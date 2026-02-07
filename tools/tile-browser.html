@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FF3 Tile Browser</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #1a1a2e;
+      color: #e0e0e0;
+      font-family: 'Courier New', monospace;
+      padding: 16px;
+    }
+    h1 { font-size: 16px; color: #c8a832; margin-bottom: 12px; }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 12px;
+      padding: 8px;
+      background: #222;
+      border-radius: 4px;
+    }
+    .controls label {
+      font-size: 12px;
+      color: #aaa;
+    }
+    .controls input[type="file"] { display: none; }
+    .controls .file-label {
+      cursor: pointer;
+      background: #333;
+      padding: 4px 10px;
+      border: 1px solid #555;
+      border-radius: 3px;
+      font-size: 12px;
+    }
+    .controls .file-label:hover { background: #444; }
+    .controls input[type="range"] { width: 300px; }
+    .controls input[type="number"] { width: 80px; background: #333; color: #e0e0e0; border: 1px solid #555; padding: 2px 4px; font-size: 12px; }
+    .controls select { background: #333; color: #e0e0e0; border: 1px solid #555; padding: 2px 4px; font-size: 12px; }
+
+    #info {
+      font-size: 11px;
+      color: #888;
+      margin-bottom: 8px;
+    }
+
+    #tile-canvas {
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      border: 1px solid #444;
+      cursor: crosshair;
+    }
+
+    #hover-info {
+      font-size: 11px;
+      color: #aaa;
+      margin-top: 8px;
+      min-height: 16px;
+    }
+
+    .palette-preview {
+      display: flex;
+      gap: 2px;
+      align-items: center;
+    }
+    .palette-swatch {
+      width: 16px;
+      height: 16px;
+      border: 1px solid #555;
+    }
+
+    .presets {
+      display: flex;
+      gap: 4px;
+    }
+    .presets button {
+      background: #333;
+      color: #e0e0e0;
+      border: 1px solid #555;
+      padding: 2px 8px;
+      font-size: 11px;
+      cursor: pointer;
+      border-radius: 2px;
+    }
+    .presets button:hover { background: #444; }
+  </style>
+</head>
+<body>
+  <h1>FF3 Tile Browser</h1>
+
+  <div class="controls">
+    <label class="file-label" for="rom-file">Load ROM</label>
+    <input type="file" id="rom-file" accept=".nes,.bin">
+
+    <label>Offset:
+      <input type="number" id="offset-input" value="0" min="0" step="256">
+    </label>
+    <input type="range" id="offset-slider" min="0" max="0" value="0" step="256">
+
+    <label>Palette:
+      <select id="palette-select"></select>
+    </label>
+
+    <div class="palette-preview" id="palette-preview"></div>
+  </div>
+
+  <div class="controls">
+    <label>Columns: <input type="number" id="cols-input" value="16" min="1" max="64"></label>
+    <label>Rows: <input type="number" id="rows-input" value="16" min="1" max="64"></label>
+    <label>Scale: <select id="scale-select">
+      <option value="2">2x</option>
+      <option value="3" selected>3x</option>
+      <option value="4">4x</option>
+    </select></label>
+
+    <div class="presets">
+      <span style="font-size:11px;color:#888;">Presets:</span>
+      <button data-offset="0x01C010">Map Sprites</button>
+      <button data-offset="0x001680">Palette Area</button>
+      <button data-offset="0x000000">ROM Start</button>
+    </div>
+  </div>
+
+  <div id="info"></div>
+  <canvas id="tile-canvas"></canvas>
+  <div id="hover-info"></div>
+
+  <script type="module">
+    import { parseROM, getBytesAt } from '../src/rom-parser.js';
+    import { decodeTile, readPalettes, paletteToRGBA, NES_SYSTEM_PALETTE } from '../src/tile-decoder.js';
+
+    let romData = null;
+    let romParsed = null;
+
+    const canvas = document.getElementById('tile-canvas');
+    const ctx = canvas.getContext('2d');
+
+    const offsetInput = document.getElementById('offset-input');
+    const offsetSlider = document.getElementById('offset-slider');
+    const paletteSelect = document.getElementById('palette-select');
+    const palettePreview = document.getElementById('palette-preview');
+    const colsInput = document.getElementById('cols-input');
+    const rowsInput = document.getElementById('rows-input');
+    const scaleSelect = document.getElementById('scale-select');
+    const info = document.getElementById('info');
+    const hoverInfo = document.getElementById('hover-info');
+
+    let allPalettes = [];
+    let currentPaletteIndex = 0;
+
+    // Default grayscale palette if no ROM palette loaded
+    const DEFAULT_PALETTE = [0x0F, 0x00, 0x10, 0x30]; // black, dark gray, light gray, white
+
+    function getCurrentPalette() {
+      if (allPalettes.length > 0) {
+        return allPalettes[currentPaletteIndex];
+      }
+      return DEFAULT_PALETTE;
+    }
+
+    function getScale() {
+      return parseInt(scaleSelect.value);
+    }
+
+    function getCols() {
+      return parseInt(colsInput.value) || 16;
+    }
+
+    function getRows() {
+      return parseInt(rowsInput.value) || 16;
+    }
+
+    function getOffset() {
+      return parseInt(offsetInput.value) || 0;
+    }
+
+    function renderTiles() {
+      if (!romData) return;
+
+      const offset = getOffset();
+      const cols = getCols();
+      const rows = getRows();
+      const scale = getScale();
+      const palette = getCurrentPalette();
+
+      const tileW = 8 * scale;
+      const tileH = 8 * scale;
+      canvas.width = cols * tileW;
+      canvas.height = rows * tileH;
+
+      ctx.fillStyle = '#111';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      const totalTiles = cols * rows;
+      const bytesNeeded = totalTiles * 16;
+
+      info.textContent = `Offset: 0x${offset.toString(16).toUpperCase().padStart(6, '0')} | ` +
+        `Showing ${totalTiles} tiles (${bytesNeeded} bytes) | ` +
+        `Palette: [${palette.map(c => '0x' + c.toString(16).toUpperCase().padStart(2, '0')).join(', ')}]`;
+
+      // Create a small canvas for each tile, then scale up
+      const tileCanvas = new OffscreenCanvas(8, 8);
+      const tileCtx = tileCanvas.getContext('2d');
+
+      const rgbaPalette = paletteToRGBA(palette);
+
+      for (let t = 0; t < totalTiles; t++) {
+        const tileOffset = offset + t * 16;
+        if (tileOffset + 16 > romData.length) break;
+
+        const pixels = decodeTile(romData, tileOffset);
+
+        const imageData = tileCtx.createImageData(8, 8);
+        for (let i = 0; i < 64; i++) {
+          const colorIdx = pixels[i];
+          const [r, g, b, a] = rgbaPalette[colorIdx];
+          imageData.data[i * 4 + 0] = r;
+          imageData.data[i * 4 + 1] = g;
+          imageData.data[i * 4 + 2] = b;
+          imageData.data[i * 4 + 3] = a;
+        }
+        tileCtx.putImageData(imageData, 0, 0);
+
+        const col = t % cols;
+        const row = Math.floor(t / cols);
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(tileCanvas, col * tileW, row * tileH, tileW, tileH);
+      }
+    }
+
+    function updatePalettePreview() {
+      const palette = getCurrentPalette();
+      const rgba = paletteToRGBA(palette);
+      palettePreview.innerHTML = '';
+      for (let i = 0; i < 4; i++) {
+        const swatch = document.createElement('div');
+        swatch.className = 'palette-swatch';
+        swatch.style.background = `rgb(${rgba[i][0]}, ${rgba[i][1]}, ${rgba[i][2]})`;
+        swatch.title = `Color ${i}: NES 0x${palette[i].toString(16).toUpperCase().padStart(2, '0')}`;
+        palettePreview.appendChild(swatch);
+      }
+    }
+
+    function loadPalettes() {
+      if (!romParsed) return;
+
+      // Try to read palettes from the known FF3 offset
+      try {
+        const palData = getBytesAt(romParsed, 0x001680, 32);
+        allPalettes = readPalettes(palData, 0, 8);
+      } catch (e) {
+        allPalettes = [DEFAULT_PALETTE];
+      }
+
+      // Add a grayscale option
+      allPalettes.push(DEFAULT_PALETTE);
+
+      paletteSelect.innerHTML = '';
+      for (let i = 0; i < allPalettes.length; i++) {
+        const opt = document.createElement('option');
+        if (i < 4) {
+          opt.textContent = `BG ${i}`;
+        } else if (i < 8) {
+          opt.textContent = `Sprite ${i - 4}`;
+        } else {
+          opt.textContent = 'Grayscale';
+        }
+        opt.value = i;
+        paletteSelect.appendChild(opt);
+      }
+      paletteSelect.value = 4; // default to first sprite palette
+      currentPaletteIndex = 4;
+      updatePalettePreview();
+    }
+
+    // Event listeners
+    document.getElementById('rom-file').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const arrayBuffer = await file.arrayBuffer();
+      romParsed = parseROM(arrayBuffer);
+      romData = romParsed.raw;
+
+      const maxOffset = Math.max(0, romData.length - 4096);
+      offsetSlider.max = maxOffset;
+      offsetInput.max = maxOffset;
+
+      loadPalettes();
+
+      // Jump to map sprite tiles
+      offsetInput.value = 0x01C010;
+      offsetSlider.value = 0x01C010;
+
+      renderTiles();
+    });
+
+    offsetInput.addEventListener('input', () => {
+      offsetSlider.value = offsetInput.value;
+      renderTiles();
+    });
+
+    offsetSlider.addEventListener('input', () => {
+      offsetInput.value = offsetSlider.value;
+      renderTiles();
+    });
+
+    paletteSelect.addEventListener('change', () => {
+      currentPaletteIndex = parseInt(paletteSelect.value);
+      updatePalettePreview();
+      renderTiles();
+    });
+
+    colsInput.addEventListener('input', renderTiles);
+    rowsInput.addEventListener('input', renderTiles);
+    scaleSelect.addEventListener('change', renderTiles);
+
+    // Preset buttons
+    document.querySelectorAll('.presets button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const offset = parseInt(btn.dataset.offset);
+        offsetInput.value = offset;
+        offsetSlider.value = offset;
+        renderTiles();
+      });
+    });
+
+    // Hover info
+    canvas.addEventListener('mousemove', (e) => {
+      if (!romData) return;
+      const rect = canvas.getBoundingClientRect();
+      const scale = getScale();
+      const cols = getCols();
+      const px = (e.clientX - rect.left) / (rect.width / canvas.width);
+      const py = (e.clientY - rect.top) / (rect.height / canvas.height);
+      const tileCol = Math.floor(px / (8 * scale));
+      const tileRow = Math.floor(py / (8 * scale));
+      const tileIndex = tileRow * cols + tileCol;
+      const tileOffset = getOffset() + tileIndex * 16;
+
+      hoverInfo.textContent =
+        `Tile ${tileIndex} | Col ${tileCol}, Row ${tileRow} | ` +
+        `Offset: 0x${tileOffset.toString(16).toUpperCase().padStart(6, '0')} | ` +
+        `Index from base: ${tileIndex}`;
+    });
+  </script>
+</body>
+</html>

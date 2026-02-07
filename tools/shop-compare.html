@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>All Ur Buildings — Interior Views</title>
+  <style>
+    body { background: #1a1a2e; color: #e0e0e0; font-family: monospace; padding: 20px; }
+    .views { display: flex; gap: 20px; margin-top: 16px; flex-wrap: wrap; }
+    .view { text-align: center; }
+    .view canvas { border: 2px solid #555; image-rendering: pixelated; width: 224px; height: 224px; }
+    .label { margin-top: 4px; font-size: 11px; max-width: 224px; }
+    h1 { color: #c8a832; font-size: 16px; }
+    #rom-picker label { cursor:pointer; background:#333; padding:6px 12px; border:1px solid #555; border-radius:4px; }
+    #rom-file { display:none; }
+  </style>
+</head>
+<body>
+  <h1>All Ur Building Interiors — Which one is the weapon shop?</h1>
+  <div id="rom-picker">
+    <label for="rom-file">Load FF3 ROM</label>
+    <input type="file" id="rom-file" accept=".nes">
+  </div>
+  <div class="views" id="views"></div>
+  <script type="module">
+    import { parseROM } from '../src/rom-parser.js';
+    import { NES_SYSTEM_PALETTE } from '../src/tile-decoder.js';
+    import { loadMap } from '../src/map-loader.js';
+
+    const UR_DOORS = [
+      { pos: '(5,7)',   dest: 2,   note: 'upper-left' },
+      { pos: '(10,19)', dest: 3,   note: 'mid-left' },
+      { pos: '(14,20)', dest: 4,   note: 'mid-center' },
+      { pos: '(18,19)', dest: 5,   note: 'mid-right' },
+      { pos: '(9,26)',  dest: 6,   note: 'lower-left' },
+      { pos: '(21,26)', dest: 8,   note: 'lower-right' },
+      { pos: '(28,29)', dest: 147, note: 'well' },
+    ];
+
+    function renderView(raw, mapId) {
+      const md = loadMap(raw, mapId);
+      const TILE_SIZE = 16, MAP_SIZE = 32;
+      const full = document.createElement('canvas');
+      full.width = full.height = 512;
+      const fctx = full.getContext('2d');
+      const tImg = fctx.createImageData(8, 8);
+      const td = tImg.data;
+
+      for (let ty = 0; ty < MAP_SIZE; ty++) {
+        for (let tx = 0; tx < MAP_SIZE; tx++) {
+          const mid = md.tilemap[ty * MAP_SIZE + tx];
+          const m = mid < 128 ? mid : mid & 0x7F;
+          const meta = md.metatiles[m];
+          const palIdx = md.tileAttrs[m] & 0x03;
+          const pal = md.palettes[palIdx];
+          const rgbPal = pal.map(c => NES_SYSTEM_PALETTE[c & 0x3F] || [0,0,0]);
+          const chrI = [meta.tl, meta.tr, meta.bl, meta.br];
+          const offs = [[0,0],[8,0],[0,8],[8,8]];
+          for (let q = 0; q < 4; q++) {
+            const tile = md.chrTiles[chrI[q]];
+            if (!tile) continue;
+            for (let py = 0; py < 8; py++) {
+              for (let px = 0; px < 8; px++) {
+                const ci = tile[py*8+px];
+                const rgb = rgbPal[ci];
+                const di = (py*8+px)*4;
+                td[di]=rgb[0]; td[di+1]=rgb[1]; td[di+2]=rgb[2]; td[di+3]=255;
+              }
+            }
+            fctx.putImageData(tImg, tx*16+offs[q][0], ty*16+offs[q][1]);
+          }
+        }
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 112;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, 112, 112);
+      const wl = md.entranceX * 16 - 48;
+      const wt = md.entranceY * 16 - 48;
+      ctx.drawImage(full, -wl, -wt);
+      ctx.strokeStyle = 'rgba(255,0,0,0.5)';
+      ctx.strokeRect(48, 45, 16, 16);
+      ctx.fillStyle = '#ff0';
+      ctx.font = '8px monospace';
+      ctx.fillText('M' + mapId, 2, 8);
+      return canvas;
+    }
+
+    document.getElementById('rom-file').addEventListener('change', async (e) => {
+      const buf = await e.target.files[0].arrayBuffer();
+      const rom = parseROM(buf);
+      const container = document.getElementById('views');
+      container.innerHTML = '';
+
+      for (const door of UR_DOORS) {
+        const canvas = renderView(rom.raw, door.dest);
+        const div = document.createElement('div');
+        div.className = 'view';
+        div.appendChild(canvas);
+        const label = document.createElement('div');
+        label.className = 'label';
+        label.textContent = `Door ${door.pos} → Map ${door.dest} (${door.note})`;
+        div.appendChild(label);
+        container.appendChild(div);
+      }
+    });
+  </script>
+</body>
+</html>

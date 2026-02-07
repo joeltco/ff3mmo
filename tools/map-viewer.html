@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>FF3 Map Viewer — Diagnostic</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #1a1a2e; color: #e0e0e0; font-family: 'Courier New', monospace; padding: 20px; }
+    h1 { font-size: 16px; color: #c8a832; margin-bottom: 12px; }
+    h2 { font-size: 13px; color: #88a; margin: 12px 0 6px; }
+    #rom-picker { margin-bottom: 16px; }
+    #rom-picker label { cursor: pointer; background: #333; padding: 6px 12px; border: 1px solid #555; border-radius: 4px; }
+    #rom-picker label:hover { background: #444; }
+    #rom-file { display: none; }
+    .canvases { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 10px; }
+    .canvas-box { text-align: center; }
+    .canvas-box canvas { border: 1px solid #444; image-rendering: pixelated; }
+    .canvas-box .label { font-size: 11px; color: #aaa; margin-top: 4px; }
+    #log { background: #111; border: 1px solid #333; padding: 8px; font-size: 11px; max-height: 400px; overflow-y: auto; white-space: pre-wrap; margin-top: 12px; }
+    .match { color: #4f4; }
+    .mismatch { color: #f44; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>FF3 Map Viewer — Diagnostic Tool</h1>
+  <p style="font-size:12px; color:#888; margin-bottom:12px;">
+    Renders Map 114 (Town of Ur) two ways:<br>
+    A) Inline code (matching map-dump.js exactly) — known to produce correct output<br>
+    B) Using src/map-loader.js + src/map-renderer.js modules — the browser pipeline<br>
+    Differences reveal where the bug is.
+  </p>
+
+  <div id="rom-picker">
+    <label for="rom-file">Load FF3 ROM (.nes)</label>
+    <input type="file" id="rom-file" accept=".nes,.bin">
+  </div>
+
+  <div class="canvases">
+    <div class="canvas-box">
+      <h2>A) Inline (like map-dump.js)</h2>
+      <canvas id="canvas-inline" width="512" height="512" style="width:512px;height:512px;"></canvas>
+      <div class="label">512x512 — full map rendered with inline code</div>
+    </div>
+    <div class="canvas-box">
+      <h2>B) Modules (map-loader + map-renderer)</h2>
+      <canvas id="canvas-module" width="512" height="512" style="width:512px;height:512px;"></canvas>
+      <div class="label">512x512 — MapRenderer._mapCanvas</div>
+    </div>
+  </div>
+
+  <h2>Diagnostic Log</h2>
+  <div id="log"></div>
+
+  <script type="module">
+    import { loadMap } from '../src/map-loader.js';
+    import { MapRenderer } from '../src/map-renderer.js';
+    import { parseROM } from '../src/rom-parser.js';
+    import { decodeTile as browserDecodeTile, NES_SYSTEM_PALETTE } from '../src/tile-decoder.js';
+
+    const log = document.getElementById('log');
+    function logMsg(msg, cls) {
+      const span = document.createElement('span');
+      span.className = cls || '';
+      span.textContent = msg + '\n';
+      log.appendChild(span);
+    }
+
+    // ─── NES System Palette (inline copy from map-dump.js) ───
+    const NES_PAL = [
+      [0x62,0x62,0x62],[0x00,0x2E,0x98],[0x12,0x12,0xAB],[0x35,0x00,0x9E],
+      [0x4E,0x00,0x7A],[0x5B,0x00,0x45],[0x5A,0x04,0x00],[0x4A,0x18,0x00],
+      [0x30,0x2E,0x00],[0x14,0x40,0x00],[0x00,0x49,0x00],[0x00,0x47,0x12],
+      [0x00,0x3E,0x4B],[0x00,0x00,0x00],[0x00,0x00,0x00],[0x00,0x00,0x00],
+      [0xAB,0xAB,0xAB],[0x0F,0x63,0xE7],[0x37,0x40,0xFF],[0x6C,0x2E,0xFF],
+      [0x9C,0x22,0xD4],[0xAF,0x22,0x83],[0xAD,0x31,0x2E],[0x96,0x4B,0x00],
+      [0x71,0x66,0x00],[0x45,0x7C,0x00],[0x1E,0x87,0x00],[0x07,0x84,0x2E],
+      [0x00,0x79,0x76],[0x00,0x00,0x00],[0x00,0x00,0x00],[0x00,0x00,0x00],
+      [0xFF,0xFF,0xFF],[0x56,0xB4,0xFF],[0x7B,0x97,0xFF],[0xAF,0x87,0xFF],
+      [0xE0,0x7C,0xFF],[0xF2,0x7D,0xD2],[0xF0,0x8B,0x82],[0xDA,0xA3,0x36],
+      [0xBA,0xBC,0x14],[0x8E,0xD1,0x1A],[0x6A,0xDA,0x42],[0x54,0xD7,0x82],
+      [0x4F,0xCE,0xC6],[0x4E,0x4E,0x4E],[0x00,0x00,0x00],[0x00,0x00,0x00],
+      [0xFF,0xFF,0xFF],[0xBE,0xDF,0xFF],[0xCC,0xD3,0xFF],[0xE1,0xCB,0xFF],
+      [0xF3,0xC7,0xFF],[0xFB,0xC7,0xED],[0xFA,0xCD,0xCA],[0xF2,0xD7,0xAB],
+      [0xE4,0xE2,0x9D],[0xD1,0xEB,0x9E],[0xC1,0xEF,0xAE],[0xB7,0xEE,0xC9],
+      [0xB5,0xEA,0xE7],[0xB0,0xB0,0xB0],[0x00,0x00,0x00],[0x00,0x00,0x00],
+    ];
+
+    // ─── Inline ROM constants (from map-dump.js) ───
+    const MAP_PROPS_BASE   = 0x004010;
+    const TILESET_BASE     = 0x002390;
+    const NAME_TABLE_BASE  = 0x003190;
+    const COLLISION_BASE   = 0x003510;
+    const GFX_SUBSET_ID    = 0x000C10;
+    const GFX_SUBSET_BASE  = 0x000E10;
+    const MAP_BG_GFX_BASE  = 0x006010;
+    const PAL_TABLE_1      = 0x001110;
+    const PAL_TABLE_2      = 0x001210;
+    const PAL_TABLE_3      = 0x001310;
+    const TILEMAP_PTR_BASE = 0x022010;
+    const TILEMAP_DATA     = 0x022210;
+    const SLOT_COUNTS = [0x1A, 0x08, 0x08, 0x0E, 0x08, 0x10, 0x10, 0x10];
+
+    function inlineDecodeTile(rom, offset) {
+      const px = new Uint8Array(64);
+      for (let row = 0; row < 8; row++) {
+        const bp0 = rom[offset + row];
+        const bp1 = rom[offset + row + 8];
+        for (let col = 0; col < 8; col++) {
+          const bit = 7 - col;
+          px[row * 8 + col] = ((bp1 >> bit) & 1) << 1 | ((bp0 >> bit) & 1);
+        }
+      }
+      return px;
+    }
+
+    function nesRGB(idx) {
+      return NES_PAL[idx & 0x3F] || [0, 0, 0];
+    }
+
+    function renderInlineMap(rom, mapId) {
+      // Exact copy of map-dump.js logic
+      const propOff = MAP_PROPS_BASE + mapId * 16;
+      const b0 = rom[propOff], b1 = rom[propOff + 1];
+      const tileset    = (b0 >> 5) & 7;
+      const entranceX  = b0 & 0x1F;
+      const entranceY  = b1 & 0x1F;
+      const fillTile   = rom[propOff + 3];
+      const palIdx     = [rom[propOff + 5], rom[propOff + 6], rom[propOff + 7]];
+
+      logMsg(`[INLINE] Tileset: ${tileset}, Entrance: (${entranceX},${entranceY}), Fill: ${fillTile}, Pal indices: [${palIdx}]`);
+
+      // Palettes
+      const palettes = [];
+      for (let i = 0; i < 3; i++) {
+        palettes.push([0x0F, rom[PAL_TABLE_1 + palIdx[i]], rom[PAL_TABLE_2 + palIdx[i]], rom[PAL_TABLE_3 + palIdx[i]]]);
+      }
+      palettes.push([0x0F, 0x0F, 0x0F, 0x0F]);
+      for (let i = 0; i < 4; i++) {
+        logMsg(`[INLINE] Palette ${i}: [${palettes[i].map(c => '0x'+c.toString(16).padStart(2,'0'))}]`);
+      }
+
+      // CHR tiles
+      const subsetId = rom[GFX_SUBSET_ID + mapId];
+      const subOff = GFX_SUBSET_BASE + subsetId * 16;
+      const chrTiles = [];
+      logMsg(`[INLINE] Graphics subset: ${subsetId}`);
+      for (let slot = 0; slot < 8; slot++) {
+        const ptr = rom[subOff + slot * 2] | (rom[subOff + slot * 2 + 1] << 8);
+        const fileOff = MAP_BG_GFX_BASE + ptr;
+        const count = SLOT_COUNTS[slot];
+        logMsg(`[INLINE]   Slot ${slot}: ptr=0x${ptr.toString(16).padStart(4,'0')} -> file 0x${fileOff.toString(16)}, ${count} tiles (CHR #${chrTiles.length}-${chrTiles.length + count - 1})`);
+        for (let t = 0; t < count; t++) {
+          chrTiles.push(inlineDecodeTile(rom, fileOff + t * 16));
+        }
+      }
+      logMsg(`[INLINE] Total CHR tiles: ${chrTiles.length}`);
+
+      // Tileset (PLANAR)
+      const tsOff = TILESET_BASE + tileset * 512;
+      const tsData = rom.slice(tsOff, tsOff + 512);
+      const metatiles = [];
+      for (let m = 0; m < 128; m++) {
+        metatiles.push({ tl: tsData[m], tr: tsData[m + 128], bl: tsData[m + 256], br: tsData[m + 384] });
+      }
+      logMsg(`[INLINE] Metatile 0: TL=${metatiles[0].tl} TR=${metatiles[0].tr} BL=${metatiles[0].bl} BR=${metatiles[0].br}`);
+      logMsg(`[INLINE] Metatile 1: TL=${metatiles[1].tl} TR=${metatiles[1].tr} BL=${metatiles[1].bl} BR=${metatiles[1].br}`);
+
+      // Name table
+      const ntOff = NAME_TABLE_BASE + tileset * 128;
+      const tileAttrs = rom.slice(ntOff, ntOff + 128);
+
+      // Tilemap
+      const tmPtrOff = TILEMAP_PTR_BASE + mapId * 2;
+      const tmPtr = rom[tmPtrOff] | (rom[tmPtrOff + 1] << 8);
+      let readPos = TILEMAP_DATA + tmPtr;
+      const tilemap = new Uint8Array(1024);
+      let writePos = 0;
+      while (writePos < 1024) {
+        const byte = rom[readPos++];
+        if (byte < 0x80) {
+          tilemap[writePos++] = byte;
+        } else if (byte < 0xC0) {
+          const count = (byte & 0x3F) + 3;
+          const tile = rom[readPos++];
+          for (let i = 0; i < count && writePos < 1024; i++) tilemap[writePos++] = tile;
+        } else {
+          const count = (byte & 0x3F) + 3;
+          for (let i = 0; i < count && writePos < 1024; i++) tilemap[writePos++] = fillTile;
+        }
+      }
+      logMsg(`[INLINE] Tilemap row 0: [${Array.from(tilemap.slice(0, 32))}]`);
+
+      // Render to canvas
+      const canvas = document.getElementById('canvas-inline');
+      const ctx = canvas.getContext('2d');
+      const imgData = ctx.createImageData(512, 512);
+      const px = imgData.data;
+
+      for (let ty = 0; ty < 32; ty++) {
+        for (let tx = 0; tx < 32; tx++) {
+          const mid = tilemap[ty * 32 + tx];
+          const m = mid < 128 ? mid : mid & 0x7F;
+          const meta = metatiles[m];
+          const palGroup = tileAttrs[m] & 0x03;
+          const pal = palettes[palGroup];
+          const sx = tx * 16;
+          const sy = ty * 16;
+
+          const quadrants = [
+            [meta.tl, 0, 0], [meta.tr, 8, 0],
+            [meta.bl, 0, 8], [meta.br, 8, 8]
+          ];
+
+          for (const [chrIdx, dx, dy] of quadrants) {
+            const tile = chrTiles[chrIdx];
+            if (!tile) continue;
+            for (let y = 0; y < 8; y++) {
+              for (let x = 0; x < 8; x++) {
+                const ci = tile[y * 8 + x];
+                const rgb = nesRGB(pal[ci]);
+                const di = ((sy + dy + y) * 512 + (sx + dx + x)) * 4;
+                px[di] = rgb[0]; px[di + 1] = rgb[1]; px[di + 2] = rgb[2]; px[di + 3] = 255;
+              }
+            }
+          }
+        }
+      }
+
+      ctx.putImageData(imgData, 0, 0);
+
+      // Draw entrance marker
+      const ex = entranceX * 16 + 8;
+      const ey = entranceY * 16 + 8;
+      ctx.fillStyle = 'red';
+      ctx.fillRect(ex - 2, ey - 2, 5, 5);
+
+      logMsg(`[INLINE] Rendered to canvas A`);
+
+      return { chrTiles, metatiles, tileAttrs, tilemap, palettes, fillTile, entranceX, entranceY };
+    }
+
+    function renderModuleMap(romRaw, mapId) {
+      // Use the actual modules
+      const mapData = loadMap(romRaw, mapId);
+
+      logMsg(`\n[MODULE] loadMap returned:`);
+      logMsg(`[MODULE] tileset: ${mapData.tileset}, fill: ${mapData.fillTile}, entrance: (${mapData.entranceX},${mapData.entranceY})`);
+      logMsg(`[MODULE] chrTiles count: ${mapData.chrTiles.length}`);
+      logMsg(`[MODULE] metatiles count: ${mapData.metatiles.length}`);
+      logMsg(`[MODULE] Metatile 0: TL=${mapData.metatiles[0].tl} TR=${mapData.metatiles[0].tr} BL=${mapData.metatiles[0].bl} BR=${mapData.metatiles[0].br}`);
+      logMsg(`[MODULE] Metatile 1: TL=${mapData.metatiles[1].tl} TR=${mapData.metatiles[1].tr} BL=${mapData.metatiles[1].bl} BR=${mapData.metatiles[1].br}`);
+      for (let i = 0; i < 4; i++) {
+        logMsg(`[MODULE] Palette ${i}: [${mapData.palettes[i].map(c => '0x'+c.toString(16).padStart(2,'0'))}]`);
+      }
+      logMsg(`[MODULE] Tilemap row 0: [${Array.from(mapData.tilemap.slice(0, 32))}]`);
+
+      // Create MapRenderer and grab its pre-rendered canvas
+      const renderer = new MapRenderer(mapData);
+      const canvas = document.getElementById('canvas-module');
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(renderer._mapCanvas, 0, 0);
+
+      // Draw entrance marker
+      const ex = mapData.entranceX * 16 + 8;
+      const ey = mapData.entranceY * 16 + 8;
+      ctx.fillStyle = 'red';
+      ctx.fillRect(ex - 2, ey - 2, 5, 5);
+
+      logMsg(`[MODULE] Rendered to canvas B`);
+
+      return mapData;
+    }
+
+    function compareData(inlineData, moduleData) {
+      logMsg('\n=== COMPARISON ===');
+
+      // Compare metatile definitions
+      let metaMismatch = 0;
+      for (let m = 0; m < 128; m++) {
+        const a = inlineData.metatiles[m];
+        const b = moduleData.metatiles[m];
+        if (a.tl !== b.tl || a.tr !== b.tr || a.bl !== b.bl || a.br !== b.br) {
+          metaMismatch++;
+          if (metaMismatch <= 5) {
+            logMsg(`  Metatile ${m} MISMATCH: inline=[${a.tl},${a.tr},${a.bl},${a.br}] module=[${b.tl},${b.tr},${b.bl},${b.br}]`, 'mismatch');
+          }
+        }
+      }
+      logMsg(metaMismatch === 0 ? '  Metatiles: ALL MATCH' : `  Metatiles: ${metaMismatch} mismatches`, metaMismatch === 0 ? 'match' : 'mismatch');
+
+      // Compare palettes
+      let palMatch = true;
+      for (let p = 0; p < 4; p++) {
+        for (let c = 0; c < 4; c++) {
+          if (inlineData.palettes[p][c] !== moduleData.palettes[p][c]) {
+            palMatch = false;
+            logMsg(`  Palette ${p}[${c}] MISMATCH: inline=0x${inlineData.palettes[p][c].toString(16)} module=0x${moduleData.palettes[p][c].toString(16)}`, 'mismatch');
+          }
+        }
+      }
+      if (palMatch) logMsg('  Palettes: ALL MATCH', 'match');
+
+      // Compare tilemap
+      let tmMismatch = 0;
+      for (let i = 0; i < 1024; i++) {
+        if (inlineData.tilemap[i] !== moduleData.tilemap[i]) tmMismatch++;
+      }
+      logMsg(tmMismatch === 0 ? '  Tilemap: ALL MATCH' : `  Tilemap: ${tmMismatch} mismatches`, tmMismatch === 0 ? 'match' : 'mismatch');
+
+      // Compare tile attrs
+      let attrMismatch = 0;
+      for (let i = 0; i < 128; i++) {
+        if (inlineData.tileAttrs[i] !== moduleData.tileAttrs[i]) attrMismatch++;
+      }
+      logMsg(attrMismatch === 0 ? '  Tile attrs: ALL MATCH' : `  Tile attrs: ${attrMismatch} mismatches`, attrMismatch === 0 ? 'match' : 'mismatch');
+
+      // Compare CHR tiles (check first pixel of each)
+      let chrMismatch = 0;
+      const minTiles = Math.min(inlineData.chrTiles.length, moduleData.chrTiles.length);
+      for (let t = 0; t < minTiles; t++) {
+        for (let p = 0; p < 64; p++) {
+          if (inlineData.chrTiles[t][p] !== moduleData.chrTiles[t][p]) {
+            chrMismatch++;
+            break; // count per tile
+          }
+        }
+      }
+      logMsg(`  CHR tiles count: inline=${inlineData.chrTiles.length} module=${moduleData.chrTiles.length}`, inlineData.chrTiles.length === moduleData.chrTiles.length ? 'match' : 'mismatch');
+      logMsg(chrMismatch === 0 ? '  CHR tile data: ALL MATCH' : `  CHR tile data: ${chrMismatch}/${minTiles} tiles differ`, chrMismatch === 0 ? 'match' : 'mismatch');
+
+      // Compare NES palettes (the system palette arrays)
+      let sysPalMatch = true;
+      for (let i = 0; i < 64; i++) {
+        const a = NES_PAL[i];
+        const b = NES_SYSTEM_PALETTE[i];
+        if (!a || !b || a[0] !== b[0] || a[1] !== b[1] || a[2] !== b[2]) {
+          sysPalMatch = false;
+          logMsg(`  NES_SYSTEM_PALETTE[${i}] MISMATCH: inline=[${a}] module=[${b}]`, 'mismatch');
+          if (i > 5) { logMsg('  (stopping at 5 mismatches)'); break; }
+        }
+      }
+      if (sysPalMatch) logMsg('  NES system palette: ALL MATCH', 'match');
+
+      // Pixel-by-pixel comparison of canvases
+      const canvasA = document.getElementById('canvas-inline');
+      const canvasB = document.getElementById('canvas-module');
+      const ctxA = canvasA.getContext('2d');
+      const ctxB = canvasB.getContext('2d');
+      const dataA = ctxA.getImageData(0, 0, 512, 512).data;
+      const dataB = ctxB.getImageData(0, 0, 512, 512).data;
+      let pixelDiff = 0;
+      let firstDiffX = -1, firstDiffY = -1;
+      for (let i = 0; i < dataA.length; i += 4) {
+        if (dataA[i] !== dataB[i] || dataA[i+1] !== dataB[i+1] || dataA[i+2] !== dataB[i+2]) {
+          pixelDiff++;
+          if (firstDiffX === -1) {
+            const pixIdx = i / 4;
+            firstDiffX = pixIdx % 512;
+            firstDiffY = Math.floor(pixIdx / 512);
+          }
+        }
+      }
+      const totalPx = 512 * 512;
+      if (pixelDiff === 0) {
+        logMsg('  Canvas pixels: IDENTICAL', 'match');
+      } else {
+        logMsg(`  Canvas pixels: ${pixelDiff}/${totalPx} differ (${(pixelDiff/totalPx*100).toFixed(1)}%)`, 'mismatch');
+        logMsg(`  First diff at pixel (${firstDiffX}, ${firstDiffY}) — metatile (${Math.floor(firstDiffX/16)}, ${Math.floor(firstDiffY/16)})`, 'mismatch');
+      }
+    }
+
+    document.getElementById('rom-file').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      log.innerHTML = '';
+
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const romRaw = new Uint8Array(arrayBuffer);
+        logMsg(`ROM loaded: ${romRaw.length} bytes`);
+
+        const mapId = 114;
+        logMsg(`\n--- Rendering Map ${mapId} ---\n`);
+
+        const inlineData = renderInlineMap(romRaw, mapId);
+        logMsg('');
+        const moduleData = renderModuleMap(romRaw, mapId);
+        compareData(inlineData, moduleData);
+
+      } catch (err) {
+        logMsg(`ERROR: ${err.message}\n${err.stack}`, 'mismatch');
+        console.error(err);
+      }
+    });
+  </script>
+</body>
+</html>

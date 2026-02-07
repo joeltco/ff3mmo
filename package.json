@@ -1,0 +1,10 @@
+{
+  "name": "ff3mmo",
+  "version": "0.1.0",
+  "description": "FF3 MMO — Walking sprite on screen (Milestone 1)",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "serve": "python3 -m http.server 8080"
+  }
+}
