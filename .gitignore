@@ -1,0 +1,6 @@
+*.nes
+*.zip
+tools/out/
+*.ppm
+*.png
+*.gif

@@ -74,6 +74,10 @@ export class Sprite {
     this.direction = dir;
   }
 
+  getDirection() {
+    return this.direction;
+  }
+
   // Set animation frame directly based on movement progress (0.0 - 1.0)
   // Frame 0 for first half of step, frame 1 for second half
   setWalkProgress(t) {
@@ -124,11 +128,6 @@ export class Sprite {
       ctx.drawImage(this._tmpCanvas, 0, 0, 16, 16, x, y, 16, 16);
     }
   }
-}
-
-// Update walk frame definitions — call this after using tile-browser to find correct indices
-export function updateWalkFrames(direction, frames) {
-  WALK_FRAMES[direction] = frames;
 }
 
 export { WALK_FRAMES, SPRITE_TILE_BASE };

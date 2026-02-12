@@ -1,9 +1,16 @@
 #!/usr/bin/env node
 // Map Dump Tool — renders map data from ROM to PPM images for visual inspection.
 // Usage: node tools/map-dump.js [mapId]
-// Outputs: tools/out/chr-tiles.ppm, tools/out/metatiles.ppm, tools/out/map.ppm
+// Outputs: tools/out/<mapId>-chr.ppm, <mapId>-metatiles.ppm, <mapId>-map.ppm, <mapId>-collision.ppm
 
 import { readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const PROJECT   = join(__dirname, '..');
+const ROM_PATH  = join(PROJECT, 'Final Fantasy III (Japan).nes');
+const OUT_DIR   = join(__dirname, 'out');
 
 const mapId = parseInt(process.argv[2] || '114', 10);
 
@@ -40,7 +47,21 @@ const PAL_TABLE_2      = 0x001210;
 const PAL_TABLE_3      = 0x001310;
 const TILEMAP_ID_BASE  = 0x000A10;
 const TILEMAP_PTR_BASE = 0x022010;
-const SLOT_COUNTS = [0x1A, 0x08, 0x08, 0x0E, 0x08, 0x10, 0x10, 0x10]; // 112 tiles
+const SLOT_COUNTS      = [0x1A, 0x08, 0x08, 0x0E, 0x08, 0x10, 0x10, 0x10];
+
+// ─── Collision overlay colors [R, G, B] ───
+const COL_PASSABLE  = [0x20, 0x80, 0x20]; // green
+const COL_WALL      = [0xA0, 0x20, 0x20]; // red
+const COL_WATER     = [0x20, 0x40, 0xA0]; // blue
+const COL_TRIG_EXIT = [0xC0, 0x40, 0xC0]; // magenta (exit_prev/exit_world)
+const COL_TRIG_ENTR = [0x20, 0xA0, 0xC0]; // cyan (entrance/door)
+const COL_TRIG_MISC = [0xC0, 0xC0, 0x20]; // yellow (event/other)
+const COL_ENTRANCE  = [0xFF, 0x40, 0x40]; // bright red (entrance marker)
+
+const COLL_TRIG_TYPES = {
+  0: 'exit_prev', 1: 'exit_world', 4: 'entrance', 5: 'door',
+  6: 'locked_door', 12: 'impassable', 13: 'impassable', 14: 'impassable', 15: 'event',
+};
 
 // ─── PPM writer ───
 function writePPM(path, w, h, pixels) {
@@ -48,13 +69,9 @@ function writePPM(path, w, h, pixels) {
   const buf = Buffer.alloc(header.length + w * h * 3);
   buf.write(header);
   const off = header.length;
-  for (let i = 0; i < w * h; i++) {
-    buf[off + i * 3]     = pixels[i * 3];
-    buf[off + i * 3 + 1] = pixels[i * 3 + 1];
-    buf[off + i * 3 + 2] = pixels[i * 3 + 2];
-  }
+  for (let i = 0; i < w * h * 3; i++) buf[off + i] = pixels[i];
   writeFileSync(path, buf);
-  console.log(`  wrote ${path} (${w}×${h})`);
+  console.log(`  ${path} (${w}x${h})`);
 }
 
 // ─── 2BPP tile decoder ───
@@ -71,11 +88,24 @@ function decodeTile(rom, offset) {
   return px;
 }
 
-// ─── Load ROM ───
-const rom = readFileSync('Final Fantasy III (Japan).nes');
-console.log(`ROM: ${rom.length} bytes, Map ID: ${mapId}`);
+function nesRGB(idx) { return NES_PAL[idx & 0x3F] || [0, 0, 0]; }
 
-// ─── Step 1: Map Properties ───
+function renderCHR(pixels, pw, px, py, tile, pal) {
+  if (!tile) return;
+  for (let y = 0; y < 8; y++) {
+    for (let x = 0; x < 8; x++) {
+      const rgb = nesRGB(pal[tile[y * 8 + x]]);
+      const di = ((py + y) * pw + (px + x)) * 3;
+      pixels[di] = rgb[0]; pixels[di + 1] = rgb[1]; pixels[di + 2] = rgb[2];
+    }
+  }
+}
+
+// ─── Load ROM ───
+const rom = readFileSync(ROM_PATH);
+console.log(`ROM: ${rom.length} bytes, Map: ${mapId}`);
+
+// ─── Map Properties ───
 const propOff = MAP_PROPS_BASE + mapId * 16;
 const b0 = rom[propOff], b1 = rom[propOff + 1];
 const tileset    = (b0 >> 5) & 7;
@@ -83,70 +113,50 @@ const entranceX  = b0 & 0x1F;
 const entranceY  = b1 & 0x1F;
 const fillTile   = rom[propOff + 3];
 const palIdx     = [rom[propOff + 5], rom[propOff + 6], rom[propOff + 7]];
-console.log(`Tileset: ${tileset}, Entrance: (${entranceX},${entranceY}), Fill: ${fillTile}, Pal indices: [${palIdx}]`);
+console.log(`Tileset: ${tileset}, Entrance: (${entranceX},${entranceY}), Fill: $${fillTile.toString(16)}`);
 
-// ─── Step 2: Build palettes ───
+// ─── Palettes ───
 const palettes = [];
 for (let i = 0; i < 3; i++) {
-  palettes.push([
-    0x0F,
-    rom[PAL_TABLE_1 + palIdx[i]],
-    rom[PAL_TABLE_2 + palIdx[i]],
-    rom[PAL_TABLE_3 + palIdx[i]],
-  ]);
+  palettes.push([0x0F, rom[PAL_TABLE_1 + palIdx[i]], rom[PAL_TABLE_2 + palIdx[i]], rom[PAL_TABLE_3 + palIdx[i]]]);
 }
-palettes.push([0x0F, 0x00, 0x02, 0x30]); // palette 3: menu/text window (hardcoded in game)
-for (let i = 0; i < 4; i++) {
-  const cols = palettes[i].map(c => `0x${c.toString(16).padStart(2,'0')}`);
-  console.log(`Palette ${i}: [${cols}]`);
-}
+palettes.push([0x0F, 0x00, 0x02, 0x30]);
 
-// ─── Step 3: Load CHR tiles ───
+// ─── CHR tiles ───
 const subsetId = rom[GFX_SUBSET_ID + mapId];
 const subOff = GFX_SUBSET_BASE + subsetId * 16;
 const chrTiles = [];
-console.log(`\nGraphics subset: ${subsetId}`);
 for (let slot = 0; slot < 8; slot++) {
   const ptr = rom[subOff + slot * 2] | (rom[subOff + slot * 2 + 1] << 8);
-  const fileOff = MAP_BG_GFX_BASE + ptr;
   const count = SLOT_COUNTS[slot];
-  console.log(`  Slot ${slot}: ptr=0x${ptr.toString(16).padStart(4,'0')} -> file 0x${fileOff.toString(16)}, ${count} tiles (CHR #${chrTiles.length}-${chrTiles.length + count - 1})`);
-  for (let t = 0; t < count; t++) {
-    chrTiles.push(decodeTile(rom, fileOff + t * 16));
-  }
+  for (let t = 0; t < count; t++) chrTiles.push(decodeTile(rom, MAP_BG_GFX_BASE + ptr + t * 16));
 }
-console.log(`Total CHR tiles loaded: ${chrTiles.length}`);
 
-// ─── Step 4: Load tileset (planar) ───
+// ─── Tileset (planar) ───
 const tsOff = TILESET_BASE + tileset * 512;
 const tsData = rom.slice(tsOff, tsOff + 512);
 const metatiles = [];
 for (let m = 0; m < 128; m++) {
-  metatiles.push({
-    tl: tsData[m],
-    tr: tsData[m + 128],
-    bl: tsData[m + 256],
-    br: tsData[m + 384],
-  });
+  metatiles.push({ tl: tsData[m], tr: tsData[m + 128], bl: tsData[m + 256], br: tsData[m + 384] });
 }
 
-// ─── Step 5: Load name table (palette per metatile) ───
+// ─── Tile attrs ───
 const ntOff = NAME_TABLE_BASE + tileset * 128;
 const tileAttrs = rom.slice(ntOff, ntOff + 128);
 
-// ─── Step 6: Decompress tilemap ───
-// Look up tilemap ID from per-map table, then resolve pointer with bank math
+// ─── Collision data ───
+const collOff = COLLISION_BASE + tileset * 256;
+
+// ─── Decompress tilemap ───
 const tilemapId = rom[TILEMAP_ID_BASE + mapId];
 const ptrIndex = (tilemapId * 2) & 0xFF;
 const ptrTableHi = (tilemapId & 0x80) ? 0x81 : 0x80;
 const ptrTableRomBase = TILEMAP_PTR_BASE + ((ptrTableHi - 0x80) << 8);
 const tmPtrLo = rom[ptrTableRomBase + ptrIndex];
 const tmPtrHi = rom[ptrTableRomBase + ptrIndex + 1];
-const nesAddrLo = tmPtrLo;
 const nesAddrHi = (tmPtrHi & 0x1F) | 0x80;
 const tmBank = 0x11 + (tmPtrHi >> 5);
-const tmRomOffset = tmBank * 0x2000 + 0x10 + ((nesAddrHi << 8 | nesAddrLo) - 0x8000);
-console.log(`Tilemap ID: ${tilemapId}, Bank: 0x${tmBank.toString(16)}, ROM offset: 0x${tmRomOffset.toString(16)}`);
+const tmRomOffset = tmBank * 0x2000 + 0x10 + ((nesAddrHi << 8 | tmPtrLo) - 0x8000);
 
 let readPos = tmRomOffset;
 const tilemap = new Uint8Array(1024);
@@ -162,105 +172,137 @@ while (writePos < 1024) {
   }
 }
 
-// ─── Helper: resolve NES color index to RGB ───
-function nesRGB(idx) {
-  return NES_PAL[idx & 0x3F] || [0, 0, 0];
+// ─── Helper: render a metatile at pixel position ───
+function renderMetatile(pixels, pw, sx, sy, mid) {
+  const m = mid < 128 ? mid : mid & 0x7F;
+  const meta = metatiles[m];
+  const palGroup = tileAttrs[m] & 0x03;
+  const pal = palettes[palGroup];
+  renderCHR(pixels, pw, sx,     sy,     chrTiles[meta.tl], pal);
+  renderCHR(pixels, pw, sx + 8, sy,     chrTiles[meta.tr], pal);
+  renderCHR(pixels, pw, sx,     sy + 8, chrTiles[meta.bl], pal);
+  renderCHR(pixels, pw, sx + 8, sy + 8, chrTiles[meta.br], pal);
 }
 
-// ─── Helper: render an 8x8 CHR tile into a pixel buffer ───
-function renderCHR(pixels, pw, px, py, tile, pal) {
-  if (!tile) return;
-  for (let y = 0; y < 8; y++) {
-    for (let x = 0; x < 8; x++) {
-      const ci = tile[y * 8 + x];
-      const rgb = nesRGB(pal[ci]);
-      const di = ((py + y) * pw + (px + x)) * 3;
-      pixels[di] = rgb[0];
-      pixels[di + 1] = rgb[1];
-      pixels[di + 2] = rgb[2];
+// ─── Helper: draw a filled rect ───
+function fillRect(pixels, pw, rx, ry, rw, rh, color) {
+  for (let dy = 0; dy < rh; dy++) {
+    for (let dx = 0; dx < rw; dx++) {
+      const di = ((ry + dy) * pw + (rx + dx)) * 3;
+      pixels[di] = color[0]; pixels[di + 1] = color[1]; pixels[di + 2] = color[2];
     }
   }
 }
 
-// ─── Output dir ───
-mkdirSync('tools/out', { recursive: true });
-
-// ═══════════════════════════════════════════
-// IMAGE 1: Raw CHR tiles (16 columns × N rows, each tile 8×8)
-// ═══════════════════════════════════════════
-{
-  const cols = 16;
-  const rows = Math.ceil(chrTiles.length / cols);
-  const w = cols * 8;
-  const h = rows * 8;
-  const px = new Uint8Array(w * h * 3);
-  // Use a grayscale palette to show raw tile data without palette influence
-  const grayPal = [0x0F, 0x00, 0x10, 0x30]; // black, dark gray, medium, white
-  for (let i = 0; i < chrTiles.length; i++) {
-    const cx = (i % cols) * 8;
-    const cy = Math.floor(i / cols) * 8;
-    renderCHR(px, w, cx, cy, chrTiles[i], grayPal);
+// ─── Helper: blend color onto pixel buffer (50% alpha) ───
+function blendRect(pixels, pw, rx, ry, rw, rh, color) {
+  for (let dy = 0; dy < rh; dy++) {
+    for (let dx = 0; dx < rw; dx++) {
+      const di = ((ry + dy) * pw + (rx + dx)) * 3;
+      pixels[di]     = (pixels[di]     + color[0]) >> 1;
+      pixels[di + 1] = (pixels[di + 1] + color[1]) >> 1;
+      pixels[di + 2] = (pixels[di + 2] + color[2]) >> 1;
+    }
   }
-  writePPM('tools/out/1-chr-tiles.ppm', w, h, px);
 }
 
-// ═══════════════════════════════════════════
-// IMAGE 2: All 128 metatiles (16 columns × 8 rows, each metatile 16×16)
-// ═══════════════════════════════════════════
+// ─── Helper: get collision color for a metatile ───
+function collisionColor(metaId) {
+  const m = metaId < 128 ? metaId : metaId & 0x7F;
+  if (m >= 128) return COL_PASSABLE;
+  const cb1 = rom[collOff + m * 2];
+  const cb2 = rom[collOff + m * 2 + 1];
+  const z = cb1 & 0x07;
+  if (cb1 & 0x80) {
+    const tt = (cb2 >> 4) & 0x0F;
+    const name = COLL_TRIG_TYPES[tt];
+    if (name === 'exit_prev' || name === 'exit_world') return COL_TRIG_EXIT;
+    if (name === 'entrance' || name === 'door' || name === 'locked_door') return COL_TRIG_ENTR;
+    return COL_TRIG_MISC;
+  }
+  if (z === 3) return COL_WALL;
+  if (z === 2) return COL_WATER;
+  return COL_PASSABLE;
+}
+
+// ─── Output ───
+mkdirSync(OUT_DIR, { recursive: true });
+const prefix = `${OUT_DIR}/${mapId}`;
+console.log('Writing:');
+
+// IMAGE 1: Raw CHR tiles
 {
-  const cols = 16;
-  const rows = 8;
-  const w = cols * 16;
-  const h = rows * 16;
+  const cols = 16, rows = Math.ceil(chrTiles.length / cols);
+  const w = cols * 8, h = rows * 8;
+  const px = new Uint8Array(w * h * 3);
+  const grayPal = [0x0F, 0x00, 0x10, 0x30];
+  for (let i = 0; i < chrTiles.length; i++) {
+    renderCHR(px, w, (i % cols) * 8, Math.floor(i / cols) * 8, chrTiles[i], grayPal);
+  }
+  writePPM(`${prefix}-chr.ppm`, w, h, px);
+}
+
+// IMAGE 2: All 128 metatiles
+{
+  const cols = 16, rows = 8, w = cols * 16, h = rows * 16;
   const px = new Uint8Array(w * h * 3);
   for (let m = 0; m < 128; m++) {
-    const mx = (m % cols) * 16;
-    const my = Math.floor(m / cols) * 16;
-    const meta = metatiles[m];
-    const palGroup = tileAttrs[m] & 0x03;
-    const pal = palettes[palGroup];
-    renderCHR(px, w, mx,     my,     chrTiles[meta.tl], pal);
-    renderCHR(px, w, mx + 8, my,     chrTiles[meta.tr], pal);
-    renderCHR(px, w, mx,     my + 8, chrTiles[meta.bl], pal);
-    renderCHR(px, w, mx + 8, my + 8, chrTiles[meta.br], pal);
+    renderMetatile(px, w, (m % cols) * 16, Math.floor(m / cols) * 16, m);
   }
-  writePPM('tools/out/2-metatiles.ppm', w, h, px);
+  writePPM(`${prefix}-metatiles.ppm`, w, h, px);
 }
 
-// ═══════════════════════════════════════════
-// IMAGE 3: Full 32×32 map
-// ═══════════════════════════════════════════
+// IMAGE 3: Full 32x32 map
 {
-  const w = 32 * 16;
-  const h = 32 * 16;
+  const w = 512, h = 512;
+  const px = new Uint8Array(w * h * 3);
+  for (let ty = 0; ty < 32; ty++) {
+    for (let tx = 0; tx < 32; tx++) {
+      renderMetatile(px, w, tx * 16, ty * 16, tilemap[ty * 32 + tx]);
+    }
+  }
+  // Entrance marker: 5x5 red dot
+  const ex = entranceX * 16 + 8, ey = entranceY * 16 + 8;
+  fillRect(px, w, ex - 2, ey - 2, 5, 5, COL_ENTRANCE);
+  writePPM(`${prefix}-map.ppm`, w, h, px);
+}
+
+// IMAGE 4: Collision overlay (solid blocks)
+{
+  const w = 512, h = 512;
+  const px = new Uint8Array(w * h * 3);
+  for (let ty = 0; ty < 32; ty++) {
+    for (let tx = 0; tx < 32; tx++) {
+      fillRect(px, w, tx * 16, ty * 16, 16, 16, collisionColor(tilemap[ty * 32 + tx]));
+    }
+  }
+  // Entrance marker
+  const ex = entranceX * 16 + 8, ey = entranceY * 16 + 8;
+  fillRect(px, w, ex - 2, ey - 2, 5, 5, COL_ENTRANCE);
+  writePPM(`${prefix}-collision.ppm`, w, h, px);
+}
+
+// IMAGE 5: Map + collision blend
+{
+  const w = 512, h = 512;
   const px = new Uint8Array(w * h * 3);
   for (let ty = 0; ty < 32; ty++) {
     for (let tx = 0; tx < 32; tx++) {
       const mid = tilemap[ty * 32 + tx];
-      const m = mid < 128 ? mid : mid & 0x7F;
-      const meta = metatiles[m];
-      const palGroup = tileAttrs[m] & 0x03;
-      const pal = palettes[palGroup];
-      const sx = tx * 16;
-      const sy = ty * 16;
-      renderCHR(px, w, sx,     sy,     chrTiles[meta.tl], pal);
-      renderCHR(px, w, sx + 8, sy,     chrTiles[meta.tr], pal);
-      renderCHR(px, w, sx,     sy + 8, chrTiles[meta.bl], pal);
-      renderCHR(px, w, sx + 8, sy + 8, chrTiles[meta.br], pal);
+      renderMetatile(px, w, tx * 16, ty * 16, mid);
+      blendRect(px, w, tx * 16, ty * 16, 16, 16, collisionColor(mid));
     }
   }
-  writePPM('tools/out/3-map.ppm', w, h, px);
-
-  // Mark entrance with a red dot
-  const ex = entranceX * 16 + 8;
-  const ey = entranceY * 16 + 8;
-  for (let dy = -2; dy <= 2; dy++) {
-    for (let dx = -2; dx <= 2; dx++) {
-      const di = ((ey + dy) * w + (ex + dx)) * 3;
-      if (di >= 0 && di < px.length - 2) { px[di] = 255; px[di+1] = 0; px[di+2] = 0; }
-    }
-  }
-  writePPM('tools/out/3-map-entrance.ppm', w, h, px);
+  const ex = entranceX * 16 + 8, ey = entranceY * 16 + 8;
+  fillRect(px, w, ex - 2, ey - 2, 5, 5, COL_ENTRANCE);
+  writePPM(`${prefix}-overlay.ppm`, w, h, px);
 }
 
-console.log('\nDone! Check tools/out/ for images.');
+console.log('\nLegend (collision/overlay):');
+console.log('  Green   = passable (z≤2)');
+console.log('  Red     = wall (z=3)');
+console.log('  Blue    = water (z=2)');
+console.log('  Magenta = exit_prev / exit_world');
+console.log('  Cyan    = entrance / door');
+console.log('  Yellow  = event / other trigger');
+console.log('  Bright red dot = entrance position');

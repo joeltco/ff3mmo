@@ -17,6 +17,7 @@ const PALETTE_TABLE_3 = 0x001310;     // 256 bytes — palette color 3
 const TILEMAP_ID_BASE = 0x000A10;     // 512 × 1 byte — tilemap ID per map
 const TILEMAP_PTR_BASE = 0x022010;    // 2 bytes per tilemap ID (pointer table)
 const BANK10_BASE = 0x020010;         // Bank $10 at NES $A000
+const NPC_PTR_BASE = 0x058010;        // NPC property pointers (256 × 2 bytes)
 
 // Dynamic trigger type table (from disassembly at 3A/921F)
 // Indexed by (tile - 0x60). Type 0=event, 1=entrance/door, 2=treasure
@@ -43,6 +44,8 @@ export function loadMap(romData, mapId) {
   const collisionByte2 = loadTileCollisionByte2(romData, mapProps.tileset);
   const tileAttrs = loadNameTable(romData, mapProps.tileset);
   const entranceData = loadEntranceData(romData, mapProps);
+  const npcs = readNPCs(romData, mapProps.npcIdx);
+  const spritePalettes = buildSpritePalettes(romData, mapProps);
 
   return {
     tileset: mapProps.tileset,
@@ -59,10 +62,12 @@ export function loadMap(romData, mapId) {
     collisionByte2,
     entranceData,
     triggerMap,
+    npcs,
+    spritePalettes,
   };
 }
 
-function parseMapProperties(romData, mapId) {
+export function parseMapProperties(romData, mapId) {
   const offset = MAP_PROPS_BASE + mapId * 16;
   const data = getBytesAt({ raw: romData }, offset, 16);
 
@@ -82,10 +87,11 @@ function parseMapProperties(romData, mapId) {
     spritePalette7: data[9],
     songId: data[10],
     mapExit: data[11],
+    npcIdx: data[4],
   };
 }
 
-function loadTileset(romData, tilesetIndex) {
+export function loadTileset(romData, tilesetIndex) {
   const offset = TILESET_BASE + tilesetIndex * 512;
   const data = getBytesAt({ raw: romData }, offset, 512);
 
@@ -102,7 +108,7 @@ function loadTileset(romData, tilesetIndex) {
   return metatiles;
 }
 
-function loadCHRGraphics(romData, mapId) {
+export function loadCHRGraphics(romData, mapId) {
   const subsetId = romData[GFX_SUBSET_ID_BASE + mapId];
   const subsetOffset = GFX_SUBSET_BASE + subsetId * 16;
   const subsetData = getBytesAt({ raw: romData }, subsetOffset, 16);
@@ -174,7 +180,7 @@ function decompressTilemap(romData, mapId, fillTile) {
   return tilemap;
 }
 
-function buildMapPalettes(romData, mapProps) {
+export function buildMapPalettes(romData, mapProps) {
   const paletteIndices = [mapProps.bgPalette0, mapProps.bgPalette1, mapProps.bgPalette2];
   const palettes = [];
 
@@ -194,7 +200,18 @@ function buildMapPalettes(romData, mapProps) {
   return palettes;
 }
 
-function loadTileCollision(romData, tilesetIndex) {
+// Build sprite palettes 6 and 7 (PPU palettes 6-7) as NES color indices
+// Returns [[pal6: 4 NES colors], [pal7: 4 NES colors]]
+function buildSpritePalettes(romData, mapProps) {
+  return [mapProps.spritePalette6, mapProps.spritePalette7].map(idx => [
+    0x0F, // color 0 transparent (rendered as black in NES)
+    romData[PALETTE_TABLE_1 + idx],
+    romData[PALETTE_TABLE_2 + idx],
+    romData[PALETTE_TABLE_3 + idx],
+  ]);
+}
+
+export function loadTileCollision(romData, tilesetIndex) {
   // Tile properties are interleaved: [tile0_byte1, tile0_byte2, tile1_byte1, tile1_byte2, ...]
   // De-interleave to get byte 1 for each of the 128 tiles
   const offset = COLLISION_BASE + tilesetIndex * 256;
@@ -206,13 +223,13 @@ function loadTileCollision(romData, tilesetIndex) {
   return byte1;
 }
 
-function loadNameTable(romData, tilesetIndex) {
+export function loadNameTable(romData, tilesetIndex) {
   const offset = NAME_TABLE_BASE + tilesetIndex * 128;
   const data = getBytesAt({ raw: romData }, offset, 128);
   return new Uint8Array(data);
 }
 
-function loadTileCollisionByte2(romData, tilesetIndex) {
+export function loadTileCollisionByte2(romData, tilesetIndex) {
   const offset = COLLISION_BASE + tilesetIndex * 256;
   const raw = getBytesAt({ raw: romData }, offset, 256);
   const byte2 = new Uint8Array(128);
@@ -235,10 +252,29 @@ function loadEntranceData(romData, mapProps) {
   return new Uint8Array(getBytesAt({ raw: romData }, fileOff, 16));
 }
 
+function readNPCs(romData, npcIdx) {
+  const shifted = npcIdx << 1;
+  const carry = npcIdx >= 128;
+  const ptrOff = NPC_PTR_BASE + (carry ? 0x100 : 0) + (shifted & 0xFF);
+  const lo = romData[ptrOff], hi = romData[ptrOff + 1];
+  const nesAddr = ((hi | 0x80) << 8) | lo;
+  const fileOff = 0x058010 + (nesAddr - 0x8000);
+  if (fileOff < 0x058010 || fileOff >= 0x05C010) return [];
+  const npcs = [];
+  let pos = fileOff;
+  for (let i = 0; i < 16; i++) {
+    const id = romData[pos];
+    if (id === 0) break;
+    npcs.push({ id, x: romData[pos + 1], y: romData[pos + 2], flags: romData[pos + 3] });
+    pos += 4;
+  }
+  return npcs;
+}
+
 // Scan decompressed tilemap for placeholder tiles ($60-$63, $70-$7C),
 // assign sequential trigger IDs per type, and replace them with special tile IDs.
 // Returns Map<"x,y", {type, trigId}> for quick position lookup.
-function processTriggerTiles(tilemap) {
+export function processTriggerTiles(tilemap) {
   const perTypeCounts = new Array(8).fill(0);
   const trigMap = new Map();
 
