@@ -71,6 +71,31 @@ export function readPalettes(romData, offset, count = 8) {
 }
 
 
+// Convert a sub-palette (4 NES color indices) to RGBA colors
+function paletteToRGBA(subPalette) {
+  return subPalette.map((nesIndex) => {
+    const rgb = NES_SYSTEM_PALETTE[nesIndex] || [0, 0, 0];
+    return [...rgb, 255];
+  });
+}
+
+// Render a decoded tile to RGBA pixel data (64 pixels * 4 channels = 256 bytes)
+function tileToRGBA(tilePixels, subPalette) {
+  const rgbaPalette = paletteToRGBA(subPalette);
+  const rgba = new Uint8Array(64 * 4);
+  for (let i = 0; i < 64; i++) {
+    const colorIdx = tilePixels[i];
+    if (colorIdx === 0) {
+      rgba[i * 4 + 3] = 0;
+    } else {
+      const [r, g, b, a] = rgbaPalette[colorIdx];
+      rgba[i * 4] = r; rgba[i * 4 + 1] = g;
+      rgba[i * 4 + 2] = b; rgba[i * 4 + 3] = a;
+    }
+  }
+  return rgba;
+}
+
 // Draw a decoded tile onto a canvas context at (x, y)
 export function drawTile(ctx, tilePixels, subPalette, x, y) {
   const rgba = tileToRGBA(tilePixels, subPalette);
