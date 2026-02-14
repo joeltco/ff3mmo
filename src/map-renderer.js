@@ -393,7 +393,7 @@ export class MapRenderer {
     const key = `${tileX},${tileY}`;
     const trig = this._triggerMap.get(key);
     if (trig) {
-      if (trig.type === 1) return true; // entrance/door — passable
+      if (trig.type === 1 || trig.type === 4) return true; // entrance/door/passage — passable
       return false; // events/treasures — blocked for now
     }
 

@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Tile Picker — Tileset 0</title>
+<style>
+body { background: #111; color: #ddd; font-family: monospace; padding: 12px; }
+h1 { font-size: 16px; color: #c8a832; }
+.btn { cursor: pointer; background: #333; padding: 4px 10px; border: 1px solid #555; border-radius: 3px; font-size: 12px; color: #ddd; }
+#grid { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 12px; }
+.tile { width: 48px; height: 48px; cursor: pointer; border: 2px solid #333; image-rendering: pixelated; }
+.tile:hover { border-color: #ff0; }
+.tile.selected { border-color: #0f0; }
+#info { font-size: 16px; margin: 12px 0; min-height: 28px; color: #ff0; }
+#preview { image-rendering: pixelated; border: 1px solid #555; display: block; margin: 8px 0; }
+.label { font-size: 10px; text-align: center; color: #888; }
+</style>
+</head>
+<body>
+<h1>Tile Picker — Tileset 0 (Cave)</h1>
+<div style="margin:8px 0">
+  <label class="btn" for="rom">Load ROM</label>
+  <input type="file" id="rom" accept=".nes" style="display:none">
+</div>
+<div id="info">Load ROM to begin</div>
+<canvas id="preview" width="128" height="128"></canvas>
+<div id="grid"></div>
+
+<script>
+const TILESET_BASE = 0x006010;
+const GFX_SUBSET_ID_BASE = 0x000C10;
+const GFX_SUBSET_BASE = 0x004810;
+const MAP_BG_GFX_BASE = 0x040010;
+const GFX_SLOT_COUNTS = [32, 32, 16, 16, 16, 16, 8, 8];
+const MAP_PROPS_BASE = 0x004010;
+const PAL_BASE = 0x006410;
+const NAME_TABLE_BASE = 0x007010;
+
+const NES_PAL = [[84,84,84],[0,30,116],[8,16,144],[48,0,136],[68,0,100],[92,0,48],[84,4,0],[60,24,0],[32,42,0],[8,58,0],[0,64,0],[0,60,0],[0,50,60],[0,0,0],[0,0,0],[0,0,0],[152,150,152],[8,76,196],[48,50,236],[92,30,228],[136,20,176],[160,20,100],[152,34,32],[120,60,0],[84,90,0],[40,114,0],[8,124,0],[0,118,40],[0,102,120],[0,0,0],[0,0,0],[0,0,0],[236,238,236],[76,154,236],[120,124,236],[176,98,236],[228,84,236],[236,88,180],[236,106,100],[212,136,32],[160,170,0],[116,196,0],[76,208,32],[56,204,108],[56,180,204],[60,60,60],[0,0,0],[0,0,0],[236,238,236],[168,204,236],[188,188,236],[212,178,236],[236,174,236],[236,174,212],[236,180,176],[228,196,144],[204,210,120],[180,222,120],[168,226,144],[152,226,180],[160,214,228],[160,162,160],[0,0,0],[0,0,0]];
+
+function decodeTile(rom, offset) {
+  const p = new Uint8Array(64);
+  for (let r = 0; r < 8; r++) {
+    const lo = rom[offset + r], hi = rom[offset + r + 8];
+    for (let c = 0; c < 8; c++) {
+      const bit = 7 - c;
+      p[r * 8 + c] = ((lo >> bit) & 1) | (((hi >> bit) & 1) << 1);
+    }
+  }
+  return p;
+}
+
+document.getElementById('rom').addEventListener('change', async (e) => {
+  const rom = new Uint8Array(await e.target.files[0].arrayBuffer());
+
+  // Load CHR tiles for map 111 (Altar Cave)
+  const subId = rom[GFX_SUBSET_ID_BASE + 111];
+  const subOff = GFX_SUBSET_BASE + subId * 16;
+  const chrTiles = [];
+  for (let slot = 0; slot < 8; slot++) {
+    const ptr = rom[subOff + slot*2] | (rom[subOff + slot*2+1] << 8);
+    const gfxOff = MAP_BG_GFX_BASE + ptr;
+    for (let t = 0; t < GFX_SLOT_COUNTS[slot]; t++)
+      chrTiles.push(decodeTile(rom, gfxOff + t * 16));
+  }
+
+  // Load tileset 0 metatiles
+  const tsOff = TILESET_BASE;
+  const metas = [];
+  for (let m = 0; m < 128; m++)
+    metas.push([rom[tsOff+m], rom[tsOff+m+128], rom[tsOff+m+256], rom[tsOff+m+384]]);
+
+  // Load palettes for map 111
+  const propOff = MAP_PROPS_BASE + 111 * 16;
+  const pals = [];
+  for (let i = 0; i < 3; i++) {
+    const pid = rom[propOff + 5 + i];
+    const po = PAL_BASE + pid * 4;
+    pals.push([rom[po], rom[po+1], rom[po+2], rom[po+3]]);
+  }
+  pals.push([0x0F, 0x00, 0x02, 0x30]);
+
+  // Name table (palette assignments)
+  const ntOff = NAME_TABLE_BASE;
+  const attrs = new Uint8Array(128);
+  for (let i = 0; i < 128; i++) attrs[i] = rom[ntOff + i];
+
+  // Render each metatile to a 16x16 canvas, convert to data URL
+  const rendered = [];
+  for (let m = 0; m < 128; m++) {
+    const palIdx = attrs[m] & 3;
+    const pal = pals[palIdx];
+    const rgbPal = pal.map(ci => NES_PAL[ci & 0x3F]);
+    const c = document.createElement('canvas');
+    c.width = 16; c.height = 16;
+    const ctx = c.getContext('2d');
+    const img = ctx.createImageData(16, 16);
+    const d = img.data;
+    const [tl, tr, bl, br] = metas[m];
+    const parts = [tl, tr, bl, br];
+    const offs = [[0,0],[8,0],[0,8],[8,8]];
+    for (let q = 0; q < 4; q++) {
+      const tile = chrTiles[parts[q]];
+      if (!tile) continue;
+      const [ox, oy] = offs[q];
+      for (let py = 0; py < 8; py++) {
+        for (let px = 0; px < 8; px++) {
+          const ci = tile[py*8+px];
+          const di = ((oy+py)*16+(ox+px))*4;
+          const rgb = rgbPal[ci];
+          d[di] = rgb[0]; d[di+1] = rgb[1]; d[di+2] = rgb[2]; d[di+3] = 255;
+        }
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    rendered.push(c.toDataURL());
+  }
+
+  // Build grid
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+  const info = document.getElementById('info');
+  const preview = document.getElementById('preview');
+  const pctx = preview.getContext('2d');
+
+  for (let m = 0; m < 128; m++) {
+    const wrap = document.createElement('div');
+    wrap.style.textAlign = 'center';
+    const img = document.createElement('img');
+    img.src = rendered[m];
+    img.className = 'tile';
+    img.dataset.id = m;
+
+    const label = document.createElement('div');
+    label.className = 'label';
+    label.textContent = '$' + m.toString(16).padStart(2, '0');
+
+    img.addEventListener('mouseenter', () => {
+      const palIdx = attrs[m] & 3;
+      info.textContent = `Tile $${m.toString(16).padStart(2,'0')} (${m}) — palette ${palIdx} — CHR: ${metas[m].join(',')}`;
+      pctx.imageSmoothingEnabled = false;
+      pctx.clearRect(0, 0, 128, 128);
+      const tmp = new Image();
+      tmp.onload = () => pctx.drawImage(tmp, 0, 0, 128, 128);
+      tmp.src = rendered[m];
+    });
+
+    img.addEventListener('click', () => {
+      document.querySelectorAll('.tile.selected').forEach(t => t.classList.remove('selected'));
+      img.classList.add('selected');
+      info.textContent = `SELECTED: $${m.toString(16).padStart(2,'0')} (${m})`;
+    });
+
+    wrap.appendChild(img);
+    wrap.appendChild(label);
+    grid.appendChild(wrap);
+  }
+
+  info.textContent = 'Hover to preview, click to select.';
+});
+</script>
+</body>
+</html>

@@ -1,14 +1,14 @@
 // Game Client — canvas rendering, input handling, game loop
 
 import { parseROM, getBytesAt } from './rom-parser.js';
-import { readPalettes, NES_SYSTEM_PALETTE, decodeTile } from './tile-decoder.js';
+import { readPalettes, NES_SYSTEM_PALETTE, decodeTile, decodeTiles } from './tile-decoder.js';
 import { Sprite, DIR_DOWN, DIR_UP, DIR_LEFT, DIR_RIGHT } from './sprite.js';
 import { loadMap } from './map-loader.js';
 import { MapRenderer } from './map-renderer.js';
 import { loadWorldMap } from './world-map-loader.js';
 import { WorldMapRenderer } from './world-map-renderer.js';
 import { generateFloor, clearDungeonCache } from './dungeon-generator.js';
-import { initMusic, playTrack, stopMusic, playSFX, startWipeSFX, updateWipeSFX, stopWipeSFX, TRACKS, SFX } from './music.js';
+import { initMusic, playTrack, stopMusic, playSFX, TRACKS, SFX } from './music.js';
 
 // Jukebox debug mode — press J to toggle, +/- to cycle songs
 let jukeboxMode = false;
@@ -18,6 +18,23 @@ const CANVAS_W = 256;          // 16 metatiles wide (NES resolution)
 const CANVAS_H = 240;          // 15 metatiles tall (NES resolution)
 const TILE_SIZE = 16;
 const WALK_DURATION = 16 * (1000 / 60);  // 16 NES frames at 60fps ≈ 267ms per tile
+
+// HUD layout — 4 panels: top scenery, game viewport, right box, bottom box
+const HUD_TOP_H = 32;                              // 2 tiles — battle scenery (future)
+const HUD_VIEW_X = 0;
+const HUD_VIEW_Y = HUD_TOP_H;                      // 32
+const HUD_VIEW_W = 144;                             // 9 tiles
+const HUD_VIEW_H = 144;                             // 9 tiles
+const HUD_RIGHT_X = HUD_VIEW_W;                     // 144
+const HUD_RIGHT_W = CANVAS_W - HUD_VIEW_W;          // 112 (7 tiles)
+const HUD_BOT_Y = HUD_VIEW_Y + HUD_VIEW_H;          // 176
+const HUD_BOT_H = CANVAS_H - HUD_BOT_Y;             // 64 (4 tiles)
+
+// Menu border tiles — ROM offset: bank 0D, $1700 into bank, tiles $F7-$FF
+const BORDER_TILE_ROM = 0x1B710 + (0xF7 - 0x70) * 16;  // 0x1BF80
+const BORDER_TILE_COUNT = 9;  // $F7 TL, $F8 top, $F9 TR, $FA left, $FB right, $FC BL, $FD bot, $FE BR, $FF fill
+const MENU_PALETTE = [0x0F, 0x00, 0x0F, 0x30];  // black, grey, black (interior), white
+let hudCanvas = null;
 
 // ROM offsets
 const PALETTE_OFFSET = 0x001680;
@@ -48,14 +65,20 @@ let dungeonFloor = -1;
 let dungeonDestinations = null;
 let secretWalls = null;
 let falseWalls = null;
+let hiddenTraps = null;
+let rockSwitch = null;
+let warpTile = null;
+let pondTiles = null;
+let trapFallPending = false;
+let trapShakePending = false;
 
 // Player world position in pixels
 let worldX = 0;
 let worldY = 0;
 
-// Where the sprite draws on screen (always centered)
-const SCREEN_CENTER_X = (CANVAS_W - 16) / 2;    // 120
-const SCREEN_CENTER_Y = (CANVAS_H - 16) / 2 - 3; // 109
+// Where the sprite draws on screen (centered in viewport)
+const SCREEN_CENTER_X = HUD_VIEW_X + (HUD_VIEW_W - 16) / 2;    // 64
+const SCREEN_CENTER_Y = HUD_VIEW_Y + (HUD_VIEW_H - 16) / 2 - 3; // 93
 
 // Movement state
 let moving = false;
@@ -75,12 +98,21 @@ let _flameRawTiles = null; // Map<npcId, [[tl,tr,bl,br], [tl,tr,bl,br]]> — raw
 let _flameFrames = null;   // Map<npcId, [canvas, canvas]> — rendered with current map palette
 let _flameSprites = [];    // [{npcId, px, py}] — active flame positions for current map
 
+// Star sprite effect state (teleport warp + pond healing)
+let _starTiles = null;     // [canvas, canvas, canvas] — 3 animation frames (8×8)
+let starEffect = null;     // {frame, radius, angle, spin, onComplete} or null
+
+
 // Screen wipe transition state (FF3-style horizontal band wipe)
 // Black bars close from top/bottom edges toward center, then open to reveal new map
-const WIPE_DURATION = 27 * (1000 / 60);  // 27 NES frames ≈ 450ms
+const WIPE_DURATION = 44 * (1000 / 60);  // 44 NES frames ≈ 733ms
 const WIPE_HOLD = 100;                    // ms to hold on full black
-const DOOR_OPEN_DURATION = 0;
-let transState = 'none';  // 'none' | 'door-opening' | 'closing' | 'hold' | 'loading' | 'opening'
+const DOOR_OPEN_DURATION = 400;
+const TRAP_REVEAL_DURATION = 400; // ms to show the hole before wipe
+const SPIN_DIRS = [DIR_LEFT, DIR_UP, DIR_RIGHT, DIR_DOWN];
+const SPIN_INTERVAL = 110;  // ms per direction change
+const SPIN_CYCLES = 4;      // full rotations, ends facing south
+let transState = 'none';  // 'none' | 'door-opening' | 'trap-falling' | 'closing' | 'hold' | 'loading' | 'opening'
 let transTimer = 0;
 let transPendingAction = null;
 let transDungeon = false;      // true when this transition is a dungeon entry
@@ -122,6 +154,74 @@ export function init() {
   });
 }
 
+function initHUD(romData) {
+  // Decode 9 border tiles ($F7-$FF) from ROM
+  const tiles = decodeTiles(romData, BORDER_TILE_ROM, BORDER_TILE_COUNT);
+  // TL=0, top=1, TR=2, left=3, right=4, BL=5, bot=6, BR=7, fill=8
+
+  // Render each tile to an 8x8 canvas with the menu palette
+  const tileCanvases = tiles.map(pixels => {
+    const c = document.createElement('canvas');
+    c.width = 8; c.height = 8;
+    const tctx = c.getContext('2d');
+    const img = tctx.createImageData(8, 8);
+    for (let i = 0; i < 64; i++) {
+      const nesIdx = MENU_PALETTE[pixels[i]];
+      const rgb = NES_SYSTEM_PALETTE[nesIdx] || [0, 0, 0];
+      img.data[i * 4]     = rgb[0];
+      img.data[i * 4 + 1] = rgb[1];
+      img.data[i * 4 + 2] = rgb[2];
+      img.data[i * 4 + 3] = 255;
+    }
+    tctx.putImageData(img, 0, 0);
+    return c;
+  });
+
+  // Pre-render entire HUD to a cached canvas
+  hudCanvas = document.createElement('canvas');
+  hudCanvas.width = CANVAS_W;
+  hudCanvas.height = CANVAS_H;
+  const hctx = hudCanvas.getContext('2d');
+  hctx.imageSmoothingEnabled = false;
+
+  // Draw a bordered box using the 9 tile canvases
+  // fill=false skips interior (for game viewport — game rendering shows through)
+  function drawBox(x, y, w, h, fill = true) {
+    const [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR, FILL] = tileCanvases;
+    // Corners
+    hctx.drawImage(TL, x, y);
+    hctx.drawImage(TR, x + w - 8, y);
+    hctx.drawImage(BL, x, y + h - 8);
+    hctx.drawImage(BR, x + w - 8, y + h - 8);
+    // Top/bottom edges
+    for (let tx = x + 8; tx < x + w - 8; tx += 8) {
+      hctx.drawImage(TOP, tx, y);
+      hctx.drawImage(BOT, tx, y + h - 8);
+    }
+    // Left/right edges
+    for (let ty = y + 8; ty < y + h - 8; ty += 8) {
+      hctx.drawImage(LEFT, x, ty);
+      hctx.drawImage(RIGHT, x + w - 8, ty);
+    }
+    // Interior fill
+    if (fill) {
+      for (let ty = y + 8; ty < y + h - 8; ty += 8) {
+        for (let tx = x + 8; tx < x + w - 8; tx += 8) {
+          hctx.drawImage(FILL, tx, ty);
+        }
+      }
+    }
+  }
+
+  // Draw all 5 HUD panels (viewport has no fill — game shows through)
+  drawBox(0, 0, CANVAS_W, HUD_TOP_H);                              // Top scenery box
+  drawBox(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H, false); // Game viewport (no fill)
+  drawBox(HUD_RIGHT_X, HUD_VIEW_Y, 48, 32);                          // Right mini-left (3 tiles wide)
+  drawBox(HUD_RIGHT_X + 48, HUD_VIEW_Y, HUD_RIGHT_W - 48, 32);      // Right mini-right
+  drawBox(HUD_RIGHT_X, HUD_VIEW_Y + 32, HUD_RIGHT_W, HUD_VIEW_H - 32); // Right main box
+  drawBox(0, HUD_BOT_Y, CANVAS_W, HUD_BOT_H);                      // Bottom box
+}
+
 export function loadROM(arrayBuffer) {
   const rom = parseROM(arrayBuffer);
 
@@ -135,8 +235,10 @@ export function loadROM(arrayBuffer) {
   spritePalette = allPalettes[0];
   romRaw = rom.raw;
 
+  initHUD(romRaw);
   initMusic(romRaw);
   _initFlameRawTiles(romRaw);
+  _initStarTiles(romRaw);
 
   sprite = new Sprite(romRaw, spritePalette);
 
@@ -163,6 +265,10 @@ function loadMapById(mapId, returnX, returnY) {
     mapData = result;
     secretWalls = result.secretWalls;
     falseWalls = result.falseWalls;
+    hiddenTraps = result.hiddenTraps;
+    rockSwitch = result.rockSwitch || null;
+    warpTile = result.warpTile || null;
+    pondTiles = result.pondTiles || null;
     dungeonDestinations = result.dungeonDestinations;
     currentMapId = mapId;
 
@@ -177,6 +283,22 @@ function loadMapById(mapId, returnX, returnY) {
     moving = false;
     sprite.setDirection(DIR_DOWN);
     sprite.resetFrame();
+    if (floorIndex === 4) playTrack(TRACKS.CRYSTAL_ROOM);
+
+    // If returning to a door tile, show it open until player walks off
+    openDoor = null;
+    if (returnX !== undefined) {
+      const trig = mapRenderer.getTriggerAt(playerX, playerY);
+      if (trig && trig.source === 'dynamic' && trig.type === 1) {
+        const origTileId = mapData.tilemap[playerY * 32 + playerX];
+        const origM = origTileId < 128 ? origTileId : origTileId & 0x7F;
+        const wasDoor = ((mapData.collisionByte2[origM] >> 4) & 0x0F) === 5;
+        if (wasDoor) {
+          mapRenderer.updateTileAt(playerX, playerY, 0x7E);
+          openDoor = { x: playerX, y: playerY, tileId: origTileId };
+        }
+      }
+    }
     return;
   }
 
@@ -184,6 +306,10 @@ function loadMapById(mapId, returnX, returnY) {
   dungeonDestinations = null;
   secretWalls = null;
   falseWalls = null;
+  hiddenTraps = null;
+  rockSwitch = null;
+  warpTile = null;
+  pondTiles = null;
 
   mapData = loadMap(romRaw, mapId);
   currentMapId = mapId;
@@ -381,6 +507,7 @@ function handleInput() {
   if (moving) return;
   if (transState !== 'none') return;
   if (shakeActive) return;
+  if (starEffect) return;
 
   if (keys['z'] || keys['Z']) {
     keys['z'] = false;
@@ -438,6 +565,37 @@ function handleAction() {
     const sx = worldX / TILE_SIZE;
     const sy = worldY / TILE_SIZE;
     mapRenderer = new MapRenderer(mapData, sx, sy); _indoorWaterCache = null;
+    return;
+  }
+
+  // Rock puzzle — press Z on rock → earthquake → false wall opens
+  if (rockSwitch && rockSwitch.rocks.some(r => facedX === r.x && facedY === r.y)) {
+    playSFX(SFX.EARTHQUAKE);
+    shakeActive = true;
+    shakeTimer = 0;
+    shakePendingAction = () => {
+      playSFX(SFX.DOOR);
+      for (const wt of rockSwitch.wallTiles) {
+        mapData.tilemap[wt.y * 32 + wt.x] = wt.newTile;
+      }
+      rockSwitch = null;
+      const sx = worldX / TILE_SIZE;
+      const sy = worldY / TILE_SIZE;
+      mapRenderer = new MapRenderer(mapData, sx, sy); _indoorWaterCache = null;
+    };
+    return;
+  }
+
+  // Pond healing — star spiral when facing dungeon pond water
+  if (pondTiles && pondTiles.has(`${facedX},${facedY}`)) {
+    playSFX(SFX.POND_DRINK);
+    starEffect = {
+      frame: 0, radius: 60, angle: 0, spin: false,
+      onComplete: () => {
+        playSFX(SFX.CURE);
+        // TODO: actual HP healing
+      }
+    };
     return;
   }
 
@@ -514,6 +672,32 @@ function updateMovement(dt) {
       }
     }
 
+    // Warp tile — star spiral + teleport to world map
+    if (warpTile) {
+      const tx = worldX / TILE_SIZE;
+      const ty = worldY / TILE_SIZE;
+      if (tx === warpTile.x && ty === warpTile.y) {
+        sprite.setDirection(DIR_DOWN);
+        playSFX(SFX.WARP);
+        starEffect = {
+          frame: 0, radius: 60, angle: 0, spin: true,
+          onComplete: () => {
+            startWipeTransition(() => {
+              while (mapStack.length > 0) {
+                const entry = mapStack.pop();
+                if (entry.mapId === 'world') {
+                  playTrack(TRACKS.WORLD_MAP);
+                  loadWorldMapAtPosition(entry.x, entry.y);
+                  return;
+                }
+              }
+            });
+          }
+        };
+        return;
+      }
+    }
+
     // Check for trigger at current tile
     if (checkTrigger()) return; // transition happened, skip input chaining
 
@@ -535,7 +719,7 @@ function startWipeTransition(action) {
   transState = 'closing';
   transTimer = 0;
   transPendingAction = action;
-  startWipeSFX();
+  playSFX(SFX.SCREEN_CLOSE);
 }
 
 function updateTransition(dt) {
@@ -543,22 +727,45 @@ function updateTransition(dt) {
 
   transTimer += dt;
 
-  if (transState === 'door-opening') {
+  if (transState === 'trap-reveal') {
+    if (transTimer >= TRAP_REVEAL_DURATION) {
+      transState = 'closing';
+      transTimer = 0;
+      playSFX(SFX.SCREEN_CLOSE);
+        }
+  } else if (transState === 'trap-falling') {
+    const totalSpinTime = SPIN_INTERVAL * SPIN_DIRS.length * SPIN_CYCLES;
+    const dirIndex = Math.floor(transTimer / SPIN_INTERVAL) % SPIN_DIRS.length;
+    sprite.setDirection(SPIN_DIRS[dirIndex]);
+    if (transTimer >= totalSpinTime) {
+      // Load the new map while still black
+      if (transPendingAction) { transPendingAction(); transPendingAction = null; }
+      trapShakePending = true;
+      transState = 'opening';
+      transTimer = 0;
+      playSFX(SFX.SCREEN_OPEN);
+        }
+  } else if (transState === 'door-opening') {
     if (transTimer >= DOOR_OPEN_DURATION) {
       transState = 'closing';
       transTimer = 0;
-      startWipeSFX();
-    }
+      playSFX(SFX.SCREEN_CLOSE);
+        }
   } else if (transState === 'closing') {
-    updateWipeSFX(Math.min(transTimer / WIPE_DURATION, 1));
     if (transTimer >= WIPE_DURATION) {
-      transState = 'hold';
-      transTimer = 0;
-      stopWipeSFX();
-      // Execute the map load while screen is fully black
-      if (transPendingAction) {
-        transPendingAction();
-        transPendingAction = null;
+      if (trapFallPending) {
+        trapFallPending = false;
+        transState = 'trap-falling';
+        transTimer = 0;
+        playSFX(SFX.FALL);
+      } else {
+        transState = 'hold';
+        transTimer = 0;
+        // For dungeon transitions, defer map load to the loading screen
+        if (!transDungeon && transPendingAction) {
+          transPendingAction();
+          transPendingAction = null;
+        }
       }
     }
   } else if (transState === 'hold') {
@@ -567,11 +774,16 @@ function updateTransition(dt) {
         transState = 'loading';
         transTimer = 0;
         playTrack(TRACKS.PIANO_3);
+        // Generate the dungeon floor during the loading screen
+        if (transPendingAction) {
+          transPendingAction();
+          transPendingAction = null;
+        }
       } else {
         transState = 'opening';
         transTimer = 0;
-        startWipeSFX();
-      }
+        playSFX(SFX.SCREEN_OPEN);
+            }
     }
   } else if (transState === 'loading') {
     if (keys['z'] || keys['Z']) {
@@ -580,15 +792,19 @@ function updateTransition(dt) {
       transState = 'opening';
       transTimer = 0;
       transDungeon = false;
+      playSFX(SFX.SCREEN_OPEN);
       playTrack(TRACKS.CRYSTAL_CAVE);
-      startWipeSFX();
-    }
+        }
   } else if (transState === 'opening') {
-    updateWipeSFX(1 - Math.min(transTimer / WIPE_DURATION, 1));
     if (transTimer >= WIPE_DURATION) {
       transState = 'none';
       transTimer = 0;
-      stopWipeSFX();
+      if (trapShakePending) {
+        trapShakePending = false;
+        playSFX(SFX.EARTHQUAKE);
+        shakeActive = true;
+        shakeTimer = 0;
+      }
     }
   }
 }
@@ -596,13 +812,15 @@ function updateTransition(dt) {
 function drawTransitionOverlay() {
   if (transState === 'none' || transState === 'door-opening') return;
 
-  const halfH = CANVAS_H / 2;
+  // Wipe bars animate within the game viewport
+  const vpMidY = HUD_VIEW_Y + HUD_VIEW_H / 2;
+  const halfH = HUD_VIEW_H / 2;
   let barHeight;
 
   if (transState === 'closing') {
     const t = Math.min(transTimer / WIPE_DURATION, 1);
     barHeight = t * halfH;
-  } else if (transState === 'hold' || transState === 'loading') {
+  } else if (transState === 'hold' || transState === 'loading' || transState === 'trap-falling') {
     barHeight = halfH;
   } else if (transState === 'opening') {
     const t = Math.min(transTimer / WIPE_DURATION, 1);
@@ -610,18 +828,19 @@ function drawTransitionOverlay() {
   }
 
   ctx.fillStyle = '#000';
-  ctx.fillRect(0, 0, CANVAS_W, Math.ceil(barHeight));
-  ctx.fillRect(0, CANVAS_H - Math.ceil(barHeight), CANVAS_W, Math.ceil(barHeight));
+  ctx.fillRect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, Math.ceil(barHeight));
+  ctx.fillRect(HUD_VIEW_X, HUD_VIEW_Y + HUD_VIEW_H - Math.ceil(barHeight), HUD_VIEW_W, Math.ceil(barHeight));
 
-  // Loading screen text overlay
+  // Loading screen text overlay (centered in viewport)
   if (transState === 'loading') {
+    const vpCenterX = HUD_VIEW_X + HUD_VIEW_W / 2;
     ctx.fillStyle = '#fff';
     ctx.font = '16px monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('ALTAR CAVE', CANVAS_W / 2, CANVAS_H / 2 - 12);
+    ctx.fillText('ALTAR CAVE', vpCenterX, vpMidY - 12);
     if (Math.floor(transTimer / 500) % 2 === 0) {
       ctx.font = '10px monospace';
-      ctx.fillText('Press Z', CANVAS_W / 2, CANVAS_H / 2 + 20);
+      ctx.fillText('Press Z', vpCenterX, vpMidY + 20);
     }
     ctx.textAlign = 'start';
   }
@@ -680,16 +899,65 @@ function checkTrigger() {
   const trigger = mapRenderer.getTriggerAt(tileX, tileY);
   if (!trigger) return false;
 
+  // Reveal hidden trap on step — show hole, play SFX, then fall
+  if (hiddenTraps && hiddenTraps.has(`${tileX},${tileY}`)) {
+    hiddenTraps.delete(`${tileX},${tileY}`);
+    mapData.tilemap[tileY * 32 + tileX] = 0x74;
+    mapRenderer = new MapRenderer(mapData, tileX, tileY); _indoorWaterCache = null;
+    playSFX(SFX.DOOR);
+    if (trigger.source === 'dynamic' && trigger.type === 1 &&
+        dungeonDestinations && dungeonDestinations.has(trigger.trigId)) {
+      const dest = dungeonDestinations.get(trigger.trigId);
+      const savedX = worldX;
+      const savedY = worldY;
+      transPendingAction = () => {
+        mapStack.push({ mapId: currentMapId, x: savedX, y: savedY });
+        loadMapById(dest.mapId);
+      };
+      transState = 'trap-reveal';
+      transTimer = 0;
+      transDungeon = false;
+      trapFallPending = true;
+      return true;
+    }
+  }
+
   if (trigger.source === 'dynamic' && trigger.type === 1) {
     // Check dungeon destinations first (synthetic maps)
     if (dungeonDestinations && dungeonDestinations.has(trigger.trigId)) {
       const dest = dungeonDestinations.get(trigger.trigId);
+      if (dest.goBack) {
+        // Go back — pop mapStack (same as exit_prev)
+        startWipeTransition(() => {
+          if (mapStack.length > 0) {
+            const prev = mapStack.pop();
+            loadMapById(prev.mapId, prev.x / TILE_SIZE, prev.y / TILE_SIZE);
+            if (prev.mapId >= 1000 && prev.mapId < 1004) playTrack(TRACKS.CRYSTAL_CAVE);
+          }
+        });
+        return true;
+      }
       const savedX = worldX;
       const savedY = worldY;
-      startWipeTransition(() => {
-        mapStack.push({ mapId: currentMapId, x: savedX, y: savedY });
-        loadMapById(dest.mapId);
-      });
+      // Check if this is a door tile — play creak SFX + open animation
+      const destTileId = mapData.tilemap[tileY * 32 + tileX];
+      const destTileM = destTileId < 128 ? destTileId : destTileId & 0x7F;
+      const destIsDoor = ((mapData.collisionByte2[destTileM] >> 4) & 0x0F) === 5;
+      if (destIsDoor) {
+        mapRenderer.updateTileAt(tileX, tileY, 0x7E);
+        playSFX(SFX.DOOR);
+        transState = 'door-opening';
+        transTimer = 0;
+        transPendingAction = () => {
+          mapStack.push({ mapId: currentMapId, x: savedX, y: savedY });
+          loadMapById(dest.mapId);
+        };
+      } else {
+        startWipeTransition(() => {
+          mapStack.push({ mapId: currentMapId, x: savedX, y: savedY });
+          loadMapById(dest.mapId);
+        });
+      }
       return true;
     }
     // Entrance/door — load destination map
@@ -721,9 +989,24 @@ function checkTrigger() {
     return true;
   }
 
+  // Type 4 dynamic triggers (PASSAGE_ENTRY) — check dungeon destinations
+  if (trigger.source === 'dynamic' && trigger.type === 4) {
+    if (dungeonDestinations && dungeonDestinations.has(trigger.trigId)) {
+      const dest = dungeonDestinations.get(trigger.trigId);
+      const savedX = worldX;
+      const savedY = worldY;
+      startWipeTransition(() => {
+        mapStack.push({ mapId: currentMapId, x: savedX, y: savedY });
+        loadMapById(dest.mapId);
+      });
+      return true;
+    }
+  }
+
   if (trigger.source === 'collision' || trigger.source === 'entrance') {
     if (trigger.trigType === 0) {
       // exit_prev — wipe out, then pop from map stack
+      const exitingCrystalRoom = currentMapId === 1004;
       startWipeTransition(() => {
         if (mapStack.length > 0) {
           const prev = mapStack.pop();
@@ -732,6 +1015,7 @@ function checkTrigger() {
             loadWorldMapAtPosition(prev.x, prev.y);
           } else {
             loadMapById(prev.mapId, prev.x / TILE_SIZE, prev.y / TILE_SIZE);
+            if (exitingCrystalRoom) playTrack(TRACKS.CRYSTAL_CAVE);
           }
         } else {
           // Empty stack — exit to world map. Find the entrance table entry
@@ -748,7 +1032,7 @@ function checkTrigger() {
 }
 
 // Self-contained water animation (bypasses cached renderer modules)
-// Horizontal ($22-$25): 8-bit circular LEFT shift per tile (user-approved)
+// Horizontal ($22-$25): 8-bit circular RIGHT shift per tile
 // Vertical ($26-$27): row rotation DOWN (NES bank 3D $B83F)
 const HORIZ_CHR = new Set([0x22, 0x23, 0x24, 0x25]);
 const VERT_CHR = [0x26, 0x27];
@@ -797,14 +1081,14 @@ function _buildWaterCache(wmr) {
     for (let f = 0; f < 16; f++) {
       arrL.push(_rebuild(cL, p1L));
       arrR.push(_rebuild(cR, p1R));
-      // 16-bit circular LEFT shift: bit 7 of L wraps to bit 0 of R
+      // 16-bit circular RIGHT shift: bit 0 of R wraps to bit 7 of L
       const nL = new Uint8Array(8), nR = new Uint8Array(8);
       for (let r = 0; r < 8; r++) {
         const l = cL[r], ri = cR[r];
-        const carryL = (l >> 7) & 1;  // MSB of left
-        const carryR = (ri >> 7) & 1; // MSB of right
-        nL[r] = ((l << 1) | carryR) & 0xFF; // right's MSB wraps to left's LSB
-        nR[r] = ((ri << 1) | carryL) & 0xFF; // left's MSB wraps to right's LSB
+        const carryL = l & 1;          // LSB of left
+        const carryR = ri & 1;         // LSB of right
+        nL[r] = ((l >> 1) | (carryR << 7)) & 0xFF; // right's LSB wraps to left's MSB
+        nR[r] = ((ri >> 1) | (carryL << 7)) & 0xFF; // left's LSB wraps to right's MSB
       }
       cL = nL; cR = nR;
     }
@@ -946,6 +1230,41 @@ function _initFlameRawTiles(romData) {
   }
 }
 
+// --- Star sprite decoding ---
+// Star sprites from ROM: 2x2 metatile (16x16) — two frames that alternate
+// Frame A (0x014790): diamond star — rays up/down/left/right
+// Frame B (0x0147C0): diagonal star — rays to corners (rotated 45°)
+const STAR_FRAMES = [0x014790, 0x0147D0]; // each is 4 consecutive 8x8 tiles (TL, TR, BL, BR)
+// Palette: 1=dark orange edge, 2=tan/warm yellow body, 3=white center
+const STAR_PALETTE = [null, NES_SYSTEM_PALETTE[0x17], NES_SYSTEM_PALETTE[0x27], NES_SYSTEM_PALETTE[0x30]];
+
+function _initStarTiles(romData) {
+  if (_starTiles) return;
+  _starTiles = [];
+  for (const baseOffset of STAR_FRAMES) {
+    const c = document.createElement('canvas');
+    c.width = 16; c.height = 16;
+    const cctx = c.getContext('2d');
+    // 4 tiles: TL(+0), TR(+16), BL(+32), BR(+48)
+    const positions = [[0, 0], [8, 0], [0, 8], [8, 8]];
+    for (let t = 0; t < 4; t++) {
+      const pixels = decodeTile(romData, baseOffset + t * 16);
+      const img = cctx.createImageData(8, 8);
+      for (let i = 0; i < 64; i++) {
+        const ci = pixels[i];
+        if (ci === 0) { img.data[i * 4 + 3] = 0; continue; }
+        const rgb = STAR_PALETTE[ci];
+        img.data[i * 4] = rgb[0];
+        img.data[i * 4 + 1] = rgb[1];
+        img.data[i * 4 + 2] = rgb[2];
+        img.data[i * 4 + 3] = 255;
+      }
+      cctx.putImageData(img, positions[t][0], positions[t][1]);
+    }
+    _starTiles.push(c);
+  }
+}
+
 // Render flame frame canvases using the current map's actual sprite palettes
 function _renderFlameFrames() {
   if (!_flameRawTiles || !mapData || !mapData.spritePalettes) return;
@@ -1033,13 +1352,14 @@ function _rebuildFlameSprites() {
   }
 }
 
+
 let _indoorWaterCache = null;
 
 function _buildIndoorWaterCache(mr) {
   const { chrTiles, metatiles, tilemap } = mr.mapData;
   const frames = new Map();
 
-  // Horizontal: 16-bit paired LEFT shift, 16 frames
+  // Horizontal: 16-bit paired RIGHT shift, 16 frames
   const HORIZ_PAIRS_I = [[0x22, 0x23], [0x24, 0x25]];
   for (const [ciL, ciR] of HORIZ_PAIRS_I) {
     const bL = chrTiles[ciL], bR = chrTiles[ciR];
@@ -1054,8 +1374,10 @@ function _buildIndoorWaterCache(mr) {
       const nL = new Uint8Array(8), nR = new Uint8Array(8);
       for (let r = 0; r < 8; r++) {
         const l = cL[r], ri = cR[r];
-        nL[r] = ((l << 1) | ((ri >> 7) & 1)) & 0xFF;
-        nR[r] = ((ri << 1) | ((l >> 7) & 1)) & 0xFF;
+        const carryL = l & 1;
+        const carryR = ri & 1;
+        nL[r] = ((l >> 1) | (carryR << 7)) & 0xFF;
+        nR[r] = ((ri >> 1) | (carryL << 7)) & 0xFF;
       }
       cL = nL; cR = nR;
     }
@@ -1155,6 +1477,10 @@ function _updateIndoorWater(mr) {
 }
 
 function render() {
+  // Clear canvas to black (HUD background)
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
   let camX = Math.round(worldX);
   const camY = Math.round(worldY);
 
@@ -1170,6 +1496,12 @@ function render() {
 
   const spriteY = SCREEN_CENTER_Y;
 
+  // Clip game rendering to viewport
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
+  ctx.clip();
+
   if (onWorldMap && worldMapRenderer) {
     worldMapRenderer.draw(ctx, camX, camY, originX, originY);
     // Water animation: update atlas directly from game.js (bypasses module cache)
@@ -1179,22 +1511,25 @@ function render() {
     _updateIndoorWater(mapRenderer);
   }
 
-  // Flame sprites: draw after background, before player
-  if (!onWorldMap && _flameSprites.length > 0) {
-    const flameFrame = Math.floor(waterTick / 8) & 1;
-    const wLeft = camX - originX;
-    const wTop = camY - originY;
-    for (const flame of _flameSprites) {
-      const sx = flame.px - wLeft;
-      const sy = flame.py - wTop;
-      if (sx < -16 || sx > CANVAS_W || sy < -16 || sy > CANVAS_H) continue;
-      const frames = _flameFrames.get(flame.npcId);
-      ctx.drawImage(frames[flameFrame], sx, sy);
+  // Hide all sprites/objects during transitions (show during trap reveal)
+  if (transState === 'none' || transState === 'trap-reveal') {
+    // Flame sprites: draw after background, before player
+    if (!onWorldMap && _flameSprites.length > 0) {
+      const flameFrame = Math.floor(waterTick / 8) & 1;
+      const wLeft = camX - originX;
+      const wTop = camY - originY;
+      for (const flame of _flameSprites) {
+        const sx = flame.px - wLeft;
+        const sy = flame.py - wTop;
+        if (sx < -16 || sx > CANVAS_W || sy < -16 || sy > CANVAS_H) continue;
+        const frames = _flameFrames.get(flame.npcId);
+        ctx.drawImage(frames[flameFrame], sx, sy);
+      }
     }
-  }
 
-  if (sprite) {
-    sprite.draw(ctx, SCREEN_CENTER_X, spriteY);
+    if (sprite) {
+      sprite.draw(ctx, SCREEN_CENTER_X, spriteY);
+    }
   }
 
   // Draw overlay tiles (grass, trees) on top of sprite
@@ -1203,6 +1538,27 @@ function render() {
   } else if (mapRenderer) {
     mapRenderer.drawOverlay(ctx, camX, camY, originX, originY, SCREEN_CENTER_X, spriteY);
   }
+
+  // Star spiral effect — 8 stars orbiting inward around player
+  if (starEffect && _starTiles) {
+    const cx = SCREEN_CENTER_X + 8;  // player sprite center X
+    const cy = SCREEN_CENTER_Y + 8;  // player sprite center Y
+    const { radius, angle, frame } = starEffect;
+    // Flicker: alternate + and X shapes every ~16 frames
+    const tile = _starTiles[(frame >> 4) & 1];
+    for (let i = 0; i < 8; i++) {
+      const a = angle + i * Math.PI / 4;
+      const sx = Math.round(cx + radius * Math.cos(a) - 8);
+      const sy = Math.round(cy + radius * Math.sin(a) - 8);
+      ctx.drawImage(tile, sx, sy);
+    }
+  }
+
+  ctx.restore(); // end viewport clip
+}
+
+function drawHUD() {
+  if (hudCanvas) ctx.drawImage(hudCanvas, 0, 0);
 }
 
 function gameLoop(timestamp) {
@@ -1222,6 +1578,24 @@ function gameLoop(timestamp) {
     }
   }
 
+  // Star spiral effect update — matches NES: radius $EA→$0C, -2/frame, ~111 frames
+  if (starEffect) {
+    starEffect.frame++;
+    starEffect.angle += 0.06;
+    starEffect.radius -= 0.55;
+    // Player spin: cycle directions every 14 frames (DOWN→LEFT→UP→RIGHT)
+    if (starEffect.spin && starEffect.frame % 14 === 0) {
+      const SPIN_ORDER = [DIR_DOWN, DIR_LEFT, DIR_UP, DIR_RIGHT];
+      const spinIdx = Math.floor(starEffect.frame / 14) % 4;
+      sprite.setDirection(SPIN_ORDER[spinIdx]);
+    }
+    if (starEffect.radius < 4) {
+      const cb = starEffect.onComplete;
+      starEffect = null;
+      if (cb) cb();
+    }
+  }
+
   // Water animation tick (~67ms each)
   // Shift advances every 8 ticks (~533ms). Rows cascade 1-per-tick.
   waterTimer += dt;
@@ -1233,6 +1607,14 @@ function gameLoop(timestamp) {
 
   render();
   drawTransitionOverlay();
+
+  // Draw spinning sprite on top of black during trap fall
+  if (transState === 'trap-falling' && sprite) {
+    sprite.draw(ctx, SCREEN_CENTER_X, SCREEN_CENTER_Y);
+  }
+
+  // HUD always on top
+  drawHUD();
 
   if (jukeboxMode) {
     ctx.font = '8px monospace';

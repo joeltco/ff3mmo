@@ -97,9 +97,9 @@
     <input type="file" id="rom-file" accept=".nes,.bin">
 
     <label>Offset:
-      <input type="number" id="offset-input" value="0" min="0" step="256">
+      <input type="number" id="offset-input" value="0" min="0" step="16">
     </label>
-    <input type="range" id="offset-slider" min="0" max="0" value="0" step="256">
+    <input type="range" id="offset-slider" min="0" max="0" value="0" step="16">
 
     <label>Palette:
       <select id="palette-select"></select>
@@ -120,7 +120,11 @@
     <div class="presets">
       <span style="font-size:11px;color:#888;">Presets:</span>
       <button data-offset="0x01C010">Map Sprites</button>
-      <button data-offset="0x001680">Palette Area</button>
+      <button data-offset="0x54010">Battle Anim 1</button>
+      <button data-offset="0x58010">Battle Anim 2</button>
+      <button data-offset="0x38010">Bank 0E</button>
+      <button data-offset="0x3C010">Bank 0F</button>
+      <button data-offset="0x3E010">Bank 1F</button>
       <button data-offset="0x000000">ROM Start</button>
     </div>
   </div>
@@ -203,7 +207,8 @@
         `Palette: [${palette.map(c => '0x' + c.toString(16).toUpperCase().padStart(2, '0')).join(', ')}]`;
 
       // Create a small canvas for each tile, then scale up
-      const tileCanvas = new OffscreenCanvas(8, 8);
+      const tileCanvas = document.createElement('canvas');
+      tileCanvas.width = 8; tileCanvas.height = 8;
       const tileCtx = tileCanvas.getContext('2d');
 
       const rgbaPalette = paletteToRGBA(palette);
@@ -256,10 +261,15 @@
         allPalettes = [DEFAULT_PALETTE];
       }
 
+      // Add custom palettes for star hunting
+      allPalettes.push([0x0F, 0x17, 0x27, 0x30]); // Black, dark orange, tan, white
+      allPalettes.push([0x0F, 0x07, 0x27, 0x30]); // Black, brown, tan, white
+      allPalettes.push([0x0F, 0x28, 0x38, 0x30]); // Black, yellow, cream, white
       // Add a grayscale option
       allPalettes.push(DEFAULT_PALETTE);
 
       paletteSelect.innerHTML = '';
+      const customNames = ['Star: Org/Tan/Wht', 'Star: Brn/Tan/Wht', 'Star: Yel/Crm/Wht', 'Grayscale'];
       for (let i = 0; i < allPalettes.length; i++) {
         const opt = document.createElement('option');
         if (i < 4) {
@@ -267,13 +277,13 @@
         } else if (i < 8) {
           opt.textContent = `Sprite ${i - 4}`;
         } else {
-          opt.textContent = 'Grayscale';
+          opt.textContent = customNames[i - 8] || `Custom ${i - 8}`;
         }
         opt.value = i;
         paletteSelect.appendChild(opt);
       }
-      paletteSelect.value = 4; // default to first sprite palette
-      currentPaletteIndex = 4;
+      paletteSelect.value = 8; // default to Star: Orange/Tan/White
+      currentPaletteIndex = 8;
       updatePalettePreview();
     }
 
@@ -329,9 +339,7 @@
       });
     });
 
-    // Hover info
-    canvas.addEventListener('mousemove', (e) => {
-      if (!romData) return;
+    function getTileAtMouse(e) {
       const rect = canvas.getBoundingClientRect();
       const scale = getScale();
       const cols = getCols();
@@ -341,11 +349,27 @@
       const tileRow = Math.floor(py / (8 * scale));
       const tileIndex = tileRow * cols + tileCol;
       const tileOffset = getOffset() + tileIndex * 16;
+      return { tileCol, tileRow, tileIndex, tileOffset };
+    }
 
+    // Hover info
+    canvas.addEventListener('mousemove', (e) => {
+      if (!romData) return;
+      const { tileCol, tileRow, tileIndex, tileOffset } = getTileAtMouse(e);
       hoverInfo.textContent =
         `Tile ${tileIndex} | Col ${tileCol}, Row ${tileRow} | ` +
         `Offset: 0x${tileOffset.toString(16).toUpperCase().padStart(6, '0')} | ` +
-        `Index from base: ${tileIndex}`;
+        `Click to copy offset`;
+    });
+
+    // Click to copy offset
+    canvas.addEventListener('click', (e) => {
+      if (!romData) return;
+      const { tileOffset } = getTileAtMouse(e);
+      const hex = '0x' + tileOffset.toString(16).toUpperCase().padStart(6, '0');
+      navigator.clipboard.writeText(hex).then(() => {
+        hoverInfo.textContent = `Copied: ${hex}`;
+      });
     });
   </script>
 </body>

@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>FF3 Tile Identifier</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #111; color: #ddd; font-family: 'Courier New', monospace; padding: 12px; }
+    h1 { font-size: 16px; color: #c8a832; margin-bottom: 8px; }
+    h2 { font-size: 14px; color: #88a; margin: 16px 0 6px; }
+    .controls { background: #222; padding: 8px; border-radius: 4px; margin-bottom: 8px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .controls label { font-size: 12px; color: #aaa; }
+    .controls input[type="file"] { display: none; }
+    .controls .btn { cursor: pointer; background: #333; padding: 4px 10px; border: 1px solid #555; border-radius: 3px; font-size: 12px; color: #ddd; }
+    .controls .btn:hover { background: #444; }
+    .controls select, .controls input { background: #333; color: #ddd; border: 1px solid #555; padding: 2px 6px; font-size: 12px; }
+    #status { font-size: 11px; color: #888; margin-bottom: 8px; }
+    .grid { display: flex; gap: 16px; flex-wrap: wrap; }
+    .panel { flex: 0 0 auto; }
+    .panel canvas { image-rendering: pixelated; image-rendering: crisp-edges; border: 1px solid #444; cursor: crosshair; display: block; }
+    #hover-info { font-size: 12px; color: #aaa; margin-top: 6px; min-height: 20px; padding: 4px; background: #1a1a2e; border-radius: 3px; }
+    #tile-detail { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
+    #tile-detail canvas { image-rendering: pixelated; border: 1px solid #555; }
+  </style>
+</head>
+<body>
+  <h1>FF3 Tile Identifier</h1>
+  <div class="controls">
+    <label class="btn" for="rom-file">Load ROM</label>
+    <input type="file" id="rom-file" accept=".nes">
+    <label>Map ID: <input type="number" id="map-id" value="2" min="0" max="511" style="width:60px"></label>
+    <label class="btn" id="render-btn">Render</label>
+  </div>
+  <div id="status">Load ROM to begin</div>
+  <div id="hover-info">Hover over tiles to identify them</div>
+  <div id="tile-detail"><canvas id="detail-canvas" width="64" height="64"></canvas><span id="detail-text"></span></div>
+
+  <div class="grid">
+    <div class="panel">
+      <h2>Metatile Reference (tileset <span id="ts-id">?</span>)</h2>
+      <canvas id="meta-canvas"></canvas>
+    </div>
+    <div class="panel">
+      <h2>Map <span id="map-label">?</span></h2>
+      <canvas id="map-canvas"></canvas>
+    </div>
+  </div>
+
+  <script type="module">
+    import { parseROM, getBytesAt } from '../src/rom-parser.js';
+    import { decodeTile, readPalettes, NES_SYSTEM_PALETTE } from '../src/tile-decoder.js';
+
+    const MAP_PROPS_BASE = 0x004010;
+    const TILESET_BASE = 0x002390;
+    const NAME_TABLE_BASE = 0x003190;
+    const COLLISION_BASE = 0x003510;
+    const GFX_SUBSET_ID = 0x000C10;
+    const GFX_SUBSET_BASE = 0x000E10;
+    const MAP_BG_GFX_BASE = 0x006010;
+    const PAL1 = 0x001110, PAL2 = 0x001210, PAL3 = 0x001310;
+    const TILEMAP_ID_BASE = 0x000A10;
+    const TILEMAP_PTR_BASE = 0x022010;
+    const SLOT_COUNTS = [0x1A, 0x08, 0x08, 0x0E, 0x08, 0x10, 0x10, 0x10];
+
+    let rom = null;
+    let currentData = null; // {tilemap, metatiles, chrTiles, palettes, tileAttrs, collision, collByte2, fillTile, entranceX, entranceY, tileset}
+
+    function nesRGB(idx) { return NES_SYSTEM_PALETTE[idx & 0x3F] || [0,0,0]; }
+
+    function loadMapData(mapId) {
+      const off = MAP_PROPS_BASE + mapId * 16;
+      const tileset = (rom[off] >> 5) & 7;
+      const entranceX = rom[off] & 0x1F;
+      const entranceY = rom[off + 1] & 0x1F;
+      const fillTile = rom[off + 3];
+      const palIdx = [rom[off+5], rom[off+6], rom[off+7]];
+
+      const palettes = [];
+      for (let i = 0; i < 3; i++) palettes.push([0x0F, rom[PAL1+palIdx[i]], rom[PAL2+palIdx[i]], rom[PAL3+palIdx[i]]]);
+      palettes.push([0x0F, 0x00, 0x02, 0x30]);
+
+      // CHR tiles
+      const subsetId = rom[GFX_SUBSET_ID + mapId];
+      const subOff = GFX_SUBSET_BASE + subsetId * 16;
+      const chrTiles = [];
+      for (let slot = 0; slot < 8; slot++) {
+        const ptr = rom[subOff + slot*2] | (rom[subOff + slot*2+1] << 8);
+        const foff = MAP_BG_GFX_BASE + ptr;
+        for (let t = 0; t < SLOT_COUNTS[slot]; t++) chrTiles.push(decodeTile(rom, foff + t*16));
+      }
+
+      // Metatiles
+      const tsOff = TILESET_BASE + tileset * 512;
+      const metatiles = [];
+      for (let m = 0; m < 128; m++) metatiles.push({ tl: rom[tsOff+m], tr: rom[tsOff+m+128], bl: rom[tsOff+m+256], br: rom[tsOff+m+384] });
+
+      const ntOff = NAME_TABLE_BASE + tileset * 128;
+      const tileAttrs = new Uint8Array(128);
+      for (let i = 0; i < 128; i++) tileAttrs[i] = rom[ntOff + i];
+
+      // Collision
+      const coff = COLLISION_BASE + tileset * 256;
+      const collision = new Uint8Array(128);
+      const collByte2 = new Uint8Array(128);
+      for (let i = 0; i < 128; i++) { collision[i] = rom[coff + i*2]; collByte2[i] = rom[coff + i*2+1]; }
+
+      // Tilemap
+      const tilemapId = rom[TILEMAP_ID_BASE + mapId];
+      const ptrIndex = (tilemapId * 2) & 0xFF;
+      const ptrTableHi = (tilemapId & 0x80) ? 0x81 : 0x80;
+      const ptrTableRomBase = TILEMAP_PTR_BASE + ((ptrTableHi - 0x80) << 8);
+      const ptrLo = rom[ptrTableRomBase + ptrIndex];
+      const ptrHi = rom[ptrTableRomBase + ptrIndex + 1];
+      const nesAddrHi = (ptrHi & 0x1F) | 0x80;
+      const bank = 0x11 + (ptrHi >> 5);
+      const tmOff = bank * 0x2000 + 0x10 + ((nesAddrHi << 8 | ptrLo) - 0x8000);
+      let rp = tmOff;
+      const tilemap = new Uint8Array(1024);
+      let wp = 0;
+      while (wp < 1024) {
+        const b = rom[rp++];
+        if ((b & 0x80) === 0) tilemap[wp++] = b;
+        else { const tile = b & 0x7F; const run = rom[rp++]; for (let i = 0; i < run && wp < 1024; i++) tilemap[wp++] = tile; }
+      }
+
+      return { tilemap, metatiles, chrTiles, palettes, tileAttrs, collision, collByte2, fillTile, entranceX, entranceY, tileset, tilemapId };
+    }
+
+    function renderMetatile(ctx, x, y, m, data, scale) {
+      const meta = data.metatiles[m];
+      const palGroup = data.tileAttrs[m] & 0x03;
+      const pal = data.palettes[palGroup].map(c => nesRGB(c));
+      const subs = [[meta.tl,0,0],[meta.tr,8,0],[meta.bl,0,8],[meta.br,8,8]];
+      for (const [chrIdx, ox, oy] of subs) {
+        const tile = data.chrTiles[chrIdx];
+        if (!tile) continue;
+        for (let py = 0; py < 8; py++) for (let px = 0; px < 8; px++) {
+          const rgb = pal[tile[py*8+px]];
+          ctx.fillStyle = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
+          ctx.fillRect(x + (ox+px)*scale, y + (oy+py)*scale, scale, scale);
+        }
+      }
+    }
+
+    function renderMetaSheet(data) {
+      const canvas = document.getElementById('meta-canvas');
+      const scale = 3;
+      const ts = 16 * scale; // 48px per tile
+      const cols = 16, rows = 8;
+      canvas.width = cols * ts; canvas.height = rows * ts;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      for (let m = 0; m < 128; m++) {
+        const col = m % cols, row = Math.floor(m / cols);
+        renderMetatile(ctx, col*ts, row*ts, m, data, scale);
+        // Label
+        ctx.fillStyle = '#000'; ctx.font = '10px monospace';
+        ctx.fillText(`$${m.toString(16).toUpperCase().padStart(2,'0')}`, col*ts+1, row*ts+11);
+        ctx.fillStyle = '#fff';
+        ctx.fillText(`$${m.toString(16).toUpperCase().padStart(2,'0')}`, col*ts, row*ts+10);
+      }
+      document.getElementById('ts-id').textContent = data.tileset;
+
+      canvas.onmousemove = (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const mx = (e.clientX - rect.left) / rect.width * canvas.width;
+        const my = (e.clientY - rect.top) / rect.height * canvas.height;
+        const tc = Math.floor(mx / ts), tr = Math.floor(my / ts);
+        const m = tr * cols + tc;
+        if (m >= 0 && m < 128) showTileInfo(m, data);
+      };
+    }
+
+    function renderMap(data, mapId) {
+      const canvas = document.getElementById('map-canvas');
+      const scale = 2;
+      canvas.width = 32*16*scale; canvas.height = 32*16*scale;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      for (let ty = 0; ty < 32; ty++) for (let tx = 0; tx < 32; tx++) {
+        const mid = data.tilemap[ty*32+tx];
+        const m = mid < 128 ? mid : mid & 0x7F;
+        renderMetatile(ctx, tx*16*scale, ty*16*scale, m, data, scale);
+      }
+      // Mark entrance
+      const ex = data.entranceX * 16 * scale + 8 * scale;
+      const ey = data.entranceY * 16 * scale + 8 * scale;
+      ctx.strokeStyle = '#f00'; ctx.lineWidth = 2;
+      ctx.strokeRect(ex - 6, ey - 6, 12, 12);
+      document.getElementById('map-label').textContent = `${mapId} (tilemap ${data.tilemapId})`;
+
+      canvas.onmousemove = (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const mx = (e.clientX - rect.left) / rect.width * canvas.width;
+        const my = (e.clientY - rect.top) / rect.height * canvas.height;
+        const tx = Math.floor(mx / (16*scale)), ty = Math.floor(my / (16*scale));
+        if (tx >= 0 && tx < 32 && ty >= 0 && ty < 32) {
+          const mid = data.tilemap[ty*32+tx];
+          const m = mid < 128 ? mid : mid & 0x7F;
+          showTileInfo(m, data, tx, ty, mid);
+        }
+      };
+    }
+
+    function showTileInfo(m, data, tx, ty, rawTile) {
+      const c = data.collision[m];
+      const b2 = data.collByte2[m];
+      const zz = c & 0x07;
+      const flags = [];
+      if (zz === 3) flags.push('WALL');
+      else if (zz === 0) flags.push('floor');
+      else flags.push(`z=${zz}`);
+      if (c & 0x80) flags.push('TRIGGER');
+      if (c & 0x20) flags.push('u-overlay');
+      if (c & 0x10) flags.push('l-overlay');
+      if (c & 0x80) {
+        const ttype = (b2 >> 4) & 0xF;
+        const tid = b2 & 0xF;
+        const names = {0:'exit_prev',1:'exit_world',4:'entrance',5:'door',6:'locked_door',15:'event'};
+        flags.push(`trig:${names[ttype]||ttype}#${tid}`);
+      }
+      const isFill = m === data.fillTile;
+      let info = `Tile $${m.toString(16).toUpperCase().padStart(2,'0')} | coll=$${c.toString(16).padStart(2,'0')} b2=$${b2.toString(16).padStart(2,'0')} | ${flags.join(', ')}`;
+      if (isFill) info += ' | FILL';
+      if (tx !== undefined) info = `(${tx},${ty}) raw=$${rawTile.toString(16).padStart(2,'0')} → ` + info;
+      document.getElementById('hover-info').textContent = info;
+
+      // Draw enlarged tile
+      const dc = document.getElementById('detail-canvas');
+      const dctx = dc.getContext('2d');
+      dc.width = 64; dc.height = 64;
+      renderMetatile(dctx, 0, 0, m, data, 4);
+      document.getElementById('detail-text').textContent = `$${m.toString(16).toUpperCase().padStart(2,'0')}`;
+    }
+
+    document.getElementById('rom-file').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const buf = await file.arrayBuffer();
+      rom = new Uint8Array(buf);
+      document.getElementById('status').textContent = `ROM loaded: ${rom.length} bytes`;
+      doRender();
+    });
+
+    document.getElementById('render-btn').addEventListener('click', doRender);
+    document.getElementById('map-id').addEventListener('change', doRender);
+
+    function doRender() {
+      if (!rom) return;
+      const mapId = parseInt(document.getElementById('map-id').value) || 0;
+      currentData = loadMapData(mapId);
+      renderMetaSheet(currentData);
+      renderMap(currentData, mapId);
+      document.getElementById('status').textContent = `Map ${mapId}: tileset ${currentData.tileset}, tilemap ${currentData.tilemapId}, entrance (${currentData.entranceX},${currentData.entranceY}), fill $${currentData.fillTile.toString(16)}`;
+    }
+  </script>
+</body>
+</html>

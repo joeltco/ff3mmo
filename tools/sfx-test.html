@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>FF3 SFX Tester</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #1a1a2e; color: #e0e0e0; font-family: 'Courier New', monospace; padding: 24px; }
+    h1 { font-size: 16px; color: #c8a832; margin-bottom: 16px; }
+    .controls { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+    button { background: #333; color: #e0e0e0; border: 1px solid #555; padding: 6px 14px; font-size: 13px; cursor: pointer; border-radius: 3px; font-family: inherit; }
+    button:hover { background: #444; }
+    button:active { background: #555; }
+    .big-btn { font-size: 18px; padding: 8px 20px; }
+    input[type="file"] { display: none; }
+    label.file-label { cursor: pointer; background: #333; padding: 6px 14px; border: 1px solid #555; border-radius: 3px; font-size: 13px; }
+    label.file-label:hover { background: #444; }
+    #current { font-size: 24px; color: #fff; min-width: 200px; text-align: center; }
+    #status { font-size: 12px; color: #888; margin-top: 8px; }
+    .section { margin-bottom: 16px; padding: 12px; background: #222; border-radius: 4px; }
+    .section h2 { font-size: 13px; color: #c8a832; margin-bottom: 8px; }
+    input[type="range"] { width: 400px; }
+    .mode-toggle { display: flex; gap: 4px; }
+    .mode-toggle button.active { background: #c8a832; color: #1a1a2e; }
+  </style>
+</head>
+<body>
+  <h1>FF3 SFX Tester</h1>
+
+  <div class="section">
+    <label class="file-label" for="rom-file">Load ROM</label>
+    <input type="file" id="rom-file" accept=".nes,.bin">
+    <span id="rom-status" style="margin-left:12px;font-size:12px;color:#888;">No ROM loaded</span>
+  </div>
+
+  <div class="section">
+    <h2>Mode</h2>
+    <div class="mode-toggle">
+      <button id="mode-sfx" class="active">SFX (ID + $41)</button>
+      <button id="mode-raw">Raw Track #</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="controls">
+      <button class="big-btn" id="prev10">&lt;&lt;</button>
+      <button class="big-btn" id="prev">&lt;</button>
+      <div id="current">--</div>
+      <button class="big-btn" id="next">&gt;</button>
+      <button class="big-btn" id="next10">&gt;&gt;</button>
+      <button class="big-btn" id="play" style="background:#2a5a2a;">&#9654; Play</button>
+      <button class="big-btn" id="stop" style="background:#5a2a2a;">&#9632; Stop</button>
+    </div>
+    <input type="range" id="slider" min="0" max="191" value="0">
+    <div id="status"></div>
+  </div>
+
+  <script src="/lib/libgme.js"></script>
+  <script type="module">
+    import { buildNSF } from '../src/nsf-builder.js';
+    import { parseROM } from '../src/rom-parser.js';
+
+    let nsfData = null;
+    let audioCtx = null;
+    let emu = null;
+    let emuRef = null;
+    let node = null;
+    let audioBuf = null;
+    let currentId = 0;
+    let mode = 'sfx'; // 'sfx' or 'raw'
+    const BUF_SIZE = 2048;
+
+    const slider = document.getElementById('slider');
+    const display = document.getElementById('current');
+    const status = document.getElementById('status');
+
+    function getTrack() {
+      return mode === 'sfx' ? currentId + 0x41 : currentId;
+    }
+
+    function getMaxId() {
+      return mode === 'sfx' ? 126 : 191; // SFX: 0-126 ($41-$BF), Raw: 0-191
+    }
+
+    function updateDisplay() {
+      const hex = '0x' + currentId.toString(16).toUpperCase().padStart(2, '0');
+      const track = getTrack();
+      const trackHex = '0x' + track.toString(16).toUpperCase().padStart(2, '0');
+      if (mode === 'sfx') {
+        display.textContent = `SFX ${hex} (#${currentId})`;
+        status.textContent = `NSF track: ${trackHex} (${track}) | ROM: $${(currentId | 0x80).toString(16).toUpperCase()} → $7F49`;
+      } else {
+        display.textContent = `Track ${hex} (#${currentId})`;
+        status.textContent = `NSF track: ${trackHex} (${track}) | ${track < 0x41 ? 'Song' : 'SFX ID ' + (track - 0x41)}`;
+      }
+      slider.max = getMaxId();
+      slider.value = currentId;
+    }
+
+    function setId(id) {
+      currentId = Math.max(0, Math.min(getMaxId(), id));
+      updateDisplay();
+    }
+
+    function playCurrentTrack() {
+      if (!nsfData || typeof Module === 'undefined') return;
+
+      if (!audioCtx) audioCtx = new AudioContext();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+
+      if (node) { node.disconnect(); node = null; }
+      if (emu) { Module.ccall('gme_delete', 'number', ['number'], [emu]); emu = null; }
+
+      if (!emuRef) emuRef = Module.allocate(1, 'i32', Module.ALLOC_STATIC);
+
+      const err = Module.ccall('gme_open_data', 'number',
+        ['array', 'number', 'number', 'number'],
+        [nsfData, nsfData.length, emuRef, audioCtx.sampleRate]);
+      if (err !== 0) { status.textContent = 'gme_open_data failed'; return; }
+      emu = Module.getValue(emuRef, 'i32');
+
+      const track = getTrack();
+      if (Module.ccall('gme_start_track', 'number', ['number', 'number'], [emu, track]) !== 0) {
+        status.textContent = `gme_start_track failed for track ${track}`;
+        return;
+      }
+
+      if (!audioBuf) audioBuf = Module._malloc(BUF_SIZE * 2 * 2);
+
+      node = audioCtx.createScriptProcessor(BUF_SIZE, 0, 2);
+      node.onaudioprocess = (e) => {
+        if (!emu) { e.outputBuffer.getChannelData(0).fill(0); e.outputBuffer.getChannelData(1).fill(0); return; }
+        if (Module.ccall('gme_track_ended', 'number', ['number'], [emu]) === 1) {
+          e.outputBuffer.getChannelData(0).fill(0); e.outputBuffer.getChannelData(1).fill(0); return;
+        }
+        Module.ccall('gme_play', 'number', ['number', 'number', 'number'], [emu, BUF_SIZE * 2, audioBuf]);
+        const ch0 = e.outputBuffer.getChannelData(0);
+        const ch1 = e.outputBuffer.getChannelData(1);
+        const base = audioBuf >> 1;
+        for (let i = 0; i < BUF_SIZE; i++) {
+          ch0[i] = Module.HEAP16[base + i * 2] / 32768;
+          ch1[i] = Module.HEAP16[base + i * 2 + 1] / 32768;
+        }
+      };
+      node.connect(audioCtx.destination);
+      updateDisplay();
+    }
+
+    function stopPlayback() {
+      if (node) { node.disconnect(); node = null; }
+      if (emu) { Module.ccall('gme_delete', 'number', ['number'], [emu]); emu = null; }
+    }
+
+    // ROM loading
+    document.getElementById('rom-file').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const buf = await file.arrayBuffer();
+      const parsed = parseROM(buf);
+      nsfData = buildNSF(parsed.raw);
+      document.getElementById('rom-status').textContent = `Loaded: ${file.name} | NSF: ${nsfData.length} bytes, ${nsfData[6]} tracks`;
+      updateDisplay();
+    });
+
+    // Mode toggles
+    document.getElementById('mode-sfx').addEventListener('click', () => {
+      mode = 'sfx';
+      document.getElementById('mode-sfx').classList.add('active');
+      document.getElementById('mode-raw').classList.remove('active');
+      setId(0);
+    });
+    document.getElementById('mode-raw').addEventListener('click', () => {
+      mode = 'raw';
+      document.getElementById('mode-raw').classList.add('active');
+      document.getElementById('mode-sfx').classList.remove('active');
+      setId(0);
+    });
+
+    // Navigation
+    document.getElementById('prev').addEventListener('click', () => setId(currentId - 1));
+    document.getElementById('next').addEventListener('click', () => setId(currentId + 1));
+    document.getElementById('prev10').addEventListener('click', () => setId(currentId - 10));
+    document.getElementById('next10').addEventListener('click', () => setId(currentId + 10));
+    document.getElementById('play').addEventListener('click', playCurrentTrack);
+    document.getElementById('stop').addEventListener('click', stopPlayback);
+    slider.addEventListener('input', () => setId(parseInt(slider.value)));
+
+    // Keyboard: left/right to navigate, space to play
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowLeft') setId(currentId - 1);
+      else if (e.key === 'ArrowRight') setId(currentId + 1);
+      else if (e.key === 'ArrowUp') setId(currentId + 10);
+      else if (e.key === 'ArrowDown') setId(currentId - 10);
+      else if (e.key === ' ') { e.preventDefault(); playCurrentTrack(); }
+      else if (e.key === 'Escape') stopPlayback();
+    });
+
+    updateDisplay();
+  </script>
+</body>
+</html>
