@@ -1,0 +1,24 @@
+Final Fantasy III 2019 Translation v1.3
+by Chaos Rush
+
+PATCHING INSTRUCTIONS:
+Apply the included patch file to a clean, unmodified,
+Japanese Final Fantasy III FAMICOM/NES ROM.
+
+This is a translation patch of Final Fantasy III for the
+Famicom/NES. It aims to be an accurate translation that
+also uses Square Enix's terminology for its modern
+remakes of that game. The script is influenced by the
+DS remake, but the only information expressed by
+characters is strictly limited to information that was
+in the original Japanese script. It also aims to be the
+definitive English version of Final Fantasy III in doing
+so. This translation keeps the original ROM format of
+the Japanese version of the game, thus this should work
+on hardware as well as any emulator that supports the
+Japanese version.
+
+Credits:
+* Chaos Rush -that's me.
+* Team dCode - for making the Bigram Analysis tool
+* Square Enix - for making the original game and remaking it

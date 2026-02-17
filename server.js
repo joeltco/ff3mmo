@@ -10,7 +10,7 @@ const MIME = {
 
 createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
-  let path = url.pathname === '/' ? '/index.html' : url.pathname;
+  let path = url.pathname === '/' ? '/index.html' : decodeURIComponent(url.pathname);
   try {
     const data = await readFile(join('.', path));
     const ext = extname(path);

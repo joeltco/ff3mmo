@@ -9,6 +9,9 @@ import { loadWorldMap } from './world-map-loader.js';
 import { WorldMapRenderer } from './world-map-renderer.js';
 import { generateFloor, clearDungeonCache } from './dungeon-generator.js';
 import { initMusic, playTrack, stopMusic, playSFX, TRACKS, SFX } from './music.js';
+import { applyIPS } from './ips-patcher.js';
+import { initTextDecoder } from './text-decoder.js';
+import { initFont, drawText, measureText, TEXT_WHITE } from './font-renderer.js';
 
 // Jukebox debug mode — press J to toggle, +/- to cycle songs
 let jukeboxMode = false;
@@ -35,6 +38,48 @@ const BORDER_TILE_ROM = 0x1B710 + (0xF7 - 0x70) * 16;  // 0x1BF80
 const BORDER_TILE_COUNT = 9;  // $F7 TL, $F8 top, $F9 TR, $FA left, $FB right, $FC BL, $FD bot, $FE BR, $FF fill
 const MENU_PALETTE = [0x0F, 0x00, 0x0F, 0x30];  // black, grey, black (interior), white
 let hudCanvas = null;
+
+// Battle sprite — Onion Knight idle frame (16×24, 2×3 tiles)
+const BATTLE_SPRITE_ROM = 0x050010;  // Bank 28/$8000 — battle character graphics (disasm 2F/AB3D)
+const BATTLE_JOB_SIZE = 0x02A0;      // 672 bytes (42 tiles) per job
+let battleSpriteCanvas = null;
+
+// FF1&2 ROM — secondary ROM for monster sprites, etc.
+let ff12Raw = null;
+const FF2_OFFSET = 0x040000;  // FF2 data starts at 256KB in compilation ROM
+const FF2_ADAMANTOISE_SPRITE = 0x04BF10;  // 4 tiles, 16×16, row-major (TL,TR,BL,BR)
+let adamantoiseFrames = null; // [normal, flipped] canvases
+
+// Boss sprite — positioned in dungeon boss room
+let bossSprite = null;  // { canvas, px, py } or null
+
+// Player stats (placeholder)
+let playerHP = 28;
+let playerMP = 12;
+
+// Top box — battle scene BG or area name
+let topBoxMode = 'name';       // 'name' | 'battle'
+let topBoxNameBytes = null;    // Uint8Array for area name text
+let topBoxBgCanvas = null;     // Pre-rendered 256×32 battle BG strip (frame 0 = original)
+let topBoxBgFadeFrames = null; // [original, step1, step2, ..., black] — NES palette fade
+let topBoxIsTown = false;      // true = always show name, never switch to battle
+
+// Top box scroll animation — blue name banner slides in/out
+let topBoxScrollState = 'none'; // 'none' | 'pending' | 'scroll-in' | 'display' | 'scroll-out'
+let topBoxScrollTimer = 0;
+let topBoxScrollOffset = -16;   // -16 = hidden above, 0 = fully visible
+let topBoxScrollOnDone = null;  // callback when scroll-out finishes
+const TOPBOX_SCROLL_DURATION = 150;  // ms for scroll in/out
+const TOPBOX_DISPLAY_HOLD = 1800;    // ms to show area name
+
+// White text on blue background — colors 1&2 = NES $02 (blue) so cell bg matches fill
+const TEXT_WHITE_ON_BLUE = [0x02, 0x02, 0x02, 0x30];
+
+// Area name tile bytes (see text-system.md for encoding)
+const AREA_NAMES = new Map([
+  [114, new Uint8Array([0x9E, 0xDB])],  // "Ur"
+]);
+const DUNGEON_NAME = new Uint8Array([0x8A, 0xD5, 0xDD, 0xCA, 0xDB, 0xFF, 0x8C, 0xCA, 0xDF, 0xCE]); // "Altar Cave"
 
 // ROM offsets
 const PALETTE_OFFSET = 0x001680;
@@ -216,14 +261,275 @@ function initHUD(romData) {
   // Draw all 5 HUD panels (viewport has no fill — game shows through)
   drawBox(0, 0, CANVAS_W, HUD_TOP_H);                              // Top scenery box
   drawBox(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H, false); // Game viewport (no fill)
-  drawBox(HUD_RIGHT_X, HUD_VIEW_Y, 48, 32);                          // Right mini-left (3 tiles wide)
-  drawBox(HUD_RIGHT_X + 48, HUD_VIEW_Y, HUD_RIGHT_W - 48, 32);      // Right mini-right
+  drawBox(HUD_RIGHT_X, HUD_VIEW_Y, 32, 32);                          // Right mini-left (16x16 interior)
+  drawBox(HUD_RIGHT_X + 32, HUD_VIEW_Y, HUD_RIGHT_W - 32, 32);      // Right mini-right
   drawBox(HUD_RIGHT_X, HUD_VIEW_Y + 32, HUD_RIGHT_W, HUD_VIEW_H - 32); // Right main box
   drawBox(0, HUD_BOT_Y, CANVAS_W, HUD_BOT_H);                      // Bottom box
 }
 
-export function loadROM(arrayBuffer) {
-  const rom = parseROM(arrayBuffer);
+function initBattleSprite(romData) {
+  // Battle palette: character palette 0 (ID $FC) at ROM 0x05CF04
+  // 3 bytes = colors 1-3, color 0 always $0F (disasm 2E/9E28 + 2E/9DA2)
+  const BATTLE_PAL_ROM = 0x05CF04;
+  const palette = [0x0F, romData[BATTLE_PAL_ROM], romData[BATTLE_PAL_ROM + 1], romData[BATTLE_PAL_ROM + 2]];
+
+  // Decode idle frame top half: tiles 0-3 (head+body), 2×2 grid (16×16)
+  const tiles = [];
+  for (let i = 0; i < 4; i++) {
+    tiles.push(decodeTile(romData, BATTLE_SPRITE_ROM + i * 16));
+  }
+
+  battleSpriteCanvas = document.createElement('canvas');
+  battleSpriteCanvas.width = 16;
+  battleSpriteCanvas.height = 16;
+  const bctx = battleSpriteCanvas.getContext('2d');
+
+  // 2×2 layout: row-major (confirmed via disasm 3C/82FA OAM data)
+  const layout = [[0,0], [8,0], [0,8], [8,8]];
+  for (let i = 0; i < 4; i++) {
+    const img = bctx.createImageData(8, 8);
+    const px = tiles[i];
+    for (let p = 0; p < 64; p++) {
+      const ci = px[p];
+      if (ci === 0) {
+        img.data[p * 4 + 3] = 0;
+      } else {
+        const rgb = NES_SYSTEM_PALETTE[palette[ci]] || [0, 0, 0];
+        img.data[p * 4]     = rgb[0];
+        img.data[p * 4 + 1] = rgb[1];
+        img.data[p * 4 + 2] = rgb[2];
+        img.data[p * 4 + 3] = 255;
+      }
+    }
+    bctx.putImageData(img, layout[i][0], layout[i][1]);
+  }
+}
+
+function initAdamantoise(romData) {
+  // 4 tiles at FF2_ADAMANTOISE_SPRITE, row-major: TL, TR, BL, BR
+  // Land Turtle palette — top half vs bottom half swapped
+  const palTop = [0x0F, 0x0F, 0x14, 0x27]; // black outline, purple, yellow
+  const palBot = [0x0F, 0x0F, 0x27, 0x14]; // black outline, yellow, purple
+  const tiles = [];
+  for (let i = 0; i < 4; i++) {
+    tiles.push(decodeTile(romData, FF2_ADAMANTOISE_SPRITE + i * 16));
+  }
+
+  const normal = document.createElement('canvas');
+  normal.width = 16;
+  normal.height = 16;
+  const actx = normal.getContext('2d');
+
+  const layout = [[0,0], [8,0], [0,8], [8,8]];
+  for (let i = 0; i < 4; i++) {
+    const pal = i < 2 ? palTop : palBot;
+    const img = actx.createImageData(8, 8);
+    const px = tiles[i];
+    for (let p = 0; p < 64; p++) {
+      const ci = px[p];
+      if (ci === 0) {
+        img.data[p * 4 + 3] = 0;
+      } else {
+        const rgb = NES_SYSTEM_PALETTE[pal[ci]] || [0, 0, 0];
+        img.data[p * 4]     = rgb[0];
+        img.data[p * 4 + 1] = rgb[1];
+        img.data[p * 4 + 2] = rgb[2];
+        img.data[p * 4 + 3] = 255;
+      }
+    }
+    actx.putImageData(img, layout[i][0], layout[i][1]);
+  }
+
+  // Flipped frame
+  const flipped = document.createElement('canvas');
+  flipped.width = 16;
+  flipped.height = 16;
+  const fctx = flipped.getContext('2d');
+  fctx.translate(16, 0);
+  fctx.scale(-1, 1);
+  fctx.drawImage(normal, 0, 0);
+
+  adamantoiseFrames = [normal, flipped];
+}
+
+// Battle BG ROM offsets (verified from ff3-disasm)
+const BATTLE_BG_TILES_ROM   = 0x018010;  // bank 0C/$8000, 256 bytes per bgId (16 tiles)
+const BATTLE_BG_MAP_LOOKUP  = 0x073C10;  // bank 39/$BC00, 256 entries (bits 0-4=bgId)
+const BATTLE_BG_PAL_C1      = 0x001110;  // bank 00/$9100, color 1 per bgId
+const BATTLE_BG_PAL_C2      = 0x001210;  // bank 00/$9200, color 2 per bgId
+const BATTLE_BG_PAL_C3      = 0x001310;  // bank 00/$9300, color 3 per bgId
+const BATTLE_BG_TMID_TABLE  = 0x05E512;  // bank 2F/$A502, tilemap ID per bgId (24 entries)
+const BATTLE_BG_META_TILES  = 0x05E52A;  // bank 2F/$A51A, 4 metatiles × 4 tile IDs
+const BATTLE_BG_TILEMAPS    = 0x05E53A;  // bank 2F/$A52A, 3 tilemaps × 32 bytes
+
+/**
+ * Pre-render battle background strip (256×32) for a given bgId.
+ * @param {Uint8Array} romData — full ROM
+ * @param {number} bgId — battle background ID (0-23)
+ * @returns {HTMLCanvasElement} 256×32 canvas
+ */
+// NES palette fade — one step toward black, matches FF3 $FA87 routine
+function nesColorFade(c) {
+  if (c === 0x0F) return 0x0F;
+  const hi = c & 0x30;
+  if (hi === 0) return 0x0F;
+  return (hi - 0x10) | (c & 0x0F);
+}
+
+function renderBattleBgWithPalette(romData, bgId, palette, tiles, metaTiles, tilemap) {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 32;
+  const bctx = c.getContext('2d');
+
+  for (let row = 0; row < 2; row++) {
+    for (let col = 0; col < 16; col++) {
+      const metaIdx = tilemap[row * 16 + col];
+      const [tl, tr, bl, br] = metaTiles[metaIdx];
+      const px = col * 16;
+      const py = row * 16;
+
+      const subTiles = [[tl, px, py], [tr, px + 8, py], [bl, px, py + 8], [br, px + 8, py + 8]];
+      for (const [tIdx, sx, sy] of subTiles) {
+        const img = bctx.createImageData(8, 8);
+        const pix = tiles[tIdx];
+        for (let p = 0; p < 64; p++) {
+          const ci = pix[p];
+          if (ci === 0) {
+            img.data[p * 4 + 3] = 0;
+          } else {
+            const rgb = NES_SYSTEM_PALETTE[palette[ci]] || [0, 0, 0];
+            img.data[p * 4]     = rgb[0];
+            img.data[p * 4 + 1] = rgb[1];
+            img.data[p * 4 + 2] = rgb[2];
+            img.data[p * 4 + 3] = 255;
+          }
+        }
+        bctx.putImageData(img, sx, sy);
+      }
+    }
+  }
+  return c;
+}
+
+function renderBattleBg(romData, bgId) {
+  // Palette: color 0 = $0F (black), colors 1-3 from ROM
+  const palette = [
+    0x0F,
+    romData[BATTLE_BG_PAL_C1 + bgId],
+    romData[BATTLE_BG_PAL_C2 + bgId],
+    romData[BATTLE_BG_PAL_C3 + bgId],
+  ];
+
+  // Decode 16 tiles (8×8 each, 2BPP)
+  const tiles = [];
+  const tileBase = BATTLE_BG_TILES_ROM + bgId * 0x100;
+  for (let i = 0; i < 16; i++) {
+    tiles.push(decodeTile(romData, tileBase + i * 16));
+  }
+
+  // Read metatile expansion table (4 metatiles × 4 tile IDs)
+  const metaTiles = [];
+  for (let m = 0; m < 4; m++) {
+    const ids = [];
+    for (let j = 0; j < 4; j++) {
+      ids.push(romData[BATTLE_BG_META_TILES + m * 4 + j] - 0x60);
+    }
+    metaTiles.push(ids);
+  }
+
+  // Read tilemap (2 rows × 16 metatile entries)
+  const tilemapIdx = romData[BATTLE_BG_TMID_TABLE + bgId];
+  const tmBase = BATTLE_BG_TILEMAPS + tilemapIdx * 32;
+  const tilemap = [];
+  for (let i = 0; i < 32; i++) tilemap.push(romData[tmBase + i]);
+
+  // Pre-render all fade frames (original → progressively darker → black)
+  const frames = [];
+  const fadePal = [...palette];
+  while (true) {
+    frames.push(renderBattleBgWithPalette(romData, bgId, fadePal, tiles, metaTiles, tilemap));
+    // Check if all colors are black
+    if (fadePal[1] === 0x0F && fadePal[2] === 0x0F && fadePal[3] === 0x0F) break;
+    // Step each color toward black
+    fadePal[1] = nesColorFade(fadePal[1]);
+    fadePal[2] = nesColorFade(fadePal[2]);
+    fadePal[3] = nesColorFade(fadePal[3]);
+  }
+
+  topBoxBgFadeFrames = frames;
+  return frames[0]; // original = topBoxBgCanvas
+}
+
+/**
+ * Set up top box state for a given area.
+ * @param {number} mapId — map being loaded
+ * @param {boolean} isWorldMap — true if entering world map
+ */
+function setupTopBox(mapId, isWorldMap) {
+  if (isWorldMap) {
+    const wasTown = topBoxIsTown;
+    const bgId = romRaw[BATTLE_BG_MAP_LOOKUP] & 0x1F; // map 0
+    topBoxBgCanvas = renderBattleBg(romRaw, bgId);
+    topBoxMode = 'battle';
+    topBoxIsTown = false;
+    if (wasTown && topBoxNameBytes) {
+      // Leaving town — scroll name banner UP during opening phase
+      topBoxScrollState = 'scroll-out';
+      topBoxScrollTimer = 0;
+      topBoxScrollOffset = 0;
+      // Keep topBoxNameBytes alive for scroll-out rendering
+    } else {
+      topBoxNameBytes = null;
+      topBoxScrollState = 'none';
+      topBoxScrollOffset = -16;
+    }
+    return;
+  }
+
+  if (mapId >= 1000) {
+    // Dungeon floor — crystal room (floor 4) uses map 148's BG, others use map 111's
+    const romMap = (mapId === 1004) ? 148 : 111;
+    const bgId = romRaw[BATTLE_BG_MAP_LOOKUP + romMap] & 0x1F;
+    topBoxBgCanvas = renderBattleBg(romRaw, bgId);
+    topBoxNameBytes = DUNGEON_NAME;
+    topBoxMode = 'battle';
+    topBoxIsTown = false;
+    // Name shown during loading screen only — no scroll after
+    topBoxScrollState = 'none';
+    topBoxScrollOffset = -16;
+    return;
+  }
+
+  // Regular map
+  if (mapId === 114) {
+    if (!topBoxIsTown) {
+      // First entry to town — scroll name in
+      topBoxScrollState = 'pending';
+    }
+    topBoxIsTown = true;
+    topBoxNameBytes = AREA_NAMES.get(114);
+    topBoxMode = 'name';
+  } else if (!topBoxIsTown) {
+    // Non-town indoor map — show battle scene immediately
+    const bgId = romRaw[BATTLE_BG_MAP_LOOKUP + mapId] & 0x1F;
+    topBoxBgCanvas = renderBattleBg(romRaw, bgId);
+    topBoxMode = 'battle';
+  }
+  // If topBoxIsTown is true and mapId !== 114, keep current state (sub-room within town)
+}
+
+export async function loadROM(arrayBuffer) {
+  // Apply English translation patch (IPS) before parsing
+  const romBytes = new Uint8Array(arrayBuffer);
+  try {
+    const ipsResp = await fetch('patches/ff3-english.ips');
+    if (ipsResp.ok) {
+      const ipsData = new Uint8Array(await ipsResp.arrayBuffer());
+      applyIPS(romBytes, ipsData);
+    }
+  } catch (_) { /* no patch file — continue with unpatched ROM */ }
+
+  const rom = parseROM(romBytes.buffer);
 
   document.getElementById('rom-info').textContent =
     `PRG: ${rom.prgBanks} banks (${rom.prgSize / 1024}KB), ` +
@@ -235,7 +541,12 @@ export function loadROM(arrayBuffer) {
   spritePalette = allPalettes[0];
   romRaw = rom.raw;
 
+  // Initialize text decoder and font renderer with patched ROM
+  initTextDecoder(romRaw);
+  initFont(romRaw);
+
   initHUD(romRaw);
+  initBattleSprite(romRaw);
   initMusic(romRaw);
   _initFlameRawTiles(romRaw);
   _initStarTiles(romRaw);
@@ -254,8 +565,14 @@ export function loadROM(arrayBuffer) {
   requestAnimationFrame(gameLoop);
 }
 
+export function loadFF12ROM(arrayBuffer) {
+  ff12Raw = new Uint8Array(arrayBuffer);
+  initAdamantoise(ff12Raw);
+}
+
 function loadMapById(mapId, returnX, returnY) {
   onWorldMap = false;
+  setupTopBox(mapId, false);
 
   if (mapId >= 1000) {
     // Synthetic dungeon floor
@@ -279,6 +596,10 @@ function loadMapById(mapId, returnX, returnY) {
 
     mapRenderer = new MapRenderer(mapData, playerX, playerY); _indoorWaterCache = null;
     _flameSprites = [];
+    // Place boss sprite in crystal room (floor 5) center stage
+    bossSprite = (floorIndex === 4 && adamantoiseFrames)
+      ? { frames: adamantoiseFrames, px: 6 * TILE_SIZE, py: 8 * TILE_SIZE }
+      : null;
     disabledTrigger = { x: playerX, y: playerY };
     moving = false;
     sprite.setDirection(DIR_DOWN);
@@ -310,6 +631,7 @@ function loadMapById(mapId, returnX, returnY) {
   rockSwitch = null;
   warpTile = null;
   pondTiles = null;
+  bossSprite = null;
 
   mapData = loadMap(romRaw, mapId);
   currentMapId = mapId;
@@ -440,6 +762,8 @@ function loadWorldMapAt(trigId) {
   onWorldMap = true;
   mapRenderer = null;
   mapData = null;
+  bossSprite = null;
+  setupTopBox(0, true);
 
   // Place player on the leftmost entrance trigger tile
   const pos = worldMapData.triggerPositions.get(trigId);
@@ -459,6 +783,7 @@ function loadWorldMapAtPosition(tileX, tileY) {
   onWorldMap = true;
   mapRenderer = null;
   mapData = null;
+  setupTopBox(0, true);
 
   worldX = tileX * TILE_SIZE;
   worldY = tileY * TILE_SIZE;
@@ -715,6 +1040,57 @@ function updateMovement(dt) {
   }
 }
 
+function updateTopBoxScroll(dt) {
+  if (topBoxScrollState === 'none') return;
+
+  // If pending and no active transition, start immediately (e.g. initial load)
+  if (topBoxScrollState === 'pending') {
+    if (transState === 'none') {
+      topBoxScrollState = 'scroll-in';
+      topBoxScrollTimer = 0;
+      topBoxScrollOffset = -16;
+    }
+    return;
+  }
+
+  topBoxScrollTimer += Math.min(dt, 33); // cap so generation lag doesn't skip scroll
+
+  if (topBoxScrollState === 'scroll-in') {
+    const t = Math.min(topBoxScrollTimer / TOPBOX_SCROLL_DURATION, 1);
+    topBoxScrollOffset = -16 + t * 16; // -16 → 0
+    if (t >= 1) {
+      topBoxScrollOffset = 0;
+      if (topBoxIsTown) {
+        // Town: name stays visible permanently
+        topBoxScrollState = 'none';
+      } else {
+        // Non-town: hold then scroll out
+        topBoxScrollState = 'display';
+        topBoxScrollTimer = 0;
+      }
+    }
+  } else if (topBoxScrollState === 'display') {
+    // During loading screen, stay displayed until Z is pressed
+    if (transState !== 'loading' && topBoxScrollTimer >= TOPBOX_DISPLAY_HOLD) {
+      topBoxScrollState = 'scroll-out';
+      topBoxScrollTimer = 0;
+    }
+  } else if (topBoxScrollState === 'scroll-out') {
+    const t = Math.min(topBoxScrollTimer / TOPBOX_SCROLL_DURATION, 1);
+    topBoxScrollOffset = -t * 16; // 0 → -16
+    if (t >= 1) {
+      topBoxScrollState = 'none';
+      topBoxScrollOffset = -16;
+      topBoxNameBytes = null;
+      if (topBoxScrollOnDone) {
+        const cb = topBoxScrollOnDone;
+        topBoxScrollOnDone = null;
+        cb();
+      }
+    }
+  }
+}
+
 function startWipeTransition(action) {
   transState = 'closing';
   transTimer = 0;
@@ -779,6 +1155,12 @@ function updateTransition(dt) {
           transPendingAction();
           transPendingAction = null;
         }
+        // Scroll dungeon name banner down during loading screen
+        if (topBoxNameBytes) {
+          topBoxScrollState = 'scroll-in';
+          topBoxScrollTimer = 0;
+          topBoxScrollOffset = -16;
+        }
       } else {
         transState = 'opening';
         transTimer = 0;
@@ -789,12 +1171,26 @@ function updateTransition(dt) {
     if (keys['z'] || keys['Z']) {
       keys['z'] = false;
       keys['Z'] = false;
-      transState = 'opening';
-      transTimer = 0;
-      transDungeon = false;
-      playSFX(SFX.SCREEN_OPEN);
-      playTrack(TRACKS.CRYSTAL_CAVE);
-        }
+      if (topBoxScrollState !== 'none' && topBoxScrollState !== 'scroll-out') {
+        // Scroll name banner up first, then open
+        topBoxScrollState = 'scroll-out';
+        topBoxScrollTimer = 0;
+        topBoxScrollOffset = 0;
+        topBoxScrollOnDone = () => {
+          transState = 'opening';
+          transTimer = 0;
+          transDungeon = false;
+          playSFX(SFX.SCREEN_OPEN);
+          playTrack(TRACKS.CRYSTAL_CAVE);
+        };
+      } else if (topBoxScrollState !== 'scroll-out') {
+        transState = 'opening';
+        transTimer = 0;
+        transDungeon = false;
+        playSFX(SFX.SCREEN_OPEN);
+        playTrack(TRACKS.CRYSTAL_CAVE);
+      }
+    }
   } else if (transState === 'opening') {
     if (transTimer >= WIPE_DURATION) {
       transState = 'none';
@@ -804,6 +1200,12 @@ function updateTransition(dt) {
         playSFX(SFX.EARTHQUAKE);
         shakeActive = true;
         shakeTimer = 0;
+      }
+      // Kick off name banner scroll after transition opens
+      if (topBoxScrollState === 'pending') {
+        topBoxScrollState = 'scroll-in';
+        topBoxScrollTimer = 0;
+        topBoxScrollOffset = -16;
       }
     }
   }
@@ -831,18 +1233,19 @@ function drawTransitionOverlay() {
   ctx.fillRect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, Math.ceil(barHeight));
   ctx.fillRect(HUD_VIEW_X, HUD_VIEW_Y + HUD_VIEW_H - Math.ceil(barHeight), HUD_VIEW_W, Math.ceil(barHeight));
 
-  // Loading screen text overlay (centered in viewport)
+  // Loading screen text overlay (ROM font, centered in viewport)
   if (transState === 'loading') {
-    const vpCenterX = HUD_VIEW_X + HUD_VIEW_W / 2;
-    ctx.fillStyle = '#fff';
-    ctx.font = '16px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText('ALTAR CAVE', vpCenterX, vpMidY - 12);
+    const titleBytes = new Uint8Array([0x8A,0x95,0x9D,0x8A,0x9B,0xFF,0x8C,0x8A,0x9F,0x8E]);
+    const promptBytes = new Uint8Array([0x99,0xDB,0xCE,0xDC,0xDC,0xFF,0xA3]);
+
+    const titleW = measureText(titleBytes);
+    const promptW = measureText(promptBytes);
+    const cx = HUD_VIEW_X + HUD_VIEW_W / 2;
+
+    drawText(ctx, cx - titleW / 2, vpMidY - 8, titleBytes, TEXT_WHITE);
     if (Math.floor(transTimer / 500) % 2 === 0) {
-      ctx.font = '10px monospace';
-      ctx.fillText('Press Z', vpCenterX, vpMidY + 20);
+      drawText(ctx, cx - promptW / 2, vpMidY + 16, promptBytes, TEXT_WHITE);
     }
-    ctx.textAlign = 'start';
   }
 }
 
@@ -1527,6 +1930,19 @@ function render() {
       }
     }
 
+    // Boss sprite (crystal room) — alternates normal/flipped like walking
+    if (bossSprite) {
+      const wLeft = camX - originX;
+      const wTop = camY - originY;
+      const bx = bossSprite.px - wLeft;
+      const by = bossSprite.py - wTop;
+      if (bx > -16 && bx < CANVAS_W && by > -16 && by < CANVAS_H) {
+        const frame = Math.floor(waterTick / 8) & 1;
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(bossSprite.frames[frame], bx, by);
+      }
+    }
+
     if (sprite) {
       sprite.draw(ctx, SCREEN_CENTER_X, spriteY);
     }
@@ -1557,8 +1973,99 @@ function render() {
   ctx.restore(); // end viewport clip
 }
 
+function statRowBytes(label1, label2, value) {
+  // Build 8-byte row: "HP   28" or "MP   12" — label + right-aligned number
+  const digits = String(value);
+  const bytes = new Uint8Array(8);
+  bytes[0] = label1;
+  bytes[1] = label2;
+  const numStart = 8 - digits.length;
+  for (let i = 2; i < numStart; i++) bytes[i] = 0xFF; // space
+  for (let i = 0; i < digits.length; i++) bytes[numStart + i] = 0x80 + parseInt(digits[i]);
+  return bytes;
+}
+
 function drawHUD() {
   if (hudCanvas) ctx.drawImage(hudCanvas, 0, 0);
+
+  // Top box content (interior: 8,8 to 248,24 = 240×16)
+  // Base layer: battle BG or permanent town blue fill
+  const isScrolling = topBoxScrollState === 'scroll-in' || topBoxScrollState === 'display' || topBoxScrollState === 'scroll-out';
+  const showTownBlue = topBoxMode === 'name' && !isScrolling;
+
+  if (transState === 'loading' && topBoxNameBytes && !isScrolling) {
+    // Loading screen: static blue + name (only when scroll isn't handling it)
+    const nesBlue = NES_SYSTEM_PALETTE[0x02] || [0, 0, 116];
+    ctx.fillStyle = `rgb(${nesBlue[0]},${nesBlue[1]},${nesBlue[2]})`;
+    ctx.fillRect(8, 8, 240, 16);
+    const tw = measureText(topBoxNameBytes);
+    const tx = 8 + Math.floor((240 - tw) / 2);
+    const ty = 8 + Math.floor((16 - 8) / 2);
+    drawText(ctx, tx, ty, topBoxNameBytes, TEXT_WHITE_ON_BLUE);
+  } else if (topBoxScrollState === 'pending' || topBoxScrollState === 'scroll-out' || (isScrolling && (topBoxIsTown || transState === 'loading'))) {
+    // Black base: pending, any scroll-out, town scroll, or loading screen scroll
+  } else if (showTownBlue) {
+    // Permanent town display (after scroll-in completes)
+    const nesBlue = NES_SYSTEM_PALETTE[0x02] || [0, 0, 116];
+    ctx.fillStyle = `rgb(${nesBlue[0]},${nesBlue[1]},${nesBlue[2]})`;
+    ctx.fillRect(8, 8, 240, 16);
+    if (topBoxNameBytes) {
+      const tw = measureText(topBoxNameBytes);
+      const tx = 8 + Math.floor((240 - tw) / 2);
+      const ty = 8 + Math.floor((16 - 8) / 2);
+      drawText(ctx, tx, ty, topBoxNameBytes, TEXT_WHITE_ON_BLUE);
+    }
+  } else if (topBoxBgCanvas) {
+    // Battle BG base layer
+    ctx.drawImage(topBoxBgCanvas, 8, 8, 240, 16, 8, 8, 240, 16);
+  }
+
+  // Scrolling name banner overlay (clips to interior)
+  if (isScrolling && topBoxNameBytes) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(8, 8, 240, 16);
+    ctx.clip();
+    const bannerY = 8 + topBoxScrollOffset;
+    const nesBlue = NES_SYSTEM_PALETTE[0x02] || [0, 0, 116];
+    ctx.fillStyle = `rgb(${nesBlue[0]},${nesBlue[1]},${nesBlue[2]})`;
+    ctx.fillRect(8, bannerY, 240, 16);
+    const tw = measureText(topBoxNameBytes);
+    const tx = 8 + Math.floor((240 - tw) / 2);
+    const ty = bannerY + Math.floor((16 - 8) / 2);
+    drawText(ctx, tx, ty, topBoxNameBytes, TEXT_WHITE_ON_BLUE);
+    ctx.restore();
+  }
+
+  // NES palette fade on top box during transitions
+  // Skip when town blue is showing or scroll is handling the transition
+  const skipFade = topBoxIsTown || topBoxScrollState !== 'none';
+  if (!skipFade && topBoxBgFadeFrames && transState !== 'none' && transState !== 'door-opening' && transState !== 'loading') {
+    const maxStep = topBoxBgFadeFrames.length - 1; // last frame = all black
+    const FADE_STEP_MS = 133; // ~8 NES frames per step
+    let fadeStep = 0;
+    if (transState === 'closing') {
+      fadeStep = Math.min(Math.floor(transTimer / FADE_STEP_MS), maxStep);
+    } else if (transState === 'hold' || transState === 'trap-falling') {
+      fadeStep = maxStep;
+    } else if (transState === 'opening') {
+      fadeStep = Math.max(maxStep - Math.floor(transTimer / FADE_STEP_MS), 0);
+    }
+    // Draw the faded frame over the base (which is frame 0)
+    if (fadeStep > 0) {
+      ctx.drawImage(topBoxBgFadeFrames[fadeStep], 8, 8, 240, 16, 8, 8, 240, 16);
+    }
+  }
+
+  // Battle sprite portrait in mini-left panel interior (16×16 exact fit)
+  if (battleSpriteCanvas) {
+    ctx.drawImage(battleSpriteCanvas, HUD_RIGHT_X + 8, HUD_VIEW_Y + 8);
+  }
+  // HP/MP in right mini-right panel (8 chars × 2 rows)
+  const sx = HUD_RIGHT_X + 32 + 8; // interior x
+  const sy = HUD_VIEW_Y + 8;       // interior y
+  drawText(ctx, sx, sy,     statRowBytes(0x91, 0x99, playerHP), TEXT_WHITE); // HP
+  drawText(ctx, sx, sy + 8, statRowBytes(0x96, 0x99, playerMP), TEXT_WHITE); // MP
 }
 
 function gameLoop(timestamp) {
@@ -1568,6 +2075,7 @@ function gameLoop(timestamp) {
   handleInput();
   updateMovement(dt);
   updateTransition(dt);
+  updateTopBoxScroll(dt);
 
   // Screen shake update
   if (shakeActive) {

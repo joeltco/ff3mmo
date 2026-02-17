@@ -44,7 +44,7 @@
       background: linear-gradient(180deg, #4a4a60, #3a3a4e);
       border-color: #c8a832;
     }
-    #rom-file { display: none; }
+    #rom-file, #rom-file-ff12 { display: none; }
     #rom-info {
       font-size: 12px;
       color: #888;
@@ -57,6 +57,20 @@
       border-radius: 4px;
       box-shadow: 0 0 24px rgba(0, 0, 0, 0.6), 0 0 2px rgba(200, 168, 50, 0.15);
       display: none;
+      position: relative;
+    }
+    #canvas-wrapper.crt::after {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      pointer-events: none;
+      background: repeating-linear-gradient(
+        to bottom,
+        transparent 0px,
+        transparent 1px,
+        rgba(0, 0, 0, 0.25) 1px,
+        rgba(0, 0, 0, 0.25) 2px
+      );
     }
     #game-canvas {
       display: block;
@@ -86,31 +100,75 @@
 
   <div id="rom-picker">
     <label for="rom-file">Load FF3 ROM (.nes)</label>
-    <input type="file" id="rom-file" accept=".nes,.bin">
+    <input type="file" id="rom-file">
+    <br><br>
+    <label for="rom-file-ff12">Load FF1&amp;2 ROM (.nes)</label>
+    <input type="file" id="rom-file-ff12">
   </div>
 
   <div id="rom-info"></div>
 
-  <div id="canvas-wrapper">
+  <div id="canvas-wrapper" class="crt">
     <canvas id="game-canvas"></canvas>
   </div>
 
-  <div id="controls-hint"><kbd>&larr;</kbd> <kbd>&uarr;</kbd> <kbd>&darr;</kbd> <kbd>&rarr;</kbd> Move &nbsp;&middot;&nbsp; <kbd>Z</kbd> Action</div>
+  <div id="controls-hint"><kbd>&larr;</kbd> <kbd>&uarr;</kbd> <kbd>&darr;</kbd> <kbd>&rarr;</kbd> Move &nbsp;&middot;&nbsp; <kbd>Z</kbd> Action &nbsp;&middot;&nbsp; <kbd>C</kbd> CRT</div>
 
   <script src="lib/libgme.js"></script>
   <script type="module">
-    import { init, loadROM } from './src/game.js';
+    import { init, loadROM, loadFF12ROM } from './src/game.js';
 
     init();
 
-    document.getElementById('rom-file').addEventListener('change', async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
+    let ff3Buffer = null;
+    let ff12Buffer = null;
 
+    // --- IndexedDB ROM cache ---
+    const DB_NAME = 'ff3mmo-roms';
+    const DB_VERSION = 1;
+    const STORE = 'roms';
+
+    function openDB() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, DB_VERSION);
+        req.onupgradeneeded = () => req.result.createObjectStore(STORE);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function cacheROM(key, buffer) {
+      const db = await openDB();
+      const tx = db.transaction(STORE, 'readwrite');
+      tx.objectStore(STORE).put(buffer, key);
+      return new Promise((resolve, reject) => {
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+      });
+    }
+
+    async function getCachedROM(key) {
+      const db = await openDB();
+      const tx = db.transaction(STORE, 'readonly');
+      const req = tx.objectStore(STORE).get(key);
+      return new Promise((resolve) => {
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => resolve(null);
+      });
+    }
+
+    // --- Launch ---
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'c' || e.key === 'C') {
+        document.getElementById('canvas-wrapper').classList.toggle('crt');
+      }
+    });
+
+    async function tryLaunch() {
+      if (!ff3Buffer || !ff12Buffer) return;
       try {
-        const arrayBuffer = await file.arrayBuffer();
-        loadROM(arrayBuffer);
-
+        loadFF12ROM(ff12Buffer);
+        await loadROM(ff3Buffer);
         document.getElementById('canvas-wrapper').style.display = 'block';
         document.getElementById('controls-hint').style.display = 'block';
         document.getElementById('rom-picker').style.display = 'none';
@@ -118,6 +176,51 @@
         document.getElementById('rom-info').textContent = `Error: ${err.message}`;
         console.error(err);
       }
+    }
+
+    // Try loading from cache first
+    try {
+      const [cached3, cached12] = await Promise.all([
+        getCachedROM('ff3'),
+        getCachedROM('ff12')
+      ]);
+      if (cached3) ff3Buffer = cached3;
+      if (cached12) ff12Buffer = cached12;
+      if (ff3Buffer && ff12Buffer) {
+        // Show start button — user click needed for audio context
+        const picker = document.getElementById('rom-picker');
+        picker.innerHTML = '';
+        const btn = document.createElement('label');
+        btn.textContent = 'Start';
+        btn.style.cursor = 'pointer';
+        btn.addEventListener('click', () => tryLaunch());
+        picker.appendChild(btn);
+        document.getElementById('rom-info').textContent = 'ROMs loaded from cache';
+      } else if (ff3Buffer) {
+        document.getElementById('rom-info').textContent = 'FF3 cached — load FF1&2 ROM';
+      } else if (ff12Buffer) {
+        document.getElementById('rom-info').textContent = 'FF1&2 cached — load FF3 ROM';
+      }
+    } catch (e) {
+      // IndexedDB unavailable, fall through to file pickers
+    }
+
+    document.getElementById('rom-file').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      ff3Buffer = await file.arrayBuffer();
+      cacheROM('ff3', ff3Buffer).catch(() => {});
+      document.getElementById('rom-info').textContent = 'FF3 loaded' + (ff12Buffer ? ' | FF1&2 loaded' : ' — load FF1&2 ROM');
+      tryLaunch();
+    });
+
+    document.getElementById('rom-file-ff12').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      ff12Buffer = await file.arrayBuffer();
+      cacheROM('ff12', ff12Buffer).catch(() => {});
+      document.getElementById('rom-info').textContent = (ff3Buffer ? 'FF3 loaded | ' : '') + 'FF1&2 loaded' + (!ff3Buffer ? ' — load FF3 ROM' : '');
+      tryLaunch();
     });
   </script>
 </body>

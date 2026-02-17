@@ -28,7 +28,7 @@
       font-size: 12px;
       color: #aaa;
     }
-    .controls input[type="file"] { display: none; }
+    .controls input[type="file"] { }
     .controls .file-label {
       cursor: pointer;
       background: #333;
@@ -94,7 +94,7 @@
 
   <div class="controls">
     <label class="file-label" for="rom-file">Load ROM</label>
-    <input type="file" id="rom-file" accept=".nes,.bin">
+    <input type="file" id="rom-file">
 
     <label>Offset:
       <input type="number" id="offset-input" value="0" min="0" step="16">
