@@ -38,6 +38,8 @@ const BORDER_TILE_ROM = 0x1B710 + (0xF7 - 0x70) * 16;  // 0x1BF80
 const BORDER_TILE_COUNT = 9;  // $F7 TL, $F8 top, $F9 TR, $FA left, $FB right, $FC BL, $FD bot, $FE BR, $FF fill
 const MENU_PALETTE = [0x0F, 0x00, 0x0F, 0x30];  // black, grey, black (interior), white
 let hudCanvas = null;
+let borderTileCanvases = null; // [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR, FILL]
+let borderFadeSets = null;    // [fadeLevel] → [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR, FILL]
 
 // Battle sprite — Onion Knight idle frame (16×24, 2×3 tiles)
 const BATTLE_SPRITE_ROM = 0x050010;  // Bank 28/$8000 — battle character graphics (disasm 2F/AB3D)
@@ -53,6 +55,53 @@ let adamantoiseFrames = null; // [normal, flipped] canvases
 // Boss sprite — positioned in dungeon boss room
 let bossSprite = null;  // { canvas, px, py } or null
 
+// Moogle NPC sprite — loading screen decoration
+const MOOGLE_GFX_ID = 42;
+const MOOGLE_SPRITE_OFF = 0x01C010 + MOOGLE_GFX_ID * 256; // 0x01EA10
+const MOOGLE_PAL = [0x0F, 0x0F, 0x16, 0x30]; // transparent, black outline, red pom-pom, white body
+let moogleFrames = null; // [normal, flipped] canvases
+
+// Invincible airship sprite — title screen, facing east
+const INVINCIBLE_TILE_ROM = 0x17A90;  // Bank $0B:$9A80 — tiles $C0-$FF (64 tiles)
+const INVINCIBLE_PAL = [0x0F, 0x0F, 0x27, 0x30]; // transparent, black, gold, white
+let invincibleFrames = null; // [frameA, frameB] 32×32 canvases (east-facing)
+let invincibleFadeFrames = null; // [fadeLevel][frameIdx] faded canvases
+let invincibleShadowFade = null; // [fadeLevel] 32×8 shadow canvases
+
+// Loading screen fade state
+let loadingFadeState = 'none'; // 'in' | 'visible' | 'out' | 'none'
+let loadingFadeTimer = 0;
+const LOAD_FADE_STEP_MS = 133;  // same rate as battle BG fade
+const LOAD_FADE_MAX = 4;        // 4 steps: $30→$20→$10→$00→$0F
+
+// Loading screen pre-rendered fade frames
+let moogleFadeFrames = null; // [step0=bright, step1, step2, step3=black] per walk frame pair
+let bossFadeFrames = null;   // same structure for adamantoise
+
+// Title screen state
+let titleState = 'credit-wait'; // 'credit-wait' | 'credit-in' | 'credit-hold' | 'credit-out' |
+                                 // 'disclaim-wait' | 'disclaim-in' | 'disclaim-hold' | 'disclaim-out' |
+                                 // 'main-in' | 'zbox-open' | 'main' | 'zbox-close' | 'main-out' | 'done'
+let titleTimer = 0;
+// Title timing — 6 seconds total for credit+disclaimer (3s each)
+const TITLE_FADE_MAX = 4;          // 4 steps to reach $0F: $30→$20→$10→$00→$0F
+const TITLE_FADE_STEP_MS = 100;    // 100ms per step
+const TITLE_FADE_MS = (TITLE_FADE_MAX + 1) * TITLE_FADE_STEP_MS; // 500ms (extra step holds at black)
+const TITLE_WAIT_MS = 0;           // no black pause — fade starts immediately
+const TITLE_HOLD_MS = 2000;        // text visible
+// Per screen: 0 + 500 + 2000 + 500 = 3000ms. Two screens = 6000ms.
+
+// Title screen water + sky
+let titleWaterFrames = null;     // [16 animation frames] 16×16 canvases at full brightness
+let titleWaterFadeTiles = null;  // [TITLE_FADE_MAX+1 fade levels] 16×16 static ocean metatile
+let titleSkyFrames = null;       // [fade levels] 256×32 battle BG strips (0=bright, last=black)
+let titleWaterScroll = 0;        // pixel scroll offset
+let titleSkyScroll = 0;
+let titleShipTimer = 0;          // animation toggle for Invincible sprite
+const TITLE_SHIP_ANIM_MS = 100;  // 100ms per frame toggle
+const TITLE_SHADOW_ANIM_MS = 50; // 50ms shadow blink
+const TITLE_ZBOX_MS = 200;       // ms for Press Z box open/close animation
+
 // Player stats (placeholder)
 let playerHP = 28;
 let playerMP = 12;
@@ -65,11 +114,12 @@ let topBoxBgFadeFrames = null; // [original, step1, step2, ..., black] — NES p
 let topBoxIsTown = false;      // true = always show name, never switch to battle
 
 // Top box scroll animation — blue name banner slides in/out
-let topBoxScrollState = 'none'; // 'none' | 'pending' | 'scroll-in' | 'display' | 'scroll-out'
+let topBoxScrollState = 'none'; // 'none' | 'pending' | 'fade-in' | 'display' | 'fade-out'
 let topBoxScrollTimer = 0;
-let topBoxScrollOffset = -16;   // -16 = hidden above, 0 = fully visible
-let topBoxScrollOnDone = null;  // callback when scroll-out finishes
-const TOPBOX_SCROLL_DURATION = 150;  // ms for scroll in/out
+let topBoxFadeStep = 0;         // 0 = full bright, 4 = fully black ($0F)
+let topBoxScrollOnDone = null;  // callback when fade-out finishes
+const TOPBOX_FADE_STEP_MS = 100;     // ms per NES fade step
+const TOPBOX_FADE_STEPS = 4;         // 4 steps: $30→$20→$10→$00→$0F
 const TOPBOX_DISPLAY_HOLD = 1800;    // ms to show area name
 
 // White text on blue background — colors 1&2 = NES $02 (blue) so cell bg matches fill
@@ -80,6 +130,26 @@ const AREA_NAMES = new Map([
   [114, new Uint8Array([0x9E, 0xDB])],  // "Ur"
 ]);
 const DUNGEON_NAME = new Uint8Array([0x8A, 0xD5, 0xDD, 0xCA, 0xDB, 0xFF, 0x8C, 0xCA, 0xDF, 0xCE]); // "Altar Cave"
+
+// Pause menu state
+let pauseState = 'none';       // 'none'|'scroll-in'|'text-in'|'open'|'text-out'|'scroll-out'
+let pauseTimer = 0;
+let pauseCursor = 0;           // 0-5
+const PAUSE_SCROLL_MS = 150;   // bordered panel scroll down/up
+const PAUSE_TEXT_STEP_MS = 100; // NES fade step duration
+const PAUSE_TEXT_STEPS = 4;    // 4 steps: $30→$20→$10→$00→$0F
+const PAUSE_MENU_W = 80;       // 10 tiles wide (left half of viewport)
+const PAUSE_MENU_H = 112;      // 14 tiles tall
+const CURSOR_TILE_ROM = 0x01B450;  // hand cursor (4 tiles, 2x2 = 16x16)
+let cursorTileCanvas = null;
+const PAUSE_ITEMS = [
+  new Uint8Array([0x92,0xDD,0xCE,0xD6]),           // "Item"
+  new Uint8Array([0x96,0xCA,0xD0,0xD2,0xCC]),       // "Magic"
+  new Uint8Array([0x8E,0xDA,0xDE,0xD2,0xD9]),       // "Equip"
+  new Uint8Array([0x9C,0xDD,0xCA,0xDD,0xDC]),       // "Stats"
+  new Uint8Array([0x93,0xD8,0xCB]),                 // "Job"
+  new Uint8Array([0x9C,0xCA,0xDF,0xCE]),             // "Save"
+];
 
 // ROM offsets
 const PALETTE_OFFSET = 0x001680;
@@ -177,7 +247,7 @@ export function init() {
 
   // Input
   window.addEventListener('keydown', (e) => {
-    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'z', 'Z'].includes(e.key)) {
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'z', 'Z', 'x', 'X', 'Enter'].includes(e.key)) {
       e.preventDefault();
       keys[e.key] = true;
     }
@@ -221,6 +291,34 @@ function initHUD(romData) {
     tctx.putImageData(img, 0, 0);
     return c;
   });
+  borderTileCanvases = tileCanvases;
+
+  // Pre-render border tiles at each fade level for loading screen
+  borderFadeSets = [];
+  for (let step = 0; step <= LOAD_FADE_MAX; step++) {
+    const fadedPal = MENU_PALETTE.map(c => {
+      let fc = c;
+      for (let s = 0; s < step; s++) fc = nesColorFade(fc);
+      return fc;
+    });
+    const set = tiles.map(pixels => {
+      const c = document.createElement('canvas');
+      c.width = 8; c.height = 8;
+      const tctx = c.getContext('2d');
+      const img = tctx.createImageData(8, 8);
+      for (let i = 0; i < 64; i++) {
+        const nesIdx = fadedPal[pixels[i]];
+        const rgb = NES_SYSTEM_PALETTE[nesIdx] || [0, 0, 0];
+        img.data[i * 4]     = rgb[0];
+        img.data[i * 4 + 1] = rgb[1];
+        img.data[i * 4 + 2] = rgb[2];
+        img.data[i * 4 + 3] = 255;
+      }
+      tctx.putImageData(img, 0, 0);
+      return c;
+    });
+    borderFadeSets.push(set);
+  }
 
   // Pre-render entire HUD to a cached canvas
   hudCanvas = document.createElement('canvas');
@@ -265,6 +363,32 @@ function initHUD(romData) {
   drawBox(HUD_RIGHT_X + 32, HUD_VIEW_Y, HUD_RIGHT_W - 32, 32);      // Right mini-right
   drawBox(HUD_RIGHT_X, HUD_VIEW_Y + 32, HUD_RIGHT_W, HUD_VIEW_H - 32); // Right main box
   drawBox(0, HUD_BOT_Y, CANVAS_W, HUD_BOT_H);                      // Bottom box
+}
+
+function initCursorTile(romData) {
+  const palette = [0x0F, 0x00, 0x10, 0x30]; // cursor palette: black, dark gray, gray, white
+  cursorTileCanvas = document.createElement('canvas');
+  cursorTileCanvas.width = 16; cursorTileCanvas.height = 16;
+  const cctx = cursorTileCanvas.getContext('2d');
+  // 4 tiles in 2x2: TL(0), TR(1), BL(2), BR(3)
+  const layout = [[0, 0], [8, 0], [0, 8], [8, 8]];
+  for (let t = 0; t < 4; t++) {
+    const pixels = decodeTile(romData, CURSOR_TILE_ROM + t * 16);
+    const img = cctx.createImageData(8, 8);
+    for (let i = 0; i < 64; i++) {
+      const ci = pixels[i];
+      if (ci === 0) {
+        img.data[i * 4 + 3] = 0;
+      } else {
+        const rgb = NES_SYSTEM_PALETTE[palette[ci]] || [0, 0, 0];
+        img.data[i * 4]     = rgb[0];
+        img.data[i * 4 + 1] = rgb[1];
+        img.data[i * 4 + 2] = rgb[2];
+        img.data[i * 4 + 3] = 255;
+      }
+    }
+    cctx.putImageData(img, layout[t][0], layout[t][1]);
+  }
 }
 
 function initBattleSprite(romData) {
@@ -350,6 +474,285 @@ function initAdamantoise(romData) {
   fctx.drawImage(normal, 0, 0);
 
   adamantoiseFrames = [normal, flipped];
+}
+
+function initInvincibleSprite(romData) {
+  // Decode tiles $C0-$FF from ROM (64 tiles, 16 bytes each)
+  const tilePixels = new Map();
+  for (let i = 0; i < 64; i++) {
+    tilePixels.set(0xC0 + i, decodeTile(romData, INVINCIBLE_TILE_ROM + i * 16));
+  }
+
+  // H-flip a decoded 8×8 tile
+  function hflipTile(pixels) {
+    const out = new Uint8Array(64);
+    for (let row = 0; row < 8; row++) {
+      for (let col = 0; col < 8; col++) {
+        out[row * 8 + col] = pixels[row * 8 + (7 - col)];
+      }
+    }
+    return out;
+  }
+
+  // Render a 32×32 frame from a 4×4 tile grid (east-facing = h-flipped tiles)
+  function renderFrame(grid, pal) {
+    const c = document.createElement('canvas');
+    c.width = 32; c.height = 32;
+    const fctx = c.getContext('2d');
+    for (let row = 0; row < 4; row++) {
+      for (let col = 0; col < 4; col++) {
+        const tileId = grid[row * 4 + col];
+        let pixels = tilePixels.get(tileId);
+        if (!pixels) continue;
+        pixels = hflipTile(pixels); // east-facing tiles are all h-flipped
+        const img = fctx.createImageData(8, 8);
+        for (let p = 0; p < 64; p++) {
+          const ci = pixels[p];
+          if (ci === 0) {
+            img.data[p * 4 + 3] = 0;
+          } else {
+            const rgb = NES_SYSTEM_PALETTE[pal[ci]] || [0, 0, 0];
+            img.data[p * 4]     = rgb[0];
+            img.data[p * 4 + 1] = rgb[1];
+            img.data[p * 4 + 2] = rgb[2];
+            img.data[p * 4 + 3] = 255;
+          }
+        }
+        fctx.putImageData(img, col * 8, row * 8);
+      }
+    }
+    return c;
+  }
+
+  // East-facing frame a (from OAM at 3C:8586) — tiles reversed per row + h-flip
+  const frameA_grid = [
+    0xE5, 0xE4, 0xE3, 0xE2,  // row 0
+    0xE9, 0xE8, 0xE7, 0xE6,  // row 1
+    0xED, 0xEC, 0xEB, 0xEA,  // row 2
+    0xF1, 0xF0, 0xEF, 0xEE,  // row 3
+  ];
+  // East-facing frame b (from OAM at 3C:85C7) — alt animation
+  const frameB_grid = [
+    0xF5, 0xF4, 0xF3, 0xF2,  // row 0
+    0xF6, 0xE8, 0xE7, 0xE6,  // row 1
+    0xF7, 0xEC, 0xEB, 0xEA,  // row 2
+    0xFB, 0xFA, 0xF9, 0xF8,  // row 3
+  ];
+
+  invincibleFrames = [
+    renderFrame(frameA_grid, INVINCIBLE_PAL),
+    renderFrame(frameB_grid, INVINCIBLE_PAL),
+  ];
+
+  // Pre-render faded frames for NES palette fade
+  invincibleFadeFrames = [];
+  for (let fl = 0; fl <= TITLE_FADE_MAX; fl++) {
+    const fadedPal = INVINCIBLE_PAL.map((c, i) => {
+      if (i === 0) return c;
+      let fc = c;
+      for (let s = 0; s < fl; s++) fc = nesColorFade(fc);
+      return fc;
+    });
+    invincibleFadeFrames.push([
+      renderFrame(frameA_grid, fadedPal),
+      renderFrame(frameB_grid, fadedPal),
+    ]);
+  }
+
+  // Shadow — 4 tiles wide × 1 tall (32×8): C0, C1, C1, C0-hflip (from OAM at 3C:8608)
+  function renderShadow(pal) {
+    const c = document.createElement('canvas');
+    c.width = 32; c.height = 8;
+    const sctx = c.getContext('2d');
+    const shadowTiles = [0xC0, 0xC1, 0xC1, 0xC0];
+    const shadowFlip  = [false, false, false, true];
+    for (let col = 0; col < 4; col++) {
+      let pixels = tilePixels.get(shadowTiles[col]);
+      if (!pixels) continue;
+      if (shadowFlip[col]) pixels = hflipTile(pixels);
+      const img = sctx.createImageData(8, 8);
+      for (let p = 0; p < 64; p++) {
+        const ci = pixels[p];
+        if (ci === 0) {
+          img.data[p * 4 + 3] = 0;
+        } else {
+          const rgb = NES_SYSTEM_PALETTE[pal[ci]] || [0, 0, 0];
+          img.data[p * 4]     = rgb[0];
+          img.data[p * 4 + 1] = rgb[1];
+          img.data[p * 4 + 2] = rgb[2];
+          img.data[p * 4 + 3] = 255;
+        }
+      }
+      sctx.putImageData(img, col * 8, 0);
+    }
+    return c;
+  }
+
+  invincibleShadowFade = [];
+  for (let fl = 0; fl <= TITLE_FADE_MAX; fl++) {
+    const fadedPal = INVINCIBLE_PAL.map((c, i) => {
+      if (i === 0) return c;
+      let fc = c;
+      for (let s = 0; s < fl; s++) fc = nesColorFade(fc);
+      return fc;
+    });
+    invincibleShadowFade.push(renderShadow(fadedPal));
+  }
+}
+
+function initMoogleSprite(romData) {
+  // South-facing walk: tiles 0-3 (TL, TR, BL, BR) at MOOGLE_SPRITE_OFF
+  const tiles = [];
+  for (let i = 0; i < 4; i++) {
+    tiles.push(decodeTile(romData, MOOGLE_SPRITE_OFF + i * 16));
+  }
+
+  const normal = document.createElement('canvas');
+  normal.width = 16; normal.height = 16;
+  const mctx = normal.getContext('2d');
+  const layout = [[0,0], [8,0], [0,8], [8,8]];
+
+  for (let i = 0; i < 4; i++) {
+    const img = mctx.createImageData(8, 8);
+    const px = tiles[i];
+    for (let p = 0; p < 64; p++) {
+      const ci = px[p];
+      if (ci === 0) {
+        img.data[p * 4 + 3] = 0;
+      } else {
+        const rgb = NES_SYSTEM_PALETTE[MOOGLE_PAL[ci]] || [0, 0, 0];
+        img.data[p * 4]     = rgb[0];
+        img.data[p * 4 + 1] = rgb[1];
+        img.data[p * 4 + 2] = rgb[2];
+        img.data[p * 4 + 3] = 255;
+      }
+    }
+    mctx.putImageData(img, layout[i][0], layout[i][1]);
+  }
+
+  const flipped = document.createElement('canvas');
+  flipped.width = 16; flipped.height = 16;
+  const fctx = flipped.getContext('2d');
+  fctx.translate(16, 0);
+  fctx.scale(-1, 1);
+  fctx.drawImage(normal, 0, 0);
+
+  moogleFrames = [normal, flipped];
+}
+
+// Pre-render a 16x16 sprite with a faded palette (NES color fade steps applied)
+function renderSpriteFaded(romData, spriteOff, basePal, fadeSteps) {
+  const fadedPal = basePal.map((c, i) => {
+    if (i === 0) return c; // transparent slot stays
+    let fc = c;
+    for (let s = 0; s < fadeSteps; s++) fc = nesColorFade(fc);
+    return fc;
+  });
+
+  const tiles = [];
+  for (let i = 0; i < 4; i++) {
+    tiles.push(decodeTile(romData, spriteOff + i * 16));
+  }
+
+  const c = document.createElement('canvas');
+  c.width = 16; c.height = 16;
+  const cctx = c.getContext('2d');
+  const layout = [[0,0], [8,0], [0,8], [8,8]];
+
+  for (let i = 0; i < 4; i++) {
+    const img = cctx.createImageData(8, 8);
+    const px = tiles[i];
+    for (let p = 0; p < 64; p++) {
+      const ci = px[p];
+      if (ci === 0) {
+        img.data[p * 4 + 3] = 0;
+      } else {
+        const rgb = NES_SYSTEM_PALETTE[fadedPal[ci]] || [0, 0, 0];
+        img.data[p * 4]     = rgb[0];
+        img.data[p * 4 + 1] = rgb[1];
+        img.data[p * 4 + 2] = rgb[2];
+        img.data[p * 4 + 3] = 255;
+      }
+    }
+    cctx.putImageData(img, layout[i][0], layout[i][1]);
+  }
+  return c;
+}
+
+// Pre-render fade frames for adamantoise (different palette for top/bottom halves)
+function renderBossFaded(romData, fadeSteps) {
+  const palTop = [0x0F, 0x0F, 0x14, 0x27];
+  const palBot = [0x0F, 0x0F, 0x27, 0x14];
+  const fadedTop = palTop.map((c, i) => {
+    if (i === 0) return c;
+    let fc = c; for (let s = 0; s < fadeSteps; s++) fc = nesColorFade(fc);
+    return fc;
+  });
+  const fadedBot = palBot.map((c, i) => {
+    if (i === 0) return c;
+    let fc = c; for (let s = 0; s < fadeSteps; s++) fc = nesColorFade(fc);
+    return fc;
+  });
+
+  const tiles = [];
+  for (let i = 0; i < 4; i++) {
+    tiles.push(decodeTile(romData, FF2_ADAMANTOISE_SPRITE + i * 16));
+  }
+
+  const c = document.createElement('canvas');
+  c.width = 16; c.height = 16;
+  const cctx = c.getContext('2d');
+  const layout = [[0,0], [8,0], [0,8], [8,8]];
+
+  for (let i = 0; i < 4; i++) {
+    const pal = i < 2 ? fadedTop : fadedBot;
+    const img = cctx.createImageData(8, 8);
+    const px = tiles[i];
+    for (let p = 0; p < 64; p++) {
+      const ci = px[p];
+      if (ci === 0) {
+        img.data[p * 4 + 3] = 0;
+      } else {
+        const rgb = NES_SYSTEM_PALETTE[pal[ci]] || [0, 0, 0];
+        img.data[p * 4]     = rgb[0];
+        img.data[p * 4 + 1] = rgb[1];
+        img.data[p * 4 + 2] = rgb[2];
+        img.data[p * 4 + 3] = 255;
+      }
+    }
+    cctx.putImageData(img, layout[i][0], layout[i][1]);
+  }
+  return c;
+}
+
+function initLoadingScreenFadeFrames(romData) {
+  // Moogle: 4 fade levels (0=bright, 3=black)
+  moogleFadeFrames = [];
+  for (let step = 0; step <= LOAD_FADE_MAX; step++) {
+    const normal = renderSpriteFaded(romData, MOOGLE_SPRITE_OFF, MOOGLE_PAL, step);
+    const flipped = document.createElement('canvas');
+    flipped.width = 16; flipped.height = 16;
+    const fctx = flipped.getContext('2d');
+    fctx.translate(16, 0);
+    fctx.scale(-1, 1);
+    fctx.drawImage(normal, 0, 0);
+    moogleFadeFrames.push([normal, flipped]);
+  }
+
+  // Boss (adamantoise from FF1&2 ROM): only if ff12Raw loaded
+  if (ff12Raw) {
+    bossFadeFrames = [];
+    for (let step = 0; step <= LOAD_FADE_MAX; step++) {
+      const normal = renderBossFaded(ff12Raw, step);
+      const flipped = document.createElement('canvas');
+      flipped.width = 16; flipped.height = 16;
+      const fctx = flipped.getContext('2d');
+      fctx.translate(16, 0);
+      fctx.scale(-1, 1);
+      fctx.drawImage(normal, 0, 0);
+      bossFadeFrames.push([normal, flipped]);
+    }
+  }
 }
 
 // Battle BG ROM offsets (verified from ff3-disasm)
@@ -460,6 +863,130 @@ function renderBattleBg(romData, bgId) {
   return frames[0]; // original = topBoxBgCanvas
 }
 
+// ── Title Screen Init ──
+
+const TITLE_OCEAN_CHR = [0x22, 0x23, 0x24, 0x25]; // horizontal water CHR tile IDs
+const TITLE_WATER_PAL_IDX = 2; // world map palette index for ocean
+const TITLE_SKY_BGID = 5;      // ocean battle BG (blue sky + waves)
+
+function initTitleWater(romData) {
+  const COMMON_CHR = 0x014C10;
+  const BG_PALETTE = 0x001650;
+
+  // Decode the 4 ocean CHR tiles
+  const chrTiles = {};
+  for (const ci of TITLE_OCEAN_CHR) {
+    chrTiles[ci] = decodeTile(romData, COMMON_CHR + ci * 16);
+  }
+
+  // Water palette from world map
+  const palOff = BG_PALETTE + TITLE_WATER_PAL_IDX * 4;
+  const basePal = [romData[palOff], romData[palOff+1], romData[palOff+2], romData[palOff+3]];
+
+  // Pre-compute 16 horizontal shift frames for each CHR pair
+  const pairs = [[0x22, 0x23], [0x24, 0x25]];
+  const shifted = {}; // ci → [frame0..frame15] pixel arrays
+  for (const [ciL, ciR] of pairs) {
+    const bL = chrTiles[ciL], bR = chrTiles[ciR];
+    const p0L = _getPlane0(bL), p0R = _getPlane0(bR);
+    const p1L = bL.map(p => p & 2), p1R = bR.map(p => p & 2);
+    const arrL = [], arrR = [];
+    let cL = new Uint8Array(p0L), cR = new Uint8Array(p0R);
+    for (let f = 0; f < 16; f++) {
+      arrL.push(_rebuild(cL, p1L));
+      arrR.push(_rebuild(cR, p1R));
+      const nL = new Uint8Array(8), nR = new Uint8Array(8);
+      for (let r = 0; r < 8; r++) {
+        const l = cL[r], ri = cR[r];
+        nL[r] = ((l >> 1) | ((ri & 1) << 7)) & 0xFF;
+        nR[r] = ((ri >> 1) | ((l & 1) << 7)) & 0xFF;
+      }
+      cL = nL; cR = nR;
+    }
+    shifted[ciL] = arrL;
+    shifted[ciR] = arrR;
+  }
+
+  // Helper: render one 16×16 ocean metatile with given palette
+  function renderOceanTile(pal, animFrame) {
+    const rgbPal = pal.map(ni => NES_SYSTEM_PALETTE[ni & 0x3F] || [0,0,0]);
+    const c = document.createElement('canvas');
+    c.width = 16; c.height = 16;
+    const tctx = c.getContext('2d');
+    const quads = [
+      [shifted[0x22][animFrame], 0, 0], [shifted[0x23][animFrame], 8, 0],
+      [shifted[0x24][animFrame], 0, 8], [shifted[0x25][animFrame], 8, 8],
+    ];
+    for (const [pixels, ox, oy] of quads) {
+      const img = tctx.createImageData(8, 8);
+      for (let p = 0; p < 64; p++) {
+        const ci = pixels[p];
+        const rgb = rgbPal[ci];
+        img.data[p*4] = rgb[0]; img.data[p*4+1] = rgb[1];
+        img.data[p*4+2] = rgb[2]; img.data[p*4+3] = 255;
+      }
+      tctx.putImageData(img, ox, oy);
+    }
+    return c;
+  }
+
+  // 16 animation frames at full brightness
+  titleWaterFrames = [];
+  for (let f = 0; f < 16; f++) {
+    titleWaterFrames.push(renderOceanTile(basePal, f));
+  }
+
+  // Fade levels (0=bright, TITLE_FADE_MAX=black) — static frame 0
+  titleWaterFadeTiles = [];
+  const fadePal = [...basePal];
+  for (let step = 0; step <= TITLE_FADE_MAX; step++) {
+    titleWaterFadeTiles.push(renderOceanTile(step === 0 ? basePal : fadePal, 0));
+    if (step < TITLE_FADE_MAX) {
+      fadePal[0] = nesColorFade(fadePal[0]);
+      fadePal[1] = nesColorFade(fadePal[1]);
+      fadePal[2] = nesColorFade(fadePal[2]);
+      fadePal[3] = nesColorFade(fadePal[3]);
+    }
+  }
+}
+
+function initTitleSky(romData) {
+  const bgId = TITLE_SKY_BGID;
+  const palette = [
+    0x0F,
+    romData[BATTLE_BG_PAL_C1 + bgId],
+    romData[BATTLE_BG_PAL_C2 + bgId],
+    romData[BATTLE_BG_PAL_C3 + bgId],
+  ];
+
+  const tiles = [];
+  const tileBase = BATTLE_BG_TILES_ROM + bgId * 0x100;
+  for (let i = 0; i < 16; i++) tiles.push(decodeTile(romData, tileBase + i * 16));
+
+  const metaTiles = [];
+  for (let m = 0; m < 4; m++) {
+    const ids = [];
+    for (let j = 0; j < 4; j++) ids.push(romData[BATTLE_BG_META_TILES + m*4 + j] - 0x60);
+    metaTiles.push(ids);
+  }
+
+  const tilemapIdx = romData[BATTLE_BG_TMID_TABLE + bgId];
+  const tmBase = BATTLE_BG_TILEMAPS + tilemapIdx * 32;
+  const tilemap = [];
+  for (let i = 0; i < 32; i++) tilemap.push(romData[tmBase + i]);
+
+  // Pre-render fade frames (same approach as renderBattleBg but stored separately)
+  titleSkyFrames = [];
+  const fadePal = [...palette];
+  while (true) {
+    titleSkyFrames.push(renderBattleBgWithPalette(romData, bgId, fadePal, tiles, metaTiles, tilemap));
+    if (fadePal[1] === 0x0F && fadePal[2] === 0x0F && fadePal[3] === 0x0F) break;
+    fadePal[1] = nesColorFade(fadePal[1]);
+    fadePal[2] = nesColorFade(fadePal[2]);
+    fadePal[3] = nesColorFade(fadePal[3]);
+  }
+}
+
 /**
  * Set up top box state for a given area.
  * @param {number} mapId — map being loaded
@@ -467,55 +994,41 @@ function renderBattleBg(romData, bgId) {
  */
 function setupTopBox(mapId, isWorldMap) {
   if (isWorldMap) {
-    const wasTown = topBoxIsTown;
-    const bgId = romRaw[BATTLE_BG_MAP_LOOKUP] & 0x1F; // map 0
+    const bgId = romRaw[BATTLE_BG_MAP_LOOKUP] & 0x1F;
     topBoxBgCanvas = renderBattleBg(romRaw, bgId);
     topBoxMode = 'battle';
     topBoxIsTown = false;
-    if (wasTown && topBoxNameBytes) {
-      // Leaving town — scroll name banner UP during opening phase
-      topBoxScrollState = 'scroll-out';
-      topBoxScrollTimer = 0;
-      topBoxScrollOffset = 0;
-      // Keep topBoxNameBytes alive for scroll-out rendering
-    } else {
-      topBoxNameBytes = null;
-      topBoxScrollState = 'none';
-      topBoxScrollOffset = -16;
-    }
+    topBoxNameBytes = null;
+    topBoxScrollState = 'none';
+    topBoxFadeStep = TOPBOX_FADE_STEPS;
     return;
   }
 
   if (mapId >= 1000) {
-    // Dungeon floor — crystal room (floor 4) uses map 148's BG, others use map 111's
     const romMap = (mapId === 1004) ? 148 : 111;
     const bgId = romRaw[BATTLE_BG_MAP_LOOKUP + romMap] & 0x1F;
     topBoxBgCanvas = renderBattleBg(romRaw, bgId);
     topBoxNameBytes = DUNGEON_NAME;
     topBoxMode = 'battle';
     topBoxIsTown = false;
-    // Name shown during loading screen only — no scroll after
     topBoxScrollState = 'none';
-    topBoxScrollOffset = -16;
+    topBoxFadeStep = TOPBOX_FADE_STEPS;
     return;
   }
 
   // Regular map
   if (mapId === 114) {
     if (!topBoxIsTown) {
-      // First entry to town — scroll name in
       topBoxScrollState = 'pending';
     }
     topBoxIsTown = true;
     topBoxNameBytes = AREA_NAMES.get(114);
     topBoxMode = 'name';
   } else if (!topBoxIsTown) {
-    // Non-town indoor map — show battle scene immediately
     const bgId = romRaw[BATTLE_BG_MAP_LOOKUP + mapId] & 0x1F;
     topBoxBgCanvas = renderBattleBg(romRaw, bgId);
     topBoxMode = 'battle';
   }
-  // If topBoxIsTown is true and mapId !== 114, keep current state (sub-room within town)
 }
 
 export async function loadROM(arrayBuffer) {
@@ -546,7 +1059,10 @@ export async function loadROM(arrayBuffer) {
   initFont(romRaw);
 
   initHUD(romRaw);
+  initCursorTile(romRaw);
   initBattleSprite(romRaw);
+  initMoogleSprite(romRaw);
+  initLoadingScreenFadeFrames(romRaw);
   initMusic(romRaw);
   _initFlameRawTiles(romRaw);
   _initStarTiles(romRaw);
@@ -558,8 +1074,18 @@ export async function loadROM(arrayBuffer) {
   worldMapRenderer = new WorldMapRenderer(worldMapData);
   _waterCache = null; // rebuild water frames for this world
 
-  // Load starting map
-  loadMapById(114);
+  // Title screen assets
+  initInvincibleSprite(romRaw);
+  initTitleWater(romRaw);
+  initTitleSky(romRaw);
+
+  // Start with title screen — map loads after title sequence
+  titleState = 'credit-wait';
+  titleTimer = 0;
+  titleWaterScroll = 0;
+  titleSkyScroll = 0;
+  titleShipTimer = 0;
+  playTrack(TRACKS.TITLE_SCREEN);
 
   lastTime = performance.now();
   requestAnimationFrame(gameLoop);
@@ -568,6 +1094,7 @@ export async function loadROM(arrayBuffer) {
 export function loadFF12ROM(arrayBuffer) {
   ff12Raw = new Uint8Array(arrayBuffer);
   initAdamantoise(ff12Raw);
+  if (romRaw) initLoadingScreenFadeFrames(romRaw); // rebuild with boss fade frames
 }
 
 function loadMapById(mapId, returnX, returnY) {
@@ -829,6 +1356,33 @@ function startMove(dir) {
 
 function handleInput() {
   if (!sprite) return;
+
+  // Enter — open pause menu
+  if (keys['Enter']) {
+    keys['Enter'] = false;
+    if (pauseState === 'none' && transState === 'none' && !shakeActive && !starEffect && !moving) {
+      pauseState = 'scroll-in'; pauseTimer = 0; pauseCursor = 0;
+    }
+    return;
+  }
+  // X — close pause menu (back button)
+  if (keys['x'] || keys['X']) {
+    keys['x'] = false; keys['X'] = false;
+    if (pauseState === 'open') {
+      pauseState = 'text-out'; pauseTimer = 0;
+    }
+    return;
+  }
+  // Pause menu cursor controls
+  if (pauseState === 'open') {
+    if (keys['ArrowDown']) { keys['ArrowDown'] = false; pauseCursor = (pauseCursor + 1) % 6; }
+    if (keys['ArrowUp'])   { keys['ArrowUp'] = false;   pauseCursor = (pauseCursor + 5) % 6; }
+    if (keys['z'] || keys['Z']) { keys['z'] = false; keys['Z'] = false; /* placeholder — no action yet */ }
+    return;
+  }
+  // Block all input during pause transitions
+  if (pauseState !== 'none') return;
+
   if (moving) return;
   if (transState !== 'none') return;
   if (shakeActive) return;
@@ -1046,41 +1600,36 @@ function updateTopBoxScroll(dt) {
   // If pending and no active transition, start immediately (e.g. initial load)
   if (topBoxScrollState === 'pending') {
     if (transState === 'none') {
-      topBoxScrollState = 'scroll-in';
+      topBoxScrollState = 'fade-in';
       topBoxScrollTimer = 0;
-      topBoxScrollOffset = -16;
+      topBoxFadeStep = TOPBOX_FADE_STEPS; // start fully faded
     }
     return;
   }
 
-  topBoxScrollTimer += Math.min(dt, 33); // cap so generation lag doesn't skip scroll
+  topBoxScrollTimer += Math.min(dt, 33); // cap so generation lag doesn't skip
 
-  if (topBoxScrollState === 'scroll-in') {
-    const t = Math.min(topBoxScrollTimer / TOPBOX_SCROLL_DURATION, 1);
-    topBoxScrollOffset = -16 + t * 16; // -16 → 0
-    if (t >= 1) {
-      topBoxScrollOffset = 0;
+  if (topBoxScrollState === 'fade-in') {
+    topBoxFadeStep = TOPBOX_FADE_STEPS - Math.min(Math.floor(topBoxScrollTimer / TOPBOX_FADE_STEP_MS), TOPBOX_FADE_STEPS);
+    if (topBoxFadeStep <= 0) {
+      topBoxFadeStep = 0;
       if (topBoxIsTown) {
-        // Town: name stays visible permanently
         topBoxScrollState = 'none';
       } else {
-        // Non-town: hold then scroll out
         topBoxScrollState = 'display';
         topBoxScrollTimer = 0;
       }
     }
   } else if (topBoxScrollState === 'display') {
-    // During loading screen, stay displayed until Z is pressed
     if (transState !== 'loading' && topBoxScrollTimer >= TOPBOX_DISPLAY_HOLD) {
-      topBoxScrollState = 'scroll-out';
+      topBoxScrollState = 'fade-out';
       topBoxScrollTimer = 0;
     }
-  } else if (topBoxScrollState === 'scroll-out') {
-    const t = Math.min(topBoxScrollTimer / TOPBOX_SCROLL_DURATION, 1);
-    topBoxScrollOffset = -t * 16; // 0 → -16
-    if (t >= 1) {
+  } else if (topBoxScrollState === 'fade-out') {
+    topBoxFadeStep = Math.min(Math.floor(topBoxScrollTimer / TOPBOX_FADE_STEP_MS), TOPBOX_FADE_STEPS);
+    if (topBoxFadeStep >= TOPBOX_FADE_STEPS) {
       topBoxScrollState = 'none';
-      topBoxScrollOffset = -16;
+      topBoxFadeStep = TOPBOX_FADE_STEPS;
       topBoxNameBytes = null;
       if (topBoxScrollOnDone) {
         const cb = topBoxScrollOnDone;
@@ -1149,46 +1698,62 @@ function updateTransition(dt) {
       if (transDungeon) {
         transState = 'loading';
         transTimer = 0;
+        loadingFadeState = 'in';
+        loadingFadeTimer = 0;
         playTrack(TRACKS.PIANO_3);
         // Generate the dungeon floor during the loading screen
         if (transPendingAction) {
           transPendingAction();
           transPendingAction = null;
         }
-        // Scroll dungeon name banner down during loading screen
+        // Fade dungeon name in during loading screen
         if (topBoxNameBytes) {
-          topBoxScrollState = 'scroll-in';
+          topBoxScrollState = 'fade-in';
           topBoxScrollTimer = 0;
-          topBoxScrollOffset = -16;
+          topBoxFadeStep = TOPBOX_FADE_STEPS;
         }
       } else {
         transState = 'opening';
         transTimer = 0;
         playSFX(SFX.SCREEN_OPEN);
+        // Fade in area name alongside opening wipe
+        if (topBoxScrollState === 'pending') {
+          topBoxScrollState = 'fade-in';
+          topBoxScrollTimer = 0;
+          topBoxFadeStep = TOPBOX_FADE_STEPS;
+        }
             }
     }
   } else if (transState === 'loading') {
-    if (keys['z'] || keys['Z']) {
-      keys['z'] = false;
-      keys['Z'] = false;
-      if (topBoxScrollState !== 'none' && topBoxScrollState !== 'scroll-out') {
-        // Scroll name banner up first, then open
-        topBoxScrollState = 'scroll-out';
-        topBoxScrollTimer = 0;
-        topBoxScrollOffset = 0;
-        topBoxScrollOnDone = () => {
-          transState = 'opening';
-          transTimer = 0;
-          transDungeon = false;
-          playSFX(SFX.SCREEN_OPEN);
-          playTrack(TRACKS.CRYSTAL_CAVE);
-        };
-      } else if (topBoxScrollState !== 'scroll-out') {
+    // Advance fade timer
+    loadingFadeTimer += dt;
+    if (loadingFadeState === 'in') {
+      if (loadingFadeTimer >= (LOAD_FADE_MAX + 1) * LOAD_FADE_STEP_MS) {
+        loadingFadeState = 'visible';
+        loadingFadeTimer = 0;
+      }
+    } else if (loadingFadeState === 'out') {
+      if (loadingFadeTimer >= (LOAD_FADE_MAX + 1) * LOAD_FADE_STEP_MS) {
+        // Fade out complete — open screen
+        loadingFadeState = 'none';
         transState = 'opening';
         transTimer = 0;
         transDungeon = false;
         playSFX(SFX.SCREEN_OPEN);
         playTrack(TRACKS.CRYSTAL_CAVE);
+      }
+    }
+    // Z press — only start fade-out when fully visible
+    if (loadingFadeState === 'visible' && (keys['z'] || keys['Z'])) {
+      keys['z'] = false;
+      keys['Z'] = false;
+      loadingFadeState = 'out';
+      loadingFadeTimer = 0;
+      // Fade out area name alongside loading screen
+      if (topBoxScrollState !== 'none' && topBoxScrollState !== 'fade-out') {
+        topBoxScrollState = 'fade-out';
+        topBoxScrollTimer = 0;
+        topBoxFadeStep = 0;
       }
     }
   } else if (transState === 'opening') {
@@ -1200,12 +1765,6 @@ function updateTransition(dt) {
         playSFX(SFX.EARTHQUAKE);
         shakeActive = true;
         shakeTimer = 0;
-      }
-      // Kick off name banner scroll after transition opens
-      if (topBoxScrollState === 'pending') {
-        topBoxScrollState = 'scroll-in';
-        topBoxScrollTimer = 0;
-        topBoxScrollOffset = -16;
       }
     }
   }
@@ -1233,18 +1792,98 @@ function drawTransitionOverlay() {
   ctx.fillRect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, Math.ceil(barHeight));
   ctx.fillRect(HUD_VIEW_X, HUD_VIEW_Y + HUD_VIEW_H - Math.ceil(barHeight), HUD_VIEW_W, Math.ceil(barHeight));
 
-  // Loading screen text overlay (ROM font, centered in viewport)
+  // Loading screen — dungeon briefing with sprites + NES fade
   if (transState === 'loading') {
-    const titleBytes = new Uint8Array([0x8A,0x95,0x9D,0x8A,0x9B,0xFF,0x8C,0x8A,0x9F,0x8E]);
-    const promptBytes = new Uint8Array([0x99,0xDB,0xCE,0xDC,0xDC,0xFF,0xA3]);
+    // Compute current fade level (0 = full bright, LOAD_FADE_MAX = black)
+    let fadeLevel = 0;
+    if (loadingFadeState === 'in') {
+      const step = Math.min(Math.floor(loadingFadeTimer / LOAD_FADE_STEP_MS), LOAD_FADE_MAX);
+      fadeLevel = LOAD_FADE_MAX - step; // count down: black → bright
+    } else if (loadingFadeState === 'out') {
+      fadeLevel = Math.min(Math.floor(loadingFadeTimer / LOAD_FADE_STEP_MS), LOAD_FADE_MAX);
+    } else if (loadingFadeState === 'visible') {
+      fadeLevel = 0;
+    } else {
+      fadeLevel = LOAD_FADE_MAX; // fully black when done
+    }
 
-    const titleW = measureText(titleBytes);
-    const promptW = measureText(promptBytes);
+    // Faded text palette — apply fade steps to TEXT_WHITE ($30 → $20 → $10 → $0F)
+    const fadedTextPal = TEXT_WHITE.map((c, i) => {
+      if (i === 0) return c;
+      let fc = c;
+      for (let s = 0; s < fadeLevel; s++) fc = nesColorFade(fc);
+      return fc;
+    });
+
+    // Text byte arrays
+    const loadingBytes = new Uint8Array([0x95,0xD8,0xCA,0xCD,0xD2,0xD7,0xD0,0xFF,0x8D,0xDE,0xD7,0xD0,0xCE,0xD8,0xD7]); // "Loading Dungeon"
+    const loadedBytes = new Uint8Array([0x8D,0xDE,0xD7,0xD0,0xCE,0xD8,0xD7,0xFF,0x95,0xD8,0xCA,0xCD,0xCE,0xCD]); // "Dungeon Loaded"
+    const promptBytes = new Uint8Array([0x99,0xDB,0xCE,0xDC,0xDC,0xFF,0xA3]); // "Press Z"
+    const beatBytes = new Uint8Array([0x8B,0xCE,0xCA,0xDD,0xFF,0xDD,0xD1,0xCE]); // "Beat the"
+    const bossBytes = new Uint8Array([0x8B,0xD8,0xDC,0xDC,0xFF,0x94,0xDE,0xD9,0xD8,0xC4]); // "Boss Kupo!"
+    const vpTop = HUD_VIEW_Y;
+    const vpBot = vpTop + HUD_VIEW_H;
     const cx = HUD_VIEW_X + HUD_VIEW_W / 2;
 
-    drawText(ctx, cx - titleW / 2, vpMidY - 8, titleBytes, TEXT_WHITE);
-    if (Math.floor(transTimer / 500) % 2 === 0) {
-      drawText(ctx, cx - promptW / 2, vpMidY + 16, promptBytes, TEXT_WHITE);
+    // Moogle sprite on left + chat bubble to the right (top area)
+    const moogleX = cx - 52;
+    const textX = moogleX + 24;
+    if (moogleFadeFrames) {
+      const mFrame = Math.floor(transTimer / 400) & 1;
+      const mCanvas = moogleFadeFrames[fadeLevel][mFrame];
+      ctx.drawImage(mCanvas, moogleX, vpTop + 20);
+    }
+    // Chat bubble — white rounded box + triangle pointer toward moogle
+    let fadedWhite = 0x30;
+    for (let s = 0; s < fadeLevel; s++) fadedWhite = nesColorFade(fadedWhite);
+    const whiteRgb = NES_SYSTEM_PALETTE[fadedWhite] || [0, 0, 0];
+    ctx.fillStyle = `rgb(${whiteRgb[0]},${whiteRgb[1]},${whiteRgb[2]})`;
+    const beatW = measureText(beatBytes);
+    const bossW = measureText(bossBytes);
+    const bgW = Math.max(beatW, bossW) + 4;
+    const bubbleX = textX - 2;
+    const bubbleY = vpTop + 18;
+    ctx.beginPath();
+    ctx.roundRect(bubbleX, bubbleY, bgW, 22, 4);
+    ctx.fill();
+    // Triangle pointing left toward moogle
+    ctx.beginPath();
+    ctx.moveTo(bubbleX, bubbleY + 8);
+    ctx.lineTo(bubbleX - 5, bubbleY + 11);
+    ctx.lineTo(bubbleX, bubbleY + 14);
+    ctx.fill();
+    const blackTextPal = [0x0F, fadedWhite, fadedWhite, 0x0F];
+    drawText(ctx, textX, vpTop + 20, beatBytes, blackTextPal);
+    drawText(ctx, textX, vpTop + 30, bossBytes, blackTextPal);
+
+    // Boss sprite + HP side by side, centered
+    const hpBytes = new Uint8Array([0x91,0x99,0xFF,0xC5,0xC5,0xC5,0xC5,0xC5]); // "HP ?????"
+    const hpW = measureText(hpBytes);
+    const bossRowW = 16 + 4 + hpW;
+    const bossRowX = cx - bossRowW / 2;
+    const bossRowY = vpBot - 60;
+    if (bossFadeFrames) {
+      const bFrame = Math.floor(transTimer / 400) & 1;
+      ctx.drawImage(bossFadeFrames[fadeLevel][bFrame], bossRowX, bossRowY);
+    } else if (adamantoiseFrames) {
+      ctx.drawImage(adamantoiseFrames[0], bossRowX, bossRowY);
+    }
+    drawText(ctx, bossRowX + 20, bossRowY + 4, hpBytes, fadedTextPal);
+
+    // Bottom area: "Loading Dungeon" during fade-in, "Dungeon Loaded" + "Press Z" once visible
+    if (loadingFadeState === 'in') {
+      const lw = measureText(loadingBytes);
+      drawText(ctx, cx - lw / 2, vpBot - 32, loadingBytes, fadedTextPal);
+    } else if (loadingFadeState === 'visible') {
+      const dw = measureText(loadedBytes);
+      drawText(ctx, cx - dw / 2, vpBot - 32, loadedBytes, fadedTextPal);
+      if (Math.floor(transTimer / 500) % 2 === 0) {
+        const pw = measureText(promptBytes);
+        drawText(ctx, cx - pw / 2, vpBot - 20, promptBytes, fadedTextPal);
+      }
+    } else if (loadingFadeState === 'out') {
+      const dw = measureText(loadedBytes);
+      drawText(ctx, cx - dw / 2, vpBot - 32, loadedBytes, fadedTextPal);
     }
   }
 }
@@ -1410,6 +2049,13 @@ function checkTrigger() {
     if (trigger.trigType === 0) {
       // exit_prev — wipe out, then pop from map stack
       const exitingCrystalRoom = currentMapId === 1004;
+      // Only fade out town name when actually leaving to world map
+      const goingToWorld = mapStack.length === 0 || mapStack[mapStack.length - 1].mapId === 'world';
+      if (goingToWorld && topBoxIsTown && topBoxNameBytes) {
+        topBoxScrollState = 'fade-out';
+        topBoxScrollTimer = 0;
+        topBoxFadeStep = 0;
+      }
       startWipeTransition(() => {
         if (mapStack.length > 0) {
           const prev = mapStack.pop();
@@ -1989,60 +2635,60 @@ function drawHUD() {
   if (hudCanvas) ctx.drawImage(hudCanvas, 0, 0);
 
   // Top box content (interior: 8,8 to 248,24 = 240×16)
-  // Base layer: battle BG or permanent town blue fill
-  const isScrolling = topBoxScrollState === 'scroll-in' || topBoxScrollState === 'display' || topBoxScrollState === 'scroll-out';
-  const showTownBlue = topBoxMode === 'name' && !isScrolling;
+  // Title screen handles its own top box (sky BG)
+  if (titleState !== 'done') return;
 
-  if (transState === 'loading' && topBoxNameBytes && !isScrolling) {
-    // Loading screen: static blue + name (only when scroll isn't handling it)
-    const nesBlue = NES_SYSTEM_PALETTE[0x02] || [0, 0, 116];
-    ctx.fillStyle = `rgb(${nesBlue[0]},${nesBlue[1]},${nesBlue[2]})`;
+  // Base layer: battle BG or town name
+  const isFading = topBoxScrollState === 'fade-in' || topBoxScrollState === 'display' || topBoxScrollState === 'fade-out';
+  const showTownName = topBoxMode === 'name' && !isFading;
+
+  if (transState === 'loading') {
+    // Loading screen: always black base, draw name if present
+    ctx.fillStyle = '#000';
     ctx.fillRect(8, 8, 240, 16);
-    const tw = measureText(topBoxNameBytes);
-    const tx = 8 + Math.floor((240 - tw) / 2);
-    const ty = 8 + Math.floor((16 - 8) / 2);
-    drawText(ctx, tx, ty, topBoxNameBytes, TEXT_WHITE_ON_BLUE);
-  } else if (topBoxScrollState === 'pending' || topBoxScrollState === 'scroll-out' || (isScrolling && (topBoxIsTown || transState === 'loading'))) {
-    // Black base: pending, any scroll-out, town scroll, or loading screen scroll
-  } else if (showTownBlue) {
-    // Permanent town display (after scroll-in completes)
-    const nesBlue = NES_SYSTEM_PALETTE[0x02] || [0, 0, 116];
-    ctx.fillStyle = `rgb(${nesBlue[0]},${nesBlue[1]},${nesBlue[2]})`;
+    if (topBoxNameBytes && !isFading) {
+      const tw = measureText(topBoxNameBytes);
+      const tx = 8 + Math.floor((240 - tw) / 2);
+      const ty = 8 + Math.floor((16 - 8) / 2);
+      drawText(ctx, tx, ty, topBoxNameBytes, TEXT_WHITE);
+    }
+  } else if (topBoxScrollState === 'pending' || topBoxScrollState === 'fade-out' || (isFading && topBoxIsTown)) {
+    // Black base
+    ctx.fillStyle = '#000';
+    ctx.fillRect(8, 8, 240, 16);
+  } else if (showTownName) {
+    // Permanent town display (after fade-in completes)
+    ctx.fillStyle = '#000';
     ctx.fillRect(8, 8, 240, 16);
     if (topBoxNameBytes) {
       const tw = measureText(topBoxNameBytes);
       const tx = 8 + Math.floor((240 - tw) / 2);
       const ty = 8 + Math.floor((16 - 8) / 2);
-      drawText(ctx, tx, ty, topBoxNameBytes, TEXT_WHITE_ON_BLUE);
+      drawText(ctx, tx, ty, topBoxNameBytes, TEXT_WHITE);
     }
   } else if (topBoxBgCanvas) {
     // Battle BG base layer
-    ctx.drawImage(topBoxBgCanvas, 8, 8, 240, 16, 8, 8, 240, 16);
+    ctx.drawImage(topBoxBgCanvas, 8, 0, 240, 16, 8, 8, 240, 16);
   }
 
-  // Scrolling name banner overlay (clips to interior)
-  if (isScrolling && topBoxNameBytes) {
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(8, 8, 240, 16);
-    ctx.clip();
-    const bannerY = 8 + topBoxScrollOffset;
-    const nesBlue = NES_SYSTEM_PALETTE[0x02] || [0, 0, 116];
-    ctx.fillStyle = `rgb(${nesBlue[0]},${nesBlue[1]},${nesBlue[2]})`;
-    ctx.fillRect(8, bannerY, 240, 16);
+  // Fading name text overlay — NES discrete palette steps
+  if (isFading && topBoxNameBytes) {
+    ctx.fillStyle = '#000';
+    ctx.fillRect(8, 8, 240, 16);
+    const fadedPal = [0x0F, 0x0F, 0x0F, 0x30];
+    for (let s = 0; s < topBoxFadeStep; s++) {
+      fadedPal[3] = nesColorFade(fadedPal[3]);
+    }
     const tw = measureText(topBoxNameBytes);
     const tx = 8 + Math.floor((240 - tw) / 2);
-    const ty = bannerY + Math.floor((16 - 8) / 2);
-    drawText(ctx, tx, ty, topBoxNameBytes, TEXT_WHITE_ON_BLUE);
-    ctx.restore();
+    const ty = 8 + Math.floor((16 - 8) / 2);
+    drawText(ctx, tx, ty, topBoxNameBytes, fadedPal);
   }
 
-  // NES palette fade on top box during transitions
-  // Skip when town blue is showing or scroll is handling the transition
-  const skipFade = topBoxIsTown || topBoxScrollState !== 'none';
-  if (!skipFade && topBoxBgFadeFrames && transState !== 'none' && transState !== 'door-opening' && transState !== 'loading') {
-    const maxStep = topBoxBgFadeFrames.length - 1; // last frame = all black
-    const FADE_STEP_MS = 133; // ~8 NES frames per step
+  // NES palette fade on battle BG during transitions
+  if (!topBoxIsTown && topBoxBgFadeFrames && transState !== 'none' && transState !== 'door-opening' && transState !== 'loading') {
+    const maxStep = topBoxBgFadeFrames.length - 1;
+    const FADE_STEP_MS = 100;
     let fadeStep = 0;
     if (transState === 'closing') {
       fadeStep = Math.min(Math.floor(transTimer / FADE_STEP_MS), maxStep);
@@ -2051,9 +2697,8 @@ function drawHUD() {
     } else if (transState === 'opening') {
       fadeStep = Math.max(maxStep - Math.floor(transTimer / FADE_STEP_MS), 0);
     }
-    // Draw the faded frame over the base (which is frame 0)
     if (fadeStep > 0) {
-      ctx.drawImage(topBoxBgFadeFrames[fadeStep], 8, 8, 240, 16, 8, 8, 240, 16);
+      ctx.drawImage(topBoxBgFadeFrames[fadeStep], 8, 0, 240, 16, 8, 8, 240, 16);
     }
   }
 
@@ -2068,11 +2713,479 @@ function drawHUD() {
   drawText(ctx, sx, sy + 8, statRowBytes(0x96, 0x99, playerMP), TEXT_WHITE); // MP
 }
 
+// ── Title Screen ──
+
+// Credit text: "A fan game" / "made by" / "JoeltCo"
+const TITLE_CREDIT_1 = new Uint8Array([0x8A,0xFF,0xCF,0xCA,0xD7,0xFF,0xD0,0xCA,0xD6,0xCE]);
+const TITLE_CREDIT_2 = new Uint8Array([0xD6,0xCA,0xCD,0xCE,0xFF,0xCB,0xE2]);
+const TITLE_CREDIT_3 = new Uint8Array([0x93,0xD8,0xCE,0xD5,0xDD,0x8C,0xD8]);
+
+// Disclaimer: "All characters" / "and music are" / "property of" / "SQUARE ENIX" / "No affiliation"
+const TITLE_DISCLAIM_1 = new Uint8Array([0x8A,0xD5,0xD5,0xFF,0xCC,0xD1,0xCA,0xDB,0xCA,0xCC,0xDD,0xCE,0xDB,0xDC]);
+const TITLE_DISCLAIM_2 = new Uint8Array([0xCA,0xD7,0xCD,0xFF,0xD6,0xDE,0xDC,0xD2,0xCC,0xFF,0xCA,0xDB,0xCE]);
+const TITLE_DISCLAIM_3 = new Uint8Array([0xD9,0xDB,0xD8,0xD9,0xCE,0xDB,0xDD,0xE2,0xFF,0xD8,0xCF]);
+const TITLE_DISCLAIM_4 = new Uint8Array([0x9C,0x9A,0x9E,0x8A,0x9B,0x8E,0xFF,0x8E,0x97,0x92,0xA1]);
+const TITLE_DISCLAIM_5 = new Uint8Array([0x97,0xD8,0xFF,0xCA,0xCF,0xCF,0xD2,0xD5,0xD2,0xCA,0xDD,0xD2,0xD8,0xD7]);
+
+const TITLE_PRESS_Z = new Uint8Array([0x99,0xDB,0xCE,0xDC,0xDC,0xFF,0xA3]); // "Press Z"
+
+// Title box: "Final Fantasy" / "III MMORPG"
+const TITLE_NAME_1 = new Uint8Array([0x8F,0xD2,0xD7,0xCA,0xD5,0xFF,0x8F,0xCA,0xD7,0xDD,0xCA,0xDC,0xE2]); // "Final Fantasy"
+const TITLE_NAME_2 = new Uint8Array([0x92,0x92,0x92,0xFF,0x96,0x96,0x98,0x9B,0x99,0x90]); // "III MMORPG"
+
+function titleFadeLevel(state, timer) {
+  if (state.endsWith('-in')) {
+    const step = Math.min(Math.floor(timer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
+    return TITLE_FADE_MAX - step;
+  } else if (state.endsWith('-out')) {
+    return Math.min(Math.floor(timer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
+  } else if (state.endsWith('-hold')) {
+    return 0;
+  }
+  return TITLE_FADE_MAX; // black
+}
+
+function titleFadePal(fadeLevel) {
+  return TEXT_WHITE.map((c, i) => {
+    if (i === 0) return c;
+    let fc = c;
+    for (let s = 0; s < fadeLevel; s++) fc = nesColorFade(fc);
+    return fc;
+  });
+}
+
+function updateTitle(dt) {
+  titleTimer += dt;
+
+  // Tick water animation during water-visible states
+  if (titleState === 'main-in' || titleState === 'zbox-open' || titleState === 'main' || titleState === 'zbox-close' || titleState === 'main-out') {
+    waterTimer += dt;
+    if (waterTimer >= WATER_TICK) {
+      waterTimer %= WATER_TICK;
+      waterTick++;
+    }
+    titleWaterScroll += dt * 0.12; // ~120px/s leftward scroll
+    titleSkyScroll += dt * 0.08;   // ~80px/s leftward scroll
+    titleShipTimer += dt;
+  }
+
+  switch (titleState) {
+    case 'credit-wait':
+      if (titleTimer >= TITLE_WAIT_MS) { titleState = 'credit-in'; titleTimer = 0; }
+      break;
+    case 'credit-in':
+      if (titleTimer >= TITLE_FADE_MS) { titleState = 'credit-hold'; titleTimer = 0; }
+      break;
+    case 'credit-hold':
+      if (titleTimer >= TITLE_HOLD_MS) { titleState = 'credit-out'; titleTimer = 0; }
+      break;
+    case 'credit-out':
+      if (titleTimer >= TITLE_FADE_MS) { titleState = 'disclaim-wait'; titleTimer = 0; }
+      break;
+    case 'disclaim-wait':
+      if (titleTimer >= TITLE_WAIT_MS) { titleState = 'disclaim-in'; titleTimer = 0; }
+      break;
+    case 'disclaim-in':
+      if (titleTimer >= TITLE_FADE_MS) { titleState = 'disclaim-hold'; titleTimer = 0; }
+      break;
+    case 'disclaim-hold':
+      if (titleTimer >= TITLE_HOLD_MS) { titleState = 'disclaim-out'; titleTimer = 0; }
+      break;
+    case 'disclaim-out':
+      if (titleTimer >= TITLE_FADE_MS) { titleState = 'main-in'; titleTimer = 0; }
+      break;
+    case 'main-in':
+      if (titleTimer >= TITLE_FADE_MS) { titleState = 'zbox-open'; titleTimer = 0; }
+      break;
+    case 'zbox-open':
+      if (titleTimer >= TITLE_ZBOX_MS) { titleState = 'main'; titleTimer = 0; }
+      break;
+    case 'main':
+      if (keys['z'] || keys['Z']) {
+        keys['z'] = false;
+        keys['Z'] = false;
+        titleState = 'zbox-close';
+        titleTimer = 0;
+      }
+      break;
+    case 'zbox-close':
+      if (titleTimer >= TITLE_ZBOX_MS) { titleState = 'main-out'; titleTimer = 0; }
+      break;
+    case 'main-out':
+      if (titleTimer >= TITLE_FADE_MS) {
+        titleState = 'done';
+        loadMapById(114);
+        playTrack(TRACKS.TOWN_UR);
+        // Opening wipe reveals the town
+        playSFX(SFX.SCREEN_OPEN);
+        transState = 'opening';
+        transTimer = 0;
+      }
+      break;
+  }
+}
+
+let _titleCascadeCanvas = null; // reusable 16×16 scratch for per-row cascade
+
+function drawTitleWater(fadeLevel) {
+  if (!titleWaterFrames) return;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
+  ctx.clip();
+
+  const scrollX = Math.floor(titleWaterScroll) % 16;
+
+  if (fadeLevel > 0 && titleWaterFadeTiles) {
+    // Fading — use static tile at this fade level
+    const tile = titleWaterFadeTiles[Math.min(fadeLevel, titleWaterFadeTiles.length - 1)];
+    for (let y = HUD_VIEW_Y; y < HUD_VIEW_Y + HUD_VIEW_H; y += 16) {
+      for (let x = HUD_VIEW_X - scrollX; x < HUD_VIEW_X + HUD_VIEW_W + 16; x += 16) {
+        ctx.drawImage(tile, x, y);
+      }
+    }
+  } else {
+    // Full brightness — per-row cascade (NES tick effect)
+    const hShift = Math.floor(waterTick / 8) % 16;
+    const hPrev = (hShift + 15) % 16;
+    const subRow = waterTick % 8; // rows 0..subRow use current shift
+    const curTile = titleWaterFrames[hShift];
+    const prevTile = titleWaterFrames[hPrev];
+
+    // Build cascade tile: prev shift as base, current shift for updated rows
+    if (!_titleCascadeCanvas) {
+      _titleCascadeCanvas = document.createElement('canvas');
+      _titleCascadeCanvas.width = 16;
+      _titleCascadeCanvas.height = 16;
+    }
+    const cctx = _titleCascadeCanvas.getContext('2d');
+    cctx.drawImage(prevTile, 0, 0);
+    // Overdraw current shift for rows 0..subRow in each 8×8 half
+    const h = subRow + 1;
+    cctx.drawImage(curTile, 0, 0, 16, h, 0, 0, 16, h);  // top 8×8 half
+    cctx.drawImage(curTile, 0, 8, 16, h, 0, 8, 16, h);  // bottom 8×8 half
+
+    for (let y = HUD_VIEW_Y; y < HUD_VIEW_Y + HUD_VIEW_H; y += 16) {
+      for (let x = HUD_VIEW_X - scrollX; x < HUD_VIEW_X + HUD_VIEW_W + 16; x += 16) {
+        ctx.drawImage(_titleCascadeCanvas, x, y);
+      }
+    }
+  }
+  ctx.restore();
+}
+
+function drawTitleSky(fadeLevel) {
+  if (!titleSkyFrames || titleSkyFrames.length === 0) return;
+
+  // Pick fade frame: 0=bright, last=black
+  const maxStep = titleSkyFrames.length - 1;
+  const frameIdx = Math.min(fadeLevel, maxStep);
+  const skyCanvas = titleSkyFrames[frameIdx];
+
+  // Scroll left, wrapping at 256px
+  const scrollX = Math.floor(titleSkyScroll) % 256;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(8, 8, 240, 16); // top box interior
+  ctx.clip();
+  ctx.drawImage(skyCanvas, 8 - scrollX, 8);
+  ctx.drawImage(skyCanvas, 8 - scrollX + 256, 8);
+  ctx.restore();
+}
+
+function drawTitleSkyInHUD() {
+  if (titleState === 'main-in') {
+    const fl = TITLE_FADE_MAX - Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
+    drawTitleSky(fl);
+  } else if (titleState === 'zbox-open' || titleState === 'main' || titleState === 'zbox-close') {
+    drawTitleSky(0);
+  } else if (titleState === 'main-out') {
+    const fl = Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
+    drawTitleSky(fl);
+  }
+}
+
+function drawTitle() {
+  // Black fill inside viewport + top box interior
+  ctx.fillStyle = '#000';
+  ctx.fillRect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
+  ctx.fillRect(8, 8, 240, 16); // top box interior
+
+  const cx = HUD_VIEW_X + HUD_VIEW_W / 2;
+  const cy = HUD_VIEW_Y + HUD_VIEW_H / 2;
+  const vpBot = HUD_VIEW_Y + HUD_VIEW_H;
+
+  if (titleState === 'credit-in' || titleState === 'credit-hold' || titleState === 'credit-out') {
+    // Skip credit-wait (black screen, no text)
+    const fl = titleFadeLevel(titleState, titleTimer);
+    const pal = titleFadePal(fl);
+    const w1 = measureText(TITLE_CREDIT_1);
+    const w2 = measureText(TITLE_CREDIT_2);
+    const w3 = measureText(TITLE_CREDIT_3);
+    drawText(ctx, cx - w1 / 2, cy - 16, TITLE_CREDIT_1, pal);
+    drawText(ctx, cx - w2 / 2, cy - 4, TITLE_CREDIT_2, pal);
+    drawText(ctx, cx - w3 / 2, cy + 8, TITLE_CREDIT_3, pal);
+  } else if (titleState === 'disclaim-in' || titleState === 'disclaim-hold' || titleState === 'disclaim-out') {
+    const fl = titleFadeLevel(titleState, titleTimer);
+    const pal = titleFadePal(fl);
+    const w1 = measureText(TITLE_DISCLAIM_1);
+    const w2 = measureText(TITLE_DISCLAIM_2);
+    const w3 = measureText(TITLE_DISCLAIM_3);
+    const w4 = measureText(TITLE_DISCLAIM_4);
+    const w5 = measureText(TITLE_DISCLAIM_5);
+    drawText(ctx, cx - w1 / 2, cy - 24, TITLE_DISCLAIM_1, pal);
+    drawText(ctx, cx - w2 / 2, cy - 14, TITLE_DISCLAIM_2, pal);
+    drawText(ctx, cx - w3 / 2, cy - 4, TITLE_DISCLAIM_3, pal);
+    drawText(ctx, cx - w4 / 2, cy + 10, TITLE_DISCLAIM_4, pal);
+    drawText(ctx, cx - w5 / 2, cy + 24, TITLE_DISCLAIM_5, pal);
+  } else if (titleState === 'main-in' || titleState === 'zbox-open' || titleState === 'main' || titleState === 'zbox-close' || titleState === 'main-out') {
+    let fl;
+    if (titleState === 'main-in') {
+      fl = TITLE_FADE_MAX - Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
+    } else if (titleState === 'main-out') {
+      fl = Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
+    } else {
+      fl = 0;
+    }
+    drawTitleWater(fl);
+
+    // Title name box — above the ship
+    if (fl < TITLE_FADE_MAX) {
+      const tw1 = measureText(TITLE_NAME_1);
+      const tw2 = measureText(TITLE_NAME_2);
+      const tboxW = Math.max(tw1, tw2) + 16; // 8px border each side
+      const tboxH = 32; // 8 border + 8 line1 + 8 line2 + 8 border
+      const tboxX = cx - tboxW / 2;
+      const tboxY = HUD_VIEW_Y + 12; // near top of viewport
+      const clampedFl = Math.min(fl, LOAD_FADE_MAX);
+      const tBorderSet = (borderFadeSets && fl > 0)
+        ? borderFadeSets[clampedFl] : borderTileCanvases;
+      if (tBorderSet) {
+        const [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR, FILL] = tBorderSet;
+        ctx.drawImage(TL, tboxX, tboxY);
+        ctx.drawImage(TR, tboxX + tboxW - 8, tboxY);
+        ctx.drawImage(BL, tboxX, tboxY + tboxH - 8);
+        ctx.drawImage(BR, tboxX + tboxW - 8, tboxY + tboxH - 8);
+        for (let tx = tboxX + 8; tx < tboxX + tboxW - 8; tx += 8) {
+          ctx.drawImage(TOP, tx, tboxY);
+          ctx.drawImage(BOT, tx, tboxY + tboxH - 8);
+        }
+        for (let ty = tboxY + 8; ty < tboxY + tboxH - 8; ty += 8) {
+          ctx.drawImage(LEFT, tboxX, ty);
+          ctx.drawImage(RIGHT, tboxX + tboxW - 8, ty);
+        }
+        for (let ty = tboxY + 8; ty < tboxY + tboxH - 8; ty += 8) {
+          for (let tx = tboxX + 8; tx < tboxX + tboxW - 8; tx += 8) {
+            ctx.drawImage(FILL, tx, ty);
+          }
+        }
+      }
+      const tpal = fl === 0 ? TEXT_WHITE : titleFadePal(fl);
+      drawText(ctx, cx - tw1 / 2, tboxY + 8, TITLE_NAME_1, tpal);
+      drawText(ctx, cx - tw2 / 2, tboxY + 16, TITLE_NAME_2, tpal);
+    }
+
+    // Invincible airship sprite — centered in viewport
+    if (invincibleFadeFrames && fl < TITLE_FADE_MAX) {
+      const frameIdx = Math.floor(titleShipTimer / TITLE_SHIP_ANIM_MS) % 2;
+      const shipCanvas = invincibleFadeFrames[fl][frameIdx];
+      const shipX = cx - 16;  // center 32px sprite in 144px viewport
+      const bob = Math.sin(titleShipTimer / 2000 * Math.PI * 2) * 4; // 4px bob, ~2s cycle
+      const shipY = Math.round(cy - 20 + bob); // +4px down
+      // Shadow stays fixed, ship bobs above it
+      const shadowY = cy - 20 + 32; // fixed base, +4px down
+      if (invincibleShadowFade && Math.floor(titleShipTimer / TITLE_SHADOW_ANIM_MS) % 2 === 0) {
+        ctx.drawImage(invincibleShadowFade[fl], shipX, shadowY);
+      }
+      ctx.drawImage(shipCanvas, shipX, shipY);
+    }
+
+    // Press Z box — opens after fade-in, closes on Z press
+    if (titleState === 'zbox-open' || titleState === 'main' || titleState === 'zbox-close') {
+      const pw = measureText(TITLE_PRESS_Z);
+      const fullW = pw + 16; // 8px border each side
+      const fullH = 24;      // 8 border + 8 text + 8 border
+      const boxCY = vpBot - 44 + fullH / 2; // center Y of box
+
+      // Animate: expand from horizontal line (open) or shrink to line (close)
+      let t = 1; // 0=closed, 1=fully open
+      if (titleState === 'zbox-open') {
+        t = Math.min(titleTimer / TITLE_ZBOX_MS, 1);
+      } else if (titleState === 'zbox-close') {
+        t = 1 - Math.min(titleTimer / TITLE_ZBOX_MS, 1);
+      }
+
+      const boxW = fullW; // width stays full
+      const boxH = Math.max(8, Math.round(fullH * t)); // min 8px (one tile row)
+      const boxX = cx - boxW / 2;
+      const boxY = Math.round(boxCY - boxH / 2);
+
+      const borderSet = borderTileCanvases;
+      if (borderSet) {
+        const [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR, FILL] = borderSet;
+        ctx.drawImage(TL, boxX, boxY);
+        ctx.drawImage(TR, boxX + boxW - 8, boxY);
+        ctx.drawImage(BL, boxX, boxY + boxH - 8);
+        ctx.drawImage(BR, boxX + boxW - 8, boxY + boxH - 8);
+        for (let tx = boxX + 8; tx < boxX + boxW - 8; tx += 8) {
+          ctx.drawImage(TOP, tx, boxY);
+          ctx.drawImage(BOT, tx, boxY + boxH - 8);
+        }
+        for (let ty = boxY + 8; ty < boxY + boxH - 8; ty += 8) {
+          ctx.drawImage(LEFT, boxX, ty);
+          ctx.drawImage(RIGHT, boxX + boxW - 8, ty);
+        }
+        for (let ty = boxY + 8; ty < boxY + boxH - 8; ty += 8) {
+          for (let tx = boxX + 8; tx < boxX + boxW - 8; tx += 8) {
+            ctx.drawImage(FILL, tx, ty);
+          }
+        }
+      }
+
+      // Text only when fully open
+      if (t >= 1) {
+        const pal = TEXT_WHITE;
+        if (Math.floor(titleTimer / 500) % 2 === 0) {
+          drawText(ctx, boxX + 8, boxY + 8, TITLE_PRESS_Z, pal);
+        }
+      }
+    }
+  }
+}
+
+// --- Pause menu ---
+
+function updatePauseMenu(dt) {
+  if (pauseState === 'none') return;
+  pauseTimer += Math.min(dt, 33);
+
+  if (pauseState === 'scroll-in') {
+    if (pauseTimer >= PAUSE_SCROLL_MS) { pauseState = 'text-in'; pauseTimer = 0; }
+  } else if (pauseState === 'text-in') {
+    if (pauseTimer >= PAUSE_TEXT_STEPS * PAUSE_TEXT_STEP_MS) { pauseState = 'open'; pauseTimer = 0; }
+  } else if (pauseState === 'text-out') {
+    if (pauseTimer >= PAUSE_TEXT_STEPS * PAUSE_TEXT_STEP_MS) { pauseState = 'scroll-out'; pauseTimer = 0; }
+  } else if (pauseState === 'scroll-out') {
+    if (pauseTimer >= PAUSE_SCROLL_MS) { pauseState = 'none'; pauseTimer = 0; }
+  }
+}
+
+function _drawBorderedBox(x, y, w, h, blue = false) {
+  if (!borderTileCanvases) return;
+  const [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR, FILL] = borderTileCanvases;
+  // Interior fill
+  if (blue) {
+    const nb = NES_SYSTEM_PALETTE[0x02];
+    ctx.fillStyle = `rgb(${nb[0]},${nb[1]},${nb[2]})`;
+    ctx.fillRect(x + 8, y + 8, w - 16, h - 16);
+  } else {
+    for (let ty = y + 8; ty < y + h - 8; ty += 8) {
+      for (let tx = x + 8; tx < x + w - 8; tx += 8) {
+        ctx.drawImage(FILL, tx, ty);
+      }
+    }
+  }
+  // Corners
+  ctx.drawImage(TL, x, y);
+  ctx.drawImage(TR, x + w - 8, y);
+  ctx.drawImage(BL, x, y + h - 8);
+  ctx.drawImage(BR, x + w - 8, y + h - 8);
+  // Top/bottom edges
+  for (let tx = x + 8; tx < x + w - 8; tx += 8) {
+    ctx.drawImage(TOP, tx, y);
+    ctx.drawImage(BOT, tx, y + h - 8);
+  }
+  // Left/right edges
+  for (let ty = y + 8; ty < y + h - 8; ty += 8) {
+    ctx.drawImage(LEFT, x, ty);
+    ctx.drawImage(RIGHT, x + w - 8, ty);
+  }
+}
+
+function drawPauseMenu() {
+  if (pauseState === 'none') return;
+
+  // Panel position: left side of viewport
+  const px = HUD_VIEW_X;
+  const finalY = HUD_VIEW_Y;
+  const pw = PAUSE_MENU_W;
+  const ph = PAUSE_MENU_H;
+
+  // Scroll position
+  let panelY = finalY;
+  if (pauseState === 'scroll-in') {
+    const t = Math.min(pauseTimer / PAUSE_SCROLL_MS, 1);
+    panelY = finalY - ph + t * ph;
+  } else if (pauseState === 'scroll-out') {
+    const t = Math.min(pauseTimer / PAUSE_SCROLL_MS, 1);
+    panelY = finalY - t * ph;
+  }
+
+  // Clip to viewport so panel hides behind top border
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
+  ctx.clip();
+
+  // Draw bordered panel with black interior
+  _drawBorderedBox(px, panelY, pw, ph);
+
+  // Text + cursor only during text-in, open, text-out
+  if (pauseState === 'text-in' || pauseState === 'open' || pauseState === 'text-out') {
+    // NES discrete palette fade: compute fade step (0=full bright, 3=fully black)
+    let fadeStep = 0;
+    if (pauseState === 'text-in') {
+      fadeStep = PAUSE_TEXT_STEPS - Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
+    } else if (pauseState === 'text-out') {
+      fadeStep = Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
+    }
+
+    // Build faded TEXT_WHITE palette: step each color toward $0F
+    const fadedPal = [0x0F, 0x0F, 0x0F, 0x30];
+    for (let s = 0; s < fadeStep; s++) {
+      fadedPal[3] = nesColorFade(fadedPal[3]);
+    }
+
+    // Menu items inside panel border — 16px vertical spacing
+    const textX = px + 24;
+    const startY = panelY + 12;
+    for (let i = 0; i < PAUSE_ITEMS.length; i++) {
+      drawText(ctx, textX, startY + i * 16, PAUSE_ITEMS[i], fadedPal);
+    }
+
+    // Hand cursor from ROM — fade with same discrete steps
+    if (cursorTileCanvas) {
+      if (fadeStep === 0) {
+        ctx.drawImage(cursorTileCanvas, px + 8, startY + pauseCursor * 16 - 4);
+      } else if (fadeStep < PAUSE_TEXT_STEPS) {
+        ctx.globalAlpha = 1 - fadeStep / PAUSE_TEXT_STEPS;
+        ctx.drawImage(cursorTileCanvas, px + 8, startY + pauseCursor * 16 - 4);
+        ctx.globalAlpha = 1;
+      }
+    }
+  }
+
+  ctx.restore();
+}
+
 function gameLoop(timestamp) {
   const dt = timestamp - lastTime;
   lastTime = timestamp;
 
+  // Title screen — runs before game starts
+  if (titleState !== 'done') {
+    updateTitle(dt);
+    drawTitle();    // viewport: water + text
+    drawHUD();      // HUD border (returns early, skips top box content)
+    drawTitleSkyInHUD(); // sky BG in top box, drawn after HUD border
+    requestAnimationFrame(gameLoop);
+    return;
+  }
+
   handleInput();
+  updatePauseMenu(dt);
   updateMovement(dt);
   updateTransition(dt);
   updateTopBoxScroll(dt);
@@ -2123,6 +3236,9 @@ function gameLoop(timestamp) {
 
   // HUD always on top
   drawHUD();
+
+  // Pause menu overlays everything
+  drawPauseMenu();
 
   if (jukeboxMode) {
     ctx.font = '8px monospace';

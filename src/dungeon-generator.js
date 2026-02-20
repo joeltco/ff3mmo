@@ -324,20 +324,29 @@ function ensureCeilingConnectivity(tilemap) {
 }
 
 // Enforce minimum 3-tile vertical gap between ceiling tiles in each column.
-// If a non-ceiling run is shorter than 3, close it off to solid ceiling.
+// If a non-ceiling run BETWEEN two ceilings is shorter than 3, close it to ceiling.
 // This prevents overhang from filling narrow gaps entirely with wall (no walkable floor).
-// Same rule as floor 0's 4-row reversal cooldown but applied as a post-process.
+// FALSE_CEILING ($44) counts as ceiling for gap purposes (visually identical).
+// Only converts safe tiles (FLOOR, WALL_ROCKY, FILL_VOID, BONES) — never special tiles.
+// NEVER touches entrance or exit blocks — runs at the top/bottom of a column (no ceiling
+// above or below) are not gaps and are left untouched.
 function enforceMinCeilingGap(tilemap) {
+  const isCeiling = t => t === CEILING || t === FALSE_CEILING;
+  const safeToConvert = t => t === FLOOR || t === WALL_ROCKY || t === FILL_VOID || t === BONES;
   for (let x = 0; x < 32; x++) {
     let y = 0;
+    let seenCeiling = false;
     while (y < 32) {
-      if (tilemap[y * 32 + x] === CEILING) { y++; continue; }
+      if (isCeiling(tilemap[y * 32 + x])) { seenCeiling = true; y++; continue; }
       const runStart = y;
-      while (y < 32 && tilemap[y * 32 + x] !== CEILING) y++;
+      while (y < 32 && !isCeiling(tilemap[y * 32 + x])) y++;
       const runLen = y - runStart;
-      if (runLen < 3) {
+      // Only fill gaps BETWEEN two ceilings (ceiling above AND below)
+      if (seenCeiling && runLen < 3 && y < 32) {
         for (let ry = runStart; ry < runStart + runLen; ry++) {
-          tilemap[ry * 32 + x] = CEILING;
+          if (safeToConvert(tilemap[ry * 32 + x])) {
+            tilemap[ry * 32 + x] = CEILING;
+          }
         }
       }
     }
@@ -749,25 +758,16 @@ function carveCorridor(tilemap, candidates, goLeft, isFalse, rng) {
 
 // Place secret corridors extending from the cave into the void.
 // Always one corridor, 50% chance for a second on the opposite side.
-// 50% chance the dungeon has a secret room — if so, exactly ONE corridor gets
-// the false ceiling teleport. All other corridors are dead ends (real ceiling).
+// Each corridor independently has a 50% chance of a false ceiling teleport
+// leading to a secret room. Both corridors can be secret rooms (opposite corners).
 function placeSecretPath(tilemap, startRow, endRow, floorIndex, rng, exitX) {
   const falseWalls = new Map();
   if (floorIndex !== 0) return falseWalls;
 
-  const hasSecret = rng() < 0.5;
   const hasSecond = rng() < 0.5;
   const primaryLeft = rng() < 0.5;
-
-  // Decide which corridor gets the secret (if any)
-  let primaryIsFalse = false, secondIsFalse = false;
-  if (hasSecret) {
-    if (hasSecond && rng() < 0.5) {
-      secondIsFalse = true;
-    } else {
-      primaryIsFalse = true;
-    }
-  }
+  const primaryIsFalse = rng() < 0.5;
+  const secondIsFalse = hasSecond && rng() < 0.5;
 
   // Primary corridor — always spawns
   const primaryCandidates = findCorridorCandidates(tilemap, startRow, endRow, primaryLeft);
@@ -781,11 +781,21 @@ function placeSecretPath(tilemap, startRow, endRow, floorIndex, rng, exitX) {
     second = carveCorridor(tilemap, secondCandidates, secondLeft, secondIsFalse, rng);
   }
 
-  // Place secret room if exactly one corridor has the false ceiling
-  const secretCorridor = primaryIsFalse && primary ? primary : secondIsFalse && second ? second : null;
-  const secretGoLeft = primaryIsFalse ? primaryLeft : !primaryLeft;
+  // Collect corridors that have false ceilings — each gets a secret room
+  const secretCorridors = [];
+  if (primaryIsFalse && primary) secretCorridors.push({ corridor: primary, goLeft: primaryLeft });
+  if (secondIsFalse && second) secretCorridors.push({ corridor: second, goLeft: !primaryLeft });
 
-  if (secretCorridor) {
+  // Void buffer: clear rows below exit block once before placing any rooms
+  if (secretCorridors.length > 0) {
+    for (let by = endRow + 5; by <= 31; by++) {
+      for (let bx = 0; bx < 32; bx++) {
+        tilemap[by * 32 + bx] = FILL_VOID;
+      }
+    }
+  }
+
+  for (const { corridor: secretCorridor, goLeft: secretGoLeft } of secretCorridors) {
     // ── Secret room: horizontal corridor in bottom corner ──
     // Left room extends left (entrance on right), right room extends right.
     // Layout: entrance → 3 wall cols → 2 chest cols → back wall
@@ -794,15 +804,6 @@ function placeSecretPath(tilemap, startRow, endRow, floorIndex, rng, exitX) {
     const rx = secretGoLeft ? 0 : (32 - rw);
     const ry = 24;
     const fy = ry + 4; // floor row = 28
-
-    // Void buffer: clear rows below exit block so nothing bleeds into the
-    // secret room viewport. Exit block occupies endRow to endRow+4 (5 rows),
-    // so start void at endRow+5 to preserve exit walls.
-    for (let by = endRow + 5; by <= 31; by++) {
-      for (let bx = 0; bx < 32; bx++) {
-        tilemap[by * 32 + bx] = FILL_VOID;
-      }
-    }
 
     // Column mapping: c(0)=entrance → c(6)=back wall
     const entCol = secretGoLeft ? rx + rw - 1 : rx;
@@ -914,7 +915,7 @@ function placeEntrance(tilemap, x, y, floorIndex) {
 // Floor feature counts per floor index
 const FLOOR_CONFIG = [
   { stairs: 1, traps: 0, chests: 0, ponds: 0, skeletons: 0, secrets: 1 }, // floor 0
-  { stairs: 0, traps: [3, 5], chests: [2, 4], ponds: 0, skeletons: 9, secrets: 0 }, // floor 1
+  { stairs: 0, traps: [3, 5], chests: [4, 6], ponds: 0, skeletons: 9, secrets: 0 }, // floor 1
   { stairs: 0, traps: 0, chests: 0, ponds: 0, skeletons: 0, secrets: 0, rockPuzzle: true }, // floor 2
   { stairs: 0, traps: 0, chests: 0, ponds: 0, skeletons: [4, 6], secrets: 0 },             // floor 3
 ];
@@ -1080,44 +1081,14 @@ function carvePathway(tilemap, startX, startFloorY, pathDir, pathLength, rng) {
 // Each row gets a 4-tile-wide horizontal strip. Overhang handles walls at corridor top.
 function carveVerticalPathway(tilemap, startX, startY, vertDir, pathLength, rng) {
   let y = startY;
-  let fx = startX;
-  let stepsSinceCurve = 0;
-
-  function carveStrip(ry, rfx) {
-    // 2 tiles wide vertical corridor
-    for (let dx = 0; dx <= 1; dx++) {
-      if (rfx + dx >= 0 && rfx + dx < 32 && ry >= 0 && ry < 32) {
-        tilemap[ry * 32 + rfx + dx] = FLOOR;
-      }
-    }
-  }
+  const fx = startX;
 
   for (let s = 0; s < pathLength; s++) {
     y += vertDir;
     if (y < 2 || y > 28) break;
-    stepsSinceCurve++;
-
-    carveStrip(y, fx);
-
-    // Curve left/right every 3-4 rows (less frequent = smoother)
-    if (stepsSinceCurve >= 3 && rng() < 0.5) {
-      const canLeft = fx > 4;
-      const canRight = fx < 27;
-      if (canLeft && canRight) {
-        if (rng() < 0.5) { fx--; } else { fx++; }
-      } else if (canLeft) {
-        fx--;
-      } else if (canRight) {
-        fx++;
-      }
-      stepsSinceCurve = 0;
-      carveStrip(y, fx);
-      // Fill 2 rows back at new position to prevent ceiling gaps → wall artifacts
-      for (let back = 1; back <= 2; back++) {
-        const by = y - vertDir * back;
-        if (by >= 0 && by < 32) carveStrip(by, fx);
-      }
-    }
+    // 2 tiles wide, straight down
+    if (fx >= 0 && fx < 32 && y >= 0 && y < 32) tilemap[y * 32 + fx] = FLOOR;
+    if (fx + 1 >= 0 && fx + 1 < 32 && y >= 0 && y < 32) tilemap[y * 32 + fx + 1] = FLOOR;
   }
 
   return { endX: fx, endY: y };
@@ -1374,6 +1345,7 @@ function _generateFloor(romData, floorIndex, seed) {
     }
 
     // 5. Clean up + overhang
+    enforceMinCeilingGap(tilemap);
     addOverhang(tilemap);
 
     // Save for secret path placement below
@@ -1818,8 +1790,9 @@ function _generateFloor(romData, floorIndex, seed) {
     const branchChestPos = [];
     // Single branch slot centered in corridor — avoids removeCeilingProtrusions merging
     const branchSlotY = Math.round((corridorBottomY + roomBotCarve) / 2) + 1; // ~row 20
+    const firstSide = rng() < 0.5 ? -1 : 1;
     for (const side of [-1, 1]) {
-      if (rng() < 0.5) continue; // 50% chance per side
+      if (side !== firstSide && rng() < 0.5) continue; // first side guaranteed, second 50%
       const len = 6 + Math.floor(rng() * 5); // 6-10 tiles
       let fatDir = 0, fatLen = 0;
       const startX = entranceX + side;
@@ -1998,6 +1971,27 @@ function _generateFloor(romData, floorIndex, seed) {
       tilemap[(doorY + 2) * 32 + doorX] = PASSAGE_BTM; // passage bottom
     }
 
+    // Bones in boss door room (non-pond side)
+    {
+      const bLeft = pondSide === 1 ? leftRoomLeft : rightRoomLeft;
+      const bRight = pondSide === 1 ? leftRoomRight : rightRoomRight;
+      const boneExclude = new Set();
+      // Exclude door column and adjacent
+      const doorX = Math.round((bLeft + bRight) / 2);
+      for (let dy = -1; dy <= 3; dy++) boneExclude.add(`${doorX},${sideRoomTopCarve - 1 + dy}`);
+      const boneCount = 2 + Math.floor(rng() * 2); // 2-3 bones
+      for (let i = 0; i < boneCount; i++) {
+        const pos = findRandomFloor(tilemap, rng, boneExclude,
+          { left: bLeft, right: bRight, top: sideRoomTopCarve, bot: sideRoomBotCarve });
+        if (pos) {
+          tilemap[pos.y * 32 + pos.x] = BONES;
+          for (let dy = -2; dy <= 2; dy++)
+            for (let dx = -2; dx <= 2; dx++)
+              boneExclude.add(`${pos.x + dx},${pos.y + dy}`);
+        }
+      }
+    }
+
     // Entrance block after overhang — placeDeepExit (same staircase as floor 1 exit).
     // Corridor FLOOR at row 26 is directly above, so floorAbove=true → south wall variant.
     placeDeepExit(tilemap, entranceX, stairY);
@@ -2079,8 +2073,8 @@ function _generateFloor(romData, floorIndex, seed) {
     const vertResult = carveVerticalPathway(tilemap, pathResult.endX, pathResult.endFloorY, vertDir, vertLength, rng);
 
     // 4. Wide chamber at end of vertical pathway
-    const chamberW = 14 + Math.floor(rng() * 4); // 14-17 tiles wide
-    const chamberH = 10 + Math.floor(rng() * 4); // 10-13 tiles tall
+    const chamberW = 9 + Math.floor(rng() * 5); // 9-13 tiles wide
+    const chamberH = 9 + Math.floor(rng() * 5); // 9-13 tiles tall
     const chamberCX = Math.max(Math.ceil(chamberW / 2) + 1,
       Math.min(30 - Math.ceil(chamberW / 2), vertResult.endX));
     const chamberLeft = Math.max(1, Math.round(chamberCX - chamberW / 2));
@@ -2254,7 +2248,7 @@ function _generateFloor(romData, floorIndex, seed) {
       ? config.traps[0] + Math.floor(rng() * (config.traps[1] - config.traps[0] + 1))
       : config.traps;
     for (let i = 0; i < trapCount; i++) {
-      const pos = findInteriorFloor(tilemap, rng, trapUsed, chamberBounds);
+      const pos = findRandomFloor(tilemap, rng, trapUsed, chamberBounds);
       if (pos) {
         tilemap[pos.y * 32 + pos.x] = TRAP_HOLE;
         hiddenTraps.add(`${pos.x},${pos.y}`);
@@ -2317,6 +2311,9 @@ function _generateFloor(romData, floorIndex, seed) {
 
     // Secret path (floor 0 only)
     falseWalls = placeSecretPath(tilemap, startRowForSecret, endRowForSecret, floorIndex, rng, exitXForSecret);
+
+    // Corridors carved by placeSecretPath can create ceiling gaps — fix them
+    if (floorIndex === 0) enforceMinCeilingGap(tilemap);
 
     // Dungeon destinations — all type-1 triggers go to next floor
     const totalType1 = config.stairs + trapsPlaced;

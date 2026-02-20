@@ -12,6 +12,7 @@ export const TRACKS = {
   WORLD_MAP:    0x1E,  // Eternal Wind
   TOWN_UR:      0x1F,  // My Home Town
   PIANO_3:      0x1A,  // 3rd piano song (loading screen)
+  TITLE_SCREEN: 0x37,  // Title screen song (55)
 };
 
 // SFX — raw NSF track numbers (passed directly to gme_start_track)
