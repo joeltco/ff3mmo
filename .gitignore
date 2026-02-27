@@ -1,4 +1,5 @@
 *.nes
+*.nes.bak
 *.zip
 tools/out/
 *.ppm
