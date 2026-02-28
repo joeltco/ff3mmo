@@ -13,6 +13,8 @@ export const TRACKS = {
   TOWN_UR:      0x1F,  // My Home Town
   PIANO_3:      0x1A,  // 3rd piano song (loading screen)
   TITLE_SCREEN: 0x37,  // Title screen song (55)
+  BOSS_BATTLE:  0x2A,  // Battle 2 (boss battle)
+  VICTORY:      0x07,  // Battle victory
 };
 
 // SFX — raw NSF track numbers (passed directly to gme_start_track)
@@ -26,6 +28,8 @@ export const SFX = {
   WARP:         0x9D,  // SFX $5C + $41
   POND_DRINK:   0x91,  // SFX $50 + $41 — healing drink (play half)
   CURE:         0x4A,  // SFX $09 + $41 — cure spell sound
+  BATTLE_SWIPE: 0x56,  // SFX $15 + $41 — battle encounter swoosh
+  BOSS_DEATH:   0x7D,  // SFX $3C + $41 — boss dissolve crumble
 };
 
 let nsfData = null;    // Built NSF Uint8Array

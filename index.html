@@ -112,7 +112,7 @@
     <canvas id="game-canvas"></canvas>
   </div>
 
-  <div id="controls-hint"><kbd>&larr;</kbd> <kbd>&uarr;</kbd> <kbd>&darr;</kbd> <kbd>&rarr;</kbd> Move &nbsp;&middot;&nbsp; <kbd>Z</kbd> Action &nbsp;&middot;&nbsp; <kbd>C</kbd> CRT</div>
+  <div id="controls-hint"><kbd>&larr;</kbd> <kbd>&uarr;</kbd> <kbd>&darr;</kbd> <kbd>&rarr;</kbd> Move &nbsp;&middot;&nbsp; <kbd>Z</kbd> Action &nbsp;&middot;&nbsp; <kbd>X</kbd> Back</div>
 
   <script src="lib/libgme.js"></script>
   <script type="module">
@@ -158,11 +158,7 @@
     }
 
     // --- Launch ---
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'c' || e.key === 'C') {
-        document.getElementById('canvas-wrapper').classList.toggle('crt');
-      }
-    });
+
 
     async function tryLaunch() {
       if (!ff3Buffer || !ff12Buffer) return;

@@ -13,6 +13,42 @@ import { applyIPS } from './ips-patcher.js';
 import { initTextDecoder } from './text-decoder.js';
 import { initFont, drawText, measureText, TEXT_WHITE } from './font-renderer.js';
 
+// --- Save data persistence (IndexedDB) ---
+function openSaveDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('ff3mmo-roms', 1);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function saveSlotsToDB() {
+  try {
+    const data = saveSlots.map(s => s ? Array.from(s) : null);
+    const db = await openSaveDB();
+    const tx = db.transaction('roms', 'readwrite');
+    tx.objectStore('roms').put(data, 'saves');
+  } catch (e) { /* silent fail */ }
+}
+
+async function loadSlotsFromDB() {
+  try {
+    const db = await openSaveDB();
+    const tx = db.transaction('roms', 'readonly');
+    const req = tx.objectStore('roms').get('saves');
+    return new Promise((resolve) => {
+      req.onsuccess = () => {
+        const data = req.result;
+        if (Array.isArray(data)) {
+          saveSlots = data.map(s => s ? new Uint8Array(s) : null);
+        }
+        resolve();
+      };
+      req.onerror = () => resolve();
+    });
+  } catch (e) { /* silent fail */ }
+}
+
 // Jukebox debug mode — press J to toggle, +/- to cycle songs
 let jukeboxMode = false;
 let jukeboxTrack = 0;
@@ -45,6 +81,7 @@ let borderFadeSets = null;    // [fadeLevel] → [TL, TOP, TR, LEFT, RIGHT, BL, 
 const BATTLE_SPRITE_ROM = 0x050010;  // Bank 28/$8000 — battle character graphics (disasm 2F/AB3D)
 const BATTLE_JOB_SIZE = 0x02A0;      // 672 bytes (42 tiles) per job
 let battleSpriteCanvas = null;
+let silhouetteCanvas = null;
 
 // FF1&2 ROM — secondary ROM for monster sprites, etc.
 let ff12Raw = null;
@@ -54,6 +91,16 @@ let adamantoiseFrames = null; // [normal, flipped] canvases
 
 // Boss sprite — positioned in dungeon boss room
 let bossSprite = null;  // { canvas, px, py } or null
+
+// Land Turtle battle sprite — 6×6 tiles (48×48 pixels) from FF3 ROM
+// Boss graphics: bank pair $24/$25 (register $12), address $9B00, 144 tiles total
+// Tilemap shows only tiles $70-$93 (36 tiles) in a 6×6 grid
+const LAND_TURTLE_GFX_OFF = 0x49B10;  // Bank $24:$9B00 — boss tile data
+const LAND_TURTLE_PAL_TOP = [0x0F, 0x13, 0x23, 0x28]; // shell/head: black, purple, lavender, yellow (palette $47)
+const LAND_TURTLE_PAL_BOT = [0x0F, 0x19, 0x18, 0x28]; // legs/body: black, green, olive, yellow (palette $22)
+const LAND_TURTLE_TILES = 36;   // 6×6 grid
+const LAND_TURTLE_COLS = 6;
+let landTurtleBattleCanvas = null; // 48×48 canvas
 
 // Moogle NPC sprite — loading screen decoration
 const MOOGLE_GFX_ID = 42;
@@ -77,11 +124,15 @@ const LOAD_FADE_MAX = 4;        // 4 steps: $30→$20→$10→$00→$0F
 // Loading screen pre-rendered fade frames
 let moogleFadeFrames = null; // [step0=bright, step1, step2, step3=black] per walk frame pair
 let bossFadeFrames = null;   // same structure for adamantoise
+let loadingBgScroll = 0;     // horizontal scroll for loading screen battle BG
+let loadingBgFadeFrames = null; // battle BG fade frames for loading screen
 
 // Title screen state
 let titleState = 'credit-wait'; // 'credit-wait' | 'credit-in' | 'credit-hold' | 'credit-out' |
                                  // 'disclaim-wait' | 'disclaim-in' | 'disclaim-hold' | 'disclaim-out' |
-                                 // 'main-in' | 'zbox-open' | 'main' | 'zbox-close' | 'main-out' | 'done'
+                                 // 'main-in' | 'zbox-open' | 'main' | 'zbox-close' |
+                                 // 'select-fade-in' | 'select' | 'select-fade-out' | 'select-fade-out-back' |
+                                 // 'main-out' | 'done'
 let titleTimer = 0;
 // Title timing — 6 seconds total for credit+disclaimer (3s each)
 const TITLE_FADE_MAX = 4;          // 4 steps to reach $0F: $30→$20→$10→$00→$0F
@@ -102,9 +153,59 @@ const TITLE_SHIP_ANIM_MS = 100;  // 100ms per frame toggle
 const TITLE_SHADOW_ANIM_MS = 50; // 50ms shadow blink
 const TITLE_ZBOX_MS = 200;       // ms for Press Z box open/close animation
 
+// Player select screen state
+let selectCursor = 0;             // 0-2 (which slot)
+const SELECT_TEXT_STEP_MS = 100;  // NES fade step duration
+const SELECT_TEXT_STEPS = 4;      // 4 steps: $30→$20→$10→$00→$0F
+let saveSlots = [null, null, null]; // null = empty, or Uint8Array of name bytes
+let nameBuffer = [];                // bytes being typed
+const NAME_MAX_LEN = 7;
+
+// HUD info fade-in after title screen ends
+let hudInfoFadeTimer = 0;
+const HUD_INFO_FADE_STEPS = 4;
+const HUD_INFO_FADE_STEP_MS = 100;
+
 // Player stats (placeholder)
 let playerHP = 28;
 let playerMP = 12;
+let playerATK = 12;
+let playerDEF = 4;
+
+// Boss fight state
+let bossHP = 111;
+const BOSS_ATK = 8, BOSS_DEF = 6, BOSS_MAX_HP = 111;
+
+let battleState = 'none';
+let battleTimer = 0;
+let battleCursor = 0;        // 0=Fight,1=Magic,2=Item,3=Run
+let battleMessage = null;     // Uint8Array for status messages
+let bossDamageNum = null;     // {value, timer}
+let playerDamageNum = null;   // {value, timer}
+let bossFlashTimer = 0;
+let battleShakeTimer = 0;
+let bossDefeated = false;
+
+// Battle timing constants
+const BATTLE_SCROLL_MS = 150;
+const BATTLE_TEXT_STEP_MS = 100;
+const BATTLE_TEXT_STEPS = 4;
+const BATTLE_ROAR_HOLD_MS = 800;
+const BATTLE_FLASH_FRAMES = 65;      // 65 frames of grayscale strobe (~1.08s at 60fps)
+const BATTLE_FLASH_FRAME_MS = 16.67; // ~1 frame at 60fps
+const BATTLE_MSG_HOLD_MS = 1200;
+const BATTLE_HIT_FLASH_MS = 400;
+const BATTLE_DMG_SHOW_MS = 800;
+const BATTLE_SHAKE_MS = 300;
+const BATTLE_VICTORY_HOLD_MS = 1500;
+const BATTLE_MENU_W = HUD_VIEW_W;      // full viewport width
+const BATTLE_MENU_H = 48;              // 2 rows of text + padding
+const BOSS_BLOCK_SIZE = 16;            // 16×16 pixel blocks for dissolve
+const BOSS_BLOCK_COLS = 3;             // 48/16 = 3 blocks wide
+const BOSS_BLOCKS = 9;                 // 3×3 blocks
+const BOSS_DISSOLVE_STEPS = 8;         // 8 pixel-shift steps per block
+const BOSS_DISSOLVE_FRAME_MS = 16.67;  // 1 NES frame per step
+const BOSS_BOX_EXPAND_MS = 300;        // box expand from center duration
 
 // Top box — battle scene BG or area name
 let topBoxMode = 'name';       // 'name' | 'battle'
@@ -150,6 +251,16 @@ const PAUSE_ITEMS = [
   new Uint8Array([0x93,0xD8,0xCB]),                 // "Job"
   new Uint8Array([0x9C,0xCA,0xDF,0xCE]),             // "Save"
 ];
+
+// Battle text byte arrays
+const BATTLE_ROAR = new Uint8Array([0x9B,0x98,0x98,0x98,0x98,0x98,0x8A,0x9B,0xC4,0xC4]); // "ROOOOOAR!!"
+const BATTLE_FIGHT = new Uint8Array([0x8F,0xD2,0xD0,0xD1,0xDD]); // "Fight"
+const BATTLE_RUN = new Uint8Array([0x9B,0xDE,0xD7]); // "Run"
+const BATTLE_CANT_ESCAPE = new Uint8Array([0x8C,0xCA,0xD7,0xDD,0xFF,0xCE,0xDC,0xCC,0xCA,0xD9,0xCE,0xC4]); // "Cant escape!"
+const BATTLE_NO_MAGIC = new Uint8Array([0x97,0xD8,0xFF,0xD6,0xCA,0xD0,0xD2,0xCC,0xC4]); // "No magic!"
+const BATTLE_NO_ITEMS = new Uint8Array([0x97,0xD8,0xFF,0xD2,0xDD,0xCE,0xD6,0xDC,0xC4]); // "No items!"
+const BATTLE_VICTORY = new Uint8Array([0x9F,0xD2,0xCC,0xDD,0xD8,0xDB,0xE2,0xC4]); // "Victory!"
+const BATTLE_MENU_ITEMS = [BATTLE_FIGHT, PAUSE_ITEMS[1]/*Magic*/, PAUSE_ITEMS[0]/*Item*/, BATTLE_RUN];
 
 // ROM offsets
 const PALETTE_OFFSET = 0x001680;
@@ -247,6 +358,23 @@ export function init() {
 
   // Input
   window.addEventListener('keydown', (e) => {
+    // Name entry mode — capture all keys, block game controls
+    if (titleState === 'name-entry') {
+      e.preventDefault();
+      if (e.key === 'Enter' && nameBuffer.length > 0) {
+        saveSlots[selectCursor] = new Uint8Array(nameBuffer);
+        saveSlotsToDB();
+        titleState = 'select'; titleTimer = 0;
+      } else if (e.key === 'Backspace') {
+        if (nameBuffer.length > 0) nameBuffer.pop();
+        else { titleState = 'select'; titleTimer = 0; } // cancel
+      } else if (e.key.length === 1 && /[a-zA-Z]/.test(e.key) && nameBuffer.length < NAME_MAX_LEN) {
+        const ch = e.key;
+        if (ch >= 'A' && ch <= 'Z') nameBuffer.push(0x8A + ch.charCodeAt(0) - 65);
+        else nameBuffer.push(0xCA + ch.charCodeAt(0) - 97);
+      }
+      return; // block all other key handling (Z, X, arrows disabled)
+    }
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'z', 'Z', 'x', 'X', 'Enter'].includes(e.key)) {
       e.preventDefault();
       keys[e.key] = true;
@@ -267,6 +395,9 @@ export function init() {
   window.addEventListener('keyup', (e) => {
     keys[e.key] = false;
   });
+
+  // Save on exit
+  window.addEventListener('beforeunload', () => saveSlotsToDB());
 }
 
 function initHUD(romData) {
@@ -427,6 +558,23 @@ function initBattleSprite(romData) {
     }
     bctx.putImageData(img, layout[i][0], layout[i][1]);
   }
+
+  // Silhouette: same shape, all non-transparent pixels → NES $00 (grey)
+  silhouetteCanvas = document.createElement('canvas');
+  silhouetteCanvas.width = 16;
+  silhouetteCanvas.height = 16;
+  const sctx = silhouetteCanvas.getContext('2d');
+  sctx.drawImage(battleSpriteCanvas, 0, 0);
+  const sdata = sctx.getImageData(0, 0, 16, 16);
+  const darkRgb = NES_SYSTEM_PALETTE[0x00] || [0, 0, 0];
+  for (let p = 0; p < 16 * 16; p++) {
+    if (sdata.data[p * 4 + 3] > 0) {
+      sdata.data[p * 4]     = darkRgb[0];
+      sdata.data[p * 4 + 1] = darkRgb[1];
+      sdata.data[p * 4 + 2] = darkRgb[2];
+    }
+  }
+  sctx.putImageData(sdata, 0, 0);
 }
 
 function initAdamantoise(romData) {
@@ -474,6 +622,43 @@ function initAdamantoise(romData) {
   fctx.drawImage(normal, 0, 0);
 
   adamantoiseFrames = [normal, flipped];
+}
+
+function initLandTurtleBattle(romData) {
+  // 36 tiles at LAND_TURTLE_GFX_OFF, sequentially (6×6 grid = 48×48 pixels)
+  // Tilemap IDs $70-$93 are PPU positions; ROM data starts at tile 0
+  const tiles = [];
+  for (let i = 0; i < LAND_TURTLE_TILES; i++) {
+    tiles.push(decodeTile(romData, LAND_TURTLE_GFX_OFF + i * 16));
+  }
+
+  const c = document.createElement('canvas');
+  c.width = LAND_TURTLE_COLS * 8;   // 48
+  c.height = LAND_TURTLE_COLS * 8;  // 48
+  const cctx = c.getContext('2d');
+
+  for (let ty = 0; ty < LAND_TURTLE_COLS; ty++) {
+    const pal = ty < 4 ? LAND_TURTLE_PAL_TOP : LAND_TURTLE_PAL_BOT;
+    for (let tx = 0; tx < LAND_TURTLE_COLS; tx++) {
+      const img = cctx.createImageData(8, 8);
+      const px = tiles[ty * LAND_TURTLE_COLS + tx];
+      for (let p = 0; p < 64; p++) {
+        const ci = px[p];
+        if (ci === 0) {
+          img.data[p * 4 + 3] = 0;
+        } else {
+          const rgb = NES_SYSTEM_PALETTE[pal[ci]] || [0, 0, 0];
+          img.data[p * 4]     = rgb[0];
+          img.data[p * 4 + 1] = rgb[1];
+          img.data[p * 4 + 2] = rgb[2];
+          img.data[p * 4 + 3] = 255;
+        }
+      }
+      cctx.putImageData(img, tx * 8, ty * 8);
+    }
+  }
+
+  landTurtleBattleCanvas = c;
 }
 
 function initInvincibleSprite(romData) {
@@ -1008,6 +1193,7 @@ function setupTopBox(mapId, isWorldMap) {
     const romMap = (mapId === 1004) ? 148 : 111;
     const bgId = romRaw[BATTLE_BG_MAP_LOOKUP + romMap] & 0x1F;
     topBoxBgCanvas = renderBattleBg(romRaw, bgId);
+    loadingBgFadeFrames = topBoxBgFadeFrames;
     topBoxNameBytes = DUNGEON_NAME;
     topBoxMode = 'battle';
     topBoxIsTown = false;
@@ -1061,6 +1247,7 @@ export async function loadROM(arrayBuffer) {
   initHUD(romRaw);
   initCursorTile(romRaw);
   initBattleSprite(romRaw);
+  initLandTurtleBattle(romRaw);
   initMoogleSprite(romRaw);
   initLoadingScreenFadeFrames(romRaw);
   initMusic(romRaw);
@@ -1078,6 +1265,9 @@ export async function loadROM(arrayBuffer) {
   initInvincibleSprite(romRaw);
   initTitleWater(romRaw);
   initTitleSky(romRaw);
+
+  // Load saved player slots from IndexedDB
+  await loadSlotsFromDB();
 
   // Start with title screen — map loads after title sequence
   titleState = 'credit-wait';
@@ -1124,7 +1314,7 @@ function loadMapById(mapId, returnX, returnY) {
     mapRenderer = new MapRenderer(mapData, playerX, playerY); _indoorWaterCache = null;
     _flameSprites = [];
     // Place boss sprite in crystal room (floor 5) center stage
-    bossSprite = (floorIndex === 4 && adamantoiseFrames)
+    bossSprite = (floorIndex === 4 && adamantoiseFrames && !bossDefeated)
       ? { frames: adamantoiseFrames, px: 6 * TILE_SIZE, py: 8 * TILE_SIZE }
       : null;
     disabledTrigger = { x: playerX, y: playerY };
@@ -1357,10 +1547,25 @@ function startMove(dir) {
 function handleInput() {
   if (!sprite) return;
 
+  // Battle menu input — block all other input during battle
+  if (battleState !== 'none') {
+    if (battleState === 'roar-hold') {
+      if (keys['z'] || keys['Z']) { keys['z'] = false; keys['Z'] = false; battleState = 'roar-text-out'; battleTimer = 0; }
+    } else if (battleState === 'menu-open') {
+      // 2×2 grid: 0=Fight(TL) 1=Magic(TR) 2=Item(BL) 3=Run(BR)
+      if (keys['ArrowDown'])  { keys['ArrowDown'] = false;  battleCursor ^= 2; }
+      if (keys['ArrowUp'])    { keys['ArrowUp'] = false;    battleCursor ^= 2; }
+      if (keys['ArrowRight']) { keys['ArrowRight'] = false; battleCursor ^= 1; }
+      if (keys['ArrowLeft'])  { keys['ArrowLeft'] = false;  battleCursor ^= 1; }
+      if (keys['z'] || keys['Z']) { keys['z'] = false; keys['Z'] = false; executeBattleCommand(battleCursor); }
+    }
+    return;
+  }
+
   // Enter — open pause menu
   if (keys['Enter']) {
     keys['Enter'] = false;
-    if (pauseState === 'none' && transState === 'none' && !shakeActive && !starEffect && !moving) {
+    if (pauseState === 'none' && battleState === 'none' && transState === 'none' && !shakeActive && !starEffect && !moving) {
       pauseState = 'scroll-in'; pauseTimer = 0; pauseCursor = 0;
     }
     return;
@@ -1419,6 +1624,12 @@ function handleAction() {
   const facedY = tileY + dy;
 
   if (facedX < 0 || facedX >= 32 || facedY < 0 || facedY >= 32) return;
+
+  // Boss fight trigger — face Adamantoise at crystal room center
+  if (bossSprite && !bossDefeated && facedX === 6 && facedY === 8) {
+    startBattle();
+    return;
+  }
 
   const facedTile = mapData.tilemap[facedY * 32 + facedX];
 
@@ -1700,6 +1911,7 @@ function updateTransition(dt) {
         transTimer = 0;
         loadingFadeState = 'in';
         loadingFadeTimer = 0;
+        loadingBgScroll = 0;
         playTrack(TRACKS.PIANO_3);
         // Generate the dungeon floor during the loading screen
         if (transPendingAction) {
@@ -1725,8 +1937,9 @@ function updateTransition(dt) {
             }
     }
   } else if (transState === 'loading') {
-    // Advance fade timer
+    // Advance fade timer and scroll
     loadingFadeTimer += dt;
+    loadingBgScroll += dt * 0.08;
     if (loadingFadeState === 'in') {
       if (loadingFadeTimer >= (LOAD_FADE_MAX + 1) * LOAD_FADE_STEP_MS) {
         loadingFadeState = 'visible';
@@ -1825,13 +2038,48 @@ function drawTransitionOverlay() {
     const vpBot = vpTop + HUD_VIEW_H;
     const cx = HUD_VIEW_X + HUD_VIEW_W / 2;
 
-    // Moogle sprite on left + chat bubble to the right (top area)
+    // Scrolling battle scene row at top of viewport
+    if (loadingBgFadeFrames && loadingBgFadeFrames.length > 0) {
+      const maxStep = loadingBgFadeFrames.length - 1;
+      const frameIdx = Math.min(fadeLevel, maxStep);
+      const bgCanvas = loadingBgFadeFrames[frameIdx];
+      const scrollX = Math.floor(loadingBgScroll) % 256;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(HUD_VIEW_X, vpTop, HUD_VIEW_W, 32);
+      ctx.clip();
+      ctx.drawImage(bgCanvas, HUD_VIEW_X - scrollX, vpTop);
+      ctx.drawImage(bgCanvas, HUD_VIEW_X - scrollX + 256, vpTop);
+      ctx.restore();
+    }
+
+    // "Floors: 4" label centered above boss
+    const floorsBytes = new Uint8Array([0x84,0xFF,0x95,0xCE,0xDF,0xCE,0xD5,0xDC]); // "4 Levels"
+    const floorsW = measureText(floorsBytes);
+    drawText(ctx, cx - floorsW / 2, vpTop + 48, floorsBytes, fadedTextPal);
+
+    // Boss sprite + HP side by side, centered (below floors label)
+    const hpBytes = new Uint8Array([0x91,0x99,0xFF,0xC5,0xC5,0xC5,0xC5,0xC5]); // "HP ?????"
+    const hpW = measureText(hpBytes);
+    const bossRowW = 16 + 4 + hpW;
+    const bossRowX = cx - bossRowW / 2;
+    const bossRowY = vpTop + 60;
+    if (bossFadeFrames) {
+      const bFrame = Math.floor(transTimer / 400) & 1;
+      ctx.drawImage(bossFadeFrames[fadeLevel][bFrame], bossRowX, bossRowY);
+    } else if (adamantoiseFrames) {
+      ctx.drawImage(adamantoiseFrames[0], bossRowX, bossRowY);
+    }
+    drawText(ctx, bossRowX + 20, bossRowY + 4, hpBytes, fadedTextPal);
+
+    // Moogle sprite on left + chat bubble to the right (below boss)
+    const moogleY = vpBot - 54;
     const moogleX = cx - 52;
     const textX = moogleX + 24;
     if (moogleFadeFrames) {
       const mFrame = Math.floor(transTimer / 400) & 1;
       const mCanvas = moogleFadeFrames[fadeLevel][mFrame];
-      ctx.drawImage(mCanvas, moogleX, vpTop + 20);
+      ctx.drawImage(mCanvas, moogleX, moogleY);
     }
     // Chat bubble — white rounded box + triangle pointer toward moogle
     let fadedWhite = 0x30;
@@ -1842,7 +2090,7 @@ function drawTransitionOverlay() {
     const bossW = measureText(bossBytes);
     const bgW = Math.max(beatW, bossW) + 4;
     const bubbleX = textX - 2;
-    const bubbleY = vpTop + 18;
+    const bubbleY = moogleY - 2;
     ctx.beginPath();
     ctx.roundRect(bubbleX, bubbleY, bgW, 22, 4);
     ctx.fill();
@@ -1853,22 +2101,8 @@ function drawTransitionOverlay() {
     ctx.lineTo(bubbleX, bubbleY + 14);
     ctx.fill();
     const blackTextPal = [0x0F, fadedWhite, fadedWhite, 0x0F];
-    drawText(ctx, textX, vpTop + 20, beatBytes, blackTextPal);
-    drawText(ctx, textX, vpTop + 30, bossBytes, blackTextPal);
-
-    // Boss sprite + HP side by side, centered
-    const hpBytes = new Uint8Array([0x91,0x99,0xFF,0xC5,0xC5,0xC5,0xC5,0xC5]); // "HP ?????"
-    const hpW = measureText(hpBytes);
-    const bossRowW = 16 + 4 + hpW;
-    const bossRowX = cx - bossRowW / 2;
-    const bossRowY = vpBot - 60;
-    if (bossFadeFrames) {
-      const bFrame = Math.floor(transTimer / 400) & 1;
-      ctx.drawImage(bossFadeFrames[fadeLevel][bFrame], bossRowX, bossRowY);
-    } else if (adamantoiseFrames) {
-      ctx.drawImage(adamantoiseFrames[0], bossRowX, bossRowY);
-    }
-    drawText(ctx, bossRowX + 20, bossRowY + 4, hpBytes, fadedTextPal);
+    drawText(ctx, textX, moogleY, beatBytes, blackTextPal);
+    drawText(ctx, textX, moogleY + 10, bossBytes, blackTextPal);
 
     // Bottom area: "Loading Dungeon" during fade-in, "Dungeon Loaded" + "Press Z" once visible
     if (loadingFadeState === 'in') {
@@ -2539,6 +2773,12 @@ function render() {
     camX += (frame & 2) ? 2 : -2;
   }
 
+  // Battle shake (enemy attack)
+  if (battleShakeTimer > 0) {
+    const frame = Math.floor(battleShakeTimer / (1000 / 60));
+    camX += (frame & 2) ? 2 : -2;
+  }
+
   // Camera origin: screen pixel where the camera world position maps to
   const originX = SCREEN_CENTER_X;
   const originY = SCREEN_CENTER_Y + 3; // sprite draws 3px above tile
@@ -2577,15 +2817,19 @@ function render() {
     }
 
     // Boss sprite (crystal room) — alternates normal/flipped like walking
+    // During battle hit: blink on/off every 60ms
     if (bossSprite) {
-      const wLeft = camX - originX;
-      const wTop = camY - originY;
-      const bx = bossSprite.px - wLeft;
-      const by = bossSprite.py - wTop;
-      if (bx > -16 && bx < CANVAS_W && by > -16 && by < CANVAS_H) {
-        const frame = Math.floor(waterTick / 8) & 1;
-        ctx.imageSmoothingEnabled = false;
-        ctx.drawImage(bossSprite.frames[frame], bx, by);
+      const blinkHidden = bossFlashTimer > 0 && (Math.floor(bossFlashTimer / 60) & 1);
+      if (!blinkHidden) {
+        const wLeft = camX - originX;
+        const wTop = camY - originY;
+        const bx = bossSprite.px - wLeft;
+        const by = bossSprite.py - wTop;
+        if (bx > -16 && bx < CANVAS_W && by > -16 && by < CANVAS_H) {
+          const frame = Math.floor(waterTick / 8) & 1;
+          ctx.imageSmoothingEnabled = false;
+          ctx.drawImage(bossSprite.frames[frame], bx, by);
+        }
       }
     }
 
@@ -2643,7 +2887,7 @@ function drawHUD() {
   const showTownName = topBoxMode === 'name' && !isFading;
 
   if (transState === 'loading') {
-    // Loading screen: always black base, draw name if present
+    // Loading screen: black top box base, draw name if present
     ctx.fillStyle = '#000';
     ctx.fillRect(8, 8, 240, 16);
     if (topBoxNameBytes && !isFading) {
@@ -2702,15 +2946,28 @@ function drawHUD() {
     }
   }
 
+  // HUD info fade-in (portrait + HP/MP)
+  const infoFadeStep = HUD_INFO_FADE_STEPS - Math.min(Math.floor(hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
+
   // Battle sprite portrait in mini-left panel interior (16×16 exact fit)
   if (battleSpriteCanvas) {
-    ctx.drawImage(battleSpriteCanvas, HUD_RIGHT_X + 8, HUD_VIEW_Y + 8);
+    if (infoFadeStep === 0) {
+      ctx.drawImage(battleSpriteCanvas, HUD_RIGHT_X + 8, HUD_VIEW_Y + 8);
+    } else if (infoFadeStep < HUD_INFO_FADE_STEPS) {
+      ctx.globalAlpha = 1 - infoFadeStep / HUD_INFO_FADE_STEPS;
+      ctx.drawImage(battleSpriteCanvas, HUD_RIGHT_X + 8, HUD_VIEW_Y + 8);
+      ctx.globalAlpha = 1;
+    }
   }
   // HP/MP in right mini-right panel (8 chars × 2 rows)
   const sx = HUD_RIGHT_X + 32 + 8; // interior x
   const sy = HUD_VIEW_Y + 8;       // interior y
-  drawText(ctx, sx, sy,     statRowBytes(0x91, 0x99, playerHP), TEXT_WHITE); // HP
-  drawText(ctx, sx, sy + 8, statRowBytes(0x96, 0x99, playerMP), TEXT_WHITE); // MP
+  const infoPal = [0x0F, 0x0F, 0x0F, 0x30];
+  for (let s = 0; s < infoFadeStep; s++) {
+    infoPal[3] = nesColorFade(infoPal[3]);
+  }
+  drawText(ctx, sx, sy,     statRowBytes(0x91, 0x99, playerHP), infoPal); // HP
+  drawText(ctx, sx, sy + 8, statRowBytes(0x96, 0x99, playerMP), infoPal); // MP
 }
 
 // ── Title Screen ──
@@ -2728,6 +2985,13 @@ const TITLE_DISCLAIM_4 = new Uint8Array([0x9C,0x9A,0x9E,0x8A,0x9B,0x8E,0xFF,0x8E
 const TITLE_DISCLAIM_5 = new Uint8Array([0x97,0xD8,0xFF,0xCA,0xCF,0xCF,0xD2,0xD5,0xD2,0xCA,0xDD,0xD2,0xD8,0xD7]);
 
 const TITLE_PRESS_Z = new Uint8Array([0x99,0xDB,0xCE,0xDC,0xDC,0xFF,0xA3]); // "Press Z"
+
+// Player select text
+const SELECT_TITLE_1 = new Uint8Array([0x9C,0xCE,0xD5,0xCE,0xCC,0xDD]); // "Select"
+const SELECT_TITLE_2 = new Uint8Array([0x99,0xD5,0xCA,0xE2,0xCE,0xDB]); // "Player"
+const SELECT_SLOT_TEXT = new Uint8Array([0x97,0xCE,0xE0,0xFF,0x90,0xCA,0xD6,0xCE]); // "New Game"
+const SELECT_DELETE_TEXT = new Uint8Array([0x8D,0xCE,0xD5,0xCE,0xDD,0xCE]); // "Delete"
+let deleteMode = false;
 
 // Title box: "Final Fantasy" / "III MMORPG"
 const TITLE_NAME_1 = new Uint8Array([0x8F,0xD2,0xD7,0xCA,0xD5,0xFF,0x8F,0xCA,0xD7,0xDD,0xCA,0xDC,0xE2]); // "Final Fantasy"
@@ -2758,7 +3022,9 @@ function updateTitle(dt) {
   titleTimer += dt;
 
   // Tick water animation during water-visible states
-  if (titleState === 'main-in' || titleState === 'zbox-open' || titleState === 'main' || titleState === 'zbox-close' || titleState === 'main-out') {
+  if (titleState === 'main-in' || titleState === 'zbox-open' || titleState === 'main' || titleState === 'zbox-close' ||
+      titleState === 'select-fade-in' || titleState === 'select' || titleState === 'select-fade-out' || titleState === 'select-fade-out-back' ||
+      titleState === 'name-entry' || titleState === 'main-out') {
     waterTimer += dt;
     if (waterTimer >= WATER_TICK) {
       waterTimer %= WATER_TICK;
@@ -2809,11 +3075,63 @@ function updateTitle(dt) {
       }
       break;
     case 'zbox-close':
-      if (titleTimer >= TITLE_ZBOX_MS) { titleState = 'main-out'; titleTimer = 0; }
+      if (titleTimer >= TITLE_ZBOX_MS) { titleState = 'select-fade-in'; titleTimer = 0; selectCursor = 0; deleteMode = false; }
+      break;
+    case 'select-fade-in':
+      if (titleTimer >= SELECT_TEXT_STEPS * SELECT_TEXT_STEP_MS) { titleState = 'select'; titleTimer = 0; }
+      break;
+    case 'select':
+      if (keys['z'] || keys['Z']) {
+        keys['z'] = false; keys['Z'] = false;
+        if (deleteMode) {
+          if (selectCursor < 3 && saveSlots[selectCursor]) {
+            // Delete the selected save
+            saveSlots[selectCursor] = null;
+            saveSlotsToDB();
+            deleteMode = false;
+          }
+        } else if (selectCursor === 3) {
+          // Activate delete mode
+          deleteMode = true;
+          selectCursor = 0;
+        } else if (saveSlots[selectCursor]) {
+          // Named slot — start game
+          titleState = 'select-fade-out'; titleTimer = 0;
+        } else {
+          // New Game — enter name inline
+          nameBuffer = [];
+          titleState = 'name-entry'; titleTimer = 0;
+        }
+      }
+      if (deleteMode) {
+        if (keys['ArrowDown']) { keys['ArrowDown'] = false; selectCursor = (selectCursor + 1) % 3; }
+        if (keys['ArrowUp'])   { keys['ArrowUp'] = false;   selectCursor = (selectCursor + 2) % 3; }
+      } else {
+        if (keys['ArrowDown']) { keys['ArrowDown'] = false; selectCursor = (selectCursor + 1) % 4; }
+        if (keys['ArrowUp'])   { keys['ArrowUp'] = false;   selectCursor = (selectCursor + 3) % 4; }
+      }
+      if (keys['x'] || keys['X']) {
+        keys['x'] = false; keys['X'] = false;
+        if (deleteMode) {
+          deleteMode = false;
+        } else {
+          titleState = 'select-fade-out-back'; titleTimer = 0;
+        }
+      }
+      break;
+    case 'name-entry':
+      // Input handled in keydown listener — just tick timer for cursor blink
+      break;
+    case 'select-fade-out':
+      if (titleTimer >= SELECT_TEXT_STEPS * SELECT_TEXT_STEP_MS) { titleState = 'main-out'; titleTimer = 0; }
+      break;
+    case 'select-fade-out-back':
+      if (titleTimer >= SELECT_TEXT_STEPS * SELECT_TEXT_STEP_MS) { titleState = 'zbox-open'; titleTimer = 0; }
       break;
     case 'main-out':
       if (titleTimer >= TITLE_FADE_MS) {
         titleState = 'done';
+        hudInfoFadeTimer = 0;
         loadMapById(114);
         playTrack(TRACKS.TOWN_UR);
         // Opening wipe reveals the town
@@ -2899,7 +3217,9 @@ function drawTitleSkyInHUD() {
   if (titleState === 'main-in') {
     const fl = TITLE_FADE_MAX - Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
     drawTitleSky(fl);
-  } else if (titleState === 'zbox-open' || titleState === 'main' || titleState === 'zbox-close') {
+  } else if (titleState === 'zbox-open' || titleState === 'main' || titleState === 'zbox-close' ||
+             titleState === 'select-fade-in' || titleState === 'select' || titleState === 'select-fade-out' || titleState === 'select-fade-out-back' ||
+             titleState === 'name-entry') {
     drawTitleSky(0);
   } else if (titleState === 'main-out') {
     const fl = Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
@@ -2940,7 +3260,9 @@ function drawTitle() {
     drawText(ctx, cx - w3 / 2, cy - 4, TITLE_DISCLAIM_3, pal);
     drawText(ctx, cx - w4 / 2, cy + 10, TITLE_DISCLAIM_4, pal);
     drawText(ctx, cx - w5 / 2, cy + 24, TITLE_DISCLAIM_5, pal);
-  } else if (titleState === 'main-in' || titleState === 'zbox-open' || titleState === 'main' || titleState === 'zbox-close' || titleState === 'main-out') {
+  } else if (titleState === 'main-in' || titleState === 'zbox-open' || titleState === 'main' || titleState === 'zbox-close' ||
+             titleState === 'select-fade-in' || titleState === 'select' || titleState === 'select-fade-out' || titleState === 'select-fade-out-back' ||
+             titleState === 'name-entry' || titleState === 'main-out') {
     let fl;
     if (titleState === 'main-in') {
       fl = TITLE_FADE_MAX - Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
@@ -3052,6 +3374,147 @@ function drawTitle() {
         }
       }
     }
+  }
+}
+
+// --- Player select screen ---
+
+function drawPlayerSelect() {
+  const isSelect = titleState === 'select-fade-in' || titleState === 'select' ||
+                   titleState === 'select-fade-out' || titleState === 'select-fade-out-back' ||
+                   titleState === 'name-entry';
+  if (!isSelect) return;
+
+  // Compute NES fade step (0=full bright, 4=fully black)
+  let fadeStep = 0;
+  if (titleState === 'select-fade-in') {
+    fadeStep = SELECT_TEXT_STEPS - Math.min(Math.floor(titleTimer / SELECT_TEXT_STEP_MS), SELECT_TEXT_STEPS);
+  } else if (titleState === 'select-fade-out' || titleState === 'select-fade-out-back') {
+    fadeStep = Math.min(Math.floor(titleTimer / SELECT_TEXT_STEP_MS), SELECT_TEXT_STEPS);
+  }
+
+  // Build faded palette
+  const fadedPal = [0x0F, 0x0F, 0x0F, 0x30];
+  for (let s = 0; s < fadeStep; s++) {
+    fadedPal[3] = nesColorFade(fadedPal[3]);
+  }
+
+  // Right main box interior: x=152, y=72, w=96, h=96
+  const ix = HUD_RIGHT_X + 8;
+  const iy = HUD_VIEW_Y + 32 + 8;
+  const iw = 96;
+
+  // "Select" / "Player" header — centered
+  const w1 = measureText(SELECT_TITLE_1);
+  const w2 = measureText(SELECT_TITLE_2);
+  drawText(ctx, ix + Math.floor((iw - w1) / 2), iy, SELECT_TITLE_1, fadedPal);
+  drawText(ctx, ix + Math.floor((iw - w2) / 2), iy + 10, SELECT_TITLE_2, fadedPal);
+
+  // 3 save slots — cursor + portrait + text
+  const slotStartY = iy + 28;
+  const slotSpacing = 20;
+  for (let i = 0; i < 3; i++) {
+    const sy = slotStartY + i * slotSpacing;
+
+    // Hand cursor — floats over left border to give text room
+    const curX = HUD_RIGHT_X - 4;  // overlap border by 12px
+    if (i === selectCursor && cursorTileCanvas) {
+      if (fadeStep === 0) {
+        ctx.drawImage(cursorTileCanvas, curX, sy - 4);
+      } else if (fadeStep < SELECT_TEXT_STEPS) {
+        ctx.globalAlpha = 1 - fadeStep / SELECT_TEXT_STEPS;
+        ctx.drawImage(cursorTileCanvas, curX, sy - 4);
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    const rowShift = (i === selectCursor) ? 0 : -4;
+    const isNameEntry = titleState === 'name-entry' && i === selectCursor;
+
+    // Portrait — colored for named slots, silhouette for empty, hidden during name entry
+    if (isNameEntry) {
+      // No portrait during name entry — keep silhouette
+      if (silhouetteCanvas) ctx.drawImage(silhouetteCanvas, ix + 8 + rowShift, sy - 4);
+    } else if (saveSlots[i] && battleSpriteCanvas) {
+      // Named slot — colored Onion Knight portrait
+      if (fadeStep === 0) {
+        ctx.drawImage(battleSpriteCanvas, ix + 8 + rowShift, sy - 4, 16, 16);
+      } else if (fadeStep < SELECT_TEXT_STEPS) {
+        ctx.globalAlpha = 1 - fadeStep / SELECT_TEXT_STEPS;
+        ctx.drawImage(battleSpriteCanvas, ix + 8 + rowShift, sy - 4, 16, 16);
+        ctx.globalAlpha = 1;
+      }
+    } else if (silhouetteCanvas) {
+      if (fadeStep === 0) {
+        ctx.drawImage(silhouetteCanvas, ix + 8 + rowShift, sy - 4);
+      } else if (fadeStep < SELECT_TEXT_STEPS) {
+        ctx.globalAlpha = 1 - fadeStep / SELECT_TEXT_STEPS;
+        ctx.drawImage(silhouetteCanvas, ix + 8 + rowShift, sy - 4);
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    // Slot text
+    const textX = ix + 28 + rowShift;
+    if (isNameEntry) {
+      // Draw typed name bytes + blinking underscore
+      if (nameBuffer.length > 0) {
+        drawText(ctx, textX, sy, new Uint8Array(nameBuffer), fadedPal);
+      }
+      // Blinking underscore, or blinking period at max length
+      if (nameBuffer.length >= NAME_MAX_LEN && Math.floor(titleTimer / 400) % 2 === 0) {
+        ctx.fillStyle = '#fcfcfc';
+        ctx.fillRect(textX + nameBuffer.length * 8 + 2, sy + 7, 2, 2);
+      } else if (nameBuffer.length < NAME_MAX_LEN && Math.floor(titleTimer / 400) % 2 === 0) {
+        ctx.fillStyle = '#fcfcfc';
+        ctx.fillRect(textX + nameBuffer.length * 8 + 1, sy + 7, 6, 1);
+      }
+    } else if (saveSlots[i]) {
+      // Named slot — draw saved name
+      drawText(ctx, textX, sy, saveSlots[i], fadedPal);
+    } else {
+      drawText(ctx, textX, sy, SELECT_SLOT_TEXT, fadedPal);
+    }
+  }
+
+  // "Delete" option below the 3 slots
+  const delY = slotStartY + 3 * slotSpacing;
+  const delPal = deleteMode
+    ? [0x0F, 0x0F, 0x0F, 0x16] // red when active
+    : [0x0F, 0x0F, 0x0F, fadedPal[3]];
+  if (!deleteMode && selectCursor === 3 && cursorTileCanvas) {
+    if (fadeStep === 0) {
+      ctx.drawImage(cursorTileCanvas, HUD_RIGHT_X - 4, delY - 4);
+    } else if (fadeStep < SELECT_TEXT_STEPS) {
+      ctx.globalAlpha = 1 - fadeStep / SELECT_TEXT_STEPS;
+      ctx.drawImage(cursorTileCanvas, HUD_RIGHT_X - 4, delY - 4);
+      ctx.globalAlpha = 1;
+    }
+  }
+  drawText(ctx, ix + 28, delY, SELECT_DELETE_TEXT, delPal);
+
+  // Portrait in mini-left panel — colored for named slot, silhouette for empty/delete
+  const slotData = selectCursor < 3 ? saveSlots[selectCursor] : null;
+  const portraitCanvas = slotData ? battleSpriteCanvas : silhouetteCanvas;
+  if (portraitCanvas) {
+    if (fadeStep === 0) {
+      ctx.drawImage(portraitCanvas, HUD_RIGHT_X + 8, HUD_VIEW_Y + 8);
+    } else if (fadeStep < SELECT_TEXT_STEPS) {
+      ctx.globalAlpha = 1 - fadeStep / SELECT_TEXT_STEPS;
+      ctx.drawImage(portraitCanvas, HUD_RIGHT_X + 8, HUD_VIEW_Y + 8);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  // Mini-right panel — show slot name, "New Game", or "Delete"
+  const hpX = HUD_RIGHT_X + 32 + 8;
+  const hpY = HUD_VIEW_Y + 12;
+  if (selectCursor === 3) {
+    drawText(ctx, hpX, hpY, SELECT_DELETE_TEXT, deleteMode ? delPal : fadedPal);
+  } else if (slotData) {
+    drawText(ctx, hpX, hpY, slotData, fadedPal);
+  } else {
+    drawText(ctx, hpX, hpY, SELECT_SLOT_TEXT, fadedPal);
   }
 }
 
@@ -3170,6 +3633,539 @@ function drawPauseMenu() {
   ctx.restore();
 }
 
+// --- Battle System ---
+
+function calcDamage(atk, def) {
+  return Math.max(1, atk - Math.floor(def / 2) + Math.floor(Math.random() * (Math.floor(atk / 4) + 1)));
+}
+
+function startBattle() {
+  battleState = 'roar-slide-in';
+  battleTimer = 0;
+  battleCursor = 0;
+  battleMessage = null;
+  bossDamageNum = null;
+  playerDamageNum = null;
+  bossFlashTimer = 0;
+  battleShakeTimer = 0;
+  bossHP = BOSS_MAX_HP;
+  playSFX(SFX.EARTHQUAKE);
+}
+
+function executeBattleCommand(index) {
+  if (index === 0) {
+    // Fight — player attacks boss
+    const dmg = calcDamage(playerATK, BOSS_DEF);
+    bossHP = Math.max(0, bossHP - dmg);
+    bossDamageNum = { value: dmg, timer: 0 };
+    bossFlashTimer = BATTLE_HIT_FLASH_MS;
+    battleState = 'player-attack';
+    battleTimer = 0;
+  } else if (index === 1) {
+    // Magic
+    battleMessage = BATTLE_NO_MAGIC;
+    battleState = 'message-hold';
+    battleTimer = 0;
+  } else if (index === 2) {
+    // Item
+    battleMessage = BATTLE_NO_ITEMS;
+    battleState = 'message-hold';
+    battleTimer = 0;
+  } else {
+    // Run
+    battleMessage = BATTLE_CANT_ESCAPE;
+    battleState = 'message-hold';
+    battleTimer = 0;
+  }
+}
+
+function updateBattle(dt) {
+  if (battleState === 'none') return;
+  battleTimer += Math.min(dt, 33);
+
+  // Boss blink countdown
+  if (bossFlashTimer > 0) bossFlashTimer = Math.max(0, bossFlashTimer - dt);
+
+  // Battle shake countdown
+  if (battleShakeTimer > 0) battleShakeTimer = Math.max(0, battleShakeTimer - dt);
+
+  // Damage number timers
+  if (bossDamageNum) {
+    bossDamageNum.timer += dt;
+    if (bossDamageNum.timer >= BATTLE_DMG_SHOW_MS) bossDamageNum = null;
+  }
+  if (playerDamageNum) {
+    playerDamageNum.timer += dt;
+    if (playerDamageNum.timer >= BATTLE_DMG_SHOW_MS) playerDamageNum = null;
+  }
+
+  // State machine
+  if (battleState === 'roar-slide-in') {
+    if (battleTimer >= BATTLE_SCROLL_MS) { battleState = 'roar-text-in'; battleTimer = 0; }
+  } else if (battleState === 'roar-text-in') {
+    if (battleTimer >= BATTLE_TEXT_STEPS * BATTLE_TEXT_STEP_MS) { battleState = 'roar-hold'; battleTimer = 0; }
+  } else if (battleState === 'roar-hold') {
+    // waits for Z press in handleInput
+  } else if (battleState === 'roar-text-out') {
+    if (battleTimer >= BATTLE_TEXT_STEPS * BATTLE_TEXT_STEP_MS) { battleState = 'roar-slide-out'; battleTimer = 0; }
+  } else if (battleState === 'roar-slide-out') {
+    if (battleTimer >= BATTLE_SCROLL_MS) { battleState = 'flash-strobe'; battleTimer = 0; playSFX(SFX.BATTLE_SWIPE); }
+  } else if (battleState === 'flash-strobe') {
+    if (battleTimer >= BATTLE_FLASH_FRAMES * BATTLE_FLASH_FRAME_MS) { battleState = 'boss-box-expand'; battleTimer = 0; playTrack(TRACKS.BOSS_BATTLE); }
+  } else if (battleState === 'boss-box-expand') {
+    if (battleTimer >= BOSS_BOX_EXPAND_MS) { battleState = 'boss-appear'; battleTimer = 0; }
+  } else if (battleState === 'boss-appear') {
+    if (battleTimer >= BOSS_BLOCKS * BOSS_DISSOLVE_STEPS * BOSS_DISSOLVE_FRAME_MS) { battleState = 'menu-slide-in'; battleTimer = 0; }
+  } else if (battleState === 'menu-slide-in') {
+    if (battleTimer >= BATTLE_SCROLL_MS) { battleState = 'menu-text-in'; battleTimer = 0; }
+  } else if (battleState === 'menu-text-in') {
+    if (battleTimer >= BATTLE_TEXT_STEPS * BATTLE_TEXT_STEP_MS) { battleState = 'menu-open'; battleTimer = 0; }
+  } else if (battleState === 'message-hold') {
+    if (battleTimer >= BATTLE_MSG_HOLD_MS) { battleState = 'menu-text-in'; battleTimer = 0; battleMessage = null; }
+  } else if (battleState === 'player-attack') {
+    if (battleTimer >= BATTLE_HIT_FLASH_MS) {
+      battleState = 'player-damage-show';
+      battleTimer = 0;
+    }
+  } else if (battleState === 'player-damage-show') {
+    if (battleTimer >= BATTLE_DMG_SHOW_MS) {
+      if (bossHP <= 0) {
+        // Boss defeated — dissolve out
+        battleState = 'boss-dissolve';
+        battleTimer = 0;
+        playSFX(SFX.BOSS_DEATH);
+      } else {
+        // Boss counterattack
+        const dmg = calcDamage(BOSS_ATK, playerDEF);
+        playerHP = Math.max(0, playerHP - dmg);
+        playerDamageNum = { value: dmg, timer: 0 };
+        battleShakeTimer = BATTLE_SHAKE_MS;
+        battleState = 'enemy-attack';
+        battleTimer = 0;
+      }
+    }
+  } else if (battleState === 'enemy-attack') {
+    if (battleTimer >= BATTLE_SHAKE_MS) {
+      battleState = 'enemy-damage-show';
+      battleTimer = 0;
+    }
+  } else if (battleState === 'enemy-damage-show') {
+    if (battleTimer >= BATTLE_DMG_SHOW_MS) {
+      if (playerHP <= 0) {
+        // Player defeated — reload after 2s
+        battleState = 'defeat';
+        battleTimer = 0;
+      } else {
+        // Back to menu
+        battleState = 'menu-text-in';
+        battleTimer = 0;
+      }
+    }
+  } else if (battleState === 'boss-dissolve') {
+    // Play death SFX every 4 blocks
+    const dFrame = Math.floor(battleTimer / BOSS_DISSOLVE_FRAME_MS);
+    const dBlock = Math.floor(dFrame / BOSS_DISSOLVE_STEPS);
+    const prevFrame = Math.floor((battleTimer - dt) / BOSS_DISSOLVE_FRAME_MS);
+    const prevBlock = Math.floor(prevFrame / BOSS_DISSOLVE_STEPS);
+    if (dBlock !== prevBlock && dBlock > 0 && (dBlock & 3) === 0) playSFX(SFX.BOSS_DEATH);
+    if (battleTimer >= BOSS_BLOCKS * BOSS_DISSOLVE_STEPS * BOSS_DISSOLVE_FRAME_MS) {
+      battleState = 'victory-text-in';
+      battleTimer = 0;
+      bossDefeated = true;
+      bossSprite = null;
+      playTrack(TRACKS.VICTORY);
+    }
+  } else if (battleState === 'victory-text-in') {
+    if (battleTimer >= BATTLE_TEXT_STEPS * BATTLE_TEXT_STEP_MS) { battleState = 'victory-hold'; battleTimer = 0; }
+  } else if (battleState === 'victory-hold') {
+    if (battleTimer >= BATTLE_VICTORY_HOLD_MS) { battleState = 'victory-text-out'; battleTimer = 0; }
+  } else if (battleState === 'victory-text-out') {
+    if (battleTimer >= BATTLE_TEXT_STEPS * BATTLE_TEXT_STEP_MS) {
+      battleState = 'none';
+      battleTimer = 0;
+      playTrack(TRACKS.CRYSTAL_ROOM);
+    }
+  } else if (battleState === 'defeat') {
+    if (battleTimer >= 2000) {
+      location.reload();
+    }
+  }
+}
+
+function drawBattle() {
+  if (battleState === 'none') return;
+
+  // NES grayscale strobe — toggle grayscale every frame for 65 frames
+  if (battleState === 'flash-strobe') {
+    const frame = Math.floor(battleTimer / BATTLE_FLASH_FRAME_MS);
+    if (frame & 1) {
+      // Odd frames: grayscale (matches NES PPUMASK bit 0)
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
+      ctx.clip();
+      ctx.filter = 'saturate(0)';
+      ctx.drawImage(ctx.canvas, HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H,
+                                HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
+      ctx.filter = 'none';
+      ctx.restore();
+    }
+  }
+
+  drawRoarBox();
+  drawBossSpriteBox();
+  drawBattleMenu();
+  drawBattleMessage();
+  drawVictoryBox();
+  drawBossHP();
+  drawDamageNumbers();
+}
+
+function drawRoarBox() {
+  const isRoar = battleState.startsWith('roar-');
+  if (!isRoar) return;
+
+  const boxW = HUD_VIEW_W - 16;
+  const boxH = 48;
+  const vpBot = HUD_VIEW_Y + HUD_VIEW_H;
+  const finalY = vpBot - boxH - 8;
+  const centerX = HUD_VIEW_X + Math.floor((HUD_VIEW_W - boxW) / 2);
+
+  let boxY = finalY;
+  if (battleState === 'roar-slide-in') {
+    const t = Math.min(battleTimer / BATTLE_SCROLL_MS, 1);
+    boxY = vpBot + (finalY - vpBot) * t;
+  } else if (battleState === 'roar-slide-out') {
+    const t = Math.min(battleTimer / BATTLE_SCROLL_MS, 1);
+    boxY = finalY + (vpBot - finalY) * t;
+  }
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
+  ctx.clip();
+
+  _drawBorderedBox(centerX, boxY, boxW, boxH, true);
+
+  // Text with NES fade
+  if (battleState === 'roar-text-in' || battleState === 'roar-hold' || battleState === 'roar-text-out') {
+    let fadeStep = 0;
+    if (battleState === 'roar-text-in') {
+      fadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
+    } else if (battleState === 'roar-text-out') {
+      fadeStep = Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
+    }
+
+    const fadedPal = [0x02, 0x02, 0x02, 0x30];
+    for (let s = 0; s < fadeStep; s++) fadedPal[3] = nesColorFade(fadedPal[3]);
+
+    const tw = measureText(BATTLE_ROAR);
+    const tx = centerX + Math.floor((boxW - tw) / 2);
+    const ty = boxY + Math.floor((boxH - 8) / 2);
+    drawText(ctx, tx, ty, BATTLE_ROAR, fadedPal);
+  }
+
+  ctx.restore();
+}
+
+function drawBattleMenu() {
+  const isMenu = battleState === 'menu-slide-in' || battleState === 'menu-text-in' ||
+                 battleState === 'menu-open' || battleState === 'player-attack' ||
+                 battleState === 'player-damage-show' || battleState === 'enemy-attack' ||
+                 battleState === 'enemy-damage-show' || battleState === 'message-hold' ||
+                 battleState === 'boss-dissolve' || battleState === 'defeat';
+  if (!isMenu) return;
+
+  const vpBot = HUD_VIEW_Y + HUD_VIEW_H;
+  const finalY = vpBot - BATTLE_MENU_H;
+  const px = HUD_VIEW_X;
+
+  let panelY = finalY;
+  if (battleState === 'menu-slide-in') {
+    const t = Math.min(battleTimer / BATTLE_SCROLL_MS, 1);
+    panelY = vpBot + (finalY - vpBot) * t;
+  }
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
+  ctx.clip();
+
+  _drawBorderedBox(px, panelY, BATTLE_MENU_W, BATTLE_MENU_H);
+
+  // 2×2 layout: Fight/Magic top row, Item/Run bottom row
+  if (battleState !== 'menu-slide-in') {
+    let fadeStep = 0;
+    if (battleState === 'menu-text-in') {
+      fadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
+    }
+
+    const fadedPal = [0x0F, 0x0F, 0x0F, 0x30];
+    for (let s = 0; s < fadeStep; s++) fadedPal[3] = nesColorFade(fadedPal[3]);
+
+    const colL = px + 24;                           // left column text x
+    const colR = px + Math.floor(BATTLE_MENU_W / 2) + 16; // right column text x
+    const row0 = panelY + 12;                        // top row y
+    const row1 = panelY + 28;                        // bottom row y
+    const positions = [[colL, row0], [colR, row0], [colL, row1], [colR, row1]];
+
+    for (let i = 0; i < BATTLE_MENU_ITEMS.length; i++) {
+      drawText(ctx, positions[i][0], positions[i][1], BATTLE_MENU_ITEMS[i], fadedPal);
+    }
+
+    // Hand cursor — position next to selected item
+    if (cursorTileCanvas && (battleState === 'menu-open' || battleState === 'menu-text-in')) {
+      const ci = battleCursor;
+      const curX = positions[ci][0] - 16;
+      const curY = positions[ci][1] - 4;
+      if (fadeStep === 0) {
+        ctx.drawImage(cursorTileCanvas, curX, curY);
+      } else if (fadeStep < BATTLE_TEXT_STEPS) {
+        ctx.globalAlpha = 1 - fadeStep / BATTLE_TEXT_STEPS;
+        ctx.drawImage(cursorTileCanvas, curX, curY);
+        ctx.globalAlpha = 1;
+      }
+    }
+  }
+
+  ctx.restore();
+}
+
+function drawBossSpriteBox() {
+  if (!landTurtleBattleCanvas) return;
+
+  const isExpand = battleState === 'boss-box-expand';
+  const isAppear = battleState === 'boss-appear';
+  const isDissolve = battleState === 'boss-dissolve';
+  const isCombat = battleState === 'menu-slide-in' || battleState === 'menu-text-in' ||
+                   battleState === 'menu-open' || battleState === 'player-attack' ||
+                   battleState === 'player-damage-show' || battleState === 'enemy-attack' ||
+                   battleState === 'enemy-damage-show' || battleState === 'message-hold' ||
+                   battleState === 'defeat';
+  if (!isExpand && !isAppear && !isDissolve && !isCombat) return;
+
+  const fullW = 64;  // 48px sprite + 8px border each side
+  const fullH = 64;
+  const vpBot = HUD_VIEW_Y + HUD_VIEW_H;
+  const centerX = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2);
+  const centerY = vpBot - BATTLE_MENU_H - 4 - Math.floor(fullH / 2);
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
+  ctx.clip();
+
+  // Box expand from center
+  let boxW = fullW, boxH = fullH;
+  if (isExpand) {
+    const t = Math.min(battleTimer / BOSS_BOX_EXPAND_MS, 1);
+    boxW = Math.max(16, Math.floor(fullW * t));
+    boxH = Math.max(16, Math.floor(fullH * t));
+    // Snap to 8px grid for border tiles
+    boxW = Math.ceil(boxW / 8) * 8;
+    boxH = Math.ceil(boxH / 8) * 8;
+  }
+  const boxX = centerX - Math.floor(boxW / 2);
+  const boxY = centerY - Math.floor(boxH / 2);
+  _drawBorderedBox(boxX, boxY, boxW, boxH);
+
+  // No sprite during expand
+  if (isExpand) { ctx.restore(); return; }
+
+  // Battle sprite — dissolve in/out or full draw
+  const sprX = centerX - 24;  // 48/2 = 24
+  const sprY = centerY - 24;
+  ctx.imageSmoothingEnabled = false;
+
+  if (isAppear || isDissolve) {
+    _drawDissolvedSprite(sprX, sprY, isDissolve);
+  } else {
+    // Full sprite — blink during hit
+    const blinkHidden = bossFlashTimer > 0 && (Math.floor(bossFlashTimer / 60) & 1);
+    if (!blinkHidden && !bossDefeated) {
+      ctx.drawImage(landTurtleBattleCanvas, sprX, sprY);
+    }
+  }
+
+  ctx.restore();
+}
+
+function _drawDissolvedSprite(sprX, sprY, reverse) {
+  // Interlaced pixel-shift dissolve per 16×16 block
+  const frame = Math.floor(battleTimer / BOSS_DISSOLVE_FRAME_MS);
+  const src = landTurtleBattleCanvas;
+  const sctx = src.getContext('2d');
+
+  for (let bi = 0; bi < BOSS_BLOCKS; bi++) {
+    const bx = (bi % BOSS_BLOCK_COLS) * BOSS_BLOCK_SIZE;
+    const by = Math.floor(bi / BOSS_BLOCK_COLS) * BOSS_BLOCK_SIZE;
+    const blockFrame = frame - bi * BOSS_DISSOLVE_STEPS;
+
+    if (!reverse) {
+      // Appear: blocks before current are fully visible, after are invisible
+      if (blockFrame >= BOSS_DISSOLVE_STEPS) {
+        // Fully revealed
+        ctx.drawImage(src, bx, by, BOSS_BLOCK_SIZE, BOSS_BLOCK_SIZE,
+                      sprX + bx, sprY + by, BOSS_BLOCK_SIZE, BOSS_BLOCK_SIZE);
+      } else if (blockFrame >= 0) {
+        // Dissolving in: shift = 7 - blockFrame (7→0)
+        const shift = 7 - blockFrame;
+        _drawShiftedBlock(sctx, sprX, sprY, bx, by, shift);
+      }
+      // else: not yet started, invisible
+    } else {
+      // Dissolve out: blocks before current are invisible, after are fully visible
+      if (blockFrame >= BOSS_DISSOLVE_STEPS) {
+        // Fully dissolved — invisible
+      } else if (blockFrame >= 0) {
+        // Dissolving out: shift = 1 + blockFrame (1→8)
+        const shift = 1 + blockFrame;
+        _drawShiftedBlock(sctx, sprX, sprY, bx, by, shift);
+      } else {
+        // Not yet started — still fully visible
+        ctx.drawImage(src, bx, by, BOSS_BLOCK_SIZE, BOSS_BLOCK_SIZE,
+                      sprX + bx, sprY + by, BOSS_BLOCK_SIZE, BOSS_BLOCK_SIZE);
+      }
+    }
+  }
+}
+
+let _shiftBlockCanvas = null;
+function _drawShiftedBlock(sctx, sprX, sprY, bx, by, shift) {
+  // Horizontal interlaced pixel shift: even rows left, odd rows right
+  // Uses a temp canvas so clipping is respected (putImageData ignores clip)
+  if (!_shiftBlockCanvas) {
+    _shiftBlockCanvas = document.createElement('canvas');
+    _shiftBlockCanvas.width = BOSS_BLOCK_SIZE;
+    _shiftBlockCanvas.height = BOSS_BLOCK_SIZE;
+  }
+  const tc = _shiftBlockCanvas.getContext('2d');
+  const imgData = sctx.getImageData(bx, by, BOSS_BLOCK_SIZE, BOSS_BLOCK_SIZE);
+  const out = tc.createImageData(BOSS_BLOCK_SIZE, BOSS_BLOCK_SIZE);
+  const s = imgData.data;
+  const d = out.data;
+
+  for (let row = 0; row < BOSS_BLOCK_SIZE; row++) {
+    const dir = (row & 1) ? shift : -shift; // odd rows right, even rows left
+    for (let col = 0; col < BOSS_BLOCK_SIZE; col++) {
+      const srcCol = col - dir;
+      if (srcCol < 0 || srcCol >= BOSS_BLOCK_SIZE) continue;
+      const si = (row * BOSS_BLOCK_SIZE + srcCol) * 4;
+      const di = (row * BOSS_BLOCK_SIZE + col) * 4;
+      d[di]     = s[si];
+      d[di + 1] = s[si + 1];
+      d[di + 2] = s[si + 2];
+      d[di + 3] = s[si + 3];
+    }
+  }
+
+  tc.putImageData(out, 0, 0);
+  ctx.drawImage(_shiftBlockCanvas, sprX + bx, sprY + by);
+}
+
+function drawBattleMessage() {
+  if (battleState !== 'message-hold' || !battleMessage) return;
+
+  const boxW = 104;
+  const boxH = 24;
+  const vpBot = HUD_VIEW_Y + HUD_VIEW_H;
+  const msgY = vpBot - BATTLE_MENU_H - boxH - 4;
+  const centerX = HUD_VIEW_X + Math.floor((HUD_VIEW_W - boxW) / 2);
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
+  ctx.clip();
+
+  _drawBorderedBox(centerX, msgY, boxW, boxH, true);
+
+  const tw = measureText(battleMessage);
+  const tx = centerX + Math.floor((boxW - tw) / 2);
+  const ty = msgY + Math.floor((boxH - 8) / 2);
+  drawText(ctx, tx, ty, battleMessage, TEXT_WHITE_ON_BLUE);
+
+  ctx.restore();
+}
+
+function drawVictoryBox() {
+  const isVictory = battleState === 'victory-text-in' || battleState === 'victory-hold' || battleState === 'victory-text-out';
+  if (!isVictory) return;
+
+  const boxW = 80;
+  const boxH = 32;
+  const centerX = HUD_VIEW_X + Math.floor((HUD_VIEW_W - boxW) / 2);
+  const centerY = HUD_VIEW_Y + Math.floor((HUD_VIEW_H - boxH) / 2);
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
+  ctx.clip();
+
+  _drawBorderedBox(centerX, centerY, boxW, boxH, true);
+
+  let fadeStep = 0;
+  if (battleState === 'victory-text-in') {
+    fadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
+  } else if (battleState === 'victory-text-out') {
+    fadeStep = Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
+  }
+
+  const fadedPal = [0x02, 0x02, 0x02, 0x30];
+  for (let s = 0; s < fadeStep; s++) fadedPal[3] = nesColorFade(fadedPal[3]);
+
+  const tw = measureText(BATTLE_VICTORY);
+  const tx = centerX + Math.floor((boxW - tw) / 2);
+  const ty = centerY + Math.floor((boxH - 8) / 2);
+  drawText(ctx, tx, ty, BATTLE_VICTORY, fadedPal);
+
+  ctx.restore();
+}
+
+function drawBossHP() {
+  if (battleState === 'none' || bossDefeated) return;
+  // Show boss HP in bottom HUD panel
+  const bossLabel = new Uint8Array([0x8B,0xD8,0xDC,0xDC]); // "Boss"
+  const hpRow = statRowBytes(0x91, 0x99, bossHP); // "HP  xxx"
+  drawText(ctx, 8, HUD_BOT_Y + 8, bossLabel, TEXT_WHITE);
+  drawText(ctx, 8, HUD_BOT_Y + 20, hpRow, TEXT_WHITE);
+}
+
+function drawDamageNumbers() {
+  // Boss damage number — floats upward above the boss sprite box
+  if (bossDamageNum && !bossDefeated) {
+    const vpBot = HUD_VIEW_Y + HUD_VIEW_H;
+    const boxY = vpBot - BATTLE_MENU_H - 64 - 4; // matches drawBossSpriteBox position
+    const bx = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2) - 4;
+    const by = boxY - 4 - Math.floor(bossDamageNum.timer / 50) * 2;
+    const digits = String(bossDamageNum.value);
+    const numBytes = new Uint8Array(digits.length);
+    for (let i = 0; i < digits.length; i++) numBytes[i] = 0x80 + parseInt(digits[i]);
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
+    ctx.clip();
+    drawText(ctx, bx, by, numBytes, TEXT_WHITE);
+    ctx.restore();
+  }
+
+  // Player damage number — near player sprite
+  if (playerDamageNum) {
+    const px = SCREEN_CENTER_X + 16;
+    const py = SCREEN_CENTER_Y - 8 - Math.floor(playerDamageNum.timer / 50) * 2;
+    const digits = String(playerDamageNum.value);
+    const numBytes = new Uint8Array(digits.length);
+    for (let i = 0; i < digits.length; i++) numBytes[i] = 0x80 + parseInt(digits[i]);
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
+    ctx.clip();
+    drawText(ctx, px, py, numBytes, TEXT_WHITE);
+    ctx.restore();
+  }
+}
+
 function gameLoop(timestamp) {
   const dt = timestamp - lastTime;
   lastTime = timestamp;
@@ -3180,12 +4176,19 @@ function gameLoop(timestamp) {
     drawTitle();    // viewport: water + text
     drawHUD();      // HUD border (returns early, skips top box content)
     drawTitleSkyInHUD(); // sky BG in top box, drawn after HUD border
+    drawPlayerSelect();  // player select in right panel
     requestAnimationFrame(gameLoop);
     return;
   }
 
+  // Tick HUD info fade-in
+  if (hudInfoFadeTimer < HUD_INFO_FADE_STEPS * HUD_INFO_FADE_STEP_MS) {
+    hudInfoFadeTimer += dt;
+  }
+
   handleInput();
   updatePauseMenu(dt);
+  updateBattle(dt);
   updateMovement(dt);
   updateTransition(dt);
   updateTopBoxScroll(dt);
@@ -3239,6 +4242,9 @@ function gameLoop(timestamp) {
 
   // Pause menu overlays everything
   drawPauseMenu();
+
+  // Battle UI overlays everything
+  drawBattle();
 
   if (jukeboxMode) {
     ctx.font = '8px monospace';
