@@ -75,6 +75,7 @@ const BORDER_TILE_COUNT = 9;  // $F7 TL, $F8 top, $F9 TR, $FA left, $FB right, $
 const MENU_PALETTE = [0x0F, 0x00, 0x0F, 0x30];  // black, grey, black (interior), white
 let hudCanvas = null;
 let borderTileCanvases = null; // [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR, FILL]
+let borderBlueTileCanvases = null; // same but with blue (0x02) background instead of black
 let borderFadeSets = null;    // [fadeLevel] → [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR, FILL]
 
 // Battle sprite — Onion Knight idle frame (16×24, 2×3 tiles)
@@ -198,14 +199,13 @@ const BATTLE_HIT_FLASH_MS = 400;
 const BATTLE_DMG_SHOW_MS = 800;
 const BATTLE_SHAKE_MS = 300;
 const BATTLE_VICTORY_HOLD_MS = 1500;
-const BATTLE_MENU_W = HUD_VIEW_W;      // full viewport width
-const BATTLE_MENU_H = 48;              // 2 rows of text + padding
 const BOSS_BLOCK_SIZE = 16;            // 16×16 pixel blocks for dissolve
 const BOSS_BLOCK_COLS = 3;             // 48/16 = 3 blocks wide
 const BOSS_BLOCKS = 9;                 // 3×3 blocks
 const BOSS_DISSOLVE_STEPS = 8;         // 8 pixel-shift steps per block
 const BOSS_DISSOLVE_FRAME_MS = 16.67;  // 1 NES frame per step
 const BOSS_BOX_EXPAND_MS = 300;        // box expand from center duration
+const BATTLE_PANEL_W = 120;            // left section width in bottom panel
 
 // Top box — battle scene BG or area name
 let topBoxMode = 'name';       // 'name' | 'battle'
@@ -260,6 +260,7 @@ const BATTLE_CANT_ESCAPE = new Uint8Array([0x8C,0xCA,0xD7,0xDD,0xFF,0xCE,0xDC,0x
 const BATTLE_NO_MAGIC = new Uint8Array([0x97,0xD8,0xFF,0xD6,0xCA,0xD0,0xD2,0xCC,0xC4]); // "No magic!"
 const BATTLE_NO_ITEMS = new Uint8Array([0x97,0xD8,0xFF,0xD2,0xDD,0xCE,0xD6,0xDC,0xC4]); // "No items!"
 const BATTLE_VICTORY = new Uint8Array([0x9F,0xD2,0xCC,0xDD,0xD8,0xDB,0xE2,0xC4]); // "Victory!"
+const BATTLE_BOSS_NAME = new Uint8Array([0x95,0xCA,0xD7,0xCD,0xFF,0x9D,0xDE,0xDB,0xDD,0xD5,0xCE]); // "Land Turtle"
 const BATTLE_MENU_ITEMS = [BATTLE_FIGHT, PAUSE_ITEMS[1]/*Magic*/, PAUSE_ITEMS[0]/*Item*/, BATTLE_RUN];
 
 // ROM offsets
@@ -423,6 +424,25 @@ function initHUD(romData) {
     return c;
   });
   borderTileCanvases = tileCanvases;
+
+  // Blue-background variant — palette index 0 uses 0x02 instead of 0x0F
+  const BLUE_MENU_PALETTE = [0x02, 0x00, 0x02, 0x30];
+  borderBlueTileCanvases = tiles.map(pixels => {
+    const c = document.createElement('canvas');
+    c.width = 8; c.height = 8;
+    const tctx = c.getContext('2d');
+    const img = tctx.createImageData(8, 8);
+    for (let i = 0; i < 64; i++) {
+      const nesIdx = BLUE_MENU_PALETTE[pixels[i]];
+      const rgb = NES_SYSTEM_PALETTE[nesIdx] || [0, 0, 0];
+      img.data[i * 4]     = rgb[0];
+      img.data[i * 4 + 1] = rgb[1];
+      img.data[i * 4 + 2] = rgb[2];
+      img.data[i * 4 + 3] = 255;
+    }
+    tctx.putImageData(img, 0, 0);
+    return c;
+  });
 
   // Pre-render border tiles at each fade level for loading screen
   borderFadeSets = [];
@@ -1269,6 +1289,18 @@ export async function loadROM(arrayBuffer) {
   // Load saved player slots from IndexedDB
   await loadSlotsFromDB();
 
+  // Debug mode — skip title, spawn directly in crystal room
+  if (window.DEBUG_BOSS) {
+    titleState = 'done';
+    dungeonSeed = 1;
+    clearDungeonCache();
+    loadMapById(1004);
+    playTrack(TRACKS.CRYSTAL_ROOM);
+    lastTime = performance.now();
+    requestAnimationFrame(gameLoop);
+    return;
+  }
+
   // Start with title screen — map loads after title sequence
   titleState = 'credit-wait';
   titleTimer = 0;
@@ -1522,6 +1554,14 @@ function startMove(dir) {
   // Check collision — face the direction but don't walk
   const tileX = targetX / TILE_SIZE;
   const tileY = targetY / TILE_SIZE;
+
+  // Block walking onto boss sprite tile
+  if (bossSprite && !bossDefeated && tileX === bossSprite.px / TILE_SIZE && tileY === bossSprite.py / TILE_SIZE) {
+    sprite.setDirection(dir);
+    sprite.resetFrame();
+    return;
+  }
+
   const renderer = onWorldMap ? worldMapRenderer : mapRenderer;
   if (renderer && !renderer.isPassable(tileX, tileY)) {
     sprite.setDirection(dir);
@@ -3537,7 +3577,8 @@ function updatePauseMenu(dt) {
 
 function _drawBorderedBox(x, y, w, h, blue = false) {
   if (!borderTileCanvases) return;
-  const [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR, FILL] = borderTileCanvases;
+  const tileSet = blue ? borderBlueTileCanvases : borderTileCanvases;
+  const [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR, FILL] = tileSet;
   // Interior fill
   if (blue) {
     const nb = NES_SYSTEM_PALETTE[0x02];
@@ -3715,13 +3756,11 @@ function updateBattle(dt) {
   } else if (battleState === 'boss-box-expand') {
     if (battleTimer >= BOSS_BOX_EXPAND_MS) { battleState = 'boss-appear'; battleTimer = 0; }
   } else if (battleState === 'boss-appear') {
-    if (battleTimer >= BOSS_BLOCKS * BOSS_DISSOLVE_STEPS * BOSS_DISSOLVE_FRAME_MS) { battleState = 'menu-slide-in'; battleTimer = 0; }
-  } else if (battleState === 'menu-slide-in') {
-    if (battleTimer >= BATTLE_SCROLL_MS) { battleState = 'menu-text-in'; battleTimer = 0; }
-  } else if (battleState === 'menu-text-in') {
+    if (battleTimer >= BOSS_BLOCKS * BOSS_DISSOLVE_STEPS * BOSS_DISSOLVE_FRAME_MS) { battleState = 'battle-fade-in'; battleTimer = 0; }
+  } else if (battleState === 'battle-fade-in') {
     if (battleTimer >= BATTLE_TEXT_STEPS * BATTLE_TEXT_STEP_MS) { battleState = 'menu-open'; battleTimer = 0; }
   } else if (battleState === 'message-hold') {
-    if (battleTimer >= BATTLE_MSG_HOLD_MS) { battleState = 'menu-text-in'; battleTimer = 0; battleMessage = null; }
+    if (battleTimer >= BATTLE_MSG_HOLD_MS) { battleState = 'battle-fade-in'; battleTimer = 0; battleMessage = null; }
   } else if (battleState === 'player-attack') {
     if (battleTimer >= BATTLE_HIT_FLASH_MS) {
       battleState = 'player-damage-show';
@@ -3757,7 +3796,7 @@ function updateBattle(dt) {
         battleTimer = 0;
       } else {
         // Back to menu
-        battleState = 'menu-text-in';
+        battleState = 'battle-fade-in';
         battleTimer = 0;
       }
     }
@@ -3817,7 +3856,6 @@ function drawBattle() {
   drawBattleMenu();
   drawBattleMessage();
   drawVictoryBox();
-  drawBossHP();
   drawDamageNumbers();
 }
 
@@ -3847,17 +3885,17 @@ function drawRoarBox() {
 
   _drawBorderedBox(centerX, boxY, boxW, boxH, true);
 
-  // Text with NES fade
+  // Text with NES fade — from blue (0x02) to white (0x30)
   if (battleState === 'roar-text-in' || battleState === 'roar-hold' || battleState === 'roar-text-out') {
-    let fadeStep = 0;
+    const ROAR_FADE = [0x02, 0x12, 0x20, 0x30]; // blue → light blue → grey → white
+    let step = ROAR_FADE.length - 1; // fully bright
     if (battleState === 'roar-text-in') {
-      fadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
+      step = Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), ROAR_FADE.length - 1);
     } else if (battleState === 'roar-text-out') {
-      fadeStep = Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
+      step = (ROAR_FADE.length - 1) - Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), ROAR_FADE.length - 1);
     }
 
-    const fadedPal = [0x02, 0x02, 0x02, 0x30];
-    for (let s = 0; s < fadeStep; s++) fadedPal[3] = nesColorFade(fadedPal[3]);
+    const fadedPal = [0x02, 0x02, 0x02, ROAR_FADE[step]];
 
     const tw = measureText(BATTLE_ROAR);
     const tx = centerX + Math.floor((boxW - tw) / 2);
@@ -3869,66 +3907,72 @@ function drawRoarBox() {
 }
 
 function drawBattleMenu() {
-  const isMenu = battleState === 'menu-slide-in' || battleState === 'menu-text-in' ||
+  const isSlide = battleState === 'boss-box-expand';
+  const isAppear = battleState === 'boss-appear';
+  const isFade = battleState === 'battle-fade-in';
+  const isMenu = isFade ||
                  battleState === 'menu-open' || battleState === 'player-attack' ||
                  battleState === 'player-damage-show' || battleState === 'enemy-attack' ||
                  battleState === 'enemy-damage-show' || battleState === 'message-hold' ||
                  battleState === 'boss-dissolve' || battleState === 'defeat';
+  if (!isSlide && !isAppear && !isMenu) return;
+
+  // Clear bottom panel interior
+  ctx.fillStyle = '#000';
+  ctx.fillRect(8, HUD_BOT_Y + 8, CANVAS_W - 16, HUD_BOT_H - 16);
+
+  // Left bordered box — slides in during boss-box-expand, stays put after
+  const boxW = BATTLE_PANEL_W;
+  const boxH = HUD_BOT_H;
+  let boxX = 0;
+  if (isSlide) {
+    const t = Math.min(battleTimer / BOSS_BOX_EXPAND_MS, 1);
+    boxX = -boxW + boxW * t;
+  }
+  _drawBorderedBox(Math.round(boxX), HUD_BOT_Y, boxW, boxH);
+
+  // Text only after slide + dissolve complete
   if (!isMenu) return;
 
-  const vpBot = HUD_VIEW_Y + HUD_VIEW_H;
-  const finalY = vpBot - BATTLE_MENU_H;
-  const px = HUD_VIEW_X;
-
-  let panelY = finalY;
-  if (battleState === 'menu-slide-in') {
-    const t = Math.min(battleTimer / BATTLE_SCROLL_MS, 1);
-    panelY = vpBot + (finalY - vpBot) * t;
+  let fadeStep = 0;
+  if (isFade) {
+    fadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
   }
 
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
-  ctx.clip();
+  const fadedPal = [0x0F, 0x0F, 0x0F, 0x30];
+  for (let s = 0; s < fadeStep; s++) fadedPal[3] = nesColorFade(fadedPal[3]);
 
-  _drawBorderedBox(px, panelY, BATTLE_MENU_W, BATTLE_MENU_H);
+  // "Land Turtle" centered in left box
+  const nameTw = measureText(BATTLE_BOSS_NAME);
+  const nameX = Math.floor((boxW - nameTw) / 2);
+  const nameY = HUD_BOT_Y + Math.floor((boxH - 8) / 2);
+  drawText(ctx, nameX, nameY, BATTLE_BOSS_NAME, fadedPal);
 
-  // 2×2 layout: Fight/Magic top row, Item/Run bottom row
-  if (battleState !== 'menu-slide-in') {
-    let fadeStep = 0;
-    if (battleState === 'menu-text-in') {
-      fadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
-    }
+  // 2×2 menu grid on right side of bottom panel
+  const menuX = boxW + 16;
+  const colL = menuX;
+  const colR = menuX + 64;
+  const row0 = HUD_BOT_Y + 16;
+  const row1 = HUD_BOT_Y + 32;
+  const positions = [[colL, row0], [colR, row0], [colL, row1], [colR, row1]];
 
-    const fadedPal = [0x0F, 0x0F, 0x0F, 0x30];
-    for (let s = 0; s < fadeStep; s++) fadedPal[3] = nesColorFade(fadedPal[3]);
-
-    const colL = px + 24;                           // left column text x
-    const colR = px + Math.floor(BATTLE_MENU_W / 2) + 16; // right column text x
-    const row0 = panelY + 12;                        // top row y
-    const row1 = panelY + 28;                        // bottom row y
-    const positions = [[colL, row0], [colR, row0], [colL, row1], [colR, row1]];
-
-    for (let i = 0; i < BATTLE_MENU_ITEMS.length; i++) {
-      drawText(ctx, positions[i][0], positions[i][1], BATTLE_MENU_ITEMS[i], fadedPal);
-    }
-
-    // Hand cursor — position next to selected item
-    if (cursorTileCanvas && (battleState === 'menu-open' || battleState === 'menu-text-in')) {
-      const ci = battleCursor;
-      const curX = positions[ci][0] - 16;
-      const curY = positions[ci][1] - 4;
-      if (fadeStep === 0) {
-        ctx.drawImage(cursorTileCanvas, curX, curY);
-      } else if (fadeStep < BATTLE_TEXT_STEPS) {
-        ctx.globalAlpha = 1 - fadeStep / BATTLE_TEXT_STEPS;
-        ctx.drawImage(cursorTileCanvas, curX, curY);
-        ctx.globalAlpha = 1;
-      }
-    }
+  for (let i = 0; i < BATTLE_MENU_ITEMS.length; i++) {
+    drawText(ctx, positions[i][0], positions[i][1], BATTLE_MENU_ITEMS[i], fadedPal);
   }
 
-  ctx.restore();
+  // Hand cursor
+  if (cursorTileCanvas && (battleState === 'menu-open' || isFade)) {
+    const ci = battleCursor;
+    const curX = positions[ci][0] - 16;
+    const curY = positions[ci][1] - 4;
+    if (fadeStep === 0) {
+      ctx.drawImage(cursorTileCanvas, curX, curY);
+    } else if (fadeStep < BATTLE_TEXT_STEPS) {
+      ctx.globalAlpha = 1 - fadeStep / BATTLE_TEXT_STEPS;
+      ctx.drawImage(cursorTileCanvas, curX, curY);
+      ctx.globalAlpha = 1;
+    }
+  }
 }
 
 function drawBossSpriteBox() {
@@ -3937,7 +3981,7 @@ function drawBossSpriteBox() {
   const isExpand = battleState === 'boss-box-expand';
   const isAppear = battleState === 'boss-appear';
   const isDissolve = battleState === 'boss-dissolve';
-  const isCombat = battleState === 'menu-slide-in' || battleState === 'menu-text-in' ||
+  const isCombat = battleState === 'battle-fade-in' ||
                    battleState === 'menu-open' || battleState === 'player-attack' ||
                    battleState === 'player-damage-show' || battleState === 'enemy-attack' ||
                    battleState === 'enemy-damage-show' || battleState === 'message-hold' ||
@@ -3946,9 +3990,8 @@ function drawBossSpriteBox() {
 
   const fullW = 64;  // 48px sprite + 8px border each side
   const fullH = 64;
-  const vpBot = HUD_VIEW_Y + HUD_VIEW_H;
   const centerX = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2);
-  const centerY = vpBot - BATTLE_MENU_H - 4 - Math.floor(fullH / 2);
+  const centerY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
 
   ctx.save();
   ctx.beginPath();
@@ -4068,8 +4111,8 @@ function drawBattleMessage() {
 
   const boxW = 104;
   const boxH = 24;
-  const vpBot = HUD_VIEW_Y + HUD_VIEW_H;
-  const msgY = vpBot - BATTLE_MENU_H - boxH - 4;
+  const bossCenterY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
+  const msgY = bossCenterY + 32 + 8; // below boss box (64/2 = 32) + gap
   const centerX = HUD_VIEW_X + Math.floor((HUD_VIEW_W - boxW) / 2);
 
   ctx.save();
@@ -4121,20 +4164,11 @@ function drawVictoryBox() {
   ctx.restore();
 }
 
-function drawBossHP() {
-  if (battleState === 'none' || bossDefeated) return;
-  // Show boss HP in bottom HUD panel
-  const bossLabel = new Uint8Array([0x8B,0xD8,0xDC,0xDC]); // "Boss"
-  const hpRow = statRowBytes(0x91, 0x99, bossHP); // "HP  xxx"
-  drawText(ctx, 8, HUD_BOT_Y + 8, bossLabel, TEXT_WHITE);
-  drawText(ctx, 8, HUD_BOT_Y + 20, hpRow, TEXT_WHITE);
-}
-
 function drawDamageNumbers() {
   // Boss damage number — floats upward above the boss sprite box
   if (bossDamageNum && !bossDefeated) {
-    const vpBot = HUD_VIEW_Y + HUD_VIEW_H;
-    const boxY = vpBot - BATTLE_MENU_H - 64 - 4; // matches drawBossSpriteBox position
+    const bossCenterY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
+    const boxY = bossCenterY - 32; // top of boss sprite box (centered in viewport)
     const bx = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2) - 4;
     const by = boxY - 4 - Math.floor(bossDamageNum.timer / 50) * 2;
     const digits = String(bossDamageNum.value);
