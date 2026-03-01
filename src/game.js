@@ -599,9 +599,9 @@ function initBattleSprite(romData) {
 
 function initAdamantoise(romData) {
   // 4 tiles at FF2_ADAMANTOISE_SPRITE, row-major: TL, TR, BL, BR
-  // Land Turtle palette — top half vs bottom half swapped
-  const palTop = [0x0F, 0x0F, 0x14, 0x27]; // black outline, purple, yellow
-  const palBot = [0x0F, 0x0F, 0x27, 0x14]; // black outline, yellow, purple
+  // Battle colors with black outline (index 1) for small map sprite
+  const palTop = [0x0F, 0x0F, LAND_TURTLE_PAL_TOP[2], LAND_TURTLE_PAL_TOP[3]];
+  const palBot = [0x0F, 0x0F, LAND_TURTLE_PAL_BOT[3], LAND_TURTLE_PAL_BOT[2]];
   const tiles = [];
   for (let i = 0; i < 4; i++) {
     tiles.push(decodeTile(romData, FF2_ADAMANTOISE_SPRITE + i * 16));
@@ -886,8 +886,8 @@ function renderSpriteFaded(romData, spriteOff, basePal, fadeSteps) {
 
 // Pre-render fade frames for adamantoise (different palette for top/bottom halves)
 function renderBossFaded(romData, fadeSteps) {
-  const palTop = [0x0F, 0x0F, 0x14, 0x27];
-  const palBot = [0x0F, 0x0F, 0x27, 0x14];
+  const palTop = [0x0F, 0x0F, LAND_TURTLE_PAL_TOP[2], LAND_TURTLE_PAL_TOP[3]];
+  const palBot = [0x0F, 0x0F, LAND_TURTLE_PAL_BOT[3], LAND_TURTLE_PAL_BOT[2]];
   const fadedTop = palTop.map((c, i) => {
     if (i === 0) return c;
     let fc = c; for (let s = 0; s < fadeSteps; s++) fc = nesColorFade(fc);
