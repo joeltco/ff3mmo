@@ -102,6 +102,7 @@ const LAND_TURTLE_PAL_BOT = [0x0F, 0x19, 0x18, 0x28]; // legs/body: black, green
 const LAND_TURTLE_TILES = 36;   // 6×6 grid
 const LAND_TURTLE_COLS = 6;
 let landTurtleBattleCanvas = null; // 48×48 canvas
+let landTurtleWhiteCanvas = null;  // 48×48 all-white version for pre-attack flash
 
 // Moogle NPC sprite — loading screen decoration
 const MOOGLE_GFX_ID = 42;
@@ -206,6 +207,10 @@ const BOSS_DISSOLVE_STEPS = 8;         // 8 pixel-shift steps per block
 const BOSS_DISSOLVE_FRAME_MS = 16.67;  // 1 NES frame per step
 const BOSS_BOX_EXPAND_MS = 300;        // box expand from center duration
 const BATTLE_PANEL_W = 120;            // left section width in bottom panel
+const BOSS_PREFLASH_MS = 133;            // 8 NES frames — boss pre-attack white blink
+const DMG_BOUNCE_COUNT = 2;              // 2 sine bounces over damage show duration
+const DMG_BOUNCE_AMP = 16;              // max bounce height in pixels
+const TARGET_CURSOR_BLINK_MS = 133;      // cursor blink rate during target select
 
 // Top box — battle scene BG or area name
 let topBoxMode = 'name';       // 'name' | 'battle'
@@ -679,6 +684,22 @@ function initLandTurtleBattle(romData) {
   }
 
   landTurtleBattleCanvas = c;
+
+  // Create all-white version for pre-attack flash blink
+  const wc = document.createElement('canvas');
+  wc.width = 48; wc.height = 48;
+  const wctx = wc.getContext('2d');
+  const srcData = cctx.getImageData(0, 0, 48, 48);
+  const whiteRGB = NES_SYSTEM_PALETTE[0x30] || [255, 255, 255];
+  for (let p = 0; p < srcData.data.length; p += 4) {
+    if (srcData.data[p + 3] > 0) {
+      srcData.data[p]     = whiteRGB[0];
+      srcData.data[p + 1] = whiteRGB[1];
+      srcData.data[p + 2] = whiteRGB[2];
+    }
+  }
+  wctx.putImageData(srcData, 0, 0);
+  landTurtleWhiteCanvas = wc;
 }
 
 function initInvincibleSprite(romData) {
@@ -1598,6 +1619,23 @@ function handleInput() {
       if (keys['ArrowRight']) { keys['ArrowRight'] = false; battleCursor ^= 1; }
       if (keys['ArrowLeft'])  { keys['ArrowLeft'] = false;  battleCursor ^= 1; }
       if (keys['z'] || keys['Z']) { keys['z'] = false; keys['Z'] = false; executeBattleCommand(battleCursor); }
+    } else if (battleState === 'target-select') {
+      if (keys['z'] || keys['Z']) {
+        keys['z'] = false; keys['Z'] = false;
+        // Confirm target — calc damage, transition to player-attack
+        const dmg = calcDamage(playerATK, BOSS_DEF);
+        bossHP = Math.max(0, bossHP - dmg);
+        bossDamageNum = { value: dmg, timer: 0 };
+        bossFlashTimer = BATTLE_HIT_FLASH_MS;
+        battleState = 'player-attack';
+        battleTimer = 0;
+      }
+      if (keys['x'] || keys['X']) {
+        keys['x'] = false; keys['X'] = false;
+        // Cancel — return to menu
+        battleState = 'menu-open';
+        battleTimer = 0;
+      }
     }
     return;
   }
@@ -2989,18 +3027,22 @@ function drawHUD() {
   // HUD info fade-in (portrait + HP/MP)
   const infoFadeStep = HUD_INFO_FADE_STEPS - Math.min(Math.floor(hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
 
+  // Portrait shake offset during enemy-attack
+  const shakeOff = (battleState === 'enemy-attack' && battleShakeTimer > 0)
+    ? (Math.floor(battleShakeTimer / 67) & 1 ? 1 : -1) : 0;
+
   // Battle sprite portrait in mini-left panel interior (16×16 exact fit)
   if (battleSpriteCanvas) {
     if (infoFadeStep === 0) {
-      ctx.drawImage(battleSpriteCanvas, HUD_RIGHT_X + 8, HUD_VIEW_Y + 8);
+      ctx.drawImage(battleSpriteCanvas, HUD_RIGHT_X + 8 + shakeOff, HUD_VIEW_Y + 8);
     } else if (infoFadeStep < HUD_INFO_FADE_STEPS) {
       ctx.globalAlpha = 1 - infoFadeStep / HUD_INFO_FADE_STEPS;
-      ctx.drawImage(battleSpriteCanvas, HUD_RIGHT_X + 8, HUD_VIEW_Y + 8);
+      ctx.drawImage(battleSpriteCanvas, HUD_RIGHT_X + 8 + shakeOff, HUD_VIEW_Y + 8);
       ctx.globalAlpha = 1;
     }
   }
   // HP/MP in right mini-right panel (8 chars × 2 rows)
-  const sx = HUD_RIGHT_X + 32 + 8; // interior x
+  const sx = HUD_RIGHT_X + 32 + 8 + shakeOff; // interior x (shakes with portrait)
   const sy = HUD_VIEW_Y + 8;       // interior y
   const infoPal = [0x0F, 0x0F, 0x0F, 0x30];
   for (let s = 0; s < infoFadeStep; s++) {
@@ -3695,12 +3737,8 @@ function startBattle() {
 
 function executeBattleCommand(index) {
   if (index === 0) {
-    // Fight — player attacks boss
-    const dmg = calcDamage(playerATK, BOSS_DEF);
-    bossHP = Math.max(0, bossHP - dmg);
-    bossDamageNum = { value: dmg, timer: 0 };
-    bossFlashTimer = BATTLE_HIT_FLASH_MS;
-    battleState = 'player-attack';
+    // Fight — go to target select (cursor on boss)
+    battleState = 'target-select';
     battleTimer = 0;
   } else if (index === 1) {
     // Magic
@@ -3760,7 +3798,7 @@ function updateBattle(dt) {
   } else if (battleState === 'battle-fade-in') {
     if (battleTimer >= BATTLE_TEXT_STEPS * BATTLE_TEXT_STEP_MS) { battleState = 'menu-open'; battleTimer = 0; }
   } else if (battleState === 'message-hold') {
-    if (battleTimer >= BATTLE_MSG_HOLD_MS) { battleState = 'battle-fade-in'; battleTimer = 0; battleMessage = null; }
+    if (battleTimer >= BATTLE_MSG_HOLD_MS) { battleState = 'menu-open'; battleTimer = 0; battleMessage = null; }
   } else if (battleState === 'player-attack') {
     if (battleTimer >= BATTLE_HIT_FLASH_MS) {
       battleState = 'player-damage-show';
@@ -3774,14 +3812,20 @@ function updateBattle(dt) {
         battleTimer = 0;
         playSFX(SFX.BOSS_DEATH);
       } else {
-        // Boss counterattack
-        const dmg = calcDamage(BOSS_ATK, playerDEF);
-        playerHP = Math.max(0, playerHP - dmg);
-        playerDamageNum = { value: dmg, timer: 0 };
-        battleShakeTimer = BATTLE_SHAKE_MS;
-        battleState = 'enemy-attack';
+        // Boss pre-attack flash before counterattack
+        battleState = 'boss-flash';
         battleTimer = 0;
       }
+    }
+  } else if (battleState === 'boss-flash') {
+    if (battleTimer >= BOSS_PREFLASH_MS) {
+      // Boss counterattack
+      const dmg = calcDamage(BOSS_ATK, playerDEF);
+      playerHP = Math.max(0, playerHP - dmg);
+      playerDamageNum = { value: dmg, timer: 0 };
+      battleShakeTimer = BATTLE_SHAKE_MS;
+      battleState = 'enemy-attack';
+      battleTimer = 0;
     }
   } else if (battleState === 'enemy-attack') {
     if (battleTimer >= BATTLE_SHAKE_MS) {
@@ -3795,8 +3839,8 @@ function updateBattle(dt) {
         battleState = 'defeat';
         battleTimer = 0;
       } else {
-        // Back to menu
-        battleState = 'battle-fade-in';
+        // Back to menu — skip fade, text stays solid between turns
+        battleState = 'menu-open';
         battleTimer = 0;
       }
     }
@@ -3911,8 +3955,10 @@ function drawBattleMenu() {
   const isAppear = battleState === 'boss-appear';
   const isFade = battleState === 'battle-fade-in';
   const isMenu = isFade ||
-                 battleState === 'menu-open' || battleState === 'player-attack' ||
-                 battleState === 'player-damage-show' || battleState === 'enemy-attack' ||
+                 battleState === 'menu-open' || battleState === 'target-select' ||
+                 battleState === 'player-attack' ||
+                 battleState === 'player-damage-show' || battleState === 'boss-flash' ||
+                 battleState === 'enemy-attack' ||
                  battleState === 'enemy-damage-show' || battleState === 'message-hold' ||
                  battleState === 'boss-dissolve' || battleState === 'defeat';
   if (!isSlide && !isAppear && !isMenu) return;
@@ -3960,8 +4006,8 @@ function drawBattleMenu() {
     drawText(ctx, positions[i][0], positions[i][1], BATTLE_MENU_ITEMS[i], fadedPal);
   }
 
-  // Hand cursor
-  if (cursorTileCanvas && (battleState === 'menu-open' || isFade)) {
+  // Hand cursor (hidden during target-select — cursor is on boss)
+  if (cursorTileCanvas && (battleState === 'menu-open' || isFade) && battleState !== 'target-select') {
     const ci = battleCursor;
     const curX = positions[ci][0] - 16;
     const curY = positions[ci][1] - 4;
@@ -3982,8 +4028,10 @@ function drawBossSpriteBox() {
   const isAppear = battleState === 'boss-appear';
   const isDissolve = battleState === 'boss-dissolve';
   const isCombat = battleState === 'battle-fade-in' ||
-                   battleState === 'menu-open' || battleState === 'player-attack' ||
-                   battleState === 'player-damage-show' || battleState === 'enemy-attack' ||
+                   battleState === 'menu-open' || battleState === 'target-select' ||
+                   battleState === 'player-attack' ||
+                   battleState === 'player-damage-show' || battleState === 'boss-flash' ||
+                   battleState === 'enemy-attack' ||
                    battleState === 'enemy-damage-show' || battleState === 'message-hold' ||
                    battleState === 'defeat';
   if (!isExpand && !isAppear && !isDissolve && !isCombat) return;
@@ -4022,12 +4070,29 @@ function drawBossSpriteBox() {
 
   if (isAppear || isDissolve) {
     _drawDissolvedSprite(sprX, sprY, isDissolve);
+  } else if (battleState === 'boss-flash') {
+    // Pre-attack white blink — alternate normal/white every other frame (~16.67ms each)
+    const frame = Math.floor(battleTimer / (BOSS_PREFLASH_MS / 8));
+    if (!bossDefeated) {
+      if (frame & 1) {
+        ctx.drawImage(landTurtleWhiteCanvas || landTurtleBattleCanvas, sprX, sprY);
+      } else {
+        ctx.drawImage(landTurtleBattleCanvas, sprX, sprY);
+      }
+    }
   } else {
     // Full sprite — blink during hit
     const blinkHidden = bossFlashTimer > 0 && (Math.floor(bossFlashTimer / 60) & 1);
     if (!blinkHidden && !bossDefeated) {
       ctx.drawImage(landTurtleBattleCanvas, sprX, sprY);
     }
+  }
+
+  // Target-select cursor — hand cursor on boss sprite box (solid, no blink)
+  if (battleState === 'target-select' && cursorTileCanvas) {
+    const curX = centerX - 32 - 16;
+    const curY = centerY - 8;
+    ctx.drawImage(cursorTileCanvas, curX, curY);
   }
 
   ctx.restore();
@@ -4164,13 +4229,20 @@ function drawVictoryBox() {
   ctx.restore();
 }
 
+function _dmgBounceY(baseY, timer) {
+  // Damped sine bounce: 2 bounces over BATTLE_DMG_SHOW_MS, amplitude shrinks to 0
+  const t = Math.min(timer / BATTLE_DMG_SHOW_MS, 1);
+  const amplitude = DMG_BOUNCE_AMP * (1 - t);
+  return Math.round(baseY - amplitude * Math.abs(Math.sin(t * Math.PI * DMG_BOUNCE_COUNT)));
+}
+
 function drawDamageNumbers() {
-  // Boss damage number — floats upward above the boss sprite box
+  // Boss damage number — sine-bounces upward above the boss sprite box
   if (bossDamageNum && !bossDefeated) {
     const bossCenterY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
-    const boxY = bossCenterY - 32; // top of boss sprite box (centered in viewport)
+    const baseY = bossCenterY - 32 - 4; // top of boss sprite box
     const bx = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2) - 4;
-    const by = boxY - 4 - Math.floor(bossDamageNum.timer / 50) * 2;
+    const by = _dmgBounceY(baseY, bossDamageNum.timer);
     const digits = String(bossDamageNum.value);
     const numBytes = new Uint8Array(digits.length);
     for (let i = 0; i < digits.length; i++) numBytes[i] = 0x80 + parseInt(digits[i]);
@@ -4183,10 +4255,11 @@ function drawDamageNumbers() {
     ctx.restore();
   }
 
-  // Player damage number — near player sprite
+  // Player damage number — sine-bounces near player sprite
   if (playerDamageNum) {
     const px = SCREEN_CENTER_X + 16;
-    const py = SCREEN_CENTER_Y - 8 - Math.floor(playerDamageNum.timer / 50) * 2;
+    const baseY = SCREEN_CENTER_Y - 8;
+    const py = _dmgBounceY(baseY, playerDamageNum.timer);
     const digits = String(playerDamageNum.value);
     const numBytes = new Uint8Array(digits.length);
     for (let i = 0; i < digits.length; i++) numBytes[i] = 0x80 + parseInt(digits[i]);
