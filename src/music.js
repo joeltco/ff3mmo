@@ -30,6 +30,10 @@ export const SFX = {
   CURE:         0x4A,  // SFX $09 + $41 — cure spell sound
   BATTLE_SWIPE: 0x56,  // SFX $15 + $41 — battle encounter swoosh
   BOSS_DEATH:   0x7D,  // SFX $3C + $41 — boss dissolve crumble
+  CURSOR:       0x59,  // SFX $18 + $41 — menu cursor movement
+  CONFIRM:      0x46,  // SFX $05 + $41 — menu confirm
+  CANCEL:       0x47,  // SFX $06 + $41 — cancel / error buzz
+  ATTACK_HIT:   0x74,  // SFX $33 + $41 — physical attack slash
 };
 
 let nsfData = null;    // Built NSF Uint8Array

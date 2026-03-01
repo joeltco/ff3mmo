@@ -1614,15 +1614,16 @@ function handleInput() {
       if (keys['z'] || keys['Z']) { keys['z'] = false; keys['Z'] = false; battleState = 'roar-text-out'; battleTimer = 0; }
     } else if (battleState === 'menu-open') {
       // 2×2 grid: 0=Fight(TL) 1=Magic(TR) 2=Item(BL) 3=Run(BR)
-      if (keys['ArrowDown'])  { keys['ArrowDown'] = false;  battleCursor ^= 2; }
-      if (keys['ArrowUp'])    { keys['ArrowUp'] = false;    battleCursor ^= 2; }
-      if (keys['ArrowRight']) { keys['ArrowRight'] = false; battleCursor ^= 1; }
-      if (keys['ArrowLeft'])  { keys['ArrowLeft'] = false;  battleCursor ^= 1; }
+      if (keys['ArrowDown'])  { keys['ArrowDown'] = false;  battleCursor ^= 2; playSFX(SFX.CURSOR); }
+      if (keys['ArrowUp'])    { keys['ArrowUp'] = false;    battleCursor ^= 2; playSFX(SFX.CURSOR); }
+      if (keys['ArrowRight']) { keys['ArrowRight'] = false; battleCursor ^= 1; playSFX(SFX.CURSOR); }
+      if (keys['ArrowLeft'])  { keys['ArrowLeft'] = false;  battleCursor ^= 1; playSFX(SFX.CURSOR); }
       if (keys['z'] || keys['Z']) { keys['z'] = false; keys['Z'] = false; executeBattleCommand(battleCursor); }
     } else if (battleState === 'target-select') {
       if (keys['z'] || keys['Z']) {
         keys['z'] = false; keys['Z'] = false;
         // Confirm target — calc damage, transition to player-attack
+        playSFX(SFX.ATTACK_HIT);
         const dmg = calcDamage(playerATK, BOSS_DEF);
         bossHP = Math.max(0, bossHP - dmg);
         bossDamageNum = { value: dmg, timer: 0 };
@@ -1633,6 +1634,7 @@ function handleInput() {
       if (keys['x'] || keys['X']) {
         keys['x'] = false; keys['X'] = false;
         // Cancel — return to menu
+        playSFX(SFX.CONFIRM);
         battleState = 'menu-open';
         battleTimer = 0;
       }
@@ -1658,8 +1660,8 @@ function handleInput() {
   }
   // Pause menu cursor controls
   if (pauseState === 'open') {
-    if (keys['ArrowDown']) { keys['ArrowDown'] = false; pauseCursor = (pauseCursor + 1) % 6; }
-    if (keys['ArrowUp'])   { keys['ArrowUp'] = false;   pauseCursor = (pauseCursor + 5) % 6; }
+    if (keys['ArrowDown']) { keys['ArrowDown'] = false; pauseCursor = (pauseCursor + 1) % 6; playSFX(SFX.CURSOR); }
+    if (keys['ArrowUp'])   { keys['ArrowUp'] = false;   pauseCursor = (pauseCursor + 5) % 6; playSFX(SFX.CURSOR); }
     if (keys['z'] || keys['Z']) { keys['z'] = false; keys['Z'] = false; /* placeholder — no action yet */ }
     return;
   }
@@ -3738,20 +3740,24 @@ function startBattle() {
 function executeBattleCommand(index) {
   if (index === 0) {
     // Fight — go to target select (cursor on boss)
+    playSFX(SFX.CONFIRM);
     battleState = 'target-select';
     battleTimer = 0;
   } else if (index === 1) {
     // Magic
+    playSFX(SFX.CANCEL);
     battleMessage = BATTLE_NO_MAGIC;
     battleState = 'message-hold';
     battleTimer = 0;
   } else if (index === 2) {
     // Item
+    playSFX(SFX.CANCEL);
     battleMessage = BATTLE_NO_ITEMS;
     battleState = 'message-hold';
     battleTimer = 0;
   } else {
     // Run
+    playSFX(SFX.CANCEL);
     battleMessage = BATTLE_CANT_ESCAPE;
     battleState = 'message-hold';
     battleTimer = 0;
