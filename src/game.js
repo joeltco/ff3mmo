@@ -12,6 +12,7 @@ import { initMusic, playTrack, stopMusic, playSFX, TRACKS, SFX } from './music.j
 import { applyIPS } from './ips-patcher.js';
 import { initTextDecoder } from './text-decoder.js';
 import { initFont, drawText, measureText, TEXT_WHITE } from './font-renderer.js';
+import { MONSTERS } from './data/monsters.js';
 
 // --- Save data persistence (IndexedDB) ---
 function openSaveDB() {
@@ -24,7 +25,16 @@ function openSaveDB() {
 
 async function saveSlotsToDB() {
   try {
-    const data = saveSlots.map(s => s ? Array.from(s) : null);
+    const data = saveSlots.map(s => s ? {
+      name: Array.from(s.name),
+      level: s.level || (playerStats ? playerStats.level : 1),
+      exp: s.exp != null ? s.exp : (playerStats ? playerStats.exp : 0),
+      stats: s.stats || (playerStats ? {
+        str: playerStats.str, agi: playerStats.agi, vit: playerStats.vit,
+        int: playerStats.int, mnd: playerStats.mnd,
+        maxHP: playerStats.maxHP, maxMP: playerStats.maxMP
+      } : null)
+    } : null);
     const db = await openSaveDB();
     const tx = db.transaction('roms', 'readwrite');
     tx.objectStore('roms').put(data, 'saves');
@@ -40,7 +50,13 @@ async function loadSlotsFromDB() {
       req.onsuccess = () => {
         const data = req.result;
         if (Array.isArray(data)) {
-          saveSlots = data.map(s => s ? new Uint8Array(s) : null);
+          saveSlots = data.map(s => {
+            if (!s) return null;
+            // Old format: plain array of name bytes
+            if (Array.isArray(s)) return { name: new Uint8Array(s), level: 1, exp: 0, stats: null };
+            // New format: object with name, level, exp, stats
+            return { name: new Uint8Array(s.name), level: s.level || 1, exp: s.exp || 0, stats: s.stats || null };
+          });
         }
         resolve();
       };
@@ -115,6 +131,13 @@ const INVINCIBLE_TILE_ROM = 0x17A90;  // Bank $0B:$9A80 — tiles $C0-$FF (64 ti
 const INVINCIBLE_PAL = [0x0F, 0x0F, 0x27, 0x30]; // transparent, black, gold, white
 let invincibleFrames = null; // [frameA, frameB] 32×32 canvases (east-facing)
 let invincibleFadeFrames = null; // [fadeLevel][frameIdx] faded canvases
+
+// Player stats — ROM offsets (iNES +16 header)
+const JOB_BASE_STATS_OFF = 0x072010;  // 22 jobs × 8 bytes: [adj, minLvl, STR, AGI, VIT, INT, MND, mpIdx]
+const CHAR_INIT_HP_OFF   = 0x073BE8;  // 2 bytes little-endian
+const CHAR_INIT_MP_OFF   = 0x073B98;  // 10 entries × 8 bytes (indexed by job mpIdx)
+const LEVEL_EXP_TABLE_OFF  = 0x0720C0;  // 98 × 3 bytes (24-bit LE per level)
+const LEVEL_STAT_BONUS_OFF = 0x0721E6;  // 22 jobs × 98 levels × 2 bytes
 let invincibleShadowFade = null; // [fadeLevel] 32×8 shadow canvases
 
 // Loading screen fade state
@@ -168,8 +191,11 @@ let hudInfoFadeTimer = 0;
 const HUD_INFO_FADE_STEPS = 4;
 const HUD_INFO_FADE_STEP_MS = 100;
 
-// Player stats (placeholder)
-let playerHP = 28;
+// Player stats — initialized from ROM in initPlayerStats()
+let playerStats = null;  // { str, agi, vit, int, mnd, hp, maxHP, mp, maxMP, level, exp, expToNext }
+let expTable = null;     // Uint32Array(98) — EXP thresholds from ROM
+let leveledUp = false;   // set by grantExp() for victory display
+let playerHP = 28;   // overwritten by initPlayerStats
 let playerMP = 12;
 let playerATK = 12;
 let playerDEF = 4;
@@ -181,12 +207,22 @@ const BOSS_ATK = 8, BOSS_DEF = 6, BOSS_MAX_HP = 111;
 let battleState = 'none';
 let battleTimer = 0;
 let battleCursor = 0;        // 0=Fight,1=Magic,2=Item,3=Run
+let targetIndex = 0;         // which monster is targeted in target-select
 let battleMessage = null;     // Uint8Array for status messages
 let bossDamageNum = null;     // {value, timer}
 let playerDamageNum = null;   // {value, timer}
 let bossFlashTimer = 0;
 let battleShakeTimer = 0;
 let bossDefeated = false;
+
+// Random encounter state
+let encounterSteps = 0;
+let isRandomEncounter = false;
+let encounterMonsters = null;  // [{ hp, maxHP, atk, def, exp }] — array of enemies
+let encounterExpGained = 0;
+let preBattleTrack = null;
+let enemyAttackQueue = [];     // indices of alive monsters still to attack this turn
+let currentAttacker = -1;      // index of monster currently attacking
 
 // Battle timing constants
 const BATTLE_SCROLL_MS = 150;
@@ -265,7 +301,10 @@ const BATTLE_CANT_ESCAPE = new Uint8Array([0x8C,0xCA,0xD7,0xDD,0xFF,0xCE,0xDC,0x
 const BATTLE_NO_MAGIC = new Uint8Array([0x97,0xD8,0xFF,0xD6,0xCA,0xD0,0xD2,0xCC,0xC4]); // "No magic!"
 const BATTLE_NO_ITEMS = new Uint8Array([0x97,0xD8,0xFF,0xD2,0xDD,0xCE,0xD6,0xDC,0xC4]); // "No items!"
 const BATTLE_VICTORY = new Uint8Array([0x9F,0xD2,0xCC,0xDD,0xD8,0xDB,0xE2,0xC4]); // "Victory!"
+const BATTLE_GOT_EXP = new Uint8Array([0x90,0xD8,0xDD,0xFF,0x82,0x80,0xFF,0x8E,0xA1,0x99,0xC4]); // "Got 20 EXP!"
+const BATTLE_LEVEL_UP = new Uint8Array([0x95,0xCE,0xDF,0xCE,0xD5,0xFF,0x9E,0xD9,0xC4]); // "Level Up!"
 const BATTLE_BOSS_NAME = new Uint8Array([0x95,0xCA,0xD7,0xCD,0xFF,0x9D,0xDE,0xDB,0xDD,0xD5,0xCE]); // "Land Turtle"
+const BATTLE_GOBLIN_NAME = new Uint8Array([0x90,0xD8,0xCB,0xD5,0xD2,0xD7]); // "Goblin"
 const BATTLE_MENU_ITEMS = [BATTLE_FIGHT, PAUSE_ITEMS[1]/*Magic*/, PAUSE_ITEMS[0]/*Item*/, BATTLE_RUN];
 
 // ROM offsets
@@ -368,7 +407,7 @@ export function init() {
     if (titleState === 'name-entry') {
       e.preventDefault();
       if (e.key === 'Enter' && nameBuffer.length > 0) {
-        saveSlots[selectCursor] = new Uint8Array(nameBuffer);
+        saveSlots[selectCursor] = { name: new Uint8Array(nameBuffer), level: 1, exp: 0, stats: null };
         saveSlotsToDB();
         titleState = 'select'; titleTimer = 0;
       } else if (e.key === 'Backspace') {
@@ -647,6 +686,85 @@ function initAdamantoise(romData) {
   fctx.drawImage(normal, 0, 0);
 
   adamantoiseFrames = [normal, flipped];
+}
+
+function initPlayerStats(romData) {
+  // Job 0 (Onion Knight): 8 bytes at JOB_BASE_STATS_OFF
+  const jobOff = JOB_BASE_STATS_OFF;
+  const str = romData[jobOff + 2];
+  const agi = romData[jobOff + 3];
+  const vit = romData[jobOff + 4];
+  const int_ = romData[jobOff + 5];
+  const mnd = romData[jobOff + 6];
+  const mpIdx = romData[jobOff + 7];
+
+  // Starting HP — 2 bytes little-endian
+  const hp = romData[CHAR_INIT_HP_OFF] | (romData[CHAR_INIT_HP_OFF + 1] << 8);
+
+  // Starting MP — indexed by mpIdx, 8 bytes per entry (levels 1-8), take level 1
+  const mp = romData[CHAR_INIT_MP_OFF + mpIdx * 8];
+
+  playerStats = { str, agi, vit, int: int_, mnd, hp, maxHP: hp, mp, maxMP: mp, level: 1, exp: 0, expToNext: 0 };
+  playerHP = hp;
+  playerMP = mp;
+  playerATK = str;
+  playerDEF = vit;
+}
+
+function initExpTable(romData) {
+  expTable = new Uint32Array(98);
+  for (let i = 0; i < 98; i++) {
+    const off = LEVEL_EXP_TABLE_OFF + i * 3;
+    expTable[i] = romData[off] | (romData[off + 1] << 8) | (romData[off + 2] << 16);
+  }
+  playerStats.expToNext = expTable[0];
+}
+
+function grantExp(amount) {
+  playerStats.exp += amount;
+  leveledUp = false;
+  while (playerStats.exp >= playerStats.expToNext && playerStats.level < 99) {
+    playerStats.level++;
+    const lv = playerStats.level;
+
+    // HP growth: vit + random(0, floor(vit/2)) + level * 2 (from disasm 35/BECA-BF09)
+    const hpGain = playerStats.vit + Math.floor(Math.random() * (Math.floor(playerStats.vit / 2) + 1)) + lv * 2;
+    playerStats.maxHP = Math.min(9999, playerStats.maxHP + hpGain);
+
+    // Stat bonuses from ROM — job 0 (Onion Knight), 2 bytes per level
+    const bonusOff = LEVEL_STAT_BONUS_OFF + 0 * 196 + (lv - 1) * 2;
+    const byte1 = romRaw[bonusOff];
+    const byte2 = romRaw[bonusOff + 1];
+    const bonusAmt = byte1 & 0x07;
+    if (byte1 & 0x80) playerStats.str += bonusAmt;
+    if (byte1 & 0x40) playerStats.agi += bonusAmt;
+    if (byte1 & 0x20) playerStats.vit += bonusAmt;
+    if (byte1 & 0x10) playerStats.int += bonusAmt;
+    if (byte1 & 0x08) playerStats.mnd += bonusAmt;
+
+    // MP bonus — count set bits in byte2
+    let mpBits = byte2;
+    let mpGain = 0;
+    while (mpBits) { mpGain += mpBits & 1; mpBits >>= 1; }
+    playerStats.maxMP += mpGain;
+
+    // Full heal on level-up (matches FF3)
+    playerStats.hp = playerStats.maxHP;
+    playerStats.mp = playerStats.maxMP;
+    playerHP = playerStats.maxHP;
+    playerMP = playerStats.maxMP;
+
+    // Update derived combat stats
+    playerATK = playerStats.str;
+    playerDEF = playerStats.vit;
+
+    // Next threshold
+    if (lv - 1 < 98) playerStats.expToNext = expTable[lv - 1];
+    else playerStats.expToNext = 0xFFFFFF; // max level
+
+    leveledUp = true;
+  }
+  return { leveledUp };
 }
 
 function initLandTurtleBattle(romData) {
@@ -1289,6 +1407,8 @@ export async function loadROM(arrayBuffer) {
   initCursorTile(romRaw);
   initBattleSprite(romRaw);
   initLandTurtleBattle(romRaw);
+  initPlayerStats(romRaw);
+  initExpTable(romRaw);
   initMoogleSprite(romRaw);
   initLoadingScreenFadeFrames(romRaw);
   initMusic(romRaw);
@@ -1394,6 +1514,8 @@ function loadMapById(mapId, returnX, returnY) {
   }
 
   // Clear dungeon state when loading a non-dungeon map
+  dungeonFloor = -1;
+  encounterSteps = 0;
   dungeonDestinations = null;
   secretWalls = null;
   falseWalls = null;
@@ -1551,6 +1673,8 @@ function loadWorldMapAt(trigId) {
 
 function loadWorldMapAtPosition(tileX, tileY) {
   onWorldMap = true;
+  dungeonFloor = -1;
+  encounterSteps = 0;
   mapRenderer = null;
   mapData = null;
   setupTopBox(0, true);
@@ -1612,6 +1736,10 @@ function handleInput() {
   if (battleState !== 'none') {
     if (battleState === 'roar-hold') {
       if (keys['z'] || keys['Z']) { keys['z'] = false; keys['Z'] = false; battleState = 'roar-text-out'; battleTimer = 0; }
+    } else if (battleState === 'victory-hold') {
+      if (keys['z'] || keys['Z']) { keys['z'] = false; keys['Z'] = false; playSFX(SFX.CONFIRM); battleState = 'exp-text-in'; battleTimer = 0; }
+    } else if (battleState === 'exp-hold') {
+      if (keys['z'] || keys['Z']) { keys['z'] = false; keys['Z'] = false; playSFX(SFX.CONFIRM); battleState = 'victory-text-out'; battleTimer = 0; }
     } else if (battleState === 'menu-open') {
       // 2×2 grid: 0=Fight(TL) 1=Magic(TR) 2=Item(BL) 3=Run(BR)
       if (keys['ArrowDown'])  { keys['ArrowDown'] = false;  battleCursor ^= 2; playSFX(SFX.CURSOR); }
@@ -1620,13 +1748,39 @@ function handleInput() {
       if (keys['ArrowLeft'])  { keys['ArrowLeft'] = false;  battleCursor ^= 1; playSFX(SFX.CURSOR); }
       if (keys['z'] || keys['Z']) { keys['z'] = false; keys['Z'] = false; executeBattleCommand(battleCursor); }
     } else if (battleState === 'target-select') {
+      // Cycle between alive monsters with left/right
+      if (isRandomEncounter && encounterMonsters) {
+        const aliveIdx = [];
+        for (let i = 0; i < encounterMonsters.length; i++) {
+          if (encounterMonsters[i].hp > 0) aliveIdx.push(i);
+        }
+        if (keys['ArrowRight'] || keys['ArrowDown']) {
+          keys['ArrowRight'] = false; keys['ArrowDown'] = false;
+          const cur = aliveIdx.indexOf(targetIndex);
+          targetIndex = aliveIdx[(cur + 1) % aliveIdx.length];
+          playSFX(SFX.CURSOR);
+        }
+        if (keys['ArrowLeft'] || keys['ArrowUp']) {
+          keys['ArrowLeft'] = false; keys['ArrowUp'] = false;
+          const cur = aliveIdx.indexOf(targetIndex);
+          targetIndex = aliveIdx[(cur - 1 + aliveIdx.length) % aliveIdx.length];
+          playSFX(SFX.CURSOR);
+        }
+      }
       if (keys['z'] || keys['Z']) {
         keys['z'] = false; keys['Z'] = false;
         // Confirm target — calc damage, transition to player-attack
         playSFX(SFX.CONFIRM);
-        const dmg = calcDamage(playerATK, BOSS_DEF);
-        bossHP = Math.max(0, bossHP - dmg);
-        bossDamageNum = { value: dmg, timer: 0 };
+        if (isRandomEncounter && encounterMonsters) {
+          const target = encounterMonsters[targetIndex];
+          const dmg = calcDamage(playerATK, target.def);
+          target.hp = Math.max(0, target.hp - dmg);
+          bossDamageNum = { value: dmg, timer: 0 };
+        } else {
+          const dmg = calcDamage(playerATK, BOSS_DEF);
+          bossHP = Math.max(0, bossHP - dmg);
+          bossDamageNum = { value: dmg, timer: 0 };
+        }
         bossFlashTimer = BATTLE_HIT_FLASH_MS;
         battleState = 'player-attack';
         battleTimer = 0;
@@ -1763,7 +1917,8 @@ function handleAction() {
       frame: 0, radius: 60, angle: 0, spin: false,
       onComplete: () => {
         playSFX(SFX.CURE);
-        // TODO: actual HP healing
+        playerHP = playerStats.maxHP;
+        playerMP = playerStats.maxMP;
       }
     };
     return;
@@ -1871,6 +2026,17 @@ function updateMovement(dt) {
     // Check for trigger at current tile
     if (checkTrigger()) return; // transition happened, skip input chaining
 
+    // Random encounter step counter (dungeon floors 0-3 only, not crystal room)
+    if (dungeonFloor >= 0 && dungeonFloor < 4 && battleState === 'none') {
+      encounterSteps++;
+      const threshold = 15 + Math.floor(Math.random() * 15);
+      if (encounterSteps >= threshold) {
+        encounterSteps = 0;
+        startRandomEncounter();
+        return;
+      }
+    }
+
     if (keys['ArrowDown']) {
       startMove(DIR_DOWN);
     } else if (keys['ArrowUp']) {
@@ -1902,7 +2068,7 @@ function updateTopBoxScroll(dt) {
 
   if (topBoxScrollState === 'fade-in') {
     topBoxFadeStep = TOPBOX_FADE_STEPS - Math.min(Math.floor(topBoxScrollTimer / TOPBOX_FADE_STEP_MS), TOPBOX_FADE_STEPS);
-    if (topBoxFadeStep <= 0) {
+    if (topBoxScrollTimer >= (TOPBOX_FADE_STEPS + 1) * TOPBOX_FADE_STEP_MS) {
       topBoxFadeStep = 0;
       if (topBoxIsTown) {
         topBoxScrollState = 'none';
@@ -1918,7 +2084,7 @@ function updateTopBoxScroll(dt) {
     }
   } else if (topBoxScrollState === 'fade-out') {
     topBoxFadeStep = Math.min(Math.floor(topBoxScrollTimer / TOPBOX_FADE_STEP_MS), TOPBOX_FADE_STEPS);
-    if (topBoxFadeStep >= TOPBOX_FADE_STEPS) {
+    if (topBoxScrollTimer >= (TOPBOX_FADE_STEPS + 1) * TOPBOX_FADE_STEP_MS) {
       topBoxScrollState = 'none';
       topBoxFadeStep = TOPBOX_FADE_STEPS;
       topBoxNameBytes = null;
@@ -2880,8 +3046,8 @@ function render() {
     _updateIndoorWater(mapRenderer);
   }
 
-  // Hide all sprites/objects during transitions (show during trap reveal)
-  if (transState === 'none' || transState === 'trap-reveal') {
+  // Hide all sprites/objects during transitions and battles (show during trap reveal)
+  if ((transState === 'none' || transState === 'trap-reveal') && battleState === 'none') {
     // Flame sprites: draw after background, before player
     if (!onWorldMap && _flameSprites.length > 0) {
       const flameFrame = Math.floor(waterTick / 8) & 1;
@@ -3163,7 +3329,7 @@ function updateTitle(dt) {
       if (titleTimer >= TITLE_ZBOX_MS) { titleState = 'select-fade-in'; titleTimer = 0; selectCursor = 0; deleteMode = false; }
       break;
     case 'select-fade-in':
-      if (titleTimer >= SELECT_TEXT_STEPS * SELECT_TEXT_STEP_MS) { titleState = 'select'; titleTimer = 0; }
+      if (titleTimer >= (SELECT_TEXT_STEPS + 1) * SELECT_TEXT_STEP_MS) { titleState = 'select'; titleTimer = 0; }
       break;
     case 'select':
       if (keys['z'] || keys['Z']) {
@@ -3214,15 +3380,35 @@ function updateTitle(dt) {
       // Input handled in keydown listener — just tick timer for cursor blink
       break;
     case 'select-fade-out':
-      if (titleTimer >= SELECT_TEXT_STEPS * SELECT_TEXT_STEP_MS) { titleState = 'main-out'; titleTimer = 0; }
+      if (titleTimer >= (SELECT_TEXT_STEPS + 1) * SELECT_TEXT_STEP_MS) { titleState = 'main-out'; titleTimer = 0; }
       break;
     case 'select-fade-out-back':
-      if (titleTimer >= SELECT_TEXT_STEPS * SELECT_TEXT_STEP_MS) { titleState = 'zbox-open'; titleTimer = 0; }
+      if (titleTimer >= (SELECT_TEXT_STEPS + 1) * SELECT_TEXT_STEP_MS) { titleState = 'zbox-open'; titleTimer = 0; }
       break;
     case 'main-out':
       if (titleTimer >= TITLE_FADE_MS) {
         titleState = 'done';
         hudInfoFadeTimer = 0;
+        // Restore saved stats if available
+        const slot = saveSlots[selectCursor];
+        if (slot && slot.stats) {
+          playerStats.str = slot.stats.str;
+          playerStats.agi = slot.stats.agi;
+          playerStats.vit = slot.stats.vit;
+          playerStats.int = slot.stats.int;
+          playerStats.mnd = slot.stats.mnd;
+          playerStats.maxHP = slot.stats.maxHP;
+          playerStats.maxMP = slot.stats.maxMP;
+          playerStats.level = slot.level;
+          playerStats.exp = slot.exp;
+          playerStats.expToNext = (slot.level - 1 < 98) ? expTable[slot.level - 1] : 0xFFFFFF;
+          playerStats.hp = playerStats.maxHP;
+          playerStats.mp = playerStats.maxMP;
+          playerHP = playerStats.maxHP;
+          playerMP = playerStats.maxMP;
+          playerATK = playerStats.str;
+          playerDEF = playerStats.vit;
+        }
         loadMapById(114);
         playTrack(TRACKS.TOWN_UR);
         // Opening wipe reveals the town
@@ -3562,7 +3748,7 @@ function drawPlayerSelect() {
       }
     } else if (saveSlots[i]) {
       // Named slot — draw saved name
-      drawText(ctx, textX, sy, saveSlots[i], fadedPal);
+      drawText(ctx, textX, sy, saveSlots[i].name, fadedPal);
     } else {
       drawText(ctx, textX, sy, SELECT_SLOT_TEXT, fadedPal);
     }
@@ -3603,7 +3789,7 @@ function drawPlayerSelect() {
   if (selectCursor === 3) {
     drawText(ctx, hpX, hpY, SELECT_DELETE_TEXT, deleteMode ? delPal : fadedPal);
   } else if (slotData) {
-    drawText(ctx, hpX, hpY, slotData, fadedPal);
+    drawText(ctx, hpX, hpY, slotData.name, fadedPal);
   } else {
     drawText(ctx, hpX, hpY, SELECT_SLOT_TEXT, fadedPal);
   }
@@ -3618,9 +3804,9 @@ function updatePauseMenu(dt) {
   if (pauseState === 'scroll-in') {
     if (pauseTimer >= PAUSE_SCROLL_MS) { pauseState = 'text-in'; pauseTimer = 0; }
   } else if (pauseState === 'text-in') {
-    if (pauseTimer >= PAUSE_TEXT_STEPS * PAUSE_TEXT_STEP_MS) { pauseState = 'open'; pauseTimer = 0; }
+    if (pauseTimer >= (PAUSE_TEXT_STEPS + 1) * PAUSE_TEXT_STEP_MS) { pauseState = 'open'; pauseTimer = 0; }
   } else if (pauseState === 'text-out') {
-    if (pauseTimer >= PAUSE_TEXT_STEPS * PAUSE_TEXT_STEP_MS) { pauseState = 'scroll-out'; pauseTimer = 0; }
+    if (pauseTimer >= (PAUSE_TEXT_STEPS + 1) * PAUSE_TEXT_STEP_MS) { pauseState = 'scroll-out'; pauseTimer = 0; }
   } else if (pauseState === 'scroll-out') {
     if (pauseTimer >= PAUSE_SCROLL_MS) { pauseState = 'none'; pauseTimer = 0; }
   }
@@ -3744,10 +3930,34 @@ function startBattle() {
   playSFX(SFX.EARTHQUAKE);
 }
 
+function startRandomEncounter() {
+  isRandomEncounter = true;
+  const goblin = MONSTERS.get(0x00);
+  const count = 1 + Math.floor(Math.random() * 4); // 1-4 goblins
+  encounterMonsters = [];
+  for (let i = 0; i < count; i++) {
+    encounterMonsters.push({ hp: goblin.hp, maxHP: goblin.hp, atk: goblin.atk, def: goblin.def, exp: goblin.exp });
+  }
+  preBattleTrack = TRACKS.CRYSTAL_CAVE;
+  // Skip roar/earthquake — go straight to flash-strobe
+  battleState = 'flash-strobe';
+  battleTimer = 0;
+  battleCursor = 0;
+  battleMessage = null;
+  bossDamageNum = null;
+  playerDamageNum = null;
+  bossFlashTimer = 0;
+  battleShakeTimer = 0;
+  playSFX(SFX.BATTLE_SWIPE);
+}
+
 function executeBattleCommand(index) {
   if (index === 0) {
-    // Fight — go to target select (cursor on boss)
+    // Fight — go to target select (cursor on enemy)
     playSFX(SFX.CONFIRM);
+    if (isRandomEncounter && encounterMonsters) {
+      targetIndex = encounterMonsters.findIndex(m => m.hp > 0);
+    }
     battleState = 'target-select';
     battleTimer = 0;
   } else if (index === 1) {
@@ -3764,10 +3974,20 @@ function executeBattleCommand(index) {
     battleTimer = 0;
   } else {
     // Run
-    playSFX(SFX.CANCEL);
-    battleMessage = BATTLE_CANT_ESCAPE;
-    battleState = 'message-hold';
-    battleTimer = 0;
+    if (isRandomEncounter) {
+      playSFX(SFX.CONFIRM);
+      battleState = 'none';
+      battleTimer = 0;
+      isRandomEncounter = false;
+      encounterMonsters = null;
+      sprite.setDirection(DIR_DOWN);
+      playTrack(preBattleTrack);
+    } else {
+      playSFX(SFX.CANCEL);
+      battleMessage = BATTLE_CANT_ESCAPE;
+      battleState = 'message-hold';
+      battleTimer = 0;
+    }
   }
 }
 
@@ -3803,13 +4023,21 @@ function updateBattle(dt) {
   } else if (battleState === 'roar-slide-out') {
     if (battleTimer >= BATTLE_SCROLL_MS) { battleState = 'flash-strobe'; battleTimer = 0; playSFX(SFX.BATTLE_SWIPE); }
   } else if (battleState === 'flash-strobe') {
-    if (battleTimer >= BATTLE_FLASH_FRAMES * BATTLE_FLASH_FRAME_MS) { battleState = 'boss-box-expand'; battleTimer = 0; playTrack(TRACKS.BOSS_BATTLE); }
+    if (battleTimer >= BATTLE_FLASH_FRAMES * BATTLE_FLASH_FRAME_MS) {
+      if (isRandomEncounter) {
+        battleState = 'encounter-box-expand'; battleTimer = 0; playTrack(TRACKS.BATTLE);
+      } else {
+        battleState = 'boss-box-expand'; battleTimer = 0; playTrack(TRACKS.BOSS_BATTLE);
+      }
+    }
+  } else if (battleState === 'encounter-box-expand') {
+    if (battleTimer >= BOSS_BOX_EXPAND_MS) { battleState = 'battle-fade-in'; battleTimer = 0; }
   } else if (battleState === 'boss-box-expand') {
     if (battleTimer >= BOSS_BOX_EXPAND_MS) { battleState = 'boss-appear'; battleTimer = 0; }
   } else if (battleState === 'boss-appear') {
     if (battleTimer >= BOSS_BLOCKS * BOSS_DISSOLVE_STEPS * BOSS_DISSOLVE_FRAME_MS) { battleState = 'battle-fade-in'; battleTimer = 0; }
   } else if (battleState === 'battle-fade-in') {
-    if (battleTimer >= BATTLE_TEXT_STEPS * BATTLE_TEXT_STEP_MS) { battleState = 'menu-open'; battleTimer = 0; }
+    if (battleTimer >= (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS) { battleState = 'menu-open'; battleTimer = 0; }
   } else if (battleState === 'message-hold') {
     if (battleTimer >= BATTLE_MSG_HOLD_MS) { battleState = 'menu-open'; battleTimer = 0; battleMessage = null; }
   } else if (battleState === 'player-attack') {
@@ -3819,21 +4047,52 @@ function updateBattle(dt) {
     }
   } else if (battleState === 'player-damage-show') {
     if (battleTimer >= BATTLE_DMG_SHOW_MS) {
-      if (bossHP <= 0) {
-        // Boss defeated — dissolve out
-        battleState = 'boss-dissolve';
-        battleTimer = 0;
-        playSFX(SFX.BOSS_DEATH);
+      const allDead = isRandomEncounter ? encounterMonsters.every(m => m.hp <= 0) : bossHP <= 0;
+      if (allDead) {
+        if (isRandomEncounter) {
+          // All monsters defeated — grant total EXP, skip dissolve
+          encounterExpGained = encounterMonsters.reduce((sum, m) => sum + m.exp, 0);
+          grantExp(encounterExpGained);
+          if (saveSlots[selectCursor]) {
+            saveSlots[selectCursor].level = playerStats.level;
+            saveSlots[selectCursor].exp = playerStats.exp;
+            saveSlots[selectCursor].stats = {
+              str: playerStats.str, agi: playerStats.agi, vit: playerStats.vit,
+              int: playerStats.int, mnd: playerStats.mnd,
+              maxHP: playerStats.maxHP, maxMP: playerStats.maxMP
+            };
+          }
+          saveSlotsToDB();
+          battleState = 'victory-box-open';
+          battleTimer = 0;
+          playTrack(TRACKS.VICTORY);
+        } else {
+          // Boss defeated — dissolve out
+          battleState = 'boss-dissolve';
+          battleTimer = 0;
+          playSFX(SFX.BOSS_DEATH);
+        }
       } else {
-        // Boss pre-attack flash before counterattack
+        // Build attack queue — all alive monsters attack in sequence
+        if (isRandomEncounter && encounterMonsters) {
+          enemyAttackQueue = [];
+          for (let i = 0; i < encounterMonsters.length; i++) {
+            if (encounterMonsters[i].hp > 0) enemyAttackQueue.push(i);
+          }
+        } else {
+          enemyAttackQueue = [-1]; // boss uses -1 sentinel
+        }
+        currentAttacker = enemyAttackQueue.shift();
         battleState = 'boss-flash';
         battleTimer = 0;
       }
     }
   } else if (battleState === 'boss-flash') {
     if (battleTimer >= BOSS_PREFLASH_MS) {
-      // Boss counterattack
-      const dmg = calcDamage(BOSS_ATK, playerDEF);
+      // Current attacker deals damage
+      const monAtk = (currentAttacker >= 0 && encounterMonsters)
+        ? encounterMonsters[currentAttacker].atk : BOSS_ATK;
+      const dmg = calcDamage(monAtk, playerDEF);
       playerHP = Math.max(0, playerHP - dmg);
       playerDamageNum = { value: dmg, timer: 0 };
       battleShakeTimer = BATTLE_SHAKE_MS;
@@ -3851,8 +4110,13 @@ function updateBattle(dt) {
         // Player defeated — reload after 2s
         battleState = 'defeat';
         battleTimer = 0;
+      } else if (enemyAttackQueue.length > 0) {
+        // Next monster in queue attacks
+        currentAttacker = enemyAttackQueue.shift();
+        battleState = 'boss-flash';
+        battleTimer = 0;
       } else {
-        // Back to menu — skip fade, text stays solid between turns
+        // All enemies attacked — back to menu
         battleState = 'menu-open';
         battleTimer = 0;
       }
@@ -3865,20 +4129,61 @@ function updateBattle(dt) {
     const prevBlock = Math.floor(prevFrame / BOSS_DISSOLVE_STEPS);
     if (dBlock !== prevBlock && dBlock > 0 && (dBlock & 3) === 0) playSFX(SFX.BOSS_DEATH);
     if (battleTimer >= BOSS_BLOCKS * BOSS_DISSOLVE_STEPS * BOSS_DISSOLVE_FRAME_MS) {
-      battleState = 'victory-text-in';
-      battleTimer = 0;
       bossDefeated = true;
       bossSprite = null;
+      encounterExpGained = 20;
+      grantExp(20);
+      // Update active save slot with current stats
+      if (saveSlots[selectCursor]) {
+        saveSlots[selectCursor].level = playerStats.level;
+        saveSlots[selectCursor].exp = playerStats.exp;
+        saveSlots[selectCursor].stats = {
+          str: playerStats.str, agi: playerStats.agi, vit: playerStats.vit,
+          int: playerStats.int, mnd: playerStats.mnd,
+          maxHP: playerStats.maxHP, maxMP: playerStats.maxMP
+        };
+      }
+      saveSlotsToDB();
+      battleState = 'victory-box-open';
+      battleTimer = 0;
       playTrack(TRACKS.VICTORY);
     }
+  } else if (battleState === 'victory-box-open') {
+    if (battleTimer >= VICTORY_BOX_ROWS * VICTORY_ROW_FRAME_MS) { battleState = 'victory-text-in'; battleTimer = 0; }
   } else if (battleState === 'victory-text-in') {
-    if (battleTimer >= BATTLE_TEXT_STEPS * BATTLE_TEXT_STEP_MS) { battleState = 'victory-hold'; battleTimer = 0; }
+    if (battleTimer >= (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS) { battleState = 'victory-hold'; battleTimer = 0; }
   } else if (battleState === 'victory-hold') {
-    if (battleTimer >= BATTLE_VICTORY_HOLD_MS) { battleState = 'victory-text-out'; battleTimer = 0; }
+    // waits for Z press in handleInput
+  } else if (battleState === 'exp-text-in') {
+    if (battleTimer >= (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS) { battleState = 'exp-hold'; battleTimer = 0; }
+  } else if (battleState === 'exp-hold') {
+    // waits for Z press in handleInput
   } else if (battleState === 'victory-text-out') {
-    if (battleTimer >= BATTLE_TEXT_STEPS * BATTLE_TEXT_STEP_MS) {
+    if (battleTimer >= (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS) {
+      battleState = 'victory-box-close'; battleTimer = 0;
+    }
+  } else if (battleState === 'victory-box-close') {
+    if (battleTimer >= VICTORY_BOX_ROWS * VICTORY_ROW_FRAME_MS) {
+      if (isRandomEncounter) {
+        battleState = 'encounter-box-close'; battleTimer = 0;
+      } else {
+        battleState = 'boss-box-close'; battleTimer = 0;
+      }
+    }
+  } else if (battleState === 'encounter-box-close') {
+    if (battleTimer >= BOSS_BOX_EXPAND_MS) {
       battleState = 'none';
       battleTimer = 0;
+      sprite.setDirection(DIR_DOWN);
+      isRandomEncounter = false;
+      encounterMonsters = null;
+      playTrack(preBattleTrack);
+    }
+  } else if (battleState === 'boss-box-close') {
+    if (battleTimer >= BOSS_BOX_EXPAND_MS) {
+      battleState = 'none';
+      battleTimer = 0;
+      sprite.setDirection(DIR_DOWN);
       playTrack(TRACKS.CRYSTAL_ROOM);
     }
   } else if (battleState === 'defeat') {
@@ -3909,6 +4214,7 @@ function drawBattle() {
   }
 
   drawRoarBox();
+  drawEncounterBox();
   drawBossSpriteBox();
   drawBattleMenu();
   drawBattleMessage();
@@ -3964,7 +4270,7 @@ function drawRoarBox() {
 }
 
 function drawBattleMenu() {
-  const isSlide = battleState === 'boss-box-expand';
+  const isSlide = battleState === 'boss-box-expand' || battleState === 'encounter-box-expand';
   const isAppear = battleState === 'boss-appear';
   const isFade = battleState === 'battle-fade-in';
   const isMenu = isFade ||
@@ -4001,11 +4307,25 @@ function drawBattleMenu() {
   const fadedPal = [0x0F, 0x0F, 0x0F, 0x30];
   for (let s = 0; s < fadeStep; s++) fadedPal[3] = nesColorFade(fadedPal[3]);
 
-  // "Land Turtle" centered in left box
-  const nameTw = measureText(BATTLE_BOSS_NAME);
+  // Enemy name centered in left box (show "Goblin ×N" for groups)
+  let enemyName;
+  if (isRandomEncounter && encounterMonsters) {
+    const alive = encounterMonsters.filter(m => m.hp > 0).length;
+    if (alive > 1) {
+      // "Goblin" + " x" + digit
+      const arr = Array.from(BATTLE_GOBLIN_NAME);
+      arr.push(0xFF, 0xE1, 0x80 + alive); // space, "x", digit
+      enemyName = new Uint8Array(arr);
+    } else {
+      enemyName = BATTLE_GOBLIN_NAME;
+    }
+  } else {
+    enemyName = BATTLE_BOSS_NAME;
+  }
+  const nameTw = measureText(enemyName);
   const nameX = Math.floor((boxW - nameTw) / 2);
   const nameY = HUD_BOT_Y + Math.floor((boxH - 8) / 2);
-  drawText(ctx, nameX, nameY, BATTLE_BOSS_NAME, fadedPal);
+  drawText(ctx, nameX, nameY, enemyName, fadedPal);
 
   // 2×2 menu grid on right side of bottom panel
   const menuX = boxW + 16;
@@ -4034,10 +4354,104 @@ function drawBattleMenu() {
   }
 }
 
+function _encounterGridPos(boxX, boxY, boxW, boxH, count) {
+  // 2×2 grid: TL=0, TR=1, BL=2, BR=3. Centered for fewer monsters.
+  const cx = boxX + Math.floor(boxW / 2);
+  const cy = boxY + Math.floor(boxH / 2);
+  const gapX = 20, gapY = 14;
+  if (count === 1) return [{ x: cx - 4, y: cy - 4 }];
+  if (count === 2) return [
+    { x: cx - gapX - 4, y: cy - 4 },
+    { x: cx + gapX - 4, y: cy - 4 },
+  ];
+  if (count === 3) return [
+    { x: cx - gapX - 4, y: cy - gapY - 4 },
+    { x: cx + gapX - 4, y: cy - gapY - 4 },
+    { x: cx - 4,        y: cy + gapY - 4 },
+  ];
+  return [ // 4
+    { x: cx - gapX - 4, y: cy - gapY - 4 },
+    { x: cx + gapX - 4, y: cy - gapY - 4 },
+    { x: cx - gapX - 4, y: cy + gapY - 4 },
+    { x: cx + gapX - 4, y: cy + gapY - 4 },
+  ];
+}
+
+function drawEncounterBox() {
+  if (!isRandomEncounter || !encounterMonsters) return;
+  const isExpand = battleState === 'encounter-box-expand';
+  const isClose = battleState === 'encounter-box-close';
+  const isCombat = battleState === 'battle-fade-in' ||
+                   battleState === 'menu-open' || battleState === 'target-select' ||
+                   battleState === 'player-attack' ||
+                   battleState === 'player-damage-show' || battleState === 'boss-flash' ||
+                   battleState === 'enemy-attack' ||
+                   battleState === 'enemy-damage-show' || battleState === 'message-hold' ||
+                   battleState === 'defeat';
+  const isVictory = battleState === 'victory-box-open' || battleState === 'victory-text-in' ||
+                    battleState === 'victory-hold' || battleState === 'exp-text-in' ||
+                    battleState === 'exp-hold' || battleState === 'victory-text-out' ||
+                    battleState === 'victory-box-close';
+  if (!isExpand && !isClose && !isCombat && !isVictory) return;
+
+  const count = encounterMonsters.length;
+  const fullW = 64;
+  const fullH = 64;
+  const centerX = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2);
+  const centerY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
+
+  // Box expand/close from center
+  let boxW = fullW, boxH = fullH;
+  if (isExpand) {
+    const t = Math.min(battleTimer / BOSS_BOX_EXPAND_MS, 1);
+    boxW = Math.max(16, Math.ceil(fullW * t / 8) * 8);
+    boxH = Math.max(16, Math.ceil(fullH * t / 8) * 8);
+  } else if (isClose) {
+    const t = 1 - Math.min(battleTimer / BOSS_BOX_EXPAND_MS, 1);
+    boxW = Math.max(16, Math.ceil(fullW * t / 8) * 8);
+    boxH = Math.max(16, Math.ceil(fullH * t / 8) * 8);
+  }
+  const boxX = centerX - Math.floor(boxW / 2);
+  const boxY = centerY - Math.floor(boxH / 2);
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
+  ctx.clip();
+  _drawBorderedBox(boxX, boxY, boxW, boxH);
+
+  // No content during expand or close
+  if (isExpand || isClose) { ctx.restore(); return; }
+
+  // 2×2 grid positions for monsters inside box (fade in during battle-fade-in)
+  const gridPos = _encounterGridPos(boxX, boxY, fullW, fullH, count);
+  const fadedPal = [0x0F, 0x0F, 0x0F, 0x30];
+  if (battleState === 'battle-fade-in') {
+    let fadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
+    for (let s = 0; s < fadeStep; s++) fadedPal[3] = nesColorFade(fadedPal[3]);
+  }
+  for (let i = 0; i < count; i++) {
+    if (encounterMonsters[i].hp > 0) {
+      const digit = new Uint8Array([0x80 + (i + 1)]);
+      drawText(ctx, gridPos[i].x, gridPos[i].y, digit, fadedPal);
+    }
+  }
+
+  // Target-select cursor — hand cursor to the left of selected monster
+  if (battleState === 'target-select' && cursorTileCanvas) {
+    const pos = gridPos[targetIndex];
+    ctx.drawImage(cursorTileCanvas, pos.x - 16, pos.y - 4);
+  }
+
+  ctx.restore();
+}
+
 function drawBossSpriteBox() {
+  if (isRandomEncounter) return;
   if (!landTurtleBattleCanvas) return;
 
   const isExpand = battleState === 'boss-box-expand';
+  const isClose = battleState === 'boss-box-close';
   const isAppear = battleState === 'boss-appear';
   const isDissolve = battleState === 'boss-dissolve';
   const isCombat = battleState === 'battle-fade-in' ||
@@ -4047,7 +4461,11 @@ function drawBossSpriteBox() {
                    battleState === 'enemy-attack' ||
                    battleState === 'enemy-damage-show' || battleState === 'message-hold' ||
                    battleState === 'defeat';
-  if (!isExpand && !isAppear && !isDissolve && !isCombat) return;
+  const isVictory = battleState === 'victory-box-open' || battleState === 'victory-text-in' ||
+                    battleState === 'victory-hold' || battleState === 'exp-text-in' ||
+                    battleState === 'exp-hold' || battleState === 'victory-text-out' ||
+                    battleState === 'victory-box-close';
+  if (!isExpand && !isClose && !isAppear && !isDissolve && !isCombat && !isVictory) return;
 
   const fullW = 64;  // 48px sprite + 8px border each side
   const fullH = 64;
@@ -4059,22 +4477,23 @@ function drawBossSpriteBox() {
   ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
   ctx.clip();
 
-  // Box expand from center
+  // Box expand/close from center
   let boxW = fullW, boxH = fullH;
   if (isExpand) {
     const t = Math.min(battleTimer / BOSS_BOX_EXPAND_MS, 1);
-    boxW = Math.max(16, Math.floor(fullW * t));
-    boxH = Math.max(16, Math.floor(fullH * t));
-    // Snap to 8px grid for border tiles
-    boxW = Math.ceil(boxW / 8) * 8;
-    boxH = Math.ceil(boxH / 8) * 8;
+    boxW = Math.max(16, Math.ceil(fullW * t / 8) * 8);
+    boxH = Math.max(16, Math.ceil(fullH * t / 8) * 8);
+  } else if (isClose) {
+    const t = 1 - Math.min(battleTimer / BOSS_BOX_EXPAND_MS, 1);
+    boxW = Math.max(16, Math.ceil(fullW * t / 8) * 8);
+    boxH = Math.max(16, Math.ceil(fullH * t / 8) * 8);
   }
   const boxX = centerX - Math.floor(boxW / 2);
   const boxY = centerY - Math.floor(boxH / 2);
   _drawBorderedBox(boxX, boxY, boxW, boxH);
 
-  // No sprite during expand
-  if (isExpand) { ctx.restore(); return; }
+  // No sprite during expand or close
+  if (isExpand || isClose) { ctx.restore(); return; }
 
   // Battle sprite — dissolve in/out or full draw
   const sprX = centerX - 24;  // 48/2 = 24
@@ -4208,38 +4627,79 @@ function drawBattleMessage() {
   ctx.restore();
 }
 
+function makeExpText(amount) {
+  // Build "Got N EXP!" as Uint8Array using ROM font encoding
+  // G=0x90, o=0xD8, t=0xDD, space=0xFF, E=0x8E, X=0xA1, P=0x99, !=0xC4
+  const digits = String(amount);
+  const arr = [0x90, 0xD8, 0xDD, 0xFF]; // "Got "
+  for (let i = 0; i < digits.length; i++) arr.push(0x80 + parseInt(digits[i]));
+  arr.push(0xFF, 0x8E, 0xA1, 0x99, 0xC4); // " EXP!"
+  return new Uint8Array(arr);
+}
+
+// Victory box — 17×4 tiles (136×32 px), row-by-row expand (ROM: PPU $2321, width $11)
+const VICTORY_BOX_W = 17 * 8;  // 136px
+const VICTORY_BOX_H = 4 * 8;   // 32px
+const VICTORY_BOX_ROWS = 4;
+const VICTORY_ROW_FRAME_MS = 16.67; // 1 NES frame per row
+
 function drawVictoryBox() {
-  const isVictory = battleState === 'victory-text-in' || battleState === 'victory-hold' || battleState === 'victory-text-out';
-  if (!isVictory) return;
+  // Box opens → "Victory!" fades in → holds → "Got N EXP!" replaces text → holds → fade out
+  const isOpen = battleState === 'victory-box-open';
+  const isClose = battleState === 'victory-box-close';
+  const isVicText = battleState === 'victory-text-in';
+  const isVicHold = battleState === 'victory-hold';
+  const isExpText = battleState === 'exp-text-in';
+  const isExpHold = battleState === 'exp-hold';
+  const isOut = battleState === 'victory-text-out';
+  const showBox = isOpen || isClose || isVicText || isVicHold || isExpText || isExpHold || isOut;
+  if (!showBox) return;
 
-  const boxW = 80;
-  const boxH = 32;
-  const centerX = HUD_VIEW_X + Math.floor((HUD_VIEW_W - boxW) / 2);
-  const centerY = HUD_VIEW_Y + Math.floor((HUD_VIEW_H - boxH) / 2);
+  const boxX = 0;
+  const boxY = HUD_BOT_Y;
 
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
-  ctx.clip();
+  // Row-by-row expand / close
+  let drawH = VICTORY_BOX_H;
+  if (isOpen) {
+    const rows = Math.min(Math.floor(battleTimer / VICTORY_ROW_FRAME_MS) + 1, VICTORY_BOX_ROWS);
+    drawH = rows * 8;
+  } else if (isClose) {
+    const rows = VICTORY_BOX_ROWS - Math.min(Math.floor(battleTimer / VICTORY_ROW_FRAME_MS), VICTORY_BOX_ROWS);
+    drawH = Math.max(8, rows * 8);
+  }
+  _drawBorderedBox(boxX, boxY, VICTORY_BOX_W, drawH);
 
-  _drawBorderedBox(centerX, centerY, boxW, boxH, true);
+  if (isOpen || isClose) return;
+
+  // Determine which message to show
+  const showExp = isExpText || isExpHold || isOut;
 
   let fadeStep = 0;
-  if (battleState === 'victory-text-in') {
+  if (isVicText || isExpText) {
     fadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
-  } else if (battleState === 'victory-text-out') {
+  } else if (isOut) {
     fadeStep = Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
   }
-
-  const fadedPal = [0x02, 0x02, 0x02, 0x30];
+  const fadedPal = [0x0F, 0x0F, 0x0F, 0x30];
   for (let s = 0; s < fadeStep; s++) fadedPal[3] = nesColorFade(fadedPal[3]);
 
-  const tw = measureText(BATTLE_VICTORY);
-  const tx = centerX + Math.floor((boxW - tw) / 2);
-  const ty = centerY + Math.floor((boxH - 8) / 2);
-  drawText(ctx, tx, ty, BATTLE_VICTORY, fadedPal);
-
-  ctx.restore();
+  if (!showExp) {
+    // "Victory!" centered in box
+    const tw = measureText(BATTLE_VICTORY);
+    drawText(ctx, boxX + Math.floor((VICTORY_BOX_W - tw) / 2), boxY + Math.floor((VICTORY_BOX_H - 8) / 2), BATTLE_VICTORY, fadedPal);
+  } else {
+    // "Got N EXP!" and optional "Level Up!"
+    const expText = makeExpText(encounterExpGained);
+    const lines = leveledUp ? 2 : 1;
+    const blockH = lines * 10;
+    const startY = boxY + Math.floor((VICTORY_BOX_H - blockH) / 2);
+    const tw2 = measureText(expText);
+    drawText(ctx, boxX + Math.floor((VICTORY_BOX_W - tw2) / 2), startY, expText, fadedPal);
+    if (leveledUp) {
+      const tw3 = measureText(BATTLE_LEVEL_UP);
+      drawText(ctx, boxX + Math.floor((VICTORY_BOX_W - tw3) / 2), startY + 10, BATTLE_LEVEL_UP, fadedPal);
+    }
+  }
 }
 
 function _dmgBounceY(baseY, timer) {
@@ -4268,21 +4728,16 @@ function drawDamageNumbers() {
     ctx.restore();
   }
 
-  // Player damage number — sine-bounces near player sprite
+  // Player damage number — sine-bounces above player portrait
   if (playerDamageNum) {
-    const px = SCREEN_CENTER_X + 16;
-    const baseY = SCREEN_CENTER_Y - 8;
+    const px = HUD_RIGHT_X + 12;
+    const baseY = HUD_VIEW_Y + 4;
     const py = _dmgBounceY(baseY, playerDamageNum.timer);
     const digits = String(playerDamageNum.value);
     const numBytes = new Uint8Array(digits.length);
     for (let i = 0; i < digits.length; i++) numBytes[i] = 0x80 + parseInt(digits[i]);
 
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
-    ctx.clip();
     drawText(ctx, px, py, numBytes, TEXT_WHITE);
-    ctx.restore();
   }
 }
 

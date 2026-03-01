@@ -13,6 +13,7 @@ export const TRACKS = {
   TOWN_UR:      0x1F,  // My Home Town
   PIANO_3:      0x1A,  // 3rd piano song (loading screen)
   TITLE_SCREEN: 0x37,  // Title screen song (55)
+  BATTLE:       0x20,  // Battle 1 (normal encounters)
   BOSS_BATTLE:  0x2A,  // Battle 2 (boss battle)
   VICTORY:      0x07,  // Battle victory
 };
