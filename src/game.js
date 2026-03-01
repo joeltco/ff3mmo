@@ -605,7 +605,7 @@ function initBattleSprite(romData) {
 function initAdamantoise(romData) {
   // 4 tiles at FF2_ADAMANTOISE_SPRITE, row-major: TL, TR, BL, BR
   // Battle colors with black outline (index 1) for small map sprite
-  const palTop = [0x0F, 0x0F, LAND_TURTLE_PAL_TOP[2], LAND_TURTLE_PAL_TOP[3]];
+  const palTop = [0x0F, 0x0F, LAND_TURTLE_PAL_TOP[1], LAND_TURTLE_PAL_TOP[2]];
   const palBot = [0x0F, 0x0F, LAND_TURTLE_PAL_BOT[3], LAND_TURTLE_PAL_BOT[2]];
   const tiles = [];
   for (let i = 0; i < 4; i++) {
@@ -907,7 +907,7 @@ function renderSpriteFaded(romData, spriteOff, basePal, fadeSteps) {
 
 // Pre-render fade frames for adamantoise (different palette for top/bottom halves)
 function renderBossFaded(romData, fadeSteps) {
-  const palTop = [0x0F, 0x0F, LAND_TURTLE_PAL_TOP[2], LAND_TURTLE_PAL_TOP[3]];
+  const palTop = [0x0F, 0x0F, LAND_TURTLE_PAL_TOP[1], LAND_TURTLE_PAL_TOP[2]];
   const palBot = [0x0F, 0x0F, LAND_TURTLE_PAL_BOT[3], LAND_TURTLE_PAL_BOT[2]];
   const fadedTop = palTop.map((c, i) => {
     if (i === 0) return c;
@@ -1623,7 +1623,7 @@ function handleInput() {
       if (keys['z'] || keys['Z']) {
         keys['z'] = false; keys['Z'] = false;
         // Confirm target — calc damage, transition to player-attack
-        playSFX(SFX.ATTACK_HIT);
+        playSFX(SFX.CONFIRM);
         const dmg = calcDamage(playerATK, BOSS_DEF);
         bossHP = Math.max(0, bossHP - dmg);
         bossDamageNum = { value: dmg, timer: 0 };
@@ -3154,6 +3154,7 @@ function updateTitle(dt) {
       if (keys['z'] || keys['Z']) {
         keys['z'] = false;
         keys['Z'] = false;
+        playSFX(SFX.CONFIRM);
         titleState = 'zbox-close';
         titleTimer = 0;
       }
@@ -3170,35 +3171,41 @@ function updateTitle(dt) {
         if (deleteMode) {
           if (selectCursor < 3 && saveSlots[selectCursor]) {
             // Delete the selected save
+            playSFX(SFX.CONFIRM);
             saveSlots[selectCursor] = null;
             saveSlotsToDB();
             deleteMode = false;
           }
         } else if (selectCursor === 3) {
           // Activate delete mode
+          playSFX(SFX.CONFIRM);
           deleteMode = true;
           selectCursor = 0;
         } else if (saveSlots[selectCursor]) {
           // Named slot — start game
+          playSFX(SFX.CONFIRM);
           titleState = 'select-fade-out'; titleTimer = 0;
         } else {
           // New Game — enter name inline
+          playSFX(SFX.CONFIRM);
           nameBuffer = [];
           titleState = 'name-entry'; titleTimer = 0;
         }
       }
       if (deleteMode) {
-        if (keys['ArrowDown']) { keys['ArrowDown'] = false; selectCursor = (selectCursor + 1) % 3; }
-        if (keys['ArrowUp'])   { keys['ArrowUp'] = false;   selectCursor = (selectCursor + 2) % 3; }
+        if (keys['ArrowDown']) { keys['ArrowDown'] = false; selectCursor = (selectCursor + 1) % 3; playSFX(SFX.CURSOR); }
+        if (keys['ArrowUp'])   { keys['ArrowUp'] = false;   selectCursor = (selectCursor + 2) % 3; playSFX(SFX.CURSOR); }
       } else {
-        if (keys['ArrowDown']) { keys['ArrowDown'] = false; selectCursor = (selectCursor + 1) % 4; }
-        if (keys['ArrowUp'])   { keys['ArrowUp'] = false;   selectCursor = (selectCursor + 3) % 4; }
+        if (keys['ArrowDown']) { keys['ArrowDown'] = false; selectCursor = (selectCursor + 1) % 4; playSFX(SFX.CURSOR); }
+        if (keys['ArrowUp'])   { keys['ArrowUp'] = false;   selectCursor = (selectCursor + 3) % 4; playSFX(SFX.CURSOR); }
       }
       if (keys['x'] || keys['X']) {
         keys['x'] = false; keys['X'] = false;
         if (deleteMode) {
+          playSFX(SFX.CONFIRM);
           deleteMode = false;
         } else {
+          playSFX(SFX.CONFIRM);
           titleState = 'select-fade-out-back'; titleTimer = 0;
         }
       }
