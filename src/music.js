@@ -35,6 +35,7 @@ export const SFX = {
   CONFIRM:      0x46,  // SFX $05 + $41 — menu confirm
   CANCEL:       0x47,  // SFX $06 + $41 — cancel / error buzz
   ATTACK_HIT:   0x74,  // SFX $33 + $41 — physical attack slash
+  MONSTER_DEATH: 0x72, // SFX $31 + $41 — normal monster death (ROM writes $B1 to $7F49)
 };
 
 let nsfData = null;    // Built NSF Uint8Array
