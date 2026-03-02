@@ -11,7 +11,7 @@ import { generateFloor, clearDungeonCache } from './dungeon-generator.js';
 import { initMusic, playTrack, stopMusic, playSFX, TRACKS, SFX } from './music.js';
 import { applyIPS } from './ips-patcher.js';
 import { initTextDecoder } from './text-decoder.js';
-import { initFont, drawText, measureText, TEXT_WHITE } from './font-renderer.js';
+import { initFont, drawText, measureText, TEXT_WHITE, TEXT_YELLOW } from './font-renderer.js';
 import { MONSTERS } from './data/monsters.js';
 
 // --- Save data persistence (IndexedDB) ---
@@ -122,7 +122,10 @@ let landTurtleWhiteCanvas = null;  // 48×48 all-white version for pre-attack fl
 
 // Goblin battle sprite — random encounters
 const GOBLIN_GFX_OFF = 0x40010;  // Bank $20:$8000 — size 0 (4×4), gfxID 0
-const GOBLIN_PAL = [0x0F, 0x17, 0x28, 0x3C]; // black, brown, yellow-green, light cyan (battle set 0, palette $89)
+const GOBLIN_PAL0 = [0x0F, 0x17, 0x28, 0x3C]; // palette $89: black, brown, yellow-green, pale cyan
+const GOBLIN_PAL1 = [0x0F, 0x18, 0x28, 0x11]; // palette $A0: black, olive, yellow-green, blue
+// Per-tile palette assignment (derived from reference sprite)
+const GOBLIN_TILE_PAL = [0,0,0,0, 1,0,1,0, 1,1,1,1, 1,1,1,1];
 const GOBLIN_TILES = 16;  // 4×4 grid
 const GOBLIN_COLS = 4;
 let goblinBattleCanvas = null;  // 32×32 canvas
@@ -243,6 +246,17 @@ let enemyAttackQueue = [];     // indices of alive monsters still to attack this
 let currentAttacker = -1;      // index of monster currently attacking
 let dyingMonsterIndex = -1;    // index of monster playing death stripe animation
 
+// Hit animation state
+let hitResults = [];               // [{damage, crit}, {miss:true}, ...] pre-calculated per attack
+let currentHitIdx = 0;             // which hit we're animating
+let slashFrame = 0;                // current slash animation frame (0-3)
+let slashX = 0, slashY = 0;       // slash effect base position (target center)
+let slashOffX = 0, slashOffY = 0; // random offset per frame (punch scatter)
+let slashFramesR = null;           // right-hand punch frames (frame $12, 4 effect sets)
+let slashFramesL = null;           // left-hand punch frames (frame $13, 4 effect sets)
+let slashFrames = null;            // alias — points to R or L based on current hit
+const BATTLE_MISS = new Uint8Array([0x96, 0xD2, 0xDC, 0xDC]); // "Miss" in ROM encoding
+
 // Battle timing constants
 const BATTLE_SCROLL_MS = 150;
 const BATTLE_TEXT_STEP_MS = 100;
@@ -268,6 +282,17 @@ const MONSTER_SLIDE_MS = 267;            // 16 frames at 60fps — sprites slide
 const DMG_BOUNCE_COUNT = 2;              // 2 sine bounces over damage show duration
 const DMG_BOUNCE_AMP = 16;              // max bounce height in pixels
 const TARGET_CURSOR_BLINK_MS = 133;      // cursor blink rate during target select
+
+// Hit stats & slash animation constants
+const SLASH_FRAME_MS = 50;               // per frame of slash sprite (4 frames = 200ms)
+const SLASH_FRAMES = 4;                  // number of slash animation frames (one per effect set)
+const HIT_PAUSE_MS = 200;               // pause showing damage number per hit
+const MISS_SHOW_MS = 400;               // "Miss" text display time
+const CRIT_RATE = 5;                     // 5% crit chance per hit
+const CRIT_MULT = 1.5;                  // critical hit damage multiplier
+const BASE_HIT_RATE = 80;               // 80% accuracy per hit (unarmed Onion Knight)
+const BOSS_HIT_RATE = 85;               // boss accuracy
+const GOBLIN_HIT_RATE = 75;             // goblin accuracy
 
 // Top box — battle scene BG or area name
 let topBoxMode = 'name';       // 'name' | 'battle'
@@ -841,15 +866,17 @@ function initLandTurtleBattle(romData) {
   landTurtleWhiteCanvas = wc;
 }
 
-function _renderGoblinWithPal(tiles, pal) {
+function _renderGoblinSprite(tiles, pal0, pal1, tilePalMap) {
   const c = document.createElement('canvas');
   c.width = GOBLIN_COLS * 8;   // 32
   c.height = GOBLIN_COLS * 8;  // 32
   const cctx = c.getContext('2d');
   for (let ty = 0; ty < GOBLIN_COLS; ty++) {
     for (let tx = 0; tx < GOBLIN_COLS; tx++) {
+      const tileIdx = ty * GOBLIN_COLS + tx;
+      const pal = tilePalMap[tileIdx] === 1 ? pal1 : pal0;
       const img = cctx.createImageData(8, 8);
-      const px = tiles[ty * GOBLIN_COLS + tx];
+      const px = tiles[tileIdx];
       for (let p = 0; p < 64; p++) {
         const ci = px[p];
         if (ci === 0) {
@@ -875,7 +902,7 @@ function initGoblinSprite(romData) {
   }
 
   // Render full-color sprite
-  goblinBattleCanvas = _renderGoblinWithPal(tiles, GOBLIN_PAL);
+  goblinBattleCanvas = _renderGoblinSprite(tiles, GOBLIN_PAL0, GOBLIN_PAL1, GOBLIN_TILE_PAL);
 
   // Create all-white version for pre-attack flash blink
   const wc = document.createElement('canvas');
@@ -1513,6 +1540,7 @@ export async function loadROM(arrayBuffer) {
   initBattleSprite(romRaw);
   initLandTurtleBattle(romRaw);
   initGoblinSprite(romRaw);
+  initSlashSprites();
   initPlayerStats(romRaw);
   initExpTable(romRaw);
   initMoogleSprite(romRaw);
@@ -1875,20 +1903,29 @@ function handleInput() {
       }
       if (keys['z'] || keys['Z']) {
         keys['z'] = false; keys['Z'] = false;
-        // Confirm target — calc damage, transition to player-attack
+        // Confirm target — roll hits, transition to player-slash
         playSFX(SFX.CONFIRM);
+        // Unarmed: both hands → minimum 2 hits
+        const potentialHits = Math.max(2, Math.floor((playerStats ? playerStats.agi : 5) / 10));
         if (isRandomEncounter && encounterMonsters) {
           const target = encounterMonsters[targetIndex];
-          const dmg = calcDamage(playerATK, target.def);
-          target.hp = Math.max(0, target.hp - dmg);
-          bossDamageNum = { value: dmg, timer: 0 };
+          hitResults = rollHits(playerATK, target.def, BASE_HIT_RATE, potentialHits);
         } else {
-          const dmg = calcDamage(playerATK, BOSS_DEF);
-          bossHP = Math.max(0, bossHP - dmg);
-          bossDamageNum = { value: dmg, timer: 0 };
+          hitResults = rollHits(playerATK, BOSS_DEF, BASE_HIT_RATE, potentialHits);
         }
-        bossFlashTimer = BATTLE_HIT_FLASH_MS;
-        battleState = 'player-attack';
+        currentHitIdx = 0;
+        slashFrame = 0;
+        slashFrames = slashFramesR; // first hit = right hand
+        // Base position = target center
+        const centerX = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2);
+        const centerY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
+        slashX = centerX;
+        slashY = centerY;
+        // Random offset for punch scatter (ROM: center + random 0-31)
+        slashOffX = Math.floor(Math.random() * 24) - 12;
+        slashOffY = Math.floor(Math.random() * 24) - 12;
+        playSFX(SFX.ATTACK_HIT);
+        battleState = 'player-slash';
         battleTimer = 0;
       }
       if (keys['x'] || keys['X']) {
@@ -3152,8 +3189,8 @@ function render() {
     _updateIndoorWater(mapRenderer);
   }
 
-  // Hide all sprites/objects during transitions and battles (show during trap reveal)
-  if ((transState === 'none' || transState === 'trap-reveal') && battleState === 'none') {
+  // Hide all sprites/objects during transitions and battles (show during trap reveal and flash-strobe)
+  if ((transState === 'none' || transState === 'trap-reveal') && (battleState === 'none' || battleState === 'flash-strobe')) {
     // Flame sprites: draw after background, before player
     if (!onWorldMap && _flameSprites.length > 0) {
       const flameFrame = Math.floor(waterTick / 8) & 1;
@@ -4026,10 +4063,72 @@ function drawPauseMenu() {
   ctx.restore();
 }
 
+// --- Slash Sprites (procedural) ---
+
+function initSlashSprites() {
+  // Unarmed punch hit effect — actual PPU tile bytes dumped from FCEUX
+  // 2×2 metasprite (16×16), tiles $4A-$4D from pattern table $1000
+  // Both hands use identical impact sprite (only fist tile differs)
+  // Sprite palette 3: $0F/$16/$27/$30
+  const TILE_DATA = [
+    [0x01,0x09,0x4E,0x3C,0x18,0xF8,0x30,0x10, 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00], // $4A TL
+    [0x00,0x20,0xE8,0x30,0x10,0x0C,0x08,0x00, 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00], // $4B TR
+    [0x10,0x30,0xF8,0x18,0x3C,0x4E,0x09,0x01, 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00], // $4C BL
+    [0x00,0x08,0x0C,0x10,0x30,0xE8,0x20,0x00, 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00], // $4D BR
+  ];
+  const HIT_PAL = [0x0F, 0x16, 0x27, 0x30]; // actual battle sprite palette 3
+
+  const c = document.createElement('canvas');
+  c.width = 16; c.height = 16;
+  const sctx = c.getContext('2d');
+  const imgData = sctx.createImageData(16, 16);
+  const layout = [[0,0],[8,0],[0,8],[8,8]]; // TL TR BL BR
+  for (let t = 0; t < 4; t++) {
+    const [ox, oy] = layout[t];
+    const d = TILE_DATA[t];
+    for (let row = 0; row < 8; row++) {
+      const lo = d[row], hi = d[row + 8];
+      for (let bit = 7; bit >= 0; bit--) {
+        const val = ((lo >> bit) & 1) | (((hi >> bit) & 1) << 1);
+        if (val === 0) continue;
+        const rgb = NES_SYSTEM_PALETTE[HIT_PAL[val]] || [252, 252, 252];
+        const px = ox + (7 - bit);
+        const py = oy + row;
+        const di = (py * 16 + px) * 4;
+        imgData.data[di]     = rgb[0];
+        imgData.data[di + 1] = rgb[1];
+        imgData.data[di + 2] = rgb[2];
+        imgData.data[di + 3] = 255;
+      }
+    }
+  }
+  sctx.putImageData(imgData, 0, 0);
+
+  // Both hands use same impact sprite; animation is positional scatter only
+  slashFramesR = [c, c, c, c];
+  slashFramesL = [c, c, c, c];
+  slashFrames = slashFramesR;
+}
+
 // --- Battle System ---
 
 function calcDamage(atk, def) {
   return Math.max(1, atk - Math.floor(def / 2) + Math.floor(Math.random() * (Math.floor(atk / 4) + 1)));
+}
+
+function rollHits(atk, def, hitRate, potentialHits) {
+  const results = [];
+  for (let i = 0; i < potentialHits; i++) {
+    if (Math.random() * 100 < hitRate) {
+      let dmg = calcDamage(atk, def);
+      const crit = Math.random() * 100 < CRIT_RATE;
+      if (crit) dmg = Math.floor(dmg * CRIT_MULT);
+      results.push({ damage: dmg, crit });
+    }
+  }
+  // At least 1 result — if all missed, return single miss entry
+  if (results.length === 0) results.push({ miss: true });
+  return results;
 }
 
 function startBattle() {
@@ -4051,7 +4150,7 @@ function startRandomEncounter() {
   const count = 1 + Math.floor(Math.random() * 4); // 1-4 goblins
   encounterMonsters = [];
   for (let i = 0; i < count; i++) {
-    encounterMonsters.push({ hp: goblin.hp, maxHP: goblin.hp, atk: goblin.atk, def: goblin.def, exp: goblin.exp });
+    encounterMonsters.push({ hp: goblin.hp, maxHP: goblin.hp, atk: goblin.atk, def: goblin.def, exp: goblin.exp, hitRate: GOBLIN_HIT_RATE });
   }
   preBattleTrack = TRACKS.CRYSTAL_CAVE;
   // Skip roar/earthquake — go straight to flash-strobe
@@ -4158,10 +4257,84 @@ function updateBattle(dt) {
     if (battleTimer >= (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS) { battleState = 'menu-open'; battleTimer = 0; }
   } else if (battleState === 'message-hold') {
     if (battleTimer >= BATTLE_MSG_HOLD_MS) { battleState = 'menu-open'; battleTimer = 0; battleMessage = null; }
-  } else if (battleState === 'player-attack') {
-    if (battleTimer >= BATTLE_HIT_FLASH_MS) {
-      battleState = 'player-damage-show';
-      battleTimer = 0;
+  } else if (battleState === 'player-slash') {
+    // 4-frame punch animation (50ms per frame = 200ms total)
+    const frame = Math.floor(battleTimer / SLASH_FRAME_MS);
+    if (frame !== slashFrame && frame < SLASH_FRAMES) {
+      slashFrame = frame;
+      // Randomize position each frame — punch scatter (ROM: every 2 ticks)
+      slashOffX = Math.floor(Math.random() * 24) - 12;
+      slashOffY = Math.floor(Math.random() * 24) - 12;
+    }
+    if (battleTimer >= SLASH_FRAMES * SLASH_FRAME_MS) {
+      const hit = hitResults[currentHitIdx];
+      if (hit.miss) {
+        battleState = 'player-miss-show';
+        battleTimer = 0;
+        bossDamageNum = { miss: true, timer: 0 };
+      } else {
+        // Subtract damage from target
+        if (isRandomEncounter && encounterMonsters) {
+          encounterMonsters[targetIndex].hp = Math.max(0, encounterMonsters[targetIndex].hp - hit.damage);
+        } else {
+          bossHP = Math.max(0, bossHP - hit.damage);
+        }
+        bossDamageNum = { value: hit.damage, crit: hit.crit, timer: 0 };
+        battleState = 'player-hit-show';
+        battleTimer = 0;
+      }
+    }
+  } else if (battleState === 'player-hit-show') {
+    if (battleTimer >= HIT_PAUSE_MS) {
+      // Check if target died mid-combo
+      const targetDead = isRandomEncounter && encounterMonsters
+        ? encounterMonsters[targetIndex].hp <= 0
+        : bossHP <= 0;
+      if (targetDead) {
+        // Remaining hits wasted — go to death animation
+        if (isRandomEncounter && encounterMonsters) {
+          dyingMonsterIndex = targetIndex;
+          battleState = 'monster-death';
+          battleTimer = 0;
+          playSFX(SFX.MONSTER_DEATH);
+        } else {
+          battleState = 'boss-dissolve';
+          battleTimer = 0;
+          playSFX(SFX.BOSS_DEATH);
+        }
+      } else if (currentHitIdx + 1 < hitResults.length) {
+        // More hits — next slash, alternate hands (R/L/R/L)
+        currentHitIdx++;
+        slashFrame = 0;
+        slashFrames = (currentHitIdx % 2 === 0) ? slashFramesR : slashFramesL;
+        slashOffX = Math.floor(Math.random() * 24) - 12;
+        slashOffY = Math.floor(Math.random() * 24) - 12;
+        playSFX(SFX.ATTACK_HIT);
+        battleState = 'player-slash';
+        battleTimer = 0;
+      } else {
+        // All hits done — transition to player-damage-show for brief final display, then enemies counter
+        battleState = 'player-damage-show';
+        battleTimer = 0;
+      }
+    }
+  } else if (battleState === 'player-miss-show') {
+    if (battleTimer >= MISS_SHOW_MS) {
+      if (currentHitIdx + 1 < hitResults.length) {
+        // More hits to try, alternate hands
+        currentHitIdx++;
+        slashFrame = 0;
+        slashFrames = (currentHitIdx % 2 === 0) ? slashFramesR : slashFramesL;
+        slashOffX = Math.floor(Math.random() * 24) - 12;
+        slashOffY = Math.floor(Math.random() * 24) - 12;
+        playSFX(SFX.ATTACK_HIT);
+        battleState = 'player-slash';
+        battleTimer = 0;
+      } else {
+        // All hits done (all missed) — enemies counter
+        battleState = 'player-damage-show';
+        battleTimer = 0;
+      }
     }
   } else if (battleState === 'player-damage-show') {
     if (battleTimer >= BATTLE_DMG_SHOW_MS) {
@@ -4224,15 +4397,25 @@ function updateBattle(dt) {
     }
   } else if (battleState === 'boss-flash') {
     if (battleTimer >= BOSS_PREFLASH_MS) {
-      // Current attacker deals damage
-      const monAtk = (currentAttacker >= 0 && encounterMonsters)
-        ? encounterMonsters[currentAttacker].atk : BOSS_ATK;
-      const dmg = calcDamage(monAtk, playerDEF);
-      playerHP = Math.max(0, playerHP - dmg);
-      playerDamageNum = { value: dmg, timer: 0 };
-      battleShakeTimer = BATTLE_SHAKE_MS;
-      battleState = 'enemy-attack';
-      battleTimer = 0;
+      // Roll accuracy for current attacker
+      const monHitRate = (currentAttacker >= 0 && encounterMonsters)
+        ? (encounterMonsters[currentAttacker].hitRate || GOBLIN_HIT_RATE) : BOSS_HIT_RATE;
+      if (Math.random() * 100 < monHitRate) {
+        // Hit — deal damage
+        const monAtk = (currentAttacker >= 0 && encounterMonsters)
+          ? encounterMonsters[currentAttacker].atk : BOSS_ATK;
+        const dmg = calcDamage(monAtk, playerDEF);
+        playerHP = Math.max(0, playerHP - dmg);
+        playerDamageNum = { value: dmg, timer: 0 };
+        battleShakeTimer = BATTLE_SHAKE_MS;
+        battleState = 'enemy-attack';
+        battleTimer = 0;
+      } else {
+        // Miss — show miss text, skip shake, go to enemy-damage-show
+        playerDamageNum = { miss: true, timer: 0 };
+        battleState = 'enemy-damage-show';
+        battleTimer = 0;
+      }
     }
   } else if (battleState === 'enemy-attack') {
     if (battleTimer >= BATTLE_SHAKE_MS) {
@@ -4411,7 +4594,8 @@ function drawBattleMenu() {
   const isFade = battleState === 'battle-fade-in';
   const isMenu = isFade ||
                  battleState === 'menu-open' || battleState === 'target-select' ||
-                 battleState === 'player-attack' ||
+                 battleState === 'player-slash' || battleState === 'player-hit-show' ||
+                 battleState === 'player-miss-show' ||
                  battleState === 'player-damage-show' || battleState === 'monster-death' ||
                  battleState === 'boss-flash' ||
                  battleState === 'enemy-attack' ||
@@ -4523,7 +4707,8 @@ function drawEncounterBox() {
   const isSlideIn = battleState === 'monster-slide-in';
   const isCombat = isSlideIn || battleState === 'battle-fade-in' ||
                    battleState === 'menu-open' || battleState === 'target-select' ||
-                   battleState === 'player-attack' ||
+                   battleState === 'player-slash' || battleState === 'player-hit-show' ||
+                   battleState === 'player-miss-show' ||
                    battleState === 'player-damage-show' || battleState === 'monster-death' ||
                    battleState === 'boss-flash' ||
                    battleState === 'enemy-attack' ||
@@ -4585,9 +4770,10 @@ function drawEncounterBox() {
     for (let i = 0; i < count; i++) {
       const alive = encounterMonsters[i].hp > 0;
       const isDying = i === dyingMonsterIndex && battleState === 'monster-death';
-      // Keep dead monster visible during hit flash + damage show
+      // Keep dead monster visible during slash + hit-show + miss-show + damage show
       const isBeingHit = i === targetIndex &&
-        (battleState === 'player-attack' || battleState === 'player-damage-show');
+        (battleState === 'player-slash' || battleState === 'player-hit-show' ||
+         battleState === 'player-miss-show' || battleState === 'player-damage-show');
 
       if (!alive && !isDying && !isBeingHit) continue;
 
@@ -4597,9 +4783,9 @@ function drawEncounterBox() {
       if (isDying) {
         _drawMonsterDeath(drawX, pos.y, 32, Math.min(battleTimer / MONSTER_DEATH_MS, 1));
       } else {
-        // Hit blink during player-attack
-        const isHitBlink = isBeingHit && battleState === 'player-attack' &&
-                           bossFlashTimer > 0 && (Math.floor(bossFlashTimer / 60) & 1);
+        // Hit blink during player-slash (60ms toggle)
+        const isHitBlink = isBeingHit && battleState === 'player-slash' &&
+                           (Math.floor(battleTimer / 60) & 1);
         // White flash blink during boss-flash for current attacker
         const isFlashing = battleState === 'boss-flash' && currentAttacker === i &&
                            Math.floor(battleTimer / 33) % 2 === 1;
@@ -4608,6 +4794,14 @@ function drawEncounterBox() {
           ctx.drawImage(spr, drawX, pos.y);
         }
       }
+    }
+
+    // Draw punch impact on target during player-slash (16×16 centered on target + scatter)
+    if (battleState === 'player-slash' && slashFrames && slashFrame < SLASH_FRAMES) {
+      const pos = gridPos[targetIndex];
+      const sx = pos.x - slideOffX + slashOffX + 8;  // center 16px on 32px sprite
+      const sy = pos.y + slashOffY + 8;
+      ctx.drawImage(slashFrames[slashFrame], sx, sy);
     }
     ctx.restore();
   }
@@ -4631,7 +4825,8 @@ function drawBossSpriteBox() {
   const isDissolve = battleState === 'boss-dissolve';
   const isCombat = battleState === 'battle-fade-in' ||
                    battleState === 'menu-open' || battleState === 'target-select' ||
-                   battleState === 'player-attack' ||
+                   battleState === 'player-slash' || battleState === 'player-hit-show' ||
+                   battleState === 'player-miss-show' ||
                    battleState === 'player-damage-show' || battleState === 'boss-flash' ||
                    battleState === 'enemy-attack' ||
                    battleState === 'enemy-damage-show' || battleState === 'message-hold' ||
@@ -4687,10 +4882,19 @@ function drawBossSpriteBox() {
         ctx.drawImage(landTurtleBattleCanvas, sprX, sprY);
       }
     }
-  } else {
-    // Full sprite — blink during hit
-    const blinkHidden = bossFlashTimer > 0 && (Math.floor(bossFlashTimer / 60) & 1);
+  } else if (battleState === 'player-slash') {
+    // Blink during slash (60ms toggle)
+    const blinkHidden = Math.floor(battleTimer / 60) & 1;
     if (!blinkHidden && !bossDefeated) {
+      ctx.drawImage(landTurtleBattleCanvas, sprX, sprY);
+    }
+    // Draw punch impact with random scatter offset (16×16 metasprite)
+    if (slashFrames && slashFrame < SLASH_FRAMES && !bossDefeated) {
+      ctx.drawImage(slashFrames[slashFrame], centerX - 8 + slashOffX, centerY - 8 + slashOffY);
+    }
+  } else {
+    // Full sprite — normal draw
+    if (!bossDefeated) {
       ctx.drawImage(landTurtleBattleCanvas, sprX, sprY);
     }
   }
@@ -4891,15 +5095,19 @@ function drawDamageNumbers() {
     const baseY = bossCenterY - 32 - 4; // top of boss sprite box
     const bx = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2) - 4;
     const by = _dmgBounceY(baseY, bossDamageNum.timer);
-    const digits = String(bossDamageNum.value);
-    const numBytes = new Uint8Array(digits.length);
-    for (let i = 0; i < digits.length; i++) numBytes[i] = 0x80 + parseInt(digits[i]);
 
     ctx.save();
     ctx.beginPath();
     ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
     ctx.clip();
-    drawText(ctx, bx, by, numBytes, TEXT_WHITE);
+    if (bossDamageNum.miss) {
+      drawText(ctx, bx - 4, by, BATTLE_MISS, TEXT_WHITE);
+    } else {
+      const digits = String(bossDamageNum.value);
+      const numBytes = new Uint8Array(digits.length);
+      for (let i = 0; i < digits.length; i++) numBytes[i] = 0x80 + parseInt(digits[i]);
+      drawText(ctx, bx, by, numBytes, bossDamageNum.crit ? TEXT_YELLOW : TEXT_WHITE);
+    }
     ctx.restore();
   }
 
@@ -4908,11 +5116,15 @@ function drawDamageNumbers() {
     const px = HUD_RIGHT_X + 12;
     const baseY = HUD_VIEW_Y + 4;
     const py = _dmgBounceY(baseY, playerDamageNum.timer);
-    const digits = String(playerDamageNum.value);
-    const numBytes = new Uint8Array(digits.length);
-    for (let i = 0; i < digits.length; i++) numBytes[i] = 0x80 + parseInt(digits[i]);
 
-    drawText(ctx, px, py, numBytes, TEXT_WHITE);
+    if (playerDamageNum.miss) {
+      drawText(ctx, px - 4, py, BATTLE_MISS, TEXT_WHITE);
+    } else {
+      const digits = String(playerDamageNum.value);
+      const numBytes = new Uint8Array(digits.length);
+      for (let i = 0; i < digits.length; i++) numBytes[i] = 0x80 + parseInt(digits[i]);
+      drawText(ctx, px, py, numBytes, TEXT_WHITE);
+    }
   }
 }
 
