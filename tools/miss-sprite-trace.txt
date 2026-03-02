@@ -1,0 +1,2952 @@
+Miss sprite trace - forces misses and captures all sprite data
+[f1] mode $00->$00 (title)
+[f53] mode $00->$08 (title)
+[f87] mode $08->$A8 (title)
+[f214] mode $A8->$00 (title)
+[f256] mode $00->$70 (title)
+[f321] mode $70->$6F (title)
+[f324] mode $6F->$70 (title)
+[f389] mode $70->$6F (title)
+[f390] mode $6F->$70 (title)
+[f524] mode $70->$6F (title)
+[f532] mode $6F->$70 (title)
+[f540] mode $70->$6F (title)
+[f548] mode $6F->$70 (title)
+[f901] mode $70->$6F (title)
+[f909] mode $6F->$70 (title)
+[f917] mode $70->$6F (title)
+[f925] mode $6F->$70 (title)
+[f933] mode $70->$6F (title)
+[f941] mode $6F->$70 (title)
+[f949] mode $70->$6F (title)
+[f957] mode $6F->$70 (title)
+[f965] mode $70->$6F (title)
+[f973] mode $6F->$70 (title)
+[f1069] mode $70->$01 (title)
+[f1070] mode $01->$00 (title)
+[f1428] mode $00->$05 (title)
+=== Walking ===
+=== Battle at f1561 mode=$05 ===
+[f1575] mode $05->$20 (battle_clear)
+=== Input cleared, forcing misses, starting A spam ===
+--- bf=121 B6=$20 CD=$01 mode=$20 ---
+  spr00: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr01: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr02: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr03: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr04: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr05: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr06: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr07: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr08: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr09: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr10: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr11: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr12: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr13: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr14: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr15: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr16: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr17: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr18: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr19: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr20: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr21: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr22: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr23: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $0F $0F
+--- bf=124 B6=$20 CD=$01 mode=$20 ---
+  spr00: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr01: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr02: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr03: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr04: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr05: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr06: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr07: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr08: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr09: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr10: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr11: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr12: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr13: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr14: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr15: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr16: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr17: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr18: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr19: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr20: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr21: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr22: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr23: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+  spr25: x=168 y= 47 tile=$61 attr=$03 pal=3 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $0F $0F
+--- bf=126 B6=$20 CD=$01 mode=$20 ---
+  spr00: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr01: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr02: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr03: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr04: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr05: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr06: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr07: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr08: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr09: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr10: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr11: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr12: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr13: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr14: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr15: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr16: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr17: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr18: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr19: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr20: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr21: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr22: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr23: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+  spr25: x=160 y= 47 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr26: x=168 y= 55 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr27: x=168 y= 47 tile=$62 attr=$03 pal=3 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $0F $0F
+--- bf=128 B6=$20 CD=$01 mode=$20 ---
+  spr00: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr01: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr02: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr03: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr04: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr05: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr06: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr07: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr08: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr09: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr10: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr11: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr12: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr13: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr14: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr15: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr16: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr17: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr18: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr19: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr20: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr21: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr22: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr23: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+  spr25: x=152 y= 47 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr26: x=160 y= 55 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr27: x=168 y= 63 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr28: x=160 y= 47 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr29: x=168 y= 55 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr30: x=168 y= 47 tile=$63 attr=$03 pal=3 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $0F $0F
+--- bf=130 B6=$20 CD=$01 mode=$20 ---
+  spr00: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr01: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr02: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr03: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr04: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr05: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr06: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr07: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr08: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr09: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr10: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr11: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr12: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr13: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr14: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr15: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr16: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr17: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr18: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr19: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr20: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr21: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr22: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr23: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+  spr25: x=144 y= 47 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr26: x=152 y= 55 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr27: x=160 y= 63 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr28: x=168 y= 71 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr29: x=152 y= 47 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr30: x=160 y= 55 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr31: x=168 y= 63 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr32: x=160 y= 47 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr33: x=168 y= 55 tile=$63 attr=$03 pal=3 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $0F $0F
+--- bf=132 B6=$20 CD=$01 mode=$20 ---
+  spr00: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr01: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr02: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr03: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr04: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr05: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr06: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr07: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr08: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr09: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr10: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr11: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr12: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr13: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr14: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr15: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr16: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr17: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr18: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr19: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr20: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr21: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr22: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr23: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+  spr25: x=136 y= 47 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr26: x=144 y= 55 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr27: x=152 y= 63 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr28: x=160 y= 71 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr29: x=168 y= 79 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr30: x=144 y= 47 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr31: x=152 y= 55 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr32: x=160 y= 63 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr33: x=168 y= 71 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr34: x=152 y= 47 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr35: x=160 y= 55 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr36: x=168 y= 63 tile=$63 attr=$03 pal=3 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $0F $0F
+--- bf=134 B6=$20 CD=$01 mode=$20 ---
+  spr00: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr01: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr02: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr03: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr04: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr05: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr06: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr07: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr08: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr09: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr10: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr11: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr12: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr13: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr14: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr15: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr16: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr17: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr18: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr19: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr20: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr21: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr22: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr23: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+  spr25: x=128 y= 47 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr26: x=136 y= 55 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr27: x=144 y= 63 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr28: x=152 y= 71 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr29: x=160 y= 79 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr30: x=168 y= 87 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr31: x=136 y= 47 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr32: x=144 y= 55 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr33: x=152 y= 63 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr34: x=160 y= 71 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr35: x=168 y= 79 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr36: x=144 y= 47 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr37: x=152 y= 55 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr38: x=160 y= 63 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr39: x=168 y= 71 tile=$63 attr=$03 pal=3 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $0F $0F
+--- bf=136 B6=$20 CD=$01 mode=$20 ---
+  spr00: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr01: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr02: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr03: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr04: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr05: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr06: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr07: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr08: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr09: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr10: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr11: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr12: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr13: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr14: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr15: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr16: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr17: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr18: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr19: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr20: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr21: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr22: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr23: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+  spr25: x=120 y= 47 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr26: x=128 y= 55 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr27: x=136 y= 63 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr28: x=144 y= 71 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr29: x=152 y= 79 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr30: x=160 y= 87 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr31: x=168 y= 95 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr32: x=128 y= 47 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr33: x=136 y= 55 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr34: x=144 y= 63 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr35: x=152 y= 71 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr36: x=160 y= 79 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr37: x=168 y= 87 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr38: x=136 y= 47 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr39: x=144 y= 55 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr40: x=152 y= 63 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr41: x=160 y= 71 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr42: x=168 y= 79 tile=$63 attr=$03 pal=3 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $0F $0F
+--- bf=138 B6=$20 CD=$01 mode=$20 ---
+  spr00: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr01: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr02: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr03: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr04: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr05: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr06: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr07: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr08: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr09: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr10: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr11: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr12: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr13: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr14: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr15: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr16: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr17: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr18: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr19: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr20: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr21: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr22: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr23: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+  spr25: x=112 y= 47 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr26: x=120 y= 55 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr27: x=128 y= 63 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr28: x=136 y= 71 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr29: x=144 y= 79 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr30: x=152 y= 87 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr31: x=160 y= 95 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr32: x=168 y=103 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr33: x=120 y= 47 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr34: x=128 y= 55 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr35: x=136 y= 63 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr36: x=144 y= 71 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr37: x=152 y= 79 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr38: x=160 y= 87 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr39: x=168 y= 95 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr40: x=128 y= 47 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr41: x=136 y= 55 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr42: x=144 y= 63 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr43: x=152 y= 71 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr44: x=160 y= 79 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr45: x=168 y= 87 tile=$63 attr=$03 pal=3 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $0F $0F
+--- bf=140 B6=$20 CD=$01 mode=$20 ---
+  spr00: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr01: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr02: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr03: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr04: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr05: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr06: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr07: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr08: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr09: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr10: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr11: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr12: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr13: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr14: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr15: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr16: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr17: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr18: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr19: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr20: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr21: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr22: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr23: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+  spr25: x=104 y= 47 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr26: x=112 y= 55 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr27: x=120 y= 63 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr28: x=128 y= 71 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr29: x=136 y= 79 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr30: x=144 y= 87 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr31: x=152 y= 95 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr32: x=160 y=103 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr33: x=168 y=111 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr34: x=112 y= 47 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr35: x=120 y= 55 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr36: x=128 y= 63 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr37: x=136 y= 71 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr38: x=144 y= 79 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr39: x=152 y= 87 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr40: x=160 y= 95 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr41: x=168 y=103 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr42: x=120 y= 47 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr43: x=128 y= 55 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr44: x=136 y= 63 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr45: x=144 y= 71 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr46: x=152 y= 79 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr47: x=160 y= 87 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr48: x=168 y= 95 tile=$63 attr=$03 pal=3 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $0F $0F
+--- bf=142 B6=$20 CD=$01 mode=$20 ---
+  spr00: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr01: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr02: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr03: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr04: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr05: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr06: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr07: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr08: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr09: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr10: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr11: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr12: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr13: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr14: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr15: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr16: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr17: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr18: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr19: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr20: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr21: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr22: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr23: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+  spr25: x= 96 y= 47 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr26: x=104 y= 55 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr27: x=112 y= 63 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr28: x=120 y= 71 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr29: x=128 y= 79 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr30: x=136 y= 87 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr31: x=144 y= 95 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr32: x=152 y=103 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr33: x=160 y=111 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr34: x=168 y=119 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr35: x=104 y= 47 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr36: x=112 y= 55 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr37: x=120 y= 63 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr38: x=128 y= 71 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr39: x=136 y= 79 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr40: x=144 y= 87 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr41: x=152 y= 95 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr42: x=160 y=103 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr43: x=168 y=111 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr44: x=112 y= 47 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr45: x=120 y= 55 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr46: x=128 y= 63 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr47: x=136 y= 71 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr48: x=144 y= 79 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr49: x=152 y= 87 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr50: x=160 y= 95 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr51: x=168 y=103 tile=$63 attr=$03 pal=3 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $0F $0F
+--- bf=144 B6=$20 CD=$01 mode=$20 ---
+  spr00: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr01: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr02: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr03: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr04: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr05: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr06: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr07: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr08: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr09: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr10: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr11: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr12: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr13: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr14: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr15: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr16: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr17: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr18: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr19: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr20: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr21: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr22: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr23: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+  spr25: x= 96 y= 55 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr26: x=104 y= 63 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr27: x=112 y= 71 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr28: x=120 y= 79 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr29: x=128 y= 87 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr30: x=136 y= 95 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr31: x=144 y=103 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr32: x=152 y=111 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr33: x=160 y=119 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr34: x=168 y=127 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr35: x= 96 y= 47 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr36: x=104 y= 55 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr37: x=112 y= 63 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr38: x=120 y= 71 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr39: x=128 y= 79 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr40: x=136 y= 87 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr41: x=144 y= 95 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr42: x=152 y=103 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr43: x=160 y=111 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr44: x=168 y=119 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr45: x=104 y= 47 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr46: x=112 y= 55 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr47: x=120 y= 63 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr48: x=128 y= 71 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr49: x=136 y= 79 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr50: x=144 y= 87 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr51: x=152 y= 95 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr52: x=160 y=103 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr53: x=168 y=111 tile=$63 attr=$03 pal=3 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $0F $0F
+--- bf=146 B6=$20 CD=$01 mode=$20 ---
+  spr00: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr01: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr02: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr03: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr04: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr05: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr06: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr07: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr08: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr09: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr10: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr11: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr12: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr13: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr14: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr15: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr16: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr17: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr18: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr19: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr20: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr21: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr22: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr23: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+  spr25: x= 96 y= 63 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr26: x=104 y= 71 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr27: x=112 y= 79 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr28: x=120 y= 87 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr29: x=128 y= 95 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr30: x=136 y=103 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr31: x=144 y=111 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr32: x=152 y=119 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr33: x=160 y=127 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr34: x=168 y=135 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr35: x= 96 y= 55 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr36: x=104 y= 63 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr37: x=112 y= 71 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr38: x=120 y= 79 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr39: x=128 y= 87 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr40: x=136 y= 95 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr41: x=144 y=103 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr42: x=152 y=111 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr43: x=160 y=119 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr44: x=168 y=127 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr45: x= 96 y= 47 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr46: x=104 y= 55 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr47: x=112 y= 63 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr48: x=120 y= 71 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr49: x=128 y= 79 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr50: x=136 y= 87 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr51: x=144 y= 95 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr52: x=152 y=103 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr53: x=160 y=111 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr54: x=168 y=119 tile=$63 attr=$03 pal=3 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $0F $0F
+--- bf=148 B6=$20 CD=$01 mode=$20 ---
+  spr00: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr01: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr02: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr03: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr04: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr05: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr06: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr07: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr08: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr09: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr10: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr11: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr12: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr13: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr14: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr15: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr16: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr17: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr18: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr19: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr20: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr21: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr22: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr23: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+  spr25: x= 96 y= 71 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr26: x=104 y= 79 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr27: x=112 y= 87 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr28: x=120 y= 95 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr29: x=128 y=103 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr30: x=136 y=111 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr31: x=144 y=119 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr32: x=152 y=127 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr33: x=160 y=135 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr34: x=168 y=143 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr35: x= 96 y= 63 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr36: x=104 y= 71 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr37: x=112 y= 79 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr38: x=120 y= 87 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr39: x=128 y= 95 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr40: x=136 y=103 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr41: x=144 y=111 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr42: x=152 y=119 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr43: x=160 y=127 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr44: x=168 y=135 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr45: x= 96 y= 55 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr46: x=104 y= 63 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr47: x=112 y= 71 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr48: x=120 y= 79 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr49: x=128 y= 87 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr50: x=136 y= 95 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr51: x=144 y=103 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr52: x=152 y=111 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr53: x=160 y=119 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr54: x=168 y=127 tile=$63 attr=$03 pal=3 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $0F $0F
+--- bf=150 B6=$20 CD=$01 mode=$20 ---
+  spr00: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr01: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr02: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr03: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr04: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr05: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr06: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr07: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr08: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr09: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr10: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr11: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr12: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr13: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr14: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr15: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr16: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr17: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr18: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr19: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr20: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr21: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr22: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr23: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+  spr25: x= 96 y= 79 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr26: x=104 y= 87 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr27: x=112 y= 95 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr28: x=120 y=103 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr29: x=128 y=111 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr30: x=136 y=119 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr31: x=144 y=127 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr32: x=152 y=135 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr33: x=160 y=143 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr34: x= 96 y= 71 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr35: x=104 y= 79 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr36: x=112 y= 87 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr37: x=120 y= 95 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr38: x=128 y=103 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr39: x=136 y=111 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr40: x=144 y=119 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr41: x=152 y=127 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr42: x=160 y=135 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr43: x=168 y=143 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr44: x= 96 y= 63 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr45: x=104 y= 71 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr46: x=112 y= 79 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr47: x=120 y= 87 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr48: x=128 y= 95 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr49: x=136 y=103 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr50: x=144 y=111 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr51: x=152 y=119 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr52: x=160 y=127 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr53: x=168 y=135 tile=$63 attr=$03 pal=3 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $0F $0F
+--- bf=152 B6=$20 CD=$01 mode=$20 ---
+  spr00: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr01: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr02: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr03: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr04: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr05: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr06: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr07: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr08: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr09: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr10: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr11: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr12: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr13: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr14: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr15: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr16: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr17: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr18: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr19: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr20: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr21: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr22: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr23: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+  spr25: x= 96 y= 87 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr26: x=104 y= 95 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr27: x=112 y=103 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr28: x=120 y=111 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr29: x=128 y=119 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr30: x=136 y=127 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr31: x=144 y=135 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr32: x=152 y=143 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr33: x= 96 y= 79 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr34: x=104 y= 87 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr35: x=112 y= 95 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr36: x=120 y=103 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr37: x=128 y=111 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr38: x=136 y=119 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr39: x=144 y=127 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr40: x=152 y=135 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr41: x=160 y=143 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr42: x= 96 y= 71 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr43: x=104 y= 79 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr44: x=112 y= 87 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr45: x=120 y= 95 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr46: x=128 y=103 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr47: x=136 y=111 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr48: x=144 y=119 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr49: x=152 y=127 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr50: x=160 y=135 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr51: x=168 y=143 tile=$63 attr=$03 pal=3 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $0F $0F
+--- bf=154 B6=$20 CD=$01 mode=$20 ---
+  spr00: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr01: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr02: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr03: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr04: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr05: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr06: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr07: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr08: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr09: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr10: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr11: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr12: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr13: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr14: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr15: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr16: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr17: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr18: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr19: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr20: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr21: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr22: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr23: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+  spr25: x= 96 y= 95 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr26: x=104 y=103 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr27: x=112 y=111 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr28: x=120 y=119 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr29: x=128 y=127 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr30: x=136 y=135 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr31: x=144 y=143 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr32: x= 96 y= 87 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr33: x=104 y= 95 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr34: x=112 y=103 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr35: x=120 y=111 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr36: x=128 y=119 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr37: x=136 y=127 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr38: x=144 y=135 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr39: x=152 y=143 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr40: x= 96 y= 79 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr41: x=104 y= 87 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr42: x=112 y= 95 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr43: x=120 y=103 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr44: x=128 y=111 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr45: x=136 y=119 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr46: x=144 y=127 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr47: x=152 y=135 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr48: x=160 y=143 tile=$63 attr=$03 pal=3 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $0F $0F
+--- bf=156 B6=$20 CD=$01 mode=$20 ---
+  spr00: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr01: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr02: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr03: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr04: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr05: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr06: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr07: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr08: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr09: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr10: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr11: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr12: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr13: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr14: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr15: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr16: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr17: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr18: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr19: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr20: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr21: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr22: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr23: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+  spr25: x= 88 y= 95 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr26: x= 96 y=103 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr27: x=104 y=111 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr28: x=112 y=119 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr29: x=120 y=127 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr30: x=128 y=135 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr31: x=136 y=143 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr32: x= 96 y= 95 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr33: x=104 y=103 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr34: x=112 y=111 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr35: x=120 y=119 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr36: x=128 y=127 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr37: x=136 y=135 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr38: x=144 y=143 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr39: x= 96 y= 87 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr40: x=104 y= 95 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr41: x=112 y=103 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr42: x=120 y=111 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr43: x=128 y=119 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr44: x=136 y=127 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr45: x=144 y=135 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr46: x=152 y=143 tile=$63 attr=$03 pal=3 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $0F $0F
+--- bf=158 B6=$20 CD=$01 mode=$20 ---
+  spr00: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr01: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr02: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr03: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr04: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr05: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr06: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr07: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr08: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr09: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr10: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr11: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr12: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr13: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr14: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr15: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr16: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr17: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr18: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr19: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr20: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr21: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr22: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr23: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+  spr25: x= 80 y= 95 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr26: x= 88 y=103 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr27: x= 96 y=111 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr28: x=104 y=119 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr29: x=112 y=127 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr30: x=120 y=135 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr31: x=128 y=143 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr32: x= 88 y= 95 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr33: x= 96 y=103 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr34: x=104 y=111 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr35: x=112 y=119 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr36: x=120 y=127 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr37: x=128 y=135 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr38: x=136 y=143 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr39: x= 96 y= 95 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr40: x=104 y=103 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr41: x=112 y=111 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr42: x=120 y=119 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr43: x=128 y=127 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr44: x=136 y=135 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr45: x=144 y=143 tile=$63 attr=$03 pal=3 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $0F $0F
+--- bf=160 B6=$20 CD=$01 mode=$20 ---
+  spr00: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr01: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr02: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr03: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr04: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr05: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr06: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr07: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr08: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr09: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr10: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr11: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr12: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr13: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr14: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr15: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr16: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr17: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr18: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr19: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr20: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr21: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr22: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr23: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+  spr25: x= 24 y= 47 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr26: x= 72 y= 95 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr27: x= 80 y=103 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr28: x= 88 y=111 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr29: x= 96 y=119 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr30: x=104 y=127 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr31: x=112 y=135 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr32: x=120 y=143 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr33: x= 80 y= 95 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr34: x= 88 y=103 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr35: x= 96 y=111 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr36: x=104 y=119 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr37: x=112 y=127 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr38: x=120 y=135 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr39: x=128 y=143 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr40: x= 88 y= 95 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr41: x= 96 y=103 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr42: x=104 y=111 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr43: x=112 y=119 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr44: x=120 y=127 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr45: x=128 y=135 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr46: x=136 y=143 tile=$63 attr=$03 pal=3 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $0F $0F
+--- bf=162 B6=$20 CD=$01 mode=$20 ---
+  spr00: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr01: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr02: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr03: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr04: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr05: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr06: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr07: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr08: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr09: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr10: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr11: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr12: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr13: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr14: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr15: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr16: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr17: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr18: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr19: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr20: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr21: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr22: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr23: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+  spr25: x= 16 y= 47 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr26: x= 24 y= 55 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr27: x= 64 y= 95 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr28: x= 72 y=103 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr29: x= 80 y=111 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr30: x= 88 y=119 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr31: x= 96 y=127 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr32: x=104 y=135 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr33: x=112 y=143 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr34: x= 24 y= 47 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr35: x= 72 y= 95 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr36: x= 80 y=103 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr37: x= 88 y=111 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr38: x= 96 y=119 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr39: x=104 y=127 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr40: x=112 y=135 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr41: x=120 y=143 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr42: x= 80 y= 95 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr43: x= 88 y=103 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr44: x= 96 y=111 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr45: x=104 y=119 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr46: x=112 y=127 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr47: x=120 y=135 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr48: x=128 y=143 tile=$63 attr=$03 pal=3 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $0F $0F
+--- bf=164 B6=$20 CD=$01 mode=$20 ---
+  spr00: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr01: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr02: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr03: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr04: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr05: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr06: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr07: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr08: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr09: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr10: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr11: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr12: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr13: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr14: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr15: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr16: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr17: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr18: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr19: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr20: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr21: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr22: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr23: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+  spr25: x=  8 y= 47 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr26: x= 16 y= 55 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr27: x= 24 y= 63 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr28: x= 64 y=103 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr29: x= 72 y=111 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr30: x= 80 y=119 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr31: x= 88 y=127 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr32: x= 96 y=135 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr33: x=104 y=143 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr34: x= 16 y= 47 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr35: x= 24 y= 55 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr36: x= 64 y= 95 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr37: x= 72 y=103 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr38: x= 80 y=111 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr39: x= 88 y=119 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr40: x= 96 y=127 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr41: x=104 y=135 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr42: x=112 y=143 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr43: x= 24 y= 47 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr44: x= 72 y= 95 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr45: x= 80 y=103 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr46: x= 88 y=111 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr47: x= 96 y=119 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr48: x=104 y=127 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr49: x=112 y=135 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr50: x=120 y=143 tile=$63 attr=$03 pal=3 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $0F $0F
+--- bf=166 B6=$20 CD=$01 mode=$20 ---
+  spr00: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr01: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr02: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr03: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr04: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr05: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr06: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr07: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr08: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr09: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr10: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr11: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr12: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr13: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr14: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr15: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr16: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr17: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr18: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr19: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr20: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr21: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr22: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr23: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+  spr25: x=  0 y= 47 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr26: x=  8 y= 55 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr27: x= 16 y= 63 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr28: x= 24 y= 71 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr29: x= 64 y=111 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr30: x= 72 y=119 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr31: x= 80 y=127 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr32: x= 88 y=135 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr33: x= 96 y=143 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr34: x=  8 y= 47 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr35: x= 16 y= 55 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr36: x= 24 y= 63 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr37: x= 64 y=103 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr38: x= 72 y=111 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr39: x= 80 y=119 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr40: x= 88 y=127 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr41: x= 96 y=135 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr42: x=104 y=143 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr43: x= 16 y= 47 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr44: x= 24 y= 55 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr45: x= 64 y= 95 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr46: x= 72 y=103 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr47: x= 80 y=111 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr48: x= 88 y=119 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr49: x= 96 y=127 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr50: x=104 y=135 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr51: x=112 y=143 tile=$63 attr=$03 pal=3 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $0F $0F
+--- bf=168 B6=$20 CD=$01 mode=$20 ---
+  spr00: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr01: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr02: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr03: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr04: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr05: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr06: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr07: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr08: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr09: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr10: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr11: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr12: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr13: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr14: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr15: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr16: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr17: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr18: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr19: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr20: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr21: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr22: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr23: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+  spr25: x=  0 y= 47 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr26: x=  0 y= 55 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr27: x=  8 y= 63 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr28: x= 16 y= 71 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr29: x= 24 y= 79 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr30: x= 64 y=119 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr31: x= 72 y=127 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr32: x= 80 y=135 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr33: x= 88 y=143 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr34: x=  0 y= 47 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr35: x=  8 y= 55 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr36: x= 16 y= 63 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr37: x= 24 y= 71 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr38: x= 64 y=111 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr39: x= 72 y=119 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr40: x= 80 y=127 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr41: x= 88 y=135 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr42: x= 96 y=143 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr43: x=  8 y= 47 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr44: x= 16 y= 55 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr45: x= 24 y= 63 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr46: x= 64 y=103 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr47: x= 72 y=111 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr48: x= 80 y=119 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr49: x= 88 y=127 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr50: x= 96 y=135 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr51: x=104 y=143 tile=$63 attr=$03 pal=3 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $0F $0F
+--- bf=170 B6=$20 CD=$01 mode=$20 ---
+  spr00: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr01: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr02: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr03: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr04: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr05: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr06: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr07: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr08: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr09: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr10: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr11: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr12: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr13: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr14: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr15: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr16: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr17: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr18: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr19: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr20: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr21: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr22: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr23: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+  spr25: x=  0 y= 47 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr26: x=  0 y= 55 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr27: x=  0 y= 63 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr28: x=  8 y= 71 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr29: x= 16 y= 79 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr30: x= 24 y= 87 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr31: x= 64 y=127 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr32: x= 72 y=135 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr33: x= 80 y=143 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr34: x=  0 y= 47 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr35: x=  0 y= 55 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr36: x=  8 y= 63 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr37: x= 16 y= 71 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr38: x= 24 y= 79 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr39: x= 64 y=119 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr40: x= 72 y=127 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr41: x= 80 y=135 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr42: x= 88 y=143 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr43: x=  0 y= 47 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr44: x=  8 y= 55 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr45: x= 16 y= 63 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr46: x= 24 y= 71 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr47: x= 64 y=111 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr48: x= 72 y=119 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr49: x= 80 y=127 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr50: x= 88 y=135 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr51: x= 96 y=143 tile=$63 attr=$03 pal=3 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $0F $0F
+--- bf=172 B6=$20 CD=$01 mode=$20 ---
+  spr00: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr01: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr02: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr03: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr04: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr05: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr06: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr07: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr08: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr09: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr10: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr11: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr12: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr13: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr14: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr15: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr16: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr17: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr18: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr19: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr20: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr21: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr22: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr23: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+  spr25: x=  0 y= 47 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr26: x=  0 y= 55 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr27: x=  0 y= 63 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr28: x=  0 y= 71 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr29: x=  8 y= 79 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr30: x= 16 y= 87 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr31: x= 24 y= 95 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr32: x= 64 y=135 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr33: x= 72 y=143 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr34: x=  0 y= 47 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr35: x=  0 y= 55 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr36: x=  0 y= 63 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr37: x=  8 y= 71 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr38: x= 16 y= 79 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr39: x= 24 y= 87 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr40: x= 64 y=127 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr41: x= 72 y=135 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr42: x= 80 y=143 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr43: x=  0 y= 47 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr44: x=  0 y= 55 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr45: x=  8 y= 63 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr46: x= 16 y= 71 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr47: x= 24 y= 79 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr48: x= 64 y=119 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr49: x= 72 y=127 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr50: x= 80 y=135 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr51: x= 88 y=143 tile=$63 attr=$03 pal=3 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $0F $0F
+--- bf=174 B6=$20 CD=$01 mode=$20 ---
+  spr00: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr01: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr02: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr03: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr04: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr05: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr06: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr07: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr08: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr09: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr10: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr11: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr12: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr13: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr14: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr15: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr16: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr17: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr18: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr19: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr20: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr21: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr22: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr23: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+  spr25: x=  0 y= 47 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr26: x=  0 y= 55 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr27: x=  0 y= 63 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr28: x=  0 y= 71 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr29: x=  0 y= 79 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr30: x=  8 y= 87 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr31: x= 16 y= 95 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr32: x= 24 y=103 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr33: x= 64 y=143 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr34: x=  0 y= 47 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr35: x=  0 y= 55 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr36: x=  0 y= 63 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr37: x=  0 y= 71 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr38: x=  8 y= 79 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr39: x= 16 y= 87 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr40: x= 24 y= 95 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr41: x= 64 y=135 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr42: x= 72 y=143 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr43: x=  0 y= 47 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr44: x=  0 y= 55 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr45: x=  0 y= 63 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr46: x=  8 y= 71 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr47: x= 16 y= 79 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr48: x= 24 y= 87 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr49: x= 64 y=127 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr50: x= 72 y=135 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr51: x= 80 y=143 tile=$63 attr=$03 pal=3 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $0F $0F
+--- bf=176 B6=$20 CD=$01 mode=$20 ---
+  spr00: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr01: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr02: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr03: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr04: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr05: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr06: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr07: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr08: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr09: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr10: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr11: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr12: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr13: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr14: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr15: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr16: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr17: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr18: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr19: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr20: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr21: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr22: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr23: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+  spr25: x=  0 y= 47 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr26: x=  0 y= 55 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr27: x=  0 y= 63 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr28: x=  0 y= 71 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr29: x=  0 y= 79 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr30: x=  0 y= 87 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr31: x=  8 y= 95 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr32: x= 16 y=103 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr33: x= 24 y=111 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr34: x= 56 y=143 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr35: x=  0 y= 47 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr36: x=  0 y= 55 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr37: x=  0 y= 63 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr38: x=  0 y= 71 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr39: x=  0 y= 79 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr40: x=  8 y= 87 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr41: x= 16 y= 95 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr42: x= 24 y=103 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr43: x= 64 y=143 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr44: x=  0 y= 47 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr45: x=  0 y= 55 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr46: x=  0 y= 63 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr47: x=  0 y= 71 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr48: x=  8 y= 79 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr49: x= 16 y= 87 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr50: x= 24 y= 95 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr51: x= 64 y=135 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr52: x= 72 y=143 tile=$63 attr=$03 pal=3 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $0F $0F
+--- bf=178 B6=$20 CD=$01 mode=$20 ---
+  spr00: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr01: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr02: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr03: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr04: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr05: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr06: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr07: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr08: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr09: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr10: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr11: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr12: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr13: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr14: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr15: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr16: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr17: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr18: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr19: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr20: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr21: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr22: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr23: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+  spr25: x=  0 y= 47 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr26: x=  0 y= 55 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr27: x=  0 y= 63 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr28: x=  0 y= 71 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr29: x=  0 y= 79 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr30: x=  0 y= 87 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr31: x=  0 y= 95 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr32: x=  8 y=103 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr33: x= 16 y=111 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr34: x= 24 y=119 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr35: x= 48 y=143 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr36: x=  0 y= 47 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr37: x=  0 y= 55 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr38: x=  0 y= 63 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr39: x=  0 y= 71 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr40: x=  0 y= 79 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr41: x=  0 y= 87 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr42: x=  8 y= 95 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr43: x= 16 y=103 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr44: x= 24 y=111 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr45: x= 56 y=143 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr46: x=  0 y= 47 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr47: x=  0 y= 55 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr48: x=  0 y= 63 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr49: x=  0 y= 71 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr50: x=  0 y= 79 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr51: x=  8 y= 87 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr52: x= 16 y= 95 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr53: x= 24 y=103 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr54: x= 64 y=143 tile=$63 attr=$03 pal=3 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $0F $0F
+--- bf=180 B6=$20 CD=$01 mode=$20 ---
+  spr00: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr01: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr02: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr03: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr04: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr05: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr06: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr07: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr08: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr09: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr10: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr11: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr12: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr13: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr14: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr15: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr16: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr17: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr18: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr19: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr20: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr21: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr22: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr23: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+  spr25: x=  0 y= 47 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr26: x=  0 y= 55 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr27: x=  0 y= 63 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr28: x=  0 y= 71 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr29: x=  0 y= 79 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr30: x=  0 y= 87 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr31: x=  0 y= 95 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr32: x=  0 y=103 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr33: x=  8 y=111 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr34: x= 16 y=119 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr35: x= 24 y=127 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr36: x= 40 y=143 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr37: x=  0 y= 47 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr38: x=  0 y= 55 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr39: x=  0 y= 63 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr40: x=  0 y= 71 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr41: x=  0 y= 79 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr42: x=  0 y= 87 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr43: x=  0 y= 95 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr44: x=  8 y=103 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr45: x= 16 y=111 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr46: x= 24 y=119 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr47: x= 48 y=143 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr48: x=  0 y= 47 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr49: x=  0 y= 55 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr50: x=  0 y= 63 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr51: x=  0 y= 71 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr52: x=  0 y= 79 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr53: x=  0 y= 87 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr54: x=  8 y= 95 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr55: x= 16 y=103 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr56: x= 24 y=111 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr57: x= 56 y=143 tile=$63 attr=$03 pal=3 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $0F $0F
+--- bf=182 B6=$20 CD=$01 mode=$20 ---
+  spr00: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr01: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr02: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr03: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr04: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr05: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr06: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr07: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr08: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr09: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr10: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr11: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr12: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr13: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr14: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr15: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr16: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr17: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr18: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr19: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr20: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr21: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr22: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr23: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+  spr25: x=  0 y= 47 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr26: x=  0 y= 55 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr27: x=  0 y= 63 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr28: x=  0 y= 71 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr29: x=  0 y= 79 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr30: x=  0 y= 87 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr31: x=  0 y= 95 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr32: x=  0 y=103 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr33: x=  0 y=111 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr34: x=  8 y=119 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr35: x= 16 y=127 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr36: x= 24 y=135 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr37: x= 32 y=143 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr38: x=  0 y= 47 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr39: x=  0 y= 55 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr40: x=  0 y= 63 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr41: x=  0 y= 71 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr42: x=  0 y= 79 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr43: x=  0 y= 87 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr44: x=  0 y= 95 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr45: x=  0 y=103 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr46: x=  8 y=111 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr47: x= 16 y=119 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr48: x= 24 y=127 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr49: x= 40 y=143 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr50: x=  0 y= 47 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr51: x=  0 y= 55 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr52: x=  0 y= 63 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr53: x=  0 y= 71 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr54: x=  0 y= 79 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr55: x=  0 y= 87 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr56: x=  0 y= 95 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr57: x=  8 y=103 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr58: x= 16 y=111 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr59: x= 24 y=119 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr60: x= 48 y=143 tile=$63 attr=$03 pal=3 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $0F $0F
+--- bf=184 B6=$20 CD=$01 mode=$20 ---
+  spr00: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr01: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr02: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr03: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr04: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr05: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr06: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr07: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr08: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr09: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr10: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr11: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr12: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr13: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr14: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr15: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr16: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr17: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr18: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr19: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr20: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr21: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr22: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr23: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+  spr25: x=  0 y= 47 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr26: x=  0 y= 55 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr27: x=  0 y= 63 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr28: x=  0 y= 71 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr29: x=  0 y= 79 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr30: x=  0 y= 87 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr31: x=  0 y= 95 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr32: x=  0 y=103 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr33: x=  0 y=111 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr34: x=  0 y=119 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr35: x=  8 y=127 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr36: x= 16 y=135 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr37: x= 24 y=143 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr38: x=  0 y= 47 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr39: x=  0 y= 55 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr40: x=  0 y= 63 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr41: x=  0 y= 71 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr42: x=  0 y= 79 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr43: x=  0 y= 87 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr44: x=  0 y= 95 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr45: x=  0 y=103 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr46: x=  0 y=111 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr47: x=  8 y=119 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr48: x= 16 y=127 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr49: x= 24 y=135 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr50: x= 32 y=143 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr51: x=  0 y= 47 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr52: x=  0 y= 55 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr53: x=  0 y= 63 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr54: x=  0 y= 71 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr55: x=  0 y= 79 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr56: x=  0 y= 87 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr57: x=  0 y= 95 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr58: x=  0 y=103 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr59: x=  8 y=111 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr60: x= 16 y=119 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr61: x= 24 y=127 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr62: x= 40 y=143 tile=$63 attr=$03 pal=3 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $0F $0F
+--- bf=186 B6=$20 CD=$01 mode=$20 ---
+  spr00: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr01: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr02: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr03: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr04: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr05: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr06: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr07: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr08: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr09: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr10: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr11: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr12: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr13: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr14: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr15: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr16: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr17: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr18: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr19: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr20: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr21: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr22: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr23: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+  spr25: x=  0 y= 47 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr26: x=  0 y= 55 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr27: x=  0 y= 63 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr28: x=  0 y= 71 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr29: x=  0 y= 79 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr30: x=  0 y= 87 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr31: x=  0 y= 95 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr32: x=  0 y=103 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr33: x=  0 y=111 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr34: x=  0 y=119 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr35: x=  0 y=127 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr36: x=  8 y=135 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr37: x= 16 y=143 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr38: x=  0 y= 47 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr39: x=  0 y= 55 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr40: x=  0 y= 63 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr41: x=  0 y= 71 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr42: x=  0 y= 79 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr43: x=  0 y= 87 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr44: x=  0 y= 95 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr45: x=  0 y=103 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr46: x=  0 y=111 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr47: x=  0 y=119 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr48: x=  8 y=127 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr49: x= 16 y=135 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr50: x= 24 y=143 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr51: x=  0 y= 47 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr52: x=  0 y= 55 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr53: x=  0 y= 63 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr54: x=  0 y= 71 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr55: x=  0 y= 79 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr56: x=  0 y= 87 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr57: x=  0 y= 95 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr58: x=  0 y=103 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr59: x=  0 y=111 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr60: x=  8 y=119 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr61: x= 16 y=127 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr62: x= 24 y=135 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr63: x= 32 y=143 tile=$63 attr=$03 pal=3 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $0F $0F
+--- bf=188 B6=$20 CD=$01 mode=$20 ---
+  spr00: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr01: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr02: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr03: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr04: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr05: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr06: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr07: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr08: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr09: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr10: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr11: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr12: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr13: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr14: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr15: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr16: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr17: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr18: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr19: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr20: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr21: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr22: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr23: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+  spr25: x=  0 y= 47 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr26: x=  0 y= 55 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr27: x=  0 y= 63 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr28: x=  0 y= 71 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr29: x=  0 y= 79 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr30: x=  0 y= 87 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr31: x=  0 y= 95 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr32: x=  0 y=103 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr33: x=  0 y=111 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr34: x=  0 y=119 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr35: x=  0 y=127 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr36: x=  0 y=135 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr37: x=  8 y=143 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr38: x=  0 y= 47 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr39: x=  0 y= 55 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr40: x=  0 y= 63 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr41: x=  0 y= 71 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr42: x=  0 y= 79 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr43: x=  0 y= 87 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr44: x=  0 y= 95 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr45: x=  0 y=103 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr46: x=  0 y=111 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr47: x=  0 y=119 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr48: x=  0 y=127 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr49: x=  8 y=135 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr50: x= 16 y=143 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr51: x=  0 y= 47 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr52: x=  0 y= 55 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr53: x=  0 y= 63 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr54: x=  0 y= 71 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr55: x=  0 y= 79 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr56: x=  0 y= 87 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr57: x=  0 y= 95 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr58: x=  0 y=103 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr59: x=  0 y=111 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr60: x=  0 y=119 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr61: x=  8 y=127 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr62: x= 16 y=135 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr63: x= 24 y=143 tile=$63 attr=$03 pal=3 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $0F $0F
+--- bf=190 B6=$20 CD=$01 mode=$20 ---
+  spr00: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr01: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr02: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr03: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr04: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr05: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr06: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr07: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr08: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr09: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr10: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr11: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr12: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr13: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr14: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr15: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr16: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr17: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr18: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr19: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr20: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr21: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr22: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr23: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+  spr25: x=  0 y= 47 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr26: x=  0 y= 55 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr27: x=  0 y= 63 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr28: x=  0 y= 71 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr29: x=  0 y= 79 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr30: x=  0 y= 87 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr31: x=  0 y= 95 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr32: x=  0 y=103 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr33: x=  0 y=111 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr34: x=  0 y=119 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr35: x=  0 y=127 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr36: x=  0 y=135 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr37: x=  0 y=143 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr38: x=  0 y= 47 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr39: x=  0 y= 55 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr40: x=  0 y= 63 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr41: x=  0 y= 71 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr42: x=  0 y= 79 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr43: x=  0 y= 87 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr44: x=  0 y= 95 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr45: x=  0 y=103 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr46: x=  0 y=111 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr47: x=  0 y=119 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr48: x=  0 y=127 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr49: x=  0 y=135 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr50: x=  8 y=143 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr51: x=  0 y= 47 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr52: x=  0 y= 55 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr53: x=  0 y= 63 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr54: x=  0 y= 71 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr55: x=  0 y= 79 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr56: x=  0 y= 87 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr57: x=  0 y= 95 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr58: x=  0 y=103 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr59: x=  0 y=111 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr60: x=  0 y=119 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr61: x=  0 y=127 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr62: x=  8 y=135 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr63: x= 16 y=143 tile=$63 attr=$03 pal=3 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $0F $0F
+--- bf=192 B6=$20 CD=$01 mode=$20 ---
+  spr00: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr01: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr02: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr03: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr04: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr05: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr06: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr07: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr08: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr09: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr10: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr11: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr12: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr13: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr14: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr15: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr16: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr17: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr18: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr19: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr20: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr21: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr22: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr23: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+  spr25: x=  0 y= 47 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr26: x=  0 y= 55 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr27: x=  0 y= 63 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr28: x=  0 y= 71 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr29: x=  0 y= 79 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr30: x=  0 y= 87 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr31: x=  0 y= 95 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr32: x=  0 y=103 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr33: x=  0 y=111 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr34: x=  0 y=119 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr35: x=  0 y=127 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr36: x=  0 y=135 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr37: x=  0 y=143 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr38: x=  0 y= 47 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr39: x=  0 y= 55 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr40: x=  0 y= 63 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr41: x=  0 y= 71 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr42: x=  0 y= 79 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr43: x=  0 y= 87 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr44: x=  0 y= 95 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr45: x=  0 y=103 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr46: x=  0 y=111 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr47: x=  0 y=119 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr48: x=  0 y=127 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr49: x=  0 y=135 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr50: x=  0 y=143 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr51: x=  0 y= 47 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr52: x=  0 y= 55 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr53: x=  0 y= 63 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr54: x=  0 y= 71 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr55: x=  0 y= 79 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr56: x=  0 y= 87 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr57: x=  0 y= 95 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr58: x=  0 y=103 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr59: x=  0 y=111 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr60: x=  0 y=119 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr61: x=  0 y=127 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr62: x=  0 y=135 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr63: x=  8 y=143 tile=$63 attr=$03 pal=3 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $0F $0F
+--- bf=194 B6=$20 CD=$01 mode=$20 ---
+  spr00: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr01: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr02: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr03: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr04: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr05: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr06: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr07: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr08: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr09: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr10: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr11: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr12: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr13: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr14: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr15: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr16: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr17: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr18: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr19: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr20: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr21: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr22: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr23: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+  spr25: x=  0 y= 47 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr26: x=  0 y= 55 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr27: x=  0 y= 63 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr28: x=  0 y= 71 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr29: x=  0 y= 79 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr30: x=  0 y= 87 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr31: x=  0 y= 95 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr32: x=  0 y=103 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr33: x=  0 y=111 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr34: x=  0 y=119 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr35: x=  0 y=127 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr36: x=  0 y=135 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr37: x=  0 y=143 tile=$61 attr=$03 pal=3 hf=0 vf=0
+  spr38: x=  0 y= 47 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr39: x=  0 y= 55 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr40: x=  0 y= 63 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr41: x=  0 y= 71 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr42: x=  0 y= 79 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr43: x=  0 y= 87 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr44: x=  0 y= 95 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr45: x=  0 y=103 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr46: x=  0 y=111 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr47: x=  0 y=119 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr48: x=  0 y=127 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr49: x=  0 y=135 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr50: x=  0 y=143 tile=$62 attr=$03 pal=3 hf=0 vf=0
+  spr51: x=  0 y= 47 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr52: x=  0 y= 55 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr53: x=  0 y= 63 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr54: x=  0 y= 71 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr55: x=  0 y= 79 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr56: x=  0 y= 87 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr57: x=  0 y= 95 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr58: x=  0 y=103 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr59: x=  0 y=111 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr60: x=  0 y=119 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr61: x=  0 y=127 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr62: x=  0 y=135 tile=$63 attr=$03 pal=3 hf=0 vf=0
+  spr63: x=  0 y=143 tile=$63 attr=$03 pal=3 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $0F $0F
+--- bf=196 B6=$20 CD=$01 mode=$20 ---
+  spr40: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr41: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr42: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr43: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr44: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr45: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr46: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr47: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr48: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr49: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr50: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr51: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr52: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr53: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr54: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr55: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr56: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr57: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr58: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr59: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr60: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr61: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr62: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr63: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $0F $0F
+[f1794] mode $20->$05 (battle)
+--- bf=267 B6=$02 CD=$01 mode=$05 ---
+  spr40: x=216 y= 43 tile=$39 attr=$00 pal=0 hf=0 vf=0
+  spr41: x=224 y= 43 tile=$3A attr=$00 pal=0 hf=0 vf=0
+  spr42: x=216 y= 51 tile=$3B attr=$00 pal=0 hf=0 vf=0
+  spr43: x=224 y= 51 tile=$3C attr=$00 pal=0 hf=0 vf=0
+  spr44: x=216 y= 59 tile=$3D attr=$00 pal=0 hf=0 vf=0
+  spr45: x=224 y= 59 tile=$3E attr=$00 pal=0 hf=0 vf=0
+  spr46: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr47: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr48: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr49: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr50: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr51: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr52: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr53: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr54: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr55: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr56: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr57: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr58: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr59: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr60: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr61: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr62: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr63: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $0F $0F
+--- bf=269 B6=$02 CD=$01 mode=$05 ---
+  spr40: x=217 y= 43 tile=$39 attr=$00 pal=0 hf=0 vf=0
+  spr41: x=225 y= 43 tile=$3A attr=$00 pal=0 hf=0 vf=0
+  spr42: x=217 y= 51 tile=$3B attr=$00 pal=0 hf=0 vf=0
+  spr43: x=225 y= 51 tile=$3C attr=$00 pal=0 hf=0 vf=0
+  spr44: x=217 y= 59 tile=$3D attr=$00 pal=0 hf=0 vf=0
+  spr45: x=225 y= 59 tile=$3E attr=$00 pal=0 hf=0 vf=0
+  spr46: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr47: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr48: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr49: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr50: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr51: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr52: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr53: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr54: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr55: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr56: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr57: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr58: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr59: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr60: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr61: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr62: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr63: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $0F $0F
+--- bf=271 B6=$02 CD=$01 mode=$05 ---
+  spr40: x=216 y= 43 tile=$39 attr=$00 pal=0 hf=0 vf=0
+  spr41: x=224 y= 43 tile=$3A attr=$00 pal=0 hf=0 vf=0
+  spr42: x=216 y= 51 tile=$3B attr=$00 pal=0 hf=0 vf=0
+  spr43: x=224 y= 51 tile=$3C attr=$00 pal=0 hf=0 vf=0
+  spr44: x=216 y= 59 tile=$3D attr=$00 pal=0 hf=0 vf=0
+  spr45: x=224 y= 59 tile=$3E attr=$00 pal=0 hf=0 vf=0
+  spr46: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr47: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr48: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr49: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr50: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr51: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr52: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr53: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr54: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr55: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr56: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr57: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr58: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr59: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr60: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr61: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr62: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr63: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $0F $0F
+--- bf=273 B6=$02 CD=$01 mode=$05 ---
+  spr40: x=217 y= 43 tile=$39 attr=$00 pal=0 hf=0 vf=0
+  spr41: x=225 y= 43 tile=$3A attr=$00 pal=0 hf=0 vf=0
+  spr42: x=217 y= 51 tile=$3B attr=$00 pal=0 hf=0 vf=0
+  spr43: x=225 y= 51 tile=$3C attr=$00 pal=0 hf=0 vf=0
+  spr44: x=217 y= 59 tile=$3D attr=$00 pal=0 hf=0 vf=0
+  spr45: x=225 y= 59 tile=$3E attr=$00 pal=0 hf=0 vf=0
+  spr46: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr47: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr48: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr49: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr50: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr51: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr52: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr53: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr54: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr55: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr56: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr57: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr58: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr59: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr60: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr61: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr62: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr63: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $0F $0F
+--- bf=275 B6=$02 CD=$01 mode=$05 ---
+  spr40: x=216 y= 43 tile=$39 attr=$00 pal=0 hf=0 vf=0
+  spr41: x=224 y= 43 tile=$3A attr=$00 pal=0 hf=0 vf=0
+  spr42: x=216 y= 51 tile=$3B attr=$00 pal=0 hf=0 vf=0
+  spr43: x=224 y= 51 tile=$3C attr=$00 pal=0 hf=0 vf=0
+  spr44: x=216 y= 59 tile=$3D attr=$00 pal=0 hf=0 vf=0
+  spr45: x=224 y= 59 tile=$3E attr=$00 pal=0 hf=0 vf=0
+  spr46: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr47: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr48: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr49: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr50: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr51: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr52: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr53: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr54: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr55: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr56: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr57: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr58: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr59: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr60: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr61: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr62: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr63: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $0F $0F
+--- bf=277 B6=$02 CD=$01 mode=$05 ---
+  spr40: x=217 y= 43 tile=$39 attr=$00 pal=0 hf=0 vf=0
+  spr41: x=225 y= 43 tile=$3A attr=$00 pal=0 hf=0 vf=0
+  spr42: x=217 y= 51 tile=$3B attr=$00 pal=0 hf=0 vf=0
+  spr43: x=225 y= 51 tile=$3C attr=$00 pal=0 hf=0 vf=0
+  spr44: x=217 y= 59 tile=$3D attr=$00 pal=0 hf=0 vf=0
+  spr45: x=225 y= 59 tile=$3E attr=$00 pal=0 hf=0 vf=0
+  spr46: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr47: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr48: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr49: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr50: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr51: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr52: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr53: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr54: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr55: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr56: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr57: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr58: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr59: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr60: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr61: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr62: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr63: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $0F $0F
+--- bf=279 B6=$02 CD=$01 mode=$05 ---
+  spr40: x=216 y= 43 tile=$39 attr=$00 pal=0 hf=0 vf=0
+  spr41: x=224 y= 43 tile=$3A attr=$00 pal=0 hf=0 vf=0
+  spr42: x=216 y= 51 tile=$3B attr=$00 pal=0 hf=0 vf=0
+  spr43: x=224 y= 51 tile=$3C attr=$00 pal=0 hf=0 vf=0
+  spr44: x=216 y= 59 tile=$3D attr=$00 pal=0 hf=0 vf=0
+  spr45: x=224 y= 59 tile=$3E attr=$00 pal=0 hf=0 vf=0
+  spr46: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr47: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr48: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr49: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr50: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr51: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr52: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr53: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr54: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr55: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr56: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr57: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr58: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr59: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr60: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr61: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr62: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr63: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $0F $0F
+--- bf=281 B6=$02 CD=$01 mode=$05 ---
+  spr40: x=217 y= 43 tile=$39 attr=$00 pal=0 hf=0 vf=0
+  spr41: x=225 y= 43 tile=$3A attr=$00 pal=0 hf=0 vf=0
+  spr42: x=217 y= 51 tile=$3B attr=$00 pal=0 hf=0 vf=0
+  spr43: x=225 y= 51 tile=$3C attr=$00 pal=0 hf=0 vf=0
+  spr44: x=217 y= 59 tile=$3D attr=$00 pal=0 hf=0 vf=0
+  spr45: x=225 y= 59 tile=$3E attr=$00 pal=0 hf=0 vf=0
+  spr46: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr47: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr48: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr49: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr50: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr51: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr52: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr53: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr54: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr55: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr56: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr57: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr58: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr59: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr60: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr61: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr62: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr63: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $0F $0F
+--- bf=283 B6=$02 CD=$01 mode=$05 ---
+  spr40: x=216 y= 43 tile=$39 attr=$00 pal=0 hf=0 vf=0
+  spr41: x=224 y= 43 tile=$3A attr=$00 pal=0 hf=0 vf=0
+  spr42: x=216 y= 51 tile=$3B attr=$00 pal=0 hf=0 vf=0
+  spr43: x=224 y= 51 tile=$3C attr=$00 pal=0 hf=0 vf=0
+  spr44: x=216 y= 59 tile=$3D attr=$00 pal=0 hf=0 vf=0
+  spr45: x=224 y= 59 tile=$3E attr=$00 pal=0 hf=0 vf=0
+  spr46: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr47: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr48: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr49: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr50: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr51: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr52: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr53: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr54: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr55: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr56: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr57: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr58: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr59: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr60: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr61: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr62: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr63: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $0F $0F
+--- bf=285 B6=$02 CD=$01 mode=$05 ---
+  spr40: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr41: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr42: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr43: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr44: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr45: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr46: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr47: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr48: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr49: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr50: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr51: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr52: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr53: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr54: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr55: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr56: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr57: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr58: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr59: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr60: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr61: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr62: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr63: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $0F $0F
+--- bf=299 B6=$00 CD=$01 mode=$05 ---
+  spr00: x=192 y= 54 tile=$00 attr=$03 pal=3 hf=0 vf=0
+  spr01: x=200 y= 54 tile=$00 attr=$03 pal=3 hf=0 vf=0
+  spr02: x=208 y= 54 tile=$00 attr=$03 pal=3 hf=0 vf=0
+  spr03: x=216 y= 54 tile=$5A attr=$03 pal=3 hf=0 vf=0
+  spr40: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr41: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr42: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr43: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr44: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr45: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr46: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr47: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr48: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr49: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr50: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr51: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr52: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr53: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr54: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr55: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr56: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr57: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr58: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr59: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr60: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr61: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr62: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr63: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $25 $2B
+  *** POSSIBLE MISS SPRITE spr03 tile=$5A x=216 y=54 ***
+-- tiles $58-$5C from pattern table $0000 --
+  tile $58: 0F070703000000006F77773300000000
+  tile $59: E0C0C0C000000000EDDDDDD900000000
+  tile $5A: 0000000002050B000000000003070F1F
+  tile $5B: 0000000080B8DCEE000000009BBEDDEF
+  tile $5C: 0003070501011B3B2010000000040020
+-- tiles $58-$5C from pattern table $1000 --
+  tile $58: 3C4299997266817E003C66660C187E00
+  tile $59: 3C4299727999423C003C660C06663C00
+  tile $5A: 0C122252B281720C000C1C2C4C7E0C00
+  tile $5B: 7E819E827999423C007E607C06663C00
+  tile $5C: 3C429F829999423C003C607C66663C00
+--- bf=300 B6=$01 CD=$01 mode=$05 ---
+  spr00: x=192 y= 60 tile=$00 attr=$03 pal=3 hf=0 vf=0
+  spr01: x=200 y= 60 tile=$00 attr=$03 pal=3 hf=0 vf=0
+  spr02: x=208 y= 60 tile=$00 attr=$03 pal=3 hf=0 vf=0
+  spr03: x=216 y= 60 tile=$5A attr=$03 pal=3 hf=0 vf=0
+  spr40: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr41: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr42: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr43: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr44: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr45: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr46: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr47: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr48: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr49: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr50: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr51: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr52: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr53: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr54: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr55: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr56: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr57: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr58: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr59: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr60: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr61: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr62: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr63: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $25 $2B
+  *** POSSIBLE MISS SPRITE spr03 tile=$5A x=216 y=60 ***
+-- tiles $58-$5C from pattern table $0000 --
+  tile $58: 0F070703000000006F77773300000000
+  tile $59: E0C0C0C000000000EDDDDDD900000000
+  tile $5A: 0000000002050B000000000003070F1F
+  tile $5B: 0000000080B8DCEE000000009BBEDDEF
+  tile $5C: 0003070501011B3B2010000000040020
+-- tiles $58-$5C from pattern table $1000 --
+  tile $58: 3C4299997266817E003C66660C187E00
+  tile $59: 3C4299727999423C003C660C06663C00
+  tile $5A: 0C122252B281720C000C1C2C4C7E0C00
+  tile $5B: 7E819E827999423C007E607C06663C00
+  tile $5C: 3C429F829999423C003C607C66663C00
+--- bf=301 B6=$02 CD=$01 mode=$05 ---
+  spr00: x=192 y= 59 tile=$00 attr=$03 pal=3 hf=0 vf=0
+  spr01: x=200 y= 59 tile=$00 attr=$03 pal=3 hf=0 vf=0
+  spr02: x=208 y= 59 tile=$00 attr=$03 pal=3 hf=0 vf=0
+  spr03: x=216 y= 59 tile=$5A attr=$03 pal=3 hf=0 vf=0
+  spr40: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr41: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr42: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr43: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr44: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr45: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr46: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr47: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr48: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr49: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr50: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr51: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr52: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr53: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr54: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr55: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr56: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr57: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr58: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr59: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr60: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr61: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr62: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr63: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $25 $2B
+  *** POSSIBLE MISS SPRITE spr03 tile=$5A x=216 y=59 ***
+-- tiles $58-$5C from pattern table $0000 --
+  tile $58: 0F070703000000006F77773300000000
+  tile $59: E0C0C0C000000000EDDDDDD900000000
+  tile $5A: 0000000002050B000000000003070F1F
+  tile $5B: 0000000080B8DCEE000000009BBEDDEF
+  tile $5C: 0003070501011B3B2010000000040020
+-- tiles $58-$5C from pattern table $1000 --
+  tile $58: 3C4299997266817E003C66660C187E00
+  tile $59: 3C4299727999423C003C660C06663C00
+  tile $5A: 0C122252B281720C000C1C2C4C7E0C00
+  tile $5B: 7E819E827999423C007E607C06663C00
+  tile $5C: 3C429F829999423C003C607C66663C00
+--- bf=303 B6=$04 CD=$01 mode=$05 ---
+  spr00: x=192 y= 34 tile=$00 attr=$03 pal=3 hf=0 vf=0
+  spr01: x=200 y= 34 tile=$00 attr=$03 pal=3 hf=0 vf=0
+  spr02: x=208 y= 34 tile=$00 attr=$03 pal=3 hf=0 vf=0
+  spr03: x=216 y= 34 tile=$5A attr=$03 pal=3 hf=0 vf=0
+  spr40: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr41: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr42: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr43: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr44: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr45: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr46: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr47: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr48: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr49: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr50: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr51: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr52: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr53: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr54: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr55: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr56: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr57: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr58: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr59: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr60: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr61: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr62: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr63: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $25 $2B
+  *** POSSIBLE MISS SPRITE spr03 tile=$5A x=216 y=34 ***
+-- tiles $58-$5C from pattern table $0000 --
+  tile $58: 0F070703000000006F77773300000000
+  tile $59: E0C0C0C000000000EDDDDDD900000000
+  tile $5A: 0000000002050B000000000003070F1F
+  tile $5B: 0000000080B8DCEE000000009BBEDDEF
+  tile $5C: 0003070501011B3B2010000000040020
+-- tiles $58-$5C from pattern table $1000 --
+  tile $58: 3C4299997266817E003C66660C187E00
+  tile $59: 3C4299727999423C003C660C06663C00
+  tile $5A: 0C122252B281720C000C1C2C4C7E0C00
+  tile $5B: 7E819E827999423C007E607C06663C00
+  tile $5C: 3C429F829999423C003C607C66663C00
+--- bf=304 B6=$05 CD=$01 mode=$05 ---
+  spr00: x=192 y= 60 tile=$00 attr=$03 pal=3 hf=0 vf=0
+  spr01: x=200 y= 60 tile=$00 attr=$03 pal=3 hf=0 vf=0
+  spr02: x=208 y= 60 tile=$00 attr=$03 pal=3 hf=0 vf=0
+  spr03: x=216 y= 60 tile=$5A attr=$03 pal=3 hf=0 vf=0
+  spr40: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr41: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr42: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr43: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr44: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr45: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr46: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr47: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr48: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr49: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr50: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr51: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr52: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr53: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr54: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr55: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr56: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr57: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr58: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr59: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr60: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr61: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr62: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr63: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $25 $2B
+  *** POSSIBLE MISS SPRITE spr03 tile=$5A x=216 y=60 ***
+-- tiles $58-$5C from pattern table $0000 --
+  tile $58: 0F070703000000006F77773300000000
+  tile $59: E0C0C0C000000000EDDDDDD900000000
+  tile $5A: 0000000002050B000000000003070F1F
+  tile $5B: 0000000080B8DCEE000000009BBEDDEF
+  tile $5C: 0003070501011B3B2010000000040020
+-- tiles $58-$5C from pattern table $1000 --
+  tile $58: 3C4299997266817E003C66660C187E00
+  tile $59: 3C4299727999423C003C660C06663C00
+  tile $5A: 0C122252B281720C000C1C2C4C7E0C00
+  tile $5B: 7E819E827999423C007E607C06663C00
+  tile $5C: 3C429F829999423C003C607C66663C00
+--- bf=306 B6=$07 CD=$01 mode=$05 ---
+  spr00: x=192 y= 59 tile=$00 attr=$03 pal=3 hf=0 vf=0
+  spr01: x=200 y= 59 tile=$00 attr=$03 pal=3 hf=0 vf=0
+  spr02: x=208 y= 59 tile=$00 attr=$03 pal=3 hf=0 vf=0
+  spr03: x=216 y= 59 tile=$5A attr=$03 pal=3 hf=0 vf=0
+  spr40: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr41: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr42: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr43: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr44: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr45: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr46: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr47: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr48: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr49: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr50: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr51: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr52: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr53: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr54: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr55: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr56: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr57: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr58: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr59: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr60: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr61: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr62: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr63: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $25 $2B
+  *** POSSIBLE MISS SPRITE spr03 tile=$5A x=216 y=59 ***
+-- tiles $58-$5C from pattern table $0000 --
+  tile $58: 0F070703000000006F77773300000000
+  tile $59: E0C0C0C000000000EDDDDDD900000000
+  tile $5A: 0000000002050B000000000003070F1F
+  tile $5B: 0000000080B8DCEE000000009BBEDDEF
+  tile $5C: 0003070501011B3B2010000000040020
+-- tiles $58-$5C from pattern table $1000 --
+  tile $58: 3C4299997266817E003C66660C187E00
+  tile $59: 3C4299727999423C003C660C06663C00
+  tile $5A: 0C122252B281720C000C1C2C4C7E0C00
+  tile $5B: 7E819E827999423C007E607C06663C00
+  tile $5C: 3C429F829999423C003C607C66663C00
+--- bf=307 B6=$08 CD=$01 mode=$05 ---
+  spr00: x=192 y= 29 tile=$00 attr=$03 pal=3 hf=0 vf=0
+  spr01: x=200 y= 29 tile=$00 attr=$03 pal=3 hf=0 vf=0
+  spr02: x=208 y= 29 tile=$00 attr=$03 pal=3 hf=0 vf=0
+  spr03: x=216 y= 29 tile=$5A attr=$03 pal=3 hf=0 vf=0
+  spr40: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr41: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr42: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr43: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr44: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr45: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr46: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr47: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr48: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr49: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr50: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr51: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr52: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr53: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr54: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr55: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr56: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr57: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr58: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr59: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr60: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr61: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr62: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr63: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $25 $2B
+  *** POSSIBLE MISS SPRITE spr03 tile=$5A x=216 y=29 ***
+-- tiles $58-$5C from pattern table $0000 --
+  tile $58: 0F070703000000006F77773300000000
+  tile $59: E0C0C0C000000000EDDDDDD900000000
+  tile $5A: 0000000002050B000000000003070F1F
+  tile $5B: 0000000080B8DCEE000000009BBEDDEF
+  tile $5C: 0003070501011B3B2010000000040020
+-- tiles $58-$5C from pattern table $1000 --
+  tile $58: 3C4299997266817E003C66660C187E00
+  tile $59: 3C4299727999423C003C660C06663C00
+  tile $5A: 0C122252B281720C000C1C2C4C7E0C00
+  tile $5B: 7E819E827999423C007E607C06663C00
+  tile $5C: 3C429F829999423C003C607C66663C00
+--- bf=308 B6=$09 CD=$01 mode=$05 ---
+  spr00: x=192 y= 59 tile=$00 attr=$03 pal=3 hf=0 vf=0
+  spr01: x=200 y= 59 tile=$00 attr=$03 pal=3 hf=0 vf=0
+  spr02: x=208 y= 59 tile=$00 attr=$03 pal=3 hf=0 vf=0
+  spr03: x=216 y= 59 tile=$5A attr=$03 pal=3 hf=0 vf=0
+  spr40: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr41: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr42: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr43: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr44: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr45: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr46: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr47: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr48: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr49: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr50: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr51: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr52: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr53: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr54: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr55: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr56: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr57: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr58: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr59: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr60: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr61: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr62: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr63: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $25 $2B
+  *** POSSIBLE MISS SPRITE spr03 tile=$5A x=216 y=59 ***
+-- tiles $58-$5C from pattern table $0000 --
+  tile $58: 0F070703000000006F77773300000000
+  tile $59: E0C0C0C000000000EDDDDDD900000000
+  tile $5A: 0000000002050B000000000003070F1F
+  tile $5B: 0000000080B8DCEE000000009BBEDDEF
+  tile $5C: 0003070501011B3B2010000000040020
+-- tiles $58-$5C from pattern table $1000 --
+  tile $58: 3C4299997266817E003C66660C187E00
+  tile $59: 3C4299727999423C003C660C06663C00
+  tile $5A: 0C122252B281720C000C1C2C4C7E0C00
+  tile $5B: 7E819E827999423C007E607C06663C00
+  tile $5C: 3C429F829999423C003C607C66663C00
+--- bf=309 B6=$0A CD=$01 mode=$05 ---
+  spr00: x=192 y= 60 tile=$00 attr=$03 pal=3 hf=0 vf=0
+  spr01: x=200 y= 60 tile=$00 attr=$03 pal=3 hf=0 vf=0
+  spr02: x=208 y= 60 tile=$00 attr=$03 pal=3 hf=0 vf=0
+  spr03: x=216 y= 60 tile=$5A attr=$03 pal=3 hf=0 vf=0
+  spr40: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr41: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr42: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr43: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr44: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr45: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr46: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr47: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr48: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr49: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr50: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr51: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr52: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr53: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr54: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr55: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr56: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr57: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr58: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr59: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr60: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr61: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr62: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr63: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $25 $2B
+  *** POSSIBLE MISS SPRITE spr03 tile=$5A x=216 y=60 ***
+-- tiles $58-$5C from pattern table $0000 --
+  tile $58: 0F070703000000006F77773300000000
+  tile $59: E0C0C0C000000000EDDDDDD900000000
+  tile $5A: 0000000002050B000000000003070F1F
+  tile $5B: 0000000080B8DCEE000000009BBEDDEF
+  tile $5C: 0003070501011B3B2010000000040020
+-- tiles $58-$5C from pattern table $1000 --
+  tile $58: 3C4299997266817E003C66660C187E00
+  tile $59: 3C4299727999423C003C660C06663C00
+  tile $5A: 0C122252B281720C000C1C2C4C7E0C00
+  tile $5B: 7E819E827999423C007E607C06663C00
+  tile $5C: 3C429F829999423C003C607C66663C00
+--- bf=310 B6=$0B CD=$01 mode=$05 ---
+  spr00: x=192 y= 58 tile=$00 attr=$03 pal=3 hf=0 vf=0
+  spr01: x=200 y= 58 tile=$00 attr=$03 pal=3 hf=0 vf=0
+  spr02: x=208 y= 58 tile=$00 attr=$03 pal=3 hf=0 vf=0
+  spr03: x=216 y= 58 tile=$5A attr=$03 pal=3 hf=0 vf=0
+  spr40: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr41: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr42: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr43: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr44: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr45: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr46: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr47: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr48: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr49: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr50: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr51: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr52: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr53: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr54: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr55: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr56: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr57: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr58: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr59: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr60: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr61: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr62: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr63: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $25 $2B
+  *** POSSIBLE MISS SPRITE spr03 tile=$5A x=216 y=58 ***
+-- tiles $58-$5C from pattern table $0000 --
+  tile $58: 0F070703000000006F77773300000000
+  tile $59: E0C0C0C000000000EDDDDDD900000000
+  tile $5A: 0000000002050B000000000003070F1F
+  tile $5B: 0000000080B8DCEE000000009BBEDDEF
+  tile $5C: 0003070501011B3B2010000000040020
+-- tiles $58-$5C from pattern table $1000 --
+  tile $58: 3C4299997266817E003C66660C187E00
+  tile $59: 3C4299727999423C003C660C06663C00
+  tile $5A: 0C122252B281720C000C1C2C4C7E0C00
+  tile $5B: 7E819E827999423C007E607C06663C00
+  tile $5C: 3C429F829999423C003C607C66663C00
+--- bf=311 B6=$0C CD=$01 mode=$05 ---
+  spr00: x=192 y= 43 tile=$00 attr=$03 pal=3 hf=0 vf=0
+  spr01: x=200 y= 43 tile=$00 attr=$03 pal=3 hf=0 vf=0
+  spr02: x=208 y= 43 tile=$00 attr=$03 pal=3 hf=0 vf=0
+  spr03: x=216 y= 43 tile=$5A attr=$03 pal=3 hf=0 vf=0
+  spr40: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr41: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr42: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr43: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr44: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr45: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr46: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr47: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr48: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr49: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr50: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr51: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr52: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr53: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr54: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr55: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr56: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr57: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr58: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr59: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr60: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr61: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr62: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr63: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $25 $2B
+  *** POSSIBLE MISS SPRITE spr03 tile=$5A x=216 y=43 ***
+-- tiles $58-$5C from pattern table $0000 --
+  tile $58: 0F070703000000006F77773300000000
+  tile $59: E0C0C0C000000000EDDDDDD900000000
+  tile $5A: 0000000002050B000000000003070F1F
+  tile $5B: 0000000080B8DCEE000000009BBEDDEF
+  tile $5C: 0003070501011B3B2010000000040020
+-- tiles $58-$5C from pattern table $1000 --
+  tile $58: 3C4299997266817E003C66660C187E00
+  tile $59: 3C4299727999423C003C660C06663C00
+  tile $5A: 0C122252B281720C000C1C2C4C7E0C00
+  tile $5B: 7E819E827999423C007E607C06663C00
+  tile $5C: 3C429F829999423C003C607C66663C00
+--- bf=312 B6=$0D CD=$01 mode=$05 ---
+  spr00: x=192 y= 55 tile=$00 attr=$03 pal=3 hf=0 vf=0
+  spr01: x=200 y= 55 tile=$00 attr=$03 pal=3 hf=0 vf=0
+  spr02: x=208 y= 55 tile=$00 attr=$03 pal=3 hf=0 vf=0
+  spr03: x=216 y= 55 tile=$5A attr=$03 pal=3 hf=0 vf=0
+  spr40: x=208 y= 43 tile=$01 attr=$00 pal=0 hf=0 vf=0
+  spr41: x=216 y= 43 tile=$02 attr=$00 pal=0 hf=0 vf=0
+  spr42: x=208 y= 51 tile=$03 attr=$00 pal=0 hf=0 vf=0
+  spr43: x=216 y= 51 tile=$04 attr=$00 pal=0 hf=0 vf=0
+  spr44: x=208 y= 59 tile=$05 attr=$00 pal=0 hf=0 vf=0
+  spr45: x=216 y= 59 tile=$06 attr=$00 pal=0 hf=0 vf=0
+  spr46: x=208 y= 71 tile=$0F attr=$01 pal=1 hf=0 vf=0
+  spr47: x=216 y= 71 tile=$10 attr=$01 pal=1 hf=0 vf=0
+  spr48: x=208 y= 79 tile=$11 attr=$01 pal=1 hf=0 vf=0
+  spr49: x=216 y= 79 tile=$12 attr=$01 pal=1 hf=0 vf=0
+  spr50: x=208 y= 87 tile=$13 attr=$01 pal=1 hf=0 vf=0
+  spr51: x=216 y= 87 tile=$14 attr=$01 pal=1 hf=0 vf=0
+  spr52: x=208 y= 99 tile=$1D attr=$02 pal=2 hf=0 vf=0
+  spr53: x=216 y= 99 tile=$1E attr=$02 pal=2 hf=0 vf=0
+  spr54: x=208 y=107 tile=$1F attr=$02 pal=2 hf=0 vf=0
+  spr55: x=216 y=107 tile=$20 attr=$02 pal=2 hf=0 vf=0
+  spr56: x=208 y=115 tile=$21 attr=$02 pal=2 hf=0 vf=0
+  spr57: x=216 y=115 tile=$22 attr=$02 pal=2 hf=0 vf=0
+  spr58: x=208 y=127 tile=$2B attr=$00 pal=0 hf=0 vf=0
+  spr59: x=216 y=127 tile=$2C attr=$00 pal=0 hf=0 vf=0
+  spr60: x=208 y=135 tile=$2D attr=$00 pal=0 hf=0 vf=0
+  spr61: x=216 y=135 tile=$2E attr=$00 pal=0 hf=0 vf=0
+  spr62: x=208 y=143 tile=$2F attr=$00 pal=0 hf=0 vf=0
+  spr63: x=216 y=143 tile=$30 attr=$00 pal=0 hf=0 vf=0
+-- sprite palettes --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $25 $2B
+  *** POSSIBLE MISS SPRITE spr03 tile=$5A x=216 y=55 ***
+-- tiles $58-$5C from pattern table $0000 --
+  tile $58: 0F070703000000006F77773300000000
+  tile $59: E0C0C0C000000000EDDDDDD900000000
+  tile $5A: 0000000002050B000000000003070F1F
+  tile $5B: 0000000080B8DCEE000000009BBEDDEF
+  tile $5C: 0003070501011B3B2010000000040020
+-- tiles $58-$5C from pattern table $1000 --
+  tile $58: 3C4299997266817E003C66660C187E00
+  tile $59: 3C4299727999423C003C660C06663C00
+  tile $5A: 0C122252B281720C000C1C2C4C7E0C00
+  tile $5B: 7E819E827999423C007E607C06663C00
+  tile $5C: 3C429F829999423C003C607C66663C00
+=== Done ===

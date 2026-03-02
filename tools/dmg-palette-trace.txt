@@ -1,0 +1,401 @@
+Damage palette trace - captures PPU palettes during damage number display
+[f1] mode $00->$00 (title)
+[f53] mode $00->$08 (title)
+[f87] mode $08->$A8 (title)
+[f294] mode $A8->$00 (title)
+[f336] mode $00->$70 (title)
+[f401] mode $70->$6F (title)
+[f404] mode $6F->$70 (title)
+[f469] mode $70->$6F (title)
+[f470] mode $6F->$70 (title)
+[f604] mode $70->$6F (title)
+[f612] mode $6F->$70 (title)
+[f620] mode $70->$6F (title)
+[f628] mode $6F->$70 (title)
+[f981] mode $70->$6F (title)
+[f989] mode $6F->$70 (title)
+[f997] mode $70->$6F (title)
+[f1005] mode $6F->$70 (title)
+[f1013] mode $70->$6F (title)
+[f1021] mode $6F->$70 (title)
+[f1029] mode $70->$6F (title)
+[f1037] mode $6F->$70 (title)
+[f1045] mode $70->$6F (title)
+[f1053] mode $6F->$70 (title)
+[f1149] mode $70->$01 (title)
+[f1150] mode $01->$00 (title)
+=== Walking ===
+[f1579] mode $00->$20 (walking)
+=== Battle at f1579 mode=$20 ===
+=== Input cleared, starting A spam ===
+[f1726] mode $20->$05 (battle)
+  spr11: x=216 y=110 tile=$5C attr=$03 pal=3
+--- DMG FRAME 1 (bf=213) ---
+-- sprite palettes (PPU $3F10-$3F1F) --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $25 $2B
+-- bg palettes (PPU $3F00-$3F0F) --
+  bgpal0: $0F $17 $28 $3C
+  bgpal1: $0F $18 $28 $11
+  bgpal2: $0F $27 $17 $07
+  bgpal3: $0F $00 $01 $30
+-- damage digit tiles (PPU pattern table $1000) --
+  tile $58: 3C4299997266817E003C66660C187E00
+  tile $59: 3C4299727999423C003C660C06663C00
+  tile $5A: 0C122252B281720C000C1C2C4C7E0C00
+  tile $5B: 7E819E827999423C007E607C06663C00
+  tile $5C: 3C429F829999423C003C607C66663C00
+  tile $5D: 7E81997912244830007E66060C183000
+  tile $5E: 3C4299429999423C003C663C66663C00
+  tile $5F: 3C4299994139423C003C66663E063C00
+  spr11: x=216 y=104 tile=$5C attr=$03 pal=3
+--- DMG FRAME 2 (bf=214) ---
+-- sprite palettes (PPU $3F10-$3F1F) --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $25 $2B
+-- bg palettes (PPU $3F00-$3F0F) --
+  bgpal0: $0F $17 $28 $3C
+  bgpal1: $0F $18 $28 $11
+  bgpal2: $0F $27 $17 $07
+  bgpal3: $0F $00 $01 $30
+  spr11: x=216 y= 99 tile=$5C attr=$03 pal=3
+--- DMG FRAME 3 (bf=215) ---
+-- sprite palettes (PPU $3F10-$3F1F) --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $25 $2B
+-- bg palettes (PPU $3F00-$3F0F) --
+  bgpal0: $0F $17 $28 $3C
+  bgpal1: $0F $18 $28 $11
+  bgpal2: $0F $27 $17 $07
+  bgpal3: $0F $00 $01 $30
+  spr11: x=216 y= 94 tile=$5C attr=$03 pal=3
+--- DMG FRAME 4 (bf=216) ---
+-- sprite palettes (PPU $3F10-$3F1F) --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $25 $2B
+-- bg palettes (PPU $3F00-$3F0F) --
+  bgpal0: $0F $17 $28 $3C
+  bgpal1: $0F $18 $28 $11
+  bgpal2: $0F $27 $17 $07
+  bgpal3: $0F $00 $01 $30
+  spr11: x=216 y= 90 tile=$5C attr=$03 pal=3
+--- DMG FRAME 5 (bf=217) ---
+-- sprite palettes (PPU $3F10-$3F1F) --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $25 $2B
+-- bg palettes (PPU $3F00-$3F0F) --
+  bgpal0: $0F $17 $28 $3C
+  bgpal1: $0F $18 $28 $11
+  bgpal2: $0F $27 $17 $07
+  bgpal3: $0F $00 $01 $30
+  spr11: x=216 y= 87 tile=$5C attr=$03 pal=3
+--- DMG FRAME 6 (bf=218) ---
+-- sprite palettes (PPU $3F10-$3F1F) --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $25 $2B
+-- bg palettes (PPU $3F00-$3F0F) --
+  bgpal0: $0F $17 $28 $3C
+  bgpal1: $0F $18 $28 $11
+  bgpal2: $0F $27 $17 $07
+  bgpal3: $0F $00 $01 $30
+  spr11: x=216 y= 85 tile=$5C attr=$03 pal=3
+--- DMG FRAME 7 (bf=219) ---
+-- sprite palettes (PPU $3F10-$3F1F) --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $25 $2B
+-- bg palettes (PPU $3F00-$3F0F) --
+  bgpal0: $0F $17 $28 $3C
+  bgpal1: $0F $18 $28 $11
+  bgpal2: $0F $27 $17 $07
+  bgpal3: $0F $00 $01 $30
+  spr11: x=216 y= 85 tile=$5C attr=$03 pal=3
+--- DMG FRAME 8 (bf=220) ---
+-- sprite palettes (PPU $3F10-$3F1F) --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $25 $2B
+-- bg palettes (PPU $3F00-$3F0F) --
+  bgpal0: $0F $17 $28 $3C
+  bgpal1: $0F $18 $28 $11
+  bgpal2: $0F $27 $17 $07
+  bgpal3: $0F $00 $01 $30
+  spr11: x=216 y= 85 tile=$5C attr=$03 pal=3
+--- DMG FRAME 9 (bf=221) ---
+-- sprite palettes (PPU $3F10-$3F1F) --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $25 $2B
+-- bg palettes (PPU $3F00-$3F0F) --
+  bgpal0: $0F $17 $28 $3C
+  bgpal1: $0F $18 $28 $11
+  bgpal2: $0F $27 $17 $07
+  bgpal3: $0F $00 $01 $30
+  spr11: x=216 y= 87 tile=$5C attr=$03 pal=3
+--- DMG FRAME 10 (bf=222) ---
+-- sprite palettes (PPU $3F10-$3F1F) --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $25 $2B
+-- bg palettes (PPU $3F00-$3F0F) --
+  bgpal0: $0F $17 $28 $3C
+  bgpal1: $0F $18 $28 $11
+  bgpal2: $0F $27 $17 $07
+  bgpal3: $0F $00 $01 $30
+  spr11: x=216 y= 90 tile=$5C attr=$03 pal=3
+--- DMG FRAME 11 (bf=223) ---
+-- sprite palettes (PPU $3F10-$3F1F) --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $25 $2B
+-- bg palettes (PPU $3F00-$3F0F) --
+  bgpal0: $0F $17 $28 $3C
+  bgpal1: $0F $18 $28 $11
+  bgpal2: $0F $27 $17 $07
+  bgpal3: $0F $00 $01 $30
+  spr11: x=216 y= 94 tile=$5C attr=$03 pal=3
+--- DMG FRAME 12 (bf=224) ---
+-- sprite palettes (PPU $3F10-$3F1F) --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $25 $2B
+-- bg palettes (PPU $3F00-$3F0F) --
+  bgpal0: $0F $17 $28 $3C
+  bgpal1: $0F $18 $28 $11
+  bgpal2: $0F $27 $17 $07
+  bgpal3: $0F $00 $01 $30
+  spr11: x=216 y= 99 tile=$5C attr=$03 pal=3
+--- DMG FRAME 13 (bf=225) ---
+-- sprite palettes (PPU $3F10-$3F1F) --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $25 $2B
+-- bg palettes (PPU $3F00-$3F0F) --
+  bgpal0: $0F $17 $28 $3C
+  bgpal1: $0F $18 $28 $11
+  bgpal2: $0F $27 $17 $07
+  bgpal3: $0F $00 $01 $30
+  spr11: x=216 y=104 tile=$5C attr=$03 pal=3
+--- DMG FRAME 14 (bf=226) ---
+-- sprite palettes (PPU $3F10-$3F1F) --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $25 $2B
+-- bg palettes (PPU $3F00-$3F0F) --
+  bgpal0: $0F $17 $28 $3C
+  bgpal1: $0F $18 $28 $11
+  bgpal2: $0F $27 $17 $07
+  bgpal3: $0F $00 $01 $30
+  spr11: x=216 y=110 tile=$5C attr=$03 pal=3
+--- DMG FRAME 15 (bf=227) ---
+-- sprite palettes (PPU $3F10-$3F1F) --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $25 $2B
+-- bg palettes (PPU $3F00-$3F0F) --
+  bgpal0: $0F $17 $28 $3C
+  bgpal1: $0F $18 $28 $11
+  bgpal2: $0F $27 $17 $07
+  bgpal3: $0F $00 $01 $30
+  spr11: x=216 y=116 tile=$5C attr=$03 pal=3
+--- DMG FRAME 16 (bf=228) ---
+-- sprite palettes (PPU $3F10-$3F1F) --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $25 $2B
+-- bg palettes (PPU $3F00-$3F0F) --
+  bgpal0: $0F $17 $28 $3C
+  bgpal1: $0F $18 $28 $11
+  bgpal2: $0F $27 $17 $07
+  bgpal3: $0F $00 $01 $30
+  spr11: x=216 y=115 tile=$5C attr=$03 pal=3
+--- DMG FRAME 17 (bf=229) ---
+-- sprite palettes (PPU $3F10-$3F1F) --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $25 $2B
+-- bg palettes (PPU $3F00-$3F0F) --
+  bgpal0: $0F $17 $28 $3C
+  bgpal1: $0F $18 $28 $11
+  bgpal2: $0F $27 $17 $07
+  bgpal3: $0F $00 $01 $30
+  spr11: x=216 y=113 tile=$5C attr=$03 pal=3
+--- DMG FRAME 18 (bf=230) ---
+-- sprite palettes (PPU $3F10-$3F1F) --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $25 $2B
+-- bg palettes (PPU $3F00-$3F0F) --
+  bgpal0: $0F $17 $28 $3C
+  bgpal1: $0F $18 $28 $11
+  bgpal2: $0F $27 $17 $07
+  bgpal3: $0F $00 $01 $30
+  spr11: x=216 y=112 tile=$5C attr=$03 pal=3
+--- DMG FRAME 19 (bf=231) ---
+-- sprite palettes (PPU $3F10-$3F1F) --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $25 $2B
+-- bg palettes (PPU $3F00-$3F0F) --
+  bgpal0: $0F $17 $28 $3C
+  bgpal1: $0F $18 $28 $11
+  bgpal2: $0F $27 $17 $07
+  bgpal3: $0F $00 $01 $30
+  spr11: x=216 y=111 tile=$5C attr=$03 pal=3
+--- DMG FRAME 20 (bf=232) ---
+-- sprite palettes (PPU $3F10-$3F1F) --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $25 $2B
+-- bg palettes (PPU $3F00-$3F0F) --
+  bgpal0: $0F $17 $28 $3C
+  bgpal1: $0F $18 $28 $11
+  bgpal2: $0F $27 $17 $07
+  bgpal3: $0F $00 $01 $30
+  spr11: x=216 y=110 tile=$5C attr=$03 pal=3
+--- DMG FRAME 21 (bf=233) ---
+-- sprite palettes (PPU $3F10-$3F1F) --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $25 $2B
+-- bg palettes (PPU $3F00-$3F0F) --
+  bgpal0: $0F $17 $28 $3C
+  bgpal1: $0F $18 $28 $11
+  bgpal2: $0F $27 $17 $07
+  bgpal3: $0F $00 $01 $30
+  spr11: x=216 y=109 tile=$5C attr=$03 pal=3
+--- DMG FRAME 22 (bf=234) ---
+-- sprite palettes (PPU $3F10-$3F1F) --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $25 $2B
+-- bg palettes (PPU $3F00-$3F0F) --
+  bgpal0: $0F $17 $28 $3C
+  bgpal1: $0F $18 $28 $11
+  bgpal2: $0F $27 $17 $07
+  bgpal3: $0F $00 $01 $30
+  spr11: x=216 y=109 tile=$5C attr=$03 pal=3
+--- DMG FRAME 23 (bf=235) ---
+-- sprite palettes (PPU $3F10-$3F1F) --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $25 $2B
+-- bg palettes (PPU $3F00-$3F0F) --
+  bgpal0: $0F $17 $28 $3C
+  bgpal1: $0F $18 $28 $11
+  bgpal2: $0F $27 $17 $07
+  bgpal3: $0F $00 $01 $30
+  spr11: x=216 y=109 tile=$5C attr=$03 pal=3
+--- DMG FRAME 24 (bf=236) ---
+-- sprite palettes (PPU $3F10-$3F1F) --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $25 $2B
+-- bg palettes (PPU $3F00-$3F0F) --
+  bgpal0: $0F $17 $28 $3C
+  bgpal1: $0F $18 $28 $11
+  bgpal2: $0F $27 $17 $07
+  bgpal3: $0F $00 $01 $30
+  spr11: x=216 y=109 tile=$5C attr=$03 pal=3
+--- DMG FRAME 25 (bf=237) ---
+-- sprite palettes (PPU $3F10-$3F1F) --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $25 $2B
+-- bg palettes (PPU $3F00-$3F0F) --
+  bgpal0: $0F $17 $28 $3C
+  bgpal1: $0F $18 $28 $11
+  bgpal2: $0F $27 $17 $07
+  bgpal3: $0F $00 $01 $30
+  spr11: x=216 y=109 tile=$5C attr=$03 pal=3
+--- DMG FRAME 26 (bf=238) ---
+-- sprite palettes (PPU $3F10-$3F1F) --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $25 $2B
+-- bg palettes (PPU $3F00-$3F0F) --
+  bgpal0: $0F $17 $28 $3C
+  bgpal1: $0F $18 $28 $11
+  bgpal2: $0F $27 $17 $07
+  bgpal3: $0F $00 $01 $30
+  spr11: x=216 y=110 tile=$5C attr=$03 pal=3
+--- DMG FRAME 27 (bf=239) ---
+-- sprite palettes (PPU $3F10-$3F1F) --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $25 $2B
+-- bg palettes (PPU $3F00-$3F0F) --
+  bgpal0: $0F $17 $28 $3C
+  bgpal1: $0F $18 $28 $11
+  bgpal2: $0F $27 $17 $07
+  bgpal3: $0F $00 $01 $30
+  spr11: x=216 y=111 tile=$5C attr=$03 pal=3
+--- DMG FRAME 28 (bf=240) ---
+-- sprite palettes (PPU $3F10-$3F1F) --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $25 $2B
+-- bg palettes (PPU $3F00-$3F0F) --
+  bgpal0: $0F $17 $28 $3C
+  bgpal1: $0F $18 $28 $11
+  bgpal2: $0F $27 $17 $07
+  bgpal3: $0F $00 $01 $30
+  spr11: x=216 y=112 tile=$5C attr=$03 pal=3
+--- DMG FRAME 29 (bf=241) ---
+-- sprite palettes (PPU $3F10-$3F1F) --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $25 $2B
+-- bg palettes (PPU $3F00-$3F0F) --
+  bgpal0: $0F $17 $28 $3C
+  bgpal1: $0F $18 $28 $11
+  bgpal2: $0F $27 $17 $07
+  bgpal3: $0F $00 $01 $30
+  spr11: x=216 y=113 tile=$5C attr=$03 pal=3
+--- DMG FRAME 30 (bf=242) ---
+-- sprite palettes (PPU $3F10-$3F1F) --
+  pal0: $0F $36 $30 $16
+  pal1: $0F $27 $18 $21
+  pal2: $0F $36 $17 $2A
+  pal3: $0F $0F $25 $2B
+-- bg palettes (PPU $3F00-$3F0F) --
+  bgpal0: $0F $17 $28 $3C
+  bgpal1: $0F $18 $28 $11
+  bgpal2: $0F $27 $17 $07
+  bgpal3: $0F $00 $01 $30
+=== Got enough palette data ===

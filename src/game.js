@@ -256,6 +256,7 @@ let slashFramesR = null;           // right-hand punch frames (frame $12, 4 effe
 let slashFramesL = null;           // left-hand punch frames (frame $13, 4 effect sets)
 let slashFrames = null;            // alias — points to R or L based on current hit
 const BATTLE_MISS = new Uint8Array([0x96, 0xD2, 0xDC, 0xDC]); // "Miss" in ROM encoding
+const BATTLE_DEFEATED = new Uint8Array([0x8D,0xE8,0xEF,0xE8,0xE4,0xDD,0xE8,0xE7]); // "Defeated"
 
 // Battle timing constants
 const BATTLE_SCROLL_MS = 150;
@@ -266,7 +267,7 @@ const BATTLE_FLASH_FRAMES = 65;      // 65 frames of grayscale strobe (~1.08s at
 const BATTLE_FLASH_FRAME_MS = 16.67; // ~1 frame at 60fps
 const BATTLE_MSG_HOLD_MS = 1200;
 const BATTLE_HIT_FLASH_MS = 400;
-const BATTLE_DMG_SHOW_MS = 800;
+const BATTLE_DMG_SHOW_MS = 550;
 const BATTLE_SHAKE_MS = 300;
 const BATTLE_VICTORY_HOLD_MS = 1500;
 const BOSS_BLOCK_SIZE = 16;            // 16×16 pixel blocks for dissolve
@@ -279,15 +280,28 @@ const BATTLE_PANEL_W = 120;            // left section width in bottom panel
 const BOSS_PREFLASH_MS = 133;            // 8 NES frames — boss pre-attack white blink
 const MONSTER_DEATH_MS = 250;            // diagonal tile wipe — 7 visible steps × 33ms (ROM: 2F/BC68)
 const MONSTER_SLIDE_MS = 267;            // 16 frames at 60fps — sprites slide in from left
-const DMG_BOUNCE_COUNT = 2;              // 2 sine bounces over damage show duration
-const DMG_BOUNCE_AMP = 16;              // max bounce height in pixels
+// Authentic damage bounce keyframes from FCEUX trace (Y offsets from baseline, up = negative)
+// 30 frames total = 500ms at 60fps
+const DMG_BOUNCE_TABLE = [
+  0, -6, -11, -16, -20, -23, -25,    // fast rise (7 frames)
+  -25, -25,                           // hang at peak (2 frames)
+  -23, -20, -16, -11, -6, 0,         // fall back to baseline (6 frames)
+  6, 5, 3, 2, 1, 0,                  // small overshoot + settle (6 frames)
+  -1, -1, -1, -1, -1,                // tiny second bounce hold (5 frames)
+  0, 1, 2, 3                         // final settle (4 frames)
+];
+const DMG_BOUNCE_FRAME_MS = 16.67;
 const TARGET_CURSOR_BLINK_MS = 133;      // cursor blink rate during target select
+// Damage number palette — sprite pal3 during damage display (FCEUX PPU dump)
+// $0F=black, $0F=black, $25=purple, $2B=green
+const DMG_NUM_PAL = [0x0F, 0x0F, 0x0F, 0x25];
 
 // Hit stats & slash animation constants
-const SLASH_FRAME_MS = 50;               // per frame of slash sprite (4 frames = 200ms)
-const SLASH_FRAMES = 4;                  // number of slash animation frames (one per effect set)
-const HIT_PAUSE_MS = 200;               // pause showing damage number per hit
-const MISS_SHOW_MS = 400;               // "Miss" text display time
+const SLASH_FRAME_MS = 50;               // per frame of slash sprite (3 frames = 150ms)
+const SLASH_FRAMES = 3;                  // number of slash animation frames (one per effect set)
+const HIT_PAUSE_MS = 150;               // pause showing damage number per hit
+const MISS_SHOW_MS = 300;               // "Miss" text display time
+const PLAYER_DMG_SHOW_MS = 400;         // pause after final hit before enemy counter
 const CRIT_RATE = 5;                     // 5% crit chance per hit
 const CRIT_MULT = 1.5;                  // critical hit damage multiplier
 const BASE_HIT_RATE = 80;               // 80% accuracy per hit (unarmed Onion Knight)
@@ -1922,10 +1936,9 @@ function handleInput() {
         slashX = centerX;
         slashY = centerY;
         // Random offset for punch scatter (ROM: center + random 0-31)
-        slashOffX = Math.floor(Math.random() * 24) - 12;
-        slashOffY = Math.floor(Math.random() * 24) - 12;
-        playSFX(SFX.ATTACK_HIT);
-        battleState = 'player-slash';
+        slashOffX = Math.floor(Math.random() * 40) - 20;
+        slashOffY = Math.floor(Math.random() * 40) - 20;
+        battleState = 'attack-start';
         battleTimer = 0;
       }
       if (keys['x'] || keys['X']) {
@@ -4105,8 +4118,8 @@ function initSlashSprites() {
   sctx.putImageData(imgData, 0, 0);
 
   // Both hands use same impact sprite; animation is positional scatter only
-  slashFramesR = [c, c, c, c];
-  slashFramesL = [c, c, c, c];
+  slashFramesR = [c, c, c];
+  slashFramesL = [c, c, c];
   slashFrames = slashFramesR;
 }
 
@@ -4257,14 +4270,21 @@ function updateBattle(dt) {
     if (battleTimer >= (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS) { battleState = 'menu-open'; battleTimer = 0; }
   } else if (battleState === 'message-hold') {
     if (battleTimer >= BATTLE_MSG_HOLD_MS) { battleState = 'menu-open'; battleTimer = 0; battleMessage = null; }
+  } else if (battleState === 'attack-start') {
+    // Brief pause so CONFIRM SFX is audible before first punch
+    if (battleTimer >= 250) {
+      playSFX(SFX.ATTACK_HIT);
+      battleState = 'player-slash';
+      battleTimer = 0;
+    }
   } else if (battleState === 'player-slash') {
-    // 4-frame punch animation (50ms per frame = 200ms total)
+    // 3-frame punch animation (50ms per frame = 150ms total)
     const frame = Math.floor(battleTimer / SLASH_FRAME_MS);
     if (frame !== slashFrame && frame < SLASH_FRAMES) {
       slashFrame = frame;
       // Randomize position each frame — punch scatter (ROM: every 2 ticks)
-      slashOffX = Math.floor(Math.random() * 24) - 12;
-      slashOffY = Math.floor(Math.random() * 24) - 12;
+      slashOffX = Math.floor(Math.random() * 40) - 20;
+      slashOffY = Math.floor(Math.random() * 40) - 20;
     }
     if (battleTimer >= SLASH_FRAMES * SLASH_FRAME_MS) {
       const hit = hitResults[currentHitIdx];
@@ -4307,8 +4327,8 @@ function updateBattle(dt) {
         currentHitIdx++;
         slashFrame = 0;
         slashFrames = (currentHitIdx % 2 === 0) ? slashFramesR : slashFramesL;
-        slashOffX = Math.floor(Math.random() * 24) - 12;
-        slashOffY = Math.floor(Math.random() * 24) - 12;
+        slashOffX = Math.floor(Math.random() * 40) - 20;
+        slashOffY = Math.floor(Math.random() * 40) - 20;
         playSFX(SFX.ATTACK_HIT);
         battleState = 'player-slash';
         battleTimer = 0;
@@ -4325,8 +4345,8 @@ function updateBattle(dt) {
         currentHitIdx++;
         slashFrame = 0;
         slashFrames = (currentHitIdx % 2 === 0) ? slashFramesR : slashFramesL;
-        slashOffX = Math.floor(Math.random() * 24) - 12;
-        slashOffY = Math.floor(Math.random() * 24) - 12;
+        slashOffX = Math.floor(Math.random() * 40) - 20;
+        slashOffY = Math.floor(Math.random() * 40) - 20;
         playSFX(SFX.ATTACK_HIT);
         battleState = 'player-slash';
         battleTimer = 0;
@@ -4337,7 +4357,7 @@ function updateBattle(dt) {
       }
     }
   } else if (battleState === 'player-damage-show') {
-    if (battleTimer >= BATTLE_DMG_SHOW_MS) {
+    if (battleTimer >= PLAYER_DMG_SHOW_MS) {
       // Check if targeted monster just died — play death stripe animation
       if (isRandomEncounter && encounterMonsters && encounterMonsters[targetIndex].hp <= 0) {
         dyingMonsterIndex = targetIndex;
@@ -4407,6 +4427,7 @@ function updateBattle(dt) {
         const dmg = calcDamage(monAtk, playerDEF);
         playerHP = Math.max(0, playerHP - dmg);
         playerDamageNum = { value: dmg, timer: 0 };
+        playSFX(SFX.ATTACK_HIT);
         battleShakeTimer = BATTLE_SHAKE_MS;
         battleState = 'enemy-attack';
         battleTimer = 0;
@@ -4506,7 +4527,16 @@ function updateBattle(dt) {
       playTrack(TRACKS.CRYSTAL_ROOM);
     }
   } else if (battleState === 'defeat') {
-    if (battleTimer >= 2000) {
+    stopMusic();
+    battleState = 'defeat-fade';
+    battleTimer = 0;
+  } else if (battleState === 'defeat-fade') {
+    if (battleTimer >= 400) {
+      battleState = 'defeat-text';
+      battleTimer = 0;
+    }
+  } else if (battleState === 'defeat-text') {
+    if (battleTimer >= 3000 || (battleTimer >= 500 && (keys['z'] || keys['Z']))) {
       location.reload();
     }
   }
@@ -4539,6 +4569,30 @@ function drawBattle() {
   drawBattleMessage();
   drawVictoryBox();
   drawDamageNumbers();
+
+  // Defeat fade — black overlay increasing opacity over viewport
+  if (battleState === 'defeat-fade') {
+    const alpha = Math.min(battleTimer / 400, 1);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = '#000';
+    ctx.fillRect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
+    ctx.restore();
+  }
+
+  // Defeat text — black viewport with "Defeated" text NES fade-in
+  if (battleState === 'defeat-text') {
+    ctx.fillStyle = '#000';
+    ctx.fillRect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
+    // NES palette fade-in: $0F → $10 → $20 → $30 over 400ms (4 steps × 100ms)
+    const fadeStep = Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
+    const DEFEAT_FADE = [0x0F, 0x10, 0x20, 0x30, 0x30];
+    const textPal = [DEFEAT_FADE[fadeStep], DEFEAT_FADE[fadeStep], DEFEAT_FADE[fadeStep], DEFEAT_FADE[fadeStep]];
+    const tw = measureText(BATTLE_DEFEATED);
+    const tx = HUD_VIEW_X + Math.floor((HUD_VIEW_W - tw) / 2);
+    const ty = HUD_VIEW_Y + Math.floor((HUD_VIEW_H - 8) / 2);
+    drawText(ctx, tx, ty, BATTLE_DEFEATED, textPal);
+  }
 }
 
 function drawRoarBox() {
@@ -4594,13 +4648,14 @@ function drawBattleMenu() {
   const isFade = battleState === 'battle-fade-in';
   const isMenu = isFade ||
                  battleState === 'menu-open' || battleState === 'target-select' ||
-                 battleState === 'player-slash' || battleState === 'player-hit-show' ||
+                 battleState === 'attack-start' || battleState === 'player-slash' || battleState === 'player-hit-show' ||
                  battleState === 'player-miss-show' ||
                  battleState === 'player-damage-show' || battleState === 'monster-death' ||
                  battleState === 'boss-flash' ||
                  battleState === 'enemy-attack' ||
                  battleState === 'enemy-damage-show' || battleState === 'message-hold' ||
-                 battleState === 'boss-dissolve' || battleState === 'defeat';
+                 battleState === 'boss-dissolve' || battleState === 'defeat' ||
+                 battleState === 'defeat-fade';
   if (!isSlide && !isAppear && !isMenu) return;
 
   // Clear bottom panel interior
@@ -4707,13 +4762,13 @@ function drawEncounterBox() {
   const isSlideIn = battleState === 'monster-slide-in';
   const isCombat = isSlideIn || battleState === 'battle-fade-in' ||
                    battleState === 'menu-open' || battleState === 'target-select' ||
-                   battleState === 'player-slash' || battleState === 'player-hit-show' ||
+                   battleState === 'attack-start' || battleState === 'player-slash' || battleState === 'player-hit-show' ||
                    battleState === 'player-miss-show' ||
                    battleState === 'player-damage-show' || battleState === 'monster-death' ||
                    battleState === 'boss-flash' ||
                    battleState === 'enemy-attack' ||
                    battleState === 'enemy-damage-show' || battleState === 'message-hold' ||
-                   battleState === 'defeat';
+                   battleState === 'defeat' || battleState === 'defeat-fade';
   const isVictory = battleState === 'victory-box-open' || battleState === 'victory-text-in' ||
                     battleState === 'victory-hold' || battleState === 'exp-text-in' ||
                     battleState === 'exp-hold' || battleState === 'victory-text-out' ||
@@ -4825,12 +4880,12 @@ function drawBossSpriteBox() {
   const isDissolve = battleState === 'boss-dissolve';
   const isCombat = battleState === 'battle-fade-in' ||
                    battleState === 'menu-open' || battleState === 'target-select' ||
-                   battleState === 'player-slash' || battleState === 'player-hit-show' ||
+                   battleState === 'attack-start' || battleState === 'player-slash' || battleState === 'player-hit-show' ||
                    battleState === 'player-miss-show' ||
                    battleState === 'player-damage-show' || battleState === 'boss-flash' ||
                    battleState === 'enemy-attack' ||
                    battleState === 'enemy-damage-show' || battleState === 'message-hold' ||
-                   battleState === 'defeat';
+                   battleState === 'defeat' || battleState === 'defeat-fade';
   const isVictory = battleState === 'victory-box-open' || battleState === 'victory-text-in' ||
                     battleState === 'victory-hold' || battleState === 'exp-text-in' ||
                     battleState === 'exp-hold' || battleState === 'victory-text-out' ||
@@ -5082,18 +5137,31 @@ function drawVictoryBox() {
 }
 
 function _dmgBounceY(baseY, timer) {
-  // Damped sine bounce: 2 bounces over BATTLE_DMG_SHOW_MS, amplitude shrinks to 0
-  const t = Math.min(timer / BATTLE_DMG_SHOW_MS, 1);
-  const amplitude = DMG_BOUNCE_AMP * (1 - t);
-  return Math.round(baseY - amplitude * Math.abs(Math.sin(t * Math.PI * DMG_BOUNCE_COUNT)));
+  // Authentic NES bounce from FCEUX trace — 26 keyframes at 60fps
+  const frame = Math.min(Math.floor(timer / DMG_BOUNCE_FRAME_MS), DMG_BOUNCE_TABLE.length - 1);
+  return baseY + DMG_BOUNCE_TABLE[frame];
 }
 
 function drawDamageNumbers() {
-  // Boss damage number — sine-bounces upward above the boss sprite box
+  // Boss/monster damage number — bounces centered on the target
   if (bossDamageNum && !bossDefeated) {
-    const bossCenterY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
-    const baseY = bossCenterY - 32 - 4; // top of boss sprite box
-    const bx = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2) - 4;
+    let bx, baseY;
+    if (isRandomEncounter && encounterMonsters) {
+      // Center on targeted monster in encounter grid
+      const count = encounterMonsters.length;
+      const fullW = count === 1 ? 64 : 96;
+      const fullH = count <= 2 ? 64 : 96;
+      const boxX = HUD_VIEW_X + Math.floor((HUD_VIEW_W - fullW) / 2);
+      const boxY = HUD_VIEW_Y + Math.floor((HUD_VIEW_H - fullH) / 2);
+      const gridPos = _encounterGridPos(boxX, boxY, fullW, fullH, count);
+      const pos = gridPos[targetIndex] || gridPos[0];
+      bx = pos.x + 8; // center of 32px sprite
+      baseY = pos.y + 8;
+    } else {
+      // Center on boss sprite
+      bx = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2) - 4;
+      baseY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2) - 8;
+    }
     const by = _dmgBounceY(baseY, bossDamageNum.timer);
 
     ctx.save();
@@ -5101,29 +5169,31 @@ function drawDamageNumbers() {
     ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
     ctx.clip();
     if (bossDamageNum.miss) {
-      drawText(ctx, bx - 4, by, BATTLE_MISS, TEXT_WHITE);
+      drawText(ctx, bx - 8, by, BATTLE_MISS, [0x0F, 0x0F, 0x0F, 0x2B]);
     } else {
       const digits = String(bossDamageNum.value);
       const numBytes = new Uint8Array(digits.length);
       for (let i = 0; i < digits.length; i++) numBytes[i] = 0x80 + parseInt(digits[i]);
-      drawText(ctx, bx, by, numBytes, bossDamageNum.crit ? TEXT_YELLOW : TEXT_WHITE);
+      const tw = digits.length * 8;
+      drawText(ctx, bx - Math.floor(tw / 2), by, numBytes, DMG_NUM_PAL);
     }
     ctx.restore();
   }
 
-  // Player damage number — sine-bounces above player portrait
+  // Player damage number — bounces centered on portrait
   if (playerDamageNum) {
-    const px = HUD_RIGHT_X + 12;
-    const baseY = HUD_VIEW_Y + 4;
+    const px = HUD_RIGHT_X + 16; // center of 16×16 portrait
+    const baseY = HUD_VIEW_Y + 16;
     const py = _dmgBounceY(baseY, playerDamageNum.timer);
 
     if (playerDamageNum.miss) {
-      drawText(ctx, px - 4, py, BATTLE_MISS, TEXT_WHITE);
+      drawText(ctx, px - 8, py, BATTLE_MISS, [0x0F, 0x0F, 0x0F, 0x2B]);
     } else {
       const digits = String(playerDamageNum.value);
       const numBytes = new Uint8Array(digits.length);
       for (let i = 0; i < digits.length; i++) numBytes[i] = 0x80 + parseInt(digits[i]);
-      drawText(ctx, px, py, numBytes, TEXT_WHITE);
+      const tw = digits.length * 8;
+      drawText(ctx, px - Math.floor(tw / 2), py, numBytes, DMG_NUM_PAL);
     }
   }
 }
