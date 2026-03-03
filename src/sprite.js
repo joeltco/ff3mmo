@@ -52,9 +52,10 @@ const WALK_FRAMES = {
 };
 
 export class Sprite {
-  constructor(romData, paletteColors) {
+  constructor(romData, paletteColors, paletteBottom) {
     this.romData = romData;
-    this.palette = paletteColors; // sub-palette: 4 NES color indices
+    this.palette = paletteColors; // sub-palette for top tiles (0,1): 4 NES color indices
+    this.paletteBottom = paletteBottom || paletteColors; // sub-palette for bottom tiles (2,3)
     this.direction = DIR_DOWN;
     this.frame = 0;
 
@@ -115,7 +116,9 @@ export class Sprite {
 
     for (let i = 0; i < 4; i++) {
       const tile = this.getDecodedTile(tileIndices[i]);
-      drawTile(tmpCtx, tile, this.palette, positions[i][0], positions[i][1]);
+      // Top tiles (0,1) use palette, bottom tiles (2,3) use paletteBottom
+      const pal = i < 2 ? this.palette : this.paletteBottom;
+      drawTile(tmpCtx, tile, pal, positions[i][0], positions[i][1]);
     }
 
     if (isFlipped) {
