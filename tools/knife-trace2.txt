@@ -1,0 +1,5 @@
+knife-trace2: both hands, minimal
+WALK
+BATTLE f=2213
+FIGHT Rwpn=$1E Lwpn=$1E
+TIMEOUT R=0 L=0

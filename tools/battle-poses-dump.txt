@@ -1,0 +1,1 @@
+Battle poses dump (attack + damage taken)

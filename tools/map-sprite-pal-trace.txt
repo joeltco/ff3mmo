@@ -1,0 +1,478 @@
+Map sprite palette trace - dumping every 60 frames
+Play normally - walk on overworld and in town to capture palettes
+=== DUMP 1 f60 mode=$00 ===
+-- sprite palettes --
+  spr_pal0: $02 $0F $0F $0F
+  spr_pal1: $0F $0F $0F $0F
+  spr_pal2: $0F $0F $0F $0F
+  spr_pal3: $0F $0F $0F $0F
+-- bg palettes --
+  bg_pal0: $02 $0F $0F $0F
+  bg_pal1: $0F $0F $02 $02
+  bg_pal2: $0F $0F $02 $20
+  bg_pal3: $0F $00 $02 $10
+-- OAM 0-7 --
+=== DUMP 2 f120 mode=$00 ===
+-- sprite palettes --
+  spr_pal0: $02 $0F $0F $0F
+  spr_pal1: $0F $0F $0F $0F
+  spr_pal2: $0F $0F $0F $0F
+  spr_pal3: $0F $0F $0F $0F
+-- bg palettes --
+  bg_pal0: $02 $0F $0F $0F
+  bg_pal1: $0F $0F $02 $02
+  bg_pal2: $0F $0F $02 $20
+  bg_pal3: $0F $00 $02 $10
+-- OAM 0-7 --
+=== DUMP 3 f180 mode=$00 ===
+-- sprite palettes --
+  spr_pal0: $02 $0F $0F $0F
+  spr_pal1: $0F $0F $0F $0F
+  spr_pal2: $0F $0F $0F $0F
+  spr_pal3: $0F $0F $0F $0F
+-- bg palettes --
+  bg_pal0: $02 $0F $0F $0F
+  bg_pal1: $0F $0F $02 $02
+  bg_pal2: $0F $0F $02 $10
+  bg_pal3: $0F $00 $02 $10
+-- OAM 0-7 --
+=== DUMP 4 f240 mode=$00 ===
+-- sprite palettes --
+  spr_pal0: $02 $0F $0F $0F
+  spr_pal1: $0F $0F $0F $0F
+  spr_pal2: $0F $0F $0F $0F
+  spr_pal3: $0F $0F $0F $0F
+-- bg palettes --
+  bg_pal0: $02 $0F $0F $0F
+  bg_pal1: $0F $0F $02 $02
+  bg_pal2: $0F $0F $02 $10
+  bg_pal3: $0F $00 $02 $10
+-- OAM 0-7 --
+=== DUMP 5 f300 mode=$00 ===
+-- sprite palettes --
+  spr_pal0: $02 $0F $0F $0F
+  spr_pal1: $0F $0F $0F $0F
+  spr_pal2: $0F $0F $0F $0F
+  spr_pal3: $0F $0F $0F $0F
+-- bg palettes --
+  bg_pal0: $02 $0F $0F $0F
+  bg_pal1: $0F $0F $02 $02
+  bg_pal2: $0F $0F $02 $10
+  bg_pal3: $0F $00 $02 $10
+-- OAM 0-7 --
+=== DUMP 6 f360 mode=$00 ===
+-- sprite palettes --
+  spr_pal0: $02 $0F $0F $0F
+  spr_pal1: $0F $0F $0F $0F
+  spr_pal2: $0F $0F $0F $0F
+  spr_pal3: $0F $0F $0F $0F
+-- bg palettes --
+  bg_pal0: $02 $0F $0F $0F
+  bg_pal1: $0F $0F $02 $02
+  bg_pal2: $0F $0F $02 $10
+  bg_pal3: $0F $00 $02 $10
+-- OAM 0-7 --
+=== DUMP 7 f420 mode=$00 ===
+-- sprite palettes --
+  spr_pal0: $02 $0F $0F $0F
+  spr_pal1: $0F $0F $0F $0F
+  spr_pal2: $0F $0F $0F $0F
+  spr_pal3: $0F $0F $0F $0F
+-- bg palettes --
+  bg_pal0: $02 $0F $0F $0F
+  bg_pal1: $0F $0F $02 $02
+  bg_pal2: $0F $0F $02 $00
+  bg_pal3: $0F $00 $02 $10
+-- OAM 0-7 --
+=== DUMP 8 f480 mode=$00 ===
+-- sprite palettes --
+  spr_pal0: $02 $0F $0F $0F
+  spr_pal1: $0F $0F $0F $0F
+  spr_pal2: $0F $0F $0F $0F
+  spr_pal3: $0F $0F $0F $0F
+-- bg palettes --
+  bg_pal0: $02 $0F $0F $0F
+  bg_pal1: $0F $0F $02 $02
+  bg_pal2: $0F $0F $02 $01
+  bg_pal3: $0F $00 $02 $10
+-- OAM 0-7 --
+=== DUMP 9 f540 mode=$00 ===
+-- sprite palettes --
+  spr_pal0: $02 $0F $0F $0F
+  spr_pal1: $0F $0F $0F $0F
+  spr_pal2: $0F $0F $0F $0F
+  spr_pal3: $0F $0F $0F $0F
+-- bg palettes --
+  bg_pal0: $02 $0F $0F $0F
+  bg_pal1: $0F $0F $02 $02
+  bg_pal2: $0F $0F $02 $00
+  bg_pal3: $0F $00 $02 $10
+-- OAM 0-7 --
+=== DUMP 10 f600 mode=$00 ===
+-- sprite palettes --
+  spr_pal0: $02 $0F $0F $0F
+  spr_pal1: $0F $0F $0F $0F
+  spr_pal2: $0F $0F $0F $0F
+  spr_pal3: $0F $0F $0F $0F
+-- bg palettes --
+  bg_pal0: $02 $0F $0F $0F
+  bg_pal1: $0F $0F $02 $02
+  bg_pal2: $0F $0F $02 $00
+  bg_pal3: $0F $00 $02 $10
+-- OAM 0-7 --
+=== DUMP 11 f660 mode=$08 ===
+-- sprite palettes --
+  spr_pal0: $0F $36 $30 $16
+  spr_pal1: $0F $27 $18 $21
+  spr_pal2: $0F $36 $17 $2A
+  spr_pal3: $0F $00 $10 $30
+-- bg palettes --
+  bg_pal0: $0F $00 $01 $2A
+  bg_pal1: $0F $00 $01 $27
+  bg_pal2: $0F $00 $01 $24
+  bg_pal3: $0F $00 $01 $30
+-- OAM 0-7 --
+=== DUMP 12 f720 mode=$A8 ===
+-- sprite palettes --
+  spr_pal0: $0F $36 $30 $16
+  spr_pal1: $0F $27 $18 $21
+  spr_pal2: $0F $36 $17 $2A
+  spr_pal3: $0F $00 $10 $30
+-- bg palettes --
+  bg_pal0: $0F $00 $01 $2A
+  bg_pal1: $0F $00 $01 $27
+  bg_pal2: $0F $00 $01 $24
+  bg_pal3: $0F $00 $01 $30
+-- OAM 0-7 --
+  spr0: x= 32 y=120 tile=$E4 attr=$03 pal=3
+  spr1: x= 40 y=120 tile=$E5 attr=$03 pal=3
+  spr2: x= 32 y=128 tile=$E6 attr=$03 pal=3
+  spr3: x= 40 y=128 tile=$E7 attr=$03 pal=3
+  spr4: x=160 y= 32 tile=$00 attr=$00 pal=0
+  spr5: x=168 y= 32 tile=$01 attr=$00 pal=0
+  spr6: x=160 y= 40 tile=$02 attr=$00 pal=0
+  spr7: x=168 y= 40 tile=$03 attr=$00 pal=0
+=== DUMP 13 f780 mode=$A8 ===
+-- sprite palettes --
+  spr_pal0: $0F $36 $30 $16
+  spr_pal1: $0F $27 $18 $21
+  spr_pal2: $0F $36 $17 $2A
+  spr_pal3: $0F $00 $10 $30
+-- bg palettes --
+  bg_pal0: $0F $00 $01 $2A
+  bg_pal1: $0F $00 $01 $27
+  bg_pal2: $0F $00 $01 $24
+  bg_pal3: $0F $00 $01 $30
+-- OAM 0-7 --
+  spr0: x= 32 y=136 tile=$E4 attr=$03 pal=3
+  spr1: x= 40 y=136 tile=$E5 attr=$03 pal=3
+  spr2: x= 32 y=144 tile=$E6 attr=$03 pal=3
+  spr3: x= 40 y=144 tile=$E7 attr=$03 pal=3
+  spr4: x=160 y= 32 tile=$00 attr=$01 pal=1
+  spr5: x=168 y= 32 tile=$01 attr=$01 pal=1
+  spr6: x=160 y= 40 tile=$02 attr=$01 pal=1
+  spr7: x=168 y= 40 tile=$03 attr=$01 pal=1
+=== DUMP 14 f840 mode=$A8 ===
+-- sprite palettes --
+  spr_pal0: $0F $36 $30 $16
+  spr_pal1: $0F $27 $18 $21
+  spr_pal2: $0F $36 $17 $2A
+  spr_pal3: $0F $00 $10 $30
+-- bg palettes --
+  bg_pal0: $0F $00 $01 $2A
+  bg_pal1: $0F $00 $01 $27
+  bg_pal2: $0F $00 $01 $24
+  bg_pal3: $0F $00 $01 $30
+-- OAM 0-7 --
+  spr0: x= 32 y=152 tile=$E4 attr=$03 pal=3
+  spr1: x= 40 y=152 tile=$E5 attr=$03 pal=3
+  spr2: x= 32 y=160 tile=$E6 attr=$03 pal=3
+  spr3: x= 40 y=160 tile=$E7 attr=$03 pal=3
+  spr4: x=160 y= 32 tile=$00 attr=$02 pal=2
+  spr5: x=168 y= 32 tile=$01 attr=$02 pal=2
+  spr6: x=160 y= 40 tile=$02 attr=$02 pal=2
+  spr7: x=168 y= 40 tile=$03 attr=$02 pal=2
+=== DUMP 15 f900 mode=$A8 ===
+-- sprite palettes --
+  spr_pal0: $0F $36 $30 $16
+  spr_pal1: $0F $27 $18 $21
+  spr_pal2: $0F $36 $17 $2A
+  spr_pal3: $0F $00 $10 $30
+-- bg palettes --
+  bg_pal0: $0F $00 $01 $2A
+  bg_pal1: $0F $00 $01 $27
+  bg_pal2: $0F $00 $01 $24
+  bg_pal3: $0F $00 $01 $30
+-- OAM 0-7 --
+  spr0: x= 32 y=168 tile=$E4 attr=$03 pal=3
+  spr1: x= 40 y=168 tile=$E5 attr=$03 pal=3
+  spr2: x= 32 y=176 tile=$E6 attr=$03 pal=3
+  spr3: x= 40 y=176 tile=$E7 attr=$03 pal=3
+  spr4: x=160 y= 32 tile=$00 attr=$00 pal=0
+  spr5: x=168 y= 32 tile=$01 attr=$00 pal=0
+  spr6: x=160 y= 40 tile=$02 attr=$00 pal=0
+  spr7: x=168 y= 40 tile=$03 attr=$00 pal=0
+=== DUMP 16 f960 mode=$A8 ===
+-- sprite palettes --
+  spr_pal0: $0F $36 $30 $16
+  spr_pal1: $0F $27 $18 $21
+  spr_pal2: $0F $36 $17 $2A
+  spr_pal3: $0F $00 $10 $30
+-- bg palettes --
+  bg_pal0: $0F $00 $01 $2A
+  bg_pal1: $0F $00 $01 $27
+  bg_pal2: $0F $00 $01 $24
+  bg_pal3: $0F $00 $01 $30
+-- OAM 0-7 --
+  spr0: x= 32 y=152 tile=$E4 attr=$03 pal=3
+  spr1: x= 40 y=152 tile=$E5 attr=$03 pal=3
+  spr2: x= 32 y=160 tile=$E6 attr=$03 pal=3
+  spr3: x= 40 y=160 tile=$E7 attr=$03 pal=3
+  spr4: x=160 y= 32 tile=$00 attr=$00 pal=0
+  spr5: x=168 y= 32 tile=$01 attr=$00 pal=0
+  spr6: x=160 y= 40 tile=$02 attr=$00 pal=0
+  spr7: x=168 y= 40 tile=$03 attr=$00 pal=0
+=== DUMP 17 f1020 mode=$70 ===
+-- sprite palettes --
+  spr_pal0: $0F $0F $16 $30
+  spr_pal1: $1A $0F $15 $30
+  spr_pal2: $1A $0F $27 $30
+  spr_pal3: $1A $0F $27 $30
+-- bg palettes --
+  bg_pal0: $0F $03 $13 $22
+  bg_pal1: $1A $01 $12 $33
+  bg_pal2: $1A $13 $22 $31
+  bg_pal3: $1A $00 $02 $30
+-- OAM 0-7 --
+  spr0: x=112 y=108 tile=$08 attr=$00 pal=0
+  spr1: x=120 y=108 tile=$09 attr=$00 pal=0
+  spr2: x=112 y=116 tile=$0A attr=$01 pal=1
+  spr3: x=120 y=116 tile=$0B attr=$01 pal=1
+=== DUMP 18 f1080 mode=$70 ===
+-- sprite palettes --
+  spr_pal0: $0F $0F $16 $30
+  spr_pal1: $1A $0F $15 $30
+  spr_pal2: $1A $0F $27 $30
+  spr_pal3: $1A $0F $27 $30
+-- bg palettes --
+  bg_pal0: $0F $03 $13 $22
+  bg_pal1: $1A $01 $12 $33
+  bg_pal2: $1A $13 $22 $31
+  bg_pal3: $1A $00 $02 $30
+-- OAM 0-7 --
+  spr0: x=112 y=108 tile=$08 attr=$00 pal=0
+  spr1: x=120 y=108 tile=$09 attr=$00 pal=0
+  spr2: x=112 y=116 tile=$0A attr=$01 pal=1
+  spr3: x=120 y=116 tile=$0B attr=$01 pal=1
+=== DUMP 19 f1140 mode=$70 ===
+-- sprite palettes --
+  spr_pal0: $0F $0F $16 $30
+  spr_pal1: $1A $0F $15 $30
+  spr_pal2: $1A $0F $27 $30
+  spr_pal3: $1A $0F $27 $30
+-- bg palettes --
+  bg_pal0: $0F $03 $13 $22
+  bg_pal1: $1A $01 $12 $33
+  bg_pal2: $1A $13 $22 $31
+  bg_pal3: $1A $00 $02 $30
+-- OAM 0-7 --
+  spr0: x=112 y=108 tile=$00 attr=$00 pal=0
+  spr1: x=120 y=108 tile=$01 attr=$00 pal=0
+  spr2: x=112 y=116 tile=$02 attr=$01 pal=1
+  spr3: x=120 y=116 tile=$03 attr=$01 pal=1
+=== DUMP 20 f1200 mode=$70 ===
+-- sprite palettes --
+  spr_pal0: $0F $0F $16 $30
+  spr_pal1: $1A $0F $15 $30
+  spr_pal2: $1A $0F $15 $36
+  spr_pal3: $1A $0F $27 $30
+-- bg palettes --
+  bg_pal0: $0F $07 $17 $28
+  bg_pal1: $1A $08 $18 $28
+  bg_pal2: $1A $12 $22 $31
+  bg_pal3: $1A $00 $02 $30
+-- OAM 0-7 --
+=== DUMP 21 f1260 mode=$70 ===
+-- sprite palettes --
+  spr_pal0: $0F $0F $16 $30
+  spr_pal1: $1A $0F $15 $30
+  spr_pal2: $1A $0F $15 $36
+  spr_pal3: $1A $0F $27 $30
+-- bg palettes --
+  bg_pal0: $0F $07 $17 $28
+  bg_pal1: $1A $08 $18 $28
+  bg_pal2: $1A $12 $22 $31
+  bg_pal3: $1A $00 $02 $30
+-- OAM 0-7 --
+  spr0: x=112 y=108 tile=$00 attr=$00 pal=0
+  spr1: x=120 y=108 tile=$01 attr=$00 pal=0
+  spr2: x=112 y=116 tile=$02 attr=$01 pal=1
+  spr3: x=120 y=116 tile=$03 attr=$01 pal=1
+=== DUMP 22 f1320 mode=$70 ===
+-- sprite palettes --
+  spr_pal0: $0F $0F $16 $30
+  spr_pal1: $1A $0F $15 $30
+  spr_pal2: $1A $0F $15 $36
+  spr_pal3: $1A $0F $27 $30
+-- bg palettes --
+  bg_pal0: $0F $07 $17 $28
+  bg_pal1: $1A $08 $18 $28
+  bg_pal2: $1A $12 $22 $31
+  bg_pal3: $1A $00 $02 $30
+-- OAM 0-7 --
+  spr0: x=112 y=108 tile=$08 attr=$00 pal=0
+  spr1: x=120 y=108 tile=$09 attr=$00 pal=0
+  spr2: x=112 y=116 tile=$0A attr=$01 pal=1
+  spr3: x=120 y=116 tile=$0B attr=$01 pal=1
+=== DUMP 23 f1380 mode=$70 ===
+-- sprite palettes --
+  spr_pal0: $0F $0F $16 $30
+  spr_pal1: $1A $0F $15 $30
+  spr_pal2: $1A $0F $15 $36
+  spr_pal3: $1A $0F $27 $30
+-- bg palettes --
+  bg_pal0: $0F $07 $17 $28
+  bg_pal1: $1A $08 $18 $28
+  bg_pal2: $1A $12 $22 $31
+  bg_pal3: $1A $00 $02 $30
+-- OAM 0-7 --
+  spr0: x=112 y=108 tile=$08 attr=$00 pal=0
+  spr1: x=120 y=108 tile=$09 attr=$00 pal=0
+  spr2: x=112 y=116 tile=$0A attr=$01 pal=1
+  spr3: x=120 y=116 tile=$0B attr=$01 pal=1
+=== DUMP 24 f1440 mode=$70 ===
+-- sprite palettes --
+  spr_pal0: $0F $0F $16 $30
+  spr_pal1: $1A $0F $15 $30
+  spr_pal2: $1A $0F $15 $36
+  spr_pal3: $1A $0F $27 $30
+-- bg palettes --
+  bg_pal0: $0F $07 $17 $28
+  bg_pal1: $1A $08 $18 $28
+  bg_pal2: $1A $12 $22 $31
+  bg_pal3: $1A $00 $02 $30
+-- OAM 0-7 --
+  spr0: x=112 y=107 tile=$0C attr=$00 pal=0
+  spr1: x=120 y=107 tile=$0D attr=$00 pal=0
+  spr2: x=112 y=115 tile=$0E attr=$01 pal=1
+  spr3: x=120 y=115 tile=$0F attr=$01 pal=1
+=== DUMP 25 f1500 mode=$70 ===
+-- sprite palettes --
+  spr_pal0: $0F $0F $16 $30
+  spr_pal1: $1A $0F $15 $30
+  spr_pal2: $1A $0F $15 $36
+  spr_pal3: $1A $0F $27 $30
+-- bg palettes --
+  bg_pal0: $0F $07 $17 $28
+  bg_pal1: $1A $08 $18 $28
+  bg_pal2: $1A $12 $22 $31
+  bg_pal3: $1A $00 $02 $30
+-- OAM 0-7 --
+  spr0: x=112 y=108 tile=$08 attr=$00 pal=0
+  spr1: x=120 y=108 tile=$09 attr=$00 pal=0
+  spr2: x=112 y=116 tile=$0A attr=$01 pal=1
+  spr3: x=120 y=116 tile=$0B attr=$01 pal=1
+=== DUMP 26 f1560 mode=$70 ===
+-- sprite palettes --
+  spr_pal0: $0F $0F $16 $30
+  spr_pal1: $1A $0F $15 $30
+  spr_pal2: $1A $0F $15 $36
+  spr_pal3: $1A $0F $27 $30
+-- bg palettes --
+  bg_pal0: $0F $07 $17 $28
+  bg_pal1: $1A $08 $18 $28
+  bg_pal2: $1A $12 $22 $31
+  bg_pal3: $1A $00 $02 $30
+-- OAM 0-7 --
+  spr0: x=112 y=108 tile=$09 attr=$40 pal=0
+  spr1: x=120 y=108 tile=$08 attr=$40 pal=0
+  spr2: x=112 y=116 tile=$0B attr=$41 pal=1
+  spr3: x=120 y=116 tile=$0A attr=$41 pal=1
+=== DUMP 27 f1620 mode=$70 ===
+-- sprite palettes --
+  spr_pal0: $0F $0F $16 $30
+  spr_pal1: $1A $0F $15 $30
+  spr_pal2: $1A $0F $15 $36
+  spr_pal3: $1A $0F $27 $30
+-- bg palettes --
+  bg_pal0: $0F $07 $17 $28
+  bg_pal1: $1A $08 $18 $28
+  bg_pal2: $1A $12 $22 $31
+  bg_pal3: $1A $00 $02 $30
+-- OAM 0-7 --
+  spr0: x=112 y=108 tile=$09 attr=$40 pal=0
+  spr1: x=120 y=108 tile=$08 attr=$40 pal=0
+  spr2: x=112 y=116 tile=$0B attr=$41 pal=1
+  spr3: x=120 y=116 tile=$0A attr=$41 pal=1
+=== DUMP 28 f1680 mode=$6F ===
+-- sprite palettes --
+  spr_pal0: $0F $0F $16 $30
+  spr_pal1: $1A $0F $15 $30
+  spr_pal2: $1A $0F $15 $36
+  spr_pal3: $1A $0F $27 $30
+-- bg palettes --
+  bg_pal0: $0F $07 $17 $28
+  bg_pal1: $1A $08 $18 $28
+  bg_pal2: $1A $12 $22 $31
+  bg_pal3: $1A $00 $02 $30
+-- OAM 0-7 --
+  spr0: x=111 y=108 tile=$04 attr=$00 pal=0
+  spr1: x=119 y=108 tile=$05 attr=$00 pal=0
+  spr2: x=111 y=116 tile=$07 attr=$41 pal=1
+  spr3: x=119 y=116 tile=$06 attr=$41 pal=1
+=== DUMP 29 f1740 mode=$6F ===
+-- sprite palettes --
+  spr_pal0: $0F $0F $16 $30
+  spr_pal1: $1A $0F $15 $30
+  spr_pal2: $1A $0F $15 $36
+  spr_pal3: $1A $0F $27 $30
+-- bg palettes --
+  bg_pal0: $0F $07 $17 $28
+  bg_pal1: $1A $08 $18 $28
+  bg_pal2: $1A $12 $22 $31
+  bg_pal3: $1A $00 $02 $30
+-- OAM 0-7 --
+  spr0: x=111 y=108 tile=$04 attr=$00 pal=0
+  spr1: x=119 y=108 tile=$05 attr=$00 pal=0
+  spr2: x=111 y=116 tile=$07 attr=$41 pal=1
+  spr3: x=119 y=116 tile=$06 attr=$41 pal=1
+=== DUMP 30 f1800 mode=$70 ===
+-- sprite palettes --
+  spr_pal0: $00 $00 $10 $30
+  spr_pal1: $10 $00 $10 $30
+  spr_pal2: $10 $00 $10 $30
+  spr_pal3: $10 $00 $20 $30
+-- bg palettes --
+  bg_pal0: $00 $00 $10 $20
+  bg_pal1: $10 $00 $10 $20
+  bg_pal2: $10 $10 $20 $30
+  bg_pal3: $10 $00 $00 $30
+-- OAM 0-7 --
+  spr0: x=112 y=108 tile=$04 attr=$00 pal=0
+  spr1: x=120 y=108 tile=$05 attr=$00 pal=0
+  spr2: x=112 y=116 tile=$06 attr=$01 pal=1
+  spr3: x=120 y=116 tile=$07 attr=$01 pal=1
+=== DUMP 31 f1860 mode=$00 ===
+-- sprite palettes --
+  spr_pal0: $0F $36 $30 $16
+  spr_pal1: $0F $27 $18 $21
+  spr_pal2: $0F $36 $17 $2A
+  spr_pal3: $0F $00 $10 $30
+-- bg palettes --
+  bg_pal0: $0F $17 $28 $3C
+  bg_pal1: $0F $18 $28 $11
+  bg_pal2: $0F $27 $17 $07
+  bg_pal3: $0F $00 $01 $30
+-- OAM 0-7 --
+=== DUMP 32 f1920 mode=$00 ===
+-- sprite palettes --
+  spr_pal0: $0F $36 $30 $16
+  spr_pal1: $0F $27 $18 $21
+  spr_pal2: $0F $36 $17 $2A
+  spr_pal3: $0F $00 $10 $30
+-- bg palettes --
+  bg_pal0: $0F $17 $28 $3C
+  bg_pal1: $0F $18 $28 $11
+  bg_pal2: $0F $27 $17 $07
+  bg_pal3: $0F $00 $01 $30
+-- OAM 0-7 --
