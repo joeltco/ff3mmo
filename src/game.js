@@ -101,6 +101,8 @@ let battleSpriteCanvas = null;
 let battleSpriteVictoryCanvas = null;
 let battleSpriteAttackCanvas = null;   // right-hand punch
 let battleSpriteAttackLCanvas = null;  // left-hand punch
+let battleSpriteHitCanvas = null;      // taking damage / recoil
+let battleFistCanvas = null;           // fist sprite (8x8, same for both hands)
 let silhouetteCanvas = null;
 
 // FF1&2 ROM — secondary ROM for monster sprites, etc.
@@ -740,6 +742,15 @@ function initBattleSprite(romData) {
   actx.drawImage(battleSpriteCanvas, 0, 0);
   drawTileToCanvas(ATK_R_39, actx, 0, 8);
 
+  // Fist tile $49 (identical for both hands) — 8x8 canvas
+  const FIST_TILE = new Uint8Array([0x00,0x00,0x00,0x0C,0x2C,0x4C,0x00,0x00,
+                                     0x00,0x00,0x00,0x73,0x53,0x23,0x00,0x00]);
+  battleFistCanvas = document.createElement('canvas');
+  battleFistCanvas.width = 8;
+  battleFistCanvas.height = 8;
+  const fctx = battleFistCanvas.getContext('2d');
+  drawTileToCanvas(FIST_TILE, fctx, 0, 0);
+
   // Left-hand punch canvas (mid-L = $3B, mid-R = $3C)
   battleSpriteAttackLCanvas = document.createElement('canvas');
   battleSpriteAttackLCanvas.width = 16;
@@ -771,6 +782,30 @@ function initBattleSprite(romData) {
       }
     }
     vctx.putImageData(vimg, layout[i][0], layout[i][1]);
+  }
+
+  // Hit/recoil pose: sprite frame 5 in job block (tiles 30-33), read from ROM like idle
+  const HIT_SPRITE_OFFSET = BATTLE_SPRITE_ROM + 30 * 16;
+  battleSpriteHitCanvas = document.createElement('canvas');
+  battleSpriteHitCanvas.width = 16;
+  battleSpriteHitCanvas.height = 16;
+  const hctx = battleSpriteHitCanvas.getContext('2d');
+  for (let i = 0; i < 4; i++) {
+    const px = decodeTile(romData, HIT_SPRITE_OFFSET + i * 16);
+    const himg = hctx.createImageData(8, 8);
+    for (let p = 0; p < 64; p++) {
+      const ci = px[p];
+      if (ci === 0) {
+        himg.data[p * 4 + 3] = 0;
+      } else {
+        const rgb = NES_SYSTEM_PALETTE[palette[ci]] || [0, 0, 0];
+        himg.data[p * 4]     = rgb[0];
+        himg.data[p * 4 + 1] = rgb[1];
+        himg.data[p * 4 + 2] = rgb[2];
+        himg.data[p * 4 + 3] = 255;
+      }
+    }
+    hctx.putImageData(himg, layout[i][0], layout[i][1]);
   }
 }
 
@@ -4632,17 +4667,26 @@ function drawBattle() {
     battleState === 'victory-hold' || battleState === 'exp-text-in' || battleState === 'exp-hold' ||
     battleState === 'victory-text-out' || battleState === 'victory-box-close';
   const isAttackPose = battleState === 'attack-start' || battleState === 'player-slash';
+  const isHitPose = battleState === 'enemy-attack' ||
+    (battleState === 'enemy-damage-show' && playerDamageNum && !playerDamageNum.miss);
   let portraitSrc = battleSpriteCanvas;
   if (isAttackPose && battleSpriteAttackCanvas) {
-    // Alternate right/left hand every 150ms during attack
-    const atkHand = Math.floor(battleTimer / 150) & 1;
-    portraitSrc = (atkHand && battleSpriteAttackLCanvas) ? battleSpriteAttackLCanvas : battleSpriteAttackCanvas;
+    // Show the hand matching the current hit (R for even hits, L for odd)
+    portraitSrc = (currentHitIdx % 2 === 1 && battleSpriteAttackLCanvas) ? battleSpriteAttackLCanvas : battleSpriteAttackCanvas;
+  } else if (isHitPose && battleSpriteHitCanvas) {
+    portraitSrc = battleSpriteHitCanvas;
   } else if (isVictoryPose && battleSpriteVictoryCanvas) {
     // Alternate idle/victory every 250ms throughout victory sequence
     if (Math.floor(Date.now() / 250) & 1) portraitSrc = battleSpriteVictoryCanvas;
   }
   if (portraitSrc) {
-    ctx.drawImage(portraitSrc, HUD_RIGHT_X + 8 + shakeOff, HUD_VIEW_Y + 8);
+    const px = HUD_RIGHT_X + 8 + shakeOff;
+    const py = HUD_VIEW_Y + 8;
+    ctx.drawImage(portraitSrc, px, py);
+    // Draw fist sprite during attack — extends over border like real NES
+    if (isAttackPose && battleFistCanvas) {
+      ctx.drawImage(battleFistCanvas, px - 4, py + 10);
+    }
   }
 
   // NES grayscale strobe — toggle grayscale every frame for 65 frames
