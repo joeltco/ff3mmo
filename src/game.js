@@ -3493,7 +3493,7 @@ function render() {
   }
 
   // Hide all sprites/objects during transitions and battles (show during trap reveal and flash-strobe)
-  if ((transState === 'none' || transState === 'trap-reveal') && (battleState === 'none' || battleState === 'flash-strobe')) {
+  if ((transState === 'none' || transState === 'trap-reveal') && (battleState === 'none' || battleState === 'flash-strobe' || battleState.startsWith('roar-'))) {
     // Flame sprites: draw after background, before player
     if (!onWorldMap && _flameSprites.length > 0) {
       const flameFrame = Math.floor(waterTick / 8) & 1;
@@ -4946,23 +4946,17 @@ function drawBattle() {
   if (isAttackPose) {
     const handWeapon = (currentHitIdx % 2 === 0) ? playerWeaponR : playerWeaponL;
     const isKnife = handWeapon !== 0 && ITEMS.get(handWeapon)?.subtype === 'knife';
-    if (isKnife) {
-      // Knife: 2 frames — back swing (attack-start) → front swing (player-slash)
-      if (battleState === 'attack-start' && battleSpriteKnifeBackCanvas) {
-        portraitSrc = battleSpriteKnifeBackCanvas;
-      } else if (currentHitIdx % 2 === 0 && battleSpriteKnifeRCanvas) {
-        portraitSrc = battleSpriteKnifeRCanvas;
-      } else if (battleSpriteKnifeLCanvas) {
-        portraitSrc = battleSpriteKnifeLCanvas;
-      }
-    } else {
-      // Unarmed punch poses
+    // Body pose is the same for knife and unarmed — only weapon sprite differs
+    // Frame 1 (attack-start): arm raised (R=$39, L=$3B/$3C)
+    // Frame 2 (player-slash): arm returns to idle (trace confirms body = idle tiles on swing)
+    if (battleState === 'attack-start') {
       if (currentHitIdx % 2 === 0) {
         portraitSrc = battleSpriteAttackCanvas || portraitSrc;
       } else {
         portraitSrc = battleSpriteAttackLCanvas || portraitSrc;
       }
     }
+    // else: portraitSrc stays as battleSpriteCanvas (idle) — correct per trace
   } else if (isHitPose && battleSpriteHitCanvas) {
     portraitSrc = battleSpriteHitCanvas;
   } else if (isVictoryPose && battleSpriteVictoryCanvas) {
@@ -4976,7 +4970,7 @@ function drawBattle() {
       const isKnife = handWeapon !== 0 && ITEMS.get(handWeapon)?.subtype === 'knife';
       // Back swing: blade BEHIND body (NES: weapon spr06-09 behind body spr00-05)
       if (isKnife && battleState === 'attack-start' && battleKnifeBladeCanvas) {
-        ctx.drawImage(battleKnifeBladeCanvas, px + 14, py - 8);
+        ctx.drawImage(battleKnifeBladeCanvas, px + 6, py - 8);
       }
     }
     ctx.drawImage(portraitSrc, px, py);
@@ -5049,17 +5043,17 @@ function drawRoarBox() {
 
   const boxW = HUD_VIEW_W - 16;
   const boxH = 48;
-  const vpBot = HUD_VIEW_Y + HUD_VIEW_H;
-  const finalY = vpBot - boxH - 8;
+  const vpTop = HUD_VIEW_Y;
+  const finalY = vpTop + 8;
   const centerX = HUD_VIEW_X + Math.floor((HUD_VIEW_W - boxW) / 2);
 
   let boxY = finalY;
   if (battleState === 'roar-slide-in') {
     const t = Math.min(battleTimer / BATTLE_SCROLL_MS, 1);
-    boxY = vpBot + (finalY - vpBot) * t;
+    boxY = (vpTop - boxH) + (finalY - (vpTop - boxH)) * t;
   } else if (battleState === 'roar-slide-out') {
     const t = Math.min(battleTimer / BATTLE_SCROLL_MS, 1);
-    boxY = finalY + (vpBot - finalY) * t;
+    boxY = finalY + ((vpTop - boxH) - finalY) * t;
   }
 
   ctx.save();
@@ -5111,21 +5105,26 @@ function drawBattleMenu() {
                     battleState === 'victory-box-close';
   if (!isSlide && !isAppear && !isMenu && !isVictory) return;
 
+  // Whole-panel horizontal slide: in from right, out to left
+  let panelOffX = 0;
+  const isClose = battleState === 'victory-box-close';
+  if (isSlide) {
+    const t = Math.min(battleTimer / BOSS_BOX_EXPAND_MS, 1);
+    panelOffX = Math.round(-CANVAS_W * (1 - t));  // left → 0
+  } else if (isClose) {
+    const t = Math.min(battleTimer / (VICTORY_BOX_ROWS * VICTORY_ROW_FRAME_MS), 1);
+    panelOffX = Math.round(-CANVAS_W * t);  // 0 → left
+  }
+
   // Clear bottom panel interior
   ctx.fillStyle = '#000';
-  ctx.fillRect(8, HUD_BOT_Y + 8, CANVAS_W - 16, HUD_BOT_H - 16);
+  ctx.fillRect(8 + panelOffX, HUD_BOT_Y + 8, CANVAS_W - 16, HUD_BOT_H - 16);
 
-  // Left bordered box — slides in during boss-box-expand, stays put after
-  // Skip left box during victory states (drawVictoryBox handles left area)
+  // Left bordered box — skip during victory states (drawVictoryBox handles left area)
   const boxW = BATTLE_PANEL_W;
   const boxH = HUD_BOT_H;
   if (!isVictory) {
-    let boxX = 0;
-    if (isSlide) {
-      const t = Math.min(battleTimer / BOSS_BOX_EXPAND_MS, 1);
-      boxX = -boxW + boxW * t;
-    }
-    _drawBorderedBox(Math.round(boxX), HUD_BOT_Y, boxW, boxH);
+    _drawBorderedBox(panelOffX, HUD_BOT_Y, boxW, boxH);
   }
 
   // Text only after slide + dissolve complete (or during victory for right side)
@@ -5155,13 +5154,13 @@ function drawBattleMenu() {
       enemyName = BATTLE_BOSS_NAME;
     }
     const nameTw = measureText(enemyName);
-    const nameX = Math.floor((boxW - nameTw) / 2);
+    const nameX = Math.floor((boxW - nameTw) / 2) + panelOffX;
     const nameY = HUD_BOT_Y + Math.floor((boxH - 8) / 2);
     drawText(ctx, nameX, nameY, enemyName, fadedPal);
   }
 
   // 2×2 menu grid on right side of bottom panel (visible during combat AND victory)
-  const menuX = boxW + 16;
+  const menuX = boxW + 16 + panelOffX;
   const colL = menuX;
   const colR = menuX + 64;
   const row0 = HUD_BOT_Y + 16;
@@ -5551,8 +5550,14 @@ function drawVictoryBox() {
   const showBox = isNameOut || isCelebrate || isOpen || isClose || isVicText || isVicHold || isExpText || isExpHold || isOut;
   if (!showBox) return;
 
-  const boxX = 0;
+  let boxX = 0;
   const boxY = HUD_BOT_Y;
+
+  // Slide left during victory-box-close (matches drawBattleMenu panelOffX)
+  if (isClose) {
+    const t = Math.min(battleTimer / (VICTORY_BOX_ROWS * VICTORY_ROW_FRAME_MS), 1);
+    boxX = Math.round(-CANVAS_W * t);
+  }
 
   // victory-name-out: left box stays with border, monster name fades out
   if (isNameOut) {
@@ -5577,14 +5582,11 @@ function drawVictoryBox() {
   // victory-celebrate: left area empty (cleared by drawBattleMenu)
   if (isCelebrate) return;
 
-  // Row-by-row expand / close
+  // Row-by-row expand (open only); close uses horizontal slide via boxX
   let drawH = VICTORY_BOX_H;
   if (isOpen) {
     const rows = Math.min(Math.floor(battleTimer / VICTORY_ROW_FRAME_MS) + 1, VICTORY_BOX_ROWS);
     drawH = rows * 8;
-  } else if (isClose) {
-    const rows = VICTORY_BOX_ROWS - Math.min(Math.floor(battleTimer / VICTORY_ROW_FRAME_MS), VICTORY_BOX_ROWS);
-    drawH = Math.max(8, rows * 8);
   }
   _drawBorderedBox(boxX, boxY, VICTORY_BOX_W, drawH);
 
