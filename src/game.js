@@ -8,11 +8,12 @@ import { MapRenderer } from './map-renderer.js';
 import { loadWorldMap } from './world-map-loader.js';
 import { WorldMapRenderer } from './world-map-renderer.js';
 import { generateFloor, clearDungeonCache } from './dungeon-generator.js';
-import { initMusic, playTrack, stopMusic, playSFX, TRACKS, SFX } from './music.js';
+import { initMusic, playTrack, stopMusic, playSFX, stopSFX, TRACKS, SFX } from './music.js';
 import { applyIPS } from './ips-patcher.js';
 import { initTextDecoder } from './text-decoder.js';
 import { initFont, drawText, measureText, TEXT_WHITE, TEXT_YELLOW } from './font-renderer.js';
 import { MONSTERS } from './data/monsters.js';
+import { ITEMS } from './data/items.js';
 
 // --- Save data persistence (IndexedDB) ---
 function openSaveDB() {
@@ -32,7 +33,8 @@ async function saveSlotsToDB() {
       stats: s.stats || (playerStats ? {
         str: playerStats.str, agi: playerStats.agi, vit: playerStats.vit,
         int: playerStats.int, mnd: playerStats.mnd,
-        maxHP: playerStats.maxHP, maxMP: playerStats.maxMP
+        maxHP: playerStats.maxHP, maxMP: playerStats.maxMP,
+        weaponR: playerWeaponR, weaponL: playerWeaponL
       } : null)
     } : null);
     const db = await openSaveDB();
@@ -99,8 +101,14 @@ const BATTLE_SPRITE_ROM = 0x050010;  // Bank 28/$8000 — battle character graph
 const BATTLE_JOB_SIZE = 0x02A0;      // 672 bytes (42 tiles) per job
 let battleSpriteCanvas = null;
 let battleSpriteVictoryCanvas = null;
-let battleSpriteAttackCanvas = null;   // right-hand punch
-let battleSpriteAttackLCanvas = null;  // left-hand punch
+let battleSpriteAttackCanvas = null;   // right-hand attack frame 1 (arm raised)
+let battleSpriteAttack2Canvas = null;  // attack frame 2 (arm swung — ROM frame 3)
+let battleSpriteAttackLCanvas = null;  // left-hand attack frame 1
+let battleSpriteKnifeRCanvas = null;   // R-hand knife front swing (single trace $2B/$2C/$39/$2E)
+let battleSpriteKnifeLCanvas = null;   // L-hand knife front swing (single trace $01/$3F/$03/$40)
+let battleSpriteKnifeBackCanvas = null;// knife back swing body (dual trace $43/$44/$45/$46)
+let battleKnifeBladeCanvas = null;     // knife blade raised 16×16 (h-flipped, back swing)
+let battleKnifeBladeSwungCanvas = null;// knife blade swung 16×16 (no flip, forward slash)
 let battleSpriteHitCanvas = null;      // taking damage / recoil
 let battleFistCanvas = null;           // fist sprite (8x8, same for both hands)
 let silhouetteCanvas = null;
@@ -225,6 +233,8 @@ let playerHP = 28;   // overwritten by initPlayerStats
 let playerMP = 12;
 let playerATK = 12;
 let playerDEF = 4;
+let playerWeaponR = 0x1E;  // right hand item ID (Knife), 0 = unarmed
+let playerWeaponL = 0x00;  // left hand item ID, 0 = unarmed
 
 // Boss fight state
 let bossHP = 111;
@@ -232,6 +242,7 @@ const BOSS_ATK = 8, BOSS_DEF = 6, BOSS_MAX_HP = 111;
 
 let battleState = 'none';
 let battleTimer = 0;
+let sfxCutTimerId = null;    // tracked setTimeout for knife SFX cut — prevents stacking
 let battleCursor = 0;        // 0=Fight,1=Magic,2=Item,3=Run
 let targetIndex = 0;         // which monster is targeted in target-select
 let battleMessage = null;     // Uint8Array for status messages
@@ -260,6 +271,8 @@ let slashOffX = 0, slashOffY = 0; // random offset per frame (punch scatter)
 let slashFramesR = null;           // right-hand punch frames (frame $12, 4 effect sets)
 let slashFramesL = null;           // left-hand punch frames (frame $13, 4 effect sets)
 let slashFrames = null;            // alias — points to R or L based on current hit
+let knifeSlashFramesR = null;      // knife diagonal slash frames (right hand)
+let knifeSlashFramesL = null;      // knife diagonal slash frames (left hand)
 const BATTLE_MISS = new Uint8Array([0x96, 0xD2, 0xDC, 0xDC]); // "Miss" in ROM encoding
 const BATTLE_DEFEATED = new Uint8Array([0x8D,0xE8,0xEF,0xE8,0xE4,0xDD,0xE8,0xE7]); // "Defeated"
 
@@ -705,10 +718,14 @@ function initBattleSprite(romData) {
   }
   sctx.putImageData(sdata, 0, 0);
 
-  // Helper: decode PPU tile bytes into canvas ImageData using palette
+  // Helper: decode PPU tile bytes into canvas using palette (composites over existing pixels)
   function drawTileToCanvas(tileBytes, tctx, x, y) {
     const px = decodeTile(tileBytes, 0);
-    const img = tctx.createImageData(8, 8);
+    const tmp = document.createElement('canvas');
+    tmp.width = 8;
+    tmp.height = 8;
+    const tc = tmp.getContext('2d');
+    const img = tc.createImageData(8, 8);
     for (let p = 0; p < 64; p++) {
       const ci = px[p];
       if (ci === 0) {
@@ -721,7 +738,8 @@ function initBattleSprite(romData) {
         img.data[p * 4 + 3] = 255;
       }
     }
-    tctx.putImageData(img, x, y);
+    tc.putImageData(img, 0, 0);
+    tctx.drawImage(tmp, x, y);
   }
 
   // Attack pose tiles from FCEUX PPU dump (unarmed, weapons zeroed)
@@ -759,6 +777,135 @@ function initBattleSprite(romData) {
   alctx.drawImage(battleSpriteCanvas, 0, 0);
   drawTileToCanvas(ATK_L_3B, alctx, 0, 8);
   drawTileToCanvas(ATK_L_3C, alctx, 8, 8);
+
+  // Knife attack body poses — from PPU trace dumps (knife integrated into body tiles)
+  // R-hand: tiles $2B/$2C/$39/$2E from knife-trace4.txt
+  const KNIFE_R_TILES = [
+    new Uint8Array([0x00,0x00,0x0A,0x16,0x2F,0x03,0x00,0x0C, 0x00,0x00,0x0E,0x1E,0x3F,0x7F,0x83,0x40]), // $2B
+    new Uint8Array([0x00,0x00,0x00,0xE0,0x70,0xB8,0xD8,0x68, 0x00,0x6C,0x19,0xFE,0x76,0xBB,0xDB,0xED]), // $2C
+    new Uint8Array([0x1F,0x04,0x16,0x16,0x2F,0x7F,0x70,0x26, 0x00,0x00,0x00,0x00,0x30,0x70,0x70,0x3E]), // $39
+    new Uint8Array([0x18,0x80,0x48,0xCC,0x00,0x00,0x70,0xD8, 0x59,0x32,0x38,0x0C,0xB0,0x78,0x70,0x1C]), // $2E
+  ];
+  battleSpriteKnifeRCanvas = document.createElement('canvas');
+  battleSpriteKnifeRCanvas.width = 16;
+  battleSpriteKnifeRCanvas.height = 16;
+  const krctx = battleSpriteKnifeRCanvas.getContext('2d');
+  for (let i = 0; i < 4; i++) {
+    const px = decodeTile(KNIFE_R_TILES[i], 0);
+    const kimg = krctx.createImageData(8, 8);
+    for (let p = 0; p < 64; p++) {
+      const ci = px[p];
+      if (ci === 0) { kimg.data[p * 4 + 3] = 0; }
+      else {
+        const rgb = NES_SYSTEM_PALETTE[palette[ci]] || [0, 0, 0];
+        kimg.data[p * 4] = rgb[0]; kimg.data[p * 4 + 1] = rgb[1];
+        kimg.data[p * 4 + 2] = rgb[2]; kimg.data[p * 4 + 3] = 255;
+      }
+    }
+    krctx.putImageData(kimg, layout[i][0], layout[i][1]);
+  }
+  // L-hand: tiles $01/$3F/$03/$40 from knife-trace4.txt PPU
+  const KNIFE_L_TILES = [
+    new Uint8Array([0x00,0x00,0x0A,0x16,0x2F,0x03,0x00,0x0C, 0x00,0x00,0x0E,0x1E,0x3F,0x7F,0x83,0x40]), // $01
+    new Uint8Array([0x00,0x00,0x00,0xE0,0x70,0xB8,0xD8,0x68, 0x00,0x6C,0x19,0xFE,0x76,0xBB,0xDB,0xEC]), // $3F
+    new Uint8Array([0x1F,0x04,0x16,0x16,0x0F,0x0F,0x60,0xC6, 0x00,0x00,0x00,0x00,0x50,0xE0,0x60,0x1E]), // $03
+    new Uint8Array([0x13,0x87,0x57,0xF8,0x7E,0x3C,0x1C,0x08, 0x50,0x30,0x30,0x38,0xFE,0x7C,0xFE,0xFA]), // $40
+  ];
+  battleSpriteKnifeLCanvas = document.createElement('canvas');
+  battleSpriteKnifeLCanvas.width = 16;
+  battleSpriteKnifeLCanvas.height = 16;
+  const klctx = battleSpriteKnifeLCanvas.getContext('2d');
+  for (let i = 0; i < 4; i++) {
+    const px = decodeTile(KNIFE_L_TILES[i], 0);
+    const klimg = klctx.createImageData(8, 8);
+    for (let p = 0; p < 64; p++) {
+      const ci = px[p];
+      if (ci === 0) { klimg.data[p * 4 + 3] = 0; }
+      else {
+        const rgb = NES_SYSTEM_PALETTE[palette[ci]] || [0, 0, 0];
+        klimg.data[p * 4] = rgb[0]; klimg.data[p * 4 + 1] = rgb[1];
+        klimg.data[p * 4 + 2] = rgb[2]; klimg.data[p * 4 + 3] = 255;
+      }
+    }
+    klctx.putImageData(klimg, layout[i][0], layout[i][1]);
+  }
+
+  // Back-swing body pose — dual trace tiles $43/$44/$45/$46 (arm pulled back)
+  // Rendered with player palette (same shape, just different palette slot in trace)
+  const KNIFE_BACK_TILES = [
+    new Uint8Array([0x05,0x0B,0x17,0x03,0x00,0x00,0x0E,0x1F, 0x07,0x0F,0x1F,0x3F,0x43,0x40,0x20,0x00]), // $43
+    new Uint8Array([0x00,0x00,0xA0,0xD0,0xE8,0x78,0x10,0x88, 0x2C,0x59,0xBE,0xD6,0xEF,0xFB,0x75,0x1A]), // $44
+    new Uint8Array([0x04,0xD6,0xD6,0x3F,0xEF,0xF0,0x63,0x0E, 0x00,0x00,0x00,0x24,0xE4,0xF0,0x6F,0x1F]), // $45
+    new Uint8Array([0x90,0x4C,0xCC,0x30,0x7C,0x78,0x30,0x00, 0x32,0x21,0x00,0xB0,0x7C,0x7C,0xB2,0xC2]), // $46
+  ];
+  battleSpriteKnifeBackCanvas = document.createElement('canvas');
+  battleSpriteKnifeBackCanvas.width = 16;
+  battleSpriteKnifeBackCanvas.height = 16;
+  const kbctx = battleSpriteKnifeBackCanvas.getContext('2d');
+  for (let i = 0; i < 4; i++) {
+    const px = decodeTile(KNIFE_BACK_TILES[i], 0);
+    const kbimg = kbctx.createImageData(8, 8);
+    for (let p = 0; p < 64; p++) {
+      const ci = px[p];
+      if (ci === 0) { kbimg.data[p * 4 + 3] = 0; }
+      else {
+        const rgb = NES_SYSTEM_PALETTE[palette[ci]] || [0, 0, 0];
+        kbimg.data[p * 4] = rgb[0]; kbimg.data[p * 4 + 1] = rgb[1];
+        kbimg.data[p * 4 + 2] = rgb[2]; kbimg.data[p * 4 + 3] = 255;
+      }
+    }
+    kbctx.putImageData(kbimg, layout[i][0], layout[i][1]);
+  }
+
+  // Knife blade tiles — single trace (knife-trace4.txt) $49/$4A/$4B/$4C
+  // Grid: $4A(0,0) $49(8,0) / $4C(0,8) $4B(8,8)
+  // Palette 3 from single trace: $0F/$00/$32/$30
+  const BLADE_PAL = [0x0F, 0x00, 0x32, 0x30];
+  const BLADE_TILES = [
+    new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x80]), // $4A
+    new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x01, 0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x01]), // $49
+    new Uint8Array([0x00,0x80,0x40,0x21,0x11,0x08,0x07,0x1B, 0xC0,0xE0,0x70,0x38,0x1C,0x0E,0x04,0x00]), // $4C
+    new Uint8Array([0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00]), // $4B
+  ];
+  const BLADE_POS = [[0,0],[8,0],[0,8],[8,8]];
+
+  // Raised blade (h-flipped, attr $43) — back swing / windup
+  battleKnifeBladeCanvas = document.createElement('canvas');
+  battleKnifeBladeCanvas.width = 16;
+  battleKnifeBladeCanvas.height = 16;
+  const blctx = battleKnifeBladeCanvas.getContext('2d');
+  for (let t = 0; t < 4; t++) {
+    const bpx = decodeTile(BLADE_TILES[t], 0);
+    const blimg = blctx.createImageData(8, 8);
+    for (let p = 0; p < 64; p++) {
+      const ci = bpx[p];
+      if (ci === 0) continue;
+      const rgb = NES_SYSTEM_PALETTE[BLADE_PAL[ci]] || [252, 252, 252];
+      const row = Math.floor(p / 8), col = p % 8;
+      const di = (row * 8 + (7 - col)) * 4; // h-flip
+      blimg.data[di] = rgb[0]; blimg.data[di + 1] = rgb[1];
+      blimg.data[di + 2] = rgb[2]; blimg.data[di + 3] = 255;
+    }
+    blctx.putImageData(blimg, BLADE_POS[t][0], BLADE_POS[t][1]);
+  }
+
+  // Swung blade (no flip, attr $03) — forward slash / hit
+  battleKnifeBladeSwungCanvas = document.createElement('canvas');
+  battleKnifeBladeSwungCanvas.width = 16;
+  battleKnifeBladeSwungCanvas.height = 16;
+  const bsctx = battleKnifeBladeSwungCanvas.getContext('2d');
+  for (let t = 0; t < 4; t++) {
+    const bpx = decodeTile(BLADE_TILES[t], 0);
+    const bsimg = bsctx.createImageData(8, 8);
+    for (let p = 0; p < 64; p++) {
+      const ci = bpx[p];
+      if (ci === 0) continue;
+      const rgb = NES_SYSTEM_PALETTE[BLADE_PAL[ci]] || [252, 252, 252];
+      bsimg.data[p * 4] = rgb[0]; bsimg.data[p * 4 + 1] = rgb[1];
+      bsimg.data[p * 4 + 2] = rgb[2]; bsimg.data[p * 4 + 3] = 255;
+    }
+    bsctx.putImageData(bsimg, BLADE_POS[t][0], BLADE_POS[t][1]);
+  }
 
   // Victory pose: sprite frame 4 in job block (tiles 24-27), read from ROM like idle
   const VICTORY_SPRITE_OFFSET = BATTLE_SPRITE_ROM + 24 * 16;
@@ -807,6 +954,32 @@ function initBattleSprite(romData) {
     }
     hctx.putImageData(himg, layout[i][0], layout[i][1]);
   }
+
+  // Attack frame 2: ROM frame 3 (tiles 18-21, top 2×2 of 2×3 body)
+  // NES attack alternates frame 2 (arm raised) and frame 3 (arm swung)
+  const ATK2_OFFSET = BATTLE_SPRITE_ROM + 18 * 16;
+  battleSpriteAttack2Canvas = document.createElement('canvas');
+  battleSpriteAttack2Canvas.width = 16;
+  battleSpriteAttack2Canvas.height = 16;
+  const a2ctx = battleSpriteAttack2Canvas.getContext('2d');
+  for (let i = 0; i < 4; i++) {
+    const px = decodeTile(romData, ATK2_OFFSET + i * 16);
+    const a2img = a2ctx.createImageData(8, 8);
+    for (let p = 0; p < 64; p++) {
+      const ci = px[p];
+      if (ci === 0) {
+        a2img.data[p * 4 + 3] = 0;
+      } else {
+        const rgb = NES_SYSTEM_PALETTE[palette[ci]] || [0, 0, 0];
+        a2img.data[p * 4]     = rgb[0];
+        a2img.data[p * 4 + 1] = rgb[1];
+        a2img.data[p * 4 + 2] = rgb[2];
+        a2img.data[p * 4 + 3] = 255;
+      }
+    }
+    a2ctx.putImageData(a2img, layout[i][0], layout[i][1]);
+  }
+
 }
 
 function initAdamantoise(romData) {
@@ -875,7 +1048,7 @@ function initPlayerStats(romData) {
   playerStats = { str, agi, vit, int: int_, mnd, hp, maxHP: hp, mp, maxMP: mp, level: 1, exp: 0, expToNext: 0 };
   playerHP = hp;
   playerMP = mp;
-  playerATK = str;
+  playerATK = str + (ITEMS.get(playerWeaponR)?.atk || 0) + (ITEMS.get(playerWeaponL)?.atk || 0);
   playerDEF = vit;
 }
 
@@ -923,7 +1096,7 @@ function grantExp(amount) {
     playerMP = playerStats.maxMP;
 
     // Update derived combat stats
-    playerATK = playerStats.str;
+    playerATK = playerStats.str + (ITEMS.get(playerWeaponR)?.atk || 0) + (ITEMS.get(playerWeaponL)?.atk || 0);
     playerDEF = playerStats.vit;
 
     // Next threshold
@@ -1659,6 +1832,7 @@ export async function loadROM(arrayBuffer) {
   initLandTurtleBattle(romRaw);
   initGoblinSprite(romRaw);
   initSlashSprites();
+  initKnifeSlashSprites();
   initPlayerStats(romRaw);
   initExpTable(romRaw);
   initMoogleSprite(romRaw);
@@ -2024,25 +2198,36 @@ function handleInput() {
         keys['z'] = false; keys['Z'] = false;
         // Confirm target — roll hits, transition to player-slash
         playSFX(SFX.CONFIRM);
-        // Unarmed: both hands → minimum 2 hits
-        const potentialHits = Math.max(2, Math.floor((playerStats ? playerStats.agi : 5) / 10));
+        // Hit count: dual-wield/unarmed = min 2, single weapon = min 1
+        const dualWield = playerWeaponR !== 0 && playerWeaponL !== 0;
+        const unarmed = playerWeaponR === 0 && playerWeaponL === 0;
+        const baseHits = Math.max(1, Math.floor((playerStats ? playerStats.agi : 5) / 10));
+        const potentialHits = (dualWield || unarmed) ? Math.max(2, baseHits) : Math.max(1, baseHits);
+        const wpn = ITEMS.get(playerWeaponR) || ITEMS.get(playerWeaponL);
+        const hitRate = wpn ? wpn.hit : BASE_HIT_RATE;
         if (isRandomEncounter && encounterMonsters) {
           const target = encounterMonsters[targetIndex];
-          hitResults = rollHits(playerATK, target.def, BASE_HIT_RATE, potentialHits);
+          hitResults = rollHits(playerATK, target.def, hitRate, potentialHits);
         } else {
-          hitResults = rollHits(playerATK, BOSS_DEF, BASE_HIT_RATE, potentialHits);
+          hitResults = rollHits(playerATK, BOSS_DEF, hitRate, potentialHits);
         }
         currentHitIdx = 0;
         slashFrame = 0;
-        slashFrames = slashFramesR; // first hit = right hand
+        const rIsKnife1st = playerWeaponR !== 0 && ITEMS.get(playerWeaponR)?.subtype === 'knife';
+        slashFrames = rIsKnife1st ? knifeSlashFramesR : slashFramesR; // first hit = right hand
         // Base position = target center
         const centerX = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2);
         const centerY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
         slashX = centerX;
         slashY = centerY;
-        // Random offset for punch scatter (ROM: center + random 0-31)
-        slashOffX = Math.floor(Math.random() * 40) - 20;
-        slashOffY = Math.floor(Math.random() * 40) - 20;
+        // Weapon-aware initial offset: knife = diagonal sweep, unarmed = random scatter
+        const rIsKnife0 = playerWeaponR !== 0 && ITEMS.get(playerWeaponR)?.subtype === 'knife';
+        if (rIsKnife0) {
+          slashOffX = 8; slashOffY = -8; // diagonal sweep starts top-right
+        } else {
+          slashOffX = Math.floor(Math.random() * 40) - 20;
+          slashOffY = Math.floor(Math.random() * 40) - 20;
+        }
         battleState = 'attack-start';
         battleTimer = 0;
       }
@@ -3667,7 +3852,9 @@ function updateTitle(dt) {
           playerStats.mp = playerStats.maxMP;
           playerHP = playerStats.maxHP;
           playerMP = playerStats.maxMP;
-          playerATK = playerStats.str;
+          playerWeaponR = slot.stats.weaponR != null ? slot.stats.weaponR : 0x1E;
+          playerWeaponL = slot.stats.weaponL != null ? slot.stats.weaponL : 0x00;
+          playerATK = playerStats.str + (ITEMS.get(playerWeaponR)?.atk || 0) + (ITEMS.get(playerWeaponL)?.atk || 0);
           playerDEF = playerStats.vit;
         }
         loadMapById(114);
@@ -4228,6 +4415,59 @@ function initSlashSprites() {
   slashFrames = slashFramesR;
 }
 
+function initKnifeSlashSprites() {
+  // Diagonal slash effect for knife attacks — 3 frames (16×16 each)
+  // Frame 0: slash start (top-right portion)
+  // Frame 1: full diagonal slash
+  // Frame 2: slash end (bottom-left portion, fading)
+  // Uses pal3 from dual-knife trace: $0F/$1B/$2B/$30
+  const white = NES_SYSTEM_PALETTE[0x30];   // white — main slash line
+  const light = NES_SYSTEM_PALETTE[0x2B];   // light green — glow/trail
+  const dark  = NES_SYSTEM_PALETTE[0x1B];   // dark blue-green — fading edge
+
+  // Slash line: diagonal from (14,0) to (0,14) — 2px wide with 1px trail
+  const FULL_LINE = [];
+  for (let i = 0; i < 15; i++) {
+    FULL_LINE.push([14 - i, i]);  // main diagonal
+  }
+
+  const frames = [];
+  for (let f = 0; f < 3; f++) {
+    const c = document.createElement('canvas');
+    c.width = 16; c.height = 16;
+    const ctx = c.getContext('2d');
+    const img = ctx.createImageData(16, 16);
+
+    function putPx(x, y, rgb) {
+      if (x < 0 || x >= 16 || y < 0 || y >= 16) return;
+      const di = (y * 16 + x) * 4;
+      img.data[di] = rgb[0]; img.data[di+1] = rgb[1]; img.data[di+2] = rgb[2]; img.data[di+3] = 255;
+    }
+
+    let startI, endI;
+    if (f === 0) { startI = 0; endI = 7; }       // top-right half
+    else if (f === 1) { startI = 0; endI = 15; }  // full line
+    else { startI = 7; endI = 15; }               // bottom-left half
+
+    for (let i = startI; i < endI; i++) {
+      const [x, y] = FULL_LINE[i];
+      putPx(x, y, white);           // main line
+      putPx(x + 1, y, light);       // right glow
+      putPx(x, y + 1, light);       // bottom glow
+      if (f === 2 && i < 10) {
+        putPx(x, y, dark);          // fading portion in frame 2
+        putPx(x + 1, y, dark);
+      }
+    }
+
+    ctx.putImageData(img, 0, 0);
+    frames.push(c);
+  }
+
+  knifeSlashFramesR = frames;
+  knifeSlashFramesL = frames;
+}
+
 // --- Battle System ---
 
 function calcDamage(atk, def) {
@@ -4242,10 +4482,10 @@ function rollHits(atk, def, hitRate, potentialHits) {
       const crit = Math.random() * 100 < CRIT_RATE;
       if (crit) dmg = Math.floor(dmg * CRIT_MULT);
       results.push({ damage: dmg, crit });
+    } else {
+      results.push({ miss: true });
     }
   }
-  // At least 1 result — if all missed, return single miss entry
-  if (results.length === 0) results.push({ miss: true });
   return results;
 }
 
@@ -4376,9 +4616,13 @@ function updateBattle(dt) {
   } else if (battleState === 'message-hold') {
     if (battleTimer >= BATTLE_MSG_HOLD_MS) { battleState = 'menu-open'; battleTimer = 0; battleMessage = null; }
   } else if (battleState === 'attack-start') {
-    // Brief pause so CONFIRM SFX is audible before first punch
-    if (battleTimer >= 250) {
-      playSFX(SFX.ATTACK_HIT);
+    // First hit: 250ms pause so CONFIRM SFX is audible. Subsequent hits: 50ms (rapid combo)
+    const startDelay = currentHitIdx === 0 ? 250 : 50;
+    if (battleTimer >= startDelay) {
+      const hw0 = (currentHitIdx % 2 === 0) ? playerWeaponR : playerWeaponL;
+      const isKnife0 = hw0 !== 0 && ITEMS.get(hw0)?.subtype === 'knife';
+      playSFX(isKnife0 ? SFX.KNIFE_HIT : SFX.ATTACK_HIT);
+      if (isKnife0) { if (sfxCutTimerId) clearTimeout(sfxCutTimerId); sfxCutTimerId = setTimeout(() => { stopSFX(); sfxCutTimerId = null; }, 133); }
       battleState = 'player-slash';
       battleTimer = 0;
     }
@@ -4387,76 +4631,103 @@ function updateBattle(dt) {
     const frame = Math.floor(battleTimer / SLASH_FRAME_MS);
     if (frame !== slashFrame && frame < SLASH_FRAMES) {
       slashFrame = frame;
-      // Randomize position each frame — punch scatter (ROM: every 2 ticks)
-      slashOffX = Math.floor(Math.random() * 40) - 20;
-      slashOffY = Math.floor(Math.random() * 40) - 20;
+      // Weapon-aware frame positioning
+      const handWeapon = (currentHitIdx % 2 === 0) ? playerWeaponR : playerWeaponL;
+      const isKnife = handWeapon !== 0 && ITEMS.get(handWeapon)?.subtype === 'knife';
+      if (isKnife) {
+        // Diagonal sweep: top-right to bottom-left over 3 frames
+        slashOffX = 8 - slashFrame * 8;   // +8, 0, -8
+        slashOffY = -8 + slashFrame * 8;  // -8, 0, +8
+      } else {
+        // Punch scatter
+        slashOffX = Math.floor(Math.random() * 40) - 20;
+        slashOffY = Math.floor(Math.random() * 40) - 20;
+      }
     }
     if (battleTimer >= SLASH_FRAMES * SLASH_FRAME_MS) {
       const hit = hitResults[currentHitIdx];
-      if (hit.miss) {
-        battleState = 'player-miss-show';
-        battleTimer = 0;
-        bossDamageNum = { miss: true, timer: 0 };
-      } else {
-        // Subtract damage from target
+      if (!hit.miss) {
+        // Subtract damage from target (no number yet — total shown after combo)
         if (isRandomEncounter && encounterMonsters) {
           encounterMonsters[targetIndex].hp = Math.max(0, encounterMonsters[targetIndex].hp - hit.damage);
         } else {
           bossHP = Math.max(0, bossHP - hit.damage);
         }
-        bossDamageNum = { value: hit.damage, crit: hit.crit, timer: 0 };
-        battleState = 'player-hit-show';
-        battleTimer = 0;
       }
+      // Brief pause between slash and next action (no damage number shown yet)
+      battleState = 'player-hit-show';
+      battleTimer = 0;
     }
   } else if (battleState === 'player-hit-show') {
-    if (battleTimer >= HIT_PAUSE_MS) {
-      // Check if target died mid-combo
-      const targetDead = isRandomEncounter && encounterMonsters
-        ? encounterMonsters[targetIndex].hp <= 0
-        : bossHP <= 0;
-      if (targetDead) {
-        // Remaining hits wasted — go to death animation
-        if (isRandomEncounter && encounterMonsters) {
-          dyingMonsterIndex = targetIndex;
-          battleState = 'monster-death';
-          battleTimer = 0;
-          playSFX(SFX.MONSTER_DEATH);
-        } else {
-          battleState = 'boss-dissolve';
-          battleTimer = 0;
-          playSFX(SFX.BOSS_DEATH);
-        }
-      } else if (currentHitIdx + 1 < hitResults.length) {
+    // Brief pause between combo hits (50ms), or full HIT_PAUSE after last hit
+    const hitPause = (currentHitIdx + 1 < hitResults.length) ? 50 : HIT_PAUSE_MS;
+    if (battleTimer >= hitPause) {
+      if (currentHitIdx + 1 < hitResults.length) {
         // More hits — next slash, alternate hands (R/L/R/L)
+        // Route through attack-start for a pause between hits (250ms wind-up)
         currentHitIdx++;
         slashFrame = 0;
-        slashFrames = (currentHitIdx % 2 === 0) ? slashFramesR : slashFramesL;
-        slashOffX = Math.floor(Math.random() * 40) - 20;
-        slashOffY = Math.floor(Math.random() * 40) - 20;
-        playSFX(SFX.ATTACK_HIT);
-        battleState = 'player-slash';
+        { const handWeapon = (currentHitIdx % 2 === 0) ? playerWeaponR : playerWeaponL;
+          const isKnife = handWeapon !== 0 && ITEMS.get(handWeapon)?.subtype === 'knife';
+          slashFrames = isKnife
+            ? ((currentHitIdx % 2 === 0) ? knifeSlashFramesR : knifeSlashFramesL)
+            : ((currentHitIdx % 2 === 0) ? slashFramesR : slashFramesL);
+          if (isKnife) {
+            slashOffX = 8; slashOffY = -8;
+          } else {
+            slashOffX = Math.floor(Math.random() * 40) - 20;
+            slashOffY = Math.floor(Math.random() * 40) - 20;
+          }
+        }
+        battleState = 'attack-start'; // pause before next hit (SFX plays in attack-start)
         battleTimer = 0;
       } else {
-        // All hits done — transition to player-damage-show for brief final display, then enemies counter
+        // All hits done — total up damage, show number, then player-damage-show
+        let totalDmg = 0, anyCrit = false, allMiss = true;
+        for (const h of hitResults) {
+          if (!h.miss) { totalDmg += h.damage; allMiss = false; if (h.crit) anyCrit = true; }
+        }
+        if (allMiss) {
+          bossDamageNum = { miss: true, timer: 0 };
+        } else {
+          bossDamageNum = { value: totalDmg, crit: anyCrit, timer: 0 };
+        }
         battleState = 'player-damage-show';
         battleTimer = 0;
       }
     }
   } else if (battleState === 'player-miss-show') {
+    // Miss pause — same as hit-show but slightly longer
     if (battleTimer >= MISS_SHOW_MS) {
       if (currentHitIdx + 1 < hitResults.length) {
         // More hits to try, alternate hands
         currentHitIdx++;
         slashFrame = 0;
-        slashFrames = (currentHitIdx % 2 === 0) ? slashFramesR : slashFramesL;
-        slashOffX = Math.floor(Math.random() * 40) - 20;
-        slashOffY = Math.floor(Math.random() * 40) - 20;
-        playSFX(SFX.ATTACK_HIT);
-        battleState = 'player-slash';
+        { const handWeapon = (currentHitIdx % 2 === 0) ? playerWeaponR : playerWeaponL;
+          const isKnife = handWeapon !== 0 && ITEMS.get(handWeapon)?.subtype === 'knife';
+          slashFrames = isKnife
+            ? ((currentHitIdx % 2 === 0) ? knifeSlashFramesR : knifeSlashFramesL)
+            : ((currentHitIdx % 2 === 0) ? slashFramesR : slashFramesL);
+          if (isKnife) {
+            slashOffX = 8; slashOffY = -8;
+          } else {
+            slashOffX = Math.floor(Math.random() * 40) - 20;
+            slashOffY = Math.floor(Math.random() * 40) - 20;
+          }
+        }
+        battleState = 'attack-start'; // pause before next hit
         battleTimer = 0;
       } else {
-        // All hits done (all missed) — enemies counter
+        // All hits done — total up damage
+        let totalDmg = 0, anyCrit = false, allMiss = true;
+        for (const h of hitResults) {
+          if (!h.miss) { totalDmg += h.damage; allMiss = false; if (h.crit) anyCrit = true; }
+        }
+        if (allMiss) {
+          bossDamageNum = { miss: true, timer: 0 };
+        } else {
+          bossDamageNum = { value: totalDmg, crit: anyCrit, timer: 0 };
+        }
         battleState = 'player-damage-show';
         battleTimer = 0;
       }
@@ -4502,7 +4773,8 @@ function updateBattle(dt) {
           saveSlots[selectCursor].stats = {
             str: playerStats.str, agi: playerStats.agi, vit: playerStats.vit,
             int: playerStats.int, mnd: playerStats.mnd,
-            maxHP: playerStats.maxHP, maxMP: playerStats.maxMP
+            maxHP: playerStats.maxHP, maxMP: playerStats.maxMP,
+            weaponR: playerWeaponR, weaponL: playerWeaponL
           };
         }
         saveSlotsToDB();
@@ -4583,7 +4855,8 @@ function updateBattle(dt) {
         saveSlots[selectCursor].stats = {
           str: playerStats.str, agi: playerStats.agi, vit: playerStats.vit,
           int: playerStats.int, mnd: playerStats.mnd,
-          maxHP: playerStats.maxHP, maxMP: playerStats.maxMP
+          maxHP: playerStats.maxHP, maxMP: playerStats.maxMP,
+          weaponR: playerWeaponR, weaponL: playerWeaponL
         };
       }
       saveSlotsToDB();
@@ -4659,7 +4932,7 @@ function updateBattle(dt) {
 function drawBattle() {
   if (battleState === 'none') return;
 
-  // Player sprite portrait — drawn here (above border layer) during battle
+  // Player sprite portrait — drawn over border during battle
   const shakeOff = (battleState === 'enemy-attack' && battleShakeTimer > 0)
     ? (Math.floor(battleShakeTimer / 67) & 1 ? 2 : -2) : 0;
   const isVictoryPose = battleState === 'victory-celebrate' ||
@@ -4670,22 +4943,52 @@ function drawBattle() {
   const isHitPose = battleState === 'enemy-attack' ||
     (battleState === 'enemy-damage-show' && playerDamageNum && !playerDamageNum.miss);
   let portraitSrc = battleSpriteCanvas;
-  if (isAttackPose && battleSpriteAttackCanvas) {
-    // Show the hand matching the current hit (R for even hits, L for odd)
-    portraitSrc = (currentHitIdx % 2 === 1 && battleSpriteAttackLCanvas) ? battleSpriteAttackLCanvas : battleSpriteAttackCanvas;
+  if (isAttackPose) {
+    const handWeapon = (currentHitIdx % 2 === 0) ? playerWeaponR : playerWeaponL;
+    const isKnife = handWeapon !== 0 && ITEMS.get(handWeapon)?.subtype === 'knife';
+    if (isKnife) {
+      // Knife: 2 frames — back swing (attack-start) → front swing (player-slash)
+      if (battleState === 'attack-start' && battleSpriteKnifeBackCanvas) {
+        portraitSrc = battleSpriteKnifeBackCanvas;
+      } else if (currentHitIdx % 2 === 0 && battleSpriteKnifeRCanvas) {
+        portraitSrc = battleSpriteKnifeRCanvas;
+      } else if (battleSpriteKnifeLCanvas) {
+        portraitSrc = battleSpriteKnifeLCanvas;
+      }
+    } else {
+      // Unarmed punch poses
+      if (currentHitIdx % 2 === 0) {
+        portraitSrc = battleSpriteAttackCanvas || portraitSrc;
+      } else {
+        portraitSrc = battleSpriteAttackLCanvas || portraitSrc;
+      }
+    }
   } else if (isHitPose && battleSpriteHitCanvas) {
     portraitSrc = battleSpriteHitCanvas;
   } else if (isVictoryPose && battleSpriteVictoryCanvas) {
-    // Alternate idle/victory every 250ms throughout victory sequence
     if (Math.floor(Date.now() / 250) & 1) portraitSrc = battleSpriteVictoryCanvas;
   }
   if (portraitSrc) {
     const px = HUD_RIGHT_X + 8 + shakeOff;
     const py = HUD_VIEW_Y + 8;
+    if (isAttackPose) {
+      const handWeapon = (currentHitIdx % 2 === 0) ? playerWeaponR : playerWeaponL;
+      const isKnife = handWeapon !== 0 && ITEMS.get(handWeapon)?.subtype === 'knife';
+      // Back swing: blade BEHIND body (NES: weapon spr06-09 behind body spr00-05)
+      if (isKnife && battleState === 'attack-start' && battleKnifeBladeCanvas) {
+        ctx.drawImage(battleKnifeBladeCanvas, px + 14, py - 8);
+      }
+    }
     ctx.drawImage(portraitSrc, px, py);
-    // Draw fist sprite during attack — extends over border like real NES
-    if (isAttackPose && battleFistCanvas) {
-      ctx.drawImage(battleFistCanvas, px - 4, py + 10);
+    if (isAttackPose) {
+      const handWeapon = (currentHitIdx % 2 === 0) ? playerWeaponR : playerWeaponL;
+      const isKnife = handWeapon !== 0 && ITEMS.get(handWeapon)?.subtype === 'knife';
+      if (isKnife && battleState === 'player-slash' && battleKnifeBladeSwungCanvas) {
+        // Forward slash: blade NEXT TO body on the left (no overlap)
+        ctx.drawImage(battleKnifeBladeSwungCanvas, px - 10, py - 4);
+      } else if (!isKnife && handWeapon === 0 && battleFistCanvas) {
+        ctx.drawImage(battleFistCanvas, px - 4, py + 10);
+      }
     }
   }
 
@@ -5451,7 +5754,6 @@ function gameLoop(timestamp) {
     sprite.draw(ctx, SCREEN_CENTER_X, SCREEN_CENTER_Y);
   }
 
-  // HUD always on top
   drawHUD();
 
   // Pause menu overlays everything

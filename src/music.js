@@ -34,7 +34,8 @@ export const SFX = {
   CURSOR:       0x59,  // SFX $18 + $41 — menu cursor movement
   CONFIRM:      0x46,  // SFX $05 + $41 — menu confirm
   CANCEL:       0x47,  // SFX $06 + $41 — cancel / error buzz
-  ATTACK_HIT:   0x74,  // SFX $33 + $41 — physical attack slash
+  ATTACK_HIT:   0x74,  // SFX $33 + $41 — unarmed punch hit
+  KNIFE_HIT:    0x77,  // SFX $36 + $41 — knife/blade slash hit (ROM writes $B6 to $7F49)
   MONSTER_DEATH: 0x72, // SFX $31 + $41 — normal monster death (ROM writes $B1 to $7F49)
 };
 
@@ -51,6 +52,7 @@ let sfxEmu = null;
 let sfxEmuRef = null;
 let sfxNode = null;
 let sfxBuf = null;
+let sfxMuted = false;  // flag to silence SFX without expensive gme_seek
 
 const BUF_SIZE = 4096; // samples per channel per callback (music, ~85ms at 48kHz)
 const SFX_BUF_SIZE = 2048;  // smaller buffer for SFX (~42ms latency at 48kHz)
@@ -178,6 +180,7 @@ export function playSFX(sfxId) {
   }
 
   // Start the SFX track (raw NSF track number)
+  sfxMuted = false;  // clear mute from any previous stopSFX
   if (Module.ccall('gme_start_track', 'number', ['number', 'number'],
       [sfxEmu, sfxId]) !== 0) {
     return;
@@ -198,8 +201,8 @@ export function playSFX(sfxId) {
         return;
       }
 
-      // If SFX track ended, output silence
-      if (Module.ccall('gme_track_ended', 'number', ['number'], [sfxEmu]) === 1) {
+      // If SFX muted or track ended, output silence
+      if (sfxMuted || Module.ccall('gme_track_ended', 'number', ['number'], [sfxEmu]) === 1) {
         e.outputBuffer.getChannelData(0).fill(0);
         e.outputBuffer.getChannelData(1).fill(0);
         return;
@@ -220,5 +223,10 @@ export function playSFX(sfxId) {
     };
     sfxNode.connect(audioCtx.destination);
   }
+}
+
+// Stop SFX playback (ROM writes $FF to $7F49 to cut SFX short)
+export function stopSFX() {
+  sfxMuted = true;  // instant silence — no expensive gme_seek
 }
 
