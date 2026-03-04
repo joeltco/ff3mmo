@@ -112,6 +112,8 @@ let battleKnifeBladeCanvas = null;     // knife blade raised 16×16 (h-flipped, 
 let battleKnifeBladeSwungCanvas = null;// knife blade swung 16×16 (no flip, forward slash)
 let battleSpriteHitCanvas = null;      // taking damage / recoil
 let battleSpriteDefendCanvas = null;   // defend pose 16×24 (tiles $43-$48)
+let battleSpriteKneelCanvas = null;    // low HP kneel pose 16×16 (PPU $09-$0C)
+let sweatFrames = [];                  // 2 × 16×8 canvases (near-fatal dot animation)
 let defendSparkleFrames = [];          // 4 × 8×8 canvases ($49-$4C)
 let battleFistCanvas = null;           // fist sprite (8x8, same for both hands)
 let silhouetteCanvas = null;
@@ -1042,6 +1044,66 @@ function initBattleSprite(romData) {
     }
     sctx.putImageData(simg, 0, 0);
     defendSparkleFrames.push(sc);
+  }
+
+  // Kneel / low HP pose: tiles $09-$0C from PPU $1000 dump (kneel-tiles.txt)
+  // Triggers at HP ≤ maxHP/4 (FF3 "near fatal" status, disasm 34/9485)
+  const KNEEL_TILES = [
+    new Uint8Array([0x00,0x00,0x00,0x00,0x02,0x05,0x0B,0x00, 0x00,0x00,0x00,0x00,0x03,0x07,0x0F,0x1F]), // $09
+    new Uint8Array([0x00,0x00,0x00,0x00,0x80,0xB8,0xDC,0xEE, 0x00,0x00,0x00,0x00,0x9B,0xBE,0xDD,0xEF]), // $0A
+    new Uint8Array([0x00,0x03,0x07,0x05,0x01,0x01,0x1B,0x3B, 0x20,0x10,0x00,0x00,0x00,0x04,0x00,0x20]), // $0B
+    new Uint8Array([0x36,0x1A,0xC6,0x20,0x92,0x81,0xDC,0xDE, 0xF6,0x3A,0x16,0x0C,0x0E,0x21,0x04,0x06]), // $0C
+  ];
+  battleSpriteKneelCanvas = document.createElement('canvas');
+  battleSpriteKneelCanvas.width = 16;
+  battleSpriteKneelCanvas.height = 16;
+  const knctx = battleSpriteKneelCanvas.getContext('2d');
+  for (let i = 0; i < 4; i++) {
+    const px = decodeTile(KNEEL_TILES[i], 0);
+    const knimg = knctx.createImageData(8, 8);
+    for (let p = 0; p < 64; p++) {
+      const ci = px[p];
+      if (ci === 0) { knimg.data[p * 4 + 3] = 0; }
+      else {
+        const rgb = NES_SYSTEM_PALETTE[palette[ci]] || [0, 0, 0];
+        knimg.data[p * 4] = rgb[0]; knimg.data[p * 4 + 1] = rgb[1];
+        knimg.data[p * 4 + 2] = rgb[2]; knimg.data[p * 4 + 3] = 255;
+      }
+    }
+    knctx.putImageData(knimg, layout[i][0], layout[i][1]);
+  }
+
+  // Near-fatal sweat: 2 frames of scattered white dots above character head
+  // Tiles $49/$4A (frame A, 4 dots) and $4B/$4C (frame B, 6 dots) from PPU $1000
+  // Pal0 color index 2 = $30 (white), alternates every 8 NES frames (~133ms)
+  const SWEAT_FRAME_TILES = [
+    // Frame A: $49 (left 8×8) + $4A (right 8×8)
+    [new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 0x04,0x00,0x40,0x00,0x00,0x00,0x00,0x00]),
+     new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 0x20,0x00,0x02,0x00,0x00,0x00,0x00,0x00])],
+    // Frame B: $4B (left 8×8) + $4C (right 8×8)
+    [new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x02,0x10,0x00,0x40,0x00]),
+     new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x40,0x08,0x00,0x02,0x00])],
+  ];
+  sweatFrames = [];
+  for (let f = 0; f < 2; f++) {
+    const sc = document.createElement('canvas');
+    sc.width = 16; sc.height = 8;
+    const sctx2 = sc.getContext('2d');
+    for (let t = 0; t < 2; t++) {
+      const spx = decodeTile(SWEAT_FRAME_TILES[f][t], 0);
+      const simg = sctx2.createImageData(8, 8);
+      for (let p = 0; p < 64; p++) {
+        const ci = spx[p];
+        if (ci === 0) { simg.data[p * 4 + 3] = 0; }
+        else {
+          const rgb = NES_SYSTEM_PALETTE[palette[ci]] || [252, 252, 252];
+          simg.data[p * 4] = rgb[0]; simg.data[p * 4 + 1] = rgb[1];
+          simg.data[p * 4 + 2] = rgb[2]; simg.data[p * 4 + 3] = 255;
+        }
+      }
+      sctx2.putImageData(simg, t * 8, 0);
+    }
+    sweatFrames.push(sc);
   }
 
   // Attack frame 2: ROM frame 3 (tiles 18-21, top 2×2 of 2×3 body)
@@ -5179,7 +5241,8 @@ function drawBattle() {
   const isHitPose = battleState === 'enemy-attack' ||
     (battleState === 'enemy-damage-show' && playerDamageNum && !playerDamageNum.miss);
   const isDefendPose = battleState === 'defend-anim';
-  let portraitSrc = battleSpriteCanvas;
+  const isNearFatal = playerHP > 0 && playerStats && playerHP <= Math.floor(playerStats.maxHP / 4);
+  let portraitSrc = (isNearFatal && battleSpriteKneelCanvas) ? battleSpriteKneelCanvas : battleSpriteCanvas;
   if (isAttackPose) {
     const handWeapon = (currentHitIdx % 2 === 0) ? playerWeaponR : playerWeaponL;
     const isKnife = handWeapon !== 0 && ITEMS.get(handWeapon)?.subtype === 'knife';
@@ -5242,6 +5305,12 @@ function drawBattle() {
       ctx.save(); ctx.scale(-1, -1);
       ctx.drawImage(frame, -(px + 23), -(py + 24));
       ctx.restore();
+    }
+    // Near-fatal sweat — scattered white dots above portrait (PPU tiles $49-$4C)
+    // 2 frames alternating every 133ms (8 NES frames), positioned 3px above portrait
+    if (isNearFatal && sweatFrames.length === 2 && !isAttackPose && !isHitPose && !isVictoryPose && !isDefendPose) {
+      const sweatIdx = Math.floor(Date.now() / 133) & 1;
+      ctx.drawImage(sweatFrames[sweatIdx], px, py - 3);
     }
   }
 
