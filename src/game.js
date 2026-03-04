@@ -8,9 +8,11 @@ import { MapRenderer } from './map-renderer.js';
 import { loadWorldMap } from './world-map-loader.js';
 import { WorldMapRenderer } from './world-map-renderer.js';
 import { generateFloor, clearDungeonCache } from './dungeon-generator.js';
-import { initMusic, playTrack, stopMusic, playSFX, stopSFX, TRACKS, SFX } from './music.js';
+import { initMusic, playTrack, stopMusic, playSFX, stopSFX, TRACKS, SFX,
+         initFF1Music, playFF1Track, stopFF1Music, getCurrentTrack, FF1_TRACKS,
+         pauseMusic, resumeMusic } from './music.js';
 import { applyIPS } from './ips-patcher.js';
-import { initTextDecoder } from './text-decoder.js';
+import { initTextDecoder, getItemNameClean } from './text-decoder.js';
 import { initFont, drawText, measureText, TEXT_WHITE, TEXT_YELLOW } from './font-renderer.js';
 import { MONSTERS } from './data/monsters.js';
 import { ITEMS } from './data/items.js';
@@ -35,7 +37,8 @@ async function saveSlotsToDB() {
         int: playerStats.int, mnd: playerStats.mnd,
         maxHP: playerStats.maxHP, maxMP: playerStats.maxMP,
         weaponR: playerWeaponR, weaponL: playerWeaponL
-      } : null)
+      } : null),
+      inventory: s.inventory || playerInventory
     } : null);
     const db = await openSaveDB();
     const tx = db.transaction('roms', 'readwrite');
@@ -55,9 +58,9 @@ async function loadSlotsFromDB() {
           saveSlots = data.map(s => {
             if (!s) return null;
             // Old format: plain array of name bytes
-            if (Array.isArray(s)) return { name: new Uint8Array(s), level: 1, exp: 0, stats: null };
-            // New format: object with name, level, exp, stats
-            return { name: new Uint8Array(s.name), level: s.level || 1, exp: s.exp || 0, stats: s.stats || null };
+            if (Array.isArray(s)) return { name: new Uint8Array(s), level: 1, exp: 0, stats: null, inventory: {} };
+            // New format: object with name, level, exp, stats, inventory
+            return { name: new Uint8Array(s.name), level: s.level || 1, exp: s.exp || 0, stats: s.stats || null, inventory: s.inventory || {} };
           });
         }
         resolve();
@@ -241,6 +244,22 @@ let playerDEF = 4;
 let playerWeaponR = 0x1E;  // right hand item ID (Knife), 0 = unarmed
 let playerWeaponL = 0x00;  // left hand item ID, 0 = unarmed
 
+// Inventory system
+let playerInventory = {};    // { itemId: count } — e.g. { 0xA6: 3 }
+let itemSelectList = [];     // [{id, count}] built when entering item-select
+let itemSelectCursor = 0;    // cursor index in item list
+let itemHealAmount = 0;      // actual HP restored (for green number display)
+let playerHealNum = null;    // {value, timer} — green heal number on portrait
+
+// Inventory helpers
+function addItem(id, count) {
+  playerInventory[id] = (playerInventory[id] || 0) + count;
+}
+function removeItem(id) {
+  if (playerInventory[id] > 0) playerInventory[id]--;
+  if (playerInventory[id] <= 0) delete playerInventory[id];
+}
+
 // Boss fight state
 let bossHP = 111;
 const BOSS_ATK = 8, BOSS_DEF = 6, BOSS_MAX_HP = 111;
@@ -364,8 +383,13 @@ const DUNGEON_NAME = new Uint8Array([0x8A, 0xD5, 0xDD, 0xCA, 0xDB, 0xFF, 0x8C, 0
 
 // Pause menu state
 let pauseState = 'none';       // 'none'|'scroll-in'|'text-in'|'open'|'text-out'|'scroll-out'
+                               // |'inv-text-out'|'inv-expand'|'inv-items-in'|'inventory'
+                               // |'inv-items-out'|'inv-shrink'|'inv-text-in'
 let pauseTimer = 0;
 let pauseCursor = 0;           // 0-5
+let pauseInvScroll = 0;        // scroll offset for inventory list
+const PAUSE_EXPAND_MS = 150;   // border expand/shrink duration
+let prePauseTrack = -1;        // FF3 track playing before pause opened
 const PAUSE_SCROLL_MS = 150;   // bordered panel scroll down/up
 const PAUSE_TEXT_STEP_MS = 100; // NES fade step duration
 const PAUSE_TEXT_STEPS = 4;    // 4 steps: $30→$20→$10→$00→$0F
@@ -381,6 +405,12 @@ const PAUSE_ITEMS = [
   new Uint8Array([0x93,0xD8,0xCB]),                 // "Job"
   new Uint8Array([0x9C,0xCA,0xDF,0xCE]),             // "Save"
 ];
+
+// Chest message box state (same style as roar box)
+let chestMsgState = 'none';    // 'slide-in'|'text-in'|'hold'|'text-out'|'slide-out'|'none'
+let chestMsgTimer = 0;
+let chestMsgBytes = null;      // Uint8Array item name to display
+const CHEST_HOLD_MS = 1200;    // time to display item name
 
 // Battle text byte arrays
 const BATTLE_ROAR = new Uint8Array([0x9B,0x98,0x98,0x98,0x98,0x98,0x8A,0x9B,0xC4,0xC4]); // "ROOOOOAR!!"
@@ -496,7 +526,7 @@ export function init() {
     if (titleState === 'name-entry') {
       e.preventDefault();
       if (e.key === 'Enter' && nameBuffer.length > 0) {
-        saveSlots[selectCursor] = { name: new Uint8Array(nameBuffer), level: 1, exp: 0, stats: null };
+        saveSlots[selectCursor] = { name: new Uint8Array(nameBuffer), level: 1, exp: 0, stats: null, inventory: {} };
         saveSlotsToDB();
         titleState = 'select'; titleTimer = 0;
       } else if (e.key === 'Backspace') {
@@ -2034,6 +2064,7 @@ export async function loadROM(arrayBuffer) {
 export function loadFF12ROM(arrayBuffer) {
   ff12Raw = new Uint8Array(arrayBuffer);
   initAdamantoise(ff12Raw);
+  initFF1Music(ff12Raw);
   if (romRaw) initLoadingScreenFadeFrames(romRaw); // rebuild with boss fade frames
 }
 
@@ -2387,12 +2418,44 @@ function handleInput() {
           slashFrames: pendingSlashFrames, slashOffX: pendingOffX, slashOffY: pendingOffY,
           slashX: centerX, slashY: centerY
         };
-        turnQueue = buildTurnOrder();
-        processNextTurn();
+        battleState = 'confirm-pause';
+        battleTimer = 0;
       }
       if (keys['x'] || keys['X']) {
         keys['x'] = false; keys['X'] = false;
         // Cancel — return to menu
+        playSFX(SFX.CONFIRM);
+        battleState = 'menu-open';
+        battleTimer = 0;
+      }
+    } else if (battleState === 'item-select') {
+      if (keys['ArrowDown']) {
+        keys['ArrowDown'] = false;
+        itemSelectCursor = (itemSelectCursor + 1) % itemSelectList.length;
+        playSFX(SFX.CURSOR);
+      }
+      if (keys['ArrowUp']) {
+        keys['ArrowUp'] = false;
+        itemSelectCursor = (itemSelectCursor - 1 + itemSelectList.length) % itemSelectList.length;
+        playSFX(SFX.CURSOR);
+      }
+      if (keys['z'] || keys['Z']) {
+        keys['z'] = false; keys['Z'] = false;
+        const item = itemSelectList[itemSelectCursor];
+        if (item.id === 0xA6) {
+          // Potion — heal 50 HP (capped at max)
+          const heal = Math.min(50, playerStats.maxHP - playerHP);
+          playerHP += heal;
+          removeItem(item.id);
+          itemHealAmount = heal;
+          playerActionPending = { command: 'item' };
+          playSFX(SFX.CONFIRM);
+          battleState = 'confirm-pause';
+          battleTimer = 0;
+        }
+      }
+      if (keys['x'] || keys['X']) {
+        keys['x'] = false; keys['X'] = false;
         playSFX(SFX.CONFIRM);
         battleState = 'menu-open';
         battleTimer = 0;
@@ -2405,27 +2468,68 @@ function handleInput() {
   if (keys['Enter']) {
     keys['Enter'] = false;
     if (pauseState === 'none' && battleState === 'none' && transState === 'none' && !shakeActive && !starEffect && !moving) {
+      playSFX(SFX.CONFIRM);
+      pauseMusic();
+      playFF1Track(FF1_TRACKS.MENU_SCREEN);
       pauseState = 'scroll-in'; pauseTimer = 0; pauseCursor = 0;
     }
     return;
   }
-  // X — close pause menu (back button)
+  // X — close pause menu (back button) — only from main menu, not sub-states
   if (keys['x'] || keys['X']) {
-    keys['x'] = false; keys['X'] = false;
     if (pauseState === 'open') {
+      keys['x'] = false; keys['X'] = false;
+      playSFX(SFX.CONFIRM);
       pauseState = 'text-out'; pauseTimer = 0;
+      return;
     }
-    return;
+    // Don't consume X here — let sub-state handlers below handle it
   }
   // Pause menu cursor controls
   if (pauseState === 'open') {
     if (keys['ArrowDown']) { keys['ArrowDown'] = false; pauseCursor = (pauseCursor + 1) % 6; playSFX(SFX.CURSOR); }
     if (keys['ArrowUp'])   { keys['ArrowUp'] = false;   pauseCursor = (pauseCursor + 5) % 6; playSFX(SFX.CURSOR); }
-    if (keys['z'] || keys['Z']) { keys['z'] = false; keys['Z'] = false; /* placeholder — no action yet */ }
+    if (keys['z'] || keys['Z']) {
+      keys['z'] = false; keys['Z'] = false;
+      if (pauseCursor === 0) {
+        // Item — fade out pause text, then expand to inventory
+        playSFX(SFX.CONFIRM);
+        pauseState = 'inv-text-out'; pauseTimer = 0; pauseInvScroll = 0;
+      }
+    }
     return;
   }
+  // Inventory sub-state — only accept input when fully open
+  if (pauseState === 'inventory') {
+    const entries = Object.entries(playerInventory).filter(([,c]) => c > 0);
+    if (keys['ArrowDown']) {
+      keys['ArrowDown'] = false;
+      if (pauseInvScroll < entries.length - 1) { pauseInvScroll++; playSFX(SFX.CURSOR); }
+    }
+    if (keys['ArrowUp']) {
+      keys['ArrowUp'] = false;
+      if (pauseInvScroll > 0) { pauseInvScroll--; playSFX(SFX.CURSOR); }
+    }
+    if (keys['x'] || keys['X']) {
+      keys['x'] = false; keys['X'] = false;
+      playSFX(SFX.CONFIRM);
+      pauseState = 'inv-items-out'; pauseTimer = 0;
+    }
+    return;
+  }
+  // Block input during inventory transitions
+  if (pauseState.startsWith('inv-')) return;
   // Block all input during pause transitions
   if (pauseState !== 'none') return;
+
+  // Chest message box — Z to dismiss during hold
+  if (chestMsgState !== 'none') {
+    if (chestMsgState === 'hold' && (keys['z'] || keys['Z'])) {
+      keys['z'] = false; keys['Z'] = false;
+      chestMsgState = 'text-out'; chestMsgTimer = 0;
+    }
+    return;
+  }
 
   if (moving) return;
   if (transState !== 'none') return;
@@ -2481,6 +2585,18 @@ function handleAction() {
   // Chest — press Z to open
   if (facedTile === 0x7C) {
     mapData.tilemap[facedY * 32 + facedX] = 0x7D;
+    addItem(0xA6, 1);  // Potion
+    playSFX(SFX.TREASURE);
+    // "Found Potion!" — F=0x8F, o=0xD8, u=0xDE, n=0xD7, d=0xCD, space=0xFF, !=0xC4
+    const itemName = getItemNameClean(0xA6);
+    const found = [0x8F, 0xD8, 0xDE, 0xD7, 0xCD, 0xFF];
+    const msg = new Uint8Array(found.length + itemName.length + 1);
+    msg.set(found, 0);
+    msg.set(itemName, found.length);
+    msg[found.length + itemName.length] = 0xC4; // "!"
+    chestMsgBytes = msg;
+    chestMsgState = 'slide-in';
+    chestMsgTimer = 0;
     const sx = worldX / TILE_SIZE;
     const sy = worldY / TILE_SIZE;
     mapRenderer = new MapRenderer(mapData, sx, sy); _indoorWaterCache = null;
@@ -3827,11 +3943,21 @@ function drawHUD() {
 
   // Portrait drawn in drawBattle() above border layer — just draw idle here during non-battle
   if (battleState === 'none' && battleSpriteCanvas) {
+    const nfPortrait = (playerHP > 0 && playerStats && playerHP <= Math.floor(playerStats.maxHP / 4) && battleSpriteKneelCanvas)
+      ? battleSpriteKneelCanvas : battleSpriteCanvas;
     if (infoFadeStep === 0) {
-      ctx.drawImage(battleSpriteCanvas, HUD_RIGHT_X + 8, HUD_VIEW_Y + 8);
+      ctx.drawImage(nfPortrait, HUD_RIGHT_X + 8, HUD_VIEW_Y + 8);
+      if (nfPortrait === battleSpriteKneelCanvas && sweatFrames.length === 2) {
+        const swi = Math.floor(Date.now() / 133) & 1;
+        ctx.drawImage(sweatFrames[swi], HUD_RIGHT_X + 8, HUD_VIEW_Y + 8 - 3);
+      }
     } else if (infoFadeStep < HUD_INFO_FADE_STEPS) {
       ctx.globalAlpha = 1 - infoFadeStep / HUD_INFO_FADE_STEPS;
-      ctx.drawImage(battleSpriteCanvas, HUD_RIGHT_X + 8, HUD_VIEW_Y + 8);
+      ctx.drawImage(nfPortrait, HUD_RIGHT_X + 8, HUD_VIEW_Y + 8);
+      if (nfPortrait === battleSpriteKneelCanvas && sweatFrames.length === 2) {
+        const swi = Math.floor(Date.now() / 133) & 1;
+        ctx.drawImage(sweatFrames[swi], HUD_RIGHT_X + 8, HUD_VIEW_Y + 8 - 3);
+      }
       ctx.globalAlpha = 1;
     }
   }
@@ -4037,6 +4163,7 @@ function updateTitle(dt) {
           playerATK = playerStats.str + (ITEMS.get(playerWeaponR)?.atk || 0) + (ITEMS.get(playerWeaponL)?.atk || 0);
           playerDEF = playerStats.vit;
         }
+        playerInventory = (slot && slot.inventory) ? { ...slot.inventory } : {};
         loadMapById(114);
         playTrack(TRACKS.TOWN_UR);
         // Opening wipe reveals the town
@@ -4446,8 +4573,87 @@ function updatePauseMenu(dt) {
   } else if (pauseState === 'text-out') {
     if (pauseTimer >= (PAUSE_TEXT_STEPS + 1) * PAUSE_TEXT_STEP_MS) { pauseState = 'scroll-out'; pauseTimer = 0; }
   } else if (pauseState === 'scroll-out') {
-    if (pauseTimer >= PAUSE_SCROLL_MS) { pauseState = 'none'; pauseTimer = 0; }
+    if (pauseTimer >= PAUSE_SCROLL_MS) {
+      pauseState = 'none'; pauseTimer = 0;
+      stopFF1Music();
+      resumeMusic();
+    }
+  // Inventory transitions
+  } else if (pauseState === 'inv-text-out') {
+    if (pauseTimer >= (PAUSE_TEXT_STEPS + 1) * PAUSE_TEXT_STEP_MS) { pauseState = 'inv-expand'; pauseTimer = 0; }
+  } else if (pauseState === 'inv-expand') {
+    if (pauseTimer >= PAUSE_EXPAND_MS) { pauseState = 'inv-items-in'; pauseTimer = 0; }
+  } else if (pauseState === 'inv-items-in') {
+    if (pauseTimer >= (PAUSE_TEXT_STEPS + 1) * PAUSE_TEXT_STEP_MS) { pauseState = 'inventory'; pauseTimer = 0; }
+  } else if (pauseState === 'inv-items-out') {
+    if (pauseTimer >= (PAUSE_TEXT_STEPS + 1) * PAUSE_TEXT_STEP_MS) { pauseState = 'inv-shrink'; pauseTimer = 0; }
+  } else if (pauseState === 'inv-shrink') {
+    if (pauseTimer >= PAUSE_EXPAND_MS) { pauseState = 'inv-text-in'; pauseTimer = 0; }
+  } else if (pauseState === 'inv-text-in') {
+    if (pauseTimer >= (PAUSE_TEXT_STEPS + 1) * PAUSE_TEXT_STEP_MS) { pauseState = 'open'; pauseTimer = 0; }
   }
+}
+
+function updateChestMessage(dt) {
+  if (chestMsgState === 'none') return;
+  chestMsgTimer += Math.min(dt, 33);
+
+  if (chestMsgState === 'slide-in') {
+    if (chestMsgTimer >= BATTLE_SCROLL_MS) { chestMsgState = 'text-in'; chestMsgTimer = 0; }
+  } else if (chestMsgState === 'text-in') {
+    if (chestMsgTimer >= BATTLE_TEXT_STEPS * BATTLE_TEXT_STEP_MS) { chestMsgState = 'hold'; chestMsgTimer = 0; }
+  } else if (chestMsgState === 'hold') {
+    if (chestMsgTimer >= CHEST_HOLD_MS) { chestMsgState = 'text-out'; chestMsgTimer = 0; }
+  } else if (chestMsgState === 'text-out') {
+    if (chestMsgTimer >= BATTLE_TEXT_STEPS * BATTLE_TEXT_STEP_MS) { chestMsgState = 'slide-out'; chestMsgTimer = 0; }
+  } else if (chestMsgState === 'slide-out') {
+    if (chestMsgTimer >= BATTLE_SCROLL_MS) { chestMsgState = 'none'; chestMsgTimer = 0; chestMsgBytes = null; }
+  }
+}
+
+function drawChestMessage() {
+  if (chestMsgState === 'none' || !chestMsgBytes) return;
+
+  const boxW = HUD_VIEW_W - 16;
+  const boxH = 48;
+  const vpTop = HUD_VIEW_Y;
+  const finalY = vpTop + 8;
+  const centerX = HUD_VIEW_X + Math.floor((HUD_VIEW_W - boxW) / 2);
+
+  let boxY = finalY;
+  if (chestMsgState === 'slide-in') {
+    const t = Math.min(chestMsgTimer / BATTLE_SCROLL_MS, 1);
+    boxY = (vpTop - boxH) + (finalY - (vpTop - boxH)) * t;
+  } else if (chestMsgState === 'slide-out') {
+    const t = Math.min(chestMsgTimer / BATTLE_SCROLL_MS, 1);
+    boxY = finalY + ((vpTop - boxH) - finalY) * t;
+  }
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
+  ctx.clip();
+
+  _drawBorderedBox(centerX, boxY, boxW, boxH, true);
+
+  if (chestMsgState === 'text-in' || chestMsgState === 'hold' || chestMsgState === 'text-out') {
+    const ROAR_FADE = [0x02, 0x12, 0x20, 0x30];
+    let step = ROAR_FADE.length - 1;
+    if (chestMsgState === 'text-in') {
+      step = Math.min(Math.floor(chestMsgTimer / BATTLE_TEXT_STEP_MS), ROAR_FADE.length - 1);
+    } else if (chestMsgState === 'text-out') {
+      step = (ROAR_FADE.length - 1) - Math.min(Math.floor(chestMsgTimer / BATTLE_TEXT_STEP_MS), ROAR_FADE.length - 1);
+    }
+
+    const fadedPal = [0x02, 0x02, 0x02, ROAR_FADE[step]];
+
+    const tw = measureText(chestMsgBytes);
+    const tx = centerX + Math.floor((boxW - tw) / 2);
+    const ty = boxY + Math.floor((boxH - 8) / 2);
+    drawText(ctx, tx, ty, chestMsgBytes, fadedPal);
+  }
+
+  ctx.restore();
 }
 
 function _drawMonsterDeath(x, y, size, progress) {
@@ -4529,13 +4735,13 @@ function roundTopBoxCorners() {
 function drawPauseMenu() {
   if (pauseState === 'none') return;
 
-  // Panel position: left side of viewport
   const px = HUD_VIEW_X;
   const finalY = HUD_VIEW_Y;
   const pw = PAUSE_MENU_W;
   const ph = PAUSE_MENU_H;
+  const isInvState = pauseState.startsWith('inv-') || pauseState === 'inventory';
 
-  // Scroll position
+  // Scroll position (only for initial scroll-in/scroll-out)
   let panelY = finalY;
   if (pauseState === 'scroll-in') {
     const t = Math.min(pauseTimer / PAUSE_SCROLL_MS, 1);
@@ -4545,39 +4751,53 @@ function drawPauseMenu() {
     panelY = finalY - t * ph;
   }
 
-  // Clip to viewport so panel hides behind top border
+  // Clip to viewport
   ctx.save();
   ctx.beginPath();
   ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
   ctx.clip();
 
-  // Draw bordered panel with black interior
-  _drawBorderedBox(px, panelY, pw, ph);
+  // --- Bordered box ---
+  // During inventory transitions, animate size from pause dims to full viewport
+  if (isInvState) {
+    let t = 1; // fully expanded
+    if (pauseState === 'inv-expand') {
+      t = Math.min(pauseTimer / PAUSE_EXPAND_MS, 1);
+    } else if (pauseState === 'inv-shrink') {
+      t = 1 - Math.min(pauseTimer / PAUSE_EXPAND_MS, 1);
+    } else if (pauseState === 'inv-text-out') {
+      t = 0; // still pause size during text fade out
+    } else if (pauseState === 'inv-text-in') {
+      t = 0; // back to pause size during text fade in
+    }
+    const bw = Math.round(pw + (HUD_VIEW_W - pw) * t);
+    const bh = Math.round(ph + (HUD_VIEW_H - ph) * t);
+    _drawBorderedBox(px, finalY, bw, bh);
+  } else {
+    _drawBorderedBox(px, panelY, pw, ph);
+  }
 
-  // Text + cursor only during text-in, open, text-out
-  if (pauseState === 'text-in' || pauseState === 'open' || pauseState === 'text-out') {
-    // NES discrete palette fade: compute fade step (0=full bright, 3=fully black)
+  // --- Pause menu text (shown during normal states + inv fade transitions) ---
+  const showPauseText = pauseState === 'text-in' || pauseState === 'open' || pauseState === 'text-out' ||
+                        pauseState === 'inv-text-out' || pauseState === 'inv-text-in';
+  if (showPauseText) {
     let fadeStep = 0;
-    if (pauseState === 'text-in') {
+    if (pauseState === 'text-in' || pauseState === 'inv-text-in') {
       fadeStep = PAUSE_TEXT_STEPS - Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
-    } else if (pauseState === 'text-out') {
+    } else if (pauseState === 'text-out' || pauseState === 'inv-text-out') {
       fadeStep = Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
     }
 
-    // Build faded TEXT_WHITE palette: step each color toward $0F
     const fadedPal = [0x0F, 0x0F, 0x0F, 0x30];
-    for (let s = 0; s < fadeStep; s++) {
-      fadedPal[3] = nesColorFade(fadedPal[3]);
-    }
+    for (let s = 0; s < fadeStep; s++) fadedPal[3] = nesColorFade(fadedPal[3]);
 
-    // Menu items inside panel border — 16px vertical spacing
     const textX = px + 24;
-    const startY = panelY + 12;
+    const startY = (isInvState ? finalY : panelY) + 12;
     for (let i = 0; i < PAUSE_ITEMS.length; i++) {
       drawText(ctx, textX, startY + i * 16, PAUSE_ITEMS[i], fadedPal);
     }
 
-    // Hand cursor from ROM — fade with same discrete steps
+    // Hand cursor
     if (cursorTileCanvas) {
       if (fadeStep === 0) {
         ctx.drawImage(cursorTileCanvas, px + 8, startY + pauseCursor * 16 - 4);
@@ -4585,6 +4805,49 @@ function drawPauseMenu() {
         ctx.globalAlpha = 1 - fadeStep / PAUSE_TEXT_STEPS;
         ctx.drawImage(cursorTileCanvas, px + 8, startY + pauseCursor * 16 - 4);
         ctx.globalAlpha = 1;
+      }
+    }
+  }
+
+  // --- Inventory items (shown when expanded) ---
+  const showInvItems = pauseState === 'inv-items-in' || pauseState === 'inventory' || pauseState === 'inv-items-out';
+  if (showInvItems) {
+    let fadeStep = 0;
+    if (pauseState === 'inv-items-in') {
+      fadeStep = PAUSE_TEXT_STEPS - Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
+    } else if (pauseState === 'inv-items-out') {
+      fadeStep = Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
+    }
+
+    const fadedPal = [0x0F, 0x0F, 0x0F, 0x30];
+    for (let s = 0; s < fadeStep; s++) fadedPal[3] = nesColorFade(fadedPal[3]);
+
+    const entries = Object.entries(playerInventory).filter(([,c]) => c > 0);
+    const maxVisible = Math.floor((HUD_VIEW_H - 16) / 14);
+    const startIdx = Math.max(0, Math.min(pauseInvScroll, Math.max(0, entries.length - maxVisible)));
+
+    for (let i = 0; i < maxVisible && startIdx + i < entries.length; i++) {
+      const [id, count] = entries[startIdx + i];
+      const nameBytes = getItemNameClean(Number(id));
+      const countStr = String(count);
+      const rowBytes = new Uint8Array(nameBytes.length + 2 + countStr.length);
+      rowBytes.set(nameBytes, 0);
+      rowBytes[nameBytes.length] = 0xFF;
+      rowBytes[nameBytes.length + 1] = 0xE1;
+      for (let d = 0; d < countStr.length; d++) rowBytes[nameBytes.length + 2 + d] = 0x80 + parseInt(countStr[d]);
+
+      const iy = finalY + 12 + i * 14;
+      drawText(ctx, px + 24, iy, rowBytes, fadedPal);
+
+      // Hand cursor on selected row
+      if (startIdx + i === pauseInvScroll && cursorTileCanvas) {
+        if (fadeStep === 0) {
+          ctx.drawImage(cursorTileCanvas, px + 8, iy - 4);
+        } else if (fadeStep < PAUSE_TEXT_STEPS) {
+          ctx.globalAlpha = 1 - fadeStep / PAUSE_TEXT_STEPS;
+          ctx.drawImage(cursorTileCanvas, px + 8, iy - 4);
+          ctx.globalAlpha = 1;
+        }
       }
     }
   }
@@ -4732,6 +4995,7 @@ function buildTurnOrder() {
 function processNextTurn() {
   if (turnQueue.length === 0) {
     isDefending = false;
+    battleCursor = 0;
     battleState = 'menu-open';
     battleTimer = 0;
     return;
@@ -4754,6 +5018,11 @@ function processNextTurn() {
       playSFX(SFX.DEFEND_HIT);
       battleState = 'defend-anim';
       battleTimer = 0;
+    } else if (playerActionPending.command === 'item') {
+      playSFX(SFX.CURE);
+      playerHealNum = { value: itemHealAmount, timer: 0 };
+      battleState = 'item-use';
+      battleTimer = 0;
     }
   } else {
     currentAttacker = turn.index;
@@ -4774,6 +5043,7 @@ function startBattle() {
   battleMessage = null;
   bossDamageNum = null;
   playerDamageNum = null;
+  playerHealNum = null;
   bossFlashTimer = 0;
   battleShakeTimer = 0;
   bossHP = BOSS_MAX_HP;
@@ -4797,6 +5067,7 @@ function startRandomEncounter() {
   battleMessage = null;
   bossDamageNum = null;
   playerDamageNum = null;
+  playerHealNum = null;
   bossFlashTimer = 0;
   battleShakeTimer = 0;
   isDefending = false;
@@ -4813,17 +5084,27 @@ function executeBattleCommand(index) {
     battleState = 'target-select';
     battleTimer = 0;
   } else if (index === 1) {
-    // Defend — build turn queue, defend-anim plays on player's turn
+    // Defend — pause for confirm SFX, then build turn queue
+    playSFX(SFX.CONFIRM);
     isDefending = true;
     playerActionPending = { command: 'defend' };
-    turnQueue = buildTurnOrder();
-    processNextTurn();
+    battleState = 'confirm-pause';
+    battleTimer = 0;
   } else if (index === 2) {
     // Item
-    playSFX(SFX.CANCEL);
-    battleMessage = BATTLE_NO_ITEMS;
-    battleState = 'message-hold';
-    battleTimer = 0;
+    const entries = Object.entries(playerInventory).filter(([,c]) => c > 0);
+    if (entries.length === 0) {
+      playSFX(SFX.CANCEL);
+      battleMessage = BATTLE_NO_ITEMS;
+      battleState = 'message-hold';
+      battleTimer = 0;
+    } else {
+      playSFX(SFX.CONFIRM);
+      itemSelectList = entries.map(([id, count]) => ({ id: Number(id), count }));
+      itemSelectCursor = 0;
+      battleState = 'item-select';
+      battleTimer = 0;
+    }
   } else {
     // Run
     if (isRandomEncounter) {
@@ -4835,7 +5116,7 @@ function executeBattleCommand(index) {
       encounterMonsters = null;
       dyingMonsterIndex = -1;
       sprite.setDirection(DIR_DOWN);
-      playTrack(preBattleTrack);
+      stopMusic(); resumeMusic();
     } else {
       playSFX(SFX.CANCEL);
       battleMessage = BATTLE_CANT_ESCAPE;
@@ -4879,9 +5160,9 @@ function updateBattle(dt) {
   } else if (battleState === 'flash-strobe') {
     if (battleTimer >= BATTLE_FLASH_FRAMES * BATTLE_FLASH_FRAME_MS) {
       if (isRandomEncounter) {
-        battleState = 'encounter-box-expand'; battleTimer = 0; playTrack(TRACKS.BATTLE);
+        battleState = 'encounter-box-expand'; battleTimer = 0; pauseMusic(); playTrack(TRACKS.BATTLE);
       } else {
-        battleState = 'boss-box-expand'; battleTimer = 0; playTrack(TRACKS.BOSS_BATTLE);
+        battleState = 'boss-box-expand'; battleTimer = 0; pauseMusic(); playTrack(TRACKS.BOSS_BATTLE);
       }
     }
   } else if (battleState === 'encounter-box-expand') {
@@ -4896,9 +5177,15 @@ function updateBattle(dt) {
     if (battleTimer >= (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS) { battleState = 'menu-open'; battleTimer = 0; }
   } else if (battleState === 'message-hold') {
     if (battleTimer >= BATTLE_MSG_HOLD_MS) { battleState = 'menu-open'; battleTimer = 0; battleMessage = null; }
+  } else if (battleState === 'confirm-pause') {
+    // Brief pause so CONFIRM SFX is audible before turn queue starts
+    if (battleTimer >= 150) {
+      turnQueue = buildTurnOrder();
+      processNextTurn();
+    }
   } else if (battleState === 'attack-start') {
-    // First hit: 250ms pause so CONFIRM SFX is audible. Subsequent hits: 50ms (rapid combo)
-    const startDelay = currentHitIdx === 0 ? 250 : 50;
+    // First hit: 100ms wind-up (confirm-pause already gave 150ms). Subsequent hits: 50ms (rapid combo)
+    const startDelay = currentHitIdx === 0 ? 100 : 50;
     if (battleTimer >= startDelay) {
       const hw0 = (currentHitIdx % 2 === 0) ? playerWeaponR : playerWeaponL;
       const isKnife0 = hw0 !== 0 && ITEMS.get(hw0)?.subtype === 'knife';
@@ -5049,6 +5336,7 @@ function updateBattle(dt) {
             maxHP: playerStats.maxHP, maxMP: playerStats.maxMP,
             weaponR: playerWeaponR, weaponL: playerWeaponL
           };
+          saveSlots[selectCursor].inventory = { ...playerInventory };
         }
         saveSlotsToDB();
         isDefending = false;
@@ -5063,6 +5351,16 @@ function updateBattle(dt) {
     // Defend pose + sparkle for 32 frames (~533ms), then enemy turn
     if (battleTimer >= DEFEND_SPARKLE_TOTAL_MS) {
       // Remaining turns in queue
+      processNextTurn();
+    }
+  } else if (battleState === 'item-use') {
+    // Heal animation — same duration as defend sparkle, then next turn
+    if (playerHealNum) {
+      playerHealNum.timer += dt;
+      if (playerHealNum.timer >= BATTLE_DMG_SHOW_MS) playerHealNum = null;
+    }
+    if (battleTimer >= DEFEND_SPARKLE_TOTAL_MS) {
+      playerHealNum = null;
       processNextTurn();
     }
   } else if (battleState === 'boss-flash') {
@@ -5128,6 +5426,7 @@ function updateBattle(dt) {
           maxHP: playerStats.maxHP, maxMP: playerStats.maxMP,
           weaponR: playerWeaponR, weaponL: playerWeaponL
         };
+        saveSlots[selectCursor].inventory = { ...playerInventory };
       }
       saveSlotsToDB();
       isDefending = false;
@@ -5185,7 +5484,7 @@ function updateBattle(dt) {
       isRandomEncounter = false;
       encounterMonsters = null;
       dyingMonsterIndex = -1;
-      playTrack(preBattleTrack);
+      stopMusic(); resumeMusic();
     }
   } else if (battleState === 'boss-box-close') {
     if (battleTimer >= BOSS_BOX_EXPAND_MS) {
@@ -5336,6 +5635,7 @@ function drawBattle() {
   drawBossSpriteBox();
   drawBattleMenu();
   drawBattleMessage();
+  drawItemSelectBox();
   drawVictoryBox();
 
   drawDamageNumbers();
@@ -5417,11 +5717,11 @@ function drawBattleMenu() {
   const isAppear = battleState === 'boss-appear' || battleState === 'monster-slide-in';
   const isFade = battleState === 'battle-fade-in';
   const isMenu = isFade ||
-                 battleState === 'menu-open' || battleState === 'target-select' ||
+                 battleState === 'menu-open' || battleState === 'target-select' || battleState === 'confirm-pause' ||
                  battleState === 'attack-start' || battleState === 'player-slash' || battleState === 'player-hit-show' ||
                  battleState === 'player-miss-show' ||
                  battleState === 'player-damage-show' || battleState === 'monster-death' ||
-                 battleState === 'defend-anim' || battleState === 'boss-flash' ||
+                 battleState === 'defend-anim' || battleState === 'item-select' || battleState === 'item-use' || battleState === 'boss-flash' ||
                  battleState === 'enemy-attack' ||
                  battleState === 'enemy-damage-show' || battleState === 'message-hold' ||
                  battleState === 'boss-dissolve' || battleState === 'defeat' ||
@@ -5559,11 +5859,11 @@ function drawEncounterBox() {
   const isClose = battleState === 'encounter-box-close';
   const isSlideIn = battleState === 'monster-slide-in';
   const isCombat = isSlideIn || battleState === 'battle-fade-in' ||
-                   battleState === 'menu-open' || battleState === 'target-select' ||
+                   battleState === 'menu-open' || battleState === 'target-select' || battleState === 'confirm-pause' ||
                    battleState === 'attack-start' || battleState === 'player-slash' || battleState === 'player-hit-show' ||
                    battleState === 'player-miss-show' ||
                    battleState === 'player-damage-show' || battleState === 'monster-death' ||
-                   battleState === 'defend-anim' || battleState === 'boss-flash' ||
+                   battleState === 'defend-anim' || battleState === 'item-select' || battleState === 'item-use' || battleState === 'boss-flash' ||
                    battleState === 'enemy-attack' ||
                    battleState === 'enemy-damage-show' || battleState === 'message-hold' ||
                    battleState === 'defeat' || battleState === 'defeat-fade';
@@ -5679,10 +5979,10 @@ function drawBossSpriteBox() {
   const isAppear = battleState === 'boss-appear';
   const isDissolve = battleState === 'boss-dissolve';
   const isCombat = battleState === 'battle-fade-in' ||
-                   battleState === 'menu-open' || battleState === 'target-select' ||
+                   battleState === 'menu-open' || battleState === 'target-select' || battleState === 'confirm-pause' ||
                    battleState === 'attack-start' || battleState === 'player-slash' || battleState === 'player-hit-show' ||
                    battleState === 'player-miss-show' ||
-                   battleState === 'player-damage-show' || battleState === 'defend-anim' || battleState === 'boss-flash' ||
+                   battleState === 'player-damage-show' || battleState === 'defend-anim' || battleState === 'item-select' || battleState === 'item-use' || battleState === 'boss-flash' ||
                    battleState === 'enemy-attack' ||
                    battleState === 'enemy-damage-show' || battleState === 'message-hold' ||
                    battleState === 'defeat' || battleState === 'defeat-fade';
@@ -5862,6 +6162,48 @@ function drawBattleMessage() {
   ctx.restore();
 }
 
+function drawItemSelectBox() {
+  if (battleState !== 'item-select') return;
+
+  const rowH = 16;
+  const rows = itemSelectList.length;
+  const boxW = 104;
+  const boxH = 16 + rows * rowH;  // 8px padding top/bottom + rows
+  const bossCenterY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
+  const msgY = bossCenterY - Math.floor(boxH / 2);
+  const centerX = HUD_VIEW_X + Math.floor((HUD_VIEW_W - boxW) / 2);
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
+  ctx.clip();
+
+  _drawBorderedBox(centerX, msgY, boxW, boxH, true);
+
+  for (let i = 0; i < itemSelectList.length; i++) {
+    const item = itemSelectList[i];
+    const nameBytes = getItemNameClean(item.id);
+    // Build "Name ×N" byte array
+    const countStr = String(item.count);
+    const rowBytes = new Uint8Array(nameBytes.length + 2 + countStr.length);
+    rowBytes.set(nameBytes, 0);
+    rowBytes[nameBytes.length] = 0xFF;     // space
+    rowBytes[nameBytes.length + 1] = 0xE1; // ×
+    for (let d = 0; d < countStr.length; d++) rowBytes[nameBytes.length + 2 + d] = 0x80 + parseInt(countStr[d]);
+
+    const tx = centerX + 16;
+    const ty = msgY + 8 + i * rowH;
+    drawText(ctx, tx, ty, rowBytes, TEXT_WHITE_ON_BLUE);
+
+    // Hand cursor
+    if (i === itemSelectCursor && cursorTileCanvas) {
+      ctx.drawImage(cursorTileCanvas, centerX - 4, ty - 4);
+    }
+  }
+
+  ctx.restore();
+}
+
 function makeExpText(amount) {
   // Build "Got N EXP!" as Uint8Array using ROM font encoding
   // G=0x90, o=0xD8, t=0xDD, space=0xFF, E=0x8E, X=0xA1, P=0x99, !=0xC4
@@ -6027,6 +6369,18 @@ function drawDamageNumbers() {
       drawText(ctx, px - Math.floor(tw / 2), py, numBytes, DMG_NUM_PAL);
     }
   }
+
+  // Player heal number — green bounce on portrait during item-use
+  if (playerHealNum) {
+    const px = HUD_RIGHT_X + 16;
+    const baseY = HUD_VIEW_Y + 16;
+    const py = _dmgBounceY(baseY, playerHealNum.timer);
+    const digits = String(playerHealNum.value);
+    const numBytes = new Uint8Array(digits.length);
+    for (let i = 0; i < digits.length; i++) numBytes[i] = 0x80 + parseInt(digits[i]);
+    const tw = digits.length * 8;
+    drawText(ctx, px - Math.floor(tw / 2), py, numBytes, [0x0F, 0x0F, 0x0F, 0x2B]);
+  }
 }
 
 function gameLoop(timestamp) {
@@ -6051,6 +6405,7 @@ function gameLoop(timestamp) {
 
   handleInput();
   updatePauseMenu(dt);
+  updateChestMessage(dt);
   updateBattle(dt);
   updateMovement(dt);
   updateTransition(dt);
@@ -6104,6 +6459,9 @@ function gameLoop(timestamp) {
 
   // Pause menu overlays everything
   drawPauseMenu();
+
+  // Chest message box
+  drawChestMessage();
 
   // Battle UI overlays everything
   drawBattle();
