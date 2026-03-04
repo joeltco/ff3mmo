@@ -19,5 +19,16 @@
 - Argue with the user about what something should look like — THEY KNOW, YOU DON'T
 - Web search for sprite references when you can just download the actual sprite and analyze it
 - Re-verify data you already verified — if it was wrong the first time, your METHOD is wrong
+- **NEVER guess ROM offsets for sprite data** — ROM bytes ≠ PPU bytes due to CHR bank switching
+- **NEVER use raw ROM offsets (BATTLE_SPRITE_ROM + N) for new sprite frames** — existing frames were mapped by previous devs, new frames MUST be captured from PPU via FCEUX Lua
 
 ### The user is the source of truth for visual correctness. The ROM is not.
+
+### PPU tile capture — MANDATORY process for new battle sprites:
+1. **NES sprites use CHR bank switching (MMC3).** ROM bytes do NOT map 1:1 to PPU tile data.
+2. **The ONLY way to get correct tile data is to dump it from PPU $1000 during the animation in FCEUX.**
+3. PPU $0000 = background tiles. PPU $1000 = sprite tiles. **ALWAYS use $1000 for sprites.**
+4. Write a Lua script that **auto-triggers on the correct OAM state** (don't rely on manual timing).
+5. Dump: tile RAW bytes, sprite palettes (PPU $3F10+), and OAM positions for verification.
+6. Use the dumped RAW bytes as hardcoded `new Uint8Array([...])` in game.js.
+7. **Portrait sprites use the top 4 tiles (16×16) of a 2×3 (16×24) body.** Same as idle/hit/victory.

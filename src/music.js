@@ -34,9 +34,10 @@ export const SFX = {
   CURSOR:       0x59,  // SFX $18 + $41 — menu cursor movement
   CONFIRM:      0x46,  // SFX $05 + $41 — menu confirm
   CANCEL:       0x47,  // SFX $06 + $41 — cancel / error buzz
-  ATTACK_HIT:   0x74,  // SFX $33 + $41 — unarmed punch hit
+  ATTACK_HIT:   0x71,  // SFX $30 + $41 — enemy physical hit on player (from battle-sfx-log trace v3)
   KNIFE_HIT:    0x77,  // SFX $36 + $41 — knife/blade slash hit (ROM writes $B6 to $7F49)
   MONSTER_DEATH: 0x72, // SFX $31 + $41 — normal monster death (ROM writes $B1 to $7F49)
+  DEFEND_HIT:   0x61,  // SFX $20 + $41 — defend action sound (confirmed by user)
 };
 
 let nsfData = null;    // Built NSF Uint8Array

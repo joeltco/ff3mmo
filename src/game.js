@@ -95,6 +95,7 @@ let hudCanvas = null;
 let borderTileCanvases = null; // [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR, FILL]
 let borderBlueTileCanvases = null; // same but with blue (0x02) background instead of black
 let borderFadeSets = null;    // [fadeLevel] → [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR, FILL]
+let cornerMasks = null;       // [TL, TR, BL, BR] 8×8 canvases — black where outside, transparent inside
 
 // Battle sprite — Onion Knight idle frame (16×24, 2×3 tiles)
 const BATTLE_SPRITE_ROM = 0x050010;  // Bank 28/$8000 — battle character graphics (disasm 2F/AB3D)
@@ -110,6 +111,8 @@ let battleSpriteKnifeBackCanvas = null;// knife back swing body (dual trace $43/
 let battleKnifeBladeCanvas = null;     // knife blade raised 16×16 (h-flipped, back swing)
 let battleKnifeBladeSwungCanvas = null;// knife blade swung 16×16 (no flip, forward slash)
 let battleSpriteHitCanvas = null;      // taking damage / recoil
+let battleSpriteDefendCanvas = null;   // defend pose 16×24 (tiles $43-$48)
+let defendSparkleFrames = [];          // 4 × 8×8 canvases ($49-$4C)
 let battleFistCanvas = null;           // fist sprite (8x8, same for both hands)
 let silhouetteCanvas = null;
 
@@ -251,6 +254,7 @@ let playerDamageNum = null;   // {value, timer}
 let bossFlashTimer = 0;
 let battleShakeTimer = 0;
 let bossDefeated = false;
+let isDefending = false;
 
 // Random encounter state
 let encounterSteps = 0;
@@ -258,7 +262,8 @@ let isRandomEncounter = false;
 let encounterMonsters = null;  // [{ hp, maxHP, atk, def, exp }] — array of enemies
 let encounterExpGained = 0;
 let preBattleTrack = null;
-let enemyAttackQueue = [];     // indices of alive monsters still to attack this turn
+let turnQueue = [];              // [{type:'player'|'enemy', index}] sorted by priority
+let playerActionPending = null;  // {command:'fight'|'defend', targetIndex, hitResults, ...}
 let currentAttacker = -1;      // index of monster currently attacking
 let dyingMonsterIndex = -1;    // index of monster playing death stripe animation
 
@@ -299,6 +304,9 @@ const BATTLE_PANEL_W = 120;            // left section width in bottom panel
 const BOSS_PREFLASH_MS = 133;            // 8 NES frames — boss pre-attack white blink
 const MONSTER_DEATH_MS = 250;            // diagonal tile wipe — 7 visible steps × 33ms (ROM: 2F/BC68)
 const MONSTER_SLIDE_MS = 267;            // 16 frames at 60fps — sprites slide in from left
+const DEFEND_SPARKLE_FRAME_MS = 133;     // 8 NES frames per tile
+const DEFEND_SPARKLE_TOTAL_MS = 533;     // 4 tiles × 133ms
+const DEFEND_SPARKLE_PAL = [0x0F, 0x1B, 0x2B, 0x30];
 // Authentic damage bounce keyframes from FCEUX trace (Y offsets from baseline, up = negative)
 // 30 frames total = 500ms at 60fps
 const DMG_BOUNCE_TABLE = [
@@ -377,14 +385,14 @@ const BATTLE_ROAR = new Uint8Array([0x9B,0x98,0x98,0x98,0x98,0x98,0x8A,0x9B,0xC4
 const BATTLE_FIGHT = new Uint8Array([0x8F,0xD2,0xD0,0xD1,0xDD]); // "Fight"
 const BATTLE_RUN = new Uint8Array([0x9B,0xDE,0xD7]); // "Run"
 const BATTLE_CANT_ESCAPE = new Uint8Array([0x8C,0xCA,0xD7,0xDD,0xFF,0xCE,0xDC,0xCC,0xCA,0xD9,0xCE,0xC4]); // "Cant escape!"
-const BATTLE_NO_MAGIC = new Uint8Array([0x97,0xD8,0xFF,0xD6,0xCA,0xD0,0xD2,0xCC,0xC4]); // "No magic!"
+const BATTLE_DEFEND = new Uint8Array([0x8D,0xCE,0xCF,0xCE,0xD7,0xCD]); // "Defend"
 const BATTLE_NO_ITEMS = new Uint8Array([0x97,0xD8,0xFF,0xD2,0xDD,0xCE,0xD6,0xDC,0xC4]); // "No items!"
 const BATTLE_VICTORY = new Uint8Array([0x9F,0xD2,0xCC,0xDD,0xD8,0xDB,0xE2,0xC4]); // "Victory!"
 const BATTLE_GOT_EXP = new Uint8Array([0x90,0xD8,0xDD,0xFF,0x82,0x80,0xFF,0x8E,0xA1,0x99,0xC4]); // "Got 20 EXP!"
 const BATTLE_LEVEL_UP = new Uint8Array([0x95,0xCE,0xDF,0xCE,0xD5,0xFF,0x9E,0xD9,0xC4]); // "Level Up!"
 const BATTLE_BOSS_NAME = new Uint8Array([0x95,0xCA,0xD7,0xCD,0xFF,0x9D,0xDE,0xDB,0xDD,0xD5,0xCE]); // "Land Turtle"
 const BATTLE_GOBLIN_NAME = new Uint8Array([0x90,0xD8,0xCB,0xD5,0xD2,0xD7]); // "Goblin"
-const BATTLE_MENU_ITEMS = [BATTLE_FIGHT, PAUSE_ITEMS[1]/*Magic*/, PAUSE_ITEMS[0]/*Item*/, BATTLE_RUN];
+const BATTLE_MENU_ITEMS = [BATTLE_FIGHT, BATTLE_DEFEND, PAUSE_ITEMS[0]/*Item*/, BATTLE_RUN];
 
 // Player sprite palettes — from FCEUX PPU trace (dual palette: top/bottom tiles)
 const SPRITE_PAL_TOP = [0x0F, 0x0F, 0x16, 0x30];    // spr_pal0: black, dark red, white
@@ -548,6 +556,25 @@ function initHUD(romData) {
   });
   borderTileCanvases = tileCanvases;
 
+  // Corner masks for rounding battle BG edges — black where outside, transparent inside
+  // TL=0, TR=2, BL=5, BR=7
+  cornerMasks = [0, 2, 5, 7].map(idx => {
+    const pixels = tiles[idx];
+    const c = document.createElement('canvas');
+    c.width = 8; c.height = 8;
+    const tctx = c.getContext('2d');
+    const img = tctx.createImageData(8, 8);
+    for (let i = 0; i < 64; i++) {
+      if (pixels[i] === 0) {
+        // Outside pixel — opaque black mask
+        img.data[i * 4 + 3] = 255;
+      }
+      // else: transparent (default 0 alpha)
+    }
+    tctx.putImageData(img, 0, 0);
+    return c;
+  });
+
   // Blue-background variant — palette index 0 uses 0x02 instead of 0x0F
   const BLUE_MENU_PALETTE = [0x02, 0x00, 0x02, 0x30];
   borderBlueTileCanvases = tiles.map(pixels => {
@@ -630,8 +657,8 @@ function initHUD(romData) {
     }
   }
 
-  // Draw all 5 HUD panels (viewport has no fill — game shows through)
-  drawBox(0, 0, CANVAS_W, HUD_TOP_H);                              // Top scenery box
+  // Draw HUD panels (viewport has no fill — game shows through)
+  // Top scenery box has NO static border — border drawn dynamically only when text shown
   drawBox(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H, false); // Game viewport (no fill)
   drawBox(HUD_RIGHT_X, HUD_VIEW_Y, 32, 32);                          // Right mini-left (16x16 interior)
   drawBox(HUD_RIGHT_X + 32, HUD_VIEW_Y, HUD_RIGHT_W - 32, 32);      // Right mini-right
@@ -956,6 +983,65 @@ function initBattleSprite(romData) {
       }
     }
     hctx.putImageData(himg, layout[i][0], layout[i][1]);
+  }
+
+  // Defend pose: 16×24 crouching sprite from FCEUX PPU $1000 dump (defend-tiles-v2.txt)
+  // Tiles $43-$48 in 2×3 grid, palette 0 (same as idle)
+  const DEFEND_TILES = [
+    new Uint8Array([0x05,0x0B,0x17,0x03,0x00,0x00,0x0E,0x1F, 0x07,0x0F,0x1F,0x3F,0x43,0x40,0x20,0x00]), // $43
+    new Uint8Array([0x00,0x00,0xA0,0xD0,0xE8,0x78,0x10,0x88, 0x2C,0x59,0xBE,0xD6,0xEF,0xFB,0x75,0x1A]), // $44
+    new Uint8Array([0x04,0xD6,0xD6,0x3F,0xEF,0xF0,0x63,0x0E, 0x00,0x00,0x00,0x24,0xE4,0xF0,0x6F,0x1F]), // $45
+    new Uint8Array([0x90,0x4C,0xCC,0x30,0x7C,0x78,0x30,0x00, 0x32,0x21,0x00,0xB0,0x7C,0x7C,0xB2,0xC2]), // $46
+    new Uint8Array([0x37,0x1F,0x0F,0x0F,0x07,0x00,0x00,0x00, 0x3F,0xDF,0xEF,0xEF,0x67,0x08,0x07,0x00]), // $47
+    new Uint8Array([0xE0,0x80,0x00,0x00,0x00,0x00,0x00,0x00, 0xE2,0xB2,0x73,0x73,0x63,0x03,0xFB,0x00]), // $48
+  ];
+  battleSpriteDefendCanvas = document.createElement('canvas');
+  battleSpriteDefendCanvas.width = 16;
+  battleSpriteDefendCanvas.height = 16;
+  const dctx = battleSpriteDefendCanvas.getContext('2d');
+  for (let i = 0; i < 4; i++) {
+    const dpx = decodeTile(DEFEND_TILES[i], 0);
+    const dimg = dctx.createImageData(8, 8);
+    for (let p = 0; p < 64; p++) {
+      const ci = dpx[p];
+      if (ci === 0) {
+        dimg.data[p * 4 + 3] = 0;
+      } else {
+        const rgb = NES_SYSTEM_PALETTE[palette[ci]] || [0, 0, 0];
+        dimg.data[p * 4]     = rgb[0];
+        dimg.data[p * 4 + 1] = rgb[1];
+        dimg.data[p * 4 + 2] = rgb[2];
+        dimg.data[p * 4 + 3] = 255;
+      }
+    }
+    dctx.putImageData(dimg, layout[i][0], layout[i][1]);
+  }
+
+  // Defend sparkle frames (4 × 8×8) — tiles $49-$4C from PPU $1000 dump (defend-tiles-v2.txt)
+  const SPARKLE_TILES = [
+    new Uint8Array([0x01,0x00,0x08,0x00,0x00,0x41,0x00,0x02, 0x00,0x00,0x01,0x02,0x00,0x09,0x00,0x12]), // $49
+    new Uint8Array([0x00,0x00,0x00,0x04,0x0A,0x14,0x0A,0x01, 0x00,0x00,0x00,0x18,0x1C,0x0E,0x04,0x00]), // $4A
+    new Uint8Array([0x00,0x00,0x20,0x10,0x08,0x04,0x00,0x00, 0x00,0x00,0x30,0x38,0x10,0x00,0x00,0x00]), // $4B
+    new Uint8Array([0x80,0x00,0x20,0x00,0x00,0x00,0x00,0x00, 0x80,0x40,0x00,0x00,0x00,0x00,0x00,0x00]), // $4C
+  ];
+  defendSparkleFrames = [];
+  for (let t = 0; t < 4; t++) {
+    const sc = document.createElement('canvas');
+    sc.width = 8; sc.height = 8;
+    const sctx = sc.getContext('2d');
+    const spx = decodeTile(SPARKLE_TILES[t], 0);
+    const simg = sctx.createImageData(8, 8);
+    for (let p = 0; p < 64; p++) {
+      const ci = spx[p];
+      if (ci === 0) { simg.data[p * 4 + 3] = 0; }
+      else {
+        const rgb = NES_SYSTEM_PALETTE[DEFEND_SPARKLE_PAL[ci]] || [0, 0, 0];
+        simg.data[p * 4] = rgb[0]; simg.data[p * 4 + 1] = rgb[1];
+        simg.data[p * 4 + 2] = rgb[2]; simg.data[p * 4 + 3] = 255;
+      }
+    }
+    sctx.putImageData(simg, 0, 0);
+    defendSparkleFrames.push(sc);
   }
 
   // Attack frame 2: ROM frame 3 (tiles 18-21, top 2×2 of 2×3 body)
@@ -2167,8 +2253,14 @@ function handleInput() {
     if (battleState === 'roar-hold') {
       if (keys['z'] || keys['Z']) { keys['z'] = false; keys['Z'] = false; battleState = 'roar-text-out'; battleTimer = 0; }
     } else if (battleState === 'victory-hold') {
-      if (keys['z'] || keys['Z']) { keys['z'] = false; keys['Z'] = false; playSFX(SFX.CONFIRM); battleState = 'exp-text-in'; battleTimer = 0; }
+      if (keys['z'] || keys['Z']) { keys['z'] = false; keys['Z'] = false; playSFX(SFX.CONFIRM); battleState = 'victory-fade-out'; battleTimer = 0; }
     } else if (battleState === 'exp-hold') {
+      if (keys['z'] || keys['Z']) {
+        keys['z'] = false; keys['Z'] = false; playSFX(SFX.CONFIRM);
+        if (leveledUp) { battleState = 'exp-fade-out'; } else { battleState = 'victory-text-out'; }
+        battleTimer = 0;
+      }
+    } else if (battleState === 'levelup-hold') {
       if (keys['z'] || keys['Z']) { keys['z'] = false; keys['Z'] = false; playSFX(SFX.CONFIRM); battleState = 'victory-text-out'; battleTimer = 0; }
     } else if (battleState === 'menu-open') {
       // 2×2 grid: 0=Fight(TL) 1=Magic(TR) 2=Item(BL) 3=Run(BR)
@@ -2214,25 +2306,27 @@ function handleInput() {
         } else {
           hitResults = rollHits(playerATK, BOSS_DEF, hitRate, potentialHits);
         }
-        currentHitIdx = 0;
-        slashFrame = 0;
         const rIsKnife1st = playerWeaponR !== 0 && ITEMS.get(playerWeaponR)?.subtype === 'knife';
-        slashFrames = rIsKnife1st ? knifeSlashFramesR : slashFramesR; // first hit = right hand
+        const pendingSlashFrames = rIsKnife1st ? knifeSlashFramesR : slashFramesR; // first hit = right hand
         // Base position = target center
         const centerX = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2);
         const centerY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
-        slashX = centerX;
-        slashY = centerY;
         // Weapon-aware initial offset: knife = diagonal sweep, unarmed = random scatter
         const rIsKnife0 = playerWeaponR !== 0 && ITEMS.get(playerWeaponR)?.subtype === 'knife';
+        let pendingOffX, pendingOffY;
         if (rIsKnife0) {
-          slashOffX = 8; slashOffY = -8; // diagonal sweep starts top-right
+          pendingOffX = 8; pendingOffY = -8; // diagonal sweep starts top-right
         } else {
-          slashOffX = Math.floor(Math.random() * 40) - 20;
-          slashOffY = Math.floor(Math.random() * 40) - 20;
+          pendingOffX = Math.floor(Math.random() * 40) - 20;
+          pendingOffY = Math.floor(Math.random() * 40) - 20;
         }
-        battleState = 'attack-start';
-        battleTimer = 0;
+        playerActionPending = {
+          command: 'fight', targetIndex, hitResults,
+          slashFrames: pendingSlashFrames, slashOffX: pendingOffX, slashOffY: pendingOffY,
+          slashX: centerX, slashY: centerY
+        };
+        turnQueue = buildTurnOrder();
+        processNextTurn();
       }
       if (keys['x'] || keys['X']) {
         keys['x'] = false; keys['X'] = false;
@@ -3573,58 +3667,19 @@ function statRowBytes(label1, label2, value) {
 function drawHUD() {
   if (hudCanvas) ctx.drawImage(hudCanvas, 0, 0);
 
-  // Top box content (interior: 8,8 to 248,24 = 240×16)
+  // Top box content (full 256×32, no static border — border only with text)
   // Title screen handles its own top box (sky BG)
   if (titleState !== 'done') return;
 
-  // Base layer: battle BG or town name
+  // Top box layers: (1) battle BG base, (2) transition fade, (3) border+text overlay
   const isFading = topBoxScrollState === 'fade-in' || topBoxScrollState === 'display' || topBoxScrollState === 'fade-out';
-  const showTownName = topBoxMode === 'name' && !isFading;
 
-  if (transState === 'loading') {
-    // Loading screen: black top box base, draw name if present
-    ctx.fillStyle = '#000';
-    ctx.fillRect(8, 8, 240, 16);
-    if (topBoxNameBytes && !isFading) {
-      const tw = measureText(topBoxNameBytes);
-      const tx = 8 + Math.floor((240 - tw) / 2);
-      const ty = 8 + Math.floor((16 - 8) / 2);
-      drawText(ctx, tx, ty, topBoxNameBytes, TEXT_WHITE);
-    }
-  } else if (topBoxScrollState === 'pending' || topBoxScrollState === 'fade-out' || (isFading && topBoxIsTown)) {
-    // Black base
-    ctx.fillStyle = '#000';
-    ctx.fillRect(8, 8, 240, 16);
-  } else if (showTownName) {
-    // Permanent town display (after fade-in completes)
-    ctx.fillStyle = '#000';
-    ctx.fillRect(8, 8, 240, 16);
-    if (topBoxNameBytes) {
-      const tw = measureText(topBoxNameBytes);
-      const tx = 8 + Math.floor((240 - tw) / 2);
-      const ty = 8 + Math.floor((16 - 8) / 2);
-      drawText(ctx, tx, ty, topBoxNameBytes, TEXT_WHITE);
-    }
-  } else if (topBoxBgCanvas) {
-    // Battle BG base layer
-    ctx.drawImage(topBoxBgCanvas, 8, 0, 240, 16, 8, 8, 240, 16);
+  // (1) Non-town battle BG: always draw as base layer (full 256×32)
+  if (transState !== 'loading' && !topBoxIsTown && topBoxBgCanvas) {
+    ctx.drawImage(topBoxBgCanvas, 0, 0);
   }
 
-  // Fading name text overlay — NES discrete palette steps
-  if (isFading && topBoxNameBytes) {
-    ctx.fillStyle = '#000';
-    ctx.fillRect(8, 8, 240, 16);
-    const fadedPal = [0x0F, 0x0F, 0x0F, 0x30];
-    for (let s = 0; s < topBoxFadeStep; s++) {
-      fadedPal[3] = nesColorFade(fadedPal[3]);
-    }
-    const tw = measureText(topBoxNameBytes);
-    const tx = 8 + Math.floor((240 - tw) / 2);
-    const ty = 8 + Math.floor((16 - 8) / 2);
-    drawText(ctx, tx, ty, topBoxNameBytes, fadedPal);
-  }
-
-  // NES palette fade on battle BG during transitions
+  // (2) NES palette fade on battle BG during transitions — drawn BEFORE border so border stays on top
   if (!topBoxIsTown && topBoxBgFadeFrames && transState !== 'none' && transState !== 'door-opening' && transState !== 'loading') {
     const maxStep = topBoxBgFadeFrames.length - 1;
     const FADE_STEP_MS = 100;
@@ -3637,8 +3692,68 @@ function drawHUD() {
       fadeStep = Math.max(maxStep - Math.floor(transTimer / FADE_STEP_MS), 0);
     }
     if (fadeStep > 0) {
-      ctx.drawImage(topBoxBgFadeFrames[fadeStep], 8, 0, 240, 16, 8, 8, 240, 16);
+      ctx.drawImage(topBoxBgFadeFrames[fadeStep], 0, 0);
     }
+  }
+
+  // Round battle BG corners to match border tile shape
+  if (!topBoxIsTown && transState !== 'loading') {
+    roundTopBoxCorners();
+  }
+
+  // (3) Border + text overlay
+  if (transState === 'loading') {
+    // Loading screen: border fades with loading content
+    let loadFade = LOAD_FADE_MAX;
+    if (loadingFadeState === 'in') {
+      loadFade = LOAD_FADE_MAX - Math.min(Math.floor(loadingFadeTimer / LOAD_FADE_STEP_MS), LOAD_FADE_MAX);
+    } else if (loadingFadeState === 'visible') {
+      loadFade = 0;
+    } else if (loadingFadeState === 'out') {
+      loadFade = Math.min(Math.floor(loadingFadeTimer / LOAD_FADE_STEP_MS), LOAD_FADE_MAX);
+    }
+    drawTopBoxBorder(loadFade);
+    // Text fades with name fade (isFading block below) or loading content
+    if (topBoxNameBytes && !isFading) {
+      const fadedPal = [0x0F, 0x0F, 0x0F, 0x30];
+      for (let s = 0; s < loadFade; s++) fadedPal[3] = nesColorFade(fadedPal[3]);
+      const tw = measureText(topBoxNameBytes);
+      const tx = 8 + Math.floor((240 - tw) / 2);
+      const ty = 8 + Math.floor((16 - 8) / 2);
+      drawText(ctx, tx, ty, topBoxNameBytes, fadedPal);
+    }
+  } else if (topBoxIsTown && topBoxMode === 'name' && topBoxNameBytes) {
+    // Town: border fades in/out with text, stays at full brightness when permanent
+    if (isFading) {
+      // fade-in or fade-out: border tracks topBoxFadeStep
+      drawTopBoxBorder(topBoxFadeStep);
+    } else if (topBoxScrollState !== 'pending') {
+      // Permanent display (after fade-in completed)
+      drawTopBoxBorder(0);
+    }
+    // pending: no border, no text (waits for fade-in)
+    if (!isFading && topBoxScrollState !== 'pending') {
+      const tw = measureText(topBoxNameBytes);
+      const tx = 8 + Math.floor((240 - tw) / 2);
+      const ty = 8 + Math.floor((16 - 8) / 2);
+      drawText(ctx, tx, ty, topBoxNameBytes, TEXT_WHITE);
+    }
+  }
+
+  // Fading name text overlay — NES discrete palette steps
+  if (isFading && topBoxNameBytes) {
+    // Non-town, non-loading: draw border fading with text
+    if (transState !== 'loading' && !topBoxIsTown) {
+      drawTopBoxBorder(topBoxFadeStep);
+    }
+    const fadedPal = [0x0F, 0x0F, 0x0F, 0x30];
+    for (let s = 0; s < topBoxFadeStep; s++) {
+      fadedPal[3] = nesColorFade(fadedPal[3]);
+    }
+    const tw = measureText(topBoxNameBytes);
+    const tx = 8 + Math.floor((240 - tw) / 2);
+    const ty = 8 + Math.floor((16 - 8) / 2);
+    drawText(ctx, tx, ty, topBoxNameBytes, fadedPal);
   }
 
   // HUD info fade-in (portrait + HP/MP)
@@ -3934,10 +4049,10 @@ function drawTitleSky(fadeLevel) {
 
   ctx.save();
   ctx.beginPath();
-  ctx.rect(8, 8, 240, 16); // top box interior
+  ctx.rect(0, 0, CANVAS_W, HUD_TOP_H); // full top box
   ctx.clip();
-  ctx.drawImage(skyCanvas, 8 - scrollX, 8);
-  ctx.drawImage(skyCanvas, 8 - scrollX + 256, 8);
+  ctx.drawImage(skyCanvas, -scrollX, 0);
+  ctx.drawImage(skyCanvas, -scrollX + 256, 0);
   ctx.restore();
 }
 
@@ -3945,13 +4060,23 @@ function drawTitleSkyInHUD() {
   if (titleState === 'main-in') {
     const fl = TITLE_FADE_MAX - Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
     drawTitleSky(fl);
+    roundTopBoxCorners();
   } else if (titleState === 'zbox-open' || titleState === 'main' || titleState === 'zbox-close' ||
              titleState === 'select-fade-in' || titleState === 'select' || titleState === 'select-fade-out' || titleState === 'select-fade-out-back' ||
              titleState === 'name-entry') {
     drawTitleSky(0);
+    roundTopBoxCorners();
   } else if (titleState === 'main-out') {
     const fl = Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
     drawTitleSky(fl);
+    roundTopBoxCorners();
+  } else if (titleState === 'disclaim-out') {
+    // Border fades out with disclaimer text
+    const fl = Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
+    drawTopBoxBorder(fl);
+  } else {
+    // Early title states (credits, disclaimer): border at full brightness
+    drawTopBoxBorder(0);
   }
 }
 
@@ -3959,7 +4084,7 @@ function drawTitle() {
   // Black fill inside viewport + top box interior
   ctx.fillStyle = '#000';
   ctx.fillRect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
-  ctx.fillRect(8, 8, 240, 16); // top box interior
+  ctx.fillRect(0, 0, CANVAS_W, HUD_TOP_H); // full top box (no border)
 
   const cx = HUD_VIEW_X + HUD_VIEW_W / 2;
   const cy = HUD_VIEW_Y + HUD_VIEW_H / 2;
@@ -4305,6 +4430,40 @@ function _drawBorderedBox(x, y, w, h, blue = false) {
   }
 }
 
+// Draw top box border dynamically using faded border tiles.
+// Only called when text is displayed — otherwise the full 32px battle BG shows through.
+function drawTopBoxBorder(fadeStep) {
+  if (!borderFadeSets || fadeStep >= TOPBOX_FADE_STEPS) return;
+  const tiles = borderFadeSets[fadeStep];
+  const [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR, FILL] = tiles;
+  const x = 0, y = 0, w = CANVAS_W, h = HUD_TOP_H;
+  // Interior fill
+  for (let ty = y + 8; ty < y + h - 8; ty += 8)
+    for (let tx = x + 8; tx < x + w - 8; tx += 8)
+      ctx.drawImage(FILL, tx, ty);
+  // Corners
+  ctx.drawImage(TL, x, y); ctx.drawImage(TR, x + w - 8, y);
+  ctx.drawImage(BL, x, y + h - 8); ctx.drawImage(BR, x + w - 8, y + h - 8);
+  // Top/bottom edges
+  for (let tx = x + 8; tx < x + w - 8; tx += 8) {
+    ctx.drawImage(TOP, tx, y); ctx.drawImage(BOT, tx, y + h - 8);
+  }
+  // Left/right edges
+  for (let ty = y + 8; ty < y + h - 8; ty += 8) {
+    ctx.drawImage(LEFT, x, ty); ctx.drawImage(RIGHT, x + w - 8, ty);
+  }
+}
+
+// Round the corners of the top box content (battle BG / sky) using corner masks
+function roundTopBoxCorners() {
+  if (!cornerMasks) return;
+  const [TL, TR, BL, BR] = cornerMasks;
+  ctx.drawImage(TL, 0, 0);
+  ctx.drawImage(TR, CANVAS_W - 8, 0);
+  ctx.drawImage(BL, 0, HUD_TOP_H - 8);
+  ctx.drawImage(BR, CANVAS_W - 8, HUD_TOP_H - 8);
+}
+
 function drawPauseMenu() {
   if (pauseState === 'none') return;
 
@@ -4492,6 +4651,60 @@ function rollHits(atk, def, hitRate, potentialHits) {
   return results;
 }
 
+function buildTurnOrder() {
+  const actors = [];
+  const playerAgi = playerStats ? playerStats.agi : 5;
+  actors.push({ type: 'player', priority: (playerAgi * 2) + Math.floor(Math.random() * 256) });
+  if (isRandomEncounter && encounterMonsters) {
+    for (let i = 0; i < encounterMonsters.length; i++) {
+      if (encounterMonsters[i].hp > 0)
+        actors.push({ type: 'enemy', index: i, priority: Math.floor(Math.random() * 256) });
+    }
+  } else {
+    actors.push({ type: 'enemy', index: -1, priority: Math.floor(Math.random() * 256) });
+  }
+  actors.sort((a, b) => b.priority - a.priority);
+  return actors;
+}
+
+function processNextTurn() {
+  if (turnQueue.length === 0) {
+    isDefending = false;
+    battleState = 'menu-open';
+    battleTimer = 0;
+    return;
+  }
+  const turn = turnQueue.shift();
+  if (turn.type === 'player') {
+    if (playerActionPending.command === 'fight') {
+      currentHitIdx = 0;
+      slashFrame = 0;
+      hitResults = playerActionPending.hitResults;
+      targetIndex = playerActionPending.targetIndex;
+      slashFrames = playerActionPending.slashFrames;
+      slashOffX = playerActionPending.slashOffX;
+      slashOffY = playerActionPending.slashOffY;
+      slashX = playerActionPending.slashX;
+      slashY = playerActionPending.slashY;
+      battleState = 'attack-start';
+      battleTimer = 0;
+    } else if (playerActionPending.command === 'defend') {
+      playSFX(SFX.DEFEND_HIT);
+      battleState = 'defend-anim';
+      battleTimer = 0;
+    }
+  } else {
+    currentAttacker = turn.index;
+    // Skip dead enemies (killed earlier this round)
+    if (turn.index >= 0 && encounterMonsters && encounterMonsters[turn.index].hp <= 0) {
+      processNextTurn();
+      return;
+    }
+    battleState = 'boss-flash';
+    battleTimer = 0;
+  }
+}
+
 function startBattle() {
   battleState = 'roar-slide-in';
   battleTimer = 0;
@@ -4502,6 +4715,7 @@ function startBattle() {
   bossFlashTimer = 0;
   battleShakeTimer = 0;
   bossHP = BOSS_MAX_HP;
+  isDefending = false;
   playSFX(SFX.EARTHQUAKE);
 }
 
@@ -4523,6 +4737,7 @@ function startRandomEncounter() {
   playerDamageNum = null;
   bossFlashTimer = 0;
   battleShakeTimer = 0;
+  isDefending = false;
   playSFX(SFX.BATTLE_SWIPE);
 }
 
@@ -4536,11 +4751,11 @@ function executeBattleCommand(index) {
     battleState = 'target-select';
     battleTimer = 0;
   } else if (index === 1) {
-    // Magic
-    playSFX(SFX.CANCEL);
-    battleMessage = BATTLE_NO_MAGIC;
-    battleState = 'message-hold';
-    battleTimer = 0;
+    // Defend — build turn queue, defend-anim plays on player's turn
+    isDefending = true;
+    playerActionPending = { command: 'defend' };
+    turnQueue = buildTurnOrder();
+    processNextTurn();
   } else if (index === 2) {
     // Item
     playSFX(SFX.CANCEL);
@@ -4551,6 +4766,7 @@ function executeBattleCommand(index) {
     // Run
     if (isRandomEncounter) {
       playSFX(SFX.CONFIRM);
+      isDefending = false;
       battleState = 'none';
       battleTimer = 0;
       isRandomEncounter = false;
@@ -4625,13 +4841,8 @@ function updateBattle(dt) {
       const hw0 = (currentHitIdx % 2 === 0) ? playerWeaponR : playerWeaponL;
       const isKnife0 = hw0 !== 0 && ITEMS.get(hw0)?.subtype === 'knife';
       playSFX(isKnife0 ? SFX.KNIFE_HIT : SFX.ATTACK_HIT);
-      if (isKnife0) { if (sfxCutTimerId) clearTimeout(sfxCutTimerId); sfxCutTimerId = setTimeout(() => { stopSFX(); sfxCutTimerId = null; }, 133); }
-      // Miss: skip slash effect, go straight to miss-show
-      if (hitResults[currentHitIdx].miss) {
-        battleState = 'player-miss-show';
-      } else {
-        battleState = 'player-slash';
-      }
+      if (isKnife0 && !(hitResults[currentHitIdx] && hitResults[currentHitIdx].crit)) { if (sfxCutTimerId) clearTimeout(sfxCutTimerId); sfxCutTimerId = setTimeout(() => { stopSFX(); sfxCutTimerId = null; }, 133); }
+      battleState = 'player-slash';
       battleTimer = 0;
     }
   } else if (battleState === 'player-slash') {
@@ -4756,18 +4967,8 @@ function updateBattle(dt) {
         battleTimer = 0;
         playSFX(SFX.BOSS_DEATH);
       } else {
-        // Build attack queue — all alive monsters attack in sequence
-        if (isRandomEncounter && encounterMonsters) {
-          enemyAttackQueue = [];
-          for (let i = 0; i < encounterMonsters.length; i++) {
-            if (encounterMonsters[i].hp > 0) enemyAttackQueue.push(i);
-          }
-        } else {
-          enemyAttackQueue = [-1]; // boss uses -1 sentinel
-        }
-        currentAttacker = enemyAttackQueue.shift();
-        battleState = 'boss-flash';
-        battleTimer = 0;
+        // Remaining turns in queue (enemies that haven't acted yet)
+        processNextTurn();
       }
     }
   } else if (battleState === 'monster-death') {
@@ -4788,18 +4989,19 @@ function updateBattle(dt) {
           };
         }
         saveSlotsToDB();
+        isDefending = false;
         battleState = 'victory-name-out';
         battleTimer = 0;
       } else {
-        // Remaining enemies attack
-        enemyAttackQueue = [];
-        for (let i = 0; i < encounterMonsters.length; i++) {
-          if (encounterMonsters[i].hp > 0) enemyAttackQueue.push(i);
-        }
-        currentAttacker = enemyAttackQueue.shift();
-        battleState = 'boss-flash';
-        battleTimer = 0;
+        // Remaining turns in queue
+        processNextTurn();
       }
+    }
+  } else if (battleState === 'defend-anim') {
+    // Defend pose + sparkle for 32 frames (~533ms), then enemy turn
+    if (battleTimer >= DEFEND_SPARKLE_TOTAL_MS) {
+      // Remaining turns in queue
+      processNextTurn();
     }
   } else if (battleState === 'boss-flash') {
     if (battleTimer >= BOSS_PREFLASH_MS) {
@@ -4810,7 +5012,8 @@ function updateBattle(dt) {
         // Hit — deal damage
         const monAtk = (currentAttacker >= 0 && encounterMonsters)
           ? encounterMonsters[currentAttacker].atk : BOSS_ATK;
-        const dmg = calcDamage(monAtk, playerDEF);
+        let dmg = calcDamage(monAtk, playerDEF);
+        if (isDefending) dmg = Math.max(1, Math.floor(dmg / 2));
         playerHP = Math.max(0, playerHP - dmg);
         playerDamageNum = { value: dmg, timer: 0 };
         playSFX(SFX.ATTACK_HIT);
@@ -4833,17 +5036,12 @@ function updateBattle(dt) {
     if (battleTimer >= BATTLE_DMG_SHOW_MS) {
       if (playerHP <= 0) {
         // Player defeated — reload after 2s
+        isDefending = false;
         battleState = 'defeat';
         battleTimer = 0;
-      } else if (enemyAttackQueue.length > 0) {
-        // Next monster in queue attacks
-        currentAttacker = enemyAttackQueue.shift();
-        battleState = 'boss-flash';
-        battleTimer = 0;
       } else {
-        // All enemies attacked — back to menu
-        battleState = 'menu-open';
-        battleTimer = 0;
+        // Next turn in queue (or back to menu if empty)
+        processNextTurn();
       }
     }
   } else if (battleState === 'boss-dissolve') {
@@ -4870,6 +5068,7 @@ function updateBattle(dt) {
         };
       }
       saveSlotsToDB();
+      isDefending = false;
       battleState = 'victory-name-out';
       battleTimer = 0;
     }
@@ -4881,20 +5080,30 @@ function updateBattle(dt) {
     }
   } else if (battleState === 'victory-celebrate') {
     if (battleTimer >= 400) {
-      battleState = 'victory-box-open';
+      battleState = 'victory-text-in';
       battleTimer = 0;
     }
-  } else if (battleState === 'victory-box-open') {
-    if (battleTimer >= VICTORY_BOX_ROWS * VICTORY_ROW_FRAME_MS) { battleState = 'victory-text-in'; battleTimer = 0; }
   } else if (battleState === 'victory-text-in') {
     if (battleTimer >= (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS) { battleState = 'victory-hold'; battleTimer = 0; }
   } else if (battleState === 'victory-hold') {
     // waits for Z press in handleInput
+  } else if (battleState === 'victory-fade-out') {
+    if (battleTimer >= (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS) { battleState = 'exp-text-in'; battleTimer = 0; }
   } else if (battleState === 'exp-text-in') {
     if (battleTimer >= (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS) { battleState = 'exp-hold'; battleTimer = 0; }
   } else if (battleState === 'exp-hold') {
     // waits for Z press in handleInput
+  } else if (battleState === 'exp-fade-out') {
+    if (battleTimer >= (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS) { battleState = 'levelup-text-in'; battleTimer = 0; }
+  } else if (battleState === 'levelup-text-in') {
+    if (battleTimer >= (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS) { battleState = 'levelup-hold'; battleTimer = 0; }
+  } else if (battleState === 'levelup-hold') {
+    // waits for Z press in handleInput
   } else if (battleState === 'victory-text-out') {
+    if (battleTimer >= (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS) {
+      battleState = 'victory-menu-fade'; battleTimer = 0;
+    }
+  } else if (battleState === 'victory-menu-fade') {
     if (battleTimer >= (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS) {
       battleState = 'victory-box-close'; battleTimer = 0;
     }
@@ -4942,16 +5151,34 @@ function updateBattle(dt) {
 function drawBattle() {
   if (battleState === 'none') return;
 
+  // Crit flash — 1 frame orange backdrop behind everything (NES $27 = #DAA336)
+  if (critFlashTimer >= 0) {
+    if (critFlashTimer === 0) critFlashTimer = Date.now();
+    if (Date.now() - critFlashTimer < 17) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
+      ctx.clip();
+      ctx.fillStyle = '#DAA336';
+      ctx.fillRect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
+      ctx.restore();
+    } else {
+      critFlashTimer = -1;
+    }
+  }
+
   // Player sprite portrait — drawn over border during battle
   const shakeOff = (battleState === 'enemy-attack' && battleShakeTimer > 0)
     ? (Math.floor(battleShakeTimer / 67) & 1 ? 2 : -2) : 0;
   const isVictoryPose = battleState === 'victory-celebrate' ||
-    battleState === 'victory-box-open' || battleState === 'victory-text-in' ||
-    battleState === 'victory-hold' || battleState === 'exp-text-in' || battleState === 'exp-hold' ||
-    battleState === 'victory-text-out' || battleState === 'victory-box-close';
+    battleState === 'victory-text-in' || battleState === 'victory-hold' || battleState === 'victory-fade-out' ||
+    battleState === 'exp-text-in' || battleState === 'exp-hold' || battleState === 'exp-fade-out' ||
+    battleState === 'levelup-text-in' || battleState === 'levelup-hold' ||
+    battleState === 'victory-text-out' || battleState === 'victory-menu-fade' || battleState === 'victory-box-close';
   const isAttackPose = battleState === 'attack-start' || battleState === 'player-slash';
   const isHitPose = battleState === 'enemy-attack' ||
     (battleState === 'enemy-damage-show' && playerDamageNum && !playerDamageNum.miss);
+  const isDefendPose = battleState === 'defend-anim';
   let portraitSrc = battleSpriteCanvas;
   if (isAttackPose) {
     const handWeapon = (currentHitIdx % 2 === 0) ? playerWeaponR : playerWeaponL;
@@ -4967,6 +5194,8 @@ function drawBattle() {
       }
     }
     // else: portraitSrc stays as battleSpriteCanvas (idle) — correct per trace
+  } else if (isDefendPose && battleSpriteDefendCanvas) {
+    portraitSrc = battleSpriteDefendCanvas;
   } else if (isHitPose && battleSpriteHitCanvas) {
     portraitSrc = battleSpriteHitCanvas;
   } else if (isVictoryPose && battleSpriteVictoryCanvas) {
@@ -4994,6 +5223,26 @@ function drawBattle() {
         ctx.drawImage(battleFistCanvas, px - 4, py + 10);
       }
     }
+    // Defend sparkle — 4 corners cycling $49→$4A→$4B→$4C during defend-anim
+    // Adjusted for 16×16 portrait: TL(-8,-7), TR(+16,-7), BL(-8,+17), BR(+16,+17)
+    if (isDefendPose && defendSparkleFrames.length === 4) {
+      const fi = Math.min(3, Math.floor(battleTimer / DEFEND_SPARKLE_FRAME_MS));
+      const frame = defendSparkleFrames[fi];
+      // TL: normal
+      ctx.drawImage(frame, px - 8, py - 7);
+      // TR: H-flip
+      ctx.save(); ctx.scale(-1, 1);
+      ctx.drawImage(frame, -(px + 23), py - 7);
+      ctx.restore();
+      // BL: V-flip
+      ctx.save(); ctx.scale(1, -1);
+      ctx.drawImage(frame, px - 8, -(py + 24));
+      ctx.restore();
+      // BR: HV-flip
+      ctx.save(); ctx.scale(-1, -1);
+      ctx.drawImage(frame, -(px + 23), -(py + 24));
+      ctx.restore();
+    }
   }
 
   // NES grayscale strobe — toggle grayscale every frame for 65 frames
@@ -5010,22 +5259,6 @@ function drawBattle() {
                                 HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
       ctx.filter = 'none';
       ctx.restore();
-    }
-  }
-
-  // Crit flash — 1 frame orange backdrop (NES $27 = #DAA336)
-  if (critFlashTimer >= 0) {
-    critFlashTimer += dt;
-    if (critFlashTimer < 17) {
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
-      ctx.clip();
-      ctx.fillStyle = '#DAA336';
-      ctx.fillRect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
-      ctx.restore();
-    } else {
-      critFlashTimer = -1;
     }
   }
 
@@ -5112,28 +5345,29 @@ function drawRoarBox() {
 
 function drawBattleMenu() {
   const isSlide = battleState === 'boss-box-expand' || battleState === 'encounter-box-expand';
-  const isAppear = battleState === 'boss-appear';
+  const isAppear = battleState === 'boss-appear' || battleState === 'monster-slide-in';
   const isFade = battleState === 'battle-fade-in';
   const isMenu = isFade ||
                  battleState === 'menu-open' || battleState === 'target-select' ||
                  battleState === 'attack-start' || battleState === 'player-slash' || battleState === 'player-hit-show' ||
                  battleState === 'player-miss-show' ||
                  battleState === 'player-damage-show' || battleState === 'monster-death' ||
-                 battleState === 'boss-flash' ||
+                 battleState === 'defend-anim' || battleState === 'boss-flash' ||
                  battleState === 'enemy-attack' ||
                  battleState === 'enemy-damage-show' || battleState === 'message-hold' ||
                  battleState === 'boss-dissolve' || battleState === 'defeat' ||
                  battleState === 'defeat-fade';
   const isVictory = battleState === 'victory-name-out' || battleState === 'victory-celebrate' ||
-                    battleState === 'victory-box-open' || battleState === 'victory-text-in' ||
-                    battleState === 'victory-hold' || battleState === 'exp-text-in' ||
-                    battleState === 'exp-hold' || battleState === 'victory-text-out' ||
-                    battleState === 'victory-box-close';
+                    battleState === 'victory-text-in' || battleState === 'victory-hold' || battleState === 'victory-fade-out' ||
+                    battleState === 'exp-text-in' || battleState === 'exp-hold' || battleState === 'exp-fade-out' ||
+                    battleState === 'levelup-text-in' || battleState === 'levelup-hold' ||
+                    battleState === 'victory-text-out' || battleState === 'victory-menu-fade' || battleState === 'victory-box-close' ||
+                    battleState === 'encounter-box-close' || battleState === 'boss-box-close';
   if (!isSlide && !isAppear && !isMenu && !isVictory) return;
 
   // Whole-panel horizontal slide: in from right, out to left
   let panelOffX = 0;
-  const isClose = battleState === 'victory-box-close';
+  const isClose = battleState === 'victory-box-close' || battleState === 'encounter-box-close' || battleState === 'boss-box-close';
   if (isSlide) {
     const t = Math.min(battleTimer / BOSS_BOX_EXPAND_MS, 1);
     panelOffX = Math.round(-CANVAS_W * (1 - t));  // left → 0
@@ -5193,10 +5427,21 @@ function drawBattleMenu() {
   const row1 = HUD_BOT_Y + 32;
   const positions = [[colL, row0], [colR, row0], [colL, row1], [colR, row1]];
 
-  // During victory, draw menu text at full brightness (no fade)
-  const menuPal = isVictory ? [0x0F, 0x0F, 0x0F, 0x30] : fadedPal;
-  for (let i = 0; i < BATTLE_MENU_ITEMS.length; i++) {
-    drawText(ctx, positions[i][0], positions[i][1], BATTLE_MENU_ITEMS[i], menuPal);
+  // During victory, draw menu text at full brightness — except during menu fade-out
+  // After menu fade completes (victory-box-close), hide text entirely
+  const isMenuFade = battleState === 'victory-menu-fade';
+  if (!isClose) {
+    let menuPal;
+    if (isMenuFade) {
+      const mfStep = Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
+      menuPal = [0x0F, 0x0F, 0x0F, 0x30];
+      for (let s = 0; s < mfStep; s++) menuPal[3] = nesColorFade(menuPal[3]);
+    } else {
+      menuPal = isVictory ? [0x0F, 0x0F, 0x0F, 0x30] : fadedPal;
+    }
+    for (let i = 0; i < BATTLE_MENU_ITEMS.length; i++) {
+      drawText(ctx, positions[i][0], positions[i][1], BATTLE_MENU_ITEMS[i], menuPal);
+    }
   }
 
   // Hand cursor (hidden during target-select and victory states)
@@ -5249,15 +5494,15 @@ function drawEncounterBox() {
                    battleState === 'attack-start' || battleState === 'player-slash' || battleState === 'player-hit-show' ||
                    battleState === 'player-miss-show' ||
                    battleState === 'player-damage-show' || battleState === 'monster-death' ||
-                   battleState === 'boss-flash' ||
+                   battleState === 'defend-anim' || battleState === 'boss-flash' ||
                    battleState === 'enemy-attack' ||
                    battleState === 'enemy-damage-show' || battleState === 'message-hold' ||
                    battleState === 'defeat' || battleState === 'defeat-fade';
   const isVictory = battleState === 'victory-name-out' || battleState === 'victory-celebrate' ||
-                    battleState === 'victory-box-open' || battleState === 'victory-text-in' ||
-                    battleState === 'victory-hold' || battleState === 'exp-text-in' ||
-                    battleState === 'exp-hold' || battleState === 'victory-text-out' ||
-                    battleState === 'victory-box-close';
+                    battleState === 'victory-text-in' || battleState === 'victory-hold' || battleState === 'victory-fade-out' ||
+                    battleState === 'exp-text-in' || battleState === 'exp-hold' || battleState === 'exp-fade-out' ||
+                    battleState === 'levelup-text-in' || battleState === 'levelup-hold' ||
+                    battleState === 'victory-text-out' || battleState === 'victory-menu-fade' || battleState === 'victory-box-close';
   if (!isExpand && !isClose && !isCombat && !isVictory) return;
 
   const count = encounterMonsters.length;
@@ -5323,9 +5568,10 @@ function drawEncounterBox() {
       if (isDying) {
         _drawMonsterDeath(drawX, pos.y, 32, Math.min(battleTimer / MONSTER_DEATH_MS, 1));
       } else {
-        // Hit blink during player-slash (60ms toggle)
+        // Hit blink during player-slash (60ms toggle, not on miss)
+        const curHit = hitResults && hitResults[currentHitIdx];
         const isHitBlink = isBeingHit && battleState === 'player-slash' &&
-                           (Math.floor(battleTimer / 60) & 1);
+                           curHit && !curHit.miss && (Math.floor(battleTimer / 60) & 1);
         // White flash blink during boss-flash for current attacker
         const isFlashing = battleState === 'boss-flash' && currentAttacker === i &&
                            Math.floor(battleTimer / 33) % 2 === 1;
@@ -5336,8 +5582,8 @@ function drawEncounterBox() {
       }
     }
 
-    // Draw punch impact on target during player-slash (16×16 centered on target + scatter)
-    if (battleState === 'player-slash' && slashFrames && slashFrame < SLASH_FRAMES) {
+    // Draw punch impact on target during player-slash (16×16 centered on target + scatter, not on miss)
+    if (battleState === 'player-slash' && slashFrames && slashFrame < SLASH_FRAMES && hitResults && hitResults[currentHitIdx] && !hitResults[currentHitIdx].miss) {
       const pos = gridPos[targetIndex];
       const sx = pos.x - slideOffX + slashOffX + 8;  // center 16px on 32px sprite
       const sy = pos.y + slashOffY + 8;
@@ -5367,15 +5613,15 @@ function drawBossSpriteBox() {
                    battleState === 'menu-open' || battleState === 'target-select' ||
                    battleState === 'attack-start' || battleState === 'player-slash' || battleState === 'player-hit-show' ||
                    battleState === 'player-miss-show' ||
-                   battleState === 'player-damage-show' || battleState === 'boss-flash' ||
+                   battleState === 'player-damage-show' || battleState === 'defend-anim' || battleState === 'boss-flash' ||
                    battleState === 'enemy-attack' ||
                    battleState === 'enemy-damage-show' || battleState === 'message-hold' ||
                    battleState === 'defeat' || battleState === 'defeat-fade';
   const isVictory = battleState === 'victory-name-out' || battleState === 'victory-celebrate' ||
-                    battleState === 'victory-box-open' || battleState === 'victory-text-in' ||
-                    battleState === 'victory-hold' || battleState === 'exp-text-in' ||
-                    battleState === 'exp-hold' || battleState === 'victory-text-out' ||
-                    battleState === 'victory-box-close';
+                    battleState === 'victory-text-in' || battleState === 'victory-hold' || battleState === 'victory-fade-out' ||
+                    battleState === 'exp-text-in' || battleState === 'exp-hold' || battleState === 'exp-fade-out' ||
+                    battleState === 'levelup-text-in' || battleState === 'levelup-hold' ||
+                    battleState === 'victory-text-out' || battleState === 'victory-menu-fade' || battleState === 'victory-box-close';
   if (!isExpand && !isClose && !isAppear && !isDissolve && !isCombat && !isVictory) return;
 
   const fullW = 64;  // 48px sprite + 8px border each side
@@ -5429,8 +5675,8 @@ function drawBossSpriteBox() {
     if (!blinkHidden && !bossDefeated) {
       ctx.drawImage(landTurtleBattleCanvas, sprX, sprY);
     }
-    // Draw punch impact with random scatter offset (16×16 metasprite)
-    if (slashFrames && slashFrame < SLASH_FRAMES && !bossDefeated) {
+    // Draw punch impact with random scatter offset (16×16 metasprite, not on miss)
+    if (slashFrames && slashFrame < SLASH_FRAMES && !bossDefeated && hitResults && hitResults[currentHitIdx] && !hitResults[currentHitIdx].miss) {
       ctx.drawImage(slashFrames[slashFrame], centerX - 8 + slashOffX, centerY - 8 + slashOffY);
     }
   } else {
@@ -5566,14 +5812,19 @@ const VICTORY_ROW_FRAME_MS = 16.67; // 1 NES frame per row
 function drawVictoryBox() {
   const isNameOut = battleState === 'victory-name-out';
   const isCelebrate = battleState === 'victory-celebrate';
-  const isOpen = battleState === 'victory-box-open';
   const isClose = battleState === 'victory-box-close';
   const isVicText = battleState === 'victory-text-in';
   const isVicHold = battleState === 'victory-hold';
+  const isVicFadeOut = battleState === 'victory-fade-out';
   const isExpText = battleState === 'exp-text-in';
   const isExpHold = battleState === 'exp-hold';
+  const isExpFadeOut = battleState === 'exp-fade-out';
+  const isLevelText = battleState === 'levelup-text-in';
+  const isLevelHold = battleState === 'levelup-hold';
   const isOut = battleState === 'victory-text-out';
-  const showBox = isNameOut || isCelebrate || isOpen || isClose || isVicText || isVicHold || isExpText || isExpHold || isOut;
+  const isMenuFadeState = battleState === 'victory-menu-fade';
+  const showBox = isNameOut || isCelebrate || isClose || isVicText || isVicHold || isVicFadeOut ||
+    isExpText || isExpHold || isExpFadeOut || isLevelText || isLevelHold || isOut || isMenuFadeState;
   if (!showBox) return;
 
   let boxX = 0;
@@ -5591,7 +5842,6 @@ function drawVictoryBox() {
     const fadeStep = Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
     const fadedPal = [0x0F, 0x0F, 0x0F, 0x30];
     for (let s = 0; s < fadeStep; s++) fadedPal[3] = nesColorFade(fadedPal[3]);
-    // Draw fading enemy name
     let enemyName;
     if (isRandomEncounter && encounterMonsters) {
       enemyName = BATTLE_GOBLIN_NAME;
@@ -5605,47 +5855,46 @@ function drawVictoryBox() {
     return;
   }
 
-  // victory-celebrate: left area empty (cleared by drawBattleMenu)
-  if (isCelebrate) return;
-
-  // Row-by-row expand (open only); close uses horizontal slide via boxX
-  let drawH = VICTORY_BOX_H;
-  if (isOpen) {
-    const rows = Math.min(Math.floor(battleTimer / VICTORY_ROW_FRAME_MS) + 1, VICTORY_BOX_ROWS);
-    drawH = rows * 8;
+  // victory-celebrate: left box stays (no text), then victory text fades in
+  if (isCelebrate) {
+    _drawBorderedBox(boxX, boxY, VICTORY_BOX_W, VICTORY_BOX_H);
+    return;
   }
-  _drawBorderedBox(boxX, boxY, VICTORY_BOX_W, drawH);
 
-  if (isOpen || isClose) return;
+  _drawBorderedBox(boxX, boxY, VICTORY_BOX_W, VICTORY_BOX_H);
 
-  // Determine which message to show
-  const showExp = isExpText || isExpHold || isOut;
+  if (isClose) return;
 
+  // Calculate fade step for current state
   let fadeStep = 0;
-  if (isVicText || isExpText) {
+  if (isVicText || isExpText || isLevelText) {
+    // Fade in
     fadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
-  } else if (isOut) {
+  } else if (isVicFadeOut || isExpFadeOut || isOut) {
+    // Fade out
     fadeStep = Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
   }
+  // Hold states: fadeStep stays 0 (fully bright)
+
   const fadedPal = [0x0F, 0x0F, 0x0F, 0x30];
   for (let s = 0; s < fadeStep; s++) fadedPal[3] = nesColorFade(fadedPal[3]);
 
-  if (!showExp) {
-    // "Victory!" centered in box
-    const tw = measureText(BATTLE_VICTORY);
-    drawText(ctx, boxX + Math.floor((VICTORY_BOX_W - tw) / 2), boxY + Math.floor((VICTORY_BOX_H - 8) / 2), BATTLE_VICTORY, fadedPal);
-  } else {
-    // "Got N EXP!" and optional "Level Up!"
-    const expText = makeExpText(encounterExpGained);
-    const lines = leveledUp ? 2 : 1;
-    const blockH = lines * 10;
-    const startY = boxY + Math.floor((VICTORY_BOX_H - blockH) / 2);
-    const tw2 = measureText(expText);
-    drawText(ctx, boxX + Math.floor((VICTORY_BOX_W - tw2) / 2), startY, expText, fadedPal);
-    if (leveledUp) {
-      const tw3 = measureText(BATTLE_LEVEL_UP);
-      drawText(ctx, boxX + Math.floor((VICTORY_BOX_W - tw3) / 2), startY + 10, BATTLE_LEVEL_UP, fadedPal);
-    }
+  // Pick which message to draw
+  let msg;
+  if (isVicText || isVicHold || isVicFadeOut) {
+    msg = BATTLE_VICTORY;
+  } else if (isExpText || isExpHold || isExpFadeOut) {
+    msg = makeExpText(encounterExpGained);
+  } else if (isLevelText || isLevelHold) {
+    msg = BATTLE_LEVEL_UP;
+  } else if (isOut) {
+    // Final fade-out: show whichever message was last
+    msg = leveledUp ? BATTLE_LEVEL_UP : makeExpText(encounterExpGained);
+  }
+
+  if (msg) {
+    const tw = measureText(msg);
+    drawText(ctx, boxX + Math.floor((VICTORY_BOX_W - tw) / 2), boxY + Math.floor((VICTORY_BOX_H - 8) / 2), msg, fadedPal);
   }
 }
 
