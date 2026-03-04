@@ -271,6 +271,7 @@ let slashOffX = 0, slashOffY = 0; // random offset per frame (punch scatter)
 let slashFramesR = null;           // right-hand punch frames (frame $12, 4 effect sets)
 let slashFramesL = null;           // left-hand punch frames (frame $13, 4 effect sets)
 let slashFrames = null;            // alias — points to R or L based on current hit
+let critFlashTimer = -1;           // >=0 while crit backdrop flash is active (1 frame = 16ms)
 let knifeSlashFramesR = null;      // knife diagonal slash frames (right hand)
 let knifeSlashFramesL = null;      // knife diagonal slash frames (left hand)
 const BATTLE_MISS = new Uint8Array([0x96, 0xD2, 0xDC, 0xDC]); // "Miss" in ROM encoding
@@ -868,6 +869,8 @@ function initBattleSprite(romData) {
     new Uint8Array([0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00]), // $4B
   ];
   const BLADE_POS = [[0,0],[8,0],[0,8],[8,8]];
+  // Swung grid order: $49(0,0) $4A(8,0) / $4B(0,8) $4C(8,8) — indices into BLADE_TILES
+  const BLADE_SWUNG_ORDER = [1, 0, 3, 2];
 
   // Raised blade (h-flipped, attr $43) — back swing / windup
   battleKnifeBladeCanvas = document.createElement('canvas');
@@ -895,7 +898,7 @@ function initBattleSprite(romData) {
   battleKnifeBladeSwungCanvas.height = 16;
   const bsctx = battleKnifeBladeSwungCanvas.getContext('2d');
   for (let t = 0; t < 4; t++) {
-    const bpx = decodeTile(BLADE_TILES[t], 0);
+    const bpx = decodeTile(BLADE_TILES[BLADE_SWUNG_ORDER[t]], 0);
     const bsimg = bsctx.createImageData(8, 8);
     for (let p = 0; p < 64; p++) {
       const ci = bpx[p];
@@ -4623,7 +4626,12 @@ function updateBattle(dt) {
       const isKnife0 = hw0 !== 0 && ITEMS.get(hw0)?.subtype === 'knife';
       playSFX(isKnife0 ? SFX.KNIFE_HIT : SFX.ATTACK_HIT);
       if (isKnife0) { if (sfxCutTimerId) clearTimeout(sfxCutTimerId); sfxCutTimerId = setTimeout(() => { stopSFX(); sfxCutTimerId = null; }, 133); }
-      battleState = 'player-slash';
+      // Miss: skip slash effect, go straight to miss-show
+      if (hitResults[currentHitIdx].miss) {
+        battleState = 'player-miss-show';
+      } else {
+        battleState = 'player-slash';
+      }
       battleTimer = 0;
     }
   } else if (battleState === 'player-slash') {
@@ -4653,6 +4661,8 @@ function updateBattle(dt) {
         } else {
           bossHP = Math.max(0, bossHP - hit.damage);
         }
+        // Crit flash — 1 frame orange backdrop (NES: $27 for 1 frame)
+        if (hit.crit) critFlashTimer = 0;
       }
       // Brief pause between slash and next action (no damage number shown yet)
       battleState = 'player-hit-show';
@@ -4970,7 +4980,7 @@ function drawBattle() {
       const isKnife = handWeapon !== 0 && ITEMS.get(handWeapon)?.subtype === 'knife';
       // Back swing: blade BEHIND body (NES: weapon spr06-09 behind body spr00-05)
       if (isKnife && battleState === 'attack-start' && battleKnifeBladeCanvas) {
-        ctx.drawImage(battleKnifeBladeCanvas, px + 6, py - 8);
+        ctx.drawImage(battleKnifeBladeCanvas, px + 8, py - 7);
       }
     }
     ctx.drawImage(portraitSrc, px, py);
@@ -4978,8 +4988,8 @@ function drawBattle() {
       const handWeapon = (currentHitIdx % 2 === 0) ? playerWeaponR : playerWeaponL;
       const isKnife = handWeapon !== 0 && ITEMS.get(handWeapon)?.subtype === 'knife';
       if (isKnife && battleState === 'player-slash' && battleKnifeBladeSwungCanvas) {
-        // Forward slash: blade NEXT TO body on the left (no overlap)
-        ctx.drawImage(battleKnifeBladeSwungCanvas, px - 10, py - 4);
+        // Forward slash: blade to the left of the body (trace: -16, +1 from body top-left)
+        ctx.drawImage(battleKnifeBladeSwungCanvas, px - 16, py + 1);
       } else if (!isKnife && handWeapon === 0 && battleFistCanvas) {
         ctx.drawImage(battleFistCanvas, px - 4, py + 10);
       }
@@ -5000,6 +5010,22 @@ function drawBattle() {
                                 HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
       ctx.filter = 'none';
       ctx.restore();
+    }
+  }
+
+  // Crit flash — 1 frame orange backdrop (NES $27 = #DAA336)
+  if (critFlashTimer >= 0) {
+    critFlashTimer += dt;
+    if (critFlashTimer < 17) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
+      ctx.clip();
+      ctx.fillStyle = '#DAA336';
+      ctx.fillRect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
+      ctx.restore();
+    } else {
+      critFlashTimer = -1;
     }
   }
 
