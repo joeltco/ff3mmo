@@ -276,6 +276,7 @@ let bossFlashTimer = 0;
 let battleShakeTimer = 0;
 let bossDefeated = false;
 let isDefending = false;
+let runSlideBack = false;
 
 // Random encounter state
 let encounterSteps = 0;
@@ -417,6 +418,7 @@ const BATTLE_ROAR = new Uint8Array([0x9B,0x98,0x98,0x98,0x98,0x98,0x8A,0x9B,0xC4
 const BATTLE_FIGHT = new Uint8Array([0x8F,0xD2,0xD0,0xD1,0xDD]); // "Fight"
 const BATTLE_RUN = new Uint8Array([0x9B,0xDE,0xD7]); // "Run"
 const BATTLE_CANT_ESCAPE = new Uint8Array([0x8C,0xCA,0xD7,0xDD,0xFF,0xCE,0xDC,0xCC,0xCA,0xD9,0xCE,0xC4]); // "Cant escape!"
+const BATTLE_RAN_AWAY = new Uint8Array([0x9B,0xCA,0xD7,0xFF,0xCA,0xE0,0xCA,0xE2,0xC4,0xC4,0xC4]); // "Ran away..."
 const BATTLE_DEFEND = new Uint8Array([0x8D,0xCE,0xCF,0xCE,0xD7,0xCD]); // "Defend"
 const BATTLE_NO_ITEMS = new Uint8Array([0x97,0xD8,0xFF,0xD2,0xDD,0xCE,0xD6,0xDC,0xC4]); // "No items!"
 const BATTLE_VICTORY = new Uint8Array([0x9F,0xD2,0xCC,0xDD,0xD8,0xDB,0xE2,0xC4]); // "Victory!"
@@ -2346,15 +2348,15 @@ function handleInput() {
     if (battleState === 'roar-hold') {
       if (keys['z'] || keys['Z']) { keys['z'] = false; keys['Z'] = false; battleState = 'roar-text-out'; battleTimer = 0; }
     } else if (battleState === 'victory-hold') {
-      if (keys['z'] || keys['Z']) { keys['z'] = false; keys['Z'] = false; playSFX(SFX.CONFIRM); battleState = 'victory-fade-out'; battleTimer = 0; }
+      if (keys['z'] || keys['Z']) { keys['z'] = false; keys['Z'] = false; battleState = 'victory-fade-out'; battleTimer = 0; }
     } else if (battleState === 'exp-hold') {
       if (keys['z'] || keys['Z']) {
-        keys['z'] = false; keys['Z'] = false; playSFX(SFX.CONFIRM);
+        keys['z'] = false; keys['Z'] = false;
         if (leveledUp) { battleState = 'exp-fade-out'; } else { battleState = 'victory-text-out'; }
         battleTimer = 0;
       }
     } else if (battleState === 'levelup-hold') {
-      if (keys['z'] || keys['Z']) { keys['z'] = false; keys['Z'] = false; playSFX(SFX.CONFIRM); battleState = 'victory-text-out'; battleTimer = 0; }
+      if (keys['z'] || keys['Z']) { keys['z'] = false; keys['Z'] = false; battleState = 'victory-text-out'; battleTimer = 0; }
     } else if (battleState === 'menu-open') {
       // 2×2 grid: 0=Fight(TL) 1=Magic(TR) 2=Item(BL) 3=Run(BR)
       if (keys['ArrowDown'])  { keys['ArrowDown'] = false;  battleCursor ^= 2; playSFX(SFX.CURSOR); }
@@ -5023,6 +5025,24 @@ function processNextTurn() {
       playerHealNum = { value: itemHealAmount, timer: 0 };
       battleState = 'item-use';
       battleTimer = 0;
+    } else if (playerActionPending.command === 'run') {
+      // Escape chance: base 25 + AGI - avg enemy level / 4 (from FF3 disasm)
+      const playerAgi = playerStats ? playerStats.agi : 5;
+      let avgLevel = 1;
+      if (encounterMonsters) {
+        const alive = encounterMonsters.filter(m => m.hp > 0);
+        if (alive.length > 0) avgLevel = alive.reduce((s, m) => s + (m.level || 1), 0) / alive.length;
+      }
+      const successRate = Math.min(99, Math.max(1, playerAgi + 25 - Math.floor(avgLevel / 4)));
+      if (Math.floor(Math.random() * 100) < successRate) {
+        // Success — monster name fades out, then "Ran away..." fades in
+        battleState = 'run-name-out';
+        battleTimer = 0;
+      } else {
+        // Failed — monster name fades out, "Can't run" fades in, turn consumed
+        battleState = 'run-fail-name-out';
+        battleTimer = 0;
+      }
     }
   } else {
     currentAttacker = turn.index;
@@ -5110,13 +5130,9 @@ function executeBattleCommand(index) {
     if (isRandomEncounter) {
       playSFX(SFX.CONFIRM);
       isDefending = false;
-      battleState = 'none';
+      playerActionPending = { command: 'run' };
+      battleState = 'confirm-pause';
       battleTimer = 0;
-      isRandomEncounter = false;
-      encounterMonsters = null;
-      dyingMonsterIndex = -1;
-      sprite.setDirection(DIR_DOWN);
-      stopMusic(); resumeMusic();
     } else {
       playSFX(SFX.CANCEL);
       battleMessage = BATTLE_CANT_ESCAPE;
@@ -5363,6 +5379,62 @@ function updateBattle(dt) {
       playerHealNum = null;
       processNextTurn();
     }
+  } else if (battleState === 'run-name-out') {
+    // Monster name fades out (same as victory-name-out)
+    if (battleTimer >= (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS) {
+      sprite.setDirection(DIR_DOWN);
+      playSFX(SFX.RUN_AWAY);
+      battleState = 'run-text-in';
+      battleTimer = 0;
+    }
+  } else if (battleState === 'run-text-in') {
+    // "Ran away..." fades in
+    if (battleTimer >= (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS) {
+      battleState = 'run-hold';
+      battleTimer = 0;
+    }
+  } else if (battleState === 'run-hold') {
+    // Hold for ~1.35s (total ~1.85s including fade-in)
+    if (battleTimer >= 1350) {
+      battleState = 'run-text-out';
+      battleTimer = 0;
+    }
+  } else if (battleState === 'run-text-out') {
+    // "Ran away..." fades out, then close encounter box
+    if (battleTimer >= (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS) {
+      runSlideBack = true;
+      battleState = 'encounter-box-close';
+      battleTimer = 0;
+    }
+  } else if (battleState === 'run-fail-name-out') {
+    // Monster name fades out
+    if (battleTimer >= (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS) {
+      battleState = 'run-fail-text-in';
+      battleTimer = 0;
+    }
+  } else if (battleState === 'run-fail-text-in') {
+    // "Can't run" fades in
+    if (battleTimer >= (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS) {
+      battleState = 'run-fail-hold';
+      battleTimer = 0;
+    }
+  } else if (battleState === 'run-fail-hold') {
+    // Hold ~550ms
+    if (battleTimer >= 550) {
+      battleState = 'run-fail-text-out';
+      battleTimer = 0;
+    }
+  } else if (battleState === 'run-fail-text-out') {
+    // "Can't run" fades out, then monster name fades back in, continue turns
+    if (battleTimer >= (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS) {
+      battleState = 'run-fail-name-in';
+      battleTimer = 0;
+    }
+  } else if (battleState === 'run-fail-name-in') {
+    // Monster name fades back in, then resume turn queue
+    if (battleTimer >= (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS) {
+      processNextTurn();
+    }
   } else if (battleState === 'boss-flash') {
     if (battleTimer >= BOSS_PREFLASH_MS) {
       // Roll accuracy for current attacker
@@ -5480,6 +5552,7 @@ function updateBattle(dt) {
     if (battleTimer >= BOSS_BOX_EXPAND_MS) {
       battleState = 'none';
       battleTimer = 0;
+      runSlideBack = false;
       sprite.setDirection(DIR_DOWN);
       isRandomEncounter = false;
       encounterMonsters = null;
@@ -5540,6 +5613,8 @@ function drawBattle() {
   const isHitPose = battleState === 'enemy-attack' ||
     (battleState === 'enemy-damage-show' && playerDamageNum && !playerDamageNum.miss);
   const isDefendPose = battleState === 'defend-anim';
+  const isRunPose = battleState === 'run-name-out' || battleState === 'run-text-in' ||
+    battleState === 'run-hold' || battleState === 'run-text-out';
   const isNearFatal = playerHP > 0 && playerStats && playerHP <= Math.floor(playerStats.maxHP / 4);
   let portraitSrc = (isNearFatal && battleSpriteKneelCanvas) ? battleSpriteKneelCanvas : battleSpriteCanvas;
   if (isAttackPose) {
@@ -5574,7 +5649,35 @@ function drawBattle() {
         ctx.drawImage(battleKnifeBladeCanvas, px + 8, py - 7);
       }
     }
-    ctx.drawImage(portraitSrc, px, py);
+    if (isRunPose) {
+      // H-flip and slide right out of the portrait box, clipped to border
+      let slideX = 0;
+      if (battleState === 'run-text-in') {
+        slideX = Math.min(battleTimer / 300, 1) * 20;
+      } else if (battleState === 'run-hold' || battleState === 'run-text-out') {
+        slideX = 20;
+      }
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(HUD_RIGHT_X + 8, HUD_VIEW_Y + 8, 16, 16);
+      ctx.clip();
+      ctx.translate(px + 16 + slideX, py);
+      ctx.scale(-1, 1);
+      ctx.drawImage(portraitSrc, 0, 0);
+      ctx.restore();
+    } else if (battleState === 'encounter-box-close' && runSlideBack) {
+      // Slide back up into position from below
+      const t = Math.min(battleTimer / 300, 1);
+      const slideY = (1 - t) * 20;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(HUD_RIGHT_X + 8, HUD_VIEW_Y + 8, 16, 16);
+      ctx.clip();
+      ctx.drawImage(portraitSrc, px, py + slideY);
+      ctx.restore();
+    } else {
+      ctx.drawImage(portraitSrc, px, py);
+    }
     if (isAttackPose) {
       const handWeapon = (currentHitIdx % 2 === 0) ? playerWeaponR : playerWeaponL;
       const isKnife = handWeapon !== 0 && ITEMS.get(handWeapon)?.subtype === 'knife';
@@ -5609,7 +5712,28 @@ function drawBattle() {
     // 2 frames alternating every 133ms (8 NES frames), positioned 3px above portrait
     if (isNearFatal && sweatFrames.length === 2 && !isAttackPose && !isHitPose && !isVictoryPose && !isDefendPose) {
       const sweatIdx = Math.floor(Date.now() / 133) & 1;
-      ctx.drawImage(sweatFrames[sweatIdx], px, py - 3);
+      if (isRunPose) {
+        let slideX = 0;
+        if (battleState === 'run-text-in') slideX = Math.min(battleTimer / 300, 1) * 20;
+        else if (battleState === 'run-hold' || battleState === 'run-text-out') slideX = 20;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(HUD_RIGHT_X + 8, HUD_VIEW_Y + 8 - 3, 16, 19);
+        ctx.clip();
+        ctx.drawImage(sweatFrames[sweatIdx], px + slideX, py - 3);
+        ctx.restore();
+      } else if (battleState === 'encounter-box-close' && runSlideBack) {
+        const t = Math.min(battleTimer / 300, 1);
+        const slideY = (1 - t) * 20;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(HUD_RIGHT_X + 8, HUD_VIEW_Y + 8 - 3, 16, 19);
+        ctx.clip();
+        ctx.drawImage(sweatFrames[sweatIdx], px, py - 3 + slideY);
+        ctx.restore();
+      } else {
+        ctx.drawImage(sweatFrames[sweatIdx], px, py - 3);
+      }
     }
   }
 
@@ -5721,7 +5845,7 @@ function drawBattleMenu() {
                  battleState === 'attack-start' || battleState === 'player-slash' || battleState === 'player-hit-show' ||
                  battleState === 'player-miss-show' ||
                  battleState === 'player-damage-show' || battleState === 'monster-death' ||
-                 battleState === 'defend-anim' || battleState === 'item-select' || battleState === 'item-use' || battleState === 'boss-flash' ||
+                 battleState === 'defend-anim' || battleState === 'item-select' || battleState === 'item-use' || battleState === 'run-name-out' || battleState === 'run-text-in' || battleState === 'run-hold' || battleState === 'run-text-out' || battleState === 'run-fail-name-out' || battleState === 'run-fail-text-in' || battleState === 'run-fail-hold' || battleState === 'run-fail-text-out' || battleState === 'run-fail-name-in' || battleState === 'boss-flash' ||
                  battleState === 'enemy-attack' ||
                  battleState === 'enemy-damage-show' || battleState === 'message-hold' ||
                  battleState === 'boss-dissolve' || battleState === 'defeat' ||
@@ -5732,6 +5856,7 @@ function drawBattleMenu() {
                     battleState === 'levelup-text-in' || battleState === 'levelup-hold' ||
                     battleState === 'victory-text-out' || battleState === 'victory-menu-fade' || battleState === 'victory-box-close' ||
                     battleState === 'encounter-box-close' || battleState === 'boss-box-close';
+  const isRunBox = battleState.startsWith('run-');
   if (!isSlide && !isAppear && !isMenu && !isVictory) return;
 
   // Whole-panel horizontal slide: in from right, out to left
@@ -5749,10 +5874,10 @@ function drawBattleMenu() {
   ctx.fillStyle = '#000';
   ctx.fillRect(8 + panelOffX, HUD_BOT_Y + 8, CANVAS_W - 16, HUD_BOT_H - 16);
 
-  // Left bordered box — skip during victory states (drawVictoryBox handles left area)
+  // Left bordered box — skip during victory/run states (drawVictoryBox handles left area)
   const boxW = BATTLE_PANEL_W;
   const boxH = HUD_BOT_H;
-  if (!isVictory) {
+  if ((!isVictory && !isRunBox) || (battleState === 'encounter-box-close' && runSlideBack)) {
     _drawBorderedBox(panelOffX, HUD_BOT_Y, boxW, boxH);
   }
 
@@ -5767,8 +5892,8 @@ function drawBattleMenu() {
   const fadedPal = [0x0F, 0x0F, 0x0F, 0x30];
   for (let s = 0; s < fadeStep; s++) fadedPal[3] = nesColorFade(fadedPal[3]);
 
-  // Enemy name centered in left box (skip during victory — drawVictoryBox handles it)
-  if (!isVictory) {
+  // Enemy name centered in left box (skip during victory/run — drawVictoryBox handles it)
+  if (!isVictory && !isRunBox) {
     let enemyName;
     if (isRandomEncounter && encounterMonsters) {
       const alive = encounterMonsters.filter(m => m.hp > 0).length;
@@ -5863,7 +5988,7 @@ function drawEncounterBox() {
                    battleState === 'attack-start' || battleState === 'player-slash' || battleState === 'player-hit-show' ||
                    battleState === 'player-miss-show' ||
                    battleState === 'player-damage-show' || battleState === 'monster-death' ||
-                   battleState === 'defend-anim' || battleState === 'item-select' || battleState === 'item-use' || battleState === 'boss-flash' ||
+                   battleState === 'defend-anim' || battleState === 'item-select' || battleState === 'item-use' || battleState === 'run-name-out' || battleState === 'run-text-in' || battleState === 'run-hold' || battleState === 'run-text-out' || battleState === 'run-fail-name-out' || battleState === 'run-fail-text-in' || battleState === 'run-fail-hold' || battleState === 'run-fail-text-out' || battleState === 'run-fail-name-in' || battleState === 'boss-flash' ||
                    battleState === 'enemy-attack' ||
                    battleState === 'enemy-damage-show' || battleState === 'message-hold' ||
                    battleState === 'defeat' || battleState === 'defeat-fade';
@@ -5982,7 +6107,7 @@ function drawBossSpriteBox() {
                    battleState === 'menu-open' || battleState === 'target-select' || battleState === 'confirm-pause' ||
                    battleState === 'attack-start' || battleState === 'player-slash' || battleState === 'player-hit-show' ||
                    battleState === 'player-miss-show' ||
-                   battleState === 'player-damage-show' || battleState === 'defend-anim' || battleState === 'item-select' || battleState === 'item-use' || battleState === 'boss-flash' ||
+                   battleState === 'player-damage-show' || battleState === 'defend-anim' || battleState === 'item-select' || battleState === 'item-use' || battleState === 'run-name-out' || battleState === 'run-text-in' || battleState === 'run-hold' || battleState === 'run-text-out' || battleState === 'run-fail-name-out' || battleState === 'run-fail-text-in' || battleState === 'run-fail-hold' || battleState === 'run-fail-text-out' || battleState === 'run-fail-name-in' || battleState === 'boss-flash' ||
                    battleState === 'enemy-attack' ||
                    battleState === 'enemy-damage-show' || battleState === 'message-hold' ||
                    battleState === 'defeat' || battleState === 'defeat-fade';
@@ -6220,6 +6345,19 @@ const VICTORY_BOX_H = HUD_BOT_H;       // 64px
 const VICTORY_BOX_ROWS = HUD_BOT_H / 8; // 8 rows
 const VICTORY_ROW_FRAME_MS = 16.67; // 1 NES frame per row
 
+function _battleEnemyName() {
+  if (isRandomEncounter && encounterMonsters) {
+    const alive = encounterMonsters.filter(m => m.hp > 0).length;
+    if (alive > 1) {
+      const arr = Array.from(BATTLE_GOBLIN_NAME);
+      arr.push(0xFF, 0xE1, 0x80 + alive);
+      return new Uint8Array(arr);
+    }
+    return BATTLE_GOBLIN_NAME;
+  }
+  return BATTLE_BOSS_NAME;
+}
+
 function drawVictoryBox() {
   const isNameOut = battleState === 'victory-name-out';
   const isCelebrate = battleState === 'victory-celebrate';
@@ -6234,8 +6372,21 @@ function drawVictoryBox() {
   const isLevelHold = battleState === 'levelup-hold';
   const isOut = battleState === 'victory-text-out';
   const isMenuFadeState = battleState === 'victory-menu-fade';
+  // Run states
+  const isRunNameOut = battleState === 'run-name-out';
+  const isRunTextIn = battleState === 'run-text-in';
+  const isRunHold = battleState === 'run-hold';
+  const isRunTextOut = battleState === 'run-text-out';
+  const isRunFailNameOut = battleState === 'run-fail-name-out';
+  const isRunFailTextIn = battleState === 'run-fail-text-in';
+  const isRunFailHold = battleState === 'run-fail-hold';
+  const isRunFailTextOut = battleState === 'run-fail-text-out';
+  const isRunFailNameIn = battleState === 'run-fail-name-in';
+  const isRun = isRunNameOut || isRunTextIn || isRunHold || isRunTextOut;
+  const isRunFail = isRunFailNameOut || isRunFailTextIn || isRunFailHold || isRunFailTextOut || isRunFailNameIn;
   const showBox = isNameOut || isCelebrate || isClose || isVicText || isVicHold || isVicFadeOut ||
-    isExpText || isExpHold || isExpFadeOut || isLevelText || isLevelHold || isOut || isMenuFadeState;
+    isExpText || isExpHold || isExpFadeOut || isLevelText || isLevelHold || isOut || isMenuFadeState ||
+    isRun || isRunFail;
   if (!showBox) return;
 
   let boxX = 0;
@@ -6247,22 +6398,54 @@ function drawVictoryBox() {
     boxX = Math.round(-CANVAS_W * t);
   }
 
-  // victory-name-out: left box stays with border, monster name fades out
-  if (isNameOut) {
+  // victory-name-out / run-name-out / run-fail-name-out: monster name fades out
+  if (isNameOut || isRunNameOut || isRunFailNameOut) {
     _drawBorderedBox(boxX, boxY, VICTORY_BOX_W, VICTORY_BOX_H);
     const fadeStep = Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
     const fadedPal = [0x0F, 0x0F, 0x0F, 0x30];
     for (let s = 0; s < fadeStep; s++) fadedPal[3] = nesColorFade(fadedPal[3]);
-    let enemyName;
-    if (isRandomEncounter && encounterMonsters) {
-      enemyName = BATTLE_GOBLIN_NAME;
-    } else {
-      enemyName = BATTLE_BOSS_NAME;
-    }
+    const enemyName = _battleEnemyName();
     const nameTw = measureText(enemyName);
     const nameX = Math.floor((VICTORY_BOX_W - nameTw) / 2);
     const nameY = boxY + Math.floor((VICTORY_BOX_H - 8) / 2);
     drawText(ctx, nameX, nameY, enemyName, fadedPal);
+    return;
+  }
+
+  // Run success: "Ran away..." fade in / hold / fade out
+  if (isRun) {
+    _drawBorderedBox(boxX, boxY, VICTORY_BOX_W, VICTORY_BOX_H);
+    let fadeStep = 0;
+    if (isRunTextIn) fadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
+    else if (isRunTextOut) fadeStep = Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
+    const fadedPal = [0x0F, 0x0F, 0x0F, 0x30];
+    for (let s = 0; s < fadeStep; s++) fadedPal[3] = nesColorFade(fadedPal[3]);
+    const tw = measureText(BATTLE_RAN_AWAY);
+    drawText(ctx, boxX + Math.floor((VICTORY_BOX_W - tw) / 2), boxY + Math.floor((VICTORY_BOX_H - 8) / 2), BATTLE_RAN_AWAY, fadedPal);
+    return;
+  }
+
+  // Run fail: "Can't run" fade in / hold / fade out, then monster name fades back in
+  if (isRunFail) {
+    _drawBorderedBox(boxX, boxY, VICTORY_BOX_W, VICTORY_BOX_H);
+    if (isRunFailNameIn) {
+      // Monster name fading back in
+      const fadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
+      const fadedPal = [0x0F, 0x0F, 0x0F, 0x30];
+      for (let s = 0; s < fadeStep; s++) fadedPal[3] = nesColorFade(fadedPal[3]);
+      const enemyName = _battleEnemyName();
+      const nameTw = measureText(enemyName);
+      drawText(ctx, boxX + Math.floor((VICTORY_BOX_W - nameTw) / 2), boxY + Math.floor((VICTORY_BOX_H - 8) / 2), enemyName, fadedPal);
+    } else {
+      // "Can't run" text
+      let fadeStep = 0;
+      if (isRunFailTextIn) fadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
+      else if (isRunFailTextOut) fadeStep = Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
+      const fadedPal = [0x0F, 0x0F, 0x0F, 0x30];
+      for (let s = 0; s < fadeStep; s++) fadedPal[3] = nesColorFade(fadedPal[3]);
+      const tw = measureText(BATTLE_CANT_ESCAPE);
+      drawText(ctx, boxX + Math.floor((VICTORY_BOX_W - tw) / 2), boxY + Math.floor((VICTORY_BOX_H - 8) / 2), BATTLE_CANT_ESCAPE, fadedPal);
+    }
     return;
   }
 

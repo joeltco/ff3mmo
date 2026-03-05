@@ -40,6 +40,7 @@ export const SFX = {
   MONSTER_DEATH: 0x72, // SFX $31 + $41 — normal monster death (ROM writes $B1 to $7F49)
   DEFEND_HIT:   0x61,  // SFX $20 + $41 — defend action sound (confirmed by user)
   TREASURE:     0x80,  // SFX $3F + $41 — treasure chest open (3F/E982: LDA #$BF → $7F49)
+  RUN_AWAY:     0x74,  // SFX $33 + $41 — escape success (ROM writes $B3 to $7F49 at PC=$BCBC)
 };
 
 // FF1 track indices (0-based, for ff1 NSF)
