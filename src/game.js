@@ -95,6 +95,9 @@ const BORDER_TILE_ROM = 0x1B710 + (0xF7 - 0x70) * 16;  // 0x1BF80
 const BORDER_TILE_COUNT = 9;  // $F7 TL, $F8 top, $F9 TR, $FA left, $FB right, $FC BL, $FD bot, $FE BR, $FF fill
 const MENU_PALETTE = [0x0F, 0x00, 0x0F, 0x30];  // black, grey, black (interior), white
 let hudCanvas = null;
+let hudFadeCanvases = null;      // [fadeLevel 1..4] faded HUD canvases for game-start fade-in
+let titleHudCanvas = null; // title screen HUD — no right boxes, full-width viewport
+let titleHudFadeCanvases = null; // [fadeLevel 1..4] faded title HUD canvases for title fades
 let borderTileCanvases = null; // [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR, FILL]
 let borderBlueTileCanvases = null; // same but with blue (0x02) background instead of black
 let borderFadeSets = null;    // [fadeLevel] → [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR, FILL]
@@ -198,8 +201,10 @@ let loadingBgFadeFrames = null; // battle BG fade frames for loading screen
 let titleState = 'credit-wait'; // 'credit-wait' | 'credit-in' | 'credit-hold' | 'credit-out' |
                                  // 'disclaim-wait' | 'disclaim-in' | 'disclaim-hold' | 'disclaim-out' |
                                  // 'main-in' | 'zbox-open' | 'main' | 'zbox-close' |
-                                 // 'select-fade-in' | 'select' | 'select-fade-out' | 'select-fade-out-back' |
-                                 // 'main-out' | 'done'
+                                 // 'logo-fade-out' | 'select-box-open' | 'select-fade-in' | 'select' |
+                                 // 'select-fade-out' | 'select-box-close-fwd' |
+                                 // 'select-fade-out-back' | 'select-box-close' | 'logo-fade-in' |
+                                 // 'name-entry' | 'main-out' | 'done'
 let titleTimer = 0;
 // Title timing — 6 seconds total for credit+disclaimer (3s each)
 const TITLE_FADE_MAX = 4;          // 4 steps to reach $0F: $30→$20→$10→$00→$0F
@@ -213,8 +218,15 @@ const TITLE_HOLD_MS = 2000;        // text visible
 let titleWaterFrames = null;     // [16 animation frames] 16×16 canvases at full brightness
 let titleWaterFadeTiles = null;  // [TITLE_FADE_MAX+1 fade levels] 16×16 static ocean metatile
 let titleSkyFrames = null;       // [fade levels] 256×32 battle BG strips (0=bright, last=black)
-let titleWaterScroll = 0;        // pixel scroll offset
-let titleSkyScroll = 0;
+let titleUnderwaterFrames = null; // [fade levels] 256×32 underwater battle BG (bgId 18)
+let titleUnderwaterScroll = 0;    // horizontal scroll offset for underwater BG
+let uwBubbleTiles = null;         // decoded bubble/fish sprite canvases
+let uwBubbles = [];               // active bubble sprites [{x, y, tile, timer, speed}]
+let uwFish = null;                // active fish sprite {x, y, frame, dir, timer} or null
+let uwFishTriggered = false;      // fish starts after 1st message
+let titleOceanFrames = null;     // [fade levels] 256×32 ocean battle BG (bgId 5) for viewport top 32px
+let titleWaterScroll = 0;        // base scroll offset (parallax multiplied per row)
+let titleLogoFrames = null;      // [TITLE_FADE_MAX+1] canvas array — FF3 logo from Sight screen sprite tiles
 let titleShipTimer = 0;          // animation toggle for Invincible sprite
 const TITLE_SHIP_ANIM_MS = 100;  // 100ms per frame toggle
 const TITLE_SHADOW_ANIM_MS = 50; // 50ms shadow blink
@@ -713,6 +725,56 @@ function initHUD(romData) {
   drawBox(HUD_RIGHT_X + 32, HUD_VIEW_Y, HUD_RIGHT_W - 32, 32);      // Right mini-right
   drawBox(HUD_RIGHT_X, HUD_VIEW_Y + 32, HUD_RIGHT_W, HUD_VIEW_H - 32); // Right main box
   drawBox(0, HUD_BOT_Y, CANVAS_W, HUD_BOT_H);                      // Bottom box
+
+  // Title screen HUD — full-width viewport (no right boxes)
+  titleHudCanvas = document.createElement('canvas');
+  titleHudCanvas.width = CANVAS_W;
+  titleHudCanvas.height = CANVAS_H;
+  const thctx = titleHudCanvas.getContext('2d');
+  thctx.imageSmoothingEnabled = false;
+  function drawBoxT(x, y, w, h, fill = true) {
+    const [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR, FILL] = tileCanvases;
+    thctx.drawImage(TL, x, y);
+    thctx.drawImage(TR, x + w - 8, y);
+    thctx.drawImage(BL, x, y + h - 8);
+    thctx.drawImage(BR, x + w - 8, y + h - 8);
+    for (let tx = x + 8; tx < x + w - 8; tx += 8)  { thctx.drawImage(TOP, tx, y); thctx.drawImage(BOT, tx, y + h - 8); }
+    for (let ty = y + 8; ty < y + h - 8; ty += 8)  { thctx.drawImage(LEFT, x, ty); thctx.drawImage(RIGHT, x + w - 8, ty); }
+    if (fill) { for (let ty = y + 8; ty < y + h - 8; ty += 8) for (let tx = x + 8; tx < x + w - 8; tx += 8) thctx.drawImage(FILL, tx, ty); }
+  }
+  drawBoxT(HUD_VIEW_X, HUD_VIEW_Y, CANVAS_W, HUD_VIEW_H, false); // full-width viewport
+  drawBoxT(0, HUD_BOT_Y, CANVAS_W, HUD_BOT_H);                   // bottom box (same)
+
+  // Pre-render faded HUD canvases for NES fade transitions (steps 1-4)
+  function buildFadedHUDs(drawFn, boxes) {
+    const arr = [];
+    for (let step = 1; step <= LOAD_FADE_MAX; step++) {
+      const c = document.createElement('canvas');
+      c.width = CANVAS_W; c.height = CANVAS_H;
+      const fctx = c.getContext('2d');
+      fctx.imageSmoothingEnabled = false;
+      const fset = borderFadeSets[step];
+      const [fTL, fTOP, fTR, fLEFT, fRIGHT, fBL, fBOT, fBR, fFILL] = fset;
+      for (const [bx, by, bw, bh, fill] of boxes) {
+        fctx.drawImage(fTL, bx, by); fctx.drawImage(fTR, bx + bw - 8, by);
+        fctx.drawImage(fBL, bx, by + bh - 8); fctx.drawImage(fBR, bx + bw - 8, by + bh - 8);
+        for (let tx = bx + 8; tx < bx + bw - 8; tx += 8) { fctx.drawImage(fTOP, tx, by); fctx.drawImage(fBOT, tx, by + bh - 8); }
+        for (let ty = by + 8; ty < by + bh - 8; ty += 8) { fctx.drawImage(fLEFT, bx, ty); fctx.drawImage(fRIGHT, bx + bw - 8, ty); }
+        if (fill) { for (let ty = by + 8; ty < by + bh - 8; ty += 8) for (let tx = bx + 8; tx < bx + bw - 8; tx += 8) fctx.drawImage(fFILL, tx, ty); }
+      }
+      arr.push(c);
+    }
+    return arr;
+  }
+  hudFadeCanvases = buildFadedHUDs(null, [
+    [HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H, false],
+    [HUD_RIGHT_X, HUD_VIEW_Y, 32, 32, true],
+    [HUD_RIGHT_X + 32, HUD_VIEW_Y, HUD_RIGHT_W - 32, 32, true],
+    [HUD_RIGHT_X, HUD_VIEW_Y + 32, HUD_RIGHT_W, HUD_VIEW_H - 32, true],
+  ]);
+  titleHudFadeCanvases = buildFadedHUDs(null, [
+    [HUD_VIEW_X, HUD_VIEW_Y, CANVAS_W, HUD_VIEW_H, false],
+  ]);
 }
 
 function initCursorTile(romData) {
@@ -1836,7 +1898,7 @@ function renderBattleBg(romData, bgId) {
 
 const TITLE_OCEAN_CHR = [0x22, 0x23, 0x24, 0x25]; // horizontal water CHR tile IDs
 const TITLE_WATER_PAL_IDX = 2; // world map palette index for ocean
-const TITLE_SKY_BGID = 5;      // ocean battle BG (blue sky + waves)
+const TITLE_SKY_BGID = 6;      // airship sky battle BG (blue/lavender/white clouds)
 
 function initTitleWater(romData) {
   const COMMON_CHR = 0x014C10;
@@ -1921,9 +1983,10 @@ function initTitleWater(romData) {
 
 function initTitleSky(romData) {
   const bgId = TITLE_SKY_BGID;
+  const oceanBgId = 5;
   const palette = [
     0x0F,
-    romData[BATTLE_BG_PAL_C1 + bgId],
+    romData[BATTLE_BG_PAL_C1 + oceanBgId], // match ocean scene's sky blue ($21)
     romData[BATTLE_BG_PAL_C2 + bgId],
     romData[BATTLE_BG_PAL_C3 + bgId],
   ];
@@ -1953,6 +2016,233 @@ function initTitleSky(romData) {
     fadePal[1] = nesColorFade(fadePal[1]);
     fadePal[2] = nesColorFade(fadePal[2]);
     fadePal[3] = nesColorFade(fadePal[3]);
+  }
+}
+
+function initTitleUnderwater(romData) {
+  const bgId = 18; // undersea Nautilus battle BG ($12/$22/$33 blue palette)
+  const palette = [
+    0x0F,
+    romData[BATTLE_BG_PAL_C1 + bgId],
+    romData[BATTLE_BG_PAL_C2 + bgId],
+    romData[BATTLE_BG_PAL_C3 + bgId],
+  ];
+
+  const tiles = [];
+  const tileBase = BATTLE_BG_TILES_ROM + bgId * 0x100;
+  for (let i = 0; i < 16; i++) tiles.push(decodeTile(romData, tileBase + i * 16));
+
+  const metaTiles = [];
+  for (let m = 0; m < 4; m++) {
+    const ids = [];
+    for (let j = 0; j < 4; j++) ids.push(romData[BATTLE_BG_META_TILES + m*4 + j] - 0x60);
+    metaTiles.push(ids);
+  }
+
+  const tilemapIdx = romData[BATTLE_BG_TMID_TABLE + bgId];
+  const tmBase = BATTLE_BG_TILEMAPS + tilemapIdx * 32;
+  const tilemap = [];
+  for (let i = 0; i < 32; i++) tilemap.push(romData[tmBase + i]);
+
+  titleUnderwaterFrames = [];
+  const fadePal = [...palette];
+  while (true) {
+    titleUnderwaterFrames.push(renderBattleBgWithPalette(romData, bgId, fadePal, tiles, metaTiles, tilemap));
+    if (fadePal[1] === 0x0F && fadePal[2] === 0x0F && fadePal[3] === 0x0F) break;
+    fadePal[1] = nesColorFade(fadePal[1]);
+    fadePal[2] = nesColorFade(fadePal[2]);
+    fadePal[3] = nesColorFade(fadePal[3]);
+  }
+}
+
+function initUnderwaterSprites(romData) {
+  // Bubble/fish tiles at ROM 0x17F10 (bank $0B, $9F00)
+  const SPRITE_ROM = 0x17F10;
+  // Underwater sprite palette 3: $0F/$0F/$27/$30 (black/orange/white)
+  const pal = [null, NES_SYSTEM_PALETTE[0x0F], NES_SYSTEM_PALETTE[0x27], NES_SYSTEM_PALETTE[0x30]];
+
+  function renderSpriteTile(tileIdx) {
+    const px = decodeTile(romData, SPRITE_ROM + tileIdx * 16);
+    const c = document.createElement('canvas');
+    c.width = 8; c.height = 8;
+    const lctx = c.getContext('2d');
+    const idata = lctx.createImageData(8, 8);
+    const d = idata.data;
+    for (let i = 0; i < 64; i++) {
+      const ci = px[i];
+      if (ci === 0) continue;
+      const rgb = pal[ci];
+      if (!rgb) continue;
+      d[i * 4] = rgb[0]; d[i * 4 + 1] = rgb[1]; d[i * 4 + 2] = rgb[2]; d[i * 4 + 3] = 255;
+    }
+    lctx.putImageData(idata, 0, 0);
+    return c;
+  }
+
+  uwBubbleTiles = [];
+  // 0: small bubble, 1: NE fish frame 1 (tile 3), 2: NE fish frame 2 (tile 4)
+  uwBubbleTiles.push(renderSpriteTile(0)); // small bubble
+  uwBubbleTiles.push(renderSpriteTile(3)); // fish frame 1
+  uwBubbleTiles.push(renderSpriteTile(4)); // fish frame 2
+}
+
+function initTitleOcean(romData) {
+  const bgId = 5; // ocean battle BG
+
+  // Sky row palette — match the sky box above (ocean's original c1 replaced with sky blue)
+  const oceanBgId = 5;
+  const skyPal = [
+    0x0F,
+    romData[BATTLE_BG_PAL_C1 + oceanBgId], // $21 — same sky blue as top box
+    romData[BATTLE_BG_PAL_C2 + oceanBgId],
+    romData[BATTLE_BG_PAL_C3 + oceanBgId],
+  ];
+
+  // Ocean row palette — remap to water tile colors
+  // Water tiles: [$1A(dark teal), $0F(black), $22(blue), $31(light blue)]
+  // Ocean BG color usage: c1=base, c2=highlight, c3=brightest
+  const BG_PALETTE = 0x001650;
+  const wPalOff = BG_PALETTE + TITLE_WATER_PAL_IDX * 4;
+  const wavePal = [
+    0x0F,
+    romData[wPalOff],     // c1 → $1A (dark teal base)
+    romData[wPalOff + 2], // c2 → $22 (blue mid)
+    romData[wPalOff + 3], // c3 → $31 (light blue highlight)
+  ];
+
+  const tiles = [];
+  const tileBase = BATTLE_BG_TILES_ROM + bgId * 0x100;
+  for (let i = 0; i < 16; i++) tiles.push(decodeTile(romData, tileBase + i * 16));
+
+  const metaTiles = [];
+  for (let m = 0; m < 4; m++) {
+    const ids = [];
+    for (let j = 0; j < 4; j++) ids.push(romData[BATTLE_BG_META_TILES + m*4 + j] - 0x60);
+    metaTiles.push(ids);
+  }
+
+  const tilemapIdx = romData[BATTLE_BG_TMID_TABLE + bgId];
+  const tmBase = BATTLE_BG_TILEMAPS + tilemapIdx * 32;
+  const tilemap = [];
+  for (let i = 0; i < 32; i++) tilemap.push(romData[tmBase + i]);
+
+  // Render helper: one 256×16 row with given palette and tilemap row offset
+  function renderRow(pal, rowIdx) {
+    const c = document.createElement('canvas');
+    c.width = 256; c.height = 16;
+    const rctx = c.getContext('2d');
+    for (let col = 0; col < 16; col++) {
+      const metaIdx = tilemap[rowIdx * 16 + col];
+      const [tl, tr, bl, br] = metaTiles[metaIdx];
+      const px = col * 16;
+      const subTiles = [[tl, px, 0], [tr, px + 8, 0], [bl, px, 8], [br, px + 8, 8]];
+      for (const [tIdx, sx, sy] of subTiles) {
+        const img = rctx.createImageData(8, 8);
+        const pix = tiles[tIdx];
+        for (let p = 0; p < 64; p++) {
+          const ci = pix[p];
+          if (ci === 0) {
+            img.data[p * 4 + 3] = 0;
+          } else {
+            const rgb = NES_SYSTEM_PALETTE[pal[ci]] || [0, 0, 0];
+            img.data[p * 4]     = rgb[0];
+            img.data[p * 4 + 1] = rgb[1];
+            img.data[p * 4 + 2] = rgb[2];
+            img.data[p * 4 + 3] = 255;
+          }
+        }
+        rctx.putImageData(img, sx, sy);
+      }
+    }
+    return c;
+  }
+
+  titleOceanFrames = [];
+  const fadeSky = [...skyPal];
+  const fadeWave = [...wavePal];
+  while (true) {
+    const frame = document.createElement('canvas');
+    frame.width = 256; frame.height = 32;
+    const fctx = frame.getContext('2d');
+
+    // Sky row (top 16px) — fill bg with sky blue, then draw tiles
+    const skyBg = NES_SYSTEM_PALETTE[fadeSky[1]] || [0, 0, 0];
+    fctx.fillStyle = `rgb(${skyBg[0]},${skyBg[1]},${skyBg[2]})`;
+    fctx.fillRect(0, 0, 256, 16);
+    fctx.drawImage(renderRow(fadeSky, 0), 0, 0);
+
+    // Wave row (bottom 16px) — fill bg with water base color, then draw tiles
+    const waveBg = NES_SYSTEM_PALETTE[fadeWave[1]] || [0, 0, 0];
+    fctx.fillStyle = `rgb(${waveBg[0]},${waveBg[1]},${waveBg[2]})`;
+    fctx.fillRect(0, 16, 256, 16);
+    fctx.drawImage(renderRow(fadeWave, 1), 0, 16);
+
+    titleOceanFrames.push(frame);
+
+    const allBlack = fadeSky[1] === 0x0F && fadeSky[2] === 0x0F && fadeSky[3] === 0x0F &&
+                     fadeWave[1] === 0x0F && fadeWave[2] === 0x0F && fadeWave[3] === 0x0F;
+    if (allBlack) break;
+    for (let i = 1; i <= 3; i++) { fadeSky[i] = nesColorFade(fadeSky[i]); fadeWave[i] = nesColorFade(fadeWave[i]); }
+  }
+}
+
+// FF3 Sight screen logo — composited pixel data captured from FCEUX (BG+sprites)
+// 160×16 pixels, hex digits: 0=transparent, 1=fill (NES $02/$03), 2=outline (NES $22)
+const LOGO_PIXELS = [
+  '0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000022222100000000000',
+  '0002222200000021000000000000000000000000000000002100000000022222000000210000000000000000000000000000000000000000000000000000000000000000000022211122222222221222',
+  '0021111122000210000000000000000000000000000000022100000000211111220002100000000000000000000000000000000000000000000000000000000000000000000000000222222222222210',
+  '0210022111222100000110000000000000000000000000222100000002100221112221000000000000000000000000000000000000000000000000000000000000000000000000000221122112211100',
+  '0210001211111000002211000000000000000000000002221000000002100012111110000000000000000000000000000000000000000000000000000000000000000000000000000220222022100000',
+  '0211001210000000000110000000000000000000000021221000000002110012100000000000000000000000000000210000000000000000000000000000000000000000000000002220220022000000',
+  '0021111222200000000000000000000000000000000202210000000000211112222000000000000000000000000002210000000000000000000000000000000000000000000000002202220220000000',
+  '0002222111220000022100000000000000000000000002210000000000022221112200000000000000000000000002100000000000000000000000000000000000000000000000011101100110000000',
+  '0000111110120000222100002022210000002221000022100000000000001111001200000222000002022210002222222100002220000022221000022100222000000000000000022022202200000000',
+  '0000000000000022021000222221221000221122100022100000000000000000000100022112210222221221000022112100221122100221112102212100221000000000000000111011001100000000',
+  '0000022100000000221000112211121002210022100221000000000000000221000000221002210002210121000021001002210022100022101000021002211000000000000000220022022000000000',
+  '0000022100000000210000002100221002100111000221000000000000000221000000210011100002100211000221001002100111000002210000221002210000000000000001110110011000000000',
+  '0000221000000002210000022100210022100221002210000000000000002210000002210022000022100210000210000022100220002100221000210002110000000000000111111110110000000000',
+  '0000221111000002210000021002202022102210002210210000000000002211100002210221000021002102002210200022102210002210221002210022100000000000001111111111111111110000',
+  '0022222221000001222100221002221012221222001222100000000000222222100001222122200221002221001222110012221222001222211002211221100000000000010001111111111110000000',
+  '0011111110000000111100110000110001110110000111000000000000111111100000111011000110000110000111100001110110000111110000222221000000000000000000011111110000000000',
+  '0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000211000000000000000000000000000000000000',
+  '0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000120002210000000000000000000000000000000000000',
+  '0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000122222110000000000000000000000000000000000000',
+  '0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000012221100000000000000000000000000000000000000',
+  '0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001111000000000000000000000000000000000000000',
+].join('');
+const LOGO_W = 160;
+const LOGO_H = 21;
+
+function initTitleLogo() {
+  // Palette: 1=fill ($21 blue), 2=outline ($30 white)
+  let pal = [0x0F, 0x21, 0x30];
+
+  function renderLogo(palette) {
+    const c = document.createElement('canvas');
+    c.width = LOGO_W; c.height = LOGO_H;
+    const lctx = c.getContext('2d');
+    const idata = lctx.createImageData(LOGO_W, LOGO_H);
+    const d = idata.data;
+    for (let i = 0; i < LOGO_PIXELS.length; i++) {
+      const ci = LOGO_PIXELS.charCodeAt(i) - 48; // '0'=0, '1'=1, '2'=2
+      if (ci === 0) continue;
+      const nesC = palette[ci];
+      const rgb = NES_SYSTEM_PALETTE[nesC] || [0, 0, 0];
+      const idx = i * 4;
+      d[idx] = rgb[0]; d[idx + 1] = rgb[1]; d[idx + 2] = rgb[2]; d[idx + 3] = 255;
+    }
+    lctx.putImageData(idata, 0, 0);
+    return c;
+  }
+
+  titleLogoFrames = [];
+  const fadePal = [...pal];
+  while (true) {
+    titleLogoFrames.push(renderLogo(fadePal));
+    const allBlack = fadePal[1] === 0x0F && fadePal[2] === 0x0F;
+    if (allBlack) break;
+    for (let i = 1; i <= 2; i++) fadePal[i] = nesColorFade(fadePal[i]);
   }
 }
 
@@ -2050,6 +2340,10 @@ export async function loadROM(arrayBuffer) {
   initInvincibleSprite(romRaw);
   initTitleWater(romRaw);
   initTitleSky(romRaw);
+  initTitleUnderwater(romRaw);
+  initUnderwaterSprites(romRaw);
+  initTitleOcean(romRaw);
+  initTitleLogo();
 
   // Load saved player slots from IndexedDB
   await loadSlotsFromDB();
@@ -2070,7 +2364,6 @@ export async function loadROM(arrayBuffer) {
   titleState = 'credit-wait';
   titleTimer = 0;
   titleWaterScroll = 0;
-  titleSkyScroll = 0;
   titleShipTimer = 0;
   playTrack(TRACKS.TITLE_SCREEN);
 
@@ -3063,7 +3356,14 @@ function updateTransition(dt) {
 
   transTimer += dt;
 
-  if (transState === 'trap-reveal') {
+  if (transState === 'hud-fade-in') {
+    if (transTimer >= (HUD_INFO_FADE_STEPS + 1) * HUD_INFO_FADE_STEP_MS) {
+      transState = 'opening';
+      transTimer = 0;
+      playSFX(SFX.SCREEN_OPEN);
+    }
+    return;
+  } else if (transState === 'trap-reveal') {
     if (transTimer >= TRAP_REVEAL_DURATION) {
       transState = 'closing';
       transTimer = 0;
@@ -3185,6 +3485,12 @@ function updateTransition(dt) {
 
 function drawTransitionOverlay() {
   if (transState === 'none' || transState === 'door-opening') return;
+  if (transState === 'hud-fade-in') {
+    // Keep viewport blacked out while HUD borders fade in
+    ctx.fillStyle = '#000';
+    ctx.fillRect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
+    return;
+  }
 
   // Wipe bars animate within the game viewport
   const vpMidY = HUD_VIEW_Y + HUD_VIEW_H / 2;
@@ -4076,7 +4382,42 @@ function statRowBytes(label1, label2, value) {
 }
 
 function drawHUD() {
-  if (hudCanvas) ctx.drawImage(hudCanvas, 0, 0);
+  const isTitleActive = titleState !== 'done';
+  if (isTitleActive && titleHudCanvas) {
+    // Compute border fade level for title states
+    let tfl = 0; // 0 = full brightness — only fade out when leaving title
+    if (titleState === 'main-out') {
+      tfl = Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
+    }
+    if (tfl > 0 && titleHudFadeCanvases && tfl <= titleHudFadeCanvases.length) {
+      // Draw faded viewport border + full-brightness bottom box
+      ctx.drawImage(titleHudFadeCanvases[tfl - 1], 0, 0);
+      // Bottom box from full-brightness canvas (clip to bottom area only)
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, HUD_BOT_Y, CANVAS_W, HUD_BOT_H);
+      ctx.clip();
+      ctx.drawImage(titleHudCanvas, 0, 0);
+      ctx.restore();
+    } else {
+      ctx.drawImage(titleHudCanvas, 0, 0);
+    }
+  } else if (hudCanvas) {
+    // Game-start border fade-in
+    const borderFade = HUD_INFO_FADE_STEPS - Math.min(Math.floor(hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
+    if (borderFade > 0 && hudFadeCanvases && borderFade <= hudFadeCanvases.length) {
+      ctx.drawImage(hudFadeCanvases[borderFade - 1], 0, 0);
+      // Bottom box always full brightness
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, HUD_BOT_Y, CANVAS_W, HUD_BOT_H);
+      ctx.clip();
+      ctx.drawImage(hudCanvas, 0, 0);
+      ctx.restore();
+    } else {
+      ctx.drawImage(hudCanvas, 0, 0);
+    }
+  }
 
   // Top box content (full 256×32, no static border — border only with text)
   // Title screen handles its own top box (sky BG)
@@ -4225,8 +4566,7 @@ const TITLE_DISCLAIM_5 = new Uint8Array([0x97,0xD8,0xFF,0xCA,0xCF,0xCF,0xD2,0xD5
 const TITLE_PRESS_Z = new Uint8Array([0x99,0xDB,0xCE,0xDC,0xDC,0xFF,0xA3]); // "Press Z"
 
 // Player select text
-const SELECT_TITLE_1 = new Uint8Array([0x9C,0xCE,0xD5,0xCE,0xCC,0xDD]); // "Select"
-const SELECT_TITLE_2 = new Uint8Array([0x99,0xD5,0xCA,0xE2,0xCE,0xDB]); // "Player"
+const SELECT_TITLE = new Uint8Array([0x99,0xD5,0xCA,0xE2,0xCE,0xDB,0xFF,0x9C,0xCE,0xD5,0xCE,0xCC,0xDD]); // "Player Select"
 const SELECT_SLOT_TEXT = new Uint8Array([0x97,0xCE,0xE0,0xFF,0x90,0xCA,0xD6,0xCE]); // "New Game"
 const SELECT_DELETE_TEXT = new Uint8Array([0x8D,0xCE,0xD5,0xCE,0xDD,0xCE]); // "Delete"
 let deleteMode = false;
@@ -4234,6 +4574,7 @@ let deleteMode = false;
 // Title box: "Final Fantasy" / "III MMORPG"
 const TITLE_NAME_1 = new Uint8Array([0x8F,0xD2,0xD7,0xCA,0xD5,0xFF,0x8F,0xCA,0xD7,0xDD,0xCA,0xDC,0xE2]); // "Final Fantasy"
 const TITLE_NAME_2 = new Uint8Array([0x92,0x92,0x92,0xFF,0x96,0x96,0x98,0x9B,0x99,0x90]); // "III MMORPG"
+const TITLE_MMORPG = new Uint8Array([0x96,0x96,0x98,0x9B,0x99,0x90]); // "MMORPG"
 
 function titleFadeLevel(state, timer) {
   if (state.endsWith('-in')) {
@@ -4259,8 +4600,56 @@ function titleFadePal(fadeLevel) {
 function updateTitle(dt) {
   titleTimer += dt;
 
+  // Tick underwater scroll during early title states
+  titleUnderwaterScroll += dt * 0.2; // ~200px/s — fast scroll
+
+  // Update underwater bubbles + fish (only during early title states)
+  if (uwBubbleTiles && titleState !== 'main-in' && titleState !== 'main' && titleState !== 'main-out' &&
+      !titleState.startsWith('zbox') && !titleState.startsWith('select') && titleState !== 'name-entry') {
+    // Spawn small bubbles randomly (up to 3)
+    if (uwBubbles.length < 3 && Math.random() < dt * 0.0015) {
+      uwBubbles.push({
+        x: HUD_VIEW_X + 20 + Math.random() * (CANVAS_W - 40),
+        y: HUD_VIEW_H - 4,
+        speed: 18 + Math.random() * 12, // px/s rising
+        zigPhase: Math.random() * Math.PI * 2, // start phase for zig-zag
+        zigSpeed: 3 + Math.random() * 3, // zig-zag frequency
+        zigAmp: 8 + Math.random() * 8, // zig-zag amplitude
+        timer: 0,
+      });
+    }
+    // Update bubbles — zig-zag upward
+    for (let i = uwBubbles.length - 1; i >= 0; i--) {
+      const b = uwBubbles[i];
+      b.y -= b.speed * dt / 1000;
+      b.timer += dt;
+      if (b.y < -8) uwBubbles.splice(i, 1);
+    }
+    // Trigger fish after 1st message fades out
+    if (!uwFishTriggered && titleState === 'disclaim-wait') {
+      uwFishTriggered = true;
+      uwFish = {
+        x: -10,
+        y: HUD_VIEW_H * 0.7, // start low
+        timer: 0,
+        speed: 80, // px/s northeast
+        zigPhase: 0,
+        zigSpeed: 4,
+        zigAmp: 6,
+      };
+    }
+    // Update fish — zig-zag northeast
+    if (uwFish) {
+      uwFish.x += uwFish.speed * dt / 1000;
+      uwFish.y -= uwFish.speed * 0.4 * dt / 1000; // rise as it moves right
+      uwFish.timer += dt;
+      if (uwFish.x > CANVAS_W + 10 || uwFish.y < -10) uwFish = null;
+    }
+  }
+
   // Tick water animation during water-visible states
   if (titleState === 'main-in' || titleState === 'zbox-open' || titleState === 'main' || titleState === 'zbox-close' ||
+      titleState === 'logo-fade-out' || titleState === 'logo-fade-in' || titleState === 'select-box-open' || titleState === 'select-box-close' || titleState === 'select-box-close-fwd' ||
       titleState === 'select-fade-in' || titleState === 'select' || titleState === 'select-fade-out' || titleState === 'select-fade-out-back' ||
       titleState === 'name-entry' || titleState === 'main-out') {
     waterTimer += dt;
@@ -4268,14 +4657,13 @@ function updateTitle(dt) {
       waterTimer %= WATER_TICK;
       waterTick++;
     }
-    titleWaterScroll += dt * 0.12; // ~120px/s leftward scroll
-    titleSkyScroll += dt * 0.08;   // ~80px/s leftward scroll
+    titleWaterScroll += dt * 0.12; // base scroll (~120px/s), parallax per row
     titleShipTimer += dt;
   }
 
   switch (titleState) {
     case 'credit-wait':
-      if (titleTimer >= TITLE_WAIT_MS) { titleState = 'credit-in'; titleTimer = 0; }
+      if (titleTimer >= TITLE_FADE_MS) { titleState = 'credit-in'; titleTimer = 0; }
       break;
     case 'credit-in':
       if (titleTimer >= TITLE_FADE_MS) { titleState = 'credit-hold'; titleTimer = 0; }
@@ -4314,7 +4702,13 @@ function updateTitle(dt) {
       }
       break;
     case 'zbox-close':
-      if (titleTimer >= TITLE_ZBOX_MS) { titleState = 'select-fade-in'; titleTimer = 0; selectCursor = 0; deleteMode = false; }
+      if (titleTimer >= TITLE_ZBOX_MS) { titleState = 'logo-fade-out'; titleTimer = 0; }
+      break;
+    case 'logo-fade-out':
+      if (titleTimer >= TITLE_FADE_MS) { titleState = 'select-box-open'; titleTimer = 0; selectCursor = 0; deleteMode = false; }
+      break;
+    case 'select-box-open':
+      if (titleTimer >= BOSS_BOX_EXPAND_MS) { titleState = 'select-fade-in'; titleTimer = 0; }
       break;
     case 'select-fade-in':
       if (titleTimer >= (SELECT_TEXT_STEPS + 1) * SELECT_TEXT_STEP_MS) { titleState = 'select'; titleTimer = 0; }
@@ -4368,10 +4762,19 @@ function updateTitle(dt) {
       // Input handled in keydown listener — just tick timer for cursor blink
       break;
     case 'select-fade-out':
-      if (titleTimer >= (SELECT_TEXT_STEPS + 1) * SELECT_TEXT_STEP_MS) { titleState = 'main-out'; titleTimer = 0; }
+      if (titleTimer >= (SELECT_TEXT_STEPS + 1) * SELECT_TEXT_STEP_MS) { titleState = 'select-box-close-fwd'; titleTimer = 0; }
+      break;
+    case 'select-box-close-fwd':
+      if (titleTimer >= BOSS_BOX_EXPAND_MS) { titleState = 'main-out'; titleTimer = 0; }
       break;
     case 'select-fade-out-back':
-      if (titleTimer >= (SELECT_TEXT_STEPS + 1) * SELECT_TEXT_STEP_MS) { titleState = 'zbox-open'; titleTimer = 0; }
+      if (titleTimer >= (SELECT_TEXT_STEPS + 1) * SELECT_TEXT_STEP_MS) { titleState = 'select-box-close'; titleTimer = 0; }
+      break;
+    case 'select-box-close':
+      if (titleTimer >= BOSS_BOX_EXPAND_MS) { titleState = 'logo-fade-in'; titleTimer = 0; }
+      break;
+    case 'logo-fade-in':
+      if (titleTimer >= TITLE_FADE_MS) { titleState = 'zbox-open'; titleTimer = 0; }
       break;
     case 'main-out':
       if (titleTimer >= TITLE_FADE_MS) {
@@ -4403,9 +4806,8 @@ function updateTitle(dt) {
         playerGil = (slot && slot.gil) || 0;
         loadMapById(114);
         playTrack(TRACKS.TOWN_UR);
-        // Opening wipe reveals the town
-        playSFX(SFX.SCREEN_OPEN);
-        transState = 'opening';
+        // Delay screen open until HUD border fade-in completes
+        transState = 'hud-fade-in';
         transTimer = 0;
       }
       break;
@@ -4414,33 +4816,67 @@ function updateTitle(dt) {
 
 let _titleCascadeCanvas = null; // reusable 16×16 scratch for per-row cascade
 
+function drawTitleOcean(fadeLevel) {
+  if (!titleOceanFrames || titleOceanFrames.length === 0) return;
+
+  const maxStep = titleOceanFrames.length - 1;
+  const frameIdx = Math.min(fadeLevel, maxStep);
+  const oceanCanvas = titleOceanFrames[frameIdx];
+
+  // Parallax: 2 rows (0=top, 1=bottom), row index 2-3 in the full scene
+  // (sky rows 0-1 are drawn separately in the top box)
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, CANVAS_W, 32);
+  ctx.clip();
+  for (let row = 0; row < 2; row++) {
+    const speed = _titleParallaxSpeed(2 + row); // scene rows 2-3
+    const scrollX = Math.floor(titleWaterScroll * speed) % 256;
+    const y = HUD_VIEW_Y + row * 16;
+    // Draw the 16px-tall strip from the ocean canvas
+    ctx.drawImage(oceanCanvas, 0, row * 16, 256, 16, -scrollX, y, 256, 16);
+    ctx.drawImage(oceanCanvas, 0, row * 16, 256, 16, -scrollX + 256, y, 256, 16);
+  }
+  ctx.restore();
+}
+
+// Parallax speed for a given scene row (0=top sky, 10=bottom water)
+// 11 total rows: sky(2) + ocean(2) + water(7)
+function _titleParallaxSpeed(row) {
+  // Row 0 (sky top) = 0.3, row 10 (water bottom) = 1.0
+  return 0.3 + (row / 10) * 0.7;
+}
+
 function drawTitleWater(fadeLevel) {
   if (!titleWaterFrames) return;
 
+  const twW = CANVAS_W; // full width during title
+  const waterTop = HUD_VIEW_Y + 32; // below ocean BG
+  const waterH = HUD_VIEW_H - 32;
   ctx.save();
   ctx.beginPath();
-  ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
+  ctx.rect(HUD_VIEW_X, waterTop, twW, waterH);
   ctx.clip();
 
-  const scrollX = Math.floor(titleWaterScroll) % 16;
-
   if (fadeLevel > 0 && titleWaterFadeTiles) {
-    // Fading — use static tile at this fade level
+    // Fading — per-row parallax with static fade tile
     const tile = titleWaterFadeTiles[Math.min(fadeLevel, titleWaterFadeTiles.length - 1)];
-    for (let y = HUD_VIEW_Y; y < HUD_VIEW_Y + HUD_VIEW_H; y += 16) {
-      for (let x = HUD_VIEW_X - scrollX; x < HUD_VIEW_X + HUD_VIEW_W + 16; x += 16) {
+    for (let r = 0; r < 7; r++) {
+      const speed = _titleParallaxSpeed(4 + r); // scene rows 4-10
+      const scrollX = Math.floor(titleWaterScroll * speed) % 16;
+      const y = waterTop + r * 16;
+      for (let x = HUD_VIEW_X - scrollX; x < HUD_VIEW_X + twW + 16; x += 16) {
         ctx.drawImage(tile, x, y);
       }
     }
   } else {
-    // Full brightness — per-row cascade (NES tick effect)
+    // Full brightness — per-row cascade + parallax
     const hShift = Math.floor(waterTick / 8) % 16;
     const hPrev = (hShift + 15) % 16;
-    const subRow = waterTick % 8; // rows 0..subRow use current shift
+    const subRow = waterTick % 8;
     const curTile = titleWaterFrames[hShift];
     const prevTile = titleWaterFrames[hPrev];
 
-    // Build cascade tile: prev shift as base, current shift for updated rows
     if (!_titleCascadeCanvas) {
       _titleCascadeCanvas = document.createElement('canvas');
       _titleCascadeCanvas.width = 16;
@@ -4448,13 +4884,15 @@ function drawTitleWater(fadeLevel) {
     }
     const cctx = _titleCascadeCanvas.getContext('2d');
     cctx.drawImage(prevTile, 0, 0);
-    // Overdraw current shift for rows 0..subRow in each 8×8 half
     const h = subRow + 1;
-    cctx.drawImage(curTile, 0, 0, 16, h, 0, 0, 16, h);  // top 8×8 half
-    cctx.drawImage(curTile, 0, 8, 16, h, 0, 8, 16, h);  // bottom 8×8 half
+    cctx.drawImage(curTile, 0, 0, 16, h, 0, 0, 16, h);
+    cctx.drawImage(curTile, 0, 8, 16, h, 0, 8, 16, h);
 
-    for (let y = HUD_VIEW_Y; y < HUD_VIEW_Y + HUD_VIEW_H; y += 16) {
-      for (let x = HUD_VIEW_X - scrollX; x < HUD_VIEW_X + HUD_VIEW_W + 16; x += 16) {
+    for (let r = 0; r < 7; r++) {
+      const speed = _titleParallaxSpeed(4 + r); // scene rows 4-10
+      const scrollX = Math.floor(titleWaterScroll * speed) % 16;
+      const y = waterTop + r * 16;
+      for (let x = HUD_VIEW_X - scrollX; x < HUD_VIEW_X + twW + 16; x += 16) {
         ctx.drawImage(_titleCascadeCanvas, x, y);
       }
     }
@@ -4465,29 +4903,68 @@ function drawTitleWater(fadeLevel) {
 function drawTitleSky(fadeLevel) {
   if (!titleSkyFrames || titleSkyFrames.length === 0) return;
 
-  // Pick fade frame: 0=bright, last=black
   const maxStep = titleSkyFrames.length - 1;
   const frameIdx = Math.min(fadeLevel, maxStep);
   const skyCanvas = titleSkyFrames[frameIdx];
 
-  // Scroll left, wrapping at 256px
-  const scrollX = Math.floor(titleSkyScroll) % 256;
-
+  // Parallax: 2 rows (scene rows 0-1, slowest)
   ctx.save();
   ctx.beginPath();
-  ctx.rect(0, 0, CANVAS_W, HUD_TOP_H); // full top box
+  ctx.rect(0, 0, CANVAS_W, HUD_TOP_H);
   ctx.clip();
-  ctx.drawImage(skyCanvas, -scrollX, 0);
-  ctx.drawImage(skyCanvas, -scrollX + 256, 0);
+  for (let row = 0; row < 2; row++) {
+    const speed = _titleParallaxSpeed(row); // scene rows 0-1
+    const scrollX = Math.floor(titleWaterScroll * speed) % 256;
+    const y = row * 16;
+    ctx.drawImage(skyCanvas, 0, row * 16, 256, 16, -scrollX, y, 256, 16);
+    ctx.drawImage(skyCanvas, 0, row * 16, 256, 16, -scrollX + 256, y, 256, 16);
+  }
+  ctx.restore();
+}
+
+function drawTitleUnderwater(fadeLevel) {
+  if (!titleUnderwaterFrames || titleUnderwaterFrames.length === 0) return;
+  const maxStep = titleUnderwaterFrames.length - 1;
+  const frameIdx = Math.min(fadeLevel, maxStep);
+  const uwCanvas = titleUnderwaterFrames[frameIdx];
+  const scrollX = Math.floor(titleUnderwaterScroll) % 256;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, 0, CANVAS_W, HUD_TOP_H);
+  ctx.clip();
+  ctx.drawImage(uwCanvas, -scrollX, 0);
+  ctx.drawImage(uwCanvas, -scrollX + 256, 0);
+  ctx.restore();
+}
+
+function drawUnderwaterSprites() {
+  if (!uwBubbleTiles) return;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, CANVAS_W, HUD_VIEW_H);
+  ctx.clip();
+  // Draw small bubbles with zig-zag
+  for (const b of uwBubbles) {
+    const zigX = Math.sin(b.zigPhase + b.timer / 1000 * b.zigSpeed) * b.zigAmp;
+    ctx.drawImage(uwBubbleTiles[0], Math.round(b.x + zigX), Math.round(HUD_VIEW_Y + b.y));
+  }
+  // Draw fish zig-zagging northeast
+  if (uwFish) {
+    const frame = Math.floor(uwFish.timer / 200) % 2; // 2-frame animation
+    const zigY = Math.sin(uwFish.zigPhase + uwFish.timer / 1000 * uwFish.zigSpeed) * uwFish.zigAmp;
+    ctx.drawImage(uwBubbleTiles[1 + frame], Math.round(uwFish.x), Math.round(HUD_VIEW_Y + uwFish.y + zigY));
+  }
   ctx.restore();
 }
 
 function drawTitleSkyInHUD() {
   if (titleState === 'main-in') {
+    // NES fade in from black
     const fl = TITLE_FADE_MAX - Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
     drawTitleSky(fl);
     roundTopBoxCorners();
   } else if (titleState === 'zbox-open' || titleState === 'main' || titleState === 'zbox-close' ||
+             titleState === 'logo-fade-out' || titleState === 'logo-fade-in' || titleState === 'select-box-open' || titleState === 'select-box-close' || titleState === 'select-box-close-fwd' ||
              titleState === 'select-fade-in' || titleState === 'select' || titleState === 'select-fade-out' || titleState === 'select-fade-out-back' ||
              titleState === 'name-entry') {
     drawTitleSky(0);
@@ -4497,49 +4974,75 @@ function drawTitleSkyInHUD() {
     drawTitleSky(fl);
     roundTopBoxCorners();
   } else if (titleState === 'disclaim-out') {
-    // Border fades out with disclaimer text
+    // Underwater BG fades out with disclaimer text
     const fl = Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
-    drawTopBoxBorder(fl);
+    drawTitleUnderwater(fl);
+    roundTopBoxCorners();
+  } else if (titleState === 'credit-wait') {
+    // Fade in from black during initial wait
+    const fl = TITLE_FADE_MAX - Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
+    drawTitleUnderwater(fl);
+    roundTopBoxCorners();
   } else {
-    // Early title states (credits, disclaimer): border at full brightness
-    drawTopBoxBorder(0);
+    // Credits, disclaimer: scrolling underwater BG at full brightness
+    drawTitleUnderwater(0);
+    roundTopBoxCorners();
   }
 }
 
 function drawTitle() {
-  // Black fill inside viewport + top box interior
+  // Title uses full-width viewport (no right boxes)
+  const TVW = CANVAS_W; // title viewport width
   ctx.fillStyle = '#000';
-  ctx.fillRect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
+  ctx.fillRect(HUD_VIEW_X, HUD_VIEW_Y, TVW, HUD_VIEW_H);
   ctx.fillRect(0, 0, CANVAS_W, HUD_TOP_H); // full top box (no border)
 
-  const cx = HUD_VIEW_X + HUD_VIEW_W / 2;
+  const cx = HUD_VIEW_X + TVW / 2;
   const cy = HUD_VIEW_Y + HUD_VIEW_H / 2;
   const vpBot = HUD_VIEW_Y + HUD_VIEW_H;
 
+  // Draw underwater sprites behind text during early title states
+  if (titleState === 'credit-wait' || titleState === 'credit-in' || titleState === 'credit-hold' || titleState === 'credit-out' ||
+      titleState === 'disclaim-wait' || titleState === 'disclaim-in' || titleState === 'disclaim-hold' || titleState === 'disclaim-out') {
+    drawUnderwaterSprites();
+  }
+
   if (titleState === 'credit-in' || titleState === 'credit-hold' || titleState === 'credit-out') {
-    // Skip credit-wait (black screen, no text)
-    const fl = titleFadeLevel(titleState, titleTimer);
-    const pal = titleFadePal(fl);
+    // NES fade in, hold, fade out
     const w1 = measureText(TITLE_CREDIT_1);
     const w2 = measureText(TITLE_CREDIT_2);
     const w3 = measureText(TITLE_CREDIT_3);
+    let fl = 0;
+    if (titleState === 'credit-in') {
+      fl = TITLE_FADE_MAX - Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
+    } else if (titleState === 'credit-out') {
+      fl = Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
+    }
+    const pal = fl === 0 ? TEXT_WHITE : titleFadePal(fl);
     drawText(ctx, cx - w1 / 2, cy - 16, TITLE_CREDIT_1, pal);
     drawText(ctx, cx - w2 / 2, cy - 4, TITLE_CREDIT_2, pal);
     drawText(ctx, cx - w3 / 2, cy + 8, TITLE_CREDIT_3, pal);
   } else if (titleState === 'disclaim-in' || titleState === 'disclaim-hold' || titleState === 'disclaim-out') {
-    const fl = titleFadeLevel(titleState, titleTimer);
-    const pal = titleFadePal(fl);
+    // NES fade in, hold, fade out
     const w1 = measureText(TITLE_DISCLAIM_1);
     const w2 = measureText(TITLE_DISCLAIM_2);
     const w3 = measureText(TITLE_DISCLAIM_3);
     const w4 = measureText(TITLE_DISCLAIM_4);
     const w5 = measureText(TITLE_DISCLAIM_5);
+    let fl = 0;
+    if (titleState === 'disclaim-in') {
+      fl = TITLE_FADE_MAX - Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
+    } else if (titleState === 'disclaim-out') {
+      fl = Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
+    }
+    const pal = fl === 0 ? TEXT_WHITE : titleFadePal(fl);
     drawText(ctx, cx - w1 / 2, cy - 24, TITLE_DISCLAIM_1, pal);
     drawText(ctx, cx - w2 / 2, cy - 14, TITLE_DISCLAIM_2, pal);
     drawText(ctx, cx - w3 / 2, cy - 4, TITLE_DISCLAIM_3, pal);
     drawText(ctx, cx - w4 / 2, cy + 10, TITLE_DISCLAIM_4, pal);
     drawText(ctx, cx - w5 / 2, cy + 24, TITLE_DISCLAIM_5, pal);
   } else if (titleState === 'main-in' || titleState === 'zbox-open' || titleState === 'main' || titleState === 'zbox-close' ||
+             titleState === 'logo-fade-out' || titleState === 'logo-fade-in' || titleState === 'select-box-open' || titleState === 'select-box-close' || titleState === 'select-box-close-fwd' ||
              titleState === 'select-fade-in' || titleState === 'select' || titleState === 'select-fade-out' || titleState === 'select-fade-out-back' ||
              titleState === 'name-entry' || titleState === 'main-out') {
     let fl;
@@ -4550,18 +5053,38 @@ function drawTitle() {
     } else {
       fl = 0;
     }
+
+    // Clip viewport content
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(HUD_VIEW_X + 8, HUD_VIEW_Y + 8, TVW - 16, HUD_VIEW_H - 16);
+    ctx.clip();
+
+    // Draw ocean BG (top 32px) and water (below)
+    drawTitleOcean(fl);
     drawTitleWater(fl);
 
-    // Title name box — above the ship
-    if (fl < TITLE_FADE_MAX) {
-      const tw1 = measureText(TITLE_NAME_1);
-      const tw2 = measureText(TITLE_NAME_2);
-      const tboxW = Math.max(tw1, tw2) + 16; // 8px border each side
-      const tboxH = 32; // 8 border + 8 line1 + 8 line2 + 8 border
-      const tboxX = cx - tboxW / 2;
-      const tboxY = HUD_VIEW_Y + 12; // near top of viewport
-      const clampedFl = Math.min(fl, LOAD_FADE_MAX);
-      const tBorderSet = (borderFadeSets && fl > 0)
+    // FF3 logo in bordered box
+    const isSelectState = titleState === 'select-box-open' || titleState === 'select-box-close' || titleState === 'select-box-close-fwd' ||
+      titleState === 'select-fade-in' || titleState === 'select' ||
+      titleState === 'select-fade-out' || titleState === 'select-fade-out-back' || titleState === 'name-entry';
+    // Logo fade level — separate from background fl
+    let logoFl = fl;
+    if (titleState === 'logo-fade-out') {
+      logoFl = Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
+    } else if (titleState === 'logo-fade-in') {
+      logoFl = TITLE_FADE_MAX - Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
+    } else if (isSelectState || titleState === 'main-out') {
+      logoFl = TITLE_FADE_MAX; // hidden — already faded before reaching these states
+    }
+    if (titleLogoFrames && logoFl < TITLE_FADE_MAX) {
+      const logoFrame = titleLogoFrames[Math.min(logoFl, titleLogoFrames.length - 1)];
+      const tboxW = logoFrame.width + 16; // 8px border each side
+      const tboxH = logoFrame.height + 24; // 8 border + logo + 4 gap + 8 text + 4 pad
+      const tboxX = Math.round(cx - tboxW / 2);
+      const tboxY = HUD_VIEW_Y + 12;
+      const clampedFl = Math.min(logoFl, LOAD_FADE_MAX);
+      const tBorderSet = (borderFadeSets && logoFl > 0)
         ? borderFadeSets[clampedFl] : borderTileCanvases;
       if (tBorderSet) {
         const [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR, FILL] = tBorderSet;
@@ -4583,25 +5106,28 @@ function drawTitle() {
           }
         }
       }
-      const tpal = fl === 0 ? TEXT_WHITE : titleFadePal(fl);
-      drawText(ctx, cx - tw1 / 2, tboxY + 8, TITLE_NAME_1, tpal);
-      drawText(ctx, cx - tw2 / 2, tboxY + 16, TITLE_NAME_2, tpal);
+      ctx.drawImage(logoFrame, tboxX + 8, tboxY + 8);
+      // "MMORPG" subtitle below logo
+      const tpal = logoFl === 0 ? TEXT_WHITE : titleFadePal(logoFl);
+      const tw2 = measureText(TITLE_MMORPG);
+      drawText(ctx, cx - tw2 / 2, tboxY + 8 + logoFrame.height + 0, TITLE_MMORPG, tpal);
     }
 
-    // Invincible airship sprite — centered in viewport
+    // Invincible airship sprite — stays visible, fades only with background (fl)
     if (invincibleFadeFrames && fl < TITLE_FADE_MAX) {
       const frameIdx = Math.floor(titleShipTimer / TITLE_SHIP_ANIM_MS) % 2;
       const shipCanvas = invincibleFadeFrames[fl][frameIdx];
-      const shipX = cx - 16;  // center 32px sprite in 144px viewport
-      const bob = Math.sin(titleShipTimer / 2000 * Math.PI * 2) * 4; // 4px bob, ~2s cycle
-      const shipY = Math.round(cy - 20 + bob); // +4px down
-      // Shadow stays fixed, ship bobs above it
-      const shadowY = cy - 20 + 32; // fixed base, +4px down
+      const shipX = cx - 16;
+      const bob = Math.sin(titleShipTimer / 2000 * Math.PI * 2) * 4;
+      const shipY = Math.round(cy - 20 + bob);
+      const shadowY = cy - 20 + 32;
       if (invincibleShadowFade && Math.floor(titleShipTimer / TITLE_SHADOW_ANIM_MS) % 2 === 0) {
         ctx.drawImage(invincibleShadowFade[fl], shipX, shadowY);
       }
       ctx.drawImage(shipCanvas, shipX, shipY);
     }
+
+    ctx.restore(); // end viewport clip
 
     // Press Z box — opens after fade-in, closes on Z press
     if (titleState === 'zbox-open' || titleState === 'main' || titleState === 'zbox-close') {
@@ -4653,17 +5179,42 @@ function drawTitle() {
         }
       }
     }
+
+    // Select box — expands from center, contains player select content
+    if (isSelectState) {
+      const SELECT_BOX_W = 128;
+      const SELECT_BOX_H = 112;
+      const sbCX = cx;
+      const sbCY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
+
+      // Box open/close animation (same as encounter boxes)
+      let sbt = 1; // 0=closed, 1=fully open
+      if (titleState === 'select-box-open') {
+        sbt = Math.min(titleTimer / BOSS_BOX_EXPAND_MS, 1);
+      } else if (titleState === 'select-box-close' || titleState === 'select-box-close-fwd') {
+        sbt = 1 - Math.min(titleTimer / BOSS_BOX_EXPAND_MS, 1);
+      }
+
+      const sbW = Math.max(16, Math.ceil(SELECT_BOX_W * sbt / 8) * 8);
+      const sbH = Math.max(16, Math.ceil(SELECT_BOX_H * sbt / 8) * 8);
+      const sbX = Math.round(sbCX - sbW / 2);
+      const sbY = Math.round(sbCY - sbH / 2);
+
+      if (borderTileCanvases) {
+        _drawBorderedBox(sbX, sbY, sbW, sbH);
+      }
+
+      // Draw select content only when fully open
+      if (sbt >= 1) {
+        drawPlayerSelectContent(sbX, sbY, SELECT_BOX_W, SELECT_BOX_H);
+      }
+    }
   }
 }
 
 // --- Player select screen ---
 
-function drawPlayerSelect() {
-  const isSelect = titleState === 'select-fade-in' || titleState === 'select' ||
-                   titleState === 'select-fade-out' || titleState === 'select-fade-out-back' ||
-                   titleState === 'name-entry';
-  if (!isSelect) return;
-
+function drawPlayerSelectContent(sbX, sbY, sbW, sbH) {
   // Compute NES fade step (0=full bright, 4=fully black)
   let fadeStep = 0;
   if (titleState === 'select-fade-in') {
@@ -4678,123 +5229,90 @@ function drawPlayerSelect() {
     fadedPal[3] = nesColorFade(fadedPal[3]);
   }
 
-  // Right main box interior: x=152, y=72, w=96, h=96
-  const ix = HUD_RIGHT_X + 8;
-  const iy = HUD_VIEW_Y + 32 + 8;
-  const iw = 96;
+  const ix = sbX + 8; // interior left
+  const iy = sbY + 8; // interior top
+  const iw = sbW - 16;
 
-  // "Select" / "Player" header — centered
-  const w1 = measureText(SELECT_TITLE_1);
-  const w2 = measureText(SELECT_TITLE_2);
-  drawText(ctx, ix + Math.floor((iw - w1) / 2), iy, SELECT_TITLE_1, fadedPal);
-  drawText(ctx, ix + Math.floor((iw - w2) / 2), iy + 10, SELECT_TITLE_2, fadedPal);
+  // "Player Select" header — centered
+  const tw = measureText(SELECT_TITLE);
+  drawText(ctx, ix + Math.floor((iw - tw) / 2), iy, SELECT_TITLE, fadedPal);
 
-  // 3 save slots — cursor + portrait + text
-  const slotStartY = iy + 28;
+  // 3 save slots
+  const slotStartY = iy + 16;
   const slotSpacing = 20;
   for (let i = 0; i < 3; i++) {
     const sy = slotStartY + i * slotSpacing;
 
-    // Hand cursor — floats over left border to give text room
-    const curX = HUD_RIGHT_X - 4;  // overlap border by 12px
+    // Hand cursor
     if (i === selectCursor && cursorTileCanvas) {
       if (fadeStep === 0) {
-        ctx.drawImage(cursorTileCanvas, curX, sy - 4);
+        ctx.drawImage(cursorTileCanvas, ix, sy - 4);
       } else if (fadeStep < SELECT_TEXT_STEPS) {
         ctx.globalAlpha = 1 - fadeStep / SELECT_TEXT_STEPS;
-        ctx.drawImage(cursorTileCanvas, curX, sy - 4);
+        ctx.drawImage(cursorTileCanvas, ix, sy - 4);
         ctx.globalAlpha = 1;
       }
     }
 
-    const rowShift = (i === selectCursor) ? 0 : -4;
     const isNameEntry = titleState === 'name-entry' && i === selectCursor;
+    const textX = ix + 20;
 
-    // Portrait — colored for named slots, silhouette for empty, hidden during name entry
+    // Portrait
     if (isNameEntry) {
-      // No portrait during name entry — keep silhouette
-      if (silhouetteCanvas) ctx.drawImage(silhouetteCanvas, ix + 8 + rowShift, sy - 4);
+      if (silhouetteCanvas) ctx.drawImage(silhouetteCanvas, textX - 2, sy - 4);
     } else if (saveSlots[i] && battleSpriteCanvas) {
-      // Named slot — colored Onion Knight portrait
       if (fadeStep === 0) {
-        ctx.drawImage(battleSpriteCanvas, ix + 8 + rowShift, sy - 4, 16, 16);
+        ctx.drawImage(battleSpriteCanvas, textX - 2, sy - 4, 16, 16);
       } else if (fadeStep < SELECT_TEXT_STEPS) {
         ctx.globalAlpha = 1 - fadeStep / SELECT_TEXT_STEPS;
-        ctx.drawImage(battleSpriteCanvas, ix + 8 + rowShift, sy - 4, 16, 16);
+        ctx.drawImage(battleSpriteCanvas, textX - 2, sy - 4, 16, 16);
         ctx.globalAlpha = 1;
       }
     } else if (silhouetteCanvas) {
       if (fadeStep === 0) {
-        ctx.drawImage(silhouetteCanvas, ix + 8 + rowShift, sy - 4);
+        ctx.drawImage(silhouetteCanvas, textX - 2, sy - 4);
       } else if (fadeStep < SELECT_TEXT_STEPS) {
         ctx.globalAlpha = 1 - fadeStep / SELECT_TEXT_STEPS;
-        ctx.drawImage(silhouetteCanvas, ix + 8 + rowShift, sy - 4);
+        ctx.drawImage(silhouetteCanvas, textX - 2, sy - 4);
         ctx.globalAlpha = 1;
       }
     }
 
     // Slot text
-    const textX = ix + 28 + rowShift;
+    const nameX = textX + 18;
     if (isNameEntry) {
-      // Draw typed name bytes + blinking underscore
       if (nameBuffer.length > 0) {
-        drawText(ctx, textX, sy, new Uint8Array(nameBuffer), fadedPal);
+        drawText(ctx, nameX, sy, new Uint8Array(nameBuffer), fadedPal);
       }
-      // Blinking underscore, or blinking period at max length
       if (nameBuffer.length >= NAME_MAX_LEN && Math.floor(titleTimer / 400) % 2 === 0) {
         ctx.fillStyle = '#fcfcfc';
-        ctx.fillRect(textX + nameBuffer.length * 8 + 2, sy + 7, 2, 2);
+        ctx.fillRect(nameX + nameBuffer.length * 8 + 2, sy + 7, 2, 2);
       } else if (nameBuffer.length < NAME_MAX_LEN && Math.floor(titleTimer / 400) % 2 === 0) {
         ctx.fillStyle = '#fcfcfc';
-        ctx.fillRect(textX + nameBuffer.length * 8 + 1, sy + 7, 6, 1);
+        ctx.fillRect(nameX + nameBuffer.length * 8 + 1, sy + 7, 6, 1);
       }
     } else if (saveSlots[i]) {
-      // Named slot — draw saved name
-      drawText(ctx, textX, sy, saveSlots[i].name, fadedPal);
+      drawText(ctx, nameX, sy, saveSlots[i].name, fadedPal);
     } else {
-      drawText(ctx, textX, sy, SELECT_SLOT_TEXT, fadedPal);
+      drawText(ctx, nameX, sy, SELECT_SLOT_TEXT, fadedPal);
     }
   }
 
-  // "Delete" option below the 3 slots
+  // "Delete" option
   const delY = slotStartY + 3 * slotSpacing;
   const delPal = deleteMode
-    ? [0x0F, 0x0F, 0x0F, 0x16] // red when active
+    ? [0x0F, 0x0F, 0x0F, 0x16]
     : [0x0F, 0x0F, 0x0F, fadedPal[3]];
   if (!deleteMode && selectCursor === 3 && cursorTileCanvas) {
     if (fadeStep === 0) {
-      ctx.drawImage(cursorTileCanvas, HUD_RIGHT_X - 4, delY - 4);
+      ctx.drawImage(cursorTileCanvas, ix, delY - 4);
     } else if (fadeStep < SELECT_TEXT_STEPS) {
       ctx.globalAlpha = 1 - fadeStep / SELECT_TEXT_STEPS;
-      ctx.drawImage(cursorTileCanvas, HUD_RIGHT_X - 4, delY - 4);
+      ctx.drawImage(cursorTileCanvas, ix, delY - 4);
       ctx.globalAlpha = 1;
     }
   }
-  drawText(ctx, ix + 28, delY, SELECT_DELETE_TEXT, delPal);
-
-  // Portrait in mini-left panel — colored for named slot, silhouette for empty/delete
-  const slotData = selectCursor < 3 ? saveSlots[selectCursor] : null;
-  const portraitCanvas = slotData ? battleSpriteCanvas : silhouetteCanvas;
-  if (portraitCanvas) {
-    if (fadeStep === 0) {
-      ctx.drawImage(portraitCanvas, HUD_RIGHT_X + 8, HUD_VIEW_Y + 8);
-    } else if (fadeStep < SELECT_TEXT_STEPS) {
-      ctx.globalAlpha = 1 - fadeStep / SELECT_TEXT_STEPS;
-      ctx.drawImage(portraitCanvas, HUD_RIGHT_X + 8, HUD_VIEW_Y + 8);
-      ctx.globalAlpha = 1;
-    }
-  }
-
-  // Mini-right panel — show slot name, "New Game", or "Delete"
-  const hpX = HUD_RIGHT_X + 32 + 8;
-  const hpY = HUD_VIEW_Y + 12;
-  if (selectCursor === 3) {
-    drawText(ctx, hpX, hpY, SELECT_DELETE_TEXT, deleteMode ? delPal : fadedPal);
-  } else if (slotData) {
-    drawText(ctx, hpX, hpY, slotData.name, fadedPal);
-  } else {
-    drawText(ctx, hpX, hpY, SELECT_SLOT_TEXT, fadedPal);
-  }
+  drawText(ctx, ix + 38, delY, SELECT_DELETE_TEXT, delPal);
 }
 
 // --- Pause menu ---
@@ -7025,7 +7543,7 @@ function gameLoop(timestamp) {
     drawTitle();    // viewport: water + text
     drawHUD();      // HUD border (returns early, skips top box content)
     drawTitleSkyInHUD(); // sky BG in top box, drawn after HUD border
-    drawPlayerSelect();  // player select in right panel
+    // Player select now drawn inside drawTitle() viewport
     requestAnimationFrame(gameLoop);
     return;
   }
