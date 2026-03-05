@@ -1,4 +1,0 @@
-Punch trace v5 - unarmed, RAM-monitored
-=== Done title mashing, unequipping ===
-=== Weapons zeroed, walking ===
-=== TIMEOUT walking ===

@@ -34,7 +34,7 @@ export const SFX = {
   BOSS_DEATH:   0x7D,  // SFX $3C + $41 — boss dissolve crumble
   CURSOR:       0x59,  // SFX $18 + $41 — menu cursor movement
   CONFIRM:      0x46,  // SFX $05 + $41 — menu confirm
-  CANCEL:       0x47,  // SFX $06 + $41 — cancel / error buzz
+  ERROR:        0x47,  // SFX $06 + $41 — error buzz
   ATTACK_HIT:   0x71,  // SFX $30 + $41 — enemy physical hit on player (from battle-sfx-log trace v3)
   KNIFE_HIT:    0x77,  // SFX $36 + $41 — knife/blade slash hit (ROM writes $B6 to $7F49)
   MONSTER_DEATH: 0x72, // SFX $31 + $41 — normal monster death (ROM writes $B1 to $7F49)

@@ -1,0 +1,245 @@
+{
+  "source": "shrines.rpgclassics.com",
+  "ff1": {
+    "staves": [
+      { "name": "Wooden Staff", "atk": 6, "hit": 0, "equip": "All except Thief", "price": 5 },
+      { "name": "Heal Staff", "atk": 6, "hit": 0, "equip": "Ninja, White Mage, White Wizard", "price": 12500, "effect": "Restores HP to party" },
+      { "name": "Power Staff", "atk": 12, "hit": 0, "equip": "All except Thief/Red Mage/Red Wizard", "price": 12345 },
+      { "name": "Mage Staff", "atk": 12, "hit": 10, "equip": "Ninja, Black Mage, Black Wizard", "price": 12500, "effect": "Casts Fire 2" },
+      { "name": "Iron Staff", "atk": 14, "hit": 0, "equip": "Fighter, Knight, Ninja, Blackbelt, Master", "price": 200 },
+      { "name": "Wizard Staff", "atk": 15, "hit": 15, "equip": "Black Wizard", "price": 25000, "effect": "Casts Confusion" }
+    ],
+    "daggers": [
+      { "name": "Small Dagger", "atk": 5, "hit": 10, "equip": "Fi, Kn, Th, Ni, RM, RW, BM, BW", "price": 5 },
+      { "name": "Large Dagger", "atk": 7, "hit": 10, "equip": "Fi, Kn, Th, Ni, RM, RW, BM, BW", "price": 175 },
+      { "name": "Silver Knife", "atk": 10, "hit": 15, "equip": "Fi, Kn, Th, Ni, RM, RW", "price": 800 },
+      { "name": "Catclaw", "atk": 22, "hit": 35, "equip": "Kn, Ni, RW, BW", "price": 65000 }
+    ],
+    "hammers": [
+      { "name": "Iron Hammer", "atk": 9, "hit": 0, "equip": "Fi, Kn, Ni, WM, WW", "price": 10 },
+      { "name": "Silver Hammer", "atk": 12, "hit": 5, "equip": "Fi, Kn, Ni, WM, WW", "price": 2500 },
+      { "name": "Thor's Hammer", "atk": 18, "hit": 15, "equip": "Kn, Ni, WW", "price": 20000, "effect": "Casts LIT 2" }
+    ],
+    "nunchucks": [
+      { "name": "Wooden Nunchuk", "atk": 12, "hit": 0, "equip": "BB, Ma", "price": 10 },
+      { "name": "Iron Nunchuck", "atk": 16, "hit": 0, "equip": "Ni, BB, Ma", "price": 200 }
+    ],
+    "axes": [
+      { "name": "Hand Axe", "atk": 16, "hit": 5, "equip": "Fi, Kn, Ni", "price": 550 },
+      { "name": "Great Axe", "atk": 22, "hit": 5, "equip": "Fi, Kn, Ni", "price": 1000 },
+      { "name": "Silver Axe", "atk": 25, "hit": 10, "equip": "Fi, Kn, Ni", "price": 4500 },
+      { "name": "Light Axe", "atk": 28, "hit": 15, "equip": "Fi, Kn, Ni", "price": 5000, "effect": "Casts HARM 2" }
+    ],
+    "swords": [
+      { "name": "Rapier", "atk": 9, "hit": 5, "equip": "Fi, Kn, Th, Ni, RM, RW", "price": 10 },
+      { "name": "Scimitar", "atk": 10, "hit": 10, "equip": "Fi, Kn, Th, Ni, RM, RW", "price": 200 },
+      { "name": "Saber", "atk": 13, "hit": 5, "equip": "Fi, Kn, Th, Ni, RM, RW", "price": 450 },
+      { "name": "Short Sword", "atk": 15, "hit": 10, "equip": "Fi, Kn, Ni, RM, RW", "price": 550 },
+      { "name": "Falchon", "atk": 15, "hit": 10, "equip": "Fi, Kn, Th, Ni, RM, RW", "price": 450 },
+      { "name": "Were Sword", "atk": 18, "hit": 15, "equip": "Fi, Kn, Ni, RM, RW", "price": 3000, "effect": "Effective vs WERE" },
+      { "name": "Rune Sword", "atk": 18, "hit": 15, "equip": "Fi, Kn, Th, Ni, RM, RW", "price": 2500, "effect": "Effective vs MAGIC" },
+      { "name": "Dragon Sword", "atk": 19, "hit": 15, "equip": "Fi, Kn, Th, Ni, RM, RW", "price": 4000, "effect": "Effective vs DRAGON" },
+      { "name": "Coral Sword", "atk": 19, "hit": 15, "equip": "Fi, Kn, Th, Ni, RM, RW", "price": 4000, "effect": "Effective vs WATER" },
+      { "name": "Long Sword", "atk": 20, "hit": 10, "equip": "Fi, Kn, Ni, RM, RW", "price": 1500 },
+      { "name": "Giant Sword", "atk": 21, "hit": 20, "equip": "Fi, Kn, Ni, RM, RW", "price": 4000, "effect": "Effective vs GIANT" },
+      { "name": "Bane Sword", "atk": 22, "hit": 20, "equip": "Kn, Ni, RW", "price": 30000, "effect": "Casts BANE" },
+      { "name": "Silver Sword", "atk": 23, "hit": 15, "equip": "Fi, Kn, Ni, RM, RW", "price": 4000 },
+      { "name": "Vorpal", "atk": 24, "hit": 25, "equip": "Kn, Ni, RW", "price": 15000 },
+      { "name": "Flame Sword", "atk": 26, "hit": 20, "equip": "Fi, Kn, Ni, RM, RW", "price": 5000, "effect": "Effective vs ICE" },
+      { "name": "Ice Sword", "atk": 29, "hit": 25, "equip": "Fi, Kn, Ni, RM, RW", "price": 7500, "effect": "Effective vs FIRE" },
+      { "name": "Defense", "atk": 30, "hit": 35, "equip": "Kn, Ni, RW", "price": 20000, "effect": "Casts RUSE" },
+      { "name": "Sun Sword", "atk": 32, "hit": 30, "equip": "Fi, Kn, Ni, RM, RW", "price": 10000, "effect": "Effective vs UNDEAD" },
+      { "name": "Katana", "atk": 33, "hit": 35, "equip": "Ni", "price": 30000 },
+      { "name": "Xcalber", "atk": 45, "hit": 35, "equip": "Kn", "price": 30000 },
+      { "name": "Masmune", "atk": 56, "hit": 50, "equip": "All", "price": 30000 }
+    ]
+  },
+  "ff2": {
+    "knives": [
+      { "name": "Knife", "atk": 3, "hit": 5, "price": 150 },
+      { "name": "Dagger", "atk": 7, "hit": 15, "price": 400 },
+      { "name": "Mithril Knife", "atk": 14, "hit": 13, "price": 800 },
+      { "name": "Gouche", "atk": 32, "hit": 10, "price": 1500 },
+      { "name": "Orhacon", "atk": 50, "hit": 8, "price": 3000 },
+      { "name": "Ripper", "atk": 69, "hit": 5, "price": 8000 },
+      { "name": "CatClaw", "atk": 86, "hit": 0, "price": 12000 }
+    ],
+    "staves": [
+      { "name": "Cane", "atk": 4, "hit": 10, "price": 250 },
+      { "name": "Mace", "atk": 9, "hit": 20, "price": 500 },
+      { "name": "Mithril Mace", "atk": 16, "hit": 20, "price": 1500 },
+      { "name": "Were Staff", "atk": 28, "hit": 18, "price": 3000 },
+      { "name": "Magic Staff", "atk": 40, "hit": 16, "price": 5000, "effect": "Bolt-5 on all enemies" },
+      { "name": "Power Staff", "atk": 53, "hit": 14, "price": 8000 },
+      { "name": "Evil Staff", "atk": 64, "hit": 12, "price": 10000, "effect": "Aero-16 randomly on enemy" },
+      { "name": "Greed Staff", "atk": 78, "hit": 10, "price": 12000 },
+      { "name": "Diamond Staff", "atk": 90, "hit": 5, "price": 15000 }
+    ],
+    "spears": [
+      { "name": "Javelin", "atk": 6, "hit": 15, "price": 300 },
+      { "name": "Spear", "atk": 11, "hit": 25, "price": 500 },
+      { "name": "Mithril Spear", "atk": 18, "hit": 25, "price": 1500 },
+      { "name": "Trident", "atk": 30, "hit": 23, "price": 5000 },
+      { "name": "Demon Spear", "atk": 42, "hit": 20, "price": 10000 },
+      { "name": "Flame Spear", "atk": 54, "hit": 18, "price": 15000, "element": "Fire" },
+      { "name": "Ice Spear", "atk": 66, "hit": 15, "price": 20000, "element": "Ice" },
+      { "name": "Bolt Spear", "atk": 78, "hit": 13, "price": 30000, "effect": "Bolt-16 all enemies" },
+      { "name": "Holy Spear", "atk": 90, "hit": 10, "price": 40000, "effect": "Holy-8 all enemies" }
+    ],
+    "swords": [
+      { "name": "Blood Sword", "atk": 0, "hit": 80, "price": 8000, "effect": "Drains HP" },
+      { "name": "Broad Sword", "atk": 8, "hit": 20, "price": 400 },
+      { "name": "Long Sword", "atk": 13, "hit": 30, "price": 600 },
+      { "name": "Mithril Sword", "atk": 20, "hit": 30, "price": 1800 },
+      { "name": "Ancient Sword", "atk": 25, "hit": 70, "price": 2500, "effect": "Curses enemies" },
+      { "name": "Sleep Sword", "atk": 30, "hit": 70, "price": 4000, "effect": "Puts enemies to sleep" },
+      { "name": "Winged Sword", "atk": 42, "hit": 24, "price": 5000 },
+      { "name": "Earth Sword", "atk": 52, "hit": 22, "price": 10000 },
+      { "name": "Flame Sword", "atk": 63, "hit": 20, "price": 10000, "element": "Fire" },
+      { "name": "Ice Sword", "atk": 72, "hit": 18, "price": 15000, "element": "Ice" },
+      { "name": "Defense Sword", "atk": 78, "hit": 16, "price": 20000 },
+      { "name": "Sun Sword", "atk": 83, "hit": 15, "price": 25000 },
+      { "name": "Xcalibr", "atk": 100, "hit": 5, "price": 130000 },
+      { "name": "Masamune", "atk": 150, "hit": -10, "price": 80000, "effect": "Haste-11 all allies" }
+    ],
+    "axes": [
+      { "name": "Axe", "atk": 10, "hit": 25, "price": 500 },
+      { "name": "Battle Axe", "atk": 15, "hit": 35, "price": 800 },
+      { "name": "Mithril Axe", "atk": 22, "hit": 35, "price": 2000 },
+      { "name": "Demon Axe", "atk": 27, "hit": 35, "price": 10000 },
+      { "name": "Ogre Axe", "atk": 58, "hit": 30, "price": 15000 },
+      { "name": "Poison Axe", "atk": 76, "hit": 25, "price": 20000, "effect": "Poisons enemy" },
+      { "name": "Rune Axe", "atk": 95, "hit": 20, "price": 50000, "effect": "Fog-6 all enemies" }
+    ],
+    "bows": [
+      { "name": "Killer Bow", "atk": 0, "hit": 80, "price": 15000, "effect": "Randomly kills enemy" },
+      { "name": "Bow", "atk": 1, "hit": 30, "price": 150 },
+      { "name": "Long Bow", "atk": 9, "hit": 40, "price": 250 },
+      { "name": "Mithril Bow", "atk": 13, "hit": 40, "price": 1000 },
+      { "name": "Blind Bow", "atk": 25, "hit": 80, "price": 3000, "effect": "Blinds enemy" },
+      { "name": "Flame Bow", "atk": 42, "hit": 33, "price": 5000, "element": "Fire" },
+      { "name": "Ice Bow", "atk": 56, "hit": 30, "price": 5000, "element": "Ice" },
+      { "name": "Yoichi Bow", "atk": 90, "hit": 5, "price": 25000, "effect": "Bsrk-3 all allies" }
+    ]
+  },
+  "ff3": {
+    "knives": [
+      { "name": "Knife", "atk": 6, "hit": 85, "equip": "On, Fi, Bw, Rw, Kn, Th, Ni", "price": 10 },
+      { "name": "Dagger", "atk": 8, "hit": 85, "equip": "On, Fi, Bw, Rw, Kn, Th, Ni", "price": 30 },
+      { "name": "Mithril Knife", "atk": 10, "hit": 85, "equip": "On, Fi, Bw, Rw, Kn, Th, Ni", "price": 250 },
+      { "name": "Main Gauche", "atk": 30, "hit": 100, "equip": "Th, Ni", "price": 3500 },
+      { "name": "Orichalcon", "atk": 45, "hit": 100, "equip": "Th, Ni", "price": 6000, "effect": "Drains HP" },
+      { "name": "Air Knife", "atk": 60, "hit": 100, "equip": "Th, Ni", "price": 5000, "element": "Air", "effect": "Item: Aero" }
+    ],
+    "swords": [
+      { "name": "Long Sword", "atk": 10, "hit": 80, "equip": "On, Fi, Kn, Ni", "price": 50 },
+      { "name": "Mithril Sword", "atk": 15, "hit": 85, "equip": "On, Fi, Kn, Ni", "price": 250 },
+      { "name": "Serpent Sword", "atk": 25, "hit": 80, "equip": "Fi, Kn, Ni", "price": 750 },
+      { "name": "Tyrving", "atk": 29, "hit": 75, "equip": "Rw, Ni", "price": 1000 },
+      { "name": "Salamand Sword", "atk": 32, "hit": 80, "equip": "Fi, Kn, Ni", "price": 1500, "element": "Fire", "effect": "Item: Fire/Fire2" },
+      { "name": "Ice Blade", "atk": 40, "hit": 80, "equip": "Fi, Kn, Ni", "price": 1500, "element": "Ice", "effect": "Item: Ice/Ice2" },
+      { "name": "King Sword", "atk": 50, "hit": 80, "equip": "Fi, Kn, Ni", "price": 2500 },
+      { "name": "Blood Sword", "atk": 35, "hit": 80, "equip": "Fi, Kn, Ni", "price": 8250, "effect": "Drains HP" },
+      { "name": "Defender", "atk": 95, "hit": 80, "equip": "Kn, Ni", "price": 8250, "effect": "VIT+5; Item: Raises defense" },
+      { "name": "Break Blade", "atk": 120, "hit": 80, "equip": "Kn, Ni", "price": 15000, "effect": "Casts Break" },
+      { "name": "Excalibur", "atk": 160, "hit": 80, "equip": "Kn, Ni", "price": 32500, "element": "Holy", "effect": "Str+5" },
+      { "name": "Ragnarok", "atk": 180, "hit": 100, "equip": "Kn, Mk, Ni", "price": 32750, "effect": "Str+5, VIT+5, AGI+5" },
+      { "name": "Onion Sword", "atk": 200, "hit": 100, "equip": "On", "price": 32500, "effect": "Str+5, AGI+5, VIT+5" },
+      { "name": "Ancient Sword", "atk": 5, "hit": 80, "equip": "Fi, Kn, Ni", "price": 8250, "effect": "Paralyzes enemies" },
+      { "name": "Shiny Sword", "atk": 5, "hit": 20, "equip": "Fi, Kn, Ni", "price": 2500 },
+      { "name": "Wight Slayer", "atk": 15, "hit": 80, "equip": "Rw, Ni", "price": 500, "element": "Holy" }
+    ],
+    "staves": [
+      { "name": "Staff", "atk": 3, "hit": 50, "equip": "Ww, Rw, Sh, Sa, Ni", "price": 20 },
+      { "name": "Burning Staff", "atk": 15, "hit": 50, "equip": "Ww, Rw, Sh, Sa, Ni", "price": 1250, "element": "Fire", "effect": "Item: Fire/Fire2" },
+      { "name": "Freezing Staff", "atk": 15, "hit": 50, "equip": "Ww, Rw, Sh, Sa, Ni", "price": 1250, "element": "Ice", "effect": "Item: Ice/Ice2" },
+      { "name": "Shining Staff", "atk": 15, "hit": 50, "equip": "Ww, Rw, Sh, Sa, Ni", "price": 1250, "element": "Lightning", "effect": "Item: Bolt/Bolt2" },
+      { "name": "Golem Staff", "atk": 8, "hit": 70, "equip": "Ww, Rw, Sh, Sa, Ni", "price": 6750, "element": "Earth", "effect": "Str+5; casts Break; Item: Break" },
+      { "name": "Rune Staff", "atk": 28, "hit": 80, "equip": "Ww, Rw, Sh, Sa, Ni", "price": 9000, "effect": "Item: Ice 2/3" },
+      { "name": "Eldest Staff", "atk": 20, "hit": 90, "equip": "Sh, Sa, Ni", "price": 32500, "effect": "INT+5, SPR+5, MEV+5%; Ice/Bolt/Fire def up; Item: Cure" }
+    ],
+    "rods": [
+      { "name": "Mithril Rod", "atk": 5, "hit": 60, "equip": "Ww, Bw, Rw, Sh, Wa, Co, Su, Sa, Ni", "price": 200 },
+      { "name": "Flame Rod", "atk": 12, "hit": 70, "equip": "Bw, Rw, Wa, Co, Su, Sa, Ni", "price": 1500, "element": "Fire" },
+      { "name": "Ice Rod", "atk": 12, "hit": 70, "equip": "Bw, Rw, Wa, Co, Su, Sa, Ni", "price": 1500, "element": "Ice" },
+      { "name": "Light Rod", "atk": 12, "hit": 70, "equip": "Bw, Rw, Wa, Co, Su, Sa, Ni", "price": 1500, "element": "Lightning" },
+      { "name": "Ultimate Rod", "atk": 20, "hit": 80, "equip": "Wa, Sa, Ni", "price": 15000, "effect": "Casts Break" }
+    ],
+    "nunchucks": [
+      { "name": "Nunchuck", "atk": 12, "hit": 70, "equip": "Mo, Ni", "price": 30 },
+      { "name": "Tonfa", "atk": 20, "hit": 80, "equip": "Mo, Ni", "price": 250 },
+      { "name": "Three-Section Staff", "atk": 25, "hit": 70, "equip": "Mo, Ni", "price": 1500 }
+    ],
+    "bows": [
+      { "name": "Bow", "atk": 5, "hit": 90, "equip": "On, Fi, Rw, Hu, Ni", "price": 50 },
+      { "name": "Great Bow", "atk": 8, "hit": 85, "equip": "On, Fi, Rw, Hu, Ni", "price": 600 },
+      { "name": "Killer Bow", "atk": 15, "hit": 85, "equip": "Hu, Ni", "price": 1000 },
+      { "name": "Rune Bow", "atk": 25, "hit": 90, "equip": "Hu, Ni", "price": 1500 },
+      { "name": "Yoichi Bow", "atk": 50, "hit": 100, "equip": "Hu, Ni", "price": 21000 }
+    ],
+    "arrows": [
+      { "name": "Wooden Arrow", "atk": 6, "hit": 90, "equip": "On, Fi, Rw, Hu, Ni", "price": 2 },
+      { "name": "Holy Arrow", "atk": 13, "hit": 85, "equip": "On, Fi, Rw, Hu, Ni", "price": 5, "element": "Holy" },
+      { "name": "Iron Arrow", "atk": 17, "hit": 85, "equip": "On, Fi, Rw, Hu, Ni", "price": 0 },
+      { "name": "Medusa Arrow", "atk": 20, "hit": 100, "equip": "Hu, Ni", "price": 50, "effect": "Casts Break" },
+      { "name": "Fire Arrow", "atk": 30, "hit": 90, "equip": "Hu, Ni", "price": 5, "element": "Fire" },
+      { "name": "Ice Arrow", "atk": 30, "hit": 90, "equip": "Hu, Ni", "price": 5, "element": "Ice" },
+      { "name": "Bolt Arrow", "atk": 30, "hit": 90, "equip": "Hu, Ni", "price": 5, "element": "Lightning" },
+      { "name": "Yoichi Arrow", "atk": 70, "hit": 100, "equip": "Hu, Ni", "price": 100 }
+    ],
+    "boomerangs": [
+      { "name": "Boomerang", "atk": 35, "hit": 70, "equip": "Th, Ni", "price": 4500 },
+      { "name": "Full Moon", "atk": 160, "hit": 90, "equip": "Kn, Mk, Ni", "price": 31000 }
+    ],
+    "books": [
+      { "name": "Flame Book", "atk": 32, "hit": 70, "equip": "Sc, Sa, Ni", "price": 1650, "element": "Fire" },
+      { "name": "Ice Book", "atk": 32, "hit": 70, "equip": "Sc, Sa, Ni", "price": 1650, "element": "Ice" },
+      { "name": "Light Book", "atk": 32, "hit": 70, "equip": "Sc, Sa, Ni", "price": 1650, "element": "Lightning" },
+      { "name": "Inferno Book", "atk": 65, "hit": 80, "equip": "Sc, Sa, Ni", "price": 7500, "element": "Fire" },
+      { "name": "Blizzard Book", "atk": 65, "hit": 80, "equip": "Sc, Sa, Ni", "price": 7500, "element": "Ice" },
+      { "name": "Illumina Book", "atk": 65, "hit": 80, "equip": "Sc, Sa, Ni", "price": 7500, "element": "Lightning" }
+    ],
+    "bells": [
+      { "name": "Earth Bell", "atk": 25, "hit": 80, "equip": "Ge, Ni", "price": 2750, "element": "Earth", "effect": "Casts Break" },
+      { "name": "Giyaman Bell", "atk": 30, "hit": 80, "equip": "Ge, Ni", "price": 2250 },
+      { "name": "Rune Bell", "atk": 40, "hit": 100, "equip": "Ge, Ni", "price": 2750 }
+    ],
+    "spears": [
+      { "name": "Thunder Spear", "atk": 35, "hit": 80, "equip": "Dr, Ni", "price": 4000, "element": "Lightning", "effect": "Item: Bolt/Bolt2" },
+      { "name": "Wind Spear", "atk": 50, "hit": 80, "equip": "Dr, Ni", "price": 5000, "element": "Air", "effect": "Item: Aero/Aero2" },
+      { "name": "Blood Spear", "atk": 70, "hit": 80, "equip": "Dr, Ni", "price": 10000, "effect": "Drains HP" },
+      { "name": "Holy Spear", "atk": 100, "hit": 80, "equip": "Dr, Ni", "price": 22500, "element": "Holy" }
+    ],
+    "axes": [
+      { "name": "Hammer", "atk": 25, "hit": 60, "equip": "Vi, Ni", "price": 250 },
+      { "name": "Battle Axe", "atk": 45, "hit": 60, "equip": "Vi, Ni", "price": 2750 },
+      { "name": "Morning Star", "atk": 50, "hit": 70, "equip": "Vi, Ni", "price": 4000 },
+      { "name": "Tomahawk", "atk": 60, "hit": 80, "equip": "Vi, Ni", "price": 10000 },
+      { "name": "Great Axe", "atk": 75, "hit": 80, "equip": "Vi, Ni", "price": 7000 },
+      { "name": "Thor Hammer", "atk": 30, "hit": 70, "equip": "Vi, Ni", "price": 7000, "effect": "Item: Bolt/Bolt2" },
+      { "name": "Triton Hammer", "atk": 85, "hit": 80, "equip": "Vi, Ni", "price": 10000 }
+    ],
+    "claws": [
+      { "name": "Kaiser Knuckle", "atk": 36, "hit": 100, "equip": "Ka, Ni", "price": 3500 },
+      { "name": "Elven Claws", "atk": 37, "hit": 100, "equip": "Ka, Ni", "price": 9000, "effect": "Item: Confuse" },
+      { "name": "Cat Claws", "atk": 42, "hit": 100, "equip": "Ka, Ni", "price": 7000 },
+      { "name": "Dragon Claws", "atk": 48, "hit": 100, "equip": "Vi, Ni", "price": 9000, "effect": "Item: Aero/Aero2" },
+      { "name": "Hell Claws", "atk": 60, "hit": 100, "equip": "Ka, Ni", "price": 20000, "effect": "Poisons enemy" }
+    ],
+    "katanas": [
+      { "name": "Ashura", "atk": 65, "hit": 100, "equip": "Mk, Ni", "price": 10000 },
+      { "name": "Kotetsu", "atk": 105, "hit": 90, "equip": "Mk, Ni", "price": 10500 },
+      { "name": "Kiku", "atk": 125, "hit": 100, "equip": "Mk, Ni", "price": 11000 },
+      { "name": "Masamune", "atk": 160, "hit": 90, "equip": "Mk, Ni", "price": 32500, "effect": "AGI+5, VIT+5" }
+    ],
+    "harps": [
+      { "name": "Dream Harp", "atk": 0, "hit": 60, "equip": "Ba, Ni", "price": 3750, "effect": "Casts Sleep" },
+      { "name": "Madora Harp", "atk": 40, "hit": 70, "equip": "Ba, Ni", "price": 4000 },
+      { "name": "Lamia Harp", "atk": 0, "hit": 80, "equip": "Ba, Ni", "price": 10750, "effect": "Casts Confuse" },
+      { "name": "Loki Harp", "atk": 60, "hit": 100, "equip": "Ba, Ni", "price": 20000 }
+    ],
+    "thrown": [
+      { "name": "Shuriken", "atk": 200, "hit": 100, "equip": "Ni", "price": 32750, "effect": "Consumable" }
+    ]
+  }
+}
