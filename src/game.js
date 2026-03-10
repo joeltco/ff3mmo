@@ -36,7 +36,8 @@ async function saveSlotsToDB() {
         str: playerStats.str, agi: playerStats.agi, vit: playerStats.vit,
         int: playerStats.int, mnd: playerStats.mnd,
         maxHP: playerStats.maxHP, maxMP: playerStats.maxMP,
-        weaponR: playerWeaponR, weaponL: playerWeaponL
+        weaponR: playerWeaponR, weaponL: playerWeaponL,
+            head: playerHead, body: playerBody, arms: playerArms
       } : null),
       inventory: s.inventory || playerInventory
     } : null);
@@ -257,6 +258,67 @@ let playerDEF = 4;
 let playerGil = 0;
 let playerWeaponR = 0x1E;  // right hand item ID (Knife), 0 = unarmed
 let playerWeaponL = 0x00;  // left hand item ID, 0 = unarmed
+let playerHead = 0x00;     // helmet item ID, 0 = empty
+let playerBody = 0x00;     // body armor item ID, 0 = empty
+let playerArms = 0x00;     // bracers item ID, 0 = empty
+
+// Equip slot index mapping: -100=RH, -101=LH, -102=Head, -103=Body, -104=Arms
+const EQUIP_SLOT_SUBTYPE = { '-102': 'helmet', '-103': 'body', '-104': 'arms' };
+
+function getEquipSlotId(eqIdx) {
+  switch (eqIdx) {
+    case -100: return playerWeaponR;
+    case -101: return playerWeaponL;
+    case -102: return playerHead;
+    case -103: return playerBody;
+    case -104: return playerArms;
+    default: return 0;
+  }
+}
+
+function setEquipSlotId(eqIdx, id) {
+  switch (eqIdx) {
+    case -100: playerWeaponR = id; break;
+    case -101: playerWeaponL = id; break;
+    case -102: playerHead = id; break;
+    case -103: playerBody = id; break;
+    case -104: playerArms = id; break;
+  }
+}
+
+function recalcDEF() {
+  const rDef = ITEMS.get(playerWeaponR)?.def || 0;
+  const lDef = ITEMS.get(playerWeaponL)?.def || 0;
+  playerDEF = (playerStats ? playerStats.vit : 4)
+    + rDef + lDef
+    + (ITEMS.get(playerHead)?.def || 0)
+    + (ITEMS.get(playerBody)?.def || 0)
+    + (ITEMS.get(playerArms)?.def || 0);
+}
+
+function isHandEquippable(itemData) {
+  return itemData && (itemData.type === 'weapon' || (itemData.type === 'armor' && itemData.subtype === 'shield'));
+}
+function isWeapon(id) {
+  if (!id) return false;
+  const item = ITEMS.get(id);
+  return item && item.type === 'weapon';
+}
+// Get the weapon ID for a given hit index (shields are not weapons)
+function getHitWeapon(hitIdx) {
+  const rW = isWeapon(playerWeaponR);
+  const lW = isWeapon(playerWeaponL);
+  if (rW && lW) return (hitIdx % 2 === 0) ? playerWeaponR : playerWeaponL;
+  if (rW) return playerWeaponR;
+  if (lW) return playerWeaponL;
+  return 0; // unarmed
+}
+function isHitRightHand(hitIdx) {
+  const rW = isWeapon(playerWeaponR);
+  const lW = isWeapon(playerWeaponL);
+  if (rW && lW) return hitIdx % 2 === 0;
+  return rW; // single weapon hand, or unarmed defaults to R
+}
 
 // Inventory system
 let playerInventory = {};    // { itemId: count } — e.g. { 0xA6: 3 }
@@ -415,12 +477,19 @@ const DUNGEON_NAME = new Uint8Array([0x8A, 0xD5, 0xDD, 0xCA, 0xDB, 0xFF, 0x8C, 0
 let pauseState = 'none';       // 'none'|'scroll-in'|'text-in'|'open'|'text-out'|'scroll-out'
                                // |'inv-text-out'|'inv-expand'|'inv-items-in'|'inventory'
                                // |'inv-items-out'|'inv-shrink'|'inv-text-in'
+                               // |'eq-text-out'|'eq-expand'|'eq-slots-in'|'equip'
+                               // |'eq-items-in'|'eq-item-select'|'eq-items-out'
+                               // |'eq-slots-out'|'eq-shrink'|'eq-text-in'
 let pauseTimer = 0;
 let pauseCursor = 0;           // 0-5
 let pauseInvScroll = 0;        // scroll offset for inventory list
 let pauseHeldItem = -1;        // index into inventory entries of held item (-1 = none)
 let pauseHealNum = null;       // {value, timer} — green heal number during pause item use
 let pauseUseItemId = 0;        // item ID stashed between target-select and use
+let eqCursor = 0;              // 0-5: RH, LH, HD, BD, SH, AR
+let eqSlotIdx = -100;          // which equip slot we're picking an item for
+let eqItemList = [];           // filtered items that fit the selected slot
+let eqItemCursor = 0;          // cursor in eqItemList
 const PAUSE_EXPAND_MS = 150;   // border expand/shrink duration
 let prePauseTrack = -1;        // FF3 track playing before pause opened
 const PAUSE_SCROLL_MS = 150;   // bordered panel scroll down/up
@@ -1375,7 +1444,7 @@ function initPlayerStats(romData) {
   playerHP = hp;
   playerMP = mp;
   playerATK = str + (ITEMS.get(playerWeaponR)?.atk || 0) + (ITEMS.get(playerWeaponL)?.atk || 0);
-  playerDEF = vit;
+  recalcDEF();
 }
 
 function initExpTable(romData) {
@@ -1423,7 +1492,7 @@ function grantExp(amount) {
 
     // Update derived combat stats
     playerATK = playerStats.str + (ITEMS.get(playerWeaponR)?.atk || 0) + (ITEMS.get(playerWeaponL)?.atk || 0);
-    playerDEF = playerStats.vit;
+    recalcDEF();
 
     // Next threshold
     if (lv - 1 < 98) playerStats.expToNext = expTable[lv - 1];
@@ -2776,11 +2845,14 @@ function handleInput() {
         // Confirm target — roll hits, transition to player-slash
         playSFX(SFX.CONFIRM);
         // Hit count: dual-wield/unarmed = min 2, single weapon = min 1
-        const dualWield = playerWeaponR !== 0 && playerWeaponL !== 0;
-        const unarmed = playerWeaponR === 0 && playerWeaponL === 0;
+        // Shields in hand don't count as weapons for combat
+        const rIsWeapon = isWeapon(playerWeaponR);
+        const lIsWeapon = isWeapon(playerWeaponL);
+        const dualWield = rIsWeapon && lIsWeapon;
+        const unarmed = !rIsWeapon && !lIsWeapon;
         const baseHits = Math.max(1, Math.floor((playerStats ? playerStats.agi : 5) / 10));
         const potentialHits = (dualWield || unarmed) ? Math.max(2, baseHits) : Math.max(1, baseHits);
-        const wpn = ITEMS.get(playerWeaponR) || ITEMS.get(playerWeaponL);
+        const wpn = (rIsWeapon ? ITEMS.get(playerWeaponR) : null) || (lIsWeapon ? ITEMS.get(playerWeaponL) : null);
         const hitRate = wpn ? wpn.hit : BASE_HIT_RATE;
         if (isRandomEncounter && encounterMonsters) {
           const target = encounterMonsters[targetIndex];
@@ -2788,13 +2860,22 @@ function handleInput() {
         } else {
           hitResults = rollHits(playerATK, BOSS_DEF, hitRate, potentialHits);
         }
-        const rIsKnife1st = playerWeaponR !== 0 && ITEMS.get(playerWeaponR)?.subtype === 'knife';
-        const pendingSlashFrames = rIsKnife1st ? knifeSlashFramesR : slashFramesR; // first hit = right hand
+        // Determine which hand attacks per hit (skip shield hands)
+        const weaponHandR = isWeapon(playerWeaponR);
+        const weaponHandL = isWeapon(playerWeaponL);
+        const firstHandR = weaponHandR || !weaponHandL; // prefer R, fallback if neither
+        const rIsKnife1st = firstHandR
+          ? (playerWeaponR !== 0 && ITEMS.get(playerWeaponR)?.subtype === 'knife')
+          : (playerWeaponL !== 0 && ITEMS.get(playerWeaponL)?.subtype === 'knife');
+        const pendingSlashFrames = firstHandR
+          ? (rIsKnife1st ? knifeSlashFramesR : slashFramesR)
+          : (rIsKnife1st ? knifeSlashFramesL : slashFramesL);
         // Base position = target center
         const centerX = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2);
         const centerY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
         // Weapon-aware initial offset: knife = diagonal sweep, unarmed = random scatter
-        const rIsKnife0 = playerWeaponR !== 0 && ITEMS.get(playerWeaponR)?.subtype === 'knife';
+        const firstWeapon0 = getHitWeapon(0);
+        const rIsKnife0 = firstWeapon0 !== 0 && ITEMS.get(firstWeapon0)?.subtype === 'knife';
         let pendingOffX, pendingOffY;
         if (rIsKnife0) {
           pendingOffX = 8; pendingOffY = -8; // diagonal sweep starts top-right
@@ -2913,13 +2994,11 @@ function handleInput() {
             const srcIdx = itemHeldIdx;
             const item = itemSelectList[srcIdx];
             const handIdx = itemPageCursor; // 0=R, 1=L
-            if (item && ITEMS.get(item.id)?.type === 'weapon') {
+            if (item && isHandEquippable(ITEMS.get(item.id))) {
               const oldWeapon = handIdx === 0 ? playerWeaponR : playerWeaponL;
               if (handIdx === 0) playerWeaponR = item.id; else playerWeaponL = item.id;
-              // Update playerInventory
               removeItem(item.id);
               if (oldWeapon !== 0) addItem(oldWeapon, 1);
-              // Update itemSelectList in place — old weapon replaces src slot
               if (oldWeapon !== 0) {
                 itemSelectList[srcIdx] = { id: oldWeapon, count: 1 };
               } else {
@@ -2938,8 +3017,7 @@ function handleInput() {
             const handWeaponId = srcHand === 0 ? playerWeaponR : playerWeaponL;
             const dstIdx = (itemPage - 1) * INV_SLOTS + itemPageCursor;
             const invItem = itemSelectList[dstIdx];
-            if (invItem && ITEMS.get(invItem.id)?.type === 'weapon') {
-              // Swap: inv weapon → hand, hand weapon → dest slot
+            if (invItem && isHandEquippable(ITEMS.get(invItem.id))) {
               if (srcHand === 0) playerWeaponR = invItem.id; else playerWeaponL = invItem.id;
               removeItem(invItem.id);
               addItem(handWeaponId, 1);
@@ -2948,7 +3026,6 @@ function handleInput() {
               itemHeldIdx = -1;
               playSFX(SFX.CONFIRM);
             } else if (!invItem) {
-              // Unequip to empty slot
               if (srcHand === 0) playerWeaponR = 0; else playerWeaponL = 0;
               addItem(handWeaponId, 1);
               itemSelectList[dstIdx] = { id: handWeaponId, count: 1 };
@@ -2956,7 +3033,6 @@ function handleInput() {
               itemHeldIdx = -1;
               playSFX(SFX.CONFIRM);
             } else {
-              // Non-weapon in dest — can't place weapon here
               playSFX(SFX.ERROR);
               itemHeldIdx = -1;
             }
@@ -3095,6 +3171,10 @@ function handleInput() {
         // Item — fade out pause text, then expand to inventory
         playSFX(SFX.CONFIRM);
         pauseState = 'inv-text-out'; pauseTimer = 0; pauseInvScroll = 0;
+      } else if (pauseCursor === 2) {
+        // Equip — fade out pause text, then expand to equip slots
+        playSFX(SFX.CONFIRM);
+        pauseState = 'eq-text-out'; pauseTimer = 0; eqCursor = 0;
       }
     }
     return;
@@ -3190,6 +3270,122 @@ function handleInput() {
   if (pauseState === 'inv-heal') return;
   // Block input during inventory transitions
   if (pauseState.startsWith('inv-')) return;
+  // Equip slot selection
+  if (pauseState === 'equip') {
+    if (keys['ArrowDown']) { keys['ArrowDown'] = false; eqCursor = (eqCursor + 1) % 6; playSFX(SFX.CURSOR); }
+    if (keys['ArrowUp'])   { keys['ArrowUp'] = false;   eqCursor = (eqCursor + 5) % 6; playSFX(SFX.CURSOR); }
+    if (keys['z'] || keys['Z']) {
+      keys['z'] = false; keys['Z'] = false;
+      if (eqCursor === 5) {
+        // Optimum — auto-equip best gear in every slot
+        const SLOT_DEFS = [
+          { eq: -100, type: 'hand', stat: 'atk' },
+          { eq: -101, type: 'hand', stat: 'atk' },
+          { eq: -102, type: 'armor', subtype: 'helmet', stat: 'def' },
+          { eq: -103, type: 'armor', subtype: 'body',   stat: 'def' },
+          { eq: -104, type: 'armor', subtype: 'arms',   stat: 'def' },
+        ];
+        for (const sd of SLOT_DEFS) {
+          let bestId = 0, bestVal = 0;
+          // Check what's currently equipped
+          const curId = getEquipSlotId(sd.eq);
+          const curItem = ITEMS.get(curId);
+          if (curItem) bestVal = curItem[sd.stat] || 0;
+          bestId = curId;
+          // Search inventory for better
+          for (const [idStr, count] of Object.entries(playerInventory)) {
+            if (count <= 0) continue;
+            const id = Number(idStr);
+            const item = ITEMS.get(id);
+            if (!item) continue;
+            if (sd.type === 'hand' && !isHandEquippable(item)) continue;
+            if (sd.type === 'armor' && (item.type !== 'armor' || item.subtype !== sd.subtype)) continue;
+            const val = item[sd.stat] || 0;
+            if (val > bestVal) { bestVal = val; bestId = id; }
+          }
+          // Equip if different
+          if (bestId !== curId) {
+            if (curId !== 0) addItem(curId, 1);
+            if (bestId !== 0) { setEquipSlotId(sd.eq, bestId); removeItem(bestId); }
+            else setEquipSlotId(sd.eq, 0);
+          }
+        }
+        playerATK = playerStats.str + (ITEMS.get(playerWeaponR)?.atk || 0) + (ITEMS.get(playerWeaponL)?.atk || 0);
+        recalcDEF();
+        if (selectCursor >= 0 && saveSlots[selectCursor]) {
+          saveSlots[selectCursor].inventory = { ...playerInventory };
+          saveSlotsToDB();
+        }
+        playSFX(SFX.CONFIRM);
+      } else {
+        playSFX(SFX.CONFIRM);
+        // Build filtered item list for this slot
+        eqSlotIdx = -100 - eqCursor;
+        const isWeaponSlot = eqSlotIdx >= -101;
+        const slotSubtype = EQUIP_SLOT_SUBTYPE[String(eqSlotIdx)];
+        eqItemList = [];
+        // First entry: "(Remove)" if slot has something equipped
+        const currentId = getEquipSlotId(eqSlotIdx);
+        if (currentId !== 0) eqItemList.push({ id: 0, label: 'remove' });
+        // Add matching items from inventory
+        for (const [idStr, count] of Object.entries(playerInventory)) {
+          if (count <= 0) continue;
+          const id = Number(idStr);
+          const item = ITEMS.get(id);
+          if (!item) continue;
+          if (isWeaponSlot && isHandEquippable(item)) eqItemList.push({ id, count });
+          else if (!isWeaponSlot && item.type === 'armor' && item.subtype === slotSubtype) eqItemList.push({ id, count });
+        }
+        eqItemCursor = 0;
+        pauseState = 'eq-items-in'; pauseTimer = 0;
+      }
+    }
+    if (keys['x'] || keys['X']) {
+      keys['x'] = false; keys['X'] = false;
+      playSFX(SFX.CONFIRM);
+      pauseState = 'eq-slots-out'; pauseTimer = 0;
+    }
+    return;
+  }
+  // Equip item selection
+  if (pauseState === 'eq-item-select') {
+    if (keys['ArrowDown']) { keys['ArrowDown'] = false; if (eqItemCursor < eqItemList.length - 1) { eqItemCursor++; playSFX(SFX.CURSOR); } }
+    if (keys['ArrowUp'])   { keys['ArrowUp'] = false;   if (eqItemCursor > 0) { eqItemCursor--; playSFX(SFX.CURSOR); } }
+    if (keys['z'] || keys['Z']) {
+      keys['z'] = false; keys['Z'] = false;
+      const pick = eqItemList[eqItemCursor];
+      if (pick) {
+        const oldId = getEquipSlotId(eqSlotIdx);
+        if (pick.label === 'remove') {
+          // Unequip
+          setEquipSlotId(eqSlotIdx, 0);
+          if (oldId !== 0) addItem(oldId, 1);
+        } else {
+          // Equip new item
+          setEquipSlotId(eqSlotIdx, pick.id);
+          removeItem(pick.id);
+          if (oldId !== 0) addItem(oldId, 1);
+        }
+        playerATK = playerStats.str + (ITEMS.get(playerWeaponR)?.atk || 0) + (ITEMS.get(playerWeaponL)?.atk || 0);
+        recalcDEF();
+        // Save
+        if (selectCursor >= 0 && saveSlots[selectCursor]) {
+          saveSlots[selectCursor].inventory = { ...playerInventory };
+          saveSlotsToDB();
+        }
+        playSFX(SFX.CONFIRM);
+      }
+      pauseState = 'eq-items-out'; pauseTimer = 0;
+    }
+    if (keys['x'] || keys['X']) {
+      keys['x'] = false; keys['X'] = false;
+      playSFX(SFX.CONFIRM);
+      pauseState = 'eq-items-out'; pauseTimer = 0;
+    }
+    return;
+  }
+  // Block input during equip transitions
+  if (pauseState.startsWith('eq-')) return;
   // Block all input during pause transitions
   if (pauseState !== 'none') return;
 
@@ -3256,11 +3452,19 @@ function handleAction() {
   // Chest — press Z to open
   if (facedTile === 0x7C) {
     mapData.tilemap[facedY * 32 + facedX] = 0x7D;
-    addItem(0xA6, 1);  // Potion
+    // Loot table by dungeon floor
+    const CHEST_LOOT = [
+      [0xA6, 0xA6, 0xA6, 0x62],                   // floor 0: Potions, Leather Cap
+      [0xA6, 0xA6, 0x58, 0x62, 0x1F],              // floor 1: Potions, Leather Shield, Leather Cap, Dagger
+      [0xA6, 0x73, 0x58, 0x8B],                     // floor 2: Potion, Leather Armor, Leather Shield, Bronze Bracers
+      [0xA6, 0xA6, 0x73, 0x8B, 0x24],               // floor 3: Potions, Leather Armor, Bronze Bracers, Longsword
+    ];
+    const lootPool = CHEST_LOOT[dungeonFloor] || [0xA6];
+    const itemId = lootPool[Math.floor(Math.random() * lootPool.length)];
+    addItem(itemId, 1);
     playSFX(SFX.TREASURE);
-    // "Found Potion!" — F=0x8F, o=0xD8, u=0xDE, n=0xD7, d=0xCD, space=0xFF, !=0xC4
-    const itemName = getItemNameClean(0xA6);
-    const found = [0x8F, 0xD8, 0xDE, 0xD7, 0xCD, 0xFF];
+    const itemName = getItemNameClean(itemId);
+    const found = [0x8F, 0xD8, 0xDE, 0xD7, 0xCD, 0xFF]; // "Found "
     const msg = new Uint8Array(found.length + itemName.length + 1);
     msg.set(found, 0);
     msg.set(itemName, found.length);
@@ -5024,12 +5228,16 @@ function updateTitle(dt) {
           playerMP = playerStats.maxMP;
           playerWeaponR = slot.stats.weaponR != null ? slot.stats.weaponR : 0x1E;
           playerWeaponL = slot.stats.weaponL != null ? slot.stats.weaponL : 0x00;
+          playerHead = slot.stats.head || 0x00;
+          playerBody = slot.stats.body || 0x00;
+          playerArms = slot.stats.arms || 0x00;
           playerATK = playerStats.str + (ITEMS.get(playerWeaponR)?.atk || 0) + (ITEMS.get(playerWeaponL)?.atk || 0);
-          playerDEF = playerStats.vit;
+          recalcDEF();
         }
         playerInventory = (slot && slot.inventory) ? { ...slot.inventory } : {};
         playerGil = (slot && slot.gil) || 0;
         loadMapById(114);
+        worldY -= 6 * TILE_SIZE; // spawn 6 tiles north of entrance
         playTrack(TRACKS.TOWN_UR);
         // Delay screen open until HUD border fade-in completes
         transState = 'hud-fade-in';
@@ -5586,6 +5794,23 @@ function updatePauseMenu(dt) {
       if (pauseInvScroll >= entries.length) pauseInvScroll = Math.max(0, entries.length - 1);
       pauseState = 'inventory'; pauseTimer = 0;
     }
+  // Equip transitions (same pattern as inventory)
+  } else if (pauseState === 'eq-text-out') {
+    if (pauseTimer >= (PAUSE_TEXT_STEPS + 1) * PAUSE_TEXT_STEP_MS) { pauseState = 'eq-expand'; pauseTimer = 0; }
+  } else if (pauseState === 'eq-expand') {
+    if (pauseTimer >= PAUSE_EXPAND_MS) { pauseState = 'eq-slots-in'; pauseTimer = 0; }
+  } else if (pauseState === 'eq-slots-in') {
+    if (pauseTimer >= (PAUSE_TEXT_STEPS + 1) * PAUSE_TEXT_STEP_MS) { pauseState = 'equip'; pauseTimer = 0; }
+  } else if (pauseState === 'eq-slots-out') {
+    if (pauseTimer >= (PAUSE_TEXT_STEPS + 1) * PAUSE_TEXT_STEP_MS) { pauseState = 'eq-shrink'; pauseTimer = 0; }
+  } else if (pauseState === 'eq-shrink') {
+    if (pauseTimer >= PAUSE_EXPAND_MS) { pauseState = 'eq-text-in'; pauseTimer = 0; }
+  } else if (pauseState === 'eq-text-in') {
+    if (pauseTimer >= (PAUSE_TEXT_STEPS + 1) * PAUSE_TEXT_STEP_MS) { pauseState = 'open'; pauseTimer = 0; }
+  } else if (pauseState === 'eq-items-in') {
+    if (pauseTimer >= (PAUSE_TEXT_STEPS + 1) * PAUSE_TEXT_STEP_MS) { pauseState = 'eq-item-select'; pauseTimer = 0; }
+  } else if (pauseState === 'eq-items-out') {
+    if (pauseTimer >= (PAUSE_TEXT_STEPS + 1) * PAUSE_TEXT_STEP_MS) { pauseState = 'equip'; pauseTimer = 0; }
   }
 }
 
@@ -5611,11 +5836,38 @@ function updateMsgBox(dt) {
   }
 }
 
+function _wrapMsgBytes(bytes, maxChars) {
+  // Split msg bytes into lines that fit within maxChars
+  // Word-break on 0xFF (space). Each printable byte = 1 char.
+  const lines = [];
+  let lineStart = 0, lastSpace = -1, lineLen = 0;
+  for (let i = 0; i < bytes.length; i++) {
+    const b = bytes[i];
+    if (b === 0x00) break;
+    if (b === 0xFF) lastSpace = i;
+    if (b >= 0x28) lineLen++;
+    if (lineLen > maxChars && lastSpace > lineStart) {
+      lines.push(bytes.slice(lineStart, lastSpace));
+      lineStart = lastSpace + 1;
+      lastSpace = -1;
+      // Recount from lineStart
+      lineLen = 0;
+      for (let j = lineStart; j <= i; j++) { if (bytes[j] >= 0x28) lineLen++; }
+    }
+  }
+  if (lineStart < bytes.length) lines.push(bytes.slice(lineStart));
+  return lines;
+}
+
 function drawMsgBox() {
   if (msgBoxState === 'none' || !msgBoxBytes) return;
 
   const boxW = HUD_VIEW_W - 16;
-  const boxH = 48;
+  const interiorW = boxW - 16; // 8px border each side
+  const maxChars = Math.floor(interiorW / 8);
+  const lines = _wrapMsgBytes(msgBoxBytes, maxChars);
+  const lineH = 12;
+  const boxH = Math.max(48, 24 + lines.length * lineH);
   const vpTop = HUD_VIEW_Y;
   const finalY = vpTop + 8;
   const centerX = HUD_VIEW_X + Math.floor((HUD_VIEW_W - boxW) / 2);
@@ -5638,10 +5890,13 @@ function drawMsgBox() {
 
   if (msgBoxState === 'hold' || msgBoxState === 'slide-out') {
     const fadedPal = [0x02, 0x02, 0x02, 0x30];
-    const tw = measureText(msgBoxBytes);
-    const tx = centerX + Math.floor((boxW - tw) / 2);
-    const ty = boxY + Math.floor((boxH - 8) / 2);
-    drawText(ctx, tx, ty, msgBoxBytes, fadedPal);
+    const textBlockH = lines.length * lineH;
+    const startTY = boxY + Math.floor((boxH - textBlockH) / 2);
+    for (let i = 0; i < lines.length; i++) {
+      const tw = measureText(lines[i]);
+      const tx = centerX + Math.floor((boxW - tw) / 2);
+      drawText(ctx, tx, startTY + i * lineH, lines[i], fadedPal);
+    }
   }
 
   ctx.restore();
@@ -5731,6 +5986,7 @@ function drawPauseMenu() {
   const pw = PAUSE_MENU_W;
   const ph = PAUSE_MENU_H;
   const isInvState = pauseState.startsWith('inv-') || pauseState === 'inventory';
+  const isEqState = pauseState.startsWith('eq-') || pauseState === 'equip';
 
   // Scroll position (only for initial scroll-in/scroll-out)
   let panelY = finalY;
@@ -5749,16 +6005,16 @@ function drawPauseMenu() {
   ctx.clip();
 
   // --- Bordered box ---
-  // During inventory transitions, animate size from pause dims to full viewport
-  if (isInvState) {
+  // During inventory/equip transitions, animate size from pause dims to full viewport
+  if (isInvState || isEqState) {
     let t = 1; // fully expanded
-    if (pauseState === 'inv-expand') {
+    if (pauseState === 'inv-expand' || pauseState === 'eq-expand') {
       t = Math.min(pauseTimer / PAUSE_EXPAND_MS, 1);
-    } else if (pauseState === 'inv-shrink') {
+    } else if (pauseState === 'inv-shrink' || pauseState === 'eq-shrink') {
       t = 1 - Math.min(pauseTimer / PAUSE_EXPAND_MS, 1);
-    } else if (pauseState === 'inv-text-out') {
+    } else if (pauseState === 'inv-text-out' || pauseState === 'eq-text-out') {
       t = 0; // still pause size during text fade out
-    } else if (pauseState === 'inv-text-in') {
+    } else if (pauseState === 'inv-text-in' || pauseState === 'eq-text-in') {
       t = 0; // back to pause size during text fade in
     }
     const bw = Math.round(pw + (HUD_VIEW_W - pw) * t);
@@ -5770,12 +6026,13 @@ function drawPauseMenu() {
 
   // --- Pause menu text (shown during normal states + inv fade transitions) ---
   const showPauseText = pauseState === 'text-in' || pauseState === 'open' || pauseState === 'text-out' ||
-                        pauseState === 'inv-text-out' || pauseState === 'inv-text-in';
+                        pauseState === 'inv-text-out' || pauseState === 'inv-text-in' ||
+                        pauseState === 'eq-text-out' || pauseState === 'eq-text-in';
   if (showPauseText) {
     let fadeStep = 0;
-    if (pauseState === 'text-in' || pauseState === 'inv-text-in') {
+    if (pauseState === 'text-in' || pauseState === 'inv-text-in' || pauseState === 'eq-text-in') {
       fadeStep = PAUSE_TEXT_STEPS - Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
-    } else if (pauseState === 'text-out' || pauseState === 'inv-text-out') {
+    } else if (pauseState === 'text-out' || pauseState === 'inv-text-out' || pauseState === 'eq-text-out') {
       fadeStep = Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
     }
 
@@ -5783,7 +6040,7 @@ function drawPauseMenu() {
     for (let s = 0; s < fadeStep; s++) fadedPal[3] = nesColorFade(fadedPal[3]);
 
     const textX = px + 24;
-    const startY = (isInvState ? finalY : panelY) + 12;
+    const startY = ((isInvState || isEqState) ? finalY : panelY) + 12;
     for (let i = 0; i < PAUSE_ITEMS.length; i++) {
       drawText(ctx, textX, startY + i * 16, PAUSE_ITEMS[i], fadedPal);
     }
@@ -5851,6 +6108,103 @@ function drawPauseMenu() {
           ctx.drawImage(cursorTileCanvas, activeX, iy - 4);
           ctx.globalAlpha = 1;
         }
+      }
+    }
+  }
+
+  // --- Equip slots (shown when expanded) ---
+  const showEqSlots = pauseState === 'eq-slots-in' || pauseState === 'equip' || pauseState === 'eq-slots-out' ||
+    pauseState === 'eq-items-in' || pauseState === 'eq-item-select' || pauseState === 'eq-items-out';
+  if (showEqSlots) {
+    let fadeStep = 0;
+    if (pauseState === 'eq-slots-in') {
+      fadeStep = PAUSE_TEXT_STEPS - Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
+    } else if (pauseState === 'eq-slots-out') {
+      fadeStep = Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
+    }
+    const fadedPal = [0x0F, 0x0F, 0x0F, 0x30];
+    for (let s = 0; s < fadeStep; s++) fadedPal[3] = nesColorFade(fadedPal[3]);
+
+    const EQ_LABELS = [
+      new Uint8Array([0x9B,0xC4,0x91,0xCA,0xD7,0xCD]), // "R.Hand"
+      new Uint8Array([0x95,0xC4,0x91,0xCA,0xD7,0xCD]), // "L.Hand"
+      new Uint8Array([0x91,0xCE,0xCA,0xCD]),             // "Head"
+      new Uint8Array([0x8B,0xD8,0xCD,0xE2]),             // "Body"
+      new Uint8Array([0x8A,0xDB,0xD6,0xDC]),             // "Arms"
+    ];
+    const EQ_IDS = [-100, -101, -102, -103, -104];
+    const eqRowH = 22;
+    const eqStartY = finalY + 12;
+    // Dim slots during item selection (show which slot is being filled)
+    const dimSlots = pauseState === 'eq-items-in' || pauseState === 'eq-item-select' || pauseState === 'eq-items-out';
+    for (let r = 0; r < 5; r++) {
+      const slotId = getEquipSlotId(EQ_IDS[r]);
+      const label = EQ_LABELS[r];
+      const iy = eqStartY + r * eqRowH;
+      // Label on left
+      const labelPal = dimSlots ? [0x0F, 0x0F, 0x0F, 0x00] : fadedPal;
+      const activePal = (dimSlots && r === eqCursor) ? fadedPal : labelPal;
+      drawText(ctx, px + 24, iy, label, activePal);
+      // Equipped item name on right (after label)
+      if (slotId !== 0) {
+        const name = getItemNameClean(slotId);
+        drawText(ctx, px + 24, iy + 9, name, activePal);
+      } else {
+        const empty = new Uint8Array([0xC2,0xC2,0xC2]);
+        drawText(ctx, px + 24, iy + 9, empty, activePal);
+      }
+    }
+    // Optimum button (row 5, after a small gap)
+    const optY = eqStartY + 5 * eqRowH + 4;
+    const optPal = dimSlots ? [0x0F, 0x0F, 0x0F, 0x00] : fadedPal;
+    const optText = new Uint8Array([0x98,0xD9,0xDD,0xD2,0xD6,0xDE,0xD6]); // "Optimum"
+    drawText(ctx, px + 24, optY, optText, optPal);
+    // Cursor on equip slots or optimum (not during item selection)
+    if (cursorTileCanvas && (pauseState === 'equip') && fadeStep === 0) {
+      const curY = eqCursor < 5 ? eqStartY + eqCursor * eqRowH - 4 : optY - 4;
+      ctx.drawImage(cursorTileCanvas, px + 8, curY);
+    }
+  }
+
+  // --- Equip item list (shown during item selection for a slot) ---
+  const showEqItems = pauseState === 'eq-items-in' || pauseState === 'eq-item-select' || pauseState === 'eq-items-out';
+  if (showEqItems) {
+    let fadeStep = 0;
+    if (pauseState === 'eq-items-in') {
+      fadeStep = PAUSE_TEXT_STEPS - Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
+    } else if (pauseState === 'eq-items-out') {
+      fadeStep = Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
+    }
+    const fadedPal = [0x0F, 0x0F, 0x0F, 0x30];
+    for (let s = 0; s < fadeStep; s++) fadedPal[3] = nesColorFade(fadedPal[3]);
+
+    // Draw a blue separator line or just list items in the right portion
+    const listX = px + 24;
+    const listY = finalY + 12 + eqCursor * 22 + 22; // below the selected slot
+    // If not enough room below, draw above
+    const maxBelow = Math.floor((finalY + HUD_VIEW_H - 16 - listY) / 12);
+    const useY = maxBelow >= eqItemList.length ? listY : finalY + 12;
+
+    if (eqItemList.length === 0) {
+      const noItems = new Uint8Array([0xC2,0xC2,0xC2]);
+      drawText(ctx, listX, useY, noItems, fadedPal);
+    } else {
+      for (let i = 0; i < eqItemList.length; i++) {
+        const entry = eqItemList[i];
+        const iy = useY + i * 12;
+        if (iy + 8 > finalY + HUD_VIEW_H - 8) break; // clip
+        if (entry.label === 'remove') {
+          const removeText = new Uint8Array([0x9B,0xCE,0xD6,0xD8,0xDF,0xCE]); // "Remove"
+          drawText(ctx, listX + 16, iy, removeText, fadedPal);
+        } else {
+          const name = getItemNameClean(entry.id);
+          drawText(ctx, listX + 16, iy, name, fadedPal);
+        }
+      }
+      // Cursor
+      if (cursorTileCanvas && pauseState === 'eq-item-select' && fadeStep === 0) {
+        const curY = useY + eqItemCursor * 12 - 4;
+        ctx.drawImage(cursorTileCanvas, listX, curY);
       }
     }
   }
@@ -6226,7 +6580,7 @@ function updateBattle(dt) {
     // First hit: 100ms wind-up (confirm-pause already gave 150ms). Subsequent hits: 50ms (rapid combo)
     const startDelay = currentHitIdx === 0 ? 100 : 50;
     if (battleTimer >= startDelay) {
-      const hw0 = (currentHitIdx % 2 === 0) ? playerWeaponR : playerWeaponL;
+      const hw0 = getHitWeapon(currentHitIdx);
       const isKnife0 = hw0 !== 0 && ITEMS.get(hw0)?.subtype === 'knife';
       playSFX(isKnife0 ? SFX.KNIFE_HIT : SFX.ATTACK_HIT);
       if (isKnife0 && !(hitResults[currentHitIdx] && hitResults[currentHitIdx].crit)) { if (sfxCutTimerId) clearTimeout(sfxCutTimerId); sfxCutTimerId = setTimeout(() => { stopSFX(); sfxCutTimerId = null; }, 133); }
@@ -6239,7 +6593,7 @@ function updateBattle(dt) {
     if (frame !== slashFrame && frame < SLASH_FRAMES) {
       slashFrame = frame;
       // Weapon-aware frame positioning
-      const handWeapon = (currentHitIdx % 2 === 0) ? playerWeaponR : playerWeaponL;
+      const handWeapon = getHitWeapon(currentHitIdx);
       const isKnife = handWeapon !== 0 && ITEMS.get(handWeapon)?.subtype === 'knife';
       if (isKnife) {
         // Diagonal sweep: top-right to bottom-left over 3 frames
@@ -6276,11 +6630,11 @@ function updateBattle(dt) {
         // Route through attack-start for a pause between hits (250ms wind-up)
         currentHitIdx++;
         slashFrame = 0;
-        { const handWeapon = (currentHitIdx % 2 === 0) ? playerWeaponR : playerWeaponL;
+        { const handWeapon = getHitWeapon(currentHitIdx);
           const isKnife = handWeapon !== 0 && ITEMS.get(handWeapon)?.subtype === 'knife';
           slashFrames = isKnife
-            ? ((currentHitIdx % 2 === 0) ? knifeSlashFramesR : knifeSlashFramesL)
-            : ((currentHitIdx % 2 === 0) ? slashFramesR : slashFramesL);
+            ? (isHitRightHand(currentHitIdx) ? knifeSlashFramesR : knifeSlashFramesL)
+            : (isHitRightHand(currentHitIdx) ? slashFramesR : slashFramesL);
           if (isKnife) {
             slashOffX = 8; slashOffY = -8;
           } else {
@@ -6312,11 +6666,11 @@ function updateBattle(dt) {
         // More hits to try, alternate hands
         currentHitIdx++;
         slashFrame = 0;
-        { const handWeapon = (currentHitIdx % 2 === 0) ? playerWeaponR : playerWeaponL;
+        { const handWeapon = getHitWeapon(currentHitIdx);
           const isKnife = handWeapon !== 0 && ITEMS.get(handWeapon)?.subtype === 'knife';
           slashFrames = isKnife
-            ? ((currentHitIdx % 2 === 0) ? knifeSlashFramesR : knifeSlashFramesL)
-            : ((currentHitIdx % 2 === 0) ? slashFramesR : slashFramesL);
+            ? (isHitRightHand(currentHitIdx) ? knifeSlashFramesR : knifeSlashFramesL)
+            : (isHitRightHand(currentHitIdx) ? slashFramesR : slashFramesL);
           if (isKnife) {
             slashOffX = 8; slashOffY = -8;
           } else {
@@ -6375,7 +6729,8 @@ function updateBattle(dt) {
             str: playerStats.str, agi: playerStats.agi, vit: playerStats.vit,
             int: playerStats.int, mnd: playerStats.mnd,
             maxHP: playerStats.maxHP, maxMP: playerStats.maxMP,
-            weaponR: playerWeaponR, weaponL: playerWeaponL
+            weaponR: playerWeaponR, weaponL: playerWeaponL,
+            head: playerHead, body: playerBody, arms: playerArms
           };
           saveSlots[selectCursor].inventory = { ...playerInventory };
           saveSlots[selectCursor].gil = playerGil;
@@ -6574,7 +6929,8 @@ function updateBattle(dt) {
           str: playerStats.str, agi: playerStats.agi, vit: playerStats.vit,
           int: playerStats.int, mnd: playerStats.mnd,
           maxHP: playerStats.maxHP, maxMP: playerStats.maxMP,
-          weaponR: playerWeaponR, weaponL: playerWeaponL
+          weaponR: playerWeaponR, weaponL: playerWeaponL,
+            head: playerHead, body: playerBody, arms: playerArms
         };
         saveSlots[selectCursor].inventory = { ...playerInventory };
       }
@@ -6718,13 +7074,13 @@ function drawBattle() {
   const isNearFatal = playerHP > 0 && playerStats && playerHP <= Math.floor(playerStats.maxHP / 4);
   let portraitSrc = (isNearFatal && battleSpriteKneelCanvas) ? battleSpriteKneelCanvas : battleSpriteCanvas;
   if (isAttackPose) {
-    const handWeapon = (currentHitIdx % 2 === 0) ? playerWeaponR : playerWeaponL;
+    const handWeapon = getHitWeapon(currentHitIdx);
     const isKnife = handWeapon !== 0 && ITEMS.get(handWeapon)?.subtype === 'knife';
     // Body pose is the same for knife and unarmed — only weapon sprite differs
     // Frame 1 (attack-start): arm raised (R=$39, L=$3B/$3C)
     // Frame 2 (player-slash): arm returns to idle (trace confirms body = idle tiles on swing)
     if (battleState === 'attack-start') {
-      if (currentHitIdx % 2 === 0) {
+      if (isHitRightHand(currentHitIdx)) {
         portraitSrc = battleSpriteAttackCanvas || portraitSrc;
       } else {
         portraitSrc = battleSpriteAttackLCanvas || portraitSrc;
@@ -6742,7 +7098,7 @@ function drawBattle() {
     const px = HUD_RIGHT_X + 8 + shakeOff;
     const py = HUD_VIEW_Y + 8;
     if (isAttackPose) {
-      const handWeapon = (currentHitIdx % 2 === 0) ? playerWeaponR : playerWeaponL;
+      const handWeapon = getHitWeapon(currentHitIdx);
       const isKnife = handWeapon !== 0 && ITEMS.get(handWeapon)?.subtype === 'knife';
       // Back swing: blade BEHIND body (NES: weapon spr06-09 behind body spr00-05)
       if (isKnife && battleState === 'attack-start' && battleKnifeBladeCanvas) {
@@ -6779,7 +7135,7 @@ function drawBattle() {
       ctx.drawImage(portraitSrc, px, py);
     }
     if (isAttackPose) {
-      const handWeapon = (currentHitIdx % 2 === 0) ? playerWeaponR : playerWeaponL;
+      const handWeapon = getHitWeapon(currentHitIdx);
       const isKnife = handWeapon !== 0 && ITEMS.get(handWeapon)?.subtype === 'knife';
       if (isKnife && battleState === 'player-slash' && battleKnifeBladeSwungCanvas) {
         // Forward slash: blade to the left of the body (trace: -16, +1 from body top-left)
@@ -6957,6 +7313,10 @@ function drawBattleMenu() {
   }
 
   ctx.save();
+  // Clip to bottom panel interior (full height, inset left/right 8px for HUD border)
+  ctx.beginPath();
+  ctx.rect(8, HUD_BOT_Y, CANVAS_W - 16, HUD_BOT_H);
+  ctx.clip();
   ctx.translate(panelOffX, 0);
 
   // Clear bottom panel interior
@@ -7003,9 +7363,9 @@ function drawBattleMenu() {
   }
 
   // 2×2 menu grid on right side of bottom panel (visible during combat AND victory)
-  const menuX = boxW + 16;
+  const menuX = boxW + 8;
   const colL = menuX;
-  const colR = menuX + 64;
+  const colR = menuX + 56;
   const row0 = HUD_BOT_Y + 16;
   const row1 = HUD_BOT_Y + 32;
   const positions = [[colL, row0], [colR, row0], [colL, row1], [colR, row1]];
@@ -7041,7 +7401,7 @@ function drawBattleMenu() {
   if (isItemShowInv) {
     const ITEM_SLIDE_MS = 200;
     const rowH = 14;
-    const rightAreaW = CANVAS_W - BATTLE_PANEL_W - 16;
+    const rightAreaW = CANVAS_W - BATTLE_PANEL_W - 8;
     const baseX = menuX;
     const invPal = [0x0F, 0x0F, 0x0F, 0x30];
     // NES text fade on entry/exit
@@ -7081,11 +7441,11 @@ function drawBattleMenu() {
         const rName = playerWeaponR !== 0 ? getItemNameClean(playerWeaponR) : new Uint8Array([0xC2,0xC2,0xC2]);
         const rRow = new Uint8Array(RH_LABEL.length + rName.length);
         rRow.set(RH_LABEL, 0); rRow.set(rName, RH_LABEL.length);
-        drawText(ctx, px + 16, topY, rRow, invPal);
+        drawText(ctx, px + 8, topY, rRow, invPal);
         const lName = playerWeaponL !== 0 ? getItemNameClean(playerWeaponL) : new Uint8Array([0xC2,0xC2,0xC2]);
         const lRow = new Uint8Array(LH_LABEL.length + lName.length);
         lRow.set(LH_LABEL, 0); lRow.set(lName, LH_LABEL.length);
-        drawText(ctx, px + 16, topY + rowH + 6, lRow, invPal);
+        drawText(ctx, px + 8, topY + rowH + 6, lRow, invPal);
       } else {
         // Inventory page
         const startIdx = (pg - 1) * INV_SLOTS;
@@ -7101,7 +7461,7 @@ function drawBattleMenu() {
           rowBytes[nameBytes.length] = 0xFF;
           rowBytes[nameBytes.length + 1] = 0xE1;
           for (let d = 0; d < countStr.length; d++) rowBytes[nameBytes.length + 2 + d] = 0x80 + parseInt(countStr[d]);
-          drawText(ctx, px + 16, topY + r * rowH, rowBytes, invPal);
+          drawText(ctx, px + 8, topY + r * rowH, rowBytes, invPal);
         }
       }
     }
@@ -7116,7 +7476,7 @@ function drawBattleMenu() {
     }
 
     if (cursorTileCanvas && battleState === 'item-select') {
-      const curPx = baseX;
+      const curPx = baseX - 8;
       const cursorY = _rowY(itemPage, itemPageCursor) - 4;
 
       // Pinned cursor at held item (if on current page)
