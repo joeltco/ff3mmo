@@ -117,6 +117,10 @@ let battleSpriteKnifeLCanvas = null;   // L-hand knife front swing (single trace
 let battleSpriteKnifeBackCanvas = null;// knife back swing body (dual trace $43/$44/$45/$46)
 let battleKnifeBladeCanvas = null;     // knife blade raised 16×16 (h-flipped, back swing)
 let battleKnifeBladeSwungCanvas = null;// knife blade swung 16×16 (no flip, forward slash)
+let battleDaggerBladeCanvas = null;    // dagger blade raised 16×16 (h-flipped, pal3 $0F/$1B/$2B/$30)
+let battleDaggerBladeSwungCanvas = null;// dagger blade swung 16×16
+let battleSwordBladeCanvas = null;     // sword blade raised 16×16 (h-flipped, back swing)
+let battleSwordBladeSwungCanvas = null;// sword blade swung 16×16 (no flip, forward slash)
 let battleSpriteHitCanvas = null;      // taking damage / recoil
 let battleSpriteDefendCanvas = null;   // defend pose 16×24 (tiles $43-$48)
 let battleSpriteKneelCanvas = null;    // low HP kneel pose 16×16 (PPU $09-$0C)
@@ -304,6 +308,21 @@ function isWeapon(id) {
   const item = ITEMS.get(id);
   return item && item.type === 'weapon';
 }
+function weaponSubtype(id) {
+  if (!id) return null;
+  const item = ITEMS.get(id);
+  return (item && item.type === 'weapon') ? item.subtype : null;
+}
+function isBladedWeapon(id) {
+  const st = weaponSubtype(id);
+  return st === 'knife' || st === 'dagger' || st === 'sword';
+}
+function getSlashFramesForWeapon(id, rightHand) {
+  const st = weaponSubtype(id);
+  if (st === 'knife' || st === 'dagger') return rightHand ? knifeSlashFramesR : knifeSlashFramesL;
+  if (st === 'sword') return rightHand ? swordSlashFramesR : swordSlashFramesL;
+  return rightHand ? slashFramesR : slashFramesL; // punch
+}
 // Get the weapon ID for a given hit index (shields are not weapons)
 function getHitWeapon(hitIdx) {
   const rW = isWeapon(playerWeaponR);
@@ -392,6 +411,8 @@ let slashFrames = null;            // alias — points to R or L based on curren
 let critFlashTimer = -1;           // >=0 while crit backdrop flash is active (1 frame = 16ms)
 let knifeSlashFramesR = null;      // knife diagonal slash frames (right hand)
 let knifeSlashFramesL = null;      // knife diagonal slash frames (left hand)
+let swordSlashFramesR = null;      // sword diagonal slash frames (right hand)
+let swordSlashFramesL = null;      // sword diagonal slash frames (left hand)
 const BATTLE_MISS = new Uint8Array([0x96, 0xD2, 0xDC, 0xDC]); // "Miss" in ROM encoding
 const BATTLE_GAME_OVER = new Uint8Array([0x90,0xCA,0xD6,0xCE,0xFF,0x98,0xDF,0xCE,0xDB]); // "Game Over"
 
@@ -1120,6 +1141,93 @@ function initBattleSprite(romData) {
       bsimg.data[p * 4 + 2] = rgb[2]; bsimg.data[p * 4 + 3] = 255;
     }
     bsctx.putImageData(bsimg, BLADE_POS[t][0], BLADE_POS[t][1]);
+  }
+
+  // --- Dagger blade sprites (same tiles as knife, pal3 $0F/$1B/$2B/$30 from FCEUX) ---
+  const DAGGER_PAL = [0x0F, 0x1B, 0x2B, 0x30];
+  battleDaggerBladeCanvas = document.createElement('canvas');
+  battleDaggerBladeCanvas.width = 16;
+  battleDaggerBladeCanvas.height = 16;
+  const dblctx = battleDaggerBladeCanvas.getContext('2d');
+  for (let t = 0; t < 4; t++) {
+    const bpx = decodeTile(BLADE_TILES[t], 0);
+    const dblimg = dblctx.createImageData(8, 8);
+    for (let p = 0; p < 64; p++) {
+      const ci = bpx[p];
+      if (ci === 0) continue;
+      const rgb = NES_SYSTEM_PALETTE[DAGGER_PAL[ci]] || [252, 252, 252];
+      const row = Math.floor(p / 8), col = p % 8;
+      const di = (row * 8 + (7 - col)) * 4; // h-flip
+      dblimg.data[di] = rgb[0]; dblimg.data[di + 1] = rgb[1];
+      dblimg.data[di + 2] = rgb[2]; dblimg.data[di + 3] = 255;
+    }
+    dblctx.putImageData(dblimg, BLADE_POS[t][0], BLADE_POS[t][1]);
+  }
+  battleDaggerBladeSwungCanvas = document.createElement('canvas');
+  battleDaggerBladeSwungCanvas.width = 16;
+  battleDaggerBladeSwungCanvas.height = 16;
+  const dbsctx = battleDaggerBladeSwungCanvas.getContext('2d');
+  for (let t = 0; t < 4; t++) {
+    const bpx = decodeTile(BLADE_TILES[BLADE_SWUNG_ORDER[t]], 0);
+    const dbsimg = dbsctx.createImageData(8, 8);
+    for (let p = 0; p < 64; p++) {
+      const ci = bpx[p];
+      if (ci === 0) continue;
+      const rgb = NES_SYSTEM_PALETTE[DAGGER_PAL[ci]] || [252, 252, 252];
+      dbsimg.data[p * 4] = rgb[0]; dbsimg.data[p * 4 + 1] = rgb[1];
+      dbsimg.data[p * 4 + 2] = rgb[2]; dbsimg.data[p * 4 + 3] = 255;
+    }
+    dbsctx.putImageData(dbsimg, BLADE_POS[t][0], BLADE_POS[t][1]);
+  }
+
+  // --- Sword blade sprites (from FCEUX PPU capture, pal3 $0F/$00/$32/$30) ---
+  const SWORD_BLADE_PAL = [0x0F, 0x00, 0x32, 0x30];
+  // Grid for raised (h-flipped): $4A(0,0) $49(8,0) / $4C(0,8) $4B(8,8)
+  const SWORD_BLADE_TILES = [
+    new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x80,0xC0, 0x00,0x00,0x00,0x00,0x00,0x00,0x80,0xC0]), // $4A
+    new Uint8Array([0x00,0x70,0x78,0x7C,0x3E,0x1F,0x0D,0x06, 0x00,0x70,0x78,0x7C,0x3E,0x1F,0x0F,0x07]), // $49
+    new Uint8Array([0x60,0xB0,0xD9,0x6D,0x33,0x12,0x0D,0x3B, 0xE0,0xF0,0xF8,0x7C,0x3C,0x1C,0x02,0x00]), // $4C
+    new Uint8Array([0x03,0x01,0x00,0x00,0x00,0x00,0x00,0x00, 0x03,0x01,0x00,0x00,0x00,0x00,0x00,0x00]), // $4B
+  ];
+  const SWORD_BLADE_POS = [[0,0],[8,0],[0,8],[8,8]];
+  const SWORD_BLADE_SWUNG_ORDER = [1, 0, 3, 2];
+
+  // Raised sword (h-flipped, attr $43) — back swing / windup
+  battleSwordBladeCanvas = document.createElement('canvas');
+  battleSwordBladeCanvas.width = 16;
+  battleSwordBladeCanvas.height = 16;
+  const sblctx = battleSwordBladeCanvas.getContext('2d');
+  for (let t = 0; t < 4; t++) {
+    const bpx = decodeTile(SWORD_BLADE_TILES[t], 0);
+    const sblimg = sblctx.createImageData(8, 8);
+    for (let p = 0; p < 64; p++) {
+      const ci = bpx[p];
+      if (ci === 0) continue;
+      const rgb = NES_SYSTEM_PALETTE[SWORD_BLADE_PAL[ci]] || [252, 252, 252];
+      const row = Math.floor(p / 8), col = p % 8;
+      const di = (row * 8 + (7 - col)) * 4; // h-flip
+      sblimg.data[di] = rgb[0]; sblimg.data[di + 1] = rgb[1];
+      sblimg.data[di + 2] = rgb[2]; sblimg.data[di + 3] = 255;
+    }
+    sblctx.putImageData(sblimg, SWORD_BLADE_POS[t][0], SWORD_BLADE_POS[t][1]);
+  }
+
+  // Swung sword (no flip, attr $03) — forward slash / hit
+  battleSwordBladeSwungCanvas = document.createElement('canvas');
+  battleSwordBladeSwungCanvas.width = 16;
+  battleSwordBladeSwungCanvas.height = 16;
+  const sswctx = battleSwordBladeSwungCanvas.getContext('2d');
+  for (let t = 0; t < 4; t++) {
+    const bpx = decodeTile(SWORD_BLADE_TILES[SWORD_BLADE_SWUNG_ORDER[t]], 0);
+    const sswimg = sswctx.createImageData(8, 8);
+    for (let p = 0; p < 64; p++) {
+      const ci = bpx[p];
+      if (ci === 0) continue;
+      const rgb = NES_SYSTEM_PALETTE[SWORD_BLADE_PAL[ci]] || [252, 252, 252];
+      sswimg.data[p * 4] = rgb[0]; sswimg.data[p * 4 + 1] = rgb[1];
+      sswimg.data[p * 4 + 2] = rgb[2]; sswimg.data[p * 4 + 3] = 255;
+    }
+    sswctx.putImageData(sswimg, SWORD_BLADE_POS[t][0], SWORD_BLADE_POS[t][1]);
   }
 
   // Victory pose: sprite frame 4 in job block (tiles 24-27), read from ROM like idle
@@ -2456,6 +2564,7 @@ export async function loadROM(arrayBuffer) {
   initGoblinSprite(romRaw);
   initSlashSprites();
   initKnifeSlashSprites();
+  initSwordSlashSprites();
   initPlayerStats(romRaw);
   initExpTable(romRaw);
   initMoogleSprite(romRaw);
@@ -2864,20 +2973,15 @@ function handleInput() {
         const weaponHandR = isWeapon(playerWeaponR);
         const weaponHandL = isWeapon(playerWeaponL);
         const firstHandR = weaponHandR || !weaponHandL; // prefer R, fallback if neither
-        const rIsKnife1st = firstHandR
-          ? (playerWeaponR !== 0 && ITEMS.get(playerWeaponR)?.subtype === 'knife')
-          : (playerWeaponL !== 0 && ITEMS.get(playerWeaponL)?.subtype === 'knife');
-        const pendingSlashFrames = firstHandR
-          ? (rIsKnife1st ? knifeSlashFramesR : slashFramesR)
-          : (rIsKnife1st ? knifeSlashFramesL : slashFramesL);
+        const firstWpnId = firstHandR ? playerWeaponR : playerWeaponL;
+        const pendingSlashFrames = getSlashFramesForWeapon(firstWpnId, firstHandR);
         // Base position = target center
         const centerX = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2);
         const centerY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
-        // Weapon-aware initial offset: knife = diagonal sweep, unarmed = random scatter
+        // Weapon-aware initial offset: bladed = diagonal sweep, unarmed = random scatter
         const firstWeapon0 = getHitWeapon(0);
-        const rIsKnife0 = firstWeapon0 !== 0 && ITEMS.get(firstWeapon0)?.subtype === 'knife';
         let pendingOffX, pendingOffY;
-        if (rIsKnife0) {
+        if (isBladedWeapon(firstWeapon0)) {
           pendingOffX = 8; pendingOffY = -8; // diagonal sweep starts top-right
         } else {
           pendingOffX = Math.floor(Math.random() * 40) - 20;
@@ -6320,6 +6424,54 @@ function initKnifeSlashSprites() {
   knifeSlashFramesL = frames;
 }
 
+function initSwordSlashSprites() {
+  // Sword slash effect from FCEUX PPU capture — tiles $4D/$4E/$4F
+  // 3-frame diagonal sweep using actual NES tile data, pal3 $0F/$00/$32/$30
+  const SWORD_SLASH_PAL = [0x0F, 0x00, 0x32, 0x30];
+  const SLASH_4D = new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x03, 0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x03]);
+  const SLASH_4E = new Uint8Array([0x00,0x04,0x00,0x18,0x30,0x60,0xC0,0x80, 0x02,0x10,0x28,0x00,0x60,0xC0,0x80,0x00]);
+  const SLASH_4F = new Uint8Array([0x07,0x0E,0x1C,0x38,0x70,0xE0,0xC0,0x80, 0x07,0x0E,0x1C,0x38,0x70,0xE0,0xC0,0x80]);
+
+  // Frame 0: top-right (tiles $4D at TL, $4E at TR)
+  // Frame 1: middle (tiles $4D at TL, $4F at TR — or just $4F full)
+  // Frame 2: bottom-left ($4F trailing)
+  // Build 3 × 16×16 canvases from tile pairs
+  const tilesets = [
+    [SLASH_4D, SLASH_4E],  // frame 0: start
+    [SLASH_4D, SLASH_4F],  // frame 1: middle
+    [SLASH_4E, SLASH_4F],  // frame 2: end
+  ];
+  const frames = [];
+  for (let f = 0; f < 3; f++) {
+    const c = document.createElement('canvas');
+    c.width = 16; c.height = 16;
+    const ctx = c.getContext('2d');
+    const img = ctx.createImageData(16, 16);
+    const tiles = tilesets[f];
+    for (let t = 0; t < 2; t++) {
+      const d = tiles[t];
+      const ox = t * 8;
+      for (let row = 0; row < 8; row++) {
+        const lo = d[row], hi = d[row + 8];
+        for (let bit = 7; bit >= 0; bit--) {
+          const val = ((lo >> bit) & 1) | (((hi >> bit) & 1) << 1);
+          if (val === 0) continue;
+          const rgb = NES_SYSTEM_PALETTE[SWORD_SLASH_PAL[val]] || [252, 252, 252];
+          const px = ox + (7 - bit);
+          const py = row;
+          const di = (py * 16 + px) * 4;
+          img.data[di] = rgb[0]; img.data[di+1] = rgb[1];
+          img.data[di+2] = rgb[2]; img.data[di+3] = 255;
+        }
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    frames.push(c);
+  }
+  swordSlashFramesR = frames;
+  swordSlashFramesL = frames;
+}
+
 // --- Battle System ---
 
 function calcDamage(atk, def) {
@@ -6581,9 +6733,9 @@ function updateBattle(dt) {
     const startDelay = currentHitIdx === 0 ? 100 : 50;
     if (battleTimer >= startDelay) {
       const hw0 = getHitWeapon(currentHitIdx);
-      const isKnife0 = hw0 !== 0 && ITEMS.get(hw0)?.subtype === 'knife';
-      playSFX(isKnife0 ? SFX.KNIFE_HIT : SFX.ATTACK_HIT);
-      if (isKnife0 && !(hitResults[currentHitIdx] && hitResults[currentHitIdx].crit)) { if (sfxCutTimerId) clearTimeout(sfxCutTimerId); sfxCutTimerId = setTimeout(() => { stopSFX(); sfxCutTimerId = null; }, 133); }
+      const isBladed0 = isBladedWeapon(hw0);
+      playSFX(isBladed0 ? SFX.KNIFE_HIT : SFX.ATTACK_HIT);
+      if (isBladed0 && !(hitResults[currentHitIdx] && hitResults[currentHitIdx].crit)) { if (sfxCutTimerId) clearTimeout(sfxCutTimerId); sfxCutTimerId = setTimeout(() => { stopSFX(); sfxCutTimerId = null; }, 133); }
       battleState = 'player-slash';
       battleTimer = 0;
     }
@@ -6594,8 +6746,7 @@ function updateBattle(dt) {
       slashFrame = frame;
       // Weapon-aware frame positioning
       const handWeapon = getHitWeapon(currentHitIdx);
-      const isKnife = handWeapon !== 0 && ITEMS.get(handWeapon)?.subtype === 'knife';
-      if (isKnife) {
+      if (isBladedWeapon(handWeapon)) {
         // Diagonal sweep: top-right to bottom-left over 3 frames
         slashOffX = 8 - slashFrame * 8;   // +8, 0, -8
         slashOffY = -8 + slashFrame * 8;  // -8, 0, +8
@@ -6631,11 +6782,8 @@ function updateBattle(dt) {
         currentHitIdx++;
         slashFrame = 0;
         { const handWeapon = getHitWeapon(currentHitIdx);
-          const isKnife = handWeapon !== 0 && ITEMS.get(handWeapon)?.subtype === 'knife';
-          slashFrames = isKnife
-            ? (isHitRightHand(currentHitIdx) ? knifeSlashFramesR : knifeSlashFramesL)
-            : (isHitRightHand(currentHitIdx) ? slashFramesR : slashFramesL);
-          if (isKnife) {
+          slashFrames = getSlashFramesForWeapon(handWeapon, isHitRightHand(currentHitIdx));
+          if (isBladedWeapon(handWeapon)) {
             slashOffX = 8; slashOffY = -8;
           } else {
             slashOffX = Math.floor(Math.random() * 40) - 20;
@@ -6667,11 +6815,8 @@ function updateBattle(dt) {
         currentHitIdx++;
         slashFrame = 0;
         { const handWeapon = getHitWeapon(currentHitIdx);
-          const isKnife = handWeapon !== 0 && ITEMS.get(handWeapon)?.subtype === 'knife';
-          slashFrames = isKnife
-            ? (isHitRightHand(currentHitIdx) ? knifeSlashFramesR : knifeSlashFramesL)
-            : (isHitRightHand(currentHitIdx) ? slashFramesR : slashFramesL);
-          if (isKnife) {
+          slashFrames = getSlashFramesForWeapon(handWeapon, isHitRightHand(currentHitIdx));
+          if (isBladedWeapon(handWeapon)) {
             slashOffX = 8; slashOffY = -8;
           } else {
             slashOffX = Math.floor(Math.random() * 40) - 20;
@@ -7074,11 +7219,8 @@ function drawBattle() {
   const isNearFatal = playerHP > 0 && playerStats && playerHP <= Math.floor(playerStats.maxHP / 4);
   let portraitSrc = (isNearFatal && battleSpriteKneelCanvas) ? battleSpriteKneelCanvas : battleSpriteCanvas;
   if (isAttackPose) {
-    const handWeapon = getHitWeapon(currentHitIdx);
-    const isKnife = handWeapon !== 0 && ITEMS.get(handWeapon)?.subtype === 'knife';
-    // Body pose is the same for knife and unarmed — only weapon sprite differs
-    // Frame 1 (attack-start): arm raised (R=$39, L=$3B/$3C)
-    // Frame 2 (player-slash): arm returns to idle (trace confirms body = idle tiles on swing)
+    // Frame 1 (attack-start): arm raised (R=$39, L=$3B/$3C) — same for all weapons
+    // Frame 2 (player-slash): body returns to idle
     if (battleState === 'attack-start') {
       if (isHitRightHand(currentHitIdx)) {
         portraitSrc = battleSpriteAttackCanvas || portraitSrc;
@@ -7099,10 +7241,16 @@ function drawBattle() {
     const py = HUD_VIEW_Y + 8;
     if (isAttackPose) {
       const handWeapon = getHitWeapon(currentHitIdx);
-      const isKnife = handWeapon !== 0 && ITEMS.get(handWeapon)?.subtype === 'knife';
+      const wpnSt = weaponSubtype(handWeapon);
       // Back swing: blade BEHIND body (NES: weapon spr06-09 behind body spr00-05)
-      if (isKnife && battleState === 'attack-start' && battleKnifeBladeCanvas) {
-        ctx.drawImage(battleKnifeBladeCanvas, px + 8, py - 7);
+      if (battleState === 'attack-start') {
+        if (wpnSt === 'knife' && battleKnifeBladeCanvas) {
+          ctx.drawImage(battleKnifeBladeCanvas, px + 8, py - 7);
+        } else if (wpnSt === 'dagger' && battleDaggerBladeCanvas) {
+          ctx.drawImage(battleDaggerBladeCanvas, px + 8, py - 7);
+        } else if (wpnSt === 'sword' && battleSwordBladeCanvas) {
+          ctx.drawImage(battleSwordBladeCanvas, px + 8, py - 7);
+        }
       }
     }
     if (isRunPose) {
@@ -7136,12 +7284,17 @@ function drawBattle() {
     }
     if (isAttackPose) {
       const handWeapon = getHitWeapon(currentHitIdx);
-      const isKnife = handWeapon !== 0 && ITEMS.get(handWeapon)?.subtype === 'knife';
-      if (isKnife && battleState === 'player-slash' && battleKnifeBladeSwungCanvas) {
-        // Forward slash: blade to the left of the body (trace: -16, +1 from body top-left)
-        ctx.drawImage(battleKnifeBladeSwungCanvas, px - 16, py + 1);
-      } else if (!isKnife && handWeapon === 0 && battleFistCanvas) {
-        ctx.drawImage(battleFistCanvas, px - 4, py + 10);
+      const wpnSt = weaponSubtype(handWeapon);
+      if (battleState === 'player-slash') {
+        if (wpnSt === 'knife' && battleKnifeBladeSwungCanvas) {
+          ctx.drawImage(battleKnifeBladeSwungCanvas, px - 16, py + 1);
+        } else if (wpnSt === 'dagger' && battleDaggerBladeSwungCanvas) {
+          ctx.drawImage(battleDaggerBladeSwungCanvas, px - 16, py + 1);
+        } else if (wpnSt === 'sword' && battleSwordBladeSwungCanvas) {
+          ctx.drawImage(battleSwordBladeSwungCanvas, px - 16, py + 1);
+        } else if (!wpnSt && handWeapon === 0 && battleFistCanvas) {
+          ctx.drawImage(battleFistCanvas, px - 4, py + 10);
+        }
       }
     }
     // Defend sparkle — 4 corners cycling $49→$4A→$4B→$4C during defend-anim

@@ -19,7 +19,7 @@ const CONSUMABLES = [
 // --- Weapons ---
 const WEAPONS = [
   [0x1E, { type: 'weapon', subtype: 'knife',    atk: 6,  hit: 85, price: 20 }],  // Knife
-  [0x1F, { type: 'weapon', subtype: 'knife',    atk: 8,  hit: 85, price: 60 }],  // Dagger
+  [0x1F, { type: 'weapon', subtype: 'dagger',   atk: 8,  hit: 85, price: 60 }],  // Dagger
   [0x24, { type: 'weapon', subtype: 'sword',    atk: 10, hit: 80, price: 100 }], // Longsword
   [0x0E, { type: 'weapon', subtype: 'staff',    atk: 3,  hit: 50, price: 40 }],  // Staff
   [0x06, { type: 'weapon', subtype: 'nunchaku', atk: 12, hit: 70, price: 30 }],  // Nunchuck
