@@ -13,7 +13,7 @@ import { initMusic, playTrack, stopMusic, playSFX, stopSFX, TRACKS, SFX,
          pauseMusic, resumeMusic } from './music.js';
 import { applyIPS } from './ips-patcher.js';
 import { initTextDecoder, getItemNameClean } from './text-decoder.js';
-import { initFont, drawText, measureText, TEXT_WHITE, TEXT_YELLOW } from './font-renderer.js';
+import { initFont, drawText, measureText, TEXT_WHITE, TEXT_GREY, TEXT_YELLOW } from './font-renderer.js';
 import { MONSTERS } from './data/monsters.js';
 import { ITEMS } from './data/items.js';
 
@@ -529,6 +529,78 @@ const PAUSE_ITEMS = [
   new Uint8Array([0x9C,0xCA,0xDF,0xCE]),             // "Save"
 ];
 
+// --- Fake players (MMO roster) ---
+// All locations players can be in
+const LOCATIONS = ['world', 'ur', 'cave-0', 'cave-1', 'cave-2', 'cave-3', 'crystal'];
+// Full player pool — each has a current location, moves around over time
+const PLAYER_POOL = [
+  { name: 'Zephyr',  level: 7,  palIdx: 1, camper: false, loc: 'ur' },
+  { name: 'Mira',    level: 4,  palIdx: 2, camper: false, loc: 'world' },
+  { name: 'Aldric',  level: 12, palIdx: 3, camper: true,  loc: 'ur' },
+  { name: 'Suki',    level: 3,  palIdx: 4, camper: false, loc: 'cave-0' },
+  { name: 'Fenris',  level: 9,  palIdx: 5, camper: false, loc: 'cave-1' },
+  { name: 'Lenna',   level: 6,  palIdx: 6, camper: true,  loc: 'ur' },
+  { name: 'Grok',    level: 15, palIdx: 7, camper: false, loc: 'cave-3' },
+  { name: 'Ivy',     level: 2,  palIdx: 0, camper: false, loc: 'ur' },
+  { name: 'Rook',    level: 11, palIdx: 3, camper: false, loc: 'cave-2' },
+  { name: 'Tora',    level: 5,  palIdx: 5, camper: false, loc: 'world' },
+  { name: 'Blix',    level: 8,  palIdx: 7, camper: false, loc: 'cave-0' },
+  { name: 'Cassia',  level: 10, palIdx: 6, camper: true,  loc: 'cave-1' },
+  { name: 'Duran',   level: 14, palIdx: 1, camper: false, loc: 'crystal' },
+  { name: 'Nyx',     level: 1,  palIdx: 4, camper: false, loc: 'ur' },
+  { name: 'Orin',    level: 6,  palIdx: 0, camper: false, loc: 'world' },
+  { name: 'Pip',     level: 3,  palIdx: 2, camper: false, loc: 'cave-0' },
+  { name: 'Vex',     level: 13, palIdx: 7, camper: false, loc: 'cave-2' },
+  { name: 'Wren',    level: 7,  palIdx: 5, camper: false, loc: 'world' },
+];
+
+function getPlayerLocation() {
+  if (onWorldMap) return 'world';
+  if (currentMapId === 114) return 'ur';
+  if (currentMapId === 1004) return 'crystal';
+  if (currentMapId >= 1000 && currentMapId < 1004) return 'cave-' + (currentMapId - 1000);
+  return 'ur'; // fallback
+}
+
+function getRosterPlayers() {
+  const loc = getPlayerLocation();
+  return PLAYER_POOL.filter(p => p.loc === loc);
+}
+// Palette variants — only color 3 changes (original $16 = red outfit)
+// Colors 0=$0F, 1=$36 (skin), 2=$30 (white) stay the same
+const PLAYER_PALETTES = [
+  [0x0F, 0x36, 0x30, 0x16], // original red
+  [0x0F, 0x36, 0x30, 0x12], // blue
+  [0x0F, 0x36, 0x30, 0x1A], // green
+  [0x0F, 0x36, 0x30, 0x14], // purple
+  [0x0F, 0x36, 0x30, 0x18], // yellow
+  [0x0F, 0x36, 0x30, 0x11], // cyan
+  [0x0F, 0x36, 0x30, 0x17], // orange
+  [0x0F, 0x36, 0x30, 0x15], // pink
+];
+let fakePlayerPortraits = [];   // HTMLCanvasElement[palIdx][fadeStep]
+let rosterTimer = 0;             // ms until next movement event
+const ROSTER_FADE_STEPS = 4;
+const ROSTER_FADE_STEP_MS = 100;
+let rosterFadeMap = {};          // {playerName: fadeStep} — 0=visible, 4=black
+let rosterFadeTimers = {};       // {playerName: ms since last step}
+let rosterFadeDir = {};          // {playerName: 'in'|'out'}
+let rosterSlideY = {};           // {playerName: px offset} — animates toward 0
+let rosterPrevLoc = null;        // last known player location
+const ROSTER_SLIDE_SPEED = 0.15; // px per ms
+let rosterBattleFade = 0;        // 0=visible, ROSTER_FADE_STEPS=black
+let rosterBattleFadeTimer = 0;
+let rosterBattleFading = 'none'; // 'none'|'out'|'in'
+let rosterState = 'none';       // 'none'|'browse'|'menu-in'|'menu'|'menu-out'
+let rosterCursor = 0;           // index into getRosterVisible()
+let rosterScroll = 0;           // scroll offset
+let rosterMenuCursor = 0;       // cursor in context menu
+let rosterMenuTimer = 0;
+const ROSTER_MENU_ITEMS = ['Party', 'Duel', 'Trade', 'Message', 'Inspect'];
+const ROSTER_ROW_H = 20;        // pixels per roster row
+const ROSTER_VISIBLE = 4;       // max visible rows in panel
+const ROSTER_TRI_H = 8;         // height reserved for scroll triangles
+
 // Chest message box state (same style as roar box)
 // Universal message box — slide-in, instant text, Z dismiss, slide-out
 let msgBoxState = 'none';      // 'slide-in'|'hold'|'slide-out'|'none'
@@ -663,7 +735,7 @@ export function init() {
       }
       return; // block all other key handling (Z, X, arrows disabled)
     }
-    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'z', 'Z', 'x', 'X', 'Enter'].includes(e.key)) {
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'z', 'Z', 'x', 'X', 'Enter', 's', 'S'].includes(e.key)) {
       e.preventDefault();
       keys[e.key] = true;
     }
@@ -870,6 +942,49 @@ function initHUD(romData) {
   titleHudFadeCanvases = buildFadedHUDs(null, [
     [HUD_VIEW_X, HUD_VIEW_Y, CANVAS_W, HUD_VIEW_H, false],
   ]);
+}
+
+function _renderPortrait(tiles, layout, palette) {
+  const c = document.createElement('canvas');
+  c.width = 16; c.height = 16;
+  const pctx = c.getContext('2d');
+  for (let i = 0; i < 4; i++) {
+    const img = pctx.createImageData(8, 8);
+    const px = tiles[i];
+    for (let p = 0; p < 64; p++) {
+      const ci = px[p];
+      if (ci === 0) { img.data[p * 4 + 3] = 0; }
+      else {
+        const rgb = NES_SYSTEM_PALETTE[palette[ci]] || [0, 0, 0];
+        img.data[p * 4] = rgb[0]; img.data[p * 4 + 1] = rgb[1];
+        img.data[p * 4 + 2] = rgb[2]; img.data[p * 4 + 3] = 255;
+      }
+    }
+    pctx.putImageData(img, layout[i][0], layout[i][1]);
+  }
+  return c;
+}
+
+function initFakePlayerPortraits(romData) {
+  const tiles = [];
+  for (let i = 0; i < 4; i++) {
+    tiles.push(decodeTile(romData, BATTLE_SPRITE_ROM + i * 16));
+  }
+  const layout = [[0,0], [8,0], [0,8], [8,8]];
+  // fakePlayerPortraits[palIdx][fadeStep] — fadeStep 0=full, 1-4=faded
+  fakePlayerPortraits = PLAYER_PALETTES.map(basePal => {
+    const frames = [];
+    for (let step = 0; step <= ROSTER_FADE_STEPS; step++) {
+      const pal = basePal.slice();
+      for (let s = 0; s < step; s++) {
+        pal[1] = nesColorFade(pal[1]);
+        pal[2] = nesColorFade(pal[2]);
+        pal[3] = nesColorFade(pal[3]);
+      }
+      frames.push(_renderPortrait(tiles, layout, pal));
+    }
+    return frames;
+  });
 }
 
 function initCursorTile(romData) {
@@ -2560,6 +2675,8 @@ export async function loadROM(arrayBuffer) {
   initHUD(romRaw);
   initCursorTile(romRaw);
   initBattleSprite(romRaw);
+  initFakePlayerPortraits(romRaw);
+  initRoster();
   initLandTurtleBattle(romRaw);
   initGoblinSprite(romRaw);
   initSlashSprites();
@@ -3243,6 +3360,92 @@ function handleInput() {
     }
     return;
   }
+
+  // S — toggle roster browse / handle roster input
+  if (keys['s'] || keys['S']) {
+    keys['s'] = false; keys['S'] = false;
+    if (rosterState === 'none' && battleState === 'none' && pauseState === 'none' && transState === 'none' && !shakeActive && !starEffect && !moving && msgBoxState === 'none') {
+      rosterState = 'browse';
+      rosterCursor = 0;
+      rosterScroll = 0;
+      playSFX(SFX.CONFIRM);
+    } else if (rosterState === 'browse') {
+      rosterState = 'none';
+      playSFX(SFX.CONFIRM);
+    }
+    return;
+  }
+  // Roster browse controls
+  if (rosterState === 'browse') {
+    const rp = getRosterVisible();
+    if (keys['ArrowDown']) {
+      keys['ArrowDown'] = false;
+      if (rosterCursor < rp.length - 1) {
+        rosterCursor++;
+        if (rosterCursor - rosterScroll >= ROSTER_VISIBLE) rosterScroll++;
+        playSFX(SFX.CURSOR);
+      }
+    }
+    if (keys['ArrowUp']) {
+      keys['ArrowUp'] = false;
+      if (rosterCursor > 0) {
+        rosterCursor--;
+        if (rosterCursor < rosterScroll) rosterScroll--;
+        playSFX(SFX.CURSOR);
+      }
+    }
+    if (keys['z'] || keys['Z']) {
+      keys['z'] = false; keys['Z'] = false;
+      rosterState = 'menu-in';
+      rosterMenuTimer = 0;
+      rosterMenuCursor = 0;
+      playSFX(SFX.CONFIRM);
+    }
+    if (keys['x'] || keys['X']) {
+      keys['x'] = false; keys['X'] = false;
+      rosterState = 'none';
+      playSFX(SFX.CONFIRM);
+    }
+    return;
+  }
+  // Roster context menu controls
+  if (rosterState === 'menu') {
+    if (keys['ArrowDown']) {
+      keys['ArrowDown'] = false;
+      rosterMenuCursor = (rosterMenuCursor + 1) % ROSTER_MENU_ITEMS.length;
+      playSFX(SFX.CURSOR);
+    }
+    if (keys['ArrowUp']) {
+      keys['ArrowUp'] = false;
+      rosterMenuCursor = (rosterMenuCursor + ROSTER_MENU_ITEMS.length - 1) % ROSTER_MENU_ITEMS.length;
+      playSFX(SFX.CURSOR);
+    }
+    if (keys['z'] || keys['Z']) {
+      keys['z'] = false; keys['Z'] = false;
+      // TODO: handle menu action (Party/Duel/Trade/Message/Inspect)
+      const action = ROSTER_MENU_ITEMS[rosterMenuCursor];
+      const target = getRosterVisible()[rosterCursor];
+      const actionBytes = _nameToBytes(action);
+      const nameBytes = _nameToBytes(target.name);
+      const sep = new Uint8Array([0xFF]);
+      const msg = new Uint8Array(actionBytes.length + 1 + nameBytes.length);
+      msg.set(actionBytes, 0);
+      msg.set(sep, actionBytes.length);
+      msg.set(nameBytes, actionBytes.length + 1);
+      showMsgBox(msg);
+      rosterState = 'menu-out';
+      rosterMenuTimer = 0;
+      playSFX(SFX.CONFIRM);
+    }
+    if (keys['x'] || keys['X']) {
+      keys['x'] = false; keys['X'] = false;
+      rosterState = 'menu-out';
+      rosterMenuTimer = 0;
+      playSFX(SFX.CONFIRM);
+    }
+    return;
+  }
+  if (rosterState === 'menu-in' || rosterState === 'menu-out') return; // block input during slide
 
   // Enter — open pause menu
   if (keys['Enter']) {
@@ -5078,6 +5281,338 @@ function drawHUD() {
     if (moogleFadeFrames) {
       const mFrame = Math.floor(transTimer / 400) & 1;
       ctx.drawImage(moogleFadeFrames[fadeLevel][mFrame], moogleX, moogleY);
+    }
+  }
+}
+
+// ── Player Roster (right main panel) ──
+
+function _nameToBytes(name) {
+  const bytes = [];
+  for (let i = 0; i < name.length; i++) {
+    const ch = name.charCodeAt(i);
+    if (ch >= 65 && ch <= 90) bytes.push(0x8A + (ch - 65));       // A-Z
+    else if (ch >= 97 && ch <= 122) bytes.push(0xCA + (ch - 97)); // a-z
+    else if (ch >= 48 && ch <= 57) bytes.push(0x80 + (ch - 48));  // 0-9
+    else bytes.push(0xFF); // space
+  }
+  return new Uint8Array(bytes);
+}
+
+function _rosterTransFade() {
+  // Compute global fade level from screen transition (0=visible, 4=black)
+  const FADE_STEP_MS = WIPE_DURATION / ROSTER_FADE_STEPS;
+  if (transState === 'closing') return Math.min(Math.floor(transTimer / FADE_STEP_MS), ROSTER_FADE_STEPS);
+  if (transState === 'hold' || transState === 'trap-falling') return ROSTER_FADE_STEPS;
+  if (transState === 'opening') return Math.max(ROSTER_FADE_STEPS - Math.floor(transTimer / FADE_STEP_MS), 0);
+  // Sync with HUD info fade-in on game start
+  const infoFade = HUD_INFO_FADE_STEPS - Math.min(Math.floor(hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
+  if (infoFade > 0) return infoFade;
+  return 0;
+}
+
+function drawRoster() {
+  if (titleState !== 'done') return;
+  if (transState === 'loading' || transState === 'hud-fade-in') return;
+  if (rosterBattleFade >= ROSTER_FADE_STEPS && battleState !== 'none') return;
+
+  const rpX = HUD_RIGHT_X + 8;        // interior x (after border)
+  const rpY = HUD_VIEW_Y + 32 + 8;    // interior y (below portrait/HP panels + border)
+  const rpW = HUD_RIGHT_W - 16;       // interior width (96)
+  const rpH = HUD_VIEW_H - 32 - 16;   // interior height (96)
+
+  const players = getRosterVisible();
+  const maxVisible = Math.min(ROSTER_VISIBLE, players.length);
+  const maxScroll = Math.max(0, players.length - maxVisible);
+  if (rosterScroll > maxScroll) rosterScroll = maxScroll;
+
+  const canScrollUp = rosterScroll > 0;
+  const canScrollDown = rosterScroll < maxScroll;
+  const listY = rpY + ROSTER_TRI_H;
+
+  // Clip to right main panel interior
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(rpX, rpY, rpW, rpH);
+  ctx.clip();
+
+  for (let i = 0; i < maxVisible; i++) {
+    const idx = rosterScroll + i;
+    if (idx >= players.length) break;
+    const p = players[idx];
+    const slideOff = rosterSlideY[p.name] || 0;
+    const rowY = listY + i * ROSTER_ROW_H + slideOff;
+    const playerFade = rosterFadeMap[p.name] || 0;
+    const transFade = _rosterTransFade();
+    const fadeStep = Math.min(Math.max(playerFade, transFade, rosterBattleFade), ROSTER_FADE_STEPS);
+
+    // Portrait (faded)
+    const portraits = fakePlayerPortraits[p.palIdx];
+    if (portraits) ctx.drawImage(portraits[fadeStep], rpX, rowY + 2);
+
+    // Name (NES faded text)
+    const namePal = [0x0F, 0x0F, 0x0F, 0x30];
+    for (let s = 0; s < fadeStep; s++) namePal[3] = nesColorFade(namePal[3]);
+    const nameBytes = _nameToBytes(p.name);
+    drawText(ctx, rpX + 18, rowY + 1, nameBytes, namePal);
+
+    // Level (NES faded)
+    const lvPal = [0x0F, 0x0F, 0x0F, 0x10];
+    for (let s = 0; s < fadeStep; s++) lvPal[3] = nesColorFade(lvPal[3]);
+    const lvLabel = _nameToBytes('Lv' + String(p.level));
+    drawText(ctx, rpX + 18, rowY + 9, lvLabel, lvPal);
+  }
+
+  // Scroll triangles (centered in panel width)
+  const triCX = rpX + Math.floor(rpW / 2);
+  const triCol = NES_SYSTEM_PALETTE[0x10] || [128, 128, 128];
+  ctx.fillStyle = `rgb(${triCol[0]},${triCol[1]},${triCol[2]})`;
+  if (canScrollUp) {
+    const ty = rpY + 2;
+    ctx.beginPath();
+    ctx.moveTo(triCX - 4, ty + 5);
+    ctx.lineTo(triCX, ty);
+    ctx.lineTo(triCX + 4, ty + 5);
+    ctx.fill();
+  }
+  if (canScrollDown) {
+    const ty = rpY + rpH - 7;
+    ctx.beginPath();
+    ctx.moveTo(triCX - 4, ty);
+    ctx.lineTo(triCX, ty + 5);
+    ctx.lineTo(triCX + 4, ty);
+    ctx.fill();
+  }
+
+  ctx.restore();
+
+  // Cursor (drawn OUTSIDE clip so it can overlap border)
+  if (rosterState === 'browse' || rosterState === 'menu' || rosterState === 'menu-in' || rosterState === 'menu-out') {
+    const visIdx = rosterCursor - rosterScroll;
+    const curTarget = players[rosterCursor];
+    const curSlide = curTarget ? (rosterSlideY[curTarget.name] || 0) : 0;
+    const curY = listY + visIdx * ROSTER_ROW_H + curSlide;
+    if (cursorTileCanvas) {
+      ctx.drawImage(cursorTileCanvas, rpX - 14, curY);
+    }
+  }
+}
+
+function drawRosterMenu() {
+  if (rosterState !== 'menu-in' && rosterState !== 'menu' && rosterState !== 'menu-out') return;
+
+  // Blue bordered box slides in from right edge of viewport
+  const menuW = 80;
+  const menuH = 8 + ROSTER_MENU_ITEMS.length * 14 + 8;
+  const finalX = HUD_VIEW_X + HUD_VIEW_W - menuW - 8;
+  const menuY = HUD_VIEW_Y + 32;
+  const SLIDE_MS = 150;
+
+  let menuX = finalX;
+  if (rosterState === 'menu-in') {
+    const t = Math.min(rosterMenuTimer / SLIDE_MS, 1);
+    menuX = (HUD_VIEW_X + HUD_VIEW_W) + (finalX - (HUD_VIEW_X + HUD_VIEW_W)) * t;
+    if (t >= 1) { rosterState = 'menu'; rosterMenuTimer = 0; }
+  } else if (rosterState === 'menu-out') {
+    const t = Math.min(rosterMenuTimer / SLIDE_MS, 1);
+    menuX = finalX + ((HUD_VIEW_X + HUD_VIEW_W) - finalX) * t;
+    if (t >= 1) { rosterState = msgBoxState !== 'none' ? 'none' : 'browse'; rosterMenuTimer = 0; }
+  }
+
+  // Clip to viewport
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
+  ctx.clip();
+
+  _drawBorderedBox(menuX, menuY, menuW, menuH, false);
+
+  if (rosterState === 'menu') {
+    const textPal = TEXT_WHITE;
+    for (let i = 0; i < ROSTER_MENU_ITEMS.length; i++) {
+      const label = ROSTER_MENU_ITEMS[i];
+      const labelBytes = _nameToBytes(label);
+      drawText(ctx, menuX + 16, menuY + 8 + i * 14, labelBytes, textPal);
+    }
+    // Cursor
+    if (cursorTileCanvas) {
+      ctx.drawImage(cursorTileCanvas, menuX + 2, menuY + 4 + rosterMenuCursor * 14);
+    }
+  }
+
+  ctx.restore();
+}
+
+function initRoster() {
+  rosterTimer = 3000 + Math.random() * 5000;
+  // Init fade state — players already at our location start visible
+  const loc = getPlayerLocation();
+  rosterPrevLoc = loc;
+  for (const p of PLAYER_POOL) {
+    if (p.loc === loc) {
+      rosterFadeMap[p.name] = 0; // fully visible
+    }
+  }
+}
+
+function _rosterNextTimer() {
+  return 4000 + Math.random() * 8000;
+}
+
+function _rosterStartFadeIn(name) {
+  rosterFadeMap[name] = ROSTER_FADE_STEPS;
+  rosterFadeDir[name] = 'in';
+  rosterFadeTimers[name] = 0;
+  rosterSlideY[name] = 0;
+  // New player goes to top — push everyone else down
+  const loc = getPlayerLocation();
+  for (const p of PLAYER_POOL) {
+    if (p.name !== name && p.loc === loc && rosterFadeMap[p.name] !== undefined) {
+      rosterSlideY[p.name] = (rosterSlideY[p.name] || 0) - ROSTER_ROW_H;
+    }
+  }
+}
+
+function _rosterStartFadeOut(name) {
+  rosterFadeDir[name] = 'out';
+  rosterFadeTimers[name] = 0;
+}
+
+// Get all players to show (at current loc OR fading out)
+function getRosterVisible() {
+  const loc = getPlayerLocation();
+  const result = [];
+  // Players at this location (may be fading in)
+  for (const p of PLAYER_POOL) {
+    if (p.loc === loc) result.push(p);
+  }
+  // Players fading out (no longer at loc but fade not done)
+  for (const p of PLAYER_POOL) {
+    if (p.loc !== loc && rosterFadeDir[p.name] === 'out' && rosterFadeMap[p.name] < ROSTER_FADE_STEPS) {
+      result.push(p);
+    }
+  }
+  return result;
+}
+
+function _clampRosterCursor() {
+  const visible = getRosterVisible();
+  if (rosterCursor >= visible.length) rosterCursor = Math.max(0, visible.length - 1);
+  const maxScroll = Math.max(0, visible.length - ROSTER_VISIBLE);
+  if (rosterScroll > maxScroll) rosterScroll = maxScroll;
+}
+
+function updateRoster(dt) {
+  if (rosterState === 'menu-in' || rosterState === 'menu-out') {
+    rosterMenuTimer += Math.min(dt, 33);
+  }
+  if (titleState !== 'done') return;
+
+  // Battle fade out/in
+  if (battleState !== 'none' && rosterBattleFading !== 'out' && rosterBattleFade < ROSTER_FADE_STEPS) {
+    rosterBattleFading = 'out';
+    rosterBattleFadeTimer = 0;
+  } else if (battleState === 'none' && rosterBattleFade > 0 && rosterBattleFading !== 'in') {
+    rosterBattleFading = 'in';
+    rosterBattleFadeTimer = 0;
+  }
+  if (rosterBattleFading === 'out') {
+    rosterBattleFadeTimer += dt;
+    if (rosterBattleFadeTimer >= ROSTER_FADE_STEP_MS) {
+      rosterBattleFadeTimer -= ROSTER_FADE_STEP_MS;
+      rosterBattleFade = Math.min(rosterBattleFade + 1, ROSTER_FADE_STEPS);
+      if (rosterBattleFade >= ROSTER_FADE_STEPS) rosterBattleFading = 'none';
+    }
+  } else if (rosterBattleFading === 'in') {
+    rosterBattleFadeTimer += dt;
+    if (rosterBattleFadeTimer >= ROSTER_FADE_STEP_MS) {
+      rosterBattleFadeTimer -= ROSTER_FADE_STEP_MS;
+      rosterBattleFade = Math.max(rosterBattleFade - 1, 0);
+      if (rosterBattleFade <= 0) rosterBattleFading = 'none';
+    }
+  }
+
+  // Detect player location change (entering a new area) — reset roster state
+  const curLoc = getPlayerLocation();
+  if (rosterPrevLoc !== null && curLoc !== rosterPrevLoc) {
+    // Clear all per-player fade/slide state
+    rosterFadeMap = {}; rosterFadeDir = {}; rosterFadeTimers = {}; rosterSlideY = {};
+    // Mark all players at new location as visible
+    for (const p of PLAYER_POOL) {
+      if (p.loc === curLoc) rosterFadeMap[p.name] = 0;
+    }
+    rosterCursor = 0;
+    rosterScroll = 0;
+    rosterPrevLoc = curLoc;
+  }
+
+  // Tick fade timers
+  for (const name in rosterFadeDir) {
+    const dir = rosterFadeDir[name];
+    if (dir === 'in' && rosterFadeMap[name] > 0) {
+      rosterFadeTimers[name] = (rosterFadeTimers[name] || 0) + dt;
+      if (rosterFadeTimers[name] >= ROSTER_FADE_STEP_MS) {
+        rosterFadeTimers[name] -= ROSTER_FADE_STEP_MS;
+        rosterFadeMap[name]--;
+        if (rosterFadeMap[name] <= 0) { rosterFadeMap[name] = 0; delete rosterFadeDir[name]; }
+      }
+    } else if (dir === 'out') {
+      rosterFadeTimers[name] = (rosterFadeTimers[name] || 0) + dt;
+      if (rosterFadeTimers[name] >= ROSTER_FADE_STEP_MS) {
+        rosterFadeTimers[name] -= ROSTER_FADE_STEP_MS;
+        rosterFadeMap[name] = (rosterFadeMap[name] || 0) + 1;
+        if (rosterFadeMap[name] >= ROSTER_FADE_STEPS) {
+          // Find position before removal, slide players below it up
+          const vis = getRosterVisible();
+          const removeIdx = vis.findIndex(p => p.name === name);
+          if (removeIdx >= 0) {
+            for (let j = removeIdx + 1; j < vis.length; j++) {
+              rosterSlideY[vis[j].name] = (rosterSlideY[vis[j].name] || 0) + ROSTER_ROW_H;
+            }
+          }
+          delete rosterFadeMap[name];
+          delete rosterFadeDir[name];
+          delete rosterFadeTimers[name];
+          delete rosterSlideY[name];
+          _clampRosterCursor();
+        }
+      }
+    }
+  }
+
+  // Tick slide offsets toward 0
+  for (const name in rosterSlideY) {
+    const sy = rosterSlideY[name];
+    if (sy === 0) { delete rosterSlideY[name]; continue; }
+    const move = ROSTER_SLIDE_SPEED * dt;
+    if (Math.abs(sy) <= move) {
+      rosterSlideY[name] = 0;
+      delete rosterSlideY[name];
+    } else {
+      rosterSlideY[name] = sy > 0 ? sy - move : sy + move;
+    }
+  }
+
+  // Simulate player movement between locations
+  rosterTimer -= dt;
+  if (rosterTimer <= 0) {
+    rosterTimer = _rosterNextTimer();
+
+    const movers = PLAYER_POOL.filter(p => !p.camper);
+    if (movers.length > 0) {
+      const mover = movers[Math.floor(Math.random() * movers.length)];
+      const wasHere = mover.loc === curLoc;
+      const otherLocs = LOCATIONS.filter(l => l !== mover.loc);
+      mover.loc = otherLocs[Math.floor(Math.random() * otherLocs.length)];
+      const isHere = mover.loc === curLoc;
+
+      if (wasHere && !isHere) {
+        // Player leaving — fade out
+        _rosterStartFadeOut(mover.name);
+      } else if (!wasHere && isHere) {
+        // Player arriving — fade in
+        _rosterStartFadeIn(mover.name);
+      }
     }
   }
 }
@@ -8314,6 +8849,7 @@ function gameLoop(timestamp) {
   }
 
   handleInput();
+  updateRoster(dt);
   updatePauseMenu(dt);
   updateMsgBox(dt);
   updateBattle(dt);
@@ -8366,12 +8902,16 @@ function gameLoop(timestamp) {
   }
 
   drawHUD();
+  drawRoster();
 
   // Pause menu overlays everything
   drawPauseMenu();
 
   // Chest message box
   drawMsgBox();
+
+  // Roster context menu (drawn over viewport, above HUD)
+  drawRosterMenu();
 
   // Battle UI overlays everything
   drawBattle();
