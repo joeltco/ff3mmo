@@ -566,6 +566,24 @@ function getRosterPlayers() {
   const loc = getPlayerLocation();
   return PLAYER_POOL.filter(p => p.loc === loc);
 }
+
+// Generate combat stats for a roster ally based on their level and location
+function generateAllyStats(player) {
+  const lv = player.level;
+  const str = 5 + lv;
+  const agi = 5 + lv;
+  const vit = 5 + lv;
+  const hp = 28 + lv * 6;
+  const loc = player.loc;
+  // Gear by location (matches chest loot tiers)
+  let weaponId = 0x1E, weaponAtk = 6, totalDef = 1; // default: Knife + Cap
+  if (loc === 'cave-1') { weaponId = 0x1F; weaponAtk = 8; totalDef = 3; } // Dagger + Shield
+  else if (loc === 'cave-2') { weaponId = 0x24; weaponAtk = 10; totalDef = 3; } // Longsword + LeatherArmor + Bracers
+  else if (loc === 'cave-3' || loc === 'crystal') { weaponId = 0x24; weaponAtk = 10; totalDef = 7; } // Longsword + full armor
+  const atk = str + weaponAtk;
+  const def = vit + totalDef;
+  return { name: player.name, palIdx: player.palIdx, level: lv, hp, maxHP: hp, atk, def, agi, weaponId, fadeStep: ROSTER_FADE_STEPS };
+}
 // Palette variants — only color 3 changes (original $16 = red outfit)
 // Colors 0=$0F, 1=$36 (skin), 2=$30 (white) stay the same
 const PLAYER_PALETTES = [
@@ -579,6 +597,11 @@ const PLAYER_PALETTES = [
   [0x0F, 0x36, 0x30, 0x15], // pink
 ];
 let fakePlayerPortraits = [];   // HTMLCanvasElement[palIdx][fadeStep]
+let fakePlayerVictoryPortraits = [];  // HTMLCanvasElement[palIdx][fadeStep] — victory pose
+let fakePlayerHitPortraits = [];      // hit/recoil pose
+let fakePlayerDefendPortraits = [];   // defend pose
+let fakePlayerKneelPortraits = [];    // near-fatal kneel pose
+let fakePlayerAttackPortraits = [];   // attack pose (right-hand arm raised)
 let rosterTimer = 0;             // ms until next movement event
 const ROSTER_FADE_STEPS = 4;
 const ROSTER_FADE_STEP_MS = 100;
@@ -587,10 +610,22 @@ let rosterFadeTimers = {};       // {playerName: ms since last step}
 let rosterFadeDir = {};          // {playerName: 'in'|'out'}
 let rosterSlideY = {};           // {playerName: px offset} — animates toward 0
 let rosterPrevLoc = null;        // last known player location
+let rosterLocChanged = false;    // true when transition involves a location change
 const ROSTER_SLIDE_SPEED = 0.15; // px per ms
 let rosterBattleFade = 0;        // 0=visible, ROSTER_FADE_STEPS=black
 let rosterBattleFadeTimer = 0;
 let rosterBattleFading = 'none'; // 'none'|'out'|'in'
+
+// Battle allies — roster players that join combat
+let battleAllies = [];         // [{name, palIdx, level, hp, maxHP, atk, def, agi, fadeStep}]
+let allyJoinTimer = 0;         // ms until next join check
+let allyJoinRound = 0;         // combat round counter
+let currentAllyAttacker = -1;  // index into battleAllies during ally turn
+let allyTargetIndex = -1;      // which enemy the ally is attacking
+let allyHitResult = null;      // single hit result {damage, crit} or {miss}
+let allyDamageNums = {};       // {allyIdx: {value, timer, crit} or {miss, timer}}
+let allyShakeTimer = {};       // {allyIdx: ms remaining}
+let enemyTargetAllyIdx = -1;   // which ally an enemy is targeting (-1 = player)
 let rosterState = 'none';       // 'none'|'browse'|'menu-in'|'menu'|'menu-out'
 let rosterCursor = 0;           // index into getRosterVisible()
 let rosterScroll = 0;           // scroll offset
@@ -985,6 +1020,59 @@ function initFakePlayerPortraits(romData) {
     }
     return frames;
   });
+
+  // Helper: generate palette-variant portraits for a set of decoded tiles
+  function _genPosePortraits(poseTiles) {
+    return PLAYER_PALETTES.map(basePal => {
+      const frames = [];
+      for (let step = 0; step <= ROSTER_FADE_STEPS; step++) {
+        const pal = basePal.slice();
+        for (let s = 0; s < step; s++) {
+          pal[1] = nesColorFade(pal[1]);
+          pal[2] = nesColorFade(pal[2]);
+          pal[3] = nesColorFade(pal[3]);
+        }
+        frames.push(_renderPortrait(poseTiles, layout, pal));
+      }
+      return frames;
+    });
+  }
+
+  // Victory pose — tiles 24-27 (frame 4)
+  const vicTiles = [];
+  for (let i = 0; i < 4; i++) vicTiles.push(decodeTile(romData, BATTLE_SPRITE_ROM + (24 + i) * 16));
+  fakePlayerVictoryPortraits = _genPosePortraits(vicTiles);
+
+  // Hit/recoil pose — tiles 30-33 (frame 5)
+  const hitTiles = [];
+  for (let i = 0; i < 4; i++) hitTiles.push(decodeTile(romData, BATTLE_SPRITE_ROM + (30 + i) * 16));
+  fakePlayerHitPortraits = _genPosePortraits(hitTiles);
+
+  // Defend pose — top 4 tiles from PPU dump ($43-$46)
+  const defTileData = [
+    new Uint8Array([0x05,0x0B,0x17,0x03,0x00,0x00,0x0E,0x1F, 0x07,0x0F,0x1F,0x3F,0x43,0x40,0x20,0x00]),
+    new Uint8Array([0x00,0x00,0xA0,0xD0,0xE8,0x78,0x10,0x88, 0x2C,0x59,0xBE,0xD6,0xEF,0xFB,0x75,0x1A]),
+    new Uint8Array([0x04,0xD6,0xD6,0x3F,0xEF,0xF0,0x63,0x0E, 0x00,0x00,0x00,0x24,0xE4,0xF0,0x6F,0x1F]),
+    new Uint8Array([0x90,0x4C,0xCC,0x30,0x7C,0x78,0x30,0x00, 0x32,0x21,0x00,0xB0,0x7C,0x7C,0xB2,0xC2]),
+  ];
+  const defTiles = defTileData.map(d => decodeTile(d, 0));
+  fakePlayerDefendPortraits = _genPosePortraits(defTiles);
+
+  // Attack pose (right-hand) — idle top + ATK_R_39 bottom-left
+  const ATK_R_39_DATA = new Uint8Array([0x1F,0x04,0x16,0x16,0x2F,0x7F,0x70,0x26,
+                                         0x00,0x00,0x00,0x00,0x30,0x70,0x70,0x3E]);
+  const atkTiles = [tiles[0], tiles[1], decodeTile(ATK_R_39_DATA, 0), tiles[3]];
+  fakePlayerAttackPortraits = _genPosePortraits(atkTiles);
+
+  // Kneel pose — tiles $09-$0C from PPU dump
+  const kneelTileData = [
+    new Uint8Array([0x00,0x00,0x00,0x00,0x02,0x05,0x0B,0x00, 0x00,0x00,0x00,0x00,0x03,0x07,0x0F,0x1F]),
+    new Uint8Array([0x00,0x00,0x00,0x00,0x80,0xB8,0xDC,0xEE, 0x00,0x00,0x00,0x00,0x9B,0xBE,0xDD,0xEF]),
+    new Uint8Array([0x00,0x03,0x07,0x05,0x01,0x01,0x1B,0x3B, 0x20,0x10,0x00,0x00,0x00,0x04,0x00,0x20]),
+    new Uint8Array([0x36,0x1A,0xC6,0x20,0x92,0x81,0xDC,0xDE, 0xF6,0x3A,0x16,0x0C,0x0E,0x21,0x04,0x06]),
+  ];
+  const kneelTiles = kneelTileData.map(d => decodeTile(d, 0));
+  fakePlayerKneelPortraits = _genPosePortraits(kneelTiles);
 }
 
 function initCursorTile(romData) {
@@ -3917,7 +4005,7 @@ function updateMovement(dt) {
                   return;
                 }
               }
-            });
+            }, 'world');
           }
         };
         return;
@@ -3998,9 +4086,12 @@ function updateTopBoxScroll(dt) {
   }
 }
 
-function startWipeTransition(action) {
+function startWipeTransition(action, destMapId) {
   transState = 'closing';
   transTimer = 0;
+  // Determine if roster should fade (only when location actually changes)
+  const curLoc = getPlayerLocation();
+  rosterLocChanged = destMapId != null && _rosterLocForMapId(destMapId) !== curLoc;
   transPendingAction = action;
   playSFX(SFX.SCREEN_CLOSE);
 }
@@ -4127,6 +4218,7 @@ function updateTransition(dt) {
     if (transTimer >= WIPE_DURATION) {
       transState = 'none';
       transTimer = 0;
+      rosterLocChanged = false;
       if (trapShakePending) {
         trapShakePending = false;
         playSFX(SFX.EARTHQUAKE);
@@ -4314,7 +4406,7 @@ function checkTrigger() {
         onWorldMap = false;
         loadMapById(finalDest);
         disabledTrigger = { x: worldX / TILE_SIZE, y: worldY / TILE_SIZE };
-      });
+      }, finalDest);
       return true;
     }
     return false;
@@ -4355,13 +4447,14 @@ function checkTrigger() {
       const dest = dungeonDestinations.get(trigger.trigId);
       if (dest.goBack) {
         // Go back — pop mapStack (same as exit_prev)
+        const prevMapId = mapStack.length > 0 ? mapStack[mapStack.length - 1].mapId : null;
         startWipeTransition(() => {
           if (mapStack.length > 0) {
             const prev = mapStack.pop();
             loadMapById(prev.mapId, prev.x / TILE_SIZE, prev.y / TILE_SIZE);
             if (prev.mapId >= 1000 && prev.mapId < 1004) playTrack(TRACKS.CRYSTAL_CAVE);
           }
-        });
+        }, prevMapId);
         return true;
       }
       const savedX = worldX;
@@ -4375,6 +4468,7 @@ function checkTrigger() {
         playSFX(SFX.DOOR);
         transState = 'door-opening';
         transTimer = 0;
+        rosterLocChanged = _rosterLocForMapId(dest.mapId) !== getPlayerLocation();
         transPendingAction = () => {
           mapStack.push({ mapId: currentMapId, x: savedX, y: savedY });
           loadMapById(dest.mapId);
@@ -4383,7 +4477,7 @@ function checkTrigger() {
         startWipeTransition(() => {
           mapStack.push({ mapId: currentMapId, x: savedX, y: savedY });
           loadMapById(dest.mapId);
-        });
+        }, dest.mapId);
       }
       return true;
     }
@@ -4402,6 +4496,7 @@ function checkTrigger() {
       playSFX(SFX.DOOR);
       transState = 'door-opening';
       transTimer = 0;
+      rosterLocChanged = _rosterLocForMapId(destMap) !== getPlayerLocation();
       transPendingAction = () => {
         mapStack.push({ mapId: currentMapId, x: savedX, y: savedY });
         loadMapById(destMap);
@@ -4411,7 +4506,7 @@ function checkTrigger() {
       startWipeTransition(() => {
         mapStack.push({ mapId: currentMapId, x: savedX, y: savedY });
         loadMapById(destMap);
-      });
+      }, destMap);
     }
     return true;
   }
@@ -4425,7 +4520,7 @@ function checkTrigger() {
       startWipeTransition(() => {
         mapStack.push({ mapId: currentMapId, x: savedX, y: savedY });
         loadMapById(dest.mapId);
-      });
+      }, dest.mapId);
       return true;
     }
   }
@@ -4441,6 +4536,7 @@ function checkTrigger() {
         topBoxScrollTimer = 0;
         topBoxFadeStep = 0;
       }
+      const exitDestMapId = mapStack.length > 0 ? mapStack[mapStack.length - 1].mapId : 'world';
       startWipeTransition(() => {
         if (mapStack.length > 0) {
           const prev = mapStack.pop();
@@ -4457,7 +4553,7 @@ function checkTrigger() {
           const exitIndex = findWorldExitIndex(currentMapId);
           loadWorldMapAt(exitIndex);
         }
-      });
+      }, exitDestMapId);
       return true;
     }
   }
@@ -5299,12 +5395,21 @@ function _nameToBytes(name) {
   return new Uint8Array(bytes);
 }
 
+function _rosterLocForMapId(mapId) {
+  if (mapId === 'world') return 'world';
+  if (mapId === 114) return 'ur';
+  if (mapId === 1004) return 'crystal';
+  if (mapId >= 1000 && mapId < 1004) return 'cave-' + (mapId - 1000);
+  return 'ur'; // sub-rooms (shops, houses) = same town
+}
+
 function _rosterTransFade() {
-  // Compute global fade level from screen transition (0=visible, 4=black)
   const FADE_STEP_MS = WIPE_DURATION / ROSTER_FADE_STEPS;
-  if (transState === 'closing') return Math.min(Math.floor(transTimer / FADE_STEP_MS), ROSTER_FADE_STEPS);
-  if (transState === 'hold' || transState === 'trap-falling') return ROSTER_FADE_STEPS;
-  if (transState === 'opening') return Math.max(ROSTER_FADE_STEPS - Math.floor(transTimer / FADE_STEP_MS), 0);
+  if (rosterLocChanged) {
+    if (transState === 'closing') return Math.min(Math.floor(transTimer / FADE_STEP_MS), ROSTER_FADE_STEPS);
+    if (transState === 'hold' || transState === 'trap-falling') return ROSTER_FADE_STEPS;
+    if (transState === 'opening') return Math.max(ROSTER_FADE_STEPS - Math.floor(transTimer / FADE_STEP_MS), 0);
+  }
   // Sync with HUD info fade-in on game start
   const infoFade = HUD_INFO_FADE_STEPS - Math.min(Math.floor(hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
   if (infoFade > 0) return infoFade;
@@ -5313,7 +5418,7 @@ function _rosterTransFade() {
 
 function drawRoster() {
   if (titleState !== 'done') return;
-  if (transState === 'loading' || transState === 'hud-fade-in') return;
+  if (transState === 'loading') return;
   if (rosterBattleFade >= ROSTER_FADE_STEPS && battleState !== 'none') return;
 
   const rpX = HUD_RIGHT_X + 8;        // interior x (after border)
@@ -5350,25 +5455,42 @@ function drawRoster() {
     const portraits = fakePlayerPortraits[p.palIdx];
     if (portraits) ctx.drawImage(portraits[fadeStep], rpX, rowY + 2);
 
-    // Name (NES faded text)
+    // Name (NES faded text, right-aligned)
     const namePal = [0x0F, 0x0F, 0x0F, 0x30];
     for (let s = 0; s < fadeStep; s++) namePal[3] = nesColorFade(namePal[3]);
     const nameBytes = _nameToBytes(p.name);
-    drawText(ctx, rpX + 18, rowY + 1, nameBytes, namePal);
+    const nameW = measureText(nameBytes);
+    drawText(ctx, rpX + rpW - nameW, rowY + 1, nameBytes, namePal);
 
-    // Level (NES faded)
+    // Level (NES faded, right-aligned)
     const lvPal = [0x0F, 0x0F, 0x0F, 0x10];
     for (let s = 0; s < fadeStep; s++) lvPal[3] = nesColorFade(lvPal[3]);
     const lvLabel = _nameToBytes('Lv' + String(p.level));
-    drawText(ctx, rpX + 18, rowY + 9, lvLabel, lvPal);
+    const lvW = measureText(lvLabel);
+    drawText(ctx, rpX + rpW - lvW, rowY + 9, lvLabel, lvPal);
+
+    // Thin separator line below row (NES faded)
+    const sepY = rowY + ROSTER_ROW_H - 1;
+    let sepNes = 0x2D;
+    for (let s = 0; s < fadeStep; s++) sepNes = nesColorFade(sepNes);
+    const sepCol = NES_SYSTEM_PALETTE[sepNes] || [0, 0, 0];
+    ctx.fillStyle = `rgb(${sepCol[0]},${sepCol[1]},${sepCol[2]})`;
+    ctx.fillRect(rpX, sepY, rpW, 1);
+    // Top separator above first row
+    if (i === 0) {
+      ctx.fillRect(rpX, rowY - 1, rpW, 1);
+    }
   }
 
-  // Scroll triangles (centered in panel width)
+  // Scroll triangles (centered in panel width, NES faded)
   const triCX = rpX + Math.floor(rpW / 2);
-  const triCol = NES_SYSTEM_PALETTE[0x10] || [128, 128, 128];
+  const triFade = Math.min(Math.max(_rosterTransFade(), rosterBattleFade), ROSTER_FADE_STEPS);
+  let triNes = 0x10;
+  for (let s = 0; s < triFade; s++) triNes = nesColorFade(triNes);
+  const triCol = NES_SYSTEM_PALETTE[triNes] || [0, 0, 0];
   ctx.fillStyle = `rgb(${triCol[0]},${triCol[1]},${triCol[2]})`;
   if (canScrollUp) {
-    const ty = rpY + 2;
+    const ty = rpY;
     ctx.beginPath();
     ctx.moveTo(triCX - 4, ty + 5);
     ctx.lineTo(triCX, ty);
@@ -7032,6 +7154,11 @@ function buildTurnOrder() {
   const actors = [];
   const playerAgi = playerStats ? playerStats.agi : 5;
   actors.push({ type: 'player', priority: (playerAgi * 2) + Math.floor(Math.random() * 256) });
+  // Allies participate in the same turn queue
+  for (let i = 0; i < battleAllies.length; i++) {
+    if (battleAllies[i].hp > 0)
+      actors.push({ type: 'ally', index: i, priority: (battleAllies[i].agi * 2) + Math.floor(Math.random() * 256) });
+  }
   if (isRandomEncounter && encounterMonsters) {
     for (let i = 0; i < encounterMonsters.length; i++) {
       if (encounterMonsters[i].hp > 0)
@@ -7055,10 +7182,21 @@ function processNextTurn() {
   const turn = turnQueue.shift();
   if (turn.type === 'player') {
     if (playerActionPending.command === 'fight') {
+      // Retarget if pre-selected enemy was killed by an ally this round
+      let ti = playerActionPending.targetIndex;
+      if (isRandomEncounter && encounterMonsters && ti >= 0 && encounterMonsters[ti].hp <= 0) {
+        const living = encounterMonsters.findIndex(m => m.hp > 0);
+        if (living < 0) {
+          // All dead — skip player attack, victory will trigger
+          processNextTurn();
+          return;
+        }
+        ti = living;
+      }
       currentHitIdx = 0;
       slashFrame = 0;
       hitResults = playerActionPending.hitResults;
-      targetIndex = playerActionPending.targetIndex;
+      targetIndex = ti;
       slashFrames = playerActionPending.slashFrames;
       slashOffX = playerActionPending.slashOffX;
       slashOffY = playerActionPending.slashOffY;
@@ -7117,6 +7255,23 @@ function processNextTurn() {
         battleTimer = 0;
       }
     }
+  } else if (turn.type === 'ally') {
+    // Ally turn — pick random living enemy target and attack
+    currentAllyAttacker = turn.index;
+    const ally = battleAllies[turn.index];
+    if (!ally || ally.hp <= 0) { processNextTurn(); return; }
+    if (isRandomEncounter && encounterMonsters) {
+      const living = encounterMonsters.map((m, i) => m.hp > 0 ? i : -1).filter(i => i >= 0);
+      if (living.length === 0) { processNextTurn(); return; }
+      allyTargetIndex = living[Math.floor(Math.random() * living.length)];
+    } else {
+      allyTargetIndex = -1; // boss
+    }
+    const targetDef = allyTargetIndex >= 0 ? encounterMonsters[allyTargetIndex].def : BOSS_DEF;
+    const hits = rollHits(ally.atk, targetDef, 85, 1);
+    allyHitResult = hits[0];
+    battleState = 'ally-attack-start';
+    battleTimer = 0;
   } else {
     currentAttacker = turn.index;
     // Skip dead enemies (killed earlier this round)
@@ -7143,6 +7298,14 @@ function startBattle() {
   battleShakeTimer = 0;
   bossHP = BOSS_MAX_HP;
   isDefending = false;
+  battleAllies = [];
+  allyJoinRound = 0;
+  currentAllyAttacker = -1;
+  allyTargetIndex = -1;
+  allyHitResult = null;
+  allyDamageNums = {};
+  allyShakeTimer = {};
+  enemyTargetAllyIdx = -1;
   playSFX(SFX.EARTHQUAKE);
 }
 
@@ -7167,6 +7330,14 @@ function startRandomEncounter() {
   bossFlashTimer = 0;
   battleShakeTimer = 0;
   isDefending = false;
+  battleAllies = [];
+  allyJoinRound = 0;
+  currentAllyAttacker = -1;
+  allyTargetIndex = -1;
+  allyHitResult = null;
+  allyDamageNums = {};
+  allyShakeTimer = {};
+  enemyTargetAllyIdx = -1;
   playSFX(SFX.BATTLE_SWIPE);
 }
 
@@ -7234,6 +7405,18 @@ function updateBattle(dt) {
     if (playerDamageNum.timer >= BATTLE_DMG_SHOW_MS) playerDamageNum = null;
   }
 
+  // Ally damage number timers
+  for (const idx in allyDamageNums) {
+    if (allyDamageNums[idx]) {
+      allyDamageNums[idx].timer += dt;
+      if (allyDamageNums[idx].timer >= BATTLE_DMG_SHOW_MS) delete allyDamageNums[idx];
+    }
+  }
+  // Ally shake timers
+  for (const idx in allyShakeTimer) {
+    if (allyShakeTimer[idx] > 0) allyShakeTimer[idx] = Math.max(0, allyShakeTimer[idx] - dt);
+  }
+
   // State machine
   if (battleState === 'roar-hold') {
     // waits for msgBox Z dismiss → callback sets flash-strobe
@@ -7260,6 +7443,20 @@ function updateBattle(dt) {
   } else if (battleState === 'confirm-pause') {
     // Brief pause so CONFIRM SFX is audible before turn queue starts
     if (battleTimer >= 150) {
+      allyJoinRound++;
+      // Ally join check: <4 allies, 50% chance
+      if (battleAllies.length < 4) {
+        const loc = getPlayerLocation();
+        const eligible = PLAYER_POOL.filter(p => p.loc === loc && !battleAllies.some(a => a.name === p.name));
+        if (eligible.length > 0 && Math.random() < 0.5) {
+          const pick = eligible[Math.floor(Math.random() * eligible.length)];
+          const ally = generateAllyStats(pick);
+          battleAllies.push(ally);
+          battleState = 'ally-fade-in';
+          battleTimer = 0;
+          return;
+        }
+      }
       turnQueue = buildTurnOrder();
       processNextTurn();
     }
@@ -7546,28 +7743,154 @@ function updateBattle(dt) {
     if (battleTimer >= (BATTLE_TEXT_STEPS + 1) * 50) {
       processNextTurn();
     }
+  } else if (battleState === 'ally-fade-in') {
+    // Fade the newly joined ally portrait in (4 steps × 100ms)
+    const newAlly = battleAllies[battleAllies.length - 1];
+    if (newAlly && battleTimer >= 100) {
+      newAlly.fadeStep = Math.max(0, newAlly.fadeStep - 1);
+      battleTimer = 0;
+      if (newAlly.fadeStep <= 0) {
+        turnQueue = buildTurnOrder();
+        processNextTurn();
+      }
+    }
+  } else if (battleState === 'ally-attack-start') {
+    // 100ms wind-up, flash ally row, play weapon SFX
+    if (battleTimer >= 100) {
+      const ally = battleAllies[currentAllyAttacker];
+      const bladed = ally && isBladedWeapon(ally.weaponId);
+      playSFX(bladed ? SFX.KNIFE_HIT : SFX.ATTACK_HIT);
+      if (bladed && !(allyHitResult && allyHitResult.crit)) {
+        if (sfxCutTimerId) clearTimeout(sfxCutTimerId);
+        sfxCutTimerId = setTimeout(() => { stopSFX(); sfxCutTimerId = null; }, 133);
+      }
+      battleState = 'ally-slash';
+      battleTimer = 0;
+    }
+  } else if (battleState === 'ally-slash') {
+    // Punch effect on target (3 frames × ~67ms = ~200ms)
+    if (battleTimer >= 200) {
+      // Apply damage to target
+      if (allyHitResult && !allyHitResult.miss) {
+        if (allyTargetIndex >= 0 && encounterMonsters) {
+          encounterMonsters[allyTargetIndex].hp = Math.max(0, encounterMonsters[allyTargetIndex].hp - allyHitResult.damage);
+        } else if (allyTargetIndex < 0) {
+          bossHP = Math.max(0, bossHP - allyHitResult.damage);
+        }
+        bossDamageNum = { value: allyHitResult.damage, crit: allyHitResult.crit, timer: 0 };
+        // Temporarily set targetIndex for damage number positioning
+        targetIndex = allyTargetIndex;
+      } else {
+        bossDamageNum = { miss: true, timer: 0 };
+        targetIndex = allyTargetIndex;
+      }
+      battleState = 'ally-damage-show';
+      battleTimer = 0;
+    }
+  } else if (battleState === 'ally-damage-show') {
+    if (battleTimer >= 400) {
+      // Check if targeted monster/boss died
+      if (isRandomEncounter && encounterMonsters && allyTargetIndex >= 0 && encounterMonsters[allyTargetIndex].hp <= 0) {
+        dyingMonsterIndex = allyTargetIndex;
+        battleState = 'monster-death';
+        battleTimer = 0;
+        playSFX(SFX.MONSTER_DEATH);
+      } else if (!isRandomEncounter && bossHP <= 0) {
+        battleState = 'boss-dissolve';
+        battleTimer = 0;
+        playSFX(SFX.BOSS_DEATH);
+      } else {
+        processNextTurn();
+      }
+    }
+  } else if (battleState === 'ally-hit') {
+    // Ally taking damage — shake portrait
+    if (battleTimer >= BATTLE_SHAKE_MS) {
+      battleState = 'ally-damage-show-enemy';
+      battleTimer = 0;
+    }
+  } else if (battleState === 'ally-damage-show-enemy') {
+    if (battleTimer >= BATTLE_DMG_SHOW_MS) {
+      const ally = battleAllies[enemyTargetAllyIdx];
+      if (ally && ally.hp <= 0) {
+        // Ally KO — fade out and show retreat message
+        battleState = 'ally-ko-fade';
+        battleTimer = 0;
+      } else {
+        enemyTargetAllyIdx = -1;
+        processNextTurn();
+      }
+    }
+  } else if (battleState === 'ally-ko-fade') {
+    // Fade out KO'd ally (4 steps × 100ms)
+    const koAlly = battleAllies[enemyTargetAllyIdx];
+    if (koAlly && battleTimer >= 100) {
+      koAlly.fadeStep = Math.min(ROSTER_FADE_STEPS, koAlly.fadeStep + 1);
+      battleTimer = 0;
+      if (koAlly.fadeStep >= ROSTER_FADE_STEPS) {
+        const retreatBytes = _nameToBytes(koAlly.name + ' retreated!');
+        showMsgBox(retreatBytes, () => {
+          // Remove from turn queue
+          turnQueue = turnQueue.filter(t => !(t.type === 'ally' && t.index === enemyTargetAllyIdx));
+          enemyTargetAllyIdx = -1;
+          processNextTurn();
+        });
+        battleState = 'ally-ko-msg';
+      }
+    }
+  } else if (battleState === 'ally-ko-msg') {
+    // Waiting for message box dismiss
   } else if (battleState === 'boss-flash') {
     if (battleTimer >= BOSS_PREFLASH_MS) {
+      // Choose target: player or an ally
+      const livingAllies = battleAllies.filter(a => a.hp > 0);
+      let targetAlly = -1;
+      if (livingAllies.length > 0) {
+        // 1/(1+livingAllies) chance to target player, else random ally
+        if (Math.random() >= 1 / (1 + livingAllies.length)) {
+          const allyOptions = battleAllies.map((a, i) => a.hp > 0 ? i : -1).filter(i => i >= 0);
+          targetAlly = allyOptions[Math.floor(Math.random() * allyOptions.length)];
+        }
+      }
       // Roll accuracy for current attacker
       const monHitRate = (currentAttacker >= 0 && encounterMonsters)
         ? (encounterMonsters[currentAttacker].hitRate || GOBLIN_HIT_RATE) : BOSS_HIT_RATE;
-      if (Math.random() * 100 < monHitRate) {
-        // Hit — deal damage
+      if (targetAlly >= 0) {
+        // Targeting an ally
+        enemyTargetAllyIdx = targetAlly;
         const monAtk = (currentAttacker >= 0 && encounterMonsters)
           ? encounterMonsters[currentAttacker].atk : BOSS_ATK;
-        let dmg = calcDamage(monAtk, playerDEF);
-        if (isDefending) dmg = Math.max(1, Math.floor(dmg / 2));
-        playerHP = Math.max(0, playerHP - dmg);
-        playerDamageNum = { value: dmg, timer: 0 };
-        playSFX(SFX.ATTACK_HIT);
-        battleShakeTimer = BATTLE_SHAKE_MS;
-        battleState = 'enemy-attack';
-        battleTimer = 0;
+        if (Math.random() * 100 < monHitRate) {
+          let dmg = calcDamage(monAtk, battleAllies[targetAlly].def);
+          battleAllies[targetAlly].hp = Math.max(0, battleAllies[targetAlly].hp - dmg);
+          allyDamageNums[targetAlly] = { value: dmg, timer: 0 };
+          allyShakeTimer[targetAlly] = BATTLE_SHAKE_MS;
+          playSFX(SFX.ATTACK_HIT);
+          battleState = 'ally-hit';
+          battleTimer = 0;
+        } else {
+          allyDamageNums[targetAlly] = { miss: true, timer: 0 };
+          battleState = 'ally-damage-show-enemy';
+          battleTimer = 0;
+        }
       } else {
-        // Miss — show miss text, skip shake, go to enemy-damage-show
-        playerDamageNum = { miss: true, timer: 0 };
-        battleState = 'enemy-damage-show';
-        battleTimer = 0;
+        // Targeting player (original logic)
+        if (Math.random() * 100 < monHitRate) {
+          const monAtk = (currentAttacker >= 0 && encounterMonsters)
+            ? encounterMonsters[currentAttacker].atk : BOSS_ATK;
+          let dmg = calcDamage(monAtk, playerDEF);
+          if (isDefending) dmg = Math.max(1, Math.floor(dmg / 2));
+          playerHP = Math.max(0, playerHP - dmg);
+          playerDamageNum = { value: dmg, timer: 0 };
+          playSFX(SFX.ATTACK_HIT);
+          battleShakeTimer = BATTLE_SHAKE_MS;
+          battleState = 'enemy-attack';
+          battleTimer = 0;
+        } else {
+          playerDamageNum = { miss: true, timer: 0 };
+          battleState = 'enemy-damage-show';
+          battleTimer = 0;
+        }
       }
     }
   } else if (battleState === 'enemy-attack') {
@@ -7677,6 +8000,8 @@ function updateBattle(dt) {
       isRandomEncounter = false;
       encounterMonsters = null;
       dyingMonsterIndex = -1;
+      battleAllies = [];
+      allyJoinRound = 0;
       stopMusic(); resumeMusic();
     }
   } else if (battleState === 'boss-box-close') {
@@ -7684,6 +8009,8 @@ function updateBattle(dt) {
       battleState = 'none';
       battleTimer = 0;
       sprite.setDirection(DIR_DOWN);
+      battleAllies = [];
+      allyJoinRound = 0;
       playTrack(TRACKS.CRYSTAL_ROOM);
     }
   } else if (battleState === 'defeat-monster-fade') {
@@ -7702,6 +8029,8 @@ function updateBattle(dt) {
       isRandomEncounter = false;
       encounterMonsters = null;
       turnQueue = [];
+      battleAllies = [];
+      allyJoinRound = 0;
       playerHP = playerStats ? playerStats.maxHP : 28;
       playerMP = playerStats ? playerStats.maxMP : 0;
       // Screen close → respawn outside dungeon entrance on world map → screen open
@@ -7711,7 +8040,7 @@ function updateBattle(dt) {
         encounterSteps = 0;
         mapStack = [];
         loadWorldMapAt(exitIdx);
-      });
+      }, 'world');
     }
   }
 }
@@ -7977,6 +8306,7 @@ function drawBattleMenu() {
                  battleState === 'defend-anim' || battleState.startsWith('item-') || battleState === 'run-name-out' || battleState === 'run-text-in' || battleState === 'run-hold' || battleState === 'run-text-out' || battleState === 'run-fail-name-out' || battleState === 'run-fail-text-in' || battleState === 'run-fail-hold' || battleState === 'run-fail-text-out' || battleState === 'run-fail-name-in' || battleState === 'boss-flash' ||
                  battleState === 'enemy-attack' ||
                  battleState === 'enemy-damage-show' || battleState === 'message-hold' ||
+                 battleState.startsWith('ally-') ||
                  battleState === 'boss-dissolve' ||
                  battleState === 'defeat-monster-fade' || battleState === 'defeat-text';
   const isVictory = battleState === 'victory-name-out' || battleState === 'victory-celebrate' ||
@@ -8244,6 +8574,7 @@ function drawEncounterBox() {
                    battleState === 'defend-anim' || battleState.startsWith('item-') || battleState === 'run-name-out' || battleState === 'run-text-in' || battleState === 'run-hold' || battleState === 'run-text-out' || battleState === 'run-fail-name-out' || battleState === 'run-fail-text-in' || battleState === 'run-fail-hold' || battleState === 'run-fail-text-out' || battleState === 'run-fail-name-in' || battleState === 'boss-flash' ||
                    battleState === 'enemy-attack' ||
                    battleState === 'enemy-damage-show' || battleState === 'message-hold' ||
+                   battleState.startsWith('ally-') ||
                    battleState === 'defeat-monster-fade' || battleState === 'defeat-text';
   const isVictory = battleState === 'victory-name-out' || battleState === 'victory-celebrate' ||
                     battleState === 'victory-text-in' || battleState === 'victory-hold' || battleState === 'victory-fade-out' ||
@@ -8304,9 +8635,11 @@ function drawEncounterBox() {
       const alive = encounterMonsters[i].hp > 0;
       const isDying = i === dyingMonsterIndex && battleState === 'monster-death';
       // Keep dead monster visible during slash + hit-show + miss-show + damage show
-      const isBeingHit = i === targetIndex &&
+      const isBeingHit = (i === targetIndex &&
         (battleState === 'player-slash' || battleState === 'player-hit-show' ||
-         battleState === 'player-miss-show' || battleState === 'player-damage-show');
+         battleState === 'player-miss-show' || battleState === 'player-damage-show')) ||
+        (i === allyTargetIndex &&
+        (battleState === 'ally-slash' || battleState === 'ally-damage-show'));
 
       if (!alive && !isDying && !isBeingHit) continue;
 
@@ -8316,10 +8649,13 @@ function drawEncounterBox() {
       if (isDying) {
         _drawMonsterDeath(drawX, pos.y, 32, Math.min(battleTimer / MONSTER_DEATH_MS, 1));
       } else {
-        // Hit blink during player-slash (60ms toggle, not on miss)
+        // Hit blink during player-slash or ally-slash (60ms toggle, not on miss)
         const curHit = hitResults && hitResults[currentHitIdx];
-        const isHitBlink = isBeingHit && battleState === 'player-slash' &&
+        const isPlayerHitBlink = isBeingHit && battleState === 'player-slash' &&
                            curHit && !curHit.miss && (Math.floor(battleTimer / 60) & 1);
+        const isAllyHitBlink = isBeingHit && battleState === 'ally-slash' &&
+                           allyHitResult && !allyHitResult.miss && (Math.floor(battleTimer / 60) & 1);
+        const isHitBlink = isPlayerHitBlink || isAllyHitBlink;
         // White flash blink during boss-flash for current attacker
         const isFlashing = battleState === 'boss-flash' && currentAttacker === i &&
                            Math.floor(battleTimer / 33) % 2 === 1;
@@ -8336,6 +8672,19 @@ function drawEncounterBox() {
       const sx = pos.x - slideOffX + slashOffX + 8;  // center 16px on 32px sprite
       const sy = pos.y + slashOffY + 8;
       ctx.drawImage(slashFrames[slashFrame], sx, sy);
+    }
+
+    // Ally slash — weapon-appropriate slash sprites on target during ally-slash
+    if (battleState === 'ally-slash' && allyHitResult && !allyHitResult.miss) {
+      const ally = battleAllies[currentAllyAttacker];
+      const allySlashFrames = ally ? getSlashFramesForWeapon(ally.weaponId, true) : slashFramesR;
+      const af = Math.min(Math.floor(battleTimer / 67), 2); // 3 frames
+      const pos = gridPos[allyTargetIndex];
+      if (pos && allySlashFrames && allySlashFrames[af]) {
+        const scatterX = [0, 10, -8][af];
+        const scatterY = [0, -6, 8][af];
+        ctx.drawImage(allySlashFrames[af], pos.x + 8 + scatterX, pos.y + 8 + scatterY);
+      }
     }
     ctx.restore();
   }
@@ -8365,6 +8714,7 @@ function drawBossSpriteBox() {
                    battleState === 'player-damage-show' || battleState === 'defend-anim' || battleState.startsWith('item-') || battleState === 'run-name-out' || battleState === 'run-text-in' || battleState === 'run-hold' || battleState === 'run-text-out' || battleState === 'run-fail-name-out' || battleState === 'run-fail-text-in' || battleState === 'run-fail-hold' || battleState === 'run-fail-text-out' || battleState === 'run-fail-name-in' || battleState === 'boss-flash' ||
                    battleState === 'enemy-attack' ||
                    battleState === 'enemy-damage-show' || battleState === 'message-hold' ||
+                   battleState.startsWith('ally-') ||
                    battleState === 'defeat-monster-fade' || battleState === 'defeat-text';
   const isVictory = battleState === 'victory-name-out' || battleState === 'victory-celebrate' ||
                     battleState === 'victory-text-in' || battleState === 'victory-hold' || battleState === 'victory-fade-out' ||
@@ -8428,6 +8778,23 @@ function drawBossSpriteBox() {
     // Draw punch impact with random scatter offset (16×16 metasprite, not on miss)
     if (slashFrames && slashFrame < SLASH_FRAMES && !bossDefeated && hitResults && hitResults[currentHitIdx] && !hitResults[currentHitIdx].miss) {
       ctx.drawImage(slashFrames[slashFrame], centerX - 8 + slashOffX, centerY - 8 + slashOffY);
+    }
+  } else if (battleState === 'ally-slash') {
+    // Blink during ally slash (60ms toggle)
+    const blinkHidden = allyHitResult && !allyHitResult.miss && (Math.floor(battleTimer / 60) & 1);
+    if (!blinkHidden && !bossDefeated) {
+      ctx.drawImage(landTurtleBattleCanvas, sprX, sprY);
+    }
+    // Draw slash effect on boss
+    if (!bossDefeated && allyHitResult && !allyHitResult.miss) {
+      const ally = battleAllies[currentAllyAttacker];
+      const allySlashFrames = ally ? getSlashFramesForWeapon(ally.weaponId, true) : slashFramesR;
+      const af = Math.min(Math.floor(battleTimer / 67), 2);
+      if (allySlashFrames && allySlashFrames[af]) {
+        const scatterX = [0, 10, -8][af];
+        const scatterY = [0, -6, 8][af];
+        ctx.drawImage(allySlashFrames[af], centerX - 8 + scatterX, centerY - 8 + scatterY);
+      }
     }
   } else {
     // Full sprite — normal draw
@@ -8730,9 +9097,142 @@ function _dmgBounceY(baseY, timer) {
   return baseY + DMG_BOUNCE_TABLE[frame];
 }
 
+function drawBattleAllies() {
+  if (battleAllies.length === 0) return;
+  if (battleState === 'none') return;
+
+  const rpX = HUD_RIGHT_X + 8;        // interior x (after border)
+  const rpY = HUD_VIEW_Y + 32 + 8;    // interior y (below portrait/HP panels + border)
+  const rpW = HUD_RIGHT_W - 16;       // interior width (96)
+  const rpH = HUD_VIEW_H - 32 - 16;   // interior height (96)
+  const listY = rpY + ROSTER_TRI_H;   // same top offset as roster
+
+  // Collect weapon sprite draws to render OUTSIDE clip
+  let weaponDraws = [];
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(rpX, rpY, rpW, rpH);
+  ctx.clip();
+
+  for (let i = 0; i < battleAllies.length; i++) {
+    const ally = battleAllies[i];
+    const shakeOff = (allyShakeTimer[i] > 0) ? (Math.floor(allyShakeTimer[i] / 67) & 1 ? 2 : -2) : 0;
+    const rowY = listY + i * ROSTER_ROW_H + shakeOff;
+
+    // Portrait (faded) — pose matches player sprite mechanics
+    const isVicPose = battleState === 'victory-celebrate' ||
+      battleState === 'victory-text-in' || battleState === 'victory-hold' || battleState === 'victory-fade-out' ||
+      battleState === 'exp-text-in' || battleState === 'exp-hold' || battleState === 'exp-fade-out' ||
+      battleState === 'gil-text-in' || battleState === 'gil-hold' || battleState === 'gil-fade-out' ||
+      battleState === 'levelup-text-in' || battleState === 'levelup-hold' ||
+      battleState === 'victory-text-out' || battleState === 'victory-menu-fade' || battleState === 'victory-box-close';
+    const isAllyHit = (battleState === 'ally-hit' || battleState === 'ally-damage-show-enemy') &&
+      enemyTargetAllyIdx === i && allyDamageNums[i] && !allyDamageNums[i].miss;
+    const isAllyAttack = (battleState === 'ally-attack-start') && currentAllyAttacker === i;
+    const isNearFatal = ally.hp > 0 && ally.hp <= Math.floor(ally.maxHP / 4);
+    let portraits;
+    if (isVicPose && (Math.floor(Date.now() / 250) & 1) && fakePlayerVictoryPortraits[ally.palIdx]) {
+      portraits = fakePlayerVictoryPortraits[ally.palIdx];
+    } else if (isAllyAttack && fakePlayerAttackPortraits[ally.palIdx]) {
+      portraits = fakePlayerAttackPortraits[ally.palIdx];
+    } else if (isAllyHit && fakePlayerHitPortraits[ally.palIdx]) {
+      portraits = fakePlayerHitPortraits[ally.palIdx];
+    } else if (isNearFatal && fakePlayerKneelPortraits[ally.palIdx]) {
+      portraits = fakePlayerKneelPortraits[ally.palIdx];
+    } else {
+      portraits = fakePlayerPortraits[ally.palIdx];
+    }
+    if (portraits) {
+      ctx.drawImage(portraits[ally.fadeStep], rpX, rowY + 2);
+      // Queue weapon sprites for drawing outside clip
+      const ppx = rpX;
+      const ppy = rowY + 2;
+      if (isAllyAttack) {
+        const wpnSt = weaponSubtype(ally.weaponId);
+        if (wpnSt === 'knife' && battleKnifeBladeCanvas) weaponDraws.push({ img: battleKnifeBladeCanvas, x: ppx + 8, y: ppy - 7 });
+        else if (wpnSt === 'dagger' && battleDaggerBladeCanvas) weaponDraws.push({ img: battleDaggerBladeCanvas, x: ppx + 8, y: ppy - 7 });
+        else if (wpnSt === 'sword' && battleSwordBladeCanvas) weaponDraws.push({ img: battleSwordBladeCanvas, x: ppx + 8, y: ppy - 7 });
+      }
+      if (battleState === 'ally-slash' && currentAllyAttacker === i) {
+        const wpnSt = weaponSubtype(ally.weaponId);
+        if (wpnSt === 'knife' && battleKnifeBladeSwungCanvas) weaponDraws.push({ img: battleKnifeBladeSwungCanvas, x: ppx - 16, y: ppy + 1 });
+        else if (wpnSt === 'dagger' && battleDaggerBladeSwungCanvas) weaponDraws.push({ img: battleDaggerBladeSwungCanvas, x: ppx - 16, y: ppy + 1 });
+        else if (wpnSt === 'sword' && battleSwordBladeSwungCanvas) weaponDraws.push({ img: battleSwordBladeSwungCanvas, x: ppx - 16, y: ppy + 1 });
+        else if (battleFistCanvas) weaponDraws.push({ img: battleFistCanvas, x: ppx - 4, y: ppy + 10 });
+      }
+    }
+
+    // Name (right-aligned)
+    const namePal = [0x0F, 0x0F, 0x0F, 0x30];
+    for (let s = 0; s < ally.fadeStep; s++) namePal[3] = nesColorFade(namePal[3]);
+    const nameBytes = _nameToBytes(ally.name);
+    const nameW = measureText(nameBytes);
+    drawText(ctx, rpX + rpW - nameW, rowY + 1, nameBytes, namePal);
+
+    // HP (right-aligned, red when low)
+    const hpStr = String(ally.hp);
+    const hpBytes = _nameToBytes(hpStr);
+    const hpW = measureText(hpBytes);
+    const hpPal = ally.hp <= Math.floor(ally.maxHP / 4) ? [0x0F, 0x0F, 0x0F, 0x16] : [0x0F, 0x0F, 0x0F, 0x10];
+    for (let s = 0; s < ally.fadeStep; s++) hpPal[3] = nesColorFade(hpPal[3]);
+    drawText(ctx, rpX + rpW - hpW, rowY + 9, hpBytes, hpPal);
+
+    // Thin separator line below row
+    const sepY = rowY + ROSTER_ROW_H - 1;
+    let sepNes = 0x2D;
+    for (let s = 0; s < ally.fadeStep; s++) sepNes = nesColorFade(sepNes);
+    const sepCol = NES_SYSTEM_PALETTE[sepNes] || [0, 0, 0];
+    ctx.fillStyle = `rgb(${sepCol[0]},${sepCol[1]},${sepCol[2]})`;
+    ctx.fillRect(rpX, sepY, rpW, 1);
+    if (i === 0) ctx.fillRect(rpX, rowY - 1, rpW, 1);
+
+    // Collect damage numbers for drawing above HUD (outside clip)
+    const dn = allyDamageNums[i];
+    if (dn) {
+      const bx = rpX + 8;
+      const baseY2 = rowY + 4;
+      const by = _dmgBounceY(baseY2, dn.timer);
+      weaponDraws.push({ type: 'dmg', dn, bx, by });
+    }
+  }
+
+  // Flash highlight on attacking ally
+  if (battleState === 'ally-attack-start' || battleState === 'ally-slash') {
+    const ai = currentAllyAttacker;
+    if (ai >= 0 && ai < battleAllies.length) {
+      const rowY = listY + ai * ROSTER_ROW_H;
+      ctx.globalAlpha = 0.3;
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(rpX, rowY, rpW, ROSTER_ROW_H);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  ctx.restore();
+
+  // Weapon blade sprites + damage numbers drawn ABOVE HUD (outside clip)
+  for (const wd of weaponDraws) {
+    if (wd.type === 'dmg') {
+      const { dn, bx, by } = wd;
+      if (dn.miss) {
+        drawText(ctx, bx - 8, by, BATTLE_MISS, [0x0F, 0x0F, 0x0F, 0x2B]);
+      } else {
+        const digits = String(dn.value);
+        const numBytes = new Uint8Array(digits.length);
+        for (let d = 0; d < digits.length; d++) numBytes[d] = 0x80 + parseInt(digits[d]);
+        const tw = digits.length * 8;
+        drawText(ctx, bx - Math.floor(tw / 2), by, numBytes, DMG_NUM_PAL);
+      }
+    } else {
+      ctx.drawImage(wd.img, wd.x, wd.y);
+    }
+  }
+}
+
 function drawDamageNumbers() {
   // Boss/monster damage number — bounces centered on the target
-  if (bossDamageNum && !bossDefeated) {
+  if (bossDamageNum && (!bossDefeated || isRandomEncounter)) {
     let bx, baseY;
     if (isRandomEncounter && encounterMonsters) {
       // Center on targeted monster in encounter grid
@@ -8902,7 +9402,11 @@ function gameLoop(timestamp) {
   }
 
   drawHUD();
-  drawRoster();
+  if (battleAllies.length > 0 && battleState !== 'none') {
+    drawBattleAllies();
+  } else {
+    drawRoster();
+  }
 
   // Pause menu overlays everything
   drawPauseMenu();
