@@ -563,6 +563,36 @@ const PLAYER_POOL = [
   { name: 'Wren',    level: 4,  palIdx: 5, camper: false, loc: 'world' },
 ];
 
+// --- Chat system ---
+const CHAT_LINE_H = 9;          // 8px font + 1px gap
+const CHAT_VISIBLE = 5;         // max lines shown when collapsed
+const CHAT_HISTORY = 30;        // total messages kept in buffer
+const CHAT_EXPAND_MS = 650;     // expand/collapse duration — tuned to match SCREEN_OPEN/CLOSE SFX
+const CHAT_AUTO_MIN_MS = 5000;
+const CHAT_AUTO_MAX_MS = 16000;
+const CHAT_PHRASES = [
+  'anyone near floor 3?',
+  'need heals',
+  'good luck!',
+  'watch out for traps',
+  'lfg crystal room',
+  'found a chest!!',
+  'that boss hits hard',
+  'anyone selling armor?',
+  'longsword on floor 3',
+  'stay together',
+  'almost to the boss',
+  'gg everyone',
+  'which floor is this?',
+  'low hp, retreating',
+  'nice one!',
+  'any potions?',
+  'boss incoming',
+  'clear!',
+  'level up!',
+  'this dungeon is wild',
+];
+
 function getPlayerLocation() {
   if (onWorldMap) return 'world';
   if (currentMapId === 114) return 'ur';
@@ -622,6 +652,15 @@ let rosterPrevLoc = null;        // last known player location
 let rosterLocChanged = false;    // true when transition involves a location change
 let rosterArrivalOrder = [];     // names in arrival order (most recent first)
 const ROSTER_SLIDE_SPEED = 0.15; // px per ms
+let chatMessages = [];       // [{text, type, timer}] type: 'chat'|'system'
+let chatAutoTimer = 8000;    // ms until first auto message
+let chatFontReady = false;
+let chatInputActive = false; // t key opens chat input
+let chatInputText = '';
+let chatCursorTimer = 0;     // ms, blinks every 500ms
+let chatExpanded = false;    // T (shift) toggles expanded chat view
+let chatExpandAnim = 0;      // 0=collapsed, 1=expanded (animated)
+
 let rosterBattleFade = 0;        // 0=visible, ROSTER_FADE_STEPS=black
 let rosterBattleFadeTimer = 0;
 let rosterBattleFading = 'none'; // 'none'|'out'|'in'
@@ -766,6 +805,27 @@ export function init() {
 
   // Input
   window.addEventListener('keydown', (e) => {
+    // Chat input mode — capture all keys
+    if (chatInputActive) {
+      e.preventDefault();
+      if (e.key === 'Enter') {
+        if (chatInputText.length > 0) {
+          const slot = saveSlots[selectCursor];
+          const senderName = (slot && slot.name) ? _nesNameToString(slot.name) : 'You';
+          addChatMessage(senderName + ': ' + chatInputText, 'chat');
+        }
+        chatInputActive = false;
+        chatInputText = '';
+      } else if (e.key === 'Escape') {
+        chatInputActive = false;
+        chatInputText = '';
+      } else if (e.key === 'Backspace') {
+        chatInputText = chatInputText.slice(0, -1);
+      } else if (e.key.length === 1 && chatInputText.length < 42) {
+        chatInputText += e.key;
+      }
+      return;
+    }
     // Name entry mode — capture all keys, block game controls
     if (titleState === 'name-entry') {
       e.preventDefault();
@@ -786,6 +846,19 @@ export function init() {
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'z', 'Z', 'x', 'X', 'Enter', 's', 'S'].includes(e.key)) {
       e.preventDefault();
       keys[e.key] = true;
+    }
+    if (e.key === 'T' && titleState === 'done' && battleState === 'none' &&
+        pauseState === 'none' && rosterState === 'none' && transState !== 'loading' && msgBoxState === 'none' && !chatInputActive) {
+      e.preventDefault();
+      chatExpanded = !chatExpanded;
+      playSFX(chatExpanded ? SFX.SCREEN_OPEN : SFX.SCREEN_CLOSE);
+    }
+    if (e.key === 't' && titleState === 'done' && battleState === 'none' &&
+        pauseState === 'none' && rosterState === 'none' && transState !== 'loading' && msgBoxState === 'none') {
+      e.preventDefault();
+      chatInputActive = true;
+      chatInputText = '';
+      chatCursorTimer = 0;
     }
     if (e.key === 'j' || e.key === 'J') {
       jukeboxMode = !jukeboxMode;
@@ -3884,6 +3957,7 @@ function handleInput() {
   if (transState !== 'none') return;
   if (shakeActive) return;
   if (starEffect) return;
+  if (chatExpanded) return;
 
   if (keys['z'] || keys['Z']) {
     keys['z'] = false;
@@ -5710,6 +5784,9 @@ function drawRosterMenu() {
 }
 
 function initRoster() {
+  document.fonts.load('8px "Press Start 2P"').then(() => {
+    requestAnimationFrame(() => { chatFontReady = true; });
+  });
   rosterTimer = 3000 + Math.random() * 5000;
   // Init HP for each player
   for (const p of PLAYER_POOL) {
@@ -5724,6 +5801,168 @@ function initRoster() {
       rosterFadeMap[p.name] = 0; // fully visible
     }
   }
+}
+
+function _nesNameToString(bytes) {
+  let s = '';
+  for (const b of bytes) {
+    if (b >= 0xCA) s += String.fromCharCode(b - 0xCA + 97);
+    else if (b >= 0x8A) s += String.fromCharCode(b - 0x8A + 65);
+    else if (b >= 0x80) s += String.fromCharCode(b - 0x80 + 48);
+  }
+  return s;
+}
+
+function addChatMessage(text, type) {
+  chatMessages.push({ text, type: type || 'chat' });
+  while (chatMessages.length > CHAT_HISTORY) chatMessages.shift();
+}
+
+function updateChat(dt) {
+  const expandTarget = chatExpanded ? 1 : 0;
+  if (chatExpandAnim < expandTarget) chatExpandAnim = Math.min(1, chatExpandAnim + dt / CHAT_EXPAND_MS);
+  else if (chatExpandAnim > expandTarget) chatExpandAnim = Math.max(0, chatExpandAnim - dt / CHAT_EXPAND_MS);
+  if (chatInputActive) chatCursorTimer += dt;
+  if (battleState === 'none' && !chatInputActive) {
+    chatAutoTimer -= dt;
+    if (chatAutoTimer <= 0) {
+      chatAutoTimer = CHAT_AUTO_MIN_MS + Math.random() * (CHAT_AUTO_MAX_MS - CHAT_AUTO_MIN_MS);
+      const p = PLAYER_POOL[Math.floor(Math.random() * PLAYER_POOL.length)];
+      const phrase = CHAT_PHRASES[Math.floor(Math.random() * CHAT_PHRASES.length)];
+      addChatMessage(p.name + ': ' + phrase, 'chat');
+    }
+  }
+}
+
+// Wrap text to fit maxWidth using char-by-char measurement, breaking at spaces
+function _chatWrap(ctx, text, maxWidth) {
+  const lines = [];
+  let start = 0;
+  while (start < text.length) {
+    let end = start;
+    let lastSpace = -1;
+    while (end < text.length && ctx.measureText(text.slice(start, end + 1)).width <= maxWidth) {
+      if (text[end] === ' ') lastSpace = end;
+      end++;
+    }
+    if (end >= text.length) { lines.push(text.slice(start)); break; }
+    const cut = lastSpace > start ? lastSpace : end;
+    lines.push(text.slice(start, cut));
+    start = cut + (text[cut] === ' ' ? 1 : 0);
+  }
+  return lines.length ? lines : [text];
+}
+
+function drawChat() {
+  if (!chatFontReady) return;
+  const battleFadeAlpha = 1 - rosterBattleFade / ROSTER_FADE_STEPS;
+  if (battleFadeAlpha <= 0) return;
+  if (chatMessages.length === 0 && !chatInputActive && chatExpandAnim === 0) return;
+
+  ctx.save();
+
+  // ---- NES-stepped fade over the viewport area (4 discrete steps, 100ms each) ----
+  if (chatExpandAnim > 0) {
+    const NES_STEP_ALPHAS = [0, 0.28, 0.52, 0.76, 1.0];
+    const step = Math.min(4, Math.round(chatExpandAnim * 4));
+    ctx.globalAlpha = NES_STEP_ALPHAS[step] * battleFadeAlpha;
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, HUD_VIEW_Y, CANVAS_W, HUD_BOT_Y - HUD_VIEW_Y);
+  }
+
+  // ---- Expanding border box: slides up in 8-px increments ----
+  const fullBoxH = CANVAS_H - HUD_VIEW_Y;                               // 208 when fully open
+  const curBoxH  = HUD_BOT_H + Math.round((fullBoxH - HUD_BOT_H) * chatExpandAnim / 8) * 8;
+  const curBoxY  = CANVAS_H - curBoxH;                                  // top-left Y of box
+  if (chatExpandAnim > 0) {
+    ctx.globalAlpha = battleFadeAlpha;
+    _drawHudBox(0, curBoxY, CANVAS_W, curBoxH, 0);
+  }
+
+  // ---- Text area inside the box ----
+  const innerTop    = curBoxY + 8;
+  const innerBottom = curBoxY + curBoxH - 10;
+  const innerH      = innerBottom - innerTop;
+
+  ctx.globalAlpha = battleFadeAlpha;
+  ctx.beginPath();
+  ctx.rect(8, innerTop, CANVAS_W - 16, curBoxH - 16);
+  ctx.clip();
+  ctx.font = '8px "Press Start 2P"';
+  ctx.textBaseline = 'bottom';
+  const startX = 12;
+  const lineW  = CANVAS_W - 8 - startX;
+
+  // Build flat row list from message history
+  const rows = [];
+  for (const m of chatMessages) {
+    if (m.type === 'system') {
+      for (const line of _chatWrap(ctx, m.text, lineW))
+        rows.push({ color: '#7898c8', text: line, x: startX });
+    } else {
+      const colon = m.text.indexOf(':');
+      if (colon > -1) {
+        const namePart = m.text.slice(0, colon + 1);
+        const msgPart  = m.text.slice(colon + 2);
+        const nameW    = ctx.measureText(namePart).width;
+        const firstLine = _chatWrap(ctx, msgPart, lineW - nameW)[0];
+        rows.push({ namePart, nameW, msgPart: firstLine, x: startX });
+        const remainder = msgPart.slice(firstLine.length).replace(/^ /, '');
+        if (remainder.length > 0)
+          rows.push({ color: '#e0e0e0', text: _chatWrap(ctx, remainder, lineW)[0], x: startX });
+      } else {
+        for (const line of _chatWrap(ctx, m.text, lineW))
+          rows.push({ color: '#e0e0e0', text: line, x: startX });
+      }
+    }
+  }
+
+  const inputRows  = chatInputActive ? 2 : 0;
+  const availRows  = Math.max(1, Math.floor(innerH / CHAT_LINE_H) - inputRows);
+  const inputLine2Y = innerBottom;
+  const inputLine1Y = inputLine2Y - CHAT_LINE_H;
+  const bottomY    = chatInputActive ? inputLine1Y - CHAT_LINE_H : inputLine2Y;
+  const visible    = rows.slice(-availRows);
+
+  for (let i = 0; i < visible.length; i++) {
+    const r = visible[i];
+    const lineY = bottomY - (visible.length - 1 - i) * CHAT_LINE_H;
+    if (r.namePart !== undefined) {
+      ctx.fillStyle = '#d8b858';
+      ctx.fillText(r.namePart, r.x, lineY);
+      ctx.fillStyle = '#e0e0e0';
+      ctx.fillText(r.msgPart, r.x + r.nameW, lineY);
+    } else {
+      ctx.fillStyle = r.color;
+      ctx.fillText(r.text, r.x, lineY);
+    }
+  }
+
+  // Input lines
+  if (chatInputActive) {
+    const promptW    = ctx.measureText('> ').width;
+    const inputAvail = lineW - promptW;
+    let splitIdx = chatInputText.length;
+    for (let i = 1; i <= chatInputText.length; i++) {
+      if (ctx.measureText(chatInputText.slice(0, i)).width > inputAvail) { splitIdx = i - 1; break; }
+    }
+    const line1Text = chatInputText.slice(0, splitIdx);
+    const line2Text = chatInputText.slice(splitIdx);
+    ctx.fillStyle = '#d8b858';
+    ctx.fillText('>', startX, inputLine1Y);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(line1Text, startX + promptW, inputLine1Y);
+    ctx.fillText(line2Text, startX, inputLine2Y);
+    if (Math.floor(chatCursorTimer / 500) % 2 === 0) {
+      if (line2Text.length > 0)
+        ctx.fillRect(startX + ctx.measureText(line2Text).width, inputLine2Y - 7, 6, 8);
+      else
+        ctx.fillRect(startX + promptW + ctx.measureText(line1Text).width, inputLine1Y - 7, 6, 8);
+    }
+  }
+
+  ctx.globalAlpha = 1;
+  ctx.restore();
 }
 
 function _rosterNextTimer() {
@@ -5745,11 +5984,13 @@ function _rosterStartFadeIn(name) {
       rosterSlideY[p.name] = (rosterSlideY[p.name] || 0) - ROSTER_ROW_H;
     }
   }
+  addChatMessage('* ' + name + ' entered the area', 'system');
 }
 
 function _rosterStartFadeOut(name) {
   rosterFadeDir[name] = 'out';
   rosterFadeTimers[name] = 0;
+  addChatMessage('* ' + name + ' left the area', 'system');
 }
 
 // Get all players to show (at current loc OR fading out), newest arrivals first
@@ -9620,6 +9861,7 @@ function gameLoop(timestamp) {
 
   handleInput();
   updateRoster(dt);
+  updateChat(dt);
   updatePauseMenu(dt);
   updateMsgBox(dt);
   updateBattle(dt);
@@ -9677,6 +9919,9 @@ function gameLoop(timestamp) {
   } else {
     drawRoster();
   }
+
+  // Chat panel in bottom box (only outside battle)
+  drawChat();
 
   // Pause menu overlays everything
   drawPauseMenu();
