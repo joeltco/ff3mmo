@@ -355,6 +355,7 @@ let itemHeldIdx = -1;        // global index of held item (-1 = none), -100/-101
 let itemPage = 0;            // current page: 0=equip, 1+=inventory pages
 let itemPageCursor = 0;      // cursor row within current page (0 to INV_SLOTS-1 or 0-1 for equip)
 let itemSlideDir = 0;        // -1 = sliding left (page++), +1 = sliding right (page--)
+let itemSlideCursor = 0;     // cursor row to set after slide completes
 let itemTargetType = 'player'; // 'player' or 'enemy' — who to use item on
 let itemTargetIndex = 0;       // which enemy index (for enemy target)
 let itemTargetAllyIndex = -1;  // -1 = player, 0+ = ally index (when itemTargetType === 'player')
@@ -619,6 +620,7 @@ let rosterFadeDir = {};          // {playerName: 'in'|'out'}
 let rosterSlideY = {};           // {playerName: px offset} — animates toward 0
 let rosterPrevLoc = null;        // last known player location
 let rosterLocChanged = false;    // true when transition involves a location change
+let rosterArrivalOrder = [];     // names in arrival order (most recent first)
 const ROSTER_SLIDE_SPEED = 0.15; // px per ms
 let rosterBattleFade = 0;        // 0=visible, ROSTER_FADE_STEPS=black
 let rosterBattleFadeTimer = 0;
@@ -635,15 +637,17 @@ let allyDamageNums = {};       // {allyIdx: {value, timer, crit} or {miss, timer
 let allyShakeTimer = {};       // {allyIdx: ms remaining}
 let enemyTargetAllyIdx = -1;   // which ally an enemy is targeting (-1 = player)
 let allyExitTimer = 0;         // ms since victory-celebrate started (for ally exit fade)
+let turnTimer = 0;             // ms elapsed while player is deciding; auto-skip at TURN_TIME_MS
+const TURN_TIME_MS = 10000;    // 10 seconds to act before turn is skipped
 let rosterState = 'none';       // 'none'|'browse'|'menu-in'|'menu'|'menu-out'
 let rosterCursor = 0;           // index into getRosterVisible()
 let rosterScroll = 0;           // scroll offset
 let rosterMenuCursor = 0;       // cursor in context menu
 let rosterMenuTimer = 0;
 const ROSTER_MENU_ITEMS = ['Party', 'Duel', 'Trade', 'Message', 'Inspect'];
-const ROSTER_ROW_H = 20;        // pixels per roster row
-const ROSTER_VISIBLE = 4;       // max visible rows in panel
-const ROSTER_TRI_H = 8;         // height reserved for scroll triangles
+const ROSTER_ROW_H = 32;        // pixels per roster row (matches HUD box height)
+const ROSTER_VISIBLE = 3;       // max visible rows in panel (3×32=96px, 16px for scroll)
+const ROSTER_TRI_H = 0;         // no top padding — scroll triangles go in bottom gap
 
 // Chest message box state (same style as roar box)
 // Universal message box — slide-in, instant text, Z dismiss, slide-out
@@ -934,7 +938,7 @@ function initHUD(romData) {
   drawBox(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H, false); // Game viewport (no fill)
   drawBox(HUD_RIGHT_X, HUD_VIEW_Y, 32, 32);                          // Right mini-left (16x16 interior)
   drawBox(HUD_RIGHT_X + 32, HUD_VIEW_Y, HUD_RIGHT_W - 32, 32);      // Right mini-right
-  drawBox(HUD_RIGHT_X, HUD_VIEW_Y + 32, HUD_RIGHT_W, HUD_VIEW_H - 32); // Right main box
+  // Right main box omitted — each roster player has its own paired boxes drawn dynamically
   drawBox(0, HUD_BOT_Y, CANVAS_W, HUD_BOT_H);                      // Bottom box
 
   // Title screen HUD — full-width viewport (no right boxes)
@@ -981,7 +985,7 @@ function initHUD(romData) {
     [HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H, false],
     [HUD_RIGHT_X, HUD_VIEW_Y, 32, 32, true],
     [HUD_RIGHT_X + 32, HUD_VIEW_Y, HUD_RIGHT_W - 32, 32, true],
-    [HUD_RIGHT_X, HUD_VIEW_Y + 32, HUD_RIGHT_W, HUD_VIEW_H - 32, true],
+    // Right main box excluded — player rows are drawn dynamically with individual paired boxes
   ]);
   titleHudFadeCanvases = buildFadedHUDs(null, [
     [HUD_VIEW_X, HUD_VIEW_Y, CANVAS_W, HUD_VIEW_H, false],
@@ -3234,15 +3238,26 @@ function handleInput() {
         return (itemPage - 1) * INV_SLOTS + itemPageCursor;
       }
 
-      // Up/Down navigation within page
+      // Up/Down navigation — advance to next/prev page at boundaries
       if (keys['ArrowDown']) {
         keys['ArrowDown'] = false;
-        itemPageCursor = (itemPageCursor + 1) % pageRows;
+        if (itemPageCursor < pageRows - 1) {
+          itemPageCursor++;
+        } else if (itemPage < totalPages - 1) {
+          itemSlideDir = -1; itemSlideCursor = 0;
+          battleState = 'item-slide'; battleTimer = 0;
+        }
         playSFX(SFX.CURSOR);
       }
       if (keys['ArrowUp']) {
         keys['ArrowUp'] = false;
-        itemPageCursor = (itemPageCursor - 1 + pageRows) % pageRows;
+        if (itemPageCursor > 0) {
+          itemPageCursor--;
+        } else if (itemPage > 0) {
+          const prevPageRows = (itemPage - 1) === 0 ? 2 : INV_SLOTS;
+          itemSlideDir = 1; itemSlideCursor = prevPageRows - 1;
+          battleState = 'item-slide'; battleTimer = 0;
+        }
         playSFX(SFX.CURSOR);
       }
 
@@ -3250,14 +3265,14 @@ function handleInput() {
       if (keys['ArrowLeft'] && itemPage > 0) {
         keys['ArrowLeft'] = false;
         playSFX(SFX.CURSOR);
-        itemSlideDir = 1; // sliding right (previous page)
+        itemSlideDir = 1; itemSlideCursor = 0; // sliding right (previous page)
         battleState = 'item-slide';
         battleTimer = 0;
       }
       if (keys['ArrowRight'] && itemPage < totalPages - 1) {
         keys['ArrowRight'] = false;
         playSFX(SFX.CURSOR);
-        itemSlideDir = -1; // sliding left (next page)
+        itemSlideDir = -1; itemSlideCursor = 0; // sliding left (next page)
         battleState = 'item-slide';
         battleTimer = 0;
       }
@@ -5433,6 +5448,17 @@ function drawHUD() {
     } else if (loadingFadeState === 'out') {
       fadeLevel = Math.min(Math.floor(loadingFadeTimer / LOAD_FADE_STEP_MS), LOAD_FADE_MAX);
     }
+    // Draw right main panel box (only shown during loading screen)
+    const _lbTiles = (borderFadeSets && borderFadeSets[fadeLevel]) || borderTileCanvases;
+    if (_lbTiles) {
+      const [lTL, lTOP, lTR, lLEFT, lRIGHT, lBL, lBOT, lBR, lFILL] = _lbTiles;
+      const lx = HUD_RIGHT_X, ly = HUD_VIEW_Y + 32, lw = HUD_RIGHT_W, lh = HUD_VIEW_H - 32;
+      ctx.drawImage(lTL, lx, ly); ctx.drawImage(lTR, lx + lw - 8, ly);
+      ctx.drawImage(lBL, lx, ly + lh - 8); ctx.drawImage(lBR, lx + lw - 8, ly + lh - 8);
+      for (let tx = lx + 8; tx < lx + lw - 8; tx += 8) { ctx.drawImage(lTOP, tx, ly); ctx.drawImage(lBOT, tx, ly + lh - 8); }
+      for (let ty = ly + 8; ty < ly + lh - 8; ty += 8) { ctx.drawImage(lLEFT, lx, ty); ctx.drawImage(lRIGHT, lx + lw - 8, ty); }
+      for (let ty = ly + 8; ty < ly + lh - 8; ty += 8) for (let tx = lx + 8; tx < lx + lw - 8; tx += 8) ctx.drawImage(lFILL, tx, ty);
+    }
     const beatBytes = new Uint8Array([0x8B,0xCE,0xCA,0xDD,0xFF,0xDD,0xD1,0xCE]); // "Beat the"
     const bossBytes = new Uint8Array([0x8B,0xD8,0xDC,0xDC,0xFF,0x94,0xDE,0xD9,0xD8,0xC4]); // "Boss Kupo!"
     const rpX = HUD_RIGHT_X; // right panel x
@@ -5479,6 +5505,18 @@ function drawHUD() {
 
 // ── Player Roster (right main panel) ──
 
+// Draw a HUD border box on the main canvas ctx, with optional NES fade step
+function _drawHudBox(x, y, w, h, fadeStep = 0) {
+  const tiles = (fadeStep > 0 && borderFadeSets) ? borderFadeSets[fadeStep] : borderTileCanvases;
+  if (!tiles) return;
+  const [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR, FILL] = tiles;
+  ctx.drawImage(TL, x, y); ctx.drawImage(TR, x + w - 8, y);
+  ctx.drawImage(BL, x, y + h - 8); ctx.drawImage(BR, x + w - 8, y + h - 8);
+  for (let tx = x + 8; tx < x + w - 8; tx += 8) { ctx.drawImage(TOP, tx, y); ctx.drawImage(BOT, tx, y + h - 8); }
+  for (let ty = y + 8; ty < y + h - 8; ty += 8) { ctx.drawImage(LEFT, x, ty); ctx.drawImage(RIGHT, x + w - 8, ty); }
+  for (let ty = y + 8; ty < y + h - 8; ty += 8) for (let tx = x + 8; tx < x + w - 8; tx += 8) ctx.drawImage(FILL, tx, ty);
+}
+
 function _nameToBytes(name) {
   const bytes = [];
   for (let i = 0; i < name.length; i++) {
@@ -5517,10 +5555,9 @@ function drawRoster() {
   if (transState === 'loading') return;
   if (rosterBattleFade >= ROSTER_FADE_STEPS && battleState !== 'none') return;
 
-  const rpX = HUD_RIGHT_X + 8;        // interior x (after border)
-  const rpY = HUD_VIEW_Y + 32 + 8;    // interior y (below portrait/HP panels + border)
-  const rpW = HUD_RIGHT_W - 16;       // interior width (96)
-  const rpH = HUD_VIEW_H - 32 - 16;   // interior height (96)
+  const panelTop = HUD_VIEW_Y + 32;          // rows start right below player boxes
+  const panelH = HUD_VIEW_H - 32;            // 112px total
+  const scrollAreaY = panelTop + ROSTER_VISIBLE * ROSTER_ROW_H; // 16px gap for triangles
 
   const players = getRosterVisible();
   const maxVisible = Math.min(ROSTER_VISIBLE, players.length);
@@ -5529,12 +5566,11 @@ function drawRoster() {
 
   const canScrollUp = rosterScroll > 0;
   const canScrollDown = rosterScroll < maxScroll;
-  const listY = rpY + ROSTER_TRI_H;
 
-  // Clip to right main panel interior
+  // Clip to right panel area to contain slide animations
   ctx.save();
   ctx.beginPath();
-  ctx.rect(rpX, rpY, rpW, rpH);
+  ctx.rect(HUD_RIGHT_X, panelTop, HUD_RIGHT_W, panelH);
   ctx.clip();
 
   for (let i = 0; i < maxVisible; i++) {
@@ -5542,86 +5578,70 @@ function drawRoster() {
     if (idx >= players.length) break;
     const p = players[idx];
     const slideOff = rosterSlideY[p.name] || 0;
-    const rowY = listY + i * ROSTER_ROW_H + slideOff;
+    const rowY = panelTop + i * ROSTER_ROW_H + slideOff;
     const playerFade = rosterFadeMap[p.name] || 0;
     const transFade = _rosterTransFade();
     const fadeStep = Math.min(Math.max(playerFade, transFade, rosterBattleFade), ROSTER_FADE_STEPS);
 
-    // Portrait (faded)
-    const portraits = fakePlayerPortraits[p.palIdx];
-    if (portraits) ctx.drawImage(portraits[fadeStep], rpX, rowY + 2);
+    // Portrait box (32×32) + info box (80×32) — mirrors top player HUD boxes
+    _drawHudBox(HUD_RIGHT_X, rowY, 32, ROSTER_ROW_H, fadeStep);
+    _drawHudBox(HUD_RIGHT_X + 32, rowY, HUD_RIGHT_W - 32, ROSTER_ROW_H, fadeStep);
 
-    // Name (NES faded text, right-aligned)
+    // Portrait in interior of portrait box
+    const portraits = fakePlayerPortraits[p.palIdx];
+    if (portraits) ctx.drawImage(portraits[fadeStep], HUD_RIGHT_X + 8, rowY + 8);
+
+    // Name (NES faded, right-aligned in info box interior — top text line)
     const namePal = [0x0F, 0x0F, 0x0F, 0x30];
     for (let s = 0; s < fadeStep; s++) namePal[3] = nesColorFade(namePal[3]);
     const nameBytes = _nameToBytes(p.name);
     const nameW = measureText(nameBytes);
-    drawText(ctx, rpX + rpW - nameW, rowY + 1, nameBytes, namePal);
+    drawText(ctx, HUD_RIGHT_X + HUD_RIGHT_W - 8 - nameW, rowY + 8, nameBytes, namePal);
 
-    // Level (NES faded, right-aligned)
+    // Level (NES faded, right-aligned — second text line)
     const lvPal = [0x0F, 0x0F, 0x0F, 0x10];
     for (let s = 0; s < fadeStep; s++) lvPal[3] = nesColorFade(lvPal[3]);
     const lvLabel = _nameToBytes('Lv' + String(p.level));
     const lvW = measureText(lvLabel);
-    drawText(ctx, rpX + rpW - lvW, rowY + 9, lvLabel, lvPal);
-
-    // Thin separator line below row (NES faded)
-    const sepY = rowY + ROSTER_ROW_H - 1;
-    let sepNes = 0x2D;
-    for (let s = 0; s < fadeStep; s++) sepNes = nesColorFade(sepNes);
-    const sepCol = NES_SYSTEM_PALETTE[sepNes] || [0, 0, 0];
-    ctx.fillStyle = `rgb(${sepCol[0]},${sepCol[1]},${sepCol[2]})`;
-    ctx.fillRect(rpX, sepY, rpW, 1);
-    // Top separator above first row
-    if (i === 0) {
-      ctx.fillRect(rpX, rowY - 1, rpW, 1);
-    }
-  }
-
-  // Scroll triangles (centered in panel width, NES faded)
-  const triCX = rpX + Math.floor(rpW / 2);
-  const triFade = Math.min(Math.max(_rosterTransFade(), rosterBattleFade), ROSTER_FADE_STEPS);
-  let triNes = 0x10;
-  for (let s = 0; s < triFade; s++) triNes = nesColorFade(triNes);
-  const triCol = NES_SYSTEM_PALETTE[triNes] || [0, 0, 0];
-  ctx.fillStyle = `rgb(${triCol[0]},${triCol[1]},${triCol[2]})`;
-  if (canScrollUp) {
-    const ty = rpY;
-    ctx.beginPath();
-    ctx.moveTo(triCX - 4, ty + 5);
-    ctx.lineTo(triCX, ty);
-    ctx.lineTo(triCX + 4, ty + 5);
-    ctx.fill();
-  }
-  if (canScrollDown) {
-    const ty = rpY + rpH - 7;
-    ctx.beginPath();
-    ctx.moveTo(triCX - 4, ty);
-    ctx.lineTo(triCX, ty + 5);
-    ctx.lineTo(triCX + 4, ty);
-    ctx.fill();
+    drawText(ctx, HUD_RIGHT_X + HUD_RIGHT_W - 8 - lvW, rowY + 16, lvLabel, lvPal);
   }
 
   ctx.restore();
+
+  // Scroll triangles in the 16px gap below rows
+  if (canScrollUp || canScrollDown) {
+    const triFade = Math.min(Math.max(_rosterTransFade(), rosterBattleFade), ROSTER_FADE_STEPS);
+    let triNes = 0x10;
+    for (let s = 0; s < triFade; s++) triNes = nesColorFade(triNes);
+    const triCol = NES_SYSTEM_PALETTE[triNes] || [0, 0, 0];
+    ctx.fillStyle = `rgb(${triCol[0]},${triCol[1]},${triCol[2]})`;
+    const triCX = HUD_RIGHT_X + Math.floor(HUD_RIGHT_W / 2);
+    if (canScrollUp) {
+      const ty = scrollAreaY + 2;
+      ctx.beginPath();
+      ctx.moveTo(triCX - 4, ty + 5); ctx.lineTo(triCX, ty); ctx.lineTo(triCX + 4, ty + 5);
+      ctx.fill();
+    }
+    if (canScrollDown) {
+      const ty = scrollAreaY + 9;
+      ctx.beginPath();
+      ctx.moveTo(triCX - 4, ty); ctx.lineTo(triCX, ty + 5); ctx.lineTo(triCX + 4, ty);
+      ctx.fill();
+    }
+  }
 
   // Cure sparkle + heal number on roster player portrait during pause heal
   if (pauseHealNum && pauseHealNum.rosterIdx >= 0 && cureSparkleFrames.length === 2) {
     const visRow = pauseHealNum.rosterIdx - rosterScroll;
     if (visRow >= 0 && visRow < ROSTER_VISIBLE) {
-      const px = rpX;
-      const py = listY + visRow * ROSTER_ROW_H + 2;
+      const px = HUD_RIGHT_X + 8;
+      const py = panelTop + visRow * ROSTER_ROW_H + 8; // portrait interior y
       const fi = Math.floor(pauseTimer / 67) & 1;
       const frame = cureSparkleFrames[fi];
       ctx.drawImage(frame, px - 8, py - 7);
-      ctx.save(); ctx.scale(-1, 1);
-      ctx.drawImage(frame, -(px + 23), py - 7);
-      ctx.restore();
-      ctx.save(); ctx.scale(1, -1);
-      ctx.drawImage(frame, px - 8, -(py + 24));
-      ctx.restore();
-      ctx.save(); ctx.scale(-1, -1);
-      ctx.drawImage(frame, -(px + 23), -(py + 24));
-      ctx.restore();
+      ctx.save(); ctx.scale(-1, 1); ctx.drawImage(frame, -(px + 23), py - 7); ctx.restore();
+      ctx.save(); ctx.scale(1, -1); ctx.drawImage(frame, px - 8, -(py + 24)); ctx.restore();
+      ctx.save(); ctx.scale(-1, -1); ctx.drawImage(frame, -(px + 23), -(py + 24)); ctx.restore();
       // Heal number
       const digits = String(pauseHealNum.value);
       const numBytes = new Uint8Array(digits.length);
@@ -5632,14 +5652,14 @@ function drawRoster() {
     }
   }
 
-  // Cursor (drawn OUTSIDE clip so it can overlap border)
+  // Cursor (drawn OUTSIDE clip — overlaps portrait box border)
   if (rosterState === 'browse' || rosterState === 'menu' || rosterState === 'menu-in' || rosterState === 'menu-out') {
     const visIdx = rosterCursor - rosterScroll;
     const curTarget = players[rosterCursor];
     const curSlide = curTarget ? (rosterSlideY[curTarget.name] || 0) : 0;
-    const curY = listY + visIdx * ROSTER_ROW_H + curSlide;
+    const curY = panelTop + visIdx * ROSTER_ROW_H + curSlide + 12;
     if (cursorTileCanvas) {
-      ctx.drawImage(cursorTileCanvas, rpX - 14, curY);
+      ctx.drawImage(cursorTileCanvas, HUD_RIGHT_X - 4, curY);
     }
   }
 }
@@ -5711,11 +5731,14 @@ function _rosterNextTimer() {
 }
 
 function _rosterStartFadeIn(name) {
+  // Insert at front of arrival order (most recent = top of list)
+  rosterArrivalOrder = rosterArrivalOrder.filter(n => n !== name);
+  rosterArrivalOrder.unshift(name);
   rosterFadeMap[name] = ROSTER_FADE_STEPS;
   rosterFadeDir[name] = 'in';
   rosterFadeTimers[name] = 0;
-  rosterSlideY[name] = 0;
-  // New player goes to top — push everyone else down
+  rosterSlideY[name] = ROSTER_ROW_H; // new player slides in from below its row-0 position
+  // All currently visible players shift down one row to make room at top
   const loc = getPlayerLocation();
   for (const p of PLAYER_POOL) {
     if (p.name !== name && p.loc === loc && rosterFadeMap[p.name] !== undefined) {
@@ -5729,21 +5752,24 @@ function _rosterStartFadeOut(name) {
   rosterFadeTimers[name] = 0;
 }
 
-// Get all players to show (at current loc OR fading out)
+// Get all players to show (at current loc OR fading out), newest arrivals first
 function getRosterVisible() {
   const loc = getPlayerLocation();
-  const result = [];
-  // Players at this location (may be fading in)
-  for (const p of PLAYER_POOL) {
-    if (p.loc === loc) result.push(p);
-  }
-  // Players fading out (no longer at loc but fade not done)
-  for (const p of PLAYER_POOL) {
-    if (p.loc !== loc && rosterFadeDir[p.name] === 'out' && rosterFadeMap[p.name] < ROSTER_FADE_STEPS) {
-      result.push(p);
-    }
-  }
-  return result;
+  const atLoc = PLAYER_POOL.filter(p => p.loc === loc);
+  const fadingOut = PLAYER_POOL.filter(p =>
+    p.loc !== loc && rosterFadeDir[p.name] === 'out' && rosterFadeMap[p.name] < ROSTER_FADE_STEPS
+  );
+  // Sort at-location players by arrival order (most recent = index 0)
+  atLoc.sort((a, b) => {
+    const ai = rosterArrivalOrder.indexOf(a.name);
+    const bi = rosterArrivalOrder.indexOf(b.name);
+    // Not in arrival order (initial players) go after recent arrivals
+    if (ai === -1 && bi === -1) return 0;
+    if (ai === -1) return 1;
+    if (bi === -1) return -1;
+    return ai - bi;
+  });
+  return [...atLoc, ...fadingOut];
 }
 
 function _clampRosterCursor() {
@@ -5788,6 +5814,7 @@ function updateRoster(dt) {
   if (rosterPrevLoc !== null && curLoc !== rosterPrevLoc) {
     // Clear all per-player fade/slide state
     rosterFadeMap = {}; rosterFadeDir = {}; rosterFadeTimers = {}; rosterSlideY = {};
+    rosterArrivalOrder = [];
     // Mark all players at new location as visible
     for (const p of PLAYER_POOL) {
       if (p.loc === curLoc) rosterFadeMap[p.name] = 0;
@@ -5844,25 +5871,25 @@ function updateRoster(dt) {
     }
   }
 
-  // Simulate player movement between locations
-  rosterTimer -= dt;
-  if (rosterTimer <= 0) {
-    rosterTimer = _rosterNextTimer();
+  // Simulate player movement — paused during battle to avoid silent list changes
+  if (battleState === 'none') {
+    rosterTimer -= dt;
+    if (rosterTimer <= 0) {
+      rosterTimer = _rosterNextTimer();
 
-    const movers = PLAYER_POOL.filter(p => !p.camper);
-    if (movers.length > 0) {
-      const mover = movers[Math.floor(Math.random() * movers.length)];
-      const wasHere = mover.loc === curLoc;
-      const otherLocs = LOCATIONS.filter(l => l !== mover.loc);
-      mover.loc = otherLocs[Math.floor(Math.random() * otherLocs.length)];
-      const isHere = mover.loc === curLoc;
+      const movers = PLAYER_POOL.filter(p => !p.camper);
+      if (movers.length > 0) {
+        const mover = movers[Math.floor(Math.random() * movers.length)];
+        const wasHere = mover.loc === curLoc;
+        const otherLocs = LOCATIONS.filter(l => l !== mover.loc);
+        mover.loc = otherLocs[Math.floor(Math.random() * otherLocs.length)];
+        const isHere = mover.loc === curLoc;
 
-      if (wasHere && !isHere) {
-        // Player leaving — fade out
-        _rosterStartFadeOut(mover.name);
-      } else if (!wasHere && isHere) {
-        // Player arriving — fade in
-        _rosterStartFadeIn(mover.name);
+        if (wasHere && !isHere) {
+          _rosterStartFadeOut(mover.name);
+        } else if (!wasHere && isHere) {
+          _rosterStartFadeIn(mover.name);
+        }
       }
     }
   }
@@ -7102,11 +7129,9 @@ function drawPauseMenu() {
   if (pauseState === 'inv-target' && cursorTileCanvas) {
     if (pauseInvAllyTarget >= 0) {
       // Cursor on selected roster player row in right panel
-      const rpX = HUD_RIGHT_X + 8;
-      const listY = HUD_VIEW_Y + 32 + 8 + ROSTER_TRI_H;
       const visRow = pauseInvAllyTarget - rosterScroll;
       if (visRow >= 0 && visRow < ROSTER_VISIBLE) {
-        ctx.drawImage(cursorTileCanvas, rpX - 12, listY + visRow * ROSTER_ROW_H + 6);
+        ctx.drawImage(cursorTileCanvas, HUD_RIGHT_X - 4, HUD_VIEW_Y + 32 + visRow * ROSTER_ROW_H + 12);
       }
     } else {
       // Cursor on player portrait
@@ -7311,6 +7336,7 @@ function processNextTurn() {
     battleCursor = 0;
     battleState = 'menu-open';
     battleTimer = 0;
+    turnTimer = 0;
     return;
   }
   const turn = turnQueue.shift();
@@ -7378,6 +7404,9 @@ function processNextTurn() {
       }
       battleState = 'item-use';
       battleTimer = 0;
+    } else if (playerActionPending.command === 'skip') {
+      processNextTurn();
+      return;
     } else if (playerActionPending.command === 'run') {
       // Escape chance: base 25 + AGI - avg enemy level / 4 (from FF3 disasm)
       const playerAgi = playerStats ? playerStats.agi : 5;
@@ -7511,6 +7540,7 @@ function executeBattleCommand(index) {
     itemPage = 1;          // start on inventory page 1
     itemPageCursor = 0;
     itemSlideDir = 0;
+    itemSlideCursor = 0;
     battleState = 'item-menu-out';
     battleTimer = 0;
   } else {
@@ -7562,6 +7592,20 @@ function updateBattle(dt) {
     if (allyShakeTimer[idx] > 0) allyShakeTimer[idx] = Math.max(0, allyShakeTimer[idx] - dt);
   }
 
+  // Turn timer — auto-skip player's turn after 10 seconds of inaction
+  const isPlayerDeciding = battleState === 'menu-open' || battleState === 'target-select' ||
+    battleState === 'item-select' || battleState === 'item-target-select' || battleState === 'item-slide';
+  if (isPlayerDeciding) {
+    turnTimer += dt;
+    if (turnTimer >= TURN_TIME_MS) {
+      turnTimer = 0;
+      itemHeldIdx = -1;
+      playerActionPending = { command: 'skip' };
+      battleState = 'confirm-pause';
+      battleTimer = 0;
+    }
+  }
+
   // Ally exit fade during victory — after 1.5s, NES-fade each ally out (1 step per 100ms)
   const ALLY_EXIT_DELAY_MS = 1500;
   const ALLY_EXIT_STEP_MS = 100;
@@ -7611,8 +7655,8 @@ function updateBattle(dt) {
     // Brief pause so CONFIRM SFX is audible before turn queue starts
     if (battleTimer >= 150) {
       allyJoinRound++;
-      // Ally join check: <4 allies, 50% chance
-      if (battleAllies.length < 4) {
+      // Ally join check: up to 3 allies (matches roster visible rows), 50% chance
+      if (battleAllies.length < 3) {
         const loc = getPlayerLocation();
         const eligible = PLAYER_POOL.filter(p => p.loc === loc && !battleAllies.some(a => a.name === p.name));
         if (eligible.length > 0 && Math.random() < 0.5) {
@@ -7835,7 +7879,8 @@ function updateBattle(dt) {
     if (battleTimer >= 200) {
       itemPage += (itemSlideDir < 0) ? 1 : -1;
       itemSlideDir = 0;
-      itemPageCursor = 0;
+      itemPageCursor = itemSlideCursor;
+      itemSlideCursor = 0;
       battleState = 'item-select';
       battleTimer = 0;
     }
@@ -9309,24 +9354,20 @@ function drawBattleAllies() {
   if (battleAllies.length === 0) return;
   if (battleState === 'none') return;
 
-  const rpX = HUD_RIGHT_X + 8;        // interior x (after border)
-  const rpY = HUD_VIEW_Y + 32 + 8;    // interior y (below portrait/HP panels + border)
-  const rpW = HUD_RIGHT_W - 16;       // interior width (96)
-  const rpH = HUD_VIEW_H - 32 - 16;   // interior height (96)
-  const listY = rpY + ROSTER_TRI_H;   // same top offset as roster
+  const panelTop = HUD_VIEW_Y + 32;   // rows start right below player boxes
 
   // Collect weapon sprite draws to render OUTSIDE clip
   let weaponDraws = [];
 
   ctx.save();
   ctx.beginPath();
-  ctx.rect(rpX, rpY, rpW, rpH);
+  ctx.rect(HUD_RIGHT_X, panelTop, HUD_RIGHT_W, HUD_VIEW_H - 32);
   ctx.clip();
 
   for (let i = 0; i < battleAllies.length; i++) {
     const ally = battleAllies[i];
     const shakeOff = (allyShakeTimer[i] > 0) ? (Math.floor(allyShakeTimer[i] / 67) & 1 ? 2 : -2) : 0;
-    const rowY = listY + i * ROSTER_ROW_H + shakeOff;
+    const rowY = panelTop + i * ROSTER_ROW_H + shakeOff;
 
     // Portrait (faded) — pose matches player sprite mechanics
     const isVicPose = battleState === 'victory-celebrate' ||
@@ -9353,11 +9394,15 @@ function drawBattleAllies() {
     } else {
       portraits = fakePlayerPortraits[ally.palIdx];
     }
+    // Portrait box (32×32) + info box (80×32)
+    _drawHudBox(HUD_RIGHT_X, rowY, 32, ROSTER_ROW_H, ally.fadeStep);
+    _drawHudBox(HUD_RIGHT_X + 32, rowY, HUD_RIGHT_W - 32, ROSTER_ROW_H, ally.fadeStep);
+
+    const ppx = HUD_RIGHT_X + 8;  // portrait interior x
+    const ppy = rowY + 8;          // portrait interior y
     if (portraits) {
-      ctx.drawImage(portraits[ally.fadeStep], rpX, rowY + 2);
+      ctx.drawImage(portraits[ally.fadeStep], ppx, ppy);
       // Queue weapon sprites for drawing outside clip
-      const ppx = rpX;
-      const ppy = rowY + 2;
       if (isAllyAttack) {
         const wpnSt = weaponSubtype(ally.weaponId);
         if (wpnSt === 'knife' && battleKnifeBladeCanvas) weaponDraws.push({ img: battleKnifeBladeCanvas, x: ppx + 8, y: ppy - 7 });
@@ -9373,14 +9418,14 @@ function drawBattleAllies() {
       }
     }
 
-    // Name (right-aligned)
+    // Name (right-aligned in info box interior — top text line)
     const namePal = [0x0F, 0x0F, 0x0F, 0x30];
     for (let s = 0; s < ally.fadeStep; s++) namePal[3] = nesColorFade(namePal[3]);
     const nameBytes = _nameToBytes(ally.name);
     const nameW = measureText(nameBytes);
-    drawText(ctx, rpX + rpW - nameW, rowY + 1, nameBytes, namePal);
+    drawText(ctx, HUD_RIGHT_X + HUD_RIGHT_W - 8 - nameW, rowY + 8, nameBytes, namePal);
 
-    // HP (right-aligned, green/yellow/red by ratio)
+    // HP (right-aligned — second text line, green/yellow/red by ratio)
     const hpStr = String(ally.hp);
     const hpBytes = _nameToBytes(hpStr);
     const hpW = measureText(hpBytes);
@@ -9388,22 +9433,13 @@ function drawBattleAllies() {
                     : ally.hp <= Math.floor(ally.maxHP / 2) ? 0x28 : 0x2A;
     const hpPal = [0x0F, 0x0F, 0x0F, allyHpNes];
     for (let s = 0; s < ally.fadeStep; s++) hpPal[3] = nesColorFade(hpPal[3]);
-    drawText(ctx, rpX + rpW - hpW, rowY + 9, hpBytes, hpPal);
-
-    // Thin separator line below row
-    const sepY = rowY + ROSTER_ROW_H - 1;
-    let sepNes = 0x2D;
-    for (let s = 0; s < ally.fadeStep; s++) sepNes = nesColorFade(sepNes);
-    const sepCol = NES_SYSTEM_PALETTE[sepNes] || [0, 0, 0];
-    ctx.fillStyle = `rgb(${sepCol[0]},${sepCol[1]},${sepCol[2]})`;
-    ctx.fillRect(rpX, sepY, rpW, 1);
-    if (i === 0) ctx.fillRect(rpX, rowY - 1, rpW, 1);
+    drawText(ctx, HUD_RIGHT_X + HUD_RIGHT_W - 8 - hpW, rowY + 16, hpBytes, hpPal);
 
     // Collect damage numbers for drawing above HUD (outside clip)
     const dn = allyDamageNums[i];
     if (dn) {
-      const bx = rpX + 8;
-      const baseY2 = rowY + 4;
+      const bx = HUD_RIGHT_X + 16; // center of portrait
+      const baseY2 = rowY + 8 + 8;
       const by = _dmgBounceY(baseY2, dn.timer);
       weaponDraws.push({ type: 'dmg', dn, bx, by });
     }
@@ -9411,28 +9447,17 @@ function drawBattleAllies() {
     // Cure sparkle on healing ally — queued outside clip
     if (isAllyHeal && cureSparkleFrames.length === 2) {
       const fi = Math.floor(battleTimer / 67) & 1;
-      weaponDraws.push({ type: 'sparkle', frame: cureSparkleFrames[fi], px: rpX, py: rowY + 2 });
+      weaponDraws.push({ type: 'sparkle', frame: cureSparkleFrames[fi], px: ppx, py: ppy });
     }
   }
 
-  // Flash highlight on attacking ally
-  if (battleState === 'ally-attack-start' || battleState === 'ally-slash') {
-    const ai = currentAllyAttacker;
-    if (ai >= 0 && ai < battleAllies.length) {
-      const rowY = listY + ai * ROSTER_ROW_H;
-      ctx.globalAlpha = 0.3;
-      ctx.fillStyle = '#fff';
-      ctx.fillRect(rpX, rowY, rpW, ROSTER_ROW_H);
-      ctx.globalAlpha = 1;
-    }
-  }
 
   ctx.restore();
 
   // Item-target cursor on selected ally row — drawn OUTSIDE clip over HUD border
   if (battleState === 'item-target-select' && itemTargetType === 'player' && itemTargetAllyIndex >= 0 && cursorTileCanvas) {
-    const cursorRowY = listY + itemTargetAllyIndex * ROSTER_ROW_H;
-    ctx.drawImage(cursorTileCanvas, rpX - 12, cursorRowY + 6);
+    const cursorRowY = panelTop + itemTargetAllyIndex * ROSTER_ROW_H;
+    ctx.drawImage(cursorTileCanvas, HUD_RIGHT_X - 4, cursorRowY + 12);
   }
 
   // Weapon blade sprites + damage numbers drawn ABOVE HUD (outside clip)
