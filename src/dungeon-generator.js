@@ -2248,7 +2248,22 @@ function _generateFloor(romData, floorIndex, seed) {
       ? config.traps[0] + Math.floor(rng() * (config.traps[1] - config.traps[0] + 1))
       : config.traps;
     for (let i = 0; i < trapCount; i++) {
-      const pos = findRandomFloor(tilemap, rng, trapUsed, chamberBounds);
+      // Build candidates: floor tiles inside chamber, not in trapUsed, all 4 neighbors also floor
+      const trapCandidates = [];
+      for (let ti = 0; ti < 1024; ti++) {
+        if (!isFloorTile(tilemap[ti])) continue;
+        const tx = ti % 32, ty = (ti - tx) / 32;
+        if (trapUsed.has(`${tx},${ty}`)) continue;
+        if (chamberBounds && (ty < chamberBounds.top || ty > chamberBounds.bot || tx < chamberBounds.left || tx > chamberBounds.right)) continue;
+        // All 4 orthogonal neighbors must be floor (1 tile from any wall)
+        const neighbors = [[0,1],[0,-1],[1,0],[-1,0]];
+        if (!neighbors.every(([dx,dy]) => {
+          const nx = tx+dx, ny = ty+dy;
+          return nx >= 0 && nx < 32 && ny >= 0 && ny < 32 && isFloorTile(tilemap[ny*32+nx]);
+        })) continue;
+        trapCandidates.push({ x: tx, y: ty });
+      }
+      const pos = trapCandidates.length > 0 ? trapCandidates[Math.floor(rng() * trapCandidates.length)] : null;
       if (pos) {
         tilemap[pos.y * 32 + pos.x] = TRAP_HOLE;
         hiddenTraps.add(`${pos.x},${pos.y}`);
