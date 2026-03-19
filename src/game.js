@@ -440,6 +440,12 @@ let itemSlideCursor = 0;     // cursor row to set after slide completes
 let itemTargetType = 'player'; // 'player' or 'enemy' — who to use item on
 let itemTargetIndex = 0;       // which enemy index (for enemy target)
 let itemTargetAllyIndex = -1;  // -1 = player, 0+ = ally index (when itemTargetType === 'player')
+let itemTargetMode = 'single'; // 'single' | 'all' | 'col-left' | 'col-right' — for battle_items
+let southWindTargets = [];     // ordered list of enemy indices to hit
+let southWindHitIdx = 0;       // current target being hit
+let southWindHitCanvas = null; // unused - kept for compat
+let swPhaseCanvases = [];      // 3-phase expanding ice explosion [16×16, 32×32, 48×48]
+let southWindDmgNums = {};     // {enemyIdx: {value, timer}} — damage numbers during sw-hit
 
 // Inventory helpers
 const INV_SLOTS = 3; // visible inventory rows per page
@@ -486,7 +492,7 @@ let preBattleTrack = null;
 let turnQueue = [];              // [{type:'player'|'enemy', index}] sorted by priority
 let playerActionPending = null;  // {command:'fight'|'defend', targetIndex, hitResults, ...}
 let currentAttacker = -1;      // index of monster currently attacking
-let dyingMonsterIndex = -1;    // index of monster playing death stripe animation
+let dyingMonsterIndices = new Map(); // index → startDelayMs for staggered death wipe
 
 // Hit animation state
 let hitResults = [];               // [{damage, crit}, {miss:true}, ...] pre-calculated per attack
@@ -551,7 +557,7 @@ const SLASH_FRAME_MS = 50;               // per frame of slash sprite (3 frames 
 const SLASH_FRAMES = 3;                  // number of slash animation frames (one per effect set)
 const HIT_PAUSE_MS = 150;               // pause showing damage number per hit
 const MISS_SHOW_MS = 300;               // "Miss" text display time
-const PLAYER_DMG_SHOW_MS = 400;         // pause after final hit before enemy counter
+const PLAYER_DMG_SHOW_MS = 700;         // pause after final hit before enemy counter/death
 const CRIT_RATE = 5;                     // 5% crit chance per hit
 const CRIT_MULT = 1.5;                  // critical hit damage multiplier
 const BASE_HIT_RATE = 80;               // 80% accuracy per hit (unarmed Onion Knight)
@@ -2122,6 +2128,96 @@ function initGoblinSprite(romData) {
 
 // Generic renderer for PPU-dumped enemy sprites.
 // rawBytes: Uint8Array of (cols*rows*16) bytes — tiles in row-major order.
+// SouthWind ice explosion — 3-phase expanding animation from battle-item-trace.txt
+// Phase 1 (+024-+031): small crystal  16×16, tile $4F 2×2
+// Phase 2 (+032-+039): medium splash  32×32, tiles $49/$4A/$4C/$4D 4×4
+// Phase 3 (+040-+047): large blast    48×48, tiles $49-$4E/$4F/$50/$51 6×6
+// All use pal3: $0F $11 $21 $31 (ice blue)
+function initSouthWindSprite() {
+  const SW_PAL = [0x0F, 0x11, 0x21, 0x31];
+  const nesColors = SW_PAL.map(c => NES_SYSTEM_PALETTE[c] || [0,0,0]);
+
+  // Raw PPU tile data from FCEUX trace (16 bytes each, planar 2BPP)
+  const TILES = {
+    0x4F: new Uint8Array([0x01,0x01,0x0F,0x18,0x27,0x4D,0x98,0xB0, 0x01,0x01,0x0F,0x1F,0x3E,0x7E,0xFF,0xFF]),
+    0x49: new Uint8Array([0x3F,0x31,0x60,0xEE,0xE1,0x80,0x90,0xB0, 0x3F,0x3F,0x7F,0xFF,0xFF,0xFF,0xEF,0xCF]),
+    0x4A: new Uint8Array([0x00,0x80,0x80,0x60,0x51,0x2B,0xB2,0x34, 0x00,0x80,0x80,0xE0,0xB1,0xDB,0xCB,0xC7]),
+    0x4B: new Uint8Array([0x00,0x03,0x06,0x04,0xE7,0xF7,0x7B,0x2F, 0x00,0x03,0x07,0x07,0xE1,0xF1,0xF8,0xFC]),
+    0x4C: new Uint8Array([0xD8,0xBC,0xAE,0x76,0x2F,0x1E,0x0D,0x01, 0xA7,0xC3,0xD1,0x69,0x31,0x1A,0x0D,0x01]),
+    0x4D: new Uint8Array([0x66,0xCA,0xAA,0x5D,0xFD,0x8E,0x86,0xC7, 0x95,0x25,0x45,0x82,0x7A,0xF9,0xFD,0x3E]),
+    0x4E: new Uint8Array([0x17,0x1B,0x01,0x05,0x8D,0xDB,0x7A,0x67, 0xFE,0xFF,0xFF,0xFF,0x7F,0x3E,0xB6,0x8C]),
+    0x50: new Uint8Array([0x63,0xAD,0xD9,0x62,0xBC,0xD9,0x63,0xE3, 0x9E,0xD2,0xE6,0xFC,0x7C,0x30,0x91,0x12]),
+    0x51: new Uint8Array([0xBF,0x3E,0x7A,0xFD,0xF7,0xCB,0xC7,0x83, 0x79,0x03,0x03,0x39,0x5C,0xBE,0x3E,0x7E]),
+  };
+
+  // Helper: decode tile to 8×8 pixel array of palette indices
+  function decodeTileLocal(id) { return decodeTile(TILES[id], 0); }
+
+  // Helper: draw one 8×8 tile into a canvas context at (dx,dy) with optional H/V flip
+  function drawTile(cctx, id, dx, dy, hf, vf) {
+    const px = decodeTileLocal(id);
+    const img = cctx.createImageData(8, 8);
+    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+      const sr = vf ? 7-r : r, sc = hf ? 7-c : c;
+      const ci = px[sr*8+sc];
+      const i = (r*8+c)*4;
+      if (ci === 0) { img.data[i+3] = 0; continue; }
+      const [R,G,B] = nesColors[ci] || [0,0,0];
+      img.data[i]=R; img.data[i+1]=G; img.data[i+2]=B; img.data[i+3]=255;
+    }
+    cctx.putImageData(img, dx, dy);
+  }
+
+  // Phase 1: 16×16 — tile $4F, 2×2 symmetric
+  const c1 = document.createElement('canvas'); c1.width = 16; c1.height = 16;
+  const x1 = c1.getContext('2d');
+  drawTile(x1, 0x4F,  0, 0, false, false);
+  drawTile(x1, 0x4F,  8, 0, true,  false);
+  drawTile(x1, 0x4F,  0, 8, false, true);
+  drawTile(x1, 0x4F,  8, 8, true,  true);
+
+  // Phase 2: 32×32 — 4×4 grid, tiles $49/$4A/$4C/$4D
+  // Row 0: $49(--) $4A(--) $4A(H) $49(H)
+  // Row 1: $4C(--) $4D(--) $4D(H) $4C(H)
+  // Row 2: $4C(V)  $4D(V)  $4D(HV) $4C(HV)
+  // Row 3: $49(V)  $4A(V)  $4A(HV) $49(HV)
+  const c2 = document.createElement('canvas'); c2.width = 32; c2.height = 32;
+  const x2 = c2.getContext('2d');
+  drawTile(x2, 0x49,  0, 0, false, false); drawTile(x2, 0x4A,  8, 0, false, false);
+  drawTile(x2, 0x4A, 16, 0, true,  false); drawTile(x2, 0x49, 24, 0, true,  false);
+  drawTile(x2, 0x4C,  0, 8, false, false); drawTile(x2, 0x4D,  8, 8, false, false);
+  drawTile(x2, 0x4D, 16, 8, true,  false); drawTile(x2, 0x4C, 24, 8, true,  false);
+  drawTile(x2, 0x4C,  0,16, false, true);  drawTile(x2, 0x4D,  8,16, false, true);
+  drawTile(x2, 0x4D, 16,16, true,  true);  drawTile(x2, 0x4C, 24,16, true,  true);
+  drawTile(x2, 0x49,  0,24, false, true);  drawTile(x2, 0x4A,  8,24, false, true);
+  drawTile(x2, 0x4A, 16,24, true,  true);  drawTile(x2, 0x49, 24,24, true,  true);
+
+  // Phase 3: 48×48 — 6×6 grid
+  // Row 0: $49(--) $4A(--) $4B(--) $4B(H) $4A(H) $49(H)
+  // Row 1: $4C(--) $4D(--) $4E(--) $4E(H) $4D(H) $4C(H)
+  // Row 2: $4F(--) $50(--) $51(--) $51(H) $50(H) $4F(H)
+  // Row 3: $4F(V)  $50(V)  $51(V)  $51(HV) $50(HV) $4F(HV)
+  // Row 4: $4C(V)  $4D(V)  $4E(V)  $4E(HV) $4D(HV) $4C(HV)
+  // Row 5: $49(V)  $4A(V)  $4B(V)  $4B(HV) $4A(HV) $49(HV)
+  const c3 = document.createElement('canvas'); c3.width = 48; c3.height = 48;
+  const x3 = c3.getContext('2d');
+  const p3 = [
+    [0x49,0x4A,0x4B,0x4B,0x4A,0x49],
+    [0x4C,0x4D,0x4E,0x4E,0x4D,0x4C],
+    [0x4F,0x50,0x51,0x51,0x50,0x4F],
+    [0x4F,0x50,0x51,0x51,0x50,0x4F],
+    [0x4C,0x4D,0x4E,0x4E,0x4D,0x4C],
+    [0x49,0x4A,0x4B,0x4B,0x4A,0x49],
+  ];
+  for (let row = 0; row < 6; row++) for (let col = 0; col < 6; col++) {
+    const hf = col >= 3, vf = row >= 3;
+    drawTile(x3, p3[row][col], col*8, row*8, hf, vf);
+  }
+
+  swPhaseCanvases = [c1, c2, c3];
+  southWindHitCanvas = c1; // compat
+}
+
 // Returns a canvas of (cols*8) × (rows*8).
 function _renderEnemySprite(rawBytes, cols, rows, tilePalMap, pal0, pal1) {
   const w = cols * 8, h = rows * 8;
@@ -3027,6 +3123,7 @@ export async function loadROM(arrayBuffer) {
   _initEnemySprite(0x02, EYE_FANG_RAW,   4, 6, EYE_FANG_TILE_PAL,   ENC_PAL0, ENC_PAL1);
   _initEnemySprite(0x03, BLUE_WISP_RAW,  4, 4, BLUE_WISP_TILE_PAL,  ENC_PAL0, ENC_PAL1);
   _initEnemySprite(0x01, CARBUNCLE_RAW,  4, 4, CARBUNCLE_TILE_PAL,  ENC_PAL0, ENC_PAL1);
+  initSouthWindSprite();
   initSlashSprites();
   initKnifeSlashSprites();
   initSwordSlashSprites();
@@ -3064,6 +3161,8 @@ export async function loadROM(arrayBuffer) {
     clearDungeonCache();
     loadMapById(1004);
     playTrack(TRACKS.CRYSTAL_ROOM);
+    playerInventory = {};
+    addItem(0x54, 5);
     lastTime = performance.now();
     requestAnimationFrame(gameLoop);
     return;
@@ -3546,11 +3645,25 @@ function handleInput() {
           if (!isEquipPage) {
             const invIdx = (itemPage - 1) * INV_SLOTS + itemPageCursor;
             const item = itemSelectList[invIdx];
-            if (item && ITEMS.get(item.id)?.type === 'consumable') {
+            const itemDat = ITEMS.get(item.id);
+            if (itemDat?.type === 'consumable' || itemDat?.type === 'battle_item') {
               playSFX(SFX.CONFIRM);
               itemHeldIdx = -1;
-              itemTargetType = 'player';
-              itemTargetIndex = 0;
+              itemTargetMode = 'single';
+              if (itemDat.type === 'battle_item' && isRandomEncounter && encounterMonsters) {
+                // Start cursor on rightmost alive enemy
+                itemTargetType = 'enemy';
+                const ecnt = encounterMonsters.length;
+                const ealive = (i) => i < encounterMonsters.length && encounterMonsters[i].hp > 0;
+                const rightCandidates = ecnt === 1 ? [0] : ecnt === 2 ? [1] : ecnt === 3 ? [1] : [1,3];
+                const leftCandidates  = ecnt === 1 ? [0] : ecnt === 2 ? [0] : ecnt === 3 ? [0,2] : [0,2];
+                const first = [...rightCandidates,...leftCandidates].find(i => ealive(i));
+                itemTargetIndex = first !== undefined ? first : 0;
+              } else if (itemDat.type === 'battle_item' && !isRandomEncounter) {
+                itemTargetType = 'enemy'; itemTargetIndex = 0;
+              } else {
+                itemTargetType = 'player'; itemTargetIndex = 0;
+              }
               itemTargetAllyIndex = -1;
               battleState = 'item-target-select';
               battleTimer = 0;
@@ -3658,19 +3771,26 @@ function handleInput() {
       const _isRightCol = (i) => _cnt === 1 || (_cnt === 2 && i === 1) || (_cnt >= 3 && (i === 1 || i === 3));
       const _isLeftCol = (i) => _cnt >= 2 && !_isRightCol(i);
 
+      const _isBattleItem = playerActionPending && ITEMS.get(playerActionPending.itemId)?.type === 'battle_item';
       if (keys['ArrowLeft']) {
         keys['ArrowLeft'] = false;
-        if (itemTargetType === 'player') {
+        if (_isBattleItem && itemTargetMode !== 'single') {
+          // In multi-target mode — LEFT goes back to single (leftmost alive)
+          const leftCandidates = _cnt <= 1 ? [0] : _cnt === 2 ? [0] : [0, 2];
+          const found = leftCandidates.find(i => _alive(i));
+          if (found !== undefined) itemTargetIndex = found;
+          itemTargetMode = 'single'; playSFX(SFX.CURSOR);
+        } else if (itemTargetType === 'player') {
           // Player → nearest right-col alive enemy
           if (!isRandomEncounter) {
-            itemTargetType = 'enemy'; itemTargetIndex = 0; playSFX(SFX.CURSOR);
+            itemTargetType = 'enemy'; itemTargetIndex = 0; itemTargetMode = 'single'; playSFX(SFX.CURSOR);
           } else {
             const rightCandidates = _cnt === 1 ? [0] : _cnt === 2 ? [1] : _cnt === 3 ? [1] : [1, 3];
             const leftCandidates = _cnt === 2 ? [0] : _cnt === 3 ? [0, 2] : _cnt >= 4 ? [0, 2] : [];
             let found = rightCandidates.find(i => _alive(i));
             if (found === undefined) found = leftCandidates.find(i => _alive(i));
             if (found !== undefined) {
-              itemTargetType = 'enemy'; itemTargetIndex = found; playSFX(SFX.CURSOR);
+              itemTargetType = 'enemy'; itemTargetIndex = found; itemTargetMode = 'single'; playSFX(SFX.CURSOR);
             }
           }
         } else if (isRandomEncounter && _isRightCol(itemTargetIndex)) {
@@ -3679,6 +3799,10 @@ function handleInput() {
           const leftOther = itemTargetIndex === 1 ? 2 : itemTargetIndex === 3 ? 0 : -1;
           if (leftPeer >= 0 && _alive(leftPeer)) { itemTargetIndex = leftPeer; playSFX(SFX.CURSOR); }
           else if (leftOther >= 0 && _alive(leftOther)) { itemTargetIndex = leftOther; playSFX(SFX.CURSOR); }
+          else if (_isBattleItem) { itemTargetMode = 'all'; playSFX(SFX.CURSOR); } // no left col alive → all
+        } else if (_isBattleItem && isRandomEncounter && _isLeftCol(itemTargetIndex)) {
+          // Already on leftmost col — toggle to all-enemies mode
+          itemTargetMode = 'all'; playSFX(SFX.CURSOR);
         }
       }
       if (keys['ArrowRight']) {
@@ -3700,7 +3824,16 @@ function handleInput() {
       if (keys['ArrowUp'] || keys['ArrowDown']) {
         const goUp = !!keys['ArrowUp'];
         keys['ArrowUp'] = false; keys['ArrowDown'] = false;
-        if (itemTargetType === 'enemy' && isRandomEncounter && encounterMonsters) {
+        if (_isBattleItem && itemTargetType === 'enemy' && isRandomEncounter && encounterMonsters) {
+          if (goUp && itemTargetMode === 'single') {
+            // UP from single → select column
+            itemTargetMode = _isLeftCol(itemTargetIndex) ? 'col-left' : 'col-right';
+            playSFX(SFX.CURSOR);
+          } else if (!goUp && itemTargetMode !== 'single') {
+            // DOWN from column → back to single
+            itemTargetMode = 'single'; playSFX(SFX.CURSOR);
+          }
+        } else if (itemTargetType === 'enemy' && isRandomEncounter && encounterMonsters) {
           // Vertical: TL↔BL (0↔2), TR↔BR (1↔3)
           const vertMap = _cnt >= 4 ? { 0: 2, 2: 0, 1: 3, 3: 1 } :
                           _cnt === 3 ? { 0: 2, 2: 0, 1: 1 } : {};
@@ -3721,6 +3854,7 @@ function handleInput() {
         keys['z'] = false; keys['Z'] = false;
         playerActionPending.target = itemTargetType === 'player' ? 'player' : itemTargetIndex;
         playerActionPending.allyIndex = itemTargetType === 'player' ? itemTargetAllyIndex : -1;
+        playerActionPending.targetMode = itemTargetMode;
         playSFX(SFX.CONFIRM);
         battleState = 'item-list-out';
         battleTimer = 0;
@@ -4183,15 +4317,17 @@ function handleAction() {
   // Chest — press Z to open
   if (facedTile === 0x7C) {
     mapData.tilemap[facedY * 32 + facedX] = 0x7D;
-    // Loot table by dungeon floor
-    const CHEST_LOOT = [
-      [0xA6, 0xA6, 0xA6, 0x62],                   // floor 0: Potions, Leather Cap
-      [0xA6, 0xA6, 0x58, 0x62, 0x1F],              // floor 1: Potions, Leather Shield, Leather Cap, Dagger
-      [0xA6, 0x73, 0x58, 0x8B],                     // floor 2: Potion, Leather Armor, Leather Shield, Bronze Bracers
-      [0xA6, 0xA6, 0x73, 0x8B, 0x24],               // floor 3: Potions, Leather Armor, Bronze Bracers, Longsword
+    // Rarity-based loot — same pool any floor
+    const LOOT_TIERS = [
+      { weight: 60, pool: [0xA6] },                    // Common:     Potion
+      { weight: 28, pool: [0x62, 0x58, 0x1F] },        // Uncommon:   Leather Cap, Leather Shield, Dagger
+      { weight: 10, pool: [0x73, 0x8B, 0x24] },        // Rare:       Leather Armor, Bronze Bracers, Longsword
+      { weight:  2, pool: [0xB2] },                    // Legendary:  SouthWind
     ];
-    const lootPool = CHEST_LOOT[dungeonFloor] || [0xA6];
-    const itemId = lootPool[Math.floor(Math.random() * lootPool.length)];
+    let roll = Math.random() * 100;
+    let tier = LOOT_TIERS[0];
+    for (const t of LOOT_TIERS) { if (roll < t.weight) { tier = t; break; } roll -= t.weight; }
+    const itemId = tier.pool[Math.floor(Math.random() * tier.pool.length)];
     addItem(itemId, 1);
     playSFX(SFX.TREASURE);
     const itemName = getItemNameClean(itemId);
@@ -6578,7 +6714,7 @@ function updateTitle(dt) {
           recalcDEF();
         }
         playerInventory = (slot && slot.inventory) ? { ...slot.inventory } : {};
-        playerGil = (slot && slot.gil) || 0;
+playerGil = (slot && slot.gil) || 0;
         loadMapById(114);
         worldY -= 6 * TILE_SIZE; // spawn 6 tiles north of entrance
         playTrack(TRACKS.TOWN_UR);
@@ -7755,6 +7891,18 @@ function buildTurnOrder() {
   return actors;
 }
 
+let swBaseDamage = 0; // rolled once per throw, split among targets
+
+function _applySWDamage(tidx) {
+  if (!isRandomEncounter || !encounterMonsters) return;
+  const mon = encounterMonsters[tidx];
+  if (!mon || mon.hp <= 0) return;
+  const dmg = Math.max(1, Math.floor(swBaseDamage / southWindTargets.length));
+  mon.hp = Math.max(0, mon.hp - dmg);
+  southWindDmgNums[tidx] = { value: dmg, timer: 0 };
+  playSFX(SFX.SW_HIT);
+}
+
 function processNextTurn() {
   if (turnQueue.length === 0) {
     isDefending = false;
@@ -7796,6 +7944,37 @@ function processNextTurn() {
     } else if (playerActionPending.command === 'item') {
       isDefending = false;
       removeItem(playerActionPending.itemId);
+      const _pendingItemDat = ITEMS.get(playerActionPending.itemId);
+      if (_pendingItemDat?.type === 'battle_item') {
+        // SouthWind / battle item — build target list and launch throw anim
+        const _mode = playerActionPending.targetMode || 'single';
+        const _rightCols = isRandomEncounter && encounterMonsters
+          ? encounterMonsters.map((m, i) => (m.hp > 0 && (encounterMonsters.length === 1 || (encounterMonsters.length === 2 && i === 1) || (encounterMonsters.length >= 3 && (i === 1 || i === 3)))) ? i : -1).filter(i => i >= 0)
+          : [];
+        const _leftCols  = isRandomEncounter && encounterMonsters
+          ? encounterMonsters.map((m, i) => (m.hp > 0 && (encounterMonsters.length >= 2) && !(_rightCols.includes(i))) ? i : -1).filter(i => i >= 0)
+          : [];
+        const _allAlive  = isRandomEncounter && encounterMonsters
+          ? encounterMonsters.map((m, i) => m.hp > 0 ? i : -1).filter(i => i >= 0)
+          : [];
+        // 'all' order: TL→TR→BL→BR (left-to-right, top-to-bottom)
+        if (_mode === 'all') {
+          const ecnt = encounterMonsters ? encounterMonsters.length : 0;
+          const rowOrder = ecnt <= 2 ? [0, 1] : [0, 1, 2, 3];
+          southWindTargets = rowOrder.filter(i => i < ecnt && encounterMonsters[i].hp > 0);
+        }
+        else if (_mode === 'col-right') southWindTargets = _rightCols;
+        else if (_mode === 'col-left') southWindTargets = _leftCols;
+        else southWindTargets = [playerActionPending.target]; // single
+        southWindHitIdx = 0;
+        // SouthWind = spell $24, power 55. Formula: (INT/2 + 55) * rand / 2, split among targets
+        const swInt = playerStats ? playerStats.int : 5;
+        const swAttack = Math.floor(swInt / 2) + 55;
+        const swRand = Math.floor(Math.random() * Math.floor(swAttack / 2 + 1));
+        swBaseDamage = Math.floor((swAttack + swRand) / 2);
+        battleState = 'sw-throw';
+        battleTimer = 0;
+      } else {
       playSFX(SFX.CURE);
       if (playerActionPending.target === 'player' && (playerActionPending.allyIndex === undefined || playerActionPending.allyIndex < 0)) {
         const heal = Math.min(50, playerStats.maxHP - playerHP);
@@ -7829,6 +8008,7 @@ function processNextTurn() {
       }
       battleState = 'item-use';
       battleTimer = 0;
+      } // end else (consumable, not battle_item)
     } else if (playerActionPending.command === 'skip') {
       processNextTurn();
       return;
@@ -7904,6 +8084,9 @@ function startBattle() {
   allyShakeTimer = {};
   enemyTargetAllyIdx = -1;
   allyExitTimer = 0;
+  southWindTargets = [];
+  southWindHitIdx = 0;
+  southWindDmgNums = {};
   playSFX(SFX.EARTHQUAKE);
 }
 
@@ -8010,6 +8193,10 @@ function updateBattle(dt) {
   if (bossDamageNum) {
     bossDamageNum.timer += dt;
     if (bossDamageNum.timer >= BATTLE_DMG_SHOW_MS) bossDamageNum = null;
+  }
+  for (const k of Object.keys(southWindDmgNums)) {
+    southWindDmgNums[k].timer += dt;
+    if (southWindDmgNums[k].timer >= 700) delete southWindDmgNums[k];
   }
   if (playerDamageNum) {
     playerDamageNum.timer += dt;
@@ -8223,7 +8410,7 @@ function updateBattle(dt) {
     if (battleTimer >= PLAYER_DMG_SHOW_MS) {
       // Check if targeted monster just died — play death stripe animation
       if (isRandomEncounter && encounterMonsters && encounterMonsters[targetIndex].hp <= 0) {
-        dyingMonsterIndex = targetIndex;
+        dyingMonsterIndices = new Map([[targetIndex, 0]]);
         battleState = 'monster-death';
         battleTimer = 0;
         playSFX(SFX.MONSTER_DEATH);
@@ -8238,8 +8425,9 @@ function updateBattle(dt) {
       }
     }
   } else if (battleState === 'monster-death') {
-    if (battleTimer >= MONSTER_DEATH_MS) {
-      dyingMonsterIndex = -1;
+    const _maxDelay = dyingMonsterIndices.size > 0 ? Math.max(...dyingMonsterIndices.values()) : 0;
+    if (battleTimer >= MONSTER_DEATH_MS + _maxDelay) {
+      dyingMonsterIndices = new Map();
       const allDead = encounterMonsters.every(m => m.hp <= 0);
       if (allDead) {
         encounterExpGained = encounterMonsters.reduce((sum, m) => sum + m.exp, 0);
@@ -8298,6 +8486,40 @@ function updateBattle(dt) {
       playerHealNum = null;
       enemyHealNum = null;
       processNextTurn();
+    }
+  } else if (battleState === 'sw-throw') {
+    // Player throw pose for 250ms, then hit first target
+    if (battleTimer >= 250) {
+      if (southWindTargets.length === 0) { processNextTurn(); }
+      else {
+        southWindHitIdx = 0;
+        _applySWDamage(southWindTargets[0]);
+        battleState = 'sw-hit'; battleTimer = 0;
+      }
+    }
+  } else if (battleState === 'sw-hit') {
+    // Explosion animation: 3 phases × 133ms = 399ms, then hold damage number until 700ms
+    if (battleTimer >= 700) {
+      southWindHitIdx++;
+      if (southWindHitIdx < southWindTargets.length) {
+        _applySWDamage(southWindTargets[southWindHitIdx]);
+        battleTimer = 0; // stay in sw-hit for next target
+      } else {
+        // All targets hit — check kills
+        const killed = isRandomEncounter && encounterMonsters
+          ? southWindTargets.filter(i => encounterMonsters[i] && encounterMonsters[i].hp <= 0)
+          : [];
+        if (killed.length > 0) {
+          // Wave order: TR(1) → TL(0) → BR(3) → BL(2), 60ms stagger each
+          const waveOrder = [1, 0, 3, 2];
+          const ordered = waveOrder.filter(i => killed.includes(i));
+          // Any killed not in wave order (e.g. single enemy idx 0) append last
+          for (const i of killed) { if (!ordered.includes(i)) ordered.push(i); }
+          dyingMonsterIndices = new Map(ordered.map((i, n) => [i, n * 60]));
+          playSFX(SFX.MONSTER_DEATH);
+          battleState = 'monster-death'; battleTimer = 0;
+        } else { processNextTurn(); }
+      }
     }
   } else if (battleState === 'item-menu-out') {
     // Menu text fades out, then inventory fades in on right side
@@ -8446,10 +8668,10 @@ function updateBattle(dt) {
       battleTimer = 0;
     }
   } else if (battleState === 'ally-damage-show') {
-    if (battleTimer >= 400) {
+    if (battleTimer >= 700) {
       // Check if targeted monster/boss died
       if (isRandomEncounter && encounterMonsters && allyTargetIndex >= 0 && encounterMonsters[allyTargetIndex].hp <= 0) {
-        dyingMonsterIndex = allyTargetIndex;
+        dyingMonsterIndices = new Map([[allyTargetIndex, 0]]);
         battleState = 'monster-death';
         battleTimer = 0;
         playSFX(SFX.MONSTER_DEATH);
@@ -8665,7 +8887,7 @@ function updateBattle(dt) {
       sprite.setDirection(DIR_DOWN);
       isRandomEncounter = false;
       encounterMonsters = null;
-      dyingMonsterIndex = -1;
+      dyingMonsterIndices = new Map();
       battleAllies = [];
       allyJoinRound = 0;
       stopMusic(); resumeMusic();
@@ -8711,6 +8933,62 @@ function updateBattle(dt) {
   }
 }
 
+function drawSWExplosion() {
+  if (battleState !== 'sw-hit') return;
+  if (!swPhaseCanvases.length || !isRandomEncounter || !encounterMonsters) return;
+
+  const count = encounterMonsters.length;
+  const { fullW, fullH, sprH } = _encounterBoxDims();
+  const boxX = HUD_VIEW_X + Math.floor((HUD_VIEW_W - fullW) / 2);
+  const boxY = HUD_VIEW_Y + Math.floor((HUD_VIEW_H - fullH) / 2);
+  const swGridPos = _encounterGridPos(boxX, boxY, fullW, fullH, count, sprH);
+
+  const tidx = southWindTargets[southWindHitIdx];
+  if (tidx === undefined || tidx >= swGridPos.length) return;
+
+  const tp = swGridPos[tidx];
+  const m = encounterMonsters[tidx];
+  const mc = monsterBattleCanvas.get(m?.monsterId) || goblinBattleCanvas;
+  const mh = mc ? mc.height : sprH;
+
+  // Phase = 0/1/2 based on 133ms intervals
+  const phase = Math.min(2, Math.floor(battleTimer / 133));
+  const phaseCanvas = swPhaseCanvases[phase];
+  if (!phaseCanvas) return;
+
+  // Center explosion on the target monster sprite
+  const cx = tp.x + 16; // center x of 32px sprite
+  const cy = tp.y + (sprH - mh) + Math.floor(mh / 2); // vertical center
+  const ex = cx - Math.floor(phaseCanvas.width / 2);
+  const ey = cy - Math.floor(phaseCanvas.height / 2);
+
+  ctx.drawImage(phaseCanvas, ex, ey);
+}
+
+function drawSWDamageNumbers() {
+  if (battleState !== 'sw-hit' || !isRandomEncounter || !encounterMonsters) return;
+  const count = encounterMonsters.length;
+  const { fullW, fullH, sprH: dSprH } = _encounterBoxDims();
+  const boxX = HUD_VIEW_X + Math.floor((HUD_VIEW_W - fullW) / 2);
+  const boxY = HUD_VIEW_Y + Math.floor((HUD_VIEW_H - fullH) / 2);
+  const swGridPos = _encounterGridPos(boxX, boxY, fullW, fullH, count, dSprH);
+  for (const [k, dn] of Object.entries(southWindDmgNums)) {
+    const idx = parseInt(k);
+    if (idx >= swGridPos.length) continue;
+    const tp = swGridPos[idx];
+    const m = encounterMonsters[idx];
+    const mc = monsterBattleCanvas.get(m?.monsterId) || goblinBattleCanvas;
+    const mh = mc ? mc.height : dSprH;
+    const bx = tp.x + 16;
+    const baseY = tp.y + (dSprH - mh) + Math.floor(mh / 2) - 8;
+    const by = _dmgBounceY(baseY, dn.timer);
+    const digits = String(dn.value);
+    const numBytes = new Uint8Array(digits.length);
+    for (let i = 0; i < digits.length; i++) numBytes[i] = 0x80 + parseInt(digits[i]);
+    drawText(ctx, bx - Math.floor(digits.length * 4), by, numBytes, DMG_NUM_PAL);
+  }
+}
+
 function drawBattle() {
   if (battleState === 'none') return;
 
@@ -8744,7 +9022,7 @@ function drawBattle() {
   const isHitPose = battleState === 'enemy-attack' ||
     (battleState === 'enemy-damage-show' && playerDamageNum && !playerDamageNum.miss);
   const isDefendPose = battleState === 'defend-anim';
-  const isItemUsePose = battleState === 'item-use';
+  const isItemUsePose = battleState === 'item-use' || battleState === 'sw-throw' || battleState === 'sw-hit';
   const isRunPose = battleState === 'run-name-out' || battleState === 'run-text-in' ||
     battleState === 'run-hold' || battleState === 'run-text-out';
   const isNearFatal = playerHP > 0 && playerStats && playerHP <= Math.floor(playerStats.maxHP / 4);
@@ -8860,7 +9138,7 @@ function drawBattle() {
     }
     // Cure sparkle — $4D/$4E at 4 corners, alternating flips every 67ms
     // Same corner positions as defend: TL(-8,-7), TR(+16,-7), BL(-8,+17), BR(+16,+17)
-    if (isItemUsePose && cureSparkleFrames.length === 2 && !(playerActionPending && playerActionPending.allyIndex >= 0)) {
+    if (battleState === 'item-use' && cureSparkleFrames.length === 2 && !(playerActionPending && playerActionPending.allyIndex >= 0)) {
       const fi = Math.floor(battleTimer / 67) & 1;
       const frame = cureSparkleFrames[fi];
       // TL
@@ -8978,7 +9256,7 @@ function drawBattleMenu() {
                  battleState === 'attack-start' || battleState === 'player-slash' || battleState === 'player-hit-show' ||
                  battleState === 'player-miss-show' ||
                  battleState === 'player-damage-show' || battleState === 'monster-death' ||
-                 battleState === 'defend-anim' || battleState.startsWith('item-') || battleState === 'run-name-out' || battleState === 'run-text-in' || battleState === 'run-hold' || battleState === 'run-text-out' || battleState === 'run-fail-name-out' || battleState === 'run-fail-text-in' || battleState === 'run-fail-hold' || battleState === 'run-fail-text-out' || battleState === 'run-fail-name-in' || battleState === 'boss-flash' ||
+                 battleState === 'defend-anim' || battleState.startsWith('item-') || battleState === 'sw-throw' || battleState === 'sw-hit' || battleState === 'run-name-out' || battleState === 'run-text-in' || battleState === 'run-hold' || battleState === 'run-text-out' || battleState === 'run-fail-name-out' || battleState === 'run-fail-text-in' || battleState === 'run-fail-hold' || battleState === 'run-fail-text-out' || battleState === 'run-fail-name-in' || battleState === 'boss-flash' ||
                  battleState === 'enemy-attack' ||
                  battleState === 'enemy-damage-show' || battleState === 'message-hold' ||
                  battleState.startsWith('ally-') ||
@@ -9254,7 +9532,7 @@ function drawEncounterBox() {
                    battleState === 'attack-start' || battleState === 'player-slash' || battleState === 'player-hit-show' ||
                    battleState === 'player-miss-show' ||
                    battleState === 'player-damage-show' || battleState === 'monster-death' ||
-                   battleState === 'defend-anim' || battleState.startsWith('item-') || battleState === 'run-name-out' || battleState === 'run-text-in' || battleState === 'run-hold' || battleState === 'run-text-out' || battleState === 'run-fail-name-out' || battleState === 'run-fail-text-in' || battleState === 'run-fail-hold' || battleState === 'run-fail-text-out' || battleState === 'run-fail-name-in' || battleState === 'boss-flash' ||
+                   battleState === 'defend-anim' || battleState.startsWith('item-') || battleState === 'sw-throw' || battleState === 'sw-hit' || battleState === 'run-name-out' || battleState === 'run-text-in' || battleState === 'run-hold' || battleState === 'run-text-out' || battleState === 'run-fail-name-out' || battleState === 'run-fail-text-in' || battleState === 'run-fail-hold' || battleState === 'run-fail-text-out' || battleState === 'run-fail-name-in' || battleState === 'boss-flash' ||
                    battleState === 'enemy-attack' ||
                    battleState === 'enemy-damage-show' || battleState === 'message-hold' ||
                    battleState.startsWith('ally-') ||
@@ -9324,13 +9602,14 @@ function drawEncounterBox() {
     ctx.imageSmoothingEnabled = false;
     for (let i = 0; i < count; i++) {
       const alive = encounterMonsters[i].hp > 0;
-      const isDying = i === dyingMonsterIndex && battleState === 'monster-death';
+      const isDying = dyingMonsterIndices.has(i) && battleState === 'monster-death';
       // Keep dead monster visible during slash + hit-show + miss-show + damage show
       const isBeingHit = (i === targetIndex &&
         (battleState === 'player-slash' || battleState === 'player-hit-show' ||
          battleState === 'player-miss-show' || battleState === 'player-damage-show')) ||
         (i === allyTargetIndex &&
-        (battleState === 'ally-slash' || battleState === 'ally-damage-show'));
+        (battleState === 'ally-slash' || battleState === 'ally-damage-show')) ||
+        (battleState === 'sw-hit' && southWindTargets.includes(i));
 
       if (!alive && !isDying && !isBeingHit) continue;
 
@@ -9344,7 +9623,9 @@ function drawEncounterBox() {
       const drawY = pos.y + (sprH - thisH); // bottom-align to shared baseline
 
       if (isDying) {
-        _drawMonsterDeath(drawX, drawY, thisH, Math.min(battleTimer / MONSTER_DEATH_MS, 1), mid);
+        const delay = dyingMonsterIndices.get(i) || 0;
+        const progress = Math.min(Math.max(0, battleTimer - delay) / MONSTER_DEATH_MS, 1);
+        _drawMonsterDeath(drawX, drawY, thisH, progress, mid);
       } else {
         // Hit blink during player-slash or ally-slash (60ms toggle, not on miss)
         const curHit = hitResults && hitResults[currentHitIdx];
@@ -9385,11 +9666,30 @@ function drawEncounterBox() {
     ctx.restore();
   }
 
-  // Target-select cursor — hand cursor to the left of selected monster
+  // Target-select cursor — hand cursor to the left of selected monster(s)
   if ((battleState === 'target-select' || (battleState === 'item-target-select' && itemTargetType === 'enemy')) && cursorTileCanvas) {
-    const idx = battleState === 'target-select' ? targetIndex : itemTargetIndex;
-    const pos = gridPos[idx];
-    ctx.drawImage(cursorTileCanvas, pos.x - 10, _slotCenterY(idx) - 4);
+    if (battleState === 'target-select') {
+      const pos = gridPos[targetIndex];
+      ctx.drawImage(cursorTileCanvas, pos.x - 10, _slotCenterY(targetIndex) - 4);
+    } else if (itemTargetMode === 'single') {
+      // Single target cursor (standard)
+      const pos = gridPos[itemTargetIndex];
+      if (pos) ctx.drawImage(cursorTileCanvas, pos.x - 10, _slotCenterY(itemTargetIndex) - 4);
+    } else {
+      // Multi-target: flash cursors on all targeted enemies
+      const flash = Math.floor(Date.now() / 133) & 1;
+      if (flash) {
+        const _rightCols = count === 1 ? [0] : count === 2 ? [1] : [1, 3];
+        const _leftCols  = count === 2 ? [0] : count >= 3 ? [0, 2] : [];
+        let targets = [];
+        if (itemTargetMode === 'all') targets = encounterMonsters.map((m, i) => m.hp > 0 ? i : -1).filter(i => i >= 0);
+        else if (itemTargetMode === 'col-right') targets = _rightCols.filter(i => i < count && encounterMonsters[i]?.hp > 0);
+        else if (itemTargetMode === 'col-left') targets = _leftCols.filter(i => i < count && encounterMonsters[i]?.hp > 0);
+        for (const ti of targets) {
+          if (gridPos[ti]) ctx.drawImage(cursorTileCanvas, gridPos[ti].x - 10, _slotCenterY(ti) - 4);
+        }
+      }
+    }
   }
 
   ctx.restore();
@@ -9407,7 +9707,7 @@ function drawBossSpriteBox() {
                    battleState === 'menu-open' || battleState === 'target-select' || battleState === 'confirm-pause' ||
                    battleState === 'attack-start' || battleState === 'player-slash' || battleState === 'player-hit-show' ||
                    battleState === 'player-miss-show' ||
-                   battleState === 'player-damage-show' || battleState === 'defend-anim' || battleState.startsWith('item-') || battleState === 'run-name-out' || battleState === 'run-text-in' || battleState === 'run-hold' || battleState === 'run-text-out' || battleState === 'run-fail-name-out' || battleState === 'run-fail-text-in' || battleState === 'run-fail-hold' || battleState === 'run-fail-text-out' || battleState === 'run-fail-name-in' || battleState === 'boss-flash' ||
+                   battleState === 'player-damage-show' || battleState === 'defend-anim' || battleState.startsWith('item-') || battleState === 'sw-throw' || battleState === 'sw-hit' || battleState === 'run-name-out' || battleState === 'run-text-in' || battleState === 'run-hold' || battleState === 'run-text-out' || battleState === 'run-fail-name-out' || battleState === 'run-fail-text-in' || battleState === 'run-fail-hold' || battleState === 'run-fail-text-out' || battleState === 'run-fail-name-in' || battleState === 'boss-flash' ||
                    battleState === 'enemy-attack' ||
                    battleState === 'enemy-damage-show' || battleState === 'message-hold' ||
                    battleState.startsWith('ally-') ||
@@ -10169,6 +10469,10 @@ function gameLoop(timestamp) {
 
   // Battle UI overlays everything
   drawBattle();
+
+  // SW explosion drawn last — must be above HUD and all other layers
+  drawSWExplosion();
+  drawSWDamageNumbers(); // damage numbers above explosion
 
   if (jukeboxMode) {
     ctx.font = '8px monospace';
