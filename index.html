@@ -327,6 +327,8 @@
         document.getElementById('canvas-wrapper').style.display = 'block';
         document.getElementById('controls-hint').style.display = 'block';
         document.getElementById('rom-picker').style.display = 'none';
+        document.querySelector('h1').style.display = 'none';
+        document.getElementById('rom-info').style.display = 'none';
       } catch (err) {
         document.getElementById('rom-info').textContent = `Error: ${err.message}`;
         console.error(err);
