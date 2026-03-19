@@ -2,64 +2,53 @@
 
 import { decodeTile, drawTile } from './tile-decoder.js';
 
-// FF3 map sprite tile region starts at file offset $01C010
-// Each character's walk sprites are a set of 8x8 tiles arranged in a 2x2 grid
-// The first character (Onion Knight) tiles are at the start of this region.
-//
-// Typical NES sprite layout for a 16x16 character:
-//   [TL] [TR]     (top-left, top-right)
-//   [BL] [BR]     (bottom-left, bottom-right)
-//
-// FF3 walking sprite arrangement (tile indices relative to sprite tile base):
-// Each direction has 2 walk frames. The tile indices below are offsets
-// into the sprite tile region (each tile is 16 bytes in 2BPP).
-//
-// These are provisional — use tile-browser.html to verify and adjust.
-// FF3 typically arranges: down-frame0, down-frame1, up-frame0, up-frame1,
-// left-frame0, left-frame1 (right = horizontal flip of left)
+const SPRITE_TILE_BASE = 0x01C010;
 
-const SPRITE_TILE_BASE = 0x01C010; // File offset for map/walking sprite tiles
-
-// Direction constants
 export const DIR_DOWN = 0;
 export const DIR_UP = 1;
 export const DIR_LEFT = 2;
 export const DIR_RIGHT = 3;
 
-// Walk animation frames per direction
-// Verified by user inspection of debug sprite sheet.
-// 16 tiles per character: down(4), up(4), left-f0(4), left-f1(4)
-// Down/up have 1 unique frame — walk animation alternates normal/hflipped.
-// Left has 2 independent frames. Right = left horizontally flipped.
-// Tiles are row-major: [TL, TR, BL, BR].
+// Verified via FCEUX OAM trace:
+// DOWN f0: tiles $00-$03, no flip
+// DOWN f1: top row $00/$01 NO flip, bottom row $03/$02 HFLIP (only bottom flips)
+// UP   f0: tiles $04-$07, no flip
+// UP   f1: top row $04/$05 NO flip, bottom row $07/$06 HFLIP (only bottom flips)
+// LEFT f0: tiles $08-$0B, no flip
+// LEFT f1: tiles $0C-$0F, no flip, 1px bob up
+// RIGHT f0: tiles $08-$0B, full HFLIP
+// RIGHT f1: tiles $0C-$0F, full HFLIP, 1px bob up
+//
+// flip: full horizontal flip of entire sprite (LEFT/RIGHT)
+// bottomFlip: only flip bottom 8px row, top stays same (DOWN/UP f1)
+// tiles for bottomFlip frames are pre-swapped [TL,TR,BR,BL] so bottom row
+// renders correctly after the half-flip
 const WALK_FRAMES = {
   [DIR_DOWN]: [
-    { tiles: [0, 1, 2, 3], flip: false },  // frame 0
-    { tiles: [0, 1, 2, 3], flip: true },   // frame 1 (horizontally flipped)
+    { tiles: [0, 1, 2, 3], flip: false, bottomFlip: false, yOff: 0 },
+    { tiles: [0, 1, 2, 3], flip: false, bottomFlip: true,  yOff: 0, xOff: -1 },
   ],
   [DIR_UP]: [
-    { tiles: [4, 5, 6, 7], flip: false },  // frame 0
-    { tiles: [4, 5, 6, 7], flip: true },   // frame 1 (horizontally flipped)
+    { tiles: [4, 5, 6, 7], flip: false, bottomFlip: false, yOff: 0 },
+    { tiles: [4, 5, 6, 7], flip: false, bottomFlip: true,  yOff: 0, xOff: -1 },
   ],
   [DIR_LEFT]: [
-    { tiles: [8, 9, 10, 11], flip: false },   // frame 0
-    { tiles: [12, 13, 14, 15], flip: false },  // frame 1
+    { tiles: [8, 9, 10, 11],   flip: false, bottomFlip: false, yOff:  0 },
+    { tiles: [12, 13, 14, 15], flip: false, bottomFlip: false, yOff: -1 },
   ],
   [DIR_RIGHT]: [
-    { tiles: [8, 9, 10, 11], flip: true },    // frame 0 (left tiles, flipped)
-    { tiles: [12, 13, 14, 15], flip: true },   // frame 1 (left tiles, flipped)
+    { tiles: [8, 9, 10, 11],   flip: true, bottomFlip: false, yOff:  0 },
+    { tiles: [12, 13, 14, 15], flip: true, bottomFlip: false, yOff: -1 },
   ],
 };
 
 export class Sprite {
   constructor(romData, paletteColors, paletteBottom) {
     this.romData = romData;
-    this.palette = paletteColors; // sub-palette for top tiles (0,1): 4 NES color indices
-    this.paletteBottom = paletteBottom || paletteColors; // sub-palette for bottom tiles (2,3)
+    this.palette = paletteColors;
+    this.paletteBottom = paletteBottom || paletteColors;
     this.direction = DIR_DOWN;
     this.frame = 0;
-
-    // Pre-decode all needed tiles from the sprite region
     this.tileCache = new Map();
   }
 
@@ -71,40 +60,18 @@ export class Sprite {
     return this.tileCache.get(tileIndex);
   }
 
-  setDirection(dir) {
-    this.direction = dir;
-  }
+  setDirection(dir) { this.direction = dir; }
+  getDirection()    { return this.direction; }
 
-  getDirection() {
-    return this.direction;
-  }
+  setWalkProgress(t) { this.frame = t < 0.5 ? 0 : 1; }
+  resetFrame()       { this.frame = 0; }
 
-  // Set animation frame directly based on movement progress (0.0 - 1.0)
-  // Frame 0 for first half of step, frame 1 for second half
-  setWalkProgress(t) {
-    this.frame = t < 0.5 ? 0 : 1;
-  }
-
-  resetFrame() {
-    this.frame = 0;
-  }
-
-  // Draw the 16x16 sprite at (x, y) on the canvas context
   draw(ctx, x, y) {
-    const frames = WALK_FRAMES[this.direction];
-    const frameData = frames[this.frame];
+    const frameData   = WALK_FRAMES[this.direction][this.frame];
     const tileIndices = frameData.tiles;
-    const isFlipped = frameData.flip;
+    x += frameData.xOff || 0;
+    y += frameData.yOff || 0;
 
-    // 2x2 tile positions in row-major order: [TL, TR, BL, BR]
-    const positions = [
-      [0, 0],  // top-left
-      [8, 0],  // top-right
-      [0, 8],  // bottom-left
-      [8, 8],  // bottom-right
-    ];
-
-    // Render tiles to a temp canvas, then composite with transparency
     if (!this._tmpCanvas) {
       this._tmpCanvas = document.createElement('canvas');
       this._tmpCanvas.width = 16;
@@ -114,18 +81,28 @@ export class Sprite {
     const tmpCtx = this._tmpCtx;
     tmpCtx.clearRect(0, 0, 16, 16);
 
+    // Draw all 4 tiles into temp canvas (top row normal, bottom row normal)
+    const positions = [[0,0],[8,0],[0,8],[8,8]];
     for (let i = 0; i < 4; i++) {
       const tile = this.getDecodedTile(tileIndices[i]);
-      // Top tiles (0,1) use palette, bottom tiles (2,3) use paletteBottom
-      const pal = i < 2 ? this.palette : this.paletteBottom;
+      const pal  = i < 2 ? this.palette : this.paletteBottom;
       drawTile(tmpCtx, tile, pal, positions[i][0], positions[i][1]);
     }
 
-    if (isFlipped) {
+    if (frameData.flip) {
+      // Full horizontal flip (LEFT/RIGHT)
       ctx.save();
       ctx.translate(x + 16, y);
       ctx.scale(-1, 1);
       ctx.drawImage(this._tmpCanvas, 0, 0);
+      ctx.restore();
+    } else if (frameData.bottomFlip) {
+      // Top 8px drawn normally, bottom 8px flipped horizontally
+      ctx.drawImage(this._tmpCanvas, 0, 0, 16, 8, x, y, 16, 8);
+      ctx.save();
+      ctx.translate(x + 16, y + 8);
+      ctx.scale(-1, 1);
+      ctx.drawImage(this._tmpCanvas, 0, 8, 16, 8, 0, 0, 16, 8);
       ctx.restore();
     } else {
       ctx.drawImage(this._tmpCanvas, 0, 0, 16, 16, x, y, 16, 16);

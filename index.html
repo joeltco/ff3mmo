@@ -204,7 +204,7 @@
       // IndexedDB unavailable, fall through to file pickers
     }
 
-    document.getElementById('rom-file').addEventListener('change', async (e) => {
+    document.getElementById('rom-file')?.addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;
       ff3Buffer = await file.arrayBuffer();
@@ -213,7 +213,7 @@
       tryLaunch();
     });
 
-    document.getElementById('rom-file-ff12').addEventListener('change', async (e) => {
+    document.getElementById('rom-file-ff12')?.addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;
       ff12Buffer = await file.arrayBuffer();
