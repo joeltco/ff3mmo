@@ -209,11 +209,11 @@
     /* Hidden input for mobile keyboard */
     #mobile-input {
       position: fixed;
-      bottom: 0;
+      top: 0;
       left: 0;
       width: 1px;
       height: 1px;
-      opacity: 0.01; /* must be > 0 and in-viewport for iOS to fire input events */
+      opacity: 0.01;
       font-size: 16px; /* prevents iOS zoom on focus */
       border: none;
       outline: none;
@@ -221,6 +221,13 @@
       color: transparent;
       caret-color: transparent;
       pointer-events: none;
+    }
+    @media (max-width: 520px) {
+      body {
+        position: fixed;
+        width: 100%;
+        overflow: hidden;
+      }
     }
   </style>
 </head>
