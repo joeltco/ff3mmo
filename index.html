@@ -327,7 +327,6 @@
         document.getElementById('canvas-wrapper').style.display = 'block';
         document.getElementById('controls-hint').style.display = 'block';
         document.getElementById('rom-picker').style.display = 'none';
-        setTimeout(() => window.scrollTo({ top: 100, behavior: 'smooth' }), 600);
       } catch (err) {
         document.getElementById('rom-info').textContent = `Error: ${err.message}`;
         console.error(err);
@@ -401,7 +400,6 @@
     setInterval(() => {
       if (getMobileInputMode() === 'none' && document.activeElement === mobileInput) {
         mobileInput.blur();
-        setTimeout(() => window.scrollTo({ top: 100, behavior: 'smooth' }), 600);
       }
     }, 80);
 
