@@ -41,6 +41,7 @@ export const SFX = {
   DEFEND_HIT:   0x61,  // SFX $20 + $41 — defend action sound (confirmed by user)
   TREASURE:     0x80,  // SFX $3F + $41 — treasure chest open (3F/E982: LDA #$BF → $7F49)
   RUN_AWAY:     0x74,  // SFX $33 + $41 — escape success (ROM writes $B3 to $7F49 at PC=$BCBC)
+  SW_HIT:       0x5D,  // SFX $1C + $41 — SouthWind ice hit per enemy (from battle-item-trace)
 };
 
 // FF1 track indices (0-based, for ff1 NSF)

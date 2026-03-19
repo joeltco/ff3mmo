@@ -8657,6 +8657,7 @@ function updateBattle(dt) {
         } else if (allyTargetIndex < 0) {
           bossHP = Math.max(0, bossHP - allyHitResult.damage);
         }
+        if (allyHitResult.crit) critFlashTimer = 0;
         bossDamageNum = { value: allyHitResult.damage, crit: allyHitResult.crit, timer: 0 };
         // Temporarily set targetIndex for damage number positioning
         targetIndex = allyTargetIndex;

@@ -35,6 +35,11 @@ const ARMOR = [
   [0x8B, { type: 'armor', subtype: 'arms',   def: 1, mdef: 3, evade: 2, price: 80 }],  // Bronze Bracers
 ];
 
+// --- Battle Items (thrown in battle for elemental damage) ---
+const BATTLE_ITEMS = [
+  [0xB2, { type: 'battle_item', subtype: 'ice', effect: 'damage_enemies', price: 500 }],  // SouthWind
+];
+
 // --- Spells (sold in magic shops, spell IDs not item IDs) ---
 const MAGIC = [
   [0x35, { type: 'magic', subtype: 'white', level: 1, price: 100 }],  // Poisona (spell $35)
@@ -42,6 +47,7 @@ const MAGIC = [
 
 export const ITEMS = new Map([
   ...CONSUMABLES,
+  ...BATTLE_ITEMS,
   ...WEAPONS,
   ...ARMOR,
   ...MAGIC,

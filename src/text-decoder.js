@@ -119,10 +119,11 @@ export function getItemName(itemId) {
  */
 export function getItemNameClean(itemId) {
   const bytes = getItemName(itemId);
-  if (bytes.length > 0 && ICON_TILES.has(bytes[0])) {
-    return bytes.slice(1);
-  }
-  return bytes;
+  let start = 0;
+  if (bytes.length > 0 && ICON_TILES.has(bytes[0])) start = 1;
+  // Strip leading spaces (0xFF) — consumables/battle items have no icon but start with a space
+  while (start < bytes.length && bytes[start] === 0xFF) start++;
+  return start > 0 ? bytes.slice(start) : bytes;
 }
 
 /**
