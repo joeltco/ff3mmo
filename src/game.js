@@ -7903,15 +7903,15 @@ function startRandomEncounter() {
   const zoneKey = ['altar_cave_f1','altar_cave_f2','altar_cave_f3','altar_cave_f4'][dungeonFloor] || 'altar_cave_f1';
   const zone = ENCOUNTERS.get(zoneKey);
   const monPool = zone ? zone.monsters : [0x00];
-  const monsterId = monPool[Math.floor(Math.random() * monPool.length)];
-  const monData = MONSTERS.get(monsterId) || MONSTERS.get(0x00);
   const minG = zone ? zone.minGroup : 1;
   const maxG = zone ? zone.maxGroup : 4;
   const count = minG + Math.floor(Math.random() * (maxG - minG + 1));
 
   encounterMonsters = [];
   for (let i = 0; i < count; i++) {
-    encounterMonsters.push({ monsterId, hp: monData.hp, maxHP: monData.hp, atk: monData.atk, def: monData.def, exp: monData.exp, gil: monData.gil || 0, hitRate: GOBLIN_HIT_RATE });
+    const mid = monPool[Math.floor(Math.random() * monPool.length)];
+    const mData = MONSTERS.get(mid) || MONSTERS.get(0x00);
+    encounterMonsters.push({ monsterId: mid, hp: mData.hp, maxHP: mData.hp, atk: mData.atk, def: mData.def, exp: mData.exp, gil: mData.gil || 0, hitRate: GOBLIN_HIT_RATE });
   }
   preBattleTrack = TRACKS.CRYSTAL_CAVE;
   // Skip roar/earthquake — go straight to flash-strobe
@@ -8936,9 +8936,7 @@ function drawBattle() {
       const ecx = HUD_VIEW_X + HUD_VIEW_W / 2;
       const ecy = HUD_VIEW_Y + HUD_VIEW_H / 2;
       if (isRandomEncounter && encounterMonsters) {
-        const count = encounterMonsters.length;
-        const fw = count === 1 ? 64 : 96;
-        const fh = count <= 2 ? 64 : 96;
+        const { fullW: fw, fullH: fh } = _encounterBoxDims();
         ctx.fillRect(Math.round(ecx - fw / 2) + 8, Math.round(ecy - fh / 2) + 8, fw - 16, fh - 16);
       } else {
         ctx.fillRect(ecx - 24, ecy - 24, 48, 48);
@@ -9189,6 +9187,21 @@ function drawBattleMenu() {
   ctx.restore();
 }
 
+function _encounterBoxDims() {
+  if (!encounterMonsters) return { fullW: 64, fullH: 64, sprH: 32 };
+  const count = encounterMonsters.length;
+  const sprH = encounterMonsters.reduce((h, m) => {
+    const c = monsterBattleCanvas.get(m.monsterId) || goblinBattleCanvas;
+    return Math.max(h, c ? c.height : 32);
+  }, 32);
+  const fullW = count === 1 ? 64 : 96;
+  const rowsNeeded = count <= 2 ? 1 : 2;
+  const gapY = 8;
+  const innerH = rowsNeeded === 1 ? sprH : sprH * 2 + gapY;
+  const fullH = Math.ceil((innerH + 24) / 8) * 8;
+  return { fullW, fullH, sprH };
+}
+
 function _encounterGridPos(boxX, boxY, boxW, boxH, count, sprH) {
   sprH = sprH || 32;
   const cx = boxX + Math.floor(boxW / 2);
@@ -9243,16 +9256,7 @@ function drawEncounterBox() {
   if (!isExpand && !isClose && !isCombat && !isVictory) return;
 
   const count = encounterMonsters.length;
-  // Compute box size based on tallest sprite in this encounter
-  const sprH = encounterMonsters.reduce((h, m) => {
-    const c = monsterBattleCanvas.get(m.monsterId) || goblinBattleCanvas;
-    return Math.max(h, c ? c.height : 32);
-  }, 32);
-  const fullW = count === 1 ? Math.max(64, 32 + 32) : 96;
-  const rowsNeeded = count <= 2 ? 1 : 2;
-  const gapY = 8;
-  const innerH = rowsNeeded === 1 ? sprH : sprH * 2 + gapY;
-  const fullH = Math.ceil((innerH + 24) / 8) * 8; // 8px border + 8px padding each side, round to 8
+  const { fullW, fullH, sprH } = _encounterBoxDims();
   const centerX = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2);
   const centerY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
 
@@ -9281,6 +9285,14 @@ function drawEncounterBox() {
 
   // Draw monster sprites in grid
   const gridPos = _encounterGridPos(boxX, boxY, fullW, fullH, count, sprH);
+  // Helper: visual center Y of a monster slot after bottom-alignment
+  const _slotCenterY = (idx) => {
+    if (!gridPos[idx] || !encounterMonsters[idx]) return 0;
+    const m = encounterMonsters[idx];
+    const c = monsterBattleCanvas.get(m.monsterId) || goblinBattleCanvas;
+    const h = c ? c.height : sprH;
+    return gridPos[idx].y + (sprH - h) + Math.floor(h / 2);
+  };
   if (goblinBattleCanvas || monsterBattleCanvas.size > 0) {
     // Slide-in: sprites start off left edge of box, slide right to final position
     // ROM: 16 frames × 16px/frame via PPU scroll. We offset sprites leftward and clip to box interior.
@@ -9315,9 +9327,11 @@ function drawEncounterBox() {
       const mid = encounterMonsters[i].monsterId;
       const sprNormal = monsterBattleCanvas.get(mid) || goblinBattleCanvas;
       const sprWhite  = monsterWhiteCanvas.get(mid)  || goblinWhiteCanvas;
+      const thisH = sprNormal ? sprNormal.height : sprH;
+      const drawY = pos.y + (sprH - thisH); // bottom-align to shared baseline
 
       if (isDying) {
-        _drawMonsterDeath(drawX, pos.y, 32, Math.min(battleTimer / MONSTER_DEATH_MS, 1), mid);
+        _drawMonsterDeath(drawX, drawY, thisH, Math.min(battleTimer / MONSTER_DEATH_MS, 1), mid);
       } else {
         // Hit blink during player-slash or ally-slash (60ms toggle, not on miss)
         const curHit = hitResults && hitResults[currentHitIdx];
@@ -9330,7 +9344,7 @@ function drawEncounterBox() {
         const isFlashing = battleState === 'boss-flash' && currentAttacker === i &&
                            Math.floor(battleTimer / 33) % 2 === 1;
         if (!isHitBlink) {
-          ctx.drawImage(isFlashing ? sprWhite : sprNormal, drawX, pos.y);
+          ctx.drawImage(isFlashing ? sprWhite : sprNormal, drawX, drawY);
         }
       }
     }
@@ -9339,7 +9353,7 @@ function drawEncounterBox() {
     if (battleState === 'player-slash' && slashFrames && slashFrame < SLASH_FRAMES && hitResults && hitResults[currentHitIdx] && !hitResults[currentHitIdx].miss) {
       const pos = gridPos[targetIndex];
       const sx = pos.x - slideOffX + slashOffX + 8;  // center 16px on 32px sprite
-      const sy = pos.y + slashOffY + 8;
+      const sy = _slotCenterY(targetIndex) + slashOffY;
       ctx.drawImage(slashFrames[slashFrame], sx, sy);
     }
 
@@ -9352,7 +9366,7 @@ function drawEncounterBox() {
       if (pos && allySlashFrames && allySlashFrames[af]) {
         const scatterX = [0, 10, -8][af];
         const scatterY = [0, -6, 8][af];
-        ctx.drawImage(allySlashFrames[af], pos.x + 8 + scatterX, pos.y + 8 + scatterY);
+        ctx.drawImage(allySlashFrames[af], pos.x + 8 + scatterX, _slotCenterY(allyTargetIndex) + scatterY);
       }
     }
     ctx.restore();
@@ -9362,7 +9376,7 @@ function drawEncounterBox() {
   if ((battleState === 'target-select' || (battleState === 'item-target-select' && itemTargetType === 'enemy')) && cursorTileCanvas) {
     const idx = battleState === 'target-select' ? targetIndex : itemTargetIndex;
     const pos = gridPos[idx];
-    ctx.drawImage(cursorTileCanvas, pos.x - 10, pos.y + 12);
+    ctx.drawImage(cursorTileCanvas, pos.x - 10, _slotCenterY(idx) - 4);
   }
 
   ctx.restore();
@@ -9619,12 +9633,17 @@ const VICTORY_ROW_FRAME_MS = 16.67; // 1 NES frame per row
 
 function _battleEnemyName() {
   if (isRandomEncounter && encounterMonsters) {
-    const monsterId = encounterMonsters[0].monsterId;
+    // Use targeted monster's name (or first alive if no target)
+    const ti = (targetIndex >= 0 && targetIndex < encounterMonsters.length && encounterMonsters[targetIndex].hp > 0)
+      ? targetIndex
+      : encounterMonsters.findIndex(m => m.hp > 0);
+    const monsterId = encounterMonsters[ti >= 0 ? ti : 0].monsterId;
     const baseName = getMonsterName(monsterId) || BATTLE_GOBLIN_NAME;
-    const alive = encounterMonsters.filter(m => m.hp > 0).length;
-    if (alive > 1) {
+    // Count how many of this same type are alive
+    const aliveOfType = encounterMonsters.filter(m => m.hp > 0 && m.monsterId === monsterId).length;
+    if (aliveOfType > 1) {
       const arr = Array.from(baseName);
-      arr.push(0xFF, 0xE1, 0x80 + alive);
+      arr.push(0xFF, 0xE1, 0x80 + aliveOfType);
       return new Uint8Array(arr);
     }
     return baseName;
@@ -9931,14 +9950,17 @@ function drawDamageNumbers() {
     if (isRandomEncounter && encounterMonsters) {
       // Center on targeted monster in encounter grid
       const count = encounterMonsters.length;
-      const fullW = count === 1 ? 64 : 96;
-      const fullH = count <= 2 ? 64 : 96;
+      const { fullW, fullH, sprH: dSprH } = _encounterBoxDims();
       const boxX = HUD_VIEW_X + Math.floor((HUD_VIEW_W - fullW) / 2);
       const boxY = HUD_VIEW_Y + Math.floor((HUD_VIEW_H - fullH) / 2);
-      const gridPos = _encounterGridPos(boxX, boxY, fullW, fullH, count);
-      const pos = gridPos[targetIndex] || gridPos[0];
-      bx = pos.x + 8; // center of 32px sprite
-      baseY = pos.y + 8;
+      const gridPos = _encounterGridPos(boxX, boxY, fullW, fullH, count, dSprH);
+      const idx = targetIndex < gridPos.length ? targetIndex : 0;
+      const pos = gridPos[idx];
+      const m = encounterMonsters[idx];
+      const mc = monsterBattleCanvas.get(m?.monsterId) || goblinBattleCanvas;
+      const mh = mc ? mc.height : dSprH;
+      bx = pos.x + 16; // center of 32px sprite
+      baseY = pos.y + (dSprH - mh) + Math.floor(mh / 2) - 8;
     } else {
       // Center on boss sprite
       bx = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2) - 4;
@@ -9996,14 +10018,17 @@ function drawDamageNumbers() {
     let bx, baseY;
     if (isRandomEncounter && encounterMonsters) {
       const count = encounterMonsters.length;
-      const fullW = count === 1 ? 64 : 96;
-      const fullH = count <= 2 ? 64 : 96;
+      const { fullW, fullH, sprH: dSprH } = _encounterBoxDims();
       const boxX = HUD_VIEW_X + Math.floor((HUD_VIEW_W - fullW) / 2);
       const boxY = HUD_VIEW_Y + Math.floor((HUD_VIEW_H - fullH) / 2);
-      const gridPos = _encounterGridPos(boxX, boxY, fullW, fullH, count);
-      const pos = gridPos[enemyHealNum.index] || gridPos[0];
-      bx = pos.x + 8;
-      baseY = pos.y + 8;
+      const gridPos = _encounterGridPos(boxX, boxY, fullW, fullH, count, dSprH);
+      const idx = (enemyHealNum.index < gridPos.length) ? enemyHealNum.index : 0;
+      const pos = gridPos[idx];
+      const m = encounterMonsters[idx];
+      const mc = monsterBattleCanvas.get(m?.monsterId) || goblinBattleCanvas;
+      const mh = mc ? mc.height : dSprH;
+      bx = pos.x + 16;
+      baseY = pos.y + (dSprH - mh) + Math.floor(mh / 2) - 8;
     } else {
       bx = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2) - 4;
       baseY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2) - 8;
