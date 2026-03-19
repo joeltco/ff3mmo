@@ -267,7 +267,7 @@
     </div>
   </div>
 
-  <input type="text" id="mobile-input" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+  <input type="text" id="mobile-input" autocomplete="new-password" autocorrect="off" autocapitalize="off" autocomplete="off" spellcheck="false" data-form-type="other">
 
   <script src="lib/libgme.js"></script>
   <script type="module">
@@ -394,11 +394,12 @@
     mobileInput.addEventListener('input', (e) => {
       if (e.inputType === 'deleteContentBackward') {
         window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true }));
-      } else if (e.data) {
+      } else if (e.inputType === 'insertText' && e.data) {
         for (const ch of e.data) {
           window.dispatchEvent(new KeyboardEvent('keydown', { key: ch, bubbles: true }));
         }
       }
+      // ignore all other inputTypes (autocorrect, autocomplete, composition, etc.)
       mobileInput.value = '';
     });
 
