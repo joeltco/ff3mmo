@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-visual">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>FF3 MMO</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -209,48 +209,10 @@
       }
     }
 
-    /* Mobile chat bar */
-    #mobile-chat-bar {
-      display: none;
-      width: 100%;
-      max-width: 512px;
-      background: #0e0e1a;
-      border-top: 2px solid #c8a832;
-      padding: 8px 12px;
-      gap: 8px;
-      align-items: center;
-    }
-    #mobile-chat-bar input {
-      flex: 1;
-      background: #1e1e2e;
-      border: 1px solid #444;
-      border-radius: 4px;
-      color: #e0e0e0;
-      font-family: 'Press Start 2P', monospace;
-      font-size: 8px;
-      padding: 6px 8px;
-      outline: none;
-      autocorrect: off;
-    }
-    #mobile-chat-bar button {
-      background: #1e1e2e;
-      border: 1px solid #c8a832;
-      border-radius: 4px;
-      color: #c8a832;
-      font-family: 'Courier New', monospace;
-      font-size: 11px;
-      padding: 6px 10px;
-      cursor: pointer;
-      -webkit-tap-highlight-color: transparent;
-    }
-    @media (max-width: 520px) {
-      #mobile-chat-bar { display: none; } /* shown via JS when in chat mode */
-    }
-
-    /* Hidden input for mobile keyboard */
+    /* Hidden input for mobile keyboard — positioned at bottom so keyboard pushes screen up */
     #mobile-input {
       position: fixed;
-      top: 0;
+      bottom: 10px;
       left: 0;
       width: 1px;
       height: 1px;
@@ -307,12 +269,6 @@
         <button class="start-btn" data-key="t">CHAT</button>
       </div>
     </div>
-  </div>
-
-  <div id="mobile-chat-bar">
-    <input type="text" id="mobile-chat-input" placeholder="say something..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" maxlength="42">
-    <button id="mobile-chat-send">SEND</button>
-    <button id="mobile-chat-cancel">✕</button>
   </div>
 
   <input type="password" id="mobile-input" autocomplete="new-password" autocorrect="off" autocapitalize="off" spellcheck="false">
@@ -422,7 +378,7 @@
       tryLaunch();
     });
 
-    // Hidden input — used for name entry only (password type = no composition/autocorrect)
+    // Mobile keyboard — single hidden input for both name entry and chat
     const mobileInput = document.getElementById('mobile-input');
     const AUTOCORRECT_TYPES = new Set(['insertReplacementText']);
     mobileInput.addEventListener('input', (e) => {
@@ -440,56 +396,17 @@
       else if (e.key === 'Escape') { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); }
     });
 
-    // Visible chat bar — shown on mobile when chat input mode is active
-    const chatBar = document.getElementById('mobile-chat-bar');
-    const chatBarInput = document.getElementById('mobile-chat-input');
-    const mobileControls = document.getElementById('mobile-controls');
-
-    function openMobileChatBar() {
-      chatBar.style.display = 'flex';
-      mobileControls.style.display = 'none';
-      chatBarInput.value = '';
-      chatBarInput.focus();
-    }
-    function closeMobileChatBar() {
-      chatBar.style.display = 'none';
-      mobileControls.style.display = 'flex';
-      chatBarInput.blur();
-    }
-
-    document.getElementById('mobile-chat-send').addEventListener('click', () => {
-      const text = chatBarInput.value.trim();
-      for (const ch of text) window.dispatchEvent(new KeyboardEvent('keydown', { key: ch, bubbles: true }));
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-      closeMobileChatBar();
-    });
-    document.getElementById('mobile-chat-cancel').addEventListener('click', () => {
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-      closeMobileChatBar();
-    });
-    chatBarInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        document.getElementById('mobile-chat-send').click();
-      }
-    });
-
-    // Poll: handle name-entry mode with hidden input, chat mode with chat bar
-    let mobileKbMode = 'none';
+    // Poll: blur when game exits text mode
     setInterval(() => {
-      const mode = getMobileInputMode();
-      if (mode === mobileKbMode) return;
-      mobileKbMode = mode;
-      if (mode === 'name') { mobileInput.value = ''; mobileInput.focus(); }
-      else if (mode === 'none') { mobileInput.blur(); }
-      // chat mode is opened via button touch (user gesture required for focus)
+      if (getMobileInputMode() === 'none' && document.activeElement === mobileInput) mobileInput.blur();
     }, 80);
 
-    // When CHAT button is tapped, open the visible chat bar (focus from user gesture)
+    // CHAT button: focus input from user gesture (iOS requires this)
     document.querySelectorAll('[data-key="t"]').forEach(btn => {
       btn.addEventListener('touchend', (e) => {
         e.preventDefault();
-        openMobileChatBar();
+        mobileInput.value = '';
+        mobileInput.focus();
       }, { passive: false });
     });
 
