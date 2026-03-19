@@ -427,11 +427,6 @@
         e.preventDefault();
         btn.classList.add('pressed');
         window.dispatchEvent(new KeyboardEvent('keydown', { key: btn.dataset.key, bubbles: true }));
-        // Z/A button may trigger name-entry — focus input now while inside user gesture
-        if (btn.dataset.key === 'z' || btn.dataset.key === 'Z') {
-          mobileInput.value = '';
-          mobileInput.focus();
-        }
       }, { passive: false });
       const release = (e) => {
         e.preventDefault();
