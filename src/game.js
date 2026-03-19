@@ -28,6 +28,7 @@ function openSaveDB() {
 }
 
 async function saveSlotsToDB() {
+  if (!savesLoaded) return;
   try {
     const data = saveSlots.map(s => s ? {
       name: Array.from(s.name),
@@ -65,11 +66,12 @@ async function loadSlotsFromDB() {
             return { name: new Uint8Array(s.name), level: s.level || 1, exp: s.exp || 0, stats: s.stats || null, inventory: s.inventory || {} };
           });
         }
+        savesLoaded = true;
         resolve();
       };
-      req.onerror = () => resolve();
+      req.onerror = () => { savesLoaded = true; resolve(); };
     });
-  } catch (e) { /* silent fail */ }
+  } catch (e) { savesLoaded = true; }
 }
 
 
@@ -321,6 +323,7 @@ let selectCursor = 0;             // 0-2 (which slot)
 const SELECT_TEXT_STEP_MS = 100;  // NES fade step duration
 const SELECT_TEXT_STEPS = 4;      // 4 steps: $30→$20→$10→$00→$0F
 let saveSlots = [null, null, null]; // null = empty, or Uint8Array of name bytes
+let savesLoaded = false;            // guard: don't write to DB until loaded from DB first
 let nameBuffer = [];                // bytes being typed
 const NAME_MAX_LEN = 7;
 
