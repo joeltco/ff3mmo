@@ -205,6 +205,22 @@
         display: flex;
       }
     }
+
+    /* Hidden input for mobile keyboard */
+    #mobile-input {
+      position: fixed;
+      top: -200px;
+      left: 0;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      font-size: 16px; /* prevents iOS zoom on focus */
+      border: none;
+      outline: none;
+      background: transparent;
+      color: transparent;
+      caret-color: transparent;
+    }
   </style>
 </head>
 <body>
@@ -246,14 +262,16 @@
       <div class="ab-row">
         <button class="start-btn" data-key="s">LIST</button>
         <button class="start-btn" data-key="Enter">START</button>
-        <button class="start-btn" data-key="T">CHAT</button>
+        <button class="start-btn" data-key="t">CHAT</button>
       </div>
     </div>
   </div>
 
+  <input type="text" id="mobile-input" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+
   <script src="lib/libgme.js"></script>
   <script type="module">
-    import { init, loadROM, loadFF12ROM } from './src/game.js';
+    import { init, loadROM, loadFF12ROM, getMobileInputMode } from './src/game.js';
 
     init();
 
@@ -354,6 +372,50 @@
       cacheROM('ff12', ff12Buffer).catch(() => {});
       document.getElementById('rom-info').textContent = (ff3Buffer ? 'FF3 loaded | ' : '') + 'FF1&2 loaded' + (!ff3Buffer ? ' — load FF3 ROM' : '');
       tryLaunch();
+    });
+
+    // Mobile keyboard — hidden input brings up OS keyboard when game enters text mode
+    const mobileInput = document.getElementById('mobile-input');
+    let mobileKbMode = 'none';
+
+    setInterval(() => {
+      const mode = getMobileInputMode();
+      if (mode !== mobileKbMode) {
+        mobileKbMode = mode;
+        if (mode !== 'none') {
+          mobileInput.value = '';
+          mobileInput.focus();
+        } else {
+          mobileInput.blur();
+        }
+      }
+    }, 80);
+
+    mobileInput.addEventListener('input', (e) => {
+      if (e.inputType === 'deleteContentBackward') {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true }));
+      } else if (e.data) {
+        for (const ch of e.data) {
+          window.dispatchEvent(new KeyboardEvent('keydown', { key: ch, bubbles: true }));
+        }
+      }
+      mobileInput.value = '';
+    });
+
+    mobileInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      } else if (e.key === 'Escape') {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      }
+    });
+
+    // When CHAT button is tapped, focus input immediately after game sets mode
+    document.querySelectorAll('[data-key="t"]').forEach(btn => {
+      btn.addEventListener('touchend', () => {
+        setTimeout(() => { if (getMobileInputMode() !== 'none') mobileInput.focus(); }, 100);
+      }, { passive: true });
     });
 
     // Mobile touch controls

@@ -3075,6 +3075,12 @@ function setupTopBox(mapId, isWorldMap) {
   }
 }
 
+export function getMobileInputMode() {
+  if (chatInputActive) return 'chat';
+  if (titleState === 'name-entry') return 'name';
+  return 'none';
+}
+
 export async function loadROM(arrayBuffer) {
   // Apply English translation patch (IPS) before parsing
   const romBytes = new Uint8Array(arrayBuffer);
