@@ -3439,6 +3439,9 @@ function startMove(dir) {
   if (renderer && !renderer.isPassable(tileX, tileY)) {
     sprite.setDirection(dir);
     sprite.resetFrame();
+    if (onWorldMap && tileX === 95 && tileY === 45) {
+      showMsgBox(new Uint8Array([0x8C,0xD8,0xD6,0xD2,0xD7,0xD0,0xFF,0x9C,0xD8,0xD8,0xD7,0xC4])); // "Coming Soon!"
+    }
     return;
   }
 
@@ -3959,7 +3962,7 @@ function handleInput() {
   // Enter — open pause menu
   if (keys['Enter']) {
     keys['Enter'] = false;
-    if (pauseState === 'none' && battleState === 'none' && transState === 'none' && !shakeActive && !starEffect && !moving) {
+    if (pauseState === 'none' && battleState === 'none' && transState === 'none' && !shakeActive && !starEffect && !moving && msgBoxState === 'none') {
       playSFX(SFX.CONFIRM);
       pauseMusic();
       playFF1Track(FF1_TRACKS.MENU_SCREEN);
@@ -5011,7 +5014,7 @@ function checkTrigger() {
   if (trigger.source === 'collision' || trigger.source === 'entrance') {
     if (trigger.trigType === 0) {
       // exit_prev — wipe out, then pop from map stack
-      const exitingCrystalRoom = currentMapId === 1004;
+const exitingCrystalRoom = currentMapId === 1004;
       // Only fade out town name when actually leaving to world map
       const goingToWorld = mapStack.length === 0 || mapStack[mapStack.length - 1].mapId === 'world';
       if (goingToWorld && topBoxIsTown && topBoxNameBytes) {

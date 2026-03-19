@@ -160,6 +160,9 @@ export class WorldMapRenderer {
     const wx = ((tileX % size) + size) % size;
     const wy = ((tileY % size) + size) % size;
 
+    // Temporary choke block south of Ur — remove when world map content is complete
+    if (wx === 95 && wy === 45) return false;
+
     const metatileId = this.data.tilemap[wy * size + wx];
     const m = metatileId & 0x7F;
     const props = this.data.tileProps[m];
