@@ -22,6 +22,12 @@
 - **NEVER guess ROM offsets for sprite data** — ROM bytes ≠ PPU bytes due to CHR bank switching
 - **NEVER use raw ROM offsets (BATTLE_SPRITE_ROM + N) for new sprite frames** — existing frames were mapped by previous devs, new frames MUST be captured from PPU via FCEUX Lua
 
+### NEVER GUESS GAME DATA — LOOK IT UP FIRST
+- **NEVER state item effects, stats, drop locations, or game mechanics from memory.** Always fetch a primary source first.
+- When asked about FF3 NES item/enemy/spell data: **immediately WebFetch a known reference** (shrines.rpgclassics.com/nes/ff3/, guides.gamercorner.net/ffiii/, strategywiki.org, gamefaqs.gamespot.com).
+- If you are not 100% certain of a fact, **do not say it** — look it up first.
+- One wrong guess wastes more time than fetching the source. **Fetch first, answer second. Always.**
+
 ### The user is the source of truth for visual correctness. The ROM is not.
 
 ### PPU tile capture — MANDATORY process for new battle sprites:
