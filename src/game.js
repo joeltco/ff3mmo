@@ -3303,6 +3303,7 @@ function loadWorldMapAtPosition(tileX, tileY) {
   onWorldMap = true;
   dungeonFloor = -1;
   encounterSteps = 0;
+  bossDefeated = false;  // boss respawns on dungeon re-entry
   mapRenderer = null;
   mapData = null;
   setupTopBox(0, true);
