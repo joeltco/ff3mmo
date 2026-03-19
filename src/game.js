@@ -72,9 +72,6 @@ async function loadSlotsFromDB() {
   } catch (e) { /* silent fail */ }
 }
 
-// Jukebox debug mode — press J to toggle, +/- to cycle songs
-let jukeboxMode = false;
-let jukeboxTrack = 0;
 
 const CANVAS_W = 256;          // 16 metatiles wide (NES resolution)
 const CANVAS_H = 240;          // 15 metatiles tall (NES resolution)
@@ -946,18 +943,6 @@ export function init() {
       chatInputActive = true;
       chatInputText = '';
       chatCursorTimer = 0;
-    }
-    if (e.key === 'j' || e.key === 'J') {
-      jukeboxMode = !jukeboxMode;
-      if (!jukeboxMode) stopMusic();
-    }
-    if (jukeboxMode && (e.key === '=' || e.key === '+')) {
-      jukeboxTrack = Math.min(jukeboxTrack + 1, 64);
-      playTrack(jukeboxTrack);
-    }
-    if (jukeboxMode && (e.key === '-' || e.key === '_')) {
-      jukeboxTrack = Math.max(jukeboxTrack - 1, 0);
-      playTrack(jukeboxTrack);
     }
   });
   window.addEventListener('keyup', (e) => {
@@ -10478,12 +10463,6 @@ function gameLoop(timestamp) {
   drawSWExplosion();
   drawSWDamageNumbers(); // damage numbers above explosion
 
-  if (jukeboxMode) {
-    ctx.font = '8px monospace';
-    ctx.fillStyle = '#c8a832';
-    ctx.textAlign = 'left';
-    ctx.fillText(`JUKEBOX: Song $${jukeboxTrack.toString(16).toUpperCase().padStart(2, '0')} (${jukeboxTrack})  +/- to change`, 4, 12);
-  }
 
   requestAnimationFrame(gameLoop);
 }

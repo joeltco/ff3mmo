@@ -96,6 +96,115 @@
       font-size: 11px;
       color: #aaa;
     }
+
+    /* Mobile canvas scaling */
+    @media (max-width: 520px) {
+      #game-canvas {
+        width: 100vw;
+        height: calc(100vw * (480 / 512));
+      }
+    }
+
+    /* Mobile controls */
+    #mobile-controls {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      max-width: 512px;
+      padding: 12px 20px;
+      gap: 16px;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    #dpad {
+      display: grid;
+      grid-template-columns: repeat(3, 52px);
+      grid-template-rows: repeat(3, 52px);
+      gap: 2px;
+    }
+    .dpad-btn {
+      width: 52px;
+      height: 52px;
+      background: #1e1e2e;
+      border: 2px solid #444;
+      border-radius: 6px;
+      color: #c8a832;
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      touch-action: none;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .dpad-btn:active, .dpad-btn.pressed {
+      background: #3a3a50;
+      border-color: #c8a832;
+    }
+    .dpad-btn.transparent {
+      background: transparent;
+      border-color: transparent;
+      pointer-events: none;
+    }
+    .dpad-center {
+      background: #111;
+      border-color: #333;
+      pointer-events: none;
+    }
+    #action-btns {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 10px;
+    }
+    .ab-row {
+      display: flex;
+      gap: 10px;
+    }
+    .action-btn {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      border: 2px solid #444;
+      background: #1e1e2e;
+      color: #c8a832;
+      font-size: 16px;
+      font-weight: bold;
+      font-family: 'Courier New', monospace;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      touch-action: none;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .action-btn:active, .action-btn.pressed {
+      background: #3a3a50;
+      border-color: #c8a832;
+    }
+    .start-btn {
+      padding: 8px 16px;
+      border-radius: 20px;
+      border: 2px solid #444;
+      background: #1e1e2e;
+      color: #c8a832;
+      font-size: 11px;
+      font-family: 'Courier New', monospace;
+      letter-spacing: 1px;
+      touch-action: none;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .start-btn:active, .start-btn.pressed {
+      background: #3a3a50;
+      border-color: #c8a832;
+    }
+    @media (max-width: 520px) {
+      #mobile-controls {
+        display: flex;
+      }
+    }
   </style>
 </head>
 <body>
@@ -116,6 +225,29 @@
   </div>
 
   <div id="controls-hint"><kbd>&larr;</kbd> <kbd>&uarr;</kbd> <kbd>&darr;</kbd> <kbd>&rarr;</kbd> Move &nbsp;&middot;&nbsp; <kbd>Z</kbd> Action &nbsp;&middot;&nbsp; <kbd>X</kbd> Back</div>
+
+  <div id="mobile-controls">
+    <div id="dpad">
+      <div class="dpad-btn transparent"></div>
+      <button class="dpad-btn" data-key="ArrowUp">▲</button>
+      <div class="dpad-btn transparent"></div>
+      <button class="dpad-btn" data-key="ArrowLeft">◀</button>
+      <div class="dpad-btn dpad-center"></div>
+      <button class="dpad-btn" data-key="ArrowRight">▶</button>
+      <div class="dpad-btn transparent"></div>
+      <button class="dpad-btn" data-key="ArrowDown">▼</button>
+      <div class="dpad-btn transparent"></div>
+    </div>
+    <div id="action-btns">
+      <div class="ab-row">
+        <button class="action-btn" data-key="x">B</button>
+        <button class="action-btn" data-key="z">A</button>
+      </div>
+      <div class="ab-row">
+        <button class="start-btn" data-key="Enter">START</button>
+      </div>
+    </div>
+  </div>
 
   <script src="lib/libgme.js"></script>
   <script type="module">
@@ -220,6 +352,22 @@
       cacheROM('ff12', ff12Buffer).catch(() => {});
       document.getElementById('rom-info').textContent = (ff3Buffer ? 'FF3 loaded | ' : '') + 'FF1&2 loaded' + (!ff3Buffer ? ' — load FF3 ROM' : '');
       tryLaunch();
+    });
+
+    // Mobile touch controls
+    document.querySelectorAll('[data-key]').forEach(btn => {
+      btn.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        btn.classList.add('pressed');
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: btn.dataset.key, bubbles: true }));
+      }, { passive: false });
+      const release = (e) => {
+        e.preventDefault();
+        btn.classList.remove('pressed');
+        window.dispatchEvent(new KeyboardEvent('keyup', { key: btn.dataset.key, bubbles: true }));
+      };
+      btn.addEventListener('touchend', release, { passive: false });
+      btn.addEventListener('touchcancel', release, { passive: false });
     });
   </script>
 </body>
