@@ -391,15 +391,15 @@
       }
     }, 80);
 
+    const AUTOCORRECT_TYPES = new Set(['insertReplacementText', 'insertFromComposition', 'insertCompositionText']);
     mobileInput.addEventListener('input', (e) => {
       if (e.inputType === 'deleteContentBackward') {
         window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true }));
-      } else if (e.inputType === 'insertText' && e.data) {
+      } else if (e.data && !AUTOCORRECT_TYPES.has(e.inputType)) {
         for (const ch of e.data) {
           window.dispatchEvent(new KeyboardEvent('keydown', { key: ch, bubbles: true }));
         }
       }
-      // ignore all other inputTypes (autocorrect, autocomplete, composition, etc.)
       mobileInput.value = '';
     });
 
