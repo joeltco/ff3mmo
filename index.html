@@ -405,11 +405,14 @@
       else if (e.key === 'Escape') { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); }
     });
 
-    // Poll: blur when game exits text mode, then rehide URL bar
+    // Poll: focus on name-entry, blur on exit
+    let mobileKbMode = 'none';
     setInterval(() => {
-      if (getMobileInputMode() === 'none' && document.activeElement === mobileInput) {
-        mobileInput.blur();
-      }
+      const mode = getMobileInputMode();
+      if (mode === mobileKbMode) return;
+      mobileKbMode = mode;
+      if (mode === 'name') { mobileInput.value = ''; mobileInput.focus(); }
+      else if (mode === 'none') { mobileInput.blur(); }
     }, 80);
 
     // CHAT button: focus input from user gesture (iOS requires this)
