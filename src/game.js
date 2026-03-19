@@ -4351,14 +4351,24 @@ function updateMovement(dt) {
     // Check for trigger at current tile
     if (checkTrigger()) return; // transition happened, skip input chaining
 
-    // Random encounter step counter (dungeon floors 0-3 only, not crystal room)
-    if (dungeonFloor >= 0 && dungeonFloor < 4 && battleState === 'none') {
-      encounterSteps++;
-      const threshold = 15 + Math.floor(Math.random() * 15);
-      if (encounterSteps >= threshold) {
-        encounterSteps = 0;
-        startRandomEncounter();
-        return;
+    // Random encounter step counter — dungeon floors 0-3 and world map grasslands
+    if (battleState === 'none') {
+      const inDungeon = dungeonFloor >= 0 && dungeonFloor < 4;
+      const onGrass = onWorldMap && worldMapRenderer && (() => {
+        const tileX = Math.floor(worldX / TILE_SIZE);
+        const tileY = Math.floor(worldY / TILE_SIZE);
+        return !worldMapRenderer.getTriggerAt(tileX, tileY);
+      })();
+      if (inDungeon || onGrass) {
+        encounterSteps++;
+        const threshold = onGrass
+          ? 20 + Math.floor(Math.random() * 20)   // world map: 20-39 steps
+          : 15 + Math.floor(Math.random() * 15);  // dungeon: 15-29 steps
+        if (encounterSteps >= threshold) {
+          encounterSteps = 0;
+          startRandomEncounter();
+          return;
+        }
       }
     }
 
@@ -7900,8 +7910,10 @@ function startBattle() {
 function startRandomEncounter() {
   isRandomEncounter = true;
 
-  // Pick encounter zone based on current dungeon floor
-  const zoneKey = ['altar_cave_f1','altar_cave_f2','altar_cave_f3','altar_cave_f4'][dungeonFloor] || 'altar_cave_f1';
+  // Pick encounter zone based on location
+  const zoneKey = onWorldMap
+    ? 'grasslands'
+    : (['altar_cave_f1','altar_cave_f2','altar_cave_f3','altar_cave_f4'][dungeonFloor] || 'altar_cave_f1');
   const zone = ENCOUNTERS.get(zoneKey);
   const monPool = zone ? zone.monsters : [0x00];
   const minG = zone ? zone.minGroup : 1;
