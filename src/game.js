@@ -12,10 +12,11 @@ import { initMusic, playTrack, stopMusic, playSFX, stopSFX, TRACKS, SFX,
          initFF1Music, playFF1Track, stopFF1Music, getCurrentTrack, FF1_TRACKS,
          pauseMusic, resumeMusic } from './music.js';
 import { applyIPS } from './ips-patcher.js';
-import { initTextDecoder, getItemNameClean } from './text-decoder.js';
+import { initTextDecoder, getItemNameClean, getMonsterName } from './text-decoder.js';
 import { initFont, drawText, measureText, TEXT_WHITE, TEXT_GREY, TEXT_YELLOW } from './font-renderer.js';
 import { MONSTERS } from './data/monsters.js';
 import { ITEMS } from './data/items.js';
+import { ENCOUNTERS } from './data/encounters.js';
 
 // --- Save data persistence (IndexedDB) ---
 function openSaveDB() {
@@ -161,6 +162,86 @@ const GOBLIN_COLS = 4;
 let goblinBattleCanvas = null;  // 32×32 canvas
 let goblinWhiteCanvas = null;   // 32×32 all-white version for pre-attack flash
 let goblinDeathFrames = null;   // pre-rendered diagonal deterioration frames
+
+// Shared BG palettes for random encounter sprites (from FCEUX PPU dump, $3F00-$3F0F)
+const ENC_PAL0 = [0x0F, 0x12, 0x22, 0x3B]; // black, dark-teal, purple, tan
+const ENC_PAL1 = [0x0F, 0x15, 0x22, 0x37]; // black, dark-red, purple, orange
+
+// Eye Fang ($02) — PPU tiles $70-$87, 4×6 = 32×48px
+const EYE_FANG_TILE_PAL = [0,0,0,0,0,0,0,0, 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1];
+const EYE_FANG_RAW = new Uint8Array([
+  0x00,0x0D,0x01,0x00,0x04,0x03,0x00,0x01,0x00,0x0E,0x01,0x00,0x00,0x00,0x00,0x00, // $70
+  0x00,0x80,0x71,0x25,0x0B,0xE5,0x3B,0x95,0x00,0x00,0x80,0x38,0x0C,0x06,0x03,0x06, // $71
+  0x00,0x70,0x41,0x06,0xDA,0x9C,0x00,0x98,0x00,0x00,0xC0,0x81,0x86,0xC0,0x80,0x00, // $72
+  0x00,0x67,0x84,0x84,0x02,0x02,0x02,0x02,0x00,0x00,0x00,0x80,0x00,0x00,0x00,0x00, // $73
+  0x00,0x00,0x00,0x00,0x00,0x00,0x05,0x04,0x01,0x00,0x00,0x00,0x00,0x03,0x06,0x0E, // $74
+  0x06,0x08,0x1C,0x18,0xE0,0xA0,0x80,0x00,0x00,0x04,0x10,0x32,0x90,0xC0,0x00,0x00, // $75
+  0xFC,0x62,0x13,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x10,0x00,0x00,0x00,0x00, // $76
+  0x1C,0x30,0x24,0xEC,0xD0,0x10,0x00,0x00,0x00,0x00,0x00,0x00,0x04,0x00,0x00,0x00, // $77
+  0x14,0x10,0x30,0x18,0x00,0x34,0x12,0x1F,0x08,0x0C,0x08,0x20,0x38,0x08,0x0C,0x00, // $78
+  0x00,0x00,0x00,0x00,0x01,0x01,0x00,0x85,0x00,0x01,0x01,0x02,0x0D,0x1D,0x1A,0x34, // $79
+  0x00,0x06,0x62,0x1A,0x3D,0xBC,0x7B,0x19,0x38,0xD6,0x62,0x80,0x01,0x80,0x03,0x01, // $7A
+  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, // $7B
+  0x0F,0x00,0x04,0x02,0x09,0x15,0x0A,0x0D,0x00,0x00,0x03,0x1C,0x11,0x21,0x28,0x2C, // $7C
+  0x84,0x00,0x01,0x67,0x2E,0x47,0xE7,0xC9,0x34,0x1B,0x87,0x63,0x25,0x0F,0x0F,0x07, // $7D
+  0xC0,0x70,0xF8,0xDC,0xFE,0x42,0xA0,0x40,0x20,0xB9,0xDC,0xFC,0xFE,0xC2,0x9C,0x3E, // $7E
+  0x00,0x00,0x40,0x40,0x40,0x9A,0xE8,0xF4,0x00,0x00,0xA0,0x58,0x44,0x18,0x0A,0x02, // $7F
+  0x43,0x0F,0x1B,0x27,0x03,0x0D,0x00,0x00,0x20,0x40,0x58,0x40,0x30,0x0C,0x10,0x0B, // $80
+  0xE3,0xC5,0xD1,0xB8,0xB2,0x0D,0x0B,0x05,0x07,0x03,0x03,0x01,0x00,0x2C,0x08,0x11, // $81
+  0x40,0x40,0x40,0x31,0x00,0xED,0xF8,0x54,0x26,0x26,0x3C,0x88,0x00,0x01,0x00,0x04, // $82
+  0xE4,0xD8,0x80,0x68,0x20,0x40,0x00,0xC0,0x02,0x18,0x04,0x60,0x20,0x00,0x00,0x00, // $83
+  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, // $84
+  0x93,0x00,0x20,0x28,0x01,0x04,0x00,0x00,0x0B,0x0C,0x03,0x00,0x04,0x04,0x00,0x00, // $85
+  0x26,0x60,0x30,0x04,0x90,0x00,0x08,0x80,0x26,0x68,0x80,0x00,0x48,0x88,0x88,0x80, // $86
+  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x80,0x80,0x00,0x00,0x00,0x00,0x00,0x00, // $87
+]);
+
+// Blue Wisp ($03) — PPU tiles $C0-$CF, 4×4 = 32×32px, all pal0
+const BLUE_WISP_TILE_PAL = [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0];
+const BLUE_WISP_RAW = new Uint8Array([
+  0x00,0x00,0x00,0x00,0x02,0x01,0x01,0x00,0x00,0x00,0x00,0x00,0x04,0x00,0x00,0x00, // $C0
+  0x00,0x10,0x08,0x0C,0x07,0x9F,0xFF,0xFC,0x00,0x10,0x00,0x00,0x00,0x00,0x00,0x03, // $C1
+  0x00,0x00,0x18,0x91,0xD0,0xF8,0xFF,0x3F,0x00,0x04,0x00,0x01,0x00,0x00,0x00,0xC1, // $C2
+  0x00,0x00,0x00,0xE0,0x1C,0x87,0x0E,0xF0,0x00,0x00,0x00,0xE0,0x1C,0x07,0x0F,0xFE, // $C3
+  0x04,0x01,0x0F,0x33,0x43,0x47,0x63,0x3F,0x00,0x00,0x0E,0x38,0x60,0x60,0x71,0x3F, // $C4
+  0xF0,0xE0,0xC3,0x8F,0x9F,0x9F,0xF1,0x0F,0x0F,0x1F,0x3F,0x7F,0x7F,0x7F,0xFF,0xFF, // $C5
+  0x7F,0x1F,0xC1,0xF1,0xF8,0xF8,0xFC,0xFC,0xBF,0xE0,0xFE,0xFE,0xFF,0xFF,0xFF,0xFF, // $C6
+  0x00,0xE0,0xF0,0xE0,0xF0,0x7C,0x70,0x70,0x00,0x00,0x00,0x00,0x02,0x80,0x80,0x80, // $C7
+  0x1F,0x0F,0x07,0x3B,0x03,0x03,0x09,0x1F,0x1C,0x00,0x00,0x00,0x40,0x00,0x08,0x1F, // $C8
+  0x7F,0x7F,0x1F,0x1F,0x8F,0xC3,0xF0,0xF0,0xBF,0xBF,0xFF,0xFF,0x7F,0x3F,0xFF,0x0F, // $C9
+  0xFC,0xFC,0xF8,0xF9,0xF1,0xC3,0x0F,0x7F,0xFF,0xFF,0xFF,0xFE,0xFE,0xFC,0xF0,0x87, // $CA
+  0x60,0xF0,0xEC,0xE0,0xFC,0xCE,0xE4,0x86,0x80,0x00,0x00,0x60,0x1C,0x0E,0x04,0x86, // $CB
+  0x0C,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0x0E,0x00,0x00,0x00,0x00,0x00,0x00,0x00, // $CC
+  0xFC,0xBF,0x17,0x41,0x20,0x1F,0x00,0x00,0x03,0x00,0x00,0x40,0x60,0x3F,0x01,0x00, // $CD
+  0xF8,0xFC,0xF7,0x81,0x00,0x80,0x7C,0x04,0x7F,0x00,0x00,0x00,0x00,0x80,0xFC,0x1E, // $CE
+  0xFE,0x3C,0x00,0x00,0x00,0x00,0x00,0x00,0xFE,0x7E,0x3C,0x00,0x00,0x00,0x00,0x00, // $CF
+]);
+
+// Carbuncle ($01) — PPU tiles $E4-$F3, 4×4 = 32×32px, mixed pal
+const CARBUNCLE_TILE_PAL = [0,0,0,0, 0,0,0,0, 0,0,1,1, 0,0,1,1];
+const CARBUNCLE_RAW = new Uint8Array([
+  0x00,0x00,0x00,0x00,0x00,0x01,0x01,0x05,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, // $E4
+  0x00,0x3F,0x47,0x02,0x02,0x12,0x9D,0xB9,0x00,0x00,0x38,0xFC,0xFC,0xEC,0x61,0x41, // $E5
+  0x00,0x00,0x18,0xBF,0xFE,0x43,0x03,0x41,0x00,0x00,0x00,0x80,0x81,0x3C,0x7C,0x3E, // $E6
+  0x00,0x00,0x00,0x00,0x80,0x80,0x80,0x40,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x40, // $E7
+  0x06,0x09,0x19,0x10,0x10,0x10,0x30,0x3C,0x00,0x06,0x06,0x0F,0x0F,0x0F,0x0F,0x03, // $E8
+  0x36,0xC9,0xF1,0x71,0x20,0xC0,0x26,0xA9,0x06,0x08,0x06,0x86,0xCF,0x0F,0xA8,0x21, // $E9
+  0x41,0xAF,0xD8,0xE7,0x65,0x10,0x30,0xCC,0x3E,0x10,0x00,0x00,0x86,0xD7,0x37,0xCF, // $EA
+  0x40,0xA0,0x20,0xC0,0xE0,0x18,0x18,0x08,0x40,0x20,0x20,0x00,0x00,0xE0,0xE0,0xF0, // $EB
+  0x18,0x03,0x34,0x2B,0x4B,0x51,0x41,0x61,0x00,0x03,0x04,0x08,0x28,0x26,0x3E,0x1E, // $EC
+  0x46,0x98,0x20,0x70,0xA0,0xB0,0xB0,0x50,0x46,0x99,0x07,0x0F,0x1F,0x0F,0x0F,0x4F, // $ED
+  0x00,0x00,0x00,0x00,0x00,0x03,0x07,0x0C,0x67,0x3B,0xBB,0xD9,0xC0,0xE7,0xCF,0xDF, // $EE
+  0x00,0x00,0x00,0x00,0x00,0x00,0x80,0xC0,0xF8,0xF8,0xF0,0xC0,0x18,0x0C,0x9C,0xCE, // $EF
+  0x61,0x32,0x3B,0x00,0x00,0x27,0x70,0x07,0x1E,0x0C,0x03,0x00,0x07,0x3E,0x70,0x06, // $F0
+  0x5C,0x0F,0xB0,0x1C,0x03,0xF0,0xDE,0xC3,0x43,0x00,0xB0,0x1F,0x83,0x00,0xE0,0x00, // $F1
+  0x08,0x08,0x0C,0x07,0x00,0x00,0x00,0x00,0xDC,0x9C,0x5F,0xCF,0xE7,0x70,0x70,0x1C, // $F2
+  0x40,0x40,0xC0,0x80,0x00,0x00,0x00,0x00,0xCE,0xCE,0xCE,0x9C,0x08,0x70,0x18,0x08, // $F3
+]);
+
+// Per-monster canvas storage
+const monsterBattleCanvas = new Map(); // monsterId → canvas
+const monsterWhiteCanvas  = new Map(); // monsterId → white flash canvas
+const monsterDeathFrames  = new Map(); // monsterId → death frame array
 
 // Bayer 4×4 ordered dither matrix — creates the pixelated deterioration pattern
 const BAYER4 = [
@@ -2039,6 +2120,96 @@ function initGoblinSprite(romData) {
   }
 }
 
+// Generic renderer for PPU-dumped enemy sprites.
+// rawBytes: Uint8Array of (cols*rows*16) bytes — tiles in row-major order.
+// Returns a canvas of (cols*8) × (rows*8).
+function _renderEnemySprite(rawBytes, cols, rows, tilePalMap, pal0, pal1) {
+  const w = cols * 8, h = rows * 8;
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const cctx = c.getContext('2d');
+  for (let ty = 0; ty < rows; ty++) {
+    for (let tx = 0; tx < cols; tx++) {
+      const tileIdx = ty * cols + tx;
+      const pal = tilePalMap[tileIdx] === 1 ? pal1 : pal0;
+      const off = tileIdx * 16;
+      const img = cctx.createImageData(8, 8);
+      for (let row = 0; row < 8; row++) {
+        const bp0 = rawBytes[off + row];
+        const bp1 = rawBytes[off + row + 8];
+        for (let col = 0; col < 8; col++) {
+          const bit = 7 - col;
+          const ci = (((bp1 >> bit) & 1) << 1) | ((bp0 >> bit) & 1);
+          const p = (row * 8 + col) * 4;
+          if (ci === 0) {
+            img.data[p + 3] = 0;
+          } else {
+            const rgb = NES_SYSTEM_PALETTE[pal[ci]] || [0, 0, 0];
+            img.data[p]     = rgb[0];
+            img.data[p + 1] = rgb[1];
+            img.data[p + 2] = rgb[2];
+            img.data[p + 3] = 255;
+          }
+        }
+      }
+      cctx.putImageData(img, tx * 8, ty * 8);
+    }
+  }
+  return c;
+}
+
+function _initEnemySprite(monsterId, rawBytes, cols, rows, tilePalMap, pal0, pal1) {
+  const w = cols * 8, h = rows * 8;
+  const canvas = _renderEnemySprite(rawBytes, cols, rows, tilePalMap, pal0, pal1);
+  monsterBattleCanvas.set(monsterId, canvas);
+
+  // White flash version for pre-attack blink
+  const wc = document.createElement('canvas');
+  wc.width = w; wc.height = h;
+  const wctx = wc.getContext('2d');
+  const srcData = canvas.getContext('2d').getImageData(0, 0, w, h);
+  const whiteRGB = NES_SYSTEM_PALETTE[0x30] || [255, 255, 255];
+  for (let p = 0; p < srcData.data.length; p += 4) {
+    if (srcData.data[p + 3] > 0) {
+      srcData.data[p]     = whiteRGB[0];
+      srcData.data[p + 1] = whiteRGB[1];
+      srcData.data[p + 2] = whiteRGB[2];
+    }
+  }
+  wctx.putImageData(srcData, 0, 0);
+  monsterWhiteCanvas.set(monsterId, wc);
+
+  // Death deterioration frames — diagonal dither dissolve
+  const origData = canvas.getContext('2d').getImageData(0, 0, w, h);
+  const maxThreshold = (w - 1) + (h - 1) + 15;
+  const frames = [];
+  for (let f = 0; f < MONSTER_DEATH_FRAMES; f++) {
+    const fc = document.createElement('canvas');
+    fc.width = w; fc.height = h;
+    const fctx = fc.getContext('2d');
+    const fd = fctx.createImageData(w, h);
+    const wave = (f / (MONSTER_DEATH_FRAMES - 1)) * (maxThreshold + 1);
+    for (let py = 0; py < h; py++) {
+      for (let px = 0; px < w; px++) {
+        const idx = (py * w + px) * 4;
+        const diag = (w - 1 - px) + py;
+        const threshold = diag + BAYER4[py & 3][px & 3];
+        if (threshold < wave) {
+          fd.data[idx + 3] = 0;
+        } else {
+          fd.data[idx]     = origData.data[idx];
+          fd.data[idx + 1] = origData.data[idx + 1];
+          fd.data[idx + 2] = origData.data[idx + 2];
+          fd.data[idx + 3] = origData.data[idx + 3];
+        }
+      }
+    }
+    fctx.putImageData(fd, 0, 0);
+    frames.push(fc);
+  }
+  monsterDeathFrames.set(monsterId, frames);
+}
+
 function initInvincibleSprite(romData) {
   // Decode tiles $C0-$FF from ROM (64 tiles, 16 bytes each)
   const tilePixels = new Map();
@@ -2853,6 +3024,9 @@ export async function loadROM(arrayBuffer) {
   initRoster();
   initLandTurtleBattle(romRaw);
   initGoblinSprite(romRaw);
+  _initEnemySprite(0x02, EYE_FANG_RAW,   4, 6, EYE_FANG_TILE_PAL,   ENC_PAL0, ENC_PAL1);
+  _initEnemySprite(0x03, BLUE_WISP_RAW,  4, 4, BLUE_WISP_TILE_PAL,  ENC_PAL0, ENC_PAL1);
+  _initEnemySprite(0x01, CARBUNCLE_RAW,  4, 4, CARBUNCLE_TILE_PAL,  ENC_PAL0, ENC_PAL1);
   initSlashSprites();
   initKnifeSlashSprites();
   initSwordSlashSprites();
@@ -7057,13 +7231,12 @@ function drawMsgBox() {
   ctx.restore();
 }
 
-function _drawMonsterDeath(x, y, size, progress) {
+function _drawMonsterDeath(x, y, size, progress, monsterId) {
   // Dithered diagonal dissolve — pre-rendered frames with Bayer 4×4 dither pattern.
-  // Top-right deteriorates first, sweeping diagonally to bottom-left.
-  if (!goblinDeathFrames || !goblinDeathFrames.length) return;
-  const frameIdx = Math.min(goblinDeathFrames.length - 1,
-                            Math.floor(progress * goblinDeathFrames.length));
-  ctx.drawImage(goblinDeathFrames[frameIdx], x, y);
+  const frames = monsterDeathFrames.get(monsterId) || goblinDeathFrames;
+  if (!frames || !frames.length) return;
+  const frameIdx = Math.min(frames.length - 1, Math.floor(progress * frames.length));
+  ctx.drawImage(frames[frameIdx], x, y);
 }
 
 function _drawBorderedBox(x, y, w, h, blue = false) {
@@ -7725,11 +7898,20 @@ function startBattle() {
 
 function startRandomEncounter() {
   isRandomEncounter = true;
-  const goblin = MONSTERS.get(0x00);
-  const count = 1 + Math.floor(Math.random() * 4); // 1-4 goblins
+
+  // Pick encounter zone based on current dungeon floor
+  const zoneKey = ['altar_cave_f1','altar_cave_f2','altar_cave_f3','altar_cave_f4'][dungeonFloor] || 'altar_cave_f1';
+  const zone = ENCOUNTERS.get(zoneKey);
+  const monPool = zone ? zone.monsters : [0x00];
+  const monsterId = monPool[Math.floor(Math.random() * monPool.length)];
+  const monData = MONSTERS.get(monsterId) || MONSTERS.get(0x00);
+  const minG = zone ? zone.minGroup : 1;
+  const maxG = zone ? zone.maxGroup : 4;
+  const count = minG + Math.floor(Math.random() * (maxG - minG + 1));
+
   encounterMonsters = [];
   for (let i = 0; i < count; i++) {
-    encounterMonsters.push({ monsterId: 0x00, hp: goblin.hp, maxHP: goblin.hp, atk: goblin.atk, def: goblin.def, exp: goblin.exp, gil: goblin.gil || 0, hitRate: GOBLIN_HIT_RATE });
+    encounterMonsters.push({ monsterId, hp: monData.hp, maxHP: monData.hp, atk: monData.atk, def: monData.def, exp: monData.exp, gil: monData.gil || 0, hitRate: GOBLIN_HIT_RATE });
   }
   preBattleTrack = TRACKS.CRYSTAL_CAVE;
   // Skip roar/earthquake — go straight to flash-strobe
@@ -8578,8 +8760,8 @@ function drawBattle() {
     if (isAttackPose) {
       const handWeapon = getHitWeapon(currentHitIdx);
       const wpnSt = weaponSubtype(handWeapon);
-      // Back swing: blade BEHIND body (NES: weapon spr06-09 behind body spr00-05)
-      if (battleState === 'attack-start') {
+      // Back swing: right hand blade BEHIND body, left hand blade IN FRONT
+      if (battleState === 'attack-start' && isHitRightHand(currentHitIdx)) {
         if (wpnSt === 'knife' && battleKnifeBladeCanvas) {
           ctx.drawImage(battleKnifeBladeCanvas, px + 8, py - 7);
         } else if (wpnSt === 'dagger' && battleDaggerBladeCanvas) {
@@ -8621,6 +8803,16 @@ function drawBattle() {
     if (isAttackPose) {
       const handWeapon = getHitWeapon(currentHitIdx);
       const wpnSt = weaponSubtype(handWeapon);
+      // Left hand back swing: blade OVER body
+      if (battleState === 'attack-start' && !isHitRightHand(currentHitIdx)) {
+        if (wpnSt === 'knife' && battleKnifeBladeCanvas) {
+          ctx.drawImage(battleKnifeBladeCanvas, px + 8, py - 7);
+        } else if (wpnSt === 'dagger' && battleDaggerBladeCanvas) {
+          ctx.drawImage(battleDaggerBladeCanvas, px + 8, py - 7);
+        } else if (wpnSt === 'sword' && battleSwordBladeCanvas) {
+          ctx.drawImage(battleSwordBladeCanvas, px + 8, py - 7);
+        }
+      }
       if (battleState === 'player-slash') {
         if (wpnSt === 'knife' && battleKnifeBladeSwungCanvas) {
           ctx.drawImage(battleKnifeBladeSwungCanvas, px - 16, py + 1);
@@ -8834,19 +9026,7 @@ function drawBattleMenu() {
 
   // Enemy name centered in left box (skip during victory/run — drawVictoryBox handles it)
   if (!isVictory && !isRunBox) {
-    let enemyName;
-    if (isRandomEncounter && encounterMonsters) {
-      const alive = encounterMonsters.filter(m => m.hp > 0).length;
-      if (alive > 1) {
-        const arr = Array.from(BATTLE_GOBLIN_NAME);
-        arr.push(0xFF, 0xE1, 0x80 + alive);
-        enemyName = new Uint8Array(arr);
-      } else {
-        enemyName = BATTLE_GOBLIN_NAME;
-      }
-    } else {
-      enemyName = BATTLE_BOSS_NAME;
-    }
+    const enemyName = _battleEnemyName();
     const nameTw = measureText(enemyName);
     const nameX = Math.floor((boxW - nameTw) / 2);
     const nameY = HUD_BOT_Y + Math.floor((boxH - 8) / 2);
@@ -9009,28 +9189,32 @@ function drawBattleMenu() {
   ctx.restore();
 }
 
-function _encounterGridPos(boxX, boxY, boxW, boxH, count) {
-  // Returns top-left positions for 32×32 sprite rendering in 2×2 grid.
+function _encounterGridPos(boxX, boxY, boxW, boxH, count, sprH) {
+  sprH = sprH || 32;
   const cx = boxX + Math.floor(boxW / 2);
   const cy = boxY + Math.floor(boxH / 2);
-  const s = 32;
-  const hs = 16;
-  if (count === 1) return [{ x: cx - hs, y: cy - hs }];
-  const gapX = 20, gapY = 20;
+  const hs = 16; // half sprite width (32px wide)
+  const gapX = 20;
+  const gapY = 8;
+  // For 2-row layouts: top of grid is centered on cy
+  const gridH2 = sprH * 2 + gapY; // total height of 2-row grid
+  const row0y = cy - Math.floor(gridH2 / 2);
+  const row1y = row0y + sprH + gapY;
+  if (count === 1) return [{ x: cx - hs, y: cy - Math.floor(sprH / 2) }];
   if (count === 2) return [
-    { x: cx - gapX - hs, y: cy - hs },
-    { x: cx + gapX - hs, y: cy - hs },
+    { x: cx - gapX - hs, y: cy - Math.floor(sprH / 2) },
+    { x: cx + gapX - hs, y: cy - Math.floor(sprH / 2) },
   ];
   if (count === 3) return [
-    { x: cx - gapX - hs, y: cy - gapY - hs },
-    { x: cx + gapX - hs, y: cy - gapY - hs },
-    { x: cx - hs,         y: cy + gapY - hs },
+    { x: cx - gapX - hs, y: row0y },
+    { x: cx + gapX - hs, y: row0y },
+    { x: cx - hs,         y: row1y },
   ];
   return [ // 4
-    { x: cx - gapX - hs, y: cy - gapY - hs },
-    { x: cx + gapX - hs, y: cy - gapY - hs },
-    { x: cx - gapX - hs, y: cy + gapY - hs },
-    { x: cx + gapX - hs, y: cy + gapY - hs },
+    { x: cx - gapX - hs, y: row0y },
+    { x: cx + gapX - hs, y: row0y },
+    { x: cx - gapX - hs, y: row1y },
+    { x: cx + gapX - hs, y: row1y },
   ];
 }
 
@@ -9059,8 +9243,16 @@ function drawEncounterBox() {
   if (!isExpand && !isClose && !isCombat && !isVictory) return;
 
   const count = encounterMonsters.length;
-  const fullW = count === 1 ? 64 : 96;
-  const fullH = count <= 2 ? 64 : 96;
+  // Compute box size based on tallest sprite in this encounter
+  const sprH = encounterMonsters.reduce((h, m) => {
+    const c = monsterBattleCanvas.get(m.monsterId) || goblinBattleCanvas;
+    return Math.max(h, c ? c.height : 32);
+  }, 32);
+  const fullW = count === 1 ? Math.max(64, 32 + 32) : 96;
+  const rowsNeeded = count <= 2 ? 1 : 2;
+  const gapY = 8;
+  const innerH = rowsNeeded === 1 ? sprH : sprH * 2 + gapY;
+  const fullH = Math.ceil((innerH + 24) / 8) * 8; // 8px border + 8px padding each side, round to 8
   const centerX = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2);
   const centerY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
 
@@ -9087,9 +9279,9 @@ function drawEncounterBox() {
   // No content during expand, close, or defeat (monsters already faded)
   if (isExpand || isClose || battleState === 'defeat-text') { ctx.restore(); return; }
 
-  // Draw goblin sprites in 2×2 grid
-  const gridPos = _encounterGridPos(boxX, boxY, fullW, fullH, count);
-  if (goblinBattleCanvas) {
+  // Draw monster sprites in grid
+  const gridPos = _encounterGridPos(boxX, boxY, fullW, fullH, count, sprH);
+  if (goblinBattleCanvas || monsterBattleCanvas.size > 0) {
     // Slide-in: sprites start off left edge of box, slide right to final position
     // ROM: 16 frames × 16px/frame via PPU scroll. We offset sprites leftward and clip to box interior.
     let slideOffX = 0;
@@ -9120,8 +9312,12 @@ function drawEncounterBox() {
       const pos = gridPos[i];
       const drawX = pos.x - slideOffX;
 
+      const mid = encounterMonsters[i].monsterId;
+      const sprNormal = monsterBattleCanvas.get(mid) || goblinBattleCanvas;
+      const sprWhite  = monsterWhiteCanvas.get(mid)  || goblinWhiteCanvas;
+
       if (isDying) {
-        _drawMonsterDeath(drawX, pos.y, 32, Math.min(battleTimer / MONSTER_DEATH_MS, 1));
+        _drawMonsterDeath(drawX, pos.y, 32, Math.min(battleTimer / MONSTER_DEATH_MS, 1), mid);
       } else {
         // Hit blink during player-slash or ally-slash (60ms toggle, not on miss)
         const curHit = hitResults && hitResults[currentHitIdx];
@@ -9134,8 +9330,7 @@ function drawEncounterBox() {
         const isFlashing = battleState === 'boss-flash' && currentAttacker === i &&
                            Math.floor(battleTimer / 33) % 2 === 1;
         if (!isHitBlink) {
-          const spr = isFlashing ? goblinWhiteCanvas : goblinBattleCanvas;
-          ctx.drawImage(spr, drawX, pos.y);
+          ctx.drawImage(isFlashing ? sprWhite : sprNormal, drawX, pos.y);
         }
       }
     }
@@ -9424,13 +9619,15 @@ const VICTORY_ROW_FRAME_MS = 16.67; // 1 NES frame per row
 
 function _battleEnemyName() {
   if (isRandomEncounter && encounterMonsters) {
+    const monsterId = encounterMonsters[0].monsterId;
+    const baseName = getMonsterName(monsterId) || BATTLE_GOBLIN_NAME;
     const alive = encounterMonsters.filter(m => m.hp > 0).length;
     if (alive > 1) {
-      const arr = Array.from(BATTLE_GOBLIN_NAME);
+      const arr = Array.from(baseName);
       arr.push(0xFF, 0xE1, 0x80 + alive);
       return new Uint8Array(arr);
     }
-    return BATTLE_GOBLIN_NAME;
+    return baseName;
   }
   return BATTLE_BOSS_NAME;
 }
