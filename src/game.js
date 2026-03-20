@@ -10417,21 +10417,26 @@ function gameLoop(timestamp) {
     }
   }
 
-  // Star spiral effect update — matches NES: radius $EA→$0C, -2/frame, ~111 frames
+  // Star spiral effect update — matches NES: radius $EA→$0C, -2/frame, ~111 frames at 60fps
   if (starEffect) {
-    starEffect.frame++;
-    starEffect.angle += 0.06;
-    starEffect.radius -= 0.55;
-    // Player spin: cycle directions every 14 frames (DOWN→LEFT→UP→RIGHT)
-    if (starEffect.spin && starEffect.frame % 14 === 0) {
-      const SPIN_ORDER = [DIR_DOWN, DIR_LEFT, DIR_UP, DIR_RIGHT];
-      const spinIdx = Math.floor(starEffect.frame / 14) % 4;
-      sprite.setDirection(SPIN_ORDER[spinIdx]);
-    }
-    if (starEffect.radius < 4) {
-      const cb = starEffect.onComplete;
-      starEffect = null;
-      if (cb) cb();
+    starEffect.acc = (starEffect.acc || 0) + dt;
+    while (starEffect.acc >= 16.67) {
+      starEffect.acc -= 16.67;
+      starEffect.frame++;
+      starEffect.angle += 0.06;
+      starEffect.radius -= 0.55;
+      // Player spin: cycle directions every 14 frames (DOWN→LEFT→UP→RIGHT)
+      if (starEffect.spin && starEffect.frame % 14 === 0) {
+        const SPIN_ORDER = [DIR_DOWN, DIR_LEFT, DIR_UP, DIR_RIGHT];
+        const spinIdx = Math.floor(starEffect.frame / 14) % 4;
+        sprite.setDirection(SPIN_ORDER[spinIdx]);
+      }
+      if (starEffect.radius < 4) {
+        const cb = starEffect.onComplete;
+        starEffect = null;
+        if (cb) cb();
+        break;
+      }
     }
   }
 
