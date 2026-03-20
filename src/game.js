@@ -9951,6 +9951,95 @@ function drawBossSpriteBox() {
                     battleState === 'victory-text-out' || battleState === 'victory-menu-fade' || battleState === 'victory-box-close';
   if (!isExpand && !isClose && !isAppear && !isDissolve && !isCombat && !isVictory) return;
 
+  // PVP opponent — drawn separately, no bordered box, bottom-right of viewport
+  if (isPVPBattle) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
+    ctx.clip();
+    ctx.imageSmoothingEnabled = false;
+
+    if (!bossDefeated && pvpOpponentStats && !isExpand && !isClose) {
+      const palIdx = pvpOpponentStats.palIdx;
+      const fullBody = fakePlayerFullBodyCanvases[palIdx] || fakePlayerFullBodyCanvases[0];
+      const oppX = HUD_VIEW_X + HUD_VIEW_W - 16 - 8;  // 120
+      const oppY = HUD_VIEW_Y + HUD_VIEW_H - 24 - 8;  // 144
+
+      const isOppAttack = battleState === 'boss-flash' || battleState === 'enemy-attack' || battleState === 'enemy-damage-show';
+      const isOppHit = (battleState === 'player-slash' && hitResults && hitResults[currentHitIdx] && !hitResults[currentHitIdx].miss) ||
+                       battleState === 'player-hit-show' || battleState === 'player-damage-show' ||
+                       (battleState === 'ally-slash' && allyHitResult && !allyHitResult.miss) ||
+                       battleState === 'ally-damage-show';
+
+      const blinkHidden = ((battleState === 'player-slash' && hitResults && hitResults[currentHitIdx] && !hitResults[currentHitIdx].miss) ||
+                           (battleState === 'ally-slash' && allyHitResult && !allyHitResult.miss))
+                          && (Math.floor(battleTimer / 60) & 1);
+      const flashFrame = battleState === 'boss-flash' ? Math.floor(battleTimer / (BOSS_PREFLASH_MS / 8)) : 0;
+      const flashHidden = battleState === 'boss-flash' && (flashFrame & 1);
+
+      if (!blinkHidden && !flashHidden && fullBody) {
+        ctx.drawImage(fullBody, oppX, oppY);
+
+        // Overlay correct pose portrait (h-flipped) over top 16×16
+        let poseSrc = null;
+        if (isOppAttack && fakePlayerAttackPortraits[palIdx]) {
+          poseSrc = fakePlayerAttackPortraits[palIdx][0];
+        } else if (isOppHit && fakePlayerHitPortraits[palIdx]) {
+          poseSrc = fakePlayerHitPortraits[palIdx][0];
+        }
+        if (poseSrc) {
+          ctx.save();
+          ctx.translate(oppX + 16, oppY);
+          ctx.scale(-1, 1);
+          ctx.drawImage(poseSrc, 0, 0);
+          ctx.restore();
+        }
+      }
+
+      // Player hits opponent — slash effect
+      if (battleState === 'player-slash' && slashFrames && slashFrame < SLASH_FRAMES &&
+          hitResults && hitResults[currentHitIdx] && !hitResults[currentHitIdx].miss) {
+        ctx.drawImage(slashFrames[slashFrame], oppX + slashOffX, oppY + slashOffY);
+      }
+      // Ally hits opponent — slash effect
+      if (battleState === 'ally-slash' && allyHitResult && !allyHitResult.miss) {
+        const ally = battleAllies[currentAllyAttacker];
+        const allySlashF = ally ? getSlashFramesForWeapon(ally.weaponId, true) : slashFramesR;
+        const af = Math.min(Math.floor(battleTimer / 67), 2);
+        if (allySlashF && allySlashF[af]) {
+          ctx.drawImage(allySlashF[af], oppX + [0,10,-8][af], oppY + [0,-6,8][af]);
+        }
+      }
+
+      // Opponent weapon sprites — h-flipped (opponent faces left toward player)
+      const wpnId = pvpOpponentStats.weaponId || 0;
+      const wpnSt = weaponSubtype(wpnId);
+      if (battleState === 'boss-flash' && !flashHidden) {
+        // Raised — opponent's right side is visually on the left (h-flipped)
+        ctx.save();
+        ctx.translate(oppX, oppY - 7);
+        ctx.scale(-1, 1);
+        if (wpnSt === 'knife' && battleKnifeBladeCanvas) ctx.drawImage(battleKnifeBladeCanvas, 0, 0);
+        else if (wpnSt === 'dagger' && battleDaggerBladeCanvas) ctx.drawImage(battleDaggerBladeCanvas, 0, 0);
+        else if (wpnSt === 'sword' && battleSwordBladeCanvas) ctx.drawImage(battleSwordBladeCanvas, 0, 0);
+        ctx.restore();
+      } else if (battleState === 'enemy-attack') {
+        // Swung — extends right toward player in HUD
+        ctx.save();
+        ctx.translate(oppX + 32, oppY + 1);
+        ctx.scale(-1, 1);
+        if (wpnSt === 'knife' && battleKnifeBladeSwungCanvas) ctx.drawImage(battleKnifeBladeSwungCanvas, 0, 0);
+        else if (wpnSt === 'dagger' && battleDaggerBladeSwungCanvas) ctx.drawImage(battleDaggerBladeSwungCanvas, 0, 0);
+        else if (wpnSt === 'sword' && battleSwordBladeSwungCanvas) ctx.drawImage(battleSwordBladeSwungCanvas, 0, 0);
+        else if (!wpnSt && wpnId === 0 && battleFistCanvas) ctx.drawImage(battleFistCanvas, 0, 0);
+        ctx.restore();
+      }
+    }
+
+    ctx.restore();
+    return;
+  }
+
   const fullW = 64;  // 48px sprite + 8px border each side
   const fullH = 64;
   const centerX = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2);
@@ -9984,38 +10073,7 @@ function drawBossSpriteBox() {
   const sprY = centerY - 24;
   ctx.imageSmoothingEnabled = false;
 
-  if (isPVPBattle) {
-    // PVP: draw opponent portrait scaled 3x (16→48px) with hit/flash effects
-    const palIdx = pvpOpponentStats ? pvpOpponentStats.palIdx : 0;
-    const fullBody = fakePlayerFullBodyCanvases[palIdx] || fakePlayerFullBodyCanvases[0];
-    if (fullBody && !bossDefeated) {
-      const fbX = centerX - 8;
-      const fbY = centerY - 12;
-      if (battleState === 'boss-flash') {
-        const frame = Math.floor(battleTimer / (BOSS_PREFLASH_MS / 8));
-        if (!(frame & 1)) ctx.drawImage(fullBody, fbX, fbY);
-      } else if (battleState === 'player-slash') {
-        const blinkHidden = Math.floor(battleTimer / 60) & 1;
-        if (!blinkHidden) ctx.drawImage(fullBody, fbX, fbY);
-        if (slashFrames && slashFrame < SLASH_FRAMES && hitResults && hitResults[currentHitIdx] && !hitResults[currentHitIdx].miss) {
-          ctx.drawImage(slashFrames[slashFrame], centerX - 8 + slashOffX, centerY - 8 + slashOffY);
-        }
-      } else if (battleState === 'ally-slash') {
-        const blinkHidden = allyHitResult && !allyHitResult.miss && (Math.floor(battleTimer / 60) & 1);
-        if (!blinkHidden) ctx.drawImage(fullBody, fbX, fbY);
-        if (allyHitResult && !allyHitResult.miss) {
-          const ally = battleAllies[currentAllyAttacker];
-          const allySlashFrames = ally ? getSlashFramesForWeapon(ally.weaponId, true) : slashFramesR;
-          const af = Math.min(Math.floor(battleTimer / 67), 2);
-          if (allySlashFrames && allySlashFrames[af]) {
-            ctx.drawImage(allySlashFrames[af], centerX - 8 + [0,10,-8][af], centerY - 8 + [0,-6,8][af]);
-          }
-        }
-      } else {
-        ctx.drawImage(fullBody, fbX, fbY);
-      }
-    }
-  } else if (isAppear || isDissolve) {
+  if (isAppear || isDissolve) {
     _drawDissolvedSprite(sprX, sprY, isDissolve);
   } else if (battleState === 'boss-flash') {
     // Pre-attack white blink — alternate normal/white every other frame (~16.67ms each)
