@@ -8443,14 +8443,17 @@ function updateBattle(dt) {
         const eligible = PLAYER_POOL.filter(p => p.loc === loc && !inBattle.has(p.name));
         if (eligible.length > 0 && Math.random() < 0.3) {
           const pick = eligible[Math.floor(Math.random() * eligible.length)];
-          // Record current box size before adding ally, then animate to new size
+          // Record current box size before adding ally
           const oldTotal = 1 + pvpEnemyAllies.length;
           const oldCols = oldTotal <= 1 ? 1 : 2;
           const oldRows = oldTotal <= 2 ? 1 : 2;
           pvpBoxResizeFromW = oldCols * 24 + 16;
           pvpBoxResizeFromH = oldRows * 32 + 16;
-          pvpBoxResizeStartTime = Date.now();
           pvpEnemyAllies.push(generateAllyStats(pick));
+          // Block all actions until box finishes expanding
+          battleState = 'pvp-ally-appear';
+          battleTimer = 0;
+          return;
         }
       }
       // Player ally join check: up to 3 allies (matches roster visible rows), 50% chance
@@ -8826,6 +8829,12 @@ function updateBattle(dt) {
   } else if (battleState === 'run-fail-name-in') {
     // Monster name fades back in (fast)
     if (battleTimer >= (BATTLE_TEXT_STEPS + 1) * 50) {
+      processNextTurn();
+    }
+  } else if (battleState === 'pvp-ally-appear') {
+    // Hold until box finishes expanding, then resume turn queue
+    if (battleTimer >= PVP_BOX_RESIZE_MS) {
+      turnQueue = buildTurnOrder();
       processNextTurn();
     }
   } else if (battleState === 'ally-fade-in') {
@@ -9966,7 +9975,7 @@ function drawBossSpriteBox() {
                    battleState === 'player-damage-show' || battleState === 'defend-anim' || battleState.startsWith('item-') || battleState === 'sw-throw' || battleState === 'sw-hit' || battleState === 'run-name-out' || battleState === 'run-text-in' || battleState === 'run-hold' || battleState === 'run-text-out' || battleState === 'run-fail-name-out' || battleState === 'run-fail-text-in' || battleState === 'run-fail-hold' || battleState === 'run-fail-text-out' || battleState === 'run-fail-name-in' || battleState === 'boss-flash' ||
                    battleState === 'enemy-attack' ||
                    battleState === 'enemy-damage-show' || battleState === 'message-hold' ||
-                   battleState.startsWith('ally-') ||
+                   battleState.startsWith('ally-') || battleState === 'pvp-ally-appear' ||
                    battleState === 'defeat-monster-fade' || battleState === 'defeat-text';
   const isVictory = battleState === 'victory-name-out' || battleState === 'victory-celebrate' ||
                     battleState === 'victory-text-in' || battleState === 'victory-hold' || battleState === 'victory-fade-out' ||
@@ -10008,8 +10017,8 @@ function drawBossSpriteBox() {
       const t = 1 - Math.min(battleTimer / BOSS_BOX_EXPAND_MS, 1);
       drawW = Math.max(16, Math.ceil(pvpBoxW * t / 8) * 8);
       drawH = Math.max(16, Math.ceil(pvpBoxH * t / 8) * 8);
-    } else if (pvpBoxResizeStartTime > 0) {
-      resizeT = Math.min((Date.now() - pvpBoxResizeStartTime) / PVP_BOX_RESIZE_MS, 1);
+    } else if (battleState === 'pvp-ally-appear') {
+      resizeT = Math.min(battleTimer / PVP_BOX_RESIZE_MS, 1);
       drawW = Math.round(pvpBoxResizeFromW + (pvpBoxW - pvpBoxResizeFromW) * resizeT);
       drawH = Math.round(pvpBoxResizeFromH + (pvpBoxH - pvpBoxResizeFromH) * resizeT);
     }
