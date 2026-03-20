@@ -258,6 +258,19 @@
       cursor: pointer;
     }
     #pw-gate button:hover { border-color: #c8a832; }
+    #pw-tagline {
+      font-family: 'Press Start 2P', monospace;
+      font-size: 9px;
+      color: #888;
+      letter-spacing: 3px;
+    }
+    #pw-sub {
+      font-size: 12px;
+      color: #666;
+      text-align: center;
+      line-height: 1.8;
+      max-width: 320px;
+    }
     #pw-gate .pw-err {
       color: #c04040;
       font-size: 12px;
@@ -286,7 +299,9 @@
   <!-- Password gate -->
   <div id="pw-gate">
     <h2>FF3 MMO</h2>
-    <input type="password" id="pw-input" placeholder="password" autocomplete="off">
+    <p id="pw-tagline">&#9670; Private Beta &#9670;</p>
+    <p id="pw-sub">An online multiplayer tribute to Final Fantasy III (NES).<br>Currently in closed beta testing. Check back soon.</p>
+    <input type="password" id="pw-input" placeholder="beta password" autocomplete="off">
     <button id="pw-submit">Enter</button>
     <div class="pw-err" id="pw-err"></div>
   </div>
