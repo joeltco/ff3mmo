@@ -4002,7 +4002,7 @@ function handleInput() {
     }
     return;
   }
-  if (rosterState === 'menu-in' || rosterState === 'menu-out') return; // block input during slide
+  if ((rosterState === 'menu-in' || rosterState === 'menu-out') && msgBoxState === 'none') return; // block input during slide (unless msgBox open)
 
   // Enter — open pause menu
   if (keys['Enter']) {
