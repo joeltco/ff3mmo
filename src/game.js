@@ -1325,16 +1325,35 @@ function initFakePlayerPortraits(romData) {
     return flipped;
   });
 
-  // Hit full body — hit portrait (tiles 30-33) + hit legs (tiles 34-35), h-flipped
-  const hitLegTileL = decodeTile(romData, BATTLE_SPRITE_ROM + 34 * 16);
-  const hitLegTileR = decodeTile(romData, BATTLE_SPRITE_ROM + 35 * 16);
+  // Hit full body — PPU tile data from all-poses-dump.txt ($07-$0C), h-flipped
+  // PPU $07=hit portrait TL, $08=TR, $09=BL, $0A=BR, $0B=left leg, $0C=right leg
+  const HIT_TILE_RAW = [
+    new Uint8Array([0xC6,0x4C,0x37,0x3F,0x3F,0x1F,0x00,0x00,0x1E,0x5F,0x3F,0x3F,0xFF,0xFF,0x78,0x39]), // $07 TL
+    new Uint8Array([0xD8,0x70,0x80,0xF0,0xE0,0xC0,0x00,0x00,0x1C,0x74,0x86,0xF2,0xE3,0xF1,0xF1,0xE1]), // $08 TR
+    new Uint8Array([0x00,0x00,0x00,0x00,0x02,0x05,0x0B,0x00,0x00,0x00,0x00,0x00,0x03,0x07,0x0F,0x1F]), // $09 BL
+    new Uint8Array([0x00,0x00,0x00,0x00,0x80,0xB8,0xDC,0xEE,0x00,0x00,0x00,0x00,0x9B,0xBE,0xDD,0xEF]), // $0A BR
+    new Uint8Array([0x00,0x03,0x07,0x05,0x01,0x01,0x1B,0x3B,0x20,0x10,0x00,0x00,0x00,0x04,0x00,0x20]), // $0B left leg
+    new Uint8Array([0x36,0x1A,0xC6,0x20,0x92,0x81,0xDC,0xDE,0xF6,0x3A,0x16,0x0C,0x0E,0x21,0x04,0x06]), // $0C right leg
+  ];
+  function decodePPUTile(raw) {
+    const px = new Uint8Array(64);
+    for (let row = 0; row < 8; row++) {
+      const lo = raw[row], hi = raw[row + 8];
+      for (let col = 0; col < 8; col++) {
+        const bit = 7 - col;
+        px[row * 8 + col] = ((lo >> bit) & 1) | (((hi >> bit) & 1) << 1);
+      }
+    }
+    return px;
+  }
+  const hitPPUTiles = HIT_TILE_RAW.map(decodePPUTile);
   fakePlayerHitFullBodyCanvases = PLAYER_PALETTES.map((basePal, pi) => {
     const c = document.createElement('canvas');
     c.width = 16; c.height = 24;
     const fctx = c.getContext('2d');
-    // Portrait: hit tiles 30-33
-    for (let i = 0; i < 4; i++) {
-      const px = decodeTile(romData, BATTLE_SPRITE_ROM + (30 + i) * 16);
+    // Portrait: tiles $07(TL) $08(TR) $09(BL) $0A(BR)
+    [[0,0,0],[1,8,0],[2,0,8],[3,8,8]].forEach(([ti, bx, by]) => {
+      const px = hitPPUTiles[ti];
       const img = fctx.createImageData(8, 8);
       for (let p = 0; p < 64; p++) {
         const ci = px[p];
@@ -1343,10 +1362,11 @@ function initFakePlayerPortraits(romData) {
           img.data[p*4]=rgb[0]; img.data[p*4+1]=rgb[1]; img.data[p*4+2]=rgb[2]; img.data[p*4+3]=255;
         }
       }
-      fctx.putImageData(img, [[0,0],[8,0],[0,8],[8,8]][i][0], [[0,0],[8,0],[0,8],[8,8]][i][1]);
-    }
-    // Legs: hit tiles 34-35
-    [[hitLegTileL, 0, 16], [hitLegTileR, 8, 16]].forEach(([px, bx, by]) => {
+      fctx.putImageData(img, bx, by);
+    });
+    // Legs: $0B left, $0C right
+    [[4,0,16],[5,8,16]].forEach(([ti, bx, by]) => {
+      const px = hitPPUTiles[ti];
       const img = fctx.createImageData(8, 8);
       for (let p = 0; p < 64; p++) {
         const ci = px[p];
@@ -10142,13 +10162,14 @@ function drawBossSpriteBox() {
         if (isOppAttack && fakePlayerAttackPortraits[palIdx]) poseSrc = fakePlayerAttackPortraits[palIdx][0];
         else if (isOppHit && fakePlayerHitPortraits[palIdx]) poseSrc = fakePlayerHitPortraits[palIdx][0];
 
-        if (poseSrc) {
-          // Attack/hit pose: idle legs + pose portrait h-flipped on top
+        if (isOppHit && fakePlayerHitFullBodyCanvases[palIdx]) {
+          ctx.drawImage(fakePlayerHitFullBodyCanvases[palIdx], sprX, sprY);
+        } else if (poseSrc) {
+          // Attack pose: idle legs + attack portrait h-flipped on top
           ctx.drawImage(fullBody, 0, 16, 16, 8, sprX, sprY + 16, 16, 8);
           ctx.save(); ctx.translate(sprX + 16, sprY); ctx.scale(-1, 1);
           ctx.drawImage(poseSrc, 0, 0); ctx.restore();
         } else {
-          // Idle: draw full body (already h-flipped with idle portrait + legs)
           ctx.drawImage(fullBody, sprX, sprY);
         }
 
