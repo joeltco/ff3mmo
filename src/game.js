@@ -4016,7 +4016,7 @@ function handleInput() {
       rosterState = 'menu-out';
       rosterMenuTimer = 0;
       playSFX(SFX.CONFIRM);
-      if (action === 'Duel') {
+      if (action === 'Duel' && (onWorldMap || dungeonFloor >= 0)) {
         // Build "Challenged [Name]!" message
         const challenged = _nameToBytes('Challenged ');
         const nameBytes = _nameToBytes(target.name);
