@@ -752,6 +752,7 @@ const PLAYER_PALETTES = [
   [0x0F, 0x36, 0x30, 0x15], // pink
 ];
 let fakePlayerPortraits = [];   // HTMLCanvasElement[palIdx][fadeStep]
+let fakePlayerFullBodyCanvases = []; // HTMLCanvasElement[palIdx] — 16×24 h-flipped full body for PVP
 let fakePlayerVictoryPortraits = [];  // HTMLCanvasElement[palIdx][fadeStep] — victory pose
 let fakePlayerHitPortraits = [];      // hit/recoil pose
 let fakePlayerDefendPortraits = [];   // defend pose
@@ -1265,6 +1266,56 @@ function initFakePlayerPortraits(romData) {
   ];
   const kneelTiles = kneelTileData.map(d => decodeTile(d, 0));
   fakePlayerKneelPortraits = _genPosePortraits(kneelTiles);
+
+  // Full body 16×24 canvases for PVP opponent — top 4 tiles + bottom 2 tiles (legs), h-flipped
+  // Bottom tiles 4-5: left-leg (TL/BL) and right-leg (TR/BR) at BATTLE_SPRITE_ROM + 4*16 / 5*16
+  const legTileL = decodeTile(romData, BATTLE_SPRITE_ROM + 4 * 16); // bottom-left 8×8
+  const legTileR = decodeTile(romData, BATTLE_SPRITE_ROM + 5 * 16); // bottom-right 8×8
+
+  fakePlayerFullBodyCanvases = PLAYER_PALETTES.map(basePal => {
+    const c = document.createElement('canvas');
+    c.width = 16; c.height = 24;
+    const fctx = c.getContext('2d');
+
+    // Draw top 4 tiles (16×16) using palette variant
+    const fullTiles = [tiles[0], tiles[1], tiles[2], tiles[3]];
+    const topLayout = [[0,0],[8,0],[0,8],[8,8]];
+    fullTiles.forEach((px, i) => {
+      const img = fctx.createImageData(8, 8);
+      for (let p = 0; p < 64; p++) {
+        const ci = px[p];
+        if (ci === 0) { img.data[p*4+3] = 0; } else {
+          const rgb = NES_SYSTEM_PALETTE[basePal[ci]] || [0,0,0];
+          img.data[p*4]=rgb[0]; img.data[p*4+1]=rgb[1]; img.data[p*4+2]=rgb[2]; img.data[p*4+3]=255;
+        }
+      }
+      fctx.putImageData(img, topLayout[i][0], topLayout[i][1]);
+    });
+
+    // Draw bottom 2 tiles (legs) at y=16
+    [[legTileL, 0, 16], [legTileR, 8, 16]].forEach(([px, bx, by]) => {
+      const img = fctx.createImageData(8, 8);
+      for (let p = 0; p < 64; p++) {
+        const ci = px[p];
+        if (ci === 0) { img.data[p*4+3] = 0; } else {
+          const rgb = NES_SYSTEM_PALETTE[basePal[ci]] || [0,0,0];
+          img.data[p*4]=rgb[0]; img.data[p*4+1]=rgb[1]; img.data[p*4+2]=rgb[2]; img.data[p*4+3]=255;
+        }
+      }
+      fctx.putImageData(img, bx, by);
+    });
+
+    // H-flip into a new canvas (opponent faces right)
+    const flipped = document.createElement('canvas');
+    flipped.width = 16; flipped.height = 24;
+    const ffc = flipped.getContext('2d');
+    ffc.save();
+    ffc.translate(16, 0);
+    ffc.scale(-1, 1);
+    ffc.drawImage(c, 0, 0);
+    ffc.restore();
+    return flipped;
+  });
 }
 
 function initCursorTile(romData) {
@@ -9936,22 +9987,22 @@ function drawBossSpriteBox() {
   if (isPVPBattle) {
     // PVP: draw opponent portrait scaled 3x (16→48px) with hit/flash effects
     const palIdx = pvpOpponentStats ? pvpOpponentStats.palIdx : 0;
-    const portraits = fakePlayerPortraits[palIdx] || fakePlayerPortraits[0];
-    const normalPortrait = portraits ? portraits[0] : null;
-    if (normalPortrait && !bossDefeated) {
+    const fullBody = fakePlayerFullBodyCanvases[palIdx] || fakePlayerFullBodyCanvases[0];
+    if (fullBody && !bossDefeated) {
+      const fbX = centerX - 8;
+      const fbY = centerY - 12;
       if (battleState === 'boss-flash') {
-        // Pre-attack blink: odd frames hide portrait
         const frame = Math.floor(battleTimer / (BOSS_PREFLASH_MS / 8));
-        if (!(frame & 1)) ctx.drawImage(normalPortrait, sprX, sprY, 48, 48);
+        if (!(frame & 1)) ctx.drawImage(fullBody, fbX, fbY);
       } else if (battleState === 'player-slash') {
         const blinkHidden = Math.floor(battleTimer / 60) & 1;
-        if (!blinkHidden) ctx.drawImage(normalPortrait, sprX, sprY, 48, 48);
+        if (!blinkHidden) ctx.drawImage(fullBody, fbX, fbY);
         if (slashFrames && slashFrame < SLASH_FRAMES && hitResults && hitResults[currentHitIdx] && !hitResults[currentHitIdx].miss) {
           ctx.drawImage(slashFrames[slashFrame], centerX - 8 + slashOffX, centerY - 8 + slashOffY);
         }
       } else if (battleState === 'ally-slash') {
         const blinkHidden = allyHitResult && !allyHitResult.miss && (Math.floor(battleTimer / 60) & 1);
-        if (!blinkHidden) ctx.drawImage(normalPortrait, sprX, sprY, 48, 48);
+        if (!blinkHidden) ctx.drawImage(fullBody, fbX, fbY);
         if (allyHitResult && !allyHitResult.miss) {
           const ally = battleAllies[currentAllyAttacker];
           const allySlashFrames = ally ? getSlashFramesForWeapon(ally.weaponId, true) : slashFramesR;
@@ -9961,7 +10012,7 @@ function drawBossSpriteBox() {
           }
         }
       } else {
-        ctx.drawImage(normalPortrait, sprX, sprY, 48, 48);
+        ctx.drawImage(fullBody, fbX, fbY);
       }
     }
   } else if (isAppear || isDissolve) {
