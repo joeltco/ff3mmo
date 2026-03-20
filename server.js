@@ -1,6 +1,7 @@
 import { createServer } from 'http';
 import { readFile } from 'fs/promises';
 import { extname, join } from 'path';
+import { handleAPI } from './api.js';
 
 const MIME = {
   '.html': 'text/html', '.js': 'application/javascript', '.mjs': 'application/javascript',
@@ -10,6 +11,14 @@ const MIME = {
 
 createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
+
+  // API routes
+  if (url.pathname.startsWith('/api/')) {
+    const handled = await handleAPI(req, res);
+    if (handled) return;
+  }
+
+  // Static files
   let path = url.pathname === '/' ? '/index.html' : decodeURIComponent(url.pathname);
   try {
     const data = await readFile(join('.', path));
@@ -25,4 +34,4 @@ createServer(async (req, res) => {
     res.writeHead(404);
     res.end('Not found');
   }
-}).listen(3000, () => console.log('No-cache server at http://localhost:3000'));
+}).listen(3000, () => console.log('Server at http://localhost:3000'));

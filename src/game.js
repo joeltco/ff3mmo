@@ -45,29 +45,50 @@ async function saveSlotsToDB() {
       } : null),
       inventory: s.inventory || playerInventory
     } : null);
+    // Local IndexedDB
     const db = await openSaveDB();
     const tx = db.transaction('roms', 'readwrite');
     tx.objectStore('roms').put(data, 'saves');
+    // Server sync — push each changed slot
+    if (window.ff3Auth) {
+      data.forEach((slotData, i) => {
+        if (slotData) window.ff3Auth.serverSave(i, slotData).catch(() => {});
+      });
+    }
   } catch (e) { /* silent fail */ }
+}
+
+async function serverDeleteSlot(slot) {
+  if (window.ff3Auth) window.ff3Auth.serverDeleteSave(slot).catch(() => {});
+}
+
+function _parseSaveSlots(data) {
+  if (!Array.isArray(data)) return;
+  saveSlots = data.map(s => {
+    if (!s) return null;
+    if (Array.isArray(s)) return { name: new Uint8Array(s), level: 1, exp: 0, stats: null, inventory: {} };
+    return { name: new Uint8Array(s.name), level: s.level || 1, exp: s.exp || 0, stats: s.stats || null, inventory: s.inventory || {} };
+  });
 }
 
 async function loadSlotsFromDB() {
   try {
+    // Try server first if logged in
+    if (window.ff3Auth) {
+      const serverSlots = await window.ff3Auth.serverLoadSaves().catch(() => null);
+      if (serverSlots) {
+        _parseSaveSlots(serverSlots);
+        savesLoaded = true;
+        return;
+      }
+    }
+    // Fall back to IndexedDB
     const db = await openSaveDB();
     const tx = db.transaction('roms', 'readonly');
     const req = tx.objectStore('roms').get('saves');
     return new Promise((resolve) => {
       req.onsuccess = () => {
-        const data = req.result;
-        if (Array.isArray(data)) {
-          saveSlots = data.map(s => {
-            if (!s) return null;
-            // Old format: plain array of name bytes
-            if (Array.isArray(s)) return { name: new Uint8Array(s), level: 1, exp: 0, stats: null, inventory: {} };
-            // New format: object with name, level, exp, stats, inventory
-            return { name: new Uint8Array(s.name), level: s.level || 1, exp: s.exp || 0, stats: s.stats || null, inventory: s.inventory || {} };
-          });
-        }
+        _parseSaveSlots(req.result);
         savesLoaded = true;
         resolve();
       };
@@ -6636,6 +6657,7 @@ function updateTitle(dt) {
             // Delete the selected save
             playSFX(SFX.CONFIRM);
             saveSlots[selectCursor] = null;
+            serverDeleteSlot(selectCursor);
             saveSlotsToDB();
             deleteMode = false;
           }

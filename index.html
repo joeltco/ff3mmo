@@ -235,6 +235,107 @@
       }
     }
 
+    /* Auth screen */
+    #auth-screen {
+      position: fixed;
+      inset: 0;
+      background: #0e0e1a;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      z-index: 9998;
+    }
+    #auth-screen h2 {
+      font-family: 'Press Start 2P', monospace;
+      font-size: 13px;
+      color: #c8a832;
+      letter-spacing: 2px;
+      margin-bottom: 8px;
+    }
+    #auth-tabs {
+      display: flex;
+      gap: 0;
+      border: 1px solid #444;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .auth-tab {
+      padding: 8px 24px;
+      background: #1e1e2e;
+      color: #888;
+      font-size: 12px;
+      font-family: 'Courier New', monospace;
+      cursor: pointer;
+      border: none;
+      letter-spacing: 1px;
+    }
+    .auth-tab.active {
+      background: #3a3a50;
+      color: #c8a832;
+    }
+    #auth-form {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      width: 280px;
+    }
+    #auth-form input {
+      background: #1e1e2e;
+      border: 2px solid #444;
+      border-radius: 6px;
+      color: #e0e0e0;
+      font-size: 15px;
+      font-family: 'Courier New', monospace;
+      padding: 10px 14px;
+      outline: none;
+      width: 100%;
+    }
+    #auth-form input:focus { border-color: #c8a832; }
+    #auth-submit {
+      padding: 10px;
+      background: linear-gradient(180deg, #3a3a50, #2a2a3e);
+      border: 2px solid #555;
+      border-radius: 6px;
+      color: #c8a832;
+      font-size: 13px;
+      font-family: 'Courier New', monospace;
+      letter-spacing: 1px;
+      cursor: pointer;
+      width: 100%;
+    }
+    #auth-submit:hover { border-color: #c8a832; }
+    #auth-err {
+      color: #c04040;
+      font-size: 11px;
+      min-height: 16px;
+      text-align: center;
+    }
+    #auth-user-bar {
+      position: fixed;
+      bottom: 8px;
+      right: 12px;
+      font-size: 11px;
+      color: #555;
+      display: none;
+      gap: 8px;
+      align-items: center;
+      z-index: 100;
+    }
+    #auth-user-bar span { color: #888; }
+    #auth-logout {
+      background: none;
+      border: 1px solid #444;
+      border-radius: 4px;
+      color: #666;
+      font-size: 10px;
+      font-family: 'Courier New', monospace;
+      padding: 2px 8px;
+      cursor: pointer;
+    }
+    #auth-logout:hover { border-color: #c8a832; color: #c8a832; }
+
     /* Password gate */
     #pw-gate {
       position: fixed;
@@ -318,6 +419,25 @@
   </style>
 </head>
 <body>
+  <!-- Auth screen (login / register) -->
+  <div id="auth-screen" style="display:none">
+    <h2>FF3 MMO</h2>
+    <div id="auth-tabs">
+      <button class="auth-tab active" id="tab-login">Login</button>
+      <button class="auth-tab" id="tab-register">Register</button>
+    </div>
+    <div id="auth-form">
+      <input type="email" id="auth-email" placeholder="email" autocomplete="email">
+      <input type="password" id="auth-password" placeholder="password" autocomplete="current-password">
+      <div id="auth-err"></div>
+      <button id="auth-submit">Login</button>
+    </div>
+  </div>
+  <div id="auth-user-bar">
+    <span id="auth-email-display"></span>
+    <button id="auth-logout">Logout</button>
+  </div>
+
   <!-- Password gate -->
   <div id="pw-gate">
     <h2>FF3 MMO</h2>
@@ -330,15 +450,16 @@
 
   <h1>FF3 MMO</h1>
 
-  <div id="rom-picker">
-    <label for="rom-file">Load FF3 ROM (.nes)</label>
-    <input type="file" id="rom-file">
-    <br><br>
-    <label for="rom-file-ff12">Load FF1&amp;2 ROM (.nes)</label>
-    <input type="file" id="rom-file-ff12">
+  <div id="rom-picker-wrap" style="display:none; text-align:center">
+    <div id="rom-picker">
+      <label for="rom-file">Load FF3 ROM (.nes)</label>
+      <input type="file" id="rom-file">
+      <br><br>
+      <label for="rom-file-ff12">Load FF1&amp;2 ROM (.nes)</label>
+      <input type="file" id="rom-file-ff12">
+    </div>
+    <div id="rom-info"></div>
   </div>
-
-  <div id="rom-info"></div>
 
   <div id="canvas-wrapper" class="crt">
     <canvas id="game-canvas"></canvas>
@@ -378,7 +499,118 @@
   <script type="module">
     import { init, loadROM, loadFF12ROM, getMobileInputMode } from './src/game.js';
 
-    // Password gate
+    // --- Auth ---
+    const API = '';  // same origin
+    let authToken = localStorage.getItem('ff3_token');
+    let authEmail = localStorage.getItem('ff3_email');
+
+    const authScreen = document.getElementById('auth-screen');
+    const authEmailInput = document.getElementById('auth-email');
+    const authPasswordInput = document.getElementById('auth-password');
+    const authErr = document.getElementById('auth-err');
+    const authSubmit = document.getElementById('auth-submit');
+    const authUserBar = document.getElementById('auth-user-bar');
+    const authEmailDisplay = document.getElementById('auth-email-display');
+    let authMode = 'login';
+
+    document.getElementById('tab-login').addEventListener('click', () => {
+      authMode = 'login';
+      document.getElementById('tab-login').classList.add('active');
+      document.getElementById('tab-register').classList.remove('active');
+      authSubmit.textContent = 'Login';
+      authErr.textContent = '';
+    });
+    document.getElementById('tab-register').addEventListener('click', () => {
+      authMode = 'register';
+      document.getElementById('tab-register').classList.add('active');
+      document.getElementById('tab-login').classList.remove('active');
+      authSubmit.textContent = 'Register';
+      authErr.textContent = '';
+    });
+
+    async function doAuth() {
+      const email = authEmailInput.value.trim();
+      const password = authPasswordInput.value;
+      if (!email || !password) { authErr.textContent = 'Fill in all fields.'; return; }
+      authSubmit.disabled = true;
+      authErr.textContent = '';
+      try {
+        const res = await fetch(`${API}/api/${authMode}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        });
+        const data = await res.json();
+        if (!res.ok) { authErr.textContent = data.error || 'Error'; authSubmit.disabled = false; return; }
+        authToken = data.token;
+        authEmail = data.email;
+        localStorage.setItem('ff3_token', authToken);
+        localStorage.setItem('ff3_email', authEmail);
+        showAuthBar();
+        authScreen.style.display = 'none';
+        showROMPicker();
+      } catch (e) {
+        authErr.textContent = 'Network error.';
+      }
+      authSubmit.disabled = false;
+    }
+
+    authSubmit.addEventListener('click', doAuth);
+    authPasswordInput.addEventListener('keydown', e => { if (e.key === 'Enter') doAuth(); });
+    authEmailInput.addEventListener('keydown', e => { if (e.key === 'Enter') authPasswordInput.focus(); });
+
+    function showAuthBar() {
+      authUserBar.style.display = 'flex';
+      authEmailDisplay.textContent = authEmail;
+    }
+
+    document.getElementById('auth-logout').addEventListener('click', () => {
+      localStorage.removeItem('ff3_token');
+      localStorage.removeItem('ff3_email');
+      authToken = null; authEmail = null;
+      authUserBar.style.display = 'none';
+      location.reload();
+    });
+
+    // --- Server save/load ---
+    async function serverSave(slot, data) {
+      if (!authToken) return;
+      try {
+        await fetch(`${API}/api/save`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+          body: JSON.stringify({ slot, data }),
+        });
+      } catch (e) { console.warn('Save sync failed:', e); }
+    }
+
+    async function serverDeleteSave(slot) {
+      if (!authToken) return;
+      try {
+        await fetch(`${API}/api/save`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+          body: JSON.stringify({ slot }),
+        });
+      } catch (e) { console.warn('Delete sync failed:', e); }
+    }
+
+    async function serverLoadSaves() {
+      if (!authToken) return null;
+      try {
+        const res = await fetch(`${API}/api/saves`, {
+          headers: { 'Authorization': `Bearer ${authToken}` },
+        });
+        if (!res.ok) return null;
+        const data = await res.json();
+        return data.slots;
+      } catch { return null; }
+    }
+
+    // Expose to game.js via window
+    window.ff3Auth = { serverSave, serverDeleteSave, serverLoadSaves };
+
+    // --- Password gate ---
     const GATE_PW = 'ff3dev';
     const gate = document.getElementById('pw-gate');
     const pwInput = document.getElementById('pw-input');
@@ -387,6 +619,14 @@
     function unlockGate() {
       gate.style.display = 'none';
       sessionStorage.setItem('ff3_auth', '1');
+      // Show auth screen if not logged in, else go straight to ROM picker
+      if (!authToken) {
+        authScreen.style.display = 'flex';
+        authEmailInput.focus();
+      } else {
+        showAuthBar();
+        showROMPicker();
+      }
     }
 
     if (sessionStorage.getItem('ff3_auth') === '1') {
@@ -405,6 +645,11 @@
         pwInput.value = '';
         pwInput.focus();
       }
+    }
+
+    function showROMPicker() {
+      document.getElementById('rom-picker-wrap').style.display = 'block';
+      loadCachedROMs();
     }
 
     init();
@@ -447,8 +692,6 @@
     }
 
     // --- Launch ---
-
-
     async function tryLaunch() {
       if (!ff3Buffer || !ff12Buffer) return;
       try {
@@ -456,7 +699,7 @@
         await loadROM(ff3Buffer);
         document.getElementById('canvas-wrapper').style.display = 'block';
         document.getElementById('controls-hint').style.display = 'block';
-        document.getElementById('rom-picker').style.display = 'none';
+        document.getElementById('rom-picker-wrap').style.display = 'none';
         document.querySelector('h1').style.display = 'none';
         document.getElementById('rom-info').style.display = 'none';
       } catch (err) {
@@ -465,31 +708,31 @@
       }
     }
 
-    // Try loading from cache first
-    try {
-      const [cached3, cached12] = await Promise.all([
-        getCachedROM('ff3'),
-        getCachedROM('ff12')
-      ]);
-      if (cached3) ff3Buffer = cached3;
-      if (cached12) ff12Buffer = cached12;
-      if (ff3Buffer && ff12Buffer) {
-        // Show start button — user click needed for audio context
-        const picker = document.getElementById('rom-picker');
-        picker.innerHTML = '';
-        const btn = document.createElement('label');
-        btn.textContent = 'Start';
-        btn.style.cursor = 'pointer';
-        btn.addEventListener('click', () => tryLaunch());
-        picker.appendChild(btn);
-        document.getElementById('rom-info').textContent = 'ROMs loaded from cache';
-      } else if (ff3Buffer) {
-        document.getElementById('rom-info').textContent = 'FF3 cached — load FF1&2 ROM';
-      } else if (ff12Buffer) {
-        document.getElementById('rom-info').textContent = 'FF1&2 cached — load FF3 ROM';
+    async function loadCachedROMs() {
+      try {
+        const [cached3, cached12] = await Promise.all([
+          getCachedROM('ff3'),
+          getCachedROM('ff12')
+        ]);
+        if (cached3) ff3Buffer = cached3;
+        if (cached12) ff12Buffer = cached12;
+        if (ff3Buffer && ff12Buffer) {
+          const picker = document.getElementById('rom-picker');
+          picker.innerHTML = '';
+          const btn = document.createElement('label');
+          btn.textContent = 'Start';
+          btn.style.cursor = 'pointer';
+          btn.addEventListener('click', () => tryLaunch());
+          picker.appendChild(btn);
+          document.getElementById('rom-info').textContent = 'ROMs loaded from cache';
+        } else if (ff3Buffer) {
+          document.getElementById('rom-info').textContent = 'FF3 cached — load FF1&2 ROM';
+        } else if (ff12Buffer) {
+          document.getElementById('rom-info').textContent = 'FF1&2 cached — load FF3 ROM';
+        }
+      } catch (e) {
+        // IndexedDB unavailable
       }
-    } catch (e) {
-      // IndexedDB unavailable, fall through to file pickers
     }
 
     document.getElementById('rom-file')?.addEventListener('change', async (e) => {
