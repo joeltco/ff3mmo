@@ -498,7 +498,8 @@ let pvpOpponentIsDefending = false; // AI defend state
 let pvpEnemyAllies = [];       // fake players who join the opponent's side
 let pvpBoxResizeFromW = 0;     // box width before last ally join (for smooth resize)
 let pvpBoxResizeFromH = 0;
-let pvpBoxResizeStartTime = 0; // Date.now() when resize started, 0 = no resize
+let pvpBoxResizeStartTime = 0;
+let pvpEnemySlidePosFrom = []; // [{x,y}] old screen positions of existing enemies before resize
 const PVP_BOX_RESIZE_MS = 300;
 
 let battleState = 'none';
@@ -8443,12 +8444,19 @@ function updateBattle(dt) {
         const eligible = PLAYER_POOL.filter(p => p.loc === loc && !inBattle.has(p.name));
         if (eligible.length > 0 && Math.random() < 0.3) {
           const pick = eligible[Math.floor(Math.random() * eligible.length)];
-          // Record current box size before adding ally
+          // Record current box size and enemy positions before adding ally
           const oldTotal = 1 + pvpEnemyAllies.length;
           const oldCols = oldTotal <= 1 ? 1 : 2;
           const oldRows = oldTotal <= 2 ? 1 : 2;
           pvpBoxResizeFromW = oldCols * 24 + 16;
           pvpBoxResizeFromH = oldRows * 32 + 16;
+          const _cx = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2);
+          const _cy = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
+          const _oldGP = [[oldRows-1,oldCols-1],[oldRows-1,0],[0,oldCols-1],[0,0]];
+          pvpEnemySlidePosFrom = Array.from({length: oldTotal}, (_, i) => {
+            const [gr, gc] = _oldGP[i] || [0, 0];
+            return { x: _cx - oldCols*12 + gc*24 + 4, y: _cy - oldRows*16 + gr*32 + 4 };
+          });
           pvpEnemyAllies.push(generateAllyStats(pick));
           // Block all actions until box finishes expanding
           battleState = 'pvp-ally-appear';
@@ -10042,8 +10050,15 @@ function drawBossSpriteBox() {
       allEnemies.forEach((enemy, idx) => {
         if (!enemy) return;
         const [gr, gc] = gridPos[idx] || [0, 0];
-        const sprX = intLeft + gc * cellW + 4;
-        const sprY = intTop  + gr * cellH + 4;
+        const targetX = intLeft + gc * cellW + 4;
+        const targetY = intTop  + gr * cellH + 4;
+        // Slide existing enemies from old position to new during pvp-ally-appear
+        let sprX = targetX, sprY = targetY;
+        if (battleState === 'pvp-ally-appear' && pvpEnemySlidePosFrom[idx]) {
+          const from = pvpEnemySlidePosFrom[idx];
+          sprX = Math.round(from.x + (targetX - from.x) * resizeT);
+          sprY = Math.round(from.y + (targetY - from.y) * resizeT);
+        }
         const isMain = idx === 0;
         const palIdx = enemy.palIdx;
         const fullBody = fakePlayerFullBodyCanvases[palIdx] || fakePlayerFullBodyCanvases[0];
