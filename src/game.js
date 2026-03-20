@@ -495,11 +495,12 @@ let isPVPBattle = false;       // true when in a player-vs-player duel
 let pvpOpponent = null;        // PLAYER_POOL entry being dueled
 let pvpOpponentStats = null;   // {hp, maxHP, atk, def, agi, level, name, palIdx, weaponId}
 let pvpOpponentIsDefending = false; // AI defend state
-let pvpEnemyAllies = [];       // fake players who join the opponent's side
-let pvpBoxResizeFromW = 0;     // box width before last ally join (for smooth resize)
+let pvpEnemyAllies = [];        // fake players who join the opponent's side
+let pvpCurrentEnemyAllyIdx = -1; // -1 = main opponent attacking, >=0 = pvpEnemyAllies[i]
+let pvpBoxResizeFromW = 0;
 let pvpBoxResizeFromH = 0;
 let pvpBoxResizeStartTime = 0;
-let pvpEnemySlidePosFrom = []; // [{x,y}] old screen positions of existing enemies before resize
+let pvpEnemySlidePosFrom = [];
 const PVP_BOX_RESIZE_MS = 300;
 
 let battleState = 'none';
@@ -758,7 +759,8 @@ const PLAYER_PALETTES = [
   [0x0F, 0x36, 0x30, 0x15], // pink
 ];
 let fakePlayerPortraits = [];   // HTMLCanvasElement[palIdx][fadeStep]
-let fakePlayerFullBodyCanvases = []; // HTMLCanvasElement[palIdx] — 16×24 h-flipped full body for PVP
+let fakePlayerFullBodyCanvases = []; // HTMLCanvasElement[palIdx] — 16×24 h-flipped full body for PVP (idle)
+let fakePlayerHitFullBodyCanvases = []; // HTMLCanvasElement[palIdx] — 16×24 h-flipped full body, hit pose legs
 let fakePlayerVictoryPortraits = [];  // HTMLCanvasElement[palIdx][fadeStep] — victory pose
 let fakePlayerHitPortraits = [];      // hit/recoil pose
 let fakePlayerDefendPortraits = [];   // defend pose
@@ -1320,6 +1322,46 @@ function initFakePlayerPortraits(romData) {
     ffc.scale(-1, 1);
     ffc.drawImage(c, 0, 0);
     ffc.restore();
+    return flipped;
+  });
+
+  // Hit full body — hit portrait (tiles 30-33) + hit legs (tiles 34-35), h-flipped
+  const hitLegTileL = decodeTile(romData, BATTLE_SPRITE_ROM + 34 * 16);
+  const hitLegTileR = decodeTile(romData, BATTLE_SPRITE_ROM + 35 * 16);
+  fakePlayerHitFullBodyCanvases = PLAYER_PALETTES.map((basePal, pi) => {
+    const c = document.createElement('canvas');
+    c.width = 16; c.height = 24;
+    const fctx = c.getContext('2d');
+    // Portrait: hit tiles 30-33
+    for (let i = 0; i < 4; i++) {
+      const px = decodeTile(romData, BATTLE_SPRITE_ROM + (30 + i) * 16);
+      const img = fctx.createImageData(8, 8);
+      for (let p = 0; p < 64; p++) {
+        const ci = px[p];
+        if (ci === 0) { img.data[p*4+3] = 0; } else {
+          const rgb = NES_SYSTEM_PALETTE[basePal[ci]] || [0,0,0];
+          img.data[p*4]=rgb[0]; img.data[p*4+1]=rgb[1]; img.data[p*4+2]=rgb[2]; img.data[p*4+3]=255;
+        }
+      }
+      fctx.putImageData(img, [[0,0],[8,0],[0,8],[8,8]][i][0], [[0,0],[8,0],[0,8],[8,8]][i][1]);
+    }
+    // Legs: hit tiles 34-35
+    [[hitLegTileL, 0, 16], [hitLegTileR, 8, 16]].forEach(([px, bx, by]) => {
+      const img = fctx.createImageData(8, 8);
+      for (let p = 0; p < 64; p++) {
+        const ci = px[p];
+        if (ci === 0) { img.data[p*4+3] = 0; } else {
+          const rgb = NES_SYSTEM_PALETTE[basePal[ci]] || [0,0,0];
+          img.data[p*4]=rgb[0]; img.data[p*4+1]=rgb[1]; img.data[p*4+2]=rgb[2]; img.data[p*4+3]=255;
+        }
+      }
+      fctx.putImageData(img, bx, by);
+    });
+    // H-flip
+    const flipped = document.createElement('canvas');
+    flipped.width = 16; flipped.height = 24;
+    const ffc = flipped.getContext('2d');
+    ffc.save(); ffc.translate(16, 0); ffc.scale(-1, 1); ffc.drawImage(c, 0, 0); ffc.restore();
     return flipped;
   });
 }
@@ -7999,6 +8041,12 @@ function buildTurnOrder() {
   } else {
     actors.push({ type: 'enemy', index: -1, priority: Math.floor(Math.random() * 256) });
   }
+  if (isPVPBattle) {
+    for (let i = 0; i < pvpEnemyAllies.length; i++) {
+      if (pvpEnemyAllies[i].hp > 0)
+        actors.push({ type: 'pvp-enemy-ally', index: i, priority: Math.floor(Math.random() * 256) });
+    }
+  }
   actors.sort((a, b) => b.priority - a.priority);
   return actors;
 }
@@ -8161,7 +8209,14 @@ function processNextTurn() {
     allyHitResult = hits[0];
     battleState = 'ally-attack-start';
     battleTimer = 0;
+  } else if (turn.type === 'pvp-enemy-ally') {
+    const ea = pvpEnemyAllies[turn.index];
+    if (!ea || ea.hp <= 0) { processNextTurn(); return; }
+    pvpCurrentEnemyAllyIdx = turn.index;
+    battleState = 'boss-flash';
+    battleTimer = 0;
   } else {
+    pvpCurrentEnemyAllyIdx = -1;
     currentAttacker = turn.index;
     // Skip dead enemies (killed earlier this round)
     if (turn.index >= 0 && encounterMonsters && encounterMonsters[turn.index].hp <= 0) {
@@ -8180,6 +8235,7 @@ function startPVPBattle(target) {
   pvpOpponentStats = generateAllyStats(target);
   pvpOpponentIsDefending = false;
   pvpEnemyAllies = [];
+  pvpCurrentEnemyAllyIdx = -1;
   pvpBoxResizeStartTime = 0;
   bossHP = pvpOpponentStats.maxHP;
   bossDefeated = false;
@@ -8995,7 +9051,7 @@ function updateBattle(dt) {
         // Targeting an ally
         enemyTargetAllyIdx = targetAlly;
         const monAtk = isPVPBattle
-          ? pvpOpponentStats.atk
+          ? (pvpCurrentEnemyAllyIdx >= 0 ? pvpEnemyAllies[pvpCurrentEnemyAllyIdx].atk : pvpOpponentStats.atk)
           : (currentAttacker >= 0 && encounterMonsters) ? encounterMonsters[currentAttacker].atk : BOSS_ATK;
         if (Math.random() * 100 < monHitRate) {
           let dmg = calcDamage(monAtk, battleAllies[targetAlly].def);
@@ -9013,7 +9069,7 @@ function updateBattle(dt) {
       } else {
         // Targeting player
         const monAtk = isPVPBattle
-          ? pvpOpponentStats.atk
+          ? (pvpCurrentEnemyAllyIdx >= 0 ? pvpEnemyAllies[pvpCurrentEnemyAllyIdx].atk : pvpOpponentStats.atk)
           : (currentAttacker >= 0 && encounterMonsters) ? encounterMonsters[currentAttacker].atk : BOSS_ATK;
         if (Math.random() * 100 < monHitRate) {
           let dmg = calcDamage(monAtk, playerDEF);
@@ -10065,7 +10121,9 @@ function drawBossSpriteBox() {
         if (!fullBody) return;
         if (isMain && bossDefeated) return;
 
-        const isOppAttack = isMain && (battleState === 'boss-flash' || battleState === 'enemy-attack' || battleState === 'enemy-damage-show');
+        // Which enemy in the grid is currently taking their attack turn
+        const isThisAttacking = isMain ? pvpCurrentEnemyAllyIdx < 0 : pvpCurrentEnemyAllyIdx === idx - 1;
+        const isOppAttack = isThisAttacking && (battleState === 'boss-flash' || battleState === 'enemy-attack' || battleState === 'enemy-damage-show');
         const isOppHit = isMain && (
           (battleState === 'player-slash' && hitResults && hitResults[currentHitIdx] && !hitResults[currentHitIdx].miss) ||
           battleState === 'player-hit-show' || battleState === 'player-damage-show' ||
@@ -10075,8 +10133,8 @@ function drawBossSpriteBox() {
           (battleState === 'player-slash' && hitResults && hitResults[currentHitIdx] && !hitResults[currentHitIdx].miss) ||
           (battleState === 'ally-slash' && allyHitResult && !allyHitResult.miss)
         ) && (Math.floor(battleTimer / 60) & 1);
-        const flashFrame = isMain && battleState === 'boss-flash' ? Math.floor(battleTimer / (BOSS_PREFLASH_MS / 8)) : 0;
-        const flashHidden = isMain && battleState === 'boss-flash' && (flashFrame & 1);
+        const flashFrame = isThisAttacking && battleState === 'boss-flash' ? Math.floor(battleTimer / (BOSS_PREFLASH_MS / 8)) : 0;
+        const flashHidden = isThisAttacking && battleState === 'boss-flash' && (flashFrame & 1);
         if (blinkHidden || flashHidden) return;
 
         // Determine pose portrait (h-flipped)
@@ -10085,7 +10143,7 @@ function drawBossSpriteBox() {
         else if (isOppHit && fakePlayerHitPortraits[palIdx]) poseSrc = fakePlayerHitPortraits[palIdx][0];
 
         if (poseSrc) {
-          // Non-idle: draw legs from fullBody (src rows 16-24), then pose portrait h-flipped on top
+          // Attack/hit pose: idle legs + pose portrait h-flipped on top
           ctx.drawImage(fullBody, 0, 16, 16, 8, sprX, sprY + 16, 16, 8);
           ctx.save(); ctx.translate(sprX + 16, sprY); ctx.scale(-1, 1);
           ctx.drawImage(poseSrc, 0, 0); ctx.restore();
@@ -10681,6 +10739,17 @@ function drawDamageNumbers() {
       const mh = mc ? mc.height : dSprH;
       bx = pos.x + 16; // center of 32px sprite
       baseY = pos.y + (dSprH - mh) + Math.floor(mh / 2) - 8;
+    } else if (isPVPBattle) {
+      // Center on pvpOpponent's cell in grid (index 0 = bottom-right)
+      const tot = 1 + pvpEnemyAllies.length;
+      const cols = tot <= 1 ? 1 : 2;
+      const rows = tot <= 2 ? 1 : 2;
+      const cx = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2);
+      const cy = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
+      const intLeft = cx - cols * 12;
+      const intTop  = cy - rows * 16;
+      bx = intLeft + (cols - 1) * 24 + 4 + 8;
+      baseY = intTop + (rows - 1) * 32 + 4 + 8;
     } else {
       // Center on boss sprite
       bx = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2) - 4;
