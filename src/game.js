@@ -10035,14 +10035,19 @@ function drawBossSpriteBox() {
         const flashHidden = isMain && battleState === 'boss-flash' && (flashFrame & 1);
         if (blinkHidden || flashHidden) return;
 
-        ctx.drawImage(fullBody, sprX, sprY);
-
+        // Determine pose portrait (h-flipped)
         let poseSrc = null;
         if (isOppAttack && fakePlayerAttackPortraits[palIdx]) poseSrc = fakePlayerAttackPortraits[palIdx][0];
         else if (isOppHit && fakePlayerHitPortraits[palIdx]) poseSrc = fakePlayerHitPortraits[palIdx][0];
+
         if (poseSrc) {
+          // Non-idle: draw legs from fullBody (src rows 16-24), then pose portrait h-flipped on top
+          ctx.drawImage(fullBody, 0, 16, 16, 8, sprX, sprY + 16, 16, 8);
           ctx.save(); ctx.translate(sprX + 16, sprY); ctx.scale(-1, 1);
           ctx.drawImage(poseSrc, 0, 0); ctx.restore();
+        } else {
+          // Idle: draw full body (already h-flipped with idle portrait + legs)
+          ctx.drawImage(fullBody, sprX, sprY);
         }
 
         if (isMain) {
