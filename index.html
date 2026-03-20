@@ -213,6 +213,57 @@
       }
     }
 
+    /* Password gate */
+    #pw-gate {
+      position: fixed;
+      inset: 0;
+      background: #0e0e1a;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      z-index: 9999;
+    }
+    #pw-gate h2 {
+      font-family: 'Press Start 2P', monospace;
+      font-size: 13px;
+      color: #c8a832;
+      letter-spacing: 2px;
+    }
+    #pw-gate input[type=password] {
+      background: #1e1e2e;
+      border: 2px solid #555;
+      border-radius: 6px;
+      color: #e0e0e0;
+      font-size: 16px;
+      font-family: 'Courier New', monospace;
+      padding: 10px 16px;
+      outline: none;
+      text-align: center;
+      width: 220px;
+    }
+    #pw-gate input[type=password]:focus {
+      border-color: #c8a832;
+    }
+    #pw-gate button {
+      padding: 10px 32px;
+      background: linear-gradient(180deg, #3a3a50, #2a2a3e);
+      border: 2px solid #555;
+      border-radius: 6px;
+      color: #c8a832;
+      font-size: 13px;
+      font-family: 'Courier New', monospace;
+      letter-spacing: 1px;
+      cursor: pointer;
+    }
+    #pw-gate button:hover { border-color: #c8a832; }
+    #pw-gate .pw-err {
+      color: #c04040;
+      font-size: 12px;
+      min-height: 16px;
+    }
+
     /* Hidden input for mobile keyboard */
     #mobile-input {
       position: fixed;
@@ -232,6 +283,14 @@
   </style>
 </head>
 <body>
+  <!-- Password gate -->
+  <div id="pw-gate">
+    <h2>FF3 MMO</h2>
+    <input type="password" id="pw-input" placeholder="password" autocomplete="off">
+    <button id="pw-submit">Enter</button>
+    <div class="pw-err" id="pw-err"></div>
+  </div>
+
   <h1>FF3 MMO</h1>
 
   <div id="rom-picker">
@@ -283,6 +342,35 @@
   <script src="lib/libgme.js"></script>
   <script type="module">
     import { init, loadROM, loadFF12ROM, getMobileInputMode } from './src/game.js';
+
+    // Password gate
+    const GATE_PW = 'ff3dev';
+    const gate = document.getElementById('pw-gate');
+    const pwInput = document.getElementById('pw-input');
+    const pwErr = document.getElementById('pw-err');
+
+    function unlockGate() {
+      gate.style.display = 'none';
+      sessionStorage.setItem('ff3_auth', '1');
+    }
+
+    if (sessionStorage.getItem('ff3_auth') === '1') {
+      unlockGate();
+    } else {
+      pwInput.focus();
+      document.getElementById('pw-submit').addEventListener('click', checkPw);
+      pwInput.addEventListener('keydown', e => { if (e.key === 'Enter') checkPw(); });
+    }
+
+    function checkPw() {
+      if (pwInput.value === GATE_PW) {
+        unlockGate();
+      } else {
+        pwErr.textContent = 'Wrong password.';
+        pwInput.value = '';
+        pwInput.focus();
+      }
+    }
 
     init();
 
