@@ -766,6 +766,7 @@ let fakePlayerHitPortraits = [];      // hit/recoil pose
 let fakePlayerDefendPortraits = [];   // defend pose
 let fakePlayerKneelPortraits = [];    // near-fatal kneel pose
 let fakePlayerAttackPortraits = [];   // attack pose (right-hand arm raised)
+let fakePlayerAttackLPortraits = [];  // attack pose (left-hand arm raised)
 let rosterTimer = 0;             // ms until next movement event
 const ROSTER_FADE_STEPS = 4;
 const ROSTER_FADE_STEP_MS = 100;
@@ -1264,6 +1265,14 @@ function initFakePlayerPortraits(romData) {
                                          0x00,0x00,0x00,0x00,0x30,0x70,0x70,0x3E]);
   const atkTiles = [tiles[0], tiles[1], decodeTile(ATK_R_39_DATA, 0), tiles[3]];
   fakePlayerAttackPortraits = _genPosePortraits(atkTiles);
+
+  // Left-hand attack pose — tiles $3B (BL) and $3C (BR)
+  const ATK_L_3B_DATA = new Uint8Array([0x1F,0x04,0x16,0x16,0x0C,0x08,0x38,0x7C,
+                                         0x00,0x00,0x00,0x00,0x11,0x03,0x38,0x7D]);
+  const ATK_L_3C_DATA = new Uint8Array([0x18,0x80,0x48,0xCC,0x00,0x00,0x00,0x00,
+                                         0x59,0x32,0x38,0x0C,0x80,0xC0,0x00,0x60]);
+  const atkLTiles = [tiles[0], tiles[1], decodeTile(ATK_L_3B_DATA, 0), decodeTile(ATK_L_3C_DATA, 0)];
+  fakePlayerAttackLPortraits = _genPosePortraits(atkLTiles);
 
   // Kneel pose — tiles $09-$0C from PPU dump
   const kneelTileData = [
