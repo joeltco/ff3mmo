@@ -786,7 +786,7 @@ let msgBoxOnClose = null;      // callback after slide-out completes
 
 // Battle text byte arrays
 const BATTLE_ROAR = new Uint8Array([0x9B,0x98,0x98,0x98,0x98,0x98,0x8A,0x9B,0xC4,0xC4]); // "ROOOOOAR!!"
-const POND_RESTORED = new Uint8Array([0x8F,0xD4,0xD5,0xD5,0xE2,0xFF,0x9B,0xCE,0xDC,0xDD,0xD8,0xDB,0xCE,0xCD,0xA1]); // "Fully Restored!"
+const POND_RESTORED = new Uint8Array([0x8F,0xDE,0xD5,0xD5,0xE2,0xFF,0x9B,0xCE,0xDC,0xDD,0xD8,0xDB,0xCE,0xCD,0xC4]); // "Fully Restored!"
 const BATTLE_FIGHT = new Uint8Array([0x8F,0xD2,0xD0,0xD1,0xDD]); // "Fight"
 const BATTLE_RUN = new Uint8Array([0x9B,0xDE,0xD7]); // "Run"
 const BATTLE_CANT_ESCAPE = new Uint8Array([0x8C,0xCA,0xD7,0xDD,0xFF,0xCE,0xDC,0xCC,0xCA,0xD9,0xCE,0xC4]); // "Cant escape!"
@@ -9198,22 +9198,6 @@ function drawBattle() {
     }
   }
 
-  // Pond heal strobe
-  if (pondStrobeTimer > 0) {
-    const frame = Math.floor((BATTLE_FLASH_FRAMES * BATTLE_FLASH_FRAME_MS - pondStrobeTimer) / BATTLE_FLASH_FRAME_MS);
-    if (frame & 1) {
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
-      ctx.clip();
-      ctx.filter = 'saturate(0)';
-      ctx.drawImage(ctx.canvas, HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H,
-                                HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
-      ctx.filter = 'none';
-      ctx.restore();
-    }
-  }
-
   // NES grayscale strobe — toggle grayscale every frame for 65 frames
   if (battleState === 'flash-strobe') {
     const frame = Math.floor(battleTimer / BATTLE_FLASH_FRAME_MS);
@@ -10474,6 +10458,22 @@ function gameLoop(timestamp) {
 
   render();
   drawTransitionOverlay();
+
+  // Pond heal strobe — grayscale flicker over viewport
+  if (pondStrobeTimer > 0) {
+    const frame = Math.floor((BATTLE_FLASH_FRAMES * BATTLE_FLASH_FRAME_MS - pondStrobeTimer) / BATTLE_FLASH_FRAME_MS);
+    if (frame & 1) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
+      ctx.clip();
+      ctx.filter = 'saturate(0)';
+      ctx.drawImage(ctx.canvas, HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H,
+                                HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
+      ctx.filter = 'none';
+      ctx.restore();
+    }
+  }
 
   // Draw spinning sprite on top of black during trap fall
   if (transState === 'trap-falling' && sprite) {
