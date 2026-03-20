@@ -1325,15 +1325,14 @@ function initFakePlayerPortraits(romData) {
     return flipped;
   });
 
-  // Hit full body — ROM tiles 6-9 (hit portrait, PPU $07-$0A) + ROM tiles 10-11 (hit legs, PPU $0B-$0C), h-flipped
-  // Sequential layout: idle portrait=0-3, idle legs=4-5, hit portrait=6-9, hit legs=10-11
+  // Hit full body — ROM 30-33 (hit portrait, same as fakePlayerHitPortraits) + ROM 34-35 (hit legs), h-flipped
   const hitBodyTiles = [];
-  for (let i = 0; i < 6; i++) hitBodyTiles.push(decodeTile(romData, BATTLE_SPRITE_ROM + (6 + i) * 16));
+  for (let i = 0; i < 6; i++) hitBodyTiles.push(decodeTile(romData, BATTLE_SPRITE_ROM + (30 + i) * 16));
   fakePlayerHitFullBodyCanvases = PLAYER_PALETTES.map((basePal, pi) => {
     const c = document.createElement('canvas');
     c.width = 16; c.height = 24;
     const fctx = c.getContext('2d');
-    // Portrait: ROM 6-9 = PPU $07(TL) $08(TR) $09(BL) $0A(BR)
+    // Portrait: ROM 30-33
     [[0,0,0],[1,8,0],[2,0,8],[3,8,8]].forEach(([ti, bx, by]) => {
       const px = hitBodyTiles[ti];
       const img = fctx.createImageData(8, 8);
@@ -1346,7 +1345,7 @@ function initFakePlayerPortraits(romData) {
       }
       fctx.putImageData(img, bx, by);
     });
-    // Legs: ROM 10-11 = PPU $0B (left) $0C (right)
+    // Legs: ROM 34-35 (matching legs for the hit portrait set)
     [[hitBodyTiles[4], 0, 16], [hitBodyTiles[5], 8, 16]].forEach(([px, bx, by]) => {
       const img = fctx.createImageData(8, 8);
       for (let p = 0; p < 64; p++) {
