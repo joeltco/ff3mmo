@@ -5,3 +5,8 @@ tools/out/
 *.ppm
 *.png
 *.gif
+node_modules/
+ff3mmo.db
+*.fc0
+*.fc8
+*.fc9
