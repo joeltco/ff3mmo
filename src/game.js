@@ -496,6 +496,10 @@ let pvpOpponent = null;        // PLAYER_POOL entry being dueled
 let pvpOpponentStats = null;   // {hp, maxHP, atk, def, agi, level, name, palIdx, weaponId}
 let pvpOpponentIsDefending = false; // AI defend state
 let pvpEnemyAllies = [];       // fake players who join the opponent's side
+let pvpBoxResizeFromW = 0;     // box width before last ally join (for smooth resize)
+let pvpBoxResizeFromH = 0;
+let pvpBoxResizeStartTime = 0; // Date.now() when resize started, 0 = no resize
+const PVP_BOX_RESIZE_MS = 300;
 
 let battleState = 'none';
 let battleTimer = 0;
@@ -8175,6 +8179,7 @@ function startPVPBattle(target) {
   pvpOpponentStats = generateAllyStats(target);
   pvpOpponentIsDefending = false;
   pvpEnemyAllies = [];
+  pvpBoxResizeStartTime = 0;
   bossHP = pvpOpponentStats.maxHP;
   bossDefeated = false;
   preBattleTrack = TRACKS.CRYSTAL_CAVE;
@@ -8438,6 +8443,13 @@ function updateBattle(dt) {
         const eligible = PLAYER_POOL.filter(p => p.loc === loc && !inBattle.has(p.name));
         if (eligible.length > 0 && Math.random() < 0.3) {
           const pick = eligible[Math.floor(Math.random() * eligible.length)];
+          // Record current box size before adding ally, then animate to new size
+          const oldTotal = 1 + pvpEnemyAllies.length;
+          const oldCols = oldTotal <= 1 ? 1 : 2;
+          const oldRows = oldTotal <= 2 ? 1 : 2;
+          pvpBoxResizeFromW = oldCols * 24 + 16;
+          pvpBoxResizeFromH = oldRows * 32 + 16;
+          pvpBoxResizeStartTime = Date.now();
           pvpEnemyAllies.push(generateAllyStats(pick));
         }
       }
@@ -9970,12 +9982,15 @@ function drawBossSpriteBox() {
 
   // PVP: bordered box that grows as enemy allies join, always centered
   if (isPVPBattle) {
-    const totalEnemies = 1 + pvpEnemyAllies.length;
+    const totalEnemies = 1 + pvpEnemyAllies.length;  // target size
     const cols = totalEnemies <= 1 ? 1 : 2;
     const rows = totalEnemies <= 2 ? 1 : 2;
     const cellW = 24, cellH = 32;
     const pvpBoxW = cols * cellW + 16;
     const pvpBoxH = rows * cellH + 16;
+    // Grid layout uses target size (matches where sprites will be after resize)
+    const visCols = cols;
+    const visRows = rows;
 
     ctx.save();
     ctx.beginPath();
@@ -9984,6 +9999,7 @@ function drawBossSpriteBox() {
     ctx.imageSmoothingEnabled = false;
 
     let drawW = pvpBoxW, drawH = pvpBoxH;
+    let resizeT = 1;
     if (isExpand) {
       const t = Math.min(battleTimer / BOSS_BOX_EXPAND_MS, 1);
       drawW = Math.max(16, Math.ceil(pvpBoxW * t / 8) * 8);
@@ -9992,8 +10008,15 @@ function drawBossSpriteBox() {
       const t = 1 - Math.min(battleTimer / BOSS_BOX_EXPAND_MS, 1);
       drawW = Math.max(16, Math.ceil(pvpBoxW * t / 8) * 8);
       drawH = Math.max(16, Math.ceil(pvpBoxH * t / 8) * 8);
+    } else if (pvpBoxResizeStartTime > 0) {
+      resizeT = Math.min((Date.now() - pvpBoxResizeStartTime) / PVP_BOX_RESIZE_MS, 1);
+      drawW = Math.round(pvpBoxResizeFromW + (pvpBoxW - pvpBoxResizeFromW) * resizeT);
+      drawH = Math.round(pvpBoxResizeFromH + (pvpBoxH - pvpBoxResizeFromH) * resizeT);
     }
     _drawBorderedBox(centerX - Math.floor(drawW / 2), centerY - Math.floor(drawH / 2), drawW, drawH);
+
+    // New ally only appears after box finishes expanding
+    const visibleAllies = resizeT >= 1 ? pvpEnemyAllies.length : pvpEnemyAllies.length - 1;
 
     if (!isExpand && !isClose && battleState !== 'defeat-text') {
       // Grid positions: index 0=pvpOpponent (bottom-right), 1=bottom-left, 2=top-right, 3=top-left
@@ -10006,7 +10029,7 @@ function drawBossSpriteBox() {
       const intLeft = centerX - cols * Math.floor(cellW / 2);
       const intTop  = centerY - rows * Math.floor(cellH / 2);
 
-      const allEnemies = [pvpOpponentStats, ...pvpEnemyAllies];
+      const allEnemies = [pvpOpponentStats, ...pvpEnemyAllies.slice(0, visibleAllies)];
       allEnemies.forEach((enemy, idx) => {
         if (!enemy) return;
         const [gr, gc] = gridPos[idx] || [0, 0];
