@@ -1325,9 +1325,10 @@ function initFakePlayerPortraits(romData) {
     return flipped;
   });
 
-  // Hit full body — ROM 30-33 (hit portrait, same as fakePlayerHitPortraits) + ROM 34-35 (hit legs), h-flipped
-  const hitBodyTiles = [];
-  for (let i = 0; i < 6; i++) hitBodyTiles.push(decodeTile(romData, BATTLE_SPRITE_ROM + (30 + i) * 16));
+  // Hit full body — ROM 30-33 (hit portrait, same as fakePlayerHitPortraits) + ROM 10-11 (hit legs, PPU $0B-$0C), h-flipped
+  const hitPortrait4 = [0,1,2,3].map(i => decodeTile(romData, BATTLE_SPRITE_ROM + (30 + i) * 16));
+  const hitLeg2 = [10,11].map(i => decodeTile(romData, BATTLE_SPRITE_ROM + i * 16));
+  const hitBodyTiles = [...hitPortrait4, ...hitLeg2];
   fakePlayerHitFullBodyCanvases = PLAYER_PALETTES.map((basePal, pi) => {
     const c = document.createElement('canvas');
     c.width = 16; c.height = 24;
@@ -1345,7 +1346,7 @@ function initFakePlayerPortraits(romData) {
       }
       fctx.putImageData(img, bx, by);
     });
-    // Legs: ROM 34-35 (matching legs for the hit portrait set)
+    // Legs: ROM 10-11 (PPU $0B-$0C, hit pose legs)
     [[hitBodyTiles[4], 0, 16], [hitBodyTiles[5], 8, 16]].forEach(([px, bx, by]) => {
       const img = fctx.createImageData(8, 8);
       for (let p = 0; p < 64; p++) {
