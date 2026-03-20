@@ -18,7 +18,7 @@ import { MONSTERS } from './data/monsters.js';
 import { ITEMS } from './data/items.js';
 import { ENCOUNTERS } from './data/encounters.js';
 
-const isMobile = window.matchMedia('(max-width: 520px)').matches;
+const isMobile = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 
 // --- Save data persistence (IndexedDB) ---
 function openSaveDB() {
