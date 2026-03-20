@@ -8439,9 +8439,6 @@ function updateBattle(dt) {
         if (eligible.length > 0 && Math.random() < 0.3) {
           const pick = eligible[Math.floor(Math.random() * eligible.length)];
           pvpEnemyAllies.push(generateAllyStats(pick));
-          const joinMsg = _nameToBytes(pick.name + ' joins!');
-          showMsgBox(joinMsg, () => { turnQueue = buildTurnOrder(); processNextTurn(); });
-          return;
         }
       }
       // Player ally join check: up to 3 allies (matches roster visible rows), 50% chance
