@@ -6348,8 +6348,8 @@ function updateRoster(dt) {
   }
   if (titleState !== 'done') return;
 
-  // Battle fade out/in
-  if (battleState !== 'none' && rosterBattleFading !== 'out' && rosterBattleFade < ROSTER_FADE_STEPS) {
+  // Battle fade out/in — don't fade during roar-hold (wait until roar box closes)
+  if (battleState !== 'none' && battleState !== 'roar-hold' && rosterBattleFading !== 'out' && rosterBattleFade < ROSTER_FADE_STEPS) {
     rosterBattleFading = 'out';
     rosterBattleFadeTimer = 0;
   } else if (battleState === 'none' && rosterBattleFade > 0 && rosterBattleFading !== 'in') {
