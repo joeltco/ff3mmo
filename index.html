@@ -101,6 +101,19 @@
       #controls-hint { display: none !important; }
     }
 
+    /* Mobile layout — flush to top, no gaps */
+    @media (max-width: 520px) {
+      body {
+        justify-content: flex-start;
+        gap: 0;
+      }
+      #canvas-wrapper {
+        border-radius: 0;
+        border-left: none;
+        border-right: none;
+      }
+    }
+
     /* Mobile canvas scaling */
     @media (max-width: 520px) {
       #game-canvas {
