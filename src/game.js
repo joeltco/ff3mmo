@@ -776,6 +776,8 @@ let fakePlayerAttackLPortraits = [];  // attack pose (left-hand arm raised)
 let fakePlayerKnifeBackPortraits = []; // knife back-swing body pose
 let fakePlayerKnifeRPortraits = [];    // knife R-hand front-swing body pose
 let fakePlayerKnifeLPortraits = [];    // knife L-hand front-swing body pose
+let fakePlayerKnifeRFullBodyCanvases = []; // knife R-hand 16×24 h-flipped full body (attack portrait + idle legs)
+let fakePlayerKnifeLFullBodyCanvases = []; // knife L-hand 16×24 h-flipped full body
 let rosterTimer = 0;             // ms until next movement event
 const ROSTER_FADE_STEPS = 4;
 const ROSTER_FADE_STEP_MS = 100;
@@ -1369,6 +1371,44 @@ function initFakePlayerPortraits(romData) {
     ffc.restore();
     return flipped;
   });
+
+  // Attack full-body (16×24) for PVP opponent — attack portrait + idle legs, h-flipped
+  // Drawn as a single image (avoids split-rendering artifact from portrait+legs approach)
+  const _buildAtkFullBody = (atkData4, pal) => {
+    const topLayout = [[0,0],[8,0],[0,8],[8,8]];
+    const c = document.createElement('canvas');
+    c.width = 16; c.height = 24;
+    const bctx = c.getContext('2d');
+    atkData4.map(d => decodeTile(d, 0)).forEach((px, i) => {
+      const img = bctx.createImageData(8, 8);
+      for (let p = 0; p < 64; p++) {
+        const ci = px[p];
+        if (ci === 0) { img.data[p*4+3] = 0; } else {
+          const rgb = NES_SYSTEM_PALETTE[pal[ci]] || [0,0,0];
+          img.data[p*4]=rgb[0]; img.data[p*4+1]=rgb[1]; img.data[p*4+2]=rgb[2]; img.data[p*4+3]=255;
+        }
+      }
+      bctx.putImageData(img, topLayout[i][0], topLayout[i][1]);
+    });
+    [[legTileL, 0, 16], [legTileR, 8, 16]].forEach(([px, bx, by]) => {
+      const img = bctx.createImageData(8, 8);
+      for (let p = 0; p < 64; p++) {
+        const ci = px[p];
+        if (ci === 0) { img.data[p*4+3] = 0; } else {
+          const rgb = NES_SYSTEM_PALETTE[pal[ci]] || [0,0,0];
+          img.data[p*4]=rgb[0]; img.data[p*4+1]=rgb[1]; img.data[p*4+2]=rgb[2]; img.data[p*4+3]=255;
+        }
+      }
+      bctx.putImageData(img, bx, by);
+    });
+    const fl = document.createElement('canvas');
+    fl.width = 16; fl.height = 24;
+    const flctx = fl.getContext('2d');
+    flctx.save(); flctx.translate(16, 0); flctx.scale(-1, 1); flctx.drawImage(c, 0, 0); flctx.restore();
+    return fl;
+  };
+  fakePlayerKnifeRFullBodyCanvases = PLAYER_PALETTES.map(pal => _buildAtkFullBody(KNIFE_R_DATA, pal));
+  fakePlayerKnifeLFullBodyCanvases = PLAYER_PALETTES.map(pal => _buildAtkFullBody(KNIFE_L_DATA, pal));
 
   // Hit full body — ROM 30-35 (frame 5: tiles 0-3=portrait, 4-5=lower body)
   const hitPortrait4 = [0,1,2,3].map(i => decodeTile(romData, BATTLE_SPRITE_ROM + (30 + i) * 16));
@@ -10227,17 +10267,18 @@ function drawBossSpriteBox() {
         const flashHidden = isThisAttacking && battleState === 'boss-flash' && (flashFrame & 1);
         if (blinkHidden || flashHidden) return;
 
-        // Determine pose portrait (h-flipped)
+        // Determine pose: atkFullBody for knife/dagger (single draw), poseSrc for fist/sword (portrait swap)
         let poseSrc = null;
+        let atkFullBody = null;
         if (isOppAttack) {
           const oppWpnSt = pvpOpponentStats && weaponSubtype(pvpOpponentStats.weaponId);
           const oppHasL = pvpOpponentStats && pvpOpponentStats.weaponL != null;
           const useL = oppHasL && (pvpOpponentHitIdx % 2 === 0);
           if (oppWpnSt === 'knife' || oppWpnSt === 'dagger') {
-            // Knife: full portrait swap for entire attack (wind-up + slash)
-            poseSrc = useL
-              ? (fakePlayerKnifeLPortraits[palIdx] && fakePlayerKnifeLPortraits[palIdx][0])
-              : (fakePlayerKnifeRPortraits[palIdx] && fakePlayerKnifeRPortraits[palIdx][0]);
+            // Knife: draw pre-built 16×24 h-flipped full body (no split rendering)
+            atkFullBody = useL
+              ? fakePlayerKnifeLFullBodyCanvases[palIdx]
+              : fakePlayerKnifeRFullBodyCanvases[palIdx];
           } else if (battleState === 'boss-flash') {
             // fist/sword: raised arm on wind-up, idle on forward slash
             poseSrc = useL
@@ -10249,8 +10290,10 @@ function drawBossSpriteBox() {
 
         if (isOppHit && fakePlayerHitFullBodyCanvases[palIdx]) {
           ctx.drawImage(fakePlayerHitFullBodyCanvases[palIdx], sprX, sprY);
+        } else if (atkFullBody) {
+          ctx.drawImage(atkFullBody, sprX, sprY);
         } else if (poseSrc) {
-          // Attack pose: idle legs + attack portrait h-flipped on top
+          // fist/sword: idle legs + attack portrait h-flipped on top
           ctx.drawImage(fullBody, 0, 16, 16, 8, sprX, sprY + 16, 16, 8);
           ctx.save(); ctx.translate(sprX + 16, sprY); ctx.scale(-1, 1);
           ctx.drawImage(poseSrc, 0, 0); ctx.restore();
