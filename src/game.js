@@ -9438,19 +9438,20 @@ function drawBattle() {
   const isNearFatal = playerHP > 0 && playerStats && playerHP <= Math.floor(playerStats.maxHP / 4);
   let portraitSrc = (isNearFatal && battleSpriteKneelCanvas) ? battleSpriteKneelCanvas : battleSpriteCanvas;
   if (isAttackPose) {
-    // Frame 1 (attack-start): arm raised (R=$39, L=$3B/$3C) — same for all weapons
-    // Frame 2 (player-slash): body returns to idle
     const _hw = getHitWeapon(currentHitIdx);
     const _ws = weaponSubtype(_hw);
-    if (battleState === 'attack-start') {
-      // Back-swing: ATK_R_39/ATK_L_3B tiles (from f=1320 PPU dump) — same for all weapon types
+    if (_ws === 'knife' || _ws === 'dagger') {
+      // knife-dual-trace: arm raises ($43-$46) and STAYS UP throughout attack+slash
+      portraitSrc = battleSpriteKnifeBackCanvas || portraitSrc;
+    } else if (battleState === 'attack-start') {
+      // fist/sword: arm raised back-swing (ATK_R_39/ATK_L_3B); returns to idle on slash
       if (isHitRightHand(currentHitIdx)) {
         portraitSrc = battleSpriteAttackCanvas || portraitSrc;
       } else {
         portraitSrc = battleSpriteAttackLCanvas || portraitSrc;
       }
     }
-    // player-slash: ATTACK POSE dump shows body tiles stay idle during forward slash
+    // fist/sword player-slash: portrait stays idle
   } else if ((isDefendPose || isItemUsePose) && battleSpriteDefendCanvas) {
     portraitSrc = battleSpriteDefendCanvas;
   } else if (isHitPose && battleSpriteHitCanvas) {
@@ -10227,14 +10228,14 @@ function drawBossSpriteBox() {
           const oppWpnSt = pvpOpponentStats && weaponSubtype(pvpOpponentStats.weaponId);
           const oppHasL = pvpOpponentStats && pvpOpponentStats.weaponL != null;
           const useL = oppHasL && (pvpOpponentHitIdx % 2 === 0);
-          // Back-swing (boss-flash) uses ATK_R/L portrait (verified f=1320 PPU dump)
-          // Forward slash (enemy-attack/damage-show): body stays idle (ATTACK POSE dump)
-          if (battleState === 'boss-flash') {
+          if (oppWpnSt === 'knife' || oppWpnSt === 'dagger') {
+            // knife-dual-trace: arm stays raised ($43-$46) throughout entire attack
+            poseSrc = fakePlayerKnifeBackPortraits[palIdx] && fakePlayerKnifeBackPortraits[palIdx][0];
+          } else if (battleState === 'boss-flash') {
+            // fist/sword: raised arm on wind-up, idle on forward slash
             poseSrc = useL
               ? (fakePlayerAttackLPortraits[palIdx] && fakePlayerAttackLPortraits[palIdx][0])
               : (fakePlayerAttackPortraits[palIdx] && fakePlayerAttackPortraits[palIdx][0]);
-          } else {
-            poseSrc = null; // idle during forward slash
           }
         }
         else if (isOppHit && fakePlayerHitPortraits[palIdx]) poseSrc = fakePlayerHitPortraits[palIdx][0];
