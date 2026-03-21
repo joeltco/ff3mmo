@@ -778,6 +778,7 @@ let fakePlayerKnifeRPortraits = [];    // knife R-hand front-swing body pose
 let fakePlayerKnifeLPortraits = [];    // knife L-hand front-swing body pose
 let fakePlayerKnifeRFullBodyCanvases = []; // knife R-hand 16×24 h-flipped full body (attack portrait + idle legs)
 let fakePlayerKnifeLFullBodyCanvases = []; // knife L-hand 16×24 h-flipped full body
+let fakePlayerKnifeBackFullBodyCanvases = []; // knife back-swing 16×24 h-flipped full body (wind-up pose)
 let rosterTimer = 0;             // ms until next movement event
 const ROSTER_FADE_STEPS = 4;
 const ROSTER_FADE_STEP_MS = 100;
@@ -1409,6 +1410,7 @@ function initFakePlayerPortraits(romData) {
   };
   fakePlayerKnifeRFullBodyCanvases = PLAYER_PALETTES.map(pal => _buildAtkFullBody(KNIFE_R_DATA, pal));
   fakePlayerKnifeLFullBodyCanvases = PLAYER_PALETTES.map(pal => _buildAtkFullBody(KNIFE_L_DATA, pal));
+  fakePlayerKnifeBackFullBodyCanvases = PLAYER_PALETTES.map(pal => _buildAtkFullBody(KNIFE_BACK_DATA, pal));
 
   // Hit full body — ROM 30-35 (frame 5: tiles 0-3=portrait, 4-5=lower body)
   const hitPortrait4 = [0,1,2,3].map(i => decodeTile(romData, BATTLE_SPRITE_ROM + (30 + i) * 16));
@@ -10280,10 +10282,14 @@ function drawBossSpriteBox() {
           // R-hand first (hitsThisTurn=0), L-hand second (hitsThisTurn>=1)
           const useL = oppHasL && pvpOpponentHitsThisTurn >= 1;
           if (oppWpnSt === 'knife' || oppWpnSt === 'dagger') {
-            // Knife: draw pre-built 16×24 h-flipped full body (no split rendering)
-            atkFullBody = useL
-              ? fakePlayerKnifeLFullBodyCanvases[palIdx]
-              : fakePlayerKnifeRFullBodyCanvases[palIdx];
+            // Wind-up: back-swing pose; Forward slash: R or L hand pose
+            if (battleState === 'boss-flash' || battleState === 'pvp-second-windup') {
+              atkFullBody = fakePlayerKnifeBackFullBodyCanvases[palIdx];
+            } else {
+              atkFullBody = useL
+                ? fakePlayerKnifeLFullBodyCanvases[palIdx]
+                : fakePlayerKnifeRFullBodyCanvases[palIdx];
+            }
           } else if (battleState === 'boss-flash' || battleState === 'pvp-second-windup') {
             // fist/sword: raised arm on wind-up, idle on forward slash
             poseSrc = useL
