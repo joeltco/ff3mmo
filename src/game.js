@@ -9441,8 +9441,15 @@ function drawBattle() {
     const _hw = getHitWeapon(currentHitIdx);
     const _ws = weaponSubtype(_hw);
     if (_ws === 'knife' || _ws === 'dagger') {
-      // PPU dump confirmed: portrait tiles $01-$04 never change during knife attack.
-      // Animation is the flying blade sprite. Portrait stays idle.
+      // Knife attack-start: show attack body pose (tile $39 R / $3B+$3C L) — same tiles
+      // the NES uses in the torso during knife wind-up. Idle on slash (knife has flown).
+      if (battleState === 'attack-start') {
+        if (isHitRightHand(currentHitIdx)) {
+          portraitSrc = battleSpriteAttackCanvas || portraitSrc;
+        } else {
+          portraitSrc = battleSpriteAttackLCanvas || portraitSrc;
+        }
+      }
     } else if (battleState === 'attack-start') {
       // fist/sword: arm raised back-swing (ATK_R_39/ATK_L_3B); returns to idle on slash
       if (isHitRightHand(currentHitIdx)) {
@@ -10229,8 +10236,13 @@ function drawBossSpriteBox() {
           const oppHasL = pvpOpponentStats && pvpOpponentStats.weaponL != null;
           const useL = oppHasL && (pvpOpponentHitIdx % 2 === 0);
           if (oppWpnSt === 'knife' || oppWpnSt === 'dagger') {
-            // PPU dump confirmed: portrait tiles never change during knife attack.
-            // Animation is the flying blade sprite. Portrait stays idle (poseSrc = null).
+            // Knife wind-up: use attack body pose (same NES torso tile $39 R / $3B L).
+            // boss-flash = wind-up phase. enemy-attack = slash (idle).
+            if (battleState === 'boss-flash') {
+              poseSrc = useL
+                ? (fakePlayerAttackLPortraits[palIdx] && fakePlayerAttackLPortraits[palIdx][0])
+                : (fakePlayerAttackPortraits[palIdx] && fakePlayerAttackPortraits[palIdx][0]);
+            }
           } else if (battleState === 'boss-flash') {
             // fist/sword: raised arm on wind-up, idle on forward slash
             poseSrc = useL
