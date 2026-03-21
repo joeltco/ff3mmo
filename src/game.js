@@ -9199,31 +9199,35 @@ function updateBattle(dt) {
         const oppR = pvpOpponent && pvpOpponent.weaponR;
         const oppHasDual = (oppL != null && isWeapon(oppL)) || (!isWeapon(oppR) && !isWeapon(oppL));
         if (oppHasDual) {
-          // Second hit — skip boss-flash (no pre-attack flash for combo), compute damage inline
+          // Second hit — wind-up animation then L-hand swing
           pvpOpponentHitsThisTurn = 1;
-          pvpOpponentHitIdx++;
-          const monHitRate2 = BOSS_HIT_RATE;
-          const monAtk2 = pvpOpponentStats.atk;
-          if (Math.random() * 100 < monHitRate2) {
-            let dmg2 = calcDamage(monAtk2, playerDEF);
-            if (isDefending) dmg2 = Math.max(1, Math.floor(dmg2 / 2));
-            playerHP = Math.max(0, playerHP - dmg2);
-            playerDamageNum = { value: dmg2, timer: 0 };
-            playSFX(SFX.ATTACK_HIT);
-            battleShakeTimer = BATTLE_SHAKE_MS;
-            battleState = 'enemy-attack';
-            battleTimer = 0;
-          } else {
-            playerDamageNum = { miss: true, timer: 0 };
-            battleState = 'enemy-damage-show';
-            battleTimer = 0;
-          }
+          battleState = 'pvp-second-windup';
+          battleTimer = 0;
         } else {
           processNextTurn();
         }
       } else {
         // Next turn in queue (or back to menu if empty)
         processNextTurn();
+      }
+    }
+  } else if (battleState === 'pvp-second-windup') {
+    // L-hand wind-up animation — blink like boss-flash, then swing
+    if (battleTimer >= BOSS_PREFLASH_MS) {
+      const monAtk2 = pvpOpponentStats.atk;
+      if (Math.random() * 100 < BOSS_HIT_RATE) {
+        let dmg2 = calcDamage(monAtk2, playerDEF);
+        if (isDefending) dmg2 = Math.max(1, Math.floor(dmg2 / 2));
+        playerHP = Math.max(0, playerHP - dmg2);
+        playerDamageNum = { value: dmg2, timer: 0 };
+        playSFX(SFX.ATTACK_HIT);
+        battleShakeTimer = BATTLE_SHAKE_MS;
+        battleState = 'enemy-attack';
+        battleTimer = 0;
+      } else {
+        playerDamageNum = { miss: true, timer: 0 };
+        battleState = 'enemy-damage-show';
+        battleTimer = 0;
       }
     }
   } else if (battleState === 'boss-dissolve') {
@@ -10253,7 +10257,7 @@ function drawBossSpriteBox() {
 
         // Which enemy in the grid is currently taking their attack turn
         const isThisAttacking = isMain ? pvpCurrentEnemyAllyIdx < 0 : pvpCurrentEnemyAllyIdx === idx - 1;
-        const isOppAttack = isThisAttacking && (battleState === 'boss-flash' || battleState === 'enemy-attack' || battleState === 'enemy-damage-show');
+        const isOppAttack = isThisAttacking && (battleState === 'boss-flash' || battleState === 'pvp-second-windup' || battleState === 'enemy-attack' || battleState === 'enemy-damage-show');
         const isOppHit = isMain && (
           (battleState === 'player-slash' && hitResults && hitResults[currentHitIdx] && !hitResults[currentHitIdx].miss) ||
           battleState === 'player-hit-show' || battleState === 'player-damage-show' ||
@@ -10263,8 +10267,8 @@ function drawBossSpriteBox() {
           (battleState === 'player-slash' && hitResults && hitResults[currentHitIdx] && !hitResults[currentHitIdx].miss) ||
           (battleState === 'ally-slash' && allyHitResult && !allyHitResult.miss)
         ) && (Math.floor(battleTimer / 60) & 1);
-        const flashFrame = isThisAttacking && battleState === 'boss-flash' ? Math.floor(battleTimer / (BOSS_PREFLASH_MS / 8)) : 0;
-        const flashHidden = isThisAttacking && battleState === 'boss-flash' && (flashFrame & 1);
+        const flashFrame = isThisAttacking && (battleState === 'boss-flash' || battleState === 'pvp-second-windup') ? Math.floor(battleTimer / (BOSS_PREFLASH_MS / 8)) : 0;
+        const flashHidden = isThisAttacking && (battleState === 'boss-flash' || battleState === 'pvp-second-windup') && (flashFrame & 1);
         if (blinkHidden || flashHidden) return;
 
         // Determine pose: atkFullBody for knife/dagger (single draw), poseSrc for fist/sword (portrait swap)
@@ -10273,13 +10277,14 @@ function drawBossSpriteBox() {
         if (isOppAttack) {
           const oppWpnSt = pvpOpponentStats && weaponSubtype(pvpOpponentStats.weaponId);
           const oppHasL = pvpOpponentStats && pvpOpponentStats.weaponL != null;
-          const useL = oppHasL && (pvpOpponentHitIdx % 2 === 0);
+          // R-hand first (hitsThisTurn=0), L-hand second (hitsThisTurn>=1)
+          const useL = oppHasL && pvpOpponentHitsThisTurn >= 1;
           if (oppWpnSt === 'knife' || oppWpnSt === 'dagger') {
             // Knife: draw pre-built 16×24 h-flipped full body (no split rendering)
             atkFullBody = useL
               ? fakePlayerKnifeLFullBodyCanvases[palIdx]
               : fakePlayerKnifeRFullBodyCanvases[palIdx];
-          } else if (battleState === 'boss-flash') {
+          } else if (battleState === 'boss-flash' || battleState === 'pvp-second-windup') {
             // fist/sword: raised arm on wind-up, idle on forward slash
             poseSrc = useL
               ? (fakePlayerAttackLPortraits[palIdx] && fakePlayerAttackLPortraits[palIdx][0])
@@ -10314,7 +10319,7 @@ function drawBossSpriteBox() {
           }
           const wpnId = pvpOpponentStats.weaponId || 0;
           const wpnSt = weaponSubtype(wpnId);
-          if (battleState === 'boss-flash' && !flashHidden) {
+          if ((battleState === 'boss-flash' || battleState === 'pvp-second-windup') && !flashHidden) {
             ctx.save(); ctx.translate(sprX, sprY - 7); ctx.scale(-1, 1);
             if (wpnSt === 'knife' && battleKnifeBladeCanvas) ctx.drawImage(battleKnifeBladeCanvas, 0, 0);
             else if (wpnSt === 'dagger' && battleDaggerBladeCanvas) ctx.drawImage(battleDaggerBladeCanvas, 0, 0);
