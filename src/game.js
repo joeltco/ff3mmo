@@ -497,6 +497,7 @@ let pvpOpponent = null;        // PLAYER_POOL entry being dueled
 let pvpOpponentStats = null;   // {hp, maxHP, atk, def, agi, level, name, palIdx, weaponId}
 let pvpOpponentIsDefending = false; // AI defend state
 let pvpOpponentHitIdx = 0;         // increments each attack, even=R hand odd=L hand
+let pvpOpponentHitsThisTurn = 0;   // how many hits opponent has done this turn (for dual-wield 2nd hit)
 let pvpEnemyAllies = [];        // fake players who join the opponent's side
 let pvpCurrentEnemyAllyIdx = -1; // -1 = main opponent attacking, >=0 = pvpEnemyAllies[i]
 let pvpBoxResizeFromW = 0;
@@ -8266,6 +8267,7 @@ function processNextTurn() {
   } else {
     pvpCurrentEnemyAllyIdx = -1;
     currentAttacker = turn.index;
+    pvpOpponentHitsThisTurn = 0;
     // Skip dead enemies (killed earlier this round)
     if (turn.index >= 0 && encounterMonsters && encounterMonsters[turn.index].hp <= 0) {
       processNextTurn();
@@ -8283,6 +8285,7 @@ function startPVPBattle(target) {
   pvpOpponentStats = generateAllyStats(target);
   pvpOpponentIsDefending = false;
   pvpOpponentHitIdx = 0;
+  pvpOpponentHitsThisTurn = 0;
   pvpEnemyAllies = [];
   pvpCurrentEnemyAllyIdx = -1;
   pvpBoxResizeStartTime = 0;
@@ -9149,6 +9152,19 @@ function updateBattle(dt) {
         isDefending = false;
         battleState = 'defeat-monster-fade';
         battleTimer = 0;
+      } else if (isPVPBattle && pvpCurrentEnemyAllyIdx < 0 && pvpOpponentHitsThisTurn === 0) {
+        // PVP main opponent: check if they have a second hand for dual-wield
+        const oppL = pvpOpponent && pvpOpponent.weaponL;
+        const oppR = pvpOpponent && pvpOpponent.weaponR;
+        const oppHasDual = (oppL != null && isWeapon(oppL)) || (!isWeapon(oppR) && !isWeapon(oppL));
+        if (oppHasDual) {
+          // Second hit — re-enter boss-flash with hit counter advanced
+          pvpOpponentHitsThisTurn = 1;
+          battleState = 'boss-flash';
+          battleTimer = 0;
+        } else {
+          processNextTurn();
+        }
       } else {
         // Next turn in queue (or back to menu if empty)
         processNextTurn();
