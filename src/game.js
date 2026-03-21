@@ -495,6 +495,7 @@ let isPVPBattle = false;       // true when in a player-vs-player duel
 let pvpOpponent = null;        // PLAYER_POOL entry being dueled
 let pvpOpponentStats = null;   // {hp, maxHP, atk, def, agi, level, name, palIdx, weaponId}
 let pvpOpponentIsDefending = false; // AI defend state
+let pvpOpponentHitIdx = 0;         // increments each attack, even=R hand odd=L hand
 let pvpEnemyAllies = [];        // fake players who join the opponent's side
 let pvpCurrentEnemyAllyIdx = -1; // -1 = main opponent attacking, >=0 = pvpEnemyAllies[i]
 let pvpBoxResizeFromW = 0;
@@ -8254,6 +8255,7 @@ function startPVPBattle(target) {
   pvpOpponent = target;
   pvpOpponentStats = generateAllyStats(target);
   pvpOpponentIsDefending = false;
+  pvpOpponentHitIdx = 0;
   pvpEnemyAllies = [];
   pvpCurrentEnemyAllyIdx = -1;
   pvpBoxResizeStartTime = 0;
@@ -9099,6 +9101,7 @@ function updateBattle(dt) {
           playSFX(SFX.ATTACK_HIT);
           battleShakeTimer = BATTLE_SHAKE_MS;
           battleState = 'enemy-attack';
+          pvpOpponentHitIdx++;
           battleTimer = 0;
         } else {
           playerDamageNum = { miss: true, timer: 0 };
@@ -10159,7 +10162,13 @@ function drawBossSpriteBox() {
 
         // Determine pose portrait (h-flipped)
         let poseSrc = null;
-        if (isOppAttack && fakePlayerAttackPortraits[palIdx]) poseSrc = fakePlayerAttackPortraits[palIdx][0];
+        if (isOppAttack) {
+          const oppHasL = pvpOpponentStats && pvpOpponentStats.weaponL != null;
+          const useL = oppHasL && (pvpOpponentHitIdx % 2 === 0);
+          poseSrc = useL
+            ? (fakePlayerAttackLPortraits[palIdx] && fakePlayerAttackLPortraits[palIdx][0])
+            : (fakePlayerAttackPortraits[palIdx] && fakePlayerAttackPortraits[palIdx][0]);
+        }
         else if (isOppHit && fakePlayerHitPortraits[palIdx]) poseSrc = fakePlayerHitPortraits[palIdx][0];
 
         if (isOppHit && fakePlayerHitFullBodyCanvases[palIdx]) {
