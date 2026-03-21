@@ -9158,10 +9158,25 @@ function updateBattle(dt) {
         const oppR = pvpOpponent && pvpOpponent.weaponR;
         const oppHasDual = (oppL != null && isWeapon(oppL)) || (!isWeapon(oppR) && !isWeapon(oppL));
         if (oppHasDual) {
-          // Second hit — re-enter boss-flash with hit counter advanced
+          // Second hit — skip boss-flash (no pre-attack flash for combo), compute damage inline
           pvpOpponentHitsThisTurn = 1;
-          battleState = 'boss-flash';
-          battleTimer = 0;
+          pvpOpponentHitIdx++;
+          const monHitRate2 = BOSS_HIT_RATE;
+          const monAtk2 = pvpOpponentStats.atk;
+          if (Math.random() * 100 < monHitRate2) {
+            let dmg2 = calcDamage(monAtk2, playerDEF);
+            if (isDefending) dmg2 = Math.max(1, Math.floor(dmg2 / 2));
+            playerHP = Math.max(0, playerHP - dmg2);
+            playerDamageNum = { value: dmg2, timer: 0 };
+            playSFX(SFX.ATTACK_HIT);
+            battleShakeTimer = BATTLE_SHAKE_MS;
+            battleState = 'enemy-attack';
+            battleTimer = 0;
+          } else {
+            playerDamageNum = { miss: true, timer: 0 };
+            battleState = 'enemy-damage-show';
+            battleTimer = 0;
+          }
         } else {
           processNextTurn();
         }
@@ -9428,19 +9443,17 @@ function drawBattle() {
     const _hw = getHitWeapon(currentHitIdx);
     const _ws = weaponSubtype(_hw);
     if (battleState === 'attack-start') {
-      if (_ws === 'knife' || _ws === 'dagger') {
-        portraitSrc = battleSpriteKnifeBackCanvas || portraitSrc;
-      } else if (isHitRightHand(currentHitIdx)) {
-        portraitSrc = battleSpriteAttackCanvas || portraitSrc;
-      } else {
-        portraitSrc = battleSpriteAttackLCanvas || portraitSrc;
+      // PPU dump: body tiles never change during knife attack — only blade position animates
+      if (_ws !== 'knife' && _ws !== 'dagger') {
+        if (isHitRightHand(currentHitIdx)) {
+          portraitSrc = battleSpriteAttackCanvas || portraitSrc;
+        } else {
+          portraitSrc = battleSpriteAttackLCanvas || portraitSrc;
+        }
       }
-    } else if (battleState === 'player-slash') {
-      if (_ws === 'knife' || _ws === 'dagger') {
-        portraitSrc = (isHitRightHand(currentHitIdx) ? battleSpriteKnifeRCanvas : battleSpriteKnifeLCanvas) || portraitSrc;
-      }
-      // else: fist/sword stays as idle
+      // knife/dagger: portrait stays idle; blade canvas positioned behind body communicates back-swing
     }
+    // player-slash: portrait stays idle for all weapons; slash frames + blade position show swing
   } else if ((isDefendPose || isItemUsePose) && battleSpriteDefendCanvas) {
     portraitSrc = battleSpriteDefendCanvas;
   } else if (isHitPose && battleSpriteHitCanvas) {
@@ -10218,13 +10231,8 @@ function drawBossSpriteBox() {
           const oppHasL = pvpOpponentStats && pvpOpponentStats.weaponL != null;
           const useL = oppHasL && (pvpOpponentHitIdx % 2 === 0);
           if (oppWpnSt === 'knife' || oppWpnSt === 'dagger') {
-            if (battleState === 'boss-flash') {
-              poseSrc = fakePlayerKnifeBackPortraits[palIdx] && fakePlayerKnifeBackPortraits[palIdx][0];
-            } else {
-              poseSrc = useL
-                ? (fakePlayerKnifeLPortraits[palIdx] && fakePlayerKnifeLPortraits[palIdx][0])
-                : (fakePlayerKnifeRPortraits[palIdx] && fakePlayerKnifeRPortraits[palIdx][0]);
-            }
+            // PPU dump: body tiles stay idle during knife attack; blade position conveys swing direction
+            poseSrc = null;
           } else {
             poseSrc = useL
               ? (fakePlayerAttackLPortraits[palIdx] && fakePlayerAttackLPortraits[palIdx][0])
