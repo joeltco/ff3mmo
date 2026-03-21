@@ -1203,10 +1203,14 @@ function _renderPortrait(tiles, layout, palette) {
 }
 
 function initFakePlayerPortraits(romData) {
-  const tiles = [];
-  for (let i = 0; i < 4; i++) {
-    tiles.push(decodeTile(romData, BATTLE_SPRITE_ROM + i * 16));
-  }
+  // Idle portrait tiles — PPU bytes from FCEUX battle dump (PPU $1000 $01-$04)
+  const IDLE_PPU = [
+    new Uint8Array([0x00,0x00,0x0A,0x16,0x2F,0x03,0x00,0x0C, 0x00,0x00,0x0E,0x1E,0x3F,0x7F,0x83,0x40]), // $01 TL
+    new Uint8Array([0x00,0x00,0x00,0xE0,0x70,0xB8,0xD8,0x68, 0x00,0x6C,0x19,0xFE,0x76,0xBB,0xDB,0xED]), // $02 TR
+    new Uint8Array([0x1F,0x04,0x16,0x16,0x0F,0x0F,0x60,0xC6, 0x00,0x00,0x00,0x00,0x50,0xE0,0x60,0x1E]), // $03 BL
+    new Uint8Array([0x18,0x80,0x48,0xCC,0x00,0x00,0x70,0xD8, 0x59,0x32,0x38,0x0C,0xB0,0x78,0x70,0x1C]), // $04 BR
+  ];
+  const tiles = IDLE_PPU.map(d => decodeTile(d, 0));
   const layout = [[0,0], [8,0], [0,8], [8,8]];
   // fakePlayerPortraits[palIdx][fadeStep] — fadeStep 0=full, 1-4=faded
   fakePlayerPortraits = PLAYER_PALETTES.map(basePal => {
@@ -1284,10 +1288,10 @@ function initFakePlayerPortraits(romData) {
   const kneelTiles = kneelTileData.map(d => decodeTile(d, 0));
   fakePlayerKneelPortraits = _genPosePortraits(kneelTiles);
 
-  // Full body 16×24 canvases for PVP opponent — top 4 tiles + bottom 2 tiles (legs), h-flipped
-  // Bottom tiles 4-5: left-leg (TL/BL) and right-leg (TR/BR) at BATTLE_SPRITE_ROM + 4*16 / 5*16
-  const legTileL = decodeTile(romData, BATTLE_SPRITE_ROM + 4 * 16); // bottom-left 8×8
-  const legTileR = decodeTile(romData, BATTLE_SPRITE_ROM + 5 * 16); // bottom-right 8×8
+  // Full body 16×24 canvases for PVP opponent — top 4 tiles + bottom 2 tiles, h-flipped
+  // Bottom row = PPU $05/$06 from FCEUX battle dump (lower torso, same in idle and hit CHR banks)
+  const legTileL = decodeTile(new Uint8Array([0xCC,0x58,0x2F,0x3F,0x3F,0x1F,0x00,0x00, 0x1E,0x5F,0x3F,0x3F,0x3F,0x1F,0x07,0x0F]), 0); // $05
+  const legTileR = decodeTile(new Uint8Array([0xD8,0x70,0x80,0xE0,0xE0,0xC0,0x00,0x00, 0x1C,0x74,0x84,0xE6,0xE6,0xC6,0xC7,0xC7]), 0); // $06
 
   fakePlayerFullBodyCanvases = PLAYER_PALETTES.map(basePal => {
     const c = document.createElement('canvas');
@@ -1334,9 +1338,12 @@ function initFakePlayerPortraits(romData) {
     return flipped;
   });
 
-  // Hit full body — ROM 30-33 (hit portrait, same as fakePlayerHitPortraits) + ROM 10-11 (hit legs, PPU $0B-$0C), h-flipped
+  // Hit full body — ROM 30-33 (hit portrait, confirmed correct) + PPU $05/$06 for lower body
   const hitPortrait4 = [0,1,2,3].map(i => decodeTile(romData, BATTLE_SPRITE_ROM + (30 + i) * 16));
-  const hitLeg2 = [10,11].map(i => decodeTile(romData, BATTLE_SPRITE_ROM + i * 16));
+  const hitLeg2 = [
+    decodeTile(new Uint8Array([0xCC,0x58,0x2F,0x3F,0x3F,0x1F,0x00,0x00, 0x1E,0x5F,0x3F,0x3F,0x3F,0x1F,0x07,0x0F]), 0), // $05
+    decodeTile(new Uint8Array([0xD8,0x70,0x80,0xE0,0xE0,0xC0,0x00,0x00, 0x1C,0x74,0x84,0xE6,0xE6,0xC6,0xC7,0xC7]), 0), // $06
+  ];
   const hitBodyTiles = [...hitPortrait4, ...hitLeg2];
   fakePlayerHitFullBodyCanvases = PLAYER_PALETTES.map((basePal, pi) => {
     const c = document.createElement('canvas');
@@ -1355,7 +1362,7 @@ function initFakePlayerPortraits(romData) {
       }
       fctx.putImageData(img, bx, by);
     });
-    // Legs: ROM 10-11 (PPU $0B-$0C, hit pose legs)
+    // Legs: PPU $05/$06 from FCEUX battle dump
     [[hitBodyTiles[4], 0, 16], [hitBodyTiles[5], 8, 16]].forEach(([px, bx, by]) => {
       const img = fctx.createImageData(8, 8);
       for (let p = 0; p < 64; p++) {
@@ -1408,11 +1415,14 @@ function initBattleSprite(romData) {
   const BATTLE_PAL_ROM = 0x05CF04;
   const palette = [0x0F, romData[BATTLE_PAL_ROM], romData[BATTLE_PAL_ROM + 1], romData[BATTLE_PAL_ROM + 2]];
 
-  // Decode idle frame top half: tiles 0-3 (head+body), 2×2 grid (16×16)
-  const tiles = [];
-  for (let i = 0; i < 4; i++) {
-    tiles.push(decodeTile(romData, BATTLE_SPRITE_ROM + i * 16));
-  }
+  // Idle portrait tiles — PPU bytes from FCEUX battle dump (PPU $1000 $01-$04)
+  const IDLE_PPU = [
+    new Uint8Array([0x00,0x00,0x0A,0x16,0x2F,0x03,0x00,0x0C, 0x00,0x00,0x0E,0x1E,0x3F,0x7F,0x83,0x40]), // $01 TL
+    new Uint8Array([0x00,0x00,0x00,0xE0,0x70,0xB8,0xD8,0x68, 0x00,0x6C,0x19,0xFE,0x76,0xBB,0xDB,0xED]), // $02 TR
+    new Uint8Array([0x1F,0x04,0x16,0x16,0x0F,0x0F,0x60,0xC6, 0x00,0x00,0x00,0x00,0x50,0xE0,0x60,0x1E]), // $03 BL
+    new Uint8Array([0x18,0x80,0x48,0xCC,0x00,0x00,0x70,0xD8, 0x59,0x32,0x38,0x0C,0xB0,0x78,0x70,0x1C]), // $04 BR
+  ];
+  const tiles = IDLE_PPU.map(d => decodeTile(d, 0));
 
   battleSpriteCanvas = document.createElement('canvas');
   battleSpriteCanvas.width = 16;
