@@ -9410,11 +9410,7 @@ function drawBattle() {
     // Frame 1 (attack-start): arm raised (R=$39, L=$3B/$3C) — same for all weapons
     // Frame 2 (player-slash): body returns to idle
     if (battleState === 'attack-start') {
-      const _hw = getHitWeapon(currentHitIdx);
-      const _ws = weaponSubtype(_hw);
-      if ((_ws === 'knife' || _ws === 'dagger') && battleSpriteKnifeBackCanvas) {
-        portraitSrc = battleSpriteKnifeBackCanvas;
-      } else if (isHitRightHand(currentHitIdx)) {
+      if (isHitRightHand(currentHitIdx)) {
         portraitSrc = battleSpriteAttackCanvas || portraitSrc;
       } else {
         portraitSrc = battleSpriteAttackLCanvas || portraitSrc;
@@ -9425,7 +9421,7 @@ function drawBattle() {
       if (_ws === 'knife' || _ws === 'dagger') {
         portraitSrc = (isHitRightHand(currentHitIdx) ? battleSpriteKnifeRCanvas : battleSpriteKnifeLCanvas) || portraitSrc;
       }
-      // else: fist/sword stays as idle — correct per trace
+      // else: fist/sword stays as idle
     }
   } else if ((isDefendPose || isItemUsePose) && battleSpriteDefendCanvas) {
     portraitSrc = battleSpriteDefendCanvas;
@@ -10203,14 +10199,10 @@ function drawBossSpriteBox() {
           const oppWpnSt = pvpOpponentStats && weaponSubtype(pvpOpponentStats.weaponId);
           const oppHasL = pvpOpponentStats && pvpOpponentStats.weaponL != null;
           const useL = oppHasL && (pvpOpponentHitIdx % 2 === 0);
-          if (oppWpnSt === 'knife' || oppWpnSt === 'dagger') {
-            if (battleState === 'boss-flash') {
-              poseSrc = fakePlayerKnifeBackPortraits[palIdx] && fakePlayerKnifeBackPortraits[palIdx][0];
-            } else {
-              poseSrc = useL
-                ? (fakePlayerKnifeLPortraits[palIdx] && fakePlayerKnifeLPortraits[palIdx][0])
-                : (fakePlayerKnifeRPortraits[palIdx] && fakePlayerKnifeRPortraits[palIdx][0]);
-            }
+          if ((oppWpnSt === 'knife' || oppWpnSt === 'dagger') && battleState === 'enemy-attack') {
+            poseSrc = useL
+              ? (fakePlayerKnifeLPortraits[palIdx] && fakePlayerKnifeLPortraits[palIdx][0])
+              : (fakePlayerKnifeRPortraits[palIdx] && fakePlayerKnifeRPortraits[palIdx][0]);
           } else {
             poseSrc = useL
               ? (fakePlayerAttackLPortraits[palIdx] && fakePlayerAttackLPortraits[palIdx][0])
