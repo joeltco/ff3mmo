@@ -669,7 +669,7 @@ const LOCATIONS = ['world', 'ur', 'cave-0', 'cave-1', 'cave-2', 'cave-3', 'cryst
 // Full player pool — each has a current location, moves around over time
 const PLAYER_POOL = [
   { name: 'Zephyr',  level: 5,  palIdx: 1, camper: false, loc: 'ur' },
-  { name: 'Mira',    level: 4,  palIdx: 2, camper: false, loc: 'world', weaponR: 0, weaponL: 0 },
+  { name: 'Mira',    level: 4,  palIdx: 2, camper: false, loc: 'world', weaponR: 0x1E, weaponL: 0x1F },
   { name: 'Aldric',  level: 5,  palIdx: 3, camper: true,  loc: 'ur' },
   { name: 'Suki',    level: 3,  palIdx: 4, camper: false, loc: 'cave-0' },
   { name: 'Fenris',  level: 5,  palIdx: 5, camper: false, loc: 'cave-1' },
@@ -772,6 +772,9 @@ let fakePlayerDefendPortraits = [];   // defend pose
 let fakePlayerKneelPortraits = [];    // near-fatal kneel pose
 let fakePlayerAttackPortraits = [];   // attack pose (right-hand arm raised)
 let fakePlayerAttackLPortraits = [];  // attack pose (left-hand arm raised)
+let fakePlayerKnifeBackPortraits = []; // knife back-swing body pose
+let fakePlayerKnifeRPortraits = [];    // knife R-hand front-swing body pose
+let fakePlayerKnifeLPortraits = [];    // knife L-hand front-swing body pose
 let rosterTimer = 0;             // ms until next movement event
 const ROSTER_FADE_STEPS = 4;
 const ROSTER_FADE_STEP_MS = 100;
@@ -1282,6 +1285,29 @@ function initFakePlayerPortraits(romData) {
                                          0x59,0x32,0x38,0x0C,0x80,0xC0,0x00,0x60]);
   const atkLTiles = [tiles[0], tiles[1], decodeTile(ATK_L_3B_DATA, 0), decodeTile(ATK_L_3C_DATA, 0)];
   fakePlayerAttackLPortraits = _genPosePortraits(atkLTiles);
+
+  // Knife body poses — same tile bytes as in initBattleSprite
+  const KNIFE_BACK_DATA = [
+    new Uint8Array([0x05,0x0B,0x17,0x03,0x00,0x00,0x0E,0x1F, 0x07,0x0F,0x1F,0x3F,0x43,0x40,0x20,0x00]),
+    new Uint8Array([0x00,0x00,0xA0,0xD0,0xE8,0x78,0x10,0x88, 0x2C,0x59,0xBE,0xD6,0xEF,0xFB,0x75,0x1A]),
+    new Uint8Array([0x04,0xD6,0xD6,0x3F,0xEF,0xF0,0x63,0x0E, 0x00,0x00,0x00,0x24,0xE4,0xF0,0x6F,0x1F]),
+    new Uint8Array([0x90,0x4C,0xCC,0x30,0x7C,0x78,0x30,0x00, 0x32,0x21,0x00,0xB0,0x7C,0x7C,0xB2,0xC2]),
+  ];
+  fakePlayerKnifeBackPortraits = _genPosePortraits(KNIFE_BACK_DATA.map(d => decodeTile(d, 0)));
+  const KNIFE_R_DATA = [
+    new Uint8Array([0x00,0x00,0x0A,0x16,0x2F,0x03,0x00,0x0C, 0x00,0x00,0x0E,0x1E,0x3F,0x7F,0x83,0x40]),
+    new Uint8Array([0x00,0x00,0x00,0xE0,0x70,0xB8,0xD8,0x68, 0x00,0x6C,0x19,0xFE,0x76,0xBB,0xDB,0xED]),
+    new Uint8Array([0x1F,0x04,0x16,0x16,0x2F,0x7F,0x70,0x26, 0x00,0x00,0x00,0x00,0x30,0x70,0x70,0x3E]),
+    new Uint8Array([0x18,0x80,0x48,0xCC,0x00,0x00,0x70,0xD8, 0x59,0x32,0x38,0x0C,0xB0,0x78,0x70,0x1C]),
+  ];
+  fakePlayerKnifeRPortraits = _genPosePortraits(KNIFE_R_DATA.map(d => decodeTile(d, 0)));
+  const KNIFE_L_DATA = [
+    new Uint8Array([0x00,0x00,0x0A,0x16,0x2F,0x03,0x00,0x0C, 0x00,0x00,0x0E,0x1E,0x3F,0x7F,0x83,0x40]),
+    new Uint8Array([0x00,0x00,0x00,0xE0,0x70,0xB8,0xD8,0x68, 0x00,0x6C,0x19,0xFE,0x76,0xBB,0xDB,0xEC]),
+    new Uint8Array([0x1F,0x04,0x16,0x16,0x0F,0x0F,0x60,0xC6, 0x00,0x00,0x00,0x00,0x50,0xE0,0x60,0x1E]),
+    new Uint8Array([0x13,0x87,0x57,0xF8,0x7E,0x3C,0x1C,0x08, 0x50,0x30,0x30,0x38,0xFE,0x7C,0xFE,0xFA]),
+  ];
+  fakePlayerKnifeLPortraits = _genPosePortraits(KNIFE_L_DATA.map(d => decodeTile(d, 0)));
 
   // Kneel pose — tiles $09-$0C from PPU dump
   const kneelTileData = [
@@ -9384,13 +9410,23 @@ function drawBattle() {
     // Frame 1 (attack-start): arm raised (R=$39, L=$3B/$3C) — same for all weapons
     // Frame 2 (player-slash): body returns to idle
     if (battleState === 'attack-start') {
-      if (isHitRightHand(currentHitIdx)) {
+      const _hw = getHitWeapon(currentHitIdx);
+      const _ws = weaponSubtype(_hw);
+      if ((_ws === 'knife' || _ws === 'dagger') && battleSpriteKnifeBackCanvas) {
+        portraitSrc = battleSpriteKnifeBackCanvas;
+      } else if (isHitRightHand(currentHitIdx)) {
         portraitSrc = battleSpriteAttackCanvas || portraitSrc;
       } else {
         portraitSrc = battleSpriteAttackLCanvas || portraitSrc;
       }
+    } else if (battleState === 'player-slash') {
+      const _hw = getHitWeapon(currentHitIdx);
+      const _ws = weaponSubtype(_hw);
+      if (_ws === 'knife' || _ws === 'dagger') {
+        portraitSrc = (isHitRightHand(currentHitIdx) ? battleSpriteKnifeRCanvas : battleSpriteKnifeLCanvas) || portraitSrc;
+      }
+      // else: fist/sword stays as idle — correct per trace
     }
-    // else: portraitSrc stays as battleSpriteCanvas (idle) — correct per trace
   } else if ((isDefendPose || isItemUsePose) && battleSpriteDefendCanvas) {
     portraitSrc = battleSpriteDefendCanvas;
   } else if (isHitPose && battleSpriteHitCanvas) {
@@ -10164,11 +10200,22 @@ function drawBossSpriteBox() {
         // Determine pose portrait (h-flipped)
         let poseSrc = null;
         if (isOppAttack) {
+          const oppWpnSt = pvpOpponentStats && weaponSubtype(pvpOpponentStats.weaponId);
           const oppHasL = pvpOpponentStats && pvpOpponentStats.weaponL != null;
           const useL = oppHasL && (pvpOpponentHitIdx % 2 === 0);
-          poseSrc = useL
-            ? (fakePlayerAttackLPortraits[palIdx] && fakePlayerAttackLPortraits[palIdx][0])
-            : (fakePlayerAttackPortraits[palIdx] && fakePlayerAttackPortraits[palIdx][0]);
+          if (oppWpnSt === 'knife' || oppWpnSt === 'dagger') {
+            if (battleState === 'boss-flash') {
+              poseSrc = fakePlayerKnifeBackPortraits[palIdx] && fakePlayerKnifeBackPortraits[palIdx][0];
+            } else {
+              poseSrc = useL
+                ? (fakePlayerKnifeLPortraits[palIdx] && fakePlayerKnifeLPortraits[palIdx][0])
+                : (fakePlayerKnifeRPortraits[palIdx] && fakePlayerKnifeRPortraits[palIdx][0]);
+            }
+          } else {
+            poseSrc = useL
+              ? (fakePlayerAttackLPortraits[palIdx] && fakePlayerAttackLPortraits[palIdx][0])
+              : (fakePlayerAttackPortraits[palIdx] && fakePlayerAttackPortraits[palIdx][0]);
+          }
         }
         else if (isOppHit && fakePlayerHitPortraits[palIdx]) poseSrc = fakePlayerHitPortraits[palIdx][0];
 
