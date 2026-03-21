@@ -667,7 +667,7 @@ const LOCATIONS = ['world', 'ur', 'cave-0', 'cave-1', 'cave-2', 'cave-3', 'cryst
 // Full player pool — each has a current location, moves around over time
 const PLAYER_POOL = [
   { name: 'Zephyr',  level: 5,  palIdx: 1, camper: false, loc: 'ur' },
-  { name: 'Mira',    level: 4,  palIdx: 2, camper: false, loc: 'world' },
+  { name: 'Mira',    level: 4,  palIdx: 2, camper: false, loc: 'world', weaponR: 0x1E, weaponL: 0x1F },
   { name: 'Aldric',  level: 5,  palIdx: 3, camper: true,  loc: 'ur' },
   { name: 'Suki',    level: 3,  palIdx: 4, camper: false, loc: 'cave-0' },
   { name: 'Fenris',  level: 5,  palIdx: 5, camper: false, loc: 'cave-1' },
@@ -739,12 +739,15 @@ function generateAllyStats(player) {
   const loc = player.loc;
   // Gear by location (matches chest loot tiers)
   let weaponId = 0x1E, weaponAtk = 6, totalDef = 1; // default: Knife + Cap
-  if (loc === 'cave-1') { weaponId = 0x1F; weaponAtk = 8; totalDef = 3; } // Dagger + Shield
-  else if (loc === 'cave-2') { weaponId = 0x24; weaponAtk = 10; totalDef = 3; } // Longsword + LeatherArmor + Bracers
-  else if (loc === 'cave-3' || loc === 'crystal') { weaponId = 0x24; weaponAtk = 10; totalDef = 7; } // Longsword + full armor
+  if (loc === 'cave-1') { weaponId = 0x1F; weaponAtk = 8; totalDef = 3; }
+  else if (loc === 'cave-2') { weaponId = 0x24; weaponAtk = 10; totalDef = 3; }
+  else if (loc === 'cave-3' || loc === 'crystal') { weaponId = 0x24; weaponAtk = 10; totalDef = 7; }
+  // Override with explicit weapon slots if defined on player entry
+  if (player.weaponR != null) weaponId = player.weaponR;
+  const weaponL = player.weaponL != null ? player.weaponL : null;
   const atk = str + weaponAtk;
   const def = vit + totalDef;
-  return { name: player.name, palIdx: player.palIdx, level: lv, hp, maxHP: hp, atk, def, agi, weaponId, fadeStep: ROSTER_FADE_STEPS };
+  return { name: player.name, palIdx: player.palIdx, level: lv, hp, maxHP: hp, atk, def, agi, weaponId, weaponL, fadeStep: ROSTER_FADE_STEPS };
 }
 // Palette variants — only color 3 changes (original $16 = red outfit)
 // Colors 0=$0F, 1=$36 (skin), 2=$30 (white) stay the same
