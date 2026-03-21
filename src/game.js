@@ -1338,12 +1338,9 @@ function initFakePlayerPortraits(romData) {
     return flipped;
   });
 
-  // Hit full body — ROM 30-33 (hit portrait, confirmed correct) + PPU $05/$06 for lower body
+  // Hit full body — ROM 30-35 (frame 5: tiles 0-3=portrait, 4-5=lower body)
   const hitPortrait4 = [0,1,2,3].map(i => decodeTile(romData, BATTLE_SPRITE_ROM + (30 + i) * 16));
-  const hitLeg2 = [
-    decodeTile(new Uint8Array([0xCC,0x58,0x2F,0x3F,0x3F,0x1F,0x00,0x00, 0x1E,0x5F,0x3F,0x3F,0x3F,0x1F,0x07,0x0F]), 0), // $05
-    decodeTile(new Uint8Array([0xD8,0x70,0x80,0xE0,0xE0,0xC0,0x00,0x00, 0x1C,0x74,0x84,0xE6,0xE6,0xC6,0xC7,0xC7]), 0), // $06
-  ];
+  const hitLeg2 = [34,35].map(i => decodeTile(romData, BATTLE_SPRITE_ROM + i * 16));
   const hitBodyTiles = [...hitPortrait4, ...hitLeg2];
   fakePlayerHitFullBodyCanvases = PLAYER_PALETTES.map((basePal, pi) => {
     const c = document.createElement('canvas');
@@ -1362,7 +1359,7 @@ function initFakePlayerPortraits(romData) {
       }
       fctx.putImageData(img, bx, by);
     });
-    // Legs: PPU $05/$06 from FCEUX battle dump
+    // Legs: ROM 34-35 (hit frame 5, tiles 4-5)
     [[hitBodyTiles[4], 0, 16], [hitBodyTiles[5], 8, 16]].forEach(([px, bx, by]) => {
       const img = fctx.createImageData(8, 8);
       for (let p = 0; p < 64; p++) {
