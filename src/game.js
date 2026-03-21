@@ -9441,8 +9441,8 @@ function drawBattle() {
     const _hw = getHitWeapon(currentHitIdx);
     const _ws = weaponSubtype(_hw);
     if (_ws === 'knife' || _ws === 'dagger') {
-      // knife-dual-trace: arm raises ($43-$46) and STAYS UP throughout attack+slash
-      portraitSrc = battleSpriteKnifeBackCanvas || portraitSrc;
+      // PPU dump confirmed: portrait tiles $01-$04 never change during knife attack.
+      // Animation is the flying blade sprite. Portrait stays idle.
     } else if (battleState === 'attack-start') {
       // fist/sword: arm raised back-swing (ATK_R_39/ATK_L_3B); returns to idle on slash
       if (isHitRightHand(currentHitIdx)) {
@@ -10229,8 +10229,8 @@ function drawBossSpriteBox() {
           const oppHasL = pvpOpponentStats && pvpOpponentStats.weaponL != null;
           const useL = oppHasL && (pvpOpponentHitIdx % 2 === 0);
           if (oppWpnSt === 'knife' || oppWpnSt === 'dagger') {
-            // knife-dual-trace: arm stays raised ($43-$46) throughout entire attack
-            poseSrc = fakePlayerKnifeBackPortraits[palIdx] && fakePlayerKnifeBackPortraits[palIdx][0];
+            // PPU dump confirmed: portrait tiles never change during knife attack.
+            // Animation is the flying blade sprite. Portrait stays idle (poseSrc = null).
           } else if (battleState === 'boss-flash') {
             // fist/sword: raised arm on wind-up, idle on forward slash
             poseSrc = useL
