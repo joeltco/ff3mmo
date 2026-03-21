@@ -445,7 +445,8 @@ function isHitRightHand(hitIdx) {
   const rW = isWeapon(playerWeaponR);
   const lW = isWeapon(playerWeaponL);
   if (rW && lW) return hitIdx % 2 === 0;
-  return rW; // single weapon hand, or unarmed defaults to R
+  if (rW || lW) return rW; // single weapon hand
+  return hitIdx % 2 === 0; // unarmed fists: alternate R/L starting with R
 }
 
 // Inventory system
@@ -668,7 +669,7 @@ const LOCATIONS = ['world', 'ur', 'cave-0', 'cave-1', 'cave-2', 'cave-3', 'cryst
 // Full player pool — each has a current location, moves around over time
 const PLAYER_POOL = [
   { name: 'Zephyr',  level: 5,  palIdx: 1, camper: false, loc: 'ur' },
-  { name: 'Mira',    level: 4,  palIdx: 2, camper: false, loc: 'world', weaponR: 0x1E, weaponL: 0x1F },
+  { name: 'Mira',    level: 4,  palIdx: 2, camper: false, loc: 'world', weaponR: 0, weaponL: 0 },
   { name: 'Aldric',  level: 5,  palIdx: 3, camper: true,  loc: 'ur' },
   { name: 'Suki',    level: 3,  palIdx: 4, camper: false, loc: 'cave-0' },
   { name: 'Fenris',  level: 5,  palIdx: 5, camper: false, loc: 'cave-1' },
