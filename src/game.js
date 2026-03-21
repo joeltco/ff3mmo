@@ -9083,9 +9083,10 @@ function updateBattle(dt) {
   } else if (battleState === 'boss-flash') {
     if (battleTimer >= BOSS_PREFLASH_MS) {
       // Choose target: player or an ally
+      // PVP main opponent always targets the player (1v1 duel — no ally interception)
       const livingAllies = battleAllies.filter(a => a.hp > 0);
       let targetAlly = -1;
-      if (livingAllies.length > 0) {
+      if (livingAllies.length > 0 && !(isPVPBattle && pvpCurrentEnemyAllyIdx < 0)) {
         // 1/(1+livingAllies) chance to target player, else random ally
         if (Math.random() >= 1 / (1 + livingAllies.length)) {
           const allyOptions = battleAllies.map((a, i) => a.hp > 0 ? i : -1).filter(i => i >= 0);
