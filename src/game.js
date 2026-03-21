@@ -9443,17 +9443,14 @@ function drawBattle() {
     const _hw = getHitWeapon(currentHitIdx);
     const _ws = weaponSubtype(_hw);
     if (battleState === 'attack-start') {
-      // PPU dump: body tiles never change during knife attack — only blade position animates
-      if (_ws !== 'knife' && _ws !== 'dagger') {
-        if (isHitRightHand(currentHitIdx)) {
-          portraitSrc = battleSpriteAttackCanvas || portraitSrc;
-        } else {
-          portraitSrc = battleSpriteAttackLCanvas || portraitSrc;
-        }
+      // Back-swing: ATK_R_39/ATK_L_3B tiles (from f=1320 PPU dump) — same for all weapon types
+      if (isHitRightHand(currentHitIdx)) {
+        portraitSrc = battleSpriteAttackCanvas || portraitSrc;
+      } else {
+        portraitSrc = battleSpriteAttackLCanvas || portraitSrc;
       }
-      // knife/dagger: portrait stays idle; blade canvas positioned behind body communicates back-swing
     }
-    // player-slash: portrait stays idle for all weapons; slash frames + blade position show swing
+    // player-slash: ATTACK POSE dump shows body tiles stay idle during forward slash
   } else if ((isDefendPose || isItemUsePose) && battleSpriteDefendCanvas) {
     portraitSrc = battleSpriteDefendCanvas;
   } else if (isHitPose && battleSpriteHitCanvas) {
@@ -10230,13 +10227,14 @@ function drawBossSpriteBox() {
           const oppWpnSt = pvpOpponentStats && weaponSubtype(pvpOpponentStats.weaponId);
           const oppHasL = pvpOpponentStats && pvpOpponentStats.weaponL != null;
           const useL = oppHasL && (pvpOpponentHitIdx % 2 === 0);
-          if (oppWpnSt === 'knife' || oppWpnSt === 'dagger') {
-            // PPU dump: body tiles stay idle during knife attack; blade position conveys swing direction
-            poseSrc = null;
-          } else {
+          // Back-swing (boss-flash) uses ATK_R/L portrait (verified f=1320 PPU dump)
+          // Forward slash (enemy-attack/damage-show): body stays idle (ATTACK POSE dump)
+          if (battleState === 'boss-flash') {
             poseSrc = useL
               ? (fakePlayerAttackLPortraits[palIdx] && fakePlayerAttackLPortraits[palIdx][0])
               : (fakePlayerAttackPortraits[palIdx] && fakePlayerAttackPortraits[palIdx][0]);
+          } else {
+            poseSrc = null; // idle during forward slash
           }
         }
         else if (isOppHit && fakePlayerHitPortraits[palIdx]) poseSrc = fakePlayerHitPortraits[palIdx][0];
