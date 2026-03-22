@@ -331,6 +331,10 @@ function setEquipSlotId(eqIdx, id) {
   }
 }
 
+function _recalcCombatStats() {
+  playerATK = playerStats.str + (ITEMS.get(playerWeaponR)?.atk || 0) + (ITEMS.get(playerWeaponL)?.atk || 0);
+  recalcDEF();
+}
 function recalcDEF() {
   const rDef = ITEMS.get(playerWeaponR)?.def || 0;
   const lDef = ITEMS.get(playerWeaponL)?.def || 0;
@@ -1333,8 +1337,7 @@ function initAdamantoise(romData) {
   normal.height = 16;
   const actx = normal.getContext('2d');
 
-  const layout = [[0,0], [8,0], [0,8], [8,8]];
-  for (let i = 0; i < 4; i++) _renderDecodedTile(actx, tiles[i], i < 2 ? palTop : palBot, layout[i][0], layout[i][1]);
+  for (let i = 0; i < 4; i++) _renderDecodedTile(actx, tiles[i], i < 2 ? palTop : palBot, _BATTLE_LAYOUT[i][0], _BATTLE_LAYOUT[i][1]);
 
   // Flipped frame
   const flipped = _hflipCanvas16(normal);
@@ -1361,8 +1364,7 @@ function initPlayerStats(romData) {
   playerStats = { str, agi, vit, int: int_, mnd, hp, maxHP: hp, mp, maxMP: mp, level: 1, exp: 0, expToNext: 0 };
   playerHP = hp;
   playerMP = mp;
-  playerATK = str + (ITEMS.get(playerWeaponR)?.atk || 0) + (ITEMS.get(playerWeaponL)?.atk || 0);
-  recalcDEF();
+  _recalcCombatStats();
 }
 
 function initExpTable(romData) {
@@ -1406,8 +1408,7 @@ function grantExp(amount) {
     _fullHeal();
 
     // Update derived combat stats
-    playerATK = playerStats.str + (ITEMS.get(playerWeaponR)?.atk || 0) + (ITEMS.get(playerWeaponL)?.atk || 0);
-    recalcDEF();
+    _recalcCombatStats();
 
     // Next threshold
     if (lv - 1 < 98) playerStats.expToNext = expTable[lv - 1];
@@ -1701,10 +1702,8 @@ function initMoogleSprite(romData) {
   const normal = document.createElement('canvas');
   normal.width = 16; normal.height = 16;
   const mctx = normal.getContext('2d');
-  const layout = [[0,0], [8,0], [0,8], [8,8]];
-
   for (let i = 0; i < 4; i++) {
-    _blitTile(mctx, tiles[i], MOOGLE_PAL, layout[i][0], layout[i][1]);
+    _blitTile(mctx, tiles[i], MOOGLE_PAL, _BATTLE_LAYOUT[i][0], _BATTLE_LAYOUT[i][1]);
   }
 
   const flipped = _hflipCanvas16(normal);
@@ -1729,10 +1728,8 @@ function renderSpriteFaded(romData, spriteOff, basePal, fadeSteps) {
   const c = document.createElement('canvas');
   c.width = 16; c.height = 16;
   const cctx = c.getContext('2d');
-  const layout = [[0,0], [8,0], [0,8], [8,8]];
-
   for (let i = 0; i < 4; i++) {
-    _blitTile(cctx, tiles[i], fadedPal, layout[i][0], layout[i][1]);
+    _blitTile(cctx, tiles[i], fadedPal, _BATTLE_LAYOUT[i][0], _BATTLE_LAYOUT[i][1]);
   }
   return c;
 }
@@ -1760,8 +1757,7 @@ function renderBossFaded(romData, fadeSteps) {
   const c = document.createElement('canvas');
   c.width = 16; c.height = 16;
   const cctx = c.getContext('2d');
-  const layout = [[0,0], [8,0], [0,8], [8,8]];
-  for (let i = 0; i < 4; i++) _renderDecodedTile(cctx, tiles[i], i < 2 ? fadedTop : fadedBot, layout[i][0], layout[i][1]);
+  for (let i = 0; i < 4; i++) _renderDecodedTile(cctx, tiles[i], i < 2 ? fadedTop : fadedBot, _BATTLE_LAYOUT[i][0], _BATTLE_LAYOUT[i][1]);
   return c;
 }
 
@@ -2639,7 +2635,6 @@ function _itemSelectNav(isEquipPage, totalPages, pageRows) {
 function _itemSelectSwap(isEquipPage, gIdx) {
   const srcEquip = itemHeldIdx <= -100;
   const dstEquip = isEquipPage;
-  const _atk = () => { playerATK = playerStats.str + (ITEMS.get(playerWeaponR)?.atk || 0) + (ITEMS.get(playerWeaponL)?.atk || 0); };
   if (!srcEquip && !dstEquip) {
     // Inv → Inv swap
     const dstIdx = (itemPage - 1) * INV_SLOTS + itemPageCursor;
@@ -2657,7 +2652,7 @@ function _itemSelectSwap(isEquipPage, gIdx) {
       removeItem(item.id);
       if (oldWeapon !== 0) addItem(oldWeapon, 1);
       itemSelectList[itemHeldIdx] = oldWeapon !== 0 ? { id: oldWeapon, count: 1 } : null;
-      _atk(); itemHeldIdx = -1; playSFX(SFX.CONFIRM);
+      _recalcCombatStats(); itemHeldIdx = -1; playSFX(SFX.CONFIRM);
     } else { playSFX(SFX.ERROR); itemHeldIdx = -1; }
   } else if (srcEquip && !dstEquip) {
     // Equip → Inv
@@ -2669,17 +2664,17 @@ function _itemSelectSwap(isEquipPage, gIdx) {
       if (srcHand === 0) playerWeaponR = invItem.id; else playerWeaponL = invItem.id;
       removeItem(invItem.id); addItem(handWeaponId, 1);
       itemSelectList[dstIdx] = { id: handWeaponId, count: 1 };
-      _atk(); itemHeldIdx = -1; playSFX(SFX.CONFIRM);
+      _recalcCombatStats(); itemHeldIdx = -1; playSFX(SFX.CONFIRM);
     } else if (!invItem) {
       if (srcHand === 0) playerWeaponR = 0; else playerWeaponL = 0;
       addItem(handWeaponId, 1);
       itemSelectList[dstIdx] = { id: handWeaponId, count: 1 };
-      _atk(); itemHeldIdx = -1; playSFX(SFX.CONFIRM);
+      _recalcCombatStats(); itemHeldIdx = -1; playSFX(SFX.CONFIRM);
     } else { playSFX(SFX.ERROR); itemHeldIdx = -1; }
   } else {
     // Equip → Equip (swap hands)
     const tmp = playerWeaponR; playerWeaponR = playerWeaponL; playerWeaponL = tmp;
-    _atk(); itemHeldIdx = -1; playSFX(SFX.CONFIRM);
+    _recalcCombatStats(); itemHeldIdx = -1; playSFX(SFX.CONFIRM);
   }
 }
 
@@ -3123,8 +3118,7 @@ function _equipBestLeftHand() {
 function _equipOptimum() {
   _equipBestMainSlots();
   _equipBestLeftHand();
-  playerATK = playerStats.str + (ITEMS.get(playerWeaponR)?.atk || 0) + (ITEMS.get(playerWeaponL)?.atk || 0);
-  recalcDEF();
+  _recalcCombatStats();
   if (selectCursor >= 0 && saveSlots[selectCursor]) { saveSlots[selectCursor].inventory = { ...playerInventory }; saveSlotsToDB(); }
   playSFX(SFX.CONFIRM);
 }
@@ -3178,8 +3172,7 @@ function _pauseInputEquipItemSelect() {
         removeItem(pick.id);
         if (oldId !== 0) addItem(oldId, 1);
       }
-      playerATK = playerStats.str + (ITEMS.get(playerWeaponR)?.atk || 0) + (ITEMS.get(playerWeaponL)?.atk || 0);
-      recalcDEF();
+      _recalcCombatStats();
       if (selectCursor >= 0 && saveSlots[selectCursor]) {
         saveSlots[selectCursor].inventory = { ...playerInventory };
         saveSlotsToDB();
@@ -4260,8 +4253,7 @@ function render() {
   if (shakeActive) camX += (Math.floor(shakeTimer / (1000 / 60)) & 2) ? 2 : -2;
   if (battleShakeTimer > 0) camX += (Math.floor(battleShakeTimer / (1000 / 60)) & 2) ? 2 : -2;
 
-  ctx.save();
-  ctx.beginPath(); ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H); ctx.clip();
+  _clipToViewport();
   _renderMapAndWater(camX, camY, SCREEN_CENTER_X, SCREEN_CENTER_Y + 3, SCREEN_CENTER_Y);
   _renderStarSpiral();
   ctx.restore();
@@ -4312,8 +4304,7 @@ function _drawTopBoxOverlay(isFading) {
     }
     drawTopBoxBorder(loadFade);
     if (topBoxNameBytes && !isFading) {
-      const fadedPal = [0x0F, 0x0F, 0x0F, 0x30];
-      for (let s = 0; s < loadFade; s++) fadedPal[3] = nesColorFade(fadedPal[3]);
+      const fadedPal = _makeFadedPal(loadFade);
       const tw = measureText(topBoxNameBytes);
       drawText(ctx, 8 + Math.floor((240 - tw) / 2), 12, topBoxNameBytes, fadedPal);
     }
@@ -4327,8 +4318,7 @@ function _drawTopBoxOverlay(isFading) {
   }
   if (isFading && topBoxNameBytes) {
     if (transState !== 'loading' && !topBoxIsTown) drawTopBoxBorder(topBoxFadeStep);
-    const fadedPal = [0x0F, 0x0F, 0x0F, 0x30];
-    for (let s = 0; s < topBoxFadeStep; s++) fadedPal[3] = nesColorFade(fadedPal[3]);
+    const fadedPal = _makeFadedPal(topBoxFadeStep);
     const tw = measureText(topBoxNameBytes);
     drawText(ctx, 8 + Math.floor((240 - tw) / 2), 12, topBoxNameBytes, fadedPal);
   }
@@ -5142,8 +5132,7 @@ function _updateTitleMainOutCase() {
     playerHead = slot.stats.head || 0x00;
     playerBody = slot.stats.body || 0x00;
     playerArms = slot.stats.arms || 0x00;
-    playerATK = playerStats.str + (ITEMS.get(playerWeaponR)?.atk || 0) + (ITEMS.get(playerWeaponL)?.atk || 0);
-    recalcDEF();
+    _recalcCombatStats();
   }
   playerInventory = (slot && slot.inventory) ? { ...slot.inventory } : {};
   playerGil = (slot && slot.gil) || 0;
@@ -7244,8 +7233,7 @@ function _drawBattleCritFlash() {
   if (critFlashTimer < 0) return;
   if (critFlashTimer === 0) critFlashTimer = Date.now();
   if (Date.now() - critFlashTimer < 17) {
-    ctx.save();
-    ctx.beginPath(); ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H); ctx.clip();
+    _clipToViewport();
     ctx.fillStyle = '#DAA336';
     ctx.fillRect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
     ctx.restore();
@@ -7254,8 +7242,7 @@ function _drawBattleCritFlash() {
 function _drawBattleStrobeFlash() {
   if (battleState !== 'flash-strobe') return;
   if (!(Math.floor(battleTimer / BATTLE_FLASH_FRAME_MS) & 1)) return;
-  ctx.save();
-  ctx.beginPath(); ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H); ctx.clip();
+  _clipToViewport();
   _grayViewport();
 }
 function _drawBattleDefeat() {
@@ -7756,8 +7743,7 @@ function _drawBossSpriteBoxBoss(centerX, centerY) {
   const isClose  = battleState === 'boss-box-close' || (!isRandomEncounter && battleState === 'defeat-close');
   const fullW = 64, fullH = 64;
 
-  ctx.save();
-  ctx.beginPath(); ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H); ctx.clip();
+  _clipToViewport();
 
   const { boxW, boxH } = _calcBoxExpandSize(fullW, fullH, isExpand, isClose);
   _drawBorderedBox(centerX - Math.floor(boxW / 2), centerY - Math.floor(boxH / 2), boxW, boxH);
@@ -8005,8 +7991,7 @@ function _drawVictoryMessage(boxX, boxY, s) {
     fadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
   else if (s.isVicFadeOut || s.isExpFadeOut || s.isGilFadeOut || s.isItemFadeOut || s.isOut)
     fadeStep = Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
-  const fadedPal = [0x0F, 0x0F, 0x0F, 0x30];
-  for (let i = 0; i < fadeStep; i++) fadedPal[3] = nesColorFade(fadedPal[3]);
+  const fadedPal = _makeFadedPal(fadeStep);
   let msg;
   if (s.isVicText || s.isVicHold || s.isVicFadeOut) msg = BATTLE_VICTORY;
   else if (s.isExpText || s.isExpHold || s.isExpFadeOut) msg = makeExpText(encounterExpGained);
@@ -8063,17 +8048,16 @@ function _drawVictoryRunText(boxX, boxY, isIn, isOut) {
 function _drawVictoryRunFail(boxX, boxY, isNameIn, isTextIn, isTextOut) {
   _drawBorderedBox(boxX, boxY, VICTORY_BOX_W, VICTORY_BOX_H);
   const RUN_FAIL_STEP_MS = 50;
-  const fadedPal = [0x0F, 0x0F, 0x0F, 0x30];
   if (isNameIn) {
     const fadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(battleTimer / RUN_FAIL_STEP_MS), BATTLE_TEXT_STEPS);
-    for (let s = 0; s < fadeStep; s++) fadedPal[3] = nesColorFade(fadedPal[3]);
+    const fadedPal = _makeFadedPal(fadeStep);
     const enemyName = _battleEnemyName();
     const nameTw = measureText(enemyName);
     drawText(ctx, boxX + Math.floor((VICTORY_BOX_W - nameTw) / 2), boxY + Math.floor((VICTORY_BOX_H - 8) / 2), enemyName, fadedPal);
   } else {
-    let fadeStep = isTextIn ? BATTLE_TEXT_STEPS - Math.min(Math.floor(battleTimer / RUN_FAIL_STEP_MS), BATTLE_TEXT_STEPS)
-                            : isTextOut ? Math.min(Math.floor(battleTimer / RUN_FAIL_STEP_MS), BATTLE_TEXT_STEPS) : 0;
-    for (let s = 0; s < fadeStep; s++) fadedPal[3] = nesColorFade(fadedPal[3]);
+    const fadeStep = isTextIn ? BATTLE_TEXT_STEPS - Math.min(Math.floor(battleTimer / RUN_FAIL_STEP_MS), BATTLE_TEXT_STEPS)
+                              : isTextOut ? Math.min(Math.floor(battleTimer / RUN_FAIL_STEP_MS), BATTLE_TEXT_STEPS) : 0;
+    const fadedPal = _makeFadedPal(fadeStep);
     const tw = measureText(BATTLE_CANT_ESCAPE);
     drawText(ctx, boxX + Math.floor((VICTORY_BOX_W - tw) / 2), boxY + Math.floor((VICTORY_BOX_H - 8) / 2), BATTLE_CANT_ESCAPE, fadedPal);
   }
