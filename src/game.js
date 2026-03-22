@@ -924,23 +924,8 @@ function initHUD(romData) {
 }
 
 function _renderPortrait(tiles, layout, palette) {
-  const c = document.createElement('canvas');
-  c.width = 16; c.height = 16;
-  const pctx = c.getContext('2d');
-  for (let i = 0; i < 4; i++) {
-    const img = pctx.createImageData(8, 8);
-    const px = tiles[i];
-    for (let p = 0; p < 64; p++) {
-      const ci = px[p];
-      if (ci === 0) { img.data[p * 4 + 3] = 0; }
-      else {
-        const rgb = NES_SYSTEM_PALETTE[palette[ci]] || [0, 0, 0];
-        img.data[p * 4] = rgb[0]; img.data[p * 4 + 1] = rgb[1];
-        img.data[p * 4 + 2] = rgb[2]; img.data[p * 4 + 3] = 255;
-      }
-    }
-    pctx.putImageData(img, layout[i][0], layout[i][1]);
-  }
+  const c = _makeCanvas16(); const pctx = c.getContext('2d');
+  for (let i = 0; i < 4; i++) _blitTile(pctx, tiles[i], palette, layout[i][0], layout[i][1]);
   return c;
 }
 
@@ -981,17 +966,7 @@ function _initFakePosePortraits(romData) {
   fakePlayerKneelPortraits    = _genPosePortraits(_FP_KNEEL.map(d => decodeTile(d, 0)));
 }
 // Build a 16×24 h-flipped full-body canvas from 4 top tiles + 2 leg tiles
-function _renderDecodedTile(ctx, tile, pal, ox, oy) {
-  const img = ctx.createImageData(8, 8);
-  for (let p = 0; p < 64; p++) {
-    const ci = tile[p];
-    if (ci === 0) { img.data[p * 4 + 3] = 0; } else {
-      const rgb = NES_SYSTEM_PALETTE[pal[ci]] || [0, 0, 0];
-      img.data[p*4]=rgb[0]; img.data[p*4+1]=rgb[1]; img.data[p*4+2]=rgb[2]; img.data[p*4+3]=255;
-    }
-  }
-  ctx.putImageData(img, ox, oy);
-}
+function _renderDecodedTile(ctx, tile, pal, ox, oy) { _blitTile(ctx, tile, pal, ox, oy); }
 function _buildFullBody16x24Canvas(topTiles4, legL, legR, pal) {
   const c = document.createElement('canvas');
   c.width = 16; c.height = 24;
@@ -1962,6 +1937,15 @@ function nesColorFade(c) {
 function _makeCanvas16() {
   const c = document.createElement('canvas'); c.width = 16; c.height = 16; return c;
 }
+function _resetBattleVars() {
+  battleCursor = 0; battleMessage = null;
+  bossDamageNum = null; playerDamageNum = null; playerHealNum = null; enemyHealNum = null;
+  encounterDropItem = null; bossFlashTimer = 0; battleShakeTimer = 0;
+  isDefending = false; battleAllies = []; allyJoinRound = 0;
+  currentAllyAttacker = -1; allyTargetIndex = -1; allyHitResult = null;
+  allyDamageNums = {}; allyShakeTimer = {}; enemyTargetAllyIdx = -1; allyExitTimer = 0;
+  southWindTargets = []; southWindHitIdx = 0; southWindDmgNums = {};
+}
 function _zPressed() { if (!keys['z'] && !keys['Z']) return false; keys['z'] = false; keys['Z'] = false; return true; }
 function _xPressed() { if (!keys['x'] && !keys['X']) return false; keys['x'] = false; keys['X'] = false; return true; }
 function _hflipCanvas16(src) {
@@ -1992,6 +1976,9 @@ function _makeFadedPal(fadeStep) {
 }
 function _stepPalFade(pal) {
   pal[1] = nesColorFade(pal[1]); pal[2] = nesColorFade(pal[2]); pal[3] = nesColorFade(pal[3]);
+}
+function _loadBattlePalette(romData, bgId) {
+  return [0x0F, romData[BATTLE_BG_PAL_C1 + bgId], romData[BATTLE_BG_PAL_C2 + bgId], romData[BATTLE_BG_PAL_C3 + bgId]];
 }
 function _loadBattleMetaTiles(romData) {
   const metaTiles = [];
@@ -2027,12 +2014,7 @@ function renderBattleBgWithPalette(romData, bgId, palette, tiles, metaTiles, til
 
 function renderBattleBg(romData, bgId) {
   // Palette: color 0 = $0F (black), colors 1-3 from ROM
-  const palette = [
-    0x0F,
-    romData[BATTLE_BG_PAL_C1 + bgId],
-    romData[BATTLE_BG_PAL_C2 + bgId],
-    romData[BATTLE_BG_PAL_C3 + bgId],
-  ];
+  const palette = _loadBattlePalette(romData, bgId);
 
   // Decode 16 tiles (8×8 each, 2BPP)
   const tiles = [];
@@ -2157,12 +2139,7 @@ function initTitleSky(romData) {
 
 function initTitleUnderwater(romData) {
   const bgId = 18; // undersea Nautilus battle BG ($12/$22/$33 blue palette)
-  const palette = [
-    0x0F,
-    romData[BATTLE_BG_PAL_C1 + bgId],
-    romData[BATTLE_BG_PAL_C2 + bgId],
-    romData[BATTLE_BG_PAL_C3 + bgId],
-  ];
+  const palette = _loadBattlePalette(romData, bgId);
 
   const tiles = [];
   const tileBase = BATTLE_BG_TILES_ROM + bgId * 0x100;
@@ -2236,11 +2213,7 @@ function _renderOceanRow(tiles, metaTiles, tilemap, pal, rowIdx) {
 }
 
 function _buildOceanPalettes(romData, bgId) {
-  const skyPal = [0x0F,
-    romData[BATTLE_BG_PAL_C1 + bgId],
-    romData[BATTLE_BG_PAL_C2 + bgId],
-    romData[BATTLE_BG_PAL_C3 + bgId],
-  ];
+  const skyPal = _loadBattlePalette(romData, bgId);
   const wPalOff = 0x001650 + TITLE_WATER_PAL_IDX * 4;
   const wavePal = [0x0F, romData[wPalOff], romData[wPalOff + 2], romData[wPalOff + 3]];
   return { skyPal, wavePal };
@@ -6443,28 +6416,7 @@ function startPVPBattle(target) {
   // Use battle music (not boss music) for PVP
   battleState = 'flash-strobe';
   battleTimer = 0;
-  battleCursor = 0;
-  battleMessage = null;
-  bossDamageNum = null;
-  playerDamageNum = null;
-  playerHealNum = null;
-  enemyHealNum = null;
-  encounterDropItem = null;
-  bossFlashTimer = 0;
-  battleShakeTimer = 0;
-  isDefending = false;
-  battleAllies = [];
-  allyJoinRound = 0;
-  currentAllyAttacker = -1;
-  allyTargetIndex = -1;
-  allyHitResult = null;
-  allyDamageNums = {};
-  allyShakeTimer = {};
-  enemyTargetAllyIdx = -1;
-  allyExitTimer = 0;
-  southWindTargets = [];
-  southWindHitIdx = 0;
-  southWindDmgNums = {};
+  _resetBattleVars();
   pauseMusic();
   playTrack(TRACKS.BATTLE);
 }
@@ -6473,29 +6425,8 @@ function startBattle() {
   battleState = 'roar-hold';
   battleTimer = 0;
   showMsgBox(BATTLE_ROAR, () => { battleState = 'flash-strobe'; battleTimer = 0; playSFX(SFX.BATTLE_SWIPE); });
-  battleCursor = 0;
-  battleMessage = null;
-  bossDamageNum = null;
-  playerDamageNum = null;
-  playerHealNum = null;
-  enemyHealNum = null;
-  encounterDropItem = null;
-  bossFlashTimer = 0;
-  battleShakeTimer = 0;
+  _resetBattleVars();
   bossHP = BOSS_MAX_HP;
-  isDefending = false;
-  battleAllies = [];
-  allyJoinRound = 0;
-  currentAllyAttacker = -1;
-  allyTargetIndex = -1;
-  allyHitResult = null;
-  allyDamageNums = {};
-  allyShakeTimer = {};
-  enemyTargetAllyIdx = -1;
-  allyExitTimer = 0;
-  southWindTargets = [];
-  southWindHitIdx = 0;
-  southWindDmgNums = {};
   playSFX(SFX.EARTHQUAKE);
 }
 
