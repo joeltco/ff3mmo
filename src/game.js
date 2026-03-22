@@ -1937,6 +1937,26 @@ function nesColorFade(c) {
 function _makeCanvas16() {
   const c = document.createElement('canvas'); c.width = 16; c.height = 16; return c;
 }
+function _grayViewport() {
+  ctx.filter = 'saturate(0)';
+  ctx.drawImage(ctx.canvas, HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H,
+                            HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
+  ctx.filter = 'none'; ctx.restore();
+}
+function _pausePanelLayout() {
+  const px = HUD_VIEW_X, finalY = HUD_VIEW_Y, pw = PAUSE_MENU_W, ph = PAUSE_MENU_H;
+  const isInvState = pauseState.startsWith('inv-') || pauseState === 'inventory';
+  const isEqState  = pauseState.startsWith('eq-')  || pauseState === 'equip';
+  let panelY = finalY;
+  if (pauseState === 'scroll-in') {
+    const t = Math.min(pauseTimer / PAUSE_SCROLL_MS, 1);
+    panelY = finalY - ph + t * ph;
+  } else if (pauseState === 'scroll-out') {
+    const t = Math.min(pauseTimer / PAUSE_SCROLL_MS, 1);
+    panelY = finalY - t * ph;
+  }
+  return { px, finalY, pw, ph, isInvState, isEqState, panelY };
+}
 function _resetBattleVars() {
   battleCursor = 0; battleMessage = null;
   bossDamageNum = null; playerDamageNum = null; playerHealNum = null; enemyHealNum = null;
@@ -5977,17 +5997,7 @@ function roundTopBoxCorners() {
 }
 
 function _drawPauseBox() {
-  const px = HUD_VIEW_X, finalY = HUD_VIEW_Y, pw = PAUSE_MENU_W, ph = PAUSE_MENU_H;
-  const isInvState = pauseState.startsWith('inv-') || pauseState === 'inventory';
-  const isEqState  = pauseState.startsWith('eq-')  || pauseState === 'equip';
-  let panelY = finalY;
-  if (pauseState === 'scroll-in') {
-    const t = Math.min(pauseTimer / PAUSE_SCROLL_MS, 1);
-    panelY = finalY - ph + t * ph;
-  } else if (pauseState === 'scroll-out') {
-    const t = Math.min(pauseTimer / PAUSE_SCROLL_MS, 1);
-    panelY = finalY - t * ph;
-  }
+  const { px, finalY, pw, ph, isInvState, isEqState, panelY } = _pausePanelLayout();
   if (isInvState || isEqState) {
     let t = 1;
     if (pauseState === 'inv-expand' || pauseState === 'eq-expand') {
@@ -6006,17 +6016,7 @@ function _drawPauseBox() {
   }
 }
 function _drawPauseMenuText() {
-  const px = HUD_VIEW_X, finalY = HUD_VIEW_Y, pw = PAUSE_MENU_W, ph = PAUSE_MENU_H;
-  const isInvState = pauseState.startsWith('inv-') || pauseState === 'inventory';
-  const isEqState  = pauseState.startsWith('eq-')  || pauseState === 'equip';
-  let panelY = finalY;
-  if (pauseState === 'scroll-in') {
-    const t = Math.min(pauseTimer / PAUSE_SCROLL_MS, 1);
-    panelY = finalY - ph + t * ph;
-  } else if (pauseState === 'scroll-out') {
-    const t = Math.min(pauseTimer / PAUSE_SCROLL_MS, 1);
-    panelY = finalY - t * ph;
-  }
+  const { px, finalY, pw, ph, isInvState, isEqState, panelY } = _pausePanelLayout();
   const showPauseText = pauseState === 'text-in' || pauseState === 'open' || pauseState === 'text-out' ||
                         pauseState === 'inv-text-out' || pauseState === 'inv-text-in' ||
                         pauseState === 'eq-text-out' || pauseState === 'eq-text-in';
@@ -7476,11 +7476,7 @@ function _drawBattleStrobeFlash() {
   if (!(Math.floor(battleTimer / BATTLE_FLASH_FRAME_MS) & 1)) return;
   ctx.save();
   ctx.beginPath(); ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H); ctx.clip();
-  ctx.filter = 'saturate(0)';
-  ctx.drawImage(ctx.canvas, HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H,
-                            HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
-  ctx.filter = 'none';
-  ctx.restore();
+  _grayViewport();
 }
 function _drawBattleDefeat() {
   const ecx = HUD_VIEW_X + HUD_VIEW_W / 2;
@@ -8517,11 +8513,7 @@ function _drawPondStrobe() {
   const frame = Math.floor((BATTLE_FLASH_FRAMES * BATTLE_FLASH_FRAME_MS - pondStrobeTimer) / BATTLE_FLASH_FRAME_MS);
   if (!(frame & 1)) return;
   _clipToViewport();
-  ctx.filter = 'saturate(0)';
-  ctx.drawImage(ctx.canvas, HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H,
-                            HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
-  ctx.filter = 'none';
-  ctx.restore();
+  _grayViewport();
 }
 
 function _updateStarEffect(dt) {
