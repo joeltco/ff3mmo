@@ -5822,7 +5822,8 @@ function _drawPauseInventory() {
   const showInvItems = pauseState === 'inv-items-in' || pauseState === 'inventory' || pauseState === 'inv-items-out' ||
     pauseState === 'inv-target' || pauseState === 'inv-heal';
   if (!showInvItems) return;
-  const fadedPal = _makeFadedPal(_pauseFadeStep('inv-items-in', 'inv-items-out'));
+  const fadeStep = _pauseFadeStep('inv-items-in', 'inv-items-out');
+  const fadedPal = _makeFadedPal(fadeStep);
   const entries = Object.entries(playerInventory).filter(([,c]) => c > 0);
   const maxVisible = Math.floor((HUD_VIEW_H - 16) / 14);
   const startIdx = Math.max(0, Math.min(pauseInvScroll, Math.max(0, entries.length - maxVisible)));
@@ -5846,7 +5847,8 @@ function _drawPauseEquipSlots() {
   const showEqSlots = pauseState === 'eq-slots-in' || pauseState === 'equip' || pauseState === 'eq-slots-out' ||
     pauseState === 'eq-items-in' || pauseState === 'eq-item-select' || pauseState === 'eq-items-out';
   if (!showEqSlots) return;
-  const fadedPal = _makeFadedPal(_pauseFadeStep('eq-slots-in', 'eq-slots-out'));
+  const fadeStep = _pauseFadeStep('eq-slots-in', 'eq-slots-out');
+  const fadedPal = _makeFadedPal(fadeStep);
   const EQ_LABELS = [
     new Uint8Array([0x9B,0xC4,0x91,0xCA,0xD7,0xCD]),
     new Uint8Array([0x95,0xC4,0x91,0xCA,0xD7,0xCD]),
