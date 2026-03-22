@@ -792,6 +792,38 @@ let shakeActive = false;
 let shakeTimer = 0;
 let shakePendingAction = null;
 
+function _onChatKeyDown(e) {
+  e.preventDefault();
+  if (e.key === 'Enter') {
+    if (chatInputText.length > 0) {
+      const slot = saveSlots[selectCursor];
+      const senderName = (slot && slot.name) ? _nesNameToString(slot.name) : 'You';
+      addChatMessage(senderName + ': ' + chatInputText, 'chat');
+    }
+    chatInputActive = false; chatInputText = '';
+  } else if (e.key === 'Escape') {
+    chatInputActive = false; chatInputText = '';
+  } else if (e.key === 'Backspace') {
+    chatInputText = chatInputText.slice(0, -1);
+  } else if (e.key.length === 1 && chatInputText.length < 42) {
+    chatInputText += e.key;
+  }
+}
+function _onNameEntryKeyDown(e) {
+  e.preventDefault();
+  if (e.key === 'Enter' && nameBuffer.length > 0) {
+    saveSlots[selectCursor] = { name: new Uint8Array(nameBuffer), level: 1, exp: 0, stats: null, inventory: {} };
+    saveSlotsToDB();
+    titleState = 'select'; titleTimer = 0;
+  } else if (e.key === 'Backspace') {
+    if (nameBuffer.length > 0) nameBuffer.pop();
+    else { titleState = 'select'; titleTimer = 0; }
+  } else if (e.key.length === 1 && /[a-zA-Z]/.test(e.key) && nameBuffer.length < NAME_MAX_LEN) {
+    const ch = e.key;
+    if (ch >= 'A' && ch <= 'Z') nameBuffer.push(0x8A + ch.charCodeAt(0) - 65);
+    else nameBuffer.push(0xCA + ch.charCodeAt(0) - 97);
+  }
+}
 export function init() {
   canvas = document.getElementById('game-canvas');
   ctx = canvas.getContext('2d');
@@ -799,46 +831,9 @@ export function init() {
   canvas.height = CANVAS_H;
   ctx.imageSmoothingEnabled = false;
 
-  // Input
   window.addEventListener('keydown', (e) => {
-    // Chat input mode — capture all keys
-    if (chatInputActive) {
-      e.preventDefault();
-      if (e.key === 'Enter') {
-        if (chatInputText.length > 0) {
-          const slot = saveSlots[selectCursor];
-          const senderName = (slot && slot.name) ? _nesNameToString(slot.name) : 'You';
-          addChatMessage(senderName + ': ' + chatInputText, 'chat');
-        }
-        chatInputActive = false;
-        chatInputText = '';
-      } else if (e.key === 'Escape') {
-        chatInputActive = false;
-        chatInputText = '';
-      } else if (e.key === 'Backspace') {
-        chatInputText = chatInputText.slice(0, -1);
-      } else if (e.key.length === 1 && chatInputText.length < 42) {
-        chatInputText += e.key;
-      }
-      return;
-    }
-    // Name entry mode — capture all keys, block game controls
-    if (titleState === 'name-entry') {
-      e.preventDefault();
-      if (e.key === 'Enter' && nameBuffer.length > 0) {
-        saveSlots[selectCursor] = { name: new Uint8Array(nameBuffer), level: 1, exp: 0, stats: null, inventory: {} };
-        saveSlotsToDB();
-        titleState = 'select'; titleTimer = 0;
-      } else if (e.key === 'Backspace') {
-        if (nameBuffer.length > 0) nameBuffer.pop();
-        else { titleState = 'select'; titleTimer = 0; } // cancel
-      } else if (e.key.length === 1 && /[a-zA-Z]/.test(e.key) && nameBuffer.length < NAME_MAX_LEN) {
-        const ch = e.key;
-        if (ch >= 'A' && ch <= 'Z') nameBuffer.push(0x8A + ch.charCodeAt(0) - 65);
-        else nameBuffer.push(0xCA + ch.charCodeAt(0) - 97);
-      }
-      return; // block all other key handling (Z, X, arrows disabled)
-    }
+    if (chatInputActive) { _onChatKeyDown(e); return; }
+    if (titleState === 'name-entry') { _onNameEntryKeyDown(e); return; }
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'z', 'Z', 'x', 'X', 'Enter', 's', 'S'].includes(e.key)) {
       e.preventDefault();
       keys[e.key] = true;
@@ -852,16 +847,10 @@ export function init() {
     if (e.key === 't' && titleState === 'done' && battleState === 'none' &&
         pauseState === 'none' && rosterState === 'none' && transState !== 'loading' && msgBoxState === 'none') {
       e.preventDefault();
-      chatInputActive = true;
-      chatInputText = '';
-      chatCursorTimer = 0;
+      chatInputActive = true; chatInputText = ''; chatCursorTimer = 0;
     }
   });
-  window.addEventListener('keyup', (e) => {
-    keys[e.key] = false;
-  });
-
-  // Save on exit
+  window.addEventListener('keyup', (e) => { keys[e.key] = false; });
   window.addEventListener('beforeunload', () => saveSlotsToDB());
 }
 
@@ -974,147 +963,114 @@ function _genPosePortraits(poseTiles) {
     return frames;
   });
 }
+// PPU tile data for player poses not already in _FP_IDLE/KNIFE constants
+const _FP_DEFEND = _FP_KNIFE_BACK; // same tiles as knife-back pose
+const _FP_ATK_R_TILE = new Uint8Array([0x1F,0x04,0x16,0x16,0x2F,0x7F,0x70,0x26, 0x00,0x00,0x00,0x00,0x30,0x70,0x70,0x3E]);
+const _FP_ATK_L_TILE3 = new Uint8Array([0x1F,0x04,0x16,0x16,0x0C,0x08,0x38,0x7C, 0x00,0x00,0x00,0x00,0x11,0x03,0x38,0x7D]);
+const _FP_ATK_L_TILE4 = new Uint8Array([0x18,0x80,0x48,0xCC,0x00,0x00,0x00,0x00, 0x59,0x32,0x38,0x0C,0x80,0xC0,0x00,0x60]);
+const _FP_KNEEL = [
+  new Uint8Array([0x00,0x00,0x00,0x00,0x02,0x05,0x0B,0x00, 0x00,0x00,0x00,0x00,0x03,0x07,0x0F,0x1F]),
+  new Uint8Array([0x00,0x00,0x00,0x00,0x80,0xB8,0xDC,0xEE, 0x00,0x00,0x00,0x00,0x9B,0xBE,0xDD,0xEF]),
+  new Uint8Array([0x00,0x03,0x07,0x05,0x01,0x01,0x1B,0x3B, 0x20,0x10,0x00,0x00,0x00,0x04,0x00,0x20]),
+  new Uint8Array([0x36,0x1A,0xC6,0x20,0x92,0x81,0xDC,0xDE, 0xF6,0x3A,0x16,0x0C,0x0E,0x21,0x04,0x06]),
+];
 function _initFakePosePortraits(romData) {
-  const IDLE_PPU = [
-    new Uint8Array([0x00,0x00,0x0A,0x16,0x2F,0x03,0x00,0x0C, 0x00,0x00,0x0E,0x1E,0x3F,0x7F,0x83,0x40]),
-    new Uint8Array([0x00,0x00,0x00,0xE0,0x70,0xB8,0xD8,0x68, 0x00,0x6C,0x19,0xFE,0x76,0xBB,0xDB,0xED]),
-    new Uint8Array([0x1F,0x04,0x16,0x16,0x0F,0x0F,0x60,0xC6, 0x00,0x00,0x00,0x00,0x50,0xE0,0x60,0x1E]),
-    new Uint8Array([0x18,0x80,0x48,0xCC,0x00,0x00,0x70,0xD8, 0x59,0x32,0x38,0x0C,0xB0,0x78,0x70,0x1C]),
-  ];
-  const idleTiles = IDLE_PPU.map(d => decodeTile(d, 0));
-  fakePlayerPortraits = _genPosePortraits(idleTiles);
-
-  const vicTiles = [0,1,2,3].map(i => decodeTile(romData, BATTLE_SPRITE_ROM + (24 + i) * 16));
-  fakePlayerVictoryPortraits = _genPosePortraits(vicTiles);
-
-  const hitTiles = [0,1,2,3].map(i => decodeTile(romData, BATTLE_SPRITE_ROM + (30 + i) * 16));
-  fakePlayerHitPortraits = _genPosePortraits(hitTiles);
-
-  const defTileData = [
-    new Uint8Array([0x05,0x0B,0x17,0x03,0x00,0x00,0x0E,0x1F, 0x07,0x0F,0x1F,0x3F,0x43,0x40,0x20,0x00]),
-    new Uint8Array([0x00,0x00,0xA0,0xD0,0xE8,0x78,0x10,0x88, 0x2C,0x59,0xBE,0xD6,0xEF,0xFB,0x75,0x1A]),
-    new Uint8Array([0x04,0xD6,0xD6,0x3F,0xEF,0xF0,0x63,0x0E, 0x00,0x00,0x00,0x24,0xE4,0xF0,0x6F,0x1F]),
-    new Uint8Array([0x90,0x4C,0xCC,0x30,0x7C,0x78,0x30,0x00, 0x32,0x21,0x00,0xB0,0x7C,0x7C,0xB2,0xC2]),
-  ];
-  fakePlayerDefendPortraits = _genPosePortraits(defTileData.map(d => decodeTile(d, 0)));
-
-  const ATK_R_39_DATA = new Uint8Array([0x1F,0x04,0x16,0x16,0x2F,0x7F,0x70,0x26,
-                                         0x00,0x00,0x00,0x00,0x30,0x70,0x70,0x3E]);
-  fakePlayerAttackPortraits = _genPosePortraits([idleTiles[0], idleTiles[1], decodeTile(ATK_R_39_DATA, 0), idleTiles[3]]);
-
-  const ATK_L_3B_DATA = new Uint8Array([0x1F,0x04,0x16,0x16,0x0C,0x08,0x38,0x7C,
-                                         0x00,0x00,0x00,0x00,0x11,0x03,0x38,0x7D]);
-  const ATK_L_3C_DATA = new Uint8Array([0x18,0x80,0x48,0xCC,0x00,0x00,0x00,0x00,
-                                         0x59,0x32,0x38,0x0C,0x80,0xC0,0x00,0x60]);
-  fakePlayerAttackLPortraits = _genPosePortraits([idleTiles[0], idleTiles[1], decodeTile(ATK_L_3B_DATA, 0), decodeTile(ATK_L_3C_DATA, 0)]);
-
-  const KNIFE_BACK_DATA = [
-    new Uint8Array([0x05,0x0B,0x17,0x03,0x00,0x00,0x0E,0x1F, 0x07,0x0F,0x1F,0x3F,0x43,0x40,0x20,0x00]),
-    new Uint8Array([0x00,0x00,0xA0,0xD0,0xE8,0x78,0x10,0x88, 0x2C,0x59,0xBE,0xD6,0xEF,0xFB,0x75,0x1A]),
-    new Uint8Array([0x04,0xD6,0xD6,0x3F,0xEF,0xF0,0x63,0x0E, 0x00,0x00,0x00,0x24,0xE4,0xF0,0x6F,0x1F]),
-    new Uint8Array([0x90,0x4C,0xCC,0x30,0x7C,0x78,0x30,0x00, 0x32,0x21,0x00,0xB0,0x7C,0x7C,0xB2,0xC2]),
-  ];
-  fakePlayerKnifeBackPortraits = _genPosePortraits(KNIFE_BACK_DATA.map(d => decodeTile(d, 0)));
-  const KNIFE_R_DATA = [
-    new Uint8Array([0x00,0x00,0x0A,0x16,0x2F,0x03,0x00,0x0C, 0x00,0x00,0x0E,0x1E,0x3F,0x7F,0x83,0x40]),
-    new Uint8Array([0x00,0x00,0x00,0xE0,0x70,0xB8,0xD8,0x68, 0x00,0x6C,0x19,0xFE,0x76,0xBB,0xDB,0xED]),
-    new Uint8Array([0x1F,0x04,0x16,0x16,0x2F,0x7F,0x70,0x26, 0x00,0x00,0x00,0x00,0x30,0x70,0x70,0x3E]),
-    new Uint8Array([0x18,0x80,0x48,0xCC,0x00,0x00,0x70,0xD8, 0x59,0x32,0x38,0x0C,0xB0,0x78,0x70,0x1C]),
-  ];
-  fakePlayerKnifeRPortraits = _genPosePortraits(KNIFE_R_DATA.map(d => decodeTile(d, 0)));
-  const KNIFE_L_DATA = [
-    new Uint8Array([0x00,0x00,0x0A,0x16,0x2F,0x03,0x00,0x0C, 0x00,0x00,0x0E,0x1E,0x3F,0x7F,0x83,0x40]),
-    new Uint8Array([0x00,0x00,0x00,0xE0,0x70,0xB8,0xD8,0x68, 0x00,0x6C,0x19,0xFE,0x76,0xBB,0xDB,0xEC]),
-    new Uint8Array([0x1F,0x04,0x16,0x16,0x0F,0x0F,0x60,0xC6, 0x00,0x00,0x00,0x00,0x50,0xE0,0x60,0x1E]),
-    new Uint8Array([0x13,0x87,0x57,0xF8,0x7E,0x3C,0x1C,0x08, 0x50,0x30,0x30,0x38,0xFE,0x7C,0xFE,0xFA]),
-  ];
-  fakePlayerKnifeLPortraits = _genPosePortraits(KNIFE_L_DATA.map(d => decodeTile(d, 0)));
-
-  const kneelTileData = [
-    new Uint8Array([0x00,0x00,0x00,0x00,0x02,0x05,0x0B,0x00, 0x00,0x00,0x00,0x00,0x03,0x07,0x0F,0x1F]),
-    new Uint8Array([0x00,0x00,0x00,0x00,0x80,0xB8,0xDC,0xEE, 0x00,0x00,0x00,0x00,0x9B,0xBE,0xDD,0xEF]),
-    new Uint8Array([0x00,0x03,0x07,0x05,0x01,0x01,0x1B,0x3B, 0x20,0x10,0x00,0x00,0x00,0x04,0x00,0x20]),
-    new Uint8Array([0x36,0x1A,0xC6,0x20,0x92,0x81,0xDC,0xDE, 0xF6,0x3A,0x16,0x0C,0x0E,0x21,0x04,0x06]),
-  ];
-  fakePlayerKneelPortraits = _genPosePortraits(kneelTileData.map(d => decodeTile(d, 0)));
+  const idleTiles = _FP_IDLE_PPU.map(d => decodeTile(d, 0));
+  fakePlayerPortraits         = _genPosePortraits(idleTiles);
+  fakePlayerVictoryPortraits  = _genPosePortraits([0,1,2,3].map(i => decodeTile(romData, BATTLE_SPRITE_ROM + (24 + i) * 16)));
+  fakePlayerHitPortraits      = _genPosePortraits([0,1,2,3].map(i => decodeTile(romData, BATTLE_SPRITE_ROM + (30 + i) * 16)));
+  fakePlayerDefendPortraits   = _genPosePortraits(_FP_DEFEND.map(d => decodeTile(d, 0)));
+  fakePlayerAttackPortraits   = _genPosePortraits([idleTiles[0], idleTiles[1], decodeTile(_FP_ATK_R_TILE, 0), idleTiles[3]]);
+  fakePlayerAttackLPortraits  = _genPosePortraits([idleTiles[0], idleTiles[1], decodeTile(_FP_ATK_L_TILE3, 0), decodeTile(_FP_ATK_L_TILE4, 0)]);
+  fakePlayerKnifeBackPortraits = _genPosePortraits(_FP_KNIFE_BACK.map(d => decodeTile(d, 0)));
+  fakePlayerKnifeRPortraits   = _genPosePortraits(_FP_KNIFE_R.map(d => decodeTile(d, 0)));
+  fakePlayerKnifeLPortraits   = _genPosePortraits(_FP_KNIFE_L.map(d => decodeTile(d, 0)));
+  fakePlayerKneelPortraits    = _genPosePortraits(_FP_KNEEL.map(d => decodeTile(d, 0)));
 }
-function _initFakeFullBodyCanvases(romData) {
-  const legTileL = decodeTile(new Uint8Array([0xCC,0x58,0x2F,0x3F,0x3F,0x1F,0x00,0x00, 0x1E,0x5F,0x3F,0x3F,0x3F,0x1F,0x07,0x0F]), 0);
-  const legTileR = decodeTile(new Uint8Array([0xD8,0x70,0x80,0xE0,0xE0,0xC0,0x00,0x00, 0x1C,0x74,0x84,0xE6,0xE6,0xC6,0xC7,0xC7]), 0);
-
-  const IDLE_PPU = [
-    new Uint8Array([0x00,0x00,0x0A,0x16,0x2F,0x03,0x00,0x0C, 0x00,0x00,0x0E,0x1E,0x3F,0x7F,0x83,0x40]),
-    new Uint8Array([0x00,0x00,0x00,0xE0,0x70,0xB8,0xD8,0x68, 0x00,0x6C,0x19,0xFE,0x76,0xBB,0xDB,0xED]),
-    new Uint8Array([0x1F,0x04,0x16,0x16,0x0F,0x0F,0x60,0xC6, 0x00,0x00,0x00,0x00,0x50,0xE0,0x60,0x1E]),
-    new Uint8Array([0x18,0x80,0x48,0xCC,0x00,0x00,0x70,0xD8, 0x59,0x32,0x38,0x0C,0xB0,0x78,0x70,0x1C]),
-  ];
-  const idleTiles = IDLE_PPU.map(d => decodeTile(d, 0));
-
-  const _buildFullBody16x24 = (topTiles4, legL, legR, pal) => {
-    const c = document.createElement('canvas');
-    c.width = 16; c.height = 24;
-    const bctx = c.getContext('2d');
-    topTiles4.forEach((px, i) => {
-      const [bx, by] = _BATTLE_LAYOUT[i];
-      const img = bctx.createImageData(8, 8);
-      for (let p = 0; p < 64; p++) {
-        const ci = px[p];
-        if (ci === 0) { img.data[p*4+3] = 0; } else {
-          const rgb = NES_SYSTEM_PALETTE[pal[ci]] || [0,0,0];
-          img.data[p*4]=rgb[0]; img.data[p*4+1]=rgb[1]; img.data[p*4+2]=rgb[2]; img.data[p*4+3]=255;
-        }
+// Build a 16×24 h-flipped full-body canvas from 4 top tiles + 2 leg tiles
+function _buildFullBody16x24Canvas(topTiles4, legL, legR, pal) {
+  const c = document.createElement('canvas');
+  c.width = 16; c.height = 24;
+  const bctx = c.getContext('2d');
+  topTiles4.forEach((px, i) => {
+    const [bx, by] = _BATTLE_LAYOUT[i];
+    const img = bctx.createImageData(8, 8);
+    for (let p = 0; p < 64; p++) {
+      const ci = px[p];
+      if (ci === 0) { img.data[p*4+3] = 0; } else {
+        const rgb = NES_SYSTEM_PALETTE[pal[ci]] || [0,0,0];
+        img.data[p*4]=rgb[0]; img.data[p*4+1]=rgb[1]; img.data[p*4+2]=rgb[2]; img.data[p*4+3]=255;
       }
-      bctx.putImageData(img, bx, by);
-    });
-    [[legL, 0, 16], [legR, 8, 16]].forEach(([px, lx, ly]) => {
-      const img = bctx.createImageData(8, 8);
-      for (let p = 0; p < 64; p++) {
-        const ci = px[p];
-        if (ci === 0) { img.data[p*4+3] = 0; } else {
-          const rgb = NES_SYSTEM_PALETTE[pal[ci]] || [0,0,0];
-          img.data[p*4]=rgb[0]; img.data[p*4+1]=rgb[1]; img.data[p*4+2]=rgb[2]; img.data[p*4+3]=255;
-        }
+    }
+    bctx.putImageData(img, bx, by);
+  });
+  [[legL, 0, 16], [legR, 8, 16]].forEach(([px, lx, ly]) => {
+    const img = bctx.createImageData(8, 8);
+    for (let p = 0; p < 64; p++) {
+      const ci = px[p];
+      if (ci === 0) { img.data[p*4+3] = 0; } else {
+        const rgb = NES_SYSTEM_PALETTE[pal[ci]] || [0,0,0];
+        img.data[p*4]=rgb[0]; img.data[p*4+1]=rgb[1]; img.data[p*4+2]=rgb[2]; img.data[p*4+3]=255;
       }
-      bctx.putImageData(img, lx, ly);
-    });
-    const fl = document.createElement('canvas');
-    fl.width = 16; fl.height = 24;
-    const flctx = fl.getContext('2d');
-    flctx.save(); flctx.translate(16, 0); flctx.scale(-1, 1); flctx.drawImage(c, 0, 0); flctx.restore();
-    return fl;
-  };
-
-  fakePlayerFullBodyCanvases = PLAYER_PALETTES.map(pal =>
-    _buildFullBody16x24(idleTiles, legTileL, legTileR, pal));
-
-  const KNIFE_BACK_DATA = [
-    new Uint8Array([0x05,0x0B,0x17,0x03,0x00,0x00,0x0E,0x1F, 0x07,0x0F,0x1F,0x3F,0x43,0x40,0x20,0x00]),
-    new Uint8Array([0x00,0x00,0xA0,0xD0,0xE8,0x78,0x10,0x88, 0x2C,0x59,0xBE,0xD6,0xEF,0xFB,0x75,0x1A]),
-    new Uint8Array([0x04,0xD6,0xD6,0x3F,0xEF,0xF0,0x63,0x0E, 0x00,0x00,0x00,0x24,0xE4,0xF0,0x6F,0x1F]),
-    new Uint8Array([0x90,0x4C,0xCC,0x30,0x7C,0x78,0x30,0x00, 0x32,0x21,0x00,0xB0,0x7C,0x7C,0xB2,0xC2]),
-  ];
-  const KNIFE_R_DATA = [
-    new Uint8Array([0x00,0x00,0x0A,0x16,0x2F,0x03,0x00,0x0C, 0x00,0x00,0x0E,0x1E,0x3F,0x7F,0x83,0x40]),
-    new Uint8Array([0x00,0x00,0x00,0xE0,0x70,0xB8,0xD8,0x68, 0x00,0x6C,0x19,0xFE,0x76,0xBB,0xDB,0xED]),
-    new Uint8Array([0x1F,0x04,0x16,0x16,0x2F,0x7F,0x70,0x26, 0x00,0x00,0x00,0x00,0x30,0x70,0x70,0x3E]),
-    new Uint8Array([0x18,0x80,0x48,0xCC,0x00,0x00,0x70,0xD8, 0x59,0x32,0x38,0x0C,0xB0,0x78,0x70,0x1C]),
-  ];
-  const KNIFE_L_DATA = [
-    new Uint8Array([0x00,0x00,0x0A,0x16,0x2F,0x03,0x00,0x0C, 0x00,0x00,0x0E,0x1E,0x3F,0x7F,0x83,0x40]),
-    new Uint8Array([0x00,0x00,0x00,0xE0,0x70,0xB8,0xD8,0x68, 0x00,0x6C,0x19,0xFE,0x76,0xBB,0xDB,0xEC]),
-    new Uint8Array([0x1F,0x04,0x16,0x16,0x0F,0x0F,0x60,0xC6, 0x00,0x00,0x00,0x00,0x50,0xE0,0x60,0x1E]),
-    new Uint8Array([0x13,0x87,0x57,0xF8,0x7E,0x3C,0x1C,0x08, 0x50,0x30,0x30,0x38,0xFE,0x7C,0xFE,0xFA]),
-  ];
-  const _buildAtkFullBody = (data4, pal) =>
-    _buildFullBody16x24(data4.map(d => decodeTile(d, 0)), legTileL, legTileR, pal);
-  fakePlayerKnifeRFullBodyCanvases    = PLAYER_PALETTES.map(pal => _buildAtkFullBody(KNIFE_R_DATA, pal));
-  fakePlayerKnifeLFullBodyCanvases    = PLAYER_PALETTES.map(pal => _buildAtkFullBody(KNIFE_L_DATA, pal));
-  fakePlayerKnifeBackFullBodyCanvases = PLAYER_PALETTES.map(pal => _buildAtkFullBody(KNIFE_BACK_DATA, pal));
-
+    }
+    bctx.putImageData(img, lx, ly);
+  });
+  const fl = document.createElement('canvas');
+  fl.width = 16; fl.height = 24;
+  const flctx = fl.getContext('2d');
+  flctx.save(); flctx.translate(16, 0); flctx.scale(-1, 1); flctx.drawImage(c, 0, 0); flctx.restore();
+  return fl;
+}
+// PPU tile data constants for fake player poses (from FCEUX trace)
+const _FP_IDLE_PPU = [
+  new Uint8Array([0x00,0x00,0x0A,0x16,0x2F,0x03,0x00,0x0C, 0x00,0x00,0x0E,0x1E,0x3F,0x7F,0x83,0x40]),
+  new Uint8Array([0x00,0x00,0x00,0xE0,0x70,0xB8,0xD8,0x68, 0x00,0x6C,0x19,0xFE,0x76,0xBB,0xDB,0xED]),
+  new Uint8Array([0x1F,0x04,0x16,0x16,0x0F,0x0F,0x60,0xC6, 0x00,0x00,0x00,0x00,0x50,0xE0,0x60,0x1E]),
+  new Uint8Array([0x18,0x80,0x48,0xCC,0x00,0x00,0x70,0xD8, 0x59,0x32,0x38,0x0C,0xB0,0x78,0x70,0x1C]),
+];
+const _FP_KNIFE_BACK = [
+  new Uint8Array([0x05,0x0B,0x17,0x03,0x00,0x00,0x0E,0x1F, 0x07,0x0F,0x1F,0x3F,0x43,0x40,0x20,0x00]),
+  new Uint8Array([0x00,0x00,0xA0,0xD0,0xE8,0x78,0x10,0x88, 0x2C,0x59,0xBE,0xD6,0xEF,0xFB,0x75,0x1A]),
+  new Uint8Array([0x04,0xD6,0xD6,0x3F,0xEF,0xF0,0x63,0x0E, 0x00,0x00,0x00,0x24,0xE4,0xF0,0x6F,0x1F]),
+  new Uint8Array([0x90,0x4C,0xCC,0x30,0x7C,0x78,0x30,0x00, 0x32,0x21,0x00,0xB0,0x7C,0x7C,0xB2,0xC2]),
+];
+const _FP_KNIFE_R = [
+  new Uint8Array([0x00,0x00,0x0A,0x16,0x2F,0x03,0x00,0x0C, 0x00,0x00,0x0E,0x1E,0x3F,0x7F,0x83,0x40]),
+  new Uint8Array([0x00,0x00,0x00,0xE0,0x70,0xB8,0xD8,0x68, 0x00,0x6C,0x19,0xFE,0x76,0xBB,0xDB,0xED]),
+  new Uint8Array([0x1F,0x04,0x16,0x16,0x2F,0x7F,0x70,0x26, 0x00,0x00,0x00,0x00,0x30,0x70,0x70,0x3E]),
+  new Uint8Array([0x18,0x80,0x48,0xCC,0x00,0x00,0x70,0xD8, 0x59,0x32,0x38,0x0C,0xB0,0x78,0x70,0x1C]),
+];
+const _FP_KNIFE_L = [
+  new Uint8Array([0x00,0x00,0x0A,0x16,0x2F,0x03,0x00,0x0C, 0x00,0x00,0x0E,0x1E,0x3F,0x7F,0x83,0x40]),
+  new Uint8Array([0x00,0x00,0x00,0xE0,0x70,0xB8,0xD8,0x68, 0x00,0x6C,0x19,0xFE,0x76,0xBB,0xDB,0xEC]),
+  new Uint8Array([0x1F,0x04,0x16,0x16,0x0F,0x0F,0x60,0xC6, 0x00,0x00,0x00,0x00,0x50,0xE0,0x60,0x1E]),
+  new Uint8Array([0x13,0x87,0x57,0xF8,0x7E,0x3C,0x1C,0x08, 0x50,0x30,0x30,0x38,0xFE,0x7C,0xFE,0xFA]),
+];
+const _FP_LEG_L = new Uint8Array([0xCC,0x58,0x2F,0x3F,0x3F,0x1F,0x00,0x00, 0x1E,0x5F,0x3F,0x3F,0x3F,0x1F,0x07,0x0F]);
+const _FP_LEG_R = new Uint8Array([0xD8,0x70,0x80,0xE0,0xE0,0xC0,0x00,0x00, 0x1C,0x74,0x84,0xE6,0xE6,0xC6,0xC7,0xC7]);
+function _buildIdleFullBodies() {
+  const legL = decodeTile(_FP_LEG_L, 0), legR = decodeTile(_FP_LEG_R, 0);
+  const tiles = _FP_IDLE_PPU.map(d => decodeTile(d, 0));
+  fakePlayerFullBodyCanvases = PLAYER_PALETTES.map(pal => _buildFullBody16x24Canvas(tiles, legL, legR, pal));
+}
+function _buildKnifeFullBodies() {
+  const legL = decodeTile(_FP_LEG_L, 0), legR = decodeTile(_FP_LEG_R, 0);
+  const build = (data, pal) => _buildFullBody16x24Canvas(data.map(d => decodeTile(d, 0)), legL, legR, pal);
+  fakePlayerKnifeRFullBodyCanvases    = PLAYER_PALETTES.map(pal => build(_FP_KNIFE_R, pal));
+  fakePlayerKnifeLFullBodyCanvases    = PLAYER_PALETTES.map(pal => build(_FP_KNIFE_L, pal));
+  fakePlayerKnifeBackFullBodyCanvases = PLAYER_PALETTES.map(pal => build(_FP_KNIFE_BACK, pal));
+}
+function _buildHitFullBodies(romData) {
+  const legL = decodeTile(_FP_LEG_L, 0), legR = decodeTile(_FP_LEG_R, 0);
   const hitPortrait4 = [0,1,2,3].map(i => decodeTile(romData, BATTLE_SPRITE_ROM + (30 + i) * 16));
   const hitLeg2 = [34,35].map(i => decodeTile(romData, BATTLE_SPRITE_ROM + i * 16));
-  fakePlayerHitFullBodyCanvases = PLAYER_PALETTES.map(basePal =>
-    _buildFullBody16x24([...hitPortrait4], hitLeg2[0], hitLeg2[1], basePal));
+  fakePlayerHitFullBodyCanvases = PLAYER_PALETTES.map(pal =>
+    _buildFullBody16x24Canvas([...hitPortrait4], hitLeg2[0], hitLeg2[1], pal));
+}
+function _initFakeFullBodyCanvases(romData) {
+  _buildIdleFullBodies();
+  _buildKnifeFullBodies();
+  _buildHitFullBodies(romData);
 }
 function initFakePlayerPortraits(romData) {
   _initFakePosePortraits(romData);
@@ -1296,70 +1252,37 @@ function _initBattleKnifeBodySprites(palette) {
   battleSpriteKnifeBackCanvas = _buildCanvas4(KNIFE_BACK_TILES, palette);
 }
 
+function _buildBladeCanvas(tileDefs, pal, pos, swungOrder) {
+  const raised = document.createElement('canvas'); raised.width = 16; raised.height = 16;
+  const rctx = raised.getContext('2d');
+  for (let t = 0; t < 4; t++) _blitTileH(rctx, decodeTile(tileDefs[t], 0), pal, pos[t][0], pos[t][1]);
+  const swung = document.createElement('canvas'); swung.width = 16; swung.height = 16;
+  const sctx = swung.getContext('2d');
+  for (let t = 0; t < 4; t++) _blitTile(sctx, decodeTile(tileDefs[swungOrder[t]], 0), pal, pos[t][0], pos[t][1]);
+  return { raised, swung };
+}
 function _initBattleBladeSprites(palette) {
-  // Knife blade tiles: $4A/$49/$4C/$4B — pal3 $0F/$00/$32/$30
-  const BLADE_PAL = [0x0F, 0x00, 0x32, 0x30];
+  const pos = [[0,0],[8,0],[0,8],[8,8]];
+  const so  = [1, 0, 3, 2]; // swung order
   const BLADE_TILES = [
-    new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x80]), // $4A
-    new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x01, 0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x01]), // $49
-    new Uint8Array([0x00,0x80,0x40,0x21,0x11,0x08,0x07,0x1B, 0xC0,0xE0,0x70,0x38,0x1C,0x0E,0x04,0x00]), // $4C
-    new Uint8Array([0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00]), // $4B
+    new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x80]),
+    new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x01, 0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x01]),
+    new Uint8Array([0x00,0x80,0x40,0x21,0x11,0x08,0x07,0x1B, 0xC0,0xE0,0x70,0x38,0x1C,0x0E,0x04,0x00]),
+    new Uint8Array([0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00]),
   ];
-  const BLADE_POS = [[0,0],[8,0],[0,8],[8,8]];
-  const BLADE_SWUNG_ORDER = [1, 0, 3, 2];
-
-  // Raised knife blade (h-flipped) — windup
-  battleKnifeBladeCanvas = document.createElement('canvas');
-  battleKnifeBladeCanvas.width = 16; battleKnifeBladeCanvas.height = 16;
-  const blctx = battleKnifeBladeCanvas.getContext('2d');
-  for (let t = 0; t < 4; t++) {
-    _blitTileH(blctx, decodeTile(BLADE_TILES[t], 0), BLADE_PAL, BLADE_POS[t][0], BLADE_POS[t][1]);
-  }
-
-  // Swung knife blade (no flip) — forward slash
-  battleKnifeBladeSwungCanvas = document.createElement('canvas');
-  battleKnifeBladeSwungCanvas.width = 16; battleKnifeBladeSwungCanvas.height = 16;
-  const bsctx = battleKnifeBladeSwungCanvas.getContext('2d');
-  for (let t = 0; t < 4; t++) {
-    _blitTile(bsctx, decodeTile(BLADE_TILES[BLADE_SWUNG_ORDER[t]], 0), BLADE_PAL, BLADE_POS[t][0], BLADE_POS[t][1]);
-  }
-
-  // Dagger blade — same tiles, pal3 $0F/$1B/$2B/$30
-  const DAGGER_PAL = [0x0F, 0x1B, 0x2B, 0x30];
-  battleDaggerBladeCanvas = document.createElement('canvas');
-  battleDaggerBladeCanvas.width = 16; battleDaggerBladeCanvas.height = 16;
-  const dblctx = battleDaggerBladeCanvas.getContext('2d');
-  for (let t = 0; t < 4; t++) {
-    _blitTileH(dblctx, decodeTile(BLADE_TILES[t], 0), DAGGER_PAL, BLADE_POS[t][0], BLADE_POS[t][1]);
-  }
-  battleDaggerBladeSwungCanvas = document.createElement('canvas');
-  battleDaggerBladeSwungCanvas.width = 16; battleDaggerBladeSwungCanvas.height = 16;
-  const dbsctx = battleDaggerBladeSwungCanvas.getContext('2d');
-  for (let t = 0; t < 4; t++) {
-    _blitTile(dbsctx, decodeTile(BLADE_TILES[BLADE_SWUNG_ORDER[t]], 0), DAGGER_PAL, BLADE_POS[t][0], BLADE_POS[t][1]);
-  }
-
-  // Sword blade tiles (from FCEUX PPU capture) — pal3 $0F/$00/$32/$30
-  const SWORD_BLADE_PAL = [0x0F, 0x00, 0x32, 0x30];
-  const SWORD_BLADE_TILES = [
-    new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x80,0xC0, 0x00,0x00,0x00,0x00,0x00,0x00,0x80,0xC0]), // $4A
-    new Uint8Array([0x00,0x70,0x78,0x7C,0x3E,0x1F,0x0D,0x06, 0x00,0x70,0x78,0x7C,0x3E,0x1F,0x0F,0x07]), // $49
-    new Uint8Array([0x60,0xB0,0xD9,0x6D,0x33,0x12,0x0D,0x3B, 0xE0,0xF0,0xF8,0x7C,0x3C,0x1C,0x02,0x00]), // $4C
-    new Uint8Array([0x03,0x01,0x00,0x00,0x00,0x00,0x00,0x00, 0x03,0x01,0x00,0x00,0x00,0x00,0x00,0x00]), // $4B
+  const SWORD_TILES = [
+    new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x80,0xC0, 0x00,0x00,0x00,0x00,0x00,0x00,0x80,0xC0]),
+    new Uint8Array([0x00,0x70,0x78,0x7C,0x3E,0x1F,0x0D,0x06, 0x00,0x70,0x78,0x7C,0x3E,0x1F,0x0F,0x07]),
+    new Uint8Array([0x60,0xB0,0xD9,0x6D,0x33,0x12,0x0D,0x3B, 0xE0,0xF0,0xF8,0x7C,0x3C,0x1C,0x02,0x00]),
+    new Uint8Array([0x03,0x01,0x00,0x00,0x00,0x00,0x00,0x00, 0x03,0x01,0x00,0x00,0x00,0x00,0x00,0x00]),
   ];
-  const SWORD_BLADE_SWUNG_ORDER = [1, 0, 3, 2];
-  battleSwordBladeCanvas = document.createElement('canvas');
-  battleSwordBladeCanvas.width = 16; battleSwordBladeCanvas.height = 16;
-  const sblctx = battleSwordBladeCanvas.getContext('2d');
-  for (let t = 0; t < 4; t++) {
-    _blitTileH(sblctx, decodeTile(SWORD_BLADE_TILES[t], 0), SWORD_BLADE_PAL, BLADE_POS[t][0], BLADE_POS[t][1]);
-  }
-  battleSwordBladeSwungCanvas = document.createElement('canvas');
-  battleSwordBladeSwungCanvas.width = 16; battleSwordBladeSwungCanvas.height = 16;
-  const sswctx = battleSwordBladeSwungCanvas.getContext('2d');
-  for (let t = 0; t < 4; t++) {
-    _blitTile(sswctx, decodeTile(SWORD_BLADE_TILES[SWORD_BLADE_SWUNG_ORDER[t]], 0), SWORD_BLADE_PAL, BLADE_POS[t][0], BLADE_POS[t][1]);
-  }
+  let b;
+  b = _buildBladeCanvas(BLADE_TILES, [0x0F,0x00,0x32,0x30], pos, so);
+  battleKnifeBladeCanvas = b.raised; battleKnifeBladeSwungCanvas = b.swung;
+  b = _buildBladeCanvas(BLADE_TILES, [0x0F,0x1B,0x2B,0x30], pos, so);
+  battleDaggerBladeCanvas = b.raised; battleDaggerBladeSwungCanvas = b.swung;
+  b = _buildBladeCanvas(SWORD_TILES, [0x0F,0x00,0x32,0x30], pos, so);
+  battleSwordBladeCanvas = b.raised; battleSwordBladeSwungCanvas = b.swung;
 }
 
 function _initBattleRomPoses(romData, palette) {
@@ -1742,75 +1665,56 @@ function initGoblinSprite(romData) {
 // Phase 2 (+032-+039): medium splash  32×32, tiles $49/$4A/$4C/$4D 4×4
 // Phase 3 (+040-+047): large blast    48×48, tiles $49-$4E/$4F/$50/$51 6×6
 // All use pal3: $0F $11 $21 $31 (ice blue)
-function initSouthWindSprite() {
-  const SW_PAL = [0x0F, 0x11, 0x21, 0x31];
-  const nesColors = SW_PAL.map(c => NES_SYSTEM_PALETTE[c] || [0,0,0]);
-
-  // Raw PPU tile data from FCEUX trace (16 bytes each, planar 2BPP)
-  const TILES = {
-    0x4F: new Uint8Array([0x01,0x01,0x0F,0x18,0x27,0x4D,0x98,0xB0, 0x01,0x01,0x0F,0x1F,0x3E,0x7E,0xFF,0xFF]),
-    0x49: new Uint8Array([0x3F,0x31,0x60,0xEE,0xE1,0x80,0x90,0xB0, 0x3F,0x3F,0x7F,0xFF,0xFF,0xFF,0xEF,0xCF]),
-    0x4A: new Uint8Array([0x00,0x80,0x80,0x60,0x51,0x2B,0xB2,0x34, 0x00,0x80,0x80,0xE0,0xB1,0xDB,0xCB,0xC7]),
-    0x4B: new Uint8Array([0x00,0x03,0x06,0x04,0xE7,0xF7,0x7B,0x2F, 0x00,0x03,0x07,0x07,0xE1,0xF1,0xF8,0xFC]),
-    0x4C: new Uint8Array([0xD8,0xBC,0xAE,0x76,0x2F,0x1E,0x0D,0x01, 0xA7,0xC3,0xD1,0x69,0x31,0x1A,0x0D,0x01]),
-    0x4D: new Uint8Array([0x66,0xCA,0xAA,0x5D,0xFD,0x8E,0x86,0xC7, 0x95,0x25,0x45,0x82,0x7A,0xF9,0xFD,0x3E]),
-    0x4E: new Uint8Array([0x17,0x1B,0x01,0x05,0x8D,0xDB,0x7A,0x67, 0xFE,0xFF,0xFF,0xFF,0x7F,0x3E,0xB6,0x8C]),
-    0x50: new Uint8Array([0x63,0xAD,0xD9,0x62,0xBC,0xD9,0x63,0xE3, 0x9E,0xD2,0xE6,0xFC,0x7C,0x30,0x91,0x12]),
-    0x51: new Uint8Array([0xBF,0x3E,0x7A,0xFD,0xF7,0xCB,0xC7,0x83, 0x79,0x03,0x03,0x39,0x5C,0xBE,0x3E,0x7E]),
-  };
-
-  // Helper: decode tile to 8×8 pixel array of palette indices
-  function decodeTileLocal(id) { return decodeTile(TILES[id], 0); }
-
-  // Helper: draw one 8×8 tile into a canvas context at (dx,dy) with optional H/V flip
-  function drawTile(cctx, id, dx, dy, hf, vf) {
-    const px = decodeTileLocal(id);
-    const img = cctx.createImageData(8, 8);
-    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
-      const sr = vf ? 7-r : r, sc = hf ? 7-c : c;
-      const ci = px[sr*8+sc];
-      const i = (r*8+c)*4;
-      if (ci === 0) { img.data[i+3] = 0; continue; }
-      const [R,G,B] = nesColors[ci] || [0,0,0];
-      img.data[i]=R; img.data[i+1]=G; img.data[i+2]=B; img.data[i+3]=255;
-    }
-    cctx.putImageData(img, dx, dy);
+// Raw PPU tile data for SouthWind spell (planar 2BPP, from FCEUX trace)
+const SW_TILES = {
+  0x4F: new Uint8Array([0x01,0x01,0x0F,0x18,0x27,0x4D,0x98,0xB0, 0x01,0x01,0x0F,0x1F,0x3E,0x7E,0xFF,0xFF]),
+  0x49: new Uint8Array([0x3F,0x31,0x60,0xEE,0xE1,0x80,0x90,0xB0, 0x3F,0x3F,0x7F,0xFF,0xFF,0xFF,0xEF,0xCF]),
+  0x4A: new Uint8Array([0x00,0x80,0x80,0x60,0x51,0x2B,0xB2,0x34, 0x00,0x80,0x80,0xE0,0xB1,0xDB,0xCB,0xC7]),
+  0x4B: new Uint8Array([0x00,0x03,0x06,0x04,0xE7,0xF7,0x7B,0x2F, 0x00,0x03,0x07,0x07,0xE1,0xF1,0xF8,0xFC]),
+  0x4C: new Uint8Array([0xD8,0xBC,0xAE,0x76,0x2F,0x1E,0x0D,0x01, 0xA7,0xC3,0xD1,0x69,0x31,0x1A,0x0D,0x01]),
+  0x4D: new Uint8Array([0x66,0xCA,0xAA,0x5D,0xFD,0x8E,0x86,0xC7, 0x95,0x25,0x45,0x82,0x7A,0xF9,0xFD,0x3E]),
+  0x4E: new Uint8Array([0x17,0x1B,0x01,0x05,0x8D,0xDB,0x7A,0x67, 0xFE,0xFF,0xFF,0xFF,0x7F,0x3E,0xB6,0x8C]),
+  0x50: new Uint8Array([0x63,0xAD,0xD9,0x62,0xBC,0xD9,0x63,0xE3, 0x9E,0xD2,0xE6,0xFC,0x7C,0x30,0x91,0x12]),
+  0x51: new Uint8Array([0xBF,0x3E,0x7A,0xFD,0xF7,0xCB,0xC7,0x83, 0x79,0x03,0x03,0x39,0x5C,0xBE,0x3E,0x7E]),
+};
+function _drawSWTile(cctx, nesColors, id, dx, dy, hf, vf) {
+  const px = decodeTile(SW_TILES[id], 0);
+  const img = cctx.createImageData(8, 8);
+  for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+    const sr = vf ? 7-r : r, sc = hf ? 7-c : c;
+    const ci = px[sr*8+sc];
+    const i = (r*8+c)*4;
+    if (ci === 0) { img.data[i+3] = 0; continue; }
+    const [R,G,B] = nesColors[ci] || [0,0,0];
+    img.data[i]=R; img.data[i+1]=G; img.data[i+2]=B; img.data[i+3]=255;
   }
-
-  // Phase 1: 16×16 — tile $4F, 2×2 symmetric
-  const c1 = document.createElement('canvas'); c1.width = 16; c1.height = 16;
-  const x1 = c1.getContext('2d');
-  drawTile(x1, 0x4F,  0, 0, false, false);
-  drawTile(x1, 0x4F,  8, 0, true,  false);
-  drawTile(x1, 0x4F,  0, 8, false, true);
-  drawTile(x1, 0x4F,  8, 8, true,  true);
-
-  // Phase 2: 32×32 — 4×4 grid, tiles $49/$4A/$4C/$4D
-  // Row 0: $49(--) $4A(--) $4A(H) $49(H)
-  // Row 1: $4C(--) $4D(--) $4D(H) $4C(H)
-  // Row 2: $4C(V)  $4D(V)  $4D(HV) $4C(HV)
-  // Row 3: $49(V)  $4A(V)  $4A(HV) $49(HV)
-  const c2 = document.createElement('canvas'); c2.width = 32; c2.height = 32;
-  const x2 = c2.getContext('2d');
-  drawTile(x2, 0x49,  0, 0, false, false); drawTile(x2, 0x4A,  8, 0, false, false);
-  drawTile(x2, 0x4A, 16, 0, true,  false); drawTile(x2, 0x49, 24, 0, true,  false);
-  drawTile(x2, 0x4C,  0, 8, false, false); drawTile(x2, 0x4D,  8, 8, false, false);
-  drawTile(x2, 0x4D, 16, 8, true,  false); drawTile(x2, 0x4C, 24, 8, true,  false);
-  drawTile(x2, 0x4C,  0,16, false, true);  drawTile(x2, 0x4D,  8,16, false, true);
-  drawTile(x2, 0x4D, 16,16, true,  true);  drawTile(x2, 0x4C, 24,16, true,  true);
-  drawTile(x2, 0x49,  0,24, false, true);  drawTile(x2, 0x4A,  8,24, false, true);
-  drawTile(x2, 0x4A, 16,24, true,  true);  drawTile(x2, 0x49, 24,24, true,  true);
-
-  // Phase 3: 48×48 — 6×6 grid
-  // Row 0: $49(--) $4A(--) $4B(--) $4B(H) $4A(H) $49(H)
-  // Row 1: $4C(--) $4D(--) $4E(--) $4E(H) $4D(H) $4C(H)
-  // Row 2: $4F(--) $50(--) $51(--) $51(H) $50(H) $4F(H)
-  // Row 3: $4F(V)  $50(V)  $51(V)  $51(HV) $50(HV) $4F(HV)
-  // Row 4: $4C(V)  $4D(V)  $4E(V)  $4E(HV) $4D(HV) $4C(HV)
-  // Row 5: $49(V)  $4A(V)  $4B(V)  $4B(HV) $4A(HV) $49(HV)
-  const c3 = document.createElement('canvas'); c3.width = 48; c3.height = 48;
-  const x3 = c3.getContext('2d');
-  const p3 = [
+  cctx.putImageData(img, dx, dy);
+}
+function _buildSWPhase1(nc) {
+  const c = document.createElement('canvas'); c.width = 16; c.height = 16;
+  const x = c.getContext('2d');
+  _drawSWTile(x, nc, 0x4F,  0, 0, false, false); _drawSWTile(x, nc, 0x4F,  8, 0, true,  false);
+  _drawSWTile(x, nc, 0x4F,  0, 8, false, true);  _drawSWTile(x, nc, 0x4F,  8, 8, true,  true);
+  return c;
+}
+function _buildSWPhase2(nc) {
+  const c = document.createElement('canvas'); c.width = 32; c.height = 32;
+  const x = c.getContext('2d');
+  _drawSWTile(x, nc, 0x49,  0, 0, false, false); _drawSWTile(x, nc, 0x4A,  8, 0, false, false);
+  _drawSWTile(x, nc, 0x4A, 16, 0, true,  false); _drawSWTile(x, nc, 0x49, 24, 0, true,  false);
+  _drawSWTile(x, nc, 0x4C,  0, 8, false, false); _drawSWTile(x, nc, 0x4D,  8, 8, false, false);
+  _drawSWTile(x, nc, 0x4D, 16, 8, true,  false); _drawSWTile(x, nc, 0x4C, 24, 8, true,  false);
+  _drawSWTile(x, nc, 0x4C,  0,16, false, true);  _drawSWTile(x, nc, 0x4D,  8,16, false, true);
+  _drawSWTile(x, nc, 0x4D, 16,16, true,  true);  _drawSWTile(x, nc, 0x4C, 24,16, true,  true);
+  _drawSWTile(x, nc, 0x49,  0,24, false, true);  _drawSWTile(x, nc, 0x4A,  8,24, false, true);
+  _drawSWTile(x, nc, 0x4A, 16,24, true,  true);  _drawSWTile(x, nc, 0x49, 24,24, true,  true);
+  return c;
+}
+function _buildSWPhase3(nc) {
+  const c = document.createElement('canvas'); c.width = 48; c.height = 48;
+  const x = c.getContext('2d');
+  // 6×6 symmetric grid: left half normal, right half H-flipped; top half normal, bottom half V-flipped
+  const p = [
     [0x49,0x4A,0x4B,0x4B,0x4A,0x49],
     [0x4C,0x4D,0x4E,0x4E,0x4D,0x4C],
     [0x4F,0x50,0x51,0x51,0x50,0x4F],
@@ -1818,13 +1722,14 @@ function initSouthWindSprite() {
     [0x4C,0x4D,0x4E,0x4E,0x4D,0x4C],
     [0x49,0x4A,0x4B,0x4B,0x4A,0x49],
   ];
-  for (let row = 0; row < 6; row++) for (let col = 0; col < 6; col++) {
-    const hf = col >= 3, vf = row >= 3;
-    drawTile(x3, p3[row][col], col*8, row*8, hf, vf);
-  }
-
-  swPhaseCanvases = [c1, c2, c3];
-  southWindHitCanvas = c1; // compat
+  for (let row = 0; row < 6; row++) for (let col = 0; col < 6; col++)
+    _drawSWTile(x, nc, p[row][col], col*8, row*8, col >= 3, row >= 3);
+  return c;
+}
+function initSouthWindSprite() {
+  const nc = [0x0F, 0x11, 0x21, 0x31].map(c => NES_SYSTEM_PALETTE[c] || [0,0,0]);
+  swPhaseCanvases = [_buildSWPhase1(nc), _buildSWPhase2(nc), _buildSWPhase3(nc)];
+  southWindHitCanvas = swPhaseCanvases[0];
 }
 
 // Returns a canvas of (cols*8) × (rows*8).
@@ -2284,24 +2189,9 @@ const TITLE_OCEAN_CHR = [0x22, 0x23, 0x24, 0x25]; // horizontal water CHR tile I
 const TITLE_WATER_PAL_IDX = 2; // world map palette index for ocean
 const TITLE_SKY_BGID = 6;      // airship sky battle BG (blue/lavender/white clouds)
 
-function initTitleWater(romData) {
-  const COMMON_CHR = 0x014C10;
-  const BG_PALETTE = 0x001650;
-
-  // Decode the 4 ocean CHR tiles
-  const chrTiles = {};
-  for (const ci of TITLE_OCEAN_CHR) {
-    chrTiles[ci] = decodeTile(romData, COMMON_CHR + ci * 16);
-  }
-
-  // Water palette from world map
-  const palOff = BG_PALETTE + TITLE_WATER_PAL_IDX * 4;
-  const basePal = [romData[palOff], romData[palOff+1], romData[palOff+2], romData[palOff+3]];
-
-  // Pre-compute 16 horizontal shift frames for each CHR pair
-  const pairs = [[0x22, 0x23], [0x24, 0x25]];
-  const shifted = {}; // ci → [frame0..frame15] pixel arrays
-  for (const [ciL, ciR] of pairs) {
+function _precomputeWaterShifts(chrTiles) {
+  const shifted = {};
+  for (const [ciL, ciR] of [[0x22, 0x23], [0x24, 0x25]]) {
     const bL = chrTiles[ciL], bR = chrTiles[ciR];
     const p0L = _getPlane0(bL), p0R = _getPlane0(bR);
     const p1L = bL.map(p => p & 2), p1R = bR.map(p => p & 2);
@@ -2318,51 +2208,45 @@ function initTitleWater(romData) {
       }
       cL = nL; cR = nR;
     }
-    shifted[ciL] = arrL;
-    shifted[ciR] = arrR;
+    shifted[ciL] = arrL; shifted[ciR] = arrR;
   }
-
-  // Helper: render one 16×16 ocean metatile with given palette
-  function renderOceanTile(pal, animFrame) {
-    const rgbPal = pal.map(ni => NES_SYSTEM_PALETTE[ni & 0x3F] || [0,0,0]);
-    const c = document.createElement('canvas');
-    c.width = 16; c.height = 16;
-    const tctx = c.getContext('2d');
-    const quads = [
-      [shifted[0x22][animFrame], 0, 0], [shifted[0x23][animFrame], 8, 0],
-      [shifted[0x24][animFrame], 0, 8], [shifted[0x25][animFrame], 8, 8],
-    ];
-    for (const [pixels, ox, oy] of quads) {
-      const img = tctx.createImageData(8, 8);
-      for (let p = 0; p < 64; p++) {
-        const ci = pixels[p];
-        const rgb = rgbPal[ci];
-        img.data[p*4] = rgb[0]; img.data[p*4+1] = rgb[1];
-        img.data[p*4+2] = rgb[2]; img.data[p*4+3] = 255;
-      }
-      tctx.putImageData(img, ox, oy);
+  return shifted;
+}
+function _renderOceanTile16(shifted, pal, animFrame) {
+  const rgbPal = pal.map(ni => NES_SYSTEM_PALETTE[ni & 0x3F] || [0,0,0]);
+  const c = document.createElement('canvas');
+  c.width = 16; c.height = 16;
+  const tctx = c.getContext('2d');
+  for (const [pixels, ox, oy] of [
+    [shifted[0x22][animFrame], 0, 0], [shifted[0x23][animFrame], 8, 0],
+    [shifted[0x24][animFrame], 0, 8], [shifted[0x25][animFrame], 8, 8],
+  ]) {
+    const img = tctx.createImageData(8, 8);
+    for (let p = 0; p < 64; p++) {
+      const rgb = rgbPal[pixels[p]];
+      img.data[p*4]=rgb[0]; img.data[p*4+1]=rgb[1]; img.data[p*4+2]=rgb[2]; img.data[p*4+3]=255;
     }
-    return c;
+    tctx.putImageData(img, ox, oy);
   }
-
-  // 16 animation frames at full brightness
+  return c;
+}
+function _buildTitleWaterFrames(shifted, basePal) {
   titleWaterFrames = [];
-  for (let f = 0; f < 16; f++) {
-    titleWaterFrames.push(renderOceanTile(basePal, f));
-  }
-
-  // Fade levels (0=bright, TITLE_FADE_MAX=black) — static frame 0
+  for (let f = 0; f < 16; f++) titleWaterFrames.push(_renderOceanTile16(shifted, basePal, f));
   titleWaterFadeTiles = [];
   const fadePal = [...basePal];
   for (let step = 0; step <= TITLE_FADE_MAX; step++) {
-    titleWaterFadeTiles.push(renderOceanTile(step === 0 ? basePal : fadePal, 0));
-    if (step < TITLE_FADE_MAX) {
-      fadePal[0] = nesColorFade(fadePal[0]);
-      fadePal[1] = nesColorFade(fadePal[1]);
-      fadePal[2] = nesColorFade(fadePal[2]);
-      fadePal[3] = nesColorFade(fadePal[3]);
-    }
+    titleWaterFadeTiles.push(_renderOceanTile16(shifted, step === 0 ? basePal : fadePal, 0));
+    if (step < TITLE_FADE_MAX) for (let i = 0; i < 4; i++) fadePal[i] = nesColorFade(fadePal[i]);
   }
+}
+function initTitleWater(romData) {
+  const COMMON_CHR = 0x014C10;
+  const chrTiles = {};
+  for (const ci of TITLE_OCEAN_CHR) chrTiles[ci] = decodeTile(romData, COMMON_CHR + ci * 16);
+  const palOff = 0x001650 + TITLE_WATER_PAL_IDX * 4;
+  const basePal = [romData[palOff], romData[palOff+1], romData[palOff+2], romData[palOff+3]];
+  _buildTitleWaterFrames(_precomputeWaterShifts(chrTiles), basePal);
 }
 
 function initTitleSky(romData) {
@@ -2493,71 +2377,58 @@ function _renderOceanRow(tiles, metaTiles, tilemap, pal, rowIdx) {
   return c;
 }
 
-function initTitleOcean(romData) {
-  const bgId = 5; // ocean battle BG
-
-  // Sky row palette — match the sky box above (ocean's original c1 replaced with sky blue)
-  const oceanBgId = 5;
-  const skyPal = [
-    0x0F,
-    romData[BATTLE_BG_PAL_C1 + oceanBgId], // $21 — same sky blue as top box
-    romData[BATTLE_BG_PAL_C2 + oceanBgId],
-    romData[BATTLE_BG_PAL_C3 + oceanBgId],
+function _buildOceanPalettes(romData, bgId) {
+  const skyPal = [0x0F,
+    romData[BATTLE_BG_PAL_C1 + bgId],
+    romData[BATTLE_BG_PAL_C2 + bgId],
+    romData[BATTLE_BG_PAL_C3 + bgId],
   ];
-
-  // Ocean row palette — remap to water tile colors
-  // Water tiles: [$1A(dark teal), $0F(black), $22(blue), $31(light blue)]
-  // Ocean BG color usage: c1=base, c2=highlight, c3=brightest
-  const BG_PALETTE = 0x001650;
-  const wPalOff = BG_PALETTE + TITLE_WATER_PAL_IDX * 4;
-  const wavePal = [
-    0x0F,
-    romData[wPalOff],     // c1 → $1A (dark teal base)
-    romData[wPalOff + 2], // c2 → $22 (blue mid)
-    romData[wPalOff + 3], // c3 → $31 (light blue highlight)
-  ];
-
-  const tiles = [];
+  const wPalOff = 0x001650 + TITLE_WATER_PAL_IDX * 4;
+  const wavePal = [0x0F, romData[wPalOff], romData[wPalOff + 2], romData[wPalOff + 3]];
+  return { skyPal, wavePal };
+}
+function _loadOceanTileData(romData, bgId) {
   const tileBase = BATTLE_BG_TILES_ROM + bgId * 0x100;
+  const tiles = [];
   for (let i = 0; i < 16; i++) tiles.push(decodeTile(romData, tileBase + i * 16));
-
   const metaTiles = [];
   for (let m = 0; m < 4; m++) {
     const ids = [];
     for (let j = 0; j < 4; j++) ids.push(romData[BATTLE_BG_META_TILES + m*4 + j] - 0x60);
     metaTiles.push(ids);
   }
-
   const tilemapIdx = romData[BATTLE_BG_TMID_TABLE + bgId];
   const tmBase = BATTLE_BG_TILEMAPS + tilemapIdx * 32;
   const tilemap = [];
   for (let i = 0; i < 32; i++) tilemap.push(romData[tmBase + i]);
-
+  return { tiles, metaTiles, tilemap };
+}
+function _buildTitleOceanFrames(tiles, metaTiles, tilemap, skyPal, wavePal) {
   titleOceanFrames = [];
-  const fadeSky = [...skyPal];
-  const fadeWave = [...wavePal];
+  const fadeSky = [...skyPal], fadeWave = [...wavePal];
   while (true) {
     const frame = document.createElement('canvas');
     frame.width = 256; frame.height = 32;
     const fctx = frame.getContext('2d');
-
-    const skyBg = NES_SYSTEM_PALETTE[fadeSky[1]] || [0, 0, 0];
+    const skyBg = NES_SYSTEM_PALETTE[fadeSky[1]] || [0,0,0];
     fctx.fillStyle = `rgb(${skyBg[0]},${skyBg[1]},${skyBg[2]})`;
     fctx.fillRect(0, 0, 256, 16);
     fctx.drawImage(_renderOceanRow(tiles, metaTiles, tilemap, fadeSky, 0), 0, 0);
-
-    const waveBg = NES_SYSTEM_PALETTE[fadeWave[1]] || [0, 0, 0];
+    const waveBg = NES_SYSTEM_PALETTE[fadeWave[1]] || [0,0,0];
     fctx.fillStyle = `rgb(${waveBg[0]},${waveBg[1]},${waveBg[2]})`;
     fctx.fillRect(0, 16, 256, 16);
     fctx.drawImage(_renderOceanRow(tiles, metaTiles, tilemap, fadeWave, 1), 0, 16);
-
     titleOceanFrames.push(frame);
-
-    const allBlack = fadeSky[1] === 0x0F && fadeSky[2] === 0x0F && fadeSky[3] === 0x0F &&
-                     fadeWave[1] === 0x0F && fadeWave[2] === 0x0F && fadeWave[3] === 0x0F;
-    if (allBlack) break;
+    if (fadeSky[1] === 0x0F && fadeSky[2] === 0x0F && fadeSky[3] === 0x0F &&
+        fadeWave[1] === 0x0F && fadeWave[2] === 0x0F && fadeWave[3] === 0x0F) break;
     for (let i = 1; i <= 3; i++) { fadeSky[i] = nesColorFade(fadeSky[i]); fadeWave[i] = nesColorFade(fadeWave[i]); }
   }
+}
+function initTitleOcean(romData) {
+  const bgId = 5;
+  const { skyPal, wavePal } = _buildOceanPalettes(romData, bgId);
+  const { tiles, metaTiles, tilemap } = _loadOceanTileData(romData, bgId);
+  _buildTitleOceanFrames(tiles, metaTiles, tilemap, skyPal, wavePal);
 }
 
 // FF3 Sight screen logo — composited pixel data captured from FCEUX (BG+sprites)
@@ -2671,29 +2542,7 @@ export function getMobileInputMode() {
   return 'none';
 }
 
-export async function loadROM(arrayBuffer) {
-  // Apply English translation patch (IPS) before parsing
-  const romBytes = new Uint8Array(arrayBuffer);
-  try {
-    const ipsResp = await fetch('patches/ff3-english.ips');
-    if (ipsResp.ok) {
-      const ipsData = new Uint8Array(await ipsResp.arrayBuffer());
-      applyIPS(romBytes, ipsData);
-    }
-  } catch (_) { /* no patch file — continue with unpatched ROM */ }
-
-  const rom = parseROM(romBytes.buffer);
-
-  document.getElementById('rom-info').textContent =
-    `PRG: ${rom.prgBanks} banks (${rom.prgSize / 1024}KB), ` +
-    `CHR: ${rom.chrBanks} banks, Mapper: ${rom.mapper}`;
-
-  romRaw = rom.raw;
-
-  // Initialize text decoder and font renderer with patched ROM
-  initTextDecoder(romRaw);
-  initFont(romRaw);
-
+function _initSpriteAssets(romRaw) {
   initHUD(romRaw);
   initCursorTile(romRaw);
   initBattleSprite(romRaw);
@@ -2715,15 +2564,8 @@ export async function loadROM(arrayBuffer) {
   initMusic(romRaw);
   _initFlameRawTiles(romRaw);
   _initStarTiles(romRaw);
-
-  sprite = new Sprite(romRaw, SPRITE_PAL_TOP, SPRITE_PAL_BTM);
-
-  // Pre-load world map data
-  worldMapData = loadWorldMap(romRaw, 0);
-  worldMapRenderer = new WorldMapRenderer(worldMapData);
-  _waterCache = null; // rebuild water frames for this world
-
-  // Title screen assets
+}
+function _initTitleAssets(romRaw) {
   initInvincibleSprite(romRaw);
   initTitleWater(romRaw);
   initTitleSky(romRaw);
@@ -2731,33 +2573,56 @@ export async function loadROM(arrayBuffer) {
   initUnderwaterSprites(romRaw);
   initTitleOcean(romRaw);
   initTitleLogo();
-
-  // Load saved player slots from IndexedDB
-  await loadSlotsFromDB();
-
-  // Debug mode — skip title, spawn directly in crystal room
-  if (window.DEBUG_BOSS) {
-    titleState = 'done';
-    dungeonSeed = 1;
-    clearDungeonCache();
-    loadMapById(1004);
-    playTrack(TRACKS.CRYSTAL_ROOM);
-    playerInventory = {};
-    addItem(0x54, 5);
-    lastTime = performance.now();
-    requestAnimationFrame(gameLoop);
-    return;
-  }
-
-  // Start with title screen — map loads after title sequence
+}
+function _startDebugMode() {
+  titleState = 'done';
+  dungeonSeed = 1;
+  clearDungeonCache();
+  loadMapById(1004);
+  playTrack(TRACKS.CRYSTAL_ROOM);
+  playerInventory = {};
+  addItem(0x54, 5);
+  lastTime = performance.now();
+  requestAnimationFrame(gameLoop);
+}
+function _startTitleScreen() {
   titleState = 'credit-wait';
   titleTimer = 0;
   titleWaterScroll = 0;
   titleShipTimer = 0;
   playTrack(TRACKS.TITLE_SCREEN);
-
   lastTime = performance.now();
   requestAnimationFrame(gameLoop);
+}
+export async function loadROM(arrayBuffer) {
+  const romBytes = new Uint8Array(arrayBuffer);
+  try {
+    const ipsResp = await fetch('patches/ff3-english.ips');
+    if (ipsResp.ok) {
+      const ipsData = new Uint8Array(await ipsResp.arrayBuffer());
+      applyIPS(romBytes, ipsData);
+    }
+  } catch (_) { /* no patch file — continue with unpatched ROM */ }
+
+  const rom = parseROM(romBytes.buffer);
+  document.getElementById('rom-info').textContent =
+    `PRG: ${rom.prgBanks} banks (${rom.prgSize / 1024}KB), ` +
+    `CHR: ${rom.chrBanks} banks, Mapper: ${rom.mapper}`;
+  romRaw = rom.raw;
+  initTextDecoder(romRaw);
+  initFont(romRaw);
+
+  _initSpriteAssets(romRaw);
+  sprite = new Sprite(romRaw, SPRITE_PAL_TOP, SPRITE_PAL_BTM);
+  worldMapData = loadWorldMap(romRaw, 0);
+  worldMapRenderer = new WorldMapRenderer(worldMapData);
+  _waterCache = null;
+  _initTitleAssets(romRaw);
+
+  await loadSlotsFromDB();
+
+  if (window.DEBUG_BOSS) { _startDebugMode(); return; }
+  _startTitleScreen();
 }
 
 export function loadFF12ROM(arrayBuffer) {
@@ -2969,76 +2834,59 @@ function startMove(dir) {
   }
 }
 
-function _battleInputTargetSelect() {
-  // Cycle between alive monsters with left/right
+function _battleTargetNav() {
+  if (!isRandomEncounter || !encounterMonsters) return;
+  const aliveIdx = encounterMonsters.reduce((a, m, i) => (m.hp > 0 ? [...a, i] : a), []);
+  if (keys['ArrowRight'] || keys['ArrowDown']) {
+    keys['ArrowRight'] = false; keys['ArrowDown'] = false;
+    targetIndex = aliveIdx[(aliveIdx.indexOf(targetIndex) + 1) % aliveIdx.length];
+    playSFX(SFX.CURSOR);
+  }
+  if (keys['ArrowLeft'] || keys['ArrowUp']) {
+    keys['ArrowLeft'] = false; keys['ArrowUp'] = false;
+    targetIndex = aliveIdx[(aliveIdx.indexOf(targetIndex) - 1 + aliveIdx.length) % aliveIdx.length];
+    playSFX(SFX.CURSOR);
+  }
+}
+function _battleTargetConfirm() {
+  if (!keys['z'] && !keys['Z']) return;
+  keys['z'] = false; keys['Z'] = false;
+  playSFX(SFX.CONFIRM);
+  const rIsWeapon = isWeapon(playerWeaponR);
+  const lIsWeapon = isWeapon(playerWeaponL);
+  const dualWield = rIsWeapon && lIsWeapon;
+  const unarmed = !rIsWeapon && !lIsWeapon;
+  const baseHits = Math.max(1, Math.floor((playerStats ? playerStats.agi : 5) / 10));
+  const potentialHits = (dualWield || unarmed) ? Math.max(2, baseHits) : Math.max(1, baseHits);
+  const wpn = (rIsWeapon ? ITEMS.get(playerWeaponR) : null) || (lIsWeapon ? ITEMS.get(playerWeaponL) : null);
+  const hitRate = wpn ? wpn.hit : BASE_HIT_RATE;
   if (isRandomEncounter && encounterMonsters) {
-    const aliveIdx = [];
-    for (let i = 0; i < encounterMonsters.length; i++) {
-      if (encounterMonsters[i].hp > 0) aliveIdx.push(i);
-    }
-    if (keys['ArrowRight'] || keys['ArrowDown']) {
-      keys['ArrowRight'] = false; keys['ArrowDown'] = false;
-      const cur = aliveIdx.indexOf(targetIndex);
-      targetIndex = aliveIdx[(cur + 1) % aliveIdx.length];
-      playSFX(SFX.CURSOR);
-    }
-    if (keys['ArrowLeft'] || keys['ArrowUp']) {
-      keys['ArrowLeft'] = false; keys['ArrowUp'] = false;
-      const cur = aliveIdx.indexOf(targetIndex);
-      targetIndex = aliveIdx[(cur - 1 + aliveIdx.length) % aliveIdx.length];
-      playSFX(SFX.CURSOR);
-    }
+    hitResults = rollHits(playerATK, encounterMonsters[targetIndex].def, hitRate, potentialHits);
+  } else {
+    const targetDef = isPVPBattle && pvpOpponentStats ? pvpOpponentStats.def : BOSS_DEF;
+    hitResults = rollHits(playerATK, targetDef, hitRate, potentialHits);
   }
-  if (keys['z'] || keys['Z']) {
-    keys['z'] = false; keys['Z'] = false;
-    // Confirm target — roll hits, transition to player-slash
-    playSFX(SFX.CONFIRM);
-    // Hit count: dual-wield/unarmed = min 2, single weapon = min 1
-    // Shields in hand don't count as weapons for combat
-    const rIsWeapon = isWeapon(playerWeaponR);
-    const lIsWeapon = isWeapon(playerWeaponL);
-    const dualWield = rIsWeapon && lIsWeapon;
-    const unarmed = !rIsWeapon && !lIsWeapon;
-    const baseHits = Math.max(1, Math.floor((playerStats ? playerStats.agi : 5) / 10));
-    const potentialHits = (dualWield || unarmed) ? Math.max(2, baseHits) : Math.max(1, baseHits);
-    const wpn = (rIsWeapon ? ITEMS.get(playerWeaponR) : null) || (lIsWeapon ? ITEMS.get(playerWeaponL) : null);
-    const hitRate = wpn ? wpn.hit : BASE_HIT_RATE;
-    if (isRandomEncounter && encounterMonsters) {
-      const target = encounterMonsters[targetIndex];
-      hitResults = rollHits(playerATK, target.def, hitRate, potentialHits);
-    } else {
-      const targetDef = isPVPBattle && pvpOpponentStats ? pvpOpponentStats.def : BOSS_DEF;
-      hitResults = rollHits(playerATK, targetDef, hitRate, potentialHits);
-    }
-    // Determine which hand attacks per hit (skip shield hands)
-    const weaponHandR = isWeapon(playerWeaponR);
-    const weaponHandL = isWeapon(playerWeaponL);
-    const firstHandR = weaponHandR || !weaponHandL; // prefer R, fallback if neither
-    const firstWpnId = firstHandR ? playerWeaponR : playerWeaponL;
-    const pendingSlashFrames = getSlashFramesForWeapon(firstWpnId, firstHandR);
-    // Base position = target center
-    const centerX = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2);
-    const centerY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
-    // Weapon-aware initial offset: bladed = diagonal sweep, unarmed = random scatter
-    const firstWeapon0 = getHitWeapon(0);
-    let pendingOffX, pendingOffY;
-    if (isBladedWeapon(firstWeapon0)) {
-      pendingOffX = 8; pendingOffY = -8; // diagonal sweep starts top-right
-    } else {
-      pendingOffX = Math.floor(Math.random() * 40) - 20;
-      pendingOffY = Math.floor(Math.random() * 40) - 20;
-    }
-    playerActionPending = {
-      command: 'fight', targetIndex, hitResults,
-      slashFrames: pendingSlashFrames, slashOffX: pendingOffX, slashOffY: pendingOffY,
-      slashX: centerX, slashY: centerY
-    };
-    battleState = 'confirm-pause';
-    battleTimer = 0;
-  }
+  const firstHandR = isWeapon(playerWeaponR) || !isWeapon(playerWeaponL);
+  const firstWpnId = firstHandR ? playerWeaponR : playerWeaponL;
+  const pendingSlashFrames = getSlashFramesForWeapon(firstWpnId, firstHandR);
+  const centerX = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2);
+  const centerY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
+  const firstWeapon0 = getHitWeapon(0);
+  const pendingOffX = isBladedWeapon(firstWeapon0) ? 8 : Math.floor(Math.random() * 40) - 20;
+  const pendingOffY = isBladedWeapon(firstWeapon0) ? -8 : Math.floor(Math.random() * 40) - 20;
+  playerActionPending = {
+    command: 'fight', targetIndex, hitResults,
+    slashFrames: pendingSlashFrames, slashOffX: pendingOffX, slashOffY: pendingOffY,
+    slashX: centerX, slashY: centerY
+  };
+  battleState = 'confirm-pause';
+  battleTimer = 0;
+}
+function _battleInputTargetSelect() {
+  _battleTargetNav();
+  _battleTargetConfirm();
   if (keys['x'] || keys['X']) {
     keys['x'] = false; keys['X'] = false;
-    // Cancel — return to menu
     playSFX(SFX.CONFIRM);
     battleState = 'menu-open';
     battleTimer = 0;
@@ -4191,76 +4039,62 @@ function drawTransitionOverlay() {
   if (transState === 'loading') _drawLoadingOverlay();
 }
 
-function _drawLoadingOverlay() {
-  let fadeLevel = 0;
-  if (loadingFadeState === 'in') {
-    fadeLevel = LOAD_FADE_MAX - Math.min(Math.floor(loadingFadeTimer / LOAD_FADE_STEP_MS), LOAD_FADE_MAX);
-  } else if (loadingFadeState === 'out') {
-    fadeLevel = Math.min(Math.floor(loadingFadeTimer / LOAD_FADE_STEP_MS), LOAD_FADE_MAX);
-  } else if (loadingFadeState !== 'visible') {
-    fadeLevel = LOAD_FADE_MAX;
-  }
-
-  const fadedTextPal = TEXT_WHITE.map((c, i) => {
-    if (i === 0) return c;
-    let fc = c;
-    for (let s = 0; s < fadeLevel; s++) fc = nesColorFade(fc);
-    return fc;
-  });
-
-  const loadingBytes = new Uint8Array([0x95,0xD8,0xCA,0xCD,0xD2,0xD7,0xD0,0xFF,0x8D,0xDE,0xD7,0xD0,0xCE,0xD8,0xD7]);
-  const loadedBytes  = new Uint8Array([0x8D,0xDE,0xD7,0xD0,0xCE,0xD8,0xD7,0xFF,0x95,0xD8,0xCA,0xCD,0xCE,0xCD]);
-  const promptBytes  = isMobile
-    ? new Uint8Array([0x99,0xDB,0xCE,0xDC,0xDC,0xFF,0x8A])
-    : new Uint8Array([0x99,0xDB,0xCE,0xDC,0xDC,0xFF,0xA3]);
-  const vpTop = HUD_VIEW_Y;
-  const vpBot = vpTop + HUD_VIEW_H;
-  const cx = HUD_VIEW_X + HUD_VIEW_W / 2;
-
-  // Scrolling battle scene BG at top of viewport
-  if (loadingBgFadeFrames && loadingBgFadeFrames.length > 0) {
-    const bgCanvas = loadingBgFadeFrames[Math.min(fadeLevel, loadingBgFadeFrames.length - 1)];
-    const scrollX = Math.floor(loadingBgScroll) % 256;
-    ctx.save();
-    ctx.beginPath(); ctx.rect(HUD_VIEW_X, vpTop, HUD_VIEW_W, 32); ctx.clip();
-    ctx.drawImage(bgCanvas, HUD_VIEW_X - scrollX, vpTop);
-    ctx.drawImage(bgCanvas, HUD_VIEW_X - scrollX + 256, vpTop);
-    ctx.restore();
-  }
-
-  // Centered info box: "4 Levels", boss sprite, HP
-  const floorsBytes = new Uint8Array([0x84,0xFF,0x95,0xCE,0xDF,0xCE,0xD5,0xDC]);
-  const hpBytes = new Uint8Array([0x91,0x99,0xFF,0xC5,0xC5,0xC5,0xC5,0xC5]);
-  const hpW = measureText(hpBytes);
+// Loading screen NES-encoded text constants
+const _LOADING_BYTES = new Uint8Array([0x95,0xD8,0xCA,0xCD,0xD2,0xD7,0xD0,0xFF,0x8D,0xDE,0xD7,0xD0,0xCE,0xD8,0xD7]);
+const _LOADED_BYTES  = new Uint8Array([0x8D,0xDE,0xD7,0xD0,0xCE,0xD8,0xD7,0xFF,0x95,0xD8,0xCA,0xCD,0xCE,0xCD]);
+const _FLOORS_BYTES  = new Uint8Array([0x84,0xFF,0x95,0xCE,0xDF,0xCE,0xD5,0xDC]);
+const _LODHP_BYTES   = new Uint8Array([0x91,0x99,0xFF,0xC5,0xC5,0xC5,0xC5,0xC5]);
+function _drawLoadingBG(vpTop, fadeLevel) {
+  if (!loadingBgFadeFrames || loadingBgFadeFrames.length === 0) return;
+  const bgCanvas = loadingBgFadeFrames[Math.min(fadeLevel, loadingBgFadeFrames.length - 1)];
+  const scrollX = Math.floor(loadingBgScroll) % 256;
+  ctx.save();
+  ctx.beginPath(); ctx.rect(HUD_VIEW_X, vpTop, HUD_VIEW_W, 32); ctx.clip();
+  ctx.drawImage(bgCanvas, HUD_VIEW_X - scrollX, vpTop);
+  ctx.drawImage(bgCanvas, HUD_VIEW_X - scrollX + 256, vpTop);
+  ctx.restore();
+}
+function _drawLoadingInfoBox(cx, vpTop, vpBot, fadeLevel, fadedTextPal) {
+  const hpW = measureText(_LODHP_BYTES);
   const bossRowW = 16 + 4 + hpW;
   const infoBoxW = Math.ceil(Math.max(bossRowW + 16, 80) / 8) * 8;
   const infoBoxH = 48;
   const infoBoxX = Math.round(cx - infoBoxW / 2);
   const infoBoxY = Math.round(vpTop + (vpBot - vpTop) / 2 - infoBoxH / 2);
-  if (borderFadeSets && fadeLevel < borderFadeSets.length) {
+  if (borderFadeSets && fadeLevel < borderFadeSets.length)
     _drawBoxOnCtx(ctx, borderFadeSets[fadeLevel], infoBoxX, infoBoxY, infoBoxW, infoBoxH);
-  }
-  const floorsW = measureText(floorsBytes);
-  drawText(ctx, infoBoxX + Math.floor((infoBoxW - floorsW) / 2), infoBoxY + 10, floorsBytes, fadedTextPal);
+  const floorsW = measureText(_FLOORS_BYTES);
+  drawText(ctx, infoBoxX + Math.floor((infoBoxW - floorsW) / 2), infoBoxY + 10, _FLOORS_BYTES, fadedTextPal);
   const bossContentX = infoBoxX + Math.floor((infoBoxW - bossRowW) / 2);
   const bossRowY = infoBoxY + 22;
   if (bossFadeFrames) ctx.drawImage(bossFadeFrames[fadeLevel][Math.floor(transTimer / 400) & 1], bossContentX, bossRowY);
   else if (adamantoiseFrames) ctx.drawImage(adamantoiseFrames[0], bossContentX, bossRowY);
-  drawText(ctx, bossContentX + 20, bossRowY + 4, hpBytes, fadedTextPal);
-
-  // Status text at bottom
+  drawText(ctx, bossContentX + 20, bossRowY + 4, _LODHP_BYTES, fadedTextPal);
+}
+function _drawLoadingOverlay() {
+  let fadeLevel = 0;
+  if (loadingFadeState === 'in') fadeLevel = LOAD_FADE_MAX - Math.min(Math.floor(loadingFadeTimer / LOAD_FADE_STEP_MS), LOAD_FADE_MAX);
+  else if (loadingFadeState === 'out') fadeLevel = Math.min(Math.floor(loadingFadeTimer / LOAD_FADE_STEP_MS), LOAD_FADE_MAX);
+  else if (loadingFadeState !== 'visible') fadeLevel = LOAD_FADE_MAX;
+  const fadedTextPal = TEXT_WHITE.map((c, i) => {
+    if (i === 0) return c;
+    let fc = c; for (let s = 0; s < fadeLevel; s++) fc = nesColorFade(fc); return fc;
+  });
+  const vpTop = HUD_VIEW_Y, vpBot = vpTop + HUD_VIEW_H;
+  const cx = HUD_VIEW_X + HUD_VIEW_W / 2;
+  _drawLoadingBG(vpTop, fadeLevel);
+  _drawLoadingInfoBox(cx, vpTop, vpBot, fadeLevel, fadedTextPal);
+  const promptBytes = isMobile
+    ? new Uint8Array([0x99,0xDB,0xCE,0xDC,0xDC,0xFF,0x8A])
+    : new Uint8Array([0x99,0xDB,0xCE,0xDC,0xDC,0xFF,0xA3]);
   if (loadingFadeState === 'in') {
-    const lw = measureText(loadingBytes);
-    drawText(ctx, cx - lw / 2, vpBot - 32, loadingBytes, fadedTextPal);
+    drawText(ctx, cx - measureText(_LOADING_BYTES) / 2, vpBot - 32, _LOADING_BYTES, fadedTextPal);
   } else if (loadingFadeState === 'visible') {
-    const dw = measureText(loadedBytes);
-    drawText(ctx, cx - dw / 2, vpBot - 32, loadedBytes, fadedTextPal);
-    if (Math.floor(transTimer / 500) % 2 === 0) {
+    drawText(ctx, cx - measureText(_LOADED_BYTES) / 2, vpBot - 32, _LOADED_BYTES, fadedTextPal);
+    if (Math.floor(transTimer / 500) % 2 === 0)
       drawText(ctx, cx - measureText(promptBytes) / 2, vpBot - 20, promptBytes, fadedTextPal);
-    }
   } else if (loadingFadeState === 'out') {
-    const dw = measureText(loadedBytes);
-    drawText(ctx, cx - dw / 2, vpBot - 32, loadedBytes, fadedTextPal);
+    drawText(ctx, cx - measureText(_LOADED_BYTES) / 2, vpBot - 32, _LOADED_BYTES, fadedTextPal);
   }
 }
 
@@ -4520,6 +4354,12 @@ function _buildWaterCache(wmr) {
   return { frames, metas };
 }
 
+function _writeTilePixels(td, tile, rgbPal) {
+  for (let p = 0; p < 64; p++) {
+    const rgb = rgbPal[tile[p]]; const di = p * 4;
+    td[di]=rgb[0]; td[di+1]=rgb[1]; td[di+2]=rgb[2]; td[di+3]=255;
+  }
+}
 function _updateWorldWater(wmr) {
   if (!wmr || !wmr._atlas) return;
   if (!_waterCache) _waterCache = _buildWaterCache(wmr);
@@ -4530,67 +4370,36 @@ function _updateWorldWater(wmr) {
   const actx = wmr._atlas.getContext('2d');
   const tileImg = actx.createImageData(8, 8);
   const td = tileImg.data;
-
-  // Derive shift state and cascade progress from waterTick
-  const hShift = Math.floor(waterTick / 8) % 16;    // current shift (16-bit cycle)
-  const hPrev = (hShift + 15) % 16;                  // previous shift
-  const subRow = waterTick % 8;                       // which row is being "refreshed" (0-7)
+  const hShift = Math.floor(waterTick / 8) % 16;
+  const hPrev  = (hShift + 15) % 16;
+  const subRow = waterTick % 8;
   const vFrame = Math.floor(waterTick / 8) % 8;
 
   for (const m of metas) {
     const meta = metatiles[m];
-    const palIdx = tileAttrs[m] & 0x03;
-    const pal = palettes[palIdx];
-    const rgbPal = pal.map(ni => NES_SYSTEM_PALETTE[ni & 0x3F] || [0, 0, 0]);
+    const rgbPal = palettes[tileAttrs[m] & 0x03].map(ni => NES_SYSTEM_PALETTE[ni & 0x3F] || [0,0,0]);
     const chrs = [meta.tl, meta.tr, meta.bl, meta.br];
-    const offs = [[0, 0], [8, 0], [0, 8], [8, 8]];
+    const offs = [[0,0],[8,0],[0,8],[8,8]];
 
     for (let q = 0; q < 4; q++) {
       const ci = chrs[q];
       const fr = frames.get(ci);
       if (!fr) {
-        // Non-animated quadrant: draw from static CHR
         const tile = chrTiles[ci];
         if (!tile) continue;
-        for (let py = 0; py < 8; py++) {
-          for (let px = 0; px < 8; px++) {
-            const cIdx = tile[py * 8 + px];
-            const rgb = rgbPal[cIdx];
-            const di = (py * 8 + px) * 4;
-            td[di] = rgb[0]; td[di+1] = rgb[1];
-            td[di+2] = rgb[2]; td[di+3] = 255;
-          }
-        }
-        actx.putImageData(tileImg, m * 16 + offs[q][0], offs[q][1]);
-        continue;
-      }
-
-      if (HORIZ_CHR.has(ci)) {
-        // Horizontal: per-row cascade. Rows <= subRow use hShift, others use hPrev.
+        _writeTilePixels(td, tile, rgbPal);
+      } else if (HORIZ_CHR.has(ci)) {
         const curTile = fr[hShift % fr.length];
         const prevTile = fr[hPrev % fr.length];
+        // Per-row cascade: rows <= subRow use current shift, others use previous
+        const mixed = new Array(64);
         for (let py = 0; py < 8; py++) {
-          const src = (py <= subRow) ? curTile : prevTile;
-          for (let px = 0; px < 8; px++) {
-            const cIdx = src[py * 8 + px];
-            const rgb = rgbPal[cIdx];
-            const di = (py * 8 + px) * 4;
-            td[di] = rgb[0]; td[di+1] = rgb[1];
-            td[di+2] = rgb[2]; td[di+3] = 255;
-          }
+          const src = py <= subRow ? curTile : prevTile;
+          for (let px = 0; px < 8; px++) mixed[py*8+px] = src[py*8+px];
         }
+        _writeTilePixels(td, mixed, rgbPal);
       } else {
-        // Vertical: uniform frame
-        const tile = fr[vFrame % fr.length];
-        for (let py = 0; py < 8; py++) {
-          for (let px = 0; px < 8; px++) {
-            const cIdx = tile[py * 8 + px];
-            const rgb = rgbPal[cIdx];
-            const di = (py * 8 + px) * 4;
-            td[di] = rgb[0]; td[di+1] = rgb[1];
-            td[di+2] = rgb[2]; td[di+3] = 255;
-          }
-        }
+        _writeTilePixels(td, fr[vFrame % fr.length], rgbPal);
       }
       actx.putImageData(tileImg, m * 16 + offs[q][0], offs[q][1]);
     }
@@ -4902,75 +4711,49 @@ function _renderSprites(camX, camY, originX, spriteY) {
   if (sprite) sprite.draw(ctx, SCREEN_CENTER_X, spriteY);
 }
 
-function render() {
-  // Clear canvas to black (HUD background)
-  ctx.fillStyle = '#000';
-  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-
-  let camX = Math.round(worldX);
-  const camY = Math.round(worldY);
-
-  // Horizontal screen shake (alternates ±2px on bit 1 of frame counter)
-  if (shakeActive) {
-    const frame = Math.floor(shakeTimer / (1000 / 60));
-    camX += (frame & 2) ? 2 : -2;
-  }
-
-  // Battle shake (enemy attack)
-  if (battleShakeTimer > 0) {
-    const frame = Math.floor(battleShakeTimer / (1000 / 60));
-    camX += (frame & 2) ? 2 : -2;
-  }
-
-  // Camera origin: screen pixel where the camera world position maps to
-  const originX = SCREEN_CENTER_X;
-  const originY = SCREEN_CENTER_Y + 3; // sprite draws 3px above tile
-
-  const spriteY = SCREEN_CENTER_Y;
-
-  // Clip game rendering to viewport
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
-  ctx.clip();
-
+function _renderMapAndWater(camX, camY, originX, originY, spriteY) {
   if (onWorldMap && worldMapRenderer) {
     worldMapRenderer.draw(ctx, camX, camY, originX, originY);
-    // Water animation: update atlas directly from game.js (bypasses module cache)
     _updateWorldWater(worldMapRenderer);
   } else if (mapRenderer) {
     mapRenderer.draw(ctx, camX, camY, originX, originY);
     _updateIndoorWater(mapRenderer);
   }
-
-  // Hide all sprites/objects during transitions and battles
-  if ((transState === 'none' || transState === 'trap-reveal') && (battleState === 'none' || battleState === 'flash-strobe' || battleState.startsWith('roar-'))) {
+  if ((transState === 'none' || transState === 'trap-reveal') &&
+      (battleState === 'none' || battleState === 'flash-strobe' || battleState.startsWith('roar-'))) {
     _renderSprites(camX, camY, originX, spriteY);
   }
-
-  // Draw overlay tiles (grass, trees) on top of sprite
   if (onWorldMap && worldMapRenderer) {
     worldMapRenderer.drawOverlay(ctx, camX, camY, originX, originY, SCREEN_CENTER_X, spriteY);
   } else if (mapRenderer) {
     mapRenderer.drawOverlay(ctx, camX, camY, originX, originY, SCREEN_CENTER_X, spriteY);
   }
-
-  // Star spiral effect — 8 stars orbiting inward around player
-  if (starEffect && _starTiles) {
-    const cx = SCREEN_CENTER_X + 8;  // player sprite center X
-    const cy = SCREEN_CENTER_Y + 8;  // player sprite center Y
-    const { radius, angle, frame } = starEffect;
-    // Flicker: alternate + and X shapes every ~16 frames
-    const tile = _starTiles[(frame >> 4) & 1];
-    for (let i = 0; i < 8; i++) {
-      const a = angle + i * Math.PI / 4;
-      const sx = Math.round(cx + radius * Math.cos(a) - 8);
-      const sy = Math.round(cy + radius * Math.sin(a) - 8);
-      ctx.drawImage(tile, sx, sy);
-    }
+}
+function _renderStarSpiral() {
+  if (!starEffect || !_starTiles) return;
+  const { radius, angle, frame } = starEffect;
+  const tile = _starTiles[(frame >> 4) & 1];
+  for (let i = 0; i < 8; i++) {
+    const a = angle + i * Math.PI / 4;
+    ctx.drawImage(tile,
+      Math.round(SCREEN_CENTER_X + 8 + radius * Math.cos(a) - 8),
+      Math.round(SCREEN_CENTER_Y + 8 + radius * Math.sin(a) - 8));
   }
+}
+function render() {
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-  ctx.restore(); // end viewport clip
+  let camX = Math.round(worldX);
+  const camY = Math.round(worldY);
+  if (shakeActive) camX += (Math.floor(shakeTimer / (1000 / 60)) & 2) ? 2 : -2;
+  if (battleShakeTimer > 0) camX += (Math.floor(battleShakeTimer / (1000 / 60)) & 2) ? 2 : -2;
+
+  ctx.save();
+  ctx.beginPath(); ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H); ctx.clip();
+  _renderMapAndWater(camX, camY, SCREEN_CENTER_X, SCREEN_CENTER_Y + 3, SCREEN_CENTER_Y);
+  _renderStarSpiral();
+  ctx.restore();
 }
 
 function statRowBytes(label1, label2, value) {
@@ -4985,19 +4768,12 @@ function statRowBytes(label1, label2, value) {
   return bytes;
 }
 
-function _drawHUDTopBox() {
-  // Top box layers: (1) battle BG base, (2) transition fade, (3) border+text overlay
-  const isFading = topBoxScrollState === 'fade-in' || topBoxScrollState === 'display' || topBoxScrollState === 'fade-out';
-
-  // (1) Non-town battle BG: always draw as base layer (full 256×32)
-  // Shake horizontally when player is hit during battle
+function _drawTopBoxBattleBG() {
   const topShake = (battleState === 'enemy-attack' && battleShakeTimer > 0)
     ? (Math.floor(battleShakeTimer / 67) & 1 ? 2 : -2) : 0;
   if (transState !== 'loading' && !topBoxIsTown && topBoxBgCanvas) {
     ctx.drawImage(topBoxBgCanvas, topShake, 0);
   }
-
-  // (2) NES palette fade on battle BG during transitions — drawn BEFORE border so border stays on top
   if (!topBoxIsTown && topBoxBgFadeFrames && transState !== 'none' && transState !== 'door-opening' && transState !== 'loading') {
     const maxStep = topBoxBgFadeFrames.length - 1;
     const FADE_STEP_MS = 100;
@@ -5009,19 +4785,12 @@ function _drawHUDTopBox() {
     } else if (transState === 'opening') {
       fadeStep = Math.max(maxStep - Math.floor(transTimer / FADE_STEP_MS), 0);
     }
-    if (fadeStep > 0) {
-      ctx.drawImage(topBoxBgFadeFrames[fadeStep], 0, 0);
-    }
+    if (fadeStep > 0) ctx.drawImage(topBoxBgFadeFrames[fadeStep], 0, 0);
   }
-
-  // Round battle BG corners to match border tile shape
-  if (!topBoxIsTown && transState !== 'loading') {
-    roundTopBoxCorners();
-  }
-
-  // (3) Border + text overlay
+  if (!topBoxIsTown && transState !== 'loading') roundTopBoxCorners();
+}
+function _drawTopBoxOverlay(isFading) {
   if (transState === 'loading') {
-    // Loading screen: border fades with loading content
     let loadFade = LOAD_FADE_MAX;
     if (loadingFadeState === 'in') {
       loadFade = LOAD_FADE_MAX - Math.min(Math.floor(loadingFadeTimer / LOAD_FADE_STEP_MS), LOAD_FADE_MAX);
@@ -5031,113 +4800,68 @@ function _drawHUDTopBox() {
       loadFade = Math.min(Math.floor(loadingFadeTimer / LOAD_FADE_STEP_MS), LOAD_FADE_MAX);
     }
     drawTopBoxBorder(loadFade);
-    // Text fades with name fade (isFading block below) or loading content
     if (topBoxNameBytes && !isFading) {
       const fadedPal = [0x0F, 0x0F, 0x0F, 0x30];
       for (let s = 0; s < loadFade; s++) fadedPal[3] = nesColorFade(fadedPal[3]);
       const tw = measureText(topBoxNameBytes);
-      const tx = 8 + Math.floor((240 - tw) / 2);
-      const ty = 8 + Math.floor((16 - 8) / 2);
-      drawText(ctx, tx, ty, topBoxNameBytes, fadedPal);
+      drawText(ctx, 8 + Math.floor((240 - tw) / 2), 12, topBoxNameBytes, fadedPal);
     }
   } else if (topBoxIsTown && topBoxMode === 'name' && topBoxNameBytes) {
-    // Town: border fades in/out with text, stays at full brightness when permanent
-    if (isFading) {
-      drawTopBoxBorder(topBoxFadeStep);
-    } else if (topBoxScrollState !== 'pending') {
-      drawTopBoxBorder(0);
-    }
+    if (isFading) drawTopBoxBorder(topBoxFadeStep);
+    else if (topBoxScrollState !== 'pending') drawTopBoxBorder(0);
     if (!isFading && topBoxScrollState !== 'pending') {
       const tw = measureText(topBoxNameBytes);
-      const tx = 8 + Math.floor((240 - tw) / 2);
-      const ty = 8 + Math.floor((16 - 8) / 2);
-      drawText(ctx, tx, ty, topBoxNameBytes, TEXT_WHITE);
+      drawText(ctx, 8 + Math.floor((240 - tw) / 2), 12, topBoxNameBytes, TEXT_WHITE);
     }
   }
-
-  // Fading name text overlay — NES discrete palette steps
   if (isFading && topBoxNameBytes) {
-    // Non-town, non-loading: draw border fading with text
-    if (transState !== 'loading' && !topBoxIsTown) {
-      drawTopBoxBorder(topBoxFadeStep);
-    }
+    if (transState !== 'loading' && !topBoxIsTown) drawTopBoxBorder(topBoxFadeStep);
     const fadedPal = [0x0F, 0x0F, 0x0F, 0x30];
-    for (let s = 0; s < topBoxFadeStep; s++) {
-      fadedPal[3] = nesColorFade(fadedPal[3]);
-    }
+    for (let s = 0; s < topBoxFadeStep; s++) fadedPal[3] = nesColorFade(fadedPal[3]);
     const tw = measureText(topBoxNameBytes);
-    const tx = 8 + Math.floor((240 - tw) / 2);
-    const ty = 8 + Math.floor((16 - 8) / 2);
-    drawText(ctx, tx, ty, topBoxNameBytes, fadedPal);
+    drawText(ctx, 8 + Math.floor((240 - tw) / 2), 12, topBoxNameBytes, fadedPal);
   }
 }
+function _drawHUDTopBox() {
+  const isFading = topBoxScrollState === 'fade-in' || topBoxScrollState === 'display' || topBoxScrollState === 'fade-out';
+  _drawTopBoxBattleBG();
+  _drawTopBoxOverlay(isFading);
+}
 
+function _drawPortraitImage(px, py, nfPortrait, isPauseHeal, infoFadeStep) {
+  if (infoFadeStep >= HUD_INFO_FADE_STEPS) return;
+  if (infoFadeStep > 0) ctx.globalAlpha = 1 - infoFadeStep / HUD_INFO_FADE_STEPS;
+  ctx.drawImage(nfPortrait, px, py);
+  if (!isPauseHeal && nfPortrait === battleSpriteKneelCanvas && sweatFrames.length === 2)
+    ctx.drawImage(sweatFrames[Math.floor(Date.now() / 133) & 1], px, py - 3);
+  if (infoFadeStep > 0) ctx.globalAlpha = 1;
+}
+function _drawCureSparkle(px, py, isPauseHeal) {
+  if (!isPauseHeal || cureSparkleFrames.length !== 2 || (pauseHealNum && pauseHealNum.rosterIdx >= 0)) return;
+  const frame = cureSparkleFrames[Math.floor(pauseTimer / 67) & 1];
+  ctx.drawImage(frame, px - 8, py - 7);
+  ctx.save(); ctx.scale(-1,  1); ctx.drawImage(frame, -(px + 23),  py - 7);  ctx.restore();
+  ctx.save(); ctx.scale( 1, -1); ctx.drawImage(frame,   px - 8,  -(py + 24)); ctx.restore();
+  ctx.save(); ctx.scale(-1, -1); ctx.drawImage(frame, -(px + 23), -(py + 24)); ctx.restore();
+}
+function _drawPauseHealNum(px, py) {
+  if (!pauseHealNum || pauseHealNum.rosterIdx >= 0) return;
+  const digits = String(pauseHealNum.value);
+  const numBytes = new Uint8Array(digits.length);
+  for (let i = 0; i < digits.length; i++) numBytes[i] = 0x80 + parseInt(digits[i]);
+  drawText(ctx, px + 8 - Math.floor(digits.length * 8 / 2), _dmgBounceY(py + 8, pauseHealNum.timer), numBytes, [0x0F, 0x0F, 0x0F, 0x2B]);
+}
 function _drawHUDPortrait() {
-  // HUD info fade-in (portrait + HP/MP)
   const infoFadeStep = HUD_INFO_FADE_STEPS - Math.min(Math.floor(hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
-
-  // Portrait shake offset during enemy-attack
-  const shakeOff = (battleState === 'enemy-attack' && battleShakeTimer > 0)
-    ? (Math.floor(battleShakeTimer / 67) & 1 ? 2 : -2) : 0;
-
-  // Portrait drawn in drawBattle() above border layer — just draw idle here during non-battle
   if (battleState !== 'none' || !battleSpriteCanvas) return;
-
   const isPauseHeal = pauseState === 'inv-heal';
-  let nfPortrait;
-  if (isPauseHeal && battleSpriteDefendCanvas) {
-    nfPortrait = battleSpriteDefendCanvas;
-  } else {
-    nfPortrait = (playerHP > 0 && playerStats && playerHP <= Math.floor(playerStats.maxHP / 4) && battleSpriteKneelCanvas)
-      ? battleSpriteKneelCanvas : battleSpriteCanvas;
-  }
-  const px = HUD_RIGHT_X + 8;
-  const py = HUD_VIEW_Y + 8;
-  if (infoFadeStep === 0) {
-    ctx.drawImage(nfPortrait, px, py);
-    if (!isPauseHeal && nfPortrait === battleSpriteKneelCanvas && sweatFrames.length === 2) {
-      const swi = Math.floor(Date.now() / 133) & 1;
-      ctx.drawImage(sweatFrames[swi], px, py - 3);
-    }
-  } else if (infoFadeStep < HUD_INFO_FADE_STEPS) {
-    ctx.globalAlpha = 1 - infoFadeStep / HUD_INFO_FADE_STEPS;
-    ctx.drawImage(nfPortrait, px, py);
-    if (!isPauseHeal && nfPortrait === battleSpriteKneelCanvas && sweatFrames.length === 2) {
-      const swi = Math.floor(Date.now() / 133) & 1;
-      ctx.drawImage(sweatFrames[swi], px, py - 3);
-    }
-    ctx.globalAlpha = 1;
-  }
-  // Cure sparkle during pause heal — 16×16 config A/B alternating every 67ms
-  if (isPauseHeal && cureSparkleFrames.length === 2 && !(pauseHealNum && pauseHealNum.rosterIdx >= 0)) {
-    const fi = Math.floor(pauseTimer / 67) & 1;
-    const frame = cureSparkleFrames[fi];
-    // TL
-    ctx.drawImage(frame, px - 8, py - 7);
-    // TR: H-flip
-    ctx.save(); ctx.scale(-1, 1);
-    ctx.drawImage(frame, -(px + 23), py - 7);
-    ctx.restore();
-    // BL: V-flip
-    ctx.save(); ctx.scale(1, -1);
-    ctx.drawImage(frame, px - 8, -(py + 24));
-    ctx.restore();
-    // BR: HV-flip
-    ctx.save(); ctx.scale(-1, -1);
-    ctx.drawImage(frame, -(px + 23), -(py + 24));
-    ctx.restore();
-  }
-  // Green heal number bounce during pause heal (player only)
-  if (pauseHealNum && !(pauseHealNum.rosterIdx >= 0)) {
-    const hpx = px + 8;
-    const baseY = py + 8;
-    const hpy = _dmgBounceY(baseY, pauseHealNum.timer);
-    const digits = String(pauseHealNum.value);
-    const numBytes = new Uint8Array(digits.length);
-    for (let i = 0; i < digits.length; i++) numBytes[i] = 0x80 + parseInt(digits[i]);
-    const tw = digits.length * 8;
-    drawText(ctx, hpx - Math.floor(tw / 2), hpy, numBytes, [0x0F, 0x0F, 0x0F, 0x2B]);
-  }
+  const nfPortrait = isPauseHeal && battleSpriteDefendCanvas ? battleSpriteDefendCanvas
+    : (playerHP > 0 && playerStats && playerHP <= Math.floor(playerStats.maxHP / 4) && battleSpriteKneelCanvas
+       ? battleSpriteKneelCanvas : battleSpriteCanvas);
+  const px = HUD_RIGHT_X + 8, py = HUD_VIEW_Y + 8;
+  _drawPortraitImage(px, py, nfPortrait, isPauseHeal, infoFadeStep);
+  _drawCureSparkle(px, py, isPauseHeal);
+  _drawPauseHealNum(px, py);
 }
 
 function _drawHUDInfoPanel() {
@@ -5177,66 +4901,49 @@ function _drawHUDInfoPanel() {
   }
 }
 
-function _drawHUDLoadingMoogle() {
-  let fadeLevel = 0;
-  if (loadingFadeState === 'in') {
-    const step = Math.min(Math.floor(loadingFadeTimer / LOAD_FADE_STEP_MS), LOAD_FADE_MAX);
-    fadeLevel = LOAD_FADE_MAX - step;
-  } else if (loadingFadeState === 'out') {
-    fadeLevel = Math.min(Math.floor(loadingFadeTimer / LOAD_FADE_STEP_MS), LOAD_FADE_MAX);
-  }
-  // Draw right main panel box (only shown during loading screen)
-  const _lbTiles = (borderFadeSets && borderFadeSets[fadeLevel]) || borderTileCanvases;
-  if (_lbTiles) {
-    const [lTL, lTOP, lTR, lLEFT, lRIGHT, lBL, lBOT, lBR, lFILL] = _lbTiles;
-    const lx = HUD_RIGHT_X, ly = HUD_VIEW_Y + 32, lw = HUD_RIGHT_W, lh = HUD_VIEW_H - 32;
-    ctx.drawImage(lTL, lx, ly); ctx.drawImage(lTR, lx + lw - 8, ly);
-    ctx.drawImage(lBL, lx, ly + lh - 8); ctx.drawImage(lBR, lx + lw - 8, ly + lh - 8);
-    for (let tx = lx + 8; tx < lx + lw - 8; tx += 8) { ctx.drawImage(lTOP, tx, ly); ctx.drawImage(lBOT, tx, ly + lh - 8); }
-    for (let ty = ly + 8; ty < ly + lh - 8; ty += 8) { ctx.drawImage(lLEFT, lx, ty); ctx.drawImage(lRIGHT, lx + lw - 8, ty); }
-    for (let ty = ly + 8; ty < ly + lh - 8; ty += 8) for (let tx = lx + 8; tx < lx + lw - 8; tx += 8) ctx.drawImage(lFILL, tx, ty);
-  }
-  const beatBytes = new Uint8Array([0x8B,0xCE,0xCA,0xDD,0xFF,0xDD,0xD1,0xCE]); // "Beat the"
-  const bossBytes = new Uint8Array([0x8B,0xD8,0xDC,0xDC,0xFF,0x94,0xDE,0xD9,0xD8,0xC4]); // "Boss Kupo!"
-  const rpX = HUD_RIGHT_X;
-  const rpY = HUD_VIEW_Y + 32;
-  const rpW = HUD_RIGHT_W;
-  const rpCX = rpX + Math.floor(rpW / 2);
-
-  // Chat bubble — centered in right panel
+function _drawLoadingRightPanel(fadeLevel) {
+  const tiles = (borderFadeSets && borderFadeSets[fadeLevel]) || borderTileCanvases;
+  if (!tiles) return;
+  const [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR, FILL] = tiles;
+  const lx = HUD_RIGHT_X, ly = HUD_VIEW_Y + 32, lw = HUD_RIGHT_W, lh = HUD_VIEW_H - 32;
+  ctx.drawImage(TL, lx, ly); ctx.drawImage(TR, lx+lw-8, ly);
+  ctx.drawImage(BL, lx, ly+lh-8); ctx.drawImage(BR, lx+lw-8, ly+lh-8);
+  for (let tx = lx+8; tx < lx+lw-8; tx += 8) { ctx.drawImage(TOP, tx, ly); ctx.drawImage(BOT, tx, ly+lh-8); }
+  for (let ty = ly+8; ty < ly+lh-8; ty += 8) { ctx.drawImage(LEFT, lx, ty); ctx.drawImage(RIGHT, lx+lw-8, ty); }
+  for (let ty = ly+8; ty < ly+lh-8; ty += 8) for (let tx = lx+8; tx < lx+lw-8; tx += 8) ctx.drawImage(FILL, tx, ty);
+}
+function _drawLoadingChatBubble(rpCX, rpY, rpH, fadeLevel) {
+  const beatBytes = new Uint8Array([0x8B,0xCE,0xCA,0xDD,0xFF,0xDD,0xD1,0xCE]);
+  const bossBytes = new Uint8Array([0x8B,0xD8,0xDC,0xDC,0xFF,0x94,0xDE,0xD9,0xD8,0xC4]);
   let fadedWhite = 0x30;
   for (let s = 0; s < fadeLevel; s++) fadedWhite = nesColorFade(fadedWhite);
-  const whiteRgb = NES_SYSTEM_PALETTE[fadedWhite] || [0, 0, 0];
+  const whiteRgb = NES_SYSTEM_PALETTE[fadedWhite] || [0,0,0];
   ctx.fillStyle = `rgb(${whiteRgb[0]},${whiteRgb[1]},${whiteRgb[2]})`;
-  const beatW = measureText(beatBytes);
-  const bossW = measureText(bossBytes);
-  const bgW = Math.max(beatW, bossW) + 6;
+  const bgW = Math.max(measureText(beatBytes), measureText(bossBytes)) + 6;
   const bubbleX = Math.round(rpCX - bgW / 2);
-  const moogleSectionH = 22 + 5 + 16;
-  const rpH = HUD_VIEW_H - 32;
-  const bubbleY = rpY + Math.floor((rpH - moogleSectionH) / 2);
-  ctx.beginPath();
-  ctx.roundRect(bubbleX, bubbleY, bgW, 22, 4);
-  ctx.fill();
-  // Triangle pointing down toward moogle
+  const bubbleY = rpY + Math.floor((rpH - (22 + 5 + 16)) / 2);
+  ctx.beginPath(); ctx.roundRect(bubbleX, bubbleY, bgW, 22, 4); ctx.fill();
   const triCX = Math.round(bubbleX + bgW / 2);
   ctx.beginPath();
-  ctx.moveTo(triCX - 4, bubbleY + 22);
-  ctx.lineTo(triCX, bubbleY + 27);
-  ctx.lineTo(triCX + 4, bubbleY + 22);
+  ctx.moveTo(triCX-4, bubbleY+22); ctx.lineTo(triCX, bubbleY+27); ctx.lineTo(triCX+4, bubbleY+22);
   ctx.fill();
-  // Chat text
   const blackTextPal = [0x0F, fadedWhite, fadedWhite, 0x0F];
-  drawText(ctx, bubbleX + 3, bubbleY + 2, beatBytes, blackTextPal);
-  drawText(ctx, bubbleX + 3, bubbleY + 12, bossBytes, blackTextPal);
-
-  // Moogle sprite below chat bubble
-  const moogleX = Math.round(rpCX - 8);
-  const moogleY = bubbleY + 30;
-  if (moogleFadeFrames) {
-    const mFrame = Math.floor(transTimer / 400) & 1;
-    ctx.drawImage(moogleFadeFrames[fadeLevel][mFrame], moogleX, moogleY);
-  }
+  drawText(ctx, bubbleX+3, bubbleY+2,  beatBytes, blackTextPal);
+  drawText(ctx, bubbleX+3, bubbleY+12, bossBytes, blackTextPal);
+  return bubbleY;
+}
+function _drawLoadingMoogleSprite(moogleX, moogleY, fadeLevel) {
+  if (!moogleFadeFrames) return;
+  ctx.drawImage(moogleFadeFrames[fadeLevel][Math.floor(transTimer / 400) & 1], moogleX, moogleY);
+}
+function _drawHUDLoadingMoogle() {
+  let fadeLevel = 0;
+  if (loadingFadeState === 'in') fadeLevel = LOAD_FADE_MAX - Math.min(Math.floor(loadingFadeTimer / LOAD_FADE_STEP_MS), LOAD_FADE_MAX);
+  else if (loadingFadeState === 'out') fadeLevel = Math.min(Math.floor(loadingFadeTimer / LOAD_FADE_STEP_MS), LOAD_FADE_MAX);
+  _drawLoadingRightPanel(fadeLevel);
+  const rpCX = HUD_RIGHT_X + Math.floor(HUD_RIGHT_W / 2);
+  const bubbleY = _drawLoadingChatBubble(rpCX, HUD_VIEW_Y + 32, HUD_VIEW_H - 32, fadeLevel);
+  _drawLoadingMoogleSprite(Math.round(rpCX - 8), bubbleY + 30, fadeLevel);
 }
 
 function drawHUD() {
@@ -5768,86 +5475,62 @@ function _updateRosterLocationReset(curLoc) {
   rosterPrevLoc = curLoc;
 }
 
-function updateRoster(dt) {
-  if (rosterState === 'menu-in' || rosterState === 'menu-out') {
-    rosterMenuTimer += Math.min(dt, 33);
-  }
-  if (titleState !== 'done') return;
-
-  _updateRosterBattleFade(dt);
-
-  const curLoc = getPlayerLocation();
-  _updateRosterLocationReset(curLoc);
-
-  // Tick fade timers
+function _updateRosterFadeTicks(dt) {
   for (const name in rosterFadeDir) {
     const dir = rosterFadeDir[name];
-    if (dir === 'in' && rosterFadeMap[name] > 0) {
-      rosterFadeTimers[name] = (rosterFadeTimers[name] || 0) + dt;
-      if (rosterFadeTimers[name] >= ROSTER_FADE_STEP_MS) {
-        rosterFadeTimers[name] -= ROSTER_FADE_STEP_MS;
-        rosterFadeMap[name]--;
-        if (rosterFadeMap[name] <= 0) { rosterFadeMap[name] = 0; delete rosterFadeDir[name]; }
-      }
+    rosterFadeTimers[name] = (rosterFadeTimers[name] || 0) + dt;
+    if (rosterFadeTimers[name] < ROSTER_FADE_STEP_MS) continue;
+    rosterFadeTimers[name] -= ROSTER_FADE_STEP_MS;
+    if (dir === 'in') {
+      if (rosterFadeMap[name] > 0) rosterFadeMap[name]--;
+      if (rosterFadeMap[name] <= 0) { rosterFadeMap[name] = 0; delete rosterFadeDir[name]; }
     } else if (dir === 'out') {
-      rosterFadeTimers[name] = (rosterFadeTimers[name] || 0) + dt;
-      if (rosterFadeTimers[name] >= ROSTER_FADE_STEP_MS) {
-        rosterFadeTimers[name] -= ROSTER_FADE_STEP_MS;
-        rosterFadeMap[name] = (rosterFadeMap[name] || 0) + 1;
-        if (rosterFadeMap[name] >= ROSTER_FADE_STEPS) {
-          // Find position before removal, slide players below it up
-          const vis = getRosterVisible();
-          const removeIdx = vis.findIndex(p => p.name === name);
-          if (removeIdx >= 0) {
-            for (let j = removeIdx + 1; j < vis.length; j++) {
-              rosterSlideY[vis[j].name] = (rosterSlideY[vis[j].name] || 0) + ROSTER_ROW_H;
-            }
-          }
-          delete rosterFadeMap[name];
-          delete rosterFadeDir[name];
-          delete rosterFadeTimers[name];
-          delete rosterSlideY[name];
-          _clampRosterCursor();
+      rosterFadeMap[name] = (rosterFadeMap[name] || 0) + 1;
+      if (rosterFadeMap[name] >= ROSTER_FADE_STEPS) {
+        const vis = getRosterVisible();
+        const removeIdx = vis.findIndex(p => p.name === name);
+        if (removeIdx >= 0) {
+          for (let j = removeIdx + 1; j < vis.length; j++)
+            rosterSlideY[vis[j].name] = (rosterSlideY[vis[j].name] || 0) + ROSTER_ROW_H;
         }
+        delete rosterFadeMap[name]; delete rosterFadeDir[name];
+        delete rosterFadeTimers[name]; delete rosterSlideY[name];
+        _clampRosterCursor();
       }
     }
   }
-
-  // Tick slide offsets toward 0
+}
+function _updateRosterSlideTicks(dt) {
   for (const name in rosterSlideY) {
     const sy = rosterSlideY[name];
     if (sy === 0) { delete rosterSlideY[name]; continue; }
     const move = ROSTER_SLIDE_SPEED * dt;
-    if (Math.abs(sy) <= move) {
-      rosterSlideY[name] = 0;
-      delete rosterSlideY[name];
-    } else {
-      rosterSlideY[name] = sy > 0 ? sy - move : sy + move;
-    }
+    rosterSlideY[name] = Math.abs(sy) <= move ? 0 : sy > 0 ? sy - move : sy + move;
+    if (rosterSlideY[name] === 0) delete rosterSlideY[name];
   }
-
-  // Simulate player movement — paused during battle to avoid silent list changes
-  if (battleState === 'none') {
-    rosterTimer -= dt;
-    if (rosterTimer <= 0) {
-      rosterTimer = _rosterNextTimer();
-
-      const movers = PLAYER_POOL.filter(p => !p.camper);
-      if (movers.length > 0) {
-        const mover = movers[Math.floor(Math.random() * movers.length)];
-        const wasHere = mover.loc === curLoc;
-        const otherLocs = LOCATIONS.filter(l => l !== mover.loc);
-        mover.loc = otherLocs[Math.floor(Math.random() * otherLocs.length)];
-        const isHere = mover.loc === curLoc;
-
-        if (wasHere && !isHere) {
-          _rosterStartFadeOut(mover.name);
-        } else if (!wasHere && isHere) {
-          _rosterStartFadeIn(mover.name);
-        }
-      }
-    }
-  }
+}
+function _updateRosterMovement(dt, curLoc) {
+  if (battleState !== 'none') return;
+  rosterTimer -= dt;
+  if (rosterTimer > 0) return;
+  rosterTimer = _rosterNextTimer();
+  const movers = PLAYER_POOL.filter(p => !p.camper);
+  if (movers.length === 0) return;
+  const mover = movers[Math.floor(Math.random() * movers.length)];
+  const wasHere = mover.loc === curLoc;
+  mover.loc = LOCATIONS.filter(l => l !== mover.loc)[Math.floor(Math.random() * (LOCATIONS.length - 1))];
+  if (wasHere && mover.loc !== curLoc) _rosterStartFadeOut(mover.name);
+  else if (!wasHere && mover.loc === curLoc) _rosterStartFadeIn(mover.name);
+}
+function updateRoster(dt) {
+  if (rosterState === 'menu-in' || rosterState === 'menu-out') rosterMenuTimer += Math.min(dt, 33);
+  if (titleState !== 'done') return;
+  _updateRosterBattleFade(dt);
+  const curLoc = getPlayerLocation();
+  _updateRosterLocationReset(curLoc);
+  _updateRosterFadeTicks(dt);
+  _updateRosterSlideTicks(dt);
+  _updateRosterMovement(dt, curLoc);
 }
 
 // ── Title Screen ──
@@ -7895,26 +7578,24 @@ function _updateAllyDamageShow() {
   }
 }
 
-function _updateBattleAlly() {
+function _updateAllyJoin() {
   if (battleState === 'pvp-ally-appear') {
-    // Hold until box finishes expanding, then resume turn queue
-    if (battleTimer >= PVP_BOX_RESIZE_MS) {
-      turnQueue = buildTurnOrder();
-      processNextTurn();
-    }
-  } else if (battleState === 'ally-fade-in') {
-    // Fade the newly joined ally portrait in (4 steps × 100ms)
+    if (battleTimer >= PVP_BOX_RESIZE_MS) { turnQueue = buildTurnOrder(); processNextTurn(); }
+    return true;
+  }
+  if (battleState === 'ally-fade-in') {
     const newAlly = battleAllies[battleAllies.length - 1];
     if (newAlly && battleTimer >= 100) {
       newAlly.fadeStep = Math.max(0, newAlly.fadeStep - 1);
       battleTimer = 0;
-      if (newAlly.fadeStep <= 0) {
-        turnQueue = buildTurnOrder();
-        processNextTurn();
-      }
+      if (newAlly.fadeStep <= 0) { turnQueue = buildTurnOrder(); processNextTurn(); }
     }
-  } else if (battleState === 'ally-attack-start') {
-    // 100ms wind-up, flash ally row, play weapon SFX
+    return true;
+  }
+  return false;
+}
+function _updateAllyAttack() {
+  if (battleState === 'ally-attack-start') {
     if (battleTimer >= 100) {
       const ally = battleAllies[currentAllyAttacker];
       const bladed = ally && isBladedWeapon(ally.weaponId);
@@ -7926,10 +7607,10 @@ function _updateBattleAlly() {
       battleState = 'ally-slash';
       battleTimer = 0;
     }
-  } else if (battleState === 'ally-slash') {
-    // Punch effect on target (3 frames × ~67ms = ~200ms)
+    return true;
+  }
+  if (battleState === 'ally-slash') {
     if (battleTimer >= 200) {
-      // Apply damage to target
       if (allyHitResult && !allyHitResult.miss) {
         if (allyTargetIndex >= 0 && encounterMonsters) {
           encounterMonsters[allyTargetIndex].hp = Math.max(0, encounterMonsters[allyTargetIndex].hp - allyHitResult.damage);
@@ -7938,7 +7619,6 @@ function _updateBattleAlly() {
         }
         if (allyHitResult.crit) critFlashTimer = 0;
         bossDamageNum = { value: allyHitResult.damage, crit: allyHitResult.crit, timer: 0 };
-        // Temporarily set targetIndex for damage number positioning
         targetIndex = allyTargetIndex;
       } else {
         bossDamageNum = { miss: true, timer: 0 };
@@ -7947,28 +7627,27 @@ function _updateBattleAlly() {
       battleState = 'ally-damage-show';
       battleTimer = 0;
     }
-  } else if (battleState === 'ally-damage-show') {
-    if (battleTimer >= 700) _updateAllyDamageShow();
-  } else if (battleState === 'ally-hit') {
-    // Ally taking damage — shake portrait
-    if (battleTimer >= BATTLE_SHAKE_MS) {
-      battleState = 'ally-damage-show-enemy';
-      battleTimer = 0;
-    }
-  } else if (battleState === 'ally-damage-show-enemy') {
+    return true;
+  }
+  return false;
+}
+function _updateAllyEnemyHit() {
+  if (battleState === 'ally-hit') {
+    if (battleTimer >= BATTLE_SHAKE_MS) { battleState = 'ally-damage-show-enemy'; battleTimer = 0; }
+    return true;
+  }
+  if (battleState === 'ally-damage-show-enemy') {
     if (battleTimer >= BATTLE_DMG_SHOW_MS) {
       const ally = battleAllies[enemyTargetAllyIdx];
-      if (ally && ally.hp <= 0) {
-        // Ally KO — fade out and show retreat message
-        battleState = 'ally-ko-fade';
-        battleTimer = 0;
-      } else {
-        enemyTargetAllyIdx = -1;
-        processNextTurn();
-      }
+      if (ally && ally.hp <= 0) { battleState = 'ally-ko-fade'; battleTimer = 0; }
+      else { enemyTargetAllyIdx = -1; processNextTurn(); }
     }
-  } else if (battleState === 'ally-ko-fade') {
-    // Fade out KO'd ally (4 steps × 100ms)
+    return true;
+  }
+  return false;
+}
+function _updateAllyKOSequence() {
+  if (battleState === 'ally-ko-fade') {
     const koAlly = battleAllies[enemyTargetAllyIdx];
     if (koAlly && battleTimer >= 100) {
       koAlly.fadeStep = Math.min(ROSTER_FADE_STEPS, koAlly.fadeStep + 1);
@@ -7976,7 +7655,6 @@ function _updateBattleAlly() {
       if (koAlly.fadeStep >= ROSTER_FADE_STEPS) {
         const retreatBytes = _nameToBytes(koAlly.name + ' retreated!');
         showMsgBox(retreatBytes, () => {
-          // Remove from turn queue
           turnQueue = turnQueue.filter(t => !(t.type === 'ally' && t.index === enemyTargetAllyIdx));
           enemyTargetAllyIdx = -1;
           processNextTurn();
@@ -7984,10 +7662,18 @@ function _updateBattleAlly() {
         battleState = 'ally-ko-msg';
       }
     }
-  } else if (battleState === 'ally-ko-msg') {
-    // Waiting for message box dismiss
-  } else { return false; }
-  return true;
+    return true;
+  }
+  if (battleState === 'ally-ko-msg') return true;
+  return false;
+}
+function _updateBattleAlly() {
+  if (_updateAllyJoin()) return true;
+  if (_updateAllyAttack()) return true;
+  if (battleState === 'ally-damage-show') { if (battleTimer >= 700) _updateAllyDamageShow(); return true; }
+  if (_updateAllyEnemyHit()) return true;
+  if (_updateAllyKOSequence()) return true;
+  return false;
 }
 
 function _processBossFlash() {
@@ -8433,108 +8119,71 @@ function _drawBattlePortrait() {
   _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal, isRunPose, isAttackPose, isHitPose, isVictoryPose);
 }
 
+function _drawBattleCritFlash() {
+  if (critFlashTimer < 0) return;
+  if (critFlashTimer === 0) critFlashTimer = Date.now();
+  if (Date.now() - critFlashTimer < 17) {
+    ctx.save();
+    ctx.beginPath(); ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H); ctx.clip();
+    ctx.fillStyle = '#DAA336';
+    ctx.fillRect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
+    ctx.restore();
+  } else { critFlashTimer = -1; }
+}
+function _drawBattleStrobeFlash() {
+  if (battleState !== 'flash-strobe') return;
+  if (!(Math.floor(battleTimer / BATTLE_FLASH_FRAME_MS) & 1)) return;
+  ctx.save();
+  ctx.beginPath(); ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H); ctx.clip();
+  ctx.filter = 'saturate(0)';
+  ctx.drawImage(ctx.canvas, HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H,
+                            HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
+  ctx.filter = 'none';
+  ctx.restore();
+}
+function _drawBattleDefeat() {
+  const ecx = HUD_VIEW_X + HUD_VIEW_W / 2;
+  const ecy = HUD_VIEW_Y + HUD_VIEW_H / 2;
+  if (battleState === 'defeat-monster-fade') {
+    ctx.save();
+    ctx.globalAlpha = Math.min(battleTimer / 500, 1);
+    ctx.fillStyle = '#000';
+    if (isRandomEncounter && encounterMonsters) {
+      const { fullW: fw, fullH: fh } = _encounterBoxDims();
+      ctx.fillRect(Math.round(ecx - fw / 2) + 8, Math.round(ecy - fh / 2) + 8, fw - 16, fh - 16);
+    } else {
+      ctx.fillRect(ecx - 24, ecy - 24, 48, 48);
+    }
+    ctx.restore();
+  }
+  if (battleState === 'defeat-text') {
+    const tw = measureText(BATTLE_GAME_OVER);
+    drawText(ctx, Math.floor(ecx - tw / 2), Math.floor(ecy - 4), BATTLE_GAME_OVER, TEXT_WHITE);
+  }
+}
 function drawBattle() {
   if (battleState === 'none') return;
-
-  // Crit flash — 1 frame orange backdrop behind everything (NES $27 = #DAA336)
-  if (critFlashTimer >= 0) {
-    if (critFlashTimer === 0) critFlashTimer = Date.now();
-    if (Date.now() - critFlashTimer < 17) {
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
-      ctx.clip();
-      ctx.fillStyle = '#DAA336';
-      ctx.fillRect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
-      ctx.restore();
-    } else {
-      critFlashTimer = -1;
-    }
-  }
-
+  _drawBattleCritFlash();
   _drawBattlePortrait();
-
-  // NES grayscale strobe — toggle grayscale every frame for 65 frames
-  if (battleState === 'flash-strobe') {
-    const frame = Math.floor(battleTimer / BATTLE_FLASH_FRAME_MS);
-    if (frame & 1) {
-      // Odd frames: grayscale (matches NES PPUMASK bit 0)
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
-      ctx.clip();
-      ctx.filter = 'saturate(0)';
-      ctx.drawImage(ctx.canvas, HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H,
-                                HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
-      ctx.filter = 'none';
-      ctx.restore();
-    }
-  }
-
-  // roar box now drawn by universal drawMsgBox()
+  _drawBattleStrobeFlash();
   drawEncounterBox();
   drawBossSpriteBox();
   drawBattleMenu();
   drawBattleMessage();
   drawVictoryBox();
-
   drawDamageNumbers();
-
-  // Defeat — monster fade out (alpha decreasing over 500ms)
-  if (battleState === 'defeat-monster-fade' || battleState === 'defeat-text' || battleState === 'defeat-close') {
-    // Fade monsters to black by drawing black overlay with increasing alpha over encounter box
-    if (battleState === 'defeat-monster-fade') {
-      const alpha = Math.min(battleTimer / 500, 1);
-      ctx.save();
-      ctx.globalAlpha = alpha;
-      ctx.fillStyle = '#000';
-      const ecx = HUD_VIEW_X + HUD_VIEW_W / 2;
-      const ecy = HUD_VIEW_Y + HUD_VIEW_H / 2;
-      if (isRandomEncounter && encounterMonsters) {
-        const { fullW: fw, fullH: fh } = _encounterBoxDims();
-        ctx.fillRect(Math.round(ecx - fw / 2) + 8, Math.round(ecy - fh / 2) + 8, fw - 16, fh - 16);
-      } else {
-        ctx.fillRect(ecx - 24, ecy - 24, 48, 48);
-      }
-      ctx.restore();
-    }
-  }
-
-  // "Game Over" text centered in encounter/boss box (viewport)
-  if (battleState === 'defeat-text') {
-    const ecx = HUD_VIEW_X + HUD_VIEW_W / 2;
-    const ecy = HUD_VIEW_Y + HUD_VIEW_H / 2;
-    const tw = measureText(BATTLE_GAME_OVER);
-    drawText(ctx, Math.floor(ecx - tw / 2), Math.floor(ecy - 4), BATTLE_GAME_OVER, TEXT_WHITE);
-  }
+  _drawBattleDefeat();
 }
 
 // drawRoarBox removed — now uses universal msgBox
 
-function _drawBattleItemPanel(menuX) {
-  const baseX = menuX;
-  const ITEM_SLIDE_MS = 200;
+function _drawBattleItemList(baseX, rightAreaW, invPal, slidePixel, totalInvPages) {
   const rowH = 14;
-  const rightAreaW = CANVAS_W - BATTLE_PANEL_W - 8;
-  const invPal = [0x0F, 0x0F, 0x0F, 0x30];
-  let invFadeStep = 0;
-  if (battleState === 'item-list-in') invFadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
-  else if (battleState === 'item-cancel-out' || battleState === 'item-list-out') invFadeStep = Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
-  for (let s = 0; s < invFadeStep; s++) invPal[3] = nesColorFade(invPal[3]);
-
-  const totalInvPages = Math.max(1, Math.ceil(itemSelectList.length / INV_SLOTS));
-  let slidePixel = 0;
-  if (battleState === 'item-slide') {
-    const t = Math.min(battleTimer / ITEM_SLIDE_MS, 1);
-    slidePixel = itemSlideDir * t * rightAreaW;
-  }
-
+  const topY = HUD_BOT_Y + 12;
   ctx.save();
   ctx.beginPath();
   ctx.rect(baseX - 8, HUD_BOT_Y + 8, rightAreaW + 8, HUD_BOT_H - 16);
   ctx.clip();
-
-  const topY = HUD_BOT_Y + 12;
   for (let pg = 0; pg <= 1 + totalInvPages; pg++) {
     const pageOff = (pg - itemPage) * rightAreaW + slidePixel;
     const px = baseX + pageOff;
@@ -8569,95 +8218,92 @@ function _drawBattleItemPanel(menuX) {
     }
   }
   ctx.restore();
-
-  // Cursors drawn outside clip
-  function _rowY(page, row) {
-    if (page === 0) return topY + row * (rowH + 6);
-    return topY + row * rowH;
+}
+function _drawBattleItemCursors(baseX) {
+  if (!cursorTileCanvas || battleState !== 'item-select') return;
+  const rowH = 14;
+  const topY = HUD_BOT_Y + 12;
+  const rowY = (page, row) => page === 0 ? topY + row * (rowH + 6) : topY + row * rowH;
+  const curPx = baseX - 8;
+  if (itemHeldIdx !== -1) {
+    const heldIsEq = itemHeldIdx <= -100;
+    const heldPage = heldIsEq ? 0 : 1 + Math.floor(itemHeldIdx / INV_SLOTS);
+    const heldRow  = heldIsEq ? -(itemHeldIdx + 100) : itemHeldIdx % INV_SLOTS;
+    if (heldPage === itemPage) ctx.drawImage(cursorTileCanvas, curPx, rowY(heldPage, heldRow) - 4);
   }
-  if (cursorTileCanvas && battleState === 'item-select') {
-    const curPx = baseX - 8;
-    const cursorY = _rowY(itemPage, itemPageCursor) - 4;
-    if (itemHeldIdx !== -1) {
-      const heldIsEq = itemHeldIdx <= -100;
-      let heldPage, heldRow;
-      if (heldIsEq) { heldPage = 0; heldRow = -(itemHeldIdx + 100); }
-      else { heldPage = 1 + Math.floor(itemHeldIdx / INV_SLOTS); heldRow = itemHeldIdx % INV_SLOTS; }
-      if (heldPage === itemPage) {
-        ctx.drawImage(cursorTileCanvas, curPx, _rowY(heldPage, heldRow) - 4);
-      }
-    }
-    const activeX = itemHeldIdx !== -1 ? curPx - 4 : curPx;
-    ctx.drawImage(cursorTileCanvas, activeX, cursorY);
-  }
+  const activeX = itemHeldIdx !== -1 ? curPx - 4 : curPx;
+  ctx.drawImage(cursorTileCanvas, activeX, rowY(itemPage, itemPageCursor) - 4);
+}
+function _drawBattleItemPanel(menuX) {
+  const ITEM_SLIDE_MS = 200;
+  const rightAreaW = CANVAS_W - BATTLE_PANEL_W - 8;
+  const invPal = [0x0F, 0x0F, 0x0F, 0x30];
+  let invFadeStep = 0;
+  if (battleState === 'item-list-in') invFadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
+  else if (battleState === 'item-cancel-out' || battleState === 'item-list-out') invFadeStep = Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
+  for (let s = 0; s < invFadeStep; s++) invPal[3] = nesColorFade(invPal[3]);
+  const totalInvPages = Math.max(1, Math.ceil(itemSelectList.length / INV_SLOTS));
+  let slidePixel = 0;
+  if (battleState === 'item-slide') slidePixel = itemSlideDir * Math.min(battleTimer / ITEM_SLIDE_MS, 1) * rightAreaW;
+  _drawBattleItemList(menuX, rightAreaW, invPal, slidePixel, totalInvPages);
+  _drawBattleItemCursors(menuX);
+}
+function _battleMenuStates() {
+  const bs = battleState;
+  const isSlide   = bs === 'boss-box-expand' || bs === 'encounter-box-expand';
+  const isAppear  = bs === 'boss-appear' || bs === 'monster-slide-in';
+  const isFade    = bs === 'battle-fade-in';
+  const isMenu    = isFade || bs === 'menu-open' || bs === 'target-select' || bs === 'confirm-pause' ||
+    bs === 'attack-start' || bs === 'player-slash' || bs === 'player-hit-show' || bs === 'player-miss-show' ||
+    bs === 'player-damage-show' || bs === 'monster-death' || bs === 'defend-anim' ||
+    bs.startsWith('item-') || bs === 'sw-throw' || bs === 'sw-hit' ||
+    bs === 'run-name-out' || bs === 'run-text-in' || bs === 'run-hold' || bs === 'run-text-out' ||
+    bs === 'run-fail-name-out' || bs === 'run-fail-text-in' || bs === 'run-fail-hold' ||
+    bs === 'run-fail-text-out' || bs === 'run-fail-name-in' || bs === 'boss-flash' ||
+    bs === 'enemy-attack' || bs === 'enemy-damage-show' || bs === 'message-hold' ||
+    bs.startsWith('ally-') || bs === 'boss-dissolve' ||
+    bs === 'defeat-monster-fade' || bs === 'defeat-text';
+  const isVictory = bs === 'victory-name-out' || bs === 'victory-celebrate' ||
+    bs === 'victory-text-in' || bs === 'victory-hold' || bs === 'victory-fade-out' ||
+    bs === 'exp-text-in' || bs === 'exp-hold' || bs === 'exp-fade-out' ||
+    bs === 'gil-text-in' || bs === 'gil-hold' || bs === 'gil-fade-out' ||
+    bs === 'levelup-text-in' || bs === 'levelup-hold' ||
+    bs === 'item-text-in' || bs === 'item-hold' || bs === 'item-fade-out' ||
+    bs === 'victory-text-out' || bs === 'victory-menu-fade' || bs === 'victory-box-close' ||
+    bs === 'encounter-box-close' || bs === 'boss-box-close' || bs === 'defeat-close';
+  const isRunBox  = bs.startsWith('run-');
+  const isClose   = bs === 'victory-box-close' || bs === 'encounter-box-close' || bs === 'boss-box-close' || bs === 'defeat-close';
+  return { isSlide, isAppear, isFade, isMenu, isVictory, isRunBox, isClose };
 }
 function drawBattleMenu() {
-  const isSlide = battleState === 'boss-box-expand' || battleState === 'encounter-box-expand';
-  const isAppear = battleState === 'boss-appear' || battleState === 'monster-slide-in';
-  const isFade = battleState === 'battle-fade-in';
-  const isMenu = isFade ||
-                 battleState === 'menu-open' || battleState === 'target-select' || battleState === 'confirm-pause' ||
-                 battleState === 'attack-start' || battleState === 'player-slash' || battleState === 'player-hit-show' ||
-                 battleState === 'player-miss-show' ||
-                 battleState === 'player-damage-show' || battleState === 'monster-death' ||
-                 battleState === 'defend-anim' || battleState.startsWith('item-') || battleState === 'sw-throw' || battleState === 'sw-hit' || battleState === 'run-name-out' || battleState === 'run-text-in' || battleState === 'run-hold' || battleState === 'run-text-out' || battleState === 'run-fail-name-out' || battleState === 'run-fail-text-in' || battleState === 'run-fail-hold' || battleState === 'run-fail-text-out' || battleState === 'run-fail-name-in' || battleState === 'boss-flash' ||
-                 battleState === 'enemy-attack' ||
-                 battleState === 'enemy-damage-show' || battleState === 'message-hold' ||
-                 battleState.startsWith('ally-') ||
-                 battleState === 'boss-dissolve' ||
-                 battleState === 'defeat-monster-fade' || battleState === 'defeat-text';
-  const isVictory = battleState === 'victory-name-out' || battleState === 'victory-celebrate' ||
-                    battleState === 'victory-text-in' || battleState === 'victory-hold' || battleState === 'victory-fade-out' ||
-                    battleState === 'exp-text-in' || battleState === 'exp-hold' || battleState === 'exp-fade-out' ||
-                    battleState === 'gil-text-in' || battleState === 'gil-hold' || battleState === 'gil-fade-out' ||
-                    battleState === 'levelup-text-in' || battleState === 'levelup-hold' ||
-    battleState === 'item-text-in' || battleState === 'item-hold' || battleState === 'item-fade-out' ||
-                    battleState === 'victory-text-out' || battleState === 'victory-menu-fade' || battleState === 'victory-box-close' ||
-                    battleState === 'encounter-box-close' || battleState === 'boss-box-close' || battleState === 'defeat-close';
-  const isRunBox = battleState.startsWith('run-');
+  const { isSlide, isAppear, isFade, isMenu, isVictory, isRunBox, isClose } = _battleMenuStates();
   if (!isSlide && !isAppear && !isMenu && !isVictory) return;
 
   let panelOffX = 0;
-  const isClose = battleState === 'victory-box-close' || battleState === 'encounter-box-close' || battleState === 'boss-box-close' || battleState === 'defeat-close';
-  if (isSlide) {
-    panelOffX = Math.round(-CANVAS_W * (1 - Math.min(battleTimer / BOSS_BOX_EXPAND_MS, 1)));
-  } else if (isClose) {
-    panelOffX = Math.round(-CANVAS_W * Math.min(battleTimer / (VICTORY_BOX_ROWS * VICTORY_ROW_FRAME_MS), 1));
-  }
+  if (isSlide) panelOffX = Math.round(-CANVAS_W * (1 - Math.min(battleTimer / BOSS_BOX_EXPAND_MS, 1)));
+  else if (isClose) panelOffX = Math.round(-CANVAS_W * Math.min(battleTimer / (VICTORY_BOX_ROWS * VICTORY_ROW_FRAME_MS), 1));
 
   ctx.save();
-  ctx.beginPath();
-  ctx.rect(8, HUD_BOT_Y, CANVAS_W - 16, HUD_BOT_H);
-  ctx.clip();
+  ctx.beginPath(); ctx.rect(8, HUD_BOT_Y, CANVAS_W - 16, HUD_BOT_H); ctx.clip();
   ctx.translate(panelOffX, 0);
   ctx.fillStyle = '#000';
   ctx.fillRect(8, HUD_BOT_Y + 8, CANVAS_W - 16, HUD_BOT_H - 16);
 
-  const boxW = BATTLE_PANEL_W;
-  const boxH = HUD_BOT_H;
-  if ((!isVictory && !isRunBox) || (battleState === 'encounter-box-close' && runSlideBack)) {
+  const boxW = BATTLE_PANEL_W, boxH = HUD_BOT_H;
+  if ((!isVictory && !isRunBox) || (battleState === 'encounter-box-close' && runSlideBack))
     _drawBorderedBox(0, HUD_BOT_Y, boxW, boxH);
-  }
   if (!isMenu && !isVictory) { ctx.restore(); return; }
 
   let fadeStep = 0;
-  if (isFade) {
-    fadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
-  }
+  if (isFade) fadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
   const fadedPal = [0x0F, 0x0F, 0x0F, 0x30];
   for (let s = 0; s < fadeStep; s++) fadedPal[3] = nesColorFade(fadedPal[3]);
-
   if (!isVictory && !isRunBox) {
     const enemyName = _battleEnemyName();
-    const nameTw = measureText(enemyName);
-    drawText(ctx, Math.floor((boxW - nameTw) / 2), HUD_BOT_Y + Math.floor((boxH - 8) / 2), enemyName, fadedPal);
+    drawText(ctx, Math.floor((boxW - measureText(enemyName)) / 2), HUD_BOT_Y + Math.floor((boxH - 8) / 2), enemyName, fadedPal);
   }
-
   const menuX = boxW + 8;
-  const colL = menuX, colR = menuX + 56;
-  const row0 = HUD_BOT_Y + 16, row1 = HUD_BOT_Y + 32;
-  const positions = [[colL, row0], [colR, row0], [colL, row1], [colR, row1]];
-
+  const positions = [[menuX, HUD_BOT_Y+16], [menuX+56, HUD_BOT_Y+16], [menuX, HUD_BOT_Y+32], [menuX+56, HUD_BOT_Y+32]];
   _drawBattleMenuItems(positions, isVictory, isClose, isFade, fadedPal, menuX);
   _drawBattleMenuCursor(positions, isFade, fadeStep);
   ctx.restore();
@@ -8991,49 +8637,18 @@ function _drawBossSpriteBoxPVP(centerX, centerY) {
 
   ctx.restore();
 }
-function _drawBossSpriteBoxBoss(centerX, centerY) {
-  const isExpand = battleState === 'boss-box-expand';
-  const isClose = battleState === 'boss-box-close' || (!isRandomEncounter && battleState === 'defeat-close');
-  const isAppear = battleState === 'boss-appear';
-  const isDissolve = battleState === 'boss-dissolve';
-  const fullW = 64, fullH = 64;
-
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
-  ctx.clip();
-
-  let boxW = fullW, boxH = fullH;
-  if (isExpand) {
-    const t = Math.min(battleTimer / BOSS_BOX_EXPAND_MS, 1);
-    boxW = Math.max(16, Math.ceil(fullW * t / 8) * 8);
-    boxH = Math.max(16, Math.ceil(fullH * t / 8) * 8);
-  } else if (isClose) {
-    const t = 1 - Math.min(battleTimer / BOSS_BOX_EXPAND_MS, 1);
-    boxW = Math.max(16, Math.ceil(fullW * t / 8) * 8);
-    boxH = Math.max(16, Math.ceil(fullH * t / 8) * 8);
-  }
-  _drawBorderedBox(centerX - Math.floor(boxW / 2), centerY - Math.floor(boxH / 2), boxW, boxH);
-
-  if (isExpand || isClose || battleState === 'defeat-text') { ctx.restore(); return; }
-
-  const sprX = centerX - 24;
-  const sprY = centerY - 24;
+function _drawBossSprite(centerX, centerY) {
+  const sprX = centerX - 24, sprY = centerY - 24;
   ctx.imageSmoothingEnabled = false;
-
-  if (isAppear || isDissolve) {
-    _drawDissolvedSprite(sprX, sprY, isDissolve);
+  if (battleState === 'boss-appear' || battleState === 'boss-dissolve') {
+    _drawDissolvedSprite(sprX, sprY, battleState === 'boss-dissolve');
   } else if (battleState === 'boss-flash') {
     const frame = Math.floor(battleTimer / (BOSS_PREFLASH_MS / 8));
-    if (!bossDefeated) {
-      ctx.drawImage((frame & 1) ? (landTurtleWhiteCanvas || landTurtleBattleCanvas) : landTurtleBattleCanvas, sprX, sprY);
-    }
+    if (!bossDefeated) ctx.drawImage((frame & 1) ? (landTurtleWhiteCanvas || landTurtleBattleCanvas) : landTurtleBattleCanvas, sprX, sprY);
   } else if (battleState === 'player-slash') {
-    const blinkHidden = Math.floor(battleTimer / 60) & 1;
-    if (!blinkHidden && !bossDefeated) ctx.drawImage(landTurtleBattleCanvas, sprX, sprY);
-    if (slashFrames && slashFrame < SLASH_FRAMES && !bossDefeated && hitResults && hitResults[currentHitIdx] && !hitResults[currentHitIdx].miss) {
+    if (!(Math.floor(battleTimer / 60) & 1) && !bossDefeated) ctx.drawImage(landTurtleBattleCanvas, sprX, sprY);
+    if (slashFrames && slashFrame < SLASH_FRAMES && !bossDefeated && hitResults && hitResults[currentHitIdx] && !hitResults[currentHitIdx].miss)
       ctx.drawImage(slashFrames[slashFrame], centerX - 8 + slashOffX, centerY - 8 + slashOffY);
-    }
   } else if (battleState === 'ally-slash') {
     const blinkHidden = allyHitResult && !allyHitResult.miss && (Math.floor(battleTimer / 60) & 1);
     if (!blinkHidden && !bossDefeated) ctx.drawImage(landTurtleBattleCanvas, sprX, sprY);
@@ -9041,17 +8656,35 @@ function _drawBossSpriteBoxBoss(centerX, centerY) {
       const ally = battleAllies[currentAllyAttacker];
       const allySlashFrames = ally ? getSlashFramesForWeapon(ally.weaponId, true) : slashFramesR;
       const af = Math.min(Math.floor(battleTimer / 67), 2);
-      if (allySlashFrames && allySlashFrames[af]) {
+      if (allySlashFrames && allySlashFrames[af])
         ctx.drawImage(allySlashFrames[af], centerX - 8 + [0,10,-8][af], centerY - 8 + [0,-6,8][af]);
-      }
     }
   } else {
     if (!bossDefeated) ctx.drawImage(landTurtleBattleCanvas, sprX, sprY);
   }
+}
+function _drawBossSpriteBoxBoss(centerX, centerY) {
+  const isExpand = battleState === 'boss-box-expand';
+  const isClose  = battleState === 'boss-box-close' || (!isRandomEncounter && battleState === 'defeat-close');
+  const fullW = 64, fullH = 64;
 
-  if ((battleState === 'target-select' || (battleState === 'item-target-select' && itemTargetType === 'enemy')) && cursorTileCanvas) {
-    ctx.drawImage(cursorTileCanvas, centerX - 32 - 16, centerY - 8);
+  ctx.save();
+  ctx.beginPath(); ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H); ctx.clip();
+
+  let boxW = fullW, boxH = fullH;
+  if (isExpand || isClose) {
+    const t = isExpand ? Math.min(battleTimer / BOSS_BOX_EXPAND_MS, 1) : 1 - Math.min(battleTimer / BOSS_BOX_EXPAND_MS, 1);
+    boxW = Math.max(16, Math.ceil(fullW * t / 8) * 8);
+    boxH = Math.max(16, Math.ceil(fullH * t / 8) * 8);
   }
+  _drawBorderedBox(centerX - Math.floor(boxW / 2), centerY - Math.floor(boxH / 2), boxW, boxH);
+
+  if (isExpand || isClose || battleState === 'defeat-text') { ctx.restore(); return; }
+
+  _drawBossSprite(centerX, centerY);
+
+  if ((battleState === 'target-select' || (battleState === 'item-target-select' && itemTargetType === 'enemy')) && cursorTileCanvas)
+    ctx.drawImage(cursorTileCanvas, centerX - 32 - 16, centerY - 8);
 
   ctx.restore();
 }
@@ -9247,83 +8880,84 @@ function _battleEnemyName() {
   return BATTLE_BOSS_NAME;
 }
 
-function drawVictoryBox() {
-  const isNameOut = battleState === 'victory-name-out';
-  const isCelebrate = battleState === 'victory-celebrate';
-  const isClose = battleState === 'victory-box-close';
-  const isVicText = battleState === 'victory-text-in';
-  const isVicHold = battleState === 'victory-hold';
-  const isVicFadeOut = battleState === 'victory-fade-out';
-  const isExpText = battleState === 'exp-text-in';
-  const isExpHold = battleState === 'exp-hold';
-  const isExpFadeOut = battleState === 'exp-fade-out';
-  const isGilText = battleState === 'gil-text-in';
-  const isGilHold = battleState === 'gil-hold';
-  const isGilFadeOut = battleState === 'gil-fade-out';
-  const isLevelText = battleState === 'levelup-text-in';
-  const isLevelHold = battleState === 'levelup-hold';
-  const isItemText = battleState === 'item-text-in';
-  const isItemHold = battleState === 'item-hold';
-  const isItemFadeOut = battleState === 'item-fade-out';
-  const isOut = battleState === 'victory-text-out';
-  const isMenuFadeState = battleState === 'victory-menu-fade';
-  // Run states
-  const isRunNameOut = battleState === 'run-name-out';
-  const isRunTextIn = battleState === 'run-text-in';
-  const isRunHold = battleState === 'run-hold';
-  const isRunTextOut = battleState === 'run-text-out';
-  const isRunFailNameOut = battleState === 'run-fail-name-out';
-  const isRunFailTextIn = battleState === 'run-fail-text-in';
-  const isRunFailHold = battleState === 'run-fail-hold';
-  const isRunFailTextOut = battleState === 'run-fail-text-out';
-  const isRunFailNameIn = battleState === 'run-fail-name-in';
-  const isRun = isRunNameOut || isRunTextIn || isRunHold || isRunTextOut;
+function _victoryBoxStates() {
+  const bs = battleState;
+  const isNameOut    = bs === 'victory-name-out';
+  const isCelebrate  = bs === 'victory-celebrate';
+  const isClose      = bs === 'victory-box-close';
+  const isVicText    = bs === 'victory-text-in';
+  const isVicHold    = bs === 'victory-hold';
+  const isVicFadeOut = bs === 'victory-fade-out';
+  const isExpText    = bs === 'exp-text-in';
+  const isExpHold    = bs === 'exp-hold';
+  const isExpFadeOut = bs === 'exp-fade-out';
+  const isGilText    = bs === 'gil-text-in';
+  const isGilHold    = bs === 'gil-hold';
+  const isGilFadeOut = bs === 'gil-fade-out';
+  const isLevelText  = bs === 'levelup-text-in';
+  const isLevelHold  = bs === 'levelup-hold';
+  const isItemText   = bs === 'item-text-in';
+  const isItemHold   = bs === 'item-hold';
+  const isItemFadeOut = bs === 'item-fade-out';
+  const isOut        = bs === 'victory-text-out';
+  const isMenuFadeState = bs === 'victory-menu-fade';
+  const isRunNameOut = bs === 'run-name-out';
+  const isRunTextIn  = bs === 'run-text-in';
+  const isRunHold    = bs === 'run-hold';
+  const isRunTextOut = bs === 'run-text-out';
+  const isRunFailNameOut  = bs === 'run-fail-name-out';
+  const isRunFailTextIn   = bs === 'run-fail-text-in';
+  const isRunFailHold     = bs === 'run-fail-hold';
+  const isRunFailTextOut  = bs === 'run-fail-text-out';
+  const isRunFailNameIn   = bs === 'run-fail-name-in';
+  const isRun     = isRunNameOut || isRunTextIn || isRunHold || isRunTextOut;
   const isRunFail = isRunFailNameOut || isRunFailTextIn || isRunFailHold || isRunFailTextOut || isRunFailNameIn;
-  const showBox = isNameOut || isCelebrate || isClose || isVicText || isVicHold || isVicFadeOut ||
-    isExpText || isExpHold || isExpFadeOut || isGilText || isGilHold || isGilFadeOut ||
-    isItemText || isItemHold || isItemFadeOut ||
-    isLevelText || isLevelHold || isOut || isMenuFadeState ||
-    isRun || isRunFail;
-  if (!showBox) return;
-
-  let boxX = 0;
-  const boxY = HUD_BOT_Y;
-
-  // Slide left during victory-box-close (matches drawBattleMenu panelOffX)
-  if (isClose) {
-    const t = Math.min(battleTimer / (VICTORY_BOX_ROWS * VICTORY_ROW_FRAME_MS), 1);
-    boxX = Math.round(-(CANVAS_W - 8) * t);
-  }
-
-  if (isNameOut || isRunNameOut || isRunFailNameOut) { _drawVictoryNameOut(boxX, boxY, isRunFailNameOut); return; }
-  if (isRun) { _drawVictoryRunText(boxX, boxY, isRunTextIn, isRunTextOut); return; }
-  if (isRunFail) { _drawVictoryRunFail(boxX, boxY, isRunFailNameIn, isRunFailTextIn, isRunFailTextOut); return; }
-  if (isCelebrate) { _drawBorderedBox(boxX, boxY, VICTORY_BOX_W, VICTORY_BOX_H); return; }
-  _drawBorderedBox(boxX, boxY, VICTORY_BOX_W, VICTORY_BOX_H);
-  if (isClose) return;
+  return { isNameOut, isCelebrate, isClose, isVicText, isVicHold, isVicFadeOut,
+           isExpText, isExpHold, isExpFadeOut, isGilText, isGilHold, isGilFadeOut,
+           isLevelText, isLevelHold, isItemText, isItemHold, isItemFadeOut,
+           isOut, isMenuFadeState, isRunNameOut, isRunTextIn, isRunHold, isRunTextOut,
+           isRunFailNameOut, isRunFailTextIn, isRunFailHold, isRunFailTextOut, isRunFailNameIn,
+           isRun, isRunFail };
+}
+function _drawVictoryMessage(boxX, boxY, s) {
   let fadeStep = 0;
-  if (isVicText || isExpText || isGilText || isItemText || isLevelText) {
+  if (s.isVicText || s.isExpText || s.isGilText || s.isItemText || s.isLevelText)
     fadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
-  } else if (isVicFadeOut || isExpFadeOut || isGilFadeOut || isItemFadeOut || isOut) {
+  else if (s.isVicFadeOut || s.isExpFadeOut || s.isGilFadeOut || s.isItemFadeOut || s.isOut)
     fadeStep = Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
-  }
   const fadedPal = [0x0F, 0x0F, 0x0F, 0x30];
-  for (let s = 0; s < fadeStep; s++) fadedPal[3] = nesColorFade(fadedPal[3]);
+  for (let i = 0; i < fadeStep; i++) fadedPal[3] = nesColorFade(fadedPal[3]);
   let msg;
-  if (isVicText || isVicHold || isVicFadeOut) msg = BATTLE_VICTORY;
-  else if (isExpText || isExpHold || isExpFadeOut) msg = makeExpText(encounterExpGained);
-  else if (isGilText || isGilHold || isGilFadeOut) msg = makeGilText(encounterGilGained);
-  else if (isItemText || isItemHold || isItemFadeOut) msg = encounterDropItem !== null ? makeFoundItemText(encounterDropItem) : null;
-  else if (isLevelText || isLevelHold) msg = BATTLE_LEVEL_UP;
-  else if (isOut) {
-    if (leveledUp) msg = BATTLE_LEVEL_UP;
-    else if (encounterDropItem !== null) msg = makeFoundItemText(encounterDropItem);
-    else msg = makeGilText(encounterGilGained);
-  }
+  if (s.isVicText || s.isVicHold || s.isVicFadeOut) msg = BATTLE_VICTORY;
+  else if (s.isExpText || s.isExpHold || s.isExpFadeOut) msg = makeExpText(encounterExpGained);
+  else if (s.isGilText || s.isGilHold || s.isGilFadeOut) msg = makeGilText(encounterGilGained);
+  else if (s.isItemText || s.isItemHold || s.isItemFadeOut) msg = encounterDropItem !== null ? makeFoundItemText(encounterDropItem) : null;
+  else if (s.isLevelText || s.isLevelHold) msg = BATTLE_LEVEL_UP;
+  else if (s.isOut) msg = leveledUp ? BATTLE_LEVEL_UP : encounterDropItem !== null ? makeFoundItemText(encounterDropItem) : makeGilText(encounterGilGained);
   if (msg) {
     const tw = measureText(msg);
     drawText(ctx, boxX + Math.floor((VICTORY_BOX_W - tw) / 2), boxY + Math.floor((VICTORY_BOX_H - 8) / 2), msg, fadedPal);
   }
+}
+function drawVictoryBox() {
+  const s = _victoryBoxStates();
+  const showBox = s.isNameOut || s.isCelebrate || s.isClose || s.isVicText || s.isVicHold || s.isVicFadeOut ||
+    s.isExpText || s.isExpHold || s.isExpFadeOut || s.isGilText || s.isGilHold || s.isGilFadeOut ||
+    s.isItemText || s.isItemHold || s.isItemFadeOut || s.isLevelText || s.isLevelHold ||
+    s.isOut || s.isMenuFadeState || s.isRun || s.isRunFail;
+  if (!showBox) return;
+
+  let boxX = 0;
+  const boxY = HUD_BOT_Y;
+  if (s.isClose) boxX = Math.round(-(CANVAS_W - 8) * Math.min(battleTimer / (VICTORY_BOX_ROWS * VICTORY_ROW_FRAME_MS), 1));
+
+  if (s.isNameOut || s.isRunNameOut || s.isRunFailNameOut) { _drawVictoryNameOut(boxX, boxY, s.isRunFailNameOut); return; }
+  if (s.isRun) { _drawVictoryRunText(boxX, boxY, s.isRunTextIn, s.isRunTextOut); return; }
+  if (s.isRunFail) { _drawVictoryRunFail(boxX, boxY, s.isRunFailNameIn, s.isRunFailTextIn, s.isRunFailTextOut); return; }
+  if (s.isCelebrate) { _drawBorderedBox(boxX, boxY, VICTORY_BOX_W, VICTORY_BOX_H); return; }
+  _drawBorderedBox(boxX, boxY, VICTORY_BOX_W, VICTORY_BOX_H);
+  if (s.isClose) return;
+  _drawVictoryMessage(boxX, boxY, s);
 }
 
 function _drawVictoryNameOut(boxX, boxY, isRunFail) {
