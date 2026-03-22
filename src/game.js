@@ -3122,6 +3122,18 @@ function _rosterInputBrowse() {
   }
 }
 
+function _rosterMenuDuelAction(target) {
+  const challenged = _nameToBytes('Challenged ');
+  const nameBytes = _nameToBytes(target.name);
+  const exclam = new Uint8Array([0xC4]);
+  const challengeMsg = new Uint8Array(challenged.length + nameBytes.length + 1);
+  challengeMsg.set(challenged, 0); challengeMsg.set(nameBytes, challenged.length); challengeMsg.set(exclam, challenged.length + nameBytes.length);
+  showMsgBox(challengeMsg, () => {
+    setTimeout(() => showMsgBox(_nameToBytes(target.name + ' accepted!'), () => startPVPBattle(target)),
+      1500 + Math.floor(Math.random() * 2500));
+  });
+}
+
 function _rosterInputMenu() {
   if (keys['ArrowDown']) {
     keys['ArrowDown'] = false;
@@ -3141,28 +3153,12 @@ function _rosterInputMenu() {
     rosterMenuTimer = 0;
     playSFX(SFX.CONFIRM);
     if (action === 'Duel' && (onWorldMap || dungeonFloor >= 0)) {
-      const challenged = _nameToBytes('Challenged ');
-      const nameBytes = _nameToBytes(target.name);
-      const exclam = new Uint8Array([0xC4]);
-      const challengeMsg = new Uint8Array(challenged.length + nameBytes.length + 1);
-      challengeMsg.set(challenged, 0);
-      challengeMsg.set(nameBytes, challenged.length);
-      challengeMsg.set(exclam, challenged.length + nameBytes.length);
-      showMsgBox(challengeMsg, () => {
-        const waitMs = 1500 + Math.floor(Math.random() * 2500);
-        setTimeout(() => {
-          const accepted = _nameToBytes(target.name + ' accepted!');
-          showMsgBox(accepted, () => startPVPBattle(target));
-        }, waitMs);
-      });
+      _rosterMenuDuelAction(target);
     } else {
-      const actionBytes = _nameToBytes(action);
-      const nameBytes = _nameToBytes(target.name);
+      const actionBytes = _nameToBytes(action), nameBytes = _nameToBytes(target.name);
       const sep = new Uint8Array([0xFF]);
       const msg = new Uint8Array(actionBytes.length + 1 + nameBytes.length);
-      msg.set(actionBytes, 0);
-      msg.set(sep, actionBytes.length);
-      msg.set(nameBytes, actionBytes.length + 1);
+      msg.set(actionBytes, 0); msg.set(sep, actionBytes.length); msg.set(nameBytes, actionBytes.length + 1);
       showMsgBox(msg);
     }
   }
@@ -6590,54 +6586,57 @@ function _playerTurnFight() {
   battleState = 'attack-start'; battleTimer = 0;
 }
 
+function _playerTurnSouthWind() {
+  const _mode = playerActionPending.targetMode || 'single';
+  const mons = isRandomEncounter && encounterMonsters;
+  const _rightCols = mons ? encounterMonsters.map((m, i) =>
+    (m.hp > 0 && (encounterMonsters.length === 1 || (encounterMonsters.length === 2 && i === 1) || (encounterMonsters.length >= 3 && (i === 1 || i === 3)))) ? i : -1).filter(i => i >= 0) : [];
+  const _leftCols = mons ? encounterMonsters.map((m, i) =>
+    (m.hp > 0 && encounterMonsters.length >= 2 && !_rightCols.includes(i)) ? i : -1).filter(i => i >= 0) : [];
+  if (_mode === 'all') {
+    const ecnt = encounterMonsters ? encounterMonsters.length : 0;
+    southWindTargets = (ecnt <= 2 ? [0, 1] : [0, 1, 2, 3]).filter(i => i < ecnt && encounterMonsters[i].hp > 0);
+  } else if (_mode === 'col-right') southWindTargets = _rightCols;
+  else if (_mode === 'col-left') southWindTargets = _leftCols;
+  else southWindTargets = [playerActionPending.target];
+  southWindHitIdx = 0;
+  const swAttack = Math.floor((playerStats ? playerStats.int : 5) / 2) + 55;
+  swBaseDamage = Math.floor((swAttack + Math.floor(Math.random() * Math.floor(swAttack / 2 + 1))) / 2);
+  battleState = 'sw-throw'; battleTimer = 0;
+}
+
+function _playerTurnConsumable() {
+  playSFX(SFX.CURE);
+  const { target, allyIndex } = playerActionPending;
+  if (target === 'player' && (allyIndex === undefined || allyIndex < 0)) {
+    const heal = Math.min(50, playerStats.maxHP - playerHP);
+    playerHP += heal; itemHealAmount = heal; playerHealNum = { value: heal, timer: 0 };
+  } else if (target === 'player' && allyIndex >= 0) {
+    const ally = battleAllies[allyIndex];
+    if (ally) {
+      const heal = Math.min(50, ally.maxHP - ally.hp);
+      ally.hp += heal; itemHealAmount = heal;
+      allyDamageNums[allyIndex] = { value: heal, timer: 0, heal: true };
+    }
+  } else {
+    const mon = isRandomEncounter && encounterMonsters ? encounterMonsters[target] : null;
+    if (mon) {
+      const heal = Math.min(50, mon.maxHP - mon.hp);
+      mon.hp += heal; itemHealAmount = heal; enemyHealNum = { value: heal, timer: 0, index: target };
+    } else {
+      const maxHP = isPVPBattle && pvpOpponentStats ? pvpOpponentStats.maxHP : BOSS_MAX_HP;
+      const heal = Math.min(50, maxHP - bossHP);
+      bossHP += heal; itemHealAmount = heal; enemyHealNum = { value: heal, timer: 0, index: 0 };
+    }
+  }
+  battleState = 'item-use'; battleTimer = 0;
+}
+
 function _playerTurnItem() {
   isDefending = false;
   removeItem(playerActionPending.itemId);
-  const _pendingItemDat = ITEMS.get(playerActionPending.itemId);
-  if (_pendingItemDat?.type === 'battle_item') {
-    // SouthWind — build target list and launch throw anim
-    const _mode = playerActionPending.targetMode || 'single';
-    const _rightCols = isRandomEncounter && encounterMonsters
-      ? encounterMonsters.map((m, i) => (m.hp > 0 && (encounterMonsters.length === 1 || (encounterMonsters.length === 2 && i === 1) || (encounterMonsters.length >= 3 && (i === 1 || i === 3)))) ? i : -1).filter(i => i >= 0) : [];
-    const _leftCols = isRandomEncounter && encounterMonsters
-      ? encounterMonsters.map((m, i) => (m.hp > 0 && encounterMonsters.length >= 2 && !_rightCols.includes(i)) ? i : -1).filter(i => i >= 0) : [];
-    if (_mode === 'all') {
-      const ecnt = encounterMonsters ? encounterMonsters.length : 0;
-      southWindTargets = (ecnt <= 2 ? [0, 1] : [0, 1, 2, 3]).filter(i => i < ecnt && encounterMonsters[i].hp > 0);
-    } else if (_mode === 'col-right') southWindTargets = _rightCols;
-    else if (_mode === 'col-left') southWindTargets = _leftCols;
-    else southWindTargets = [playerActionPending.target];
-    southWindHitIdx = 0;
-    const swAttack = Math.floor((playerStats ? playerStats.int : 5) / 2) + 55;
-    swBaseDamage = Math.floor((swAttack + Math.floor(Math.random() * Math.floor(swAttack / 2 + 1))) / 2);
-    battleState = 'sw-throw'; battleTimer = 0;
-  } else {
-    // Consumable (Potion/Cure)
-    playSFX(SFX.CURE);
-    if (playerActionPending.target === 'player' && (playerActionPending.allyIndex === undefined || playerActionPending.allyIndex < 0)) {
-      const heal = Math.min(50, playerStats.maxHP - playerHP);
-      playerHP += heal; itemHealAmount = heal; playerHealNum = { value: heal, timer: 0 };
-    } else if (playerActionPending.target === 'player' && playerActionPending.allyIndex >= 0) {
-      const ally = battleAllies[playerActionPending.allyIndex];
-      if (ally) {
-        const heal = Math.min(50, ally.maxHP - ally.hp);
-        ally.hp += heal; itemHealAmount = heal;
-        allyDamageNums[playerActionPending.allyIndex] = { value: heal, timer: 0, heal: true };
-      }
-    } else {
-      const ei = playerActionPending.target;
-      const mon = isRandomEncounter && encounterMonsters ? encounterMonsters[ei] : null;
-      if (mon) {
-        const heal = Math.min(50, mon.maxHP - mon.hp);
-        mon.hp += heal; itemHealAmount = heal; enemyHealNum = { value: heal, timer: 0, index: ei };
-      } else {
-        const bossMaxForHeal = isPVPBattle && pvpOpponentStats ? pvpOpponentStats.maxHP : BOSS_MAX_HP;
-        const heal = Math.min(50, bossMaxForHeal - bossHP);
-        bossHP += heal; itemHealAmount = heal; enemyHealNum = { value: heal, timer: 0, index: 0 };
-      }
-    }
-    battleState = 'item-use'; battleTimer = 0;
-  }
+  if (ITEMS.get(playerActionPending.itemId)?.type === 'battle_item') _playerTurnSouthWind();
+  else _playerTurnConsumable();
 }
 
 function _playerTurnRun() {
@@ -6872,36 +6871,38 @@ function _updateBattleTimers(dt) {
     if (allyShakeTimer[idx] > 0) allyShakeTimer[idx] = Math.max(0, allyShakeTimer[idx] - dt);
   }
 
-  // Turn timer — auto-skip player's turn after 10 seconds of inaction
+  _updateTurnTimer(dt);
+  _updateAllyExitFade(dt);
+}
+
+function _updateTurnTimer(dt) {
   const isPlayerDeciding = battleState === 'menu-open' || battleState === 'target-select' ||
     battleState === 'item-select' || battleState === 'item-target-select' || battleState === 'item-slide';
-  if (isPlayerDeciding) {
-    turnTimer += dt;
-    if (turnTimer >= TURN_TIME_MS) {
-      turnTimer = 0; itemHeldIdx = -1;
-      playerActionPending = { command: 'skip' };
-      battleState = 'confirm-pause'; battleTimer = 0;
-    }
+  if (!isPlayerDeciding) return;
+  turnTimer += dt;
+  if (turnTimer >= TURN_TIME_MS) {
+    turnTimer = 0; itemHeldIdx = -1;
+    playerActionPending = { command: 'skip' }; battleState = 'confirm-pause'; battleTimer = 0;
   }
+}
 
-  // Ally exit fade during victory — after 1.5s, NES-fade each ally out (1 step per 100ms)
+function _updateAllyExitFade(dt) {
+  if (battleAllies.length === 0) return;
+  const isVicState = battleState === 'victory-celebrate' || battleState === 'victory-text-in' ||
+    battleState === 'victory-hold' || battleState === 'victory-fade-out' ||
+    battleState === 'exp-text-in' || battleState === 'exp-hold' || battleState === 'exp-fade-out' ||
+    battleState === 'gil-text-in' || battleState === 'gil-hold' || battleState === 'gil-fade-out' ||
+    battleState === 'item-text-in' || battleState === 'item-hold' || battleState === 'item-fade-out' ||
+    battleState === 'levelup-text-in' || battleState === 'levelup-hold' ||
+    battleState === 'victory-text-out' || battleState === 'victory-menu-fade';
+  if (!isVicState) return;
   const ALLY_EXIT_DELAY_MS = 1500, ALLY_EXIT_STEP_MS = 100;
-  if (battleAllies.length > 0 && (
-    battleState === 'victory-celebrate' || battleState === 'victory-text-in' ||
-    battleState === 'victory-hold'      || battleState === 'victory-fade-out' ||
-    battleState === 'exp-text-in'       || battleState === 'exp-hold'         || battleState === 'exp-fade-out' ||
-    battleState === 'gil-text-in'       || battleState === 'gil-hold'         || battleState === 'gil-fade-out' ||
-    battleState === 'item-text-in'      || battleState === 'item-hold'        || battleState === 'item-fade-out' ||
-    battleState === 'levelup-text-in'   || battleState === 'levelup-hold' ||
-    battleState === 'victory-text-out'  || battleState === 'victory-menu-fade'
-  )) {
-    allyExitTimer += dt;
-    if (allyExitTimer >= ALLY_EXIT_DELAY_MS) {
-      const stepsDone = Math.floor((allyExitTimer - ALLY_EXIT_DELAY_MS) / ALLY_EXIT_STEP_MS);
-      for (let i = 0; i < battleAllies.length; i++) {
-        const targetFade = Math.min(4, stepsDone);
-        if (battleAllies[i].fadeStep < targetFade) battleAllies[i].fadeStep = targetFade;
-      }
+  allyExitTimer += dt;
+  if (allyExitTimer >= ALLY_EXIT_DELAY_MS) {
+    const stepsDone = Math.floor((allyExitTimer - ALLY_EXIT_DELAY_MS) / ALLY_EXIT_STEP_MS);
+    const targetFade = Math.min(4, stepsDone);
+    for (let i = 0; i < battleAllies.length; i++) {
+      if (battleAllies[i].fadeStep < targetFade) battleAllies[i].fadeStep = targetFade;
     }
   }
 }
@@ -7462,57 +7463,36 @@ function _processBossFlash() {
   return true;
 }
 
+function _processEnemyDamageShow() {
+  if (battleTimer < BATTLE_DMG_SHOW_MS) return;
+  if (playerHP <= 0) {
+    isDefending = false; battleState = 'defeat-monster-fade'; battleTimer = 0;
+  } else if (isPVPBattle && pvpCurrentEnemyAllyIdx < 0 && pvpOpponentHitsThisTurn === 0) {
+    const oppL = pvpOpponent && pvpOpponent.weaponL, oppR = pvpOpponent && pvpOpponent.weaponR;
+    if ((oppL != null && isWeapon(oppL)) || (!isWeapon(oppR) && !isWeapon(oppL))) {
+      pvpOpponentHitsThisTurn = 1; battleState = 'pvp-second-windup'; battleTimer = 0;
+    } else { processNextTurn(); }
+  } else { processNextTurn(); }
+}
+
+function _processPVPSecondWindup() {
+  if (battleTimer < BOSS_PREFLASH_MS) return;
+  const monAtk2 = pvpOpponentStats.atk;
+  if (Math.random() * 100 < BOSS_HIT_RATE) {
+    let dmg2 = calcDamage(monAtk2, playerDEF);
+    if (isDefending) dmg2 = Math.max(1, Math.floor(dmg2 / 2));
+    playerHP = Math.max(0, playerHP - dmg2);
+    playerDamageNum = { value: dmg2, timer: 0 }; playSFX(SFX.ATTACK_HIT);
+    battleShakeTimer = BATTLE_SHAKE_MS; battleState = 'enemy-attack'; battleTimer = 0;
+  } else { playerDamageNum = { miss: true, timer: 0 }; battleState = 'enemy-damage-show'; battleTimer = 0; }
+}
+
 function _updateBattleEnemyTurn() {
   if (_processBossFlash()) return true;
   if (battleState === 'enemy-attack') {
-    if (battleTimer >= BATTLE_SHAKE_MS) {
-      battleState = 'enemy-damage-show';
-      battleTimer = 0;
-    }
-  } else if (battleState === 'enemy-damage-show') {
-    if (battleTimer >= BATTLE_DMG_SHOW_MS) {
-      if (playerHP <= 0) {
-        // Player defeated — monster fade out → game over → respawn
-        isDefending = false;
-        battleState = 'defeat-monster-fade';
-        battleTimer = 0;
-      } else if (isPVPBattle && pvpCurrentEnemyAllyIdx < 0 && pvpOpponentHitsThisTurn === 0) {
-        // PVP main opponent: check if they have a second hand for dual-wield
-        const oppL = pvpOpponent && pvpOpponent.weaponL;
-        const oppR = pvpOpponent && pvpOpponent.weaponR;
-        const oppHasDual = (oppL != null && isWeapon(oppL)) || (!isWeapon(oppR) && !isWeapon(oppL));
-        if (oppHasDual) {
-          // Second hit — wind-up animation then L-hand swing
-          pvpOpponentHitsThisTurn = 1;
-          battleState = 'pvp-second-windup';
-          battleTimer = 0;
-        } else {
-          processNextTurn();
-        }
-      } else {
-        // Next turn in queue (or back to menu if empty)
-        processNextTurn();
-      }
-    }
-  } else if (battleState === 'pvp-second-windup') {
-    // L-hand wind-up animation — blink like boss-flash, then swing
-    if (battleTimer >= BOSS_PREFLASH_MS) {
-      const monAtk2 = pvpOpponentStats.atk;
-      if (Math.random() * 100 < BOSS_HIT_RATE) {
-        let dmg2 = calcDamage(monAtk2, playerDEF);
-        if (isDefending) dmg2 = Math.max(1, Math.floor(dmg2 / 2));
-        playerHP = Math.max(0, playerHP - dmg2);
-        playerDamageNum = { value: dmg2, timer: 0 };
-        playSFX(SFX.ATTACK_HIT);
-        battleShakeTimer = BATTLE_SHAKE_MS;
-        battleState = 'enemy-attack';
-        battleTimer = 0;
-      } else {
-        playerDamageNum = { miss: true, timer: 0 };
-        battleState = 'enemy-damage-show';
-        battleTimer = 0;
-      }
-    }
+    if (battleTimer >= BATTLE_SHAKE_MS) { battleState = 'enemy-damage-show'; battleTimer = 0; }
+  } else if (battleState === 'enemy-damage-show') { _processEnemyDamageShow();
+  } else if (battleState === 'pvp-second-windup') { _processPVPSecondWindup();
   } else { return false; }
   return true;
 }
