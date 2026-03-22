@@ -1336,90 +1336,95 @@ function initCursorTile(romData) {
   }
 }
 
-function initBattleSprite(romData) {
-  // Battle palette: character palette 0 (ID $FC) at ROM 0x05CF04
-  // 3 bytes = colors 1-3, color 0 always $0F (disasm 2E/9E28 + 2E/9DA2)
-  const BATTLE_PAL_ROM = 0x05CF04;
-  const palette = [0x0F, romData[BATTLE_PAL_ROM], romData[BATTLE_PAL_ROM + 1], romData[BATTLE_PAL_ROM + 2]];
+// --- Battle sprite low-level helpers ---
+const _BATTLE_LAYOUT = [[0,0],[8,0],[0,8],[8,8]];
 
-  // Idle portrait tiles — PPU bytes from FCEUX battle dump (PPU $1000 $01-$04)
+// Blit a decoded 8×8 tile onto a canvas context at (x, y), transparent on palette index 0
+function _blitTile(ctx, px, palette, x, y) {
+  const img = ctx.createImageData(8, 8);
+  for (let p = 0; p < 64; p++) {
+    const ci = px[p];
+    if (ci === 0) { img.data[p * 4 + 3] = 0; }
+    else {
+      const rgb = NES_SYSTEM_PALETTE[palette[ci]] || [0, 0, 0];
+      img.data[p * 4] = rgb[0]; img.data[p * 4 + 1] = rgb[1];
+      img.data[p * 4 + 2] = rgb[2]; img.data[p * 4 + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, x, y);
+}
+
+// H-flipped blit — for blade sprite windup poses (NES attr bit $40)
+function _blitTileH(ctx, px, palette, x, y) {
+  const img = ctx.createImageData(8, 8);
+  for (let p = 0; p < 64; p++) {
+    const ci = px[p];
+    if (ci === 0) continue;
+    const rgb = NES_SYSTEM_PALETTE[palette[ci]] || [0, 0, 0];
+    const di = (Math.floor(p / 8) * 8 + (7 - p % 8)) * 4;
+    img.data[di] = rgb[0]; img.data[di + 1] = rgb[1];
+    img.data[di + 2] = rgb[2]; img.data[di + 3] = 255;
+  }
+  ctx.putImageData(img, x, y);
+}
+
+// Build a 16×16 canvas from 4 PPU tile byte arrays using the battle 2×2 layout
+function _buildCanvas4(tilesArr, palette) {
+  const c = document.createElement('canvas');
+  c.width = 16; c.height = 16;
+  const cx = c.getContext('2d');
+  for (let i = 0; i < 4; i++) {
+    _blitTile(cx, decodeTile(tilesArr[i], 0), palette, _BATTLE_LAYOUT[i][0], _BATTLE_LAYOUT[i][1]);
+  }
+  return c;
+}
+
+// Build a 16×16 canvas from 4 sequential ROM tiles (16 bytes each) using the battle 2×2 layout
+function _buildCanvas4ROM(romData, offset, palette) {
+  const c = document.createElement('canvas');
+  c.width = 16; c.height = 16;
+  const cx = c.getContext('2d');
+  for (let i = 0; i < 4; i++) {
+    _blitTile(cx, decodeTile(romData, offset + i * 16), palette, _BATTLE_LAYOUT[i][0], _BATTLE_LAYOUT[i][1]);
+  }
+  return c;
+}
+
+// Draw a single decoded tile onto an existing canvas context (composite, no clear)
+function _drawTileOnto(tileBytes, palette, ctx, x, y) {
+  _blitTile(ctx, decodeTile(tileBytes, 0), palette, x, y);
+}
+
+function _initBattleIdleSprites(romData, palette) {
   const IDLE_PPU = [
     new Uint8Array([0x00,0x00,0x0A,0x16,0x2F,0x03,0x00,0x0C, 0x00,0x00,0x0E,0x1E,0x3F,0x7F,0x83,0x40]), // $01 TL
     new Uint8Array([0x00,0x00,0x00,0xE0,0x70,0xB8,0xD8,0x68, 0x00,0x6C,0x19,0xFE,0x76,0xBB,0xDB,0xED]), // $02 TR
     new Uint8Array([0x1F,0x04,0x16,0x16,0x0F,0x0F,0x60,0xC6, 0x00,0x00,0x00,0x00,0x50,0xE0,0x60,0x1E]), // $03 BL
     new Uint8Array([0x18,0x80,0x48,0xCC,0x00,0x00,0x70,0xD8, 0x59,0x32,0x38,0x0C,0xB0,0x78,0x70,0x1C]), // $04 BR
   ];
-  const tiles = IDLE_PPU.map(d => decodeTile(d, 0));
+  // Idle portrait — 2×2 layout row-major (disasm 3C/82FA OAM data)
+  battleSpriteCanvas = _buildCanvas4(IDLE_PPU, palette);
 
-  battleSpriteCanvas = document.createElement('canvas');
-  battleSpriteCanvas.width = 16;
-  battleSpriteCanvas.height = 16;
-  const bctx = battleSpriteCanvas.getContext('2d');
-
-  // 2×2 layout: row-major (confirmed via disasm 3C/82FA OAM data)
-  const layout = [[0,0], [8,0], [0,8], [8,8]];
-  for (let i = 0; i < 4; i++) {
-    const img = bctx.createImageData(8, 8);
-    const px = tiles[i];
-    for (let p = 0; p < 64; p++) {
-      const ci = px[p];
-      if (ci === 0) {
-        img.data[p * 4 + 3] = 0;
-      } else {
-        const rgb = NES_SYSTEM_PALETTE[palette[ci]] || [0, 0, 0];
-        img.data[p * 4]     = rgb[0];
-        img.data[p * 4 + 1] = rgb[1];
-        img.data[p * 4 + 2] = rgb[2];
-        img.data[p * 4 + 3] = 255;
-      }
-    }
-    bctx.putImageData(img, layout[i][0], layout[i][1]);
-  }
-
-  // Silhouette: same shape, all non-transparent pixels → NES $00 (grey)
+  // Silhouette — same shape, all opaque pixels → NES $00 (grey)
   silhouetteCanvas = document.createElement('canvas');
-  silhouetteCanvas.width = 16;
-  silhouetteCanvas.height = 16;
+  silhouetteCanvas.width = 16; silhouetteCanvas.height = 16;
   const sctx = silhouetteCanvas.getContext('2d');
   sctx.drawImage(battleSpriteCanvas, 0, 0);
   const sdata = sctx.getImageData(0, 0, 16, 16);
   const darkRgb = NES_SYSTEM_PALETTE[0x00] || [0, 0, 0];
   for (let p = 0; p < 16 * 16; p++) {
     if (sdata.data[p * 4 + 3] > 0) {
-      sdata.data[p * 4]     = darkRgb[0];
+      sdata.data[p * 4] = darkRgb[0];
       sdata.data[p * 4 + 1] = darkRgb[1];
       sdata.data[p * 4 + 2] = darkRgb[2];
     }
   }
   sctx.putImageData(sdata, 0, 0);
+}
 
-  // Helper: decode PPU tile bytes into canvas using palette (composites over existing pixels)
-  function drawTileToCanvas(tileBytes, tctx, x, y) {
-    const px = decodeTile(tileBytes, 0);
-    const tmp = document.createElement('canvas');
-    tmp.width = 8;
-    tmp.height = 8;
-    const tc = tmp.getContext('2d');
-    const img = tc.createImageData(8, 8);
-    for (let p = 0; p < 64; p++) {
-      const ci = px[p];
-      if (ci === 0) {
-        img.data[p * 4 + 3] = 0;
-      } else {
-        const rgb = NES_SYSTEM_PALETTE[palette[ci]] || [0, 0, 0];
-        img.data[p * 4]     = rgb[0];
-        img.data[p * 4 + 1] = rgb[1];
-        img.data[p * 4 + 2] = rgb[2];
-        img.data[p * 4 + 3] = 255;
-      }
-    }
-    tc.putImageData(img, 0, 0);
-    tctx.drawImage(tmp, x, y);
-  }
-
+function _initBattleAttackSprites(palette) {
   // Attack pose tiles from FCEUX PPU dump (unarmed, weapons zeroed)
-  // Right hand: mid-L changes $03→$39 (mid-R $04 stays)
-  // Left hand: mid-L changes $03→$3B, mid-R changes $04→$3C
+  // Right hand: mid-L changes $03→$39; left hand: mid-L→$3B, mid-R→$3C
   const ATK_R_39 = new Uint8Array([0x1F,0x04,0x16,0x16,0x2F,0x7F,0x70,0x26,
                                     0x00,0x00,0x00,0x00,0x30,0x70,0x70,0x3E]);
   const ATK_L_3B = new Uint8Array([0x1F,0x04,0x16,0x16,0x0C,0x08,0x38,0x7C,
@@ -1427,114 +1432,60 @@ function initBattleSprite(romData) {
   const ATK_L_3C = new Uint8Array([0x18,0x80,0x48,0xCC,0x00,0x00,0x00,0x00,
                                     0x59,0x32,0x38,0x0C,0x80,0xC0,0x00,0x60]);
 
-  // Right-hand punch canvas (mid-L = $39)
+  // Right-hand punch (mid-L = $39) — idle + modified lower-left tile
   battleSpriteAttackCanvas = document.createElement('canvas');
-  battleSpriteAttackCanvas.width = 16;
-  battleSpriteAttackCanvas.height = 16;
+  battleSpriteAttackCanvas.width = 16; battleSpriteAttackCanvas.height = 16;
   const actx = battleSpriteAttackCanvas.getContext('2d');
   actx.drawImage(battleSpriteCanvas, 0, 0);
-  drawTileToCanvas(ATK_R_39, actx, 0, 8);
+  _drawTileOnto(ATK_R_39, palette, actx, 0, 8);
 
-  // Fist tile $49 (identical for both hands) — 8x8 canvas
+  // Fist tile $49 — 8×8 canvas (identical for both hands)
   const FIST_TILE = new Uint8Array([0x00,0x00,0x00,0x0C,0x2C,0x4C,0x00,0x00,
                                      0x00,0x00,0x00,0x73,0x53,0x23,0x00,0x00]);
   battleFistCanvas = document.createElement('canvas');
-  battleFistCanvas.width = 8;
-  battleFistCanvas.height = 8;
-  const fctx = battleFistCanvas.getContext('2d');
-  drawTileToCanvas(FIST_TILE, fctx, 0, 0);
+  battleFistCanvas.width = 8; battleFistCanvas.height = 8;
+  _drawTileOnto(FIST_TILE, palette, battleFistCanvas.getContext('2d'), 0, 0);
 
-  // Left-hand punch canvas (mid-L = $3B, mid-R = $3C)
+  // Left-hand punch (mid-L = $3B, mid-R = $3C)
   battleSpriteAttackLCanvas = document.createElement('canvas');
-  battleSpriteAttackLCanvas.width = 16;
-  battleSpriteAttackLCanvas.height = 16;
+  battleSpriteAttackLCanvas.width = 16; battleSpriteAttackLCanvas.height = 16;
   const alctx = battleSpriteAttackLCanvas.getContext('2d');
   alctx.drawImage(battleSpriteCanvas, 0, 0);
-  drawTileToCanvas(ATK_L_3B, alctx, 0, 8);
-  drawTileToCanvas(ATK_L_3C, alctx, 8, 8);
+  _drawTileOnto(ATK_L_3B, palette, alctx, 0, 8);
+  _drawTileOnto(ATK_L_3C, palette, alctx, 8, 8);
+}
 
-  // Knife attack body poses — from PPU trace dumps
-  // R-hand: $2B/$2C/$39/$2E
+function _initBattleKnifeBodySprites(palette) {
+  // Knife R-hand body pose: $2B/$2C/$39/$2E
   const KNIFE_R_TILES = [
-    new Uint8Array([0x00,0x00,0x0A,0x16,0x2F,0x03,0x00,0x0C, 0x00,0x00,0x0E,0x1E,0x3F,0x7F,0x83,0x40]), // $2B
-    new Uint8Array([0x00,0x00,0x00,0xE0,0x70,0xB8,0xD8,0x68, 0x00,0x6C,0x19,0xFE,0x76,0xBB,0xDB,0xED]), // $2C
-    new Uint8Array([0x1F,0x04,0x16,0x16,0x2F,0x7F,0x70,0x26, 0x00,0x00,0x00,0x00,0x30,0x70,0x70,0x3E]), // $39
-    new Uint8Array([0x18,0x80,0x48,0xCC,0x00,0x00,0x70,0xD8, 0x59,0x32,0x38,0x0C,0xB0,0x78,0x70,0x1C]), // $2E
+    new Uint8Array([0x00,0x00,0x0A,0x16,0x2F,0x03,0x00,0x0C, 0x00,0x00,0x0E,0x1E,0x3F,0x7F,0x83,0x40]),
+    new Uint8Array([0x00,0x00,0x00,0xE0,0x70,0xB8,0xD8,0x68, 0x00,0x6C,0x19,0xFE,0x76,0xBB,0xDB,0xED]),
+    new Uint8Array([0x1F,0x04,0x16,0x16,0x2F,0x7F,0x70,0x26, 0x00,0x00,0x00,0x00,0x30,0x70,0x70,0x3E]),
+    new Uint8Array([0x18,0x80,0x48,0xCC,0x00,0x00,0x70,0xD8, 0x59,0x32,0x38,0x0C,0xB0,0x78,0x70,0x1C]),
   ];
-  battleSpriteKnifeRCanvas = document.createElement('canvas');
-  battleSpriteKnifeRCanvas.width = 16;
-  battleSpriteKnifeRCanvas.height = 16;
-  const krctx = battleSpriteKnifeRCanvas.getContext('2d');
-  for (let i = 0; i < 4; i++) {
-    const px = decodeTile(KNIFE_R_TILES[i], 0);
-    const kimg = krctx.createImageData(8, 8);
-    for (let p = 0; p < 64; p++) {
-      const ci = px[p];
-      if (ci === 0) { kimg.data[p * 4 + 3] = 0; }
-      else {
-        const rgb = NES_SYSTEM_PALETTE[palette[ci]] || [0, 0, 0];
-        kimg.data[p * 4] = rgb[0]; kimg.data[p * 4 + 1] = rgb[1];
-        kimg.data[p * 4 + 2] = rgb[2]; kimg.data[p * 4 + 3] = 255;
-      }
-    }
-    krctx.putImageData(kimg, layout[i][0], layout[i][1]);
-  }
-  // L-hand: $01/$3F/$03/$40
+  battleSpriteKnifeRCanvas = _buildCanvas4(KNIFE_R_TILES, palette);
+
+  // Knife L-hand body pose: $01/$3F/$03/$40
   const KNIFE_L_TILES = [
-    new Uint8Array([0x00,0x00,0x0A,0x16,0x2F,0x03,0x00,0x0C, 0x00,0x00,0x0E,0x1E,0x3F,0x7F,0x83,0x40]), // $01
-    new Uint8Array([0x00,0x00,0x00,0xE0,0x70,0xB8,0xD8,0x68, 0x00,0x6C,0x19,0xFE,0x76,0xBB,0xDB,0xEC]), // $3F
-    new Uint8Array([0x1F,0x04,0x16,0x16,0x0F,0x0F,0x60,0xC6, 0x00,0x00,0x00,0x00,0x50,0xE0,0x60,0x1E]), // $03
-    new Uint8Array([0x13,0x87,0x57,0xF8,0x7E,0x3C,0x1C,0x08, 0x50,0x30,0x30,0x38,0xFE,0x7C,0xFE,0xFA]), // $40
+    new Uint8Array([0x00,0x00,0x0A,0x16,0x2F,0x03,0x00,0x0C, 0x00,0x00,0x0E,0x1E,0x3F,0x7F,0x83,0x40]),
+    new Uint8Array([0x00,0x00,0x00,0xE0,0x70,0xB8,0xD8,0x68, 0x00,0x6C,0x19,0xFE,0x76,0xBB,0xDB,0xEC]),
+    new Uint8Array([0x1F,0x04,0x16,0x16,0x0F,0x0F,0x60,0xC6, 0x00,0x00,0x00,0x00,0x50,0xE0,0x60,0x1E]),
+    new Uint8Array([0x13,0x87,0x57,0xF8,0x7E,0x3C,0x1C,0x08, 0x50,0x30,0x30,0x38,0xFE,0x7C,0xFE,0xFA]),
   ];
-  battleSpriteKnifeLCanvas = document.createElement('canvas');
-  battleSpriteKnifeLCanvas.width = 16;
-  battleSpriteKnifeLCanvas.height = 16;
-  const klctx = battleSpriteKnifeLCanvas.getContext('2d');
-  for (let i = 0; i < 4; i++) {
-    const px = decodeTile(KNIFE_L_TILES[i], 0);
-    const klimg = klctx.createImageData(8, 8);
-    for (let p = 0; p < 64; p++) {
-      const ci = px[p];
-      if (ci === 0) { klimg.data[p * 4 + 3] = 0; }
-      else {
-        const rgb = NES_SYSTEM_PALETTE[palette[ci]] || [0, 0, 0];
-        klimg.data[p * 4] = rgb[0]; klimg.data[p * 4 + 1] = rgb[1];
-        klimg.data[p * 4 + 2] = rgb[2]; klimg.data[p * 4 + 3] = 255;
-      }
-    }
-    klctx.putImageData(klimg, layout[i][0], layout[i][1]);
-  }
+  battleSpriteKnifeLCanvas = _buildCanvas4(KNIFE_L_TILES, palette);
 
-  // Back-swing body pose — dual trace tiles $43/$44/$45/$46 (arm pulled back)
-  // Rendered with player palette (same shape, just different palette slot in trace)
+  // Back-swing body pose: $43/$44/$45/$46
   const KNIFE_BACK_TILES = [
-    new Uint8Array([0x05,0x0B,0x17,0x03,0x00,0x00,0x0E,0x1F, 0x07,0x0F,0x1F,0x3F,0x43,0x40,0x20,0x00]), // $43
-    new Uint8Array([0x00,0x00,0xA0,0xD0,0xE8,0x78,0x10,0x88, 0x2C,0x59,0xBE,0xD6,0xEF,0xFB,0x75,0x1A]), // $44
-    new Uint8Array([0x04,0xD6,0xD6,0x3F,0xEF,0xF0,0x63,0x0E, 0x00,0x00,0x00,0x24,0xE4,0xF0,0x6F,0x1F]), // $45
-    new Uint8Array([0x90,0x4C,0xCC,0x30,0x7C,0x78,0x30,0x00, 0x32,0x21,0x00,0xB0,0x7C,0x7C,0xB2,0xC2]), // $46
+    new Uint8Array([0x05,0x0B,0x17,0x03,0x00,0x00,0x0E,0x1F, 0x07,0x0F,0x1F,0x3F,0x43,0x40,0x20,0x00]),
+    new Uint8Array([0x00,0x00,0xA0,0xD0,0xE8,0x78,0x10,0x88, 0x2C,0x59,0xBE,0xD6,0xEF,0xFB,0x75,0x1A]),
+    new Uint8Array([0x04,0xD6,0xD6,0x3F,0xEF,0xF0,0x63,0x0E, 0x00,0x00,0x00,0x24,0xE4,0xF0,0x6F,0x1F]),
+    new Uint8Array([0x90,0x4C,0xCC,0x30,0x7C,0x78,0x30,0x00, 0x32,0x21,0x00,0xB0,0x7C,0x7C,0xB2,0xC2]),
   ];
-  battleSpriteKnifeBackCanvas = document.createElement('canvas');
-  battleSpriteKnifeBackCanvas.width = 16;
-  battleSpriteKnifeBackCanvas.height = 16;
-  const kbctx = battleSpriteKnifeBackCanvas.getContext('2d');
-  for (let i = 0; i < 4; i++) {
-    const px = decodeTile(KNIFE_BACK_TILES[i], 0);
-    const kbimg = kbctx.createImageData(8, 8);
-    for (let p = 0; p < 64; p++) {
-      const ci = px[p];
-      if (ci === 0) { kbimg.data[p * 4 + 3] = 0; }
-      else {
-        const rgb = NES_SYSTEM_PALETTE[palette[ci]] || [0, 0, 0];
-        kbimg.data[p * 4] = rgb[0]; kbimg.data[p * 4 + 1] = rgb[1];
-        kbimg.data[p * 4 + 2] = rgb[2]; kbimg.data[p * 4 + 3] = 255;
-      }
-    }
-    kbctx.putImageData(kbimg, layout[i][0], layout[i][1]);
-  }
+  battleSpriteKnifeBackCanvas = _buildCanvas4(KNIFE_BACK_TILES, palette);
+}
 
-  // Knife blade tiles — single trace (knife-trace4.txt) $49/$4A/$4B/$4C
-  // Grid: $4A(0,0) $49(8,0) / $4C(0,8) $4B(8,8)
-  // Palette 3 from single trace: $0F/$00/$32/$30
+function _initBattleBladeSprites(palette) {
+  // Knife blade tiles: $4A/$49/$4C/$4B — pal3 $0F/$00/$32/$30
   const BLADE_PAL = [0x0F, 0x00, 0x32, 0x30];
   const BLADE_TILES = [
     new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x80]), // $4A
@@ -1543,387 +1494,168 @@ function initBattleSprite(romData) {
     new Uint8Array([0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00]), // $4B
   ];
   const BLADE_POS = [[0,0],[8,0],[0,8],[8,8]];
-  // Swung grid order: $49(0,0) $4A(8,0) / $4B(0,8) $4C(8,8) — indices into BLADE_TILES
   const BLADE_SWUNG_ORDER = [1, 0, 3, 2];
 
-  // Raised blade (h-flipped, attr $43) — back swing / windup
+  // Raised knife blade (h-flipped) — windup
   battleKnifeBladeCanvas = document.createElement('canvas');
-  battleKnifeBladeCanvas.width = 16;
-  battleKnifeBladeCanvas.height = 16;
+  battleKnifeBladeCanvas.width = 16; battleKnifeBladeCanvas.height = 16;
   const blctx = battleKnifeBladeCanvas.getContext('2d');
   for (let t = 0; t < 4; t++) {
-    const bpx = decodeTile(BLADE_TILES[t], 0);
-    const blimg = blctx.createImageData(8, 8);
-    for (let p = 0; p < 64; p++) {
-      const ci = bpx[p];
-      if (ci === 0) continue;
-      const rgb = NES_SYSTEM_PALETTE[BLADE_PAL[ci]] || [252, 252, 252];
-      const row = Math.floor(p / 8), col = p % 8;
-      const di = (row * 8 + (7 - col)) * 4; // h-flip
-      blimg.data[di] = rgb[0]; blimg.data[di + 1] = rgb[1];
-      blimg.data[di + 2] = rgb[2]; blimg.data[di + 3] = 255;
-    }
-    blctx.putImageData(blimg, BLADE_POS[t][0], BLADE_POS[t][1]);
+    _blitTileH(blctx, decodeTile(BLADE_TILES[t], 0), BLADE_PAL, BLADE_POS[t][0], BLADE_POS[t][1]);
   }
 
-  // Swung blade (no flip, attr $03) — forward slash / hit
+  // Swung knife blade (no flip) — forward slash
   battleKnifeBladeSwungCanvas = document.createElement('canvas');
-  battleKnifeBladeSwungCanvas.width = 16;
-  battleKnifeBladeSwungCanvas.height = 16;
+  battleKnifeBladeSwungCanvas.width = 16; battleKnifeBladeSwungCanvas.height = 16;
   const bsctx = battleKnifeBladeSwungCanvas.getContext('2d');
   for (let t = 0; t < 4; t++) {
-    const bpx = decodeTile(BLADE_TILES[BLADE_SWUNG_ORDER[t]], 0);
-    const bsimg = bsctx.createImageData(8, 8);
-    for (let p = 0; p < 64; p++) {
-      const ci = bpx[p];
-      if (ci === 0) continue;
-      const rgb = NES_SYSTEM_PALETTE[BLADE_PAL[ci]] || [252, 252, 252];
-      bsimg.data[p * 4] = rgb[0]; bsimg.data[p * 4 + 1] = rgb[1];
-      bsimg.data[p * 4 + 2] = rgb[2]; bsimg.data[p * 4 + 3] = 255;
-    }
-    bsctx.putImageData(bsimg, BLADE_POS[t][0], BLADE_POS[t][1]);
+    _blitTile(bsctx, decodeTile(BLADE_TILES[BLADE_SWUNG_ORDER[t]], 0), BLADE_PAL, BLADE_POS[t][0], BLADE_POS[t][1]);
   }
 
-  // --- Dagger blade sprites (same tiles as knife, pal3 $0F/$1B/$2B/$30 from FCEUX) ---
+  // Dagger blade — same tiles, pal3 $0F/$1B/$2B/$30
   const DAGGER_PAL = [0x0F, 0x1B, 0x2B, 0x30];
   battleDaggerBladeCanvas = document.createElement('canvas');
-  battleDaggerBladeCanvas.width = 16;
-  battleDaggerBladeCanvas.height = 16;
+  battleDaggerBladeCanvas.width = 16; battleDaggerBladeCanvas.height = 16;
   const dblctx = battleDaggerBladeCanvas.getContext('2d');
   for (let t = 0; t < 4; t++) {
-    const bpx = decodeTile(BLADE_TILES[t], 0);
-    const dblimg = dblctx.createImageData(8, 8);
-    for (let p = 0; p < 64; p++) {
-      const ci = bpx[p];
-      if (ci === 0) continue;
-      const rgb = NES_SYSTEM_PALETTE[DAGGER_PAL[ci]] || [252, 252, 252];
-      const row = Math.floor(p / 8), col = p % 8;
-      const di = (row * 8 + (7 - col)) * 4; // h-flip
-      dblimg.data[di] = rgb[0]; dblimg.data[di + 1] = rgb[1];
-      dblimg.data[di + 2] = rgb[2]; dblimg.data[di + 3] = 255;
-    }
-    dblctx.putImageData(dblimg, BLADE_POS[t][0], BLADE_POS[t][1]);
+    _blitTileH(dblctx, decodeTile(BLADE_TILES[t], 0), DAGGER_PAL, BLADE_POS[t][0], BLADE_POS[t][1]);
   }
   battleDaggerBladeSwungCanvas = document.createElement('canvas');
-  battleDaggerBladeSwungCanvas.width = 16;
-  battleDaggerBladeSwungCanvas.height = 16;
+  battleDaggerBladeSwungCanvas.width = 16; battleDaggerBladeSwungCanvas.height = 16;
   const dbsctx = battleDaggerBladeSwungCanvas.getContext('2d');
   for (let t = 0; t < 4; t++) {
-    const bpx = decodeTile(BLADE_TILES[BLADE_SWUNG_ORDER[t]], 0);
-    const dbsimg = dbsctx.createImageData(8, 8);
-    for (let p = 0; p < 64; p++) {
-      const ci = bpx[p];
-      if (ci === 0) continue;
-      const rgb = NES_SYSTEM_PALETTE[DAGGER_PAL[ci]] || [252, 252, 252];
-      dbsimg.data[p * 4] = rgb[0]; dbsimg.data[p * 4 + 1] = rgb[1];
-      dbsimg.data[p * 4 + 2] = rgb[2]; dbsimg.data[p * 4 + 3] = 255;
-    }
-    dbsctx.putImageData(dbsimg, BLADE_POS[t][0], BLADE_POS[t][1]);
+    _blitTile(dbsctx, decodeTile(BLADE_TILES[BLADE_SWUNG_ORDER[t]], 0), DAGGER_PAL, BLADE_POS[t][0], BLADE_POS[t][1]);
   }
 
-  // --- Sword blade sprites (from FCEUX PPU capture, pal3 $0F/$00/$32/$30) ---
+  // Sword blade tiles (from FCEUX PPU capture) — pal3 $0F/$00/$32/$30
   const SWORD_BLADE_PAL = [0x0F, 0x00, 0x32, 0x30];
-  // Grid for raised (h-flipped): $4A(0,0) $49(8,0) / $4C(0,8) $4B(8,8)
   const SWORD_BLADE_TILES = [
     new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x80,0xC0, 0x00,0x00,0x00,0x00,0x00,0x00,0x80,0xC0]), // $4A
     new Uint8Array([0x00,0x70,0x78,0x7C,0x3E,0x1F,0x0D,0x06, 0x00,0x70,0x78,0x7C,0x3E,0x1F,0x0F,0x07]), // $49
     new Uint8Array([0x60,0xB0,0xD9,0x6D,0x33,0x12,0x0D,0x3B, 0xE0,0xF0,0xF8,0x7C,0x3C,0x1C,0x02,0x00]), // $4C
     new Uint8Array([0x03,0x01,0x00,0x00,0x00,0x00,0x00,0x00, 0x03,0x01,0x00,0x00,0x00,0x00,0x00,0x00]), // $4B
   ];
-  const SWORD_BLADE_POS = [[0,0],[8,0],[0,8],[8,8]];
   const SWORD_BLADE_SWUNG_ORDER = [1, 0, 3, 2];
-
-  // Raised sword (h-flipped, attr $43) — back swing / windup
   battleSwordBladeCanvas = document.createElement('canvas');
-  battleSwordBladeCanvas.width = 16;
-  battleSwordBladeCanvas.height = 16;
+  battleSwordBladeCanvas.width = 16; battleSwordBladeCanvas.height = 16;
   const sblctx = battleSwordBladeCanvas.getContext('2d');
   for (let t = 0; t < 4; t++) {
-    const bpx = decodeTile(SWORD_BLADE_TILES[t], 0);
-    const sblimg = sblctx.createImageData(8, 8);
-    for (let p = 0; p < 64; p++) {
-      const ci = bpx[p];
-      if (ci === 0) continue;
-      const rgb = NES_SYSTEM_PALETTE[SWORD_BLADE_PAL[ci]] || [252, 252, 252];
-      const row = Math.floor(p / 8), col = p % 8;
-      const di = (row * 8 + (7 - col)) * 4; // h-flip
-      sblimg.data[di] = rgb[0]; sblimg.data[di + 1] = rgb[1];
-      sblimg.data[di + 2] = rgb[2]; sblimg.data[di + 3] = 255;
-    }
-    sblctx.putImageData(sblimg, SWORD_BLADE_POS[t][0], SWORD_BLADE_POS[t][1]);
+    _blitTileH(sblctx, decodeTile(SWORD_BLADE_TILES[t], 0), SWORD_BLADE_PAL, BLADE_POS[t][0], BLADE_POS[t][1]);
   }
-
-  // Swung sword (no flip, attr $03) — forward slash / hit
   battleSwordBladeSwungCanvas = document.createElement('canvas');
-  battleSwordBladeSwungCanvas.width = 16;
-  battleSwordBladeSwungCanvas.height = 16;
+  battleSwordBladeSwungCanvas.width = 16; battleSwordBladeSwungCanvas.height = 16;
   const sswctx = battleSwordBladeSwungCanvas.getContext('2d');
   for (let t = 0; t < 4; t++) {
-    const bpx = decodeTile(SWORD_BLADE_TILES[SWORD_BLADE_SWUNG_ORDER[t]], 0);
-    const sswimg = sswctx.createImageData(8, 8);
-    for (let p = 0; p < 64; p++) {
-      const ci = bpx[p];
-      if (ci === 0) continue;
-      const rgb = NES_SYSTEM_PALETTE[SWORD_BLADE_PAL[ci]] || [252, 252, 252];
-      sswimg.data[p * 4] = rgb[0]; sswimg.data[p * 4 + 1] = rgb[1];
-      sswimg.data[p * 4 + 2] = rgb[2]; sswimg.data[p * 4 + 3] = 255;
-    }
-    sswctx.putImageData(sswimg, SWORD_BLADE_POS[t][0], SWORD_BLADE_POS[t][1]);
+    _blitTile(sswctx, decodeTile(SWORD_BLADE_TILES[SWORD_BLADE_SWUNG_ORDER[t]], 0), SWORD_BLADE_PAL, BLADE_POS[t][0], BLADE_POS[t][1]);
   }
+}
 
-  // Victory pose: sprite frame 4 in job block (tiles 24-27), read from ROM like idle
-  const VICTORY_SPRITE_OFFSET = BATTLE_SPRITE_ROM + 24 * 16;
-  battleSpriteVictoryCanvas = document.createElement('canvas');
-  battleSpriteVictoryCanvas.width = 16;
-  battleSpriteVictoryCanvas.height = 16;
-  const vctx = battleSpriteVictoryCanvas.getContext('2d');
-  for (let i = 0; i < 4; i++) {
-    const px = decodeTile(romData, VICTORY_SPRITE_OFFSET + i * 16);
-    const vimg = vctx.createImageData(8, 8);
-    for (let p = 0; p < 64; p++) {
-      const ci = px[p];
-      if (ci === 0) {
-        vimg.data[p * 4 + 3] = 0;
-      } else {
-        const rgb = NES_SYSTEM_PALETTE[palette[ci]] || [0, 0, 0];
-        vimg.data[p * 4]     = rgb[0];
-        vimg.data[p * 4 + 1] = rgb[1];
-        vimg.data[p * 4 + 2] = rgb[2];
-        vimg.data[p * 4 + 3] = 255;
-      }
-    }
-    vctx.putImageData(vimg, layout[i][0], layout[i][1]);
-  }
+function _initBattleRomPoses(romData, palette) {
+  // Victory pose: sprite frame 4 in job block (tiles 24-27)
+  battleSpriteVictoryCanvas = _buildCanvas4ROM(romData, BATTLE_SPRITE_ROM + 24 * 16, palette);
+  // Hit/recoil pose: sprite frame 5 in job block (tiles 30-33)
+  battleSpriteHitCanvas = _buildCanvas4ROM(romData, BATTLE_SPRITE_ROM + 30 * 16, palette);
+  // Attack frame 2: ROM frame 3 (tiles 18-21, arm raised)
+  battleSpriteAttack2Canvas = _buildCanvas4ROM(romData, BATTLE_SPRITE_ROM + 18 * 16, palette);
+}
 
-  // Hit/recoil pose: sprite frame 5 in job block (tiles 30-33), read from ROM like idle
-  const HIT_SPRITE_OFFSET = BATTLE_SPRITE_ROM + 30 * 16;
-  battleSpriteHitCanvas = document.createElement('canvas');
-  battleSpriteHitCanvas.width = 16;
-  battleSpriteHitCanvas.height = 16;
-  const hctx = battleSpriteHitCanvas.getContext('2d');
-  for (let i = 0; i < 4; i++) {
-    const px = decodeTile(romData, HIT_SPRITE_OFFSET + i * 16);
-    const himg = hctx.createImageData(8, 8);
-    for (let p = 0; p < 64; p++) {
-      const ci = px[p];
-      if (ci === 0) {
-        himg.data[p * 4 + 3] = 0;
-      } else {
-        const rgb = NES_SYSTEM_PALETTE[palette[ci]] || [0, 0, 0];
-        himg.data[p * 4]     = rgb[0];
-        himg.data[p * 4 + 1] = rgb[1];
-        himg.data[p * 4 + 2] = rgb[2];
-        himg.data[p * 4 + 3] = 255;
-      }
-    }
-    hctx.putImageData(himg, layout[i][0], layout[i][1]);
-  }
-
-  // Defend pose: 16×24 crouching sprite from FCEUX PPU $1000 dump (defend-tiles-v2.txt)
-  // Tiles $43-$48 in 2×3 grid, palette 0 (same as idle)
+function _initBattleDefendSprites(palette) {
+  // Defend pose: tiles $43-$46 (top 2×2 of 2×3 crouching body)
   const DEFEND_TILES = [
     new Uint8Array([0x05,0x0B,0x17,0x03,0x00,0x00,0x0E,0x1F, 0x07,0x0F,0x1F,0x3F,0x43,0x40,0x20,0x00]), // $43
     new Uint8Array([0x00,0x00,0xA0,0xD0,0xE8,0x78,0x10,0x88, 0x2C,0x59,0xBE,0xD6,0xEF,0xFB,0x75,0x1A]), // $44
     new Uint8Array([0x04,0xD6,0xD6,0x3F,0xEF,0xF0,0x63,0x0E, 0x00,0x00,0x00,0x24,0xE4,0xF0,0x6F,0x1F]), // $45
     new Uint8Array([0x90,0x4C,0xCC,0x30,0x7C,0x78,0x30,0x00, 0x32,0x21,0x00,0xB0,0x7C,0x7C,0xB2,0xC2]), // $46
-    new Uint8Array([0x37,0x1F,0x0F,0x0F,0x07,0x00,0x00,0x00, 0x3F,0xDF,0xEF,0xEF,0x67,0x08,0x07,0x00]), // $47
-    new Uint8Array([0xE0,0x80,0x00,0x00,0x00,0x00,0x00,0x00, 0xE2,0xB2,0x73,0x73,0x63,0x03,0xFB,0x00]), // $48
   ];
-  battleSpriteDefendCanvas = document.createElement('canvas');
-  battleSpriteDefendCanvas.width = 16;
-  battleSpriteDefendCanvas.height = 16;
-  const dctx = battleSpriteDefendCanvas.getContext('2d');
-  for (let i = 0; i < 4; i++) {
-    const dpx = decodeTile(DEFEND_TILES[i], 0);
-    const dimg = dctx.createImageData(8, 8);
-    for (let p = 0; p < 64; p++) {
-      const ci = dpx[p];
-      if (ci === 0) {
-        dimg.data[p * 4 + 3] = 0;
-      } else {
-        const rgb = NES_SYSTEM_PALETTE[palette[ci]] || [0, 0, 0];
-        dimg.data[p * 4]     = rgb[0];
-        dimg.data[p * 4 + 1] = rgb[1];
-        dimg.data[p * 4 + 2] = rgb[2];
-        dimg.data[p * 4 + 3] = 255;
-      }
-    }
-    dctx.putImageData(dimg, layout[i][0], layout[i][1]);
-  }
+  battleSpriteDefendCanvas = _buildCanvas4(DEFEND_TILES, palette);
 
-  // Defend sparkle frames (4 × 8×8) — tiles $49-$4C from PPU $1000 dump (defend-tiles-v2.txt)
+  // Defend sparkle: tiles $49-$4C, 4 × 8×8 frames
   const SPARKLE_TILES = [
-    new Uint8Array([0x01,0x00,0x08,0x00,0x00,0x41,0x00,0x02, 0x00,0x00,0x01,0x02,0x00,0x09,0x00,0x12]), // $49
-    new Uint8Array([0x00,0x00,0x00,0x04,0x0A,0x14,0x0A,0x01, 0x00,0x00,0x00,0x18,0x1C,0x0E,0x04,0x00]), // $4A
-    new Uint8Array([0x00,0x00,0x20,0x10,0x08,0x04,0x00,0x00, 0x00,0x00,0x30,0x38,0x10,0x00,0x00,0x00]), // $4B
-    new Uint8Array([0x80,0x00,0x20,0x00,0x00,0x00,0x00,0x00, 0x80,0x40,0x00,0x00,0x00,0x00,0x00,0x00]), // $4C
+    new Uint8Array([0x01,0x00,0x08,0x00,0x00,0x41,0x00,0x02, 0x00,0x00,0x01,0x02,0x00,0x09,0x00,0x12]),
+    new Uint8Array([0x00,0x00,0x00,0x04,0x0A,0x14,0x0A,0x01, 0x00,0x00,0x00,0x18,0x1C,0x0E,0x04,0x00]),
+    new Uint8Array([0x00,0x00,0x20,0x10,0x08,0x04,0x00,0x00, 0x00,0x00,0x30,0x38,0x10,0x00,0x00,0x00]),
+    new Uint8Array([0x80,0x00,0x20,0x00,0x00,0x00,0x00,0x00, 0x80,0x40,0x00,0x00,0x00,0x00,0x00,0x00]),
   ];
-  defendSparkleFrames = [];
-  for (let t = 0; t < 4; t++) {
+  defendSparkleFrames = SPARKLE_TILES.map(raw => {
     const sc = document.createElement('canvas');
     sc.width = 8; sc.height = 8;
-    const sctx = sc.getContext('2d');
-    const spx = decodeTile(SPARKLE_TILES[t], 0);
-    const simg = sctx.createImageData(8, 8);
-    for (let p = 0; p < 64; p++) {
-      const ci = spx[p];
-      if (ci === 0) { simg.data[p * 4 + 3] = 0; }
-      else {
-        const rgb = NES_SYSTEM_PALETTE[DEFEND_SPARKLE_PAL[ci]] || [0, 0, 0];
-        simg.data[p * 4] = rgb[0]; simg.data[p * 4 + 1] = rgb[1];
-        simg.data[p * 4 + 2] = rgb[2]; simg.data[p * 4 + 3] = 255;
-      }
-    }
-    sctx.putImageData(simg, 0, 0);
-    defendSparkleFrames.push(sc);
-  }
+    _blitTile(sc.getContext('2d'), decodeTile(raw, 0), DEFEND_SPARKLE_PAL, 0, 0);
+    return sc;
+  });
 
-  // Cure sparkle frames (2 × 16×16) — tiles $4D/$4E from PPU $1000 dump (potion-tiles.txt)
-  // Two configs alternate every 4 NES frames (~67ms). Pal3: $0F $12 $22 $31
-  // Config A: TL=$4E(H), TR=$4D(H), BL=$4D(V), BR=$4E(V)
-  // Config B: TL=$4D, TR=$4E, BL=$4E(HV), BR=$4D(HV)
+  // Cure sparkle: tiles $4D/$4E, 2 × 16×16 config frames — pal3 $0F/$12/$22/$31
   const CURE_TILE_4D = new Uint8Array([0x00,0x40,0x00,0x10,0x08,0x04,0x03,0x03, 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x01]);
   const CURE_TILE_4E = new Uint8Array([0x00,0x00,0x00,0x08,0x10,0x60,0x20,0x80, 0x00,0x00,0x00,0x00,0x00,0x00,0xC0,0xC0]);
-  const CURE_PAL = [0x0F, 0x12, 0x22, 0x31]; // pal3 from trace
-  const cureTiles = [CURE_TILE_4D, CURE_TILE_4E];
-  // Decode both tiles into 8×8 canvases
-  const cureTileCanvases = cureTiles.map(raw => {
+  const CURE_PAL = [0x0F, 0x12, 0x22, 0x31];
+  const cureTileCanvases = [CURE_TILE_4D, CURE_TILE_4E].map(raw => {
     const c = document.createElement('canvas');
     c.width = 8; c.height = 8;
-    const cx = c.getContext('2d');
-    const px = decodeTile(raw, 0);
-    const img = cx.createImageData(8, 8);
-    for (let p = 0; p < 64; p++) {
-      const ci = px[p];
-      if (ci === 0) { img.data[p * 4 + 3] = 0; }
-      else {
-        const rgb = NES_SYSTEM_PALETTE[CURE_PAL[ci]] || [0, 0, 0];
-        img.data[p * 4] = rgb[0]; img.data[p * 4 + 1] = rgb[1];
-        img.data[p * 4 + 2] = rgb[2]; img.data[p * 4 + 3] = 255;
-      }
-    }
-    cx.putImageData(img, 0, 0);
+    _blitTile(c.getContext('2d'), decodeTile(raw, 0), CURE_PAL, 0, 0);
     return c;
   });
-  // Build 16×16 config A and B canvases
   // Config A: TL=$4E(H), TR=$4D(H), BL=$4D(V), BR=$4E(V)
   // Config B: TL=$4D, TR=$4E, BL=$4E(HV), BR=$4D(HV)
-  cureSparkleFrames = [];
   const configLayouts = [
-    // [tileIdx, ox, oy, hFlip, vFlip]
-    [ // Config A
-      [1, 0, 0, true, false],   // TL = $4E H-flip
-      [0, 8, 0, true, false],   // TR = $4D H-flip
-      [0, 0, 8, false, true],   // BL = $4D V-flip
-      [1, 8, 8, false, true],   // BR = $4E V-flip
-    ],
-    [ // Config B
-      [0, 0, 0, false, false],  // TL = $4D
-      [1, 8, 0, false, false],  // TR = $4E
-      [1, 0, 8, true, true],    // BL = $4E HV-flip
-      [0, 8, 8, true, true],    // BR = $4D HV-flip
-    ],
+    [[1,0,0,true,false],[0,8,0,true,false],[0,0,8,false,true],[1,8,8,false,true]],
+    [[0,0,0,false,false],[1,8,0,false,false],[1,0,8,true,true],[0,8,8,true,true]],
   ];
-  for (const config of configLayouts) {
+  cureSparkleFrames = configLayouts.map(config => {
     const c = document.createElement('canvas');
     c.width = 16; c.height = 16;
     const cx = c.getContext('2d');
     for (const [ti, ox, oy, hf, vf] of config) {
       cx.save();
       if (hf && vf) { cx.translate(ox + 8, oy + 8); cx.scale(-1, -1); cx.drawImage(cureTileCanvases[ti], 0, 0); }
-      else if (hf) { cx.translate(ox + 8, oy); cx.scale(-1, 1); cx.drawImage(cureTileCanvases[ti], 0, 0); }
-      else if (vf) { cx.translate(ox, oy + 8); cx.scale(1, -1); cx.drawImage(cureTileCanvases[ti], 0, 0); }
-      else { cx.drawImage(cureTileCanvases[ti], ox, oy); }
+      else if (hf)  { cx.translate(ox + 8, oy);     cx.scale(-1,  1); cx.drawImage(cureTileCanvases[ti], 0, 0); }
+      else if (vf)  { cx.translate(ox,     oy + 8); cx.scale( 1, -1); cx.drawImage(cureTileCanvases[ti], 0, 0); }
+      else          { cx.drawImage(cureTileCanvases[ti], ox, oy); }
       cx.restore();
     }
-    cureSparkleFrames.push(c);
-  }
+    return c;
+  });
+}
 
-  // Kneel / low HP pose: tiles $09-$0C from PPU $1000 dump (kneel-tiles.txt)
-  // Triggers at HP ≤ maxHP/4 (FF3 "near fatal" status, disasm 34/9485)
+function _initBattleLowHPSprites(palette) {
+  // Kneel pose: tiles $09-$0C (near-fatal ≤ maxHP/4, disasm 34/9485)
   const KNEEL_TILES = [
-    new Uint8Array([0x00,0x00,0x00,0x00,0x02,0x05,0x0B,0x00, 0x00,0x00,0x00,0x00,0x03,0x07,0x0F,0x1F]), // $09
-    new Uint8Array([0x00,0x00,0x00,0x00,0x80,0xB8,0xDC,0xEE, 0x00,0x00,0x00,0x00,0x9B,0xBE,0xDD,0xEF]), // $0A
-    new Uint8Array([0x00,0x03,0x07,0x05,0x01,0x01,0x1B,0x3B, 0x20,0x10,0x00,0x00,0x00,0x04,0x00,0x20]), // $0B
-    new Uint8Array([0x36,0x1A,0xC6,0x20,0x92,0x81,0xDC,0xDE, 0xF6,0x3A,0x16,0x0C,0x0E,0x21,0x04,0x06]), // $0C
+    new Uint8Array([0x00,0x00,0x00,0x00,0x02,0x05,0x0B,0x00, 0x00,0x00,0x00,0x00,0x03,0x07,0x0F,0x1F]),
+    new Uint8Array([0x00,0x00,0x00,0x00,0x80,0xB8,0xDC,0xEE, 0x00,0x00,0x00,0x00,0x9B,0xBE,0xDD,0xEF]),
+    new Uint8Array([0x00,0x03,0x07,0x05,0x01,0x01,0x1B,0x3B, 0x20,0x10,0x00,0x00,0x00,0x04,0x00,0x20]),
+    new Uint8Array([0x36,0x1A,0xC6,0x20,0x92,0x81,0xDC,0xDE, 0xF6,0x3A,0x16,0x0C,0x0E,0x21,0x04,0x06]),
   ];
-  battleSpriteKneelCanvas = document.createElement('canvas');
-  battleSpriteKneelCanvas.width = 16;
-  battleSpriteKneelCanvas.height = 16;
-  const knctx = battleSpriteKneelCanvas.getContext('2d');
-  for (let i = 0; i < 4; i++) {
-    const px = decodeTile(KNEEL_TILES[i], 0);
-    const knimg = knctx.createImageData(8, 8);
-    for (let p = 0; p < 64; p++) {
-      const ci = px[p];
-      if (ci === 0) { knimg.data[p * 4 + 3] = 0; }
-      else {
-        const rgb = NES_SYSTEM_PALETTE[palette[ci]] || [0, 0, 0];
-        knimg.data[p * 4] = rgb[0]; knimg.data[p * 4 + 1] = rgb[1];
-        knimg.data[p * 4 + 2] = rgb[2]; knimg.data[p * 4 + 3] = 255;
-      }
-    }
-    knctx.putImageData(knimg, layout[i][0], layout[i][1]);
-  }
+  battleSpriteKneelCanvas = _buildCanvas4(KNEEL_TILES, palette);
 
-  // Near-fatal sweat: 2 frames of scattered white dots above character head
-  // Tiles $49/$4A (frame A, 4 dots) and $4B/$4C (frame B, 6 dots) from PPU $1000
-  // Pal0 color index 2 = $30 (white), alternates every 8 NES frames (~133ms)
+  // Sweat frames: 2 × 16×8 (tiles $49/$4A frame A, $4B/$4C frame B)
   const SWEAT_FRAME_TILES = [
-    // Frame A: $49 (left 8×8) + $4A (right 8×8)
     [new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 0x04,0x00,0x40,0x00,0x00,0x00,0x00,0x00]),
      new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 0x20,0x00,0x02,0x00,0x00,0x00,0x00,0x00])],
-    // Frame B: $4B (left 8×8) + $4C (right 8×8)
     [new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x02,0x10,0x00,0x40,0x00]),
      new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x40,0x08,0x00,0x02,0x00])],
   ];
-  sweatFrames = [];
-  for (let f = 0; f < 2; f++) {
+  sweatFrames = SWEAT_FRAME_TILES.map(frameTiles => {
     const sc = document.createElement('canvas');
     sc.width = 16; sc.height = 8;
-    const sctx2 = sc.getContext('2d');
+    const sctx = sc.getContext('2d');
     for (let t = 0; t < 2; t++) {
-      const spx = decodeTile(SWEAT_FRAME_TILES[f][t], 0);
-      const simg = sctx2.createImageData(8, 8);
-      for (let p = 0; p < 64; p++) {
-        const ci = spx[p];
-        if (ci === 0) { simg.data[p * 4 + 3] = 0; }
-        else {
-          const rgb = NES_SYSTEM_PALETTE[palette[ci]] || [252, 252, 252];
-          simg.data[p * 4] = rgb[0]; simg.data[p * 4 + 1] = rgb[1];
-          simg.data[p * 4 + 2] = rgb[2]; simg.data[p * 4 + 3] = 255;
-        }
-      }
-      sctx2.putImageData(simg, t * 8, 0);
+      _blitTile(sctx, decodeTile(frameTiles[t], 0), palette, t * 8, 0);
     }
-    sweatFrames.push(sc);
-  }
+    return sc;
+  });
+}
 
-  // Attack frame 2: ROM frame 3 (tiles 18-21, top 2×2 of 2×3 body)
-  // NES attack alternates frame 2 (arm raised) and frame 3 (arm swung)
-  const ATK2_OFFSET = BATTLE_SPRITE_ROM + 18 * 16;
-  battleSpriteAttack2Canvas = document.createElement('canvas');
-  battleSpriteAttack2Canvas.width = 16;
-  battleSpriteAttack2Canvas.height = 16;
-  const a2ctx = battleSpriteAttack2Canvas.getContext('2d');
-  for (let i = 0; i < 4; i++) {
-    const px = decodeTile(romData, ATK2_OFFSET + i * 16);
-    const a2img = a2ctx.createImageData(8, 8);
-    for (let p = 0; p < 64; p++) {
-      const ci = px[p];
-      if (ci === 0) {
-        a2img.data[p * 4 + 3] = 0;
-      } else {
-        const rgb = NES_SYSTEM_PALETTE[palette[ci]] || [0, 0, 0];
-        a2img.data[p * 4]     = rgb[0];
-        a2img.data[p * 4 + 1] = rgb[1];
-        a2img.data[p * 4 + 2] = rgb[2];
-        a2img.data[p * 4 + 3] = 255;
-      }
-    }
-    a2ctx.putImageData(a2img, layout[i][0], layout[i][1]);
-  }
+function initBattleSprite(romData) {
+  // Battle palette: character palette 0 (ID $FC) at ROM 0x05CF04
+  // 3 bytes = colors 1-3, color 0 always $0F (disasm 2E/9E28 + 2E/9DA2)
+  const BATTLE_PAL_ROM = 0x05CF04;
+  const palette = [0x0F, romData[BATTLE_PAL_ROM], romData[BATTLE_PAL_ROM + 1], romData[BATTLE_PAL_ROM + 2]];
 
+  _initBattleIdleSprites(romData, palette);
+  _initBattleAttackSprites(palette);
+  _initBattleKnifeBodySprites(palette);
+  _initBattleBladeSprites(palette);
+  _initBattleRomPoses(romData, palette);
+  _initBattleDefendSprites(palette);
+  _initBattleLowHPSprites(palette);
 }
 
 function initAdamantoise(romData) {
@@ -5728,48 +5460,7 @@ function statRowBytes(label1, label2, value) {
   return bytes;
 }
 
-function drawHUD() {
-  const isTitleActive = titleState !== 'done';
-  if (isTitleActive && titleHudCanvas) {
-    // Compute border fade level for title states
-    let tfl = 0; // 0 = full brightness — only fade out when leaving title
-    if (titleState === 'main-out') {
-      tfl = Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
-    }
-    if (tfl > 0 && titleHudFadeCanvases && tfl <= titleHudFadeCanvases.length) {
-      // Draw faded viewport border + full-brightness bottom box
-      ctx.drawImage(titleHudFadeCanvases[tfl - 1], 0, 0);
-      // Bottom box from full-brightness canvas (clip to bottom area only)
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(0, HUD_BOT_Y, CANVAS_W, HUD_BOT_H);
-      ctx.clip();
-      ctx.drawImage(titleHudCanvas, 0, 0);
-      ctx.restore();
-    } else {
-      ctx.drawImage(titleHudCanvas, 0, 0);
-    }
-  } else if (hudCanvas) {
-    // Game-start border fade-in
-    const borderFade = HUD_INFO_FADE_STEPS - Math.min(Math.floor(hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
-    if (borderFade > 0 && hudFadeCanvases && borderFade <= hudFadeCanvases.length) {
-      ctx.drawImage(hudFadeCanvases[borderFade - 1], 0, 0);
-      // Bottom box always full brightness
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(0, HUD_BOT_Y, CANVAS_W, HUD_BOT_H);
-      ctx.clip();
-      ctx.drawImage(hudCanvas, 0, 0);
-      ctx.restore();
-    } else {
-      ctx.drawImage(hudCanvas, 0, 0);
-    }
-  }
-
-  // Top box content (full 256×32, no static border — border only with text)
-  // Title screen handles its own top box (sky BG)
-  if (titleState !== 'done') return;
-
+function _drawHUDTopBox() {
   // Top box layers: (1) battle BG base, (2) transition fade, (3) border+text overlay
   const isFading = topBoxScrollState === 'fade-in' || topBoxScrollState === 'display' || topBoxScrollState === 'fade-out';
 
@@ -5827,13 +5518,10 @@ function drawHUD() {
   } else if (topBoxIsTown && topBoxMode === 'name' && topBoxNameBytes) {
     // Town: border fades in/out with text, stays at full brightness when permanent
     if (isFading) {
-      // fade-in or fade-out: border tracks topBoxFadeStep
       drawTopBoxBorder(topBoxFadeStep);
     } else if (topBoxScrollState !== 'pending') {
-      // Permanent display (after fade-in completed)
       drawTopBoxBorder(0);
     }
-    // pending: no border, no text (waits for fade-in)
     if (!isFading && topBoxScrollState !== 'pending') {
       const tw = measureText(topBoxNameBytes);
       const tx = 8 + Math.floor((240 - tw) / 2);
@@ -5857,7 +5545,9 @@ function drawHUD() {
     const ty = 8 + Math.floor((16 - 8) / 2);
     drawText(ctx, tx, ty, topBoxNameBytes, fadedPal);
   }
+}
 
+function _drawHUDPortrait() {
   // HUD info fade-in (portrait + HP/MP)
   const infoFadeStep = HUD_INFO_FADE_STEPS - Math.min(Math.floor(hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
 
@@ -5866,158 +5556,211 @@ function drawHUD() {
     ? (Math.floor(battleShakeTimer / 67) & 1 ? 2 : -2) : 0;
 
   // Portrait drawn in drawBattle() above border layer — just draw idle here during non-battle
-  if (battleState === 'none' && battleSpriteCanvas) {
-    const isPauseHeal = pauseState === 'inv-heal';
-    const isPauseTarget = pauseState === 'inv-target';
-    let nfPortrait;
-    if (isPauseHeal && battleSpriteDefendCanvas) {
-      nfPortrait = battleSpriteDefendCanvas;
-    } else {
-      nfPortrait = (playerHP > 0 && playerStats && playerHP <= Math.floor(playerStats.maxHP / 4) && battleSpriteKneelCanvas)
-        ? battleSpriteKneelCanvas : battleSpriteCanvas;
-    }
-    const px = HUD_RIGHT_X + 8;
-    const py = HUD_VIEW_Y + 8;
-    if (infoFadeStep === 0) {
-      ctx.drawImage(nfPortrait, px, py);
-      if (!isPauseHeal && nfPortrait === battleSpriteKneelCanvas && sweatFrames.length === 2) {
-        const swi = Math.floor(Date.now() / 133) & 1;
-        ctx.drawImage(sweatFrames[swi], px, py - 3);
-      }
-    } else if (infoFadeStep < HUD_INFO_FADE_STEPS) {
-      ctx.globalAlpha = 1 - infoFadeStep / HUD_INFO_FADE_STEPS;
-      ctx.drawImage(nfPortrait, px, py);
-      if (!isPauseHeal && nfPortrait === battleSpriteKneelCanvas && sweatFrames.length === 2) {
-        const swi = Math.floor(Date.now() / 133) & 1;
-        ctx.drawImage(sweatFrames[swi], px, py - 3);
-      }
-      ctx.globalAlpha = 1;
-    }
-    // Cure sparkle during pause heal — 16×16 config A/B alternating every 67ms
-    if (isPauseHeal && cureSparkleFrames.length === 2 && !(pauseHealNum && pauseHealNum.rosterIdx >= 0)) { // sparkles on player only when healing self
-      const fi = Math.floor(pauseTimer / 67) & 1;
-      const frame = cureSparkleFrames[fi];
-      // TL
-      ctx.drawImage(frame, px - 8, py - 7);
-      // TR: H-flip
-      ctx.save(); ctx.scale(-1, 1);
-      ctx.drawImage(frame, -(px + 23), py - 7);
-      ctx.restore();
-      // BL: V-flip
-      ctx.save(); ctx.scale(1, -1);
-      ctx.drawImage(frame, px - 8, -(py + 24));
-      ctx.restore();
-      // BR: HV-flip
-      ctx.save(); ctx.scale(-1, -1);
-      ctx.drawImage(frame, -(px + 23), -(py + 24));
-      ctx.restore();
-    }
-    // Green heal number bounce during pause heal (player only)
-    if (pauseHealNum && !(pauseHealNum.rosterIdx >= 0)) {
-      const hpx = px + 8;
-      const baseY = py + 8;
-      const hpy = _dmgBounceY(baseY, pauseHealNum.timer);
-      const digits = String(pauseHealNum.value);
-      const numBytes = new Uint8Array(digits.length);
-      for (let i = 0; i < digits.length; i++) numBytes[i] = 0x80 + parseInt(digits[i]);
-      const tw = digits.length * 8;
-      drawText(ctx, hpx - Math.floor(tw / 2), hpy, numBytes, [0x0F, 0x0F, 0x0F, 0x2B]);
-    }
+  if (battleState !== 'none' || !battleSpriteCanvas) return;
+
+  const isPauseHeal = pauseState === 'inv-heal';
+  let nfPortrait;
+  if (isPauseHeal && battleSpriteDefendCanvas) {
+    nfPortrait = battleSpriteDefendCanvas;
+  } else {
+    nfPortrait = (playerHP > 0 && playerStats && playerHP <= Math.floor(playerStats.maxHP / 4) && battleSpriteKneelCanvas)
+      ? battleSpriteKneelCanvas : battleSpriteCanvas;
   }
+  const px = HUD_RIGHT_X + 8;
+  const py = HUD_VIEW_Y + 8;
+  if (infoFadeStep === 0) {
+    ctx.drawImage(nfPortrait, px, py);
+    if (!isPauseHeal && nfPortrait === battleSpriteKneelCanvas && sweatFrames.length === 2) {
+      const swi = Math.floor(Date.now() / 133) & 1;
+      ctx.drawImage(sweatFrames[swi], px, py - 3);
+    }
+  } else if (infoFadeStep < HUD_INFO_FADE_STEPS) {
+    ctx.globalAlpha = 1 - infoFadeStep / HUD_INFO_FADE_STEPS;
+    ctx.drawImage(nfPortrait, px, py);
+    if (!isPauseHeal && nfPortrait === battleSpriteKneelCanvas && sweatFrames.length === 2) {
+      const swi = Math.floor(Date.now() / 133) & 1;
+      ctx.drawImage(sweatFrames[swi], px, py - 3);
+    }
+    ctx.globalAlpha = 1;
+  }
+  // Cure sparkle during pause heal — 16×16 config A/B alternating every 67ms
+  if (isPauseHeal && cureSparkleFrames.length === 2 && !(pauseHealNum && pauseHealNum.rosterIdx >= 0)) {
+    const fi = Math.floor(pauseTimer / 67) & 1;
+    const frame = cureSparkleFrames[fi];
+    // TL
+    ctx.drawImage(frame, px - 8, py - 7);
+    // TR: H-flip
+    ctx.save(); ctx.scale(-1, 1);
+    ctx.drawImage(frame, -(px + 23), py - 7);
+    ctx.restore();
+    // BL: V-flip
+    ctx.save(); ctx.scale(1, -1);
+    ctx.drawImage(frame, px - 8, -(py + 24));
+    ctx.restore();
+    // BR: HV-flip
+    ctx.save(); ctx.scale(-1, -1);
+    ctx.drawImage(frame, -(px + 23), -(py + 24));
+    ctx.restore();
+  }
+  // Green heal number bounce during pause heal (player only)
+  if (pauseHealNum && !(pauseHealNum.rosterIdx >= 0)) {
+    const hpx = px + 8;
+    const baseY = py + 8;
+    const hpy = _dmgBounceY(baseY, pauseHealNum.timer);
+    const digits = String(pauseHealNum.value);
+    const numBytes = new Uint8Array(digits.length);
+    for (let i = 0; i < digits.length; i++) numBytes[i] = 0x80 + parseInt(digits[i]);
+    const tw = digits.length * 8;
+    drawText(ctx, hpx - Math.floor(tw / 2), hpy, numBytes, [0x0F, 0x0F, 0x0F, 0x2B]);
+  }
+}
+
+function _drawHUDInfoPanel() {
   // Name + Level in right mini-right panel (right-aligned, like roster players)
-  const sy = HUD_VIEW_Y + 8;       // interior y
-  const panelRight = HUD_RIGHT_X + HUD_RIGHT_W - 8 + shakeOff; // right edge of interior
+  const infoFadeStep = HUD_INFO_FADE_STEPS - Math.min(Math.floor(hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
+  const shakeOff = (battleState === 'enemy-attack' && battleShakeTimer > 0)
+    ? (Math.floor(battleShakeTimer / 67) & 1 ? 2 : -2) : 0;
+  const sy = HUD_VIEW_Y + 8;
+  const panelRight = HUD_RIGHT_X + HUD_RIGHT_W - 8 + shakeOff;
   const infoPal = [0x0F, 0x0F, 0x0F, 0x30];
   for (let s = 0; s < infoFadeStep; s++) {
     infoPal[3] = nesColorFade(infoPal[3]);
   }
   const slot = saveSlots[selectCursor];
-  if (slot) {
-    const nameW = measureText(slot.name);
-    drawText(ctx, panelRight - nameW, sy, slot.name, infoPal);
-    // Level fades out as battle starts, HP fades in (and vice versa)
-    const lvFadeStep = infoFadeStep + hudHpLvStep;           // 0=visible → 4+=black
-    if (hudHpLvStep < 4) {
-      const lvLabel = _nameToBytes('Lv' + String(playerStats ? playerStats.level : slot.level));
-      const lvPal = [0x0F, 0x0F, 0x0F, 0x10];
-      for (let s = 0; s < lvFadeStep; s++) lvPal[3] = nesColorFade(lvPal[3]);
-      const lvW = measureText(lvLabel);
-      drawText(ctx, panelRight - lvW, sy + 9, lvLabel, lvPal);
+  if (!slot) return;
+  const nameW = measureText(slot.name);
+  drawText(ctx, panelRight - nameW, sy, slot.name, infoPal);
+  // Level fades out as battle starts, HP fades in (and vice versa)
+  const lvFadeStep = infoFadeStep + hudHpLvStep;
+  if (hudHpLvStep < 4) {
+    const lvLabel = _nameToBytes('Lv' + String(playerStats ? playerStats.level : slot.level));
+    const lvPal = [0x0F, 0x0F, 0x0F, 0x10];
+    for (let s = 0; s < lvFadeStep; s++) lvPal[3] = nesColorFade(lvPal[3]);
+    const lvW = measureText(lvLabel);
+    drawText(ctx, panelRight - lvW, sy + 9, lvLabel, lvPal);
+  }
+  if (hudHpLvStep > 0) {
+    const maxHP = playerStats ? playerStats.maxHP : 28;
+    const hpNes = playerHP <= Math.floor(maxHP / 4) ? 0x16
+                : playerHP <= Math.floor(maxHP / 2) ? 0x28 : 0x2A;
+    const hpFadeStep = infoFadeStep + (4 - hudHpLvStep);
+    const hpPal = [0x0F, 0x0F, 0x0F, hpNes];
+    for (let s = 0; s < hpFadeStep; s++) hpPal[3] = nesColorFade(hpPal[3]);
+    const hpLabel = _nameToBytes(String(playerHP));
+    const hpW = measureText(hpLabel);
+    drawText(ctx, panelRight - hpW, sy + 9, hpLabel, hpPal);
+  }
+}
+
+function _drawHUDLoadingMoogle() {
+  let fadeLevel = 0;
+  if (loadingFadeState === 'in') {
+    const step = Math.min(Math.floor(loadingFadeTimer / LOAD_FADE_STEP_MS), LOAD_FADE_MAX);
+    fadeLevel = LOAD_FADE_MAX - step;
+  } else if (loadingFadeState === 'out') {
+    fadeLevel = Math.min(Math.floor(loadingFadeTimer / LOAD_FADE_STEP_MS), LOAD_FADE_MAX);
+  }
+  // Draw right main panel box (only shown during loading screen)
+  const _lbTiles = (borderFadeSets && borderFadeSets[fadeLevel]) || borderTileCanvases;
+  if (_lbTiles) {
+    const [lTL, lTOP, lTR, lLEFT, lRIGHT, lBL, lBOT, lBR, lFILL] = _lbTiles;
+    const lx = HUD_RIGHT_X, ly = HUD_VIEW_Y + 32, lw = HUD_RIGHT_W, lh = HUD_VIEW_H - 32;
+    ctx.drawImage(lTL, lx, ly); ctx.drawImage(lTR, lx + lw - 8, ly);
+    ctx.drawImage(lBL, lx, ly + lh - 8); ctx.drawImage(lBR, lx + lw - 8, ly + lh - 8);
+    for (let tx = lx + 8; tx < lx + lw - 8; tx += 8) { ctx.drawImage(lTOP, tx, ly); ctx.drawImage(lBOT, tx, ly + lh - 8); }
+    for (let ty = ly + 8; ty < ly + lh - 8; ty += 8) { ctx.drawImage(lLEFT, lx, ty); ctx.drawImage(lRIGHT, lx + lw - 8, ty); }
+    for (let ty = ly + 8; ty < ly + lh - 8; ty += 8) for (let tx = lx + 8; tx < lx + lw - 8; tx += 8) ctx.drawImage(lFILL, tx, ty);
+  }
+  const beatBytes = new Uint8Array([0x8B,0xCE,0xCA,0xDD,0xFF,0xDD,0xD1,0xCE]); // "Beat the"
+  const bossBytes = new Uint8Array([0x8B,0xD8,0xDC,0xDC,0xFF,0x94,0xDE,0xD9,0xD8,0xC4]); // "Boss Kupo!"
+  const rpX = HUD_RIGHT_X;
+  const rpY = HUD_VIEW_Y + 32;
+  const rpW = HUD_RIGHT_W;
+  const rpCX = rpX + Math.floor(rpW / 2);
+
+  // Chat bubble — centered in right panel
+  let fadedWhite = 0x30;
+  for (let s = 0; s < fadeLevel; s++) fadedWhite = nesColorFade(fadedWhite);
+  const whiteRgb = NES_SYSTEM_PALETTE[fadedWhite] || [0, 0, 0];
+  ctx.fillStyle = `rgb(${whiteRgb[0]},${whiteRgb[1]},${whiteRgb[2]})`;
+  const beatW = measureText(beatBytes);
+  const bossW = measureText(bossBytes);
+  const bgW = Math.max(beatW, bossW) + 6;
+  const bubbleX = Math.round(rpCX - bgW / 2);
+  const moogleSectionH = 22 + 5 + 16;
+  const rpH = HUD_VIEW_H - 32;
+  const bubbleY = rpY + Math.floor((rpH - moogleSectionH) / 2);
+  ctx.beginPath();
+  ctx.roundRect(bubbleX, bubbleY, bgW, 22, 4);
+  ctx.fill();
+  // Triangle pointing down toward moogle
+  const triCX = Math.round(bubbleX + bgW / 2);
+  ctx.beginPath();
+  ctx.moveTo(triCX - 4, bubbleY + 22);
+  ctx.lineTo(triCX, bubbleY + 27);
+  ctx.lineTo(triCX + 4, bubbleY + 22);
+  ctx.fill();
+  // Chat text
+  const blackTextPal = [0x0F, fadedWhite, fadedWhite, 0x0F];
+  drawText(ctx, bubbleX + 3, bubbleY + 2, beatBytes, blackTextPal);
+  drawText(ctx, bubbleX + 3, bubbleY + 12, bossBytes, blackTextPal);
+
+  // Moogle sprite below chat bubble
+  const moogleX = Math.round(rpCX - 8);
+  const moogleY = bubbleY + 30;
+  if (moogleFadeFrames) {
+    const mFrame = Math.floor(transTimer / 400) & 1;
+    ctx.drawImage(moogleFadeFrames[fadeLevel][mFrame], moogleX, moogleY);
+  }
+}
+
+function drawHUD() {
+  const isTitleActive = titleState !== 'done';
+  if (isTitleActive && titleHudCanvas) {
+    // Compute border fade level for title states
+    let tfl = 0; // 0 = full brightness — only fade out when leaving title
+    if (titleState === 'main-out') {
+      tfl = Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
     }
-    if (hudHpLvStep > 0) {
-      const maxHP = playerStats ? playerStats.maxHP : 28;
-      const hpNes = playerHP <= Math.floor(maxHP / 4) ? 0x16
-                  : playerHP <= Math.floor(maxHP / 2) ? 0x28 : 0x2A;
-      const hpFadeStep = infoFadeStep + (4 - hudHpLvStep);  // 4=black → 0=visible
-      const hpPal = [0x0F, 0x0F, 0x0F, hpNes];
-      for (let s = 0; s < hpFadeStep; s++) hpPal[3] = nesColorFade(hpPal[3]);
-      const hpLabel = _nameToBytes(String(playerHP));
-      const hpW = measureText(hpLabel);
-      drawText(ctx, panelRight - hpW, sy + 9, hpLabel, hpPal);
+    if (tfl > 0 && titleHudFadeCanvases && tfl <= titleHudFadeCanvases.length) {
+      // Draw faded viewport border + full-brightness bottom box
+      ctx.drawImage(titleHudFadeCanvases[tfl - 1], 0, 0);
+      // Bottom box from full-brightness canvas (clip to bottom area only)
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, HUD_BOT_Y, CANVAS_W, HUD_BOT_H);
+      ctx.clip();
+      ctx.drawImage(titleHudCanvas, 0, 0);
+      ctx.restore();
+    } else {
+      ctx.drawImage(titleHudCanvas, 0, 0);
+    }
+  } else if (hudCanvas) {
+    // Game-start border fade-in
+    const borderFade = HUD_INFO_FADE_STEPS - Math.min(Math.floor(hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
+    if (borderFade > 0 && hudFadeCanvases && borderFade <= hudFadeCanvases.length) {
+      ctx.drawImage(hudFadeCanvases[borderFade - 1], 0, 0);
+      // Bottom box always full brightness
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, HUD_BOT_Y, CANVAS_W, HUD_BOT_H);
+      ctx.clip();
+      ctx.drawImage(hudCanvas, 0, 0);
+      ctx.restore();
+    } else {
+      ctx.drawImage(hudCanvas, 0, 0);
     }
   }
 
-  // Moogle + chat bubble in right main panel during loading screen
+  // Top box content (full 256×32, no static border — border only with text)
+  // Title screen handles its own top box (sky BG)
+  if (titleState !== 'done') return;
+
+  _drawHUDTopBox();
+  _drawHUDPortrait();
+  _drawHUDInfoPanel();
   if (transState === 'loading' && loadingFadeState !== 'none') {
-    let fadeLevel = 0;
-    if (loadingFadeState === 'in') {
-      const step = Math.min(Math.floor(loadingFadeTimer / LOAD_FADE_STEP_MS), LOAD_FADE_MAX);
-      fadeLevel = LOAD_FADE_MAX - step;
-    } else if (loadingFadeState === 'out') {
-      fadeLevel = Math.min(Math.floor(loadingFadeTimer / LOAD_FADE_STEP_MS), LOAD_FADE_MAX);
-    }
-    // Draw right main panel box (only shown during loading screen)
-    const _lbTiles = (borderFadeSets && borderFadeSets[fadeLevel]) || borderTileCanvases;
-    if (_lbTiles) {
-      const [lTL, lTOP, lTR, lLEFT, lRIGHT, lBL, lBOT, lBR, lFILL] = _lbTiles;
-      const lx = HUD_RIGHT_X, ly = HUD_VIEW_Y + 32, lw = HUD_RIGHT_W, lh = HUD_VIEW_H - 32;
-      ctx.drawImage(lTL, lx, ly); ctx.drawImage(lTR, lx + lw - 8, ly);
-      ctx.drawImage(lBL, lx, ly + lh - 8); ctx.drawImage(lBR, lx + lw - 8, ly + lh - 8);
-      for (let tx = lx + 8; tx < lx + lw - 8; tx += 8) { ctx.drawImage(lTOP, tx, ly); ctx.drawImage(lBOT, tx, ly + lh - 8); }
-      for (let ty = ly + 8; ty < ly + lh - 8; ty += 8) { ctx.drawImage(lLEFT, lx, ty); ctx.drawImage(lRIGHT, lx + lw - 8, ty); }
-      for (let ty = ly + 8; ty < ly + lh - 8; ty += 8) for (let tx = lx + 8; tx < lx + lw - 8; tx += 8) ctx.drawImage(lFILL, tx, ty);
-    }
-    const beatBytes = new Uint8Array([0x8B,0xCE,0xCA,0xDD,0xFF,0xDD,0xD1,0xCE]); // "Beat the"
-    const bossBytes = new Uint8Array([0x8B,0xD8,0xDC,0xDC,0xFF,0x94,0xDE,0xD9,0xD8,0xC4]); // "Boss Kupo!"
-    const rpX = HUD_RIGHT_X; // right panel x
-    const rpY = HUD_VIEW_Y + 32; // below portrait/HP panels
-    const rpW = HUD_RIGHT_W; // 112
-    const rpCX = rpX + Math.floor(rpW / 2); // center x of right panel
-
-    // Chat bubble — centered in right panel
-    let fadedWhite = 0x30;
-    for (let s = 0; s < fadeLevel; s++) fadedWhite = nesColorFade(fadedWhite);
-    const whiteRgb = NES_SYSTEM_PALETTE[fadedWhite] || [0, 0, 0];
-    ctx.fillStyle = `rgb(${whiteRgb[0]},${whiteRgb[1]},${whiteRgb[2]})`;
-    const beatW = measureText(beatBytes);
-    const bossW = measureText(bossBytes);
-    const bgW = Math.max(beatW, bossW) + 6;
-    const bubbleX = Math.round(rpCX - bgW / 2);
-    const moogleSectionH = 22 + 5 + 16; // bubble + triangle + moogle
-    const rpH = HUD_VIEW_H - 32; // right main panel height (112)
-    const bubbleY = rpY + Math.floor((rpH - moogleSectionH) / 2);
-    ctx.beginPath();
-    ctx.roundRect(bubbleX, bubbleY, bgW, 22, 4);
-    ctx.fill();
-    // Triangle pointing down toward moogle (centered)
-    const triCX = Math.round(bubbleX + bgW / 2);
-    ctx.beginPath();
-    ctx.moveTo(triCX - 4, bubbleY + 22);
-    ctx.lineTo(triCX, bubbleY + 27);
-    ctx.lineTo(triCX + 4, bubbleY + 22);
-    ctx.fill();
-    // Chat text
-    const blackTextPal = [0x0F, fadedWhite, fadedWhite, 0x0F];
-    drawText(ctx, bubbleX + 3, bubbleY + 2, beatBytes, blackTextPal);
-    drawText(ctx, bubbleX + 3, bubbleY + 12, bossBytes, blackTextPal);
-
-    // Moogle sprite below chat bubble
-    const moogleX = Math.round(rpCX - 8); // center 16px sprite
-    const moogleY = bubbleY + 30;
-    if (moogleFadeFrames) {
-      const mFrame = Math.floor(transTimer / 400) & 1;
-      ctx.drawImage(moogleFadeFrames[fadeLevel][mFrame], moogleX, moogleY);
-    }
+    _drawHUDLoadingMoogle();
   }
 }
 
@@ -9344,25 +9087,7 @@ function drawSWDamageNumbers() {
   }
 }
 
-function drawBattle() {
-  if (battleState === 'none') return;
-
-  // Crit flash — 1 frame orange backdrop behind everything (NES $27 = #DAA336)
-  if (critFlashTimer >= 0) {
-    if (critFlashTimer === 0) critFlashTimer = Date.now();
-    if (Date.now() - critFlashTimer < 17) {
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
-      ctx.clip();
-      ctx.fillStyle = '#DAA336';
-      ctx.fillRect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
-      ctx.restore();
-    } else {
-      critFlashTimer = -1;
-    }
-  }
-
+function _drawBattlePortrait() {
   // Player sprite portrait — drawn over border during battle
   const shakeOff = (battleState === 'enemy-attack' && battleShakeTimer > 0)
     ? (Math.floor(battleShakeTimer / 67) & 1 ? 2 : -2) : 0;
@@ -9552,6 +9277,28 @@ function drawBattle() {
       ctx.drawImage(cursorTileCanvas, px - 12, py + 4);
     }
   }
+}
+
+function drawBattle() {
+  if (battleState === 'none') return;
+
+  // Crit flash — 1 frame orange backdrop behind everything (NES $27 = #DAA336)
+  if (critFlashTimer >= 0) {
+    if (critFlashTimer === 0) critFlashTimer = Date.now();
+    if (Date.now() - critFlashTimer < 17) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
+      ctx.clip();
+      ctx.fillStyle = '#DAA336';
+      ctx.fillRect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
+      ctx.restore();
+    } else {
+      critFlashTimer = -1;
+    }
+  }
+
+  _drawBattlePortrait();
 
   // NES grayscale strobe — toggle grayscale every frame for 65 frames
   if (battleState === 'flash-strobe') {
