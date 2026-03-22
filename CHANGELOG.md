@@ -6,6 +6,14 @@ All notable changes to this project are documented here.
 
 _No unreleased changes._
 
+## 1.0.4 — 2026-03-22
+
+### Fix top box battle BG flash at game start
+
+When `hud-fade-in` ended and `'opening'` wipe started, `transTimer` reset to 0, causing `fadeStep = maxStep` (fully dark) on the first frame of opening — the top box flashed dark then re-brightened during the wipe.
+
+Fix: `_topBoxAlreadyBright` flag set on `hud-fade-in → opening` transition. During `opening`, if flag is set, top box stays at `fadeStep = 0` (full brightness) for the entire wipe. Flag cleared when opening finishes.
+
 ## 1.0.3 — 2026-03-22
 
 ### Fix HUD fade-in after player select

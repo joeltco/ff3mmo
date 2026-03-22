@@ -724,6 +724,7 @@ const SPIN_INTERVAL = 110;  // ms per direction change
 const SPIN_CYCLES = 4;      // full rotations, ends facing south
 let transState = 'none';  // 'none' | 'door-opening' | 'trap-falling' | 'closing' | 'hold' | 'loading' | 'opening'
 let transTimer = 0;
+let _topBoxAlreadyBright = false; // set when hud-fade-in → opening so top box doesn't re-darken
 let transPendingAction = null;
 let transDungeon = false;      // true when this transition is a dungeon entry
 
@@ -3062,7 +3063,7 @@ function _updateTransitionTrapFall() {
 
 function _updateTransitionOpening() {
   if (transTimer >= WIPE_DURATION) {
-    transState = 'none'; transTimer = 0; rosterLocChanged = false;
+    transState = 'none'; transTimer = 0; rosterLocChanged = false; _topBoxAlreadyBright = false;
     if (trapShakePending) {
       trapShakePending = false; playSFX(SFX.EARTHQUAKE); shakeActive = true; shakeTimer = 0;
     }
@@ -3073,7 +3074,7 @@ function updateTransition(dt) {
   if (transState === 'none') return;
   transTimer += dt;
   if (transState === 'hud-fade-in') {
-    if (transTimer >= (HUD_INFO_FADE_STEPS + 1) * HUD_INFO_FADE_STEP_MS) { transState = 'opening'; transTimer = 0; playSFX(SFX.SCREEN_OPEN); }
+    if (transTimer >= (HUD_INFO_FADE_STEPS + 1) * HUD_INFO_FADE_STEP_MS) { transState = 'opening'; transTimer = 0; _topBoxAlreadyBright = true; playSFX(SFX.SCREEN_OPEN); }
     return;
   } else if (transState === 'trap-reveal') {
     if (transTimer >= TRAP_REVEAL_DURATION) { transState = 'closing'; transTimer = 0; playSFX(SFX.SCREEN_CLOSE); }
@@ -3569,7 +3570,8 @@ function _drawTopBoxBattleBG() {
     } else if (transState === 'hold' || transState === 'trap-falling') {
       fadeStep = maxStep;
     } else if (transState === 'opening') {
-      fadeStep = Math.max(maxStep - Math.floor(transTimer / FADE_STEP_MS), 0);
+      if (_topBoxAlreadyBright) fadeStep = 0; // came from hud-fade-in, already bright
+      else fadeStep = Math.max(maxStep - Math.floor(transTimer / FADE_STEP_MS), 0);
     } else if (transState === 'hud-fade-in') {
       fadeStep = Math.max(maxStep - Math.floor(hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), 0);
     }
