@@ -1070,83 +1070,52 @@ function _renderPortrait(tiles, layout, palette) {
   return c;
 }
 
-function initFakePlayerPortraits(romData) {
-  // Idle portrait tiles — PPU bytes from FCEUX battle dump (PPU $1000 $01-$04)
-  const IDLE_PPU = [
-    new Uint8Array([0x00,0x00,0x0A,0x16,0x2F,0x03,0x00,0x0C, 0x00,0x00,0x0E,0x1E,0x3F,0x7F,0x83,0x40]), // $01 TL
-    new Uint8Array([0x00,0x00,0x00,0xE0,0x70,0xB8,0xD8,0x68, 0x00,0x6C,0x19,0xFE,0x76,0xBB,0xDB,0xED]), // $02 TR
-    new Uint8Array([0x1F,0x04,0x16,0x16,0x0F,0x0F,0x60,0xC6, 0x00,0x00,0x00,0x00,0x50,0xE0,0x60,0x1E]), // $03 BL
-    new Uint8Array([0x18,0x80,0x48,0xCC,0x00,0x00,0x70,0xD8, 0x59,0x32,0x38,0x0C,0xB0,0x78,0x70,0x1C]), // $04 BR
-  ];
-  const tiles = IDLE_PPU.map(d => decodeTile(d, 0));
-  const layout = [[0,0], [8,0], [0,8], [8,8]];
-  // fakePlayerPortraits[palIdx][fadeStep] — fadeStep 0=full, 1-4=faded
-  fakePlayerPortraits = PLAYER_PALETTES.map(basePal => {
+// Shared helper: generate palette-variant portrait frames for a set of decoded tiles
+function _genPosePortraits(poseTiles) {
+  return PLAYER_PALETTES.map(basePal => {
     const frames = [];
     for (let step = 0; step <= ROSTER_FADE_STEPS; step++) {
       const pal = basePal.slice();
-      for (let s = 0; s < step; s++) {
-        pal[1] = nesColorFade(pal[1]);
-        pal[2] = nesColorFade(pal[2]);
-        pal[3] = nesColorFade(pal[3]);
-      }
-      frames.push(_renderPortrait(tiles, layout, pal));
+      for (let s = 0; s < step; s++) { pal[1] = nesColorFade(pal[1]); pal[2] = nesColorFade(pal[2]); pal[3] = nesColorFade(pal[3]); }
+      frames.push(_renderPortrait(poseTiles, _BATTLE_LAYOUT, pal));
     }
     return frames;
   });
+}
+function _initFakePosePortraits(romData) {
+  const IDLE_PPU = [
+    new Uint8Array([0x00,0x00,0x0A,0x16,0x2F,0x03,0x00,0x0C, 0x00,0x00,0x0E,0x1E,0x3F,0x7F,0x83,0x40]),
+    new Uint8Array([0x00,0x00,0x00,0xE0,0x70,0xB8,0xD8,0x68, 0x00,0x6C,0x19,0xFE,0x76,0xBB,0xDB,0xED]),
+    new Uint8Array([0x1F,0x04,0x16,0x16,0x0F,0x0F,0x60,0xC6, 0x00,0x00,0x00,0x00,0x50,0xE0,0x60,0x1E]),
+    new Uint8Array([0x18,0x80,0x48,0xCC,0x00,0x00,0x70,0xD8, 0x59,0x32,0x38,0x0C,0xB0,0x78,0x70,0x1C]),
+  ];
+  const idleTiles = IDLE_PPU.map(d => decodeTile(d, 0));
+  fakePlayerPortraits = _genPosePortraits(idleTiles);
 
-  // Helper: generate palette-variant portraits for a set of decoded tiles
-  function _genPosePortraits(poseTiles) {
-    return PLAYER_PALETTES.map(basePal => {
-      const frames = [];
-      for (let step = 0; step <= ROSTER_FADE_STEPS; step++) {
-        const pal = basePal.slice();
-        for (let s = 0; s < step; s++) {
-          pal[1] = nesColorFade(pal[1]);
-          pal[2] = nesColorFade(pal[2]);
-          pal[3] = nesColorFade(pal[3]);
-        }
-        frames.push(_renderPortrait(poseTiles, layout, pal));
-      }
-      return frames;
-    });
-  }
-
-  // Victory pose — tiles 24-27 (frame 4)
-  const vicTiles = [];
-  for (let i = 0; i < 4; i++) vicTiles.push(decodeTile(romData, BATTLE_SPRITE_ROM + (24 + i) * 16));
+  const vicTiles = [0,1,2,3].map(i => decodeTile(romData, BATTLE_SPRITE_ROM + (24 + i) * 16));
   fakePlayerVictoryPortraits = _genPosePortraits(vicTiles);
 
-  // Hit/recoil pose — tiles 30-33 (frame 5)
-  const hitTiles = [];
-  for (let i = 0; i < 4; i++) hitTiles.push(decodeTile(romData, BATTLE_SPRITE_ROM + (30 + i) * 16));
+  const hitTiles = [0,1,2,3].map(i => decodeTile(romData, BATTLE_SPRITE_ROM + (30 + i) * 16));
   fakePlayerHitPortraits = _genPosePortraits(hitTiles);
 
-  // Defend pose — top 4 tiles from PPU dump ($43-$46)
   const defTileData = [
     new Uint8Array([0x05,0x0B,0x17,0x03,0x00,0x00,0x0E,0x1F, 0x07,0x0F,0x1F,0x3F,0x43,0x40,0x20,0x00]),
     new Uint8Array([0x00,0x00,0xA0,0xD0,0xE8,0x78,0x10,0x88, 0x2C,0x59,0xBE,0xD6,0xEF,0xFB,0x75,0x1A]),
     new Uint8Array([0x04,0xD6,0xD6,0x3F,0xEF,0xF0,0x63,0x0E, 0x00,0x00,0x00,0x24,0xE4,0xF0,0x6F,0x1F]),
     new Uint8Array([0x90,0x4C,0xCC,0x30,0x7C,0x78,0x30,0x00, 0x32,0x21,0x00,0xB0,0x7C,0x7C,0xB2,0xC2]),
   ];
-  const defTiles = defTileData.map(d => decodeTile(d, 0));
-  fakePlayerDefendPortraits = _genPosePortraits(defTiles);
+  fakePlayerDefendPortraits = _genPosePortraits(defTileData.map(d => decodeTile(d, 0)));
 
-  // Attack pose (right-hand) — idle top + ATK_R_39 bottom-left
   const ATK_R_39_DATA = new Uint8Array([0x1F,0x04,0x16,0x16,0x2F,0x7F,0x70,0x26,
                                          0x00,0x00,0x00,0x00,0x30,0x70,0x70,0x3E]);
-  const atkTiles = [tiles[0], tiles[1], decodeTile(ATK_R_39_DATA, 0), tiles[3]];
-  fakePlayerAttackPortraits = _genPosePortraits(atkTiles);
+  fakePlayerAttackPortraits = _genPosePortraits([idleTiles[0], idleTiles[1], decodeTile(ATK_R_39_DATA, 0), idleTiles[3]]);
 
-  // Left-hand attack pose — tiles $3B (BL) and $3C (BR)
   const ATK_L_3B_DATA = new Uint8Array([0x1F,0x04,0x16,0x16,0x0C,0x08,0x38,0x7C,
                                          0x00,0x00,0x00,0x00,0x11,0x03,0x38,0x7D]);
   const ATK_L_3C_DATA = new Uint8Array([0x18,0x80,0x48,0xCC,0x00,0x00,0x00,0x00,
                                          0x59,0x32,0x38,0x0C,0x80,0xC0,0x00,0x60]);
-  const atkLTiles = [tiles[0], tiles[1], decodeTile(ATK_L_3B_DATA, 0), decodeTile(ATK_L_3C_DATA, 0)];
-  fakePlayerAttackLPortraits = _genPosePortraits(atkLTiles);
+  fakePlayerAttackLPortraits = _genPosePortraits([idleTiles[0], idleTiles[1], decodeTile(ATK_L_3B_DATA, 0), decodeTile(ATK_L_3C_DATA, 0)]);
 
-  // Knife body poses — same tile bytes as in initBattleSprite
   const KNIFE_BACK_DATA = [
     new Uint8Array([0x05,0x0B,0x17,0x03,0x00,0x00,0x0E,0x1F, 0x07,0x0F,0x1F,0x3F,0x43,0x40,0x20,0x00]),
     new Uint8Array([0x00,0x00,0xA0,0xD0,0xE8,0x78,0x10,0x88, 0x2C,0x59,0xBE,0xD6,0xEF,0xFB,0x75,0x1A]),
@@ -1169,85 +1138,32 @@ function initFakePlayerPortraits(romData) {
   ];
   fakePlayerKnifeLPortraits = _genPosePortraits(KNIFE_L_DATA.map(d => decodeTile(d, 0)));
 
-  // Kneel pose — tiles $09-$0C from PPU dump
   const kneelTileData = [
     new Uint8Array([0x00,0x00,0x00,0x00,0x02,0x05,0x0B,0x00, 0x00,0x00,0x00,0x00,0x03,0x07,0x0F,0x1F]),
     new Uint8Array([0x00,0x00,0x00,0x00,0x80,0xB8,0xDC,0xEE, 0x00,0x00,0x00,0x00,0x9B,0xBE,0xDD,0xEF]),
     new Uint8Array([0x00,0x03,0x07,0x05,0x01,0x01,0x1B,0x3B, 0x20,0x10,0x00,0x00,0x00,0x04,0x00,0x20]),
     new Uint8Array([0x36,0x1A,0xC6,0x20,0x92,0x81,0xDC,0xDE, 0xF6,0x3A,0x16,0x0C,0x0E,0x21,0x04,0x06]),
   ];
-  const kneelTiles = kneelTileData.map(d => decodeTile(d, 0));
-  fakePlayerKneelPortraits = _genPosePortraits(kneelTiles);
+  fakePlayerKneelPortraits = _genPosePortraits(kneelTileData.map(d => decodeTile(d, 0)));
+}
+function _initFakeFullBodyCanvases(romData) {
+  const legTileL = decodeTile(new Uint8Array([0xCC,0x58,0x2F,0x3F,0x3F,0x1F,0x00,0x00, 0x1E,0x5F,0x3F,0x3F,0x3F,0x1F,0x07,0x0F]), 0);
+  const legTileR = decodeTile(new Uint8Array([0xD8,0x70,0x80,0xE0,0xE0,0xC0,0x00,0x00, 0x1C,0x74,0x84,0xE6,0xE6,0xC6,0xC7,0xC7]), 0);
 
-  // Full body 16×24 canvases for PVP opponent — top 4 tiles + bottom 2 tiles, h-flipped
-  // Bottom row = PPU $05/$06 from FCEUX battle dump (lower torso, same in idle and hit CHR banks)
-  const legTileL = decodeTile(new Uint8Array([0xCC,0x58,0x2F,0x3F,0x3F,0x1F,0x00,0x00, 0x1E,0x5F,0x3F,0x3F,0x3F,0x1F,0x07,0x0F]), 0); // $05
-  const legTileR = decodeTile(new Uint8Array([0xD8,0x70,0x80,0xE0,0xE0,0xC0,0x00,0x00, 0x1C,0x74,0x84,0xE6,0xE6,0xC6,0xC7,0xC7]), 0); // $06
+  const IDLE_PPU = [
+    new Uint8Array([0x00,0x00,0x0A,0x16,0x2F,0x03,0x00,0x0C, 0x00,0x00,0x0E,0x1E,0x3F,0x7F,0x83,0x40]),
+    new Uint8Array([0x00,0x00,0x00,0xE0,0x70,0xB8,0xD8,0x68, 0x00,0x6C,0x19,0xFE,0x76,0xBB,0xDB,0xED]),
+    new Uint8Array([0x1F,0x04,0x16,0x16,0x0F,0x0F,0x60,0xC6, 0x00,0x00,0x00,0x00,0x50,0xE0,0x60,0x1E]),
+    new Uint8Array([0x18,0x80,0x48,0xCC,0x00,0x00,0x70,0xD8, 0x59,0x32,0x38,0x0C,0xB0,0x78,0x70,0x1C]),
+  ];
+  const idleTiles = IDLE_PPU.map(d => decodeTile(d, 0));
 
-  fakePlayerFullBodyCanvases = PLAYER_PALETTES.map(basePal => {
-    const c = document.createElement('canvas');
-    c.width = 16; c.height = 24;
-    const fctx = c.getContext('2d');
-
-    // Draw top 4 tiles (16×16) using palette variant
-    const fullTiles = [tiles[0], tiles[1], tiles[2], tiles[3]];
-    const topLayout = [[0,0],[8,0],[0,8],[8,8]];
-    fullTiles.forEach((px, i) => {
-      const img = fctx.createImageData(8, 8);
-      for (let p = 0; p < 64; p++) {
-        const ci = px[p];
-        if (ci === 0) { img.data[p*4+3] = 0; } else {
-          const rgb = NES_SYSTEM_PALETTE[basePal[ci]] || [0,0,0];
-          img.data[p*4]=rgb[0]; img.data[p*4+1]=rgb[1]; img.data[p*4+2]=rgb[2]; img.data[p*4+3]=255;
-        }
-      }
-      fctx.putImageData(img, topLayout[i][0], topLayout[i][1]);
-    });
-
-    // Draw bottom 2 tiles (legs) at y=16
-    [[legTileL, 0, 16], [legTileR, 8, 16]].forEach(([px, bx, by]) => {
-      const img = fctx.createImageData(8, 8);
-      for (let p = 0; p < 64; p++) {
-        const ci = px[p];
-        if (ci === 0) { img.data[p*4+3] = 0; } else {
-          const rgb = NES_SYSTEM_PALETTE[basePal[ci]] || [0,0,0];
-          img.data[p*4]=rgb[0]; img.data[p*4+1]=rgb[1]; img.data[p*4+2]=rgb[2]; img.data[p*4+3]=255;
-        }
-      }
-      fctx.putImageData(img, bx, by);
-    });
-
-    // H-flip into a new canvas (opponent faces right)
-    const flipped = document.createElement('canvas');
-    flipped.width = 16; flipped.height = 24;
-    const ffc = flipped.getContext('2d');
-    ffc.save();
-    ffc.translate(16, 0);
-    ffc.scale(-1, 1);
-    ffc.drawImage(c, 0, 0);
-    ffc.restore();
-    return flipped;
-  });
-
-  // Attack full-body (16×24) for PVP opponent — attack portrait + idle legs, h-flipped
-  // Drawn as a single image (avoids split-rendering artifact from portrait+legs approach)
-  const _buildAtkFullBody = (atkData4, pal) => {
-    const topLayout = [[0,0],[8,0],[0,8],[8,8]];
+  const _buildFullBody16x24 = (topTiles4, legL, legR, pal) => {
     const c = document.createElement('canvas');
     c.width = 16; c.height = 24;
     const bctx = c.getContext('2d');
-    atkData4.map(d => decodeTile(d, 0)).forEach((px, i) => {
-      const img = bctx.createImageData(8, 8);
-      for (let p = 0; p < 64; p++) {
-        const ci = px[p];
-        if (ci === 0) { img.data[p*4+3] = 0; } else {
-          const rgb = NES_SYSTEM_PALETTE[pal[ci]] || [0,0,0];
-          img.data[p*4]=rgb[0]; img.data[p*4+1]=rgb[1]; img.data[p*4+2]=rgb[2]; img.data[p*4+3]=255;
-        }
-      }
-      bctx.putImageData(img, topLayout[i][0], topLayout[i][1]);
-    });
-    [[legTileL, 0, 16], [legTileR, 8, 16]].forEach(([px, bx, by]) => {
+    topTiles4.forEach((px, i) => {
+      const [bx, by] = _BATTLE_LAYOUT[i];
       const img = bctx.createImageData(8, 8);
       for (let p = 0; p < 64; p++) {
         const ci = px[p];
@@ -1258,57 +1174,61 @@ function initFakePlayerPortraits(romData) {
       }
       bctx.putImageData(img, bx, by);
     });
+    [[legL, 0, 16], [legR, 8, 16]].forEach(([px, lx, ly]) => {
+      const img = bctx.createImageData(8, 8);
+      for (let p = 0; p < 64; p++) {
+        const ci = px[p];
+        if (ci === 0) { img.data[p*4+3] = 0; } else {
+          const rgb = NES_SYSTEM_PALETTE[pal[ci]] || [0,0,0];
+          img.data[p*4]=rgb[0]; img.data[p*4+1]=rgb[1]; img.data[p*4+2]=rgb[2]; img.data[p*4+3]=255;
+        }
+      }
+      bctx.putImageData(img, lx, ly);
+    });
     const fl = document.createElement('canvas');
     fl.width = 16; fl.height = 24;
     const flctx = fl.getContext('2d');
     flctx.save(); flctx.translate(16, 0); flctx.scale(-1, 1); flctx.drawImage(c, 0, 0); flctx.restore();
     return fl;
   };
-  fakePlayerKnifeRFullBodyCanvases = PLAYER_PALETTES.map(pal => _buildAtkFullBody(KNIFE_R_DATA, pal));
-  fakePlayerKnifeLFullBodyCanvases = PLAYER_PALETTES.map(pal => _buildAtkFullBody(KNIFE_L_DATA, pal));
+
+  fakePlayerFullBodyCanvases = PLAYER_PALETTES.map(pal =>
+    _buildFullBody16x24(idleTiles, legTileL, legTileR, pal));
+
+  const KNIFE_BACK_DATA = [
+    new Uint8Array([0x05,0x0B,0x17,0x03,0x00,0x00,0x0E,0x1F, 0x07,0x0F,0x1F,0x3F,0x43,0x40,0x20,0x00]),
+    new Uint8Array([0x00,0x00,0xA0,0xD0,0xE8,0x78,0x10,0x88, 0x2C,0x59,0xBE,0xD6,0xEF,0xFB,0x75,0x1A]),
+    new Uint8Array([0x04,0xD6,0xD6,0x3F,0xEF,0xF0,0x63,0x0E, 0x00,0x00,0x00,0x24,0xE4,0xF0,0x6F,0x1F]),
+    new Uint8Array([0x90,0x4C,0xCC,0x30,0x7C,0x78,0x30,0x00, 0x32,0x21,0x00,0xB0,0x7C,0x7C,0xB2,0xC2]),
+  ];
+  const KNIFE_R_DATA = [
+    new Uint8Array([0x00,0x00,0x0A,0x16,0x2F,0x03,0x00,0x0C, 0x00,0x00,0x0E,0x1E,0x3F,0x7F,0x83,0x40]),
+    new Uint8Array([0x00,0x00,0x00,0xE0,0x70,0xB8,0xD8,0x68, 0x00,0x6C,0x19,0xFE,0x76,0xBB,0xDB,0xED]),
+    new Uint8Array([0x1F,0x04,0x16,0x16,0x2F,0x7F,0x70,0x26, 0x00,0x00,0x00,0x00,0x30,0x70,0x70,0x3E]),
+    new Uint8Array([0x18,0x80,0x48,0xCC,0x00,0x00,0x70,0xD8, 0x59,0x32,0x38,0x0C,0xB0,0x78,0x70,0x1C]),
+  ];
+  const KNIFE_L_DATA = [
+    new Uint8Array([0x00,0x00,0x0A,0x16,0x2F,0x03,0x00,0x0C, 0x00,0x00,0x0E,0x1E,0x3F,0x7F,0x83,0x40]),
+    new Uint8Array([0x00,0x00,0x00,0xE0,0x70,0xB8,0xD8,0x68, 0x00,0x6C,0x19,0xFE,0x76,0xBB,0xDB,0xEC]),
+    new Uint8Array([0x1F,0x04,0x16,0x16,0x0F,0x0F,0x60,0xC6, 0x00,0x00,0x00,0x00,0x50,0xE0,0x60,0x1E]),
+    new Uint8Array([0x13,0x87,0x57,0xF8,0x7E,0x3C,0x1C,0x08, 0x50,0x30,0x30,0x38,0xFE,0x7C,0xFE,0xFA]),
+  ];
+  const _buildAtkFullBody = (data4, pal) =>
+    _buildFullBody16x24(data4.map(d => decodeTile(d, 0)), legTileL, legTileR, pal);
+  fakePlayerKnifeRFullBodyCanvases    = PLAYER_PALETTES.map(pal => _buildAtkFullBody(KNIFE_R_DATA, pal));
+  fakePlayerKnifeLFullBodyCanvases    = PLAYER_PALETTES.map(pal => _buildAtkFullBody(KNIFE_L_DATA, pal));
   fakePlayerKnifeBackFullBodyCanvases = PLAYER_PALETTES.map(pal => _buildAtkFullBody(KNIFE_BACK_DATA, pal));
 
-  // Hit full body — ROM 30-35 (frame 5: tiles 0-3=portrait, 4-5=lower body)
   const hitPortrait4 = [0,1,2,3].map(i => decodeTile(romData, BATTLE_SPRITE_ROM + (30 + i) * 16));
   const hitLeg2 = [34,35].map(i => decodeTile(romData, BATTLE_SPRITE_ROM + i * 16));
-  const hitBodyTiles = [...hitPortrait4, ...hitLeg2];
-  fakePlayerHitFullBodyCanvases = PLAYER_PALETTES.map((basePal, pi) => {
-    const c = document.createElement('canvas');
-    c.width = 16; c.height = 24;
-    const fctx = c.getContext('2d');
-    // Portrait: ROM 30-33
-    [[0,0,0],[1,8,0],[2,0,8],[3,8,8]].forEach(([ti, bx, by]) => {
-      const px = hitBodyTiles[ti];
-      const img = fctx.createImageData(8, 8);
-      for (let p = 0; p < 64; p++) {
-        const ci = px[p];
-        if (ci === 0) { img.data[p*4+3] = 0; } else {
-          const rgb = NES_SYSTEM_PALETTE[basePal[ci]] || [0,0,0];
-          img.data[p*4]=rgb[0]; img.data[p*4+1]=rgb[1]; img.data[p*4+2]=rgb[2]; img.data[p*4+3]=255;
-        }
-      }
-      fctx.putImageData(img, bx, by);
-    });
-    // Legs: ROM 34-35 (hit frame 5, tiles 4-5)
-    [[hitBodyTiles[4], 0, 16], [hitBodyTiles[5], 8, 16]].forEach(([px, bx, by]) => {
-      const img = fctx.createImageData(8, 8);
-      for (let p = 0; p < 64; p++) {
-        const ci = px[p];
-        if (ci === 0) { img.data[p*4+3] = 0; } else {
-          const rgb = NES_SYSTEM_PALETTE[basePal[ci]] || [0,0,0];
-          img.data[p*4]=rgb[0]; img.data[p*4+1]=rgb[1]; img.data[p*4+2]=rgb[2]; img.data[p*4+3]=255;
-        }
-      }
-      fctx.putImageData(img, bx, by);
-    });
-    // H-flip
-    const flipped = document.createElement('canvas');
-    flipped.width = 16; flipped.height = 24;
-    const ffc = flipped.getContext('2d');
-    ffc.save(); ffc.translate(16, 0); ffc.scale(-1, 1); ffc.drawImage(c, 0, 0); ffc.restore();
-    return flipped;
-  });
+  fakePlayerHitFullBodyCanvases = PLAYER_PALETTES.map(basePal =>
+    _buildFullBody16x24([...hitPortrait4], hitLeg2[0], hitLeg2[1], basePal));
 }
+function initFakePlayerPortraits(romData) {
+  _initFakePosePortraits(romData);
+  _initFakeFullBodyCanvases(romData);
+}
+
 
 function initCursorTile(romData) {
   const palette = [0x0F, 0x00, 0x10, 0x30]; // cursor palette: black, dark gray, gray, white
@@ -3798,8 +3718,7 @@ function _handleRosterInput() {
   return false;
 }
 
-function _handlePauseInput() {
-  // Enter — open pause menu
+function _pauseInputOpenClose() {
   if (keys['Enter']) {
     keys['Enter'] = false;
     if (pauseState === 'none' && battleState === 'none' && transState === 'none' && !shakeActive && !starEffect && !moving && msgBoxState === 'none') {
@@ -3810,7 +3729,6 @@ function _handlePauseInput() {
     }
     return true;
   }
-  // X — close pause menu (back button) — only from main menu, not sub-states
   if (keys['x'] || keys['X']) {
     if (pauseState === 'open') {
       keys['x'] = false; keys['X'] = false;
@@ -3818,285 +3736,275 @@ function _handlePauseInput() {
       pauseState = 'text-out'; pauseTimer = 0;
       return true;
     }
-    // Don't consume X here — let sub-state handlers below handle it
   }
-  // Pause menu cursor controls
-  if (pauseState === 'open') {
-    if (keys['ArrowDown']) { keys['ArrowDown'] = false; pauseCursor = (pauseCursor + 1) % 6; playSFX(SFX.CURSOR); }
-    if (keys['ArrowUp'])   { keys['ArrowUp'] = false;   pauseCursor = (pauseCursor + 5) % 6; playSFX(SFX.CURSOR); }
-    if (keys['z'] || keys['Z']) {
-      keys['z'] = false; keys['Z'] = false;
-      if (pauseCursor === 0) {
-        // Item — fade out pause text, then expand to inventory
-        playSFX(SFX.CONFIRM);
-        pauseState = 'inv-text-out'; pauseTimer = 0; pauseInvScroll = 0;
-      } else if (pauseCursor === 2) {
-        // Equip — fade out pause text, then expand to equip slots
-        playSFX(SFX.CONFIRM);
-        pauseState = 'eq-text-out'; pauseTimer = 0; eqCursor = 0;
-      }
+  return false;
+}
+function _pauseInputMainMenu() {
+  if (pauseState !== 'open') return false;
+  if (keys['ArrowDown']) { keys['ArrowDown'] = false; pauseCursor = (pauseCursor + 1) % 6; playSFX(SFX.CURSOR); }
+  if (keys['ArrowUp'])   { keys['ArrowUp'] = false;   pauseCursor = (pauseCursor + 5) % 6; playSFX(SFX.CURSOR); }
+  if (keys['z'] || keys['Z']) {
+    keys['z'] = false; keys['Z'] = false;
+    if (pauseCursor === 0) {
+      playSFX(SFX.CONFIRM);
+      pauseState = 'inv-text-out'; pauseTimer = 0; pauseInvScroll = 0;
+    } else if (pauseCursor === 2) {
+      playSFX(SFX.CONFIRM);
+      pauseState = 'eq-text-out'; pauseTimer = 0; eqCursor = 0;
     }
-    return true;
   }
-  // Inventory sub-state — only accept input when fully open
-  if (pauseState === 'inventory') {
-    const entries = Object.entries(playerInventory).filter(([,c]) => c > 0);
-    if (keys['ArrowDown']) {
-      keys['ArrowDown'] = false;
-      if (pauseInvScroll < entries.length - 1) { pauseInvScroll++; playSFX(SFX.CURSOR); }
-    }
-    if (keys['ArrowUp']) {
-      keys['ArrowUp'] = false;
-      if (pauseInvScroll > 0) { pauseInvScroll--; playSFX(SFX.CURSOR); }
-    }
-    if (keys['z'] || keys['Z']) {
-      keys['z'] = false; keys['Z'] = false;
-      if (pauseHeldItem === -1) {
-        // Nothing held — pick up
-        if (entries.length > 0 && entries[pauseInvScroll]) {
-          pauseHeldItem = pauseInvScroll;
-          playSFX(SFX.CONFIRM);
-        } else {
-          playSFX(SFX.ERROR);
-        }
-      } else if (pauseHeldItem === pauseInvScroll) {
-        // Same slot — use consumable → target select, or deselect
-        const [id] = entries[pauseHeldItem];
-        const item = ITEMS.get(Number(id));
-        if (item && item.type === 'consumable') {
-          playSFX(SFX.CONFIRM);
-          pauseHeldItem = -1;
-          pauseState = 'inv-target'; pauseTimer = 0;
-          pauseUseItemId = Number(id);
-          pauseInvAllyTarget = -1;
-        } else {
-          pauseHeldItem = -1;
-          playSFX(SFX.CONFIRM);
-        }
-      } else {
-        // Different slot — move hold
-        if (entries[pauseInvScroll]) {
-          pauseHeldItem = pauseInvScroll;
-          playSFX(SFX.CONFIRM);
-        } else {
-          pauseHeldItem = -1;
-          playSFX(SFX.ERROR);
-        }
-      }
-    }
-    if (keys['x'] || keys['X']) {
-      keys['x'] = false; keys['X'] = false;
-      if (pauseHeldItem !== -1) {
-        pauseHeldItem = -1;
-        playSFX(SFX.CONFIRM);
-      } else {
-        playSFX(SFX.CONFIRM);
-        pauseState = 'inv-items-out'; pauseTimer = 0;
-      }
-    }
-    return true;
+  return true;
+}
+function _pauseInputInventory() {
+  if (pauseState !== 'inventory') return false;
+  const entries = Object.entries(playerInventory).filter(([,c]) => c > 0);
+  if (keys['ArrowDown']) {
+    keys['ArrowDown'] = false;
+    if (pauseInvScroll < entries.length - 1) { pauseInvScroll++; playSFX(SFX.CURSOR); }
   }
-  // Inventory target select — cursor on player portrait, Z to confirm, X to cancel back
-  if (pauseState === 'inv-target') {
-    const rosterTargets = getRosterVisible();
-    if (keys['ArrowDown']) {
-      keys['ArrowDown'] = false;
-      if (pauseInvAllyTarget < rosterTargets.length - 1) { pauseInvAllyTarget++; playSFX(SFX.CURSOR); }
-    }
-    if (keys['ArrowUp']) {
-      keys['ArrowUp'] = false;
-      if (pauseInvAllyTarget > -1) { pauseInvAllyTarget--; playSFX(SFX.CURSOR); }
-    }
-    if (keys['z'] || keys['Z']) {
-      keys['z'] = false; keys['Z'] = false;
-      const item = ITEMS.get(pauseUseItemId);
-      if (item && item.effect === 'restore_hp') {
-        if (pauseInvAllyTarget >= 0) {
-          // Heal selected roster player
-          const rp = rosterTargets[pauseInvAllyTarget];
-          if (rp) {
-            const heal = Math.min(item.value, rp.maxHP - rp.hp);
-            rp.hp += heal;
-            removeItem(pauseUseItemId);
-            playSFX(SFX.CURE);
-            pauseHealNum = { value: heal, timer: 0, rosterIdx: pauseInvAllyTarget };
-            pauseState = 'inv-heal'; pauseTimer = 0;
-            if (selectCursor >= 0 && saveSlots[selectCursor]) {
-              saveSlots[selectCursor].inventory = { ...playerInventory };
-              saveSlotsToDB();
-            }
-          } else {
-            playSFX(SFX.ERROR);
-          }
-        } else {
-          // Heal player
-          const heal = Math.min(item.value, playerStats.maxHP - playerHP);
-          playerHP += heal;
-          removeItem(pauseUseItemId);
-          playSFX(SFX.CURE);
-          pauseHealNum = { value: heal, timer: 0 };
-          pauseState = 'inv-heal'; pauseTimer = 0;
-          if (selectCursor >= 0 && saveSlots[selectCursor]) {
-            saveSlots[selectCursor].hp = playerHP;
-            saveSlots[selectCursor].inventory = { ...playerInventory };
-            saveSlotsToDB();
-          }
-        }
+  if (keys['ArrowUp']) {
+    keys['ArrowUp'] = false;
+    if (pauseInvScroll > 0) { pauseInvScroll--; playSFX(SFX.CURSOR); }
+  }
+  if (keys['z'] || keys['Z']) {
+    keys['z'] = false; keys['Z'] = false;
+    if (pauseHeldItem === -1) {
+      if (entries.length > 0 && entries[pauseInvScroll]) {
+        pauseHeldItem = pauseInvScroll;
+        playSFX(SFX.CONFIRM);
       } else {
         playSFX(SFX.ERROR);
       }
+    } else if (pauseHeldItem === pauseInvScroll) {
+      const [id] = entries[pauseHeldItem];
+      const item = ITEMS.get(Number(id));
+      if (item && item.type === 'consumable') {
+        playSFX(SFX.CONFIRM);
+        pauseHeldItem = -1;
+        pauseState = 'inv-target'; pauseTimer = 0;
+        pauseUseItemId = Number(id);
+        pauseInvAllyTarget = -1;
+      } else {
+        pauseHeldItem = -1;
+        playSFX(SFX.CONFIRM);
+      }
+    } else {
+      if (entries[pauseInvScroll]) {
+        pauseHeldItem = pauseInvScroll;
+        playSFX(SFX.CONFIRM);
+      } else {
+        pauseHeldItem = -1;
+        playSFX(SFX.ERROR);
+      }
     }
-    if (keys['x'] || keys['X']) {
-      keys['x'] = false; keys['X'] = false;
-      pauseState = 'inventory'; pauseTimer = 0;
+  }
+  if (keys['x'] || keys['X']) {
+    keys['x'] = false; keys['X'] = false;
+    if (pauseHeldItem !== -1) {
       pauseHeldItem = -1;
       playSFX(SFX.CONFIRM);
+    } else {
+      playSFX(SFX.CONFIRM);
+      pauseState = 'inv-items-out'; pauseTimer = 0;
     }
-    return true;
   }
-  // Heal animation — block input until done
-  if (pauseState === 'inv-heal') return true;
-  // Block input during inventory transitions
-  if (pauseState.startsWith('inv-')) return true;
-  // Equip slot selection
-  if (pauseState === 'equip') {
-    if (keys['ArrowDown']) { keys['ArrowDown'] = false; eqCursor = (eqCursor + 1) % 6; playSFX(SFX.CURSOR); }
-    if (keys['ArrowUp'])   { keys['ArrowUp'] = false;   eqCursor = (eqCursor + 5) % 6; playSFX(SFX.CURSOR); }
-    if (keys['z'] || keys['Z']) {
-      keys['z'] = false; keys['Z'] = false;
-      if (eqCursor === 5) {
-        // Optimum — auto-equip best gear in every slot
-        const SLOT_DEFS = [
-          { eq: -100, type: 'hand', stat: 'atk' },
-          { eq: -102, type: 'armor', subtype: 'helmet', stat: 'def' },
-          { eq: -103, type: 'armor', subtype: 'body',   stat: 'def' },
-          { eq: -104, type: 'armor', subtype: 'arms',   stat: 'def' },
-        ];
-        for (const sd of SLOT_DEFS) {
-          let bestId = 0, bestVal = 0;
-          const curId = getEquipSlotId(sd.eq);
-          const curItem = ITEMS.get(curId);
-          if (curItem) bestVal = curItem[sd.stat] || 0;
-          bestId = curId;
-          for (const [idStr, count] of Object.entries(playerInventory)) {
-            if (count <= 0) continue;
-            const id = Number(idStr);
-            const item = ITEMS.get(id);
-            if (!item) continue;
-            if (sd.type === 'hand' && !isHandEquippable(item)) continue;
-            if (sd.type === 'armor' && (item.type !== 'armor' || item.subtype !== sd.subtype)) continue;
-            const val = item[sd.stat] || 0;
-            if (val > bestVal) { bestVal = val; bestId = id; }
+  return true;
+}
+function _pauseInputInvTarget() {
+  if (pauseState !== 'inv-target') return false;
+  const rosterTargets = getRosterVisible();
+  if (keys['ArrowDown']) {
+    keys['ArrowDown'] = false;
+    if (pauseInvAllyTarget < rosterTargets.length - 1) { pauseInvAllyTarget++; playSFX(SFX.CURSOR); }
+  }
+  if (keys['ArrowUp']) {
+    keys['ArrowUp'] = false;
+    if (pauseInvAllyTarget > -1) { pauseInvAllyTarget--; playSFX(SFX.CURSOR); }
+  }
+  if (keys['z'] || keys['Z']) {
+    keys['z'] = false; keys['Z'] = false;
+    const item = ITEMS.get(pauseUseItemId);
+    if (item && item.effect === 'restore_hp') {
+      if (pauseInvAllyTarget >= 0) {
+        const rp = rosterTargets[pauseInvAllyTarget];
+        if (rp) {
+          const heal = Math.min(item.value, rp.maxHP - rp.hp);
+          rp.hp += heal;
+          removeItem(pauseUseItemId);
+          playSFX(SFX.CURE);
+          pauseHealNum = { value: heal, timer: 0, rosterIdx: pauseInvAllyTarget };
+          pauseState = 'inv-heal'; pauseTimer = 0;
+          if (selectCursor >= 0 && saveSlots[selectCursor]) {
+            saveSlots[selectCursor].inventory = { ...playerInventory };
+            saveSlotsToDB();
           }
-          if (bestId !== curId) {
-            if (curId !== 0) addItem(curId, 1);
-            if (bestId !== 0) { setEquipSlotId(sd.eq, bestId); removeItem(bestId); }
-            else setEquipSlotId(sd.eq, 0);
-          }
+        } else {
+          playSFX(SFX.ERROR);
         }
-        // L.Hand: prefer best weapon (atk), fall back to best shield (def) if no weapon found
-        {
-          const curId = getEquipSlotId(-101);
-          let bestWepId = 0, bestWepAtk = 0;
-          let bestShieldId = 0, bestShieldDef = 0;
-          const curItem = ITEMS.get(curId);
-          if (curItem && curItem.type === 'weapon') bestWepAtk = curItem.atk || 0, bestWepId = curId;
-          else if (curItem && curItem.subtype === 'shield') bestShieldDef = curItem.def || 0, bestShieldId = curId;
-          for (const [idStr, count] of Object.entries(playerInventory)) {
-            if (count <= 0) continue;
-            const id = Number(idStr);
-            const item = ITEMS.get(id);
-            if (!item || !isHandEquippable(item)) continue;
-            if (item.type === 'weapon') { const v = item.atk || 0; if (v > bestWepAtk) { bestWepAtk = v; bestWepId = id; } }
-            else if (item.subtype === 'shield') { const v = item.def || 0; if (v > bestShieldDef) { bestShieldDef = v; bestShieldId = id; } }
-          }
-          const bestId = bestShieldId !== 0 ? bestShieldId : bestWepId;
-          if (bestId !== curId) {
-            if (curId !== 0) addItem(curId, 1);
-            if (bestId !== 0) { setEquipSlotId(-101, bestId); removeItem(bestId); }
-            else setEquipSlotId(-101, 0);
-          }
-        }
-        playerATK = playerStats.str + (ITEMS.get(playerWeaponR)?.atk || 0) + (ITEMS.get(playerWeaponL)?.atk || 0);
-        recalcDEF();
+      } else {
+        const heal = Math.min(item.value, playerStats.maxHP - playerHP);
+        playerHP += heal;
+        removeItem(pauseUseItemId);
+        playSFX(SFX.CURE);
+        pauseHealNum = { value: heal, timer: 0 };
+        pauseState = 'inv-heal'; pauseTimer = 0;
         if (selectCursor >= 0 && saveSlots[selectCursor]) {
+          saveSlots[selectCursor].hp = playerHP;
           saveSlots[selectCursor].inventory = { ...playerInventory };
           saveSlotsToDB();
         }
-        playSFX(SFX.CONFIRM);
-      } else {
-        playSFX(SFX.CONFIRM);
-        // Build filtered item list for this slot
-        eqSlotIdx = -100 - eqCursor;
-        const isWeaponSlot = eqSlotIdx >= -101;
-        const slotSubtype = EQUIP_SLOT_SUBTYPE[String(eqSlotIdx)];
-        eqItemList = [];
-        // First entry: "(Remove)" if slot has something equipped
-        const currentId = getEquipSlotId(eqSlotIdx);
-        if (currentId !== 0) eqItemList.push({ id: 0, label: 'remove' });
-        // Add matching items from inventory
+      }
+    } else {
+      playSFX(SFX.ERROR);
+    }
+  }
+  if (keys['x'] || keys['X']) {
+    keys['x'] = false; keys['X'] = false;
+    pauseState = 'inventory'; pauseTimer = 0;
+    pauseHeldItem = -1;
+    playSFX(SFX.CONFIRM);
+  }
+  return true;
+}
+function _pauseInputEquip() {
+  if (pauseState !== 'equip') return false;
+  if (keys['ArrowDown']) { keys['ArrowDown'] = false; eqCursor = (eqCursor + 1) % 6; playSFX(SFX.CURSOR); }
+  if (keys['ArrowUp'])   { keys['ArrowUp'] = false;   eqCursor = (eqCursor + 5) % 6; playSFX(SFX.CURSOR); }
+  if (keys['z'] || keys['Z']) {
+    keys['z'] = false; keys['Z'] = false;
+    if (eqCursor === 5) {
+      const SLOT_DEFS = [
+        { eq: -100, type: 'hand', stat: 'atk' },
+        { eq: -102, type: 'armor', subtype: 'helmet', stat: 'def' },
+        { eq: -103, type: 'armor', subtype: 'body',   stat: 'def' },
+        { eq: -104, type: 'armor', subtype: 'arms',   stat: 'def' },
+      ];
+      for (const sd of SLOT_DEFS) {
+        let bestId = 0, bestVal = 0;
+        const curId = getEquipSlotId(sd.eq);
+        const curItem = ITEMS.get(curId);
+        if (curItem) bestVal = curItem[sd.stat] || 0;
+        bestId = curId;
         for (const [idStr, count] of Object.entries(playerInventory)) {
           if (count <= 0) continue;
           const id = Number(idStr);
           const item = ITEMS.get(id);
           if (!item) continue;
-          if (isWeaponSlot && isHandEquippable(item)) eqItemList.push({ id, count });
-          else if (!isWeaponSlot && item.type === 'armor' && item.subtype === slotSubtype) eqItemList.push({ id, count });
+          if (sd.type === 'hand' && !isHandEquippable(item)) continue;
+          if (sd.type === 'armor' && (item.type !== 'armor' || item.subtype !== sd.subtype)) continue;
+          const val = item[sd.stat] || 0;
+          if (val > bestVal) { bestVal = val; bestId = id; }
         }
-        eqItemCursor = 0;
-        pauseState = 'eq-items-in'; pauseTimer = 0;
+        if (bestId !== curId) {
+          if (curId !== 0) addItem(curId, 1);
+          if (bestId !== 0) { setEquipSlotId(sd.eq, bestId); removeItem(bestId); }
+          else setEquipSlotId(sd.eq, 0);
+        }
       }
-    }
-    if (keys['x'] || keys['X']) {
-      keys['x'] = false; keys['X'] = false;
-      playSFX(SFX.CONFIRM);
-      pauseState = 'eq-slots-out'; pauseTimer = 0;
-    }
-    return true;
-  }
-  // Equip item selection
-  if (pauseState === 'eq-item-select') {
-    if (keys['ArrowDown']) { keys['ArrowDown'] = false; if (eqItemCursor < eqItemList.length - 1) { eqItemCursor++; playSFX(SFX.CURSOR); } }
-    if (keys['ArrowUp'])   { keys['ArrowUp'] = false;   if (eqItemCursor > 0) { eqItemCursor--; playSFX(SFX.CURSOR); } }
-    if (keys['z'] || keys['Z']) {
-      keys['z'] = false; keys['Z'] = false;
-      const pick = eqItemList[eqItemCursor];
-      if (pick) {
-        const oldId = getEquipSlotId(eqSlotIdx);
-        if (pick.label === 'remove') {
-          // Unequip
-          setEquipSlotId(eqSlotIdx, 0);
-          if (oldId !== 0) addItem(oldId, 1);
-        } else {
-          // Equip new item
-          setEquipSlotId(eqSlotIdx, pick.id);
-          removeItem(pick.id);
-          if (oldId !== 0) addItem(oldId, 1);
+      {
+        const curId = getEquipSlotId(-101);
+        let bestWepId = 0, bestWepAtk = 0;
+        let bestShieldId = 0, bestShieldDef = 0;
+        const curItem = ITEMS.get(curId);
+        if (curItem && curItem.type === 'weapon') bestWepAtk = curItem.atk || 0, bestWepId = curId;
+        else if (curItem && curItem.subtype === 'shield') bestShieldDef = curItem.def || 0, bestShieldId = curId;
+        for (const [idStr, count] of Object.entries(playerInventory)) {
+          if (count <= 0) continue;
+          const id = Number(idStr);
+          const item = ITEMS.get(id);
+          if (!item || !isHandEquippable(item)) continue;
+          if (item.type === 'weapon') { const v = item.atk || 0; if (v > bestWepAtk) { bestWepAtk = v; bestWepId = id; } }
+          else if (item.subtype === 'shield') { const v = item.def || 0; if (v > bestShieldDef) { bestShieldDef = v; bestShieldId = id; } }
         }
-        playerATK = playerStats.str + (ITEMS.get(playerWeaponR)?.atk || 0) + (ITEMS.get(playerWeaponL)?.atk || 0);
-        recalcDEF();
-        // Save
-        if (selectCursor >= 0 && saveSlots[selectCursor]) {
-          saveSlots[selectCursor].inventory = { ...playerInventory };
-          saveSlotsToDB();
+        const bestId = bestShieldId !== 0 ? bestShieldId : bestWepId;
+        if (bestId !== curId) {
+          if (curId !== 0) addItem(curId, 1);
+          if (bestId !== 0) { setEquipSlotId(-101, bestId); removeItem(bestId); }
+          else setEquipSlotId(-101, 0);
         }
-        playSFX(SFX.CONFIRM);
       }
-      pauseState = 'eq-items-out'; pauseTimer = 0;
-    }
-    if (keys['x'] || keys['X']) {
-      keys['x'] = false; keys['X'] = false;
+      playerATK = playerStats.str + (ITEMS.get(playerWeaponR)?.atk || 0) + (ITEMS.get(playerWeaponL)?.atk || 0);
+      recalcDEF();
+      if (selectCursor >= 0 && saveSlots[selectCursor]) {
+        saveSlots[selectCursor].inventory = { ...playerInventory };
+        saveSlotsToDB();
+      }
       playSFX(SFX.CONFIRM);
-      pauseState = 'eq-items-out'; pauseTimer = 0;
+    } else {
+      playSFX(SFX.CONFIRM);
+      eqSlotIdx = -100 - eqCursor;
+      const isWeaponSlot = eqSlotIdx >= -101;
+      const slotSubtype = EQUIP_SLOT_SUBTYPE[String(eqSlotIdx)];
+      eqItemList = [];
+      const currentId = getEquipSlotId(eqSlotIdx);
+      if (currentId !== 0) eqItemList.push({ id: 0, label: 'remove' });
+      for (const [idStr, count] of Object.entries(playerInventory)) {
+        if (count <= 0) continue;
+        const id = Number(idStr);
+        const item = ITEMS.get(id);
+        if (!item) continue;
+        if (isWeaponSlot && isHandEquippable(item)) eqItemList.push({ id, count });
+        else if (!isWeaponSlot && item.type === 'armor' && item.subtype === slotSubtype) eqItemList.push({ id, count });
+      }
+      eqItemCursor = 0;
+      pauseState = 'eq-items-in'; pauseTimer = 0;
     }
-    return true;
   }
-  // Block input during equip transitions
+  if (keys['x'] || keys['X']) {
+    keys['x'] = false; keys['X'] = false;
+    playSFX(SFX.CONFIRM);
+    pauseState = 'eq-slots-out'; pauseTimer = 0;
+  }
+  return true;
+}
+function _pauseInputEquipItemSelect() {
+  if (pauseState !== 'eq-item-select') return false;
+  if (keys['ArrowDown']) { keys['ArrowDown'] = false; if (eqItemCursor < eqItemList.length - 1) { eqItemCursor++; playSFX(SFX.CURSOR); } }
+  if (keys['ArrowUp'])   { keys['ArrowUp'] = false;   if (eqItemCursor > 0) { eqItemCursor--; playSFX(SFX.CURSOR); } }
+  if (keys['z'] || keys['Z']) {
+    keys['z'] = false; keys['Z'] = false;
+    const pick = eqItemList[eqItemCursor];
+    if (pick) {
+      const oldId = getEquipSlotId(eqSlotIdx);
+      if (pick.label === 'remove') {
+        setEquipSlotId(eqSlotIdx, 0);
+        if (oldId !== 0) addItem(oldId, 1);
+      } else {
+        setEquipSlotId(eqSlotIdx, pick.id);
+        removeItem(pick.id);
+        if (oldId !== 0) addItem(oldId, 1);
+      }
+      playerATK = playerStats.str + (ITEMS.get(playerWeaponR)?.atk || 0) + (ITEMS.get(playerWeaponL)?.atk || 0);
+      recalcDEF();
+      if (selectCursor >= 0 && saveSlots[selectCursor]) {
+        saveSlots[selectCursor].inventory = { ...playerInventory };
+        saveSlotsToDB();
+      }
+      playSFX(SFX.CONFIRM);
+    }
+    pauseState = 'eq-items-out'; pauseTimer = 0;
+  }
+  if (keys['x'] || keys['X']) {
+    keys['x'] = false; keys['X'] = false;
+    playSFX(SFX.CONFIRM);
+    pauseState = 'eq-items-out'; pauseTimer = 0;
+  }
+  return true;
+}
+function _handlePauseInput() {
+  if (_pauseInputOpenClose()) return true;
+  if (_pauseInputMainMenu()) return true;
+  if (_pauseInputInventory()) return true;
+  if (_pauseInputInvTarget()) return true;
+  if (pauseState === 'inv-heal') return true;
+  if (pauseState.startsWith('inv-')) return true;
+  if (_pauseInputEquip()) return true;
+  if (_pauseInputEquipItemSelect()) return true;
   if (pauseState.startsWith('eq-')) return true;
-  // Block all input during pause transitions
   if (pauseState !== 'none') return true;
   return false;
 }
+
 
 function handleInput() {
   if (!sprite) return;
@@ -7322,17 +7230,10 @@ function roundTopBoxCorners() {
   ctx.drawImage(BR, CANVAS_W - 8, HUD_TOP_H - 8);
 }
 
-function drawPauseMenu() {
-  if (pauseState === 'none') return;
-
-  const px = HUD_VIEW_X;
-  const finalY = HUD_VIEW_Y;
-  const pw = PAUSE_MENU_W;
-  const ph = PAUSE_MENU_H;
+function _drawPauseBox() {
+  const px = HUD_VIEW_X, finalY = HUD_VIEW_Y, pw = PAUSE_MENU_W, ph = PAUSE_MENU_H;
   const isInvState = pauseState.startsWith('inv-') || pauseState === 'inventory';
-  const isEqState = pauseState.startsWith('eq-') || pauseState === 'equip';
-
-  // Scroll position (only for initial scroll-in/scroll-out)
+  const isEqState  = pauseState.startsWith('eq-')  || pauseState === 'equip';
   let panelY = finalY;
   if (pauseState === 'scroll-in') {
     const t = Math.min(pauseTimer / PAUSE_SCROLL_MS, 1);
@@ -7341,25 +7242,15 @@ function drawPauseMenu() {
     const t = Math.min(pauseTimer / PAUSE_SCROLL_MS, 1);
     panelY = finalY - t * ph;
   }
-
-  // Clip to viewport
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
-  ctx.clip();
-
-  // --- Bordered box ---
-  // During inventory/equip transitions, animate size from pause dims to full viewport
   if (isInvState || isEqState) {
-    let t = 1; // fully expanded
+    let t = 1;
     if (pauseState === 'inv-expand' || pauseState === 'eq-expand') {
       t = Math.min(pauseTimer / PAUSE_EXPAND_MS, 1);
     } else if (pauseState === 'inv-shrink' || pauseState === 'eq-shrink') {
       t = 1 - Math.min(pauseTimer / PAUSE_EXPAND_MS, 1);
-    } else if (pauseState === 'inv-text-out' || pauseState === 'eq-text-out') {
-      t = 0; // still pause size during text fade out
-    } else if (pauseState === 'inv-text-in' || pauseState === 'eq-text-in') {
-      t = 0; // back to pause size during text fade in
+    } else if (pauseState === 'inv-text-out' || pauseState === 'eq-text-out' ||
+               pauseState === 'inv-text-in'  || pauseState === 'eq-text-in') {
+      t = 0;
     }
     const bw = Math.round(pw + (HUD_VIEW_W - pw) * t);
     const bh = Math.round(ph + (HUD_VIEW_H - ph) * t);
@@ -7367,208 +7258,199 @@ function drawPauseMenu() {
   } else {
     _drawBorderedBox(px, panelY, pw, ph);
   }
-
-  // --- Pause menu text (shown during normal states + inv fade transitions) ---
+}
+function _drawPauseMenuText() {
+  const px = HUD_VIEW_X, finalY = HUD_VIEW_Y, pw = PAUSE_MENU_W, ph = PAUSE_MENU_H;
+  const isInvState = pauseState.startsWith('inv-') || pauseState === 'inventory';
+  const isEqState  = pauseState.startsWith('eq-')  || pauseState === 'equip';
+  let panelY = finalY;
+  if (pauseState === 'scroll-in') {
+    const t = Math.min(pauseTimer / PAUSE_SCROLL_MS, 1);
+    panelY = finalY - ph + t * ph;
+  } else if (pauseState === 'scroll-out') {
+    const t = Math.min(pauseTimer / PAUSE_SCROLL_MS, 1);
+    panelY = finalY - t * ph;
+  }
   const showPauseText = pauseState === 'text-in' || pauseState === 'open' || pauseState === 'text-out' ||
                         pauseState === 'inv-text-out' || pauseState === 'inv-text-in' ||
                         pauseState === 'eq-text-out' || pauseState === 'eq-text-in';
-  if (showPauseText) {
-    let fadeStep = 0;
-    if (pauseState === 'text-in' || pauseState === 'inv-text-in' || pauseState === 'eq-text-in') {
-      fadeStep = PAUSE_TEXT_STEPS - Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
-    } else if (pauseState === 'text-out' || pauseState === 'inv-text-out' || pauseState === 'eq-text-out') {
-      fadeStep = Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
+  if (!showPauseText) return;
+  let fadeStep = 0;
+  if (pauseState === 'text-in' || pauseState === 'inv-text-in' || pauseState === 'eq-text-in') {
+    fadeStep = PAUSE_TEXT_STEPS - Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
+  } else if (pauseState === 'text-out' || pauseState === 'inv-text-out' || pauseState === 'eq-text-out') {
+    fadeStep = Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
+  }
+  const fadedPal = [0x0F, 0x0F, 0x0F, 0x30];
+  for (let s = 0; s < fadeStep; s++) fadedPal[3] = nesColorFade(fadedPal[3]);
+  const textX = px + 24;
+  const startY = ((isInvState || isEqState) ? finalY : panelY) + 12;
+  for (let i = 0; i < PAUSE_ITEMS.length; i++) {
+    drawText(ctx, textX, startY + i * 16, PAUSE_ITEMS[i], fadedPal);
+  }
+  if (cursorTileCanvas) {
+    if (fadeStep === 0) {
+      ctx.drawImage(cursorTileCanvas, px + 8, startY + pauseCursor * 16 - 4);
+    } else if (fadeStep < PAUSE_TEXT_STEPS) {
+      ctx.globalAlpha = 1 - fadeStep / PAUSE_TEXT_STEPS;
+      ctx.drawImage(cursorTileCanvas, px + 8, startY + pauseCursor * 16 - 4);
+      ctx.globalAlpha = 1;
     }
-
-    const fadedPal = [0x0F, 0x0F, 0x0F, 0x30];
-    for (let s = 0; s < fadeStep; s++) fadedPal[3] = nesColorFade(fadedPal[3]);
-
-    const textX = px + 24;
-    const startY = ((isInvState || isEqState) ? finalY : panelY) + 12;
-    for (let i = 0; i < PAUSE_ITEMS.length; i++) {
-      drawText(ctx, textX, startY + i * 16, PAUSE_ITEMS[i], fadedPal);
-    }
-
-    // Hand cursor
-    if (cursorTileCanvas) {
+  }
+}
+function _drawPauseInventory() {
+  const px = HUD_VIEW_X, finalY = HUD_VIEW_Y;
+  const showInvItems = pauseState === 'inv-items-in' || pauseState === 'inventory' || pauseState === 'inv-items-out' ||
+    pauseState === 'inv-target' || pauseState === 'inv-heal';
+  if (!showInvItems) return;
+  let fadeStep = 0;
+  if (pauseState === 'inv-items-in') {
+    fadeStep = PAUSE_TEXT_STEPS - Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
+  } else if (pauseState === 'inv-items-out') {
+    fadeStep = Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
+  }
+  const fadedPal = [0x0F, 0x0F, 0x0F, 0x30];
+  for (let s = 0; s < fadeStep; s++) fadedPal[3] = nesColorFade(fadedPal[3]);
+  const entries = Object.entries(playerInventory).filter(([,c]) => c > 0);
+  const maxVisible = Math.floor((HUD_VIEW_H - 16) / 14);
+  const startIdx = Math.max(0, Math.min(pauseInvScroll, Math.max(0, entries.length - maxVisible)));
+  for (let i = 0; i < maxVisible && startIdx + i < entries.length; i++) {
+    const [id, count] = entries[startIdx + i];
+    const nameBytes = getItemNameClean(Number(id));
+    const countStr = String(count);
+    const rowBytes = new Uint8Array(nameBytes.length + 2 + countStr.length);
+    rowBytes.set(nameBytes, 0);
+    rowBytes[nameBytes.length] = 0xFF;
+    rowBytes[nameBytes.length + 1] = 0xE1;
+    for (let d = 0; d < countStr.length; d++) rowBytes[nameBytes.length + 2 + d] = 0x80 + parseInt(countStr[d]);
+    const iy = finalY + 12 + i * 14;
+    drawText(ctx, px + 24, iy, rowBytes, fadedPal);
+    if (pauseHeldItem >= 0 && startIdx + i === pauseHeldItem && cursorTileCanvas && pauseState !== 'inv-target' && pauseState !== 'inv-heal') {
       if (fadeStep === 0) {
-        ctx.drawImage(cursorTileCanvas, px + 8, startY + pauseCursor * 16 - 4);
+        ctx.drawImage(cursorTileCanvas, px + 8, iy - 4);
       } else if (fadeStep < PAUSE_TEXT_STEPS) {
         ctx.globalAlpha = 1 - fadeStep / PAUSE_TEXT_STEPS;
-        ctx.drawImage(cursorTileCanvas, px + 8, startY + pauseCursor * 16 - 4);
+        ctx.drawImage(cursorTileCanvas, px + 8, iy - 4);
+        ctx.globalAlpha = 1;
+      }
+    }
+    if (startIdx + i === pauseInvScroll && cursorTileCanvas && pauseState !== 'inv-target' && pauseState !== 'inv-heal') {
+      const activeX = pauseHeldItem >= 0 ? px + 4 : px + 8;
+      if (fadeStep === 0) {
+        ctx.drawImage(cursorTileCanvas, activeX, iy - 4);
+      } else if (fadeStep < PAUSE_TEXT_STEPS) {
+        ctx.globalAlpha = 1 - fadeStep / PAUSE_TEXT_STEPS;
+        ctx.drawImage(cursorTileCanvas, activeX, iy - 4);
         ctx.globalAlpha = 1;
       }
     }
   }
-
-  // --- Inventory items (shown when expanded) ---
-  const showInvItems = pauseState === 'inv-items-in' || pauseState === 'inventory' || pauseState === 'inv-items-out' ||
-    pauseState === 'inv-target' || pauseState === 'inv-heal';
-  if (showInvItems) {
-    let fadeStep = 0;
-    if (pauseState === 'inv-items-in') {
-      fadeStep = PAUSE_TEXT_STEPS - Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
-    } else if (pauseState === 'inv-items-out') {
-      fadeStep = Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
-    }
-
-    const fadedPal = [0x0F, 0x0F, 0x0F, 0x30];
-    for (let s = 0; s < fadeStep; s++) fadedPal[3] = nesColorFade(fadedPal[3]);
-
-    const entries = Object.entries(playerInventory).filter(([,c]) => c > 0);
-    const maxVisible = Math.floor((HUD_VIEW_H - 16) / 14);
-    const startIdx = Math.max(0, Math.min(pauseInvScroll, Math.max(0, entries.length - maxVisible)));
-
-    for (let i = 0; i < maxVisible && startIdx + i < entries.length; i++) {
-      const [id, count] = entries[startIdx + i];
-      const nameBytes = getItemNameClean(Number(id));
-      const countStr = String(count);
-      const rowBytes = new Uint8Array(nameBytes.length + 2 + countStr.length);
-      rowBytes.set(nameBytes, 0);
-      rowBytes[nameBytes.length] = 0xFF;
-      rowBytes[nameBytes.length + 1] = 0xE1;
-      for (let d = 0; d < countStr.length; d++) rowBytes[nameBytes.length + 2 + d] = 0x80 + parseInt(countStr[d]);
-
-      const iy = finalY + 12 + i * 14;
-      drawText(ctx, px + 24, iy, rowBytes, fadedPal);
-
-      // Pinned cursor at held item position
-      if (pauseHeldItem >= 0 && startIdx + i === pauseHeldItem && cursorTileCanvas && pauseState !== 'inv-target' && pauseState !== 'inv-heal') {
-        if (fadeStep === 0) {
-          ctx.drawImage(cursorTileCanvas, px + 8, iy - 4);
-        } else if (fadeStep < PAUSE_TEXT_STEPS) {
-          ctx.globalAlpha = 1 - fadeStep / PAUSE_TEXT_STEPS;
-          ctx.drawImage(cursorTileCanvas, px + 8, iy - 4);
-          ctx.globalAlpha = 1;
-        }
-      }
-      // Active cursor — offset 4px left if holding (duplicated cursor)
-      if (startIdx + i === pauseInvScroll && cursorTileCanvas && pauseState !== 'inv-target' && pauseState !== 'inv-heal') {
-        const activeX = pauseHeldItem >= 0 ? px + 4 : px + 8;
-        if (fadeStep === 0) {
-          ctx.drawImage(cursorTileCanvas, activeX, iy - 4);
-        } else if (fadeStep < PAUSE_TEXT_STEPS) {
-          ctx.globalAlpha = 1 - fadeStep / PAUSE_TEXT_STEPS;
-          ctx.drawImage(cursorTileCanvas, activeX, iy - 4);
-          ctx.globalAlpha = 1;
-        }
-      }
-    }
-  }
-
-  // --- Equip slots (shown when expanded) ---
+}
+function _drawPauseEquipSlots() {
+  const px = HUD_VIEW_X, finalY = HUD_VIEW_Y;
   const showEqSlots = pauseState === 'eq-slots-in' || pauseState === 'equip' || pauseState === 'eq-slots-out' ||
     pauseState === 'eq-items-in' || pauseState === 'eq-item-select' || pauseState === 'eq-items-out';
-  if (showEqSlots) {
-    let fadeStep = 0;
-    if (pauseState === 'eq-slots-in') {
-      fadeStep = PAUSE_TEXT_STEPS - Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
-    } else if (pauseState === 'eq-slots-out') {
-      fadeStep = Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
-    }
-    const fadedPal = [0x0F, 0x0F, 0x0F, 0x30];
-    for (let s = 0; s < fadeStep; s++) fadedPal[3] = nesColorFade(fadedPal[3]);
-
-    const EQ_LABELS = [
-      new Uint8Array([0x9B,0xC4,0x91,0xCA,0xD7,0xCD]), // "R.Hand"
-      new Uint8Array([0x95,0xC4,0x91,0xCA,0xD7,0xCD]), // "L.Hand"
-      new Uint8Array([0x91,0xCE,0xCA,0xCD]),             // "Head"
-      new Uint8Array([0x8B,0xD8,0xCD,0xE2]),             // "Body"
-      new Uint8Array([0x8A,0xDB,0xD6,0xDC]),             // "Arms"
-    ];
-    const EQ_IDS = [-100, -101, -102, -103, -104];
-    const eqRowH = 22;
-    const eqStartY = finalY + 12;
-    // Dim slots during item selection (show which slot is being filled)
-    const dimSlots = pauseState === 'eq-items-in' || pauseState === 'eq-item-select' || pauseState === 'eq-items-out';
-    for (let r = 0; r < 5; r++) {
-      const slotId = getEquipSlotId(EQ_IDS[r]);
-      const label = EQ_LABELS[r];
-      const iy = eqStartY + r * eqRowH;
-      // Label on left
-      const labelPal = dimSlots ? [0x0F, 0x0F, 0x0F, 0x00] : fadedPal;
-      const activePal = (dimSlots && r === eqCursor) ? fadedPal : labelPal;
-      drawText(ctx, px + 24, iy, label, activePal);
-      // Equipped item name on right (after label)
-      if (slotId !== 0) {
-        const name = getItemNameClean(slotId);
-        drawText(ctx, px + 24, iy + 9, name, activePal);
-      } else {
-        const empty = new Uint8Array([0xC2,0xC2,0xC2]);
-        drawText(ctx, px + 24, iy + 9, empty, activePal);
-      }
-    }
-    // Optimum button (row 5, after a small gap)
-    const optY = eqStartY + 5 * eqRowH + 4;
-    const optPal = dimSlots ? [0x0F, 0x0F, 0x0F, 0x00] : fadedPal;
-    const optText = new Uint8Array([0x98,0xD9,0xDD,0xD2,0xD6,0xDE,0xD6]); // "Optimum"
-    drawText(ctx, px + 24, optY, optText, optPal);
-    // Cursor on equip slots or optimum (not during item selection)
-    if (cursorTileCanvas && (pauseState === 'equip') && fadeStep === 0) {
-      const curY = eqCursor < 5 ? eqStartY + eqCursor * eqRowH - 4 : optY - 4;
-      ctx.drawImage(cursorTileCanvas, px + 8, curY);
-    }
+  if (!showEqSlots) return;
+  let fadeStep = 0;
+  if (pauseState === 'eq-slots-in') {
+    fadeStep = PAUSE_TEXT_STEPS - Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
+  } else if (pauseState === 'eq-slots-out') {
+    fadeStep = Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
   }
-
-  // --- Equip item list (shown during item selection for a slot) ---
-  const showEqItems = pauseState === 'eq-items-in' || pauseState === 'eq-item-select' || pauseState === 'eq-items-out';
-  if (showEqItems) {
-    let fadeStep = 0;
-    if (pauseState === 'eq-items-in') {
-      fadeStep = PAUSE_TEXT_STEPS - Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
-    } else if (pauseState === 'eq-items-out') {
-      fadeStep = Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
-    }
-    const fadedPal = [0x0F, 0x0F, 0x0F, 0x30];
-    for (let s = 0; s < fadeStep; s++) fadedPal[3] = nesColorFade(fadedPal[3]);
-
-    // Draw a blue separator line or just list items in the right portion
-    const listX = px + 24;
-    const listY = finalY + 12 + eqCursor * 22 + 22; // below the selected slot
-    // If not enough room below, draw above
-    const maxBelow = Math.floor((finalY + HUD_VIEW_H - 16 - listY) / 12);
-    const useY = maxBelow >= eqItemList.length ? listY : finalY + 12;
-
-    if (eqItemList.length === 0) {
-      const noItems = new Uint8Array([0xC2,0xC2,0xC2]);
-      drawText(ctx, listX, useY, noItems, fadedPal);
+  const fadedPal = [0x0F, 0x0F, 0x0F, 0x30];
+  for (let s = 0; s < fadeStep; s++) fadedPal[3] = nesColorFade(fadedPal[3]);
+  const EQ_LABELS = [
+    new Uint8Array([0x9B,0xC4,0x91,0xCA,0xD7,0xCD]),
+    new Uint8Array([0x95,0xC4,0x91,0xCA,0xD7,0xCD]),
+    new Uint8Array([0x91,0xCE,0xCA,0xCD]),
+    new Uint8Array([0x8B,0xD8,0xCD,0xE2]),
+    new Uint8Array([0x8A,0xDB,0xD6,0xDC]),
+  ];
+  const EQ_IDS = [-100, -101, -102, -103, -104];
+  const eqRowH = 22;
+  const eqStartY = finalY + 12;
+  const dimSlots = pauseState === 'eq-items-in' || pauseState === 'eq-item-select' || pauseState === 'eq-items-out';
+  for (let r = 0; r < 5; r++) {
+    const slotId = getEquipSlotId(EQ_IDS[r]);
+    const label = EQ_LABELS[r];
+    const iy = eqStartY + r * eqRowH;
+    const labelPal  = dimSlots ? [0x0F, 0x0F, 0x0F, 0x00] : fadedPal;
+    const activePal = (dimSlots && r === eqCursor) ? fadedPal : labelPal;
+    drawText(ctx, px + 24, iy, label, activePal);
+    if (slotId !== 0) {
+      drawText(ctx, px + 24, iy + 9, getItemNameClean(slotId), activePal);
     } else {
-      for (let i = 0; i < eqItemList.length; i++) {
-        const entry = eqItemList[i];
-        const iy = useY + i * 12;
-        if (iy + 8 > finalY + HUD_VIEW_H - 8) break; // clip
-        if (entry.label === 'remove') {
-          const removeText = new Uint8Array([0x9B,0xCE,0xD6,0xD8,0xDF,0xCE]); // "Remove"
-          drawText(ctx, listX + 16, iy, removeText, fadedPal);
-        } else {
-          const name = getItemNameClean(entry.id);
-          drawText(ctx, listX + 16, iy, name, fadedPal);
-        }
-      }
-      // Cursor
-      if (cursorTileCanvas && pauseState === 'eq-item-select' && fadeStep === 0) {
-        const curY = useY + eqItemCursor * 12 - 4;
-        ctx.drawImage(cursorTileCanvas, listX, curY);
-      }
+      drawText(ctx, px + 24, iy + 9, new Uint8Array([0xC2,0xC2,0xC2]), activePal);
     }
   }
-
+  const optY   = eqStartY + 5 * eqRowH + 4;
+  const optPal  = dimSlots ? [0x0F, 0x0F, 0x0F, 0x00] : fadedPal;
+  const optText = new Uint8Array([0x98,0xD9,0xDD,0xD2,0xD6,0xDE,0xD6]);
+  drawText(ctx, px + 24, optY, optText, optPal);
+  if (cursorTileCanvas && pauseState === 'equip' && fadeStep === 0) {
+    const curY = eqCursor < 5 ? eqStartY + eqCursor * eqRowH - 4 : optY - 4;
+    ctx.drawImage(cursorTileCanvas, px + 8, curY);
+  }
+}
+function _drawPauseEquipItems() {
+  const px = HUD_VIEW_X, finalY = HUD_VIEW_Y;
+  const showEqItems = pauseState === 'eq-items-in' || pauseState === 'eq-item-select' || pauseState === 'eq-items-out';
+  if (!showEqItems) return;
+  let fadeStep = 0;
+  if (pauseState === 'eq-items-in') {
+    fadeStep = PAUSE_TEXT_STEPS - Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
+  } else if (pauseState === 'eq-items-out') {
+    fadeStep = Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
+  }
+  const fadedPal = [0x0F, 0x0F, 0x0F, 0x30];
+  for (let s = 0; s < fadeStep; s++) fadedPal[3] = nesColorFade(fadedPal[3]);
+  const listX = px + 24;
+  const listY = finalY + 12 + eqCursor * 22 + 22;
+  const maxBelow = Math.floor((finalY + HUD_VIEW_H - 16 - listY) / 12);
+  const useY = maxBelow >= eqItemList.length ? listY : finalY + 12;
+  if (eqItemList.length === 0) {
+    drawText(ctx, listX, useY, new Uint8Array([0xC2,0xC2,0xC2]), fadedPal);
+  } else {
+    for (let i = 0; i < eqItemList.length; i++) {
+      const entry = eqItemList[i];
+      const iy = useY + i * 12;
+      if (iy + 8 > finalY + HUD_VIEW_H - 8) break;
+      if (entry.label === 'remove') {
+        drawText(ctx, listX + 16, iy, new Uint8Array([0x9B,0xCE,0xD6,0xD8,0xDF,0xCE]), fadedPal);
+      } else {
+        drawText(ctx, listX + 16, iy, getItemNameClean(entry.id), fadedPal);
+      }
+    }
+    if (cursorTileCanvas && pauseState === 'eq-item-select' && fadeStep === 0) {
+      ctx.drawImage(cursorTileCanvas, listX, useY + eqItemCursor * 12 - 4);
+    }
+  }
+}
+function drawPauseMenu() {
+  if (pauseState === 'none') return;
+  _drawPauseBox();
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
+  ctx.clip();
+  _drawPauseMenuText();
+  _drawPauseInventory();
+  _drawPauseEquipSlots();
+  _drawPauseEquipItems();
   ctx.restore();
-
-  // Target cursor on portrait during inv-target — drawn AFTER border+restore so it's on top, unclipped
+  // Target cursor on portrait — drawn after restore so it's unclipped
   if (pauseState === 'inv-target' && cursorTileCanvas) {
     if (pauseInvAllyTarget >= 0) {
-      // Cursor on selected roster player row in right panel
       const visRow = pauseInvAllyTarget - rosterScroll;
       if (visRow >= 0 && visRow < ROSTER_VISIBLE) {
         ctx.drawImage(cursorTileCanvas, HUD_RIGHT_X - 4, HUD_VIEW_Y + 32 + visRow * ROSTER_ROW_H + 12);
       }
     } else {
-      // Cursor on player portrait
       ctx.drawImage(cursorTileCanvas, HUD_RIGHT_X - 4, HUD_VIEW_Y + 12);
     }
   }
 }
+
 
 // --- Slash Sprites (procedural) ---
 
@@ -9357,6 +9239,86 @@ function drawBattle() {
 
 // drawRoarBox removed — now uses universal msgBox
 
+function _drawBattleItemPanel(menuX) {
+  const baseX = menuX;
+  const ITEM_SLIDE_MS = 200;
+  const rowH = 14;
+  const rightAreaW = CANVAS_W - BATTLE_PANEL_W - 8;
+  const invPal = [0x0F, 0x0F, 0x0F, 0x30];
+  let invFadeStep = 0;
+  if (battleState === 'item-list-in') invFadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
+  else if (battleState === 'item-cancel-out' || battleState === 'item-list-out') invFadeStep = Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
+  for (let s = 0; s < invFadeStep; s++) invPal[3] = nesColorFade(invPal[3]);
+
+  const totalInvPages = Math.max(1, Math.ceil(itemSelectList.length / INV_SLOTS));
+  let slidePixel = 0;
+  if (battleState === 'item-slide') {
+    const t = Math.min(battleTimer / ITEM_SLIDE_MS, 1);
+    slidePixel = itemSlideDir * t * rightAreaW;
+  }
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(baseX - 8, HUD_BOT_Y + 8, rightAreaW + 8, HUD_BOT_H - 16);
+  ctx.clip();
+
+  const topY = HUD_BOT_Y + 12;
+  for (let pg = 0; pg <= 1 + totalInvPages; pg++) {
+    const pageOff = (pg - itemPage) * rightAreaW + slidePixel;
+    const px = baseX + pageOff;
+    if (px > baseX + rightAreaW || px < baseX - rightAreaW) continue;
+    if (pg === 0) {
+      const RH_LABEL = new Uint8Array([0x9B,0x91,0xFF]);
+      const LH_LABEL = new Uint8Array([0x95,0x91,0xFF]);
+      const rName = playerWeaponR !== 0 ? getItemNameClean(playerWeaponR) : new Uint8Array([0xC2,0xC2,0xC2]);
+      const rRow = new Uint8Array(RH_LABEL.length + rName.length);
+      rRow.set(RH_LABEL, 0); rRow.set(rName, RH_LABEL.length);
+      drawText(ctx, px + 8, topY, rRow, invPal);
+      const lName = playerWeaponL !== 0 ? getItemNameClean(playerWeaponL) : new Uint8Array([0xC2,0xC2,0xC2]);
+      const lRow = new Uint8Array(LH_LABEL.length + lName.length);
+      lRow.set(LH_LABEL, 0); lRow.set(lName, LH_LABEL.length);
+      drawText(ctx, px + 8, topY + rowH + 6, lRow, invPal);
+    } else {
+      const startIdx = (pg - 1) * INV_SLOTS;
+      for (let r = 0; r < INV_SLOTS; r++) {
+        const idx = startIdx + r;
+        if (idx >= itemSelectList.length) break;
+        const item = itemSelectList[idx];
+        if (!item) continue;
+        const nameBytes = getItemNameClean(item.id);
+        const countStr = String(item.count);
+        const rowBytes = new Uint8Array(nameBytes.length + 2 + countStr.length);
+        rowBytes.set(nameBytes, 0);
+        rowBytes[nameBytes.length] = 0xFF;
+        rowBytes[nameBytes.length + 1] = 0xE1;
+        for (let d = 0; d < countStr.length; d++) rowBytes[nameBytes.length + 2 + d] = 0x80 + parseInt(countStr[d]);
+        drawText(ctx, px + 8, topY + r * rowH, rowBytes, invPal);
+      }
+    }
+  }
+  ctx.restore();
+
+  // Cursors drawn outside clip
+  function _rowY(page, row) {
+    if (page === 0) return topY + row * (rowH + 6);
+    return topY + row * rowH;
+  }
+  if (cursorTileCanvas && battleState === 'item-select') {
+    const curPx = baseX - 8;
+    const cursorY = _rowY(itemPage, itemPageCursor) - 4;
+    if (itemHeldIdx !== -1) {
+      const heldIsEq = itemHeldIdx <= -100;
+      let heldPage, heldRow;
+      if (heldIsEq) { heldPage = 0; heldRow = -(itemHeldIdx + 100); }
+      else { heldPage = 1 + Math.floor(itemHeldIdx / INV_SLOTS); heldRow = itemHeldIdx % INV_SLOTS; }
+      if (heldPage === itemPage) {
+        ctx.drawImage(cursorTileCanvas, curPx, _rowY(heldPage, heldRow) - 4);
+      }
+    }
+    const activeX = itemHeldIdx !== -1 ? curPx - 4 : curPx;
+    ctx.drawImage(cursorTileCanvas, activeX, cursorY);
+  }
+}
 function drawBattleMenu() {
   const isSlide = battleState === 'boss-box-expand' || battleState === 'encounter-box-expand';
   const isAppear = battleState === 'boss-appear' || battleState === 'monster-slide-in';
@@ -9383,69 +9345,50 @@ function drawBattleMenu() {
   const isRunBox = battleState.startsWith('run-');
   if (!isSlide && !isAppear && !isMenu && !isVictory) return;
 
-  // Whole-panel horizontal slide: in from left, out to left
   let panelOffX = 0;
   const isClose = battleState === 'victory-box-close' || battleState === 'encounter-box-close' || battleState === 'boss-box-close' || battleState === 'defeat-close';
   if (isSlide) {
-    const t = Math.min(battleTimer / BOSS_BOX_EXPAND_MS, 1);
-    panelOffX = Math.round(-CANVAS_W * (1 - t));
+    panelOffX = Math.round(-CANVAS_W * (1 - Math.min(battleTimer / BOSS_BOX_EXPAND_MS, 1)));
   } else if (isClose) {
-    const t = Math.min(battleTimer / (VICTORY_BOX_ROWS * VICTORY_ROW_FRAME_MS), 1);
-    panelOffX = Math.round(-CANVAS_W * t);
+    panelOffX = Math.round(-CANVAS_W * Math.min(battleTimer / (VICTORY_BOX_ROWS * VICTORY_ROW_FRAME_MS), 1));
   }
 
   ctx.save();
-  // Clip to bottom panel interior (full height, inset left/right 8px for HUD border)
   ctx.beginPath();
   ctx.rect(8, HUD_BOT_Y, CANVAS_W - 16, HUD_BOT_H);
   ctx.clip();
   ctx.translate(panelOffX, 0);
-
-  // Clear bottom panel interior
   ctx.fillStyle = '#000';
   ctx.fillRect(8, HUD_BOT_Y + 8, CANVAS_W - 16, HUD_BOT_H - 16);
 
-  // Left bordered box — skip during victory/run states (drawVictoryBox handles left area)
   const boxW = BATTLE_PANEL_W;
   const boxH = HUD_BOT_H;
   if ((!isVictory && !isRunBox) || (battleState === 'encounter-box-close' && runSlideBack)) {
     _drawBorderedBox(0, HUD_BOT_Y, boxW, boxH);
   }
-
-  // Text only after slide + dissolve complete (or during victory for right side)
   if (!isMenu && !isVictory) { ctx.restore(); return; }
 
   let fadeStep = 0;
   if (isFade) {
     fadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
   }
-
   const fadedPal = [0x0F, 0x0F, 0x0F, 0x30];
   for (let s = 0; s < fadeStep; s++) fadedPal[3] = nesColorFade(fadedPal[3]);
 
-  // Enemy name centered in left box (skip during victory/run — drawVictoryBox handles it)
   if (!isVictory && !isRunBox) {
     const enemyName = _battleEnemyName();
     const nameTw = measureText(enemyName);
-    const nameX = Math.floor((boxW - nameTw) / 2);
-    const nameY = HUD_BOT_Y + Math.floor((boxH - 8) / 2);
-    drawText(ctx, nameX, nameY, enemyName, fadedPal);
+    drawText(ctx, Math.floor((boxW - nameTw) / 2), HUD_BOT_Y + Math.floor((boxH - 8) / 2), enemyName, fadedPal);
   }
 
-  // 2×2 menu grid on right side of bottom panel (visible during combat AND victory)
   const menuX = boxW + 8;
-  const colL = menuX;
-  const colR = menuX + 56;
-  const row0 = HUD_BOT_Y + 16;
-  const row1 = HUD_BOT_Y + 32;
+  const colL = menuX, colR = menuX + 56;
+  const row0 = HUD_BOT_Y + 16, row1 = HUD_BOT_Y + 32;
   const positions = [[colL, row0], [colR, row0], [colL, row1], [colR, row1]];
 
-  // During victory, draw menu text at full brightness — except during menu fade-out
-  // After menu fade completes (victory-box-close), hide text entirely
   const isMenuFade = battleState === 'victory-menu-fade';
   const isItemMenuOut = battleState === 'item-menu-out';
   const isItemMenuIn = battleState === 'item-cancel-in' || battleState === 'item-use-menu-in';
-  // Hide menu text during item-select/list/slide states — inventory/equip draws instead
   const isItemShowInv = battleState === 'item-list-in' || battleState === 'item-select' ||
     battleState === 'item-cancel-out' || battleState === 'item-list-out' || battleState === 'item-slide' ||
     battleState === 'item-target-select';
@@ -9467,116 +9410,11 @@ function drawBattleMenu() {
     }
   }
 
-  // Draw inventory / equipment on right side during item states
-  if (isItemShowInv) {
-    const ITEM_SLIDE_MS = 200;
-    const rowH = 14;
-    const rightAreaW = CANVAS_W - BATTLE_PANEL_W - 8;
-    const baseX = menuX;
-    const invPal = [0x0F, 0x0F, 0x0F, 0x30];
-    // NES text fade on entry/exit
-    let invFadeStep = 0;
-    if (battleState === 'item-list-in') invFadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
-    else if (battleState === 'item-cancel-out' || battleState === 'item-list-out') invFadeStep = Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
-    for (let s = 0; s < invFadeStep; s++) invPal[3] = nesColorFade(invPal[3]);
+  if (isItemShowInv) _drawBattleItemPanel(menuX);
 
-    // Page layout: page 0 = equip, pages 1+ = inventory (INV_SLOTS per page)
-    const totalInvPages = Math.max(1, Math.ceil(itemSelectList.length / INV_SLOTS));
-    // Slide offset: each page is rightAreaW wide, current page at offset 0
-    let slidePixel = 0;
-    if (battleState === 'item-slide') {
-      const t = Math.min(battleTimer / ITEM_SLIDE_MS, 1);
-      slidePixel = itemSlideDir * t * rightAreaW; // +rightAreaW = sliding right, -rightAreaW = sliding left
-    }
-
-    // Clip to right panel area
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(baseX - 8, HUD_BOT_Y + 8, rightAreaW + 8, HUD_BOT_H - 16);
-    ctx.clip();
-
-    const topY = HUD_BOT_Y + 12;
-
-    // Draw visible pages (current page + neighbor being slid to)
-    for (let pg = 0; pg <= 1 + totalInvPages; pg++) {
-      const pageOff = (pg - itemPage) * rightAreaW + slidePixel;
-      const px = baseX + pageOff;
-      // Skip pages fully off-screen
-      if (px > baseX + rightAreaW || px < baseX - rightAreaW) continue;
-
-      if (pg === 0) {
-        // Equipment page — "RH WeaponName" / "LH WeaponName"
-        const RH_LABEL = new Uint8Array([0x9B,0x91,0xFF]); // "RH "
-        const LH_LABEL = new Uint8Array([0x95,0x91,0xFF]); // "LH "
-        const rName = playerWeaponR !== 0 ? getItemNameClean(playerWeaponR) : new Uint8Array([0xC2,0xC2,0xC2]);
-        const rRow = new Uint8Array(RH_LABEL.length + rName.length);
-        rRow.set(RH_LABEL, 0); rRow.set(rName, RH_LABEL.length);
-        drawText(ctx, px + 8, topY, rRow, invPal);
-        const lName = playerWeaponL !== 0 ? getItemNameClean(playerWeaponL) : new Uint8Array([0xC2,0xC2,0xC2]);
-        const lRow = new Uint8Array(LH_LABEL.length + lName.length);
-        lRow.set(LH_LABEL, 0); lRow.set(lName, LH_LABEL.length);
-        drawText(ctx, px + 8, topY + rowH + 6, lRow, invPal);
-      } else {
-        // Inventory page
-        const startIdx = (pg - 1) * INV_SLOTS;
-        for (let r = 0; r < INV_SLOTS; r++) {
-          const idx = startIdx + r;
-          if (idx >= itemSelectList.length) break;
-          const item = itemSelectList[idx];
-          if (!item) continue;
-          const nameBytes = getItemNameClean(item.id);
-          const countStr = String(item.count);
-          const rowBytes = new Uint8Array(nameBytes.length + 2 + countStr.length);
-          rowBytes.set(nameBytes, 0);
-          rowBytes[nameBytes.length] = 0xFF;
-          rowBytes[nameBytes.length + 1] = 0xE1;
-          for (let d = 0; d < countStr.length; d++) rowBytes[nameBytes.length + 2 + d] = 0x80 + parseInt(countStr[d]);
-          drawText(ctx, px + 8, topY + r * rowH, rowBytes, invPal);
-        }
-      }
-    }
-
-    ctx.restore();
-
-    // -- Cursors drawn OUTSIDE clip so they render over borders --
-    // Row Y helper: equip page has 6px gap between rows
-    function _rowY(page, row) {
-      if (page === 0) return topY + row * (rowH + 6);
-      return topY + row * rowH;
-    }
-
-    if (cursorTileCanvas && battleState === 'item-select') {
-      const curPx = baseX - 8;
-      const cursorY = _rowY(itemPage, itemPageCursor) - 4;
-
-      // Pinned cursor at held item (if on current page)
-      if (itemHeldIdx !== -1) {
-        const heldIsEq = itemHeldIdx <= -100;
-        let heldPage, heldRow;
-        if (heldIsEq) {
-          heldPage = 0;
-          heldRow = -(itemHeldIdx + 100);
-        } else {
-          heldPage = 1 + Math.floor(itemHeldIdx / INV_SLOTS);
-          heldRow = itemHeldIdx % INV_SLOTS;
-        }
-        if (heldPage === itemPage) {
-          const pinY = _rowY(heldPage, heldRow) - 4;
-          ctx.drawImage(cursorTileCanvas, curPx, pinY);
-        }
-      }
-
-      // Active cursor (ghost — offset 4px left if holding)
-      const activeX = itemHeldIdx !== -1 ? curPx - 4 : curPx;
-      ctx.drawImage(cursorTileCanvas, activeX, cursorY);
-    }
-  }
-
-  // Hand cursor (hidden during target-select and victory states)
   if (cursorTileCanvas && (battleState === 'menu-open' || isFade) && battleState !== 'target-select') {
-    const ci = battleCursor;
-    const curX = positions[ci][0] - 16;
-    const curY = positions[ci][1] - 4;
+    const curX = positions[battleCursor][0] - 16;
+    const curY = positions[battleCursor][1] - 4;
     if (fadeStep === 0) {
       ctx.drawImage(cursorTileCanvas, curX, curY);
     } else if (fadeStep < BATTLE_TEXT_STEPS) {
@@ -9587,6 +9425,7 @@ function drawBattleMenu() {
   }
   ctx.restore();
 }
+
 
 function _encounterBoxDims() {
   if (!encounterMonsters) return { fullW: 64, fullH: 64, sprH: 32 };
@@ -9805,6 +9644,174 @@ function drawEncounterBox() {
   ctx.restore();
 }
 
+function _drawBossSpriteBoxPVP(centerX, centerY) {
+  const isExpand = battleState === 'boss-box-expand';
+  const isClose = battleState === 'boss-box-close' || (!isRandomEncounter && battleState === 'defeat-close');
+  const totalEnemies = 1 + pvpEnemyAllies.length;
+  const cols = totalEnemies <= 1 ? 1 : 2;
+  const rows = totalEnemies <= 2 ? 1 : 2;
+  const cellW = 24, cellH = 32;
+  const pvpBoxW = cols * cellW + 16;
+  const pvpBoxH = rows * cellH + 16;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
+  ctx.clip();
+  ctx.imageSmoothingEnabled = false;
+
+  let drawW = pvpBoxW, drawH = pvpBoxH;
+  let resizeT = 1;
+  if (isExpand) {
+    const t = Math.min(battleTimer / BOSS_BOX_EXPAND_MS, 1);
+    drawW = Math.max(16, Math.ceil(pvpBoxW * t / 8) * 8);
+    drawH = Math.max(16, Math.ceil(pvpBoxH * t / 8) * 8);
+  } else if (isClose) {
+    const t = 1 - Math.min(battleTimer / BOSS_BOX_EXPAND_MS, 1);
+    drawW = Math.max(16, Math.ceil(pvpBoxW * t / 8) * 8);
+    drawH = Math.max(16, Math.ceil(pvpBoxH * t / 8) * 8);
+  } else if (battleState === 'pvp-ally-appear') {
+    resizeT = Math.min(battleTimer / PVP_BOX_RESIZE_MS, 1);
+    drawW = Math.round(pvpBoxResizeFromW + (pvpBoxW - pvpBoxResizeFromW) * resizeT);
+    drawH = Math.round(pvpBoxResizeFromH + (pvpBoxH - pvpBoxResizeFromH) * resizeT);
+  }
+  _drawBorderedBox(centerX - Math.floor(drawW / 2), centerY - Math.floor(drawH / 2), drawW, drawH);
+
+  const visibleAllies = resizeT >= 1 ? pvpEnemyAllies.length : pvpEnemyAllies.length - 1;
+
+  if (!isExpand && !isClose && battleState !== 'defeat-text') {
+    const gridPos = [[rows-1,cols-1],[rows-1,0],[0,cols-1],[0,0]];
+    const intLeft = centerX - cols * Math.floor(cellW / 2);
+    const intTop  = centerY - rows * Math.floor(cellH / 2);
+    const allEnemies = [pvpOpponentStats, ...pvpEnemyAllies.slice(0, visibleAllies)];
+    allEnemies.forEach((enemy, idx) => {
+      if (!enemy) return;
+      const [gr, gc] = gridPos[idx] || [0, 0];
+      const targetX = intLeft + gc * cellW + 4;
+      const targetY = intTop  + gr * cellH + 4;
+      let sprX = targetX, sprY = targetY;
+      if (battleState === 'pvp-ally-appear' && pvpEnemySlidePosFrom[idx]) {
+        const from = pvpEnemySlidePosFrom[idx];
+        sprX = Math.round(from.x + (targetX - from.x) * resizeT);
+        sprY = Math.round(from.y + (targetY - from.y) * resizeT);
+      }
+      const isMain = idx === 0;
+      const palIdx = enemy.palIdx;
+      const fullBody = fakePlayerFullBodyCanvases[palIdx] || fakePlayerFullBodyCanvases[0];
+      if (!fullBody) return;
+      if (isMain && bossDefeated) return;
+
+      const isThisAttacking = isMain ? pvpCurrentEnemyAllyIdx < 0 : pvpCurrentEnemyAllyIdx === idx - 1;
+      const isOppAttack = isThisAttacking && (battleState === 'boss-flash' || battleState === 'pvp-second-windup' || battleState === 'enemy-attack' || battleState === 'enemy-damage-show');
+      const isOppHit = isMain && (
+        (battleState === 'player-slash' && hitResults && hitResults[currentHitIdx] && !hitResults[currentHitIdx].miss) ||
+        battleState === 'player-hit-show' || battleState === 'player-damage-show' ||
+        (battleState === 'ally-slash' && allyHitResult && !allyHitResult.miss) ||
+        battleState === 'ally-damage-show');
+      const blinkHidden = isMain && (
+        (battleState === 'player-slash' && hitResults && hitResults[currentHitIdx] && !hitResults[currentHitIdx].miss) ||
+        (battleState === 'ally-slash' && allyHitResult && !allyHitResult.miss)
+      ) && (Math.floor(battleTimer / 60) & 1);
+      const flashFrame = isThisAttacking && (battleState === 'boss-flash' || battleState === 'pvp-second-windup') ? Math.floor(battleTimer / (BOSS_PREFLASH_MS / 8)) : 0;
+      const flashHidden = isThisAttacking && (battleState === 'boss-flash' || battleState === 'pvp-second-windup') && (flashFrame & 1);
+      if (blinkHidden || flashHidden) return;
+
+      let poseSrc = null, atkFullBody = null;
+      if (isOppHit && fakePlayerHitPortraits[palIdx]) poseSrc = fakePlayerHitPortraits[palIdx][0];
+
+      if (isOppHit && fakePlayerHitFullBodyCanvases[palIdx]) {
+        ctx.drawImage(fakePlayerHitFullBodyCanvases[palIdx], sprX, sprY);
+      } else if (atkFullBody) {
+        ctx.drawImage(atkFullBody, sprX, sprY);
+      } else if (poseSrc) {
+        ctx.drawImage(fullBody, 0, 16, 16, 8, sprX, sprY + 16, 16, 8);
+        ctx.save(); ctx.translate(sprX + 16, sprY); ctx.scale(-1, 1);
+        ctx.drawImage(poseSrc, 0, 0); ctx.restore();
+      } else {
+        ctx.drawImage(fullBody, sprX, sprY);
+      }
+
+      if (isMain) {
+        if (battleState === 'player-slash' && slashFrames && slashFrame < SLASH_FRAMES &&
+            hitResults && hitResults[currentHitIdx] && !hitResults[currentHitIdx].miss) {
+          ctx.drawImage(slashFrames[slashFrame], sprX + slashOffX, sprY + slashOffY);
+        }
+        if (battleState === 'ally-slash' && allyHitResult && !allyHitResult.miss) {
+          const ally = battleAllies[currentAllyAttacker];
+          const aSlashF = ally ? getSlashFramesForWeapon(ally.weaponId, true) : slashFramesR;
+          const af = Math.min(Math.floor(battleTimer / 67), 2);
+          if (aSlashF && aSlashF[af]) ctx.drawImage(aSlashF[af], sprX + [0,10,-8][af], sprY + [0,-6,8][af]);
+        }
+      }
+    });
+  }
+
+  ctx.restore();
+}
+function _drawBossSpriteBoxBoss(centerX, centerY) {
+  const isExpand = battleState === 'boss-box-expand';
+  const isClose = battleState === 'boss-box-close' || (!isRandomEncounter && battleState === 'defeat-close');
+  const isAppear = battleState === 'boss-appear';
+  const isDissolve = battleState === 'boss-dissolve';
+  const fullW = 64, fullH = 64;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
+  ctx.clip();
+
+  let boxW = fullW, boxH = fullH;
+  if (isExpand) {
+    const t = Math.min(battleTimer / BOSS_BOX_EXPAND_MS, 1);
+    boxW = Math.max(16, Math.ceil(fullW * t / 8) * 8);
+    boxH = Math.max(16, Math.ceil(fullH * t / 8) * 8);
+  } else if (isClose) {
+    const t = 1 - Math.min(battleTimer / BOSS_BOX_EXPAND_MS, 1);
+    boxW = Math.max(16, Math.ceil(fullW * t / 8) * 8);
+    boxH = Math.max(16, Math.ceil(fullH * t / 8) * 8);
+  }
+  _drawBorderedBox(centerX - Math.floor(boxW / 2), centerY - Math.floor(boxH / 2), boxW, boxH);
+
+  if (isExpand || isClose || battleState === 'defeat-text') { ctx.restore(); return; }
+
+  const sprX = centerX - 24;
+  const sprY = centerY - 24;
+  ctx.imageSmoothingEnabled = false;
+
+  if (isAppear || isDissolve) {
+    _drawDissolvedSprite(sprX, sprY, isDissolve);
+  } else if (battleState === 'boss-flash') {
+    const frame = Math.floor(battleTimer / (BOSS_PREFLASH_MS / 8));
+    if (!bossDefeated) {
+      ctx.drawImage((frame & 1) ? (landTurtleWhiteCanvas || landTurtleBattleCanvas) : landTurtleBattleCanvas, sprX, sprY);
+    }
+  } else if (battleState === 'player-slash') {
+    const blinkHidden = Math.floor(battleTimer / 60) & 1;
+    if (!blinkHidden && !bossDefeated) ctx.drawImage(landTurtleBattleCanvas, sprX, sprY);
+    if (slashFrames && slashFrame < SLASH_FRAMES && !bossDefeated && hitResults && hitResults[currentHitIdx] && !hitResults[currentHitIdx].miss) {
+      ctx.drawImage(slashFrames[slashFrame], centerX - 8 + slashOffX, centerY - 8 + slashOffY);
+    }
+  } else if (battleState === 'ally-slash') {
+    const blinkHidden = allyHitResult && !allyHitResult.miss && (Math.floor(battleTimer / 60) & 1);
+    if (!blinkHidden && !bossDefeated) ctx.drawImage(landTurtleBattleCanvas, sprX, sprY);
+    if (!bossDefeated && allyHitResult && !allyHitResult.miss) {
+      const ally = battleAllies[currentAllyAttacker];
+      const allySlashFrames = ally ? getSlashFramesForWeapon(ally.weaponId, true) : slashFramesR;
+      const af = Math.min(Math.floor(battleTimer / 67), 2);
+      if (allySlashFrames && allySlashFrames[af]) {
+        ctx.drawImage(allySlashFrames[af], centerX - 8 + [0,10,-8][af], centerY - 8 + [0,-6,8][af]);
+      }
+    }
+  } else {
+    if (!bossDefeated) ctx.drawImage(landTurtleBattleCanvas, sprX, sprY);
+  }
+
+  if ((battleState === 'target-select' || (battleState === 'item-target-select' && itemTargetType === 'enemy')) && cursorTileCanvas) {
+    ctx.drawImage(cursorTileCanvas, centerX - 32 - 16, centerY - 8);
+  }
+
+  ctx.restore();
+}
 function drawBossSpriteBox() {
   if (isRandomEncounter) return;
   if (!isPVPBattle && !landTurtleBattleCanvas) return;
@@ -9834,212 +9841,13 @@ function drawBossSpriteBox() {
   const centerX = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2);
   const centerY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
 
-  // PVP: bordered box that grows as enemy allies join, always centered
   if (isPVPBattle) {
-    const totalEnemies = 1 + pvpEnemyAllies.length;  // target size
-    const cols = totalEnemies <= 1 ? 1 : 2;
-    const rows = totalEnemies <= 2 ? 1 : 2;
-    const cellW = 24, cellH = 32;
-    const pvpBoxW = cols * cellW + 16;
-    const pvpBoxH = rows * cellH + 16;
-    // Grid layout uses target size (matches where sprites will be after resize)
-    const visCols = cols;
-    const visRows = rows;
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
-    ctx.clip();
-    ctx.imageSmoothingEnabled = false;
-
-    let drawW = pvpBoxW, drawH = pvpBoxH;
-    let resizeT = 1;
-    if (isExpand) {
-      const t = Math.min(battleTimer / BOSS_BOX_EXPAND_MS, 1);
-      drawW = Math.max(16, Math.ceil(pvpBoxW * t / 8) * 8);
-      drawH = Math.max(16, Math.ceil(pvpBoxH * t / 8) * 8);
-    } else if (isClose) {
-      const t = 1 - Math.min(battleTimer / BOSS_BOX_EXPAND_MS, 1);
-      drawW = Math.max(16, Math.ceil(pvpBoxW * t / 8) * 8);
-      drawH = Math.max(16, Math.ceil(pvpBoxH * t / 8) * 8);
-    } else if (battleState === 'pvp-ally-appear') {
-      resizeT = Math.min(battleTimer / PVP_BOX_RESIZE_MS, 1);
-      drawW = Math.round(pvpBoxResizeFromW + (pvpBoxW - pvpBoxResizeFromW) * resizeT);
-      drawH = Math.round(pvpBoxResizeFromH + (pvpBoxH - pvpBoxResizeFromH) * resizeT);
-    }
-    _drawBorderedBox(centerX - Math.floor(drawW / 2), centerY - Math.floor(drawH / 2), drawW, drawH);
-
-    // New ally only appears after box finishes expanding
-    const visibleAllies = resizeT >= 1 ? pvpEnemyAllies.length : pvpEnemyAllies.length - 1;
-
-    if (!isExpand && !isClose && battleState !== 'defeat-text') {
-      // Grid positions: index 0=pvpOpponent (bottom-right), 1=bottom-left, 2=top-right, 3=top-left
-      const gridPos = [
-        [rows - 1, cols - 1],
-        [rows - 1, 0],
-        [0, cols - 1],
-        [0, 0],
-      ];
-      const intLeft = centerX - cols * Math.floor(cellW / 2);
-      const intTop  = centerY - rows * Math.floor(cellH / 2);
-
-      const allEnemies = [pvpOpponentStats, ...pvpEnemyAllies.slice(0, visibleAllies)];
-      allEnemies.forEach((enemy, idx) => {
-        if (!enemy) return;
-        const [gr, gc] = gridPos[idx] || [0, 0];
-        const targetX = intLeft + gc * cellW + 4;
-        const targetY = intTop  + gr * cellH + 4;
-        // Slide existing enemies from old position to new during pvp-ally-appear
-        let sprX = targetX, sprY = targetY;
-        if (battleState === 'pvp-ally-appear' && pvpEnemySlidePosFrom[idx]) {
-          const from = pvpEnemySlidePosFrom[idx];
-          sprX = Math.round(from.x + (targetX - from.x) * resizeT);
-          sprY = Math.round(from.y + (targetY - from.y) * resizeT);
-        }
-        const isMain = idx === 0;
-        const palIdx = enemy.palIdx;
-        const fullBody = fakePlayerFullBodyCanvases[palIdx] || fakePlayerFullBodyCanvases[0];
-        if (!fullBody) return;
-        if (isMain && bossDefeated) return;
-
-        // Which enemy in the grid is currently taking their attack turn
-        const isThisAttacking = isMain ? pvpCurrentEnemyAllyIdx < 0 : pvpCurrentEnemyAllyIdx === idx - 1;
-        const isOppAttack = isThisAttacking && (battleState === 'boss-flash' || battleState === 'pvp-second-windup' || battleState === 'enemy-attack' || battleState === 'enemy-damage-show');
-        const isOppHit = isMain && (
-          (battleState === 'player-slash' && hitResults && hitResults[currentHitIdx] && !hitResults[currentHitIdx].miss) ||
-          battleState === 'player-hit-show' || battleState === 'player-damage-show' ||
-          (battleState === 'ally-slash' && allyHitResult && !allyHitResult.miss) ||
-          battleState === 'ally-damage-show');
-        const blinkHidden = isMain && (
-          (battleState === 'player-slash' && hitResults && hitResults[currentHitIdx] && !hitResults[currentHitIdx].miss) ||
-          (battleState === 'ally-slash' && allyHitResult && !allyHitResult.miss)
-        ) && (Math.floor(battleTimer / 60) & 1);
-        const flashFrame = isThisAttacking && (battleState === 'boss-flash' || battleState === 'pvp-second-windup') ? Math.floor(battleTimer / (BOSS_PREFLASH_MS / 8)) : 0;
-        const flashHidden = isThisAttacking && (battleState === 'boss-flash' || battleState === 'pvp-second-windup') && (flashFrame & 1);
-        if (blinkHidden || flashHidden) return;
-
-        let poseSrc = null;
-        let atkFullBody = null;
-        if (isOppHit && fakePlayerHitPortraits[palIdx]) poseSrc = fakePlayerHitPortraits[palIdx][0];
-
-        if (isOppHit && fakePlayerHitFullBodyCanvases[palIdx]) {
-          ctx.drawImage(fakePlayerHitFullBodyCanvases[palIdx], sprX, sprY);
-        } else if (atkFullBody) {
-          ctx.drawImage(atkFullBody, sprX, sprY);
-        } else if (poseSrc) {
-          // fist/sword: idle legs + attack portrait h-flipped on top
-          ctx.drawImage(fullBody, 0, 16, 16, 8, sprX, sprY + 16, 16, 8);
-          ctx.save(); ctx.translate(sprX + 16, sprY); ctx.scale(-1, 1);
-          ctx.drawImage(poseSrc, 0, 0); ctx.restore();
-        } else {
-          ctx.drawImage(fullBody, sprX, sprY);
-        }
-
-        if (isMain) {
-          if (battleState === 'player-slash' && slashFrames && slashFrame < SLASH_FRAMES &&
-              hitResults && hitResults[currentHitIdx] && !hitResults[currentHitIdx].miss) {
-            ctx.drawImage(slashFrames[slashFrame], sprX + slashOffX, sprY + slashOffY);
-          }
-          if (battleState === 'ally-slash' && allyHitResult && !allyHitResult.miss) {
-            const ally = battleAllies[currentAllyAttacker];
-            const aSlashF = ally ? getSlashFramesForWeapon(ally.weaponId, true) : slashFramesR;
-            const af = Math.min(Math.floor(battleTimer / 67), 2);
-            if (aSlashF && aSlashF[af]) ctx.drawImage(aSlashF[af], sprX + [0,10,-8][af], sprY + [0,-6,8][af]);
-          }
-        }
-      });
-    }
-
-    ctx.restore();
-    return;
-  }
-
-  const fullW = 64;  // 48px sprite + 8px border each side
-  const fullH = 64;
-
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
-  ctx.clip();
-
-  // Box expand/close from center
-  let boxW = fullW, boxH = fullH;
-  if (isExpand) {
-    const t = Math.min(battleTimer / BOSS_BOX_EXPAND_MS, 1);
-    boxW = Math.max(16, Math.ceil(fullW * t / 8) * 8);
-    boxH = Math.max(16, Math.ceil(fullH * t / 8) * 8);
-  } else if (isClose) {
-    const t = 1 - Math.min(battleTimer / BOSS_BOX_EXPAND_MS, 1);
-    boxW = Math.max(16, Math.ceil(fullW * t / 8) * 8);
-    boxH = Math.max(16, Math.ceil(fullH * t / 8) * 8);
-  }
-  const boxX = centerX - Math.floor(boxW / 2);
-  const boxY = centerY - Math.floor(boxH / 2);
-  _drawBorderedBox(boxX, boxY, boxW, boxH);
-
-  // No sprite during expand, close, or defeat (boss already faded)
-  if (isExpand || isClose || battleState === 'defeat-text') { ctx.restore(); return; }
-
-  // Battle sprite — dissolve in/out or full draw
-  const sprX = centerX - 24;  // 48/2 = 24
-  const sprY = centerY - 24;
-  ctx.imageSmoothingEnabled = false;
-
-  if (isAppear || isDissolve) {
-    _drawDissolvedSprite(sprX, sprY, isDissolve);
-  } else if (battleState === 'boss-flash') {
-    // Pre-attack white blink — alternate normal/white every other frame (~16.67ms each)
-    const frame = Math.floor(battleTimer / (BOSS_PREFLASH_MS / 8));
-    if (!bossDefeated) {
-      if (frame & 1) {
-        ctx.drawImage(landTurtleWhiteCanvas || landTurtleBattleCanvas, sprX, sprY);
-      } else {
-        ctx.drawImage(landTurtleBattleCanvas, sprX, sprY);
-      }
-    }
-  } else if (battleState === 'player-slash') {
-    // Blink during slash (60ms toggle)
-    const blinkHidden = Math.floor(battleTimer / 60) & 1;
-    if (!blinkHidden && !bossDefeated) {
-      ctx.drawImage(landTurtleBattleCanvas, sprX, sprY);
-    }
-    // Draw punch impact with random scatter offset (16×16 metasprite, not on miss)
-    if (slashFrames && slashFrame < SLASH_FRAMES && !bossDefeated && hitResults && hitResults[currentHitIdx] && !hitResults[currentHitIdx].miss) {
-      ctx.drawImage(slashFrames[slashFrame], centerX - 8 + slashOffX, centerY - 8 + slashOffY);
-    }
-  } else if (battleState === 'ally-slash') {
-    // Blink during ally slash (60ms toggle)
-    const blinkHidden = allyHitResult && !allyHitResult.miss && (Math.floor(battleTimer / 60) & 1);
-    if (!blinkHidden && !bossDefeated) {
-      ctx.drawImage(landTurtleBattleCanvas, sprX, sprY);
-    }
-    // Draw slash effect on boss
-    if (!bossDefeated && allyHitResult && !allyHitResult.miss) {
-      const ally = battleAllies[currentAllyAttacker];
-      const allySlashFrames = ally ? getSlashFramesForWeapon(ally.weaponId, true) : slashFramesR;
-      const af = Math.min(Math.floor(battleTimer / 67), 2);
-      if (allySlashFrames && allySlashFrames[af]) {
-        const scatterX = [0, 10, -8][af];
-        const scatterY = [0, -6, 8][af];
-        ctx.drawImage(allySlashFrames[af], centerX - 8 + scatterX, centerY - 8 + scatterY);
-      }
-    }
+    _drawBossSpriteBoxPVP(centerX, centerY);
   } else {
-    // Full sprite — normal draw
-    if (!bossDefeated) {
-      ctx.drawImage(landTurtleBattleCanvas, sprX, sprY);
-    }
+    _drawBossSpriteBoxBoss(centerX, centerY);
   }
-
-  // Target-select cursor — hand cursor on boss sprite box (solid, no blink)
-  if ((battleState === 'target-select' || (battleState === 'item-target-select' && itemTargetType === 'enemy')) && cursorTileCanvas) {
-    const curX = centerX - 32 - 16;
-    const curY = centerY - 8;
-    ctx.drawImage(cursorTileCanvas, curX, curY);
-  }
-
-  ctx.restore();
 }
+
 
 function _drawDissolvedSprite(sprX, sprY, reverse) {
   // Interlaced pixel-shift dissolve per 16×16 block
