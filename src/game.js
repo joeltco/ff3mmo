@@ -4723,6 +4723,15 @@ function drawHUD() {
 function _drawSparkleCorners(frame, px, py) {
   _drawSparkleCorners(frame, px, py);
 }
+function _drawCursorFaded(cx, cy, fadeStep) {
+  if (!cursorTileCanvas) return;
+  if (fadeStep === 0) { ctx.drawImage(cursorTileCanvas, cx, cy); return; }
+  if (fadeStep < 4) {
+    ctx.globalAlpha = 1 - fadeStep / 4;
+    ctx.drawImage(cursorTileCanvas, cx, cy);
+    ctx.globalAlpha = 1;
+  }
+}
 function _drawHudBox(x, y, w, h, fadeStep = 0) {
   const tiles = (fadeStep > 0 && borderFadeSets) ? borderFadeSets[fadeStep] : borderTileCanvases;
   if (!tiles) return;
@@ -5748,15 +5757,7 @@ function _drawSelectSlot(i, ix, slotStartY, slotSpacing, fadeStep, fadedPal) {
   const isNameEntry = titleState === 'name-entry' && i === selectCursor;
 
   // Hand cursor
-  if (i === selectCursor && cursorTileCanvas) {
-    if (fadeStep === 0) {
-      ctx.drawImage(cursorTileCanvas, ix, sy - 4);
-    } else if (fadeStep < SELECT_TEXT_STEPS) {
-      ctx.globalAlpha = 1 - fadeStep / SELECT_TEXT_STEPS;
-      ctx.drawImage(cursorTileCanvas, ix, sy - 4);
-      ctx.globalAlpha = 1;
-    }
-  }
+  if (i === selectCursor) _drawCursorFaded(ix, sy - 4, fadeStep);
 
   // Portrait
   if (isNameEntry) {
@@ -5823,15 +5824,7 @@ function drawPlayerSelectContent(sbX, sbY, sbW, sbH) {
   const delPal = deleteMode
     ? [0x0F, 0x0F, 0x0F, 0x16]
     : [0x0F, 0x0F, 0x0F, fadedPal[3]];
-  if (!deleteMode && selectCursor === 3 && cursorTileCanvas) {
-    if (fadeStep === 0) {
-      ctx.drawImage(cursorTileCanvas, ix, delY - 4);
-    } else if (fadeStep < SELECT_TEXT_STEPS) {
-      ctx.globalAlpha = 1 - fadeStep / SELECT_TEXT_STEPS;
-      ctx.drawImage(cursorTileCanvas, ix, delY - 4);
-      ctx.globalAlpha = 1;
-    }
-  }
+  if (!deleteMode && selectCursor === 3) _drawCursorFaded(ix, delY - 4, fadeStep);
   drawText(ctx, ix + 38, delY, SELECT_DELETE_TEXT, delPal);
 }
 
@@ -6125,15 +6118,7 @@ function _drawPauseMenuText() {
   for (let i = 0; i < PAUSE_ITEMS.length; i++) {
     drawText(ctx, textX, startY + i * 16, PAUSE_ITEMS[i], fadedPal);
   }
-  if (cursorTileCanvas) {
-    if (fadeStep === 0) {
-      ctx.drawImage(cursorTileCanvas, px + 8, startY + pauseCursor * 16 - 4);
-    } else if (fadeStep < PAUSE_TEXT_STEPS) {
-      ctx.globalAlpha = 1 - fadeStep / PAUSE_TEXT_STEPS;
-      ctx.drawImage(cursorTileCanvas, px + 8, startY + pauseCursor * 16 - 4);
-      ctx.globalAlpha = 1;
-    }
-  }
+  _drawCursorFaded(px + 8, startY + pauseCursor * 16 - 4, fadeStep);
 }
 function _drawPauseInventory() {
   const px = HUD_VIEW_X, finalY = HUD_VIEW_Y;
@@ -6162,24 +6147,11 @@ function _drawPauseInventory() {
     for (let d = 0; d < countStr.length; d++) rowBytes[nameBytes.length + 2 + d] = 0x80 + parseInt(countStr[d]);
     const iy = finalY + 12 + i * 14;
     drawText(ctx, px + 24, iy, rowBytes, fadedPal);
-    if (pauseHeldItem >= 0 && startIdx + i === pauseHeldItem && cursorTileCanvas && pauseState !== 'inv-target' && pauseState !== 'inv-heal') {
-      if (fadeStep === 0) {
-        ctx.drawImage(cursorTileCanvas, px + 8, iy - 4);
-      } else if (fadeStep < PAUSE_TEXT_STEPS) {
-        ctx.globalAlpha = 1 - fadeStep / PAUSE_TEXT_STEPS;
-        ctx.drawImage(cursorTileCanvas, px + 8, iy - 4);
-        ctx.globalAlpha = 1;
-      }
-    }
-    if (startIdx + i === pauseInvScroll && cursorTileCanvas && pauseState !== 'inv-target' && pauseState !== 'inv-heal') {
+    if (pauseHeldItem >= 0 && startIdx + i === pauseHeldItem && pauseState !== 'inv-target' && pauseState !== 'inv-heal')
+      _drawCursorFaded(px + 8, iy - 4, fadeStep);
+    if (startIdx + i === pauseInvScroll && pauseState !== 'inv-target' && pauseState !== 'inv-heal') {
       const activeX = pauseHeldItem >= 0 ? px + 4 : px + 8;
-      if (fadeStep === 0) {
-        ctx.drawImage(cursorTileCanvas, activeX, iy - 4);
-      } else if (fadeStep < PAUSE_TEXT_STEPS) {
-        ctx.globalAlpha = 1 - fadeStep / PAUSE_TEXT_STEPS;
-        ctx.drawImage(cursorTileCanvas, activeX, iy - 4);
-        ctx.globalAlpha = 1;
-      }
+      _drawCursorFaded(activeX, iy - 4, fadeStep);
     }
   }
 }
@@ -7878,13 +7850,7 @@ function _drawBattleMenuCursor(positions, isFade, fadeStep) {
   if (battleState === 'target-select') return;
   const curX = positions[battleCursor][0] - 16;
   const curY = positions[battleCursor][1] - 4;
-  if (fadeStep === 0) {
-    ctx.drawImage(cursorTileCanvas, curX, curY);
-  } else if (fadeStep < BATTLE_TEXT_STEPS) {
-    ctx.globalAlpha = 1 - fadeStep / BATTLE_TEXT_STEPS;
-    ctx.drawImage(cursorTileCanvas, curX, curY);
-    ctx.globalAlpha = 1;
-  }
+  _drawCursorFaded(curX, curY, fadeStep);
 }
 
 
