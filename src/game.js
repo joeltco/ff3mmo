@@ -1986,6 +1986,19 @@ function nesColorFade(c) {
   return (hi - 0x10) | (c & 0x0F);
 }
 
+function _loadBattleMetaTiles(romData) {
+  const metaTiles = [];
+  for (let m = 0; m < 4; m++) {
+    const ids = [];
+    for (let j = 0; j < 4; j++) ids.push(romData[BATTLE_BG_META_TILES + m * 4 + j] - 0x60);
+    metaTiles.push(ids);
+  }
+  return metaTiles;
+}
+function _loadBattleTilemap(romData, bgId) {
+  const tilemap = _loadBattleTilemap(romData, bgId);
+  return tilemap;
+}
 function renderBattleBgWithPalette(romData, bgId, palette, tiles, metaTiles, tilemap) {
   const c = document.createElement('canvas');
   c.width = 256; c.height = 32;
@@ -2021,21 +2034,10 @@ function renderBattleBg(romData, bgId) {
     tiles.push(decodeTile(romData, tileBase + i * 16));
   }
 
-  // Read metatile expansion table (4 metatiles × 4 tile IDs)
-  const metaTiles = [];
-  for (let m = 0; m < 4; m++) {
-    const ids = [];
-    for (let j = 0; j < 4; j++) {
-      ids.push(romData[BATTLE_BG_META_TILES + m * 4 + j] - 0x60);
-    }
-    metaTiles.push(ids);
-  }
+  const metaTiles = _loadBattleMetaTiles(romData);
 
   // Read tilemap (2 rows × 16 metatile entries)
-  const tilemapIdx = romData[BATTLE_BG_TMID_TABLE + bgId];
-  const tmBase = BATTLE_BG_TILEMAPS + tilemapIdx * 32;
-  const tilemap = [];
-  for (let i = 0; i < 32; i++) tilemap.push(romData[tmBase + i]);
+  const tilemap = _loadBattleTilemap(romData, bgId);
 
   // Pre-render all fade frames (original → progressively darker → black)
   const frames = [];
@@ -2134,17 +2136,9 @@ function initTitleSky(romData) {
   const tileBase = BATTLE_BG_TILES_ROM + bgId * 0x100;
   for (let i = 0; i < 16; i++) tiles.push(decodeTile(romData, tileBase + i * 16));
 
-  const metaTiles = [];
-  for (let m = 0; m < 4; m++) {
-    const ids = [];
-    for (let j = 0; j < 4; j++) ids.push(romData[BATTLE_BG_META_TILES + m*4 + j] - 0x60);
-    metaTiles.push(ids);
-  }
+  const metaTiles = _loadBattleMetaTiles(romData);
 
-  const tilemapIdx = romData[BATTLE_BG_TMID_TABLE + bgId];
-  const tmBase = BATTLE_BG_TILEMAPS + tilemapIdx * 32;
-  const tilemap = [];
-  for (let i = 0; i < 32; i++) tilemap.push(romData[tmBase + i]);
+  const tilemap = _loadBattleTilemap(romData, bgId);
 
   // Pre-render fade frames (same approach as renderBattleBg but stored separately)
   titleSkyFrames = [];
@@ -2171,17 +2165,9 @@ function initTitleUnderwater(romData) {
   const tileBase = BATTLE_BG_TILES_ROM + bgId * 0x100;
   for (let i = 0; i < 16; i++) tiles.push(decodeTile(romData, tileBase + i * 16));
 
-  const metaTiles = [];
-  for (let m = 0; m < 4; m++) {
-    const ids = [];
-    for (let j = 0; j < 4; j++) ids.push(romData[BATTLE_BG_META_TILES + m*4 + j] - 0x60);
-    metaTiles.push(ids);
-  }
+  const metaTiles = _loadBattleMetaTiles(romData);
 
-  const tilemapIdx = romData[BATTLE_BG_TMID_TABLE + bgId];
-  const tmBase = BATTLE_BG_TILEMAPS + tilemapIdx * 32;
-  const tilemap = [];
-  for (let i = 0; i < 32; i++) tilemap.push(romData[tmBase + i]);
+  const tilemap = _loadBattleTilemap(romData, bgId);
 
   titleUnderwaterFrames = [];
   const fadePal = [...palette];
@@ -2262,16 +2248,8 @@ function _loadOceanTileData(romData, bgId) {
   const tileBase = BATTLE_BG_TILES_ROM + bgId * 0x100;
   const tiles = [];
   for (let i = 0; i < 16; i++) tiles.push(decodeTile(romData, tileBase + i * 16));
-  const metaTiles = [];
-  for (let m = 0; m < 4; m++) {
-    const ids = [];
-    for (let j = 0; j < 4; j++) ids.push(romData[BATTLE_BG_META_TILES + m*4 + j] - 0x60);
-    metaTiles.push(ids);
-  }
-  const tilemapIdx = romData[BATTLE_BG_TMID_TABLE + bgId];
-  const tmBase = BATTLE_BG_TILEMAPS + tilemapIdx * 32;
-  const tilemap = [];
-  for (let i = 0; i < 32; i++) tilemap.push(romData[tmBase + i]);
+  const metaTiles = _loadBattleMetaTiles(romData);
+  const tilemap = _loadBattleTilemap(romData, bgId);
   return { tiles, metaTiles, tilemap };
 }
 function _buildTitleOceanFrames(tiles, metaTiles, tilemap, skyPal, wavePal) {
