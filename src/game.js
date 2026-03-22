@@ -5211,10 +5211,7 @@ function updateTitle(dt) {
   titleUnderwaterScroll += dt * 0.11;
   _updateTitleUnderwater(dt);
 
-  if (titleState === 'main-in' || titleState === 'zbox-open' || titleState === 'main' || titleState === 'zbox-close' ||
-      titleState === 'logo-fade-out' || titleState === 'logo-fade-in' || titleState === 'select-box-open' || titleState === 'select-box-close' || titleState === 'select-box-close-fwd' ||
-      titleState === 'select-fade-in' || titleState === 'select' || titleState === 'select-fade-out' || titleState === 'select-fade-out-back' ||
-      titleState === 'name-entry' || titleState === 'main-out') {
+  if (_isTitleActiveState()) {
     waterTimer += dt;
     if (waterTimer >= WATER_TICK) { waterTimer %= WATER_TICK; waterTick++; }
     titleWaterScroll += dt * 0.12;
@@ -5528,10 +5525,7 @@ function drawTitle() {
     drawUnderwaterSprites();
   }
 
-  if (titleState === 'main-in' || titleState === 'zbox-open' || titleState === 'main' || titleState === 'zbox-close' ||
-      titleState === 'logo-fade-out' || titleState === 'logo-fade-in' || titleState === 'select-box-open' || titleState === 'select-box-close' || titleState === 'select-box-close-fwd' ||
-      titleState === 'select-fade-in' || titleState === 'select' || titleState === 'select-fade-out' || titleState === 'select-fade-out-back' ||
-      titleState === 'name-entry' || titleState === 'main-out') {
+  if (_isTitleActiveState()) {
     let fl = 0;
     if (titleState === 'main-in') fl = TITLE_FADE_MAX - Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
     else if (titleState === 'main-out') fl = Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
@@ -6402,6 +6396,12 @@ function _updateTurnTimer(dt) {
   }
 }
 
+function _isTitleActiveState() {
+  return titleState === 'main-in' || titleState === 'zbox-open' || titleState === 'main' || titleState === 'zbox-close' ||
+    titleState === 'logo-fade-out' || titleState === 'logo-fade-in' || titleState === 'select-box-open' || titleState === 'select-box-close' || titleState === 'select-box-close-fwd' ||
+    titleState === 'select-fade-in' || titleState === 'select' || titleState === 'select-fade-out' || titleState === 'select-fade-out-back' ||
+    titleState === 'name-entry' || titleState === 'main-out';
+}
 function _isVictoryBattleState() {
   return battleState === 'victory-celebrate' || battleState === 'victory-text-in' ||
     battleState === 'victory-hold' || battleState === 'victory-fade-out' ||
