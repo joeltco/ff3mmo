@@ -59,3 +59,26 @@ export const CHAT_PHRASES = [
   'level up!',
   'this dungeon is wild',
 ];
+
+
+export const ROSTER_FADE_STEPS = 4;
+
+export function generateAllyStats(player) {
+  const lv = player.level;
+  const str = 5 + lv;
+  const agi = 5 + lv;
+  const vit = 5 + lv;
+  const hp = 28 + lv * 6;
+  const loc = player.loc;
+  // Gear by location (matches chest loot tiers)
+  let weaponId = 0x1E, weaponAtk = 6, totalDef = 1; // default: Knife + Cap
+  if (loc === 'cave-1') { weaponId = 0x1F; weaponAtk = 8; totalDef = 3; }
+  else if (loc === 'cave-2') { weaponId = 0x24; weaponAtk = 10; totalDef = 3; }
+  else if (loc === 'cave-3' || loc === 'crystal') { weaponId = 0x24; weaponAtk = 10; totalDef = 7; }
+  // Override with explicit weapon slots if defined on player entry
+  if (player.weaponR != null) weaponId = player.weaponR;
+  const weaponL = player.weaponL != null ? player.weaponL : null;
+  const atk = str + weaponAtk;
+  const def = vit + totalDef;
+  return { name: player.name, palIdx: player.palIdx, level: lv, hp, maxHP: hp, atk, def, agi, weaponId, weaponL, fadeStep: ROSTER_FADE_STEPS };
+}

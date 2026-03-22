@@ -19,7 +19,7 @@ import { ITEMS, isHandEquippable, isWeapon, weaponSubtype, isBladedWeapon } from
 import { ENCOUNTERS } from './data/encounters.js';
 import { CRIT_RATE, CRIT_MULT, BASE_HIT_RATE, BOSS_HIT_RATE, GOBLIN_HIT_RATE,
          calcDamage, rollHits } from './battle-math.js';
-import { LOCATIONS, PLAYER_POOL, PLAYER_PALETTES, CHAT_PHRASES } from './data/players.js';
+import { LOCATIONS, PLAYER_POOL, PLAYER_PALETTES, CHAT_PHRASES, ROSTER_FADE_STEPS, generateAllyStats } from './data/players.js';
 import { BATTLE_MISS, BATTLE_GAME_OVER, BATTLE_ROAR, BATTLE_FIGHT, BATTLE_RUN,
          BATTLE_CANT_ESCAPE, BATTLE_RAN_AWAY, BATTLE_DEFEND, BATTLE_VICTORY,
          BATTLE_GOT_EXP, BATTLE_LEVEL_UP, BATTLE_BOSS_NAME, BATTLE_GOBLIN_NAME,
@@ -574,25 +574,7 @@ function getRosterPlayers() {
 }
 
 // Generate combat stats for a roster ally based on their level and location
-function generateAllyStats(player) {
-  const lv = player.level;
-  const str = 5 + lv;
-  const agi = 5 + lv;
-  const vit = 5 + lv;
-  const hp = 28 + lv * 6;
-  const loc = player.loc;
-  // Gear by location (matches chest loot tiers)
-  let weaponId = 0x1E, weaponAtk = 6, totalDef = 1; // default: Knife + Cap
-  if (loc === 'cave-1') { weaponId = 0x1F; weaponAtk = 8; totalDef = 3; }
-  else if (loc === 'cave-2') { weaponId = 0x24; weaponAtk = 10; totalDef = 3; }
-  else if (loc === 'cave-3' || loc === 'crystal') { weaponId = 0x24; weaponAtk = 10; totalDef = 7; }
-  // Override with explicit weapon slots if defined on player entry
-  if (player.weaponR != null) weaponId = player.weaponR;
-  const weaponL = player.weaponL != null ? player.weaponL : null;
-  const atk = str + weaponAtk;
-  const def = vit + totalDef;
-  return { name: player.name, palIdx: player.palIdx, level: lv, hp, maxHP: hp, atk, def, agi, weaponId, weaponL, fadeStep: ROSTER_FADE_STEPS };
-}
+// generateAllyStats, ROSTER_FADE_STEPS → data/players.js
 // PLAYER_PALETTES → data/players.js
 let fakePlayerPortraits = [];   // HTMLCanvasElement[palIdx][fadeStep]
 let fakePlayerFullBodyCanvases = []; // HTMLCanvasElement[palIdx] — 16×24 h-flipped full body for PVP (idle)
@@ -610,7 +592,7 @@ let fakePlayerKnifeRFullBodyCanvases = []; // knife R-hand 16×24 h-flipped full
 let fakePlayerKnifeLFullBodyCanvases = []; // knife L-hand 16×24 h-flipped full body
 let fakePlayerKnifeBackFullBodyCanvases = []; // knife back-swing 16×24 h-flipped full body (wind-up pose)
 let rosterTimer = 0;             // ms until next movement event
-const ROSTER_FADE_STEPS = 4;
+
 const ROSTER_FADE_STEP_MS = 100;
 let rosterFadeMap = {};          // {playerName: fadeStep} — 0=visible, 4=black
 let rosterFadeTimers = {};       // {playerName: ms since last step}

@@ -6,6 +6,14 @@ All notable changes to this project are documented here.
 
 _No unreleased changes._
 
+## 0.9.7 — 2026-03-22
+
+### Modularization continued
+
+**Extracted to `src/data/players.js`:**
+- `ROSTER_FADE_STEPS` — roster fade constant (was module-level in game.js)
+- `generateAllyStats(player)` — nearly pure function computing ally stats from player pool entry
+
 ## 0.9.6 — 2026-03-22
 
 ### Modularization + bug fixes
