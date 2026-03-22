@@ -1555,21 +1555,7 @@ function initLandTurtleBattle(romData) {
 
   landTurtleBattleCanvas = c;
 
-  // Create all-white version for pre-attack flash blink
-  const wc = document.createElement('canvas');
-  wc.width = 48; wc.height = 48;
-  const wctx = wc.getContext('2d');
-  const srcData = cctx.getImageData(0, 0, 48, 48);
-  const whiteRGB = NES_SYSTEM_PALETTE[0x30] || [255, 255, 255];
-  for (let p = 0; p < srcData.data.length; p += 4) {
-    if (srcData.data[p + 3] > 0) {
-      srcData.data[p]     = whiteRGB[0];
-      srcData.data[p + 1] = whiteRGB[1];
-      srcData.data[p + 2] = whiteRGB[2];
-    }
-  }
-  wctx.putImageData(srcData, 0, 0);
-  landTurtleWhiteCanvas = wc;
+  landTurtleWhiteCanvas = _makeWhiteCanvas(landTurtleBattleCanvas);
 }
 
 function _renderGoblinSprite(tiles, pal0, pal1, tilePalMap) {
@@ -1601,6 +1587,41 @@ function _renderGoblinSprite(tiles, pal0, pal1, tilePalMap) {
   return c;
 }
 
+function _makeWhiteCanvas(srcCanvas) {
+  const { width: w, height: h } = srcCanvas;
+  const wc = document.createElement('canvas'); wc.width = w; wc.height = h;
+  const wctx = wc.getContext('2d');
+  const srcData = srcCanvas.getContext('2d').getImageData(0, 0, w, h);
+  const [r, g, b] = NES_SYSTEM_PALETTE[0x30] || [255, 255, 255];
+  for (let p = 0; p < srcData.data.length; p += 4) {
+    if (srcData.data[p + 3] > 0) { srcData.data[p] = r; srcData.data[p+1] = g; srcData.data[p+2] = b; }
+  }
+  wctx.putImageData(srcData, 0, 0);
+  return wc;
+}
+
+function _makeDeathFrames(srcCanvas) {
+  const { width: w, height: h } = srcCanvas;
+  const origData = srcCanvas.getContext('2d').getImageData(0, 0, w, h);
+  const maxThreshold = (w - 1) + (h - 1) + 15;
+  const frames = [];
+  for (let f = 0; f < MONSTER_DEATH_FRAMES; f++) {
+    const fc = document.createElement('canvas'); fc.width = w; fc.height = h;
+    const fctx = fc.getContext('2d'); const fd = fctx.createImageData(w, h);
+    const wave = (f / (MONSTER_DEATH_FRAMES - 1)) * (maxThreshold + 1);
+    for (let py = 0; py < h; py++) {
+      for (let px = 0; px < w; px++) {
+        const idx = (py * w + px) * 4;
+        const threshold = (w - 1 - px) + py + BAYER4[py & 3][px & 3];
+        if (threshold < wave) { fd.data[idx + 3] = 0; }
+        else { fd.data[idx] = origData.data[idx]; fd.data[idx+1] = origData.data[idx+1]; fd.data[idx+2] = origData.data[idx+2]; fd.data[idx+3] = origData.data[idx+3]; }
+      }
+    }
+    fctx.putImageData(fd, 0, 0); frames.push(fc);
+  }
+  return frames;
+}
+
 function initGoblinSprite(romData) {
   const tiles = [];
   for (let i = 0; i < GOBLIN_TILES; i++) {
@@ -1610,52 +1631,8 @@ function initGoblinSprite(romData) {
   // Render full-color sprite
   goblinBattleCanvas = _renderGoblinSprite(tiles, GOBLIN_PAL0, GOBLIN_PAL1, GOBLIN_TILE_PAL);
 
-  // Create all-white version for pre-attack flash blink
-  const wc = document.createElement('canvas');
-  wc.width = 32; wc.height = 32;
-  const wctx = wc.getContext('2d');
-  const cctx = goblinBattleCanvas.getContext('2d');
-  const srcData = cctx.getImageData(0, 0, 32, 32);
-  const whiteRGB = NES_SYSTEM_PALETTE[0x30] || [255, 255, 255];
-  for (let p = 0; p < srcData.data.length; p += 4) {
-    if (srcData.data[p + 3] > 0) {
-      srcData.data[p]     = whiteRGB[0];
-      srcData.data[p + 1] = whiteRGB[1];
-      srcData.data[p + 2] = whiteRGB[2];
-    }
-  }
-  wctx.putImageData(srcData, 0, 0);
-  goblinWhiteCanvas = wc;
-
-  // Pre-render death deterioration frames — dithered diagonal dissolve
-  // Uses Bayer 4×4 matrix for the pixelated look, diagonal sweep top-right → bottom-left
-  const origData = goblinBattleCanvas.getContext('2d').getImageData(0, 0, 32, 32);
-  const maxThreshold = 62 + 15; // (31-0+31) + max bayer value
-  goblinDeathFrames = [];
-  for (let f = 0; f < MONSTER_DEATH_FRAMES; f++) {
-    const fc = document.createElement('canvas');
-    fc.width = 32; fc.height = 32;
-    const fctx = fc.getContext('2d');
-    const fd = fctx.createImageData(32, 32);
-    const wave = (f / (MONSTER_DEATH_FRAMES - 1)) * (maxThreshold + 1);
-    for (let py = 0; py < 32; py++) {
-      for (let px = 0; px < 32; px++) {
-        const idx = (py * 32 + px) * 4;
-        const diag = (31 - px) + py;
-        const threshold = diag + BAYER4[py & 3][px & 3];
-        if (threshold < wave) {
-          fd.data[idx + 3] = 0; // erased — transparent
-        } else {
-          fd.data[idx]     = origData.data[idx];
-          fd.data[idx + 1] = origData.data[idx + 1];
-          fd.data[idx + 2] = origData.data[idx + 2];
-          fd.data[idx + 3] = origData.data[idx + 3];
-        }
-      }
-    }
-    fctx.putImageData(fd, 0, 0);
-    goblinDeathFrames.push(fc);
-  }
+  goblinWhiteCanvas = _makeWhiteCanvas(goblinBattleCanvas);
+  goblinDeathFrames = _makeDeathFrames(goblinBattleCanvas);
 }
 
 // Generic renderer for PPU-dumped enemy sprites.
@@ -1773,50 +1750,8 @@ function _initEnemySprite(monsterId, rawBytes, cols, rows, tilePalMap, pal0, pal
   const canvas = _renderEnemySprite(rawBytes, cols, rows, tilePalMap, pal0, pal1);
   monsterBattleCanvas.set(monsterId, canvas);
 
-  // White flash version for pre-attack blink
-  const wc = document.createElement('canvas');
-  wc.width = w; wc.height = h;
-  const wctx = wc.getContext('2d');
-  const srcData = canvas.getContext('2d').getImageData(0, 0, w, h);
-  const whiteRGB = NES_SYSTEM_PALETTE[0x30] || [255, 255, 255];
-  for (let p = 0; p < srcData.data.length; p += 4) {
-    if (srcData.data[p + 3] > 0) {
-      srcData.data[p]     = whiteRGB[0];
-      srcData.data[p + 1] = whiteRGB[1];
-      srcData.data[p + 2] = whiteRGB[2];
-    }
-  }
-  wctx.putImageData(srcData, 0, 0);
-  monsterWhiteCanvas.set(monsterId, wc);
-
-  // Death deterioration frames — diagonal dither dissolve
-  const origData = canvas.getContext('2d').getImageData(0, 0, w, h);
-  const maxThreshold = (w - 1) + (h - 1) + 15;
-  const frames = [];
-  for (let f = 0; f < MONSTER_DEATH_FRAMES; f++) {
-    const fc = document.createElement('canvas');
-    fc.width = w; fc.height = h;
-    const fctx = fc.getContext('2d');
-    const fd = fctx.createImageData(w, h);
-    const wave = (f / (MONSTER_DEATH_FRAMES - 1)) * (maxThreshold + 1);
-    for (let py = 0; py < h; py++) {
-      for (let px = 0; px < w; px++) {
-        const idx = (py * w + px) * 4;
-        const diag = (w - 1 - px) + py;
-        const threshold = diag + BAYER4[py & 3][px & 3];
-        if (threshold < wave) {
-          fd.data[idx + 3] = 0;
-        } else {
-          fd.data[idx]     = origData.data[idx];
-          fd.data[idx + 1] = origData.data[idx + 1];
-          fd.data[idx + 2] = origData.data[idx + 2];
-          fd.data[idx + 3] = origData.data[idx + 3];
-        }
-      }
-    }
-    fctx.putImageData(fd, 0, 0);
-    frames.push(fc);
-  }
+  monsterWhiteCanvas.set(monsterId, _makeWhiteCanvas(canvas));
+  const frames = _makeDeathFrames(canvas);
   monsterDeathFrames.set(monsterId, frames);
 }
 
@@ -3315,6 +3250,22 @@ function _pauseInputMainMenu() {
   }
   return true;
 }
+function _pauseInvZPress(entries) {
+  if (pauseHeldItem === -1) {
+    if (entries.length > 0 && entries[pauseInvScroll]) { pauseHeldItem = pauseInvScroll; playSFX(SFX.CONFIRM); }
+    else playSFX(SFX.ERROR);
+  } else if (pauseHeldItem === pauseInvScroll) {
+    const [id] = entries[pauseHeldItem]; const item = ITEMS.get(Number(id));
+    if (item && item.type === 'consumable') {
+      playSFX(SFX.CONFIRM); pauseHeldItem = -1;
+      pauseState = 'inv-target'; pauseTimer = 0; pauseUseItemId = Number(id); pauseInvAllyTarget = -1;
+    } else { pauseHeldItem = -1; playSFX(SFX.CONFIRM); }
+  } else {
+    if (entries[pauseInvScroll]) { pauseHeldItem = pauseInvScroll; playSFX(SFX.CONFIRM); }
+    else { pauseHeldItem = -1; playSFX(SFX.ERROR); }
+  }
+}
+
 function _pauseInputInventory() {
   if (pauseState !== 'inventory') return false;
   const entries = Object.entries(playerInventory).filter(([,c]) => c > 0);
@@ -3326,50 +3277,33 @@ function _pauseInputInventory() {
     keys['ArrowUp'] = false;
     if (pauseInvScroll > 0) { pauseInvScroll--; playSFX(SFX.CURSOR); }
   }
-  if (keys['z'] || keys['Z']) {
-    keys['z'] = false; keys['Z'] = false;
-    if (pauseHeldItem === -1) {
-      if (entries.length > 0 && entries[pauseInvScroll]) {
-        pauseHeldItem = pauseInvScroll;
-        playSFX(SFX.CONFIRM);
-      } else {
-        playSFX(SFX.ERROR);
-      }
-    } else if (pauseHeldItem === pauseInvScroll) {
-      const [id] = entries[pauseHeldItem];
-      const item = ITEMS.get(Number(id));
-      if (item && item.type === 'consumable') {
-        playSFX(SFX.CONFIRM);
-        pauseHeldItem = -1;
-        pauseState = 'inv-target'; pauseTimer = 0;
-        pauseUseItemId = Number(id);
-        pauseInvAllyTarget = -1;
-      } else {
-        pauseHeldItem = -1;
-        playSFX(SFX.CONFIRM);
-      }
-    } else {
-      if (entries[pauseInvScroll]) {
-        pauseHeldItem = pauseInvScroll;
-        playSFX(SFX.CONFIRM);
-      } else {
-        pauseHeldItem = -1;
-        playSFX(SFX.ERROR);
-      }
-    }
-  }
+  if (keys['z'] || keys['Z']) { keys['z'] = false; keys['Z'] = false; _pauseInvZPress(entries); }
   if (keys['x'] || keys['X']) {
     keys['x'] = false; keys['X'] = false;
-    if (pauseHeldItem !== -1) {
-      pauseHeldItem = -1;
-      playSFX(SFX.CONFIRM);
-    } else {
-      playSFX(SFX.CONFIRM);
-      pauseState = 'inv-items-out'; pauseTimer = 0;
-    }
+    if (pauseHeldItem !== -1) { pauseHeldItem = -1; playSFX(SFX.CONFIRM); }
+    else { playSFX(SFX.CONFIRM); pauseState = 'inv-items-out'; pauseTimer = 0; }
   }
   return true;
 }
+function _applyPauseItemUse(item, rosterTargets) {
+  if (!item || item.effect !== 'restore_hp') { playSFX(SFX.ERROR); return; }
+  if (pauseInvAllyTarget >= 0) {
+    const rp = rosterTargets[pauseInvAllyTarget];
+    if (!rp) { playSFX(SFX.ERROR); return; }
+    const heal = Math.min(item.value, rp.maxHP - rp.hp);
+    rp.hp += heal; removeItem(pauseUseItemId); playSFX(SFX.CURE);
+    pauseHealNum = { value: heal, timer: 0, rosterIdx: pauseInvAllyTarget };
+    pauseState = 'inv-heal'; pauseTimer = 0;
+    if (selectCursor >= 0 && saveSlots[selectCursor]) { saveSlots[selectCursor].inventory = { ...playerInventory }; saveSlotsToDB(); }
+  } else {
+    const heal = Math.min(item.value, playerStats.maxHP - playerHP);
+    playerHP += heal; removeItem(pauseUseItemId); playSFX(SFX.CURE);
+    pauseHealNum = { value: heal, timer: 0 };
+    pauseState = 'inv-heal'; pauseTimer = 0;
+    if (selectCursor >= 0 && saveSlots[selectCursor]) { saveSlots[selectCursor].hp = playerHP; saveSlots[selectCursor].inventory = { ...playerInventory }; saveSlotsToDB(); }
+  }
+}
+
 function _pauseInputInvTarget() {
   if (pauseState !== 'inv-target') return false;
   const rosterTargets = getRosterVisible();
@@ -3383,40 +3317,7 @@ function _pauseInputInvTarget() {
   }
   if (keys['z'] || keys['Z']) {
     keys['z'] = false; keys['Z'] = false;
-    const item = ITEMS.get(pauseUseItemId);
-    if (item && item.effect === 'restore_hp') {
-      if (pauseInvAllyTarget >= 0) {
-        const rp = rosterTargets[pauseInvAllyTarget];
-        if (rp) {
-          const heal = Math.min(item.value, rp.maxHP - rp.hp);
-          rp.hp += heal;
-          removeItem(pauseUseItemId);
-          playSFX(SFX.CURE);
-          pauseHealNum = { value: heal, timer: 0, rosterIdx: pauseInvAllyTarget };
-          pauseState = 'inv-heal'; pauseTimer = 0;
-          if (selectCursor >= 0 && saveSlots[selectCursor]) {
-            saveSlots[selectCursor].inventory = { ...playerInventory };
-            saveSlotsToDB();
-          }
-        } else {
-          playSFX(SFX.ERROR);
-        }
-      } else {
-        const heal = Math.min(item.value, playerStats.maxHP - playerHP);
-        playerHP += heal;
-        removeItem(pauseUseItemId);
-        playSFX(SFX.CURE);
-        pauseHealNum = { value: heal, timer: 0 };
-        pauseState = 'inv-heal'; pauseTimer = 0;
-        if (selectCursor >= 0 && saveSlots[selectCursor]) {
-          saveSlots[selectCursor].hp = playerHP;
-          saveSlots[selectCursor].inventory = { ...playerInventory };
-          saveSlotsToDB();
-        }
-      }
-    } else {
-      playSFX(SFX.ERROR);
-    }
+    _applyPauseItemUse(ITEMS.get(pauseUseItemId), rosterTargets);
   }
   if (keys['x'] || keys['X']) {
     keys['x'] = false; keys['X'] = false;
@@ -3943,60 +3844,39 @@ function _updateTransitionLoading(dt) {
   }
 }
 
+function _updateTransitionTrapFall() {
+  const totalSpinTime = SPIN_INTERVAL * SPIN_DIRS.length * SPIN_CYCLES;
+  sprite.setDirection(SPIN_DIRS[Math.floor(transTimer / SPIN_INTERVAL) % SPIN_DIRS.length]);
+  if (transTimer >= totalSpinTime) {
+    if (transPendingAction) { transPendingAction(); transPendingAction = null; }
+    trapShakePending = true; transState = 'opening'; transTimer = 0; playSFX(SFX.SCREEN_OPEN);
+  }
+}
+
+function _updateTransitionOpening() {
+  if (transTimer >= WIPE_DURATION) {
+    transState = 'none'; transTimer = 0; rosterLocChanged = false;
+    if (trapShakePending) {
+      trapShakePending = false; playSFX(SFX.EARTHQUAKE); shakeActive = true; shakeTimer = 0;
+    }
+  }
+}
+
 function updateTransition(dt) {
   if (transState === 'none') return;
-
   transTimer += dt;
-
   if (transState === 'hud-fade-in') {
-    if (transTimer >= (HUD_INFO_FADE_STEPS + 1) * HUD_INFO_FADE_STEP_MS) {
-      transState = 'opening';
-      transTimer = 0;
-      playSFX(SFX.SCREEN_OPEN);
-    }
+    if (transTimer >= (HUD_INFO_FADE_STEPS + 1) * HUD_INFO_FADE_STEP_MS) { transState = 'opening'; transTimer = 0; playSFX(SFX.SCREEN_OPEN); }
     return;
   } else if (transState === 'trap-reveal') {
-    if (transTimer >= TRAP_REVEAL_DURATION) {
-      transState = 'closing';
-      transTimer = 0;
-      playSFX(SFX.SCREEN_CLOSE);
-        }
-  } else if (transState === 'trap-falling') {
-    const totalSpinTime = SPIN_INTERVAL * SPIN_DIRS.length * SPIN_CYCLES;
-    const dirIndex = Math.floor(transTimer / SPIN_INTERVAL) % SPIN_DIRS.length;
-    sprite.setDirection(SPIN_DIRS[dirIndex]);
-    if (transTimer >= totalSpinTime) {
-      // Load the new map while still black
-      if (transPendingAction) { transPendingAction(); transPendingAction = null; }
-      trapShakePending = true;
-      transState = 'opening';
-      transTimer = 0;
-      playSFX(SFX.SCREEN_OPEN);
-        }
+    if (transTimer >= TRAP_REVEAL_DURATION) { transState = 'closing'; transTimer = 0; playSFX(SFX.SCREEN_CLOSE); }
+  } else if (transState === 'trap-falling') { _updateTransitionTrapFall();
   } else if (transState === 'door-opening') {
-    if (transTimer >= DOOR_OPEN_DURATION) {
-      transState = 'closing';
-      transTimer = 0;
-      playSFX(SFX.SCREEN_CLOSE);
-        }
-  } else if (transState === 'closing') {
-    _updateTransitionClosing();
-  } else if (transState === 'hold') {
-    _updateTransitionHold();
-  } else if (transState === 'loading') {
-    _updateTransitionLoading(dt);
-  } else if (transState === 'opening') {
-    if (transTimer >= WIPE_DURATION) {
-      transState = 'none';
-      transTimer = 0;
-      rosterLocChanged = false;
-      if (trapShakePending) {
-        trapShakePending = false;
-        playSFX(SFX.EARTHQUAKE);
-        shakeActive = true;
-        shakeTimer = 0;
-      }
-    }
+    if (transTimer >= DOOR_OPEN_DURATION) { transState = 'closing'; transTimer = 0; playSFX(SFX.SCREEN_CLOSE); }
+  } else if (transState === 'closing') { _updateTransitionClosing();
+  } else if (transState === 'hold') { _updateTransitionHold();
+  } else if (transState === 'loading') { _updateTransitionLoading(dt);
+  } else if (transState === 'opening') { _updateTransitionOpening();
   }
 }
 
