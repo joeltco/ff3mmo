@@ -6,6 +6,23 @@ All notable changes to this project are documented here.
 
 _No unreleased changes._
 
+## 0.9.6 — 2026-03-22
+
+### Modularization + bug fixes
+
+**Extracted to `src/data/items.js`:**
+- `isHandEquippable`, `isWeapon`, `weaponSubtype`, `isBladedWeapon` — pure item query functions
+
+**New module `src/save.js`:**
+- `openSaveDB` — IndexedDB open helper
+- `serverDeleteSlot` — server save deletion
+- `parseSaveSlots` — parse raw save data into slot array (refactored from `_parseSaveSlots` to return value instead of mutating global)
+
+**Bug fixes (M99 regressions):**
+- `_drawPauseInventory` — `fadeStep` was undeclared (orphaned by M99 function split), causing ReferenceError and missing inventory cursor
+- `_drawPauseEquipSlots` — same issue, caused missing equip screen cursor + soft-lock
+- `_drawPauseEquipItems` — same issue, caused missing item-select cursor in equip screen
+
 ## 0.9.5 — 2026-03-22
 
 ### M99: game.js refactor (continued) + bug fix — 8477L → 8320L (−157L)
