@@ -1881,6 +1881,11 @@ function nesColorFade(c) {
 function _makeCanvas16() {
   const c = document.createElement('canvas'); c.width = 16; c.height = 16; return c;
 }
+function _pauseFadeStep(inState, outState) {
+  if (pauseState === inState) return PAUSE_TEXT_STEPS - Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
+  if (pauseState === outState) return Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
+  return 0;
+}
 function _drawHudWithFade(fullCanvas, fadeCanvases, fadeStep) {
   if (fadeStep > 0 && fadeCanvases && fadeStep <= fadeCanvases.length) {
     ctx.drawImage(fadeCanvases[fadeStep - 1], 0, 0);
@@ -5967,13 +5972,7 @@ function _drawPauseInventory() {
   const showInvItems = pauseState === 'inv-items-in' || pauseState === 'inventory' || pauseState === 'inv-items-out' ||
     pauseState === 'inv-target' || pauseState === 'inv-heal';
   if (!showInvItems) return;
-  let fadeStep = 0;
-  if (pauseState === 'inv-items-in') {
-    fadeStep = PAUSE_TEXT_STEPS - Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
-  } else if (pauseState === 'inv-items-out') {
-    fadeStep = Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
-  }
-  const fadedPal = _makeFadedPal(fadeStep);
+  const fadedPal = _makeFadedPal(_pauseFadeStep('inv-items-in', 'inv-items-out'));
   const entries = Object.entries(playerInventory).filter(([,c]) => c > 0);
   const maxVisible = Math.floor((HUD_VIEW_H - 16) / 14);
   const startIdx = Math.max(0, Math.min(pauseInvScroll, Math.max(0, entries.length - maxVisible)));
@@ -6001,13 +6000,7 @@ function _drawPauseEquipSlots() {
   const showEqSlots = pauseState === 'eq-slots-in' || pauseState === 'equip' || pauseState === 'eq-slots-out' ||
     pauseState === 'eq-items-in' || pauseState === 'eq-item-select' || pauseState === 'eq-items-out';
   if (!showEqSlots) return;
-  let fadeStep = 0;
-  if (pauseState === 'eq-slots-in') {
-    fadeStep = PAUSE_TEXT_STEPS - Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
-  } else if (pauseState === 'eq-slots-out') {
-    fadeStep = Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
-  }
-  const fadedPal = _makeFadedPal(fadeStep);
+  const fadedPal = _makeFadedPal(_pauseFadeStep('eq-slots-in', 'eq-slots-out'));
   const EQ_LABELS = [
     new Uint8Array([0x9B,0xC4,0x91,0xCA,0xD7,0xCD]),
     new Uint8Array([0x95,0xC4,0x91,0xCA,0xD7,0xCD]),
@@ -6045,13 +6038,7 @@ function _drawPauseEquipItems() {
   const px = HUD_VIEW_X, finalY = HUD_VIEW_Y;
   const showEqItems = pauseState === 'eq-items-in' || pauseState === 'eq-item-select' || pauseState === 'eq-items-out';
   if (!showEqItems) return;
-  let fadeStep = 0;
-  if (pauseState === 'eq-items-in') {
-    fadeStep = PAUSE_TEXT_STEPS - Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
-  } else if (pauseState === 'eq-items-out') {
-    fadeStep = Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
-  }
-  const fadedPal = _makeFadedPal(fadeStep);
+  const fadedPal = _makeFadedPal(_pauseFadeStep('eq-items-in', 'eq-items-out'));
   const listX = px + 24;
   const listY = finalY + 12 + eqCursor * 22 + 22;
   const maxBelow = Math.floor((finalY + HUD_VIEW_H - 16 - listY) / 12);
