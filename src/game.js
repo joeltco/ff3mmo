@@ -1689,15 +1689,7 @@ function _renderInvShadow(tilePixels, pal) {
     if (!pixels) continue;
     if (shadowFlip[col]) pixels = _hflipTile(pixels);
     const img = sctx.createImageData(8, 8);
-    for (let p = 0; p < 64; p++) {
-      const ci = pixels[p];
-      if (ci === 0) { img.data[p * 4 + 3] = 0; }
-      else {
-        const rgb = NES_SYSTEM_PALETTE[pal[ci]] || [0, 0, 0];
-        img.data[p * 4] = rgb[0]; img.data[p * 4 + 1] = rgb[1];
-        img.data[p * 4 + 2] = rgb[2]; img.data[p * 4 + 3] = 255;
-      }
-    }
+    _writePixels64(img, pixels, pal);
     sctx.putImageData(img, col * 8, 0);
   }
   return c;
@@ -8235,18 +8227,20 @@ function drawBattleAllies() {
   _flushAllyWeaponDraws(weaponDraws);
 }
 
+function _encounterMonsterPos(idx) {
+  const { sprH: dSprH, gridPos } = _encounterGridLayout();
+  const safeIdx = idx < gridPos.length ? idx : 0;
+  const pos = gridPos[safeIdx];
+  const m = encounterMonsters[safeIdx];
+  const mc = monsterBattleCanvas.get(m?.monsterId) || goblinBattleCanvas;
+  const mh = mc ? mc.height : dSprH;
+  return { bx: pos.x + 16, baseY: pos.y + (dSprH - mh) + Math.floor(mh / 2) - 8 };
+}
 function _drawBossDmgNum() {
   if (!bossDamageNum || (bossDefeated && !isRandomEncounter)) return;
   let bx, baseY;
   if (isRandomEncounter && encounterMonsters) {
-    const { count, boxX, boxY, sprH: dSprH, gridPos } = _encounterGridLayout();
-    const idx = targetIndex < gridPos.length ? targetIndex : 0;
-    const pos = gridPos[idx];
-    const m = encounterMonsters[idx];
-    const mc = monsterBattleCanvas.get(m?.monsterId) || goblinBattleCanvas;
-    const mh = mc ? mc.height : dSprH;
-    bx = pos.x + 16;
-    baseY = pos.y + (dSprH - mh) + Math.floor(mh / 2) - 8;
+    ({ bx, baseY } = _encounterMonsterPos(targetIndex));
   } else if (isPVPBattle) {
     const tot = 1 + pvpEnemyAllies.length;
     const cols = tot <= 1 ? 1 : 2;
@@ -8275,14 +8269,7 @@ function _drawEnemyHealNum() {
   if (!enemyHealNum) return;
   let bx, baseY;
   if (isRandomEncounter && encounterMonsters) {
-    const { count, boxX, boxY, sprH: dSprH, gridPos } = _encounterGridLayout();
-    const idx = (enemyHealNum.index < gridPos.length) ? enemyHealNum.index : 0;
-    const pos = gridPos[idx];
-    const m = encounterMonsters[idx];
-    const mc = monsterBattleCanvas.get(m?.monsterId) || goblinBattleCanvas;
-    const mh = mc ? mc.height : dSprH;
-    bx = pos.x + 16;
-    baseY = pos.y + (dSprH - mh) + Math.floor(mh / 2) - 8;
+    ({ bx, baseY } = _encounterMonsterPos(enemyHealNum.index));
   } else {
     bx = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2) - 4;
     baseY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2) - 8;
