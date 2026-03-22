@@ -987,33 +987,23 @@ function _initFakePosePortraits(romData) {
   fakePlayerKneelPortraits    = _genPosePortraits(_FP_KNEEL.map(d => decodeTile(d, 0)));
 }
 // Build a 16×24 h-flipped full-body canvas from 4 top tiles + 2 leg tiles
+function _renderDecodedTile(ctx, tile, pal, ox, oy) {
+  const img = ctx.createImageData(8, 8);
+  for (let p = 0; p < 64; p++) {
+    const ci = tile[p];
+    if (ci === 0) { img.data[p * 4 + 3] = 0; } else {
+      const rgb = NES_SYSTEM_PALETTE[pal[ci]] || [0, 0, 0];
+      img.data[p*4]=rgb[0]; img.data[p*4+1]=rgb[1]; img.data[p*4+2]=rgb[2]; img.data[p*4+3]=255;
+    }
+  }
+  ctx.putImageData(img, ox, oy);
+}
 function _buildFullBody16x24Canvas(topTiles4, legL, legR, pal) {
   const c = document.createElement('canvas');
   c.width = 16; c.height = 24;
   const bctx = c.getContext('2d');
-  topTiles4.forEach((px, i) => {
-    const [bx, by] = _BATTLE_LAYOUT[i];
-    const img = bctx.createImageData(8, 8);
-    for (let p = 0; p < 64; p++) {
-      const ci = px[p];
-      if (ci === 0) { img.data[p*4+3] = 0; } else {
-        const rgb = NES_SYSTEM_PALETTE[pal[ci]] || [0,0,0];
-        img.data[p*4]=rgb[0]; img.data[p*4+1]=rgb[1]; img.data[p*4+2]=rgb[2]; img.data[p*4+3]=255;
-      }
-    }
-    bctx.putImageData(img, bx, by);
-  });
-  [[legL, 0, 16], [legR, 8, 16]].forEach(([px, lx, ly]) => {
-    const img = bctx.createImageData(8, 8);
-    for (let p = 0; p < 64; p++) {
-      const ci = px[p];
-      if (ci === 0) { img.data[p*4+3] = 0; } else {
-        const rgb = NES_SYSTEM_PALETTE[pal[ci]] || [0,0,0];
-        img.data[p*4]=rgb[0]; img.data[p*4+1]=rgb[1]; img.data[p*4+2]=rgb[2]; img.data[p*4+3]=255;
-      }
-    }
-    bctx.putImageData(img, lx, ly);
-  });
+  topTiles4.forEach((tile, i) => { const [bx, by] = _BATTLE_LAYOUT[i]; _renderDecodedTile(bctx, tile, pal, bx, by); });
+  [[legL, 0, 16], [legR, 8, 16]].forEach(([tile, lx, ly]) => _renderDecodedTile(bctx, tile, pal, lx, ly));
   const fl = document.createElement('canvas');
   fl.width = 16; fl.height = 24;
   const flctx = fl.getContext('2d');
@@ -1406,24 +1396,7 @@ function initAdamantoise(romData) {
   const actx = normal.getContext('2d');
 
   const layout = [[0,0], [8,0], [0,8], [8,8]];
-  for (let i = 0; i < 4; i++) {
-    const pal = i < 2 ? palTop : palBot;
-    const img = actx.createImageData(8, 8);
-    const px = tiles[i];
-    for (let p = 0; p < 64; p++) {
-      const ci = px[p];
-      if (ci === 0) {
-        img.data[p * 4 + 3] = 0;
-      } else {
-        const rgb = NES_SYSTEM_PALETTE[pal[ci]] || [0, 0, 0];
-        img.data[p * 4]     = rgb[0];
-        img.data[p * 4 + 1] = rgb[1];
-        img.data[p * 4 + 2] = rgb[2];
-        img.data[p * 4 + 3] = 255;
-      }
-    }
-    actx.putImageData(img, layout[i][0], layout[i][1]);
-  }
+  for (let i = 0; i < 4; i++) _renderDecodedTile(actx, tiles[i], i < 2 ? palTop : palBot, layout[i][0], layout[i][1]);
 
   // Flipped frame
   const flipped = document.createElement('canvas');
@@ -1955,25 +1928,7 @@ function renderBossFaded(romData, fadeSteps) {
   c.width = 16; c.height = 16;
   const cctx = c.getContext('2d');
   const layout = [[0,0], [8,0], [0,8], [8,8]];
-
-  for (let i = 0; i < 4; i++) {
-    const pal = i < 2 ? fadedTop : fadedBot;
-    const img = cctx.createImageData(8, 8);
-    const px = tiles[i];
-    for (let p = 0; p < 64; p++) {
-      const ci = px[p];
-      if (ci === 0) {
-        img.data[p * 4 + 3] = 0;
-      } else {
-        const rgb = NES_SYSTEM_PALETTE[pal[ci]] || [0, 0, 0];
-        img.data[p * 4]     = rgb[0];
-        img.data[p * 4 + 1] = rgb[1];
-        img.data[p * 4 + 2] = rgb[2];
-        img.data[p * 4 + 3] = 255;
-      }
-    }
-    cctx.putImageData(img, layout[i][0], layout[i][1]);
-  }
+  for (let i = 0; i < 4; i++) _renderDecodedTile(cctx, tiles[i], i < 2 ? fadedTop : fadedBot, layout[i][0], layout[i][1]);
   return c;
 }
 
@@ -2044,23 +1999,7 @@ function renderBattleBgWithPalette(romData, bgId, palette, tiles, metaTiles, til
       const py = row * 16;
 
       const subTiles = [[tl, px, py], [tr, px + 8, py], [bl, px, py + 8], [br, px + 8, py + 8]];
-      for (const [tIdx, sx, sy] of subTiles) {
-        const img = bctx.createImageData(8, 8);
-        const pix = tiles[tIdx];
-        for (let p = 0; p < 64; p++) {
-          const ci = pix[p];
-          if (ci === 0) {
-            img.data[p * 4 + 3] = 0;
-          } else {
-            const rgb = NES_SYSTEM_PALETTE[palette[ci]] || [0, 0, 0];
-            img.data[p * 4]     = rgb[0];
-            img.data[p * 4 + 1] = rgb[1];
-            img.data[p * 4 + 2] = rgb[2];
-            img.data[p * 4 + 3] = 255;
-          }
-        }
-        bctx.putImageData(img, sx, sy);
-      }
+      for (const [tIdx, sx, sy] of subTiles) _renderDecodedTile(bctx, tiles[tIdx], palette, sx, sy);
     }
   }
   return c;
