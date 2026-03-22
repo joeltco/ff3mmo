@@ -52,3 +52,21 @@ export const ITEMS = new Map([
   ...ARMOR,
   ...MAGIC,
 ]);
+
+export function isHandEquippable(itemData) {
+  return itemData && (itemData.type === 'weapon' || (itemData.type === 'armor' && itemData.subtype === 'shield'));
+}
+export function isWeapon(id) {
+  if (!id) return false;
+  const item = ITEMS.get(id);
+  return item && item.type === 'weapon';
+}
+export function weaponSubtype(id) {
+  if (!id) return null;
+  const item = ITEMS.get(id);
+  return (item && item.type === 'weapon') ? item.subtype : null;
+}
+export function isBladedWeapon(id) {
+  const st = weaponSubtype(id);
+  return st === 'knife' || st === 'dagger' || st === 'sword';
+}
