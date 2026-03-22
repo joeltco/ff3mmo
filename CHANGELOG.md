@@ -6,6 +6,23 @@ All notable changes to this project are documented here.
 
 _No unreleased changes._
 
+## 1.0.0 — 2026-03-22
+
+### Modularization Phase 3 complete
+
+**New module `src/canvas-utils.js`:**
+- `_makeCanvas16`, `_makeCanvas16ctx` — 16×16 canvas creation helpers
+- `_hflipCanvas16` — horizontal flip utility
+- `_makeWhiteCanvas` — copies canvas with all opaque pixels set to NES white ($30)
+
+**New module `src/water-animation.js`:**
+- `_buildHorizWaterPair` — builds 16-frame horizontal water shift animation for a tile pair
+- `_updateWorldWater(wmr, waterTick)` — animates world map water atlas
+- `_updateIndoorWater(mr, waterTick)` — animates indoor map water tiles
+- `resetWorldWaterCache`, `resetIndoorWaterCache` — called on map transitions
+- All support functions (`_buildHorizWaterFrames`, `_buildWorldVertWaterFrames`, `_buildWaterCache`, etc.) internalized
+- `HORIZ_CHR`, `VERT_CHR`, `ANIM_CHR` constants moved into module
+
 ## 0.9.9 — 2026-03-22
 
 ### Modularization Phase 2 (partial)

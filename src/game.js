@@ -34,6 +34,8 @@ import { nesColorFade, _makeFadedPal, _stepPalFade } from './palette.js';
 import { _getPlane0, _rebuild, _shiftHorizWater, _isWater, _buildHorizMixed, _writePixels64, _writeTilePixels } from './tile-math.js';
 import { BAYER4, DMG_BOUNCE_TABLE, _dmgBounceY } from './data/animation-tables.js';
 import { _calcBoxExpandSize, _encounterGridPos } from './battle-layout.js';
+import { _makeCanvas16, _makeCanvas16ctx, _hflipCanvas16, _makeWhiteCanvas } from './canvas-utils.js';
+import { _updateWorldWater, _updateIndoorWater, resetWorldWaterCache, resetIndoorWaterCache, _buildHorizWaterPair } from './water-animation.js';
 
 const isMobile = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 
@@ -1396,18 +1398,7 @@ function _renderGoblinSprite(tiles, pal0, pal1, tilePalMap) {
   return c;
 }
 
-function _makeWhiteCanvas(srcCanvas) {
-  const { width: w, height: h } = srcCanvas;
-  const wc = document.createElement('canvas'); wc.width = w; wc.height = h;
-  const wctx = wc.getContext('2d');
-  const srcData = srcCanvas.getContext('2d').getImageData(0, 0, w, h);
-  const [r, g, b] = NES_SYSTEM_PALETTE[0x30] || [255, 255, 255];
-  for (let p = 0; p < srcData.data.length; p += 4) {
-    if (srcData.data[p + 3] > 0) { srcData.data[p] = r; srcData.data[p+1] = g; srcData.data[p+2] = b; }
-  }
-  wctx.putImageData(srcData, 0, 0);
-  return wc;
-}
+
 
 function _makeDeathFrames(srcCanvas) {
   const { width: w, height: h } = srcCanvas;
@@ -1732,23 +1723,7 @@ const BATTLE_BG_TILEMAPS    = 0x05E53A;  // bank 2F/$A52A, 3 tilemaps × 32 byte
  */
 // NES palette fade — one step toward black, matches FF3 $FA87 routine
 
-function _makeCanvas16() {
-  const c = document.createElement('canvas'); c.width = 16; c.height = 16; return c;
-}
-function _makeCanvas16ctx() {
-  const c = _makeCanvas16(); return [c, c.getContext('2d')];
-}
-function _buildHorizWaterPair(bL, bR) {
-  const p0L = _getPlane0(bL), p0R = _getPlane0(bR);
-  const p1L = bL.map(p => p & 2), p1R = bR.map(p => p & 2);
-  const arrL = [], arrR = [];
-  let cL = new Uint8Array(p0L), cR = new Uint8Array(p0R);
-  for (let f = 0; f < 16; f++) {
-    arrL.push(_rebuild(cL, p1L)); arrR.push(_rebuild(cR, p1R));
-    [cL, cR] = _shiftHorizWater(cL, cR);
-  }
-  return [arrL, arrR];
-}
+
 
 function _pauseFadeStep(inState, outState) {
   if (pauseState === inState) return PAUSE_TEXT_STEPS - Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
@@ -1802,10 +1777,7 @@ function _resetBattleVars() {
 }
 function _zPressed() { if (!keys['z'] && !keys['Z']) return false; keys['z'] = false; keys['Z'] = false; return true; }
 function _xPressed() { if (!keys['x'] && !keys['X']) return false; keys['x'] = false; keys['X'] = false; return true; }
-function _hflipCanvas16(src) {
-  const c = _makeCanvas16(); const cx = c.getContext('2d');
-  cx.translate(16, 0); cx.scale(-1, 1); cx.drawImage(src, 0, 0); return c;
-}
+
 function _playerStatsSnapshot() {
   return {
     str: playerStats.str, agi: playerStats.agi, vit: playerStats.vit,
@@ -2261,7 +2233,7 @@ export async function loadROM(arrayBuffer) {
   sprite = new Sprite(romRaw, SPRITE_PAL_TOP, SPRITE_PAL_BTM);
   worldMapData = loadWorldMap(romRaw, 0);
   worldMapRenderer = new WorldMapRenderer(worldMapData);
-  _waterCache = null;
+  resetWorldWaterCache();
   _initTitleAssets(romRaw);
 
   await loadSlotsFromDB();
@@ -2349,7 +2321,7 @@ function _loadDungeonFloor(mapId, returnX, returnY) {
   const playerX = returnX !== undefined ? returnX : result.entranceX;
   const playerY = returnY !== undefined ? returnY : result.entranceY;
   worldX = playerX * TILE_SIZE; worldY = playerY * TILE_SIZE;
-  mapRenderer = new MapRenderer(mapData, playerX, playerY); _indoorWaterCache = null;
+  mapRenderer = new MapRenderer(mapData, playerX, playerY); resetIndoorWaterCache();
   _flameSprites = [];
   bossSprite = (floorIndex === 4 && adamantoiseFrames && !bossDefeated)
     ? { frames: adamantoiseFrames, px: 6 * TILE_SIZE, py: 8 * TILE_SIZE } : null;
@@ -2370,7 +2342,7 @@ function _loadRegularMap(mapId, returnX, returnY) {
   const playerX = returnX !== undefined ? returnX : ex;
   const playerY = returnY !== undefined ? returnY : _calcSpawnY(ex, ey);
   worldX = playerX * TILE_SIZE; worldY = playerY * TILE_SIZE;
-  mapRenderer = new MapRenderer(mapData, playerX, playerY); _indoorWaterCache = null;
+  mapRenderer = new MapRenderer(mapData, playerX, playerY); resetIndoorWaterCache();
   if (mapRenderer.hasRoomClip()) {
     const spawnMid = mapData.tilemap[playerY * 32 + playerX];
     disabledTrigger = (spawnMid === 0x44 || playerY !== ey) ? { x: playerX, y: playerY } : null;
@@ -3193,13 +3165,13 @@ function _handleChest(facedX, facedY) {
   msg.set(found, 0); msg.set(itemName, found.length);
   msg[found.length + itemName.length] = 0xC4; // "!"
   showMsgBox(msg);
-  mapRenderer = new MapRenderer(mapData, worldX / TILE_SIZE, worldY / TILE_SIZE); _indoorWaterCache = null;
+  mapRenderer = new MapRenderer(mapData, worldX / TILE_SIZE, worldY / TILE_SIZE); resetIndoorWaterCache();
 }
 
 function _handleSecretWall(facedX, facedY) {
   mapData.tilemap[facedY * 32 + facedX] = 0x30;
   secretWalls.delete(`${facedX},${facedY}`);
-  mapRenderer = new MapRenderer(mapData, worldX / TILE_SIZE, worldY / TILE_SIZE); _indoorWaterCache = null;
+  mapRenderer = new MapRenderer(mapData, worldX / TILE_SIZE, worldY / TILE_SIZE); resetIndoorWaterCache();
 }
 
 function _handleRockPuzzle() {
@@ -3209,7 +3181,7 @@ function _handleRockPuzzle() {
     playSFX(SFX.DOOR);
     for (const wt of rockSwitch.wallTiles) mapData.tilemap[wt.y * 32 + wt.x] = wt.newTile;
     rockSwitch = null;
-    mapRenderer = new MapRenderer(mapData, worldX / TILE_SIZE, worldY / TILE_SIZE); _indoorWaterCache = null;
+    mapRenderer = new MapRenderer(mapData, worldX / TILE_SIZE, worldY / TILE_SIZE); resetIndoorWaterCache();
   };
 }
 
@@ -3244,7 +3216,7 @@ function openPassage() {
     applyPassage(mapData.tilemap);
     const sx = worldX / TILE_SIZE;
     const sy = worldY / TILE_SIZE;
-    mapRenderer = new MapRenderer(mapData, sx, sy); _indoorWaterCache = null;
+    mapRenderer = new MapRenderer(mapData, sx, sy); resetIndoorWaterCache();
     _rebuildFlameSprites();
   };
 }
@@ -3293,7 +3265,7 @@ function _checkFalseWall() {
     worldX = dest.destX * TILE_SIZE;
     worldY = dest.destY * TILE_SIZE;
     sprite.setDirection(DIR_DOWN);
-    mapRenderer = new MapRenderer(mapData, dest.destX, dest.destY); _indoorWaterCache = null;
+    mapRenderer = new MapRenderer(mapData, dest.destX, dest.destY); resetIndoorWaterCache();
   });
   return true;
 }
@@ -3625,7 +3597,7 @@ function _checkHiddenTrap(trigger, tileX, tileY) {
   if (!hiddenTraps || !hiddenTraps.has(`${tileX},${tileY}`)) return false;
   hiddenTraps.delete(`${tileX},${tileY}`);
   mapData.tilemap[tileY * 32 + tileX] = 0x74;
-  mapRenderer = new MapRenderer(mapData, tileX, tileY); _indoorWaterCache = null;
+  mapRenderer = new MapRenderer(mapData, tileX, tileY); resetIndoorWaterCache();
   playSFX(SFX.DOOR);
   if (trigger.source === 'dynamic' && trigger.type === 1 &&
       dungeonDestinations && dungeonDestinations.has(trigger.trigId)) {
@@ -3733,15 +3705,6 @@ function checkTrigger() {
   return false;
 }
 
-// Self-contained water animation (bypasses cached renderer modules)
-// Horizontal ($22-$25): 8-bit circular RIGHT shift per tile
-// Vertical ($26-$27): row rotation DOWN (NES bank 3D $B83F)
-const HORIZ_CHR = new Set([0x22, 0x23, 0x24, 0x25]);
-const VERT_CHR = [0x26, 0x27];
-const ANIM_CHR = new Set([0x22, 0x23, 0x24, 0x25, 0x26, 0x27]);
-let _waterCache = null;
-
-
 function _startMoveFromKeys(resetOnIdle) {
   if (keys['ArrowDown']) startMove(DIR_DOWN);
   else if (keys['ArrowUp']) startMove(DIR_UP);
@@ -3750,82 +3713,6 @@ function _startMoveFromKeys(resetOnIdle) {
   else if (resetOnIdle) sprite.resetFrame();
 }
 
-function _buildWorldHorizWaterFrames(chrTiles, frames) { _buildHorizWaterFrames(chrTiles, frames); }
-
-
-function _buildWorldVertWaterFrames(chrTiles, frames) {
-  for (const ci of VERT_CHR) {
-    const base = chrTiles[ci];
-    if (!base || !_isWater(base)) continue;
-    const p0 = _getPlane0(base), p1 = base.map(p => p & 2);
-    const arr = [];
-    for (let f = 0; f < 8; f++) {
-      const rot = new Uint8Array(8);
-      for (let r = 0; r < 8; r++) rot[r] = p0[((r - f) % 8 + 8) % 8];
-      arr.push(_rebuild(rot, p1));
-    }
-    frames.set(ci, arr);
-  }
-}
-
-function _findAnimatedMetatiles(metatiles) {
-  const metas = [];
-  for (let m = 0; m < 128; m++) {
-    const mt = metatiles[m];
-    if (ANIM_CHR.has(mt.tl) || ANIM_CHR.has(mt.tr) || ANIM_CHR.has(mt.bl) || ANIM_CHR.has(mt.br)) metas.push(m);
-  }
-  return metas;
-}
-
-function _buildWaterCache(wmr) {
-  const { metatiles, chrTiles } = wmr.data;
-  const frames = new Map();
-  _buildWorldHorizWaterFrames(chrTiles, frames);
-  _buildWorldVertWaterFrames(chrTiles, frames);
-  return { frames, metas: _findAnimatedMetatiles(metatiles) };
-}
-
-
-function _updateWorldWater(wmr) {
-  if (!wmr || !wmr._atlas) return;
-  if (!_waterCache) _waterCache = _buildWaterCache(wmr);
-  const { frames, metas } = _waterCache;
-  if (metas.length === 0) return;
-
-  const { metatiles, chrTiles, palettes, tileAttrs } = wmr.data;
-  const actx = wmr._atlas.getContext('2d');
-  const tileImg = actx.createImageData(8, 8);
-  const td = tileImg.data;
-  const hShift = Math.floor(waterTick / 8) % 16;
-  const hPrev  = (hShift + 15) % 16;
-  const subRow = waterTick % 8;
-  const vFrame = Math.floor(waterTick / 8) % 8;
-
-  for (const m of metas) {
-    const meta = metatiles[m];
-    const rgbPal = palettes[tileAttrs[m] & 0x03].map(ni => NES_SYSTEM_PALETTE[ni & 0x3F] || [0,0,0]);
-    const chrs = [meta.tl, meta.tr, meta.bl, meta.br];
-    const offs = [[0,0],[8,0],[0,8],[8,8]];
-
-    for (let q = 0; q < 4; q++) {
-      const ci = chrs[q];
-      const fr = frames.get(ci);
-      if (!fr) {
-        const tile = chrTiles[ci];
-        if (!tile) continue;
-        _writeTilePixels(td, tile, rgbPal);
-      } else if (HORIZ_CHR.has(ci)) {
-        const curTile = fr[hShift % fr.length];
-        const prevTile = fr[hPrev % fr.length];
-        // Per-row cascade: rows <= subRow use current shift, others use previous
-          _writeTilePixels(td, _buildHorizMixed(curTile, prevTile, subRow), rgbPal);
-      } else {
-        _writeTilePixels(td, fr[vFrame % fr.length], rgbPal);
-      }
-      actx.putImageData(tileImg, m * 16 + offs[q][0], offs[q][1]);
-    }
-  }
-}
 
 // --- Flame sprite decoding ---
 // Two-frame sprite graphics bank $0A: file offset 0x14010
@@ -3964,73 +3851,7 @@ function _rebuildFlameSprites() {
 }
 
 
-let _indoorWaterCache = null;
 
-function _buildHorizWaterFrames(chrTiles, frames) {
-  for (const [ciL, ciR] of [[0x22, 0x23], [0x24, 0x25]]) {
-    const bL = chrTiles[ciL], bR = chrTiles[ciR];
-    if (!bL || !bR || !_isWater(bL) || !_isWater(bR)) continue;
-    const [arrL, arrR] = _buildHorizWaterPair(bL, bR);
-    frames.set(ciL, arrL); frames.set(ciR, arrR);
-  }
-}
-function _findAnimatedPositions(tilemap, metatiles) {
-  const positions = [];
-  for (let ty = 0; ty < 32; ty++) for (let tx = 0; tx < 32; tx++) {
-    const mid = tilemap[ty * 32 + tx];
-    const mt = metatiles[mid < 128 ? mid : mid & 0x7F];
-    if (ANIM_CHR.has(mt.tl) || ANIM_CHR.has(mt.tr) || ANIM_CHR.has(mt.bl) || ANIM_CHR.has(mt.br))
-      positions.push({ tx, ty, m: mid < 128 ? mid : mid & 0x7F });
-  }
-  return positions;
-}
-function _buildIndoorWaterCache(mr) {
-  const { chrTiles, metatiles, tilemap } = mr.mapData;
-  const frames = new Map();
-  _buildHorizWaterFrames(chrTiles, frames);
-  _buildWorldVertWaterFrames(chrTiles, frames);
-  return { frames, positions: _findAnimatedPositions(tilemap, metatiles) };
-}
-
-function _updateIndoorWater(mr) {
-  if (!mr || !mr._mapCanvas) return;
-  if (!_indoorWaterCache) _indoorWaterCache = _buildIndoorWaterCache(mr);
-  const { frames, positions } = _indoorWaterCache;
-  if (positions.length === 0) return;
-
-  const { metatiles, chrTiles, palettes, tileAttrs } = mr.mapData;
-  const fctx = mr._mapCanvas.getContext('2d');
-  const tileImg = fctx.createImageData(8, 8);
-  const td = tileImg.data;
-
-  const hShift = Math.floor(waterTick / 8) % 16;
-  const hPrev = (hShift + 15) % 16;
-  const subRow = waterTick % 8;
-  const vFrame = Math.floor(waterTick / 8) % 8;
-
-  for (const { tx, ty, m } of positions) {
-    const meta = metatiles[m];
-    const palIdx = tileAttrs[m] & 0x03;
-    const pal = palettes[palIdx];
-    const rgbPal = pal.map(ni => NES_SYSTEM_PALETTE[ni & 0x3F] || [0, 0, 0]);
-    const chrs = [meta.tl, meta.tr, meta.bl, meta.br];
-    const offs = [[0, 0], [8, 0], [0, 8], [8, 8]];
-
-    for (let q = 0; q < 4; q++) {
-      const ci = chrs[q];
-      const fr = frames.get(ci);
-      if (!fr) continue;
-
-      if (HORIZ_CHR.has(ci)) {
-        const curTile = fr[hShift % fr.length], prevTile = fr[hPrev % fr.length];
-        _writeTilePixels(td, _buildHorizMixed(curTile, prevTile, subRow), rgbPal);
-      } else {
-        _writeTilePixels(td, fr[vFrame % fr.length], rgbPal);
-      }
-      fctx.putImageData(tileImg, tx * 16 + offs[q][0], ty * 16 + offs[q][1]);
-    }
-  }
-}
 
 function _renderSprites(camX, camY, originX, spriteY) {
   if (!onWorldMap && _flameSprites.length > 0) {
@@ -4065,10 +3886,10 @@ function _renderSprites(camX, camY, originX, spriteY) {
 function _renderMapAndWater(camX, camY, originX, originY, spriteY) {
   if (onWorldMap && worldMapRenderer) {
     worldMapRenderer.draw(ctx, camX, camY, originX, originY);
-    _updateWorldWater(worldMapRenderer);
+    _updateWorldWater(worldMapRenderer, waterTick);
   } else if (mapRenderer) {
     mapRenderer.draw(ctx, camX, camY, originX, originY);
-    _updateIndoorWater(mapRenderer);
+    _updateIndoorWater(mapRenderer, waterTick);
   }
   if ((transState === 'none' || transState === 'trap-reveal') &&
       (battleState === 'none' || battleState === 'flash-strobe' || battleState.startsWith('roar-'))) {
