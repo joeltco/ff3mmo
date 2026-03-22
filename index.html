@@ -648,7 +648,7 @@
     }
 
     function checkPw() {
-      if (pwInput.value === GATE_PW) {
+      if (pwInput.value.trim().toLowerCase() === GATE_PW) {
         unlockGate();
       } else {
         pwErr.textContent = 'Wrong password.';
