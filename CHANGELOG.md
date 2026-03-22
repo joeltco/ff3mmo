@@ -6,6 +6,34 @@ All notable changes to this project are documented here.
 
 _No unreleased changes._
 
+## 0.9.4 — 2026-03-22
+
+### M97–M98: game.js refactor (continued) — 8736L → 8477L (−259L)
+
+Continued pure structural refactoring of `src/game.js`. No new features or behavior changes.
+
+**New module-level helpers extracted:**
+- `_makeCanvas16()` — 6 sites
+- `_hflipCanvas16(src)` — 4 sites (horizontal-flip 16×16 canvas)
+- `_playerStatsSnapshot()` — 5 sites (save slot stats object)
+- `_syncSaveSlotProgress()` — 3 sites (level/exp/stats/inventory/gil sync)
+- `_zPressed()` / `_xPressed()` — 9 + 10 sites (key consume helpers)
+- `_resetBattleVars()` — 2 sites (22-line battle state reset block)
+- `_loadBattlePalette(romData, bgId)` — 3 sites
+- `_shiftHorizWater(cL, cR)` — 3 sites (bit-rotation for water animation)
+- `_buildHorizWaterPair(bL, bR)` — 3 sites
+- `_grayViewport()` — 2 sites (saturate-0 gray overlay)
+- `_pausePanelLayout()` — 2 sites (pause menu scroll position)
+- `_pauseFadeStep(inState, outState)` — 3 sites
+- `_drawHudWithFade(fullCanvas, fadeCanvases, fadeStep)` — 2 sites
+- `_encounterGridLayout()` — 4 sites (encounter box + grid position)
+- `_buildItemRowBytes(nameBytes, countStr)` — 2 sites
+
+**Deduplication:**
+- `_renderDecodedTile` collapsed to alias for `_blitTile` (identical logic)
+- `_renderPortrait` simplified from 17L to 3L using `_blitTile` + `_makeCanvas16`
+- 4 inline 64-pixel tile loops replaced with `_blitTile` calls (`initLandTurtleBattle`, `_renderGoblinSprite`, `initMoogleSprite`, `renderSpriteFaded`)
+
 ## 2026-03-21
 
 ### M89–M90: Refactor/modularize game.js (continued)
