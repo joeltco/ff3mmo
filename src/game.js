@@ -17,6 +17,17 @@ import { initFont, drawText, measureText, TEXT_WHITE, TEXT_GREY, TEXT_YELLOW } f
 import { MONSTERS } from './data/monsters.js';
 import { ITEMS } from './data/items.js';
 import { ENCOUNTERS } from './data/encounters.js';
+import { CRIT_RATE, CRIT_MULT, BASE_HIT_RATE, BOSS_HIT_RATE, GOBLIN_HIT_RATE,
+         calcDamage, rollHits } from './battle-math.js';
+import { LOCATIONS, PLAYER_POOL, PLAYER_PALETTES, CHAT_PHRASES } from './data/players.js';
+import { BATTLE_MISS, BATTLE_GAME_OVER, BATTLE_ROAR, BATTLE_FIGHT, BATTLE_RUN,
+         BATTLE_CANT_ESCAPE, BATTLE_RAN_AWAY, BATTLE_DEFEND, BATTLE_VICTORY,
+         BATTLE_GOT_EXP, BATTLE_LEVEL_UP, BATTLE_BOSS_NAME, BATTLE_GOBLIN_NAME,
+         BATTLE_MENU_ITEMS, PAUSE_ITEMS, AREA_NAMES, DUNGEON_NAME,
+         POND_RESTORED } from './data/strings.js';
+import { ENC_PAL0, ENC_PAL1, EYE_FANG_TILE_PAL, EYE_FANG_RAW,
+         BLUE_WISP_TILE_PAL, BLUE_WISP_RAW,
+         CARBUNCLE_TILE_PAL, CARBUNCLE_RAW } from './data/monster-sprites.js';
 
 const isMobile = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 
@@ -185,80 +196,7 @@ let goblinBattleCanvas = null;  // 32×32 canvas
 let goblinWhiteCanvas = null;   // 32×32 all-white version for pre-attack flash
 let goblinDeathFrames = null;   // pre-rendered diagonal deterioration frames
 
-// Shared BG palettes for random encounter sprites (from FCEUX PPU dump, $3F00-$3F0F)
-const ENC_PAL0 = [0x0F, 0x12, 0x22, 0x3B]; // black, dark-teal, purple, tan
-const ENC_PAL1 = [0x0F, 0x15, 0x22, 0x37]; // black, dark-red, purple, orange
-
-// Eye Fang ($02) — PPU tiles $70-$87, 4×6 = 32×48px
-const EYE_FANG_TILE_PAL = [0,0,0,0,0,0,0,0, 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1];
-const EYE_FANG_RAW = new Uint8Array([
-  0x00,0x0D,0x01,0x00,0x04,0x03,0x00,0x01,0x00,0x0E,0x01,0x00,0x00,0x00,0x00,0x00, // $70
-  0x00,0x80,0x71,0x25,0x0B,0xE5,0x3B,0x95,0x00,0x00,0x80,0x38,0x0C,0x06,0x03,0x06, // $71
-  0x00,0x70,0x41,0x06,0xDA,0x9C,0x00,0x98,0x00,0x00,0xC0,0x81,0x86,0xC0,0x80,0x00, // $72
-  0x00,0x67,0x84,0x84,0x02,0x02,0x02,0x02,0x00,0x00,0x00,0x80,0x00,0x00,0x00,0x00, // $73
-  0x00,0x00,0x00,0x00,0x00,0x00,0x05,0x04,0x01,0x00,0x00,0x00,0x00,0x03,0x06,0x0E, // $74
-  0x06,0x08,0x1C,0x18,0xE0,0xA0,0x80,0x00,0x00,0x04,0x10,0x32,0x90,0xC0,0x00,0x00, // $75
-  0xFC,0x62,0x13,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x10,0x00,0x00,0x00,0x00, // $76
-  0x1C,0x30,0x24,0xEC,0xD0,0x10,0x00,0x00,0x00,0x00,0x00,0x00,0x04,0x00,0x00,0x00, // $77
-  0x14,0x10,0x30,0x18,0x00,0x34,0x12,0x1F,0x08,0x0C,0x08,0x20,0x38,0x08,0x0C,0x00, // $78
-  0x00,0x00,0x00,0x00,0x01,0x01,0x00,0x85,0x00,0x01,0x01,0x02,0x0D,0x1D,0x1A,0x34, // $79
-  0x00,0x06,0x62,0x1A,0x3D,0xBC,0x7B,0x19,0x38,0xD6,0x62,0x80,0x01,0x80,0x03,0x01, // $7A
-  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, // $7B
-  0x0F,0x00,0x04,0x02,0x09,0x15,0x0A,0x0D,0x00,0x00,0x03,0x1C,0x11,0x21,0x28,0x2C, // $7C
-  0x84,0x00,0x01,0x67,0x2E,0x47,0xE7,0xC9,0x34,0x1B,0x87,0x63,0x25,0x0F,0x0F,0x07, // $7D
-  0xC0,0x70,0xF8,0xDC,0xFE,0x42,0xA0,0x40,0x20,0xB9,0xDC,0xFC,0xFE,0xC2,0x9C,0x3E, // $7E
-  0x00,0x00,0x40,0x40,0x40,0x9A,0xE8,0xF4,0x00,0x00,0xA0,0x58,0x44,0x18,0x0A,0x02, // $7F
-  0x43,0x0F,0x1B,0x27,0x03,0x0D,0x00,0x00,0x20,0x40,0x58,0x40,0x30,0x0C,0x10,0x0B, // $80
-  0xE3,0xC5,0xD1,0xB8,0xB2,0x0D,0x0B,0x05,0x07,0x03,0x03,0x01,0x00,0x2C,0x08,0x11, // $81
-  0x40,0x40,0x40,0x31,0x00,0xED,0xF8,0x54,0x26,0x26,0x3C,0x88,0x00,0x01,0x00,0x04, // $82
-  0xE4,0xD8,0x80,0x68,0x20,0x40,0x00,0xC0,0x02,0x18,0x04,0x60,0x20,0x00,0x00,0x00, // $83
-  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, // $84
-  0x93,0x00,0x20,0x28,0x01,0x04,0x00,0x00,0x0B,0x0C,0x03,0x00,0x04,0x04,0x00,0x00, // $85
-  0x26,0x60,0x30,0x04,0x90,0x00,0x08,0x80,0x26,0x68,0x80,0x00,0x48,0x88,0x88,0x80, // $86
-  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x80,0x80,0x00,0x00,0x00,0x00,0x00,0x00, // $87
-]);
-
-// Blue Wisp ($03) — PPU tiles $C0-$CF, 4×4 = 32×32px, all pal0
-const BLUE_WISP_TILE_PAL = [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0];
-const BLUE_WISP_RAW = new Uint8Array([
-  0x00,0x00,0x00,0x00,0x02,0x01,0x01,0x00,0x00,0x00,0x00,0x00,0x04,0x00,0x00,0x00, // $C0
-  0x00,0x10,0x08,0x0C,0x07,0x9F,0xFF,0xFC,0x00,0x10,0x00,0x00,0x00,0x00,0x00,0x03, // $C1
-  0x00,0x00,0x18,0x91,0xD0,0xF8,0xFF,0x3F,0x00,0x04,0x00,0x01,0x00,0x00,0x00,0xC1, // $C2
-  0x00,0x00,0x00,0xE0,0x1C,0x87,0x0E,0xF0,0x00,0x00,0x00,0xE0,0x1C,0x07,0x0F,0xFE, // $C3
-  0x04,0x01,0x0F,0x33,0x43,0x47,0x63,0x3F,0x00,0x00,0x0E,0x38,0x60,0x60,0x71,0x3F, // $C4
-  0xF0,0xE0,0xC3,0x8F,0x9F,0x9F,0xF1,0x0F,0x0F,0x1F,0x3F,0x7F,0x7F,0x7F,0xFF,0xFF, // $C5
-  0x7F,0x1F,0xC1,0xF1,0xF8,0xF8,0xFC,0xFC,0xBF,0xE0,0xFE,0xFE,0xFF,0xFF,0xFF,0xFF, // $C6
-  0x00,0xE0,0xF0,0xE0,0xF0,0x7C,0x70,0x70,0x00,0x00,0x00,0x00,0x02,0x80,0x80,0x80, // $C7
-  0x1F,0x0F,0x07,0x3B,0x03,0x03,0x09,0x1F,0x1C,0x00,0x00,0x00,0x40,0x00,0x08,0x1F, // $C8
-  0x7F,0x7F,0x1F,0x1F,0x8F,0xC3,0xF0,0xF0,0xBF,0xBF,0xFF,0xFF,0x7F,0x3F,0xFF,0x0F, // $C9
-  0xFC,0xFC,0xF8,0xF9,0xF1,0xC3,0x0F,0x7F,0xFF,0xFF,0xFF,0xFE,0xFE,0xFC,0xF0,0x87, // $CA
-  0x60,0xF0,0xEC,0xE0,0xFC,0xCE,0xE4,0x86,0x80,0x00,0x00,0x60,0x1C,0x0E,0x04,0x86, // $CB
-  0x0C,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0x0E,0x00,0x00,0x00,0x00,0x00,0x00,0x00, // $CC
-  0xFC,0xBF,0x17,0x41,0x20,0x1F,0x00,0x00,0x03,0x00,0x00,0x40,0x60,0x3F,0x01,0x00, // $CD
-  0xF8,0xFC,0xF7,0x81,0x00,0x80,0x7C,0x04,0x7F,0x00,0x00,0x00,0x00,0x80,0xFC,0x1E, // $CE
-  0xFE,0x3C,0x00,0x00,0x00,0x00,0x00,0x00,0xFE,0x7E,0x3C,0x00,0x00,0x00,0x00,0x00, // $CF
-]);
-
-// Carbuncle ($01) — PPU tiles $E4-$F3, 4×4 = 32×32px, mixed pal
-const CARBUNCLE_TILE_PAL = [0,0,0,0, 0,0,0,0, 0,0,1,1, 0,0,1,1];
-const CARBUNCLE_RAW = new Uint8Array([
-  0x00,0x00,0x00,0x00,0x00,0x01,0x01,0x05,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, // $E4
-  0x00,0x3F,0x47,0x02,0x02,0x12,0x9D,0xB9,0x00,0x00,0x38,0xFC,0xFC,0xEC,0x61,0x41, // $E5
-  0x00,0x00,0x18,0xBF,0xFE,0x43,0x03,0x41,0x00,0x00,0x00,0x80,0x81,0x3C,0x7C,0x3E, // $E6
-  0x00,0x00,0x00,0x00,0x80,0x80,0x80,0x40,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x40, // $E7
-  0x06,0x09,0x19,0x10,0x10,0x10,0x30,0x3C,0x00,0x06,0x06,0x0F,0x0F,0x0F,0x0F,0x03, // $E8
-  0x36,0xC9,0xF1,0x71,0x20,0xC0,0x26,0xA9,0x06,0x08,0x06,0x86,0xCF,0x0F,0xA8,0x21, // $E9
-  0x41,0xAF,0xD8,0xE7,0x65,0x10,0x30,0xCC,0x3E,0x10,0x00,0x00,0x86,0xD7,0x37,0xCF, // $EA
-  0x40,0xA0,0x20,0xC0,0xE0,0x18,0x18,0x08,0x40,0x20,0x20,0x00,0x00,0xE0,0xE0,0xF0, // $EB
-  0x18,0x03,0x34,0x2B,0x4B,0x51,0x41,0x61,0x00,0x03,0x04,0x08,0x28,0x26,0x3E,0x1E, // $EC
-  0x46,0x98,0x20,0x70,0xA0,0xB0,0xB0,0x50,0x46,0x99,0x07,0x0F,0x1F,0x0F,0x0F,0x4F, // $ED
-  0x00,0x00,0x00,0x00,0x00,0x03,0x07,0x0C,0x67,0x3B,0xBB,0xD9,0xC0,0xE7,0xCF,0xDF, // $EE
-  0x00,0x00,0x00,0x00,0x00,0x00,0x80,0xC0,0xF8,0xF8,0xF0,0xC0,0x18,0x0C,0x9C,0xCE, // $EF
-  0x61,0x32,0x3B,0x00,0x00,0x27,0x70,0x07,0x1E,0x0C,0x03,0x00,0x07,0x3E,0x70,0x06, // $F0
-  0x5C,0x0F,0xB0,0x1C,0x03,0xF0,0xDE,0xC3,0x43,0x00,0xB0,0x1F,0x83,0x00,0xE0,0x00, // $F1
-  0x08,0x08,0x0C,0x07,0x00,0x00,0x00,0x00,0xDC,0x9C,0x5F,0xCF,0xE7,0x70,0x70,0x1C, // $F2
-  0x40,0x40,0xC0,0x80,0x00,0x00,0x00,0x00,0xCE,0xCE,0xCE,0x9C,0x08,0x70,0x18,0x08, // $F3
-]);
+// ENC_PAL0/1, *_RAW, *_TILE_PAL → data/monster-sprites.js
 
 // Per-monster canvas storage
 const monsterBattleCanvas = new Map(); // monsterId → canvas
@@ -547,8 +485,7 @@ let knifeSlashFramesR = null;      // knife diagonal slash frames (right hand)
 let knifeSlashFramesL = null;      // knife diagonal slash frames (left hand)
 let swordSlashFramesR = null;      // sword diagonal slash frames (right hand)
 let swordSlashFramesL = null;      // sword diagonal slash frames (left hand)
-const BATTLE_MISS = new Uint8Array([0x96, 0xD2, 0xDC, 0xDC]); // "Miss" in ROM encoding
-const BATTLE_GAME_OVER = new Uint8Array([0x90,0xCA,0xD6,0xCE,0xFF,0x98,0xDF,0xCE,0xDB]); // "Game Over"
+// BATTLE_MISS, BATTLE_GAME_OVER → data/strings.js
 
 // Battle timing constants
 const BATTLE_SCROLL_MS = 150;
@@ -597,11 +534,7 @@ const SLASH_FRAMES = 3;                  // number of slash animation frames (on
 const HIT_PAUSE_MS = 150;               // pause showing damage number per hit
 const MISS_SHOW_MS = 300;               // "Miss" text display time
 const PLAYER_DMG_SHOW_MS = 700;         // pause after final hit before enemy counter/death
-const CRIT_RATE = 5;                     // 5% crit chance per hit
-const CRIT_MULT = 1.5;                  // critical hit damage multiplier
-const BASE_HIT_RATE = 80;               // 80% accuracy per hit (unarmed Onion Knight)
-const BOSS_HIT_RATE = 85;               // boss accuracy
-const GOBLIN_HIT_RATE = 75;             // goblin accuracy
+// CRIT_RATE, CRIT_MULT, BASE_HIT_RATE, BOSS_HIT_RATE, GOBLIN_HIT_RATE → battle-math.js
 
 // Top box — battle scene BG or area name
 let topBoxMode = 'name';       // 'name' | 'battle'
@@ -622,11 +555,7 @@ const TOPBOX_DISPLAY_HOLD = 1800;    // ms to show area name
 // White text on blue background — colors 1&2 = NES $02 (blue) so cell bg matches fill
 const TEXT_WHITE_ON_BLUE = [0x02, 0x02, 0x02, 0x30];
 
-// Area name tile bytes (see text-system.md for encoding)
-const AREA_NAMES = new Map([
-  [114, new Uint8Array([0x9E, 0xDB])],  // "Ur"
-]);
-const DUNGEON_NAME = new Uint8Array([0x8A, 0xD5, 0xDD, 0xCA, 0xDB, 0xFF, 0x8C, 0xCA, 0xDF, 0xCE]); // "Altar Cave"
+// AREA_NAMES, DUNGEON_NAME → data/strings.js
 
 // Pause menu state
 let pauseState = 'none';       // 'none'|'scroll-in'|'text-in'|'open'|'text-out'|'scroll-out'
@@ -655,39 +584,11 @@ const PAUSE_MENU_W = 80;       // 10 tiles wide (left half of viewport)
 const PAUSE_MENU_H = 112;      // 14 tiles tall
 const CURSOR_TILE_ROM = 0x01B450;  // hand cursor (4 tiles, 2x2 = 16x16)
 let cursorTileCanvas = null;
-const PAUSE_ITEMS = [
-  new Uint8Array([0x92,0xDD,0xCE,0xD6]),           // "Item"
-  new Uint8Array([0x96,0xCA,0xD0,0xD2,0xCC]),       // "Magic"
-  new Uint8Array([0x8E,0xDA,0xDE,0xD2,0xD9]),       // "Equip"
-  new Uint8Array([0x9C,0xDD,0xCA,0xDD,0xDC]),       // "Stats"
-  new Uint8Array([0x93,0xD8,0xCB]),                 // "Job"
-  new Uint8Array([0x9C,0xCA,0xDF,0xCE]),             // "Save"
-];
+// PAUSE_ITEMS → data/strings.js
 
 // --- Fake players (MMO roster) ---
 // All locations players can be in
-const LOCATIONS = ['world', 'ur', 'cave-0', 'cave-1', 'cave-2', 'cave-3', 'crystal'];
-// Full player pool — each has a current location, moves around over time
-const PLAYER_POOL = [
-  { name: 'Zephyr',  level: 5,  palIdx: 1, camper: false, loc: 'ur' },
-  { name: 'Mira',    level: 4,  palIdx: 2, camper: false, loc: 'world' },
-  { name: 'Aldric',  level: 5,  palIdx: 3, camper: true,  loc: 'ur' },
-  { name: 'Suki',    level: 3,  palIdx: 4, camper: false, loc: 'cave-0' },
-  { name: 'Fenris',  level: 5,  palIdx: 5, camper: false, loc: 'cave-1' },
-  { name: 'Lenna',   level: 5,  palIdx: 6, camper: true,  loc: 'ur' },
-  { name: 'Grok',    level: 5,  palIdx: 7, camper: false, loc: 'cave-3' },
-  { name: 'Ivy',     level: 2,  palIdx: 0, camper: false, loc: 'ur' },
-  { name: 'Rook',    level: 5,  palIdx: 3, camper: false, loc: 'cave-2' },
-  { name: 'Tora',    level: 5,  palIdx: 5, camper: false, loc: 'world' },
-  { name: 'Blix',    level: 4,  palIdx: 7, camper: false, loc: 'cave-0' },
-  { name: 'Cassia',  level: 5,  palIdx: 6, camper: true,  loc: 'cave-1' },
-  { name: 'Duran',   level: 5,  palIdx: 1, camper: false, loc: 'crystal' },
-  { name: 'Nyx',     level: 1,  palIdx: 4, camper: false, loc: 'ur' },
-  { name: 'Orin',    level: 4,  palIdx: 0, camper: false, loc: 'world' },
-  { name: 'Pip',     level: 3,  palIdx: 2, camper: false, loc: 'cave-0' },
-  { name: 'Vex',     level: 5,  palIdx: 7, camper: false, loc: 'cave-2' },
-  { name: 'Wren',    level: 4,  palIdx: 5, camper: false, loc: 'world' },
-];
+// LOCATIONS, PLAYER_POOL → data/players.js
 
 // --- Chat system ---
 const CHAT_LINE_H = 9;          // 8px font + 1px gap
@@ -696,28 +597,7 @@ const CHAT_HISTORY = 30;        // total messages kept in buffer
 const CHAT_EXPAND_MS = 650;     // expand/collapse duration — tuned to match SCREEN_OPEN/CLOSE SFX
 const CHAT_AUTO_MIN_MS = 5000;
 const CHAT_AUTO_MAX_MS = 16000;
-const CHAT_PHRASES = [
-  'anyone near floor 3?',
-  'need heals',
-  'good luck!',
-  'watch out for traps',
-  'lfg crystal room',
-  'found a chest!!',
-  'that boss hits hard',
-  'anyone selling armor?',
-  'longsword on floor 3',
-  'stay together',
-  'almost to the boss',
-  'gg everyone',
-  'which floor is this?',
-  'low hp, retreating',
-  'nice one!',
-  'any potions?',
-  'boss incoming',
-  'clear!',
-  'level up!',
-  'this dungeon is wild',
-];
+// CHAT_PHRASES → data/players.js
 
 function getPlayerLocation() {
   if (onWorldMap) return 'world';
@@ -752,18 +632,7 @@ function generateAllyStats(player) {
   const def = vit + totalDef;
   return { name: player.name, palIdx: player.palIdx, level: lv, hp, maxHP: hp, atk, def, agi, weaponId, weaponL, fadeStep: ROSTER_FADE_STEPS };
 }
-// Palette variants — only color 3 changes (original $16 = red outfit)
-// Colors 0=$0F, 1=$36 (skin), 2=$30 (white) stay the same
-const PLAYER_PALETTES = [
-  [0x0F, 0x36, 0x30, 0x16], // original red
-  [0x0F, 0x36, 0x30, 0x12], // blue
-  [0x0F, 0x36, 0x30, 0x1A], // green
-  [0x0F, 0x36, 0x30, 0x14], // purple
-  [0x0F, 0x36, 0x30, 0x18], // yellow
-  [0x0F, 0x36, 0x30, 0x11], // cyan
-  [0x0F, 0x36, 0x30, 0x17], // orange
-  [0x0F, 0x36, 0x30, 0x15], // pink
-];
+// PLAYER_PALETTES → data/players.js
 let fakePlayerPortraits = [];   // HTMLCanvasElement[palIdx][fadeStep]
 let fakePlayerFullBodyCanvases = []; // HTMLCanvasElement[palIdx] — 16×24 h-flipped full body for PVP (idle)
 let fakePlayerHitFullBodyCanvases = []; // HTMLCanvasElement[palIdx] — 16×24 h-flipped full body, hit pose legs
@@ -833,20 +702,7 @@ let msgBoxTimer = 0;
 let msgBoxBytes = null;        // Uint8Array text to display
 let msgBoxOnClose = null;      // callback after slide-out completes
 
-// Battle text byte arrays
-const BATTLE_ROAR = new Uint8Array([0x9B,0x98,0x98,0x98,0x98,0x98,0x8A,0x9B,0xC4,0xC4]); // "ROOOOOAR!!"
-const POND_RESTORED = new Uint8Array([0x8F,0xDE,0xD5,0xD5,0xE2,0xFF,0x9B,0xCE,0xDC,0xDD,0xD8,0xDB,0xCE,0xCD,0xC4]); // "Fully Restored!"
-const BATTLE_FIGHT = new Uint8Array([0x8F,0xD2,0xD0,0xD1,0xDD]); // "Fight"
-const BATTLE_RUN = new Uint8Array([0x9B,0xDE,0xD7]); // "Run"
-const BATTLE_CANT_ESCAPE = new Uint8Array([0x8C,0xCA,0xD7,0xDD,0xFF,0xCE,0xDC,0xCC,0xCA,0xD9,0xCE,0xC4]); // "Cant escape!"
-const BATTLE_RAN_AWAY = new Uint8Array([0x9B,0xCA,0xD7,0xFF,0xCA,0xE0,0xCA,0xE2,0xC4,0xC4,0xC4]); // "Ran away..."
-const BATTLE_DEFEND = new Uint8Array([0x8D,0xCE,0xCF,0xCE,0xD7,0xCD]); // "Defend"
-const BATTLE_VICTORY = new Uint8Array([0x9F,0xD2,0xCC,0xDD,0xD8,0xDB,0xE2,0xC4]); // "Victory!"
-const BATTLE_GOT_EXP = new Uint8Array([0x90,0xD8,0xDD,0xFF,0x82,0x80,0xFF,0x8E,0xA1,0x99,0xC4]); // "Got 20 EXP!"
-const BATTLE_LEVEL_UP = new Uint8Array([0x95,0xCE,0xDF,0xCE,0xD5,0xFF,0x9E,0xD9,0xC4]); // "Level Up!"
-const BATTLE_BOSS_NAME = new Uint8Array([0x95,0xCA,0xD7,0xCD,0xFF,0x9D,0xDE,0xDB,0xDD,0xD5,0xCE]); // "Land Turtle"
-const BATTLE_GOBLIN_NAME = new Uint8Array([0x90,0xD8,0xCB,0xD5,0xD2,0xD7]); // "Goblin"
-const BATTLE_MENU_ITEMS = [BATTLE_FIGHT, BATTLE_DEFEND, PAUSE_ITEMS[0]/*Item*/, BATTLE_RUN];
+// Battle text byte arrays → data/strings.js
 
 // Player sprite palettes — from FCEUX PPU trace (dual palette: top/bottom tiles)
 const SPRITE_PAL_TOP = [0x0F, 0x0F, 0x16, 0x30];    // spr_pal0: black, dark red, white
@@ -3675,11 +3531,384 @@ function startMove(dir) {
   }
 }
 
-function handleInput() {
-  if (!sprite) return;
+function _battleInputTargetSelect() {
+  // Cycle between alive monsters with left/right
+  if (isRandomEncounter && encounterMonsters) {
+    const aliveIdx = [];
+    for (let i = 0; i < encounterMonsters.length; i++) {
+      if (encounterMonsters[i].hp > 0) aliveIdx.push(i);
+    }
+    if (keys['ArrowRight'] || keys['ArrowDown']) {
+      keys['ArrowRight'] = false; keys['ArrowDown'] = false;
+      const cur = aliveIdx.indexOf(targetIndex);
+      targetIndex = aliveIdx[(cur + 1) % aliveIdx.length];
+      playSFX(SFX.CURSOR);
+    }
+    if (keys['ArrowLeft'] || keys['ArrowUp']) {
+      keys['ArrowLeft'] = false; keys['ArrowUp'] = false;
+      const cur = aliveIdx.indexOf(targetIndex);
+      targetIndex = aliveIdx[(cur - 1 + aliveIdx.length) % aliveIdx.length];
+      playSFX(SFX.CURSOR);
+    }
+  }
+  if (keys['z'] || keys['Z']) {
+    keys['z'] = false; keys['Z'] = false;
+    // Confirm target — roll hits, transition to player-slash
+    playSFX(SFX.CONFIRM);
+    // Hit count: dual-wield/unarmed = min 2, single weapon = min 1
+    // Shields in hand don't count as weapons for combat
+    const rIsWeapon = isWeapon(playerWeaponR);
+    const lIsWeapon = isWeapon(playerWeaponL);
+    const dualWield = rIsWeapon && lIsWeapon;
+    const unarmed = !rIsWeapon && !lIsWeapon;
+    const baseHits = Math.max(1, Math.floor((playerStats ? playerStats.agi : 5) / 10));
+    const potentialHits = (dualWield || unarmed) ? Math.max(2, baseHits) : Math.max(1, baseHits);
+    const wpn = (rIsWeapon ? ITEMS.get(playerWeaponR) : null) || (lIsWeapon ? ITEMS.get(playerWeaponL) : null);
+    const hitRate = wpn ? wpn.hit : BASE_HIT_RATE;
+    if (isRandomEncounter && encounterMonsters) {
+      const target = encounterMonsters[targetIndex];
+      hitResults = rollHits(playerATK, target.def, hitRate, potentialHits);
+    } else {
+      const targetDef = isPVPBattle && pvpOpponentStats ? pvpOpponentStats.def : BOSS_DEF;
+      hitResults = rollHits(playerATK, targetDef, hitRate, potentialHits);
+    }
+    // Determine which hand attacks per hit (skip shield hands)
+    const weaponHandR = isWeapon(playerWeaponR);
+    const weaponHandL = isWeapon(playerWeaponL);
+    const firstHandR = weaponHandR || !weaponHandL; // prefer R, fallback if neither
+    const firstWpnId = firstHandR ? playerWeaponR : playerWeaponL;
+    const pendingSlashFrames = getSlashFramesForWeapon(firstWpnId, firstHandR);
+    // Base position = target center
+    const centerX = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2);
+    const centerY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
+    // Weapon-aware initial offset: bladed = diagonal sweep, unarmed = random scatter
+    const firstWeapon0 = getHitWeapon(0);
+    let pendingOffX, pendingOffY;
+    if (isBladedWeapon(firstWeapon0)) {
+      pendingOffX = 8; pendingOffY = -8; // diagonal sweep starts top-right
+    } else {
+      pendingOffX = Math.floor(Math.random() * 40) - 20;
+      pendingOffY = Math.floor(Math.random() * 40) - 20;
+    }
+    playerActionPending = {
+      command: 'fight', targetIndex, hitResults,
+      slashFrames: pendingSlashFrames, slashOffX: pendingOffX, slashOffY: pendingOffY,
+      slashX: centerX, slashY: centerY
+    };
+    battleState = 'confirm-pause';
+    battleTimer = 0;
+  }
+  if (keys['x'] || keys['X']) {
+    keys['x'] = false; keys['X'] = false;
+    // Cancel — return to menu
+    playSFX(SFX.CONFIRM);
+    battleState = 'menu-open';
+    battleTimer = 0;
+  }
+}
+
+function _battleInputItemSelect() {
+  const isEquipPage = itemPage === 0;
+  const pageRows = isEquipPage ? 2 : INV_SLOTS;
+  const totalInvPages = Math.max(1, Math.ceil(itemSelectList.length / INV_SLOTS));
+  const totalPages = 1 + totalInvPages; // page 0 = equip, pages 1+ = inventory
+
+  // Global inventory index from current page + cursor
+  function _curGlobalIdx() {
+    if (isEquipPage) return -100 - itemPageCursor; // -100 = R.Hand, -101 = L.Hand
+    return (itemPage - 1) * INV_SLOTS + itemPageCursor;
+  }
+
+  // Up/Down navigation — advance to next/prev page at boundaries
+  if (keys['ArrowDown']) {
+    keys['ArrowDown'] = false;
+    if (itemPageCursor < pageRows - 1) {
+      itemPageCursor++;
+    } else if (itemPage < totalPages - 1) {
+      itemSlideDir = -1; itemSlideCursor = 0;
+      battleState = 'item-slide'; battleTimer = 0;
+    }
+    playSFX(SFX.CURSOR);
+  }
+  if (keys['ArrowUp']) {
+    keys['ArrowUp'] = false;
+    if (itemPageCursor > 0) {
+      itemPageCursor--;
+    } else if (itemPage > 0) {
+      const prevPageRows = (itemPage - 1) === 0 ? 2 : INV_SLOTS;
+      itemSlideDir = 1; itemSlideCursor = prevPageRows - 1;
+      battleState = 'item-slide'; battleTimer = 0;
+    }
+    playSFX(SFX.CURSOR);
+  }
+
+  // Left/Right — page slide
+  if (keys['ArrowLeft'] && itemPage > 0) {
+    keys['ArrowLeft'] = false;
+    playSFX(SFX.CURSOR);
+    itemSlideDir = 1; itemSlideCursor = 0; // sliding right (previous page)
+    battleState = 'item-slide';
+    battleTimer = 0;
+  }
+  if (keys['ArrowRight'] && itemPage < totalPages - 1) {
+    keys['ArrowRight'] = false;
+    playSFX(SFX.CURSOR);
+    itemSlideDir = -1; itemSlideCursor = 0; // sliding left (next page)
+    battleState = 'item-slide';
+    battleTimer = 0;
+  }
+
+  // Z — hold or place/use
+  if (keys['z'] || keys['Z']) {
+    keys['z'] = false; keys['Z'] = false;
+    const gIdx = _curGlobalIdx();
+
+    if (itemHeldIdx === -1) {
+      // Nothing held — pick up
+      if (isEquipPage) {
+        const weaponId = itemPageCursor === 0 ? playerWeaponR : playerWeaponL;
+        if (weaponId !== 0) { itemHeldIdx = gIdx; playSFX(SFX.CONFIRM); }
+        else playSFX(SFX.ERROR);
+      } else {
+        const invIdx = (itemPage - 1) * INV_SLOTS + itemPageCursor;
+        if (itemSelectList[invIdx] !== null) { itemHeldIdx = gIdx; playSFX(SFX.CONFIRM); }
+        else playSFX(SFX.ERROR);
+      }
+    } else if (itemHeldIdx === gIdx) {
+      // Same slot — use consumable or deselect
+      if (!isEquipPage) {
+        const invIdx = (itemPage - 1) * INV_SLOTS + itemPageCursor;
+        const item = itemSelectList[invIdx];
+        const itemDat = ITEMS.get(item.id);
+        if (itemDat?.type === 'consumable' || itemDat?.type === 'battle_item') {
+          playSFX(SFX.CONFIRM);
+          itemHeldIdx = -1;
+          itemTargetMode = 'single';
+          if (itemDat.type === 'battle_item' && isRandomEncounter && encounterMonsters) {
+            // Start cursor on rightmost alive enemy
+            itemTargetType = 'enemy';
+            const ecnt = encounterMonsters.length;
+            const ealive = (i) => i < encounterMonsters.length && encounterMonsters[i].hp > 0;
+            const rightCandidates = ecnt === 1 ? [0] : ecnt === 2 ? [1] : ecnt === 3 ? [1] : [1,3];
+            const leftCandidates  = ecnt === 1 ? [0] : ecnt === 2 ? [0] : ecnt === 3 ? [0,2] : [0,2];
+            const first = [...rightCandidates,...leftCandidates].find(i => ealive(i));
+            itemTargetIndex = first !== undefined ? first : 0;
+          } else if (itemDat.type === 'battle_item' && !isRandomEncounter) {
+            itemTargetType = 'enemy'; itemTargetIndex = 0;
+          } else {
+            itemTargetType = 'player'; itemTargetIndex = 0;
+          }
+          itemTargetAllyIndex = -1;
+          battleState = 'item-target-select';
+          battleTimer = 0;
+          // Stash the item id for when target is confirmed
+          playerActionPending = { command: 'item', itemId: item.id };
+        } else {
+          itemHeldIdx = -1;
+          playSFX(SFX.CONFIRM);
+        }
+      } else {
+        itemHeldIdx = -1;
+        playSFX(SFX.CONFIRM);
+      }
+    } else {
+      // Different slot — swap/equip/unequip
+      const srcEquip = itemHeldIdx <= -100;
+      const dstEquip = isEquipPage;
+      if (!srcEquip && !dstEquip) {
+        // Inv → Inv swap
+        const srcIdx = srcEquip ? 0 : itemHeldIdx;
+        const dstIdx = (itemPage - 1) * INV_SLOTS + itemPageCursor;
+        const tmp = itemSelectList[srcIdx];
+        itemSelectList[srcIdx] = itemSelectList[dstIdx];
+        itemSelectList[dstIdx] = tmp;
+        itemHeldIdx = -1;
+        playSFX(SFX.CONFIRM);
+      } else if (!srcEquip && dstEquip) {
+        // Inv → Equip (equip weapon from inventory to hand)
+        const srcIdx = itemHeldIdx;
+        const item = itemSelectList[srcIdx];
+        const handIdx = itemPageCursor; // 0=R, 1=L
+        if (item && isHandEquippable(ITEMS.get(item.id))) {
+          const oldWeapon = handIdx === 0 ? playerWeaponR : playerWeaponL;
+          if (handIdx === 0) playerWeaponR = item.id; else playerWeaponL = item.id;
+          removeItem(item.id);
+          if (oldWeapon !== 0) addItem(oldWeapon, 1);
+          if (oldWeapon !== 0) {
+            itemSelectList[srcIdx] = { id: oldWeapon, count: 1 };
+          } else {
+            itemSelectList[srcIdx] = null;
+          }
+          playerATK = playerStats.str + (ITEMS.get(playerWeaponR)?.atk || 0) + (ITEMS.get(playerWeaponL)?.atk || 0);
+          itemHeldIdx = -1;
+          playSFX(SFX.CONFIRM);
+        } else {
+          playSFX(SFX.ERROR);
+          itemHeldIdx = -1;
+        }
+      } else if (srcEquip && !dstEquip) {
+        // Equip → Inv (unequip hand weapon to inventory slot)
+        const srcHand = -(itemHeldIdx + 100); // 0=R, 1=L
+        const handWeaponId = srcHand === 0 ? playerWeaponR : playerWeaponL;
+        const dstIdx = (itemPage - 1) * INV_SLOTS + itemPageCursor;
+        const invItem = itemSelectList[dstIdx];
+        if (invItem && isHandEquippable(ITEMS.get(invItem.id))) {
+          if (srcHand === 0) playerWeaponR = invItem.id; else playerWeaponL = invItem.id;
+          removeItem(invItem.id);
+          addItem(handWeaponId, 1);
+          itemSelectList[dstIdx] = { id: handWeaponId, count: 1 };
+          playerATK = playerStats.str + (ITEMS.get(playerWeaponR)?.atk || 0) + (ITEMS.get(playerWeaponL)?.atk || 0);
+          itemHeldIdx = -1;
+          playSFX(SFX.CONFIRM);
+        } else if (!invItem) {
+          if (srcHand === 0) playerWeaponR = 0; else playerWeaponL = 0;
+          addItem(handWeaponId, 1);
+          itemSelectList[dstIdx] = { id: handWeaponId, count: 1 };
+          playerATK = playerStats.str + (ITEMS.get(playerWeaponR)?.atk || 0) + (ITEMS.get(playerWeaponL)?.atk || 0);
+          itemHeldIdx = -1;
+          playSFX(SFX.CONFIRM);
+        } else {
+          playSFX(SFX.ERROR);
+          itemHeldIdx = -1;
+        }
+      } else if (srcEquip && dstEquip) {
+        // Equip → Equip (swap hands)
+        const tmp = playerWeaponR;
+        playerWeaponR = playerWeaponL;
+        playerWeaponL = tmp;
+        playerATK = playerStats.str + (ITEMS.get(playerWeaponR)?.atk || 0) + (ITEMS.get(playerWeaponL)?.atk || 0);
+        itemHeldIdx = -1;
+        playSFX(SFX.CONFIRM);
+      }
+    }
+  }
+
+  // X — cancel hold or exit inventory
+  if (keys['x'] || keys['X']) {
+    keys['x'] = false; keys['X'] = false;
+    if (itemHeldIdx !== -1) {
+      itemHeldIdx = -1;
+      playSFX(SFX.CONFIRM);
+    } else {
+      playSFX(SFX.CONFIRM);
+      battleState = 'item-cancel-out';
+      battleTimer = 0;
+    }
+  }
+}
+
+function _battleInputItemTargetSelect() {
+  // Spatial nav: Player ← right-col enemies ← left-col enemies
+  // Grid: 0=TL, 1=TR, 2=BL, 3=BR. Right col = 1,3. Left col = 0,2.
+  // 1 enemy: just index 0. 2 enemies: 0=left, 1=right. 3: 0=TL,1=TR,2=BL.
+  const _alive = (i) => isRandomEncounter && encounterMonsters && i < encounterMonsters.length && encounterMonsters[i].hp > 0;
+  const _cnt = isRandomEncounter && encounterMonsters ? encounterMonsters.length : (isRandomEncounter ? 0 : 1);
+  // Which column is this index in? For 1 enemy, it's the right col (goes straight to player).
+  const _isRightCol = (i) => _cnt === 1 || (_cnt === 2 && i === 1) || (_cnt >= 3 && (i === 1 || i === 3));
+  const _isLeftCol = (i) => _cnt >= 2 && !_isRightCol(i);
+
+  const _isBattleItem = playerActionPending && ITEMS.get(playerActionPending.itemId)?.type === 'battle_item';
+  if (keys['ArrowLeft']) {
+    keys['ArrowLeft'] = false;
+    if (_isBattleItem && itemTargetMode !== 'single') {
+      // In multi-target mode — LEFT goes back to single (leftmost alive)
+      const leftCandidates = _cnt <= 1 ? [0] : _cnt === 2 ? [0] : [0, 2];
+      const found = leftCandidates.find(i => _alive(i));
+      if (found !== undefined) itemTargetIndex = found;
+      itemTargetMode = 'single'; playSFX(SFX.CURSOR);
+    } else if (itemTargetType === 'player') {
+      // Player → nearest right-col alive enemy
+      if (!isRandomEncounter) {
+        itemTargetType = 'enemy'; itemTargetIndex = 0; itemTargetMode = 'single'; playSFX(SFX.CURSOR);
+      } else {
+        const rightCandidates = _cnt === 1 ? [0] : _cnt === 2 ? [1] : _cnt === 3 ? [1] : [1, 3];
+        const leftCandidates = _cnt === 2 ? [0] : _cnt === 3 ? [0, 2] : _cnt >= 4 ? [0, 2] : [];
+        let found = rightCandidates.find(i => _alive(i));
+        if (found === undefined) found = leftCandidates.find(i => _alive(i));
+        if (found !== undefined) {
+          itemTargetType = 'enemy'; itemTargetIndex = found; itemTargetMode = 'single'; playSFX(SFX.CURSOR);
+        }
+      }
+    } else if (isRandomEncounter && _isRightCol(itemTargetIndex)) {
+      // Right col → left col (same row if possible)
+      const leftPeer = itemTargetIndex === 1 ? 0 : itemTargetIndex === 3 ? 2 : -1;
+      const leftOther = itemTargetIndex === 1 ? 2 : itemTargetIndex === 3 ? 0 : -1;
+      if (leftPeer >= 0 && _alive(leftPeer)) { itemTargetIndex = leftPeer; playSFX(SFX.CURSOR); }
+      else if (leftOther >= 0 && _alive(leftOther)) { itemTargetIndex = leftOther; playSFX(SFX.CURSOR); }
+      else if (_isBattleItem) { itemTargetMode = 'all'; playSFX(SFX.CURSOR); } // no left col alive → all
+    } else if (_isBattleItem && isRandomEncounter && _isLeftCol(itemTargetIndex)) {
+      // Already on leftmost col — toggle to all-enemies mode
+      itemTargetMode = 'all'; playSFX(SFX.CURSOR);
+    }
+  }
+  if (keys['ArrowRight']) {
+    keys['ArrowRight'] = false;
+    if (itemTargetType === 'enemy') {
+      if (_isRightCol(itemTargetIndex) || !isRandomEncounter) {
+        // Right col or boss → player
+        itemTargetType = 'player'; playSFX(SFX.CURSOR);
+      } else {
+        // Left col → right col (same row if possible)
+        const rightPeer = itemTargetIndex === 0 ? 1 : itemTargetIndex === 2 ? 3 : -1;
+        const rightOther = itemTargetIndex === 0 ? 3 : itemTargetIndex === 2 ? 1 : -1;
+        if (rightPeer >= 0 && _alive(rightPeer)) { itemTargetIndex = rightPeer; playSFX(SFX.CURSOR); }
+        else if (rightOther >= 0 && _alive(rightOther)) { itemTargetIndex = rightOther; playSFX(SFX.CURSOR); }
+        else { itemTargetType = 'player'; playSFX(SFX.CURSOR); }
+      }
+    }
+  }
+  if (keys['ArrowUp'] || keys['ArrowDown']) {
+    const goUp = !!keys['ArrowUp'];
+    keys['ArrowUp'] = false; keys['ArrowDown'] = false;
+    if (_isBattleItem && itemTargetType === 'enemy' && isRandomEncounter && encounterMonsters) {
+      if (goUp && itemTargetMode === 'single') {
+        // UP from single → select column
+        itemTargetMode = _isLeftCol(itemTargetIndex) ? 'col-left' : 'col-right';
+        playSFX(SFX.CURSOR);
+      } else if (!goUp && itemTargetMode !== 'single') {
+        // DOWN from column → back to single
+        itemTargetMode = 'single'; playSFX(SFX.CURSOR);
+      }
+    } else if (itemTargetType === 'enemy' && isRandomEncounter && encounterMonsters) {
+      // Vertical: TL↔BL (0↔2), TR↔BR (1↔3)
+      const vertMap = _cnt >= 4 ? { 0: 2, 2: 0, 1: 3, 3: 1 } :
+                      _cnt === 3 ? { 0: 2, 2: 0, 1: 1 } : {};
+      const next = vertMap[itemTargetIndex];
+      if (next !== undefined && next !== itemTargetIndex && _alive(next)) {
+        itemTargetIndex = next; playSFX(SFX.CURSOR);
+      }
+    } else if (itemTargetType === 'player') {
+      const livingAllies = battleAllies.filter(a => a.hp > 0);
+      if (!goUp && itemTargetAllyIndex < livingAllies.length - 1) {
+        itemTargetAllyIndex++; playSFX(SFX.CURSOR);
+      } else if (goUp && itemTargetAllyIndex >= 0) {
+        itemTargetAllyIndex--; playSFX(SFX.CURSOR);
+      }
+    }
+  }
+  if (keys['z'] || keys['Z']) {
+    keys['z'] = false; keys['Z'] = false;
+    playerActionPending.target = itemTargetType === 'player' ? 'player' : itemTargetIndex;
+    playerActionPending.allyIndex = itemTargetType === 'player' ? itemTargetAllyIndex : -1;
+    playerActionPending.targetMode = itemTargetMode;
+    playSFX(SFX.CONFIRM);
+    battleState = 'item-list-out';
+    battleTimer = 0;
+  }
+  if (keys['x'] || keys['X']) {
+    keys['x'] = false; keys['X'] = false;
+    playerActionPending = null;
+    playSFX(SFX.CONFIRM);
+    battleState = 'item-select';
+    battleTimer = 0;
+  }
+}
+
+function _handleBattleInput() {
+  if (battleState === 'none') return false;
 
   // Battle menu input — block all other input during battle
-  if (battleState !== 'none') {
+  if (true) {
     if (battleState === 'roar-hold') {
       if (msgBoxState === 'hold' && (keys['z'] || keys['Z'])) {
         keys['z'] = false; keys['Z'] = false;
@@ -3719,376 +3948,17 @@ function handleInput() {
       if (keys['ArrowLeft'])  { keys['ArrowLeft'] = false;  battleCursor ^= 1; playSFX(SFX.CURSOR); }
       if (keys['z'] || keys['Z']) { keys['z'] = false; keys['Z'] = false; executeBattleCommand(battleCursor); }
     } else if (battleState === 'target-select') {
-      // Cycle between alive monsters with left/right
-      if (isRandomEncounter && encounterMonsters) {
-        const aliveIdx = [];
-        for (let i = 0; i < encounterMonsters.length; i++) {
-          if (encounterMonsters[i].hp > 0) aliveIdx.push(i);
-        }
-        if (keys['ArrowRight'] || keys['ArrowDown']) {
-          keys['ArrowRight'] = false; keys['ArrowDown'] = false;
-          const cur = aliveIdx.indexOf(targetIndex);
-          targetIndex = aliveIdx[(cur + 1) % aliveIdx.length];
-          playSFX(SFX.CURSOR);
-        }
-        if (keys['ArrowLeft'] || keys['ArrowUp']) {
-          keys['ArrowLeft'] = false; keys['ArrowUp'] = false;
-          const cur = aliveIdx.indexOf(targetIndex);
-          targetIndex = aliveIdx[(cur - 1 + aliveIdx.length) % aliveIdx.length];
-          playSFX(SFX.CURSOR);
-        }
-      }
-      if (keys['z'] || keys['Z']) {
-        keys['z'] = false; keys['Z'] = false;
-        // Confirm target — roll hits, transition to player-slash
-        playSFX(SFX.CONFIRM);
-        // Hit count: dual-wield/unarmed = min 2, single weapon = min 1
-        // Shields in hand don't count as weapons for combat
-        const rIsWeapon = isWeapon(playerWeaponR);
-        const lIsWeapon = isWeapon(playerWeaponL);
-        const dualWield = rIsWeapon && lIsWeapon;
-        const unarmed = !rIsWeapon && !lIsWeapon;
-        const baseHits = Math.max(1, Math.floor((playerStats ? playerStats.agi : 5) / 10));
-        const potentialHits = (dualWield || unarmed) ? Math.max(2, baseHits) : Math.max(1, baseHits);
-        const wpn = (rIsWeapon ? ITEMS.get(playerWeaponR) : null) || (lIsWeapon ? ITEMS.get(playerWeaponL) : null);
-        const hitRate = wpn ? wpn.hit : BASE_HIT_RATE;
-        if (isRandomEncounter && encounterMonsters) {
-          const target = encounterMonsters[targetIndex];
-          hitResults = rollHits(playerATK, target.def, hitRate, potentialHits);
-        } else {
-          const targetDef = isPVPBattle && pvpOpponentStats ? pvpOpponentStats.def : BOSS_DEF;
-          hitResults = rollHits(playerATK, targetDef, hitRate, potentialHits);
-        }
-        // Determine which hand attacks per hit (skip shield hands)
-        const weaponHandR = isWeapon(playerWeaponR);
-        const weaponHandL = isWeapon(playerWeaponL);
-        const firstHandR = weaponHandR || !weaponHandL; // prefer R, fallback if neither
-        const firstWpnId = firstHandR ? playerWeaponR : playerWeaponL;
-        const pendingSlashFrames = getSlashFramesForWeapon(firstWpnId, firstHandR);
-        // Base position = target center
-        const centerX = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2);
-        const centerY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
-        // Weapon-aware initial offset: bladed = diagonal sweep, unarmed = random scatter
-        const firstWeapon0 = getHitWeapon(0);
-        let pendingOffX, pendingOffY;
-        if (isBladedWeapon(firstWeapon0)) {
-          pendingOffX = 8; pendingOffY = -8; // diagonal sweep starts top-right
-        } else {
-          pendingOffX = Math.floor(Math.random() * 40) - 20;
-          pendingOffY = Math.floor(Math.random() * 40) - 20;
-        }
-        playerActionPending = {
-          command: 'fight', targetIndex, hitResults,
-          slashFrames: pendingSlashFrames, slashOffX: pendingOffX, slashOffY: pendingOffY,
-          slashX: centerX, slashY: centerY
-        };
-        battleState = 'confirm-pause';
-        battleTimer = 0;
-      }
-      if (keys['x'] || keys['X']) {
-        keys['x'] = false; keys['X'] = false;
-        // Cancel — return to menu
-        playSFX(SFX.CONFIRM);
-        battleState = 'menu-open';
-        battleTimer = 0;
-      }
+      _battleInputTargetSelect();
     } else if (battleState === 'item-select') {
-      const isEquipPage = itemPage === 0;
-      const pageRows = isEquipPage ? 2 : INV_SLOTS;
-      const totalInvPages = Math.max(1, Math.ceil(itemSelectList.length / INV_SLOTS));
-      const totalPages = 1 + totalInvPages; // page 0 = equip, pages 1+ = inventory
-
-      // Global inventory index from current page + cursor
-      function _curGlobalIdx() {
-        if (isEquipPage) return -100 - itemPageCursor; // -100 = R.Hand, -101 = L.Hand
-        return (itemPage - 1) * INV_SLOTS + itemPageCursor;
-      }
-
-      // Up/Down navigation — advance to next/prev page at boundaries
-      if (keys['ArrowDown']) {
-        keys['ArrowDown'] = false;
-        if (itemPageCursor < pageRows - 1) {
-          itemPageCursor++;
-        } else if (itemPage < totalPages - 1) {
-          itemSlideDir = -1; itemSlideCursor = 0;
-          battleState = 'item-slide'; battleTimer = 0;
-        }
-        playSFX(SFX.CURSOR);
-      }
-      if (keys['ArrowUp']) {
-        keys['ArrowUp'] = false;
-        if (itemPageCursor > 0) {
-          itemPageCursor--;
-        } else if (itemPage > 0) {
-          const prevPageRows = (itemPage - 1) === 0 ? 2 : INV_SLOTS;
-          itemSlideDir = 1; itemSlideCursor = prevPageRows - 1;
-          battleState = 'item-slide'; battleTimer = 0;
-        }
-        playSFX(SFX.CURSOR);
-      }
-
-      // Left/Right — page slide
-      if (keys['ArrowLeft'] && itemPage > 0) {
-        keys['ArrowLeft'] = false;
-        playSFX(SFX.CURSOR);
-        itemSlideDir = 1; itemSlideCursor = 0; // sliding right (previous page)
-        battleState = 'item-slide';
-        battleTimer = 0;
-      }
-      if (keys['ArrowRight'] && itemPage < totalPages - 1) {
-        keys['ArrowRight'] = false;
-        playSFX(SFX.CURSOR);
-        itemSlideDir = -1; itemSlideCursor = 0; // sliding left (next page)
-        battleState = 'item-slide';
-        battleTimer = 0;
-      }
-
-      // Z — hold or place/use
-      if (keys['z'] || keys['Z']) {
-        keys['z'] = false; keys['Z'] = false;
-        const gIdx = _curGlobalIdx();
-
-        if (itemHeldIdx === -1) {
-          // Nothing held — pick up
-          if (isEquipPage) {
-            const weaponId = itemPageCursor === 0 ? playerWeaponR : playerWeaponL;
-            if (weaponId !== 0) { itemHeldIdx = gIdx; playSFX(SFX.CONFIRM); }
-            else playSFX(SFX.ERROR);
-          } else {
-            const invIdx = (itemPage - 1) * INV_SLOTS + itemPageCursor;
-            if (itemSelectList[invIdx] !== null) { itemHeldIdx = gIdx; playSFX(SFX.CONFIRM); }
-            else playSFX(SFX.ERROR);
-          }
-        } else if (itemHeldIdx === gIdx) {
-          // Same slot — use consumable or deselect
-          if (!isEquipPage) {
-            const invIdx = (itemPage - 1) * INV_SLOTS + itemPageCursor;
-            const item = itemSelectList[invIdx];
-            const itemDat = ITEMS.get(item.id);
-            if (itemDat?.type === 'consumable' || itemDat?.type === 'battle_item') {
-              playSFX(SFX.CONFIRM);
-              itemHeldIdx = -1;
-              itemTargetMode = 'single';
-              if (itemDat.type === 'battle_item' && isRandomEncounter && encounterMonsters) {
-                // Start cursor on rightmost alive enemy
-                itemTargetType = 'enemy';
-                const ecnt = encounterMonsters.length;
-                const ealive = (i) => i < encounterMonsters.length && encounterMonsters[i].hp > 0;
-                const rightCandidates = ecnt === 1 ? [0] : ecnt === 2 ? [1] : ecnt === 3 ? [1] : [1,3];
-                const leftCandidates  = ecnt === 1 ? [0] : ecnt === 2 ? [0] : ecnt === 3 ? [0,2] : [0,2];
-                const first = [...rightCandidates,...leftCandidates].find(i => ealive(i));
-                itemTargetIndex = first !== undefined ? first : 0;
-              } else if (itemDat.type === 'battle_item' && !isRandomEncounter) {
-                itemTargetType = 'enemy'; itemTargetIndex = 0;
-              } else {
-                itemTargetType = 'player'; itemTargetIndex = 0;
-              }
-              itemTargetAllyIndex = -1;
-              battleState = 'item-target-select';
-              battleTimer = 0;
-              // Stash the item id for when target is confirmed
-              playerActionPending = { command: 'item', itemId: item.id };
-            } else {
-              itemHeldIdx = -1;
-              playSFX(SFX.CONFIRM);
-            }
-          } else {
-            itemHeldIdx = -1;
-            playSFX(SFX.CONFIRM);
-          }
-        } else {
-          // Different slot — swap/equip/unequip
-          const srcEquip = itemHeldIdx <= -100;
-          const dstEquip = isEquipPage;
-          if (!srcEquip && !dstEquip) {
-            // Inv → Inv swap
-            const srcIdx = srcEquip ? 0 : itemHeldIdx;
-            const dstIdx = (itemPage - 1) * INV_SLOTS + itemPageCursor;
-            const tmp = itemSelectList[srcIdx];
-            itemSelectList[srcIdx] = itemSelectList[dstIdx];
-            itemSelectList[dstIdx] = tmp;
-            itemHeldIdx = -1;
-            playSFX(SFX.CONFIRM);
-          } else if (!srcEquip && dstEquip) {
-            // Inv → Equip (equip weapon from inventory to hand)
-            const srcIdx = itemHeldIdx;
-            const item = itemSelectList[srcIdx];
-            const handIdx = itemPageCursor; // 0=R, 1=L
-            if (item && isHandEquippable(ITEMS.get(item.id))) {
-              const oldWeapon = handIdx === 0 ? playerWeaponR : playerWeaponL;
-              if (handIdx === 0) playerWeaponR = item.id; else playerWeaponL = item.id;
-              removeItem(item.id);
-              if (oldWeapon !== 0) addItem(oldWeapon, 1);
-              if (oldWeapon !== 0) {
-                itemSelectList[srcIdx] = { id: oldWeapon, count: 1 };
-              } else {
-                itemSelectList[srcIdx] = null;
-              }
-              playerATK = playerStats.str + (ITEMS.get(playerWeaponR)?.atk || 0) + (ITEMS.get(playerWeaponL)?.atk || 0);
-              itemHeldIdx = -1;
-              playSFX(SFX.CONFIRM);
-            } else {
-              playSFX(SFX.ERROR);
-              itemHeldIdx = -1;
-            }
-          } else if (srcEquip && !dstEquip) {
-            // Equip → Inv (unequip hand weapon to inventory slot)
-            const srcHand = -(itemHeldIdx + 100); // 0=R, 1=L
-            const handWeaponId = srcHand === 0 ? playerWeaponR : playerWeaponL;
-            const dstIdx = (itemPage - 1) * INV_SLOTS + itemPageCursor;
-            const invItem = itemSelectList[dstIdx];
-            if (invItem && isHandEquippable(ITEMS.get(invItem.id))) {
-              if (srcHand === 0) playerWeaponR = invItem.id; else playerWeaponL = invItem.id;
-              removeItem(invItem.id);
-              addItem(handWeaponId, 1);
-              itemSelectList[dstIdx] = { id: handWeaponId, count: 1 };
-              playerATK = playerStats.str + (ITEMS.get(playerWeaponR)?.atk || 0) + (ITEMS.get(playerWeaponL)?.atk || 0);
-              itemHeldIdx = -1;
-              playSFX(SFX.CONFIRM);
-            } else if (!invItem) {
-              if (srcHand === 0) playerWeaponR = 0; else playerWeaponL = 0;
-              addItem(handWeaponId, 1);
-              itemSelectList[dstIdx] = { id: handWeaponId, count: 1 };
-              playerATK = playerStats.str + (ITEMS.get(playerWeaponR)?.atk || 0) + (ITEMS.get(playerWeaponL)?.atk || 0);
-              itemHeldIdx = -1;
-              playSFX(SFX.CONFIRM);
-            } else {
-              playSFX(SFX.ERROR);
-              itemHeldIdx = -1;
-            }
-          } else if (srcEquip && dstEquip) {
-            // Equip → Equip (swap hands)
-            const tmp = playerWeaponR;
-            playerWeaponR = playerWeaponL;
-            playerWeaponL = tmp;
-            playerATK = playerStats.str + (ITEMS.get(playerWeaponR)?.atk || 0) + (ITEMS.get(playerWeaponL)?.atk || 0);
-            itemHeldIdx = -1;
-            playSFX(SFX.CONFIRM);
-          }
-        }
-      }
-
-      // X — cancel hold or exit inventory
-      if (keys['x'] || keys['X']) {
-        keys['x'] = false; keys['X'] = false;
-        if (itemHeldIdx !== -1) {
-          itemHeldIdx = -1;
-          playSFX(SFX.CONFIRM);
-        } else {
-          playSFX(SFX.CONFIRM);
-          battleState = 'item-cancel-out';
-          battleTimer = 0;
-        }
-      }
+      _battleInputItemSelect();
     } else if (battleState === 'item-target-select') {
-      // Spatial nav: Player ← right-col enemies ← left-col enemies
-      // Grid: 0=TL, 1=TR, 2=BL, 3=BR. Right col = 1,3. Left col = 0,2.
-      // 1 enemy: just index 0. 2 enemies: 0=left, 1=right. 3: 0=TL,1=TR,2=BL.
-      const _alive = (i) => isRandomEncounter && encounterMonsters && i < encounterMonsters.length && encounterMonsters[i].hp > 0;
-      const _cnt = isRandomEncounter && encounterMonsters ? encounterMonsters.length : (isRandomEncounter ? 0 : 1);
-      // Which column is this index in? For 1 enemy, it's the right col (goes straight to player).
-      const _isRightCol = (i) => _cnt === 1 || (_cnt === 2 && i === 1) || (_cnt >= 3 && (i === 1 || i === 3));
-      const _isLeftCol = (i) => _cnt >= 2 && !_isRightCol(i);
-
-      const _isBattleItem = playerActionPending && ITEMS.get(playerActionPending.itemId)?.type === 'battle_item';
-      if (keys['ArrowLeft']) {
-        keys['ArrowLeft'] = false;
-        if (_isBattleItem && itemTargetMode !== 'single') {
-          // In multi-target mode — LEFT goes back to single (leftmost alive)
-          const leftCandidates = _cnt <= 1 ? [0] : _cnt === 2 ? [0] : [0, 2];
-          const found = leftCandidates.find(i => _alive(i));
-          if (found !== undefined) itemTargetIndex = found;
-          itemTargetMode = 'single'; playSFX(SFX.CURSOR);
-        } else if (itemTargetType === 'player') {
-          // Player → nearest right-col alive enemy
-          if (!isRandomEncounter) {
-            itemTargetType = 'enemy'; itemTargetIndex = 0; itemTargetMode = 'single'; playSFX(SFX.CURSOR);
-          } else {
-            const rightCandidates = _cnt === 1 ? [0] : _cnt === 2 ? [1] : _cnt === 3 ? [1] : [1, 3];
-            const leftCandidates = _cnt === 2 ? [0] : _cnt === 3 ? [0, 2] : _cnt >= 4 ? [0, 2] : [];
-            let found = rightCandidates.find(i => _alive(i));
-            if (found === undefined) found = leftCandidates.find(i => _alive(i));
-            if (found !== undefined) {
-              itemTargetType = 'enemy'; itemTargetIndex = found; itemTargetMode = 'single'; playSFX(SFX.CURSOR);
-            }
-          }
-        } else if (isRandomEncounter && _isRightCol(itemTargetIndex)) {
-          // Right col → left col (same row if possible)
-          const leftPeer = itemTargetIndex === 1 ? 0 : itemTargetIndex === 3 ? 2 : -1;
-          const leftOther = itemTargetIndex === 1 ? 2 : itemTargetIndex === 3 ? 0 : -1;
-          if (leftPeer >= 0 && _alive(leftPeer)) { itemTargetIndex = leftPeer; playSFX(SFX.CURSOR); }
-          else if (leftOther >= 0 && _alive(leftOther)) { itemTargetIndex = leftOther; playSFX(SFX.CURSOR); }
-          else if (_isBattleItem) { itemTargetMode = 'all'; playSFX(SFX.CURSOR); } // no left col alive → all
-        } else if (_isBattleItem && isRandomEncounter && _isLeftCol(itemTargetIndex)) {
-          // Already on leftmost col — toggle to all-enemies mode
-          itemTargetMode = 'all'; playSFX(SFX.CURSOR);
-        }
-      }
-      if (keys['ArrowRight']) {
-        keys['ArrowRight'] = false;
-        if (itemTargetType === 'enemy') {
-          if (_isRightCol(itemTargetIndex) || !isRandomEncounter) {
-            // Right col or boss → player
-            itemTargetType = 'player'; playSFX(SFX.CURSOR);
-          } else {
-            // Left col → right col (same row if possible)
-            const rightPeer = itemTargetIndex === 0 ? 1 : itemTargetIndex === 2 ? 3 : -1;
-            const rightOther = itemTargetIndex === 0 ? 3 : itemTargetIndex === 2 ? 1 : -1;
-            if (rightPeer >= 0 && _alive(rightPeer)) { itemTargetIndex = rightPeer; playSFX(SFX.CURSOR); }
-            else if (rightOther >= 0 && _alive(rightOther)) { itemTargetIndex = rightOther; playSFX(SFX.CURSOR); }
-            else { itemTargetType = 'player'; playSFX(SFX.CURSOR); }
-          }
-        }
-      }
-      if (keys['ArrowUp'] || keys['ArrowDown']) {
-        const goUp = !!keys['ArrowUp'];
-        keys['ArrowUp'] = false; keys['ArrowDown'] = false;
-        if (_isBattleItem && itemTargetType === 'enemy' && isRandomEncounter && encounterMonsters) {
-          if (goUp && itemTargetMode === 'single') {
-            // UP from single → select column
-            itemTargetMode = _isLeftCol(itemTargetIndex) ? 'col-left' : 'col-right';
-            playSFX(SFX.CURSOR);
-          } else if (!goUp && itemTargetMode !== 'single') {
-            // DOWN from column → back to single
-            itemTargetMode = 'single'; playSFX(SFX.CURSOR);
-          }
-        } else if (itemTargetType === 'enemy' && isRandomEncounter && encounterMonsters) {
-          // Vertical: TL↔BL (0↔2), TR↔BR (1↔3)
-          const vertMap = _cnt >= 4 ? { 0: 2, 2: 0, 1: 3, 3: 1 } :
-                          _cnt === 3 ? { 0: 2, 2: 0, 1: 1 } : {};
-          const next = vertMap[itemTargetIndex];
-          if (next !== undefined && next !== itemTargetIndex && _alive(next)) {
-            itemTargetIndex = next; playSFX(SFX.CURSOR);
-          }
-        } else if (itemTargetType === 'player') {
-          const livingAllies = battleAllies.filter(a => a.hp > 0);
-          if (!goUp && itemTargetAllyIndex < livingAllies.length - 1) {
-            itemTargetAllyIndex++; playSFX(SFX.CURSOR);
-          } else if (goUp && itemTargetAllyIndex >= 0) {
-            itemTargetAllyIndex--; playSFX(SFX.CURSOR);
-          }
-        }
-      }
-      if (keys['z'] || keys['Z']) {
-        keys['z'] = false; keys['Z'] = false;
-        playerActionPending.target = itemTargetType === 'player' ? 'player' : itemTargetIndex;
-        playerActionPending.allyIndex = itemTargetType === 'player' ? itemTargetAllyIndex : -1;
-        playerActionPending.targetMode = itemTargetMode;
-        playSFX(SFX.CONFIRM);
-        battleState = 'item-list-out';
-        battleTimer = 0;
-      }
-      if (keys['x'] || keys['X']) {
-        keys['x'] = false; keys['X'] = false;
-        playerActionPending = null;
-        playSFX(SFX.CONFIRM);
-        battleState = 'item-select';
-        battleTimer = 0;
-      }
+      _battleInputItemTargetSelect();
     }
-    return;
+    return true;
   }
+}
 
+function _handleRosterInput() {
   // S — toggle roster browse / handle roster input
   if (keys['s'] || keys['S']) {
     keys['s'] = false; keys['S'] = false;
@@ -4101,7 +3971,7 @@ function handleInput() {
       rosterState = 'none';
       playSFX(SFX.CONFIRM);
     }
-    return;
+    return true;
   }
   // Roster browse controls
   if (rosterState === 'browse') {
@@ -4134,7 +4004,7 @@ function handleInput() {
       rosterState = 'none';
       playSFX(SFX.CONFIRM);
     }
-    return;
+    return true;
   }
   // Roster context menu controls
   if (rosterState === 'menu') {
@@ -4190,10 +4060,13 @@ function handleInput() {
       rosterMenuTimer = 0;
       playSFX(SFX.CONFIRM);
     }
-    return;
+    return true;
   }
-  if ((rosterState === 'menu-in' || rosterState === 'menu-out') && msgBoxState === 'none') return; // block input during slide (unless msgBox open)
+  if ((rosterState === 'menu-in' || rosterState === 'menu-out') && msgBoxState === 'none') return true; // block input during slide (unless msgBox open)
+  return false;
+}
 
+function _handlePauseInput() {
   // Enter — open pause menu
   if (keys['Enter']) {
     keys['Enter'] = false;
@@ -4203,7 +4076,7 @@ function handleInput() {
       playFF1Track(FF1_TRACKS.MENU_SCREEN);
       pauseState = 'scroll-in'; pauseTimer = 0; pauseCursor = 0;
     }
-    return;
+    return true;
   }
   // X — close pause menu (back button) — only from main menu, not sub-states
   if (keys['x'] || keys['X']) {
@@ -4211,7 +4084,7 @@ function handleInput() {
       keys['x'] = false; keys['X'] = false;
       playSFX(SFX.CONFIRM);
       pauseState = 'text-out'; pauseTimer = 0;
-      return;
+      return true;
     }
     // Don't consume X here — let sub-state handlers below handle it
   }
@@ -4231,7 +4104,7 @@ function handleInput() {
         pauseState = 'eq-text-out'; pauseTimer = 0; eqCursor = 0;
       }
     }
-    return;
+    return true;
   }
   // Inventory sub-state — only accept input when fully open
   if (pauseState === 'inventory') {
@@ -4289,7 +4162,7 @@ function handleInput() {
         pauseState = 'inv-items-out'; pauseTimer = 0;
       }
     }
-    return;
+    return true;
   }
   // Inventory target select — cursor on player portrait, Z to confirm, X to cancel back
   if (pauseState === 'inv-target') {
@@ -4347,12 +4220,12 @@ function handleInput() {
       pauseHeldItem = -1;
       playSFX(SFX.CONFIRM);
     }
-    return;
+    return true;
   }
   // Heal animation — block input until done
-  if (pauseState === 'inv-heal') return;
+  if (pauseState === 'inv-heal') return true;
   // Block input during inventory transitions
-  if (pauseState.startsWith('inv-')) return;
+  if (pauseState.startsWith('inv-')) return true;
   // Equip slot selection
   if (pauseState === 'equip') {
     if (keys['ArrowDown']) { keys['ArrowDown'] = false; eqCursor = (eqCursor + 1) % 6; playSFX(SFX.CURSOR); }
@@ -4447,7 +4320,7 @@ function handleInput() {
       playSFX(SFX.CONFIRM);
       pauseState = 'eq-slots-out'; pauseTimer = 0;
     }
-    return;
+    return true;
   }
   // Equip item selection
   if (pauseState === 'eq-item-select') {
@@ -4484,12 +4357,20 @@ function handleInput() {
       playSFX(SFX.CONFIRM);
       pauseState = 'eq-items-out'; pauseTimer = 0;
     }
-    return;
+    return true;
   }
   // Block input during equip transitions
-  if (pauseState.startsWith('eq-')) return;
+  if (pauseState.startsWith('eq-')) return true;
   // Block all input during pause transitions
-  if (pauseState !== 'none') return;
+  if (pauseState !== 'none') return true;
+  return false;
+}
+
+function handleInput() {
+  if (!sprite) return;
+  if (_handleBattleInput()) return;
+  if (_handleRosterInput()) return;
+  if (_handlePauseInput()) return;
 
   // Universal message box — Z to dismiss during hold
   if (msgBoxState !== 'none') {
@@ -8096,24 +7977,7 @@ function initSwordSlashSprites() {
 
 // --- Battle System ---
 
-function calcDamage(atk, def) {
-  return Math.max(1, atk - Math.floor(def / 2) + Math.floor(Math.random() * (Math.floor(atk / 4) + 1)));
-}
-
-function rollHits(atk, def, hitRate, potentialHits) {
-  const results = [];
-  for (let i = 0; i < potentialHits; i++) {
-    if (Math.random() * 100 < hitRate) {
-      let dmg = calcDamage(atk, def);
-      const crit = Math.random() * 100 < CRIT_RATE;
-      if (crit) dmg = Math.floor(dmg * CRIT_MULT);
-      results.push({ damage: dmg, crit });
-    } else {
-      results.push({ miss: true });
-    }
-  }
-  return results;
-}
+// calcDamage, rollHits → battle-math.js
 
 function buildTurnOrder() {
   const actors = [];
@@ -8482,38 +8346,24 @@ function executeBattleCommand(index) {
   }
 }
 
-function updateBattle(dt) {
-  if (battleState === 'none') return;
-  battleTimer += Math.min(dt, 33);
+// --- Battle update sub-handlers ---
+// Each returns true if it handled the current battleState, false otherwise.
+// Called in order from updateBattle; short-circuits on first match (mirrors old if-else chain).
 
-  // Boss blink countdown
+function _updateBattleTimers(dt) {
   if (bossFlashTimer > 0) bossFlashTimer = Math.max(0, bossFlashTimer - dt);
-
-  // Battle shake countdown
   if (battleShakeTimer > 0) battleShakeTimer = Math.max(0, battleShakeTimer - dt);
 
-  // Damage number timers
-  if (bossDamageNum) {
-    bossDamageNum.timer += dt;
-    if (bossDamageNum.timer >= BATTLE_DMG_SHOW_MS) bossDamageNum = null;
-  }
+  if (bossDamageNum) { bossDamageNum.timer += dt; if (bossDamageNum.timer >= BATTLE_DMG_SHOW_MS) bossDamageNum = null; }
   for (const k of Object.keys(southWindDmgNums)) {
     southWindDmgNums[k].timer += dt;
     if (southWindDmgNums[k].timer >= 700) delete southWindDmgNums[k];
   }
-  if (playerDamageNum) {
-    playerDamageNum.timer += dt;
-    if (playerDamageNum.timer >= BATTLE_DMG_SHOW_MS) playerDamageNum = null;
-  }
+  if (playerDamageNum) { playerDamageNum.timer += dt; if (playerDamageNum.timer >= BATTLE_DMG_SHOW_MS) playerDamageNum = null; }
 
-  // Ally damage number timers
   for (const idx in allyDamageNums) {
-    if (allyDamageNums[idx]) {
-      allyDamageNums[idx].timer += dt;
-      if (allyDamageNums[idx].timer >= BATTLE_DMG_SHOW_MS) delete allyDamageNums[idx];
-    }
+    if (allyDamageNums[idx]) { allyDamageNums[idx].timer += dt; if (allyDamageNums[idx].timer >= BATTLE_DMG_SHOW_MS) delete allyDamageNums[idx]; }
   }
-  // Ally shake timers
   for (const idx in allyShakeTimer) {
     if (allyShakeTimer[idx] > 0) allyShakeTimer[idx] = Math.max(0, allyShakeTimer[idx] - dt);
   }
@@ -8524,25 +8374,22 @@ function updateBattle(dt) {
   if (isPlayerDeciding) {
     turnTimer += dt;
     if (turnTimer >= TURN_TIME_MS) {
-      turnTimer = 0;
-      itemHeldIdx = -1;
+      turnTimer = 0; itemHeldIdx = -1;
       playerActionPending = { command: 'skip' };
-      battleState = 'confirm-pause';
-      battleTimer = 0;
+      battleState = 'confirm-pause'; battleTimer = 0;
     }
   }
 
   // Ally exit fade during victory — after 1.5s, NES-fade each ally out (1 step per 100ms)
-  const ALLY_EXIT_DELAY_MS = 1500;
-  const ALLY_EXIT_STEP_MS = 100;
+  const ALLY_EXIT_DELAY_MS = 1500, ALLY_EXIT_STEP_MS = 100;
   if (battleAllies.length > 0 && (
     battleState === 'victory-celebrate' || battleState === 'victory-text-in' ||
-    battleState === 'victory-hold' || battleState === 'victory-fade-out' ||
-    battleState === 'exp-text-in' || battleState === 'exp-hold' || battleState === 'exp-fade-out' ||
-    battleState === 'gil-text-in' || battleState === 'gil-hold' || battleState === 'gil-fade-out' ||
-    battleState === 'item-text-in' || battleState === 'item-hold' || battleState === 'item-fade-out' ||
-    battleState === 'levelup-text-in' || battleState === 'levelup-hold' ||
-    battleState === 'victory-text-out' || battleState === 'victory-menu-fade'
+    battleState === 'victory-hold'      || battleState === 'victory-fade-out' ||
+    battleState === 'exp-text-in'       || battleState === 'exp-hold'         || battleState === 'exp-fade-out' ||
+    battleState === 'gil-text-in'       || battleState === 'gil-hold'         || battleState === 'gil-fade-out' ||
+    battleState === 'item-text-in'      || battleState === 'item-hold'        || battleState === 'item-fade-out' ||
+    battleState === 'levelup-text-in'   || battleState === 'levelup-hold' ||
+    battleState === 'victory-text-out'  || battleState === 'victory-menu-fade'
   )) {
     allyExitTimer += dt;
     if (allyExitTimer >= ALLY_EXIT_DELAY_MS) {
@@ -8553,8 +8400,9 @@ function updateBattle(dt) {
       }
     }
   }
+}
 
-  // State machine
+function _updateBattleOpening() {
   if (battleState === 'roar-hold') {
     // waits for msgBox Z dismiss → callback sets flash-strobe
   } else if (battleState === 'flash-strobe') {
@@ -8581,7 +8429,12 @@ function updateBattle(dt) {
     } else if (battleTimer >= BOSS_BLOCKS * BOSS_DISSOLVE_STEPS * BOSS_DISSOLVE_FRAME_MS) { battleState = 'battle-fade-in'; battleTimer = 0; }
   } else if (battleState === 'battle-fade-in') {
     if (battleTimer >= (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS) { battleState = 'menu-open'; battleTimer = 0; }
-  } else if (battleState === 'message-hold') {
+  } else { return false; }
+  return true;
+}
+
+function _updateBattleMenuConfirm() {
+  if (battleState === 'message-hold') {
     if (battleTimer >= BATTLE_MSG_HOLD_MS) { battleState = 'menu-open'; battleTimer = 0; battleMessage = null; }
   } else if (battleState === 'confirm-pause') {
     // Brief pause so CONFIRM SFX is audible before turn queue starts
@@ -8630,7 +8483,12 @@ function updateBattle(dt) {
       turnQueue = buildTurnOrder();
       processNextTurn();
     }
-  } else if (battleState === 'attack-start') {
+  } else { return false; }
+  return true;
+}
+
+function _updateBattlePlayerAttack() {
+  if (battleState === 'attack-start') {
     // First hit: 100ms wind-up (confirm-pause already gave 150ms). Subsequent hits: 50ms (rapid combo)
     const startDelay = currentHitIdx === 0 ? 100 : 50;
     if (battleTimer >= startDelay) {
@@ -8832,7 +8690,12 @@ function updateBattle(dt) {
         processNextTurn();
       }
     }
-  } else if (battleState === 'defend-anim') {
+  } else { return false; }
+  return true;
+}
+
+function _updateBattleDefendItem(dt) {
+  if (battleState === 'defend-anim') {
     // Defend pose + sparkle for 32 frames (~533ms), then enemy turn
     if (battleTimer >= DEFEND_SPARKLE_TOTAL_MS) {
       // Remaining turns in queue
@@ -8933,7 +8796,12 @@ function updateBattle(dt) {
       battleState = 'confirm-pause';
       battleTimer = 0;
     }
-  } else if (battleState === 'run-name-out') {
+  } else { return false; }
+  return true;
+}
+
+function _updateBattleRun() {
+  if (battleState === 'run-name-out') {
     // Monster name fades out (same as victory-name-out)
     if (battleTimer >= (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS) {
       sprite.setDirection(DIR_DOWN);
@@ -8989,7 +8857,12 @@ function updateBattle(dt) {
     if (battleTimer >= (BATTLE_TEXT_STEPS + 1) * 50) {
       processNextTurn();
     }
-  } else if (battleState === 'pvp-ally-appear') {
+  } else { return false; }
+  return true;
+}
+
+function _updateBattleAlly() {
+  if (battleState === 'pvp-ally-appear') {
     // Hold until box finishes expanding, then resume turn queue
     if (battleTimer >= PVP_BOX_RESIZE_MS) {
       turnQueue = buildTurnOrder();
@@ -9120,7 +8993,12 @@ function updateBattle(dt) {
     }
   } else if (battleState === 'ally-ko-msg') {
     // Waiting for message box dismiss
-  } else if (battleState === 'boss-flash') {
+  } else { return false; }
+  return true;
+}
+
+function _updateBattleEnemyTurn() {
+  if (battleState === 'boss-flash') {
     if (battleTimer >= BOSS_PREFLASH_MS) {
       // Choose target: player or an ally
       // PVP main opponent always targets the player (1v1 duel — no ally interception)
@@ -9232,7 +9110,12 @@ function updateBattle(dt) {
         battleTimer = 0;
       }
     }
-  } else if (battleState === 'boss-dissolve') {
+  } else { return false; }
+  return true;
+}
+
+function _updateBattleEndSequence(dt) {
+  if (battleState === 'boss-dissolve') {
     // Play death SFX every 4 blocks
     const dFrame = Math.floor(battleTimer / BOSS_DISSOLVE_FRAME_MS);
     const dBlock = Math.floor(dFrame / BOSS_DISSOLVE_STEPS);
@@ -9387,7 +9270,22 @@ function updateBattle(dt) {
         loadWorldMapAt(exitIdx);
       }, 'world');
     }
-  }
+  } else { return false; }
+  return true;
+}
+
+function updateBattle(dt) {
+  if (battleState === 'none') return;
+  battleTimer += Math.min(dt, 33);
+  _updateBattleTimers(dt);
+  _updateBattleOpening()      ||
+  _updateBattleMenuConfirm()  ||
+  _updateBattlePlayerAttack() ||
+  _updateBattleDefendItem(dt) ||
+  _updateBattleRun()          ||
+  _updateBattleAlly()         ||
+  _updateBattleEnemyTurn()    ||
+  _updateBattleEndSequence(dt);
 }
 
 function drawSWExplosion() {
