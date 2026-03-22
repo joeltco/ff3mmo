@@ -3741,8 +3741,12 @@ function drawHUD() {
   } else if (hudCanvas) {
     // Game-start border fade-in — alpha-based so it's visible on the black background
     const alpha = Math.min(hudInfoFadeTimer / (HUD_INFO_FADE_STEPS * HUD_INFO_FADE_STEP_MS), 1);
-    if (alpha < 1) { ctx.globalAlpha = alpha; ctx.drawImage(hudCanvas, 0, 0); ctx.globalAlpha = 1; }
-    else ctx.drawImage(hudCanvas, 0, 0);
+    if (alpha < 1) {
+      ctx.globalAlpha = alpha; ctx.drawImage(hudCanvas, 0, 0); ctx.globalAlpha = 1;
+      // Bottom HUD stays solid — redraw it at full alpha on top
+      ctx.save(); ctx.beginPath(); ctx.rect(0, HUD_BOT_Y, CANVAS_W, HUD_BOT_H); ctx.clip();
+      ctx.drawImage(hudCanvas, 0, 0); ctx.restore();
+    } else ctx.drawImage(hudCanvas, 0, 0);
   }
 
   // Top box content (full 256×32, no static border — border only with text)
