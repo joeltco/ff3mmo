@@ -15,7 +15,7 @@ import { applyIPS } from './ips-patcher.js';
 import { initTextDecoder, getItemNameClean, getMonsterName } from './text-decoder.js';
 import { initFont, drawText, measureText, TEXT_WHITE, TEXT_GREY, TEXT_YELLOW } from './font-renderer.js';
 import { MONSTERS } from './data/monsters.js';
-import { ITEMS, isHandEquippable, isWeapon, weaponSubtype, isBladedWeapon } from './data/items.js';
+import { ITEMS } from './data/items.js';
 import { ENCOUNTERS } from './data/encounters.js';
 import { CRIT_RATE, CRIT_MULT, BASE_HIT_RATE, BOSS_HIT_RATE, GOBLIN_HIT_RATE,
          calcDamage, rollHits } from './battle-math.js';
@@ -344,7 +344,23 @@ function recalcDEF() {
     + (ITEMS.get(playerBody)?.def || 0)
     + (ITEMS.get(playerArms)?.def || 0);
 }
-
+function isHandEquippable(itemData) {
+  return itemData && (itemData.type === 'weapon' || (itemData.type === 'armor' && itemData.subtype === 'shield'));
+}
+function isWeapon(id) {
+  if (!id) return false;
+  const item = ITEMS.get(id);
+  return item && item.type === 'weapon';
+}
+function weaponSubtype(id) {
+  if (!id) return null;
+  const item = ITEMS.get(id);
+  return (item && item.type === 'weapon') ? item.subtype : null;
+}
+function isBladedWeapon(id) {
+  const st = weaponSubtype(id);
+  return st === 'knife' || st === 'dagger' || st === 'sword';
+}
 function getSlashFramesForWeapon(id, rightHand) {
   const st = weaponSubtype(id);
   if (st === 'knife' || st === 'dagger') return rightHand ? knifeSlashFramesR : knifeSlashFramesL;
