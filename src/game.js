@@ -2827,108 +2827,98 @@ function _battleInputItemSelect() {
   }
 }
 
-function _battleInputItemTargetSelect() {
-  // Spatial nav: Player ← right-col enemies ← left-col enemies
-  // Grid: 0=TL, 1=TR, 2=BL, 3=BR. Right col = 1,3. Left col = 0,2.
-  // 1 enemy: just index 0. 2 enemies: 0=left, 1=right. 3: 0=TL,1=TR,2=BL.
-  const _alive = (i) => isRandomEncounter && encounterMonsters && i < encounterMonsters.length && encounterMonsters[i].hp > 0;
-  const _cnt = isRandomEncounter && encounterMonsters ? encounterMonsters.length : (isRandomEncounter ? 0 : 1);
-  // Which column is this index in? For 1 enemy, it's the right col (goes straight to player).
-  const _isRightCol = (i) => _cnt === 1 || (_cnt === 2 && i === 1) || (_cnt >= 3 && (i === 1 || i === 3));
-  const _isLeftCol = (i) => _cnt >= 2 && !_isRightCol(i);
-
-  const _isBattleItem = playerActionPending && ITEMS.get(playerActionPending.itemId)?.type === 'battle_item';
-  if (keys['ArrowLeft']) {
-    keys['ArrowLeft'] = false;
-    if (_isBattleItem && itemTargetMode !== 'single') {
-      // In multi-target mode — LEFT goes back to single (leftmost alive)
-      const leftCandidates = _cnt <= 1 ? [0] : _cnt === 2 ? [0] : [0, 2];
-      const found = leftCandidates.find(i => _alive(i));
-      if (found !== undefined) itemTargetIndex = found;
+function _itemTargetCnt() {
+  return isRandomEncounter && encounterMonsters ? encounterMonsters.length : (isRandomEncounter ? 0 : 1);
+}
+function _itemTargetAlive(i) {
+  return isRandomEncounter && encounterMonsters && i < encounterMonsters.length && encounterMonsters[i].hp > 0;
+}
+function _itemTargetIsRightCol(i) {
+  const cnt = _itemTargetCnt();
+  return cnt === 1 || (cnt === 2 && i === 1) || (cnt >= 3 && (i === 1 || i === 3));
+}
+function _itemTargetIsLeftCol(i) { return _itemTargetCnt() >= 2 && !_itemTargetIsRightCol(i); }
+function _itemTargetNavLeft(isBattleItem) {
+  const cnt = _itemTargetCnt();
+  if (isBattleItem && itemTargetMode !== 'single') {
+    const leftCandidates = cnt <= 1 ? [0] : cnt === 2 ? [0] : [0, 2];
+    const found = leftCandidates.find(i => _itemTargetAlive(i));
+    if (found !== undefined) itemTargetIndex = found;
+    itemTargetMode = 'single'; playSFX(SFX.CURSOR);
+  } else if (itemTargetType === 'player') {
+    if (!isRandomEncounter) {
+      itemTargetType = 'enemy'; itemTargetIndex = 0; itemTargetMode = 'single'; playSFX(SFX.CURSOR);
+    } else {
+      const rightCandidates = cnt === 1 ? [0] : cnt === 2 ? [1] : cnt === 3 ? [1] : [1, 3];
+      const leftCandidates = cnt === 2 ? [0] : cnt === 3 ? [0, 2] : cnt >= 4 ? [0, 2] : [];
+      let found = rightCandidates.find(i => _itemTargetAlive(i));
+      if (found === undefined) found = leftCandidates.find(i => _itemTargetAlive(i));
+      if (found !== undefined) {
+        itemTargetType = 'enemy'; itemTargetIndex = found; itemTargetMode = 'single'; playSFX(SFX.CURSOR);
+      }
+    }
+  } else if (isRandomEncounter && _itemTargetIsRightCol(itemTargetIndex)) {
+    const leftPeer = itemTargetIndex === 1 ? 0 : itemTargetIndex === 3 ? 2 : -1;
+    const leftOther = itemTargetIndex === 1 ? 2 : itemTargetIndex === 3 ? 0 : -1;
+    if (leftPeer >= 0 && _itemTargetAlive(leftPeer)) { itemTargetIndex = leftPeer; playSFX(SFX.CURSOR); }
+    else if (leftOther >= 0 && _itemTargetAlive(leftOther)) { itemTargetIndex = leftOther; playSFX(SFX.CURSOR); }
+    else if (isBattleItem) { itemTargetMode = 'all'; playSFX(SFX.CURSOR); }
+  } else if (isBattleItem && isRandomEncounter && _itemTargetIsLeftCol(itemTargetIndex)) {
+    itemTargetMode = 'all'; playSFX(SFX.CURSOR);
+  }
+}
+function _itemTargetNavRight() {
+  if (itemTargetType !== 'enemy') return;
+  if (_itemTargetIsRightCol(itemTargetIndex) || !isRandomEncounter) {
+    itemTargetType = 'player'; playSFX(SFX.CURSOR);
+  } else {
+    const rightPeer = itemTargetIndex === 0 ? 1 : itemTargetIndex === 2 ? 3 : -1;
+    const rightOther = itemTargetIndex === 0 ? 3 : itemTargetIndex === 2 ? 1 : -1;
+    if (rightPeer >= 0 && _itemTargetAlive(rightPeer)) { itemTargetIndex = rightPeer; playSFX(SFX.CURSOR); }
+    else if (rightOther >= 0 && _itemTargetAlive(rightOther)) { itemTargetIndex = rightOther; playSFX(SFX.CURSOR); }
+    else { itemTargetType = 'player'; playSFX(SFX.CURSOR); }
+  }
+}
+function _itemTargetNavVertical(isBattleItem) {
+  const goUp = !!keys['ArrowUp'];
+  keys['ArrowUp'] = false; keys['ArrowDown'] = false;
+  const cnt = _itemTargetCnt();
+  if (isBattleItem && itemTargetType === 'enemy' && isRandomEncounter && encounterMonsters) {
+    if (goUp && itemTargetMode === 'single') {
+      itemTargetMode = _itemTargetIsLeftCol(itemTargetIndex) ? 'col-left' : 'col-right';
+      playSFX(SFX.CURSOR);
+    } else if (!goUp && itemTargetMode !== 'single') {
       itemTargetMode = 'single'; playSFX(SFX.CURSOR);
-    } else if (itemTargetType === 'player') {
-      // Player → nearest right-col alive enemy
-      if (!isRandomEncounter) {
-        itemTargetType = 'enemy'; itemTargetIndex = 0; itemTargetMode = 'single'; playSFX(SFX.CURSOR);
-      } else {
-        const rightCandidates = _cnt === 1 ? [0] : _cnt === 2 ? [1] : _cnt === 3 ? [1] : [1, 3];
-        const leftCandidates = _cnt === 2 ? [0] : _cnt === 3 ? [0, 2] : _cnt >= 4 ? [0, 2] : [];
-        let found = rightCandidates.find(i => _alive(i));
-        if (found === undefined) found = leftCandidates.find(i => _alive(i));
-        if (found !== undefined) {
-          itemTargetType = 'enemy'; itemTargetIndex = found; itemTargetMode = 'single'; playSFX(SFX.CURSOR);
-        }
-      }
-    } else if (isRandomEncounter && _isRightCol(itemTargetIndex)) {
-      // Right col → left col (same row if possible)
-      const leftPeer = itemTargetIndex === 1 ? 0 : itemTargetIndex === 3 ? 2 : -1;
-      const leftOther = itemTargetIndex === 1 ? 2 : itemTargetIndex === 3 ? 0 : -1;
-      if (leftPeer >= 0 && _alive(leftPeer)) { itemTargetIndex = leftPeer; playSFX(SFX.CURSOR); }
-      else if (leftOther >= 0 && _alive(leftOther)) { itemTargetIndex = leftOther; playSFX(SFX.CURSOR); }
-      else if (_isBattleItem) { itemTargetMode = 'all'; playSFX(SFX.CURSOR); } // no left col alive → all
-    } else if (_isBattleItem && isRandomEncounter && _isLeftCol(itemTargetIndex)) {
-      // Already on leftmost col — toggle to all-enemies mode
-      itemTargetMode = 'all'; playSFX(SFX.CURSOR);
+    }
+  } else if (itemTargetType === 'enemy' && isRandomEncounter && encounterMonsters) {
+    const vertMap = cnt >= 4 ? { 0: 2, 2: 0, 1: 3, 3: 1 } :
+                    cnt === 3 ? { 0: 2, 2: 0, 1: 1 } : {};
+    const next = vertMap[itemTargetIndex];
+    if (next !== undefined && next !== itemTargetIndex && _itemTargetAlive(next)) {
+      itemTargetIndex = next; playSFX(SFX.CURSOR);
+    }
+  } else if (itemTargetType === 'player') {
+    const livingAllies = battleAllies.filter(a => a.hp > 0);
+    if (!goUp && itemTargetAllyIndex < livingAllies.length - 1) {
+      itemTargetAllyIndex++; playSFX(SFX.CURSOR);
+    } else if (goUp && itemTargetAllyIndex >= 0) {
+      itemTargetAllyIndex--; playSFX(SFX.CURSOR);
     }
   }
-  if (keys['ArrowRight']) {
-    keys['ArrowRight'] = false;
-    if (itemTargetType === 'enemy') {
-      if (_isRightCol(itemTargetIndex) || !isRandomEncounter) {
-        // Right col or boss → player
-        itemTargetType = 'player'; playSFX(SFX.CURSOR);
-      } else {
-        // Left col → right col (same row if possible)
-        const rightPeer = itemTargetIndex === 0 ? 1 : itemTargetIndex === 2 ? 3 : -1;
-        const rightOther = itemTargetIndex === 0 ? 3 : itemTargetIndex === 2 ? 1 : -1;
-        if (rightPeer >= 0 && _alive(rightPeer)) { itemTargetIndex = rightPeer; playSFX(SFX.CURSOR); }
-        else if (rightOther >= 0 && _alive(rightOther)) { itemTargetIndex = rightOther; playSFX(SFX.CURSOR); }
-        else { itemTargetType = 'player'; playSFX(SFX.CURSOR); }
-      }
-    }
-  }
-  if (keys['ArrowUp'] || keys['ArrowDown']) {
-    const goUp = !!keys['ArrowUp'];
-    keys['ArrowUp'] = false; keys['ArrowDown'] = false;
-    if (_isBattleItem && itemTargetType === 'enemy' && isRandomEncounter && encounterMonsters) {
-      if (goUp && itemTargetMode === 'single') {
-        // UP from single → select column
-        itemTargetMode = _isLeftCol(itemTargetIndex) ? 'col-left' : 'col-right';
-        playSFX(SFX.CURSOR);
-      } else if (!goUp && itemTargetMode !== 'single') {
-        // DOWN from column → back to single
-        itemTargetMode = 'single'; playSFX(SFX.CURSOR);
-      }
-    } else if (itemTargetType === 'enemy' && isRandomEncounter && encounterMonsters) {
-      // Vertical: TL↔BL (0↔2), TR↔BR (1↔3)
-      const vertMap = _cnt >= 4 ? { 0: 2, 2: 0, 1: 3, 3: 1 } :
-                      _cnt === 3 ? { 0: 2, 2: 0, 1: 1 } : {};
-      const next = vertMap[itemTargetIndex];
-      if (next !== undefined && next !== itemTargetIndex && _alive(next)) {
-        itemTargetIndex = next; playSFX(SFX.CURSOR);
-      }
-    } else if (itemTargetType === 'player') {
-      const livingAllies = battleAllies.filter(a => a.hp > 0);
-      if (!goUp && itemTargetAllyIndex < livingAllies.length - 1) {
-        itemTargetAllyIndex++; playSFX(SFX.CURSOR);
-      } else if (goUp && itemTargetAllyIndex >= 0) {
-        itemTargetAllyIndex--; playSFX(SFX.CURSOR);
-      }
-    }
-  }
+}
+function _battleInputItemTargetSelect() {
+  const isBattleItem = playerActionPending && ITEMS.get(playerActionPending.itemId)?.type === 'battle_item';
+  if (keys['ArrowLeft']) { keys['ArrowLeft'] = false; _itemTargetNavLeft(isBattleItem); }
+  if (keys['ArrowRight']) { keys['ArrowRight'] = false; _itemTargetNavRight(); }
+  if (keys['ArrowUp'] || keys['ArrowDown']) _itemTargetNavVertical(isBattleItem);
   if (_zPressed()) {
     playerActionPending.target = itemTargetType === 'player' ? 'player' : itemTargetIndex;
     playerActionPending.allyIndex = itemTargetType === 'player' ? itemTargetAllyIndex : -1;
     playerActionPending.targetMode = itemTargetMode;
-    playSFX(SFX.CONFIRM);
-    battleState = 'item-list-out';
-    battleTimer = 0;
+    playSFX(SFX.CONFIRM); battleState = 'item-list-out'; battleTimer = 0;
   }
   if (_xPressed()) {
-    playerActionPending = null;
-    playSFX(SFX.CONFIRM);
-    battleState = 'item-select';
-    battleTimer = 0;
+    playerActionPending = null; playSFX(SFX.CONFIRM); battleState = 'item-select'; battleTimer = 0;
   }
 }
 
