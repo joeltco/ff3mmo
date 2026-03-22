@@ -1964,6 +1964,16 @@ function _playerStatsSnapshot() {
     head: playerHead, body: playerBody, arms: playerArms,
   };
 }
+function _landOnWorldMap(tileX, tileY) {
+  worldX = tileX * TILE_SIZE; worldY = tileY * TILE_SIZE;
+  disabledTrigger = { x: tileX, y: tileY };
+  moving = false; sprite.setDirection(DIR_DOWN); sprite.resetFrame();
+  playTrack(TRACKS.WORLD_MAP);
+}
+function _calcBoxExpandSize(fullW, fullH, isExpand, isClose) {
+  const { boxW, boxH } = _calcBoxExpandSize(fullW, fullH, isExpand, isClose);
+  return { boxW, boxH };
+}
 function _syncSaveSlotProgress() {
   if (!saveSlots[selectCursor]) return;
   saveSlots[selectCursor].level = playerStats.level;
@@ -2573,14 +2583,7 @@ function loadWorldMapAt(trigId) {
   const pos = worldMapData.triggerPositions.get(trigId);
   const tileX = pos ? pos.x : 0;
   const tileY = pos ? pos.y : 0;
-  worldX = tileX * TILE_SIZE;
-  worldY = tileY * TILE_SIZE;
-
-  disabledTrigger = { x: tileX, y: tileY };
-  moving = false;
-  sprite.setDirection(DIR_DOWN);
-  sprite.resetFrame();
-  playTrack(TRACKS.WORLD_MAP);
+  _landOnWorldMap(tileX, tileY);
 }
 
 function loadWorldMapAtPosition(tileX, tileY) {
@@ -2592,14 +2595,7 @@ function loadWorldMapAtPosition(tileX, tileY) {
   mapData = null;
   setupTopBox(0, true);
 
-  worldX = tileX * TILE_SIZE;
-  worldY = tileY * TILE_SIZE;
-
-  disabledTrigger = { x: tileX, y: tileY };
-  moving = false;
-  sprite.setDirection(DIR_DOWN);
-  sprite.resetFrame();
-  playTrack(TRACKS.WORLD_MAP);
+  _landOnWorldMap(tileX, tileY);
 }
 
 function startMove(dir) {
@@ -7703,12 +7699,7 @@ function drawEncounterBox() {
   const centerX = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2);
   const centerY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
 
-  let boxW = fullW, boxH = fullH;
-  if (isExpand || isClose) {
-    const t = isExpand ? Math.min(battleTimer / BOSS_BOX_EXPAND_MS, 1) : 1 - Math.min(battleTimer / BOSS_BOX_EXPAND_MS, 1);
-    boxW = Math.max(16, Math.ceil(fullW * t / 8) * 8);
-    boxH = Math.max(16, Math.ceil(fullH * t / 8) * 8);
-  }
+  const { boxW, boxH } = _calcBoxExpandSize(fullW, fullH, isExpand, isClose);
   const boxX = centerX - Math.floor(boxW / 2);
   const boxY = centerY - Math.floor(boxH / 2);
 
@@ -7865,12 +7856,7 @@ function _drawBossSpriteBoxBoss(centerX, centerY) {
   ctx.save();
   ctx.beginPath(); ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H); ctx.clip();
 
-  let boxW = fullW, boxH = fullH;
-  if (isExpand || isClose) {
-    const t = isExpand ? Math.min(battleTimer / BOSS_BOX_EXPAND_MS, 1) : 1 - Math.min(battleTimer / BOSS_BOX_EXPAND_MS, 1);
-    boxW = Math.max(16, Math.ceil(fullW * t / 8) * 8);
-    boxH = Math.max(16, Math.ceil(fullH * t / 8) * 8);
-  }
+  const { boxW, boxH } = _calcBoxExpandSize(fullW, fullH, isExpand, isClose);
   _drawBorderedBox(centerX - Math.floor(boxW / 2), centerY - Math.floor(boxH / 2), boxW, boxH);
 
   if (isExpand || isClose || battleState === 'defeat-text') { ctx.restore(); return; }
