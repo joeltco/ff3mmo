@@ -1468,21 +1468,7 @@ function initLandTurtleBattle(romData) {
   for (let ty = 0; ty < LAND_TURTLE_COLS; ty++) {
     const pal = ty < 4 ? LAND_TURTLE_PAL_TOP : LAND_TURTLE_PAL_BOT;
     for (let tx = 0; tx < LAND_TURTLE_COLS; tx++) {
-      const img = cctx.createImageData(8, 8);
-      const px = tiles[ty * LAND_TURTLE_COLS + tx];
-      for (let p = 0; p < 64; p++) {
-        const ci = px[p];
-        if (ci === 0) {
-          img.data[p * 4 + 3] = 0;
-        } else {
-          const rgb = NES_SYSTEM_PALETTE[pal[ci]] || [0, 0, 0];
-          img.data[p * 4]     = rgb[0];
-          img.data[p * 4 + 1] = rgb[1];
-          img.data[p * 4 + 2] = rgb[2];
-          img.data[p * 4 + 3] = 255;
-        }
-      }
-      cctx.putImageData(img, tx * 8, ty * 8);
+      _blitTile(cctx, tiles[ty * LAND_TURTLE_COLS + tx], pal, tx * 8, ty * 8);
     }
   }
 
@@ -1500,21 +1486,7 @@ function _renderGoblinSprite(tiles, pal0, pal1, tilePalMap) {
     for (let tx = 0; tx < GOBLIN_COLS; tx++) {
       const tileIdx = ty * GOBLIN_COLS + tx;
       const pal = tilePalMap[tileIdx] === 1 ? pal1 : pal0;
-      const img = cctx.createImageData(8, 8);
-      const px = tiles[tileIdx];
-      for (let p = 0; p < 64; p++) {
-        const ci = px[p];
-        if (ci === 0) {
-          img.data[p * 4 + 3] = 0;
-        } else {
-          const rgb = NES_SYSTEM_PALETTE[pal[ci]] || [0, 0, 0];
-          img.data[p * 4]     = rgb[0];
-          img.data[p * 4 + 1] = rgb[1];
-          img.data[p * 4 + 2] = rgb[2];
-          img.data[p * 4 + 3] = 255;
-        }
-      }
-      cctx.putImageData(img, tx * 8, ty * 8);
+      _blitTile(cctx, tiles[tileIdx], pal, tx * 8, ty * 8);
     }
   }
   return c;
@@ -1801,21 +1773,7 @@ function initMoogleSprite(romData) {
   const layout = [[0,0], [8,0], [0,8], [8,8]];
 
   for (let i = 0; i < 4; i++) {
-    const img = mctx.createImageData(8, 8);
-    const px = tiles[i];
-    for (let p = 0; p < 64; p++) {
-      const ci = px[p];
-      if (ci === 0) {
-        img.data[p * 4 + 3] = 0;
-      } else {
-        const rgb = NES_SYSTEM_PALETTE[MOOGLE_PAL[ci]] || [0, 0, 0];
-        img.data[p * 4]     = rgb[0];
-        img.data[p * 4 + 1] = rgb[1];
-        img.data[p * 4 + 2] = rgb[2];
-        img.data[p * 4 + 3] = 255;
-      }
-    }
-    mctx.putImageData(img, layout[i][0], layout[i][1]);
+    _blitTile(mctx, tiles[i], MOOGLE_PAL, layout[i][0], layout[i][1]);
   }
 
   const flipped = _hflipCanvas16(normal);
@@ -1843,21 +1801,7 @@ function renderSpriteFaded(romData, spriteOff, basePal, fadeSteps) {
   const layout = [[0,0], [8,0], [0,8], [8,8]];
 
   for (let i = 0; i < 4; i++) {
-    const img = cctx.createImageData(8, 8);
-    const px = tiles[i];
-    for (let p = 0; p < 64; p++) {
-      const ci = px[p];
-      if (ci === 0) {
-        img.data[p * 4 + 3] = 0;
-      } else {
-        const rgb = NES_SYSTEM_PALETTE[fadedPal[ci]] || [0, 0, 0];
-        img.data[p * 4]     = rgb[0];
-        img.data[p * 4 + 1] = rgb[1];
-        img.data[p * 4 + 2] = rgb[2];
-        img.data[p * 4 + 3] = 255;
-      }
-    }
-    cctx.putImageData(img, layout[i][0], layout[i][1]);
+    _blitTile(cctx, tiles[i], fadedPal, layout[i][0], layout[i][1]);
   }
   return c;
 }
@@ -1936,6 +1880,15 @@ function nesColorFade(c) {
 
 function _makeCanvas16() {
   const c = document.createElement('canvas'); c.width = 16; c.height = 16; return c;
+}
+function _shiftHorizWater(cL, cR) {
+  const nL = new Uint8Array(8), nR = new Uint8Array(8);
+  for (let r = 0; r < 8; r++) {
+    const l = cL[r], ri = cR[r];
+    nL[r] = ((l >> 1) | ((ri & 1) << 7)) & 0xFF;
+    nR[r] = ((ri >> 1) | ((l & 1) << 7)) & 0xFF;
+  }
+  return [nL, nR];
 }
 function _grayViewport() {
   ctx.filter = 'saturate(0)';
@@ -2080,13 +2033,7 @@ function _precomputeWaterShifts(chrTiles) {
     for (let f = 0; f < 16; f++) {
       arrL.push(_rebuild(cL, p1L));
       arrR.push(_rebuild(cR, p1R));
-      const nL = new Uint8Array(8), nR = new Uint8Array(8);
-      for (let r = 0; r < 8; r++) {
-        const l = cL[r], ri = cR[r];
-        nL[r] = ((l >> 1) | ((ri & 1) << 7)) & 0xFF;
-        nR[r] = ((ri >> 1) | ((l & 1) << 7)) & 0xFF;
-      }
-      cL = nL; cR = nR;
+      [cL, cR] = _shiftHorizWater(cL, cR);
     }
     shifted[ciL] = arrL; shifted[ciR] = arrR;
   }
@@ -4020,13 +3967,7 @@ function _buildWorldHorizWaterFrames(chrTiles, frames) {
     let cL = new Uint8Array(p0L), cR = new Uint8Array(p0R);
     for (let f = 0; f < 16; f++) {
       arrL.push(_rebuild(cL, p1L)); arrR.push(_rebuild(cR, p1R));
-      const nL = new Uint8Array(8), nR = new Uint8Array(8);
-      for (let r = 0; r < 8; r++) {
-        const l = cL[r], ri = cR[r];
-        nL[r] = ((l >> 1) | ((ri & 1) << 7)) & 0xFF;
-        nR[r] = ((ri >> 1) | ((l & 1) << 7)) & 0xFF;
-      }
-      cL = nL; cR = nR;
+      [cL, cR] = _shiftHorizWater(cL, cR);
     }
     frames.set(ciL, arrL); frames.set(ciR, arrR);
   }
@@ -4271,13 +4212,7 @@ function _buildHorizWaterFrames(chrTiles, frames) {
     for (let f = 0; f < 16; f++) {
       arrL.push(_rebuild(cL, p1L));
       arrR.push(_rebuild(cR, p1R));
-      const nL = new Uint8Array(8), nR = new Uint8Array(8);
-      for (let r = 0; r < 8; r++) {
-        const l = cL[r], ri = cR[r];
-        nL[r] = ((l >> 1) | ((ri & 1) << 7)) & 0xFF;
-        nR[r] = ((ri >> 1) | ((l & 1) << 7)) & 0xFF;
-      }
-      cL = nL; cR = nR;
+      [cL, cR] = _shiftHorizWater(cL, cR);
     }
     frames.set(ciL, arrL); frames.set(ciR, arrR);
   }
