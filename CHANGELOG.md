@@ -6,6 +6,33 @@ All notable changes to this project are documented here.
 
 _No unreleased changes._
 
+## 1.0.1 — 2026-03-22
+
+### Modularization continued — −451L from game.js
+
+**New module `src/slash-effects.js`:**
+- `initSlashSprites`, `initKnifeSlashSprites`, `initSwordSlashSprites` — punch/knife/sword slash frame builders
+- Internal helpers: `_decode2BPPTiles`, `_buildSwordSlashFrame`, `_putPx16`
+
+**New module `src/south-wind.js`:**
+- `initSouthWindSprite` — builds 3-phase ice explosion canvases (16×16, 32×32, 48×48)
+- Internal: `SW_TILES` PPU data, `_drawSWTile`, `_buildSWPhase1/2/3`
+
+**New module `src/battle-bg.js`:**
+- `renderBattleBg(romData, bgId)` — returns `{ bgCanvas, fadeFrames }` instead of setting globals
+- `renderBattleBgWithPalette` — shared renderer used by title animations
+- `_loadBattlePalette`, `_loadOceanTileData` — ROM data parsers
+- Exports `BATTLE_BG_MAP_LOOKUP` and palette-C1/C2/C3 constants
+
+**New module `src/title-animations.js`:**
+- `initTitleWater(romData, titleFadeMax)` — returns `{ titleWaterFrames, titleWaterFadeTiles }`
+- `initTitleSky`, `initTitleUnderwater`, `initTitleOcean` — return frame arrays
+- `initUnderwaterSprites` — returns `{ uwBubbleTiles }`
+- `initTitleLogo` — returns `titleLogoFrames` array
+- Imports from `battle-bg.js`, `water-animation.js`, `palette.js`
+
+**game.js call sites updated** to capture return values and assign to existing globals.
+
 ## 1.0.0 — 2026-03-22
 
 ### Modularization Phase 3 complete

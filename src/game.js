@@ -36,6 +36,10 @@ import { BAYER4, DMG_BOUNCE_TABLE, _dmgBounceY } from './data/animation-tables.j
 import { _calcBoxExpandSize, _encounterGridPos } from './battle-layout.js';
 import { _makeCanvas16, _makeCanvas16ctx, _hflipCanvas16, _makeWhiteCanvas } from './canvas-utils.js';
 import { _updateWorldWater, _updateIndoorWater, resetWorldWaterCache, resetIndoorWaterCache, _buildHorizWaterPair } from './water-animation.js';
+import { initSlashSprites, initKnifeSlashSprites, initSwordSlashSprites } from './slash-effects.js';
+import { initSouthWindSprite } from './south-wind.js';
+import { BATTLE_BG_MAP_LOOKUP, renderBattleBg } from './battle-bg.js';
+import { initTitleWater, initTitleSky, initTitleUnderwater, initUnderwaterSprites, initTitleOcean, initTitleLogo } from './title-animations.js';
 
 const isMobile = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 
@@ -1437,77 +1441,6 @@ function initGoblinSprite(romData) {
 
 // Generic renderer for PPU-dumped enemy sprites.
 // rawBytes: Uint8Array of (cols*rows*16) bytes — tiles in row-major order.
-// SouthWind ice explosion — 3-phase expanding animation from battle-item-trace.txt
-// Phase 1 (+024-+031): small crystal  16×16, tile $4F 2×2
-// Phase 2 (+032-+039): medium splash  32×32, tiles $49/$4A/$4C/$4D 4×4
-// Phase 3 (+040-+047): large blast    48×48, tiles $49-$4E/$4F/$50/$51 6×6
-// All use pal3: $0F $11 $21 $31 (ice blue)
-// Raw PPU tile data for SouthWind spell (planar 2BPP, from FCEUX trace)
-const SW_TILES = {
-  0x4F: new Uint8Array([0x01,0x01,0x0F,0x18,0x27,0x4D,0x98,0xB0, 0x01,0x01,0x0F,0x1F,0x3E,0x7E,0xFF,0xFF]),
-  0x49: new Uint8Array([0x3F,0x31,0x60,0xEE,0xE1,0x80,0x90,0xB0, 0x3F,0x3F,0x7F,0xFF,0xFF,0xFF,0xEF,0xCF]),
-  0x4A: new Uint8Array([0x00,0x80,0x80,0x60,0x51,0x2B,0xB2,0x34, 0x00,0x80,0x80,0xE0,0xB1,0xDB,0xCB,0xC7]),
-  0x4B: new Uint8Array([0x00,0x03,0x06,0x04,0xE7,0xF7,0x7B,0x2F, 0x00,0x03,0x07,0x07,0xE1,0xF1,0xF8,0xFC]),
-  0x4C: new Uint8Array([0xD8,0xBC,0xAE,0x76,0x2F,0x1E,0x0D,0x01, 0xA7,0xC3,0xD1,0x69,0x31,0x1A,0x0D,0x01]),
-  0x4D: new Uint8Array([0x66,0xCA,0xAA,0x5D,0xFD,0x8E,0x86,0xC7, 0x95,0x25,0x45,0x82,0x7A,0xF9,0xFD,0x3E]),
-  0x4E: new Uint8Array([0x17,0x1B,0x01,0x05,0x8D,0xDB,0x7A,0x67, 0xFE,0xFF,0xFF,0xFF,0x7F,0x3E,0xB6,0x8C]),
-  0x50: new Uint8Array([0x63,0xAD,0xD9,0x62,0xBC,0xD9,0x63,0xE3, 0x9E,0xD2,0xE6,0xFC,0x7C,0x30,0x91,0x12]),
-  0x51: new Uint8Array([0xBF,0x3E,0x7A,0xFD,0xF7,0xCB,0xC7,0x83, 0x79,0x03,0x03,0x39,0x5C,0xBE,0x3E,0x7E]),
-};
-function _drawSWTile(cctx, nesColors, id, dx, dy, hf, vf) {
-  const px = decodeTile(SW_TILES[id], 0);
-  const img = cctx.createImageData(8, 8);
-  for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
-    const sr = vf ? 7-r : r, sc = hf ? 7-c : c;
-    const ci = px[sr*8+sc];
-    const i = (r*8+c)*4;
-    if (ci === 0) { img.data[i+3] = 0; continue; }
-    const [R,G,B] = nesColors[ci] || [0,0,0];
-    img.data[i]=R; img.data[i+1]=G; img.data[i+2]=B; img.data[i+3]=255;
-  }
-  cctx.putImageData(img, dx, dy);
-}
-function _buildSWPhase1(nc) {
-  const c = _makeCanvas16();
-  const x = c.getContext('2d');
-  _drawSWTile(x, nc, 0x4F,  0, 0, false, false); _drawSWTile(x, nc, 0x4F,  8, 0, true,  false);
-  _drawSWTile(x, nc, 0x4F,  0, 8, false, true);  _drawSWTile(x, nc, 0x4F,  8, 8, true,  true);
-  return c;
-}
-function _buildSWPhase2(nc) {
-  const c = document.createElement('canvas'); c.width = 32; c.height = 32;
-  const x = c.getContext('2d');
-  _drawSWTile(x, nc, 0x49,  0, 0, false, false); _drawSWTile(x, nc, 0x4A,  8, 0, false, false);
-  _drawSWTile(x, nc, 0x4A, 16, 0, true,  false); _drawSWTile(x, nc, 0x49, 24, 0, true,  false);
-  _drawSWTile(x, nc, 0x4C,  0, 8, false, false); _drawSWTile(x, nc, 0x4D,  8, 8, false, false);
-  _drawSWTile(x, nc, 0x4D, 16, 8, true,  false); _drawSWTile(x, nc, 0x4C, 24, 8, true,  false);
-  _drawSWTile(x, nc, 0x4C,  0,16, false, true);  _drawSWTile(x, nc, 0x4D,  8,16, false, true);
-  _drawSWTile(x, nc, 0x4D, 16,16, true,  true);  _drawSWTile(x, nc, 0x4C, 24,16, true,  true);
-  _drawSWTile(x, nc, 0x49,  0,24, false, true);  _drawSWTile(x, nc, 0x4A,  8,24, false, true);
-  _drawSWTile(x, nc, 0x4A, 16,24, true,  true);  _drawSWTile(x, nc, 0x49, 24,24, true,  true);
-  return c;
-}
-function _buildSWPhase3(nc) {
-  const c = document.createElement('canvas'); c.width = 48; c.height = 48;
-  const x = c.getContext('2d');
-  // 6×6 symmetric grid: left half normal, right half H-flipped; top half normal, bottom half V-flipped
-  const p = [
-    [0x49,0x4A,0x4B,0x4B,0x4A,0x49],
-    [0x4C,0x4D,0x4E,0x4E,0x4D,0x4C],
-    [0x4F,0x50,0x51,0x51,0x50,0x4F],
-    [0x4F,0x50,0x51,0x51,0x50,0x4F],
-    [0x4C,0x4D,0x4E,0x4E,0x4D,0x4C],
-    [0x49,0x4A,0x4B,0x4B,0x4A,0x49],
-  ];
-  for (let row = 0; row < 6; row++) for (let col = 0; col < 6; col++)
-    _drawSWTile(x, nc, p[row][col], col*8, row*8, col >= 3, row >= 3);
-  return c;
-}
-function initSouthWindSprite() {
-  const nc = [0x0F, 0x11, 0x21, 0x31].map(c => NES_SYSTEM_PALETTE[c] || [0,0,0]);
-  swPhaseCanvases = [_buildSWPhase1(nc), _buildSWPhase2(nc), _buildSWPhase3(nc)];
-  southWindHitCanvas = swPhaseCanvases[0];
-}
 
 // Returns a canvas of (cols*8) × (rows*8).
 function _renderEnemySprite(rawBytes, cols, rows, tilePalMap, pal0, pal1) {
@@ -1705,24 +1638,6 @@ function initLoadingScreenFadeFrames(romData) {
   }
 }
 
-// Battle BG ROM offsets (verified from ff3-disasm)
-const BATTLE_BG_TILES_ROM   = 0x018010;  // bank 0C/$8000, 256 bytes per bgId (16 tiles)
-const BATTLE_BG_MAP_LOOKUP  = 0x073C10;  // bank 39/$BC00, 256 entries (bits 0-4=bgId)
-const BATTLE_BG_PAL_C1      = 0x001110;  // bank 00/$9100, color 1 per bgId
-const BATTLE_BG_PAL_C2      = 0x001210;  // bank 00/$9200, color 2 per bgId
-const BATTLE_BG_PAL_C3      = 0x001310;  // bank 00/$9300, color 3 per bgId
-const BATTLE_BG_TMID_TABLE  = 0x05E512;  // bank 2F/$A502, tilemap ID per bgId (24 entries)
-const BATTLE_BG_META_TILES  = 0x05E52A;  // bank 2F/$A51A, 4 metatiles × 4 tile IDs
-const BATTLE_BG_TILEMAPS    = 0x05E53A;  // bank 2F/$A52A, 3 tilemaps × 32 bytes
-
-/**
- * Pre-render battle background strip (256×32) for a given bgId.
- * @param {Uint8Array} romData — full ROM
- * @param {number} bgId — battle background ID (0-23)
- * @returns {HTMLCanvasElement} 256×32 canvas
- */
-// NES palette fade — one step toward black, matches FF3 $FA87 routine
-
 
 
 function _pauseFadeStep(inState, outState) {
@@ -1807,306 +1722,6 @@ function _fullHeal() {
   playerHP = playerStats.maxHP; playerMP = playerStats.maxMP;
 }
 
-function _loadBattlePalette(romData, bgId) {
-  return [0x0F, romData[BATTLE_BG_PAL_C1 + bgId], romData[BATTLE_BG_PAL_C2 + bgId], romData[BATTLE_BG_PAL_C3 + bgId]];
-}
-function _loadBattleMetaTiles(romData) {
-  const metaTiles = [];
-  for (let m = 0; m < 4; m++) {
-    const ids = [];
-    for (let j = 0; j < 4; j++) ids.push(romData[BATTLE_BG_META_TILES + m * 4 + j] - 0x60);
-    metaTiles.push(ids);
-  }
-  return metaTiles;
-}
-function _loadBattleTilemap(romData, bgId) {
-  const tilemapIdx = romData[BATTLE_BG_TMID_TABLE + bgId];
-  const tmBase = BATTLE_BG_TILEMAPS + tilemapIdx * 32;
-  const tilemap = [];
-  for (let i = 0; i < 32; i++) tilemap.push(romData[tmBase + i]);
-  return tilemap;
-}
-function renderBattleBgWithPalette(romData, bgId, palette, tiles, metaTiles, tilemap) {
-  const c = document.createElement('canvas');
-  c.width = 256; c.height = 32;
-  const bctx = c.getContext('2d');
-
-  for (let row = 0; row < 2; row++) {
-    for (let col = 0; col < 16; col++) {
-      const metaIdx = tilemap[row * 16 + col];
-      const [tl, tr, bl, br] = metaTiles[metaIdx];
-      const px = col * 16;
-      const py = row * 16;
-
-      const subTiles = [[tl, px, py], [tr, px + 8, py], [bl, px, py + 8], [br, px + 8, py + 8]];
-      for (const [tIdx, sx, sy] of subTiles) _renderDecodedTile(bctx, tiles[tIdx], palette, sx, sy);
-    }
-  }
-  return c;
-}
-
-function renderBattleBg(romData, bgId) {
-  // Palette: color 0 = $0F (black), colors 1-3 from ROM
-  const palette = _loadBattlePalette(romData, bgId);
-
-  const { tiles, metaTiles, tilemap } = _loadOceanTileData(romData, bgId);
-
-  // Pre-render all fade frames (original → progressively darker → black)
-  const frames = [];
-  const fadePal = [...palette];
-  while (true) {
-    frames.push(renderBattleBgWithPalette(romData, bgId, fadePal, tiles, metaTiles, tilemap));
-    // Check if all colors are black
-    if (fadePal[1] === 0x0F && fadePal[2] === 0x0F && fadePal[3] === 0x0F) break;
-    // Step each color toward black
-    _stepPalFade(fadePal);
-  }
-
-  topBoxBgFadeFrames = frames;
-  return frames[0]; // original = topBoxBgCanvas
-}
-
-// ── Title Screen Init ──
-
-const TITLE_OCEAN_CHR = [0x22, 0x23, 0x24, 0x25]; // horizontal water CHR tile IDs
-const TITLE_WATER_PAL_IDX = 2; // world map palette index for ocean
-const TITLE_SKY_BGID = 6;      // airship sky battle BG (blue/lavender/white clouds)
-
-function _precomputeWaterShifts(chrTiles) {
-  const shifted = {};
-  for (const [ciL, ciR] of [[0x22, 0x23], [0x24, 0x25]]) {
-    const bL = chrTiles[ciL], bR = chrTiles[ciR];
-    const [arrL, arrR] = _buildHorizWaterPair(bL, bR);
-    shifted[ciL] = arrL; shifted[ciR] = arrR;
-  }
-  return shifted;
-}
-function _renderOceanTile16(shifted, pal, animFrame) {
-  const rgbPal = pal.map(ni => NES_SYSTEM_PALETTE[ni & 0x3F] || [0,0,0]);
-  const c = document.createElement('canvas');
-  c.width = 16; c.height = 16;
-  const tctx = c.getContext('2d');
-  for (const [pixels, ox, oy] of [
-    [shifted[0x22][animFrame], 0, 0], [shifted[0x23][animFrame], 8, 0],
-    [shifted[0x24][animFrame], 0, 8], [shifted[0x25][animFrame], 8, 8],
-  ]) {
-    const img = tctx.createImageData(8, 8);
-    for (let p = 0; p < 64; p++) {
-      const rgb = rgbPal[pixels[p]];
-      img.data[p*4]=rgb[0]; img.data[p*4+1]=rgb[1]; img.data[p*4+2]=rgb[2]; img.data[p*4+3]=255;
-    }
-    tctx.putImageData(img, ox, oy);
-  }
-  return c;
-}
-function _buildTitleWaterFrames(shifted, basePal) {
-  titleWaterFrames = [];
-  for (let f = 0; f < 16; f++) titleWaterFrames.push(_renderOceanTile16(shifted, basePal, f));
-  titleWaterFadeTiles = [];
-  const fadePal = [...basePal];
-  for (let step = 0; step <= TITLE_FADE_MAX; step++) {
-    titleWaterFadeTiles.push(_renderOceanTile16(shifted, step === 0 ? basePal : fadePal, 0));
-    if (step < TITLE_FADE_MAX) for (let i = 0; i < 4; i++) fadePal[i] = nesColorFade(fadePal[i]);
-  }
-}
-function initTitleWater(romData) {
-  const COMMON_CHR = 0x014C10;
-  const chrTiles = {};
-  for (const ci of TITLE_OCEAN_CHR) chrTiles[ci] = decodeTile(romData, COMMON_CHR + ci * 16);
-  const palOff = 0x001650 + TITLE_WATER_PAL_IDX * 4;
-  const basePal = [romData[palOff], romData[palOff+1], romData[palOff+2], romData[palOff+3]];
-  _buildTitleWaterFrames(_precomputeWaterShifts(chrTiles), basePal);
-}
-
-function initTitleSky(romData) {
-  const bgId = TITLE_SKY_BGID;
-  const oceanBgId = 5;
-  const palette = [
-    0x0F,
-    romData[BATTLE_BG_PAL_C1 + oceanBgId], // match ocean scene's sky blue ($21)
-    romData[BATTLE_BG_PAL_C2 + bgId],
-    romData[BATTLE_BG_PAL_C3 + bgId],
-  ];
-
-  const { tiles, metaTiles, tilemap } = _loadOceanTileData(romData, bgId);
-  titleSkyFrames = [];
-  const fadePal = [...palette];
-  while (true) {
-    titleSkyFrames.push(renderBattleBgWithPalette(romData, bgId, fadePal, tiles, metaTiles, tilemap));
-    if (fadePal[1] === 0x0F && fadePal[2] === 0x0F && fadePal[3] === 0x0F) break;
-    _stepPalFade(fadePal);
-  }
-}
-
-function initTitleUnderwater(romData) {
-  const bgId = 18; // undersea Nautilus battle BG ($12/$22/$33 blue palette)
-  const palette = _loadBattlePalette(romData, bgId);
-
-  const { tiles, metaTiles, tilemap } = _loadOceanTileData(romData, bgId);
-  titleUnderwaterFrames = [];
-  const fadePal = [...palette];
-  while (true) {
-    titleUnderwaterFrames.push(renderBattleBgWithPalette(romData, bgId, fadePal, tiles, metaTiles, tilemap));
-    if (fadePal[1] === 0x0F && fadePal[2] === 0x0F && fadePal[3] === 0x0F) break;
-    _stepPalFade(fadePal);
-  }
-}
-
-function initUnderwaterSprites(romData) {
-  // Bubble/fish tiles at ROM 0x17F10 (bank $0B, $9F00)
-  const SPRITE_ROM = 0x17F10;
-  // Underwater sprite palette 3: $0F/$0F/$27/$30 (black/orange/white)
-  const pal = [null, NES_SYSTEM_PALETTE[0x0F], NES_SYSTEM_PALETTE[0x27], NES_SYSTEM_PALETTE[0x30]];
-
-  function renderSpriteTile(tileIdx) {
-    const px = decodeTile(romData, SPRITE_ROM + tileIdx * 16);
-    const c = document.createElement('canvas');
-    c.width = 8; c.height = 8;
-    const lctx = c.getContext('2d');
-    const idata = lctx.createImageData(8, 8);
-    const d = idata.data;
-    for (let i = 0; i < 64; i++) {
-      const ci = px[i];
-      if (ci === 0) continue;
-      const rgb = pal[ci];
-      if (!rgb) continue;
-      d[i * 4] = rgb[0]; d[i * 4 + 1] = rgb[1]; d[i * 4 + 2] = rgb[2]; d[i * 4 + 3] = 255;
-    }
-    lctx.putImageData(idata, 0, 0);
-    return c;
-  }
-
-  uwBubbleTiles = [];
-  // 0: small bubble, 1: NE fish frame 1 (tile 3), 2: NE fish frame 2 (tile 4)
-  uwBubbleTiles.push(renderSpriteTile(0)); // small bubble
-  uwBubbleTiles.push(renderSpriteTile(3)); // fish frame 1
-  uwBubbleTiles.push(renderSpriteTile(4)); // fish frame 2
-}
-
-function _renderOceanRow(tiles, metaTiles, tilemap, pal, rowIdx) {
-  const c = document.createElement('canvas');
-  c.width = 256; c.height = 16;
-  const rctx = c.getContext('2d');
-  for (let col = 0; col < 16; col++) {
-    const metaIdx = tilemap[rowIdx * 16 + col];
-    const [tl, tr, bl, br] = metaTiles[metaIdx];
-    const px = col * 16;
-    for (const [tIdx, sx, sy] of [[tl,px,0],[tr,px+8,0],[bl,px,8],[br,px+8,8]]) {
-      const img = rctx.createImageData(8, 8);
-      const pix = tiles[tIdx];
-      for (let p = 0; p < 64; p++) {
-        const ci = pix[p];
-        if (ci === 0) { img.data[p * 4 + 3] = 0; continue; }
-        const rgb = NES_SYSTEM_PALETTE[pal[ci]] || [0, 0, 0];
-        img.data[p*4]=rgb[0]; img.data[p*4+1]=rgb[1]; img.data[p*4+2]=rgb[2]; img.data[p*4+3]=255;
-      }
-      rctx.putImageData(img, sx, sy);
-    }
-  }
-  return c;
-}
-
-function _buildOceanPalettes(romData, bgId) {
-  const skyPal = _loadBattlePalette(romData, bgId);
-  const wPalOff = 0x001650 + TITLE_WATER_PAL_IDX * 4;
-  const wavePal = [0x0F, romData[wPalOff], romData[wPalOff + 2], romData[wPalOff + 3]];
-  return { skyPal, wavePal };
-}
-function _loadOceanTileData(romData, bgId) {
-  const tileBase = BATTLE_BG_TILES_ROM + bgId * 0x100;
-  const tiles = [];
-  for (let i = 0; i < 16; i++) tiles.push(decodeTile(romData, tileBase + i * 16));
-  const metaTiles = _loadBattleMetaTiles(romData);
-  const tilemap = _loadBattleTilemap(romData, bgId);
-  return { tiles, metaTiles, tilemap };
-}
-function _buildTitleOceanFrames(tiles, metaTiles, tilemap, skyPal, wavePal) {
-  titleOceanFrames = [];
-  const fadeSky = [...skyPal], fadeWave = [...wavePal];
-  while (true) {
-    const frame = document.createElement('canvas');
-    frame.width = 256; frame.height = 32;
-    const fctx = frame.getContext('2d');
-    const skyBg = NES_SYSTEM_PALETTE[fadeSky[1]] || [0,0,0];
-    fctx.fillStyle = `rgb(${skyBg[0]},${skyBg[1]},${skyBg[2]})`;
-    fctx.fillRect(0, 0, 256, 16);
-    fctx.drawImage(_renderOceanRow(tiles, metaTiles, tilemap, fadeSky, 0), 0, 0);
-    const waveBg = NES_SYSTEM_PALETTE[fadeWave[1]] || [0,0,0];
-    fctx.fillStyle = `rgb(${waveBg[0]},${waveBg[1]},${waveBg[2]})`;
-    fctx.fillRect(0, 16, 256, 16);
-    fctx.drawImage(_renderOceanRow(tiles, metaTiles, tilemap, fadeWave, 1), 0, 16);
-    titleOceanFrames.push(frame);
-    if (fadeSky[1] === 0x0F && fadeSky[2] === 0x0F && fadeSky[3] === 0x0F &&
-        fadeWave[1] === 0x0F && fadeWave[2] === 0x0F && fadeWave[3] === 0x0F) break;
-    for (let i = 1; i <= 3; i++) { fadeSky[i] = nesColorFade(fadeSky[i]); fadeWave[i] = nesColorFade(fadeWave[i]); }
-  }
-}
-function initTitleOcean(romData) {
-  const bgId = 5;
-  const { skyPal, wavePal } = _buildOceanPalettes(romData, bgId);
-  const { tiles, metaTiles, tilemap } = _loadOceanTileData(romData, bgId);
-  _buildTitleOceanFrames(tiles, metaTiles, tilemap, skyPal, wavePal);
-}
-
-// FF3 Sight screen logo — composited pixel data captured from FCEUX (BG+sprites)
-// 160×16 pixels, hex digits: 0=transparent, 1=fill (NES $02/$03), 2=outline (NES $22)
-const LOGO_PIXELS = [
-  '0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000022222100000000000',
-  '0002222200000021000000000000000000000000000000002100000000022222000000210000000000000000000000000000000000000000000000000000000000000000000022211122222222221222',
-  '0021111122000210000000000000000000000000000000022100000000211111220002100000000000000000000000000000000000000000000000000000000000000000000000000222222222222210',
-  '0210022111222100000110000000000000000000000000222100000002100221112221000000000000000000000000000000000000000000000000000000000000000000000000000221122112211100',
-  '0210001211111000002211000000000000000000000002221000000002100012111110000000000000000000000000000000000000000000000000000000000000000000000000000220222022100000',
-  '0211001210000000000110000000000000000000000021221000000002110012100000000000000000000000000000210000000000000000000000000000000000000000000000002220220022000000',
-  '0021111222200000000000000000000000000000000202210000000000211112222000000000000000000000000002210000000000000000000000000000000000000000000000002202220220000000',
-  '0002222111220000022100000000000000000000000002210000000000022221112200000000000000000000000002100000000000000000000000000000000000000000000000011101100110000000',
-  '0000111110120000222100002022210000002221000022100000000000001111001200000222000002022210002222222100002220000022221000022100222000000000000000022022202200000000',
-  '0000000000000022021000222221221000221122100022100000000000000000000100022112210222221221000022112100221122100221112102212100221000000000000000111011001100000000',
-  '0000022100000000221000112211121002210022100221000000000000000221000000221002210002210121000021001002210022100022101000021002211000000000000000220022022000000000',
-  '0000022100000000210000002100221002100111000221000000000000000221000000210011100002100211000221001002100111000002210000221002210000000000000001110110011000000000',
-  '0000221000000002210000022100210022100221002210000000000000002210000002210022000022100210000210000022100220002100221000210002110000000000000111111110110000000000',
-  '0000221111000002210000021002202022102210002210210000000000002211100002210221000021002102002210200022102210002210221002210022100000000000001111111111111111110000',
-  '0022222221000001222100221002221012221222001222100000000000222222100001222122200221002221001222110012221222001222211002211221100000000000010001111111111110000000',
-  '0011111110000000111100110000110001110110000111000000000000111111100000111011000110000110000111100001110110000111110000222221000000000000000000011111110000000000',
-  '0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000211000000000000000000000000000000000000',
-  '0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000120002210000000000000000000000000000000000000',
-  '0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000122222110000000000000000000000000000000000000',
-  '0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000012221100000000000000000000000000000000000000',
-  '0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001111000000000000000000000000000000000000000',
-].join('');
-const LOGO_W = 160;
-const LOGO_H = 21;
-
-function initTitleLogo() {
-  // Palette: 1=fill ($21 blue), 2=outline ($30 white)
-  let pal = [0x0F, 0x21, 0x30];
-
-  function renderLogo(palette) {
-    const c = document.createElement('canvas');
-    c.width = LOGO_W; c.height = LOGO_H;
-    const lctx = c.getContext('2d');
-    const idata = lctx.createImageData(LOGO_W, LOGO_H);
-    const d = idata.data;
-    for (let i = 0; i < LOGO_PIXELS.length; i++) {
-      const ci = LOGO_PIXELS.charCodeAt(i) - 48; // '0'=0, '1'=1, '2'=2
-      if (ci === 0) continue;
-      const nesC = palette[ci];
-      const rgb = NES_SYSTEM_PALETTE[nesC] || [0, 0, 0];
-      const idx = i * 4;
-      d[idx] = rgb[0]; d[idx + 1] = rgb[1]; d[idx + 2] = rgb[2]; d[idx + 3] = 255;
-    }
-    lctx.putImageData(idata, 0, 0);
-    return c;
-  }
-
-  titleLogoFrames = [];
-  const fadePal = [...pal];
-  while (true) {
-    titleLogoFrames.push(renderLogo(fadePal));
-    const allBlack = fadePal[1] === 0x0F && fadePal[2] === 0x0F;
-    if (allBlack) break;
-    for (let i = 1; i <= 2; i++) fadePal[i] = nesColorFade(fadePal[i]);
-  }
-}
 
 /**
  * Set up top box state for a given area.
@@ -2116,7 +1731,7 @@ function initTitleLogo() {
 function setupTopBox(mapId, isWorldMap) {
   if (isWorldMap) {
     const bgId = romRaw[BATTLE_BG_MAP_LOOKUP] & 0x1F;
-    topBoxBgCanvas = renderBattleBg(romRaw, bgId);
+    ({ bgCanvas: topBoxBgCanvas, fadeFrames: topBoxBgFadeFrames } = renderBattleBg(romRaw, bgId));
     topBoxMode = 'battle';
     topBoxIsTown = false;
     topBoxNameBytes = null;
@@ -2128,7 +1743,7 @@ function setupTopBox(mapId, isWorldMap) {
   if (mapId >= 1000) {
     const romMap = (mapId === 1004) ? 148 : 111;
     const bgId = romRaw[BATTLE_BG_MAP_LOOKUP + romMap] & 0x1F;
-    topBoxBgCanvas = renderBattleBg(romRaw, bgId);
+    ({ bgCanvas: topBoxBgCanvas, fadeFrames: topBoxBgFadeFrames } = renderBattleBg(romRaw, bgId));
     loadingBgFadeFrames = topBoxBgFadeFrames;
     topBoxNameBytes = DUNGEON_NAME;
     topBoxMode = 'battle';
@@ -2148,7 +1763,7 @@ function setupTopBox(mapId, isWorldMap) {
     topBoxMode = 'name';
   } else if (!topBoxIsTown) {
     const bgId = romRaw[BATTLE_BG_MAP_LOOKUP + mapId] & 0x1F;
-    topBoxBgCanvas = renderBattleBg(romRaw, bgId);
+    ({ bgCanvas: topBoxBgCanvas, fadeFrames: topBoxBgFadeFrames } = renderBattleBg(romRaw, bgId));
     topBoxMode = 'battle';
   }
 }
@@ -2170,10 +1785,10 @@ function _initSpriteAssets(romRaw) {
   _initEnemySprite(0x02, EYE_FANG_RAW,   4, 6, EYE_FANG_TILE_PAL,   ENC_PAL0, ENC_PAL1);
   _initEnemySprite(0x03, BLUE_WISP_RAW,  4, 4, BLUE_WISP_TILE_PAL,  ENC_PAL0, ENC_PAL1);
   _initEnemySprite(0x01, CARBUNCLE_RAW,  4, 4, CARBUNCLE_TILE_PAL,  ENC_PAL0, ENC_PAL1);
-  initSouthWindSprite();
-  initSlashSprites();
-  initKnifeSlashSprites();
-  initSwordSlashSprites();
+  swPhaseCanvases = initSouthWindSprite(); southWindHitCanvas = swPhaseCanvases[0];
+  slashFrames = slashFramesR = slashFramesL = initSlashSprites();
+  knifeSlashFramesR = knifeSlashFramesL = initKnifeSlashSprites();
+  swordSlashFramesR = swordSlashFramesL = initSwordSlashSprites();
   initPlayerStats(romRaw);
   initExpTable(romRaw);
   initMoogleSprite(romRaw);
@@ -2184,12 +1799,12 @@ function _initSpriteAssets(romRaw) {
 }
 function _initTitleAssets(romRaw) {
   initInvincibleSprite(romRaw);
-  initTitleWater(romRaw);
-  initTitleSky(romRaw);
-  initTitleUnderwater(romRaw);
-  initUnderwaterSprites(romRaw);
-  initTitleOcean(romRaw);
-  initTitleLogo();
+  ({ titleWaterFrames, titleWaterFadeTiles } = initTitleWater(romRaw, TITLE_FADE_MAX));
+  titleSkyFrames = initTitleSky(romRaw);
+  titleUnderwaterFrames = initTitleUnderwater(romRaw);
+  ({ uwBubbleTiles } = initUnderwaterSprites(romRaw));
+  titleOceanFrames = initTitleOcean(romRaw);
+  titleLogoFrames = initTitleLogo();
 }
 function _startDebugMode() {
   titleState = 'done';
@@ -5593,72 +5208,6 @@ function drawPauseMenu() {
 
 // --- Slash Sprites (procedural) ---
 
-function _decode2BPPTiles(imgData, tiles, layout, pal) {
-  for (let t = 0; t < tiles.length; t++) {
-    const [ox, oy] = layout[t]; const d = tiles[t];
-    for (let row = 0; row < 8; row++) {
-      const lo = d[row], hi = d[row + 8];
-      for (let bit = 7; bit >= 0; bit--) {
-        const val = ((lo >> bit) & 1) | (((hi >> bit) & 1) << 1);
-        if (val === 0) continue;
-        const rgb = NES_SYSTEM_PALETTE[pal[val]] || [252, 252, 252];
-        const di = ((oy + row) * 16 + ox + (7 - bit)) * 4;
-        imgData.data[di] = rgb[0]; imgData.data[di+1] = rgb[1]; imgData.data[di+2] = rgb[2]; imgData.data[di+3] = 255;
-      }
-    }
-  }
-}
-function _buildSwordSlashFrame(tiles, pal) {
-  const c = _makeCanvas16();
-  const cctx = c.getContext('2d'); const img = cctx.createImageData(16, 16);
-  _decode2BPPTiles(img, tiles, [[0, 0], [8, 0]], pal);
-  cctx.putImageData(img, 0, 0); return c;
-}
-function initSlashSprites() {
-  const TILE_DATA = [
-    new Uint8Array([0x01,0x09,0x4E,0x3C,0x18,0xF8,0x30,0x10, 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]),
-    new Uint8Array([0x00,0x20,0xE8,0x30,0x10,0x0C,0x08,0x00, 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]),
-    new Uint8Array([0x10,0x30,0xF8,0x18,0x3C,0x4E,0x09,0x01, 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]),
-    new Uint8Array([0x00,0x08,0x0C,0x10,0x30,0xE8,0x20,0x00, 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]),
-  ];
-  const c = _makeCanvas16();
-  const sctx = c.getContext('2d'); const imgData = sctx.createImageData(16, 16);
-  _decode2BPPTiles(imgData, TILE_DATA, [[0,0],[8,0],[0,8],[8,8]], [0x0F, 0x16, 0x27, 0x30]);
-  sctx.putImageData(imgData, 0, 0);
-  slashFramesR = [c, c, c]; slashFramesL = [c, c, c]; slashFrames = slashFramesR;
-}
-
-function _putPx16(img, x, y, rgb) {
-  if (x < 0 || x >= 16 || y < 0 || y >= 16) return;
-  const di = (y * 16 + x) * 4;
-  img.data[di] = rgb[0]; img.data[di+1] = rgb[1]; img.data[di+2] = rgb[2]; img.data[di+3] = 255;
-}
-
-function initKnifeSlashSprites() {
-  const white = NES_SYSTEM_PALETTE[0x30], light = NES_SYSTEM_PALETTE[0x2B], dark = NES_SYSTEM_PALETTE[0x1B];
-  const FULL_LINE = Array.from({length: 15}, (_, i) => [14 - i, i]);
-  const frames = [];
-  for (let f = 0; f < 3; f++) {
-    const c = _makeCanvas16();
-    const cctx = c.getContext('2d'); const img = cctx.createImageData(16, 16);
-    const startI = f === 0 ? 0 : f === 1 ? 0 : 7, endI = f === 1 ? 15 : f === 0 ? 7 : 15;
-    for (let i = startI; i < endI; i++) {
-      const [x, y] = FULL_LINE[i];
-      _putPx16(img, x, y, white); _putPx16(img, x + 1, y, light); _putPx16(img, x, y + 1, light);
-      if (f === 2 && i < 10) { _putPx16(img, x, y, dark); _putPx16(img, x + 1, y, dark); }
-    }
-    cctx.putImageData(img, 0, 0); frames.push(c);
-  }
-  knifeSlashFramesR = frames; knifeSlashFramesL = frames;
-}
-
-function initSwordSlashSprites() {
-  const PAL = [0x0F, 0x00, 0x32, 0x30];
-  const D = new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x03, 0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x03]);
-  const E = new Uint8Array([0x00,0x04,0x00,0x18,0x30,0x60,0xC0,0x80, 0x02,0x10,0x28,0x00,0x60,0xC0,0x80,0x00]);
-  const F = new Uint8Array([0x07,0x0E,0x1C,0x38,0x70,0xE0,0xC0,0x80, 0x07,0x0E,0x1C,0x38,0x70,0xE0,0xC0,0x80]);
-  swordSlashFramesR = swordSlashFramesL = [[D,E],[D,F],[E,F]].map(t => _buildSwordSlashFrame(t, PAL));
-}
 
 // --- Battle System ---
 
