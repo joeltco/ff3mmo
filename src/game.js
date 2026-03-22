@@ -30,6 +30,7 @@ import { ENC_PAL0, ENC_PAL1, EYE_FANG_TILE_PAL, EYE_FANG_RAW,
          CARBUNCLE_TILE_PAL, CARBUNCLE_RAW } from './data/monster-sprites.js';
 import { openSaveDB, serverDeleteSlot, parseSaveSlots } from './save.js';
 import { _nameToBytes, _nesNameToString, _buildItemRowBytes, _makeGotNText, makeExpText, makeGilText, makeFoundItemText } from './text-utils.js';
+import { nesColorFade, _makeFadedPal, _stepPalFade } from './palette.js';
 
 const isMobile = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 
@@ -1740,12 +1741,6 @@ const BATTLE_BG_TILEMAPS    = 0x05E53A;  // bank 2F/$A52A, 3 tilemaps × 32 byte
  * @returns {HTMLCanvasElement} 256×32 canvas
  */
 // NES palette fade — one step toward black, matches FF3 $FA87 routine
-function nesColorFade(c) {
-  if (c === 0x0F) return 0x0F;
-  const hi = c & 0x30;
-  if (hi === 0) return 0x0F;
-  return (hi - 0x10) | (c & 0x0F);
-}
 
 function _makeCanvas16() {
   const c = document.createElement('canvas'); c.width = 16; c.height = 16; return c;
@@ -1865,14 +1860,7 @@ function _fullHeal() {
   playerStats.hp = playerStats.maxHP; playerStats.mp = playerStats.maxMP;
   playerHP = playerStats.maxHP; playerMP = playerStats.maxMP;
 }
-function _makeFadedPal(fadeStep) {
-  const p = [0x0F, 0x0F, 0x0F, 0x30];
-  for (let s = 0; s < fadeStep; s++) p[3] = nesColorFade(p[3]);
-  return p;
-}
-function _stepPalFade(pal) {
-  pal[1] = nesColorFade(pal[1]); pal[2] = nesColorFade(pal[2]); pal[3] = nesColorFade(pal[3]);
-}
+
 function _loadBattlePalette(romData, bgId) {
   return [0x0F, romData[BATTLE_BG_PAL_C1 + bgId], romData[BATTLE_BG_PAL_C2 + bgId], romData[BATTLE_BG_PAL_C3 + bgId]];
 }
