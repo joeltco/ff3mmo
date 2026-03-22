@@ -4781,6 +4781,9 @@ function drawHUD() {
 // ── Player Roster (right main panel) ──
 
 // Draw a HUD border box on the main canvas ctx, with optional NES fade step
+function _drawSparkleCorners(frame, px, py) {
+  _drawSparkleCorners(frame, px, py);
+}
 function _drawHudBox(x, y, w, h, fadeStep = 0) {
   const tiles = (fadeStep > 0 && borderFadeSets) ? borderFadeSets[fadeStep] : borderTileCanvases;
   if (!tiles) return;
@@ -4859,10 +4862,7 @@ function _drawRosterSparkle(panelTop) {
   const py = panelTop + visRow * ROSTER_ROW_H + 8;
   const fi = Math.floor(pauseTimer / 67) & 1;
   const frame = cureSparkleFrames[fi];
-  ctx.drawImage(frame, px - 8, py - 7);
-  ctx.save(); ctx.scale(-1, 1); ctx.drawImage(frame, -(px + 23), py - 7); ctx.restore();
-  ctx.save(); ctx.scale(1, -1); ctx.drawImage(frame, px - 8, -(py + 24)); ctx.restore();
-  ctx.save(); ctx.scale(-1, -1); ctx.drawImage(frame, -(px + 23), -(py + 24)); ctx.restore();
+  _drawSparkleCorners(frame, px, py);
   const digits = String(pauseHealNum.value);
   const numBytes = new Uint8Array(digits.length);
   for (let i = 0; i < digits.length; i++) numBytes[i] = 0x80 + parseInt(digits[i]);
@@ -6352,49 +6352,39 @@ function drawPauseMenu() {
 
 // --- Slash Sprites (procedural) ---
 
-function initSlashSprites() {
-  // Unarmed punch hit effect — actual PPU tile bytes dumped from FCEUX
-  // 2×2 metasprite (16×16), tiles $4A-$4D from pattern table $1000
-  // Both hands use identical impact sprite (only fist tile differs)
-  // Sprite palette 3: $0F/$16/$27/$30
-  const TILE_DATA = [
-    [0x01,0x09,0x4E,0x3C,0x18,0xF8,0x30,0x10, 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00], // $4A TL
-    [0x00,0x20,0xE8,0x30,0x10,0x0C,0x08,0x00, 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00], // $4B TR
-    [0x10,0x30,0xF8,0x18,0x3C,0x4E,0x09,0x01, 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00], // $4C BL
-    [0x00,0x08,0x0C,0x10,0x30,0xE8,0x20,0x00, 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00], // $4D BR
-  ];
-  const HIT_PAL = [0x0F, 0x16, 0x27, 0x30]; // actual battle sprite palette 3
-
-  const c = document.createElement('canvas');
-  c.width = 16; c.height = 16;
-  const sctx = c.getContext('2d');
-  const imgData = sctx.createImageData(16, 16);
-  const layout = [[0,0],[8,0],[0,8],[8,8]]; // TL TR BL BR
-  for (let t = 0; t < 4; t++) {
-    const [ox, oy] = layout[t];
-    const d = TILE_DATA[t];
+function _decode2BPPTiles(imgData, tiles, layout, pal) {
+  for (let t = 0; t < tiles.length; t++) {
+    const [ox, oy] = layout[t]; const d = tiles[t];
     for (let row = 0; row < 8; row++) {
       const lo = d[row], hi = d[row + 8];
       for (let bit = 7; bit >= 0; bit--) {
         const val = ((lo >> bit) & 1) | (((hi >> bit) & 1) << 1);
         if (val === 0) continue;
-        const rgb = NES_SYSTEM_PALETTE[HIT_PAL[val]] || [252, 252, 252];
-        const px = ox + (7 - bit);
-        const py = oy + row;
-        const di = (py * 16 + px) * 4;
-        imgData.data[di]     = rgb[0];
-        imgData.data[di + 1] = rgb[1];
-        imgData.data[di + 2] = rgb[2];
-        imgData.data[di + 3] = 255;
+        const rgb = NES_SYSTEM_PALETTE[pal[val]] || [252, 252, 252];
+        const di = ((oy + row) * 16 + ox + (7 - bit)) * 4;
+        imgData.data[di] = rgb[0]; imgData.data[di+1] = rgb[1]; imgData.data[di+2] = rgb[2]; imgData.data[di+3] = 255;
       }
     }
   }
+}
+function _buildSwordSlashFrame(tiles, pal) {
+  const c = document.createElement('canvas'); c.width = 16; c.height = 16;
+  const cctx = c.getContext('2d'); const img = cctx.createImageData(16, 16);
+  _decode2BPPTiles(img, tiles, [[0, 0], [8, 0]], pal);
+  cctx.putImageData(img, 0, 0); return c;
+}
+function initSlashSprites() {
+  const TILE_DATA = [
+    new Uint8Array([0x01,0x09,0x4E,0x3C,0x18,0xF8,0x30,0x10, 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]),
+    new Uint8Array([0x00,0x20,0xE8,0x30,0x10,0x0C,0x08,0x00, 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]),
+    new Uint8Array([0x10,0x30,0xF8,0x18,0x3C,0x4E,0x09,0x01, 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]),
+    new Uint8Array([0x00,0x08,0x0C,0x10,0x30,0xE8,0x20,0x00, 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]),
+  ];
+  const c = document.createElement('canvas'); c.width = 16; c.height = 16;
+  const sctx = c.getContext('2d'); const imgData = sctx.createImageData(16, 16);
+  _decode2BPPTiles(imgData, TILE_DATA, [[0,0],[8,0],[0,8],[8,8]], [0x0F, 0x16, 0x27, 0x30]);
   sctx.putImageData(imgData, 0, 0);
-
-  // Both hands use same impact sprite; animation is positional scatter only
-  slashFramesR = [c, c, c];
-  slashFramesL = [c, c, c];
-  slashFrames = slashFramesR;
+  slashFramesR = [c, c, c]; slashFramesL = [c, c, c]; slashFrames = slashFramesR;
 }
 
 function _putPx16(img, x, y, rgb) {
@@ -6422,51 +6412,11 @@ function initKnifeSlashSprites() {
 }
 
 function initSwordSlashSprites() {
-  // Sword slash effect from FCEUX PPU capture — tiles $4D/$4E/$4F
-  // 3-frame diagonal sweep using actual NES tile data, pal3 $0F/$00/$32/$30
-  const SWORD_SLASH_PAL = [0x0F, 0x00, 0x32, 0x30];
-  const SLASH_4D = new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x03, 0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x03]);
-  const SLASH_4E = new Uint8Array([0x00,0x04,0x00,0x18,0x30,0x60,0xC0,0x80, 0x02,0x10,0x28,0x00,0x60,0xC0,0x80,0x00]);
-  const SLASH_4F = new Uint8Array([0x07,0x0E,0x1C,0x38,0x70,0xE0,0xC0,0x80, 0x07,0x0E,0x1C,0x38,0x70,0xE0,0xC0,0x80]);
-
-  // Frame 0: top-right (tiles $4D at TL, $4E at TR)
-  // Frame 1: middle (tiles $4D at TL, $4F at TR — or just $4F full)
-  // Frame 2: bottom-left ($4F trailing)
-  // Build 3 × 16×16 canvases from tile pairs
-  const tilesets = [
-    [SLASH_4D, SLASH_4E],  // frame 0: start
-    [SLASH_4D, SLASH_4F],  // frame 1: middle
-    [SLASH_4E, SLASH_4F],  // frame 2: end
-  ];
-  const frames = [];
-  for (let f = 0; f < 3; f++) {
-    const c = document.createElement('canvas');
-    c.width = 16; c.height = 16;
-    const ctx = c.getContext('2d');
-    const img = ctx.createImageData(16, 16);
-    const tiles = tilesets[f];
-    for (let t = 0; t < 2; t++) {
-      const d = tiles[t];
-      const ox = t * 8;
-      for (let row = 0; row < 8; row++) {
-        const lo = d[row], hi = d[row + 8];
-        for (let bit = 7; bit >= 0; bit--) {
-          const val = ((lo >> bit) & 1) | (((hi >> bit) & 1) << 1);
-          if (val === 0) continue;
-          const rgb = NES_SYSTEM_PALETTE[SWORD_SLASH_PAL[val]] || [252, 252, 252];
-          const px = ox + (7 - bit);
-          const py = row;
-          const di = (py * 16 + px) * 4;
-          img.data[di] = rgb[0]; img.data[di+1] = rgb[1];
-          img.data[di+2] = rgb[2]; img.data[di+3] = 255;
-        }
-      }
-    }
-    ctx.putImageData(img, 0, 0);
-    frames.push(c);
-  }
-  swordSlashFramesR = frames;
-  swordSlashFramesL = frames;
+  const PAL = [0x0F, 0x00, 0x32, 0x30];
+  const D = new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x03, 0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x03]);
+  const E = new Uint8Array([0x00,0x04,0x00,0x18,0x30,0x60,0xC0,0x80, 0x02,0x10,0x28,0x00,0x60,0xC0,0x80,0x00]);
+  const F = new Uint8Array([0x07,0x0E,0x1C,0x38,0x70,0xE0,0xC0,0x80, 0x07,0x0E,0x1C,0x38,0x70,0xE0,0xC0,0x80]);
+  swordSlashFramesR = swordSlashFramesL = [[D,E],[D,F],[E,F]].map(t => _buildSwordSlashFrame(t, PAL));
 }
 
 // --- Battle System ---
@@ -6828,15 +6778,18 @@ function _updateTurnTimer(dt) {
   }
 }
 
-function _updateAllyExitFade(dt) {
-  if (battleAllies.length === 0) return;
-  const isVicState = battleState === 'victory-celebrate' || battleState === 'victory-text-in' ||
+function _isVictoryBattleState() {
+  return battleState === 'victory-celebrate' || battleState === 'victory-text-in' ||
     battleState === 'victory-hold' || battleState === 'victory-fade-out' ||
     battleState === 'exp-text-in' || battleState === 'exp-hold' || battleState === 'exp-fade-out' ||
     battleState === 'gil-text-in' || battleState === 'gil-hold' || battleState === 'gil-fade-out' ||
-    battleState === 'item-text-in' || battleState === 'item-hold' || battleState === 'item-fade-out' ||
     battleState === 'levelup-text-in' || battleState === 'levelup-hold' ||
-    battleState === 'victory-text-out' || battleState === 'victory-menu-fade';
+    battleState === 'item-text-in' || battleState === 'item-hold' || battleState === 'item-fade-out' ||
+    battleState === 'victory-text-out' || battleState === 'victory-menu-fade' || battleState === 'victory-box-close';
+}
+function _updateAllyExitFade(dt) {
+  if (battleAllies.length === 0) return;
+  const isVicState = _isVictoryBattleState() && battleState !== 'victory-box-close';
   if (!isVicState) return;
   const ALLY_EXIT_DELAY_MS = 1500, ALLY_EXIT_STEP_MS = 100;
   allyExitTimer += dt;
@@ -7710,19 +7663,13 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
   if (isDefendPose && defendSparkleFrames.length === 4) {
     const fi = Math.min(3, Math.floor(battleTimer / DEFEND_SPARKLE_FRAME_MS));
     const frame = defendSparkleFrames[fi];
-    ctx.drawImage(frame, px - 8, py - 7);
-    ctx.save(); ctx.scale(-1, 1); ctx.drawImage(frame, -(px + 23), py - 7); ctx.restore();
-    ctx.save(); ctx.scale(1, -1); ctx.drawImage(frame, px - 8, -(py + 24)); ctx.restore();
-    ctx.save(); ctx.scale(-1, -1); ctx.drawImage(frame, -(px + 23), -(py + 24)); ctx.restore();
+    _drawSparkleCorners(frame, px, py);
   }
   // Cure sparkle — alternating flips every 67ms during item-use
   if (battleState === 'item-use' && cureSparkleFrames.length === 2 && !(playerActionPending && playerActionPending.allyIndex >= 0)) {
     const fi = Math.floor(battleTimer / 67) & 1;
     const frame = cureSparkleFrames[fi];
-    ctx.drawImage(frame, px - 8, py - 7);
-    ctx.save(); ctx.scale(-1, 1); ctx.drawImage(frame, -(px + 23), py - 7); ctx.restore();
-    ctx.save(); ctx.scale(1, -1); ctx.drawImage(frame, px - 8, -(py + 24)); ctx.restore();
-    ctx.save(); ctx.scale(-1, -1); ctx.drawImage(frame, -(px + 23), -(py + 24)); ctx.restore();
+    _drawSparkleCorners(frame, px, py);
   }
   // Near-fatal sweat — 2 frames alternating every 133ms, 3px above portrait
   if (isNearFatal && sweatFrames.length === 2 && !isAttackPose && !isHitPose && !isVictoryPose && !isDefendPose && !isItemUsePose) {
@@ -7758,13 +7705,7 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
 function _drawBattlePortrait() {
   const shakeOff = (battleState === 'enemy-attack' && battleShakeTimer > 0)
     ? (Math.floor(battleShakeTimer / 67) & 1 ? 2 : -2) : 0;
-  const isVictoryPose = battleState === 'victory-celebrate' ||
-    battleState === 'victory-text-in' || battleState === 'victory-hold' || battleState === 'victory-fade-out' ||
-    battleState === 'exp-text-in' || battleState === 'exp-hold' || battleState === 'exp-fade-out' ||
-    battleState === 'gil-text-in' || battleState === 'gil-hold' || battleState === 'gil-fade-out' ||
-    battleState === 'levelup-text-in' || battleState === 'levelup-hold' ||
-    battleState === 'item-text-in' || battleState === 'item-hold' || battleState === 'item-fade-out' ||
-    battleState === 'victory-text-out' || battleState === 'victory-menu-fade' || battleState === 'victory-box-close';
+  const isVictoryPose = _isVictoryBattleState();
   const isAttackPose = battleState === 'attack-start' || battleState === 'player-slash';
   const isHitPose = battleState === 'enemy-attack' ||
     (battleState === 'enemy-damage-show' && playerDamageNum && !playerDamageNum.miss);
@@ -7927,14 +7868,7 @@ function _battleMenuStates() {
     bs === 'enemy-attack' || bs === 'enemy-damage-show' || bs === 'message-hold' ||
     bs.startsWith('ally-') || bs === 'boss-dissolve' ||
     bs === 'defeat-monster-fade' || bs === 'defeat-text';
-  const isVictory = bs === 'victory-name-out' || bs === 'victory-celebrate' ||
-    bs === 'victory-text-in' || bs === 'victory-hold' || bs === 'victory-fade-out' ||
-    bs === 'exp-text-in' || bs === 'exp-hold' || bs === 'exp-fade-out' ||
-    bs === 'gil-text-in' || bs === 'gil-hold' || bs === 'gil-fade-out' ||
-    bs === 'levelup-text-in' || bs === 'levelup-hold' ||
-    bs === 'item-text-in' || bs === 'item-hold' || bs === 'item-fade-out' ||
-    bs === 'victory-text-out' || bs === 'victory-menu-fade' || bs === 'victory-box-close' ||
-    bs === 'encounter-box-close' || bs === 'boss-box-close' || bs === 'defeat-close';
+  const isVictory = _isVictoryBattleState() || bs === 'victory-name-out' || bs === 'encounter-box-close' || bs === 'boss-box-close' || bs === 'defeat-close';
   const isRunBox  = bs.startsWith('run-');
   const isClose   = bs === 'victory-box-close' || bs === 'encounter-box-close' || bs === 'boss-box-close' || bs === 'defeat-close';
   return { isSlide, isAppear, isFade, isMenu, isVictory, isRunBox, isClose };
@@ -8153,13 +8087,7 @@ function drawEncounterBox() {
     battleState === 'boss-flash' || battleState === 'enemy-attack' || battleState === 'enemy-damage-show' ||
     battleState === 'message-hold' || battleState.startsWith('ally-') ||
     battleState === 'defeat-monster-fade' || battleState === 'defeat-text';
-  const isVictory = battleState === 'victory-name-out' || battleState === 'victory-celebrate' ||
-    battleState === 'victory-text-in' || battleState === 'victory-hold' || battleState === 'victory-fade-out' ||
-    battleState === 'exp-text-in' || battleState === 'exp-hold' || battleState === 'exp-fade-out' ||
-    battleState === 'gil-text-in' || battleState === 'gil-hold' || battleState === 'gil-fade-out' ||
-    battleState === 'levelup-text-in' || battleState === 'levelup-hold' ||
-    battleState === 'item-text-in' || battleState === 'item-hold' || battleState === 'item-fade-out' ||
-    battleState === 'victory-text-out' || battleState === 'victory-menu-fade' || battleState === 'victory-box-close';
+  const isVictory = _isVictoryBattleState() || battleState === 'victory-name-out';
   if (!isExpand && !isClose && !isCombat && !isVictory) return;
 
   const count = encounterMonsters.length;
@@ -8674,13 +8602,7 @@ function _dmgBounceY(baseY, timer) {
 function _drawAllyRow(i, ally, panelTop, weaponDraws) {
   const shakeOff = (allyShakeTimer[i] > 0) ? (Math.floor(allyShakeTimer[i] / 67) & 1 ? 2 : -2) : 0;
   const rowY = panelTop + i * ROSTER_ROW_H + shakeOff;
-  const isVicPose = battleState === 'victory-celebrate' ||
-    battleState === 'victory-text-in' || battleState === 'victory-hold' || battleState === 'victory-fade-out' ||
-    battleState === 'exp-text-in' || battleState === 'exp-hold' || battleState === 'exp-fade-out' ||
-    battleState === 'gil-text-in' || battleState === 'gil-hold' || battleState === 'gil-fade-out' ||
-    battleState === 'levelup-text-in' || battleState === 'levelup-hold' ||
-    battleState === 'item-text-in' || battleState === 'item-hold' || battleState === 'item-fade-out' ||
-    battleState === 'victory-text-out' || battleState === 'victory-menu-fade' || battleState === 'victory-box-close';
+  const isVicPose = _isVictoryBattleState();
   const isAllyHit = (battleState === 'ally-hit' || battleState === 'ally-damage-show-enemy') &&
     enemyTargetAllyIdx === i && allyDamageNums[i] && !allyDamageNums[i].miss;
   const isAllyAttack = (battleState === 'ally-attack-start') && currentAllyAttacker === i;
@@ -8741,10 +8663,7 @@ function _flushAllyWeaponDraws(weaponDraws) {
       }
     } else if (wd.type === 'sparkle') {
       const { frame, px, py } = wd;
-      ctx.drawImage(frame, px - 8, py - 7);
-      ctx.save(); ctx.scale(-1, 1); ctx.drawImage(frame, -(px + 23), py - 7); ctx.restore();
-      ctx.save(); ctx.scale(1, -1); ctx.drawImage(frame, px - 8, -(py + 24)); ctx.restore();
-      ctx.save(); ctx.scale(-1, -1); ctx.drawImage(frame, -(px + 23), -(py + 24)); ctx.restore();
+      _drawSparkleCorners(frame, px, py);
     } else {
       ctx.drawImage(wd.img, wd.x, wd.y);
     }
