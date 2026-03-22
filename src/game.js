@@ -2691,64 +2691,56 @@ function _openReturnDoor(playerX, playerY) {
   }
 }
 
-function loadMapById(mapId, returnX, returnY) {
-  onWorldMap = false;
-  setupTopBox(mapId, false);
+function _loadDungeonFloor(mapId, returnX, returnY) {
+  const floorIndex = mapId - 1000;
+  dungeonFloor = floorIndex;
+  const result = generateFloor(romRaw, floorIndex, dungeonSeed);
+  mapData = result;
+  secretWalls = result.secretWalls; falseWalls = result.falseWalls;
+  hiddenTraps = result.hiddenTraps; rockSwitch = result.rockSwitch || null;
+  warpTile = result.warpTile || null; pondTiles = result.pondTiles || null;
+  dungeonDestinations = result.dungeonDestinations;
+  currentMapId = mapId;
+  const playerX = returnX !== undefined ? returnX : result.entranceX;
+  const playerY = returnY !== undefined ? returnY : result.entranceY;
+  worldX = playerX * TILE_SIZE; worldY = playerY * TILE_SIZE;
+  mapRenderer = new MapRenderer(mapData, playerX, playerY); _indoorWaterCache = null;
+  _flameSprites = [];
+  bossSprite = (floorIndex === 4 && adamantoiseFrames && !bossDefeated)
+    ? { frames: adamantoiseFrames, px: 6 * TILE_SIZE, py: 8 * TILE_SIZE } : null;
+  disabledTrigger = { x: playerX, y: playerY };
+  moving = false; sprite.setDirection(DIR_DOWN); sprite.resetFrame();
+  if (floorIndex === 4) playTrack(TRACKS.CRYSTAL_ROOM);
+  if (returnX !== undefined) _openReturnDoor(playerX, playerY);
+}
 
-  if (mapId >= 1000) {
-    // Synthetic dungeon floor
-    const floorIndex = mapId - 1000;
-    dungeonFloor = floorIndex;
-    const result = generateFloor(romRaw, floorIndex, dungeonSeed);
-    mapData = result;
-    secretWalls = result.secretWalls; falseWalls = result.falseWalls;
-    hiddenTraps = result.hiddenTraps; rockSwitch = result.rockSwitch || null;
-    warpTile = result.warpTile || null; pondTiles = result.pondTiles || null;
-    dungeonDestinations = result.dungeonDestinations;
-    currentMapId = mapId;
-    const playerX = returnX !== undefined ? returnX : result.entranceX;
-    const playerY = returnY !== undefined ? returnY : result.entranceY;
-    worldX = playerX * TILE_SIZE; worldY = playerY * TILE_SIZE;
-    mapRenderer = new MapRenderer(mapData, playerX, playerY); _indoorWaterCache = null;
-    _flameSprites = [];
-    bossSprite = (floorIndex === 4 && adamantoiseFrames && !bossDefeated)
-      ? { frames: adamantoiseFrames, px: 6 * TILE_SIZE, py: 8 * TILE_SIZE } : null;
-    disabledTrigger = { x: playerX, y: playerY };
-    moving = false; sprite.setDirection(DIR_DOWN); sprite.resetFrame();
-    if (floorIndex === 4) playTrack(TRACKS.CRYSTAL_ROOM);
-    if (returnX !== undefined) _openReturnDoor(playerX, playerY);
-    return;
-  }
-
-  // Clear dungeon state
+function _loadRegularMap(mapId, returnX, returnY) {
   dungeonFloor = -1; encounterSteps = 0; dungeonDestinations = null;
   secretWalls = null; falseWalls = null; hiddenTraps = null;
   rockSwitch = null; warpTile = null; pondTiles = null; bossSprite = null;
-
   mapData = loadMap(romRaw, mapId);
   currentMapId = mapId;
   if (returnX !== undefined) applyPassage(mapData.tilemap);
-
-  const ex = mapData.entranceX;
-  const ey = mapData.entranceY;
-  const startY = _calcSpawnY(ex, ey);
+  const ex = mapData.entranceX; const ey = mapData.entranceY;
   const playerX = returnX !== undefined ? returnX : ex;
-  const playerY = returnY !== undefined ? returnY : startY;
+  const playerY = returnY !== undefined ? returnY : _calcSpawnY(ex, ey);
   worldX = playerX * TILE_SIZE; worldY = playerY * TILE_SIZE;
-
   mapRenderer = new MapRenderer(mapData, playerX, playerY); _indoorWaterCache = null;
-
   if (mapRenderer.hasRoomClip()) {
     const spawnMid = mapData.tilemap[playerY * 32 + playerX];
     disabledTrigger = (spawnMid === 0x44 || playerY !== ey) ? { x: playerX, y: playerY } : null;
-  } else {
-    disabledTrigger = null;
-  }
-
+  } else { disabledTrigger = null; }
   _rebuildFlameSprites();
   moving = false; sprite.setDirection(DIR_DOWN); sprite.resetFrame();
   if (returnX !== undefined) _openReturnDoor(playerX, playerY);
   if (mapId === 114) playTrack(TRACKS.TOWN_UR);
+}
+
+function loadMapById(mapId, returnX, returnY) {
+  onWorldMap = false;
+  setupTopBox(mapId, false);
+  if (mapId >= 1000) { _loadDungeonFloor(mapId, returnX, returnY); return; }
+  _loadRegularMap(mapId, returnX, returnY);
 }
 
 function loadWorldMapAt(trigId) {
@@ -4294,12 +4286,7 @@ function _isWater(pixels) {
   return true;
 }
 
-function _buildWaterCache(wmr) {
-  const { metatiles, chrTiles } = wmr.data;
-  const frames = new Map();
-
-  // Horizontal: 16-bit paired circular LEFT shift
-  // Pairs ($22,$23) and ($24,$25) shift as 16-bit values across tile boundaries
+function _buildWorldHorizWaterFrames(chrTiles, frames) {
   const HORIZ_PAIRS = [[0x22, 0x23], [0x24, 0x25]];
   for (const [ciL, ciR] of HORIZ_PAIRS) {
     const bL = chrTiles[ciL], bR = chrTiles[ciR];
@@ -4309,30 +4296,24 @@ function _buildWaterCache(wmr) {
     const arrL = [], arrR = [];
     let cL = new Uint8Array(p0L), cR = new Uint8Array(p0R);
     for (let f = 0; f < 16; f++) {
-      arrL.push(_rebuild(cL, p1L));
-      arrR.push(_rebuild(cR, p1R));
-      // 16-bit circular RIGHT shift: bit 0 of R wraps to bit 7 of L
+      arrL.push(_rebuild(cL, p1L)); arrR.push(_rebuild(cR, p1R));
       const nL = new Uint8Array(8), nR = new Uint8Array(8);
       for (let r = 0; r < 8; r++) {
         const l = cL[r], ri = cR[r];
-        const carryL = l & 1;          // LSB of left
-        const carryR = ri & 1;         // LSB of right
-        nL[r] = ((l >> 1) | (carryR << 7)) & 0xFF; // right's LSB wraps to left's MSB
-        nR[r] = ((ri >> 1) | (carryL << 7)) & 0xFF; // left's LSB wraps to right's MSB
+        nL[r] = ((l >> 1) | ((ri & 1) << 7)) & 0xFF;
+        nR[r] = ((ri >> 1) | ((l & 1) << 7)) & 0xFF;
       }
       cL = nL; cR = nR;
     }
-    frames.set(ciL, arrL);
-    frames.set(ciR, arrR);
+    frames.set(ciL, arrL); frames.set(ciR, arrR);
   }
+}
 
-  // Vertical: row rotation down, 8 frames (no per-row offset — NES
-  // refreshes all 16 vertical bytes within one rotation period)
+function _buildWorldVertWaterFrames(chrTiles, frames) {
   for (const ci of VERT_CHR) {
     const base = chrTiles[ci];
     if (!base || !_isWater(base)) continue;
-    const p0 = _getPlane0(base);
-    const p1 = base.map(p => p & 2);
+    const p0 = _getPlane0(base), p1 = base.map(p => p & 2);
     const arr = [];
     for (let f = 0; f < 8; f++) {
       const rot = new Uint8Array(8);
@@ -4341,17 +4322,23 @@ function _buildWaterCache(wmr) {
     }
     frames.set(ci, arr);
   }
+}
 
-  // Find animated metatiles
+function _findAnimatedMetatiles(metatiles) {
   const metas = [];
   for (let m = 0; m < 128; m++) {
     const mt = metatiles[m];
-    if (ANIM_CHR.has(mt.tl) || ANIM_CHR.has(mt.tr) ||
-        ANIM_CHR.has(mt.bl) || ANIM_CHR.has(mt.br)) {
-      metas.push(m);
-    }
+    if (ANIM_CHR.has(mt.tl) || ANIM_CHR.has(mt.tr) || ANIM_CHR.has(mt.bl) || ANIM_CHR.has(mt.br)) metas.push(m);
   }
-  return { frames, metas };
+  return metas;
+}
+
+function _buildWaterCache(wmr) {
+  const { metatiles, chrTiles } = wmr.data;
+  const frames = new Map();
+  _buildWorldHorizWaterFrames(chrTiles, frames);
+  _buildWorldVertWaterFrames(chrTiles, frames);
+  return { frames, metas: _findAnimatedMetatiles(metatiles) };
 }
 
 function _writeTilePixels(td, tile, rgbPal) {
@@ -4471,61 +4458,48 @@ function _initStarTiles(romData) {
 }
 
 // Render flame frame canvases using the current map's actual sprite palettes
-function _renderFlameFrames() {
-  if (!_flameRawTiles || !mapData || !mapData.spritePalettes) return;
-  _flameFrames = new Map();
-
-  const sp = mapData.spritePalettes; // [pal6, pal7] — NES color indices
-
-  // Determine which palette each flame NPC type uses from map's NPC flags
-  // palCombo (flags bits 3-2): 0,1 → sprite pal 2 (pal6), 2,3 → sprite pal 3 (pal7)
-  const npcPalIdx = new Map(); // npcId → 0 (pal6) or 1 (pal7)
+function _buildNpcPalIdxMap() {
+  const npcPalIdx = new Map();
   if (mapData.npcs) {
     for (const npc of mapData.npcs) {
       if (!_flameRawTiles.has(npc.id) || npcPalIdx.has(npc.id)) continue;
-      const palCombo = (npc.flags >> 2) & 3;
-      npcPalIdx.set(npc.id, palCombo >= 2 ? 1 : 0);
+      npcPalIdx.set(npc.id, ((npc.flags >> 2) & 3) >= 2 ? 1 : 0);
     }
   }
-  // Defaults: torch #193 → pal6(0), candle #194 → pal7(1)
   if (!npcPalIdx.has(193)) npcPalIdx.set(193, 0);
   if (!npcPalIdx.has(194)) npcPalIdx.set(194, 1);
+  return npcPalIdx;
+}
 
-  for (const [id, rawFrames] of _flameRawTiles) {
-    const nesPal = sp[npcPalIdx.get(id) || 0];
-    // Convert NES color indices to RGB via system palette
-    const rgbPal = nesPal.map(ci => NES_SYSTEM_PALETTE[ci & 0x3F]);
-
-    const canvases = [];
-    for (const tiles of rawFrames) {
-      const c = document.createElement('canvas');
-      c.width = 16; c.height = 16;
-      const fctx = c.getContext('2d');
-      const img = fctx.createImageData(16, 16);
-      const d = img.data;
-
-      const offsets = [[0, 0], [8, 0], [0, 8], [8, 8]];
-      for (let q = 0; q < 4; q++) {
-        const tile = tiles[q];
-        const [ox, oy] = offsets[q];
-        for (let py = 0; py < 8; py++) {
-          for (let px = 0; px < 8; px++) {
-            const ci = tile[py * 8 + px];
-            const di = ((oy + py) * 16 + (ox + px)) * 4;
-            if (ci === 0) {
-              d[di + 3] = 0; // transparent
-            } else {
-              const rgb = rgbPal[ci];
-              d[di] = rgb[0]; d[di + 1] = rgb[1];
-              d[di + 2] = rgb[2]; d[di + 3] = 255;
-            }
-          }
+function _buildFlameCanvas(rawFrames, rgbPal) {
+  const canvases = [];
+  const offsets = [[0, 0], [8, 0], [0, 8], [8, 8]];
+  for (const tiles of rawFrames) {
+    const c = document.createElement('canvas'); c.width = 16; c.height = 16;
+    const fctx = c.getContext('2d'); const img = fctx.createImageData(16, 16); const d = img.data;
+    for (let q = 0; q < 4; q++) {
+      const tile = tiles[q]; const [ox, oy] = offsets[q];
+      for (let py = 0; py < 8; py++) {
+        for (let px = 0; px < 8; px++) {
+          const ci = tile[py * 8 + px]; const di = ((oy + py) * 16 + (ox + px)) * 4;
+          if (ci === 0) { d[di + 3] = 0; }
+          else { const rgb = rgbPal[ci]; d[di] = rgb[0]; d[di+1] = rgb[1]; d[di+2] = rgb[2]; d[di+3] = 255; }
         }
       }
-      fctx.putImageData(img, 0, 0);
-      canvases.push(c);
     }
-    _flameFrames.set(id, canvases);
+    fctx.putImageData(img, 0, 0); canvases.push(c);
+  }
+  return canvases;
+}
+
+function _renderFlameFrames() {
+  if (!_flameRawTiles || !mapData || !mapData.spritePalettes) return;
+  _flameFrames = new Map();
+  const sp = mapData.spritePalettes;
+  const npcPalIdx = _buildNpcPalIdxMap();
+  for (const [id, rawFrames] of _flameRawTiles) {
+    const rgbPal = sp[npcPalIdx.get(id) || 0].map(ci => NES_SYSTEM_PALETTE[ci & 0x3F]);
+    _flameFrames.set(id, _buildFlameCanvas(rawFrames, rgbPal));
   }
 }
 
@@ -4560,13 +4534,8 @@ function _rebuildFlameSprites() {
 
 let _indoorWaterCache = null;
 
-function _buildIndoorWaterCache(mr) {
-  const { chrTiles, metatiles, tilemap } = mr.mapData;
-  const frames = new Map();
-
-  // Horizontal: 16-bit paired RIGHT shift, 16 frames
-  const HORIZ_PAIRS_I = [[0x22, 0x23], [0x24, 0x25]];
-  for (const [ciL, ciR] of HORIZ_PAIRS_I) {
+function _buildHorizWaterFrames(chrTiles, frames) {
+  for (const [ciL, ciR] of [[0x22, 0x23], [0x24, 0x25]]) {
     const bL = chrTiles[ciL], bR = chrTiles[ciR];
     if (!bL || !bR || !_isWater(bL) || !_isWater(bR)) continue;
     const p0L = _getPlane0(bL), p0R = _getPlane0(bR);
@@ -4579,23 +4548,19 @@ function _buildIndoorWaterCache(mr) {
       const nL = new Uint8Array(8), nR = new Uint8Array(8);
       for (let r = 0; r < 8; r++) {
         const l = cL[r], ri = cR[r];
-        const carryL = l & 1;
-        const carryR = ri & 1;
-        nL[r] = ((l >> 1) | (carryR << 7)) & 0xFF;
-        nR[r] = ((ri >> 1) | (carryL << 7)) & 0xFF;
+        nL[r] = ((l >> 1) | ((ri & 1) << 7)) & 0xFF;
+        nR[r] = ((ri >> 1) | ((l & 1) << 7)) & 0xFF;
       }
       cL = nL; cR = nR;
     }
-    frames.set(ciL, arrL);
-    frames.set(ciR, arrR);
+    frames.set(ciL, arrL); frames.set(ciR, arrR);
   }
-
-  // Vertical: row rotation down, 8 frames
+}
+function _buildVertWaterFrames(chrTiles, frames) {
   for (const ci of VERT_CHR) {
     const base = chrTiles[ci];
     if (!base || !_isWater(base)) continue;
-    const p0 = _getPlane0(base);
-    const p1 = base.map(p => p & 2);
+    const p0 = _getPlane0(base), p1 = base.map(p => p & 2);
     const arr = [];
     for (let f = 0; f < 8; f++) {
       const rot = new Uint8Array(8);
@@ -4604,22 +4569,23 @@ function _buildIndoorWaterCache(mr) {
     }
     frames.set(ci, arr);
   }
-
-  // Find animated positions
+}
+function _findAnimatedPositions(tilemap, metatiles) {
   const positions = [];
-  const MAP_SIZE = 32;
-  for (let ty = 0; ty < MAP_SIZE; ty++) {
-    for (let tx = 0; tx < MAP_SIZE; tx++) {
-      const mid = tilemap[ty * MAP_SIZE + tx];
-      const m = mid < 128 ? mid : mid & 0x7F;
-      const mt = metatiles[m];
-      if (ANIM_CHR.has(mt.tl) || ANIM_CHR.has(mt.tr) ||
-          ANIM_CHR.has(mt.bl) || ANIM_CHR.has(mt.br)) {
-        positions.push({ tx, ty, m });
-      }
-    }
+  for (let ty = 0; ty < 32; ty++) for (let tx = 0; tx < 32; tx++) {
+    const mid = tilemap[ty * 32 + tx];
+    const mt = metatiles[mid < 128 ? mid : mid & 0x7F];
+    if (ANIM_CHR.has(mt.tl) || ANIM_CHR.has(mt.tr) || ANIM_CHR.has(mt.bl) || ANIM_CHR.has(mt.br))
+      positions.push({ tx, ty, m: mid < 128 ? mid : mid & 0x7F });
   }
-  return { frames, positions };
+  return positions;
+}
+function _buildIndoorWaterCache(mr) {
+  const { chrTiles, metatiles, tilemap } = mr.mapData;
+  const frames = new Map();
+  _buildHorizWaterFrames(chrTiles, frames);
+  _buildVertWaterFrames(chrTiles, frames);
+  return { frames, positions: _findAnimatedPositions(tilemap, metatiles) };
 }
 
 function _updateIndoorWater(mr) {
@@ -4652,29 +4618,16 @@ function _updateIndoorWater(mr) {
       if (!fr) continue;
 
       if (HORIZ_CHR.has(ci)) {
-        const curTile = fr[hShift % fr.length];
-        const prevTile = fr[hPrev % fr.length];
+        const curTile = fr[hShift % fr.length], prevTile = fr[hPrev % fr.length];
         for (let py = 0; py < 8; py++) {
           const src = (py <= subRow) ? curTile : prevTile;
           for (let px = 0; px < 8; px++) {
-            const cIdx = src[py * 8 + px];
-            const rgb = rgbPal[cIdx];
-            const di = (py * 8 + px) * 4;
-            td[di] = rgb[0]; td[di+1] = rgb[1];
-            td[di+2] = rgb[2]; td[di+3] = 255;
+            const cIdx = src[py * 8 + px], rgb = rgbPal[cIdx], di = (py * 8 + px) * 4;
+            td[di] = rgb[0]; td[di+1] = rgb[1]; td[di+2] = rgb[2]; td[di+3] = 255;
           }
         }
       } else {
-        const tile = fr[vFrame % fr.length];
-        for (let py = 0; py < 8; py++) {
-          for (let px = 0; px < 8; px++) {
-            const cIdx = tile[py * 8 + px];
-            const rgb = rgbPal[cIdx];
-            const di = (py * 8 + px) * 4;
-            td[di] = rgb[0]; td[di+1] = rgb[1];
-            td[di+2] = rgb[2]; td[di+3] = 255;
-          }
-        }
+        _writeTilePixels(td, fr[vFrame % fr.length], rgbPal);
       }
       fctx.putImageData(tileImg, tx * 16 + offs[q][0], ty * 16 + offs[q][1]);
     }
@@ -5089,6 +5042,24 @@ function _drawRosterSparkle(panelTop) {
   drawText(ctx, px + 8 - Math.floor(tw / 2), hpy, numBytes, [0x0F, 0x0F, 0x0F, 0x2B]);
 }
 
+function _drawRosterScrollTriangles(scrollAreaY, canScrollUp, canScrollDown) {
+  if (!canScrollUp && !canScrollDown) return;
+  const triFade = Math.min(Math.max(_rosterTransFade(), rosterBattleFade), ROSTER_FADE_STEPS);
+  let triNes = 0x10;
+  for (let s = 0; s < triFade; s++) triNes = nesColorFade(triNes);
+  const triCol = NES_SYSTEM_PALETTE[triNes] || [0, 0, 0];
+  ctx.fillStyle = `rgb(${triCol[0]},${triCol[1]},${triCol[2]})`;
+  const triCX = HUD_RIGHT_X + Math.floor(HUD_RIGHT_W / 2);
+  if (canScrollUp) {
+    const ty = scrollAreaY + 2;
+    ctx.beginPath(); ctx.moveTo(triCX - 4, ty + 5); ctx.lineTo(triCX, ty); ctx.lineTo(triCX + 4, ty + 5); ctx.fill();
+  }
+  if (canScrollDown) {
+    const ty = scrollAreaY + 9;
+    ctx.beginPath(); ctx.moveTo(triCX - 4, ty); ctx.lineTo(triCX, ty + 5); ctx.lineTo(triCX + 4, ty); ctx.fill();
+  }
+}
+
 function drawRoster() {
   if (titleState !== 'done') return;
   if (transState === 'loading') return;
@@ -5117,27 +5088,7 @@ function drawRoster() {
   }
   ctx.restore();
 
-  // Scroll triangles
-  if (canScrollUp || canScrollDown) {
-    const triFade = Math.min(Math.max(_rosterTransFade(), rosterBattleFade), ROSTER_FADE_STEPS);
-    let triNes = 0x10;
-    for (let s = 0; s < triFade; s++) triNes = nesColorFade(triNes);
-    const triCol = NES_SYSTEM_PALETTE[triNes] || [0, 0, 0];
-    ctx.fillStyle = `rgb(${triCol[0]},${triCol[1]},${triCol[2]})`;
-    const triCX = HUD_RIGHT_X + Math.floor(HUD_RIGHT_W / 2);
-    if (canScrollUp) {
-      const ty = scrollAreaY + 2;
-      ctx.beginPath();
-      ctx.moveTo(triCX - 4, ty + 5); ctx.lineTo(triCX, ty); ctx.lineTo(triCX + 4, ty + 5);
-      ctx.fill();
-    }
-    if (canScrollDown) {
-      const ty = scrollAreaY + 9;
-      ctx.beginPath();
-      ctx.moveTo(triCX - 4, ty); ctx.lineTo(triCX, ty + 5); ctx.lineTo(triCX + 4, ty);
-      ctx.fill();
-    }
-  }
+  _drawRosterScrollTriangles(scrollAreaY, canScrollUp, canScrollDown);
 
   _drawRosterSparkle(panelTop);
 
@@ -5314,70 +5265,51 @@ function _drawChatInput(ctx, lineW, startX, inputLine1Y, inputLine2Y) {
   }
 }
 
+function _drawChatExpandBG(curBoxY, curBoxH, battleFadeAlpha) {
+  if (chatExpandAnim <= 0) return;
+  const NES_STEP_ALPHAS = [0, 0.28, 0.52, 0.76, 1.0];
+  ctx.globalAlpha = NES_STEP_ALPHAS[Math.min(4, Math.round(chatExpandAnim * 4))] * battleFadeAlpha;
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, HUD_VIEW_Y, CANVAS_W, HUD_BOT_Y - HUD_VIEW_Y);
+  ctx.globalAlpha = battleFadeAlpha;
+  _drawHudBox(0, curBoxY, CANVAS_W, curBoxH, 0);
+}
+
+function _drawChatTextArea(curBoxY, curBoxH, battleFadeAlpha) {
+  const innerTop    = curBoxY + 8;
+  const innerBottom = curBoxY + curBoxH - 10;
+  const innerH      = innerBottom - innerTop;
+  ctx.globalAlpha = battleFadeAlpha;
+  ctx.beginPath(); ctx.rect(8, innerTop, CANVAS_W - 16, curBoxH - 16); ctx.clip();
+  ctx.font = '8px "Press Start 2P"'; ctx.textBaseline = 'bottom';
+  const startX = 12; const lineW = CANVAS_W - 8 - startX;
+  const rows      = _buildChatRows(ctx, lineW, startX);
+  const inputRows = chatInputActive ? 2 : 0;
+  const availRows = Math.max(1, Math.floor(innerH / CHAT_LINE_H) - inputRows);
+  const inputLine2Y = innerBottom;
+  const inputLine1Y = inputLine2Y - CHAT_LINE_H;
+  const bottomY   = chatInputActive ? inputLine1Y - CHAT_LINE_H : inputLine2Y;
+  const visible   = rows.slice(-availRows);
+  for (let i = 0; i < visible.length; i++) {
+    const r = visible[i]; const lineY = bottomY - (visible.length - 1 - i) * CHAT_LINE_H;
+    if (r.namePart !== undefined) {
+      ctx.fillStyle = '#d8b858'; ctx.fillText(r.namePart, r.x, lineY);
+      ctx.fillStyle = '#e0e0e0'; ctx.fillText(r.msgPart, r.x + r.nameW, lineY);
+    } else { ctx.fillStyle = r.color; ctx.fillText(r.text, r.x, lineY); }
+  }
+  if (chatInputActive) _drawChatInput(ctx, lineW, startX, inputLine1Y, inputLine2Y);
+}
+
 function drawChat() {
   if (!chatFontReady) return;
   const battleFadeAlpha = 1 - rosterBattleFade / ROSTER_FADE_STEPS;
   if (battleFadeAlpha <= 0) return;
   if (chatMessages.length === 0 && !chatInputActive && chatExpandAnim === 0) return;
-
+  const curBoxH = HUD_BOT_H + Math.round((CANVAS_H - HUD_VIEW_Y - HUD_BOT_H) * chatExpandAnim / 8) * 8;
+  const curBoxY = CANVAS_H - curBoxH;
   ctx.save();
-
-  // NES-stepped fade over viewport area
-  if (chatExpandAnim > 0) {
-    const NES_STEP_ALPHAS = [0, 0.28, 0.52, 0.76, 1.0];
-    const step = Math.min(4, Math.round(chatExpandAnim * 4));
-    ctx.globalAlpha = NES_STEP_ALPHAS[step] * battleFadeAlpha;
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, HUD_VIEW_Y, CANVAS_W, HUD_BOT_Y - HUD_VIEW_Y);
-  }
-
-  // Expanding border box
-  const fullBoxH = CANVAS_H - HUD_VIEW_Y;
-  const curBoxH  = HUD_BOT_H + Math.round((fullBoxH - HUD_BOT_H) * chatExpandAnim / 8) * 8;
-  const curBoxY  = CANVAS_H - curBoxH;
-  if (chatExpandAnim > 0) {
-    ctx.globalAlpha = battleFadeAlpha;
-    _drawHudBox(0, curBoxY, CANVAS_W, curBoxH, 0);
-  }
-
-  // Text area inside the box
-  const innerTop    = curBoxY + 8;
-  const innerBottom = curBoxY + curBoxH - 10;
-  const innerH      = innerBottom - innerTop;
-
-  ctx.globalAlpha = battleFadeAlpha;
-  ctx.beginPath();
-  ctx.rect(8, innerTop, CANVAS_W - 16, curBoxH - 16);
-  ctx.clip();
-  ctx.font = '8px "Press Start 2P"';
-  ctx.textBaseline = 'bottom';
-  const startX = 12;
-  const lineW  = CANVAS_W - 8 - startX;
-
-  const rows = _buildChatRows(ctx, lineW, startX);
-  const inputRows   = chatInputActive ? 2 : 0;
-  const availRows   = Math.max(1, Math.floor(innerH / CHAT_LINE_H) - inputRows);
-  const inputLine2Y = innerBottom;
-  const inputLine1Y = inputLine2Y - CHAT_LINE_H;
-  const bottomY     = chatInputActive ? inputLine1Y - CHAT_LINE_H : inputLine2Y;
-  const visible     = rows.slice(-availRows);
-
-  for (let i = 0; i < visible.length; i++) {
-    const r = visible[i];
-    const lineY = bottomY - (visible.length - 1 - i) * CHAT_LINE_H;
-    if (r.namePart !== undefined) {
-      ctx.fillStyle = '#d8b858';
-      ctx.fillText(r.namePart, r.x, lineY);
-      ctx.fillStyle = '#e0e0e0';
-      ctx.fillText(r.msgPart, r.x + r.nameW, lineY);
-    } else {
-      ctx.fillStyle = r.color;
-      ctx.fillText(r.text, r.x, lineY);
-    }
-  }
-
-  if (chatInputActive) _drawChatInput(ctx, lineW, startX, inputLine1Y, inputLine2Y);
-
+  _drawChatExpandBG(curBoxY, curBoxH, battleFadeAlpha);
+  _drawChatTextArea(curBoxY, curBoxH, battleFadeAlpha);
   ctx.globalAlpha = 1;
   ctx.restore();
 }
@@ -6160,66 +6092,71 @@ function drawPlayerSelectContent(sbX, sbY, sbW, sbH) {
 
 // --- Pause menu ---
 
-function updatePauseMenu(dt) {
-  if (pauseState === 'none') return;
-  pauseTimer += Math.min(dt, 33);
-
+function _updatePauseMainTransitions() {
+  const T = (PAUSE_TEXT_STEPS + 1) * PAUSE_TEXT_STEP_MS;
   if (pauseState === 'scroll-in') {
     if (pauseTimer >= PAUSE_SCROLL_MS) { pauseState = 'text-in'; pauseTimer = 0; }
   } else if (pauseState === 'text-in') {
-    if (pauseTimer >= (PAUSE_TEXT_STEPS + 1) * PAUSE_TEXT_STEP_MS) { pauseState = 'open'; pauseTimer = 0; }
+    if (pauseTimer >= T) { pauseState = 'open'; pauseTimer = 0; }
   } else if (pauseState === 'text-out') {
-    if (pauseTimer >= (PAUSE_TEXT_STEPS + 1) * PAUSE_TEXT_STEP_MS) { pauseState = 'scroll-out'; pauseTimer = 0; }
+    if (pauseTimer >= T) { pauseState = 'scroll-out'; pauseTimer = 0; }
   } else if (pauseState === 'scroll-out') {
-    if (pauseTimer >= PAUSE_SCROLL_MS) {
-      pauseState = 'none'; pauseTimer = 0;
-      stopFF1Music();
-      resumeMusic();
-    }
-  // Inventory transitions
-  } else if (pauseState === 'inv-text-out') {
-    if (pauseTimer >= (PAUSE_TEXT_STEPS + 1) * PAUSE_TEXT_STEP_MS) { pauseState = 'inv-expand'; pauseTimer = 0; }
+    if (pauseTimer >= PAUSE_SCROLL_MS) { pauseState = 'none'; pauseTimer = 0; stopFF1Music(); resumeMusic(); }
+  }
+}
+
+function _updatePauseInvTransitions(dt) {
+  const T = (PAUSE_TEXT_STEPS + 1) * PAUSE_TEXT_STEP_MS;
+  if (pauseState === 'inv-text-out') {
+    if (pauseTimer >= T) { pauseState = 'inv-expand'; pauseTimer = 0; }
   } else if (pauseState === 'inv-expand') {
     if (pauseTimer >= PAUSE_EXPAND_MS) { pauseState = 'inv-items-in'; pauseTimer = 0; }
   } else if (pauseState === 'inv-items-in') {
-    if (pauseTimer >= (PAUSE_TEXT_STEPS + 1) * PAUSE_TEXT_STEP_MS) { pauseState = 'inventory'; pauseTimer = 0; }
+    if (pauseTimer >= T) { pauseState = 'inventory'; pauseTimer = 0; }
   } else if (pauseState === 'inv-items-out') {
-    if (pauseTimer >= (PAUSE_TEXT_STEPS + 1) * PAUSE_TEXT_STEP_MS) { pauseState = 'inv-shrink'; pauseTimer = 0; }
+    if (pauseTimer >= T) { pauseState = 'inv-shrink'; pauseTimer = 0; }
   } else if (pauseState === 'inv-shrink') {
     if (pauseTimer >= PAUSE_EXPAND_MS) { pauseState = 'inv-text-in'; pauseTimer = 0; }
   } else if (pauseState === 'inv-text-in') {
-    if (pauseTimer >= (PAUSE_TEXT_STEPS + 1) * PAUSE_TEXT_STEP_MS) { pauseState = 'open'; pauseTimer = 0; }
+    if (pauseTimer >= T) { pauseState = 'open'; pauseTimer = 0; }
   } else if (pauseState === 'inv-heal') {
-    // Heal animation — defend pose + sparkle for same duration as battle
-    if (pauseHealNum) {
-      pauseHealNum.timer += dt;
-      if (pauseHealNum.timer >= BATTLE_DMG_SHOW_MS) pauseHealNum = null;
-    }
+    if (pauseHealNum) { pauseHealNum.timer += dt; if (pauseHealNum.timer >= BATTLE_DMG_SHOW_MS) pauseHealNum = null; }
     if (pauseTimer >= DEFEND_SPARKLE_TOTAL_MS) {
       pauseHealNum = null;
-      // Re-check if items remain, adjust scroll
       const entries = Object.entries(playerInventory).filter(([,c]) => c > 0);
       if (pauseInvScroll >= entries.length) pauseInvScroll = Math.max(0, entries.length - 1);
       pauseState = 'inventory'; pauseTimer = 0;
     }
-  // Equip transitions (same pattern as inventory)
-  } else if (pauseState === 'eq-text-out') {
-    if (pauseTimer >= (PAUSE_TEXT_STEPS + 1) * PAUSE_TEXT_STEP_MS) { pauseState = 'eq-expand'; pauseTimer = 0; }
+  }
+}
+
+function _updatePauseEqTransitions() {
+  const T = (PAUSE_TEXT_STEPS + 1) * PAUSE_TEXT_STEP_MS;
+  if (pauseState === 'eq-text-out') {
+    if (pauseTimer >= T) { pauseState = 'eq-expand'; pauseTimer = 0; }
   } else if (pauseState === 'eq-expand') {
     if (pauseTimer >= PAUSE_EXPAND_MS) { pauseState = 'eq-slots-in'; pauseTimer = 0; }
   } else if (pauseState === 'eq-slots-in') {
-    if (pauseTimer >= (PAUSE_TEXT_STEPS + 1) * PAUSE_TEXT_STEP_MS) { pauseState = 'equip'; pauseTimer = 0; }
+    if (pauseTimer >= T) { pauseState = 'equip'; pauseTimer = 0; }
   } else if (pauseState === 'eq-slots-out') {
-    if (pauseTimer >= (PAUSE_TEXT_STEPS + 1) * PAUSE_TEXT_STEP_MS) { pauseState = 'eq-shrink'; pauseTimer = 0; }
+    if (pauseTimer >= T) { pauseState = 'eq-shrink'; pauseTimer = 0; }
   } else if (pauseState === 'eq-shrink') {
     if (pauseTimer >= PAUSE_EXPAND_MS) { pauseState = 'eq-text-in'; pauseTimer = 0; }
   } else if (pauseState === 'eq-text-in') {
-    if (pauseTimer >= (PAUSE_TEXT_STEPS + 1) * PAUSE_TEXT_STEP_MS) { pauseState = 'open'; pauseTimer = 0; }
+    if (pauseTimer >= T) { pauseState = 'open'; pauseTimer = 0; }
   } else if (pauseState === 'eq-items-in') {
-    if (pauseTimer >= (PAUSE_TEXT_STEPS + 1) * PAUSE_TEXT_STEP_MS) { pauseState = 'eq-item-select'; pauseTimer = 0; }
+    if (pauseTimer >= T) { pauseState = 'eq-item-select'; pauseTimer = 0; }
   } else if (pauseState === 'eq-items-out') {
-    if (pauseTimer >= (PAUSE_TEXT_STEPS + 1) * PAUSE_TEXT_STEP_MS) { pauseState = 'equip'; pauseTimer = 0; }
+    if (pauseTimer >= T) { pauseState = 'equip'; pauseTimer = 0; }
   }
+}
+
+function updatePauseMenu(dt) {
+  if (pauseState === 'none') return;
+  pauseTimer += Math.min(dt, 33);
+  if (pauseState.startsWith('inv-')) _updatePauseInvTransitions(dt);
+  else if (pauseState.startsWith('eq-')) _updatePauseEqTransitions();
+  else _updatePauseMainTransitions();
 }
 
 function showMsgBox(bytes, onClose) {
@@ -7483,65 +7420,40 @@ function _updateItemMenuFades() {
   return true;
 }
 
-function _updateBattleRun() {
+function _updateBattleRunSuccess() {
+  const T = (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS;
   if (battleState === 'run-name-out') {
-    // Monster name fades out (same as victory-name-out)
-    if (battleTimer >= (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS) {
-      sprite.setDirection(DIR_DOWN);
-      playSFX(SFX.RUN_AWAY);
-      battleState = 'run-text-in';
-      battleTimer = 0;
-    }
+    if (battleTimer >= T) { sprite.setDirection(DIR_DOWN); playSFX(SFX.RUN_AWAY); battleState = 'run-text-in'; battleTimer = 0; }
   } else if (battleState === 'run-text-in') {
-    // "Ran away..." fades in
-    if (battleTimer >= (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS) {
-      battleState = 'run-hold';
-      battleTimer = 0;
-    }
+    if (battleTimer >= T) { battleState = 'run-hold'; battleTimer = 0; }
   } else if (battleState === 'run-hold') {
-    // Hold for ~1.35s (total ~1.85s including fade-in)
-    if (battleTimer >= 1350) {
-      battleState = 'run-text-out';
-      battleTimer = 0;
-    }
+    if (battleTimer >= 1350) { battleState = 'run-text-out'; battleTimer = 0; }
   } else if (battleState === 'run-text-out') {
-    // "Ran away..." fades out, then close encounter box
-    if (battleTimer >= (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS) {
-      runSlideBack = true;
-      battleState = 'encounter-box-close';
-      battleTimer = 0;
-    }
-  } else if (battleState === 'run-fail-name-out') {
-    // Monster name fades out (fast)
-    if (battleTimer >= (BATTLE_TEXT_STEPS + 1) * 50) {
-      battleState = 'run-fail-text-in';
-      battleTimer = 0;
-    }
-  } else if (battleState === 'run-fail-text-in') {
-    // "Can't run" fades in (fast)
-    if (battleTimer >= (BATTLE_TEXT_STEPS + 1) * 50) {
-      battleState = 'run-fail-hold';
-      battleTimer = 0;
-    }
-  } else if (battleState === 'run-fail-hold') {
-    // Hold ~300ms
-    if (battleTimer >= 300) {
-      battleState = 'run-fail-text-out';
-      battleTimer = 0;
-    }
-  } else if (battleState === 'run-fail-text-out') {
-    // "Can't run" fades out (fast)
-    if (battleTimer >= (BATTLE_TEXT_STEPS + 1) * 50) {
-      battleState = 'run-fail-name-in';
-      battleTimer = 0;
-    }
-  } else if (battleState === 'run-fail-name-in') {
-    // Monster name fades back in (fast)
-    if (battleTimer >= (BATTLE_TEXT_STEPS + 1) * 50) {
-      processNextTurn();
-    }
+    if (battleTimer >= T) { runSlideBack = true; battleState = 'encounter-box-close'; battleTimer = 0; }
   } else { return false; }
   return true;
+}
+
+function _updateBattleRunFail() {
+  const T = (BATTLE_TEXT_STEPS + 1) * 50;
+  if (battleState === 'run-fail-name-out') {
+    if (battleTimer >= T) { battleState = 'run-fail-text-in'; battleTimer = 0; }
+  } else if (battleState === 'run-fail-text-in') {
+    if (battleTimer >= T) { battleState = 'run-fail-hold'; battleTimer = 0; }
+  } else if (battleState === 'run-fail-hold') {
+    if (battleTimer >= 300) { battleState = 'run-fail-text-out'; battleTimer = 0; }
+  } else if (battleState === 'run-fail-text-out') {
+    if (battleTimer >= T) { battleState = 'run-fail-name-in'; battleTimer = 0; }
+  } else if (battleState === 'run-fail-name-in') {
+    if (battleTimer >= T) processNextTurn();
+  } else { return false; }
+  return true;
+}
+
+function _updateBattleRun() {
+  if (battleState.startsWith('run-fail-')) return _updateBattleRunFail();
+  if (battleState.startsWith('run-')) return _updateBattleRunSuccess();
+  return false;
 }
 
 function _updateAllyDamageShow() {
@@ -9267,28 +9179,9 @@ function _updateStarEffect(dt) {
   }
 }
 
-function gameLoop(timestamp) {
-  const dt = timestamp - lastTime;
-  lastTime = timestamp;
-
-  // Title screen — runs before game starts
-  if (titleState !== 'done') {
-    updateTitle(dt);
-    drawTitle();    // viewport: water + text
-    drawHUD();      // HUD border (returns early, skips top box content)
-    drawTitleSkyInHUD(); // sky BG in top box, drawn after HUD border
-    // Player select now drawn inside drawTitle() viewport
-    requestAnimationFrame(gameLoop);
-    return;
-  }
-
-  // Tick HUD info fade-in
-  if (hudInfoFadeTimer < HUD_INFO_FADE_STEPS * HUD_INFO_FADE_STEP_MS) {
-    hudInfoFadeTimer += dt;
-  }
-
+function _gameLoopUpdate(dt) {
+  if (hudInfoFadeTimer < HUD_INFO_FADE_STEPS * HUD_INFO_FADE_STEP_MS) hudInfoFadeTimer += dt;
   _updateHudHpLvStep(dt);
-
   handleInput();
   updateRoster(dt);
   updateChat(dt);
@@ -9298,11 +9191,7 @@ function gameLoop(timestamp) {
   updateMovement(dt);
   updateTransition(dt);
   updateTopBoxScroll(dt);
-
-  // Pond strobe timer
   if (pondStrobeTimer > 0) pondStrobeTimer = Math.max(0, pondStrobeTimer - dt);
-
-  // Screen shake update
   if (shakeActive) {
     shakeTimer += dt;
     if (shakeTimer >= SHAKE_DURATION) {
@@ -9310,54 +9199,40 @@ function gameLoop(timestamp) {
       if (shakePendingAction) { shakePendingAction(); shakePendingAction = null; }
     }
   }
-
   _updateStarEffect(dt);
-
-  // Water animation tick (~67ms each)
-  // Shift advances every 8 ticks (~533ms). Rows cascade 1-per-tick.
   waterTimer += dt;
-  if (waterTimer >= WATER_TICK) {
-    waterTimer %= WATER_TICK;
-    waterTick++;
-    // Indoor maps: handled by _updateIndoorWater in render()
-  }
+  if (waterTimer >= WATER_TICK) { waterTimer %= WATER_TICK; waterTick++; }
+}
 
+function _gameLoopDraw() {
   render();
   drawTransitionOverlay();
-
   _drawPondStrobe();
-
-  // Draw spinning sprite on top of black during trap fall
-  if (transState === 'trap-falling' && sprite) {
-    sprite.draw(ctx, SCREEN_CENTER_X, SCREEN_CENTER_Y);
-  }
-
+  if (transState === 'trap-falling' && sprite) sprite.draw(ctx, SCREEN_CENTER_X, SCREEN_CENTER_Y);
   drawHUD();
-  if (battleAllies.length > 0 && battleState !== 'none') {
-    drawBattleAllies();
-  } else {
-    drawRoster();
+  if (battleAllies.length > 0 && battleState !== 'none') drawBattleAllies();
+  else drawRoster();
+  drawChat();
+  drawPauseMenu();
+  drawMsgBox();
+  drawRosterMenu();
+  drawBattle();
+  drawSWExplosion();
+  drawSWDamageNumbers();
+}
+
+function gameLoop(timestamp) {
+  const dt = timestamp - lastTime;
+  lastTime = timestamp;
+
+  if (titleState !== 'done') {
+    updateTitle(dt); drawTitle(); drawHUD(); drawTitleSkyInHUD();
+    requestAnimationFrame(gameLoop);
+    return;
   }
 
-  // Chat panel in bottom box (only outside battle)
-  drawChat();
-
-  // Pause menu overlays everything
-  drawPauseMenu();
-
-  // Chest message box
-  drawMsgBox();
-
-  // Roster context menu (drawn over viewport, above HUD)
-  drawRosterMenu();
-
-  // Battle UI overlays everything
-  drawBattle();
-
-  // SW explosion drawn last — must be above HUD and all other layers
-  drawSWExplosion();
-  drawSWDamageNumbers(); // damage numbers above explosion
-
+  _gameLoopUpdate(dt);
+  _gameLoopDraw();
 
   requestAnimationFrame(gameLoop);
 }
