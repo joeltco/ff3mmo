@@ -1962,6 +1962,8 @@ function nesColorFade(c) {
 function _makeCanvas16() {
   const c = document.createElement('canvas'); c.width = 16; c.height = 16; return c;
 }
+function _zPressed() { if (!keys['z'] && !keys['Z']) return false; keys['z'] = false; keys['Z'] = false; return true; }
+function _xPressed() { if (!keys['x'] && !keys['X']) return false; keys['x'] = false; keys['X'] = false; return true; }
 function _hflipCanvas16(src) {
   const c = _makeCanvas16(); const cx = c.getContext('2d');
   cx.translate(16, 0); cx.scale(-1, 1); cx.drawImage(src, 0, 0); return c;
@@ -2725,8 +2727,7 @@ function _battleTargetConfirm() {
 function _battleInputTargetSelect() {
   _battleTargetNav();
   _battleTargetConfirm();
-  if (keys['x'] || keys['X']) {
-    keys['x'] = false; keys['X'] = false;
+  if (_xPressed()) {
     playSFX(SFX.CONFIRM);
     battleState = 'menu-open';
     battleTimer = 0;
@@ -2848,13 +2849,11 @@ function _battleInputItemSelect() {
   const pageRows = isEquipPage ? 2 : INV_SLOTS;
   const totalPages = 1 + Math.max(1, Math.ceil(itemSelectList.length / INV_SLOTS));
   _itemSelectNav(isEquipPage, totalPages, pageRows);
-  if (keys['z'] || keys['Z']) {
-    keys['z'] = false; keys['Z'] = false;
+  if (_zPressed()) {
     const gIdx = isEquipPage ? -100 - itemPageCursor : (itemPage - 1) * INV_SLOTS + itemPageCursor;
     _itemSelectZ(isEquipPage, gIdx);
   }
-  if (keys['x'] || keys['X']) {
-    keys['x'] = false; keys['X'] = false;
+  if (_xPressed()) {
     if (itemHeldIdx !== -1) { itemHeldIdx = -1; playSFX(SFX.CONFIRM); }
     else { playSFX(SFX.CONFIRM); battleState = 'item-cancel-out'; battleTimer = 0; }
   }
@@ -2949,8 +2948,7 @@ function _battleInputItemTargetSelect() {
       }
     }
   }
-  if (keys['z'] || keys['Z']) {
-    keys['z'] = false; keys['Z'] = false;
+  if (_zPressed()) {
     playerActionPending.target = itemTargetType === 'player' ? 'player' : itemTargetIndex;
     playerActionPending.allyIndex = itemTargetType === 'player' ? itemTargetAllyIndex : -1;
     playerActionPending.targetMode = itemTargetMode;
@@ -2958,8 +2956,7 @@ function _battleInputItemTargetSelect() {
     battleState = 'item-list-out';
     battleTimer = 0;
   }
-  if (keys['x'] || keys['X']) {
-    keys['x'] = false; keys['X'] = false;
+  if (_xPressed()) {
     playerActionPending = null;
     playSFX(SFX.CONFIRM);
     battleState = 'item-select';
@@ -3022,15 +3019,13 @@ function _rosterInputBrowse() {
       playSFX(SFX.CURSOR);
     }
   }
-  if (keys['z'] || keys['Z']) {
-    keys['z'] = false; keys['Z'] = false;
+  if (_zPressed()) {
     rosterState = 'menu-in';
     rosterMenuTimer = 0;
     rosterMenuCursor = 0;
     playSFX(SFX.CONFIRM);
   }
-  if (keys['x'] || keys['X']) {
-    keys['x'] = false; keys['X'] = false;
+  if (_xPressed()) {
     rosterState = 'none';
     playSFX(SFX.CONFIRM);
   }
@@ -3059,8 +3054,7 @@ function _rosterInputMenu() {
     rosterMenuCursor = (rosterMenuCursor + ROSTER_MENU_ITEMS.length - 1) % ROSTER_MENU_ITEMS.length;
     playSFX(SFX.CURSOR);
   }
-  if (keys['z'] || keys['Z']) {
-    keys['z'] = false; keys['Z'] = false;
+  if (_zPressed()) {
     const action = ROSTER_MENU_ITEMS[rosterMenuCursor];
     const target = getRosterVisible()[rosterCursor];
     rosterState = 'menu-out';
@@ -3076,8 +3070,7 @@ function _rosterInputMenu() {
       showMsgBox(msg);
     }
   }
-  if (keys['x'] || keys['X']) {
-    keys['x'] = false; keys['X'] = false;
+  if (_xPressed()) {
     rosterState = 'menu-out';
     rosterMenuTimer = 0;
     playSFX(SFX.CONFIRM);
@@ -3130,8 +3123,7 @@ function _pauseInputMainMenu() {
   if (pauseState !== 'open') return false;
   if (keys['ArrowDown']) { keys['ArrowDown'] = false; pauseCursor = (pauseCursor + 1) % 6; playSFX(SFX.CURSOR); }
   if (keys['ArrowUp'])   { keys['ArrowUp'] = false;   pauseCursor = (pauseCursor + 5) % 6; playSFX(SFX.CURSOR); }
-  if (keys['z'] || keys['Z']) {
-    keys['z'] = false; keys['Z'] = false;
+  if (_zPressed()) {
     if (pauseCursor === 0) {
       playSFX(SFX.CONFIRM);
       pauseState = 'inv-text-out'; pauseTimer = 0; pauseInvScroll = 0;
@@ -3170,8 +3162,7 @@ function _pauseInputInventory() {
     if (pauseInvScroll > 0) { pauseInvScroll--; playSFX(SFX.CURSOR); }
   }
   if (keys['z'] || keys['Z']) { keys['z'] = false; keys['Z'] = false; _pauseInvZPress(entries); }
-  if (keys['x'] || keys['X']) {
-    keys['x'] = false; keys['X'] = false;
+  if (_xPressed()) {
     if (pauseHeldItem !== -1) { pauseHeldItem = -1; playSFX(SFX.CONFIRM); }
     else { playSFX(SFX.CONFIRM); pauseState = 'inv-items-out'; pauseTimer = 0; }
   }
@@ -3207,12 +3198,10 @@ function _pauseInputInvTarget() {
     keys['ArrowUp'] = false;
     if (pauseInvAllyTarget > -1) { pauseInvAllyTarget--; playSFX(SFX.CURSOR); }
   }
-  if (keys['z'] || keys['Z']) {
-    keys['z'] = false; keys['Z'] = false;
+  if (_zPressed()) {
     _applyPauseItemUse(ITEMS.get(pauseUseItemId), rosterTargets);
   }
-  if (keys['x'] || keys['X']) {
-    keys['x'] = false; keys['X'] = false;
+  if (_xPressed()) {
     pauseState = 'inventory'; pauseTimer = 0;
     pauseHeldItem = -1;
     playSFX(SFX.CONFIRM);
@@ -3275,8 +3264,7 @@ function _pauseInputEquip() {
   if (pauseState !== 'equip') return false;
   if (keys['ArrowDown']) { keys['ArrowDown'] = false; eqCursor = (eqCursor + 1) % 6; playSFX(SFX.CURSOR); }
   if (keys['ArrowUp'])   { keys['ArrowUp'] = false;   eqCursor = (eqCursor + 5) % 6; playSFX(SFX.CURSOR); }
-  if (keys['z'] || keys['Z']) {
-    keys['z'] = false; keys['Z'] = false;
+  if (_zPressed()) {
     if (eqCursor === 5) {
       _equipOptimum();
     } else {
@@ -3299,8 +3287,7 @@ function _pauseInputEquip() {
       pauseState = 'eq-items-in'; pauseTimer = 0;
     }
   }
-  if (keys['x'] || keys['X']) {
-    keys['x'] = false; keys['X'] = false;
+  if (_xPressed()) {
     playSFX(SFX.CONFIRM);
     pauseState = 'eq-slots-out'; pauseTimer = 0;
   }
@@ -3310,8 +3297,7 @@ function _pauseInputEquipItemSelect() {
   if (pauseState !== 'eq-item-select') return false;
   if (keys['ArrowDown']) { keys['ArrowDown'] = false; if (eqItemCursor < eqItemList.length - 1) { eqItemCursor++; playSFX(SFX.CURSOR); } }
   if (keys['ArrowUp'])   { keys['ArrowUp'] = false;   if (eqItemCursor > 0) { eqItemCursor--; playSFX(SFX.CURSOR); } }
-  if (keys['z'] || keys['Z']) {
-    keys['z'] = false; keys['Z'] = false;
+  if (_zPressed()) {
     const pick = eqItemList[eqItemCursor];
     if (pick) {
       const oldId = getEquipSlotId(eqSlotIdx);
@@ -3333,8 +3319,7 @@ function _pauseInputEquipItemSelect() {
     }
     pauseState = 'eq-items-out'; pauseTimer = 0;
   }
-  if (keys['x'] || keys['X']) {
-    keys['x'] = false; keys['X'] = false;
+  if (_xPressed()) {
     playSFX(SFX.CONFIRM);
     pauseState = 'eq-items-out'; pauseTimer = 0;
   }
@@ -5291,8 +5276,7 @@ function _updateTitleUnderwater(dt) {
   }
 }
 function _updateTitleSelectCase() {
-  if (keys['z'] || keys['Z']) {
-    keys['z'] = false; keys['Z'] = false;
+  if (_zPressed()) {
     if (deleteMode) {
       if (selectCursor < 3 && saveSlots[selectCursor]) {
         playSFX(SFX.CONFIRM);
@@ -5321,8 +5305,7 @@ function _updateTitleSelectCase() {
     if (keys['ArrowDown']) { keys['ArrowDown'] = false; selectCursor = (selectCursor + 1) % 4; playSFX(SFX.CURSOR); }
     if (keys['ArrowUp'])   { keys['ArrowUp'] = false;   selectCursor = (selectCursor + 3) % 4; playSFX(SFX.CURSOR); }
   }
-  if (keys['x'] || keys['X']) {
-    keys['x'] = false; keys['X'] = false;
+  if (_xPressed()) {
     if (deleteMode) { playSFX(SFX.CONFIRM); deleteMode = false; }
     else { playSFX(SFX.CONFIRM); titleState = 'select-fade-out-back'; titleTimer = 0; }
   }
