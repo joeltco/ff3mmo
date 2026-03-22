@@ -32,6 +32,7 @@ import { openSaveDB, serverDeleteSlot, parseSaveSlots } from './save.js';
 import { _nameToBytes, _nesNameToString, _buildItemRowBytes, _makeGotNText, makeExpText, makeGilText, makeFoundItemText } from './text-utils.js';
 import { nesColorFade, _makeFadedPal, _stepPalFade } from './palette.js';
 import { _getPlane0, _rebuild, _shiftHorizWater, _isWater, _buildHorizMixed, _writePixels64, _writeTilePixels } from './tile-math.js';
+import { BAYER4, DMG_BOUNCE_TABLE, _dmgBounceY } from './data/animation-tables.js';
 
 const isMobile = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 
@@ -181,12 +182,7 @@ const monsterWhiteCanvas  = new Map(); // monsterId → white flash canvas
 const monsterDeathFrames  = new Map(); // monsterId → death frame array
 
 // Bayer 4×4 ordered dither matrix — creates the pixelated deterioration pattern
-const BAYER4 = [
-  [ 0, 8, 2,10],
-  [12, 4,14, 6],
-  [ 3,11, 1, 9],
-  [15, 7,13, 5],
-];
+
 const MONSTER_DEATH_FRAMES = 16;
 
 // Moogle NPC sprite — loading screen decoration
@@ -478,15 +474,7 @@ const DEFEND_SPARKLE_TOTAL_MS = 533;     // 4 tiles × 133ms
 const DEFEND_SPARKLE_PAL = [0x0F, 0x1B, 0x2B, 0x30];
 // Authentic damage bounce keyframes from FCEUX trace (Y offsets from baseline, up = negative)
 // 30 frames total = 500ms at 60fps
-const DMG_BOUNCE_TABLE = [
-  0, -6, -11, -16, -20, -23, -25,    // fast rise (7 frames)
-  -25, -25,                           // hang at peak (2 frames)
-  -23, -20, -16, -11, -6, 0,         // fall back to baseline (6 frames)
-  6, 5, 3, 2, 1, 0,                  // small overshoot + settle (6 frames)
-  -1, -1, -1, -1, -1,                // tiny second bounce hold (5 frames)
-  0, 1, 2, 3                         // final settle (4 frames)
-];
-const DMG_BOUNCE_FRAME_MS = 16.67;
+
 const TARGET_CURSOR_BLINK_MS = 133;      // cursor blink rate during target select
 // Damage number palette — sprite pal3 during damage display (FCEUX PPU dump)
 // $0F=black, $0F=black, $25=purple, $2B=green
@@ -7877,11 +7865,6 @@ function _drawVictoryRunFail(boxX, boxY, isNameIn, isTextIn, isTextOut) {
   }
 }
 
-function _dmgBounceY(baseY, timer) {
-  // Authentic NES bounce from FCEUX trace — 26 keyframes at 60fps
-  const frame = Math.min(Math.floor(timer / DMG_BOUNCE_FRAME_MS), DMG_BOUNCE_TABLE.length - 1);
-  return baseY + DMG_BOUNCE_TABLE[frame];
-}
 
 function _drawAllyRow(i, ally, panelTop, weaponDraws) {
   const shakeOff = (allyShakeTimer[i] > 0) ? (Math.floor(allyShakeTimer[i] / 67) & 1 ? 2 : -2) : 0;
