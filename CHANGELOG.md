@@ -8,6 +8,13 @@ _No unreleased changes._
 
 ## 2026-03-21
 
+### M89–M90: Refactor/modularize game.js (continued)
+
+- **M89**: `_handlePauseInput` (300L→15L) split into 6 subs (`_pauseInputOpenClose`, `_pauseInputMainMenu`, `_pauseInputInventory`, `_pauseInputInvTarget`, `_pauseInputEquip`, `_pauseInputEquipItemSelect`); `drawPauseMenu` (247L→28L) split into 5 subs (`_drawPauseBox`, `_drawPauseMenuText`, `_drawPauseInventory`, `_drawPauseEquipSlots`, `_drawPauseEquipItems`); `initFakePlayerPortraits` (239L→4L) into `_genPosePortraits` (module-level helper) + `_initFakePosePortraits` + `_initFakeFullBodyCanvases`; `drawBattleMenu` item panel extracted as `_drawBattleItemPanel`; `drawBossSpriteBox` (235L→35L) split into `_drawBossSpriteBoxPVP` + `_drawBossSpriteBoxBoss`
+- **M90**: `_updateBattlePlayerAttack` (206L→9L) split into `_finalizeComboHits` + `_advanceHitCombo` (shared helpers eliminating duplicate combo-finalize logic) + 6 state subs (`_updatePlayerAttackStart/Slash/HitShow/MissShow/DamageShow` + `_updateMonsterDeath`); `updateTitle` (221L→46L) into `_updateTitleUnderwater` + `_updateTitleSelectCase` + `_updateTitleMainOutCase`; `drawTitle` (223L→45L) into 5 subs (`_drawTitleCredit`, `_drawTitleLogo`, `_drawTitleShip`, `_drawTitlePressZ`, `_drawTitleSelectBox`)
+
+## 2026-03-21
+
 ### M87–M88: Refactor/modularize game.js
 
 - **M87**: Extracted pure data/math into ES modules — `battle-math.js` (combat formulas), `data/players.js` (PLAYER_POOL, palettes, chat phrases), `data/strings.js` (all NES-encoded text constants), `data/monster-sprites.js` (PPU-dumped tile bytes); split `handleInput` (849L) and `updateBattle` into focused sub-functions with true/false dispatcher pattern
