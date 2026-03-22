@@ -1905,7 +1905,12 @@ function _landOnWorldMap(tileX, tileY) {
   playTrack(TRACKS.WORLD_MAP);
 }
 function _calcBoxExpandSize(fullW, fullH, isExpand, isClose) {
-  const { boxW, boxH } = _calcBoxExpandSize(fullW, fullH, isExpand, isClose);
+  let boxW = fullW, boxH = fullH;
+  if (isExpand || isClose) {
+    const t = isExpand ? Math.min(battleTimer / BOSS_BOX_EXPAND_MS, 1) : 1 - Math.min(battleTimer / BOSS_BOX_EXPAND_MS, 1);
+    boxW = Math.max(16, Math.ceil(fullW * t / 8) * 8);
+    boxH = Math.max(16, Math.ceil(fullH * t / 8) * 8);
+  }
   return { boxW, boxH };
 }
 function _syncSaveSlotProgress() {
