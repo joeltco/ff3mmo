@@ -10273,31 +10273,9 @@ function drawBossSpriteBox() {
         const flashHidden = isThisAttacking && (battleState === 'boss-flash' || battleState === 'pvp-second-windup') && (flashFrame & 1);
         if (blinkHidden || flashHidden) return;
 
-        // Determine pose: atkFullBody for knife/dagger (single draw), poseSrc for fist/sword (portrait swap)
         let poseSrc = null;
         let atkFullBody = null;
-        if (isOppAttack) {
-          const oppWpnSt = pvpOpponentStats && weaponSubtype(pvpOpponentStats.weaponId);
-          const oppHasL = pvpOpponentStats && pvpOpponentStats.weaponL != null;
-          // R-hand first (hitsThisTurn=0), L-hand second (hitsThisTurn>=1)
-          const useL = oppHasL && pvpOpponentHitsThisTurn >= 1;
-          if (oppWpnSt === 'knife' || oppWpnSt === 'dagger') {
-            // Wind-up: back-swing pose; Forward slash: R or L hand pose
-            if (battleState === 'boss-flash' || battleState === 'pvp-second-windup') {
-              atkFullBody = fakePlayerKnifeBackFullBodyCanvases[palIdx];
-            } else {
-              atkFullBody = useL
-                ? fakePlayerKnifeLFullBodyCanvases[palIdx]
-                : fakePlayerKnifeRFullBodyCanvases[palIdx];
-            }
-          } else if (battleState === 'boss-flash' || battleState === 'pvp-second-windup') {
-            // fist/sword: raised arm on wind-up, idle on forward slash
-            poseSrc = useL
-              ? (fakePlayerAttackLPortraits[palIdx] && fakePlayerAttackLPortraits[palIdx][0])
-              : (fakePlayerAttackPortraits[palIdx] && fakePlayerAttackPortraits[palIdx][0]);
-          }
-        }
-        else if (isOppHit && fakePlayerHitPortraits[palIdx]) poseSrc = fakePlayerHitPortraits[palIdx][0];
+        if (isOppHit && fakePlayerHitPortraits[palIdx]) poseSrc = fakePlayerHitPortraits[palIdx][0];
 
         if (isOppHit && fakePlayerHitFullBodyCanvases[palIdx]) {
           ctx.drawImage(fakePlayerHitFullBodyCanvases[palIdx], sprX, sprY);
@@ -10322,22 +10300,6 @@ function drawBossSpriteBox() {
             const aSlashF = ally ? getSlashFramesForWeapon(ally.weaponId, true) : slashFramesR;
             const af = Math.min(Math.floor(battleTimer / 67), 2);
             if (aSlashF && aSlashF[af]) ctx.drawImage(aSlashF[af], sprX + [0,10,-8][af], sprY + [0,-6,8][af]);
-          }
-          const wpnId = pvpOpponentStats.weaponId || 0;
-          const wpnSt = weaponSubtype(wpnId);
-          if ((battleState === 'boss-flash' || battleState === 'pvp-second-windup') && !flashHidden) {
-            ctx.save(); ctx.translate(sprX, sprY - 7); ctx.scale(-1, 1);
-            if (wpnSt === 'knife' && battleKnifeBladeCanvas) ctx.drawImage(battleKnifeBladeCanvas, 0, 0);
-            else if (wpnSt === 'dagger' && battleDaggerBladeCanvas) ctx.drawImage(battleDaggerBladeCanvas, 0, 0);
-            else if (wpnSt === 'sword' && battleSwordBladeCanvas) ctx.drawImage(battleSwordBladeCanvas, 0, 0);
-            ctx.restore();
-          } else if (battleState === 'enemy-attack') {
-            ctx.save(); ctx.translate(sprX + 32, sprY + 1); ctx.scale(-1, 1);
-            if (wpnSt === 'knife' && battleKnifeBladeSwungCanvas) ctx.drawImage(battleKnifeBladeSwungCanvas, 0, 0);
-            else if (wpnSt === 'dagger' && battleDaggerBladeSwungCanvas) ctx.drawImage(battleDaggerBladeSwungCanvas, 0, 0);
-            else if (wpnSt === 'sword' && battleSwordBladeSwungCanvas) ctx.drawImage(battleSwordBladeSwungCanvas, 0, 0);
-            else if (!wpnSt && wpnId === 0 && battleFistCanvas) ctx.drawImage(battleFistCanvas, 0, 0);
-            ctx.restore();
           }
         }
       });
