@@ -1986,6 +1986,14 @@ function nesColorFade(c) {
   return (hi - 0x10) | (c & 0x0F);
 }
 
+function _makeFadedPal(fadeStep) {
+  const p = [0x0F, 0x0F, 0x0F, 0x30];
+  for (let s = 0; s < fadeStep; s++) p[3] = nesColorFade(p[3]);
+  return p;
+}
+function _stepPalFade(pal) {
+  pal[1] = nesColorFade(pal[1]); pal[2] = nesColorFade(pal[2]); pal[3] = nesColorFade(pal[3]);
+}
 function _loadBattleMetaTiles(romData) {
   const metaTiles = [];
   for (let m = 0; m < 4; m++) {
@@ -2047,9 +2055,7 @@ function renderBattleBg(romData, bgId) {
     // Check if all colors are black
     if (fadePal[1] === 0x0F && fadePal[2] === 0x0F && fadePal[3] === 0x0F) break;
     // Step each color toward black
-    fadePal[1] = nesColorFade(fadePal[1]);
-    fadePal[2] = nesColorFade(fadePal[2]);
-    fadePal[3] = nesColorFade(fadePal[3]);
+    _stepPalFade(fadePal);
   }
 
   topBoxBgFadeFrames = frames;
@@ -2146,9 +2152,7 @@ function initTitleSky(romData) {
   while (true) {
     titleSkyFrames.push(renderBattleBgWithPalette(romData, bgId, fadePal, tiles, metaTiles, tilemap));
     if (fadePal[1] === 0x0F && fadePal[2] === 0x0F && fadePal[3] === 0x0F) break;
-    fadePal[1] = nesColorFade(fadePal[1]);
-    fadePal[2] = nesColorFade(fadePal[2]);
-    fadePal[3] = nesColorFade(fadePal[3]);
+    _stepPalFade(fadePal);
   }
 }
 
@@ -2174,9 +2178,7 @@ function initTitleUnderwater(romData) {
   while (true) {
     titleUnderwaterFrames.push(renderBattleBgWithPalette(romData, bgId, fadePal, tiles, metaTiles, tilemap));
     if (fadePal[1] === 0x0F && fadePal[2] === 0x0F && fadePal[3] === 0x0F) break;
-    fadePal[1] = nesColorFade(fadePal[1]);
-    fadePal[2] = nesColorFade(fadePal[2]);
-    fadePal[3] = nesColorFade(fadePal[3]);
+    _stepPalFade(fadePal);
   }
 }
 
@@ -5766,10 +5768,7 @@ function drawPlayerSelectContent(sbX, sbY, sbW, sbH) {
   }
 
   // Build faded palette
-  const fadedPal = [0x0F, 0x0F, 0x0F, 0x30];
-  for (let s = 0; s < fadeStep; s++) {
-    fadedPal[3] = nesColorFade(fadedPal[3]);
-  }
+  const fadedPal = _makeFadedPal(fadeStep);
 
   const ix = sbX + 8; // interior left
   const iy = sbY + 8; // interior top
@@ -6075,8 +6074,7 @@ function _drawPauseMenuText() {
   } else if (pauseState === 'text-out' || pauseState === 'inv-text-out' || pauseState === 'eq-text-out') {
     fadeStep = Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
   }
-  const fadedPal = [0x0F, 0x0F, 0x0F, 0x30];
-  for (let s = 0; s < fadeStep; s++) fadedPal[3] = nesColorFade(fadedPal[3]);
+  const fadedPal = _makeFadedPal(fadeStep);
   const textX = px + 24;
   const startY = ((isInvState || isEqState) ? finalY : panelY) + 12;
   for (let i = 0; i < PAUSE_ITEMS.length; i++) {
@@ -6095,8 +6093,7 @@ function _drawPauseInventory() {
   } else if (pauseState === 'inv-items-out') {
     fadeStep = Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
   }
-  const fadedPal = [0x0F, 0x0F, 0x0F, 0x30];
-  for (let s = 0; s < fadeStep; s++) fadedPal[3] = nesColorFade(fadedPal[3]);
+  const fadedPal = _makeFadedPal(fadeStep);
   const entries = Object.entries(playerInventory).filter(([,c]) => c > 0);
   const maxVisible = Math.floor((HUD_VIEW_H - 16) / 14);
   const startIdx = Math.max(0, Math.min(pauseInvScroll, Math.max(0, entries.length - maxVisible)));
@@ -6130,8 +6127,7 @@ function _drawPauseEquipSlots() {
   } else if (pauseState === 'eq-slots-out') {
     fadeStep = Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
   }
-  const fadedPal = [0x0F, 0x0F, 0x0F, 0x30];
-  for (let s = 0; s < fadeStep; s++) fadedPal[3] = nesColorFade(fadedPal[3]);
+  const fadedPal = _makeFadedPal(fadeStep);
   const EQ_LABELS = [
     new Uint8Array([0x9B,0xC4,0x91,0xCA,0xD7,0xCD]),
     new Uint8Array([0x95,0xC4,0x91,0xCA,0xD7,0xCD]),
@@ -6175,8 +6171,7 @@ function _drawPauseEquipItems() {
   } else if (pauseState === 'eq-items-out') {
     fadeStep = Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
   }
-  const fadedPal = [0x0F, 0x0F, 0x0F, 0x30];
-  for (let s = 0; s < fadeStep; s++) fadedPal[3] = nesColorFade(fadedPal[3]);
+  const fadedPal = _makeFadedPal(fadeStep);
   const listX = px + 24;
   const listY = finalY + 12 + eqCursor * 22 + 22;
   const maxBelow = Math.floor((finalY + HUD_VIEW_H - 16 - listY) / 12);
@@ -7766,8 +7761,7 @@ function drawBattleMenu() {
 
   let fadeStep = 0;
   if (isFade) fadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
-  const fadedPal = [0x0F, 0x0F, 0x0F, 0x30];
-  for (let s = 0; s < fadeStep; s++) fadedPal[3] = nesColorFade(fadedPal[3]);
+  const fadedPal = _makeFadedPal(fadeStep);
   if (!isVictory && !isRunBox) {
     const enemyName = _battleEnemyName();
     drawText(ctx, Math.floor((boxW - measureText(enemyName)) / 2), HUD_BOT_Y + Math.floor((boxH - 8) / 2), enemyName, fadedPal);
@@ -8413,8 +8407,7 @@ function _drawVictoryNameOut(boxX, boxY, isRunFail) {
   _drawBorderedBox(boxX, boxY, VICTORY_BOX_W, VICTORY_BOX_H);
   const stepMs = isRunFail ? 50 : BATTLE_TEXT_STEP_MS;
   const fadeStep = Math.min(Math.floor(battleTimer / stepMs), BATTLE_TEXT_STEPS);
-  const fadedPal = [0x0F, 0x0F, 0x0F, 0x30];
-  for (let s = 0; s < fadeStep; s++) fadedPal[3] = nesColorFade(fadedPal[3]);
+  const fadedPal = _makeFadedPal(fadeStep);
   const enemyName = _battleEnemyName();
   const nameTw = measureText(enemyName);
   drawText(ctx, Math.floor((VICTORY_BOX_W - nameTw) / 2), boxY + Math.floor((VICTORY_BOX_H - 8) / 2), enemyName, fadedPal);
@@ -8425,8 +8418,7 @@ function _drawVictoryRunText(boxX, boxY, isIn, isOut) {
   let fadeStep = 0;
   if (isIn) fadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
   else if (isOut) fadeStep = Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
-  const fadedPal = [0x0F, 0x0F, 0x0F, 0x30];
-  for (let s = 0; s < fadeStep; s++) fadedPal[3] = nesColorFade(fadedPal[3]);
+  const fadedPal = _makeFadedPal(fadeStep);
   const tw = measureText(BATTLE_RAN_AWAY);
   drawText(ctx, boxX + Math.floor((VICTORY_BOX_W - tw) / 2), boxY + Math.floor((VICTORY_BOX_H - 8) / 2), BATTLE_RAN_AWAY, fadedPal);
 }
