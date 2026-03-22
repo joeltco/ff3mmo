@@ -4115,6 +4115,14 @@ function _writeTilePixels(td, tile, rgbPal) {
     td[di]=rgb[0]; td[di+1]=rgb[1]; td[di+2]=rgb[2]; td[di+3]=255;
   }
 }
+function _buildHorizMixed(curTile, prevTile, subRow) {
+  const m = new Array(64);
+  for (let py = 0; py < 8; py++) {
+    const src = py <= subRow ? curTile : prevTile;
+    for (let px = 0; px < 8; px++) m[py * 8 + px] = src[py * 8 + px];
+  }
+  return m;
+}
 function _updateWorldWater(wmr) {
   if (!wmr || !wmr._atlas) return;
   if (!_waterCache) _waterCache = _buildWaterCache(wmr);
@@ -4147,12 +4155,7 @@ function _updateWorldWater(wmr) {
         const curTile = fr[hShift % fr.length];
         const prevTile = fr[hPrev % fr.length];
         // Per-row cascade: rows <= subRow use current shift, others use previous
-        const mixed = new Array(64);
-        for (let py = 0; py < 8; py++) {
-          const src = py <= subRow ? curTile : prevTile;
-          for (let px = 0; px < 8; px++) mixed[py*8+px] = src[py*8+px];
-        }
-        _writeTilePixels(td, mixed, rgbPal);
+          _writeTilePixels(td, _buildHorizMixed(curTile, prevTile, subRow), rgbPal);
       } else {
         _writeTilePixels(td, fr[vFrame % fr.length], rgbPal);
       }
@@ -4387,13 +4390,7 @@ function _updateIndoorWater(mr) {
 
       if (HORIZ_CHR.has(ci)) {
         const curTile = fr[hShift % fr.length], prevTile = fr[hPrev % fr.length];
-        for (let py = 0; py < 8; py++) {
-          const src = (py <= subRow) ? curTile : prevTile;
-          for (let px = 0; px < 8; px++) {
-            const cIdx = src[py * 8 + px], rgb = rgbPal[cIdx], di = (py * 8 + px) * 4;
-            td[di] = rgb[0]; td[di+1] = rgb[1]; td[di+2] = rgb[2]; td[di+3] = 255;
-          }
-        }
+        _writeTilePixels(td, _buildHorizMixed(curTile, prevTile, subRow), rgbPal);
       } else {
         _writeTilePixels(td, fr[vFrame % fr.length], rgbPal);
       }
@@ -4729,6 +4726,9 @@ function _drawCursorFaded(cx, cy, fadeStep) {
     ctx.globalAlpha = 1;
   }
 }
+function _clipToViewport() {
+  ctx.save(); ctx.beginPath(); ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H); ctx.clip();
+}
 function _drawHudBox(x, y, w, h, fadeStep = 0) {
   const tiles = (fadeStep > 0 && borderFadeSets) ? borderFadeSets[fadeStep] : borderTileCanvases;
   if (!tiles) return;
@@ -4893,10 +4893,7 @@ function drawRosterMenu() {
   }
 
   // Clip to viewport
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
-  ctx.clip();
+  _clipToViewport();
 
   _drawBorderedBox(menuX, menuY, menuW, menuH, false);
 
@@ -5956,10 +5953,7 @@ function drawMsgBox() {
     boxY = finalY + ((vpTop - boxH) - finalY) * t;
   }
 
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
-  ctx.clip();
+  _clipToViewport();
 
   _drawBorderedBox(centerX, boxY, boxW, boxH, true);
 
@@ -6230,10 +6224,7 @@ function _drawPauseEquipItems() {
 function drawPauseMenu() {
   if (pauseState === 'none') return;
   _drawPauseBox();
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
-  ctx.clip();
+  _clipToViewport();
   _drawPauseMenuText();
   _drawPauseInventory();
   _drawPauseEquipSlots();
@@ -8001,10 +7992,7 @@ function drawEncounterBox() {
   const boxX = centerX - Math.floor(boxW / 2);
   const boxY = centerY - Math.floor(boxH / 2);
 
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
-  ctx.clip();
+  _clipToViewport();
   _drawBorderedBox(boxX, boxY, boxW, boxH);
 
   if (isExpand || isClose || battleState === 'defeat-text') { ctx.restore(); return; }
@@ -8089,10 +8077,7 @@ function _drawBossSpriteBoxPVP(centerX, centerY) {
   const pvpBoxW = cols * cellW + 16;
   const pvpBoxH = rows * cellH + 16;
 
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
-  ctx.clip();
+  _clipToViewport();
   ctx.imageSmoothingEnabled = false;
 
   let drawW = pvpBoxW, drawH = pvpBoxH;
@@ -8296,10 +8281,7 @@ function drawBattleMessage() {
   const msgY = bossCenterY + 32 + 8; // below boss box (64/2 = 32) + gap
   const centerX = HUD_VIEW_X + Math.floor((HUD_VIEW_W - boxW) / 2);
 
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
-  ctx.clip();
+  _clipToViewport();
 
   _drawBorderedBox(centerX, msgY, boxW, boxH, true);
 
@@ -8611,10 +8593,7 @@ function _drawBossDmgNum() {
     baseY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2) - 8;
   }
   const by = _dmgBounceY(baseY, bossDamageNum.timer);
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
-  ctx.clip();
+  _clipToViewport();
   if (bossDamageNum.miss) {
     drawText(ctx, bx - 8, by, BATTLE_MISS, [0x0F, 0x0F, 0x0F, 0x2B]);
   } else {
@@ -8644,10 +8623,7 @@ function _drawEnemyHealNum() {
     baseY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2) - 8;
   }
   const hy = _dmgBounceY(baseY, enemyHealNum.timer);
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
-  ctx.clip();
+  _clipToViewport();
   _drawBattleNum(bx, hy, enemyHealNum.value, [0x0F, 0x0F, 0x0F, 0x2B]);
   ctx.restore();
 }
@@ -8701,10 +8677,7 @@ function _drawPondStrobe() {
   if (pondStrobeTimer <= 0) return;
   const frame = Math.floor((BATTLE_FLASH_FRAMES * BATTLE_FLASH_FRAME_MS - pondStrobeTimer) / BATTLE_FLASH_FRAME_MS);
   if (!(frame & 1)) return;
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
-  ctx.clip();
+  _clipToViewport();
   ctx.filter = 'saturate(0)';
   ctx.drawImage(ctx.canvas, HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H,
                             HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
