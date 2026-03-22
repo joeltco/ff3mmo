@@ -3303,8 +3303,7 @@ function _pauseInputInvTarget() {
   }
   return true;
 }
-function _equipOptimum() {
-  // Optimum button: auto-equip best gear from inventory for each slot
+function _equipBestMainSlots() {
   const SLOT_DEFS = [
     { eq: -100, type: 'hand', stat: 'atk' },
     { eq: -102, type: 'armor', subtype: 'helmet', stat: 'def' },
@@ -3312,37 +3311,30 @@ function _equipOptimum() {
     { eq: -104, type: 'armor', subtype: 'arms',   stat: 'def' },
   ];
   for (const sd of SLOT_DEFS) {
-    let bestId = 0, bestVal = 0;
-    const curId = getEquipSlotId(sd.eq);
-    const curItem = ITEMS.get(curId);
-    if (curItem) bestVal = curItem[sd.stat] || 0;
-    bestId = curId;
+    const curId = getEquipSlotId(sd.eq); const curItem = ITEMS.get(curId);
+    let bestId = curId, bestVal = curItem ? (curItem[sd.stat] || 0) : 0;
     for (const [idStr, count] of Object.entries(playerInventory)) {
       if (count <= 0) continue;
-      const id = Number(idStr);
-      const item = ITEMS.get(id);
-      if (!item) continue;
+      const id = Number(idStr); const item = ITEMS.get(id); if (!item) continue;
       if (sd.type === 'hand' && !isHandEquippable(item)) continue;
       if (sd.type === 'armor' && (item.type !== 'armor' || item.subtype !== sd.subtype)) continue;
-      const val = item[sd.stat] || 0;
-      if (val > bestVal) { bestVal = val; bestId = id; }
+      const val = item[sd.stat] || 0; if (val > bestVal) { bestVal = val; bestId = id; }
     }
     if (bestId !== curId) {
       if (curId !== 0) addItem(curId, 1);
-      if (bestId !== 0) { setEquipSlotId(sd.eq, bestId); removeItem(bestId); }
-      else setEquipSlotId(sd.eq, 0);
+      if (bestId !== 0) { setEquipSlotId(sd.eq, bestId); removeItem(bestId); } else setEquipSlotId(sd.eq, 0);
     }
   }
-  // Left hand (weapon or shield — pick best stat)
-  const curId = getEquipSlotId(-101);
+}
+
+function _equipBestLeftHand() {
+  const curId = getEquipSlotId(-101); const curItem = ITEMS.get(curId);
   let bestWepId = 0, bestWepAtk = 0, bestShieldId = 0, bestShieldDef = 0;
-  const curItem = ITEMS.get(curId);
-  if (curItem && curItem.type === 'weapon') { bestWepAtk = curItem.atk || 0; bestWepId = curId; }
-  else if (curItem && curItem.subtype === 'shield') { bestShieldDef = curItem.def || 0; bestShieldId = curId; }
+  if (curItem?.type === 'weapon') { bestWepAtk = curItem.atk || 0; bestWepId = curId; }
+  else if (curItem?.subtype === 'shield') { bestShieldDef = curItem.def || 0; bestShieldId = curId; }
   for (const [idStr, count] of Object.entries(playerInventory)) {
     if (count <= 0) continue;
-    const id = Number(idStr);
-    const item = ITEMS.get(id);
+    const id = Number(idStr); const item = ITEMS.get(id);
     if (!item || !isHandEquippable(item)) continue;
     if (item.type === 'weapon') { const v = item.atk || 0; if (v > bestWepAtk) { bestWepAtk = v; bestWepId = id; } }
     else if (item.subtype === 'shield') { const v = item.def || 0; if (v > bestShieldDef) { bestShieldDef = v; bestShieldId = id; } }
@@ -3350,15 +3342,16 @@ function _equipOptimum() {
   const bestId = bestShieldId !== 0 ? bestShieldId : bestWepId;
   if (bestId !== curId) {
     if (curId !== 0) addItem(curId, 1);
-    if (bestId !== 0) { setEquipSlotId(-101, bestId); removeItem(bestId); }
-    else setEquipSlotId(-101, 0);
+    if (bestId !== 0) { setEquipSlotId(-101, bestId); removeItem(bestId); } else setEquipSlotId(-101, 0);
   }
+}
+
+function _equipOptimum() {
+  _equipBestMainSlots();
+  _equipBestLeftHand();
   playerATK = playerStats.str + (ITEMS.get(playerWeaponR)?.atk || 0) + (ITEMS.get(playerWeaponL)?.atk || 0);
   recalcDEF();
-  if (selectCursor >= 0 && saveSlots[selectCursor]) {
-    saveSlots[selectCursor].inventory = { ...playerInventory };
-    saveSlotsToDB();
-  }
+  if (selectCursor >= 0 && saveSlots[selectCursor]) { saveSlots[selectCursor].inventory = { ...playerInventory }; saveSlotsToDB(); }
   playSFX(SFX.CONFIRM);
 }
 
