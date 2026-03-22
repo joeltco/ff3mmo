@@ -29,6 +29,7 @@ import { ENC_PAL0, ENC_PAL1, EYE_FANG_TILE_PAL, EYE_FANG_RAW,
          BLUE_WISP_TILE_PAL, BLUE_WISP_RAW,
          CARBUNCLE_TILE_PAL, CARBUNCLE_RAW } from './data/monster-sprites.js';
 import { openSaveDB, serverDeleteSlot, parseSaveSlots } from './save.js';
+import { _nameToBytes, _nesNameToString, _buildItemRowBytes, _makeGotNText, makeExpText, makeGilText, makeFoundItemText } from './text-utils.js';
 
 const isMobile = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 
@@ -1763,13 +1764,7 @@ function _buildHorizWaterPair(bL, bR) {
   }
   return [arrL, arrR];
 }
-function _buildItemRowBytes(nameBytes, countStr) {
-  const rowBytes = new Uint8Array(nameBytes.length + 2 + countStr.length);
-  rowBytes.set(nameBytes, 0);
-  rowBytes[nameBytes.length] = 0xFF; rowBytes[nameBytes.length + 1] = 0xE1;
-  for (let d = 0; d < countStr.length; d++) rowBytes[nameBytes.length + 2 + d] = 0x80 + parseInt(countStr[d]);
-  return rowBytes;
-}
+
 function _pauseFadeStep(inState, outState) {
   if (pauseState === inState) return PAUSE_TEXT_STEPS - Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
   if (pauseState === outState) return Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
@@ -4439,17 +4434,6 @@ function _drawHudBox(x, y, w, h, fadeStep = 0) {
   for (let ty = y + 8; ty < y + h - 8; ty += 8) for (let tx = x + 8; tx < x + w - 8; tx += 8) ctx.drawImage(FILL, tx, ty);
 }
 
-function _nameToBytes(name) {
-  const bytes = [];
-  for (let i = 0; i < name.length; i++) {
-    const ch = name.charCodeAt(i);
-    if (ch >= 65 && ch <= 90) bytes.push(0x8A + (ch - 65));       // A-Z
-    else if (ch >= 97 && ch <= 122) bytes.push(0xCA + (ch - 97)); // a-z
-    else if (ch >= 48 && ch <= 57) bytes.push(0x80 + (ch - 48));  // 0-9
-    else bytes.push(0xFF); // space
-  }
-  return new Uint8Array(bytes);
-}
 
 function _rosterLocForMapId(mapId) {
   if (mapId === 'world') return 'world';
@@ -4632,15 +4616,6 @@ function initRoster() {
   }
 }
 
-function _nesNameToString(bytes) {
-  let s = '';
-  for (const b of bytes) {
-    if (b >= 0xCA) s += String.fromCharCode(b - 0xCA + 97);
-    else if (b >= 0x8A) s += String.fromCharCode(b - 0x8A + 65);
-    else if (b >= 0x80) s += String.fromCharCode(b - 0x80 + 48);
-  }
-  return s;
-}
 
 function addChatMessage(text, type) {
   chatMessages.push({ text, type: type || 'chat' });
@@ -7822,25 +7797,6 @@ function drawBattleMessage() {
 }
 
 
-function _makeGotNText(amount, suffix) {
-  const arr = [0x90, 0xD8, 0xDD, 0xFF]; // "Got "
-  for (const d of String(amount)) arr.push(0x80 + parseInt(d));
-  arr.push(...suffix);
-  return new Uint8Array(arr);
-}
-function makeExpText(amount) { return _makeGotNText(amount, [0xFF, 0x8E, 0xA1, 0x99, 0xC4]); } // " EXP!"
-function makeGilText(amount) { return _makeGotNText(amount, [0xFF, 0x90, 0xD2, 0xD5, 0xC4]); } // " Gil!"
-
-function makeFoundItemText(itemId) {
-  // "Found [name]!" — F=0x8F, o=0xD8, u=0xDE, n=0xD7, d=0xCD, space=0xFF, !=0xC4
-  const found = [0x8F, 0xD8, 0xDE, 0xD7, 0xCD, 0xFF];
-  const name = getItemNameClean(itemId);
-  const arr = new Uint8Array(found.length + name.length + 1);
-  arr.set(found, 0);
-  arr.set(name, found.length);
-  arr[found.length + name.length] = 0xC4;
-  return arr;
-}
 
 // Victory box — reuses left box area (120×64 px), row-by-row expand
 const VICTORY_BOX_W = BATTLE_PANEL_W;  // 120px (same as left box)
