@@ -6,6 +6,30 @@ All notable changes to this project are documented here.
 
 _No unreleased changes._
 
+## 0.9.5 — 2026-03-22
+
+### M99: game.js refactor (continued) + bug fix — 8477L → 8320L (−157L)
+
+Continued pure structural refactoring of `src/game.js`. No new features or behavior changes.
+
+**New helpers extracted:**
+- `_recalcCombatStats()` — 5 sites (`playerATK = str + weapons; recalcDEF()`)
+- `_startMoveFromKeys(resetOnIdle)` — 2 sites (arrow key → startMove dispatcher)
+- `_makeGotNText(amount, suffix)` — shared core of `makeExpText` / `makeGilText`
+- `_makeCanvas16ctx()` — 3 sites (returns `[canvas, ctx]` for 16×16 canvases)
+
+**Deduplication:**
+- `_FP_KNIFE_R` / `_FP_KNIFE_L` / `_FP_KNEEL` — removed duplicate inline tile arrays in `_initBattleKnifeBodySprites` / `_initBattleLowHPSprites`
+- `_BATTLE_LAYOUT` — replaced 4 inline `const layout = [[0,0],[8,0],[0,8],[8,8]]`
+- `_makeFadedPal(fadeStep)` — replaced 4 inline fade-palette build loops
+- `_clipToViewport()` — replaced 4 inline `ctx.save/beginPath/rect/clip` blocks
+- `_buildWorldHorizWaterFrames` collapsed to call `_buildHorizWaterFrames` (identical logic)
+- `invincibleFadeFrames` / `invincibleShadowFade` — two identical fade loops unified into single `Array.from` + map
+- `rosterBattleFade` out/in branches unified into direction-based single block
+
+**Bug fix:**
+- `_calcBoxExpandSize` — fixed self-referential infinite recursion introduced by automated refactor script; restored correct expand/close interpolation logic
+
 ## 0.9.4 — 2026-03-22
 
 ### M97–M98: game.js refactor (continued) — 8736L → 8477L (−259L)
