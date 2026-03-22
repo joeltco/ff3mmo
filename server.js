@@ -3,6 +3,8 @@ import { readFile } from 'fs/promises';
 import { extname, join } from 'path';
 import { handleAPI } from './api.js';
 
+const { version } = JSON.parse(await readFile('./package.json', 'utf8'));
+
 const MIME = {
   '.html': 'text/html', '.js': 'application/javascript', '.mjs': 'application/javascript',
   '.css': 'text/css', '.json': 'application/json', '.png': 'image/png',
@@ -21,8 +23,9 @@ createServer(async (req, res) => {
   // Static files
   let path = url.pathname === '/' ? '/index.html' : decodeURIComponent(url.pathname);
   try {
-    const data = await readFile(join('.', path));
+    let data = await readFile(join('.', path));
     const ext = extname(path);
+    if (ext === '.html') data = Buffer.from(data.toString().replace('{{VERSION}}', version));
     res.writeHead(200, {
       'Content-Type': MIME[ext] || 'application/octet-stream',
       'Cache-Control': 'no-store, no-cache, must-revalidate',

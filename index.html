@@ -82,6 +82,15 @@
       image-rendering: pixelated;
       image-rendering: crisp-edges;
     }
+    #version-badge {
+      position: fixed;
+      bottom: 4px;
+      right: 6px;
+      font-size: 10px;
+      color: #333;
+      pointer-events: none;
+      z-index: 9999;
+    }
     #controls-hint {
       font-size: 11px;
       color: #555;
@@ -464,6 +473,7 @@
   <div id="canvas-wrapper" class="crt">
     <canvas id="game-canvas"></canvas>
   </div>
+  <div id="version-badge">v{{VERSION}}</div>
 
   <div id="controls-hint"><kbd>&larr;</kbd> <kbd>&uarr;</kbd> <kbd>&darr;</kbd> <kbd>&rarr;</kbd> Move &nbsp;&middot;&nbsp; <kbd>Z</kbd> Action &nbsp;&middot;&nbsp; <kbd>X</kbd> Back</div>
 
