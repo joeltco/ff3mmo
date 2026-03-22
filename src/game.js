@@ -7468,7 +7468,8 @@ function gameLoop(timestamp) {
   lastTime = timestamp;
 
   if (titleState !== 'done') {
-    updateTitle(dt); drawTitle(); drawHUD(); drawTitleSkyInHUD();
+    updateTitle(dt); drawTitle(); drawHUD();
+    if (titleState !== 'done') drawTitleSkyInHUD(); // guard: updateTitle may have set titleState='done'
     requestAnimationFrame(gameLoop);
     return;
   }

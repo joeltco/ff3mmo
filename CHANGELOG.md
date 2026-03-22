@@ -6,6 +6,14 @@ All notable changes to this project are documented here.
 
 _No unreleased changes._
 
+## 1.0.5 — 2026-03-22
+
+### Fix underwater title BG flash on game start
+
+When `updateTitle(dt)` set `titleState='done'` mid-frame, `drawTitleSkyInHUD()` was still called in the same iteration. With no matching state, it hit its `else` branch and drew the title underwater BG at full brightness in the top box for one frame (~50ms with dt cap), causing a visible flash.
+
+Fix: re-check `titleState !== 'done'` before calling `drawTitleSkyInHUD()` in the game loop.
+
 ## 1.0.4 — 2026-03-22
 
 ### Fix top box battle BG flash at game start
