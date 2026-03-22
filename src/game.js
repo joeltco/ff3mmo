@@ -47,13 +47,7 @@ async function saveSlotsToDB() {
       name: Array.from(s.name),
       level: s.level || (playerStats ? playerStats.level : 1),
       exp: s.exp != null ? s.exp : (playerStats ? playerStats.exp : 0),
-      stats: s.stats || (playerStats ? {
-        str: playerStats.str, agi: playerStats.agi, vit: playerStats.vit,
-        int: playerStats.int, mnd: playerStats.mnd,
-        maxHP: playerStats.maxHP, maxMP: playerStats.maxMP,
-        weaponR: playerWeaponR, weaponL: playerWeaponL,
-            head: playerHead, body: playerBody, arms: playerArms
-      } : null),
+      stats: s.stats || (playerStats ? _playerStatsSnapshot() : null),
       inventory: s.inventory || playerInventory
     } : null);
     // Local IndexedDB
@@ -1323,7 +1317,7 @@ function _initCureSparkleFrames() {
     [[0,0,0,false,false],[1,8,0,false,false],[1,0,8,true,true],[0,8,8,true,true]],
   ];
   cureSparkleFrames = configLayouts.map(config => {
-    const c = document.createElement('canvas'); c.width = 16; c.height = 16;
+    const c = _makeCanvas16();
     const cx = c.getContext('2d');
     for (const [ti, ox, oy, hf, vf] of config) {
       cx.save();
@@ -1399,13 +1393,7 @@ function initAdamantoise(romData) {
   for (let i = 0; i < 4; i++) _renderDecodedTile(actx, tiles[i], i < 2 ? palTop : palBot, layout[i][0], layout[i][1]);
 
   // Flipped frame
-  const flipped = document.createElement('canvas');
-  flipped.width = 16;
-  flipped.height = 16;
-  const fctx = flipped.getContext('2d');
-  fctx.translate(16, 0);
-  fctx.scale(-1, 1);
-  fctx.drawImage(normal, 0, 0);
+  const flipped = _hflipCanvas16(normal);
 
   adamantoiseFrames = [normal, flipped];
 }
@@ -1638,7 +1626,7 @@ function _drawSWTile(cctx, nesColors, id, dx, dy, hf, vf) {
   cctx.putImageData(img, dx, dy);
 }
 function _buildSWPhase1(nc) {
-  const c = document.createElement('canvas'); c.width = 16; c.height = 16;
+  const c = _makeCanvas16();
   const x = c.getContext('2d');
   _drawSWTile(x, nc, 0x4F,  0, 0, false, false); _drawSWTile(x, nc, 0x4F,  8, 0, true,  false);
   _drawSWTile(x, nc, 0x4F,  0, 8, false, true);  _drawSWTile(x, nc, 0x4F,  8, 8, true,  true);
@@ -1855,12 +1843,7 @@ function initMoogleSprite(romData) {
     mctx.putImageData(img, layout[i][0], layout[i][1]);
   }
 
-  const flipped = document.createElement('canvas');
-  flipped.width = 16; flipped.height = 16;
-  const fctx = flipped.getContext('2d');
-  fctx.translate(16, 0);
-  fctx.scale(-1, 1);
-  fctx.drawImage(normal, 0, 0);
+  const flipped = _hflipCanvas16(normal);
 
   moogleFrames = [normal, flipped];
 }
@@ -1937,12 +1920,7 @@ function initLoadingScreenFadeFrames(romData) {
   moogleFadeFrames = [];
   for (let step = 0; step <= LOAD_FADE_MAX; step++) {
     const normal = renderSpriteFaded(romData, MOOGLE_SPRITE_OFF, MOOGLE_PAL, step);
-    const flipped = document.createElement('canvas');
-    flipped.width = 16; flipped.height = 16;
-    const fctx = flipped.getContext('2d');
-    fctx.translate(16, 0);
-    fctx.scale(-1, 1);
-    fctx.drawImage(normal, 0, 0);
+    const flipped = _hflipCanvas16(normal);
     moogleFadeFrames.push([normal, flipped]);
   }
 
@@ -1951,12 +1929,7 @@ function initLoadingScreenFadeFrames(romData) {
     bossFadeFrames = [];
     for (let step = 0; step <= LOAD_FADE_MAX; step++) {
       const normal = renderBossFaded(ff12Raw, step);
-      const flipped = document.createElement('canvas');
-      flipped.width = 16; flipped.height = 16;
-      const fctx = flipped.getContext('2d');
-      fctx.translate(16, 0);
-      fctx.scale(-1, 1);
-      fctx.drawImage(normal, 0, 0);
+      const flipped = _hflipCanvas16(normal);
       bossFadeFrames.push([normal, flipped]);
     }
   }
@@ -1986,6 +1959,30 @@ function nesColorFade(c) {
   return (hi - 0x10) | (c & 0x0F);
 }
 
+function _makeCanvas16() {
+  const c = document.createElement('canvas'); c.width = 16; c.height = 16; return c;
+}
+function _hflipCanvas16(src) {
+  const c = _makeCanvas16(); const cx = c.getContext('2d');
+  cx.translate(16, 0); cx.scale(-1, 1); cx.drawImage(src, 0, 0); return c;
+}
+function _playerStatsSnapshot() {
+  return {
+    str: playerStats.str, agi: playerStats.agi, vit: playerStats.vit,
+    int: playerStats.int, mnd: playerStats.mnd,
+    maxHP: playerStats.maxHP, maxMP: playerStats.maxMP,
+    weaponR: playerWeaponR, weaponL: playerWeaponL,
+    head: playerHead, body: playerBody, arms: playerArms,
+  };
+}
+function _syncSaveSlotProgress() {
+  if (!saveSlots[selectCursor]) return;
+  saveSlots[selectCursor].level = playerStats.level;
+  saveSlots[selectCursor].exp = playerStats.exp;
+  saveSlots[selectCursor].stats = _playerStatsSnapshot();
+  saveSlots[selectCursor].inventory = { ...playerInventory };
+  saveSlots[selectCursor].gil = playerGil;
+}
 function _makeFadedPal(fadeStep) {
   const p = [0x0F, 0x0F, 0x0F, 0x30];
   for (let s = 0; s < fadeStep; s++) p[3] = nesColorFade(p[3]);
@@ -4226,7 +4223,7 @@ function _buildFlameCanvas(rawFrames, rgbPal) {
   const canvases = [];
   const offsets = [[0, 0], [8, 0], [0, 8], [8, 8]];
   for (const tiles of rawFrames) {
-    const c = document.createElement('canvas'); c.width = 16; c.height = 16;
+    const c = _makeCanvas16();
     const fctx = c.getContext('2d'); const img = fctx.createImageData(16, 16); const d = img.data;
     for (let q = 0; q < 4; q++) {
       const tile = tiles[q]; const [ox, oy] = offsets[q];
@@ -6235,7 +6232,7 @@ function _decode2BPPTiles(imgData, tiles, layout, pal) {
   }
 }
 function _buildSwordSlashFrame(tiles, pal) {
-  const c = document.createElement('canvas'); c.width = 16; c.height = 16;
+  const c = _makeCanvas16();
   const cctx = c.getContext('2d'); const img = cctx.createImageData(16, 16);
   _decode2BPPTiles(img, tiles, [[0, 0], [8, 0]], pal);
   cctx.putImageData(img, 0, 0); return c;
@@ -6247,7 +6244,7 @@ function initSlashSprites() {
     new Uint8Array([0x10,0x30,0xF8,0x18,0x3C,0x4E,0x09,0x01, 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]),
     new Uint8Array([0x00,0x08,0x0C,0x10,0x30,0xE8,0x20,0x00, 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]),
   ];
-  const c = document.createElement('canvas'); c.width = 16; c.height = 16;
+  const c = _makeCanvas16();
   const sctx = c.getContext('2d'); const imgData = sctx.createImageData(16, 16);
   _decode2BPPTiles(imgData, TILE_DATA, [[0,0],[8,0],[0,8],[8,8]], [0x0F, 0x16, 0x27, 0x30]);
   sctx.putImageData(imgData, 0, 0);
@@ -6265,7 +6262,7 @@ function initKnifeSlashSprites() {
   const FULL_LINE = Array.from({length: 15}, (_, i) => [14 - i, i]);
   const frames = [];
   for (let f = 0; f < 3; f++) {
-    const c = document.createElement('canvas'); c.width = 16; c.height = 16;
+    const c = _makeCanvas16();
     const cctx = c.getContext('2d'); const img = cctx.createImageData(16, 16);
     const startI = f === 0 ? 0 : f === 1 ? 0 : 7, endI = f === 1 ? 15 : f === 0 ? 7 : 15;
     for (let i = startI; i < endI; i++) {
@@ -6842,19 +6839,7 @@ function _updatePlayerDamageShow() {
         encounterGilGained = pvpGil;
         grantExp(pvpExp);
         playerGil += pvpGil;
-        if (saveSlots[selectCursor]) {
-          saveSlots[selectCursor].level = playerStats.level;
-          saveSlots[selectCursor].exp = playerStats.exp;
-          saveSlots[selectCursor].stats = {
-            str: playerStats.str, agi: playerStats.agi, vit: playerStats.vit,
-            int: playerStats.int, mnd: playerStats.mnd,
-            maxHP: playerStats.maxHP, maxMP: playerStats.maxMP,
-            weaponR: playerWeaponR, weaponL: playerWeaponL,
-            head: playerHead, body: playerBody, arms: playerArms
-          };
-          saveSlots[selectCursor].inventory = { ...playerInventory };
-          saveSlots[selectCursor].gil = playerGil;
-        }
+        _syncSaveSlotProgress();
         saveSlotsToDB();
         isDefending = false;
         bossDefeated = true;
@@ -6891,19 +6876,7 @@ function _updateMonsterDeath() {
         }
       }
       if (encounterDropItem !== null) addItem(encounterDropItem, 1);
-      if (saveSlots[selectCursor]) {
-        saveSlots[selectCursor].level = playerStats.level;
-        saveSlots[selectCursor].exp = playerStats.exp;
-        saveSlots[selectCursor].stats = {
-          str: playerStats.str, agi: playerStats.agi, vit: playerStats.vit,
-          int: playerStats.int, mnd: playerStats.mnd,
-          maxHP: playerStats.maxHP, maxMP: playerStats.maxMP,
-          weaponR: playerWeaponR, weaponL: playerWeaponL,
-          head: playerHead, body: playerBody, arms: playerArms
-        };
-        saveSlots[selectCursor].inventory = { ...playerInventory };
-        saveSlots[selectCursor].gil = playerGil;
-      }
+      _syncSaveSlotProgress();
       saveSlotsToDB();
       isDefending = false;
       battleState = 'victory-name-out';
@@ -7059,19 +7032,7 @@ function _updateAllyDamageShow() {
       const pvpGil = 10 * pvpOpponentStats.level;
       encounterExpGained = pvpExp; encounterGilGained = pvpGil;
       grantExp(pvpExp); playerGil += pvpGil;
-      if (saveSlots[selectCursor]) {
-        saveSlots[selectCursor].level = playerStats.level;
-        saveSlots[selectCursor].exp = playerStats.exp;
-        saveSlots[selectCursor].stats = {
-          str: playerStats.str, agi: playerStats.agi, vit: playerStats.vit,
-          int: playerStats.int, mnd: playerStats.mnd,
-          maxHP: playerStats.maxHP, maxMP: playerStats.maxMP,
-          weaponR: playerWeaponR, weaponL: playerWeaponL,
-          head: playerHead, body: playerBody, arms: playerArms
-        };
-        saveSlots[selectCursor].inventory = { ...playerInventory };
-        saveSlots[selectCursor].gil = playerGil;
-      }
+      _syncSaveSlotProgress();
       saveSlotsToDB();
       isDefending = false; bossDefeated = true;
       battleState = 'victory-name-out'; battleTimer = 0;
@@ -7272,13 +7233,7 @@ function _updateBossDissolve(dt) {
     if (saveSlots[selectCursor]) {
       saveSlots[selectCursor].level = playerStats.level;
       saveSlots[selectCursor].exp = playerStats.exp;
-      saveSlots[selectCursor].stats = {
-        str: playerStats.str, agi: playerStats.agi, vit: playerStats.vit,
-        int: playerStats.int, mnd: playerStats.mnd,
-        maxHP: playerStats.maxHP, maxMP: playerStats.maxMP,
-        weaponR: playerWeaponR, weaponL: playerWeaponL,
-        head: playerHead, body: playerBody, arms: playerArms
-      };
+      saveSlots[selectCursor].stats = _playerStatsSnapshot();
       saveSlots[selectCursor].inventory = { ...playerInventory };
     }
     saveSlotsToDB();
