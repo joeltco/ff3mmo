@@ -1429,10 +1429,7 @@ function grantExp(amount) {
     playerStats.maxMP += mpGain;
 
     // Full heal on level-up (matches FF3)
-    playerStats.hp = playerStats.maxHP;
-    playerStats.mp = playerStats.maxMP;
-    playerHP = playerStats.maxHP;
-    playerMP = playerStats.maxMP;
+    _fullHeal();
 
     // Update derived combat stats
     playerATK = playerStats.str + (ITEMS.get(playerWeaponR)?.atk || 0) + (ITEMS.get(playerWeaponL)?.atk || 0);
@@ -1974,6 +1971,10 @@ function _syncSaveSlotProgress() {
   saveSlots[selectCursor].stats = _playerStatsSnapshot();
   saveSlots[selectCursor].inventory = { ...playerInventory };
   saveSlots[selectCursor].gil = playerGil;
+}
+function _fullHeal() {
+  playerStats.hp = playerStats.maxHP; playerStats.mp = playerStats.maxMP;
+  playerHP = playerStats.maxHP; playerMP = playerStats.maxMP;
 }
 function _makeFadedPal(fadeStep) {
   const p = [0x0F, 0x0F, 0x0F, 0x30];
@@ -5236,10 +5237,7 @@ function _updateTitleMainOutCase() {
     playerStats.level = slot.level;
     playerStats.exp = slot.exp;
     playerStats.expToNext = (slot.level - 1 < 98) ? expTable[slot.level - 1] : 0xFFFFFF;
-    playerStats.hp = playerStats.maxHP;
-    playerStats.mp = playerStats.maxMP;
-    playerHP = playerStats.maxHP;
-    playerMP = playerStats.maxMP;
+    _fullHeal();
     playerWeaponR = slot.stats.weaponR != null ? slot.stats.weaponR : 0x1E;
     playerWeaponL = slot.stats.weaponL != null ? slot.stats.weaponL : 0x00;
     playerHead = slot.stats.head || 0x00;
@@ -7040,12 +7038,7 @@ function _updateBossDissolve(dt) {
     bossDefeated = true; bossSprite = null;
     encounterExpGained = 20; encounterGilGained = 500;
     grantExp(20); playerGil += encounterGilGained;
-    if (saveSlots[selectCursor]) {
-      saveSlots[selectCursor].level = playerStats.level;
-      saveSlots[selectCursor].exp = playerStats.exp;
-      saveSlots[selectCursor].stats = _playerStatsSnapshot();
-      saveSlots[selectCursor].inventory = { ...playerInventory };
-    }
+    _syncSaveSlotProgress();
     saveSlotsToDB();
     isDefending = false; battleState = 'victory-name-out'; battleTimer = 0;
   }
