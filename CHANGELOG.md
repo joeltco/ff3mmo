@@ -6,6 +6,29 @@ All notable changes to this project are documented here.
 
 _No unreleased changes._
 
+## 0.9.8 — 2026-03-22
+
+### Modularization Phase 1 complete
+
+**New module `src/text-utils.js`:**
+- `_nameToBytes`, `_nesNameToString` — JS string ↔ NES byte encoding
+- `_buildItemRowBytes` — inventory row formatter
+- `_makeGotNText`, `makeExpText`, `makeGilText`, `makeFoundItemText` — battle result text builders
+
+**New module `src/palette.js`:**
+- `nesColorFade` — NES color fade step (bit math)
+- `_makeFadedPal` — builds faded palette array
+- `_stepPalFade` — fades palette colors in place
+
+**New module `src/tile-math.js`:**
+- `_getPlane0`, `_rebuild` — NES 2-bit plane extraction/merging
+- `_shiftHorizWater` — horizontal water tile shift
+- `_isWater`, `_buildHorizMixed`, `_writePixels64`, `_writeTilePixels` — pixel/tile helpers
+
+**New module `src/data/animation-tables.js`:**
+- `BAYER4` — 4×4 Bayer dithering matrix (boss dissolve)
+- `DMG_BOUNCE_TABLE`, `_dmgBounceY` — damage number bounce animation (FCEUX trace data)
+
 ## 0.9.7 — 2026-03-22
 
 ### Modularization continued
