@@ -968,8 +968,7 @@ function _initFakePosePortraits(romData) {
 // Build a 16×24 h-flipped full-body canvas from 4 top tiles + 2 leg tiles
 function _renderDecodedTile(ctx, tile, pal, ox, oy) { _blitTile(ctx, tile, pal, ox, oy); }
 function _buildFullBody16x24Canvas(topTiles4, legL, legR, pal) {
-  const c = document.createElement('canvas');
-  c.width = 16; c.height = 24;
+  const c = document.createElement('canvas'); c.width = 16; c.height = 24;
   const bctx = c.getContext('2d');
   topTiles4.forEach((tile, i) => { const [bx, by] = _BATTLE_LAYOUT[i]; _renderDecodedTile(bctx, tile, pal, bx, by); });
   [[legL, 0, 16], [legR, 8, 16]].forEach(([tile, lx, ly]) => _renderDecodedTile(bctx, tile, pal, lx, ly));
@@ -1096,9 +1095,7 @@ function _blitTileH(ctx, px, palette, x, y) {
 
 // Build a 16×16 canvas from 4 PPU tile byte arrays using the battle 2×2 layout
 function _buildCanvas4(tilesArr, palette) {
-  const c = document.createElement('canvas');
-  c.width = 16; c.height = 16;
-  const cx = c.getContext('2d');
+  const c = _makeCanvas16(); const cx = c.getContext('2d');
   for (let i = 0; i < 4; i++) {
     _blitTile(cx, decodeTile(tilesArr[i], 0), palette, _BATTLE_LAYOUT[i][0], _BATTLE_LAYOUT[i][1]);
   }
@@ -1107,9 +1104,7 @@ function _buildCanvas4(tilesArr, palette) {
 
 // Build a 16×16 canvas from 4 sequential ROM tiles (16 bytes each) using the battle 2×2 layout
 function _buildCanvas4ROM(romData, offset, palette) {
-  const c = document.createElement('canvas');
-  c.width = 16; c.height = 16;
-  const cx = c.getContext('2d');
+  const c = _makeCanvas16(); const cx = c.getContext('2d');
   for (let i = 0; i < 4; i++) {
     _blitTile(cx, decodeTile(romData, offset + i * 16), palette, _BATTLE_LAYOUT[i][0], _BATTLE_LAYOUT[i][1]);
   }
@@ -1891,6 +1886,13 @@ function _buildHorizWaterPair(bL, bR) {
     [cL, cR] = _shiftHorizWater(cL, cR);
   }
   return [arrL, arrR];
+}
+function _buildItemRowBytes(nameBytes, countStr) {
+  const rowBytes = new Uint8Array(nameBytes.length + 2 + countStr.length);
+  rowBytes.set(nameBytes, 0);
+  rowBytes[nameBytes.length] = 0xFF; rowBytes[nameBytes.length + 1] = 0xE1;
+  for (let d = 0; d < countStr.length; d++) rowBytes[nameBytes.length + 2 + d] = 0x80 + parseInt(countStr[d]);
+  return rowBytes;
 }
 function _pauseFadeStep(inState, outState) {
   if (pauseState === inState) return PAUSE_TEXT_STEPS - Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
@@ -5968,11 +5970,7 @@ function _drawPauseInventory() {
     const [id, count] = entries[startIdx + i];
     const nameBytes = getItemNameClean(Number(id));
     const countStr = String(count);
-    const rowBytes = new Uint8Array(nameBytes.length + 2 + countStr.length);
-    rowBytes.set(nameBytes, 0);
-    rowBytes[nameBytes.length] = 0xFF;
-    rowBytes[nameBytes.length + 1] = 0xE1;
-    for (let d = 0; d < countStr.length; d++) rowBytes[nameBytes.length + 2 + d] = 0x80 + parseInt(countStr[d]);
+    const rowBytes = _buildItemRowBytes(nameBytes, countStr);
     const iy = finalY + 12 + i * 14;
     drawText(ctx, px + 24, iy, rowBytes, fadedPal);
     if (pauseHeldItem >= 0 && startIdx + i === pauseHeldItem && pauseState !== 'inv-target' && pauseState !== 'inv-heal')
@@ -7439,11 +7437,7 @@ function _drawBattleItemList(baseX, rightAreaW, invPal, slidePixel, totalInvPage
         if (!item) continue;
         const nameBytes = getItemNameClean(item.id);
         const countStr = String(item.count);
-        const rowBytes = new Uint8Array(nameBytes.length + 2 + countStr.length);
-        rowBytes.set(nameBytes, 0);
-        rowBytes[nameBytes.length] = 0xFF;
-        rowBytes[nameBytes.length + 1] = 0xE1;
-        for (let d = 0; d < countStr.length; d++) rowBytes[nameBytes.length + 2 + d] = 0x80 + parseInt(countStr[d]);
+        const rowBytes = _buildItemRowBytes(nameBytes, countStr);
         drawText(ctx, px + 8, topY + r * rowH, rowBytes, invPal);
       }
     }
