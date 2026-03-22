@@ -1881,6 +1881,21 @@ function nesColorFade(c) {
 function _makeCanvas16() {
   const c = document.createElement('canvas'); c.width = 16; c.height = 16; return c;
 }
+function _drawHudWithFade(fullCanvas, fadeCanvases, fadeStep) {
+  if (fadeStep > 0 && fadeCanvases && fadeStep <= fadeCanvases.length) {
+    ctx.drawImage(fadeCanvases[fadeStep - 1], 0, 0);
+    ctx.save(); ctx.beginPath(); ctx.rect(0, HUD_BOT_Y, CANVAS_W, HUD_BOT_H); ctx.clip();
+    ctx.drawImage(fullCanvas, 0, 0); ctx.restore();
+  } else { ctx.drawImage(fullCanvas, 0, 0); }
+}
+function _encounterGridLayout() {
+  const count = encounterMonsters.length;
+  const { fullW, fullH, sprH } = _encounterBoxDims();
+  const boxX = HUD_VIEW_X + Math.floor((HUD_VIEW_W - fullW) / 2);
+  const boxY = HUD_VIEW_Y + Math.floor((HUD_VIEW_H - fullH) / 2);
+  const gridPos = _encounterGridPos(boxX, boxY, fullW, fullH, count, sprH);
+  return { count, boxX, boxY, sprH, fullW, fullH, gridPos };
+}
 function _shiftHorizWater(cL, cR) {
   const nL = new Uint8Array(8), nR = new Uint8Array(8);
   for (let r = 0; r < 8; r++) {
@@ -4559,34 +4574,11 @@ function drawHUD() {
     if (titleState === 'main-out') {
       tfl = Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
     }
-    if (tfl > 0 && titleHudFadeCanvases && tfl <= titleHudFadeCanvases.length) {
-      // Draw faded viewport border + full-brightness bottom box
-      ctx.drawImage(titleHudFadeCanvases[tfl - 1], 0, 0);
-      // Bottom box from full-brightness canvas (clip to bottom area only)
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(0, HUD_BOT_Y, CANVAS_W, HUD_BOT_H);
-      ctx.clip();
-      ctx.drawImage(titleHudCanvas, 0, 0);
-      ctx.restore();
-    } else {
-      ctx.drawImage(titleHudCanvas, 0, 0);
-    }
+    _drawHudWithFade(titleHudCanvas, titleHudFadeCanvases, tfl);
   } else if (hudCanvas) {
     // Game-start border fade-in
     const borderFade = HUD_INFO_FADE_STEPS - Math.min(Math.floor(hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
-    if (borderFade > 0 && hudFadeCanvases && borderFade <= hudFadeCanvases.length) {
-      ctx.drawImage(hudFadeCanvases[borderFade - 1], 0, 0);
-      // Bottom box always full brightness
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(0, HUD_BOT_Y, CANVAS_W, HUD_BOT_H);
-      ctx.clip();
-      ctx.drawImage(hudCanvas, 0, 0);
-      ctx.restore();
-    } else {
-      ctx.drawImage(hudCanvas, 0, 0);
-    }
+    _drawHudWithFade(hudCanvas, hudFadeCanvases, borderFade);
   }
 
   // Top box content (full 256×32, no static border — border only with text)
@@ -7208,11 +7200,7 @@ function drawSWExplosion() {
   if (battleState !== 'sw-hit') return;
   if (!swPhaseCanvases.length || !isRandomEncounter || !encounterMonsters) return;
 
-  const count = encounterMonsters.length;
-  const { fullW, fullH, sprH } = _encounterBoxDims();
-  const boxX = HUD_VIEW_X + Math.floor((HUD_VIEW_W - fullW) / 2);
-  const boxY = HUD_VIEW_Y + Math.floor((HUD_VIEW_H - fullH) / 2);
-  const swGridPos = _encounterGridPos(boxX, boxY, fullW, fullH, count, sprH);
+  const { count, boxX, boxY, sprH, gridPos: swGridPos } = _encounterGridLayout();
 
   const tidx = southWindTargets[southWindHitIdx];
   if (tidx === undefined || tidx >= swGridPos.length) return;
@@ -7238,11 +7226,7 @@ function drawSWExplosion() {
 
 function drawSWDamageNumbers() {
   if (battleState !== 'sw-hit' || !isRandomEncounter || !encounterMonsters) return;
-  const count = encounterMonsters.length;
-  const { fullW, fullH, sprH: dSprH } = _encounterBoxDims();
-  const boxX = HUD_VIEW_X + Math.floor((HUD_VIEW_W - fullW) / 2);
-  const boxY = HUD_VIEW_Y + Math.floor((HUD_VIEW_H - fullH) / 2);
-  const swGridPos = _encounterGridPos(boxX, boxY, fullW, fullH, count, dSprH);
+  const { count, boxX, boxY, gridPos: swGridPos } = _encounterGridLayout();
   for (const [k, dn] of Object.entries(southWindDmgNums)) {
     const idx = parseInt(k);
     if (idx >= swGridPos.length) continue;
@@ -8336,11 +8320,7 @@ function _drawBossDmgNum() {
   if (!bossDamageNum || (bossDefeated && !isRandomEncounter)) return;
   let bx, baseY;
   if (isRandomEncounter && encounterMonsters) {
-    const count = encounterMonsters.length;
-    const { fullW, fullH, sprH: dSprH } = _encounterBoxDims();
-    const boxX = HUD_VIEW_X + Math.floor((HUD_VIEW_W - fullW) / 2);
-    const boxY = HUD_VIEW_Y + Math.floor((HUD_VIEW_H - fullH) / 2);
-    const gridPos = _encounterGridPos(boxX, boxY, fullW, fullH, count, dSprH);
+    const { count, boxX, boxY, sprH: dSprH, gridPos } = _encounterGridLayout();
     const idx = targetIndex < gridPos.length ? targetIndex : 0;
     const pos = gridPos[idx];
     const m = encounterMonsters[idx];
@@ -8376,11 +8356,7 @@ function _drawEnemyHealNum() {
   if (!enemyHealNum) return;
   let bx, baseY;
   if (isRandomEncounter && encounterMonsters) {
-    const count = encounterMonsters.length;
-    const { fullW, fullH, sprH: dSprH } = _encounterBoxDims();
-    const boxX = HUD_VIEW_X + Math.floor((HUD_VIEW_W - fullW) / 2);
-    const boxY = HUD_VIEW_Y + Math.floor((HUD_VIEW_H - fullH) / 2);
-    const gridPos = _encounterGridPos(boxX, boxY, fullW, fullH, count, dSprH);
+    const { count, boxX, boxY, sprH: dSprH, gridPos } = _encounterGridLayout();
     const idx = (enemyHealNum.index < gridPos.length) ? enemyHealNum.index : 0;
     const pos = gridPos[idx];
     const m = encounterMonsters[idx];
