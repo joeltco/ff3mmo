@@ -1996,7 +1996,10 @@ function _loadBattleMetaTiles(romData) {
   return metaTiles;
 }
 function _loadBattleTilemap(romData, bgId) {
-  const tilemap = _loadBattleTilemap(romData, bgId);
+  const tilemapIdx = romData[BATTLE_BG_TMID_TABLE + bgId];
+  const tmBase = BATTLE_BG_TILEMAPS + tilemapIdx * 32;
+  const tilemap = [];
+  for (let i = 0; i < 32; i++) tilemap.push(romData[tmBase + i]);
   return tilemap;
 }
 function renderBattleBgWithPalette(romData, bgId, palette, tiles, metaTiles, tilemap) {
