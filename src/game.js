@@ -877,16 +877,12 @@ function _drawBoxOnCtx(pctx, tileCanvases, x, y, w, h, fill = true) {
   if (fill) for (let ty = y + 8; ty < y + h - 8; ty += 8) for (let tx = x + 8; tx < x + w - 8; tx += 8) pctx.drawImage(FILL, tx, ty);
 }
 
-function initHUD(romData) {
-  const tiles = decodeTiles(romData, BORDER_TILE_ROM, BORDER_TILE_COUNT);
-
-  // Border tiles: menu palette, blue palette, corner masks, fade sets
+function _initHUDBorderTiles(tiles) {
   borderTileCanvases = tiles.map(p => _tileToCanvas(p, MENU_PALETTE));
   cornerMasks = [0, 2, 5, 7].map(idx => {
     const pixels = tiles[idx];
     const c = document.createElement('canvas'); c.width = 8; c.height = 8;
-    const tctx = c.getContext('2d');
-    const img = tctx.createImageData(8, 8);
+    const tctx = c.getContext('2d'); const img = tctx.createImageData(8, 8);
     for (let i = 0; i < 64; i++) if (pixels[i] === 0) img.data[i * 4 + 3] = 255;
     tctx.putImageData(img, 0, 0); return c;
   });
@@ -896,38 +892,41 @@ function initHUD(romData) {
     const fadedPal = MENU_PALETTE.map(c => { let fc = c; for (let s = 0; s < step; s++) fc = nesColorFade(fc); return fc; });
     borderFadeSets.push(tiles.map(p => _tileToCanvas(p, fadedPal)));
   }
+}
 
-  // Main game HUD canvas
+function _initHUDCanvases() {
   hudCanvas = document.createElement('canvas'); hudCanvas.width = CANVAS_W; hudCanvas.height = CANVAS_H;
   const hctx = hudCanvas.getContext('2d'); hctx.imageSmoothingEnabled = false;
   _drawBoxOnCtx(hctx, borderTileCanvases, HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H, false);
   _drawBoxOnCtx(hctx, borderTileCanvases, HUD_RIGHT_X, HUD_VIEW_Y, 32, 32);
   _drawBoxOnCtx(hctx, borderTileCanvases, HUD_RIGHT_X + 32, HUD_VIEW_Y, HUD_RIGHT_W - 32, 32);
   _drawBoxOnCtx(hctx, borderTileCanvases, 0, HUD_BOT_Y, CANVAS_W, HUD_BOT_H);
-
-  // Title screen HUD canvas (full-width viewport, no right boxes)
   titleHudCanvas = document.createElement('canvas'); titleHudCanvas.width = CANVAS_W; titleHudCanvas.height = CANVAS_H;
   const thctx = titleHudCanvas.getContext('2d'); thctx.imageSmoothingEnabled = false;
   _drawBoxOnCtx(thctx, borderTileCanvases, HUD_VIEW_X, HUD_VIEW_Y, CANVAS_W, HUD_VIEW_H, false);
   _drawBoxOnCtx(thctx, borderTileCanvases, 0, HUD_BOT_Y, CANVAS_W, HUD_BOT_H);
+}
 
-  // Faded HUD canvases for NES fade transitions (steps 1-4)
-  function _buildFadedSet(boxes) {
-    const arr = [];
-    for (let step = 1; step <= LOAD_FADE_MAX; step++) {
-      const c = document.createElement('canvas'); c.width = CANVAS_W; c.height = CANVAS_H;
-      const fctx = c.getContext('2d'); fctx.imageSmoothingEnabled = false;
-      for (const [bx, by, bw, bh, fill] of boxes) _drawBoxOnCtx(fctx, borderFadeSets[step], bx, by, bw, bh, fill);
-      arr.push(c);
-    }
-    return arr;
+function _buildFadedHUDSet(boxes) {
+  const arr = [];
+  for (let step = 1; step <= LOAD_FADE_MAX; step++) {
+    const c = document.createElement('canvas'); c.width = CANVAS_W; c.height = CANVAS_H;
+    const fctx = c.getContext('2d'); fctx.imageSmoothingEnabled = false;
+    for (const [bx, by, bw, bh, fill] of boxes) _drawBoxOnCtx(fctx, borderFadeSets[step], bx, by, bw, bh, fill);
+    arr.push(c);
   }
-  hudFadeCanvases = _buildFadedSet([
+  return arr;
+}
+
+function initHUD(romData) {
+  _initHUDBorderTiles(decodeTiles(romData, BORDER_TILE_ROM, BORDER_TILE_COUNT));
+  _initHUDCanvases();
+  hudFadeCanvases = _buildFadedHUDSet([
     [HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H, false],
     [HUD_RIGHT_X, HUD_VIEW_Y, 32, 32, true],
     [HUD_RIGHT_X + 32, HUD_VIEW_Y, HUD_RIGHT_W - 32, 32, true],
   ]);
-  titleHudFadeCanvases = _buildFadedSet([[HUD_VIEW_X, HUD_VIEW_Y, CANVAS_W, HUD_VIEW_H, false]]);
+  titleHudFadeCanvases = _buildFadedHUDSet([[HUD_VIEW_X, HUD_VIEW_Y, CANVAS_W, HUD_VIEW_H, false]]);
 }
 
 function _renderPortrait(tiles, layout, palette) {
@@ -3054,58 +3053,41 @@ function _battleInputItemTargetSelect() {
   }
 }
 
+function _battleInputHoldStates() {
+  const z = keys['z'] || keys['Z'];
+  const clearZ = () => { keys['z'] = false; keys['Z'] = false; };
+  if (battleState === 'roar-hold') {
+    if (msgBoxState === 'hold' && z) { clearZ(); msgBoxState = 'slide-out'; msgBoxTimer = 0; }
+  } else if (battleState === 'defeat-text') {
+    if (z) { clearZ(); battleState = 'defeat-close'; battleTimer = 0; }
+  } else if (battleState === 'victory-hold') {
+    if (z) { clearZ(); battleState = 'victory-fade-out'; battleTimer = 0; }
+  } else if (battleState === 'exp-hold') {
+    if (z) { clearZ(); battleState = 'exp-fade-out'; battleTimer = 0; }
+  } else if (battleState === 'gil-hold') {
+    if (z) { clearZ(); battleState = (leveledUp || encounterDropItem !== null) ? 'gil-fade-out' : 'victory-text-out'; battleTimer = 0; }
+  } else if (battleState === 'item-hold') {
+    if (z) { clearZ(); battleState = leveledUp ? 'item-fade-out' : 'victory-text-out'; battleTimer = 0; }
+  } else if (battleState === 'levelup-hold') {
+    if (z) { clearZ(); battleState = 'victory-text-out'; battleTimer = 0; }
+  } else { return false; }
+  return true;
+}
+
 function _handleBattleInput() {
   if (battleState === 'none') return false;
-
-  // Battle menu input — block all other input during battle
-  if (true) {
-    if (battleState === 'roar-hold') {
-      if (msgBoxState === 'hold' && (keys['z'] || keys['Z'])) {
-        keys['z'] = false; keys['Z'] = false;
-        msgBoxState = 'slide-out'; msgBoxTimer = 0;
-      }
-    } else if (battleState === 'defeat-text') {
-      if (keys['z'] || keys['Z']) {
-        keys['z'] = false; keys['Z'] = false;
-        battleState = 'defeat-close'; battleTimer = 0;
-      }
-    } else if (battleState === 'victory-hold') {
-      if (keys['z'] || keys['Z']) { keys['z'] = false; keys['Z'] = false; battleState = 'victory-fade-out'; battleTimer = 0; }
-    } else if (battleState === 'exp-hold') {
-      if (keys['z'] || keys['Z']) {
-        keys['z'] = false; keys['Z'] = false;
-        battleState = 'exp-fade-out'; battleTimer = 0;
-      }
-    } else if (battleState === 'gil-hold') {
-      if (keys['z'] || keys['Z']) {
-        keys['z'] = false; keys['Z'] = false;
-        if (leveledUp || encounterDropItem !== null) { battleState = 'gil-fade-out'; } else { battleState = 'victory-text-out'; }
-        battleTimer = 0;
-      }
-    } else if (battleState === 'item-hold') {
-      if (keys['z'] || keys['Z']) {
-        keys['z'] = false; keys['Z'] = false;
-        if (leveledUp) { battleState = 'item-fade-out'; } else { battleState = 'victory-text-out'; }
-        battleTimer = 0;
-      }
-    } else if (battleState === 'levelup-hold') {
-      if (keys['z'] || keys['Z']) { keys['z'] = false; keys['Z'] = false; battleState = 'victory-text-out'; battleTimer = 0; }
-    } else if (battleState === 'menu-open') {
-      // 2×2 grid: 0=Fight(TL) 1=Magic(TR) 2=Item(BL) 3=Run(BR)
-      if (keys['ArrowDown'])  { keys['ArrowDown'] = false;  battleCursor ^= 2; playSFX(SFX.CURSOR); }
-      if (keys['ArrowUp'])    { keys['ArrowUp'] = false;    battleCursor ^= 2; playSFX(SFX.CURSOR); }
-      if (keys['ArrowRight']) { keys['ArrowRight'] = false; battleCursor ^= 1; playSFX(SFX.CURSOR); }
-      if (keys['ArrowLeft'])  { keys['ArrowLeft'] = false;  battleCursor ^= 1; playSFX(SFX.CURSOR); }
-      if (keys['z'] || keys['Z']) { keys['z'] = false; keys['Z'] = false; executeBattleCommand(battleCursor); }
-    } else if (battleState === 'target-select') {
-      _battleInputTargetSelect();
-    } else if (battleState === 'item-select') {
-      _battleInputItemSelect();
-    } else if (battleState === 'item-target-select') {
-      _battleInputItemTargetSelect();
-    }
-    return true;
+  if (_battleInputHoldStates()) return true;
+  if (battleState === 'menu-open') {
+    if (keys['ArrowDown'])  { keys['ArrowDown'] = false;  battleCursor ^= 2; playSFX(SFX.CURSOR); }
+    if (keys['ArrowUp'])    { keys['ArrowUp'] = false;    battleCursor ^= 2; playSFX(SFX.CURSOR); }
+    if (keys['ArrowRight']) { keys['ArrowRight'] = false; battleCursor ^= 1; playSFX(SFX.CURSOR); }
+    if (keys['ArrowLeft'])  { keys['ArrowLeft'] = false;  battleCursor ^= 1; playSFX(SFX.CURSOR); }
+    if (keys['z'] || keys['Z']) { keys['z'] = false; keys['Z'] = false; executeBattleCommand(battleCursor); }
+  } else if (battleState === 'target-select') { _battleInputTargetSelect();
+  } else if (battleState === 'item-select') { _battleInputItemSelect();
+  } else if (battleState === 'item-target-select') { _battleInputItemTargetSelect();
   }
+  return true;
 }
 
 function _rosterInputBrowse() {
@@ -5577,55 +5559,32 @@ function _titleParallaxSpeed(row) {
   return 0.3 + (row / 10) * 0.7;
 }
 
+function _drawTitleWaterRows(waterTop, twW, tile) {
+  for (let r = 0; r < 7; r++) {
+    const speed = _titleParallaxSpeed(4 + r);
+    const scrollX = Math.floor(titleWaterScroll * speed) % 16;
+    const y = waterTop + r * 16;
+    for (let x = HUD_VIEW_X - scrollX; x < HUD_VIEW_X + twW + 16; x += 16) ctx.drawImage(tile, x, y);
+  }
+}
+
 function drawTitleWater(fadeLevel) {
   if (!titleWaterFrames) return;
-
-  const twW = CANVAS_W; // full width during title
-  const waterTop = HUD_VIEW_Y + 32; // below ocean BG
-  const waterH = HUD_VIEW_H - 32;
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(HUD_VIEW_X, waterTop, twW, waterH);
-  ctx.clip();
-
+  const twW = CANVAS_W; const waterTop = HUD_VIEW_Y + 32;
+  ctx.save(); ctx.beginPath(); ctx.rect(HUD_VIEW_X, waterTop, twW, HUD_VIEW_H - 32); ctx.clip();
   if (fadeLevel > 0 && titleWaterFadeTiles) {
-    // Fading — per-row parallax with static fade tile
-    const tile = titleWaterFadeTiles[Math.min(fadeLevel, titleWaterFadeTiles.length - 1)];
-    for (let r = 0; r < 7; r++) {
-      const speed = _titleParallaxSpeed(4 + r); // scene rows 4-10
-      const scrollX = Math.floor(titleWaterScroll * speed) % 16;
-      const y = waterTop + r * 16;
-      for (let x = HUD_VIEW_X - scrollX; x < HUD_VIEW_X + twW + 16; x += 16) {
-        ctx.drawImage(tile, x, y);
-      }
-    }
+    _drawTitleWaterRows(waterTop, twW, titleWaterFadeTiles[Math.min(fadeLevel, titleWaterFadeTiles.length - 1)]);
   } else {
-    // Full brightness — per-row cascade + parallax
-    const hShift = Math.floor(waterTick / 8) % 16;
-    const hPrev = (hShift + 15) % 16;
-    const subRow = waterTick % 8;
-    const curTile = titleWaterFrames[hShift];
-    const prevTile = titleWaterFrames[hPrev];
-
+    const hShift = Math.floor(waterTick / 8) % 16, hPrev = (hShift + 15) % 16, subRow = waterTick % 8;
     if (!_titleCascadeCanvas) {
-      _titleCascadeCanvas = document.createElement('canvas');
-      _titleCascadeCanvas.width = 16;
-      _titleCascadeCanvas.height = 16;
+      _titleCascadeCanvas = document.createElement('canvas'); _titleCascadeCanvas.width = 16; _titleCascadeCanvas.height = 16;
     }
     const cctx = _titleCascadeCanvas.getContext('2d');
-    cctx.drawImage(prevTile, 0, 0);
+    cctx.drawImage(titleWaterFrames[hPrev], 0, 0);
     const h = subRow + 1;
-    cctx.drawImage(curTile, 0, 0, 16, h, 0, 0, 16, h);
-    cctx.drawImage(curTile, 0, 8, 16, h, 0, 8, 16, h);
-
-    for (let r = 0; r < 7; r++) {
-      const speed = _titleParallaxSpeed(4 + r); // scene rows 4-10
-      const scrollX = Math.floor(titleWaterScroll * speed) % 16;
-      const y = waterTop + r * 16;
-      for (let x = HUD_VIEW_X - scrollX; x < HUD_VIEW_X + twW + 16; x += 16) {
-        ctx.drawImage(_titleCascadeCanvas, x, y);
-      }
-    }
+    cctx.drawImage(titleWaterFrames[hShift], 0, 0, 16, h, 0, 0, 16, h);
+    cctx.drawImage(titleWaterFrames[hShift], 0, 8, 16, h, 0, 8, 16, h);
+    _drawTitleWaterRows(waterTop, twW, _titleCascadeCanvas);
   }
   ctx.restore();
 }
@@ -6978,55 +6937,46 @@ function _updateBattleOpening() {
   return true;
 }
 
+function _tryJoinPVPEnemyAlly() {
+  if (!isPVPBattle || pvpEnemyAllies.length >= 3) return false;
+  const loc = getPlayerLocation();
+  const inBattle = new Set([pvpOpponent && pvpOpponent.name, ...pvpEnemyAllies.map(a => a.name), ...battleAllies.map(a => a.name)]);
+  const eligible = PLAYER_POOL.filter(p => p.loc === loc && !inBattle.has(p.name));
+  if (eligible.length === 0 || Math.random() >= 0.3) return false;
+  const pick = eligible[Math.floor(Math.random() * eligible.length)];
+  const oldTotal = 1 + pvpEnemyAllies.length;
+  const oldCols = oldTotal <= 1 ? 1 : 2, oldRows = oldTotal <= 2 ? 1 : 2;
+  pvpBoxResizeFromW = oldCols * 24 + 16; pvpBoxResizeFromH = oldRows * 32 + 16;
+  const _cx = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2), _cy = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
+  const _oldGP = [[oldRows-1,oldCols-1],[oldRows-1,0],[0,oldCols-1],[0,0]];
+  pvpEnemySlidePosFrom = Array.from({length: oldTotal}, (_, i) => {
+    const [gr, gc] = _oldGP[i] || [0, 0];
+    return { x: _cx - oldCols*12 + gc*24 + 4, y: _cy - oldRows*16 + gr*32 + 4 };
+  });
+  pvpEnemyAllies.push(generateAllyStats(pick));
+  battleState = 'pvp-ally-appear'; battleTimer = 0;
+  return true;
+}
+
+function _tryJoinPlayerAlly() {
+  if (isPVPBattle || battleAllies.length >= 3) return false;
+  const loc = getPlayerLocation();
+  const eligible = PLAYER_POOL.filter(p => p.loc === loc && !battleAllies.some(a => a.name === p.name));
+  if (eligible.length === 0 || Math.random() >= 0.5) return false;
+  battleAllies.push(generateAllyStats(eligible[Math.floor(Math.random() * eligible.length)]));
+  battleState = 'ally-fade-in'; battleTimer = 0;
+  return true;
+}
+
 function _updateBattleMenuConfirm() {
   if (battleState === 'message-hold') {
     if (battleTimer >= BATTLE_MSG_HOLD_MS) { battleState = 'menu-open'; battleTimer = 0; battleMessage = null; }
   } else if (battleState === 'confirm-pause') {
-    // Brief pause so CONFIRM SFX is audible before turn queue starts
     if (battleTimer >= 150) {
       allyJoinRound++;
-      // Enemy ally join during PVP (up to 3 total enemy allies, 30% chance per round)
-      if (isPVPBattle && pvpEnemyAllies.length < 3) {
-        const loc = getPlayerLocation();
-        const inBattle = new Set([pvpOpponent && pvpOpponent.name, ...pvpEnemyAllies.map(a => a.name), ...battleAllies.map(a => a.name)]);
-        const eligible = PLAYER_POOL.filter(p => p.loc === loc && !inBattle.has(p.name));
-        if (eligible.length > 0 && Math.random() < 0.3) {
-          const pick = eligible[Math.floor(Math.random() * eligible.length)];
-          // Record current box size and enemy positions before adding ally
-          const oldTotal = 1 + pvpEnemyAllies.length;
-          const oldCols = oldTotal <= 1 ? 1 : 2;
-          const oldRows = oldTotal <= 2 ? 1 : 2;
-          pvpBoxResizeFromW = oldCols * 24 + 16;
-          pvpBoxResizeFromH = oldRows * 32 + 16;
-          const _cx = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2);
-          const _cy = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
-          const _oldGP = [[oldRows-1,oldCols-1],[oldRows-1,0],[0,oldCols-1],[0,0]];
-          pvpEnemySlidePosFrom = Array.from({length: oldTotal}, (_, i) => {
-            const [gr, gc] = _oldGP[i] || [0, 0];
-            return { x: _cx - oldCols*12 + gc*24 + 4, y: _cy - oldRows*16 + gr*32 + 4 };
-          });
-          pvpEnemyAllies.push(generateAllyStats(pick));
-          // Block all actions until box finishes expanding
-          battleState = 'pvp-ally-appear';
-          battleTimer = 0;
-          return;
-        }
-      }
-      // Player ally join check: up to 3 allies (matches roster visible rows), 50% chance
-      if (!isPVPBattle && battleAllies.length < 3) {
-        const loc = getPlayerLocation();
-        const eligible = PLAYER_POOL.filter(p => p.loc === loc && !battleAllies.some(a => a.name === p.name));
-        if (eligible.length > 0 && Math.random() < 0.5) {
-          const pick = eligible[Math.floor(Math.random() * eligible.length)];
-          const ally = generateAllyStats(pick);
-          battleAllies.push(ally);
-          battleState = 'ally-fade-in';
-          battleTimer = 0;
-          return;
-        }
-      }
-      turnQueue = buildTurnOrder();
-      processNextTurn();
+      if (_tryJoinPVPEnemyAlly()) return true;
+      if (_tryJoinPlayerAlly()) return true;
+      turnQueue = buildTurnOrder(); processNextTurn();
     }
   } else { return false; }
   return true;
