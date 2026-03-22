@@ -4595,7 +4595,10 @@ function drawHUD() {
 
 // Draw a HUD border box on the main canvas ctx, with optional NES fade step
 function _drawSparkleCorners(frame, px, py) {
-  _drawSparkleCorners(frame, px, py);
+  ctx.drawImage(frame, px - 8, py - 7);
+  ctx.save(); ctx.scale(-1, 1); ctx.drawImage(frame, -(px + 23), py - 7); ctx.restore();
+  ctx.save(); ctx.scale(1, -1); ctx.drawImage(frame, px - 8, -(py + 24)); ctx.restore();
+  ctx.save(); ctx.scale(-1, -1); ctx.drawImage(frame, -(px + 23), -(py + 24)); ctx.restore();
 }
 function _drawCursorFaded(cx, cy, fadeStep) {
   if (!cursorTileCanvas) return;
