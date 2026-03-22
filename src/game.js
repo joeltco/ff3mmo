@@ -3570,6 +3570,8 @@ function _drawTopBoxBattleBG() {
       fadeStep = maxStep;
     } else if (transState === 'opening') {
       fadeStep = Math.max(maxStep - Math.floor(transTimer / FADE_STEP_MS), 0);
+    } else if (transState === 'hud-fade-in') {
+      fadeStep = Math.max(maxStep - Math.floor(hudInfoFadeTimer / FADE_STEP_MS), 0);
     }
     if (fadeStep > 0) ctx.drawImage(topBoxBgFadeFrames[fadeStep], 0, 0);
   }

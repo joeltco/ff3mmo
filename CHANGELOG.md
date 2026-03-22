@@ -6,6 +6,15 @@ All notable changes to this project are documented here.
 
 _No unreleased changes._
 
+## 1.0.2 — 2026-03-22
+
+### Smooth HUD fade-in after player select screen
+
+**Top box battle BG now fades in with the rest of the HUD:**
+- `_drawTopBoxBattleBG` now handles `'hud-fade-in'` transState
+- Fades from fully dark to full brightness using `hudInfoFadeTimer` in sync with portrait, roster, info panel, and HUD borders
+- Previously the top box battle BG strip popped in immediately while everything else faded — now all elements animate together
+
 ## 1.0.1 — 2026-03-22
 
 ### Modularization continued — −451L from game.js
