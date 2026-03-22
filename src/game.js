@@ -4567,10 +4567,7 @@ function _drawCureSparkle(px, py, isPauseHeal) {
 }
 function _drawPauseHealNum(px, py) {
   if (!pauseHealNum || pauseHealNum.rosterIdx >= 0) return;
-  const digits = String(pauseHealNum.value);
-  const numBytes = new Uint8Array(digits.length);
-  for (let i = 0; i < digits.length; i++) numBytes[i] = 0x80 + parseInt(digits[i]);
-  drawText(ctx, px + 8 - Math.floor(digits.length * 8 / 2), _dmgBounceY(py + 8, pauseHealNum.timer), numBytes, [0x0F, 0x0F, 0x0F, 0x2B]);
+  _drawBattleNum(px + 8, _dmgBounceY(py + 8, pauseHealNum.timer), pauseHealNum.value, [0x0F, 0x0F, 0x0F, 0x2B]);
 }
 function _drawHUDPortrait() {
   const infoFadeStep = HUD_INFO_FADE_STEPS - Math.min(Math.floor(hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
@@ -4811,12 +4808,7 @@ function _drawRosterSparkle(panelTop) {
   const fi = Math.floor(pauseTimer / 67) & 1;
   const frame = cureSparkleFrames[fi];
   _drawSparkleCorners(frame, px, py);
-  const digits = String(pauseHealNum.value);
-  const numBytes = new Uint8Array(digits.length);
-  for (let i = 0; i < digits.length; i++) numBytes[i] = 0x80 + parseInt(digits[i]);
-  const tw = digits.length * 8;
-  const hpy = _dmgBounceY(py + 8, pauseHealNum.timer);
-  drawText(ctx, px + 8 - Math.floor(tw / 2), hpy, numBytes, [0x0F, 0x0F, 0x0F, 0x2B]);
+  _drawBattleNum(px + 8, _dmgBounceY(py + 8, pauseHealNum.timer), pauseHealNum.value, [0x0F, 0x0F, 0x0F, 0x2B]);
 }
 
 function _drawRosterScrollTriangles(scrollAreaY, canScrollUp, canScrollDown) {
@@ -8561,10 +8553,7 @@ function _flushAllyWeaponDraws(weaponDraws) {
       if (dn.miss) {
         drawText(ctx, bx - 8, by, BATTLE_MISS, [0x0F, 0x0F, 0x0F, 0x2B]);
       } else {
-        const digits = String(dn.value);
-        const numBytes = new Uint8Array(digits.length);
-        for (let d = 0; d < digits.length; d++) numBytes[d] = 0x80 + parseInt(digits[d]);
-        drawText(ctx, bx - Math.floor(digits.length * 8 / 2), by, numBytes, dn.heal ? [0x0F, 0x0F, 0x0F, 0x2B] : DMG_NUM_PAL);
+        _drawBattleNum(bx, by, dn.value, dn.heal ? [0x0F, 0x0F, 0x0F, 0x2B] : DMG_NUM_PAL);
       }
     } else if (wd.type === 'sparkle') {
       const { frame, px, py } = wd;
@@ -8629,11 +8618,7 @@ function _drawBossDmgNum() {
   if (bossDamageNum.miss) {
     drawText(ctx, bx - 8, by, BATTLE_MISS, [0x0F, 0x0F, 0x0F, 0x2B]);
   } else {
-    const digits = String(bossDamageNum.value);
-    const numBytes = new Uint8Array(digits.length);
-    for (let i = 0; i < digits.length; i++) numBytes[i] = 0x80 + parseInt(digits[i]);
-    const tw = digits.length * 8;
-    drawText(ctx, bx - Math.floor(tw / 2), by, numBytes, DMG_NUM_PAL);
+    _drawBattleNum(bx, by, bossDamageNum.value, DMG_NUM_PAL);
   }
   ctx.restore();
 }
@@ -8663,14 +8648,16 @@ function _drawEnemyHealNum() {
   ctx.beginPath();
   ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
   ctx.clip();
-  const digits = String(enemyHealNum.value);
-  const numBytes = new Uint8Array(digits.length);
-  for (let i = 0; i < digits.length; i++) numBytes[i] = 0x80 + parseInt(digits[i]);
-  const tw = digits.length * 8;
-  drawText(ctx, bx - Math.floor(tw / 2), hy, numBytes, [0x0F, 0x0F, 0x0F, 0x2B]);
+  _drawBattleNum(bx, hy, enemyHealNum.value, [0x0F, 0x0F, 0x0F, 0x2B]);
   ctx.restore();
 }
 
+function _drawBattleNum(bx, by, value, pal) {
+  const digits = String(value);
+  const b = new Uint8Array(digits.length);
+  for (let i = 0; i < digits.length; i++) b[i] = 0x80 + parseInt(digits[i]);
+  drawText(ctx, bx - Math.floor(digits.length * 4), by, b, pal);
+}
 function drawDamageNumbers() {
   _drawBossDmgNum();
 
@@ -8682,11 +8669,7 @@ function drawDamageNumbers() {
     if (playerDamageNum.miss) {
       drawText(ctx, px - 8, py, BATTLE_MISS, [0x0F, 0x0F, 0x0F, 0x2B]);
     } else {
-      const digits = String(playerDamageNum.value);
-      const numBytes = new Uint8Array(digits.length);
-      for (let i = 0; i < digits.length; i++) numBytes[i] = 0x80 + parseInt(digits[i]);
-      const tw = digits.length * 8;
-      drawText(ctx, px - Math.floor(tw / 2), py, numBytes, DMG_NUM_PAL);
+      _drawBattleNum(px, py, playerDamageNum.value, DMG_NUM_PAL);
     }
   }
 
@@ -8695,11 +8678,7 @@ function drawDamageNumbers() {
     const px = HUD_RIGHT_X + 16;
     const baseY = HUD_VIEW_Y + 16;
     const py = _dmgBounceY(baseY, playerHealNum.timer);
-    const digits = String(playerHealNum.value);
-    const numBytes = new Uint8Array(digits.length);
-    for (let i = 0; i < digits.length; i++) numBytes[i] = 0x80 + parseInt(digits[i]);
-    const tw = digits.length * 8;
-    drawText(ctx, px - Math.floor(tw / 2), py, numBytes, [0x0F, 0x0F, 0x0F, 0x2B]);
+    _drawBattleNum(px, py, playerHealNum.value, [0x0F, 0x0F, 0x0F, 0x2B]);
   }
 
   _drawEnemyHealNum();
