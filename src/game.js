@@ -271,7 +271,7 @@ const NAME_MAX_LEN = 7;
 // HUD info fade-in after title screen ends
 let hudInfoFadeTimer = 0;
 const HUD_INFO_FADE_STEPS = 4;
-const HUD_INFO_FADE_STEP_MS = 100;
+const HUD_INFO_FADE_STEP_MS = 200;
 
 // HUD level ↔ HP cross-fade (0=level fully visible, 4=HP fully visible)
 let hudHpLvStep = 0;
@@ -3571,7 +3571,7 @@ function _drawTopBoxBattleBG() {
     } else if (transState === 'opening') {
       fadeStep = Math.max(maxStep - Math.floor(transTimer / FADE_STEP_MS), 0);
     } else if (transState === 'hud-fade-in') {
-      fadeStep = Math.max(maxStep - Math.floor(hudInfoFadeTimer / FADE_STEP_MS), 0);
+      fadeStep = Math.max(maxStep - Math.floor(hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), 0);
     }
     if (fadeStep > 0) ctx.drawImage(topBoxBgFadeFrames[fadeStep], 0, 0);
   }
@@ -3650,24 +3650,22 @@ function _drawHUDPortrait() {
 function _drawHUDInfoPanel() {
   // Name + Level in right mini-right panel (right-aligned, like roster players)
   const infoFadeStep = HUD_INFO_FADE_STEPS - Math.min(Math.floor(hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
+  if (infoFadeStep >= HUD_INFO_FADE_STEPS) return;
   const shakeOff = (battleState === 'enemy-attack' && battleShakeTimer > 0)
     ? (Math.floor(battleShakeTimer / 67) & 1 ? 2 : -2) : 0;
   const sy = HUD_VIEW_Y + 8;
   const panelRight = HUD_RIGHT_X + HUD_RIGHT_W - 8 + shakeOff;
-  const infoPal = [0x0F, 0x0F, 0x0F, 0x30];
-  for (let s = 0; s < infoFadeStep; s++) {
-    infoPal[3] = nesColorFade(infoPal[3]);
-  }
   const slot = saveSlots[selectCursor];
   if (!slot) return;
+  // Game-start fade: alpha-based (NES palette fade is invisible on a black background)
+  if (infoFadeStep > 0) ctx.globalAlpha = 1 - infoFadeStep / HUD_INFO_FADE_STEPS;
   const nameW = measureText(slot.name);
-  drawText(ctx, panelRight - nameW, sy, slot.name, infoPal);
+  drawText(ctx, panelRight - nameW, sy, slot.name, TEXT_WHITE);
   // Level fades out as battle starts, HP fades in (and vice versa)
-  const lvFadeStep = infoFadeStep + hudHpLvStep;
   if (hudHpLvStep < 4) {
     const lvLabel = _nameToBytes('Lv' + String(playerStats ? playerStats.level : slot.level));
     const lvPal = [0x0F, 0x0F, 0x0F, 0x10];
-    for (let s = 0; s < lvFadeStep; s++) lvPal[3] = nesColorFade(lvPal[3]);
+    for (let s = 0; s < hudHpLvStep; s++) lvPal[3] = nesColorFade(lvPal[3]);
     const lvW = measureText(lvLabel);
     drawText(ctx, panelRight - lvW, sy + 9, lvLabel, lvPal);
   }
@@ -3675,13 +3673,13 @@ function _drawHUDInfoPanel() {
     const maxHP = playerStats ? playerStats.maxHP : 28;
     const hpNes = playerHP <= Math.floor(maxHP / 4) ? 0x16
                 : playerHP <= Math.floor(maxHP / 2) ? 0x28 : 0x2A;
-    const hpFadeStep = infoFadeStep + (4 - hudHpLvStep);
     const hpPal = [0x0F, 0x0F, 0x0F, hpNes];
-    for (let s = 0; s < hpFadeStep; s++) hpPal[3] = nesColorFade(hpPal[3]);
+    for (let s = 0; s < 4 - hudHpLvStep; s++) hpPal[3] = nesColorFade(hpPal[3]);
     const hpLabel = _nameToBytes(String(playerHP));
     const hpW = measureText(hpLabel);
     drawText(ctx, panelRight - hpW, sy + 9, hpLabel, hpPal);
   }
+  ctx.globalAlpha = 1;
 }
 
 function _drawLoadingRightPanel(fadeLevel) {
@@ -3739,9 +3737,10 @@ function drawHUD() {
     }
     _drawHudWithFade(titleHudCanvas, titleHudFadeCanvases, tfl);
   } else if (hudCanvas) {
-    // Game-start border fade-in
-    const borderFade = HUD_INFO_FADE_STEPS - Math.min(Math.floor(hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
-    _drawHudWithFade(hudCanvas, hudFadeCanvases, borderFade);
+    // Game-start border fade-in — alpha-based so it's visible on the black background
+    const alpha = Math.min(hudInfoFadeTimer / (HUD_INFO_FADE_STEPS * HUD_INFO_FADE_STEP_MS), 1);
+    if (alpha < 1) { ctx.globalAlpha = alpha; ctx.drawImage(hudCanvas, 0, 0); ctx.globalAlpha = 1; }
+    else ctx.drawImage(hudCanvas, 0, 0);
   }
 
   // Top box content (full 256×32, no static border — border only with text)
@@ -7463,7 +7462,7 @@ function _gameLoopDraw() {
 }
 
 function gameLoop(timestamp) {
-  const dt = timestamp - lastTime;
+  const dt = Math.min(timestamp - lastTime, 50); // cap at 50ms to prevent frame-spike skipping animations
   lastTime = timestamp;
 
   if (titleState !== 'done') {

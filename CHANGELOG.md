@@ -6,6 +6,22 @@ All notable changes to this project are documented here.
 
 _No unreleased changes._
 
+## 1.0.3 — 2026-03-22
+
+### Fix HUD fade-in after player select
+
+**Root causes fixed:**
+- Frame spike: `loadMapById` at game start caused a single large `dt` that consumed the entire 500ms `hud-fade-in` state in one frame — capped `dt` at 50ms in `gameLoop`
+- Invisible fade: HUD border and info text used NES palette fading (dark colors on a black background look identical to the background) — switched to `globalAlpha` so the fade is actually visible
+- Duration too short: increased `HUD_INFO_FADE_STEP_MS` from 100ms → 200ms (800ms total fade, then screen opens)
+
+**Changes:**
+- `gameLoop`: cap `dt = Math.min(dt, 50)` to prevent animation skipping on slow frames
+- `drawHUD` game-start branch: alpha-based border fade instead of palette-fade canvases
+- `_drawHUDInfoPanel`: `globalAlpha` for name text fade-in; battle HP/Level cross-fade unchanged
+- `_drawTopBoxBattleBG` hud-fade-in: use `HUD_INFO_FADE_STEP_MS` to stay in sync with other elements
+- `HUD_INFO_FADE_STEP_MS`: 100 → 200ms
+
 ## 1.0.2 — 2026-03-22
 
 ### Smooth HUD fade-in after player select screen
