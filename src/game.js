@@ -6281,227 +6281,154 @@ function titleFadePal(fadeLevel) {
   });
 }
 
-function updateTitle(dt) {
-  titleTimer += dt;
-
-  // Tick underwater scroll during early title states
-  titleUnderwaterScroll += dt * 0.11; // ~110px/s
-
-  // Update underwater bubbles + fish (only during early title states)
-  if (uwBubbleTiles && titleState !== 'main-in' && titleState !== 'main' && titleState !== 'main-out' &&
-      !titleState.startsWith('zbox') && !titleState.startsWith('select') && titleState !== 'name-entry') {
-    // Spawn small bubbles randomly (up to 3)
-    if (uwBubbles.length < 3 && Math.random() < dt * 0.0015) {
-      uwBubbles.push({
-        x: HUD_VIEW_X + 20 + Math.random() * (CANVAS_W - 40),
-        y: HUD_VIEW_H - 4,
-        speed: 18 + Math.random() * 12, // px/s rising
-        zigPhase: Math.random() * Math.PI * 2, // start phase for zig-zag
-        zigSpeed: 3 + Math.random() * 3, // zig-zag frequency
-        zigAmp: 8 + Math.random() * 8, // zig-zag amplitude
-        timer: 0,
-      });
-    }
-    // Update bubbles — zig-zag upward
-    for (let i = uwBubbles.length - 1; i >= 0; i--) {
-      const b = uwBubbles[i];
-      b.y -= b.speed * dt / 1000;
-      b.timer += dt;
-      if (b.y < -8) uwBubbles.splice(i, 1);
-    }
-    // Trigger fish after 1st message fades out
-    if (!uwFishTriggered && titleState === 'disclaim-wait') {
-      uwFishTriggered = true;
-      uwFish = {
-        x: -10,
-        y: HUD_VIEW_H * 0.7, // start low
-        timer: 0,
-        speed: 80, // px/s northeast
-        zigPhase: 0,
-        zigSpeed: 4,
-        zigAmp: 6,
-      };
-    }
-    // Update fish — zig-zag northeast
-    if (uwFish) {
-      uwFish.x += uwFish.speed * dt / 1000;
-      uwFish.y -= uwFish.speed * 0.4 * dt / 1000; // rise as it moves right
-      uwFish.timer += dt;
-      if (uwFish.x > CANVAS_W + 10 || uwFish.y < -10) uwFish = null;
+function _updateTitleUnderwater(dt) {
+  if (!uwBubbleTiles) return;
+  if (titleState === 'main-in' || titleState === 'main' || titleState === 'main-out' ||
+      titleState.startsWith('zbox') || titleState.startsWith('select') || titleState === 'name-entry') return;
+  if (uwBubbles.length < 3 && Math.random() < dt * 0.0015) {
+    uwBubbles.push({
+      x: HUD_VIEW_X + 20 + Math.random() * (CANVAS_W - 40),
+      y: HUD_VIEW_H - 4,
+      speed: 18 + Math.random() * 12,
+      zigPhase: Math.random() * Math.PI * 2,
+      zigSpeed: 3 + Math.random() * 3,
+      zigAmp: 8 + Math.random() * 8,
+      timer: 0,
+    });
+  }
+  for (let i = uwBubbles.length - 1; i >= 0; i--) {
+    const b = uwBubbles[i];
+    b.y -= b.speed * dt / 1000;
+    b.timer += dt;
+    if (b.y < -8) uwBubbles.splice(i, 1);
+  }
+  if (!uwFishTriggered && titleState === 'disclaim-wait') {
+    uwFishTriggered = true;
+    uwFish = { x: -10, y: HUD_VIEW_H * 0.7, timer: 0, speed: 80, zigPhase: 0, zigSpeed: 4, zigAmp: 6 };
+  }
+  if (uwFish) {
+    uwFish.x += uwFish.speed * dt / 1000;
+    uwFish.y -= uwFish.speed * 0.4 * dt / 1000;
+    uwFish.timer += dt;
+    if (uwFish.x > CANVAS_W + 10 || uwFish.y < -10) uwFish = null;
+  }
+}
+function _updateTitleSelectCase() {
+  if (keys['z'] || keys['Z']) {
+    keys['z'] = false; keys['Z'] = false;
+    if (deleteMode) {
+      if (selectCursor < 3 && saveSlots[selectCursor]) {
+        playSFX(SFX.CONFIRM);
+        saveSlots[selectCursor] = null;
+        serverDeleteSlot(selectCursor);
+        saveSlotsToDB();
+        deleteMode = false;
+      }
+    } else if (selectCursor === 3) {
+      playSFX(SFX.CONFIRM);
+      deleteMode = true;
+      selectCursor = 0;
+    } else if (saveSlots[selectCursor]) {
+      playSFX(SFX.CONFIRM);
+      titleState = 'select-fade-out'; titleTimer = 0;
+    } else {
+      playSFX(SFX.CONFIRM);
+      nameBuffer = [];
+      titleState = 'name-entry'; titleTimer = 0;
     }
   }
+  if (deleteMode) {
+    if (keys['ArrowDown']) { keys['ArrowDown'] = false; selectCursor = (selectCursor + 1) % 3; playSFX(SFX.CURSOR); }
+    if (keys['ArrowUp'])   { keys['ArrowUp'] = false;   selectCursor = (selectCursor + 2) % 3; playSFX(SFX.CURSOR); }
+  } else {
+    if (keys['ArrowDown']) { keys['ArrowDown'] = false; selectCursor = (selectCursor + 1) % 4; playSFX(SFX.CURSOR); }
+    if (keys['ArrowUp'])   { keys['ArrowUp'] = false;   selectCursor = (selectCursor + 3) % 4; playSFX(SFX.CURSOR); }
+  }
+  if (keys['x'] || keys['X']) {
+    keys['x'] = false; keys['X'] = false;
+    if (deleteMode) { playSFX(SFX.CONFIRM); deleteMode = false; }
+    else { playSFX(SFX.CONFIRM); titleState = 'select-fade-out-back'; titleTimer = 0; }
+  }
+}
+function _updateTitleMainOutCase() {
+  titleState = 'done';
+  hudInfoFadeTimer = 0;
+  const slot = saveSlots[selectCursor];
+  if (slot && slot.stats) {
+    playerStats.str = slot.stats.str;
+    playerStats.agi = slot.stats.agi;
+    playerStats.vit = slot.stats.vit;
+    playerStats.int = slot.stats.int;
+    playerStats.mnd = slot.stats.mnd;
+    playerStats.maxHP = slot.stats.maxHP;
+    playerStats.maxMP = slot.stats.maxMP;
+    playerStats.level = slot.level;
+    playerStats.exp = slot.exp;
+    playerStats.expToNext = (slot.level - 1 < 98) ? expTable[slot.level - 1] : 0xFFFFFF;
+    playerStats.hp = playerStats.maxHP;
+    playerStats.mp = playerStats.maxMP;
+    playerHP = playerStats.maxHP;
+    playerMP = playerStats.maxMP;
+    playerWeaponR = slot.stats.weaponR != null ? slot.stats.weaponR : 0x1E;
+    playerWeaponL = slot.stats.weaponL != null ? slot.stats.weaponL : 0x00;
+    playerHead = slot.stats.head || 0x00;
+    playerBody = slot.stats.body || 0x00;
+    playerArms = slot.stats.arms || 0x00;
+    playerATK = playerStats.str + (ITEMS.get(playerWeaponR)?.atk || 0) + (ITEMS.get(playerWeaponL)?.atk || 0);
+    recalcDEF();
+  }
+  playerInventory = (slot && slot.inventory) ? { ...slot.inventory } : {};
+  playerGil = (slot && slot.gil) || 0;
+  loadMapById(114);
+  worldY -= 6 * TILE_SIZE;
+  playTrack(TRACKS.TOWN_UR);
+  transState = 'hud-fade-in';
+  transTimer = 0;
+}
+function updateTitle(dt) {
+  titleTimer += dt;
+  titleUnderwaterScroll += dt * 0.11;
+  _updateTitleUnderwater(dt);
 
-  // Tick water animation during water-visible states
   if (titleState === 'main-in' || titleState === 'zbox-open' || titleState === 'main' || titleState === 'zbox-close' ||
       titleState === 'logo-fade-out' || titleState === 'logo-fade-in' || titleState === 'select-box-open' || titleState === 'select-box-close' || titleState === 'select-box-close-fwd' ||
       titleState === 'select-fade-in' || titleState === 'select' || titleState === 'select-fade-out' || titleState === 'select-fade-out-back' ||
       titleState === 'name-entry' || titleState === 'main-out') {
     waterTimer += dt;
-    if (waterTimer >= WATER_TICK) {
-      waterTimer %= WATER_TICK;
-      waterTick++;
-    }
-    titleWaterScroll += dt * 0.12; // base scroll (~120px/s), parallax per row
+    if (waterTimer >= WATER_TICK) { waterTimer %= WATER_TICK; waterTick++; }
+    titleWaterScroll += dt * 0.12;
     titleShipTimer += dt;
   }
 
   switch (titleState) {
-    case 'credit-wait':
-      if (titleTimer >= TITLE_FADE_MS) { titleState = 'credit-in'; titleTimer = 0; }
-      break;
-    case 'credit-in':
-      if (titleTimer >= TITLE_FADE_MS) { titleState = 'credit-hold'; titleTimer = 0; }
-      break;
-    case 'credit-hold':
-      if (titleTimer >= TITLE_HOLD_MS) { titleState = 'credit-out'; titleTimer = 0; }
-      break;
-    case 'credit-out':
-      if (titleTimer >= TITLE_FADE_MS) { titleState = 'disclaim-wait'; titleTimer = 0; }
-      break;
-    case 'disclaim-wait':
-      if (titleTimer >= TITLE_WAIT_MS) { titleState = 'disclaim-in'; titleTimer = 0; }
-      break;
-    case 'disclaim-in':
-      if (titleTimer >= TITLE_FADE_MS) { titleState = 'disclaim-hold'; titleTimer = 0; }
-      break;
-    case 'disclaim-hold':
-      if (titleTimer >= TITLE_HOLD_MS) { titleState = 'disclaim-out'; titleTimer = 0; }
-      break;
-    case 'disclaim-out':
-      if (titleTimer >= TITLE_FADE_MS) { titleState = 'main-in'; titleTimer = 0; }
-      break;
-    case 'main-in':
-      if (titleTimer >= TITLE_FADE_MS) { titleState = 'zbox-open'; titleTimer = 0; }
-      break;
-    case 'zbox-open':
-      if (titleTimer >= TITLE_ZBOX_MS) { titleState = 'main'; titleTimer = 0; }
-      break;
+    case 'credit-wait':    if (titleTimer >= TITLE_FADE_MS) { titleState = 'credit-in';     titleTimer = 0; } break;
+    case 'credit-in':      if (titleTimer >= TITLE_FADE_MS) { titleState = 'credit-hold';   titleTimer = 0; } break;
+    case 'credit-hold':    if (titleTimer >= TITLE_HOLD_MS) { titleState = 'credit-out';    titleTimer = 0; } break;
+    case 'credit-out':     if (titleTimer >= TITLE_FADE_MS) { titleState = 'disclaim-wait'; titleTimer = 0; } break;
+    case 'disclaim-wait':  if (titleTimer >= TITLE_WAIT_MS) { titleState = 'disclaim-in';   titleTimer = 0; } break;
+    case 'disclaim-in':    if (titleTimer >= TITLE_FADE_MS) { titleState = 'disclaim-hold'; titleTimer = 0; } break;
+    case 'disclaim-hold':  if (titleTimer >= TITLE_HOLD_MS) { titleState = 'disclaim-out';  titleTimer = 0; } break;
+    case 'disclaim-out':   if (titleTimer >= TITLE_FADE_MS) { titleState = 'main-in';       titleTimer = 0; } break;
+    case 'main-in':        if (titleTimer >= TITLE_FADE_MS) { titleState = 'zbox-open';     titleTimer = 0; } break;
+    case 'zbox-open':      if (titleTimer >= TITLE_ZBOX_MS) { titleState = 'main';          titleTimer = 0; } break;
     case 'main':
-      if (keys['z'] || keys['Z']) {
-        keys['z'] = false;
-        keys['Z'] = false;
-        playSFX(SFX.CONFIRM);
-        titleState = 'zbox-close';
-        titleTimer = 0;
-      }
+      if (keys['z'] || keys['Z']) { keys['z'] = false; keys['Z'] = false; playSFX(SFX.CONFIRM); titleState = 'zbox-close'; titleTimer = 0; }
       break;
-    case 'zbox-close':
-      if (titleTimer >= TITLE_ZBOX_MS) { titleState = 'logo-fade-out'; titleTimer = 0; }
-      break;
-    case 'logo-fade-out':
-      if (titleTimer >= TITLE_FADE_MS) { titleState = 'select-box-open'; titleTimer = 0; selectCursor = 0; deleteMode = false; }
-      break;
-    case 'select-box-open':
-      if (titleTimer >= BOSS_BOX_EXPAND_MS) { titleState = 'select-fade-in'; titleTimer = 0; }
-      break;
-    case 'select-fade-in':
-      if (titleTimer >= (SELECT_TEXT_STEPS + 1) * SELECT_TEXT_STEP_MS) { titleState = 'select'; titleTimer = 0; }
-      break;
-    case 'select':
-      if (keys['z'] || keys['Z']) {
-        keys['z'] = false; keys['Z'] = false;
-        if (deleteMode) {
-          if (selectCursor < 3 && saveSlots[selectCursor]) {
-            // Delete the selected save
-            playSFX(SFX.CONFIRM);
-            saveSlots[selectCursor] = null;
-            serverDeleteSlot(selectCursor);
-            saveSlotsToDB();
-            deleteMode = false;
-          }
-        } else if (selectCursor === 3) {
-          // Activate delete mode
-          playSFX(SFX.CONFIRM);
-          deleteMode = true;
-          selectCursor = 0;
-        } else if (saveSlots[selectCursor]) {
-          // Named slot — start game
-          playSFX(SFX.CONFIRM);
-          titleState = 'select-fade-out'; titleTimer = 0;
-        } else {
-          // New Game — enter name inline
-          playSFX(SFX.CONFIRM);
-          nameBuffer = [];
-          titleState = 'name-entry'; titleTimer = 0;
-        }
-      }
-      if (deleteMode) {
-        if (keys['ArrowDown']) { keys['ArrowDown'] = false; selectCursor = (selectCursor + 1) % 3; playSFX(SFX.CURSOR); }
-        if (keys['ArrowUp'])   { keys['ArrowUp'] = false;   selectCursor = (selectCursor + 2) % 3; playSFX(SFX.CURSOR); }
-      } else {
-        if (keys['ArrowDown']) { keys['ArrowDown'] = false; selectCursor = (selectCursor + 1) % 4; playSFX(SFX.CURSOR); }
-        if (keys['ArrowUp'])   { keys['ArrowUp'] = false;   selectCursor = (selectCursor + 3) % 4; playSFX(SFX.CURSOR); }
-      }
-      if (keys['x'] || keys['X']) {
-        keys['x'] = false; keys['X'] = false;
-        if (deleteMode) {
-          playSFX(SFX.CONFIRM);
-          deleteMode = false;
-        } else {
-          playSFX(SFX.CONFIRM);
-          titleState = 'select-fade-out-back'; titleTimer = 0;
-        }
-      }
-      break;
-    case 'name-entry':
-      // Input handled in keydown listener — just tick timer for cursor blink
-      break;
-    case 'select-fade-out':
-      if (titleTimer >= (SELECT_TEXT_STEPS + 1) * SELECT_TEXT_STEP_MS) { titleState = 'select-box-close-fwd'; titleTimer = 0; }
-      break;
-    case 'select-box-close-fwd':
-      if (titleTimer >= BOSS_BOX_EXPAND_MS) { titleState = 'main-out'; titleTimer = 0; }
-      break;
-    case 'select-fade-out-back':
-      if (titleTimer >= (SELECT_TEXT_STEPS + 1) * SELECT_TEXT_STEP_MS) { titleState = 'select-box-close'; titleTimer = 0; }
-      break;
-    case 'select-box-close':
-      if (titleTimer >= BOSS_BOX_EXPAND_MS) { titleState = 'logo-fade-in'; titleTimer = 0; }
-      break;
-    case 'logo-fade-in':
-      if (titleTimer >= TITLE_FADE_MS) { titleState = 'zbox-open'; titleTimer = 0; }
-      break;
-    case 'main-out':
-      if (titleTimer >= TITLE_FADE_MS) {
-        titleState = 'done';
-        hudInfoFadeTimer = 0;
-        // Restore saved stats if available
-        const slot = saveSlots[selectCursor];
-        if (slot && slot.stats) {
-          playerStats.str = slot.stats.str;
-          playerStats.agi = slot.stats.agi;
-          playerStats.vit = slot.stats.vit;
-          playerStats.int = slot.stats.int;
-          playerStats.mnd = slot.stats.mnd;
-          playerStats.maxHP = slot.stats.maxHP;
-          playerStats.maxMP = slot.stats.maxMP;
-          playerStats.level = slot.level;
-          playerStats.exp = slot.exp;
-          playerStats.expToNext = (slot.level - 1 < 98) ? expTable[slot.level - 1] : 0xFFFFFF;
-          playerStats.hp = playerStats.maxHP;
-          playerStats.mp = playerStats.maxMP;
-          playerHP = playerStats.maxHP;
-          playerMP = playerStats.maxMP;
-          playerWeaponR = slot.stats.weaponR != null ? slot.stats.weaponR : 0x1E;
-          playerWeaponL = slot.stats.weaponL != null ? slot.stats.weaponL : 0x00;
-          playerHead = slot.stats.head || 0x00;
-          playerBody = slot.stats.body || 0x00;
-          playerArms = slot.stats.arms || 0x00;
-          playerATK = playerStats.str + (ITEMS.get(playerWeaponR)?.atk || 0) + (ITEMS.get(playerWeaponL)?.atk || 0);
-          recalcDEF();
-        }
-        playerInventory = (slot && slot.inventory) ? { ...slot.inventory } : {};
-playerGil = (slot && slot.gil) || 0;
-        loadMapById(114);
-        worldY -= 6 * TILE_SIZE; // spawn 6 tiles north of entrance
-        playTrack(TRACKS.TOWN_UR);
-        // Delay screen open until HUD border fade-in completes
-        transState = 'hud-fade-in';
-        transTimer = 0;
-      }
-      break;
+    case 'zbox-close':           if (titleTimer >= TITLE_ZBOX_MS) { titleState = 'logo-fade-out'; titleTimer = 0; } break;
+    case 'logo-fade-out':        if (titleTimer >= TITLE_FADE_MS) { titleState = 'select-box-open'; titleTimer = 0; selectCursor = 0; deleteMode = false; } break;
+    case 'select-box-open':      if (titleTimer >= BOSS_BOX_EXPAND_MS) { titleState = 'select-fade-in'; titleTimer = 0; } break;
+    case 'select-fade-in':       if (titleTimer >= (SELECT_TEXT_STEPS + 1) * SELECT_TEXT_STEP_MS) { titleState = 'select'; titleTimer = 0; } break;
+    case 'select':               _updateTitleSelectCase(); break;
+    case 'name-entry':           break;
+    case 'select-fade-out':      if (titleTimer >= (SELECT_TEXT_STEPS + 1) * SELECT_TEXT_STEP_MS) { titleState = 'select-box-close-fwd'; titleTimer = 0; } break;
+    case 'select-box-close-fwd': if (titleTimer >= BOSS_BOX_EXPAND_MS) { titleState = 'main-out'; titleTimer = 0; } break;
+    case 'select-fade-out-back': if (titleTimer >= (SELECT_TEXT_STEPS + 1) * SELECT_TEXT_STEP_MS) { titleState = 'select-box-close'; titleTimer = 0; } break;
+    case 'select-box-close':     if (titleTimer >= BOSS_BOX_EXPAND_MS) { titleState = 'logo-fade-in'; titleTimer = 0; } break;
+    case 'logo-fade-in':         if (titleTimer >= TITLE_FADE_MS) { titleState = 'zbox-open'; titleTimer = 0; } break;
+    case 'main-out':             if (titleTimer >= TITLE_FADE_MS) _updateTitleMainOutCase(); break;
   }
 }
+
 
 let _titleCascadeCanvas = null; // reusable 16×16 scratch for per-row cascade
 
@@ -6679,229 +6606,159 @@ function drawTitleSkyInHUD() {
   }
 }
 
+function _drawTitleCredit(cx, cy) {
+  if (titleState === 'credit-in' || titleState === 'credit-hold' || titleState === 'credit-out') {
+    let fl = 0;
+    if (titleState === 'credit-in') fl = TITLE_FADE_MAX - Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
+    else if (titleState === 'credit-out') fl = Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
+    const pal = fl === 0 ? TEXT_WHITE : titleFadePal(fl);
+    drawText(ctx, cx - measureText(TITLE_CREDIT_1) / 2, cy - 16, TITLE_CREDIT_1, pal);
+    drawText(ctx, cx - measureText(TITLE_CREDIT_2) / 2, cy -  4, TITLE_CREDIT_2, pal);
+    drawText(ctx, cx - measureText(TITLE_CREDIT_3) / 2, cy +  8, TITLE_CREDIT_3, pal);
+  } else if (titleState === 'disclaim-in' || titleState === 'disclaim-hold' || titleState === 'disclaim-out') {
+    let fl = 0;
+    if (titleState === 'disclaim-in') fl = TITLE_FADE_MAX - Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
+    else if (titleState === 'disclaim-out') fl = Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
+    const pal = fl === 0 ? TEXT_WHITE : titleFadePal(fl);
+    drawText(ctx, cx - measureText(TITLE_DISCLAIM_1) / 2, cy - 24, TITLE_DISCLAIM_1, pal);
+    drawText(ctx, cx - measureText(TITLE_DISCLAIM_2) / 2, cy - 14, TITLE_DISCLAIM_2, pal);
+    drawText(ctx, cx - measureText(TITLE_DISCLAIM_3) / 2, cy -  4, TITLE_DISCLAIM_3, pal);
+    drawText(ctx, cx - measureText(TITLE_DISCLAIM_4) / 2, cy + 10, TITLE_DISCLAIM_4, pal);
+    drawText(ctx, cx - measureText(TITLE_DISCLAIM_5) / 2, cy + 24, TITLE_DISCLAIM_5, pal);
+  }
+}
+function _drawTitleLogo(cx, fl, isSelectState) {
+  let logoFl = fl;
+  if (titleState === 'logo-fade-out') {
+    logoFl = Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
+  } else if (titleState === 'logo-fade-in') {
+    logoFl = TITLE_FADE_MAX - Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
+  } else if (isSelectState || titleState === 'main-out') {
+    logoFl = TITLE_FADE_MAX;
+  }
+  if (!titleLogoFrames || logoFl >= TITLE_FADE_MAX) return;
+  const logoFrame = titleLogoFrames[Math.min(logoFl, titleLogoFrames.length - 1)];
+  const tboxW = logoFrame.width + 16;
+  const tboxH = logoFrame.height + 24;
+  const tboxX = Math.round(cx - tboxW / 2);
+  const tboxY = HUD_VIEW_Y + 12;
+  const clampedFl = Math.min(logoFl, LOAD_FADE_MAX);
+  const tBorderSet = (borderFadeSets && logoFl > 0) ? borderFadeSets[clampedFl] : borderTileCanvases;
+  if (tBorderSet) {
+    const [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR, FILL] = tBorderSet;
+    ctx.drawImage(TL, tboxX, tboxY); ctx.drawImage(TR, tboxX + tboxW - 8, tboxY);
+    ctx.drawImage(BL, tboxX, tboxY + tboxH - 8); ctx.drawImage(BR, tboxX + tboxW - 8, tboxY + tboxH - 8);
+    for (let tx = tboxX + 8; tx < tboxX + tboxW - 8; tx += 8) { ctx.drawImage(TOP, tx, tboxY); ctx.drawImage(BOT, tx, tboxY + tboxH - 8); }
+    for (let ty = tboxY + 8; ty < tboxY + tboxH - 8; ty += 8) { ctx.drawImage(LEFT, tboxX, ty); ctx.drawImage(RIGHT, tboxX + tboxW - 8, ty); }
+    for (let ty = tboxY + 8; ty < tboxY + tboxH - 8; ty += 8)
+      for (let tx = tboxX + 8; tx < tboxX + tboxW - 8; tx += 8) ctx.drawImage(FILL, tx, ty);
+  }
+  ctx.drawImage(logoFrame, tboxX + 8, tboxY + 8);
+  const tw2 = measureText(TITLE_MMORPG);
+  drawText(ctx, cx - tw2 / 2, tboxY + 8 + logoFrame.height, TITLE_MMORPG, logoFl === 0 ? TEXT_WHITE : titleFadePal(logoFl));
+}
+function _drawTitleShip(cx, cy, fl) {
+  if (!invincibleFadeFrames || fl >= TITLE_FADE_MAX) return;
+  const frameIdx = Math.floor(titleShipTimer / TITLE_SHIP_ANIM_MS) % 2;
+  const shipCanvas = invincibleFadeFrames[fl][frameIdx];
+  const shipX = cx - 16;
+  const bob = Math.sin(titleShipTimer / 2000 * Math.PI * 2) * 4;
+  const shipY = Math.round(cy - 20 + bob);
+  const shadowY = cy - 20 + 32;
+  if (invincibleShadowFade && Math.floor(titleShipTimer / TITLE_SHADOW_ANIM_MS) % 2 === 0) {
+    ctx.drawImage(invincibleShadowFade[fl], shipX, shadowY);
+  }
+  ctx.drawImage(shipCanvas, shipX, shipY);
+}
+function _drawTitlePressZ(cx, vpBot) {
+  if (titleState !== 'zbox-open' && titleState !== 'main' && titleState !== 'zbox-close') return;
+  const pw = measureText(TITLE_PRESS_Z);
+  const fullW = pw + 16, fullH = 24;
+  const boxCY = vpBot - 44 + fullH / 2;
+  let t = 1;
+  if (titleState === 'zbox-open') t = Math.min(titleTimer / TITLE_ZBOX_MS, 1);
+  else if (titleState === 'zbox-close') t = 1 - Math.min(titleTimer / TITLE_ZBOX_MS, 1);
+  const boxW = fullW;
+  const boxH = Math.max(8, Math.round(fullH * t));
+  const boxX = cx - boxW / 2;
+  const boxY = Math.round(boxCY - boxH / 2);
+  if (borderTileCanvases) {
+    const [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR, FILL] = borderTileCanvases;
+    ctx.drawImage(TL, boxX, boxY); ctx.drawImage(TR, boxX + boxW - 8, boxY);
+    ctx.drawImage(BL, boxX, boxY + boxH - 8); ctx.drawImage(BR, boxX + boxW - 8, boxY + boxH - 8);
+    for (let tx = boxX + 8; tx < boxX + boxW - 8; tx += 8) { ctx.drawImage(TOP, tx, boxY); ctx.drawImage(BOT, tx, boxY + boxH - 8); }
+    for (let ty = boxY + 8; ty < boxY + boxH - 8; ty += 8) { ctx.drawImage(LEFT, boxX, ty); ctx.drawImage(RIGHT, boxX + boxW - 8, ty); }
+    for (let ty = boxY + 8; ty < boxY + boxH - 8; ty += 8)
+      for (let tx = boxX + 8; tx < boxX + boxW - 8; tx += 8) ctx.drawImage(FILL, tx, ty);
+  }
+  if (t >= 1 && Math.floor(titleTimer / 500) % 2 === 0) {
+    drawText(ctx, boxX + 8, boxY + 8, TITLE_PRESS_Z, TEXT_WHITE);
+  }
+}
+function _drawTitleSelectBox(cx) {
+  const isSelectState = titleState === 'select-box-open' || titleState === 'select-box-close' || titleState === 'select-box-close-fwd' ||
+    titleState === 'select-fade-in' || titleState === 'select' ||
+    titleState === 'select-fade-out' || titleState === 'select-fade-out-back' || titleState === 'name-entry';
+  if (!isSelectState) return;
+  const SELECT_BOX_W = 128, SELECT_BOX_H = 112;
+  const sbCX = cx;
+  const sbCY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
+  let sbt = 1;
+  if (titleState === 'select-box-open') sbt = Math.min(titleTimer / BOSS_BOX_EXPAND_MS, 1);
+  else if (titleState === 'select-box-close' || titleState === 'select-box-close-fwd') sbt = 1 - Math.min(titleTimer / BOSS_BOX_EXPAND_MS, 1);
+  const sbW = Math.max(16, Math.ceil(SELECT_BOX_W * sbt / 8) * 8);
+  const sbH = Math.max(16, Math.ceil(SELECT_BOX_H * sbt / 8) * 8);
+  if (borderTileCanvases) _drawBorderedBox(Math.round(sbCX - sbW / 2), Math.round(sbCY - sbH / 2), sbW, sbH);
+  if (sbt >= 1 && titleState !== 'select-box-close' && titleState !== 'select-box-close-fwd') {
+    drawPlayerSelectContent(Math.round(sbCX - sbW / 2), Math.round(sbCY - sbH / 2), SELECT_BOX_W, SELECT_BOX_H);
+  }
+}
 function drawTitle() {
-  // Title uses full-width viewport (no right boxes)
-  const TVW = CANVAS_W; // title viewport width
+  const TVW = CANVAS_W;
   ctx.fillStyle = '#000';
   ctx.fillRect(HUD_VIEW_X, HUD_VIEW_Y, TVW, HUD_VIEW_H);
-  ctx.fillRect(0, 0, CANVAS_W, HUD_TOP_H); // full top box (no border)
+  ctx.fillRect(0, 0, CANVAS_W, HUD_TOP_H);
 
   const cx = HUD_VIEW_X + TVW / 2;
   const cy = HUD_VIEW_Y + HUD_VIEW_H / 2;
   const vpBot = HUD_VIEW_Y + HUD_VIEW_H;
 
-  if (titleState === 'credit-in' || titleState === 'credit-hold' || titleState === 'credit-out') {
-    // NES fade in, hold, fade out
-    const w1 = measureText(TITLE_CREDIT_1);
-    const w2 = measureText(TITLE_CREDIT_2);
-    const w3 = measureText(TITLE_CREDIT_3);
-    let fl = 0;
-    if (titleState === 'credit-in') {
-      fl = TITLE_FADE_MAX - Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
-    } else if (titleState === 'credit-out') {
-      fl = Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
-    }
-    const pal = fl === 0 ? TEXT_WHITE : titleFadePal(fl);
-    drawText(ctx, cx - w1 / 2, cy - 16, TITLE_CREDIT_1, pal);
-    drawText(ctx, cx - w2 / 2, cy - 4, TITLE_CREDIT_2, pal);
-    drawText(ctx, cx - w3 / 2, cy + 8, TITLE_CREDIT_3, pal);
-  } else if (titleState === 'disclaim-in' || titleState === 'disclaim-hold' || titleState === 'disclaim-out') {
-    // NES fade in, hold, fade out
-    const w1 = measureText(TITLE_DISCLAIM_1);
-    const w2 = measureText(TITLE_DISCLAIM_2);
-    const w3 = measureText(TITLE_DISCLAIM_3);
-    const w4 = measureText(TITLE_DISCLAIM_4);
-    const w5 = measureText(TITLE_DISCLAIM_5);
-    let fl = 0;
-    if (titleState === 'disclaim-in') {
-      fl = TITLE_FADE_MAX - Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
-    } else if (titleState === 'disclaim-out') {
-      fl = Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
-    }
-    const pal = fl === 0 ? TEXT_WHITE : titleFadePal(fl);
-    drawText(ctx, cx - w1 / 2, cy - 24, TITLE_DISCLAIM_1, pal);
-    drawText(ctx, cx - w2 / 2, cy - 14, TITLE_DISCLAIM_2, pal);
-    drawText(ctx, cx - w3 / 2, cy - 4, TITLE_DISCLAIM_3, pal);
-    drawText(ctx, cx - w4 / 2, cy + 10, TITLE_DISCLAIM_4, pal);
-    drawText(ctx, cx - w5 / 2, cy + 24, TITLE_DISCLAIM_5, pal);
-  }
+  _drawTitleCredit(cx, cy);
 
-  // Draw underwater sprites over text during early title states
   if (titleState === 'credit-wait' || titleState === 'credit-in' || titleState === 'credit-hold' || titleState === 'credit-out' ||
       titleState === 'disclaim-wait' || titleState === 'disclaim-in' || titleState === 'disclaim-hold' || titleState === 'disclaim-out') {
     drawUnderwaterSprites();
   }
 
   if (titleState === 'main-in' || titleState === 'zbox-open' || titleState === 'main' || titleState === 'zbox-close' ||
-             titleState === 'logo-fade-out' || titleState === 'logo-fade-in' || titleState === 'select-box-open' || titleState === 'select-box-close' || titleState === 'select-box-close-fwd' ||
-             titleState === 'select-fade-in' || titleState === 'select' || titleState === 'select-fade-out' || titleState === 'select-fade-out-back' ||
-             titleState === 'name-entry' || titleState === 'main-out') {
-    let fl;
-    if (titleState === 'main-in') {
-      fl = TITLE_FADE_MAX - Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
-    } else if (titleState === 'main-out') {
-      fl = Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
-    } else {
-      fl = 0;
-    }
+      titleState === 'logo-fade-out' || titleState === 'logo-fade-in' || titleState === 'select-box-open' || titleState === 'select-box-close' || titleState === 'select-box-close-fwd' ||
+      titleState === 'select-fade-in' || titleState === 'select' || titleState === 'select-fade-out' || titleState === 'select-fade-out-back' ||
+      titleState === 'name-entry' || titleState === 'main-out') {
+    let fl = 0;
+    if (titleState === 'main-in') fl = TITLE_FADE_MAX - Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
+    else if (titleState === 'main-out') fl = Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
 
-    // Clip viewport content
+    const isSelectState = titleState === 'select-box-open' || titleState === 'select-box-close' || titleState === 'select-box-close-fwd' ||
+      titleState === 'select-fade-in' || titleState === 'select' ||
+      titleState === 'select-fade-out' || titleState === 'select-fade-out-back' || titleState === 'name-entry';
+
     ctx.save();
     ctx.beginPath();
     ctx.rect(HUD_VIEW_X + 8, HUD_VIEW_Y + 8, TVW - 16, HUD_VIEW_H - 16);
     ctx.clip();
 
-    // Draw ocean BG (top 32px) and water (below)
     drawTitleOcean(fl);
     drawTitleWater(fl);
+    _drawTitleLogo(cx, fl, isSelectState);
+    _drawTitleShip(cx, cy, fl);
 
-    // FF3 logo in bordered box
-    const isSelectState = titleState === 'select-box-open' || titleState === 'select-box-close' || titleState === 'select-box-close-fwd' ||
-      titleState === 'select-fade-in' || titleState === 'select' ||
-      titleState === 'select-fade-out' || titleState === 'select-fade-out-back' || titleState === 'name-entry';
-    // Logo fade level — separate from background fl
-    let logoFl = fl;
-    if (titleState === 'logo-fade-out') {
-      logoFl = Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
-    } else if (titleState === 'logo-fade-in') {
-      logoFl = TITLE_FADE_MAX - Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
-    } else if (isSelectState || titleState === 'main-out') {
-      logoFl = TITLE_FADE_MAX; // hidden — already faded before reaching these states
-    }
-    if (titleLogoFrames && logoFl < TITLE_FADE_MAX) {
-      const logoFrame = titleLogoFrames[Math.min(logoFl, titleLogoFrames.length - 1)];
-      const tboxW = logoFrame.width + 16; // 8px border each side
-      const tboxH = logoFrame.height + 24; // 8 border + logo + 4 gap + 8 text + 4 pad
-      const tboxX = Math.round(cx - tboxW / 2);
-      const tboxY = HUD_VIEW_Y + 12;
-      const clampedFl = Math.min(logoFl, LOAD_FADE_MAX);
-      const tBorderSet = (borderFadeSets && logoFl > 0)
-        ? borderFadeSets[clampedFl] : borderTileCanvases;
-      if (tBorderSet) {
-        const [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR, FILL] = tBorderSet;
-        ctx.drawImage(TL, tboxX, tboxY);
-        ctx.drawImage(TR, tboxX + tboxW - 8, tboxY);
-        ctx.drawImage(BL, tboxX, tboxY + tboxH - 8);
-        ctx.drawImage(BR, tboxX + tboxW - 8, tboxY + tboxH - 8);
-        for (let tx = tboxX + 8; tx < tboxX + tboxW - 8; tx += 8) {
-          ctx.drawImage(TOP, tx, tboxY);
-          ctx.drawImage(BOT, tx, tboxY + tboxH - 8);
-        }
-        for (let ty = tboxY + 8; ty < tboxY + tboxH - 8; ty += 8) {
-          ctx.drawImage(LEFT, tboxX, ty);
-          ctx.drawImage(RIGHT, tboxX + tboxW - 8, ty);
-        }
-        for (let ty = tboxY + 8; ty < tboxY + tboxH - 8; ty += 8) {
-          for (let tx = tboxX + 8; tx < tboxX + tboxW - 8; tx += 8) {
-            ctx.drawImage(FILL, tx, ty);
-          }
-        }
-      }
-      ctx.drawImage(logoFrame, tboxX + 8, tboxY + 8);
-      // "MMORPG" subtitle below logo
-      const tpal = logoFl === 0 ? TEXT_WHITE : titleFadePal(logoFl);
-      const tw2 = measureText(TITLE_MMORPG);
-      drawText(ctx, cx - tw2 / 2, tboxY + 8 + logoFrame.height + 0, TITLE_MMORPG, tpal);
-    }
+    ctx.restore();
 
-    // Invincible airship sprite — stays visible, fades only with background (fl)
-    if (invincibleFadeFrames && fl < TITLE_FADE_MAX) {
-      const frameIdx = Math.floor(titleShipTimer / TITLE_SHIP_ANIM_MS) % 2;
-      const shipCanvas = invincibleFadeFrames[fl][frameIdx];
-      const shipX = cx - 16;
-      const bob = Math.sin(titleShipTimer / 2000 * Math.PI * 2) * 4;
-      const shipY = Math.round(cy - 20 + bob);
-      const shadowY = cy - 20 + 32;
-      if (invincibleShadowFade && Math.floor(titleShipTimer / TITLE_SHADOW_ANIM_MS) % 2 === 0) {
-        ctx.drawImage(invincibleShadowFade[fl], shipX, shadowY);
-      }
-      ctx.drawImage(shipCanvas, shipX, shipY);
-    }
-
-    ctx.restore(); // end viewport clip
-
-    // Press Z box — opens after fade-in, closes on Z press
-    if (titleState === 'zbox-open' || titleState === 'main' || titleState === 'zbox-close') {
-      const pw = measureText(TITLE_PRESS_Z);
-      const fullW = pw + 16; // 8px border each side
-      const fullH = 24;      // 8 border + 8 text + 8 border
-      const boxCY = vpBot - 44 + fullH / 2; // center Y of box
-
-      // Animate: expand from horizontal line (open) or shrink to line (close)
-      let t = 1; // 0=closed, 1=fully open
-      if (titleState === 'zbox-open') {
-        t = Math.min(titleTimer / TITLE_ZBOX_MS, 1);
-      } else if (titleState === 'zbox-close') {
-        t = 1 - Math.min(titleTimer / TITLE_ZBOX_MS, 1);
-      }
-
-      const boxW = fullW; // width stays full
-      const boxH = Math.max(8, Math.round(fullH * t)); // min 8px (one tile row)
-      const boxX = cx - boxW / 2;
-      const boxY = Math.round(boxCY - boxH / 2);
-
-      const borderSet = borderTileCanvases;
-      if (borderSet) {
-        const [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR, FILL] = borderSet;
-        ctx.drawImage(TL, boxX, boxY);
-        ctx.drawImage(TR, boxX + boxW - 8, boxY);
-        ctx.drawImage(BL, boxX, boxY + boxH - 8);
-        ctx.drawImage(BR, boxX + boxW - 8, boxY + boxH - 8);
-        for (let tx = boxX + 8; tx < boxX + boxW - 8; tx += 8) {
-          ctx.drawImage(TOP, tx, boxY);
-          ctx.drawImage(BOT, tx, boxY + boxH - 8);
-        }
-        for (let ty = boxY + 8; ty < boxY + boxH - 8; ty += 8) {
-          ctx.drawImage(LEFT, boxX, ty);
-          ctx.drawImage(RIGHT, boxX + boxW - 8, ty);
-        }
-        for (let ty = boxY + 8; ty < boxY + boxH - 8; ty += 8) {
-          for (let tx = boxX + 8; tx < boxX + boxW - 8; tx += 8) {
-            ctx.drawImage(FILL, tx, ty);
-          }
-        }
-      }
-
-      // Text only when fully open
-      if (t >= 1) {
-        const pal = TEXT_WHITE;
-        if (Math.floor(titleTimer / 500) % 2 === 0) {
-          drawText(ctx, boxX + 8, boxY + 8, TITLE_PRESS_Z, pal);
-        }
-      }
-    }
-
-    // Select box — expands from center, contains player select content
-    if (isSelectState) {
-      const SELECT_BOX_W = 128;
-      const SELECT_BOX_H = 112;
-      const sbCX = cx;
-      const sbCY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
-
-      // Box open/close animation (same as encounter boxes)
-      let sbt = 1; // 0=closed, 1=fully open
-      if (titleState === 'select-box-open') {
-        sbt = Math.min(titleTimer / BOSS_BOX_EXPAND_MS, 1);
-      } else if (titleState === 'select-box-close' || titleState === 'select-box-close-fwd') {
-        sbt = 1 - Math.min(titleTimer / BOSS_BOX_EXPAND_MS, 1);
-      }
-
-      const sbW = Math.max(16, Math.ceil(SELECT_BOX_W * sbt / 8) * 8);
-      const sbH = Math.max(16, Math.ceil(SELECT_BOX_H * sbt / 8) * 8);
-      const sbX = Math.round(sbCX - sbW / 2);
-      const sbY = Math.round(sbCY - sbH / 2);
-
-      if (borderTileCanvases) {
-        _drawBorderedBox(sbX, sbY, sbW, sbH);
-      }
-
-      // Draw select content only when fully open and not closing
-      if (sbt >= 1 && titleState !== 'select-box-close' && titleState !== 'select-box-close-fwd') {
-        drawPlayerSelectContent(sbX, sbY, SELECT_BOX_W, SELECT_BOX_H);
-      }
-    }
+    _drawTitlePressZ(cx, vpBot);
+    _drawTitleSelectBox(cx);
   }
 }
+
 
 // --- Player select screen ---
 
@@ -8112,187 +7969,103 @@ function _updateBattleMenuConfirm() {
   return true;
 }
 
-function _updateBattlePlayerAttack() {
-  if (battleState === 'attack-start') {
-    // First hit: 100ms wind-up (confirm-pause already gave 150ms). Subsequent hits: 50ms (rapid combo)
-    const startDelay = currentHitIdx === 0 ? 100 : 50;
-    if (battleTimer >= startDelay) {
-      const hw0 = getHitWeapon(currentHitIdx);
-      const isBladed0 = isBladedWeapon(hw0);
-      playSFX(isBladed0 ? SFX.KNIFE_HIT : SFX.ATTACK_HIT);
-      if (isBladed0 && !(hitResults[currentHitIdx] && hitResults[currentHitIdx].crit)) { if (sfxCutTimerId) clearTimeout(sfxCutTimerId); sfxCutTimerId = setTimeout(() => { stopSFX(); sfxCutTimerId = null; }, 133); }
-      battleState = 'player-slash';
+function _finalizeComboHits() {
+  let totalDmg = 0, anyCrit = false, allMiss = true;
+  for (const h of hitResults) {
+    if (!h.miss) { totalDmg += h.damage; allMiss = false; if (h.crit) anyCrit = true; }
+  }
+  bossDamageNum = allMiss ? { miss: true, timer: 0 } : { value: totalDmg, crit: anyCrit, timer: 0 };
+  battleState = 'player-damage-show';
+  battleTimer = 0;
+}
+function _advanceHitCombo() {
+  if (currentHitIdx + 1 < hitResults.length) {
+    currentHitIdx++;
+    slashFrame = 0;
+    const handWeapon = getHitWeapon(currentHitIdx);
+    slashFrames = getSlashFramesForWeapon(handWeapon, isHitRightHand(currentHitIdx));
+    if (isBladedWeapon(handWeapon)) { slashOffX = 8; slashOffY = -8; }
+    else { slashOffX = Math.floor(Math.random() * 40) - 20; slashOffY = Math.floor(Math.random() * 40) - 20; }
+    battleState = 'attack-start';
+    battleTimer = 0;
+  } else {
+    _finalizeComboHits();
+  }
+}
+function _updatePlayerAttackStart() {
+  if (battleState !== 'attack-start') return false;
+  const startDelay = currentHitIdx === 0 ? 100 : 50;
+  if (battleTimer >= startDelay) {
+    const hw0 = getHitWeapon(currentHitIdx);
+    const isBladed0 = isBladedWeapon(hw0);
+    playSFX(isBladed0 ? SFX.KNIFE_HIT : SFX.ATTACK_HIT);
+    if (isBladed0 && !(hitResults[currentHitIdx] && hitResults[currentHitIdx].crit)) {
+      if (sfxCutTimerId) clearTimeout(sfxCutTimerId);
+      sfxCutTimerId = setTimeout(() => { stopSFX(); sfxCutTimerId = null; }, 133);
+    }
+    battleState = 'player-slash';
+    battleTimer = 0;
+  }
+  return true;
+}
+function _updatePlayerSlash() {
+  if (battleState !== 'player-slash') return false;
+  const frame = Math.floor(battleTimer / SLASH_FRAME_MS);
+  if (frame !== slashFrame && frame < SLASH_FRAMES) {
+    slashFrame = frame;
+    const handWeapon = getHitWeapon(currentHitIdx);
+    if (isBladedWeapon(handWeapon)) {
+      slashOffX = 8 - slashFrame * 8;
+      slashOffY = -8 + slashFrame * 8;
+    } else {
+      slashOffX = Math.floor(Math.random() * 40) - 20;
+      slashOffY = Math.floor(Math.random() * 40) - 20;
+    }
+  }
+  if (battleTimer >= SLASH_FRAMES * SLASH_FRAME_MS) {
+    const hit = hitResults[currentHitIdx];
+    if (!hit.miss) {
+      if (isRandomEncounter && encounterMonsters) {
+        encounterMonsters[targetIndex].hp = Math.max(0, encounterMonsters[targetIndex].hp - hit.damage);
+      } else {
+        let dmgToApply = hit.damage;
+        if (isPVPBattle && pvpOpponentIsDefending) dmgToApply = Math.max(1, Math.floor(dmgToApply / 2));
+        bossHP = Math.max(0, bossHP - dmgToApply);
+      }
+      if (hit.crit) critFlashTimer = 0;
+    }
+    battleState = 'player-hit-show';
+    battleTimer = 0;
+  }
+  return true;
+}
+function _updatePlayerHitShow() {
+  if (battleState !== 'player-hit-show') return false;
+  const hitPause = (currentHitIdx + 1 < hitResults.length) ? 50 : HIT_PAUSE_MS;
+  if (battleTimer >= hitPause) _advanceHitCombo();
+  return true;
+}
+function _updatePlayerMissShow() {
+  if (battleState !== 'player-miss-show') return false;
+  if (battleTimer >= MISS_SHOW_MS) _advanceHitCombo();
+  return true;
+}
+function _updatePlayerDamageShow() {
+  if (battleState !== 'player-damage-show') return false;
+  if (battleTimer >= PLAYER_DMG_SHOW_MS) {
+    if (isRandomEncounter && encounterMonsters && encounterMonsters[targetIndex].hp <= 0) {
+      dyingMonsterIndices = new Map([[targetIndex, 0]]);
+      battleState = 'monster-death';
       battleTimer = 0;
-    }
-  } else if (battleState === 'player-slash') {
-    // 3-frame punch animation (50ms per frame = 150ms total)
-    const frame = Math.floor(battleTimer / SLASH_FRAME_MS);
-    if (frame !== slashFrame && frame < SLASH_FRAMES) {
-      slashFrame = frame;
-      // Weapon-aware frame positioning
-      const handWeapon = getHitWeapon(currentHitIdx);
-      if (isBladedWeapon(handWeapon)) {
-        // Diagonal sweep: top-right to bottom-left over 3 frames
-        slashOffX = 8 - slashFrame * 8;   // +8, 0, -8
-        slashOffY = -8 + slashFrame * 8;  // -8, 0, +8
-      } else {
-        // Punch scatter
-        slashOffX = Math.floor(Math.random() * 40) - 20;
-        slashOffY = Math.floor(Math.random() * 40) - 20;
-      }
-    }
-    if (battleTimer >= SLASH_FRAMES * SLASH_FRAME_MS) {
-      const hit = hitResults[currentHitIdx];
-      if (!hit.miss) {
-        // Subtract damage from target (no number yet — total shown after combo)
-        if (isRandomEncounter && encounterMonsters) {
-          encounterMonsters[targetIndex].hp = Math.max(0, encounterMonsters[targetIndex].hp - hit.damage);
-        } else {
-          let dmgToApply = hit.damage;
-          if (isPVPBattle && pvpOpponentIsDefending) dmgToApply = Math.max(1, Math.floor(dmgToApply / 2));
-          bossHP = Math.max(0, bossHP - dmgToApply);
-        }
-        // Crit flash — 1 frame orange backdrop (NES: $27 for 1 frame)
-        if (hit.crit) critFlashTimer = 0;
-      }
-      // Brief pause between slash and next action (no damage number shown yet)
-      battleState = 'player-hit-show';
-      battleTimer = 0;
-    }
-  } else if (battleState === 'player-hit-show') {
-    // Brief pause between combo hits (50ms), or full HIT_PAUSE after last hit
-    const hitPause = (currentHitIdx + 1 < hitResults.length) ? 50 : HIT_PAUSE_MS;
-    if (battleTimer >= hitPause) {
-      if (currentHitIdx + 1 < hitResults.length) {
-        // More hits — next slash, alternate hands (R/L/R/L)
-        // Route through attack-start for a pause between hits (250ms wind-up)
-        currentHitIdx++;
-        slashFrame = 0;
-        { const handWeapon = getHitWeapon(currentHitIdx);
-          slashFrames = getSlashFramesForWeapon(handWeapon, isHitRightHand(currentHitIdx));
-          if (isBladedWeapon(handWeapon)) {
-            slashOffX = 8; slashOffY = -8;
-          } else {
-            slashOffX = Math.floor(Math.random() * 40) - 20;
-            slashOffY = Math.floor(Math.random() * 40) - 20;
-          }
-        }
-        battleState = 'attack-start'; // pause before next hit (SFX plays in attack-start)
-        battleTimer = 0;
-      } else {
-        // All hits done — total up damage, show number, then player-damage-show
-        let totalDmg = 0, anyCrit = false, allMiss = true;
-        for (const h of hitResults) {
-          if (!h.miss) { totalDmg += h.damage; allMiss = false; if (h.crit) anyCrit = true; }
-        }
-        if (allMiss) {
-          bossDamageNum = { miss: true, timer: 0 };
-        } else {
-          bossDamageNum = { value: totalDmg, crit: anyCrit, timer: 0 };
-        }
-        battleState = 'player-damage-show';
-        battleTimer = 0;
-      }
-    }
-  } else if (battleState === 'player-miss-show') {
-    // Miss pause — same as hit-show but slightly longer
-    if (battleTimer >= MISS_SHOW_MS) {
-      if (currentHitIdx + 1 < hitResults.length) {
-        // More hits to try, alternate hands
-        currentHitIdx++;
-        slashFrame = 0;
-        { const handWeapon = getHitWeapon(currentHitIdx);
-          slashFrames = getSlashFramesForWeapon(handWeapon, isHitRightHand(currentHitIdx));
-          if (isBladedWeapon(handWeapon)) {
-            slashOffX = 8; slashOffY = -8;
-          } else {
-            slashOffX = Math.floor(Math.random() * 40) - 20;
-            slashOffY = Math.floor(Math.random() * 40) - 20;
-          }
-        }
-        battleState = 'attack-start'; // pause before next hit
-        battleTimer = 0;
-      } else {
-        // All hits done — total up damage
-        let totalDmg = 0, anyCrit = false, allMiss = true;
-        for (const h of hitResults) {
-          if (!h.miss) { totalDmg += h.damage; allMiss = false; if (h.crit) anyCrit = true; }
-        }
-        if (allMiss) {
-          bossDamageNum = { miss: true, timer: 0 };
-        } else {
-          bossDamageNum = { value: totalDmg, crit: anyCrit, timer: 0 };
-        }
-        battleState = 'player-damage-show';
-        battleTimer = 0;
-      }
-    }
-  } else if (battleState === 'player-damage-show') {
-    if (battleTimer >= PLAYER_DMG_SHOW_MS) {
-      // Check if targeted monster just died — play death stripe animation
-      if (isRandomEncounter && encounterMonsters && encounterMonsters[targetIndex].hp <= 0) {
-        dyingMonsterIndices = new Map([[targetIndex, 0]]);
-        battleState = 'monster-death';
-        battleTimer = 0;
-        playSFX(SFX.MONSTER_DEATH);
-      } else if (!isRandomEncounter && bossHP <= 0) {
-        if (isPVPBattle) {
-          // PVP victory — opponent retreats (no dissolve)
-          const pvpExp = 5 * pvpOpponentStats.level;
-          const pvpGil = 10 * pvpOpponentStats.level;
-          encounterExpGained = pvpExp;
-          encounterGilGained = pvpGil;
-          grantExp(pvpExp);
-          playerGil += pvpGil;
-          if (saveSlots[selectCursor]) {
-            saveSlots[selectCursor].level = playerStats.level;
-            saveSlots[selectCursor].exp = playerStats.exp;
-            saveSlots[selectCursor].stats = {
-              str: playerStats.str, agi: playerStats.agi, vit: playerStats.vit,
-              int: playerStats.int, mnd: playerStats.mnd,
-              maxHP: playerStats.maxHP, maxMP: playerStats.maxMP,
-              weaponR: playerWeaponR, weaponL: playerWeaponL,
-              head: playerHead, body: playerBody, arms: playerArms
-            };
-            saveSlots[selectCursor].inventory = { ...playerInventory };
-            saveSlots[selectCursor].gil = playerGil;
-          }
-          saveSlotsToDB();
-          isDefending = false;
-          bossDefeated = true;
-          battleState = 'victory-name-out';
-          battleTimer = 0;
-        } else {
-          // Boss defeated — dissolve out
-          battleState = 'boss-dissolve';
-          battleTimer = 0;
-          playSFX(SFX.BOSS_DEATH);
-        }
-      } else {
-        // Remaining turns in queue (enemies that haven't acted yet)
-        processNextTurn();
-      }
-    }
-  } else if (battleState === 'monster-death') {
-    const _maxDelay = dyingMonsterIndices.size > 0 ? Math.max(...dyingMonsterIndices.values()) : 0;
-    if (battleTimer >= MONSTER_DEATH_MS + _maxDelay) {
-      dyingMonsterIndices = new Map();
-      const allDead = encounterMonsters.every(m => m.hp <= 0);
-      if (allDead) {
-        encounterExpGained = encounterMonsters.reduce((sum, m) => sum + m.exp, 0);
-        encounterGilGained = encounterMonsters.reduce((sum, m) => sum + (m.gil || 0), 0);
-        grantExp(encounterExpGained);
-        playerGil += encounterGilGained;
-        // Roll item drops — 25% chance per monster, keep first hit
-        encounterDropItem = null;
-        for (const m of encounterMonsters) {
-          const mData = MONSTERS.get(m.monsterId);
-          if (mData && mData.drops && mData.drops.length && Math.random() < 0.25) {
-            encounterDropItem = mData.drops[Math.floor(Math.random() * mData.drops.length)];
-            break;
-          }
-        }
-        if (encounterDropItem !== null) addItem(encounterDropItem, 1);
+      playSFX(SFX.MONSTER_DEATH);
+    } else if (!isRandomEncounter && bossHP <= 0) {
+      if (isPVPBattle) {
+        const pvpExp = 5 * pvpOpponentStats.level;
+        const pvpGil = 10 * pvpOpponentStats.level;
+        encounterExpGained = pvpExp;
+        encounterGilGained = pvpGil;
+        grantExp(pvpExp);
+        playerGil += pvpGil;
         if (saveSlots[selectCursor]) {
           saveSlots[selectCursor].level = playerStats.level;
           saveSlots[selectCursor].exp = playerStats.exp;
@@ -8308,16 +8081,72 @@ function _updateBattlePlayerAttack() {
         }
         saveSlotsToDB();
         isDefending = false;
+        bossDefeated = true;
         battleState = 'victory-name-out';
         battleTimer = 0;
       } else {
-        // Remaining turns in queue
-        processNextTurn();
+        battleState = 'boss-dissolve';
+        battleTimer = 0;
+        playSFX(SFX.BOSS_DEATH);
       }
+    } else {
+      processNextTurn();
     }
-  } else { return false; }
+  }
   return true;
 }
+function _updateMonsterDeath() {
+  if (battleState !== 'monster-death') return false;
+  const _maxDelay = dyingMonsterIndices.size > 0 ? Math.max(...dyingMonsterIndices.values()) : 0;
+  if (battleTimer >= MONSTER_DEATH_MS + _maxDelay) {
+    dyingMonsterIndices = new Map();
+    const allDead = encounterMonsters.every(m => m.hp <= 0);
+    if (allDead) {
+      encounterExpGained = encounterMonsters.reduce((sum, m) => sum + m.exp, 0);
+      encounterGilGained = encounterMonsters.reduce((sum, m) => sum + (m.gil || 0), 0);
+      grantExp(encounterExpGained);
+      playerGil += encounterGilGained;
+      encounterDropItem = null;
+      for (const m of encounterMonsters) {
+        const mData = MONSTERS.get(m.monsterId);
+        if (mData && mData.drops && mData.drops.length && Math.random() < 0.25) {
+          encounterDropItem = mData.drops[Math.floor(Math.random() * mData.drops.length)];
+          break;
+        }
+      }
+      if (encounterDropItem !== null) addItem(encounterDropItem, 1);
+      if (saveSlots[selectCursor]) {
+        saveSlots[selectCursor].level = playerStats.level;
+        saveSlots[selectCursor].exp = playerStats.exp;
+        saveSlots[selectCursor].stats = {
+          str: playerStats.str, agi: playerStats.agi, vit: playerStats.vit,
+          int: playerStats.int, mnd: playerStats.mnd,
+          maxHP: playerStats.maxHP, maxMP: playerStats.maxMP,
+          weaponR: playerWeaponR, weaponL: playerWeaponL,
+          head: playerHead, body: playerBody, arms: playerArms
+        };
+        saveSlots[selectCursor].inventory = { ...playerInventory };
+        saveSlots[selectCursor].gil = playerGil;
+      }
+      saveSlotsToDB();
+      isDefending = false;
+      battleState = 'victory-name-out';
+      battleTimer = 0;
+    } else {
+      processNextTurn();
+    }
+  }
+  return true;
+}
+function _updateBattlePlayerAttack() {
+  return _updatePlayerAttackStart() ||
+         _updatePlayerSlash() ||
+         _updatePlayerHitShow() ||
+         _updatePlayerMissShow() ||
+         _updatePlayerDamageShow() ||
+         _updateMonsterDeath();
+}
+
 
 function _updateBattleDefendItem(dt) {
   if (battleState === 'defend-anim') {
