@@ -1725,9 +1725,7 @@ function renderSpriteFaded(romData, spriteOff, basePal, fadeSteps) {
     tiles.push(decodeTile(romData, spriteOff + i * 16));
   }
 
-  const c = document.createElement('canvas');
-  c.width = 16; c.height = 16;
-  const cctx = c.getContext('2d');
+  const [c, cctx] = _makeCanvas16ctx();
   for (let i = 0; i < 4; i++) {
     _blitTile(cctx, tiles[i], fadedPal, _BATTLE_LAYOUT[i][0], _BATTLE_LAYOUT[i][1]);
   }
@@ -1754,9 +1752,7 @@ function renderBossFaded(romData, fadeSteps) {
     tiles.push(decodeTile(romData, FF2_ADAMANTOISE_SPRITE + i * 16));
   }
 
-  const c = document.createElement('canvas');
-  c.width = 16; c.height = 16;
-  const cctx = c.getContext('2d');
+  const [c, cctx] = _makeCanvas16ctx();
   for (let i = 0; i < 4; i++) _renderDecodedTile(cctx, tiles[i], i < 2 ? fadedTop : fadedBot, _BATTLE_LAYOUT[i][0], _BATTLE_LAYOUT[i][1]);
   return c;
 }
@@ -1807,6 +1803,9 @@ function nesColorFade(c) {
 
 function _makeCanvas16() {
   const c = document.createElement('canvas'); c.width = 16; c.height = 16; return c;
+}
+function _makeCanvas16ctx() {
+  const c = _makeCanvas16(); return [c, c.getContext('2d')];
 }
 function _buildHorizWaterPair(bL, bR) {
   const p0L = _getPlane0(bL), p0R = _getPlane0(bR);
@@ -3230,15 +3229,7 @@ function handleInput() {
     return;
   }
 
-  if (keys['ArrowDown']) {
-    startMove(DIR_DOWN);
-  } else if (keys['ArrowUp']) {
-    startMove(DIR_UP);
-  } else if (keys['ArrowLeft']) {
-    startMove(DIR_LEFT);
-  } else if (keys['ArrowRight']) {
-    startMove(DIR_RIGHT);
-  }
+  _startMoveFromKeys();
 }
 
 function handleAction() {
@@ -3454,17 +3445,7 @@ function _onMoveComplete() {
 
   if (_tickRandomEncounter()) return;
 
-  if (keys['ArrowDown']) {
-    startMove(DIR_DOWN);
-  } else if (keys['ArrowUp']) {
-    startMove(DIR_UP);
-  } else if (keys['ArrowLeft']) {
-    startMove(DIR_LEFT);
-  } else if (keys['ArrowRight']) {
-    startMove(DIR_RIGHT);
-  } else {
-    sprite.resetFrame();
-  }
+  _startMoveFromKeys(true);
 }
 
 function updateTopBoxScroll(dt) {
@@ -3873,6 +3854,13 @@ function _rebuild(plane0, plane1pix) {
   return px;
 }
 
+function _startMoveFromKeys(resetOnIdle) {
+  if (keys['ArrowDown']) startMove(DIR_DOWN);
+  else if (keys['ArrowUp']) startMove(DIR_UP);
+  else if (keys['ArrowLeft']) startMove(DIR_LEFT);
+  else if (keys['ArrowRight']) startMove(DIR_RIGHT);
+  else if (resetOnIdle) sprite.resetFrame();
+}
 function _isWater(pixels) {
   for (let i = 0; i < 64; i++) if (!(pixels[i] & 2)) return false;
   return true;
@@ -4019,9 +4007,7 @@ function _initStarTiles(romData) {
   if (_starTiles) return;
   _starTiles = [];
   for (const baseOffset of STAR_FRAMES) {
-    const c = document.createElement('canvas');
-    c.width = 16; c.height = 16;
-    const cctx = c.getContext('2d');
+    const [c, cctx] = _makeCanvas16ctx();
     // 4 tiles: TL(+0), TR(+16), BL(+32), BR(+48)
     const positions = [[0, 0], [8, 0], [0, 8], [8, 8]];
     for (let t = 0; t < 4; t++) {
@@ -4907,19 +4893,13 @@ function _updateRosterBattleFade(dt) {
     rosterBattleFading = 'in';
     rosterBattleFadeTimer = 0;
   }
-  if (rosterBattleFading === 'out') {
+  if (rosterBattleFading !== 'none') {
     rosterBattleFadeTimer += dt;
     if (rosterBattleFadeTimer >= ROSTER_FADE_STEP_MS) {
       rosterBattleFadeTimer -= ROSTER_FADE_STEP_MS;
-      rosterBattleFade = Math.min(rosterBattleFade + 1, ROSTER_FADE_STEPS);
-      if (rosterBattleFade >= ROSTER_FADE_STEPS) rosterBattleFading = 'none';
-    }
-  } else if (rosterBattleFading === 'in') {
-    rosterBattleFadeTimer += dt;
-    if (rosterBattleFadeTimer >= ROSTER_FADE_STEP_MS) {
-      rosterBattleFadeTimer -= ROSTER_FADE_STEP_MS;
-      rosterBattleFade = Math.max(rosterBattleFade - 1, 0);
-      if (rosterBattleFade <= 0) rosterBattleFading = 'none';
+      const dir = rosterBattleFading === 'out' ? 1 : -1;
+      rosterBattleFade = Math.max(0, Math.min(ROSTER_FADE_STEPS, rosterBattleFade + dir));
+      if (rosterBattleFade === 0 || rosterBattleFade >= ROSTER_FADE_STEPS) rosterBattleFading = 'none';
     }
   }
 }
@@ -7889,24 +7869,14 @@ function drawBattleMessage() {
 }
 
 
-function makeExpText(amount) {
-  // Build "Got N EXP!" as Uint8Array using ROM font encoding
-  // G=0x90, o=0xD8, t=0xDD, space=0xFF, E=0x8E, X=0xA1, P=0x99, !=0xC4
-  const digits = String(amount);
+function _makeGotNText(amount, suffix) {
   const arr = [0x90, 0xD8, 0xDD, 0xFF]; // "Got "
-  for (let i = 0; i < digits.length; i++) arr.push(0x80 + parseInt(digits[i]));
-  arr.push(0xFF, 0x8E, 0xA1, 0x99, 0xC4); // " EXP!"
+  for (const d of String(amount)) arr.push(0x80 + parseInt(d));
+  arr.push(...suffix);
   return new Uint8Array(arr);
 }
-
-function makeGilText(amount) {
-  // Build "Got N Gil!" — G=0x90, o=0xD8, t=0xDD, i=0xD2, l=0xD5
-  const digits = String(amount);
-  const arr = [0x90, 0xD8, 0xDD, 0xFF]; // "Got "
-  for (let i = 0; i < digits.length; i++) arr.push(0x80 + parseInt(digits[i]));
-  arr.push(0xFF, 0x90, 0xD2, 0xD5, 0xC4); // " Gil!"
-  return new Uint8Array(arr);
-}
+function makeExpText(amount) { return _makeGotNText(amount, [0xFF, 0x8E, 0xA1, 0x99, 0xC4]); } // " EXP!"
+function makeGilText(amount) { return _makeGotNText(amount, [0xFF, 0x90, 0xD2, 0xD5, 0xC4]); } // " Gil!"
 
 function makeFoundItemText(itemId) {
   // "Found [name]!" — F=0x8F, o=0xD8, u=0xDE, n=0xD7, d=0xCD, space=0xFF, !=0xC4
