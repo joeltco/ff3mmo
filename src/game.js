@@ -1671,15 +1671,7 @@ function _renderInvFrame(tilePixels, grid, pal) {
       if (!pixels) continue;
       pixels = _hflipTile(pixels);
       const img = fctx.createImageData(8, 8);
-      for (let p = 0; p < 64; p++) {
-        const ci = pixels[p];
-        if (ci === 0) { img.data[p * 4 + 3] = 0; }
-        else {
-          const rgb = NES_SYSTEM_PALETTE[pal[ci]] || [0, 0, 0];
-          img.data[p * 4] = rgb[0]; img.data[p * 4 + 1] = rgb[1];
-          img.data[p * 4 + 2] = rgb[2]; img.data[p * 4 + 3] = 255;
-        }
-      }
+      _writePixels64(img, pixels, pal);
       fctx.putImageData(img, col * 8, row * 8);
     }
   }
@@ -2036,17 +2028,7 @@ function renderBattleBg(romData, bgId) {
   // Palette: color 0 = $0F (black), colors 1-3 from ROM
   const palette = _loadBattlePalette(romData, bgId);
 
-  // Decode 16 tiles (8×8 each, 2BPP)
-  const tiles = [];
-  const tileBase = BATTLE_BG_TILES_ROM + bgId * 0x100;
-  for (let i = 0; i < 16; i++) {
-    tiles.push(decodeTile(romData, tileBase + i * 16));
-  }
-
-  const metaTiles = _loadBattleMetaTiles(romData);
-
-  // Read tilemap (2 rows × 16 metatile entries)
-  const tilemap = _loadBattleTilemap(romData, bgId);
+  const { tiles, metaTiles, tilemap } = _loadOceanTileData(romData, bgId);
 
   // Pre-render all fade frames (original → progressively darker → black)
   const frames = [];
@@ -2125,15 +2107,7 @@ function initTitleSky(romData) {
     romData[BATTLE_BG_PAL_C3 + bgId],
   ];
 
-  const tiles = [];
-  const tileBase = BATTLE_BG_TILES_ROM + bgId * 0x100;
-  for (let i = 0; i < 16; i++) tiles.push(decodeTile(romData, tileBase + i * 16));
-
-  const metaTiles = _loadBattleMetaTiles(romData);
-
-  const tilemap = _loadBattleTilemap(romData, bgId);
-
-  // Pre-render fade frames (same approach as renderBattleBg but stored separately)
+  const { tiles, metaTiles, tilemap } = _loadOceanTileData(romData, bgId);
   titleSkyFrames = [];
   const fadePal = [...palette];
   while (true) {
@@ -2147,14 +2121,7 @@ function initTitleUnderwater(romData) {
   const bgId = 18; // undersea Nautilus battle BG ($12/$22/$33 blue palette)
   const palette = _loadBattlePalette(romData, bgId);
 
-  const tiles = [];
-  const tileBase = BATTLE_BG_TILES_ROM + bgId * 0x100;
-  for (let i = 0; i < 16; i++) tiles.push(decodeTile(romData, tileBase + i * 16));
-
-  const metaTiles = _loadBattleMetaTiles(romData);
-
-  const tilemap = _loadBattleTilemap(romData, bgId);
-
+  const { tiles, metaTiles, tilemap } = _loadOceanTileData(romData, bgId);
   titleUnderwaterFrames = [];
   const fadePal = [...palette];
   while (true) {
@@ -3981,6 +3948,17 @@ function _buildWorldHorizWaterFrames(chrTiles, frames) {
   }
 }
 
+function _writePixels64(img, pixels, pal) {
+  for (let p = 0; p < 64; p++) {
+    const ci = pixels[p];
+    if (ci === 0) { img.data[p * 4 + 3] = 0; }
+    else {
+      const rgb = NES_SYSTEM_PALETTE[pal[ci]] || [0, 0, 0];
+      img.data[p * 4] = rgb[0]; img.data[p * 4 + 1] = rgb[1];
+      img.data[p * 4 + 2] = rgb[2]; img.data[p * 4 + 3] = 255;
+    }
+  }
+}
 function _buildWorldVertWaterFrames(chrTiles, frames) {
   for (const ci of VERT_CHR) {
     const base = chrTiles[ci];
@@ -4217,20 +4195,6 @@ function _buildHorizWaterFrames(chrTiles, frames) {
     frames.set(ciL, arrL); frames.set(ciR, arrR);
   }
 }
-function _buildVertWaterFrames(chrTiles, frames) {
-  for (const ci of VERT_CHR) {
-    const base = chrTiles[ci];
-    if (!base || !_isWater(base)) continue;
-    const p0 = _getPlane0(base), p1 = base.map(p => p & 2);
-    const arr = [];
-    for (let f = 0; f < 8; f++) {
-      const rot = new Uint8Array(8);
-      for (let r = 0; r < 8; r++) rot[r] = p0[((r - f) % 8 + 8) % 8];
-      arr.push(_rebuild(rot, p1));
-    }
-    frames.set(ci, arr);
-  }
-}
 function _findAnimatedPositions(tilemap, metatiles) {
   const positions = [];
   for (let ty = 0; ty < 32; ty++) for (let tx = 0; tx < 32; tx++) {
@@ -4245,7 +4209,7 @@ function _buildIndoorWaterCache(mr) {
   const { chrTiles, metatiles, tilemap } = mr.mapData;
   const frames = new Map();
   _buildHorizWaterFrames(chrTiles, frames);
-  _buildVertWaterFrames(chrTiles, frames);
+  _buildWorldVertWaterFrames(chrTiles, frames);
   return { frames, positions: _findAnimatedPositions(tilemap, metatiles) };
 }
 
