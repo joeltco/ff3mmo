@@ -1317,25 +1317,23 @@ function _initBattleDefendSprites(palette) {
     return sc;
   });
 
-  // Cure sparkle: tiles $4D/$4E, 2 × 16×16 config frames — pal3 $0F/$12/$22/$31
+  _initCureSparkleFrames();
+}
+
+function _initCureSparkleFrames() {
   const CURE_TILE_4D = new Uint8Array([0x00,0x40,0x00,0x10,0x08,0x04,0x03,0x03, 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x01]);
   const CURE_TILE_4E = new Uint8Array([0x00,0x00,0x00,0x08,0x10,0x60,0x20,0x80, 0x00,0x00,0x00,0x00,0x00,0x00,0xC0,0xC0]);
   const CURE_PAL = [0x0F, 0x12, 0x22, 0x31];
   const cureTileCanvases = [CURE_TILE_4D, CURE_TILE_4E].map(raw => {
-    const c = document.createElement('canvas');
-    c.width = 8; c.height = 8;
-    _blitTile(c.getContext('2d'), decodeTile(raw, 0), CURE_PAL, 0, 0);
-    return c;
+    const c = document.createElement('canvas'); c.width = 8; c.height = 8;
+    _blitTile(c.getContext('2d'), decodeTile(raw, 0), CURE_PAL, 0, 0); return c;
   });
-  // Config A: TL=$4E(H), TR=$4D(H), BL=$4D(V), BR=$4E(V)
-  // Config B: TL=$4D, TR=$4E, BL=$4E(HV), BR=$4D(HV)
   const configLayouts = [
     [[1,0,0,true,false],[0,8,0,true,false],[0,0,8,false,true],[1,8,8,false,true]],
     [[0,0,0,false,false],[1,8,0,false,false],[1,0,8,true,true],[0,8,8,true,true]],
   ];
   cureSparkleFrames = configLayouts.map(config => {
-    const c = document.createElement('canvas');
-    c.width = 16; c.height = 16;
+    const c = document.createElement('canvas'); c.width = 16; c.height = 16;
     const cx = c.getContext('2d');
     for (const [ti, ox, oy, hf, vf] of config) {
       cx.save();
@@ -4001,6 +3999,20 @@ function _checkHiddenTrap(trigger, tileX, tileY) {
   return false;
 }
 
+function _triggerMapTransition(tileX, tileY, destMapId) {
+  const tileId = mapData.tilemap[tileY * 32 + tileX];
+  const tileM = tileId < 128 ? tileId : tileId & 0x7F;
+  const savedX = worldX, savedY = worldY;
+  if (((mapData.collisionByte2[tileM] >> 4) & 0x0F) === 5) {
+    mapRenderer.updateTileAt(tileX, tileY, 0x7E); playSFX(SFX.DOOR);
+    transState = 'door-opening'; transTimer = 0;
+    rosterLocChanged = _rosterLocForMapId(destMapId) !== getPlayerLocation();
+    transPendingAction = () => { mapStack.push({ mapId: currentMapId, x: savedX, y: savedY }); loadMapById(destMapId); };
+  } else {
+    startWipeTransition(() => { mapStack.push({ mapId: currentMapId, x: savedX, y: savedY }); loadMapById(destMapId); }, destMapId);
+  }
+}
+
 function _checkDynType1(trigger, tileX, tileY) {
   if (!(trigger.source === 'dynamic' && trigger.type === 1)) return false;
   if (dungeonDestinations && dungeonDestinations.has(trigger.trigId)) {
@@ -4016,46 +4028,12 @@ function _checkDynType1(trigger, tileX, tileY) {
       }, prevMapId);
       return true;
     }
-    const savedX = worldX, savedY = worldY;
-    const destTileId = mapData.tilemap[tileY * 32 + tileX];
-    const destTileM = destTileId < 128 ? destTileId : destTileId & 0x7F;
-    if (((mapData.collisionByte2[destTileM] >> 4) & 0x0F) === 5) {
-      mapRenderer.updateTileAt(tileX, tileY, 0x7E);
-      playSFX(SFX.DOOR);
-      transState = 'door-opening'; transTimer = 0;
-      rosterLocChanged = _rosterLocForMapId(dest.mapId) !== getPlayerLocation();
-      transPendingAction = () => {
-        mapStack.push({ mapId: currentMapId, x: savedX, y: savedY });
-        loadMapById(dest.mapId);
-      };
-    } else {
-      startWipeTransition(() => {
-        mapStack.push({ mapId: currentMapId, x: savedX, y: savedY });
-        loadMapById(dest.mapId);
-      }, dest.mapId);
-    }
+    _triggerMapTransition(tileX, tileY, dest.mapId);
     return true;
   }
   const destMap = mapData.entranceData[trigger.trigId];
   if (destMap === 0) return false;
-  const savedX = worldX, savedY = worldY;
-  const trigTileId = mapData.tilemap[tileY * 32 + tileX];
-  const trigM = trigTileId < 128 ? trigTileId : trigTileId & 0x7F;
-  if (((mapData.collisionByte2[trigM] >> 4) & 0x0F) === 5) {
-    mapRenderer.updateTileAt(tileX, tileY, 0x7E);
-    playSFX(SFX.DOOR);
-    transState = 'door-opening'; transTimer = 0;
-    rosterLocChanged = _rosterLocForMapId(destMap) !== getPlayerLocation();
-    transPendingAction = () => {
-      mapStack.push({ mapId: currentMapId, x: savedX, y: savedY });
-      loadMapById(destMap);
-    };
-  } else {
-    startWipeTransition(() => {
-      mapStack.push({ mapId: currentMapId, x: savedX, y: savedY });
-      loadMapById(destMap);
-    }, destMap);
-  }
+  _triggerMapTransition(tileX, tileY, destMap);
   return true;
 }
 
@@ -6426,57 +6404,28 @@ function initSlashSprites() {
   slashFrames = slashFramesR;
 }
 
+function _putPx16(img, x, y, rgb) {
+  if (x < 0 || x >= 16 || y < 0 || y >= 16) return;
+  const di = (y * 16 + x) * 4;
+  img.data[di] = rgb[0]; img.data[di+1] = rgb[1]; img.data[di+2] = rgb[2]; img.data[di+3] = 255;
+}
+
 function initKnifeSlashSprites() {
-  // Diagonal slash effect for knife attacks — 3 frames (16×16 each)
-  // Frame 0: slash start (top-right portion)
-  // Frame 1: full diagonal slash
-  // Frame 2: slash end (bottom-left portion, fading)
-  // Uses pal3 from dual-knife trace: $0F/$1B/$2B/$30
-  const white = NES_SYSTEM_PALETTE[0x30];   // white — main slash line
-  const light = NES_SYSTEM_PALETTE[0x2B];   // light green — glow/trail
-  const dark  = NES_SYSTEM_PALETTE[0x1B];   // dark blue-green — fading edge
-
-  // Slash line: diagonal from (14,0) to (0,14) — 2px wide with 1px trail
-  const FULL_LINE = [];
-  for (let i = 0; i < 15; i++) {
-    FULL_LINE.push([14 - i, i]);  // main diagonal
-  }
-
+  const white = NES_SYSTEM_PALETTE[0x30], light = NES_SYSTEM_PALETTE[0x2B], dark = NES_SYSTEM_PALETTE[0x1B];
+  const FULL_LINE = Array.from({length: 15}, (_, i) => [14 - i, i]);
   const frames = [];
   for (let f = 0; f < 3; f++) {
-    const c = document.createElement('canvas');
-    c.width = 16; c.height = 16;
-    const ctx = c.getContext('2d');
-    const img = ctx.createImageData(16, 16);
-
-    function putPx(x, y, rgb) {
-      if (x < 0 || x >= 16 || y < 0 || y >= 16) return;
-      const di = (y * 16 + x) * 4;
-      img.data[di] = rgb[0]; img.data[di+1] = rgb[1]; img.data[di+2] = rgb[2]; img.data[di+3] = 255;
-    }
-
-    let startI, endI;
-    if (f === 0) { startI = 0; endI = 7; }       // top-right half
-    else if (f === 1) { startI = 0; endI = 15; }  // full line
-    else { startI = 7; endI = 15; }               // bottom-left half
-
+    const c = document.createElement('canvas'); c.width = 16; c.height = 16;
+    const cctx = c.getContext('2d'); const img = cctx.createImageData(16, 16);
+    const startI = f === 0 ? 0 : f === 1 ? 0 : 7, endI = f === 1 ? 15 : f === 0 ? 7 : 15;
     for (let i = startI; i < endI; i++) {
       const [x, y] = FULL_LINE[i];
-      putPx(x, y, white);           // main line
-      putPx(x + 1, y, light);       // right glow
-      putPx(x, y + 1, light);       // bottom glow
-      if (f === 2 && i < 10) {
-        putPx(x, y, dark);          // fading portion in frame 2
-        putPx(x + 1, y, dark);
-      }
+      _putPx16(img, x, y, white); _putPx16(img, x + 1, y, light); _putPx16(img, x, y + 1, light);
+      if (f === 2 && i < 10) { _putPx16(img, x, y, dark); _putPx16(img, x + 1, y, dark); }
     }
-
-    ctx.putImageData(img, 0, 0);
-    frames.push(c);
+    cctx.putImageData(img, 0, 0); frames.push(c);
   }
-
-  knifeSlashFramesR = frames;
-  knifeSlashFramesL = frames;
+  knifeSlashFramesR = frames; knifeSlashFramesL = frames;
 }
 
 function initSwordSlashSprites() {
