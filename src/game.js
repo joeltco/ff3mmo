@@ -1881,6 +1881,17 @@ function nesColorFade(c) {
 function _makeCanvas16() {
   const c = document.createElement('canvas'); c.width = 16; c.height = 16; return c;
 }
+function _buildHorizWaterPair(bL, bR) {
+  const p0L = _getPlane0(bL), p0R = _getPlane0(bR);
+  const p1L = bL.map(p => p & 2), p1R = bR.map(p => p & 2);
+  const arrL = [], arrR = [];
+  let cL = new Uint8Array(p0L), cR = new Uint8Array(p0R);
+  for (let f = 0; f < 16; f++) {
+    arrL.push(_rebuild(cL, p1L)); arrR.push(_rebuild(cR, p1R));
+    [cL, cR] = _shiftHorizWater(cL, cR);
+  }
+  return [arrL, arrR];
+}
 function _pauseFadeStep(inState, outState) {
   if (pauseState === inState) return PAUSE_TEXT_STEPS - Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
   if (pauseState === outState) return Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
@@ -2046,15 +2057,7 @@ function _precomputeWaterShifts(chrTiles) {
   const shifted = {};
   for (const [ciL, ciR] of [[0x22, 0x23], [0x24, 0x25]]) {
     const bL = chrTiles[ciL], bR = chrTiles[ciR];
-    const p0L = _getPlane0(bL), p0R = _getPlane0(bR);
-    const p1L = bL.map(p => p & 2), p1R = bR.map(p => p & 2);
-    const arrL = [], arrR = [];
-    let cL = new Uint8Array(p0L), cR = new Uint8Array(p0R);
-    for (let f = 0; f < 16; f++) {
-      arrL.push(_rebuild(cL, p1L));
-      arrR.push(_rebuild(cR, p1R));
-      [cL, cR] = _shiftHorizWater(cL, cR);
-    }
+    const [arrL, arrR] = _buildHorizWaterPair(bL, bR);
     shifted[ciL] = arrL; shifted[ciR] = arrR;
   }
   return shifted;
@@ -3981,14 +3984,7 @@ function _buildWorldHorizWaterFrames(chrTiles, frames) {
   for (const [ciL, ciR] of HORIZ_PAIRS) {
     const bL = chrTiles[ciL], bR = chrTiles[ciR];
     if (!bL || !bR || !_isWater(bL) || !_isWater(bR)) continue;
-    const p0L = _getPlane0(bL), p0R = _getPlane0(bR);
-    const p1L = bL.map(p => p & 2), p1R = bR.map(p => p & 2);
-    const arrL = [], arrR = [];
-    let cL = new Uint8Array(p0L), cR = new Uint8Array(p0R);
-    for (let f = 0; f < 16; f++) {
-      arrL.push(_rebuild(cL, p1L)); arrR.push(_rebuild(cR, p1R));
-      [cL, cR] = _shiftHorizWater(cL, cR);
-    }
+    const [arrL, arrR] = _buildHorizWaterPair(bL, bR);
     frames.set(ciL, arrL); frames.set(ciR, arrR);
   }
 }
@@ -4225,15 +4221,7 @@ function _buildHorizWaterFrames(chrTiles, frames) {
   for (const [ciL, ciR] of [[0x22, 0x23], [0x24, 0x25]]) {
     const bL = chrTiles[ciL], bR = chrTiles[ciR];
     if (!bL || !bR || !_isWater(bL) || !_isWater(bR)) continue;
-    const p0L = _getPlane0(bL), p0R = _getPlane0(bR);
-    const p1L = bL.map(p => p & 2), p1R = bR.map(p => p & 2);
-    const arrL = [], arrR = [];
-    let cL = new Uint8Array(p0L), cR = new Uint8Array(p0R);
-    for (let f = 0; f < 16; f++) {
-      arrL.push(_rebuild(cL, p1L));
-      arrR.push(_rebuild(cR, p1R));
-      [cL, cR] = _shiftHorizWater(cL, cR);
-    }
+    const [arrL, arrR] = _buildHorizWaterPair(bL, bR);
     frames.set(ciL, arrL); frames.set(ciR, arrR);
   }
 }
