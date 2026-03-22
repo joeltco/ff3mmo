@@ -28,18 +28,11 @@ import { BATTLE_MISS, BATTLE_GAME_OVER, BATTLE_ROAR, BATTLE_FIGHT, BATTLE_RUN,
 import { ENC_PAL0, ENC_PAL1, EYE_FANG_TILE_PAL, EYE_FANG_RAW,
          BLUE_WISP_TILE_PAL, BLUE_WISP_RAW,
          CARBUNCLE_TILE_PAL, CARBUNCLE_RAW } from './data/monster-sprites.js';
+import { openSaveDB, serverDeleteSlot, parseSaveSlots } from './save.js';
 
 const isMobile = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 
 // --- Save data persistence (IndexedDB) ---
-function openSaveDB() {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open('ff3mmo-roms', 1);
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-
 async function saveSlotsToDB() {
   if (!savesLoaded) return;
   try {
@@ -63,26 +56,13 @@ async function saveSlotsToDB() {
   } catch (e) { /* silent fail */ }
 }
 
-async function serverDeleteSlot(slot) {
-  if (window.ff3Auth) window.ff3Auth.serverDeleteSave(slot).catch(() => {});
-}
-
-function _parseSaveSlots(data) {
-  if (!Array.isArray(data)) return;
-  saveSlots = data.map(s => {
-    if (!s) return null;
-    if (Array.isArray(s)) return { name: new Uint8Array(s), level: 1, exp: 0, stats: null, inventory: {} };
-    return { name: new Uint8Array(s.name), level: s.level || 1, exp: s.exp || 0, stats: s.stats || null, inventory: s.inventory || {} };
-  });
-}
-
 async function loadSlotsFromDB() {
   try {
     // Try server first if logged in
     if (window.ff3Auth) {
       const serverSlots = await window.ff3Auth.serverLoadSaves().catch(() => null);
       if (serverSlots) {
-        _parseSaveSlots(serverSlots);
+        saveSlots = parseSaveSlots(serverSlots) || saveSlots;
         savesLoaded = true;
         return;
       }
@@ -93,7 +73,7 @@ async function loadSlotsFromDB() {
     const req = tx.objectStore('roms').get('saves');
     return new Promise((resolve) => {
       req.onsuccess = () => {
-        _parseSaveSlots(req.result);
+        saveSlots = parseSaveSlots(req.result) || saveSlots;
         savesLoaded = true;
         resolve();
       };
