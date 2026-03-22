@@ -6,6 +6,14 @@ All notable changes to this project are documented here.
 
 _No unreleased changes._
 
+## 0.9.9 — 2026-03-22
+
+### Modularization Phase 2 (partial)
+
+**New module `src/battle-layout.js`:**
+- `_calcBoxExpandSize(fullW, fullH, isExpand, isClose, timer)` — box expand/close animation sizing (refactored to take `timer` as param instead of reading `battleTimer` global)
+- `_encounterGridPos(boxX, boxY, boxW, boxH, count, sprH)` — pure monster grid positioning for 1–4 encounters
+
 ## 0.9.8 — 2026-03-22
 
 ### Modularization Phase 1 complete

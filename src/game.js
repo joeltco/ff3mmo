@@ -33,6 +33,7 @@ import { _nameToBytes, _nesNameToString, _buildItemRowBytes, _makeGotNText, make
 import { nesColorFade, _makeFadedPal, _stepPalFade } from './palette.js';
 import { _getPlane0, _rebuild, _shiftHorizWater, _isWater, _buildHorizMixed, _writePixels64, _writeTilePixels } from './tile-math.js';
 import { BAYER4, DMG_BOUNCE_TABLE, _dmgBounceY } from './data/animation-tables.js';
+import { _calcBoxExpandSize, _encounterGridPos } from './battle-layout.js';
 
 const isMobile = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 
@@ -1820,15 +1821,7 @@ function _landOnWorldMap(tileX, tileY) {
   moving = false; sprite.setDirection(DIR_DOWN); sprite.resetFrame();
   playTrack(TRACKS.WORLD_MAP);
 }
-function _calcBoxExpandSize(fullW, fullH, isExpand, isClose) {
-  let boxW = fullW, boxH = fullH;
-  if (isExpand || isClose) {
-    const t = isExpand ? Math.min(battleTimer / BOSS_BOX_EXPAND_MS, 1) : 1 - Math.min(battleTimer / BOSS_BOX_EXPAND_MS, 1);
-    boxW = Math.max(16, Math.ceil(fullW * t / 8) * 8);
-    boxH = Math.max(16, Math.ceil(fullH * t / 8) * 8);
-  }
-  return { boxW, boxH };
-}
+
 function _syncSaveSlotProgress() {
   if (!saveSlots[selectCursor]) return;
   saveSlots[selectCursor].level = playerStats.level;
@@ -7283,34 +7276,6 @@ function _encounterBoxDims() {
   return { fullW, fullH, sprH };
 }
 
-function _encounterGridPos(boxX, boxY, boxW, boxH, count, sprH) {
-  sprH = sprH || 32;
-  const cx = boxX + Math.floor(boxW / 2);
-  const cy = boxY + Math.floor(boxH / 2);
-  const hs = 16; // half sprite width (32px wide)
-  const gapX = 20;
-  const gapY = 8;
-  // For 2-row layouts: top of grid is centered on cy
-  const gridH2 = sprH * 2 + gapY; // total height of 2-row grid
-  const row0y = cy - Math.floor(gridH2 / 2);
-  const row1y = row0y + sprH + gapY;
-  if (count === 1) return [{ x: cx - hs, y: cy - Math.floor(sprH / 2) }];
-  if (count === 2) return [
-    { x: cx - gapX - hs, y: cy - Math.floor(sprH / 2) },
-    { x: cx + gapX - hs, y: cy - Math.floor(sprH / 2) },
-  ];
-  if (count === 3) return [
-    { x: cx - gapX - hs, y: row0y },
-    { x: cx + gapX - hs, y: row0y },
-    { x: cx - hs,         y: row1y },
-  ];
-  return [ // 4
-    { x: cx - gapX - hs, y: row0y },
-    { x: cx + gapX - hs, y: row0y },
-    { x: cx - gapX - hs, y: row1y },
-    { x: cx + gapX - hs, y: row1y },
-  ];
-}
 
 function _drawEncounterMonsters(gridPos, sprH, boxX, boxY, boxW, boxH, isSlideIn, fullW, slotCenterY) {
   if (!goblinBattleCanvas && monsterBattleCanvas.size === 0) return;
@@ -7420,7 +7385,7 @@ function drawEncounterBox() {
   const centerX = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2);
   const centerY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
 
-  const { boxW, boxH } = _calcBoxExpandSize(fullW, fullH, isExpand, isClose);
+  const { boxW, boxH } = _calcBoxExpandSize(fullW, fullH, isExpand, isClose, battleTimer);
   const boxX = centerX - Math.floor(boxW / 2);
   const boxY = centerY - Math.floor(boxH / 2);
 
@@ -7576,7 +7541,7 @@ function _drawBossSpriteBoxBoss(centerX, centerY) {
 
   _clipToViewport();
 
-  const { boxW, boxH } = _calcBoxExpandSize(fullW, fullH, isExpand, isClose);
+  const { boxW, boxH } = _calcBoxExpandSize(fullW, fullH, isExpand, isClose, battleTimer);
   _drawBorderedBox(centerX - Math.floor(boxW / 2), centerY - Math.floor(boxH / 2), boxW, boxH);
 
   if (isExpand || isClose || battleState === 'defeat-text') { ctx.restore(); return; }
