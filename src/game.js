@@ -31,6 +31,7 @@ import { ENC_PAL0, ENC_PAL1, EYE_FANG_TILE_PAL, EYE_FANG_RAW,
 import { openSaveDB, serverDeleteSlot, parseSaveSlots } from './save.js';
 import { _nameToBytes, _nesNameToString, _buildItemRowBytes, _makeGotNText, makeExpText, makeGilText, makeFoundItemText } from './text-utils.js';
 import { nesColorFade, _makeFadedPal, _stepPalFade } from './palette.js';
+import { _getPlane0, _rebuild, _shiftHorizWater, _isWater, _buildHorizMixed, _writePixels64, _writeTilePixels } from './tile-math.js';
 
 const isMobile = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 
@@ -1780,15 +1781,7 @@ function _encounterGridLayout() {
   const gridPos = _encounterGridPos(boxX, boxY, fullW, fullH, count, sprH);
   return { count, boxX, boxY, sprH, fullW, fullH, gridPos };
 }
-function _shiftHorizWater(cL, cR) {
-  const nL = new Uint8Array(8), nR = new Uint8Array(8);
-  for (let r = 0; r < 8; r++) {
-    const l = cL[r], ri = cR[r];
-    nL[r] = ((l >> 1) | ((ri & 1) << 7)) & 0xFF;
-    nR[r] = ((ri >> 1) | ((l & 1) << 7)) & 0xFF;
-  }
-  return [nL, nR];
-}
+
 function _grayViewport() {
   ctx.filter = 'saturate(0)';
   ctx.drawImage(ctx.canvas, HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H,
@@ -3767,25 +3760,6 @@ const VERT_CHR = [0x26, 0x27];
 const ANIM_CHR = new Set([0x22, 0x23, 0x24, 0x25, 0x26, 0x27]);
 let _waterCache = null;
 
-function _getPlane0(pixels) {
-  const p = new Uint8Array(8);
-  for (let r = 0; r < 8; r++) {
-    let b = 0;
-    for (let c = 0; c < 8; c++) b |= (pixels[r * 8 + c] & 1) << (7 - c);
-    p[r] = b;
-  }
-  return p;
-}
-
-function _rebuild(plane0, plane1pix) {
-  const px = new Uint8Array(64);
-  for (let r = 0; r < 8; r++) {
-    const b = plane0[r];
-    for (let c = 0; c < 8; c++)
-      px[r * 8 + c] = plane1pix[r * 8 + c] | ((b >> (7 - c)) & 1);
-  }
-  return px;
-}
 
 function _startMoveFromKeys(resetOnIdle) {
   if (keys['ArrowDown']) startMove(DIR_DOWN);
@@ -3794,24 +3768,10 @@ function _startMoveFromKeys(resetOnIdle) {
   else if (keys['ArrowRight']) startMove(DIR_RIGHT);
   else if (resetOnIdle) sprite.resetFrame();
 }
-function _isWater(pixels) {
-  for (let i = 0; i < 64; i++) if (!(pixels[i] & 2)) return false;
-  return true;
-}
 
 function _buildWorldHorizWaterFrames(chrTiles, frames) { _buildHorizWaterFrames(chrTiles, frames); }
 
-function _writePixels64(img, pixels, pal) {
-  for (let p = 0; p < 64; p++) {
-    const ci = pixels[p];
-    if (ci === 0) { img.data[p * 4 + 3] = 0; }
-    else {
-      const rgb = NES_SYSTEM_PALETTE[pal[ci]] || [0, 0, 0];
-      img.data[p * 4] = rgb[0]; img.data[p * 4 + 1] = rgb[1];
-      img.data[p * 4 + 2] = rgb[2]; img.data[p * 4 + 3] = 255;
-    }
-  }
-}
+
 function _buildWorldVertWaterFrames(chrTiles, frames) {
   for (const ci of VERT_CHR) {
     const base = chrTiles[ci];
@@ -3844,20 +3804,7 @@ function _buildWaterCache(wmr) {
   return { frames, metas: _findAnimatedMetatiles(metatiles) };
 }
 
-function _writeTilePixels(td, tile, rgbPal) {
-  for (let p = 0; p < 64; p++) {
-    const rgb = rgbPal[tile[p]]; const di = p * 4;
-    td[di]=rgb[0]; td[di+1]=rgb[1]; td[di+2]=rgb[2]; td[di+3]=255;
-  }
-}
-function _buildHorizMixed(curTile, prevTile, subRow) {
-  const m = new Array(64);
-  for (let py = 0; py < 8; py++) {
-    const src = py <= subRow ? curTile : prevTile;
-    for (let px = 0; px < 8; px++) m[py * 8 + px] = src[py * 8 + px];
-  }
-  return m;
-}
+
 function _updateWorldWater(wmr) {
   if (!wmr || !wmr._atlas) return;
   if (!_waterCache) _waterCache = _buildWaterCache(wmr);
