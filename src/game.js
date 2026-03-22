@@ -5886,7 +5886,8 @@ function _drawPauseEquipItems() {
   const px = HUD_VIEW_X, finalY = HUD_VIEW_Y;
   const showEqItems = pauseState === 'eq-items-in' || pauseState === 'eq-item-select' || pauseState === 'eq-items-out';
   if (!showEqItems) return;
-  const fadedPal = _makeFadedPal(_pauseFadeStep('eq-items-in', 'eq-items-out'));
+  const fadeStep = _pauseFadeStep('eq-items-in', 'eq-items-out');
+  const fadedPal = _makeFadedPal(fadeStep);
   const listX = px + 24;
   const listY = finalY + 12 + eqCursor * 22 + 22;
   const maxBelow = Math.floor((finalY + HUD_VIEW_H - 16 - listY) / 12);
