@@ -6043,6 +6043,9 @@ function _processBossFlash() {
     } else {
       playerDamageNum = { miss: true, timer: 0 };
       battleState = 'enemy-damage-show'; battleTimer = 0;
+      // Shield block — earn prof if player has a shield equipped
+      const shieldId = [ps.weaponR, ps.weaponL].find(id => ITEMS.get(id)?.subtype === 'shield');
+      if (shieldId) battleProfHits['shield'] = (battleProfHits['shield'] || 0) + 1;
     }
   }
   return true;
@@ -6069,7 +6072,11 @@ function _processPVPSecondWindup() {
     ps.hp = Math.max(0, ps.hp - dmg2);
     playerDamageNum = { value: dmg2, timer: 0 }; playSFX(SFX.ATTACK_HIT);
     battleShakeTimer = BATTLE_SHAKE_MS; battleState = 'enemy-attack'; battleTimer = 0;
-  } else { playerDamageNum = { miss: true, timer: 0 }; battleState = 'enemy-damage-show'; battleTimer = 0; }
+  } else {
+    playerDamageNum = { miss: true, timer: 0 }; battleState = 'enemy-damage-show'; battleTimer = 0;
+    const shieldId2 = [ps.weaponR, ps.weaponL].find(id => ITEMS.get(id)?.subtype === 'shield');
+    if (shieldId2) battleProfHits['shield'] = (battleProfHits['shield'] || 0) + 1;
+  }
 }
 
 function _updateBattleEnemyTurn() {
