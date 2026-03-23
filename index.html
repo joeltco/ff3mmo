@@ -419,6 +419,9 @@
       flex-direction: column;
       z-index: 500;
       padding: 8px;
+      height: 100%;
+      box-sizing: border-box;
+      overflow: hidden;
     }
     #tile-viewer-header {
       color: #c8a832;
@@ -434,8 +437,9 @@
       display: flex;
       flex-wrap: wrap;
       gap: 6px;
-      overflow-y: auto;
+      overflow-y: scroll;
       flex: 1;
+      min-height: 0;
       align-content: flex-start;
       padding-bottom: 8px;
     }
