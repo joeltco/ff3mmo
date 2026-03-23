@@ -5082,6 +5082,10 @@ function _drawPauseStats() {
   // Top half: combat stats in 2 columns
   const s = ps.stats;
   if (!s) return;
+  // col0: label at tx, value right-aligned to tx+60
+  // col1: label at tx+72, value right-aligned to tx+W (12px gap between cols)
+  const col0Lx = tx, col0Rx = tx + 60;
+  const col1Lx = tx + 72, col1Rx = tx + W;
   const col0 = [
     ['Lv',   String(s.level)],
     ['HP',   ps.hp + '/' + s.maxHP],
@@ -5100,13 +5104,12 @@ function _drawPauseStats() {
   ];
   for (let i = 0; i < col0.length; i++) {
     const cy = y + i * 10;
-    for (const [ci, col] of [[0, col0], [1, col1]]) {
-      const [label, val] = col[i];
-      const cx = tx + ci * colW;
-      drawText(ctx, cx, cy, _nameToBytes(label), fadedPal);
-      const vb = _nameToBytes(val);
-      drawText(ctx, cx + colW - vb.length * 8, cy, vb, fadedPal);
-    }
+    const [l0, v0] = col0[i]; const [l1, v1] = col1[i];
+    const v0b = _nameToBytes(v0), v1b = _nameToBytes(v1);
+    drawText(ctx, col0Lx, cy, _nameToBytes(l0), fadedPal);
+    drawText(ctx, col0Rx - v0b.length * 8, cy, v0b, fadedPal);
+    drawText(ctx, col1Lx, cy, _nameToBytes(l1), fadedPal);
+    drawText(ctx, col1Rx - v1b.length * 8, cy, v1b, fadedPal);
   }
 
   // Divider gap
@@ -5119,7 +5122,7 @@ function _drawPauseStats() {
     const lv = Math.min(16, Math.floor((ps.proficiency[cat] || 0) / 100));
     const col = i % 2;
     const row = Math.floor(i / 2);
-    const cx = tx + col * colW;
+    const cx = col === 0 ? col0Lx : col1Lx;
     const cy = y + row * 10;
     const icon = getProfIcon(cat);
     if (icon) {
