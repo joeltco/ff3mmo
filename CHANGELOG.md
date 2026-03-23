@@ -6,6 +6,26 @@ All notable changes to this project are documented here.
 
 _No unreleased changes._
 
+## 1.0.7 — 2026-03-22
+
+### All fades converted to NES palette — no globalAlpha on HUD or sprites
+
+Enforced strict NES palette fading across the entire codebase. `globalAlpha` is now only used for the chat black fill rect and canvas text (no NES tile equivalent exists for those).
+
+**Changes:**
+- `drawHUD` game-start border: switched from `globalAlpha` to `_drawHudWithFade` + `hudFadeCanvases` (real NES border tiles fading via `borderFadeSets`)
+- Portrait idle/kneel/defend: new `_buildFadedCanvas4Set` helper generates pre-rendered NES-palette-faded canvas sets at init time; `_drawPortraitImage` selects the correct faded canvas per pose
+- Info panel text (name/HP/level): `nesColorFade` applied to text palette per `infoFadeStep`; HP/level cross-fade steps combined additively with `infoFadeStep`
+- Cursor: `initCursorTile` refactored to use `_buildCanvas4ROM` + pre-rendered `cursorFadeCanvases`; `_drawCursorFaded` uses faded canvases instead of `globalAlpha`
+- Select screen portraits: use `battleSpriteFadeCanvases[fadeStep-1]`; silhouette skipped during fade (no faded version)
+- Chat border: `_drawChatExpandBG` passes `rosterBattleFade` step to `_drawHudBox` → `borderFadeSets` used for NES tile fading
+
+## 1.0.6 — 2026-03-22
+
+### Keep bottom HUD solid during game-start fade-in
+
+Bottom HUD border (chat panel) was fading in along with the rest of the HUD on map start. After drawing the faded `hudCanvas`, the bottom HUD region is now clipped and redrawn at full alpha — same pattern used by `_drawHudWithFade` for title screen.
+
 ## 1.0.5 — 2026-03-22
 
 ### Fix underwater title BG flash on game start
