@@ -40,6 +40,8 @@ import { initSlashSprites, initKnifeSlashSprites, initSwordSlashSprites } from '
 import { initSouthWindSprite } from './south-wind.js';
 import { BATTLE_BG_MAP_LOOKUP, renderBattleBg } from './battle-bg.js';
 import { initTitleWater, initTitleSky, initTitleUnderwater, initUnderwaterSprites, initTitleOcean, initTitleLogo } from './title-animations.js';
+import { BATTLE_SPRITE_ROM, BATTLE_JOB_SIZE, BATTLE_PAL_ROM } from './data/jobs.js';
+import { ps, EQUIP_SLOT_SUBTYPE, getEquipSlotId, setEquipSlotId, recalcDEF, recalcCombatStats, getHitWeapon, isHitRightHand, initPlayerStats, initExpTable, grantExp, fullHeal, playerStatsSnapshot, gainProficiency, getProfHits } from './player-stats.js';
 
 const isMobile = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 
@@ -49,9 +51,9 @@ async function saveSlotsToDB() {
   try {
     const data = saveSlots.map(s => s ? {
       name: Array.from(s.name),
-      level: s.level || (playerStats ? playerStats.level : 1),
-      exp: s.exp != null ? s.exp : (playerStats ? playerStats.exp : 0),
-      stats: s.stats || (playerStats ? _playerStatsSnapshot() : null),
+      level: s.level || (ps.stats ? ps.stats.level : 1),
+      exp: s.exp != null ? s.exp : (ps.stats ? ps.stats.exp : 0),
+      stats: s.stats || (ps.stats ? playerStatsSnapshot() : null),
       inventory: s.inventory || playerInventory
     } : null);
     // Local IndexedDB
@@ -124,8 +126,6 @@ let borderFadeSets = null;    // [fadeLevel] → [TL, TOP, TR, LEFT, RIGHT, BL, 
 let cornerMasks = null;       // [TL, TR, BL, BR] 8×8 canvases — black where outside, transparent inside
 
 // Battle sprite — Onion Knight idle frame (16×24, 2×3 tiles)
-const BATTLE_SPRITE_ROM = 0x050010;  // Bank 28/$8000 — battle character graphics (disasm 2F/AB3D)
-const BATTLE_JOB_SIZE = 0x02A0;      // 672 bytes (42 tiles) per job
 let battleSpriteCanvas = null;
 let battleSpriteFadeCanvases = null;       // [step1..step4] NES-faded idle portrait for game-start fade-in
 let battleSpriteDefendFadeCanvases = null; // same for defend pose
@@ -207,12 +207,7 @@ const INVINCIBLE_PAL = [0x0F, 0x0F, 0x27, 0x30]; // transparent, black, gold, wh
 let invincibleFrames = null; // [frameA, frameB] 32×32 canvases (east-facing)
 let invincibleFadeFrames = null; // [fadeLevel][frameIdx] faded canvases
 
-// Player stats — ROM offsets (iNES +16 header)
-const JOB_BASE_STATS_OFF = 0x072010;  // 22 jobs × 8 bytes: [adj, minLvl, STR, AGI, VIT, INT, MND, mpIdx]
-const CHAR_INIT_HP_OFF   = 0x073BE8;  // 2 bytes little-endian
-const CHAR_INIT_MP_OFF   = 0x073B98;  // 10 entries × 8 bytes (indexed by job mpIdx)
-const LEVEL_EXP_TABLE_OFF  = 0x0720C0;  // 98 × 3 bytes (24-bit LE per level)
-const LEVEL_STAT_BONUS_OFF = 0x0721E6;  // 22 jobs × 98 levels × 2 bytes
+// Player stats — see src/data/jobs.js for ROM offsets and reader functions
 let invincibleShadowFade = null; // [fadeLevel] 32×8 shadow canvases
 
 // Loading screen fade state
@@ -281,58 +276,7 @@ let hudHpLvStep = 0;
 let hudHpLvTimer = 0;
 const HUD_HPLV_STEP_MS = 60;
 
-// Player stats — initialized from ROM in initPlayerStats()
-let playerStats = null;  // { str, agi, vit, int, mnd, hp, maxHP, mp, maxMP, level, exp, expToNext }
-let expTable = null;     // Uint32Array(98) — EXP thresholds from ROM
-let leveledUp = false;   // set by grantExp() for victory display
-let playerHP = 28;   // overwritten by initPlayerStats
-let playerMP = 12;
-let playerATK = 12;
-let playerDEF = 4;
-let playerGil = 0;
-let playerWeaponR = 0x1E;  // right hand item ID (Knife), 0 = unarmed
-let playerWeaponL = 0x00;  // left hand item ID, 0 = unarmed
-let playerHead = 0x00;     // helmet item ID, 0 = empty
-let playerBody = 0x00;     // body armor item ID, 0 = empty
-let playerArms = 0x00;     // bracers item ID, 0 = empty
-
-// Equip slot index mapping: -100=RH, -101=LH, -102=Head, -103=Body, -104=Arms
-const EQUIP_SLOT_SUBTYPE = { '-102': 'helmet', '-103': 'body', '-104': 'arms' };
-
-function getEquipSlotId(eqIdx) {
-  switch (eqIdx) {
-    case -100: return playerWeaponR;
-    case -101: return playerWeaponL;
-    case -102: return playerHead;
-    case -103: return playerBody;
-    case -104: return playerArms;
-    default: return 0;
-  }
-}
-
-function setEquipSlotId(eqIdx, id) {
-  switch (eqIdx) {
-    case -100: playerWeaponR = id; break;
-    case -101: playerWeaponL = id; break;
-    case -102: playerHead = id; break;
-    case -103: playerBody = id; break;
-    case -104: playerArms = id; break;
-  }
-}
-
-function _recalcCombatStats() {
-  playerATK = playerStats.str + (ITEMS.get(playerWeaponR)?.atk || 0) + (ITEMS.get(playerWeaponL)?.atk || 0);
-  recalcDEF();
-}
-function recalcDEF() {
-  const rDef = ITEMS.get(playerWeaponR)?.def || 0;
-  const lDef = ITEMS.get(playerWeaponL)?.def || 0;
-  playerDEF = (playerStats ? playerStats.vit : 4)
-    + rDef + lDef
-    + (ITEMS.get(playerHead)?.def || 0)
-    + (ITEMS.get(playerBody)?.def || 0)
-    + (ITEMS.get(playerArms)?.def || 0);
-}
+// Player stats are now in ps (imported from ./player-stats.js)
 
 function getSlashFramesForWeapon(id, rightHand) {
   const st = weaponSubtype(id);
@@ -340,23 +284,6 @@ function getSlashFramesForWeapon(id, rightHand) {
   if (st === 'sword') return rightHand ? swordSlashFramesR : swordSlashFramesL;
   return rightHand ? slashFramesR : slashFramesL; // punch
 }
-// Get the weapon ID for a given hit index (shields are not weapons)
-function getHitWeapon(hitIdx) {
-  const rW = isWeapon(playerWeaponR);
-  const lW = isWeapon(playerWeaponL);
-  if (rW && lW) return (hitIdx % 2 === 0) ? playerWeaponR : playerWeaponL;
-  if (rW) return playerWeaponR;
-  if (lW) return playerWeaponL;
-  return 0; // unarmed
-}
-function isHitRightHand(hitIdx) {
-  const rW = isWeapon(playerWeaponR);
-  const lW = isWeapon(playerWeaponL);
-  if (rW && lW) return hitIdx % 2 === 0;
-  if (rW || lW) return rW; // single weapon hand
-  return hitIdx % 2 === 0; // unarmed fists: alternate R/L starting with R
-}
-
 // Inventory system
 let playerInventory = {};    // { itemId: count } — e.g. { 0xA6: 3 }
 let itemSelectList = [];     // [{id, count}] built when entering item-select
@@ -434,6 +361,7 @@ let isRandomEncounter = false;
 let encounterMonsters = null;  // [{ hp, maxHP, atk, def, exp }] — array of enemies
 let encounterExpGained = 0;
 let encounterGilGained = 0;
+let battleProfHits = {};   // { subtype: hitsLanded } — accumulated this battle, applied on victory
 let encounterDropItem = null;  // item id dropped on victory (or null)
 let preBattleTrack = null;
 let turnQueue = [];              // [{type:'player'|'enemy', index}] sorted by priority
@@ -526,7 +454,10 @@ let pauseState = 'none';       // 'none'|'scroll-in'|'text-in'|'open'|'text-out'
                                // |'eq-text-out'|'eq-expand'|'eq-slots-in'|'equip'
                                // |'eq-items-in'|'eq-item-select'|'eq-items-out'
                                // |'eq-slots-out'|'eq-shrink'|'eq-text-in'
+                               // |'stats-text-out'|'stats-expand'|'stats-in'|'stats'
+                               // |'stats-out'|'stats-shrink'|'stats-text-in'
 let pauseTimer = 0;
+let pauseStatsPage = 0;        // 0 = combat stats, 1 = proficiency
 let pauseCursor = 0;           // 0-5
 let pauseInvScroll = 0;        // scroll offset for inventory list
 let pauseHeldItem = -1;        // index into inventory entries of held item (-1 = none)
@@ -1257,7 +1188,6 @@ function _initBattleLowHPSprites(palette) {
 function initBattleSprite(romData) {
   // Battle palette: character palette 0 (ID $FC) at ROM 0x05CF04
   // 3 bytes = colors 1-3, color 0 always $0F (disasm 2E/9E28 + 2E/9DA2)
-  const BATTLE_PAL_ROM = 0x05CF04;
   const palette = [0x0F, romData[BATTLE_PAL_ROM], romData[BATTLE_PAL_ROM + 1], romData[BATTLE_PAL_ROM + 2]];
 
   _initBattleIdleSprites(romData, palette);
@@ -1290,80 +1220,6 @@ function initAdamantoise(romData) {
   const flipped = _hflipCanvas16(normal);
 
   adamantoiseFrames = [normal, flipped];
-}
-
-function initPlayerStats(romData) {
-  // Job 0 (Onion Knight): 8 bytes at JOB_BASE_STATS_OFF
-  const jobOff = JOB_BASE_STATS_OFF;
-  const str = romData[jobOff + 2];
-  const agi = romData[jobOff + 3];
-  const vit = romData[jobOff + 4];
-  const int_ = romData[jobOff + 5];
-  const mnd = romData[jobOff + 6];
-  const mpIdx = romData[jobOff + 7];
-
-  // Starting HP — 2 bytes little-endian
-  const hp = romData[CHAR_INIT_HP_OFF] | (romData[CHAR_INIT_HP_OFF + 1] << 8);
-
-  // Starting MP — indexed by mpIdx, 8 bytes per entry (levels 1-8), take level 1
-  const mp = romData[CHAR_INIT_MP_OFF + mpIdx * 8];
-
-  playerStats = { str, agi, vit, int: int_, mnd, hp, maxHP: hp, mp, maxMP: mp, level: 1, exp: 0, expToNext: 0 };
-  playerHP = hp;
-  playerMP = mp;
-  _recalcCombatStats();
-}
-
-function initExpTable(romData) {
-  expTable = new Uint32Array(98);
-  for (let i = 0; i < 98; i++) {
-    const off = LEVEL_EXP_TABLE_OFF + i * 3;
-    expTable[i] = romData[off] | (romData[off + 1] << 8) | (romData[off + 2] << 16);
-  }
-  playerStats.expToNext = expTable[0];
-}
-
-function grantExp(amount) {
-  playerStats.exp += amount;
-  leveledUp = false;
-  while (playerStats.exp >= playerStats.expToNext && playerStats.level < 5) {
-    playerStats.level++;
-    const lv = playerStats.level;
-
-    // HP growth: vit + random(0, floor(vit/2)) + level * 2 (from disasm 35/BECA-BF09)
-    const hpGain = playerStats.vit + Math.floor(Math.random() * (Math.floor(playerStats.vit / 2) + 1)) + lv * 2;
-    playerStats.maxHP = Math.min(9999, playerStats.maxHP + hpGain);
-
-    // Stat bonuses from ROM — job 0 (Onion Knight), 2 bytes per level
-    const bonusOff = LEVEL_STAT_BONUS_OFF + 0 * 196 + (lv - 1) * 2;
-    const byte1 = romRaw[bonusOff];
-    const byte2 = romRaw[bonusOff + 1];
-    const bonusAmt = byte1 & 0x07;
-    if (byte1 & 0x80) playerStats.str += bonusAmt;
-    if (byte1 & 0x40) playerStats.agi += bonusAmt;
-    if (byte1 & 0x20) playerStats.vit += bonusAmt;
-    if (byte1 & 0x10) playerStats.int += bonusAmt;
-    if (byte1 & 0x08) playerStats.mnd += bonusAmt;
-
-    // MP bonus — count set bits in byte2
-    let mpBits = byte2;
-    let mpGain = 0;
-    while (mpBits) { mpGain += mpBits & 1; mpBits >>= 1; }
-    playerStats.maxMP += mpGain;
-
-    // Full heal on level-up (matches FF3)
-    _fullHeal();
-
-    // Update derived combat stats
-    _recalcCombatStats();
-
-    // Next threshold
-    if (lv - 1 < 98) playerStats.expToNext = expTable[lv - 1];
-    else playerStats.expToNext = 0xFFFFFF; // max level
-
-    leveledUp = true;
-  }
-  return { leveledUp };
 }
 
 function initLandTurtleBattle(romData) {
@@ -1673,8 +1529,9 @@ function _grayViewport() {
 }
 function _pausePanelLayout() {
   const px = HUD_VIEW_X, finalY = HUD_VIEW_Y, pw = PAUSE_MENU_W, ph = PAUSE_MENU_H;
-  const isInvState = pauseState.startsWith('inv-') || pauseState === 'inventory';
-  const isEqState  = pauseState.startsWith('eq-')  || pauseState === 'equip';
+  const isInvState   = pauseState.startsWith('inv-') || pauseState === 'inventory';
+  const isEqState    = pauseState.startsWith('eq-')  || pauseState === 'equip';
+  const isStatsState = pauseState.startsWith('stats-') || pauseState === 'stats';
   let panelY = finalY;
   if (pauseState === 'scroll-in') {
     const t = Math.min(pauseTimer / PAUSE_SCROLL_MS, 1);
@@ -1683,7 +1540,7 @@ function _pausePanelLayout() {
     const t = Math.min(pauseTimer / PAUSE_SCROLL_MS, 1);
     panelY = finalY - t * ph;
   }
-  return { px, finalY, pw, ph, isInvState, isEqState, panelY };
+  return { px, finalY, pw, ph, isInvState, isEqState, isStatsState, panelY };
 }
 function _resetBattleVars() {
   battleCursor = 0; battleMessage = null;
@@ -1693,19 +1550,11 @@ function _resetBattleVars() {
   currentAllyAttacker = -1; allyTargetIndex = -1; allyHitResult = null;
   allyDamageNums = {}; allyShakeTimer = {}; enemyTargetAllyIdx = -1; allyExitTimer = 0;
   southWindTargets = []; southWindHitIdx = 0; southWindDmgNums = {};
+  battleProfHits = {};
 }
 function _zPressed() { if (!keys['z'] && !keys['Z']) return false; keys['z'] = false; keys['Z'] = false; return true; }
 function _xPressed() { if (!keys['x'] && !keys['X']) return false; keys['x'] = false; keys['X'] = false; return true; }
 
-function _playerStatsSnapshot() {
-  return {
-    str: playerStats.str, agi: playerStats.agi, vit: playerStats.vit,
-    int: playerStats.int, mnd: playerStats.mnd,
-    maxHP: playerStats.maxHP, maxMP: playerStats.maxMP,
-    weaponR: playerWeaponR, weaponL: playerWeaponL,
-    head: playerHead, body: playerBody, arms: playerArms,
-  };
-}
 function _landOnWorldMap(tileX, tileY) {
   worldX = tileX * TILE_SIZE; worldY = tileY * TILE_SIZE;
   disabledTrigger = { x: tileX, y: tileY };
@@ -1715,18 +1564,13 @@ function _landOnWorldMap(tileX, tileY) {
 
 function _syncSaveSlotProgress() {
   if (!saveSlots[selectCursor]) return;
-  saveSlots[selectCursor].level = playerStats.level;
-  saveSlots[selectCursor].exp = playerStats.exp;
-  saveSlots[selectCursor].stats = _playerStatsSnapshot();
+  saveSlots[selectCursor].level = ps.stats.level;
+  saveSlots[selectCursor].exp = ps.stats.exp;
+  saveSlots[selectCursor].stats = playerStatsSnapshot();
   saveSlots[selectCursor].inventory = { ...playerInventory };
-  saveSlots[selectCursor].gil = playerGil;
+  saveSlots[selectCursor].gil = ps.gil;
+  saveSlots[selectCursor].proficiency = { ...ps.proficiency };
 }
-function _fullHeal() {
-  playerStats.hp = playerStats.maxHP; playerStats.mp = playerStats.maxMP;
-  playerHP = playerStats.maxHP; playerMP = playerStats.maxMP;
-}
-
-
 /**
  * Set up top box state for a given area.
  * @param {number} mapId — map being loaded
@@ -2066,22 +1910,27 @@ function _battleTargetConfirm() {
   if (!keys['z'] && !keys['Z']) return;
   keys['z'] = false; keys['Z'] = false;
   playSFX(SFX.CONFIRM);
-  const rIsWeapon = isWeapon(playerWeaponR);
-  const lIsWeapon = isWeapon(playerWeaponL);
+  const rIsWeapon = isWeapon(ps.weaponR);
+  const lIsWeapon = isWeapon(ps.weaponL);
   const dualWield = rIsWeapon && lIsWeapon;
   const unarmed = !rIsWeapon && !lIsWeapon;
-  const baseHits = Math.max(1, Math.floor((playerStats ? playerStats.agi : 5) / 10));
-  const potentialHits = (dualWield || unarmed) ? Math.max(2, baseHits) : Math.max(1, baseHits);
-  const wpn = (rIsWeapon ? ITEMS.get(playerWeaponR) : null) || (lIsWeapon ? ITEMS.get(playerWeaponL) : null);
+  const baseHits = Math.max(1, Math.floor((ps.stats ? ps.stats.agi : 5) / 10));
+  const wpnSubtype = weaponSubtype(ps.weaponR) || weaponSubtype(ps.weaponL) || 'unarmed';
+  const profBonus = getProfHits(wpnSubtype);
+  const potentialHits = (dualWield || unarmed) ? Math.max(2, baseHits) + profBonus : Math.max(1, baseHits) + profBonus;
+  const wpn = (rIsWeapon ? ITEMS.get(ps.weaponR) : null) || (lIsWeapon ? ITEMS.get(ps.weaponL) : null);
   const hitRate = wpn ? wpn.hit : BASE_HIT_RATE;
   if (isRandomEncounter && encounterMonsters) {
-    hitResults = rollHits(playerATK, encounterMonsters[targetIndex].def, hitRate, potentialHits);
+    hitResults = rollHits(ps.atk, encounterMonsters[targetIndex].def, hitRate, potentialHits);
   } else {
     const targetDef = isPVPBattle && pvpOpponentStats ? pvpOpponentStats.def : BOSS_DEF;
-    hitResults = rollHits(playerATK, targetDef, hitRate, potentialHits);
+    hitResults = rollHits(ps.atk, targetDef, hitRate, potentialHits);
   }
-  const firstHandR = isWeapon(playerWeaponR) || !isWeapon(playerWeaponL);
-  const firstWpnId = firstHandR ? playerWeaponR : playerWeaponL;
+  // Track hits for proficiency gain at battle end
+  const hitsLanded = hitResults.filter(h => h > 0).length;
+  if (hitsLanded > 0) battleProfHits[wpnSubtype] = (battleProfHits[wpnSubtype] || 0) + hitsLanded;
+  const firstHandR = isWeapon(ps.weaponR) || !isWeapon(ps.weaponL);
+  const firstWpnId = firstHandR ? ps.weaponR : ps.weaponL;
   const pendingSlashFrames = getSlashFramesForWeapon(firstWpnId, firstHandR);
   const centerX = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2);
   const centerY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
@@ -2144,34 +1993,34 @@ function _itemSelectSwap(isEquipPage, gIdx) {
     const item = itemSelectList[itemHeldIdx];
     const handIdx = itemPageCursor;
     if (item && isHandEquippable(ITEMS.get(item.id))) {
-      const oldWeapon = handIdx === 0 ? playerWeaponR : playerWeaponL;
-      if (handIdx === 0) playerWeaponR = item.id; else playerWeaponL = item.id;
+      const oldWeapon = handIdx === 0 ? ps.weaponR : ps.weaponL;
+      if (handIdx === 0) ps.weaponR = item.id; else ps.weaponL = item.id;
       removeItem(item.id);
       if (oldWeapon !== 0) addItem(oldWeapon, 1);
       itemSelectList[itemHeldIdx] = oldWeapon !== 0 ? { id: oldWeapon, count: 1 } : null;
-      _recalcCombatStats(); itemHeldIdx = -1; playSFX(SFX.CONFIRM);
+      recalcCombatStats(); itemHeldIdx = -1; playSFX(SFX.CONFIRM);
     } else { playSFX(SFX.ERROR); itemHeldIdx = -1; }
   } else if (srcEquip && !dstEquip) {
     // Equip → Inv
     const srcHand = -(itemHeldIdx + 100);
-    const handWeaponId = srcHand === 0 ? playerWeaponR : playerWeaponL;
+    const handWeaponId = srcHand === 0 ? ps.weaponR : ps.weaponL;
     const dstIdx = (itemPage - 1) * INV_SLOTS + itemPageCursor;
     const invItem = itemSelectList[dstIdx];
     if (invItem && isHandEquippable(ITEMS.get(invItem.id))) {
-      if (srcHand === 0) playerWeaponR = invItem.id; else playerWeaponL = invItem.id;
+      if (srcHand === 0) ps.weaponR = invItem.id; else ps.weaponL = invItem.id;
       removeItem(invItem.id); addItem(handWeaponId, 1);
       itemSelectList[dstIdx] = { id: handWeaponId, count: 1 };
-      _recalcCombatStats(); itemHeldIdx = -1; playSFX(SFX.CONFIRM);
+      recalcCombatStats(); itemHeldIdx = -1; playSFX(SFX.CONFIRM);
     } else if (!invItem) {
-      if (srcHand === 0) playerWeaponR = 0; else playerWeaponL = 0;
+      if (srcHand === 0) ps.weaponR = 0; else ps.weaponL = 0;
       addItem(handWeaponId, 1);
       itemSelectList[dstIdx] = { id: handWeaponId, count: 1 };
-      _recalcCombatStats(); itemHeldIdx = -1; playSFX(SFX.CONFIRM);
+      recalcCombatStats(); itemHeldIdx = -1; playSFX(SFX.CONFIRM);
     } else { playSFX(SFX.ERROR); itemHeldIdx = -1; }
   } else {
     // Equip → Equip (swap hands)
-    const tmp = playerWeaponR; playerWeaponR = playerWeaponL; playerWeaponL = tmp;
-    _recalcCombatStats(); itemHeldIdx = -1; playSFX(SFX.CONFIRM);
+    const tmp = ps.weaponR; ps.weaponR = ps.weaponL; ps.weaponL = tmp;
+    recalcCombatStats(); itemHeldIdx = -1; playSFX(SFX.CONFIRM);
   }
 }
 
@@ -2179,7 +2028,7 @@ function _itemSelectZ(isEquipPage, gIdx) {
   if (itemHeldIdx === -1) {
     // Nothing held — pick up
     if (isEquipPage) {
-      const weaponId = itemPageCursor === 0 ? playerWeaponR : playerWeaponL;
+      const weaponId = itemPageCursor === 0 ? ps.weaponR : ps.weaponL;
       if (weaponId !== 0) { itemHeldIdx = gIdx; playSFX(SFX.CONFIRM); } else playSFX(SFX.ERROR);
     } else {
       const invIdx = (itemPage - 1) * INV_SLOTS + itemPageCursor;
@@ -2337,9 +2186,9 @@ function _battleInputHoldStates() {
   } else if (battleState === 'exp-hold') {
     if (z) { clearZ(); battleState = 'exp-fade-out'; battleTimer = 0; }
   } else if (battleState === 'gil-hold') {
-    if (z) { clearZ(); battleState = (leveledUp || encounterDropItem !== null) ? 'gil-fade-out' : 'victory-text-out'; battleTimer = 0; }
+    if (z) { clearZ(); battleState = (ps.leveledUp || encounterDropItem !== null) ? 'gil-fade-out' : 'victory-text-out'; battleTimer = 0; }
   } else if (battleState === 'item-hold') {
-    if (z) { clearZ(); battleState = leveledUp ? 'item-fade-out' : 'victory-text-out'; battleTimer = 0; }
+    if (z) { clearZ(); battleState = ps.leveledUp ? 'item-fade-out' : 'victory-text-out'; battleTimer = 0; }
   } else if (battleState === 'levelup-hold') {
     if (z) { clearZ(); battleState = 'victory-text-out'; battleTimer = 0; }
   } else { return false; }
@@ -2491,6 +2340,9 @@ function _pauseInputMainMenu() {
     } else if (pauseCursor === 2) {
       playSFX(SFX.CONFIRM);
       pauseState = 'eq-text-out'; pauseTimer = 0; eqCursor = 0;
+    } else if (pauseCursor === 3) {
+      playSFX(SFX.CONFIRM);
+      pauseState = 'stats-text-out'; pauseTimer = 0; pauseStatsPage = 0;
     }
   }
   return true;
@@ -2540,11 +2392,11 @@ function _applyPauseItemUse(item, rosterTargets) {
     pauseState = 'inv-heal'; pauseTimer = 0;
     if (selectCursor >= 0 && saveSlots[selectCursor]) { saveSlots[selectCursor].inventory = { ...playerInventory }; saveSlotsToDB(); }
   } else {
-    const heal = Math.min(item.value, playerStats.maxHP - playerHP);
-    playerHP += heal; removeItem(pauseUseItemId); playSFX(SFX.CURE);
+    const heal = Math.min(item.value, ps.stats.maxHP - ps.hp);
+    ps.hp += heal; removeItem(pauseUseItemId); playSFX(SFX.CURE);
     pauseHealNum = { value: heal, timer: 0 };
     pauseState = 'inv-heal'; pauseTimer = 0;
-    if (selectCursor >= 0 && saveSlots[selectCursor]) { saveSlots[selectCursor].hp = playerHP; saveSlots[selectCursor].inventory = { ...playerInventory }; saveSlotsToDB(); }
+    if (selectCursor >= 0 && saveSlots[selectCursor]) { saveSlots[selectCursor].hp = ps.hp; saveSlots[selectCursor].inventory = { ...playerInventory }; saveSlotsToDB(); }
   }
 }
 
@@ -2615,7 +2467,7 @@ function _equipBestLeftHand() {
 function _equipOptimum() {
   _equipBestMainSlots();
   _equipBestLeftHand();
-  _recalcCombatStats();
+  recalcCombatStats();
   if (selectCursor >= 0 && saveSlots[selectCursor]) { saveSlots[selectCursor].inventory = { ...playerInventory }; saveSlotsToDB(); }
   playSFX(SFX.CONFIRM);
 }
@@ -2669,7 +2521,7 @@ function _pauseInputEquipItemSelect() {
         removeItem(pick.id);
         if (oldId !== 0) addItem(oldId, 1);
       }
-      _recalcCombatStats();
+      recalcCombatStats();
       if (selectCursor >= 0 && saveSlots[selectCursor]) {
         saveSlots[selectCursor].inventory = { ...playerInventory };
         saveSlotsToDB();
@@ -2684,6 +2536,16 @@ function _pauseInputEquipItemSelect() {
   }
   return true;
 }
+function _pauseInputStats() {
+  if (pauseState !== 'stats') return false;
+  if (keys['ArrowLeft'] || keys['ArrowRight']) {
+    keys['ArrowLeft'] = false; keys['ArrowRight'] = false;
+    pauseStatsPage = pauseStatsPage === 0 ? 1 : 0;
+    playSFX(SFX.CURSOR);
+  }
+  if (_xPressed()) { playSFX(SFX.CONFIRM); pauseState = 'stats-out'; pauseTimer = 0; }
+  return true;
+}
 function _handlePauseInput() {
   if (_pauseInputOpenClose()) return true;
   if (_pauseInputMainMenu()) return true;
@@ -2694,6 +2556,8 @@ function _handlePauseInput() {
   if (_pauseInputEquip()) return true;
   if (_pauseInputEquipItemSelect()) return true;
   if (pauseState.startsWith('eq-')) return true;
+  if (_pauseInputStats()) return true;
+  if (pauseState.startsWith('stats-')) return true;
   if (pauseState !== 'none') return true;
   return false;
 }
@@ -2810,8 +2674,8 @@ function _handlePondHeal() {
     frame: 0, radius: 60, angle: 0, spin: false,
     onComplete: () => {
       playSFX(SFX.CURE);
-      playerHP = playerStats.maxHP;
-      playerMP = playerStats.maxMP;
+      ps.hp = ps.stats.maxHP;
+      ps.mp = ps.stats.maxMP;
       pondStrobeTimer = BATTLE_FLASH_FRAMES * BATTLE_FLASH_FRAME_MS;
       setTimeout(() => showMsgBox(POND_RESTORED, null), BATTLE_FLASH_FRAMES * BATTLE_FLASH_FRAME_MS);
     }
@@ -3648,7 +3512,7 @@ function _drawHUDPortrait() {
   if (battleState !== 'none' || !battleSpriteCanvas) return;
   const isPauseHeal = pauseState === 'inv-heal';
   const nfPortrait = isPauseHeal && battleSpriteDefendCanvas ? battleSpriteDefendCanvas
-    : (playerHP > 0 && playerStats && playerHP <= Math.floor(playerStats.maxHP / 4) && battleSpriteKneelCanvas
+    : (ps.hp > 0 && ps.stats && ps.hp <= Math.floor(ps.stats.maxHP / 4) && battleSpriteKneelCanvas
        ? battleSpriteKneelCanvas : battleSpriteCanvas);
   const px = HUD_RIGHT_X + 8, py = HUD_VIEW_Y + 8;
   _drawPortraitImage(px, py, nfPortrait, isPauseHeal, infoFadeStep);
@@ -3673,19 +3537,19 @@ function _drawHUDInfoPanel() {
   drawText(ctx, panelRight - nameW, sy, slot.name, namePal);
   // Level fades out as battle starts, HP fades in — combined with game-start infoFadeStep
   if (hudHpLvStep < 4) {
-    const lvLabel = _nameToBytes('Lv' + String(playerStats ? playerStats.level : slot.level));
+    const lvLabel = _nameToBytes('Lv' + String(ps.stats ? ps.stats.level : slot.level));
     const lvPal = [0x0F, 0x0F, 0x0F, 0x10];
     for (let s = 0; s < hudHpLvStep + infoFadeStep; s++) lvPal[3] = nesColorFade(lvPal[3]);
     const lvW = measureText(lvLabel);
     drawText(ctx, panelRight - lvW, sy + 9, lvLabel, lvPal);
   }
   if (hudHpLvStep > 0) {
-    const maxHP = playerStats ? playerStats.maxHP : 28;
-    const hpNes = playerHP <= Math.floor(maxHP / 4) ? 0x16
-                : playerHP <= Math.floor(maxHP / 2) ? 0x28 : 0x2A;
+    const maxHP = ps.stats ? ps.stats.maxHP : 28;
+    const hpNes = ps.hp <= Math.floor(maxHP / 4) ? 0x16
+                : ps.hp <= Math.floor(maxHP / 2) ? 0x28 : 0x2A;
     const hpPal = [0x0F, 0x0F, 0x0F, hpNes];
     for (let s = 0; s < (4 - hudHpLvStep) + infoFadeStep; s++) hpPal[3] = nesColorFade(hpPal[3]);
-    const hpLabel = _nameToBytes(String(playerHP));
+    const hpLabel = _nameToBytes(String(ps.hp));
     const hpW = measureText(hpLabel);
     drawText(ctx, panelRight - hpW, sy + 9, hpLabel, hpPal);
   }
@@ -4379,26 +4243,27 @@ function _updateTitleMainOutCase() {
   hudInfoFadeTimer = 0;
   const slot = saveSlots[selectCursor];
   if (slot && slot.stats) {
-    playerStats.str = slot.stats.str;
-    playerStats.agi = slot.stats.agi;
-    playerStats.vit = slot.stats.vit;
-    playerStats.int = slot.stats.int;
-    playerStats.mnd = slot.stats.mnd;
-    playerStats.maxHP = slot.stats.maxHP;
-    playerStats.maxMP = slot.stats.maxMP;
-    playerStats.level = slot.level;
-    playerStats.exp = slot.exp;
-    playerStats.expToNext = (slot.level - 1 < 98) ? expTable[slot.level - 1] : 0xFFFFFF;
-    _fullHeal();
-    playerWeaponR = slot.stats.weaponR != null ? slot.stats.weaponR : 0x1E;
-    playerWeaponL = slot.stats.weaponL != null ? slot.stats.weaponL : 0x00;
-    playerHead = slot.stats.head || 0x00;
-    playerBody = slot.stats.body || 0x00;
-    playerArms = slot.stats.arms || 0x00;
-    _recalcCombatStats();
+    ps.stats.str = slot.stats.str;
+    ps.stats.agi = slot.stats.agi;
+    ps.stats.vit = slot.stats.vit;
+    ps.stats.int = slot.stats.int;
+    ps.stats.mnd = slot.stats.mnd;
+    ps.stats.maxHP = slot.stats.maxHP;
+    ps.stats.maxMP = slot.stats.maxMP;
+    ps.stats.level = slot.level;
+    ps.stats.exp = slot.exp;
+    ps.stats.expToNext = (slot.level - 1 < 98) ? ps.expTable[slot.level - 1] : 0xFFFFFF;
+    fullHeal();
+    ps.weaponR = slot.stats.weaponR != null ? slot.stats.weaponR : 0x1E;
+    ps.weaponL = slot.stats.weaponL != null ? slot.stats.weaponL : 0x00;
+    ps.head = slot.stats.head || 0x00;
+    ps.body = slot.stats.body || 0x00;
+    ps.arms = slot.stats.arms || 0x00;
+    recalcCombatStats();
   }
   playerInventory = (slot && slot.inventory) ? { ...slot.inventory } : {};
-  playerGil = (slot && slot.gil) || 0;
+  ps.gil = (slot && slot.gil) || 0;
+  ps.proficiency = (slot && slot.proficiency) ? { ...slot.proficiency } : {};
   loadMapById(114);
   worldY -= 6 * TILE_SIZE;
   playTrack(TRACKS.TOWN_UR);
@@ -4888,11 +4753,29 @@ function _updatePauseEqTransitions() {
   }
 }
 
+function _updatePauseStatsTransitions() {
+  const T = (PAUSE_TEXT_STEPS + 1) * PAUSE_TEXT_STEP_MS;
+  if (pauseState === 'stats-text-out') {
+    if (pauseTimer >= T) { pauseState = 'stats-expand'; pauseTimer = 0; }
+  } else if (pauseState === 'stats-expand') {
+    if (pauseTimer >= PAUSE_EXPAND_MS) { pauseState = 'stats-in'; pauseTimer = 0; }
+  } else if (pauseState === 'stats-in') {
+    if (pauseTimer >= T) { pauseState = 'stats'; pauseTimer = 0; }
+  } else if (pauseState === 'stats-out') {
+    if (pauseTimer >= T) { pauseState = 'stats-shrink'; pauseTimer = 0; }
+  } else if (pauseState === 'stats-shrink') {
+    if (pauseTimer >= PAUSE_EXPAND_MS) { pauseState = 'stats-text-in'; pauseTimer = 0; }
+  } else if (pauseState === 'stats-text-in') {
+    if (pauseTimer >= T) { pauseState = 'open'; pauseTimer = 0; }
+  }
+}
+
 function updatePauseMenu(dt) {
   if (pauseState === 'none') return;
   pauseTimer += Math.min(dt, 33);
   if (pauseState.startsWith('inv-')) _updatePauseInvTransitions(dt);
   else if (pauseState.startsWith('eq-')) _updatePauseEqTransitions();
+  else if (pauseState.startsWith('stats-') || pauseState === 'stats') _updatePauseStatsTransitions();
   else _updatePauseMainTransitions();
 }
 
@@ -5058,14 +4941,14 @@ function roundTopBoxCorners() {
 
 function _drawPauseBox() {
   const { px, finalY, pw, ph, isInvState, isEqState, panelY } = _pausePanelLayout();
-  if (isInvState || isEqState) {
+  if (isInvState || isEqState || isStatsState) {
     let t = 1;
-    if (pauseState === 'inv-expand' || pauseState === 'eq-expand') {
+    if (pauseState === 'inv-expand' || pauseState === 'eq-expand' || pauseState === 'stats-expand') {
       t = Math.min(pauseTimer / PAUSE_EXPAND_MS, 1);
-    } else if (pauseState === 'inv-shrink' || pauseState === 'eq-shrink') {
+    } else if (pauseState === 'inv-shrink' || pauseState === 'eq-shrink' || pauseState === 'stats-shrink') {
       t = 1 - Math.min(pauseTimer / PAUSE_EXPAND_MS, 1);
-    } else if (pauseState === 'inv-text-out' || pauseState === 'eq-text-out' ||
-               pauseState === 'inv-text-in'  || pauseState === 'eq-text-in') {
+    } else if (pauseState === 'inv-text-out' || pauseState === 'eq-text-out' || pauseState === 'stats-text-out' ||
+               pauseState === 'inv-text-in'  || pauseState === 'eq-text-in'  || pauseState === 'stats-text-in') {
       t = 0;
     }
     const bw = Math.round(pw + (HUD_VIEW_W - pw) * t);
@@ -5079,17 +4962,18 @@ function _drawPauseMenuText() {
   const { px, finalY, pw, ph, isInvState, isEqState, panelY } = _pausePanelLayout();
   const showPauseText = pauseState === 'text-in' || pauseState === 'open' || pauseState === 'text-out' ||
                         pauseState === 'inv-text-out' || pauseState === 'inv-text-in' ||
-                        pauseState === 'eq-text-out' || pauseState === 'eq-text-in';
+                        pauseState === 'eq-text-out' || pauseState === 'eq-text-in' ||
+                        pauseState === 'stats-text-out' || pauseState === 'stats-text-in';
   if (!showPauseText) return;
   let fadeStep = 0;
-  if (pauseState === 'text-in' || pauseState === 'inv-text-in' || pauseState === 'eq-text-in') {
+  if (pauseState === 'text-in' || pauseState === 'inv-text-in' || pauseState === 'eq-text-in' || pauseState === 'stats-text-in') {
     fadeStep = PAUSE_TEXT_STEPS - Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
-  } else if (pauseState === 'text-out' || pauseState === 'inv-text-out' || pauseState === 'eq-text-out') {
+  } else if (pauseState === 'text-out' || pauseState === 'inv-text-out' || pauseState === 'eq-text-out' || pauseState === 'stats-text-out') {
     fadeStep = Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
   }
   const fadedPal = _makeFadedPal(fadeStep);
   const textX = px + 24;
-  const startY = ((isInvState || isEqState) ? finalY : panelY) + 12;
+  const startY = ((isInvState || isEqState || isStatsState) ? finalY : panelY) + 12;
   for (let i = 0; i < PAUSE_ITEMS.length; i++) {
     drawText(ctx, textX, startY + i * 16, PAUSE_ITEMS[i], fadedPal);
   }
@@ -5188,6 +5072,64 @@ function _drawPauseEquipItems() {
     }
   }
 }
+function _drawPauseStats() {
+  const px = HUD_VIEW_X, finalY = HUD_VIEW_Y;
+  const show = pauseState === 'stats-in' || pauseState === 'stats' || pauseState === 'stats-out';
+  if (!show) return;
+  const fadeStep = _pauseFadeStep('stats-in', 'stats-out');
+  const fadedPal = _makeFadedPal(fadeStep);
+  const tx = px + 8, W = HUD_VIEW_W - 16;
+  let y = finalY + 8;
+
+  if (pauseStatsPage === 0) {
+    // Page 1: Combat stats
+    const s = ps.stats;
+    if (!s) return;
+    const rows = [
+      ['Lv', String(s.level)],
+      ['HP', ps.hp + '/' + s.maxHP],
+      ['MP', ps.mp + '/' + s.maxMP],
+      ['EXP', String(s.exp)],
+      ['Next', String(s.expToNext)],
+      ['STR', String(s.str)],
+      ['AGI', String(s.agi)],
+      ['VIT', String(s.vit)],
+      ['INT', String(s.int)],
+      ['MND', String(s.mnd)],
+      ['ATK', String(ps.atk)],
+      ['DEF', String(ps.def)],
+    ];
+    for (const [label, val] of rows) {
+      const lb = _nameToBytes(label);
+      const vb = _nameToBytes(val);
+      drawText(ctx, tx, y, lb, fadedPal);
+      drawText(ctx, tx + W - vb.length * 8, y, vb, fadedPal);
+      y += 12;
+      if (y > finalY + HUD_VIEW_H - 12) break;
+    }
+    // Page indicator
+    drawText(ctx, tx + Math.floor(W / 2) - 4, finalY + HUD_VIEW_H - 12, _nameToBytes('1/2'), fadedPal);
+  } else {
+    // Page 2: Proficiency
+    const subtypes = ['sword','knife','axe','spear','katana','bow','rod','staff','claw','nunchaku','hammer','book','bell','harp','boomerang','shuriken','arrow','unarmed'];
+    let shown = 0;
+    for (const st of subtypes) {
+      const pts = ps.proficiency[st] || 0;
+      if (pts === 0 && shown > 0) continue; // skip zeroes after first entry
+      const lv = Math.min(16, Math.floor(pts / 100));
+      const lb = _nameToBytes(st.charAt(0).toUpperCase() + st.slice(1));
+      const vb = _nameToBytes('Lv' + lv);
+      drawText(ctx, tx, y, lb, fadedPal);
+      drawText(ctx, tx + W - vb.length * 8, y, vb, fadedPal);
+      y += 12;
+      shown++;
+      if (y > finalY + HUD_VIEW_H - 12) break;
+    }
+    if (shown === 0) drawText(ctx, tx, y, _nameToBytes('No skills yet'), fadedPal);
+    drawText(ctx, tx + Math.floor(W / 2) - 4, finalY + HUD_VIEW_H - 12, _nameToBytes('2/2'), fadedPal);
+  }
+}
+
 function drawPauseMenu() {
   if (pauseState === 'none') return;
   _drawPauseBox();
@@ -5196,6 +5138,7 @@ function drawPauseMenu() {
   _drawPauseInventory();
   _drawPauseEquipSlots();
   _drawPauseEquipItems();
+  _drawPauseStats();
   ctx.restore();
   // Target cursor on portrait — drawn after restore so it's unclipped
   if (pauseState === 'inv-target' && cursorTileCanvas) {
@@ -5220,7 +5163,7 @@ function drawPauseMenu() {
 
 function buildTurnOrder() {
   const actors = [];
-  const playerAgi = playerStats ? playerStats.agi : 5;
+  const playerAgi = ps.stats ? ps.stats.agi : 5;
   actors.push({ type: 'player', priority: (playerAgi * 2) + Math.floor(Math.random() * 256) });
   // Allies participate in the same turn queue
   for (let i = 0; i < battleAllies.length; i++) {
@@ -5287,7 +5230,7 @@ function _playerTurnSouthWind() {
   else if (_mode === 'col-left') southWindTargets = _leftCols;
   else southWindTargets = [playerActionPending.target];
   southWindHitIdx = 0;
-  const swAttack = Math.floor((playerStats ? playerStats.int : 5) / 2) + 55;
+  const swAttack = Math.floor((ps.stats ? ps.stats.int : 5) / 2) + 55;
   swBaseDamage = Math.floor((swAttack + Math.floor(Math.random() * Math.floor(swAttack / 2 + 1))) / 2);
   battleState = 'sw-throw'; battleTimer = 0;
 }
@@ -5296,8 +5239,8 @@ function _playerTurnConsumable() {
   playSFX(SFX.CURE);
   const { target, allyIndex } = playerActionPending;
   if (target === 'player' && (allyIndex === undefined || allyIndex < 0)) {
-    const heal = Math.min(50, playerStats.maxHP - playerHP);
-    playerHP += heal; itemHealAmount = heal; playerHealNum = { value: heal, timer: 0 };
+    const heal = Math.min(50, ps.stats.maxHP - ps.hp);
+    ps.hp += heal; itemHealAmount = heal; playerHealNum = { value: heal, timer: 0 };
   } else if (target === 'player' && allyIndex >= 0) {
     const ally = battleAllies[allyIndex];
     if (ally) {
@@ -5327,7 +5270,7 @@ function _playerTurnItem() {
 }
 
 function _playerTurnRun() {
-  const playerAgi = playerStats ? playerStats.agi : 5;
+  const playerAgi = ps.stats ? ps.stats.agi : 5;
   let avgLevel = 1;
   if (encounterMonsters) {
     const alive = encounterMonsters.filter(m => m.hp > 0);
@@ -5407,6 +5350,7 @@ function startBattle() {
 
 function startRandomEncounter() {
   isRandomEncounter = true;
+  battleProfHits = {};
 
   // Pick encounter zone based on location
   const zoneKey = onWorldMap
@@ -5733,7 +5677,8 @@ function _updatePlayerDamageShow() {
         encounterExpGained = pvpExp;
         encounterGilGained = pvpGil;
         grantExp(pvpExp);
-        playerGil += pvpGil;
+        ps.gil += pvpGil;
+        gainProficiency(battleProfHits); battleProfHits = {};
         _syncSaveSlotProgress();
         saveSlotsToDB();
         isDefending = false;
@@ -5761,7 +5706,8 @@ function _updateMonsterDeath() {
       encounterExpGained = encounterMonsters.reduce((sum, m) => sum + m.exp, 0);
       encounterGilGained = encounterMonsters.reduce((sum, m) => sum + (m.gil || 0), 0);
       grantExp(encounterExpGained);
-      playerGil += encounterGilGained;
+      ps.gil += encounterGilGained;
+      gainProficiency(battleProfHits); battleProfHits = {};
       encounterDropItem = null;
       for (const m of encounterMonsters) {
         const mData = MONSTERS.get(m.monsterId);
@@ -5926,7 +5872,8 @@ function _updateAllyDamageShow() {
       const pvpExp = 5 * pvpOpponentStats.level;
       const pvpGil = 10 * pvpOpponentStats.level;
       encounterExpGained = pvpExp; encounterGilGained = pvpGil;
-      grantExp(pvpExp); playerGil += pvpGil;
+      grantExp(pvpExp); ps.gil += pvpGil;
+      gainProficiency(battleProfHits); battleProfHits = {};
       _syncSaveSlotProgress();
       saveSlotsToDB();
       isDefending = false; bossDefeated = true;
@@ -6067,9 +6014,9 @@ function _processBossFlash() {
     }
   } else {
     if (Math.random() * 100 < monHitRate) {
-      let dmg = calcDamage(monAtk, playerDEF);
+      let dmg = calcDamage(monAtk, ps.def);
       if (isDefending) dmg = Math.max(1, Math.floor(dmg / 2));
-      playerHP = Math.max(0, playerHP - dmg);
+      ps.hp = Math.max(0, ps.hp - dmg);
       playerDamageNum = { value: dmg, timer: 0 };
       playSFX(SFX.ATTACK_HIT); battleShakeTimer = BATTLE_SHAKE_MS;
       battleState = 'enemy-attack'; pvpOpponentHitIdx++; battleTimer = 0;
@@ -6083,7 +6030,7 @@ function _processBossFlash() {
 
 function _processEnemyDamageShow() {
   if (battleTimer < BATTLE_DMG_SHOW_MS) return;
-  if (playerHP <= 0) {
+  if (ps.hp <= 0) {
     isDefending = false; battleState = 'defeat-monster-fade'; battleTimer = 0;
   } else if (isPVPBattle && pvpCurrentEnemyAllyIdx < 0 && pvpOpponentHitsThisTurn === 0) {
     const oppL = pvpOpponent && pvpOpponent.weaponL, oppR = pvpOpponent && pvpOpponent.weaponR;
@@ -6097,9 +6044,9 @@ function _processPVPSecondWindup() {
   if (battleTimer < BOSS_PREFLASH_MS) return;
   const monAtk2 = pvpOpponentStats.atk;
   if (Math.random() * 100 < BOSS_HIT_RATE) {
-    let dmg2 = calcDamage(monAtk2, playerDEF);
+    let dmg2 = calcDamage(monAtk2, ps.def);
     if (isDefending) dmg2 = Math.max(1, Math.floor(dmg2 / 2));
-    playerHP = Math.max(0, playerHP - dmg2);
+    ps.hp = Math.max(0, ps.hp - dmg2);
     playerDamageNum = { value: dmg2, timer: 0 }; playSFX(SFX.ATTACK_HIT);
     battleShakeTimer = BATTLE_SHAKE_MS; battleState = 'enemy-attack'; battleTimer = 0;
   } else { playerDamageNum = { miss: true, timer: 0 }; battleState = 'enemy-damage-show'; battleTimer = 0; }
@@ -6124,7 +6071,8 @@ function _updateBossDissolve(dt) {
   if (battleTimer >= BOSS_BLOCKS * BOSS_DISSOLVE_STEPS * BOSS_DISSOLVE_FRAME_MS) {
     bossDefeated = true; bossSprite = null;
     encounterExpGained = 20; encounterGilGained = 500;
-    grantExp(20); playerGil += encounterGilGained;
+    grantExp(20); ps.gil += encounterGilGained;
+    gainProficiency(battleProfHits); battleProfHits = {};
     _syncSaveSlotProgress();
     saveSlotsToDB();
     isDefending = false; battleState = 'victory-name-out'; battleTimer = 0;
@@ -6215,8 +6163,8 @@ function _updateDefeatStates() {
       isRandomEncounter = false; isPVPBattle = false;
       pvpOpponent = null; pvpOpponentStats = null; pvpOpponentIsDefending = false; pvpEnemyAllies = [];
       encounterMonsters = null; turnQueue = []; battleAllies = []; allyJoinRound = 0;
-      playerHP = playerStats ? playerStats.maxHP : 28;
-      playerMP = playerStats ? playerStats.maxMP : 0;
+      ps.hp = ps.stats ? ps.stats.maxHP : 28;
+      ps.mp = ps.stats ? ps.stats.maxMP : 0;
       startWipeTransition(() => {
         dungeonFloor = -1; encounterSteps = 0; mapStack = [];
         loadWorldMapAt(findWorldExitIndex(111));
@@ -6345,17 +6293,17 @@ function _drawPortraitWeapon(px, py, before) {
   if (battleState === 'attack-start') {
     const rightHand = isHitRightHand(currentHitIdx);
     if (before && rightHand) {
-      if (wpnSt === 'knife' && battleKnifeBladeCanvas) ctx.drawImage(battleKnifeBladeCanvas, px + 8, py - 7);
-      else if (wpnSt === 'dagger' && battleDaggerBladeCanvas) ctx.drawImage(battleDaggerBladeCanvas, px + 8, py - 7);
+      if (wpnSt === 'knife' && handWeapon === 0x1F && battleDaggerBladeCanvas) ctx.drawImage(battleDaggerBladeCanvas, px + 8, py - 7);
+      else if (wpnSt === 'knife' && battleKnifeBladeCanvas) ctx.drawImage(battleKnifeBladeCanvas, px + 8, py - 7);
       else if (wpnSt === 'sword' && battleSwordBladeCanvas) ctx.drawImage(battleSwordBladeCanvas, px + 8, py - 7);
     } else if (!before && !rightHand) {
-      if (wpnSt === 'knife' && battleKnifeBladeCanvas) ctx.drawImage(battleKnifeBladeCanvas, px + 8, py - 7);
-      else if (wpnSt === 'dagger' && battleDaggerBladeCanvas) ctx.drawImage(battleDaggerBladeCanvas, px + 8, py - 7);
+      if (wpnSt === 'knife' && handWeapon === 0x1F && battleDaggerBladeCanvas) ctx.drawImage(battleDaggerBladeCanvas, px + 8, py - 7);
+      else if (wpnSt === 'knife' && battleKnifeBladeCanvas) ctx.drawImage(battleKnifeBladeCanvas, px + 8, py - 7);
       else if (wpnSt === 'sword' && battleSwordBladeCanvas) ctx.drawImage(battleSwordBladeCanvas, px + 8, py - 7);
     }
   } else if (!before && battleState === 'player-slash') {
-    if (wpnSt === 'knife' && battleKnifeBladeSwungCanvas) ctx.drawImage(battleKnifeBladeSwungCanvas, px - 16, py + 1);
-    else if (wpnSt === 'dagger' && battleDaggerBladeSwungCanvas) ctx.drawImage(battleDaggerBladeSwungCanvas, px - 16, py + 1);
+    if (wpnSt === 'knife' && handWeapon === 0x1F && battleDaggerBladeSwungCanvas) ctx.drawImage(battleDaggerBladeSwungCanvas, px - 16, py + 1);
+    else if (wpnSt === 'knife' && battleKnifeBladeSwungCanvas) ctx.drawImage(battleKnifeBladeSwungCanvas, px - 16, py + 1);
     else if (wpnSt === 'sword' && battleSwordBladeSwungCanvas) ctx.drawImage(battleSwordBladeSwungCanvas, px - 16, py + 1);
     else if (!wpnSt && handWeapon === 0 && battleFistCanvas) ctx.drawImage(battleFistCanvas, px - 4, py + 10);
   }
@@ -6417,7 +6365,7 @@ function _drawBattlePortrait() {
   const isItemUsePose = battleState === 'item-use' || battleState === 'sw-throw' || battleState === 'sw-hit';
   const isRunPose = battleState === 'run-name-out' || battleState === 'run-text-in' ||
     battleState === 'run-hold' || battleState === 'run-text-out';
-  const isNearFatal = playerHP > 0 && playerStats && playerHP <= Math.floor(playerStats.maxHP / 4);
+  const isNearFatal = ps.hp > 0 && ps.stats && ps.hp <= Math.floor(ps.stats.maxHP / 4);
   const portraitSrc = _getPortraitSrc(isNearFatal, isAttackPose, isHitPose, isDefendPose, isItemUsePose, isVictoryPose);
   if (!portraitSrc) return;
   const px = HUD_RIGHT_X + 8 + shakeOff;
@@ -6494,11 +6442,11 @@ function _drawBattleItemList(baseX, rightAreaW, invPal, slidePixel, totalInvPage
     if (pg === 0) {
       const RH_LABEL = new Uint8Array([0x9B,0x91,0xFF]);
       const LH_LABEL = new Uint8Array([0x95,0x91,0xFF]);
-      const rName = playerWeaponR !== 0 ? getItemNameClean(playerWeaponR) : new Uint8Array([0xC2,0xC2,0xC2]);
+      const rName = ps.weaponR !== 0 ? getItemNameClean(ps.weaponR) : new Uint8Array([0xC2,0xC2,0xC2]);
       const rRow = new Uint8Array(RH_LABEL.length + rName.length);
       rRow.set(RH_LABEL, 0); rRow.set(rName, RH_LABEL.length);
       drawText(ctx, px + 8, topY, rRow, invPal);
-      const lName = playerWeaponL !== 0 ? getItemNameClean(playerWeaponL) : new Uint8Array([0xC2,0xC2,0xC2]);
+      const lName = ps.weaponL !== 0 ? getItemNameClean(ps.weaponL) : new Uint8Array([0xC2,0xC2,0xC2]);
       const lRow = new Uint8Array(LH_LABEL.length + lName.length);
       lRow.set(LH_LABEL, 0); lRow.set(lName, LH_LABEL.length);
       drawText(ctx, px + 8, topY + rowH + 6, lRow, invPal);
@@ -7140,7 +7088,7 @@ function _drawVictoryMessage(boxX, boxY, s) {
   else if (s.isGilText || s.isGilHold || s.isGilFadeOut) msg = makeGilText(encounterGilGained);
   else if (s.isItemText || s.isItemHold || s.isItemFadeOut) msg = encounterDropItem !== null ? makeFoundItemText(encounterDropItem) : null;
   else if (s.isLevelText || s.isLevelHold) msg = BATTLE_LEVEL_UP;
-  else if (s.isOut) msg = leveledUp ? BATTLE_LEVEL_UP : encounterDropItem !== null ? makeFoundItemText(encounterDropItem) : makeGilText(encounterGilGained);
+  else if (s.isOut) msg = ps.leveledUp ? BATTLE_LEVEL_UP : encounterDropItem !== null ? makeFoundItemText(encounterDropItem) : makeGilText(encounterGilGained);
   if (msg) {
     const tw = measureText(msg);
     drawText(ctx, boxX + Math.floor((VICTORY_BOX_W - tw) / 2), boxY + Math.floor((VICTORY_BOX_H - 8) / 2), msg, fadedPal);
@@ -7232,14 +7180,14 @@ function _drawAllyPortrait(i, ally, isVicPose, isAllyAttack, isAllyHit, isNearFa
   ctx.drawImage(portraits[ally.fadeStep], ppx, ppy);
   if (isAllyAttack) {
     const wpnSt = weaponSubtype(ally.weaponId);
-    if (wpnSt === 'knife' && battleKnifeBladeCanvas) weaponDraws.push({ img: battleKnifeBladeCanvas, x: ppx + 8, y: ppy - 7 });
-    else if (wpnSt === 'dagger' && battleDaggerBladeCanvas) weaponDraws.push({ img: battleDaggerBladeCanvas, x: ppx + 8, y: ppy - 7 });
+    if (wpnSt === 'knife' && ally.weaponId === 0x1F && battleDaggerBladeCanvas) weaponDraws.push({ img: battleDaggerBladeCanvas, x: ppx + 8, y: ppy - 7 });
+    else if (wpnSt === 'knife' && battleKnifeBladeCanvas) weaponDraws.push({ img: battleKnifeBladeCanvas, x: ppx + 8, y: ppy - 7 });
     else if (wpnSt === 'sword' && battleSwordBladeCanvas) weaponDraws.push({ img: battleSwordBladeCanvas, x: ppx + 8, y: ppy - 7 });
   }
   if (battleState === 'ally-slash' && currentAllyAttacker === i) {
     const wpnSt = weaponSubtype(ally.weaponId);
-    if (wpnSt === 'knife' && battleKnifeBladeSwungCanvas) weaponDraws.push({ img: battleKnifeBladeSwungCanvas, x: ppx - 16, y: ppy + 1 });
-    else if (wpnSt === 'dagger' && battleDaggerBladeSwungCanvas) weaponDraws.push({ img: battleDaggerBladeSwungCanvas, x: ppx - 16, y: ppy + 1 });
+    if (wpnSt === 'knife' && ally.weaponId === 0x1F && battleDaggerBladeSwungCanvas) weaponDraws.push({ img: battleDaggerBladeSwungCanvas, x: ppx - 16, y: ppy + 1 });
+    else if (wpnSt === 'knife' && battleKnifeBladeSwungCanvas) weaponDraws.push({ img: battleKnifeBladeSwungCanvas, x: ppx - 16, y: ppy + 1 });
     else if (wpnSt === 'sword' && battleSwordBladeSwungCanvas) weaponDraws.push({ img: battleSwordBladeSwungCanvas, x: ppx - 16, y: ppy + 1 });
     else if (battleFistCanvas) weaponDraws.push({ img: battleFistCanvas, x: ppx - 4, y: ppy + 10 });
   }

@@ -4,7 +4,24 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
-_No unreleased changes._
+## 1.0.9 — 2026-03-23
+
+### Player stats module + FF2-style proficiency system + stats screen
+
+- New `src/player-stats.js` — extracts all player state from game.js into a single `ps` object and exports pure functions: `getEquipSlotId`, `setEquipSlotId`, `recalcCombatStats`, `recalcDEF`, `getHitWeapon`, `isHitRightHand`, `initPlayerStats`, `initExpTable`, `grantExp`, `fullHeal`, `playerStatsSnapshot`
+- `ps` replaces 13 scattered globals: `playerStats`, `playerHP/MP/ATK/DEF/Gil`, `playerWeaponR/L`, `playerHead/Body/Arms`, `expTable`, `leveledUp`
+- **FF2-style weapon proficiency**: `ps.proficiency` tracks points per weapon subtype (100 pts/level, max level 16). Hits landed in battle earn points. Every 4 proficiency levels = +1 bonus hit. Gains applied on victory, persisted in save DB.
+- **Stats screen in pause menu**: Select → Stats expands HUD panel (same animation as Inventory/Equip). Page 1: Lv, HP, MP, EXP, STR/AGI/VIT/INT/MND, ATK/DEF. Page 2: weapon proficiency levels. Left/Right to page-flip, X to exit.
+
+## 1.0.8 — 2026-03-22
+
+### Extract jobs module + fix weapon subtype system
+
+- New `src/data/jobs.js` — all 22 FF3 NES jobs in ROM order, ROM offset constants (`BATTLE_SPRITE_ROM`, `BATTLE_JOB_SIZE`, `BATTLE_PAL_ROM`, `JOB_BASE_STATS_OFF`, etc.), `JOBS` array with name/weapons/armor/magic flags, `JOB_NAMES`, and reader functions: `readJobBaseStats`, `readStartingHP`, `readStartingMP`, `readJobLevelBonus`, `buildExpTable`
+- `game.js` imports from `jobs.js`; removed inline ROM offset constants and inline stat/exp parsing
+- `initPlayerStats` and `initExpTable` now call reader functions from `jobs.js`
+- `grantExp` level-up stat bonuses now use `readJobLevelBonus`
+- Weapon sprite selection in game.js now keyed by item ID (`0x1F`) rather than `'dagger'` subtype — subtype is animation category only (`'knife'`, `'sword'`, everything else)
 
 ## 1.0.7 — 2026-03-22
 
