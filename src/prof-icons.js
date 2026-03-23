@@ -32,11 +32,10 @@ function decodeToCanvas(romData, offset) {
   const img = ctx.createImageData(8, 8);
   for (let i = 0; i < 64; i++) {
     const ci = pixels[i];
-    const v = 255;
-    img.data[i*4]   = v;
-    img.data[i*4+1] = v;
-    img.data[i*4+2] = v;
-    img.data[i*4+3] = ci === 3 ? 255 : 0;
+    img.data[i*4]   = 255;
+    img.data[i*4+1] = 255;
+    img.data[i*4+2] = 255;
+    img.data[i*4+3] = ci === 0 ? 0 : ci === 1 ? 60 : ci === 2 ? 160 : 255;
   }
   ctx.putImageData(img, 0, 0);
   return c;
