@@ -592,7 +592,7 @@
   <script src="lib/libgme.js"></script>
   <script type="module">
     import { init, loadROM, loadFF12ROM, getMobileInputMode } from './src/game.js';
-    import { getAllFontTiles, TEXT_WHITE } from './src/font-renderer.js';
+    import { decodeTile, NES_SYSTEM_PALETTE } from './src/tile-decoder.js';
 
     // --- Auth ---
     const API = '';  // same origin
@@ -885,24 +885,44 @@
       }, { passive: false });
     });
 
-    // --- Font tile viewer ---
+    // --- ROM Tile Browser ---
     const tileViewer = document.getElementById('tile-viewer');
     const tileGrid = document.getElementById('tile-viewer-grid');
+    const tileHeader = document.getElementById('tile-viewer-header');
     let tileViewerOpen = false;
+    const TILES_PER_PAGE = 128;
+    let tilePage = 0;
 
-    function openTileViewer() {
-      const tiles = getAllFontTiles(TEXT_WHITE);
-      if (tiles.size === 0) return; // font not loaded yet
+    function renderTilePage() {
+      if (!ff3Buffer) return;
+      const rom = new Uint8Array(ff3Buffer);
+      const totalTiles = Math.floor((rom.length - 16) / 16); // skip iNES header
+      const totalPages = Math.ceil(totalTiles / TILES_PER_PAGE);
+      const startTile = tilePage * TILES_PER_PAGE;
+      const startOff = 16 + startTile * 16;
+      tileHeader.textContent = 'ROM TILES — PAGE ' + (tilePage+1) + '/' + totalPages + ' — OFF $' + startOff.toString(16).toUpperCase();
       tileGrid.innerHTML = '';
-      for (const [tileId, srcCanvas] of tiles) {
-        const cell = document.createElement('div');
-        cell.className = 'tile-cell';
+      for (let i = 0; i < TILES_PER_PAGE && (startTile + i) < totalTiles; i++) {
+        const off = startOff + i * 16;
+        const pixels = decodeTile(rom, off);
         const c = document.createElement('canvas');
         c.width = 32; c.height = 32;
-        c.getContext('2d').drawImage(srcCanvas, 0, 0, 32, 32);
+        const ctx = c.getContext('2d');
+        const img = ctx.createImageData(8, 8);
+        for (let p = 0; p < 64; p++) {
+          const ci = pixels[p];
+          const rgb = ci > 0 ? (NES_SYSTEM_PALETTE[0x30] || [255,255,255]) : [0,0,0];
+          img.data[p*4]=rgb[0]; img.data[p*4+1]=rgb[1]; img.data[p*4+2]=rgb[2]; img.data[p*4+3]=255;
+        }
+        ctx.putImageData(img, 0, 0);
+        const scaled = document.createElement('canvas');
+        scaled.width = 32; scaled.height = 32;
+        scaled.getContext('2d').drawImage(c, 0, 0, 32, 32);
         const label = document.createElement('span');
-        label.textContent = '$' + tileId.toString(16).toUpperCase().padStart(2, '0');
-        cell.appendChild(c);
+        label.textContent = '$' + off.toString(16).toUpperCase();
+        const cell = document.createElement('div');
+        cell.className = 'tile-cell';
+        cell.appendChild(scaled);
         cell.appendChild(label);
         cell.addEventListener('touchstart', (e) => {
           e.preventDefault();
@@ -911,6 +931,13 @@
         }, { passive: false });
         tileGrid.appendChild(cell);
       }
+      tileGrid.scrollTop = 0;
+    }
+
+    function openTileViewer() {
+      if (!ff3Buffer) return;
+      tilePage = 0;
+      renderTilePage();
       tileViewer.style.display = 'flex';
       tileViewerOpen = true;
     }
@@ -925,16 +952,22 @@
       if (tileViewerOpen) closeTileViewer(); else openTileViewer();
     }, { passive: false });
 
-    document.getElementById('tv-up').addEventListener('touchstart', (e) => { e.preventDefault(); tileGrid.scrollTop -= 120; }, { passive: false });
-    document.getElementById('tv-down').addEventListener('touchstart', (e) => { e.preventDefault(); tileGrid.scrollTop += 120; }, { passive: false });
+    document.getElementById('tv-up').addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      if (tilePage > 0) { tilePage--; renderTilePage(); }
+    }, { passive: false });
+    document.getElementById('tv-down').addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      const rom = new Uint8Array(ff3Buffer);
+      const totalPages = Math.ceil(Math.floor((rom.length - 16) / 16) / TILES_PER_PAGE);
+      if (tilePage < totalPages - 1) { tilePage++; renderTilePage(); }
+    }, { passive: false });
     document.getElementById('tv-close').addEventListener('touchstart', (e) => { e.preventDefault(); closeTileViewer(); }, { passive: false });
 
-    // Arrow keys + X intercept when tile viewer is open
     window.addEventListener('keydown', (e) => {
       if (!tileViewerOpen) return;
-      const scrollAmt = 120;
-      if (e.key === 'ArrowDown')  { tileGrid.scrollTop += scrollAmt; e.stopImmediatePropagation(); }
-      else if (e.key === 'ArrowUp')   { tileGrid.scrollTop -= scrollAmt; e.stopImmediatePropagation(); }
+      if (e.key === 'ArrowDown') { document.getElementById('tv-down').dispatchEvent(new TouchEvent('touchstart')); e.stopImmediatePropagation(); }
+      else if (e.key === 'ArrowUp') { document.getElementById('tv-up').dispatchEvent(new TouchEvent('touchstart')); e.stopImmediatePropagation(); }
       else if (e.key === 'x' || e.key === 'X' || e.key === 'Escape') { closeTileViewer(); e.stopImmediatePropagation(); }
     }, true);
 
