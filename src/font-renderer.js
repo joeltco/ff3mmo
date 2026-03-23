@@ -142,3 +142,9 @@ export function drawJobText(ctx, x, y, jobId, palette = TEXT_WHITE) {
 export function drawStringById(ctx, x, y, stringId, palette = TEXT_WHITE) {
   return drawText(ctx, x, y, getStringBytes(stringId), palette);
 }
+
+// Returns Map<tileId, HTMLCanvasElement> for all loaded font tiles — used by tile viewer debug tool
+export function getAllFontTiles(palette = TEXT_WHITE) {
+  if (!_fontPixels) return new Map();
+  return getCanvases(palette);
+}

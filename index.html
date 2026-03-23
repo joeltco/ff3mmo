@@ -409,6 +409,57 @@
       min-height: 16px;
     }
 
+    /* Font tile viewer overlay */
+    #tile-viewer {
+      position: fixed;
+      inset: 0;
+      background: #0a0a10;
+      display: none;
+      flex-direction: column;
+      z-index: 500;
+      padding: 8px;
+    }
+    #tile-viewer-header {
+      color: #c8a832;
+      font-size: 9px;
+      letter-spacing: 1px;
+      text-align: center;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #333;
+      margin-bottom: 8px;
+      flex-shrink: 0;
+    }
+    #tile-viewer-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      overflow-y: auto;
+      flex: 1;
+      align-content: flex-start;
+      padding-bottom: 8px;
+    }
+    .tile-cell {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      padding: 3px;
+      border: 1px solid #2a2a3a;
+      border-radius: 2px;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .tile-cell.tapped {
+      border-color: #c8a832;
+      background: #1a1a2e;
+    }
+    .tile-cell canvas { image-rendering: pixelated; }
+    .tile-cell span {
+      font-size: 7px;
+      color: #555;
+      font-family: monospace;
+    }
+
     /* Hidden input for mobile keyboard */
     #mobile-input {
       position: fixed;
@@ -474,6 +525,10 @@
     <canvas id="game-canvas"></canvas>
   </div>
   <div id="version-badge">v{{VERSION}}</div>
+  <div id="tile-viewer">
+    <div id="tile-viewer-header">FONT TILES &#9670; TAP = HIGHLIGHT &#9670; X TO CLOSE</div>
+    <div id="tile-viewer-grid"></div>
+  </div>
 
   <div id="controls-hint"><kbd>&larr;</kbd> <kbd>&uarr;</kbd> <kbd>&darr;</kbd> <kbd>&rarr;</kbd> Move &nbsp;&middot;&nbsp; <kbd>Z</kbd> Action &nbsp;&middot;&nbsp; <kbd>X</kbd> Back</div>
 
@@ -483,6 +538,7 @@
       <button class="util-btn" data-key="T">LOG</button>
       <button class="util-btn" data-key="s">SELECT</button>
       <button class="util-btn" data-key="Enter">START</button>
+      <button class="util-btn" id="btn-tiles">TILES</button>
     </div>
     <div id="main-controls">
       <div id="dpad">
@@ -508,6 +564,7 @@
   <script src="lib/libgme.js"></script>
   <script type="module">
     import { init, loadROM, loadFF12ROM, getMobileInputMode } from './src/game.js';
+    import { getAllFontTiles, TEXT_WHITE } from './src/font-renderer.js';
 
     // --- Auth ---
     const API = '';  // same origin
@@ -799,6 +856,55 @@
         mobileInput.focus();
       }, { passive: false });
     });
+
+    // --- Font tile viewer ---
+    const tileViewer = document.getElementById('tile-viewer');
+    const tileGrid = document.getElementById('tile-viewer-grid');
+    let tileViewerOpen = false;
+
+    function openTileViewer() {
+      const tiles = getAllFontTiles(TEXT_WHITE);
+      if (tiles.size === 0) return; // font not loaded yet
+      tileGrid.innerHTML = '';
+      for (const [tileId, srcCanvas] of tiles) {
+        const cell = document.createElement('div');
+        cell.className = 'tile-cell';
+        const c = document.createElement('canvas');
+        c.width = 24; c.height = 24;
+        c.getContext('2d').drawImage(srcCanvas, 0, 0, 24, 24);
+        const label = document.createElement('span');
+        label.textContent = '$' + tileId.toString(16).toUpperCase().padStart(2, '0');
+        cell.appendChild(c);
+        cell.appendChild(label);
+        cell.addEventListener('touchstart', (e) => {
+          e.preventDefault();
+          cell.classList.add('tapped');
+          setTimeout(() => cell.classList.remove('tapped'), 400);
+        }, { passive: false });
+        tileGrid.appendChild(cell);
+      }
+      tileViewer.style.display = 'flex';
+      tileViewerOpen = true;
+    }
+
+    function closeTileViewer() {
+      tileViewer.style.display = 'none';
+      tileViewerOpen = false;
+    }
+
+    document.getElementById('btn-tiles').addEventListener('touchend', (e) => {
+      e.preventDefault();
+      if (tileViewerOpen) closeTileViewer(); else openTileViewer();
+    }, { passive: false });
+
+    // X button (key 'x') closes the viewer — intercept before game.js sees it
+    window.addEventListener('keydown', (e) => {
+      if (!tileViewerOpen) return;
+      if (e.key === 'x' || e.key === 'X' || e.key === 'Escape') {
+        closeTileViewer();
+        e.stopImmediatePropagation();
+      }
+    }, true);
 
     // Mobile touch controls
     document.querySelectorAll('[data-key]').forEach(btn => {
