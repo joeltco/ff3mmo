@@ -156,10 +156,11 @@ export const WEAPON_PROF_CATEGORY = {
   harp:      'staff',
   boomerang: 'bow',
   shuriken:  'knife',
+  shield:    'shield',
   unarmed:   'unarmed',
 };
 
-export const PROF_CATEGORIES = ['sword','knife','axe','spear','staff','bow','unarmed','white','black','call'];
+export const PROF_CATEGORIES = ['sword','knife','axe','spear','staff','bow','shield','unarmed','white','black','call'];
 
 export function getProfLevel(category) {
   return Math.min(16, Math.floor((ps.proficiency[category] || 0) / 100));
