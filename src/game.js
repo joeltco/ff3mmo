@@ -5076,10 +5076,10 @@ function _drawPauseStats() {
   const fadeStep = _pauseFadeStep('stats-in', 'stats-out');
   const fadedPal = _makeFadedPal(fadeStep);
   const tx = px + 8;
-  // Left stats section: x=tx..tx+96. Right prof section: x=tx+100..tx+128
-  const statRx = tx + 96;   // right edge for stat values
-  const profX  = tx + 100;  // icon x for prof column
-  const profVx = tx + 110;  // level value x (after icon + 2px gap)
+  const panelRx = tx + HUD_VIEW_W - 16; // 136
+  // Left stats: x=tx..tx+88. Gap 12px. Right prof: icon at tx+100, level right-aligned to panelRx
+  const statRx = tx + 88;
+  const profX  = tx + 100;
   const STEP = 9;
   let y = finalY + 8;
 
@@ -5114,14 +5114,15 @@ function _drawPauseStats() {
   }
 
   statRow('Lv',   String(s.level));
-  // HP/MP: label left, cur/max value immediately after label (2-char label = 16px)
+  // HP/MP: label left, value right-aligned to statRx
   const hpStr = ps.hp + '/' + s.maxHP;
   const mpStr = ps.mp + '/' + s.maxMP;
-  drawText(ctx, tx,      y, _nameToBytes('HP'), fadedPal);
-  drawText(ctx, tx + 16, y, _nameToBytes(hpStr), fadedPal);
+  const hpb = _nameToBytes(hpStr), mpb = _nameToBytes(mpStr);
+  drawText(ctx, tx, y, _nameToBytes('HP'), fadedPal);
+  drawText(ctx, statRx - hpb.length * 8, y, hpb, fadedPal);
   y += STEP;
-  drawText(ctx, tx,      y, _nameToBytes('MP'), fadedPal);
-  drawText(ctx, tx + 16, y, _nameToBytes(mpStr), fadedPal);
+  drawText(ctx, tx, y, _nameToBytes('MP'), fadedPal);
+  drawText(ctx, statRx - mpb.length * 8, y, mpb, fadedPal);
   y += STEP;
   statRow('EXP',  String(s.exp));
   statRow('Next', String(s.expToNext));
@@ -5144,7 +5145,8 @@ function _drawPauseStats() {
       ctx.drawImage(icon, profX, cy, 8, 8);
       ctx.restore();
     }
-    drawText(ctx, profVx, cy, _nameToBytes(String(lv)), fadedPal);
+    const lvb = _nameToBytes(String(lv));
+    drawText(ctx, panelRx - lvb.length * 8, cy, lvb, fadedPal);
   }
 }
 
