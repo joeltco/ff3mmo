@@ -435,7 +435,7 @@
       flex-wrap: wrap;
       gap: 6px;
       overflow-y: scroll;
-      height: calc(100vh - 140px);
+      height: 55vh;
       align-content: flex-start;
       padding-bottom: 8px;
     }
@@ -898,8 +898,8 @@
         const cell = document.createElement('div');
         cell.className = 'tile-cell';
         const c = document.createElement('canvas');
-        c.width = 24; c.height = 24;
-        c.getContext('2d').drawImage(srcCanvas, 0, 0, 24, 24);
+        c.width = 32; c.height = 32;
+        c.getContext('2d').drawImage(srcCanvas, 0, 0, 32, 32);
         const label = document.createElement('span');
         label.textContent = '$' + tileId.toString(16).toUpperCase().padStart(2, '0');
         cell.appendChild(c);
