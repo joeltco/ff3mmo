@@ -42,17 +42,22 @@ for (let i = 0; i < 26; i++) CHAR_MAP[0x8A + i] = String.fromCharCode(65 + i);
 // a-z
 for (let i = 0; i < 26; i++) CHAR_MAP[0xCA + i] = String.fromCharCode(97 + i);
 // 0-9
-for (let i = 0; i < 10; i++) CHAR_MAP[0x7E + i] = String.fromCharCode(48 + i);
+for (let i = 0; i < 10; i++) CHAR_MAP[0x80 + i] = String.fromCharCode(48 + i);
 // Space
 CHAR_MAP[0xFF] = ' ';
 // Common symbols
+CHAR_MAP[0xA9] = "'";  // apostrophe (confirmed: Zeus' Wrath)
+CHAR_MAP[0xC1] = '.';  // period
 CHAR_MAP[0xC2] = '-';  // hyphen (confirmed: Hi-Potion)
-CHAR_MAP[0xC4] = '.';  // period
-CHAR_MAP[0xC5] = ',';  // comma
+CHAR_MAP[0xC3] = '…';  // ellipsis
+CHAR_MAP[0xC4] = '!';  // exclamation
+CHAR_MAP[0xC5] = '?';  // question mark
+CHAR_MAP[0xC6] = '%';  // percent
 CHAR_MAP[0xC7] = '/';  // slash
 CHAR_MAP[0xC8] = ':';  // colon
-CHAR_MAP[0xC9] = '!';  // exclamation
-CHAR_MAP[0xA9] = "'";  // apostrophe (confirmed: Zeus' Wrath)
+CHAR_MAP[0xC9] = '"';  // double quote
+CHAR_MAP[0xE4] = '"';  // double quote (variant)
+CHAR_MAP[0xE6] = '+';  // plus
 
 // Item type icon tiles ($5C-$7B range) — first byte in item/spell names
 const ICON_TILES = new Set();

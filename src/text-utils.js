@@ -8,7 +8,17 @@ export function _nameToBytes(name) {
     if (ch >= 65 && ch <= 90) bytes.push(0x8A + (ch - 65));       // A-Z
     else if (ch >= 97 && ch <= 122) bytes.push(0xCA + (ch - 97)); // a-z
     else if (ch >= 48 && ch <= 57) bytes.push(0x80 + (ch - 48));  // 0-9
-    else bytes.push(0xFF); // space
+    else if (ch === 39)  bytes.push(0xA9); // '
+    else if (ch === 46)  bytes.push(0xC1); // .
+    else if (ch === 45)  bytes.push(0xC2); // -
+    else if (ch === 33)  bytes.push(0xC4); // !
+    else if (ch === 63)  bytes.push(0xC5); // ?
+    else if (ch === 37)  bytes.push(0xC6); // %
+    else if (ch === 47)  bytes.push(0xC7); // /
+    else if (ch === 58)  bytes.push(0xC8); // :
+    else if (ch === 34)  bytes.push(0xC9); // "
+    else if (ch === 43)  bytes.push(0xE6); // +
+    else bytes.push(0xFF); // space (unknown chars)
   }
   return new Uint8Array(bytes);
 }
