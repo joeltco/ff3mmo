@@ -897,13 +897,13 @@
       if (tileViewerOpen) closeTileViewer(); else openTileViewer();
     }, { passive: false });
 
-    // X button (key 'x') closes the viewer — intercept before game.js sees it
+    // Arrow keys + X intercept when tile viewer is open
     window.addEventListener('keydown', (e) => {
       if (!tileViewerOpen) return;
-      if (e.key === 'x' || e.key === 'X' || e.key === 'Escape') {
-        closeTileViewer();
-        e.stopImmediatePropagation();
-      }
+      const scrollAmt = 120;
+      if (e.key === 'ArrowDown')  { tileGrid.scrollTop += scrollAmt; e.stopImmediatePropagation(); }
+      else if (e.key === 'ArrowUp')   { tileGrid.scrollTop -= scrollAmt; e.stopImmediatePropagation(); }
+      else if (e.key === 'x' || e.key === 'X' || e.key === 'Escape') { closeTileViewer(); e.stopImmediatePropagation(); }
     }, true);
 
     // Mobile touch controls
