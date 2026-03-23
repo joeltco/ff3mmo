@@ -5124,8 +5124,9 @@ function _drawPauseStats() {
       const cy = y + row * 14;
       const icon = getProfIcon(cat);
       if (icon) {
+        const alpha = fadeStep === 0 ? 1 : (PAUSE_TEXT_STEPS - fadeStep) / PAUSE_TEXT_STEPS;
         ctx.save();
-        ctx.globalAlpha = fadeStep / 8;
+        ctx.globalAlpha = alpha;
         ctx.imageSmoothingEnabled = false;
         ctx.drawImage(icon, cx, cy, 8, 8);
         ctx.restore();
