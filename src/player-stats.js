@@ -171,6 +171,15 @@ export function getProfHits(subtype) {
   return Math.floor(getProfLevel(cat) / 4);
 }
 
+// Returns effective shield evade% (base + 1% per shield prof level). 0 if no shield equipped.
+export function getShieldEvade(ITEMS) {
+  const shieldItem = ITEMS.get(ps.weaponR)?.subtype === 'shield' ? ITEMS.get(ps.weaponR)
+                   : ITEMS.get(ps.weaponL)?.subtype === 'shield' ? ITEMS.get(ps.weaponL)
+                   : null;
+  if (!shieldItem) return 0;
+  return (shieldItem.evade || 0) + getProfLevel('shield');
+}
+
 // Call once per battle victory with { subtype: hitsLanded }
 export function gainProficiency(hitsMap) {
   for (const [subtype, hits] of Object.entries(hitsMap)) {

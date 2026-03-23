@@ -41,7 +41,7 @@ import { initSouthWindSprite } from './south-wind.js';
 import { BATTLE_BG_MAP_LOOKUP, renderBattleBg } from './battle-bg.js';
 import { initTitleWater, initTitleSky, initTitleUnderwater, initUnderwaterSprites, initTitleOcean, initTitleLogo } from './title-animations.js';
 import { BATTLE_SPRITE_ROM, BATTLE_JOB_SIZE, BATTLE_PAL_ROM } from './data/jobs.js';
-import { ps, EQUIP_SLOT_SUBTYPE, getEquipSlotId, setEquipSlotId, recalcDEF, recalcCombatStats, getHitWeapon, isHitRightHand, initPlayerStats, initExpTable, grantExp, fullHeal, playerStatsSnapshot, gainProficiency, getProfHits, PROF_CATEGORIES } from './player-stats.js';
+import { ps, EQUIP_SLOT_SUBTYPE, getEquipSlotId, setEquipSlotId, recalcDEF, recalcCombatStats, getHitWeapon, isHitRightHand, initPlayerStats, initExpTable, grantExp, fullHeal, playerStatsSnapshot, gainProficiency, getProfHits, getShieldEvade, PROF_CATEGORIES } from './player-stats.js';
 import { initProfIcons, getProfIcon } from './prof-icons.js';
 
 const isMobile = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
@@ -6033,7 +6033,13 @@ function _processBossFlash() {
       battleState = 'ally-damage-show-enemy'; battleTimer = 0;
     }
   } else {
-    if (Math.random() * 100 < monHitRate) {
+    const shieldEvade = getShieldEvade(ITEMS);
+    const shieldBlocked = shieldEvade > 0 && Math.random() * 100 < shieldEvade;
+    if (shieldBlocked) {
+      playerDamageNum = { miss: true, timer: 0 };
+      battleState = 'enemy-damage-show'; battleTimer = 0;
+      battleProfHits['shield'] = (battleProfHits['shield'] || 0) + 1;
+    } else if (Math.random() * 100 < monHitRate) {
       let dmg = calcDamage(monAtk, ps.def);
       if (isDefending) dmg = Math.max(1, Math.floor(dmg / 2));
       ps.hp = Math.max(0, ps.hp - dmg);
@@ -6043,9 +6049,6 @@ function _processBossFlash() {
     } else {
       playerDamageNum = { miss: true, timer: 0 };
       battleState = 'enemy-damage-show'; battleTimer = 0;
-      // Shield block — earn prof if player has a shield equipped
-      const shieldId = [ps.weaponR, ps.weaponL].find(id => ITEMS.get(id)?.subtype === 'shield');
-      if (shieldId) battleProfHits['shield'] = (battleProfHits['shield'] || 0) + 1;
     }
   }
   return true;
@@ -6066,7 +6069,12 @@ function _processEnemyDamageShow() {
 function _processPVPSecondWindup() {
   if (battleTimer < BOSS_PREFLASH_MS) return;
   const monAtk2 = pvpOpponentStats.atk;
-  if (Math.random() * 100 < BOSS_HIT_RATE) {
+  const shieldEvade2 = getShieldEvade(ITEMS);
+  const shieldBlocked2 = shieldEvade2 > 0 && Math.random() * 100 < shieldEvade2;
+  if (shieldBlocked2) {
+    playerDamageNum = { miss: true, timer: 0 }; battleState = 'enemy-damage-show'; battleTimer = 0;
+    battleProfHits['shield'] = (battleProfHits['shield'] || 0) + 1;
+  } else if (Math.random() * 100 < BOSS_HIT_RATE) {
     let dmg2 = calcDamage(monAtk2, ps.def);
     if (isDefending) dmg2 = Math.max(1, Math.floor(dmg2 / 2));
     ps.hp = Math.max(0, ps.hp - dmg2);
@@ -6074,8 +6082,6 @@ function _processPVPSecondWindup() {
     battleShakeTimer = BATTLE_SHAKE_MS; battleState = 'enemy-attack'; battleTimer = 0;
   } else {
     playerDamageNum = { miss: true, timer: 0 }; battleState = 'enemy-damage-show'; battleTimer = 0;
-    const shieldId2 = [ps.weaponR, ps.weaponL].find(id => ITEMS.get(id)?.subtype === 'shield');
-    if (shieldId2) battleProfHits['shield'] = (battleProfHits['shield'] || 0) + 1;
   }
 }
 
