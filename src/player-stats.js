@@ -181,14 +181,16 @@ export function getShieldEvade(ITEMS) {
 }
 
 // Call once per battle victory with { subtype: hitsLanded }
+// battleRank = avg enemy level; scales points via FF2 formula: hits * max(1, rank - profLevel + 1)
 // Returns array of { cat, newLevel } for any categories that leveled up
-export function gainProficiency(hitsMap) {
+export function gainProficiency(hitsMap, battleRank = 1) {
   const levelUps = [];
   for (const [subtype, hits] of Object.entries(hitsMap)) {
     if (hits <= 0) continue;
     const cat = WEAPON_PROF_CATEGORY[subtype] || subtype;
     const oldLevel = getProfLevel(cat);
-    ps.proficiency[cat] = Math.min(1600, (ps.proficiency[cat] || 0) + hits);
+    const scaled = hits * Math.max(1, battleRank - oldLevel + 1);
+    ps.proficiency[cat] = Math.min(1600, (ps.proficiency[cat] || 0) + scaled);
     const newLevel = getProfLevel(cat);
     if (newLevel > oldLevel) levelUps.push({ cat, newLevel });
   }

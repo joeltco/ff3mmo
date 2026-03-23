@@ -4,6 +4,25 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## 1.1.2 — 2026-03-23
+
+### Full monster catalog + FF2 battle rank prof scaling
+
+- **All 225 monsters populated** in `src/data/monsters.js` — complete NES bestiary from Altar Cave through Dark World. HP/Level/EXP/Gil from GameFAQs NES FAQ + RPGClassics shrine. ATK/DEF estimated via `level+4` / `max(1,floor(level/4))` formula (exact NES values require GamerCorner per-page lookup).
+  - Regular enemies IDs `0x00`–`0xC2` (195 entries, sequential by bestiary order)
+  - Bosses IDs `0xCC`–`0xE9` (30 entries, verified offset from existing Land Turtle)
+  - IDs `0xC3`–`0xCB` reserved (9 unused/dummied ROM slots)
+  - Undead flagged `weakness: ['fire','holy']`, sea enemies `'bolt'`, sky `'air'`, etc.
+  - Splitting enemies (Sirenos, Azrael, Death Claw, etc.) flagged `weakness: 'dark'`
+  - Dummied entries (Mandrake, Fury Eye) included with `location: ['dummied']`
+- **FF2 battle rank scaling** for proficiency gains — `gainProficiency(hitsMap, battleRank)` in `player-stats.js`:
+  - Points per hit = `hits × max(1, battleRank − profLevel + 1)`
+  - Grinding low-rank enemies gives 1× points; fighting above your prof level multiplies gains
+  - Random encounters pass avg monster level from `MONSTERS.get(m.monsterId)?.level`
+  - PVP passes `pvpOpponentStats.level`
+  - Boss (Land Turtle) passes `MONSTERS.get(0xCC)?.level`
+  - Boss dissolve path now also stores `encounterProfLevelUps` / `profLevelUpIdx` so prof level-up messages display after boss victories
+
 ## 1.1.1 — 2026-03-23
 
 ### Proficiency depth — shield evade + full combat scaling

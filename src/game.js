@@ -5710,7 +5710,7 @@ function _updatePlayerDamageShow() {
         encounterGilGained = pvpGil;
         grantExp(pvpExp);
         ps.gil += pvpGil;
-        encounterProfLevelUps = gainProficiency(battleProfHits); battleProfHits = {}; profLevelUpIdx = 0;
+        encounterProfLevelUps = gainProficiency(battleProfHits, pvpOpponentStats.level); battleProfHits = {}; profLevelUpIdx = 0;
         _syncSaveSlotProgress();
         saveSlotsToDB();
         isDefending = false;
@@ -5739,7 +5739,8 @@ function _updateMonsterDeath() {
       encounterGilGained = encounterMonsters.reduce((sum, m) => sum + (m.gil || 0), 0);
       grantExp(encounterExpGained);
       ps.gil += encounterGilGained;
-      encounterProfLevelUps = gainProficiency(battleProfHits); battleProfHits = {}; profLevelUpIdx = 0;
+      const _avgEnemyLv = Math.round(encounterMonsters.reduce((s, m) => s + (MONSTERS.get(m.monsterId)?.level || 1), 0) / encounterMonsters.length);
+      encounterProfLevelUps = gainProficiency(battleProfHits, _avgEnemyLv); battleProfHits = {}; profLevelUpIdx = 0;
       encounterDropItem = null;
       for (const m of encounterMonsters) {
         const mData = MONSTERS.get(m.monsterId);
@@ -5905,7 +5906,7 @@ function _updateAllyDamageShow() {
       const pvpGil = 10 * pvpOpponentStats.level;
       encounterExpGained = pvpExp; encounterGilGained = pvpGil;
       grantExp(pvpExp); ps.gil += pvpGil;
-      gainProficiency(battleProfHits); battleProfHits = {};
+      encounterProfLevelUps = gainProficiency(battleProfHits, pvpOpponentStats.level); battleProfHits = {}; profLevelUpIdx = 0;
       _syncSaveSlotProgress();
       saveSlotsToDB();
       isDefending = false; bossDefeated = true;
@@ -6117,7 +6118,8 @@ function _updateBossDissolve(dt) {
     bossDefeated = true; bossSprite = null;
     encounterExpGained = 20; encounterGilGained = 500;
     grantExp(20); ps.gil += encounterGilGained;
-    gainProficiency(battleProfHits); battleProfHits = {};
+    const _bossLv = MONSTERS.get(0xCC)?.level || 4;
+    encounterProfLevelUps = gainProficiency(battleProfHits, _bossLv); battleProfHits = {}; profLevelUpIdx = 0;
     _syncSaveSlotProgress();
     saveSlotsToDB();
     isDefending = false; battleState = 'victory-name-out'; battleTimer = 0;
