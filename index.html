@@ -460,6 +460,28 @@
       color: #555;
       font-family: monospace;
     }
+    #tile-viewer-nav {
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+      padding: 8px 0 4px;
+      flex-shrink: 0;
+    }
+    #tile-viewer-nav button {
+      width: 64px;
+      height: 48px;
+      background: #1e1e2e;
+      border: 2px solid #444;
+      border-radius: 8px;
+      color: #c8a832;
+      font-size: 20px;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #tile-viewer-nav button:active {
+      background: #3a3a50;
+      border-color: #c8a832;
+    }
 
     /* Hidden input for mobile keyboard */
     #mobile-input {
@@ -529,6 +551,11 @@
   <div id="tile-viewer">
     <div id="tile-viewer-header">FONT TILES &#9670; TAP = HIGHLIGHT &#9670; X TO CLOSE</div>
     <div id="tile-viewer-grid"></div>
+    <div id="tile-viewer-nav">
+      <button id="tv-up">▲</button>
+      <button id="tv-close">X</button>
+      <button id="tv-down">▼</button>
+    </div>
   </div>
 
   <div id="controls-hint"><kbd>&larr;</kbd> <kbd>&uarr;</kbd> <kbd>&darr;</kbd> <kbd>&rarr;</kbd> Move &nbsp;&middot;&nbsp; <kbd>Z</kbd> Action &nbsp;&middot;&nbsp; <kbd>X</kbd> Back</div>
@@ -897,6 +924,10 @@
       e.preventDefault();
       if (tileViewerOpen) closeTileViewer(); else openTileViewer();
     }, { passive: false });
+
+    document.getElementById('tv-up').addEventListener('touchstart', (e) => { e.preventDefault(); tileGrid.scrollTop -= 120; }, { passive: false });
+    document.getElementById('tv-down').addEventListener('touchstart', (e) => { e.preventDefault(); tileGrid.scrollTop += 120; }, { passive: false });
+    document.getElementById('tv-close').addEventListener('touchstart', (e) => { e.preventDefault(); closeTileViewer(); }, { passive: false });
 
     // Arrow keys + X intercept when tile viewer is open
     window.addEventListener('keydown', (e) => {
