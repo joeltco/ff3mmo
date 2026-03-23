@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## 1.1.0 — 2026-03-23
+
+### Stats screen overhaul + proficiency icons
+
+- New `src/prof-icons.js` — decodes FF2 weapon icon tiles (unarmed/shield/knife/spear/staff/sword/axe/bow) from FF1&2 ROM at `$64A10`–`$64A80`, and FF3 magic icon tiles (call/white/black) from FF3 ROM at `$1B730`–`$1B760`. `initProfIcons(ff3Rom, ff12Rom)` called on ROM load. `getProfIcon(category)` returns 8×8 canvas.
+- ROM tile browser debug tool — TILES button in mobile utility row opens full ROM tile viewer. Select FF3 or FF1&2 ROM, enter hex offset, page through 128 tiles per page.
+- Stats screen redesigned as single page: left section has player name, Lv, HP cur/max, MP cur/max, EXP, Next, paired stat rows (ATK/DEF, STR/AGI, VIT/INT, MND); right column has all 11 proficiency icons stacked vertically with level numbers.
+- `text-decoder.js` / `text-utils.js`: fixed and added symbol character mappings — `,` `'` `.` `-` `!` `?` `%` `/` `:` `"` `+`
+- Removed 2-page stats system; single-page layout with 11px row spacing fills the HUD panel cleanly.
+
 ## 1.0.9 — 2026-03-23
 
 ### Player stats module + FF2-style proficiency system + stats screen
