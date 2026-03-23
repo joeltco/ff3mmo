@@ -5077,9 +5077,9 @@ function _drawPauseStats() {
   const fadedPal = _makeFadedPal(fadeStep);
   const tx = px + 8;
   const panelRx = tx + HUD_VIEW_W - 16; // 136
-  // Left stats: x=tx..tx+88. Gap 12px. Right prof: icon at tx+100, level right-aligned to panelRx
-  const statRx = tx + 88;
-  const profX  = tx + 100;
+  // Left stats: x=tx..tx+96. Gap 8px. Right prof: icon at tx+104, level right-aligned to panelRx
+  const statRx = tx + 96;
+  const profX  = tx + 104;
   const STEP = 11;
   let y = finalY + 8;
 
