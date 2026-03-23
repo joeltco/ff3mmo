@@ -460,6 +460,33 @@
       color: #555;
       font-family: monospace;
     }
+    #tv-jump-row {
+      display: flex;
+      gap: 8px;
+      padding: 4px 0 6px;
+      flex-shrink: 0;
+    }
+    #tv-offset {
+      flex: 1;
+      background: #1e1e2e;
+      border: 1px solid #444;
+      border-radius: 4px;
+      color: #e0e0e0;
+      font-family: monospace;
+      font-size: 13px;
+      padding: 6px 8px;
+      outline: none;
+    }
+    #tv-go {
+      padding: 6px 14px;
+      background: #2a2a3e;
+      border: 1px solid #555;
+      border-radius: 4px;
+      color: #c8a832;
+      font-family: monospace;
+      font-size: 13px;
+      cursor: pointer;
+    }
     #tile-viewer-nav {
       display: flex;
       justify-content: center;
@@ -549,7 +576,11 @@
   </div>
   <div id="version-badge">v{{VERSION}}</div>
   <div id="tile-viewer">
-    <div id="tile-viewer-header">FONT TILES &#9670; TAP = HIGHLIGHT &#9670; X TO CLOSE</div>
+    <div id="tile-viewer-header">ROM TILES</div>
+    <div id="tv-jump-row">
+      <input id="tv-offset" type="text" placeholder="ROM offset (hex)" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+      <button id="tv-go">GO</button>
+    </div>
     <div id="tile-viewer-grid"></div>
     <div id="tile-viewer-nav">
       <button id="tv-up">▲</button>
@@ -892,15 +923,15 @@
     let tileViewerOpen = false;
     const TILES_PER_PAGE = 128;
     let tilePage = 0;
+    let tileBaseOffset = 16; // iNES header skip by default
 
     function renderTilePage() {
       if (!ff3Buffer) return;
       const rom = new Uint8Array(ff3Buffer);
-      const totalTiles = Math.floor((rom.length - 16) / 16); // skip iNES header
-      const totalPages = Math.ceil(totalTiles / TILES_PER_PAGE);
-      const startTile = tilePage * TILES_PER_PAGE;
-      const startOff = 16 + startTile * 16;
-      tileHeader.textContent = 'ROM TILES — PAGE ' + (tilePage+1) + '/' + totalPages + ' — OFF $' + startOff.toString(16).toUpperCase();
+      const startOff = tileBaseOffset + tilePage * TILES_PER_PAGE * 16;
+      const remaining = Math.floor((rom.length - startOff) / 16);
+      const totalPages = Math.ceil((rom.length - tileBaseOffset) / (TILES_PER_PAGE * 16));
+      tileHeader.textContent = 'PAGE ' + (tilePage+1) + '/' + totalPages + '  $' + startOff.toString(16).toUpperCase();
       tileGrid.innerHTML = '';
       for (let i = 0; i < TILES_PER_PAGE && (startTile + i) < totalTiles; i++) {
         const off = startOff + i * 16;
@@ -935,9 +966,14 @@
       tileGrid.scrollTop = 0;
     }
 
+    document.getElementById('tv-go').addEventListener('click', () => {
+      const val = parseInt(document.getElementById('tv-offset').value.replace(/^0x/i,''), 16);
+      if (!isNaN(val) && val >= 0) { tileBaseOffset = val; tilePage = 0; renderTilePage(); }
+    });
+
     function openTileViewer() {
       if (!ff3Buffer) return;
-      tilePage = 0;
+      tileBaseOffset = 16; tilePage = 0;
       renderTilePage();
       tileViewer.style.display = 'flex';
       tileViewerOpen = true;
