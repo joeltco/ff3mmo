@@ -5112,20 +5112,16 @@ function _drawPauseStats() {
   } else {
     // Page 2: Proficiency
     const subtypes = ['sword','knife','axe','spear','katana','bow','rod','staff','claw','nunchaku','hammer','book','bell','harp','boomerang','shuriken','arrow','unarmed'];
-    let shown = 0;
     for (const st of subtypes) {
       const pts = ps.proficiency[st] || 0;
-      if (pts === 0 && shown > 0) continue; // skip zeroes after first entry
       const lv = Math.min(16, Math.floor(pts / 100));
       const lb = _nameToBytes(st.charAt(0).toUpperCase() + st.slice(1));
       const vb = _nameToBytes('Lv' + lv);
       drawText(ctx, tx, y, lb, fadedPal);
       drawText(ctx, tx + W - vb.length * 8, y, vb, fadedPal);
       y += 12;
-      shown++;
       if (y > finalY + HUD_VIEW_H - 12) break;
     }
-    if (shown === 0) drawText(ctx, tx, y, _nameToBytes('No skills yet'), fadedPal);
     drawText(ctx, tx + Math.floor(W / 2) - 4, finalY + HUD_VIEW_H - 12, _nameToBytes('2/2'), fadedPal);
   }
 }
