@@ -29,7 +29,7 @@ import { ENC_PAL0, ENC_PAL1, EYE_FANG_TILE_PAL, EYE_FANG_RAW,
          BLUE_WISP_TILE_PAL, BLUE_WISP_RAW,
          CARBUNCLE_TILE_PAL, CARBUNCLE_RAW } from './data/monster-sprites.js';
 import { openSaveDB, serverDeleteSlot, parseSaveSlots } from './save.js';
-import { _nameToBytes, _nesNameToString, _buildItemRowBytes, _makeGotNText, makeExpText, makeGilText, makeFoundItemText } from './text-utils.js';
+import { _nameToBytes, _nesNameToString, _buildItemRowBytes, _makeGotNText, makeExpText, makeGilText, makeFoundItemText, makeProfLevelUpText } from './text-utils.js';
 import { nesColorFade, _makeFadedPal, _stepPalFade } from './palette.js';
 import { _getPlane0, _rebuild, _shiftHorizWater, _isWater, _buildHorizMixed, _writePixels64, _writeTilePixels } from './tile-math.js';
 import { BAYER4, DMG_BOUNCE_TABLE, _dmgBounceY } from './data/animation-tables.js';
@@ -362,6 +362,8 @@ let isRandomEncounter = false;
 let encounterMonsters = null;  // [{ hp, maxHP, atk, def, exp }] — array of enemies
 let encounterExpGained = 0;
 let encounterGilGained = 0;
+let encounterProfLevelUps = []; // [{cat, newLevel}] earned this battle
+let profLevelUpIdx = 0;
 let battleProfHits = {};   // { subtype: hitsLanded } — accumulated this battle, applied on victory
 let encounterDropItem = null;  // item id dropped on victory (or null)
 let preBattleTrack = null;
@@ -2190,11 +2192,18 @@ function _battleInputHoldStates() {
   } else if (battleState === 'exp-hold') {
     if (z) { clearZ(); battleState = 'exp-fade-out'; battleTimer = 0; }
   } else if (battleState === 'gil-hold') {
-    if (z) { clearZ(); battleState = (ps.leveledUp || encounterDropItem !== null) ? 'gil-fade-out' : 'victory-text-out'; battleTimer = 0; }
+    if (z) { clearZ(); battleState = (ps.leveledUp || encounterDropItem !== null) ? 'gil-fade-out' : encounterProfLevelUps.length > 0 ? 'prof-levelup-text-in' : 'victory-text-out'; battleTimer = 0; }
   } else if (battleState === 'item-hold') {
-    if (z) { clearZ(); battleState = ps.leveledUp ? 'item-fade-out' : 'victory-text-out'; battleTimer = 0; }
+    if (z) { clearZ(); battleState = ps.leveledUp ? 'item-fade-out' : encounterProfLevelUps.length > 0 ? 'prof-levelup-text-in' : 'victory-text-out'; battleTimer = 0; }
   } else if (battleState === 'levelup-hold') {
-    if (z) { clearZ(); battleState = 'victory-text-out'; battleTimer = 0; }
+    if (z) { clearZ(); battleState = encounterProfLevelUps.length > 0 ? 'prof-levelup-text-in' : 'victory-text-out'; battleTimer = 0; }
+  } else if (battleState === 'prof-levelup-hold') {
+    if (z) {
+      clearZ();
+      if (profLevelUpIdx + 1 < encounterProfLevelUps.length) { profLevelUpIdx++; battleState = 'prof-levelup-text-in'; }
+      else { battleState = 'victory-text-out'; }
+      battleTimer = 0;
+    }
   } else { return false; }
   return true;
 }
@@ -5510,6 +5519,7 @@ function _isVictoryBattleState() {
     battleState === 'gil-text-in' || battleState === 'gil-hold' || battleState === 'gil-fade-out' ||
     battleState === 'levelup-text-in' || battleState === 'levelup-hold' ||
     battleState === 'item-text-in' || battleState === 'item-hold' || battleState === 'item-fade-out' ||
+    battleState === 'prof-levelup-text-in' || battleState === 'prof-levelup-hold' ||
     battleState === 'victory-text-out' || battleState === 'victory-menu-fade' || battleState === 'victory-box-close';
 }
 function _updateAllyExitFade(dt) {
@@ -5700,7 +5710,7 @@ function _updatePlayerDamageShow() {
         encounterGilGained = pvpGil;
         grantExp(pvpExp);
         ps.gil += pvpGil;
-        gainProficiency(battleProfHits); battleProfHits = {};
+        encounterProfLevelUps = gainProficiency(battleProfHits); battleProfHits = {}; profLevelUpIdx = 0;
         _syncSaveSlotProgress();
         saveSlotsToDB();
         isDefending = false;
@@ -5729,7 +5739,7 @@ function _updateMonsterDeath() {
       encounterGilGained = encounterMonsters.reduce((sum, m) => sum + (m.gil || 0), 0);
       grantExp(encounterExpGained);
       ps.gil += encounterGilGained;
-      gainProficiency(battleProfHits); battleProfHits = {};
+      encounterProfLevelUps = gainProficiency(battleProfHits); battleProfHits = {}; profLevelUpIdx = 0;
       encounterDropItem = null;
       for (const m of encounterMonsters) {
         const mData = MONSTERS.get(m.monsterId);
@@ -6148,6 +6158,10 @@ function _updateVictorySequence() {
   } else if (battleState === 'levelup-text-in') {
     if (battleTimer >= _textMs) { battleState = 'levelup-hold'; battleTimer = 0; }
   } else if (battleState === 'levelup-hold') {
+    // waits for Z press
+  } else if (battleState === 'prof-levelup-text-in') {
+    if (battleTimer >= _textMs) { battleState = 'prof-levelup-hold'; battleTimer = 0; }
+  } else if (battleState === 'prof-levelup-hold') {
     // waits for Z press
   } else if (battleState === 'victory-text-out') {
     if (battleTimer >= _textMs) { battleState = 'victory-menu-fade'; battleTimer = 0; }
@@ -6933,7 +6947,8 @@ function drawBossSpriteBox() {
                     battleState === 'exp-text-in' || battleState === 'exp-hold' || battleState === 'exp-fade-out' ||
                     battleState === 'gil-text-in' || battleState === 'gil-hold' || battleState === 'gil-fade-out' ||
                     battleState === 'levelup-text-in' || battleState === 'levelup-hold' ||
-    battleState === 'item-text-in' || battleState === 'item-hold' || battleState === 'item-fade-out' ||
+                    battleState === 'item-text-in' || battleState === 'item-hold' || battleState === 'item-fade-out' ||
+                    battleState === 'prof-levelup-text-in' || battleState === 'prof-levelup-hold' ||
                     battleState === 'victory-text-out' || battleState === 'victory-menu-fade' || battleState === 'victory-box-close';
   if (!isExpand && !isClose && !isAppear && !isDissolve && !isCombat && !isVictory) return;
 
@@ -7087,6 +7102,8 @@ function _victoryBoxStates() {
   const isGilFadeOut = bs === 'gil-fade-out';
   const isLevelText  = bs === 'levelup-text-in';
   const isLevelHold  = bs === 'levelup-hold';
+  const isProfLvText = bs === 'prof-levelup-text-in';
+  const isProfLvHold = bs === 'prof-levelup-hold';
   const isItemText   = bs === 'item-text-in';
   const isItemHold   = bs === 'item-hold';
   const isItemFadeOut = bs === 'item-fade-out';
@@ -7106,13 +7123,14 @@ function _victoryBoxStates() {
   return { isNameOut, isCelebrate, isClose, isVicText, isVicHold, isVicFadeOut,
            isExpText, isExpHold, isExpFadeOut, isGilText, isGilHold, isGilFadeOut,
            isLevelText, isLevelHold, isItemText, isItemHold, isItemFadeOut,
+           isProfLvText, isProfLvHold,
            isOut, isMenuFadeState, isRunNameOut, isRunTextIn, isRunHold, isRunTextOut,
            isRunFailNameOut, isRunFailTextIn, isRunFailHold, isRunFailTextOut, isRunFailNameIn,
            isRun, isRunFail };
 }
 function _drawVictoryMessage(boxX, boxY, s) {
   let fadeStep = 0;
-  if (s.isVicText || s.isExpText || s.isGilText || s.isItemText || s.isLevelText)
+  if (s.isVicText || s.isExpText || s.isGilText || s.isItemText || s.isLevelText || s.isProfLvText)
     fadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
   else if (s.isVicFadeOut || s.isExpFadeOut || s.isGilFadeOut || s.isItemFadeOut || s.isOut)
     fadeStep = Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
@@ -7123,6 +7141,7 @@ function _drawVictoryMessage(boxX, boxY, s) {
   else if (s.isGilText || s.isGilHold || s.isGilFadeOut) msg = makeGilText(encounterGilGained);
   else if (s.isItemText || s.isItemHold || s.isItemFadeOut) msg = encounterDropItem !== null ? makeFoundItemText(encounterDropItem) : null;
   else if (s.isLevelText || s.isLevelHold) msg = BATTLE_LEVEL_UP;
+  else if (s.isProfLvText || s.isProfLvHold) { const p = encounterProfLevelUps[profLevelUpIdx]; msg = p ? makeProfLevelUpText(p.cat, p.newLevel) : null; }
   else if (s.isOut) msg = ps.leveledUp ? BATTLE_LEVEL_UP : encounterDropItem !== null ? makeFoundItemText(encounterDropItem) : makeGilText(encounterGilGained);
   if (msg) {
     const tw = measureText(msg);
@@ -7134,6 +7153,7 @@ function drawVictoryBox() {
   const showBox = s.isNameOut || s.isCelebrate || s.isClose || s.isVicText || s.isVicHold || s.isVicFadeOut ||
     s.isExpText || s.isExpHold || s.isExpFadeOut || s.isGilText || s.isGilHold || s.isGilFadeOut ||
     s.isItemText || s.isItemHold || s.isItemFadeOut || s.isLevelText || s.isLevelHold ||
+    s.isProfLvText || s.isProfLvHold ||
     s.isOut || s.isMenuFadeState || s.isRun || s.isRunFail;
   if (!showBox) return;
 

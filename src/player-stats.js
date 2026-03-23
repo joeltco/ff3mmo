@@ -181,12 +181,18 @@ export function getShieldEvade(ITEMS) {
 }
 
 // Call once per battle victory with { subtype: hitsLanded }
+// Returns array of { cat, newLevel } for any categories that leveled up
 export function gainProficiency(hitsMap) {
+  const levelUps = [];
   for (const [subtype, hits] of Object.entries(hitsMap)) {
     if (hits <= 0) continue;
     const cat = WEAPON_PROF_CATEGORY[subtype] || subtype;
+    const oldLevel = getProfLevel(cat);
     ps.proficiency[cat] = Math.min(1600, (ps.proficiency[cat] || 0) + hits);
+    const newLevel = getProfLevel(cat);
+    if (newLevel > oldLevel) levelUps.push({ cat, newLevel });
   }
+  return levelUps;
 }
 
 // Call when a spell is cast (magic proficiency gain)
