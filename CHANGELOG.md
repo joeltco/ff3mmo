@@ -2,7 +2,41 @@
 
 All notable changes to this project are documented here.
 
-## [Unreleased]
+## 1.1.3 — 2026-03-23
+
+### game.js refactor — 6 modules extracted (7,488 → 5,631L)
+
+- **Extracted `src/chat.js`** (~150L) — chat message buffer, auto-chat, expand/collapse animation, and HUD rendering fully decoupled from game.js
+  - `chatState` object replaces 8 scattered globals (`messages`, `autoTimer`, `fontReady`, `inputActive`, `inputText`, `cursorTimer`, `expanded`, `expandAnim`)
+  - `addChatMessage(text, type)`, `updateChat(dt, battleState)`, `drawChat(ctx, drawHudBoxFn, rosterBattleFade)` exported
+  - All 5 chat constants moved into module (`CHAT_LINE_H`, `CHAT_HISTORY`, `CHAT_EXPAND_MS`, `CHAT_AUTO_MIN/MAX_MS`)
+- **Extracted `src/message-box.js`** (~100L) — slide-in/hold/slide-out message box overlay
+  - `msgState` object replaces 4 globals (`state`, `timer`, `bytes`, `onClose`)
+  - `showMsgBox(bytes, onClose)`, `updateMsgBox(dt)`, `drawMsgBox(ctx, clipFn, drawBoxFn)` exported
+  - `_wrapMsgBytes` moved into module (byte-level word wrap for NES text encoding)
+- **Extracted `src/title-screen.js`** (~445L) — all title draw functions + titleSt state object
+  - `titleSt` object replaces ~20 scattered title globals (waterScroll, underwaterScroll, shipTimer, deleteMode, all sprite caches, pressZ, fish/bubble state)
+  - Exported draw functions: `drawTitle`, `drawTitleOcean`, `drawTitleWater`, `drawTitleSky`, `drawTitleUnderwater`, `drawUnderwaterSprites`, `drawTitleSkyInHUD`, `drawPlayerSelectContent`
+  - Draw functions take `(ctx, shared)` where `shared` bundles game.js deps (waterTick, selectCursor, saveSlots, drawBorderedBox, etc.)
+  - Border tiles / fade sets wired via `titleSt.borderTiles` / `titleSt.borderFadeSets` after HUD init
+  - Title update logic kept in game.js (too coupled to game state machine)
+- **Extracted `src/pause-menu.js`** (~405L) — pause menu state, transitions, and rendering
+  - `pauseSt` object replaces 12 globals (state, timer, cursor, invScroll, heldItem, healNum, useItemId, invAllyTarget, eqCursor, eqSlotIdx, eqItemList, eqItemCursor)
+  - Exports: `pauseSt`, `updatePauseMenu(dt, playerInventory)`, `drawPauseMenu(ctx, shared)`
+  - All 4 pause transition sub-functions + all 6 draw sub-functions moved into module
+  - `_pauseShared()` helper in game.js bundles deps for draw calls
+- **Extracted `src/transitions.js`** (~234L) — wipe transitions, loading screen state, top-box area name
+  - `transSt`, `topBoxSt`, `loadingSt` objects replace 17 scattered globals
+  - Exports: `startWipeTransition`, `updateTransition`, `updateTopBoxScroll`, `drawTransitionOverlay`
+  - `_triggerWipe()` wrapper in game.js pre-computes `rosterLocChanged` before calling module
+  - Loading overlay draw functions kept in game.js (too coupled to game canvas globals)
+- **Extracted `src/input-handler.js`** (~380L module, ~674L removed from game.js) — battle, roster, and pause input handlers
+  - `inputSt` object replaces 20 scattered globals (battleCursor, targetIndex, hitResults, playerActionPending, itemSelectList, itemPage/PageCursor/SlideDir/SlideCursor, itemHeldIdx, itemTargetType/Index/AllyIndex/Mode, battleProfHits, rosterState/Cursor/Scroll/MenuCursor/MenuTimer)
+  - Exports: `inputSt`, `handleBattleInput(shared)`, `handleRosterInput(shared)`, `handlePauseInput(shared)`
+  - Module-level `_s` pattern: exported handlers set shared context once, private helpers access it without explicit parameter threading
+  - `_inputShared()` helper in game.js bundles 30+ deps (get/set battleState/battleTimer, game arrays, callbacks)
+  - `executeBattleCommand`, `_resetBattleVars`, roster draw/update in game.js all reference `inputSt.*` directly
+- game.js: −1,857L total (7,488 → 5,631)
 
 ## 1.1.2 — 2026-03-23
 

@@ -43,6 +43,12 @@ import { initTitleWater, initTitleSky, initTitleUnderwater, initUnderwaterSprite
 import { BATTLE_SPRITE_ROM, BATTLE_JOB_SIZE, BATTLE_PAL_ROM } from './data/jobs.js';
 import { ps, EQUIP_SLOT_SUBTYPE, getEquipSlotId, setEquipSlotId, recalcDEF, recalcCombatStats, getHitWeapon, isHitRightHand, initPlayerStats, initExpTable, grantExp, fullHeal, playerStatsSnapshot, gainProficiency, getProfHits, getProfLevel, getShieldEvade, PROF_CATEGORIES, WEAPON_PROF_CATEGORY } from './player-stats.js';
 import { initProfIcons, getProfIcon } from './prof-icons.js';
+import { chatState, addChatMessage, updateChat, drawChat } from './chat.js';
+import { msgState, showMsgBox, updateMsgBox, drawMsgBox } from './message-box.js';
+import { titleSt, isTitleActiveState, titleFadeLevel, titleFadePal, drawTitleOcean, drawTitleWater, drawTitleSky, drawTitleUnderwater, drawUnderwaterSprites, drawTitleSkyInHUD, drawTitle, drawPlayerSelectContent } from './title-screen.js';
+import { pauseSt, updatePauseMenu, drawPauseMenu } from './pause-menu.js';
+import { transSt, topBoxSt, loadingSt, startWipeTransition, updateTransition, updateTopBoxScroll, drawTransitionOverlay } from './transitions.js';
+import { inputSt, handleBattleInput, handleRosterInput, handlePauseInput } from './input-handler.js';
 
 const isMobile = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 
@@ -206,62 +212,30 @@ let moogleFrames = null; // [normal, flipped] canvases
 const INVINCIBLE_TILE_ROM = 0x17A90;  // Bank $0B:$9A80 — tiles $C0-$FF (64 tiles)
 const INVINCIBLE_PAL = [0x0F, 0x0F, 0x27, 0x30]; // transparent, black, gold, white
 let invincibleFrames = null; // [frameA, frameB] 32×32 canvases (east-facing)
-let invincibleFadeFrames = null; // [fadeLevel][frameIdx] faded canvases
-
-// Player stats — see src/data/jobs.js for ROM offsets and reader functions
-let invincibleShadowFade = null; // [fadeLevel] 32×8 shadow canvases
+// titleSt.shipFadeFrames, titleSt.shadowFade → title-screen.js
 
 // Loading screen fade state
-let loadingFadeState = 'none'; // 'in' | 'visible' | 'out' | 'none'
-let loadingFadeTimer = 0;
 const LOAD_FADE_STEP_MS = 133;  // same rate as battle BG fade
 const LOAD_FADE_MAX = 4;        // 4 steps: $30→$20→$10→$00→$0F
 
 // Loading screen pre-rendered fade frames
 let moogleFadeFrames = null; // [step0=bright, step1, step2, step3=black] per walk frame pair
 let bossFadeFrames = null;   // same structure for adamantoise
-let loadingBgScroll = 0;     // horizontal scroll for loading screen battle BG
 let loadingBgFadeFrames = null; // battle BG fade frames for loading screen
 
-// Title screen state
-let titleState = 'credit-wait'; // 'credit-wait' | 'credit-in' | 'credit-hold' | 'credit-out' |
-                                 // 'disclaim-wait' | 'disclaim-in' | 'disclaim-hold' | 'disclaim-out' |
-                                 // 'main-in' | 'zbox-open' | 'main' | 'zbox-close' |
-                                 // 'logo-fade-out' | 'select-box-open' | 'select-fade-in' | 'select' |
-                                 // 'select-fade-out' | 'select-box-close-fwd' |
-                                 // 'select-fade-out-back' | 'select-box-close' | 'logo-fade-in' |
-                                 // 'name-entry' | 'main-out' | 'done'
-let titleTimer = 0;
-// Title timing — 6 seconds total for credit+disclaimer (3s each)
-const TITLE_FADE_MAX = 4;          // 4 steps to reach $0F: $30→$20→$10→$00→$0F
-const TITLE_FADE_STEP_MS = 100;    // 100ms per step
-const TITLE_FADE_MS = (TITLE_FADE_MAX + 1) * TITLE_FADE_STEP_MS; // 500ms (extra step holds at black)
-const TITLE_WAIT_MS = 0;           // no black pause — fade starts immediately
-const TITLE_HOLD_MS = 2000;        // text visible
-// Per screen: 0 + 500 + 2000 + 500 = 3000ms. Two screens = 6000ms.
-
-// Title screen water + sky
-let titleWaterFrames = null;     // [16 animation frames] 16×16 canvases at full brightness
-let titleWaterFadeTiles = null;  // [TITLE_FADE_MAX+1 fade levels] 16×16 static ocean metatile
-let titleSkyFrames = null;       // [fade levels] 256×32 battle BG strips (0=bright, last=black)
-let titleUnderwaterFrames = null; // [fade levels] 256×32 underwater battle BG (bgId 18)
-let titleUnderwaterScroll = 0;    // horizontal scroll offset for underwater BG
-let uwBubbleTiles = null;         // decoded bubble/fish sprite canvases
-let uwBubbles = [];               // active bubble sprites [{x, y, tile, timer, speed}]
-let uwFish = null;                // active fish sprite {x, y, frame, dir, timer} or null
-let uwFishTriggered = false;      // fish starts after 1st message
-let titleOceanFrames = null;     // [fade levels] 256×32 ocean battle BG (bgId 5) for viewport top 32px
-let titleWaterScroll = 0;        // base scroll offset (parallax multiplied per row)
-let titleLogoFrames = null;      // [TITLE_FADE_MAX+1] canvas array — FF3 logo from Sight screen sprite tiles
-let titleShipTimer = 0;          // animation toggle for Invincible sprite
-const TITLE_SHIP_ANIM_MS = 100;  // 100ms per frame toggle
-const TITLE_SHADOW_ANIM_MS = 50; // 50ms shadow blink
-const TITLE_ZBOX_MS = 200;       // ms for Press Z box open/close animation
+// Title screen state → titleSt in title-screen.js
+// Title timing constants (needed by updateTitle and init functions in game.js)
+const TITLE_FADE_MAX     = 4;
+const TITLE_FADE_STEP_MS = 100;
+const TITLE_FADE_MS      = (TITLE_FADE_MAX + 1) * TITLE_FADE_STEP_MS;
+const TITLE_WAIT_MS      = 0;
+const TITLE_HOLD_MS      = 2000;
+const TITLE_ZBOX_MS      = 200;
+const SELECT_TEXT_STEP_MS = 100;
+const SELECT_TEXT_STEPS   = 4;
 
 // Player select screen state
 let selectCursor = 0;             // 0-2 (which slot)
-const SELECT_TEXT_STEP_MS = 100;  // NES fade step duration
-const SELECT_TEXT_STEPS = 4;      // 4 steps: $30→$20→$10→$00→$0F
 let saveSlots = [null, null, null]; // null = empty, or Uint8Array of name bytes
 let savesLoaded = false;            // guard: don't write to DB until loaded from DB first
 let nameBuffer = [];                // bytes being typed
@@ -287,20 +261,10 @@ function getSlashFramesForWeapon(id, rightHand) {
 }
 // Inventory system
 let playerInventory = {};    // { itemId: count } — e.g. { 0xA6: 3 }
-let itemSelectList = [];     // [{id, count}] built when entering item-select
 let itemSelectCursor = 0;    // cursor index in item list
 let itemHealAmount = 0;      // actual HP restored (for green number display)
 let playerHealNum = null;    // {value, timer} — green heal number on portrait
 let enemyHealNum = null;     // {value, timer, index} — green heal number on enemy
-let itemHeldIdx = -1;        // global index of held item (-1 = none), -100/-101 = equip R/L
-let itemPage = 0;            // current page: 0=equip, 1+=inventory pages
-let itemPageCursor = 0;      // cursor row within current page (0 to INV_SLOTS-1 or 0-1 for equip)
-let itemSlideDir = 0;        // -1 = sliding left (page++), +1 = sliding right (page--)
-let itemSlideCursor = 0;     // cursor row to set after slide completes
-let itemTargetType = 'player'; // 'player' or 'enemy' — who to use item on
-let itemTargetIndex = 0;       // which enemy index (for enemy target)
-let itemTargetAllyIndex = -1;  // -1 = player, 0+ = ally index (when itemTargetType === 'player')
-let itemTargetMode = 'single'; // 'single' | 'all' | 'col-left' | 'col-right' — for battle_items
 let southWindTargets = [];     // ordered list of enemy indices to hit
 let southWindHitIdx = 0;       // current target being hit
 let southWindHitCanvas = null; // unused - kept for compat
@@ -345,8 +309,6 @@ const PVP_BOX_RESIZE_MS = 300;
 let battleState = 'none';
 let battleTimer = 0;
 let sfxCutTimerId = null;    // tracked setTimeout for knife SFX cut — prevents stacking
-let battleCursor = 0;        // 0=Fight,1=Magic,2=Item,3=Run
-let targetIndex = 0;         // which monster is targeted in target-select
 let battleMessage = null;     // Uint8Array for status messages
 let bossDamageNum = null;     // {value, timer}
 let playerDamageNum = null;   // {value, timer}
@@ -364,16 +326,13 @@ let encounterExpGained = 0;
 let encounterGilGained = 0;
 let encounterProfLevelUps = []; // [{cat, newLevel}] earned this battle
 let profLevelUpIdx = 0;
-let battleProfHits = {};   // { subtype: hitsLanded } — accumulated this battle, applied on victory
 let encounterDropItem = null;  // item id dropped on victory (or null)
 let preBattleTrack = null;
 let turnQueue = [];              // [{type:'player'|'enemy', index}] sorted by priority
-let playerActionPending = null;  // {command:'fight'|'defend', targetIndex, hitResults, ...}
 let currentAttacker = -1;      // index of monster currently attacking
 let dyingMonsterIndices = new Map(); // index → startDelayMs for staggered death wipe
 
 // Hit animation state
-let hitResults = [];               // [{damage, crit}, {miss:true}, ...] pre-calculated per attack
 let currentHitIdx = 0;             // which hit we're animating
 let slashFrame = 0;                // current slash animation frame (0-3)
 let slashX = 0, slashY = 0;       // slash effect base position (target center)
@@ -431,52 +390,19 @@ const PLAYER_DMG_SHOW_MS = 700;         // pause after final hit before enemy co
 
 // Top box — battle scene BG or area name
 let topBoxMode = 'name';       // 'name' | 'battle'
-let topBoxNameBytes = null;    // Uint8Array for area name text
 let topBoxBgCanvas = null;     // Pre-rendered 256×32 battle BG strip (frame 0 = original)
 let topBoxBgFadeFrames = null; // [original, step1, step2, ..., black] — NES palette fade
-let topBoxIsTown = false;      // true = always show name, never switch to battle
 
 // Top box scroll animation — blue name banner slides in/out
-let topBoxScrollState = 'none'; // 'none' | 'pending' | 'fade-in' | 'display' | 'fade-out'
-let topBoxScrollTimer = 0;
-let topBoxFadeStep = 0;         // 0 = full bright, 4 = fully black ($0F)
-let topBoxScrollOnDone = null;  // callback when fade-out finishes
-const TOPBOX_FADE_STEP_MS = 100;     // ms per NES fade step
-const TOPBOX_FADE_STEPS = 4;         // 4 steps: $30→$20→$10→$00→$0F
-const TOPBOX_DISPLAY_HOLD = 1800;    // ms to show area name
+const TOPBOX_FADE_STEPS = 4;         // 4 steps: $30→$20→$10→$00→$0F — still used by game.js draw functions
 
 // White text on blue background — colors 1&2 = NES $02 (blue) so cell bg matches fill
 const TEXT_WHITE_ON_BLUE = [0x02, 0x02, 0x02, 0x30];
 
 // AREA_NAMES, DUNGEON_NAME → data/strings.js
 
-// Pause menu state
-let pauseState = 'none';       // 'none'|'scroll-in'|'text-in'|'open'|'text-out'|'scroll-out'
-                               // |'inv-text-out'|'inv-expand'|'inv-items-in'|'inventory'
-                               // |'inv-items-out'|'inv-shrink'|'inv-text-in'
-                               // |'eq-text-out'|'eq-expand'|'eq-slots-in'|'equip'
-                               // |'eq-items-in'|'eq-item-select'|'eq-items-out'
-                               // |'eq-slots-out'|'eq-shrink'|'eq-text-in'
-                               // |'stats-text-out'|'stats-expand'|'stats-in'|'stats'
-                               // |'stats-out'|'stats-shrink'|'stats-text-in'
-let pauseTimer = 0;
-let pauseCursor = 0;           // 0-5
-let pauseInvScroll = 0;        // scroll offset for inventory list
-let pauseHeldItem = -1;        // index into inventory entries of held item (-1 = none)
-let pauseHealNum = null;       // {value, timer} — green heal number during pause item use
-let pauseUseItemId = 0;        // item ID stashed between target-select and use
-let pauseInvAllyTarget = -1;   // -1 = player, 0+ = ally index for pause menu item targeting
-let eqCursor = 0;              // 0-5: RH, LH, HD, BD, SH, AR
-let eqSlotIdx = -100;          // which equip slot we're picking an item for
-let eqItemList = [];           // filtered items that fit the selected slot
-let eqItemCursor = 0;          // cursor in eqItemList
-const PAUSE_EXPAND_MS = 150;   // border expand/shrink duration
+// Pause menu state → pause-menu.js (pauseSt)
 let prePauseTrack = -1;        // FF3 track playing before pause opened
-const PAUSE_SCROLL_MS = 150;   // bordered panel scroll down/up
-const PAUSE_TEXT_STEP_MS = 100; // NES fade step duration
-const PAUSE_TEXT_STEPS = 4;    // 4 steps: $30→$20→$10→$00→$0F
-const PAUSE_MENU_W = 80;       // 10 tiles wide (left half of viewport)
-const PAUSE_MENU_H = 112;      // 14 tiles tall
 const CURSOR_TILE_ROM = 0x01B450;  // hand cursor (4 tiles, 2x2 = 16x16)
 let cursorTileCanvas = null;
 let cursorFadeCanvases = null; // [step1..step4] NES-faded cursor canvases
@@ -486,14 +412,7 @@ let cursorFadeCanvases = null; // [step1..step4] NES-faded cursor canvases
 // All locations players can be in
 // LOCATIONS, PLAYER_POOL → data/players.js
 
-// --- Chat system ---
-const CHAT_LINE_H = 9;          // 8px font + 1px gap
-const CHAT_VISIBLE = 5;         // max lines shown when collapsed
-const CHAT_HISTORY = 30;        // total messages kept in buffer
-const CHAT_EXPAND_MS = 650;     // expand/collapse duration — tuned to match SCREEN_OPEN/CLOSE SFX
-const CHAT_AUTO_MIN_MS = 5000;
-const CHAT_AUTO_MAX_MS = 16000;
-// CHAT_PHRASES → data/players.js
+// Chat system → chat.js
 
 function getPlayerLocation() {
   if (onWorldMap) return 'world';
@@ -534,17 +453,9 @@ let rosterFadeTimers = {};       // {playerName: ms since last step}
 let rosterFadeDir = {};          // {playerName: 'in'|'out'}
 let rosterSlideY = {};           // {playerName: px offset} — animates toward 0
 let rosterPrevLoc = null;        // last known player location
-let rosterLocChanged = false;    // true when transition involves a location change
 let rosterArrivalOrder = [];     // names in arrival order (most recent first)
 const ROSTER_SLIDE_SPEED = 0.15; // px per ms
-let chatMessages = [];       // [{text, type, timer}] type: 'chat'|'system'
-let chatAutoTimer = 8000;    // ms until first auto message
-let chatFontReady = false;
-let chatInputActive = false; // t key opens chat input
-let chatInputText = '';
-let chatCursorTimer = 0;     // ms, blinks every 500ms
-let chatExpanded = false;    // T (shift) toggles expanded chat view
-let chatExpandAnim = 0;      // 0=collapsed, 1=expanded (animated)
+// chatState → chat.js
 
 let rosterBattleFade = 0;        // 0=visible, ROSTER_FADE_STEPS=black
 let rosterBattleFadeTimer = 0;
@@ -563,11 +474,6 @@ let enemyTargetAllyIdx = -1;   // which ally an enemy is targeting (-1 = player)
 let allyExitTimer = 0;         // ms since victory-celebrate started (for ally exit fade)
 let turnTimer = 0;             // ms elapsed while player is deciding; auto-skip at TURN_TIME_MS
 const TURN_TIME_MS = 10000;    // 10 seconds to act before turn is skipped
-let rosterState = 'none';       // 'none'|'browse'|'menu-in'|'menu'|'menu-out'
-let rosterCursor = 0;           // index into getRosterVisible()
-let rosterScroll = 0;           // scroll offset
-let rosterMenuCursor = 0;       // cursor in context menu
-let rosterMenuTimer = 0;
 const ROSTER_MENU_ITEMS = ['Party', 'Duel', 'Trade', 'Message', 'Inspect'];
 const ROSTER_ROW_H = 32;        // pixels per roster row (matches HUD box height)
 const ROSTER_VISIBLE = 3;       // max visible rows in panel (3×32=96px, 16px for scroll)
@@ -575,10 +481,7 @@ const ROSTER_TRI_H = 0;         // no top padding — scroll triangles go in bot
 
 // Chest message box state (same style as roar box)
 // Universal message box — slide-in, instant text, Z dismiss, slide-out
-let msgBoxState = 'none';      // 'slide-in'|'hold'|'slide-out'|'none'
-let msgBoxTimer = 0;
-let msgBoxBytes = null;        // Uint8Array text to display
-let msgBoxOnClose = null;      // callback after slide-out completes
+// msgState → message-box.js
 
 // Battle text byte arrays → data/strings.js
 
@@ -615,8 +518,6 @@ let hiddenTraps = null;
 let rockSwitch = null;
 let warpTile = null;
 let pondTiles = null;
-let trapFallPending = false;
-let trapShakePending = false;
 
 // Player world position in pixels
 let worldX = 0;
@@ -650,20 +551,9 @@ let starEffect = null;     // {frame, radius, angle, spin, onComplete} or null
 let pondStrobeTimer = 0;  // >0 = pond strobe active
 
 
-// Screen wipe transition state (FF3-style horizontal band wipe)
-// Black bars close from top/bottom edges toward center, then open to reveal new map
+// Screen wipe timing constants → transitions.js
+// WIPE_DURATION still referenced by roster fade
 const WIPE_DURATION = 44 * (1000 / 60);  // 44 NES frames ≈ 733ms
-const WIPE_HOLD = 100;                    // ms to hold on full black
-const DOOR_OPEN_DURATION = 400;
-const TRAP_REVEAL_DURATION = 400; // ms to show the hole before wipe
-const SPIN_DIRS = [DIR_LEFT, DIR_UP, DIR_RIGHT, DIR_DOWN];
-const SPIN_INTERVAL = 110;  // ms per direction change
-const SPIN_CYCLES = 4;      // full rotations, ends facing south
-let transState = 'none';  // 'none' | 'door-opening' | 'trap-falling' | 'closing' | 'hold' | 'loading' | 'opening'
-let transTimer = 0;
-let _topBoxAlreadyBright = false; // set when hud-fade-in → opening so top box doesn't re-darken
-let transPendingAction = null;
-let transDungeon = false;      // true when this transition is a dungeon entry
 
 // Screen shake state (earthquake effect for secret passages)
 const SHAKE_DURATION = 34 * (1000 / 60);  // 2 × 17 NES frames ≈ 567ms
@@ -674,18 +564,18 @@ let shakePendingAction = null;
 function _onChatKeyDown(e) {
   e.preventDefault();
   if (e.key === 'Enter') {
-    if (chatInputText.length > 0) {
+    if (chatState.inputText.length > 0) {
       const slot = saveSlots[selectCursor];
       const senderName = (slot && slot.name) ? _nesNameToString(slot.name) : 'You';
-      addChatMessage(senderName + ': ' + chatInputText, 'chat');
+      addChatMessage(senderName + ': ' + chatState.inputText, 'chat');
     }
-    chatInputActive = false; chatInputText = '';
+    chatState.inputActive = false; chatState.inputText = '';
   } else if (e.key === 'Escape') {
-    chatInputActive = false; chatInputText = '';
+    chatState.inputActive = false; chatState.inputText = '';
   } else if (e.key === 'Backspace') {
-    chatInputText = chatInputText.slice(0, -1);
-  } else if (e.key.length === 1 && chatInputText.length < 42) {
-    chatInputText += e.key;
+    chatState.inputText = chatState.inputText.slice(0, -1);
+  } else if (e.key.length === 1 && chatState.inputText.length < 42) {
+    chatState.inputText += e.key;
   }
 }
 function _onNameEntryKeyDown(e) {
@@ -693,10 +583,10 @@ function _onNameEntryKeyDown(e) {
   if (e.key === 'Enter' && nameBuffer.length > 0) {
     saveSlots[selectCursor] = { name: new Uint8Array(nameBuffer), level: 1, exp: 0, stats: null, inventory: {} };
     saveSlotsToDB();
-    titleState = 'select'; titleTimer = 0;
+    titleSt.state = 'select'; titleSt.timer = 0;
   } else if (e.key === 'Backspace') {
     if (nameBuffer.length > 0) nameBuffer.pop();
-    else { titleState = 'select'; titleTimer = 0; }
+    else { titleSt.state = 'select'; titleSt.timer = 0; }
   } else if (e.key.length === 1 && /[a-zA-Z]/.test(e.key) && nameBuffer.length < NAME_MAX_LEN) {
     const ch = e.key;
     if (ch >= 'A' && ch <= 'Z') nameBuffer.push(0x8A + ch.charCodeAt(0) - 65);
@@ -711,22 +601,22 @@ export function init() {
   ctx.imageSmoothingEnabled = false;
 
   window.addEventListener('keydown', (e) => {
-    if (chatInputActive) { _onChatKeyDown(e); return; }
-    if (titleState === 'name-entry') { _onNameEntryKeyDown(e); return; }
+    if (chatState.inputActive) { _onChatKeyDown(e); return; }
+    if (titleSt.state === 'name-entry') { _onNameEntryKeyDown(e); return; }
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'z', 'Z', 'x', 'X', 'Enter', 's', 'S'].includes(e.key)) {
       e.preventDefault();
       keys[e.key] = true;
     }
-    if (e.key === 'T' && titleState === 'done' && battleState === 'none' &&
-        pauseState === 'none' && rosterState === 'none' && transState !== 'loading' && msgBoxState === 'none' && !chatInputActive) {
+    if (e.key === 'T' && titleSt.state === 'done' && battleState === 'none' &&
+        pauseSt.state === 'none' && inputSt.rosterState === 'none' && transSt.state !== 'loading' && msgState.state === 'none' && !chatState.inputActive) {
       e.preventDefault();
-      chatExpanded = !chatExpanded;
-      playSFX(chatExpanded ? SFX.SCREEN_OPEN : SFX.SCREEN_CLOSE);
+      chatState.expanded = !chatState.expanded;
+      playSFX(chatState.expanded ? SFX.SCREEN_OPEN : SFX.SCREEN_CLOSE);
     }
-    if (e.key === 't' && titleState === 'done' && battleState === 'none' &&
-        pauseState === 'none' && rosterState === 'none' && transState !== 'loading' && msgBoxState === 'none') {
+    if (e.key === 't' && titleSt.state === 'done' && battleState === 'none' &&
+        pauseSt.state === 'none' && inputSt.rosterState === 'none' && transSt.state !== 'loading' && msgState.state === 'none') {
       e.preventDefault();
-      chatInputActive = true; chatInputText = ''; chatCursorTimer = 0;
+      chatState.inputActive = true; chatState.inputText = ''; chatState.cursorTimer = 0;
     }
   });
   window.addEventListener('keyup', (e) => { keys[e.key] = false; });
@@ -771,6 +661,9 @@ function _initHUDBorderTiles(tiles) {
     const fadedPal = MENU_PALETTE.map(c => { let fc = c; for (let s = 0; s < step; s++) fc = nesColorFade(fc); return fc; });
     borderFadeSets.push(tiles.map(p => _tileToCanvas(p, fadedPal)));
   }
+  // Wire border tile refs into title-screen.js
+  titleSt.borderTiles = borderTileCanvases;
+  titleSt.borderFadeSets = borderFadeSets;
 }
 
 function _initHUDCanvases() {
@@ -1411,8 +1304,8 @@ function initInvincibleSprite(romData) {
   const fadePals = Array.from({ length: TITLE_FADE_MAX + 1 }, (_, fl) =>
     INVINCIBLE_PAL.map((c, i) => { if (i === 0) return c; let fc = c; for (let s = 0; s < fl; s++) fc = nesColorFade(fc); return fc; })
   );
-  invincibleFadeFrames = fadePals.map(p => [_renderInvFrame(tilePixels, frameA_grid, p), _renderInvFrame(tilePixels, frameB_grid, p)]);
-  invincibleShadowFade = fadePals.map(p => _renderInvShadow(tilePixels, p));
+  titleSt.shipFadeFrames = fadePals.map(p => [_renderInvFrame(tilePixels, frameA_grid, p), _renderInvFrame(tilePixels, frameB_grid, p)]);
+  titleSt.shadowFade = fadePals.map(p => _renderInvShadow(tilePixels, p));
 }
 
 function initMoogleSprite(romData) {
@@ -1502,11 +1395,7 @@ function initLoadingScreenFadeFrames(romData) {
 
 
 
-function _pauseFadeStep(inState, outState) {
-  if (pauseState === inState) return PAUSE_TEXT_STEPS - Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
-  if (pauseState === outState) return Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
-  return 0;
-}
+// _pauseFadeStep → pause-menu.js
 function _drawHudWithFade(fullCanvas, fadeCanvases, fadeStep) {
   if (fadeStep > 0 && fadeCanvases && fadeStep <= fadeCanvases.length) {
     ctx.drawImage(fadeCanvases[fadeStep - 1], 0, 0);
@@ -1529,30 +1418,16 @@ function _grayViewport() {
                             HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
   ctx.filter = 'none'; ctx.restore();
 }
-function _pausePanelLayout() {
-  const px = HUD_VIEW_X, finalY = HUD_VIEW_Y, pw = PAUSE_MENU_W, ph = PAUSE_MENU_H;
-  const isInvState   = pauseState.startsWith('inv-') || pauseState === 'inventory';
-  const isEqState    = pauseState.startsWith('eq-')  || pauseState === 'equip';
-  const isStatsState = pauseState.startsWith('stats-') || pauseState === 'stats';
-  let panelY = finalY;
-  if (pauseState === 'scroll-in') {
-    const t = Math.min(pauseTimer / PAUSE_SCROLL_MS, 1);
-    panelY = finalY - ph + t * ph;
-  } else if (pauseState === 'scroll-out') {
-    const t = Math.min(pauseTimer / PAUSE_SCROLL_MS, 1);
-    panelY = finalY - t * ph;
-  }
-  return { px, finalY, pw, ph, isInvState, isEqState, isStatsState, panelY };
-}
+// _pausePanelLayout → pause-menu.js
 function _resetBattleVars() {
-  battleCursor = 0; battleMessage = null;
+  inputSt.battleCursor = 0; battleMessage = null;
   bossDamageNum = null; playerDamageNum = null; playerHealNum = null; enemyHealNum = null;
   encounterDropItem = null; bossFlashTimer = 0; battleShakeTimer = 0;
   isDefending = false; battleAllies = []; allyJoinRound = 0;
   currentAllyAttacker = -1; allyTargetIndex = -1; allyHitResult = null;
   allyDamageNums = {}; allyShakeTimer = {}; enemyTargetAllyIdx = -1; allyExitTimer = 0;
   southWindTargets = []; southWindHitIdx = 0; southWindDmgNums = {};
-  battleProfHits = {};
+  inputSt.battleProfHits = {};
 }
 function _zPressed() { if (!keys['z'] && !keys['Z']) return false; keys['z'] = false; keys['Z'] = false; return true; }
 function _xPressed() { if (!keys['x'] && !keys['X']) return false; keys['x'] = false; keys['X'] = false; return true; }
@@ -1583,10 +1458,10 @@ function setupTopBox(mapId, isWorldMap) {
     const bgId = romRaw[BATTLE_BG_MAP_LOOKUP] & 0x1F;
     ({ bgCanvas: topBoxBgCanvas, fadeFrames: topBoxBgFadeFrames } = renderBattleBg(romRaw, bgId));
     topBoxMode = 'battle';
-    topBoxIsTown = false;
-    topBoxNameBytes = null;
-    topBoxScrollState = 'none';
-    topBoxFadeStep = TOPBOX_FADE_STEPS;
+    topBoxSt.isTown = false;
+    topBoxSt.nameBytes = null;
+    topBoxSt.state = 'none';
+    topBoxSt.fadeStep = TOPBOX_FADE_STEPS;
     return;
   }
 
@@ -1595,32 +1470,114 @@ function setupTopBox(mapId, isWorldMap) {
     const bgId = romRaw[BATTLE_BG_MAP_LOOKUP + romMap] & 0x1F;
     ({ bgCanvas: topBoxBgCanvas, fadeFrames: topBoxBgFadeFrames } = renderBattleBg(romRaw, bgId));
     loadingBgFadeFrames = topBoxBgFadeFrames;
-    topBoxNameBytes = DUNGEON_NAME;
+    topBoxSt.nameBytes = DUNGEON_NAME;
     topBoxMode = 'battle';
-    topBoxIsTown = false;
-    topBoxScrollState = 'none';
-    topBoxFadeStep = TOPBOX_FADE_STEPS;
+    topBoxSt.isTown = false;
+    topBoxSt.state = 'none';
+    topBoxSt.fadeStep = TOPBOX_FADE_STEPS;
     return;
   }
 
   // Regular map
   if (mapId === 114) {
-    if (!topBoxIsTown) {
-      topBoxScrollState = 'pending';
+    if (!topBoxSt.isTown) {
+      topBoxSt.state = 'pending';
     }
-    topBoxIsTown = true;
-    topBoxNameBytes = AREA_NAMES.get(114);
+    topBoxSt.isTown = true;
+    topBoxSt.nameBytes = AREA_NAMES.get(114);
     topBoxMode = 'name';
-  } else if (!topBoxIsTown) {
+  } else if (!topBoxSt.isTown) {
     const bgId = romRaw[BATTLE_BG_MAP_LOOKUP + mapId] & 0x1F;
     ({ bgCanvas: topBoxBgCanvas, fadeFrames: topBoxBgFadeFrames } = renderBattleBg(romRaw, bgId));
     topBoxMode = 'battle';
   }
 }
 
+// Shared state objects passed to transitions.js functions
+function _transShared() {
+  return {
+    sprite,
+    keys,
+    onShake: () => { shakeActive = true; shakeTimer = 0; },
+  };
+}
+function _transDrawShared() {
+  return { drawLoadingOverlay: _drawLoadingOverlay };
+}
+// Wrapper that pre-computes rosterLocChanged before calling transitions.js
+function _triggerWipe(action, destMapId) {
+  const rc = destMapId != null && _rosterLocForMapId(destMapId) !== getPlayerLocation();
+  startWipeTransition(action, destMapId, rc);
+}
+
+// Shared state object passed to input-handler.js functions
+function _inputShared() {
+  return {
+    keys,
+    playerInventory,
+    saveSlots,
+    battleAllies,
+    get battleState()          { return battleState; },
+    set battleState(v)          { battleState = v; },
+    get battleTimer()           { return battleTimer; },
+    set battleTimer(v)          { battleTimer = v; },
+    get isRandomEncounter()     { return isRandomEncounter; },
+    get encounterMonsters()     { return encounterMonsters; },
+    get encounterDropItem()     { return encounterDropItem; },
+    get encounterProfLevelUps() { return encounterProfLevelUps; },
+    get profLevelUpIdx()        { return profLevelUpIdx; },
+    set profLevelUpIdx(v)       { profLevelUpIdx = v; },
+    get isPVPBattle()           { return isPVPBattle; },
+    get pvpOpponentStats()      { return pvpOpponentStats; },
+    get shakeActive()           { return shakeActive; },
+    get starEffect()            { return starEffect; },
+    get moving()                { return moving; },
+    get onWorldMap()            { return onWorldMap; },
+    get dungeonFloor()          { return dungeonFloor; },
+    get selectCursor()          { return selectCursor; },
+    saveSlotsToDB,
+    addItem,
+    removeItem,
+    getRosterVisible,
+    getSlashFramesForWeapon,
+    executeBattleCommand,
+    startPVPBattle,
+  };
+}
+
+// Shared state object passed to pause-menu.js draw functions
+function _pauseShared() {
+  return {
+    playerInventory,
+    saveSlots,
+    selectCursor,
+    cursorTileCanvas,
+    rosterScroll: inputSt.rosterScroll,
+    _drawBorderedBox,
+    _clipToViewport,
+    _drawCursorFaded,
+  };
+}
+
+// Shared state object passed to title-screen.js draw functions
+function _titleShared() {
+  return {
+    waterTick,
+    selectCursor,
+    saveSlots,
+    nameBuffer,
+    nameMaxLen: NAME_MAX_LEN,
+    battleSpriteCanvas,
+    battleSpriteFadeCanvases,
+    silhouetteCanvas,
+    drawBorderedBox: _drawBorderedBox,
+    drawCursorFaded: _drawCursorFaded,
+  };
+}
+
 export function getMobileInputMode() {
-  if (chatInputActive) return 'chat';
-  if (titleState === 'name-entry') return 'name';
+  if (chatState.inputActive) return 'chat';
+  if (titleSt.state === 'name-entry') return 'name';
   return 'none';
 }
 
@@ -1649,15 +1606,15 @@ function _initSpriteAssets(romRaw) {
 }
 function _initTitleAssets(romRaw) {
   initInvincibleSprite(romRaw);
-  ({ titleWaterFrames, titleWaterFadeTiles } = initTitleWater(romRaw, TITLE_FADE_MAX));
-  titleSkyFrames = initTitleSky(romRaw);
-  titleUnderwaterFrames = initTitleUnderwater(romRaw);
-  ({ uwBubbleTiles } = initUnderwaterSprites(romRaw));
-  titleOceanFrames = initTitleOcean(romRaw);
-  titleLogoFrames = initTitleLogo();
+  const _tw = initTitleWater(romRaw, TITLE_FADE_MAX); titleSt.waterFrames = _tw.titleWaterFrames; titleSt.waterFadeTiles = _tw.titleWaterFadeTiles;
+  titleSt.skyFrames = initTitleSky(romRaw);
+  titleSt.underwaterFrames = initTitleUnderwater(romRaw);
+  titleSt.bubbleTiles = initUnderwaterSprites(romRaw).uwBubbleTiles;
+  titleSt.oceanFrames = initTitleOcean(romRaw);
+  titleSt.logoFrames = initTitleLogo();
 }
 function _startDebugMode() {
-  titleState = 'done';
+  titleSt.state = 'done';
   dungeonSeed = 1;
   clearDungeonCache();
   loadMapById(1004);
@@ -1668,10 +1625,13 @@ function _startDebugMode() {
   requestAnimationFrame(gameLoop);
 }
 function _startTitleScreen() {
-  titleState = 'credit-wait';
-  titleTimer = 0;
-  titleWaterScroll = 0;
-  titleShipTimer = 0;
+  titleSt.state = 'credit-wait';
+  titleSt.timer = 0;
+  titleSt.waterScroll = 0;
+  titleSt.shipTimer = 0;
+  titleSt.pressZ = isMobile
+    ? new Uint8Array([0x99,0xDB,0xCE,0xDC,0xDC,0xFF,0x8A])  // "Press A"
+    : new Uint8Array([0x99,0xDB,0xCE,0xDC,0xDC,0xFF,0xA3]); // "Press Z"
   playTrack(TRACKS.TITLE_SCREEN);
   lastTime = performance.now();
   requestAnimationFrame(gameLoop);
@@ -1896,701 +1856,30 @@ function startMove(dir) {
   }
 }
 
-function _battleTargetNav() {
-  if (!isRandomEncounter || !encounterMonsters) return;
-  const aliveIdx = encounterMonsters.reduce((a, m, i) => (m.hp > 0 ? [...a, i] : a), []);
-  if (keys['ArrowRight'] || keys['ArrowDown']) {
-    keys['ArrowRight'] = false; keys['ArrowDown'] = false;
-    targetIndex = aliveIdx[(aliveIdx.indexOf(targetIndex) + 1) % aliveIdx.length];
-    playSFX(SFX.CURSOR);
-  }
-  if (keys['ArrowLeft'] || keys['ArrowUp']) {
-    keys['ArrowLeft'] = false; keys['ArrowUp'] = false;
-    targetIndex = aliveIdx[(aliveIdx.indexOf(targetIndex) - 1 + aliveIdx.length) % aliveIdx.length];
-    playSFX(SFX.CURSOR);
-  }
-}
-function _battleTargetConfirm() {
-  if (!keys['z'] && !keys['Z']) return;
-  keys['z'] = false; keys['Z'] = false;
-  playSFX(SFX.CONFIRM);
-  const rIsWeapon = isWeapon(ps.weaponR);
-  const lIsWeapon = isWeapon(ps.weaponL);
-  const dualWield = rIsWeapon && lIsWeapon;
-  const unarmed = !rIsWeapon && !lIsWeapon;
-  const baseHits = Math.max(1, Math.floor((ps.stats ? ps.stats.agi : 5) / 10));
-  const wpnSubtype = weaponSubtype(ps.weaponR) || weaponSubtype(ps.weaponL) || 'unarmed';
-  const profBonus = getProfHits(wpnSubtype);
-  const potentialHits = (dualWield || unarmed) ? Math.max(2, baseHits) + profBonus : Math.max(1, baseHits) + profBonus;
-  const wpn = (rIsWeapon ? ITEMS.get(ps.weaponR) : null) || (lIsWeapon ? ITEMS.get(ps.weaponL) : null);
-  const hitRate = wpn ? wpn.hit : BASE_HIT_RATE;
-  const profCat = WEAPON_PROF_CATEGORY[wpnSubtype] || wpnSubtype;
-  const profLv = getProfLevel(profCat);
-  if (isRandomEncounter && encounterMonsters) {
-    hitResults = rollHits(ps.atk, encounterMonsters[targetIndex].def, hitRate, potentialHits, profLv);
-  } else {
-    const targetDef = isPVPBattle && pvpOpponentStats ? pvpOpponentStats.def : BOSS_DEF;
-    hitResults = rollHits(ps.atk, targetDef, hitRate, potentialHits, profLv);
-  }
-  // Track hits for proficiency gain at battle end
-  const hitsLanded = hitResults.filter(h => h > 0).length;
-  if (hitsLanded > 0) battleProfHits[wpnSubtype] = (battleProfHits[wpnSubtype] || 0) + hitsLanded;
-  const firstHandR = isWeapon(ps.weaponR) || !isWeapon(ps.weaponL);
-  const firstWpnId = firstHandR ? ps.weaponR : ps.weaponL;
-  const pendingSlashFrames = getSlashFramesForWeapon(firstWpnId, firstHandR);
-  const centerX = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2);
-  const centerY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
-  const firstWeapon0 = getHitWeapon(0);
-  const pendingOffX = isBladedWeapon(firstWeapon0) ? 8 : Math.floor(Math.random() * 40) - 20;
-  const pendingOffY = isBladedWeapon(firstWeapon0) ? -8 : Math.floor(Math.random() * 40) - 20;
-  playerActionPending = {
-    command: 'fight', targetIndex, hitResults,
-    slashFrames: pendingSlashFrames, slashOffX: pendingOffX, slashOffY: pendingOffY,
-    slashX: centerX, slashY: centerY
-  };
-  battleState = 'confirm-pause';
-  battleTimer = 0;
-}
-function _battleInputTargetSelect() {
-  _battleTargetNav();
-  _battleTargetConfirm();
-  if (_xPressed()) {
-    playSFX(SFX.CONFIRM);
-    battleState = 'menu-open';
-    battleTimer = 0;
-  }
-}
 
-function _itemSelectNav(isEquipPage, totalPages, pageRows) {
-  if (keys['ArrowDown']) {
-    keys['ArrowDown'] = false;
-    if (itemPageCursor < pageRows - 1) itemPageCursor++;
-    else if (itemPage < totalPages - 1) { itemSlideDir = -1; itemSlideCursor = 0; battleState = 'item-slide'; battleTimer = 0; }
-    playSFX(SFX.CURSOR);
-  }
-  if (keys['ArrowUp']) {
-    keys['ArrowUp'] = false;
-    if (itemPageCursor > 0) itemPageCursor--;
-    else if (itemPage > 0) { itemSlideDir = 1; itemSlideCursor = (itemPage - 1) === 0 ? 1 : INV_SLOTS - 1; battleState = 'item-slide'; battleTimer = 0; }
-    playSFX(SFX.CURSOR);
-  }
-  if (keys['ArrowLeft'] && itemPage > 0) {
-    keys['ArrowLeft'] = false; playSFX(SFX.CURSOR);
-    itemSlideDir = 1; itemSlideCursor = 0; battleState = 'item-slide'; battleTimer = 0;
-  }
-  if (keys['ArrowRight'] && itemPage < totalPages - 1) {
-    keys['ArrowRight'] = false; playSFX(SFX.CURSOR);
-    itemSlideDir = -1; itemSlideCursor = 0; battleState = 'item-slide'; battleTimer = 0;
-  }
-}
-
-function _itemSelectSwap(isEquipPage, gIdx) {
-  const srcEquip = itemHeldIdx <= -100;
-  const dstEquip = isEquipPage;
-  if (!srcEquip && !dstEquip) {
-    // Inv → Inv swap
-    const dstIdx = (itemPage - 1) * INV_SLOTS + itemPageCursor;
-    const tmp = itemSelectList[itemHeldIdx];
-    itemSelectList[itemHeldIdx] = itemSelectList[dstIdx];
-    itemSelectList[dstIdx] = tmp;
-    itemHeldIdx = -1; playSFX(SFX.CONFIRM);
-  } else if (!srcEquip && dstEquip) {
-    // Inv → Equip
-    const item = itemSelectList[itemHeldIdx];
-    const handIdx = itemPageCursor;
-    if (item && isHandEquippable(ITEMS.get(item.id))) {
-      const oldWeapon = handIdx === 0 ? ps.weaponR : ps.weaponL;
-      if (handIdx === 0) ps.weaponR = item.id; else ps.weaponL = item.id;
-      removeItem(item.id);
-      if (oldWeapon !== 0) addItem(oldWeapon, 1);
-      itemSelectList[itemHeldIdx] = oldWeapon !== 0 ? { id: oldWeapon, count: 1 } : null;
-      recalcCombatStats(); itemHeldIdx = -1; playSFX(SFX.CONFIRM);
-    } else { playSFX(SFX.ERROR); itemHeldIdx = -1; }
-  } else if (srcEquip && !dstEquip) {
-    // Equip → Inv
-    const srcHand = -(itemHeldIdx + 100);
-    const handWeaponId = srcHand === 0 ? ps.weaponR : ps.weaponL;
-    const dstIdx = (itemPage - 1) * INV_SLOTS + itemPageCursor;
-    const invItem = itemSelectList[dstIdx];
-    if (invItem && isHandEquippable(ITEMS.get(invItem.id))) {
-      if (srcHand === 0) ps.weaponR = invItem.id; else ps.weaponL = invItem.id;
-      removeItem(invItem.id); addItem(handWeaponId, 1);
-      itemSelectList[dstIdx] = { id: handWeaponId, count: 1 };
-      recalcCombatStats(); itemHeldIdx = -1; playSFX(SFX.CONFIRM);
-    } else if (!invItem) {
-      if (srcHand === 0) ps.weaponR = 0; else ps.weaponL = 0;
-      addItem(handWeaponId, 1);
-      itemSelectList[dstIdx] = { id: handWeaponId, count: 1 };
-      recalcCombatStats(); itemHeldIdx = -1; playSFX(SFX.CONFIRM);
-    } else { playSFX(SFX.ERROR); itemHeldIdx = -1; }
-  } else {
-    // Equip → Equip (swap hands)
-    const tmp = ps.weaponR; ps.weaponR = ps.weaponL; ps.weaponL = tmp;
-    recalcCombatStats(); itemHeldIdx = -1; playSFX(SFX.CONFIRM);
-  }
-}
-
-function _itemSelectZ(isEquipPage, gIdx) {
-  if (itemHeldIdx === -1) {
-    // Nothing held — pick up
-    if (isEquipPage) {
-      const weaponId = itemPageCursor === 0 ? ps.weaponR : ps.weaponL;
-      if (weaponId !== 0) { itemHeldIdx = gIdx; playSFX(SFX.CONFIRM); } else playSFX(SFX.ERROR);
-    } else {
-      const invIdx = (itemPage - 1) * INV_SLOTS + itemPageCursor;
-      if (itemSelectList[invIdx] !== null) { itemHeldIdx = gIdx; playSFX(SFX.CONFIRM); } else playSFX(SFX.ERROR);
-    }
-  } else if (itemHeldIdx === gIdx) {
-    // Same slot — use consumable or deselect
-    if (!isEquipPage) {
-      const invIdx = (itemPage - 1) * INV_SLOTS + itemPageCursor;
-      const item = itemSelectList[invIdx];
-      const itemDat = ITEMS.get(item.id);
-      if (itemDat?.type === 'consumable' || itemDat?.type === 'battle_item') {
-        playSFX(SFX.CONFIRM); itemHeldIdx = -1; itemTargetMode = 'single';
-        if (itemDat.type === 'battle_item' && isRandomEncounter && encounterMonsters) {
-          itemTargetType = 'enemy';
-          const ecnt = encounterMonsters.length;
-          const ealive = (i) => i < encounterMonsters.length && encounterMonsters[i].hp > 0;
-          const rightCandidates = ecnt === 1 ? [0] : ecnt === 2 ? [1] : ecnt === 3 ? [1] : [1,3];
-          const leftCandidates  = ecnt === 1 ? [0] : ecnt === 2 ? [0] : ecnt === 3 ? [0,2] : [0,2];
-          const first = [...rightCandidates,...leftCandidates].find(i => ealive(i));
-          itemTargetIndex = first !== undefined ? first : 0;
-        } else if (itemDat.type === 'battle_item' && !isRandomEncounter) {
-          itemTargetType = 'enemy'; itemTargetIndex = 0;
-        } else {
-          itemTargetType = 'player'; itemTargetIndex = 0;
-        }
-        itemTargetAllyIndex = -1; battleState = 'item-target-select'; battleTimer = 0;
-        playerActionPending = { command: 'item', itemId: item.id };
-      } else { itemHeldIdx = -1; playSFX(SFX.CONFIRM); }
-    } else { itemHeldIdx = -1; playSFX(SFX.CONFIRM); }
-  } else {
-    _itemSelectSwap(isEquipPage, gIdx);
-  }
-}
-
-function _battleInputItemSelect() {
-  const isEquipPage = itemPage === 0;
-  const pageRows = isEquipPage ? 2 : INV_SLOTS;
-  const totalPages = 1 + Math.max(1, Math.ceil(itemSelectList.length / INV_SLOTS));
-  _itemSelectNav(isEquipPage, totalPages, pageRows);
-  if (_zPressed()) {
-    const gIdx = isEquipPage ? -100 - itemPageCursor : (itemPage - 1) * INV_SLOTS + itemPageCursor;
-    _itemSelectZ(isEquipPage, gIdx);
-  }
-  if (_xPressed()) {
-    if (itemHeldIdx !== -1) { itemHeldIdx = -1; playSFX(SFX.CONFIRM); }
-    else { playSFX(SFX.CONFIRM); battleState = 'item-cancel-out'; battleTimer = 0; }
-  }
-}
-
-function _itemTargetCnt() {
-  return isRandomEncounter && encounterMonsters ? encounterMonsters.length : (isRandomEncounter ? 0 : 1);
-}
-function _itemTargetAlive(i) {
-  return isRandomEncounter && encounterMonsters && i < encounterMonsters.length && encounterMonsters[i].hp > 0;
-}
-function _itemTargetIsRightCol(i) {
-  const cnt = _itemTargetCnt();
-  return cnt === 1 || (cnt === 2 && i === 1) || (cnt >= 3 && (i === 1 || i === 3));
-}
-function _itemTargetIsLeftCol(i) { return _itemTargetCnt() >= 2 && !_itemTargetIsRightCol(i); }
-function _itemTargetNavLeft(isBattleItem) {
-  const cnt = _itemTargetCnt();
-  if (isBattleItem && itemTargetMode !== 'single') {
-    const leftCandidates = cnt <= 1 ? [0] : cnt === 2 ? [0] : [0, 2];
-    const found = leftCandidates.find(i => _itemTargetAlive(i));
-    if (found !== undefined) itemTargetIndex = found;
-    itemTargetMode = 'single'; playSFX(SFX.CURSOR);
-  } else if (itemTargetType === 'player') {
-    if (!isRandomEncounter) {
-      itemTargetType = 'enemy'; itemTargetIndex = 0; itemTargetMode = 'single'; playSFX(SFX.CURSOR);
-    } else {
-      const rightCandidates = cnt === 1 ? [0] : cnt === 2 ? [1] : cnt === 3 ? [1] : [1, 3];
-      const leftCandidates = cnt === 2 ? [0] : cnt === 3 ? [0, 2] : cnt >= 4 ? [0, 2] : [];
-      let found = rightCandidates.find(i => _itemTargetAlive(i));
-      if (found === undefined) found = leftCandidates.find(i => _itemTargetAlive(i));
-      if (found !== undefined) {
-        itemTargetType = 'enemy'; itemTargetIndex = found; itemTargetMode = 'single'; playSFX(SFX.CURSOR);
-      }
-    }
-  } else if (isRandomEncounter && _itemTargetIsRightCol(itemTargetIndex)) {
-    const leftPeer = itemTargetIndex === 1 ? 0 : itemTargetIndex === 3 ? 2 : -1;
-    const leftOther = itemTargetIndex === 1 ? 2 : itemTargetIndex === 3 ? 0 : -1;
-    if (leftPeer >= 0 && _itemTargetAlive(leftPeer)) { itemTargetIndex = leftPeer; playSFX(SFX.CURSOR); }
-    else if (leftOther >= 0 && _itemTargetAlive(leftOther)) { itemTargetIndex = leftOther; playSFX(SFX.CURSOR); }
-    else if (isBattleItem) { itemTargetMode = 'all'; playSFX(SFX.CURSOR); }
-  } else if (isBattleItem && isRandomEncounter && _itemTargetIsLeftCol(itemTargetIndex)) {
-    itemTargetMode = 'all'; playSFX(SFX.CURSOR);
-  }
-}
-function _itemTargetNavRight() {
-  if (itemTargetType !== 'enemy') return;
-  if (_itemTargetIsRightCol(itemTargetIndex) || !isRandomEncounter) {
-    itemTargetType = 'player'; playSFX(SFX.CURSOR);
-  } else {
-    const rightPeer = itemTargetIndex === 0 ? 1 : itemTargetIndex === 2 ? 3 : -1;
-    const rightOther = itemTargetIndex === 0 ? 3 : itemTargetIndex === 2 ? 1 : -1;
-    if (rightPeer >= 0 && _itemTargetAlive(rightPeer)) { itemTargetIndex = rightPeer; playSFX(SFX.CURSOR); }
-    else if (rightOther >= 0 && _itemTargetAlive(rightOther)) { itemTargetIndex = rightOther; playSFX(SFX.CURSOR); }
-    else { itemTargetType = 'player'; playSFX(SFX.CURSOR); }
-  }
-}
-function _itemTargetNavVertical(isBattleItem) {
-  const goUp = !!keys['ArrowUp'];
-  keys['ArrowUp'] = false; keys['ArrowDown'] = false;
-  const cnt = _itemTargetCnt();
-  if (isBattleItem && itemTargetType === 'enemy' && isRandomEncounter && encounterMonsters) {
-    if (goUp && itemTargetMode === 'single') {
-      itemTargetMode = _itemTargetIsLeftCol(itemTargetIndex) ? 'col-left' : 'col-right';
-      playSFX(SFX.CURSOR);
-    } else if (!goUp && itemTargetMode !== 'single') {
-      itemTargetMode = 'single'; playSFX(SFX.CURSOR);
-    }
-  } else if (itemTargetType === 'enemy' && isRandomEncounter && encounterMonsters) {
-    const vertMap = cnt >= 4 ? { 0: 2, 2: 0, 1: 3, 3: 1 } :
-                    cnt === 3 ? { 0: 2, 2: 0, 1: 1 } : {};
-    const next = vertMap[itemTargetIndex];
-    if (next !== undefined && next !== itemTargetIndex && _itemTargetAlive(next)) {
-      itemTargetIndex = next; playSFX(SFX.CURSOR);
-    }
-  } else if (itemTargetType === 'player') {
-    const livingAllies = battleAllies.filter(a => a.hp > 0);
-    if (!goUp && itemTargetAllyIndex < livingAllies.length - 1) {
-      itemTargetAllyIndex++; playSFX(SFX.CURSOR);
-    } else if (goUp && itemTargetAllyIndex >= 0) {
-      itemTargetAllyIndex--; playSFX(SFX.CURSOR);
-    }
-  }
-}
-function _battleInputItemTargetSelect() {
-  const isBattleItem = playerActionPending && ITEMS.get(playerActionPending.itemId)?.type === 'battle_item';
-  if (keys['ArrowLeft']) { keys['ArrowLeft'] = false; _itemTargetNavLeft(isBattleItem); }
-  if (keys['ArrowRight']) { keys['ArrowRight'] = false; _itemTargetNavRight(); }
-  if (keys['ArrowUp'] || keys['ArrowDown']) _itemTargetNavVertical(isBattleItem);
-  if (_zPressed()) {
-    playerActionPending.target = itemTargetType === 'player' ? 'player' : itemTargetIndex;
-    playerActionPending.allyIndex = itemTargetType === 'player' ? itemTargetAllyIndex : -1;
-    playerActionPending.targetMode = itemTargetMode;
-    playSFX(SFX.CONFIRM); battleState = 'item-list-out'; battleTimer = 0;
-  }
-  if (_xPressed()) {
-    playerActionPending = null; playSFX(SFX.CONFIRM); battleState = 'item-select'; battleTimer = 0;
-  }
-}
-
-function _battleInputHoldStates() {
-  const z = keys['z'] || keys['Z'];
-  const clearZ = () => { keys['z'] = false; keys['Z'] = false; };
-  if (battleState === 'roar-hold') {
-    if (msgBoxState === 'hold' && z) { clearZ(); msgBoxState = 'slide-out'; msgBoxTimer = 0; }
-  } else if (battleState === 'defeat-text') {
-    if (z) { clearZ(); battleState = 'defeat-close'; battleTimer = 0; }
-  } else if (battleState === 'victory-hold') {
-    if (z) { clearZ(); battleState = 'victory-fade-out'; battleTimer = 0; }
-  } else if (battleState === 'exp-hold') {
-    if (z) { clearZ(); battleState = 'exp-fade-out'; battleTimer = 0; }
-  } else if (battleState === 'gil-hold') {
-    if (z) { clearZ(); battleState = (ps.leveledUp || encounterDropItem !== null) ? 'gil-fade-out' : encounterProfLevelUps.length > 0 ? 'prof-levelup-text-in' : 'victory-text-out'; battleTimer = 0; }
-  } else if (battleState === 'item-hold') {
-    if (z) { clearZ(); battleState = ps.leveledUp ? 'item-fade-out' : encounterProfLevelUps.length > 0 ? 'prof-levelup-text-in' : 'victory-text-out'; battleTimer = 0; }
-  } else if (battleState === 'levelup-hold') {
-    if (z) { clearZ(); battleState = encounterProfLevelUps.length > 0 ? 'prof-levelup-text-in' : 'victory-text-out'; battleTimer = 0; }
-  } else if (battleState === 'prof-levelup-hold') {
-    if (z) {
-      clearZ();
-      if (profLevelUpIdx + 1 < encounterProfLevelUps.length) { profLevelUpIdx++; battleState = 'prof-levelup-text-in'; }
-      else { battleState = 'victory-text-out'; }
-      battleTimer = 0;
-    }
-  } else { return false; }
-  return true;
-}
-
-function _handleBattleInput() {
-  if (battleState === 'none') return false;
-  if (_battleInputHoldStates()) return true;
-  if (battleState === 'menu-open') {
-    if (keys['ArrowDown'])  { keys['ArrowDown'] = false;  battleCursor ^= 2; playSFX(SFX.CURSOR); }
-    if (keys['ArrowUp'])    { keys['ArrowUp'] = false;    battleCursor ^= 2; playSFX(SFX.CURSOR); }
-    if (keys['ArrowRight']) { keys['ArrowRight'] = false; battleCursor ^= 1; playSFX(SFX.CURSOR); }
-    if (keys['ArrowLeft'])  { keys['ArrowLeft'] = false;  battleCursor ^= 1; playSFX(SFX.CURSOR); }
-    if (keys['z'] || keys['Z']) { keys['z'] = false; keys['Z'] = false; executeBattleCommand(battleCursor); }
-  } else if (battleState === 'target-select') { _battleInputTargetSelect();
-  } else if (battleState === 'item-select') { _battleInputItemSelect();
-  } else if (battleState === 'item-target-select') { _battleInputItemTargetSelect();
-  }
-  return true;
-}
-
-function _rosterInputBrowse() {
-  const rp = getRosterVisible();
-  if (keys['ArrowDown']) {
-    keys['ArrowDown'] = false;
-    if (rosterCursor < rp.length - 1) {
-      rosterCursor++;
-      if (rosterCursor - rosterScroll >= ROSTER_VISIBLE) rosterScroll++;
-      playSFX(SFX.CURSOR);
-    }
-  }
-  if (keys['ArrowUp']) {
-    keys['ArrowUp'] = false;
-    if (rosterCursor > 0) {
-      rosterCursor--;
-      if (rosterCursor < rosterScroll) rosterScroll--;
-      playSFX(SFX.CURSOR);
-    }
-  }
-  if (_zPressed()) {
-    rosterState = 'menu-in';
-    rosterMenuTimer = 0;
-    rosterMenuCursor = 0;
-    playSFX(SFX.CONFIRM);
-  }
-  if (_xPressed()) {
-    rosterState = 'none';
-    playSFX(SFX.CONFIRM);
-  }
-}
-
-function _rosterMenuDuelAction(target) {
-  const challenged = _nameToBytes('Challenged ');
-  const nameBytes = _nameToBytes(target.name);
-  const exclam = new Uint8Array([0xC4]);
-  const challengeMsg = new Uint8Array(challenged.length + nameBytes.length + 1);
-  challengeMsg.set(challenged, 0); challengeMsg.set(nameBytes, challenged.length); challengeMsg.set(exclam, challenged.length + nameBytes.length);
-  showMsgBox(challengeMsg, () => {
-    setTimeout(() => showMsgBox(_nameToBytes(target.name + ' accepted!'), () => startPVPBattle(target)),
-      1500 + Math.floor(Math.random() * 2500));
-  });
-}
-
-function _rosterInputMenu() {
-  if (keys['ArrowDown']) {
-    keys['ArrowDown'] = false;
-    rosterMenuCursor = (rosterMenuCursor + 1) % ROSTER_MENU_ITEMS.length;
-    playSFX(SFX.CURSOR);
-  }
-  if (keys['ArrowUp']) {
-    keys['ArrowUp'] = false;
-    rosterMenuCursor = (rosterMenuCursor + ROSTER_MENU_ITEMS.length - 1) % ROSTER_MENU_ITEMS.length;
-    playSFX(SFX.CURSOR);
-  }
-  if (_zPressed()) {
-    const action = ROSTER_MENU_ITEMS[rosterMenuCursor];
-    const target = getRosterVisible()[rosterCursor];
-    rosterState = 'menu-out';
-    rosterMenuTimer = 0;
-    playSFX(SFX.CONFIRM);
-    if (action === 'Duel' && (onWorldMap || dungeonFloor >= 0)) {
-      _rosterMenuDuelAction(target);
-    } else {
-      const actionBytes = _nameToBytes(action), nameBytes = _nameToBytes(target.name);
-      const sep = new Uint8Array([0xFF]);
-      const msg = new Uint8Array(actionBytes.length + 1 + nameBytes.length);
-      msg.set(actionBytes, 0); msg.set(sep, actionBytes.length); msg.set(nameBytes, actionBytes.length + 1);
-      showMsgBox(msg);
-    }
-  }
-  if (_xPressed()) {
-    rosterState = 'menu-out';
-    rosterMenuTimer = 0;
-    playSFX(SFX.CONFIRM);
-  }
-}
-
-function _handleRosterInput() {
-  // S — toggle roster browse
-  if (keys['s'] || keys['S']) {
-    keys['s'] = false; keys['S'] = false;
-    if (rosterState === 'none' && battleState === 'none' && pauseState === 'none' && transState === 'none' && !shakeActive && !starEffect && !moving && msgBoxState === 'none') {
-      rosterState = 'browse';
-      rosterCursor = 0;
-      rosterScroll = 0;
-      playSFX(SFX.CONFIRM);
-    } else if (rosterState === 'browse') {
-      rosterState = 'none';
-      playSFX(SFX.CONFIRM);
-    }
-    return true;
-  }
-  if (rosterState === 'browse') { _rosterInputBrowse(); return true; }
-  if (rosterState === 'menu')   { _rosterInputMenu();   return true; }
-  if ((rosterState === 'menu-in' || rosterState === 'menu-out') && msgBoxState === 'none') return true;
-  return false;
-}
-
-function _pauseInputOpenClose() {
-  if (keys['Enter']) {
-    keys['Enter'] = false;
-    if (pauseState === 'none' && battleState === 'none' && transState === 'none' && !shakeActive && !starEffect && !moving && msgBoxState === 'none') {
-      playSFX(SFX.CONFIRM);
-      pauseMusic();
-      playFF1Track(FF1_TRACKS.MENU_SCREEN);
-      pauseState = 'scroll-in'; pauseTimer = 0; pauseCursor = 0;
-    }
-    return true;
-  }
-  if (keys['x'] || keys['X']) {
-    if (pauseState === 'open') {
-      keys['x'] = false; keys['X'] = false;
-      playSFX(SFX.CONFIRM);
-      pauseState = 'text-out'; pauseTimer = 0;
-      return true;
-    }
-  }
-  return false;
-}
-function _pauseInputMainMenu() {
-  if (pauseState !== 'open') return false;
-  if (keys['ArrowDown']) { keys['ArrowDown'] = false; pauseCursor = (pauseCursor + 1) % 6; playSFX(SFX.CURSOR); }
-  if (keys['ArrowUp'])   { keys['ArrowUp'] = false;   pauseCursor = (pauseCursor + 5) % 6; playSFX(SFX.CURSOR); }
-  if (_zPressed()) {
-    if (pauseCursor === 0) {
-      playSFX(SFX.CONFIRM);
-      pauseState = 'inv-text-out'; pauseTimer = 0; pauseInvScroll = 0;
-    } else if (pauseCursor === 2) {
-      playSFX(SFX.CONFIRM);
-      pauseState = 'eq-text-out'; pauseTimer = 0; eqCursor = 0;
-    } else if (pauseCursor === 3) {
-      playSFX(SFX.CONFIRM);
-      pauseState = 'stats-text-out'; pauseTimer = 0;
-    }
-  }
-  return true;
-}
-function _pauseInvZPress(entries) {
-  if (pauseHeldItem === -1) {
-    if (entries.length > 0 && entries[pauseInvScroll]) { pauseHeldItem = pauseInvScroll; playSFX(SFX.CONFIRM); }
-    else playSFX(SFX.ERROR);
-  } else if (pauseHeldItem === pauseInvScroll) {
-    const [id] = entries[pauseHeldItem]; const item = ITEMS.get(Number(id));
-    if (item && item.type === 'consumable') {
-      playSFX(SFX.CONFIRM); pauseHeldItem = -1;
-      pauseState = 'inv-target'; pauseTimer = 0; pauseUseItemId = Number(id); pauseInvAllyTarget = -1;
-    } else { pauseHeldItem = -1; playSFX(SFX.CONFIRM); }
-  } else {
-    if (entries[pauseInvScroll]) { pauseHeldItem = pauseInvScroll; playSFX(SFX.CONFIRM); }
-    else { pauseHeldItem = -1; playSFX(SFX.ERROR); }
-  }
-}
-
-function _pauseInputInventory() {
-  if (pauseState !== 'inventory') return false;
-  const entries = Object.entries(playerInventory).filter(([,c]) => c > 0);
-  if (keys['ArrowDown']) {
-    keys['ArrowDown'] = false;
-    if (pauseInvScroll < entries.length - 1) { pauseInvScroll++; playSFX(SFX.CURSOR); }
-  }
-  if (keys['ArrowUp']) {
-    keys['ArrowUp'] = false;
-    if (pauseInvScroll > 0) { pauseInvScroll--; playSFX(SFX.CURSOR); }
-  }
-  if (keys['z'] || keys['Z']) { keys['z'] = false; keys['Z'] = false; _pauseInvZPress(entries); }
-  if (_xPressed()) {
-    if (pauseHeldItem !== -1) { pauseHeldItem = -1; playSFX(SFX.CONFIRM); }
-    else { playSFX(SFX.CONFIRM); pauseState = 'inv-items-out'; pauseTimer = 0; }
-  }
-  return true;
-}
-function _applyPauseItemUse(item, rosterTargets) {
-  if (!item || item.effect !== 'restore_hp') { playSFX(SFX.ERROR); return; }
-  if (pauseInvAllyTarget >= 0) {
-    const rp = rosterTargets[pauseInvAllyTarget];
-    if (!rp) { playSFX(SFX.ERROR); return; }
-    const heal = Math.min(item.value, rp.maxHP - rp.hp);
-    rp.hp += heal; removeItem(pauseUseItemId); playSFX(SFX.CURE);
-    pauseHealNum = { value: heal, timer: 0, rosterIdx: pauseInvAllyTarget };
-    pauseState = 'inv-heal'; pauseTimer = 0;
-    if (selectCursor >= 0 && saveSlots[selectCursor]) { saveSlots[selectCursor].inventory = { ...playerInventory }; saveSlotsToDB(); }
-  } else {
-    const heal = Math.min(item.value, ps.stats.maxHP - ps.hp);
-    ps.hp += heal; removeItem(pauseUseItemId); playSFX(SFX.CURE);
-    pauseHealNum = { value: heal, timer: 0 };
-    pauseState = 'inv-heal'; pauseTimer = 0;
-    if (selectCursor >= 0 && saveSlots[selectCursor]) { saveSlots[selectCursor].hp = ps.hp; saveSlots[selectCursor].inventory = { ...playerInventory }; saveSlotsToDB(); }
-  }
-}
-
-function _pauseInputInvTarget() {
-  if (pauseState !== 'inv-target') return false;
-  const rosterTargets = getRosterVisible();
-  if (keys['ArrowDown']) {
-    keys['ArrowDown'] = false;
-    if (pauseInvAllyTarget < rosterTargets.length - 1) { pauseInvAllyTarget++; playSFX(SFX.CURSOR); }
-  }
-  if (keys['ArrowUp']) {
-    keys['ArrowUp'] = false;
-    if (pauseInvAllyTarget > -1) { pauseInvAllyTarget--; playSFX(SFX.CURSOR); }
-  }
-  if (_zPressed()) {
-    _applyPauseItemUse(ITEMS.get(pauseUseItemId), rosterTargets);
-  }
-  if (_xPressed()) {
-    pauseState = 'inventory'; pauseTimer = 0;
-    pauseHeldItem = -1;
-    playSFX(SFX.CONFIRM);
-  }
-  return true;
-}
-function _equipBestMainSlots() {
-  const SLOT_DEFS = [
-    { eq: -100, type: 'hand', stat: 'atk' },
-    { eq: -102, type: 'armor', subtype: 'helmet', stat: 'def' },
-    { eq: -103, type: 'armor', subtype: 'body',   stat: 'def' },
-    { eq: -104, type: 'armor', subtype: 'arms',   stat: 'def' },
-  ];
-  for (const sd of SLOT_DEFS) {
-    const curId = getEquipSlotId(sd.eq); const curItem = ITEMS.get(curId);
-    let bestId = curId, bestVal = curItem ? (curItem[sd.stat] || 0) : 0;
-    for (const [idStr, count] of Object.entries(playerInventory)) {
-      if (count <= 0) continue;
-      const id = Number(idStr); const item = ITEMS.get(id); if (!item) continue;
-      if (sd.type === 'hand' && !isHandEquippable(item)) continue;
-      if (sd.type === 'armor' && (item.type !== 'armor' || item.subtype !== sd.subtype)) continue;
-      const val = item[sd.stat] || 0; if (val > bestVal) { bestVal = val; bestId = id; }
-    }
-    if (bestId !== curId) {
-      if (curId !== 0) addItem(curId, 1);
-      if (bestId !== 0) { setEquipSlotId(sd.eq, bestId); removeItem(bestId); } else setEquipSlotId(sd.eq, 0);
-    }
-  }
-}
-
-function _equipBestLeftHand() {
-  const curId = getEquipSlotId(-101); const curItem = ITEMS.get(curId);
-  let bestWepId = 0, bestWepAtk = 0, bestShieldId = 0, bestShieldDef = 0;
-  if (curItem?.type === 'weapon') { bestWepAtk = curItem.atk || 0; bestWepId = curId; }
-  else if (curItem?.subtype === 'shield') { bestShieldDef = curItem.def || 0; bestShieldId = curId; }
-  for (const [idStr, count] of Object.entries(playerInventory)) {
-    if (count <= 0) continue;
-    const id = Number(idStr); const item = ITEMS.get(id);
-    if (!item || !isHandEquippable(item)) continue;
-    if (item.type === 'weapon') { const v = item.atk || 0; if (v > bestWepAtk) { bestWepAtk = v; bestWepId = id; } }
-    else if (item.subtype === 'shield') { const v = item.def || 0; if (v > bestShieldDef) { bestShieldDef = v; bestShieldId = id; } }
-  }
-  const bestId = bestShieldId !== 0 ? bestShieldId : bestWepId;
-  if (bestId !== curId) {
-    if (curId !== 0) addItem(curId, 1);
-    if (bestId !== 0) { setEquipSlotId(-101, bestId); removeItem(bestId); } else setEquipSlotId(-101, 0);
-  }
-}
-
-function _equipOptimum() {
-  _equipBestMainSlots();
-  _equipBestLeftHand();
-  recalcCombatStats();
-  if (selectCursor >= 0 && saveSlots[selectCursor]) { saveSlots[selectCursor].inventory = { ...playerInventory }; saveSlotsToDB(); }
-  playSFX(SFX.CONFIRM);
-}
-
-function _pauseInputEquip() {
-  if (pauseState !== 'equip') return false;
-  if (keys['ArrowDown']) { keys['ArrowDown'] = false; eqCursor = (eqCursor + 1) % 6; playSFX(SFX.CURSOR); }
-  if (keys['ArrowUp'])   { keys['ArrowUp'] = false;   eqCursor = (eqCursor + 5) % 6; playSFX(SFX.CURSOR); }
-  if (_zPressed()) {
-    if (eqCursor === 5) {
-      _equipOptimum();
-    } else {
-      playSFX(SFX.CONFIRM);
-      eqSlotIdx = -100 - eqCursor;
-      const isWeaponSlot = eqSlotIdx >= -101;
-      const slotSubtype = EQUIP_SLOT_SUBTYPE[String(eqSlotIdx)];
-      eqItemList = [];
-      const currentId = getEquipSlotId(eqSlotIdx);
-      if (currentId !== 0) eqItemList.push({ id: 0, label: 'remove' });
-      for (const [idStr, count] of Object.entries(playerInventory)) {
-        if (count <= 0) continue;
-        const id = Number(idStr);
-        const item = ITEMS.get(id);
-        if (!item) continue;
-        if (isWeaponSlot && isHandEquippable(item)) eqItemList.push({ id, count });
-        else if (!isWeaponSlot && item.type === 'armor' && item.subtype === slotSubtype) eqItemList.push({ id, count });
-      }
-      eqItemCursor = 0;
-      pauseState = 'eq-items-in'; pauseTimer = 0;
-    }
-  }
-  if (_xPressed()) {
-    playSFX(SFX.CONFIRM);
-    pauseState = 'eq-slots-out'; pauseTimer = 0;
-  }
-  return true;
-}
-function _pauseInputEquipItemSelect() {
-  if (pauseState !== 'eq-item-select') return false;
-  if (keys['ArrowDown']) { keys['ArrowDown'] = false; if (eqItemCursor < eqItemList.length - 1) { eqItemCursor++; playSFX(SFX.CURSOR); } }
-  if (keys['ArrowUp'])   { keys['ArrowUp'] = false;   if (eqItemCursor > 0) { eqItemCursor--; playSFX(SFX.CURSOR); } }
-  if (_zPressed()) {
-    const pick = eqItemList[eqItemCursor];
-    if (pick) {
-      const oldId = getEquipSlotId(eqSlotIdx);
-      if (pick.label === 'remove') {
-        setEquipSlotId(eqSlotIdx, 0);
-        if (oldId !== 0) addItem(oldId, 1);
-      } else {
-        setEquipSlotId(eqSlotIdx, pick.id);
-        removeItem(pick.id);
-        if (oldId !== 0) addItem(oldId, 1);
-      }
-      recalcCombatStats();
-      if (selectCursor >= 0 && saveSlots[selectCursor]) {
-        saveSlots[selectCursor].inventory = { ...playerInventory };
-        saveSlotsToDB();
-      }
-      playSFX(SFX.CONFIRM);
-    }
-    pauseState = 'eq-items-out'; pauseTimer = 0;
-  }
-  if (_xPressed()) {
-    playSFX(SFX.CONFIRM);
-    pauseState = 'eq-items-out'; pauseTimer = 0;
-  }
-  return true;
-}
-function _pauseInputStats() {
-  if (pauseState !== 'stats') return false;
-  if (_xPressed()) { playSFX(SFX.CONFIRM); pauseState = 'stats-out'; pauseTimer = 0; }
-  return true;
-}
-function _handlePauseInput() {
-  if (_pauseInputOpenClose()) return true;
-  if (_pauseInputMainMenu()) return true;
-  if (_pauseInputInventory()) return true;
-  if (_pauseInputInvTarget()) return true;
-  if (pauseState === 'inv-heal') return true;
-  if (pauseState.startsWith('inv-')) return true;
-  if (_pauseInputEquip()) return true;
-  if (_pauseInputEquipItemSelect()) return true;
-  if (pauseState.startsWith('eq-')) return true;
-  if (_pauseInputStats()) return true;
-  if (pauseState.startsWith('stats-')) return true;
-  if (pauseState !== 'none') return true;
-  return false;
-}
+// _battleTargetNav…_handlePauseInput → input-handler.js
 
 
 function handleInput() {
   if (!sprite) return;
-  if (_handleBattleInput()) return;
-  if (_handleRosterInput()) return;
-  if (_handlePauseInput()) return;
+  if (handleBattleInput(_inputShared())) return;
+  if (handleRosterInput(_inputShared())) return;
+  if (handlePauseInput(_inputShared())) return;
 
   // Universal message box — Z to dismiss during hold
-  if (msgBoxState !== 'none') {
-    if (msgBoxState === 'hold' && (keys['z'] || keys['Z'])) {
+  if (msgState.state !== 'none') {
+    if (msgState.state === 'hold' && (keys['z'] || keys['Z'])) {
       keys['z'] = false; keys['Z'] = false;
-      msgBoxState = 'slide-out'; msgBoxTimer = 0;
+      msgState.state = 'slide-out'; msgState.timer = 0;
     }
     return;
   }
 
   if (moving) return;
-  if (transState !== 'none') return;
+  if (transSt.state !== 'none') return;
   if (shakeActive) return;
   if (starEffect) return;
-  if (chatExpanded) return;
+  if (chatState.expanded) return;
 
   if (keys['z'] || keys['Z']) {
     keys['z'] = false;
@@ -2752,7 +2041,7 @@ function _checkFalseWall() {
   const key = `${worldX / TILE_SIZE},${worldY / TILE_SIZE}`;
   if (!falseWalls.has(key)) return false;
   const dest = falseWalls.get(key);
-  startWipeTransition(() => {
+  _triggerWipe(() => {
     worldX = dest.destX * TILE_SIZE;
     worldY = dest.destY * TILE_SIZE;
     sprite.setDirection(DIR_DOWN);
@@ -2771,7 +2060,7 @@ function _checkWarpTile() {
   starEffect = {
     frame: 0, radius: 60, angle: 0, spin: true,
     onComplete: () => {
-      startWipeTransition(() => {
+      _triggerWipe(() => {
         while (mapStack.length > 0) {
           const entry = mapStack.pop();
           if (entry.mapId === 'world') {
@@ -2818,181 +2107,7 @@ function _onMoveComplete() {
   _startMoveFromKeys(true);
 }
 
-function updateTopBoxScroll(dt) {
-  if (topBoxScrollState === 'none') return;
-
-  // If pending and no active transition, start immediately (e.g. initial load)
-  if (topBoxScrollState === 'pending') {
-    if (transState === 'none') {
-      topBoxScrollState = 'fade-in';
-      topBoxScrollTimer = 0;
-      topBoxFadeStep = TOPBOX_FADE_STEPS; // start fully faded
-    }
-    return;
-  }
-
-  topBoxScrollTimer += Math.min(dt, 33); // cap so generation lag doesn't skip
-
-  if (topBoxScrollState === 'fade-in') {
-    topBoxFadeStep = TOPBOX_FADE_STEPS - Math.min(Math.floor(topBoxScrollTimer / TOPBOX_FADE_STEP_MS), TOPBOX_FADE_STEPS);
-    if (topBoxScrollTimer >= (TOPBOX_FADE_STEPS + 1) * TOPBOX_FADE_STEP_MS) {
-      topBoxFadeStep = 0;
-      if (topBoxIsTown) {
-        topBoxScrollState = 'none';
-      } else {
-        topBoxScrollState = 'display';
-        topBoxScrollTimer = 0;
-      }
-    }
-  } else if (topBoxScrollState === 'display') {
-    if (transState !== 'loading' && topBoxScrollTimer >= TOPBOX_DISPLAY_HOLD) {
-      topBoxScrollState = 'fade-out';
-      topBoxScrollTimer = 0;
-    }
-  } else if (topBoxScrollState === 'fade-out') {
-    topBoxFadeStep = Math.min(Math.floor(topBoxScrollTimer / TOPBOX_FADE_STEP_MS), TOPBOX_FADE_STEPS);
-    if (topBoxScrollTimer >= (TOPBOX_FADE_STEPS + 1) * TOPBOX_FADE_STEP_MS) {
-      topBoxScrollState = 'none';
-      topBoxFadeStep = TOPBOX_FADE_STEPS;
-      topBoxNameBytes = null;
-      if (topBoxScrollOnDone) {
-        const cb = topBoxScrollOnDone;
-        topBoxScrollOnDone = null;
-        cb();
-      }
-    }
-  }
-}
-
-function startWipeTransition(action, destMapId) {
-  transState = 'closing';
-  transTimer = 0;
-  // Determine if roster should fade (only when location actually changes)
-  const curLoc = getPlayerLocation();
-  rosterLocChanged = destMapId != null && _rosterLocForMapId(destMapId) !== curLoc;
-  transPendingAction = action;
-  playSFX(SFX.SCREEN_CLOSE);
-}
-
-function _updateTransitionClosing() {
-  if (transTimer < WIPE_DURATION) return;
-  if (trapFallPending) {
-    trapFallPending = false;
-    transState = 'trap-falling'; transTimer = 0;
-    playSFX(SFX.FALL);
-  } else {
-    transState = 'hold'; transTimer = 0;
-    if (!transDungeon && transPendingAction) { transPendingAction(); transPendingAction = null; }
-  }
-}
-
-function _updateTransitionHold() {
-  if (transTimer < WIPE_HOLD) return;
-  if (transDungeon) {
-    transState = 'loading'; transTimer = 0;
-    loadingFadeState = 'in'; loadingFadeTimer = 0; loadingBgScroll = 0;
-    playTrack(TRACKS.PIANO_3);
-    if (transPendingAction) { transPendingAction(); transPendingAction = null; }
-    if (topBoxNameBytes) {
-      topBoxScrollState = 'fade-in'; topBoxScrollTimer = 0; topBoxFadeStep = TOPBOX_FADE_STEPS;
-    }
-  } else {
-    transState = 'opening'; transTimer = 0;
-    playSFX(SFX.SCREEN_OPEN);
-    if (topBoxScrollState === 'pending') {
-      topBoxScrollState = 'fade-in'; topBoxScrollTimer = 0; topBoxFadeStep = TOPBOX_FADE_STEPS;
-    }
-  }
-}
-
-function _updateTransitionLoading(dt) {
-  loadingFadeTimer += dt;
-  loadingBgScroll += dt * 0.08;
-  if (loadingFadeState === 'in') {
-    if (loadingFadeTimer >= (LOAD_FADE_MAX + 1) * LOAD_FADE_STEP_MS) {
-      loadingFadeState = 'visible'; loadingFadeTimer = 0;
-    }
-  } else if (loadingFadeState === 'out') {
-    if (loadingFadeTimer >= (LOAD_FADE_MAX + 1) * LOAD_FADE_STEP_MS) {
-      loadingFadeState = 'none'; transState = 'opening'; transTimer = 0;
-      transDungeon = false; playSFX(SFX.SCREEN_OPEN); playTrack(TRACKS.CRYSTAL_CAVE);
-    }
-  }
-  if (loadingFadeState === 'visible' && (keys['z'] || keys['Z'])) {
-    keys['z'] = false; keys['Z'] = false;
-    loadingFadeState = 'out'; loadingFadeTimer = 0;
-    if (topBoxScrollState !== 'none' && topBoxScrollState !== 'fade-out') {
-      topBoxScrollState = 'fade-out'; topBoxScrollTimer = 0; topBoxFadeStep = 0;
-    }
-  }
-}
-
-function _updateTransitionTrapFall() {
-  const totalSpinTime = SPIN_INTERVAL * SPIN_DIRS.length * SPIN_CYCLES;
-  sprite.setDirection(SPIN_DIRS[Math.floor(transTimer / SPIN_INTERVAL) % SPIN_DIRS.length]);
-  if (transTimer >= totalSpinTime) {
-    if (transPendingAction) { transPendingAction(); transPendingAction = null; }
-    trapShakePending = true; transState = 'opening'; transTimer = 0; playSFX(SFX.SCREEN_OPEN);
-  }
-}
-
-function _updateTransitionOpening() {
-  if (transTimer >= WIPE_DURATION) {
-    transState = 'none'; transTimer = 0; rosterLocChanged = false; _topBoxAlreadyBright = false;
-    if (trapShakePending) {
-      trapShakePending = false; playSFX(SFX.EARTHQUAKE); shakeActive = true; shakeTimer = 0;
-    }
-  }
-}
-
-function updateTransition(dt) {
-  if (transState === 'none') return;
-  transTimer += dt;
-  if (transState === 'hud-fade-in') {
-    if (transTimer >= (HUD_INFO_FADE_STEPS + 1) * HUD_INFO_FADE_STEP_MS) { transState = 'opening'; transTimer = 0; _topBoxAlreadyBright = true; playSFX(SFX.SCREEN_OPEN); }
-    return;
-  } else if (transState === 'trap-reveal') {
-    if (transTimer >= TRAP_REVEAL_DURATION) { transState = 'closing'; transTimer = 0; playSFX(SFX.SCREEN_CLOSE); }
-  } else if (transState === 'trap-falling') { _updateTransitionTrapFall();
-  } else if (transState === 'door-opening') {
-    if (transTimer >= DOOR_OPEN_DURATION) { transState = 'closing'; transTimer = 0; playSFX(SFX.SCREEN_CLOSE); }
-  } else if (transState === 'closing') { _updateTransitionClosing();
-  } else if (transState === 'hold') { _updateTransitionHold();
-  } else if (transState === 'loading') { _updateTransitionLoading(dt);
-  } else if (transState === 'opening') { _updateTransitionOpening();
-  }
-}
-
-function drawTransitionOverlay() {
-  if (transState === 'none' || transState === 'door-opening') return;
-  if (transState === 'hud-fade-in') {
-    // Keep viewport blacked out while HUD borders fade in
-    ctx.fillStyle = '#000';
-    ctx.fillRect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
-    return;
-  }
-
-  // Wipe bars animate within the game viewport
-  const vpMidY = HUD_VIEW_Y + HUD_VIEW_H / 2;
-  const halfH = HUD_VIEW_H / 2;
-  let barHeight;
-
-  if (transState === 'closing') {
-    const t = Math.min(transTimer / WIPE_DURATION, 1);
-    barHeight = t * halfH;
-  } else if (transState === 'hold' || transState === 'loading' || transState === 'trap-falling') {
-    barHeight = halfH;
-  } else if (transState === 'opening') {
-    const t = Math.min(transTimer / WIPE_DURATION, 1);
-    barHeight = (1 - t) * halfH;
-  }
-
-  ctx.fillStyle = '#000';
-  ctx.fillRect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, Math.ceil(barHeight));
-  ctx.fillRect(HUD_VIEW_X, HUD_VIEW_Y + HUD_VIEW_H - Math.ceil(barHeight), HUD_VIEW_W, Math.ceil(barHeight));
-
-  if (transState === 'loading') _drawLoadingOverlay();
-}
+// startWipeTransition, updateTransition, _updateTransition*, updateTopBoxScroll, drawTransitionOverlay → transitions.js
 
 // Loading screen NES-encoded text constants
 const _LOADING_BYTES = new Uint8Array([0x95,0xD8,0xCA,0xCD,0xD2,0xD7,0xD0,0xFF,0x8D,0xDE,0xD7,0xD0,0xCE,0xD8,0xD7]);
@@ -3002,7 +2117,7 @@ const _LODHP_BYTES   = new Uint8Array([0x91,0x99,0xFF,0xC5,0xC5,0xC5,0xC5,0xC5])
 function _drawLoadingBG(vpTop, fadeLevel) {
   if (!loadingBgFadeFrames || loadingBgFadeFrames.length === 0) return;
   const bgCanvas = loadingBgFadeFrames[Math.min(fadeLevel, loadingBgFadeFrames.length - 1)];
-  const scrollX = Math.floor(loadingBgScroll) % 256;
+  const scrollX = Math.floor(loadingSt.bgScroll) % 256;
   ctx.save();
   ctx.beginPath(); ctx.rect(HUD_VIEW_X, vpTop, HUD_VIEW_W, 32); ctx.clip();
   ctx.drawImage(bgCanvas, HUD_VIEW_X - scrollX, vpTop);
@@ -3022,15 +2137,15 @@ function _drawLoadingInfoBox(cx, vpTop, vpBot, fadeLevel, fadedTextPal) {
   drawText(ctx, infoBoxX + Math.floor((infoBoxW - floorsW) / 2), infoBoxY + 10, _FLOORS_BYTES, fadedTextPal);
   const bossContentX = infoBoxX + Math.floor((infoBoxW - bossRowW) / 2);
   const bossRowY = infoBoxY + 22;
-  if (bossFadeFrames) ctx.drawImage(bossFadeFrames[fadeLevel][Math.floor(transTimer / 400) & 1], bossContentX, bossRowY);
+  if (bossFadeFrames) ctx.drawImage(bossFadeFrames[fadeLevel][Math.floor(transSt.timer / 400) & 1], bossContentX, bossRowY);
   else if (adamantoiseFrames) ctx.drawImage(adamantoiseFrames[0], bossContentX, bossRowY);
   drawText(ctx, bossContentX + 20, bossRowY + 4, _LODHP_BYTES, fadedTextPal);
 }
 function _drawLoadingOverlay() {
   let fadeLevel = 0;
-  if (loadingFadeState === 'in') fadeLevel = LOAD_FADE_MAX - Math.min(Math.floor(loadingFadeTimer / LOAD_FADE_STEP_MS), LOAD_FADE_MAX);
-  else if (loadingFadeState === 'out') fadeLevel = Math.min(Math.floor(loadingFadeTimer / LOAD_FADE_STEP_MS), LOAD_FADE_MAX);
-  else if (loadingFadeState !== 'visible') fadeLevel = LOAD_FADE_MAX;
+  if (loadingSt.state === 'in') fadeLevel = LOAD_FADE_MAX - Math.min(Math.floor(loadingSt.timer / LOAD_FADE_STEP_MS), LOAD_FADE_MAX);
+  else if (loadingSt.state === 'out') fadeLevel = Math.min(Math.floor(loadingSt.timer / LOAD_FADE_STEP_MS), LOAD_FADE_MAX);
+  else if (loadingSt.state !== 'visible') fadeLevel = LOAD_FADE_MAX;
   const fadedTextPal = TEXT_WHITE.map((c, i) => {
     if (i === 0) return c;
     let fc = c; for (let s = 0; s < fadeLevel; s++) fc = nesColorFade(fc); return fc;
@@ -3042,13 +2157,13 @@ function _drawLoadingOverlay() {
   const promptBytes = isMobile
     ? new Uint8Array([0x99,0xDB,0xCE,0xDC,0xDC,0xFF,0x8A])
     : new Uint8Array([0x99,0xDB,0xCE,0xDC,0xDC,0xFF,0xA3]);
-  if (loadingFadeState === 'in') {
+  if (loadingSt.state === 'in') {
     drawText(ctx, cx - measureText(_LOADING_BYTES) / 2, vpBot - 32, _LOADING_BYTES, fadedTextPal);
-  } else if (loadingFadeState === 'visible') {
+  } else if (loadingSt.state === 'visible') {
     drawText(ctx, cx - measureText(_LOADED_BYTES) / 2, vpBot - 32, _LOADED_BYTES, fadedTextPal);
-    if (Math.floor(transTimer / 500) % 2 === 0)
+    if (Math.floor(transSt.timer / 500) % 2 === 0)
       drawText(ctx, cx - measureText(promptBytes) / 2, vpBot - 20, promptBytes, fadedTextPal);
-  } else if (loadingFadeState === 'out') {
+  } else if (loadingSt.state === 'out') {
     drawText(ctx, cx - measureText(_LOADED_BYTES) / 2, vpBot - 32, _LOADED_BYTES, fadedTextPal);
   }
 }
@@ -3072,10 +2187,10 @@ function _checkWorldMapTrigger(tileX, tileY) {
     dungeonSeed = Date.now();
     clearDungeonCache();
     destMap = 1000;
-    transDungeon = true;
+    transSt.dungeon = true;
   }
   const finalDest = destMap;
-  startWipeTransition(() => {
+  _triggerWipe(() => {
     mapStack.push({ mapId: 'world', worldId: 0, x: savedX, y: savedY });
     onWorldMap = false;
     loadMapById(finalDest);
@@ -3094,13 +2209,13 @@ function _checkHiddenTrap(trigger, tileX, tileY) {
       dungeonDestinations && dungeonDestinations.has(trigger.trigId)) {
     const dest = dungeonDestinations.get(trigger.trigId);
     const savedX = worldX, savedY = worldY;
-    transPendingAction = () => {
+    transSt.pendingAction = () => {
       mapStack.push({ mapId: currentMapId, x: savedX, y: savedY });
       loadMapById(dest.mapId);
     };
-    rosterLocChanged = _rosterLocForMapId(dest.mapId) !== getPlayerLocation();
-    transState = 'trap-reveal'; transTimer = 0;
-    transDungeon = false; trapFallPending = true;
+    transSt.rosterLocChanged = _rosterLocForMapId(dest.mapId) !== getPlayerLocation();
+    transSt.state = 'trap-reveal'; transSt.timer = 0;
+    transSt.dungeon = false; transSt.trapFallPending = true;
     return true;
   }
   return false;
@@ -3112,11 +2227,11 @@ function _triggerMapTransition(tileX, tileY, destMapId) {
   const savedX = worldX, savedY = worldY;
   if (((mapData.collisionByte2[tileM] >> 4) & 0x0F) === 5) {
     mapRenderer.updateTileAt(tileX, tileY, 0x7E); playSFX(SFX.DOOR);
-    transState = 'door-opening'; transTimer = 0;
-    rosterLocChanged = _rosterLocForMapId(destMapId) !== getPlayerLocation();
-    transPendingAction = () => { mapStack.push({ mapId: currentMapId, x: savedX, y: savedY }); loadMapById(destMapId); };
+    transSt.state = 'door-opening'; transSt.timer = 0;
+    transSt.rosterLocChanged = _rosterLocForMapId(destMapId) !== getPlayerLocation();
+    transSt.pendingAction = () => { mapStack.push({ mapId: currentMapId, x: savedX, y: savedY }); loadMapById(destMapId); };
   } else {
-    startWipeTransition(() => { mapStack.push({ mapId: currentMapId, x: savedX, y: savedY }); loadMapById(destMapId); }, destMapId);
+    _triggerWipe(() => { mapStack.push({ mapId: currentMapId, x: savedX, y: savedY }); loadMapById(destMapId); }, destMapId);
   }
 }
 
@@ -3126,7 +2241,7 @@ function _checkDynType1(trigger, tileX, tileY) {
     const dest = dungeonDestinations.get(trigger.trigId);
     if (dest.goBack) {
       const prevMapId = mapStack.length > 0 ? mapStack[mapStack.length - 1].mapId : null;
-      startWipeTransition(() => {
+      _triggerWipe(() => {
         if (mapStack.length > 0) {
           const prev = mapStack.pop();
           loadMapById(prev.mapId, prev.x / TILE_SIZE, prev.y / TILE_SIZE);
@@ -3149,7 +2264,7 @@ function _checkDynType4(trigger, tileX, tileY) {
   if (!dungeonDestinations || !dungeonDestinations.has(trigger.trigId)) return false;
   const dest = dungeonDestinations.get(trigger.trigId);
   const savedX = worldX, savedY = worldY;
-  startWipeTransition(() => {
+  _triggerWipe(() => {
     mapStack.push({ mapId: currentMapId, x: savedX, y: savedY });
     loadMapById(dest.mapId);
   }, dest.mapId);
@@ -3159,11 +2274,11 @@ function _checkDynType4(trigger, tileX, tileY) {
 function _checkExitPrev() {
   const exitingCrystalRoom = currentMapId === 1004;
   const goingToWorld = mapStack.length === 0 || mapStack[mapStack.length - 1].mapId === 'world';
-  if (goingToWorld && topBoxIsTown && topBoxNameBytes) {
-    topBoxScrollState = 'fade-out'; topBoxScrollTimer = 0; topBoxFadeStep = 0;
+  if (goingToWorld && topBoxSt.isTown && topBoxSt.nameBytes) {
+    topBoxSt.state = 'fade-out'; topBoxSt.timer = 0; topBoxSt.fadeStep = 0;
   }
   const exitDestMapId = mapStack.length > 0 ? mapStack[mapStack.length - 1].mapId : 'world';
-  startWipeTransition(() => {
+  _triggerWipe(() => {
     if (mapStack.length > 0) {
       const prev = mapStack.pop();
       if (prev.mapId === 'world') {
@@ -3382,7 +2497,7 @@ function _renderMapAndWater(camX, camY, originX, originY, spriteY) {
     mapRenderer.draw(ctx, camX, camY, originX, originY);
     _updateIndoorWater(mapRenderer, waterTick);
   }
-  if ((transState === 'none' || transState === 'trap-reveal') &&
+  if ((transSt.state === 'none' || transSt.state === 'trap-reveal') &&
       (battleState === 'none' || battleState === 'flash-strobe' || battleState.startsWith('roar-'))) {
     _renderSprites(camX, camY, originX, spriteY);
   }
@@ -3433,60 +2548,60 @@ function statRowBytes(label1, label2, value) {
 function _drawTopBoxBattleBG() {
   const topShake = (battleState === 'enemy-attack' && battleShakeTimer > 0)
     ? (Math.floor(battleShakeTimer / 67) & 1 ? 2 : -2) : 0;
-  if (transState !== 'loading' && !topBoxIsTown && topBoxBgCanvas) {
+  if (transSt.state !== 'loading' && !topBoxSt.isTown && topBoxBgCanvas) {
     ctx.drawImage(topBoxBgCanvas, topShake, 0);
   }
-  if (!topBoxIsTown && topBoxBgFadeFrames && transState !== 'none' && transState !== 'door-opening' && transState !== 'loading') {
+  if (!topBoxSt.isTown && topBoxBgFadeFrames && transSt.state !== 'none' && transSt.state !== 'door-opening' && transSt.state !== 'loading') {
     const maxStep = topBoxBgFadeFrames.length - 1;
     const FADE_STEP_MS = 100;
     let fadeStep = 0;
-    if (transState === 'closing') {
-      fadeStep = Math.min(Math.floor(transTimer / FADE_STEP_MS), maxStep);
-    } else if (transState === 'hold' || transState === 'trap-falling') {
+    if (transSt.state === 'closing') {
+      fadeStep = Math.min(Math.floor(transSt.timer / FADE_STEP_MS), maxStep);
+    } else if (transSt.state === 'hold' || transSt.state === 'trap-falling') {
       fadeStep = maxStep;
-    } else if (transState === 'opening') {
-      if (_topBoxAlreadyBright) fadeStep = 0; // came from hud-fade-in, already bright
-      else fadeStep = Math.max(maxStep - Math.floor(transTimer / FADE_STEP_MS), 0);
-    } else if (transState === 'hud-fade-in') {
+    } else if (transSt.state === 'opening') {
+      if (transSt.topBoxAlreadyBright) fadeStep = 0; // came from hud-fade-in, already bright
+      else fadeStep = Math.max(maxStep - Math.floor(transSt.timer / FADE_STEP_MS), 0);
+    } else if (transSt.state === 'hud-fade-in') {
       fadeStep = Math.max(maxStep - Math.floor(hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), 0);
     }
     if (fadeStep > 0) ctx.drawImage(topBoxBgFadeFrames[fadeStep], 0, 0);
   }
-  if (!topBoxIsTown && transState !== 'loading') roundTopBoxCorners();
+  if (!topBoxSt.isTown && transSt.state !== 'loading') roundTopBoxCorners();
 }
 function _drawTopBoxOverlay(isFading) {
-  if (transState === 'loading') {
+  if (transSt.state === 'loading') {
     let loadFade = LOAD_FADE_MAX;
-    if (loadingFadeState === 'in') {
-      loadFade = LOAD_FADE_MAX - Math.min(Math.floor(loadingFadeTimer / LOAD_FADE_STEP_MS), LOAD_FADE_MAX);
-    } else if (loadingFadeState === 'visible') {
+    if (loadingSt.state === 'in') {
+      loadFade = LOAD_FADE_MAX - Math.min(Math.floor(loadingSt.timer / LOAD_FADE_STEP_MS), LOAD_FADE_MAX);
+    } else if (loadingSt.state === 'visible') {
       loadFade = 0;
-    } else if (loadingFadeState === 'out') {
-      loadFade = Math.min(Math.floor(loadingFadeTimer / LOAD_FADE_STEP_MS), LOAD_FADE_MAX);
+    } else if (loadingSt.state === 'out') {
+      loadFade = Math.min(Math.floor(loadingSt.timer / LOAD_FADE_STEP_MS), LOAD_FADE_MAX);
     }
     drawTopBoxBorder(loadFade);
-    if (topBoxNameBytes && !isFading) {
+    if (topBoxSt.nameBytes && !isFading) {
       const fadedPal = _makeFadedPal(loadFade);
-      const tw = measureText(topBoxNameBytes);
-      drawText(ctx, 8 + Math.floor((240 - tw) / 2), 12, topBoxNameBytes, fadedPal);
+      const tw = measureText(topBoxSt.nameBytes);
+      drawText(ctx, 8 + Math.floor((240 - tw) / 2), 12, topBoxSt.nameBytes, fadedPal);
     }
-  } else if (topBoxIsTown && topBoxMode === 'name' && topBoxNameBytes) {
-    if (isFading) drawTopBoxBorder(topBoxFadeStep);
-    else if (topBoxScrollState !== 'pending') drawTopBoxBorder(0);
-    if (!isFading && topBoxScrollState !== 'pending') {
-      const tw = measureText(topBoxNameBytes);
-      drawText(ctx, 8 + Math.floor((240 - tw) / 2), 12, topBoxNameBytes, TEXT_WHITE);
+  } else if (topBoxSt.isTown && topBoxMode === 'name' && topBoxSt.nameBytes) {
+    if (isFading) drawTopBoxBorder(topBoxSt.fadeStep);
+    else if (topBoxSt.state !== 'pending') drawTopBoxBorder(0);
+    if (!isFading && topBoxSt.state !== 'pending') {
+      const tw = measureText(topBoxSt.nameBytes);
+      drawText(ctx, 8 + Math.floor((240 - tw) / 2), 12, topBoxSt.nameBytes, TEXT_WHITE);
     }
   }
-  if (isFading && topBoxNameBytes) {
-    if (transState !== 'loading' && !topBoxIsTown) drawTopBoxBorder(topBoxFadeStep);
-    const fadedPal = _makeFadedPal(topBoxFadeStep);
-    const tw = measureText(topBoxNameBytes);
-    drawText(ctx, 8 + Math.floor((240 - tw) / 2), 12, topBoxNameBytes, fadedPal);
+  if (isFading && topBoxSt.nameBytes) {
+    if (transSt.state !== 'loading' && !topBoxSt.isTown) drawTopBoxBorder(topBoxSt.fadeStep);
+    const fadedPal = _makeFadedPal(topBoxSt.fadeStep);
+    const tw = measureText(topBoxSt.nameBytes);
+    drawText(ctx, 8 + Math.floor((240 - tw) / 2), 12, topBoxSt.nameBytes, fadedPal);
   }
 }
 function _drawHUDTopBox() {
-  const isFading = topBoxScrollState === 'fade-in' || topBoxScrollState === 'display' || topBoxScrollState === 'fade-out';
+  const isFading = topBoxSt.state === 'fade-in' || topBoxSt.state === 'display' || topBoxSt.state === 'fade-out';
   _drawTopBoxBattleBG();
   _drawTopBoxOverlay(isFading);
 }
@@ -3504,21 +2619,21 @@ function _drawPortraitImage(px, py, nfPortrait, isPauseHeal, infoFadeStep) {
     ctx.drawImage(sweatFrames[Math.floor(Date.now() / 133) & 1], px, py - 3);
 }
 function _drawCureSparkle(px, py, isPauseHeal) {
-  if (!isPauseHeal || cureSparkleFrames.length !== 2 || (pauseHealNum && pauseHealNum.rosterIdx >= 0)) return;
-  const frame = cureSparkleFrames[Math.floor(pauseTimer / 67) & 1];
+  if (!isPauseHeal || cureSparkleFrames.length !== 2 || (pauseSt.healNum && pauseSt.healNum.rosterIdx >= 0)) return;
+  const frame = cureSparkleFrames[Math.floor(pauseSt.timer / 67) & 1];
   ctx.drawImage(frame, px - 8, py - 7);
   ctx.save(); ctx.scale(-1,  1); ctx.drawImage(frame, -(px + 23),  py - 7);  ctx.restore();
   ctx.save(); ctx.scale( 1, -1); ctx.drawImage(frame,   px - 8,  -(py + 24)); ctx.restore();
   ctx.save(); ctx.scale(-1, -1); ctx.drawImage(frame, -(px + 23), -(py + 24)); ctx.restore();
 }
 function _drawPauseHealNum(px, py) {
-  if (!pauseHealNum || pauseHealNum.rosterIdx >= 0) return;
-  _drawBattleNum(px + 8, _dmgBounceY(py + 8, pauseHealNum.timer), pauseHealNum.value, [0x0F, 0x0F, 0x0F, 0x2B]);
+  if (!pauseSt.healNum || pauseSt.healNum.rosterIdx >= 0) return;
+  _drawBattleNum(px + 8, _dmgBounceY(py + 8, pauseSt.healNum.timer), pauseSt.healNum.value, [0x0F, 0x0F, 0x0F, 0x2B]);
 }
 function _drawHUDPortrait() {
   const infoFadeStep = HUD_INFO_FADE_STEPS - Math.min(Math.floor(hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
   if (battleState !== 'none' || !battleSpriteCanvas) return;
-  const isPauseHeal = pauseState === 'inv-heal';
+  const isPauseHeal = pauseSt.state === 'inv-heal';
   const nfPortrait = isPauseHeal && battleSpriteDefendCanvas ? battleSpriteDefendCanvas
     : (ps.hp > 0 && ps.stats && ps.hp <= Math.floor(ps.stats.maxHP / 4) && battleSpriteKneelCanvas
        ? battleSpriteKneelCanvas : battleSpriteCanvas);
@@ -3596,12 +2711,12 @@ function _drawLoadingChatBubble(rpCX, rpY, rpH, fadeLevel) {
 }
 function _drawLoadingMoogleSprite(moogleX, moogleY, fadeLevel) {
   if (!moogleFadeFrames) return;
-  ctx.drawImage(moogleFadeFrames[fadeLevel][Math.floor(transTimer / 400) & 1], moogleX, moogleY);
+  ctx.drawImage(moogleFadeFrames[fadeLevel][Math.floor(transSt.timer / 400) & 1], moogleX, moogleY);
 }
 function _drawHUDLoadingMoogle() {
   let fadeLevel = 0;
-  if (loadingFadeState === 'in') fadeLevel = LOAD_FADE_MAX - Math.min(Math.floor(loadingFadeTimer / LOAD_FADE_STEP_MS), LOAD_FADE_MAX);
-  else if (loadingFadeState === 'out') fadeLevel = Math.min(Math.floor(loadingFadeTimer / LOAD_FADE_STEP_MS), LOAD_FADE_MAX);
+  if (loadingSt.state === 'in') fadeLevel = LOAD_FADE_MAX - Math.min(Math.floor(loadingSt.timer / LOAD_FADE_STEP_MS), LOAD_FADE_MAX);
+  else if (loadingSt.state === 'out') fadeLevel = Math.min(Math.floor(loadingSt.timer / LOAD_FADE_STEP_MS), LOAD_FADE_MAX);
   _drawLoadingRightPanel(fadeLevel);
   const rpCX = HUD_RIGHT_X + Math.floor(HUD_RIGHT_W / 2);
   const bubbleY = _drawLoadingChatBubble(rpCX, HUD_VIEW_Y + 32, HUD_VIEW_H - 32, fadeLevel);
@@ -3609,12 +2724,12 @@ function _drawHUDLoadingMoogle() {
 }
 
 function drawHUD() {
-  const isTitleActive = titleState !== 'done';
+  const isTitleActive = titleSt.state !== 'done';
   if (isTitleActive && titleHudCanvas) {
     // Compute border fade level for title states
     let tfl = 0; // 0 = full brightness — only fade out when leaving title
-    if (titleState === 'main-out') {
-      tfl = Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
+    if (titleSt.state === 'main-out') {
+      tfl = Math.min(Math.floor(titleSt.timer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
     }
     _drawHudWithFade(titleHudCanvas, titleHudFadeCanvases, tfl);
   } else if (hudCanvas) {
@@ -3624,12 +2739,12 @@ function drawHUD() {
 
   // Top box content (full 256×32, no static border — border only with text)
   // Title screen handles its own top box (sky BG)
-  if (titleState !== 'done') return;
+  if (titleSt.state !== 'done') return;
 
   _drawHUDTopBox();
   _drawHUDPortrait();
   _drawHUDInfoPanel();
-  if (transState === 'loading' && loadingFadeState !== 'none') {
+  if (transSt.state === 'loading' && loadingSt.state !== 'none') {
     _drawHUDLoadingMoogle();
   }
 }
@@ -3673,10 +2788,10 @@ function _rosterLocForMapId(mapId) {
 
 function _rosterTransFade() {
   const FADE_STEP_MS = WIPE_DURATION / ROSTER_FADE_STEPS;
-  if (rosterLocChanged) {
-    if (transState === 'closing') return Math.min(Math.floor(transTimer / FADE_STEP_MS), ROSTER_FADE_STEPS);
-    if (transState === 'hold' || transState === 'trap-falling') return ROSTER_FADE_STEPS;
-    if (transState === 'opening') return Math.max(ROSTER_FADE_STEPS - Math.floor(transTimer / FADE_STEP_MS), 0);
+  if (transSt.rosterLocChanged) {
+    if (transSt.state === 'closing') return Math.min(Math.floor(transSt.timer / FADE_STEP_MS), ROSTER_FADE_STEPS);
+    if (transSt.state === 'hold' || transSt.state === 'trap-falling') return ROSTER_FADE_STEPS;
+    if (transSt.state === 'opening') return Math.max(ROSTER_FADE_STEPS - Math.floor(transSt.timer / FADE_STEP_MS), 0);
   }
   // Sync with HUD info fade-in on game start
   const infoFade = HUD_INFO_FADE_STEPS - Math.min(Math.floor(hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
@@ -3711,15 +2826,15 @@ function _drawRosterRow(p, i, panelTop) {
 }
 
 function _drawRosterSparkle(panelTop) {
-  if (!pauseHealNum || pauseHealNum.rosterIdx < 0 || cureSparkleFrames.length !== 2) return;
-  const visRow = pauseHealNum.rosterIdx - rosterScroll;
+  if (!pauseSt.healNum || pauseSt.healNum.rosterIdx < 0 || cureSparkleFrames.length !== 2) return;
+  const visRow = pauseSt.healNum.rosterIdx - inputSt.rosterScroll;
   if (visRow < 0 || visRow >= ROSTER_VISIBLE) return;
   const px = HUD_RIGHT_X + 8;
   const py = panelTop + visRow * ROSTER_ROW_H + 8;
-  const fi = Math.floor(pauseTimer / 67) & 1;
+  const fi = Math.floor(pauseSt.timer / 67) & 1;
   const frame = cureSparkleFrames[fi];
   _drawSparkleCorners(frame, px, py);
-  _drawBattleNum(px + 8, _dmgBounceY(py + 8, pauseHealNum.timer), pauseHealNum.value, [0x0F, 0x0F, 0x0F, 0x2B]);
+  _drawBattleNum(px + 8, _dmgBounceY(py + 8, pauseSt.healNum.timer), pauseSt.healNum.value, [0x0F, 0x0F, 0x0F, 0x2B]);
 }
 
 function _drawRosterScrollTriangles(scrollAreaY, canScrollUp, canScrollDown) {
@@ -3741,8 +2856,8 @@ function _drawRosterScrollTriangles(scrollAreaY, canScrollUp, canScrollDown) {
 }
 
 function drawRoster() {
-  if (titleState !== 'done') return;
-  if (transState === 'loading') return;
+  if (titleSt.state !== 'done') return;
+  if (transSt.state === 'loading') return;
   if (rosterBattleFade >= ROSTER_FADE_STEPS && battleState !== 'none') return;
 
   const panelTop = HUD_VIEW_Y + 32;
@@ -3752,17 +2867,17 @@ function drawRoster() {
   const players = getRosterVisible();
   const maxVisible = Math.min(ROSTER_VISIBLE, players.length);
   const maxScroll = Math.max(0, players.length - maxVisible);
-  if (rosterScroll > maxScroll) rosterScroll = maxScroll;
+  if (inputSt.rosterScroll > maxScroll) inputSt.rosterScroll = maxScroll;
 
-  const canScrollUp = rosterScroll > 0;
-  const canScrollDown = rosterScroll < maxScroll;
+  const canScrollUp = inputSt.rosterScroll > 0;
+  const canScrollDown = inputSt.rosterScroll < maxScroll;
 
   ctx.save();
   ctx.beginPath();
   ctx.rect(HUD_RIGHT_X, panelTop, HUD_RIGHT_W, panelH);
   ctx.clip();
   for (let i = 0; i < maxVisible; i++) {
-    const idx = rosterScroll + i;
+    const idx = inputSt.rosterScroll + i;
     if (idx >= players.length) break;
     _drawRosterRow(players[idx], i, panelTop);
   }
@@ -3773,9 +2888,9 @@ function drawRoster() {
   _drawRosterSparkle(panelTop);
 
   // Cursor (drawn outside clip — overlaps portrait box border)
-  if (rosterState === 'browse' || rosterState === 'menu' || rosterState === 'menu-in' || rosterState === 'menu-out') {
-    const visIdx = rosterCursor - rosterScroll;
-    const curTarget = players[rosterCursor];
+  if (inputSt.rosterState === 'browse' || inputSt.rosterState === 'menu' || inputSt.rosterState === 'menu-in' || inputSt.rosterState === 'menu-out') {
+    const visIdx = inputSt.rosterCursor - inputSt.rosterScroll;
+    const curTarget = players[inputSt.rosterCursor];
     const curSlide = curTarget ? (rosterSlideY[curTarget.name] || 0) : 0;
     const curY = panelTop + visIdx * ROSTER_ROW_H + curSlide + 12;
     if (cursorTileCanvas) ctx.drawImage(cursorTileCanvas, HUD_RIGHT_X - 4, curY);
@@ -3783,7 +2898,7 @@ function drawRoster() {
 }
 
 function drawRosterMenu() {
-  if (rosterState !== 'menu-in' && rosterState !== 'menu' && rosterState !== 'menu-out') return;
+  if (inputSt.rosterState !== 'menu-in' && inputSt.rosterState !== 'menu' && inputSt.rosterState !== 'menu-out') return;
 
   // Blue bordered box slides in from right edge of viewport
   const menuW = 80;
@@ -3793,14 +2908,14 @@ function drawRosterMenu() {
   const SLIDE_MS = 150;
 
   let menuX = finalX;
-  if (rosterState === 'menu-in') {
-    const t = Math.min(rosterMenuTimer / SLIDE_MS, 1);
+  if (inputSt.rosterState === 'menu-in') {
+    const t = Math.min(inputSt.rosterMenuTimer / SLIDE_MS, 1);
     menuX = (HUD_VIEW_X + HUD_VIEW_W) + (finalX - (HUD_VIEW_X + HUD_VIEW_W)) * t;
-    if (t >= 1) { rosterState = 'menu'; rosterMenuTimer = 0; }
-  } else if (rosterState === 'menu-out') {
-    const t = Math.min(rosterMenuTimer / SLIDE_MS, 1);
+    if (t >= 1) { inputSt.rosterState = 'menu'; inputSt.rosterMenuTimer = 0; }
+  } else if (inputSt.rosterState === 'menu-out') {
+    const t = Math.min(inputSt.rosterMenuTimer / SLIDE_MS, 1);
     menuX = finalX + ((HUD_VIEW_X + HUD_VIEW_W) - finalX) * t;
-    if (t >= 1) { rosterState = msgBoxState !== 'none' ? 'none' : 'browse'; rosterMenuTimer = 0; }
+    if (t >= 1) { inputSt.rosterState = msgState.state !== 'none' ? 'none' : 'browse'; inputSt.rosterMenuTimer = 0; }
   }
 
   // Clip to viewport
@@ -3808,7 +2923,7 @@ function drawRosterMenu() {
 
   _drawBorderedBox(menuX, menuY, menuW, menuH, false);
 
-  if (rosterState === 'menu') {
+  if (inputSt.rosterState === 'menu') {
     const textPal = TEXT_WHITE;
     for (let i = 0; i < ROSTER_MENU_ITEMS.length; i++) {
       const label = ROSTER_MENU_ITEMS[i];
@@ -3817,7 +2932,7 @@ function drawRosterMenu() {
     }
     // Cursor
     if (cursorTileCanvas) {
-      ctx.drawImage(cursorTileCanvas, menuX + 2, menuY + 4 + rosterMenuCursor * 14);
+      ctx.drawImage(cursorTileCanvas, menuX + 2, menuY + 4 + inputSt.rosterMenuCursor * 14);
     }
   }
 
@@ -3826,7 +2941,7 @@ function drawRosterMenu() {
 
 function initRoster() {
   document.fonts.load('8px "Press Start 2P"').then(() => {
-    requestAnimationFrame(() => { chatFontReady = true; });
+    requestAnimationFrame(() => { chatState.fontReady = true; });
   });
   rosterTimer = 3000 + Math.random() * 5000;
   // Init HP for each player
@@ -3845,144 +2960,7 @@ function initRoster() {
 }
 
 
-function addChatMessage(text, type) {
-  chatMessages.push({ text, type: type || 'chat' });
-  while (chatMessages.length > CHAT_HISTORY) chatMessages.shift();
-}
-
-function updateChat(dt) {
-  const expandTarget = chatExpanded ? 1 : 0;
-  if (chatExpandAnim < expandTarget) chatExpandAnim = Math.min(1, chatExpandAnim + dt / CHAT_EXPAND_MS);
-  else if (chatExpandAnim > expandTarget) chatExpandAnim = Math.max(0, chatExpandAnim - dt / CHAT_EXPAND_MS);
-  if (chatInputActive) chatCursorTimer += dt;
-  if (battleState === 'none' && !chatInputActive) {
-    chatAutoTimer -= dt;
-    if (chatAutoTimer <= 0) {
-      chatAutoTimer = CHAT_AUTO_MIN_MS + Math.random() * (CHAT_AUTO_MAX_MS - CHAT_AUTO_MIN_MS);
-      const p = PLAYER_POOL[Math.floor(Math.random() * PLAYER_POOL.length)];
-      const phrase = CHAT_PHRASES[Math.floor(Math.random() * CHAT_PHRASES.length)];
-      addChatMessage(p.name + ': ' + phrase, 'chat');
-    }
-  }
-}
-
-// Wrap text to fit maxWidth using char-by-char measurement, breaking at spaces
-function _chatWrap(ctx, text, maxWidth) {
-  const lines = [];
-  let start = 0;
-  while (start < text.length) {
-    let end = start;
-    let lastSpace = -1;
-    while (end < text.length && ctx.measureText(text.slice(start, end + 1)).width <= maxWidth) {
-      if (text[end] === ' ') lastSpace = end;
-      end++;
-    }
-    if (end >= text.length) { lines.push(text.slice(start)); break; }
-    const cut = lastSpace > start ? lastSpace : end;
-    lines.push(text.slice(start, cut));
-    start = cut + (text[cut] === ' ' ? 1 : 0);
-  }
-  return lines.length ? lines : [text];
-}
-
-function _buildChatRows(ctx, lineW, startX) {
-  const rows = [];
-  for (const m of chatMessages) {
-    if (m.type === 'system') {
-      for (const line of _chatWrap(ctx, m.text, lineW))
-        rows.push({ color: '#7898c8', text: line, x: startX });
-    } else {
-      const colon = m.text.indexOf(':');
-      if (colon > -1) {
-        const namePart = m.text.slice(0, colon + 1);
-        const msgPart  = m.text.slice(colon + 2);
-        const nameW    = ctx.measureText(namePart).width;
-        const firstLine = _chatWrap(ctx, msgPart, lineW - nameW)[0];
-        rows.push({ namePart, nameW, msgPart: firstLine, x: startX });
-        const remainder = msgPart.slice(firstLine.length).replace(/^ /, '');
-        if (remainder.length > 0)
-          rows.push({ color: '#e0e0e0', text: _chatWrap(ctx, remainder, lineW)[0], x: startX });
-      } else {
-        for (const line of _chatWrap(ctx, m.text, lineW))
-          rows.push({ color: '#e0e0e0', text: line, x: startX });
-      }
-    }
-  }
-  return rows;
-}
-
-function _drawChatInput(ctx, lineW, startX, inputLine1Y, inputLine2Y) {
-  const promptW    = ctx.measureText('> ').width;
-  const inputAvail = lineW - promptW;
-  let splitIdx = chatInputText.length;
-  for (let i = 1; i <= chatInputText.length; i++) {
-    if (ctx.measureText(chatInputText.slice(0, i)).width > inputAvail) { splitIdx = i - 1; break; }
-  }
-  const line1Text = chatInputText.slice(0, splitIdx);
-  const line2Text = chatInputText.slice(splitIdx);
-  ctx.fillStyle = '#d8b858';
-  ctx.fillText('>', startX, inputLine1Y);
-  ctx.fillStyle = '#ffffff';
-  ctx.fillText(line1Text, startX + promptW, inputLine1Y);
-  ctx.fillText(line2Text, startX, inputLine2Y);
-  if (Math.floor(chatCursorTimer / 500) % 2 === 0) {
-    if (line2Text.length > 0)
-      ctx.fillRect(startX + ctx.measureText(line2Text).width, inputLine2Y - 7, 6, 8);
-    else
-      ctx.fillRect(startX + promptW + ctx.measureText(line1Text).width, inputLine1Y - 7, 6, 8);
-  }
-}
-
-function _drawChatExpandBG(curBoxY, curBoxH, battleFadeAlpha, battleFadeStep) {
-  if (chatExpandAnim <= 0) return;
-  const NES_STEP_ALPHAS = [0, 0.28, 0.52, 0.76, 1.0];
-  // Black fill — fill rect has no NES tile equivalent, stepped alpha is closest approximation
-  ctx.globalAlpha = NES_STEP_ALPHAS[Math.min(4, Math.round(chatExpandAnim * 4))] * battleFadeAlpha;
-  ctx.fillStyle = '#000';
-  ctx.fillRect(0, HUD_VIEW_Y, CANVAS_W, HUD_BOT_Y - HUD_VIEW_Y);
-  ctx.globalAlpha = 1;
-  // Border — NES palette faded tiles via borderFadeSets
-  _drawHudBox(0, curBoxY, CANVAS_W, curBoxH, battleFadeStep);
-}
-
-function _drawChatTextArea(curBoxY, curBoxH, battleFadeAlpha) {
-  const innerTop    = curBoxY + 8;
-  const innerBottom = curBoxY + curBoxH - 10;
-  const innerH      = innerBottom - innerTop;
-  ctx.globalAlpha = battleFadeAlpha;
-  ctx.beginPath(); ctx.rect(8, innerTop, CANVAS_W - 16, curBoxH - 16); ctx.clip();
-  ctx.font = '8px "Press Start 2P"'; ctx.textBaseline = 'bottom';
-  const startX = 12; const lineW = CANVAS_W - 8 - startX;
-  const rows      = _buildChatRows(ctx, lineW, startX);
-  const inputRows = chatInputActive ? 2 : 0;
-  const availRows = Math.max(1, Math.floor(innerH / CHAT_LINE_H) - inputRows);
-  const inputLine2Y = innerBottom;
-  const inputLine1Y = inputLine2Y - CHAT_LINE_H;
-  const bottomY   = chatInputActive ? inputLine1Y - CHAT_LINE_H : inputLine2Y;
-  const visible   = rows.slice(-availRows);
-  for (let i = 0; i < visible.length; i++) {
-    const r = visible[i]; const lineY = bottomY - (visible.length - 1 - i) * CHAT_LINE_H;
-    if (r.namePart !== undefined) {
-      ctx.fillStyle = '#d8b858'; ctx.fillText(r.namePart, r.x, lineY);
-      ctx.fillStyle = '#e0e0e0'; ctx.fillText(r.msgPart, r.x + r.nameW, lineY);
-    } else { ctx.fillStyle = r.color; ctx.fillText(r.text, r.x, lineY); }
-  }
-  if (chatInputActive) _drawChatInput(ctx, lineW, startX, inputLine1Y, inputLine2Y);
-}
-
-function drawChat() {
-  if (!chatFontReady) return;
-  const battleFadeAlpha = 1 - rosterBattleFade / ROSTER_FADE_STEPS;
-  if (battleFadeAlpha <= 0) return;
-  if (chatMessages.length === 0 && !chatInputActive && chatExpandAnim === 0) return;
-  const curBoxH = HUD_BOT_H + Math.round((CANVAS_H - HUD_VIEW_Y - HUD_BOT_H) * chatExpandAnim / 8) * 8;
-  const curBoxY = CANVAS_H - curBoxH;
-  ctx.save();
-  _drawChatExpandBG(curBoxY, curBoxH, battleFadeAlpha, rosterBattleFade);
-  _drawChatTextArea(curBoxY, curBoxH, battleFadeAlpha);
-  ctx.globalAlpha = 1;
-  ctx.restore();
-}
+// addChatMessage, updateChat, drawChat → chat.js
 
 function _rosterNextTimer() {
   return 4000 + Math.random() * 8000;
@@ -4034,9 +3012,9 @@ function getRosterVisible() {
 
 function _clampRosterCursor() {
   const visible = getRosterVisible();
-  if (rosterCursor >= visible.length) rosterCursor = Math.max(0, visible.length - 1);
+  if (inputSt.rosterCursor >= visible.length) inputSt.rosterCursor = Math.max(0, visible.length - 1);
   const maxScroll = Math.max(0, visible.length - ROSTER_VISIBLE);
-  if (rosterScroll > maxScroll) rosterScroll = maxScroll;
+  if (inputSt.rosterScroll > maxScroll) inputSt.rosterScroll = maxScroll;
 }
 
 function _updateRosterBattleFade(dt) {
@@ -4066,8 +3044,8 @@ function _updateRosterLocationReset(curLoc) {
   for (const p of PLAYER_POOL) {
     if (p.loc === curLoc) rosterFadeMap[p.name] = 0;
   }
-  rosterCursor = 0;
-  rosterScroll = 0;
+  inputSt.rosterCursor = 0;
+  inputSt.rosterScroll = 0;
   rosterPrevLoc = curLoc;
 }
 
@@ -4119,8 +3097,8 @@ function _updateRosterMovement(dt, curLoc) {
   else if (!wasHere && mover.loc === curLoc) _rosterStartFadeIn(mover.name);
 }
 function updateRoster(dt) {
-  if (rosterState === 'menu-in' || rosterState === 'menu-out') rosterMenuTimer += Math.min(dt, 33);
-  if (titleState !== 'done') return;
+  if (inputSt.rosterState === 'menu-in' || inputSt.rosterState === 'menu-out') inputSt.rosterMenuTimer += Math.min(dt, 33);
+  if (titleSt.state !== 'done') return;
   _updateRosterBattleFade(dt);
   const curLoc = getPlayerLocation();
   _updateRosterLocationReset(curLoc);
@@ -4129,62 +3107,14 @@ function updateRoster(dt) {
   _updateRosterMovement(dt, curLoc);
 }
 
-// ── Title Screen ──
-
-// Credit text: "A fan game" / "made by" / "JoeltCo"
-const TITLE_CREDIT_1 = new Uint8Array([0x8A,0xFF,0xCF,0xCA,0xD7,0xFF,0xD0,0xCA,0xD6,0xCE]);
-const TITLE_CREDIT_2 = new Uint8Array([0xD6,0xCA,0xCD,0xCE,0xFF,0xCB,0xE2]);
-const TITLE_CREDIT_3 = new Uint8Array([0x93,0xD8,0xCE,0xD5,0xDD,0x8C,0xD8]);
-
-// Disclaimer: "All characters" / "and music are" / "property of" / "SQUARE ENIX" / "No affiliation"
-const TITLE_DISCLAIM_1 = new Uint8Array([0x8A,0xD5,0xD5,0xFF,0xCC,0xD1,0xCA,0xDB,0xCA,0xCC,0xDD,0xCE,0xDB,0xDC]);
-const TITLE_DISCLAIM_2 = new Uint8Array([0xCA,0xD7,0xCD,0xFF,0xD6,0xDE,0xDC,0xD2,0xCC,0xFF,0xCA,0xDB,0xCE]);
-const TITLE_DISCLAIM_3 = new Uint8Array([0xD9,0xDB,0xD8,0xD9,0xCE,0xDB,0xDD,0xE2,0xFF,0xD8,0xCF]);
-const TITLE_DISCLAIM_4 = new Uint8Array([0x9C,0x9A,0x9E,0x8A,0x9B,0x8E,0xFF,0x8E,0x97,0x92,0xA1]);
-const TITLE_DISCLAIM_5 = new Uint8Array([0x97,0xD8,0xFF,0xCA,0xCF,0xCF,0xD2,0xD5,0xD2,0xCA,0xDD,0xD2,0xD8,0xD7]);
-
-const TITLE_PRESS_Z = isMobile
-  ? new Uint8Array([0x99,0xDB,0xCE,0xDC,0xDC,0xFF,0x8A]) // "Press A"
-  : new Uint8Array([0x99,0xDB,0xCE,0xDC,0xDC,0xFF,0xA3]); // "Press Z"
-
-// Player select text
-const SELECT_TITLE = new Uint8Array([0x99,0xD5,0xCA,0xE2,0xCE,0xDB,0xFF,0x9C,0xCE,0xD5,0xCE,0xCC,0xDD]); // "Player Select"
-const SELECT_SLOT_TEXT = new Uint8Array([0x97,0xCE,0xE0,0xFF,0x90,0xCA,0xD6,0xCE]); // "New Game"
-const SELECT_DELETE_TEXT = new Uint8Array([0x8D,0xCE,0xD5,0xCE,0xDD,0xCE]); // "Delete"
-let deleteMode = false;
-
-// Title box: "Final Fantasy" / "III MMORPG"
-const TITLE_NAME_1 = new Uint8Array([0x8F,0xD2,0xD7,0xCA,0xD5,0xFF,0x8F,0xCA,0xD7,0xDD,0xCA,0xDC,0xE2]); // "Final Fantasy"
-const TITLE_NAME_2 = new Uint8Array([0x92,0x92,0x92,0xFF,0x96,0x96,0x98,0x9B,0x99,0x90]); // "III MMORPG"
-const TITLE_MMORPG = new Uint8Array([0x96,0x96,0x98,0x9B,0x99,0x90]); // "MMORPG"
-
-function titleFadeLevel(state, timer) {
-  if (state.endsWith('-in')) {
-    const step = Math.min(Math.floor(timer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
-    return TITLE_FADE_MAX - step;
-  } else if (state.endsWith('-out')) {
-    return Math.min(Math.floor(timer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
-  } else if (state.endsWith('-hold')) {
-    return 0;
-  }
-  return TITLE_FADE_MAX; // black
-}
-
-function titleFadePal(fadeLevel) {
-  return TEXT_WHITE.map((c, i) => {
-    if (i === 0) return c;
-    let fc = c;
-    for (let s = 0; s < fadeLevel; s++) fc = nesColorFade(fc);
-    return fc;
-  });
-}
+// ── Title Screen — titleFadeLevel, titleFadePal, draw functions → title-screen.js ──
 
 function _updateTitleUnderwater(dt) {
-  if (!uwBubbleTiles) return;
-  if (titleState === 'main-in' || titleState === 'main' || titleState === 'main-out' ||
-      titleState.startsWith('zbox') || titleState.startsWith('select') || titleState === 'name-entry') return;
-  if (uwBubbles.length < 3 && Math.random() < dt * 0.0015) {
-    uwBubbles.push({
+  if (!titleSt.bubbleTiles) return;
+  if (titleSt.state === 'main-in' || titleSt.state === 'main' || titleSt.state === 'main-out' ||
+      titleSt.state.startsWith('zbox') || titleSt.state.startsWith('select') || titleSt.state === 'name-entry') return;
+  if (titleSt.bubbles.length < 3 && Math.random() < dt * 0.0015) {
+    titleSt.bubbles.push({
       x: HUD_VIEW_X + 20 + Math.random() * (CANVAS_W - 40),
       y: HUD_VIEW_H - 4,
       speed: 18 + Math.random() * 12,
@@ -4194,47 +3124,47 @@ function _updateTitleUnderwater(dt) {
       timer: 0,
     });
   }
-  for (let i = uwBubbles.length - 1; i >= 0; i--) {
-    const b = uwBubbles[i];
+  for (let i = titleSt.bubbles.length - 1; i >= 0; i--) {
+    const b = titleSt.bubbles[i];
     b.y -= b.speed * dt / 1000;
     b.timer += dt;
-    if (b.y < -8) uwBubbles.splice(i, 1);
+    if (b.y < -8) titleSt.bubbles.splice(i, 1);
   }
-  if (!uwFishTriggered && titleState === 'disclaim-wait') {
-    uwFishTriggered = true;
-    uwFish = { x: -10, y: HUD_VIEW_H * 0.7, timer: 0, speed: 80, zigPhase: 0, zigSpeed: 4, zigAmp: 6 };
+  if (!titleSt.fishTriggered && titleSt.state === 'disclaim-wait') {
+    titleSt.fishTriggered = true;
+    titleSt.fish = { x: -10, y: HUD_VIEW_H * 0.7, timer: 0, speed: 80, zigPhase: 0, zigSpeed: 4, zigAmp: 6 };
   }
-  if (uwFish) {
-    uwFish.x += uwFish.speed * dt / 1000;
-    uwFish.y -= uwFish.speed * 0.4 * dt / 1000;
-    uwFish.timer += dt;
-    if (uwFish.x > CANVAS_W + 10 || uwFish.y < -10) uwFish = null;
+  if (titleSt.fish) {
+    titleSt.fish.x += titleSt.fish.speed * dt / 1000;
+    titleSt.fish.y -= titleSt.fish.speed * 0.4 * dt / 1000;
+    titleSt.fish.timer += dt;
+    if (titleSt.fish.x > CANVAS_W + 10 || titleSt.fish.y < -10) titleSt.fish = null;
   }
 }
 function _updateTitleSelectCase() {
   if (_zPressed()) {
-    if (deleteMode) {
+    if (titleSt.deleteMode) {
       if (selectCursor < 3 && saveSlots[selectCursor]) {
         playSFX(SFX.CONFIRM);
         saveSlots[selectCursor] = null;
         serverDeleteSlot(selectCursor);
         saveSlotsToDB();
-        deleteMode = false;
+        titleSt.deleteMode = false;
       }
     } else if (selectCursor === 3) {
       playSFX(SFX.CONFIRM);
-      deleteMode = true;
+      titleSt.deleteMode = true;
       selectCursor = 0;
     } else if (saveSlots[selectCursor]) {
       playSFX(SFX.CONFIRM);
-      titleState = 'select-fade-out'; titleTimer = 0;
+      titleSt.state = 'select-fade-out'; titleSt.timer = 0;
     } else {
       playSFX(SFX.CONFIRM);
       nameBuffer = [];
-      titleState = 'name-entry'; titleTimer = 0;
+      titleSt.state = 'name-entry'; titleSt.timer = 0;
     }
   }
-  if (deleteMode) {
+  if (titleSt.deleteMode) {
     if (keys['ArrowDown']) { keys['ArrowDown'] = false; selectCursor = (selectCursor + 1) % 3; playSFX(SFX.CURSOR); }
     if (keys['ArrowUp'])   { keys['ArrowUp'] = false;   selectCursor = (selectCursor + 2) % 3; playSFX(SFX.CURSOR); }
   } else {
@@ -4242,12 +3172,12 @@ function _updateTitleSelectCase() {
     if (keys['ArrowUp'])   { keys['ArrowUp'] = false;   selectCursor = (selectCursor + 3) % 4; playSFX(SFX.CURSOR); }
   }
   if (_xPressed()) {
-    if (deleteMode) { playSFX(SFX.CONFIRM); deleteMode = false; }
-    else { playSFX(SFX.CONFIRM); titleState = 'select-fade-out-back'; titleTimer = 0; }
+    if (titleSt.deleteMode) { playSFX(SFX.CONFIRM); titleSt.deleteMode = false; }
+    else { playSFX(SFX.CONFIRM); titleSt.state = 'select-fade-out-back'; titleSt.timer = 0; }
   }
 }
 function _updateTitleMainOutCase() {
-  titleState = 'done';
+  titleSt.state = 'done';
   hudInfoFadeTimer = 0;
   const slot = saveSlots[selectCursor];
   if (slot && slot.stats) {
@@ -4275,602 +3205,56 @@ function _updateTitleMainOutCase() {
   loadMapById(114);
   worldY -= 6 * TILE_SIZE;
   playTrack(TRACKS.TOWN_UR);
-  transState = 'hud-fade-in';
-  transTimer = 0;
+  transSt.state = 'hud-fade-in';
+  transSt.timer = 0;
 }
 function updateTitle(dt) {
-  titleTimer += dt;
-  titleUnderwaterScroll += dt * 0.11;
+  titleSt.timer += dt;
+  titleSt.underwaterScroll += dt * 0.11;
   _updateTitleUnderwater(dt);
 
-  if (_isTitleActiveState()) {
+  if (isTitleActiveState()) {
     waterTimer += dt;
     if (waterTimer >= WATER_TICK) { waterTimer %= WATER_TICK; waterTick++; }
-    titleWaterScroll += dt * 0.12;
-    titleShipTimer += dt;
+    titleSt.waterScroll += dt * 0.12;
+    titleSt.shipTimer += dt;
   }
 
-  switch (titleState) {
-    case 'credit-wait':    if (titleTimer >= TITLE_FADE_MS) { titleState = 'credit-in';     titleTimer = 0; } break;
-    case 'credit-in':      if (titleTimer >= TITLE_FADE_MS) { titleState = 'credit-hold';   titleTimer = 0; } break;
-    case 'credit-hold':    if (titleTimer >= TITLE_HOLD_MS) { titleState = 'credit-out';    titleTimer = 0; } break;
-    case 'credit-out':     if (titleTimer >= TITLE_FADE_MS) { titleState = 'disclaim-wait'; titleTimer = 0; } break;
-    case 'disclaim-wait':  if (titleTimer >= TITLE_WAIT_MS) { titleState = 'disclaim-in';   titleTimer = 0; } break;
-    case 'disclaim-in':    if (titleTimer >= TITLE_FADE_MS) { titleState = 'disclaim-hold'; titleTimer = 0; } break;
-    case 'disclaim-hold':  if (titleTimer >= TITLE_HOLD_MS) { titleState = 'disclaim-out';  titleTimer = 0; } break;
-    case 'disclaim-out':   if (titleTimer >= TITLE_FADE_MS) { titleState = 'main-in';       titleTimer = 0; } break;
-    case 'main-in':        if (titleTimer >= TITLE_FADE_MS) { titleState = 'zbox-open';     titleTimer = 0; } break;
-    case 'zbox-open':      if (titleTimer >= TITLE_ZBOX_MS) { titleState = 'main';          titleTimer = 0; } break;
+  switch (titleSt.state) {
+    case 'credit-wait':    if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'credit-in';     titleSt.timer = 0; } break;
+    case 'credit-in':      if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'credit-hold';   titleSt.timer = 0; } break;
+    case 'credit-hold':    if (titleSt.timer >= TITLE_HOLD_MS) { titleSt.state = 'credit-out';    titleSt.timer = 0; } break;
+    case 'credit-out':     if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'disclaim-wait'; titleSt.timer = 0; } break;
+    case 'disclaim-wait':  if (titleSt.timer >= TITLE_WAIT_MS) { titleSt.state = 'disclaim-in';   titleSt.timer = 0; } break;
+    case 'disclaim-in':    if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'disclaim-hold'; titleSt.timer = 0; } break;
+    case 'disclaim-hold':  if (titleSt.timer >= TITLE_HOLD_MS) { titleSt.state = 'disclaim-out';  titleSt.timer = 0; } break;
+    case 'disclaim-out':   if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'main-in';       titleSt.timer = 0; } break;
+    case 'main-in':        if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'zbox-open';     titleSt.timer = 0; } break;
+    case 'zbox-open':      if (titleSt.timer >= TITLE_ZBOX_MS) { titleSt.state = 'main';          titleSt.timer = 0; } break;
     case 'main':
-      if (keys['z'] || keys['Z']) { keys['z'] = false; keys['Z'] = false; playSFX(SFX.CONFIRM); titleState = 'zbox-close'; titleTimer = 0; }
+      if (keys['z'] || keys['Z']) { keys['z'] = false; keys['Z'] = false; playSFX(SFX.CONFIRM); titleSt.state = 'zbox-close'; titleSt.timer = 0; }
       break;
-    case 'zbox-close':           if (titleTimer >= TITLE_ZBOX_MS) { titleState = 'logo-fade-out'; titleTimer = 0; } break;
-    case 'logo-fade-out':        if (titleTimer >= TITLE_FADE_MS) { titleState = 'select-box-open'; titleTimer = 0; selectCursor = 0; deleteMode = false; } break;
-    case 'select-box-open':      if (titleTimer >= BOSS_BOX_EXPAND_MS) { titleState = 'select-fade-in'; titleTimer = 0; } break;
-    case 'select-fade-in':       if (titleTimer >= (SELECT_TEXT_STEPS + 1) * SELECT_TEXT_STEP_MS) { titleState = 'select'; titleTimer = 0; } break;
+    case 'zbox-close':           if (titleSt.timer >= TITLE_ZBOX_MS) { titleSt.state = 'logo-fade-out'; titleSt.timer = 0; } break;
+    case 'logo-fade-out':        if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'select-box-open'; titleSt.timer = 0; selectCursor = 0; titleSt.deleteMode = false; } break;
+    case 'select-box-open':      if (titleSt.timer >= BOSS_BOX_EXPAND_MS) { titleSt.state = 'select-fade-in'; titleSt.timer = 0; } break;
+    case 'select-fade-in':       if (titleSt.timer >= (SELECT_TEXT_STEPS + 1) * SELECT_TEXT_STEP_MS) { titleSt.state = 'select'; titleSt.timer = 0; } break;
     case 'select':               _updateTitleSelectCase(); break;
     case 'name-entry':           break;
-    case 'select-fade-out':      if (titleTimer >= (SELECT_TEXT_STEPS + 1) * SELECT_TEXT_STEP_MS) { titleState = 'select-box-close-fwd'; titleTimer = 0; } break;
-    case 'select-box-close-fwd': if (titleTimer >= BOSS_BOX_EXPAND_MS) { titleState = 'main-out'; titleTimer = 0; } break;
-    case 'select-fade-out-back': if (titleTimer >= (SELECT_TEXT_STEPS + 1) * SELECT_TEXT_STEP_MS) { titleState = 'select-box-close'; titleTimer = 0; } break;
-    case 'select-box-close':     if (titleTimer >= BOSS_BOX_EXPAND_MS) { titleState = 'logo-fade-in'; titleTimer = 0; } break;
-    case 'logo-fade-in':         if (titleTimer >= TITLE_FADE_MS) { titleState = 'zbox-open'; titleTimer = 0; } break;
-    case 'main-out':             if (titleTimer >= TITLE_FADE_MS) _updateTitleMainOutCase(); break;
+    case 'select-fade-out':      if (titleSt.timer >= (SELECT_TEXT_STEPS + 1) * SELECT_TEXT_STEP_MS) { titleSt.state = 'select-box-close-fwd'; titleSt.timer = 0; } break;
+    case 'select-box-close-fwd': if (titleSt.timer >= BOSS_BOX_EXPAND_MS) { titleSt.state = 'main-out'; titleSt.timer = 0; } break;
+    case 'select-fade-out-back': if (titleSt.timer >= (SELECT_TEXT_STEPS + 1) * SELECT_TEXT_STEP_MS) { titleSt.state = 'select-box-close'; titleSt.timer = 0; } break;
+    case 'select-box-close':     if (titleSt.timer >= BOSS_BOX_EXPAND_MS) { titleSt.state = 'logo-fade-in'; titleSt.timer = 0; } break;
+    case 'logo-fade-in':         if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'zbox-open'; titleSt.timer = 0; } break;
+    case 'main-out':             if (titleSt.timer >= TITLE_FADE_MS) _updateTitleMainOutCase(); break;
   }
 }
 
 
-let _titleCascadeCanvas = null; // reusable 16×16 scratch for per-row cascade
+// drawTitleOcean..drawPlayerSelectContent → title-screen.js
 
-function drawTitleOcean(fadeLevel) {
-  if (!titleOceanFrames || titleOceanFrames.length === 0) return;
+// --- Pause menu (updatePauseMenu, drawPauseMenu → pause-menu.js) ---
 
-  const maxStep = titleOceanFrames.length - 1;
-  const frameIdx = Math.min(fadeLevel, maxStep);
-  const oceanCanvas = titleOceanFrames[frameIdx];
-
-  // Parallax: 2 rows (0=top, 1=bottom), row index 2-3 in the full scene
-  // (sky rows 0-1 are drawn separately in the top box)
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, CANVAS_W, 32);
-  ctx.clip();
-  for (let row = 0; row < 2; row++) {
-    const speed = _titleParallaxSpeed(2 + row); // scene rows 2-3
-    const scrollX = Math.floor(titleWaterScroll * speed) % 256;
-    const y = HUD_VIEW_Y + row * 16;
-    // Draw the 16px-tall strip from the ocean canvas
-    ctx.drawImage(oceanCanvas, 0, row * 16, 256, 16, -scrollX, y, 256, 16);
-    ctx.drawImage(oceanCanvas, 0, row * 16, 256, 16, -scrollX + 256, y, 256, 16);
-  }
-  ctx.restore();
-}
-
-// Parallax speed for a given scene row (0=top sky, 10=bottom water)
-// 11 total rows: sky(2) + ocean(2) + water(7)
-function _titleParallaxSpeed(row) {
-  // Row 0 (sky top) = 0.3, row 10 (water bottom) = 1.0
-  return 0.3 + (row / 10) * 0.7;
-}
-
-function _drawTitleWaterRows(waterTop, twW, tile) {
-  for (let r = 0; r < 7; r++) {
-    const speed = _titleParallaxSpeed(4 + r);
-    const scrollX = Math.floor(titleWaterScroll * speed) % 16;
-    const y = waterTop + r * 16;
-    for (let x = HUD_VIEW_X - scrollX; x < HUD_VIEW_X + twW + 16; x += 16) ctx.drawImage(tile, x, y);
-  }
-}
-
-function drawTitleWater(fadeLevel) {
-  if (!titleWaterFrames) return;
-  const twW = CANVAS_W; const waterTop = HUD_VIEW_Y + 32;
-  ctx.save(); ctx.beginPath(); ctx.rect(HUD_VIEW_X, waterTop, twW, HUD_VIEW_H - 32); ctx.clip();
-  if (fadeLevel > 0 && titleWaterFadeTiles) {
-    _drawTitleWaterRows(waterTop, twW, titleWaterFadeTiles[Math.min(fadeLevel, titleWaterFadeTiles.length - 1)]);
-  } else {
-    const hShift = Math.floor(waterTick / 8) % 16, hPrev = (hShift + 15) % 16, subRow = waterTick % 8;
-    if (!_titleCascadeCanvas) {
-      _titleCascadeCanvas = document.createElement('canvas'); _titleCascadeCanvas.width = 16; _titleCascadeCanvas.height = 16;
-    }
-    const cctx = _titleCascadeCanvas.getContext('2d');
-    cctx.drawImage(titleWaterFrames[hPrev], 0, 0);
-    const h = subRow + 1;
-    cctx.drawImage(titleWaterFrames[hShift], 0, 0, 16, h, 0, 0, 16, h);
-    cctx.drawImage(titleWaterFrames[hShift], 0, 8, 16, h, 0, 8, 16, h);
-    _drawTitleWaterRows(waterTop, twW, _titleCascadeCanvas);
-  }
-  ctx.restore();
-}
-
-function drawTitleSky(fadeLevel) {
-  if (!titleSkyFrames || titleSkyFrames.length === 0) return;
-
-  const maxStep = titleSkyFrames.length - 1;
-  const frameIdx = Math.min(fadeLevel, maxStep);
-  const skyCanvas = titleSkyFrames[frameIdx];
-
-  // Parallax: 2 rows (scene rows 0-1, slowest)
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(0, 0, CANVAS_W, HUD_TOP_H);
-  ctx.clip();
-  for (let row = 0; row < 2; row++) {
-    const speed = _titleParallaxSpeed(row); // scene rows 0-1
-    const scrollX = Math.floor(titleWaterScroll * speed) % 256;
-    const y = row * 16;
-    ctx.drawImage(skyCanvas, 0, row * 16, 256, 16, -scrollX, y, 256, 16);
-    ctx.drawImage(skyCanvas, 0, row * 16, 256, 16, -scrollX + 256, y, 256, 16);
-  }
-  ctx.restore();
-}
-
-function drawTitleUnderwater(fadeLevel) {
-  if (!titleUnderwaterFrames || titleUnderwaterFrames.length === 0) return;
-  const maxStep = titleUnderwaterFrames.length - 1;
-  const frameIdx = Math.min(fadeLevel, maxStep);
-  const uwCanvas = titleUnderwaterFrames[frameIdx];
-  const scrollX = Math.floor(titleUnderwaterScroll) % 256;
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(0, 0, CANVAS_W, HUD_TOP_H);
-  ctx.clip();
-  ctx.drawImage(uwCanvas, -scrollX, 0);
-  ctx.drawImage(uwCanvas, -scrollX + 256, 0);
-  ctx.restore();
-}
-
-function drawUnderwaterSprites() {
-  if (!uwBubbleTiles) return;
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, CANVAS_W, HUD_VIEW_H);
-  ctx.clip();
-  // Draw small bubbles with zig-zag
-  for (const b of uwBubbles) {
-    const zigX = Math.sin(b.zigPhase + b.timer / 1000 * b.zigSpeed) * b.zigAmp;
-    ctx.drawImage(uwBubbleTiles[0], Math.round(b.x + zigX), Math.round(HUD_VIEW_Y + b.y));
-  }
-  // Draw fish zig-zagging northeast
-  if (uwFish) {
-    const frame = Math.floor(uwFish.timer / 200) % 2; // 2-frame animation
-    const zigY = Math.sin(uwFish.zigPhase + uwFish.timer / 1000 * uwFish.zigSpeed) * uwFish.zigAmp;
-    ctx.drawImage(uwBubbleTiles[1 + frame], Math.round(uwFish.x), Math.round(HUD_VIEW_Y + uwFish.y + zigY));
-  }
-  ctx.restore();
-}
-
-function drawTitleSkyInHUD() {
-  if (titleState === 'main-in') {
-    // NES fade in from black
-    const fl = TITLE_FADE_MAX - Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
-    drawTitleSky(fl);
-    roundTopBoxCorners();
-  } else if (titleState === 'zbox-open' || titleState === 'main' || titleState === 'zbox-close' ||
-             titleState === 'logo-fade-out' || titleState === 'logo-fade-in' || titleState === 'select-box-open' || titleState === 'select-box-close' || titleState === 'select-box-close-fwd' ||
-             titleState === 'select-fade-in' || titleState === 'select' || titleState === 'select-fade-out' || titleState === 'select-fade-out-back' ||
-             titleState === 'name-entry') {
-    drawTitleSky(0);
-    roundTopBoxCorners();
-  } else if (titleState === 'main-out') {
-    const fl = Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
-    drawTitleSky(fl);
-    roundTopBoxCorners();
-  } else if (titleState === 'disclaim-out') {
-    // Underwater BG fades out with disclaimer text
-    const fl = Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
-    drawTitleUnderwater(fl);
-    roundTopBoxCorners();
-  } else if (titleState === 'credit-wait') {
-    // Fade in from black during initial wait
-    const fl = TITLE_FADE_MAX - Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
-    drawTitleUnderwater(fl);
-    roundTopBoxCorners();
-  } else {
-    // Credits, disclaimer: scrolling underwater BG at full brightness
-    drawTitleUnderwater(0);
-    roundTopBoxCorners();
-  }
-}
-
-function _drawTitleCredit(cx, cy) {
-  if (titleState === 'credit-in' || titleState === 'credit-hold' || titleState === 'credit-out') {
-    let fl = 0;
-    if (titleState === 'credit-in') fl = TITLE_FADE_MAX - Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
-    else if (titleState === 'credit-out') fl = Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
-    const pal = fl === 0 ? TEXT_WHITE : titleFadePal(fl);
-    drawText(ctx, cx - measureText(TITLE_CREDIT_1) / 2, cy - 16, TITLE_CREDIT_1, pal);
-    drawText(ctx, cx - measureText(TITLE_CREDIT_2) / 2, cy -  4, TITLE_CREDIT_2, pal);
-    drawText(ctx, cx - measureText(TITLE_CREDIT_3) / 2, cy +  8, TITLE_CREDIT_3, pal);
-  } else if (titleState === 'disclaim-in' || titleState === 'disclaim-hold' || titleState === 'disclaim-out') {
-    let fl = 0;
-    if (titleState === 'disclaim-in') fl = TITLE_FADE_MAX - Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
-    else if (titleState === 'disclaim-out') fl = Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
-    const pal = fl === 0 ? TEXT_WHITE : titleFadePal(fl);
-    drawText(ctx, cx - measureText(TITLE_DISCLAIM_1) / 2, cy - 24, TITLE_DISCLAIM_1, pal);
-    drawText(ctx, cx - measureText(TITLE_DISCLAIM_2) / 2, cy - 14, TITLE_DISCLAIM_2, pal);
-    drawText(ctx, cx - measureText(TITLE_DISCLAIM_3) / 2, cy -  4, TITLE_DISCLAIM_3, pal);
-    drawText(ctx, cx - measureText(TITLE_DISCLAIM_4) / 2, cy + 10, TITLE_DISCLAIM_4, pal);
-    drawText(ctx, cx - measureText(TITLE_DISCLAIM_5) / 2, cy + 24, TITLE_DISCLAIM_5, pal);
-  }
-}
-function _drawTitleLogo(cx, fl, isSelectState) {
-  let logoFl = fl;
-  if (titleState === 'logo-fade-out') {
-    logoFl = Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
-  } else if (titleState === 'logo-fade-in') {
-    logoFl = TITLE_FADE_MAX - Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
-  } else if (isSelectState || titleState === 'main-out') {
-    logoFl = TITLE_FADE_MAX;
-  }
-  if (!titleLogoFrames || logoFl >= TITLE_FADE_MAX) return;
-  const logoFrame = titleLogoFrames[Math.min(logoFl, titleLogoFrames.length - 1)];
-  const tboxW = logoFrame.width + 16;
-  const tboxH = logoFrame.height + 24;
-  const tboxX = Math.round(cx - tboxW / 2);
-  const tboxY = HUD_VIEW_Y + 12;
-  const clampedFl = Math.min(logoFl, LOAD_FADE_MAX);
-  const tBorderSet = (borderFadeSets && logoFl > 0) ? borderFadeSets[clampedFl] : borderTileCanvases;
-  if (tBorderSet) {
-    const [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR, FILL] = tBorderSet;
-    ctx.drawImage(TL, tboxX, tboxY); ctx.drawImage(TR, tboxX + tboxW - 8, tboxY);
-    ctx.drawImage(BL, tboxX, tboxY + tboxH - 8); ctx.drawImage(BR, tboxX + tboxW - 8, tboxY + tboxH - 8);
-    for (let tx = tboxX + 8; tx < tboxX + tboxW - 8; tx += 8) { ctx.drawImage(TOP, tx, tboxY); ctx.drawImage(BOT, tx, tboxY + tboxH - 8); }
-    for (let ty = tboxY + 8; ty < tboxY + tboxH - 8; ty += 8) { ctx.drawImage(LEFT, tboxX, ty); ctx.drawImage(RIGHT, tboxX + tboxW - 8, ty); }
-    for (let ty = tboxY + 8; ty < tboxY + tboxH - 8; ty += 8)
-      for (let tx = tboxX + 8; tx < tboxX + tboxW - 8; tx += 8) ctx.drawImage(FILL, tx, ty);
-  }
-  ctx.drawImage(logoFrame, tboxX + 8, tboxY + 8);
-  const tw2 = measureText(TITLE_MMORPG);
-  drawText(ctx, cx - tw2 / 2, tboxY + 8 + logoFrame.height, TITLE_MMORPG, logoFl === 0 ? TEXT_WHITE : titleFadePal(logoFl));
-}
-function _drawTitleShip(cx, cy, fl) {
-  if (!invincibleFadeFrames || fl >= TITLE_FADE_MAX) return;
-  const frameIdx = Math.floor(titleShipTimer / TITLE_SHIP_ANIM_MS) % 2;
-  const shipCanvas = invincibleFadeFrames[fl][frameIdx];
-  const shipX = cx - 16;
-  const bob = Math.sin(titleShipTimer / 2000 * Math.PI * 2) * 4;
-  const shipY = Math.round(cy - 20 + bob);
-  const shadowY = cy - 20 + 32;
-  if (invincibleShadowFade && Math.floor(titleShipTimer / TITLE_SHADOW_ANIM_MS) % 2 === 0) {
-    ctx.drawImage(invincibleShadowFade[fl], shipX, shadowY);
-  }
-  ctx.drawImage(shipCanvas, shipX, shipY);
-}
-function _drawTitlePressZ(cx, vpBot) {
-  if (titleState !== 'zbox-open' && titleState !== 'main' && titleState !== 'zbox-close') return;
-  const pw = measureText(TITLE_PRESS_Z);
-  const fullW = pw + 16, fullH = 24;
-  const boxCY = vpBot - 44 + fullH / 2;
-  let t = 1;
-  if (titleState === 'zbox-open') t = Math.min(titleTimer / TITLE_ZBOX_MS, 1);
-  else if (titleState === 'zbox-close') t = 1 - Math.min(titleTimer / TITLE_ZBOX_MS, 1);
-  const boxW = fullW;
-  const boxH = Math.max(8, Math.round(fullH * t));
-  const boxX = cx - boxW / 2;
-  const boxY = Math.round(boxCY - boxH / 2);
-  if (borderTileCanvases) {
-    const [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR, FILL] = borderTileCanvases;
-    ctx.drawImage(TL, boxX, boxY); ctx.drawImage(TR, boxX + boxW - 8, boxY);
-    ctx.drawImage(BL, boxX, boxY + boxH - 8); ctx.drawImage(BR, boxX + boxW - 8, boxY + boxH - 8);
-    for (let tx = boxX + 8; tx < boxX + boxW - 8; tx += 8) { ctx.drawImage(TOP, tx, boxY); ctx.drawImage(BOT, tx, boxY + boxH - 8); }
-    for (let ty = boxY + 8; ty < boxY + boxH - 8; ty += 8) { ctx.drawImage(LEFT, boxX, ty); ctx.drawImage(RIGHT, boxX + boxW - 8, ty); }
-    for (let ty = boxY + 8; ty < boxY + boxH - 8; ty += 8)
-      for (let tx = boxX + 8; tx < boxX + boxW - 8; tx += 8) ctx.drawImage(FILL, tx, ty);
-  }
-  if (t >= 1 && Math.floor(titleTimer / 500) % 2 === 0) {
-    drawText(ctx, boxX + 8, boxY + 8, TITLE_PRESS_Z, TEXT_WHITE);
-  }
-}
-function _drawTitleSelectBox(cx) {
-  const isSelectState = titleState === 'select-box-open' || titleState === 'select-box-close' || titleState === 'select-box-close-fwd' ||
-    titleState === 'select-fade-in' || titleState === 'select' ||
-    titleState === 'select-fade-out' || titleState === 'select-fade-out-back' || titleState === 'name-entry';
-  if (!isSelectState) return;
-  const SELECT_BOX_W = 128, SELECT_BOX_H = 112;
-  const sbCX = cx;
-  const sbCY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
-  let sbt = 1;
-  if (titleState === 'select-box-open') sbt = Math.min(titleTimer / BOSS_BOX_EXPAND_MS, 1);
-  else if (titleState === 'select-box-close' || titleState === 'select-box-close-fwd') sbt = 1 - Math.min(titleTimer / BOSS_BOX_EXPAND_MS, 1);
-  const sbW = Math.max(16, Math.ceil(SELECT_BOX_W * sbt / 8) * 8);
-  const sbH = Math.max(16, Math.ceil(SELECT_BOX_H * sbt / 8) * 8);
-  if (borderTileCanvases) _drawBorderedBox(Math.round(sbCX - sbW / 2), Math.round(sbCY - sbH / 2), sbW, sbH);
-  if (sbt >= 1 && titleState !== 'select-box-close' && titleState !== 'select-box-close-fwd') {
-    drawPlayerSelectContent(Math.round(sbCX - sbW / 2), Math.round(sbCY - sbH / 2), SELECT_BOX_W, SELECT_BOX_H);
-  }
-}
-function drawTitle() {
-  const TVW = CANVAS_W;
-  ctx.fillStyle = '#000';
-  ctx.fillRect(HUD_VIEW_X, HUD_VIEW_Y, TVW, HUD_VIEW_H);
-  ctx.fillRect(0, 0, CANVAS_W, HUD_TOP_H);
-
-  const cx = HUD_VIEW_X + TVW / 2;
-  const cy = HUD_VIEW_Y + HUD_VIEW_H / 2;
-  const vpBot = HUD_VIEW_Y + HUD_VIEW_H;
-
-  _drawTitleCredit(cx, cy);
-
-  if (titleState === 'credit-wait' || titleState === 'credit-in' || titleState === 'credit-hold' || titleState === 'credit-out' ||
-      titleState === 'disclaim-wait' || titleState === 'disclaim-in' || titleState === 'disclaim-hold' || titleState === 'disclaim-out') {
-    drawUnderwaterSprites();
-  }
-
-  if (_isTitleActiveState()) {
-    let fl = 0;
-    if (titleState === 'main-in') fl = TITLE_FADE_MAX - Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
-    else if (titleState === 'main-out') fl = Math.min(Math.floor(titleTimer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
-
-    const isSelectState = titleState === 'select-box-open' || titleState === 'select-box-close' || titleState === 'select-box-close-fwd' ||
-      titleState === 'select-fade-in' || titleState === 'select' ||
-      titleState === 'select-fade-out' || titleState === 'select-fade-out-back' || titleState === 'name-entry';
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(HUD_VIEW_X + 8, HUD_VIEW_Y + 8, TVW - 16, HUD_VIEW_H - 16);
-    ctx.clip();
-
-    drawTitleOcean(fl);
-    drawTitleWater(fl);
-    _drawTitleLogo(cx, fl, isSelectState);
-    _drawTitleShip(cx, cy, fl);
-
-    ctx.restore();
-
-    _drawTitlePressZ(cx, vpBot);
-    _drawTitleSelectBox(cx);
-  }
-}
-
-
-// --- Player select screen ---
-
-function _drawSelectSlot(i, ix, slotStartY, slotSpacing, fadeStep, fadedPal) {
-  const sy = slotStartY + i * slotSpacing;
-  const textX = ix + 20;
-  const nameX = textX + 18;
-  const isNameEntry = titleState === 'name-entry' && i === selectCursor;
-
-  // Hand cursor
-  if (i === selectCursor) _drawCursorFaded(ix, sy - 4, fadeStep);
-
-  // Portrait
-  if (isNameEntry) {
-    if (silhouetteCanvas) ctx.drawImage(silhouetteCanvas, textX - 2, sy - 4);
-  } else {
-    const portraitSrc = (saveSlots[i] && battleSpriteCanvas) ? battleSpriteCanvas : silhouetteCanvas;
-    if (portraitSrc && fadeStep < SELECT_TEXT_STEPS) {
-      let src = portraitSrc;
-      if (fadeStep > 0 && portraitSrc === battleSpriteCanvas && battleSpriteFadeCanvases)
-        src = battleSpriteFadeCanvases[fadeStep - 1];
-      else if (fadeStep > 0)
-        src = null; // no faded version for silhouette — skip during fade
-      if (src) ctx.drawImage(src, textX - 2, sy - 4, ...(portraitSrc === battleSpriteCanvas ? [16,16] : []));
-    }
-  }
-
-  // Slot text
-  if (isNameEntry) {
-    if (nameBuffer.length > 0) drawText(ctx, nameX, sy, new Uint8Array(nameBuffer), fadedPal);
-    if (nameBuffer.length < NAME_MAX_LEN && Math.floor(titleTimer / 400) % 2 === 0) {
-      ctx.fillStyle = '#fcfcfc';
-      ctx.fillRect(nameX + nameBuffer.length * 8 + 1, sy + 7, 6, 1);
-    }
-  } else if (saveSlots[i]) {
-    drawText(ctx, nameX, sy, saveSlots[i].name, fadedPal);
-  } else {
-    drawText(ctx, nameX, sy, SELECT_SLOT_TEXT, fadedPal);
-  }
-}
-
-function drawPlayerSelectContent(sbX, sbY, sbW, sbH) {
-  // Compute NES fade step (0=full bright, 4=fully black)
-  let fadeStep = 0;
-  if (titleState === 'select-fade-in') {
-    fadeStep = SELECT_TEXT_STEPS - Math.min(Math.floor(titleTimer / SELECT_TEXT_STEP_MS), SELECT_TEXT_STEPS);
-  } else if (titleState === 'select-fade-out' || titleState === 'select-fade-out-back') {
-    fadeStep = Math.min(Math.floor(titleTimer / SELECT_TEXT_STEP_MS), SELECT_TEXT_STEPS);
-  }
-
-  // Build faded palette
-  const fadedPal = _makeFadedPal(fadeStep);
-
-  const ix = sbX + 8; // interior left
-  const iy = sbY + 8; // interior top
-  const iw = sbW - 16;
-
-  // "Player Select" header — centered
-  const tw = measureText(SELECT_TITLE);
-  drawText(ctx, ix + Math.floor((iw - tw) / 2), iy, SELECT_TITLE, fadedPal);
-
-  // 3 save slots
-  const slotStartY = iy + 16;
-  const slotSpacing = 20;
-  for (let i = 0; i < 3; i++) {
-    _drawSelectSlot(i, ix, slotStartY, slotSpacing, fadeStep, fadedPal);
-  }
-
-  // "Delete" option
-  const delY = slotStartY + 3 * slotSpacing;
-  const delPal = deleteMode
-    ? [0x0F, 0x0F, 0x0F, 0x16]
-    : [0x0F, 0x0F, 0x0F, fadedPal[3]];
-  if (!deleteMode && selectCursor === 3) _drawCursorFaded(ix, delY - 4, fadeStep);
-  drawText(ctx, ix + 38, delY, SELECT_DELETE_TEXT, delPal);
-}
-
-// --- Pause menu ---
-
-function _updatePauseMainTransitions() {
-  const T = (PAUSE_TEXT_STEPS + 1) * PAUSE_TEXT_STEP_MS;
-  if (pauseState === 'scroll-in') {
-    if (pauseTimer >= PAUSE_SCROLL_MS) { pauseState = 'text-in'; pauseTimer = 0; }
-  } else if (pauseState === 'text-in') {
-    if (pauseTimer >= T) { pauseState = 'open'; pauseTimer = 0; }
-  } else if (pauseState === 'text-out') {
-    if (pauseTimer >= T) { pauseState = 'scroll-out'; pauseTimer = 0; }
-  } else if (pauseState === 'scroll-out') {
-    if (pauseTimer >= PAUSE_SCROLL_MS) { pauseState = 'none'; pauseTimer = 0; stopFF1Music(); resumeMusic(); }
-  }
-}
-
-function _updatePauseInvTransitions(dt) {
-  const T = (PAUSE_TEXT_STEPS + 1) * PAUSE_TEXT_STEP_MS;
-  if (pauseState === 'inv-text-out') {
-    if (pauseTimer >= T) { pauseState = 'inv-expand'; pauseTimer = 0; }
-  } else if (pauseState === 'inv-expand') {
-    if (pauseTimer >= PAUSE_EXPAND_MS) { pauseState = 'inv-items-in'; pauseTimer = 0; }
-  } else if (pauseState === 'inv-items-in') {
-    if (pauseTimer >= T) { pauseState = 'inventory'; pauseTimer = 0; }
-  } else if (pauseState === 'inv-items-out') {
-    if (pauseTimer >= T) { pauseState = 'inv-shrink'; pauseTimer = 0; }
-  } else if (pauseState === 'inv-shrink') {
-    if (pauseTimer >= PAUSE_EXPAND_MS) { pauseState = 'inv-text-in'; pauseTimer = 0; }
-  } else if (pauseState === 'inv-text-in') {
-    if (pauseTimer >= T) { pauseState = 'open'; pauseTimer = 0; }
-  } else if (pauseState === 'inv-heal') {
-    if (pauseHealNum) { pauseHealNum.timer += dt; if (pauseHealNum.timer >= BATTLE_DMG_SHOW_MS) pauseHealNum = null; }
-    if (pauseTimer >= DEFEND_SPARKLE_TOTAL_MS) {
-      pauseHealNum = null;
-      const entries = Object.entries(playerInventory).filter(([,c]) => c > 0);
-      if (pauseInvScroll >= entries.length) pauseInvScroll = Math.max(0, entries.length - 1);
-      pauseState = 'inventory'; pauseTimer = 0;
-    }
-  }
-}
-
-function _updatePauseEqTransitions() {
-  const T = (PAUSE_TEXT_STEPS + 1) * PAUSE_TEXT_STEP_MS;
-  if (pauseState === 'eq-text-out') {
-    if (pauseTimer >= T) { pauseState = 'eq-expand'; pauseTimer = 0; }
-  } else if (pauseState === 'eq-expand') {
-    if (pauseTimer >= PAUSE_EXPAND_MS) { pauseState = 'eq-slots-in'; pauseTimer = 0; }
-  } else if (pauseState === 'eq-slots-in') {
-    if (pauseTimer >= T) { pauseState = 'equip'; pauseTimer = 0; }
-  } else if (pauseState === 'eq-slots-out') {
-    if (pauseTimer >= T) { pauseState = 'eq-shrink'; pauseTimer = 0; }
-  } else if (pauseState === 'eq-shrink') {
-    if (pauseTimer >= PAUSE_EXPAND_MS) { pauseState = 'eq-text-in'; pauseTimer = 0; }
-  } else if (pauseState === 'eq-text-in') {
-    if (pauseTimer >= T) { pauseState = 'open'; pauseTimer = 0; }
-  } else if (pauseState === 'eq-items-in') {
-    if (pauseTimer >= T) { pauseState = 'eq-item-select'; pauseTimer = 0; }
-  } else if (pauseState === 'eq-items-out') {
-    if (pauseTimer >= T) { pauseState = 'equip'; pauseTimer = 0; }
-  }
-}
-
-function _updatePauseStatsTransitions() {
-  const T = (PAUSE_TEXT_STEPS + 1) * PAUSE_TEXT_STEP_MS;
-  if (pauseState === 'stats-text-out') {
-    if (pauseTimer >= T) { pauseState = 'stats-expand'; pauseTimer = 0; }
-  } else if (pauseState === 'stats-expand') {
-    if (pauseTimer >= PAUSE_EXPAND_MS) { pauseState = 'stats-in'; pauseTimer = 0; }
-  } else if (pauseState === 'stats-in') {
-    if (pauseTimer >= T) { pauseState = 'stats'; pauseTimer = 0; }
-  } else if (pauseState === 'stats-out') {
-    if (pauseTimer >= T) { pauseState = 'stats-shrink'; pauseTimer = 0; }
-  } else if (pauseState === 'stats-shrink') {
-    if (pauseTimer >= PAUSE_EXPAND_MS) { pauseState = 'stats-text-in'; pauseTimer = 0; }
-  } else if (pauseState === 'stats-text-in') {
-    if (pauseTimer >= T) { pauseState = 'open'; pauseTimer = 0; }
-  }
-}
-
-function updatePauseMenu(dt) {
-  if (pauseState === 'none') return;
-  pauseTimer += Math.min(dt, 33);
-  if (pauseState.startsWith('inv-')) _updatePauseInvTransitions(dt);
-  else if (pauseState.startsWith('eq-')) _updatePauseEqTransitions();
-  else if (pauseState.startsWith('stats-') || pauseState === 'stats') _updatePauseStatsTransitions();
-  else _updatePauseMainTransitions();
-}
-
-function showMsgBox(bytes, onClose) {
-  msgBoxBytes = bytes;
-  msgBoxState = 'slide-in';
-  msgBoxTimer = 0;
-  msgBoxOnClose = onClose || null;
-}
-
-function updateMsgBox(dt) {
-  if (msgBoxState === 'none') return;
-  msgBoxTimer += Math.min(dt, 33);
-
-  if (msgBoxState === 'slide-in') {
-    if (msgBoxTimer >= BATTLE_SCROLL_MS) { msgBoxState = 'hold'; msgBoxTimer = 0; }
-  } else if (msgBoxState === 'slide-out') {
-    if (msgBoxTimer >= BATTLE_SCROLL_MS) {
-      const cb = msgBoxOnClose;
-      msgBoxState = 'none'; msgBoxTimer = 0; msgBoxBytes = null; msgBoxOnClose = null;
-      if (cb) cb();
-    }
-  }
-}
-
-function _wrapMsgBytes(bytes, maxChars) {
-  // Split msg bytes into lines that fit within maxChars
-  // Word-break on 0xFF (space). Each printable byte = 1 char.
-  const lines = [];
-  let lineStart = 0, lastSpace = -1, lineLen = 0;
-  for (let i = 0; i < bytes.length; i++) {
-    const b = bytes[i];
-    if (b === 0x00) break;
-    if (b === 0xFF) lastSpace = i;
-    if (b >= 0x28) lineLen++;
-    if (lineLen > maxChars && lastSpace > lineStart) {
-      lines.push(bytes.slice(lineStart, lastSpace));
-      lineStart = lastSpace + 1;
-      lastSpace = -1;
-      // Recount from lineStart
-      lineLen = 0;
-      for (let j = lineStart; j <= i; j++) { if (bytes[j] >= 0x28) lineLen++; }
-    }
-  }
-  if (lineStart < bytes.length) lines.push(bytes.slice(lineStart));
-  return lines;
-}
-
-function drawMsgBox() {
-  if (msgBoxState === 'none' || !msgBoxBytes) return;
-
-  const boxW = HUD_VIEW_W - 16;
-  const interiorW = boxW - 16; // 8px border each side
-  const maxChars = Math.floor(interiorW / 8);
-  const lines = _wrapMsgBytes(msgBoxBytes, maxChars);
-  const lineH = 12;
-  const boxH = Math.max(48, 24 + lines.length * lineH);
-  const vpTop = HUD_VIEW_Y;
-  const finalY = vpTop + 8;
-  const centerX = HUD_VIEW_X + Math.floor((HUD_VIEW_W - boxW) / 2);
-
-  let boxY = finalY;
-  if (msgBoxState === 'slide-in') {
-    const t = Math.min(msgBoxTimer / BATTLE_SCROLL_MS, 1);
-    boxY = (vpTop - boxH) + (finalY - (vpTop - boxH)) * t;
-  } else if (msgBoxState === 'slide-out') {
-    const t = Math.min(msgBoxTimer / BATTLE_SCROLL_MS, 1);
-    boxY = finalY + ((vpTop - boxH) - finalY) * t;
-  }
-
-  _clipToViewport();
-
-  _drawBorderedBox(centerX, boxY, boxW, boxH, true);
-
-  if (msgBoxState === 'hold' || msgBoxState === 'slide-out') {
-    const fadedPal = [0x02, 0x02, 0x02, 0x30];
-    const textBlockH = lines.length * lineH;
-    const startTY = boxY + Math.floor((boxH - textBlockH) / 2);
-    for (let i = 0; i < lines.length; i++) {
-      const tw = measureText(lines[i]);
-      const tx = centerX + Math.floor((boxW - tw) / 2);
-      drawText(ctx, tx, startTY + i * lineH, lines[i], fadedPal);
-    }
-  }
-
-  ctx.restore();
-}
+// showMsgBox, updateMsgBox, drawMsgBox → message-box.js
 
 function _drawMonsterDeath(x, y, size, progress, monsterId) {
   // Dithered diagonal dissolve — pre-rendered frames with Bayer 4×4 dither pattern.
@@ -4947,243 +3331,7 @@ function roundTopBoxCorners() {
   ctx.drawImage(BR, CANVAS_W - 8, HUD_TOP_H - 8);
 }
 
-function _drawPauseBox() {
-  const { px, finalY, pw, ph, isInvState, isEqState, isStatsState, panelY } = _pausePanelLayout();
-  if (isInvState || isEqState || isStatsState) {
-    let t = 1;
-    if (pauseState === 'inv-expand' || pauseState === 'eq-expand' || pauseState === 'stats-expand') {
-      t = Math.min(pauseTimer / PAUSE_EXPAND_MS, 1);
-    } else if (pauseState === 'inv-shrink' || pauseState === 'eq-shrink' || pauseState === 'stats-shrink') {
-      t = 1 - Math.min(pauseTimer / PAUSE_EXPAND_MS, 1);
-    } else if (pauseState === 'inv-text-out' || pauseState === 'eq-text-out' || pauseState === 'stats-text-out' ||
-               pauseState === 'inv-text-in'  || pauseState === 'eq-text-in'  || pauseState === 'stats-text-in') {
-      t = 0;
-    }
-    const bw = Math.round(pw + (HUD_VIEW_W - pw) * t);
-    const bh = Math.round(ph + (HUD_VIEW_H - ph) * t);
-    _drawBorderedBox(px, finalY, bw, bh);
-  } else {
-    _drawBorderedBox(px, panelY, pw, ph);
-  }
-}
-function _drawPauseMenuText() {
-  const { px, finalY, pw, ph, isInvState, isEqState, isStatsState, panelY } = _pausePanelLayout();
-  const showPauseText = pauseState === 'text-in' || pauseState === 'open' || pauseState === 'text-out' ||
-                        pauseState === 'inv-text-out' || pauseState === 'inv-text-in' ||
-                        pauseState === 'eq-text-out' || pauseState === 'eq-text-in' ||
-                        pauseState === 'stats-text-out' || pauseState === 'stats-text-in';
-  if (!showPauseText) return;
-  let fadeStep = 0;
-  if (pauseState === 'text-in' || pauseState === 'inv-text-in' || pauseState === 'eq-text-in' || pauseState === 'stats-text-in') {
-    fadeStep = PAUSE_TEXT_STEPS - Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
-  } else if (pauseState === 'text-out' || pauseState === 'inv-text-out' || pauseState === 'eq-text-out' || pauseState === 'stats-text-out') {
-    fadeStep = Math.min(Math.floor(pauseTimer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
-  }
-  const fadedPal = _makeFadedPal(fadeStep);
-  const textX = px + 24;
-  const startY = ((isInvState || isEqState || isStatsState) ? finalY : panelY) + 12;
-  for (let i = 0; i < PAUSE_ITEMS.length; i++) {
-    drawText(ctx, textX, startY + i * 16, PAUSE_ITEMS[i], fadedPal);
-  }
-  _drawCursorFaded(px + 8, startY + pauseCursor * 16 - 4, fadeStep);
-}
-function _drawPauseInventory() {
-  const px = HUD_VIEW_X, finalY = HUD_VIEW_Y;
-  const showInvItems = pauseState === 'inv-items-in' || pauseState === 'inventory' || pauseState === 'inv-items-out' ||
-    pauseState === 'inv-target' || pauseState === 'inv-heal';
-  if (!showInvItems) return;
-  const fadeStep = _pauseFadeStep('inv-items-in', 'inv-items-out');
-  const fadedPal = _makeFadedPal(fadeStep);
-  const entries = Object.entries(playerInventory).filter(([,c]) => c > 0);
-  const maxVisible = Math.floor((HUD_VIEW_H - 16) / 14);
-  const startIdx = Math.max(0, Math.min(pauseInvScroll, Math.max(0, entries.length - maxVisible)));
-  for (let i = 0; i < maxVisible && startIdx + i < entries.length; i++) {
-    const [id, count] = entries[startIdx + i];
-    const nameBytes = getItemNameClean(Number(id));
-    const countStr = String(count);
-    const rowBytes = _buildItemRowBytes(nameBytes, countStr);
-    const iy = finalY + 12 + i * 14;
-    drawText(ctx, px + 24, iy, rowBytes, fadedPal);
-    if (pauseHeldItem >= 0 && startIdx + i === pauseHeldItem && pauseState !== 'inv-target' && pauseState !== 'inv-heal')
-      _drawCursorFaded(px + 8, iy - 4, fadeStep);
-    if (startIdx + i === pauseInvScroll && pauseState !== 'inv-target' && pauseState !== 'inv-heal') {
-      const activeX = pauseHeldItem >= 0 ? px + 4 : px + 8;
-      _drawCursorFaded(activeX, iy - 4, fadeStep);
-    }
-  }
-}
-function _drawPauseEquipSlots() {
-  const px = HUD_VIEW_X, finalY = HUD_VIEW_Y;
-  const showEqSlots = pauseState === 'eq-slots-in' || pauseState === 'equip' || pauseState === 'eq-slots-out' ||
-    pauseState === 'eq-items-in' || pauseState === 'eq-item-select' || pauseState === 'eq-items-out';
-  if (!showEqSlots) return;
-  const fadeStep = _pauseFadeStep('eq-slots-in', 'eq-slots-out');
-  const fadedPal = _makeFadedPal(fadeStep);
-  const EQ_LABELS = [
-    new Uint8Array([0x9B,0xC4,0x91,0xCA,0xD7,0xCD]),
-    new Uint8Array([0x95,0xC4,0x91,0xCA,0xD7,0xCD]),
-    new Uint8Array([0x91,0xCE,0xCA,0xCD]),
-    new Uint8Array([0x8B,0xD8,0xCD,0xE2]),
-    new Uint8Array([0x8A,0xDB,0xD6,0xDC]),
-  ];
-  const EQ_IDS = [-100, -101, -102, -103, -104];
-  const eqRowH = 22;
-  const eqStartY = finalY + 12;
-  const dimSlots = pauseState === 'eq-items-in' || pauseState === 'eq-item-select' || pauseState === 'eq-items-out';
-  for (let r = 0; r < 5; r++) {
-    const slotId = getEquipSlotId(EQ_IDS[r]);
-    const label = EQ_LABELS[r];
-    const iy = eqStartY + r * eqRowH;
-    const labelPal  = dimSlots ? [0x0F, 0x0F, 0x0F, 0x00] : fadedPal;
-    const activePal = (dimSlots && r === eqCursor) ? fadedPal : labelPal;
-    drawText(ctx, px + 24, iy, label, activePal);
-    if (slotId !== 0) {
-      drawText(ctx, px + 24, iy + 9, getItemNameClean(slotId), activePal);
-    } else {
-      drawText(ctx, px + 24, iy + 9, new Uint8Array([0xC2,0xC2,0xC2]), activePal);
-    }
-  }
-  const optY   = eqStartY + 5 * eqRowH + 4;
-  const optPal  = dimSlots ? [0x0F, 0x0F, 0x0F, 0x00] : fadedPal;
-  const optText = new Uint8Array([0x98,0xD9,0xDD,0xD2,0xD6,0xDE,0xD6]);
-  drawText(ctx, px + 24, optY, optText, optPal);
-  if (cursorTileCanvas && pauseState === 'equip' && fadeStep === 0) {
-    const curY = eqCursor < 5 ? eqStartY + eqCursor * eqRowH - 4 : optY - 4;
-    ctx.drawImage(cursorTileCanvas, px + 8, curY);
-  }
-}
-function _drawPauseEquipItems() {
-  const px = HUD_VIEW_X, finalY = HUD_VIEW_Y;
-  const showEqItems = pauseState === 'eq-items-in' || pauseState === 'eq-item-select' || pauseState === 'eq-items-out';
-  if (!showEqItems) return;
-  const fadeStep = _pauseFadeStep('eq-items-in', 'eq-items-out');
-  const fadedPal = _makeFadedPal(fadeStep);
-  const listX = px + 24;
-  const listY = finalY + 12 + eqCursor * 22 + 22;
-  const maxBelow = Math.floor((finalY + HUD_VIEW_H - 16 - listY) / 12);
-  const useY = maxBelow >= eqItemList.length ? listY : finalY + 12;
-  if (eqItemList.length === 0) {
-    drawText(ctx, listX, useY, new Uint8Array([0xC2,0xC2,0xC2]), fadedPal);
-  } else {
-    for (let i = 0; i < eqItemList.length; i++) {
-      const entry = eqItemList[i];
-      const iy = useY + i * 12;
-      if (iy + 8 > finalY + HUD_VIEW_H - 8) break;
-      if (entry.label === 'remove') {
-        drawText(ctx, listX + 16, iy, new Uint8Array([0x9B,0xCE,0xD6,0xD8,0xDF,0xCE]), fadedPal);
-      } else {
-        drawText(ctx, listX + 16, iy, getItemNameClean(entry.id), fadedPal);
-      }
-    }
-    if (cursorTileCanvas && pauseState === 'eq-item-select' && fadeStep === 0) {
-      ctx.drawImage(cursorTileCanvas, listX, useY + eqItemCursor * 12 - 4);
-    }
-  }
-}
-function _drawPauseStats() {
-  const px = HUD_VIEW_X, finalY = HUD_VIEW_Y;
-  const show = pauseState === 'stats-in' || pauseState === 'stats' || pauseState === 'stats-out';
-  if (!show) return;
-  const fadeStep = _pauseFadeStep('stats-in', 'stats-out');
-  const fadedPal = _makeFadedPal(fadeStep);
-  const tx = px + 8;
-  const panelRx = tx + HUD_VIEW_W - 16; // 136
-  // Left stats: x=tx..tx+96. Gap 8px. Right prof: icon at tx+104, level right-aligned to panelRx
-  const statRx = tx + 96;
-  const profX  = tx + 104;
-  const STEP = 11;
-  let y = finalY + 8;
-
-  const s = ps.stats;
-  if (!s) return;
-  const iconAlpha = fadeStep === 0 ? 1 : (PAUSE_TEXT_STEPS - fadeStep) / PAUSE_TEXT_STEPS;
-
-  // Helper: draw one stat row — label left, value right-aligned to statRx
-  function statRow(label, val) {
-    const vb = _nameToBytes(val);
-    drawText(ctx, tx, y, _nameToBytes(label), fadedPal);
-    drawText(ctx, statRx - vb.length * 8, y, vb, fadedPal);
-    y += STEP;
-  }
-  // Helper: draw paired stat row (two stats side by side within left section)
-  function statPair(l0, v0, l1, v1) {
-    const midX = tx + 48;
-    const v0b = _nameToBytes(v0), v1b = _nameToBytes(v1);
-    drawText(ctx, tx, y, _nameToBytes(l0), fadedPal);
-    drawText(ctx, midX - v0b.length * 8, y, v0b, fadedPal);
-    drawText(ctx, midX + 4, y, _nameToBytes(l1), fadedPal);
-    drawText(ctx, statRx - v1b.length * 8, y, v1b, fadedPal);
-    y += STEP;
-  }
-
-  // Name — right-aligned across full left section
-  const slot = saveSlots[selectCursor];
-  if (slot?.name) {
-    const nb = slot.name;
-    drawText(ctx, statRx - nb.length * 8, y, nb, fadedPal);
-    y += STEP;
-  }
-
-  statRow('Lv',   String(s.level));
-  // HP/MP: label left, value right-aligned to statRx
-  const hpStr = ps.hp + '/' + s.maxHP;
-  const mpStr = ps.mp + '/' + s.maxMP;
-  const hpb = _nameToBytes(hpStr), mpb = _nameToBytes(mpStr);
-  drawText(ctx, tx, y, _nameToBytes('HP'), fadedPal);
-  drawText(ctx, statRx - hpb.length * 8, y, hpb, fadedPal);
-  y += STEP;
-  drawText(ctx, tx, y, _nameToBytes('MP'), fadedPal);
-  drawText(ctx, statRx - mpb.length * 8, y, mpb, fadedPal);
-  y += STEP;
-  statRow('EXP',  String(s.exp));
-  statRow('Next', String(s.expToNext));
-  statPair('ATK', String(ps.atk),  'DEF', String(ps.def));
-  statPair('STR', String(s.str),   'AGI', String(s.agi));
-  statPair('VIT', String(s.vit),   'INT', String(s.int));
-  statPair('MND', String(s.mnd), '', '');
-
-  // Prof icons — right column, stacked vertically from top
-  const py0 = finalY + 8;
-  for (let i = 0; i < PROF_CATEGORIES.length; i++) {
-    const cat = PROF_CATEGORIES[i];
-    const lv = Math.min(16, Math.floor((ps.proficiency[cat] || 0) / 100));
-    const cy = py0 + i * STEP;
-    const icon = getProfIcon(cat);
-    if (icon) {
-      ctx.save();
-      ctx.globalAlpha = iconAlpha;
-      ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(icon, profX, cy, 8, 8);
-      ctx.restore();
-    }
-    const lvb = _nameToBytes(String(lv));
-    drawText(ctx, panelRx - lvb.length * 8, cy, lvb, fadedPal);
-  }
-}
-
-function drawPauseMenu() {
-  if (pauseState === 'none') return;
-  _drawPauseBox();
-  _clipToViewport();
-  _drawPauseMenuText();
-  _drawPauseInventory();
-  _drawPauseEquipSlots();
-  _drawPauseEquipItems();
-  _drawPauseStats();
-  ctx.restore();
-  // Target cursor on portrait — drawn after restore so it's unclipped
-  if (pauseState === 'inv-target' && cursorTileCanvas) {
-    if (pauseInvAllyTarget >= 0) {
-      const visRow = pauseInvAllyTarget - rosterScroll;
-      if (visRow >= 0 && visRow < ROSTER_VISIBLE) {
-        ctx.drawImage(cursorTileCanvas, HUD_RIGHT_X - 4, HUD_VIEW_Y + 32 + visRow * ROSTER_ROW_H + 12);
-      }
-    } else {
-      ctx.drawImage(cursorTileCanvas, HUD_RIGHT_X - 4, HUD_VIEW_Y + 12);
-    }
-  }
-}
-
+// _drawPauseBox, _drawPauseMenuText, _drawPauseInventory, _drawPauseEquipSlots, _drawPauseEquipItems, _drawPauseStats, drawPauseMenu → pause-menu.js
 
 // --- Slash Sprites (procedural) ---
 
@@ -5232,23 +3380,23 @@ function _applySWDamage(tidx) {
 }
 
 function _playerTurnFight() {
-  let ti = playerActionPending.targetIndex;
+  let ti = inputSt.playerActionPending.targetIndex;
   if (isRandomEncounter && encounterMonsters && ti >= 0 && encounterMonsters[ti].hp <= 0) {
     const living = encounterMonsters.findIndex(m => m.hp > 0);
     if (living < 0) { processNextTurn(); return; } // all dead — skip, victory will trigger
     ti = living;
   }
   currentHitIdx = 0; slashFrame = 0;
-  hitResults = playerActionPending.hitResults;
-  targetIndex = ti;
-  slashFrames = playerActionPending.slashFrames;
-  slashOffX = playerActionPending.slashOffX; slashOffY = playerActionPending.slashOffY;
-  slashX = playerActionPending.slashX; slashY = playerActionPending.slashY;
+  inputSt.hitResults = inputSt.playerActionPending.hitResults;
+  inputSt.targetIndex = ti;
+  slashFrames = inputSt.playerActionPending.slashFrames;
+  slashOffX = inputSt.playerActionPending.slashOffX; slashOffY = inputSt.playerActionPending.slashOffY;
+  slashX = inputSt.playerActionPending.slashX; slashY = inputSt.playerActionPending.slashY;
   battleState = 'attack-start'; battleTimer = 0;
 }
 
 function _playerTurnSouthWind() {
-  const _mode = playerActionPending.targetMode || 'single';
+  const _mode = inputSt.playerActionPending.targetMode || 'single';
   const mons = isRandomEncounter && encounterMonsters;
   const _rightCols = mons ? encounterMonsters.map((m, i) =>
     (m.hp > 0 && (encounterMonsters.length === 1 || (encounterMonsters.length === 2 && i === 1) || (encounterMonsters.length >= 3 && (i === 1 || i === 3)))) ? i : -1).filter(i => i >= 0) : [];
@@ -5259,7 +3407,7 @@ function _playerTurnSouthWind() {
     southWindTargets = (ecnt <= 2 ? [0, 1] : [0, 1, 2, 3]).filter(i => i < ecnt && encounterMonsters[i].hp > 0);
   } else if (_mode === 'col-right') southWindTargets = _rightCols;
   else if (_mode === 'col-left') southWindTargets = _leftCols;
-  else southWindTargets = [playerActionPending.target];
+  else southWindTargets = [inputSt.playerActionPending.target];
   southWindHitIdx = 0;
   const swAttack = Math.floor((ps.stats ? ps.stats.int : 5) / 2) + 55;
   swBaseDamage = Math.floor((swAttack + Math.floor(Math.random() * Math.floor(swAttack / 2 + 1))) / 2);
@@ -5268,7 +3416,7 @@ function _playerTurnSouthWind() {
 
 function _playerTurnConsumable() {
   playSFX(SFX.CURE);
-  const { target, allyIndex } = playerActionPending;
+  const { target, allyIndex } = inputSt.playerActionPending;
   if (target === 'player' && (allyIndex === undefined || allyIndex < 0)) {
     const heal = Math.min(50, ps.stats.maxHP - ps.hp);
     ps.hp += heal; itemHealAmount = heal; playerHealNum = { value: heal, timer: 0 };
@@ -5295,8 +3443,8 @@ function _playerTurnConsumable() {
 
 function _playerTurnItem() {
   isDefending = false;
-  removeItem(playerActionPending.itemId);
-  if (ITEMS.get(playerActionPending.itemId)?.type === 'battle_item') _playerTurnSouthWind();
+  removeItem(inputSt.playerActionPending.itemId);
+  if (ITEMS.get(inputSt.playerActionPending.itemId)?.type === 'battle_item') _playerTurnSouthWind();
   else _playerTurnConsumable();
 }
 
@@ -5314,12 +3462,12 @@ function _playerTurnRun() {
 
 function processNextTurn() {
   if (turnQueue.length === 0) {
-    isDefending = false; battleCursor = 0; battleState = 'menu-open'; battleTimer = 0; turnTimer = 0;
+    isDefending = false; inputSt.battleCursor = 0; battleState = 'menu-open'; battleTimer = 0; turnTimer = 0;
     return;
   }
   const turn = turnQueue.shift();
   if (turn.type === 'player') {
-    const cmd = playerActionPending.command;
+    const cmd = inputSt.playerActionPending.command;
     if (cmd === 'fight') _playerTurnFight();
     else if (cmd === 'defend') { playSFX(SFX.DEFEND_HIT); battleState = 'defend-anim'; battleTimer = 0; }
     else if (cmd === 'item') _playerTurnItem();
@@ -5381,7 +3529,7 @@ function startBattle() {
 
 function startRandomEncounter() {
   isRandomEncounter = true;
-  battleProfHits = {};
+  inputSt.battleProfHits = {};
 
   // Pick encounter zone based on location
   const zoneKey = onWorldMap
@@ -5403,7 +3551,7 @@ function startRandomEncounter() {
   // Skip roar/earthquake — go straight to flash-strobe
   battleState = 'flash-strobe';
   battleTimer = 0;
-  battleCursor = 0;
+  inputSt.battleCursor = 0;
   battleMessage = null;
   bossDamageNum = null;
   playerDamageNum = null;
@@ -5429,7 +3577,7 @@ function executeBattleCommand(index) {
     // Fight — go to target select (cursor on enemy)
     playSFX(SFX.CONFIRM);
     if (isRandomEncounter && encounterMonsters) {
-      targetIndex = encounterMonsters.findIndex(m => m.hp > 0);
+      inputSt.targetIndex = encounterMonsters.findIndex(m => m.hp > 0);
     }
     battleState = 'target-select';
     battleTimer = 0;
@@ -5437,19 +3585,19 @@ function executeBattleCommand(index) {
     // Defend — pause for confirm SFX, then build turn queue
     playSFX(SFX.CONFIRM);
     isDefending = true;
-    playerActionPending = { command: 'defend' };
+    inputSt.playerActionPending = { command: 'defend' };
     battleState = 'confirm-pause';
     battleTimer = 0;
   } else if (index === 2) {
     // Item — fade menu text out, show inventory on right side
     playSFX(SFX.CONFIRM);
-    itemSelectList = buildItemSelectList();
+    inputSt.itemSelectList = buildItemSelectList();
     itemSelectCursor = 0;
-    itemHeldIdx = -1;
-    itemPage = 1;          // start on inventory page 1
-    itemPageCursor = 0;
-    itemSlideDir = 0;
-    itemSlideCursor = 0;
+    inputSt.itemHeldIdx = -1;
+    inputSt.itemPage = 1;          // start on inventory page 1
+    inputSt.itemPageCursor = 0;
+    inputSt.itemSlideDir = 0;
+    inputSt.itemSlideCursor = 0;
     battleState = 'item-menu-out';
     battleTimer = 0;
   } else {
@@ -5457,7 +3605,7 @@ function executeBattleCommand(index) {
     if (isRandomEncounter) {
       playSFX(SFX.CONFIRM);
       isDefending = false;
-      playerActionPending = { command: 'run' };
+      inputSt.playerActionPending = { command: 'run' };
       battleState = 'confirm-pause';
       battleTimer = 0;
     } else {
@@ -5501,17 +3649,12 @@ function _updateTurnTimer(dt) {
   if (!isPlayerDeciding) return;
   turnTimer += dt;
   if (turnTimer >= TURN_TIME_MS) {
-    turnTimer = 0; itemHeldIdx = -1;
-    playerActionPending = { command: 'skip' }; battleState = 'confirm-pause'; battleTimer = 0;
+    turnTimer = 0; inputSt.itemHeldIdx = -1;
+    inputSt.playerActionPending = { command: 'skip' }; battleState = 'confirm-pause'; battleTimer = 0;
   }
 }
 
-function _isTitleActiveState() {
-  return titleState === 'main-in' || titleState === 'zbox-open' || titleState === 'main' || titleState === 'zbox-close' ||
-    titleState === 'logo-fade-out' || titleState === 'logo-fade-in' || titleState === 'select-box-open' || titleState === 'select-box-close' || titleState === 'select-box-close-fwd' ||
-    titleState === 'select-fade-in' || titleState === 'select' || titleState === 'select-fade-out' || titleState === 'select-fade-out-back' ||
-    titleState === 'name-entry' || titleState === 'main-out';
-}
+// _isTitleActiveState → isTitleActiveState() in title-screen.js
 function _isVictoryBattleState() {
   return battleState === 'victory-celebrate' || battleState === 'victory-text-in' ||
     battleState === 'victory-hold' || battleState === 'victory-fade-out' ||
@@ -5615,7 +3758,7 @@ function _updateBattleMenuConfirm() {
 
 function _finalizeComboHits() {
   let totalDmg = 0, anyCrit = false, allMiss = true;
-  for (const h of hitResults) {
+  for (const h of inputSt.hitResults) {
     if (!h.miss) { totalDmg += h.damage; allMiss = false; if (h.crit) anyCrit = true; }
   }
   bossDamageNum = allMiss ? { miss: true, timer: 0 } : { value: totalDmg, crit: anyCrit, timer: 0 };
@@ -5623,7 +3766,7 @@ function _finalizeComboHits() {
   battleTimer = 0;
 }
 function _advanceHitCombo() {
-  if (currentHitIdx + 1 < hitResults.length) {
+  if (currentHitIdx + 1 < inputSt.hitResults.length) {
     currentHitIdx++;
     slashFrame = 0;
     const handWeapon = getHitWeapon(currentHitIdx);
@@ -5643,7 +3786,7 @@ function _updatePlayerAttackStart() {
     const hw0 = getHitWeapon(currentHitIdx);
     const isBladed0 = isBladedWeapon(hw0);
     playSFX(isBladed0 ? SFX.KNIFE_HIT : SFX.ATTACK_HIT);
-    if (isBladed0 && !(hitResults[currentHitIdx] && hitResults[currentHitIdx].crit)) {
+    if (isBladed0 && !(inputSt.hitResults[currentHitIdx] && inputSt.hitResults[currentHitIdx].crit)) {
       if (sfxCutTimerId) clearTimeout(sfxCutTimerId);
       sfxCutTimerId = setTimeout(() => { stopSFX(); sfxCutTimerId = null; }, 133);
     }
@@ -5667,10 +3810,10 @@ function _updatePlayerSlash() {
     }
   }
   if (battleTimer >= SLASH_FRAMES * SLASH_FRAME_MS) {
-    const hit = hitResults[currentHitIdx];
+    const hit = inputSt.hitResults[currentHitIdx];
     if (!hit.miss) {
       if (isRandomEncounter && encounterMonsters) {
-        encounterMonsters[targetIndex].hp = Math.max(0, encounterMonsters[targetIndex].hp - hit.damage);
+        encounterMonsters[inputSt.targetIndex].hp = Math.max(0, encounterMonsters[inputSt.targetIndex].hp - hit.damage);
       } else {
         let dmgToApply = hit.damage;
         if (isPVPBattle && pvpOpponentIsDefending) dmgToApply = Math.max(1, Math.floor(dmgToApply / 2));
@@ -5685,7 +3828,7 @@ function _updatePlayerSlash() {
 }
 function _updatePlayerHitShow() {
   if (battleState !== 'player-hit-show') return false;
-  const hitPause = (currentHitIdx + 1 < hitResults.length) ? 50 : HIT_PAUSE_MS;
+  const hitPause = (currentHitIdx + 1 < inputSt.hitResults.length) ? 50 : HIT_PAUSE_MS;
   if (battleTimer >= hitPause) _advanceHitCombo();
   return true;
 }
@@ -5697,8 +3840,8 @@ function _updatePlayerMissShow() {
 function _updatePlayerDamageShow() {
   if (battleState !== 'player-damage-show') return false;
   if (battleTimer >= PLAYER_DMG_SHOW_MS) {
-    if (isRandomEncounter && encounterMonsters && encounterMonsters[targetIndex].hp <= 0) {
-      dyingMonsterIndices = new Map([[targetIndex, 0]]);
+    if (isRandomEncounter && encounterMonsters && encounterMonsters[inputSt.targetIndex].hp <= 0) {
+      dyingMonsterIndices = new Map([[inputSt.targetIndex, 0]]);
       battleState = 'monster-death';
       battleTimer = 0;
       playSFX(SFX.MONSTER_DEATH);
@@ -5710,7 +3853,7 @@ function _updatePlayerDamageShow() {
         encounterGilGained = pvpGil;
         grantExp(pvpExp);
         ps.gil += pvpGil;
-        encounterProfLevelUps = gainProficiency(battleProfHits, pvpOpponentStats.level); battleProfHits = {}; profLevelUpIdx = 0;
+        encounterProfLevelUps = gainProficiency(inputSt.battleProfHits, pvpOpponentStats.level); inputSt.battleProfHits = {}; profLevelUpIdx = 0;
         _syncSaveSlotProgress();
         saveSlotsToDB();
         isDefending = false;
@@ -5740,7 +3883,7 @@ function _updateMonsterDeath() {
       grantExp(encounterExpGained);
       ps.gil += encounterGilGained;
       const _avgEnemyLv = Math.round(encounterMonsters.reduce((s, m) => s + (MONSTERS.get(m.monsterId)?.level || 1), 0) / encounterMonsters.length);
-      encounterProfLevelUps = gainProficiency(battleProfHits, _avgEnemyLv); battleProfHits = {}; profLevelUpIdx = 0;
+      encounterProfLevelUps = gainProficiency(inputSt.battleProfHits, _avgEnemyLv); inputSt.battleProfHits = {}; profLevelUpIdx = 0;
       encounterDropItem = null;
       for (const m of encounterMonsters) {
         const mData = MONSTERS.get(m.monsterId);
@@ -5844,14 +3987,14 @@ function _updateItemMenuFades() {
     if (battleTimer >= FADE_DUR) { battleState = 'item-select'; battleTimer = 0; }
   } else if (battleState === 'item-slide') {
     if (battleTimer >= 200) {
-      itemPage += (itemSlideDir < 0) ? 1 : -1;
-      itemSlideDir = 0; itemPageCursor = itemSlideCursor; itemSlideCursor = 0;
+      inputSt.itemPage += (inputSt.itemSlideDir < 0) ? 1 : -1;
+      inputSt.itemSlideDir = 0; inputSt.itemPageCursor = inputSt.itemSlideCursor; inputSt.itemSlideCursor = 0;
       battleState = 'item-select'; battleTimer = 0;
     }
   } else if (battleState === 'item-cancel-out') {
     if (battleTimer >= FADE_DUR) { battleState = 'item-cancel-in'; battleTimer = 0; }
   } else if (battleState === 'item-cancel-in') {
-    if (battleTimer >= FADE_DUR) { itemPage = 1; battleState = 'menu-open'; battleTimer = 0; }
+    if (battleTimer >= FADE_DUR) { inputSt.itemPage = 1; battleState = 'menu-open'; battleTimer = 0; }
   } else if (battleState === 'item-list-out') {
     if (battleTimer >= FADE_DUR) { battleState = 'item-use-menu-in'; battleTimer = 0; }
   } else if (battleState === 'item-use-menu-in') {
@@ -5906,7 +4049,7 @@ function _updateAllyDamageShow() {
       const pvpGil = 10 * pvpOpponentStats.level;
       encounterExpGained = pvpExp; encounterGilGained = pvpGil;
       grantExp(pvpExp); ps.gil += pvpGil;
-      encounterProfLevelUps = gainProficiency(battleProfHits, pvpOpponentStats.level); battleProfHits = {}; profLevelUpIdx = 0;
+      encounterProfLevelUps = gainProficiency(inputSt.battleProfHits, pvpOpponentStats.level); inputSt.battleProfHits = {}; profLevelUpIdx = 0;
       _syncSaveSlotProgress();
       saveSlotsToDB();
       isDefending = false; bossDefeated = true;
@@ -5960,10 +4103,10 @@ function _updateAllyAttack() {
         }
         if (allyHitResult.crit) critFlashTimer = 0;
         bossDamageNum = { value: allyHitResult.damage, crit: allyHitResult.crit, timer: 0 };
-        targetIndex = allyTargetIndex;
+        inputSt.targetIndex = allyTargetIndex;
       } else {
         bossDamageNum = { miss: true, timer: 0 };
-        targetIndex = allyTargetIndex;
+        inputSt.targetIndex = allyTargetIndex;
       }
       battleState = 'ally-damage-show';
       battleTimer = 0;
@@ -6051,7 +4194,7 @@ function _processBossFlash() {
     if (shieldBlocked) {
       playerDamageNum = { miss: true, timer: 0 };
       battleState = 'enemy-damage-show'; battleTimer = 0;
-      battleProfHits['shield'] = (battleProfHits['shield'] || 0) + 1;
+      inputSt.battleProfHits['shield'] = (inputSt.battleProfHits['shield'] || 0) + 1;
     } else if (Math.random() * 100 < monHitRate) {
       let dmg = calcDamage(monAtk, ps.def);
       if (isDefending) dmg = Math.max(1, Math.floor(dmg / 2));
@@ -6086,7 +4229,7 @@ function _processPVPSecondWindup() {
   const shieldBlocked2 = shieldEvade2 > 0 && Math.random() * 100 < shieldEvade2;
   if (shieldBlocked2) {
     playerDamageNum = { miss: true, timer: 0 }; battleState = 'enemy-damage-show'; battleTimer = 0;
-    battleProfHits['shield'] = (battleProfHits['shield'] || 0) + 1;
+    inputSt.battleProfHits['shield'] = (inputSt.battleProfHits['shield'] || 0) + 1;
   } else if (Math.random() * 100 < BOSS_HIT_RATE) {
     let dmg2 = calcDamage(monAtk2, ps.def);
     if (isDefending) dmg2 = Math.max(1, Math.floor(dmg2 / 2));
@@ -6119,7 +4262,7 @@ function _updateBossDissolve(dt) {
     encounterExpGained = 20; encounterGilGained = 500;
     grantExp(20); ps.gil += encounterGilGained;
     const _bossLv = MONSTERS.get(0xCC)?.level || 4;
-    encounterProfLevelUps = gainProficiency(battleProfHits, _bossLv); battleProfHits = {}; profLevelUpIdx = 0;
+    encounterProfLevelUps = gainProficiency(inputSt.battleProfHits, _bossLv); inputSt.battleProfHits = {}; profLevelUpIdx = 0;
     _syncSaveSlotProgress();
     saveSlotsToDB();
     isDefending = false; battleState = 'victory-name-out'; battleTimer = 0;
@@ -6216,7 +4359,7 @@ function _updateDefeatStates() {
       encounterMonsters = null; turnQueue = []; battleAllies = []; allyJoinRound = 0;
       ps.hp = ps.stats ? ps.stats.maxHP : 28;
       ps.mp = ps.stats ? ps.stats.maxMP : 0;
-      startWipeTransition(() => {
+      _triggerWipe(() => {
         dungeonFloor = -1; encounterSteps = 0; mapStack = [];
         loadWorldMapAt(findWorldExitIndex(111));
       }, 'world');
@@ -6369,7 +4512,7 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
     _drawSparkleCorners(frame, px, py);
   }
   // Cure sparkle — alternating flips every 67ms during item-use
-  if (battleState === 'item-use' && cureSparkleFrames.length === 2 && !(playerActionPending && playerActionPending.allyIndex >= 0)) {
+  if (battleState === 'item-use' && cureSparkleFrames.length === 2 && !(inputSt.playerActionPending && inputSt.playerActionPending.allyIndex >= 0)) {
     const fi = Math.floor(battleTimer / 67) & 1;
     const frame = cureSparkleFrames[fi];
     _drawSparkleCorners(frame, px, py);
@@ -6400,7 +4543,7 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
     }
   }
   // Item target cursor on player portrait (only when not targeting an ally)
-  if (battleState === 'item-target-select' && itemTargetType === 'player' && itemTargetAllyIndex < 0 && cursorTileCanvas) {
+  if (battleState === 'item-target-select' && inputSt.itemTargetType === 'player' && inputSt.itemTargetAllyIndex < 0 && cursorTileCanvas) {
     ctx.drawImage(cursorTileCanvas, px - 12, py + 4);
   }
 }
@@ -6487,7 +4630,7 @@ function _drawBattleItemList(baseX, rightAreaW, invPal, slidePixel, totalInvPage
   ctx.rect(baseX - 8, HUD_BOT_Y + 8, rightAreaW + 8, HUD_BOT_H - 16);
   ctx.clip();
   for (let pg = 0; pg <= 1 + totalInvPages; pg++) {
-    const pageOff = (pg - itemPage) * rightAreaW + slidePixel;
+    const pageOff = (pg - inputSt.itemPage) * rightAreaW + slidePixel;
     const px = baseX + pageOff;
     if (px > baseX + rightAreaW || px < baseX - rightAreaW) continue;
     if (pg === 0) {
@@ -6505,8 +4648,8 @@ function _drawBattleItemList(baseX, rightAreaW, invPal, slidePixel, totalInvPage
       const startIdx = (pg - 1) * INV_SLOTS;
       for (let r = 0; r < INV_SLOTS; r++) {
         const idx = startIdx + r;
-        if (idx >= itemSelectList.length) break;
-        const item = itemSelectList[idx];
+        if (idx >= inputSt.itemSelectList.length) break;
+        const item = inputSt.itemSelectList[idx];
         if (!item) continue;
         const nameBytes = getItemNameClean(item.id);
         const countStr = String(item.count);
@@ -6523,14 +4666,14 @@ function _drawBattleItemCursors(baseX) {
   const topY = HUD_BOT_Y + 12;
   const rowY = (page, row) => page === 0 ? topY + row * (rowH + 6) : topY + row * rowH;
   const curPx = baseX - 8;
-  if (itemHeldIdx !== -1) {
-    const heldIsEq = itemHeldIdx <= -100;
-    const heldPage = heldIsEq ? 0 : 1 + Math.floor(itemHeldIdx / INV_SLOTS);
-    const heldRow  = heldIsEq ? -(itemHeldIdx + 100) : itemHeldIdx % INV_SLOTS;
-    if (heldPage === itemPage) ctx.drawImage(cursorTileCanvas, curPx, rowY(heldPage, heldRow) - 4);
+  if (inputSt.itemHeldIdx !== -1) {
+    const heldIsEq = inputSt.itemHeldIdx <= -100;
+    const heldPage = heldIsEq ? 0 : 1 + Math.floor(inputSt.itemHeldIdx / INV_SLOTS);
+    const heldRow  = heldIsEq ? -(inputSt.itemHeldIdx + 100) : inputSt.itemHeldIdx % INV_SLOTS;
+    if (heldPage === inputSt.itemPage) ctx.drawImage(cursorTileCanvas, curPx, rowY(heldPage, heldRow) - 4);
   }
-  const activeX = itemHeldIdx !== -1 ? curPx - 4 : curPx;
-  ctx.drawImage(cursorTileCanvas, activeX, rowY(itemPage, itemPageCursor) - 4);
+  const activeX = inputSt.itemHeldIdx !== -1 ? curPx - 4 : curPx;
+  ctx.drawImage(cursorTileCanvas, activeX, rowY(inputSt.itemPage, inputSt.itemPageCursor) - 4);
 }
 function _drawBattleItemPanel(menuX) {
   const ITEM_SLIDE_MS = 200;
@@ -6540,9 +4683,9 @@ function _drawBattleItemPanel(menuX) {
   if (battleState === 'item-list-in') invFadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
   else if (battleState === 'item-cancel-out' || battleState === 'item-list-out') invFadeStep = Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
   for (let s = 0; s < invFadeStep; s++) invPal[3] = nesColorFade(invPal[3]);
-  const totalInvPages = Math.max(1, Math.ceil(itemSelectList.length / INV_SLOTS));
+  const totalInvPages = Math.max(1, Math.ceil(inputSt.itemSelectList.length / INV_SLOTS));
   let slidePixel = 0;
-  if (battleState === 'item-slide') slidePixel = itemSlideDir * Math.min(battleTimer / ITEM_SLIDE_MS, 1) * rightAreaW;
+  if (battleState === 'item-slide') slidePixel = inputSt.itemSlideDir * Math.min(battleTimer / ITEM_SLIDE_MS, 1) * rightAreaW;
   _drawBattleItemList(menuX, rightAreaW, invPal, slidePixel, totalInvPages);
   _drawBattleItemCursors(menuX);
 }
@@ -6629,8 +4772,8 @@ function _drawBattleMenuCursor(positions, isFade, fadeStep) {
   if (!cursorTileCanvas) return;
   if (battleState !== 'menu-open' && !isFade) return;
   if (battleState === 'target-select') return;
-  const curX = positions[battleCursor][0] - 16;
-  const curY = positions[battleCursor][1] - 4;
+  const curX = positions[inputSt.battleCursor][0] - 16;
+  const curY = positions[inputSt.battleCursor][1] - 4;
   _drawCursorFaded(curX, curY, fadeStep);
 }
 
@@ -6666,7 +4809,7 @@ function _drawEncounterMonsters(gridPos, sprH, boxX, boxY, boxW, boxH, isSlideIn
   for (let i = 0; i < count; i++) {
     const alive = encounterMonsters[i].hp > 0;
     const isDying = dyingMonsterIndices.has(i) && battleState === 'monster-death';
-    const isBeingHit = (i === targetIndex &&
+    const isBeingHit = (i === inputSt.targetIndex &&
       (battleState === 'player-slash' || battleState === 'player-hit-show' ||
        battleState === 'player-miss-show' || battleState === 'player-damage-show')) ||
       (i === allyTargetIndex && (battleState === 'ally-slash' || battleState === 'ally-damage-show')) ||
@@ -6685,7 +4828,7 @@ function _drawEncounterMonsters(gridPos, sprH, boxX, boxY, boxW, boxH, isSlideIn
       const delay = dyingMonsterIndices.get(i) || 0;
       _drawMonsterDeath(drawX, drawY, thisH, Math.min(Math.max(0, battleTimer - delay) / MONSTER_DEATH_MS, 1), mid);
     } else {
-      const curHit = hitResults && hitResults[currentHitIdx];
+      const curHit = inputSt.hitResults && inputSt.hitResults[currentHitIdx];
       const isHitBlink = (isBeingHit && battleState === 'player-slash' && curHit && !curHit.miss && (Math.floor(battleTimer / 60) & 1)) ||
                          (isBeingHit && battleState === 'ally-slash' && allyHitResult && !allyHitResult.miss && (Math.floor(battleTimer / 60) & 1));
       const isFlashing = battleState === 'boss-flash' && currentAttacker === i && Math.floor(battleTimer / 33) % 2 === 1;
@@ -6697,9 +4840,9 @@ function _drawEncounterMonsters(gridPos, sprH, boxX, boxY, boxW, boxH, isSlideIn
   ctx.restore();
 }
 function _drawEncounterSlashEffects(gridPos, slideOffX, slotCenterY) {
-  if (battleState === 'player-slash' && slashFrames && slashFrame < SLASH_FRAMES && hitResults && hitResults[currentHitIdx] && !hitResults[currentHitIdx].miss) {
-    const pos = gridPos[targetIndex];
-    ctx.drawImage(slashFrames[slashFrame], pos.x - slideOffX + slashOffX + 8, slotCenterY(targetIndex) + slashOffY);
+  if (battleState === 'player-slash' && slashFrames && slashFrame < SLASH_FRAMES && inputSt.hitResults && inputSt.hitResults[currentHitIdx] && !inputSt.hitResults[currentHitIdx].miss) {
+    const pos = gridPos[inputSt.targetIndex];
+    ctx.drawImage(slashFrames[slashFrame], pos.x - slideOffX + slashOffX + 8, slotCenterY(inputSt.targetIndex) + slashOffY);
   }
   if (battleState === 'ally-slash' && allyHitResult && !allyHitResult.miss) {
     const ally = battleAllies[currentAllyAttacker];
@@ -6714,20 +4857,20 @@ function _drawEncounterSlashEffects(gridPos, slideOffX, slotCenterY) {
 }
 
 function _drawEncounterCursors(gridPos, count, slotCenterY) {
-  if (!(battleState === 'target-select' || (battleState === 'item-target-select' && itemTargetType === 'enemy')) || !cursorTileCanvas) return;
+  if (!(battleState === 'target-select' || (battleState === 'item-target-select' && inputSt.itemTargetType === 'enemy')) || !cursorTileCanvas) return;
   if (battleState === 'target-select') {
-    const pos = gridPos[targetIndex];
-    ctx.drawImage(cursorTileCanvas, pos.x - 10, slotCenterY(targetIndex) - 4);
-  } else if (itemTargetMode === 'single') {
-    const pos = gridPos[itemTargetIndex];
-    if (pos) ctx.drawImage(cursorTileCanvas, pos.x - 10, slotCenterY(itemTargetIndex) - 4);
+    const pos = gridPos[inputSt.targetIndex];
+    ctx.drawImage(cursorTileCanvas, pos.x - 10, slotCenterY(inputSt.targetIndex) - 4);
+  } else if (inputSt.itemTargetMode === 'single') {
+    const pos = gridPos[inputSt.itemTargetIndex];
+    if (pos) ctx.drawImage(cursorTileCanvas, pos.x - 10, slotCenterY(inputSt.itemTargetIndex) - 4);
   } else if (Math.floor(Date.now() / 133) & 1) {
     const _rightCols = count === 1 ? [0] : count === 2 ? [1] : [1, 3];
     const _leftCols  = count === 2 ? [0] : count >= 3 ? [0, 2] : [];
     let targets = [];
-    if (itemTargetMode === 'all') targets = encounterMonsters.map((m, i) => m.hp > 0 ? i : -1).filter(i => i >= 0);
-    else if (itemTargetMode === 'col-right') targets = _rightCols.filter(i => i < count && encounterMonsters[i]?.hp > 0);
-    else if (itemTargetMode === 'col-left') targets = _leftCols.filter(i => i < count && encounterMonsters[i]?.hp > 0);
+    if (inputSt.itemTargetMode === 'all') targets = encounterMonsters.map((m, i) => m.hp > 0 ? i : -1).filter(i => i >= 0);
+    else if (inputSt.itemTargetMode === 'col-right') targets = _rightCols.filter(i => i < count && encounterMonsters[i]?.hp > 0);
+    else if (inputSt.itemTargetMode === 'col-left') targets = _leftCols.filter(i => i < count && encounterMonsters[i]?.hp > 0);
     for (const ti of targets) if (gridPos[ti]) ctx.drawImage(cursorTileCanvas, gridPos[ti].x - 10, slotCenterY(ti) - 4);
   }
 }
@@ -6798,12 +4941,12 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
 
   const isThisAttacking = isMain ? pvpCurrentEnemyAllyIdx < 0 : pvpCurrentEnemyAllyIdx === idx - 1;
   const isOppHit = isMain && (
-    (battleState === 'player-slash' && hitResults && hitResults[currentHitIdx] && !hitResults[currentHitIdx].miss) ||
+    (battleState === 'player-slash' && inputSt.hitResults && inputSt.hitResults[currentHitIdx] && !inputSt.hitResults[currentHitIdx].miss) ||
     battleState === 'player-hit-show' || battleState === 'player-damage-show' ||
     (battleState === 'ally-slash' && allyHitResult && !allyHitResult.miss) ||
     battleState === 'ally-damage-show');
   const blinkHidden = isMain && (
-    (battleState === 'player-slash' && hitResults && hitResults[currentHitIdx] && !hitResults[currentHitIdx].miss) ||
+    (battleState === 'player-slash' && inputSt.hitResults && inputSt.hitResults[currentHitIdx] && !inputSt.hitResults[currentHitIdx].miss) ||
     (battleState === 'ally-slash' && allyHitResult && !allyHitResult.miss)
   ) && (Math.floor(battleTimer / 60) & 1);
   const flashFrame = isThisAttacking && (battleState === 'boss-flash' || battleState === 'pvp-second-windup')
@@ -6826,7 +4969,7 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
 
   if (isMain) {
     if (battleState === 'player-slash' && slashFrames && slashFrame < SLASH_FRAMES &&
-        hitResults && hitResults[currentHitIdx] && !hitResults[currentHitIdx].miss) {
+        inputSt.hitResults && inputSt.hitResults[currentHitIdx] && !inputSt.hitResults[currentHitIdx].miss) {
       ctx.drawImage(slashFrames[slashFrame], sprX + slashOffX, sprY + slashOffY);
     }
     if (battleState === 'ally-slash' && allyHitResult && !allyHitResult.miss) {
@@ -6892,7 +5035,7 @@ function _drawBossSprite(centerX, centerY) {
     if (!bossDefeated) ctx.drawImage((frame & 1) ? (landTurtleWhiteCanvas || landTurtleBattleCanvas) : landTurtleBattleCanvas, sprX, sprY);
   } else if (battleState === 'player-slash') {
     if (!(Math.floor(battleTimer / 60) & 1) && !bossDefeated) ctx.drawImage(landTurtleBattleCanvas, sprX, sprY);
-    if (slashFrames && slashFrame < SLASH_FRAMES && !bossDefeated && hitResults && hitResults[currentHitIdx] && !hitResults[currentHitIdx].miss)
+    if (slashFrames && slashFrame < SLASH_FRAMES && !bossDefeated && inputSt.hitResults && inputSt.hitResults[currentHitIdx] && !inputSt.hitResults[currentHitIdx].miss)
       ctx.drawImage(slashFrames[slashFrame], centerX - 8 + slashOffX, centerY - 8 + slashOffY);
   } else if (battleState === 'ally-slash') {
     const blinkHidden = allyHitResult && !allyHitResult.miss && (Math.floor(battleTimer / 60) & 1);
@@ -6922,7 +5065,7 @@ function _drawBossSpriteBoxBoss(centerX, centerY) {
 
   _drawBossSprite(centerX, centerY);
 
-  if ((battleState === 'target-select' || (battleState === 'item-target-select' && itemTargetType === 'enemy')) && cursorTileCanvas)
+  if ((battleState === 'target-select' || (battleState === 'item-target-select' && inputSt.itemTargetType === 'enemy')) && cursorTileCanvas)
     ctx.drawImage(cursorTileCanvas, centerX - 32 - 16, centerY - 8);
 
   ctx.restore();
@@ -7070,8 +5213,8 @@ const VICTORY_ROW_FRAME_MS = 16.67; // 1 NES frame per row
 function _battleEnemyName() {
   if (isRandomEncounter && encounterMonsters) {
     // Use targeted monster's name (or first alive if no target)
-    const ti = (targetIndex >= 0 && targetIndex < encounterMonsters.length && encounterMonsters[targetIndex].hp > 0)
-      ? targetIndex
+    const ti = (inputSt.targetIndex >= 0 && inputSt.targetIndex < encounterMonsters.length && encounterMonsters[inputSt.targetIndex].hp > 0)
+      ? inputSt.targetIndex
       : encounterMonsters.findIndex(m => m.hp > 0);
     const monsterId = encounterMonsters[ti >= 0 ? ti : 0].monsterId;
     const baseName = getMonsterName(monsterId) || BATTLE_GOBLIN_NAME;
@@ -7218,7 +5361,7 @@ function _drawAllyRow(i, ally, panelTop, weaponDraws) {
   const isAllyHit = (battleState === 'ally-hit' || battleState === 'ally-damage-show-enemy') &&
     enemyTargetAllyIdx === i && allyDamageNums[i] && !allyDamageNums[i].miss;
   const isAllyAttack = (battleState === 'ally-attack-start') && currentAllyAttacker === i;
-  const isAllyHeal = battleState === 'item-use' && playerActionPending && playerActionPending.allyIndex === i;
+  const isAllyHeal = battleState === 'item-use' && inputSt.playerActionPending && inputSt.playerActionPending.allyIndex === i;
   const isNearFatal = ally.hp > 0 && ally.hp <= Math.floor(ally.maxHP / 4);
   const ppx = HUD_RIGHT_X + 8, ppy = rowY + 8;
   _drawHudBox(HUD_RIGHT_X, rowY, 32, ROSTER_ROW_H, ally.fadeStep);
@@ -7294,8 +5437,8 @@ function drawBattleAllies() {
   ctx.clip();
   for (let i = 0; i < battleAllies.length; i++) _drawAllyRow(i, battleAllies[i], panelTop, weaponDraws);
   ctx.restore();
-  if (battleState === 'item-target-select' && itemTargetType === 'player' && itemTargetAllyIndex >= 0 && cursorTileCanvas) {
-    ctx.drawImage(cursorTileCanvas, HUD_RIGHT_X - 4, panelTop + itemTargetAllyIndex * ROSTER_ROW_H + 12);
+  if (battleState === 'item-target-select' && inputSt.itemTargetType === 'player' && inputSt.itemTargetAllyIndex >= 0 && cursorTileCanvas) {
+    ctx.drawImage(cursorTileCanvas, HUD_RIGHT_X - 4, panelTop + inputSt.itemTargetAllyIndex * ROSTER_ROW_H + 12);
   }
   _flushAllyWeaponDraws(weaponDraws);
 }
@@ -7313,7 +5456,7 @@ function _drawBossDmgNum() {
   if (!bossDamageNum || (bossDefeated && !isRandomEncounter)) return;
   let bx, baseY;
   if (isRandomEncounter && encounterMonsters) {
-    ({ bx, baseY } = _encounterMonsterPos(targetIndex));
+    ({ bx, baseY } = _encounterMonsterPos(inputSt.targetIndex));
   } else if (isPVPBattle) {
     const tot = 1 + pvpEnemyAllies.length;
     const cols = tot <= 1 ? 1 : 2;
@@ -7433,12 +5576,12 @@ function _gameLoopUpdate(dt) {
   _updateHudHpLvStep(dt);
   handleInput();
   updateRoster(dt);
-  updateChat(dt);
-  updatePauseMenu(dt);
+  updateChat(dt, battleState);
+  updatePauseMenu(dt, playerInventory);
   updateMsgBox(dt);
   updateBattle(dt);
   updateMovement(dt);
-  updateTransition(dt);
+  updateTransition(dt, _transShared());
   updateTopBoxScroll(dt);
   if (pondStrobeTimer > 0) pondStrobeTimer = Math.max(0, pondStrobeTimer - dt);
   if (shakeActive) {
@@ -7455,15 +5598,15 @@ function _gameLoopUpdate(dt) {
 
 function _gameLoopDraw() {
   render();
-  drawTransitionOverlay();
+  drawTransitionOverlay(ctx, _transDrawShared());
   _drawPondStrobe();
-  if (transState === 'trap-falling' && sprite) sprite.draw(ctx, SCREEN_CENTER_X, SCREEN_CENTER_Y);
+  if (transSt.state === 'trap-falling' && sprite) sprite.draw(ctx, SCREEN_CENTER_X, SCREEN_CENTER_Y);
   drawHUD();
   if (battleAllies.length > 0 && battleState !== 'none') drawBattleAllies();
   else drawRoster();
-  drawChat();
-  drawPauseMenu();
-  drawMsgBox();
+  drawChat(ctx, _drawHudBox, rosterBattleFade);
+  drawPauseMenu(ctx, _pauseShared());
+  drawMsgBox(ctx, _clipToViewport, _drawBorderedBox);
   drawRosterMenu();
   drawBattle();
   drawSWExplosion();
@@ -7474,9 +5617,9 @@ function gameLoop(timestamp) {
   const dt = Math.min(timestamp - lastTime, 50); // cap at 50ms to prevent frame-spike skipping animations
   lastTime = timestamp;
 
-  if (titleState !== 'done') {
-    updateTitle(dt); drawTitle(); drawHUD();
-    if (titleState !== 'done') drawTitleSkyInHUD(); // guard: updateTitle may have set titleState='done'
+  if (titleSt.state !== 'done') {
+    updateTitle(dt); drawTitle(ctx, _titleShared()); drawHUD();
+    if (titleSt.state !== 'done') drawTitleSkyInHUD(ctx, roundTopBoxCorners); // guard: updateTitle may have set titleSt.state='done'
     requestAnimationFrame(gameLoop);
     return;
   }
