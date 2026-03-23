@@ -35,7 +35,7 @@ function decodeToCanvas(romData, offset) {
     img.data[i*4]   = 255;
     img.data[i*4+1] = 255;
     img.data[i*4+2] = 255;
-    img.data[i*4+3] = ci === 0 ? 0 : ci === 1 ? 60 : ci === 2 ? 160 : 255;
+    img.data[i*4+3] = ci <= 1 ? 0 : ci === 2 ? 160 : 255;
   }
   ctx.putImageData(img, 0, 0);
   return c;
