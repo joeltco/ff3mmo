@@ -46,6 +46,7 @@ for (let i = 0; i < 10; i++) CHAR_MAP[0x80 + i] = String.fromCharCode(48 + i);
 // Space
 CHAR_MAP[0xFF] = ' ';
 // Common symbols
+CHAR_MAP[0xA5] = ',';  // comma
 CHAR_MAP[0xA9] = "'";  // apostrophe (confirmed: Zeus' Wrath)
 CHAR_MAP[0xC1] = '.';  // period
 CHAR_MAP[0xC2] = '-';  // hyphen (confirmed: Hi-Potion)
