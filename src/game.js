@@ -458,7 +458,6 @@ let pauseState = 'none';       // 'none'|'scroll-in'|'text-in'|'open'|'text-out'
                                // |'stats-text-out'|'stats-expand'|'stats-in'|'stats'
                                // |'stats-out'|'stats-shrink'|'stats-text-in'
 let pauseTimer = 0;
-let pauseStatsPage = 0;        // 0 = combat stats, 1 = proficiency
 let pauseCursor = 0;           // 0-5
 let pauseInvScroll = 0;        // scroll offset for inventory list
 let pauseHeldItem = -1;        // index into inventory entries of held item (-1 = none)
@@ -2345,7 +2344,7 @@ function _pauseInputMainMenu() {
       pauseState = 'eq-text-out'; pauseTimer = 0; eqCursor = 0;
     } else if (pauseCursor === 3) {
       playSFX(SFX.CONFIRM);
-      pauseState = 'stats-text-out'; pauseTimer = 0; pauseStatsPage = 0;
+      pauseState = 'stats-text-out'; pauseTimer = 0;
     }
   }
   return true;
@@ -2541,11 +2540,6 @@ function _pauseInputEquipItemSelect() {
 }
 function _pauseInputStats() {
   if (pauseState !== 'stats') return false;
-  if (keys['ArrowLeft'] || keys['ArrowRight']) {
-    keys['ArrowLeft'] = false; keys['ArrowRight'] = false;
-    pauseStatsPage = pauseStatsPage === 0 ? 1 : 0;
-    playSFX(SFX.CURSOR);
-  }
   if (_xPressed()) { playSFX(SFX.CONFIRM); pauseState = 'stats-out'; pauseTimer = 0; }
   return true;
 }
@@ -5082,60 +5076,62 @@ function _drawPauseStats() {
   const fadeStep = _pauseFadeStep('stats-in', 'stats-out');
   const fadedPal = _makeFadedPal(fadeStep);
   const tx = px + 8, W = HUD_VIEW_W - 16;
+  const colW = Math.floor(W / 2);
   let y = finalY + 8;
 
-  if (pauseStatsPage === 0) {
-    // Page 1: Combat stats
-    const s = ps.stats;
-    if (!s) return;
-    const rows = [
-      ['Lv', String(s.level)],
-      ['HP', ps.hp + '/' + s.maxHP],
-      ['MP', ps.mp + '/' + s.maxMP],
-      ['EXP', String(s.exp)],
-      ['Next', String(s.expToNext)],
-      ['STR', String(s.str)],
-      ['AGI', String(s.agi)],
-      ['VIT', String(s.vit)],
-      ['INT', String(s.int)],
-      ['MND', String(s.mnd)],
-      ['ATK', String(ps.atk)],
-      ['DEF', String(ps.def)],
-    ];
-    for (const [label, val] of rows) {
-      const lb = _nameToBytes(label);
+  // Top half: combat stats in 2 columns
+  const s = ps.stats;
+  if (!s) return;
+  const col0 = [
+    ['Lv',   String(s.level)],
+    ['HP',   ps.hp + '/' + s.maxHP],
+    ['MP',   ps.mp + '/' + s.maxMP],
+    ['EXP',  String(s.exp)],
+    ['Next', String(s.expToNext)],
+    ['ATK',  String(ps.atk)],
+  ];
+  const col1 = [
+    ['STR', String(s.str)],
+    ['AGI', String(s.agi)],
+    ['VIT', String(s.vit)],
+    ['INT', String(s.int)],
+    ['MND', String(s.mnd)],
+    ['DEF', String(ps.def)],
+  ];
+  for (let i = 0; i < col0.length; i++) {
+    const cy = y + i * 10;
+    for (const [ci, col] of [[0, col0], [1, col1]]) {
+      const [label, val] = col[i];
+      const cx = tx + ci * colW;
+      drawText(ctx, cx, cy, _nameToBytes(label), fadedPal);
       const vb = _nameToBytes(val);
-      drawText(ctx, tx, y, lb, fadedPal);
-      drawText(ctx, tx + W - vb.length * 8, y, vb, fadedPal);
-      y += 12;
-      if (y > finalY + HUD_VIEW_H - 12) break;
+      drawText(ctx, cx + colW - vb.length * 8, cy, vb, fadedPal);
     }
-    // Page indicator
-    drawText(ctx, tx + Math.floor(W / 2) - 4, finalY + HUD_VIEW_H - 12, _nameToBytes('1/2'), fadedPal);
-  } else {
-    // Page 2: Proficiency — 2-column icon grid
-    const colW = Math.floor(W / 2);
-    for (let i = 0; i < PROF_CATEGORIES.length; i++) {
-      const cat = PROF_CATEGORIES[i];
-      const lv = Math.min(16, Math.floor((ps.proficiency[cat] || 0) / 100));
-      const col = i % 2;
-      const row = Math.floor(i / 2);
-      const cx = tx + col * colW;
-      const cy = y + row * 14;
-      const icon = getProfIcon(cat);
-      if (icon) {
-        const alpha = fadeStep === 0 ? 1 : (PAUSE_TEXT_STEPS - fadeStep) / PAUSE_TEXT_STEPS;
-        ctx.save();
-        ctx.globalAlpha = alpha;
-        ctx.imageSmoothingEnabled = false;
-        ctx.drawImage(icon, cx, cy, 8, 8);
-        ctx.restore();
-        drawText(ctx, cx + 10, cy, _nameToBytes(String(lv)), fadedPal);
-      } else {
-        drawText(ctx, cx, cy, _nameToBytes(cat.slice(0,2).toUpperCase() + String(lv)), fadedPal);
-      }
+  }
+
+  // Divider gap
+  y += col0.length * 10 + 4;
+
+  // Bottom half: proficiency icons in 2 columns
+  const iconAlpha = fadeStep === 0 ? 1 : (PAUSE_TEXT_STEPS - fadeStep) / PAUSE_TEXT_STEPS;
+  for (let i = 0; i < PROF_CATEGORIES.length; i++) {
+    const cat = PROF_CATEGORIES[i];
+    const lv = Math.min(16, Math.floor((ps.proficiency[cat] || 0) / 100));
+    const col = i % 2;
+    const row = Math.floor(i / 2);
+    const cx = tx + col * colW;
+    const cy = y + row * 10;
+    const icon = getProfIcon(cat);
+    if (icon) {
+      ctx.save();
+      ctx.globalAlpha = iconAlpha;
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(icon, cx, cy, 8, 8);
+      ctx.restore();
+      drawText(ctx, cx + 10, cy, _nameToBytes(String(lv)), fadedPal);
+    } else {
+      drawText(ctx, cx, cy, _nameToBytes(cat.slice(0, 2).toUpperCase() + String(lv)), fadedPal);
     }
-    drawText(ctx, tx + Math.floor(W / 2) - 4, finalY + HUD_VIEW_H - 12, _nameToBytes('2/2'), fadedPal);
   }
 }
 
