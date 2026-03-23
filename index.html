@@ -477,6 +477,18 @@
       padding: 6px 8px;
       outline: none;
     }
+    .tv-rom-btn {
+      padding: 6px 10px;
+      background: #1e1e2e;
+      border: 1px solid #444;
+      border-radius: 4px;
+      color: #888;
+      font-family: monospace;
+      font-size: 11px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .tv-rom-btn.active { border-color: #c8a832; color: #c8a832; }
     #tv-go {
       padding: 6px 14px;
       background: #2a2a3e;
@@ -578,7 +590,9 @@
   <div id="tile-viewer">
     <div id="tile-viewer-header">ROM TILES</div>
     <div id="tv-jump-row">
-      <input id="tv-offset" type="text" placeholder="ROM offset (hex)" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+      <button id="tv-rom3" class="tv-rom-btn active">FF3</button>
+      <button id="tv-rom12" class="tv-rom-btn">FF1&2</button>
+      <input id="tv-offset" type="text" placeholder="offset (hex)" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
       <button id="tv-go">GO</button>
     </div>
     <div id="tile-viewer-grid"></div>
@@ -923,11 +937,25 @@
     let tileViewerOpen = false;
     const TILES_PER_PAGE = 128;
     let tilePage = 0;
-    let tileBaseOffset = 16; // iNES header skip by default
+    let tileBaseOffset = 16;
+    let tileRomBuffer = null; // whichever ROM is selected
+
+    document.getElementById('tv-rom3').addEventListener('click', () => {
+      tileRomBuffer = ff3Buffer; tilePage = 0; tileBaseOffset = 16;
+      document.getElementById('tv-rom3').classList.add('active');
+      document.getElementById('tv-rom12').classList.remove('active');
+      renderTilePage();
+    });
+    document.getElementById('tv-rom12').addEventListener('click', () => {
+      tileRomBuffer = ff12Buffer; tilePage = 0; tileBaseOffset = 16;
+      document.getElementById('tv-rom12').classList.add('active');
+      document.getElementById('tv-rom3').classList.remove('active');
+      renderTilePage();
+    });
 
     function renderTilePage() {
-      if (!ff3Buffer) return;
-      const rom = new Uint8Array(ff3Buffer);
+      if (!tileRomBuffer) return;
+      const rom = new Uint8Array(tileRomBuffer);
       const startOff = tileBaseOffset + tilePage * TILES_PER_PAGE * 16;
       const remaining = Math.floor((rom.length - startOff) / 16);
       const totalPages = Math.ceil((rom.length - tileBaseOffset) / (TILES_PER_PAGE * 16));
@@ -973,7 +1001,9 @@
 
     function openTileViewer() {
       if (!ff3Buffer) return;
-      tileBaseOffset = 16; tilePage = 0;
+      tileRomBuffer = ff3Buffer; tileBaseOffset = 16; tilePage = 0;
+      document.getElementById('tv-rom3').classList.add('active');
+      document.getElementById('tv-rom12').classList.remove('active');
       renderTilePage();
       tileViewer.style.display = 'flex';
       tileViewerOpen = true;
@@ -995,8 +1025,9 @@
     }, { passive: false });
     document.getElementById('tv-down').addEventListener('touchstart', (e) => {
       e.preventDefault();
-      const rom = new Uint8Array(ff3Buffer);
-      const totalPages = Math.ceil(Math.floor((rom.length - 16) / 16) / TILES_PER_PAGE);
+      if (!tileRomBuffer) return;
+      const rom = new Uint8Array(tileRomBuffer);
+      const totalPages = Math.ceil((rom.length - tileBaseOffset) / (TILES_PER_PAGE * 16));
       if (tilePage < totalPages - 1) { tilePage++; renderTilePage(); }
     }, { passive: false });
     document.getElementById('tv-close').addEventListener('touchstart', (e) => { e.preventDefault(); closeTileViewer(); }, { passive: false });
