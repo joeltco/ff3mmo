@@ -127,6 +127,9 @@ let cornerMasks = null;       // [TL, TR, BL, BR] 8×8 canvases — black where 
 const BATTLE_SPRITE_ROM = 0x050010;  // Bank 28/$8000 — battle character graphics (disasm 2F/AB3D)
 const BATTLE_JOB_SIZE = 0x02A0;      // 672 bytes (42 tiles) per job
 let battleSpriteCanvas = null;
+let battleSpriteFadeCanvases = null;       // [step1..step4] NES-faded idle portrait for game-start fade-in
+let battleSpriteDefendFadeCanvases = null; // same for defend pose
+let battleSpriteKneelFadeCanvases = null;  // same for kneel pose
 let battleSpriteVictoryCanvas = null;
 let battleSpriteAttackCanvas = null;   // right-hand attack frame 1 (arm raised)
 let battleSpriteAttack2Canvas = null;  // attack frame 2 (arm swung — ROM frame 3)
@@ -543,6 +546,7 @@ const PAUSE_MENU_W = 80;       // 10 tiles wide (left half of viewport)
 const PAUSE_MENU_H = 112;      // 14 tiles tall
 const CURSOR_TILE_ROM = 0x01B450;  // hand cursor (4 tiles, 2x2 = 16x16)
 let cursorTileCanvas = null;
+let cursorFadeCanvases = null; // [step1..step4] NES-faded cursor canvases
 // PAUSE_ITEMS → data/strings.js
 
 // --- Fake players (MMO roster) ---
@@ -985,27 +989,12 @@ function initFakePlayerPortraits(romData) {
 
 function initCursorTile(romData) {
   const palette = [0x0F, 0x00, 0x10, 0x30]; // cursor palette: black, dark gray, gray, white
-  cursorTileCanvas = document.createElement('canvas');
-  cursorTileCanvas.width = 16; cursorTileCanvas.height = 16;
-  const cctx = cursorTileCanvas.getContext('2d');
-  // 4 tiles in 2x2: TL(0), TR(1), BL(2), BR(3)
-  const layout = [[0, 0], [8, 0], [0, 8], [8, 8]];
-  for (let t = 0; t < 4; t++) {
-    const pixels = decodeTile(romData, CURSOR_TILE_ROM + t * 16);
-    const img = cctx.createImageData(8, 8);
-    for (let i = 0; i < 64; i++) {
-      const ci = pixels[i];
-      if (ci === 0) {
-        img.data[i * 4 + 3] = 0;
-      } else {
-        const rgb = NES_SYSTEM_PALETTE[palette[ci]] || [0, 0, 0];
-        img.data[i * 4]     = rgb[0];
-        img.data[i * 4 + 1] = rgb[1];
-        img.data[i * 4 + 2] = rgb[2];
-        img.data[i * 4 + 3] = 255;
-      }
-    }
-    cctx.putImageData(img, layout[t][0], layout[t][1]);
+  cursorTileCanvas = _buildCanvas4ROM(romData, CURSOR_TILE_ROM, palette);
+  cursorFadeCanvases = [];
+  for (let step = 1; step <= 4; step++) {
+    let fp = [...palette];
+    for (let s = 0; s < step; s++) fp = fp.map(c => nesColorFade(c));
+    cursorFadeCanvases.push(_buildCanvas4ROM(romData, CURSOR_TILE_ROM, fp));
   }
 }
 
@@ -1050,6 +1039,17 @@ function _buildCanvas4(tilesArr, palette) {
   return c;
 }
 
+// Generate HUD_INFO_FADE_STEPS NES-palette-faded versions of a _buildCanvas4 sprite
+function _buildFadedCanvas4Set(tilesArr, palette) {
+  const arr = [];
+  for (let step = 1; step <= HUD_INFO_FADE_STEPS; step++) {
+    let fp = [...palette];
+    for (let s = 0; s < step; s++) fp = fp.map(c => nesColorFade(c));
+    arr.push(_buildCanvas4(tilesArr, fp));
+  }
+  return arr;
+}
+
 // Build a 16×16 canvas from 4 sequential ROM tiles (16 bytes each) using the battle 2×2 layout
 function _buildCanvas4ROM(romData, offset, palette) {
   const c = _makeCanvas16(); const cx = c.getContext('2d');
@@ -1073,6 +1073,7 @@ function _initBattleIdleSprites(romData, palette) {
   ];
   // Idle portrait — 2×2 layout row-major (disasm 3C/82FA OAM data)
   battleSpriteCanvas = _buildCanvas4(IDLE_PPU, palette);
+  battleSpriteFadeCanvases = _buildFadedCanvas4Set(IDLE_PPU, palette);
 
   // Silhouette — same shape, all opaque pixels → NES $00 (grey)
   silhouetteCanvas = document.createElement('canvas');
@@ -1184,6 +1185,7 @@ function _initBattleDefendSprites(palette) {
     new Uint8Array([0x90,0x4C,0xCC,0x30,0x7C,0x78,0x30,0x00, 0x32,0x21,0x00,0xB0,0x7C,0x7C,0xB2,0xC2]), // $46
   ];
   battleSpriteDefendCanvas = _buildCanvas4(DEFEND_TILES, palette);
+  battleSpriteDefendFadeCanvases = _buildFadedCanvas4Set(DEFEND_TILES, palette);
 
   // Defend sparkle: tiles $49-$4C, 4 × 8×8 frames
   const SPARKLE_TILES = [
@@ -1232,6 +1234,7 @@ function _initCureSparkleFrames() {
 function _initBattleLowHPSprites(palette) {
   // Kneel pose: same tiles as _FP_KNEEL
   battleSpriteKneelCanvas = _buildCanvas4(_FP_KNEEL, palette);
+  battleSpriteKneelFadeCanvases = _buildFadedCanvas4Set(_FP_KNEEL, palette);
 
   // Sweat frames: 2 × 16×8 (tiles $49/$4A frame A, $4B/$4C frame B)
   const SWEAT_FRAME_TILES = [
@@ -3618,11 +3621,15 @@ function _drawHUDTopBox() {
 
 function _drawPortraitImage(px, py, nfPortrait, isPauseHeal, infoFadeStep) {
   if (infoFadeStep >= HUD_INFO_FADE_STEPS) return;
-  if (infoFadeStep > 0) ctx.globalAlpha = 1 - infoFadeStep / HUD_INFO_FADE_STEPS;
+  if (infoFadeStep > 0) {
+    const fadeSets = nfPortrait === battleSpriteKneelCanvas ? battleSpriteKneelFadeCanvases
+                   : nfPortrait === battleSpriteDefendCanvas ? battleSpriteDefendFadeCanvases
+                   : battleSpriteFadeCanvases;
+    if (fadeSets) { ctx.drawImage(fadeSets[infoFadeStep - 1], px, py); return; }
+  }
   ctx.drawImage(nfPortrait, px, py);
   if (!isPauseHeal && nfPortrait === battleSpriteKneelCanvas && sweatFrames.length === 2)
     ctx.drawImage(sweatFrames[Math.floor(Date.now() / 133) & 1], px, py - 3);
-  if (infoFadeStep > 0) ctx.globalAlpha = 1;
 }
 function _drawCureSparkle(px, py, isPauseHeal) {
   if (!isPauseHeal || cureSparkleFrames.length !== 2 || (pauseHealNum && pauseHealNum.rosterIdx >= 0)) return;
@@ -3659,15 +3666,16 @@ function _drawHUDInfoPanel() {
   const panelRight = HUD_RIGHT_X + HUD_RIGHT_W - 8 + shakeOff;
   const slot = saveSlots[selectCursor];
   if (!slot) return;
-  // Game-start fade: alpha-based (NES palette fade is invisible on a black background)
-  if (infoFadeStep > 0) ctx.globalAlpha = 1 - infoFadeStep / HUD_INFO_FADE_STEPS;
+  // Name — NES palette fade toward black for game-start fade-in
+  const namePal = [...TEXT_WHITE];
+  for (let s = 0; s < infoFadeStep; s++) namePal[3] = nesColorFade(namePal[3]);
   const nameW = measureText(slot.name);
-  drawText(ctx, panelRight - nameW, sy, slot.name, TEXT_WHITE);
-  // Level fades out as battle starts, HP fades in (and vice versa)
+  drawText(ctx, panelRight - nameW, sy, slot.name, namePal);
+  // Level fades out as battle starts, HP fades in — combined with game-start infoFadeStep
   if (hudHpLvStep < 4) {
     const lvLabel = _nameToBytes('Lv' + String(playerStats ? playerStats.level : slot.level));
     const lvPal = [0x0F, 0x0F, 0x0F, 0x10];
-    for (let s = 0; s < hudHpLvStep; s++) lvPal[3] = nesColorFade(lvPal[3]);
+    for (let s = 0; s < hudHpLvStep + infoFadeStep; s++) lvPal[3] = nesColorFade(lvPal[3]);
     const lvW = measureText(lvLabel);
     drawText(ctx, panelRight - lvW, sy + 9, lvLabel, lvPal);
   }
@@ -3676,12 +3684,11 @@ function _drawHUDInfoPanel() {
     const hpNes = playerHP <= Math.floor(maxHP / 4) ? 0x16
                 : playerHP <= Math.floor(maxHP / 2) ? 0x28 : 0x2A;
     const hpPal = [0x0F, 0x0F, 0x0F, hpNes];
-    for (let s = 0; s < 4 - hudHpLvStep; s++) hpPal[3] = nesColorFade(hpPal[3]);
+    for (let s = 0; s < (4 - hudHpLvStep) + infoFadeStep; s++) hpPal[3] = nesColorFade(hpPal[3]);
     const hpLabel = _nameToBytes(String(playerHP));
     const hpW = measureText(hpLabel);
     drawText(ctx, panelRight - hpW, sy + 9, hpLabel, hpPal);
   }
-  ctx.globalAlpha = 1;
 }
 
 function _drawLoadingRightPanel(fadeLevel) {
@@ -3739,14 +3746,8 @@ function drawHUD() {
     }
     _drawHudWithFade(titleHudCanvas, titleHudFadeCanvases, tfl);
   } else if (hudCanvas) {
-    // Game-start border fade-in — alpha-based so it's visible on the black background
-    const alpha = Math.min(hudInfoFadeTimer / (HUD_INFO_FADE_STEPS * HUD_INFO_FADE_STEP_MS), 1);
-    if (alpha < 1) {
-      ctx.globalAlpha = alpha; ctx.drawImage(hudCanvas, 0, 0); ctx.globalAlpha = 1;
-      // Bottom HUD stays solid — redraw it at full alpha on top
-      ctx.save(); ctx.beginPath(); ctx.rect(0, HUD_BOT_Y, CANVAS_W, HUD_BOT_H); ctx.clip();
-      ctx.drawImage(hudCanvas, 0, 0); ctx.restore();
-    } else ctx.drawImage(hudCanvas, 0, 0);
+    const fadeStep = HUD_INFO_FADE_STEPS - Math.min(Math.floor(hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
+    _drawHudWithFade(hudCanvas, hudFadeCanvases, fadeStep);
   }
 
   // Top box content (full 256×32, no static border — border only with text)
@@ -3772,12 +3773,8 @@ function _drawSparkleCorners(frame, px, py) {
 }
 function _drawCursorFaded(cx, cy, fadeStep) {
   if (!cursorTileCanvas) return;
-  if (fadeStep === 0) { ctx.drawImage(cursorTileCanvas, cx, cy); return; }
-  if (fadeStep < 4) {
-    ctx.globalAlpha = 1 - fadeStep / 4;
-    ctx.drawImage(cursorTileCanvas, cx, cy);
-    ctx.globalAlpha = 1;
-  }
+  if (fadeStep <= 0) { ctx.drawImage(cursorTileCanvas, cx, cy); return; }
+  if (fadeStep < 4 && cursorFadeCanvases) ctx.drawImage(cursorFadeCanvases[fadeStep - 1], cx, cy);
 }
 function _clipToViewport() {
   ctx.save(); ctx.beginPath(); ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H); ctx.clip();
@@ -4064,14 +4061,16 @@ function _drawChatInput(ctx, lineW, startX, inputLine1Y, inputLine2Y) {
   }
 }
 
-function _drawChatExpandBG(curBoxY, curBoxH, battleFadeAlpha) {
+function _drawChatExpandBG(curBoxY, curBoxH, battleFadeAlpha, battleFadeStep) {
   if (chatExpandAnim <= 0) return;
   const NES_STEP_ALPHAS = [0, 0.28, 0.52, 0.76, 1.0];
+  // Black fill — fill rect has no NES tile equivalent, stepped alpha is closest approximation
   ctx.globalAlpha = NES_STEP_ALPHAS[Math.min(4, Math.round(chatExpandAnim * 4))] * battleFadeAlpha;
   ctx.fillStyle = '#000';
   ctx.fillRect(0, HUD_VIEW_Y, CANVAS_W, HUD_BOT_Y - HUD_VIEW_Y);
-  ctx.globalAlpha = battleFadeAlpha;
-  _drawHudBox(0, curBoxY, CANVAS_W, curBoxH, 0);
+  ctx.globalAlpha = 1;
+  // Border — NES palette faded tiles via borderFadeSets
+  _drawHudBox(0, curBoxY, CANVAS_W, curBoxH, battleFadeStep);
 }
 
 function _drawChatTextArea(curBoxY, curBoxH, battleFadeAlpha) {
@@ -4107,7 +4106,7 @@ function drawChat() {
   const curBoxH = HUD_BOT_H + Math.round((CANVAS_H - HUD_VIEW_Y - HUD_BOT_H) * chatExpandAnim / 8) * 8;
   const curBoxY = CANVAS_H - curBoxH;
   ctx.save();
-  _drawChatExpandBG(curBoxY, curBoxH, battleFadeAlpha);
+  _drawChatExpandBG(curBoxY, curBoxH, battleFadeAlpha, rosterBattleFade);
   _drawChatTextArea(curBoxY, curBoxH, battleFadeAlpha);
   ctx.globalAlpha = 1;
   ctx.restore();
@@ -4768,14 +4767,13 @@ function _drawSelectSlot(i, ix, slotStartY, slotSpacing, fadeStep, fadedPal) {
     if (silhouetteCanvas) ctx.drawImage(silhouetteCanvas, textX - 2, sy - 4);
   } else {
     const portraitSrc = (saveSlots[i] && battleSpriteCanvas) ? battleSpriteCanvas : silhouetteCanvas;
-    if (portraitSrc) {
-      if (fadeStep === 0) {
-        ctx.drawImage(portraitSrc, textX - 2, sy - 4, ...(portraitSrc === battleSpriteCanvas ? [16,16] : []));
-      } else if (fadeStep < SELECT_TEXT_STEPS) {
-        ctx.globalAlpha = 1 - fadeStep / SELECT_TEXT_STEPS;
-        ctx.drawImage(portraitSrc, textX - 2, sy - 4, ...(portraitSrc === battleSpriteCanvas ? [16,16] : []));
-        ctx.globalAlpha = 1;
-      }
+    if (portraitSrc && fadeStep < SELECT_TEXT_STEPS) {
+      let src = portraitSrc;
+      if (fadeStep > 0 && portraitSrc === battleSpriteCanvas && battleSpriteFadeCanvases)
+        src = battleSpriteFadeCanvases[fadeStep - 1];
+      else if (fadeStep > 0)
+        src = null; // no faded version for silhouette — skip during fade
+      if (src) ctx.drawImage(src, textX - 2, sy - 4, ...(portraitSrc === battleSpriteCanvas ? [16,16] : []));
     }
   }
 
