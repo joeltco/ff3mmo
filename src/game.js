@@ -42,6 +42,7 @@ import { BATTLE_BG_MAP_LOOKUP, renderBattleBg } from './battle-bg.js';
 import { initTitleWater, initTitleSky, initTitleUnderwater, initUnderwaterSprites, initTitleOcean, initTitleLogo } from './title-animations.js';
 import { BATTLE_SPRITE_ROM, BATTLE_JOB_SIZE, BATTLE_PAL_ROM } from './data/jobs.js';
 import { ps, EQUIP_SLOT_SUBTYPE, getEquipSlotId, setEquipSlotId, recalcDEF, recalcCombatStats, getHitWeapon, isHitRightHand, initPlayerStats, initExpTable, grantExp, fullHeal, playerStatsSnapshot, gainProficiency, getProfHits, PROF_CATEGORIES } from './player-stats.js';
+import { initProfIcons, getProfIcon } from './prof-icons.js';
 
 const isMobile = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 
@@ -1691,6 +1692,7 @@ export async function loadROM(arrayBuffer) {
   romRaw = rom.raw;
   initTextDecoder(romRaw);
   initFont(romRaw);
+  if (ff12Raw) initProfIcons(romRaw, ff12Raw);
 
   _initSpriteAssets(romRaw);
   sprite = new Sprite(romRaw, SPRITE_PAL_TOP, SPRITE_PAL_BTM);
@@ -1709,6 +1711,7 @@ export function loadFF12ROM(arrayBuffer) {
   ff12Raw = new Uint8Array(arrayBuffer);
   initAdamantoise(ff12Raw);
   initFF1Music(ff12Raw);
+  if (romRaw) initProfIcons(romRaw, ff12Raw);
   if (romRaw) initLoadingScreenFadeFrames(romRaw); // rebuild with boss fade frames
 }
 
@@ -5110,15 +5113,26 @@ function _drawPauseStats() {
     // Page indicator
     drawText(ctx, tx + Math.floor(W / 2) - 4, finalY + HUD_VIEW_H - 12, _nameToBytes('1/2'), fadedPal);
   } else {
-    // Page 2: Proficiency
-    for (const cat of PROF_CATEGORIES) {
+    // Page 2: Proficiency — 2-column icon grid
+    const colW = Math.floor(W / 2);
+    for (let i = 0; i < PROF_CATEGORIES.length; i++) {
+      const cat = PROF_CATEGORIES[i];
       const lv = Math.min(16, Math.floor((ps.proficiency[cat] || 0) / 100));
-      const lb = _nameToBytes(cat.charAt(0).toUpperCase() + cat.slice(1));
-      const vb = _nameToBytes('Lv' + lv);
-      drawText(ctx, tx, y, lb, fadedPal);
-      drawText(ctx, tx + W - vb.length * 8, y, vb, fadedPal);
-      y += 12;
-      if (y > finalY + HUD_VIEW_H - 12) break;
+      const col = i % 2;
+      const row = Math.floor(i / 2);
+      const cx = tx + col * colW;
+      const cy = y + row * 14;
+      const icon = getProfIcon(cat);
+      if (icon) {
+        ctx.save();
+        ctx.globalAlpha = fadeStep / 8;
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(icon, cx, cy, 8, 8);
+        ctx.restore();
+        drawText(ctx, cx + 10, cy, _nameToBytes(String(lv)), fadedPal);
+      } else {
+        drawText(ctx, cx, cy, _nameToBytes(cat.slice(0,2).toUpperCase() + String(lv)), fadedPal);
+      }
     }
     drawText(ctx, tx + Math.floor(W / 2) - 4, finalY + HUD_VIEW_H - 12, _nameToBytes('2/2'), fadedPal);
   }
