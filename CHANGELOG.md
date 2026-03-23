@@ -4,6 +4,18 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## 1.1.1 — 2026-03-23
+
+### Proficiency depth — shield evade + full combat scaling
+
+- **Shield evade mechanic**: shields now roll evade% before the enemy hit rate check. Each shield has a base evade value from ROM data (Leather 3%, Crystal 19%, Onion 48%). Enemy misses due to shield block earn 1 shield prof point. `getShieldEvade(ITEMS)` in `player-stats.js` returns `baseEvade + profLevel`.
+- **Shield prof scaling**: +1% evade per shield prof level (max +16% at level 16). Stacks on top of base shield evade.
+- **Weapon prof combat bonuses** — `rollHits` in `battle-math.js` now accepts `profLevel` param:
+  - +0.5% hit rate per level (max +8% at level 16)
+  - +0.25% crit rate per level (max +4% on top of base 5%)
+  - +floor(level × 0.5) flat ATK per level (max +8 at level 16)
+- **`WEAPON_PROF_CATEGORY`** map covers all weapon subtypes: claw/nunchaku→unarmed, rod→staff, katana→sword, hammer→axe, boomerang→bow, shuriken→knife, bell/book/harp→staff.
+
 ## 1.1.0 — 2026-03-23
 
 ### Stats screen overhaul + proficiency icons
