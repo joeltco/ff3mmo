@@ -410,18 +410,15 @@
     }
 
     /* Font tile viewer overlay */
-    #canvas-wrapper { position: relative; }
     #tile-viewer {
-      position: absolute;
-      inset: 0;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
       background: #0a0a10;
       display: none;
       flex-direction: column;
       z-index: 500;
       padding: 8px;
-      height: 100%;
       box-sizing: border-box;
-      overflow: hidden;
     }
     #tile-viewer-header {
       color: #c8a832;
@@ -438,8 +435,7 @@
       flex-wrap: wrap;
       gap: 6px;
       overflow-y: scroll;
-      flex: 1;
-      min-height: 0;
+      height: calc(100vh - 140px);
       align-content: flex-start;
       padding-bottom: 8px;
     }
@@ -897,13 +893,6 @@
     function openTileViewer() {
       const tiles = getAllFontTiles(TEXT_WHITE);
       if (tiles.size === 0) return; // font not loaded yet
-      tileViewer.style.display = 'flex';
-      const tvH = tileViewer.offsetHeight;
-      const hdrH = document.getElementById('tile-viewer-header').offsetHeight;
-      const navH = document.getElementById('tile-viewer-nav').offsetHeight;
-      tileGrid.style.height = (tvH - hdrH - navH - 32) + 'px';
-      tileGrid.style.overflowY = 'scroll';
-      tileViewer.style.display = 'none';
       tileGrid.innerHTML = '';
       for (const [tileId, srcCanvas] of tiles) {
         const cell = document.createElement('div');
