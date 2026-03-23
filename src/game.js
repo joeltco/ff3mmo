@@ -5080,7 +5080,7 @@ function _drawPauseStats() {
   // Left stats: x=tx..tx+88. Gap 12px. Right prof: icon at tx+100, level right-aligned to panelRx
   const statRx = tx + 88;
   const profX  = tx + 100;
-  const STEP = 9;
+  const STEP = 11;
   let y = finalY + 8;
 
   const s = ps.stats;
