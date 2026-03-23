@@ -5088,8 +5088,8 @@ function _drawPauseStats() {
   const col1Lx = tx + 72, col1Rx = tx + W;
   const col0 = [
     ['Lv',   String(s.level)],
-    ['HP',   ps.hp + '/' + s.maxHP],
-    ['MP',   ps.mp + '/' + s.maxMP],
+    ['HP',   String(s.maxHP)],
+    ['MP',   String(s.maxMP)],
     ['EXP',  String(s.exp)],
     ['Next', String(s.expToNext)],
     ['ATK',  String(ps.atk)],
