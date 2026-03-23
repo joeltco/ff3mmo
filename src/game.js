@@ -41,7 +41,7 @@ import { initSouthWindSprite } from './south-wind.js';
 import { BATTLE_BG_MAP_LOOKUP, renderBattleBg } from './battle-bg.js';
 import { initTitleWater, initTitleSky, initTitleUnderwater, initUnderwaterSprites, initTitleOcean, initTitleLogo } from './title-animations.js';
 import { BATTLE_SPRITE_ROM, BATTLE_JOB_SIZE, BATTLE_PAL_ROM } from './data/jobs.js';
-import { ps, EQUIP_SLOT_SUBTYPE, getEquipSlotId, setEquipSlotId, recalcDEF, recalcCombatStats, getHitWeapon, isHitRightHand, initPlayerStats, initExpTable, grantExp, fullHeal, playerStatsSnapshot, gainProficiency, getProfHits } from './player-stats.js';
+import { ps, EQUIP_SLOT_SUBTYPE, getEquipSlotId, setEquipSlotId, recalcDEF, recalcCombatStats, getHitWeapon, isHitRightHand, initPlayerStats, initExpTable, grantExp, fullHeal, playerStatsSnapshot, gainProficiency, getProfHits, PROF_CATEGORIES } from './player-stats.js';
 
 const isMobile = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 
@@ -5111,11 +5111,9 @@ function _drawPauseStats() {
     drawText(ctx, tx + Math.floor(W / 2) - 4, finalY + HUD_VIEW_H - 12, _nameToBytes('1/2'), fadedPal);
   } else {
     // Page 2: Proficiency
-    const subtypes = ['sword','knife','axe','spear','katana','bow','rod','staff','claw','nunchaku','hammer','book','bell','harp','boomerang','shuriken','arrow','unarmed'];
-    for (const st of subtypes) {
-      const pts = ps.proficiency[st] || 0;
-      const lv = Math.min(16, Math.floor(pts / 100));
-      const lb = _nameToBytes(st.charAt(0).toUpperCase() + st.slice(1));
+    for (const cat of PROF_CATEGORIES) {
+      const lv = Math.min(16, Math.floor((ps.proficiency[cat] || 0) / 100));
+      const lb = _nameToBytes(cat.charAt(0).toUpperCase() + cat.slice(1));
       const vb = _nameToBytes('Lv' + lv);
       drawText(ctx, tx, y, lb, fadedPal);
       drawText(ctx, tx + W - vb.length * 8, y, vb, fadedPal);

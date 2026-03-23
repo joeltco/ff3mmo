@@ -132,24 +132,58 @@ export function grantExp(amount) {
   return { leveledUp: ps.leveledUp };
 }
 
-// --- Proficiency system (FF2-style weapon skill) ---
+// --- Proficiency system (FF2-style weapon/magic skill) ---
 // Points: 100 per level, max level 16. Gain = hits landed per battle.
 // Bonus hits: +1 per 4 proficiency levels (so +4 hits at level 16).
+// Categories: sword, knife, axe, spear, staff, bow, unarmed, white, black, call
 
-export function getProfLevel(subtype) {
-  return Math.min(16, Math.floor((ps.proficiency[subtype] || 0) / 100));
+// Maps animation subtype → proficiency category
+export const WEAPON_PROF_CATEGORY = {
+  sword:     'sword',
+  knife:     'knife',
+  axe:       'axe',
+  hammer:    'axe',
+  spear:     'spear',
+  staff:     'staff',
+  rod:       'staff',
+  bow:       'bow',
+  arrow:     'bow',
+  katana:    'sword',
+  claw:      'unarmed',
+  nunchaku:  'unarmed',
+  book:      'staff',
+  bell:      'staff',
+  harp:      'staff',
+  boomerang: 'bow',
+  shuriken:  'knife',
+  unarmed:   'unarmed',
+};
+
+export const PROF_CATEGORIES = ['sword','knife','axe','spear','staff','bow','unarmed','white','black','call'];
+
+export function getProfLevel(category) {
+  return Math.min(16, Math.floor((ps.proficiency[category] || 0) / 100));
 }
 
 export function getProfHits(subtype) {
-  return Math.floor(getProfLevel(subtype) / 4);
+  const cat = WEAPON_PROF_CATEGORY[subtype] || subtype;
+  return Math.floor(getProfLevel(cat) / 4);
 }
 
 // Call once per battle victory with { subtype: hitsLanded }
 export function gainProficiency(hitsMap) {
   for (const [subtype, hits] of Object.entries(hitsMap)) {
     if (hits <= 0) continue;
-    ps.proficiency[subtype] = Math.min(1600, (ps.proficiency[subtype] || 0) + hits);
+    const cat = WEAPON_PROF_CATEGORY[subtype] || subtype;
+    ps.proficiency[cat] = Math.min(1600, (ps.proficiency[cat] || 0) + hits);
   }
+}
+
+// Call when a spell is cast (magic proficiency gain)
+export function gainMagicProficiency(magicType) {
+  const cat = magicType === 'white' ? 'white' : magicType === 'black' ? 'black' : magicType === 'call' ? 'call' : null;
+  if (!cat) return;
+  ps.proficiency[cat] = Math.min(1600, (ps.proficiency[cat] || 0) + 1);
 }
 
 export function playerStatsSnapshot() {
