@@ -933,7 +933,7 @@
       const totalPages = Math.ceil((rom.length - tileBaseOffset) / (TILES_PER_PAGE * 16));
       tileHeader.textContent = 'PAGE ' + (tilePage+1) + '/' + totalPages + '  $' + startOff.toString(16).toUpperCase();
       tileGrid.innerHTML = '';
-      for (let i = 0; i < TILES_PER_PAGE && (startTile + i) < totalTiles; i++) {
+      for (let i = 0; i < TILES_PER_PAGE && startOff + i * 16 + 15 < rom.length; i++) {
         const off = startOff + i * 16;
         const pixels = decodeTile(rom, off);
         const src = document.createElement('canvas');
