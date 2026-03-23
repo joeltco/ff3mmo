@@ -41,7 +41,7 @@ import { initSouthWindSprite } from './south-wind.js';
 import { BATTLE_BG_MAP_LOOKUP, renderBattleBg } from './battle-bg.js';
 import { initTitleWater, initTitleSky, initTitleUnderwater, initUnderwaterSprites, initTitleOcean, initTitleLogo } from './title-animations.js';
 import { BATTLE_SPRITE_ROM, BATTLE_JOB_SIZE, BATTLE_PAL_ROM } from './data/jobs.js';
-import { ps, EQUIP_SLOT_SUBTYPE, getEquipSlotId, setEquipSlotId, recalcDEF, recalcCombatStats, getHitWeapon, isHitRightHand, initPlayerStats, initExpTable, grantExp, fullHeal, playerStatsSnapshot, gainProficiency, getProfHits, getShieldEvade, PROF_CATEGORIES } from './player-stats.js';
+import { ps, EQUIP_SLOT_SUBTYPE, getEquipSlotId, setEquipSlotId, recalcDEF, recalcCombatStats, getHitWeapon, isHitRightHand, initPlayerStats, initExpTable, grantExp, fullHeal, playerStatsSnapshot, gainProficiency, getProfHits, getProfLevel, getShieldEvade, PROF_CATEGORIES, WEAPON_PROF_CATEGORY } from './player-stats.js';
 import { initProfIcons, getProfIcon } from './prof-icons.js';
 
 const isMobile = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
@@ -1922,11 +1922,13 @@ function _battleTargetConfirm() {
   const potentialHits = (dualWield || unarmed) ? Math.max(2, baseHits) + profBonus : Math.max(1, baseHits) + profBonus;
   const wpn = (rIsWeapon ? ITEMS.get(ps.weaponR) : null) || (lIsWeapon ? ITEMS.get(ps.weaponL) : null);
   const hitRate = wpn ? wpn.hit : BASE_HIT_RATE;
+  const profCat = WEAPON_PROF_CATEGORY[wpnSubtype] || wpnSubtype;
+  const profLv = getProfLevel(profCat);
   if (isRandomEncounter && encounterMonsters) {
-    hitResults = rollHits(ps.atk, encounterMonsters[targetIndex].def, hitRate, potentialHits);
+    hitResults = rollHits(ps.atk, encounterMonsters[targetIndex].def, hitRate, potentialHits, profLv);
   } else {
     const targetDef = isPVPBattle && pvpOpponentStats ? pvpOpponentStats.def : BOSS_DEF;
-    hitResults = rollHits(ps.atk, targetDef, hitRate, potentialHits);
+    hitResults = rollHits(ps.atk, targetDef, hitRate, potentialHits, profLv);
   }
   // Track hits for proficiency gain at battle end
   const hitsLanded = hitResults.filter(h => h > 0).length;
