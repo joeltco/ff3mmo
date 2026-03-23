@@ -5075,66 +5075,76 @@ function _drawPauseStats() {
   if (!show) return;
   const fadeStep = _pauseFadeStep('stats-in', 'stats-out');
   const fadedPal = _makeFadedPal(fadeStep);
-  const tx = px + 8, W = HUD_VIEW_W - 16;
-  const colW = Math.floor(W / 2);
+  const tx = px + 8;
+  // Left stats section: x=tx..tx+96. Right prof section: x=tx+100..tx+128
+  const statRx = tx + 96;   // right edge for stat values
+  const profX  = tx + 100;  // icon x for prof column
+  const profVx = tx + 110;  // level value x (after icon + 2px gap)
+  const STEP = 9;
   let y = finalY + 8;
 
-  // Top half: combat stats in 2 columns
   const s = ps.stats;
   if (!s) return;
-  // col0: label at tx, value right-aligned to tx+60
-  // col1: label at tx+72, value right-aligned to tx+W (12px gap between cols)
-  const col0Lx = tx, col0Rx = tx + 60;
-  const col1Lx = tx + 72, col1Rx = tx + W;
-  const col0 = [
-    ['Lv',   String(s.level)],
-    ['HP',   String(s.maxHP)],
-    ['MP',   String(s.maxMP)],
-    ['EXP',  String(s.exp)],
-    ['Next', String(s.expToNext)],
-    ['ATK',  String(ps.atk)],
-  ];
-  const col1 = [
-    ['STR', String(s.str)],
-    ['AGI', String(s.agi)],
-    ['VIT', String(s.vit)],
-    ['INT', String(s.int)],
-    ['MND', String(s.mnd)],
-    ['DEF', String(ps.def)],
-  ];
-  for (let i = 0; i < col0.length; i++) {
-    const cy = y + i * 10;
-    const [l0, v0] = col0[i]; const [l1, v1] = col1[i];
+  const iconAlpha = fadeStep === 0 ? 1 : (PAUSE_TEXT_STEPS - fadeStep) / PAUSE_TEXT_STEPS;
+
+  // Helper: draw one stat row — label left, value right-aligned to statRx
+  function statRow(label, val) {
+    const vb = _nameToBytes(val);
+    drawText(ctx, tx, y, _nameToBytes(label), fadedPal);
+    drawText(ctx, statRx - vb.length * 8, y, vb, fadedPal);
+    y += STEP;
+  }
+  // Helper: draw paired stat row (two stats side by side within left section)
+  function statPair(l0, v0, l1, v1) {
+    const midX = tx + 48;
     const v0b = _nameToBytes(v0), v1b = _nameToBytes(v1);
-    drawText(ctx, col0Lx, cy, _nameToBytes(l0), fadedPal);
-    drawText(ctx, col0Rx - v0b.length * 8, cy, v0b, fadedPal);
-    drawText(ctx, col1Lx, cy, _nameToBytes(l1), fadedPal);
-    drawText(ctx, col1Rx - v1b.length * 8, cy, v1b, fadedPal);
+    drawText(ctx, tx, y, _nameToBytes(l0), fadedPal);
+    drawText(ctx, midX - v0b.length * 8, y, v0b, fadedPal);
+    drawText(ctx, midX + 4, y, _nameToBytes(l1), fadedPal);
+    drawText(ctx, statRx - v1b.length * 8, y, v1b, fadedPal);
+    y += STEP;
   }
 
-  // Divider gap
-  y += col0.length * 10 + 4;
+  // Name — right-aligned across full left section
+  const slot = saveSlots[selectCursor];
+  if (slot?.name) {
+    const nb = slot.name;
+    drawText(ctx, statRx - nb.length * 8, y, nb, fadedPal);
+    y += STEP;
+  }
 
-  // Bottom half: proficiency icons in 2 columns
-  const iconAlpha = fadeStep === 0 ? 1 : (PAUSE_TEXT_STEPS - fadeStep) / PAUSE_TEXT_STEPS;
+  statRow('Lv',   String(s.level));
+  // HP/MP: label left, cur/max value immediately after label (2-char label = 16px)
+  const hpStr = ps.hp + '/' + s.maxHP;
+  const mpStr = ps.mp + '/' + s.maxMP;
+  drawText(ctx, tx,      y, _nameToBytes('HP'), fadedPal);
+  drawText(ctx, tx + 16, y, _nameToBytes(hpStr), fadedPal);
+  y += STEP;
+  drawText(ctx, tx,      y, _nameToBytes('MP'), fadedPal);
+  drawText(ctx, tx + 16, y, _nameToBytes(mpStr), fadedPal);
+  y += STEP;
+  statRow('EXP',  String(s.exp));
+  statRow('Next', String(s.expToNext));
+  statPair('ATK', String(ps.atk),  'DEF', String(ps.def));
+  statPair('STR', String(s.str),   'AGI', String(s.agi));
+  statPair('VIT', String(s.vit),   'INT', String(s.int));
+  statRow('MND',  String(s.mnd));
+
+  // Prof icons — right column, stacked vertically from top
+  const py0 = finalY + 8;
   for (let i = 0; i < PROF_CATEGORIES.length; i++) {
     const cat = PROF_CATEGORIES[i];
     const lv = Math.min(16, Math.floor((ps.proficiency[cat] || 0) / 100));
-    const col = i % 2;
-    const row = Math.floor(i / 2);
-    const cx = col === 0 ? col0Lx : col1Lx;
-    const cy = y + row * 10;
+    const cy = py0 + i * STEP;
     const icon = getProfIcon(cat);
     if (icon) {
       ctx.save();
       ctx.globalAlpha = iconAlpha;
       ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(icon, cx, cy, 8, 8);
+      ctx.drawImage(icon, profX, cy, 8, 8);
       ctx.restore();
-      drawText(ctx, cx + 10, cy, _nameToBytes(String(lv)), fadedPal);
-    } else {
-      drawText(ctx, cx, cy, _nameToBytes(cat.slice(0, 2).toUpperCase() + String(lv)), fadedPal);
     }
+    drawText(ctx, profVx, cy, _nameToBytes(String(lv)), fadedPal);
   }
 }
 
