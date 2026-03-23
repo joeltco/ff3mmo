@@ -905,19 +905,20 @@
       for (let i = 0; i < TILES_PER_PAGE && (startTile + i) < totalTiles; i++) {
         const off = startOff + i * 16;
         const pixels = decodeTile(rom, off);
-        const c = document.createElement('canvas');
-        c.width = 32; c.height = 32;
-        const ctx = c.getContext('2d');
-        const img = ctx.createImageData(8, 8);
+        const src = document.createElement('canvas');
+        src.width = 8; src.height = 8;
+        const sctx = src.getContext('2d');
+        const img = sctx.createImageData(8, 8);
         for (let p = 0; p < 64; p++) {
-          const ci = pixels[p];
-          const rgb = ci > 0 ? (NES_SYSTEM_PALETTE[0x30] || [255,255,255]) : [0,0,0];
-          img.data[p*4]=rgb[0]; img.data[p*4+1]=rgb[1]; img.data[p*4+2]=rgb[2]; img.data[p*4+3]=255;
+          const v = pixels[p] * 85; // 0→0, 1→85, 2→170, 3→255
+          img.data[p*4]=v; img.data[p*4+1]=v; img.data[p*4+2]=v; img.data[p*4+3]=255;
         }
-        ctx.putImageData(img, 0, 0);
+        sctx.putImageData(img, 0, 0);
         const scaled = document.createElement('canvas');
         scaled.width = 32; scaled.height = 32;
-        scaled.getContext('2d').drawImage(c, 0, 0, 32, 32);
+        const ssc = scaled.getContext('2d');
+        ssc.imageSmoothingEnabled = false;
+        ssc.drawImage(src, 0, 0, 32, 32);
         const label = document.createElement('span');
         label.textContent = '$' + off.toString(16).toUpperCase();
         const cell = document.createElement('div');
