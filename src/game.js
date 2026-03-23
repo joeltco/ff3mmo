@@ -4940,7 +4940,7 @@ function roundTopBoxCorners() {
 }
 
 function _drawPauseBox() {
-  const { px, finalY, pw, ph, isInvState, isEqState, panelY } = _pausePanelLayout();
+  const { px, finalY, pw, ph, isInvState, isEqState, isStatsState, panelY } = _pausePanelLayout();
   if (isInvState || isEqState || isStatsState) {
     let t = 1;
     if (pauseState === 'inv-expand' || pauseState === 'eq-expand' || pauseState === 'stats-expand') {
@@ -4959,7 +4959,7 @@ function _drawPauseBox() {
   }
 }
 function _drawPauseMenuText() {
-  const { px, finalY, pw, ph, isInvState, isEqState, panelY } = _pausePanelLayout();
+  const { px, finalY, pw, ph, isInvState, isEqState, isStatsState, panelY } = _pausePanelLayout();
   const showPauseText = pauseState === 'text-in' || pauseState === 'open' || pauseState === 'text-out' ||
                         pauseState === 'inv-text-out' || pauseState === 'inv-text-in' ||
                         pauseState === 'eq-text-out' || pauseState === 'eq-text-in' ||
