@@ -897,6 +897,13 @@
     function openTileViewer() {
       const tiles = getAllFontTiles(TEXT_WHITE);
       if (tiles.size === 0) return; // font not loaded yet
+      tileViewer.style.display = 'flex';
+      const tvH = tileViewer.offsetHeight;
+      const hdrH = document.getElementById('tile-viewer-header').offsetHeight;
+      const navH = document.getElementById('tile-viewer-nav').offsetHeight;
+      tileGrid.style.height = (tvH - hdrH - navH - 32) + 'px';
+      tileGrid.style.overflowY = 'scroll';
+      tileViewer.style.display = 'none';
       tileGrid.innerHTML = '';
       for (const [tileId, srcCanvas] of tiles) {
         const cell = document.createElement('div');
