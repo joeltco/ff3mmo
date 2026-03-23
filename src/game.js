@@ -5129,7 +5129,7 @@ function _drawPauseStats() {
   statPair('ATK', String(ps.atk),  'DEF', String(ps.def));
   statPair('STR', String(s.str),   'AGI', String(s.agi));
   statPair('VIT', String(s.vit),   'INT', String(s.int));
-  statRow('MND',  String(s.mnd));
+  statPair('MND', String(s.mnd), '', '');
 
   // Prof icons — right column, stacked vertically from top
   const py0 = finalY + 8;
