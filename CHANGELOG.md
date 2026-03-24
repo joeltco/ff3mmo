@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## 1.1.6 — 2026-03-23
+
+### Polish fixes
+
+- **Quit→title full-screen fade** — black overlay drawn last in `_gameLoopDraw` after all HUDs, covering entire 256×240 canvas. `hud-fade-out` removed from `drawTransitionOverlay` (handled in game.js only)
+- **Quit no longer reloads page** — `returnToTitle` now calls `_startTitleScreen()` directly after fade; session preserved
+
 ## 1.1.5 — 2026-03-23
 
 ### Polish — music timing, tile viewer, pause menu clip

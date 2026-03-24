@@ -143,13 +143,7 @@ export function updateTopBoxScroll(dt) {
 
 // shared = { drawLoadingOverlay }
 export function drawTransitionOverlay(ctx, shared) {
-  if (transSt.state === 'none' || transSt.state === 'door-opening') return;
-  if (transSt.state === 'hud-fade-out') {
-    const alpha = Math.min(transSt.timer / ((HUD_INFO_FADE_STEPS + 1) * HUD_INFO_FADE_STEP_MS), 1);
-    ctx.fillStyle = `rgba(0,0,0,${alpha})`;
-    ctx.fillRect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
-    return;
-  }
+  if (transSt.state === 'none' || transSt.state === 'door-opening' || transSt.state === 'hud-fade-out') return;
   if (transSt.state === 'hud-fade-in') {
     ctx.fillStyle = '#000';
     ctx.fillRect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);

@@ -1455,7 +1455,7 @@ function returnToTitle() {
   pauseSt.state = 'none';
   transSt.state = 'hud-fade-out';
   transSt.timer = 0;
-  transSt.pendingAction = () => window.location.reload();
+  transSt.pendingAction = () => { battleState = 'none'; hudInfoFadeTimer = HUD_INFO_FADE_STEPS * HUD_INFO_FADE_STEP_MS; _startTitleScreen(); };
 }
 /**
  * Set up top box state for a given area.
@@ -5454,6 +5454,11 @@ function _gameLoopDraw() {
   drawBattle();
   drawSWExplosion();
   drawSWDamageNumbers();
+  if (transSt.state === 'hud-fade-out') {
+    const alpha = Math.min(transSt.timer / ((HUD_INFO_FADE_STEPS + 1) * HUD_INFO_FADE_STEP_MS), 1);
+    ctx.fillStyle = `rgba(0,0,0,${alpha})`;
+    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  }
 }
 
 function gameLoop(timestamp) {
