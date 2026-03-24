@@ -297,33 +297,37 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   if (isOppHit && _s.hitFullBodyCanvases[palIdx]) {
     body = _s.hitFullBodyCanvases[palIdx];
   } else if (isWindUp) {
-    body = _s.knifeBackFullBodyCanvases[palIdx] || fullBody;   // raised/back-swing wind-up
+    body = _s.knifeBackFullBodyCanvases[palIdx] || fullBody;
   } else if (isAttackState) {
-    const atkCvs = (isLeftHandAtk) ? _s.knifeLFullBodyCanvases : _s.knifeRFullBodyCanvases;
+    const atkCvs = isLeftHandAtk ? _s.knifeLFullBodyCanvases : _s.knifeRFullBodyCanvases;
     body = (atkCvs && atkCvs[palIdx]) || fullBody;
   }
-  _s.ctx.drawImage(body, sprX, sprY);
 
-  // Weapon blade overlay — mirrored via translate(sprX+16)+scale(-1,1).
-  // Matches _drawPortraitWeapon offsets: raised=(8,-7), swung=(-16,1), fist=(-4,10).
-  // In mirrored space these place the blade on opponent's screen-left (their right hand).
+  // Resolve blade canvas — pick raised (wind-up) or swung (attack)
+  // Mirrored draw: translate(sprX+16)+scale(-1,1) → raised=(8,-7) behind body, swung=(-16,1) in front
+  const blades = _s.blades;
+  let blade = null;
   if (isWindUp || isAttackState) {
-    const blades = _s.blades;
-    let blade = null;
-    if (wpn === 'knife' && activeWeaponId === 0x1F) blade = isAttackState ? blades.dagger.swung : blades.dagger.raised;
+    if      (wpn === 'knife' && activeWeaponId === 0x1F) blade = isAttackState ? blades.dagger.swung : blades.dagger.raised;
     else if (wpn === 'knife')  blade = isAttackState ? blades.knife.swung  : blades.knife.raised;
     else if (wpn === 'sword')  blade = isAttackState ? blades.sword.swung  : blades.sword.raised;
     else if (isAttackState)    blade = blades.fist;
-    if (blade) {
-      _s.ctx.save();
-      _s.ctx.translate(sprX + 16, sprY);
-      _s.ctx.scale(-1, 1);
-      if (isAttackState && blade === blades.fist) _s.ctx.drawImage(blade, -4, 10);
-      else if (isAttackState)                     _s.ctx.drawImage(blade, -16, 1);
-      else                                        _s.ctx.drawImage(blade,   8, -7);
-      _s.ctx.restore();
-    }
   }
+  const drawBlade = () => {
+    _s.ctx.save();
+    _s.ctx.translate(sprX + 16, sprY);
+    _s.ctx.scale(-1, 1);
+    if (isAttackState && blade === blades.fist) _s.ctx.drawImage(blade, -4, 10);
+    else if (isAttackState)                     _s.ctx.drawImage(blade, -16, 1);
+    else                                        _s.ctx.drawImage(blade,   8, -7);
+    _s.ctx.restore();
+  };
+
+  // Wind-up: raised blade BEHIND body (draw before body — mirrors player portrait before=true pass)
+  if (isWindUp && blade) drawBlade();
+  _s.ctx.drawImage(body, sprX, sprY);
+  // Strike: swung blade IN FRONT of body (draw after body — mirrors player portrait before=false pass)
+  if (isAttackState && blade) drawBlade();
 
   // Slash effect overlays (player/ally attacking the main opponent)
   if (isMain) {
