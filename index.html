@@ -611,7 +611,6 @@
       <button class="util-btn" data-key="T">LOG</button>
       <button class="util-btn" data-key="s">SELECT</button>
       <button class="util-btn" data-key="Enter">START</button>
-      <button class="util-btn" id="btn-tiles">TILES</button>
     </div>
     <div id="main-controls">
       <div id="dpad">
@@ -1014,10 +1013,18 @@
       tileViewerOpen = false;
     }
 
-    document.getElementById('btn-tiles').addEventListener('touchend', (e) => {
-      e.preventDefault();
-      if (tileViewerOpen) closeTileViewer(); else openTileViewer();
-    }, { passive: false });
+    // Konami code: up up down down left right left right b a start
+    const KONAMI = ['ArrowUp','ArrowUp','ArrowDown','ArrowDown','ArrowLeft','ArrowRight','ArrowLeft','ArrowRight','b','a','Enter'];
+    let konamiIdx = 0;
+    window.addEventListener('keydown', (e) => {
+      if (tileViewerOpen) return;
+      if (e.key === KONAMI[konamiIdx]) {
+        konamiIdx++;
+        if (konamiIdx === KONAMI.length) { konamiIdx = 0; openTileViewer(); }
+      } else {
+        konamiIdx = e.key === KONAMI[0] ? 1 : 0;
+      }
+    }, true);
 
     document.getElementById('tv-up').addEventListener('touchstart', (e) => {
       e.preventDefault();
