@@ -296,9 +296,10 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   } else if (isWindUp) {
     body = _s.knifeBackFullBodyCanvases[palIdx] || fullBody;
   } else if (isAttackState) {
-    // After h-flip: knifeR source (right arm) → left side visible = opponent's right arm
-    //               knifeL source (left arm)  → right side visible = opponent's left arm
-    const atkCvs = isLeftHandAtk ? _s.knifeLFullBodyCanvases : _s.knifeRFullBodyCanvases;
+    // After h-flip: knifeR source tile2 → canvas RIGHT = opponent's LEFT arm side
+    //               knifeL source tile2 → canvas LEFT  = opponent's RIGHT arm side
+    // So: right-hand attack uses knifeL (arm on canvas-LEFT), left-hand uses knifeR (arm on canvas-RIGHT)
+    const atkCvs = isLeftHandAtk ? _s.knifeRFullBodyCanvases : _s.knifeLFullBodyCanvases;
     body = (atkCvs && atkCvs[palIdx]) || fullBody;
   }
 
@@ -323,13 +324,13 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
     _s.ctx.restore();
   };
 
-  // Opponent faces player — arms mirror the player portrait:
-  // Right-hand (arm on LEFT side after h-flip): back-swing goes BEHIND body
-  // Left-hand  (arm on RIGHT side after h-flip): back-swing crosses IN FRONT of body
-  // All strikes: swung blade IN FRONT
-  if (isWindUp && blade && !isLeftHandWind) drawBlade();   // right-hand wind-up: behind body
+  // Z-order mirrors player portrait (h-flip swaps which hand is "in front"):
+  // Right-hand wind-up: arm on canvas-LEFT = player's LEFT arm = IN FRONT of body
+  // Left-hand  wind-up: arm on canvas-RIGHT = player's RIGHT arm = BEHIND body
+  // All strikes: IN FRONT
+  if (isWindUp && blade && isLeftHandWind) drawBlade();    // left-hand wind-up: behind body
   _s.ctx.drawImage(body, sprX, sprY);
-  if ((isAttackState || (isWindUp && isLeftHandWind)) && blade) drawBlade(); // left-hand wind-up + strikes: in front
+  if ((isAttackState || (isWindUp && !isLeftHandWind)) && blade) drawBlade(); // right-hand wind-up + strikes: in front
 
   // Slash effect overlays (player/ally attacking the main opponent)
   if (isMain) {
