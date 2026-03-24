@@ -275,12 +275,9 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
     inputSt.hitResults && inputSt.hitResults[_s.currentHitIdx] && !inputSt.hitResults[_s.currentHitIdx].miss;
   const allyHitLanded = bs === 'ally-slash' && _s.allyHitResult && !_s.allyHitResult.miss;
   const isOppHit = isMain && (playerHitLanded || bs === 'player-hit-show' || allyHitLanded || bs === 'ally-damage-show');
-  // Blink hidden during slash (opponent flickers on hit)
   const blinkHidden = isMain && (playerHitLanded || allyHitLanded) && (Math.floor(_s.battleTimer / 60) & 1);
-  // Wind-up blink during opponent attack (50ms per frame = visible at 60fps)
   const isWindUp = isThisAttacking && (bs === 'boss-flash' || bs === 'pvp-second-windup');
-  const windUpHidden = isWindUp && (Math.floor(_s.battleTimer / 50) & 1);
-  if (blinkHidden || windUpHidden) return;
+  if (blinkHidden) return;
 
   // Which hand is this enemy using right now?
   // boss-flash = right hand (first attack), pvp-second-windup = left hand, allies = always right
