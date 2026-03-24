@@ -592,6 +592,7 @@
     <div id="tv-jump-row">
       <button id="tv-rom3" class="tv-rom-btn active">FF3</button>
       <button id="tv-rom12" class="tv-rom-btn">FF1&2</button>
+      <button id="tv-sprite" class="tv-rom-btn">SPRITE</button>
       <input id="tv-offset" type="text" placeholder="offset (hex)" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
       <button id="tv-go">GO</button>
     </div>
@@ -935,9 +936,11 @@
     const tileHeader = document.getElementById('tile-viewer-header');
     let tileViewerOpen = false;
     const TILES_PER_PAGE = 128;
+    const SPRITES_PER_PAGE = 16; // 16×32 sprite mode: 8 tiles each
     let tilePage = 0;
     let tileBaseOffset = 16;
-    let tileRomBuffer = null; // whichever ROM is selected
+    let tileRomBuffer = null;
+    let spriteMode = false;
 
     document.getElementById('tv-rom3').addEventListener('click', () => {
       tileRomBuffer = ff3Buffer; tilePage = 0; tileBaseOffset = 16;
@@ -952,46 +955,99 @@
       renderTilePage();
     });
 
+    function decodeTileToImageData(rom, off) {
+      const pixels = decodeTile(rom, off);
+      const img = new ImageData(8, 8);
+      for (let p = 0; p < 64; p++) {
+        const v = pixels[p] * 85;
+        img.data[p*4]=v; img.data[p*4+1]=v; img.data[p*4+2]=v; img.data[p*4+3]=255;
+      }
+      return img;
+    }
+
     function renderTilePage() {
       if (!tileRomBuffer) return;
       const rom = new Uint8Array(tileRomBuffer);
-      const startOff = tileBaseOffset + tilePage * TILES_PER_PAGE * 16;
-      const remaining = Math.floor((rom.length - startOff) / 16);
-      const totalPages = Math.ceil((rom.length - tileBaseOffset) / (TILES_PER_PAGE * 16));
-      tileHeader.textContent = 'PAGE ' + (tilePage+1) + '/' + totalPages + '  $' + startOff.toString(16).toUpperCase();
       tileGrid.innerHTML = '';
-      for (let i = 0; i < TILES_PER_PAGE && startOff + i * 16 + 15 < rom.length; i++) {
-        const off = startOff + i * 16;
-        const pixels = decodeTile(rom, off);
-        const src = document.createElement('canvas');
-        src.width = 8; src.height = 8;
-        const sctx = src.getContext('2d');
-        const img = sctx.createImageData(8, 8);
-        for (let p = 0; p < 64; p++) {
-          const v = pixels[p] * 85; // 0→0, 1→85, 2→170, 3→255
-          img.data[p*4]=v; img.data[p*4+1]=v; img.data[p*4+2]=v; img.data[p*4+3]=255;
+
+      if (spriteMode) {
+        // 16×32 sprite mode: 8 tiles per sprite (2 wide × 4 tall)
+        const tilesPerSprite = 8;
+        const bytesPerSprite = tilesPerSprite * 16;
+        const startOff = tileBaseOffset + tilePage * SPRITES_PER_PAGE * bytesPerSprite;
+        const totalPages = Math.ceil((rom.length - tileBaseOffset) / (SPRITES_PER_PAGE * bytesPerSprite));
+        tileHeader.textContent = 'SPRITE  PG ' + (tilePage+1) + '/' + totalPages + '  $' + startOff.toString(16).toUpperCase();
+        for (let i = 0; i < SPRITES_PER_PAGE; i++) {
+          const sprOff = startOff + i * bytesPerSprite;
+          if (sprOff + bytesPerSprite - 1 >= rom.length) break;
+          // Composite 8 tiles into 16×32 canvas
+          const src = document.createElement('canvas');
+          src.width = 16; src.height = 32;
+          const sctx = src.getContext('2d');
+          for (let t = 0; t < tilesPerSprite; t++) {
+            const toff = sprOff + t * 16;
+            if (toff + 15 >= rom.length) break;
+            sctx.putImageData(decodeTileToImageData(rom, toff), (t % 2) * 8, Math.floor(t / 2) * 8);
+          }
+          const scaled = document.createElement('canvas');
+          scaled.width = 64; scaled.height = 128;
+          const ssc = scaled.getContext('2d');
+          ssc.imageSmoothingEnabled = false;
+          ssc.drawImage(src, 0, 0, 64, 128);
+          const label = document.createElement('span');
+          label.textContent = '$' + sprOff.toString(16).toUpperCase();
+          const cell = document.createElement('div');
+          cell.className = 'tile-cell';
+          cell.appendChild(scaled);
+          cell.appendChild(label);
+          cell.addEventListener('click', () => {
+            document.getElementById('tv-offset').value = sprOff.toString(16).toUpperCase();
+          });
+          cell.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            document.getElementById('tv-offset').value = sprOff.toString(16).toUpperCase();
+            cell.classList.add('tapped');
+            setTimeout(() => cell.classList.remove('tapped'), 400);
+          }, { passive: false });
+          tileGrid.appendChild(cell);
         }
-        sctx.putImageData(img, 0, 0);
-        const scaled = document.createElement('canvas');
-        scaled.width = 32; scaled.height = 32;
-        const ssc = scaled.getContext('2d');
-        ssc.imageSmoothingEnabled = false;
-        ssc.drawImage(src, 0, 0, 32, 32);
-        const label = document.createElement('span');
-        label.textContent = '$' + off.toString(16).toUpperCase();
-        const cell = document.createElement('div');
-        cell.className = 'tile-cell';
-        cell.appendChild(scaled);
-        cell.appendChild(label);
-        cell.addEventListener('touchstart', (e) => {
-          e.preventDefault();
-          cell.classList.add('tapped');
-          setTimeout(() => cell.classList.remove('tapped'), 400);
-        }, { passive: false });
-        tileGrid.appendChild(cell);
+      } else {
+        // Normal 8×8 tile mode
+        const startOff = tileBaseOffset + tilePage * TILES_PER_PAGE * 16;
+        const totalPages = Math.ceil((rom.length - tileBaseOffset) / (TILES_PER_PAGE * 16));
+        tileHeader.textContent = 'PAGE ' + (tilePage+1) + '/' + totalPages + '  $' + startOff.toString(16).toUpperCase();
+        for (let i = 0; i < TILES_PER_PAGE && startOff + i * 16 + 15 < rom.length; i++) {
+          const off = startOff + i * 16;
+          const src = document.createElement('canvas');
+          src.width = 8; src.height = 8;
+          src.getContext('2d').putImageData(decodeTileToImageData(rom, off), 0, 0);
+          const scaled = document.createElement('canvas');
+          scaled.width = 32; scaled.height = 32;
+          const ssc = scaled.getContext('2d');
+          ssc.imageSmoothingEnabled = false;
+          ssc.drawImage(src, 0, 0, 32, 32);
+          const label = document.createElement('span');
+          label.textContent = '$' + off.toString(16).toUpperCase();
+          const cell = document.createElement('div');
+          cell.className = 'tile-cell';
+          cell.appendChild(scaled);
+          cell.appendChild(label);
+          cell.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            cell.classList.add('tapped');
+            setTimeout(() => cell.classList.remove('tapped'), 400);
+          }, { passive: false });
+          tileGrid.appendChild(cell);
+        }
       }
       tileGrid.scrollTop = 0;
     }
+
+    document.getElementById('tv-sprite').addEventListener('click', () => {
+      spriteMode = !spriteMode;
+      document.getElementById('tv-sprite').classList.toggle('active', spriteMode);
+      tilePage = 0; renderTilePage();
+    });
 
     document.getElementById('tv-go').addEventListener('click', () => {
       const val = parseInt(document.getElementById('tv-offset').value.replace(/^0x/i,''), 16);
@@ -1034,7 +1090,8 @@
       e.preventDefault();
       if (!tileRomBuffer) return;
       const rom = new Uint8Array(tileRomBuffer);
-      const totalPages = Math.ceil((rom.length - tileBaseOffset) / (TILES_PER_PAGE * 16));
+      const pageBytes = spriteMode ? SPRITES_PER_PAGE * 8 * 16 : TILES_PER_PAGE * 16;
+      const totalPages = Math.ceil((rom.length - tileBaseOffset) / pageBytes);
       if (tilePage < totalPages - 1) { tilePage++; renderTilePage(); }
     }, { passive: false });
     document.getElementById('tv-close').addEventListener('touchstart', (e) => { e.preventDefault(); closeTileViewer(); }, { passive: false });
