@@ -31,6 +31,7 @@ export const transSt = {
   state:              'none',  // 'none'|'door-opening'|'trap-reveal'|'trap-falling'|'closing'|'hold'|'loading'|'opening'|'hud-fade-in'
   timer:              0,
   pendingAction:      null,
+  pendingTrack:       null,   // track to play when 'hud-fade-in' transitions to 'opening'
   dungeon:            false,
   trapFallPending:    false,
   trapShakePending:   false,
@@ -73,6 +74,7 @@ export function updateTransition(dt, shared) {
     if (transSt.timer >= (HUD_INFO_FADE_STEPS + 1) * HUD_INFO_FADE_STEP_MS) {
       transSt.state = 'opening'; transSt.timer = 0; transSt.topBoxAlreadyBright = true;
       playSFX(SFX.SCREEN_OPEN);
+      if (transSt.pendingTrack != null) { playTrack(transSt.pendingTrack); transSt.pendingTrack = null; }
     }
     return;
   } else if (transSt.state === 'trap-reveal') {

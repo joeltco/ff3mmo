@@ -1824,7 +1824,7 @@ function _loadRegularMap(mapId, returnX, returnY) {
   _rebuildFlameSprites();
   moving = false; sprite.setDirection(DIR_DOWN); sprite.resetFrame();
   if (returnX !== undefined) _openReturnDoor(playerX, playerY);
-  if (mapId === 114) playTrack(TRACKS.TOWN_UR);
+  if (mapId === 114 && transSt.pendingTrack == null) playTrack(TRACKS.TOWN_UR);
 }
 
 function loadMapById(mapId, returnX, returnY) {
@@ -3036,9 +3036,9 @@ function _updateTitleMainOutCase() {
   playerInventory = (slot && slot.inventory) ? { ...slot.inventory } : {};
   ps.gil = (slot && slot.gil) || 0;
   ps.proficiency = (slot && slot.proficiency) ? { ...slot.proficiency } : {};
+  transSt.pendingTrack = TRACKS.TOWN_UR;
   loadMapById(114);
   worldY -= 6 * TILE_SIZE;
-  playTrack(TRACKS.TOWN_UR);
   transSt.state = 'hud-fade-in';
   transSt.timer = 0;
 }
