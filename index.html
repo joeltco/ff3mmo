@@ -1146,14 +1146,15 @@
       new Uint8Array([0x36,0x1A,0xC6,0x20,0x92,0x81,0xDC,0xDE, 0xF6,0x3A,0x16,0x0C,0x0E,0x21,0x04,0x06]),
     ];
 
+    const _EMPTY = new Uint8Array(16); // blank tile placeholder
     const OK_POSES = [
-      { label: 'IDLE',       tiles: [OK_IDLE_T0, OK_IDLE_T1, OK_IDLE_T2, OK_IDLE_T3, OK_LEG_L, OK_LEG_R], rows: 3 },
-      { label: 'ATK-R',      tiles: [OK_IDLE_T0, OK_IDLE_T1, OK_ATK_R_MID, OK_IDLE_T3, OK_LEG_L, OK_LEG_R], rows: 3 },
-      { label: 'ATK-L',      tiles: [OK_IDLE_T0, OK_IDLE_T1, OK_ATK_L_MID, OK_ATK_L_MR, OK_LEG_L, OK_LEG_R], rows: 3 },
-      { label: 'KNIFE-R',    tiles: [...OK_KNIFE_R, OK_LEG_L, OK_LEG_R], rows: 3 },
-      { label: 'KNIFE-L',    tiles: [...OK_KNIFE_L, OK_LEG_L, OK_LEG_R], rows: 3 },
-      { label: 'KNIFE-BACK', tiles: [...OK_KNIFE_BACK, OK_LEG_L, OK_LEG_R], rows: 3 },
-      { label: 'KNEEL',      tiles: [...OK_KNEEL], rows: 2 },
+      { label: 'IDLE',         tiles: [OK_IDLE_T0, OK_IDLE_T1, OK_IDLE_T2, OK_IDLE_T3, OK_LEG_L, OK_LEG_R], rows: 3 },
+      { label: 'L BACK SWING', tiles: [...OK_KNIFE_BACK, OK_LEG_L, OK_LEG_R], rows: 3 },
+      { label: 'L FWD SWING',  tiles: [OK_IDLE_T0, OK_IDLE_T1, OK_ATK_L_MID, OK_ATK_L_MR, OK_LEG_L, OK_LEG_R], rows: 3 },
+      { label: 'R BACK SWING', tiles: [...OK_KNIFE_R, OK_LEG_L, OK_LEG_R], rows: 3 },
+      { label: 'R FWD SWING',  tiles: [OK_IDLE_T0, OK_IDLE_T1, OK_ATK_R_MID, OK_IDLE_T3, OK_LEG_L, OK_LEG_R], rows: 3 },
+      { label: 'KNEEL',        tiles: [...OK_KNEEL, _EMPTY, _EMPTY], rows: 3 },
+      { label: 'VICTORY',      tiles: [_EMPTY, _EMPTY, _EMPTY, _EMPTY, OK_LEG_L, OK_LEG_R], rows: 3 },
     ];
 
     let posesMode = false;
@@ -1306,6 +1307,11 @@
       document.getElementById('tv-frame-label').textContent = 'F0 $50010';
       onionFrameIdx = 0;
       document.getElementById('tv-offset').value = ONION_KNIGHT_OFFSET.toString(16).toUpperCase();
+      // Seed VICTORY top tiles from ROM (BATTLE_SPRITE_ROM + 24*16 = $50190)
+      const _rom = new Uint8Array(ff3Buffer);
+      const _vicBase = 0x50010 + 24 * 16;
+      okPoseTiles = OK_POSES.map(p => ({ label: p.label, rows: p.rows, tiles: p.tiles.map(t => new Uint8Array(t)) }));
+      for (let t = 0; t < 4; t++) okPoseTiles[6].tiles[t] = new Uint8Array(_rom.buffer, _vicBase + t * 16, 16);
       renderTilePage();
       tileViewer.style.display = 'flex';
       tileViewerOpen = true;
