@@ -1,6 +1,6 @@
 # game.js Refactor TODO
 
-Current size: ~5,631 lines. Target: <4,000 lines.
+Current size: ~5,465 lines. Target: <4,000 lines.
 
 ---
 
@@ -17,7 +17,7 @@ Current size: ~5,631 lines. Target: <4,000 lines.
 - [x] Extract `src/input-handler.js` — all `_handleBattleInput`, `_battleTargetNav`, `_battleTargetConfirm`, `_itemSelectNav`, `_itemSelectZ`, `_itemSelectSwap`, `_handleRosterInput`, `_handlePauseInput`, `_pauseInput*`, `_equipBest*` functions (~674L). Exports `inputSt` (20-prop mutable state shared with game.js draw/update) + `handleBattleInput`, `handleRosterInput`, `handlePauseInput`.
 - [x] Extract `src/pause-menu.js` — `updatePauseMenu`, `_updatePause*Transitions`, `_drawPauseBox`, `_drawPauseMenuText`, `_drawPauseInventory`, `_drawPauseEquipSlots`, `_drawPauseEquipItems`, `_drawPauseStats` (~400L)
 - [x] Extract `src/transitions.js` — `startWipeTransition`, `updateTransition`, `_updateTransition*`, `drawTransitionOverlay`, `updateTopBoxScroll` (~250L)
-- [ ] Extract `src/map-triggers.js` — `checkTrigger`, `_checkWorldMapTrigger`, `_checkHiddenTrap`, `_checkDynType1`, `_checkDynType4`, `_checkExitPrev`, `_triggerMapTransition`, `_handleChest`, `_handleSecretWall`, `_handleRockPuzzle`, `_handlePondHeal`, `applyPassage`, `openPassage` (~250L)
+- [x] Extract `src/map-triggers.js` — `checkTrigger`, `_checkWorldMapTrigger`, `_checkHiddenTrap`, `_checkDynType1`, `_checkDynType4`, `_checkExitPrev`, `_triggerMapTransition`, `_handleChest`, `_handleSecretWall`, `_handleRockPuzzle`, `_handlePondHeal`, `applyPassage`, `openPassage`, `findWorldExitIndex` (254L). Uses `_triggerShared()` pattern with get/set props.
 
 ---
 

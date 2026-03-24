@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.1.4 — 2026-03-23
+
+### game.js refactor — map-triggers.js extracted (5,631 → 5,465L)
+
+- **Extracted `src/map-triggers.js`** (254L) — all tile-based Z-action and walk-on event handlers
+  - `checkTrigger`, `_checkWorldMapTrigger`, `_checkHiddenTrap`, `_checkDynType1`, `_checkDynType4`, `_checkExitPrev`, `_triggerMapTransition`, `handleChest`, `handleSecretWall`, `handleRockPuzzle`, `handlePondHeal`, `applyPassage`, `openPassage`, `findWorldExitIndex`
+  - `_triggerShared()` helper in game.js bundles map/dungeon state via get/set props for `mapRenderer`, `rockSwitch`, `disabledTrigger`, `onWorldMap`, `dungeonSeed`, shake/star/pond effects
+  - `applyPassage(tm)` remains pure (no shared state); `findWorldExitIndex(mapId, worldMapData)` takes data directly
+- game.js: −166L this release, −2,023L total (7,488 → 5,465)
+
 ## 1.1.3 — 2026-03-23
 
 ### game.js refactor — 6 modules extracted (7,488 → 5,631L)

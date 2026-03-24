@@ -49,6 +49,7 @@ import { titleSt, isTitleActiveState, titleFadeLevel, titleFadePal, drawTitleOce
 import { pauseSt, updatePauseMenu, drawPauseMenu } from './pause-menu.js';
 import { transSt, topBoxSt, loadingSt, startWipeTransition, updateTransition, updateTopBoxScroll, drawTransitionOverlay } from './transitions.js';
 import { inputSt, handleBattleInput, handleRosterInput, handlePauseInput } from './input-handler.js';
+import { checkTrigger, applyPassage, openPassage, handleChest, handleSecretWall, handleRockPuzzle, handlePondHeal, findWorldExitIndex } from './map-triggers.js';
 
 const isMobile = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 
@@ -1559,6 +1560,52 @@ function _pauseShared() {
   };
 }
 
+// Shared state object passed to map-triggers.js
+function _triggerShared() {
+  return {
+    // read-only constants
+    TILE_SIZE,
+    BATTLE_FLASH_FRAMES,
+    BATTLE_FLASH_FRAME_MS,
+    // read-only primitives
+    get worldX()            { return worldX; },
+    get worldY()            { return worldY; },
+    get currentMapId()      { return currentMapId; },
+    get onWorldMap()        { return onWorldMap; },
+    set onWorldMap(v)       { onWorldMap = v; },
+    get disabledTrigger()   { return disabledTrigger; },
+    set disabledTrigger(v)  { disabledTrigger = v; },
+    get dungeonSeed()       { return dungeonSeed; },
+    set dungeonSeed(v)      { dungeonSeed = v; },
+    get mapRenderer()       { return mapRenderer; },
+    set mapRenderer(v)      { mapRenderer = v; },
+    get rockSwitch()        { return rockSwitch; },
+    set rockSwitch(v)       { rockSwitch = v; },
+    set shakeActive(v)      { shakeActive = v; },
+    set shakeTimer(v)       { shakeTimer = v; },
+    set shakePendingAction(v) { shakePendingAction = v; },
+    set starEffect(v)       { starEffect = v; },
+    set pondStrobeTimer(v)  { pondStrobeTimer = v; },
+    // object refs (mutated, not reassigned)
+    mapData,
+    worldMapData,
+    worldMapRenderer,
+    mapStack,
+    dungeonDestinations,
+    hiddenTraps,
+    secretWalls,
+    // functions
+    addItem,
+    loadMapById,
+    loadWorldMapAtPosition,
+    loadWorldMapAt,
+    _triggerWipe,
+    _rebuildFlameSprites,
+    _rosterLocForMapId,
+    getPlayerLocation,
+  };
+}
+
 // Shared state object passed to title-screen.js draw functions
 function _titleShared() {
   return {
@@ -1915,91 +1962,18 @@ function handleAction() {
 
   // Third torch ($32 at col 8, row 16) opens hidden passage
   if (facedTile === 0x32 && facedX === 8 && facedY === 16) {
-    openPassage();
+    openPassage(_triggerShared());
     return;
   }
 
-  if (facedTile === 0x7C)                                         { _handleChest(facedX, facedY); return; }
-  if (secretWalls && secretWalls.has(`${facedX},${facedY}`))      { _handleSecretWall(facedX, facedY); return; }
-  if (rockSwitch && rockSwitch.rocks.some(r => facedX === r.x && facedY === r.y)) { _handleRockPuzzle(); return; }
-  if (pondTiles && pondTiles.has(`${facedX},${facedY}`))          { _handlePondHeal(); return; }
+  if (facedTile === 0x7C)                                         { handleChest(facedX, facedY, _triggerShared()); return; }
+  if (secretWalls && secretWalls.has(`${facedX},${facedY}`))      { handleSecretWall(facedX, facedY, _triggerShared()); return; }
+  if (rockSwitch && rockSwitch.rocks.some(r => facedX === r.x && facedY === r.y)) { handleRockPuzzle(_triggerShared()); return; }
+  if (pondTiles && pondTiles.has(`${facedX},${facedY}`))          { handlePondHeal(_triggerShared()); return; }
 }
 
-function _handleChest(facedX, facedY) {
-  mapData.tilemap[facedY * 32 + facedX] = 0x7D;
-  const LOOT_TIERS = [
-    { weight: 60, pool: [0xA6] },                    // Common:     Potion
-    { weight: 28, pool: [0x62, 0x58, 0x1F] },        // Uncommon:   Leather Cap, Leather Shield, Dagger
-    { weight: 10, pool: [0x73, 0x8B, 0x24] },        // Rare:       Leather Armor, Bronze Bracers, Longsword
-    { weight:  2, pool: [0xB2] },                    // Legendary:  SouthWind
-  ];
-  let roll = Math.random() * 100;
-  let tier = LOOT_TIERS[0];
-  for (const t of LOOT_TIERS) { if (roll < t.weight) { tier = t; break; } roll -= t.weight; }
-  const itemId = tier.pool[Math.floor(Math.random() * tier.pool.length)];
-  addItem(itemId, 1);
-  playSFX(SFX.TREASURE);
-  const itemName = getItemNameClean(itemId);
-  const found = [0x8F, 0xD8, 0xDE, 0xD7, 0xCD, 0xFF]; // "Found "
-  const msg = new Uint8Array(found.length + itemName.length + 1);
-  msg.set(found, 0); msg.set(itemName, found.length);
-  msg[found.length + itemName.length] = 0xC4; // "!"
-  showMsgBox(msg);
-  mapRenderer = new MapRenderer(mapData, worldX / TILE_SIZE, worldY / TILE_SIZE); resetIndoorWaterCache();
-}
-
-function _handleSecretWall(facedX, facedY) {
-  mapData.tilemap[facedY * 32 + facedX] = 0x30;
-  secretWalls.delete(`${facedX},${facedY}`);
-  mapRenderer = new MapRenderer(mapData, worldX / TILE_SIZE, worldY / TILE_SIZE); resetIndoorWaterCache();
-}
-
-function _handleRockPuzzle() {
-  playSFX(SFX.EARTHQUAKE);
-  shakeActive = true; shakeTimer = 0;
-  shakePendingAction = () => {
-    playSFX(SFX.DOOR);
-    for (const wt of rockSwitch.wallTiles) mapData.tilemap[wt.y * 32 + wt.x] = wt.newTile;
-    rockSwitch = null;
-    mapRenderer = new MapRenderer(mapData, worldX / TILE_SIZE, worldY / TILE_SIZE); resetIndoorWaterCache();
-  };
-}
-
-function _handlePondHeal() {
-  playSFX(SFX.POND_DRINK);
-  starEffect = {
-    frame: 0, radius: 60, angle: 0, spin: false,
-    onComplete: () => {
-      playSFX(SFX.CURE);
-      ps.hp = ps.stats.maxHP;
-      ps.mp = ps.stats.maxMP;
-      pondStrobeTimer = BATTLE_FLASH_FRAMES * BATTLE_FLASH_FRAME_MS;
-      setTimeout(() => showMsgBox(POND_RESTORED, null), BATTLE_FLASH_FRAMES * BATTLE_FLASH_FRAME_MS);
-    }
-  };
-}
-
-function applyPassage(tm) {
-  // FF3 $D6/$D7: $5B → $5D (doorframe top), $5C → $5E (walkable passage)
-  for (let i = 0; i < tm.length; i++) {
-    if (tm[i] === 0x5B) tm[i] = 0x5D;
-    if (tm[i] === 0x5C) tm[i] = 0x5E;
-  }
-}
-
-function openPassage() {
-  playSFX(SFX.EARTHQUAKE);
-  shakeActive = true;
-  shakeTimer = 0;
-  shakePendingAction = () => {
-    playSFX(SFX.DOOR);
-    applyPassage(mapData.tilemap);
-    const sx = worldX / TILE_SIZE;
-    const sy = worldY / TILE_SIZE;
-    mapRenderer = new MapRenderer(mapData, sx, sy); resetIndoorWaterCache();
-    _rebuildFlameSprites();
-  };
-}
+// _handleChest, _handleSecretWall, _handleRockPuzzle, _handlePondHeal,
+// applyPassage, openPassage → map-triggers.js
 
 function updateMovement(dt) {
   if (!moving) return;
@@ -2100,7 +2074,7 @@ function _onMoveComplete() {
   if (_checkWarpTile()) return;
 
   // Check for trigger at current tile
-  if (checkTrigger()) return;
+  if (checkTrigger(_triggerShared())) return;
 
   if (_tickRandomEncounter()) return;
 
@@ -2168,148 +2142,8 @@ function _drawLoadingOverlay() {
   }
 }
 
-function findWorldExitIndex(mapId) {
-  // Search the world map entrance table for the entry that leads to this map
-  const table = worldMapData.entranceTable;
-  for (let i = 0; i < table.length; i++) {
-    if (table[i] === mapId) return i;
-  }
-  return 0; // fallback
-}
-
-function _checkWorldMapTrigger(tileX, tileY) {
-  const trigger = worldMapRenderer.getTriggerAt(tileX, tileY);
-  if (!trigger || trigger.type !== 'entrance') return false;
-  let destMap = trigger.destMap;
-  if (destMap === 0) return false;
-  const savedX = tileX, savedY = tileY;
-  if (destMap === 111) {
-    dungeonSeed = Date.now();
-    clearDungeonCache();
-    destMap = 1000;
-    transSt.dungeon = true;
-  }
-  const finalDest = destMap;
-  _triggerWipe(() => {
-    mapStack.push({ mapId: 'world', worldId: 0, x: savedX, y: savedY });
-    onWorldMap = false;
-    loadMapById(finalDest);
-    disabledTrigger = { x: worldX / TILE_SIZE, y: worldY / TILE_SIZE };
-  }, finalDest);
-  return true;
-}
-
-function _checkHiddenTrap(trigger, tileX, tileY) {
-  if (!hiddenTraps || !hiddenTraps.has(`${tileX},${tileY}`)) return false;
-  hiddenTraps.delete(`${tileX},${tileY}`);
-  mapData.tilemap[tileY * 32 + tileX] = 0x74;
-  mapRenderer = new MapRenderer(mapData, tileX, tileY); resetIndoorWaterCache();
-  playSFX(SFX.DOOR);
-  if (trigger.source === 'dynamic' && trigger.type === 1 &&
-      dungeonDestinations && dungeonDestinations.has(trigger.trigId)) {
-    const dest = dungeonDestinations.get(trigger.trigId);
-    const savedX = worldX, savedY = worldY;
-    transSt.pendingAction = () => {
-      mapStack.push({ mapId: currentMapId, x: savedX, y: savedY });
-      loadMapById(dest.mapId);
-    };
-    transSt.rosterLocChanged = _rosterLocForMapId(dest.mapId) !== getPlayerLocation();
-    transSt.state = 'trap-reveal'; transSt.timer = 0;
-    transSt.dungeon = false; transSt.trapFallPending = true;
-    return true;
-  }
-  return false;
-}
-
-function _triggerMapTransition(tileX, tileY, destMapId) {
-  const tileId = mapData.tilemap[tileY * 32 + tileX];
-  const tileM = tileId < 128 ? tileId : tileId & 0x7F;
-  const savedX = worldX, savedY = worldY;
-  if (((mapData.collisionByte2[tileM] >> 4) & 0x0F) === 5) {
-    mapRenderer.updateTileAt(tileX, tileY, 0x7E); playSFX(SFX.DOOR);
-    transSt.state = 'door-opening'; transSt.timer = 0;
-    transSt.rosterLocChanged = _rosterLocForMapId(destMapId) !== getPlayerLocation();
-    transSt.pendingAction = () => { mapStack.push({ mapId: currentMapId, x: savedX, y: savedY }); loadMapById(destMapId); };
-  } else {
-    _triggerWipe(() => { mapStack.push({ mapId: currentMapId, x: savedX, y: savedY }); loadMapById(destMapId); }, destMapId);
-  }
-}
-
-function _checkDynType1(trigger, tileX, tileY) {
-  if (!(trigger.source === 'dynamic' && trigger.type === 1)) return false;
-  if (dungeonDestinations && dungeonDestinations.has(trigger.trigId)) {
-    const dest = dungeonDestinations.get(trigger.trigId);
-    if (dest.goBack) {
-      const prevMapId = mapStack.length > 0 ? mapStack[mapStack.length - 1].mapId : null;
-      _triggerWipe(() => {
-        if (mapStack.length > 0) {
-          const prev = mapStack.pop();
-          loadMapById(prev.mapId, prev.x / TILE_SIZE, prev.y / TILE_SIZE);
-          if (prev.mapId >= 1000 && prev.mapId < 1004) playTrack(TRACKS.CRYSTAL_CAVE);
-        }
-      }, prevMapId);
-      return true;
-    }
-    _triggerMapTransition(tileX, tileY, dest.mapId);
-    return true;
-  }
-  const destMap = mapData.entranceData[trigger.trigId];
-  if (destMap === 0) return false;
-  _triggerMapTransition(tileX, tileY, destMap);
-  return true;
-}
-
-function _checkDynType4(trigger, tileX, tileY) {
-  if (!(trigger.source === 'dynamic' && trigger.type === 4)) return false;
-  if (!dungeonDestinations || !dungeonDestinations.has(trigger.trigId)) return false;
-  const dest = dungeonDestinations.get(trigger.trigId);
-  const savedX = worldX, savedY = worldY;
-  _triggerWipe(() => {
-    mapStack.push({ mapId: currentMapId, x: savedX, y: savedY });
-    loadMapById(dest.mapId);
-  }, dest.mapId);
-  return true;
-}
-
-function _checkExitPrev() {
-  const exitingCrystalRoom = currentMapId === 1004;
-  const goingToWorld = mapStack.length === 0 || mapStack[mapStack.length - 1].mapId === 'world';
-  if (goingToWorld && topBoxSt.isTown && topBoxSt.nameBytes) {
-    topBoxSt.state = 'fade-out'; topBoxSt.timer = 0; topBoxSt.fadeStep = 0;
-  }
-  const exitDestMapId = mapStack.length > 0 ? mapStack[mapStack.length - 1].mapId : 'world';
-  _triggerWipe(() => {
-    if (mapStack.length > 0) {
-      const prev = mapStack.pop();
-      if (prev.mapId === 'world') {
-        loadWorldMapAtPosition(prev.x, prev.y);
-      } else {
-        loadMapById(prev.mapId, prev.x / TILE_SIZE, prev.y / TILE_SIZE);
-        if (exitingCrystalRoom) playTrack(TRACKS.CRYSTAL_CAVE);
-      }
-    } else {
-      loadWorldMapAt(findWorldExitIndex(currentMapId));
-    }
-  }, exitDestMapId);
-  return true;
-}
-
-function checkTrigger() {
-  const tileX = worldX / TILE_SIZE;
-  const tileY = worldY / TILE_SIZE;
-  if (disabledTrigger && tileX === disabledTrigger.x && tileY === disabledTrigger.y) return false;
-  if (onWorldMap) return _checkWorldMapTrigger(tileX, tileY);
-  if (!mapRenderer || !mapData) return false;
-  const trigger = mapRenderer.getTriggerAt(tileX, tileY);
-  if (!trigger) return false;
-  if (_checkHiddenTrap(trigger, tileX, tileY)) return true;
-  if (_checkDynType1(trigger, tileX, tileY)) return true;
-  if (_checkDynType4(trigger, tileX, tileY)) return true;
-  if ((trigger.source === 'collision' || trigger.source === 'entrance') && trigger.trigType === 0) {
-    return _checkExitPrev();
-  }
-  return false;
-}
+// findWorldExitIndex, _checkWorldMapTrigger, _checkHiddenTrap, _triggerMapTransition,
+// _checkDynType1, _checkDynType4, _checkExitPrev, checkTrigger → map-triggers.js
 
 function _startMoveFromKeys(resetOnIdle) {
   if (keys['ArrowDown']) startMove(DIR_DOWN);
@@ -4361,7 +4195,7 @@ function _updateDefeatStates() {
       ps.mp = ps.stats ? ps.stats.maxMP : 0;
       _triggerWipe(() => {
         dungeonFloor = -1; encounterSteps = 0; mapStack = [];
-        loadWorldMapAt(findWorldExitIndex(111));
+        loadWorldMapAt(findWorldExitIndex(111, worldMapData));
       }, 'world');
     }
     return true;
