@@ -382,8 +382,8 @@ function _drawPauseStats(ctx, shared) {
 //            _drawBorderedBox, _clipToViewport, _drawCursorFaded }
 export function drawPauseMenu(ctx, shared) {
   if (pauseSt.state === 'none') return;
-  _drawPauseBox(ctx, shared);
   shared._clipToViewport();
+  _drawPauseBox(ctx, shared);
   _drawPauseMenuText(ctx, shared);
   _drawPauseInventory(ctx, shared);
   _drawPauseEquipSlots(ctx, shared);

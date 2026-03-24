@@ -1449,6 +1449,14 @@ function _syncSaveSlotProgress() {
   saveSlots[selectCursor].gil = ps.gil;
   saveSlots[selectCursor].proficiency = { ...ps.proficiency };
 }
+function returnToTitle() {
+  _syncSaveSlotProgress();
+  saveSlotsToDB();
+  pauseSt.state = 'none';
+  transSt.state = 'hud-fade-out';
+  transSt.timer = 0;
+  transSt.pendingAction = () => window.location.reload();
+}
 /**
  * Set up top box state for a given area.
  * @param {number} mapId — map being loaded
@@ -1543,6 +1551,7 @@ function _inputShared() {
     getSlashFramesForWeapon,
     executeBattleCommand,
     startPVPBattle,
+    returnToTitle,
   };
 }
 

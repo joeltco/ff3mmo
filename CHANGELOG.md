@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here.
 
+## 1.1.5 — 2026-03-23
+
+### Polish — music timing, tile viewer, pause menu clip
+
+- **Ur music deferred to map open transition** — title → game start: `transSt.pendingTrack` set before `loadMapById`; `_loadRegularMap` skips immediate play when pending track is set; `hud-fade-in` → `opening` triggers playback in sync with the wipe
+- **Title screen music fade-out** — `fadeOutMusic(durationMs)` added to `music.js` using Web Audio `GainNode`; triggered at `select-box-close-fwd` → `main-out` so music fades with the title screen. Fixed: `gainNode` now created independently of `audioCtx` so `playSFX` initializing audio first no longer breaks the fade
+- **TILES button removed** — ROM tile viewer now opened via Konami code (↑↑↓↓←→←→ X Z Start), using game keybindings (X=B, Z=A)
+- **Pause menu scroll-in clip** — box was drawing over top HUD area during slide-in; fixed by moving `_clipToViewport()` before `_drawPauseBox()` in `drawPauseMenu`
+
 ## 1.1.4 — 2026-03-23
 
 ### game.js refactor — map-triggers.js extracted (5,631 → 5,465L)

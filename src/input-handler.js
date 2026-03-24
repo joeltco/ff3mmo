@@ -552,6 +552,9 @@ function _pauseInputMainMenu() {
     } else if (pauseSt.cursor === 3) {
       playSFX(SFX.CONFIRM);
       pauseSt.state = 'stats-text-out'; pauseSt.timer = 0;
+    } else if (pauseSt.cursor === 5) {
+      playSFX(SFX.CONFIRM);
+      _s.returnToTitle();
     }
   }
   return true;
