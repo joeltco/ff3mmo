@@ -595,6 +595,7 @@
       <button id="tv-sprite" class="tv-rom-btn">SPRITE</button>
       <button id="tv-layout" class="tv-rom-btn" style="display:none">ROW</button>
       <button id="tv-height" class="tv-rom-btn" style="display:none">24</button>
+      <button id="tv-pal" class="tv-rom-btn" style="display:none">PAL0</button>
       <input id="tv-offset" type="text" placeholder="offset (hex)" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
       <button id="tv-go">GO</button>
     </div>
@@ -945,6 +946,15 @@
     let spriteMode = false;
     let spriteRowMajor = true;  // true = row-major (matches FF3 OAM: t0,t1 top, t2,t3 mid, t4,t5 bot)
     let spriteTall = false;     // false = 2×3 (16×24, 6 tiles), true = 2×4 (16×32, 8 tiles)
+    // NES battle palettes (NES color index). $0F = transparent/black.
+    const ONION_KNIGHT_OFFSET = 0x50010; // ROM offset for Onion Knight battle idle frame
+    const BATTLE_PALETTES = [
+      [0x0F, 0x36, 0x30, 0x16], // pal0 Onion Knight: black, blue, white, red-orange
+      [0x0F, 0x16, 0x26, 0x36], // pal1 warm variant
+      [0x0F, 0x11, 0x21, 0x31], // pal2 blue variant
+      [0x0F, 0x0A, 0x1A, 0x2A], // pal3 green variant
+    ];
+    let spritePalIdx = 0;
 
     document.getElementById('tv-rom3').addEventListener('click', () => {
       tileRomBuffer = ff3Buffer; tilePage = 0; tileBaseOffset = 16;
@@ -959,12 +969,23 @@
       renderTilePage();
     });
 
-    function decodeTileToImageData(rom, off) {
+    function decodeTileToImageData(rom, off, pal) {
       const pixels = decodeTile(rom, off);
       const img = new ImageData(8, 8);
       for (let p = 0; p < 64; p++) {
-        const v = pixels[p] * 85;
-        img.data[p*4]=v; img.data[p*4+1]=v; img.data[p*4+2]=v; img.data[p*4+3]=255;
+        const idx = pixels[p];
+        if (pal) {
+          const nesColor = pal[idx];
+          if (nesColor === 0x0F) {
+            img.data[p*4]=0; img.data[p*4+1]=0; img.data[p*4+2]=0; img.data[p*4+3]=255;
+          } else {
+            const rgb = NES_SYSTEM_PALETTE[nesColor] || [0,0,0];
+            img.data[p*4]=rgb[0]; img.data[p*4+1]=rgb[1]; img.data[p*4+2]=rgb[2]; img.data[p*4+3]=255;
+          }
+        } else {
+          const v = idx * 85;
+          img.data[p*4]=v; img.data[p*4+1]=v; img.data[p*4+2]=v; img.data[p*4+3]=255;
+        }
       }
       return img;
     }
@@ -993,7 +1014,8 @@
             if (toff + 15 >= rom.length) break;
             const tx = spriteRowMajor ? (t % 2) * 8 : Math.floor(t / rows) * 8;
             const ty = spriteRowMajor ? Math.floor(t / 2) * 8 : (t % rows) * 8;
-            sctx.putImageData(decodeTileToImageData(rom, toff), tx, ty);
+            const pal = BATTLE_PALETTES[spritePalIdx];
+            sctx.putImageData(decodeTileToImageData(rom, toff, pal), tx, ty);
           }
           const scaled = document.createElement('canvas');
           scaled.width = 64; scaled.height = sprH * 4;
@@ -1054,7 +1076,14 @@
       document.getElementById('tv-sprite').classList.toggle('active', spriteMode);
       document.getElementById('tv-layout').style.display = spriteMode ? '' : 'none';
       document.getElementById('tv-height').style.display = spriteMode ? '' : 'none';
+      document.getElementById('tv-pal').style.display = spriteMode ? '' : 'none';
       tilePage = 0; renderTilePage();
+    });
+
+    document.getElementById('tv-pal').addEventListener('click', () => {
+      spritePalIdx = (spritePalIdx + 1) % BATTLE_PALETTES.length;
+      document.getElementById('tv-pal').textContent = 'PAL' + spritePalIdx;
+      renderTilePage();
     });
 
     document.getElementById('tv-layout').addEventListener('click', () => {
@@ -1076,9 +1105,23 @@
 
     function openTileViewer() {
       if (!ff3Buffer) return;
-      tileRomBuffer = ff3Buffer; tileBaseOffset = 16; tilePage = 0;
+      tileRomBuffer = ff3Buffer;
+      tileBaseOffset = ONION_KNIGHT_OFFSET;
+      tilePage = 0;
+      spriteMode = true;
+      spriteRowMajor = true;
+      spriteTall = false;
+      spritePalIdx = 0;
       document.getElementById('tv-rom3').classList.add('active');
       document.getElementById('tv-rom12').classList.remove('active');
+      document.getElementById('tv-sprite').classList.add('active');
+      document.getElementById('tv-layout').style.display = '';
+      document.getElementById('tv-height').style.display = '';
+      document.getElementById('tv-pal').style.display = '';
+      document.getElementById('tv-layout').textContent = 'ROW';
+      document.getElementById('tv-height').textContent = '24';
+      document.getElementById('tv-pal').textContent = 'PAL0';
+      document.getElementById('tv-offset').value = ONION_KNIGHT_OFFSET.toString(16).toUpperCase();
       renderTilePage();
       tileViewer.style.display = 'flex';
       tileViewerOpen = true;
