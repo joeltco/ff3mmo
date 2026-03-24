@@ -1581,10 +1581,19 @@ function _pvpShared() {
     get allyShakeTimer()  { return allyShakeTimer; },
     // canvas refs
     get ctx()             { return ctx; },
-    get fullBodyCanvases()      { return fakePlayerFullBodyCanvases; },
-    get hitFullBodyCanvases()   { return fakePlayerHitFullBodyCanvases; },
+    get fullBodyCanvases()         { return fakePlayerFullBodyCanvases; },
+    get hitFullBodyCanvases()      { return fakePlayerHitFullBodyCanvases; },
     get knifeBackFullBodyCanvases(){ return fakePlayerKnifeBackFullBodyCanvases; },
-    get hitPortraits()          { return fakePlayerHitPortraits; },
+    get knifeRFullBodyCanvases()   { return fakePlayerKnifeRFullBodyCanvases; },
+    get knifeLFullBodyCanvases()   { return fakePlayerKnifeLFullBodyCanvases; },
+    get blades() {
+      return {
+        knife:  { raised: battleKnifeBladeCanvas,   swung: battleKnifeBladeSwungCanvas },
+        dagger: { raised: battleDaggerBladeCanvas,   swung: battleDaggerBladeSwungCanvas },
+        sword:  { raised: battleSwordBladeCanvas,    swung: battleSwordBladeSwungCanvas },
+        fist:   battleFistCanvas,
+      };
+    },
     // functions
     processNextTurn,
     resetBattleVars:  _resetBattleVars,

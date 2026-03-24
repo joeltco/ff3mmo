@@ -1088,6 +1088,7 @@
             // If in edit mode, place this tile into the selected slot
             if (editPoseIdx >= 0 && editSlotIdx >= 0) {
               okPoseTiles[editPoseIdx].tiles[editSlotIdx] = new Uint8Array(rom.buffer, off, 16);
+              _savePosesToStorage();
               editPoseIdx = -1; editSlotIdx = -1;
               posesMode = true;
               document.getElementById('tv-poses').classList.add('active');

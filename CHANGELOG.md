@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented here.
 
+## 1.1.7 — 2026-03-24
+
+### PVP system modularized + opponent animation overhaul
+
+- **Battle freeze fix** — `HUD_VIEW_H` was missing from `input-handler.js` local constants; every call to `_battleTargetConfirm` threw `ReferenceError`, crashing the game loop on player attack confirm
+- **Extracted `src/pvp.js`** (new module, ~340L) — entire PVP duel system decoupled from game.js
+  - `pvpSt` exported state object replaces 12 scattered `let` vars (`isPVPBattle`, `pvpOpponent`, `pvpOpponentStats`, `pvpOpponentIsDefending`, `pvpOpponentHitIdx`, `pvpOpponentHitsThisTurn`, `pvpEnemyAllies`, `pvpCurrentEnemyAllyIdx`, `pvpBoxResize*`, `pvpEnemySlidePosFrom`)
+  - Exports: `startPVPBattle`, `resetPVPState`, `tryJoinPVPEnemyAlly`, `updateBattleEnemyTurn`, `drawBossSpriteBoxPVP`
+  - `_pvpShared()` in game.js bundles all required state via getter/setter pattern (same as `_inputShared`, `_triggerShared`)
+  - game.js: −181L this release
+- **Opponent animation system** — PVP opponents now mirror the full player/ally portrait animation pipeline
+  - **Body poses**: idle → `fullBodyCanvases`; hit → `hitFullBodyCanvases`; wind-up → `knifeBackFullBodyCanvases` (raised back-swing); R-hand strike → `knifeRFullBodyCanvases`; L-hand strike → `knifeLFullBodyCanvases`
+  - **Weapon blade overlays**: drawn via mirrored transform (`translate(sprX+16) + scale(-1,1)`) — same offsets as player/ally (`raised=(8,-7)`, `swung=(-16,1)`, `fist=(-4,10)`) but h-flipped so blades appear on opponent's screen-left (their right hand)
+  - Supports knife, dagger, sword, fist; dual-wield second hit uses left-hand pose and blade
+  - **Hit pose duration fixed**: `player-damage-show` (700ms) removed from `isOppHit` — opponent returns to idle during damage display, only flinches during slash impact + `player-hit-show` (150ms)
+  - **Wind-up blink fixed**: slowed from 16ms/frame to 50ms/frame — was too fast to render at 60fps (invisible flicker); now clearly visible
+- **Naming cleanup in pvp.js**: `monHitRate`→`hitRate`, `monAtk`→`atk`, `monAtk2`/`shieldEvade2`/`dmg2` → clean names; removed unused `wpnSt` knife-pose variable
+
 ## 1.1.6 — 2026-03-23
 
 ### Polish fixes

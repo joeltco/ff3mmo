@@ -124,9 +124,9 @@ function _processBossFlash() {
     }
   }
   pvpSt.pvpOpponentIsDefending = (pvpSt.isPVPBattle && targetAlly < 0) ? Math.random() < 0.30 : false;
-  const monHitRate = (_s.currentAttacker >= 0 && _s.encounterMonsters)
+  const hitRate = (_s.currentAttacker >= 0 && _s.encounterMonsters)
     ? (_s.encounterMonsters[_s.currentAttacker].hitRate || GOBLIN_HIT_RATE) : BOSS_HIT_RATE;
-  const monAtk = pvpSt.isPVPBattle
+  const atk = pvpSt.isPVPBattle
     ? (pvpSt.pvpCurrentEnemyAllyIdx >= 0
         ? pvpSt.pvpEnemyAllies[pvpSt.pvpCurrentEnemyAllyIdx].atk
         : pvpSt.pvpOpponentStats.atk)
@@ -134,8 +134,8 @@ function _processBossFlash() {
         ? _s.encounterMonsters[_s.currentAttacker].atk : BOSS_ATK;
   if (targetAlly >= 0) {
     _s.enemyTargetAllyIdx = targetAlly;
-    if (Math.random() * 100 < monHitRate) {
-      const dmg = calcDamage(monAtk, _s.battleAllies[targetAlly].def);
+    if (Math.random() * 100 < hitRate) {
+      const dmg = calcDamage(atk, _s.battleAllies[targetAlly].def);
       _s.battleAllies[targetAlly].hp = Math.max(0, _s.battleAllies[targetAlly].hp - dmg);
       _s.allyDamageNums[targetAlly] = { value: dmg, timer: 0 };
       _s.allyShakeTimer[targetAlly] = BATTLE_SHAKE_MS;
@@ -151,8 +151,8 @@ function _processBossFlash() {
       _s.playerDamageNum = { miss: true, timer: 0 };
       _s.battleState = 'enemy-damage-show'; _s.battleTimer = 0;
       inputSt.battleProfHits['shield'] = (inputSt.battleProfHits['shield'] || 0) + 1;
-    } else if (Math.random() * 100 < monHitRate) {
-      let dmg = calcDamage(monAtk, ps.def);
+    } else if (Math.random() * 100 < hitRate) {
+      let dmg = calcDamage(atk, ps.def);
       if (_s.isDefending) dmg = Math.max(1, Math.floor(dmg / 2));
       ps.hp = Math.max(0, ps.hp - dmg);
       _s.playerDamageNum = { value: dmg, timer: 0 };
@@ -184,18 +184,18 @@ function _processEnemyDamageShow() {
 
 function _processPVPSecondWindup() {
   if (_s.battleTimer < BOSS_PREFLASH_MS) return;
-  const monAtk2 = pvpSt.pvpOpponentStats.atk;
-  const shieldEvade2 = getShieldEvade(ITEMS);
-  const shieldBlocked2 = shieldEvade2 > 0 && Math.random() * 100 < shieldEvade2;
-  if (shieldBlocked2) {
+  const atk = pvpSt.pvpOpponentStats.atk;
+  const shieldEvade = getShieldEvade(ITEMS);
+  const shieldBlocked = shieldEvade > 0 && Math.random() * 100 < shieldEvade;
+  if (shieldBlocked) {
     _s.playerDamageNum = { miss: true, timer: 0 };
     _s.battleState = 'enemy-damage-show'; _s.battleTimer = 0;
     inputSt.battleProfHits['shield'] = (inputSt.battleProfHits['shield'] || 0) + 1;
   } else if (Math.random() * 100 < BOSS_HIT_RATE) {
-    let dmg2 = calcDamage(monAtk2, ps.def);
-    if (_s.isDefending) dmg2 = Math.max(1, Math.floor(dmg2 / 2));
-    ps.hp = Math.max(0, ps.hp - dmg2);
-    _s.playerDamageNum = { value: dmg2, timer: 0 };
+    let dmg = calcDamage(atk, ps.def);
+    if (_s.isDefending) dmg = Math.max(1, Math.floor(dmg / 2));
+    ps.hp = Math.max(0, ps.hp - dmg);
+    _s.playerDamageNum = { value: dmg, timer: 0 };
     playSFX(SFX.ATTACK_HIT);
     _s.battleShakeTimer = BATTLE_SHAKE_MS;
     _s.battleState = 'enemy-attack'; _s.battleTimer = 0;
@@ -270,48 +270,67 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   const isThisAttacking = isMain
     ? pvpSt.pvpCurrentEnemyAllyIdx < 0
     : pvpSt.pvpCurrentEnemyAllyIdx === idx - 1;
-  const isOppHit = isMain && (
-    (bs === 'player-slash' && inputSt.hitResults && inputSt.hitResults[_s.currentHitIdx] && !inputSt.hitResults[_s.currentHitIdx].miss) ||
-    bs === 'player-hit-show' || bs === 'player-damage-show' ||
-    (bs === 'ally-slash' && _s.allyHitResult && !_s.allyHitResult.miss) ||
-    bs === 'ally-damage-show');
-  const blinkHidden = isMain && (
-    (bs === 'player-slash' && inputSt.hitResults && inputSt.hitResults[_s.currentHitIdx] && !inputSt.hitResults[_s.currentHitIdx].miss) ||
-    (bs === 'ally-slash' && _s.allyHitResult && !_s.allyHitResult.miss)
-  ) && (Math.floor(_s.battleTimer / 60) & 1);
+  // Hit pose: only during the slash impact and brief flinch — NOT the full 700ms damage display
+  const playerHitLanded = bs === 'player-slash' &&
+    inputSt.hitResults && inputSt.hitResults[_s.currentHitIdx] && !inputSt.hitResults[_s.currentHitIdx].miss;
+  const allyHitLanded = bs === 'ally-slash' && _s.allyHitResult && !_s.allyHitResult.miss;
+  const isOppHit = isMain && (playerHitLanded || bs === 'player-hit-show' || allyHitLanded || bs === 'ally-damage-show');
+  // Blink hidden during slash (opponent flickers on hit)
+  const blinkHidden = isMain && (playerHitLanded || allyHitLanded) && (Math.floor(_s.battleTimer / 60) & 1);
+  // Wind-up blink during opponent attack (50ms per frame = visible at 60fps)
   const isWindUp = isThisAttacking && (bs === 'boss-flash' || bs === 'pvp-second-windup');
-  const flashFrame  = isWindUp ? Math.floor(_s.battleTimer / (BOSS_PREFLASH_MS / 8)) : 0;
-  const flashHidden = isWindUp && (flashFrame & 1);
-  if (blinkHidden || flashHidden) return;
+  const windUpHidden = isWindUp && (Math.floor(_s.battleTimer / 50) & 1);
+  if (blinkHidden || windUpHidden) return;
 
-  // Choose pose canvas
+  // Which hand is this enemy using right now?
+  // boss-flash = right hand (first attack), pvp-second-windup = left hand, allies = always right
+  const isAttackState = isThisAttacking && bs === 'enemy-attack';
+  const isLeftHandWind = isMain && bs === 'pvp-second-windup';
+  const isLeftHandAtk  = isMain && isAttackState && pvpSt.pvpOpponentHitsThisTurn === 1;
+  const activeWeaponId = (isLeftHandWind || isLeftHandAtk)
+    ? (enemy.weaponL != null ? enemy.weaponL : enemy.weaponId)
+    : enemy.weaponId;
+  const wpn = weaponSubtype(activeWeaponId);
+
+  // Body canvas — mirrors player portrait animation
   let body = fullBody;
   if (isOppHit && _s.hitFullBodyCanvases[palIdx]) {
     body = _s.hitFullBodyCanvases[palIdx];
-  } else if (isWindUp && !flashHidden) {
-    // Show knife wind-up pose during attack flash
-    const wpnSt = weaponSubtype(enemy.weaponId);
-    if (wpnSt === 'knife' || wpnSt === 'dagger') {
-      body = _s.knifeBackFullBodyCanvases[palIdx] || fullBody;
+  } else if (isWindUp) {
+    body = _s.knifeBackFullBodyCanvases[palIdx] || fullBody;   // raised/back-swing wind-up
+  } else if (isAttackState) {
+    const atkCvs = (isLeftHandAtk) ? _s.knifeLFullBodyCanvases : _s.knifeRFullBodyCanvases;
+    body = (atkCvs && atkCvs[palIdx]) || fullBody;
+  }
+  _s.ctx.drawImage(body, sprX, sprY);
+
+  // Weapon blade overlay — mirrored via translate(sprX+16)+scale(-1,1).
+  // Matches _drawPortraitWeapon offsets: raised=(8,-7), swung=(-16,1), fist=(-4,10).
+  // In mirrored space these place the blade on opponent's screen-left (their right hand).
+  if (isWindUp || isAttackState) {
+    const blades = _s.blades;
+    let blade = null;
+    if (wpn === 'knife' && activeWeaponId === 0x1F) blade = isAttackState ? blades.dagger.swung : blades.dagger.raised;
+    else if (wpn === 'knife')  blade = isAttackState ? blades.knife.swung  : blades.knife.raised;
+    else if (wpn === 'sword')  blade = isAttackState ? blades.sword.swung  : blades.sword.raised;
+    else if (isAttackState)    blade = blades.fist;
+    if (blade) {
+      _s.ctx.save();
+      _s.ctx.translate(sprX + 16, sprY);
+      _s.ctx.scale(-1, 1);
+      if (isAttackState && blade === blades.fist) _s.ctx.drawImage(blade, -4, 10);
+      else if (isAttackState)                     _s.ctx.drawImage(blade, -16, 1);
+      else                                        _s.ctx.drawImage(blade,   8, -7);
+      _s.ctx.restore();
     }
   }
 
-  if (body === fullBody && isOppHit && _s.hitPortraits[palIdx]) {
-    // Fallback: idle legs + flipped hit portrait
-    _s.ctx.drawImage(fullBody, 0, 16, 16, 8, sprX, sprY + 16, 16, 8);
-    _s.ctx.save(); _s.ctx.translate(sprX + 16, sprY); _s.ctx.scale(-1, 1);
-    _s.ctx.drawImage(_s.hitPortraits[palIdx][0], 0, 0); _s.ctx.restore();
-  } else {
-    _s.ctx.drawImage(body, sprX, sprY);
-  }
-
-  // Slash effect overlays
+  // Slash effect overlays (player/ally attacking the main opponent)
   if (isMain) {
-    if (bs === 'player-slash' && _s.slashFrames && _s.slashFrame < SLASH_FRAMES &&
-        inputSt.hitResults && inputSt.hitResults[_s.currentHitIdx] && !inputSt.hitResults[_s.currentHitIdx].miss) {
+    if (bs === 'player-slash' && _s.slashFrames && _s.slashFrame < SLASH_FRAMES && playerHitLanded) {
       _s.ctx.drawImage(_s.slashFrames[_s.slashFrame], sprX + _s.slashOffX, sprY + _s.slashOffY);
     }
-    if (bs === 'ally-slash' && _s.allyHitResult && !_s.allyHitResult.miss) {
+    if (bs === 'ally-slash' && allyHitLanded) {
       const ally = _s.battleAllies[_s.currentAllyAttacker];
       const aSlashF = ally ? _s.getSlashFramesForWeapon(ally.weaponId, true) : _s.slashFramesR;
       const af = Math.min(Math.floor(_s.battleTimer / 67), 2);
