@@ -1079,6 +1079,15 @@
             e.preventDefault();
             cell.classList.add('tapped');
             setTimeout(() => cell.classList.remove('tapped'), 400);
+            // If in edit mode, place this tile into the selected slot
+            if (editPoseIdx >= 0 && editSlotIdx >= 0) {
+              okPoseTiles[editPoseIdx].tiles[editSlotIdx] = new Uint8Array(rom.buffer, off, 16);
+              editPoseIdx = -1; editSlotIdx = -1;
+              posesMode = true;
+              document.getElementById('tv-poses').classList.add('active');
+              renderPosesGrid();
+              return;
+            }
           }, { passive: false });
           tileGrid.appendChild(cell);
         }
@@ -1148,45 +1157,96 @@
     ];
 
     let posesMode = false;
+    // Mutable session copies of pose tile arrays
+    let okPoseTiles = OK_POSES.map(p => ({ label: p.label, rows: p.rows, tiles: p.tiles.map(t => new Uint8Array(t)) }));
+    let editPoseIdx = -1;  // which pose is being edited
+    let editSlotIdx = -1;  // which tile slot within that pose
 
-    function _drawPoseTile(sctx, bytes, tx, ty, pal) {
-      sctx.putImageData(decodeTileToImageData(bytes, 0, pal), tx, ty);
+    function _renderOneTile8x8(bytes, pal) {
+      const src = document.createElement('canvas'); src.width = 8; src.height = 8;
+      src.getContext('2d').putImageData(decodeTileToImageData(bytes, 0, pal), 0, 0);
+      const scaled = document.createElement('canvas'); scaled.width = 32; scaled.height = 32;
+      const sc = scaled.getContext('2d'); sc.imageSmoothingEnabled = false;
+      sc.drawImage(src, 0, 0, 32, 32);
+      return scaled;
     }
 
     function renderPosesGrid() {
       tileGrid.innerHTML = '';
-      tileHeader.textContent = 'ONION KNIGHT — HARDCODED POSES';
+      const isPickMode = editPoseIdx >= 0;
+      tileHeader.textContent = isPickMode
+        ? '▶ TAP ROM TILE TO PLACE INTO ' + okPoseTiles[editPoseIdx].label + ' SLOT ' + editSlotIdx
+        : 'ONION KNIGHT — TAP TILE TO EDIT';
       const pal = BATTLE_PALETTES[spritePalIdx];
-      for (const pose of OK_POSES) {
+
+      for (let pi = 0; pi < okPoseTiles.length; pi++) {
+        const pose = okPoseTiles[pi];
         const rows = pose.rows;
-        const h = rows * 8;
-        const src = document.createElement('canvas');
-        src.width = 16; src.height = h;
-        const sctx = src.getContext('2d');
-        for (let t = 0; t < pose.tiles.length && t < rows * 2; t++) {
-          const tx = (t % 2) * 8;
-          const ty = Math.floor(t / 2) * 8;
-          _drawPoseTile(sctx, pose.tiles[t], tx, ty, pal);
+
+        const card = document.createElement('div');
+        card.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px;border:1px solid #2a2a3a;border-radius:4px;';
+        if (pi === editPoseIdx) card.style.borderColor = '#c8a832';
+
+        const lbl = document.createElement('span');
+        lbl.textContent = pose.label;
+        lbl.style.cssText = 'color:#c8a832;font-size:7px;font-family:monospace;';
+        card.appendChild(lbl);
+
+        const grid = document.createElement('div');
+        grid.style.cssText = 'display:grid;grid-template-columns:32px 32px;gap:1px;';
+
+        for (let t = 0; t < rows * 2; t++) {
+          const bytes = pose.tiles[t];
+          const tc = bytes ? _renderOneTile8x8(bytes, pal) : (() => { const c = document.createElement('canvas'); c.width=32; c.height=32; return c; })();
+          tc.style.cssText = 'border:1px solid #333;cursor:pointer;-webkit-tap-highlight-color:transparent;';
+          if (pi === editPoseIdx && t === editSlotIdx) {
+            tc.style.border = '2px solid #c8a832';
+            tc.style.boxShadow = '0 0 6px #c8a832';
+          }
+
+          const finalPi = pi, finalT = t;
+          tc.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            editPoseIdx = finalPi; editSlotIdx = finalT;
+            posesMode = false;
+            document.getElementById('tv-poses').classList.remove('active');
+            // Switch to 8×8 tile browse so user can pick a replacement
+            spriteMode = false;
+            document.getElementById('tv-sprite').classList.remove('active');
+            document.getElementById('tv-layout').style.display = 'none';
+            document.getElementById('tv-height').style.display = 'none';
+            document.getElementById('tv-frame-row').style.display = 'none';
+            tileHeader.textContent = '▶ PICK TILE FOR ' + okPoseTiles[finalPi].label + ' SLOT ' + finalT;
+            renderTilePage();
+          }, { passive: false });
+
+          grid.appendChild(tc);
         }
-        const scaled = document.createElement('canvas');
-        scaled.width = 64; scaled.height = h * 4;
-        const ssc = scaled.getContext('2d');
-        ssc.imageSmoothingEnabled = false;
-        ssc.drawImage(src, 0, 0, 64, h * 4);
-        const label = document.createElement('span');
-        label.textContent = pose.label;
-        const cell = document.createElement('div');
-        cell.className = 'tile-cell';
-        cell.appendChild(scaled);
-        cell.appendChild(label);
-        tileGrid.appendChild(cell);
+
+        // COPY BYTES button per pose
+        const copyBtn = document.createElement('button');
+        copyBtn.textContent = 'BYTES';
+        copyBtn.style.cssText = 'margin-top:2px;font-size:7px;font-family:monospace;padding:2px 4px;background:#1e1e2e;border:1px solid #444;color:#888;border-radius:3px;cursor:pointer;';
+        copyBtn.addEventListener('touchstart', (e) => {
+          e.preventDefault();
+          const lines = pose.tiles.map((b, i) => `  // slot ${i}\n  new Uint8Array([${Array.from(b).map(x=>'0x'+x.toString(16).toUpperCase().padStart(2,'0')).join(',')}]),`);
+          document.getElementById('tv-offset').value = lines.join('\n');
+        }, { passive: false });
+        copyBtn.addEventListener('click', () => {
+          const lines = pose.tiles.map((b, i) => `  // slot ${i}\n  new Uint8Array([${Array.from(b).map(x=>'0x'+x.toString(16).toUpperCase().padStart(2,'0')).join(',')}]),`);
+          document.getElementById('tv-offset').value = lines.join('\n');
+        });
+        card.appendChild(grid);
+        card.appendChild(copyBtn);
+        tileGrid.appendChild(card);
       }
     }
 
     document.getElementById('tv-poses').addEventListener('click', () => {
       posesMode = !posesMode;
+      editPoseIdx = -1; editSlotIdx = -1;
       document.getElementById('tv-poses').classList.toggle('active', posesMode);
-      if (posesMode) renderPosesGrid();
+      if (posesMode) { spriteMode = false; renderPosesGrid(); }
       else renderTilePage();
     });
 
