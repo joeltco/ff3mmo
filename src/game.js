@@ -1453,6 +1453,8 @@ function returnToTitle() {
   _syncSaveSlotProgress();
   saveSlotsToDB();
   pauseSt.state = 'none';
+  stopFF1Music();
+  resumeMusic(); // un-stash so fadeOutMusic fades the right track
   transSt.state = 'hud-fade-out';
   transSt.timer = 0;
   fadeOutMusic((HUD_INFO_FADE_STEPS + 1) * HUD_INFO_FADE_STEP_MS);
