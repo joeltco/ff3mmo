@@ -95,6 +95,8 @@ export function playTrack(trackId) {
   // Create AudioContext on first use (browser autoplay policy)
   if (!audioCtx) {
     audioCtx = new AudioContext();
+  }
+  if (!gainNode) {
     gainNode = audioCtx.createGain();
     gainNode.connect(audioCtx.destination);
   }
