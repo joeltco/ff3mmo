@@ -76,6 +76,8 @@ let ff1NsfData = null;
 let ff1Emu = null;
 let ff1EmuRef = null;
 let ff1Node = null;
+let ff1GainNode = null;
+let ff1FadeTimer = null;
 let ff1Buf = null;
 let ff1Track = -1;
 
@@ -349,7 +351,11 @@ export function playFF1Track(trackId) {
     }
   };
 
-  ff1Node.connect(audioCtx.destination);
+  if (!ff1GainNode) { ff1GainNode = audioCtx.createGain(); ff1GainNode.connect(audioCtx.destination); }
+  if (ff1FadeTimer) { clearTimeout(ff1FadeTimer); ff1FadeTimer = null; }
+  ff1GainNode.gain.cancelScheduledValues(audioCtx.currentTime);
+  ff1GainNode.gain.setValueAtTime(1, audioCtx.currentTime);
+  ff1Node.connect(ff1GainNode);
 }
 
 export function stopFF1Music() {
@@ -362,6 +368,21 @@ export function stopFF1Music() {
     ff1Emu = null;
   }
   ff1Track = -1;
+}
+
+export function fadeOutFF1Music(durationMs) {
+  if (!ff1GainNode || !audioCtx) return;
+  if (ff1FadeTimer) { clearTimeout(ff1FadeTimer); ff1FadeTimer = null; }
+  ff1GainNode.gain.cancelScheduledValues(audioCtx.currentTime);
+  ff1GainNode.gain.setValueAtTime(ff1GainNode.gain.value, audioCtx.currentTime);
+  ff1GainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + durationMs / 1000);
+  ff1FadeTimer = setTimeout(() => { ff1FadeTimer = null; stopFF1Music(); }, durationMs);
+}
+
+export function clearMusicStash() {
+  if (stashedNode) { stashedNode.disconnect(); stashedNode = null; }
+  if (stashedEmu) { Module.ccall('gme_delete', 'number', ['number'], [stashedEmu]); stashedEmu = null; }
+  stashedTrack = -1;
 }
 
 export function getCurrentTrack() {

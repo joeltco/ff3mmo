@@ -9,8 +9,8 @@ import { loadWorldMap } from './world-map-loader.js';
 import { WorldMapRenderer } from './world-map-renderer.js';
 import { generateFloor, clearDungeonCache } from './dungeon-generator.js';
 import { initMusic, playTrack, stopMusic, fadeOutMusic, playSFX, stopSFX, TRACKS, SFX,
-         initFF1Music, playFF1Track, stopFF1Music, getCurrentTrack, FF1_TRACKS,
-         pauseMusic, resumeMusic } from './music.js';
+         initFF1Music, playFF1Track, stopFF1Music, fadeOutFF1Music, clearMusicStash,
+         getCurrentTrack, FF1_TRACKS, pauseMusic, resumeMusic } from './music.js';
 import { applyIPS } from './ips-patcher.js';
 import { initTextDecoder, getItemNameClean, getMonsterName } from './text-decoder.js';
 import { initFont, drawText, measureText, TEXT_WHITE, TEXT_GREY, TEXT_YELLOW } from './font-renderer.js';
@@ -1453,11 +1453,10 @@ function returnToTitle() {
   _syncSaveSlotProgress();
   saveSlotsToDB();
   pauseSt.state = 'none';
-  stopFF1Music();
-  resumeMusic(); // un-stash so fadeOutMusic fades the right track
+  fadeOutFF1Music((HUD_INFO_FADE_STEPS + 1) * HUD_INFO_FADE_STEP_MS);
+  clearMusicStash();
   transSt.state = 'hud-fade-out';
   transSt.timer = 0;
-  fadeOutMusic((HUD_INFO_FADE_STEPS + 1) * HUD_INFO_FADE_STEP_MS);
   transSt.pendingAction = () => { battleState = 'none'; hudInfoFadeTimer = HUD_INFO_FADE_STEPS * HUD_INFO_FADE_STEP_MS; _startTitleScreen(); };
 }
 /**
