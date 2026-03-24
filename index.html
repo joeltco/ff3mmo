@@ -593,6 +593,7 @@
       <button id="tv-rom3" class="tv-rom-btn active">FF3</button>
       <button id="tv-rom12" class="tv-rom-btn">FF1&2</button>
       <button id="tv-sprite" class="tv-rom-btn">SPRITE</button>
+      <button id="tv-layout" class="tv-rom-btn" style="display:none">ROW</button>
       <input id="tv-offset" type="text" placeholder="offset (hex)" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
       <button id="tv-go">GO</button>
     </div>
@@ -941,6 +942,7 @@
     let tileBaseOffset = 16;
     let tileRomBuffer = null;
     let spriteMode = false;
+    let spriteRowMajor = false; // false = column-major (left col then right col)
 
     document.getElementById('tv-rom3').addEventListener('click', () => {
       tileRomBuffer = ff3Buffer; tilePage = 0; tileBaseOffset = 16;
@@ -987,7 +989,9 @@
           for (let t = 0; t < tilesPerSprite; t++) {
             const toff = sprOff + t * 16;
             if (toff + 15 >= rom.length) break;
-            sctx.putImageData(decodeTileToImageData(rom, toff), (t % 2) * 8, Math.floor(t / 2) * 8);
+            const tx = spriteRowMajor ? (t % 2) * 8 : Math.floor(t / 4) * 8;
+            const ty = spriteRowMajor ? Math.floor(t / 2) * 8 : (t % 4) * 8;
+            sctx.putImageData(decodeTileToImageData(rom, toff), tx, ty);
           }
           const scaled = document.createElement('canvas');
           scaled.width = 64; scaled.height = 128;
@@ -1046,7 +1050,14 @@
     document.getElementById('tv-sprite').addEventListener('click', () => {
       spriteMode = !spriteMode;
       document.getElementById('tv-sprite').classList.toggle('active', spriteMode);
+      document.getElementById('tv-layout').style.display = spriteMode ? '' : 'none';
       tilePage = 0; renderTilePage();
+    });
+
+    document.getElementById('tv-layout').addEventListener('click', () => {
+      spriteRowMajor = !spriteRowMajor;
+      document.getElementById('tv-layout').textContent = spriteRowMajor ? 'ROW' : 'COL';
+      renderTilePage();
     });
 
     document.getElementById('tv-go').addEventListener('click', () => {
