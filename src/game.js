@@ -8,7 +8,7 @@ import { MapRenderer } from './map-renderer.js';
 import { loadWorldMap } from './world-map-loader.js';
 import { WorldMapRenderer } from './world-map-renderer.js';
 import { generateFloor, clearDungeonCache } from './dungeon-generator.js';
-import { initMusic, playTrack, stopMusic, playSFX, stopSFX, TRACKS, SFX,
+import { initMusic, playTrack, stopMusic, fadeOutMusic, playSFX, stopSFX, TRACKS, SFX,
          initFF1Music, playFF1Track, stopFF1Music, getCurrentTrack, FF1_TRACKS,
          pauseMusic, resumeMusic } from './music.js';
 import { applyIPS } from './ips-patcher.js';
@@ -3075,7 +3075,7 @@ function updateTitle(dt) {
     case 'select':               _updateTitleSelectCase(); break;
     case 'name-entry':           break;
     case 'select-fade-out':      if (titleSt.timer >= (SELECT_TEXT_STEPS + 1) * SELECT_TEXT_STEP_MS) { titleSt.state = 'select-box-close-fwd'; titleSt.timer = 0; } break;
-    case 'select-box-close-fwd': if (titleSt.timer >= BOSS_BOX_EXPAND_MS) { titleSt.state = 'main-out'; titleSt.timer = 0; } break;
+    case 'select-box-close-fwd': if (titleSt.timer >= BOSS_BOX_EXPAND_MS) { titleSt.state = 'main-out'; titleSt.timer = 0; fadeOutMusic(TITLE_FADE_MS); } break;
     case 'select-fade-out-back': if (titleSt.timer >= (SELECT_TEXT_STEPS + 1) * SELECT_TEXT_STEP_MS) { titleSt.state = 'select-box-close'; titleSt.timer = 0; } break;
     case 'select-box-close':     if (titleSt.timer >= BOSS_BOX_EXPAND_MS) { titleSt.state = 'logo-fade-in'; titleSt.timer = 0; } break;
     case 'logo-fade-in':         if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'zbox-open'; titleSt.timer = 0; } break;

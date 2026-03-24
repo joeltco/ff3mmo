@@ -51,11 +51,13 @@ export const FF1_TRACKS = {
 
 let nsfData = null;    // Built NSF Uint8Array
 let audioCtx = null;   // Web Audio context
+let gainNode = null;   // Master gain — used for fade-out
 let emu = null;        // libgme emulator handle
 let emuRef = null;     // Emscripten pointer for emulator
 let node = null;       // ScriptProcessor node
 let audioBuf = null;   // Emscripten heap pointer for sample buffer
 let currentTrack = -1;
+let fadeOutTimer = null; // setTimeout handle for stop-after-fade
 
 // Stashed music state (for pause/resume across battle)
 let stashedEmu = null;
@@ -93,10 +95,17 @@ export function playTrack(trackId) {
   // Create AudioContext on first use (browser autoplay policy)
   if (!audioCtx) {
     audioCtx = new AudioContext();
+    gainNode = audioCtx.createGain();
+    gainNode.connect(audioCtx.destination);
   }
   if (audioCtx.state === 'suspended') {
     audioCtx.resume();
   }
+
+  // Cancel any in-progress fade and reset gain to full
+  if (fadeOutTimer) { clearTimeout(fadeOutTimer); fadeOutTimer = null; }
+  gainNode.gain.cancelScheduledValues(audioCtx.currentTime);
+  gainNode.gain.setValueAtTime(1, audioCtx.currentTime);
 
   // Tear down previous playback
   if (node) {
@@ -162,7 +171,7 @@ export function playTrack(trackId) {
     }
   };
 
-  node.connect(audioCtx.destination);
+  node.connect(gainNode);
 }
 
 export function stopMusic() {
@@ -175,6 +184,15 @@ export function stopMusic() {
     emu = null;
   }
   currentTrack = -1;
+}
+
+export function fadeOutMusic(durationMs) {
+  if (!gainNode || !audioCtx) return;
+  if (fadeOutTimer) { clearTimeout(fadeOutTimer); fadeOutTimer = null; }
+  gainNode.gain.cancelScheduledValues(audioCtx.currentTime);
+  gainNode.gain.setValueAtTime(gainNode.gain.value, audioCtx.currentTime);
+  gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + durationMs / 1000);
+  fadeOutTimer = setTimeout(() => { fadeOutTimer = null; stopMusic(); }, durationMs);
 }
 
 export function playSFX(sfxId) {
