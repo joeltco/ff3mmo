@@ -1455,6 +1455,7 @@ function returnToTitle() {
   pauseSt.state = 'none';
   transSt.state = 'hud-fade-out';
   transSt.timer = 0;
+  fadeOutMusic((HUD_INFO_FADE_STEPS + 1) * HUD_INFO_FADE_STEP_MS);
   transSt.pendingAction = () => { battleState = 'none'; hudInfoFadeTimer = HUD_INFO_FADE_STEPS * HUD_INFO_FADE_STEP_MS; _startTitleScreen(); };
 }
 /**
