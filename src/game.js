@@ -733,11 +733,11 @@ const _FP_KNEEL = [
 function _initFakePosePortraits(romData) {
   const idleTiles = _FP_IDLE_PPU.map(d => decodeTile(d, 0));
   fakePlayerPortraits         = _genPosePortraits(idleTiles);
-  fakePlayerVictoryPortraits  = _genPosePortraits([0,1,2,3].map(i => decodeTile(romData, BATTLE_SPRITE_ROM + (24 + i) * 16)));
+  fakePlayerVictoryPortraits  = _genPosePortraits(_FP_KNIFE_BACK.map(d => decodeTile(d, 0)));
   fakePlayerHitPortraits      = _genPosePortraits([0,1,2,3].map(i => decodeTile(romData, BATTLE_SPRITE_ROM + (30 + i) * 16)));
   fakePlayerDefendPortraits   = _genPosePortraits(_FP_DEFEND.map(d => decodeTile(d, 0)));
   fakePlayerAttackPortraits   = _genPosePortraits([idleTiles[0], idleTiles[1], decodeTile(_FP_ATK_R_TILE, 0), idleTiles[3]]);
-  fakePlayerAttackLPortraits  = _genPosePortraits([idleTiles[0], idleTiles[1], decodeTile(_FP_ATK_L_TILE3, 0), decodeTile(_FP_ATK_L_TILE4, 0)]);
+  fakePlayerAttackLPortraits  = _genPosePortraits([idleTiles[0], idleTiles[1], idleTiles[2], decodeTile(_FP_KNIFE_L[3], 0)]);
   fakePlayerKnifeBackPortraits = _genPosePortraits(_FP_KNIFE_BACK.map(d => decodeTile(d, 0)));
   fakePlayerKnifeRPortraits   = _genPosePortraits(_FP_KNIFE_R.map(d => decodeTile(d, 0)));
   fakePlayerKnifeLPortraits   = _genPosePortraits(_FP_KNIFE_L.map(d => decodeTile(d, 0)));
@@ -778,23 +778,33 @@ const _FP_KNIFE_R = [
 ];
 const _FP_KNIFE_L = [
   new Uint8Array([0x00,0x00,0x0A,0x16,0x2F,0x03,0x00,0x0C, 0x00,0x00,0x0E,0x1E,0x3F,0x7F,0x83,0x40]),
-  new Uint8Array([0x00,0x00,0x00,0xE0,0x70,0xB8,0xD8,0x68, 0x00,0x6C,0x19,0xFE,0x76,0xBB,0xDB,0xEC]),
+  new Uint8Array([0x00,0x00,0x00,0xE0,0x70,0xB8,0xD8,0x68, 0x00,0x6C,0x19,0xFE,0x76,0xBB,0xDB,0xED]),
   new Uint8Array([0x1F,0x04,0x16,0x16,0x0F,0x0F,0x60,0xC6, 0x00,0x00,0x00,0x00,0x50,0xE0,0x60,0x1E]),
   new Uint8Array([0x13,0x87,0x57,0xF8,0x7E,0x3C,0x1C,0x08, 0x50,0x30,0x30,0x38,0xFE,0x7C,0xFE,0xFA]),
 ];
 const _FP_LEG_L = new Uint8Array([0xCC,0x58,0x2F,0x3F,0x3F,0x1F,0x00,0x00, 0x1E,0x5F,0x3F,0x3F,0x3F,0x1F,0x07,0x0F]);
 const _FP_LEG_R = new Uint8Array([0xD8,0x70,0x80,0xE0,0xE0,0xC0,0x00,0x00, 0x1C,0x74,0x84,0xE6,0xE6,0xC6,0xC7,0xC7]);
+// Per-pose leg tiles (correct from PPU debugger)
+const _FP_LEG_L_BACK_L  = new Uint8Array([0xC6,0x4C,0x37,0x3F,0x3F,0x1F,0x00,0x00, 0x1F,0x5F,0x3F,0x3F,0xFF,0xFF,0x78,0x39]); // L back swing
+const _FP_LEG_R_BACK_L  = new Uint8Array([0x00,0x00,0xF0,0xF0,0xE0,0xC0,0x00,0x00, 0xE2,0xC2,0xF3,0xF1,0xE1,0xF1,0xF1,0xE1]); // L back swing
+const _FP_LEG_L_FWD_L   = new Uint8Array([0xDC,0xD8,0x04,0x3C,0x3C,0x1C,0x00,0x00, 0x1D,0x1D,0x05,0x3D,0xFD,0xFD,0x79,0x39]); // L fwd swing
+const _FP_LEG_R_FWD_L   = new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 0x70,0x78,0xFC,0xBE,0xFF,0xFF,0xFC,0xE0]); // L fwd swing
+const _FP_LEG_L_BACK_R  = new Uint8Array([0x06,0x0C,0x37,0x3F,0x3F,0x1F,0x00,0x00, 0x1E,0x1F,0x3F,0x3F,0xFF,0xFF,0x78,0x39]); // R back swing
+const _FP_LEG_R_SWING   = new Uint8Array([0xD8,0x70,0x80,0xF0,0xE0,0xC0,0x00,0x00, 0x1C,0x74,0x86,0xF2,0xE3,0xF1,0xF1,0xE1]); // R back+fwd swing
+const _FP_LEG_L_KNEEL   = new Uint8Array([0x38,0x18,0x03,0x05,0x0F,0x07,0x07,0x03, 0x38,0x1B,0x07,0x17,0x6F,0x77,0x77,0x33]);
+const _FP_LEG_R_KNEEL   = new Uint8Array([0x0E,0xCC,0x80,0xF8,0xE0,0xC0,0xC0,0xC0, 0x0E,0xEC,0xF2,0xF9,0xED,0xDD,0xDD,0xD9]);
+const _FP_LEG_L_VICTORY = new Uint8Array([0x37,0x1F,0x0F,0x0F,0x07,0x00,0x00,0x00, 0x3F,0xDF,0xEF,0xEF,0x67,0x08,0x07,0x00]);
+const _FP_LEG_R_VICTORY = new Uint8Array([0xE0,0x80,0x00,0x00,0x00,0x00,0x00,0x00, 0xE2,0xB2,0x73,0x73,0x63,0x03,0xFB,0x00]);
 function _buildIdleFullBodies() {
   const legL = decodeTile(_FP_LEG_L, 0), legR = decodeTile(_FP_LEG_R, 0);
   const tiles = _FP_IDLE_PPU.map(d => decodeTile(d, 0));
   fakePlayerFullBodyCanvases = PLAYER_PALETTES.map(pal => _buildFullBody16x24Canvas(tiles, legL, legR, pal));
 }
 function _buildKnifeFullBodies() {
-  const legL = decodeTile(_FP_LEG_L, 0), legR = decodeTile(_FP_LEG_R, 0);
-  const build = (data, pal) => _buildFullBody16x24Canvas(data.map(d => decodeTile(d, 0)), legL, legR, pal);
-  fakePlayerKnifeRFullBodyCanvases    = PLAYER_PALETTES.map(pal => build(_FP_KNIFE_R, pal));
-  fakePlayerKnifeLFullBodyCanvases    = PLAYER_PALETTES.map(pal => build(_FP_KNIFE_L, pal));
-  fakePlayerKnifeBackFullBodyCanvases = PLAYER_PALETTES.map(pal => build(_FP_KNIFE_BACK, pal));
+  const build = (data, lL, lR, pal) => _buildFullBody16x24Canvas(data.map(d => decodeTile(d, 0)), decodeTile(lL, 0), decodeTile(lR, 0), pal);
+  fakePlayerKnifeRFullBodyCanvases    = PLAYER_PALETTES.map(pal => build(_FP_KNIFE_R,    _FP_LEG_L_BACK_R, _FP_LEG_R_SWING,   pal));
+  fakePlayerKnifeLFullBodyCanvases    = PLAYER_PALETTES.map(pal => build(_FP_KNIFE_L,    _FP_LEG_L_BACK_L, _FP_LEG_R_BACK_L,  pal));
+  fakePlayerKnifeBackFullBodyCanvases = PLAYER_PALETTES.map(pal => build(_FP_KNIFE_BACK, _FP_LEG_L_VICTORY,_FP_LEG_R_VICTORY, pal));
 }
 function _buildHitFullBodies(romData) {
   const legL = decodeTile(_FP_LEG_L, 0), legR = decodeTile(_FP_LEG_R, 0);
@@ -920,14 +930,9 @@ function _initBattleIdleSprites(romData, palette) {
 }
 
 function _initBattleAttackSprites(palette) {
-  // Attack pose tiles from FCEUX PPU dump (unarmed, weapons zeroed)
-  // Right hand: mid-L changes $03→$39; left hand: mid-L→$3B, mid-R→$3C
+  // R back swing: mid-L changes idle $03→$39 (arm raises)
   const ATK_R_39 = new Uint8Array([0x1F,0x04,0x16,0x16,0x2F,0x7F,0x70,0x26,
                                     0x00,0x00,0x00,0x00,0x30,0x70,0x70,0x3E]);
-  const ATK_L_3B = new Uint8Array([0x1F,0x04,0x16,0x16,0x0C,0x08,0x38,0x7C,
-                                    0x00,0x00,0x00,0x00,0x11,0x03,0x38,0x7D]);
-  const ATK_L_3C = new Uint8Array([0x18,0x80,0x48,0xCC,0x00,0x00,0x00,0x00,
-                                    0x59,0x32,0x38,0x0C,0x80,0xC0,0x00,0x60]);
 
   // Right-hand punch (mid-L = $39) — idle + modified lower-left tile
   battleSpriteAttackCanvas = document.createElement('canvas');
@@ -948,8 +953,8 @@ function _initBattleAttackSprites(palette) {
   battleSpriteAttackLCanvas.width = 16; battleSpriteAttackLCanvas.height = 16;
   const alctx = battleSpriteAttackLCanvas.getContext('2d');
   alctx.drawImage(battleSpriteCanvas, 0, 0);
-  _drawTileOnto(ATK_L_3B, palette, alctx, 0, 8);
-  _drawTileOnto(ATK_L_3C, palette, alctx, 8, 8);
+  // L back swing: mid-left stays idle, mid-right = _FP_KNIFE_L[3]
+  _drawTileOnto(_FP_KNIFE_L[3], palette, alctx, 8, 8);
 }
 
 function _initBattleKnifeBodySprites(palette) {
@@ -995,8 +1000,8 @@ function _initBattleBladeSprites(palette) {
 }
 
 function _initBattleRomPoses(romData, palette) {
-  // Victory pose: sprite frame 4 in job block (tiles 24-27)
-  battleSpriteVictoryCanvas = _buildCanvas4ROM(romData, BATTLE_SPRITE_ROM + 24 * 16, palette);
+  // Victory pose: KNIFE_BACK tiles (arms raised, confirmed from PPU debugger)
+  battleSpriteVictoryCanvas = _buildCanvas4(_FP_KNIFE_BACK, palette);
   // Hit/recoil pose: sprite frame 5 in job block (tiles 30-33)
   battleSpriteHitCanvas = _buildCanvas4ROM(romData, BATTLE_SPRITE_ROM + 30 * 16, palette);
   // Attack frame 2: ROM frame 3 (tiles 18-21, arm raised)
