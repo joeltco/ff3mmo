@@ -296,7 +296,9 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   } else if (isWindUp) {
     body = _s.knifeBackFullBodyCanvases[palIdx] || fullBody;
   } else if (isAttackState) {
-    const atkCvs = isLeftHandAtk ? _s.knifeRFullBodyCanvases : _s.knifeLFullBodyCanvases;
+    // After h-flip: knifeR source (right arm) → left side visible = opponent's right arm
+    //               knifeL source (left arm)  → right side visible = opponent's left arm
+    const atkCvs = isLeftHandAtk ? _s.knifeLFullBodyCanvases : _s.knifeRFullBodyCanvases;
     body = (atkCvs && atkCvs[palIdx]) || fullBody;
   }
 
@@ -315,16 +317,19 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
     _s.ctx.translate(sprX + 16, sprY);
     _s.ctx.scale(-1, 1);
     if (isAttackState && blade === blades.fist) _s.ctx.drawImage(blade, -4, 10);
-    else if (isAttackState)                     _s.ctx.drawImage(blade, -16, 1);
-    else                                        _s.ctx.drawImage(blade,   8, -7);
+    else if (isAttackState)                     _s.ctx.drawImage(blade,  16,  1); // swung: LEFT of sprite (toward player)
+    else if (isLeftHandWind)                    _s.ctx.drawImage(blade,  -8, -7); // L wind-up: blade on RIGHT side (left arm)
+    else                                        _s.ctx.drawImage(blade,   8, -7); // R wind-up: blade on LEFT side (right arm)
     _s.ctx.restore();
   };
 
-  // Wind-up: raised blade BEHIND body (draw before body — mirrors player portrait before=true pass)
-  if (isWindUp && blade) drawBlade();
+  // Opponent faces player — arms mirror the player portrait:
+  // Right-hand (arm on LEFT side after h-flip): back-swing goes BEHIND body
+  // Left-hand  (arm on RIGHT side after h-flip): back-swing crosses IN FRONT of body
+  // All strikes: swung blade IN FRONT
+  if (isWindUp && blade && !isLeftHandWind) drawBlade();   // right-hand wind-up: behind body
   _s.ctx.drawImage(body, sprX, sprY);
-  // Strike: swung blade IN FRONT of body (draw after body — mirrors player portrait before=false pass)
-  if (isAttackState && blade) drawBlade();
+  if ((isAttackState || (isWindUp && isLeftHandWind)) && blade) drawBlade(); // left-hand wind-up + strikes: in front
 
   // Slash effect overlays (player/ally attacking the main opponent)
   if (isMain) {
