@@ -12,7 +12,7 @@ import { BASE_HIT_RATE, rollHits } from './battle-math.js';
 import { _nameToBytes } from './text-utils.js';
 
 // Local constants (must match game.js)
-const HUD_VIEW_X = 0, HUD_VIEW_Y = 32, HUD_VIEW_W = 144;
+const HUD_VIEW_X = 0, HUD_VIEW_Y = 32, HUD_VIEW_W = 144, HUD_VIEW_H = 144;
 const BOSS_DEF = 6;
 const INV_SLOTS = 3;
 const ROSTER_VISIBLE = 3;
