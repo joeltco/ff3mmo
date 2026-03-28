@@ -384,7 +384,8 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
     } else if (isAttackState) {
       ctx.drawImage(blade, -16, 1);
     } else {
-      ctx.drawImage(blade, 8, -7);
+      // L-hand back-swing sits 8px further from body than R-hand (NES: +16 vs +8)
+      ctx.drawImage(blade, isLeftHandWind ? 16 : 8, -7);
     }
     ctx.restore();
   };

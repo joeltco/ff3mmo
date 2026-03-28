@@ -460,6 +460,7 @@ let allyJoinRound = 0;         // combat round counter
 let currentAllyAttacker = -1;  // index into battleAllies during ally turn
 let allyTargetIndex = -1;      // which enemy the ally is attacking
 let allyHitResult = null;      // single hit result {damage, crit} or {miss}
+let allyHitIsLeft = false;     // true when current ally hit is L-hand (second strike)
 let allyDamageNums = {};       // {allyIdx: {value, timer, crit} or {miss, timer}}
 let allyShakeTimer = {};       // {allyIdx: ms remaining}
 let enemyTargetAllyIdx = -1;   // which ally an enemy is targeting (-1 = player)
@@ -1395,7 +1396,7 @@ function _resetBattleVars() {
   bossDamageNum = null; playerDamageNum = null; playerHealNum = null; enemyHealNum = null;
   encounterDropItem = null; bossFlashTimer = 0; battleShakeTimer = 0;
   isDefending = false; battleAllies = []; allyJoinRound = 0;
-  currentAllyAttacker = -1; allyTargetIndex = -1; allyHitResult = null;
+  currentAllyAttacker = -1; allyTargetIndex = -1; allyHitResult = null; allyHitIsLeft = false;
   allyDamageNums = {}; allyShakeTimer = {}; enemyTargetAllyIdx = -1; allyExitTimer = 0;
   southWindTargets = []; southWindHitIdx = 0; southWindDmgNums = {};
   inputSt.battleProfHits = {};
@@ -3424,7 +3425,7 @@ function startRandomEncounter() {
   allyJoinRound = 0;
   currentAllyAttacker = -1;
   allyTargetIndex = -1;
-  allyHitResult = null;
+  allyHitResult = null; allyHitIsLeft = false;
   allyDamageNums = {};
   allyShakeTimer = {};
   enemyTargetAllyIdx = -1;
@@ -3885,7 +3886,16 @@ function _updateAllyDamageShow() {
     if (pvpSt.isPVPBattle) { _advancePVPTargetOrVictory(); }
     else { battleState = 'boss-dissolve'; battleTimer = 0; playSFX(SFX.BOSS_DEATH); }
   } else {
-    processNextTurn();
+    const ally = battleAllies[currentAllyAttacker];
+    if (!allyHitIsLeft && ally && isWeapon(ally.weaponL)) {
+      allyHitIsLeft = true;
+      const targetDef = allyTargetIndex >= 0 && encounterMonsters ? encounterMonsters[allyTargetIndex].def : BOSS_DEF;
+      allyHitResult = rollHits(ally.atk, targetDef, 85, 1)[0];
+      battleState = 'ally-attack-start'; battleTimer = 0;
+    } else {
+      allyHitIsLeft = false;
+      processNextTurn();
+    }
   }
 }
 
@@ -3905,7 +3915,8 @@ function _updateAllyAttack() {
   if (battleState === 'ally-attack-start') {
     if (battleTimer >= 100) {
       const ally = battleAllies[currentAllyAttacker];
-      const bladed = ally && isBladedWeapon(ally.weaponId);
+      const activeWpn = allyHitIsLeft ? (ally && ally.weaponL) : (ally && ally.weaponId);
+      const bladed = isBladedWeapon(activeWpn);
       playSFX(bladed ? SFX.KNIFE_HIT : SFX.ATTACK_HIT);
       if (bladed && !(allyHitResult && allyHitResult.crit)) {
         if (sfxCutTimerId) clearTimeout(sfxCutTimerId);
@@ -4288,9 +4299,9 @@ function _drawPortraitWeapon(px, py, before) {
       else if (wpnSt === 'knife' && battleKnifeBladeCanvas) ctx.drawImage(battleKnifeBladeCanvas, px + 8, py - 7);
       else if (wpnSt === 'sword' && battleSwordBladeCanvas) ctx.drawImage(battleSwordBladeCanvas, px + 8, py - 7);
     } else if (!before && !rightHand) {
-      if (wpnSt === 'knife' && handWeapon === 0x1F && battleDaggerBladeCanvas) ctx.drawImage(battleDaggerBladeCanvas, px + 8, py - 7);
-      else if (wpnSt === 'knife' && battleKnifeBladeCanvas) ctx.drawImage(battleKnifeBladeCanvas, px + 8, py - 7);
-      else if (wpnSt === 'sword' && battleSwordBladeCanvas) ctx.drawImage(battleSwordBladeCanvas, px + 8, py - 7);
+      if (wpnSt === 'knife' && handWeapon === 0x1F && battleDaggerBladeCanvas) ctx.drawImage(battleDaggerBladeCanvas, px + 16, py - 7);
+      else if (wpnSt === 'knife' && battleKnifeBladeCanvas) ctx.drawImage(battleKnifeBladeCanvas, px + 16, py - 7);
+      else if (wpnSt === 'sword' && battleSwordBladeCanvas) ctx.drawImage(battleSwordBladeCanvas, px + 16, py - 7);
     }
   } else if (!before && battleState === 'player-slash') {
     if (wpnSt === 'knife' && handWeapon === 0x1F && battleDaggerBladeSwungCanvas) ctx.drawImage(battleDaggerBladeSwungCanvas, px - 16, py + 1);
@@ -5086,23 +5097,29 @@ function _drawAllyRow(i, ally, panelTop, weaponDraws) {
   _drawAllyTexts(i, ally, rowY, isAllyHeal, ppx, ppy, weaponDraws);
 }
 function _drawAllyPortrait(i, ally, isVicPose, isAllyAttack, isAllyHit, isNearFatal, ppx, ppy, weaponDraws) {
+  const isThisAllySlash = battleState === 'ally-slash' && currentAllyAttacker === i;
+  const hitLeft = isAllyAttack && allyHitIsLeft;
   let portraits;
   if (isVicPose && (Math.floor(Date.now() / 250) & 1) && fakePlayerVictoryPortraits[ally.palIdx]) portraits = fakePlayerVictoryPortraits[ally.palIdx];
-  else if (isAllyAttack && fakePlayerAttackPortraits[ally.palIdx]) portraits = fakePlayerAttackPortraits[ally.palIdx];
+  else if (isAllyAttack) portraits = (hitLeft ? fakePlayerAttackLPortraits : fakePlayerAttackPortraits)[ally.palIdx];
+  else if (isThisAllySlash) portraits = (allyHitIsLeft ? fakePlayerKnifeLPortraits : fakePlayerKnifeRPortraits)[ally.palIdx];
   else if (isAllyHit && fakePlayerHitPortraits[ally.palIdx]) portraits = fakePlayerHitPortraits[ally.palIdx];
   else if (isNearFatal && fakePlayerKneelPortraits[ally.palIdx]) portraits = fakePlayerKneelPortraits[ally.palIdx];
   else portraits = fakePlayerPortraits[ally.palIdx];
   if (!portraits) return;
   ctx.drawImage(portraits[ally.fadeStep], ppx, ppy);
   if (isAllyAttack) {
-    const wpnSt = weaponSubtype(ally.weaponId);
-    if (wpnSt === 'knife' && ally.weaponId === 0x1F && battleDaggerBladeCanvas) weaponDraws.push({ img: battleDaggerBladeCanvas, x: ppx + 8, y: ppy - 7 });
-    else if (wpnSt === 'knife' && battleKnifeBladeCanvas) weaponDraws.push({ img: battleKnifeBladeCanvas, x: ppx + 8, y: ppy - 7 });
-    else if (wpnSt === 'sword' && battleSwordBladeCanvas) weaponDraws.push({ img: battleSwordBladeCanvas, x: ppx + 8, y: ppy - 7 });
+    const activeWpnId = hitLeft ? ally.weaponL : ally.weaponId;
+    const wpnSt = weaponSubtype(activeWpnId);
+    const backX = ppx + (hitLeft ? 16 : 8);
+    if (wpnSt === 'knife' && activeWpnId === 0x1F && battleDaggerBladeCanvas) weaponDraws.push({ img: battleDaggerBladeCanvas, x: backX, y: ppy - 7 });
+    else if (wpnSt === 'knife' && battleKnifeBladeCanvas) weaponDraws.push({ img: battleKnifeBladeCanvas, x: backX, y: ppy - 7 });
+    else if (wpnSt === 'sword' && battleSwordBladeCanvas) weaponDraws.push({ img: battleSwordBladeCanvas, x: backX, y: ppy - 7 });
   }
-  if (battleState === 'ally-slash' && currentAllyAttacker === i) {
-    const wpnSt = weaponSubtype(ally.weaponId);
-    if (wpnSt === 'knife' && ally.weaponId === 0x1F && battleDaggerBladeSwungCanvas) weaponDraws.push({ img: battleDaggerBladeSwungCanvas, x: ppx - 16, y: ppy + 1 });
+  if (isThisAllySlash) {
+    const activeWpnId = allyHitIsLeft ? ally.weaponL : ally.weaponId;
+    const wpnSt = weaponSubtype(activeWpnId);
+    if (wpnSt === 'knife' && activeWpnId === 0x1F && battleDaggerBladeSwungCanvas) weaponDraws.push({ img: battleDaggerBladeSwungCanvas, x: ppx - 16, y: ppy + 1 });
     else if (wpnSt === 'knife' && battleKnifeBladeSwungCanvas) weaponDraws.push({ img: battleKnifeBladeSwungCanvas, x: ppx - 16, y: ppy + 1 });
     else if (wpnSt === 'sword' && battleSwordBladeSwungCanvas) weaponDraws.push({ img: battleSwordBladeSwungCanvas, x: ppx - 16, y: ppy + 1 });
     else if (battleFistCanvas) weaponDraws.push({ img: battleFistCanvas, x: ppx - 4, y: ppy + 10 });
