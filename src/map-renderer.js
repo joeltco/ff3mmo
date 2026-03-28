@@ -348,11 +348,14 @@ export class MapRenderer {
     const rc = this._roomClip;
     if (rc) {
       ctx.save();
-      ctx.beginPath();
-      ctx.rect(rc.x - worldLeft, rc.y - worldTop, rc.w, rc.h);
-      ctx.clip();
-      ctx.drawImage(this._mapCanvas, -worldLeft, -worldTop);
-      ctx.restore();
+      try {
+        ctx.beginPath();
+        ctx.rect(rc.x - worldLeft, rc.y - worldTop, rc.w, rc.h);
+        ctx.clip();
+        ctx.drawImage(this._mapCanvas, -worldLeft, -worldTop);
+      } finally {
+        ctx.restore();
+      }
     } else {
       ctx.drawImage(this._mapCanvas, -worldLeft, -worldTop);
     }
@@ -364,19 +367,25 @@ export class MapRenderer {
 
     // u bit (0x20): overlay clips to sprite's bottom 8px
     ctx.save();
-    ctx.beginPath();
-    ctx.rect(spriteX, spriteY + 8, 16, 8);
-    ctx.clip();
-    ctx.drawImage(this._overlayU, -worldLeft, -worldTop);
-    ctx.restore();
+    try {
+      ctx.beginPath();
+      ctx.rect(spriteX, spriteY + 8, 16, 8);
+      ctx.clip();
+      ctx.drawImage(this._overlayU, -worldLeft, -worldTop);
+    } finally {
+      ctx.restore();
+    }
 
     // l bit (0x10): overlay clips to sprite's top 8px
     ctx.save();
-    ctx.beginPath();
-    ctx.rect(spriteX, spriteY, 16, 8);
-    ctx.clip();
-    ctx.drawImage(this._overlayL, -worldLeft, -worldTop);
-    ctx.restore();
+    try {
+      ctx.beginPath();
+      ctx.rect(spriteX, spriteY, 16, 8);
+      ctx.clip();
+      ctx.drawImage(this._overlayL, -worldLeft, -worldTop);
+    } finally {
+      ctx.restore();
+    }
   }
 
   isPassable(tileX, tileY) {
