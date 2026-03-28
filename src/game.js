@@ -2261,7 +2261,7 @@ function _rebuildFlameSprites() {
 
 
 
-function _renderSprites(camX, camY, originX, spriteY) {
+function _renderSprites(camX, camY, originX, originY, spriteY) {
   if (!onWorldMap && _flameSprites.length > 0) {
     const flameFrame = Math.floor(waterTick / 8) & 1;
     const wLeft = camX - originX;
@@ -2301,7 +2301,7 @@ function _renderMapAndWater(camX, camY, originX, originY, spriteY) {
   }
   if ((transSt.state === 'none' || transSt.state === 'trap-reveal') &&
       (battleState === 'none' || battleState === 'flash-strobe' || battleState.startsWith('roar-'))) {
-    _renderSprites(camX, camY, originX, spriteY);
+    _renderSprites(camX, camY, originX, originY, spriteY);
   }
   if (onWorldMap && worldMapRenderer) {
     worldMapRenderer.drawOverlay(ctx, camX, camY, originX, originY, SCREEN_CENTER_X, spriteY);
