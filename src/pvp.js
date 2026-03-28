@@ -376,11 +376,17 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   const drawBlade = () => {
     const ctx = _s.ctx;
     if (isAttackState && blade === blades.fist) {
-      ctx.drawImage(blade, sprX + 4,  sprY + 10);
-    } else if (isAttackState) {
-      ctx.drawImage(blade, sprX + 16, sprY + 1);  // forward: arm extends RIGHT in h-flipped canvas
+      ctx.drawImage(blade, sprX + 4, sprY + 10);
     } else {
-      ctx.drawImage(blade, sprX - 8,  sprY - 7);  // back-swing: arm is on LEFT of h-flipped canvas
+      // Blade canvases were built for a right-facing player portrait.
+      // Opponent faces left — h-flip the blade canvas to mirror the portrait exactly.
+      const bx = isAttackState ? sprX + 16 : sprX - 8;
+      const by = isAttackState ? sprY + 1   : sprY - 7;
+      ctx.save();
+      ctx.translate(bx + 16, by);
+      ctx.scale(-1, 1);
+      ctx.drawImage(blade, 0, 0);
+      ctx.restore();
     }
   };
 
