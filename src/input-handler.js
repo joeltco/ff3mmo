@@ -16,7 +16,7 @@ const HUD_VIEW_X = 0, HUD_VIEW_Y = 32, HUD_VIEW_W = 144, HUD_VIEW_H = 144;
 const BOSS_DEF = 6;
 const INV_SLOTS = 3;
 const ROSTER_VISIBLE = 3;
-const ROSTER_MENU_ITEMS = ['Party', 'Duel', 'Trade', 'Message', 'Inspect'];
+const ROSTER_MENU_ITEMS = ['Party', 'Battle', 'Trade', 'Message', 'Inspect'];
 
 // ── Mutable state (imported by game.js draw/update code) ───────────────────
 
@@ -470,7 +470,7 @@ function _rosterInputMenu() {
     inputSt.rosterState = 'menu-out';
     inputSt.rosterMenuTimer = 0;
     playSFX(SFX.CONFIRM);
-    if (action === 'Duel' && (_s.onWorldMap || _s.dungeonFloor >= 0)) {
+    if (action === 'Battle' && (_s.onWorldMap || _s.dungeonFloor >= 0)) {
       _rosterMenuDuelAction(target);
     } else {
       const actionBytes = _nameToBytes(action), nameBytes = _nameToBytes(target.name);

@@ -50,6 +50,7 @@ import { pauseSt, updatePauseMenu, drawPauseMenu } from './pause-menu.js';
 import { transSt, topBoxSt, loadingSt, startWipeTransition, updateTransition, updateTopBoxScroll, drawTransitionOverlay } from './transitions.js';
 import { inputSt, handleBattleInput, handleRosterInput, handlePauseInput } from './input-handler.js';
 import { checkTrigger, applyPassage, openPassage, handleChest, handleSecretWall, handleRockPuzzle, handlePondHeal, findWorldExitIndex } from './map-triggers.js';
+import { pvpSt, startPVPBattle, resetPVPState, tryJoinPVPEnemyAlly, updateBattleEnemyTurn as _updateBattleEnemyTurnPVP, drawBossSpriteBoxPVP } from './pvp.js';
 import { OK_IDLE, OK_VICTORY, OK_L_BACK_SWING, OK_L_FWD_T2, OK_L_FWD_T3, OK_R_BACK_SWING, OK_R_FWD_T2, OK_KNEEL,
          OK_LEG_L_IDLE, OK_LEG_R_IDLE, OK_LEG_L_BACK_L, OK_LEG_R_BACK_L, OK_LEG_L_FWD_L, OK_LEG_R_FWD_L,
          OK_LEG_L_BACK_R, OK_LEG_R_SWING, OK_LEG_L_KNEEL, OK_LEG_R_KNEEL, OK_LEG_L_VICTORY, OK_LEG_R_VICTORY } from './data/job-sprites.js';
@@ -1506,6 +1507,8 @@ function _inputShared() {
     get onWorldMap()            { return onWorldMap; },
     get dungeonFloor()          { return dungeonFloor; },
     get selectCursor()          { return selectCursor; },
+    get isPVPBattle()           { return pvpSt.isPVPBattle; },
+    get pvpOpponentStats()      { return pvpSt.pvpOpponentStats; },
     saveSlotsToDB,
     addItem,
     removeItem,
@@ -1513,6 +1516,7 @@ function _inputShared() {
     getSlashFramesForWeapon,
     executeBattleCommand,
     returnToTitle,
+    startPVPBattle: (target) => startPVPBattle(_pvpShared(), target),
   };
 }
 
@@ -1526,6 +1530,62 @@ function _pauseShared() {
     _drawBorderedBox,
     _clipToViewport,
     _drawCursorFaded,
+  };
+}
+
+// Shared state object passed to pvp.js
+function _pvpShared() {
+  return {
+    get bossHP()                { return bossHP; },
+    set bossHP(v)               { bossHP = v; },
+    get bossDefeated()          { return bossDefeated; },
+    set bossDefeated(v)         { bossDefeated = v; },
+    get isRandomEncounter()     { return isRandomEncounter; },
+    set isRandomEncounter(v)    { isRandomEncounter = v; },
+    get preBattleTrack()        { return preBattleTrack; },
+    set preBattleTrack(v)       { preBattleTrack = v; },
+    get battleState()           { return battleState; },
+    set battleState(v)          { battleState = v; },
+    get battleTimer()           { return battleTimer; },
+    set battleTimer(v)          { battleTimer = v; },
+    get currentAttacker()       { return currentAttacker; },
+    get encounterMonsters()     { return encounterMonsters; },
+    get enemyTargetAllyIdx()    { return enemyTargetAllyIdx; },
+    set enemyTargetAllyIdx(v)   { enemyTargetAllyIdx = v; },
+    get playerDamageNum()       { return playerDamageNum; },
+    set playerDamageNum(v)      { playerDamageNum = v; },
+    get isDefending()           { return isDefending; },
+    get battleShakeTimer()      { return battleShakeTimer; },
+    set battleShakeTimer(v)     { battleShakeTimer = v; },
+    get slashFrames()           { return slashFrames; },
+    get slashFrame()            { return slashFrame; },
+    get slashOffX()             { return slashOffX; },
+    get slashOffY()             { return slashOffY; },
+    get slashFramesR()          { return slashFramesR; },
+    get currentHitIdx()         { return currentHitIdx; },
+    get currentAllyAttacker()   { return currentAllyAttacker; },
+    get allyHitResult()         { return allyHitResult; },
+    battleAllies,
+    allyDamageNums,
+    allyShakeTimer,
+    ctx,
+    blades: {
+      knife:  { raised: battleKnifeBladeCanvas,  swung: battleKnifeBladeSwungCanvas },
+      dagger: { raised: battleDaggerBladeCanvas, swung: battleDaggerBladeSwungCanvas },
+      sword:  { raised: battleSwordBladeCanvas,  swung: battleSwordBladeSwungCanvas },
+      fist:   battleFistCanvas,
+    },
+    fullBodyCanvases:          fakePlayerFullBodyCanvases,
+    hitFullBodyCanvases:       fakePlayerHitFullBodyCanvases,
+    knifeBackFullBodyCanvases: fakePlayerKnifeBackFullBodyCanvases,
+    knifeRFullBodyCanvases:    fakePlayerKnifeRFullBodyCanvases,
+    knifeLFullBodyCanvases:    fakePlayerKnifeLFullBodyCanvases,
+    resetBattleVars:     _resetBattleVars,
+    processNextTurn,
+    getPlayerLocation,
+    getSlashFramesForWeapon,
+    clipToViewport:  _clipToViewport,
+    drawBorderedBox: _drawBorderedBox,
   };
 }
 
@@ -3496,7 +3556,8 @@ function _updateBattleMenuConfirm() {
   } else if (battleState === 'confirm-pause') {
     if (battleTimer >= 150) {
       allyJoinRound++;
-      if (_tryJoinPlayerAlly()) return true;
+      if (pvpSt.isPVPBattle && tryJoinPVPEnemyAlly(_pvpShared())) return true;
+      if (!pvpSt.isPVPBattle && _tryJoinPlayerAlly()) return true;
       turnQueue = buildTurnOrder(); processNextTurn();
     }
   } else { return false; }
@@ -3591,14 +3652,27 @@ function _updatePlayerDamageShow() {
       battleTimer = 0;
       playSFX(SFX.MONSTER_DEATH);
     } else if (!isRandomEncounter && bossHP <= 0) {
-      battleState = 'boss-dissolve';
-      battleTimer = 0;
-      playSFX(SFX.BOSS_DEATH);
+      if (pvpSt.isPVPBattle) { _triggerPVPVictory(); }
+      else { battleState = 'boss-dissolve'; battleTimer = 0; playSFX(SFX.BOSS_DEATH); }
     } else {
       processNextTurn();
     }
   }
   return true;
+}
+function _triggerPVPVictory() {
+  const oppLv = pvpSt.pvpOpponentStats ? pvpSt.pvpOpponentStats.level : 1;
+  encounterExpGained = 5 * oppLv;
+  encounterGilGained = 10 * oppLv;
+  grantExp(encounterExpGained);
+  ps.gil += encounterGilGained;
+  encounterProfLevelUps = gainProficiency(inputSt.battleProfHits, oppLv);
+  inputSt.battleProfHits = {}; profLevelUpIdx = 0;
+  _syncSaveSlotProgress();
+  saveSlotsToDB();
+  bossDefeated = true;
+  isDefending = false; battleState = 'victory-name-out'; battleTimer = 0;
+  playSFX(SFX.BOSS_DEATH);
 }
 function _updateMonsterDeath() {
   if (battleState !== 'monster-death') return false;
@@ -3773,7 +3847,8 @@ function _updateAllyDamageShow() {
     dyingMonsterIndices = new Map([[allyTargetIndex, 0]]);
     battleState = 'monster-death'; battleTimer = 0; playSFX(SFX.MONSTER_DEATH);
   } else if (!isRandomEncounter && bossHP <= 0) {
-    battleState = 'boss-dissolve'; battleTimer = 0; playSFX(SFX.BOSS_DEATH);
+    if (pvpSt.isPVPBattle) { _triggerPVPVictory(); }
+    else { battleState = 'boss-dissolve'; battleTimer = 0; playSFX(SFX.BOSS_DEATH); }
   } else {
     processNextTurn();
   }
@@ -3787,6 +3862,10 @@ function _updateAllyJoin() {
       battleTimer = 0;
       if (newAlly.fadeStep <= 0) { turnQueue = buildTurnOrder(); processNextTurn(); }
     }
+    return true;
+  }
+  if (battleState === 'pvp-ally-appear') {
+    if (battleTimer >= 300) { turnQueue = buildTurnOrder(); processNextTurn(); }
     return true;
   }
   return false;
@@ -3929,6 +4008,7 @@ function _processEnemyDamageShowState() {
   } else { processNextTurn(); }
 }
 function _updateBattleEnemyTurn() {
+  if (pvpSt.isPVPBattle) return _updateBattleEnemyTurnPVP(_pvpShared());
   if (_processBossFlashEnemy()) return true;
   if (battleState === 'enemy-attack') {
     if (battleTimer >= BATTLE_SHAKE_MS) { battleState = 'enemy-damage-show'; battleTimer = 0; }
@@ -4018,9 +4098,12 @@ function _updateBoxClose() {
   }
   if (battleState === 'boss-box-close') {
     if (battleTimer >= BOSS_BOX_EXPAND_MS) {
+      const wasPVP = pvpSt.isPVPBattle;
+      resetPVPState();
       battleState = 'none'; battleTimer = 0; sprite.setDirection(DIR_DOWN);
       battleAllies = []; allyJoinRound = 0;
-      playTrack(TRACKS.CRYSTAL_ROOM);
+      if (!wasPVP) playTrack(TRACKS.CRYSTAL_ROOM);
+      else resumeMusic();
     }
     return true;
   }
@@ -4036,6 +4119,7 @@ function _updateDefeatStates() {
   if (battleState === 'defeat-text') return true; // Z to dismiss handled in handleInput
   if (battleState === 'defeat-close') {
     if (battleTimer >= BOSS_BOX_EXPAND_MS) {
+      resetPVPState();
       battleState = 'none'; battleTimer = 0;
       isRandomEncounter = false;
       encounterMonsters = null; turnQueue = []; battleAllies = []; allyJoinRound = 0;
@@ -4383,7 +4467,8 @@ function _battleMenuStates() {
     bs === 'run-name-out' || bs === 'run-text-in' || bs === 'run-hold' || bs === 'run-text-out' ||
     bs === 'run-fail-name-out' || bs === 'run-fail-text-in' || bs === 'run-fail-hold' ||
     bs === 'run-fail-text-out' || bs === 'run-fail-name-in' || bs === 'boss-flash' ||
-    bs === 'enemy-attack' || bs === 'enemy-damage-show' || bs === 'message-hold' ||
+    bs === 'enemy-attack' || bs === 'enemy-damage-show' || bs === 'pvp-second-windup' ||
+    bs === 'pvp-ally-appear' || bs === 'message-hold' ||
     bs.startsWith('ally-') || bs === 'boss-dissolve' ||
     bs === 'defeat-monster-fade' || bs === 'defeat-text';
   const isVictory = _isVictoryBattleState() || bs === 'victory-name-out' || bs === 'encounter-box-close' || bs === 'boss-box-close' || bs === 'defeat-close';
@@ -4652,10 +4737,38 @@ function _drawBossSpriteBoxBoss(centerX, centerY) {
 }
 function drawBossSpriteBox() {
   if (isRandomEncounter) return;
+
+  const centerX = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2);
+  const centerY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
+
+  if (pvpSt.isPVPBattle) {
+    const isCombatPVP = battleState === 'battle-fade-in' ||
+                    battleState === 'boss-box-expand' || battleState === 'boss-box-close' ||
+                    battleState === 'menu-open' || battleState === 'target-select' || battleState === 'confirm-pause' ||
+                    battleState === 'attack-start' || battleState === 'player-slash' || battleState === 'player-hit-show' ||
+                    battleState === 'player-miss-show' ||
+                    battleState === 'player-damage-show' || battleState === 'defend-anim' || battleState.startsWith('item-') ||
+                    battleState === 'boss-flash' || battleState === 'enemy-attack' ||
+                    battleState === 'enemy-damage-show' || battleState === 'pvp-second-windup' ||
+                    battleState === 'pvp-ally-appear' || battleState === 'message-hold' ||
+                    battleState.startsWith('ally-') ||
+                    battleState === 'defeat-monster-fade' || battleState === 'defeat-text' || battleState === 'defeat-close' ||
+                    battleState === 'victory-name-out' || battleState === 'victory-celebrate' ||
+                    battleState === 'victory-text-in' || battleState === 'victory-hold' || battleState === 'victory-fade-out' ||
+                    battleState === 'exp-text-in' || battleState === 'exp-hold' || battleState === 'exp-fade-out' ||
+                    battleState === 'gil-text-in' || battleState === 'gil-hold' || battleState === 'gil-fade-out' ||
+                    battleState === 'levelup-text-in' || battleState === 'levelup-hold' ||
+                    battleState === 'item-text-in' || battleState === 'item-hold' || battleState === 'item-fade-out' ||
+                    battleState === 'prof-levelup-text-in' || battleState === 'prof-levelup-hold' ||
+                    battleState === 'victory-text-out' || battleState === 'victory-menu-fade' || battleState === 'victory-box-close';
+    if (isCombatPVP) drawBossSpriteBoxPVP(_pvpShared(), centerX, centerY);
+    return;
+  }
+
   if (!landTurtleBattleCanvas) return;
 
   const isExpand = battleState === 'boss-box-expand';
-  const isClose = battleState === 'boss-box-close' || (!isRandomEncounter && battleState === 'defeat-close');
+  const isClose = battleState === 'boss-box-close' || battleState === 'defeat-close';
   const isAppear = battleState === 'boss-appear';
   const isDissolve = battleState === 'boss-dissolve';
   const isCombat = battleState === 'battle-fade-in' ||
@@ -4676,9 +4789,6 @@ function drawBossSpriteBox() {
                     battleState === 'prof-levelup-text-in' || battleState === 'prof-levelup-hold' ||
                     battleState === 'victory-text-out' || battleState === 'victory-menu-fade' || battleState === 'victory-box-close';
   if (!isExpand && !isClose && !isAppear && !isDissolve && !isCombat && !isVictory) return;
-
-  const centerX = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2);
-  const centerY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
 
   _drawBossSpriteBoxBoss(centerX, centerY);
 }
