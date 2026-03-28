@@ -35,6 +35,7 @@ export const pvpSt = {
   pvpOpponentHitsThisTurn:0,      // gates dual-wield 2nd hit
   pvpEnemyAllies:         [],     // fake players who join opponent's side
   pvpCurrentEnemyAllyIdx:-1,      // -1 = main opponent, >=0 = pvpEnemyAllies[i]
+  pvpPlayerTargetIdx:    -1,      // which enemy the player is currently fighting (-1=main opp, >=0=pvpEnemyAllies[i])
   pvpBoxResizeFromW:      0,
   pvpBoxResizeFromH:      0,
   pvpBoxResizeStartTime:  0,
@@ -55,6 +56,7 @@ export function startPVPBattle(shared, target) {
   pvpSt.pvpOpponentHitsThisTurn = 0;
   pvpSt.pvpEnemyAllies          = [];
   pvpSt.pvpCurrentEnemyAllyIdx  = -1;
+  pvpSt.pvpPlayerTargetIdx      = -1;
   pvpSt.pvpBoxResizeStartTime   = 0;
   _s.bossHP       = pvpSt.pvpOpponentStats.maxHP;
   _s.bossDefeated = false;
@@ -73,6 +75,7 @@ export function resetPVPState() {
   pvpSt.pvpOpponentIsDefending  = false;
   pvpSt.pvpEnemyAllies          = [];
   pvpSt.pvpCurrentEnemyAllyIdx  = -1;
+  pvpSt.pvpPlayerTargetIdx      = -1;
 }
 
 // ── Ally joining ──────────────────────────────────────────────────────────────
@@ -316,8 +319,13 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   const palIdx = enemy.palIdx;
   const fullBody = _s.fullBodyCanvases[palIdx] || _s.fullBodyCanvases[0];
   if (!fullBody) return;
-  if (isMain && _s.bossDefeated) return;
+  // Hide main opponent if player has moved on to fighting an ally
+  if (isMain && (_s.bossDefeated || pvpSt.pvpPlayerTargetIdx >= 0)) return;
+  // Hide ally if the player hasn't reached them yet (and they were already defeated)
+  if (!isMain && (idx - 1) < pvpSt.pvpPlayerTargetIdx) return;
 
+  // isCurrentTarget: which enemy the player is currently attacking
+  const isCurrentTarget = isMain ? pvpSt.pvpPlayerTargetIdx < 0 : (idx - 1) === pvpSt.pvpPlayerTargetIdx;
   const isThisAttacking = isMain
     ? pvpSt.pvpCurrentEnemyAllyIdx < 0
     : pvpSt.pvpCurrentEnemyAllyIdx === idx - 1;
@@ -325,8 +333,8 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   const playerHitLanded = bs === 'player-slash' &&
     inputSt.hitResults && inputSt.hitResults[_s.currentHitIdx] && !inputSt.hitResults[_s.currentHitIdx].miss;
   const allyHitLanded = bs === 'ally-slash' && _s.allyHitResult && !_s.allyHitResult.miss;
-  const isOppHit = isMain && (playerHitLanded || bs === 'player-hit-show' || allyHitLanded || bs === 'ally-damage-show');
-  const blinkHidden = isMain && (playerHitLanded || allyHitLanded) && (Math.floor(_s.battleTimer / 60) & 1);
+  const isOppHit = isCurrentTarget && (playerHitLanded || bs === 'player-hit-show' || allyHitLanded || bs === 'ally-damage-show');
+  const blinkHidden = isCurrentTarget && (playerHitLanded || allyHitLanded) && (Math.floor(_s.battleTimer / 60) & 1);
   const isWindUp = isThisAttacking && (bs === 'boss-flash' || bs === 'pvp-second-windup');
   if (blinkHidden) return;
 
@@ -369,7 +377,7 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
     _s.ctx.translate(sprX + 16, sprY);
     _s.ctx.scale(-1, 1);
     if (isAttackState && blade === blades.fist) _s.ctx.drawImage(blade, -4, 10);
-    else if (isAttackState)                     _s.ctx.drawImage(blade,  16,  1); // swung: LEFT of sprite (toward player)
+    else if (isAttackState)                     _s.ctx.drawImage(blade, -16,  1); // swung: RIGHT of sprite (toward player)
     else if (isLeftHandWind)                    _s.ctx.drawImage(blade,  -8, -7); // L wind-up: blade on RIGHT side (left arm)
     else                                        _s.ctx.drawImage(blade,   8, -7); // R wind-up: blade on LEFT side (right arm)
     _s.ctx.restore();
@@ -383,8 +391,8 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   _s.ctx.drawImage(body, sprX, sprY);
   if ((isAttackState || (isWindUp && !isLeftHandWind)) && blade) drawBlade(); // right-hand wind-up + strikes: in front
 
-  // Slash effect overlays (player/ally attacking the main opponent)
-  if (isMain) {
+  // Slash effect overlays on the current target
+  if (isCurrentTarget) {
     if (bs === 'player-slash' && _s.slashFrames && _s.slashFrame < SLASH_FRAMES && playerHitLanded) {
       _s.ctx.drawImage(_s.slashFrames[_s.slashFrame], sprX + _s.slashOffX, sprY + _s.slashOffY);
     }

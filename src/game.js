@@ -3668,13 +3668,23 @@ function _updatePlayerDamageShow() {
       battleTimer = 0;
       playSFX(SFX.MONSTER_DEATH);
     } else if (!isRandomEncounter && bossHP <= 0) {
-      if (pvpSt.isPVPBattle) { _triggerPVPVictory(); }
+      if (pvpSt.isPVPBattle) { _advancePVPTargetOrVictory(); }
       else { battleState = 'boss-dissolve'; battleTimer = 0; playSFX(SFX.BOSS_DEATH); }
     } else {
       processNextTurn();
     }
   }
   return true;
+}
+function _advancePVPTargetOrVictory() {
+  const nextIdx = pvpSt.pvpPlayerTargetIdx + 1;
+  if (nextIdx < pvpSt.pvpEnemyAllies.length) {
+    pvpSt.pvpPlayerTargetIdx = nextIdx;
+    bossHP = pvpSt.pvpEnemyAllies[nextIdx].hp;
+    processNextTurn();
+  } else {
+    _triggerPVPVictory();
+  }
 }
 function _triggerPVPVictory() {
   const oppLv = pvpSt.pvpOpponentStats ? pvpSt.pvpOpponentStats.level : 1;
@@ -3863,7 +3873,7 @@ function _updateAllyDamageShow() {
     dyingMonsterIndices = new Map([[allyTargetIndex, 0]]);
     battleState = 'monster-death'; battleTimer = 0; playSFX(SFX.MONSTER_DEATH);
   } else if (!isRandomEncounter && bossHP <= 0) {
-    if (pvpSt.isPVPBattle) { _triggerPVPVictory(); }
+    if (pvpSt.isPVPBattle) { _advancePVPTargetOrVictory(); }
     else { battleState = 'boss-dissolve'; battleTimer = 0; playSFX(SFX.BOSS_DEATH); }
   } else {
     processNextTurn();
