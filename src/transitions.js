@@ -176,7 +176,10 @@ function _updateTransitionClosing() {
     playSFX(SFX.FALL);
   } else {
     transSt.state = 'hold'; transSt.timer = 0;
-    if (!transSt.dungeon && transSt.pendingAction) { transSt.pendingAction(); transSt.pendingAction = null; }
+    if (!transSt.dungeon && transSt.pendingAction) {
+      try { transSt.pendingAction(); } catch(e) { console.error('[TRANSITION pendingAction ERROR]', e); }
+      transSt.pendingAction = null;
+    }
   }
 }
 
@@ -226,7 +229,10 @@ function _updateTransitionTrapFall(shared) {
   const totalSpinTime = SPIN_INTERVAL * SPIN_DIRS_ORDER.length * SPIN_CYCLES;
   shared.sprite.setDirection(SPIN_DIRS_ORDER[Math.floor(transSt.timer / SPIN_INTERVAL) % SPIN_DIRS_ORDER.length]);
   if (transSt.timer >= totalSpinTime) {
-    if (transSt.pendingAction) { transSt.pendingAction(); transSt.pendingAction = null; }
+    if (transSt.pendingAction) {
+      try { transSt.pendingAction(); } catch(e) { console.error('[TRANSITION pendingAction ERROR]', e); }
+      transSt.pendingAction = null;
+    }
     transSt.trapShakePending = true; transSt.state = 'opening'; transSt.timer = 0; playSFX(SFX.SCREEN_OPEN);
   }
 }

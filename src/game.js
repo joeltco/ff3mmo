@@ -2299,7 +2299,7 @@ function _renderMapAndWater(camX, camY, originX, originY, spriteY) {
     mapRenderer.draw(ctx, camX, camY, originX, originY);
     _updateIndoorWater(mapRenderer, waterTick);
   }
-  if ((transSt.state === 'none' || transSt.state === 'trap-reveal' || transSt.state === 'door-opening' || transSt.state === 'closing' || transSt.state === 'opening') &&
+  if ((transSt.state === 'none' || transSt.state === 'trap-reveal') &&
       (battleState === 'none' || battleState === 'flash-strobe' || battleState.startsWith('roar-'))) {
     _renderSprites(camX, camY, originX, spriteY);
   }
@@ -5190,8 +5190,14 @@ function gameLoop(timestamp) {
     return;
   }
 
-  _gameLoopUpdate(dt);
-  _gameLoopDraw();
+  try {
+    _gameLoopUpdate(dt);
+    _gameLoopDraw();
+  } catch (e) {
+    console.error('[GAME LOOP ERROR] transSt.state=' + transSt.state + ' battleState=' + battleState, e);
+    requestAnimationFrame(gameLoop);
+    return;
+  }
 
   requestAnimationFrame(gameLoop);
 }
