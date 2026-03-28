@@ -348,27 +348,23 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
     : enemy.weaponId;
   const wpn = weaponSubtype(activeWeaponId);
 
-  // Body canvas — opponent faces RIGHT (toward player) so body is drawn with a second h-flip.
-  // All canvases are pre-h-flipped in buildFullBody16x24Canvas; the extra flip here restores
-  // the original facing-right orientation so the attack arm extends toward the player.
+  // Body canvas — drawn directly (pre-h-flipped canvases face left, matching enemy-side visual style)
   let body = fullBody;
   if (isOppHit && _s.hitFullBodyCanvases[palIdx]) {
     body = _s.hitFullBodyCanvases[palIdx];
   } else if (isWindUp) {
     body = _s.knifeBackFullBodyCanvases[palIdx] || fullBody;
   } else if (isAttackState) {
-    // With the second h-flip applied in the body draw below:
-    // knifeR (pre-h-flipped) → second h-flip → right arm appears on RIGHT (toward player). Use for R-hand.
-    // knifeL (pre-h-flipped) → second h-flip → left arm appears on LEFT (behind body). Use for L-hand.
-    const atkCvs = isLeftHandAtk ? _s.knifeLFullBodyCanvases : _s.knifeRFullBodyCanvases;
+    // Pre-h-flipped canvases: knifeR has R arm on LEFT side, knifeL has L arm on RIGHT side
+    // For left-facing character: R attack uses knifeL (arm appears on RIGHT = attack side), L attack uses knifeR
+    const atkCvs = isLeftHandAtk ? _s.knifeRFullBodyCanvases : _s.knifeLFullBodyCanvases;
     body = (atkCvs && atkCvs[palIdx]) || fullBody;
   }
 
-  // Resolve blade canvas — raised for wind-up, swung for attack
-  // Blade drawn via translate(sprX+16)+scale(-1,1). With body now facing RIGHT:
-  //   R wind-up:  cx=-8  → screen sprX+8..sprX+24 (right side, where R arm is) ✓
-  //   L wind-up:  cx= 8  → screen sprX-8..sprX+8  (left side,  where L arm is) ✓
-  //   swung:      cx=-16 → screen sprX+16..sprX+32 (toward player) ✓
+  // Blade drawn directly (no transform) — same positions as player portrait:
+  //   wind-up: sprX+8 (right side, behind the swing) drawn BEFORE body
+  //   swung:   sprX-16 (left side, forward slash)    drawn AFTER body
+  //   fist:    sprX-4 (left side, punch)              drawn AFTER body
   const blades = _s.blades;
   let blade = null;
   if (isWindUp || isAttackState) {
@@ -378,27 +374,15 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
     else if (isAttackState)    blade = blades.fist;
   }
   const drawBlade = () => {
-    _s.ctx.save();
-    _s.ctx.translate(sprX + 16, sprY);
-    _s.ctx.scale(-1, 1);
-    if (isAttackState && blade === blades.fist) _s.ctx.drawImage(blade, -4, 10);
-    else if (isAttackState)                     _s.ctx.drawImage(blade, -16,  1); // swung: RIGHT of sprite (toward player)
-    else if (isLeftHandWind)                    _s.ctx.drawImage(blade,   8, -7); // L wind-up: LEFT side (left arm, behind)
-    else                                        _s.ctx.drawImage(blade,  -8, -7); // R wind-up: RIGHT side (right arm, in front)
-    _s.ctx.restore();
+    if (isAttackState && blade === blades.fist) _s.ctx.drawImage(blade, sprX - 4, sprY + 10);
+    else if (isAttackState)                     _s.ctx.drawImage(blade, sprX - 16, sprY + 1);
+    else                                        _s.ctx.drawImage(blade, sprX + 8,  sprY - 7);
   };
 
-  // Z-order: R-hand attack arm is in front (toward player), L-hand arm is behind body
-  const drawBodyFlipped = () => {
-    _s.ctx.save();
-    _s.ctx.translate(sprX + 16, sprY);
-    _s.ctx.scale(-1, 1);
-    _s.ctx.drawImage(body, 0, 0);
-    _s.ctx.restore();
-  };
-  if (isWindUp && blade && isLeftHandWind) drawBlade();    // L wind-up: behind body
-  drawBodyFlipped();
-  if ((isAttackState || (isWindUp && !isLeftHandWind)) && blade) drawBlade(); // R wind-up + strikes: in front
+  // Wind-up: blade behind body (pulled back); swung/fist: blade in front
+  if (isWindUp && blade) drawBlade();
+  _s.ctx.drawImage(body, sprX, sprY);
+  if (isAttackState && blade) drawBlade();
 
   // Slash effect overlays on the current target
   if (isCurrentTarget) {
