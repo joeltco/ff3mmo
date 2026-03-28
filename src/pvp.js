@@ -376,13 +376,11 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   const drawBlade = () => {
     const ctx = _s.ctx;
     if (isAttackState && blade === blades.fist) {
-      ctx.drawImage(blade, sprX + 4, sprY + 10);
+      ctx.drawImage(blade, sprX + 4, sprY + 10);                                                          // mirror of px-4
     } else if (isAttackState) {
-      // Swung: to the RIGHT of body (mirrored from player's left), tile h-flipped
-      ctx.save(); ctx.translate(sprX + 32, sprY + 1); ctx.scale(-1, 1); ctx.drawImage(blade, 0, 0); ctx.restore();
+      ctx.save(); ctx.translate(sprX + 32, sprY + 1);  ctx.scale(-1, 1); ctx.drawImage(blade, 0, 0); ctx.restore(); // mirror of px-16
     } else {
-      // Wind-up: L back swing arm is on the RIGHT side of the pre-h-flipped canvas — blade to the right
-      ctx.drawImage(blade, sprX + 8, sprY - 7);
+      ctx.save(); ctx.translate(sprX + 8,  sprY - 7);  ctx.scale(-1, 1); ctx.drawImage(blade, 0, 0); ctx.restore(); // mirror of px+8
     }
   };
 
