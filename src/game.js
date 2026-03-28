@@ -50,7 +50,7 @@ import { pauseSt, updatePauseMenu, drawPauseMenu } from './pause-menu.js';
 import { transSt, topBoxSt, loadingSt, startWipeTransition, updateTransition, updateTopBoxScroll, drawTransitionOverlay } from './transitions.js';
 import { inputSt, handleBattleInput, handleRosterInput, handlePauseInput } from './input-handler.js';
 import { checkTrigger, applyPassage, openPassage, handleChest, handleSecretWall, handleRockPuzzle, handlePondHeal, findWorldExitIndex } from './map-triggers.js';
-import { OK_IDLE, OK_L_BACK_SWING, OK_L_FWD_T2, OK_L_FWD_T3, OK_R_BACK_SWING, OK_R_FWD_T2, OK_KNEEL,
+import { OK_IDLE, OK_VICTORY, OK_L_BACK_SWING, OK_L_FWD_T2, OK_L_FWD_T3, OK_R_BACK_SWING, OK_R_FWD_T2, OK_KNEEL,
          OK_LEG_L_IDLE, OK_LEG_R_IDLE, OK_LEG_L_BACK_L, OK_LEG_R_BACK_L, OK_LEG_L_FWD_L, OK_LEG_R_FWD_L,
          OK_LEG_L_BACK_R, OK_LEG_R_SWING, OK_LEG_L_KNEEL, OK_LEG_R_KNEEL, OK_LEG_L_VICTORY, OK_LEG_R_VICTORY } from './data/job-sprites.js';
 
@@ -717,7 +717,7 @@ const _FP_KNEEL       = OK_KNEEL;
 function _initFakePosePortraits(romData) {
   const idleTiles = _FP_IDLE_PPU.map(d => decodeTile(d, 0));
   fakePlayerPortraits         = _genPosePortraits(idleTiles);
-  fakePlayerVictoryPortraits  = _genPosePortraits(_FP_KNIFE_BACK.map(d => decodeTile(d, 0)));
+  fakePlayerVictoryPortraits  = _genPosePortraits(_FP_VICTORY.map(d => decodeTile(d, 0)));
   fakePlayerHitPortraits      = _genPosePortraits([0,1,2,3].map(i => decodeTile(romData, BATTLE_SPRITE_ROM + (30 + i) * 16)));
   fakePlayerDefendPortraits   = _genPosePortraits(_FP_DEFEND.map(d => decodeTile(d, 0)));
   fakePlayerAttackPortraits   = _genPosePortraits([idleTiles[0], idleTiles[1], decodeTile(_FP_ATK_R_TILE, 0), idleTiles[3]]);
@@ -742,8 +742,9 @@ function _buildFullBody16x24Canvas(topTiles4, legL, legR, pal) {
 }
 // Onion Knight pose tiles — imported from src/data/job-sprites.js
 const _FP_IDLE_PPU    = OK_IDLE;
-const _FP_KNIFE_BACK  = OK_L_BACK_SWING; // L back swing = defend/victory pose
-const _FP_DEFEND      = OK_L_BACK_SWING;
+const _FP_VICTORY     = OK_VICTORY;       // victory/defend body (arm raised)
+const _FP_KNIFE_BACK  = OK_L_BACK_SWING; // L back swing body (idle + arm pulled)
+const _FP_DEFEND      = OK_VICTORY;       // defend = victory body pose
 const _FP_KNIFE_R     = OK_R_BACK_SWING;
 const _FP_KNIFE_L     = OK_L_BACK_SWING; // L back swing body (fwd swing only changes T2+T3)
 const _FP_LEG_L       = OK_LEG_L_IDLE;
@@ -767,7 +768,7 @@ function _buildKnifeFullBodies() {
   const build = (data, lL, lR, pal) => _buildFullBody16x24Canvas(data.map(d => decodeTile(d, 0)), decodeTile(lL, 0), decodeTile(lR, 0), pal);
   fakePlayerKnifeRFullBodyCanvases    = PLAYER_PALETTES.map(pal => build(_FP_KNIFE_R,    _FP_LEG_L_BACK_R, _FP_LEG_R_SWING,   pal));
   fakePlayerKnifeLFullBodyCanvases    = PLAYER_PALETTES.map(pal => build(_FP_KNIFE_L,    _FP_LEG_L_BACK_L, _FP_LEG_R_BACK_L,  pal));
-  fakePlayerKnifeBackFullBodyCanvases = PLAYER_PALETTES.map(pal => build(_FP_KNIFE_BACK, _FP_LEG_L_VICTORY,_FP_LEG_R_VICTORY, pal));
+  fakePlayerKnifeBackFullBodyCanvases = PLAYER_PALETTES.map(pal => build(_FP_KNIFE_BACK, _FP_LEG_L_BACK_L, _FP_LEG_R_BACK_L, pal));
 }
 function _buildHitFullBodies(romData) {
   const legL = decodeTile(_FP_LEG_L, 0), legR = decodeTile(_FP_LEG_R, 0);
@@ -956,8 +957,8 @@ function _initBattleBladeSprites(palette) {
 }
 
 function _initBattleRomPoses(romData, palette) {
-  // Victory pose: KNIFE_BACK tiles (arms raised, confirmed from PPU debugger)
-  battleSpriteVictoryCanvas = _buildCanvas4(_FP_KNIFE_BACK, palette);
+  // Victory pose: OK_VICTORY tiles (arms raised, confirmed from PPU debugger)
+  battleSpriteVictoryCanvas = _buildCanvas4(_FP_VICTORY, palette);
   // Hit/recoil pose: sprite frame 5 in job block (tiles 30-33)
   battleSpriteHitCanvas = _buildCanvas4ROM(romData, BATTLE_SPRITE_ROM + 30 * 16, palette);
   // Attack frame 2: ROM frame 3 (tiles 18-21, arm raised)
