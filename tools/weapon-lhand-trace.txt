@@ -1,0 +1,36 @@
+=== L-HAND ONLY trace — dagger in L, nothing in R ===
+
+[No save state slot 0 — navigating from title screen]
+[1] mode $FF -> $00
+[68] mode $00 -> $08
+[103] Name entry screen
+[103] mode $08 -> $A8
+[729] mode $A8 -> $00
+[729] Past name entry — pressing into battle
+[771] mode $00 -> $70
+[836] mode $70 -> $6F
+[839] mode $6F -> $70
+[904] mode $70 -> $6F
+[905] mode $6F -> $70
+[1038] mode $70 -> $6F
+[1046] mode $6F -> $70
+[1054] mode $70 -> $6F
+[1062] mode $6F -> $70
+[1413] mode $70 -> $6F
+[1421] mode $6F -> $70
+[1429] mode $70 -> $6F
+[1437] mode $6F -> $70
+[1445] mode $70 -> $6F
+[1453] mode $6F -> $70
+[1461] mode $70 -> $6F
+[1469] mode $6F -> $70
+[1477] mode $70 -> $6F
+[1485] mode $6F -> $70
+[1581] mode $70 -> $01
+[1582] mode $01 -> $00
+[1844] mode $00 -> $05
+[1969] mode $05 -> $20
+[1969] BATTLE START — L-HAND ONLY (dagger, no R-hand weapon)
+Columns: pose# | bf | swing-type | hflip | weapon_x weapon_y | body_x body_y | offset_x offset_y
+
+Timeout — 1800 battle frames, 0 poses

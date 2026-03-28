@@ -1,0 +1,585 @@
+=== R-HAND ONLY trace — knife in R, nothing in L ===
+
+[No save state slot 0 — navigating from title screen]
+[1] mode $FF -> $00
+[68] mode $00 -> $08
+[103] Name entry screen
+[103] mode $08 -> $A8
+[729] mode $A8 -> $00
+[729] Past name entry — pressing into battle
+[771] mode $00 -> $70
+[836] mode $70 -> $6F
+[839] mode $6F -> $70
+[904] mode $70 -> $6F
+[905] mode $6F -> $70
+[1038] mode $70 -> $6F
+[1046] mode $6F -> $70
+[1054] mode $70 -> $6F
+[1062] mode $6F -> $70
+[1413] mode $70 -> $6F
+[1421] mode $6F -> $70
+[1429] mode $70 -> $6F
+[1437] mode $6F -> $70
+[1445] mode $70 -> $6F
+[1453] mode $6F -> $70
+[1461] mode $70 -> $6F
+[1469] mode $6F -> $70
+[1477] mode $70 -> $6F
+[1485] mode $6F -> $70
+[1581] mode $70 -> $01
+[1582] mode $01 -> $00
+[1844] mode $00 -> $05
+[1969] mode $05 -> $20
+[1969] BATTLE START — R-HAND ONLY (knife, no L-hand weapon)
+Columns: pose# | bf | swing-type | hflip | weapon_x weapon_y | body_x body_y | offset_x offset_y
+
+R-HAND POSE #1  bf=33    BACK-SWING  hflip=Y  weapon x=200 y=36   body x=192 y=43   offset_x=8    offset_y=-7 
+  -- OAM R-HAND BACK-SWING --
+    spr00: x=192 y= 43 t=$01 a=$00
+    spr01: x=200 y= 43 t=$02 a=$00
+    spr02: x=192 y= 51 t=$39 a=$00
+    spr03: x=200 y= 51 t=$04 a=$00
+    spr04: x=192 y= 59 t=$3A a=$00
+    spr05: x=200 y= 59 t=$08 a=$00
+    spr06: x=208 y= 36 t=$49 a=$43
+    spr07: x=200 y= 36 t=$4A a=$43
+    spr08: x=208 y= 44 t=$4B a=$43
+    spr09: x=200 y= 44 t=$4C a=$43
+    spr46: x=208 y= 71 t=$0F a=$01
+    spr47: x=216 y= 71 t=$10 a=$01
+    spr48: x=208 y= 79 t=$11 a=$01
+    spr49: x=216 y= 79 t=$12 a=$01
+    spr50: x=208 y= 87 t=$13 a=$01
+    spr51: x=216 y= 87 t=$14 a=$01
+    spr52: x=208 y= 99 t=$1D a=$02
+    spr53: x=216 y= 99 t=$1E a=$02
+    spr54: x=208 y=107 t=$1F a=$02
+    spr55: x=216 y=107 t=$20 a=$02
+    spr56: x=208 y=115 t=$21 a=$02
+    spr57: x=216 y=115 t=$22 a=$02
+    spr58: x=208 y=127 t=$2B a=$00
+    spr59: x=216 y=127 t=$2C a=$00
+    spr60: x=208 y=135 t=$2D a=$00
+    spr61: x=216 y=135 t=$2E a=$00
+    spr62: x=208 y=143 t=$2F a=$00
+    spr63: x=216 y=143 t=$30 a=$00
+
+R-HAND POSE #1  bf=37    FWD-SWING   hflip=N  weapon x=176 y=44   body x=192 y=43   offset_x=-16  offset_y=1  
+  -- OAM R-HAND FWD-SWING  --
+    spr00: x=192 y= 43 t=$01 a=$00
+    spr01: x=200 y= 43 t=$02 a=$00
+    spr02: x=192 y= 51 t=$03 a=$00
+    spr03: x=200 y= 51 t=$04 a=$00
+    spr04: x=192 y= 59 t=$07 a=$00
+    spr05: x=200 y= 59 t=$08 a=$00
+    spr06: x=176 y= 44 t=$49 a=$03
+    spr07: x=184 y= 44 t=$4A a=$03
+    spr08: x=176 y= 52 t=$4B a=$03
+    spr09: x=184 y= 52 t=$4C a=$03
+    spr10: x= 88 y= 95 t=$4D a=$03
+    spr11: x= 96 y= 95 t=$4E a=$03
+    spr12: x= 80 y=103 t=$4D a=$03
+    spr13: x= 88 y=103 t=$4F a=$03
+    spr14: x= 72 y=111 t=$00 a=$03
+    spr15: x= 80 y=111 t=$00 a=$03
+    spr16: x= 64 y=119 t=$00 a=$03
+    spr17: x= 72 y=119 t=$00 a=$03
+    spr18: x= 56 y=127 t=$00 a=$03
+    spr19: x= 64 y=127 t=$00 a=$03
+    spr20: x= 48 y=135 t=$00 a=$03
+    spr21: x= 56 y=135 t=$00 a=$03
+    spr46: x=208 y= 71 t=$0F a=$01
+    spr47: x=216 y= 71 t=$10 a=$01
+    spr48: x=208 y= 79 t=$11 a=$01
+    spr49: x=216 y= 79 t=$12 a=$01
+    spr50: x=208 y= 87 t=$13 a=$01
+    spr51: x=216 y= 87 t=$14 a=$01
+    spr52: x=208 y= 99 t=$1D a=$02
+    spr53: x=216 y= 99 t=$1E a=$02
+    spr54: x=208 y=107 t=$1F a=$02
+    spr55: x=216 y=107 t=$20 a=$02
+    spr56: x=208 y=115 t=$21 a=$02
+    spr57: x=216 y=115 t=$22 a=$02
+    spr58: x=208 y=127 t=$2B a=$00
+    spr59: x=216 y=127 t=$2C a=$00
+    spr60: x=208 y=135 t=$2D a=$00
+    spr61: x=216 y=135 t=$2E a=$00
+    spr62: x=208 y=143 t=$2F a=$00
+    spr63: x=216 y=143 t=$30 a=$00
+
+R-HAND POSE #2  bf=243   BACK-SWING  hflip=Y  weapon x=200 y=64   body x=208 y=43   offset_x=-8   offset_y=21 
+  -- OAM R-HAND BACK-SWING --
+    spr00: x=192 y= 71 t=$0F a=$01
+    spr01: x=200 y= 71 t=$10 a=$01
+    spr02: x=192 y= 79 t=$39 a=$01
+    spr03: x=200 y= 79 t=$12 a=$01
+    spr04: x=192 y= 87 t=$3A a=$01
+    spr05: x=200 y= 87 t=$16 a=$01
+    spr06: x=208 y= 64 t=$49 a=$43
+    spr07: x=200 y= 64 t=$4A a=$43
+    spr08: x=208 y= 72 t=$4B a=$43
+    spr09: x=200 y= 72 t=$4C a=$43
+    spr40: x=208 y= 43 t=$01 a=$00
+    spr41: x=216 y= 43 t=$02 a=$00
+    spr42: x=208 y= 51 t=$03 a=$00
+    spr43: x=216 y= 51 t=$04 a=$00
+    spr44: x=208 y= 59 t=$05 a=$00
+    spr45: x=216 y= 59 t=$06 a=$00
+    spr52: x=208 y= 99 t=$1D a=$02
+    spr53: x=216 y= 99 t=$1E a=$02
+    spr54: x=208 y=107 t=$1F a=$02
+    spr55: x=216 y=107 t=$20 a=$02
+    spr56: x=208 y=115 t=$21 a=$02
+    spr57: x=216 y=115 t=$22 a=$02
+    spr58: x=208 y=127 t=$2B a=$00
+    spr59: x=216 y=127 t=$2C a=$00
+    spr60: x=208 y=135 t=$2D a=$00
+    spr61: x=216 y=135 t=$2E a=$00
+    spr62: x=208 y=143 t=$2F a=$00
+    spr63: x=216 y=143 t=$30 a=$00
+
+R-HAND POSE #2  bf=247   FWD-SWING   hflip=N  weapon x=176 y=72   body x=208 y=43   offset_x=-32  offset_y=29 
+  -- OAM R-HAND FWD-SWING  --
+    spr00: x=192 y= 71 t=$0F a=$01
+    spr01: x=200 y= 71 t=$10 a=$01
+    spr02: x=192 y= 79 t=$11 a=$01
+    spr03: x=200 y= 79 t=$12 a=$01
+    spr04: x=192 y= 87 t=$15 a=$01
+    spr05: x=200 y= 87 t=$16 a=$01
+    spr06: x=176 y= 72 t=$49 a=$03
+    spr07: x=184 y= 72 t=$4A a=$03
+    spr08: x=176 y= 80 t=$4B a=$03
+    spr09: x=184 y= 80 t=$4C a=$03
+    spr10: x= 56 y= 95 t=$4D a=$03
+    spr11: x= 64 y= 95 t=$4E a=$03
+    spr12: x= 48 y=103 t=$4D a=$03
+    spr13: x= 56 y=103 t=$4F a=$03
+    spr14: x= 40 y=111 t=$00 a=$03
+    spr15: x= 48 y=111 t=$00 a=$03
+    spr16: x= 32 y=119 t=$00 a=$03
+    spr17: x= 40 y=119 t=$00 a=$03
+    spr18: x= 24 y=127 t=$00 a=$03
+    spr19: x= 32 y=127 t=$00 a=$03
+    spr20: x= 16 y=135 t=$00 a=$03
+    spr21: x= 24 y=135 t=$00 a=$03
+    spr40: x=208 y= 43 t=$01 a=$00
+    spr41: x=216 y= 43 t=$02 a=$00
+    spr42: x=208 y= 51 t=$03 a=$00
+    spr43: x=216 y= 51 t=$04 a=$00
+    spr44: x=208 y= 59 t=$05 a=$00
+    spr45: x=216 y= 59 t=$06 a=$00
+    spr52: x=208 y= 99 t=$1D a=$02
+    spr53: x=216 y= 99 t=$1E a=$02
+    spr54: x=208 y=107 t=$1F a=$02
+    spr55: x=216 y=107 t=$20 a=$02
+    spr56: x=208 y=115 t=$21 a=$02
+    spr57: x=216 y=115 t=$22 a=$02
+    spr58: x=208 y=127 t=$2B a=$00
+    spr59: x=216 y=127 t=$2C a=$00
+    spr60: x=208 y=135 t=$2D a=$00
+    spr61: x=216 y=135 t=$2E a=$00
+    spr62: x=208 y=143 t=$2F a=$00
+    spr63: x=216 y=143 t=$30 a=$00
+
+R-HAND POSE #3  bf=365   BACK-SWING  hflip=Y  weapon x=200 y=92   body x=208 y=43   offset_x=-8   offset_y=49 
+  -- OAM R-HAND BACK-SWING --
+    spr00: x=192 y= 99 t=$1D a=$02
+    spr01: x=200 y= 99 t=$1E a=$02
+    spr02: x=192 y=107 t=$39 a=$02
+    spr03: x=200 y=107 t=$20 a=$02
+    spr04: x=192 y=115 t=$3A a=$02
+    spr05: x=200 y=115 t=$24 a=$02
+    spr06: x=208 y= 92 t=$49 a=$43
+    spr07: x=200 y= 92 t=$4A a=$43
+    spr08: x=208 y=100 t=$4B a=$43
+    spr09: x=200 y=100 t=$4C a=$43
+    spr40: x=208 y= 43 t=$01 a=$00
+    spr41: x=216 y= 43 t=$02 a=$00
+    spr42: x=208 y= 51 t=$03 a=$00
+    spr43: x=216 y= 51 t=$04 a=$00
+    spr44: x=208 y= 59 t=$05 a=$00
+    spr45: x=216 y= 59 t=$06 a=$00
+    spr46: x=208 y= 71 t=$0F a=$01
+    spr47: x=216 y= 71 t=$10 a=$01
+    spr48: x=208 y= 79 t=$11 a=$01
+    spr49: x=216 y= 79 t=$12 a=$01
+    spr50: x=208 y= 87 t=$13 a=$01
+    spr51: x=216 y= 87 t=$14 a=$01
+    spr58: x=208 y=127 t=$2B a=$00
+    spr59: x=216 y=127 t=$2C a=$00
+    spr60: x=208 y=135 t=$2D a=$00
+    spr61: x=216 y=135 t=$2E a=$00
+    spr62: x=208 y=143 t=$2F a=$00
+    spr63: x=216 y=143 t=$30 a=$00
+
+R-HAND POSE #3  bf=369   FWD-SWING   hflip=N  weapon x=176 y=100  body x=208 y=43   offset_x=-32  offset_y=57 
+  -- OAM R-HAND FWD-SWING  --
+    spr00: x=192 y= 99 t=$1D a=$02
+    spr01: x=200 y= 99 t=$1E a=$02
+    spr02: x=192 y=107 t=$1F a=$02
+    spr03: x=200 y=107 t=$20 a=$02
+    spr04: x=192 y=115 t=$23 a=$02
+    spr05: x=200 y=115 t=$24 a=$02
+    spr06: x=176 y=100 t=$49 a=$03
+    spr07: x=184 y=100 t=$4A a=$03
+    spr08: x=176 y=108 t=$4B a=$03
+    spr09: x=184 y=108 t=$4C a=$03
+    spr10: x= 56 y= 47 t=$4D a=$03
+    spr11: x= 64 y= 47 t=$4E a=$03
+    spr12: x= 48 y= 55 t=$4D a=$03
+    spr13: x= 56 y= 55 t=$4F a=$03
+    spr14: x= 40 y= 63 t=$00 a=$03
+    spr15: x= 48 y= 63 t=$00 a=$03
+    spr16: x= 32 y= 71 t=$00 a=$03
+    spr17: x= 40 y= 71 t=$00 a=$03
+    spr18: x= 24 y= 79 t=$00 a=$03
+    spr19: x= 32 y= 79 t=$00 a=$03
+    spr20: x= 16 y= 87 t=$00 a=$03
+    spr21: x= 24 y= 87 t=$00 a=$03
+    spr40: x=208 y= 43 t=$01 a=$00
+    spr41: x=216 y= 43 t=$02 a=$00
+    spr42: x=208 y= 51 t=$03 a=$00
+    spr43: x=216 y= 51 t=$04 a=$00
+    spr44: x=208 y= 59 t=$05 a=$00
+    spr45: x=216 y= 59 t=$06 a=$00
+    spr46: x=208 y= 71 t=$0F a=$01
+    spr47: x=216 y= 71 t=$10 a=$01
+    spr48: x=208 y= 79 t=$11 a=$01
+    spr49: x=216 y= 79 t=$12 a=$01
+    spr50: x=208 y= 87 t=$13 a=$01
+    spr51: x=216 y= 87 t=$14 a=$01
+    spr58: x=208 y=127 t=$2B a=$00
+    spr59: x=216 y=127 t=$2C a=$00
+    spr60: x=208 y=135 t=$2D a=$00
+    spr61: x=216 y=135 t=$2E a=$00
+    spr62: x=208 y=143 t=$2F a=$00
+    spr63: x=216 y=143 t=$30 a=$00
+
+R-HAND POSE #4  bf=487   BACK-SWING  hflip=Y  weapon x=200 y=120  body x=208 y=43   offset_x=-8   offset_y=77 
+  -- OAM R-HAND BACK-SWING --
+    spr00: x=192 y=127 t=$2B a=$00
+    spr01: x=200 y=127 t=$2C a=$00
+    spr02: x=192 y=135 t=$39 a=$00
+    spr03: x=200 y=135 t=$2E a=$00
+    spr04: x=192 y=143 t=$3A a=$00
+    spr05: x=200 y=143 t=$32 a=$00
+    spr06: x=208 y=120 t=$49 a=$43
+    spr07: x=200 y=120 t=$4A a=$43
+    spr08: x=208 y=128 t=$4B a=$43
+    spr09: x=200 y=128 t=$4C a=$43
+    spr40: x=208 y= 43 t=$01 a=$00
+    spr41: x=216 y= 43 t=$02 a=$00
+    spr42: x=208 y= 51 t=$03 a=$00
+    spr43: x=216 y= 51 t=$04 a=$00
+    spr44: x=208 y= 59 t=$05 a=$00
+    spr45: x=216 y= 59 t=$06 a=$00
+    spr46: x=208 y= 71 t=$0F a=$01
+    spr47: x=216 y= 71 t=$10 a=$01
+    spr48: x=208 y= 79 t=$11 a=$01
+    spr49: x=216 y= 79 t=$12 a=$01
+    spr50: x=208 y= 87 t=$13 a=$01
+    spr51: x=216 y= 87 t=$14 a=$01
+    spr52: x=208 y= 99 t=$1D a=$02
+    spr53: x=216 y= 99 t=$1E a=$02
+    spr54: x=208 y=107 t=$1F a=$02
+    spr55: x=216 y=107 t=$20 a=$02
+    spr56: x=208 y=115 t=$21 a=$02
+    spr57: x=216 y=115 t=$22 a=$02
+
+R-HAND POSE #4  bf=491   FWD-SWING   hflip=N  weapon x=176 y=128  body x=208 y=43   offset_x=-32  offset_y=85 
+  -- OAM R-HAND FWD-SWING  --
+    spr00: x=192 y=127 t=$2B a=$00
+    spr01: x=200 y=127 t=$2C a=$00
+    spr02: x=192 y=135 t=$2D a=$00
+    spr03: x=200 y=135 t=$2E a=$00
+    spr04: x=192 y=143 t=$31 a=$00
+    spr05: x=200 y=143 t=$32 a=$00
+    spr06: x=176 y=128 t=$49 a=$03
+    spr07: x=184 y=128 t=$4A a=$03
+    spr08: x=176 y=136 t=$4B a=$03
+    spr09: x=184 y=136 t=$4C a=$03
+    spr10: x= 56 y= 95 t=$4D a=$03
+    spr11: x= 64 y= 95 t=$4E a=$03
+    spr12: x= 48 y=103 t=$4D a=$03
+    spr13: x= 56 y=103 t=$4F a=$03
+    spr14: x= 40 y=111 t=$00 a=$03
+    spr15: x= 48 y=111 t=$00 a=$03
+    spr16: x= 32 y=119 t=$00 a=$03
+    spr17: x= 40 y=119 t=$00 a=$03
+    spr18: x= 24 y=127 t=$00 a=$03
+    spr19: x= 32 y=127 t=$00 a=$03
+    spr20: x= 16 y=135 t=$00 a=$03
+    spr21: x= 24 y=135 t=$00 a=$03
+    spr40: x=208 y= 43 t=$01 a=$00
+    spr41: x=216 y= 43 t=$02 a=$00
+    spr42: x=208 y= 51 t=$03 a=$00
+    spr43: x=216 y= 51 t=$04 a=$00
+    spr44: x=208 y= 59 t=$05 a=$00
+    spr45: x=216 y= 59 t=$06 a=$00
+    spr46: x=208 y= 71 t=$0F a=$01
+    spr47: x=216 y= 71 t=$10 a=$01
+    spr48: x=208 y= 79 t=$11 a=$01
+    spr49: x=216 y= 79 t=$12 a=$01
+    spr50: x=208 y= 87 t=$13 a=$01
+    spr51: x=216 y= 87 t=$14 a=$01
+    spr52: x=208 y= 99 t=$1D a=$02
+    spr53: x=216 y= 99 t=$1E a=$02
+    spr54: x=208 y=107 t=$1F a=$02
+    spr55: x=216 y=107 t=$20 a=$02
+    spr56: x=208 y=115 t=$21 a=$02
+    spr57: x=216 y=115 t=$22 a=$02
+
+R-HAND POSE #5  bf=1241  BACK-SWING  hflip=Y  weapon x=200 y=92   body x=208 y=43   offset_x=-8   offset_y=49 
+  -- OAM R-HAND BACK-SWING --
+    spr00: x=192 y= 99 t=$1D a=$02
+    spr01: x=200 y= 99 t=$1E a=$02
+    spr02: x=192 y=107 t=$39 a=$02
+    spr03: x=200 y=107 t=$20 a=$02
+    spr04: x=192 y=115 t=$3A a=$02
+    spr05: x=200 y=115 t=$24 a=$02
+    spr06: x=208 y= 92 t=$49 a=$43
+    spr07: x=200 y= 92 t=$4A a=$43
+    spr08: x=208 y=100 t=$4B a=$43
+    spr09: x=200 y=100 t=$4C a=$43
+    spr40: x=208 y= 43 t=$01 a=$00
+    spr41: x=216 y= 43 t=$02 a=$00
+    spr42: x=208 y= 51 t=$03 a=$00
+    spr43: x=216 y= 51 t=$04 a=$00
+    spr44: x=208 y= 59 t=$05 a=$00
+    spr45: x=216 y= 59 t=$06 a=$00
+    spr46: x=208 y= 71 t=$0F a=$01
+    spr47: x=216 y= 71 t=$10 a=$01
+    spr48: x=208 y= 79 t=$11 a=$01
+    spr49: x=216 y= 79 t=$12 a=$01
+    spr50: x=208 y= 87 t=$13 a=$01
+    spr51: x=216 y= 87 t=$14 a=$01
+    spr58: x=208 y=127 t=$2B a=$00
+    spr59: x=216 y=127 t=$2C a=$00
+    spr60: x=208 y=135 t=$2D a=$00
+    spr61: x=216 y=135 t=$2E a=$00
+    spr62: x=208 y=143 t=$2F a=$00
+    spr63: x=216 y=143 t=$30 a=$00
+
+R-HAND POSE #5  bf=1245  FWD-SWING   hflip=N  weapon x=176 y=100  body x=208 y=43   offset_x=-32  offset_y=57 
+  -- OAM R-HAND FWD-SWING  --
+    spr00: x=192 y= 99 t=$1D a=$02
+    spr01: x=200 y= 99 t=$1E a=$02
+    spr02: x=192 y=107 t=$1F a=$02
+    spr03: x=200 y=107 t=$20 a=$02
+    spr04: x=192 y=115 t=$23 a=$02
+    spr05: x=200 y=115 t=$24 a=$02
+    spr06: x=176 y=100 t=$49 a=$03
+    spr07: x=184 y=100 t=$4A a=$03
+    spr08: x=176 y=108 t=$4B a=$03
+    spr09: x=184 y=108 t=$4C a=$03
+    spr10: x= 88 y= 47 t=$4D a=$03
+    spr11: x= 96 y= 47 t=$4E a=$03
+    spr12: x= 80 y= 55 t=$4D a=$03
+    spr13: x= 88 y= 55 t=$4F a=$03
+    spr14: x= 72 y= 63 t=$00 a=$03
+    spr15: x= 80 y= 63 t=$00 a=$03
+    spr16: x= 64 y= 71 t=$00 a=$03
+    spr17: x= 72 y= 71 t=$00 a=$03
+    spr18: x= 56 y= 79 t=$00 a=$03
+    spr19: x= 64 y= 79 t=$00 a=$03
+    spr20: x= 48 y= 87 t=$00 a=$03
+    spr21: x= 56 y= 87 t=$00 a=$03
+    spr40: x=208 y= 43 t=$01 a=$00
+    spr41: x=216 y= 43 t=$02 a=$00
+    spr42: x=208 y= 51 t=$03 a=$00
+    spr43: x=216 y= 51 t=$04 a=$00
+    spr44: x=208 y= 59 t=$05 a=$00
+    spr45: x=216 y= 59 t=$06 a=$00
+    spr46: x=208 y= 71 t=$0F a=$01
+    spr47: x=216 y= 71 t=$10 a=$01
+    spr48: x=208 y= 79 t=$11 a=$01
+    spr49: x=216 y= 79 t=$12 a=$01
+    spr50: x=208 y= 87 t=$13 a=$01
+    spr51: x=216 y= 87 t=$14 a=$01
+    spr58: x=208 y=127 t=$2B a=$00
+    spr59: x=216 y=127 t=$2C a=$00
+    spr60: x=208 y=135 t=$2D a=$00
+    spr61: x=216 y=135 t=$2E a=$00
+    spr62: x=208 y=143 t=$2F a=$00
+    spr63: x=216 y=143 t=$30 a=$00
+
+R-HAND POSE #6  bf=1363  BACK-SWING  hflip=Y  weapon x=200 y=120  body x=208 y=43   offset_x=-8   offset_y=77 
+  -- OAM R-HAND BACK-SWING --
+    spr00: x=192 y=127 t=$2B a=$00
+    spr01: x=200 y=127 t=$2C a=$00
+    spr02: x=192 y=135 t=$39 a=$00
+    spr03: x=200 y=135 t=$2E a=$00
+    spr04: x=192 y=143 t=$3A a=$00
+    spr05: x=200 y=143 t=$32 a=$00
+    spr06: x=208 y=120 t=$49 a=$43
+    spr07: x=200 y=120 t=$4A a=$43
+    spr08: x=208 y=128 t=$4B a=$43
+    spr09: x=200 y=128 t=$4C a=$43
+    spr40: x=208 y= 43 t=$01 a=$00
+    spr41: x=216 y= 43 t=$02 a=$00
+    spr42: x=208 y= 51 t=$03 a=$00
+    spr43: x=216 y= 51 t=$04 a=$00
+    spr44: x=208 y= 59 t=$05 a=$00
+    spr45: x=216 y= 59 t=$06 a=$00
+    spr46: x=208 y= 71 t=$0F a=$01
+    spr47: x=216 y= 71 t=$10 a=$01
+    spr48: x=208 y= 79 t=$11 a=$01
+    spr49: x=216 y= 79 t=$12 a=$01
+    spr50: x=208 y= 87 t=$13 a=$01
+    spr51: x=216 y= 87 t=$14 a=$01
+    spr52: x=208 y= 99 t=$1D a=$02
+    spr53: x=216 y= 99 t=$1E a=$02
+    spr54: x=208 y=107 t=$1F a=$02
+    spr55: x=216 y=107 t=$20 a=$02
+    spr56: x=208 y=115 t=$21 a=$02
+    spr57: x=216 y=115 t=$22 a=$02
+
+R-HAND POSE #6  bf=1367  FWD-SWING   hflip=N  weapon x=176 y=128  body x=208 y=43   offset_x=-32  offset_y=85 
+  -- OAM R-HAND FWD-SWING  --
+    spr00: x=192 y=127 t=$2B a=$00
+    spr01: x=200 y=127 t=$2C a=$00
+    spr02: x=192 y=135 t=$2D a=$00
+    spr03: x=200 y=135 t=$2E a=$00
+    spr04: x=192 y=143 t=$31 a=$00
+    spr05: x=200 y=143 t=$32 a=$00
+    spr06: x=176 y=128 t=$49 a=$03
+    spr07: x=184 y=128 t=$4A a=$03
+    spr08: x=176 y=136 t=$4B a=$03
+    spr09: x=184 y=136 t=$4C a=$03
+    spr10: x= 88 y= 47 t=$4D a=$03
+    spr11: x= 96 y= 47 t=$4E a=$03
+    spr12: x= 80 y= 55 t=$4D a=$03
+    spr13: x= 88 y= 55 t=$4F a=$03
+    spr14: x= 72 y= 63 t=$00 a=$03
+    spr15: x= 80 y= 63 t=$00 a=$03
+    spr16: x= 64 y= 71 t=$00 a=$03
+    spr17: x= 72 y= 71 t=$00 a=$03
+    spr18: x= 56 y= 79 t=$00 a=$03
+    spr19: x= 64 y= 79 t=$00 a=$03
+    spr20: x= 48 y= 87 t=$00 a=$03
+    spr21: x= 56 y= 87 t=$00 a=$03
+    spr40: x=208 y= 43 t=$01 a=$00
+    spr41: x=216 y= 43 t=$02 a=$00
+    spr42: x=208 y= 51 t=$03 a=$00
+    spr43: x=216 y= 51 t=$04 a=$00
+    spr44: x=208 y= 59 t=$05 a=$00
+    spr45: x=216 y= 59 t=$06 a=$00
+    spr46: x=208 y= 71 t=$0F a=$01
+    spr47: x=216 y= 71 t=$10 a=$01
+    spr48: x=208 y= 79 t=$11 a=$01
+    spr49: x=216 y= 79 t=$12 a=$01
+    spr50: x=208 y= 87 t=$13 a=$01
+    spr51: x=216 y= 87 t=$14 a=$01
+    spr52: x=208 y= 99 t=$1D a=$02
+    spr53: x=216 y= 99 t=$1E a=$02
+    spr54: x=208 y=107 t=$1F a=$02
+    spr55: x=216 y=107 t=$20 a=$02
+    spr56: x=208 y=115 t=$21 a=$02
+    spr57: x=216 y=115 t=$22 a=$02
+
+R-HAND POSE #7  bf=1611  BACK-SWING  hflip=Y  weapon x=200 y=64   body x=208 y=43   offset_x=-8   offset_y=21 
+  -- OAM R-HAND BACK-SWING --
+    spr00: x=192 y= 71 t=$0F a=$01
+    spr01: x=200 y= 71 t=$10 a=$01
+    spr02: x=192 y= 79 t=$39 a=$01
+    spr03: x=200 y= 79 t=$12 a=$01
+    spr04: x=192 y= 87 t=$3A a=$01
+    spr05: x=200 y= 87 t=$16 a=$01
+    spr06: x=208 y= 64 t=$49 a=$43
+    spr07: x=200 y= 64 t=$4A a=$43
+    spr08: x=208 y= 72 t=$4B a=$43
+    spr09: x=200 y= 72 t=$4C a=$43
+    spr40: x=208 y= 43 t=$01 a=$00
+    spr41: x=216 y= 43 t=$02 a=$00
+    spr42: x=208 y= 51 t=$03 a=$00
+    spr43: x=216 y= 51 t=$04 a=$00
+    spr44: x=208 y= 59 t=$05 a=$00
+    spr45: x=216 y= 59 t=$06 a=$00
+    spr52: x=208 y= 99 t=$1D a=$02
+    spr53: x=216 y= 99 t=$1E a=$02
+    spr54: x=208 y=107 t=$1F a=$02
+    spr55: x=216 y=107 t=$20 a=$02
+    spr56: x=208 y=115 t=$21 a=$02
+    spr57: x=216 y=115 t=$22 a=$02
+    spr58: x=208 y=127 t=$2B a=$00
+    spr59: x=216 y=127 t=$2C a=$00
+    spr60: x=208 y=135 t=$2D a=$00
+    spr61: x=216 y=135 t=$2E a=$00
+    spr62: x=208 y=143 t=$2F a=$00
+    spr63: x=216 y=143 t=$30 a=$00
+
+R-HAND POSE #7  bf=1615  FWD-SWING   hflip=N  weapon x=176 y=72   body x=208 y=43   offset_x=-32  offset_y=29 
+  -- OAM R-HAND FWD-SWING  --
+    spr00: x=192 y= 71 t=$0F a=$01
+    spr01: x=200 y= 71 t=$10 a=$01
+    spr02: x=192 y= 79 t=$11 a=$01
+    spr03: x=200 y= 79 t=$12 a=$01
+    spr04: x=192 y= 87 t=$15 a=$01
+    spr05: x=200 y= 87 t=$16 a=$01
+    spr06: x=176 y= 72 t=$49 a=$03
+    spr07: x=184 y= 72 t=$4A a=$03
+    spr08: x=176 y= 80 t=$4B a=$03
+    spr09: x=184 y= 80 t=$4C a=$03
+    spr10: x= 88 y= 47 t=$4D a=$03
+    spr11: x= 96 y= 47 t=$4E a=$03
+    spr12: x= 80 y= 55 t=$4D a=$03
+    spr13: x= 88 y= 55 t=$4F a=$03
+    spr14: x= 72 y= 63 t=$00 a=$03
+    spr15: x= 80 y= 63 t=$00 a=$03
+    spr16: x= 64 y= 71 t=$00 a=$03
+    spr17: x= 72 y= 71 t=$00 a=$03
+    spr18: x= 56 y= 79 t=$00 a=$03
+    spr19: x= 64 y= 79 t=$00 a=$03
+    spr20: x= 48 y= 87 t=$00 a=$03
+    spr21: x= 56 y= 87 t=$00 a=$03
+    spr40: x=208 y= 43 t=$01 a=$00
+    spr41: x=216 y= 43 t=$02 a=$00
+    spr42: x=208 y= 51 t=$03 a=$00
+    spr43: x=216 y= 51 t=$04 a=$00
+    spr44: x=208 y= 59 t=$05 a=$00
+    spr45: x=216 y= 59 t=$06 a=$00
+    spr52: x=208 y= 99 t=$1D a=$02
+    spr53: x=216 y= 99 t=$1E a=$02
+    spr54: x=208 y=107 t=$1F a=$02
+    spr55: x=216 y=107 t=$20 a=$02
+    spr56: x=208 y=115 t=$21 a=$02
+    spr57: x=216 y=115 t=$22 a=$02
+    spr58: x=208 y=127 t=$2B a=$00
+    spr59: x=216 y=127 t=$2C a=$00
+    spr60: x=208 y=135 t=$2D a=$00
+    spr61: x=216 y=135 t=$2E a=$00
+    spr62: x=208 y=143 t=$2F a=$00
+    spr63: x=216 y=143 t=$30 a=$00
+
+R-HAND POSE #8  bf=1733  BACK-SWING  hflip=Y  weapon x=200 y=36   body x=192 y=43   offset_x=8    offset_y=-7 
+  -- OAM R-HAND BACK-SWING --
+    spr00: x=192 y= 43 t=$01 a=$00
+    spr01: x=200 y= 43 t=$02 a=$00
+    spr02: x=192 y= 51 t=$39 a=$00
+    spr03: x=200 y= 51 t=$04 a=$00
+    spr04: x=192 y= 59 t=$3A a=$00
+    spr05: x=200 y= 59 t=$08 a=$00
+    spr06: x=208 y= 36 t=$49 a=$43
+    spr07: x=200 y= 36 t=$4A a=$43
+    spr08: x=208 y= 44 t=$4B a=$43
+    spr09: x=200 y= 44 t=$4C a=$43
+    spr46: x=208 y= 71 t=$0F a=$01
+    spr47: x=216 y= 71 t=$10 a=$01
+    spr48: x=208 y= 79 t=$11 a=$01
+    spr49: x=216 y= 79 t=$12 a=$01
+    spr50: x=208 y= 87 t=$13 a=$01
+    spr51: x=216 y= 87 t=$14 a=$01
+    spr52: x=208 y= 99 t=$1D a=$02
+    spr53: x=216 y= 99 t=$1E a=$02
+    spr54: x=208 y=107 t=$1F a=$02
+    spr55: x=216 y=107 t=$20 a=$02
+    spr56: x=208 y=115 t=$21 a=$02
+    spr57: x=216 y=115 t=$22 a=$02
+    spr58: x=208 y=127 t=$2B a=$00
+    spr59: x=216 y=127 t=$2C a=$00
+    spr60: x=208 y=135 t=$2D a=$00
+    spr61: x=216 y=135 t=$2E a=$00
+    spr62: x=208 y=143 t=$2F a=$00
+    spr63: x=216 y=143 t=$30 a=$00
+
+Captured 8 poses — done.
