@@ -464,7 +464,7 @@ let enemyTargetAllyIdx = -1;   // which ally an enemy is targeting (-1 = player)
 let allyExitTimer = 0;         // ms since victory-celebrate started (for ally exit fade)
 let turnTimer = 0;             // ms elapsed while player is deciding; auto-skip at TURN_TIME_MS
 const TURN_TIME_MS = 10000;    // 10 seconds to act before turn is skipped
-const ROSTER_MENU_ITEMS = ['Party', 'Trade', 'Message', 'Inspect'];
+const ROSTER_MENU_ITEMS = ['Party', 'Battle', 'Trade', 'Message', 'Inspect'];
 const ROSTER_ROW_H = 32;        // pixels per roster row (matches HUD box height)
 const ROSTER_VISIBLE = 3;       // max visible rows in panel (3×32=96px, 16px for scroll)
 const ROSTER_TRI_H = 0;         // no top padding — scroll triangles go in bottom gap
