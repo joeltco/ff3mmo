@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## 1.1.8 — 2026-03-28
+
+### Fix PVP opponent weapon blade positions
+
+- **`drawBlade()` fixed** — replaced hardcoded wrong positions with a mirrored ctx transform
+  - `ctx.translate(sprX+16, sprY); ctx.scale(-1,1)` pivots at the body's right edge
+  - Blade drawn at player-identical offsets: raised=(8,-7), swung=(-16,1), fist=(-4,10)
+  - Back-swing blade now spans sprX-8 to sprX+8 (behind body, correct side)
+  - Fwd-swing blade now spans sprX+16 to sprX+32 (forward, correct side)
+- **Root cause of previous failure:** `trace-weapon-positions.lua` equipped both hands simultaneously without labeling R vs L. Fixed by writing isolated `tools/trace-rhand.lua` and `tools/trace-lhand.lua`; ran headlessly via Xvfb.
+- **L-hand finding:** dagger L-hand attack produces no weapon tile sprites in NES — it uses the fist/punch animation. Existing fist path in pvp.js is correct.
+
 ## 1.1.7 — 2026-03-24
 
 ### PVP system modularized + opponent animation overhaul

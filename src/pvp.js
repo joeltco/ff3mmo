@@ -375,15 +375,18 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   }
   const drawBlade = () => {
     const ctx = _s.ctx;
+    // Opponent faces left — flip coordinates around body's right edge to reuse player offsets.
+    ctx.save();
+    ctx.translate(sprX + 16, sprY);
+    ctx.scale(-1, 1);
     if (isAttackState && blade === blades.fist) {
-      ctx.drawImage(blade, sprX + 4, sprY + 10);
+      ctx.drawImage(blade, -4, 10);
     } else if (isAttackState) {
-      // Fwd-swing: NES weapon at body_left-16, after body h-flip → sprX+(16+16-1)=sprX+31
-      ctx.drawImage(blade, sprX + 32, sprY + 1);
+      ctx.drawImage(blade, -16, 1);
     } else {
-      // Back-swing: NES weapon at body_left+8, after body h-flip → body_right-8=sprX+8
-      ctx.drawImage(blade, sprX + 8, sprY - 7);
+      ctx.drawImage(blade, 8, -7);
     }
+    ctx.restore();
   };
 
   // Wind-up: blade behind body (pulled back); swung/fist: blade in front
