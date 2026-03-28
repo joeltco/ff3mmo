@@ -2299,7 +2299,7 @@ function _renderMapAndWater(camX, camY, originX, originY, spriteY) {
     mapRenderer.draw(ctx, camX, camY, originX, originY);
     _updateIndoorWater(mapRenderer, waterTick);
   }
-  if ((transSt.state === 'none' || transSt.state === 'trap-reveal') &&
+  if (transSt.state === 'none' &&
       (battleState === 'none' || battleState === 'flash-strobe' || battleState.startsWith('roar-'))) {
     _renderSprites(camX, camY, originX, originY, spriteY);
   }
