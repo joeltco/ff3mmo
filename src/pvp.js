@@ -355,9 +355,8 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   } else if (isWindUp) {
     body = _s.knifeBackFullBodyCanvases[palIdx] || fullBody;
   } else if (isAttackState) {
-    // Pre-h-flipped canvases: knifeR has R arm on LEFT side, knifeL has L arm on RIGHT side
-    // For left-facing character: R attack uses knifeL (arm appears on RIGHT = attack side), L attack uses knifeR
-    const atkCvs = isLeftHandAtk ? _s.knifeRFullBodyCanvases : _s.knifeLFullBodyCanvases;
+    // Mirror of player: right-hand attack uses knifeR canvas, left-hand uses knifeL canvas
+    const atkCvs = isLeftHandAtk ? _s.knifeLFullBodyCanvases : _s.knifeRFullBodyCanvases;
     body = (atkCvs && atkCvs[palIdx]) || fullBody;
   }
 
@@ -368,9 +367,10 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   const blades = _s.blades;
   let blade = null;
   if (isWindUp || isAttackState) {
-    if      (wpn === 'knife' && activeWeaponId === 0x1F) blade = isAttackState ? blades.dagger.swung : blades.dagger.raised;
-    else if (wpn === 'knife')  blade = isAttackState ? blades.knife.swung  : blades.knife.raised;
-    else if (wpn === 'sword')  blade = isAttackState ? blades.sword.swung  : blades.sword.raised;
+    // Opponent faces LEFT — swap raised/swung vs player (opponent's forward = player's back)
+    if      (wpn === 'knife' && activeWeaponId === 0x1F) blade = isAttackState ? blades.dagger.raised : blades.dagger.swung;
+    else if (wpn === 'knife')  blade = isAttackState ? blades.knife.raised  : blades.knife.swung;
+    else if (wpn === 'sword')  blade = isAttackState ? blades.sword.raised  : blades.sword.swung;
     else if (isAttackState)    blade = blades.fist;
   }
   const drawBlade = () => {
