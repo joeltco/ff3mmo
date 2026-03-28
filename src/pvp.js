@@ -348,22 +348,27 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
     : enemy.weaponId;
   const wpn = weaponSubtype(activeWeaponId);
 
-  // Body canvas — mirrors player portrait animation
+  // Body canvas — opponent faces RIGHT (toward player) so body is drawn with a second h-flip.
+  // All canvases are pre-h-flipped in buildFullBody16x24Canvas; the extra flip here restores
+  // the original facing-right orientation so the attack arm extends toward the player.
   let body = fullBody;
   if (isOppHit && _s.hitFullBodyCanvases[palIdx]) {
     body = _s.hitFullBodyCanvases[palIdx];
   } else if (isWindUp) {
     body = _s.knifeBackFullBodyCanvases[palIdx] || fullBody;
   } else if (isAttackState) {
-    // After h-flip: knifeR source tile2 → canvas RIGHT = opponent's LEFT arm side
-    //               knifeL source tile2 → canvas LEFT  = opponent's RIGHT arm side
-    // So: right-hand attack uses knifeL (arm on canvas-LEFT), left-hand uses knifeR (arm on canvas-RIGHT)
-    const atkCvs = isLeftHandAtk ? _s.knifeRFullBodyCanvases : _s.knifeLFullBodyCanvases;
+    // With the second h-flip applied in the body draw below:
+    // knifeR (pre-h-flipped) → second h-flip → right arm appears on RIGHT (toward player). Use for R-hand.
+    // knifeL (pre-h-flipped) → second h-flip → left arm appears on LEFT (behind body). Use for L-hand.
+    const atkCvs = isLeftHandAtk ? _s.knifeLFullBodyCanvases : _s.knifeRFullBodyCanvases;
     body = (atkCvs && atkCvs[palIdx]) || fullBody;
   }
 
-  // Resolve blade canvas — pick raised (wind-up) or swung (attack)
-  // Mirrored draw: translate(sprX+16)+scale(-1,1) → raised=(8,-7) behind body, swung=(-16,1) in front
+  // Resolve blade canvas — raised for wind-up, swung for attack
+  // Blade drawn via translate(sprX+16)+scale(-1,1). With body now facing RIGHT:
+  //   R wind-up:  cx=-8  → screen sprX+8..sprX+24 (right side, where R arm is) ✓
+  //   L wind-up:  cx= 8  → screen sprX-8..sprX+8  (left side,  where L arm is) ✓
+  //   swung:      cx=-16 → screen sprX+16..sprX+32 (toward player) ✓
   const blades = _s.blades;
   let blade = null;
   if (isWindUp || isAttackState) {
@@ -378,18 +383,22 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
     _s.ctx.scale(-1, 1);
     if (isAttackState && blade === blades.fist) _s.ctx.drawImage(blade, -4, 10);
     else if (isAttackState)                     _s.ctx.drawImage(blade, -16,  1); // swung: RIGHT of sprite (toward player)
-    else if (isLeftHandWind)                    _s.ctx.drawImage(blade,  -8, -7); // L wind-up: blade on RIGHT side (left arm)
-    else                                        _s.ctx.drawImage(blade,   8, -7); // R wind-up: blade on LEFT side (right arm)
+    else if (isLeftHandWind)                    _s.ctx.drawImage(blade,   8, -7); // L wind-up: LEFT side (left arm, behind)
+    else                                        _s.ctx.drawImage(blade,  -8, -7); // R wind-up: RIGHT side (right arm, in front)
     _s.ctx.restore();
   };
 
-  // Z-order mirrors player portrait (h-flip swaps which hand is "in front"):
-  // Right-hand wind-up: arm on canvas-LEFT = player's LEFT arm = IN FRONT of body
-  // Left-hand  wind-up: arm on canvas-RIGHT = player's RIGHT arm = BEHIND body
-  // All strikes: IN FRONT
-  if (isWindUp && blade && isLeftHandWind) drawBlade();    // left-hand wind-up: behind body
-  _s.ctx.drawImage(body, sprX, sprY);
-  if ((isAttackState || (isWindUp && !isLeftHandWind)) && blade) drawBlade(); // right-hand wind-up + strikes: in front
+  // Z-order: R-hand attack arm is in front (toward player), L-hand arm is behind body
+  const drawBodyFlipped = () => {
+    _s.ctx.save();
+    _s.ctx.translate(sprX + 16, sprY);
+    _s.ctx.scale(-1, 1);
+    _s.ctx.drawImage(body, 0, 0);
+    _s.ctx.restore();
+  };
+  if (isWindUp && blade && isLeftHandWind) drawBlade();    // L wind-up: behind body
+  drawBodyFlipped();
+  if ((isAttackState || (isWindUp && !isLeftHandWind)) && blade) drawBlade(); // R wind-up + strikes: in front
 
   // Slash effect overlays on the current target
   if (isCurrentTarget) {
