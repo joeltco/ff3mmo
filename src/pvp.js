@@ -381,8 +381,8 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
       // Swung: to the RIGHT of body (mirrored from player's left), tile h-flipped
       ctx.save(); ctx.translate(sprX + 32, sprY + 1); ctx.scale(-1, 1); ctx.drawImage(blade, 0, 0); ctx.restore();
     } else {
-      // Wind-up: to the LEFT of body (mirrored from player's right), tile h-flipped
-      ctx.save(); ctx.translate(sprX + 8, sprY - 7); ctx.scale(-1, 1); ctx.drawImage(blade, 0, 0); ctx.restore();
+      // Wind-up: L back swing arm is on the RIGHT side of the pre-h-flipped canvas — blade to the right
+      ctx.drawImage(blade, sprX + 8, sprY - 7);
     }
   };
 
