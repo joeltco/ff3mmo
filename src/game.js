@@ -2330,9 +2330,12 @@ function render() {
   if (battleShakeTimer > 0) camX += (Math.floor(battleShakeTimer / (1000 / 60)) & 2) ? 2 : -2;
 
   _clipToViewport();
-  _renderMapAndWater(camX, camY, SCREEN_CENTER_X, SCREEN_CENTER_Y + 3, SCREEN_CENTER_Y);
-  _renderStarSpiral();
-  ctx.restore();
+  try {
+    _renderMapAndWater(camX, camY, SCREEN_CENTER_X, SCREEN_CENTER_Y + 3, SCREEN_CENTER_Y);
+    _renderStarSpiral();
+  } finally {
+    ctx.restore();
+  }
 }
 
 function statRowBytes(label1, label2, value) {
@@ -5158,10 +5161,14 @@ function _gameLoopUpdate(dt) {
 }
 
 function _gameLoopDraw() {
-  render();
-  drawTransitionOverlay(ctx, _transDrawShared());
-  _drawPondStrobe();
-  if (transSt.state === 'trap-falling' && sprite) sprite.draw(ctx, SCREEN_CENTER_X, SCREEN_CENTER_Y);
+  try {
+    render();
+    drawTransitionOverlay(ctx, _transDrawShared());
+    _drawPondStrobe();
+    if (transSt.state === 'trap-falling' && sprite) sprite.draw(ctx, SCREEN_CENTER_X, SCREEN_CENTER_Y);
+  } catch (e) {
+    console.error('[RENDER ERROR]', e);
+  }
   drawHUD();
   if (battleAllies.length > 0 && battleState !== 'none') drawBattleAllies();
   else drawRoster();
