@@ -12,13 +12,18 @@ import { getShieldEvade } from './player-stats.js';
 
 // ── Local constants (mirrors game.js values — keep in sync) ──────────────────
 const HUD_VIEW_X = 0, HUD_VIEW_Y = 32, HUD_VIEW_W = 144, HUD_VIEW_H = 144;
-const BOSS_PREFLASH_MS   = 133;   // 8 NES frames pre-attack blink
-const BOSS_BOX_EXPAND_MS = 300;
-const PVP_BOX_RESIZE_MS  = 300;
-const BATTLE_SHAKE_MS    = 300;
-const BATTLE_DMG_SHOW_MS = 550;
-const SLASH_FRAMES       = 3;
-const BOSS_ATK           = 8;
+const BOSS_PREFLASH_MS       = 133;
+const BOSS_BOX_EXPAND_MS     = 300;
+const PVP_BOX_RESIZE_MS      = 300;
+const BATTLE_SHAKE_MS        = 300;
+const BATTLE_DMG_SHOW_MS     = 550;
+const SLASH_FRAMES           = 3;
+const BOSS_ATK               = 8;
+const BATTLE_FLASH_FRAMES    = 65;
+const BATTLE_FLASH_FRAME_MS  = 16.67;
+const BATTLE_TEXT_STEPS      = 4;
+const BATTLE_TEXT_STEP_MS    = 50;
+const BATTLE_MSG_HOLD_MS     = 1200;
 
 // ── Mutable PVP state (imported directly by game.js) ─────────────────────────
 export const pvpSt = {
@@ -58,8 +63,7 @@ export function startPVPBattle(shared, target) {
   _s.battleState  = 'flash-strobe';
   _s.battleTimer  = 0;
   _s.resetBattleVars();
-  pauseMusic();
-  playTrack(TRACKS.BATTLE);
+  pauseMusic(); // pause map music now; battle track plays when box expands
 }
 
 export function resetPVPState() {
@@ -99,6 +103,53 @@ export function tryJoinPVPEnemyAlly(shared) {
   _s.battleState = 'pvp-ally-appear';
   _s.battleTimer = 0;
   return true;
+}
+
+// ── Full PVP battle update (called from game.js updateBattle when isPVPBattle) ─
+function _updatePVPOpening() {
+  const bs = _s.battleState;
+  if (bs === 'flash-strobe') {
+    if (_s.battleTimer >= BATTLE_FLASH_FRAMES * BATTLE_FLASH_FRAME_MS) {
+      _s.battleState = 'boss-box-expand'; _s.battleTimer = 0;
+      playTrack(TRACKS.BATTLE); // map music already paused in startPVPBattle
+    }
+  } else if (bs === 'boss-box-expand') {
+    // Skip boss-appear (land turtle) — PVP box goes straight to battle-fade-in
+    if (_s.battleTimer >= BOSS_BOX_EXPAND_MS) { _s.battleState = 'battle-fade-in'; _s.battleTimer = 0; }
+  } else if (bs === 'battle-fade-in') {
+    if (_s.battleTimer >= (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS) { _s.battleState = 'menu-open'; _s.battleTimer = 0; }
+  } else { return false; }
+  return true;
+}
+function _updatePVPMenuConfirm() {
+  const bs = _s.battleState;
+  if (bs === 'message-hold') {
+    if (_s.battleTimer >= BATTLE_MSG_HOLD_MS) { _s.battleState = 'menu-open'; _s.battleTimer = 0; _s.battleMessage = null; }
+  } else if (bs === 'confirm-pause') {
+    if (_s.battleTimer >= 150) {
+      _s.allyJoinRound++;
+      if (tryJoinPVPEnemyAlly(_s)) return true;
+      _s.buildAndProcessNextTurn();
+    }
+  } else { return false; }
+  return true;
+}
+function _updatePVPAllyAppear() {
+  if (_s.battleState !== 'pvp-ally-appear') return false;
+  if (_s.battleTimer >= PVP_BOX_RESIZE_MS) _s.buildAndProcessNextTurn();
+  return true;
+}
+export function updatePVPBattle(dt, shared) {
+  _s = shared;
+  _s.updateTimers(dt);
+  _updatePVPOpening()         ||
+  _updatePVPMenuConfirm()     ||
+  _updatePVPAllyAppear()      ||
+  _s.handlePlayerAttack()     ||
+  _s.handleDefendItem(dt)     ||
+  _s.handleAlly()             ||
+  updateBattleEnemyTurn(_s)   ||
+  _s.handleEndSequence(dt);
 }
 
 // ── Enemy turn update ─────────────────────────────────────────────────────────

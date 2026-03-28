@@ -50,7 +50,7 @@ import { pauseSt, updatePauseMenu, drawPauseMenu } from './pause-menu.js';
 import { transSt, topBoxSt, loadingSt, startWipeTransition, updateTransition, updateTopBoxScroll, drawTransitionOverlay } from './transitions.js';
 import { inputSt, handleBattleInput, handleRosterInput, handlePauseInput } from './input-handler.js';
 import { checkTrigger, applyPassage, openPassage, handleChest, handleSecretWall, handleRockPuzzle, handlePondHeal, findWorldExitIndex } from './map-triggers.js';
-import { pvpSt, startPVPBattle, resetPVPState, tryJoinPVPEnemyAlly, updateBattleEnemyTurn as _updateBattleEnemyTurnPVP, drawBossSpriteBoxPVP } from './pvp.js';
+import { pvpSt, startPVPBattle, resetPVPState, updatePVPBattle, drawBossSpriteBoxPVP } from './pvp.js';
 import { OK_IDLE, OK_VICTORY, OK_L_BACK_SWING, OK_L_FWD_T2, OK_L_FWD_T3, OK_R_BACK_SWING, OK_R_FWD_T2, OK_KNEEL,
          OK_LEG_L_IDLE, OK_LEG_R_IDLE, OK_LEG_L_BACK_L, OK_LEG_R_BACK_L, OK_LEG_L_FWD_L, OK_LEG_R_FWD_L,
          OK_LEG_L_BACK_R, OK_LEG_R_SWING, OK_LEG_L_KNEEL, OK_LEG_R_KNEEL, OK_LEG_L_VICTORY, OK_LEG_R_VICTORY } from './data/job-sprites.js';
@@ -1536,6 +1536,7 @@ function _pauseShared() {
 // Shared state object passed to pvp.js
 function _pvpShared() {
   return {
+    // ── Primitive game state (getters/setters so pvp always reads live values) ──
     get bossHP()                { return bossHP; },
     set bossHP(v)               { bossHP = v; },
     get bossDefeated()          { return bossDefeated; },
@@ -1557,6 +1558,10 @@ function _pvpShared() {
     get isDefending()           { return isDefending; },
     get battleShakeTimer()      { return battleShakeTimer; },
     set battleShakeTimer(v)     { battleShakeTimer = v; },
+    get battleMessage()         { return battleMessage; },
+    set battleMessage(v)        { battleMessage = v; },
+    get allyJoinRound()         { return allyJoinRound; },
+    set allyJoinRound(v)        { allyJoinRound = v; },
     get slashFrames()           { return slashFrames; },
     get slashFrame()            { return slashFrame; },
     get slashOffX()             { return slashOffX; },
@@ -1565,21 +1570,33 @@ function _pvpShared() {
     get currentHitIdx()         { return currentHitIdx; },
     get currentAllyAttacker()   { return currentAllyAttacker; },
     get allyHitResult()         { return allyHitResult; },
-    battleAllies,
-    allyDamageNums,
-    allyShakeTimer,
+    // ── Array/object refs (getters so pvp always gets the live array) ─────────
+    get battleAllies()          { return battleAllies; },
+    get allyDamageNums()        { return allyDamageNums; },
+    get allyShakeTimer()        { return allyShakeTimer; },
     ctx,
-    blades: {
-      knife:  { raised: battleKnifeBladeCanvas,  swung: battleKnifeBladeSwungCanvas },
-      dagger: { raised: battleDaggerBladeCanvas, swung: battleDaggerBladeSwungCanvas },
-      sword:  { raised: battleSwordBladeCanvas,  swung: battleSwordBladeSwungCanvas },
-      fist:   battleFistCanvas,
+    // ── Weapon sprite canvases (stable after init) ────────────────────────────
+    get blades() {
+      return {
+        knife:  { raised: battleKnifeBladeCanvas,  swung: battleKnifeBladeSwungCanvas },
+        dagger: { raised: battleDaggerBladeCanvas, swung: battleDaggerBladeSwungCanvas },
+        sword:  { raised: battleSwordBladeCanvas,  swung: battleSwordBladeSwungCanvas },
+        fist:   battleFistCanvas,
+      };
     },
-    fullBodyCanvases:          fakePlayerFullBodyCanvases,
-    hitFullBodyCanvases:       fakePlayerHitFullBodyCanvases,
-    knifeBackFullBodyCanvases: fakePlayerKnifeBackFullBodyCanvases,
-    knifeRFullBodyCanvases:    fakePlayerKnifeRFullBodyCanvases,
-    knifeLFullBodyCanvases:    fakePlayerKnifeLFullBodyCanvases,
+    get fullBodyCanvases()          { return fakePlayerFullBodyCanvases; },
+    get hitFullBodyCanvases()       { return fakePlayerHitFullBodyCanvases; },
+    get knifeBackFullBodyCanvases() { return fakePlayerKnifeBackFullBodyCanvases; },
+    get knifeRFullBodyCanvases()    { return fakePlayerKnifeRFullBodyCanvases; },
+    get knifeLFullBodyCanvases()    { return fakePlayerKnifeLFullBodyCanvases; },
+    // ── Delegated update functions ────────────────────────────────────────────
+    updateTimers:           (dt) => _updateBattleTimers(dt),
+    handlePlayerAttack:     ()   => _updateBattlePlayerAttack(),
+    handleDefendItem:       (dt) => _updateBattleDefendItem(dt),
+    handleAlly:             ()   => _updateBattleAlly(),
+    handleEndSequence:      (dt) => _updateBattleEndSequence(dt),
+    buildAndProcessNextTurn: ()  => { turnQueue = buildTurnOrder(); processNextTurn(); },
+    // ── Other functions ───────────────────────────────────────────────────────
     resetBattleVars:     _resetBattleVars,
     processNextTurn,
     getPlayerLocation,
@@ -3556,8 +3573,7 @@ function _updateBattleMenuConfirm() {
   } else if (battleState === 'confirm-pause') {
     if (battleTimer >= 150) {
       allyJoinRound++;
-      if (pvpSt.isPVPBattle && tryJoinPVPEnemyAlly(_pvpShared())) return true;
-      if (!pvpSt.isPVPBattle && _tryJoinPlayerAlly()) return true;
+      if (_tryJoinPlayerAlly()) return true;
       turnQueue = buildTurnOrder(); processNextTurn();
     }
   } else { return false; }
@@ -3864,10 +3880,6 @@ function _updateAllyJoin() {
     }
     return true;
   }
-  if (battleState === 'pvp-ally-appear') {
-    if (battleTimer >= 300) { turnQueue = buildTurnOrder(); processNextTurn(); }
-    return true;
-  }
   return false;
 }
 function _updateAllyAttack() {
@@ -4008,7 +4020,6 @@ function _processEnemyDamageShowState() {
   } else { processNextTurn(); }
 }
 function _updateBattleEnemyTurn() {
-  if (pvpSt.isPVPBattle) return _updateBattleEnemyTurnPVP(_pvpShared());
   if (_processBossFlashEnemy()) return true;
   if (battleState === 'enemy-attack') {
     if (battleTimer >= BATTLE_SHAKE_MS) { battleState = 'enemy-damage-show'; battleTimer = 0; }
@@ -4142,6 +4153,7 @@ function _updateBattleEndSequence(dt) {
 function updateBattle(dt) {
   if (battleState === 'none') return;
   battleTimer += Math.min(dt, 33);
+  if (pvpSt.isPVPBattle) { updatePVPBattle(dt, _pvpShared()); return; }
   _updateBattleTimers(dt);
   _updateBattleOpening()      ||
   _updateBattleMenuConfirm()  ||
