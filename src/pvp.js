@@ -378,9 +378,9 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
     if (isAttackState && blade === blades.fist) {
       ctx.drawImage(blade, sprX + 4,  sprY + 10);
     } else if (isAttackState) {
-      ctx.drawImage(blade, sprX - 16, sprY + 1);  // forward: blade LEFT (same as NES body_x-16)
+      ctx.drawImage(blade, sprX + 16, sprY + 1);  // forward: arm extends RIGHT in h-flipped canvas
     } else {
-      ctx.drawImage(blade, sprX + 8,  sprY - 7);  // back-swing: blade RIGHT (same as NES body_x+8)
+      ctx.drawImage(blade, sprX - 8,  sprY - 7);  // back-swing: arm is on LEFT of h-flipped canvas
     }
   };
 
