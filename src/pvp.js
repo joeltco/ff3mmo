@@ -376,11 +376,11 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   const drawBlade = () => {
     const ctx = _s.ctx;
     if (isAttackState && blade === blades.fist) {
-      ctx.drawImage(blade, sprX + 4, sprY + 10);                                                          // mirror of px-4
+      ctx.drawImage(blade, sprX + 4,  sprY + 10); // mirror of px-4
     } else if (isAttackState) {
-      ctx.save(); ctx.translate(sprX + 32, sprY + 1);  ctx.scale(-1, 1); ctx.drawImage(blade, 0, 0); ctx.restore(); // mirror of px-16
+      ctx.drawImage(blade, sprX + 16, sprY + 1);  // mirror of px-16
     } else {
-      ctx.save(); ctx.translate(sprX + 8,  sprY - 7);  ctx.scale(-1, 1); ctx.drawImage(blade, 0, 0); ctx.restore(); // mirror of px+8
+      ctx.drawImage(blade, sprX - 8,  sprY - 7);  // mirror of px+8
     }
   };
 
