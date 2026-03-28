@@ -367,20 +367,20 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   const blades = _s.blades;
   let blade = null;
   if (isWindUp || isAttackState) {
-    // Opponent faces LEFT — swap raised/swung vs player (opponent's forward = player's back)
-    if      (wpn === 'knife' && activeWeaponId === 0x1F) blade = isAttackState ? blades.dagger.raised : blades.dagger.swung;
-    else if (wpn === 'knife')  blade = isAttackState ? blades.knife.raised  : blades.knife.swung;
-    else if (wpn === 'sword')  blade = isAttackState ? blades.sword.raised  : blades.sword.swung;
+    // Same as NES: raised (hflip tile) = back-swing, swung (normal tile) = forward strike
+    if      (wpn === 'knife' && activeWeaponId === 0x1F) blade = isAttackState ? blades.dagger.swung : blades.dagger.raised;
+    else if (wpn === 'knife')  blade = isAttackState ? blades.knife.swung  : blades.knife.raised;
+    else if (wpn === 'sword')  blade = isAttackState ? blades.sword.swung  : blades.sword.raised;
     else if (isAttackState)    blade = blades.fist;
   }
   const drawBlade = () => {
     const ctx = _s.ctx;
     if (isAttackState && blade === blades.fist) {
-      ctx.drawImage(blade, sprX + 4,  sprY + 10); // mirror of px-4
+      ctx.drawImage(blade, sprX + 4,  sprY + 10);
     } else if (isAttackState) {
-      ctx.drawImage(blade, sprX + 16, sprY + 1);  // mirror of px-16
+      ctx.drawImage(blade, sprX - 16, sprY + 1);  // forward: blade LEFT (same as NES body_x-16)
     } else {
-      ctx.drawImage(blade, sprX - 8,  sprY - 7);  // mirror of px+8
+      ctx.drawImage(blade, sprX + 8,  sprY - 7);  // back-swing: blade RIGHT (same as NES body_x+8)
     }
   };
 
