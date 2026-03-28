@@ -355,8 +355,8 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   } else if (isWindUp) {
     body = _s.knifeBackFullBodyCanvases[palIdx] || fullBody;
   } else if (isAttackState) {
-    // Mirror of player: right-hand attack uses knifeR canvas, left-hand uses knifeL canvas
-    const atkCvs = isLeftHandAtk ? _s.knifeLFullBodyCanvases : _s.knifeRFullBodyCanvases;
+    // Forward-swing: use actual fwd-swing tiles (arm extended), not back-swing tiles
+    const atkCvs = isLeftHandAtk ? _s.knifeLFwdFullBodyCanvases : _s.knifeRFwdFullBodyCanvases;
     body = (atkCvs && atkCvs[palIdx]) || fullBody;
   }
 

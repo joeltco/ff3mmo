@@ -432,9 +432,11 @@ let fakePlayerAttackLPortraits = [];  // attack pose (left-hand arm raised)
 let fakePlayerKnifeBackPortraits = []; // knife back-swing body pose
 let fakePlayerKnifeRPortraits = [];    // knife R-hand front-swing body pose
 let fakePlayerKnifeLPortraits = [];    // knife L-hand front-swing body pose
-let fakePlayerKnifeRFullBodyCanvases = []; // knife R-hand 16×24 h-flipped full body (attack portrait + idle legs)
-let fakePlayerKnifeLFullBodyCanvases = []; // knife L-hand 16×24 h-flipped full body
+let fakePlayerKnifeRFullBodyCanvases = []; // knife R-hand 16×24 h-flipped full body (back-swing pose)
+let fakePlayerKnifeLFullBodyCanvases = []; // knife L-hand 16×24 h-flipped full body (back-swing pose)
 let fakePlayerKnifeBackFullBodyCanvases = []; // knife back-swing 16×24 h-flipped full body (wind-up pose)
+let fakePlayerKnifeRFwdFullBodyCanvases = []; // knife R-hand 16×24 h-flipped full body (forward-swing pose)
+let fakePlayerKnifeLFwdFullBodyCanvases = []; // knife L-hand 16×24 h-flipped full body (forward-swing pose)
 let rosterTimer = 0;             // ms until next movement event
 
 const ROSTER_FADE_STEP_MS = 100;
@@ -770,6 +772,11 @@ function _buildKnifeFullBodies() {
   fakePlayerKnifeRFullBodyCanvases    = PLAYER_PALETTES.map(pal => build(_FP_KNIFE_R,    _FP_LEG_L_BACK_R, _FP_LEG_R_SWING,   pal));
   fakePlayerKnifeLFullBodyCanvases    = PLAYER_PALETTES.map(pal => build(_FP_KNIFE_L,    _FP_LEG_L_BACK_L, _FP_LEG_R_BACK_L,  pal));
   fakePlayerKnifeBackFullBodyCanvases = PLAYER_PALETTES.map(pal => build(_FP_KNIFE_BACK, _FP_LEG_L_BACK_L, _FP_LEG_R_BACK_L, pal));
+  // Forward-swing full bodies — arm extended, distinct leg tiles
+  const _FP_L_FWD = [OK_IDLE[0], OK_IDLE[1], OK_L_FWD_T2, OK_L_FWD_T3];
+  const _FP_R_FWD = [OK_IDLE[0], OK_IDLE[1], OK_R_FWD_T2, OK_IDLE[3]];
+  fakePlayerKnifeLFwdFullBodyCanvases = PLAYER_PALETTES.map(pal => build(_FP_L_FWD, _FP_LEG_L_FWD_L, _FP_LEG_R_FWD_L, pal));
+  fakePlayerKnifeRFwdFullBodyCanvases = PLAYER_PALETTES.map(pal => build(_FP_R_FWD, _FP_LEG_L_BACK_R, _FP_LEG_R_SWING, pal));
 }
 function _buildHitFullBodies(romData) {
   const legL = decodeTile(_FP_LEG_L, 0), legR = decodeTile(_FP_LEG_R, 0);
@@ -1586,9 +1593,11 @@ function _pvpShared() {
     },
     get fullBodyCanvases()          { return fakePlayerFullBodyCanvases; },
     get hitFullBodyCanvases()       { return fakePlayerHitFullBodyCanvases; },
-    get knifeBackFullBodyCanvases() { return fakePlayerKnifeBackFullBodyCanvases; },
-    get knifeRFullBodyCanvases()    { return fakePlayerKnifeRFullBodyCanvases; },
-    get knifeLFullBodyCanvases()    { return fakePlayerKnifeLFullBodyCanvases; },
+    get knifeBackFullBodyCanvases()    { return fakePlayerKnifeBackFullBodyCanvases; },
+    get knifeRFullBodyCanvases()       { return fakePlayerKnifeRFullBodyCanvases; },
+    get knifeLFullBodyCanvases()       { return fakePlayerKnifeLFullBodyCanvases; },
+    get knifeRFwdFullBodyCanvases()    { return fakePlayerKnifeRFwdFullBodyCanvases; },
+    get knifeLFwdFullBodyCanvases()    { return fakePlayerKnifeLFwdFullBodyCanvases; },
     // ── Delegated update functions ────────────────────────────────────────────
     updateTimers:           (dt) => _updateBattleTimers(dt),
     handlePlayerAttack:     ()   => _updateBattlePlayerAttack(),
