@@ -65,6 +65,7 @@ export function startPVPBattle(shared, target) {
   _s.preBattleTrack    = TRACKS.CRYSTAL_CAVE;
   _s.battleState  = 'flash-strobe';
   _s.battleTimer  = 0;
+  playSFX(SFX.BATTLE_SWIPE);
   _s.resetBattleVars();
   pauseMusic(); // pause map music now; battle track plays when box expands
 }
