@@ -274,7 +274,7 @@ function _processEnemyDamageShow() {
   } else if (pvpSt.isPVPBattle && pvpSt.pvpCurrentEnemyAllyIdx < 0 && pvpSt.pvpOpponentHitsThisTurn === 0) {
     const oppL = pvpSt.pvpOpponent && pvpSt.pvpOpponent.weaponL;
     const oppR = pvpSt.pvpOpponent && pvpSt.pvpOpponent.weaponId;
-    if ((oppL != null && isWeapon(oppL)) || (!isWeapon(oppR) && !isWeapon(oppL))) {
+    if (oppL != null && isWeapon(oppL)) {
       pvpSt.pvpOpponentHitsThisTurn = 1; _s.battleState = 'pvp-second-windup'; _s.battleTimer = 0;
     } else { _s.processNextTurn(); }
   } else { _s.processNextTurn(); }
