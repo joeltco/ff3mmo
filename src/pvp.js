@@ -360,13 +360,11 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   if (isOppHit && _s.hitFullBodyCanvases[palIdx]) {
     body = _s.hitFullBodyCanvases[palIdx];
   } else if (isWindUp) {
-    // R-hand wind-up → use L-back-swing canvas (after flip = R-hand arm back)
-    // L-hand wind-up → use R-back-swing canvas (after flip = L-hand arm back)
-    body = (isLeftHandWind ? _s.knifeRFullBodyCanvases : _s.knifeBackFullBodyCanvases)[palIdx] || fullBody;
+    // Canvases are pre-h-flipped — R/L hand canvases already show correct arm for left-facing opponent
+    body = (isLeftHandWind ? _s.knifeLFullBodyCanvases : _s.knifeBackFullBodyCanvases)[palIdx] || fullBody;
   } else if (isAttackState) {
-    // R-hand fwd-swing → use L-fwd canvas (after flip = R-hand arm extended)
-    // L-hand fwd-swing → use R-fwd canvas (after flip = L-hand arm extended)
-    const atkCvs = isLeftHandAtk ? _s.knifeRFwdFullBodyCanvases : _s.knifeLFwdFullBodyCanvases;
+    // Canvases are pre-h-flipped — use matching hand directly
+    const atkCvs = isLeftHandAtk ? _s.knifeLFwdFullBodyCanvases : _s.knifeRFwdFullBodyCanvases;
     body = (atkCvs && atkCvs[palIdx]) || fullBody;
   } else if (isOppVictory && _s.victoryFullBodyCanvases && (Math.floor(Date.now() / 250) & 1)) {
     body = _s.victoryFullBodyCanvases[palIdx] || fullBody;
