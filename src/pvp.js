@@ -25,14 +25,16 @@ const BATTLE_TEXT_STEPS      = 4;
 const BATTLE_TEXT_STEP_MS    = 50;
 const BATTLE_MSG_HOLD_MS     = 1200;
 const MONSTER_DEATH_MS       = 250;
+const DEFEND_SPARKLE_FRAME_MS = 133;
+const DEFEND_SPARKLE_TOTAL_MS = 533;
 
 // ── Mutable PVP state (imported directly by game.js) ─────────────────────────
 export const pvpSt = {
   isPVPBattle:            false,
   pvpOpponent:            null,   // PLAYER_POOL entry being dueled
   pvpOpponentStats:       null,   // {hp, maxHP, atk, def, agi, level, name, palIdx, weaponId}
-  pvpOpponentIsDefending: false,  // AI defend state
-  pvpOpponentHitIdx:      0,      // increments per opponent attack (even=R hand, odd=L hand)
+  pvpOpponentIsDefending: false,  // AI defend state — halves incoming player/ally damage this round
+  pvpPendingTargetAlly:   -1,     // saved targeting decision during pvp-defend-anim
   pvpOpponentHitsThisTurn:0,      // gates dual-wield 2nd hit
   pvpEnemyAllies:         [],     // fake players who join opponent's side
   pvpCurrentEnemyAllyIdx:-1,      // -1 = main opponent, >=0 = pvpEnemyAllies[i]
@@ -54,7 +56,7 @@ export function startPVPBattle(shared, target) {
   pvpSt.pvpOpponent             = target;
   pvpSt.pvpOpponentStats        = generateAllyStats(target);
   pvpSt.pvpOpponentIsDefending  = false;
-  pvpSt.pvpOpponentHitIdx       = 0;
+  pvpSt.pvpPendingTargetAlly    = -1;
   pvpSt.pvpOpponentHitsThisTurn = 0;
   pvpSt.pvpEnemyAllies          = [];
   pvpSt.pvpCurrentEnemyAllyIdx  = -1;
@@ -181,6 +183,7 @@ export function updatePVPBattle(dt, shared) {
 export function updateBattleEnemyTurn(shared) {
   _s = shared;
   if (_processBossFlash()) return true;
+  if (_processPVPDefendAnim()) return true;
   if (_s.battleState === 'enemy-attack') {
     if (_s.battleTimer >= BATTLE_SHAKE_MS) { _s.battleState = 'enemy-damage-show'; _s.battleTimer = 0; }
   } else if (_s.battleState === 'enemy-damage-show') { _processEnemyDamageShow();
@@ -189,17 +192,7 @@ export function updateBattleEnemyTurn(shared) {
   return true;
 }
 
-function _processBossFlash() {
-  if (_s.battleState !== 'boss-flash' || _s.battleTimer < BOSS_PREFLASH_MS) return false;
-  const livingAllies = _s.battleAllies.filter(a => a.hp > 0);
-  let targetAlly = -1;
-  if (livingAllies.length > 0 && !(pvpSt.isPVPBattle && pvpSt.pvpCurrentEnemyAllyIdx < 0)) {
-    if (Math.random() >= 1 / (1 + livingAllies.length)) {
-      const allyOptions = _s.battleAllies.map((a, i) => a.hp > 0 ? i : -1).filter(i => i >= 0);
-      targetAlly = allyOptions[Math.floor(Math.random() * allyOptions.length)];
-    }
-  }
-  pvpSt.pvpOpponentIsDefending = (pvpSt.isPVPBattle && targetAlly < 0) ? Math.random() < 0.30 : false;
+function _runEnemyAttack(targetAlly) {
   const hitRate = (_s.currentAttacker >= 0 && _s.encounterMonsters)
     ? (_s.encounterMonsters[_s.currentAttacker].hitRate || GOBLIN_HIT_RATE) : BOSS_HIT_RATE;
   const atk = pvpSt.isPVPBattle
@@ -234,14 +227,39 @@ function _processBossFlash() {
       _s.playerDamageNum = { value: dmg, timer: 0 };
       playSFX(SFX.ATTACK_HIT);
       _s.battleShakeTimer = BATTLE_SHAKE_MS;
-      _s.battleState = 'enemy-attack';
-      pvpSt.pvpOpponentHitIdx++;
-      _s.battleTimer = 0;
+      _s.battleState = 'enemy-attack'; _s.battleTimer = 0;
     } else {
       _s.playerDamageNum = { miss: true, timer: 0 };
       _s.battleState = 'enemy-damage-show'; _s.battleTimer = 0;
     }
   }
+}
+
+function _processBossFlash() {
+  if (_s.battleState !== 'boss-flash' || _s.battleTimer < BOSS_PREFLASH_MS) return false;
+  const livingAllies = _s.battleAllies.filter(a => a.hp > 0);
+  let targetAlly = -1;
+  if (livingAllies.length > 0 && !(pvpSt.isPVPBattle && pvpSt.pvpCurrentEnemyAllyIdx < 0)) {
+    if (Math.random() >= 1 / (1 + livingAllies.length)) {
+      const allyOptions = _s.battleAllies.map((a, i) => a.hp > 0 ? i : -1).filter(i => i >= 0);
+      targetAlly = allyOptions[Math.floor(Math.random() * allyOptions.length)];
+    }
+  }
+  pvpSt.pvpOpponentIsDefending = (pvpSt.isPVPBattle && pvpSt.pvpCurrentEnemyAllyIdx < 0 && targetAlly < 0)
+    ? Math.random() < 0.30 : false;
+  if (pvpSt.pvpOpponentIsDefending) {
+    pvpSt.pvpPendingTargetAlly = targetAlly;
+    playSFX(SFX.DEFEND_HIT);
+    _s.battleState = 'pvp-defend-anim'; _s.battleTimer = 0;
+    return true;
+  }
+  _runEnemyAttack(targetAlly);
+  return true;
+}
+
+function _processPVPDefendAnim() {
+  if (_s.battleState !== 'pvp-defend-anim') return false;
+  if (_s.battleTimer >= DEFEND_SPARKLE_TOTAL_MS) _runEnemyAttack(pvpSt.pvpPendingTargetAlly);
   return true;
 }
 
@@ -282,6 +300,15 @@ function _processPVPSecondWindup() {
 }
 
 // ── Rendering ─────────────────────────────────────────────────────────────────
+// Mirrors game.js _drawSparkleCorners but uses _s.ctx. Wraps a 16×24 body at (sprX, sprY).
+function _drawSparkleAtCorners(sprX, sprY, frame) {
+  const ctx = _s.ctx;
+  ctx.drawImage(frame, sprX - 8, sprY - 7);
+  ctx.save(); ctx.scale(-1, 1); ctx.drawImage(frame, -(sprX + 23), sprY - 7); ctx.restore();
+  ctx.save(); ctx.scale(1, -1); ctx.drawImage(frame, sprX - 8, -(sprY + 24)); ctx.restore();
+  ctx.save(); ctx.scale(-1, -1); ctx.drawImage(frame, -(sprX + 23), -(sprY + 24)); ctx.restore();
+}
+
 export function drawBossSpriteBoxPVP(shared, centerX, centerY) {
   _s = shared;
   const bs = _s.battleState;
@@ -378,6 +405,7 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   const isNearFatalOpp = oppHP > 0 && oppHP <= Math.floor(oppMaxHP / 4);
   // Opponent victory = player was defeated (defeat-monster-fade)
   const isOppVictory = _s.battleState === 'defeat-monster-fade';
+  const isOppDefending = isMain && pvpSt.pvpOpponentIsDefending && bs === 'pvp-defend-anim';
   let body = fullBody;
   if (isOppHit && _s.hitFullBodyCanvases[palIdx]) {
     body = _s.hitFullBodyCanvases[palIdx];
@@ -388,6 +416,8 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
     // Canvases are pre-h-flipped — use matching hand directly
     const atkCvs = isLeftHandAtk ? _s.knifeLFwdFullBodyCanvases : _s.knifeRFwdFullBodyCanvases;
     body = (atkCvs && atkCvs[palIdx]) || fullBody;
+  } else if (isOppDefending && _s.victoryFullBodyCanvases) {
+    body = _s.victoryFullBodyCanvases[palIdx] || fullBody;
   } else if (isOppVictory && _s.victoryFullBodyCanvases && (Math.floor(Date.now() / 250) & 1)) {
     body = _s.victoryFullBodyCanvases[palIdx] || fullBody;
   } else if (isNearFatalOpp && !isOppVictory && _s.kneelFullBodyCanvases) {
@@ -439,6 +469,12 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
     _s.ctx.drawImage(body, sprX, sprY);
   }
   if (isAttackState && blade) drawBlade();
+
+  // Defend sparkle — 4 frames cycling over 533ms, full-body corners
+  if (isOppDefending && _s.defendSparkleFrames && _s.defendSparkleFrames.length === 4) {
+    const fi = Math.min(3, Math.floor(_s.battleTimer / DEFEND_SPARKLE_FRAME_MS));
+    _drawSparkleAtCorners(sprX, sprY, _s.defendSparkleFrames[fi]);
+  }
 
   // Slash effect overlays on the current target
   if (isCurrentTarget) {
