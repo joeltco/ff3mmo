@@ -349,15 +349,29 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   const wpn = weaponSubtype(activeWeaponId);
 
   // Body canvas — drawn directly (pre-h-flipped canvases face left, matching enemy-side visual style)
+  // MIRRORING RULE: opponent faces left, so R-hand canvases look like L-hand after flip and vice versa.
+  // Use the opposite hand's canvas to get the correct visual for each hand.
+  const oppHP   = isMain ? _s.bossHP : (enemy.hp != null ? enemy.hp : 0);
+  const oppMaxHP = isMain ? (pvpSt.pvpOpponentStats ? pvpSt.pvpOpponentStats.maxHP : 1) : (enemy.maxHP || 1);
+  const isNearFatalOpp = oppHP > 0 && oppHP <= Math.floor(oppMaxHP / 4);
+  // Opponent victory = player was defeated (defeat-monster-fade)
+  const isOppVictory = _s.battleState === 'defeat-monster-fade';
   let body = fullBody;
   if (isOppHit && _s.hitFullBodyCanvases[palIdx]) {
     body = _s.hitFullBodyCanvases[palIdx];
   } else if (isWindUp) {
-    body = _s.knifeBackFullBodyCanvases[palIdx] || fullBody;
+    // R-hand wind-up → use L-back-swing canvas (after flip = R-hand arm back)
+    // L-hand wind-up → use R-back-swing canvas (after flip = L-hand arm back)
+    body = (isLeftHandWind ? _s.knifeRFullBodyCanvases : _s.knifeBackFullBodyCanvases)[palIdx] || fullBody;
   } else if (isAttackState) {
-    // Forward-swing: use actual fwd-swing tiles (arm extended), not back-swing tiles
-    const atkCvs = isLeftHandAtk ? _s.knifeLFwdFullBodyCanvases : _s.knifeRFwdFullBodyCanvases;
+    // R-hand fwd-swing → use L-fwd canvas (after flip = R-hand arm extended)
+    // L-hand fwd-swing → use R-fwd canvas (after flip = L-hand arm extended)
+    const atkCvs = isLeftHandAtk ? _s.knifeRFwdFullBodyCanvases : _s.knifeLFwdFullBodyCanvases;
     body = (atkCvs && atkCvs[palIdx]) || fullBody;
+  } else if (isOppVictory && _s.victoryFullBodyCanvases && (Math.floor(Date.now() / 250) & 1)) {
+    body = _s.victoryFullBodyCanvases[palIdx] || fullBody;
+  } else if (isNearFatalOpp && !isOppVictory && _s.kneelFullBodyCanvases) {
+    body = _s.kneelFullBodyCanvases[palIdx] || fullBody;
   }
 
   // Opponent faces LEFT — blade positions and tile orientation are mirrored vs player portrait.

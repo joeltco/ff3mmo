@@ -437,6 +437,8 @@ let fakePlayerKnifeLFullBodyCanvases = []; // knife L-hand 16×24 h-flipped full
 let fakePlayerKnifeBackFullBodyCanvases = []; // knife back-swing 16×24 h-flipped full body (wind-up pose)
 let fakePlayerKnifeRFwdFullBodyCanvases = []; // knife R-hand 16×24 h-flipped full body (forward-swing pose)
 let fakePlayerKnifeLFwdFullBodyCanvases = []; // knife L-hand 16×24 h-flipped full body (forward-swing pose)
+let fakePlayerKneelFullBodyCanvases = [];     // near-fatal kneel 16×24 h-flipped full body
+let fakePlayerVictoryFullBodyCanvases = [];   // victory 16×24 h-flipped full body
 let rosterTimer = 0;             // ms until next movement event
 
 const ROSTER_FADE_STEP_MS = 100;
@@ -778,6 +780,8 @@ function _buildKnifeFullBodies() {
   const _FP_R_FWD = [OK_IDLE[0], OK_IDLE[1], OK_R_FWD_T2, OK_IDLE[3]];
   fakePlayerKnifeLFwdFullBodyCanvases = PLAYER_PALETTES.map(pal => build(_FP_L_FWD, _FP_LEG_L_FWD_L, _FP_LEG_R_FWD_L, pal));
   fakePlayerKnifeRFwdFullBodyCanvases = PLAYER_PALETTES.map(pal => build(_FP_R_FWD, _FP_LEG_L_BACK_R, _FP_LEG_R_SWING, pal));
+  fakePlayerKneelFullBodyCanvases    = PLAYER_PALETTES.map(pal => build(_FP_KNEEL, _FP_LEG_L_KNEEL, _FP_LEG_R_KNEEL, pal));
+  fakePlayerVictoryFullBodyCanvases  = PLAYER_PALETTES.map(pal => build(_FP_VICTORY, _FP_LEG_L_VICTORY, _FP_LEG_R_VICTORY, pal));
 }
 function _buildHitFullBodies(romData) {
   const legL = decodeTile(_FP_LEG_L, 0), legR = decodeTile(_FP_LEG_R, 0);
@@ -1599,6 +1603,8 @@ function _pvpShared() {
     get knifeLFullBodyCanvases()       { return fakePlayerKnifeLFullBodyCanvases; },
     get knifeRFwdFullBodyCanvases()    { return fakePlayerKnifeRFwdFullBodyCanvases; },
     get knifeLFwdFullBodyCanvases()    { return fakePlayerKnifeLFwdFullBodyCanvases; },
+    get kneelFullBodyCanvases()        { return fakePlayerKneelFullBodyCanvases; },
+    get victoryFullBodyCanvases()      { return fakePlayerVictoryFullBodyCanvases; },
     // ── Delegated update functions ────────────────────────────────────────────
     updateTimers:           (dt) => _updateBattleTimers(dt),
     handlePlayerAttack:     ()   => _updateBattlePlayerAttack(),
@@ -5107,14 +5113,25 @@ function _drawAllyPortrait(i, ally, isVicPose, isAllyAttack, isAllyHit, isNearFa
   else if (isNearFatal && fakePlayerKneelPortraits[ally.palIdx]) portraits = fakePlayerKneelPortraits[ally.palIdx];
   else portraits = fakePlayerPortraits[ally.palIdx];
   if (!portraits) return;
+  if (isAllyAttack) {
+    // R-hand back-swing blade goes BEHIND portrait (NES OAM: weapon spr06-09 loses to body spr00-05)
+    // L-hand back-swing blade goes IN FRONT (NES OAM: weapon spr00-03 beats body spr04-09)
+    if (!hitLeft) {
+      const wpnSt = weaponSubtype(ally.weaponId);
+      const backX = ppx + 8;
+      if (wpnSt === 'knife' && ally.weaponId === 0x1F && battleDaggerBladeCanvas) ctx.drawImage(battleDaggerBladeCanvas, backX, ppy - 7);
+      else if (wpnSt === 'knife' && battleKnifeBladeCanvas) ctx.drawImage(battleKnifeBladeCanvas, backX, ppy - 7);
+      else if (wpnSt === 'sword' && battleSwordBladeCanvas) ctx.drawImage(battleSwordBladeCanvas, backX, ppy - 7);
+    }
+  }
   ctx.drawImage(portraits[ally.fadeStep], ppx, ppy);
   if (isAllyAttack) {
-    const activeWpnId = hitLeft ? ally.weaponL : ally.weaponId;
-    const wpnSt = weaponSubtype(activeWpnId);
-    const backX = ppx + (hitLeft ? 16 : 8);
-    if (wpnSt === 'knife' && activeWpnId === 0x1F && battleDaggerBladeCanvas) weaponDraws.push({ img: battleDaggerBladeCanvas, x: backX, y: ppy - 7 });
-    else if (wpnSt === 'knife' && battleKnifeBladeCanvas) weaponDraws.push({ img: battleKnifeBladeCanvas, x: backX, y: ppy - 7 });
-    else if (wpnSt === 'sword' && battleSwordBladeCanvas) weaponDraws.push({ img: battleSwordBladeCanvas, x: backX, y: ppy - 7 });
+    if (hitLeft) {
+      const wpnSt = weaponSubtype(ally.weaponL);
+      if (wpnSt === 'knife' && ally.weaponL === 0x1F && battleDaggerBladeCanvas) weaponDraws.push({ img: battleDaggerBladeCanvas, x: ppx + 16, y: ppy - 7 });
+      else if (wpnSt === 'knife' && battleKnifeBladeCanvas) weaponDraws.push({ img: battleKnifeBladeCanvas, x: ppx + 16, y: ppy - 7 });
+      else if (wpnSt === 'sword' && battleSwordBladeCanvas) weaponDraws.push({ img: battleSwordBladeCanvas, x: ppx + 16, y: ppy - 7 });
+    }
   }
   if (isThisAllySlash) {
     const activeWpnId = allyHitIsLeft ? ally.weaponL : ally.weaponId;
