@@ -5037,8 +5037,10 @@ const VICTORY_BOX_ROWS = HUD_BOT_H / 8; // 8 rows
 const VICTORY_ROW_FRAME_MS = 16.67; // 1 NES frame per row
 
 function _battleEnemyName() {
-  if (pvpSt.isPVPBattle && pvpSt.pvpOpponentStats) {
-    return _nameToBytes(pvpSt.pvpOpponentStats.name);
+  if (pvpSt.isPVPBattle) {
+    const ti = pvpSt.pvpPlayerTargetIdx;
+    if (ti >= 0 && pvpSt.pvpEnemyAllies[ti]) return _nameToBytes(pvpSt.pvpEnemyAllies[ti].name);
+    if (pvpSt.pvpOpponentStats) return _nameToBytes(pvpSt.pvpOpponentStats.name);
   }
   if (isRandomEncounter && encounterMonsters) {
     // Use targeted monster's name (or first alive if no target)
