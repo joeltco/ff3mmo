@@ -3521,6 +3521,7 @@ function executeBattleCommand(index) {
 function _updateBattleTimers(dt) {
   if (bossFlashTimer > 0) bossFlashTimer = Math.max(0, bossFlashTimer - dt);
   if (battleShakeTimer > 0) battleShakeTimer = Math.max(0, battleShakeTimer - dt);
+  if (pvpSt.pvpBossShakeTimer > 0) pvpSt.pvpBossShakeTimer = Math.max(0, pvpSt.pvpBossShakeTimer - dt);
 
   if (bossDamageNum) { bossDamageNum.timer += dt; if (bossDamageNum.timer >= BATTLE_DMG_SHOW_MS) bossDamageNum = null; }
   for (const k of Object.keys(southWindDmgNums)) {
@@ -3640,6 +3641,7 @@ function _finalizeComboHits() {
     if (!h.miss) { totalDmg += h.damage; allMiss = false; if (h.crit) anyCrit = true; }
   }
   bossDamageNum = allMiss ? { miss: true, timer: 0 } : { value: totalDmg, crit: anyCrit, timer: 0 };
+  if (pvpSt.isPVPBattle && !allMiss) pvpSt.pvpBossShakeTimer = BATTLE_SHAKE_MS;
   battleState = 'player-damage-show';
   battleTimer = 0;
 }
@@ -3987,6 +3989,7 @@ function _updateAllyAttack() {
           encounterMonsters[allyTargetIndex].hp = Math.max(0, encounterMonsters[allyTargetIndex].hp - allyHitResult.damage);
         } else if (allyTargetIndex < 0) {
           bossHP = Math.max(0, bossHP - allyHitResult.damage);
+          if (pvpSt.isPVPBattle) pvpSt.pvpBossShakeTimer = BATTLE_SHAKE_MS;
         }
         if (allyHitResult.crit) critFlashTimer = 0;
         bossDamageNum = { value: allyHitResult.damage, crit: allyHitResult.crit, timer: 0 };
