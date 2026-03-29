@@ -4,24 +4,24 @@ export const LOCATIONS = ['world', 'ur', 'cave-0', 'cave-1', 'cave-2', 'cave-3',
 
 // Each player has a current location that changes over time (loc is mutated at runtime)
 export const PLAYER_POOL = [
-  { name: 'Zephyr',  level: 5,  palIdx: 1, camper: false, loc: 'ur' },
-  { name: 'Mira',    level: 4,  palIdx: 2, camper: false, loc: 'world' },
-  { name: 'Aldric',  level: 5,  palIdx: 3, camper: true,  loc: 'ur' },
-  { name: 'Suki',    level: 3,  palIdx: 4, camper: false, loc: 'cave-0' },
-  { name: 'Fenris',  level: 5,  palIdx: 5, camper: false, loc: 'cave-1' },
-  { name: 'Lenna',   level: 5,  palIdx: 6, camper: true,  loc: 'ur' },
-  { name: 'Grok',    level: 5,  palIdx: 7, camper: false, loc: 'cave-3' },
-  { name: 'Ivy',     level: 2,  palIdx: 0, camper: false, loc: 'ur' },
-  { name: 'Rook',    level: 5,  palIdx: 3, camper: false, loc: 'cave-2' },
-  { name: 'Tora',    level: 5,  palIdx: 5, camper: false, loc: 'world' },
-  { name: 'Blix',    level: 4,  palIdx: 7, camper: false, loc: 'cave-0' },
-  { name: 'Cassia',  level: 5,  palIdx: 6, camper: true,  loc: 'cave-1' },
-  { name: 'Duran',   level: 5,  palIdx: 1, camper: false, loc: 'crystal' },
-  { name: 'Nyx',     level: 1,  palIdx: 4, camper: false, loc: 'ur' },
-  { name: 'Orin',    level: 4,  palIdx: 0, camper: false, loc: 'world' },
-  { name: 'Pip',     level: 3,  palIdx: 2, camper: false, loc: 'cave-0' },
-  { name: 'Vex',     level: 5,  palIdx: 7, camper: false, loc: 'cave-2' },
-  { name: 'Wren',    level: 4,  palIdx: 5, camper: false, loc: 'world' },
+  { name: 'Zephyr',  level: 5,  palIdx: 1, camper: false, loc: 'ur',      weaponR: 0x1E },                    // Knife
+  { name: 'Mira',    level: 4,  palIdx: 2, camper: false, loc: 'world',   weaponR: 0x1E, weaponL: 0x1E },     // Knife × 2 (dual)
+  { name: 'Aldric',  level: 5,  palIdx: 3, camper: true,  loc: 'ur',      weaponR: 0x1E },                    // Knife
+  { name: 'Suki',    level: 3,  palIdx: 4, camper: false, loc: 'cave-0',  weaponR: 0x1E },                    // Knife
+  { name: 'Fenris',  level: 5,  palIdx: 5, camper: false, loc: 'cave-1',  weaponR: 0x1F },                    // Dagger
+  { name: 'Lenna',   level: 5,  palIdx: 6, camper: true,  loc: 'ur',      weaponR: 0x1E },                    // Knife
+  { name: 'Grok',    level: 5,  palIdx: 7, camper: false, loc: 'cave-3',  weaponR: 0x24 },                    // Longsword
+  { name: 'Ivy',     level: 2,  palIdx: 0, camper: false, loc: 'ur',      weaponR: 0x1E },                    // Knife
+  { name: 'Rook',    level: 5,  palIdx: 3, camper: false, loc: 'cave-2',  weaponR: 0x24 },                    // Longsword
+  { name: 'Tora',    level: 5,  palIdx: 5, camper: false, loc: 'world',   weaponR: 0x1F },                    // Dagger
+  { name: 'Blix',    level: 4,  palIdx: 7, camper: false, loc: 'cave-0',  weaponR: 0x1F },                    // Dagger
+  { name: 'Cassia',  level: 5,  palIdx: 6, camper: true,  loc: 'cave-1',  weaponR: 0x1F },                    // Dagger
+  { name: 'Duran',   level: 5,  palIdx: 1, camper: false, loc: 'crystal', weaponR: 0x24 },                    // Longsword
+  { name: 'Nyx',     level: 1,  palIdx: 4, camper: false, loc: 'ur',      weaponR: 0x1E },                    // Knife
+  { name: 'Orin',    level: 4,  palIdx: 0, camper: false, loc: 'world',   weaponR: 0x1F, weaponL: 0x1E },     // Dagger + Knife (dual)
+  { name: 'Pip',     level: 3,  palIdx: 2, camper: false, loc: 'cave-0',  weaponR: 0x1E },                    // Knife
+  { name: 'Vex',     level: 5,  palIdx: 7, camper: false, loc: 'cave-2',  weaponR: 0x24 },                    // Longsword
+  { name: 'Wren',    level: 4,  palIdx: 5, camper: false, loc: 'world',   weaponR: 0x1F },                    // Dagger
 ];
 
 // Palette variants — only color 3 changes (original $16 = red outfit)
