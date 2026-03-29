@@ -27,6 +27,7 @@ const BATTLE_MSG_HOLD_MS     = 1200;
 const MONSTER_DEATH_MS       = 250;
 const DEFEND_SPARKLE_FRAME_MS = 133;
 const DEFEND_SPARKLE_TOTAL_MS = 533;
+const ENEMY_SLASH_TOTAL_MS    = 201; // 3 frames × 67ms — slash on player portrait before shake
 
 // ── Mutable PVP state (imported directly by game.js) ─────────────────────────
 export const pvpSt = {
@@ -37,6 +38,7 @@ export const pvpSt = {
   pvpPendingTargetAlly:   -1,     // saved targeting decision during pvp-defend-anim
   pvpBossShakeTimer:      0,      // drives opponent left-shake on damage (mirrors battleShakeTimer)
   pvpOpponentHitsThisTurn:0,      // gates dual-wield 2nd hit
+  pvpPendingAttack:       null,   // {miss, shieldBlock, dmg} — staged during pvp-enemy-slash, applied at end
   pvpEnemyAllies:         [],     // fake players who join opponent's side
   pvpCurrentEnemyAllyIdx:-1,      // -1 = main opponent, >=0 = pvpEnemyAllies[i]
   pvpPlayerTargetIdx:    -1,      // which enemy the player is currently fighting (-1=main opp, >=0=pvpEnemyAllies[i])
@@ -60,6 +62,7 @@ export function startPVPBattle(shared, target) {
   pvpSt.pvpPendingTargetAlly    = -1;
   pvpSt.pvpBossShakeTimer       = 0;
   pvpSt.pvpOpponentHitsThisTurn = 0;
+  pvpSt.pvpPendingAttack        = null;
   pvpSt.pvpEnemyAllies          = [];
   pvpSt.pvpCurrentEnemyAllyIdx  = -1;
   pvpSt.pvpPlayerTargetIdx      = -1;
@@ -188,6 +191,10 @@ export function updateBattleEnemyTurn(shared) {
   _s = shared;
   if (_processBossFlash()) return true;
   if (_processPVPDefendAnim()) return true;
+  if (_processPVPEnemySlash()) return true;
+  if (_processPVPOppPotion()) return true;
+  if (_processPVPOppSWThrow()) return true;
+  if (_processPVPOppSWHit()) return true;
   if (_s.battleState === 'enemy-attack') {
     if (_s.battleTimer >= BATTLE_SHAKE_MS) { _s.battleState = 'enemy-damage-show'; _s.battleTimer = 0; }
   } else if (_s.battleState === 'enemy-damage-show') { _processEnemyDamageShow();
@@ -220,21 +227,36 @@ function _runEnemyAttack(targetAlly) {
   } else {
     const shieldEvade = getShieldEvade(ITEMS);
     const shieldBlocked = shieldEvade > 0 && Math.random() * 100 < shieldEvade;
-    if (shieldBlocked) {
-      _s.playerDamageNum = { miss: true, timer: 0 };
-      inputSt.battleProfHits['shield'] = (inputSt.battleProfHits['shield'] || 0) + 1;
-      _s.battleState = 'enemy-attack'; _s.battleTimer = 0;
-    } else if (Math.random() * 100 < hitRate) {
-      let dmg = calcDamage(atk, ps.def);
-      if (_s.isDefending) dmg = Math.max(1, Math.floor(dmg / 2));
-      ps.hp = Math.max(0, ps.hp - dmg);
-      _s.playerDamageNum = { value: dmg, timer: 0 };
-      playSFX(SFX.ATTACK_HIT);
-      _s.battleShakeTimer = BATTLE_SHAKE_MS;
-      _s.battleState = 'enemy-attack'; _s.battleTimer = 0;
+    if (pvpSt.isPVPBattle) {
+      // PVP: stage hit — apply after slash animation plays on player portrait
+      if (shieldBlocked) {
+        pvpSt.pvpPendingAttack = { miss: false, shieldBlock: true, dmg: 0 };
+      } else if (Math.random() * 100 < hitRate) {
+        let dmg = calcDamage(atk, ps.def);
+        if (_s.isDefending) dmg = Math.max(1, Math.floor(dmg / 2));
+        pvpSt.pvpPendingAttack = { miss: false, shieldBlock: false, dmg };
+      } else {
+        pvpSt.pvpPendingAttack = { miss: true, shieldBlock: false, dmg: 0 };
+      }
+      _s.battleState = 'pvp-enemy-slash'; _s.battleTimer = 0;
     } else {
-      _s.playerDamageNum = { miss: true, timer: 0 };
-      _s.battleState = 'enemy-attack'; _s.battleTimer = 0;
+      // Non-PVP boss: apply immediately (existing behavior)
+      if (shieldBlocked) {
+        _s.playerDamageNum = { miss: true, timer: 0 };
+        inputSt.battleProfHits['shield'] = (inputSt.battleProfHits['shield'] || 0) + 1;
+        _s.battleState = 'enemy-attack'; _s.battleTimer = 0;
+      } else if (Math.random() * 100 < hitRate) {
+        let dmg = calcDamage(atk, ps.def);
+        if (_s.isDefending) dmg = Math.max(1, Math.floor(dmg / 2));
+        ps.hp = Math.max(0, ps.hp - dmg);
+        _s.playerDamageNum = { value: dmg, timer: 0 };
+        playSFX(SFX.ATTACK_HIT);
+        _s.battleShakeTimer = BATTLE_SHAKE_MS;
+        _s.battleState = 'enemy-attack'; _s.battleTimer = 0;
+      } else {
+        _s.playerDamageNum = { miss: true, timer: 0 };
+        _s.battleState = 'enemy-attack'; _s.battleTimer = 0;
+      }
     }
   }
 }
@@ -257,13 +279,67 @@ function _processBossFlash() {
     _s.battleState = 'pvp-defend-anim'; _s.battleTimer = 0;
     return true;
   }
+  // Item usage — main opponent targeting player only
+  if (pvpSt.isPVPBattle && pvpSt.pvpCurrentEnemyAllyIdx < 0 && targetAlly < 0) {
+    const maxHP = pvpSt.pvpOpponentStats.maxHP;
+    const heal = Math.min(50, maxHP - _s.bossHP);
+    if (_s.bossHP < maxHP * 0.5 && heal > 0 && Math.random() < 0.25) {
+      _s.bossHP += heal;
+      _s.enemyHealNum = { value: heal, timer: 0 };
+      playSFX(SFX.CURE);
+      _s.battleState = 'pvp-opp-potion'; _s.battleTimer = 0;
+      return true;
+    }
+    if (Math.random() < 0.15) {
+      _s.battleState = 'pvp-opp-sw-throw'; _s.battleTimer = 0;
+      return true;
+    }
+  }
   _runEnemyAttack(targetAlly);
   return true;
 }
 
 function _processPVPDefendAnim() {
   if (_s.battleState !== 'pvp-defend-anim') return false;
-  if (_s.battleTimer >= DEFEND_SPARKLE_TOTAL_MS) _runEnemyAttack(pvpSt.pvpPendingTargetAlly);
+  if (_s.battleTimer >= DEFEND_SPARKLE_TOTAL_MS) _s.processNextTurn(); // defend is the full action
+  return true;
+}
+
+function _processPVPOppPotion() {
+  if (_s.battleState !== 'pvp-opp-potion') return false;
+  if (_s.battleTimer >= DEFEND_SPARKLE_TOTAL_MS) {
+    _s.enemyHealNum = null;
+    _s.processNextTurn();
+  }
+  return true;
+}
+
+function _processPVPOppSWThrow() {
+  if (_s.battleState !== 'pvp-opp-sw-throw') return false;
+  if (_s.battleTimer >= 250) {
+    const atk = pvpSt.pvpOpponentStats.atk;
+    const swAtk = Math.floor(atk / 2) + 55;
+    const swBase = Math.floor((swAtk + Math.floor(Math.random() * Math.floor(swAtk / 2 + 1))) / 2);
+    const dmg = Math.max(1, calcDamage(swBase, ps.def));
+    ps.hp = Math.max(0, ps.hp - dmg);
+    _s.playerDamageNum = { value: dmg, timer: 0 };
+    playSFX(SFX.SW_HIT);
+    _s.battleShakeTimer = BATTLE_SHAKE_MS;
+    _s.battleState = 'pvp-opp-sw-hit'; _s.battleTimer = 0;
+  }
+  return true;
+}
+
+function _processPVPOppSWHit() {
+  if (_s.battleState !== 'pvp-opp-sw-hit') return false;
+  if (_s.battleTimer >= 700) {
+    _s.playerDamageNum = null;
+    if (ps.hp <= 0) {
+      _s.isDefending = false; _s.battleState = 'defeat-monster-fade'; _s.battleTimer = 0;
+    } else {
+      _s.processNextTurn();
+    }
+  }
   return true;
 }
 
@@ -286,21 +362,35 @@ function _processPVPSecondWindup() {
   const shieldEvade = getShieldEvade(ITEMS);
   const shieldBlocked = shieldEvade > 0 && Math.random() * 100 < shieldEvade;
   if (shieldBlocked) {
-    _s.playerDamageNum = { miss: true, timer: 0 };
-    inputSt.battleProfHits['shield'] = (inputSt.battleProfHits['shield'] || 0) + 1;
-    _s.battleState = 'enemy-attack'; _s.battleTimer = 0;
+    pvpSt.pvpPendingAttack = { miss: false, shieldBlock: true, dmg: 0 };
   } else if (Math.random() * 100 < BOSS_HIT_RATE) {
     let dmg = calcDamage(atk, ps.def);
     if (_s.isDefending) dmg = Math.max(1, Math.floor(dmg / 2));
-    ps.hp = Math.max(0, ps.hp - dmg);
-    _s.playerDamageNum = { value: dmg, timer: 0 };
+    pvpSt.pvpPendingAttack = { miss: false, shieldBlock: false, dmg };
+  } else {
+    pvpSt.pvpPendingAttack = { miss: true, shieldBlock: false, dmg: 0 };
+  }
+  _s.battleState = 'pvp-enemy-slash'; _s.battleTimer = 0;
+}
+
+function _processPVPEnemySlash() {
+  if (_s.battleState !== 'pvp-enemy-slash') return false;
+  if (_s.battleTimer < ENEMY_SLASH_TOTAL_MS) return true;
+  const pending = pvpSt.pvpPendingAttack;
+  pvpSt.pvpPendingAttack = null;
+  if (!pending || pending.miss) {
+    _s.playerDamageNum = { miss: true, timer: 0 };
+  } else if (pending.shieldBlock) {
+    _s.playerDamageNum = { miss: true, timer: 0 };
+    inputSt.battleProfHits['shield'] = (inputSt.battleProfHits['shield'] || 0) + 1;
+  } else {
+    ps.hp = Math.max(0, ps.hp - pending.dmg);
+    _s.playerDamageNum = { value: pending.dmg, timer: 0 };
     playSFX(SFX.ATTACK_HIT);
     _s.battleShakeTimer = BATTLE_SHAKE_MS;
-    _s.battleState = 'enemy-attack'; _s.battleTimer = 0;
-  } else {
-    _s.playerDamageNum = { miss: true, timer: 0 };
-    _s.battleState = 'enemy-attack'; _s.battleTimer = 0;
   }
+  _s.battleState = 'enemy-attack'; _s.battleTimer = 0;
+  return true;
 }
 
 // ── Rendering ─────────────────────────────────────────────────────────────────
@@ -397,7 +487,7 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
 
   // Which hand is this enemy using right now?
   // boss-flash = right hand (first attack), pvp-second-windup = left hand, allies = always right
-  const isAttackState = isThisAttacking && bs === 'enemy-attack';
+  const isAttackState = isThisAttacking && (bs === 'enemy-attack' || bs === 'pvp-enemy-slash');
   const isLeftHandWind = isMain && bs === 'pvp-second-windup';
   const isLeftHandAtk  = isMain && isAttackState && pvpSt.pvpOpponentHitsThisTurn === 1;
   const activeWeaponId = (isLeftHandWind || isLeftHandAtk)
@@ -482,6 +572,11 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   if (isOppDefending && _s.defendSparkleFrames && _s.defendSparkleFrames.length === 4) {
     const fi = Math.min(3, Math.floor(_s.battleTimer / DEFEND_SPARKLE_FRAME_MS));
     _drawSparkleAtCorners(sprX, sprY, _s.defendSparkleFrames[fi]);
+  }
+  // Cure sparkle — alternating over main opponent during potion use
+  if (isMain && bs === 'pvp-opp-potion' && _s.cureSparkleFrames && _s.cureSparkleFrames.length === 2) {
+    const fi = Math.floor(_s.battleTimer / 67) & 1;
+    _drawSparkleAtCorners(sprX, sprY, _s.cureSparkleFrames[fi]);
   }
 
   // Slash effect overlays on the current target

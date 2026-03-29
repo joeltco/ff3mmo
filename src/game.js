@@ -1610,6 +1610,10 @@ function _pvpShared() {
     get victoryFullBodyCanvases()      { return fakePlayerVictoryFullBodyCanvases; },
     get fakePlayerDeathFrames()        { return fakePlayerDeathFrames; },
     get defendSparkleFrames()          { return defendSparkleFrames; },
+    get cureSparkleFrames()            { return cureSparkleFrames; },
+    get swPhaseCanvases()              { return swPhaseCanvases; },
+    get enemyHealNum()                 { return enemyHealNum; },
+    set enemyHealNum(v)                { enemyHealNum = v; },
     advancePVPTargetOrVictory: _advancePVPTargetOrVictory,
     // ── Delegated update functions ────────────────────────────────────────────
     updateTimers:           (dt) => _updateBattleTimers(dt),
@@ -4252,6 +4256,21 @@ function updateBattle(dt) {
 }
 
 function drawSWExplosion() {
+  // PVP opponent South Wind — explosion centered in battle view
+  if (pvpSt.isPVPBattle && battleState === 'pvp-opp-sw-hit') {
+    if (!swPhaseCanvases.length) return;
+    const phase = Math.min(2, Math.floor(battleTimer / 133));
+    const canvas = swPhaseCanvases[phase];
+    if (!canvas) return;
+    const cx = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2);
+    const cy = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
+    const half = canvas.width / 2;
+    _clipToViewport();
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(canvas, cx - half, cy - half);
+    ctx.restore();
+    return;
+  }
   if (battleState !== 'sw-hit') return;
   if (!swPhaseCanvases.length || !isRandomEncounter || !encounterMonsters) return;
 
@@ -4410,15 +4429,28 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
   if (battleState === 'item-target-select' && inputSt.itemTargetType === 'player' && inputSt.itemTargetAllyIndex < 0 && cursorTileCanvas) {
     ctx.drawImage(cursorTileCanvas, px - 12, py + 4);
   }
+  // Enemy slash effect on player portrait during PVP melee attack swing
+  if (battleState === 'pvp-enemy-slash') {
+    const eWpnId = pvpSt.pvpCurrentEnemyAllyIdx >= 0
+      ? (pvpSt.pvpEnemyAllies[pvpSt.pvpCurrentEnemyAllyIdx] && pvpSt.pvpEnemyAllies[pvpSt.pvpCurrentEnemyAllyIdx].weaponId)
+      : (pvpSt.pvpOpponent && pvpSt.pvpOpponent.weaponId);
+    const eSlashF = getSlashFramesForWeapon(eWpnId, true);
+    const af = Math.min(2, Math.floor(battleTimer / 67));
+    if (eSlashF && eSlashF[af]) {
+      ctx.drawImage(eSlashF[af], px + [0, 10, -8][af], py + [0, -6, 8][af]);
+    }
+  }
 }
 
 function _drawBattlePortrait() {
-  const shakeOff = (battleState === 'enemy-attack' && battleShakeTimer > 0)
+  const shakeOff = ((battleState === 'enemy-attack' || battleState === 'pvp-opp-sw-hit') && battleShakeTimer > 0)
     ? (Math.floor(battleShakeTimer / 67) & 1 ? 2 : -2) : 0;
   const isVictoryPose = _isVictoryBattleState();
   const isAttackPose = battleState === 'attack-start' || battleState === 'player-slash';
   const isHitPose = battleState === 'enemy-attack' ||
-    (battleState === 'enemy-damage-show' && playerDamageNum && !playerDamageNum.miss);
+    (battleState === 'enemy-damage-show' && playerDamageNum && !playerDamageNum.miss) ||
+    battleState === 'pvp-opp-sw-hit' ||
+    (battleState === 'pvp-enemy-slash' && pvpSt.pvpPendingAttack && !pvpSt.pvpPendingAttack.miss && !pvpSt.pvpPendingAttack.shieldBlock);
   const isDefendPose = battleState === 'defend-anim';
   const isItemUsePose = battleState === 'item-use' || battleState === 'sw-throw' || battleState === 'sw-hit';
   const isRunPose = battleState === 'run-name-out' || battleState === 'run-text-in' ||
@@ -4428,9 +4460,15 @@ function _drawBattlePortrait() {
   if (!portraitSrc) return;
   const px = HUD_RIGHT_X + 8 + shakeOff;
   const py = HUD_VIEW_Y + 8;
-  if (isAttackPose) _drawPortraitWeapon(px, py, true);
-  _drawPortraitFrame(px, py, portraitSrc, isRunPose);
-  if (isAttackPose) _drawPortraitWeapon(px, py, false);
+  // Blink portrait when enemy slash is landing (mirrors opponent blink on player hit)
+  const portraitBlink = battleState === 'pvp-enemy-slash' &&
+    pvpSt.pvpPendingAttack && !pvpSt.pvpPendingAttack.miss && !pvpSt.pvpPendingAttack.shieldBlock &&
+    (Math.floor(battleTimer / 60) & 1);
+  if (!portraitBlink) {
+    if (isAttackPose) _drawPortraitWeapon(px, py, true);
+    _drawPortraitFrame(px, py, portraitSrc, isRunPose);
+    if (isAttackPose) _drawPortraitWeapon(px, py, false);
+  }
   _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal, isRunPose, isAttackPose, isHitPose, isVictoryPose);
 }
 
@@ -4566,7 +4604,8 @@ function _battleMenuStates() {
     bs === 'run-fail-name-out' || bs === 'run-fail-text-in' || bs === 'run-fail-hold' ||
     bs === 'run-fail-text-out' || bs === 'run-fail-name-in' || bs === 'boss-flash' ||
     bs === 'enemy-attack' || bs === 'enemy-damage-show' || bs === 'pvp-second-windup' ||
-    bs === 'pvp-ally-appear' || bs === 'pvp-defend-anim' || bs === 'message-hold' ||
+    bs === 'pvp-ally-appear' || bs === 'pvp-defend-anim' || bs === 'pvp-enemy-slash' ||
+    bs === 'pvp-opp-potion' || bs === 'pvp-opp-sw-throw' || bs === 'pvp-opp-sw-hit' || bs === 'message-hold' ||
     bs.startsWith('ally-') || bs === 'boss-dissolve' ||
     bs === 'defeat-monster-fade' || bs === 'defeat-text';
   const isVictory = _isVictoryBattleState() || bs === 'victory-name-out' || bs === 'encounter-box-close' || bs === 'boss-box-close' || bs === 'defeat-close';
@@ -4851,6 +4890,8 @@ function drawBossSpriteBox() {
                     battleState === 'pvp-ally-appear' || battleState === 'message-hold' ||
                     battleState.startsWith('ally-') ||
                     battleState === 'pvp-dissolve' || battleState === 'pvp-defend-anim' ||
+                    battleState === 'pvp-enemy-slash' || battleState === 'pvp-opp-potion' ||
+                    battleState === 'pvp-opp-sw-throw' || battleState === 'pvp-opp-sw-hit' ||
                     battleState === 'defeat-monster-fade' || battleState === 'defeat-text' || battleState === 'defeat-close' ||
                     battleState === 'victory-name-out' || battleState === 'victory-celebrate' ||
                     battleState === 'victory-text-in' || battleState === 'victory-hold' || battleState === 'victory-fade-out' ||
