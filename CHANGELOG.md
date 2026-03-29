@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented here.
 
+## 1.1.9 — 2026-03-28
+
+### Weapon blade positioning overhaul + ally dual-wield
+
+NES OAM traces confirmed exact per-hand offsets for all blade placements.
+
+- **L-hand back-swing offset corrected** — NES data shows L-hand sits at body_left+16, not +8 (R-hand). Fixed in player portrait (`_drawPortraitWeapon`), PVP opponent (`drawBlade` with `isLeftHandWind`).
+- **Ally dual-wield second strike** — allies with `weaponL` now perform a full second hit:
+  - `allyHitIsLeft` flag tracks which hit is active
+  - `_updateAllyDamageShow` queues second `ally-attack-start` when `isWeapon(ally.weaponL)`
+  - `_drawAllyPortrait` selects correct portrait per hand (`fakePlayerAttackLPortraits` for L back-swing, `fakePlayerKnifeR/LPortraits` for fwd-swing), correct blade position, correct blade canvas
+  - SFX uses active hand's weapon (knife sound vs punch)
+  - Single-weapon allies unaffected
+
 ## 1.1.8 — 2026-03-28
 
 ### Fix PVP opponent weapon blade positions
