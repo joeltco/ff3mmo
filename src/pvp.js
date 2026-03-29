@@ -41,6 +41,7 @@ export const pvpSt = {
   pvpBoxResizeFromH:      0,
   pvpBoxResizeStartTime:  0,
   pvpEnemySlidePosFrom:   [],
+  pvpDyingMap:            new Map(), // enemyIdx → startDelayMs for staggered death wipe
 };
 
 // ── Shared context ────────────────────────────────────────────────────────────
@@ -78,6 +79,7 @@ export function resetPVPState() {
   pvpSt.pvpEnemyAllies          = [];
   pvpSt.pvpCurrentEnemyAllyIdx  = -1;
   pvpSt.pvpPlayerTargetIdx      = -1;
+  pvpSt.pvpDyingMap             = new Map();
 }
 
 // ── Ally joining ──────────────────────────────────────────────────────────────
@@ -134,6 +136,7 @@ function _updatePVPMenuConfirm() {
     if (_s.battleTimer >= 150) {
       _s.allyJoinRound++;
       if (tryJoinPVPEnemyAlly(_s)) return true;
+      if (_s.tryJoinPlayerAlly()) return true;
       _s.buildAndProcessNextTurn();
     }
   } else { return false; }
@@ -144,9 +147,36 @@ function _updatePVPAllyAppear() {
   if (_s.battleTimer >= PVP_BOX_RESIZE_MS) _s.buildAndProcessNextTurn();
   return true;
 }
+function _buildPVPDyingMap() {
+  const totalEnemies = 1 + pvpSt.pvpEnemyAllies.length;
+  const cols = totalEnemies <= 1 ? 1 : 2;
+  const rows = totalEnemies <= 2 ? 1 : 2;
+  const gridPos = [[rows-1,cols-1],[rows-1,0],[0,cols-1],[0,0]];
+  const allEnemies = [pvpSt.pvpOpponentStats, ...pvpSt.pvpEnemyAllies];
+  const dyingIndices = [];
+  for (let i = 0; i < allEnemies.length; i++) {
+    const enemy = allEnemies[i];
+    if (!enemy) continue;
+    const hp = i === 0 ? _s.bossHP : (enemy.hp != null ? enemy.hp : 0);
+    // Only include enemies still visible (not already advanced past)
+    const alreadyGone = i === 0 ? pvpSt.pvpPlayerTargetIdx >= 0 : (i - 1) < pvpSt.pvpPlayerTargetIdx;
+    if (hp <= 0 && !alreadyGone) dyingIndices.push(i);
+  }
+  // Sort top-right first: row ascending (top first), col descending (right first)
+  dyingIndices.sort((a, b) => {
+    const [ra, ca] = gridPos[a] || [0, 0];
+    const [rb, cb] = gridPos[b] || [0, 0];
+    if (ra !== rb) return ra - rb;
+    return cb - ca;
+  });
+  pvpSt.pvpDyingMap = new Map(dyingIndices.map((idx, n) => [idx, n * 60]));
+}
 function _updatePVPDissolve() {
   if (_s.battleState !== 'pvp-dissolve') return false;
-  if (_s.battleTimer >= MONSTER_DEATH_MS) {
+  if (pvpSt.pvpDyingMap.size === 0) _buildPVPDyingMap();
+  const _maxDelay = pvpSt.pvpDyingMap.size > 0 ? Math.max(...pvpSt.pvpDyingMap.values()) : 0;
+  if (_s.battleTimer >= MONSTER_DEATH_MS + _maxDelay) {
+    pvpSt.pvpDyingMap = new Map();
     _s.battleTimer = 0;
     _s.advancePVPTargetOrVictory();
   }
@@ -415,10 +445,12 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
 
   // Wind-up: blade behind body (pulled back); swung/fist: blade in front
   if (isWindUp && blade) drawBlade();
-  if (bs === 'pvp-dissolve' && isCurrentTarget) {
+  const isDying = pvpSt.pvpDyingMap.has(idx) && bs === 'pvp-dissolve';
+  if (isDying) {
+    const delay = pvpSt.pvpDyingMap.get(idx) || 0;
     const deathFrames = _s.fakePlayerDeathFrames && _s.fakePlayerDeathFrames[palIdx];
     if (deathFrames && deathFrames.length) {
-      const progress = Math.min(_s.battleTimer / MONSTER_DEATH_MS, 1);
+      const progress = Math.min(Math.max(0, _s.battleTimer - delay) / MONSTER_DEATH_MS, 1);
       const fi = Math.min(deathFrames.length - 1, Math.floor(progress * deathFrames.length));
       _s.ctx.drawImage(deathFrames[fi], sprX, sprY);
     }
