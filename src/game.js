@@ -439,6 +439,7 @@ let fakePlayerKnifeRFwdFullBodyCanvases = []; // knife R-hand 16×24 h-flipped f
 let fakePlayerKnifeLFwdFullBodyCanvases = []; // knife L-hand 16×24 h-flipped full body (forward-swing pose)
 let fakePlayerKneelFullBodyCanvases = [];     // near-fatal kneel 16×24 h-flipped full body
 let fakePlayerVictoryFullBodyCanvases = [];   // victory 16×24 h-flipped full body
+let fakePlayerDeathFrames = [];               // death wipe frames per palette (for pvp-dissolve)
 let rosterTimer = 0;             // ms until next movement event
 
 const ROSTER_FADE_STEP_MS = 100;
@@ -794,6 +795,7 @@ function _initFakeFullBodyCanvases(romData) {
   _buildIdleFullBodies();
   _buildKnifeFullBodies();
   _buildHitFullBodies(romData);
+  fakePlayerDeathFrames = fakePlayerFullBodyCanvases.map(c => _makeDeathFrames(c));
 }
 function initFakePlayerPortraits(romData) {
   _initFakePosePortraits(romData);
@@ -1605,6 +1607,8 @@ function _pvpShared() {
     get knifeLFwdFullBodyCanvases()    { return fakePlayerKnifeLFwdFullBodyCanvases; },
     get kneelFullBodyCanvases()        { return fakePlayerKneelFullBodyCanvases; },
     get victoryFullBodyCanvases()      { return fakePlayerVictoryFullBodyCanvases; },
+    get fakePlayerDeathFrames()        { return fakePlayerDeathFrames; },
+    advancePVPTargetOrVictory: _advancePVPTargetOrVictory,
     // ── Delegated update functions ────────────────────────────────────────────
     updateTimers:           (dt) => _updateBattleTimers(dt),
     handlePlayerAttack:     ()   => _updateBattlePlayerAttack(),
@@ -3684,7 +3688,7 @@ function _updatePlayerDamageShow() {
       battleTimer = 0;
       playSFX(SFX.MONSTER_DEATH);
     } else if (!isRandomEncounter && bossHP <= 0) {
-      if (pvpSt.isPVPBattle) { _advancePVPTargetOrVictory(); }
+      if (pvpSt.isPVPBattle) { battleState = 'pvp-dissolve'; battleTimer = 0; playSFX(SFX.MONSTER_DEATH); }
       else { battleState = 'boss-dissolve'; battleTimer = 0; playSFX(SFX.BOSS_DEATH); }
     } else {
       processNextTurn();
@@ -3889,7 +3893,7 @@ function _updateAllyDamageShow() {
     dyingMonsterIndices = new Map([[allyTargetIndex, 0]]);
     battleState = 'monster-death'; battleTimer = 0; playSFX(SFX.MONSTER_DEATH);
   } else if (!isRandomEncounter && bossHP <= 0) {
-    if (pvpSt.isPVPBattle) { _advancePVPTargetOrVictory(); }
+    if (pvpSt.isPVPBattle) { battleState = 'pvp-dissolve'; battleTimer = 0; playSFX(SFX.MONSTER_DEATH); }
     else { battleState = 'boss-dissolve'; battleTimer = 0; playSFX(SFX.BOSS_DEATH); }
   } else {
     const ally = battleAllies[currentAllyAttacker];

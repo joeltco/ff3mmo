@@ -24,6 +24,7 @@ const BATTLE_FLASH_FRAME_MS  = 16.67;
 const BATTLE_TEXT_STEPS      = 4;
 const BATTLE_TEXT_STEP_MS    = 50;
 const BATTLE_MSG_HOLD_MS     = 1200;
+const MONSTER_DEATH_MS       = 250;
 
 // ── Mutable PVP state (imported directly by game.js) ─────────────────────────
 export const pvpSt = {
@@ -142,12 +143,21 @@ function _updatePVPAllyAppear() {
   if (_s.battleTimer >= PVP_BOX_RESIZE_MS) _s.buildAndProcessNextTurn();
   return true;
 }
+function _updatePVPDissolve() {
+  if (_s.battleState !== 'pvp-dissolve') return false;
+  if (_s.battleTimer >= MONSTER_DEATH_MS) {
+    _s.battleTimer = 0;
+    _s.advancePVPTargetOrVictory();
+  }
+  return true;
+}
 export function updatePVPBattle(dt, shared) {
   _s = shared;
   _s.updateTimers(dt);
   _updatePVPOpening()         ||
   _updatePVPMenuConfirm()     ||
   _updatePVPAllyAppear()      ||
+  _updatePVPDissolve()        ||
   _s.handlePlayerAttack()     ||
   _s.handleDefendItem(dt)     ||
   _s.handleAlly()             ||
@@ -404,7 +414,16 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
 
   // Wind-up: blade behind body (pulled back); swung/fist: blade in front
   if (isWindUp && blade) drawBlade();
-  _s.ctx.drawImage(body, sprX, sprY);
+  if (bs === 'pvp-dissolve' && isCurrentTarget) {
+    const deathFrames = _s.fakePlayerDeathFrames && _s.fakePlayerDeathFrames[palIdx];
+    if (deathFrames && deathFrames.length) {
+      const progress = Math.min(_s.battleTimer / MONSTER_DEATH_MS, 1);
+      const fi = Math.min(deathFrames.length - 1, Math.floor(progress * deathFrames.length));
+      _s.ctx.drawImage(deathFrames[fi], sprX, sprY);
+    }
+  } else {
+    _s.ctx.drawImage(body, sprX, sprY);
+  }
   if (isAttackState && blade) drawBlade();
 
   // Slash effect overlays on the current target
