@@ -1615,6 +1615,7 @@ function _pvpShared() {
     handleDefendItem:       (dt) => _updateBattleDefendItem(dt),
     handleAlly:             ()   => _updateBattleAlly(),
     handleEndSequence:      (dt) => _updateBattleEndSequence(dt),
+    tryJoinPlayerAlly:       ()  => _tryJoinPlayerAlly(),
     buildAndProcessNextTurn: ()  => { turnQueue = buildTurnOrder(); processNextTurn(); },
     // ── Other functions ───────────────────────────────────────────────────────
     resetBattleVars:     _resetBattleVars,
@@ -3257,6 +3258,15 @@ function buildTurnOrder() {
       if (encounterMonsters[i].hp > 0)
         actors.push({ type: 'enemy', index: i, priority: Math.floor(Math.random() * 256) });
     }
+  } else if (pvpSt.isPVPBattle) {
+    // Main opponent — only if player hasn't advanced past them
+    if (pvpSt.pvpPlayerTargetIdx < 0)
+      actors.push({ type: 'enemy', index: -1, pvpAllyIdx: -1, priority: Math.floor(Math.random() * 256) });
+    // PVP enemy allies — only those the player hasn't defeated yet
+    for (let i = 0; i < pvpSt.pvpEnemyAllies.length; i++) {
+      if (pvpSt.pvpPlayerTargetIdx <= i)
+        actors.push({ type: 'enemy', index: -1, pvpAllyIdx: i, priority: Math.floor(Math.random() * 256) });
+    }
   } else {
     actors.push({ type: 'enemy', index: -1, priority: Math.floor(Math.random() * 256) });
   }
@@ -3383,6 +3393,15 @@ function processNextTurn() {
     battleState = 'ally-attack-start'; battleTimer = 0;
   } else {
     currentAttacker = turn.index;
+    if (pvpSt.isPVPBattle) {
+      const pai = turn.pvpAllyIdx ?? -1;
+      pvpSt.pvpCurrentEnemyAllyIdx = pai;
+      // Skip if this attacker has already been defeated (player advanced past them)
+      if (pai < 0 && pvpSt.pvpPlayerTargetIdx >= 0) { processNextTurn(); return; }
+      if (pai >= 0 && pvpSt.pvpPlayerTargetIdx > pai) { processNextTurn(); return; }
+      // Reset dual-wield counter for each fresh main-opponent turn
+      if (pai < 0) pvpSt.pvpOpponentHitsThisTurn = 0;
+    }
     if (turn.index >= 0 && encounterMonsters && encounterMonsters[turn.index].hp <= 0) { processNextTurn(); return; }
     battleState = 'boss-flash'; battleTimer = 0;
   }
@@ -3580,7 +3599,15 @@ function _updateBattleOpening() {
 function _tryJoinPlayerAlly() {
   if (battleAllies.length >= 3) return false;
   const loc = getPlayerLocation();
-  const eligible = PLAYER_POOL.filter(p => p.loc === loc && !battleAllies.some(a => a.name === p.name));
+  const pvpNames = new Set([
+    pvpSt.pvpOpponent && pvpSt.pvpOpponent.name,
+    ...pvpSt.pvpEnemyAllies.map(a => a.name),
+  ].filter(Boolean));
+  const eligible = PLAYER_POOL.filter(p =>
+    p.loc === loc &&
+    !battleAllies.some(a => a.name === p.name) &&
+    !pvpNames.has(p.name)
+  );
   if (eligible.length === 0 || Math.random() >= 0.5) return false;
   battleAllies.push(generateAllyStats(eligible[Math.floor(Math.random() * eligible.length)]));
   battleState = 'ally-fade-in'; battleTimer = 0;
