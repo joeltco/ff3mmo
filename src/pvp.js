@@ -78,6 +78,7 @@ export function resetPVPState() {
   pvpSt.pvpOpponent             = null;
   pvpSt.pvpOpponentStats        = null;
   pvpSt.pvpOpponentIsDefending  = false;
+  pvpSt.pvpPendingTargetAlly    = -1;
   pvpSt.pvpEnemyAllies          = [];
   pvpSt.pvpCurrentEnemyAllyIdx  = -1;
   pvpSt.pvpPlayerTargetIdx      = -1;
