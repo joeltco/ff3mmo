@@ -1,27 +1,29 @@
 // MMO roster data — fake player pool, palette table, chat phrases
+import { ITEMS } from './items.js';
 
 export const LOCATIONS = ['world', 'ur', 'cave-0', 'cave-1', 'cave-2', 'cave-3', 'crystal'];
 
 // Each player has a current location that changes over time (loc is mutated at runtime)
 export const PLAYER_POOL = [
-  { name: 'Zephyr',  level: 5,  palIdx: 1, camper: false, loc: 'ur',      weaponR: 0x1E },                    // Knife
-  { name: 'Mira',    level: 4,  palIdx: 2, camper: false, loc: 'world',   weaponR: 0x1E, weaponL: 0x1E },     // Knife × 2 (dual)
-  { name: 'Aldric',  level: 5,  palIdx: 3, camper: true,  loc: 'ur',      weaponR: 0x1E },                    // Knife
-  { name: 'Suki',    level: 3,  palIdx: 4, camper: false, loc: 'cave-0',  weaponR: 0x1E },                    // Knife
-  { name: 'Fenris',  level: 5,  palIdx: 5, camper: false, loc: 'cave-1',  weaponR: 0x1F },                    // Dagger
-  { name: 'Lenna',   level: 5,  palIdx: 6, camper: true,  loc: 'ur',      weaponR: 0x1E },                    // Knife
-  { name: 'Grok',    level: 5,  palIdx: 7, camper: false, loc: 'cave-3',  weaponR: 0x24 },                    // Longsword
-  { name: 'Ivy',     level: 2,  palIdx: 0, camper: false, loc: 'ur',      weaponR: 0x1E },                    // Knife
-  { name: 'Rook',    level: 5,  palIdx: 3, camper: false, loc: 'cave-2',  weaponR: 0x24 },                    // Longsword
-  { name: 'Tora',    level: 5,  palIdx: 5, camper: false, loc: 'world',   weaponR: 0x1F },                    // Dagger
-  { name: 'Blix',    level: 4,  palIdx: 7, camper: false, loc: 'cave-0',  weaponR: 0x1F },                    // Dagger
-  { name: 'Cassia',  level: 5,  palIdx: 6, camper: true,  loc: 'cave-1',  weaponR: 0x1F },                    // Dagger
-  { name: 'Duran',   level: 5,  palIdx: 1, camper: false, loc: 'crystal', weaponR: 0x24 },                    // Longsword
-  { name: 'Nyx',     level: 1,  palIdx: 4, camper: false, loc: 'ur',      weaponR: 0x1E },                    // Knife
-  { name: 'Orin',    level: 4,  palIdx: 0, camper: false, loc: 'world',   weaponR: 0x1F, weaponL: 0x1E },     // Dagger + Knife (dual)
-  { name: 'Pip',     level: 3,  palIdx: 2, camper: false, loc: 'cave-0',  weaponR: 0x1E },                    // Knife
-  { name: 'Vex',     level: 5,  palIdx: 7, camper: false, loc: 'cave-2',  weaponR: 0x24 },                    // Longsword
-  { name: 'Wren',    level: 4,  palIdx: 5, camper: false, loc: 'world',   weaponR: 0x1F },                    // Dagger
+  // name      lv  pal  camper  loc        weaponR  weaponL  armorId  helmId  shieldId
+  { name: 'Zephyr',  level: 5,  palIdx: 1, camper: false, loc: 'ur',      weaponR: 0x1E,              armorId: 0x73, helmId: 0x62, shieldId: 0x58 }, // Knife / Leather+Cap+Shield
+  { name: 'Mira',    level: 4,  palIdx: 2, camper: false, loc: 'world',   weaponR: 0x1E, weaponL: 0x1E, armorId: 0x73, helmId: 0x62 },               // Knife×2 dual / Leather+Cap
+  { name: 'Aldric',  level: 5,  palIdx: 3, camper: true,  loc: 'ur',      weaponR: 0x1E,              armorId: 0x73, helmId: 0x62, shieldId: 0x58 }, // Knife / Leather+Cap+Shield
+  { name: 'Suki',    level: 3,  palIdx: 4, camper: false, loc: 'cave-0',  weaponR: 0x1E,              armorId: 0x75, helmId: 0x62 },                  // Knife / Mythril+Cap
+  { name: 'Fenris',  level: 5,  palIdx: 5, camper: false, loc: 'cave-1',  weaponR: 0x1F,              armorId: 0x76, helmId: 0x64, shieldId: 0x58 }, // Dagger / Shell+MythrilHelm+LeatherShield
+  { name: 'Lenna',   level: 5,  palIdx: 6, camper: true,  loc: 'ur',      weaponR: 0x1E,              armorId: 0x73, helmId: 0x62 },                  // Knife / Leather+Cap
+  { name: 'Grok',    level: 5,  palIdx: 7, camper: false, loc: 'cave-3',  weaponR: 0x24,              armorId: 0x7C, helmId: 0x64, shieldId: 0x5A }, // Longsword / Viking+MythrilHelm+MythrilShield
+  { name: 'Ivy',     level: 2,  palIdx: 0, camper: false, loc: 'ur',      weaponR: 0x1E,              armorId: 0x72, helmId: 0x62 },                  // Knife / Vest+Cap
+  { name: 'Rook',    level: 5,  palIdx: 3, camper: false, loc: 'cave-2',  weaponR: 0x24,              armorId: 0x79, helmId: 0x65, shieldId: 0x5A }, // Longsword / Kenpo+ShellHelm+MythrilShield
+  { name: 'Tora',    level: 5,  palIdx: 5, camper: false, loc: 'world',   weaponR: 0x1F,              armorId: 0x73, helmId: 0x62 },                  // Dagger / Leather+Cap
+  { name: 'Blix',    level: 4,  palIdx: 7, camper: false, loc: 'cave-0',  weaponR: 0x1F,              armorId: 0x75, helmId: 0x62 },                  // Dagger / Mythril+Cap
+  { name: 'Cassia',  level: 5,  palIdx: 6, camper: true,  loc: 'cave-1',  weaponR: 0x1F,              armorId: 0x76, helmId: 0x64, shieldId: 0x58 }, // Dagger / Shell+MythrilHelm+LeatherShield
+  { name: 'Duran',   level: 5,  palIdx: 1, camper: false, loc: 'crystal', weaponR: 0x24,              armorId: 0x7C, helmId: 0x64, shieldId: 0x5A }, // Longsword / Viking+MythrilHelm+MythrilShield
+  { name: 'Nyx',     level: 1,  palIdx: 4, camper: false, loc: 'ur',      weaponR: 0x1E,              armorId: 0x72, helmId: 0x62 },                  // Knife / Vest+Cap
+  { name: 'Orin',    level: 4,  palIdx: 0, camper: false, loc: 'world',   weaponR: 0x1F, weaponL: 0x1E, armorId: 0x73, helmId: 0x62 },               // Dagger+Knife dual / Leather+Cap
+  { name: 'Pip',     level: 3,  palIdx: 2, camper: false, loc: 'cave-0',  weaponR: 0x1E,              armorId: 0x73, helmId: 0x62 },                  // Knife / Leather+Cap
+  { name: 'Vex',     level: 5,  palIdx: 7, camper: false, loc: 'cave-2',  weaponR: 0x24,              armorId: 0x7A, helmId: 0x65, shieldId: 0x5A }, // Longsword / BlackGarb+ShellHelm+MythrilShield
+  { name: 'Wren',    level: 4,  palIdx: 5, camper: false, loc: 'world',   weaponR: 0x1F,              armorId: 0x73, helmId: 0x62 },                  // Dagger / Leather+Cap
 ];
 
 // Palette variants — only color 3 changes (original $16 = red outfit)
@@ -78,6 +80,13 @@ export function generateAllyStats(player) {
   // Override with explicit weapon slots if defined on player entry
   if (player.weaponR != null) weaponId = player.weaponR;
   const weaponL = player.weaponL != null ? player.weaponL : null;
+  // Calculate totalDef from explicit armor if defined
+  if (player.armorId != null || player.helmId != null || player.shieldId != null) {
+    totalDef = 0;
+    if (player.armorId  != null) totalDef += (ITEMS.get(player.armorId)  || {}).def || 0;
+    if (player.helmId   != null) totalDef += (ITEMS.get(player.helmId)   || {}).def || 0;
+    if (player.shieldId != null) totalDef += (ITEMS.get(player.shieldId) || {}).def || 0;
+  }
   const atk = str + weaponAtk;
   const def = vit + totalDef;
   return { name: player.name, palIdx: player.palIdx, level: lv, hp, maxHP: hp, atk, def, agi, weaponId, weaponL, fadeStep: ROSTER_FADE_STEPS };
