@@ -222,8 +222,8 @@ function _runEnemyAttack(targetAlly) {
     const shieldBlocked = shieldEvade > 0 && Math.random() * 100 < shieldEvade;
     if (shieldBlocked) {
       _s.playerDamageNum = { miss: true, timer: 0 };
-      _s.battleState = 'enemy-damage-show'; _s.battleTimer = 0;
       inputSt.battleProfHits['shield'] = (inputSt.battleProfHits['shield'] || 0) + 1;
+      _s.battleState = 'enemy-attack'; _s.battleTimer = 0;
     } else if (Math.random() * 100 < hitRate) {
       let dmg = calcDamage(atk, ps.def);
       if (_s.isDefending) dmg = Math.max(1, Math.floor(dmg / 2));
@@ -234,7 +234,7 @@ function _runEnemyAttack(targetAlly) {
       _s.battleState = 'enemy-attack'; _s.battleTimer = 0;
     } else {
       _s.playerDamageNum = { miss: true, timer: 0 };
-      _s.battleState = 'enemy-damage-show'; _s.battleTimer = 0;
+      _s.battleState = 'enemy-attack'; _s.battleTimer = 0;
     }
   }
 }
@@ -287,8 +287,8 @@ function _processPVPSecondWindup() {
   const shieldBlocked = shieldEvade > 0 && Math.random() * 100 < shieldEvade;
   if (shieldBlocked) {
     _s.playerDamageNum = { miss: true, timer: 0 };
-    _s.battleState = 'enemy-damage-show'; _s.battleTimer = 0;
     inputSt.battleProfHits['shield'] = (inputSt.battleProfHits['shield'] || 0) + 1;
+    _s.battleState = 'enemy-attack'; _s.battleTimer = 0;
   } else if (Math.random() * 100 < BOSS_HIT_RATE) {
     let dmg = calcDamage(atk, ps.def);
     if (_s.isDefending) dmg = Math.max(1, Math.floor(dmg / 2));
@@ -299,7 +299,7 @@ function _processPVPSecondWindup() {
     _s.battleState = 'enemy-attack'; _s.battleTimer = 0;
   } else {
     _s.playerDamageNum = { miss: true, timer: 0 };
-    _s.battleState = 'enemy-damage-show'; _s.battleTimer = 0;
+    _s.battleState = 'enemy-attack'; _s.battleTimer = 0;
   }
 }
 
