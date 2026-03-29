@@ -309,8 +309,8 @@ function _drawSparkleAtCorners(sprX, sprY, frame) {
   const ctx = _s.ctx;
   ctx.drawImage(frame, sprX - 8, sprY - 7);
   ctx.save(); ctx.scale(-1, 1); ctx.drawImage(frame, -(sprX + 23), sprY - 7); ctx.restore();
-  ctx.save(); ctx.scale(1, -1); ctx.drawImage(frame, sprX - 8, -(sprY + 24)); ctx.restore();
-  ctx.save(); ctx.scale(-1, -1); ctx.drawImage(frame, -(sprX + 23), -(sprY + 24)); ctx.restore();
+  ctx.save(); ctx.scale(1, -1); ctx.drawImage(frame, sprX - 8, -(sprY + 32)); ctx.restore();
+  ctx.save(); ctx.scale(-1, -1); ctx.drawImage(frame, -(sprX + 23), -(sprY + 32)); ctx.restore();
 }
 
 export function drawBossSpriteBoxPVP(shared, centerX, centerY) {
