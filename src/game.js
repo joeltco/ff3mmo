@@ -1570,6 +1570,7 @@ function _pvpShared() {
     get playerDamageNum()       { return playerDamageNum; },
     set playerDamageNum(v)      { playerDamageNum = v; },
     get isDefending()           { return isDefending; },
+    set isDefending(v)          { isDefending = v; },
     get battleShakeTimer()      { return battleShakeTimer; },
     set battleShakeTimer(v)     { battleShakeTimer = v; },
     get battleMessage()         { return battleMessage; },
@@ -1608,6 +1609,7 @@ function _pvpShared() {
     get kneelFullBodyCanvases()        { return fakePlayerKneelFullBodyCanvases; },
     get victoryFullBodyCanvases()      { return fakePlayerVictoryFullBodyCanvases; },
     get fakePlayerDeathFrames()        { return fakePlayerDeathFrames; },
+    get defendSparkleFrames()          { return defendSparkleFrames; },
     advancePVPTargetOrVictory: _advancePVPTargetOrVictory,
     // ── Delegated update functions ────────────────────────────────────────────
     updateTimers:           (dt) => _updateBattleTimers(dt),
@@ -3683,6 +3685,8 @@ function _updatePlayerSlash() {
   if (battleTimer >= SLASH_FRAMES * SLASH_FRAME_MS) {
     const hit = inputSt.hitResults[currentHitIdx];
     if (!hit.miss) {
+      if (pvpSt.isPVPBattle && pvpSt.pvpOpponentIsDefending)
+        hit.damage = Math.max(1, Math.floor(hit.damage / 2));
       if (isRandomEncounter && encounterMonsters) {
         encounterMonsters[inputSt.targetIndex].hp = Math.max(0, encounterMonsters[inputSt.targetIndex].hp - hit.damage);
       } else {
@@ -3967,6 +3971,8 @@ function _updateAllyAttack() {
   if (battleState === 'ally-slash') {
     if (battleTimer >= 200) {
       if (allyHitResult && !allyHitResult.miss) {
+        if (pvpSt.isPVPBattle && pvpSt.pvpOpponentIsDefending && allyTargetIndex < 0)
+          allyHitResult.damage = Math.max(1, Math.floor(allyHitResult.damage / 2));
         if (allyTargetIndex >= 0 && encounterMonsters) {
           encounterMonsters[allyTargetIndex].hp = Math.max(0, encounterMonsters[allyTargetIndex].hp - allyHitResult.damage);
         } else if (allyTargetIndex < 0) {
@@ -4831,7 +4837,7 @@ function drawBossSpriteBox() {
                     battleState === 'enemy-damage-show' || battleState === 'pvp-second-windup' ||
                     battleState === 'pvp-ally-appear' || battleState === 'message-hold' ||
                     battleState.startsWith('ally-') ||
-                    battleState === 'pvp-dissolve' ||
+                    battleState === 'pvp-dissolve' || battleState === 'pvp-defend-anim' ||
                     battleState === 'defeat-monster-fade' || battleState === 'defeat-text' || battleState === 'defeat-close' ||
                     battleState === 'victory-name-out' || battleState === 'victory-celebrate' ||
                     battleState === 'victory-text-in' || battleState === 'victory-hold' || battleState === 'victory-fade-out' ||
