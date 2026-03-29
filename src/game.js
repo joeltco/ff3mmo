@@ -3390,7 +3390,12 @@ function processNextTurn() {
       if (living.length === 0) { processNextTurn(); return; }
       allyTargetIndex = living[Math.floor(Math.random() * living.length)];
     } else { allyTargetIndex = -1; }
-    const targetDef = allyTargetIndex >= 0 ? encounterMonsters[allyTargetIndex].def : BOSS_DEF;
+    const targetDef = allyTargetIndex >= 0 ? encounterMonsters[allyTargetIndex].def
+      : pvpSt.isPVPBattle
+        ? (pvpSt.pvpPlayerTargetIdx >= 0
+            ? (pvpSt.pvpEnemyAllies[pvpSt.pvpPlayerTargetIdx] || pvpSt.pvpOpponentStats).def
+            : pvpSt.pvpOpponentStats.def)
+        : BOSS_DEF;
     allyHitResult = rollHits(ally.atk, targetDef, 85, 1)[0];
     battleState = 'ally-attack-start'; battleTimer = 0;
   } else {
@@ -3930,7 +3935,12 @@ function _updateAllyDamageShow() {
     const ally = battleAllies[currentAllyAttacker];
     if (!allyHitIsLeft && ally && isWeapon(ally.weaponL)) {
       allyHitIsLeft = true;
-      const targetDef = allyTargetIndex >= 0 && encounterMonsters ? encounterMonsters[allyTargetIndex].def : BOSS_DEF;
+      const targetDef = allyTargetIndex >= 0 && encounterMonsters ? encounterMonsters[allyTargetIndex].def
+        : pvpSt.isPVPBattle
+          ? (pvpSt.pvpPlayerTargetIdx >= 0
+              ? (pvpSt.pvpEnemyAllies[pvpSt.pvpPlayerTargetIdx] || pvpSt.pvpOpponentStats).def
+              : pvpSt.pvpOpponentStats.def)
+          : BOSS_DEF;
       allyHitResult = rollHits(ally.atk, targetDef, 85, 1)[0];
       battleState = 'ally-attack-start'; battleTimer = 0;
     } else {
@@ -4553,7 +4563,7 @@ function _battleMenuStates() {
     bs === 'run-fail-name-out' || bs === 'run-fail-text-in' || bs === 'run-fail-hold' ||
     bs === 'run-fail-text-out' || bs === 'run-fail-name-in' || bs === 'boss-flash' ||
     bs === 'enemy-attack' || bs === 'enemy-damage-show' || bs === 'pvp-second-windup' ||
-    bs === 'pvp-ally-appear' || bs === 'message-hold' ||
+    bs === 'pvp-ally-appear' || bs === 'pvp-defend-anim' || bs === 'message-hold' ||
     bs.startsWith('ally-') || bs === 'boss-dissolve' ||
     bs === 'defeat-monster-fade' || bs === 'defeat-text';
   const isVictory = _isVictoryBattleState() || bs === 'victory-name-out' || bs === 'encounter-box-close' || bs === 'boss-box-close' || bs === 'defeat-close';
