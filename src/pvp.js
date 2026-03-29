@@ -35,6 +35,7 @@ export const pvpSt = {
   pvpOpponentStats:       null,   // {hp, maxHP, atk, def, agi, level, name, palIdx, weaponId}
   pvpOpponentIsDefending: false,  // AI defend state — halves incoming player/ally damage this round
   pvpPendingTargetAlly:   -1,     // saved targeting decision during pvp-defend-anim
+  pvpBossShakeTimer:      0,      // drives opponent left-shake on damage (mirrors battleShakeTimer)
   pvpOpponentHitsThisTurn:0,      // gates dual-wield 2nd hit
   pvpEnemyAllies:         [],     // fake players who join opponent's side
   pvpCurrentEnemyAllyIdx:-1,      // -1 = main opponent, >=0 = pvpEnemyAllies[i]
@@ -57,6 +58,7 @@ export function startPVPBattle(shared, target) {
   pvpSt.pvpOpponentStats        = generateAllyStats(target);
   pvpSt.pvpOpponentIsDefending  = false;
   pvpSt.pvpPendingTargetAlly    = -1;
+  pvpSt.pvpBossShakeTimer       = 0;
   pvpSt.pvpOpponentHitsThisTurn = 0;
   pvpSt.pvpEnemyAllies          = [];
   pvpSt.pvpCurrentEnemyAllyIdx  = -1;
@@ -79,6 +81,7 @@ export function resetPVPState() {
   pvpSt.pvpOpponentStats        = null;
   pvpSt.pvpOpponentIsDefending  = false;
   pvpSt.pvpPendingTargetAlly    = -1;
+  pvpSt.pvpBossShakeTimer       = 0;
   pvpSt.pvpEnemyAllies          = [];
   pvpSt.pvpCurrentEnemyAllyIdx  = -1;
   pvpSt.pvpPlayerTargetIdx      = -1;
@@ -376,6 +379,10 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
 
   // isCurrentTarget: which enemy the player is currently attacking
   const isCurrentTarget = isMain ? pvpSt.pvpPlayerTargetIdx < 0 : (idx - 1) === pvpSt.pvpPlayerTargetIdx;
+  // Shake left when taking damage (mirrors player's right-shake on hit)
+  if (isCurrentTarget && pvpSt.pvpBossShakeTimer > 0) {
+    sprX += (Math.floor(pvpSt.pvpBossShakeTimer / 67) & 1) ? -2 : 2;
+  }
   const isThisAttacking = isMain
     ? pvpSt.pvpCurrentEnemyAllyIdx < 0
     : pvpSt.pvpCurrentEnemyAllyIdx === idx - 1;
