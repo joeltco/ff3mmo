@@ -4442,7 +4442,7 @@ function _drawBattleDefeat() {
       const { fullW: fw, fullH: fh } = _encounterBoxDims();
       ctx.fillRect(Math.round(ecx - fw / 2) + 8, Math.round(ecy - fh / 2) + 8, fw - 16, fh - 16);
     } else {
-      ctx.fillRect(ecx - 24, ecy - 24, 48, 48);
+      if (!pvpSt.isPVPBattle) ctx.fillRect(ecx - 24, ecy - 24, 48, 48);
     }
     ctx.restore();
   }
@@ -4831,6 +4831,7 @@ function drawBossSpriteBox() {
                     battleState === 'enemy-damage-show' || battleState === 'pvp-second-windup' ||
                     battleState === 'pvp-ally-appear' || battleState === 'message-hold' ||
                     battleState.startsWith('ally-') ||
+                    battleState === 'pvp-dissolve' ||
                     battleState === 'defeat-monster-fade' || battleState === 'defeat-text' || battleState === 'defeat-close' ||
                     battleState === 'victory-name-out' || battleState === 'victory-celebrate' ||
                     battleState === 'victory-text-in' || battleState === 'victory-hold' || battleState === 'victory-fade-out' ||

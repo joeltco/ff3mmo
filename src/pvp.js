@@ -148,28 +148,9 @@ function _updatePVPAllyAppear() {
   return true;
 }
 function _buildPVPDyingMap() {
-  const totalEnemies = 1 + pvpSt.pvpEnemyAllies.length;
-  const cols = totalEnemies <= 1 ? 1 : 2;
-  const rows = totalEnemies <= 2 ? 1 : 2;
-  const gridPos = [[rows-1,cols-1],[rows-1,0],[0,cols-1],[0,0]];
-  const allEnemies = [pvpSt.pvpOpponentStats, ...pvpSt.pvpEnemyAllies];
-  const dyingIndices = [];
-  for (let i = 0; i < allEnemies.length; i++) {
-    const enemy = allEnemies[i];
-    if (!enemy) continue;
-    const hp = i === 0 ? _s.bossHP : (enemy.hp != null ? enemy.hp : 0);
-    // Only include enemies still visible (not already advanced past)
-    const alreadyGone = i === 0 ? pvpSt.pvpPlayerTargetIdx >= 0 : (i - 1) < pvpSt.pvpPlayerTargetIdx;
-    if (hp <= 0 && !alreadyGone) dyingIndices.push(i);
-  }
-  // Sort top-right first: row ascending (top first), col descending (right first)
-  dyingIndices.sort((a, b) => {
-    const [ra, ca] = gridPos[a] || [0, 0];
-    const [rb, cb] = gridPos[b] || [0, 0];
-    if (ra !== rb) return ra - rb;
-    return cb - ca;
-  });
-  pvpSt.pvpDyingMap = new Map(dyingIndices.map((idx, n) => [idx, n * 60]));
+  // Current target: main opponent (grid idx 0) or the ally the player just defeated
+  const dyingIdx = pvpSt.pvpPlayerTargetIdx < 0 ? 0 : pvpSt.pvpPlayerTargetIdx + 1;
+  pvpSt.pvpDyingMap = new Map([[dyingIdx, 0]]);
 }
 function _updatePVPDissolve() {
   if (_s.battleState !== 'pvp-dissolve') return false;
