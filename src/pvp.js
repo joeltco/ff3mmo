@@ -443,6 +443,14 @@ export function drawBossSpriteBoxPVP(shared, centerX, centerY) {
     allEnemies.forEach((enemy, idx) => {
       if (enemy) _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, resizeT);
     });
+    // Target cursor during target-select
+    if ((bs === 'target-select' || (bs === 'item-target-select' && inputSt.itemTargetType === 'enemy')) && _s.cursorTileCanvas) {
+      const tIdx = pvpSt.pvpPlayerTargetIdx < 0 ? 0 : pvpSt.pvpPlayerTargetIdx + 1;
+      const [gr, gc] = gridPos[tIdx] || gridPos[0];
+      const tx = intLeft + gc * cellW + 4;
+      const ty = intTop  + gr * cellH + 4;
+      _s.ctx.drawImage(_s.cursorTileCanvas, tx - 14, ty + 4);
+    }
   }
   _s.ctx.restore();
 }

@@ -1633,6 +1633,7 @@ function _pvpShared() {
     drawText,
     measureText,
     nameToBytes: _nameToBytes,
+    get cursorTileCanvas() { return cursorTileCanvas; },
   };
 }
 
