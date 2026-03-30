@@ -2,7 +2,7 @@
 // Shared context pattern: exported entry-points set module-level _s = shared,
 // private helpers access _s directly.
 
-import { playSFX, SFX, pauseMusic, playTrack, TRACKS } from './music.js';
+import { playSFX, stopSFX, SFX, pauseMusic, playTrack, TRACKS } from './music.js';
 import { calcDamage, BOSS_HIT_RATE, GOBLIN_HIT_RATE, CRIT_RATE, CRIT_MULT } from './battle-math.js';
 import { ITEMS, isWeapon, weaponSubtype } from './data/items.js';
 import { PLAYER_POOL, generateAllyStats } from './data/players.js';
@@ -52,6 +52,17 @@ export const pvpSt = {
 
 // ── Shared context ────────────────────────────────────────────────────────────
 let _s = null;
+let _sfxCutTimerId = null;
+
+function _playSlashSFX(weaponId, isCrit) {
+  const sub = weaponSubtype(weaponId);
+  const isBladed = sub === 'knife' || sub === 'sword';
+  playSFX(isBladed ? SFX.KNIFE_HIT : SFX.ATTACK_HIT);
+  if (isBladed && !isCrit) {
+    if (_sfxCutTimerId) clearTimeout(_sfxCutTimerId);
+    _sfxCutTimerId = setTimeout(() => { stopSFX(); _sfxCutTimerId = null; }, 133);
+  }
+}
 
 // ── Init / teardown ───────────────────────────────────────────────────────────
 export function startPVPBattle(shared, target) {
@@ -254,7 +265,9 @@ function _runEnemyAttack(targetAlly) {
       } else {
         pvpSt.pvpPendingAttack = { miss: true, shieldBlock: false, dmg: 0, crit: false };
       }
-      playSFX(attackerStats ? _pvpAttackerSFX(attackerStats.weaponId) : SFX.ATTACK_HIT);
+      const pendingCrit = pvpSt.pvpPendingAttack && pvpSt.pvpPendingAttack.crit;
+      const wId = attackerStats ? attackerStats.weaponId : null;
+      if (wId != null) _playSlashSFX(wId, pendingCrit); else playSFX(SFX.ATTACK_HIT);
       _s.battleState = 'pvp-enemy-slash'; _s.battleTimer = 0;
     } else {
       // Non-PVP boss: apply immediately (existing behavior)
@@ -397,7 +410,7 @@ function _processPVPSecondWindup() {
     pvpSt.pvpPendingAttack = { miss: true, shieldBlock: false, dmg: 0, crit: false };
   }
   const wL = pvpSt.pvpOpponentStats.weaponL ?? pvpSt.pvpOpponentStats.weaponId;
-  playSFX(_pvpAttackerSFX(wL));
+  _playSlashSFX(wL, pvpSt.pvpPendingAttack && pvpSt.pvpPendingAttack.crit);
   _s.battleState = 'pvp-enemy-slash'; _s.battleTimer = 0;
 }
 
