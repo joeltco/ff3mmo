@@ -5260,14 +5260,21 @@ function _drawAllyPortrait(i, ally, isVicPose, isAllyAttack, isAllyHit, isNearFa
     else if (wpnSt === 'sword' && battleSwordBladeSwungCanvas) weaponDraws.push({ img: battleSwordBladeSwungCanvas, x: ppx - 16, y: ppy + 1 });
     else if (battleFistCanvas) weaponDraws.push({ img: battleFistCanvas, x: ppx - 4, y: ppy + 10 });
   }
-  // PVP enemy slash overlay on targeted ally during ally-hit
+  // PVP enemy slash overlay on targeted ally during ally-hit — h-flipped (opponent attacks from left)
   if (pvpSt.isPVPBattle && battleState === 'ally-hit' && enemyTargetAllyIdx === i) {
     const eWpnId = pvpSt.pvpCurrentEnemyAllyIdx >= 0
       ? pvpSt.pvpEnemyAllies[pvpSt.pvpCurrentEnemyAllyIdx]?.weaponId
       : pvpSt.pvpOpponentStats?.weaponId;
     const eSlashF = getSlashFramesForWeapon(eWpnId, true);
     const af = Math.min(2, Math.floor(battleTimer / 67));
-    if (eSlashF && eSlashF[af]) ctx.drawImage(eSlashF[af], ppx + [0, 10, -8][af], ppy + [0, -6, 8][af]);
+    if (eSlashF && eSlashF[af]) {
+      const sf = eSlashF[af];
+      ctx.save();
+      ctx.translate(ppx + sf.width + [-0, -10, 8][af], ppy + [0, -6, 8][af]);
+      ctx.scale(-1, 1);
+      ctx.drawImage(sf, 0, 0);
+      ctx.restore();
+    }
   }
 }
 function _drawAllyTexts(i, ally, rowY, isAllyHeal, ppx, ppy, weaponDraws) {
