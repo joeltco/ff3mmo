@@ -1630,6 +1630,9 @@ function _pvpShared() {
     getSlashFramesForWeapon,
     clipToViewport:  _clipToViewport,
     drawBorderedBox: _drawBorderedBox,
+    drawText,
+    measureText,
+    nameToBytes: _nameToBytes,
   };
 }
 
@@ -4636,8 +4639,25 @@ function drawBattleMenu() {
   if (isFade) fadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
   const fadedPal = _makeFadedPal(fadeStep);
   if (!isVictory && !isRunBox) {
-    const enemyName = _battleEnemyName();
-    drawText(ctx, Math.floor((boxW - measureText(enemyName)) / 2), HUD_BOT_Y + Math.floor((boxH - 8) / 2), enemyName, fadedPal);
+    if (pvpSt.isPVPBattle) {
+      // Collect all living PVP enemy names and stack them
+      const names = [];
+      if (!bossDefeated && pvpSt.pvpPlayerTargetIdx < 0 && pvpSt.pvpOpponentStats)
+        names.push(_nameToBytes(pvpSt.pvpOpponentStats.name));
+      for (let i = 0; i < pvpSt.pvpEnemyAllies.length; i++) {
+        const a = pvpSt.pvpEnemyAllies[i];
+        if (a && a.hp > 0 && i >= pvpSt.pvpPlayerTargetIdx)
+          names.push(_nameToBytes(a.name));
+      }
+      const rowH = 10;
+      const startY = HUD_BOT_Y + Math.floor((boxH - names.length * rowH) / 2);
+      names.forEach((nb, i) => {
+        drawText(ctx, Math.floor((boxW - measureText(nb)) / 2), startY + i * rowH, nb, fadedPal);
+      });
+    } else {
+      const enemyName = _battleEnemyName();
+      drawText(ctx, Math.floor((boxW - measureText(enemyName)) / 2), HUD_BOT_Y + Math.floor((boxH - 8) / 2), enemyName, fadedPal);
+    }
   }
   const menuX = boxW + 8;
   const positions = [[menuX, HUD_BOT_Y+16], [menuX+56, HUD_BOT_Y+16], [menuX, HUD_BOT_Y+32], [menuX+56, HUD_BOT_Y+32]];
