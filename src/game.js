@@ -4270,7 +4270,9 @@ function drawSWExplosion() {
     const cx = HUD_RIGHT_X + 8 + 8;   // portrait left + half portrait width
     const cy = HUD_VIEW_Y + 8 + 12;   // portrait top + half portrait height
     const half = canvas.width / 2;
-    _clipToViewport();
+    // Clip to full HUD view height (not just viewport — portrait is in right panel x>144)
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, HUD_VIEW_Y, CANVAS_W, HUD_VIEW_H); ctx.clip();
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(canvas, cx - half, cy - half);
     ctx.restore();
