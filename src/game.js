@@ -3418,7 +3418,7 @@ function processNextTurn() {
       if (pai < 0) pvpSt.pvpOpponentHitsThisTurn = 0;
     }
     if (turn.index >= 0 && encounterMonsters && encounterMonsters[turn.index].hp <= 0) { processNextTurn(); return; }
-    battleState = 'boss-flash'; battleTimer = 0;
+    battleState = 'boss-flash'; battleTimer = 0; pvpSt.pvpPreflashDecided = false;
   }
 }
 
