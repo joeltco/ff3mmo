@@ -4442,7 +4442,12 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
     const eSlashF = getSlashFramesForWeapon(eWpnId, true);
     const af = Math.min(2, Math.floor(battleTimer / 67));
     if (eSlashF && eSlashF[af]) {
-      ctx.drawImage(eSlashF[af], px + [0, 10, -8][af], py + [0, -6, 8][af]);
+      const sf = eSlashF[af];
+      ctx.save();
+      ctx.translate(px + sf.width + [-0, -10, 8][af], py + [0, -6, 8][af]);
+      ctx.scale(-1, 1);
+      ctx.drawImage(sf, 0, 0);
+      ctx.restore();
     }
   }
 }

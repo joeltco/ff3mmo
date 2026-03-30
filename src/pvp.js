@@ -528,7 +528,7 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
     body = _s.hitFullBodyCanvases[palIdx];
   } else if (isWindUp) {
     // Canvases are pre-h-flipped — R/L hand canvases already show correct arm for left-facing opponent
-    body = (isLeftHandWind ? _s.knifeLFullBodyCanvases : _s.knifeBackFullBodyCanvases)[palIdx] || fullBody;
+    body = (isLeftHandWind ? _s.knifeLFullBodyCanvases : _s.knifeRFullBodyCanvases)[palIdx] || fullBody;
   } else if (isAttackState) {
     // Canvases are pre-h-flipped — use matching hand directly
     const atkCvs = isLeftHandAtk ? _s.knifeLFwdFullBodyCanvases : _s.knifeRFwdFullBodyCanvases;
