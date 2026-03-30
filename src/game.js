@@ -5349,6 +5349,20 @@ function _drawBossDmgNum() {
   let bx, baseY;
   if (isRandomEncounter && encounterMonsters) {
     ({ bx, baseY } = _encounterMonsterPos(inputSt.targetIndex));
+  } else if (pvpSt.isPVPBattle) {
+    const totalEnemies = 1 + pvpSt.pvpEnemyAllies.length;
+    const cols = totalEnemies <= 1 ? 1 : 2;
+    const rows = totalEnemies <= 2 ? 1 : 2;
+    const cellW = 24, cellH = 32;
+    const centerX = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2);
+    const centerY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
+    const intLeft = centerX - cols * Math.floor(cellW / 2);
+    const intTop  = centerY - rows * Math.floor(cellH / 2);
+    const gridPos = [[rows-1,cols-1],[rows-1,0],[0,cols-1],[0,0]];
+    const tIdx = pvpSt.pvpPlayerTargetIdx < 0 ? 0 : pvpSt.pvpPlayerTargetIdx + 1;
+    const [gr, gc] = gridPos[Math.min(tIdx, gridPos.length - 1)];
+    bx = intLeft + gc * cellW + 12;
+    baseY = intTop + gr * cellH + 4;
   } else {
     bx = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2) - 4;
     baseY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2) - 8;
