@@ -586,6 +586,17 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   }
   if (isAttackState && blade) drawBlade();
 
+  // Near-fatal sweat — h-flipped to match opponent facing left
+  if (isNearFatalOpp && !isOppVictory && !isDying && _s.sweatFrames && _s.sweatFrames.length === 2) {
+    const sf = _s.sweatFrames[Math.floor(Date.now() / 133) & 1];
+    const ctx = _s.ctx;
+    ctx.save();
+    ctx.translate(sprX + sf.width, sprY - 3);
+    ctx.scale(-1, 1);
+    ctx.drawImage(sf, 0, 0);
+    ctx.restore();
+  }
+
   // Defend sparkle — 4 frames cycling over 533ms, full-body corners
   if (isOppDefending && _s.defendSparkleFrames && _s.defendSparkleFrames.length === 4) {
     const fi = Math.min(3, Math.floor(_s.battleTimer / DEFEND_SPARKLE_FRAME_MS));
