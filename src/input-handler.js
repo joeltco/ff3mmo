@@ -277,36 +277,44 @@ function _itemTargetIsLeftCol(i) { return _itemTargetCnt() >= 2 && !_itemTargetI
 function _itemTargetNavLeft(isBattleItem) {
   const cnt = _itemTargetCnt();
   if (isBattleItem && inputSt.itemTargetMode !== 'single') {
-    const leftCandidates = cnt <= 1 ? [0] : cnt === 2 ? [0] : [0, 2];
+    // col/all mode → back to single. Left-col candidates differ per mode.
+    const leftCandidates = _s.isPVPBattle
+      ? (cnt <= 1 ? [0] : cnt === 2 ? [1] : [1, 3])      // PVP left col = 1,3
+      : (cnt <= 1 ? [0] : cnt === 2 ? [0] : [0, 2]);      // encounter left col = 0,2
     const found = leftCandidates.find(i => _itemTargetAlive(i));
     if (found !== undefined) inputSt.itemTargetIndex = found;
     inputSt.itemTargetMode = 'single'; playSFX(SFX.CURSOR);
   } else if (inputSt.itemTargetType === 'player') {
-    if (!_s.isRandomEncounter) {
-      inputSt.itemTargetType = 'enemy'; inputSt.itemTargetIndex = 0; inputSt.itemTargetMode = 'single'; playSFX(SFX.CURSOR);
-    } else {
-      const rightCandidates = cnt === 1 ? [0] : cnt === 2 ? [1] : cnt === 3 ? [1] : [1, 3];
-      const leftCandidates = cnt === 2 ? [0] : cnt === 3 ? [0, 2] : cnt >= 4 ? [0, 2] : [];
+    if (_s.isPVPBattle) {
+      // PVP: player → right col of PVP grid (idx 0)
+      const rightCandidates = cnt === 1 ? [0] : cnt === 2 ? [0] : cnt === 3 ? [0] : [0, 2];
+      const leftCandidates  = cnt === 2 ? [1] : cnt === 3 ? [1, 3] : cnt >= 4 ? [1, 3] : [];
       let found = rightCandidates.find(i => _itemTargetAlive(i));
       if (found === undefined) found = leftCandidates.find(i => _itemTargetAlive(i));
       if (found !== undefined) {
         inputSt.itemTargetType = 'enemy'; inputSt.itemTargetIndex = found; inputSt.itemTargetMode = 'single'; playSFX(SFX.CURSOR);
       }
+    } else if (_s.isRandomEncounter) {
+      const rightCandidates = cnt === 1 ? [0] : cnt === 2 ? [1] : cnt === 3 ? [1] : [1, 3];
+      const leftCandidates  = cnt === 2 ? [0] : cnt === 3 ? [0, 2] : cnt >= 4 ? [0, 2] : [];
+      let found = rightCandidates.find(i => _itemTargetAlive(i));
+      if (found === undefined) found = leftCandidates.find(i => _itemTargetAlive(i));
+      if (found !== undefined) {
+        inputSt.itemTargetType = 'enemy'; inputSt.itemTargetIndex = found; inputSt.itemTargetMode = 'single'; playSFX(SFX.CURSOR);
+      }
+    } else {
+      inputSt.itemTargetType = 'enemy'; inputSt.itemTargetIndex = 0; inputSt.itemTargetMode = 'single'; playSFX(SFX.CURSOR);
     }
-  } else if (_s.isPVPBattle && _itemTargetIsRightCol(inputSt.itemTargetIndex)) {
-    // PVP right col (0,2) → left col (1,3)
+  } else if (_itemTargetIsRightCol(inputSt.itemTargetIndex)) {
+    // right col → left col
     const idx = inputSt.itemTargetIndex;
-    const leftPeer  = idx === 0 ? 1 : idx === 2 ? 3 : -1;
-    const leftOther = idx === 0 ? 3 : idx === 2 ? 1 : -1;
-    if (leftPeer >= 0 && _itemTargetAlive(leftPeer)) { inputSt.itemTargetIndex = leftPeer; playSFX(SFX.CURSOR); }
-    else if (leftOther >= 0 && _itemTargetAlive(leftOther)) { inputSt.itemTargetIndex = leftOther; playSFX(SFX.CURSOR); }
-  } else if (_s.isRandomEncounter && _itemTargetIsRightCol(inputSt.itemTargetIndex)) {
-    const leftPeer = inputSt.itemTargetIndex === 1 ? 0 : inputSt.itemTargetIndex === 3 ? 2 : -1;
-    const leftOther = inputSt.itemTargetIndex === 1 ? 2 : inputSt.itemTargetIndex === 3 ? 0 : -1;
+    const [leftPeer, leftOther] = _s.isPVPBattle
+      ? [idx === 0 ? 1 : idx === 2 ? 3 : -1, idx === 0 ? 3 : idx === 2 ? 1 : -1]   // PVP: 0→1, 2→3
+      : [idx === 1 ? 0 : idx === 3 ? 2 : -1, idx === 1 ? 2 : idx === 3 ? 0 : -1];  // encounter: 1→0, 3→2
     if (leftPeer >= 0 && _itemTargetAlive(leftPeer)) { inputSt.itemTargetIndex = leftPeer; playSFX(SFX.CURSOR); }
     else if (leftOther >= 0 && _itemTargetAlive(leftOther)) { inputSt.itemTargetIndex = leftOther; playSFX(SFX.CURSOR); }
     else if (isBattleItem) { inputSt.itemTargetMode = 'all'; playSFX(SFX.CURSOR); }
-  } else if (isBattleItem && _s.isRandomEncounter && _itemTargetIsLeftCol(inputSt.itemTargetIndex)) {
+  } else if (isBattleItem && _itemTargetIsLeftCol(inputSt.itemTargetIndex)) {
     inputSt.itemTargetMode = 'all'; playSFX(SFX.CURSOR);
   }
 }
@@ -343,7 +351,7 @@ function _itemTargetNavVertical(isBattleItem) {
   const goUp = !!k['ArrowUp'];
   k['ArrowUp'] = false; k['ArrowDown'] = false;
   const cnt = _itemTargetCnt();
-  if (isBattleItem && inputSt.itemTargetType === 'enemy' && _s.isRandomEncounter && _s.encounterMonsters) {
+  if (isBattleItem && inputSt.itemTargetType === 'enemy' && (_s.isPVPBattle || (_s.isRandomEncounter && _s.encounterMonsters))) {
     if (goUp && inputSt.itemTargetMode === 'single') {
       inputSt.itemTargetMode = _itemTargetIsLeftCol(inputSt.itemTargetIndex) ? 'col-left' : 'col-right';
       playSFX(SFX.CURSOR);
