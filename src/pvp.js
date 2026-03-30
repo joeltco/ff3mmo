@@ -206,13 +206,20 @@ export function updateBattleEnemyTurn(shared) {
   return true;
 }
 
+function _pvpAttackerSFX(weaponId) {
+  const sub = weaponSubtype(weaponId);
+  return (sub === 'knife' || sub === 'sword') ? SFX.KNIFE_HIT : SFX.ATTACK_HIT;
+}
+
 function _runEnemyAttack(targetAlly) {
   const hitRate = (_s.currentAttacker >= 0 && _s.encounterMonsters)
     ? (_s.encounterMonsters[_s.currentAttacker].hitRate || GOBLIN_HIT_RATE) : BOSS_HIT_RATE;
-  const atk = pvpSt.isPVPBattle
+  const attackerStats = pvpSt.isPVPBattle
     ? (pvpSt.pvpCurrentEnemyAllyIdx >= 0
-        ? pvpSt.pvpEnemyAllies[pvpSt.pvpCurrentEnemyAllyIdx].atk
-        : pvpSt.pvpOpponentStats.atk)
+        ? pvpSt.pvpEnemyAllies[pvpSt.pvpCurrentEnemyAllyIdx]
+        : pvpSt.pvpOpponentStats)
+    : null;
+  const atk = attackerStats ? attackerStats.atk
     : (_s.currentAttacker >= 0 && _s.encounterMonsters)
         ? _s.encounterMonsters[_s.currentAttacker].atk : BOSS_ATK;
   if (targetAlly >= 0) {
@@ -222,7 +229,8 @@ function _runEnemyAttack(targetAlly) {
       _s.battleAllies[targetAlly].hp = Math.max(0, _s.battleAllies[targetAlly].hp - dmg);
       _s.allyDamageNums[targetAlly] = { value: dmg, timer: 0 };
       _s.allyShakeTimer[targetAlly] = BATTLE_SHAKE_MS;
-      playSFX(SFX.ATTACK_HIT); _s.battleState = 'ally-hit'; _s.battleTimer = 0;
+      const sfx = attackerStats ? _pvpAttackerSFX(attackerStats.weaponId) : SFX.ATTACK_HIT;
+      playSFX(sfx); _s.battleState = 'ally-hit'; _s.battleTimer = 0;
     } else {
       _s.allyDamageNums[targetAlly] = { miss: true, timer: 0 };
       _s.battleState = 'ally-damage-show-enemy'; _s.battleTimer = 0;
@@ -241,6 +249,7 @@ function _runEnemyAttack(targetAlly) {
       } else {
         pvpSt.pvpPendingAttack = { miss: true, shieldBlock: false, dmg: 0 };
       }
+      playSFX(attackerStats ? _pvpAttackerSFX(attackerStats.weaponId) : SFX.ATTACK_HIT);
       _s.battleState = 'pvp-enemy-slash'; _s.battleTimer = 0;
     } else {
       // Non-PVP boss: apply immediately (existing behavior)
@@ -380,6 +389,8 @@ function _processPVPSecondWindup() {
   } else {
     pvpSt.pvpPendingAttack = { miss: true, shieldBlock: false, dmg: 0 };
   }
+  const wL = pvpSt.pvpOpponentStats.weaponL ?? pvpSt.pvpOpponentStats.weaponId;
+  playSFX(_pvpAttackerSFX(wL));
   _s.battleState = 'pvp-enemy-slash'; _s.battleTimer = 0;
 }
 
@@ -396,7 +407,6 @@ function _processPVPEnemySlash() {
   } else {
     ps.hp = Math.max(0, ps.hp - pending.dmg);
     _s.playerDamageNum = { value: pending.dmg, timer: 0 };
-    playSFX(SFX.ATTACK_HIT);
     _s.battleShakeTimer = BATTLE_SHAKE_MS;
   }
   _s.battleState = 'enemy-attack'; _s.battleTimer = 0;
