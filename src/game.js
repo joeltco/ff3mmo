@@ -4261,14 +4261,14 @@ function updateBattle(dt) {
 }
 
 function drawSWExplosion() {
-  // PVP opponent South Wind — explosion centered in battle view
+  // PVP opponent South Wind — explosion centered on player portrait
   if (pvpSt.isPVPBattle && battleState === 'pvp-opp-sw-hit') {
     if (!swPhaseCanvases.length) return;
     const phase = Math.min(2, Math.floor(battleTimer / 133));
     const canvas = swPhaseCanvases[phase];
     if (!canvas) return;
-    const cx = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2);
-    const cy = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
+    const cx = HUD_RIGHT_X + 8 + 8;   // portrait left + half portrait width
+    const cy = HUD_VIEW_Y + 8 + 12;   // portrait top + half portrait height
     const half = canvas.width / 2;
     _clipToViewport();
     ctx.imageSmoothingEnabled = false;
@@ -4437,8 +4437,8 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
   // Enemy slash effect on player portrait during PVP melee attack swing
   if (battleState === 'pvp-enemy-slash') {
     const eWpnId = pvpSt.pvpCurrentEnemyAllyIdx >= 0
-      ? (pvpSt.pvpEnemyAllies[pvpSt.pvpCurrentEnemyAllyIdx] && pvpSt.pvpEnemyAllies[pvpSt.pvpCurrentEnemyAllyIdx].weaponId)
-      : (pvpSt.pvpOpponent && pvpSt.pvpOpponent.weaponId);
+      ? pvpSt.pvpEnemyAllies[pvpSt.pvpCurrentEnemyAllyIdx]?.weaponId
+      : pvpSt.pvpOpponentStats?.weaponId;
     const eSlashF = getSlashFramesForWeapon(eWpnId, true);
     const af = Math.min(2, Math.floor(battleTimer / 67));
     if (eSlashF && eSlashF[af]) {
