@@ -1635,6 +1635,8 @@ function _pvpShared() {
     nameToBytes: _nameToBytes,
     get cursorTileCanvas() { return cursorTileCanvas; },
     get sweatFrames() { return sweatFrames; },
+    get critFlashTimer()  { return critFlashTimer; },
+    set critFlashTimer(v) { critFlashTimer = v; },
   };
 }
 

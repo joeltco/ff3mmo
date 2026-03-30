@@ -3,7 +3,7 @@
 // private helpers access _s directly.
 
 import { playSFX, SFX, pauseMusic, playTrack, TRACKS } from './music.js';
-import { calcDamage, BOSS_HIT_RATE, GOBLIN_HIT_RATE } from './battle-math.js';
+import { calcDamage, BOSS_HIT_RATE, GOBLIN_HIT_RATE, CRIT_RATE, CRIT_MULT } from './battle-math.js';
 import { ITEMS, isWeapon, weaponSubtype } from './data/items.js';
 import { PLAYER_POOL, generateAllyStats } from './data/players.js';
 import { ps } from './player-stats.js';
@@ -225,10 +225,13 @@ function _runEnemyAttack(targetAlly) {
   if (targetAlly >= 0) {
     _s.enemyTargetAllyIdx = targetAlly;
     if (Math.random() * 100 < hitRate) {
-      const dmg = calcDamage(atk, _s.battleAllies[targetAlly].def);
+      const crit = Math.random() * 100 < CRIT_RATE;
+      let dmg = calcDamage(atk, _s.battleAllies[targetAlly].def);
+      if (crit) dmg = Math.floor(dmg * CRIT_MULT);
       _s.battleAllies[targetAlly].hp = Math.max(0, _s.battleAllies[targetAlly].hp - dmg);
-      _s.allyDamageNums[targetAlly] = { value: dmg, timer: 0 };
+      _s.allyDamageNums[targetAlly] = { value: dmg, crit, timer: 0 };
       _s.allyShakeTimer[targetAlly] = BATTLE_SHAKE_MS;
+      if (crit) _s.critFlashTimer = 0;
       const sfx = attackerStats ? _pvpAttackerSFX(attackerStats.weaponId) : SFX.ATTACK_HIT;
       playSFX(sfx); _s.battleState = 'ally-hit'; _s.battleTimer = 0;
     } else {
@@ -243,11 +246,13 @@ function _runEnemyAttack(targetAlly) {
       if (shieldBlocked) {
         pvpSt.pvpPendingAttack = { miss: false, shieldBlock: true, dmg: 0 };
       } else if (Math.random() * 100 < hitRate) {
+        const crit = Math.random() * 100 < CRIT_RATE;
         let dmg = calcDamage(atk, ps.def);
+        if (crit) dmg = Math.floor(dmg * CRIT_MULT);
         if (_s.isDefending) dmg = Math.max(1, Math.floor(dmg / 2));
-        pvpSt.pvpPendingAttack = { miss: false, shieldBlock: false, dmg };
+        pvpSt.pvpPendingAttack = { miss: false, shieldBlock: false, dmg, crit };
       } else {
-        pvpSt.pvpPendingAttack = { miss: true, shieldBlock: false, dmg: 0 };
+        pvpSt.pvpPendingAttack = { miss: true, shieldBlock: false, dmg: 0, crit: false };
       }
       playSFX(attackerStats ? _pvpAttackerSFX(attackerStats.weaponId) : SFX.ATTACK_HIT);
       _s.battleState = 'pvp-enemy-slash'; _s.battleTimer = 0;
@@ -383,11 +388,13 @@ function _processPVPSecondWindup() {
   if (shieldBlocked) {
     pvpSt.pvpPendingAttack = { miss: false, shieldBlock: true, dmg: 0 };
   } else if (Math.random() * 100 < BOSS_HIT_RATE) {
+    const crit = Math.random() * 100 < CRIT_RATE;
     let dmg = calcDamage(atk, ps.def);
+    if (crit) dmg = Math.floor(dmg * CRIT_MULT);
     if (_s.isDefending) dmg = Math.max(1, Math.floor(dmg / 2));
-    pvpSt.pvpPendingAttack = { miss: false, shieldBlock: false, dmg };
+    pvpSt.pvpPendingAttack = { miss: false, shieldBlock: false, dmg, crit };
   } else {
-    pvpSt.pvpPendingAttack = { miss: true, shieldBlock: false, dmg: 0 };
+    pvpSt.pvpPendingAttack = { miss: true, shieldBlock: false, dmg: 0, crit: false };
   }
   const wL = pvpSt.pvpOpponentStats.weaponL ?? pvpSt.pvpOpponentStats.weaponId;
   playSFX(_pvpAttackerSFX(wL));
@@ -407,6 +414,7 @@ function _processPVPEnemySlash() {
   } else {
     ps.hp = Math.max(0, ps.hp - pending.dmg);
     _s.playerDamageNum = { value: pending.dmg, timer: 0 };
+    if (pending.crit) _s.critFlashTimer = 0;
     _s.battleShakeTimer = BATTLE_SHAKE_MS;
   }
   _s.battleState = 'enemy-attack'; _s.battleTimer = 0;
