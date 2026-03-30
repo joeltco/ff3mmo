@@ -255,12 +255,20 @@ function _battleInputItemSelect() {
 }
 
 function _itemTargetCnt() {
+  if (_s.isPVPBattle) return 1 + (_s.pvpEnemyAllies ? _s.pvpEnemyAllies.length : 0);
   return _s.isRandomEncounter && _s.encounterMonsters ? _s.encounterMonsters.length : (_s.isRandomEncounter ? 0 : 1);
 }
 function _itemTargetAlive(i) {
+  if (_s.isPVPBattle) {
+    if (i === 0) return _s.bossHP > 0;
+    const a = _s.pvpEnemyAllies && _s.pvpEnemyAllies[i - 1];
+    return !!(a && a.hp > 0);
+  }
   return _s.isRandomEncounter && _s.encounterMonsters && i < _s.encounterMonsters.length && _s.encounterMonsters[i].hp > 0;
 }
+// PVP grid: right col = indices 0,2 (gc=cols-1). Encounter grid: right col = indices 1,3.
 function _itemTargetIsRightCol(i) {
+  if (_s.isPVPBattle) return _itemTargetCnt() <= 1 || i === 0 || i === 2;
   const cnt = _itemTargetCnt();
   return cnt === 1 || (cnt === 2 && i === 1) || (cnt >= 3 && (i === 1 || i === 3));
 }
@@ -285,6 +293,13 @@ function _itemTargetNavLeft(isBattleItem) {
         inputSt.itemTargetType = 'enemy'; inputSt.itemTargetIndex = found; inputSt.itemTargetMode = 'single'; playSFX(SFX.CURSOR);
       }
     }
+  } else if (_s.isPVPBattle && _itemTargetIsRightCol(inputSt.itemTargetIndex)) {
+    // PVP right col (0,2) → left col (1,3)
+    const idx = inputSt.itemTargetIndex;
+    const leftPeer  = idx === 0 ? 1 : idx === 2 ? 3 : -1;
+    const leftOther = idx === 0 ? 3 : idx === 2 ? 1 : -1;
+    if (leftPeer >= 0 && _itemTargetAlive(leftPeer)) { inputSt.itemTargetIndex = leftPeer; playSFX(SFX.CURSOR); }
+    else if (leftOther >= 0 && _itemTargetAlive(leftOther)) { inputSt.itemTargetIndex = leftOther; playSFX(SFX.CURSOR); }
   } else if (_s.isRandomEncounter && _itemTargetIsRightCol(inputSt.itemTargetIndex)) {
     const leftPeer = inputSt.itemTargetIndex === 1 ? 0 : inputSt.itemTargetIndex === 3 ? 2 : -1;
     const leftOther = inputSt.itemTargetIndex === 1 ? 2 : inputSt.itemTargetIndex === 3 ? 0 : -1;
@@ -298,6 +313,20 @@ function _itemTargetNavLeft(isBattleItem) {
 
 function _itemTargetNavRight() {
   if (inputSt.itemTargetType !== 'enemy') return;
+  if (_s.isPVPBattle) {
+    if (_itemTargetIsRightCol(inputSt.itemTargetIndex)) {
+      inputSt.itemTargetType = 'player'; playSFX(SFX.CURSOR);
+    } else {
+      // PVP left col (1,3) → right col (0,2)
+      const idx = inputSt.itemTargetIndex;
+      const rightPeer  = idx === 1 ? 0 : idx === 3 ? 2 : -1;
+      const rightOther = idx === 1 ? 2 : idx === 3 ? 0 : -1;
+      if (rightPeer >= 0 && _itemTargetAlive(rightPeer)) { inputSt.itemTargetIndex = rightPeer; playSFX(SFX.CURSOR); }
+      else if (rightOther >= 0 && _itemTargetAlive(rightOther)) { inputSt.itemTargetIndex = rightOther; playSFX(SFX.CURSOR); }
+      else { inputSt.itemTargetType = 'player'; playSFX(SFX.CURSOR); }
+    }
+    return;
+  }
   if (_itemTargetIsRightCol(inputSt.itemTargetIndex) || !_s.isRandomEncounter) {
     inputSt.itemTargetType = 'player'; playSFX(SFX.CURSOR);
   } else {
@@ -321,7 +350,7 @@ function _itemTargetNavVertical(isBattleItem) {
     } else if (!goUp && inputSt.itemTargetMode !== 'single') {
       inputSt.itemTargetMode = 'single'; playSFX(SFX.CURSOR);
     }
-  } else if (inputSt.itemTargetType === 'enemy' && _s.isRandomEncounter && _s.encounterMonsters) {
+  } else if (inputSt.itemTargetType === 'enemy' && (_s.isPVPBattle || (_s.isRandomEncounter && _s.encounterMonsters))) {
     const vertMap = cnt >= 4 ? { 0: 2, 2: 0, 1: 3, 3: 1 } :
                     cnt === 3 ? { 0: 2, 2: 0, 1: 1 } : {};
     const next = vertMap[inputSt.itemTargetIndex];
