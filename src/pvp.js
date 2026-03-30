@@ -482,8 +482,8 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   if (!fullBody) return;
   // Hide main opponent if player has moved on to fighting an ally
   if (isMain && (_s.bossDefeated || pvpSt.pvpPlayerTargetIdx >= 0)) return;
-  // Hide ally if the player hasn't reached them yet (and they were already defeated)
-  if (!isMain && (idx - 1) < pvpSt.pvpPlayerTargetIdx) return;
+  // Hide ally if defeated or not yet reached
+  if (!isMain && (_s.bossDefeated || (idx - 1) < pvpSt.pvpPlayerTargetIdx)) return;
 
   // isCurrentTarget: which enemy the player is currently attacking
   const isCurrentTarget = isMain ? pvpSt.pvpPlayerTargetIdx < 0 : (idx - 1) === pvpSt.pvpPlayerTargetIdx;
