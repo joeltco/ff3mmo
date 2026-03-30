@@ -67,10 +67,30 @@ function _xPressed() {
 // ── Battle input ───────────────────────────────────────────────────────────
 
 function _battleTargetNav() {
+  const k = _s.keys;
+  if (_s.isPVPBattle) {
+    // Build list of alive PVP target indices: -1=main opp, 0,1,...=allies
+    const aliveTargets = [];
+    if (_s.bossHP > 0) aliveTargets.push(-1);
+    (_s.pvpEnemyAllies || []).forEach((a, i) => { if (a.hp > 0) aliveTargets.push(i); });
+    if (aliveTargets.length <= 1) return;
+    const cur = _s.pvpPlayerTargetIdx;
+    const ci = aliveTargets.indexOf(cur);
+    if (k['ArrowRight'] || k['ArrowDown']) {
+      k['ArrowRight'] = false; k['ArrowDown'] = false;
+      _s.pvpPlayerTargetIdx = aliveTargets[(ci + 1) % aliveTargets.length];
+      playSFX(SFX.CURSOR);
+    }
+    if (k['ArrowLeft'] || k['ArrowUp']) {
+      k['ArrowLeft'] = false; k['ArrowUp'] = false;
+      _s.pvpPlayerTargetIdx = aliveTargets[(ci - 1 + aliveTargets.length) % aliveTargets.length];
+      playSFX(SFX.CURSOR);
+    }
+    return;
+  }
   const enc = _s.encounterMonsters;
   if (!_s.isRandomEncounter || !enc) return;
   const aliveIdx = enc.reduce((a, m, i) => (m.hp > 0 ? [...a, i] : a), []);
-  const k = _s.keys;
   if (k['ArrowRight'] || k['ArrowDown']) {
     k['ArrowRight'] = false; k['ArrowDown'] = false;
     inputSt.targetIndex = aliveIdx[(aliveIdx.indexOf(inputSt.targetIndex) + 1) % aliveIdx.length];
@@ -103,7 +123,11 @@ function _battleTargetConfirm() {
   if (_s.isRandomEncounter && _s.encounterMonsters) {
     inputSt.hitResults = rollHits(ps.atk, _s.encounterMonsters[inputSt.targetIndex].def, hitRate, potentialHits, profLv);
   } else {
-    const targetDef = _s.isPVPBattle && _s.pvpOpponentStats ? _s.pvpOpponentStats.def : BOSS_DEF;
+    const targetDef = _s.isPVPBattle && _s.pvpOpponentStats
+      ? (_s.pvpPlayerTargetIdx >= 0
+          ? (_s.pvpEnemyAllies[_s.pvpPlayerTargetIdx] || _s.pvpOpponentStats).def
+          : _s.pvpOpponentStats.def)
+      : BOSS_DEF;
     inputSt.hitResults = rollHits(ps.atk, targetDef, hitRate, potentialHits, profLv);
   }
   const hitsLanded = inputSt.hitResults.filter(h => h > 0).length;

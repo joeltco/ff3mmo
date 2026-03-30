@@ -530,7 +530,8 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
     inputSt.hitResults && inputSt.hitResults[_s.currentHitIdx] && !inputSt.hitResults[_s.currentHitIdx].miss;
   const allyHitLanded = bs === 'ally-slash' && _s.allyHitResult && !_s.allyHitResult.miss;
   const playerHitShowLanded = bs === 'player-hit-show' && inputSt.hitResults && inputSt.hitResults[_s.currentHitIdx] && !inputSt.hitResults[_s.currentHitIdx].miss;
-  const isOppHit = isCurrentTarget && (playerHitLanded || playerHitShowLanded || allyHitLanded || bs === 'ally-damage-show');
+  const isOppHit = isCurrentTarget && (playerHitLanded || playerHitShowLanded || allyHitLanded ||
+    (bs === 'ally-damage-show' && _s.allyHitResult && !_s.allyHitResult.miss));
   const blinkHidden = isCurrentTarget && (playerHitLanded || allyHitLanded) && (Math.floor(_s.battleTimer / 60) & 1);
   const isWindUp = isThisAttacking && (bs === 'boss-flash' || bs === 'pvp-second-windup');
   if (blinkHidden) return;

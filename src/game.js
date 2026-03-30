@@ -1524,6 +1524,8 @@ function _inputShared() {
     get isPVPBattle()           { return pvpSt.isPVPBattle; },
     get pvpOpponentStats()      { return pvpSt.pvpOpponentStats; },
     get pvpEnemyAllies()        { return pvpSt.pvpEnemyAllies; },
+    get pvpPlayerTargetIdx()    { return pvpSt.pvpPlayerTargetIdx; },
+    set pvpPlayerTargetIdx(v)   { pvpSt.pvpPlayerTargetIdx = v; },
     get bossHP()                { return bossHP; },
     saveSlotsToDB,
     addItem,
@@ -3274,12 +3276,12 @@ function buildTurnOrder() {
         actors.push({ type: 'enemy', index: i, priority: Math.floor(Math.random() * 256) });
     }
   } else if (pvpSt.isPVPBattle) {
-    // Main opponent — only if player hasn't advanced past them
-    if (pvpSt.pvpPlayerTargetIdx < 0)
+    // Main opponent — only if still alive
+    if (bossHP > 0)
       actors.push({ type: 'enemy', index: -1, pvpAllyIdx: -1, priority: Math.floor(Math.random() * 256) });
-    // PVP enemy allies — only those the player hasn't defeated yet
+    // PVP enemy allies — only alive ones
     for (let i = 0; i < pvpSt.pvpEnemyAllies.length; i++) {
-      if (pvpSt.pvpPlayerTargetIdx <= i)
+      if (pvpSt.pvpEnemyAllies[i].hp > 0)
         actors.push({ type: 'enemy', index: -1, pvpAllyIdx: i, priority: Math.floor(Math.random() * 256) });
     }
   } else {
@@ -3440,9 +3442,9 @@ function processNextTurn() {
     if (pvpSt.isPVPBattle) {
       const pai = turn.pvpAllyIdx ?? -1;
       pvpSt.pvpCurrentEnemyAllyIdx = pai;
-      // Skip if this attacker has already been defeated (player advanced past them)
-      if (pai < 0 && pvpSt.pvpPlayerTargetIdx >= 0) { processNextTurn(); return; }
-      if (pai >= 0 && pvpSt.pvpPlayerTargetIdx > pai) { processNextTurn(); return; }
+      // Skip if this attacker is dead
+      if (pai < 0 && bossHP <= 0) { processNextTurn(); return; }
+      if (pai >= 0 && (pvpSt.pvpEnemyAllies[pai]?.hp ?? 0) <= 0) { processNextTurn(); return; }
       // Reset dual-wield counter for each fresh main-opponent turn
       if (pai < 0) pvpSt.pvpOpponentHitsThisTurn = 0;
     }
@@ -3763,8 +3765,10 @@ function _updatePlayerDamageShow() {
       battleTimer = 0;
       playSFX(SFX.MONSTER_DEATH);
     } else if (!isRandomEncounter && bossHP <= 0) {
-      if (pvpSt.isPVPBattle) { battleState = 'pvp-dissolve'; battleTimer = 0; playSFX(SFX.MONSTER_DEATH); }
-      else { battleState = 'boss-dissolve'; battleTimer = 0; playSFX(SFX.BOSS_DEATH); }
+      if (pvpSt.isPVPBattle) {
+        if (pvpSt.pvpPlayerTargetIdx >= 0) pvpSt.pvpEnemyAllies[pvpSt.pvpPlayerTargetIdx].hp = 0;
+        battleState = 'pvp-dissolve'; battleTimer = 0; playSFX(SFX.MONSTER_DEATH);
+      } else { battleState = 'boss-dissolve'; battleTimer = 0; playSFX(SFX.BOSS_DEATH); }
     } else {
       processNextTurn();
     }
@@ -3786,12 +3790,12 @@ function _pvpEnemyCellCenter(idx) {
 }
 
 function _advancePVPTargetOrVictory() {
-  let nextIdx = pvpSt.pvpPlayerTargetIdx + 1;
-  // Skip allies that were already killed (e.g. by SW)
-  while (nextIdx < pvpSt.pvpEnemyAllies.length && pvpSt.pvpEnemyAllies[nextIdx].hp <= 0) nextIdx++;
-  if (nextIdx < pvpSt.pvpEnemyAllies.length) {
-    pvpSt.pvpPlayerTargetIdx = nextIdx;
-    bossHP = pvpSt.pvpEnemyAllies[nextIdx].hp;
+  // Find any remaining alive enemy
+  if (bossHP > 0) { pvpSt.pvpPlayerTargetIdx = -1; processNextTurn(); return; }
+  const aliveAllyIdx = pvpSt.pvpEnemyAllies.findIndex(a => a.hp > 0);
+  if (aliveAllyIdx >= 0) {
+    pvpSt.pvpPlayerTargetIdx = aliveAllyIdx;
+    bossHP = pvpSt.pvpEnemyAllies[aliveAllyIdx].hp;
     processNextTurn();
   } else {
     _triggerPVPVictory();
@@ -3991,8 +3995,10 @@ function _updateAllyDamageShow() {
     dyingMonsterIndices = new Map([[allyTargetIndex, 0]]);
     battleState = 'monster-death'; battleTimer = 0; playSFX(SFX.MONSTER_DEATH);
   } else if (!isRandomEncounter && bossHP <= 0) {
-    if (pvpSt.isPVPBattle) { battleState = 'pvp-dissolve'; battleTimer = 0; playSFX(SFX.MONSTER_DEATH); }
-    else { battleState = 'boss-dissolve'; battleTimer = 0; playSFX(SFX.BOSS_DEATH); }
+    if (pvpSt.isPVPBattle) {
+      if (pvpSt.pvpPlayerTargetIdx >= 0) pvpSt.pvpEnemyAllies[pvpSt.pvpPlayerTargetIdx].hp = 0;
+      battleState = 'pvp-dissolve'; battleTimer = 0; playSFX(SFX.MONSTER_DEATH);
+    } else { battleState = 'boss-dissolve'; battleTimer = 0; playSFX(SFX.BOSS_DEATH); }
   } else {
     const ally = battleAllies[currentAllyAttacker];
     if (!allyHitIsLeft && ally && isWeapon(ally.weaponL)) {
