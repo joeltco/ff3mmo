@@ -1634,6 +1634,7 @@ function _pvpShared() {
     measureText,
     nameToBytes: _nameToBytes,
     get cursorTileCanvas() { return cursorTileCanvas; },
+    get sweatFrames() { return sweatFrames; },
   };
 }
 
