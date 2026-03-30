@@ -523,6 +523,7 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   // Opponent victory = player was defeated (defeat-monster-fade)
   const isOppVictory = _s.battleState === 'defeat-monster-fade';
   const isOppDefending = isMain && pvpSt.pvpOpponentIsDefending && bs === 'pvp-defend-anim';
+  const isOppItemUse   = isMain && (bs === 'pvp-opp-sw-throw' || bs === 'pvp-opp-sw-hit' || bs === 'pvp-opp-potion');
   let body = fullBody;
   if (isOppHit && _s.hitFullBodyCanvases[palIdx]) {
     body = _s.hitFullBodyCanvases[palIdx];
@@ -533,7 +534,7 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
     // Canvases are pre-h-flipped — use matching hand directly
     const atkCvs = isLeftHandAtk ? _s.knifeLFwdFullBodyCanvases : _s.knifeRFwdFullBodyCanvases;
     body = (atkCvs && atkCvs[palIdx]) || fullBody;
-  } else if (isOppDefending && _s.victoryFullBodyCanvases) {
+  } else if ((isOppDefending || isOppItemUse) && _s.victoryFullBodyCanvases) {
     body = _s.victoryFullBodyCanvases[palIdx] || fullBody;
   } else if (isOppVictory && _s.victoryFullBodyCanvases && (Math.floor(Date.now() / 250) & 1)) {
     body = _s.victoryFullBodyCanvases[palIdx] || fullBody;
