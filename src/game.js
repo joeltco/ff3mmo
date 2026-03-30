@@ -1523,6 +1523,8 @@ function _inputShared() {
     get selectCursor()          { return selectCursor; },
     get isPVPBattle()           { return pvpSt.isPVPBattle; },
     get pvpOpponentStats()      { return pvpSt.pvpOpponentStats; },
+    get pvpEnemyAllies()        { return pvpSt.pvpEnemyAllies; },
+    get bossHP()                { return bossHP; },
     saveSlotsToDB,
     addItem,
     removeItem,
@@ -3290,10 +3292,23 @@ function buildTurnOrder() {
 let swBaseDamage = 0; // rolled once per throw, split among targets
 
 function _applySWDamage(tidx) {
+  const dmg = Math.max(1, Math.floor(swBaseDamage / southWindTargets.length));
+  if (pvpSt.isPVPBattle) {
+    if (tidx === 0) {
+      if (bossHP <= 0) return;
+      bossHP = Math.max(0, bossHP - dmg);
+    } else {
+      const ally = pvpSt.pvpEnemyAllies[tidx - 1];
+      if (!ally || ally.hp <= 0) return;
+      ally.hp = Math.max(0, ally.hp - dmg);
+    }
+    southWindDmgNums[tidx] = { value: dmg, timer: 0 };
+    playSFX(SFX.SW_HIT);
+    return;
+  }
   if (!isRandomEncounter || !encounterMonsters) return;
   const mon = encounterMonsters[tidx];
   if (!mon || mon.hp <= 0) return;
-  const dmg = Math.max(1, Math.floor(swBaseDamage / southWindTargets.length));
   mon.hp = Math.max(0, mon.hp - dmg);
   southWindDmgNums[tidx] = { value: dmg, timer: 0 };
   playSFX(SFX.SW_HIT);
@@ -3317,6 +3332,16 @@ function _playerTurnFight() {
 
 function _playerTurnSouthWind() {
   const _mode = inputSt.playerActionPending.targetMode || 'single';
+  if (pvpSt.isPVPBattle) {
+    // In PVP: 'all' hits all living enemies; 'single' hits selected target index
+    if (_mode === 'all') {
+      southWindTargets = [];
+      if (bossHP > 0) southWindTargets.push(0);
+      pvpSt.pvpEnemyAllies.forEach((a, i) => { if (a.hp > 0) southWindTargets.push(i + 1); });
+    } else {
+      southWindTargets = [inputSt.playerActionPending.target];
+    }
+  } else {
   const mons = isRandomEncounter && encounterMonsters;
   const _rightCols = mons ? encounterMonsters.map((m, i) =>
     (m.hp > 0 && (encounterMonsters.length === 1 || (encounterMonsters.length === 2 && i === 1) || (encounterMonsters.length >= 3 && (i === 1 || i === 3)))) ? i : -1).filter(i => i >= 0) : [];
@@ -3328,6 +3353,7 @@ function _playerTurnSouthWind() {
   } else if (_mode === 'col-right') southWindTargets = _rightCols;
   else if (_mode === 'col-left') southWindTargets = _leftCols;
   else southWindTargets = [inputSt.playerActionPending.target];
+  }
   southWindHitIdx = 0;
   const swAttack = Math.floor((ps.stats ? ps.stats.int : 5) / 2) + 55;
   swBaseDamage = Math.floor((swAttack + Math.floor(Math.random() * Math.floor(swAttack / 2 + 1))) / 2);
@@ -3745,8 +3771,24 @@ function _updatePlayerDamageShow() {
   }
   return true;
 }
+function _pvpEnemyCellCenter(idx) {
+  const totalEnemies = 1 + pvpSt.pvpEnemyAllies.length;
+  const cols = totalEnemies <= 1 ? 1 : 2;
+  const rows = totalEnemies <= 2 ? 1 : 2;
+  const cellW = 24, cellH = 32;
+  const centerX = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2);
+  const centerY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
+  const intLeft = centerX - cols * Math.floor(cellW / 2);
+  const intTop  = centerY - rows * Math.floor(cellH / 2);
+  const gridPos = [[rows-1,cols-1],[rows-1,0],[0,cols-1],[0,0]];
+  const [gr, gc] = gridPos[Math.min(idx, gridPos.length - 1)];
+  return { x: intLeft + gc * cellW + 12, y: intTop + gr * cellH + 12 };
+}
+
 function _advancePVPTargetOrVictory() {
-  const nextIdx = pvpSt.pvpPlayerTargetIdx + 1;
+  let nextIdx = pvpSt.pvpPlayerTargetIdx + 1;
+  // Skip allies that were already killed (e.g. by SW)
+  while (nextIdx < pvpSt.pvpEnemyAllies.length && pvpSt.pvpEnemyAllies[nextIdx].hp <= 0) nextIdx++;
   if (nextIdx < pvpSt.pvpEnemyAllies.length) {
     pvpSt.pvpPlayerTargetIdx = nextIdx;
     bossHP = pvpSt.pvpEnemyAllies[nextIdx].hp;
@@ -3861,6 +3903,13 @@ function _updateSWThrowHit() {
       _applySWDamage(southWindTargets[southWindHitIdx]);
       battleTimer = 0;
     } else {
+      if (pvpSt.isPVPBattle) {
+        // Check if the current PVP target was killed
+        const curTgtIdx = pvpSt.pvpPlayerTargetIdx < 0 ? 0 : pvpSt.pvpPlayerTargetIdx + 1;
+        const curTgtDead = curTgtIdx === 0 ? bossHP <= 0 : (pvpSt.pvpEnemyAllies[curTgtIdx - 1]?.hp ?? 1) <= 0;
+        if (curTgtDead) _advancePVPTargetOrVictory(); else processNextTurn();
+        return true;
+      }
       const killed = isRandomEncounter && encounterMonsters
         ? southWindTargets.filter(i => encounterMonsters[i] && encounterMonsters[i].hp <= 0)
         : [];
@@ -4281,6 +4330,17 @@ function drawSWExplosion() {
     return;
   }
   if (battleState !== 'sw-hit') return;
+  if (pvpSt.isPVPBattle) {
+    if (!swPhaseCanvases.length) return;
+    const phase = Math.min(2, Math.floor(battleTimer / 133));
+    const canvas = swPhaseCanvases[phase];
+    if (!canvas) return;
+    const tidx = southWindTargets[southWindHitIdx];
+    if (tidx === undefined) return;
+    const { x: cx, y: cy } = _pvpEnemyCellCenter(tidx);
+    ctx.drawImage(canvas, cx - Math.floor(canvas.width / 2), cy - Math.floor(canvas.height / 2));
+    return;
+  }
   if (!swPhaseCanvases.length || !isRandomEncounter || !encounterMonsters) return;
 
   const { count, boxX, boxY, sprH, gridPos: swGridPos } = _encounterGridLayout();
@@ -4308,7 +4368,15 @@ function drawSWExplosion() {
 }
 
 function drawSWDamageNumbers() {
-  if (battleState !== 'sw-hit' || !isRandomEncounter || !encounterMonsters) return;
+  if (battleState !== 'sw-hit') return;
+  if (pvpSt.isPVPBattle) {
+    for (const [k, dn] of Object.entries(southWindDmgNums)) {
+      const { x: bx, y: by } = _pvpEnemyCellCenter(parseInt(k));
+      _drawBattleNum(bx, _dmgBounceY(by, dn.timer), dn.value, DMG_NUM_PAL);
+    }
+    return;
+  }
+  if (!isRandomEncounter || !encounterMonsters) return;
   const { count, boxX, boxY, gridPos: swGridPos } = _encounterGridLayout();
   for (const [k, dn] of Object.entries(southWindDmgNums)) {
     const idx = parseInt(k);
