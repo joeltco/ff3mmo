@@ -25,17 +25,13 @@ function _renderSprite(rawBytes, cols, rows, pal0, pal1) {
   c.width = w; c.height = h;
   const cctx = c.getContext('2d');
 
-  // NES PPU attribute table assigns palette per 16×16 block based on
-  // screen position. The standard FF3 battle layout puts pal0 on the
-  // top row of 16×16 blocks and pal1 on the remaining rows.
-  // For 4×4 sprites (one row of blocks tall = 2 tile rows), all pal0.
-  // Verified against Eye Fang PPU capture: rows 0-1 pal0, rows 2-5 pal1.
-  const blockRows = rows >> 1; // 16×16 block rows = tile rows / 2
+  // NES PPU attribute table assigns palette per 16×16 block based on screen
+  // position. Top 16px (2 tile rows) uses pal0, rest uses pal1.
+  // Verified: Eye Fang (4×6) rows 0-1=pal0, 2-5=pal1. Goblin (4×4) rows 0-1=pal0, 2-3=pal1.
   for (let ty = 0; ty < rows; ty++) {
     for (let tx = 0; tx < cols; tx++) {
       const tileIdx = ty * cols + tx;
-      const blockRow = ty >> 1; // which 16×16 block row this tile is in
-      const pal = (blockRows <= 2 || blockRow === 0) ? pal0 : pal1;
+      const pal = ty < 2 ? pal0 : pal1;
       const off = tileIdx * 16;
       const img = cctx.createImageData(8, 8);
       for (let row = 0; row < 8; row++) {
