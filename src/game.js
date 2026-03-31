@@ -1590,6 +1590,7 @@ function _pvpShared() {
     get currentHitIdx()         { return currentHitIdx; },
     get currentAllyAttacker()   { return currentAllyAttacker; },
     get allyHitResult()         { return allyHitResult; },
+    get bossDamageNum()         { return bossDamageNum; },
     // ── Array/object refs (getters so pvp always gets the live array) ─────────
     get battleAllies()          { return battleAllies; },
     get allyDamageNums()        { return allyDamageNums; },
@@ -3680,32 +3681,38 @@ function _updateBattleMenuConfirm() {
 }
 
 function _finalizeComboHits() {
+  // Apply ALL damage at once (deferred from individual slashes)
   let totalDmg = 0, anyCrit = false, allMiss = true;
   for (const h of inputSt.hitResults) {
-    if (!h.miss) { totalDmg += h.damage; allMiss = false; if (h.crit) anyCrit = true; }
+    if (!h.miss) {
+      if (pvpSt.isPVPBattle && pvpSt.pvpOpponentIsDefending)
+        h.damage = Math.max(1, Math.floor(h.damage / 2));
+      totalDmg += h.damage;
+      allMiss = false;
+      if (h.crit) anyCrit = true;
+    }
+  }
+  if (!allMiss) {
+    if (isRandomEncounter && encounterMonsters) {
+      encounterMonsters[inputSt.targetIndex].hp = Math.max(0, encounterMonsters[inputSt.targetIndex].hp - totalDmg);
+    } else {
+      bossHP = Math.max(0, bossHP - totalDmg);
+      if (pvpSt.isPVPBattle) {
+        if (pvpSt.pvpPlayerTargetIdx < 0) pvpSt.pvpOpponentStats.hp = bossHP;
+        else if (pvpSt.pvpEnemyAllies[pvpSt.pvpPlayerTargetIdx]) pvpSt.pvpEnemyAllies[pvpSt.pvpPlayerTargetIdx].hp = bossHP;
+      }
+    }
+    if (anyCrit) critFlashTimer = 0;
   }
   bossDamageNum = allMiss ? { miss: true, timer: 0 } : { value: totalDmg, crit: anyCrit, timer: 0 };
   if (pvpSt.isPVPBattle && !allMiss) pvpSt.pvpBossShakeTimer = BATTLE_SHAKE_MS;
   battleState = 'player-damage-show';
   battleTimer = 0;
 }
-function _advanceHitCombo() {
-  if (currentHitIdx + 1 < inputSt.hitResults.length) {
-    currentHitIdx++;
-    slashFrame = 0;
-    const handWeapon = getHitWeapon(currentHitIdx);
-    slashFrames = getSlashFramesForWeapon(handWeapon, isHitRightHand(currentHitIdx));
-    if (isBladedWeapon(handWeapon)) { slashOffX = 8; slashOffY = -8; }
-    else { slashOffX = Math.floor(Math.random() * 40) - 20; slashOffY = Math.floor(Math.random() * 40) - 20; }
-    battleState = 'attack-start';
-    battleTimer = 0;
-  } else {
-    _finalizeComboHits();
-  }
-}
+// _advanceHitCombo removed — slash combo now goes directly from _updatePlayerSlash to next attack-start or _finalizeComboHits
 function _updatePlayerAttackStart() {
   if (battleState !== 'attack-start') return false;
-  const startDelay = currentHitIdx === 0 ? 100 : 50;
+  const startDelay = currentHitIdx === 0 ? 100 : 33;
   if (battleTimer >= startDelay) {
     const hw0 = getHitWeapon(currentHitIdx);
     const isBladed0 = isBladedWeapon(hw0);
@@ -3734,24 +3741,19 @@ function _updatePlayerSlash() {
     }
   }
   if (battleTimer >= SLASH_FRAMES * SLASH_FRAME_MS) {
-    const hit = inputSt.hitResults[currentHitIdx];
-    if (!hit.miss) {
-      if (pvpSt.isPVPBattle && pvpSt.pvpOpponentIsDefending)
-        hit.damage = Math.max(1, Math.floor(hit.damage / 2));
-      if (isRandomEncounter && encounterMonsters) {
-        encounterMonsters[inputSt.targetIndex].hp = Math.max(0, encounterMonsters[inputSt.targetIndex].hp - hit.damage);
-      } else {
-        bossHP = Math.max(0, bossHP - hit.damage);
-        // Sync authoritative HP source for PVP free targeting
-        if (pvpSt.isPVPBattle) {
-          if (pvpSt.pvpPlayerTargetIdx < 0) pvpSt.pvpOpponentStats.hp = bossHP;
-          else if (pvpSt.pvpEnemyAllies[pvpSt.pvpPlayerTargetIdx]) pvpSt.pvpEnemyAllies[pvpSt.pvpPlayerTargetIdx].hp = bossHP;
-        }
-      }
-      if (hit.crit) critFlashTimer = 0;
+    // All slashes play on idle target first — damage deferred to _finalizeComboHits
+    if (currentHitIdx + 1 < inputSt.hitResults.length) {
+      currentHitIdx++;
+      slashFrame = 0;
+      const handWeapon = getHitWeapon(currentHitIdx);
+      slashFrames = getSlashFramesForWeapon(handWeapon, isHitRightHand(currentHitIdx));
+      if (isBladedWeapon(handWeapon)) { slashOffX = 8; slashOffY = -8; }
+      else { slashOffX = Math.floor(Math.random() * 40) - 20; slashOffY = Math.floor(Math.random() * 40) - 20; }
+      battleState = 'attack-start';
+      battleTimer = 0;
+    } else {
+      _finalizeComboHits();
     }
-    battleState = 'player-hit-show';
-    battleTimer = 0;
   }
   return true;
 }
@@ -4847,10 +4849,8 @@ function _drawEncounterMonsters(gridPos, sprH, boxX, boxY, boxW, boxH, isSlideIn
   for (let i = 0; i < count; i++) {
     const alive = encounterMonsters[i].hp > 0;
     const isDying = dyingMonsterIndices.has(i) && battleState === 'monster-death';
-    const isBeingHit = (i === inputSt.targetIndex &&
-      (battleState === 'player-slash' || battleState === 'player-hit-show' ||
-       battleState === 'player-miss-show' || battleState === 'player-damage-show')) ||
-      (i === allyTargetIndex && (battleState === 'ally-slash' || battleState === 'ally-damage-show')) ||
+    const isBeingHit = (i === inputSt.targetIndex && battleState === 'player-damage-show') ||
+      (i === allyTargetIndex && battleState === 'ally-damage-show') ||
       (battleState === 'sw-hit' && southWindTargets.includes(i));
     if (!alive && !isDying && !isBeingHit) continue;
 
@@ -4866,9 +4866,10 @@ function _drawEncounterMonsters(gridPos, sprH, boxX, boxY, boxW, boxH, isSlideIn
       const delay = dyingMonsterIndices.get(i) || 0;
       _drawMonsterDeath(drawX, drawY, thisH, Math.min(Math.max(0, battleTimer - delay) / MONSTER_DEATH_MS, 1), mid);
     } else {
-      const curHit = inputSt.hitResults && inputSt.hitResults[currentHitIdx];
-      const isHitBlink = (isBeingHit && battleState === 'player-slash' && curHit && !curHit.miss && (Math.floor(battleTimer / 60) & 1)) ||
-                         (isBeingHit && battleState === 'ally-slash' && allyHitResult && !allyHitResult.miss && (Math.floor(battleTimer / 60) & 1));
+      const isHitBlink = isBeingHit && (
+        (battleState === 'player-damage-show' && bossDamageNum && !bossDamageNum.miss) ||
+        (battleState === 'ally-damage-show' && allyHitResult && !allyHitResult.miss)
+      ) && (Math.floor(battleTimer / 60) & 1);
       const isFlashing = battleState === 'boss-flash' && currentAttacker === i && Math.floor(battleTimer / 33) % 2 === 1;
       if (!isHitBlink) ctx.drawImage(isFlashing ? sprWhite : sprNormal, drawX, drawY);
     }
