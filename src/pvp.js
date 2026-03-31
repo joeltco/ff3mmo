@@ -354,6 +354,16 @@ function _processPVPOppPotion() {
 function _processPVPOppSWThrow() {
   if (_s.battleState !== 'pvp-opp-sw-throw') return false;
   if (_s.battleTimer >= 250) {
+    // Switch to explosion animation — damage deferred until explosion completes
+    _s.battleState = 'pvp-opp-sw-hit'; _s.battleTimer = 0;
+  }
+  return true;
+}
+
+function _processPVPOppSWHit() {
+  if (_s.battleState !== 'pvp-opp-sw-hit') return false;
+  // Apply damage after explosion phases complete (3 × 133ms ≈ 400ms)
+  if (_s.battleTimer >= 400 && !_s.playerDamageNum) {
     const atk = pvpSt.pvpOpponentStats.atk;
     const swAtk = Math.floor(atk / 2) + 55;
     const swBase = Math.floor((swAtk + Math.floor(Math.random() * Math.floor(swAtk / 2 + 1))) / 2);
@@ -362,13 +372,7 @@ function _processPVPOppSWThrow() {
     _s.playerDamageNum = { value: dmg, timer: 0 };
     playSFX(SFX.SW_HIT);
     _s.battleShakeTimer = BATTLE_SHAKE_MS;
-    _s.battleState = 'pvp-opp-sw-hit'; _s.battleTimer = 0;
   }
-  return true;
-}
-
-function _processPVPOppSWHit() {
-  if (_s.battleState !== 'pvp-opp-sw-hit') return false;
   if (_s.battleTimer >= 700) {
     _s.playerDamageNum = null;
     if (ps.hp <= 0) {

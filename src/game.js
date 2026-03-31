@@ -272,6 +272,7 @@ let playerHealNum = null;    // {value, timer} — green heal number on portrait
 let enemyHealNum = null;     // {value, timer, index} — green heal number on enemy
 let southWindTargets = [];     // ordered list of enemy indices to hit
 let southWindHitIdx = 0;       // current target being hit
+let swHitDamageApplied = false; // flag: damage applied for current sw-hit cycle
 let southWindHitCanvas = null; // unused - kept for compat
 let swPhaseCanvases = [];      // 3-phase expanding ice explosion [16×16, 32×32, 48×48]
 let southWindDmgNums = {};     // {enemyIdx: {value, timer}} — damage numbers during sw-hit
@@ -1404,7 +1405,7 @@ function _resetBattleVars() {
   isDefending = false; battleAllies = []; allyJoinRound = 0;
   currentAllyAttacker = -1; allyTargetIndex = -1; allyHitResult = null; allyHitIsLeft = false;
   allyDamageNums = {}; allyShakeTimer = {}; enemyTargetAllyIdx = -1; allyExitTimer = 0;
-  southWindTargets = []; southWindHitIdx = 0; southWindDmgNums = {};
+  southWindTargets = []; southWindHitIdx = 0; southWindDmgNums = {}; swHitDamageApplied = false;
   inputSt.battleProfHits = {};
 }
 function _zPressed() { if (!keys['z'] && !keys['Z']) return false; keys['z'] = false; keys['Z'] = false; return true; }
@@ -3912,17 +3913,21 @@ function _updateSWThrowHit() {
       if (southWindTargets.length === 0) { processNextTurn(); }
       else {
         southWindHitIdx = 0;
-        _applySWDamage(southWindTargets[0]);
+        swHitDamageApplied = false;
         battleState = 'sw-hit'; battleTimer = 0;
       }
     }
     return true;
   }
-  // sw-hit: explosion 3 phases × 133ms, hold until 700ms
+  // sw-hit: explosion 3 phases × 133ms ≈ 400ms, then damage, hold until 700ms
+  if (battleTimer >= 400 && !swHitDamageApplied) {
+    swHitDamageApplied = true;
+    _applySWDamage(southWindTargets[southWindHitIdx]);
+  }
   if (battleTimer >= 700) {
     southWindHitIdx++;
+    swHitDamageApplied = false;
     if (southWindHitIdx < southWindTargets.length) {
-      _applySWDamage(southWindTargets[southWindHitIdx]);
       battleTimer = 0;
     } else {
       if (pvpSt.isPVPBattle) {
@@ -4568,7 +4573,7 @@ function _drawBattlePortrait() {
   const isAttackPose = battleState === 'attack-start' || battleState === 'player-slash';
   const isHitPose = (battleState === 'enemy-attack' && playerDamageNum && !playerDamageNum.miss) ||
     (battleState === 'enemy-damage-show' && playerDamageNum && !playerDamageNum.miss) ||
-    battleState === 'pvp-opp-sw-hit' ||
+    (battleState === 'pvp-opp-sw-hit' && playerDamageNum) ||
     (battleState === 'pvp-enemy-slash' && pvpSt.pvpPendingAttack && !pvpSt.pvpPendingAttack.miss && !pvpSt.pvpPendingAttack.shieldBlock);
   const isDefendPose = battleState === 'defend-anim';
   const isItemUsePose = battleState === 'item-use' || battleState === 'sw-throw' || battleState === 'sw-hit';
