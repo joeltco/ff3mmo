@@ -66,24 +66,37 @@ function _xPressed() {
 
 // ── Battle input ───────────────────────────────────────────────────────────
 
+// Switch PVP target: save current bossHP to old target's source, load new target's HP
+function _switchPVPTarget(newIdx) {
+  const oldIdx = _s.pvpPlayerTargetIdx;
+  // Save current bossHP back to the old target's authoritative HP source
+  if (oldIdx < 0 && _s.pvpOpponentStats) _s.pvpOpponentStats.hp = _s.bossHP;
+  else if (oldIdx >= 0 && _s.pvpEnemyAllies && _s.pvpEnemyAllies[oldIdx]) _s.pvpEnemyAllies[oldIdx].hp = _s.bossHP;
+  // Set new target and load its HP into bossHP
+  _s.pvpPlayerTargetIdx = newIdx;
+  if (newIdx < 0 && _s.pvpOpponentStats) _s.bossHP = _s.pvpOpponentStats.hp;
+  else if (newIdx >= 0 && _s.pvpEnemyAllies && _s.pvpEnemyAllies[newIdx]) _s.bossHP = _s.pvpEnemyAllies[newIdx].hp;
+}
+
 function _battleTargetNav() {
   const k = _s.keys;
   if (_s.isPVPBattle) {
     // Build list of alive PVP target indices: -1=main opp, 0,1,...=allies
+    // Use authoritative HP: pvpOpponentStats.hp for main, pvpEnemyAllies[i].hp for allies
     const aliveTargets = [];
-    if (_s.bossHP > 0) aliveTargets.push(-1);
+    if (_s.pvpOpponentStats && _s.pvpOpponentStats.hp > 0) aliveTargets.push(-1);
     (_s.pvpEnemyAllies || []).forEach((a, i) => { if (a.hp > 0) aliveTargets.push(i); });
     if (aliveTargets.length <= 1) return;
     const cur = _s.pvpPlayerTargetIdx;
     const ci = aliveTargets.indexOf(cur);
     if (k['ArrowRight'] || k['ArrowDown']) {
       k['ArrowRight'] = false; k['ArrowDown'] = false;
-      _s.pvpPlayerTargetIdx = aliveTargets[(ci + 1) % aliveTargets.length];
+      _switchPVPTarget(aliveTargets[(ci + 1) % aliveTargets.length]);
       playSFX(SFX.CURSOR);
     }
     if (k['ArrowLeft'] || k['ArrowUp']) {
       k['ArrowLeft'] = false; k['ArrowUp'] = false;
-      _s.pvpPlayerTargetIdx = aliveTargets[(ci - 1 + aliveTargets.length) % aliveTargets.length];
+      _switchPVPTarget(aliveTargets[(ci - 1 + aliveTargets.length) % aliveTargets.length]);
       playSFX(SFX.CURSOR);
     }
     return;
@@ -250,7 +263,12 @@ function _itemSelectZ(isEquipPage, gIdx) {
           const first = [...rightCandidates,...leftCandidates].find(i => ealive(i));
           inputSt.itemTargetIndex = first !== undefined ? first : 0;
         } else if (itemDat.type === 'battle_item' && !_s.isRandomEncounter) {
-          inputSt.itemTargetType = 'enemy'; inputSt.itemTargetIndex = 0;
+          inputSt.itemTargetType = 'enemy';
+          // Default to first alive PVP target (grid index)
+          const cnt = 1 + (_s.pvpEnemyAllies ? _s.pvpEnemyAllies.length : 0);
+          let first = 0;
+          for (let ii = 0; ii < cnt; ii++) { if (_itemTargetAlive(ii)) { first = ii; break; } }
+          inputSt.itemTargetIndex = first;
         } else {
           inputSt.itemTargetType = 'player'; inputSt.itemTargetIndex = 0;
         }
@@ -284,7 +302,7 @@ function _itemTargetCnt() {
 }
 function _itemTargetAlive(i) {
   if (_s.isPVPBattle) {
-    if (i === 0) return _s.bossHP > 0;
+    if (i === 0) return _s.pvpOpponentStats && _s.pvpOpponentStats.hp > 0;
     const a = _s.pvpEnemyAllies && _s.pvpEnemyAllies[i - 1];
     return !!(a && a.hp > 0);
   }

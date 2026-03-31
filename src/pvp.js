@@ -484,9 +484,12 @@ export function drawBossSpriteBoxPVP(shared, centerX, centerY) {
     allEnemies.forEach((enemy, idx) => {
       if (enemy) _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, resizeT);
     });
-    // Target cursor during target-select
+    // Target cursor during target-select or item-target-select
     if ((bs === 'target-select' || (bs === 'item-target-select' && inputSt.itemTargetType === 'enemy')) && _s.cursorTileCanvas) {
-      const tIdx = pvpSt.pvpPlayerTargetIdx < 0 ? 0 : pvpSt.pvpPlayerTargetIdx + 1;
+      // Fight cursor uses pvpPlayerTargetIdx; item cursor uses itemTargetIndex (grid index directly)
+      const tIdx = bs === 'item-target-select'
+        ? inputSt.itemTargetIndex
+        : (pvpSt.pvpPlayerTargetIdx < 0 ? 0 : pvpSt.pvpPlayerTargetIdx + 1);
       const [gr, gc] = gridPos[tIdx] || gridPos[0];
       const tx = intLeft + gc * cellW + 4;
       const ty = intTop  + gr * cellH + 4;
@@ -511,10 +514,10 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   const palIdx = enemy.palIdx;
   const fullBody = _s.fullBodyCanvases[palIdx] || _s.fullBodyCanvases[0];
   if (!fullBody) return;
-  // Hide main opponent if player has moved on to fighting an ally
-  if (isMain && (_s.bossDefeated || pvpSt.pvpPlayerTargetIdx >= 0)) return;
-  // Hide ally if defeated or not yet reached
-  if (!isMain && (_s.bossDefeated || (idx - 1) < pvpSt.pvpPlayerTargetIdx)) return;
+  // Hide main opponent if dead (HP-based, supports free target selection)
+  if (isMain && (_s.bossDefeated || (pvpSt.pvpOpponentStats && pvpSt.pvpOpponentStats.hp <= 0))) return;
+  // Hide ally if dead
+  if (!isMain && (_s.bossDefeated || enemy.hp <= 0)) return;
 
   // isCurrentTarget: which enemy the player is currently attacking
   const isCurrentTarget = isMain ? pvpSt.pvpPlayerTargetIdx < 0 : (idx - 1) === pvpSt.pvpPlayerTargetIdx;
@@ -549,7 +552,7 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   // Body canvas — drawn directly (pre-h-flipped canvases face left, matching enemy-side visual style)
   // MIRRORING RULE: opponent faces left, so R-hand canvases look like L-hand after flip and vice versa.
   // Use the opposite hand's canvas to get the correct visual for each hand.
-  const oppHP   = isMain ? _s.bossHP : (enemy.hp != null ? enemy.hp : 0);
+  const oppHP   = isMain ? (pvpSt.pvpOpponentStats ? pvpSt.pvpOpponentStats.hp : _s.bossHP) : (enemy.hp != null ? enemy.hp : 0);
   const oppMaxHP = isMain ? (pvpSt.pvpOpponentStats ? pvpSt.pvpOpponentStats.maxHP : 1) : (enemy.maxHP || 1);
   const isNearFatalOpp = oppHP > 0 && oppHP <= Math.floor(oppMaxHP / 4);
   // Opponent victory = player was defeated (defeat-monster-fade)
