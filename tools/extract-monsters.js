@@ -42,11 +42,15 @@ function readMonsterStats(id) {
   const base = PROP_OFF + id * 16;
   const level = rom[base];
   const hp    = rom[base + 1] | (rom[base + 2] << 8);
-  const atkSetIdx = rom[base + 9];
-  const defSetIdx = rom[base + 12];
+  // Stat-set index bytes: upper 2 bits = hit multiplier flags, lower 6 bits = set index
+  const rawAtkByte = rom[base + 9];
+  const rawDefByte = rom[base + 12];
+  const atkSetIdx = rawAtkByte & 0x3F;
+  const defSetIdx = rawDefByte & 0x3F;
   const atk = rom[STAT_SET_OFF + atkSetIdx * 3 + 1];
   const def = rom[STAT_SET_OFF + defSetIdx * 3 + 2];
-  return { level, hp, atk, def };
+  const hits = ((rawAtkByte >> 6) & 0x03) + 1; // attack multiplier (1-4)
+  return { level, hp, atk, def, hits };
 }
 
 // ── BOSS BANK MAPPING ──────────────────────────────────────────────
