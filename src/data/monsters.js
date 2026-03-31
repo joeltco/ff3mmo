@@ -25,9 +25,9 @@ export const MONSTERS = new Map([
   [0x0A, { level: 4, hp:  48, atk:  10, def: 1, exp:  40, gil:  24, weakness: ['fire','holy'],  type: null, steal: 0xA6, drops: [],              location: ['cave_seal','mythril_mines'] }], // Mummy
   [0x0B, { level: 4, hp:  54, atk:  30, def: 1, exp:  40, gil:  26, weakness: ['fire','holy'],  type: null, steal: 0xA6, drops: [],              location: ['cave_seal','mythril_mines'] }], // Skeleton
   [0x0C, { level: 5, hp:  35, atk:  10, def: 1, exp:  48, gil:  28, weakness: ['fire','holy'],  type: null, steal: 0xA6, drops: [],              location: ['cave_seal','mythril_mines'] }], // Cursed Coin
-  [0x0D, { level: 5, hp:  38, atk:  20, def: 7, exp:  48, gil:  30, weakness: ['fire','holy'],  type: null, steal: 0xAF, drops: [0xAF, 0xAE],   location: ['cave_seal','mythril_mines'] }], // Laruwai
-  [0x0E, { level: 5, hp:  65, atk:  20, def: 7, exp:  48, gil:  32, weakness: ['fire','holy'],  type: null, steal: 0xAF, drops: [0xAF, 0xAE],   location: ['cave_seal','mythril_mines'] }], // Shadow
-  [0x0F, { level: 6, hp:  70, atk:  20, def: 7, exp:  52, gil:  34, weakness: ['fire','holy'],  type: null, steal: 0xAF, drops: [0xAF, 0xAE],   location: ['cave_seal'] }],               // Revenant
+  [0x0D, { level: 5, hp:  38, atk:  30, def: 1, exp:  48, gil:  30, weakness: ['fire','holy'],  type: null, steal: 0xAF, drops: [0xAF, 0xAE],   location: ['cave_seal','mythril_mines'] }], // Laruwai
+  [0x0E, { level: 5, hp:  65, atk:  10, def: 1, exp:  48, gil:  32, weakness: ['fire','holy'],  type: null, steal: 0xAF, drops: [0xAF, 0xAE],   location: ['cave_seal','mythril_mines'] }], // Shadow
+  [0x0F, { level: 6, hp:  70, atk:  50, def: 1, exp:  52, gil:  34, weakness: ['fire','holy'],  type: null, steal: 0xAF, drops: [0xAF, 0xAE],   location: ['cave_seal'] }],               // Revenant
 
   // --- Road to the Summit ---
   [0x10, { level: 3, hp:  72, atk:  10, def: 1, exp:  52, gil:  36, weakness: ['ice','air'],    type: null, steal: 0xA6, drops: [],              location: ['summit_road'] }],             // Firefly
@@ -39,9 +39,9 @@ export const MONSTERS = new Map([
   [0x16, { level: 5, hp: 120, atk:  60, def: 1, exp:  72, gil:  48, weakness: null,             type: null, steal: 0xA6, drops: [],              location: ['dummied'] }],                 // Mandrake (unused)
 
   // --- Hidden Road / Nepto Shrine ---
-  [0x17, { level:10, hp:  36, atk:  20, def: 7, exp:  80, gil:  52, weakness: null,             type: null, steal: 0xA6, drops: [0xA6, 0xC3, 0xB1], location: ['hidden_road'] }],         // Leprechaun
+  [0x17, { level:10, hp:  36, atk:  10, def: 9, exp:  80, gil:  52, weakness: null,             type: null, steal: 0xA6, drops: [0xA6, 0xC3, 0xB1], location: ['hidden_road'] }],         // Leprechaun
   [0x18, { level:10, hp:  55, atk:  15, def: 1, exp:  80, gil:  53, weakness: null,             type: null, steal: 0xA6, drops: [],              location: ['hidden_road'] }],             // Dark Face
-  [0x19, { level: 3, hp:  45, atk:  25, def: 7, exp:  80, gil:  54, weakness: null,             type: null, steal: 0xB1, drops: [0xB1, 0xB3, 0xB2], location: ['nepto_shrine'] }],        // Puti
+  [0x19, { level: 3, hp:  45, atk:  20, def: 1, exp:  80, gil:  54, weakness: null,             type: null, steal: 0xB1, drops: [0xB1, 0xB3, 0xB2], location: ['nepto_shrine'] }],        // Puti
   [0x1A, { level:10, hp:  60, atk:  60, def: 1, exp:  88, gil:  56, weakness: 'air',            type: null, steal: 0xA6, drops: [],              location: ['nepto_shrine'] }],            // Poison Bat
   [0x1B, { level: 2, hp:  58, atk:  60, def: 1, exp:  88, gil:  58, weakness: null,             type: null, steal: 0xA6, drops: [0xA6],          location: ['nepto_shrine'] }],            // Liliput
   [0x1C, { level:10, hp:  72, atk:  10, def: 1, exp:  88, gil:  60, weakness: null,             type: null, steal: 0xA6, drops: [],              location: ['nepto_shrine'] }],            // Were-rat
@@ -56,28 +56,28 @@ export const MONSTERS = new Map([
 
   // --- South of Floating Continent / Sasoon West Tower ---
   [0x23, { level: 6, hp: 145, atk:  40, def: 2, exp: 108, gil:  72, weakness: null,             type: null, steal: null, drops: [null, null, null, null], location: ['south_float'] }],    // Paralyma (arrow drops)
-  [0x24, { level:13, hp: 150, atk:  25, def: 7, exp: 108, gil:  74, weakness: null,             type: null, steal: 0xB1, drops: [0xB1, 0xB2, 0xB3], location: ['sasoon_west'] }],         // Griffon
+  [0x24, { level:13, hp: 150, atk:  20, def: 2, exp: 108, gil:  74, weakness: null,             type: null, steal: 0xB1, drops: [0xB1, 0xB2, 0xB3], location: ['sasoon_west'] }],         // Griffon
   [0x25, { level:13, hp: 165, atk:  45, def: 2, exp: 108, gil:  76, weakness: null,             type: null, steal: 0xA6, drops: [],              location: ['south_float'] }],             // Lynx
   [0x26, { level:14, hp: 160, atk:  45, def: 2, exp: 120, gil:  78, weakness: null,             type: null, steal: 0xA6, drops: [],              location: ['south_float'] }],             // Hornet
 
   // --- Castle Argus / Dwarven Hollows ---
-  [0x27, { level:14, hp: 185, atk:  20, def: 7, exp: 120, gil:  80, weakness: null,             type: null, steal: 0xA6, drops: [0xA6, 0xB3, 0xBB], location: ['castle_argus','dwarven_hollows'] }], // Knocker
+  [0x27, { level:14, hp: 185, atk:  20, def: 2, exp: 120, gil:  80, weakness: null,             type: null, steal: 0xA6, drops: [0xA6, 0xB3, 0xBB], location: ['castle_argus','dwarven_hollows'] }], // Knocker
   [0x28, { level: 7, hp: 190, atk:  45, def: 2, exp: 120, gil:  82, weakness: 'air',            type: null, steal: 0xA6, drops: [],              location: ['castle_argus','dwarven_hollows'] }], // Flyer
   [0x29, { level:15, hp: 200, atk:  50, def: 2, exp: 128, gil:  84, weakness: null,             type: null, steal: 0xA6, drops: [],              location: ['castle_argus','dwarven_hollows'] }], // Lizard Man
   [0x2A, { level:15, hp: 200, atk:  50, def: 2, exp: 128, gil:  86, weakness: null,             type: null, steal: 0xA6, drops: [],              location: ['castle_argus','dwarven_hollows'] }], // Gorgone
 
   // --- Floating Continent ---
-  [0x2B, { level: 8, hp: 210, atk:  20, def: 7, exp: 128, gil:  87, weakness: null,             type: null, steal: 0xA6, drops: [0xA6, 0xB3, 0xBB], location: ['floating_continent'] }], // Red Cap
+  [0x2B, { level: 8, hp: 210, atk:  60, def: 2, exp: 128, gil:  87, weakness: null,             type: null, steal: 0xA6, drops: [0xA6, 0xB3, 0xBB], location: ['floating_continent'] }], // Red Cap
   [0x2C, { level: 8, hp: 220, atk:  60, def: 2, exp: 132, gil:  88, weakness: null,             type: null, steal: null, drops: [],              location: ['floating_continent_forest'] }], // Barometz
   [0x2D, { level: 8, hp: 200, atk:  25, def: 2, exp: 132, gil:  90, weakness: null,             type: null, steal: 0xA6, drops: [],              location: ['float_nw'] }],                // Slime
   [0x2E, { level: 8, hp: 200, atk:  60, def: 4, exp: 132, gil:  92, weakness: null,             type: null, steal: 0xA6, drops: [],              location: ['float_nw'] }],                // Tarantula
   [0x2F, { level: 8, hp: 200, atk:  10, def: 2, exp: 144, gil:  94, weakness: null,             type: null, steal: 0xA6, drops: [],              location: ['float_desert'] }],            // Cafjel
 
   // --- Tower of Owen ---
-  [0x30, { level: 5, hp: 109, atk:  15, def: 7, exp: 144, gil:  96, weakness: null,             type: null, steal: 0xAC, drops: [0xAC, 0xAB, 0xAD], location: ['tower_owen'] }],          // Pygman
+  [0x30, { level: 5, hp: 109, atk:  10, def: 2, exp: 144, gil:  96, weakness: null,             type: null, steal: 0xAC, drops: [0xAC, 0xAB, 0xAD], location: ['tower_owen'] }],          // Pygman
   [0x31, { level: 5, hp: 111, atk:  20, def: 2, exp: 144, gil:  98, weakness: null,             type: null, steal: 0xA6, drops: [],              location: ['tower_owen'] }],              // Farjalug
   [0x32, { level:19, hp: 114, atk:  30, def: 2, exp: 152, gil: 100, weakness: null,             type: null, steal: 0xA6, drops: [],              location: ['tower_owen'] }],              // Blood Bat
-  [0x33, { level: 4, hp: 118, atk:  15, def: 7, exp: 152, gil: 101, weakness: null,             type: null, steal: 0xAC, drops: [0xAC, 0xAB, 0xAD], location: ['tower_owen'] }],          // Puti Mage
+  [0x33, { level: 4, hp: 118, atk:  20, def: 2, exp: 152, gil: 101, weakness: null,             type: null, steal: 0xAC, drops: [0xAC, 0xAB, 0xAD], location: ['tower_owen'] }],          // Puti Mage
   [0x34, { level:11, hp: 120, atk:  10, def: 2, exp: 152, gil: 102, weakness: null,             type: null, steal: 0xA6, drops: [],              location: ['dummied'] }],                 // Fury Eye (unused)
   [0x35, { level:19, hp: 122, atk:  25, def: 2, exp: 160, gil: 105, weakness: null,             type: null, steal: 0xA6, drops: [],              location: ['tower_owen'] }],              // Ohishuki
 
@@ -90,16 +90,16 @@ export const MONSTERS = new Map([
   [0x3B, { level:10, hp: 140, atk:  40, def: 3, exp: 189, gil: 120, weakness: 'bolt',           type: null, steal: 0xA6, drops: [],              location: ['dwarven_cave'] }],            // Ruin Wave
 
   // --- Flame Cave ---
-  [0x3C, { level:10, hp: 143, atk:  20, def: 7, exp: 180, gil: 125, weakness: 'fire',           type: null, steal: 0xA6, drops: [0xA6, 0xC3, 0xB1], location: ['flame_cave'] }],          // Balloon
+  [0x3C, { level:10, hp: 143, atk:  30, def: 3, exp: 180, gil: 125, weakness: 'fire',           type: null, steal: 0xA6, drops: [0xA6, 0xC3, 0xB1], location: ['flame_cave'] }],          // Balloon
   [0x3D, { level:21, hp: 147, atk:  40, def: 3, exp: 200, gil: 130, weakness: 'ice',            type: null, steal: 0xA6, drops: [],              location: ['flame_cave'] }],              // Milmecoreo
   [0x3E, { level:22, hp: 150, atk:  30, def: 3, exp: 200, gil: 135, weakness: 'ice',            type: null, steal: 0xA6, drops: [],              location: ['flame_cave'] }],              // Crocotta
-  [0x3F, { level:11, hp: 153, atk:  20, def: 7, exp: 200, gil: 135, weakness: 'ice',            type: null, steal: 0xAA, drops: [0xA6, 0xB2, null], location: ['flame_cave'] }],          // Adamantai (Midget Bread unknown)
+  [0x3F, { level:11, hp: 153, atk:  45, def: 3, exp: 200, gil: 135, weakness: 'ice',            type: null, steal: 0xAA, drops: [0xA6, 0xB2, null], location: ['flame_cave'] }],          // Adamantai (Midget Bread unknown)
   [0x40, { level:22, hp: 155, atk:  45, def: 4, exp: 200, gil: 140, weakness: 'fire',           type: null, steal: 0xA6, drops: [],              location: ['flame_cave'] }],              // Red Mallow
 
   // --- Castle Hyne ---
-  [0x41, { level:11, hp: 160, atk:  20, def: 7, exp: 240, gil: 145, weakness: ['fire','holy'],  type: null, steal: 0xAF, drops: [0xAF, 0xAE],   location: ['hynes_castle'] }],            // Pharaoh
+  [0x41, { level:11, hp: 160, atk:  50, def: 4, exp: 240, gil: 145, weakness: ['fire','holy'],  type: null, steal: 0xAF, drops: [0xAF, 0xAE],   location: ['hynes_castle'] }],            // Pharaoh
   [0x42, { level:23, hp: 164, atk:  30, def: 3, exp: 240, gil: 150, weakness: ['fire','holy'],  type: null, steal: 0xA6, drops: [],              location: ['hynes_castle'] }],            // Lemwraith
-  [0x43, { level:12, hp: 168, atk:  30, def: 7, exp: 240, gil: 155, weakness: null,             type: null, steal: 0xB2, drops: [0xB2, 0xB1, 0xB3], location: ['hynes_castle'] }],        // Lamia
+  [0x43, { level:12, hp: 168, atk:  50, def: 3, exp: 240, gil: 155, weakness: null,             type: null, steal: 0xB2, drops: [0xB2, 0xB1, 0xB3], location: ['hynes_castle'] }],        // Lamia
   [0x44, { level:24, hp: 171, atk:  60, def: 3, exp: 288, gil: 158, weakness: null,             type: null, steal: null, drops: [null, null, null, null], location: ['hynes_castle'] }],   // Daemon (arrow drops)
   [0x45, { level:24, hp: 350, atk:  60, def: 3, exp: 288, gil: 160, weakness: null,             type: null, steal: 0xA6, drops: [],              location: ['hynes_castle'] }],            // Dullahan
 
@@ -113,21 +113,21 @@ export const MONSTERS = new Map([
   [0x4A, { level:26, hp: 195, atk:  20, def: 3, exp: 320, gil: 185, weakness: null,             type: null, steal: 0xAA, drops: [0xAA],          location: ['water_cave'] }],              // Cockatrice
   [0x4B, { level:26, hp: 200, atk:  35, def: 3, exp: 360, gil: 190, weakness: 'fire',           type: null, steal: 0xA6, drops: [],              location: ['water_cave'] }],              // Venom Toad
   [0x4C, { level:26, hp: 205, atk:  35, def: 3, exp: 360, gil: 195, weakness: null,             type: null, steal: 0xA6, drops: [],              location: ['water_cave'] }],              // Twin Head
-  [0x4D, { level:27, hp: 210, atk:  35, def: 11, exp: 360, gil: 200, weakness: 'bolt',           type: null, steal: 0xB4, drops: [0xB4, 0xB6, 0xB5], location: ['water_cave'] }],          // Roper
+  [0x4D, { level:27, hp: 210, atk:  20, def: 3, exp: 360, gil: 200, weakness: 'bolt',           type: null, steal: 0xB4, drops: [0xB4, 0xB6, 0xB5], location: ['water_cave'] }],          // Roper
   [0x4E, { level:27, hp: 215, atk:  35, def: 3, exp: 400, gil: 210, weakness: 'bolt',           type: null, steal: 0xA6, drops: [],              location: ['water_cave'] }],              // Agaria
 
   // --- Amur Sewer ---
   [0x4F, { level:27, hp: 220, atk:  25, def: 3, exp: 400, gil: 220, weakness: 'bolt',           type: null, steal: 0xA6, drops: [],              location: ['amur_sewer'] }],              // Dark Foot
   [0x50, { level:28, hp: 225, atk:  25, def: 3, exp: 400, gil: 230, weakness: 'bolt',           type: null, steal: 0xA6, drops: [],              location: ['amur_sewer'] }],              // Gigan Toad
   [0x51, { level:28, hp: 230, atk:  30, def: 3, exp: 440, gil: 240, weakness: null,             type: null, steal: 0xA6, drops: [],              location: ['amur_sewer'] }],              // Twin Liger
-  [0x52, { level:28, hp: 400, atk:  50, def: 7, exp: 440, gil: 250, weakness: 'bolt',           type: null, steal: 0xA7, drops: [0xA7, 0xC1, 0xB6], location: ['amur_sewer'] }],          // Storoper
+  [0x52, { level:28, hp: 400, atk:  30, def: 3, exp: 440, gil: 250, weakness: 'bolt',           type: null, steal: 0xA7, drops: [0xA7, 0xC1, 0xB6], location: ['amur_sewer'] }],          // Storoper
 
   // --- Amur area / Surface World ---
-  [0x53, { level:29, hp: 240, atk:  35, def: 11, exp: 440, gil: 260, weakness: 'air',            type: null, steal: 0xB4, drops: [0xB4, 0xB6, 0xB5], location: ['amur_forest'] }],         // Pudding
+  [0x53, { level:29, hp: 240, atk:  50, def: 3, exp: 440, gil: 260, weakness: 'air',            type: null, steal: 0xB4, drops: [0xB4, 0xB6, 0xB5], location: ['amur_forest'] }],         // Pudding
   [0x54, { level:29, hp: 245, atk:  40, def: 5, exp: 500, gil: 270, weakness: null,             type: null, steal: 0xA6, drops: [],              location: ['amur_area'] }],               // Helcan
-  [0x55, { level:29, hp: 250, atk:  50, def: 7, exp: 500, gil: 280, weakness: 'ice',            type: null, steal: 0xA7, drops: [0xA7, 0xC1, 0xB4], location: ['surface_desert'] }],      // Vulcan
+  [0x55, { level:29, hp: 250, atk:  40, def: 3, exp: 500, gil: 280, weakness: 'ice',            type: null, steal: 0xA7, drops: [0xA7, 0xC1, 0xB4], location: ['surface_desert'] }],      // Vulcan
   [0x56, { level:30, hp: 255, atk:  50, def: 3, exp: 500, gil: 290, weakness: null,             type: null, steal: 0xA6, drops: [],              location: ['surface_desert'] }],          // Leucrotta
-  [0x57, { level:12, hp: 260, atk:  35, def: 11, exp: 560, gil: 300, weakness: null,             type: null, steal: 0xB4, drops: [0xB4, 0xA7, 0xC1, 0xB6], location: ['surface_forest'] }], // Magician
+  [0x57, { level:12, hp: 260, atk:  40, def: 3, exp: 560, gil: 300, weakness: null,             type: null, steal: 0xB4, drops: [0xB4, 0xA7, 0xC1, 0xB6], location: ['surface_forest'] }], // Magician
   [0x58, { level:30, hp: 265, atk:  10, def: 3, exp: 560, gil: 310, weakness: null,             type: null, steal: 0xA6, drops: [],              location: ['surface_world'] }],           // Roaming Gold Coin
 
   // --- Goldor's Mansion / Salonia ---
@@ -139,9 +139,9 @@ export const MONSTERS = new Map([
 
   // --- Dragon Tower ---
   [0x5E, { level:32, hp: 295, atk:  40, def: 4, exp: 700, gil: 370, weakness: null,             type: null, steal: 0xA6, drops: [],              location: ['dragon_tower'] }],            // M.Helcan
-  [0x5F, { level:33, hp: 300, atk:  50, def: 7, exp: 700, gil: 380, weakness: null,             type: null, steal: 0xA7, drops: [0xA7, 0xBC, 0xBE], location: ['dragon_tower'] }],        // Needler
+  [0x5F, { level:33, hp: 300, atk:  25, def: 4, exp: 700, gil: 380, weakness: null,             type: null, steal: 0xA7, drops: [0xA7, 0xBC, 0xBE], location: ['dragon_tower'] }],        // Needler
   [0x60, { level:33, hp: 305, atk:  40, def: 4, exp: 800, gil: 390, weakness: null,             type: null, steal: 0xA6, drops: [],              location: ['dragon_tower'] }],            // Catoblepas
-  [0x61, { level:22, hp: 310, atk:  50, def: 7, exp: 800, gil: 400, weakness: null,             type: null, steal: 0xA7, drops: [0xA7, 0xB5, 0xBA], location: ['dragon_tower'] }],        // Sorcerer
+  [0x61, { level:22, hp: 310, atk:  30, def: 4, exp: 800, gil: 400, weakness: null,             type: null, steal: 0xA7, drops: [0xA7, 0xB5, 0xBA], location: ['dragon_tower'] }],        // Sorcerer
   [0x62, { level:34, hp: 320, atk:  35, def: 4, exp: 960, gil: 420, weakness: null,             type: null, steal: 0xA6, drops: [],              location: ['dragon_tower'] }],            // Sand Worm
 
   // --- Sky (near Doga's Manor) ---
@@ -153,9 +153,9 @@ export const MONSTERS = new Map([
 
   // --- Magic Circle Cave ---
   [0x68, { level:36, hp: 355, atk:  50, def: 4, exp:1320, gil: 480, weakness: null,             type: null, steal: 0xA7, drops: [0xA7],          location: ['magic_circle_cave'] }],       // Devil Horse
-  [0x69, { level:36, hp: 360, atk:  50, def: 7, exp:1320, gil: 490, weakness: null,             type: null, steal: 0xA7, drops: [0xA7, 0xC1, 0xB4], location: ['magic_circle_cave'] }],   // Rock Gargoyle
+  [0x69, { level:36, hp: 360, atk:  50, def: 4, exp:1320, gil: 490, weakness: null,             type: null, steal: 0xA7, drops: [0xA7, 0xC1, 0xB4], location: ['magic_circle_cave'] }],   // Rock Gargoyle
   [0x6A, { level:37, hp: 365, atk:  45, def: 4, exp:1320, gil: 500, weakness: null,             type: null, steal: 0xA7, drops: [0xA7],          location: ['magic_circle_cave'] }],       // Bull Man
-  [0x6B, { level:37, hp: 370, atk:  35, def: 9, exp:1440, gil: 510, weakness: null,             type: null, steal: 0xB5, drops: [0xB5, 0xB6, 0xB4], location: ['magic_circle_cave'] }],   // Dark Knight
+  [0x6B, { level:37, hp: 370, atk:  35, def: 4, exp:1440, gil: 510, weakness: null,             type: null, steal: 0xB5, drops: [0xB5, 0xB6, 0xB4], location: ['magic_circle_cave'] }],   // Dark Knight
   [0x6C, { level:18, hp: 555, atk:  40, def: 4, exp:1440, gil: 520, weakness: 'air',            type: null, steal: 0xA6, drops: [],              location: ['magic_circle_cave'] }],       // Mage Flyer
 
   // --- Surface World Underwater ---
@@ -166,9 +166,9 @@ export const MONSTERS = new Map([
   [0x71, { level:39, hp: 650, atk:  25, def: 4, exp:1560, gil: 600, weakness: null,             type: null, steal: 0xA6, drops: [],              location: ['underwater'] }],              // Charybdis
 
   // --- Saronia Catacombs ---
-  [0x72, { level:42, hp: 490, atk:  50, def: 7, exp:2000, gil: 720, weakness: null,             type: null, steal: 0xA7, drops: [0xA7, 0xC1, 0xB6], location: ['saronia_catacombs'] }],   // Kyklops
-  [0x73, { level:43, hp: 500, atk:  50, def: 7, exp:2000, gil: 740, weakness: null,             type: null, steal: 0xA7, drops: [0xA7, 0xB5, 0xBA], location: ['saronia_catacombs'] }],   // Boss Troll
-  [0x74, { level:43, hp: 510, atk:  50, def: 7, exp:2800, gil: 745, weakness: null,             type: null, steal: 0xA7, drops: [0xA7, 0xC1, 0xB4], location: ['saronia_catacombs'] }],   // Fahan
+  [0x72, { level:42, hp: 490, atk:  25, def: 4, exp:2000, gil: 720, weakness: null,             type: null, steal: 0xA7, drops: [0xA7, 0xC1, 0xB6], location: ['saronia_catacombs'] }],   // Kyklops
+  [0x73, { level:43, hp: 500, atk:  30, def: 4, exp:2000, gil: 740, weakness: null,             type: null, steal: 0xA7, drops: [0xA7, 0xB5, 0xBA], location: ['saronia_catacombs'] }],   // Boss Troll
+  [0x74, { level:43, hp: 510, atk:  30, def: 4, exp:2800, gil: 745, weakness: null,             type: null, steal: 0xA7, drops: [0xA7, 0xC1, 0xB4], location: ['saronia_catacombs'] }],   // Fahan
   [0x75, { level:45, hp:1120, atk:  35, def: 4, exp:2200, gil: 750, weakness: null,             type: null, steal: 0xA6, drops: [],              location: ['saronia_catacombs'] }],       // Kenkos
   [0x76, { level:44, hp: 530, atk:  35, def: 4, exp:2200, gil: 760, weakness: null,             type: null, steal: 0xA6, drops: [],              location: ['saronia_catacombs'] }],       // Valar
 
@@ -194,7 +194,7 @@ export const MONSTERS = new Map([
   [0x85, { level:46, hp:1500, atk:  30, def: 4, exp:4800, gil: 880, weakness: null,             type: null, steal: 0xA6, drops: [],              location: ['ancient_ruins'] }],           // Pyralis
   [0x86, { level:36, hp: 910, atk:  30, def: 4, exp: 320, gil: 920, weakness: 'dark',           type: null, steal: 0xA6, drops: [],              location: ['ancient_ruins'] }],           // Sirenos (splits)
   [0x87, { level:37, hp:1000, atk:  35, def: 5, exp: 320, gil: 940, weakness: 'dark',           type: null, steal: 0xA7, drops: [0xA7],          location: ['ancient_ruins'] }],           // Garb (splits)
-  [0x88, { level:37, hp:1100, atk:  20, def: 7, exp: 320, gil: 945, weakness: 'dark',           type: null, steal: 0xA6, drops: [0xA6, 0xB5, 0xB6], location: ['ancient_ruins'] }],       // Azrael (splits)
+  [0x88, { level:37, hp:1100, atk:  35, def: 5, exp: 320, gil: 945, weakness: 'dark',           type: null, steal: 0xA6, drops: [0xA6, 0xB5, 0xB6], location: ['ancient_ruins'] }],       // Azrael (splits)
   [0x89, { level:47, hp:1150, atk:  40, def: 5, exp: 320, gil: 950, weakness: 'dark',           type: null, steal: 0xA6, drops: [],              location: ['ancient_ruins'] }],           // Eater (splits)
   [0x8A, { level:48, hp:2000, atk:  40, def: 5, exp:5000, gil: 960, weakness: ['fire','holy'],  type: null, steal: 0xA6, drops: [],              location: ['ancient_ruins'] }],           // D.Zombie
 
@@ -212,7 +212,7 @@ export const MONSTERS = new Map([
   [0x93, { level:56, hp:1280, atk:  30, def: 5, exp:4000, gil:2200, weakness: null,             type: null, steal: 0xA6, drops: [],              location: ['bahamut_cave'] }],            // Q.Lamia
 
   // --- Cave of Darkness ---
-  [0x94, { level:48, hp:1400, atk:  50, def: 7, exp: 320, gil: 980, weakness: null,             type: null, steal: 0xA7, drops: [0xA7, 0xBC, 0xBF], location: ['cave_of_darkness'] }],    // Death Claw (splits)
+  [0x94, { level:48, hp:1400, atk:  30, def: 5, exp: 320, gil: 980, weakness: null,             type: null, steal: 0xA7, drops: [0xA7, 0xBC, 0xBF], location: ['cave_of_darkness'] }],    // Death Claw (splits)
   [0x95, { level:49, hp: 680, atk:  40, def: 5, exp:5000, gil: 990, weakness: null,             type: null, steal: 0xA6, drops: [],              location: ['cave_of_darkness'] }],        // Hell Horse
   [0x96, { level:49, hp:1550, atk:  40, def: 5, exp: 320, gil:1000, weakness: 'dark',           type: null, steal: 0xA6, drops: [],              location: ['cave_of_darkness'] }],        // Cronos (splits)
   [0x97, { level:49, hp:1620, atk:  50, def: 5, exp: 320, gil:1050, weakness: null,             type: null, steal: 0xA6, drops: [],              location: ['cave_of_darkness'] }],        // Balfrey (splits)
