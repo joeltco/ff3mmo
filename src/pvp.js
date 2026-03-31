@@ -536,9 +536,9 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   const isOppHit = isCurrentTarget && (playerHitLanded || playerHitShowLanded || allyHitLanded ||
     (bs === 'ally-damage-show' && _s.allyHitResult && !_s.allyHitResult.miss));
   const blinkHidden = isCurrentTarget && (playerHitLanded || allyHitLanded) && (Math.floor(_s.battleTimer / 60) & 1);
-  // Only show backswing during boss-flash if preflash decided attack (not defend/item/SW)
+  // Backswing: allies always attack so always show; main only after preflash decided attack
   const isWindUp = isThisAttacking && (bs === 'pvp-second-windup' ||
-    (bs === 'boss-flash' && pvpSt.pvpPreflashDecided));
+    (bs === 'boss-flash' && (!isMain || pvpSt.pvpPreflashDecided)));
   if (blinkHidden) return;
 
   // Which hand is this enemy using right now?
