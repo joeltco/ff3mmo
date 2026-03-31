@@ -528,14 +528,11 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   const isThisAttacking = isMain
     ? pvpSt.pvpCurrentEnemyAllyIdx < 0
     : pvpSt.pvpCurrentEnemyAllyIdx === idx - 1;
-  // Hit pose: only during the slash impact and brief flinch — NOT the full 700ms damage display
-  const playerHitLanded = bs === 'player-slash' &&
-    inputSt.hitResults && inputSt.hitResults[_s.currentHitIdx] && !inputSt.hitResults[_s.currentHitIdx].miss;
-  const allyHitLanded = bs === 'ally-slash' && _s.allyHitResult && !_s.allyHitResult.miss;
-  const playerHitShowLanded = bs === 'player-hit-show' && inputSt.hitResults && inputSt.hitResults[_s.currentHitIdx] && !inputSt.hitResults[_s.currentHitIdx].miss;
-  const isOppHit = isCurrentTarget && (playerHitLanded || playerHitShowLanded || allyHitLanded ||
-    (bs === 'ally-damage-show' && _s.allyHitResult && !_s.allyHitResult.miss));
-  const blinkHidden = isCurrentTarget && (playerHitLanded || allyHitLanded) && (Math.floor(_s.battleTimer / 60) & 1);
+  // Hit pose + blink: only during damage-show (after all slashes complete), not during individual slashes
+  const playerDmgHit = bs === 'player-damage-show' && _s.bossDamageNum && !_s.bossDamageNum.miss;
+  const allyDmgHit = bs === 'ally-damage-show' && _s.allyHitResult && !_s.allyHitResult.miss;
+  const isOppHit = isCurrentTarget && (playerDmgHit || allyDmgHit);
+  const blinkHidden = isCurrentTarget && (playerDmgHit || allyDmgHit) && (Math.floor(_s.battleTimer / 60) & 1);
   const isWindUp = isThisAttacking && (bs === 'boss-flash' || bs === 'pvp-second-windup');
   if (blinkHidden) return;
 
