@@ -514,14 +514,13 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   const palIdx = enemy.palIdx;
   const fullBody = _s.fullBodyCanvases[palIdx] || _s.fullBodyCanvases[0];
   if (!fullBody) return;
-  // Hide dead enemies — but keep visible during dissolve and the attack sequence leading to it
+  // Hide dead enemies — but NOT during pvp-dissolve if this enemy is dissolving
   const isDying = pvpSt.pvpDyingMap.has(idx) && bs === 'pvp-dissolve';
-  const isCurrentTarget = isMain ? pvpSt.pvpPlayerTargetIdx < 0 : (idx - 1) === pvpSt.pvpPlayerTargetIdx;
-  const isBeingKilled = isCurrentTarget && (bs === 'player-slash' || bs === 'player-hit-show' ||
-    bs === 'player-damage-show' || bs === 'ally-slash' || bs === 'ally-damage-show');
-  if (isMain && (_s.bossDefeated || (pvpSt.pvpOpponentStats && pvpSt.pvpOpponentStats.hp <= 0)) && !isDying && !isBeingKilled) return;
-  if (!isMain && (_s.bossDefeated || enemy.hp <= 0) && !isDying && !isBeingKilled) return;
+  if (isMain && (_s.bossDefeated || (pvpSt.pvpOpponentStats && pvpSt.pvpOpponentStats.hp <= 0)) && !isDying) return;
+  if (!isMain && (_s.bossDefeated || enemy.hp <= 0) && !isDying) return;
 
+  // isCurrentTarget: which enemy the player is currently attacking
+  const isCurrentTarget = isMain ? pvpSt.pvpPlayerTargetIdx < 0 : (idx - 1) === pvpSt.pvpPlayerTargetIdx;
   // Shake left when taking damage (mirrors player's right-shake on hit)
   if (isCurrentTarget && pvpSt.pvpBossShakeTimer > 0) {
     sprX += (Math.floor(pvpSt.pvpBossShakeTimer / 67) & 1) ? -2 : 2;
@@ -529,17 +528,20 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   const isThisAttacking = isMain
     ? pvpSt.pvpCurrentEnemyAllyIdx < 0
     : pvpSt.pvpCurrentEnemyAllyIdx === idx - 1;
-  // Hit pose + blink: after all slashes complete (damage-show), not during individual hits
-  const anyPlayerHit = bs === 'player-damage-show' && inputSt.hitResults && inputSt.hitResults.some(h => !h.miss);
-  const allyDmgHit = bs === 'ally-damage-show' && _s.allyHitResult && !_s.allyHitResult.miss;
-  const isOppHit = isCurrentTarget && (anyPlayerHit || allyDmgHit);
-  const blinkHidden = isCurrentTarget && (anyPlayerHit || allyDmgHit) && (Math.floor(_s.battleTimer / 60) & 1);
+  // Hit pose: only during the slash impact and brief flinch — NOT the full 700ms damage display
+  const playerHitLanded = bs === 'player-slash' &&
+    inputSt.hitResults && inputSt.hitResults[_s.currentHitIdx] && !inputSt.hitResults[_s.currentHitIdx].miss;
+  const allyHitLanded = bs === 'ally-slash' && _s.allyHitResult && !_s.allyHitResult.miss;
+  const playerHitShowLanded = bs === 'player-hit-show' && inputSt.hitResults && inputSt.hitResults[_s.currentHitIdx] && !inputSt.hitResults[_s.currentHitIdx].miss;
+  const isOppHit = isCurrentTarget && (playerHitLanded || playerHitShowLanded || allyHitLanded ||
+    (bs === 'ally-damage-show' && _s.allyHitResult && !_s.allyHitResult.miss));
+  const blinkHidden = isCurrentTarget && (playerHitLanded || allyHitLanded) && (Math.floor(_s.battleTimer / 60) & 1);
   const isWindUp = isThisAttacking && (bs === 'boss-flash' || bs === 'pvp-second-windup');
   if (blinkHidden) return;
 
   // Which hand is this enemy using right now?
   // boss-flash = right hand (first attack), pvp-second-windup = left hand, allies = always right
-  const isAttackState = isThisAttacking && (bs === 'enemy-attack' || bs === 'pvp-enemy-slash' || bs === 'ally-hit');
+  const isAttackState = isThisAttacking && (bs === 'enemy-attack' || bs === 'pvp-enemy-slash');
   const isLeftHandWind = isMain && bs === 'pvp-second-windup';
   const isLeftHandAtk  = isMain && isAttackState && pvpSt.pvpOpponentHitsThisTurn === 1;
   const activeWeaponId = (isLeftHandWind || isLeftHandAtk)
