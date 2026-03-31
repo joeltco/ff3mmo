@@ -6,8 +6,10 @@ export const BASE_HIT_RATE = 80;   // 80% accuracy per hit (unarmed Onion Knight
 export const BOSS_HIT_RATE = 85;   // boss accuracy
 export const GOBLIN_HIT_RATE = 75; // goblin accuracy
 
+// NES FF3 damage formula: atk + random(0..floor(atk/2)) - def
+// Full defense subtraction (not halved). Variance: +0-50% of ATK.
 export function calcDamage(atk, def) {
-  return Math.max(1, atk - Math.floor(def / 2) + Math.floor(Math.random() * (Math.floor(atk / 4) + 1)));
+  return Math.max(1, atk + Math.floor(Math.random() * (Math.floor(atk / 2) + 1)) - def);
 }
 
 // profLevel: weapon proficiency level (0–16) — adds hit rate, crit rate, and ATK bonuses
