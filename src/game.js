@@ -3682,18 +3682,7 @@ function _updateBattleMenuConfirm() {
 function _finalizeComboHits() {
   let totalDmg = 0, anyCrit = false, allMiss = true;
   for (const h of inputSt.hitResults) {
-    if (!h.miss) {
-      if (pvpSt.isPVPBattle && pvpSt.pvpOpponentIsDefending)
-        h.damage = Math.max(1, Math.floor(h.damage / 2));
-      totalDmg += h.damage; allMiss = false; if (h.crit) anyCrit = true;
-    }
-  }
-  // PVP: apply all damage at once (was deferred from per-hit slashes)
-  if (pvpSt.isPVPBattle && !allMiss) {
-    bossHP = Math.max(0, bossHP - totalDmg);
-    if (pvpSt.pvpPlayerTargetIdx < 0) pvpSt.pvpOpponentStats.hp = bossHP;
-    else if (pvpSt.pvpEnemyAllies[pvpSt.pvpPlayerTargetIdx]) pvpSt.pvpEnemyAllies[pvpSt.pvpPlayerTargetIdx].hp = bossHP;
-    if (anyCrit) critFlashTimer = 0;
+    if (!h.miss) { totalDmg += h.damage; allMiss = false; if (h.crit) anyCrit = true; }
   }
   bossDamageNum = allMiss ? { miss: true, timer: 0 } : { value: totalDmg, crit: anyCrit, timer: 0 };
   if (pvpSt.isPVPBattle && !allMiss) pvpSt.pvpBossShakeTimer = BATTLE_SHAKE_MS;
@@ -3746,9 +3735,19 @@ function _updatePlayerSlash() {
   }
   if (battleTimer >= SLASH_FRAMES * SLASH_FRAME_MS) {
     const hit = inputSt.hitResults[currentHitIdx];
-    // Random encounters: apply per-hit. PVP: defer all damage to _finalizeComboHits
-    if (!hit.miss && isRandomEncounter && encounterMonsters) {
-      encounterMonsters[inputSt.targetIndex].hp = Math.max(0, encounterMonsters[inputSt.targetIndex].hp - hit.damage);
+    if (!hit.miss) {
+      if (pvpSt.isPVPBattle && pvpSt.pvpOpponentIsDefending)
+        hit.damage = Math.max(1, Math.floor(hit.damage / 2));
+      if (isRandomEncounter && encounterMonsters) {
+        encounterMonsters[inputSt.targetIndex].hp = Math.max(0, encounterMonsters[inputSt.targetIndex].hp - hit.damage);
+      } else {
+        bossHP = Math.max(0, bossHP - hit.damage);
+        // Sync authoritative HP source for PVP free targeting
+        if (pvpSt.isPVPBattle) {
+          if (pvpSt.pvpPlayerTargetIdx < 0) pvpSt.pvpOpponentStats.hp = bossHP;
+          else if (pvpSt.pvpEnemyAllies[pvpSt.pvpPlayerTargetIdx]) pvpSt.pvpEnemyAllies[pvpSt.pvpPlayerTargetIdx].hp = bossHP;
+        }
+      }
       if (hit.crit) critFlashTimer = 0;
     }
     battleState = 'player-hit-show';
