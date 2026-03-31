@@ -291,9 +291,10 @@ function buildItemSelectList() {
   return list;
 }
 
-// Boss fight state
-let bossHP = 120;
-const BOSS_ATK = 8, BOSS_DEF = 6, BOSS_MAX_HP = 120;
+// Boss fight state — stats read from monsters.js (Land Turtle 0xCC)
+const _BOSS_DATA = MONSTERS.get(0xCC) || { hp: 120, atk: 8, def: 1 };
+let bossHP = _BOSS_DATA.hp;
+const BOSS_ATK = _BOSS_DATA.atk, BOSS_DEF = _BOSS_DATA.def, BOSS_MAX_HP = _BOSS_DATA.hp;
 
 let battleState = 'none';
 let battleTimer = 0;

@@ -10,10 +10,11 @@ import { ps, recalcCombatStats, getEquipSlotId, setEquipSlotId, EQUIP_SLOT_SUBTY
 import { ITEMS, isHandEquippable, isWeapon, weaponSubtype, isBladedWeapon } from './data/items.js';
 import { BASE_HIT_RATE, rollHits } from './battle-math.js';
 import { _nameToBytes } from './text-utils.js';
+import { MONSTERS } from './data/monsters.js';
 
 // Local constants (must match game.js)
 const HUD_VIEW_X = 0, HUD_VIEW_Y = 32, HUD_VIEW_W = 144, HUD_VIEW_H = 144;
-const BOSS_DEF = 6;
+const BOSS_DEF = (MONSTERS.get(0xCC) || { def: 1 }).def;
 const INV_SLOTS = 3;
 const ROSTER_VISIBLE = 3;
 const ROSTER_MENU_ITEMS = ['Party', 'Battle', 'Trade', 'Message', 'Inspect'];
