@@ -272,7 +272,7 @@ let playerHealNum = null;    // {value, timer} — green heal number on portrait
 let enemyHealNum = null;     // {value, timer, index} — green heal number on enemy
 let southWindTargets = [];     // ordered list of enemy indices to hit
 let southWindHitIdx = 0;       // current target being hit
-let swHitDamageApplied = false; // flag: damage applied for current sw-hit cycle
+let swHitDamageApplied = false; // damage deferred until after explosion animation
 let southWindHitCanvas = null; // unused - kept for compat
 let swPhaseCanvases = [];      // 3-phase expanding ice explosion [16×16, 32×32, 48×48]
 let southWindDmgNums = {};     // {enemyIdx: {value, timer}} — damage numbers during sw-hit
@@ -1591,7 +1591,6 @@ function _pvpShared() {
     get currentHitIdx()         { return currentHitIdx; },
     get currentAllyAttacker()   { return currentAllyAttacker; },
     get allyHitResult()         { return allyHitResult; },
-    get bossDamageNum()         { return bossDamageNum; },
     // ── Array/object refs (getters so pvp always gets the live array) ─────────
     get battleAllies()          { return battleAllies; },
     get allyDamageNums()        { return allyDamageNums; },
@@ -3682,15 +3681,13 @@ function _updateBattleMenuConfirm() {
 }
 
 function _finalizeComboHits() {
-  // Apply ALL damage at once (deferred from individual slashes)
+  // All damage applied here after every slash has played on idle target
   let totalDmg = 0, anyCrit = false, allMiss = true;
   for (const h of inputSt.hitResults) {
     if (!h.miss) {
       if (pvpSt.isPVPBattle && pvpSt.pvpOpponentIsDefending)
         h.damage = Math.max(1, Math.floor(h.damage / 2));
-      totalDmg += h.damage;
-      allMiss = false;
-      if (h.crit) anyCrit = true;
+      totalDmg += h.damage; allMiss = false; if (h.crit) anyCrit = true;
     }
   }
   if (!allMiss) {
@@ -3710,10 +3707,23 @@ function _finalizeComboHits() {
   battleState = 'player-damage-show';
   battleTimer = 0;
 }
-// _advanceHitCombo removed — slash combo now goes directly from _updatePlayerSlash to next attack-start or _finalizeComboHits
+function _advanceHitCombo() {
+  if (currentHitIdx + 1 < inputSt.hitResults.length) {
+    currentHitIdx++;
+    slashFrame = 0;
+    const handWeapon = getHitWeapon(currentHitIdx);
+    slashFrames = getSlashFramesForWeapon(handWeapon, isHitRightHand(currentHitIdx));
+    if (isBladedWeapon(handWeapon)) { slashOffX = 8; slashOffY = -8; }
+    else { slashOffX = Math.floor(Math.random() * 40) - 20; slashOffY = Math.floor(Math.random() * 40) - 20; }
+    battleState = 'attack-start';
+    battleTimer = 0;
+  } else {
+    _finalizeComboHits();
+  }
+}
 function _updatePlayerAttackStart() {
   if (battleState !== 'attack-start') return false;
-  const startDelay = currentHitIdx === 0 ? 100 : 33;
+  const startDelay = currentHitIdx === 0 ? 100 : 50;
   if (battleTimer >= startDelay) {
     const hw0 = getHitWeapon(currentHitIdx);
     const isBladed0 = isBladedWeapon(hw0);
@@ -3742,19 +3752,9 @@ function _updatePlayerSlash() {
     }
   }
   if (battleTimer >= SLASH_FRAMES * SLASH_FRAME_MS) {
-    // All slashes play on idle target first — damage deferred to _finalizeComboHits
-    if (currentHitIdx + 1 < inputSt.hitResults.length) {
-      currentHitIdx++;
-      slashFrame = 0;
-      const handWeapon = getHitWeapon(currentHitIdx);
-      slashFrames = getSlashFramesForWeapon(handWeapon, isHitRightHand(currentHitIdx));
-      if (isBladedWeapon(handWeapon)) { slashOffX = 8; slashOffY = -8; }
-      else { slashOffX = Math.floor(Math.random() * 40) - 20; slashOffY = Math.floor(Math.random() * 40) - 20; }
-      battleState = 'attack-start';
-      battleTimer = 0;
-    } else {
-      _finalizeComboHits();
-    }
+    // Damage deferred to _finalizeComboHits — slashes play on idle target
+    battleState = 'player-hit-show';
+    battleTimer = 0;
   }
   return true;
 }
@@ -3919,7 +3919,7 @@ function _updateSWThrowHit() {
     }
     return true;
   }
-  // sw-hit: explosion 3 phases × 133ms ≈ 400ms, then damage, hold until 700ms
+  // sw-hit: explosion 3 phases × 133ms ≈ 400ms, then apply damage
   if (battleTimer >= 400 && !swHitDamageApplied) {
     swHitDamageApplied = true;
     _applySWDamage(southWindTargets[southWindHitIdx]);
@@ -4854,8 +4854,10 @@ function _drawEncounterMonsters(gridPos, sprH, boxX, boxY, boxW, boxH, isSlideIn
   for (let i = 0; i < count; i++) {
     const alive = encounterMonsters[i].hp > 0;
     const isDying = dyingMonsterIndices.has(i) && battleState === 'monster-death';
-    const isBeingHit = (i === inputSt.targetIndex && battleState === 'player-damage-show') ||
-      (i === allyTargetIndex && battleState === 'ally-damage-show') ||
+    const isBeingHit = (i === inputSt.targetIndex &&
+      (battleState === 'player-slash' || battleState === 'player-hit-show' ||
+       battleState === 'player-miss-show' || battleState === 'player-damage-show')) ||
+      (i === allyTargetIndex && (battleState === 'ally-slash' || battleState === 'ally-damage-show')) ||
       (battleState === 'sw-hit' && southWindTargets.includes(i));
     if (!alive && !isDying && !isBeingHit) continue;
 
@@ -4871,10 +4873,9 @@ function _drawEncounterMonsters(gridPos, sprH, boxX, boxY, boxW, boxH, isSlideIn
       const delay = dyingMonsterIndices.get(i) || 0;
       _drawMonsterDeath(drawX, drawY, thisH, Math.min(Math.max(0, battleTimer - delay) / MONSTER_DEATH_MS, 1), mid);
     } else {
-      const isHitBlink = isBeingHit && (
-        (battleState === 'player-damage-show' && bossDamageNum && !bossDamageNum.miss) ||
-        (battleState === 'ally-damage-show' && allyHitResult && !allyHitResult.miss)
-      ) && (Math.floor(battleTimer / 60) & 1);
+      // Blink only during damage-show (after all slashes), not during individual slashes
+      const isHitBlink = (isBeingHit && battleState === 'player-damage-show' && bossDamageNum && !bossDamageNum.miss && (Math.floor(battleTimer / 60) & 1)) ||
+                         (isBeingHit && battleState === 'ally-damage-show' && allyHitResult && !allyHitResult.miss && (Math.floor(battleTimer / 60) & 1));
       const isFlashing = battleState === 'boss-flash' && currentAttacker === i && Math.floor(battleTimer / 33) % 2 === 1;
       if (!isHitBlink) ctx.drawImage(isFlashing ? sprWhite : sprNormal, drawX, drawY);
     }
