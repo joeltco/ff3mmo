@@ -560,11 +560,12 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   if (isOppHit && _s.hitFullBodyCanvases[palIdx]) {
     body = _s.hitFullBodyCanvases[palIdx];
   } else if (isWindUp) {
-    // Canvases are pre-h-flipped — R/L hand canvases already show correct arm for left-facing opponent
-    body = (isLeftHandWind ? _s.knifeLFullBodyCanvases : _s.knifeRFullBodyCanvases)[palIdx] || fullBody;
+    // h-flip swaps visual sides: knifeR arm ends up on viewer's right = opponent's left hand visually.
+    // Use knifeL for first attack (R-hand, arm on viewer's left) and knifeR for second (L-hand, arm on viewer's right).
+    body = (isLeftHandWind ? _s.knifeRFullBodyCanvases : _s.knifeLFullBodyCanvases)[palIdx] || fullBody;
   } else if (isAttackState) {
-    // Canvases are pre-h-flipped — use matching hand directly
-    const atkCvs = isLeftHandAtk ? _s.knifeLFwdFullBodyCanvases : _s.knifeRFwdFullBodyCanvases;
+    // Same swap as windup: knifeL → viewer's left = opponent's R-hand forward; knifeR → viewer's right = L-hand forward.
+    const atkCvs = isLeftHandAtk ? _s.knifeRFwdFullBodyCanvases : _s.knifeLFwdFullBodyCanvases;
     body = (atkCvs && atkCvs[palIdx]) || fullBody;
   } else if ((isOppDefending || isOppItemUse) && _s.victoryFullBodyCanvases) {
     body = _s.victoryFullBodyCanvases[palIdx] || fullBody;
@@ -599,7 +600,7 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
       ctx.drawImage(blade, -16, 1);
     } else {
       // L-hand back-swing sits 8px further from body than R-hand (NES: +16 vs +8)
-      ctx.drawImage(blade, isLeftHandWind ? 16 : 8, -7);
+      ctx.drawImage(blade, isLeftHandWind ? 8 : 16, -7);
     }
     ctx.restore();
   };
