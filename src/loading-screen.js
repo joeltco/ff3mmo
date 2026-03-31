@@ -5,6 +5,7 @@
 import { nesColorFade } from './palette.js';
 import { NES_SYSTEM_PALETTE } from './tile-decoder.js';
 import { loadingSt } from './transitions.js';
+import { MONSTERS } from './data/monsters.js';
 
 // Constants
 const LOAD_FADE_STEP_MS = 133;
@@ -17,7 +18,9 @@ let _s = null;
 const _LOADING_BYTES = new Uint8Array([0x95,0xD8,0xCA,0xCD,0xD2,0xD7,0xD0,0xFF,0x8D,0xDE,0xD7,0xD0,0xCE,0xD8,0xD7]);
 const _LOADED_BYTES  = new Uint8Array([0x8D,0xDE,0xD7,0xD0,0xCE,0xD8,0xD7,0xFF,0x95,0xD8,0xCA,0xCD,0xCE,0xCD]);
 const _FLOORS_BYTES  = new Uint8Array([0x84,0xFF,0x95,0xCE,0xDF,0xCE,0xD5,0xDC]);
-const _LODHP_BYTES   = new Uint8Array([0x91,0x99,0xFF,0xC5,0xC5,0xC5,0xC5,0xC5]);
+// "HP " + boss HP digits (NES encoding: 0x80='0', 0x81='1', etc.)
+const _bossHP = String((MONSTERS.get(0xCC) || { hp: 120 }).hp);
+const _LODHP_BYTES = new Uint8Array([0x91, 0x99, 0xFF, ...Array.from(_bossHP, ch => 0x80 + parseInt(ch))]);
 
 function _calcFadeLevel() {
   if (loadingSt.state === 'in') return LOAD_FADE_MAX - Math.min(Math.floor(loadingSt.timer / LOAD_FADE_STEP_MS), LOAD_FADE_MAX);
