@@ -514,13 +514,13 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   const palIdx = enemy.palIdx;
   const fullBody = _s.fullBodyCanvases[palIdx] || _s.fullBodyCanvases[0];
   if (!fullBody) return;
-  // Hide dead enemies — but NOT during pvp-dissolve if this enemy is dissolving
+  // Hide dead enemies — but keep visible during dissolve and attack sequence
   const isDying = pvpSt.pvpDyingMap.has(idx) && bs === 'pvp-dissolve';
-  if (isMain && (_s.bossDefeated || (pvpSt.pvpOpponentStats && pvpSt.pvpOpponentStats.hp <= 0)) && !isDying) return;
-  if (!isMain && (_s.bossDefeated || enemy.hp <= 0) && !isDying) return;
-
-  // isCurrentTarget: which enemy the player is currently attacking
   const isCurrentTarget = isMain ? pvpSt.pvpPlayerTargetIdx < 0 : (idx - 1) === pvpSt.pvpPlayerTargetIdx;
+  const isBeingKilled = isCurrentTarget && (bs === 'player-slash' || bs === 'player-hit-show' ||
+    bs === 'player-damage-show' || bs === 'ally-slash' || bs === 'ally-damage-show');
+  if (isMain && (_s.bossDefeated || (pvpSt.pvpOpponentStats && pvpSt.pvpOpponentStats.hp <= 0)) && !isDying && !isBeingKilled) return;
+  if (!isMain && (_s.bossDefeated || enemy.hp <= 0) && !isDying && !isBeingKilled) return;
   // Shake left when taking damage (mirrors player's right-shake on hit)
   if (isCurrentTarget && pvpSt.pvpBossShakeTimer > 0) {
     sprX += (Math.floor(pvpSt.pvpBossShakeTimer / 67) & 1) ? -2 : 2;
@@ -541,7 +541,7 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
 
   // Which hand is this enemy using right now?
   // boss-flash = right hand (first attack), pvp-second-windup = left hand, allies = always right
-  const isAttackState = isThisAttacking && (bs === 'enemy-attack' || bs === 'pvp-enemy-slash');
+  const isAttackState = isThisAttacking && (bs === 'enemy-attack' || bs === 'pvp-enemy-slash' || bs === 'ally-hit');
   const isLeftHandWind = isMain && bs === 'pvp-second-windup';
   const isLeftHandAtk  = isMain && isAttackState && pvpSt.pvpOpponentHitsThisTurn === 1;
   const activeWeaponId = (isLeftHandWind || isLeftHandAtk)
