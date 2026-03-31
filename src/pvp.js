@@ -6,6 +6,7 @@ import { playSFX, stopSFX, SFX, pauseMusic, playTrack, TRACKS } from './music.js
 import { calcDamage, BOSS_HIT_RATE, GOBLIN_HIT_RATE, CRIT_RATE, CRIT_MULT } from './battle-math.js';
 import { ITEMS, isWeapon, weaponSubtype } from './data/items.js';
 import { PLAYER_POOL, generateAllyStats } from './data/players.js';
+import { MONSTERS } from './data/monsters.js';
 import { ps } from './player-stats.js';
 import { inputSt } from './input-handler.js';
 import { getShieldEvade } from './player-stats.js';
@@ -18,7 +19,7 @@ const PVP_BOX_RESIZE_MS      = 300;
 const BATTLE_SHAKE_MS        = 300;
 const BATTLE_DMG_SHOW_MS     = 550;
 const SLASH_FRAMES           = 3;
-const BOSS_ATK               = 8;
+const BOSS_ATK               = (MONSTERS.get(0xCC) || { atk: 8 }).atk;
 const BATTLE_FLASH_FRAMES    = 65;
 const BATTLE_FLASH_FRAME_MS  = 16.67;
 const BATTLE_TEXT_STEPS      = 4;
