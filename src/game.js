@@ -293,8 +293,8 @@ function buildItemSelectList() {
 }
 
 // Boss fight state
-let bossHP = 111;
-const BOSS_ATK = 8, BOSS_DEF = 6, BOSS_MAX_HP = 111;
+let bossHP = 120;
+const BOSS_ATK = 8, BOSS_DEF = 6, BOSS_MAX_HP = 120;
 
 let battleState = 'none';
 let battleTimer = 0;
@@ -4217,9 +4217,10 @@ function _updateBossDissolve(dt) {
   if (dBlock !== prevBlock && dBlock > 0 && (dBlock & 3) === 0) playSFX(SFX.BOSS_DEATH);
   if (battleTimer >= BOSS_BLOCKS * BOSS_DISSOLVE_STEPS * BOSS_DISSOLVE_FRAME_MS) {
     bossDefeated = true; bossSprite = null;
-    encounterExpGained = 20; encounterGilGained = 500;
-    grantExp(20); ps.gil += encounterGilGained;
-    const _bossLv = MONSTERS.get(0xCC)?.level || 4;
+    const _bossData = MONSTERS.get(0xCC);
+    encounterExpGained = _bossData?.exp || 132; encounterGilGained = _bossData?.gil || 500;
+    grantExp(encounterExpGained); ps.gil += encounterGilGained;
+    const _bossLv = _bossData?.level || 8;
     encounterProfLevelUps = gainProficiency(inputSt.battleProfHits, _bossLv); inputSt.battleProfHits = {}; profLevelUpIdx = 0;
     _syncSaveSlotProgress();
     saveSlotsToDB();
