@@ -47,3 +47,69 @@ Current size: ~5,465 lines. Target: <4,000 lines.
 - Roster draw/update — coupled to too many game globals (noted in M87–M99)
 - Full rendering core — canvas state too entangled
 - Battle state machine — needs architectural redesign first
+
+---
+
+## Phase 2 Analysis (2026-03-30) — Next Extraction Targets
+
+game.js is now **~5,600L**. Analysis of remaining candidates:
+
+### Quick Wins (do first)
+
+#### 1. `src/pvp-math.js` (~30L extracted)
+Pure grid math, no side effects. Both game.js and pvp.js duplicate this.
+- Extract `_pvpEnemyCellCenter(idx)` as a shared exported function
+- Move duplicate constants: `HUD_VIEW_X/Y/W/H` (currently hardcoded in both files)
+- Move inline grid recalc in `tryJoinPVPEnemyAlly()` (pvp.js ~line 109, 173) to call this instead
+- **Blocker:** None. Pure math.
+
+#### 2. `src/battle-ally.js` (~220L extracted)
+Already grouped, already follow same patterns as extracted modules.
+- Extract: `_updateAllyJoin`, `_updateAllyAttack`, `_updateAllyDamageShow`, `_updateAllyEnemyHit`, `_updateAllyKOSequence`, `_updateBattleAlly`
+- Keep in game.js: `_tryJoinPlayerAlly` (needs turnQueue, inputSt), player turn handlers
+- Use `_allyShared()` pattern (same as `_pvpShared`, `_inputShared`)
+- **Needs shared context getters/setters for:** `battleState`, `battleTimer`, `bossDamageNum`, `allyHitResult`, `allyDamageNums`, `allyShakeTimer`, `currentAllyAttacker`, `enemyTargetAllyIdx`, `critFlashTimer`, `bossHP`, `encounterMonsters`, `pvpSt`
+- **Blocker:** Medium — wiring up shared context
+
+#### 3. `src/battle-sfx.js` (~40L, consolidation only)
+game.js has an inline copy of pvp.js `_playSlashSFX` for ally attacks (lines 4038–4042). Deduplicate.
+- Export `playSlashSFX(weaponId, isCrit, cutTimerRef)` used by both
+- **Blocker:** None.
+
+---
+
+### Medium Effort
+
+#### 4. `src/battle-drawing.js` (~1,340L extracted — biggest single win)
+All `draw*` + `_draw*` rendering functions. Gets game.js under 4,000L alone.
+- Candidates: `drawBattle`, `drawBattleMenu`, `drawBattleAllies`, `drawEncounterBox`, `drawBossSpriteBox`, `drawBossSpriteBoxPVP`, `drawVictoryBox`, `drawDamageNumbers`, `_drawBossDmgNum`, `_drawEnemyHealNum`, `drawSWExplosion`, `drawSWDamageNumbers`, plus ~20 internal `_draw*` helpers
+- **Blocker:** Reads ~20 globals. Needs read-only shared state object with getters — same pattern already used by pvp.js. ctx passed as parameter.
+- **Do after:** `pvp-math.js` (used inside drawing functions)
+
+#### 5. Group globals into `battleCtx` object (~40 vars → 1 symbol)
+Prerequisite for fully decoupling update/render modules.
+- `battleState`, `battleTimer`, `bossDamageNum`, `playerDamageNum`, `bossHP`, `bossDefeated`, `battleShakeTimer`, `critFlashTimer`, `currentHitIdx`, `slashFrame`, `turnQueue`, etc.
+- **Blocker:** Touches every function in the file. Do in one pass with search/replace.
+
+---
+
+### Duplications to Fix (no new file needed)
+
+| Location | Duplicate of | Fix |
+|---|---|---|
+| game.js ally SFX (lines ~4038–4042) | pvp.js `_playSlashSFX` | Share via `battle-sfx.js` |
+| pvp.js grid math in `tryJoinPVPEnemyAlly` + `_buildPVPDyingMap` | game.js `_pvpEnemyCellCenter` | Both call `pvp-math.js` |
+| `_syncSaveSlotProgress()` called 5+ times before victory | — | Fold into `_triggerPVPVictory` / `_triggerBossVictory` |
+
+---
+
+### Estimated Line Counts After Each Step
+
+| After step | game.js size |
+|---|---|
+| Now | ~5,600L |
+| + `pvp-math.js` | ~5,570L |
+| + `battle-ally.js` | ~5,350L |
+| + `battle-sfx.js` | ~5,310L |
+| + `battle-drawing.js` | ~3,970L ✓ target hit |
+| + `battleCtx` grouping | ~3,800L |
