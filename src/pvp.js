@@ -560,11 +560,15 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   if (isOppHit && _s.hitFullBodyCanvases[palIdx]) {
     body = _s.hitFullBodyCanvases[palIdx];
   } else if (isWindUp) {
-    // h-flip swaps visual sides: knifeR arm ends up on viewer's right = opponent's left hand visually.
-    // Use knifeL for first attack (R-hand, arm on viewer's left) and knifeR for second (L-hand, arm on viewer's right).
+    // *** PERMANENT RULE — DO NOT CHANGE ***
+    // Opponent faces RIGHT. Right-hand swings use LEFT-hand pose sprites, and vice versa.
+    // This is NOT a bug — it's how the NES tile layout works for a right-facing sprite.
+    // First attack = right hand → knifeLFullBodyCanvases (L pose = correct visual for R-hand swing)
+    // Second attack = left hand → knifeRFullBodyCanvases (R pose = correct visual for L-hand swing)
     body = (isLeftHandWind ? _s.knifeRFullBodyCanvases : _s.knifeLFullBodyCanvases)[palIdx] || fullBody;
   } else if (isAttackState) {
-    // Same swap as windup: knifeL → viewer's left = opponent's R-hand forward; knifeR → viewer's right = L-hand forward.
+    // *** PERMANENT RULE — DO NOT CHANGE ***
+    // Opponent faces RIGHT. Right-hand → L pose sprites. Left-hand → R pose sprites.
     const atkCvs = isLeftHandAtk ? _s.knifeRFwdFullBodyCanvases : _s.knifeLFwdFullBodyCanvases;
     body = (atkCvs && atkCvs[palIdx]) || fullBody;
   } else if ((isOppDefending || isOppItemUse) && _s.victoryFullBodyCanvases) {
