@@ -354,7 +354,7 @@ function _processPVPOppPotion() {
 function _processPVPOppSWThrow() {
   if (_s.battleState !== 'pvp-opp-sw-throw') return false;
   if (_s.battleTimer >= 250) {
-    // Switch to explosion animation — damage deferred until explosion completes
+    // Explosion animation first — damage deferred to pvp-opp-sw-hit at 400ms
     _s.battleState = 'pvp-opp-sw-hit'; _s.battleTimer = 0;
   }
   return true;
@@ -362,7 +362,7 @@ function _processPVPOppSWThrow() {
 
 function _processPVPOppSWHit() {
   if (_s.battleState !== 'pvp-opp-sw-hit') return false;
-  // Apply damage after explosion phases complete (3 × 133ms ≈ 400ms)
+  // Apply damage after explosion completes (3 phases × 133ms ≈ 400ms)
   if (_s.battleTimer >= 400 && !_s.playerDamageNum) {
     const atk = pvpSt.pvpOpponentStats.atk;
     const swAtk = Math.floor(atk / 2) + 55;
@@ -532,11 +532,11 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   const isThisAttacking = isMain
     ? pvpSt.pvpCurrentEnemyAllyIdx < 0
     : pvpSt.pvpCurrentEnemyAllyIdx === idx - 1;
-  // Hit pose + blink: only during damage-show (after all slashes complete), not during individual slashes
-  const playerDmgHit = bs === 'player-damage-show' && _s.bossDamageNum && !_s.bossDamageNum.miss;
+  // Hit pose + blink: only during damage-show (after all slashes complete on idle target)
+  const anyPlayerHitLanded = bs === 'player-damage-show' && inputSt.hitResults && inputSt.hitResults.some(h => !h.miss);
   const allyDmgHit = bs === 'ally-damage-show' && _s.allyHitResult && !_s.allyHitResult.miss;
-  const isOppHit = isCurrentTarget && (playerDmgHit || allyDmgHit);
-  const blinkHidden = isCurrentTarget && (playerDmgHit || allyDmgHit) && (Math.floor(_s.battleTimer / 60) & 1);
+  const isOppHit = isCurrentTarget && (anyPlayerHitLanded || allyDmgHit);
+  const blinkHidden = isCurrentTarget && (anyPlayerHitLanded || allyDmgHit) && (Math.floor(_s.battleTimer / 60) & 1);
   const isWindUp = isThisAttacking && (bs === 'boss-flash' || bs === 'pvp-second-windup');
   if (blinkHidden) return;
 
