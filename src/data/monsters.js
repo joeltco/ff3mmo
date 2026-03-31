@@ -276,7 +276,7 @@ export const MONSTERS = new Map([
   // --- IDs 0xC3–0xCB: unused/dummied slots ---
 
   // --- Bosses (starting at 0xCC) ---
-  [0xCC, { level:  8, hp:   120, atk:  8, def:  1, exp:  132, gil:   500, weakness: null,            type: 'boss', steal: 0xA6, drops: [0xA6, 0xB2],    location: ['altar_cave_boss'] }],         // Land Turtle
+  [0xCC, { level:  8, hp:   120, atk:  8, def:  6, exp:  132, gil:   500, weakness: null,            type: 'boss', steal: 0xA6, drops: [0xA6, 0xB2],    location: ['altar_cave_boss'] }],         // Land Turtle
   [0xCD, { level: 13, hp:   480, atk: 17, def:  3, exp:  160, gil:   700, weakness: 'ice',           type: 'boss', steal: 0xA6, drops: [],              location: ['cave_seal_boss'] }],           // Jinn
   [0xCE, { level: 39, hp: 60000, atk: 43, def:  9, exp: 1560, gil:   560, weakness: null,            type: 'boss', steal: 0xA6, drops: [],              location: ['guards_bay_boss'] }],          // Nepto Dragon
   [0xCF, { level:  2, hp:   450, atk:  6, def:  1, exp:  240, gil:  1000, weakness: null,            type: 'boss', steal: 0xA6, drops: [],              location: ['nepto_shrine_boss'] }],        // Big Rat
