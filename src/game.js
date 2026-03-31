@@ -4497,7 +4497,7 @@ function _drawPortraitWeapon(px, py, before) {
       else if (wpnSt === 'knife' && battleKnifeBladeCanvas) ctx.drawImage(battleKnifeBladeCanvas, px + 16, py - 7);
       else if (wpnSt === 'sword' && battleSwordBladeCanvas) ctx.drawImage(battleSwordBladeCanvas, px + 16, py - 7);
     }
-  } else if (!before && battleState === 'player-slash') {
+  } else if (!before && (battleState === 'player-slash' || (battleState === 'player-hit-show' && inputSt.hitResults && currentHitIdx + 1 < inputSt.hitResults.length))) {
     if (wpnSt === 'knife' && handWeapon === 0x1F && battleDaggerBladeSwungCanvas) ctx.drawImage(battleDaggerBladeSwungCanvas, px - 16, py + 1);
     else if (wpnSt === 'knife' && battleKnifeBladeSwungCanvas) ctx.drawImage(battleKnifeBladeSwungCanvas, px - 16, py + 1);
     else if (wpnSt === 'sword' && battleSwordBladeSwungCanvas) ctx.drawImage(battleSwordBladeSwungCanvas, px - 16, py + 1);
@@ -4570,7 +4570,8 @@ function _drawBattlePortrait() {
   const shakeOff = ((battleState === 'enemy-attack' || battleState === 'pvp-opp-sw-hit') && battleShakeTimer > 0)
     ? (Math.floor(battleShakeTimer / 67) & 1 ? 2 : -2) : 0;
   const isVictoryPose = _isVictoryBattleState();
-  const isAttackPose = battleState === 'attack-start' || battleState === 'player-slash';
+  const isComboHitShow = battleState === 'player-hit-show' && inputSt.hitResults && currentHitIdx + 1 < inputSt.hitResults.length;
+  const isAttackPose = battleState === 'attack-start' || battleState === 'player-slash' || isComboHitShow;
   const isHitPose = (battleState === 'enemy-attack' && playerDamageNum && !playerDamageNum.miss) ||
     (battleState === 'enemy-damage-show' && playerDamageNum && !playerDamageNum.miss) ||
     (battleState === 'pvp-opp-sw-hit' && playerDamageNum) ||
