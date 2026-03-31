@@ -4039,13 +4039,9 @@ function _updateAllyKOSequence() {
       koAlly.fadeStep = Math.min(ROSTER_FADE_STEPS, koAlly.fadeStep + 1);
       battleTimer = 0;
       if (koAlly.fadeStep >= ROSTER_FADE_STEPS) {
-        const retreatBytes = _nameToBytes(koAlly.name + ' retreated!');
-        showMsgBox(retreatBytes, () => {
-          turnQueue = turnQueue.filter(t => !(t.type === 'ally' && t.index === enemyTargetAllyIdx));
-          enemyTargetAllyIdx = -1;
-          processNextTurn();
-        });
-        battleState = 'ally-ko-msg';
+        turnQueue = turnQueue.filter(t => !(t.type === 'ally' && t.index === enemyTargetAllyIdx));
+        enemyTargetAllyIdx = -1;
+        processNextTurn();
       }
     }
     return true;
