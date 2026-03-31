@@ -25,9 +25,9 @@ import { BATTLE_MISS, BATTLE_GAME_OVER, BATTLE_ROAR, BATTLE_FIGHT, BATTLE_RUN,
          BATTLE_GOT_EXP, BATTLE_LEVEL_UP, BATTLE_BOSS_NAME, BATTLE_GOBLIN_NAME,
          BATTLE_MENU_ITEMS, PAUSE_ITEMS, AREA_NAMES, DUNGEON_NAME,
          POND_RESTORED } from './data/strings.js';
-import { ENC_PAL0, ENC_PAL1, EYE_FANG_TILE_PAL, EYE_FANG_RAW,
-         BLUE_WISP_TILE_PAL, BLUE_WISP_RAW,
-         CARBUNCLE_TILE_PAL, CARBUNCLE_RAW } from './data/monster-sprites.js';
+import { initMonsterSprites, getMonsterCanvas, getMonsterWhiteCanvas,
+         getMonsterDeathFrames, hasMonsterSprites } from './monster-sprites.js';
+import { loadBossSprite, getBossBattleCanvas, getBossWhiteCanvas } from './boss-sprites.js';
 import { openSaveDB, serverDeleteSlot, parseSaveSlots } from './save.js';
 import { _nameToBytes, _nesNameToString, _buildItemRowBytes, _makeGotNText, makeExpText, makeGilText, makeFoundItemText, makeProfLevelUpText } from './text-utils.js';
 import { nesColorFade, _makeFadedPal, _stepPalFade } from './palette.js';
@@ -177,13 +177,9 @@ let bossSprite = null;  // { canvas, px, py } or null
 // Land Turtle battle sprite — 6×6 tiles (48×48 pixels) from FF3 ROM
 // Boss graphics: bank pair $24/$25 (register $12), address $9B00, 144 tiles total
 // Tilemap shows only tiles $70-$93 (36 tiles) in a 6×6 grid
-const LAND_TURTLE_GFX_OFF = 0x49B10;  // Bank $24:$9B00 — boss tile data
-const LAND_TURTLE_PAL_TOP = [0x0F, 0x13, 0x23, 0x28]; // shell/head: black, purple, lavender, yellow (palette $47)
-const LAND_TURTLE_PAL_BOT = [0x0F, 0x19, 0x18, 0x28]; // legs/body: black, green, olive, yellow (palette $22)
-const LAND_TURTLE_TILES = 36;   // 6×6 grid
-const LAND_TURTLE_COLS = 6;
-let landTurtleBattleCanvas = null; // 48×48 canvas
-let landTurtleWhiteCanvas = null;  // 48×48 all-white version for pre-attack flash
+// Land Turtle palette colors — reused by Adamantoise map sprite
+const LAND_TURTLE_PAL_TOP = [0x0F, 0x13, 0x23, 0x28];
+const LAND_TURTLE_PAL_BOT = [0x0F, 0x19, 0x18, 0x28];
 
 // Goblin battle sprite — random encounters
 const GOBLIN_GFX_OFF = 0x40010;  // Bank $20:$8000 — size 0 (4×4), gfxID 0
@@ -197,16 +193,8 @@ let goblinBattleCanvas = null;  // 32×32 canvas
 let goblinWhiteCanvas = null;   // 32×32 all-white version for pre-attack flash
 let goblinDeathFrames = null;   // pre-rendered diagonal deterioration frames
 
-// ENC_PAL0/1, *_RAW, *_TILE_PAL → data/monster-sprites.js
-
-// Per-monster canvas storage
-const monsterBattleCanvas = new Map(); // monsterId → canvas
-const monsterWhiteCanvas  = new Map(); // monsterId → white flash canvas
-const monsterDeathFrames  = new Map(); // monsterId → death frame array
-
-// Bayer 4×4 ordered dither matrix — creates the pixelated deterioration pattern
-
-const MONSTER_DEATH_FRAMES = 16;
+// Monster sprites: module in monster-sprites.js (initMonsterSprites, getMonster*)
+const MONSTER_DEATH_FRAMES = 16; // also used for goblin/fake player death frames
 
 // Moogle NPC sprite — loading screen decoration
 const MOOGLE_GFX_ID = 42;
@@ -1095,31 +1083,6 @@ function initAdamantoise(romData) {
   adamantoiseFrames = [normal, flipped];
 }
 
-function initLandTurtleBattle(romData) {
-  // 36 tiles at LAND_TURTLE_GFX_OFF, sequentially (6×6 grid = 48×48 pixels)
-  // Tilemap IDs $70-$93 are PPU positions; ROM data starts at tile 0
-  const tiles = [];
-  for (let i = 0; i < LAND_TURTLE_TILES; i++) {
-    tiles.push(decodeTile(romData, LAND_TURTLE_GFX_OFF + i * 16));
-  }
-
-  const c = document.createElement('canvas');
-  c.width = LAND_TURTLE_COLS * 8;   // 48
-  c.height = LAND_TURTLE_COLS * 8;  // 48
-  const cctx = c.getContext('2d');
-
-  for (let ty = 0; ty < LAND_TURTLE_COLS; ty++) {
-    const pal = ty < 4 ? LAND_TURTLE_PAL_TOP : LAND_TURTLE_PAL_BOT;
-    for (let tx = 0; tx < LAND_TURTLE_COLS; tx++) {
-      _blitTile(cctx, tiles[ty * LAND_TURTLE_COLS + tx], pal, tx * 8, ty * 8);
-    }
-  }
-
-  landTurtleBattleCanvas = c;
-
-  landTurtleWhiteCanvas = _makeWhiteCanvas(landTurtleBattleCanvas);
-}
-
 function _renderGoblinSprite(tiles, pal0, pal1, tilePalMap) {
   const c = document.createElement('canvas');
   c.width = GOBLIN_COLS * 8;   // 32
@@ -1174,52 +1137,6 @@ function initGoblinSprite(romData) {
 
 // Generic renderer for PPU-dumped enemy sprites.
 // rawBytes: Uint8Array of (cols*rows*16) bytes — tiles in row-major order.
-
-// Returns a canvas of (cols*8) × (rows*8).
-function _renderEnemySprite(rawBytes, cols, rows, tilePalMap, pal0, pal1) {
-  const w = cols * 8, h = rows * 8;
-  const c = document.createElement('canvas');
-  c.width = w; c.height = h;
-  const cctx = c.getContext('2d');
-  for (let ty = 0; ty < rows; ty++) {
-    for (let tx = 0; tx < cols; tx++) {
-      const tileIdx = ty * cols + tx;
-      const pal = tilePalMap[tileIdx] === 1 ? pal1 : pal0;
-      const off = tileIdx * 16;
-      const img = cctx.createImageData(8, 8);
-      for (let row = 0; row < 8; row++) {
-        const bp0 = rawBytes[off + row];
-        const bp1 = rawBytes[off + row + 8];
-        for (let col = 0; col < 8; col++) {
-          const bit = 7 - col;
-          const ci = (((bp1 >> bit) & 1) << 1) | ((bp0 >> bit) & 1);
-          const p = (row * 8 + col) * 4;
-          if (ci === 0) {
-            img.data[p + 3] = 0;
-          } else {
-            const rgb = NES_SYSTEM_PALETTE[pal[ci]] || [0, 0, 0];
-            img.data[p]     = rgb[0];
-            img.data[p + 1] = rgb[1];
-            img.data[p + 2] = rgb[2];
-            img.data[p + 3] = 255;
-          }
-        }
-      }
-      cctx.putImageData(img, tx * 8, ty * 8);
-    }
-  }
-  return c;
-}
-
-function _initEnemySprite(monsterId, rawBytes, cols, rows, tilePalMap, pal0, pal1) {
-  const w = cols * 8, h = rows * 8;
-  const canvas = _renderEnemySprite(rawBytes, cols, rows, tilePalMap, pal0, pal1);
-  monsterBattleCanvas.set(monsterId, canvas);
-
-  monsterWhiteCanvas.set(monsterId, _makeWhiteCanvas(canvas));
-  const frames = _makeDeathFrames(canvas);
-  monsterDeathFrames.set(monsterId, frames);
-}
 
 function _hflipTile(pixels) {
   const out = new Uint8Array(64);
@@ -1736,11 +1653,9 @@ function _initSpriteAssets(romRaw) {
   initBattleSprite(romRaw);
   initFakePlayerPortraits(romRaw);
   initRoster();
-  initLandTurtleBattle(romRaw);
+  loadBossSprite(0xCC); // Land Turtle — loaded eagerly for now (only boss in game)
   initGoblinSprite(romRaw);
-  _initEnemySprite(0x02, EYE_FANG_RAW,   4, 6, EYE_FANG_TILE_PAL,   ENC_PAL0, ENC_PAL1);
-  _initEnemySprite(0x03, BLUE_WISP_RAW,  4, 4, BLUE_WISP_TILE_PAL,  ENC_PAL0, ENC_PAL1);
-  _initEnemySprite(0x01, CARBUNCLE_RAW,  4, 4, CARBUNCLE_TILE_PAL,  ENC_PAL0, ENC_PAL1);
+  initMonsterSprites();
   swPhaseCanvases = initSouthWindSprite(); southWindHitCanvas = swPhaseCanvases[0];
   slashFrames = slashFramesR = slashFramesL = initSlashSprites();
   knifeSlashFramesR = knifeSlashFramesL = initKnifeSlashSprites();
@@ -3097,7 +3012,7 @@ function updateTitle(dt) {
 
 function _drawMonsterDeath(x, y, size, progress, monsterId) {
   // Dithered diagonal dissolve — pre-rendered frames with Bayer 4×4 dither pattern.
-  const frames = monsterDeathFrames.get(monsterId) || goblinDeathFrames;
+  const frames = getMonsterDeathFrames(monsterId, goblinDeathFrames);
   if (!frames || !frames.length) return;
   const frameIdx = Math.min(frames.length - 1, Math.floor(progress * frames.length));
   ctx.drawImage(frames[frameIdx], x, y);
@@ -4299,7 +4214,7 @@ function drawSWExplosion() {
 
   const tp = swGridPos[tidx];
   const m = encounterMonsters[tidx];
-  const mc = monsterBattleCanvas.get(m?.monsterId) || goblinBattleCanvas;
+  const mc = getMonsterCanvas(m?.monsterId, goblinBattleCanvas);
   const mh = mc ? mc.height : sprH;
 
   // Phase = 0/1/2 based on 133ms intervals
@@ -4332,7 +4247,7 @@ function drawSWDamageNumbers() {
     if (idx >= swGridPos.length) continue;
     const tp = swGridPos[idx];
     const m = encounterMonsters[idx];
-    const mc = monsterBattleCanvas.get(m?.monsterId) || goblinBattleCanvas;
+    const mc = getMonsterCanvas(m?.monsterId, goblinBattleCanvas);
     const mh = mc ? mc.height : dSprH;
     const bx = tp.x + 16;
     const baseY = tp.y + (dSprH - mh) + Math.floor(mh / 2) - 8;
@@ -4734,7 +4649,7 @@ function _encounterBoxDims() {
   if (!encounterMonsters) return { fullW: 64, fullH: 64, sprH: 32 };
   const count = encounterMonsters.length;
   const sprH = encounterMonsters.reduce((h, m) => {
-    const c = monsterBattleCanvas.get(m.monsterId) || goblinBattleCanvas;
+    const c = getMonsterCanvas(m.monsterId, goblinBattleCanvas);
     return Math.max(h, c ? c.height : 32);
   }, 32);
   const fullW = count === 1 ? 64 : 96;
@@ -4749,7 +4664,7 @@ function _encounterBoxDims() {
 
 
 function _drawEncounterMonsters(gridPos, sprH, boxX, boxY, boxW, boxH, isSlideIn, fullW, slotCenterY) {
-  if (!goblinBattleCanvas && monsterBattleCanvas.size === 0) return;
+  if (!goblinBattleCanvas && !hasMonsterSprites()) return;
   let slideOffX = 0;
   if (isSlideIn) slideOffX = Math.floor((1 - Math.min(battleTimer / MONSTER_SLIDE_MS, 1)) * (fullW + 32));
 
@@ -4773,8 +4688,8 @@ function _drawEncounterMonsters(gridPos, sprH, boxX, boxY, boxW, boxH, isSlideIn
     const pos = gridPos[i];
     const drawX = pos.x - slideOffX;
     const mid = encounterMonsters[i].monsterId;
-    const sprNormal = monsterBattleCanvas.get(mid) || goblinBattleCanvas;
-    const sprWhite  = monsterWhiteCanvas.get(mid)  || goblinWhiteCanvas;
+    const sprNormal = getMonsterCanvas(mid, goblinBattleCanvas);
+    const sprWhite  = getMonsterWhiteCanvas(mid, goblinWhiteCanvas);
     const thisH = sprNormal ? sprNormal.height : sprH;
     const drawY = pos.y + (sprH - thisH);
 
@@ -4868,7 +4783,7 @@ function drawEncounterBox() {
   const gridPos = _encounterGridPos(boxX, boxY, fullW, fullH, count, sprH);
   const slotCenterY = (idx) => {
     if (!gridPos[idx] || !encounterMonsters[idx]) return 0;
-    const c = monsterBattleCanvas.get(encounterMonsters[idx].monsterId) || goblinBattleCanvas;
+    const c = getMonsterCanvas(encounterMonsters[idx].monsterId, goblinBattleCanvas);
     const h = c ? c.height : sprH;
     return gridPos[idx].y + (sprH - h) + Math.floor(h / 2);
   };
@@ -4884,14 +4799,14 @@ function _drawBossSprite(centerX, centerY) {
     _drawDissolvedSprite(sprX, sprY, battleState === 'boss-dissolve');
   } else if (battleState === 'boss-flash') {
     const frame = Math.floor(battleTimer / (BOSS_PREFLASH_MS / 8));
-    if (!bossDefeated) ctx.drawImage((frame & 1) ? (landTurtleWhiteCanvas || landTurtleBattleCanvas) : landTurtleBattleCanvas, sprX, sprY);
+    if (!bossDefeated) ctx.drawImage((frame & 1) ? (getBossWhiteCanvas() || getBossBattleCanvas()) : getBossBattleCanvas(), sprX, sprY);
   } else if (battleState === 'player-slash') {
-    if (!(Math.floor(battleTimer / 60) & 1) && !bossDefeated) ctx.drawImage(landTurtleBattleCanvas, sprX, sprY);
+    if (!(Math.floor(battleTimer / 60) & 1) && !bossDefeated) ctx.drawImage(getBossBattleCanvas(), sprX, sprY);
     if (slashFrames && slashFrame < SLASH_FRAMES && !bossDefeated && inputSt.hitResults && inputSt.hitResults[currentHitIdx] && !inputSt.hitResults[currentHitIdx].miss)
       ctx.drawImage(slashFrames[slashFrame], centerX - 8 + slashOffX, centerY - 8 + slashOffY);
   } else if (battleState === 'ally-slash') {
     const blinkHidden = allyHitResult && !allyHitResult.miss && (Math.floor(battleTimer / 60) & 1);
-    if (!blinkHidden && !bossDefeated) ctx.drawImage(landTurtleBattleCanvas, sprX, sprY);
+    if (!blinkHidden && !bossDefeated) ctx.drawImage(getBossBattleCanvas(), sprX, sprY);
     if (!bossDefeated && allyHitResult && !allyHitResult.miss) {
       const ally = battleAllies[currentAllyAttacker];
       const allySlashFrames = ally ? getSlashFramesForWeapon(ally.weaponId, true) : slashFramesR;
@@ -4900,7 +4815,7 @@ function _drawBossSprite(centerX, centerY) {
         ctx.drawImage(allySlashFrames[af], centerX - 8 + [0,10,-8][af], centerY - 8 + [0,-6,8][af]);
     }
   } else {
-    if (!bossDefeated) ctx.drawImage(landTurtleBattleCanvas, sprX, sprY);
+    if (!bossDefeated) ctx.drawImage(getBossBattleCanvas(), sprX, sprY);
   }
 }
 function _drawBossSpriteBoxBoss(centerX, centerY) {
@@ -4956,7 +4871,7 @@ function drawBossSpriteBox() {
     return;
   }
 
-  if (!landTurtleBattleCanvas) return;
+  if (!getBossBattleCanvas()) return;
 
   const isExpand = battleState === 'boss-box-expand';
   const isClose = battleState === 'boss-box-close' || battleState === 'defeat-close';
@@ -4988,7 +4903,7 @@ function drawBossSpriteBox() {
 function _drawDissolvedSprite(sprX, sprY, reverse) {
   // Interlaced pixel-shift dissolve per 16×16 block
   const frame = Math.floor(battleTimer / BOSS_DISSOLVE_FRAME_MS);
-  const src = landTurtleBattleCanvas;
+  const src = getBossBattleCanvas();
   const sctx = src.getContext('2d');
 
   for (let bi = 0; bi < BOSS_BLOCKS; bi++) {
@@ -5362,7 +5277,7 @@ function _encounterMonsterPos(idx) {
   const safeIdx = idx < gridPos.length ? idx : 0;
   const pos = gridPos[safeIdx];
   const m = encounterMonsters[safeIdx];
-  const mc = monsterBattleCanvas.get(m?.monsterId) || goblinBattleCanvas;
+  const mc = getMonsterCanvas(m?.monsterId, goblinBattleCanvas);
   const mh = mc ? mc.height : dSprH;
   return { bx: pos.x + 16, baseY: pos.y + (dSprH - mh) + Math.floor(mh / 2) - 8 };
 }
