@@ -272,6 +272,7 @@ let playerHealNum = null;    // {value, timer} — green heal number on portrait
 let enemyHealNum = null;     // {value, timer, index} — green heal number on enemy
 let southWindTargets = [];     // ordered list of enemy indices to hit
 let southWindHitIdx = 0;       // current target being hit
+let swHitDamageApplied = false; // damage deferred until after explosion
 let southWindHitCanvas = null; // unused - kept for compat
 let swPhaseCanvases = [];      // 3-phase expanding ice explosion [16×16, 32×32, 48×48]
 let southWindDmgNums = {};     // {enemyIdx: {value, timer}} — damage numbers during sw-hit
@@ -1404,7 +1405,7 @@ function _resetBattleVars() {
   isDefending = false; battleAllies = []; allyJoinRound = 0;
   currentAllyAttacker = -1; allyTargetIndex = -1; allyHitResult = null; allyHitIsLeft = false;
   allyDamageNums = {}; allyShakeTimer = {}; enemyTargetAllyIdx = -1; allyExitTimer = 0;
-  southWindTargets = []; southWindHitIdx = 0; southWindDmgNums = {};
+  southWindTargets = []; southWindHitIdx = 0; southWindDmgNums = {}; swHitDamageApplied = false;
   inputSt.battleProfHits = {};
 }
 function _zPressed() { if (!keys['z'] && !keys['Z']) return false; keys['z'] = false; keys['Z'] = false; return true; }
@@ -3682,7 +3683,23 @@ function _updateBattleMenuConfirm() {
 function _finalizeComboHits() {
   let totalDmg = 0, anyCrit = false, allMiss = true;
   for (const h of inputSt.hitResults) {
-    if (!h.miss) { totalDmg += h.damage; allMiss = false; if (h.crit) anyCrit = true; }
+    if (!h.miss) {
+      if (pvpSt.isPVPBattle && pvpSt.pvpOpponentIsDefending)
+        h.damage = Math.max(1, Math.floor(h.damage / 2));
+      totalDmg += h.damage; allMiss = false; if (h.crit) anyCrit = true;
+    }
+  }
+  if (!allMiss) {
+    if (isRandomEncounter && encounterMonsters) {
+      encounterMonsters[inputSt.targetIndex].hp = Math.max(0, encounterMonsters[inputSt.targetIndex].hp - totalDmg);
+    } else {
+      bossHP = Math.max(0, bossHP - totalDmg);
+      if (pvpSt.isPVPBattle) {
+        if (pvpSt.pvpPlayerTargetIdx < 0) pvpSt.pvpOpponentStats.hp = bossHP;
+        else if (pvpSt.pvpEnemyAllies[pvpSt.pvpPlayerTargetIdx]) pvpSt.pvpEnemyAllies[pvpSt.pvpPlayerTargetIdx].hp = bossHP;
+      }
+    }
+    if (anyCrit) critFlashTimer = 0;
   }
   bossDamageNum = allMiss ? { miss: true, timer: 0 } : { value: totalDmg, crit: anyCrit, timer: 0 };
   if (pvpSt.isPVPBattle && !allMiss) pvpSt.pvpBossShakeTimer = BATTLE_SHAKE_MS;
@@ -3734,22 +3751,7 @@ function _updatePlayerSlash() {
     }
   }
   if (battleTimer >= SLASH_FRAMES * SLASH_FRAME_MS) {
-    const hit = inputSt.hitResults[currentHitIdx];
-    if (!hit.miss) {
-      if (pvpSt.isPVPBattle && pvpSt.pvpOpponentIsDefending)
-        hit.damage = Math.max(1, Math.floor(hit.damage / 2));
-      if (isRandomEncounter && encounterMonsters) {
-        encounterMonsters[inputSt.targetIndex].hp = Math.max(0, encounterMonsters[inputSt.targetIndex].hp - hit.damage);
-      } else {
-        bossHP = Math.max(0, bossHP - hit.damage);
-        // Sync authoritative HP source for PVP free targeting
-        if (pvpSt.isPVPBattle) {
-          if (pvpSt.pvpPlayerTargetIdx < 0) pvpSt.pvpOpponentStats.hp = bossHP;
-          else if (pvpSt.pvpEnemyAllies[pvpSt.pvpPlayerTargetIdx]) pvpSt.pvpEnemyAllies[pvpSt.pvpPlayerTargetIdx].hp = bossHP;
-        }
-      }
-      if (hit.crit) critFlashTimer = 0;
-    }
+    // Damage deferred to _finalizeComboHits — slashes play on idle target
     battleState = 'player-hit-show';
     battleTimer = 0;
   }
@@ -3910,17 +3912,21 @@ function _updateSWThrowHit() {
       if (southWindTargets.length === 0) { processNextTurn(); }
       else {
         southWindHitIdx = 0;
-        _applySWDamage(southWindTargets[0]);
+        swHitDamageApplied = false;
         battleState = 'sw-hit'; battleTimer = 0;
       }
     }
     return true;
   }
-  // sw-hit: explosion 3 phases × 133ms, hold until 700ms
+  // sw-hit: explosion 3 phases × 133ms ≈ 400ms, then damage
+  if (battleTimer >= 400 && !swHitDamageApplied) {
+    swHitDamageApplied = true;
+    _applySWDamage(southWindTargets[southWindHitIdx]);
+  }
   if (battleTimer >= 700) {
     southWindHitIdx++;
+    swHitDamageApplied = false;
     if (southWindHitIdx < southWindTargets.length) {
-      _applySWDamage(southWindTargets[southWindHitIdx]);
       battleTimer = 0;
     } else {
       if (pvpSt.isPVPBattle) {
@@ -4566,7 +4572,7 @@ function _drawBattlePortrait() {
   const isAttackPose = battleState === 'attack-start' || battleState === 'player-slash';
   const isHitPose = (battleState === 'enemy-attack' && playerDamageNum && !playerDamageNum.miss) ||
     (battleState === 'enemy-damage-show' && playerDamageNum && !playerDamageNum.miss) ||
-    battleState === 'pvp-opp-sw-hit' ||
+    (battleState === 'pvp-opp-sw-hit' && playerDamageNum) ||
     (battleState === 'pvp-enemy-slash' && pvpSt.pvpPendingAttack && !pvpSt.pvpPendingAttack.miss && !pvpSt.pvpPendingAttack.shieldBlock);
   const isDefendPose = battleState === 'defend-anim';
   const isItemUsePose = battleState === 'item-use' || battleState === 'sw-throw' || battleState === 'sw-hit';
@@ -4866,9 +4872,8 @@ function _drawEncounterMonsters(gridPos, sprH, boxX, boxY, boxW, boxH, isSlideIn
       const delay = dyingMonsterIndices.get(i) || 0;
       _drawMonsterDeath(drawX, drawY, thisH, Math.min(Math.max(0, battleTimer - delay) / MONSTER_DEATH_MS, 1), mid);
     } else {
-      const curHit = inputSt.hitResults && inputSt.hitResults[currentHitIdx];
-      const isHitBlink = (isBeingHit && battleState === 'player-slash' && curHit && !curHit.miss && (Math.floor(battleTimer / 60) & 1)) ||
-                         (isBeingHit && battleState === 'ally-slash' && allyHitResult && !allyHitResult.miss && (Math.floor(battleTimer / 60) & 1));
+      const isHitBlink = (isBeingHit && battleState === 'player-damage-show' && bossDamageNum && !bossDamageNum.miss && (Math.floor(battleTimer / 60) & 1)) ||
+                         (isBeingHit && battleState === 'ally-damage-show' && allyHitResult && !allyHitResult.miss && (Math.floor(battleTimer / 60) & 1));
       const isFlashing = battleState === 'boss-flash' && currentAttacker === i && Math.floor(battleTimer / 33) % 2 === 1;
       if (!isHitBlink) ctx.drawImage(isFlashing ? sprWhite : sprNormal, drawX, drawY);
     }

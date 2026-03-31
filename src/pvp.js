@@ -354,6 +354,14 @@ function _processPVPOppPotion() {
 function _processPVPOppSWThrow() {
   if (_s.battleState !== 'pvp-opp-sw-throw') return false;
   if (_s.battleTimer >= 250) {
+    _s.battleState = 'pvp-opp-sw-hit'; _s.battleTimer = 0;
+  }
+  return true;
+}
+
+function _processPVPOppSWHit() {
+  if (_s.battleState !== 'pvp-opp-sw-hit') return false;
+  if (_s.battleTimer >= 400 && !_s.playerDamageNum) {
     const atk = pvpSt.pvpOpponentStats.atk;
     const swAtk = Math.floor(atk / 2) + 55;
     const swBase = Math.floor((swAtk + Math.floor(Math.random() * Math.floor(swAtk / 2 + 1))) / 2);
@@ -362,13 +370,7 @@ function _processPVPOppSWThrow() {
     _s.playerDamageNum = { value: dmg, timer: 0 };
     playSFX(SFX.SW_HIT);
     _s.battleShakeTimer = BATTLE_SHAKE_MS;
-    _s.battleState = 'pvp-opp-sw-hit'; _s.battleTimer = 0;
   }
-  return true;
-}
-
-function _processPVPOppSWHit() {
-  if (_s.battleState !== 'pvp-opp-sw-hit') return false;
   if (_s.battleTimer >= 700) {
     _s.playerDamageNum = null;
     if (ps.hp <= 0) {
@@ -528,14 +530,11 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   const isThisAttacking = isMain
     ? pvpSt.pvpCurrentEnemyAllyIdx < 0
     : pvpSt.pvpCurrentEnemyAllyIdx === idx - 1;
-  // Hit pose: only during the slash impact and brief flinch — NOT the full 700ms damage display
-  const playerHitLanded = bs === 'player-slash' &&
-    inputSt.hitResults && inputSt.hitResults[_s.currentHitIdx] && !inputSt.hitResults[_s.currentHitIdx].miss;
-  const allyHitLanded = bs === 'ally-slash' && _s.allyHitResult && !_s.allyHitResult.miss;
-  const playerHitShowLanded = bs === 'player-hit-show' && inputSt.hitResults && inputSt.hitResults[_s.currentHitIdx] && !inputSt.hitResults[_s.currentHitIdx].miss;
-  const isOppHit = isCurrentTarget && (playerHitLanded || playerHitShowLanded || allyHitLanded ||
-    (bs === 'ally-damage-show' && _s.allyHitResult && !_s.allyHitResult.miss));
-  const blinkHidden = isCurrentTarget && (playerHitLanded || allyHitLanded) && (Math.floor(_s.battleTimer / 60) & 1);
+  // Hit pose + blink: only during damage-show (after all slashes on idle target)
+  const anyPlayerHitLanded = bs === 'player-damage-show' && inputSt.hitResults && inputSt.hitResults.some(h => !h.miss);
+  const allyDmgHit = bs === 'ally-damage-show' && _s.allyHitResult && !_s.allyHitResult.miss;
+  const isOppHit = isCurrentTarget && (anyPlayerHitLanded || allyDmgHit);
+  const blinkHidden = isCurrentTarget && (anyPlayerHitLanded || allyDmgHit) && (Math.floor(_s.battleTimer / 60) & 1);
   const isWindUp = isThisAttacking && (bs === 'boss-flash' || bs === 'pvp-second-windup');
   if (blinkHidden) return;
 
