@@ -4535,7 +4535,7 @@ function _drawBattlePortrait() {
     ? (Math.floor(battleShakeTimer / 67) & 1 ? 2 : -2) : 0;
   const isVictoryPose = _isVictoryBattleState();
   const isAttackPose = battleState === 'attack-start' || battleState === 'player-slash';
-  const isHitPose = battleState === 'enemy-attack' ||
+  const isHitPose = (battleState === 'enemy-attack' && playerDamageNum && !playerDamageNum.miss) ||
     (battleState === 'enemy-damage-show' && playerDamageNum && !playerDamageNum.miss) ||
     battleState === 'pvp-opp-sw-hit' ||
     (battleState === 'pvp-enemy-slash' && pvpSt.pvpPendingAttack && !pvpSt.pvpPendingAttack.miss && !pvpSt.pvpPendingAttack.shieldBlock);
