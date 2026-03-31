@@ -3422,6 +3422,7 @@ function processNextTurn() {
     else if (cmd === 'run') _playerTurnRun();
   } else if (turn.type === 'ally') {
     currentAllyAttacker = turn.index;
+    allyHitIsLeft = false;
     const ally = battleAllies[turn.index];
     if (!ally || ally.hp <= 0) { processNextTurn(); return; }
     if (isRandomEncounter && encounterMonsters) {
@@ -3992,9 +3993,11 @@ function _updateBattleRun() {
 
 function _updateAllyDamageShow() {
   if (isRandomEncounter && encounterMonsters && allyTargetIndex >= 0 && encounterMonsters[allyTargetIndex].hp <= 0) {
+    allyHitIsLeft = false;
     dyingMonsterIndices = new Map([[allyTargetIndex, 0]]);
     battleState = 'monster-death'; battleTimer = 0; playSFX(SFX.MONSTER_DEATH);
   } else if (!isRandomEncounter && bossHP <= 0) {
+    allyHitIsLeft = false;
     if (pvpSt.isPVPBattle) {
       if (pvpSt.pvpPlayerTargetIdx >= 0) pvpSt.pvpEnemyAllies[pvpSt.pvpPlayerTargetIdx].hp = 0;
       battleState = 'pvp-dissolve'; battleTimer = 0; playSFX(SFX.MONSTER_DEATH);
