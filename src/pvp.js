@@ -542,7 +542,7 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
 
   // Which hand is this enemy using right now?
   // boss-flash = right hand (first attack), pvp-second-windup = left hand, allies = always right
-  const isAttackState = isThisAttacking && (bs === 'enemy-attack' || bs === 'pvp-enemy-slash');
+  const isAttackState = isThisAttacking && (bs === 'enemy-attack' || bs === 'pvp-enemy-slash' || bs === 'ally-hit');
   const isLeftHandWind = isMain && bs === 'pvp-second-windup';
   const isLeftHandAtk  = isMain && isAttackState && pvpSt.pvpOpponentHitsThisTurn === 1;
   const activeWeaponId = (isLeftHandWind || isLeftHandAtk)
