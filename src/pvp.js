@@ -514,10 +514,10 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   const palIdx = enemy.palIdx;
   const fullBody = _s.fullBodyCanvases[palIdx] || _s.fullBodyCanvases[0];
   if (!fullBody) return;
-  // Hide main opponent if dead (HP-based, supports free target selection)
-  if (isMain && (_s.bossDefeated || (pvpSt.pvpOpponentStats && pvpSt.pvpOpponentStats.hp <= 0))) return;
-  // Hide ally if dead
-  if (!isMain && (_s.bossDefeated || enemy.hp <= 0)) return;
+  // Hide dead enemies — but NOT during pvp-dissolve if this enemy is dissolving
+  const isDying = pvpSt.pvpDyingMap.has(idx) && bs === 'pvp-dissolve';
+  if (isMain && (_s.bossDefeated || (pvpSt.pvpOpponentStats && pvpSt.pvpOpponentStats.hp <= 0)) && !isDying) return;
+  if (!isMain && (_s.bossDefeated || enemy.hp <= 0) && !isDying) return;
 
   // isCurrentTarget: which enemy the player is currently attacking
   const isCurrentTarget = isMain ? pvpSt.pvpPlayerTargetIdx < 0 : (idx - 1) === pvpSt.pvpPlayerTargetIdx;
@@ -614,7 +614,6 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
 
   // Wind-up: blade behind body (pulled back); swung/fist: blade in front
   if (isWindUp && blade) drawBlade();
-  const isDying = pvpSt.pvpDyingMap.has(idx) && bs === 'pvp-dissolve';
   if (isDying) {
     const delay = pvpSt.pvpDyingMap.get(idx) || 0;
     const deathFrames = _s.fakePlayerDeathFrames && _s.fakePlayerDeathFrames[palIdx];
