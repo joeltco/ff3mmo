@@ -2517,9 +2517,15 @@ function _drawCureSparkle(px, py, isPauseHeal) {
   ctx.save(); ctx.scale( 1, -1); ctx.drawImage(frame,   px - 8,  -(py + 24)); ctx.restore();
   ctx.save(); ctx.scale(-1, -1); ctx.drawImage(frame, -(px + 23), -(py + 24)); ctx.restore();
 }
+function _drawHealNum(bx, by, value, pal) {
+  const digits = String(value);
+  const b = new Uint8Array(digits.length);
+  for (let i = 0; i < digits.length; i++) b[i] = 0x80 + parseInt(digits[i]);
+  drawText(ctx, bx - Math.floor(digits.length * 4), by, b, pal);
+}
 function _drawPauseHealNum(px, py) {
   if (!pauseSt.healNum || pauseSt.healNum.rosterIdx >= 0) return;
-  _drawBattleNum(px + 8, _dmgBounceY(py + 8, pauseSt.healNum.timer), pauseSt.healNum.value, [0x0F, 0x0F, 0x0F, 0x2B]);
+  _drawHealNum(px + 8, _dmgBounceY(py + 8, pauseSt.healNum.timer), pauseSt.healNum.value, [0x0F, 0x0F, 0x0F, 0x2B]);
 }
 function _drawHUDPortrait() {
   const infoFadeStep = HUD_INFO_FADE_STEPS - Math.min(Math.floor(hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
@@ -2682,7 +2688,7 @@ function _drawRosterSparkle(panelTop) {
   const fi = Math.floor(pauseSt.timer / 67) & 1;
   const frame = cureSparkleFrames[fi];
   _drawSparkleCorners(frame, px, py);
-  _drawBattleNum(px + 8, _dmgBounceY(py + 8, pauseSt.healNum.timer), pauseSt.healNum.value, [0x0F, 0x0F, 0x0F, 0x2B]);
+  _drawHealNum(px + 8, _dmgBounceY(py + 8, pauseSt.healNum.timer), pauseSt.healNum.value, [0x0F, 0x0F, 0x0F, 0x2B]);
 }
 
 function _drawRosterScrollTriangles(scrollAreaY, canScrollUp, canScrollDown) {
