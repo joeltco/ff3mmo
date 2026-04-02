@@ -52,16 +52,14 @@ Current size: ~5,465 lines. Target: <4,000 lines.
 
 ## Phase 2 Analysis (2026-03-30) — Next Extraction Targets
 
-game.js is now **~5,600L**. Analysis of remaining candidates:
+game.js is now **~5,460L**. Analysis of remaining candidates:
 
 ### Quick Wins (do first)
 
-#### 1. `src/pvp-math.js` (~30L extracted)
-Pure grid math, no side effects. Both game.js and pvp.js duplicate this.
-- Extract `_pvpEnemyCellCenter(idx)` as a shared exported function
-- Move duplicate constants: `HUD_VIEW_X/Y/W/H` (currently hardcoded in both files)
-- Move inline grid recalc in `tryJoinPVPEnemyAlly()` (pvp.js ~line 109, 173) to call this instead
-- **Blocker:** None. Pure math.
+#### 1. ~~`src/pvp-math.js` (~30L extracted)~~ ✅ DONE
+- Exported `pvpGridLayout(totalEnemies)`, `pvpEnemyCellCenter(idx, totalEnemies)`, `PVP_CELL_W/H`
+- game.js `_pvpEnemyCellCenter` → thin wrapper calling `pvpEnemyCellCenter`
+- pvp.js `tryJoinPVPEnemyAlly` + `drawBossSpriteBoxPVP` now import from `pvp-math.js`
 
 #### 2. `src/battle-ally.js` (~220L extracted)
 Already grouped, already follow same patterns as extracted modules.
@@ -71,10 +69,9 @@ Already grouped, already follow same patterns as extracted modules.
 - **Needs shared context getters/setters for:** `battleState`, `battleTimer`, `bossDamageNum`, `allyHitResult`, `allyDamageNums`, `allyShakeTimer`, `currentAllyAttacker`, `enemyTargetAllyIdx`, `critFlashTimer`, `bossHP`, `encounterMonsters`, `pvpSt`
 - **Blocker:** Medium — wiring up shared context
 
-#### 3. `src/battle-sfx.js` (~40L, consolidation only)
-game.js has an inline copy of pvp.js `_playSlashSFX` for ally attacks (lines 4038–4042). Deduplicate.
-- Export `playSlashSFX(weaponId, isCrit, cutTimerRef)` used by both
-- **Blocker:** None.
+#### 3. ~~`src/battle-sfx.js` (~15L, consolidation only)~~ ✅ DONE
+- Exported `playSlashSFX(weaponId, isCrit)` with shared `_sfxCutTimerId`
+- Replaced 3 inline copies: game.js player attack, game.js ally attack, pvp.js `_playSlashSFX`
 
 ---
 
@@ -97,8 +94,8 @@ Prerequisite for fully decoupling update/render modules.
 
 | Location | Duplicate of | Fix |
 |---|---|---|
-| game.js ally SFX (lines ~4038–4042) | pvp.js `_playSlashSFX` | Share via `battle-sfx.js` |
-| pvp.js grid math in `tryJoinPVPEnemyAlly` + `_buildPVPDyingMap` | game.js `_pvpEnemyCellCenter` | Both call `pvp-math.js` |
+| ~~game.js ally SFX~~ | ~~pvp.js `_playSlashSFX`~~ | ✅ `battle-sfx.js` |
+| ~~pvp.js grid math~~ | ~~game.js `_pvpEnemyCellCenter`~~ | ✅ `pvp-math.js` |
 | `_syncSaveSlotProgress()` called 5+ times before victory | — | Fold into `_triggerPVPVictory` / `_triggerBossVictory` |
 
 ---
@@ -107,9 +104,8 @@ Prerequisite for fully decoupling update/render modules.
 
 | After step | game.js size |
 |---|---|
-| Now | ~5,600L |
-| + `pvp-math.js` | ~5,570L |
-| + `battle-ally.js` | ~5,350L |
-| + `battle-sfx.js` | ~5,310L |
-| + `battle-drawing.js` | ~3,970L ✓ target hit |
-| + `battleCtx` grouping | ~3,800L |
+| ~~+ `pvp-math.js`~~ | ~~~5,570L~~ ✅ 5,462L |
+| ~~+ `battle-sfx.js`~~ | ~~~5,310L~~ ✅ (included above) |
+| + `battle-ally.js` | ~5,190L |
+| + `battle-drawing.js` | ~3,850L ✓ target hit |
+| + `battleCtx` grouping | ~3,650L |
