@@ -52,6 +52,8 @@ import { transSt, topBoxSt, loadingSt, startWipeTransition, updateTransition, up
 import { inputSt, handleBattleInput, handleRosterInput, handlePauseInput } from './input-handler.js';
 import { checkTrigger, applyPassage, openPassage, handleChest, handleSecretWall, handleRockPuzzle, handlePondHeal, findWorldExitIndex } from './map-triggers.js';
 import { pvpSt, startPVPBattle, resetPVPState, updatePVPBattle, drawBossSpriteBoxPVP } from './pvp.js';
+import { pvpEnemyCellCenter } from './pvp-math.js';
+import { playSlashSFX } from './battle-sfx.js';
 import { OK_IDLE, OK_VICTORY, OK_L_BACK_SWING, OK_L_FWD_T2, OK_L_FWD_T3, OK_R_BACK_SWING, OK_R_FWD_T2, OK_KNEEL,
          OK_LEG_L_IDLE, OK_LEG_R_IDLE, OK_LEG_L_BACK_L, OK_LEG_R_BACK_L, OK_LEG_L_FWD_L, OK_LEG_R_FWD_L,
          OK_LEG_L_BACK_R, OK_LEG_R_SWING, OK_LEG_L_KNEEL, OK_LEG_R_KNEEL, OK_LEG_L_VICTORY, OK_LEG_R_VICTORY } from './data/job-sprites.js';
@@ -286,7 +288,7 @@ const BOSS_ATK = _BOSS_DATA.atk, BOSS_DEF = _BOSS_DATA.def, BOSS_MAX_HP = _BOSS_
 
 let battleState = 'none';
 let battleTimer = 0;
-let sfxCutTimerId = null;    // tracked setTimeout for knife SFX cut — prevents stacking
+// sfxCutTimerId moved to battle-sfx.js
 let battleMessage = null;     // Uint8Array for status messages
 let bossDamageNum = null;     // {value, timer}
 let playerDamageNum = null;   // {value, timer}
@@ -3286,7 +3288,7 @@ function processNextTurn() {
       if (pai < 0) pvpSt.pvpOpponentHitsThisTurn = 0;
     }
     if (turn.index >= 0 && encounterMonsters && encounterMonsters[turn.index].hp <= 0) { processNextTurn(); return; }
-    battleState = 'boss-flash'; battleTimer = 0; pvpSt.pvpPreflashDecided = false;
+    battleState = 'enemy-flash'; battleTimer = 0; pvpSt.pvpPreflashDecided = false;
   }
 }
 
@@ -3397,7 +3399,7 @@ function executeBattleCommand(index) {
 function _updateBattleTimers(dt) {
   if (bossFlashTimer > 0) bossFlashTimer = Math.max(0, bossFlashTimer - dt);
   if (battleShakeTimer > 0) battleShakeTimer = Math.max(0, battleShakeTimer - dt);
-  if (pvpSt.pvpBossShakeTimer > 0) pvpSt.pvpBossShakeTimer = Math.max(0, pvpSt.pvpBossShakeTimer - dt);
+  if (pvpSt.pvpOpponentShakeTimer > 0) pvpSt.pvpOpponentShakeTimer = Math.max(0, pvpSt.pvpOpponentShakeTimer - dt);
 
   if (bossDamageNum) { bossDamageNum.timer += dt; if (bossDamageNum.timer >= BATTLE_DMG_SHOW_MS) bossDamageNum = null; }
   for (const k of Object.keys(southWindDmgNums)) {
@@ -3462,14 +3464,14 @@ function _updateBattleOpening() {
       if (isRandomEncounter) {
         battleState = 'encounter-box-expand'; battleTimer = 0; pauseMusic(); playTrack(TRACKS.BATTLE);
       } else {
-        battleState = 'boss-box-expand'; battleTimer = 0; pauseMusic(); playTrack(TRACKS.BOSS_BATTLE);
+        battleState = 'enemy-box-expand'; battleTimer = 0; pauseMusic(); playTrack(TRACKS.BOSS_BATTLE);
       }
     }
   } else if (battleState === 'encounter-box-expand') {
     if (battleTimer >= BOSS_BOX_EXPAND_MS) { battleState = 'monster-slide-in'; battleTimer = 0; }
   } else if (battleState === 'monster-slide-in') {
     if (battleTimer >= MONSTER_SLIDE_MS) { battleState = 'battle-fade-in'; battleTimer = 0; }
-  } else if (battleState === 'boss-box-expand') {
+  } else if (battleState === 'enemy-box-expand') {
     if (battleTimer >= BOSS_BOX_EXPAND_MS) { battleState = 'boss-appear'; battleTimer = 0; }
   } else if (battleState === 'boss-appear') {
     if (battleTimer >= BOSS_BLOCKS * BOSS_DISSOLVE_STEPS * BOSS_DISSOLVE_FRAME_MS) { battleState = 'battle-fade-in'; battleTimer = 0; }
@@ -3517,7 +3519,7 @@ function _finalizeComboHits() {
     if (!h.miss) { totalDmg += h.damage; allMiss = false; if (h.crit) anyCrit = true; }
   }
   bossDamageNum = allMiss ? { miss: true, timer: 0 } : { value: totalDmg, crit: anyCrit, timer: 0 };
-  if (pvpSt.isPVPBattle && !allMiss) pvpSt.pvpBossShakeTimer = BATTLE_SHAKE_MS;
+  if (pvpSt.isPVPBattle && !allMiss) pvpSt.pvpOpponentShakeTimer = BATTLE_SHAKE_MS;
   battleState = 'player-damage-show';
   battleTimer = 0;
 }
@@ -3540,12 +3542,8 @@ function _updatePlayerAttackStart() {
   const startDelay = currentHitIdx === 0 ? 100 : 50;
   if (battleTimer >= startDelay) {
     const hw0 = getHitWeapon(currentHitIdx);
-    const isBladed0 = isBladedWeapon(hw0);
-    playSFX(isBladed0 ? SFX.KNIFE_HIT : SFX.ATTACK_HIT);
-    if (isBladed0 && !(inputSt.hitResults[currentHitIdx] && inputSt.hitResults[currentHitIdx].crit)) {
-      if (sfxCutTimerId) clearTimeout(sfxCutTimerId);
-      sfxCutTimerId = setTimeout(() => { stopSFX(); sfxCutTimerId = null; }, 133);
-    }
+    const isCrit0 = inputSt.hitResults[currentHitIdx] && inputSt.hitResults[currentHitIdx].crit;
+    playSlashSFX(hw0, isCrit0);
     battleState = 'player-slash';
     battleTimer = 0;
   }
@@ -3619,17 +3617,7 @@ function _updatePlayerDamageShow() {
   return true;
 }
 function _pvpEnemyCellCenter(idx) {
-  const totalEnemies = 1 + pvpSt.pvpEnemyAllies.length;
-  const cols = totalEnemies <= 1 ? 1 : 2;
-  const rows = totalEnemies <= 2 ? 1 : 2;
-  const cellW = 24, cellH = 32;
-  const centerX = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2);
-  const centerY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
-  const intLeft = centerX - cols * Math.floor(cellW / 2);
-  const intTop  = centerY - rows * Math.floor(cellH / 2);
-  const gridPos = [[rows-1,cols-1],[rows-1,0],[0,cols-1],[0,0]];
-  const [gr, gc] = gridPos[Math.min(idx, gridPos.length - 1)];
-  return { x: intLeft + gc * cellW + 12, y: intTop + gr * cellH + 12 };
+  return pvpEnemyCellCenter(idx, 1 + pvpSt.pvpEnemyAllies.length);
 }
 
 function _advancePVPTargetOrVictory() {
@@ -3892,12 +3880,7 @@ function _updateAllyAttack() {
     if (battleTimer >= 100) {
       const ally = battleAllies[currentAllyAttacker];
       const activeWpn = allyHitIsLeft ? (ally && ally.weaponL) : (ally && ally.weaponId);
-      const bladed = isBladedWeapon(activeWpn);
-      playSFX(bladed ? SFX.KNIFE_HIT : SFX.ATTACK_HIT);
-      if (bladed && !(allyHitResult && allyHitResult.crit)) {
-        if (sfxCutTimerId) clearTimeout(sfxCutTimerId);
-        sfxCutTimerId = setTimeout(() => { stopSFX(); sfxCutTimerId = null; }, 133);
-      }
+      playSlashSFX(activeWpn, allyHitResult && allyHitResult.crit);
       battleState = 'ally-slash';
       battleTimer = 0;
     }
@@ -3913,7 +3896,7 @@ function _updateAllyAttack() {
         } else if (allyTargetIndex < 0) {
           bossHP = Math.max(0, bossHP - allyHitResult.damage);
           if (pvpSt.isPVPBattle) {
-            pvpSt.pvpBossShakeTimer = BATTLE_SHAKE_MS;
+            pvpSt.pvpOpponentShakeTimer = BATTLE_SHAKE_MS;
             if (pvpSt.pvpPlayerTargetIdx < 0) pvpSt.pvpOpponentStats.hp = bossHP;
             else if (pvpSt.pvpEnemyAllies[pvpSt.pvpPlayerTargetIdx]) pvpSt.pvpEnemyAllies[pvpSt.pvpPlayerTargetIdx].hp = bossHP;
           }
@@ -3974,8 +3957,8 @@ function _updateBattleAlly() {
 }
 
 // Enemy turn update
-function _processBossFlashEnemy() {
-  if (battleState !== 'boss-flash' || battleTimer < BOSS_PREFLASH_MS) return false;
+function _processEnemyFlash() {
+  if (battleState !== 'enemy-flash' || battleTimer < BOSS_PREFLASH_MS) return false;
   const livingAllies = battleAllies.filter(a => a.hp > 0);
   let targetAlly = -1;
   if (livingAllies.length > 0) {
@@ -4029,7 +4012,7 @@ function _processEnemyDamageShowState() {
   } else { processNextTurn(); }
 }
 function _updateBattleEnemyTurn() {
-  if (_processBossFlashEnemy()) return true;
+  if (_processEnemyFlash()) return true;
   if (battleState === 'enemy-attack') {
     if (battleTimer >= BATTLE_SHAKE_MS) { battleState = 'enemy-damage-show'; battleTimer = 0; }
   } else if (battleState === 'enemy-damage-show') { _processEnemyDamageShowState();
@@ -4101,7 +4084,7 @@ function _updateVictorySequence() {
     if (battleTimer >= _textMs) { battleState = 'victory-box-close'; battleTimer = 0; }
   } else if (battleState === 'victory-box-close') {
     if (battleTimer >= VICTORY_BOX_ROWS * VICTORY_ROW_FRAME_MS) {
-      battleState = isRandomEncounter ? 'encounter-box-close' : 'boss-box-close'; battleTimer = 0;
+      battleState = isRandomEncounter ? 'encounter-box-close' : 'enemy-box-close'; battleTimer = 0;
     }
   } else { return false; }
   return true;
@@ -4117,7 +4100,7 @@ function _updateBoxClose() {
     }
     return true;
   }
-  if (battleState === 'boss-box-close') {
+  if (battleState === 'enemy-box-close') {
     if (battleTimer >= BOSS_BOX_EXPAND_MS) {
       const wasPVP = pvpSt.isPVPBattle;
       resetPVPState();
@@ -4539,7 +4522,7 @@ function _drawBattleItemPanel(menuX) {
 }
 function _battleMenuStates() {
   const bs = battleState;
-  const isSlide   = bs === 'boss-box-expand' || bs === 'encounter-box-expand';
+  const isSlide   = bs === 'enemy-box-expand' || bs === 'encounter-box-expand';
   const isAppear  = bs === 'boss-appear' || bs === 'monster-slide-in';
   const isFade    = bs === 'battle-fade-in';
   const isMenu    = isFade || bs === 'menu-open' || bs === 'target-select' || bs === 'confirm-pause' ||
@@ -4548,15 +4531,15 @@ function _battleMenuStates() {
     bs.startsWith('item-') || bs === 'sw-throw' || bs === 'sw-hit' ||
     bs === 'run-name-out' || bs === 'run-text-in' || bs === 'run-hold' || bs === 'run-text-out' ||
     bs === 'run-fail-name-out' || bs === 'run-fail-text-in' || bs === 'run-fail-hold' ||
-    bs === 'run-fail-text-out' || bs === 'run-fail-name-in' || bs === 'boss-flash' ||
+    bs === 'run-fail-text-out' || bs === 'run-fail-name-in' || bs === 'enemy-flash' ||
     bs === 'enemy-attack' || bs === 'enemy-damage-show' || bs === 'pvp-second-windup' ||
     bs === 'pvp-ally-appear' || bs === 'pvp-defend-anim' || bs === 'pvp-enemy-slash' ||
     bs === 'pvp-opp-potion' || bs === 'pvp-opp-sw-throw' || bs === 'pvp-opp-sw-hit' || bs === 'message-hold' ||
     bs.startsWith('ally-') || bs === 'boss-dissolve' ||
     bs === 'defeat-monster-fade' || bs === 'defeat-text';
-  const isVictory = _isVictoryBattleState() || bs === 'victory-name-out' || bs === 'encounter-box-close' || bs === 'boss-box-close' || bs === 'defeat-close';
+  const isVictory = _isVictoryBattleState() || bs === 'victory-name-out' || bs === 'encounter-box-close' || bs === 'enemy-box-close' || bs === 'defeat-close';
   const isRunBox  = bs.startsWith('run-');
-  const isClose   = bs === 'victory-box-close' || bs === 'encounter-box-close' || bs === 'boss-box-close' || bs === 'defeat-close';
+  const isClose   = bs === 'victory-box-close' || bs === 'encounter-box-close' || bs === 'enemy-box-close' || bs === 'defeat-close';
   return { isSlide, isAppear, isFade, isMenu, isVictory, isRunBox, isClose };
 }
 function drawBattleMenu() {
@@ -4700,7 +4683,7 @@ function _drawEncounterMonsters(gridPos, sprH, boxX, boxY, boxW, boxH, isSlideIn
       const curHit = inputSt.hitResults && inputSt.hitResults[currentHitIdx];
       const isHitBlink = (isBeingHit && battleState === 'player-slash' && curHit && !curHit.miss && (Math.floor(battleTimer / 60) & 1)) ||
                          (isBeingHit && battleState === 'ally-slash' && allyHitResult && !allyHitResult.miss && (Math.floor(battleTimer / 60) & 1));
-      const isFlashing = battleState === 'boss-flash' && currentAttacker === i && Math.floor(battleTimer / 33) % 2 === 1;
+      const isFlashing = battleState === 'enemy-flash' && currentAttacker === i && Math.floor(battleTimer / 33) % 2 === 1;
       if (!isHitBlink) ctx.drawImage(isFlashing ? sprWhite : sprNormal, drawX, drawY);
     }
   }
@@ -4753,7 +4736,7 @@ function _isEncounterCombatState() {
     battleState === 'run-name-out' || battleState === 'run-text-in' || battleState === 'run-hold' ||
     battleState === 'run-text-out' || battleState === 'run-fail-name-out' || battleState === 'run-fail-text-in' ||
     battleState === 'run-fail-hold' || battleState === 'run-fail-text-out' || battleState === 'run-fail-name-in' ||
-    battleState === 'boss-flash' || battleState === 'enemy-attack' || battleState === 'enemy-damage-show' ||
+    battleState === 'enemy-flash' || battleState === 'enemy-attack' || battleState === 'enemy-damage-show' ||
     battleState === 'message-hold' || battleState.startsWith('ally-') ||
     battleState === 'defeat-monster-fade' || battleState === 'defeat-text';
 }
@@ -4797,7 +4780,7 @@ function _drawBossSprite(centerX, centerY) {
   ctx.imageSmoothingEnabled = false;
   if (battleState === 'boss-appear' || battleState === 'boss-dissolve') {
     _drawDissolvedSprite(sprX, sprY, battleState === 'boss-dissolve');
-  } else if (battleState === 'boss-flash') {
+  } else if (battleState === 'enemy-flash') {
     const frame = Math.floor(battleTimer / (BOSS_PREFLASH_MS / 8));
     if (!bossDefeated) ctx.drawImage((frame & 1) ? (getBossWhiteCanvas() || getBossBattleCanvas()) : getBossBattleCanvas(), sprX, sprY);
   } else if (battleState === 'player-slash') {
@@ -4819,8 +4802,8 @@ function _drawBossSprite(centerX, centerY) {
   }
 }
 function _drawBossSpriteBoxBoss(centerX, centerY) {
-  const isExpand = battleState === 'boss-box-expand';
-  const isClose  = battleState === 'boss-box-close' || (!isRandomEncounter && battleState === 'defeat-close');
+  const isExpand = battleState === 'enemy-box-expand';
+  const isClose  = battleState === 'enemy-box-close' || (!isRandomEncounter && battleState === 'defeat-close');
   const fullW = 64, fullH = 64;
 
   _clipToViewport();
@@ -4845,13 +4828,13 @@ function drawBossSpriteBox() {
 
   if (pvpSt.isPVPBattle) {
     const isCombatPVP = battleState === 'battle-fade-in' ||
-                    battleState === 'boss-box-expand' || battleState === 'boss-box-close' ||
+                    battleState === 'enemy-box-expand' || battleState === 'enemy-box-close' ||
                     battleState === 'menu-open' || battleState === 'target-select' || battleState === 'confirm-pause' ||
                     battleState === 'attack-start' || battleState === 'player-slash' || battleState === 'player-hit-show' ||
                     battleState === 'player-miss-show' ||
                     battleState === 'player-damage-show' || battleState === 'defend-anim' || battleState.startsWith('item-') ||
                     battleState === 'sw-throw' || battleState === 'sw-hit' ||
-                    battleState === 'boss-flash' || battleState === 'enemy-attack' ||
+                    battleState === 'enemy-flash' || battleState === 'enemy-attack' ||
                     battleState === 'enemy-damage-show' || battleState === 'pvp-second-windup' ||
                     battleState === 'pvp-ally-appear' || battleState === 'message-hold' ||
                     battleState.startsWith('ally-') ||
@@ -4873,15 +4856,15 @@ function drawBossSpriteBox() {
 
   if (!getBossBattleCanvas()) return;
 
-  const isExpand = battleState === 'boss-box-expand';
-  const isClose = battleState === 'boss-box-close' || battleState === 'defeat-close';
+  const isExpand = battleState === 'enemy-box-expand';
+  const isClose = battleState === 'enemy-box-close' || battleState === 'defeat-close';
   const isAppear = battleState === 'boss-appear';
   const isDissolve = battleState === 'boss-dissolve';
   const isCombat = battleState === 'battle-fade-in' ||
                    battleState === 'menu-open' || battleState === 'target-select' || battleState === 'confirm-pause' ||
                    battleState === 'attack-start' || battleState === 'player-slash' || battleState === 'player-hit-show' ||
                    battleState === 'player-miss-show' ||
-                   battleState === 'player-damage-show' || battleState === 'defend-anim' || battleState.startsWith('item-') || battleState === 'sw-throw' || battleState === 'sw-hit' || battleState === 'run-name-out' || battleState === 'run-text-in' || battleState === 'run-hold' || battleState === 'run-text-out' || battleState === 'run-fail-name-out' || battleState === 'run-fail-text-in' || battleState === 'run-fail-hold' || battleState === 'run-fail-text-out' || battleState === 'run-fail-name-in' || battleState === 'boss-flash' ||
+                   battleState === 'player-damage-show' || battleState === 'defend-anim' || battleState.startsWith('item-') || battleState === 'sw-throw' || battleState === 'sw-hit' || battleState === 'run-name-out' || battleState === 'run-text-in' || battleState === 'run-hold' || battleState === 'run-text-out' || battleState === 'run-fail-name-out' || battleState === 'run-fail-text-in' || battleState === 'run-fail-hold' || battleState === 'run-fail-text-out' || battleState === 'run-fail-name-in' || battleState === 'enemy-flash' ||
                    battleState === 'enemy-attack' ||
                    battleState === 'enemy-damage-show' || battleState === 'message-hold' ||
                    battleState.startsWith('ally-') ||
@@ -5364,7 +5347,7 @@ function drawDamageNumbers() {
 function _updateHudHpLvStep(dt) {
   const target = (battleState === 'none' || battleState === 'flash-strobe' ||
     battleState === 'encounter-box-expand' || battleState === 'monster-slide-in' ||
-    battleState === 'boss-box-expand' || battleState === 'boss-appear') ? 0 : 4;
+    battleState === 'enemy-box-expand' || battleState === 'boss-appear') ? 0 : 4;
   if (hudHpLvStep === target) return;
   hudHpLvTimer += dt;
   while (hudHpLvTimer >= HUD_HPLV_STEP_MS) {

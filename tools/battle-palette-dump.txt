@@ -1,0 +1,411 @@
+FF3 Battle Palette Dump — cycles encounters, dumps nametable + attribute table
+
+[No save state slot 0 — running from title screen]
+[1] mode $FF -> $00
+[68] mode $00 -> $08
+[103] Name entry screen
+[103] mode $08 -> $A8
+[729] mode $A8 -> $00
+[729] Past name entry — pressing A into battle
+[771] mode $00 -> $70
+[836] mode $70 -> $6F
+[839] mode $6F -> $70
+[904] mode $70 -> $6F
+[905] mode $6F -> $70
+[1038] mode $70 -> $6F
+[1046] mode $6F -> $70
+[1054] mode $70 -> $6F
+[1062] mode $6F -> $70
+[1413] mode $70 -> $6F
+[1421] mode $6F -> $70
+[1429] mode $70 -> $6F
+[1437] mode $6F -> $70
+[1445] mode $70 -> $6F
+[1453] mode $6F -> $70
+[1461] mode $70 -> $6F
+[1469] mode $6F -> $70
+[1477] mode $70 -> $6F
+[1485] mode $6F -> $70
+[1581] mode $70 -> $01
+[1582] mode $01 -> $00
+[1844] mode $00 -> $05
+[1969] mode $05 -> $20
+[1969] BATTLE START #0
+=== ENCOUNTER 0 (frame 2030) ===
+  displayPattern: 0
+  encPal0: $89  encPal1: $A0
+  bgPal0: $0F $17 $28 $3C
+  bgPal1: $0F $18 $28 $11
+  bgPal2: $0F $27 $17 $07
+  bgPal3: $0F $00 $01 $30
+  slot0: monId=$00 gfxAttr=$00 cat=0 gfxId=0
+  nametable:
+    row03: 6A 6B 68 69 68 69 6A 6B 6A 6B 68 69 68 69 6A 6B 6A 6B 68 69
+    row04: 6E 6F 6C 6D 6C 6D 6E 6F 6E 6F 6C 6D 6C 6D 6E 6F 6E 6F 6C 6D
+    row05: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    row06: 00 00 00 00 70 71 72 73 70 71 72 73 00 00 00 00 00 00 00 00
+    row07: 00 00 00 00 74 75 76 77 74 75 76 77 00 00 00 00 00 00 00 00
+    row08: 00 00 00 00 78 79 7A 7B 78 79 7A 7B 00 00 00 00 00 00 00 00
+    row09: 00 00 00 00 7C 7D 7E 7F 7C 7D 7E 7F 00 00 00 00 00 00 00 00
+    row10: 00 00 00 00 80 81 82 83 80 81 82 83 00 00 00 00 00 00 00 00
+    row11: 00 00 00 00 84 85 86 87 84 85 86 87 00 00 00 00 00 00 00 00
+    row12: 00 00 00 00 70 71 72 73 70 71 72 73 00 00 00 00 00 00 00 00
+    row13: 00 00 00 00 74 75 76 77 74 75 76 77 00 00 00 00 00 00 00 00
+    row14: 00 00 00 00 78 79 7A 7B 78 79 7A 7B 00 00 00 00 00 00 00 00
+    row15: 00 00 00 00 7C 7D 7E 7F 7C 7D 7E 7F 00 00 00 00 00 00 00 00
+  attrTable:
+    row0: AA AA AA AA AA AA AA AA
+    row1: FA 0A 0A FA FA FA FA FA
+    row2: FF 50 50 FF FF FF FF FF
+    row3: FF 00 00 FF FF FF FF FF
+    row4: FF F5 F5 FF FF FF FF FF
+    row5: FF FF FF FF FF FF FF FF
+    row6: FF FF FF FF FF FF FF FF
+    row7: FF FF FF FF FF FF FF FF
+  cluster1: 8x10 at nt(4,6) baseTile=$70
+    tids: 70 71 72 73 70 71 72 73
+    pals:  0  0  0  0  0  0  0  0
+    tids: 74 75 76 77 74 75 76 77
+    pals:  0  0  0  0  0  0  0  0
+    tids: 78 79 7A 7B 78 79 7A 7B
+    pals:  0  0  0  0  0  0  0  0
+    tids: 7C 7D 7E 7F 7C 7D 7E 7F
+    pals:  0  0  0  0  0  0  0  0
+    tids: 80 81 82 83 80 81 82 83
+    pals:  1  1  1  1  1  1  1  1
+    tids: 84 85 86 87 84 85 86 87
+    pals:  1  1  1  1  1  1  1  1
+    tids: 70 71 72 73 70 71 72 73
+    pals:  0  0  0  0  0  0  0  0
+    tids: 74 75 76 77 74 75 76 77
+    pals:  0  0  0  0  0  0  0  0
+    tids: 78 79 7A 7B 78 79 7A 7B
+    pals:  0  0  0  0  0  0  0  0
+    tids: 7C 7D 7E 7F 7C 7D 7E 7F
+    pals:  0  0  0  0  0  0  0  0
+    jsPalMap: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+[2061] BATTLE START #1
+=== ENCOUNTER 1 (frame 2122) ===
+  displayPattern: 0
+  encPal0: $89  encPal1: $A0
+  bgPal0: $0F $17 $28 $3C
+  bgPal1: $0F $18 $28 $11
+  bgPal2: $0F $27 $17 $07
+  bgPal3: $0F $00 $01 $30
+  slot0: monId=$00 gfxAttr=$00 cat=0 gfxId=0
+  nametable:
+    row03: 6A 6B 68 69 68 69 6A 6B 6A 6B 68 69 68 69 6A 6B 6A 6B 68 69
+    row04: 6E 6F 6C 6D 6C 6D 6E 6F 6E 6F 6C 6D 6C 6D 6E 6F 6E 6F 6C 6D
+    row05: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    row06: 00 00 00 00 70 71 72 73 70 71 72 73 00 00 00 00 00 00 00 00
+    row07: 00 00 00 00 74 75 76 77 74 75 76 77 00 00 00 00 00 00 00 00
+    row08: 00 00 00 00 78 79 7A 7B 78 79 7A 7B 00 00 00 00 00 00 00 00
+    row09: 00 00 00 00 7C 7D 7E 7F 7C 7D 7E 7F 00 00 00 00 00 00 00 00
+    row10: 00 00 00 00 80 81 82 83 80 81 82 83 00 00 00 00 00 00 00 00
+    row11: 00 00 00 00 84 85 86 87 84 85 86 87 00 00 00 00 00 00 00 00
+    row12: 00 00 00 00 70 71 72 73 00 00 00 00 00 00 00 00 00 00 00 00
+    row13: 00 00 00 00 74 75 76 77 00 00 00 00 00 00 00 00 00 00 00 00
+    row14: 00 00 00 00 78 79 7A 7B 00 00 00 00 00 00 00 00 00 00 00 00
+    row15: 00 00 00 00 7C 7D 7E 7F 00 00 00 00 00 00 00 00 00 00 00 00
+  attrTable:
+    row0: AA AA AA AA AA AA AA AA
+    row1: FA 0A 0A FA FA FA FA FA
+    row2: FF 50 50 FF FF FF FF FF
+    row3: FF 00 00 FF FF FF FF FF
+    row4: FF F5 F5 FF FF FF FF FF
+    row5: FF FF FF FF FF FF FF FF
+    row6: FF FF FF FF FF FF FF FF
+    row7: FF FF FF FF FF FF FF FF
+  cluster1: 8x10 at nt(4,6) baseTile=$70
+    tids: 70 71 72 73 70 71 72 73
+    pals:  0  0  0  0  0  0  0  0
+    tids: 74 75 76 77 74 75 76 77
+    pals:  0  0  0  0  0  0  0  0
+    tids: 78 79 7A 7B 78 79 7A 7B
+    pals:  0  0  0  0  0  0  0  0
+    tids: 7C 7D 7E 7F 7C 7D 7E 7F
+    pals:  0  0  0  0  0  0  0  0
+    tids: 80 81 82 83 80 81 82 83
+    pals:  1  1  1  1  1  1  1  1
+    tids: 84 85 86 87 84 85 86 87
+    pals:  1  1  1  1  1  1  1  1
+    tids: 70 71 72 73 .. .. .. ..
+    pals:  0  0  0  0  .  .  .  .
+    tids: 74 75 76 77 .. .. .. ..
+    pals:  0  0  0  0  .  .  .  .
+    tids: 78 79 7A 7B .. .. .. ..
+    pals:  0  0  0  0  .  .  .  .
+    tids: 7C 7D 7E 7F .. .. .. ..
+    pals:  0  0  0  0  .  .  .  .
+    jsPalMap: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+[2153] BATTLE START #2
+=== ENCOUNTER 2 (frame 2214) ===
+  displayPattern: 0
+  encPal0: $89  encPal1: $A0
+  bgPal0: $0F $17 $28 $3C
+  bgPal1: $0F $18 $28 $11
+  bgPal2: $0F $27 $17 $07
+  bgPal3: $0F $00 $01 $30
+  slot0: monId=$00 gfxAttr=$00 cat=0 gfxId=0
+  nametable:
+    row03: 6A 6B 68 69 68 69 6A 6B 6A 6B 68 69 68 69 6A 6B 6A 6B 68 69
+    row04: 6E 6F 6C 6D 6C 6D 6E 6F 6E 6F 6C 6D 6C 6D 6E 6F 6E 6F 6C 6D
+    row05: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    row06: 00 00 00 00 70 71 72 73 70 71 72 73 00 00 00 00 00 00 00 00
+    row07: 00 00 00 00 74 75 76 77 74 75 76 77 00 00 00 00 00 00 00 00
+    row08: 00 00 00 00 78 79 7A 7B 78 79 7A 7B 00 00 00 00 00 00 00 00
+    row09: 00 00 00 00 7C 7D 7E 7F 7C 7D 7E 7F 00 00 00 00 00 00 00 00
+    row10: 00 00 00 00 80 81 82 83 80 81 82 83 00 00 00 00 00 00 00 00
+    row11: 00 00 00 00 84 85 86 87 84 85 86 87 00 00 00 00 00 00 00 00
+    row12: 00 00 00 00 70 71 72 73 00 00 00 00 00 00 00 00 00 00 00 00
+    row13: 00 00 00 00 74 75 76 77 00 00 00 00 00 00 00 00 00 00 00 00
+    row14: 00 00 00 00 78 79 7A 7B 00 00 00 00 00 00 00 00 00 00 00 00
+    row15: 00 00 00 00 7C 7D 7E 7F 00 00 00 00 00 00 00 00 00 00 00 00
+  attrTable:
+    row0: AA AA AA AA AA AA AA AA
+    row1: FA 0A 0A FA FA FA FA FA
+    row2: FF 50 50 FF FF FF FF FF
+    row3: FF 00 00 FF FF FF FF FF
+    row4: FF F5 F5 FF FF FF FF FF
+    row5: FF FF FF FF FF FF FF FF
+    row6: FF FF FF FF FF FF FF FF
+    row7: FF FF FF FF FF FF FF FF
+  cluster1: 8x10 at nt(4,6) baseTile=$70
+    tids: 70 71 72 73 70 71 72 73
+    pals:  0  0  0  0  0  0  0  0
+    tids: 74 75 76 77 74 75 76 77
+    pals:  0  0  0  0  0  0  0  0
+    tids: 78 79 7A 7B 78 79 7A 7B
+    pals:  0  0  0  0  0  0  0  0
+    tids: 7C 7D 7E 7F 7C 7D 7E 7F
+    pals:  0  0  0  0  0  0  0  0
+    tids: 80 81 82 83 80 81 82 83
+    pals:  1  1  1  1  1  1  1  1
+    tids: 84 85 86 87 84 85 86 87
+    pals:  1  1  1  1  1  1  1  1
+    tids: 70 71 72 73 .. .. .. ..
+    pals:  0  0  0  0  .  .  .  .
+    tids: 74 75 76 77 .. .. .. ..
+    pals:  0  0  0  0  .  .  .  .
+    tids: 78 79 7A 7B .. .. .. ..
+    pals:  0  0  0  0  .  .  .  .
+    tids: 7C 7D 7E 7F .. .. .. ..
+    pals:  0  0  0  0  .  .  .  .
+    jsPalMap: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+[2245] BATTLE START #3
+=== ENCOUNTER 3 (frame 2306) ===
+  displayPattern: 0
+  encPal0: $89  encPal1: $A0
+  bgPal0: $0F $17 $28 $3C
+  bgPal1: $0F $18 $28 $11
+  bgPal2: $0F $27 $17 $07
+  bgPal3: $0F $00 $01 $30
+  slot0: monId=$00 gfxAttr=$00 cat=0 gfxId=0
+  nametable:
+    row03: 6A 6B 68 69 68 69 6A 6B 6A 6B 68 69 68 69 6A 6B 6A 6B 68 69
+    row04: 6E 6F 6C 6D 6C 6D 6E 6F 6E 6F 6C 6D 6C 6D 6E 6F 6E 6F 6C 6D
+    row05: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    row06: 00 00 00 00 70 71 72 73 70 71 72 73 00 00 00 00 00 00 00 00
+    row07: 00 00 00 00 74 75 76 77 74 75 76 77 00 00 00 00 00 00 00 00
+    row08: 00 00 00 00 78 79 7A 7B 78 79 7A 7B 00 00 00 00 00 00 00 00
+    row09: 00 00 00 00 7C 7D 7E 7F 7C 7D 7E 7F 00 00 00 00 00 00 00 00
+    row10: 00 00 00 00 80 81 82 83 80 81 82 83 00 00 00 00 00 00 00 00
+    row11: 00 00 00 00 84 85 86 87 84 85 86 87 00 00 00 00 00 00 00 00
+    row12: 00 00 00 00 70 71 72 73 00 00 00 00 00 00 00 00 00 00 00 00
+    row13: 00 00 00 00 74 75 76 77 00 00 00 00 00 00 00 00 00 00 00 00
+    row14: 00 00 00 00 78 79 7A 7B 00 00 00 00 00 00 00 00 00 00 00 00
+    row15: 00 00 00 00 7C 7D 7E 7F 00 00 00 00 00 00 00 00 00 00 00 00
+  attrTable:
+    row0: AA AA AA AA AA AA AA AA
+    row1: FA 0A 0A FA FA FA FA FA
+    row2: FF 50 50 FF FF FF FF FF
+    row3: FF 00 00 FF FF FF FF FF
+    row4: FF F5 F5 FF FF FF FF FF
+    row5: FF FF FF FF FF FF FF FF
+    row6: FF FF FF FF FF FF FF FF
+    row7: FF FF FF FF FF FF FF FF
+  cluster1: 8x10 at nt(4,6) baseTile=$70
+    tids: 70 71 72 73 70 71 72 73
+    pals:  0  0  0  0  0  0  0  0
+    tids: 74 75 76 77 74 75 76 77
+    pals:  0  0  0  0  0  0  0  0
+    tids: 78 79 7A 7B 78 79 7A 7B
+    pals:  0  0  0  0  0  0  0  0
+    tids: 7C 7D 7E 7F 7C 7D 7E 7F
+    pals:  0  0  0  0  0  0  0  0
+    tids: 80 81 82 83 80 81 82 83
+    pals:  1  1  1  1  1  1  1  1
+    tids: 84 85 86 87 84 85 86 87
+    pals:  1  1  1  1  1  1  1  1
+    tids: 70 71 72 73 .. .. .. ..
+    pals:  0  0  0  0  .  .  .  .
+    tids: 74 75 76 77 .. .. .. ..
+    pals:  0  0  0  0  .  .  .  .
+    tids: 78 79 7A 7B .. .. .. ..
+    pals:  0  0  0  0  .  .  .  .
+    tids: 7C 7D 7E 7F .. .. .. ..
+    pals:  0  0  0  0  .  .  .  .
+    jsPalMap: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+[2337] BATTLE START #4
+=== ENCOUNTER 4 (frame 2398) ===
+  displayPattern: 0
+  encPal0: $89  encPal1: $A0
+  bgPal0: $0F $17 $28 $3C
+  bgPal1: $0F $18 $28 $11
+  bgPal2: $0F $27 $17 $07
+  bgPal3: $0F $00 $01 $30
+  slot0: monId=$00 gfxAttr=$00 cat=0 gfxId=0
+  nametable:
+    row03: 6A 6B 68 69 68 69 6A 6B 6A 6B 68 69 68 69 6A 6B 6A 6B 68 69
+    row04: 6E 6F 6C 6D 6C 6D 6E 6F 6E 6F 6C 6D 6C 6D 6E 6F 6E 6F 6C 6D
+    row05: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    row06: 00 00 00 00 70 71 72 73 70 71 72 73 00 00 00 00 00 00 00 00
+    row07: 00 00 00 00 74 75 76 77 74 75 76 77 00 00 00 00 00 00 00 00
+    row08: 00 00 00 00 78 79 7A 7B 78 79 7A 7B 00 00 00 00 00 00 00 00
+    row09: 00 00 00 00 7C 7D 7E 7F 7C 7D 7E 7F 00 00 00 00 00 00 00 00
+    row10: 00 00 00 00 80 81 82 83 80 81 82 83 00 00 00 00 00 00 00 00
+    row11: 00 00 00 00 84 85 86 87 84 85 86 87 00 00 00 00 00 00 00 00
+    row12: 00 00 00 00 70 71 72 73 00 00 00 00 00 00 00 00 00 00 00 00
+    row13: 00 00 00 00 74 75 76 77 00 00 00 00 00 00 00 00 00 00 00 00
+    row14: 00 00 00 00 78 79 7A 7B 00 00 00 00 00 00 00 00 00 00 00 00
+    row15: 00 00 00 00 7C 7D 7E 7F 00 00 00 00 00 00 00 00 00 00 00 00
+  attrTable:
+    row0: AA AA AA AA AA AA AA AA
+    row1: FA 0A 0A FA FA FA FA FA
+    row2: FF 50 50 FF FF FF FF FF
+    row3: FF 00 00 FF FF FF FF FF
+    row4: FF F5 F5 FF FF FF FF FF
+    row5: FF FF FF FF FF FF FF FF
+    row6: FF FF FF FF FF FF FF FF
+    row7: FF FF FF FF FF FF FF FF
+  cluster1: 8x10 at nt(4,6) baseTile=$70
+    tids: 70 71 72 73 70 71 72 73
+    pals:  0  0  0  0  0  0  0  0
+    tids: 74 75 76 77 74 75 76 77
+    pals:  0  0  0  0  0  0  0  0
+    tids: 78 79 7A 7B 78 79 7A 7B
+    pals:  0  0  0  0  0  0  0  0
+    tids: 7C 7D 7E 7F 7C 7D 7E 7F
+    pals:  0  0  0  0  0  0  0  0
+    tids: 80 81 82 83 80 81 82 83
+    pals:  1  1  1  1  1  1  1  1
+    tids: 84 85 86 87 84 85 86 87
+    pals:  1  1  1  1  1  1  1  1
+    tids: 70 71 72 73 .. .. .. ..
+    pals:  0  0  0  0  .  .  .  .
+    tids: 74 75 76 77 .. .. .. ..
+    pals:  0  0  0  0  .  .  .  .
+    tids: 78 79 7A 7B .. .. .. ..
+    pals:  0  0  0  0  .  .  .  .
+    tids: 7C 7D 7E 7F .. .. .. ..
+    pals:  0  0  0  0  .  .  .  .
+    jsPalMap: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+[2429] BATTLE START #5
+=== ENCOUNTER 5 (frame 2490) ===
+  displayPattern: 0
+  encPal0: $89  encPal1: $A0
+  bgPal0: $0F $17 $28 $3C
+  bgPal1: $0F $18 $28 $11
+  bgPal2: $0F $27 $17 $07
+  bgPal3: $0F $00 $01 $30
+  slot0: monId=$00 gfxAttr=$00 cat=0 gfxId=0
+  nametable:
+    row03: 6A 6B 68 69 68 69 6A 6B 6A 6B 68 69 68 69 6A 6B 6A 6B 68 69
+    row04: 6E 6F 6C 6D 6C 6D 6E 6F 6E 6F 6C 6D 6C 6D 6E 6F 6E 6F 6C 6D
+    row05: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    row06: 00 00 00 00 00 00 00 00 70 71 72 73 00 00 00 00 00 00 00 00
+    row07: 00 00 00 00 00 00 00 00 74 75 76 77 00 00 00 00 00 00 00 00
+    row08: 00 00 00 00 00 00 00 00 78 79 7A 7B 00 00 00 00 00 00 00 00
+    row09: 00 00 00 00 00 00 00 00 7C 7D 7E 7F 00 00 00 00 00 00 00 00
+    row10: 00 00 00 00 00 00 00 00 80 81 82 83 00 00 00 00 00 00 00 00
+    row11: 00 00 00 00 00 00 00 00 84 85 86 87 00 00 00 00 00 00 00 00
+    row12: 00 00 00 00 70 71 72 73 00 00 00 00 00 00 00 00 00 00 00 00
+    row13: 00 00 00 00 74 75 76 77 00 00 00 00 00 00 00 00 00 00 00 00
+    row14: 00 00 00 00 78 79 7A 7B 00 00 00 00 00 00 00 00 00 00 00 00
+    row15: 00 00 00 00 7C 7D 7E 7F 00 00 00 00 00 00 00 00 00 00 00 00
+  attrTable:
+    row0: AA AA AA AA AA AA AA AA
+    row1: FA 0A 0A FA FA FA FA FA
+    row2: FF 50 50 FF FF FF FF FF
+    row3: FF 00 00 FF FF FF FF FF
+    row4: FF F5 F5 FF FF FF FF FF
+    row5: FF FF FF FF FF FF FF FF
+    row6: FF FF FF FF FF FF FF FF
+    row7: FF FF FF FF FF FF FF FF
+  cluster1: 8x10 at nt(4,6) baseTile=$70
+    tids: .. .. .. .. 70 71 72 73
+    pals:  .  .  .  .  0  0  0  0
+    tids: .. .. .. .. 74 75 76 77
+    pals:  .  .  .  .  0  0  0  0
+    tids: .. .. .. .. 78 79 7A 7B
+    pals:  .  .  .  .  0  0  0  0
+    tids: .. .. .. .. 7C 7D 7E 7F
+    pals:  .  .  .  .  0  0  0  0
+    tids: .. .. .. .. 80 81 82 83
+    pals:  .  .  .  .  1  1  1  1
+    tids: .. .. .. .. 84 85 86 87
+    pals:  .  .  .  .  1  1  1  1
+    tids: 70 71 72 73 .. .. .. ..
+    pals:  0  0  0  0  .  .  .  .
+    tids: 74 75 76 77 .. .. .. ..
+    pals:  0  0  0  0  .  .  .  .
+    tids: 78 79 7A 7B .. .. .. ..
+    pals:  0  0  0  0  .  .  .  .
+    tids: 7C 7D 7E 7F .. .. .. ..
+    pals:  0  0  0  0  .  .  .  .
+    jsPalMap: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+[2521] BATTLE START #6
+=== ENCOUNTER 6 (frame 2582) ===
+  displayPattern: 0
+  encPal0: $89  encPal1: $A0
+  bgPal0: $0F $17 $28 $3C
+  bgPal1: $0F $18 $28 $11
+  bgPal2: $0F $27 $17 $07
+  bgPal3: $0F $00 $01 $30
+  slot0: monId=$00 gfxAttr=$00 cat=0 gfxId=0
+  nametable:
+    row03: 6A 6B 68 69 68 69 6A 6B 6A 6B 68 69 68 69 6A 6B 6A 6B 68 69
+    row04: 6E 6F 6C 6D 6C 6D 6E 6F 6E 6F 6C 6D 6C 6D 6E 6F 6E 6F 6C 6D
+    row05: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    row06: 00 00 00 00 00 00 00 00 70 71 72 73 00 00 00 00 00 00 00 00
+    row07: 00 00 00 00 00 00 00 00 74 75 76 77 00 00 00 00 00 00 00 00
+    row08: 00 00 00 00 00 00 00 00 78 79 7A 7B 00 00 00 00 00 00 00 00
+    row09: 00 00 00 00 00 00 00 00 7C 7D 7E 7F 00 00 00 00 00 00 00 00
+    row10: 00 00 00 00 00 00 00 00 80 81 82 83 00 00 00 00 00 00 00 00
+    row11: 00 00 00 00 00 00 00 00 84 85 86 87 00 00 00 00 00 00 00 00
+    row12: 00 00 00 00 70 71 72 73 00 00 00 00 00 00 00 00 00 00 00 00
+    row13: 00 00 00 00 74 75 76 77 00 00 00 00 00 00 00 00 00 00 00 00
+    row14: 00 00 00 00 78 79 7A 7B 00 00 00 00 00 00 00 00 00 00 00 00
+    row15: 00 00 00 00 7C 7D 7E 7F 00 00 00 00 00 00 00 00 00 00 00 00
+  attrTable:
+    row0: AA AA AA AA AA AA AA AA
+    row1: FA 0A 0A FA FA FA FA FA
+    row2: FF 50 50 FF FF FF FF FF
+    row3: FF 00 00 FF FF FF FF FF
+    row4: FF F5 F5 FF FF FF FF FF
+    row5: FF FF FF FF FF FF FF FF
+    row6: FF FF FF FF FF FF FF FF
+    row7: FF FF FF FF FF FF FF FF
+  cluster1: 8x10 at nt(4,6) baseTile=$70
+    tids: .. .. .. .. 70 71 72 73
+    pals:  .  .  .  .  0  0  0  0
+    tids: .. .. .. .. 74 75 76 77
+    pals:  .  .  .  .  0  0  0  0
+    tids: .. .. .. .. 78 79 7A 7B
+    pals:  .  .  .  .  0  0  0  0
+    tids: .. .. .. .. 7C 7D 7E 7F
+    pals:  .  .  .  .  0  0  0  0
+    tids: .. .. .. .. 80 81 82 83
+    pals:  .  .  .  .  1  1  1  1
+    tids: .. .. .. .. 84 85 86 87
+    pals:  .  .  .  .  1  1  1  1
+    tids: 70 71 72 73 .. .. .. ..
+    pals:  0  0  0  0  .  .  .  .
+    tids: 74 75 76 77 .. .. .. ..
+    pals:  0  0  0  0  .  .  .  .
+    tids: 78 79 7A 7B .. .. .. ..
+    pals:  0  0  0  0  .  .  .  .
+    tids: 7C 7D 7E 7F .. .. .. ..
+    pals:  0  0  0  0  .  .  .  .
+    jsPalMap: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+Timeout waiting for next encounter

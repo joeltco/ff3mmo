@@ -10,6 +10,8 @@ import { MONSTERS } from './data/monsters.js';
 import { ps } from './player-stats.js';
 import { inputSt } from './input-handler.js';
 import { getShieldEvade } from './player-stats.js';
+import { pvpGridLayout, PVP_CELL_W, PVP_CELL_H } from './pvp-math.js';
+import { playSlashSFX } from './battle-sfx.js';
 
 // ── Local constants (mirrors game.js values — keep in sync) ──────────────────
 const HUD_VIEW_X = 0, HUD_VIEW_Y = 32, HUD_VIEW_W = 144, HUD_VIEW_H = 144;
@@ -37,10 +39,10 @@ export const pvpSt = {
   pvpOpponentStats:       null,   // {hp, maxHP, atk, def, agi, level, name, palIdx, weaponId}
   pvpOpponentIsDefending: false,  // AI defend state — halves incoming player/ally damage this round
   pvpPendingTargetAlly:   -1,     // saved targeting decision during pvp-defend-anim
-  pvpBossShakeTimer:      0,      // drives opponent left-shake on damage (mirrors battleShakeTimer)
+  pvpOpponentShakeTimer:      0,      // drives opponent left-shake on damage (mirrors battleShakeTimer)
   pvpOpponentHitsThisTurn:0,      // gates dual-wield 2nd hit
   pvpPendingAttack:       null,   // {miss, shieldBlock, dmg} — staged during pvp-enemy-slash, applied at end
-  pvpPreflashDecided:     false,  // true after defend/item/attack decision made for current boss-flash
+  pvpPreflashDecided:     false,  // true after defend/item/attack decision made for current enemy-flash
   pvpEnemyAllies:         [],     // fake players who join opponent's side
   pvpCurrentEnemyAllyIdx:-1,      // -1 = main opponent, >=0 = pvpEnemyAllies[i]
   pvpPlayerTargetIdx:    -1,      // which enemy the player is currently fighting (-1=main opp, >=0=pvpEnemyAllies[i])
@@ -53,17 +55,7 @@ export const pvpSt = {
 
 // ── Shared context ────────────────────────────────────────────────────────────
 let _s = null;
-let _sfxCutTimerId = null;
-
-function _playSlashSFX(weaponId, isCrit) {
-  const sub = weaponSubtype(weaponId);
-  const isBladed = sub === 'knife' || sub === 'sword';
-  playSFX(isBladed ? SFX.KNIFE_HIT : SFX.ATTACK_HIT);
-  if (isBladed && !isCrit) {
-    if (_sfxCutTimerId) clearTimeout(_sfxCutTimerId);
-    _sfxCutTimerId = setTimeout(() => { stopSFX(); _sfxCutTimerId = null; }, 133);
-  }
-}
+// _playSlashSFX moved to battle-sfx.js → playSlashSFX
 
 // ── Init / teardown ───────────────────────────────────────────────────────────
 export function startPVPBattle(shared, target) {
@@ -73,7 +65,7 @@ export function startPVPBattle(shared, target) {
   pvpSt.pvpOpponentStats        = generateAllyStats(target);
   pvpSt.pvpOpponentIsDefending  = false;
   pvpSt.pvpPendingTargetAlly    = -1;
-  pvpSt.pvpBossShakeTimer       = 0;
+  pvpSt.pvpOpponentShakeTimer       = 0;
   pvpSt.pvpOpponentHitsThisTurn = 0;
   pvpSt.pvpPendingAttack        = null;
   pvpSt.pvpPreflashDecided      = false;
@@ -98,7 +90,7 @@ export function resetPVPState() {
   pvpSt.pvpOpponentStats        = null;
   pvpSt.pvpOpponentIsDefending  = false;
   pvpSt.pvpPendingTargetAlly    = -1;
-  pvpSt.pvpBossShakeTimer       = 0;
+  pvpSt.pvpOpponentShakeTimer       = 0;
   pvpSt.pvpEnemyAllies          = [];
   pvpSt.pvpCurrentEnemyAllyIdx  = -1;
   pvpSt.pvpPlayerTargetIdx      = -1;
@@ -120,15 +112,14 @@ export function tryJoinPVPEnemyAlly(shared) {
   if (eligible.length === 0 || Math.random() >= 0.3) return false;
   const pick = eligible[Math.floor(Math.random() * eligible.length)];
   const oldTotal = 1 + pvpSt.pvpEnemyAllies.length;
-  const oldCols = oldTotal <= 1 ? 1 : 2, oldRows = oldTotal <= 2 ? 1 : 2;
-  pvpSt.pvpBoxResizeFromW = oldCols * 24 + 16;
-  pvpSt.pvpBoxResizeFromH = oldRows * 32 + 16;
+  const { cols: oldCols, rows: oldRows, gridPos: oldGP } = pvpGridLayout(oldTotal);
+  pvpSt.pvpBoxResizeFromW = oldCols * PVP_CELL_W + 16;
+  pvpSt.pvpBoxResizeFromH = oldRows * PVP_CELL_H + 16;
   const _cx = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2);
   const _cy = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
-  const _oldGP = [[oldRows-1,oldCols-1],[oldRows-1,0],[0,oldCols-1],[0,0]];
   pvpSt.pvpEnemySlidePosFrom = Array.from({length: oldTotal}, (_, i) => {
-    const [gr, gc] = _oldGP[i] || [0, 0];
-    return { x: _cx - oldCols*12 + gc*24 + 4, y: _cy - oldRows*16 + gr*32 + 4 };
+    const [gr, gc] = oldGP[i] || [0, 0];
+    return { x: _cx - oldCols*12 + gc*PVP_CELL_W + 4, y: _cy - oldRows*16 + gr*PVP_CELL_H + 4 };
   });
   pvpSt.pvpEnemyAllies.push(generateAllyStats(pick));
   _s.battleState = 'pvp-ally-appear';
@@ -141,10 +132,10 @@ function _updatePVPOpening() {
   const bs = _s.battleState;
   if (bs === 'flash-strobe') {
     if (_s.battleTimer >= BATTLE_FLASH_FRAMES * BATTLE_FLASH_FRAME_MS) {
-      _s.battleState = 'boss-box-expand'; _s.battleTimer = 0;
+      _s.battleState = 'enemy-box-expand'; _s.battleTimer = 0;
       playTrack(TRACKS.BATTLE); // map music already paused in startPVPBattle
     }
-  } else if (bs === 'boss-box-expand') {
+  } else if (bs === 'enemy-box-expand') {
     // Skip boss-appear (land turtle) — PVP box goes straight to battle-fade-in
     if (_s.battleTimer >= BOSS_BOX_EXPAND_MS) { _s.battleState = 'battle-fade-in'; _s.battleTimer = 0; }
   } else if (bs === 'battle-fade-in') {
@@ -204,7 +195,7 @@ export function updatePVPBattle(dt, shared) {
 // ── Enemy turn update ─────────────────────────────────────────────────────────
 export function updateBattleEnemyTurn(shared) {
   _s = shared;
-  if (_processBossFlash()) return true;
+  if (_processEnemyFlash()) return true;
   if (_processPVPDefendAnim()) return true;
   if (_processPVPEnemySlash()) return true;
   if (_processPVPOppPotion()) return true;
@@ -268,7 +259,7 @@ function _runEnemyAttack(targetAlly) {
       }
       const pendingCrit = pvpSt.pvpPendingAttack && pvpSt.pvpPendingAttack.crit;
       const wId = attackerStats ? attackerStats.weaponId : null;
-      if (wId != null) _playSlashSFX(wId, pendingCrit); else playSFX(SFX.ATTACK_HIT);
+      if (wId != null) playSlashSFX(wId, pendingCrit); else playSFX(SFX.ATTACK_HIT);
       _s.battleState = 'pvp-enemy-slash'; _s.battleTimer = 0;
     } else {
       // Non-PVP boss: apply immediately (existing behavior)
@@ -292,10 +283,10 @@ function _runEnemyAttack(targetAlly) {
   }
 }
 
-function _processBossFlash() {
-  if (_s.battleState !== 'boss-flash') return false;
+function _processEnemyFlash() {
+  if (_s.battleState !== 'enemy-flash') return false;
 
-  // On first tick of boss-flash, decide defend/item for PVP main opponent (skip backswing for non-attack)
+  // On first tick of enemy-flash, decide defend/item for PVP main opponent (skip backswing for non-attack)
   if (!pvpSt.pvpPreflashDecided && pvpSt.isPVPBattle && pvpSt.pvpCurrentEnemyAllyIdx < 0) {
     pvpSt.pvpPreflashDecided = true;
     if (Math.random() < 0.30) {
@@ -411,7 +402,7 @@ function _processPVPSecondWindup() {
     pvpSt.pvpPendingAttack = { miss: true, shieldBlock: false, dmg: 0, crit: false };
   }
   const wL = pvpSt.pvpOpponentStats.weaponL ?? pvpSt.pvpOpponentStats.weaponId;
-  _playSlashSFX(wL, pvpSt.pvpPendingAttack && pvpSt.pvpPendingAttack.crit);
+  playSlashSFX(wL, pvpSt.pvpPendingAttack && pvpSt.pvpPendingAttack.crit);
   _s.battleState = 'pvp-enemy-slash'; _s.battleTimer = 0;
 }
 
@@ -448,14 +439,12 @@ function _drawSparkleAtCorners(sprX, sprY, frame) {
 export function drawBossSpriteBoxPVP(shared, centerX, centerY) {
   _s = shared;
   const bs = _s.battleState;
-  const isExpand = bs === 'boss-box-expand';
-  const isClose  = bs === 'boss-box-close' || (!_s.isRandomEncounter && bs === 'defeat-close');
+  const isExpand = bs === 'enemy-box-expand';
+  const isClose  = bs === 'enemy-box-close' || (!_s.isRandomEncounter && bs === 'defeat-close');
   const totalEnemies = 1 + pvpSt.pvpEnemyAllies.length;
-  const cols = totalEnemies <= 1 ? 1 : 2;
-  const rows = totalEnemies <= 2 ? 1 : 2;
-  const cellW = 24, cellH = 32;
-  const pvpBoxW = cols * cellW + 16;
-  const pvpBoxH = rows * cellH + 16;
+  const { cols, rows, gridPos } = pvpGridLayout(totalEnemies);
+  const pvpBoxW = cols * PVP_CELL_W + 16;
+  const pvpBoxH = rows * PVP_CELL_H + 16;
 
   _s.clipToViewport();
   _s.ctx.imageSmoothingEnabled = false;
@@ -478,12 +467,11 @@ export function drawBossSpriteBoxPVP(shared, centerX, centerY) {
 
   const visibleAllies = resizeT >= 1 ? pvpSt.pvpEnemyAllies.length : pvpSt.pvpEnemyAllies.length - 1;
   if (!isExpand && !isClose && bs !== 'defeat-text') {
-    const gridPos = [[rows-1,cols-1],[rows-1,0],[0,cols-1],[0,0]];
-    const intLeft = centerX - cols * Math.floor(cellW / 2);
-    const intTop  = centerY - rows * Math.floor(cellH / 2);
+    const intLeft = centerX - cols * Math.floor(PVP_CELL_W / 2);
+    const intTop  = centerY - rows * Math.floor(PVP_CELL_H / 2);
     const allEnemies = [pvpSt.pvpOpponentStats, ...pvpSt.pvpEnemyAllies.slice(0, visibleAllies)];
     allEnemies.forEach((enemy, idx) => {
-      if (enemy) _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, resizeT);
+      if (enemy) _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, PVP_CELL_W, PVP_CELL_H, resizeT);
     });
     // Target cursor during target-select or item-target-select
     if ((bs === 'target-select' || (bs === 'item-target-select' && inputSt.itemTargetType === 'enemy')) && _s.cursorTileCanvas) {
@@ -492,8 +480,8 @@ export function drawBossSpriteBoxPVP(shared, centerX, centerY) {
         ? inputSt.itemTargetIndex
         : (pvpSt.pvpPlayerTargetIdx < 0 ? 0 : pvpSt.pvpPlayerTargetIdx + 1);
       const [gr, gc] = gridPos[tIdx] || gridPos[0];
-      const tx = intLeft + gc * cellW + 4;
-      const ty = intTop  + gr * cellH + 4;
+      const tx = intLeft + gc * PVP_CELL_W + 4;
+      const ty = intTop  + gr * PVP_CELL_H + 4;
       _s.ctx.drawImage(_s.cursorTileCanvas, tx - 14, ty + 4);
     }
   }
@@ -523,8 +511,8 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   if (isMain && (_s.bossDefeated || (pvpSt.pvpOpponentStats && pvpSt.pvpOpponentStats.hp <= 0)) && !isDying && !isBeingKilled) return;
   if (!isMain && (_s.bossDefeated || enemy.hp <= 0) && !isDying && !isBeingKilled) return;
   // Shake left when taking damage (mirrors player's right-shake on hit)
-  if (isCurrentTarget && pvpSt.pvpBossShakeTimer > 0) {
-    sprX += (Math.floor(pvpSt.pvpBossShakeTimer / 67) & 1) ? -2 : 2;
+  if (isCurrentTarget && pvpSt.pvpOpponentShakeTimer > 0) {
+    sprX += (Math.floor(pvpSt.pvpOpponentShakeTimer / 67) & 1) ? -2 : 2;
   }
   const isThisAttacking = isMain
     ? pvpSt.pvpCurrentEnemyAllyIdx < 0
@@ -537,11 +525,11 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   const isOppHit = isCurrentTarget && (playerHitLanded || playerHitShowLanded || allyHitLanded ||
     (bs === 'ally-damage-show' && _s.allyHitResult && !_s.allyHitResult.miss));
   const blinkHidden = isCurrentTarget && (playerHitLanded || allyHitLanded) && (Math.floor(_s.battleTimer / 60) & 1);
-  const isWindUp = isThisAttacking && (bs === 'boss-flash' || bs === 'pvp-second-windup');
+  const isWindUp = isThisAttacking && (bs === 'enemy-flash' || bs === 'pvp-second-windup');
   if (blinkHidden) return;
 
   // Which hand is this enemy using right now?
-  // boss-flash = right hand (first attack), pvp-second-windup = left hand, allies = always right
+  // enemy-flash = right hand (first attack), pvp-second-windup = left hand, allies = always right
   const isAttackState = isThisAttacking && (bs === 'enemy-attack' || bs === 'pvp-enemy-slash' || bs === 'ally-hit');
   const isLeftHandWind = isMain && bs === 'pvp-second-windup';
   const isLeftHandAtk  = isMain && isAttackState && pvpSt.pvpOpponentHitsThisTurn === 1;
