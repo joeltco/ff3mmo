@@ -51,8 +51,8 @@ import { pauseSt, updatePauseMenu, drawPauseMenu } from './pause-menu.js';
 import { transSt, topBoxSt, loadingSt, startWipeTransition, updateTransition, updateTopBoxScroll, drawTransitionOverlay } from './transitions.js';
 import { inputSt, handleBattleInput, handleRosterInput, handlePauseInput } from './input-handler.js';
 import { checkTrigger, applyPassage, openPassage, handleChest, handleSecretWall, handleRockPuzzle, handlePondHeal, findWorldExitIndex } from './map-triggers.js';
-import { pvpSt, startPVPBattle, resetPVPState, updatePVPBattle, drawBossSpriteBoxPVP } from './pvp.js';
-import { pvpEnemyCellCenter } from './pvp-math.js';
+import { pvpSt, startPVPBattle, resetPVPState, updatePVPBattle } from './pvp.js';
+import { drawBattle, drawBattleAllies, drawSWExplosion, drawSWDamageNumbers } from './battle-drawing.js';
 import { playSlashSFX } from './battle-sfx.js';
 import { OK_IDLE, OK_VICTORY, OK_L_BACK_SWING, OK_L_FWD_T2, OK_L_FWD_T3, OK_R_BACK_SWING, OK_R_FWD_T2, OK_KNEEL,
          OK_LEG_L_IDLE, OK_LEG_R_IDLE, OK_LEG_L_BACK_L, OK_LEG_R_BACK_L, OK_LEG_L_FWD_L, OK_LEG_R_FWD_L,
@@ -1300,14 +1300,6 @@ function _drawHudWithFade(fullCanvas, fadeCanvases, fadeStep) {
     ctx.drawImage(fullCanvas, 0, 0); ctx.restore();
   } else { ctx.drawImage(fullCanvas, 0, 0); }
 }
-function _encounterGridLayout() {
-  const count = encounterMonsters.length;
-  const { fullW, fullH, sprH } = _encounterBoxDims();
-  const boxX = HUD_VIEW_X + Math.floor((HUD_VIEW_W - fullW) / 2);
-  const boxY = HUD_VIEW_Y + Math.floor((HUD_VIEW_H - fullH) / 2);
-  const gridPos = _encounterGridPos(boxX, boxY, fullW, fullH, count, sprH);
-  return { count, boxX, boxY, sprH, fullW, fullH, gridPos };
-}
 
 function _grayViewport() {
   ctx.filter = 'saturate(0)';
@@ -1578,6 +1570,106 @@ function _pvpShared() {
     get sweatFrames() { return sweatFrames; },
     get critFlashTimer()  { return critFlashTimer; },
     set critFlashTimer(v) { critFlashTimer = v; },
+  };
+}
+
+function _battleDrawShared() {
+  return {
+    get battleState() { return battleState; },
+    get battleTimer() { return battleTimer; },
+    get bossHP() { return bossHP; },
+    get bossDefeated() { return bossDefeated; },
+    get isRandomEncounter() { return isRandomEncounter; },
+    get isDefending() { return isDefending; },
+    get bossDamageNum() { return bossDamageNum; },
+    get playerDamageNum() { return playerDamageNum; },
+    get playerHealNum() { return playerHealNum; },
+    get enemyHealNum() { return enemyHealNum; },
+    get battleShakeTimer() { return battleShakeTimer; },
+    get critFlashTimer() { return critFlashTimer; },
+    set critFlashTimer(v) { critFlashTimer = v; },
+    get currentHitIdx() { return currentHitIdx; },
+    get currentAttacker() { return currentAttacker; },
+    get slashFrame() { return slashFrame; },
+    get slashOffX() { return slashOffX; },
+    get slashOffY() { return slashOffY; },
+    get slashFrames() { return slashFrames; },
+    get slashFramesR() { return slashFramesR; },
+    get currentAllyAttacker() { return currentAllyAttacker; },
+    get allyHitResult() { return allyHitResult; },
+    get allyHitIsLeft() { return allyHitIsLeft; },
+    get allyTargetIndex() { return allyTargetIndex; },
+    get enemyTargetAllyIdx() { return enemyTargetAllyIdx; },
+    get allyJoinRound() { return allyJoinRound; },
+    get runSlideBack() { return runSlideBack; },
+    get encounterExpGained() { return encounterExpGained; },
+    get encounterGilGained() { return encounterGilGained; },
+    get encounterDropItem() { return encounterDropItem; },
+    get encounterProfLevelUps() { return encounterProfLevelUps; },
+    get profLevelUpIdx() { return profLevelUpIdx; },
+    get southWindTargets() { return southWindTargets; },
+    get southWindHitIdx() { return southWindHitIdx; },
+    get southWindDmgNums() { return southWindDmgNums; },
+    get dyingMonsterIndices() { return dyingMonsterIndices; },
+    get encounterMonsters() { return encounterMonsters; },
+    get battleAllies() { return battleAllies; },
+    get allyDamageNums() { return allyDamageNums; },
+    get allyShakeTimer() { return allyShakeTimer; },
+    get battleMessage() { return battleMessage; },
+    ctx,
+    get battleSpriteCanvas() { return battleSpriteCanvas; },
+    get battleSpriteAttackCanvas() { return battleSpriteAttackCanvas; },
+    get battleSpriteAttack2Canvas() { return battleSpriteAttack2Canvas; },
+    get battleSpriteAttackLCanvas() { return battleSpriteAttackLCanvas; },
+    get battleSpriteKnifeRCanvas() { return battleSpriteKnifeRCanvas; },
+    get battleSpriteKnifeLCanvas() { return battleSpriteKnifeLCanvas; },
+    get battleSpriteKnifeBackCanvas() { return battleSpriteKnifeBackCanvas; },
+    get battleSpriteHitCanvas() { return battleSpriteHitCanvas; },
+    get battleSpriteDefendCanvas() { return battleSpriteDefendCanvas; },
+    get battleSpriteKneelCanvas() { return battleSpriteKneelCanvas; },
+    get battleSpriteVictoryCanvas() { return battleSpriteVictoryCanvas; },
+    get battleSpriteFadeCanvases() { return battleSpriteFadeCanvases; },
+    get battleSpriteDefendFadeCanvases() { return battleSpriteDefendFadeCanvases; },
+    get battleSpriteKneelFadeCanvases() { return battleSpriteKneelFadeCanvases; },
+    get battleKnifeBladeCanvas() { return battleKnifeBladeCanvas; },
+    get battleKnifeBladeSwungCanvas() { return battleKnifeBladeSwungCanvas; },
+    get battleDaggerBladeCanvas() { return battleDaggerBladeCanvas; },
+    get battleDaggerBladeSwungCanvas() { return battleDaggerBladeSwungCanvas; },
+    get battleSwordBladeCanvas() { return battleSwordBladeCanvas; },
+    get battleSwordBladeSwungCanvas() { return battleSwordBladeSwungCanvas; },
+    get battleFistCanvas() { return battleFistCanvas; },
+    get fakePlayerPortraits() { return fakePlayerPortraits; },
+    get fakePlayerVictoryPortraits() { return fakePlayerVictoryPortraits; },
+    get fakePlayerHitPortraits() { return fakePlayerHitPortraits; },
+    get fakePlayerDefendPortraits() { return fakePlayerDefendPortraits; },
+    get fakePlayerKneelPortraits() { return fakePlayerKneelPortraits; },
+    get fakePlayerAttackPortraits() { return fakePlayerAttackPortraits; },
+    get fakePlayerAttackLPortraits() { return fakePlayerAttackLPortraits; },
+    get fakePlayerKnifeBackPortraits() { return fakePlayerKnifeBackPortraits; },
+    get fakePlayerKnifeRPortraits() { return fakePlayerKnifeRPortraits; },
+    get fakePlayerKnifeLPortraits() { return fakePlayerKnifeLPortraits; },
+    get goblinBattleCanvas() { return goblinBattleCanvas; },
+    get goblinWhiteCanvas() { return goblinWhiteCanvas; },
+    get goblinDeathFrames() { return goblinDeathFrames; },
+    get swPhaseCanvases() { return swPhaseCanvases; },
+    get defendSparkleFrames() { return defendSparkleFrames; },
+    get cureSparkleFrames() { return cureSparkleFrames; },
+    get sweatFrames() { return sweatFrames; },
+    get cursorTileCanvas() { return cursorTileCanvas; },
+    get cursorFadeCanvases() { return cursorFadeCanvases; },
+    get topBoxBgCanvas() { return topBoxBgCanvas; },
+    get topBoxBgFadeFrames() { return topBoxBgFadeFrames; },
+    topBoxSt,
+    clipToViewport: _clipToViewport,
+    grayViewport: _grayViewport,
+    drawBorderedBox: _drawBorderedBox,
+    drawSparkleCorners: _drawSparkleCorners,
+    drawCursorFaded: _drawCursorFaded,
+    drawHudBox: _drawHudBox,
+    isVictoryBattleState: _isVictoryBattleState,
+    drawMonsterDeath: _drawMonsterDeath,
+    getSlashFramesForWeapon,
+    pvpShared: () => _pvpShared(),
   };
 }
 
@@ -3616,10 +3708,6 @@ function _updatePlayerDamageShow() {
   }
   return true;
 }
-function _pvpEnemyCellCenter(idx) {
-  return pvpEnemyCellCenter(idx, 1 + pvpSt.pvpEnemyAllies.length);
-}
-
 function _advancePVPTargetOrVictory() {
   // Find any remaining alive enemy — use authoritative HP sources
   if (pvpSt.pvpOpponentStats && pvpSt.pvpOpponentStats.hp > 0) {
@@ -4158,1191 +4246,7 @@ function updateBattle(dt) {
   _updateBattleEndSequence(dt);
 }
 
-function drawSWExplosion() {
-  // PVP opponent South Wind — explosion centered on player portrait
-  if (pvpSt.isPVPBattle && battleState === 'pvp-opp-sw-hit') {
-    if (!swPhaseCanvases.length) return;
-    const phase = Math.min(2, Math.floor(battleTimer / 133));
-    const canvas = swPhaseCanvases[phase];
-    if (!canvas) return;
-    const cx = HUD_RIGHT_X + 8 + 8;   // portrait left + half portrait width
-    const cy = HUD_VIEW_Y + 8 + 12;   // portrait top + half portrait height
-    const half = canvas.width / 2;
-    // Clip to full HUD view height (not just viewport — portrait is in right panel x>144)
-    ctx.save();
-    ctx.beginPath(); ctx.rect(0, HUD_VIEW_Y, CANVAS_W, HUD_VIEW_H); ctx.clip();
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(canvas, cx - half, cy - half);
-    ctx.restore();
-    return;
-  }
-  if (battleState !== 'sw-hit') return;
-  if (pvpSt.isPVPBattle) {
-    if (!swPhaseCanvases.length) return;
-    const phase = Math.min(2, Math.floor(battleTimer / 133));
-    const canvas = swPhaseCanvases[phase];
-    if (!canvas) return;
-    const tidx = southWindTargets[southWindHitIdx];
-    if (tidx === undefined) return;
-    const { x: cx, y: cy } = _pvpEnemyCellCenter(tidx);
-    ctx.drawImage(canvas, cx - Math.floor(canvas.width / 2), cy - Math.floor(canvas.height / 2));
-    return;
-  }
-  if (!swPhaseCanvases.length || !isRandomEncounter || !encounterMonsters) return;
-
-  const { count, boxX, boxY, sprH, gridPos: swGridPos } = _encounterGridLayout();
-
-  const tidx = southWindTargets[southWindHitIdx];
-  if (tidx === undefined || tidx >= swGridPos.length) return;
-
-  const tp = swGridPos[tidx];
-  const m = encounterMonsters[tidx];
-  const mc = getMonsterCanvas(m?.monsterId, goblinBattleCanvas);
-  const mh = mc ? mc.height : sprH;
-
-  // Phase = 0/1/2 based on 133ms intervals
-  const phase = Math.min(2, Math.floor(battleTimer / 133));
-  const phaseCanvas = swPhaseCanvases[phase];
-  if (!phaseCanvas) return;
-
-  // Center explosion on the target monster sprite
-  const cx = tp.x + 16; // center x of 32px sprite
-  const cy = tp.y + (sprH - mh) + Math.floor(mh / 2); // vertical center
-  const ex = cx - Math.floor(phaseCanvas.width / 2);
-  const ey = cy - Math.floor(phaseCanvas.height / 2);
-
-  ctx.drawImage(phaseCanvas, ex, ey);
-}
-
-function drawSWDamageNumbers() {
-  if (battleState !== 'sw-hit') return;
-  if (pvpSt.isPVPBattle) {
-    for (const [k, dn] of Object.entries(southWindDmgNums)) {
-      const { x: bx, y: by } = _pvpEnemyCellCenter(parseInt(k));
-      _drawBattleNum(bx, _dmgBounceY(by, dn.timer), dn.value, DMG_NUM_PAL);
-    }
-    return;
-  }
-  if (!isRandomEncounter || !encounterMonsters) return;
-  const { count, boxX, boxY, gridPos: swGridPos } = _encounterGridLayout();
-  for (const [k, dn] of Object.entries(southWindDmgNums)) {
-    const idx = parseInt(k);
-    if (idx >= swGridPos.length) continue;
-    const tp = swGridPos[idx];
-    const m = encounterMonsters[idx];
-    const mc = getMonsterCanvas(m?.monsterId, goblinBattleCanvas);
-    const mh = mc ? mc.height : dSprH;
-    const bx = tp.x + 16;
-    const baseY = tp.y + (dSprH - mh) + Math.floor(mh / 2) - 8;
-    const by = _dmgBounceY(baseY, dn.timer);
-    const digits = String(dn.value);
-    const numBytes = new Uint8Array(digits.length);
-    for (let i = 0; i < digits.length; i++) numBytes[i] = 0x80 + parseInt(digits[i]);
-    drawText(ctx, bx - Math.floor(digits.length * 4), by, numBytes, DMG_NUM_PAL);
-  }
-}
-
-function _getPortraitSrc(isNearFatal, isAttackPose, isHitPose, isDefendPose, isItemUsePose, isVictoryPose) {
-  let src = (isNearFatal && battleSpriteKneelCanvas) ? battleSpriteKneelCanvas : battleSpriteCanvas;
-  if (isAttackPose) {
-    const _ws = weaponSubtype(getHitWeapon(currentHitIdx));
-    if (_ws === 'knife' || _ws === 'dagger') {
-      src = (isHitRightHand(currentHitIdx) ? battleSpriteKnifeRCanvas : battleSpriteKnifeLCanvas) || src;
-    } else if (battleState === 'attack-start') {
-      src = (isHitRightHand(currentHitIdx) ? battleSpriteAttackCanvas : battleSpriteAttackLCanvas) || src;
-    }
-  } else if ((isDefendPose || isItemUsePose) && battleSpriteDefendCanvas) {
-    src = battleSpriteDefendCanvas;
-  } else if (isHitPose && battleSpriteHitCanvas) {
-    src = battleSpriteHitCanvas;
-  } else if (isVictoryPose && battleSpriteVictoryCanvas) {
-    if (Math.floor(Date.now() / 250) & 1) src = battleSpriteVictoryCanvas;
-  }
-  return src;
-}
-
-function _drawPortraitFrame(px, py, portraitSrc, isRunPose) {
-  if (isRunPose) {
-    let slideX = 0;
-    if (battleState === 'run-text-in') slideX = Math.min(battleTimer / 300, 1) * 20;
-    else if (battleState === 'run-hold' || battleState === 'run-text-out') slideX = 20;
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(HUD_RIGHT_X + 8, HUD_VIEW_Y + 8, 16, 16);
-    ctx.clip();
-    ctx.translate(px + 16 + slideX, py);
-    ctx.scale(-1, 1);
-    ctx.drawImage(portraitSrc, 0, 0);
-    ctx.restore();
-  } else if (battleState === 'encounter-box-close' && runSlideBack) {
-    const t = Math.min(battleTimer / 300, 1);
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(HUD_RIGHT_X + 8, HUD_VIEW_Y + 8, 16, 16);
-    ctx.clip();
-    ctx.drawImage(portraitSrc, px, py + (1 - t) * 20);
-    ctx.restore();
-  } else {
-    ctx.drawImage(portraitSrc, px, py);
-  }
-}
-
-function _drawPortraitWeapon(px, py, before) {
-  // before=true: back-swing blade BEHIND body; false: front blade IN FRONT or swung
-  const handWeapon = getHitWeapon(currentHitIdx);
-  const wpnSt = weaponSubtype(handWeapon);
-  if (battleState === 'attack-start') {
-    const rightHand = isHitRightHand(currentHitIdx);
-    if (before && rightHand) {
-      if (wpnSt === 'knife' && handWeapon === 0x1F && battleDaggerBladeCanvas) ctx.drawImage(battleDaggerBladeCanvas, px + 8, py - 7);
-      else if (wpnSt === 'knife' && battleKnifeBladeCanvas) ctx.drawImage(battleKnifeBladeCanvas, px + 8, py - 7);
-      else if (wpnSt === 'sword' && battleSwordBladeCanvas) ctx.drawImage(battleSwordBladeCanvas, px + 8, py - 7);
-    } else if (!before && !rightHand) {
-      if (wpnSt === 'knife' && handWeapon === 0x1F && battleDaggerBladeCanvas) ctx.drawImage(battleDaggerBladeCanvas, px + 16, py - 7);
-      else if (wpnSt === 'knife' && battleKnifeBladeCanvas) ctx.drawImage(battleKnifeBladeCanvas, px + 16, py - 7);
-      else if (wpnSt === 'sword' && battleSwordBladeCanvas) ctx.drawImage(battleSwordBladeCanvas, px + 16, py - 7);
-    }
-  } else if (!before && battleState === 'player-slash') {
-    if (wpnSt === 'knife' && handWeapon === 0x1F && battleDaggerBladeSwungCanvas) ctx.drawImage(battleDaggerBladeSwungCanvas, px - 16, py + 1);
-    else if (wpnSt === 'knife' && battleKnifeBladeSwungCanvas) ctx.drawImage(battleKnifeBladeSwungCanvas, px - 16, py + 1);
-    else if (wpnSt === 'sword' && battleSwordBladeSwungCanvas) ctx.drawImage(battleSwordBladeSwungCanvas, px - 16, py + 1);
-    else if (!wpnSt && handWeapon === 0 && battleFistCanvas) ctx.drawImage(battleFistCanvas, px - 4, py + 10);
-  }
-}
-
-function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal, isRunPose,
-                                isAttackPose, isHitPose, isVictoryPose) {
-  // Defend sparkle — 4 corners cycling during defend-anim
-  if (isDefendPose && defendSparkleFrames.length === 4) {
-    const fi = Math.min(3, Math.floor(battleTimer / DEFEND_SPARKLE_FRAME_MS));
-    const frame = defendSparkleFrames[fi];
-    _drawSparkleCorners(frame, px, py);
-  }
-  // Cure sparkle — alternating flips every 67ms during item-use
-  if (battleState === 'item-use' && cureSparkleFrames.length === 2 && !(inputSt.playerActionPending && inputSt.playerActionPending.allyIndex >= 0)) {
-    const fi = Math.floor(battleTimer / 67) & 1;
-    const frame = cureSparkleFrames[fi];
-    _drawSparkleCorners(frame, px, py);
-  }
-  // Near-fatal sweat — 2 frames alternating every 133ms, 3px above portrait
-  if (isNearFatal && sweatFrames.length === 2 && !isAttackPose && !isHitPose && !isVictoryPose && !isDefendPose && !isItemUsePose) {
-    const sweatIdx = Math.floor(Date.now() / 133) & 1;
-    if (isRunPose) {
-      let slideX = 0;
-      if (battleState === 'run-text-in') slideX = Math.min(battleTimer / 300, 1) * 20;
-      else if (battleState === 'run-hold' || battleState === 'run-text-out') slideX = 20;
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(HUD_RIGHT_X + 8, HUD_VIEW_Y + 8 - 3, 16, 19);
-      ctx.clip();
-      ctx.drawImage(sweatFrames[sweatIdx], px + slideX, py - 3);
-      ctx.restore();
-    } else if (battleState === 'encounter-box-close' && runSlideBack) {
-      const t = Math.min(battleTimer / 300, 1);
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(HUD_RIGHT_X + 8, HUD_VIEW_Y + 8 - 3, 16, 19);
-      ctx.clip();
-      ctx.drawImage(sweatFrames[sweatIdx], px, py - 3 + (1 - t) * 20);
-      ctx.restore();
-    } else {
-      ctx.drawImage(sweatFrames[sweatIdx], px, py - 3);
-    }
-  }
-  // Item target cursor on player portrait (only when not targeting an ally)
-  if (battleState === 'item-target-select' && inputSt.itemTargetType === 'player' && inputSt.itemTargetAllyIndex < 0 && cursorTileCanvas) {
-    ctx.drawImage(cursorTileCanvas, px - 12, py + 4);
-  }
-  // Enemy slash effect on player portrait during PVP melee attack swing
-  if (battleState === 'pvp-enemy-slash') {
-    const eWpnId = pvpSt.pvpCurrentEnemyAllyIdx >= 0
-      ? pvpSt.pvpEnemyAllies[pvpSt.pvpCurrentEnemyAllyIdx]?.weaponId
-      : pvpSt.pvpOpponentStats?.weaponId;
-    const eSlashF = getSlashFramesForWeapon(eWpnId, true);
-    const af = Math.min(2, Math.floor(battleTimer / 67));
-    if (eSlashF && eSlashF[af]) {
-      const sf = eSlashF[af];
-      ctx.save();
-      ctx.translate(px + sf.width + [-0, -10, 8][af], py + [0, -6, 8][af]);
-      ctx.scale(-1, 1);
-      ctx.drawImage(sf, 0, 0);
-      ctx.restore();
-    }
-  }
-}
-
-function _drawBattlePortrait() {
-  const shakeOff = ((battleState === 'enemy-attack' || battleState === 'pvp-opp-sw-hit') && battleShakeTimer > 0)
-    ? (Math.floor(battleShakeTimer / 67) & 1 ? 2 : -2) : 0;
-  const isVictoryPose = _isVictoryBattleState();
-  const isAttackPose = battleState === 'attack-start' || battleState === 'player-slash';
-  const isHitPose = (battleState === 'enemy-attack' && playerDamageNum && !playerDamageNum.miss) ||
-    (battleState === 'enemy-damage-show' && playerDamageNum && !playerDamageNum.miss) ||
-    battleState === 'pvp-opp-sw-hit' ||
-    (battleState === 'pvp-enemy-slash' && pvpSt.pvpPendingAttack && !pvpSt.pvpPendingAttack.miss && !pvpSt.pvpPendingAttack.shieldBlock);
-  const isDefendPose = battleState === 'defend-anim';
-  const isItemUsePose = battleState === 'item-use' || battleState === 'sw-throw' || battleState === 'sw-hit';
-  const isRunPose = battleState === 'run-name-out' || battleState === 'run-text-in' ||
-    battleState === 'run-hold' || battleState === 'run-text-out';
-  const isNearFatal = ps.hp > 0 && ps.stats && ps.hp <= Math.floor(ps.stats.maxHP / 4);
-  const portraitSrc = _getPortraitSrc(isNearFatal, isAttackPose, isHitPose, isDefendPose, isItemUsePose, isVictoryPose);
-  if (!portraitSrc) return;
-  const px = HUD_RIGHT_X + 8 + shakeOff;
-  const py = HUD_VIEW_Y + 8;
-  // Blink portrait when enemy slash is landing (mirrors opponent blink on player hit)
-  const portraitBlink = battleState === 'pvp-enemy-slash' &&
-    pvpSt.pvpPendingAttack && !pvpSt.pvpPendingAttack.miss && !pvpSt.pvpPendingAttack.shieldBlock &&
-    (Math.floor(battleTimer / 60) & 1);
-  if (!portraitBlink) {
-    if (isAttackPose) _drawPortraitWeapon(px, py, true);
-    _drawPortraitFrame(px, py, portraitSrc, isRunPose);
-    if (isAttackPose) _drawPortraitWeapon(px, py, false);
-  }
-  _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal, isRunPose, isAttackPose, isHitPose, isVictoryPose);
-}
-
-function _drawBattleCritFlash() {
-  if (critFlashTimer < 0) return;
-  if (critFlashTimer === 0) critFlashTimer = Date.now();
-  if (Date.now() - critFlashTimer < 17) {
-    _clipToViewport();
-    ctx.fillStyle = '#DAA336';
-    ctx.fillRect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
-    ctx.restore();
-  } else { critFlashTimer = -1; }
-}
-function _drawBattleStrobeFlash() {
-  if (battleState !== 'flash-strobe') return;
-  if (!(Math.floor(battleTimer / BATTLE_FLASH_FRAME_MS) & 1)) return;
-  _clipToViewport();
-  _grayViewport();
-}
-function _drawBattleDefeat() {
-  const ecx = HUD_VIEW_X + HUD_VIEW_W / 2;
-  const ecy = HUD_VIEW_Y + HUD_VIEW_H / 2;
-  if (battleState === 'defeat-monster-fade') {
-    ctx.save();
-    ctx.globalAlpha = Math.min(battleTimer / 500, 1);
-    ctx.fillStyle = '#000';
-    if (isRandomEncounter && encounterMonsters) {
-      const { fullW: fw, fullH: fh } = _encounterBoxDims();
-      ctx.fillRect(Math.round(ecx - fw / 2) + 8, Math.round(ecy - fh / 2) + 8, fw - 16, fh - 16);
-    } else {
-      if (!pvpSt.isPVPBattle) ctx.fillRect(ecx - 24, ecy - 24, 48, 48);
-    }
-    ctx.restore();
-  }
-  if (battleState === 'defeat-text') {
-    const tw = measureText(BATTLE_GAME_OVER);
-    drawText(ctx, Math.floor(ecx - tw / 2), Math.floor(ecy - 4), BATTLE_GAME_OVER, TEXT_WHITE);
-  }
-}
-function drawBattle() {
-  if (battleState === 'none') return;
-  _drawBattleCritFlash();
-  _drawBattlePortrait();
-  _drawBattleStrobeFlash();
-  drawEncounterBox();
-  drawBossSpriteBox();
-  drawBattleMenu();
-  drawBattleMessage();
-  drawVictoryBox();
-  drawDamageNumbers();
-  _drawBattleDefeat();
-}
-
-// drawRoarBox removed — now uses universal msgBox
-
-function _drawBattleItemList(baseX, rightAreaW, invPal, slidePixel, totalInvPages) {
-  const rowH = 14;
-  const topY = HUD_BOT_Y + 12;
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(baseX - 8, HUD_BOT_Y + 8, rightAreaW + 8, HUD_BOT_H - 16);
-  ctx.clip();
-  for (let pg = 0; pg <= 1 + totalInvPages; pg++) {
-    const pageOff = (pg - inputSt.itemPage) * rightAreaW + slidePixel;
-    const px = baseX + pageOff;
-    if (px > baseX + rightAreaW || px < baseX - rightAreaW) continue;
-    if (pg === 0) {
-      const RH_LABEL = new Uint8Array([0x9B,0x91,0xFF]);
-      const LH_LABEL = new Uint8Array([0x95,0x91,0xFF]);
-      const rName = ps.weaponR !== 0 ? getItemNameClean(ps.weaponR) : new Uint8Array([0xC2,0xC2,0xC2]);
-      const rRow = new Uint8Array(RH_LABEL.length + rName.length);
-      rRow.set(RH_LABEL, 0); rRow.set(rName, RH_LABEL.length);
-      drawText(ctx, px + 8, topY, rRow, invPal);
-      const lName = ps.weaponL !== 0 ? getItemNameClean(ps.weaponL) : new Uint8Array([0xC2,0xC2,0xC2]);
-      const lRow = new Uint8Array(LH_LABEL.length + lName.length);
-      lRow.set(LH_LABEL, 0); lRow.set(lName, LH_LABEL.length);
-      drawText(ctx, px + 8, topY + rowH + 6, lRow, invPal);
-    } else {
-      const startIdx = (pg - 1) * INV_SLOTS;
-      for (let r = 0; r < INV_SLOTS; r++) {
-        const idx = startIdx + r;
-        if (idx >= inputSt.itemSelectList.length) break;
-        const item = inputSt.itemSelectList[idx];
-        if (!item) continue;
-        const nameBytes = getItemNameClean(item.id);
-        const countStr = String(item.count);
-        const rowBytes = _buildItemRowBytes(nameBytes, countStr);
-        drawText(ctx, px + 8, topY + r * rowH, rowBytes, invPal);
-      }
-    }
-  }
-  ctx.restore();
-}
-function _drawBattleItemCursors(baseX) {
-  if (!cursorTileCanvas || battleState !== 'item-select') return;
-  const rowH = 14;
-  const topY = HUD_BOT_Y + 12;
-  const rowY = (page, row) => page === 0 ? topY + row * (rowH + 6) : topY + row * rowH;
-  const curPx = baseX - 8;
-  if (inputSt.itemHeldIdx !== -1) {
-    const heldIsEq = inputSt.itemHeldIdx <= -100;
-    const heldPage = heldIsEq ? 0 : 1 + Math.floor(inputSt.itemHeldIdx / INV_SLOTS);
-    const heldRow  = heldIsEq ? -(inputSt.itemHeldIdx + 100) : inputSt.itemHeldIdx % INV_SLOTS;
-    if (heldPage === inputSt.itemPage) ctx.drawImage(cursorTileCanvas, curPx, rowY(heldPage, heldRow) - 4);
-  }
-  const activeX = inputSt.itemHeldIdx !== -1 ? curPx - 4 : curPx;
-  ctx.drawImage(cursorTileCanvas, activeX, rowY(inputSt.itemPage, inputSt.itemPageCursor) - 4);
-}
-function _drawBattleItemPanel(menuX) {
-  const ITEM_SLIDE_MS = 200;
-  const rightAreaW = CANVAS_W - BATTLE_PANEL_W - 8;
-  const invPal = [0x0F, 0x0F, 0x0F, 0x30];
-  let invFadeStep = 0;
-  if (battleState === 'item-list-in') invFadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
-  else if (battleState === 'item-cancel-out' || battleState === 'item-list-out') invFadeStep = Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
-  for (let s = 0; s < invFadeStep; s++) invPal[3] = nesColorFade(invPal[3]);
-  const totalInvPages = Math.max(1, Math.ceil(inputSt.itemSelectList.length / INV_SLOTS));
-  let slidePixel = 0;
-  if (battleState === 'item-slide') slidePixel = inputSt.itemSlideDir * Math.min(battleTimer / ITEM_SLIDE_MS, 1) * rightAreaW;
-  _drawBattleItemList(menuX, rightAreaW, invPal, slidePixel, totalInvPages);
-  _drawBattleItemCursors(menuX);
-}
-function _battleMenuStates() {
-  const bs = battleState;
-  const isSlide   = bs === 'enemy-box-expand' || bs === 'encounter-box-expand';
-  const isAppear  = bs === 'boss-appear' || bs === 'monster-slide-in';
-  const isFade    = bs === 'battle-fade-in';
-  const isMenu    = isFade || bs === 'menu-open' || bs === 'target-select' || bs === 'confirm-pause' ||
-    bs === 'attack-start' || bs === 'player-slash' || bs === 'player-hit-show' || bs === 'player-miss-show' ||
-    bs === 'player-damage-show' || bs === 'monster-death' || bs === 'defend-anim' ||
-    bs.startsWith('item-') || bs === 'sw-throw' || bs === 'sw-hit' ||
-    bs === 'run-name-out' || bs === 'run-text-in' || bs === 'run-hold' || bs === 'run-text-out' ||
-    bs === 'run-fail-name-out' || bs === 'run-fail-text-in' || bs === 'run-fail-hold' ||
-    bs === 'run-fail-text-out' || bs === 'run-fail-name-in' || bs === 'enemy-flash' ||
-    bs === 'enemy-attack' || bs === 'enemy-damage-show' || bs === 'pvp-second-windup' ||
-    bs === 'pvp-ally-appear' || bs === 'pvp-defend-anim' || bs === 'pvp-enemy-slash' ||
-    bs === 'pvp-opp-potion' || bs === 'pvp-opp-sw-throw' || bs === 'pvp-opp-sw-hit' || bs === 'message-hold' ||
-    bs.startsWith('ally-') || bs === 'boss-dissolve' ||
-    bs === 'defeat-monster-fade' || bs === 'defeat-text';
-  const isVictory = _isVictoryBattleState() || bs === 'victory-name-out' || bs === 'encounter-box-close' || bs === 'enemy-box-close' || bs === 'defeat-close';
-  const isRunBox  = bs.startsWith('run-');
-  const isClose   = bs === 'victory-box-close' || bs === 'encounter-box-close' || bs === 'enemy-box-close' || bs === 'defeat-close';
-  return { isSlide, isAppear, isFade, isMenu, isVictory, isRunBox, isClose };
-}
-function drawBattleMenu() {
-  const { isSlide, isAppear, isFade, isMenu, isVictory, isRunBox, isClose } = _battleMenuStates();
-  if (!isSlide && !isAppear && !isMenu && !isVictory) return;
-
-  let panelOffX = 0;
-  if (isSlide) panelOffX = Math.round(-CANVAS_W * (1 - Math.min(battleTimer / BOSS_BOX_EXPAND_MS, 1)));
-  else if (isClose) panelOffX = Math.round(-CANVAS_W * Math.min(battleTimer / (VICTORY_BOX_ROWS * VICTORY_ROW_FRAME_MS), 1));
-
-  ctx.save();
-  ctx.beginPath(); ctx.rect(8, HUD_BOT_Y, CANVAS_W - 16, HUD_BOT_H); ctx.clip();
-  ctx.translate(panelOffX, 0);
-  ctx.fillStyle = '#000';
-  ctx.fillRect(8, HUD_BOT_Y + 8, CANVAS_W - 16, HUD_BOT_H - 16);
-
-  const boxW = BATTLE_PANEL_W, boxH = HUD_BOT_H;
-  if ((!isVictory && !isRunBox) || (battleState === 'encounter-box-close' && runSlideBack))
-    _drawBorderedBox(0, HUD_BOT_Y, boxW, boxH);
-  if (!isMenu && !isVictory) { ctx.restore(); return; }
-
-  let fadeStep = 0;
-  if (isFade) fadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
-  const fadedPal = _makeFadedPal(fadeStep);
-  if (!isVictory && !isRunBox) {
-    if (pvpSt.isPVPBattle) {
-      // Collect all living PVP enemy names and stack them
-      const names = [];
-      if (!bossDefeated && pvpSt.pvpPlayerTargetIdx < 0 && pvpSt.pvpOpponentStats)
-        names.push(_nameToBytes(pvpSt.pvpOpponentStats.name));
-      for (let i = 0; i < pvpSt.pvpEnemyAllies.length; i++) {
-        const a = pvpSt.pvpEnemyAllies[i];
-        if (a && a.hp > 0 && i >= pvpSt.pvpPlayerTargetIdx)
-          names.push(_nameToBytes(a.name));
-      }
-      const rowH = 10;
-      const startY = HUD_BOT_Y + Math.floor((boxH - names.length * rowH) / 2);
-      names.forEach((nb, i) => {
-        drawText(ctx, Math.floor((boxW - measureText(nb)) / 2), startY + i * rowH, nb, fadedPal);
-      });
-    } else {
-      const enemyName = _battleEnemyName();
-      drawText(ctx, Math.floor((boxW - measureText(enemyName)) / 2), HUD_BOT_Y + Math.floor((boxH - 8) / 2), enemyName, fadedPal);
-    }
-  }
-  const menuX = boxW + 8;
-  const positions = [[menuX, HUD_BOT_Y+16], [menuX+56, HUD_BOT_Y+16], [menuX, HUD_BOT_Y+32], [menuX+56, HUD_BOT_Y+32]];
-  _drawBattleMenuItems(positions, isVictory, isClose, isFade, fadedPal, menuX);
-  _drawBattleMenuCursor(positions, isFade, fadeStep);
-  ctx.restore();
-}
-
-function _drawBattleMenuItems(positions, isVictory, isClose, isFade, fadedPal, menuX) {
-  const isMenuFade = battleState === 'victory-menu-fade';
-  const isItemMenuOut = battleState === 'item-menu-out';
-  const isItemMenuIn = battleState === 'item-cancel-in' || battleState === 'item-use-menu-in';
-  const isItemShowInv = battleState === 'item-list-in' || battleState === 'item-select' ||
-    battleState === 'item-cancel-out' || battleState === 'item-list-out' || battleState === 'item-slide' ||
-    battleState === 'item-target-select';
-  if (!isClose && !isItemShowInv) {
-    let menuPal;
-    if (isMenuFade || isItemMenuOut) {
-      const mfStep = Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
-      menuPal = [0x0F, 0x0F, 0x0F, 0x30];
-      for (let s = 0; s < mfStep; s++) menuPal[3] = nesColorFade(menuPal[3]);
-    } else if (isItemMenuIn) {
-      const mfStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
-      menuPal = [0x0F, 0x0F, 0x0F, 0x30];
-      for (let s = 0; s < mfStep; s++) menuPal[3] = nesColorFade(menuPal[3]);
-    } else {
-      menuPal = isVictory ? [0x0F, 0x0F, 0x0F, 0x30] : fadedPal;
-    }
-    for (let i = 0; i < BATTLE_MENU_ITEMS.length; i++)
-      drawText(ctx, positions[i][0], positions[i][1], BATTLE_MENU_ITEMS[i], menuPal);
-  }
-  if (isItemShowInv) _drawBattleItemPanel(menuX);
-}
-
-function _drawBattleMenuCursor(positions, isFade, fadeStep) {
-  if (!cursorTileCanvas) return;
-  if (battleState !== 'menu-open' && !isFade) return;
-  if (battleState === 'target-select') return;
-  const curX = positions[inputSt.battleCursor][0] - 16;
-  const curY = positions[inputSt.battleCursor][1] - 4;
-  _drawCursorFaded(curX, curY, fadeStep);
-}
-
-
-function _encounterBoxDims() {
-  if (!encounterMonsters) return { fullW: 64, fullH: 64, sprH: 32 };
-  const count = encounterMonsters.length;
-  const sprH = encounterMonsters.reduce((h, m) => {
-    const c = getMonsterCanvas(m.monsterId, goblinBattleCanvas);
-    return Math.max(h, c ? c.height : 32);
-  }, 32);
-  const fullW = count === 1 ? 64 : 96;
-  const rowsNeeded = count <= 2 ? 1 : 2;
-  const gapY = 8;
-  // 1-2 monsters: single row, tight top padding (16px). 3-4: two rows with full padding (24px).
-  const padding = rowsNeeded === 1 ? 16 : 24;
-  const innerH = rowsNeeded === 1 ? sprH : sprH * 2 + gapY;
-  const fullH = Math.ceil((innerH + padding) / 8) * 8;
-  return { fullW, fullH, sprH };
-}
-
-
-function _drawEncounterMonsters(gridPos, sprH, boxX, boxY, boxW, boxH, isSlideIn, fullW, slotCenterY) {
-  if (!goblinBattleCanvas && !hasMonsterSprites()) return;
-  let slideOffX = 0;
-  if (isSlideIn) slideOffX = Math.floor((1 - Math.min(battleTimer / MONSTER_SLIDE_MS, 1)) * (fullW + 32));
-
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(boxX + 8, boxY + 8, boxW - 16, boxH - 16);
-  ctx.clip();
-  ctx.imageSmoothingEnabled = false;
-
-  const count = encounterMonsters.length;
-  for (let i = 0; i < count; i++) {
-    const alive = encounterMonsters[i].hp > 0;
-    const isDying = dyingMonsterIndices.has(i) && battleState === 'monster-death';
-    const isBeingHit = (i === inputSt.targetIndex &&
-      (battleState === 'player-slash' || battleState === 'player-hit-show' ||
-       battleState === 'player-miss-show' || battleState === 'player-damage-show')) ||
-      (i === allyTargetIndex && (battleState === 'ally-slash' || battleState === 'ally-damage-show')) ||
-      (battleState === 'sw-hit' && southWindTargets.includes(i));
-    if (!alive && !isDying && !isBeingHit) continue;
-
-    const pos = gridPos[i];
-    const drawX = pos.x - slideOffX;
-    const mid = encounterMonsters[i].monsterId;
-    const sprNormal = getMonsterCanvas(mid, goblinBattleCanvas);
-    const sprWhite  = getMonsterWhiteCanvas(mid, goblinWhiteCanvas);
-    const thisH = sprNormal ? sprNormal.height : sprH;
-    const drawY = pos.y + (sprH - thisH);
-
-    if (isDying) {
-      const delay = dyingMonsterIndices.get(i) || 0;
-      _drawMonsterDeath(drawX, drawY, thisH, Math.min(Math.max(0, battleTimer - delay) / MONSTER_DEATH_MS, 1), mid);
-    } else {
-      const curHit = inputSt.hitResults && inputSt.hitResults[currentHitIdx];
-      const isHitBlink = (isBeingHit && battleState === 'player-slash' && curHit && !curHit.miss && (Math.floor(battleTimer / 60) & 1)) ||
-                         (isBeingHit && battleState === 'ally-slash' && allyHitResult && !allyHitResult.miss && (Math.floor(battleTimer / 60) & 1));
-      const isFlashing = battleState === 'enemy-flash' && currentAttacker === i && Math.floor(battleTimer / 33) % 2 === 1;
-      if (!isHitBlink) ctx.drawImage(isFlashing ? sprWhite : sprNormal, drawX, drawY);
-    }
-  }
-
-  _drawEncounterSlashEffects(gridPos, slideOffX, slotCenterY);
-  ctx.restore();
-}
-function _drawEncounterSlashEffects(gridPos, slideOffX, slotCenterY) {
-  if (battleState === 'player-slash' && slashFrames && slashFrame < SLASH_FRAMES && inputSt.hitResults && inputSt.hitResults[currentHitIdx] && !inputSt.hitResults[currentHitIdx].miss) {
-    const pos = gridPos[inputSt.targetIndex];
-    ctx.drawImage(slashFrames[slashFrame], pos.x - slideOffX + slashOffX + 8, slotCenterY(inputSt.targetIndex) + slashOffY);
-  }
-  if (battleState === 'ally-slash' && allyHitResult && !allyHitResult.miss) {
-    const ally = battleAllies[currentAllyAttacker];
-    const allySlashFrames = ally ? getSlashFramesForWeapon(ally.weaponId, true) : slashFramesR;
-    const af = Math.min(Math.floor(battleTimer / 67), 2);
-    const pos = gridPos[allyTargetIndex];
-    if (pos && allySlashFrames && allySlashFrames[af]) {
-      const scatterX = [0, 10, -8][af], scatterY = [0, -6, 8][af];
-      ctx.drawImage(allySlashFrames[af], pos.x + 8 + scatterX, slotCenterY(allyTargetIndex) + scatterY);
-    }
-  }
-}
-
-function _drawEncounterCursors(gridPos, count, slotCenterY) {
-  if (!(battleState === 'target-select' || (battleState === 'item-target-select' && inputSt.itemTargetType === 'enemy')) || !cursorTileCanvas) return;
-  if (battleState === 'target-select') {
-    const pos = gridPos[inputSt.targetIndex];
-    ctx.drawImage(cursorTileCanvas, pos.x - 10, slotCenterY(inputSt.targetIndex) - 4);
-  } else if (inputSt.itemTargetMode === 'single') {
-    const pos = gridPos[inputSt.itemTargetIndex];
-    if (pos) ctx.drawImage(cursorTileCanvas, pos.x - 10, slotCenterY(inputSt.itemTargetIndex) - 4);
-  } else if (Math.floor(Date.now() / 133) & 1) {
-    const _rightCols = count === 1 ? [0] : count === 2 ? [1] : [1, 3];
-    const _leftCols  = count === 2 ? [0] : count >= 3 ? [0, 2] : [];
-    let targets = [];
-    if (inputSt.itemTargetMode === 'all') targets = encounterMonsters.map((m, i) => m.hp > 0 ? i : -1).filter(i => i >= 0);
-    else if (inputSt.itemTargetMode === 'col-right') targets = _rightCols.filter(i => i < count && encounterMonsters[i]?.hp > 0);
-    else if (inputSt.itemTargetMode === 'col-left') targets = _leftCols.filter(i => i < count && encounterMonsters[i]?.hp > 0);
-    for (const ti of targets) if (gridPos[ti]) ctx.drawImage(cursorTileCanvas, gridPos[ti].x - 10, slotCenterY(ti) - 4);
-  }
-}
-
-function _isEncounterCombatState() {
-  return battleState === 'monster-slide-in' || battleState === 'battle-fade-in' || battleState === 'menu-open' ||
-    battleState === 'target-select' || battleState === 'confirm-pause' || battleState === 'attack-start' ||
-    battleState === 'player-slash' || battleState === 'player-hit-show' || battleState === 'player-miss-show' ||
-    battleState === 'player-damage-show' || battleState === 'monster-death' || battleState === 'defend-anim' ||
-    battleState.startsWith('item-') || battleState === 'sw-throw' || battleState === 'sw-hit' ||
-    battleState === 'run-name-out' || battleState === 'run-text-in' || battleState === 'run-hold' ||
-    battleState === 'run-text-out' || battleState === 'run-fail-name-out' || battleState === 'run-fail-text-in' ||
-    battleState === 'run-fail-hold' || battleState === 'run-fail-text-out' || battleState === 'run-fail-name-in' ||
-    battleState === 'enemy-flash' || battleState === 'enemy-attack' || battleState === 'enemy-damage-show' ||
-    battleState === 'message-hold' || battleState.startsWith('ally-') ||
-    battleState === 'defeat-monster-fade' || battleState === 'defeat-text';
-}
-function drawEncounterBox() {
-  if (!isRandomEncounter || !encounterMonsters) return;
-  const isExpand = battleState === 'encounter-box-expand';
-  const isClose = battleState === 'encounter-box-close' || battleState === 'defeat-close';
-  const isSlideIn = battleState === 'monster-slide-in';
-  const isCombat = _isEncounterCombatState();
-  const isVictory = _isVictoryBattleState() || battleState === 'victory-name-out';
-  if (!isExpand && !isClose && !isCombat && !isVictory) return;
-
-  const count = encounterMonsters.length;
-  const { fullW, fullH, sprH } = _encounterBoxDims();
-  const centerX = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2);
-  const centerY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
-
-  const { boxW, boxH } = _calcBoxExpandSize(fullW, fullH, isExpand, isClose, battleTimer);
-  const boxX = centerX - Math.floor(boxW / 2);
-  const boxY = centerY - Math.floor(boxH / 2);
-
-  _clipToViewport();
-  _drawBorderedBox(boxX, boxY, boxW, boxH);
-
-  if (isExpand || isClose || battleState === 'defeat-text') { ctx.restore(); return; }
-
-  const gridPos = _encounterGridPos(boxX, boxY, fullW, fullH, count, sprH);
-  const slotCenterY = (idx) => {
-    if (!gridPos[idx] || !encounterMonsters[idx]) return 0;
-    const c = getMonsterCanvas(encounterMonsters[idx].monsterId, goblinBattleCanvas);
-    const h = c ? c.height : sprH;
-    return gridPos[idx].y + (sprH - h) + Math.floor(h / 2);
-  };
-  _drawEncounterMonsters(gridPos, sprH, boxX, boxY, boxW, boxH, isSlideIn, fullW, slotCenterY);
-  _drawEncounterCursors(gridPos, count, slotCenterY);
-  ctx.restore();
-}
-
-function _drawBossSprite(centerX, centerY) {
-  const sprX = centerX - 24, sprY = centerY - 24;
-  ctx.imageSmoothingEnabled = false;
-  if (battleState === 'boss-appear' || battleState === 'boss-dissolve') {
-    _drawDissolvedSprite(sprX, sprY, battleState === 'boss-dissolve');
-  } else if (battleState === 'enemy-flash') {
-    const frame = Math.floor(battleTimer / (BOSS_PREFLASH_MS / 8));
-    if (!bossDefeated) ctx.drawImage((frame & 1) ? (getBossWhiteCanvas() || getBossBattleCanvas()) : getBossBattleCanvas(), sprX, sprY);
-  } else if (battleState === 'player-slash') {
-    if (!(Math.floor(battleTimer / 60) & 1) && !bossDefeated) ctx.drawImage(getBossBattleCanvas(), sprX, sprY);
-    if (slashFrames && slashFrame < SLASH_FRAMES && !bossDefeated && inputSt.hitResults && inputSt.hitResults[currentHitIdx] && !inputSt.hitResults[currentHitIdx].miss)
-      ctx.drawImage(slashFrames[slashFrame], centerX - 8 + slashOffX, centerY - 8 + slashOffY);
-  } else if (battleState === 'ally-slash') {
-    const blinkHidden = allyHitResult && !allyHitResult.miss && (Math.floor(battleTimer / 60) & 1);
-    if (!blinkHidden && !bossDefeated) ctx.drawImage(getBossBattleCanvas(), sprX, sprY);
-    if (!bossDefeated && allyHitResult && !allyHitResult.miss) {
-      const ally = battleAllies[currentAllyAttacker];
-      const allySlashFrames = ally ? getSlashFramesForWeapon(ally.weaponId, true) : slashFramesR;
-      const af = Math.min(Math.floor(battleTimer / 67), 2);
-      if (allySlashFrames && allySlashFrames[af])
-        ctx.drawImage(allySlashFrames[af], centerX - 8 + [0,10,-8][af], centerY - 8 + [0,-6,8][af]);
-    }
-  } else {
-    if (!bossDefeated) ctx.drawImage(getBossBattleCanvas(), sprX, sprY);
-  }
-}
-function _drawBossSpriteBoxBoss(centerX, centerY) {
-  const isExpand = battleState === 'enemy-box-expand';
-  const isClose  = battleState === 'enemy-box-close' || (!isRandomEncounter && battleState === 'defeat-close');
-  const fullW = 64, fullH = 64;
-
-  _clipToViewport();
-
-  const { boxW, boxH } = _calcBoxExpandSize(fullW, fullH, isExpand, isClose, battleTimer);
-  _drawBorderedBox(centerX - Math.floor(boxW / 2), centerY - Math.floor(boxH / 2), boxW, boxH);
-
-  if (isExpand || isClose || battleState === 'defeat-text') { ctx.restore(); return; }
-
-  _drawBossSprite(centerX, centerY);
-
-  if ((battleState === 'target-select' || (battleState === 'item-target-select' && inputSt.itemTargetType === 'enemy')) && cursorTileCanvas)
-    ctx.drawImage(cursorTileCanvas, centerX - 32 - 16, centerY - 8);
-
-  ctx.restore();
-}
-function drawBossSpriteBox() {
-  if (isRandomEncounter) return;
-
-  const centerX = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2);
-  const centerY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
-
-  if (pvpSt.isPVPBattle) {
-    const isCombatPVP = battleState === 'battle-fade-in' ||
-                    battleState === 'enemy-box-expand' || battleState === 'enemy-box-close' ||
-                    battleState === 'menu-open' || battleState === 'target-select' || battleState === 'confirm-pause' ||
-                    battleState === 'attack-start' || battleState === 'player-slash' || battleState === 'player-hit-show' ||
-                    battleState === 'player-miss-show' ||
-                    battleState === 'player-damage-show' || battleState === 'defend-anim' || battleState.startsWith('item-') ||
-                    battleState === 'sw-throw' || battleState === 'sw-hit' ||
-                    battleState === 'enemy-flash' || battleState === 'enemy-attack' ||
-                    battleState === 'enemy-damage-show' || battleState === 'pvp-second-windup' ||
-                    battleState === 'pvp-ally-appear' || battleState === 'message-hold' ||
-                    battleState.startsWith('ally-') ||
-                    battleState === 'pvp-dissolve' || battleState === 'pvp-defend-anim' ||
-                    battleState === 'pvp-enemy-slash' || battleState === 'pvp-opp-potion' ||
-                    battleState === 'pvp-opp-sw-throw' || battleState === 'pvp-opp-sw-hit' ||
-                    battleState === 'defeat-monster-fade' || battleState === 'defeat-text' || battleState === 'defeat-close' ||
-                    battleState === 'victory-name-out' || battleState === 'victory-celebrate' ||
-                    battleState === 'victory-text-in' || battleState === 'victory-hold' || battleState === 'victory-fade-out' ||
-                    battleState === 'exp-text-in' || battleState === 'exp-hold' || battleState === 'exp-fade-out' ||
-                    battleState === 'gil-text-in' || battleState === 'gil-hold' || battleState === 'gil-fade-out' ||
-                    battleState === 'levelup-text-in' || battleState === 'levelup-hold' ||
-                    battleState === 'item-text-in' || battleState === 'item-hold' || battleState === 'item-fade-out' ||
-                    battleState === 'prof-levelup-text-in' || battleState === 'prof-levelup-hold' ||
-                    battleState === 'victory-text-out' || battleState === 'victory-menu-fade' || battleState === 'victory-box-close';
-    if (isCombatPVP) drawBossSpriteBoxPVP(_pvpShared(), centerX, centerY);
-    return;
-  }
-
-  if (!getBossBattleCanvas()) return;
-
-  const isExpand = battleState === 'enemy-box-expand';
-  const isClose = battleState === 'enemy-box-close' || battleState === 'defeat-close';
-  const isAppear = battleState === 'boss-appear';
-  const isDissolve = battleState === 'boss-dissolve';
-  const isCombat = battleState === 'battle-fade-in' ||
-                   battleState === 'menu-open' || battleState === 'target-select' || battleState === 'confirm-pause' ||
-                   battleState === 'attack-start' || battleState === 'player-slash' || battleState === 'player-hit-show' ||
-                   battleState === 'player-miss-show' ||
-                   battleState === 'player-damage-show' || battleState === 'defend-anim' || battleState.startsWith('item-') || battleState === 'sw-throw' || battleState === 'sw-hit' || battleState === 'run-name-out' || battleState === 'run-text-in' || battleState === 'run-hold' || battleState === 'run-text-out' || battleState === 'run-fail-name-out' || battleState === 'run-fail-text-in' || battleState === 'run-fail-hold' || battleState === 'run-fail-text-out' || battleState === 'run-fail-name-in' || battleState === 'enemy-flash' ||
-                   battleState === 'enemy-attack' ||
-                   battleState === 'enemy-damage-show' || battleState === 'message-hold' ||
-                   battleState.startsWith('ally-') ||
-                   battleState === 'defeat-monster-fade' || battleState === 'defeat-text';
-  const isVictory = battleState === 'victory-name-out' || battleState === 'victory-celebrate' ||
-                    battleState === 'victory-text-in' || battleState === 'victory-hold' || battleState === 'victory-fade-out' ||
-                    battleState === 'exp-text-in' || battleState === 'exp-hold' || battleState === 'exp-fade-out' ||
-                    battleState === 'gil-text-in' || battleState === 'gil-hold' || battleState === 'gil-fade-out' ||
-                    battleState === 'levelup-text-in' || battleState === 'levelup-hold' ||
-                    battleState === 'item-text-in' || battleState === 'item-hold' || battleState === 'item-fade-out' ||
-                    battleState === 'prof-levelup-text-in' || battleState === 'prof-levelup-hold' ||
-                    battleState === 'victory-text-out' || battleState === 'victory-menu-fade' || battleState === 'victory-box-close';
-  if (!isExpand && !isClose && !isAppear && !isDissolve && !isCombat && !isVictory) return;
-
-  _drawBossSpriteBoxBoss(centerX, centerY);
-}
-
-
-function _drawDissolvedSprite(sprX, sprY, reverse) {
-  // Interlaced pixel-shift dissolve per 16×16 block
-  const frame = Math.floor(battleTimer / BOSS_DISSOLVE_FRAME_MS);
-  const src = getBossBattleCanvas();
-  const sctx = src.getContext('2d');
-
-  for (let bi = 0; bi < BOSS_BLOCKS; bi++) {
-    const bx = (bi % BOSS_BLOCK_COLS) * BOSS_BLOCK_SIZE;
-    const by = Math.floor(bi / BOSS_BLOCK_COLS) * BOSS_BLOCK_SIZE;
-    const blockFrame = frame - bi * BOSS_DISSOLVE_STEPS;
-
-    if (!reverse) {
-      // Appear: blocks before current are fully visible, after are invisible
-      if (blockFrame >= BOSS_DISSOLVE_STEPS) {
-        // Fully revealed
-        ctx.drawImage(src, bx, by, BOSS_BLOCK_SIZE, BOSS_BLOCK_SIZE,
-                      sprX + bx, sprY + by, BOSS_BLOCK_SIZE, BOSS_BLOCK_SIZE);
-      } else if (blockFrame >= 0) {
-        // Dissolving in: shift = 7 - blockFrame (7→0)
-        const shift = 7 - blockFrame;
-        _drawShiftedBlock(sctx, sprX, sprY, bx, by, shift);
-      }
-      // else: not yet started, invisible
-    } else {
-      // Dissolve out: blocks before current are invisible, after are fully visible
-      if (blockFrame >= BOSS_DISSOLVE_STEPS) {
-        // Fully dissolved — invisible
-      } else if (blockFrame >= 0) {
-        // Dissolving out: shift = 1 + blockFrame (1→8)
-        const shift = 1 + blockFrame;
-        _drawShiftedBlock(sctx, sprX, sprY, bx, by, shift);
-      } else {
-        // Not yet started — still fully visible
-        ctx.drawImage(src, bx, by, BOSS_BLOCK_SIZE, BOSS_BLOCK_SIZE,
-                      sprX + bx, sprY + by, BOSS_BLOCK_SIZE, BOSS_BLOCK_SIZE);
-      }
-    }
-  }
-}
-
-let _shiftBlockCanvas = null;
-function _drawShiftedBlock(sctx, sprX, sprY, bx, by, shift) {
-  // Horizontal interlaced pixel shift: even rows left, odd rows right
-  // Uses a temp canvas so clipping is respected (putImageData ignores clip)
-  if (!_shiftBlockCanvas) {
-    _shiftBlockCanvas = document.createElement('canvas');
-    _shiftBlockCanvas.width = BOSS_BLOCK_SIZE;
-    _shiftBlockCanvas.height = BOSS_BLOCK_SIZE;
-  }
-  const tc = _shiftBlockCanvas.getContext('2d');
-  const imgData = sctx.getImageData(bx, by, BOSS_BLOCK_SIZE, BOSS_BLOCK_SIZE);
-  const out = tc.createImageData(BOSS_BLOCK_SIZE, BOSS_BLOCK_SIZE);
-  const s = imgData.data;
-  const d = out.data;
-
-  for (let row = 0; row < BOSS_BLOCK_SIZE; row++) {
-    const dir = (row & 1) ? shift : -shift; // odd rows right, even rows left
-    for (let col = 0; col < BOSS_BLOCK_SIZE; col++) {
-      const srcCol = col - dir;
-      if (srcCol < 0 || srcCol >= BOSS_BLOCK_SIZE) continue;
-      const si = (row * BOSS_BLOCK_SIZE + srcCol) * 4;
-      const di = (row * BOSS_BLOCK_SIZE + col) * 4;
-      d[di]     = s[si];
-      d[di + 1] = s[si + 1];
-      d[di + 2] = s[si + 2];
-      d[di + 3] = s[si + 3];
-    }
-  }
-
-  tc.putImageData(out, 0, 0);
-  ctx.drawImage(_shiftBlockCanvas, sprX + bx, sprY + by);
-}
-
-function drawBattleMessage() {
-  if (battleState !== 'message-hold' || !battleMessage) return;
-
-  const boxW = 104;
-  const boxH = 24;
-  const bossCenterY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
-  const msgY = bossCenterY + 32 + 8; // below boss box (64/2 = 32) + gap
-  const centerX = HUD_VIEW_X + Math.floor((HUD_VIEW_W - boxW) / 2);
-
-  _clipToViewport();
-
-  _drawBorderedBox(centerX, msgY, boxW, boxH, true);
-
-  const tw = measureText(battleMessage);
-  const tx = centerX + Math.floor((boxW - tw) / 2);
-  const ty = msgY + Math.floor((boxH - 8) / 2);
-  drawText(ctx, tx, ty, battleMessage, TEXT_WHITE_ON_BLUE);
-
-  ctx.restore();
-}
-
-
-
-// Victory box — reuses left box area (120×64 px), row-by-row expand
-const VICTORY_BOX_W = BATTLE_PANEL_W;  // 120px (same as left box)
-const VICTORY_BOX_H = HUD_BOT_H;       // 64px
-const VICTORY_BOX_ROWS = HUD_BOT_H / 8; // 8 rows
-const VICTORY_ROW_FRAME_MS = 16.67; // 1 NES frame per row
-
-function _battleEnemyName() {
-  if (pvpSt.isPVPBattle) {
-    const ti = pvpSt.pvpPlayerTargetIdx;
-    if (ti >= 0 && pvpSt.pvpEnemyAllies[ti]) return _nameToBytes(pvpSt.pvpEnemyAllies[ti].name);
-    if (pvpSt.pvpOpponentStats) return _nameToBytes(pvpSt.pvpOpponentStats.name);
-  }
-  if (isRandomEncounter && encounterMonsters) {
-    // Use targeted monster's name (or first alive if no target)
-    const ti = (inputSt.targetIndex >= 0 && inputSt.targetIndex < encounterMonsters.length && encounterMonsters[inputSt.targetIndex].hp > 0)
-      ? inputSt.targetIndex
-      : encounterMonsters.findIndex(m => m.hp > 0);
-    const monsterId = encounterMonsters[ti >= 0 ? ti : 0].monsterId;
-    const baseName = getMonsterName(monsterId) || BATTLE_GOBLIN_NAME;
-    // Count how many of this same type are alive
-    const aliveOfType = encounterMonsters.filter(m => m.hp > 0 && m.monsterId === monsterId).length;
-    if (aliveOfType > 1) {
-      const arr = Array.from(baseName);
-      arr.push(0xFF, 0xE1, 0x80 + aliveOfType);
-      return new Uint8Array(arr);
-    }
-    return baseName;
-  }
-  return BATTLE_BOSS_NAME;
-}
-
-function _victoryBoxStates() {
-  const bs = battleState;
-  const isNameOut    = bs === 'victory-name-out';
-  const isCelebrate  = bs === 'victory-celebrate';
-  const isClose      = bs === 'victory-box-close';
-  const isVicText    = bs === 'victory-text-in';
-  const isVicHold    = bs === 'victory-hold';
-  const isVicFadeOut = bs === 'victory-fade-out';
-  const isExpText    = bs === 'exp-text-in';
-  const isExpHold    = bs === 'exp-hold';
-  const isExpFadeOut = bs === 'exp-fade-out';
-  const isGilText    = bs === 'gil-text-in';
-  const isGilHold    = bs === 'gil-hold';
-  const isGilFadeOut = bs === 'gil-fade-out';
-  const isLevelText  = bs === 'levelup-text-in';
-  const isLevelHold  = bs === 'levelup-hold';
-  const isProfLvText = bs === 'prof-levelup-text-in';
-  const isProfLvHold = bs === 'prof-levelup-hold';
-  const isItemText   = bs === 'item-text-in';
-  const isItemHold   = bs === 'item-hold';
-  const isItemFadeOut = bs === 'item-fade-out';
-  const isOut        = bs === 'victory-text-out';
-  const isMenuFadeState = bs === 'victory-menu-fade';
-  const isRunNameOut = bs === 'run-name-out';
-  const isRunTextIn  = bs === 'run-text-in';
-  const isRunHold    = bs === 'run-hold';
-  const isRunTextOut = bs === 'run-text-out';
-  const isRunFailNameOut  = bs === 'run-fail-name-out';
-  const isRunFailTextIn   = bs === 'run-fail-text-in';
-  const isRunFailHold     = bs === 'run-fail-hold';
-  const isRunFailTextOut  = bs === 'run-fail-text-out';
-  const isRunFailNameIn   = bs === 'run-fail-name-in';
-  const isRun     = isRunNameOut || isRunTextIn || isRunHold || isRunTextOut;
-  const isRunFail = isRunFailNameOut || isRunFailTextIn || isRunFailHold || isRunFailTextOut || isRunFailNameIn;
-  return { isNameOut, isCelebrate, isClose, isVicText, isVicHold, isVicFadeOut,
-           isExpText, isExpHold, isExpFadeOut, isGilText, isGilHold, isGilFadeOut,
-           isLevelText, isLevelHold, isItemText, isItemHold, isItemFadeOut,
-           isProfLvText, isProfLvHold,
-           isOut, isMenuFadeState, isRunNameOut, isRunTextIn, isRunHold, isRunTextOut,
-           isRunFailNameOut, isRunFailTextIn, isRunFailHold, isRunFailTextOut, isRunFailNameIn,
-           isRun, isRunFail };
-}
-function _drawVictoryMessage(boxX, boxY, s) {
-  let fadeStep = 0;
-  if (s.isVicText || s.isExpText || s.isGilText || s.isItemText || s.isLevelText || s.isProfLvText)
-    fadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
-  else if (s.isVicFadeOut || s.isExpFadeOut || s.isGilFadeOut || s.isItemFadeOut || s.isOut)
-    fadeStep = Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
-  const fadedPal = _makeFadedPal(fadeStep);
-  let msg;
-  if (s.isVicText || s.isVicHold || s.isVicFadeOut) msg = BATTLE_VICTORY;
-  else if (s.isExpText || s.isExpHold || s.isExpFadeOut) msg = makeExpText(encounterExpGained);
-  else if (s.isGilText || s.isGilHold || s.isGilFadeOut) msg = makeGilText(encounterGilGained);
-  else if (s.isItemText || s.isItemHold || s.isItemFadeOut) msg = encounterDropItem !== null ? makeFoundItemText(encounterDropItem) : null;
-  else if (s.isLevelText || s.isLevelHold) msg = BATTLE_LEVEL_UP;
-  else if (s.isProfLvText || s.isProfLvHold) { const p = encounterProfLevelUps[profLevelUpIdx]; msg = p ? makeProfLevelUpText(p.cat, p.newLevel) : null; }
-  else if (s.isOut) msg = ps.leveledUp ? BATTLE_LEVEL_UP : encounterDropItem !== null ? makeFoundItemText(encounterDropItem) : makeGilText(encounterGilGained);
-  if (msg) {
-    const tw = measureText(msg);
-    drawText(ctx, boxX + Math.floor((VICTORY_BOX_W - tw) / 2), boxY + Math.floor((VICTORY_BOX_H - 8) / 2), msg, fadedPal);
-  }
-}
-function drawVictoryBox() {
-  const s = _victoryBoxStates();
-  const showBox = s.isNameOut || s.isCelebrate || s.isClose || s.isVicText || s.isVicHold || s.isVicFadeOut ||
-    s.isExpText || s.isExpHold || s.isExpFadeOut || s.isGilText || s.isGilHold || s.isGilFadeOut ||
-    s.isItemText || s.isItemHold || s.isItemFadeOut || s.isLevelText || s.isLevelHold ||
-    s.isProfLvText || s.isProfLvHold ||
-    s.isOut || s.isMenuFadeState || s.isRun || s.isRunFail;
-  if (!showBox) return;
-
-  let boxX = 0;
-  const boxY = HUD_BOT_Y;
-  if (s.isClose) boxX = Math.round(-(CANVAS_W - 8) * Math.min(battleTimer / (VICTORY_BOX_ROWS * VICTORY_ROW_FRAME_MS), 1));
-
-  if (s.isNameOut || s.isRunNameOut || s.isRunFailNameOut) { _drawVictoryNameOut(boxX, boxY, s.isRunFailNameOut); return; }
-  if (s.isRun) { _drawVictoryRunText(boxX, boxY, s.isRunTextIn, s.isRunTextOut); return; }
-  if (s.isRunFail) { _drawVictoryRunFail(boxX, boxY, s.isRunFailNameIn, s.isRunFailTextIn, s.isRunFailTextOut); return; }
-  if (s.isCelebrate) { _drawBorderedBox(boxX, boxY, VICTORY_BOX_W, VICTORY_BOX_H); return; }
-  _drawBorderedBox(boxX, boxY, VICTORY_BOX_W, VICTORY_BOX_H);
-  if (s.isClose) return;
-  _drawVictoryMessage(boxX, boxY, s);
-}
-
-function _drawVictoryNameOut(boxX, boxY, isRunFail) {
-  _drawBorderedBox(boxX, boxY, VICTORY_BOX_W, VICTORY_BOX_H);
-  const stepMs = isRunFail ? 50 : BATTLE_TEXT_STEP_MS;
-  const fadeStep = Math.min(Math.floor(battleTimer / stepMs), BATTLE_TEXT_STEPS);
-  const fadedPal = _makeFadedPal(fadeStep);
-  const enemyName = _battleEnemyName();
-  const nameTw = measureText(enemyName);
-  drawText(ctx, Math.floor((VICTORY_BOX_W - nameTw) / 2), boxY + Math.floor((VICTORY_BOX_H - 8) / 2), enemyName, fadedPal);
-}
-
-function _drawVictoryRunText(boxX, boxY, isIn, isOut) {
-  _drawBorderedBox(boxX, boxY, VICTORY_BOX_W, VICTORY_BOX_H);
-  let fadeStep = 0;
-  if (isIn) fadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
-  else if (isOut) fadeStep = Math.min(Math.floor(battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
-  const fadedPal = _makeFadedPal(fadeStep);
-  const tw = measureText(BATTLE_RAN_AWAY);
-  drawText(ctx, boxX + Math.floor((VICTORY_BOX_W - tw) / 2), boxY + Math.floor((VICTORY_BOX_H - 8) / 2), BATTLE_RAN_AWAY, fadedPal);
-}
-
-function _drawVictoryRunFail(boxX, boxY, isNameIn, isTextIn, isTextOut) {
-  _drawBorderedBox(boxX, boxY, VICTORY_BOX_W, VICTORY_BOX_H);
-  const RUN_FAIL_STEP_MS = 50;
-  if (isNameIn) {
-    const fadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(battleTimer / RUN_FAIL_STEP_MS), BATTLE_TEXT_STEPS);
-    const fadedPal = _makeFadedPal(fadeStep);
-    const enemyName = _battleEnemyName();
-    const nameTw = measureText(enemyName);
-    drawText(ctx, boxX + Math.floor((VICTORY_BOX_W - nameTw) / 2), boxY + Math.floor((VICTORY_BOX_H - 8) / 2), enemyName, fadedPal);
-  } else {
-    const fadeStep = isTextIn ? BATTLE_TEXT_STEPS - Math.min(Math.floor(battleTimer / RUN_FAIL_STEP_MS), BATTLE_TEXT_STEPS)
-                              : isTextOut ? Math.min(Math.floor(battleTimer / RUN_FAIL_STEP_MS), BATTLE_TEXT_STEPS) : 0;
-    const fadedPal = _makeFadedPal(fadeStep);
-    const tw = measureText(BATTLE_CANT_ESCAPE);
-    drawText(ctx, boxX + Math.floor((VICTORY_BOX_W - tw) / 2), boxY + Math.floor((VICTORY_BOX_H - 8) / 2), BATTLE_CANT_ESCAPE, fadedPal);
-  }
-}
-
-
-function _drawAllyRow(i, ally, panelTop, weaponDraws) {
-  const shakeOff = (allyShakeTimer[i] > 0) ? (Math.floor(allyShakeTimer[i] / 67) & 1 ? 2 : -2) : 0;
-  const rowY = panelTop + i * ROSTER_ROW_H + shakeOff;
-  const isVicPose = _isVictoryBattleState();
-  const isAllyHit = (battleState === 'ally-hit' || battleState === 'ally-damage-show-enemy') &&
-    enemyTargetAllyIdx === i && allyDamageNums[i] && !allyDamageNums[i].miss;
-  const isAllyAttack = (battleState === 'ally-attack-start') && currentAllyAttacker === i;
-  const isAllyHeal = battleState === 'item-use' && inputSt.playerActionPending && inputSt.playerActionPending.allyIndex === i;
-  const isNearFatal = ally.hp > 0 && ally.hp <= Math.floor(ally.maxHP / 4);
-  const ppx = HUD_RIGHT_X + 8, ppy = rowY + 8;
-  _drawHudBox(HUD_RIGHT_X, rowY, 32, ROSTER_ROW_H, ally.fadeStep);
-  _drawHudBox(HUD_RIGHT_X + 32, rowY, HUD_RIGHT_W - 32, ROSTER_ROW_H, ally.fadeStep);
-  _drawAllyPortrait(i, ally, isVicPose, isAllyAttack, isAllyHit, isNearFatal, ppx, ppy, weaponDraws);
-  _drawAllyTexts(i, ally, rowY, isAllyHeal, ppx, ppy, weaponDraws);
-}
-function _drawAllyPortrait(i, ally, isVicPose, isAllyAttack, isAllyHit, isNearFatal, ppx, ppy, weaponDraws) {
-  const isThisAllySlash = battleState === 'ally-slash' && currentAllyAttacker === i;
-  const hitLeft = isAllyAttack && allyHitIsLeft;
-  let portraits;
-  if (isVicPose && (Math.floor(Date.now() / 250) & 1) && fakePlayerVictoryPortraits[ally.palIdx]) portraits = fakePlayerVictoryPortraits[ally.palIdx];
-  else if (isAllyAttack) portraits = (hitLeft ? fakePlayerAttackLPortraits : fakePlayerAttackPortraits)[ally.palIdx];
-  else if (isThisAllySlash) portraits = (allyHitIsLeft ? fakePlayerKnifeLPortraits : fakePlayerKnifeRPortraits)[ally.palIdx];
-  else if (isAllyHit && fakePlayerHitPortraits[ally.palIdx]) portraits = fakePlayerHitPortraits[ally.palIdx];
-  else if (isNearFatal && fakePlayerKneelPortraits[ally.palIdx]) portraits = fakePlayerKneelPortraits[ally.palIdx];
-  else portraits = fakePlayerPortraits[ally.palIdx];
-  if (!portraits) return;
-  if (isAllyAttack) {
-    // R-hand back-swing blade goes BEHIND portrait (NES OAM: weapon spr06-09 loses to body spr00-05)
-    // L-hand back-swing blade goes IN FRONT (NES OAM: weapon spr00-03 beats body spr04-09)
-    if (!hitLeft) {
-      const wpnSt = weaponSubtype(ally.weaponId);
-      const backX = ppx + 8;
-      if (wpnSt === 'knife' && ally.weaponId === 0x1F && battleDaggerBladeCanvas) ctx.drawImage(battleDaggerBladeCanvas, backX, ppy - 7);
-      else if (wpnSt === 'knife' && battleKnifeBladeCanvas) ctx.drawImage(battleKnifeBladeCanvas, backX, ppy - 7);
-      else if (wpnSt === 'sword' && battleSwordBladeCanvas) ctx.drawImage(battleSwordBladeCanvas, backX, ppy - 7);
-    }
-  }
-  ctx.drawImage(portraits[ally.fadeStep], ppx, ppy);
-  if (isAllyAttack) {
-    if (hitLeft) {
-      const wpnSt = weaponSubtype(ally.weaponL);
-      if (wpnSt === 'knife' && ally.weaponL === 0x1F && battleDaggerBladeCanvas) weaponDraws.push({ img: battleDaggerBladeCanvas, x: ppx + 16, y: ppy - 7 });
-      else if (wpnSt === 'knife' && battleKnifeBladeCanvas) weaponDraws.push({ img: battleKnifeBladeCanvas, x: ppx + 16, y: ppy - 7 });
-      else if (wpnSt === 'sword' && battleSwordBladeCanvas) weaponDraws.push({ img: battleSwordBladeCanvas, x: ppx + 16, y: ppy - 7 });
-    }
-  }
-  if (isThisAllySlash) {
-    const activeWpnId = allyHitIsLeft ? ally.weaponL : ally.weaponId;
-    const wpnSt = weaponSubtype(activeWpnId);
-    if (wpnSt === 'knife' && activeWpnId === 0x1F && battleDaggerBladeSwungCanvas) weaponDraws.push({ img: battleDaggerBladeSwungCanvas, x: ppx - 16, y: ppy + 1 });
-    else if (wpnSt === 'knife' && battleKnifeBladeSwungCanvas) weaponDraws.push({ img: battleKnifeBladeSwungCanvas, x: ppx - 16, y: ppy + 1 });
-    else if (wpnSt === 'sword' && battleSwordBladeSwungCanvas) weaponDraws.push({ img: battleSwordBladeSwungCanvas, x: ppx - 16, y: ppy + 1 });
-    else if (battleFistCanvas) weaponDraws.push({ img: battleFistCanvas, x: ppx - 4, y: ppy + 10 });
-  }
-  // PVP enemy slash overlay on targeted ally during ally-hit — h-flipped (opponent attacks from left)
-  if (pvpSt.isPVPBattle && battleState === 'ally-hit' && enemyTargetAllyIdx === i) {
-    const eWpnId = pvpSt.pvpCurrentEnemyAllyIdx >= 0
-      ? pvpSt.pvpEnemyAllies[pvpSt.pvpCurrentEnemyAllyIdx]?.weaponId
-      : pvpSt.pvpOpponentStats?.weaponId;
-    const eSlashF = getSlashFramesForWeapon(eWpnId, true);
-    const af = Math.min(2, Math.floor(battleTimer / 67));
-    if (eSlashF && eSlashF[af]) {
-      const sf = eSlashF[af];
-      ctx.save();
-      ctx.translate(ppx + sf.width + [-0, -10, 8][af], ppy + [0, -6, 8][af]);
-      ctx.scale(-1, 1);
-      ctx.drawImage(sf, 0, 0);
-      ctx.restore();
-    }
-  }
-}
-function _drawAllyTexts(i, ally, rowY, isAllyHeal, ppx, ppy, weaponDraws) {
-  const namePal = [0x0F, 0x0F, 0x0F, 0x30];
-  for (let s = 0; s < ally.fadeStep; s++) namePal[3] = nesColorFade(namePal[3]);
-  const nameBytes = _nameToBytes(ally.name);
-  drawText(ctx, HUD_RIGHT_X + HUD_RIGHT_W - 8 - measureText(nameBytes), rowY + 8, nameBytes, namePal);
-  const hpBytes = _nameToBytes(String(ally.hp));
-  const allyHpNes = ally.hp <= Math.floor(ally.maxHP / 4) ? 0x16 : ally.hp <= Math.floor(ally.maxHP / 2) ? 0x28 : 0x2A;
-  const hpPal = [0x0F, 0x0F, 0x0F, allyHpNes];
-  for (let s = 0; s < ally.fadeStep; s++) hpPal[3] = nesColorFade(hpPal[3]);
-  drawText(ctx, HUD_RIGHT_X + HUD_RIGHT_W - 8 - measureText(hpBytes), rowY + 16, hpBytes, hpPal);
-  const dn = allyDamageNums[i];
-  if (dn) weaponDraws.push({ type: 'dmg', dn, bx: HUD_RIGHT_X + 16, by: _dmgBounceY(rowY + 16, dn.timer) });
-  if (isAllyHeal && cureSparkleFrames.length === 2) {
-    weaponDraws.push({ type: 'sparkle', frame: cureSparkleFrames[Math.floor(battleTimer / 67) & 1], px: ppx, py: ppy });
-  }
-}
-
-function _flushAllyWeaponDraws(weaponDraws) {
-  for (const wd of weaponDraws) {
-    if (wd.type === 'dmg') {
-      const { dn, bx, by } = wd;
-      if (dn.miss) {
-        drawText(ctx, bx - 8, by, BATTLE_MISS, [0x0F, 0x0F, 0x0F, 0x2B]);
-      } else {
-        _drawBattleNum(bx, by, dn.value, dn.heal ? [0x0F, 0x0F, 0x0F, 0x2B] : DMG_NUM_PAL);
-      }
-    } else if (wd.type === 'sparkle') {
-      const { frame, px, py } = wd;
-      _drawSparkleCorners(frame, px, py);
-    } else {
-      ctx.drawImage(wd.img, wd.x, wd.y);
-    }
-  }
-}
-
-function drawBattleAllies() {
-  if (battleAllies.length === 0 || battleState === 'none') return;
-  const panelTop = HUD_VIEW_Y + 32;
-  const weaponDraws = [];
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(HUD_RIGHT_X, panelTop, HUD_RIGHT_W, HUD_VIEW_H - 32);
-  ctx.clip();
-  for (let i = 0; i < battleAllies.length; i++) _drawAllyRow(i, battleAllies[i], panelTop, weaponDraws);
-  ctx.restore();
-  if (battleState === 'item-target-select' && inputSt.itemTargetType === 'player' && inputSt.itemTargetAllyIndex >= 0 && cursorTileCanvas) {
-    ctx.drawImage(cursorTileCanvas, HUD_RIGHT_X - 4, panelTop + inputSt.itemTargetAllyIndex * ROSTER_ROW_H + 12);
-  }
-  _flushAllyWeaponDraws(weaponDraws);
-}
-
-function _encounterMonsterPos(idx) {
-  const { sprH: dSprH, gridPos } = _encounterGridLayout();
-  const safeIdx = idx < gridPos.length ? idx : 0;
-  const pos = gridPos[safeIdx];
-  const m = encounterMonsters[safeIdx];
-  const mc = getMonsterCanvas(m?.monsterId, goblinBattleCanvas);
-  const mh = mc ? mc.height : dSprH;
-  return { bx: pos.x + 16, baseY: pos.y + (dSprH - mh) + Math.floor(mh / 2) - 8 };
-}
-function _drawBossDmgNum() {
-  if (!bossDamageNum || (bossDefeated && !isRandomEncounter)) return;
-  let bx, baseY;
-  if (isRandomEncounter && encounterMonsters) {
-    ({ bx, baseY } = _encounterMonsterPos(inputSt.targetIndex));
-  } else if (pvpSt.isPVPBattle) {
-    const totalEnemies = 1 + pvpSt.pvpEnemyAllies.length;
-    const cols = totalEnemies <= 1 ? 1 : 2;
-    const rows = totalEnemies <= 2 ? 1 : 2;
-    const cellW = 24, cellH = 32;
-    const centerX = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2);
-    const centerY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
-    const intLeft = centerX - cols * Math.floor(cellW / 2);
-    const intTop  = centerY - rows * Math.floor(cellH / 2);
-    const gridPos = [[rows-1,cols-1],[rows-1,0],[0,cols-1],[0,0]];
-    const tIdx = pvpSt.pvpPlayerTargetIdx < 0 ? 0 : pvpSt.pvpPlayerTargetIdx + 1;
-    const [gr, gc] = gridPos[Math.min(tIdx, gridPos.length - 1)];
-    bx = intLeft + gc * cellW + 12;
-    baseY = intTop + gr * cellH + 4;
-  } else {
-    bx = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2) - 4;
-    baseY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2) - 8;
-  }
-  const by = _dmgBounceY(baseY, bossDamageNum.timer);
-  _clipToViewport();
-  if (bossDamageNum.miss) {
-    drawText(ctx, bx - 8, by, BATTLE_MISS, [0x0F, 0x0F, 0x0F, 0x2B]);
-  } else {
-    _drawBattleNum(bx, by, bossDamageNum.value, DMG_NUM_PAL);
-  }
-  ctx.restore();
-}
-
-function _drawEnemyHealNum() {
-  if (!enemyHealNum) return;
-  let bx, baseY;
-  if (isRandomEncounter && encounterMonsters) {
-    ({ bx, baseY } = _encounterMonsterPos(enemyHealNum.index));
-  } else {
-    bx = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2) - 4;
-    baseY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2) - 8;
-  }
-  const hy = _dmgBounceY(baseY, enemyHealNum.timer);
-  _clipToViewport();
-  _drawBattleNum(bx, hy, enemyHealNum.value, [0x0F, 0x0F, 0x0F, 0x2B]);
-  ctx.restore();
-}
-
-function _drawBattleNum(bx, by, value, pal) {
-  const digits = String(value);
-  const b = new Uint8Array(digits.length);
-  for (let i = 0; i < digits.length; i++) b[i] = 0x80 + parseInt(digits[i]);
-  drawText(ctx, bx - Math.floor(digits.length * 4), by, b, pal);
-}
-function drawDamageNumbers() {
-  _drawBossDmgNum();
-
-  // Player damage number — bounces centered on portrait
-  if (playerDamageNum) {
-    const px = HUD_RIGHT_X + 16;
-    const baseY = HUD_VIEW_Y + 16;
-    const py = _dmgBounceY(baseY, playerDamageNum.timer);
-    if (playerDamageNum.miss) {
-      drawText(ctx, px - 8, py, BATTLE_MISS, [0x0F, 0x0F, 0x0F, 0x2B]);
-    } else {
-      _drawBattleNum(px, py, playerDamageNum.value, DMG_NUM_PAL);
-    }
-  }
-
-  // Player heal number — green bounce on portrait during item-use
-  if (playerHealNum) {
-    const px = HUD_RIGHT_X + 16;
-    const baseY = HUD_VIEW_Y + 16;
-    const py = _dmgBounceY(baseY, playerHealNum.timer);
-    _drawBattleNum(px, py, playerHealNum.value, [0x0F, 0x0F, 0x0F, 0x2B]);
-  }
-
-  _drawEnemyHealNum();
-}
+// Battle draw functions extracted to battle-drawing.js
 
 function _updateHudHpLvStep(dt) {
   const target = (battleState === 'none' || battleState === 'flash-strobe' ||
@@ -5422,15 +4326,16 @@ function _gameLoopDraw() {
     console.error('[RENDER ERROR]', e);
   }
   drawHUD();
-  if (battleAllies.length > 0 && battleState !== 'none') drawBattleAllies();
+  const _bds = _battleDrawShared();
+  if (battleAllies.length > 0 && battleState !== 'none') drawBattleAllies(_bds);
   else drawRoster();
   drawChat(ctx, _drawHudBox, rosterBattleFade);
   drawPauseMenu(ctx, _pauseShared());
   drawMsgBox(ctx, _clipToViewport, _drawBorderedBox);
   drawRosterMenu();
-  drawBattle();
-  drawSWExplosion();
-  drawSWDamageNumbers();
+  drawBattle(_bds);
+  drawSWExplosion(_bds);
+  drawSWDamageNumbers(_bds);
   if (transSt.state === 'hud-fade-out') {
     const alpha = Math.min(transSt.timer / ((HUD_INFO_FADE_STEPS + 1) * HUD_INFO_FADE_STEP_MS), 1);
     ctx.fillStyle = `rgba(0,0,0,${alpha})`;
