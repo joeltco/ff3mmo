@@ -455,8 +455,10 @@ let allyJoinTimer = 0;         // ms until next join check
 let allyJoinRound = 0;         // combat round counter
 let currentAllyAttacker = -1;  // index into battleAllies during ally turn
 let allyTargetIndex = -1;      // which enemy the ally is attacking
-let allyHitResult = null;      // single hit result {damage, crit} or {miss}
-let allyHitIsLeft = false;     // true when current ally hit is L-hand (second strike)
+let allyHitResult = null;      // current hit result {damage, crit} or {miss} (for drawing compat)
+let allyHitResults = [];       // full combo hit array for current ally turn
+let allyHitIdx = 0;            // current hit index in ally combo
+let allyHitIsLeft = false;     // true when current ally hit is L-hand
 let allyDamageNums = {};       // {allyIdx: {value, timer, crit} or {miss, timer}}
 let allyShakeTimer = {};       // {allyIdx: ms remaining}
 let enemyTargetAllyIdx = -1;   // which ally an enemy is targeting (-1 = player)
@@ -1590,6 +1592,9 @@ function _allyShared() {
     get allyTargetIndex()       { return allyTargetIndex; },
     get allyHitResult()         { return allyHitResult; },
     set allyHitResult(v)        { allyHitResult = v; },
+    get allyHitResults()        { return allyHitResults; },
+    get allyHitIdx()            { return allyHitIdx; },
+    set allyHitIdx(v)           { allyHitIdx = v; },
     get allyHitIsLeft()         { return allyHitIsLeft; },
     set allyHitIsLeft(v)        { allyHitIsLeft = v; },
     get encounterMonsters()     { return encounterMonsters; },
@@ -3413,7 +3418,12 @@ function processNextTurn() {
             ? (pvpSt.pvpEnemyAllies[pvpSt.pvpPlayerTargetIdx] || pvpSt.pvpOpponentStats).def
             : pvpSt.pvpOpponentStats.def)
         : BOSS_DEF;
-    allyHitResult = rollHits(ally.atk, targetDef, 85, 1)[0];
+    const dualWield = isWeapon(ally.weaponId) && isWeapon(ally.weaponL);
+    const baseHits = Math.max(1, Math.floor(ally.agi / 10));
+    const potentialHits = dualWield ? Math.max(2, baseHits) : Math.max(1, baseHits);
+    allyHitResults = rollHits(ally.atk, targetDef, 85, potentialHits);
+    allyHitIdx = 0;
+    allyHitResult = allyHitResults[0];
     battleState = 'ally-attack-start'; battleTimer = 0;
   } else {
     currentAttacker = turn.index;
@@ -3423,8 +3433,8 @@ function processNextTurn() {
       // Skip if this attacker is dead
       if (pai < 0 && (!pvpSt.pvpOpponentStats || pvpSt.pvpOpponentStats.hp <= 0)) { processNextTurn(); return; }
       if (pai >= 0 && (pvpSt.pvpEnemyAllies[pai]?.hp ?? 0) <= 0) { processNextTurn(); return; }
-      // Reset dual-wield counter for each fresh main-opponent turn
-      if (pai < 0) pvpSt.pvpOpponentHitsThisTurn = 0;
+      // Reset combo index for each fresh main-opponent turn
+      if (pai < 0) pvpSt.pvpEnemyHitIdx = 0;
     }
     if (turn.index >= 0 && encounterMonsters && encounterMonsters[turn.index].hp <= 0) { processNextTurn(); return; }
     battleState = 'enemy-flash'; battleTimer = 0; pvpSt.pvpPreflashDecided = false;
