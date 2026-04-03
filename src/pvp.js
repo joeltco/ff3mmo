@@ -42,6 +42,7 @@ export const pvpSt = {
   pvpOpponentShakeTimer:      0,      // drives opponent left-shake on damage (mirrors battleShakeTimer)
   pvpEnemyHitResults:     [],     // pre-rolled hits for current enemy combo
   pvpEnemyHitIdx:         0,      // current hit index in enemy combo
+  pvpEnemyDualWield:      false,  // true if current attacker is dual-wielding
   pvpPendingAttack:       null,   // {miss, shieldBlock, dmg} — staged during pvp-enemy-slash, applied at end
   pvpPreflashDecided:     false,  // true after defend/item/attack decision made for current enemy-flash
   pvpEnemyAllies:         [],     // fake players who join opponent's side
@@ -100,6 +101,7 @@ export function resetPVPState() {
   pvpSt.pvpPreflashDecided      = false;
   pvpSt.pvpEnemyHitResults      = [];
   pvpSt.pvpEnemyHitIdx          = 0;
+  pvpSt.pvpEnemyDualWield       = false;
 }
 
 // ── Ally joining ──────────────────────────────────────────────────────────────
@@ -304,6 +306,7 @@ function _processEnemyFlash() {
 
   pvpSt.pvpEnemyHitResults = [];
   pvpSt.pvpEnemyHitIdx = 0;
+  pvpSt.pvpEnemyDualWield = dualWield;
   if (targetAlly >= 0) {
     const def = _s.battleAllies[targetAlly].def;
     for (let i = 0; i < potentialHits; i++) {
@@ -540,8 +543,8 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   // Which hand is this enemy using right now?
   // Even hit index = right hand, odd = left hand (if dual-wielding)
   const isAttackState = isThisAttacking && (bs === 'enemy-attack' || bs === 'pvp-enemy-slash' || bs === 'ally-hit');
-  const isLeftHandWind = isMain && bs === 'pvp-second-windup' && pvpSt.pvpEnemyHitIdx % 2 === 1 && isWeapon(enemy.weaponL);
-  const isLeftHandAtk  = isMain && isAttackState && pvpSt.pvpEnemyHitIdx % 2 === 1 && isWeapon(enemy.weaponL);
+  const isLeftHandWind = isMain && bs === 'pvp-second-windup' && pvpSt.pvpEnemyHitIdx % 2 === 1 && pvpSt.pvpEnemyDualWield;
+  const isLeftHandAtk  = isMain && isAttackState && pvpSt.pvpEnemyHitIdx % 2 === 1 && pvpSt.pvpEnemyDualWield;
   const activeWeaponId = (isLeftHandWind || isLeftHandAtk)
     ? (enemy.weaponL != null ? enemy.weaponL : enemy.weaponId)
     : enemy.weaponId;
