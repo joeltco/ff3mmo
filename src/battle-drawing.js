@@ -304,7 +304,7 @@ function _drawBattlePortrait() {
       const deathCanvas = _s.deathPoseCanvases && _s.deathPoseCanvases[0];
       if (deathCanvas) {
         _s.ctx.globalAlpha = fadeT;
-        const dx = HUD_RIGHT_X + 32 + Math.floor(((HUD_RIGHT_W - 32) - 32) / 2);
+        const dx = HUD_RIGHT_X + HUD_RIGHT_W - 32 - 8;
         const dy = HUD_VIEW_Y + Math.floor((32 - 16) / 2);
         _s.ctx.drawImage(deathCanvas, dx, dy);
         _s.ctx.globalAlpha = 1;
@@ -1107,7 +1107,7 @@ function _drawAllyRow(i, ally, panelTop, weaponDraws) {
       const deathCanvas = _s.deathPoseCanvases && _s.deathPoseCanvases[ally.palIdx];
       if (deathCanvas) {
         _s.ctx.globalAlpha = fadeT;
-        const dx = HUD_RIGHT_X + 32 + Math.floor(((HUD_RIGHT_W - 32) - 32) / 2);
+        const dx = HUD_RIGHT_X + HUD_RIGHT_W - 32 - 8;
         const dy = rowY + Math.floor((ROSTER_ROW_H - 16) / 2);
         _s.ctx.drawImage(deathCanvas, dx, dy);
         _s.ctx.globalAlpha = 1;
