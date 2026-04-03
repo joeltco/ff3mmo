@@ -263,6 +263,7 @@ let playerHealNum = null;    // {value, timer} — green heal number on portrait
 let enemyHealNum = null;     // {value, timer, index} — green heal number on enemy
 let southWindTargets = [];     // ordered list of enemy indices to hit
 let southWindHitIdx = 0;       // current target being hit
+let _swDmgApplied = false;     // damage applied this cycle (after explosion)
 let southWindHitCanvas = null; // unused - kept for compat
 let swPhaseCanvases = [];      // 3-phase expanding ice explosion [16×16, 32×32, 48×48]
 let southWindDmgNums = {};     // {enemyIdx: {value, timer}} — damage numbers during sw-hit
@@ -3947,17 +3948,21 @@ function _updateSWThrowHit() {
       if (southWindTargets.length === 0) { processNextTurn(); }
       else {
         southWindHitIdx = 0;
-        _applySWDamage(southWindTargets[0]);
+        _swDmgApplied = false;
         battleState = 'sw-hit'; battleTimer = 0;
       }
     }
     return true;
   }
-  // sw-hit: explosion 3 phases × 133ms, hold until 700ms
-  if (battleTimer >= 700) {
+  // sw-hit: explosion 400ms, then damage + shake, hold until 1100ms
+  if (!_swDmgApplied && battleTimer >= 400) {
+    _applySWDamage(southWindTargets[southWindHitIdx]);
+    _swDmgApplied = true;
+  }
+  if (battleTimer >= 1100) {
     southWindHitIdx++;
+    _swDmgApplied = false;
     if (southWindHitIdx < southWindTargets.length) {
-      _applySWDamage(southWindTargets[southWindHitIdx]);
       battleTimer = 0;
     } else {
       if (pvpSt.isPVPBattle) {
