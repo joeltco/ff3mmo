@@ -422,8 +422,8 @@ function _processPVPEnemySlash() {
     inputSt.battleProfHits['shield'] = (inputSt.battleProfHits['shield'] || 0) + 1;
   }
   // Advance combo
-  pvpSt.pvpEnemyHitIdx++;
-  if (pvpSt.pvpEnemyHitIdx < pvpSt.pvpEnemyHitResults.length) {
+  if (pvpSt.pvpEnemyHitIdx + 1 < pvpSt.pvpEnemyHitResults.length) {
+    pvpSt.pvpEnemyHitIdx++;
     // More hits — windup for next slash
     _s.battleState = 'pvp-second-windup'; _s.battleTimer = 0;
   } else {
