@@ -1,13 +1,13 @@
-// message-box.js — slide-in/hold/slide-out message box overlay
+// message-box.js — slide-in/hold/slide-out message box overlay (draws over chat HUD panel)
 
 import { drawText, measureText } from './font-renderer.js';
 
 // NES layout constants — must match game.js
-const HUD_VIEW_X = 0;
-const HUD_VIEW_Y = 32;
-const HUD_VIEW_W = 144;
+const CANVAS_W   = 256;
+const HUD_BOT_Y  = 176;
+const HUD_BOT_H  = 64;
 
-const BATTLE_SCROLL_MS = 150;
+const SLIDE_MS = 80;  // faster slide than old viewport box
 
 // ── Mutable state ──────────────────────────────────────────────────────────
 export const msgState = {
@@ -31,9 +31,9 @@ export function updateMsgBox(dt) {
   msgState.timer += Math.min(dt, 33);
 
   if (msgState.state === 'slide-in') {
-    if (msgState.timer >= BATTLE_SCROLL_MS) { msgState.state = 'hold'; msgState.timer = 0; }
+    if (msgState.timer >= SLIDE_MS) { msgState.state = 'hold'; msgState.timer = 0; }
   } else if (msgState.state === 'slide-out') {
-    if (msgState.timer >= BATTLE_SCROLL_MS) {
+    if (msgState.timer >= SLIDE_MS) {
       const cb = msgState.onClose;
       msgState.state = 'none'; msgState.timer = 0; msgState.bytes = null; msgState.onClose = null;
       if (cb) cb();
@@ -41,30 +41,33 @@ export function updateMsgBox(dt) {
   }
 }
 
-export function drawMsgBox(ctx, clipToViewportFn, drawBorderedBoxFn) {
+export function drawMsgBox(ctx, _clipUnused, drawBorderedBoxFn) {
   if (msgState.state === 'none' || !msgState.bytes) return;
 
-  const boxW      = HUD_VIEW_W - 16;
+  const boxW      = CANVAS_W;
+  const boxH      = HUD_BOT_H;
   const interiorW = boxW - 16;
   const maxChars  = Math.floor(interiorW / 8);
   const lines     = _wrapMsgBytes(msgState.bytes, maxChars);
   const lineH     = 12;
-  const boxH      = Math.max(48, 24 + lines.length * lineH);
-  const vpTop     = HUD_VIEW_Y;
-  const finalY    = vpTop + 8;
-  const centerX   = HUD_VIEW_X + Math.floor((HUD_VIEW_W - boxW) / 2);
+  const finalY    = HUD_BOT_Y;
 
   let boxY = finalY;
   if (msgState.state === 'slide-in') {
-    const t = Math.min(msgState.timer / BATTLE_SCROLL_MS, 1);
-    boxY = (vpTop - boxH) + (finalY - (vpTop - boxH)) * t;
+    const t = Math.min(msgState.timer / SLIDE_MS, 1);
+    boxY = (HUD_BOT_Y - boxH) + boxH * t;  // slide down from above into chat panel
   } else if (msgState.state === 'slide-out') {
-    const t = Math.min(msgState.timer / BATTLE_SCROLL_MS, 1);
-    boxY = finalY + ((vpTop - boxH) - finalY) * t;
+    const t = Math.min(msgState.timer / SLIDE_MS, 1);
+    boxY = finalY - boxH * t;               // slide back up out of view
   }
 
-  clipToViewportFn();
-  drawBorderedBoxFn(centerX, boxY, boxW, boxH, true);
+  // Clip to chat panel area
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, HUD_BOT_Y, CANVAS_W, HUD_BOT_H);
+  ctx.clip();
+
+  drawBorderedBoxFn(0, boxY, boxW, boxH, true);
 
   if (msgState.state === 'hold' || msgState.state === 'slide-out') {
     const fadedPal   = [0x02, 0x02, 0x02, 0x30];
@@ -72,7 +75,7 @@ export function drawMsgBox(ctx, clipToViewportFn, drawBorderedBoxFn) {
     const startTY    = boxY + Math.floor((boxH - textBlockH) / 2);
     for (let i = 0; i < lines.length; i++) {
       const tw = measureText(lines[i]);
-      const tx = centerX + Math.floor((boxW - tw) / 2);
+      const tx = Math.floor((boxW - tw) / 2);
       drawText(ctx, tx, startTY + i * lineH, lines[i], fadedPal);
     }
   }
@@ -83,8 +86,6 @@ export function drawMsgBox(ctx, clipToViewportFn, drawBorderedBoxFn) {
 // ── Private helpers ────────────────────────────────────────────────────────
 
 function _wrapMsgBytes(bytes, maxChars) {
-  // Split msg bytes into lines that fit within maxChars.
-  // Word-break on 0xFF (space). Each printable byte (>=0x28) = 1 char.
   const lines = [];
   let lineStart = 0, lastSpace = -1, lineLen = 0;
   for (let i = 0; i < bytes.length; i++) {
