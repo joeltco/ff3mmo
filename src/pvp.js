@@ -76,8 +76,8 @@ export function startPVPBattle(shared, target) {
   pvpSt.pvpCurrentEnemyAllyIdx  = -1;
   pvpSt.pvpPlayerTargetIdx      = -1;
   pvpSt.pvpBoxResizeStartTime   = 0;
-  _s.bossHP       = pvpSt.pvpOpponentStats.maxHP;
-  _s.bossDefeated = false;
+  _s.enemyHP       = pvpSt.pvpOpponentStats.maxHP;
+  _s.enemyDefeated = false;
   _s.isRandomEncounter = false;
   _s.preBattleTrack    = TRACKS.CRYSTAL_CAVE;
   _s.battleState  = 'flash-strobe';
@@ -266,10 +266,10 @@ function _processEnemyFlash() {
       return true;
     }
     const maxHP = pvpSt.pvpOpponentStats.maxHP;
-    const heal = Math.min(50, maxHP - _s.bossHP);
-    if (_s.bossHP < maxHP * 0.5 && heal > 0 && Math.random() < 0.25) {
-      _s.bossHP += heal;
-      pvpSt.pvpOpponentStats.hp = _s.bossHP;
+    const heal = Math.min(50, maxHP - _s.enemyHP);
+    if (_s.enemyHP < maxHP * 0.5 && heal > 0 && Math.random() < 0.25) {
+      _s.enemyHP += heal;
+      pvpSt.pvpOpponentStats.hp = _s.enemyHP;
       _s.enemyHealNum = { value: heal, timer: 0 };
       playSFX(SFX.CURE);
       _s.battleState = 'pvp-opp-potion'; _s.battleTimer = 0;
@@ -521,8 +521,8 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   const isCurrentTarget = isMain ? pvpSt.pvpPlayerTargetIdx < 0 : (idx - 1) === pvpSt.pvpPlayerTargetIdx;
   const isBeingKilled = isCurrentTarget && (bs === 'player-slash' || bs === 'player-hit-show' ||
     bs === 'player-damage-show' || bs === 'ally-slash' || bs === 'ally-damage-show');
-  if (isMain && (_s.bossDefeated || (pvpSt.pvpOpponentStats && pvpSt.pvpOpponentStats.hp <= 0)) && !isDying && !isBeingKilled) return;
-  if (!isMain && (_s.bossDefeated || enemy.hp <= 0) && !isDying && !isBeingKilled) return;
+  if (isMain && (_s.enemyDefeated || (pvpSt.pvpOpponentStats && pvpSt.pvpOpponentStats.hp <= 0)) && !isDying && !isBeingKilled) return;
+  if (!isMain && (_s.enemyDefeated || enemy.hp <= 0) && !isDying && !isBeingKilled) return;
   // Shake left when taking damage (mirrors player's right-shake on hit)
   if (isCurrentTarget && pvpSt.pvpOpponentShakeTimer > 0) {
     sprX += (Math.floor(pvpSt.pvpOpponentShakeTimer / 67) & 1) ? -2 : 2;
@@ -554,7 +554,7 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   // Body canvas — drawn directly (pre-h-flipped canvases face left, matching enemy-side visual style)
   // MIRRORING RULE: opponent faces left, so R-hand canvases look like L-hand after flip and vice versa.
   // Use the opposite hand's canvas to get the correct visual for each hand.
-  const oppHP   = isMain ? (pvpSt.pvpOpponentStats ? pvpSt.pvpOpponentStats.hp : _s.bossHP) : (enemy.hp != null ? enemy.hp : 0);
+  const oppHP   = isMain ? (pvpSt.pvpOpponentStats ? pvpSt.pvpOpponentStats.hp : _s.enemyHP) : (enemy.hp != null ? enemy.hp : 0);
   const oppMaxHP = isMain ? (pvpSt.pvpOpponentStats ? pvpSt.pvpOpponentStats.maxHP : 1) : (enemy.maxHP || 1);
   const isNearFatalOpp = oppHP > 0 && oppHP <= Math.floor(oppMaxHP / 4);
   // Opponent victory = player was defeated (defeat-monster-fade)

@@ -284,18 +284,18 @@ function buildItemSelectList() {
 
 // Boss fight state — stats read from monsters.js (Land Turtle 0xCC)
 const _BOSS_DATA = MONSTERS.get(0xCC) || { hp: 120, atk: 8, def: 1 };
-let bossHP = _BOSS_DATA.hp;
+let enemyHP = _BOSS_DATA.hp;
 const BOSS_ATK = _BOSS_DATA.atk, BOSS_DEF = _BOSS_DATA.def, BOSS_MAX_HP = _BOSS_DATA.hp;
 
 let battleState = 'none';
 let battleTimer = 0;
 // sfxCutTimerId moved to battle-sfx.js
 let battleMessage = null;     // Uint8Array for status messages
-let bossDamageNum = null;     // {value, timer}
+let enemyDmgNum = null;     // {value, timer}
 let playerDamageNum = null;   // {value, timer}
 let bossFlashTimer = 0;
 let battleShakeTimer = 0;
-let bossDefeated = false;
+let enemyDefeated = false;
 let isDefending = false;
 let runSlideBack = false;
 
@@ -1315,7 +1315,7 @@ function _grayViewport() {
 // _pausePanelLayout → pause-menu.js
 function _resetBattleVars() {
   inputSt.battleCursor = 0; battleMessage = null;
-  bossDamageNum = null; playerDamageNum = null; playerHealNum = null; enemyHealNum = null;
+  enemyDmgNum = null; playerDamageNum = null; playerHealNum = null; enemyHealNum = null;
   encounterDropItem = null; bossFlashTimer = 0; battleShakeTimer = 0;
   isDefending = false; battleAllies = []; allyJoinRound = 0;
   currentAllyAttacker = -1; allyTargetIndex = -1; allyHitResult = null; allyHitIsLeft = false;
@@ -1459,8 +1459,8 @@ function _inputShared() {
     get pvpEnemyAllies()        { return pvpSt.pvpEnemyAllies; },
     get pvpPlayerTargetIdx()    { return pvpSt.pvpPlayerTargetIdx; },
     set pvpPlayerTargetIdx(v)   { pvpSt.pvpPlayerTargetIdx = v; },
-    get bossHP()                { return bossHP; },
-    set bossHP(v)               { bossHP = v; },
+    get enemyHP()                { return enemyHP; },
+    set enemyHP(v)               { enemyHP = v; },
     saveSlotsToDB,
     addItem,
     removeItem,
@@ -1489,10 +1489,10 @@ function _pauseShared() {
 function _pvpShared() {
   return {
     // ── Primitive game state (getters/setters so pvp always reads live values) ──
-    get bossHP()                { return bossHP; },
-    set bossHP(v)               { bossHP = v; },
-    get bossDefeated()          { return bossDefeated; },
-    set bossDefeated(v)         { bossDefeated = v; },
+    get enemyHP()                { return enemyHP; },
+    set enemyHP(v)               { enemyHP = v; },
+    get enemyDefeated()          { return enemyDefeated; },
+    set enemyDefeated(v)         { enemyDefeated = v; },
     get isRandomEncounter()     { return isRandomEncounter; },
     set isRandomEncounter(v)    { isRandomEncounter = v; },
     get preBattleTrack()        { return preBattleTrack; },
@@ -1584,8 +1584,8 @@ function _allyShared() {
     set battleState(v)          { battleState = v; },
     get battleTimer()           { return battleTimer; },
     set battleTimer(v)          { battleTimer = v; },
-    get bossHP()                { return bossHP; },
-    set bossHP(v)               { bossHP = v; },
+    get enemyHP()                { return enemyHP; },
+    set enemyHP(v)               { enemyHP = v; },
     get isRandomEncounter()     { return isRandomEncounter; },
     get battleAllies()          { return battleAllies; },
     get currentAllyAttacker()   { return currentAllyAttacker; },
@@ -1604,8 +1604,8 @@ function _allyShared() {
     set enemyTargetAllyIdx(v)   { enemyTargetAllyIdx = v; },
     get critFlashTimer()        { return critFlashTimer; },
     set critFlashTimer(v)       { critFlashTimer = v; },
-    get bossDamageNum()         { return bossDamageNum; },
-    set bossDamageNum(v)        { bossDamageNum = v; },
+    get enemyDmgNum()         { return enemyDmgNum; },
+    set enemyDmgNum(v)        { enemyDmgNum = v; },
     get turnQueue()             { return turnQueue; },
     set turnQueue(v)            { turnQueue = v; },
     get pvpSt()                 { return pvpSt; },
@@ -1623,11 +1623,11 @@ function _battleDrawShared() {
   return {
     get battleState() { return battleState; },
     get battleTimer() { return battleTimer; },
-    get bossHP() { return bossHP; },
-    get bossDefeated() { return bossDefeated; },
+    get enemyHP() { return enemyHP; },
+    get enemyDefeated() { return enemyDefeated; },
     get isRandomEncounter() { return isRandomEncounter; },
     get isDefending() { return isDefending; },
-    get bossDamageNum() { return bossDamageNum; },
+    get enemyDmgNum() { return enemyDmgNum; },
     get playerDamageNum() { return playerDamageNum; },
     get playerHealNum() { return playerHealNum; },
     get enemyHealNum() { return enemyHealNum; },
@@ -1954,7 +1954,7 @@ function _loadDungeonFloor(mapId, returnX, returnY) {
   worldX = playerX * TILE_SIZE; worldY = playerY * TILE_SIZE;
   mapRenderer = new MapRenderer(mapData, playerX, playerY); resetIndoorWaterCache();
   _flameSprites = [];
-  bossSprite = (floorIndex === 4 && adamantoiseFrames && !bossDefeated)
+  bossSprite = (floorIndex === 4 && adamantoiseFrames && !enemyDefeated)
     ? { frames: adamantoiseFrames, px: 6 * TILE_SIZE, py: 8 * TILE_SIZE } : null;
   disabledTrigger = { x: playerX, y: playerY };
   moving = false; sprite.setDirection(DIR_DOWN); sprite.resetFrame();
@@ -2009,7 +2009,7 @@ function loadWorldMapAtPosition(tileX, tileY) {
   onWorldMap = true;
   dungeonFloor = -1;
   encounterSteps = 0;
-  bossDefeated = false;  // boss respawns on dungeon re-entry
+  enemyDefeated = false;  // boss respawns on dungeon re-entry
   mapRenderer = null;
   mapData = null;
   setupTopBox(0, true);
@@ -2029,7 +2029,7 @@ function startMove(dir) {
   const tileY = targetY / TILE_SIZE;
 
   // Block walking onto boss sprite tile
-  if (bossSprite && !bossDefeated && tileX === bossSprite.px / TILE_SIZE && tileY === bossSprite.py / TILE_SIZE) {
+  if (bossSprite && !enemyDefeated && tileX === bossSprite.px / TILE_SIZE && tileY === bossSprite.py / TILE_SIZE) {
     sprite.setDirection(dir);
     sprite.resetFrame();
     return;
@@ -2110,7 +2110,7 @@ function handleAction() {
   if (facedX < 0 || facedX >= 32 || facedY < 0 || facedY >= 32) return;
 
   // Boss fight trigger — face Adamantoise at crystal room center
-  if (bossSprite && !bossDefeated && facedX === 6 && facedY === 8) {
+  if (bossSprite && !enemyDefeated && facedX === 6 && facedY === 8) {
     startBattle();
     return;
   }
@@ -3255,7 +3255,7 @@ function buildTurnOrder() {
         actors.push({ type: 'enemy', index: i, priority: Math.floor(Math.random() * 256) });
     }
   } else if (pvpSt.isPVPBattle) {
-    // Main opponent — only if still alive (use authoritative HP, not bossHP proxy)
+    // Main opponent — only if still alive (use authoritative HP, not enemyHP proxy)
     if (pvpSt.pvpOpponentStats && pvpSt.pvpOpponentStats.hp > 0)
       actors.push({ type: 'enemy', index: -1, pvpAllyIdx: -1, priority: Math.floor(Math.random() * 256) });
     // PVP enemy allies — only alive ones
@@ -3276,15 +3276,15 @@ function _applySWDamage(tidx) {
   const dmg = Math.max(1, Math.floor(swBaseDamage / southWindTargets.length));
   if (pvpSt.isPVPBattle) {
     if (tidx === 0) {
-      // Main boss — use authoritative HP source, sync bossHP if this IS the current target
+      // Main boss — use authoritative HP source, sync enemyHP if this IS the current target
       if (!pvpSt.pvpOpponentStats || pvpSt.pvpOpponentStats.hp <= 0) return;
       pvpSt.pvpOpponentStats.hp = Math.max(0, pvpSt.pvpOpponentStats.hp - dmg);
-      if (pvpSt.pvpPlayerTargetIdx < 0) bossHP = pvpSt.pvpOpponentStats.hp;
+      if (pvpSt.pvpPlayerTargetIdx < 0) enemyHP = pvpSt.pvpOpponentStats.hp;
     } else {
       const ally = pvpSt.pvpEnemyAllies[tidx - 1];
       if (!ally || ally.hp <= 0) return;
       ally.hp = Math.max(0, ally.hp - dmg);
-      if (pvpSt.pvpPlayerTargetIdx === tidx - 1) bossHP = ally.hp;
+      if (pvpSt.pvpPlayerTargetIdx === tidx - 1) enemyHP = ally.hp;
     }
     southWindDmgNums[tidx] = { value: dmg, timer: 0 };
     playSFX(SFX.SW_HIT);
@@ -3363,8 +3363,8 @@ function _playerTurnConsumable() {
       const heal = Math.min(50, mon.maxHP - mon.hp);
       mon.hp += heal; itemHealAmount = heal; enemyHealNum = { value: heal, timer: 0, index: target };
     } else {
-      const heal = Math.min(50, BOSS_MAX_HP - bossHP);
-      bossHP += heal; itemHealAmount = heal; enemyHealNum = { value: heal, timer: 0, index: 0 };
+      const heal = Math.min(50, BOSS_MAX_HP - enemyHP);
+      enemyHP += heal; itemHealAmount = heal; enemyHealNum = { value: heal, timer: 0, index: 0 };
     }
   }
   battleState = 'item-use'; battleTimer = 0;
@@ -3447,7 +3447,7 @@ function startBattle() {
   battleTimer = 0;
   showMsgBox(BATTLE_ROAR, () => { battleState = 'flash-strobe'; battleTimer = 0; playSFX(SFX.BATTLE_SWIPE); });
   _resetBattleVars();
-  bossHP = BOSS_MAX_HP;
+  enemyHP = BOSS_MAX_HP;
   playSFX(SFX.EARTHQUAKE);
 }
 
@@ -3477,7 +3477,7 @@ function startRandomEncounter() {
   battleTimer = 0;
   inputSt.battleCursor = 0;
   battleMessage = null;
-  bossDamageNum = null;
+  enemyDmgNum = null;
   playerDamageNum = null;
   playerHealNum = null;
   enemyHealNum = null;
@@ -3550,7 +3550,7 @@ function _updateBattleTimers(dt) {
   if (battleShakeTimer > 0) battleShakeTimer = Math.max(0, battleShakeTimer - dt);
   if (pvpSt.pvpOpponentShakeTimer > 0) pvpSt.pvpOpponentShakeTimer = Math.max(0, pvpSt.pvpOpponentShakeTimer - dt);
 
-  if (bossDamageNum) { bossDamageNum.timer += dt; if (bossDamageNum.timer >= BATTLE_DMG_SHOW_MS) bossDamageNum = null; }
+  if (enemyDmgNum) { enemyDmgNum.timer += dt; if (enemyDmgNum.timer >= BATTLE_DMG_SHOW_MS) enemyDmgNum = null; }
   for (const k of Object.keys(southWindDmgNums)) {
     southWindDmgNums[k].timer += dt;
     if (southWindDmgNums[k].timer >= 700) delete southWindDmgNums[k];
@@ -3667,7 +3667,7 @@ function _finalizeComboHits() {
   for (const h of inputSt.hitResults) {
     if (!h.miss) { totalDmg += h.damage; allMiss = false; if (h.crit) anyCrit = true; }
   }
-  bossDamageNum = allMiss ? { miss: true, timer: 0 } : { value: totalDmg, crit: anyCrit, timer: 0 };
+  enemyDmgNum = allMiss ? { miss: true, timer: 0 } : { value: totalDmg, crit: anyCrit, timer: 0 };
   if (pvpSt.isPVPBattle && !allMiss) pvpSt.pvpOpponentShakeTimer = BATTLE_SHAKE_MS;
   battleState = 'player-damage-show';
   battleTimer = 0;
@@ -3720,11 +3720,11 @@ function _updatePlayerSlash() {
       if (isRandomEncounter && encounterMonsters) {
         encounterMonsters[inputSt.targetIndex].hp = Math.max(0, encounterMonsters[inputSt.targetIndex].hp - hit.damage);
       } else {
-        bossHP = Math.max(0, bossHP - hit.damage);
+        enemyHP = Math.max(0, enemyHP - hit.damage);
         // Sync authoritative HP source for PVP free targeting
         if (pvpSt.isPVPBattle) {
-          if (pvpSt.pvpPlayerTargetIdx < 0) pvpSt.pvpOpponentStats.hp = bossHP;
-          else if (pvpSt.pvpEnemyAllies[pvpSt.pvpPlayerTargetIdx]) pvpSt.pvpEnemyAllies[pvpSt.pvpPlayerTargetIdx].hp = bossHP;
+          if (pvpSt.pvpPlayerTargetIdx < 0) pvpSt.pvpOpponentStats.hp = enemyHP;
+          else if (pvpSt.pvpEnemyAllies[pvpSt.pvpPlayerTargetIdx]) pvpSt.pvpEnemyAllies[pvpSt.pvpPlayerTargetIdx].hp = enemyHP;
         }
       }
       if (hit.crit) critFlashTimer = 0;
@@ -3753,7 +3753,7 @@ function _updatePlayerDamageShow() {
       battleState = 'monster-death';
       battleTimer = 0;
       playSFX(SFX.MONSTER_DEATH);
-    } else if (!isRandomEncounter && bossHP <= 0) {
+    } else if (!isRandomEncounter && enemyHP <= 0) {
       if (pvpSt.isPVPBattle) {
         if (pvpSt.pvpPlayerTargetIdx < 0) pvpSt.pvpOpponentStats.hp = 0;
         else pvpSt.pvpEnemyAllies[pvpSt.pvpPlayerTargetIdx].hp = 0;
@@ -3769,14 +3769,14 @@ function _advancePVPTargetOrVictory() {
   // Find any remaining alive enemy — use authoritative HP sources
   if (pvpSt.pvpOpponentStats && pvpSt.pvpOpponentStats.hp > 0) {
     pvpSt.pvpPlayerTargetIdx = -1;
-    bossHP = pvpSt.pvpOpponentStats.hp;
+    enemyHP = pvpSt.pvpOpponentStats.hp;
     processNextTurn();
     return;
   }
   const aliveAllyIdx = pvpSt.pvpEnemyAllies.findIndex(a => a.hp > 0);
   if (aliveAllyIdx >= 0) {
     pvpSt.pvpPlayerTargetIdx = aliveAllyIdx;
-    bossHP = pvpSt.pvpEnemyAllies[aliveAllyIdx].hp;
+    enemyHP = pvpSt.pvpEnemyAllies[aliveAllyIdx].hp;
     processNextTurn();
   } else {
     _triggerPVPVictory();
@@ -3792,7 +3792,7 @@ function _triggerPVPVictory() {
   inputSt.battleProfHits = {}; profLevelUpIdx = 0;
   _syncSaveSlotProgress();
   saveSlotsToDB();
-  bossDefeated = true;
+  enemyDefeated = true;
   isDefending = false; battleState = 'victory-name-out'; battleTimer = 0;
   playSFX(SFX.BOSS_DEATH);
 }
@@ -4050,7 +4050,7 @@ function _updateBossDissolve(dt) {
   const prevBlock = Math.floor(Math.floor((battleTimer - dt) / BOSS_DISSOLVE_FRAME_MS) / BOSS_DISSOLVE_STEPS);
   if (dBlock !== prevBlock && dBlock > 0 && (dBlock & 3) === 0) playSFX(SFX.BOSS_DEATH);
   if (battleTimer >= BOSS_BLOCKS * BOSS_DISSOLVE_STEPS * BOSS_DISSOLVE_FRAME_MS) {
-    bossDefeated = true; bossSprite = null;
+    enemyDefeated = true; bossSprite = null;
     const _bossData = MONSTERS.get(0xCC);
     encounterExpGained = _bossData?.exp || 132; encounterGilGained = _bossData?.gil || 500;
     grantExp(encounterExpGained); ps.gil += encounterGilGained;

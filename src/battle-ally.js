@@ -12,7 +12,7 @@ function _finalizeAllyCombo() {
   for (const h of _s.allyHitResults) {
     if (!h.miss) { totalDmg += h.damage; allMiss = false; if (h.crit) anyCrit = true; }
   }
-  _s.bossDamageNum = allMiss ? { miss: true, timer: 0 } : { value: totalDmg, crit: anyCrit, timer: 0 };
+  _s.enemyDmgNum = allMiss ? { miss: true, timer: 0 } : { value: totalDmg, crit: anyCrit, timer: 0 };
   _s.inputSt.targetIndex = _s.allyTargetIndex;
 }
 
@@ -21,7 +21,7 @@ function _updateAllyDamageShow() {
   if (_s.isRandomEncounter && _s.encounterMonsters && _s.allyTargetIndex >= 0 && _s.encounterMonsters[_s.allyTargetIndex].hp <= 0) {
     _s.dyingMonsterIndices = new Map([[_s.allyTargetIndex, 0]]);
     _s.battleState = 'monster-death'; _s.battleTimer = 0; playSFX(SFX.MONSTER_DEATH);
-  } else if (!_s.isRandomEncounter && _s.bossHP <= 0) {
+  } else if (!_s.isRandomEncounter && _s.enemyHP <= 0) {
     if (_s.pvpSt.isPVPBattle) {
       if (_s.pvpSt.pvpPlayerTargetIdx < 0) _s.pvpSt.pvpOpponentStats.hp = 0;
       else _s.pvpSt.pvpEnemyAllies[_s.pvpSt.pvpPlayerTargetIdx].hp = 0;
@@ -75,11 +75,11 @@ function _updateAllyAttack() {
         if (_s.allyTargetIndex >= 0 && _s.encounterMonsters) {
           _s.encounterMonsters[_s.allyTargetIndex].hp = Math.max(0, _s.encounterMonsters[_s.allyTargetIndex].hp - hit.damage);
         } else if (_s.allyTargetIndex < 0) {
-          _s.bossHP = Math.max(0, _s.bossHP - hit.damage);
+          _s.enemyHP = Math.max(0, _s.enemyHP - hit.damage);
           if (_s.pvpSt.isPVPBattle) {
             _s.pvpSt.pvpOpponentShakeTimer = _s.BATTLE_SHAKE_MS;
-            if (_s.pvpSt.pvpPlayerTargetIdx < 0) _s.pvpSt.pvpOpponentStats.hp = _s.bossHP;
-            else if (_s.pvpSt.pvpEnemyAllies[_s.pvpSt.pvpPlayerTargetIdx]) _s.pvpSt.pvpEnemyAllies[_s.pvpSt.pvpPlayerTargetIdx].hp = _s.bossHP;
+            if (_s.pvpSt.pvpPlayerTargetIdx < 0) _s.pvpSt.pvpOpponentStats.hp = _s.enemyHP;
+            else if (_s.pvpSt.pvpEnemyAllies[_s.pvpSt.pvpPlayerTargetIdx]) _s.pvpSt.pvpEnemyAllies[_s.pvpSt.pvpPlayerTargetIdx].hp = _s.enemyHP;
           }
         }
         if (hit.crit) _s.critFlashTimer = 0;
