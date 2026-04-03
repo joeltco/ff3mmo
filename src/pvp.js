@@ -360,14 +360,12 @@ function _processPVPOppPotion() {
 function _processPVPOppSWThrow() {
   if (_s.battleState !== 'pvp-opp-sw-throw') return false;
   if (_s.battleTimer >= 250) {
+    // Roll damage now but don't show yet — explosion plays first
     const atk = pvpSt.pvpOpponentStats.atk;
     const swAtk = Math.floor(atk / 2) + 55;
     const swBase = Math.floor((swAtk + Math.floor(Math.random() * Math.floor(swAtk / 2 + 1))) / 2);
-    const dmg = Math.max(1, calcDamage(swBase, ps.def));
-    ps.hp = Math.max(0, ps.hp - dmg);
-    _s.playerDamageNum = { value: dmg, timer: 0 };
+    pvpSt._pendingSWDmg = Math.max(1, calcDamage(swBase, ps.def));
     playSFX(SFX.SW_HIT);
-    _s.battleShakeTimer = BATTLE_SHAKE_MS;
     _s.battleState = 'pvp-opp-sw-hit'; _s.battleTimer = 0;
   }
   return true;
@@ -375,8 +373,18 @@ function _processPVPOppSWThrow() {
 
 function _processPVPOppSWHit() {
   if (_s.battleState !== 'pvp-opp-sw-hit') return false;
-  if (_s.battleTimer >= 700) {
+  // Explosion plays for 400ms (3 phases × 133ms), then shake + damage
+  if (_s.battleTimer >= 400 && !pvpSt._swDmgApplied) {
+    const dmg = pvpSt._pendingSWDmg;
+    ps.hp = Math.max(0, ps.hp - dmg);
+    _s.playerDamageNum = { value: dmg, timer: 0 };
+    _s.battleShakeTimer = BATTLE_SHAKE_MS;
+    pvpSt._swDmgApplied = true;
+  }
+  if (_s.battleTimer >= 400 + 700) {
     _s.playerDamageNum = null;
+    pvpSt._pendingSWDmg = 0;
+    pvpSt._swDmgApplied = false;
     if (_s.isTeamWiped()) {
       _s.isDefending = false; _s.battleState = 'team-wipe'; _s.battleTimer = 0;
     } else {
