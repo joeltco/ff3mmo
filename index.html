@@ -1163,7 +1163,7 @@
       { label: 'KNEEL',        tiles: [...OK_KNEEL, _EMPTY, _EMPTY], rows: 3 },
       { label: 'VICTORY',      tiles: [_EMPTY, _EMPTY, _EMPTY, _EMPTY, OK_LEG_L, OK_LEG_R], rows: 3 },
       { label: 'HIT',          tiles: [_EMPTY, _EMPTY, _EMPTY, _EMPTY, _EMPTY, _EMPTY], rows: 3 },
-      { label: 'DEATH',        tiles: [_EMPTY, _EMPTY, _EMPTY, _EMPTY], rows: 1, cols: 4 },
+      { label: 'DEATH',        tiles: [_EMPTY, _EMPTY, _EMPTY, _EMPTY, _EMPTY, _EMPTY, _EMPTY, _EMPTY], rows: 2, cols: 4 },
     ];
 
     let posesMode = false;
@@ -1348,10 +1348,10 @@
       const _rom = new Uint8Array(ff3Buffer);
       const _vicBase = 0x50010 + 24 * 16;
       okPoseTiles = OK_POSES.map(p => ({ label: p.label, rows: p.rows, cols: p.cols || 2, tiles: p.tiles.map(t => new Uint8Array(t)) }));
-      for (let t = 0; t < 4; t++) okPoseTiles[6].tiles[t] = new Uint8Array(_rom.buffer, _vicBase + t * 16, 16);
+      for (let t = 0; t < 4; t++) okPoseTiles[6].tiles[t] = _rom.slice(_vicBase + t * 16, _vicBase + (t + 1) * 16);
       // Seed HIT tiles from ROM (tiles 30-33 portrait + 34-35 legs)
       const _hitBase = 0x50010 + 30 * 16;
-      for (let t = 0; t < 6; t++) okPoseTiles[7].tiles[t] = new Uint8Array(_rom.buffer, _hitBase + t * 16, 16);
+      for (let t = 0; t < 6; t++) okPoseTiles[7].tiles[t] = _rom.slice(_hitBase + t * 16, _hitBase + (t + 1) * 16);
       // DEATH tiles: placeholder empties — user will find and assign via tile picker
       renderTilePage();
       tileViewer.style.display = 'flex';
