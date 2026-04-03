@@ -104,8 +104,16 @@ function _updateAllyEnemyHit() {
   if (_s.battleState === 'ally-damage-show-enemy') {
     if (_s.battleTimer >= _s.BATTLE_DMG_SHOW_MS) {
       const ally = _s.battleAllies[_s.enemyTargetAllyIdx];
-      if (ally && ally.hp <= 0) { _s.battleState = 'ally-ko-fade'; _s.battleTimer = 0; }
-      else { _s.enemyTargetAllyIdx = -1; _s.processNextTurn(); }
+      if (ally && ally.hp <= 0) {
+        // Dead ally stays visible — just remove from turn queue and check team wipe
+        _s.turnQueue = _s.turnQueue.filter(t => !(t.type === 'ally' && t.index === _s.enemyTargetAllyIdx));
+        _s.enemyTargetAllyIdx = -1;
+        if (_s.isTeamWiped()) {
+          _s.battleState = 'team-wipe'; _s.battleTimer = 0;
+        } else {
+          _s.processNextTurn();
+        }
+      } else { _s.enemyTargetAllyIdx = -1; _s.processNextTurn(); }
     }
     return true;
   }
