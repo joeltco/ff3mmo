@@ -269,6 +269,7 @@ function _processEnemyFlash() {
     const heal = Math.min(50, maxHP - _s.bossHP);
     if (_s.bossHP < maxHP * 0.5 && heal > 0 && Math.random() < 0.25) {
       _s.bossHP += heal;
+      pvpSt.pvpOpponentStats.hp = _s.bossHP;
       _s.enemyHealNum = { value: heal, timer: 0 };
       playSFX(SFX.CURE);
       _s.battleState = 'pvp-opp-potion'; _s.battleTimer = 0;
