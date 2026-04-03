@@ -266,10 +266,10 @@ function _processEnemyFlash() {
       return true;
     }
     const maxHP = pvpSt.pvpOpponentStats.maxHP;
-    const heal = Math.min(50, maxHP - _s.enemyHP);
-    if (_s.enemyHP < maxHP * 0.5 && heal > 0 && Math.random() < 0.25) {
-      _s.enemyHP += heal;
-      pvpSt.pvpOpponentStats.hp = _s.enemyHP;
+    const curHP = pvpSt.pvpOpponentStats.hp;
+    const heal = Math.min(50, maxHP - curHP);
+    if (curHP < maxHP * 0.5 && heal > 0 && Math.random() < 0.25) {
+      pvpSt.pvpOpponentStats.hp = curHP + heal;
       _s.enemyHealNum = { value: heal, timer: 0 };
       playSFX(SFX.CURE);
       _s.battleState = 'pvp-opp-potion'; _s.battleTimer = 0;
