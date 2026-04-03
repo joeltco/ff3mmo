@@ -1,43 +1,38 @@
 // Battle ally update logic — extracted from game.js
 
-import { rollHits } from './battle-math.js';
 import { playSlashSFX } from './battle-sfx.js';
 import { isWeapon } from './data/items.js';
 import { SFX, playSFX } from './music.js';
 
 let _s = null;
 
+// ── Combo finalization ───────────────────────────────────────────────────────
+function _finalizeAllyCombo() {
+  let totalDmg = 0, anyCrit = false, allMiss = true;
+  for (const h of _s.allyHitResults) {
+    if (!h.miss) { totalDmg += h.damage; allMiss = false; if (h.crit) anyCrit = true; }
+  }
+  _s.bossDamageNum = allMiss ? { miss: true, timer: 0 } : { value: totalDmg, crit: anyCrit, timer: 0 };
+  _s.inputSt.targetIndex = _s.allyTargetIndex;
+}
+
+// ── After damage-show: check for death/dissolve or advance turn ──────────────
 function _updateAllyDamageShow() {
   if (_s.isRandomEncounter && _s.encounterMonsters && _s.allyTargetIndex >= 0 && _s.encounterMonsters[_s.allyTargetIndex].hp <= 0) {
-    _s.allyHitIsLeft = false;
     _s.dyingMonsterIndices = new Map([[_s.allyTargetIndex, 0]]);
     _s.battleState = 'monster-death'; _s.battleTimer = 0; playSFX(SFX.MONSTER_DEATH);
   } else if (!_s.isRandomEncounter && _s.bossHP <= 0) {
-    _s.allyHitIsLeft = false;
     if (_s.pvpSt.isPVPBattle) {
       if (_s.pvpSt.pvpPlayerTargetIdx < 0) _s.pvpSt.pvpOpponentStats.hp = 0;
       else _s.pvpSt.pvpEnemyAllies[_s.pvpSt.pvpPlayerTargetIdx].hp = 0;
       _s.battleState = 'pvp-dissolve'; _s.battleTimer = 0; playSFX(SFX.MONSTER_DEATH);
     } else { _s.battleState = 'boss-dissolve'; _s.battleTimer = 0; playSFX(SFX.BOSS_DEATH); }
   } else {
-    const ally = _s.battleAllies[_s.currentAllyAttacker];
-    if (!_s.allyHitIsLeft && ally && isWeapon(ally.weaponL)) {
-      _s.allyHitIsLeft = true;
-      const targetDef = _s.allyTargetIndex >= 0 && _s.encounterMonsters ? _s.encounterMonsters[_s.allyTargetIndex].def
-        : _s.pvpSt.isPVPBattle
-          ? (_s.pvpSt.pvpPlayerTargetIdx >= 0
-              ? (_s.pvpSt.pvpEnemyAllies[_s.pvpSt.pvpPlayerTargetIdx] || _s.pvpSt.pvpOpponentStats).def
-              : _s.pvpSt.pvpOpponentStats.def)
-          : _s.BOSS_DEF;
-      _s.allyHitResult = rollHits(ally.atk, targetDef, 85, 1)[0];
-      _s.battleState = 'ally-attack-start'; _s.battleTimer = 0;
-    } else {
-      _s.allyHitIsLeft = false;
-      _s.processNextTurn();
-    }
+    _s.processNextTurn();
   }
 }
 
+// ── Ally join fade-in ────────────────────────────────────────────────────────
 function _updateAllyJoin() {
   if (_s.battleState === 'ally-fade-in') {
     const newAlly = _s.battleAllies[_s.battleAllies.length - 1];
@@ -51,12 +46,19 @@ function _updateAllyJoin() {
   return false;
 }
 
+// ── Ally attack combo (multi-hit with summed damage) ─────────────────────────
 function _updateAllyAttack() {
   if (_s.battleState === 'ally-attack-start') {
-    if (_s.battleTimer >= 100) {
+    const delay = _s.allyHitIdx === 0 ? 100 : 50;
+    if (_s.battleTimer >= delay) {
       const ally = _s.battleAllies[_s.currentAllyAttacker];
-      const activeWpn = _s.allyHitIsLeft ? (ally && ally.weaponL) : (ally && ally.weaponId);
-      playSlashSFX(activeWpn, _s.allyHitResult && _s.allyHitResult.crit);
+      // Alternate hands: even hits = R, odd hits = L (if dual-wielding)
+      const isLeft = (_s.allyHitIdx % 2 === 1) && ally && isWeapon(ally.weaponL);
+      _s.allyHitIsLeft = isLeft;
+      const activeWpn = isLeft ? ally.weaponL : (ally && ally.weaponId);
+      const hit = _s.allyHitResults[_s.allyHitIdx];
+      _s.allyHitResult = hit;
+      playSlashSFX(activeWpn, hit && hit.crit);
       _s.battleState = 'ally-slash';
       _s.battleTimer = 0;
     }
@@ -64,34 +66,42 @@ function _updateAllyAttack() {
   }
   if (_s.battleState === 'ally-slash') {
     if (_s.battleTimer >= 200) {
-      if (_s.allyHitResult && !_s.allyHitResult.miss) {
+      const hit = _s.allyHitResults[_s.allyHitIdx];
+      if (hit && !hit.miss) {
+        // Defend halving for PVP opponent
         if (_s.pvpSt.isPVPBattle && _s.pvpSt.pvpOpponentIsDefending && _s.allyTargetIndex < 0)
-          _s.allyHitResult.damage = Math.max(1, Math.floor(_s.allyHitResult.damage / 2));
+          hit.damage = Math.max(1, Math.floor(hit.damage / 2));
+        // Apply damage per hit
         if (_s.allyTargetIndex >= 0 && _s.encounterMonsters) {
-          _s.encounterMonsters[_s.allyTargetIndex].hp = Math.max(0, _s.encounterMonsters[_s.allyTargetIndex].hp - _s.allyHitResult.damage);
+          _s.encounterMonsters[_s.allyTargetIndex].hp = Math.max(0, _s.encounterMonsters[_s.allyTargetIndex].hp - hit.damage);
         } else if (_s.allyTargetIndex < 0) {
-          _s.bossHP = Math.max(0, _s.bossHP - _s.allyHitResult.damage);
+          _s.bossHP = Math.max(0, _s.bossHP - hit.damage);
           if (_s.pvpSt.isPVPBattle) {
             _s.pvpSt.pvpOpponentShakeTimer = _s.BATTLE_SHAKE_MS;
             if (_s.pvpSt.pvpPlayerTargetIdx < 0) _s.pvpSt.pvpOpponentStats.hp = _s.bossHP;
             else if (_s.pvpSt.pvpEnemyAllies[_s.pvpSt.pvpPlayerTargetIdx]) _s.pvpSt.pvpEnemyAllies[_s.pvpSt.pvpPlayerTargetIdx].hp = _s.bossHP;
           }
         }
-        if (_s.allyHitResult.crit) _s.critFlashTimer = 0;
-        _s.bossDamageNum = { value: _s.allyHitResult.damage, crit: _s.allyHitResult.crit, timer: 0 };
-        _s.inputSt.targetIndex = _s.allyTargetIndex;
-      } else {
-        _s.bossDamageNum = { miss: true, timer: 0 };
-        _s.inputSt.targetIndex = _s.allyTargetIndex;
+        if (hit.crit) _s.critFlashTimer = 0;
       }
-      _s.battleState = 'ally-damage-show';
-      _s.battleTimer = 0;
+      // Advance combo
+      _s.allyHitIdx = _s.allyHitIdx + 1;
+      if (_s.allyHitIdx < _s.allyHitResults.length) {
+        _s.battleState = 'ally-attack-start';
+        _s.battleTimer = 0;
+      } else {
+        _finalizeAllyCombo();
+        _s.allyHitIsLeft = false;
+        _s.battleState = 'ally-damage-show';
+        _s.battleTimer = 0;
+      }
     }
     return true;
   }
   return false;
 }
 
+// ── Ally taking enemy hit ────────────────────────────────────────────────────
 function _updateAllyEnemyHit() {
   if (_s.battleState === 'ally-hit') {
     if (_s.battleTimer >= _s.BATTLE_SHAKE_MS) { _s.battleState = 'ally-damage-show-enemy'; _s.battleTimer = 0; }
@@ -108,6 +118,7 @@ function _updateAllyEnemyHit() {
   return false;
 }
 
+// ── Ally KO sequence ─────────────────────────────────────────────────────────
 function _updateAllyKOSequence() {
   if (_s.battleState === 'ally-ko-fade') {
     const koAlly = _s.battleAllies[_s.enemyTargetAllyIdx];
