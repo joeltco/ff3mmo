@@ -285,26 +285,31 @@ function _drawBattlePortrait() {
   // Player death animation
   if (_s.playerDeathTimer != null) {
     const dt = Math.min(_s.playerDeathTimer, DEATH_TOTAL_MS);
-    _s.ctx.save();
-    _s.ctx.beginPath();
-    _s.ctx.rect(HUD_RIGHT_X, HUD_VIEW_Y, 32, 32);
-    _s.ctx.clip();
+
+    // Phase 1: kneel slides down, clipped to inner portrait area (16×16)
     if (dt < DEATH_SLIDE_MS) {
-      // Phase 1: kneel slides down
+      _s.ctx.save();
+      _s.ctx.beginPath();
+      _s.ctx.rect(px, py, 16, 16);
+      _s.ctx.clip();
       const slideT = dt / DEATH_SLIDE_MS;
       const slideY = Math.floor(slideT * 16);
       if (_s.battleSpriteKneelCanvas) _s.ctx.drawImage(_s.battleSpriteKneelCanvas, px, py + slideY);
-    } else {
-      // Phase 2: death pose fades in (32×16 centered in 32×32 portrait box)
+      _s.ctx.restore();
+    }
+
+    // Phase 2: death pose fades in, centered in the name/HP info box
+    if (dt >= DEATH_SLIDE_MS) {
       const fadeT = Math.min((dt - DEATH_SLIDE_MS) / DEATH_FADE_MS, 1);
-      const deathCanvas = _s.deathPoseCanvases && _s.deathPoseCanvases[0]; // player palette = 0
+      const deathCanvas = _s.deathPoseCanvases && _s.deathPoseCanvases[0];
       if (deathCanvas) {
         _s.ctx.globalAlpha = fadeT;
-        _s.ctx.drawImage(deathCanvas, px - 8, py + 8); // 32×16 centered
+        const dx = HUD_RIGHT_X + 32 + Math.floor(((HUD_RIGHT_W - 32) - 32) / 2);
+        const dy = HUD_VIEW_Y + Math.floor((32 - 16) / 2);
+        _s.ctx.drawImage(deathCanvas, dx, dy);
         _s.ctx.globalAlpha = 1;
       }
     }
-    _s.ctx.restore();
     return;
   }
 
@@ -1059,8 +1064,8 @@ function _drawVictoryRunFail(boxX, boxY, isNameIn, isTextIn, isTextOut) {
 }
 
 
-const DEATH_SLIDE_MS = 200;
-const DEATH_FADE_MS  = 200;
+const DEATH_SLIDE_MS = 500;
+const DEATH_FADE_MS  = 300;
 const DEATH_TOTAL_MS = DEATH_SLIDE_MS + DEATH_FADE_MS;
 
 function _drawAllyRow(i, ally, panelTop, weaponDraws) {
@@ -1078,31 +1083,31 @@ function _drawAllyRow(i, ally, panelTop, weaponDraws) {
   // Death animation: kneel slides down, text fades, death pose fades in
   if (ally.deathTimer != null) {
     const dt = Math.min(ally.deathTimer, DEATH_TOTAL_MS);
-    // Clip to this ally's row so sliding portrait doesn't bleed
     _s.ctx.save();
-    _s.ctx.beginPath();
-    _s.ctx.rect(HUD_RIGHT_X, rowY, HUD_RIGHT_W, ROSTER_ROW_H);
-    _s.ctx.clip();
 
     if (dt < DEATH_SLIDE_MS) {
-      // Phase 1: kneel portrait slides down, name/HP fading out
+      // Phase 1: kneel portrait slides down, clipped to inner portrait area (16×16)
       const slideT = dt / DEATH_SLIDE_MS;
-      const slideY = Math.floor(slideT * 16); // slide 16px down
+      const slideY = Math.floor(slideT * 16);
       const kneel = _s.fakePlayerKneelPortraits[ally.palIdx];
-      if (kneel) _s.ctx.drawImage(kneel, ppx, ppy + slideY);
+      if (kneel) {
+        _s.ctx.beginPath();
+        _s.ctx.rect(ppx, ppy, 16, 16);
+        _s.ctx.clip();
+        _s.ctx.drawImage(kneel, ppx, ppy + slideY);
+      }
       // Fade text with alpha
       const textAlpha = 1 - slideT;
       _s.ctx.globalAlpha = textAlpha;
       _drawAllyTexts(i, ally, rowY, false, ppx, ppy, weaponDraws);
       _s.ctx.globalAlpha = 1;
     } else {
-      // Phase 2: death pose fades in (32×16, centered in the full row)
+      // Phase 2: death pose fades in (32×16, centered in the name/HP info box)
       const fadeT = Math.min((dt - DEATH_SLIDE_MS) / DEATH_FADE_MS, 1);
       const deathCanvas = _s.deathPoseCanvases && _s.deathPoseCanvases[ally.palIdx];
       if (deathCanvas) {
         _s.ctx.globalAlpha = fadeT;
-        // Center 32×16 death pose in the full ally row (portrait + info area)
-        const dx = HUD_RIGHT_X + Math.floor((HUD_RIGHT_W - 32) / 2);
+        const dx = HUD_RIGHT_X + 32 + Math.floor(((HUD_RIGHT_W - 32) - 32) / 2);
         const dy = rowY + Math.floor((ROSTER_ROW_H - 16) / 2);
         _s.ctx.drawImage(deathCanvas, dx, dy);
         _s.ctx.globalAlpha = 1;
