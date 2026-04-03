@@ -1431,6 +1431,22 @@ function _triggerWipe(action, destMapId) {
   startWipeTransition(action, destMapId, rc);
 }
 
+// PVP-aware enemy HP access — reads/writes authoritative source directly, no proxy sync needed
+function _getEnemyHP() {
+  if (pvpSt.isPVPBattle) {
+    if (pvpSt.pvpPlayerTargetIdx < 0) return pvpSt.pvpOpponentStats.hp;
+    return pvpSt.pvpEnemyAllies[pvpSt.pvpPlayerTargetIdx].hp;
+  }
+  return enemyHP;
+}
+function _setEnemyHP(v) {
+  if (pvpSt.isPVPBattle) {
+    if (pvpSt.pvpPlayerTargetIdx < 0) pvpSt.pvpOpponentStats.hp = v;
+    else pvpSt.pvpEnemyAllies[pvpSt.pvpPlayerTargetIdx].hp = v;
+  }
+  enemyHP = v;
+}
+
 // Shared state object passed to input-handler.js functions
 function _inputShared() {
   return {
@@ -1459,8 +1475,8 @@ function _inputShared() {
     get pvpEnemyAllies()        { return pvpSt.pvpEnemyAllies; },
     get pvpPlayerTargetIdx()    { return pvpSt.pvpPlayerTargetIdx; },
     set pvpPlayerTargetIdx(v)   { pvpSt.pvpPlayerTargetIdx = v; },
-    get enemyHP()                { return enemyHP; },
-    set enemyHP(v)               { enemyHP = v; },
+    get enemyHP()                { return _getEnemyHP(); },
+    set enemyHP(v)               { _setEnemyHP(v); },
     saveSlotsToDB,
     addItem,
     removeItem,
@@ -1489,8 +1505,8 @@ function _pauseShared() {
 function _pvpShared() {
   return {
     // ── Primitive game state (getters/setters so pvp always reads live values) ──
-    get enemyHP()                { return enemyHP; },
-    set enemyHP(v)               { enemyHP = v; },
+    get enemyHP()                { return _getEnemyHP(); },
+    set enemyHP(v)               { _setEnemyHP(v); },
     get enemyDefeated()          { return enemyDefeated; },
     set enemyDefeated(v)         { enemyDefeated = v; },
     get isRandomEncounter()     { return isRandomEncounter; },
@@ -1584,8 +1600,8 @@ function _allyShared() {
     set battleState(v)          { battleState = v; },
     get battleTimer()           { return battleTimer; },
     set battleTimer(v)          { battleTimer = v; },
-    get enemyHP()                { return enemyHP; },
-    set enemyHP(v)               { enemyHP = v; },
+    get enemyHP()                { return _getEnemyHP(); },
+    set enemyHP(v)               { _setEnemyHP(v); },
     get isRandomEncounter()     { return isRandomEncounter; },
     get battleAllies()          { return battleAllies; },
     get currentAllyAttacker()   { return currentAllyAttacker; },
@@ -1623,7 +1639,7 @@ function _battleDrawShared() {
   return {
     get battleState() { return battleState; },
     get battleTimer() { return battleTimer; },
-    get enemyHP() { return enemyHP; },
+    get enemyHP() { return _getEnemyHP(); },
     get enemyDefeated() { return enemyDefeated; },
     get isRandomEncounter() { return isRandomEncounter; },
     get isDefending() { return isDefending; },
@@ -3276,15 +3292,12 @@ function _applySWDamage(tidx) {
   const dmg = Math.max(1, Math.floor(swBaseDamage / southWindTargets.length));
   if (pvpSt.isPVPBattle) {
     if (tidx === 0) {
-      // Main boss — use authoritative HP source, sync enemyHP if this IS the current target
       if (!pvpSt.pvpOpponentStats || pvpSt.pvpOpponentStats.hp <= 0) return;
       pvpSt.pvpOpponentStats.hp = Math.max(0, pvpSt.pvpOpponentStats.hp - dmg);
-      if (pvpSt.pvpPlayerTargetIdx < 0) enemyHP = pvpSt.pvpOpponentStats.hp;
     } else {
       const ally = pvpSt.pvpEnemyAllies[tidx - 1];
       if (!ally || ally.hp <= 0) return;
       ally.hp = Math.max(0, ally.hp - dmg);
-      if (pvpSt.pvpPlayerTargetIdx === tidx - 1) enemyHP = ally.hp;
     }
     southWindDmgNums[tidx] = { value: dmg, timer: 0 };
     playSFX(SFX.SW_HIT);
@@ -3363,8 +3376,10 @@ function _playerTurnConsumable() {
       const heal = Math.min(50, mon.maxHP - mon.hp);
       mon.hp += heal; itemHealAmount = heal; enemyHealNum = { value: heal, timer: 0, index: target };
     } else {
-      const heal = Math.min(50, BOSS_MAX_HP - enemyHP);
-      enemyHP += heal; itemHealAmount = heal; enemyHealNum = { value: heal, timer: 0, index: 0 };
+      const curHP = _getEnemyHP();
+      const maxHP = pvpSt.isPVPBattle ? (pvpSt.pvpOpponentStats ? pvpSt.pvpOpponentStats.maxHP : 1) : BOSS_MAX_HP;
+      const heal = Math.min(50, maxHP - curHP);
+      _setEnemyHP(curHP + heal); itemHealAmount = heal; enemyHealNum = { value: heal, timer: 0, index: 0 };
     }
   }
   battleState = 'item-use'; battleTimer = 0;
@@ -3720,12 +3735,7 @@ function _updatePlayerSlash() {
       if (isRandomEncounter && encounterMonsters) {
         encounterMonsters[inputSt.targetIndex].hp = Math.max(0, encounterMonsters[inputSt.targetIndex].hp - hit.damage);
       } else {
-        enemyHP = Math.max(0, enemyHP - hit.damage);
-        // Sync authoritative HP source for PVP free targeting
-        if (pvpSt.isPVPBattle) {
-          if (pvpSt.pvpPlayerTargetIdx < 0) pvpSt.pvpOpponentStats.hp = enemyHP;
-          else if (pvpSt.pvpEnemyAllies[pvpSt.pvpPlayerTargetIdx]) pvpSt.pvpEnemyAllies[pvpSt.pvpPlayerTargetIdx].hp = enemyHP;
-        }
+        _setEnemyHP(Math.max(0, _getEnemyHP() - hit.damage));
       }
       if (hit.crit) critFlashTimer = 0;
     }
@@ -3753,10 +3763,8 @@ function _updatePlayerDamageShow() {
       battleState = 'monster-death';
       battleTimer = 0;
       playSFX(SFX.MONSTER_DEATH);
-    } else if (!isRandomEncounter && enemyHP <= 0) {
+    } else if (!isRandomEncounter && _getEnemyHP() <= 0) {
       if (pvpSt.isPVPBattle) {
-        if (pvpSt.pvpPlayerTargetIdx < 0) pvpSt.pvpOpponentStats.hp = 0;
-        else pvpSt.pvpEnemyAllies[pvpSt.pvpPlayerTargetIdx].hp = 0;
         battleState = 'pvp-dissolve'; battleTimer = 0; playSFX(SFX.MONSTER_DEATH);
       } else { battleState = 'boss-dissolve'; battleTimer = 0; playSFX(SFX.BOSS_DEATH); }
     } else {
@@ -3766,17 +3774,14 @@ function _updatePlayerDamageShow() {
   return true;
 }
 function _advancePVPTargetOrVictory() {
-  // Find any remaining alive enemy — use authoritative HP sources
   if (pvpSt.pvpOpponentStats && pvpSt.pvpOpponentStats.hp > 0) {
     pvpSt.pvpPlayerTargetIdx = -1;
-    enemyHP = pvpSt.pvpOpponentStats.hp;
     processNextTurn();
     return;
   }
   const aliveAllyIdx = pvpSt.pvpEnemyAllies.findIndex(a => a.hp > 0);
   if (aliveAllyIdx >= 0) {
     pvpSt.pvpPlayerTargetIdx = aliveAllyIdx;
-    enemyHP = pvpSt.pvpEnemyAllies[aliveAllyIdx].hp;
     processNextTurn();
   } else {
     _triggerPVPVictory();

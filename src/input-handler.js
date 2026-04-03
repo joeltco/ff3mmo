@@ -67,16 +67,9 @@ function _xPressed() {
 
 // ── Battle input ───────────────────────────────────────────────────────────
 
-// Switch PVP target: save current enemyHP to old target's source, load new target's HP
+// Switch PVP target — just change the index; enemyHP getter/setter reads authoritative source
 function _switchPVPTarget(newIdx) {
-  const oldIdx = _s.pvpPlayerTargetIdx;
-  // Save current enemyHP back to the old target's authoritative HP source
-  if (oldIdx < 0 && _s.pvpOpponentStats) _s.pvpOpponentStats.hp = _s.enemyHP;
-  else if (oldIdx >= 0 && _s.pvpEnemyAllies && _s.pvpEnemyAllies[oldIdx]) _s.pvpEnemyAllies[oldIdx].hp = _s.enemyHP;
-  // Set new target and load its HP into enemyHP
   _s.pvpPlayerTargetIdx = newIdx;
-  if (newIdx < 0 && _s.pvpOpponentStats) _s.enemyHP = _s.pvpOpponentStats.hp;
-  else if (newIdx >= 0 && _s.pvpEnemyAllies && _s.pvpEnemyAllies[newIdx]) _s.enemyHP = _s.pvpEnemyAllies[newIdx].hp;
 }
 
 function _battleTargetNav() {

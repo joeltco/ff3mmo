@@ -23,8 +23,6 @@ function _updateAllyDamageShow() {
     _s.battleState = 'monster-death'; _s.battleTimer = 0; playSFX(SFX.MONSTER_DEATH);
   } else if (!_s.isRandomEncounter && _s.enemyHP <= 0) {
     if (_s.pvpSt.isPVPBattle) {
-      if (_s.pvpSt.pvpPlayerTargetIdx < 0) _s.pvpSt.pvpOpponentStats.hp = 0;
-      else _s.pvpSt.pvpEnemyAllies[_s.pvpSt.pvpPlayerTargetIdx].hp = 0;
       _s.battleState = 'pvp-dissolve'; _s.battleTimer = 0; playSFX(SFX.MONSTER_DEATH);
     } else { _s.battleState = 'boss-dissolve'; _s.battleTimer = 0; playSFX(SFX.BOSS_DEATH); }
   } else {
@@ -76,11 +74,7 @@ function _updateAllyAttack() {
           _s.encounterMonsters[_s.allyTargetIndex].hp = Math.max(0, _s.encounterMonsters[_s.allyTargetIndex].hp - hit.damage);
         } else if (_s.allyTargetIndex < 0) {
           _s.enemyHP = Math.max(0, _s.enemyHP - hit.damage);
-          if (_s.pvpSt.isPVPBattle) {
-            _s.pvpSt.pvpOpponentShakeTimer = _s.BATTLE_SHAKE_MS;
-            if (_s.pvpSt.pvpPlayerTargetIdx < 0) _s.pvpSt.pvpOpponentStats.hp = _s.enemyHP;
-            else if (_s.pvpSt.pvpEnemyAllies[_s.pvpSt.pvpPlayerTargetIdx]) _s.pvpSt.pvpEnemyAllies[_s.pvpSt.pvpPlayerTargetIdx].hp = _s.enemyHP;
-          }
+          if (_s.pvpSt.isPVPBattle) _s.pvpSt.pvpOpponentShakeTimer = _s.BATTLE_SHAKE_MS;
         }
         if (hit.crit) _s.critFlashTimer = 0;
       }
