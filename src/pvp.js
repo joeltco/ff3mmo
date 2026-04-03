@@ -489,13 +489,34 @@ export function drawBossSpriteBoxPVP(shared, centerX, centerY) {
     // Target cursor during target-select or item-target-select
     if ((bs === 'target-select' || (bs === 'item-target-select' && inputSt.itemTargetType === 'enemy')) && _s.cursorTileCanvas) {
       // Fight cursor uses pvpPlayerTargetIdx; item cursor uses itemTargetIndex (grid index directly)
-      const tIdx = bs === 'item-target-select'
-        ? inputSt.itemTargetIndex
-        : (pvpSt.pvpPlayerTargetIdx < 0 ? 0 : pvpSt.pvpPlayerTargetIdx + 1);
-      const [gr, gc] = gridPos[tIdx] || gridPos[0];
-      const tx = intLeft + gc * PVP_CELL_W + 4;
-      const ty = intTop  + gr * PVP_CELL_H + 4;
-      _s.ctx.drawImage(_s.cursorTileCanvas, tx - 14, ty + 4);
+      if (bs === 'item-target-select' && inputSt.itemTargetMode !== 'single') {
+        // Multi-target: draw blinking cursors on all targeted enemies
+        if (Math.floor(Date.now() / 133) & 1) {
+          const allEnemies = [pvpSt.pvpOpponentStats, ...pvpSt.pvpEnemyAllies];
+          for (let ei = 0; ei < allEnemies.length; ei++) {
+            if (!allEnemies[ei] || allEnemies[ei].hp <= 0) continue;
+            if (inputSt.itemTargetMode !== 'all') {
+              // col mode: check if this enemy is in the target column
+              const [er, ec] = gridPos[ei] || [0, 0];
+              const isLeft = ec === 0;
+              if (inputSt.itemTargetMode === 'col-left' && !isLeft) continue;
+              if (inputSt.itemTargetMode === 'col-right' && isLeft) continue;
+            }
+            const [gr, gc] = gridPos[ei] || [0, 0];
+            const tx = intLeft + gc * PVP_CELL_W + 4;
+            const ty = intTop  + gr * PVP_CELL_H + 4;
+            _s.ctx.drawImage(_s.cursorTileCanvas, tx - 14, ty + 4);
+          }
+        }
+      } else {
+        const tIdx = bs === 'item-target-select'
+          ? inputSt.itemTargetIndex
+          : (pvpSt.pvpPlayerTargetIdx < 0 ? 0 : pvpSt.pvpPlayerTargetIdx + 1);
+        const [gr, gc] = gridPos[tIdx] || gridPos[0];
+        const tx = intLeft + gc * PVP_CELL_W + 4;
+        const ty = intTop  + gr * PVP_CELL_H + 4;
+        _s.ctx.drawImage(_s.cursorTileCanvas, tx - 14, ty + 4);
+      }
     }
   }
   _s.ctx.restore();
