@@ -66,7 +66,7 @@ function _encounterGridLayout() {
 function drawSWExplosion(shared) {
   _s = shared;
   // PVP opponent South Wind — explosion centered on player portrait
-  if (pvpSt.isPVPBattle && _s.battleState === 'pvp-opp-sw-hit') {
+  if (pvpSt.isPVPBattle && _s.battleState === 'pvp-opp-sw-hit' && _s.battleTimer < 400) {
     if (!_s.swPhaseCanvases.length) return;
     const phase = Math.min(2, Math.floor(_s.battleTimer / 133));
     const canvas = _s.swPhaseCanvases[phase];
