@@ -1431,6 +1431,12 @@ function _triggerWipe(action, destMapId) {
   startWipeTransition(action, destMapId, rc);
 }
 
+// Team wipe check — true when player AND all allies are dead
+function _isTeamWiped() {
+  if (ps.hp > 0) return false;
+  return battleAllies.every(a => a.hp <= 0);
+}
+
 // PVP-aware enemy HP access — reads/writes authoritative source directly, no proxy sync needed
 function _getEnemyHP() {
   if (pvpSt.isPVPBattle) {
@@ -1580,6 +1586,7 @@ function _pvpShared() {
     // ── Other functions ───────────────────────────────────────────────────────
     resetBattleVars:     _resetBattleVars,
     processNextTurn,
+    isTeamWiped:         _isTeamWiped,
     getPlayerLocation,
     getSlashFramesForWeapon,
     clipToViewport:  _clipToViewport,
@@ -1632,6 +1639,7 @@ function _allyShared() {
     ROSTER_FADE_STEPS,
     processNextTurn,
     buildTurnOrder,
+    isTeamWiped: _isTeamWiped,
   };
 }
 
@@ -3258,8 +3266,10 @@ function roundTopBoxCorners() {
 
 function buildTurnOrder() {
   const actors = [];
-  const playerAgi = ps.stats ? ps.stats.agi : 5;
-  actors.push({ type: 'player', priority: (playerAgi * 2) + Math.floor(Math.random() * 256) });
+  if (ps.hp > 0) {
+    const playerAgi = ps.stats ? ps.stats.agi : 5;
+    actors.push({ type: 'player', priority: (playerAgi * 2) + Math.floor(Math.random() * 256) });
+  }
   // Allies participate in the same turn queue
   for (let i = 0; i < battleAllies.length; i++) {
     if (battleAllies[i].hp > 0)
@@ -3406,11 +3416,20 @@ function _playerTurnRun() {
 
 function processNextTurn() {
   if (turnQueue.length === 0) {
-    isDefending = false; inputSt.battleCursor = 0; battleState = 'menu-open'; battleTimer = 0; turnTimer = 0;
+    isDefending = false; inputSt.battleCursor = 0; turnTimer = 0;
+    if (ps.hp <= 0) {
+      // Player dead but allies alive — auto-rebuild turn order, skip menu
+      turnQueue = buildTurnOrder();
+      if (turnQueue.length === 0) return; // safety: nobody alive
+      processNextTurn();
+      return;
+    }
+    battleState = 'menu-open'; battleTimer = 0;
     return;
   }
   const turn = turnQueue.shift();
   if (turn.type === 'player') {
+    if (ps.hp <= 0) { processNextTurn(); return; } // dead player — skip
     const cmd = inputSt.playerActionPending.command;
     if (cmd === 'fight') _playerTurnFight();
     else if (cmd === 'defend') { playSFX(SFX.DEFEND_HIT); battleState = 'defend-anim'; battleTimer = 0; }
@@ -4035,8 +4054,8 @@ function _processEnemyFlash() {
 }
 function _processEnemyDamageShowState() {
   if (battleTimer < BATTLE_DMG_SHOW_MS) return;
-  if (ps.hp <= 0) {
-    isDefending = false; battleState = 'defeat-monster-fade'; battleTimer = 0;
+  if (_isTeamWiped()) {
+    isDefending = false; battleState = 'team-wipe'; battleTimer = 0;
   } else { processNextTurn(); }
 }
 function _updateBattleEnemyTurn() {
@@ -4143,6 +4162,16 @@ function _updateBoxClose() {
 }
 
 function _updateDefeatStates() {
+  if (battleState === 'team-wipe') {
+    if (battleTimer === 0) {
+      stopMusic();
+      showMsgBox(BATTLE_GAME_OVER, () => {
+        battleState = 'defeat-close'; battleTimer = 0;
+      });
+    }
+    battleTimer = 1; // prevent re-triggering; msgBox handles the flow
+    return true;
+  }
   if (battleState === 'defeat-monster-fade') {
     stopMusic();
     if (battleTimer >= 500) { battleState = 'defeat-text'; battleTimer = 0; }

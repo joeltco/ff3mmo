@@ -442,7 +442,7 @@ function _battleMenuStates() {
     bs === 'pvp-ally-appear' || bs === 'pvp-defend-anim' || bs === 'pvp-enemy-slash' ||
     bs === 'pvp-opp-potion' || bs === 'pvp-opp-sw-throw' || bs === 'pvp-opp-sw-hit' || bs === 'message-hold' ||
     bs.startsWith('ally-') || bs === 'boss-dissolve' ||
-    bs === 'defeat-monster-fade' || bs === 'defeat-text';
+    bs === 'defeat-monster-fade' || bs === 'defeat-text' || bs === 'team-wipe';
   const isVictory = _s.isVictoryBattleState() || bs === 'victory-name-out' || bs === 'encounter-box-close' || bs === 'enemy-box-close' || bs === 'defeat-close';
   const isRunBox  = bs.startsWith('run-');
   const isClose   = bs === 'victory-box-close' || bs === 'encounter-box-close' || bs === 'enemy-box-close' || bs === 'defeat-close';
@@ -747,7 +747,7 @@ function drawBossSpriteBox() {
                     _s.battleState === 'pvp-dissolve' || _s.battleState === 'pvp-defend-anim' ||
                     _s.battleState === 'pvp-enemy-slash' || _s.battleState === 'pvp-opp-potion' ||
                     _s.battleState === 'pvp-opp-sw-throw' || _s.battleState === 'pvp-opp-sw-hit' ||
-                    _s.battleState === 'defeat-monster-fade' || _s.battleState === 'defeat-text' || _s.battleState === 'defeat-close' ||
+                    _s.battleState === 'defeat-monster-fade' || _s.battleState === 'defeat-text' || _s.battleState === 'defeat-close' || _s.battleState === 'team-wipe' ||
                     _s.battleState === 'victory-name-out' || _s.battleState === 'victory-celebrate' ||
                     _s.battleState === 'victory-text-in' || _s.battleState === 'victory-hold' || _s.battleState === 'victory-fade-out' ||
                     _s.battleState === 'exp-text-in' || _s.battleState === 'exp-hold' || _s.battleState === 'exp-fade-out' ||

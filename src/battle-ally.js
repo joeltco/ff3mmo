@@ -122,7 +122,11 @@ function _updateAllyKOSequence() {
       if (koAlly.fadeStep >= _s.ROSTER_FADE_STEPS) {
         _s.turnQueue = _s.turnQueue.filter(t => !(t.type === 'ally' && t.index === _s.enemyTargetAllyIdx));
         _s.enemyTargetAllyIdx = -1;
-        _s.processNextTurn();
+        if (_s.isTeamWiped()) {
+          _s.battleState = 'team-wipe'; _s.battleTimer = 0;
+        } else {
+          _s.processNextTurn();
+        }
       }
     }
     return true;
