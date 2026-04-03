@@ -538,7 +538,7 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   const isOppHit = isCurrentTarget && (playerHitLanded || playerHitShowLanded || allyHitLanded ||
     (bs === 'ally-damage-show' && _s.allyHitResult && !_s.allyHitResult.miss));
   const blinkHidden = isCurrentTarget && (playerHitLanded || allyHitLanded) && (Math.floor(_s.battleTimer / 60) & 1);
-  const isWindUp = isThisAttacking && (bs === 'enemy-flash' || bs === 'pvp-second-windup');
+  const isWindUp = isThisAttacking && ((bs === 'enemy-flash' && pvpSt.pvpPreflashDecided) || bs === 'pvp-second-windup');
   if (blinkHidden) return;
 
   // Which hand is this enemy using right now?
