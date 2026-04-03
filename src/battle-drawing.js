@@ -279,6 +279,35 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
 }
 
 function _drawBattlePortrait() {
+  const px = HUD_RIGHT_X + 8;
+  const py = HUD_VIEW_Y + 8;
+
+  // Player death animation
+  if (_s.playerDeathTimer != null) {
+    const dt = Math.min(_s.playerDeathTimer, DEATH_TOTAL_MS);
+    _s.ctx.save();
+    _s.ctx.beginPath();
+    _s.ctx.rect(HUD_RIGHT_X, HUD_VIEW_Y, 32, 32);
+    _s.ctx.clip();
+    if (dt < DEATH_SLIDE_MS) {
+      // Phase 1: kneel slides down
+      const slideT = dt / DEATH_SLIDE_MS;
+      const slideY = Math.floor(slideT * 16);
+      if (_s.battleSpriteKneelCanvas) _s.ctx.drawImage(_s.battleSpriteKneelCanvas, px, py + slideY);
+    } else {
+      // Phase 2: death pose fades in (32×16 centered in 32×32 portrait box)
+      const fadeT = Math.min((dt - DEATH_SLIDE_MS) / DEATH_FADE_MS, 1);
+      const deathCanvas = _s.deathPoseCanvases && _s.deathPoseCanvases[0]; // player palette = 0
+      if (deathCanvas) {
+        _s.ctx.globalAlpha = fadeT;
+        _s.ctx.drawImage(deathCanvas, px - 8, py + 8); // 32×16 centered
+        _s.ctx.globalAlpha = 1;
+      }
+    }
+    _s.ctx.restore();
+    return;
+  }
+
   const shakeOff = ((_s.battleState === 'enemy-attack' || _s.battleState === 'pvp-opp-sw-hit') && _s.battleShakeTimer > 0)
     ? (Math.floor(_s.battleShakeTimer / 67) & 1 ? 2 : -2) : 0;
   const isVictoryPose = _s.isVictoryBattleState();
@@ -294,18 +323,17 @@ function _drawBattlePortrait() {
   const isNearFatal = ps.hp > 0 && ps.stats && ps.hp <= Math.floor(ps.stats.maxHP / 4);
   const portraitSrc = _getPortraitSrc(isNearFatal, isAttackPose, isHitPose, isDefendPose, isItemUsePose, isVictoryPose);
   if (!portraitSrc) return;
-  const px = HUD_RIGHT_X + 8 + shakeOff;
-  const py = HUD_VIEW_Y + 8;
+  const pxs = px + shakeOff;
   // Blink portrait when enemy slash is landing (mirrors opponent blink on player hit)
   const portraitBlink = _s.battleState === 'pvp-enemy-slash' &&
     pvpSt.pvpPendingAttack && !pvpSt.pvpPendingAttack.miss && !pvpSt.pvpPendingAttack.shieldBlock &&
     (Math.floor(_s.battleTimer / 60) & 1);
   if (!portraitBlink) {
-    if (isAttackPose) _drawPortraitWeapon(px, py, true);
-    _drawPortraitFrame(px, py, portraitSrc, isRunPose);
-    if (isAttackPose) _drawPortraitWeapon(px, py, false);
+    if (isAttackPose) _drawPortraitWeapon(pxs, py, true);
+    _drawPortraitFrame(pxs, py, portraitSrc, isRunPose);
+    if (isAttackPose) _drawPortraitWeapon(pxs, py, false);
   }
-  _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal, isRunPose, isAttackPose, isHitPose, isVictoryPose);
+  _drawPortraitOverlays(pxs, py, isDefendPose, isItemUsePose, isNearFatal, isRunPose, isAttackPose, isHitPose, isVictoryPose);
 }
 
 function _drawBattleCritFlash() {
@@ -1031,6 +1059,10 @@ function _drawVictoryRunFail(boxX, boxY, isNameIn, isTextIn, isTextOut) {
 }
 
 
+const DEATH_SLIDE_MS = 200;
+const DEATH_FADE_MS  = 200;
+const DEATH_TOTAL_MS = DEATH_SLIDE_MS + DEATH_FADE_MS;
+
 function _drawAllyRow(i, ally, panelTop, weaponDraws) {
   const shakeOff = (_s.allyShakeTimer[i] > 0) ? (Math.floor(_s.allyShakeTimer[i] / 67) & 1 ? 2 : -2) : 0;
   const rowY = panelTop + i * ROSTER_ROW_H + shakeOff;
@@ -1039,10 +1071,48 @@ function _drawAllyRow(i, ally, panelTop, weaponDraws) {
     _s.enemyTargetAllyIdx === i && _s.allyDamageNums[i] && !_s.allyDamageNums[i].miss;
   const isAllyAttack = (_s.battleState === 'ally-attack-start') && _s.currentAllyAttacker === i;
   const isAllyHeal = _s.battleState === 'item-use' && inputSt.playerActionPending && inputSt.playerActionPending.allyIndex === i;
-  const isNearFatal = ally.hp <= 0 || (ally.hp > 0 && ally.hp <= Math.floor(ally.maxHP / 4));
   const ppx = HUD_RIGHT_X + 8, ppy = rowY + 8;
   _s.drawHudBox(HUD_RIGHT_X, rowY, 32, ROSTER_ROW_H, ally.fadeStep);
   _s.drawHudBox(HUD_RIGHT_X + 32, rowY, HUD_RIGHT_W - 32, ROSTER_ROW_H, ally.fadeStep);
+
+  // Death animation: kneel slides down, text fades, death pose fades in
+  if (ally.deathTimer != null) {
+    const dt = Math.min(ally.deathTimer, DEATH_TOTAL_MS);
+    // Clip to this ally's row so sliding portrait doesn't bleed
+    _s.ctx.save();
+    _s.ctx.beginPath();
+    _s.ctx.rect(HUD_RIGHT_X, rowY, HUD_RIGHT_W, ROSTER_ROW_H);
+    _s.ctx.clip();
+
+    if (dt < DEATH_SLIDE_MS) {
+      // Phase 1: kneel portrait slides down, name/HP fading out
+      const slideT = dt / DEATH_SLIDE_MS;
+      const slideY = Math.floor(slideT * 16); // slide 16px down
+      const kneel = _s.fakePlayerKneelPortraits[ally.palIdx];
+      if (kneel) _s.ctx.drawImage(kneel, ppx, ppy + slideY);
+      // Fade text with alpha
+      const textAlpha = 1 - slideT;
+      _s.ctx.globalAlpha = textAlpha;
+      _drawAllyTexts(i, ally, rowY, false, ppx, ppy, weaponDraws);
+      _s.ctx.globalAlpha = 1;
+    } else {
+      // Phase 2: death pose fades in (32×16, centered in the full row)
+      const fadeT = Math.min((dt - DEATH_SLIDE_MS) / DEATH_FADE_MS, 1);
+      const deathCanvas = _s.deathPoseCanvases && _s.deathPoseCanvases[ally.palIdx];
+      if (deathCanvas) {
+        _s.ctx.globalAlpha = fadeT;
+        // Center 32×16 death pose in the full ally row (portrait + info area)
+        const dx = HUD_RIGHT_X + Math.floor((HUD_RIGHT_W - 32) / 2);
+        const dy = rowY + Math.floor((ROSTER_ROW_H - 16) / 2);
+        _s.ctx.drawImage(deathCanvas, dx, dy);
+        _s.ctx.globalAlpha = 1;
+      }
+    }
+    _s.ctx.restore();
+    return;
+  }
+
+  const isNearFatal = ally.hp > 0 && ally.hp <= Math.floor(ally.maxHP / 4);
   _drawAllyPortrait(i, ally, isVicPose, isAllyAttack, isAllyHit, isNearFatal, ppx, ppy, weaponDraws);
   _drawAllyTexts(i, ally, rowY, isAllyHeal, ppx, ppy, weaponDraws);
 }

@@ -105,7 +105,8 @@ function _updateAllyEnemyHit() {
     if (_s.battleTimer >= _s.BATTLE_DMG_SHOW_MS) {
       const ally = _s.battleAllies[_s.enemyTargetAllyIdx];
       if (ally && ally.hp <= 0) {
-        // Dead ally stays visible — just remove from turn queue and check team wipe
+        // Start death animation — visual only, battle continues
+        ally.deathTimer = 0;
         _s.turnQueue = _s.turnQueue.filter(t => !(t.type === 'ally' && t.index === _s.enemyTargetAllyIdx));
         _s.enemyTargetAllyIdx = -1;
         if (_s.isTeamWiped()) {
