@@ -1162,6 +1162,8 @@
       { label: 'R FWD SWING',  tiles: [OK_IDLE_T0, OK_IDLE_T1, OK_ATK_R_MID, OK_IDLE_T3, OK_LEG_L, OK_LEG_R], rows: 3 },
       { label: 'KNEEL',        tiles: [...OK_KNEEL, _EMPTY, _EMPTY], rows: 3 },
       { label: 'VICTORY',      tiles: [_EMPTY, _EMPTY, _EMPTY, _EMPTY, OK_LEG_L, OK_LEG_R], rows: 3 },
+      { label: 'HIT',          tiles: [_EMPTY, _EMPTY, _EMPTY, _EMPTY, _EMPTY, _EMPTY], rows: 3 },
+      { label: 'DEATH',        tiles: [_EMPTY, _EMPTY, _EMPTY, _EMPTY], rows: 1, cols: 4 },
     ];
 
     let posesMode = false;
@@ -1200,10 +1202,11 @@
         lbl.style.cssText = 'color:#c8a832;font-size:7px;font-family:monospace;';
         card.appendChild(lbl);
 
+        const cols = pose.cols || 2;
         const grid = document.createElement('div');
-        grid.style.cssText = 'display:grid;grid-template-columns:32px 32px;gap:1px;';
+        grid.style.cssText = 'display:grid;grid-template-columns:repeat(' + cols + ',32px);gap:1px;';
 
-        for (let t = 0; t < rows * 2; t++) {
+        for (let t = 0; t < rows * cols; t++) {
           const bytes = pose.tiles[t];
           const tc = bytes ? _renderOneTile8x8(bytes, pal) : (() => { const c = document.createElement('canvas'); c.width=32; c.height=32; return c; })();
           tc.style.cssText = 'border:1px solid #333;cursor:pointer;-webkit-tap-highlight-color:transparent;';
@@ -1344,8 +1347,12 @@
       // Seed VICTORY top tiles from ROM (BATTLE_SPRITE_ROM + 24*16 = $50190)
       const _rom = new Uint8Array(ff3Buffer);
       const _vicBase = 0x50010 + 24 * 16;
-      okPoseTiles = OK_POSES.map(p => ({ label: p.label, rows: p.rows, tiles: p.tiles.map(t => new Uint8Array(t)) }));
+      okPoseTiles = OK_POSES.map(p => ({ label: p.label, rows: p.rows, cols: p.cols || 2, tiles: p.tiles.map(t => new Uint8Array(t)) }));
       for (let t = 0; t < 4; t++) okPoseTiles[6].tiles[t] = new Uint8Array(_rom.buffer, _vicBase + t * 16, 16);
+      // Seed HIT tiles from ROM (tiles 30-33 portrait + 34-35 legs)
+      const _hitBase = 0x50010 + 30 * 16;
+      for (let t = 0; t < 6; t++) okPoseTiles[7].tiles[t] = new Uint8Array(_rom.buffer, _hitBase + t * 16, 16);
+      // DEATH tiles: placeholder empties — user will find and assign via tile picker
       renderTilePage();
       tileViewer.style.display = 'flex';
       tileViewerOpen = true;
