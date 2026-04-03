@@ -65,16 +65,24 @@ function _encounterGridLayout() {
 
 function drawSWExplosion(shared) {
   _s = shared;
-  // PVP opponent South Wind — explosion centered on player portrait
+  // PVP opponent South Wind — explosion centered on current target (player or ally)
   if (pvpSt.isPVPBattle && _s.battleState === 'pvp-opp-sw-hit' && _s.battleTimer < 400) {
     if (!_s.swPhaseCanvases.length) return;
     const phase = Math.min(2, Math.floor(_s.battleTimer / 133));
     const canvas = _s.swPhaseCanvases[phase];
     if (!canvas) return;
-    const cx = HUD_RIGHT_X + 8 + 8;   // portrait left + half portrait width
-    const cy = HUD_VIEW_Y + 8 + 12;   // portrait top + half portrait height
+    const targets = pvpSt._oppSWTargets;
+    const tidx = targets ? targets[pvpSt._oppSWHitIdx] : -1;
+    let cx, cy;
+    if (tidx === -1) {
+      cx = HUD_RIGHT_X + 8 + 8;
+      cy = HUD_VIEW_Y + 8 + 12;
+    } else {
+      const panelTop = HUD_VIEW_Y + 32;
+      cx = HUD_RIGHT_X + 8 + 8;
+      cy = panelTop + tidx * ROSTER_ROW_H + 8 + 8;
+    }
     const half = canvas.width / 2;
-    // Clip to full HUD view height (not just viewport — portrait is in right panel x>144)
     _s.ctx.save();
     _s.ctx.beginPath(); _s.ctx.rect(0, HUD_VIEW_Y, CANVAS_W, HUD_VIEW_H); _s.ctx.clip();
     _s.ctx.imageSmoothingEnabled = false;
