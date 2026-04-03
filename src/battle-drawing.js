@@ -1039,7 +1039,7 @@ function _drawAllyRow(i, ally, panelTop, weaponDraws) {
     _s.enemyTargetAllyIdx === i && _s.allyDamageNums[i] && !_s.allyDamageNums[i].miss;
   const isAllyAttack = (_s.battleState === 'ally-attack-start') && _s.currentAllyAttacker === i;
   const isAllyHeal = _s.battleState === 'item-use' && inputSt.playerActionPending && inputSt.playerActionPending.allyIndex === i;
-  const isNearFatal = ally.hp > 0 && ally.hp <= Math.floor(ally.maxHP / 4);
+  const isNearFatal = ally.hp <= 0 || (ally.hp > 0 && ally.hp <= Math.floor(ally.maxHP / 4));
   const ppx = HUD_RIGHT_X + 8, ppy = rowY + 8;
   _s.drawHudBox(HUD_RIGHT_X, rowY, 32, ROSTER_ROW_H, ally.fadeStep);
   _s.drawHudBox(HUD_RIGHT_X + 32, rowY, HUD_RIGHT_W - 32, ROSTER_ROW_H, ally.fadeStep);
