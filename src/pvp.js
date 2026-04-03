@@ -377,8 +377,8 @@ function _processPVPOppSWHit() {
   if (_s.battleState !== 'pvp-opp-sw-hit') return false;
   if (_s.battleTimer >= 700) {
     _s.playerDamageNum = null;
-    if (ps.hp <= 0) {
-      _s.isDefending = false; _s.battleState = 'defeat-monster-fade'; _s.battleTimer = 0;
+    if (_s.isTeamWiped()) {
+      _s.isDefending = false; _s.battleState = 'team-wipe'; _s.battleTimer = 0;
     } else {
       _s.processNextTurn();
     }
@@ -388,8 +388,8 @@ function _processPVPOppSWHit() {
 
 function _processEnemyDamageShow() {
   if (_s.battleTimer < BATTLE_DMG_SHOW_MS) return;
-  if (ps.hp <= 0) {
-    _s.isDefending = false; _s.battleState = 'defeat-monster-fade'; _s.battleTimer = 0;
+  if (_s.isTeamWiped()) {
+    _s.isDefending = false; _s.battleState = 'team-wipe'; _s.battleTimer = 0;
   } else { _s.processNextTurn(); }
 }
 
@@ -578,8 +578,8 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   const oppHP   = isMain ? (pvpSt.pvpOpponentStats ? pvpSt.pvpOpponentStats.hp : _s.enemyHP) : (enemy.hp != null ? enemy.hp : 0);
   const oppMaxHP = isMain ? (pvpSt.pvpOpponentStats ? pvpSt.pvpOpponentStats.maxHP : 1) : (enemy.maxHP || 1);
   const isNearFatalOpp = oppHP > 0 && oppHP <= Math.floor(oppMaxHP / 4);
-  // Opponent victory = player was defeated (defeat-monster-fade)
-  const isOppVictory = _s.battleState === 'defeat-monster-fade';
+  // Opponent victory = team wiped or old defeat path
+  const isOppVictory = _s.battleState === 'team-wipe' || _s.battleState === 'defeat-monster-fade';
   const isOppDefending = isMain && pvpSt.pvpOpponentIsDefending && bs === 'pvp-defend-anim';
   const isOppItemUse   = isMain && (bs === 'pvp-opp-sw-throw' || bs === 'pvp-opp-sw-hit' || bs === 'pvp-opp-potion');
   let body = fullBody;
