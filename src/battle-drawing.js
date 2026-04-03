@@ -474,7 +474,7 @@ function drawBattleMenu() {
     if (pvpSt.isPVPBattle) {
       // Collect all living PVP enemy names and stack them
       const names = [];
-      if (!_s.bossDefeated && pvpSt.pvpPlayerTargetIdx < 0 && pvpSt.pvpOpponentStats)
+      if (!_s.enemyDefeated && pvpSt.pvpPlayerTargetIdx < 0 && pvpSt.pvpOpponentStats)
         names.push(_nameToBytes(pvpSt.pvpOpponentStats.name));
       for (let i = 0; i < pvpSt.pvpEnemyAllies.length; i++) {
         const a = pvpSt.pvpEnemyAllies[i];
@@ -688,15 +688,15 @@ function _drawBossSprite(centerX, centerY) {
     _drawDissolvedSprite(sprX, sprY, _s.battleState === 'boss-dissolve');
   } else if (_s.battleState === 'enemy-flash') {
     const frame = Math.floor(_s.battleTimer / (BOSS_PREFLASH_MS / 8));
-    if (!_s.bossDefeated) _s.ctx.drawImage((frame & 1) ? (getBossWhiteCanvas() || getBossBattleCanvas()) : getBossBattleCanvas(), sprX, sprY);
+    if (!_s.enemyDefeated) _s.ctx.drawImage((frame & 1) ? (getBossWhiteCanvas() || getBossBattleCanvas()) : getBossBattleCanvas(), sprX, sprY);
   } else if (_s.battleState === 'player-slash') {
-    if (!(Math.floor(_s.battleTimer / 60) & 1) && !_s.bossDefeated) _s.ctx.drawImage(getBossBattleCanvas(), sprX, sprY);
-    if (_s.slashFrames && _s.slashFrame < SLASH_FRAMES && !_s.bossDefeated && inputSt.hitResults && inputSt.hitResults[_s.currentHitIdx] && !inputSt.hitResults[_s.currentHitIdx].miss)
+    if (!(Math.floor(_s.battleTimer / 60) & 1) && !_s.enemyDefeated) _s.ctx.drawImage(getBossBattleCanvas(), sprX, sprY);
+    if (_s.slashFrames && _s.slashFrame < SLASH_FRAMES && !_s.enemyDefeated && inputSt.hitResults && inputSt.hitResults[_s.currentHitIdx] && !inputSt.hitResults[_s.currentHitIdx].miss)
       _s.ctx.drawImage(_s.slashFrames[_s.slashFrame], centerX - 8 + _s.slashOffX, centerY - 8 + _s.slashOffY);
   } else if (_s.battleState === 'ally-slash') {
     const blinkHidden = _s.allyHitResult && !_s.allyHitResult.miss && (Math.floor(_s.battleTimer / 60) & 1);
-    if (!blinkHidden && !_s.bossDefeated) _s.ctx.drawImage(getBossBattleCanvas(), sprX, sprY);
-    if (!_s.bossDefeated && _s.allyHitResult && !_s.allyHitResult.miss) {
+    if (!blinkHidden && !_s.enemyDefeated) _s.ctx.drawImage(getBossBattleCanvas(), sprX, sprY);
+    if (!_s.enemyDefeated && _s.allyHitResult && !_s.allyHitResult.miss) {
       const ally = _s.battleAllies[_s.currentAllyAttacker];
       const allySlashFrames = ally ? _s.getSlashFramesForWeapon(ally.weaponId, true) : _s.slashFramesR;
       const af = Math.min(Math.floor(_s.battleTimer / 67), 2);
@@ -704,7 +704,7 @@ function _drawBossSprite(centerX, centerY) {
         _s.ctx.drawImage(allySlashFrames[af], centerX - 8 + [0,10,-8][af], centerY - 8 + [0,-6,8][af]);
     }
   } else {
-    if (!_s.bossDefeated) _s.ctx.drawImage(getBossBattleCanvas(), sprX, sprY);
+    if (!_s.enemyDefeated) _s.ctx.drawImage(getBossBattleCanvas(), sprX, sprY);
   }
 }
 function _drawBossSpriteBoxBoss(centerX, centerY) {
@@ -1164,7 +1164,7 @@ function _encounterMonsterPos(idx) {
   return { bx: pos.x + 16, baseY: pos.y + (dSprH - mh) + Math.floor(mh / 2) - 8 };
 }
 function _drawBossDmgNum() {
-  if (!_s.bossDamageNum || (_s.bossDefeated && !_s.isRandomEncounter)) return;
+  if (!_s.enemyDmgNum || (_s.enemyDefeated && !_s.isRandomEncounter)) return;
   let bx, baseY;
   if (_s.isRandomEncounter && _s.encounterMonsters) {
     ({ bx, baseY } = _encounterMonsterPos(inputSt.targetIndex));
@@ -1176,12 +1176,12 @@ function _drawBossDmgNum() {
     bx = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2) - 4;
     baseY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2) - 8;
   }
-  const by = _dmgBounceY(baseY, _s.bossDamageNum.timer);
+  const by = _dmgBounceY(baseY, _s.enemyDmgNum.timer);
   _s.clipToViewport();
-  if (_s.bossDamageNum.miss) {
+  if (_s.enemyDmgNum.miss) {
     drawText(_s.ctx, bx - 8, by, BATTLE_MISS, [0x0F, 0x0F, 0x0F, 0x2B]);
   } else {
-    _drawBattleNum(bx, by, _s.bossDamageNum.value, DMG_NUM_PAL);
+    _drawBattleNum(bx, by, _s.enemyDmgNum.value, DMG_NUM_PAL);
   }
   _s.ctx.restore();
 }
