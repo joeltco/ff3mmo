@@ -548,10 +548,11 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   // Hide dead enemies — but keep visible during dissolve and attack sequence
   const isDying = pvpSt.pvpDyingMap.has(idx) && bs === 'pvp-dissolve';
   const isCurrentTarget = isMain ? pvpSt.pvpPlayerTargetIdx < 0 : (idx - 1) === pvpSt.pvpPlayerTargetIdx;
+  const isSWHit = bs === 'sw-hit' || bs === 'sw-throw';
   const isBeingKilled = isCurrentTarget && (bs === 'player-slash' || bs === 'player-hit-show' ||
     bs === 'player-damage-show' || bs === 'ally-slash' || bs === 'ally-damage-show');
-  if (isMain && (_s.enemyDefeated || (pvpSt.pvpOpponentStats && pvpSt.pvpOpponentStats.hp <= 0)) && !isDying && !isBeingKilled) return;
-  if (!isMain && (_s.enemyDefeated || enemy.hp <= 0) && !isDying && !isBeingKilled) return;
+  if (isMain && (_s.enemyDefeated || (pvpSt.pvpOpponentStats && pvpSt.pvpOpponentStats.hp <= 0)) && !isDying && !isBeingKilled && !isSWHit) return;
+  if (!isMain && (_s.enemyDefeated || enemy.hp <= 0) && !isDying && !isBeingKilled && !isSWHit) return;
   // Shake left when taking damage (mirrors player's right-shake on hit)
   if (isCurrentTarget && pvpSt.pvpOpponentShakeTimer > 0) {
     sprX += (Math.floor(pvpSt.pvpOpponentShakeTimer / 67) & 1) ? -2 : 2;
