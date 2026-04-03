@@ -53,6 +53,11 @@ export const pvpSt = {
   pvpBoxResizeStartTime:  0,
   pvpEnemySlidePosFrom:   [],
   pvpDyingMap:            new Map(), // enemyIdx → startDelayMs for staggered death wipe
+  // Opponent South Wind multi-target state
+  _oppSWTargets:          [],       // target indices: -1=player, 0+=ally index
+  _oppSWHitIdx:           0,        // current target in sequence
+  _oppSWPerDmg:           0,        // pre-rolled damage per target
+  _swDmgApplied:          false,    // damage applied this cycle
 };
 
 // ── Shared context ────────────────────────────────────────────────────────────
@@ -102,6 +107,10 @@ export function resetPVPState() {
   pvpSt.pvpEnemyHitResults      = [];
   pvpSt.pvpEnemyHitIdx          = 0;
   pvpSt.pvpEnemyDualWield       = false;
+  pvpSt._oppSWTargets           = [];
+  pvpSt._oppSWHitIdx            = 0;
+  pvpSt._oppSWPerDmg            = 0;
+  pvpSt._swDmgApplied           = false;
 }
 
 // ── Ally joining ──────────────────────────────────────────────────────────────
@@ -360,12 +369,21 @@ function _processPVPOppPotion() {
 function _processPVPOppSWThrow() {
   if (_s.battleState !== 'pvp-opp-sw-throw') return false;
   if (_s.battleTimer >= 250) {
-    // Roll damage now but don't show yet — explosion plays first
-    const atk = pvpSt.pvpOpponentStats.atk;
-    const swAtk = Math.floor(atk / 2) + 55;
+    // Build target list: player + living allies
+    const targets = [];
+    if (ps.hp > 0) targets.push(-1);
+    for (let i = 0; i < _s.battleAllies.length; i++) {
+      if (_s.battleAllies[i].hp > 0) targets.push(i);
+    }
+    if (targets.length === 0) { _s.processNextTurn(); return true; }
+    // Roll damage using INT (5 + level), matching player formula (no defense calc)
+    const int = 5 + (pvpSt.pvpOpponentStats.level || 1);
+    const swAtk = Math.floor(int / 2) + 55;
     const swBase = Math.floor((swAtk + Math.floor(Math.random() * Math.floor(swAtk / 2 + 1))) / 2);
-    pvpSt._pendingSWDmg = Math.max(1, calcDamage(swBase, ps.def));
-    playSFX(SFX.SW_HIT);
+    pvpSt._oppSWTargets = targets;
+    pvpSt._oppSWHitIdx = 0;
+    pvpSt._oppSWPerDmg = Math.max(1, Math.floor(swBase / targets.length));
+    pvpSt._swDmgApplied = false;
     _s.battleState = 'pvp-opp-sw-hit'; _s.battleTimer = 0;
   }
   return true;
@@ -373,22 +391,50 @@ function _processPVPOppSWThrow() {
 
 function _processPVPOppSWHit() {
   if (_s.battleState !== 'pvp-opp-sw-hit') return false;
-  // Explosion plays for 400ms (3 phases × 133ms), then shake + damage
+  const targets = pvpSt._oppSWTargets;
+  if (!targets || targets.length === 0) { _s.processNextTurn(); return true; }
+  const tidx = targets[pvpSt._oppSWHitIdx];
+  // At 400ms: apply damage to current target
   if (_s.battleTimer >= 400 && !pvpSt._swDmgApplied) {
-    const dmg = pvpSt._pendingSWDmg;
-    ps.hp = Math.max(0, ps.hp - dmg);
-    _s.playerDamageNum = { value: dmg, timer: 0 };
-    _s.battleShakeTimer = BATTLE_SHAKE_MS;
+    const dmg = pvpSt._oppSWPerDmg;
+    if (tidx === -1) {
+      ps.hp = Math.max(0, ps.hp - dmg);
+      _s.playerDamageNum = { value: dmg, timer: 0 };
+      _s.battleShakeTimer = BATTLE_SHAKE_MS;
+    } else {
+      const ally = _s.battleAllies[tidx];
+      if (ally && ally.hp > 0) {
+        ally.hp = Math.max(0, ally.hp - dmg);
+        _s.allyDamageNums[tidx] = { value: dmg, timer: 0 };
+        _s.allyShakeTimer[tidx] = BATTLE_SHAKE_MS;
+      }
+    }
+    playSFX(SFX.SW_HIT);
     pvpSt._swDmgApplied = true;
   }
-  if (_s.battleTimer >= 400 + 700) {
-    _s.playerDamageNum = null;
-    pvpSt._pendingSWDmg = 0;
+  // At 1100ms: next target or done
+  if (_s.battleTimer >= 1100) {
+    if (tidx === -1) _s.playerDamageNum = null;
+    pvpSt._oppSWHitIdx++;
     pvpSt._swDmgApplied = false;
-    if (_s.isTeamWiped()) {
-      _s.isDefending = false; _s.battleState = 'team-wipe'; _s.battleTimer = 0;
+    if (pvpSt._oppSWHitIdx < targets.length) {
+      _s.battleTimer = 0;
     } else {
-      _s.processNextTurn();
+      pvpSt._oppSWTargets = [];
+      pvpSt._oppSWHitIdx = 0;
+      // Trigger death animations for killed allies
+      for (let i = 0; i < _s.battleAllies.length; i++) {
+        const ally = _s.battleAllies[i];
+        if (ally.hp <= 0 && ally.deathTimer == null) {
+          ally.deathTimer = 0; playSFX(SFX.FALL);
+          _s.turnQueue = _s.turnQueue.filter(t => !(t.type === 'ally' && t.index === i));
+        }
+      }
+      if (_s.isTeamWiped()) {
+        _s.isDefending = false; _s.battleState = 'team-wipe'; _s.battleTimer = 0;
+      } else {
+        _s.processNextTurn();
+      }
     }
   }
   return true;
