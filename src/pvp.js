@@ -58,6 +58,7 @@ export const pvpSt = {
   _oppSWHitIdx:           0,        // current target in sequence
   _oppSWPerDmg:           0,        // pre-rolled damage per target
   _swDmgApplied:          false,    // damage applied this cycle
+  _oppSWExplosionPlayed:  false,    // explosion SFX played this target
 };
 
 // ── Shared context ────────────────────────────────────────────────────────────
@@ -111,6 +112,7 @@ export function resetPVPState() {
   pvpSt._oppSWHitIdx            = 0;
   pvpSt._oppSWPerDmg            = 0;
   pvpSt._swDmgApplied           = false;
+  pvpSt._oppSWExplosionPlayed   = false;
 }
 
 // ── Ally joining ──────────────────────────────────────────────────────────────
@@ -397,7 +399,12 @@ function _processPVPOppSWHit() {
   const targets = pvpSt._oppSWTargets;
   if (!targets || targets.length === 0) { _s.processNextTurn(); return true; }
   const tidx = targets[pvpSt._oppSWHitIdx];
-  // At 400ms: apply damage to current target
+  // At 0ms: explosion SFX
+  if (!pvpSt._oppSWExplosionPlayed) {
+    pvpSt._oppSWExplosionPlayed = true;
+    playSFX(SFX.SW_HIT);
+  }
+  // At 400ms: apply damage + hit SFX
   if (_s.battleTimer >= 400 && !pvpSt._swDmgApplied) {
     const dmg = pvpSt._oppSWPerDmg;
     if (tidx === -1) {
@@ -412,7 +419,7 @@ function _processPVPOppSWHit() {
         _s.allyShakeTimer[tidx] = BATTLE_SHAKE_MS;
       }
     }
-    playSFX(SFX.SW_HIT);
+    playSFX(SFX.ATTACK_HIT);
     pvpSt._swDmgApplied = true;
   }
   // At 1100ms: next target or done
@@ -420,6 +427,7 @@ function _processPVPOppSWHit() {
     if (tidx === -1) _s.playerDamageNum = null;
     pvpSt._oppSWHitIdx++;
     pvpSt._swDmgApplied = false;
+    pvpSt._oppSWExplosionPlayed = false;
     if (pvpSt._oppSWHitIdx < targets.length) {
       _s.battleTimer = 0;
     } else {
