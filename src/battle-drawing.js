@@ -13,7 +13,7 @@ import { _nameToBytes, _buildItemRowBytes, makeExpText, makeGilText, makeFoundIt
 import { pvpEnemyCellCenter } from './pvp-math.js';
 import { pvpSt, drawBossSpriteBoxPVP } from './pvp.js';
 import { inputSt } from './input-handler.js';
-import { BATTLE_MISS, BATTLE_GAME_OVER, BATTLE_VICTORY, BATTLE_RAN_AWAY,
+import { BATTLE_MISS, BATTLE_GAME_OVER, BATTLE_DEFEATED, BATTLE_VICTORY, BATTLE_RAN_AWAY,
          BATTLE_CANT_ESCAPE, BATTLE_BOSS_NAME, BATTLE_GOBLIN_NAME,
          BATTLE_LEVEL_UP, BATTLE_MENU_ITEMS } from './data/strings.js';
 
@@ -512,6 +512,7 @@ function drawBattleMenu() {
   if (isFade) fadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(_s.battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
   const fadedPal = _makeFadedPal(fadeStep);
   if (!isVictory && !isRunBox) {
+    const isTeamWipe = _s.battleState === 'team-wipe';
     if (pvpSt.isPVPBattle) {
       // Collect all living PVP enemy names and stack them
       const names = [];
@@ -522,11 +523,32 @@ function drawBattleMenu() {
         if (a && a.hp > 0 && i >= pvpSt.pvpPlayerTargetIdx)
           names.push(_nameToBytes(a.name));
       }
-      const rowH = 10;
-      const startY = HUD_BOT_Y + Math.floor((boxH - names.length * rowH) / 2);
-      names.forEach((nb, i) => {
-        drawText(_s.ctx, Math.floor((boxW - measureText(nb)) / 2), startY + i * rowH, nb, fadedPal);
-      });
+      if (isTeamWipe) {
+        // Crossfade: names out (0-400ms), "Defeated" in (400-800ms)
+        const t = _s.battleTimer;
+        if (t < 400) {
+          const alpha = 1 - t / 400;
+          _s.ctx.globalAlpha = alpha;
+          const rowH = 10;
+          const startY = HUD_BOT_Y + Math.floor((boxH - names.length * rowH) / 2);
+          names.forEach((nb, i) => {
+            drawText(_s.ctx, Math.floor((boxW - measureText(nb)) / 2), startY + i * rowH, nb, fadedPal);
+          });
+          _s.ctx.globalAlpha = 1;
+        } else {
+          const alpha = Math.min((t - 400) / 400, 1);
+          _s.ctx.globalAlpha = alpha;
+          const tw = measureText(BATTLE_DEFEATED);
+          drawText(_s.ctx, Math.floor((boxW - tw) / 2), HUD_BOT_Y + Math.floor((boxH - 8) / 2), BATTLE_DEFEATED, fadedPal);
+          _s.ctx.globalAlpha = 1;
+        }
+      } else {
+        const rowH = 10;
+        const startY = HUD_BOT_Y + Math.floor((boxH - names.length * rowH) / 2);
+        names.forEach((nb, i) => {
+          drawText(_s.ctx, Math.floor((boxW - measureText(nb)) / 2), startY + i * rowH, nb, fadedPal);
+        });
+      }
     } else {
       const enemyName = _battleEnemyName();
       drawText(_s.ctx, Math.floor((boxW - measureText(enemyName)) / 2), HUD_BOT_Y + Math.floor((boxH - 8) / 2), enemyName, fadedPal);
