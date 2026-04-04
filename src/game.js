@@ -4238,9 +4238,14 @@ function _updateDefeatStates() {
       encounterMonsters = null; turnQueue = []; battleAllies = []; allyJoinRound = 0;
       ps.hp = ps.stats ? ps.stats.maxHP : 28;
       ps.mp = ps.stats ? ps.stats.maxMP : 0;
+      const worldEntry = mapStack.slice().reverse().find(e => e.mapId === 'world');
       _triggerWipe(() => {
         dungeonFloor = -1; encounterSteps = 0; mapStack = [];
-        loadWorldMapAt(findWorldExitIndex(111, worldMapData));
+        if (worldEntry) {
+          loadWorldMapAtPosition(worldEntry.x, worldEntry.y);
+        } else {
+          loadWorldMapAt(findWorldExitIndex(currentMapId, worldMapData));
+        }
       }, 'world');
     }
     return true;
