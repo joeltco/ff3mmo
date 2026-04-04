@@ -24,8 +24,7 @@ export function _encounterGridPos(boxX, boxY, boxW, boxH, count, sprH) {
   const row1y = row0y + sprH + gapY;
   if (count === 1) return [{ x: cx - hs, y: cy - Math.floor(sprH / 2) }];
   if (count === 2) {
-    // Pin to top of box (8px border + tighter padding)
-    const topY = boxY + 8;
+    const topY = cy - Math.floor(sprH / 2);
     return [
       { x: cx - gapX - hs, y: topY },
       { x: cx + gapX - hs, y: topY },
