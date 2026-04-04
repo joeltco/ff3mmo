@@ -327,7 +327,7 @@ function _drawBattlePortrait() {
   const isAttackPose = _s.battleState === 'attack-start' || _s.battleState === 'player-slash';
   const isHitPose = (_s.battleState === 'enemy-attack' && _s.playerDamageNum && !_s.playerDamageNum.miss) ||
     (_s.battleState === 'enemy-damage-show' && _s.playerDamageNum && !_s.playerDamageNum.miss) ||
-    _s.battleState === 'pvp-opp-sw-hit' ||
+    (_s.battleState === 'pvp-opp-sw-hit' && _s.battleShakeTimer > 0) ||
     (_s.battleState === 'pvp-enemy-slash' && pvpSt.pvpPendingAttack && !pvpSt.pvpPendingAttack.miss && !pvpSt.pvpPendingAttack.shieldBlock);
   const isDefendPose = _s.battleState === 'defend-anim';
   const isItemUsePose = _s.battleState === 'item-use' || _s.battleState === 'sw-throw' || _s.battleState === 'sw-hit';
@@ -1103,8 +1103,9 @@ function _drawAllyRow(i, ally, panelTop, weaponDraws) {
   const shakeOff = (_s.allyShakeTimer[i] > 0) ? (Math.floor(_s.allyShakeTimer[i] / 67) & 1 ? 2 : -2) : 0;
   const rowY = panelTop + i * ROSTER_ROW_H + shakeOff;
   const isVicPose = _s.isVictoryBattleState();
-  const isAllyHit = (_s.battleState === 'ally-hit' || _s.battleState === 'ally-damage-show-enemy') &&
-    _s.enemyTargetAllyIdx === i && _s.allyDamageNums[i] && !_s.allyDamageNums[i].miss;
+  const isAllyHit = ((_s.battleState === 'ally-hit' || _s.battleState === 'ally-damage-show-enemy') &&
+    _s.enemyTargetAllyIdx === i && _s.allyDamageNums[i] && !_s.allyDamageNums[i].miss) ||
+    (_s.battleState === 'pvp-opp-sw-hit' && _s.allyShakeTimer[i] > 0);
   const isAllyAttack = (_s.battleState === 'ally-attack-start') && _s.currentAllyAttacker === i;
   const isAllyHeal = _s.battleState === 'item-use' && inputSt.playerActionPending && inputSt.playerActionPending.allyIndex === i;
   const ppx = HUD_RIGHT_X + 8, ppy = rowY + 8;
