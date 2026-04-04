@@ -426,7 +426,7 @@ function _processPVPOppSWHit() {
       for (let i = 0; i < _s.battleAllies.length; i++) {
         const ally = _s.battleAllies[i];
         if (ally.hp <= 0 && ally.deathTimer == null) {
-          ally.deathTimer = 0; playSFX(SFX.FALL);
+          ally.deathTimer = 0;
           _s.turnQueue = _s.turnQueue.filter(t => !(t.type === 'ally' && t.index === i));
         }
       }

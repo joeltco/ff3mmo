@@ -435,7 +435,7 @@ let fakePlayerKnifeLFwdFullBodyCanvases = []; // knife L-hand 16×24 h-flipped f
 let fakePlayerKneelFullBodyCanvases = [];     // near-fatal kneel 16×24 h-flipped full body
 let fakePlayerVictoryFullBodyCanvases = [];   // victory 16×24 h-flipped full body
 let fakePlayerDeathFrames = [];               // death wipe frames per palette (for pvp-dissolve)
-let fakePlayerDeathPoseCanvases = [];         // 32×16 death pose per palette
+let fakePlayerDeathPoseCanvases = [];         // 24×16 death pose per palette
 let rosterTimer = 0;             // ms until next movement event
 
 const ROSTER_FADE_STEP_MS = 100;
@@ -793,12 +793,12 @@ function _buildHitFullBodies(romData) {
 function _buildDeathPoseCanvases() {
   const tiles = OK_DEATH.map(d => decodeTile(d, 0));
   fakePlayerDeathPoseCanvases = PLAYER_PALETTES.map(pal => {
-    const c = document.createElement('canvas'); c.width = 32; c.height = 16;
+    const c = document.createElement('canvas'); c.width = 24; c.height = 16;
     const bctx = c.getContext('2d');
-    // 4 cols × 2 rows, each tile 8×8
+    // 3 cols × 2 rows, each tile 8×8
     for (let row = 0; row < 2; row++) {
-      for (let col = 0; col < 4; col++) {
-        _renderDecodedTile(bctx, tiles[row * 4 + col], pal, col * 8, row * 8);
+      for (let col = 0; col < 3; col++) {
+        _renderDecodedTile(bctx, tiles[row * 3 + col], pal, col * 8, row * 8);
       }
     }
     return c;
@@ -2638,12 +2638,18 @@ function _drawHUDInfoPanel() {
   const infoFadeStep = HUD_INFO_FADE_STEPS - Math.min(Math.floor(hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
   if (infoFadeStep >= HUD_INFO_FADE_STEPS) return;
 
-  // Player death: fade text out during slide phase, then don't draw
+  // Player death: text stays during slide, fades out after slide ends (500-800ms)
   if (playerDeathTimer != null) {
-    const deathAlpha = Math.max(0, 1 - playerDeathTimer / 500);
-    if (deathAlpha <= 0) return;
-    ctx.save();
-    ctx.globalAlpha = deathAlpha;
+    if (playerDeathTimer < 500) {
+      // Phase 1 (slide): text stays visible
+    } else if (playerDeathTimer < 800) {
+      // Phase 2 (text fade): alpha fades from 1→0
+      const deathAlpha = 1 - (playerDeathTimer - 500) / 300;
+      ctx.save();
+      ctx.globalAlpha = deathAlpha;
+    } else {
+      return; // Phase 3+: no text
+    }
   }
 
   const shakeOff = (battleState === 'enemy-attack' && battleShakeTimer > 0)
@@ -2651,7 +2657,8 @@ function _drawHUDInfoPanel() {
   const sy = HUD_VIEW_Y + 8;
   const panelRight = HUD_RIGHT_X + HUD_RIGHT_W - 8 + shakeOff;
   const slot = saveSlots[selectCursor];
-  if (!slot) { if (playerDeathTimer != null) ctx.restore(); return; }
+  const deathTextFading = playerDeathTimer != null && playerDeathTimer >= 500 && playerDeathTimer < 800;
+  if (!slot) { if (deathTextFading) ctx.restore(); return; }
   // Name — NES palette fade toward black for game-start fade-in
   const namePal = [...TEXT_WHITE];
   for (let s = 0; s < infoFadeStep; s++) namePal[3] = nesColorFade(namePal[3]);
@@ -2676,7 +2683,7 @@ function _drawHUDInfoPanel() {
     drawText(ctx, panelRight - hpW, sy + 9, hpLabel, hpPal);
   }
 
-  if (playerDeathTimer != null) ctx.restore();
+  if (deathTextFading) ctx.restore();
 }
 
 // Loading right panel, moogle, chat bubble → loading-screen.js
@@ -3632,19 +3639,10 @@ function _updateBattleTimers(dt) {
     if (allyShakeTimer[idx] > 0) allyShakeTimer[idx] = Math.max(0, allyShakeTimer[idx] - dt);
   }
   // Start player death animation on first frame of hp=0
-  if (ps.hp <= 0 && playerDeathTimer == null && battleState !== 'none') { playerDeathTimer = 0; playSFX(SFX.FALL); }
-  // Advance death animation timers — stop fall SFX when slide ends (500ms)
-  if (playerDeathTimer != null) {
-    const prev = playerDeathTimer;
-    playerDeathTimer += dt;
-    if (prev < 500 && playerDeathTimer >= 500) stopSFX();
-  }
+  if (ps.hp <= 0 && playerDeathTimer == null && battleState !== 'none') { playerDeathTimer = 0; }
+  if (playerDeathTimer != null) playerDeathTimer += dt;
   for (const ally of battleAllies) {
-    if (ally.deathTimer != null) {
-      const prev = ally.deathTimer;
-      ally.deathTimer += dt;
-      if (prev < 500 && ally.deathTimer >= 500) stopSFX();
-    }
+    if (ally.deathTimer != null) ally.deathTimer += dt;
   }
 
   _updateTurnTimer(dt);
