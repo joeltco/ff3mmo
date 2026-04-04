@@ -296,9 +296,12 @@ function _processEnemyFlash() {
   // Pre-flash elapsed — resolve attack
   const livingAllies = _s.battleAllies.filter(a => a.hp > 0);
   let targetAlly = -1;
-  if (livingAllies.length > 0 && !(pvpSt.isPVPBattle && pvpSt.pvpCurrentEnemyAllyIdx < 0)) {
-    if (Math.random() >= 1 / (1 + livingAllies.length)) {
-      const allyOptions = _s.battleAllies.map((a, i) => a.hp > 0 ? i : -1).filter(i => i >= 0);
+  if (livingAllies.length > 0) {
+    const allyOptions = _s.battleAllies.map((a, i) => a.hp > 0 ? i : -1).filter(i => i >= 0);
+    if (ps.hp <= 0) {
+      // Player dead — must target a living ally
+      targetAlly = allyOptions[Math.floor(Math.random() * allyOptions.length)];
+    } else if (Math.random() >= 1 / (1 + livingAllies.length)) {
       targetAlly = allyOptions[Math.floor(Math.random() * allyOptions.length)];
     }
   }
