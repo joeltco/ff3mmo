@@ -59,6 +59,7 @@ import { initWeaponSprites, getKnifeBladeCanvas, getKnifeBladeSwungCanvas,
          getSwordBladeCanvas, getSwordBladeSwungCanvas,
          getFistCanvas, getBlades } from './weapon-sprites.js';
 import { updateBattleAlly } from './battle-ally.js';
+import { updateBattleEnemyTurn } from './battle-enemy.js';
 import { OK_IDLE, OK_VICTORY, OK_L_BACK_SWING, OK_L_FWD_T2, OK_L_FWD_T3, OK_R_BACK_SWING, OK_R_FWD_T2, OK_KNEEL,
          OK_LEG_L_IDLE, OK_LEG_R_IDLE, OK_LEG_L_BACK_L, OK_LEG_R_BACK_L, OK_LEG_L_FWD_L, OK_LEG_R_FWD_L,
          OK_LEG_L_BACK_R, OK_LEG_R_SWING, OK_LEG_L_KNEEL, OK_LEG_R_KNEEL, OK_LEG_L_VICTORY, OK_LEG_R_VICTORY,
@@ -1607,6 +1608,39 @@ function _allyShared() {
     ROSTER_FADE_STEPS,
     processNextTurn,
     buildTurnOrder,
+    isTeamWiped: _isTeamWiped,
+  };
+}
+
+function _enemyShared() {
+  return {
+    get battleState()           { return battleState; },
+    set battleState(v)          { battleState = v; },
+    get battleTimer()           { return battleTimer; },
+    set battleTimer(v)          { battleTimer = v; },
+    get battleAllies()          { return battleAllies; },
+    get encounterMonsters()     { return encounterMonsters; },
+    get currentAttacker()       { return currentAttacker; },
+    get enemyTargetAllyIdx()    { return enemyTargetAllyIdx; },
+    set enemyTargetAllyIdx(v)   { enemyTargetAllyIdx = v; },
+    get allyDamageNums()        { return allyDamageNums; },
+    get allyShakeTimer()        { return allyShakeTimer; },
+    get playerDamageNum()       { return playerDamageNum; },
+    set playerDamageNum(v)      { playerDamageNum = v; },
+    get battleShakeTimer()      { return battleShakeTimer; },
+    set battleShakeTimer(v)     { battleShakeTimer = v; },
+    get isDefending()           { return isDefending; },
+    set isDefending(v)          { isDefending = v; },
+    get ps()                    { return ps; },
+    get inputSt()               { return inputSt; },
+    ITEMS,
+    BOSS_HIT_RATE,
+    GOBLIN_HIT_RATE,
+    BOSS_ATK,
+    BOSS_PREFLASH_MS,
+    BATTLE_SHAKE_MS,
+    BATTLE_DMG_SHOW_MS,
+    processNextTurn,
     isTeamWiped: _isTeamWiped,
   };
 }
@@ -4001,72 +4035,7 @@ function _updateBattleRun() {
 
 // Ally battle update logic extracted to battle-ally.js
 
-// Enemy turn update
-function _processEnemyFlash() {
-  if (battleState !== 'enemy-flash' || battleTimer < BOSS_PREFLASH_MS) return false;
-  const livingAllies = battleAllies.filter(a => a.hp > 0);
-  let targetAlly = -1;
-  if (livingAllies.length > 0) {
-    const allyOptions = battleAllies.map((a, i) => a.hp > 0 ? i : -1).filter(i => i >= 0);
-    if (ps.hp <= 0) {
-      // Player dead — must target a living ally
-      targetAlly = allyOptions[Math.floor(Math.random() * allyOptions.length)];
-    } else if (Math.random() >= 1 / (1 + livingAllies.length)) {
-      targetAlly = allyOptions[Math.floor(Math.random() * allyOptions.length)];
-    }
-  }
-  const hitRate = (currentAttacker >= 0 && encounterMonsters)
-    ? (encounterMonsters[currentAttacker].hitRate || GOBLIN_HIT_RATE) : BOSS_HIT_RATE;
-  const atk = (currentAttacker >= 0 && encounterMonsters)
-    ? encounterMonsters[currentAttacker].atk : BOSS_ATK;
-  if (targetAlly >= 0) {
-    enemyTargetAllyIdx = targetAlly;
-    if (Math.random() * 100 < hitRate) {
-      const dmg = calcDamage(atk, battleAllies[targetAlly].def);
-      battleAllies[targetAlly].hp = Math.max(0, battleAllies[targetAlly].hp - dmg);
-      allyDamageNums[targetAlly] = { value: dmg, timer: 0 };
-      allyShakeTimer[targetAlly] = BATTLE_SHAKE_MS;
-      playSFX(SFX.ATTACK_HIT); battleState = 'ally-hit'; battleTimer = 0;
-    } else {
-      allyDamageNums[targetAlly] = { miss: true, timer: 0 };
-      battleState = 'ally-damage-show-enemy'; battleTimer = 0;
-    }
-  } else {
-    const shieldEvade = getShieldEvade(ITEMS);
-    const shieldBlocked = shieldEvade > 0 && Math.random() * 100 < shieldEvade;
-    if (shieldBlocked) {
-      playerDamageNum = { miss: true, timer: 0 };
-      battleState = 'enemy-damage-show'; battleTimer = 0;
-      inputSt.battleProfHits['shield'] = (inputSt.battleProfHits['shield'] || 0) + 1;
-    } else if (Math.random() * 100 < hitRate) {
-      let dmg = calcDamage(atk, ps.def);
-      if (isDefending) dmg = Math.max(1, Math.floor(dmg / 2));
-      ps.hp = Math.max(0, ps.hp - dmg);
-      playerDamageNum = { value: dmg, timer: 0 };
-      playSFX(SFX.ATTACK_HIT);
-      battleShakeTimer = BATTLE_SHAKE_MS;
-      battleState = 'enemy-attack'; battleTimer = 0;
-    } else {
-      playerDamageNum = { miss: true, timer: 0 };
-      battleState = 'enemy-damage-show'; battleTimer = 0;
-    }
-  }
-  return true;
-}
-function _processEnemyDamageShowState() {
-  if (battleTimer < BATTLE_DMG_SHOW_MS) return;
-  if (_isTeamWiped()) {
-    isDefending = false; battleState = 'team-wipe'; battleTimer = 0;
-  } else { processNextTurn(); }
-}
-function _updateBattleEnemyTurn() {
-  if (_processEnemyFlash()) return true;
-  if (battleState === 'enemy-attack') {
-    if (battleTimer >= BATTLE_SHAKE_MS) { battleState = 'enemy-damage-show'; battleTimer = 0; }
-  } else if (battleState === 'enemy-damage-show') { _processEnemyDamageShowState();
-  } else { return false; }
-  return true;
-}
+// Enemy turn update logic extracted to battle-enemy.js
 
 function _updateBossDissolve(dt) {
   if (battleState !== 'boss-dissolve') return false;
@@ -4215,7 +4184,7 @@ function updateBattle(dt) {
   _updateBattleDefendItem(dt) ||
   _updateBattleRun()          ||
   updateBattleAlly(_allyShared()) ||
-  _updateBattleEnemyTurn()    ||
+  updateBattleEnemyTurn(_enemyShared()) ||
   _updateBattleEndSequence(dt);
 }
 
