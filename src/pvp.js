@@ -671,10 +671,9 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
     body = _s.kneelFullBodyCanvases[palIdx] || fullBody;
   }
 
-  // Opponent faces LEFT — blade positions and tile orientation are mirrored vs player portrait.
-  // Player (faces right): wind-up at px+8 (right/behind), swung at px-16 (left/forward).
-  // Opponent (faces left): wind-up at sprX-8 (left/behind), swung at sprX+16 (right/forward).
-  // Blade canvas h-flipped via translate+scale so tile content matches the facing direction.
+  // Opponent faces RIGHT (pre-flipped body canvas), player faces LEFT.
+  // Player (faces left): wind-up at px+8 (right/behind), swung at px-16 (left/forward).
+  // Opponent (faces right): body is pre-h-flipped, so blade uses translate+scale(-1,1) to mirror offsets.
   const blades = _s.blades;
   let blade = null;
   if (isWindUp || isAttackState) {
@@ -686,7 +685,7 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   }
   const drawBlade = () => {
     const ctx = _s.ctx;
-    // Opponent faces left — flip coordinates around body's right edge to reuse player offsets.
+    // Opponent body is pre-h-flipped — mirror blade coords to match.
     ctx.save();
     ctx.translate(sprX + 16, sprY);
     ctx.scale(-1, 1);
