@@ -1121,7 +1121,8 @@ function _drawAllyRow(i, ally, panelTop, weaponDraws) {
     if (dt < DEATH_SLIDE_MS) {
       const slideT = dt / DEATH_SLIDE_MS;
       const slideY = Math.floor(slideT * 16);
-      const kneel = _s.fakePlayerKneelPortraits[ally.palIdx];
+      const kneelFrames = _s.fakePlayerKneelPortraits[ally.palIdx];
+      const kneel = kneelFrames && kneelFrames[ally.fadeStep];
       if (kneel) {
         _s.ctx.save();
         _s.ctx.beginPath();
