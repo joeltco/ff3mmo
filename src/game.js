@@ -4215,12 +4215,9 @@ function _updateBoxClose() {
 
 function _updateDefeatStates() {
   if (battleState === 'team-wipe') {
-    if (!_teamWipeMsgShown) {
-      _teamWipeMsgShown = true;
-      stopMusic();
-      showMsgBox(BATTLE_GAME_OVER, () => {
-        battleState = 'defeat-close'; battleTimer = 0;
-      });
+    if (!_teamWipeMsgShown) { _teamWipeMsgShown = true; stopMusic(); }
+    if (battleTimer >= 1200 || _zPressed()) {
+      battleState = 'defeat-close'; battleTimer = 0;
     }
     return true;
   }
