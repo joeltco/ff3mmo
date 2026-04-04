@@ -465,6 +465,7 @@ let allyHitIsLeft = false;     // true when current ally hit is L-hand
 let allyDamageNums = {};       // {allyIdx: {value, timer, crit} or {miss, timer}}
 let allyShakeTimer = {};       // {allyIdx: ms remaining}
 let playerDeathTimer = null;   // null = alive, number = ms into death animation
+let _teamWipeMsgShown = false;
 let enemyTargetAllyIdx = -1;   // which ally an enemy is targeting (-1 = player)
 let allyExitTimer = 0;         // ms since victory-celebrate started (for ally exit fade)
 let turnTimer = 0;             // ms elapsed while player is deciding; auto-skip at TURN_TIME_MS
@@ -1340,7 +1341,7 @@ function _resetBattleVars() {
   currentAllyAttacker = -1; allyTargetIndex = -1; allyHitResult = null; allyHitIsLeft = false;
   allyDamageNums = {}; allyShakeTimer = {}; enemyTargetAllyIdx = -1; allyExitTimer = 0;
   southWindTargets = []; southWindHitIdx = 0; southWindDmgNums = {};
-  playerDeathTimer = null;
+  playerDeathTimer = null; _teamWipeMsgShown = false;
   inputSt.battleProfHits = {};
 }
 function _zPressed() { if (!keys['z'] && !keys['Z']) return false; keys['z'] = false; keys['Z'] = false; return true; }
@@ -4214,13 +4215,13 @@ function _updateBoxClose() {
 
 function _updateDefeatStates() {
   if (battleState === 'team-wipe') {
-    if (battleTimer === 0) {
+    if (!_teamWipeMsgShown) {
+      _teamWipeMsgShown = true;
       stopMusic();
       showMsgBox(BATTLE_GAME_OVER, () => {
         battleState = 'defeat-close'; battleTimer = 0;
       });
     }
-    battleTimer = 1; // prevent re-triggering; msgBox handles the flow
     return true;
   }
   if (battleState === 'defeat-monster-fade') {
