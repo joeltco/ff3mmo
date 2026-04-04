@@ -4215,7 +4215,7 @@ function _updateBoxClose() {
 
 function _updateDefeatStates() {
   if (battleState === 'team-wipe') {
-    if (!_teamWipeMsgShown) { _teamWipeMsgShown = true; stopMusic(); }
+    if (!_teamWipeMsgShown) { _teamWipeMsgShown = true; fadeOutMusic(1000); }
     if (battleTimer >= 1200 || _zPressed()) {
       battleState = 'defeat-close'; battleTimer = 0;
     }
