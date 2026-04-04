@@ -81,6 +81,8 @@ function _updateAllyAttack() {
       // Advance combo
       _s.allyHitIdx = _s.allyHitIdx + 1;
       if (_s.allyHitIdx < _s.allyHitResults.length) {
+        const nextAlly = _s.battleAllies[_s.currentAllyAttacker];
+        _s.allyHitIsLeft = (_s.allyHitIdx % 2 === 1) && nextAlly && isWeapon(nextAlly.weaponL);
         _s.battleState = 'ally-attack-start';
         _s.battleTimer = 0;
       } else {
