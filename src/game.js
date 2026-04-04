@@ -4351,6 +4351,7 @@ function _gameLoopDraw() {
     if (transSt.state === 'trap-falling' && sprite) sprite.draw(ctx, SCREEN_CENTER_X, SCREEN_CENTER_Y);
   } catch (e) {
     console.error('[RENDER ERROR]', e);
+    fetch('/api/client-error', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ msg: e.message, stack: e.stack }) }).catch(() => {});
   }
   drawHUD();
   const _bds = _battleDrawShared();
@@ -4366,6 +4367,7 @@ function _gameLoopDraw() {
     drawSWDamageNumbers(_bds);
   } catch (e) {
     console.error('[BATTLE DRAW ERROR]', e);
+    fetch('/api/client-error', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ msg: e.message, stack: e.stack }) }).catch(() => {});
   }
   if (transSt.state === 'hud-fade-out') {
     const alpha = Math.min(transSt.timer / ((HUD_INFO_FADE_STEPS + 1) * HUD_INFO_FADE_STEP_MS), 1);
