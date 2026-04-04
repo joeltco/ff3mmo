@@ -5440,7 +5440,7 @@ export const PALETTE_TABLE = [
 
 export const MONSTER_REGISTRY = new Map([
   [0x00, { raw: C0_G0_RAW, cols: C0_G0_COLS, rows: C0_G0_ROWS, pal0: 137, pal1: 160 }],
-  [0x01, { raw: C0_G3_RAW, cols: C0_G3_COLS, rows: C0_G3_ROWS, pal0: 53, pal1: 94 }],
+  [0x01, { raw: C0_G3_RAW, cols: C0_G3_COLS, rows: C0_G3_ROWS, pal0: 53, pal1: 94, tilePal: [0,0,0,0, 0,0,0,0, 0,0,1,1, 0,0,1,1] }],
   [0x02, { raw: C1_G1_RAW, cols: C1_G1_COLS, rows: C1_G1_ROWS, pal0: 53, pal1: 94 }],
   [0x03, { raw: C0_G9_RAW, cols: C0_G9_COLS, rows: C0_G9_ROWS, pal0: 53, pal1: 94 }],
   [0x04, { raw: C0_G1_RAW, cols: C0_G1_COLS, rows: C0_G1_ROWS, pal0: 63, pal1: 64 }],
@@ -5496,7 +5496,7 @@ export const MONSTER_REGISTRY = new Map([
   [0x36, { raw: C1_G20_RAW, cols: C1_G20_COLS, rows: C1_G20_ROWS, pal0: 237, pal1: 129 }],
   [0x37, { raw: C0_G10_RAW, cols: C0_G10_COLS, rows: C0_G10_ROWS, pal0: 109, pal1: 45 }],
   [0x38, { raw: C2_G21_RAW, cols: C2_G21_COLS, rows: C2_G21_ROWS, pal0: 161, pal1: 164 }],
-  [0x39, { raw: C0_G3_RAW, cols: C0_G3_COLS, rows: C0_G3_ROWS, pal0: 85, pal1: 84 }],
+  [0x39, { raw: C0_G3_RAW, cols: C0_G3_COLS, rows: C0_G3_ROWS, pal0: 85, pal1: 84, tilePal: [0,0,0,0, 0,0,0,0, 0,0,1,1, 0,0,1,1] }],
   [0x3a, { raw: C0_G5_RAW, cols: C0_G5_COLS, rows: C0_G5_ROWS, pal0: 109, pal1: 45 }],
   [0x3b, { raw: C1_G6_RAW, cols: C1_G6_COLS, rows: C1_G6_ROWS, pal0: 85, pal1: 84 }],
   [0x3c, { raw: C0_G15_RAW, cols: C0_G15_COLS, rows: C0_G15_ROWS, pal0: 109, pal1: 45 }],

@@ -19,7 +19,7 @@ const BAYER4 = [
 // ── Rendering ──────────────────────────────────────────────────────
 
 /** Decode 2BPP tile bytes into a canvas */
-function _renderSprite(rawBytes, cols, rows, pal0, pal1) {
+function _renderSprite(rawBytes, cols, rows, pal0, pal1, tilePal) {
   const w = cols * 8, h = rows * 8;
   const c = document.createElement('canvas');
   c.width = w; c.height = h;
@@ -31,7 +31,7 @@ function _renderSprite(rawBytes, cols, rows, pal0, pal1) {
   for (let ty = 0; ty < rows; ty++) {
     for (let tx = 0; tx < cols; tx++) {
       const tileIdx = ty * cols + tx;
-      const pal = ty < 2 ? pal0 : pal1;
+      const pal = tilePal ? (tilePal[tileIdx] === 1 ? pal1 : pal0) : (ty < 2 ? pal0 : pal1);
       const off = tileIdx * 16;
       const img = cctx.createImageData(8, 8);
       for (let row = 0; row < 8; row++) {
@@ -96,7 +96,7 @@ export function initMonsterSprites() {
   for (const [monsterId, entry] of MONSTER_REGISTRY) {
     const pal0 = PALETTE_TABLE[entry.pal0] || [0x0F, 0x00, 0x10, 0x20];
     const pal1 = PALETTE_TABLE[entry.pal1] || [0x0F, 0x00, 0x10, 0x20];
-    const canvas = _renderSprite(entry.raw, entry.cols, entry.rows, pal0, pal1);
+    const canvas = _renderSprite(entry.raw, entry.cols, entry.rows, pal0, pal1, entry.tilePal);
     monsterBattleCanvas.set(monsterId, canvas);
     monsterWhiteCanvas.set(monsterId, _makeWhiteCanvas(canvas));
     monsterDeathFrames.set(monsterId, _makeDeathFrames(canvas));
