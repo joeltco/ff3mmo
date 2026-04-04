@@ -434,8 +434,6 @@ function _battleInputHoldStates() {
   const clearZ = () => { k['z'] = false; k['Z'] = false; };
   if (_s.battleState === 'roar-hold') {
     if (msgState.state === 'hold' && z) { clearZ(); msgState.state = 'slide-out'; msgState.timer = 0; }
-  } else if (_s.battleState === 'team-wipe') {
-    if (msgState.state === 'hold' && z) { clearZ(); msgState.state = 'slide-out'; msgState.timer = 0; }
   } else if (_s.battleState === 'defeat-text') {
     if (z) { clearZ(); _s.battleState = 'defeat-close'; _s.battleTimer = 0; }
   } else if (_s.battleState === 'victory-hold') {
