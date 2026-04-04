@@ -1122,10 +1122,12 @@ function _drawAllyRow(i, ally, panelTop, weaponDraws) {
       const slideY = Math.floor(slideT * 16);
       const kneel = _s.fakePlayerKneelPortraits[ally.palIdx];
       if (kneel) {
+        _s.ctx.save();
         _s.ctx.beginPath();
         _s.ctx.rect(ppx, ppy, 16, 16);
         _s.ctx.clip();
         _s.ctx.drawImage(kneel, ppx, ppy + slideY);
+        _s.ctx.restore();
       }
       _drawAllyTexts(i, ally, rowY, false, ppx, ppy, weaponDraws);
     } else if (dt < DEATH_SLIDE_MS + DEATH_TXTFADE_MS) {
