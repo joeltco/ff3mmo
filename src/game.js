@@ -54,6 +54,10 @@ import { checkTrigger, applyPassage, openPassage, handleChest, handleSecretWall,
 import { pvpSt, startPVPBattle, resetPVPState, updatePVPBattle } from './pvp.js';
 import { drawBattle, drawBattleAllies, drawSWExplosion, drawSWDamageNumbers } from './battle-drawing.js';
 import { playSlashSFX } from './battle-sfx.js';
+import { initWeaponSprites, getKnifeBladeCanvas, getKnifeBladeSwungCanvas,
+         getDaggerBladeCanvas, getDaggerBladeSwungCanvas,
+         getSwordBladeCanvas, getSwordBladeSwungCanvas,
+         getFistCanvas, getBlades } from './weapon-sprites.js';
 import { updateBattleAlly } from './battle-ally.js';
 import { OK_IDLE, OK_VICTORY, OK_L_BACK_SWING, OK_L_FWD_T2, OK_L_FWD_T3, OK_R_BACK_SWING, OK_R_FWD_T2, OK_KNEEL,
          OK_LEG_L_IDLE, OK_LEG_R_IDLE, OK_LEG_L_BACK_L, OK_LEG_R_BACK_L, OK_LEG_L_FWD_L, OK_LEG_R_FWD_L,
@@ -154,19 +158,14 @@ let battleSpriteAttackLCanvas = null;  // left-hand attack frame 1
 let battleSpriteKnifeRCanvas = null;   // R-hand knife front swing (single trace $2B/$2C/$39/$2E)
 let battleSpriteKnifeLCanvas = null;   // L-hand knife front swing (single trace $01/$3F/$03/$40)
 let battleSpriteKnifeBackCanvas = null;// knife back swing body (dual trace $43/$44/$45/$46)
-let battleKnifeBladeCanvas = null;     // knife blade raised 16×16 (h-flipped, back swing)
-let battleKnifeBladeSwungCanvas = null;// knife blade swung 16×16 (no flip, forward slash)
-let battleDaggerBladeCanvas = null;    // dagger blade raised 16×16 (h-flipped, pal3 $0F/$1B/$2B/$30)
-let battleDaggerBladeSwungCanvas = null;// dagger blade swung 16×16
-let battleSwordBladeCanvas = null;     // sword blade raised 16×16 (h-flipped, back swing)
-let battleSwordBladeSwungCanvas = null;// sword blade swung 16×16 (no flip, forward slash)
+// Weapon blade + fist canvases → weapon-sprites.js
 let battleSpriteHitCanvas = null;      // taking damage / recoil
 let battleSpriteDefendCanvas = null;   // defend pose 16×24 (tiles $43-$48)
 let battleSpriteKneelCanvas = null;    // low HP kneel pose 16×16 (PPU $09-$0C)
 let sweatFrames = [];                  // 2 × 16×8 canvases (near-fatal dot animation)
 let defendSparkleFrames = [];          // 4 × 8×8 canvases ($49-$4C)
 let cureSparkleFrames = [];            // 2 × 16×16 canvases (config A/B from $4D/$4E)
-let battleFistCanvas = null;           // fist sprite (8x8, same for both hands)
+// battleFistCanvas → weapon-sprites.js
 let silhouetteCanvas = null;
 
 // FF1&2 ROM — secondary ROM for monster sprites, etc.
@@ -847,19 +846,7 @@ function _blitTile(ctx, px, palette, x, y) {
   ctx.putImageData(img, x, y);
 }
 
-// H-flipped blit — for blade sprite windup poses (NES attr bit $40)
-function _blitTileH(ctx, px, palette, x, y) {
-  const img = ctx.createImageData(8, 8);
-  for (let p = 0; p < 64; p++) {
-    const ci = px[p];
-    if (ci === 0) continue;
-    const rgb = NES_SYSTEM_PALETTE[palette[ci]] || [0, 0, 0];
-    const di = (Math.floor(p / 8) * 8 + (7 - p % 8)) * 4;
-    img.data[di] = rgb[0]; img.data[di + 1] = rgb[1];
-    img.data[di + 2] = rgb[2]; img.data[di + 3] = 255;
-  }
-  ctx.putImageData(img, x, y);
-}
+// _blitTileH → weapon-sprites.js
 
 // Build a 16×16 canvas from 4 PPU tile byte arrays using the battle 2×2 layout
 function _buildCanvas4(tilesArr, palette) {
@@ -928,13 +915,6 @@ function _initBattleAttackSprites(palette) {
   actx.drawImage(battleSpriteCanvas, 0, 0);
   _drawTileOnto(ATK_R_39, palette, actx, 0, 8);
 
-  // Fist tile $49 — 8×8 canvas (identical for both hands)
-  const FIST_TILE = new Uint8Array([0x00,0x00,0x00,0x0C,0x2C,0x4C,0x00,0x00,
-                                     0x00,0x00,0x00,0x73,0x53,0x23,0x00,0x00]);
-  battleFistCanvas = document.createElement('canvas');
-  battleFistCanvas.width = 8; battleFistCanvas.height = 8;
-  _drawTileOnto(FIST_TILE, palette, battleFistCanvas.getContext('2d'), 0, 0);
-
   // Left-hand punch (mid-L = $3B, mid-R = $3C)
   battleSpriteAttackLCanvas = document.createElement('canvas');
   battleSpriteAttackLCanvas.width = 16; battleSpriteAttackLCanvas.height = 16;
@@ -953,38 +933,7 @@ function _initBattleKnifeBodySprites(palette) {
   battleSpriteKnifeBackCanvas = _buildCanvas4(_FP_KNIFE_BACK, palette);
 }
 
-function _buildBladeCanvas(tileDefs, pal, pos, swungOrder) {
-  const raised = document.createElement('canvas'); raised.width = 16; raised.height = 16;
-  const rctx = raised.getContext('2d');
-  for (let t = 0; t < 4; t++) _blitTileH(rctx, decodeTile(tileDefs[t], 0), pal, pos[t][0], pos[t][1]);
-  const swung = document.createElement('canvas'); swung.width = 16; swung.height = 16;
-  const sctx = swung.getContext('2d');
-  for (let t = 0; t < 4; t++) _blitTile(sctx, decodeTile(tileDefs[swungOrder[t]], 0), pal, pos[t][0], pos[t][1]);
-  return { raised, swung };
-}
-function _initBattleBladeSprites(palette) {
-  const pos = [[0,0],[8,0],[0,8],[8,8]];
-  const so  = [1, 0, 3, 2]; // swung order
-  const BLADE_TILES = [
-    new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x80]),
-    new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x01, 0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x01]),
-    new Uint8Array([0x00,0x80,0x40,0x21,0x11,0x08,0x07,0x1B, 0xC0,0xE0,0x70,0x38,0x1C,0x0E,0x04,0x00]),
-    new Uint8Array([0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00]),
-  ];
-  const SWORD_TILES = [
-    new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x80,0xC0, 0x00,0x00,0x00,0x00,0x00,0x00,0x80,0xC0]),
-    new Uint8Array([0x00,0x70,0x78,0x7C,0x3E,0x1F,0x0D,0x06, 0x00,0x70,0x78,0x7C,0x3E,0x1F,0x0F,0x07]),
-    new Uint8Array([0x60,0xB0,0xD9,0x6D,0x33,0x12,0x0D,0x3B, 0xE0,0xF0,0xF8,0x7C,0x3C,0x1C,0x02,0x00]),
-    new Uint8Array([0x03,0x01,0x00,0x00,0x00,0x00,0x00,0x00, 0x03,0x01,0x00,0x00,0x00,0x00,0x00,0x00]),
-  ];
-  let b;
-  b = _buildBladeCanvas(BLADE_TILES, [0x0F,0x00,0x32,0x30], pos, so);
-  battleKnifeBladeCanvas = b.raised; battleKnifeBladeSwungCanvas = b.swung;
-  b = _buildBladeCanvas(BLADE_TILES, [0x0F,0x1B,0x2B,0x30], pos, so);
-  battleDaggerBladeCanvas = b.raised; battleDaggerBladeSwungCanvas = b.swung;
-  b = _buildBladeCanvas(SWORD_TILES, [0x0F,0x00,0x32,0x30], pos, so);
-  battleSwordBladeCanvas = b.raised; battleSwordBladeSwungCanvas = b.swung;
-}
+// _buildBladeCanvas + _initBattleBladeSprites → weapon-sprites.js
 
 function _initBattleRomPoses(romData, palette) {
   // Victory pose: OK_VICTORY tiles (arms raised, confirmed from PPU debugger)
@@ -1081,7 +1030,7 @@ function initBattleSprite(romData) {
   _initBattleIdleSprites(romData, palette);
   _initBattleAttackSprites(palette);
   _initBattleKnifeBodySprites(palette);
-  _initBattleBladeSprites(palette);
+  initWeaponSprites(palette);
   _initBattleRomPoses(romData, palette);
   _initBattleDefendSprites(palette);
   _initBattleLowHPSprites(palette);
@@ -1574,10 +1523,7 @@ function _pvpShared() {
     // ── Weapon sprite canvases (stable after init) ────────────────────────────
     get blades() {
       return {
-        knife:  { raised: battleKnifeBladeCanvas,  swung: battleKnifeBladeSwungCanvas },
-        dagger: { raised: battleDaggerBladeCanvas, swung: battleDaggerBladeSwungCanvas },
-        sword:  { raised: battleSwordBladeCanvas,  swung: battleSwordBladeSwungCanvas },
-        fist:   battleFistCanvas,
+        ...getBlades(),
       };
     },
     get fullBodyCanvases()          { return fakePlayerFullBodyCanvases; },
@@ -1725,13 +1671,13 @@ function _battleDrawShared() {
     get battleSpriteFadeCanvases() { return battleSpriteFadeCanvases; },
     get battleSpriteDefendFadeCanvases() { return battleSpriteDefendFadeCanvases; },
     get battleSpriteKneelFadeCanvases() { return battleSpriteKneelFadeCanvases; },
-    get battleKnifeBladeCanvas() { return battleKnifeBladeCanvas; },
-    get battleKnifeBladeSwungCanvas() { return battleKnifeBladeSwungCanvas; },
-    get battleDaggerBladeCanvas() { return battleDaggerBladeCanvas; },
-    get battleDaggerBladeSwungCanvas() { return battleDaggerBladeSwungCanvas; },
-    get battleSwordBladeCanvas() { return battleSwordBladeCanvas; },
-    get battleSwordBladeSwungCanvas() { return battleSwordBladeSwungCanvas; },
-    get battleFistCanvas() { return battleFistCanvas; },
+    get battleKnifeBladeCanvas() { return getKnifeBladeCanvas(); },
+    get battleKnifeBladeSwungCanvas() { return getKnifeBladeSwungCanvas(); },
+    get battleDaggerBladeCanvas() { return getDaggerBladeCanvas(); },
+    get battleDaggerBladeSwungCanvas() { return getDaggerBladeSwungCanvas(); },
+    get battleSwordBladeCanvas() { return getSwordBladeCanvas(); },
+    get battleSwordBladeSwungCanvas() { return getSwordBladeSwungCanvas(); },
+    get battleFistCanvas() { return getFistCanvas(); },
     get fakePlayerPortraits() { return fakePlayerPortraits; },
     get fakePlayerVictoryPortraits() { return fakePlayerVictoryPortraits; },
     get fakePlayerHitPortraits() { return fakePlayerHitPortraits; },
