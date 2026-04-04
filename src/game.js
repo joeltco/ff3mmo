@@ -4354,15 +4354,19 @@ function _gameLoopDraw() {
   }
   drawHUD();
   const _bds = _battleDrawShared();
-  if (battleAllies.length > 0 && battleState !== 'none') drawBattleAllies(_bds);
-  else drawRoster();
-  drawChat(ctx, _drawHudBox, rosterBattleFade);
-  drawPauseMenu(ctx, _pauseShared());
-  drawMsgBox(ctx, _clipToViewport, _drawBorderedBox);
-  drawRosterMenu();
-  drawBattle(_bds);
-  drawSWExplosion(_bds);
-  drawSWDamageNumbers(_bds);
+  try {
+    if (battleAllies.length > 0 && battleState !== 'none') drawBattleAllies(_bds);
+    else drawRoster();
+    drawChat(ctx, _drawHudBox, rosterBattleFade);
+    drawPauseMenu(ctx, _pauseShared());
+    drawMsgBox(ctx, _clipToViewport, _drawBorderedBox);
+    drawRosterMenu();
+    drawBattle(_bds);
+    drawSWExplosion(_bds);
+    drawSWDamageNumbers(_bds);
+  } catch (e) {
+    console.error('[BATTLE DRAW ERROR]', e);
+  }
   if (transSt.state === 'hud-fade-out') {
     const alpha = Math.min(transSt.timer / ((HUD_INFO_FADE_STEPS + 1) * HUD_INFO_FADE_STEP_MS), 1);
     ctx.fillStyle = `rgba(0,0,0,${alpha})`;
