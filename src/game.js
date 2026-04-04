@@ -2531,7 +2531,7 @@ function statRowBytes(label1, label2, value) {
 }
 
 function _drawTopBoxBattleBG() {
-  const topShake = (battleState === 'enemy-attack' && battleShakeTimer > 0)
+  const topShake = ((battleState === 'enemy-attack' || battleState === 'pvp-opp-sw-hit') && battleShakeTimer > 0)
     ? (Math.floor(battleShakeTimer / 67) & 1 ? 2 : -2) : 0;
   if (transSt.state !== 'loading' && !topBoxSt.isTown && topBoxBgCanvas) {
     ctx.drawImage(topBoxBgCanvas, topShake, 0);
@@ -2653,7 +2653,7 @@ function _drawHUDInfoPanel() {
     }
   }
 
-  const shakeOff = (battleState === 'enemy-attack' && battleShakeTimer > 0)
+  const shakeOff = ((battleState === 'enemy-attack' || battleState === 'pvp-opp-sw-hit') && battleShakeTimer > 0)
     ? (Math.floor(battleShakeTimer / 67) & 1 ? 2 : -2) : 0;
   const sy = HUD_VIEW_Y + 8;
   const panelRight = HUD_RIGHT_X + HUD_RIGHT_W - 8 + shakeOff;
