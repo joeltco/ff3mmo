@@ -1195,6 +1195,11 @@ function _drawAllyPortrait(i, ally, isVicPose, isAllyAttack, isAllyHit, isNearFa
     else if (wpnSt === 'sword' && _s.battleSwordBladeSwungCanvas) weaponDraws.push({ img: _s.battleSwordBladeSwungCanvas, x: ppx - 16, y: ppy + 1 });
     else if (_s.battleFistCanvas) weaponDraws.push({ img: _s.battleFistCanvas, x: ppx - 4, y: ppy + 10 });
   }
+  // Near-fatal sweat — 2 frames alternating every 133ms, 3px above portrait
+  if (isNearFatal && _s.sweatFrames.length === 2 && !isAllyAttack && !isAllyHit && !isVicPose && !isThisAllySlash) {
+    const sweatIdx = Math.floor(Date.now() / 133) & 1;
+    _s.ctx.drawImage(_s.sweatFrames[sweatIdx], ppx, ppy - 3);
+  }
   // PVP enemy slash overlay on targeted ally during ally-hit — h-flipped (opponent attacks from left)
   if (pvpSt.isPVPBattle && _s.battleState === 'ally-hit' && _s.enemyTargetAllyIdx === i) {
     const eWpnId = pvpSt.pvpCurrentEnemyAllyIdx >= 0
