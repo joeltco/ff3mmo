@@ -607,8 +607,8 @@ function _encounterBoxDims() {
   const fullW = count === 1 ? 64 : 96;
   const rowsNeeded = count <= 2 ? 1 : 2;
   const gapY = 8;
-  // 1-2 monsters: single row, tight top padding (16px). 3-4: two rows with full padding (24px).
-  const padding = rowsNeeded === 1 ? 16 : 24;
+  // 1-2 monsters: single row, minimal padding. 3-4: two rows with full padding (24px).
+  const padding = rowsNeeded === 1 ? (sprH > 32 ? 8 : 16) : 24;
   const innerH = rowsNeeded === 1 ? sprH : sprH * 2 + gapY;
   const fullH = Math.ceil((innerH + padding) / 8) * 8;
   return { fullW, fullH, sprH };
