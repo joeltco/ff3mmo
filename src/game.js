@@ -2111,6 +2111,7 @@ function handleInput() {
   if (transSt.state !== 'none') return;
   if (shakeActive) return;
   if (starEffect) return;
+  if (pondStrobeTimer > 0) return;
   if (chatState.expanded) return;
 
   if (keys['z'] || keys['Z']) {
