@@ -3527,6 +3527,12 @@ function startRandomEncounter() {
     const mData = MONSTERS.get(mid) || MONSTERS.get(0x00);
     encounterMonsters.push({ monsterId: mid, hp: mData.hp, maxHP: mData.hp, atk: mData.atk, def: mData.def, exp: mData.exp, gil: mData.gil || 0, hitRate: GOBLIN_HIT_RATE });
   }
+  // Sort tallest monsters first so they land on the top row of the grid
+  encounterMonsters.sort((a, b) => {
+    const ha = getMonsterCanvas(a.monsterId, goblinBattleCanvas)?.height || 32;
+    const hb = getMonsterCanvas(b.monsterId, goblinBattleCanvas)?.height || 32;
+    return hb - ha;
+  });
   preBattleTrack = TRACKS.CRYSTAL_CAVE;
   // Skip roar/earthquake — go straight to flash-strobe
   battleState = 'flash-strobe';

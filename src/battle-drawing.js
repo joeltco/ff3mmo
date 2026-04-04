@@ -56,11 +56,11 @@ function _pvpEnemyCellCenter(idx) {
 
 function _encounterGridLayout() {
   const count = _s.encounterMonsters.length;
-  const { fullW, fullH, sprH } = _encounterBoxDims();
+  const { fullW, fullH, sprH, row0H, row1H } = _encounterBoxDims();
   const boxX = HUD_VIEW_X + Math.floor((HUD_VIEW_W - fullW) / 2);
   const boxY = HUD_VIEW_Y + Math.floor((HUD_VIEW_H - fullH) / 2);
-  const gridPos = _encounterGridPos(boxX, boxY, fullW, fullH, count, sprH);
-  return { count, boxX, boxY, sprH, fullW, fullH, gridPos };
+  const gridPos = _encounterGridPos(boxX, boxY, fullW, fullH, count, sprH, row0H, row1H);
+  return { count, boxX, boxY, sprH, row0H, row1H, fullW, fullH, gridPos };
 }
 
 function drawSWExplosion(shared) {
@@ -104,7 +104,7 @@ function drawSWExplosion(shared) {
   }
   if (!_s.swPhaseCanvases.length || !_s.isRandomEncounter || !_s.encounterMonsters) return;
 
-  const { count, boxX, boxY, sprH, gridPos: swGridPos } = _encounterGridLayout();
+  const { count, boxX, boxY, sprH, row0H, row1H, gridPos: swGridPos } = _encounterGridLayout();
 
   const tidx = _s.southWindTargets[_s.southWindHitIdx];
   if (tidx === undefined || tidx >= swGridPos.length) return;
@@ -112,7 +112,8 @@ function drawSWExplosion(shared) {
   const tp = swGridPos[tidx];
   const m = _s.encounterMonsters[tidx];
   const mc = getMonsterCanvas(m?.monsterId, _s.goblinBattleCanvas);
-  const mh = mc ? mc.height : sprH;
+  const rH = tidx < 2 ? (row0H || sprH) : (row1H || sprH);
+  const mh = mc ? mc.height : rH;
 
   // Phase = 0/1/2 based on 133ms intervals
   const phase = Math.min(2, Math.floor(_s.battleTimer / 133));
@@ -121,7 +122,7 @@ function drawSWExplosion(shared) {
 
   // Center explosion on the target monster sprite
   const cx = tp.x + 16; // center x of 32px sprite
-  const cy = tp.y + (sprH - mh) + Math.floor(mh / 2); // vertical center
+  const cy = tp.y + (rH - mh) + Math.floor(mh / 2); // vertical center
   const ex = cx - Math.floor(phaseCanvas.width / 2);
   const ey = cy - Math.floor(phaseCanvas.height / 2);
 
@@ -139,16 +140,17 @@ function drawSWDamageNumbers(shared) {
     return;
   }
   if (!_s.isRandomEncounter || !_s.encounterMonsters) return;
-  const { count, boxX, boxY, sprH, gridPos: swGridPos } = _encounterGridLayout();
+  const { count, boxX, boxY, sprH, row0H, row1H, gridPos: swGridPos } = _encounterGridLayout();
   for (const [k, dn] of Object.entries(_s.southWindDmgNums)) {
     const idx = parseInt(k);
     if (idx >= swGridPos.length) continue;
     const tp = swGridPos[idx];
     const m = _s.encounterMonsters[idx];
     const mc = getMonsterCanvas(m?.monsterId, _s.goblinBattleCanvas);
-    const mh = mc ? mc.height : sprH;
+    const rH = idx < 2 ? (row0H || sprH) : (row1H || sprH);
+    const mh = mc ? mc.height : rH;
     const bx = tp.x + 16;
-    const baseY = tp.y + (sprH - mh) + Math.floor(mh / 2) - 8;
+    const baseY = tp.y + (rH - mh) + Math.floor(mh / 2) - 8;
     const by = _dmgBounceY(baseY, dn.timer);
     const digits = String(dn.value);
     const numBytes = new Uint8Array(digits.length);
@@ -598,24 +600,26 @@ function _drawBattleMenuCursor(positions, isFade, fadeStep) {
 
 
 function _encounterBoxDims() {
-  if (!_s.encounterMonsters) return { fullW: 64, fullH: 64, sprH: 32 };
+  if (!_s.encounterMonsters) return { fullW: 64, fullH: 64, sprH: 32, row0H: 32, row1H: 0 };
   const count = _s.encounterMonsters.length;
-  const sprH = _s.encounterMonsters.reduce((h, m) => {
+  const heights = _s.encounterMonsters.map(m => {
     const c = getMonsterCanvas(m.monsterId, _s.goblinBattleCanvas);
-    return Math.max(h, c ? c.height : 32);
-  }, 32);
+    return c ? c.height : 32;
+  });
   const fullW = count === 1 ? 64 : 96;
-  const rowsNeeded = count <= 2 ? 1 : 2;
-  const gapY = 8;
-  // 1-2 monsters: single row, minimal padding. 3-4: two rows with full padding (24px).
-  const padding = rowsNeeded === 1 ? (sprH > 32 ? 8 : 16) : 24;
-  const innerH = rowsNeeded === 1 ? sprH : sprH * 2 + gapY;
+  // Row 0 = indices 0-1, row 1 = indices 2-3 (monsters pre-sorted tallest first)
+  const row0H = Math.max(heights[0] || 32, heights[1] || 0);
+  const row1H = count > 2 ? Math.max(heights[2] || 32, heights[3] || 0) : 0;
+  const sprH = Math.max(row0H, row1H); // legacy — tallest overall
+  const gapY = row1H > 0 ? 2 : 0;
+  const padding = 16;
+  const innerH = row1H > 0 ? row0H + gapY + row1H : row0H;
   const fullH = Math.ceil((innerH + padding) / 8) * 8;
-  return { fullW, fullH, sprH };
+  return { fullW, fullH, sprH, row0H, row1H };
 }
 
 
-function _drawEncounterMonsters(gridPos, sprH, boxX, boxY, boxW, boxH, isSlideIn, fullW, slotCenterY) {
+function _drawEncounterMonsters(gridPos, sprH, boxX, boxY, boxW, boxH, isSlideIn, fullW, slotCenterY, row0H, row1H) {
   if (!_s.goblinBattleCanvas && !hasMonsterSprites()) return;
   let slideOffX = 0;
   if (isSlideIn) slideOffX = Math.floor((1 - Math.min(_s.battleTimer / MONSTER_SLIDE_MS, 1)) * (fullW + 32));
@@ -643,7 +647,8 @@ function _drawEncounterMonsters(gridPos, sprH, boxX, boxY, boxW, boxH, isSlideIn
     const sprNormal = getMonsterCanvas(mid, _s.goblinBattleCanvas);
     const sprWhite  = getMonsterWhiteCanvas(mid, _s.goblinWhiteCanvas);
     const thisH = sprNormal ? sprNormal.height : sprH;
-    const drawY = pos.y + (sprH - thisH);
+    const rH = i < 2 ? (row0H || sprH) : (row1H || sprH);
+    const drawY = pos.y + (rH - thisH);
 
     if (isDying) {
       const delay = _s.dyingMonsterIndices.get(i) || 0;
@@ -719,7 +724,7 @@ function drawEncounterBox() {
   if (!isExpand && !isClose && !isCombat && !isVictory) return;
 
   const count = _s.encounterMonsters.length;
-  const { fullW, fullH, sprH } = _encounterBoxDims();
+  const { fullW, fullH, sprH, row0H, row1H } = _encounterBoxDims();
   const centerX = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2);
   const centerY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
 
@@ -732,14 +737,15 @@ function drawEncounterBox() {
 
   if (isExpand || isClose || _s.battleState === 'defeat-text') { _s.ctx.restore(); return; }
 
-  const gridPos = _encounterGridPos(boxX, boxY, fullW, fullH, count, sprH);
+  const gridPos = _encounterGridPos(boxX, boxY, fullW, fullH, count, sprH, row0H, row1H);
+  const rowH = (idx) => idx < 2 ? row0H : row1H;
   const slotCenterY = (idx) => {
     if (!gridPos[idx] || !_s.encounterMonsters[idx]) return 0;
     const c = getMonsterCanvas(_s.encounterMonsters[idx].monsterId, _s.goblinBattleCanvas);
-    const h = c ? c.height : sprH;
-    return gridPos[idx].y + (sprH - h) + Math.floor(h / 2);
+    const h = c ? c.height : rowH(idx);
+    return gridPos[idx].y + (rowH(idx) - h) + Math.floor(h / 2);
   };
-  _drawEncounterMonsters(gridPos, sprH, boxX, boxY, boxW, boxH, isSlideIn, fullW, slotCenterY);
+  _drawEncounterMonsters(gridPos, sprH, boxX, boxY, boxW, boxH, isSlideIn, fullW, slotCenterY, row0H, row1H);
   _drawEncounterCursors(gridPos, count, slotCenterY);
   _s.ctx.restore();
 }
@@ -1272,13 +1278,14 @@ function drawBattleAllies(shared) {
 }
 
 function _encounterMonsterPos(idx) {
-  const { sprH: dSprH, gridPos } = _encounterGridLayout();
+  const { sprH: dSprH, row0H, row1H, gridPos } = _encounterGridLayout();
   const safeIdx = idx < gridPos.length ? idx : 0;
   const pos = gridPos[safeIdx];
   const m = _s.encounterMonsters[safeIdx];
   const mc = getMonsterCanvas(m?.monsterId, _s.goblinBattleCanvas);
-  const mh = mc ? mc.height : dSprH;
-  return { bx: pos.x + 16, baseY: pos.y + (dSprH - mh) + Math.floor(mh / 2) - 8 };
+  const rH = safeIdx < 2 ? (row0H || dSprH) : (row1H || dSprH);
+  const mh = mc ? mc.height : rH;
+  return { bx: pos.x + 16, baseY: pos.y + (rH - mh) + Math.floor(mh / 2) - 8 };
 }
 function _drawBossDmgNum() {
   if (!_s.enemyDmgNum || (_s.enemyDefeated && !_s.isRandomEncounter)) return;

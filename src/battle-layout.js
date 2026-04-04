@@ -12,19 +12,22 @@ export function _calcBoxExpandSize(fullW, fullH, isExpand, isClose, timer) {
 }
 
 // Compute pixel positions for 1-4 monsters centered in the encounter box
-export function _encounterGridPos(boxX, boxY, boxW, boxH, count, sprH) {
+// row0H/row1H allow per-row height sizing; falls back to sprH if not provided
+export function _encounterGridPos(boxX, boxY, boxW, boxH, count, sprH, row0H, row1H) {
   sprH = sprH || 32;
+  row0H = row0H || sprH;
+  row1H = row1H || sprH;
   const cx = boxX + Math.floor(boxW / 2);
   const cy = boxY + Math.floor(boxH / 2);
   const hs = 16; // half sprite width (32px wide)
   const gapX = 20;
-  const gapY = 8;
-  const gridH2 = sprH * 2 + gapY;
-  const row0y = cy - Math.floor(gridH2 / 2);
-  const row1y = row0y + sprH + gapY;
-  if (count === 1) return [{ x: cx - hs, y: cy - Math.floor(sprH / 2) }];
+  const gapY = count <= 2 ? 0 : 2;
+  const totalH = row0H + gapY + row1H;
+  const row0y = cy - Math.floor(totalH / 2);
+  const row1y = row0y + row0H + gapY;
+  if (count === 1) return [{ x: cx - hs, y: cy - Math.floor(row0H / 2) }];
   if (count === 2) {
-    const topY = cy - Math.floor(sprH / 2);
+    const topY = cy - Math.floor(row0H / 2);
     return [
       { x: cx - gapX - hs, y: topY },
       { x: cx + gapX - hs, y: topY },
