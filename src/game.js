@@ -4236,6 +4236,7 @@ function _updateDefeatStates() {
       battleState = 'none'; battleTimer = 0;
       isRandomEncounter = false;
       encounterMonsters = null; turnQueue = []; battleAllies = []; allyJoinRound = 0;
+      playerDeathTimer = null; _teamWipeMsgShown = false;
       ps.hp = ps.stats ? ps.stats.maxHP : 28;
       ps.mp = ps.stats ? ps.stats.maxMP : 0;
       const worldEntry = mapStack.slice().reverse().find(e => e.mapId === 'world');
