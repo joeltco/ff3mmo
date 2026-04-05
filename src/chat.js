@@ -201,51 +201,46 @@ export function drawChatTabs(ctx, fadeStep, drawHudBox) {
   if (fadeStep >= ROSTER_FADE_STEPS) return;
 
   const widths = _getTabWidths();
+  const panelW = CANVAS_W - HUD_RIGHT_X; // 112px
 
-  // All tabs packed in a row: selected tab at HUD_RIGHT_X, unselected tabs
-  // to its left — they overflow past the panel edge and hide behind the left HUD.
-  // Order: unselected (left, behind) ... | selected (rightmost, on top)
-
-  // Calculate x position for each tab in original order
-  const positions = [];
-  let totalBefore = 0;
+  // Build draw order: selected tab first in layout, rest follow
+  const order = [activeTab];
   for (let i = 0; i < CHAT_TABS.length; i++) {
-    if (i < activeTab) totalBefore += widths[i];
-  }
-  // Selected tab starts at HUD_RIGHT_X; tabs before it are to the left
-  let x = HUD_RIGHT_X - totalBefore;
-  for (let i = 0; i < CHAT_TABS.length; i++) {
-    positions.push(x);
-    x += widths[i];
+    if (i !== activeTab) order.push(i);
   }
 
+  // Clip to right panel only
   ctx.save();
   ctx.beginPath();
-  ctx.rect(0, TAB_BAR_Y, CANVAS_W, TAB_BAR_H);
+  ctx.rect(HUD_RIGHT_X, TAB_BAR_Y, panelW, TAB_BAR_H);
   ctx.clip();
 
-  // Draw unselected tabs first (behind), then selected on top
-  for (let pass = 0; pass < 2; pass++) {
-    for (let i = 0; i < CHAT_TABS.length; i++) {
-      const isActive = i === activeTab;
-      if (pass === 0 && isActive) continue;   // skip selected on first pass
-      if (pass === 1 && !isActive) continue;   // skip unselected on second pass
+  // Layout: selected tab at left edge, rest packed after it, overlapping/clipped at right
+  // Draw back-to-front: rightmost (last) first, selected (leftmost) last on top
+  let positions = [];
+  let x = HUD_RIGHT_X;
+  for (let oi = 0; oi < order.length; oi++) {
+    positions.push(x);
+    x += widths[order[oi]];
+  }
 
-      const tabFade = isActive ? fadeStep : Math.min(fadeStep + 2, ROSTER_FADE_STEPS);
-      const tx = positions[i];
-      const w = widths[i];
+  for (let oi = order.length - 1; oi >= 0; oi--) {
+    const tabIdx = order[oi];
+    const isActive = tabIdx === activeTab;
+    const tabFade = isActive ? fadeStep : Math.min(fadeStep + 2, ROSTER_FADE_STEPS);
+    const tx = positions[oi];
+    const w = widths[tabIdx];
 
-      // Blink active tab in select mode
-      if (isActive && tabSelectMode && (Math.floor((Date.now() - _tabBlinkStart) / 400) & 1)) continue;
+    // Blink active tab in select mode
+    if (isActive && tabSelectMode && (Math.floor((Date.now() - _tabBlinkStart) / 400) & 1)) continue;
 
-      drawHudBox(tx, TAB_BAR_Y, w, TAB_BAR_H, tabFade);
+    drawHudBox(tx, TAB_BAR_Y, w, TAB_BAR_H, tabFade);
 
-      let pal = [...TEXT_WHITE];
-      for (let s = 0; s < tabFade; s++) pal = pal.map(c => nesColorFade(c));
-      const label = _nameToBytes(CHAT_TABS[i]);
-      const lw = measureText(label);
-      drawText(ctx, tx + Math.floor((w - lw) / 2), TAB_BAR_Y + 4, label, pal);
-    }
+    let pal = [...TEXT_WHITE];
+    for (let s = 0; s < tabFade; s++) pal = pal.map(c => nesColorFade(c));
+    const label = _nameToBytes(CHAT_TABS[tabIdx]);
+    const lw = measureText(label);
+    drawText(ctx, tx + Math.floor((w - lw) / 2), TAB_BAR_Y + 4, label, pal);
   }
 
   ctx.restore();
