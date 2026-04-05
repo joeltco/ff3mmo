@@ -480,7 +480,7 @@ function _drawSelectSlotRow(ctx, i, selX, rowY, fadeStep, showContent, shared) {
   }
 
   // Cursor
-  if (i === selectCursor) shared.drawCursorFaded(selX + 4, rowY + 8, fadeStep);
+  if (i === selectCursor) shared.drawCursorFaded(selX - 10, rowY + 12, fadeStep);
 
   // Name + level text (right-aligned in info box, like roster)
   const fadedPal = _makeFadedPal(fadeStep);
