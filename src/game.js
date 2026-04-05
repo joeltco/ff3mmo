@@ -3004,6 +3004,10 @@ function _gameLoopDraw() {
     console.error('[RENDER ERROR]', e);
     fetch('/api/client-error', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ msg: e.message, stack: e.stack }) }).catch(() => {});
   }
+  // Draw tabs BEFORE HUD so static HUD canvas draws on top of tab overlap
+  const _infoFade = HUD_INFO_FADE_STEPS - Math.min(Math.floor(hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
+  const _tabFade = Math.max(rosterBattleFade, _infoFade);
+  if (transSt.state !== 'loading') drawChatTabs(ctx, _tabFade, _drawHudBox);
   drawHUD();
   const _bds = _battleDrawShared();
   try {
@@ -3019,10 +3023,6 @@ function _gameLoopDraw() {
     if (battleAllies.length > 0 && battleState !== 'none') drawBattleAllies(_bds);
     else drawRoster(_rds);
     drawChat(ctx, _drawHudBox, rosterBattleFade);
-    // Tab bar fade: combine battle fade, transition fade, and HUD info fade
-    const _infoFade = HUD_INFO_FADE_STEPS - Math.min(Math.floor(hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
-    const _tabFade = Math.max(rosterBattleFade, _infoFade);
-    if (transSt.state !== 'loading') drawChatTabs(ctx, _tabFade, _drawHudBox);
     drawPauseMenu(ctx, _pauseShared());
     drawMsgBox(ctx, _clipToViewport, _drawBorderedBox);
     drawRosterMenu(_rds);
