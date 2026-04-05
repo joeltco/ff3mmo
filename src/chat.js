@@ -172,9 +172,6 @@ export function drawChatTabs(ctx, drawHudBoxFn, rosterBattleFade) {
   const battleFadeAlpha = 1 - rosterBattleFade / ROSTER_FADE_STEPS;
   if (battleFadeAlpha <= 0) return;
 
-  // Draw tab background box
-  drawHudBoxFn(HUD_RIGHT_X, TAB_BAR_Y, CANVAS_W - HUD_RIGHT_X, TAB_BAR_H, 0);
-
   ctx.save();
   ctx.globalAlpha = battleFadeAlpha;
 
