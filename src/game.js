@@ -3009,9 +3009,9 @@ function _gameLoopDraw() {
   let _tabFade = Math.max(rosterBattleFade, _infoFade);
   // Fade tabs with loading screen
   if (transSt.state === 'loading') {
-    if (loadingSt.state === 'in') _tabFade = Math.max(_tabFade, LOAD_FADE_MAX - Math.min(Math.floor(loadingSt.timer / LOAD_FADE_STEP_MS), LOAD_FADE_MAX));
+    if (loadingSt.state === 'in') _tabFade = Math.max(_tabFade, Math.min(Math.floor(loadingSt.timer / LOAD_FADE_STEP_MS), LOAD_FADE_MAX));
     else if (loadingSt.state === 'visible') _tabFade = ROSTER_FADE_STEPS;
-    else if (loadingSt.state === 'out') _tabFade = Math.max(_tabFade, Math.min(Math.floor(loadingSt.timer / LOAD_FADE_STEP_MS), LOAD_FADE_MAX));
+    else if (loadingSt.state === 'out') _tabFade = Math.max(_tabFade, LOAD_FADE_MAX - Math.min(Math.floor(loadingSt.timer / LOAD_FADE_STEP_MS), LOAD_FADE_MAX));
   }
   drawChatTabs(ctx, _tabFade, _drawHudBox);
   drawHUD();
