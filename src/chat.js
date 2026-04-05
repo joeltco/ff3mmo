@@ -28,7 +28,10 @@ let _tabBlinkStart = 0;
 let _tabScrollX = 0;      // current scroll offset (animated)
 let _tabScrollTarget = 0;  // target scroll offset
 const _tabUnread = [false, false, false, false]; // unread notification per tab
-export function setActiveTab(i) { activeTab = i; _tabBlinkStart = Date.now(); _tabScrollTarget = 0; _tabUnread[i] = false; }
+export let chatScrollOffset = 0; // how many rows scrolled up from bottom
+export function setChatScrollOffset(v) { chatScrollOffset = v; }
+export function setActiveTab(i) { activeTab = i; _tabBlinkStart = Date.now(); _tabScrollTarget = 0; _tabUnread[i] = false; chatScrollOffset = 0; }
+export function setTabSelectMode(v) { tabSelectMode = v; _tabBlinkStart = Date.now(); if (!v) chatScrollOffset = 0; }
 export function setTabSelectMode(v) { tabSelectMode = v; _tabBlinkStart = Date.now(); }
 
 // ── Mutable state (exported so game.js can read/write directly) ────────────
@@ -371,7 +374,9 @@ function _drawChatTextArea(ctx, curBoxY, curBoxH, battleFadeAlpha, titleActive) 
   const availRows = Math.max(1, Math.floor(innerH / CHAT_LINE_H) - inputRows);
   const inputLineY = innerBottom - (inputRows - 1) * CHAT_LINE_H;
   const bottomY = chatState.inputActive ? inputLineY - CHAT_LINE_H : innerBottom;
-  const visible = rows.slice(-availRows);
+  const scroll = (CHAT_TABS[activeTab] === 'Private' && tabSelectMode) ? chatScrollOffset : 0;
+  const endIdx = rows.length - scroll;
+  const visible = rows.slice(Math.max(0, endIdx - availRows), endIdx);
   for (let i = 0; i < visible.length; i++) {
     const r = visible[i];
     const lineY = bottomY - (visible.length - 1 - i) * CHAT_LINE_H;

@@ -4,7 +4,7 @@ import { playSFX, SFX, pauseMusic, playFF1Track, FF1_TRACKS } from './music.js';
 import { pauseSt } from './pause-menu.js';
 import { transSt } from './transitions.js';
 import { msgState, showMsgBox } from './message-box.js';
-import { chatState, CHAT_TABS, activeTab, tabSelectMode, setActiveTab, setTabSelectMode } from './chat.js';
+import { chatState, CHAT_TABS, activeTab, tabSelectMode, setActiveTab, setTabSelectMode, chatScrollOffset, setChatScrollOffset } from './chat.js';
 import { ps, recalcCombatStats, getEquipSlotId, setEquipSlotId, EQUIP_SLOT_SUBTYPE,
          getProfHits, getProfLevel, getHitWeapon, WEAPON_PROF_CATEGORY } from './player-stats.js';
 import { ITEMS, isHandEquippable, isWeapon, weaponSubtype, isBladedWeapon } from './data/items.js';
@@ -607,6 +607,19 @@ function _tabSelectInput() {
     k['ArrowRight'] = false;
     setActiveTab((activeTab + 1) % CHAT_TABS.length);
     playSFX(SFX.CURSOR);
+  }
+  // Up/down scrolls chat history on Private tab
+  if (CHAT_TABS[activeTab] === 'Private') {
+    if (k['ArrowUp']) {
+      k['ArrowUp'] = false;
+      setChatScrollOffset(chatScrollOffset + 1);
+      playSFX(SFX.CURSOR);
+    }
+    if (k['ArrowDown']) {
+      k['ArrowDown'] = false;
+      setChatScrollOffset(Math.max(0, chatScrollOffset - 1));
+      playSFX(SFX.CURSOR);
+    }
   }
   if (k['x'] || k['X'] || k['Escape']) {
     k['x'] = false; k['X'] = false; k['Escape'] = false;
