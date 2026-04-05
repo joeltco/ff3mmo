@@ -167,13 +167,14 @@ const TAB_BAR_Y = HUD_VIEW_Y + 32 + 3 * 32; // 160 — bottom of roster panel
 const TAB_BAR_H = 16;
 const HUD_RIGHT_X = 144;
 
-export function drawChatTabs(ctx, drawHudBoxFn, rosterBattleFade) {
+export function drawChatTabs(ctx, fadeStep) {
   if (!chatState.fontReady) return;
-  const battleFadeAlpha = 1 - rosterBattleFade / ROSTER_FADE_STEPS;
-  if (battleFadeAlpha <= 0) return;
+  if (fadeStep >= ROSTER_FADE_STEPS) return;
 
   ctx.save();
-  ctx.globalAlpha = battleFadeAlpha;
+  // NES-stepped alpha matching roster fade
+  const NES_STEP_ALPHAS = [1.0, 0.76, 0.52, 0.28, 0];
+  ctx.globalAlpha = NES_STEP_ALPHAS[Math.min(fadeStep, 4)];
 
   // Layout tabs evenly across the box
   const innerX = HUD_RIGHT_X + 4;
