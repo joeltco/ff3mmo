@@ -87,7 +87,7 @@ export const titleSt = {
 
 export function isTitleActiveState() {
   const s = titleSt.state;
-  return s === 'main-in' || s === 'logo-box-open' || s === 'logo-content-in' ||
+  return s === 'main-in' || s === 'logo-box-open' || s === 'logo-content-in' || s === 'logo-content-in-back' ||
     s === 'zbox-open' || s === 'main' || s === 'logo-content-out' ||
     s === 'to-select' || s === 'to-main' || s === 'logo-reopen' ||
     s === 'select-box-open' || s === 'select-box-close-fwd' ||
@@ -206,7 +206,7 @@ export function drawTitleSkyInHUD(ctx, roundTopBoxCornersFn) {
   if (ts.state === 'main-in') {
     const fl = TITLE_FADE_MAX - Math.min(Math.floor(ts.timer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
     drawTitleSky(ctx, fl); roundTopBoxCornersFn();
-  } else if (ts.state === 'logo-box-open' || ts.state === 'logo-content-in' ||
+  } else if (ts.state === 'logo-box-open' || ts.state === 'logo-content-in' || ts.state === 'logo-content-in-back' ||
              ts.state === 'zbox-open' || ts.state === 'main' || ts.state === 'logo-content-out' ||
              ts.state === 'to-select' || ts.state === 'to-main' || ts.state === 'logo-reopen' ||
              ts.state === 'select-box-open' || ts.state === 'select-box-close-fwd' ||
@@ -351,7 +351,7 @@ function _drawTitleLogo(ctx, cx, fl, isSelectState) {
   // Content fade — separate from box open/close
   let contentFl = fl;
   if (ts.state === 'logo-box-open') contentFl = TITLE_FADE_MAX; // box opening, no content yet
-  else if (ts.state === 'logo-content-in') contentFl = TITLE_FADE_MAX - Math.min(Math.floor(ts.timer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
+  else if (ts.state === 'logo-content-in' || ts.state === 'logo-content-in-back') contentFl = TITLE_FADE_MAX - Math.min(Math.floor(ts.timer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
   else if (ts.state === 'logo-content-out') contentFl = Math.min(Math.floor(ts.timer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
   else if (ts.state === 'to-select' || ts.state === 'logo-reopen') contentFl = TITLE_FADE_MAX; // box animating, content hidden
   if (contentFl < TITLE_FADE_MAX) {
@@ -387,7 +387,7 @@ function _drawTitleShip(ctx, cx, cy, fl) {
 function _drawTitlePressZ(ctx, cx, vpBot) {
   const ts = titleSt;
   if (ts.state !== 'zbox-open' && ts.state !== 'main' && ts.state !== 'logo-content-out' &&
-      ts.state !== 'to-select' && ts.state !== 'logo-reopen' && ts.state !== 'logo-content-in') return;
+      ts.state !== 'to-select' && ts.state !== 'logo-reopen' && ts.state !== 'logo-content-in' && ts.state !== 'logo-content-in-back') return;
   if (!ts.pressZ) return;
   const pw    = measureText(ts.pressZ);
   const fullW = pw + 16, fullH = 24;
