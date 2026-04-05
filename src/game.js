@@ -2047,11 +2047,14 @@ function updateTitle(dt) {
     case 'disclaim-in':    if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'disclaim-hold'; titleSt.timer = 0; } break;
     case 'disclaim-hold':  if (titleSt.timer >= TITLE_HOLD_MS) { titleSt.state = 'disclaim-out';  titleSt.timer = 0; } break;
     case 'disclaim-out':   if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'main-in';       titleSt.timer = 0; } break;
-    case 'main-in':        if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'zbox-open';     titleSt.timer = 0; } break;
+    case 'main-in':        if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'logo-box-open';  titleSt.timer = 0; } break;
+    case 'logo-box-open':  if (titleSt.timer >= BOSS_BOX_EXPAND_MS) { titleSt.state = 'logo-content-in'; titleSt.timer = 0; } break;
+    case 'logo-content-in': if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'zbox-open';    titleSt.timer = 0; } break;
     case 'zbox-open':      if (titleSt.timer >= TITLE_ZBOX_MS) { titleSt.state = 'main';          titleSt.timer = 0; } break;
     case 'main':
-      if (keys['z'] || keys['Z']) { keys['z'] = false; keys['Z'] = false; playSFX(SFX.CONFIRM); titleSt.state = 'to-select'; titleSt.timer = 0; }
+      if (keys['z'] || keys['Z']) { keys['z'] = false; keys['Z'] = false; playSFX(SFX.CONFIRM); titleSt.state = 'logo-content-out'; titleSt.timer = 0; }
       break;
+    case 'logo-content-out': if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'to-select'; titleSt.timer = 0; } break;
     case 'to-select':            if (titleSt.timer >= TITLE_TRANSITION_MS) { titleSt.state = 'select-box-open'; titleSt.timer = 0; setSelectCursor(0); titleSt.deleteMode = false; } break;
     case 'select-box-open':      if (titleSt.timer >= BOSS_BOX_EXPAND_MS) { titleSt.state = 'select-fade-in'; titleSt.timer = 0; } break;
     case 'select-fade-in':       if (titleSt.timer >= (SELECT_TEXT_STEPS + 1) * SELECT_TEXT_STEP_MS) { titleSt.state = 'select'; titleSt.timer = 0; } break;
@@ -2061,7 +2064,7 @@ function updateTitle(dt) {
     case 'select-box-close-fwd': if (titleSt.timer >= BOSS_BOX_EXPAND_MS) { titleSt.state = 'main-out'; titleSt.timer = 0; fadeOutMusic(TITLE_FADE_MS); } break;
     case 'select-fade-out-back': if (titleSt.timer >= (SELECT_TEXT_STEPS + 1) * SELECT_TEXT_STEP_MS) { titleSt.state = 'to-main'; titleSt.timer = 0; } break;
     case 'to-main':              if (titleSt.timer >= TITLE_TRANSITION_MS) { titleSt.state = 'logo-reopen'; titleSt.timer = 0; } break;
-    case 'logo-reopen':          if (titleSt.timer >= BOSS_BOX_EXPAND_MS) { titleSt.state = 'main'; titleSt.timer = 0; } break;
+    case 'logo-reopen':          if (titleSt.timer >= BOSS_BOX_EXPAND_MS) { titleSt.state = 'logo-content-in'; titleSt.timer = 0; } break;
     case 'main-out':             if (titleSt.timer >= TITLE_FADE_MS) _updateTitleMainOutCase(); break;
   }
 }

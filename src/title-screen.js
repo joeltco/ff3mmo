@@ -87,7 +87,8 @@ export const titleSt = {
 
 export function isTitleActiveState() {
   const s = titleSt.state;
-  return s === 'main-in' || s === 'zbox-open' || s === 'main' ||
+  return s === 'main-in' || s === 'logo-box-open' || s === 'logo-content-in' ||
+    s === 'zbox-open' || s === 'main' || s === 'logo-content-out' ||
     s === 'to-select' || s === 'to-main' || s === 'logo-reopen' ||
     s === 'select-box-open' || s === 'select-box-close-fwd' ||
     s === 'select-fade-in' || s === 'select' || s === 'select-fade-out' ||
@@ -205,7 +206,8 @@ export function drawTitleSkyInHUD(ctx, roundTopBoxCornersFn) {
   if (ts.state === 'main-in') {
     const fl = TITLE_FADE_MAX - Math.min(Math.floor(ts.timer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
     drawTitleSky(ctx, fl); roundTopBoxCornersFn();
-  } else if (ts.state === 'zbox-open' || ts.state === 'main' ||
+  } else if (ts.state === 'logo-box-open' || ts.state === 'logo-content-in' ||
+             ts.state === 'zbox-open' || ts.state === 'main' || ts.state === 'logo-content-out' ||
              ts.state === 'to-select' || ts.state === 'to-main' || ts.state === 'logo-reopen' ||
              ts.state === 'select-box-open' || ts.state === 'select-box-close-fwd' ||
              ts.state === 'select-fade-in' || ts.state === 'select' || ts.state === 'select-fade-out' ||
@@ -318,8 +320,10 @@ function _drawTitleLogo(ctx, cx, fl, isSelectState) {
   if (isSelectState || ts.state === 'main-out' || ts.state === 'to-main') return;
   if (!ts.logoFrames) return;
 
+  // Box expand/collapse factor
   let t = 1;
-  if (ts.state === 'to-select') t = 1 - _easeInOut(Math.min(ts.timer / TITLE_TRANSITION_MS, 1));
+  if (ts.state === 'logo-box-open')  t = _easeInOut(Math.min(ts.timer / BOSS_BOX_EXPAND_MS, 1));
+  else if (ts.state === 'to-select') t = 1 - _easeInOut(Math.min(ts.timer / TITLE_TRANSITION_MS, 1));
   else if (ts.state === 'logo-reopen') t = _easeInOut(Math.min(ts.timer / BOSS_BOX_EXPAND_MS, 1));
   if (t <= 0) return;
 
@@ -343,10 +347,13 @@ function _drawTitleLogo(ctx, cx, fl, isSelectState) {
     for (let ty = tboxY + 8; ty < tboxY + tboxH - 8; ty += 8)
       for (let tx = tboxX + 8; tx < tboxX + tboxW - 8; tx += 8) ctx.drawImage(FILL, tx, ty);
   }
-  // Fade logo + MMORPG text during transitions
+
+  // Content fade — separate from box open/close
   let contentFl = fl;
-  if (ts.state === 'to-select') contentFl = Math.min(Math.floor(ts.timer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
-  else if (ts.state === 'logo-reopen') contentFl = TITLE_FADE_MAX - Math.min(Math.floor(ts.timer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
+  if (ts.state === 'logo-box-open') contentFl = TITLE_FADE_MAX; // box opening, no content yet
+  else if (ts.state === 'logo-content-in') contentFl = TITLE_FADE_MAX - Math.min(Math.floor(ts.timer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
+  else if (ts.state === 'logo-content-out') contentFl = Math.min(Math.floor(ts.timer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
+  else if (ts.state === 'to-select' || ts.state === 'logo-reopen') contentFl = TITLE_FADE_MAX; // box animating, content hidden
   if (contentFl < TITLE_FADE_MAX) {
     const contentFrame = ts.logoFrames[Math.min(contentFl, ts.logoFrames.length - 1)];
     const fullTboxY = HUD_VIEW_Y + 12;
@@ -379,15 +386,17 @@ function _drawTitleShip(ctx, cx, cy, fl) {
 
 function _drawTitlePressZ(ctx, cx, vpBot) {
   const ts = titleSt;
-  if (ts.state !== 'zbox-open' && ts.state !== 'main' && ts.state !== 'to-select' && ts.state !== 'logo-reopen') return;
+  if (ts.state !== 'zbox-open' && ts.state !== 'main' && ts.state !== 'logo-content-out' &&
+      ts.state !== 'to-select' && ts.state !== 'logo-reopen' && ts.state !== 'logo-content-in') return;
   if (!ts.pressZ) return;
   const pw    = measureText(ts.pressZ);
   const fullW = pw + 16, fullH = 24;
   const boxCY = vpBot - 44 + fullH / 2;
   let t = 1;
-  if (ts.state === 'zbox-open')    t = Math.min(ts.timer / TITLE_ZBOX_MS, 1);
+  if (ts.state === 'zbox-open')         t = Math.min(ts.timer / TITLE_ZBOX_MS, 1);
   else if (ts.state === 'to-select')   t = 1 - _easeInOut(Math.min(ts.timer / TITLE_TRANSITION_MS, 1));
   else if (ts.state === 'logo-reopen') t = _easeInOut(Math.min(ts.timer / BOSS_BOX_EXPAND_MS, 1));
+  // logo-content-out, logo-content-in, main: t stays 1
   if (t <= 0) return;
   const boxW = fullW, boxH = Math.max(8, Math.round(fullH * t));
   const boxX = cx - boxW / 2, boxY = Math.round(boxCY - boxH / 2);
@@ -436,11 +445,16 @@ function _drawTitleSelectBox(ctx, cx, shared) {
   for (let i = 0; i < 3; i++) {
     const rowY = topY + i * (SEL_ROW_H + gap);
     if (sbt < 1) {
-      // Each box expands/collapses individually
-      const rowCX = selX + SEL_W / 2, rowCY = rowY + SEL_ROW_H / 2;
-      const bw = Math.max(16, Math.ceil(SEL_W * sbt / 8) * 8);
-      const bh = Math.max(16, Math.ceil(SEL_ROW_H * sbt / 8) * 8);
-      shared.drawHudBox(Math.round(rowCX - bw / 2), Math.round(rowCY - bh / 2), bw, bh);
+      // Each row closes as two boxes (portrait + info), like roster
+      const pH = Math.max(8, Math.ceil(SEL_ROW_H * sbt / 8) * 8);
+      const pCY = rowY + SEL_ROW_H / 2;
+      // Portrait box
+      const pW = Math.max(8, Math.ceil(32 * sbt / 8) * 8);
+      shared.drawHudBox(Math.round(selX + 16 - pW / 2), Math.round(pCY - pH / 2), pW, pH);
+      // Info box
+      const iFullW = SEL_W - 32;
+      const iW = Math.max(8, Math.ceil(iFullW * sbt / 8) * 8);
+      shared.drawHudBox(Math.round(selX + 32 + iFullW / 2 - iW / 2), Math.round(pCY - pH / 2), iW, pH);
     } else {
       _drawSelectSlotRow(ctx, i, selX, rowY, fadeStep, showContent, shared);
     }
