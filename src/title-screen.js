@@ -419,16 +419,7 @@ function _drawTitleSelectBox(ctx, cx, shared) {
   const totalH = 3 * SEL_ROW_H + 2 * gap;
   const topY = HUD_VIEW_Y + Math.floor((HUD_VIEW_H - totalH) / 2);
 
-  if (sbt < 1) {
-    const fullW = SEL_W, fullH = totalH;
-    const sbCX = selX + fullW / 2, sbCY = topY + fullH / 2;
-    const sbW = Math.max(16, Math.ceil(fullW * sbt / 8) * 8);
-    const sbH = Math.max(16, Math.ceil(fullH * sbt / 8) * 8);
-    shared.drawHudBox(Math.round(sbCX - sbW / 2), Math.round(sbCY - sbH / 2), sbW, sbH);
-    return;
-  }
-
-  const showContent = ts.state !== 'select-box-close-fwd' && ts.state !== 'to-main';
+  const showContent = sbt >= 1 && ts.state !== 'select-box-close-fwd' && ts.state !== 'to-main';
   let fadeStep = 0;
   if (showContent) {
     if (ts.state === 'select-fade-in') fadeStep = SELECT_TEXT_STEPS - Math.min(Math.floor(ts.timer / SELECT_TEXT_STEP_MS), SELECT_TEXT_STEPS);
@@ -436,7 +427,16 @@ function _drawTitleSelectBox(ctx, cx, shared) {
   }
 
   for (let i = 0; i < 3; i++) {
-    _drawSelectSlotRow(ctx, i, selX, topY + i * (SEL_ROW_H + gap), fadeStep, showContent, shared);
+    const rowY = topY + i * (SEL_ROW_H + gap);
+    if (sbt < 1) {
+      // Each box expands/collapses individually
+      const rowCX = selX + SEL_W / 2, rowCY = rowY + SEL_ROW_H / 2;
+      const bw = Math.max(16, Math.ceil(SEL_W * sbt / 8) * 8);
+      const bh = Math.max(16, Math.ceil(SEL_ROW_H * sbt / 8) * 8);
+      shared.drawHudBox(Math.round(rowCX - bw / 2), Math.round(rowCY - bh / 2), bw, bh);
+    } else {
+      _drawSelectSlotRow(ctx, i, selX, rowY, fadeStep, showContent, shared);
+    }
   }
 }
 
