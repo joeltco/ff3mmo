@@ -233,8 +233,6 @@ export function drawChatTabs(ctx, fadeStep, drawHudBox) {
     const tx = positions[oi];
     const w = widths[tabIdx];
 
-    if (isActive && tabSelectMode && (Math.floor((Date.now() - _tabBlinkStart) / 400) & 1)) continue;
-
     drawHudBox(tx, TAB_BAR_Y, w, TAB_BAR_H, tabFade);
 
     // Selected tab: erase bottom border to connect interior with chat HUD below
