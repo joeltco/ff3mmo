@@ -236,6 +236,12 @@ export function drawChatTabs(ctx, fadeStep, drawHudBox) {
 
     drawHudBox(tx, TAB_BAR_Y, w, TAB_BAR_H, tabFade);
 
+    // Erase bottom border on selected tab to connect with chat HUD below
+    if (isActive) {
+      ctx.fillStyle = '#000';
+      ctx.fillRect(tx + 8, TAB_BAR_Y + TAB_BAR_H - 8, w - 16, 8);
+    }
+
     let pal = [...TEXT_WHITE];
     for (let s = 0; s < tabFade; s++) pal = pal.map(c => nesColorFade(c));
     const label = _nameToBytes(CHAT_TABS[tabIdx]);
