@@ -44,14 +44,14 @@ export const chatState = {
 
 // ── Public API ─────────────────────────────────────────────────────────────
 
-export function addChatMessage(text, type, channel) {
+export function addChatMessage(text, type, channel, loc) {
   // Default channel based on type
   if (!channel) {
     if (type === 'console' || type === 'system') channel = 'sys';
     else channel = 'room';
   }
   const msg = { text, type: type || 'chat', channel };
-  if (channel === 'room') msg.loc = getPlayerLocation();
+  if (channel === 'room') msg.loc = loc || getPlayerLocation();
   chatState.messages.push(msg);
   while (chatState.messages.length > CHAT_HISTORY) chatState.messages.shift();
 }
@@ -146,12 +146,17 @@ export function updateChat(dt, battleState, titleActive) {
     chatState.autoTimer -= dt;
     if (chatState.autoTimer <= 0) {
       chatState.autoTimer = CHAT_AUTO_MIN_MS + Math.random() * (CHAT_AUTO_MAX_MS - CHAT_AUTO_MIN_MS);
+      // 60% local room chat, 40% world chat from other rooms
       const loc = getPlayerLocation();
       const local = PLAYER_POOL.filter(p => p.loc === loc);
-      if (local.length === 0) return;
-      const p      = local[Math.floor(Math.random() * local.length)];
+      const remote = PLAYER_POOL.filter(p => p.loc !== loc);
+      const useLocal = local.length > 0 && (remote.length === 0 || Math.random() < 0.6);
+      const p = useLocal
+        ? local[Math.floor(Math.random() * local.length)]
+        : remote[Math.floor(Math.random() * remote.length)];
+      if (!p) return;
       const phrase = CHAT_PHRASES[Math.floor(Math.random() * CHAT_PHRASES.length)];
-      addChatMessage(p.name + ': ' + phrase, 'chat');
+      addChatMessage(p.name + ': ' + phrase, 'chat', 'room', p.loc);
     }
   }
 }

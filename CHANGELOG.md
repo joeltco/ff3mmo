@@ -6,17 +6,19 @@ All notable changes to this project are documented here.
 
 ### Chat tabs + channel system
 
-- **Chat tab bar** in 16px gap between roster panel and chat HUD
-  - Tabs: World, Room, Private, System — single label, left-aligned, white on black
+- **Chat tab bar** — bordered tabs in gap between roster panel and chat HUD
+  - Tabs: World, Room, Private, System — HUD-bordered boxes, selected tab on left with open bottom connecting to chat HUD
+  - Unselected tabs collapse behind selected tab, filling remaining panel width
   - S key cycles: none → roster browse → tab select. X/Z exits tab select
-  - Left/right arrows cycle tabs in tab select mode. Blink resets on each scroll
-  - World: all messages. Room: chat from current area only. Private: PMs. System: console + system
+  - Left/right arrows cycle tabs. Selected tab text blinks in tab select mode
+  - Drawn before HUD so chat HUD border draws on top of tab overlap
 - **Channel system** — messages tagged with `channel` ('room'/'pm'/'sys') and `loc` (for room filtering)
-  - Auto-chat now only fires from players in current room (not random from entire pool)
+  - Auto-chat only fires from players in current room
   - Room tab filters by `msg.loc === getPlayerLocation()`
-- **Tab bar fading** — NES-stepped alpha matching roster/battle/HUD info fade. Hidden during loading screen
+  - World: all messages. Room: current area only. Private: PMs. System: console + system
+- **Tab fading** — NES palette fade on game start (HUD info), battle (roster fade), dungeon loading (fade out during closing wipe, stay faded during loading, fade in during opening wipe after loading). `_tabWasLoading` flag tracks post-loading fade-in. No fade on regular room transitions.
 - Movement blocked during tab select mode
-- chat.js: 317L (+57L from tabs, channels, tab draw)
+- chat.js: 379L, input-handler.js: 892L
 
 ## 1.3.1 — 2026-04-05
 
