@@ -25,8 +25,7 @@ const TITLE_WAIT_MS        = 0;
 const TITLE_ZBOX_MS        = 200;
 const TITLE_TRANSITION_MS  = 800;
 const SHIP_DRIFT_PX        = 56;
-const SHIP_IDLE_DRIFT      = 12;  // ±px oscillation during select
-const SHIP_WINDUP_PX       = 20;  // extra left drift before fly-off
+const SHIP_WINDUP_PX       = 20;
 const SELECT_BOX_OFFSET_X  = 48;
 const TITLE_SHIP_ANIM_MS   = 100;
 const TITLE_SHADOW_ANIM_MS = 50;
@@ -364,55 +363,33 @@ function _drawTitleLogo(ctx, cx, fl, isSelectState) {
   }
 }
 
-function _shipIdleOsc(timer) {
-  return Math.sin(timer / 3000 * Math.PI * 2) * SHIP_IDLE_DRIFT;
-}
-
 function _drawTitleShip(ctx, cx, cy, fl) {
   const ts = titleSt;
   if (!ts.shipFadeFrames || fl >= TITLE_FADE_MAX) return;
   const frameIdx = Math.floor(ts.shipTimer / TITLE_SHIP_ANIM_MS) % 2;
   const shipCanvas = ts.shipFadeFrames[fl][frameIdx];
 
-  // Base left position
   const leftX = cx - 16 - SHIP_DRIFT_PX;
   let shipX;
 
-  if (ts.state === 'logo-content-out') {
-    // Hold center while content fades
-    shipX = cx - 16;
-  } else if (ts.state === 'to-select') {
-    // Center → left (ease-out only — starts slow, ends fast… reversed: starts slow)
-    const raw = Math.min(ts.timer / TITLE_TRANSITION_MS, 1);
-    const t = raw * raw; // quadratic ease-in — slow start
+  if (ts.state === 'to-select') {
+    const t = _easeInOut(Math.min(ts.timer / TITLE_TRANSITION_MS, 1));
     shipX = cx - 16 - t * SHIP_DRIFT_PX;
   } else if (ts.state === 'to-main') {
-    // Left (with osc snapshot) → center
     const t = _easeInOut(Math.min(ts.timer / TITLE_TRANSITION_MS, 1));
-    const startX = leftX + (ts._shipOscSnap || 0);
-    shipX = startX + (cx - 16 - startX) * t;
+    shipX = leftX + (cx - 16 - leftX) * t;
   } else if (ts.state === 'select-fade-out') {
-    // Wind-up: drift further left
+    // Wind-up left
     const t = Math.min(ts.timer / ((SELECT_TEXT_STEPS + 1) * SELECT_TEXT_STEP_MS), 1);
-    const oscSnap = ts._shipOscSnap || 0;
-    shipX = leftX + oscSnap - t * SHIP_WINDUP_PX;
+    shipX = leftX - t * SHIP_WINDUP_PX;
   } else if (ts.state === 'select-box-close-fwd' || ts.state === 'main-out') {
-    // Fly off to the right with acceleration
-    const elapsed = ts.state === 'select-box-close-fwd'
-      ? ts.timer
-      : BOSS_BOX_EXPAND_MS + ts.timer;
+    // Fly right
+    const elapsed = ts.state === 'select-box-close-fwd' ? ts.timer : BOSS_BOX_EXPAND_MS + ts.timer;
     const totalFly = BOSS_BOX_EXPAND_MS + TITLE_FADE_MS;
     const t = Math.min(elapsed / totalFly, 1);
-    const startX = leftX - SHIP_WINDUP_PX;
-    shipX = startX + (cx + 300 - startX) * t * t; // quadratic acceleration
-  } else if (ts.state === 'select-fade-out-back') {
-    // Snapshot osc position, hold for fade
-    shipX = leftX + (ts._shipOscSnap || 0);
-  } else if (_isShipLeftState(ts.state)) {
-    // Idle oscillation around left position
-    const osc = _shipIdleOsc(ts.shipTimer);
-    ts._shipOscSnap = osc;
-    shipX = leftX + osc;
+    shipX = (leftX - SHIP_WINDUP_PX) + (cx + 300 - (leftX - SHIP_WINDUP_PX)) * t * t;
+  } else if (_isShipLeftState(ts.state) || ts.state === 'select-fade-out-back') {
+    shipX = leftX;
   } else {
     shipX = cx - 16;
   }
