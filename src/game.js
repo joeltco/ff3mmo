@@ -3021,7 +3021,7 @@ function _gameLoopDraw() {
     // Tab bar fade: combine battle fade, transition fade, and HUD info fade
     const _infoFade = HUD_INFO_FADE_STEPS - Math.min(Math.floor(hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
     const _tabFade = Math.max(rosterBattleFade, _infoFade);
-    drawChatTabs(ctx, _tabFade);
+    if (transSt.state !== 'loading') drawChatTabs(ctx, _tabFade);
     drawPauseMenu(ctx, _pauseShared());
     drawMsgBox(ctx, _clipToViewport, _drawBorderedBox);
     drawRosterMenu(_rds);
