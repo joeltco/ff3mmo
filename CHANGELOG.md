@@ -2,15 +2,33 @@
 
 All notable changes to this project are documented here.
 
+## 1.2.1 — 2026-04-04
+
+### Damage numbers module + miss sprite + gil
+
+- **Extracted `src/damage-numbers.js`** (new module, 102L) — all damage/heal number state and rendering
+  - Owns all 6 number state variables (`enemyDmgNum`, `playerDamageNum`, `allyDamageNums`, `playerHealNum`, `enemyHealNum`, `swDmgNums`)
+  - `DMG_NUM_PAL` and `HEAL_NUM_PAL` constants — single source of truth (removed duplicates from game.js + battle-drawing.js)
+  - `tickDmgNums()` / `tickHealNums()` / `clearHealNums()` / `resetAllDmgNums()` — unified lifecycle
+  - `drawBattleNum()` — shared digit rendering helper (replaced duplicate `_drawHealNum` in game.js)
+  - `initMissSprite()` / `getMissCanvas()` — miss sprite from ROM tiles $1B4D0/$1B4E0 (green "MISS" with black outline)
+- **Miss sprite** — replaced `drawText` "Miss" with actual ROM tile sprite (2×8×8 tiles, color 3=green fill, color 1=black outline)
+- **Damage number positioning** — NES-accurate: bottom-right of enemy sprites, right edge of player/ally portraits
+- **Battle items use `setSwDmgNum()`** from damage-numbers module (removed local dmgNums from battle-items.js)
+- **Gil on stats screen** — displayed in pause menu stats panel below MND
+- **Gil persists on logout** — `beforeunload` now calls `_syncSaveSlotProgress()` before saving
+- **Tile viewer BANK button** — cycles through 21 known CHR data banks in ROM, skips program code garbage
+- game.js: ~4,208L (−23L this release)
+
 ## 1.2.0 — 2026-04-04
 
 ### Magic battle items extracted + Southwind boss fix
 
-- **Extracted `src/battle-items.js`** (new module, 159L) — all magic item battle logic decoupled from game.js
+- **Extracted `src/battle-items.js`** (new module, 150L) — all magic item battle logic decoupled from game.js
   - `startMagicItem()` — target selection + damage roll (PVP, random encounter, boss paths)
   - `updateMagicItemThrowHit()` — throw/hit state machine, damage application, death triggers
-  - `resetBattleItemVars()` / `tickDmgNums()` — state reset and timer management
-  - Module-local state: targets, hitIdx, baseDamage, dmgNums (no longer pollute game.js scope)
+  - `resetBattleItemVars()` — state reset
+  - Module-local state: targets, hitIdx, baseDamage (no longer pollute game.js scope)
   - `_magicItemShared()` context in game.js passes battle state via getter/setter pattern
   - Designed for multiple spell items — future items share the same entry points
 - **Southwind now works on boss** — was silently doing nothing (animation played, item consumed, no damage). Boss path added to damage application, target selection, kill detection, explosion drawing, and damage numbers
