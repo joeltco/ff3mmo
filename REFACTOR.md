@@ -1,6 +1,6 @@
 # game.js Refactor TODO
 
-Current size: **3,534 lines** (v1.2.2). Target: <4,000 lines — **achieved**.
+Current size: **3,467 lines** (v1.2.3). Target: <4,000 lines — **achieved**.
 
 ---
 
@@ -78,10 +78,12 @@ follow-up. Revisit when extracting a battle engine module.
 </details>
 
 <details>
-<summary>Phase 4 — final push (4,208→3,534L)</summary>
+<summary>Phase 4 — final push (4,208→3,467L)</summary>
 
 - [x] `src/sprite-init.js` (~636L) — 37 pure init functions: battle sprites, portraits, full-body canvases, goblin, adamantoise, invincible, moogle, cursor, fade frames. ROM in → canvases out. Net: −674L.
 - [x] `src/flame-sprites.js` (~153L) — Flame/star tile decode, palette rendering, sprite positioning. Net: −135L.
+- [x] `src/save-state.js` (~83L) — Centralized save slot state. Direct imports replace shared context proxying. Net: −67L.
 - [x] `_syncSaveSlotProgress` dedup — Merged into `saveSlotsToDB()`. Net: −10L.
 - [x] `startRandomEncounter` dedup — Replaced 15 manual resets with `_resetBattleVars()`. Net: −12L.
+- [x] Gil + proficiency persistence fix — was missing from DB serialization and parse.
 </details>

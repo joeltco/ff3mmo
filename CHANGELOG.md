@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## 1.2.3 — 2026-04-05
+
+### Save state module + gil persistence fix
+
+- **Extracted `src/save-state.js`** (new module, 83L) — centralized save slot state
+  - Owns `selectCursor`, `saveSlots`, `nameBuffer`, `savesLoaded`
+  - `saveSlotsToDB()` and `loadSlotsFromDB()` moved from game.js
+  - input-handler.js, pause-menu.js, title-screen.js now import directly — no more shared context proxying
+  - 3 shared context functions simplified (removed `selectCursor`/`saveSlots` getters)
+- **Gil + proficiency persistence fix** — `saveSlotsToDB()` serialization was missing `gil` and `proficiency` fields; `parseSaveSlots()` wasn't reading `gil` back. Both now persist to IndexedDB and server correctly.
+- game.js: 3,467L (−67L from save-state extraction)
+
 ## 1.2.2 — 2026-04-05
 
 ### Refactor: game.js under 4,000 lines (4,208 → 3,534)
