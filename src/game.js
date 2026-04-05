@@ -71,7 +71,8 @@ import { updateBattleAlly } from './battle-ally.js';
 import { updateBattleEnemyTurn } from './battle-enemy.js';
 import { resetBattleItemVars, getTargets, getHitIdx, startMagicItem, updateMagicItemThrowHit } from './battle-items.js';
 import { initBattleSprite as _initBattleSprite, initFakePlayerPortraits as _initFakePlayerPortraits,
-         initCursorTile as _initCursorTile, initAdamantoise as _initAdamantoise,
+         initCursorTile as _initCursorTile, initScrollArrows as _initScrollArrows,
+         initAdamantoise as _initAdamantoise,
          initGoblinSprite as _initGoblinSprite, initInvincibleSprite as _initInvincibleSprite,
          initMoogleSprite as _initMoogleSprite, initLoadingScreenFadeFrames as _initLoadingScreenFadeFrames } from './sprite-init.js';
 import { HEAL_NUM_PAL, DMG_SHOW_MS, resetAllDmgNums, tickDmgNums, tickHealNums, clearHealNums, initMissSprite,
@@ -315,6 +316,10 @@ let prePauseTrack = -1;        // FF3 track playing before pause opened
 // CURSOR_TILE_ROM → sprite-init.js
 let cursorTileCanvas = null;
 let cursorFadeCanvases = null; // [step1..step4] NES-faded cursor canvases
+let scrollArrowDown = null;
+let scrollArrowUp = null;
+let scrollArrowDownFade = null;  // [step1..step4]
+let scrollArrowUpFade = null;    // [step1..step4]
 // PAUSE_ITEMS → data/strings.js
 
 // getPlayerLocation, getRosterPlayers, getRosterVisible, roster state/update/draw ��� roster.js
@@ -1103,6 +1108,13 @@ function _initSpriteAssets(romRaw) {
   const ct = _initCursorTile(romRaw);
   cursorTileCanvas = ct.cursorTileCanvas;
   cursorFadeCanvases = ct.cursorFadeCanvases;
+
+  // Scroll arrows (sprite-init.js)
+  const sa = _initScrollArrows(romRaw);
+  scrollArrowDown = sa.scrollArrowDown;
+  scrollArrowUp = sa.scrollArrowUp;
+  scrollArrowDownFade = sa.scrollArrowDownFade;
+  scrollArrowUpFade = sa.scrollArrowUpFade;
 
   // Battle sprite (sprite-init.js)
   const bs = _initBattleSprite(romRaw);
@@ -2995,6 +3007,7 @@ function _gameLoopDraw() {
     const _rds = {
       ctx, drawHudBox: _drawHudBox, drawBorderedBox: _drawBorderedBox,
       clipToViewport: _clipToViewport, cursorTileCanvas,
+      scrollArrowUp, scrollArrowDown, scrollArrowUpFade, scrollArrowDownFade,
       fakePlayerPortraits, drawSparkle: _drawRosterSparkle,
       transSt, wipeDuration: 44 * (1000 / 60),
       hudInfoFadeTimer, hudInfoFadeSteps: HUD_INFO_FADE_STEPS, hudInfoFadeStepMs: HUD_INFO_FADE_STEP_MS,
