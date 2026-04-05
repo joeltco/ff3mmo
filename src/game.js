@@ -55,7 +55,7 @@ import { rosterBattleFade, setLocationGetter, getPlayerLocation, rosterLocForMap
          getRosterVisible, initRoster, updateRoster,
          drawRoster, drawRosterMenu } from './roster.js';
 import { msgState, showMsgBox, updateMsgBox, drawMsgBox } from './message-box.js';
-import { titleSt, isTitleActiveState, titleFadeLevel, titleFadePal, drawTitleOcean, drawTitleWater, drawTitleSky, drawTitleUnderwater, drawUnderwaterSprites, drawTitleSkyInHUD, drawTitle, drawPlayerSelectContent,
+import { titleSt, isTitleActiveState, titleFadeLevel, titleFadePal, drawTitleOcean, drawTitleWater, drawTitleSky, drawTitleUnderwater, drawUnderwaterSprites, drawTitleSkyInHUD, drawTitle,
          updateTitleUnderwater, updateTitleSelect, onNameEntryKeyDown } from './title-screen.js';
 import { pauseSt, updatePauseMenu, drawPauseMenu } from './pause-menu.js';
 import { transSt, topBoxSt, loadingSt, startWipeTransition, updateTransition, updateTopBoxScroll, drawTransitionOverlay } from './transitions.js';
@@ -1094,6 +1094,7 @@ function _titleShared() {
     battleSpriteFadeCanvases,
     silhouetteCanvas,
     drawBorderedBox: _drawBorderedBox,
+    drawHudBox: _drawHudBox,
     drawCursorFaded: _drawCursorFaded,
   };
 }

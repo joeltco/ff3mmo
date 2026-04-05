@@ -2,6 +2,7 @@
 
 import { drawText, measureText, TEXT_WHITE } from './font-renderer.js';
 import { nesColorFade, _makeFadedPal } from './palette.js';
+import { _nameToBytes } from './text-utils.js';
 import { selectCursor, saveSlots, nameBuffer, NAME_MAX_LEN,
          setSelectCursor, setNameBuffer, saveSlotsToDB } from './save-state.js';
 import { playSFX, SFX } from './music.js';
@@ -30,6 +31,8 @@ export const SELECT_TEXT_STEPS    = 4;
 export const SELECT_TEXT_STEP_MS  = 100;
 export const BOSS_BOX_EXPAND_MS   = 300;
 const LOAD_FADE_MAX        = 4;
+const SEL_ROW_H            = 32;  // same as roster rows
+const SEL_W                = 112; // same width as roster panel
 // NAME_MAX_LEN → imported from save-state.js
 
 // ── Text byte arrays (NES encoding) ───────────────────────────────────────
@@ -263,30 +266,6 @@ export function drawTitle(ctx, shared) {
   }
 }
 
-export function drawPlayerSelectContent(ctx, sbX, sbY, sbW, sbH, shared) {
-  const ts = titleSt;
-  let fadeStep = 0;
-  if (ts.state === 'select-fade-in') {
-    fadeStep = SELECT_TEXT_STEPS - Math.min(Math.floor(ts.timer / SELECT_TEXT_STEP_MS), SELECT_TEXT_STEPS);
-  } else if (ts.state === 'select-fade-out' || ts.state === 'select-fade-out-back') {
-    fadeStep = Math.min(Math.floor(ts.timer / SELECT_TEXT_STEP_MS), SELECT_TEXT_STEPS);
-  }
-  const fadedPal = _makeFadedPal(fadeStep);
-  const ix = sbX + 8, iy = sbY + 8, iw = sbW - 16;
-  const tw = measureText(SELECT_TITLE);
-  drawText(ctx, ix + Math.floor((iw - tw) / 2), iy, SELECT_TITLE, fadedPal);
-  const slotStartY = iy + 16, slotSpacing = 20;
-  for (let i = 0; i < 3; i++) {
-    _drawSelectSlot(ctx, i, ix, slotStartY, slotSpacing, fadeStep, fadedPal, shared);
-  }
-  const delY   = slotStartY + 3 * slotSpacing;
-  const delPal = ts.deleteMode
-    ? [0x0F, 0x0F, 0x0F, 0x16]
-    : [0x0F, 0x0F, 0x0F, fadedPal[3]];
-  if (!ts.deleteMode && selectCursor === 3) shared.drawCursorFaded(ix, delY - 4, fadeStep);
-  drawText(ctx, ix + 38, delY, SELECT_DELETE_TEXT, delPal);
-}
-
 // ── Private helpers ────────────────────────────────────────────────────────
 
 function _easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
@@ -427,52 +406,117 @@ function _drawTitleSelectBox(ctx, cx, shared) {
     ts.state === 'select-fade-in' || ts.state === 'select' ||
     ts.state === 'select-fade-out' || ts.state === 'select-fade-out-back' || ts.state === 'name-entry';
   if (!isSelectState) return;
-  const SELECT_BOX_W = 128, SELECT_BOX_H = 112;
-  const sbCX = cx + SELECT_BOX_OFFSET_X, sbCY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
+
+  // Compute expand factor
   let sbt = 1;
   if (ts.state === 'select-box-open') sbt = Math.min(ts.timer / BOSS_BOX_EXPAND_MS, 1);
   else if (ts.state === 'select-box-close-fwd') sbt = 1 - Math.min(ts.timer / BOSS_BOX_EXPAND_MS, 1);
   else if (ts.state === 'to-main') sbt = 1 - _easeInOut(Math.min(ts.timer / TITLE_TRANSITION_MS, 1));
-  const sbW = Math.max(16, Math.ceil(SELECT_BOX_W * sbt / 8) * 8);
-  const sbH = Math.max(16, Math.ceil(SELECT_BOX_H * sbt / 8) * 8);
-  if (ts.borderTiles) shared.drawBorderedBox(Math.round(sbCX - sbW / 2), Math.round(sbCY - sbH / 2), sbW, sbH);
-  if (sbt >= 1 && ts.state !== 'select-box-close-fwd' && ts.state !== 'to-main') {
-    drawPlayerSelectContent(ctx, Math.round(sbCX - sbW / 2), Math.round(sbCY - sbH / 2), SELECT_BOX_W, SELECT_BOX_H, shared);
+
+  // Layout: title HUD, 3 slot rows, delete HUD — stacked vertically
+  const selX = Math.round(cx + SELECT_BOX_OFFSET_X - SEL_W / 2);
+  const titleH = 24, delH = 24, gap = 2;
+  const totalH = titleH + gap + 3 * SEL_ROW_H + gap + delH;
+  const topY = HUD_VIEW_Y + Math.floor((HUD_VIEW_H - totalH) / 2);
+
+  if (sbt < 1) {
+    // Expanding/collapsing — draw as single box
+    const fullW = SEL_W, fullH = totalH;
+    const sbCX = selX + fullW / 2, sbCY = topY + fullH / 2;
+    const sbW = Math.max(16, Math.ceil(fullW * sbt / 8) * 8);
+    const sbH = Math.max(16, Math.ceil(fullH * sbt / 8) * 8);
+    shared.drawHudBox(Math.round(sbCX - sbW / 2), Math.round(sbCY - sbH / 2), sbW, sbH);
+    return;
+  }
+
+  // Fully open — draw individual HUD boxes
+  const showContent = ts.state !== 'select-box-close-fwd' && ts.state !== 'to-main';
+  let fadeStep = 0;
+  if (showContent) {
+    if (ts.state === 'select-fade-in') fadeStep = SELECT_TEXT_STEPS - Math.min(Math.floor(ts.timer / SELECT_TEXT_STEP_MS), SELECT_TEXT_STEPS);
+    else if (ts.state === 'select-fade-out' || ts.state === 'select-fade-out-back') fadeStep = Math.min(Math.floor(ts.timer / SELECT_TEXT_STEP_MS), SELECT_TEXT_STEPS);
+  }
+
+  // Title HUD
+  shared.drawHudBox(selX, topY, SEL_W, titleH, fadeStep);
+  if (showContent) {
+    const fadedPal = _makeFadedPal(fadeStep);
+    const tw = measureText(SELECT_TITLE);
+    drawText(ctx, selX + Math.floor((SEL_W - tw) / 2), topY + 8, SELECT_TITLE, fadedPal);
+  }
+
+  // Slot rows
+  const slotsY = topY + titleH + gap;
+  for (let i = 0; i < 3; i++) {
+    _drawSelectSlotRow(ctx, i, selX, slotsY + i * SEL_ROW_H, fadeStep, showContent, shared);
+  }
+
+  // Delete HUD
+  const delY = slotsY + 3 * SEL_ROW_H + gap;
+  shared.drawHudBox(selX, delY, SEL_W, delH, fadeStep);
+  if (showContent) {
+    const delPal = ts.deleteMode
+      ? [0x0F, 0x0F, 0x0F, 0x16]
+      : _makeFadedPal(fadeStep);
+    if (!ts.deleteMode && selectCursor === 3) shared.drawCursorFaded(selX + 4, delY + 4, fadeStep);
+    const dw = measureText(SELECT_DELETE_TEXT);
+    drawText(ctx, selX + Math.floor((SEL_W - dw) / 2), delY + 8, SELECT_DELETE_TEXT, delPal);
   }
 }
 
-function _drawSelectSlot(ctx, i, ix, slotStartY, slotSpacing, fadeStep, fadedPal, shared) {
-  const ts  = titleSt;
-  const sy  = slotStartY + i * slotSpacing;
-  const textX = ix + 20, nameX = textX + 18;
+function _drawSelectSlotRow(ctx, i, selX, rowY, fadeStep, showContent, shared) {
+  const ts = titleSt;
   const isNameEntry = ts.state === 'name-entry' && i === selectCursor;
 
-  if (i === selectCursor) shared.drawCursorFaded(ix, sy - 4, fadeStep);
+  // Portrait box (left) + info box (right) — roster style
+  shared.drawHudBox(selX, rowY, 32, SEL_ROW_H, fadeStep);
+  shared.drawHudBox(selX + 32, rowY, SEL_W - 32, SEL_ROW_H, fadeStep);
+  if (!showContent) return;
 
+  // Portrait
   if (isNameEntry) {
-    if (shared.silhouetteCanvas) ctx.drawImage(shared.silhouetteCanvas, textX - 2, sy - 4);
+    if (shared.silhouetteCanvas) ctx.drawImage(shared.silhouetteCanvas, selX + 8, rowY + 8);
   } else {
     const portraitSrc = (saveSlots[i] && shared.battleSpriteCanvas) ? shared.battleSpriteCanvas : shared.silhouetteCanvas;
     if (portraitSrc && fadeStep < SELECT_TEXT_STEPS) {
       let src = portraitSrc;
       if (fadeStep > 0 && portraitSrc === shared.battleSpriteCanvas && shared.battleSpriteFadeCanvases)
         src = shared.battleSpriteFadeCanvases[fadeStep - 1];
-      else if (fadeStep > 0)
-        src = null;
-      if (src) ctx.drawImage(src, textX - 2, sy - 4, ...(portraitSrc === shared.battleSpriteCanvas ? [16, 16] : []));
+      else if (fadeStep > 0) src = null;
+      if (src) ctx.drawImage(src, selX + 8, rowY + 8, ...(portraitSrc === shared.battleSpriteCanvas ? [16, 16] : []));
     }
   }
 
+  // Cursor
+  if (i === selectCursor) shared.drawCursorFaded(selX + 4, rowY + 8, fadeStep);
+
+  // Name + level text (right-aligned in info box, like roster)
+  const fadedPal = _makeFadedPal(fadeStep);
+  const infoRight = selX + SEL_W - 8;
   if (isNameEntry) {
-    if (nameBuffer.length > 0) drawText(ctx, nameX, sy, new Uint8Array(nameBuffer), fadedPal);
+    if (nameBuffer.length > 0) {
+      const nameBytes = new Uint8Array(nameBuffer);
+      const nw = measureText(nameBytes);
+      drawText(ctx, infoRight - nw, rowY + 8, nameBytes, fadedPal);
+    }
     if (nameBuffer.length < NAME_MAX_LEN && Math.floor(ts.timer / 400) % 2 === 0) {
+      const cursorX = nameBuffer.length > 0 ? infoRight - measureText(new Uint8Array(nameBuffer)) + nameBuffer.length * 8 + 1 : selX + 40;
       ctx.fillStyle = '#fcfcfc';
-      ctx.fillRect(nameX + nameBuffer.length * 8 + 1, sy + 7, 6, 1);
+      ctx.fillRect(cursorX, rowY + 15, 6, 1);
     }
   } else if (saveSlots[i]) {
-    drawText(ctx, nameX, sy, saveSlots[i].name, fadedPal);
+    const nameBytes = saveSlots[i].name;
+    const nw = measureText(nameBytes);
+    drawText(ctx, infoRight - nw, rowY + 8, nameBytes, fadedPal);
+    const lvl = saveSlots[i].level || 1;
+    const lvLabel = _nameToBytes('Lv' + String(lvl));
+    const lvPal = [0x0F, 0x0F, 0x0F, 0x10];
+    for (let s = 0; s < fadeStep; s++) lvPal[3] = nesColorFade(lvPal[3]);
+    const lvW = measureText(lvLabel);
+    drawText(ctx, infoRight - lvW, rowY + 16, lvLabel, lvPal);
   } else {
-    drawText(ctx, nameX, sy, SELECT_SLOT_TEXT, fadedPal);
+    const nw = measureText(SELECT_SLOT_TEXT);
+    drawText(ctx, infoRight - nw, rowY + 8, SELECT_SLOT_TEXT, fadedPal);
   }
 }
 
