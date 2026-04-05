@@ -27,7 +27,8 @@ export let tabSelectMode = false;
 let _tabBlinkStart = 0;
 let _tabScrollX = 0;      // current scroll offset (animated)
 let _tabScrollTarget = 0;  // target scroll offset
-export function setActiveTab(i) { activeTab = i; _tabBlinkStart = Date.now(); _tabScrollTarget = 0; }
+const _tabUnread = [false, false, false, false]; // unread notification per tab
+export function setActiveTab(i) { activeTab = i; _tabBlinkStart = Date.now(); _tabScrollTarget = 0; _tabUnread[i] = false; }
 export function setTabSelectMode(v) { tabSelectMode = v; _tabBlinkStart = Date.now(); }
 
 // ── Mutable state (exported so game.js can read/write directly) ────────────
@@ -54,6 +55,10 @@ export function addChatMessage(text, type, channel, loc) {
   if (channel === 'room') msg.loc = loc || getPlayerLocation();
   chatState.messages.push(msg);
   while (chatState.messages.length > CHAT_HISTORY) chatState.messages.shift();
+  // Mark background tabs as unread
+  const tabMap = { world: 0, room: 1, pm: 2, sys: 3 };
+  const tabIdx = tabMap[channel];
+  if (tabIdx !== undefined && tabIdx !== activeTab) _tabUnread[tabIdx] = true;
 }
 
 function _passesTabFilter(msg) {
@@ -248,9 +253,10 @@ export function drawChatTabs(ctx, fadeStep, drawHudBox) {
       ctx.fillRect(tx + 8, TAB_BAR_Y + TAB_BAR_H - 8, w - 16, 8);
     }
 
-    // Blink text only when in tab select mode on active tab
-    const blinkHide = isActive && tabSelectMode && (Math.floor((Date.now() - _tabBlinkStart) / 400) & 1);
-    if (!blinkHide) {
+    // Blink text: active tab in select mode, or background tab with unread
+    const selectBlink = isActive && tabSelectMode && (Math.floor((Date.now() - _tabBlinkStart) / 400) & 1);
+    const unreadBlink = !isActive && _tabUnread[tabIdx] && (Math.floor(Date.now() / 500) & 1);
+    if (!selectBlink && !unreadBlink) {
       let pal = [...TEXT_WHITE];
       for (let s = 0; s < tabFade; s++) pal = pal.map(c => nesColorFade(c));
       const label = _nameToBytes(CHAT_TABS[tabIdx]);
