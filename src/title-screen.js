@@ -343,11 +343,16 @@ function _drawTitleLogo(ctx, cx, fl, isSelectState) {
     for (let ty = tboxY + 8; ty < tboxY + tboxH - 8; ty += 8)
       for (let tx = tboxX + 8; tx < tboxX + tboxW - 8; tx += 8) ctx.drawImage(FILL, tx, ty);
   }
-  if (t >= 1) {
+  // Fade logo + MMORPG text during transitions
+  let contentFl = fl;
+  if (ts.state === 'to-select') contentFl = Math.min(Math.floor(ts.timer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
+  else if (ts.state === 'logo-reopen') contentFl = TITLE_FADE_MAX - Math.min(Math.floor(ts.timer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
+  if (contentFl < TITLE_FADE_MAX) {
+    const contentFrame = ts.logoFrames[Math.min(contentFl, ts.logoFrames.length - 1)];
     const fullTboxY = HUD_VIEW_Y + 12;
-    ctx.drawImage(logoFrame, tboxX + 8, fullTboxY + 8);
+    ctx.drawImage(contentFrame, tboxX + 8, fullTboxY + 8);
     const tw2 = measureText(TITLE_MMORPG);
-    drawText(ctx, cx - tw2 / 2, fullTboxY + 8 + logoFrame.height, TITLE_MMORPG, fl === 0 ? TEXT_WHITE : titleFadePal(fl));
+    drawText(ctx, cx - tw2 / 2, fullTboxY + 8 + contentFrame.height, TITLE_MMORPG, contentFl === 0 ? TEXT_WHITE : titleFadePal(contentFl));
   }
 }
 
