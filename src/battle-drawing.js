@@ -149,17 +149,18 @@ function drawSWDamageNumbers(shared) {
       const mh = mc ? mc.height : rH;
       const mw = mc ? mc.width : 32;
       const bx = tp.x + mw - 4;
-      const baseY = tp.y + (rH - mh) + Math.floor(mh / 2) - 8;
+      const baseY = tp.y + rH - 8;
       const by = _dmgBounceY(baseY, dn.timer);
       _drawBattleNum(bx, by, dn.value, DMG_NUM_PAL);
     }
   } else {
-    // Boss — damage number on right side of boss sprite
+    // Boss — damage number on bottom-right of boss sprite
     const bc = getBossBattleCanvas();
     const bw = bc ? bc.width : 48;
+    const bh = bc ? bc.height : 48;
     for (const [k, dn] of Object.entries(_s.southWindDmgNums)) {
       const bx = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2) + Math.floor(bw / 2) - 4;
-      const baseY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2) - 8;
+      const baseY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2) + Math.floor(bh / 2) - 8;
       _drawBattleNum(bx, _dmgBounceY(baseY, dn.timer), dn.value, DMG_NUM_PAL);
     }
   }
@@ -1293,7 +1294,7 @@ function _encounterMonsterPos(idx) {
   const rH = safeIdx < 2 ? (row0H || dSprH) : (row1H || dSprH);
   const mh = mc ? mc.height : rH;
   const mw = mc ? mc.width : 32;
-  return { bx: pos.x + mw - 4, baseY: pos.y + (rH - mh) + Math.floor(mh / 2) - 8 };
+  return { bx: pos.x + mw - 4, baseY: pos.y + rH - 8 };
 }
 function _drawBossDmgNum() {
   if (!_s.enemyDmgNum || (_s.enemyDefeated && !_s.isRandomEncounter)) return;
@@ -1307,8 +1308,9 @@ function _drawBossDmgNum() {
   } else {
     const bc = getBossBattleCanvas();
     const bw = bc ? bc.width : 48;
+    const bh = bc ? bc.height : 48;
     bx = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2) + Math.floor(bw / 2) - 4;
-    baseY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2) - 8;
+    baseY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2) + Math.floor(bh / 2) - 8;
   }
   const by = _dmgBounceY(baseY, _s.enemyDmgNum.timer);
   _s.clipToViewport();
@@ -1329,8 +1331,9 @@ function _drawEnemyHealNum() {
   } else {
     const bc = getBossBattleCanvas();
     const bw = bc ? bc.width : 48;
+    const bh = bc ? bc.height : 48;
     bx = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2) + Math.floor(bw / 2) - 4;
-    baseY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2) - 8;
+    baseY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2) + Math.floor(bh / 2) - 8;
   }
   const hy = _dmgBounceY(baseY, _s.enemyHealNum.timer);
   _s.clipToViewport();
