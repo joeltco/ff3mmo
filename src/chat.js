@@ -196,34 +196,36 @@ export function updateChatTabs(dt) {
   }
 }
 
+const TAB_PEEK = 16; // px of each collapsed unselected tab peeking out
+
 export function drawChatTabs(ctx, fadeStep, drawHudBox) {
   if (!chatState.fontReady) return;
   if (fadeStep >= ROSTER_FADE_STEPS) return;
 
   const widths = _getTabWidths();
-  const panelW = CANVAS_W - HUD_RIGHT_X; // 112px
+  const panelW = CANVAS_W - HUD_RIGHT_X;
 
-  // Build draw order: selected tab first in layout, rest follow
+  // Order: selected first, then rest in original order
   const order = [activeTab];
   for (let i = 0; i < CHAT_TABS.length; i++) {
     if (i !== activeTab) order.push(i);
   }
 
-  // Clip to right panel only
+  // Positions: selected at left edge full width, unselected collapsed after it
+  const positions = [];
+  const selectedW = widths[activeTab];
+  positions.push(HUD_RIGHT_X); // selected tab
+  for (let oi = 1; oi < order.length; oi++) {
+    positions.push(HUD_RIGHT_X + selectedW + (oi - 1) * TAB_PEEK);
+  }
+
+  // Clip to right panel
   ctx.save();
   ctx.beginPath();
   ctx.rect(HUD_RIGHT_X, TAB_BAR_Y, panelW, TAB_BAR_H);
   ctx.clip();
 
-  // Layout: selected tab at left edge, rest packed after it, overlapping/clipped at right
-  // Draw back-to-front: rightmost (last) first, selected (leftmost) last on top
-  let positions = [];
-  let x = HUD_RIGHT_X;
-  for (let oi = 0; oi < order.length; oi++) {
-    positions.push(x);
-    x += widths[order[oi]];
-  }
-
+  // Draw back-to-front: rightmost first, selected last on top
   for (let oi = order.length - 1; oi >= 0; oi--) {
     const tabIdx = order[oi];
     const isActive = tabIdx === activeTab;
@@ -231,22 +233,19 @@ export function drawChatTabs(ctx, fadeStep, drawHudBox) {
     const tx = positions[oi];
     const w = widths[tabIdx];
 
-    // Blink active tab in select mode
     if (isActive && tabSelectMode && (Math.floor((Date.now() - _tabBlinkStart) / 400) & 1)) continue;
 
     drawHudBox(tx, TAB_BAR_Y, w, TAB_BAR_H, tabFade);
 
-    // Erase bottom border on selected tab to connect with chat HUD below
-    if (isActive) {
-      ctx.fillStyle = '#000';
-      ctx.fillRect(tx + 8, TAB_BAR_Y + TAB_BAR_H - 8, w - 16, 8);
-    }
+    // Erase bottom border — all tabs connect to chat HUD below
+    ctx.fillStyle = '#000';
+    ctx.fillRect(tx + 8, TAB_BAR_Y + TAB_BAR_H - 8, w - 16, 8);
 
     let pal = [...TEXT_WHITE];
     for (let s = 0; s < tabFade; s++) pal = pal.map(c => nesColorFade(c));
     const label = _nameToBytes(CHAT_TABS[tabIdx]);
     const lw = measureText(label);
-    drawText(ctx, tx + Math.floor((w - lw) / 2), TAB_BAR_Y + 4, label, pal);
+    drawText(ctx, tx + Math.floor((w - lw) / 2), TAB_BAR_Y + 5, label, pal);
   }
 
   ctx.restore();
