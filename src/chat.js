@@ -32,7 +32,6 @@ export let chatScrollOffset = 0; // how many rows scrolled up from bottom
 export function setChatScrollOffset(v) { chatScrollOffset = v; }
 export function setActiveTab(i) { activeTab = i; _tabBlinkStart = Date.now(); _tabScrollTarget = 0; _tabUnread[i] = false; chatScrollOffset = 0; }
 export function setTabSelectMode(v) { tabSelectMode = v; _tabBlinkStart = Date.now(); if (!v) chatScrollOffset = 0; }
-export function setTabSelectMode(v) { tabSelectMode = v; _tabBlinkStart = Date.now(); }
 
 // ── Mutable state (exported so game.js can read/write directly) ────────────
 export const chatState = {
