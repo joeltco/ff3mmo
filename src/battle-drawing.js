@@ -4,7 +4,7 @@ import { drawText, measureText, TEXT_WHITE } from './font-renderer.js';
 import { nesColorFade, _makeFadedPal } from './palette.js';
 import { _calcBoxExpandSize, _encounterGridPos } from './battle-layout.js';
 import { _dmgBounceY } from './data/animation-tables.js';
-import { DMG_NUM_PAL, HEAL_NUM_PAL, drawBattleNum as _drawBattleNumCtx } from './damage-numbers.js';
+import { DMG_NUM_PAL, HEAL_NUM_PAL, drawBattleNum as _drawBattleNumCtx, getMissCanvas } from './damage-numbers.js';
 import { getBossBattleCanvas, getBossWhiteCanvas } from './boss-sprites.js';
 import { getMonsterCanvas, getMonsterWhiteCanvas, hasMonsterSprites } from './monster-sprites.js';
 import { getItemNameClean, getMonsterName } from './text-decoder.js';
@@ -14,7 +14,7 @@ import { _nameToBytes, _buildItemRowBytes, makeExpText, makeGilText, makeFoundIt
 import { pvpEnemyCellCenter } from './pvp-math.js';
 import { pvpSt, drawBossSpriteBoxPVP } from './pvp.js';
 import { inputSt } from './input-handler.js';
-import { BATTLE_MISS, BATTLE_GAME_OVER, BATTLE_DEFEATED, BATTLE_VICTORY, BATTLE_RAN_AWAY,
+import { BATTLE_GAME_OVER, BATTLE_DEFEATED, BATTLE_VICTORY, BATTLE_RAN_AWAY,
          BATTLE_CANT_ESCAPE, BATTLE_BOSS_NAME, BATTLE_GOBLIN_NAME,
          BATTLE_LEVEL_UP, BATTLE_MENU_ITEMS } from './data/strings.js';
 
@@ -1253,7 +1253,8 @@ function _flushAllyWeaponDraws(weaponDraws) {
     if (wd.type === 'dmg') {
       const { dn, bx, by } = wd;
       if (dn.miss) {
-        drawText(_s.ctx, bx - 8, by, BATTLE_MISS, HEAL_NUM_PAL);
+        const mc = getMissCanvas();
+        if (mc) _s.ctx.drawImage(mc, bx - 8, by);
       } else {
         _drawBattleNum(bx, by, dn.value, dn.heal ? HEAL_NUM_PAL : DMG_NUM_PAL);
       }
@@ -1312,7 +1313,8 @@ function _drawBossDmgNum() {
   const by = _dmgBounceY(baseY, _s.enemyDmgNum.timer);
   _s.clipToViewport();
   if (_s.enemyDmgNum.miss) {
-    drawText(_s.ctx, bx - 8, by, BATTLE_MISS, HEAL_NUM_PAL);
+    const mc = getMissCanvas();
+    if (mc) _s.ctx.drawImage(mc, bx - 8, by);
   } else {
     _drawBattleNum(bx, by, _s.enemyDmgNum.value, DMG_NUM_PAL);
   }
@@ -1348,7 +1350,8 @@ function drawDamageNumbers() {
     const baseY = HUD_VIEW_Y + 16;
     const py = _dmgBounceY(baseY, _s.playerDamageNum.timer);
     if (_s.playerDamageNum.miss) {
-      drawText(_s.ctx, px - 8, py, BATTLE_MISS, HEAL_NUM_PAL);
+      const mc = getMissCanvas();
+      if (mc) _s.ctx.drawImage(mc, px - 8, py);
     } else {
       _drawBattleNum(px, py, _s.playerDamageNum.value, DMG_NUM_PAL);
     }
