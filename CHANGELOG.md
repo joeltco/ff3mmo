@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented here.
 
+## 1.3.2 — 2026-04-05
+
+### Chat tabs + channel system
+
+- **Chat tab bar** in 16px gap between roster panel and chat HUD
+  - Tabs: World, Room, Private, System — single label, left-aligned, white on black
+  - S key cycles: none → roster browse → tab select. X/Z exits tab select
+  - Left/right arrows cycle tabs in tab select mode. Blink resets on each scroll
+  - World: all messages. Room: chat from current area only. Private: PMs. System: console + system
+- **Channel system** — messages tagged with `channel` ('room'/'pm'/'sys') and `loc` (for room filtering)
+  - Auto-chat now only fires from players in current room (not random from entire pool)
+  - Room tab filters by `msg.loc === getPlayerLocation()`
+- **Tab bar fading** — NES-stepped alpha matching roster/battle/HUD info fade. Hidden during loading screen
+- Movement blocked during tab select mode
+- chat.js: 317L (+57L from tabs, channels, tab draw)
+
 ## 1.3.1 — 2026-04-05
 
 ### Roster extraction + scroll arrows

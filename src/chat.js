@@ -4,6 +4,7 @@ import { PLAYER_POOL, CHAT_PHRASES, ROSTER_FADE_STEPS } from './data/players.js'
 import { selectCursor, saveSlots } from './save-state.js';
 import { _nesNameToString, _nameToBytes } from './text-utils.js';
 import { drawText, measureText, TEXT_WHITE } from './font-renderer.js';
+import { nesColorFade } from './palette.js';
 import { getPlayerLocation } from './roster.js';
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -24,7 +25,9 @@ export const CHAT_TABS = ['World', 'Room', 'Private', 'System'];
 export let activeTab = 0;  // index into CHAT_TABS
 export let tabSelectMode = false;
 let _tabBlinkStart = 0;
-export function setActiveTab(i) { activeTab = i; _tabBlinkStart = Date.now(); }
+let _tabScrollX = 0;      // current scroll offset (animated)
+let _tabScrollTarget = 0;  // target scroll offset
+export function setActiveTab(i) { activeTab = i; _tabBlinkStart = Date.now(); _tabScrollTarget = 0; }
 export function setTabSelectMode(v) { tabSelectMode = v; _tabBlinkStart = Date.now(); }
 
 // ── Mutable state (exported so game.js can read/write directly) ────────────
@@ -174,24 +177,69 @@ const TAB_BAR_Y = HUD_VIEW_Y + 32 + 3 * 32; // 160 — bottom of roster panel
 const TAB_BAR_H = 16;
 const HUD_RIGHT_X = 144;
 
-export function drawChatTabs(ctx, fadeStep) {
+const TAB_PAD = 8;       // padding inside each tab box (4px each side)
+const TAB_GAP = 0;       // gap between tabs
+const TAB_SCROLL_SPEED = 0.4; // px per ms
+
+function _getTabWidths() {
+  // Each tab: 8px border left + 4px pad + text + 4px pad + 8px border right = text + 24px
+  // But with shared borders between tabs, middle borders overlap
+  return CHAT_TABS.map(name => measureText(_nameToBytes(name)) + 16);
+}
+
+export function updateChatTabs(dt) {
+  // Animate scroll toward target
+  if (_tabScrollX !== _tabScrollTarget) {
+    const diff = _tabScrollTarget - _tabScrollX;
+    const move = TAB_SCROLL_SPEED * dt;
+    _tabScrollX = Math.abs(diff) <= move ? _tabScrollTarget : _tabScrollX + Math.sign(diff) * move;
+  }
+}
+
+export function drawChatTabs(ctx, fadeStep, drawHudBox) {
   if (!chatState.fontReady) return;
   if (fadeStep >= ROSTER_FADE_STEPS) return;
 
-  ctx.save();
-  const NES_STEP_ALPHAS = [1.0, 0.76, 0.52, 0.28, 0];
-  ctx.globalAlpha = NES_STEP_ALPHAS[Math.min(fadeStep, 4)];
+  const panelW = CANVAS_W - HUD_RIGHT_X;
+  const widths = _getTabWidths();
 
-  const label = _nameToBytes(CHAT_TABS[activeTab]);
-  const tx = HUD_RIGHT_X + 4;
-  const ty = TAB_BAR_Y + 4;
-  if (tabSelectMode && (Math.floor((Date.now() - _tabBlinkStart) / 400) & 1)) {
-    // blink — skip draw
-  } else {
-    drawText(ctx, tx, ty, label, TEXT_WHITE);
+  // Build tab order: selected tab first, then the rest in order
+  const order = [activeTab];
+  for (let i = 0; i < CHAT_TABS.length; i++) {
+    if (i !== activeTab) order.push(i);
   }
 
-  ctx.globalAlpha = 1;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(HUD_RIGHT_X, TAB_BAR_Y, panelW, TAB_BAR_H);
+  ctx.clip();
+
+  let x = HUD_RIGHT_X - Math.round(_tabScrollX);
+  for (let oi = 0; oi < order.length; oi++) {
+    const tabIdx = order[oi];
+    const w = widths[tabIdx];
+    const isActive = tabIdx === activeTab;
+    const tabFade = isActive ? fadeStep : Math.min(fadeStep + 2, ROSTER_FADE_STEPS);
+
+    // Blink active tab in select mode
+    if (isActive && tabSelectMode && (Math.floor((Date.now() - _tabBlinkStart) / 400) & 1)) {
+      x += w + TAB_GAP;
+      continue;
+    }
+
+    // Draw tab border box
+    drawHudBox(x, TAB_BAR_Y, w, TAB_BAR_H, tabFade);
+
+    // Draw label with NES-faded palette
+    let pal = [...TEXT_WHITE];
+    for (let s = 0; s < tabFade; s++) pal = pal.map(c => nesColorFade(c));
+    const label = _nameToBytes(CHAT_TABS[tabIdx]);
+    const lw = measureText(label);
+    drawText(ctx, x + Math.floor((w - lw) / 2), TAB_BAR_Y + 4, label, pal);
+
+    x += w + TAB_GAP;
+  }
+
   ctx.restore();
 }
 
