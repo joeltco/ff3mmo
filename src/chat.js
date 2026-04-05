@@ -229,13 +229,18 @@ function _drawChatTextArea(ctx, curBoxY, curBoxH, battleFadeAlpha) {
   ctx.font = '8px "Press Start 2P"'; ctx.textBaseline = 'bottom';
   const startX = 12;
   const lineW  = CANVAS_W - 8 - startX;
-  const rows      = _buildChatRows(ctx, lineW, startX);
-  const inputRows = chatState.inputActive ? 2 : 0;
+  const rows = _buildChatRows(ctx, lineW, startX);
+  let inputRows = 0;
+  if (chatState.inputActive) {
+    const promptW = ctx.measureText('> ').width;
+    const inputFits = chatState.inputText.length === 0 ||
+      ctx.measureText(chatState.inputText).width <= lineW - promptW;
+    inputRows = inputFits ? 1 : 2;
+  }
   const availRows = Math.max(1, Math.floor(innerH / CHAT_LINE_H) - inputRows);
-  const inputLine2Y = innerBottom;
-  const inputLine1Y = inputLine2Y - CHAT_LINE_H;
-  const bottomY   = chatState.inputActive ? inputLine1Y - CHAT_LINE_H : inputLine2Y;
-  const visible   = rows.slice(-availRows);
+  const inputLineY = innerBottom - (inputRows - 1) * CHAT_LINE_H;
+  const bottomY = chatState.inputActive ? inputLineY - CHAT_LINE_H : innerBottom;
+  const visible = rows.slice(-availRows);
   for (let i = 0; i < visible.length; i++) {
     const r = visible[i];
     const lineY = bottomY - (visible.length - 1 - i) * CHAT_LINE_H;
@@ -246,5 +251,9 @@ function _drawChatTextArea(ctx, curBoxY, curBoxH, battleFadeAlpha) {
       ctx.fillStyle = r.color; ctx.fillText(r.text, r.x, lineY);
     }
   }
-  if (chatState.inputActive) _drawChatInput(ctx, lineW, startX, inputLine1Y, inputLine2Y);
+  if (chatState.inputActive) {
+    const line1Y = inputRows === 2 ? innerBottom - CHAT_LINE_H : innerBottom;
+    const line2Y = innerBottom;
+    _drawChatInput(ctx, lineW, startX, line1Y, line2Y);
+  }
 }
