@@ -452,17 +452,14 @@ function _drawTitleSelectBox(ctx, cx, shared) {
     else if (ts.state === 'select-fade-out' || ts.state === 'select-fade-out-back') fadeStep = Math.min(Math.floor(ts.timer / SELECT_TEXT_STEP_MS), SELECT_TEXT_STEPS);
   }
 
-  // Label box dimensions
+  // Delete box dimensions
   const labelH = 24;
-  const selectLabelW = measureText(SELECT_TITLE) + 16;
   const deleteLabelW = measureText(SELECT_DELETE_TEXT) + 16;
-  const row0Y = topY;
   const row2Y = topY + 2 * (SEL_ROW_H + gap);
 
   for (let i = 0; i < 3; i++) {
     const rowY = topY + i * (SEL_ROW_H + gap);
     if (sbt < 1) {
-      // Each box expands/collapses individually
       const rowCX = selX + SEL_W / 2, rowCY = rowY + SEL_ROW_H / 2;
       const bw = Math.max(16, Math.ceil(SEL_W * sbt / 8) * 8);
       const bh = Math.max(16, Math.ceil(SEL_ROW_H * sbt / 8) * 8);
@@ -472,28 +469,15 @@ function _drawTitleSelectBox(ctx, cx, shared) {
     }
   }
 
-  // "Player Select" label — left of top row
+  // "Delete" label — left of bottom row, bottom-aligned
+  const dy = row2Y + SEL_ROW_H - labelH;
   if (sbt < 1) {
-    const lCX = selX - 4 - selectLabelW / 2, lCY = row0Y + SEL_ROW_H / 2;
-    const lw = Math.max(16, Math.ceil(selectLabelW * sbt / 8) * 8);
-    const lh = Math.max(16, Math.ceil(labelH * sbt / 8) * 8);
-    shared.drawHudBox(Math.round(lCX - lw / 2), Math.round(lCY - lh / 2), lw, lh);
-  } else {
-    const lx = selX - 4 - selectLabelW, ly = row0Y + Math.floor((SEL_ROW_H - labelH) / 2);
-    shared.drawHudBox(lx, ly, selectLabelW, labelH, 0);
-    if (showContent) {
-      drawText(ctx, lx + 8, ly + 8, SELECT_TITLE, TEXT_WHITE);
-    }
-  }
-
-  // "Delete" label — left of bottom row
-  if (sbt < 1) {
-    const dCX = selX - 4 - deleteLabelW / 2, dCY = row2Y + SEL_ROW_H / 2;
+    const dCX = selX - 4 - deleteLabelW / 2, dCY = dy + labelH / 2;
     const dw = Math.max(16, Math.ceil(deleteLabelW * sbt / 8) * 8);
     const dh = Math.max(16, Math.ceil(labelH * sbt / 8) * 8);
     shared.drawHudBox(Math.round(dCX - dw / 2), Math.round(dCY - dh / 2), dw, dh);
   } else {
-    const dx = selX - 4 - deleteLabelW, dy = row2Y + Math.floor((SEL_ROW_H - labelH) / 2);
+    const dx = selX - 4 - deleteLabelW;
     const delPal = selectCursor === 3 ? [0x0F, 0x0F, 0x0F, 0x16] : TEXT_WHITE;
     shared.drawHudBox(dx, dy, deleteLabelW, labelH, 0);
     if (showContent) {
