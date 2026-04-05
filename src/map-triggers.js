@@ -154,7 +154,7 @@ function _checkHiddenTrap(trigger, tileX, tileY) {
       _s.mapStack.push({ mapId: _s.currentMapId, x: savedX, y: savedY });
       _s.loadMapById(dest.mapId);
     };
-    transSt.rosterLocChanged = _s._rosterLocForMapId(dest.mapId) !== _s.getPlayerLocation();
+    transSt.rosterLocChanged = _s.rosterLocForMapId(dest.mapId) !== _s.getPlayerLocation();
     transSt.state = 'trap-reveal'; transSt.timer = 0;
     transSt.dungeon = false; transSt.trapFallPending = true;
     return true;
@@ -169,7 +169,7 @@ function _triggerMapTransition(tileX, tileY, destMapId) {
   if ((((_s.mapData.collisionByte2[tileM] >> 4) & 0x0F) === 5)) {
     _s.mapRenderer.updateTileAt(tileX, tileY, 0x7E); playSFX(SFX.DOOR);
     transSt.state = 'door-opening'; transSt.timer = 0;
-    transSt.rosterLocChanged = _s._rosterLocForMapId(destMapId) !== _s.getPlayerLocation();
+    transSt.rosterLocChanged = _s.rosterLocForMapId(destMapId) !== _s.getPlayerLocation();
     transSt.pendingAction = () => { _s.mapStack.push({ mapId: _s.currentMapId, x: savedX, y: savedY }); _s.loadMapById(destMapId); };
   } else {
     _s._triggerWipe(() => { _s.mapStack.push({ mapId: _s.currentMapId, x: savedX, y: savedY }); _s.loadMapById(destMapId); }, destMapId);

@@ -19,7 +19,7 @@ import { ITEMS, isHandEquippable, isWeapon, weaponSubtype, isBladedWeapon } from
 import { ENCOUNTERS } from './data/encounters.js';
 import { CRIT_RATE, CRIT_MULT, BASE_HIT_RATE, BOSS_HIT_RATE, GOBLIN_HIT_RATE,
          calcDamage, rollHits } from './battle-math.js';
-import { LOCATIONS, PLAYER_POOL, PLAYER_PALETTES, CHAT_PHRASES, ROSTER_FADE_STEPS, generateAllyStats } from './data/players.js';
+import { PLAYER_POOL, PLAYER_PALETTES, ROSTER_FADE_STEPS, generateAllyStats } from './data/players.js';
 import { BATTLE_MISS, BATTLE_GAME_OVER, BATTLE_ROAR, BATTLE_FIGHT, BATTLE_RUN,
          BATTLE_CANT_ESCAPE, BATTLE_RAN_AWAY, BATTLE_DEFEND, BATTLE_VICTORY,
          BATTLE_GOT_EXP, BATTLE_LEVEL_UP, BATTLE_BOSS_NAME, BATTLE_GOBLIN_NAME,
@@ -50,6 +50,9 @@ import { initTitleWater, initTitleSky, initTitleUnderwater, initUnderwaterSprite
 import { ps, EQUIP_SLOT_SUBTYPE, getEquipSlotId, setEquipSlotId, recalcDEF, recalcCombatStats, getHitWeapon, isHitRightHand, initPlayerStats, initExpTable, grantExp, fullHeal, gainProficiency, getProfHits, getProfLevel, getShieldEvade, PROF_CATEGORIES, WEAPON_PROF_CATEGORY } from './player-stats.js';
 import { initProfIcons, getProfIcon } from './prof-icons.js';
 import { chatState, addChatMessage, updateChat, drawChat, onChatKeyDown, consoleLog, setCommandContext } from './chat.js';
+import { rosterBattleFade, setLocationGetter, getPlayerLocation, rosterLocForMapId,
+         getRosterVisible, initRoster, updateRoster,
+         drawRoster, drawRosterMenu } from './roster.js';
 import { msgState, showMsgBox, updateMsgBox, drawMsgBox } from './message-box.js';
 import { titleSt, isTitleActiveState, titleFadeLevel, titleFadePal, drawTitleOcean, drawTitleWater, drawTitleSky, drawTitleUnderwater, drawUnderwaterSprites, drawTitleSkyInHUD, drawTitle, drawPlayerSelectContent,
          updateTitleUnderwater, updateTitleSelect, onNameEntryKeyDown } from './title-screen.js';
@@ -314,64 +317,29 @@ let cursorTileCanvas = null;
 let cursorFadeCanvases = null; // [step1..step4] NES-faded cursor canvases
 // PAUSE_ITEMS → data/strings.js
 
-// --- Fake players (MMO roster) ---
-// All locations players can be in
-// LOCATIONS, PLAYER_POOL → data/players.js
-
-// Chat system → chat.js
-
-function getPlayerLocation() {
-  if (onWorldMap) return 'world';
-  if (currentMapId === 114) return 'ur';
-  if (currentMapId === 1004) return 'crystal';
-  if (currentMapId >= 1000 && currentMapId < 1004) return 'cave-' + (currentMapId - 1000);
-  return 'ur'; // fallback
-}
-
-function getRosterPlayers() {
-  const loc = getPlayerLocation();
-  return PLAYER_POOL.filter(p => p.loc === loc);
-}
-
-// Generate combat stats for a roster ally based on their level and location
-// generateAllyStats, ROSTER_FADE_STEPS → data/players.js
-// PLAYER_PALETTES → data/players.js
-let fakePlayerPortraits = [];   // HTMLCanvasElement[palIdx][fadeStep]
-let fakePlayerFullBodyCanvases = []; // HTMLCanvasElement[palIdx] — 16×24 h-flipped full body (idle)
-let fakePlayerHitFullBodyCanvases = []; // HTMLCanvasElement[palIdx] — 16×24 h-flipped full body, hit pose legs
-let fakePlayerVictoryPortraits = [];  // HTMLCanvasElement[palIdx][fadeStep] — victory pose
-let fakePlayerHitPortraits = [];      // hit/recoil pose
-let fakePlayerDefendPortraits = [];   // defend pose
-let fakePlayerKneelPortraits = [];    // near-fatal kneel pose
-let fakePlayerAttackPortraits = [];   // attack pose (right-hand arm raised)
-let fakePlayerAttackLPortraits = [];  // attack pose (left-hand arm raised)
-let fakePlayerKnifeBackPortraits = []; // knife back-swing body pose
-let fakePlayerKnifeRPortraits = [];    // knife R-hand front-swing body pose
-let fakePlayerKnifeLPortraits = [];    // knife L-hand front-swing body pose
-let fakePlayerKnifeRFullBodyCanvases = []; // knife R-hand 16×24 h-flipped full body (back-swing pose)
-let fakePlayerKnifeLFullBodyCanvases = []; // knife L-hand 16×24 h-flipped full body (back-swing pose)
-let fakePlayerKnifeBackFullBodyCanvases = []; // knife back-swing 16×24 h-flipped full body (wind-up pose)
-let fakePlayerKnifeRFwdFullBodyCanvases = []; // knife R-hand 16×24 h-flipped full body (forward-swing pose)
-let fakePlayerKnifeLFwdFullBodyCanvases = []; // knife L-hand 16×24 h-flipped full body (forward-swing pose)
-let fakePlayerKneelFullBodyCanvases = [];     // near-fatal kneel 16×24 h-flipped full body
-let fakePlayerVictoryFullBodyCanvases = [];   // victory 16×24 h-flipped full body
-let fakePlayerDeathFrames = [];               // death wipe frames per palette (for pvp-dissolve)
-let fakePlayerDeathPoseCanvases = [];         // 24×16 death pose per palette
-let rosterTimer = 0;             // ms until next movement event
-
-const ROSTER_FADE_STEP_MS = 100;
-let rosterFadeMap = {};          // {playerName: fadeStep} — 0=visible, 4=black
-let rosterFadeTimers = {};       // {playerName: ms since last step}
-let rosterFadeDir = {};          // {playerName: 'in'|'out'}
-let rosterSlideY = {};           // {playerName: px offset} — animates toward 0
-let rosterPrevLoc = null;        // last known player location
-let rosterArrivalOrder = [];     // names in arrival order (most recent first)
-const ROSTER_SLIDE_SPEED = 0.15; // px per ms
-// chatState → chat.js
-
-let rosterBattleFade = 0;        // 0=visible, ROSTER_FADE_STEPS=black
-let rosterBattleFadeTimer = 0;
-let rosterBattleFading = 'none'; // 'none'|'out'|'in'
+// getPlayerLocation, getRosterPlayers, getRosterVisible, roster state/update/draw ��� roster.js
+// fakePlayer portrait vars stay here (shared by battle-drawing, battle-ally, pvp)
+let fakePlayerPortraits = [];
+let fakePlayerFullBodyCanvases = [];
+let fakePlayerHitFullBodyCanvases = [];
+let fakePlayerVictoryPortraits = [];
+let fakePlayerHitPortraits = [];
+let fakePlayerDefendPortraits = [];
+let fakePlayerKneelPortraits = [];
+let fakePlayerAttackPortraits = [];
+let fakePlayerAttackLPortraits = [];
+let fakePlayerKnifeBackPortraits = [];
+let fakePlayerKnifeRPortraits = [];
+let fakePlayerKnifeLPortraits = [];
+let fakePlayerKnifeRFullBodyCanvases = [];
+let fakePlayerKnifeLFullBodyCanvases = [];
+let fakePlayerKnifeBackFullBodyCanvases = [];
+let fakePlayerKnifeRFwdFullBodyCanvases = [];
+let fakePlayerKnifeLFwdFullBodyCanvases = [];
+let fakePlayerKneelFullBodyCanvases = [];
+let fakePlayerVictoryFullBodyCanvases = [];
+let fakePlayerDeathFrames = [];
+let fakePlayerDeathPoseCanvases = [];
 
 // Battle allies — roster players that join combat
 let battleAllies = [];         // [{name, palIdx, level, hp, maxHP, atk, def, agi, fadeStep}]
@@ -390,11 +358,6 @@ let enemyTargetAllyIdx = -1;   // which ally an enemy is targeting (-1 = player)
 let allyExitTimer = 0;         // ms since victory-celebrate started (for ally exit fade)
 let turnTimer = 0;             // ms elapsed while player is deciding; auto-skip at TURN_TIME_MS
 const TURN_TIME_MS = 10000;    // 10 seconds to act before turn is skipped
-const ROSTER_MENU_ITEMS = ['Party', 'Battle', 'Trade', 'Message', 'Inspect'];
-const ROSTER_ROW_H = 32;        // pixels per roster row (matches HUD box height)
-const ROSTER_VISIBLE = 3;       // max visible rows in panel (3×32=96px, 16px for scroll)
-const ROSTER_TRI_H = 0;         // no top padding — scroll triangles go in bottom gap
-
 // Chest message box state (same style as roar box)
 // Universal message box — slide-in, instant text, Z dismiss, slide-out
 // msgState → message-box.js
@@ -463,8 +426,7 @@ let pondStrobeTimer = 0;  // >0 = pond strobe active
 
 
 // Screen wipe timing constants → transitions.js
-// WIPE_DURATION still referenced by roster fade
-const WIPE_DURATION = 44 * (1000 / 60);  // 44 NES frames ≈ 733ms
+// WIPE_DURATION → transitions.js (roster.js gets it via shared context)
 
 // Screen shake state (earthquake effect for secret passages)
 const SHAKE_DURATION = 34 * (1000 / 60);  // 2 × 17 NES frames ≈ 567ms
@@ -476,6 +438,7 @@ let shakePendingAction = null;
 // _onNameEntryKeyDown → title-screen.js (onNameEntryKeyDown)
 export function init() {
   setInventoryGetter(() => playerInventory);
+  setLocationGetter(() => ({ onWorldMap, currentMapId }));
   canvas = document.getElementById('game-canvas');
   ctx = canvas.getContext('2d');
   canvas.width = CANVAS_W;
@@ -706,7 +669,7 @@ function _loadingShared() {
 }
 // Wrapper that pre-computes rosterLocChanged before calling transitions.js
 function _triggerWipe(action, destMapId) {
-  const rc = destMapId != null && _rosterLocForMapId(destMapId) !== getPlayerLocation();
+  const rc = destMapId != null && rosterLocForMapId(destMapId) !== getPlayerLocation();
   startWipeTransition(action, destMapId, rc);
 }
 
@@ -1110,7 +1073,7 @@ function _triggerShared() {
     loadWorldMapAt,
     _triggerWipe,
     _rebuildFlameSprites,
-    _rosterLocForMapId,
+    rosterLocForMapId,
     getPlayerLocation,
   };
 }
@@ -1997,333 +1960,18 @@ function _drawHudBox(x, y, w, h, fadeStep = 0) {
 }
 
 
-function _rosterLocForMapId(mapId) {
-  if (mapId === 'world') return 'world';
-  if (mapId === 114) return 'ur';
-  if (mapId === 1004) return 'crystal';
-  if (mapId >= 1000 && mapId < 1004) return 'cave-' + (mapId - 1000);
-  return 'ur'; // sub-rooms (shops, houses) = same town
-}
-
-function _rosterTransFade() {
-  const FADE_STEP_MS = WIPE_DURATION / ROSTER_FADE_STEPS;
-  if (transSt.rosterLocChanged) {
-    if (transSt.state === 'closing') return Math.min(Math.floor(transSt.timer / FADE_STEP_MS), ROSTER_FADE_STEPS);
-    if (transSt.state === 'hold' || transSt.state === 'trap-falling') return ROSTER_FADE_STEPS;
-    if (transSt.state === 'opening') return Math.max(ROSTER_FADE_STEPS - Math.floor(transSt.timer / FADE_STEP_MS), 0);
-  }
-  // Sync with HUD info fade-in on game start
-  const infoFade = HUD_INFO_FADE_STEPS - Math.min(Math.floor(hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
-  if (infoFade > 0) return infoFade;
-  return 0;
-}
-
-function _drawRosterRow(p, i, panelTop) {
-  const slideOff = rosterSlideY[p.name] || 0;
-  const rowY = panelTop + i * ROSTER_ROW_H + slideOff;
-  const playerFade = rosterFadeMap[p.name] || 0;
-  const transFade = _rosterTransFade();
-  const fadeStep = Math.min(Math.max(playerFade, transFade, rosterBattleFade), ROSTER_FADE_STEPS);
-
-  _drawHudBox(HUD_RIGHT_X, rowY, 32, ROSTER_ROW_H, fadeStep);
-  _drawHudBox(HUD_RIGHT_X + 32, rowY, HUD_RIGHT_W - 32, ROSTER_ROW_H, fadeStep);
-
-  const portraits = fakePlayerPortraits[p.palIdx];
-  if (portraits) ctx.drawImage(portraits[fadeStep], HUD_RIGHT_X + 8, rowY + 8);
-
-  const namePal = [0x0F, 0x0F, 0x0F, 0x30];
-  for (let s = 0; s < fadeStep; s++) namePal[3] = nesColorFade(namePal[3]);
-  const nameBytes = _nameToBytes(p.name);
-  const nameW = measureText(nameBytes);
-  drawText(ctx, HUD_RIGHT_X + HUD_RIGHT_W - 8 - nameW, rowY + 8, nameBytes, namePal);
-
-  const lvPal = [0x0F, 0x0F, 0x0F, 0x10];
-  for (let s = 0; s < fadeStep; s++) lvPal[3] = nesColorFade(lvPal[3]);
-  const lvLabel = _nameToBytes('Lv' + String(p.level));
-  const lvW = measureText(lvLabel);
-  drawText(ctx, HUD_RIGHT_X + HUD_RIGHT_W - 8 - lvW, rowY + 16, lvLabel, lvPal);
-}
-
+// roster draw/update/state → roster.js
+// _drawRosterSparkle stays here as callback (needs pauseSt, cureSparkleFrames, _drawHealNum)
 function _drawRosterSparkle(panelTop) {
   if (!pauseSt.healNum || pauseSt.healNum.rosterIdx < 0 || cureSparkleFrames.length !== 2) return;
   const visRow = pauseSt.healNum.rosterIdx - inputSt.rosterScroll;
-  if (visRow < 0 || visRow >= ROSTER_VISIBLE) return;
+  if (visRow < 0 || visRow >= 3) return;
   const px = HUD_RIGHT_X + 8;
-  const py = panelTop + visRow * ROSTER_ROW_H + 8;
+  const py = panelTop + visRow * 32 + 8;
   const fi = Math.floor(pauseSt.timer / 67) & 1;
   const frame = cureSparkleFrames[fi];
   _drawSparkleCorners(frame, px, py);
   _drawHealNum(px + 8, _dmgBounceY(py + 8, pauseSt.healNum.timer), pauseSt.healNum.value, HEAL_NUM_PAL);
-}
-
-function _drawRosterScrollTriangles(scrollAreaY, canScrollUp, canScrollDown) {
-  if (!canScrollUp && !canScrollDown) return;
-  const triFade = Math.min(Math.max(_rosterTransFade(), rosterBattleFade), ROSTER_FADE_STEPS);
-  let triNes = 0x10;
-  for (let s = 0; s < triFade; s++) triNes = nesColorFade(triNes);
-  const triCol = NES_SYSTEM_PALETTE[triNes] || [0, 0, 0];
-  ctx.fillStyle = `rgb(${triCol[0]},${triCol[1]},${triCol[2]})`;
-  const triCX = HUD_RIGHT_X + Math.floor(HUD_RIGHT_W / 2);
-  if (canScrollUp) {
-    const ty = scrollAreaY + 2;
-    ctx.beginPath(); ctx.moveTo(triCX - 4, ty + 5); ctx.lineTo(triCX, ty); ctx.lineTo(triCX + 4, ty + 5); ctx.fill();
-  }
-  if (canScrollDown) {
-    const ty = scrollAreaY + 9;
-    ctx.beginPath(); ctx.moveTo(triCX - 4, ty); ctx.lineTo(triCX, ty + 5); ctx.lineTo(triCX + 4, ty); ctx.fill();
-  }
-}
-
-function drawRoster() {
-  if (titleSt.state !== 'done') return;
-  if (transSt.state === 'loading') return;
-  if (rosterBattleFade >= ROSTER_FADE_STEPS && battleState !== 'none') return;
-
-  const panelTop = HUD_VIEW_Y + 32;
-  const panelH = HUD_VIEW_H - 32;
-  const scrollAreaY = panelTop + ROSTER_VISIBLE * ROSTER_ROW_H;
-
-  const players = getRosterVisible();
-  const maxVisible = Math.min(ROSTER_VISIBLE, players.length);
-  const maxScroll = Math.max(0, players.length - maxVisible);
-  if (inputSt.rosterScroll > maxScroll) inputSt.rosterScroll = maxScroll;
-
-  const canScrollUp = inputSt.rosterScroll > 0;
-  const canScrollDown = inputSt.rosterScroll < maxScroll;
-
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(HUD_RIGHT_X, panelTop, HUD_RIGHT_W, panelH);
-  ctx.clip();
-  for (let i = 0; i < maxVisible; i++) {
-    const idx = inputSt.rosterScroll + i;
-    if (idx >= players.length) break;
-    _drawRosterRow(players[idx], i, panelTop);
-  }
-  ctx.restore();
-
-  _drawRosterScrollTriangles(scrollAreaY, canScrollUp, canScrollDown);
-
-  _drawRosterSparkle(panelTop);
-
-  // Cursor (drawn outside clip — overlaps portrait box border)
-  if (inputSt.rosterState === 'browse' || inputSt.rosterState === 'menu' || inputSt.rosterState === 'menu-in' || inputSt.rosterState === 'menu-out') {
-    const visIdx = inputSt.rosterCursor - inputSt.rosterScroll;
-    const curTarget = players[inputSt.rosterCursor];
-    const curSlide = curTarget ? (rosterSlideY[curTarget.name] || 0) : 0;
-    const curY = panelTop + visIdx * ROSTER_ROW_H + curSlide + 12;
-    if (cursorTileCanvas) ctx.drawImage(cursorTileCanvas, HUD_RIGHT_X - 4, curY);
-  }
-}
-
-function drawRosterMenu() {
-  if (inputSt.rosterState !== 'menu-in' && inputSt.rosterState !== 'menu' && inputSt.rosterState !== 'menu-out') return;
-
-  // Blue bordered box slides in from right edge of viewport
-  const menuW = 80;
-  const menuH = 8 + ROSTER_MENU_ITEMS.length * 14 + 8;
-  const finalX = HUD_VIEW_X + HUD_VIEW_W - menuW - 8;
-  const menuY = HUD_VIEW_Y + 32;
-  const SLIDE_MS = 150;
-
-  let menuX = finalX;
-  if (inputSt.rosterState === 'menu-in') {
-    const t = Math.min(inputSt.rosterMenuTimer / SLIDE_MS, 1);
-    menuX = (HUD_VIEW_X + HUD_VIEW_W) + (finalX - (HUD_VIEW_X + HUD_VIEW_W)) * t;
-    if (t >= 1) { inputSt.rosterState = 'menu'; inputSt.rosterMenuTimer = 0; }
-  } else if (inputSt.rosterState === 'menu-out') {
-    const t = Math.min(inputSt.rosterMenuTimer / SLIDE_MS, 1);
-    menuX = finalX + ((HUD_VIEW_X + HUD_VIEW_W) - finalX) * t;
-    if (t >= 1) { inputSt.rosterState = msgState.state !== 'none' ? 'none' : 'browse'; inputSt.rosterMenuTimer = 0; }
-  }
-
-  // Clip to viewport
-  _clipToViewport();
-
-  _drawBorderedBox(menuX, menuY, menuW, menuH, false);
-
-  if (inputSt.rosterState === 'menu') {
-    const textPal = TEXT_WHITE;
-    for (let i = 0; i < ROSTER_MENU_ITEMS.length; i++) {
-      const label = ROSTER_MENU_ITEMS[i];
-      const labelBytes = _nameToBytes(label);
-      drawText(ctx, menuX + 16, menuY + 8 + i * 14, labelBytes, textPal);
-    }
-    // Cursor
-    if (cursorTileCanvas) {
-      ctx.drawImage(cursorTileCanvas, menuX + 2, menuY + 4 + inputSt.rosterMenuCursor * 14);
-    }
-  }
-
-  ctx.restore();
-}
-
-function initRoster() {
-  document.fonts.load('8px "Press Start 2P"').then(() => {
-    requestAnimationFrame(() => { chatState.fontReady = true; });
-  });
-  rosterTimer = 3000 + Math.random() * 5000;
-  // Init HP for each player
-  for (const p of PLAYER_POOL) {
-    const maxHP = 28 + p.level * 6;
-    if (p.maxHP === undefined) { p.maxHP = maxHP; p.hp = maxHP; }
-  }
-  // Init fade state — players already at our location start visible
-  const loc = getPlayerLocation();
-  rosterPrevLoc = loc;
-  for (const p of PLAYER_POOL) {
-    if (p.loc === loc) {
-      rosterFadeMap[p.name] = 0; // fully visible
-    }
-  }
-}
-
-
-// addChatMessage, updateChat, drawChat → chat.js
-
-function _rosterNextTimer() {
-  return 4000 + Math.random() * 8000;
-}
-
-function _rosterStartFadeIn(name) {
-  // Insert at front of arrival order (most recent = top of list)
-  rosterArrivalOrder = rosterArrivalOrder.filter(n => n !== name);
-  rosterArrivalOrder.unshift(name);
-  rosterFadeMap[name] = ROSTER_FADE_STEPS;
-  rosterFadeDir[name] = 'in';
-  rosterFadeTimers[name] = 0;
-  rosterSlideY[name] = ROSTER_ROW_H; // new player slides in from below its row-0 position
-  // All currently visible players shift down one row to make room at top
-  const loc = getPlayerLocation();
-  for (const p of PLAYER_POOL) {
-    if (p.name !== name && p.loc === loc && rosterFadeMap[p.name] !== undefined) {
-      rosterSlideY[p.name] = (rosterSlideY[p.name] || 0) - ROSTER_ROW_H;
-    }
-  }
-  addChatMessage('* ' + name + ' entered the area', 'system');
-}
-
-function _rosterStartFadeOut(name) {
-  rosterFadeDir[name] = 'out';
-  rosterFadeTimers[name] = 0;
-  addChatMessage('* ' + name + ' left the area', 'system');
-}
-
-// Get all players to show (at current loc OR fading out), newest arrivals first
-function getRosterVisible() {
-  const loc = getPlayerLocation();
-  const atLoc = PLAYER_POOL.filter(p => p.loc === loc);
-  const fadingOut = PLAYER_POOL.filter(p =>
-    p.loc !== loc && rosterFadeDir[p.name] === 'out' && rosterFadeMap[p.name] < ROSTER_FADE_STEPS
-  );
-  // Sort at-location players by arrival order (most recent = index 0)
-  atLoc.sort((a, b) => {
-    const ai = rosterArrivalOrder.indexOf(a.name);
-    const bi = rosterArrivalOrder.indexOf(b.name);
-    // Not in arrival order (initial players) go after recent arrivals
-    if (ai === -1 && bi === -1) return 0;
-    if (ai === -1) return 1;
-    if (bi === -1) return -1;
-    return ai - bi;
-  });
-  return [...atLoc, ...fadingOut];
-}
-
-function _clampRosterCursor() {
-  const visible = getRosterVisible();
-  if (inputSt.rosterCursor >= visible.length) inputSt.rosterCursor = Math.max(0, visible.length - 1);
-  const maxScroll = Math.max(0, visible.length - ROSTER_VISIBLE);
-  if (inputSt.rosterScroll > maxScroll) inputSt.rosterScroll = maxScroll;
-}
-
-function _updateRosterBattleFade(dt) {
-  // Battle fade out/in — don't fade during roar-hold (wait until roar box closes)
-  if (battleState !== 'none' && battleState !== 'roar-hold' && rosterBattleFading !== 'out' && rosterBattleFade < ROSTER_FADE_STEPS) {
-    rosterBattleFading = 'out';
-    rosterBattleFadeTimer = 0;
-  } else if (battleState === 'none' && rosterBattleFade > 0 && rosterBattleFading !== 'in') {
-    rosterBattleFading = 'in';
-    rosterBattleFadeTimer = 0;
-  }
-  if (rosterBattleFading !== 'none') {
-    rosterBattleFadeTimer += dt;
-    if (rosterBattleFadeTimer >= ROSTER_FADE_STEP_MS) {
-      rosterBattleFadeTimer -= ROSTER_FADE_STEP_MS;
-      const dir = rosterBattleFading === 'out' ? 1 : -1;
-      rosterBattleFade = Math.max(0, Math.min(ROSTER_FADE_STEPS, rosterBattleFade + dir));
-      if (rosterBattleFade === 0 || rosterBattleFade >= ROSTER_FADE_STEPS) rosterBattleFading = 'none';
-    }
-  }
-}
-
-function _updateRosterLocationReset(curLoc) {
-  if (rosterPrevLoc === null || curLoc === rosterPrevLoc) return;
-  rosterFadeMap = {}; rosterFadeDir = {}; rosterFadeTimers = {}; rosterSlideY = {};
-  rosterArrivalOrder = [];
-  for (const p of PLAYER_POOL) {
-    if (p.loc === curLoc) rosterFadeMap[p.name] = 0;
-  }
-  inputSt.rosterCursor = 0;
-  inputSt.rosterScroll = 0;
-  rosterPrevLoc = curLoc;
-}
-
-function _updateRosterFadeTicks(dt) {
-  for (const name in rosterFadeDir) {
-    const dir = rosterFadeDir[name];
-    rosterFadeTimers[name] = (rosterFadeTimers[name] || 0) + dt;
-    if (rosterFadeTimers[name] < ROSTER_FADE_STEP_MS) continue;
-    rosterFadeTimers[name] -= ROSTER_FADE_STEP_MS;
-    if (dir === 'in') {
-      if (rosterFadeMap[name] > 0) rosterFadeMap[name]--;
-      if (rosterFadeMap[name] <= 0) { rosterFadeMap[name] = 0; delete rosterFadeDir[name]; }
-    } else if (dir === 'out') {
-      rosterFadeMap[name] = (rosterFadeMap[name] || 0) + 1;
-      if (rosterFadeMap[name] >= ROSTER_FADE_STEPS) {
-        const vis = getRosterVisible();
-        const removeIdx = vis.findIndex(p => p.name === name);
-        if (removeIdx >= 0) {
-          for (let j = removeIdx + 1; j < vis.length; j++)
-            rosterSlideY[vis[j].name] = (rosterSlideY[vis[j].name] || 0) + ROSTER_ROW_H;
-        }
-        delete rosterFadeMap[name]; delete rosterFadeDir[name];
-        delete rosterFadeTimers[name]; delete rosterSlideY[name];
-        _clampRosterCursor();
-      }
-    }
-  }
-}
-function _updateRosterSlideTicks(dt) {
-  for (const name in rosterSlideY) {
-    const sy = rosterSlideY[name];
-    if (sy === 0) { delete rosterSlideY[name]; continue; }
-    const move = ROSTER_SLIDE_SPEED * dt;
-    rosterSlideY[name] = Math.abs(sy) <= move ? 0 : sy > 0 ? sy - move : sy + move;
-    if (rosterSlideY[name] === 0) delete rosterSlideY[name];
-  }
-}
-function _updateRosterMovement(dt, curLoc) {
-  if (battleState !== 'none') return;
-  rosterTimer -= dt;
-  if (rosterTimer > 0) return;
-  rosterTimer = _rosterNextTimer();
-  const movers = PLAYER_POOL.filter(p => !p.camper);
-  if (movers.length === 0) return;
-  const mover = movers[Math.floor(Math.random() * movers.length)];
-  const wasHere = mover.loc === curLoc;
-  mover.loc = LOCATIONS.filter(l => l !== mover.loc)[Math.floor(Math.random() * (LOCATIONS.length - 1))];
-  if (wasHere && mover.loc !== curLoc) _rosterStartFadeOut(mover.name);
-  else if (!wasHere && mover.loc === curLoc) _rosterStartFadeIn(mover.name);
-}
-function updateRoster(dt) {
-  if (inputSt.rosterState === 'menu-in' || inputSt.rosterState === 'menu-out') inputSt.rosterMenuTimer += Math.min(dt, 33);
-  if (titleSt.state !== 'done') return;
-  _updateRosterBattleFade(dt);
-  const curLoc = getPlayerLocation();
-  _updateRosterLocationReset(curLoc);
-  _updateRosterFadeTicks(dt);
-  _updateRosterSlideTicks(dt);
-  _updateRosterMovement(dt, curLoc);
 }
 
 // ── Title Screen — titleFadeLevel, titleFadePal, draw functions → title-screen.js ──
@@ -3310,7 +2958,7 @@ function _gameLoopUpdate(dt) {
   if (hudInfoFadeTimer < HUD_INFO_FADE_STEPS * HUD_INFO_FADE_STEP_MS) hudInfoFadeTimer += dt;
   _updateHudHpLvStep(dt);
   handleInput();
-  updateRoster(dt);
+  updateRoster(dt, { battleState, transSt, wipeDuration: 44 * (1000 / 60), hudInfoFadeTimer, hudInfoFadeSteps: HUD_INFO_FADE_STEPS, hudInfoFadeStepMs: HUD_INFO_FADE_STEP_MS });
   updateChat(dt, battleState);
   updatePauseMenu(dt, playerInventory);
   updateMsgBox(dt);
@@ -3344,12 +2992,20 @@ function _gameLoopDraw() {
   drawHUD();
   const _bds = _battleDrawShared();
   try {
+    const _rds = {
+      ctx, drawHudBox: _drawHudBox, drawBorderedBox: _drawBorderedBox,
+      clipToViewport: _clipToViewport, cursorTileCanvas,
+      fakePlayerPortraits, drawSparkle: _drawRosterSparkle,
+      transSt, wipeDuration: 44 * (1000 / 60),
+      hudInfoFadeTimer, hudInfoFadeSteps: HUD_INFO_FADE_STEPS, hudInfoFadeStepMs: HUD_INFO_FADE_STEP_MS,
+      battleState, msgState,
+    };
     if (battleAllies.length > 0 && battleState !== 'none') drawBattleAllies(_bds);
-    else drawRoster();
+    else drawRoster(_rds);
     drawChat(ctx, _drawHudBox, rosterBattleFade);
     drawPauseMenu(ctx, _pauseShared());
     drawMsgBox(ctx, _clipToViewport, _drawBorderedBox);
-    drawRosterMenu();
+    drawRosterMenu(_rds);
     drawBattle(_bds);
     drawSWExplosion(_bds);
     drawSWDamageNumbers(_bds);
