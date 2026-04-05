@@ -60,7 +60,12 @@ import { initWeaponSprites, getKnifeBladeCanvas, getKnifeBladeSwungCanvas,
          getFistCanvas, getBlades } from './weapon-sprites.js';
 import { updateBattleAlly } from './battle-ally.js';
 import { updateBattleEnemyTurn } from './battle-enemy.js';
-import { resetBattleItemVars, getTargets, getHitIdx, getDmgNums, tickDmgNums, startMagicItem, updateMagicItemThrowHit } from './battle-items.js';
+import { resetBattleItemVars, getTargets, getHitIdx, startMagicItem, updateMagicItemThrowHit } from './battle-items.js';
+import { HEAL_NUM_PAL, DMG_SHOW_MS, resetAllDmgNums, tickDmgNums, tickHealNums, clearHealNums,
+         getEnemyDmgNum, setEnemyDmgNum, getPlayerDamageNum, setPlayerDamageNum,
+         getPlayerHealNum, setPlayerHealNum, getEnemyHealNum, setEnemyHealNum,
+         getAllyDamageNums, getSwDmgNums,
+         drawBattleNum } from './damage-numbers.js';
 import { OK_IDLE, OK_VICTORY, OK_L_BACK_SWING, OK_L_FWD_T2, OK_L_FWD_T3, OK_R_BACK_SWING, OK_R_FWD_T2, OK_KNEEL,
          OK_LEG_L_IDLE, OK_LEG_R_IDLE, OK_LEG_L_BACK_L, OK_LEG_R_BACK_L, OK_LEG_L_FWD_L, OK_LEG_R_FWD_L,
          OK_LEG_L_BACK_R, OK_LEG_R_SWING, OK_LEG_L_KNEEL, OK_LEG_R_KNEEL, OK_LEG_L_VICTORY, OK_LEG_R_VICTORY,
@@ -260,8 +265,6 @@ function getSlashFramesForWeapon(id, rightHand) {
 let playerInventory = {};    // { itemId: count } — e.g. { 0xA6: 3 }
 let itemSelectCursor = 0;    // cursor index in item list
 let itemHealAmount = 0;      // actual HP restored (for green number display)
-let playerHealNum = null;    // {value, timer} — green heal number on portrait
-let enemyHealNum = null;     // {value, timer, index} — green heal number on enemy
 let swPhaseCanvases = [];      // 3-phase expanding ice explosion [16×16, 32×32, 48×48]
 
 // Inventory helpers
@@ -289,8 +292,6 @@ let battleState = 'none';
 let battleTimer = 0;
 // sfxCutTimerId moved to battle-sfx.js
 let battleMessage = null;     // Uint8Array for status messages
-let enemyDmgNum = null;     // {value, timer}
-let playerDamageNum = null;   // {value, timer}
 let bossFlashTimer = 0;
 let battleShakeTimer = 0;
 let enemyDefeated = false;
@@ -335,7 +336,7 @@ const BATTLE_FLASH_FRAMES = 65;      // 65 frames of grayscale strobe (~1.08s at
 const BATTLE_FLASH_FRAME_MS = 16.67; // ~1 frame at 60fps
 const BATTLE_MSG_HOLD_MS = 1200;
 const BATTLE_HIT_FLASH_MS = 400;
-const BATTLE_DMG_SHOW_MS = 550;
+const BATTLE_DMG_SHOW_MS = DMG_SHOW_MS;
 const BATTLE_SHAKE_MS = 300;
 const BATTLE_VICTORY_HOLD_MS = 1500;
 const BOSS_BLOCK_SIZE = 16;            // 16×16 pixel blocks for dissolve
@@ -357,9 +358,6 @@ const DEFEND_SPARKLE_PAL = [0x0F, 0x1B, 0x2B, 0x30];
 // 30 frames total = 500ms at 60fps
 
 const TARGET_CURSOR_BLINK_MS = 133;      // cursor blink rate during target select
-// Damage number palette — sprite pal3 during damage display (FCEUX PPU dump)
-// $0F=black, $0F=black, $25=purple, $2B=green
-const DMG_NUM_PAL = [0x0F, 0x0F, 0x0F, 0x25];
 
 // Hit stats & slash animation constants
 const SLASH_FRAME_MS = 50;               // per frame of slash sprite (3 frames = 150ms)
@@ -458,7 +456,6 @@ let allyHitResult = null;      // current hit result {damage, crit} or {miss} (f
 let allyHitResults = [];       // full combo hit array for current ally turn
 let allyHitIdx = 0;            // current hit index in ally combo
 let allyHitIsLeft = false;     // true when current ally hit is L-hand
-let allyDamageNums = {};       // {allyIdx: {value, timer, crit} or {miss, timer}}
 let allyShakeTimer = {};       // {allyIdx: ms remaining}
 let playerDeathTimer = null;   // null = alive, number = ms into death animation
 let _teamWipeMsgShown = false;
@@ -1281,11 +1278,11 @@ function _grayViewport() {
 // _pausePanelLayout → pause-menu.js
 function _resetBattleVars() {
   inputSt.battleCursor = 0; battleMessage = null;
-  enemyDmgNum = null; playerDamageNum = null; playerHealNum = null; enemyHealNum = null;
+  resetAllDmgNums();
   encounterDropItem = null; bossFlashTimer = 0; battleShakeTimer = 0;
   isDefending = false; battleAllies = []; allyJoinRound = 0;
   currentAllyAttacker = -1; allyTargetIndex = -1; allyHitResult = null; allyHitIsLeft = false;
-  allyDamageNums = {}; allyShakeTimer = {}; enemyTargetAllyIdx = -1; allyExitTimer = 0;
+  allyShakeTimer = {}; enemyTargetAllyIdx = -1; allyExitTimer = 0;
   resetBattleItemVars();
   playerDeathTimer = null; _teamWipeMsgShown = false;
   inputSt.battleProfHits = {};
@@ -1494,8 +1491,8 @@ function _pvpShared() {
     get encounterMonsters()     { return encounterMonsters; },
     get enemyTargetAllyIdx()    { return enemyTargetAllyIdx; },
     set enemyTargetAllyIdx(v)   { enemyTargetAllyIdx = v; },
-    get playerDamageNum()       { return playerDamageNum; },
-    set playerDamageNum(v)      { playerDamageNum = v; },
+    get playerDamageNum()       { return getPlayerDamageNum(); },
+    set playerDamageNum(v)      { setPlayerDamageNum(v); },
     get isDefending()           { return isDefending; },
     set isDefending(v)          { isDefending = v; },
     get battleShakeTimer()      { return battleShakeTimer; },
@@ -1514,7 +1511,7 @@ function _pvpShared() {
     get allyHitResult()         { return allyHitResult; },
     // ── Array/object refs (getters so pvp always gets the live array) ─────────
     get battleAllies()          { return battleAllies; },
-    get allyDamageNums()        { return allyDamageNums; },
+    get allyDamageNums()        { return getAllyDamageNums(); },
     get allyShakeTimer()        { return allyShakeTimer; },
     ctx,
     // ── Weapon sprite canvases (stable after init) ────────────────────────────
@@ -1537,8 +1534,8 @@ function _pvpShared() {
     get defendSparkleFrames()          { return defendSparkleFrames; },
     get cureSparkleFrames()            { return cureSparkleFrames; },
     get swPhaseCanvases()              { return swPhaseCanvases; },
-    get enemyHealNum()                 { return enemyHealNum; },
-    set enemyHealNum(v)                { enemyHealNum = v; },
+    get enemyHealNum()                 { return getEnemyHealNum(); },
+    set enemyHealNum(v)                { setEnemyHealNum(v); },
     advancePVPTargetOrVictory: _advancePVPTargetOrVictory,
     // ── Delegated update functions ────────────────────────────────────────────
     updateTimers:           (dt) => _updateBattleTimers(dt),
@@ -1592,8 +1589,8 @@ function _allyShared() {
     set enemyTargetAllyIdx(v)   { enemyTargetAllyIdx = v; },
     get critFlashTimer()        { return critFlashTimer; },
     set critFlashTimer(v)       { critFlashTimer = v; },
-    get enemyDmgNum()         { return enemyDmgNum; },
-    set enemyDmgNum(v)        { enemyDmgNum = v; },
+    get enemyDmgNum()         { return getEnemyDmgNum(); },
+    set enemyDmgNum(v)        { setEnemyDmgNum(v); },
     get turnQueue()             { return turnQueue; },
     set turnQueue(v)            { turnQueue = v; },
     get pvpSt()                 { return pvpSt; },
@@ -1638,10 +1635,10 @@ function _enemyShared() {
     get currentAttacker()       { return currentAttacker; },
     get enemyTargetAllyIdx()    { return enemyTargetAllyIdx; },
     set enemyTargetAllyIdx(v)   { enemyTargetAllyIdx = v; },
-    get allyDamageNums()        { return allyDamageNums; },
+    get allyDamageNums()        { return getAllyDamageNums(); },
     get allyShakeTimer()        { return allyShakeTimer; },
-    get playerDamageNum()       { return playerDamageNum; },
-    set playerDamageNum(v)      { playerDamageNum = v; },
+    get playerDamageNum()       { return getPlayerDamageNum(); },
+    set playerDamageNum(v)      { setPlayerDamageNum(v); },
     get battleShakeTimer()      { return battleShakeTimer; },
     set battleShakeTimer(v)     { battleShakeTimer = v; },
     get isDefending()           { return isDefending; },
@@ -1668,10 +1665,10 @@ function _battleDrawShared() {
     get enemyDefeated() { return enemyDefeated; },
     get isRandomEncounter() { return isRandomEncounter; },
     get isDefending() { return isDefending; },
-    get enemyDmgNum() { return enemyDmgNum; },
-    get playerDamageNum() { return playerDamageNum; },
-    get playerHealNum() { return playerHealNum; },
-    get enemyHealNum() { return enemyHealNum; },
+    get enemyDmgNum() { return getEnemyDmgNum(); },
+    get playerDamageNum() { return getPlayerDamageNum(); },
+    get playerHealNum() { return getPlayerHealNum(); },
+    get enemyHealNum() { return getEnemyHealNum(); },
     get battleShakeTimer() { return battleShakeTimer; },
     get playerDeathTimer() { return playerDeathTimer; },
     get deathPoseCanvases() { return fakePlayerDeathPoseCanvases; },
@@ -1698,11 +1695,11 @@ function _battleDrawShared() {
     get profLevelUpIdx() { return profLevelUpIdx; },
     get southWindTargets() { return getTargets(); },
     get southWindHitIdx() { return getHitIdx(); },
-    get southWindDmgNums() { return getDmgNums(); },
+    get southWindDmgNums() { return getSwDmgNums(); },
     get dyingMonsterIndices() { return dyingMonsterIndices; },
     get encounterMonsters() { return encounterMonsters; },
     get battleAllies() { return battleAllies; },
-    get allyDamageNums() { return allyDamageNums; },
+    get allyDamageNums() { return getAllyDamageNums(); },
     get allyShakeTimer() { return allyShakeTimer; },
     get battleMessage() { return battleMessage; },
     ctx,
@@ -2608,14 +2605,11 @@ function _drawCureSparkle(px, py, isPauseHeal) {
   ctx.save(); ctx.scale(-1, -1); ctx.drawImage(frame, -(px + 23), -(py + 24)); ctx.restore();
 }
 function _drawHealNum(bx, by, value, pal) {
-  const digits = String(value);
-  const b = new Uint8Array(digits.length);
-  for (let i = 0; i < digits.length; i++) b[i] = 0x80 + parseInt(digits[i]);
-  drawText(ctx, bx - Math.floor(digits.length * 4), by, b, pal);
+  drawBattleNum(ctx, bx, by, value, pal);
 }
 function _drawPauseHealNum(px, py) {
   if (!pauseSt.healNum || pauseSt.healNum.rosterIdx >= 0) return;
-  _drawHealNum(px + 8, _dmgBounceY(py + 8, pauseSt.healNum.timer), pauseSt.healNum.value, [0x0F, 0x0F, 0x0F, 0x2B]);
+  _drawHealNum(px + 8, _dmgBounceY(py + 8, pauseSt.healNum.timer), pauseSt.healNum.value, HEAL_NUM_PAL);
 }
 function _drawHUDPortrait() {
   const infoFadeStep = HUD_INFO_FADE_STEPS - Math.min(Math.floor(hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
@@ -2796,7 +2790,7 @@ function _drawRosterSparkle(panelTop) {
   const fi = Math.floor(pauseSt.timer / 67) & 1;
   const frame = cureSparkleFrames[fi];
   _drawSparkleCorners(frame, px, py);
-  _drawHealNum(px + 8, _dmgBounceY(py + 8, pauseSt.healNum.timer), pauseSt.healNum.value, [0x0F, 0x0F, 0x0F, 0x2B]);
+  _drawHealNum(px + 8, _dmgBounceY(py + 8, pauseSt.healNum.timer), pauseSt.healNum.value, HEAL_NUM_PAL);
 }
 
 function _drawRosterScrollTriangles(scrollAreaY, canScrollUp, canScrollDown) {
@@ -3357,24 +3351,24 @@ function _playerTurnConsumable() {
   const { target, allyIndex } = inputSt.playerActionPending;
   if (target === 'player' && (allyIndex === undefined || allyIndex < 0)) {
     const heal = Math.min(50, ps.stats.maxHP - ps.hp);
-    ps.hp += heal; itemHealAmount = heal; playerHealNum = { value: heal, timer: 0 };
+    ps.hp += heal; itemHealAmount = heal; setPlayerHealNum({ value: heal, timer: 0 });
   } else if (target === 'player' && allyIndex >= 0) {
     const ally = battleAllies[allyIndex];
     if (ally) {
       const heal = Math.min(50, ally.maxHP - ally.hp);
       ally.hp += heal; itemHealAmount = heal;
-      allyDamageNums[allyIndex] = { value: heal, timer: 0, heal: true };
+      getAllyDamageNums()[allyIndex] = { value: heal, timer: 0, heal: true };
     }
   } else {
     const mon = isRandomEncounter && encounterMonsters ? encounterMonsters[target] : null;
     if (mon) {
       const heal = Math.min(50, mon.maxHP - mon.hp);
-      mon.hp += heal; itemHealAmount = heal; enemyHealNum = { value: heal, timer: 0, index: target };
+      mon.hp += heal; itemHealAmount = heal; setEnemyHealNum({ value: heal, timer: 0, index: target });
     } else {
       const curHP = _getEnemyHP();
       const maxHP = pvpSt.isPVPBattle ? (pvpSt.pvpOpponentStats ? pvpSt.pvpOpponentStats.maxHP : 1) : BOSS_MAX_HP;
       const heal = Math.min(50, maxHP - curHP);
-      _setEnemyHP(curHP + heal); itemHealAmount = heal; enemyHealNum = { value: heal, timer: 0, index: 0 };
+      _setEnemyHP(curHP + heal); itemHealAmount = heal; setEnemyHealNum({ value: heal, timer: 0, index: 0 });
     }
   }
   battleState = 'item-use'; battleTimer = 0;
@@ -3502,10 +3496,7 @@ function startRandomEncounter() {
   battleTimer = 0;
   inputSt.battleCursor = 0;
   battleMessage = null;
-  enemyDmgNum = null;
-  playerDamageNum = null;
-  playerHealNum = null;
-  enemyHealNum = null;
+  resetAllDmgNums();
   bossFlashTimer = 0;
   battleShakeTimer = 0;
   isDefending = false;
@@ -3514,7 +3505,6 @@ function startRandomEncounter() {
   currentAllyAttacker = -1;
   allyTargetIndex = -1;
   allyHitResult = null; allyHitIsLeft = false;
-  allyDamageNums = {};
   allyShakeTimer = {};
   enemyTargetAllyIdx = -1;
   allyExitTimer = 0;
@@ -3575,13 +3565,7 @@ function _updateBattleTimers(dt) {
   if (battleShakeTimer > 0) battleShakeTimer = Math.max(0, battleShakeTimer - dt);
   if (pvpSt.pvpOpponentShakeTimer > 0) pvpSt.pvpOpponentShakeTimer = Math.max(0, pvpSt.pvpOpponentShakeTimer - dt);
 
-  if (enemyDmgNum) { enemyDmgNum.timer += dt; if (enemyDmgNum.timer >= BATTLE_DMG_SHOW_MS) enemyDmgNum = null; }
   tickDmgNums(dt);
-  if (playerDamageNum) { playerDamageNum.timer += dt; if (playerDamageNum.timer >= BATTLE_DMG_SHOW_MS) playerDamageNum = null; }
-
-  for (const idx in allyDamageNums) {
-    if (allyDamageNums[idx]) { allyDamageNums[idx].timer += dt; if (allyDamageNums[idx].timer >= BATTLE_DMG_SHOW_MS) delete allyDamageNums[idx]; }
-  }
   for (const idx in allyShakeTimer) {
     if (allyShakeTimer[idx] > 0) allyShakeTimer[idx] = Math.max(0, allyShakeTimer[idx] - dt);
   }
@@ -3695,7 +3679,7 @@ function _finalizeComboHits() {
   for (const h of inputSt.hitResults) {
     if (!h.miss) { totalDmg += h.damage; allMiss = false; if (h.crit) anyCrit = true; }
   }
-  enemyDmgNum = allMiss ? { miss: true, timer: 0 } : { value: totalDmg, crit: anyCrit, timer: 0 };
+  setEnemyDmgNum(allMiss ? { miss: true, timer: 0 } : { value: totalDmg, crit: anyCrit, timer: 0 });
   if (pvpSt.isPVPBattle && !allMiss) pvpSt.pvpOpponentShakeTimer = BATTLE_SHAKE_MS;
   battleState = 'player-damage-show';
   battleTimer = 0;
@@ -3866,17 +3850,9 @@ function _updateBattleDefendItem(dt) {
     }
   } else if (battleState === 'item-use') {
     // Heal animation — same duration as defend sparkle, then next turn
-    if (playerHealNum) {
-      playerHealNum.timer += dt;
-      if (playerHealNum.timer >= BATTLE_DMG_SHOW_MS) playerHealNum = null;
-    }
-    if (enemyHealNum) {
-      enemyHealNum.timer += dt;
-      if (enemyHealNum.timer >= BATTLE_DMG_SHOW_MS) enemyHealNum = null;
-    }
+    tickHealNums(dt);
     if (battleTimer >= DEFEND_SPARKLE_TOTAL_MS) {
-      playerHealNum = null;
-      enemyHealNum = null;
+      clearHealNums();
       processNextTurn();
     }
   } else if (battleState === 'sw-throw' || battleState === 'sw-hit') {
