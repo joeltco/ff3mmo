@@ -358,6 +358,12 @@ function _drawPauseStats(ctx, shared) {
   statPair('VIT', String(s.vit),   'INT', String(s.int));
   statPair('MND', String(s.mnd), '', '');
 
+  // Gil — bottom-left
+  y += STEP;
+  const gilb = _nameToBytes(String(ps.gil));
+  drawText(ctx, tx, y, _nameToBytes('Gil'), fadedPal);
+  drawText(ctx, statRx - gilb.length * 8, y, gilb, fadedPal);
+
   const py0 = finalY + 8;
   for (let i = 0; i < PROF_CATEGORIES.length; i++) {
     const cat = PROF_CATEGORIES[i];
