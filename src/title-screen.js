@@ -333,7 +333,7 @@ function _drawTitleLogo(ctx, cx, fl, isSelectState) {
   const fullW = logoFrame.width + 16, fullH = logoFrame.height + 24;
   const tboxCY = HUD_VIEW_Y + 12 + fullH / 2;
   const tboxW = fullW;
-  const tboxH = Math.max(8, Math.ceil(fullH * t / 8) * 8);
+  const tboxH = Math.max(16, Math.ceil(fullH * t / 8) * 8);
   const tboxX = Math.round(cx - tboxW / 2);
   const tboxY = Math.round(tboxCY - tboxH / 2);
   const clampedFl = Math.min(fl, LOAD_FADE_MAX);
@@ -398,7 +398,7 @@ function _drawTitlePressZ(ctx, cx, vpBot) {
   else if (ts.state === 'logo-reopen') t = _easeInOut(Math.min(ts.timer / BOSS_BOX_EXPAND_MS, 1));
   // logo-content-out, logo-content-in, main: t stays 1
   if (t <= 0) return;
-  const boxW = fullW, boxH = Math.max(8, Math.round(fullH * t));
+  const boxW = fullW, boxH = Math.max(16, Math.round(fullH * t));
   const boxX = cx - boxW / 2, boxY = Math.round(boxCY - boxH / 2);
   if (ts.borderTiles) {
     const [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR, FILL] = ts.borderTiles;
