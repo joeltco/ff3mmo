@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## 1.2.4 — 2026-04-05
+
+### Player select + title update logic → title-screen.js
+
+- **Moved player select update logic to `title-screen.js`** — slot cursor input, delete mode, name entry key handler, underwater bubble/fish animations
+  - `updateTitleSelect(keys)`, `onNameEntryKeyDown(e)`, `updateTitleUnderwater(dt)` now exported from title-screen.js
+  - title-screen.js is now the complete player select module (draw + update)
+  - `_zPressed`/`_xPressed` helpers moved as private functions
+  - `_updateTitleMainOutCase` stays in game.js (deep game state writes)
+- Cleaned up unused imports: `serverDeleteSlot`, `nameBuffer`, `NAME_MAX_LEN`, `setNameBuffer` removed from game.js
+- game.js: 3,388L (−79L this release)
+
 ## 1.2.3 — 2026-04-05
 
 ### Save state module + gil persistence fix

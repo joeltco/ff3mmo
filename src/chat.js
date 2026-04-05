@@ -1,6 +1,8 @@
-// chat.js — chat message buffer, auto-chat, expand/collapse animation, and HUD rendering
+// chat.js — console + chat: message buffer, commands, auto-chat, expand/collapse, HUD rendering
 
 import { PLAYER_POOL, CHAT_PHRASES, ROSTER_FADE_STEPS } from './data/players.js';
+import { selectCursor, saveSlots } from './save-state.js';
+import { _nesNameToString } from './text-utils.js';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 const CHAT_LINE_H      = 9;
@@ -17,7 +19,7 @@ const HUD_BOT_H  = 64;
 
 // ── Mutable state (exported so game.js can read/write directly) ────────────
 export const chatState = {
-  messages:    [],     // [{ text, type }] type: 'chat'|'system'
+  messages:    [],     // [{ text, type }] type: 'chat'|'system'|'console'
   autoTimer:   8000,   // ms until next auto message
   fontReady:   false,
   inputActive: false,  // t key opens input
@@ -33,6 +35,74 @@ export function addChatMessage(text, type) {
   chatState.messages.push({ text, type: type || 'chat' });
   while (chatState.messages.length > CHAT_HISTORY) chatState.messages.shift();
 }
+
+// ── Commands ──────────────────────────────────────────────────────────────
+
+const COMMANDS = new Map();
+
+function registerCommand(name, desc, handler) {
+  COMMANDS.set(name, { desc, handler });
+}
+
+registerCommand('help', 'List available commands', () => {
+  addChatMessage('Available commands:', 'console');
+  for (const [name, cmd] of COMMANDS)
+    addChatMessage('  /' + name + ' — ' + cmd.desc, 'console');
+});
+
+registerCommand('clear', 'Clear console', () => {
+  chatState.messages.length = 0;
+});
+
+registerCommand('who', 'Show players in area', (_args, ctx) => {
+  if (!ctx.getRosterNames) { addChatMessage('Roster not available', 'console'); return; }
+  const names = ctx.getRosterNames();
+  addChatMessage(names.length + ' player(s) in area:', 'console');
+  for (const n of names) addChatMessage('  ' + n, 'console');
+});
+
+let _commandCtx = {};
+export function setCommandContext(ctx) { _commandCtx = ctx; }
+
+function _execCommand(input) {
+  const trimmed = input.slice(1).trim();
+  const spaceIdx = trimmed.indexOf(' ');
+  const name = (spaceIdx === -1 ? trimmed : trimmed.slice(0, spaceIdx)).toLowerCase();
+  const args = spaceIdx === -1 ? '' : trimmed.slice(spaceIdx + 1).trim();
+  const cmd = COMMANDS.get(name);
+  if (!cmd) { addChatMessage('Unknown command: /' + name + '. Type /help', 'console'); return; }
+  cmd.handler(args, _commandCtx);
+}
+
+// ── Console messages ──────────────────────────────────────────────────────
+
+export function consoleLog(text) { addChatMessage(text, 'console'); }
+
+// ── Chat input handler (moved from game.js) ──────────────────────────────
+
+export function onChatKeyDown(e) {
+  e.preventDefault();
+  if (e.key === 'Enter') {
+    if (chatState.inputText.length > 0) {
+      if (chatState.inputText[0] === '/') {
+        _execCommand(chatState.inputText);
+      } else {
+        const slot = saveSlots[selectCursor];
+        const senderName = (slot && slot.name) ? _nesNameToString(slot.name) : 'You';
+        addChatMessage(senderName + ': ' + chatState.inputText, 'chat');
+      }
+    }
+    chatState.inputActive = false; chatState.inputText = '';
+  } else if (e.key === 'Escape') {
+    chatState.inputActive = false; chatState.inputText = '';
+  } else if (e.key === 'Backspace') {
+    chatState.inputText = chatState.inputText.slice(0, -1);
+  } else if (e.key.length === 1 && chatState.inputText.length < 42) {
+    chatState.inputText += e.key;
+  }
+}
+
+// ── Update / Draw ─────────────────────────────────────────────────────────
 
 export function updateChat(dt, battleState) {
   const expandTarget = chatState.expanded ? 1 : 0;
@@ -92,7 +162,10 @@ function _chatWrap(ctx, text, maxWidth) {
 function _buildChatRows(ctx, lineW, startX) {
   const rows = [];
   for (const m of chatState.messages) {
-    if (m.type === 'system') {
+    if (m.type === 'console') {
+      for (const line of _chatWrap(ctx, m.text, lineW))
+        rows.push({ color: '#58c858', text: line, x: startX });
+    } else if (m.type === 'system') {
       for (const line of _chatWrap(ctx, m.text, lineW))
         rows.push({ color: '#7898c8', text: line, x: startX });
     } else {
