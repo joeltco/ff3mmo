@@ -2,7 +2,8 @@
 
 import { PLAYER_POOL, CHAT_PHRASES, ROSTER_FADE_STEPS } from './data/players.js';
 import { selectCursor, saveSlots } from './save-state.js';
-import { _nesNameToString } from './text-utils.js';
+import { _nesNameToString, _nameToBytes } from './text-utils.js';
+import { drawText, measureText, TEXT_YELLOW, TEXT_GREY } from './font-renderer.js';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 const CHAT_LINE_H      = 9;
@@ -17,9 +18,16 @@ const CANVAS_H   = 240;
 const HUD_VIEW_Y = 32;
 const HUD_BOT_H  = 64;
 
+// ── Chat tabs ─────────────────────────────────────────────────────────────
+export const CHAT_TABS = ['ALL', 'ROOM', 'PM', 'SYS'];
+export let activeTab = 0;  // index into CHAT_TABS
+export let tabSelectMode = false;
+export function setActiveTab(i) { activeTab = i; }
+export function setTabSelectMode(v) { tabSelectMode = v; }
+
 // ── Mutable state (exported so game.js can read/write directly) ────────────
 export const chatState = {
-  messages:    [],     // [{ text, type }] type: 'chat'|'system'|'console'
+  messages:    [],     // [{ text, type, channel }] type: 'chat'|'system'|'console', channel: 'all'|'room'|'pm'|'sys'
   autoTimer:   8000,   // ms until next auto message
   fontReady:   false,
   inputActive: false,  // t key opens input
@@ -31,9 +39,23 @@ export const chatState = {
 
 // ── Public API ─────────────────────────────────────────────────────────────
 
-export function addChatMessage(text, type) {
-  chatState.messages.push({ text, type: type || 'chat' });
+export function addChatMessage(text, type, channel) {
+  // Default channel based on type
+  if (!channel) {
+    if (type === 'console' || type === 'system') channel = 'sys';
+    else channel = 'room';
+  }
+  chatState.messages.push({ text, type: type || 'chat', channel });
   while (chatState.messages.length > CHAT_HISTORY) chatState.messages.shift();
+}
+
+function _passesTabFilter(msg) {
+  const tab = CHAT_TABS[activeTab];
+  if (tab === 'ALL') return true;
+  if (tab === 'ROOM') return msg.channel === 'room';
+  if (tab === 'PM') return msg.channel === 'pm';
+  if (tab === 'SYS') return msg.channel === 'sys';
+  return true;
 }
 
 // ── Commands ──────────────────────────────────────────────────────────────
@@ -139,6 +161,48 @@ export function drawChat(ctx, drawHudBoxFn, rosterBattleFade, titleActive) {
   ctx.restore();
 }
 
+// ── Tab bar (16px gap between roster and chat HUD) ───────────────────────
+
+const TAB_BAR_Y = HUD_VIEW_Y + 32 + 3 * 32; // 160 — bottom of roster panel
+const TAB_BAR_H = 16;
+const HUD_RIGHT_X = 144;
+
+export function drawChatTabs(ctx, drawHudBoxFn, rosterBattleFade) {
+  if (!chatState.fontReady) return;
+  const battleFadeAlpha = 1 - rosterBattleFade / ROSTER_FADE_STEPS;
+  if (battleFadeAlpha <= 0) return;
+
+  // Draw tab background box
+  drawHudBoxFn(HUD_RIGHT_X, TAB_BAR_Y, CANVAS_W - HUD_RIGHT_X, TAB_BAR_H, 0);
+
+  ctx.save();
+  ctx.globalAlpha = battleFadeAlpha;
+
+  // Layout tabs evenly across the box
+  const innerX = HUD_RIGHT_X + 4;
+  const innerW = CANVAS_W - HUD_RIGHT_X - 8;
+  const tabW = Math.floor(innerW / CHAT_TABS.length);
+
+  for (let i = 0; i < CHAT_TABS.length; i++) {
+    const label = _nameToBytes(CHAT_TABS[i]);
+    const lw = measureText(label);
+    const tx = innerX + i * tabW + Math.floor((tabW - lw) / 2);
+    const ty = TAB_BAR_Y + 4;
+    const isActive = i === activeTab;
+    const isSelected = tabSelectMode && i === activeTab;
+
+    // Blink cursor on selected tab in tab-select mode
+    if (isSelected && (Math.floor(Date.now() / 400) & 1)) {
+      drawText(ctx, tx, ty, label, TEXT_GREY);
+    } else {
+      drawText(ctx, tx, ty, label, isActive ? TEXT_YELLOW : TEXT_GREY);
+    }
+  }
+
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
 // ── Private helpers ────────────────────────────────────────────────────────
 
 function _chatWrap(ctx, text, maxWidth) {
@@ -163,6 +227,7 @@ function _buildChatRows(ctx, lineW, startX, titleActive) {
   const rows = [];
   for (const m of chatState.messages) {
     if (titleActive && m.type !== 'console') continue;
+    if (!titleActive && !_passesTabFilter(m)) continue;
     if (m.type === 'console') {
       for (const line of _chatWrap(ctx, m.text, lineW))
         rows.push({ color: '#58c858', text: line, x: startX });

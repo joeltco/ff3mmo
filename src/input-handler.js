@@ -4,7 +4,7 @@ import { playSFX, SFX, pauseMusic, playFF1Track, FF1_TRACKS } from './music.js';
 import { pauseSt } from './pause-menu.js';
 import { transSt } from './transitions.js';
 import { msgState, showMsgBox } from './message-box.js';
-import { chatState } from './chat.js';
+import { chatState, CHAT_TABS, activeTab, tabSelectMode, setActiveTab, setTabSelectMode } from './chat.js';
 import { ps, recalcCombatStats, getEquipSlotId, setEquipSlotId, EQUIP_SLOT_SUBTYPE,
          getProfHits, getProfLevel, getHitWeapon, WEAPON_PROF_CATEGORY } from './player-stats.js';
 import { ITEMS, isHandEquippable, isWeapon, weaponSubtype, isBladedWeapon } from './data/items.js';
@@ -569,21 +569,55 @@ export function handleRosterInput(shared) {
   const k = _s.keys;
   if (k['s'] || k['S']) {
     k['s'] = false; k['S'] = false;
-    if (inputSt.rosterState === 'none' && _s.battleState === 'none' && pauseSt.state === 'none' && transSt.state === 'none' && !_s.shakeActive && !_s.starEffect && !_s.moving && msgState.state === 'none') {
+    if (tabSelectMode) {
+      // S from tab select → exit tabs and roster
+      setTabSelectMode(false);
+      inputSt.rosterState = 'none';
+      playSFX(SFX.CONFIRM);
+    } else if (inputSt.rosterState === 'none' && _s.battleState === 'none' && pauseSt.state === 'none' && transSt.state === 'none' && !_s.shakeActive && !_s.starEffect && !_s.moving && msgState.state === 'none') {
       inputSt.rosterState = 'browse';
       inputSt.rosterCursor = 0;
       inputSt.rosterScroll = 0;
       playSFX(SFX.CONFIRM);
     } else if (inputSt.rosterState === 'browse') {
+      // S from roster browse → tab select
       inputSt.rosterState = 'none';
+      setTabSelectMode(true);
       playSFX(SFX.CONFIRM);
     }
     return true;
   }
+  if (tabSelectMode) { _tabSelectInput(); return true; }
   if (inputSt.rosterState === 'browse') { _rosterInputBrowse(); return true; }
   if (inputSt.rosterState === 'menu')   { _rosterInputMenu();   return true; }
   if ((inputSt.rosterState === 'menu-in' || inputSt.rosterState === 'menu-out') && msgState.state === 'none') return true;
   return false;
+}
+
+// ── Tab select input ──────────────────────────────────────────────────────
+
+function _tabSelectInput() {
+  const k = _s.keys;
+  if (k['ArrowLeft']) {
+    k['ArrowLeft'] = false;
+    setActiveTab((activeTab - 1 + CHAT_TABS.length) % CHAT_TABS.length);
+    playSFX(SFX.CURSOR);
+  }
+  if (k['ArrowRight']) {
+    k['ArrowRight'] = false;
+    setActiveTab((activeTab + 1) % CHAT_TABS.length);
+    playSFX(SFX.CURSOR);
+  }
+  if (k['x'] || k['X'] || k['Escape']) {
+    k['x'] = false; k['X'] = false; k['Escape'] = false;
+    setTabSelectMode(false);
+    playSFX(SFX.CANCEL);
+  }
+  if (k['z'] || k['Z'] || k['Enter']) {
+    k['z'] = false; k['Z'] = false; k['Enter'] = false;
+    setTabSelectMode(false);
+    playSFX(SFX.CONFIRM);
+  }
 }
 
 // ── Pause input ────────────────────────────────────────────────────────────
