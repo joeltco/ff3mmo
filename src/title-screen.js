@@ -19,6 +19,7 @@ const HUD_VIEW_H = 144;
 // ── Title constants ────────────────────────────────────────────────────────
 const TITLE_FADE_MAX       = 4;
 const TITLE_FADE_STEP_MS   = 100;
+const TITLE_FADE_MS        = (TITLE_FADE_MAX + 1) * TITLE_FADE_STEP_MS;
 const TITLE_HOLD_MS        = 2000;
 const TITLE_WAIT_MS        = 0;
 const TITLE_ZBOX_MS        = 200;
