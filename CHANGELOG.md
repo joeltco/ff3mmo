@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented here.
 
+## 1.2.2 — 2026-04-05
+
+### Refactor: game.js under 4,000 lines (4,208 → 3,534)
+
+- **Extracted `src/sprite-init.js`** (new module, 636L) — all sprite initialization functions
+  - 37 pure init functions: battle sprites, portraits, full-body canvases, goblin, adamantoise, invincible airship, moogle, cursor, loading screen fade frames
+  - ROM bytes in, canvases out — zero runtime coupling
+  - Constants moved: palette arrays, ROM offsets, tile data (only used at init time)
+  - Each init function returns result object; game.js destructures and assigns to existing variables
+- **Extracted `src/flame-sprites.js`** (new module, 153L) — flame & star sprite systems
+  - Flame tile decode from ROM, palette rendering with map sprite palettes, sprite positioning
+  - Star tile decode (teleport warp effect)
+  - Thin wrapper `_rebuildFlameSprites()` remains in game.js for map-triggers compat
+- **`_syncSaveSlotProgress` dedup** — merged 9L sync function into `saveSlotsToDB()`, removed 5 paired call sites
+- **`startRandomEncounter` dedup** — replaced 15 manual variable resets with single `_resetBattleVars()` call
+- game.js: 3,534L (−674L this release). **Target <4,000L achieved.**
+
 ## 1.2.1 — 2026-04-04
 
 ### Damage numbers module + miss sprite + gil
