@@ -32,7 +32,7 @@ import { loadBossSprite, getBossBattleCanvas, getBossWhiteCanvas } from './boss-
 import { selectCursor, saveSlots,
          setSelectCursor, setSaveSlots,
          saveSlotsToDB, loadSlotsFromDB, setInventoryGetter } from './save-state.js';
-import { _nameToBytes, _nesNameToString, _buildItemRowBytes, _makeGotNText, makeExpText, makeGilText, makeFoundItemText, makeProfLevelUpText } from './text-utils.js';
+import { _nameToBytes, _buildItemRowBytes, _makeGotNText, makeExpText, makeGilText, makeFoundItemText, makeProfLevelUpText } from './text-utils.js';
 import { nesColorFade, _makeFadedPal, _stepPalFade } from './palette.js';
 import { _getPlane0, _rebuild, _shiftHorizWater, _isWater, _buildHorizMixed } from './tile-math.js';
 import { _dmgBounceY } from './data/animation-tables.js';
@@ -49,7 +49,7 @@ import { initTitleWater, initTitleSky, initTitleUnderwater, initUnderwaterSprite
 // BATTLE_SPRITE_ROM, BATTLE_JOB_SIZE, BATTLE_PAL_ROM → sprite-init.js
 import { ps, EQUIP_SLOT_SUBTYPE, getEquipSlotId, setEquipSlotId, recalcDEF, recalcCombatStats, getHitWeapon, isHitRightHand, initPlayerStats, initExpTable, grantExp, fullHeal, gainProficiency, getProfHits, getProfLevel, getShieldEvade, PROF_CATEGORIES, WEAPON_PROF_CATEGORY } from './player-stats.js';
 import { initProfIcons, getProfIcon } from './prof-icons.js';
-import { chatState, addChatMessage, updateChat, drawChat } from './chat.js';
+import { chatState, addChatMessage, updateChat, drawChat, onChatKeyDown, consoleLog, setCommandContext } from './chat.js';
 import { msgState, showMsgBox, updateMsgBox, drawMsgBox } from './message-box.js';
 import { titleSt, isTitleActiveState, titleFadeLevel, titleFadePal, drawTitleOcean, drawTitleWater, drawTitleSky, drawTitleUnderwater, drawUnderwaterSprites, drawTitleSkyInHUD, drawTitle, drawPlayerSelectContent,
          updateTitleUnderwater, updateTitleSelect, onNameEntryKeyDown } from './title-screen.js';
@@ -472,23 +472,7 @@ let shakeActive = false;
 let shakeTimer = 0;
 let shakePendingAction = null;
 
-function _onChatKeyDown(e) {
-  e.preventDefault();
-  if (e.key === 'Enter') {
-    if (chatState.inputText.length > 0) {
-      const slot = saveSlots[selectCursor];
-      const senderName = (slot && slot.name) ? _nesNameToString(slot.name) : 'You';
-      addChatMessage(senderName + ': ' + chatState.inputText, 'chat');
-    }
-    chatState.inputActive = false; chatState.inputText = '';
-  } else if (e.key === 'Escape') {
-    chatState.inputActive = false; chatState.inputText = '';
-  } else if (e.key === 'Backspace') {
-    chatState.inputText = chatState.inputText.slice(0, -1);
-  } else if (e.key.length === 1 && chatState.inputText.length < 42) {
-    chatState.inputText += e.key;
-  }
-}
+// _onChatKeyDown → chat.js (onChatKeyDown)
 // _onNameEntryKeyDown → title-screen.js (onNameEntryKeyDown)
 export function init() {
   setInventoryGetter(() => playerInventory);
@@ -499,7 +483,7 @@ export function init() {
   ctx.imageSmoothingEnabled = false;
 
   window.addEventListener('keydown', (e) => {
-    if (chatState.inputActive) { _onChatKeyDown(e); return; }
+    if (chatState.inputActive) { onChatKeyDown(e); return; }
     if (titleSt.state === 'name-entry') { onNameEntryKeyDown(e); return; }
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'z', 'Z', 'x', 'X', 'Enter', 's', 'S'].includes(e.key)) {
       e.preventDefault();
@@ -1298,6 +1282,15 @@ export async function loadROM(arrayBuffer) {
 
   if (window.DEBUG_BOSS) { _startDebugMode(); return; }
   _startTitleScreen();
+
+  // Wire console command context
+  setCommandContext({
+    getRosterNames: () => PLAYER_POOL.filter(p => p.loc === getPlayerLocation()).map(p => p.name),
+  });
+
+  // Startup console messages
+  consoleLog('FF3 MMO v1.2.4');
+  consoleLog('Type /help for commands');
 }
 
 export function loadFF12ROM(arrayBuffer) {
