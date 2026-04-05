@@ -89,67 +89,48 @@ export function clearHealNums() {
   enemyHealNum = null;
 }
 
-// ── Miss sprite (PPU tile $61, 8×8, green with black outline) ───────────────
-const MISS_TILE_RAW = new Uint8Array([
-  0xAA,0x05,0x2A,0x81,0x0A,0x00,0x02,0x08,  // bitplane 0
-  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00   // bitplane 1
+// ── Miss sprite — 2 tiles (16×8) from ROM $1B4D0 "MI" + $1B4E0 "SS" ────────
+// Color 0=transparent, 1=outline(black), 3=fill(green)
+const MISS_TILE_0 = new Uint8Array([ // "MI"
+  0x00,0x4a,0xff,0xff,0xff,0xff,0xff,0x4a, // bp0
+  0x00,0x00,0x4a,0x7a,0x4a,0x4a,0x4a,0x00  // bp1
 ]);
-// NES palette: $0F=black(transparent), $2B=green, $0F=black, $0F=black
-// Color 0 = transparent, color 1 = green fill
+const MISS_TILE_1 = new Uint8Array([ // "SS"
+  0x00,0x66,0xff,0xff,0xff,0xff,0xfe,0xcc, // bp0
+  0x00,0x00,0x66,0x88,0xee,0x22,0xcc,0x00  // bp1
+]);
 import { NES_SYSTEM_PALETTE } from './tile-decoder.js';
 let missCanvas = null;
 
 export function initMissSprite() {
   const c = document.createElement('canvas');
-  c.width = 8; c.height = 8;
+  c.width = 16; c.height = 8;
   const cx = c.getContext('2d');
-  const img = cx.createImageData(8, 8);
+  const img = cx.createImageData(16, 8);
   const green = NES_SYSTEM_PALETTE[0x2B] || [124, 252, 0];
   const black = NES_SYSTEM_PALETTE[0x0F] || [0, 0, 0];
-  for (let row = 0; row < 8; row++) {
-    const bp0 = MISS_TILE_RAW[row];
-    for (let col = 0; col < 8; col++) {
-      const bit = 7 - col;
-      const ci = (bp0 >> bit) & 1;
-      const p = (row * 8 + col) * 4;
-      if (ci === 1) {
-        img.data[p] = green[0]; img.data[p+1] = green[1]; img.data[p+2] = green[2]; img.data[p+3] = 255;
-      } else {
-        img.data[p+3] = 0;
+  const tiles = [MISS_TILE_0, MISS_TILE_1];
+  for (let t = 0; t < 2; t++) {
+    const tile = tiles[t];
+    for (let row = 0; row < 8; row++) {
+      const bp0 = tile[row], bp1 = tile[row + 8];
+      for (let col = 0; col < 8; col++) {
+        const bit = 7 - col;
+        const ci = ((bp0 >> bit) & 1) | (((bp1 >> bit) & 1) << 1);
+        const px = t * 8 + col;
+        const p = (row * 16 + px) * 4;
+        if (ci === 3) {
+          img.data[p] = green[0]; img.data[p+1] = green[1]; img.data[p+2] = green[2]; img.data[p+3] = 255;
+        } else if (ci === 1) {
+          img.data[p] = black[0]; img.data[p+1] = black[1]; img.data[p+2] = black[2]; img.data[p+3] = 255;
+        } else {
+          img.data[p+3] = 0;
+        }
       }
     }
   }
   cx.putImageData(img, 0, 0);
-  // Add black outline: draw shifted copies in black behind the green
-  const outlined = document.createElement('canvas');
-  outlined.width = 10; outlined.height = 10; // 1px border
-  const ox = outlined.getContext('2d');
-  // Black outline layer
-  const bImg = ox.createImageData(8, 8);
-  for (let row = 0; row < 8; row++) {
-    const bp0 = MISS_TILE_RAW[row];
-    for (let col = 0; col < 8; col++) {
-      const bit = 7 - col;
-      const ci = (bp0 >> bit) & 1;
-      const p = (row * 8 + col) * 4;
-      if (ci === 1) {
-        bImg.data[p] = black[0]; bImg.data[p+1] = black[1]; bImg.data[p+2] = black[2]; bImg.data[p+3] = 255;
-      }
-    }
-  }
-  const bCanvas = document.createElement('canvas');
-  bCanvas.width = 8; bCanvas.height = 8;
-  bCanvas.getContext('2d').putImageData(bImg, 0, 0);
-  // Draw black at 8 surrounding offsets for outline
-  for (let dy = -1; dy <= 1; dy++) {
-    for (let dx = -1; dx <= 1; dx++) {
-      if (dx === 0 && dy === 0) continue;
-      ox.drawImage(bCanvas, 1 + dx, 1 + dy);
-    }
-  }
-  // Green on top
-  ox.drawImage(c, 1, 1);
-  missCanvas = outlined;
+  missCanvas = c;
 }
 
 export function getMissCanvas() { return missCanvas; }
