@@ -102,31 +102,29 @@ function drawSWExplosion(shared) {
     _s.ctx.drawImage(canvas, cx - Math.floor(canvas.width / 2), cy - Math.floor(canvas.height / 2));
     return;
   }
-  if (!_s.swPhaseCanvases.length || !_s.isRandomEncounter || !_s.encounterMonsters) return;
-
-  const { count, boxX, boxY, sprH, row0H, row1H, gridPos: swGridPos } = _encounterGridLayout();
-
-  const tidx = _s.southWindTargets[_s.southWindHitIdx];
-  if (tidx === undefined || tidx >= swGridPos.length) return;
-
-  const tp = swGridPos[tidx];
-  const m = _s.encounterMonsters[tidx];
-  const mc = getMonsterCanvas(m?.monsterId, _s.goblinBattleCanvas);
-  const rH = tidx < 2 ? (row0H || sprH) : (row1H || sprH);
-  const mh = mc ? mc.height : rH;
-
-  // Phase = 0/1/2 based on 133ms intervals
+  if (!_s.swPhaseCanvases.length) return;
   const phase = Math.min(2, Math.floor(_s.battleTimer / 133));
   const phaseCanvas = _s.swPhaseCanvases[phase];
   if (!phaseCanvas) return;
 
-  // Center explosion on the target monster sprite
-  const cx = tp.x + 16; // center x of 32px sprite
-  const cy = tp.y + (rH - mh) + Math.floor(mh / 2); // vertical center
-  const ex = cx - Math.floor(phaseCanvas.width / 2);
-  const ey = cy - Math.floor(phaseCanvas.height / 2);
-
-  _s.ctx.drawImage(phaseCanvas, ex, ey);
+  if (_s.isRandomEncounter && _s.encounterMonsters) {
+    const { count, boxX, boxY, sprH, row0H, row1H, gridPos: swGridPos } = _encounterGridLayout();
+    const tidx = _s.southWindTargets[_s.southWindHitIdx];
+    if (tidx === undefined || tidx >= swGridPos.length) return;
+    const tp = swGridPos[tidx];
+    const m = _s.encounterMonsters[tidx];
+    const mc = getMonsterCanvas(m?.monsterId, _s.goblinBattleCanvas);
+    const rH = tidx < 2 ? (row0H || sprH) : (row1H || sprH);
+    const mh = mc ? mc.height : rH;
+    const cx = tp.x + 16;
+    const cy = tp.y + (rH - mh) + Math.floor(mh / 2);
+    _s.ctx.drawImage(phaseCanvas, cx - Math.floor(phaseCanvas.width / 2), cy - Math.floor(phaseCanvas.height / 2));
+  } else {
+    // Boss — center on boss sprite
+    const cx = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2);
+    const cy = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
+    _s.ctx.drawImage(phaseCanvas, cx - Math.floor(phaseCanvas.width / 2), cy - Math.floor(phaseCanvas.height / 2));
+  }
 }
 
 function drawSWDamageNumbers(shared) {
@@ -139,23 +137,31 @@ function drawSWDamageNumbers(shared) {
     }
     return;
   }
-  if (!_s.isRandomEncounter || !_s.encounterMonsters) return;
-  const { count, boxX, boxY, sprH, row0H, row1H, gridPos: swGridPos } = _encounterGridLayout();
-  for (const [k, dn] of Object.entries(_s.southWindDmgNums)) {
-    const idx = parseInt(k);
-    if (idx >= swGridPos.length) continue;
-    const tp = swGridPos[idx];
-    const m = _s.encounterMonsters[idx];
-    const mc = getMonsterCanvas(m?.monsterId, _s.goblinBattleCanvas);
-    const rH = idx < 2 ? (row0H || sprH) : (row1H || sprH);
-    const mh = mc ? mc.height : rH;
-    const bx = tp.x + 16;
-    const baseY = tp.y + (rH - mh) + Math.floor(mh / 2) - 8;
-    const by = _dmgBounceY(baseY, dn.timer);
-    const digits = String(dn.value);
-    const numBytes = new Uint8Array(digits.length);
-    for (let i = 0; i < digits.length; i++) numBytes[i] = 0x80 + parseInt(digits[i]);
-    drawText(_s.ctx, bx - Math.floor(digits.length * 4), by, numBytes, DMG_NUM_PAL);
+  if (_s.isRandomEncounter && _s.encounterMonsters) {
+    const { count, boxX, boxY, sprH, row0H, row1H, gridPos: swGridPos } = _encounterGridLayout();
+    for (const [k, dn] of Object.entries(_s.southWindDmgNums)) {
+      const idx = parseInt(k);
+      if (idx >= swGridPos.length) continue;
+      const tp = swGridPos[idx];
+      const m = _s.encounterMonsters[idx];
+      const mc = getMonsterCanvas(m?.monsterId, _s.goblinBattleCanvas);
+      const rH = idx < 2 ? (row0H || sprH) : (row1H || sprH);
+      const mh = mc ? mc.height : rH;
+      const bx = tp.x + 16;
+      const baseY = tp.y + (rH - mh) + Math.floor(mh / 2) - 8;
+      const by = _dmgBounceY(baseY, dn.timer);
+      const digits = String(dn.value);
+      const numBytes = new Uint8Array(digits.length);
+      for (let i = 0; i < digits.length; i++) numBytes[i] = 0x80 + parseInt(digits[i]);
+      drawText(_s.ctx, bx - Math.floor(digits.length * 4), by, numBytes, DMG_NUM_PAL);
+    }
+  } else {
+    // Boss — damage number centered on boss
+    for (const [k, dn] of Object.entries(_s.southWindDmgNums)) {
+      const cx = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2);
+      const baseY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2) - 8;
+      _drawBattleNum(cx, _dmgBounceY(baseY, dn.timer), dn.value, DMG_NUM_PAL);
+    }
   }
 }
 
