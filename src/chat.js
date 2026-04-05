@@ -178,24 +178,21 @@ export function drawChatTabs(ctx, fadeStep) {
   if (fadeStep >= ROSTER_FADE_STEPS) return;
 
   ctx.save();
-  // NES-stepped alpha matching roster fade
   const NES_STEP_ALPHAS = [1.0, 0.76, 0.52, 0.28, 0];
   ctx.globalAlpha = NES_STEP_ALPHAS[Math.min(fadeStep, 4)];
 
-  // Layout tabs evenly across the box
-  const innerX = HUD_RIGHT_X + 4;
-  const innerW = CANVAS_W - HUD_RIGHT_X - 8;
-  const tabW = Math.floor(innerW / CHAT_TABS.length);
-
+  // 2×2 grid layout: top row [ALL, ROOM], bottom row [PM, SYS]
+  const halfW = Math.floor((CANVAS_W - HUD_RIGHT_X) / 2);
   for (let i = 0; i < CHAT_TABS.length; i++) {
+    const col = i % 2;
+    const row = Math.floor(i / 2);
     const label = _nameToBytes(CHAT_TABS[i]);
     const lw = measureText(label);
-    const tx = innerX + i * tabW + Math.floor((tabW - lw) / 2);
-    const ty = TAB_BAR_Y + 4;
+    const tx = HUD_RIGHT_X + col * halfW + Math.floor((halfW - lw) / 2);
+    const ty = TAB_BAR_Y + row * 8;
     const isActive = i === activeTab;
     const isSelected = tabSelectMode && i === activeTab;
 
-    // Blink cursor on selected tab in tab-select mode
     if (isSelected && (Math.floor(Date.now() / 400) & 1)) {
       drawText(ctx, tx, ty, label, TEXT_GREY);
     } else {
