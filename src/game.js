@@ -2064,7 +2064,8 @@ function updateTitle(dt) {
     case 'select-box-close-fwd': if (titleSt.timer >= BOSS_BOX_EXPAND_MS) { titleSt.state = 'main-out'; titleSt.timer = 0; fadeOutMusic(TITLE_FADE_MS); } break;
     case 'select-fade-out-back': if (titleSt.timer >= (SELECT_TEXT_STEPS + 1) * SELECT_TEXT_STEP_MS) { titleSt.state = 'to-main'; titleSt.timer = 0; } break;
     case 'to-main':              if (titleSt.timer >= TITLE_TRANSITION_MS) { titleSt.state = 'logo-reopen'; titleSt.timer = 0; } break;
-    case 'logo-reopen':          if (titleSt.timer >= BOSS_BOX_EXPAND_MS) { titleSt.state = 'logo-content-in'; titleSt.timer = 0; } break;
+    case 'logo-reopen':          if (titleSt.timer >= BOSS_BOX_EXPAND_MS) { titleSt.state = 'logo-content-in-back'; titleSt.timer = 0; } break;
+    case 'logo-content-in-back': if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'main'; titleSt.timer = 0; } break;
     case 'main-out':             if (titleSt.timer >= TITLE_FADE_MS) _updateTitleMainOutCase(); break;
   }
 }
