@@ -1268,14 +1268,10 @@ export async function loadROM(arrayBuffer) {
   });
 
   // Startup console log
-  consoleLog('FF3 MMO v1.2.4');
+  consoleLog('FF3 MMO v1.3.3');
   consoleLog('ROM: ' + rom.prgBanks + ' PRG, ' + rom.chrBanks + ' CHR, mapper ' + rom.mapper);
-  consoleLog('English patch applied');
   const email = localStorage.getItem('ff3_email');
   consoleLog('Auth: ' + (email || 'guest'));
-  const saveSrc = window.ff3Auth ? 'server' : 'local';
-  const slotCount = saveSlots.filter(s => s !== null).length;
-  consoleLog('Saves: ' + slotCount + '/3 slots (' + saveSrc + ')');
   consoleLog('Type /help for commands');
 }
 

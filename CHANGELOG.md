@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## 1.3.3 — 2026-04-05
+
+### Player select rework
+
+- **Airship drift transition** — pressing Z on title triggers simultaneous: logo box closes, press-A box closes, airship drifts left (eased, 800ms). Pressing X on select reverses: boxes close, airship drifts right, logo reopens, content fades in
+- **Roster-style save slots** — 3 individual HUD boxes (portrait + info, like roster rows) replace single select box. Positioned center-right, pushed right one tile. Each box opens/closes individually
+- **Sequenced logo animations** — logo box expands on title start (after credits), FF3 MMORPG content fades in separately, press-A box opens then text fades in and blinks. On close: content fades out first, then box collapses (top+bottom HUD borders visible on final frame)
+- **Delete system** — "Delete" HUD box to the left of bottom slot row, bottom-aligned. Left arrow moves cursor to delete, right/X returns. Z on delete removes save. Red highlight when selected, fades with content
+- **Removed states**: `zbox-close`, `logo-fade-out`, `logo-fade-in`, `select-box-close`. **Added**: `to-select`, `to-main`, `logo-reopen`, `logo-box-open`, `logo-content-in`, `logo-content-out`, `logo-content-in-back`, `pressz-fade-in`
+- Removed `drawPlayerSelectContent` export. Added `drawHudBox` to title shared context
+- title-screen.js: 635L (was 539L), game.js: 3,084L (was 3,078L)
+
 ## 1.3.2 — 2026-04-05
 
 ### Chat tabs + channel system
