@@ -2032,6 +2032,8 @@ function updateTitle(dt) {
     if (waterTimer >= WATER_TICK) { waterTimer %= WATER_TICK; waterTick++; }
     titleSt.waterScroll += dt * 0.12;
     titleSt.shipTimer += dt;
+    const _s = titleSt.state;
+    if (_s === 'select-box-open' || _s === 'select-fade-in' || _s === 'select' || _s === 'name-entry' || _s === 'select-fade-out-back') titleSt.shipDriftTimer += dt;
   }
 
   switch (titleSt.state) {
@@ -2052,7 +2054,7 @@ function updateTitle(dt) {
       if (keys['z'] || keys['Z']) { keys['z'] = false; keys['Z'] = false; playSFX(SFX.CONFIRM); titleSt.state = 'logo-content-out'; titleSt.timer = 0; }
       break;
     case 'logo-content-out': if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'to-select'; titleSt.timer = 0; } break;
-    case 'to-select':            if (titleSt.timer >= TITLE_TRANSITION_MS) { titleSt.state = 'select-box-open'; titleSt.timer = 0; setSelectCursor(0); titleSt.deleteMode = false; } break;
+    case 'to-select':            if (titleSt.timer >= TITLE_TRANSITION_MS) { titleSt.state = 'select-box-open'; titleSt.timer = 0; titleSt.shipDriftTimer = 0; setSelectCursor(0); titleSt.deleteMode = false; } break;
     case 'select-box-open':      if (titleSt.timer >= BOSS_BOX_EXPAND_MS) { titleSt.state = 'select-fade-in'; titleSt.timer = 0; } break;
     case 'select-fade-in':       if (titleSt.timer >= (SELECT_TEXT_STEPS + 1) * SELECT_TEXT_STEP_MS) { titleSt.state = 'select'; titleSt.timer = 0; } break;
     case 'select':               updateTitleSelect(keys); break;

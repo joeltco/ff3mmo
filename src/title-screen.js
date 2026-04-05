@@ -25,6 +25,7 @@ const TITLE_WAIT_MS        = 0;
 const TITLE_ZBOX_MS        = 200;
 const TITLE_TRANSITION_MS  = 800;
 const SHIP_DRIFT_PX        = 56;
+const SHIP_IDLE_DRIFT      = 12;
 const SHIP_WINDUP_PX       = 20;
 const SELECT_BOX_OFFSET_X  = 48;
 const TITLE_SHIP_ANIM_MS   = 100;
@@ -58,6 +59,7 @@ export const titleSt = {
   waterScroll:       0,
   underwaterScroll:  0,
   shipTimer:         0,
+  shipDriftTimer:    0,     // accumulates during select idle states, starts at 0 on arrival
   deleteMode:        false,
 
   // Sprite caches — populated after init
@@ -377,7 +379,8 @@ function _drawTitleShip(ctx, cx, cy, fl) {
     shipX = cx - 16 - t * SHIP_DRIFT_PX;
   } else if (ts.state === 'to-main') {
     const t = _easeInOut(Math.min(ts.timer / TITLE_TRANSITION_MS, 1));
-    shipX = leftX + (cx - 16 - leftX) * t;
+    const startOsc = Math.sin(ts.shipDriftTimer / 3000 * Math.PI * 2) * SHIP_IDLE_DRIFT;
+    shipX = (leftX + startOsc) + (cx - 16 - (leftX + startOsc)) * t;
   } else if (ts.state === 'select-fade-out') {
     // Wind-up left
     const t = Math.min(ts.timer / ((SELECT_TEXT_STEPS + 1) * SELECT_TEXT_STEP_MS), 1);
@@ -389,7 +392,8 @@ function _drawTitleShip(ctx, cx, cy, fl) {
     const t = Math.min(elapsed / totalFly, 1);
     shipX = (leftX - SHIP_WINDUP_PX) + (cx + 300 - (leftX - SHIP_WINDUP_PX)) * t * t;
   } else if (_isShipLeftState(ts.state) || ts.state === 'select-fade-out-back') {
-    shipX = leftX;
+    const osc = Math.sin(ts.shipDriftTimer / 3000 * Math.PI * 2) * SHIP_IDLE_DRIFT;
+    shipX = leftX + osc;
   } else {
     shipX = cx - 16;
   }
