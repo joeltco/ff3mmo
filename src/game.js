@@ -3006,7 +3006,16 @@ function _gameLoopDraw() {
   }
   // Draw tabs BEFORE HUD so static HUD canvas draws on top of tab overlap
   const _infoFade = HUD_INFO_FADE_STEPS - Math.min(Math.floor(hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
-  const _tabFade = Math.max(rosterBattleFade, _infoFade);
+  // Transition fade (screen wipe) — same logic as roster
+  const _wipeDur = 44 * (1000 / 60);
+  let _transFade = 0;
+  if (transSt.rosterLocChanged) {
+    const wFadeMs = _wipeDur / ROSTER_FADE_STEPS;
+    if (transSt.state === 'closing') _transFade = Math.min(Math.floor(transSt.timer / wFadeMs), ROSTER_FADE_STEPS);
+    else if (transSt.state === 'hold' || transSt.state === 'trap-falling') _transFade = ROSTER_FADE_STEPS;
+    else if (transSt.state === 'opening') _transFade = Math.max(ROSTER_FADE_STEPS - Math.floor(transSt.timer / wFadeMs), 0);
+  }
+  const _tabFade = Math.max(rosterBattleFade, _infoFade, _transFade);
   if (transSt.state !== 'loading') drawChatTabs(ctx, _tabFade, _drawHudBox);
   drawHUD();
   const _bds = _battleDrawShared();
