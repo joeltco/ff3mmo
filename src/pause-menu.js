@@ -8,6 +8,7 @@ import { getItemNameClean } from './text-decoder.js';
 import { getProfIcon } from './prof-icons.js';
 import { stopFF1Music, resumeMusic, playFF1Track, FF1_TRACKS } from './music.js';
 import { PAUSE_ITEMS } from './data/strings.js';
+import { selectCursor, saveSlots } from './save-state.js';
 
 // NES layout constants — must match game.js
 const HUD_VIEW_X  = 0;
@@ -302,7 +303,7 @@ function _drawPauseEquipItems(ctx, shared) {
 
 function _drawPauseStats(ctx, shared) {
   const px = HUD_VIEW_X, finalY = HUD_VIEW_Y;
-  const { saveSlots, selectCursor } = shared;
+  // selectCursor, saveSlots imported from save-state.js
   const show = pauseSt.state === 'stats-in' || pauseSt.state === 'stats' || pauseSt.state === 'stats-out';
   if (!show) return;
   const fadeStep = _pauseFadeStep('stats-in', 'stats-out');

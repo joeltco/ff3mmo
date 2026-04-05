@@ -8,6 +8,7 @@ import { chatState } from './chat.js';
 import { ps, recalcCombatStats, getEquipSlotId, setEquipSlotId, EQUIP_SLOT_SUBTYPE,
          getProfHits, getProfLevel, getHitWeapon, WEAPON_PROF_CATEGORY } from './player-stats.js';
 import { ITEMS, isHandEquippable, isWeapon, weaponSubtype, isBladedWeapon } from './data/items.js';
+import { selectCursor, saveSlots, saveSlotsToDB } from './save-state.js';
 import { BASE_HIT_RATE, rollHits } from './battle-math.js';
 import { _nameToBytes } from './text-utils.js';
 import { MONSTERS } from './data/monsters.js';
@@ -678,13 +679,13 @@ function _applyPauseItemUse(item, rosterTargets) {
     rp.hp += heal; _s.removeItem(pauseSt.useItemId); playSFX(SFX.CURE);
     pauseSt.healNum = { value: heal, timer: 0, rosterIdx: pauseSt.invAllyTarget };
     pauseSt.state = 'inv-heal'; pauseSt.timer = 0;
-    if (_s.selectCursor >= 0 && _s.saveSlots[_s.selectCursor]) { _s.saveSlots[_s.selectCursor].inventory = { ..._s.playerInventory }; _s.saveSlotsToDB(); }
+    if (selectCursor >= 0 && saveSlots[selectCursor]) { saveSlots[selectCursor].inventory = { ..._s.playerInventory }; saveSlotsToDB(); }
   } else {
     const heal = Math.min(item.value, ps.stats.maxHP - ps.hp);
     ps.hp += heal; _s.removeItem(pauseSt.useItemId); playSFX(SFX.CURE);
     pauseSt.healNum = { value: heal, timer: 0 };
     pauseSt.state = 'inv-heal'; pauseSt.timer = 0;
-    if (_s.selectCursor >= 0 && _s.saveSlots[_s.selectCursor]) { _s.saveSlots[_s.selectCursor].hp = ps.hp; _s.saveSlots[_s.selectCursor].inventory = { ..._s.playerInventory }; _s.saveSlotsToDB(); }
+    if (selectCursor >= 0 && saveSlots[selectCursor]) { saveSlots[selectCursor].hp = ps.hp; saveSlots[selectCursor].inventory = { ..._s.playerInventory }; saveSlotsToDB(); }
   }
 }
 
@@ -758,7 +759,7 @@ function _equipOptimum() {
   _equipBestMainSlots();
   _equipBestLeftHand();
   recalcCombatStats();
-  if (_s.selectCursor >= 0 && _s.saveSlots[_s.selectCursor]) { _s.saveSlots[_s.selectCursor].inventory = { ..._s.playerInventory }; _s.saveSlotsToDB(); }
+  if (selectCursor >= 0 && saveSlots[selectCursor]) { saveSlots[selectCursor].inventory = { ..._s.playerInventory }; saveSlotsToDB(); }
   playSFX(SFX.CONFIRM);
 }
 
@@ -815,9 +816,9 @@ function _pauseInputEquipItemSelect() {
         if (oldId !== 0) _s.addItem(oldId, 1);
       }
       recalcCombatStats();
-      if (_s.selectCursor >= 0 && _s.saveSlots[_s.selectCursor]) {
-        _s.saveSlots[_s.selectCursor].inventory = { ..._s.playerInventory };
-        _s.saveSlotsToDB();
+      if (selectCursor >= 0 && saveSlots[selectCursor]) {
+        saveSlots[selectCursor].inventory = { ..._s.playerInventory };
+        saveSlotsToDB();
       }
       playSFX(SFX.CONFIRM);
     }
