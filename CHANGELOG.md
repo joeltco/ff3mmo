@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented here.
 
+## 1.3.1 — 2026-04-05
+
+### Roster extraction → roster.js
+
+- **Extracted `src/roster.js`** (367L) — all roster state, update, and draw logic
+  - Owns: fade maps, slide animations, battle fade, arrival order, movement timers
+  - Exports: `getPlayerLocation`, `rosterLocForMapId`, `getRosterVisible`, `rosterBattleFade`
+  - `setLocationGetter()` callback pattern for `onWorldMap`/`currentMapId` (avoids circular dep)
+  - Draw functions receive shared context: `ctx`, `drawHudBox`, portraits, sparkle callback
+  - Update functions receive shared context: `battleState`, `transSt`, `wipeDuration`, HUD fade params
+  - `_drawRosterSparkle` stays in game.js (entangled with `pauseSt`, `cureSparkleFrames`, `_drawHealNum`)
+- Cleaned up game.js imports: removed `LOCATIONS`, `CHAT_PHRASES` (moved to roster.js/chat.js)
+- Renamed `_rosterLocForMapId` → `rosterLocForMapId` (public export)
+- game.js: 3,046L (−344L)
+
 ## 1.3.0 — 2026-04-05
 
 ### Console system

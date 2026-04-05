@@ -36,6 +36,7 @@ const INVINCIBLE_TILE_ROM = 0x17A90;
 const INVINCIBLE_PAL = [0x0F, 0x0F, 0x27, 0x30];
 
 const CURSOR_TILE_ROM = 0x01B450;
+const SCROLL_ARROW_ROM = 0x01B490;
 
 const DEFEND_SPARKLE_PAL = [0x0F, 0x1B, 0x2B, 0x30];
 
@@ -289,6 +290,31 @@ export function initCursorTile(romData) {
     cursorFadeCanvases.push(_buildCanvas4ROM(romData, CURSOR_TILE_ROM, fp));
   }
   return { cursorTileCanvas, cursorFadeCanvases };
+}
+
+export function initScrollArrows(romData) {
+  const palette = [0x0F, 0x00, 0x10, 0x30];
+  const downArrow = _buildCanvas4ROM(romData, SCROLL_ARROW_ROM, palette);
+  const upArrow = document.createElement('canvas');
+  upArrow.width = 8; upArrow.height = 8;
+  const uctx = upArrow.getContext('2d');
+  uctx.translate(0, 8); uctx.scale(1, -1);
+  uctx.drawImage(downArrow, 0, 0);
+  // Faded versions
+  const downFade = [], upFade = [];
+  for (let step = 1; step <= 4; step++) {
+    let fp = [...palette];
+    for (let s = 0; s < step; s++) fp = fp.map(c => nesColorFade(c));
+    const df = _buildCanvas4ROM(romData, SCROLL_ARROW_ROM, fp);
+    downFade.push(df);
+    const uf = document.createElement('canvas');
+    uf.width = 8; uf.height = 8;
+    const ufc = uf.getContext('2d');
+    ufc.translate(0, 8); ufc.scale(1, -1);
+    ufc.drawImage(df, 0, 0);
+    upFade.push(uf);
+  }
+  return { scrollArrowDown: downArrow, scrollArrowUp: upArrow, scrollArrowDownFade: downFade, scrollArrowUpFade: upFade };
 }
 
 function _initBattleIdleSprites(romData, palette) {

@@ -1,6 +1,6 @@
 # game.js Refactor TODO
 
-Current size: **3,390 lines** (v1.3.0). Target: <4,000 lines — **achieved**.
+Current size: **3,046 lines** (v1.3.1). Target: <4,000 lines — **achieved**.
 
 ---
 
@@ -34,7 +34,7 @@ follow-up. Revisit when extracting a battle engine module.
 
 ## Won't Extract (too entangled)
 
-- Roster draw/update (357L) — reads/writes ~20 state vars, needs ctx + 10 canvas arrays + 8 helpers. Shared context would eat most savings.
+- ~~Roster draw/update (357L)~~ — **extracted** to `src/roster.js` (v1.3.1). Shared context pattern worked.
 - Title update logic (139L) — entangled with game state (ps, playerInventory, saveSlots, map loading)
 - Full rendering core — canvas state too entangled
 - Battle state machine — needs architectural redesign first

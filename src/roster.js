@@ -5,7 +5,6 @@ import { inputSt } from './input-handler.js';
 import { titleSt } from './title-screen.js';
 import { chatState, addChatMessage } from './chat.js';
 import { nesColorFade } from './palette.js';
-import { NES_SYSTEM_PALETTE } from './tile-decoder.js';
 import { _nameToBytes } from './text-utils.js';
 import { drawText, measureText, TEXT_WHITE } from './font-renderer.js';
 
@@ -269,21 +268,24 @@ function _drawRosterRow(ds, p, i, panelTop) {
   drawText(ds.ctx, HUD_RIGHT_X + HUD_RIGHT_W - 8 - lvW, rowY + 16, lvLabel, lvPal);
 }
 
-function _drawScrollTriangles(ds, scrollAreaY, canScrollUp, canScrollDown) {
+function _drawScrollArrows(ds, panelTop, maxVisible, canScrollUp, canScrollDown) {
   if (!canScrollUp && !canScrollDown) return;
-  const triFade = Math.min(Math.max(_rosterTransFade(ds), rosterBattleFade), ROSTER_FADE_STEPS);
-  let triNes = 0x10;
-  for (let s = 0; s < triFade; s++) triNes = nesColorFade(triNes);
-  const triCol = NES_SYSTEM_PALETTE[triNes] || [0, 0, 0];
-  ds.ctx.fillStyle = `rgb(${triCol[0]},${triCol[1]},${triCol[2]})`;
-  const triCX = HUD_RIGHT_X + Math.floor(HUD_RIGHT_W / 2);
+  const blink = Math.floor(Date.now() / 500) & 1;
+  if (!blink) return;
+  const fadeStep = Math.min(Math.max(_rosterTransFade(ds), rosterBattleFade), ROSTER_FADE_STEPS);
+  // Info box right edge minus arrow width minus padding
+  const ax = HUD_RIGHT_X + HUD_RIGHT_W - 8 - 2;
   if (canScrollUp) {
-    const ty = scrollAreaY + 2;
-    ds.ctx.beginPath(); ds.ctx.moveTo(triCX - 4, ty + 5); ds.ctx.lineTo(triCX, ty); ds.ctx.lineTo(triCX + 4, ty + 5); ds.ctx.fill();
+    const rowY = panelTop; // top-most row
+    const ay = rowY + 2;   // top-right of info box
+    const arrow = (fadeStep > 0 && ds.scrollArrowUpFade) ? ds.scrollArrowUpFade[fadeStep - 1] : ds.scrollArrowUp;
+    if (arrow) ds.ctx.drawImage(arrow, ax, ay);
   }
   if (canScrollDown) {
-    const ty = scrollAreaY + 9;
-    ds.ctx.beginPath(); ds.ctx.moveTo(triCX - 4, ty); ds.ctx.lineTo(triCX, ty + 5); ds.ctx.lineTo(triCX + 4, ty); ds.ctx.fill();
+    const rowY = panelTop + (maxVisible - 1) * ROSTER_ROW_H; // bottom-most row
+    const ay = rowY + 2;   // top-right of info box
+    const arrow = (fadeStep > 0 && ds.scrollArrowDownFade) ? ds.scrollArrowDownFade[fadeStep - 1] : ds.scrollArrowDown;
+    if (arrow) ds.ctx.drawImage(arrow, ax, ay);
   }
 }
 
@@ -315,7 +317,7 @@ export function drawRoster(ds) {
   }
   ds.ctx.restore();
 
-  _drawScrollTriangles(ds, scrollAreaY, canScrollUp, canScrollDown);
+  _drawScrollArrows(ds, panelTop, maxVisible, canScrollUp, canScrollDown);
 
   ds.drawSparkle(panelTop);
 
