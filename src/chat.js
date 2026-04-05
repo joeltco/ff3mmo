@@ -243,11 +243,15 @@ export function drawChatTabs(ctx, fadeStep, drawHudBox) {
       ctx.fillRect(tx + 8, TAB_BAR_Y + TAB_BAR_H - 8, w - 16, 8);
     }
 
-    let pal = [...TEXT_WHITE];
-    for (let s = 0; s < tabFade; s++) pal = pal.map(c => nesColorFade(c));
-    const label = _nameToBytes(CHAT_TABS[tabIdx]);
-    const lw = measureText(label);
-    drawText(ctx, tx + Math.floor((w - lw) / 2), TAB_BAR_Y + 8, label, pal);
+    // Blink text only when in tab select mode on active tab
+    const blinkHide = isActive && tabSelectMode && (Math.floor((Date.now() - _tabBlinkStart) / 400) & 1);
+    if (!blinkHide) {
+      let pal = [...TEXT_WHITE];
+      for (let s = 0; s < tabFade; s++) pal = pal.map(c => nesColorFade(c));
+      const label = _nameToBytes(CHAT_TABS[tabIdx]);
+      const lw = measureText(label);
+      drawText(ctx, tx + Math.floor((w - lw) / 2), TAB_BAR_Y + 8, label, pal);
+    }
   }
 
   ctx.restore();
