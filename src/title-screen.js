@@ -478,7 +478,7 @@ function _drawTitleSelectBox(ctx, cx, shared) {
     shared.drawHudBox(Math.round(dCX - dw / 2), Math.round(dCY - dh / 2), dw, dh);
   } else {
     const dx = selX - 4 - deleteLabelW;
-    const delPal = selectCursor === 3 ? [0x0F, 0x0F, 0x0F, 0x16] : TEXT_WHITE;
+    const delPal = selectCursor === 3 ? [0x0F, 0x0F, 0x0F, 0x16] : _makeFadedPal(fadeStep);
     shared.drawHudBox(dx, dy, deleteLabelW, labelH, 0);
     if (showContent) {
       if (selectCursor === 3) shared.drawCursorFaded(dx - 10, dy + 4, 0);
