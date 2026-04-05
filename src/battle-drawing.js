@@ -558,6 +558,13 @@ function drawBattleMenu() {
           drawText(_s.ctx, Math.floor((boxW - measureText(nb)) / 2), startY + i * rowH, nb, fadedPal);
         });
       }
+    } else if (_s.isRandomEncounter && _s.encounterMonsters) {
+      const names = _battleEnemyNames();
+      const rowH = 10;
+      const startY = HUD_BOT_Y + Math.floor((boxH - names.length * rowH) / 2);
+      names.forEach((nb, i) => {
+        drawText(_s.ctx, Math.floor((boxW - measureText(nb)) / 2), startY + i * rowH, nb, fadedPal);
+      });
     } else {
       const enemyName = _battleEnemyName();
       drawText(_s.ctx, Math.floor((boxW - measureText(enemyName)) / 2), HUD_BOT_Y + Math.floor((boxH - 8) / 2), enemyName, fadedPal);
@@ -958,6 +965,25 @@ function drawBattleMessage() {
   _s.ctx.restore();
 }
 
+
+function _battleEnemyNames() {
+  const names = [];
+  const seen = new Set();
+  for (const m of _s.encounterMonsters) {
+    if (m.hp <= 0 || seen.has(m.monsterId)) continue;
+    seen.add(m.monsterId);
+    const baseName = getMonsterName(m.monsterId) || BATTLE_GOBLIN_NAME;
+    const count = _s.encounterMonsters.filter(e => e.hp > 0 && e.monsterId === m.monsterId).length;
+    if (count > 1) {
+      const arr = Array.from(baseName);
+      arr.push(0xFF, 0xE1, 0x80 + count);
+      names.push(new Uint8Array(arr));
+    } else {
+      names.push(baseName);
+    }
+  }
+  return names.length > 0 ? names : [BATTLE_GOBLIN_NAME];
+}
 
 function _battleEnemyName() {
   if (pvpSt.isPVPBattle) {
