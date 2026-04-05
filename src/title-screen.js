@@ -388,6 +388,7 @@ function _drawTitlePressZ(ctx, cx, vpBot) {
   if (ts.state === 'zbox-open')    t = Math.min(ts.timer / TITLE_ZBOX_MS, 1);
   else if (ts.state === 'to-select')   t = 1 - _easeInOut(Math.min(ts.timer / TITLE_TRANSITION_MS, 1));
   else if (ts.state === 'logo-reopen') t = _easeInOut(Math.min(ts.timer / BOSS_BOX_EXPAND_MS, 1));
+  if (t <= 0) return;
   const boxW = fullW, boxH = Math.max(8, Math.round(fullH * t));
   const boxX = cx - boxW / 2, boxY = Math.round(boxCY - boxH / 2);
   if (ts.borderTiles) {
@@ -417,6 +418,7 @@ function _drawTitleSelectBox(ctx, cx, shared) {
   if (ts.state === 'select-box-open') sbt = Math.min(ts.timer / BOSS_BOX_EXPAND_MS, 1);
   else if (ts.state === 'select-box-close-fwd') sbt = 1 - Math.min(ts.timer / BOSS_BOX_EXPAND_MS, 1);
   else if (ts.state === 'to-main') sbt = 1 - _easeInOut(Math.min(ts.timer / TITLE_TRANSITION_MS, 1));
+  if (sbt <= 0) return;
 
   // Layout: 3 slot rows with gaps, pushed right one tile
   const selX = Math.round(cx + SELECT_BOX_OFFSET_X - SEL_W / 2) + 8;
