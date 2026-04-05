@@ -88,7 +88,7 @@ export const titleSt = {
 export function isTitleActiveState() {
   const s = titleSt.state;
   return s === 'main-in' || s === 'logo-box-open' || s === 'logo-content-in' || s === 'logo-content-in-back' ||
-    s === 'zbox-open' || s === 'main' || s === 'logo-content-out' ||
+    s === 'zbox-open' || s === 'pressz-fade-in' || s === 'main' || s === 'logo-content-out' ||
     s === 'to-select' || s === 'to-main' || s === 'logo-reopen' ||
     s === 'select-box-open' || s === 'select-box-close-fwd' ||
     s === 'select-fade-in' || s === 'select' || s === 'select-fade-out' ||
@@ -207,7 +207,7 @@ export function drawTitleSkyInHUD(ctx, roundTopBoxCornersFn) {
     const fl = TITLE_FADE_MAX - Math.min(Math.floor(ts.timer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
     drawTitleSky(ctx, fl); roundTopBoxCornersFn();
   } else if (ts.state === 'logo-box-open' || ts.state === 'logo-content-in' || ts.state === 'logo-content-in-back' ||
-             ts.state === 'zbox-open' || ts.state === 'main' || ts.state === 'logo-content-out' ||
+             ts.state === 'zbox-open' || ts.state === 'pressz-fade-in' || ts.state === 'main' || ts.state === 'logo-content-out' ||
              ts.state === 'to-select' || ts.state === 'to-main' || ts.state === 'logo-reopen' ||
              ts.state === 'select-box-open' || ts.state === 'select-box-close-fwd' ||
              ts.state === 'select-fade-in' || ts.state === 'select' || ts.state === 'select-fade-out' ||
@@ -386,7 +386,7 @@ function _drawTitleShip(ctx, cx, cy, fl) {
 
 function _drawTitlePressZ(ctx, cx, vpBot) {
   const ts = titleSt;
-  if (ts.state !== 'zbox-open' && ts.state !== 'main' && ts.state !== 'logo-content-out' &&
+  if (ts.state !== 'zbox-open' && ts.state !== 'pressz-fade-in' && ts.state !== 'main' && ts.state !== 'logo-content-out' &&
       ts.state !== 'to-select' && ts.state !== 'logo-reopen' && ts.state !== 'logo-content-in-back') return;
   if (!ts.pressZ) return;
   const pw    = measureText(ts.pressZ);
@@ -409,13 +409,13 @@ function _drawTitlePressZ(ctx, cx, vpBot) {
     for (let ty = boxY + 8; ty < boxY + boxH - 8; ty += 8)
       for (let tx = boxX + 8; tx < boxX + boxW - 8; tx += 8) ctx.drawImage(FILL, tx, ty);
   }
-  // Text: fade in on open, blink while idle, fade out on close
+  // Text: fade in after box opens, blink while idle, fade out on close
   let textFl = TITLE_FADE_MAX;
-  if (ts.state === 'zbox-open') textFl = TITLE_FADE_MAX - Math.min(Math.floor(ts.timer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
-  else if (ts.state === 'logo-reopen') textFl = TITLE_FADE_MAX - Math.min(Math.floor(ts.timer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
+  if (ts.state === 'zbox-open' || ts.state === 'logo-reopen') textFl = TITLE_FADE_MAX; // box opening, no text yet
+  else if (ts.state === 'pressz-fade-in' || ts.state === 'logo-content-in-back') textFl = TITLE_FADE_MAX - Math.min(Math.floor(ts.timer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
   else if (ts.state === 'logo-content-out') textFl = Math.min(Math.floor(ts.timer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
   else if (ts.state === 'to-select') textFl = TITLE_FADE_MAX;
-  else if (ts.state === 'main' || ts.state === 'logo-content-in-back') {
+  else if (ts.state === 'main') {
     textFl = (Math.floor(ts.timer / 500) % 2 === 0) ? 0 : TITLE_FADE_MAX;
   }
   if (textFl < TITLE_FADE_MAX) {

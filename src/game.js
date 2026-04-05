@@ -2050,7 +2050,8 @@ function updateTitle(dt) {
     case 'main-in':        if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'logo-box-open';  titleSt.timer = 0; } break;
     case 'logo-box-open':  if (titleSt.timer >= BOSS_BOX_EXPAND_MS) { titleSt.state = 'logo-content-in'; titleSt.timer = 0; } break;
     case 'logo-content-in': if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'zbox-open';    titleSt.timer = 0; } break;
-    case 'zbox-open':      if (titleSt.timer >= TITLE_ZBOX_MS) { titleSt.state = 'main';          titleSt.timer = 0; } break;
+    case 'zbox-open':      if (titleSt.timer >= TITLE_ZBOX_MS) { titleSt.state = 'pressz-fade-in'; titleSt.timer = 0; } break;
+    case 'pressz-fade-in': if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'main';          titleSt.timer = 0; } break;
     case 'main':
       if (keys['z'] || keys['Z']) { keys['z'] = false; keys['Z'] = false; playSFX(SFX.CONFIRM); titleSt.state = 'logo-content-out'; titleSt.timer = 0; }
       break;
