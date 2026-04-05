@@ -611,7 +611,7 @@ function _tabSelectInput() {
   if (k['x'] || k['X'] || k['Escape']) {
     k['x'] = false; k['X'] = false; k['Escape'] = false;
     setTabSelectMode(false);
-    playSFX(SFX.CANCEL);
+    playSFX(SFX.CONFIRM);
   }
   if (k['z'] || k['Z'] || k['Enter']) {
     k['z'] = false; k['Z'] = false; k['Enter'] = false;
