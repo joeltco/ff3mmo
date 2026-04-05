@@ -600,12 +600,26 @@ function _tabSelectInput() {
   const k = _s.keys;
   if (k['ArrowLeft']) {
     k['ArrowLeft'] = false;
-    setActiveTab((activeTab - 1 + CHAT_TABS.length) % CHAT_TABS.length);
+    // Move left within row (0↔1, 2↔3)
+    const col = activeTab % 2;
+    setActiveTab(col === 0 ? activeTab + 1 : activeTab - 1);
     playSFX(SFX.CURSOR);
   }
   if (k['ArrowRight']) {
     k['ArrowRight'] = false;
-    setActiveTab((activeTab + 1) % CHAT_TABS.length);
+    const col = activeTab % 2;
+    setActiveTab(col === 1 ? activeTab - 1 : activeTab + 1);
+    playSFX(SFX.CURSOR);
+  }
+  if (k['ArrowUp']) {
+    k['ArrowUp'] = false;
+    // Move up between rows (0↔2, 1↔3)
+    setActiveTab(activeTab >= 2 ? activeTab - 2 : activeTab + 2);
+    playSFX(SFX.CURSOR);
+  }
+  if (k['ArrowDown']) {
+    k['ArrowDown'] = false;
+    setActiveTab(activeTab < 2 ? activeTab + 2 : activeTab - 2);
     playSFX(SFX.CURSOR);
   }
   if (k['x'] || k['X'] || k['Escape']) {
