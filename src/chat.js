@@ -3,7 +3,7 @@
 import { PLAYER_POOL, CHAT_PHRASES, ROSTER_FADE_STEPS } from './data/players.js';
 import { selectCursor, saveSlots } from './save-state.js';
 import { _nesNameToString, _nameToBytes } from './text-utils.js';
-import { drawText, measureText, TEXT_YELLOW, TEXT_GREY } from './font-renderer.js';
+import { drawText, measureText, TEXT_WHITE } from './font-renderer.js';
 import { getPlayerLocation } from './roster.js';
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -184,8 +184,7 @@ export function drawChatTabs(ctx, fadeStep) {
   const label = _nameToBytes(CHAT_TABS[activeTab]);
   const tx = HUD_RIGHT_X + 4;
   const ty = TAB_BAR_Y + 4;
-  const pal = tabSelectMode ? TEXT_YELLOW : TEXT_GREY;
-  drawText(ctx, tx, ty, label, pal);
+  drawText(ctx, tx, ty, label, TEXT_WHITE);
 
   ctx.globalAlpha = 1;
   ctx.restore();
