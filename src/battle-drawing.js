@@ -1242,7 +1242,7 @@ function _drawAllyTexts(i, ally, rowY, isAllyHeal, ppx, ppy, weaponDraws) {
   for (let s = 0; s < ally.fadeStep; s++) hpPal[3] = nesColorFade(hpPal[3]);
   drawText(_s.ctx, HUD_RIGHT_X + HUD_RIGHT_W - 8 - measureText(hpBytes), rowY + 16, hpBytes, hpPal);
   const dn = _s.allyDamageNums[i];
-  if (dn) weaponDraws.push({ type: 'dmg', dn, bx: HUD_RIGHT_X + 16, by: _dmgBounceY(rowY + 16, dn.timer) });
+  if (dn) weaponDraws.push({ type: 'dmg', dn, bx: HUD_RIGHT_X + 20, by: _dmgBounceY(rowY + 16, dn.timer) });
   if (isAllyHeal && _s.cureSparkleFrames.length === 2) {
     weaponDraws.push({ type: 'sparkle', frame: _s.cureSparkleFrames[Math.floor(_s.battleTimer / 67) & 1], px: ppx, py: ppy });
   }
@@ -1344,9 +1344,9 @@ function _drawBattleNum(bx, by, value, pal) {
 function drawDamageNumbers() {
   _drawBossDmgNum();
 
-  // Player damage number — bounces centered on portrait
+  // Player damage number — bounces on right side of portrait
   if (_s.playerDamageNum) {
-    const px = HUD_RIGHT_X + 16;
+    const px = HUD_RIGHT_X + 20;
     const baseY = HUD_VIEW_Y + 16;
     const py = _dmgBounceY(baseY, _s.playerDamageNum.timer);
     if (_s.playerDamageNum.miss) {
@@ -1357,9 +1357,9 @@ function drawDamageNumbers() {
     }
   }
 
-  // Player heal number — green bounce on portrait during item-use
+  // Player heal number — green bounce on right side of portrait during item-use
   if (_s.playerHealNum) {
-    const px = HUD_RIGHT_X + 16;
+    const px = HUD_RIGHT_X + 20;
     const baseY = HUD_VIEW_Y + 16;
     const py = _dmgBounceY(baseY, _s.playerHealNum.timer);
     _drawBattleNum(px, py, _s.playerHealNum.value, HEAL_NUM_PAL);
