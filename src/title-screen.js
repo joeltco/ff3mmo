@@ -485,6 +485,12 @@ function _drawTitleSelectBox(ctx, cx, shared) {
       drawText(ctx, dx + 8, dy + 8, SELECT_DELETE_TEXT, delPal);
     }
   }
+
+  // Draw slot cursors AFTER delete box so they aren't covered
+  if (sbt >= 1 && showContent && selectCursor >= 0 && selectCursor < 3) {
+    const cursorRowY = topY + selectCursor * (SEL_ROW_H + gap);
+    shared.drawCursorFaded(selX - 10, cursorRowY + 12, fadeStep);
+  }
 }
 
 function _drawSelectSlotRow(ctx, i, selX, rowY, fadeStep, showContent, shared) {
@@ -509,9 +515,6 @@ function _drawSelectSlotRow(ctx, i, selX, rowY, fadeStep, showContent, shared) {
       if (src) ctx.drawImage(src, selX + 8, rowY + 8, ...(portraitSrc === shared.battleSpriteCanvas ? [16, 16] : []));
     }
   }
-
-  // Cursor
-  if (i === selectCursor) shared.drawCursorFaded(selX - 10, rowY + 12, fadeStep);
 
   // Name + level text (right-aligned in info box, like roster)
   const fadedPal = _makeFadedPal(fadeStep);
