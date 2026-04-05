@@ -213,11 +213,13 @@ export function drawChatTabs(ctx, fadeStep, drawHudBox) {
     if (i !== activeTab) order.push(i);
   }
 
-  // Position each unselected tab so only PEEK px peeks past the one above it.
-  // Each tab's right edge = selectedRight + oi * PEEK, x = rightEdge - width
+  // Distribute unselected tabs evenly across remaining space
+  const remaining = panelW - selectedW;
+  const numUnselected = order.length - 1;
+  const peek = numUnselected > 0 ? Math.floor(remaining / numUnselected) : 0;
   const positions = [HUD_RIGHT_X];
   for (let oi = 1; oi < order.length; oi++) {
-    positions.push(selectedRight + oi * TAB_PEEK - widths[order[oi]]);
+    positions.push(selectedRight + oi * peek - widths[order[oi]]);
   }
 
   ctx.save();
