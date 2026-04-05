@@ -174,7 +174,7 @@ export function drawChat(ctx, drawHudBoxFn, rosterBattleFade, titleActive) {
 // ── Tab bar (16px gap between roster and chat HUD) ───────────────────────
 
 const TAB_BAR_Y = HUD_VIEW_Y + 32 + 3 * 32; // 160 — bottom of roster panel
-const TAB_BAR_H = 16;
+const TAB_BAR_H = 24;  // 3 tile rows — overlaps chat HUD top border by 8px
 const HUD_RIGHT_X = 144;
 
 const TAB_PAD = 8;       // padding inside each tab box (4px each side)
@@ -236,6 +236,12 @@ export function drawChatTabs(ctx, fadeStep, drawHudBox) {
     if (isActive && tabSelectMode && (Math.floor((Date.now() - _tabBlinkStart) / 400) & 1)) continue;
 
     drawHudBox(tx, TAB_BAR_Y, w, TAB_BAR_H, tabFade);
+
+    // Selected tab: erase bottom border to connect interior with chat HUD below
+    if (isActive) {
+      ctx.fillStyle = '#000';
+      ctx.fillRect(tx + 8, TAB_BAR_Y + TAB_BAR_H - 8, w - 16, 8);
+    }
 
     let pal = [...TEXT_WHITE];
     for (let s = 0; s < tabFade; s++) pal = pal.map(c => nesColorFade(c));
