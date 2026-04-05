@@ -283,7 +283,7 @@ function _drawScrollArrows(ds, panelTop, maxVisible, canScrollUp, canScrollDown)
   }
   if (canScrollDown) {
     const rowY = panelTop + (maxVisible - 1) * ROSTER_ROW_H; // bottom-most row
-    const ay = rowY + 2;   // top-right of info box
+    const ay = rowY + ROSTER_ROW_H - 8 - 2; // bottom-right of info box
     const arrow = (fadeStep > 0 && ds.scrollArrowDownFade) ? ds.scrollArrowDownFade[fadeStep - 1] : ds.scrollArrowDown;
     if (arrow) ds.ctx.drawImage(arrow, ax, ay);
   }
