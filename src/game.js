@@ -61,7 +61,7 @@ import { initWeaponSprites, getKnifeBladeCanvas, getKnifeBladeSwungCanvas,
 import { updateBattleAlly } from './battle-ally.js';
 import { updateBattleEnemyTurn } from './battle-enemy.js';
 import { resetBattleItemVars, getTargets, getHitIdx, startMagicItem, updateMagicItemThrowHit } from './battle-items.js';
-import { HEAL_NUM_PAL, DMG_SHOW_MS, resetAllDmgNums, tickDmgNums, tickHealNums, clearHealNums,
+import { HEAL_NUM_PAL, DMG_SHOW_MS, resetAllDmgNums, tickDmgNums, tickHealNums, clearHealNums, initMissSprite,
          getEnemyDmgNum, setEnemyDmgNum, getPlayerDamageNum, setPlayerDamageNum,
          getPlayerHealNum, setPlayerHealNum, getEnemyHealNum, setEnemyHealNum,
          getAllyDamageNums, getSwDmgNums,
@@ -1837,6 +1837,7 @@ function _initSpriteAssets(romRaw) {
   initGoblinSprite(romRaw);
   initMonsterSprites();
   swPhaseCanvases = initSouthWindSprite();
+  initMissSprite();
   slashFrames = slashFramesR = slashFramesL = initSlashSprites();
   knifeSlashFramesR = knifeSlashFramesL = initKnifeSlashSprites();
   swordSlashFramesR = swordSlashFramesL = initSwordSlashSprites();

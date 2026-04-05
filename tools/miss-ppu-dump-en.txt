@@ -1,0 +1,79 @@
+FF3 Miss Sprite PPU Tile Dump
+
+[No save state slot 0 — running from title screen]
+[1] mode $FF -> $00
+[58] mode $00 -> $08
+[91] Name entry screen
+[91] mode $08 -> $A8
+[717] mode $A8 -> $00
+[717] Past name entry — pressing A into battle
+[759] mode $00 -> $70
+[824] mode $70 -> $6F
+[827] mode $6F -> $70
+[892] mode $70 -> $6F
+[893] mode $6F -> $70
+[1028] mode $70 -> $6F
+[1036] mode $6F -> $70
+[1044] mode $70 -> $6F
+[1052] mode $6F -> $70
+[1403] mode $70 -> $6F
+[1411] mode $6F -> $70
+[1419] mode $70 -> $6F
+[1427] mode $6F -> $70
+[1435] mode $70 -> $6F
+[1443] mode $6F -> $70
+[1451] mode $70 -> $6F
+[1459] mode $6F -> $70
+[1467] mode $70 -> $6F
+[1475] mode $6F -> $70
+[1571] mode $70 -> $01
+[1572] mode $01 -> $00
+[1832] mode $00 -> $05
+[1957] mode $05 -> $20
+[1957] BATTLE START
+[2047] Battle settled — mashing A to attack
+[2057] Miss sprite detected in OAM!
+=== MISS SPRITE PPU TILE DUMP ===
+  frame: 2061
+  sprPal0: $0F $36 $30 $16
+  sprPal1: $0F $27 $18 $21
+  sprPal2: $0F $36 $17 $2A
+  sprPal3: $0F $0F $0F $0F
+  tile $61 PPU $1610: [0xAA,0x05,0x2A,0x81,0x0A,0x00,0x02,0x08,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+  tile $61 pixels:
+    1.1.1.1.
+    .....1.1
+    ..1.1.1.
+    1......1
+    ....1.1.
+    ........
+    ......1.
+    ....1...
+  tile $62 PPU $1620: [0xFF,0x5B,0xBF,0x56,0xAF,0x55,0xAB,0x15,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+  tile $62 pixels:
+    11111111
+    .1.11.11
+    1.111111
+    .1.1.11.
+    1.1.1111
+    .1.1.1.1
+    1.1.1.11
+    ...1.1.1
+  tile $63 PPU $1630: [0x7F,0xFF,0xFF,0xFF,0xF7,0xBF,0xFF,0x6F,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+  tile $63 pixels:
+    .1111111
+    11111111
+    11111111
+    11111111
+    1111.111
+    1.111111
+    11111111
+    .11.1111
+  OAM miss sprites:
+    spr25: x=152 y=48 tile=$61 pal=3 hf=0 vf=0
+    spr26: x=160 y=56 tile=$61 pal=3 hf=0 vf=0
+    spr27: x=168 y=64 tile=$61 pal=3 hf=0 vf=0
+    spr28: x=160 y=48 tile=$62 pal=3 hf=0 vf=0
+    spr29: x=168 y=56 tile=$62 pal=3 hf=0 vf=0
+    spr30: x=168 y=48 tile=$63 pal=3 hf=0 vf=0
+=== DUMP COMPLETE ===
