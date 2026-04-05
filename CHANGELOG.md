@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented here.
 
+## 1.2.0 — 2026-04-04
+
+### Magic battle items extracted + Southwind boss fix
+
+- **Extracted `src/battle-items.js`** (new module, 159L) — all magic item battle logic decoupled from game.js
+  - `startMagicItem()` — target selection + damage roll (PVP, random encounter, boss paths)
+  - `updateMagicItemThrowHit()` — throw/hit state machine, damage application, death triggers
+  - `resetBattleItemVars()` / `tickDmgNums()` — state reset and timer management
+  - Module-local state: targets, hitIdx, baseDamage, dmgNums (no longer pollute game.js scope)
+  - `_magicItemShared()` context in game.js passes battle state via getter/setter pattern
+  - Designed for multiple spell items — future items share the same entry points
+- **Southwind now works on boss** — was silently doing nothing (animation played, item consumed, no damage). Boss path added to damage application, target selection, kill detection, explosion drawing, and damage numbers
+- **Carbuncle per-tile palette fix** — bottom-left tiles were wrong colors; added `tilePal` override array
+- **Blue Wisp palette fix** — bottom half used wrong palette; all tiles forced to pal0
+- **Encounter box per-row height** — tall monsters (Eye Fangs) sorted to top row; box sized per-row instead of single sprH
+- **Healing pond movement block** — player can no longer walk away during strobe animation before "Fully Restored!" message
+- game.js: ~4,231L (−89L this release)
+
 ## 1.1.9 — 2026-03-28
 
 ### Weapon blade positioning overhaul + ally dual-wield
