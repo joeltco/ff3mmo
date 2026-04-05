@@ -433,6 +433,7 @@ let pondStrobeTimer = 0;  // >0 = pond strobe active
 
 // Screen wipe timing constants → transitions.js
 // WIPE_DURATION → transitions.js (roster.js gets it via shared context)
+let _tabWasLoading = false; // tracks if we just came from a loading screen
 
 // Screen shake state (earthquake effect for secret passages)
 const SHAKE_DURATION = 34 * (1000 / 60);  // 2 × 17 NES frames ≈ 567ms
@@ -3011,10 +3012,12 @@ function _gameLoopDraw() {
   if (transSt.dungeon && transSt.state === 'closing') _tabFade = Math.max(_tabFade, Math.min(Math.floor(transSt.timer / _wFadeMs), ROSTER_FADE_STEPS));
   else if (transSt.dungeon && (transSt.state === 'hold' || transSt.state === 'trap-falling')) _tabFade = ROSTER_FADE_STEPS;
   else if (transSt.state === 'loading') {
+    _tabWasLoading = true;
     _tabFade = ROSTER_FADE_STEPS;
     if (loadingSt.state === 'out') _tabFade = LOAD_FADE_MAX - Math.min(Math.floor(loadingSt.timer / LOAD_FADE_STEP_MS), LOAD_FADE_MAX);
   }
-  else if (transSt.dungeon && transSt.state === 'opening') _tabFade = Math.max(_tabFade, ROSTER_FADE_STEPS - Math.min(Math.floor(transSt.timer / _wFadeMs), ROSTER_FADE_STEPS));
+  else if (transSt.state === 'opening' && _tabWasLoading) _tabFade = Math.max(_tabFade, ROSTER_FADE_STEPS - Math.min(Math.floor(transSt.timer / _wFadeMs), ROSTER_FADE_STEPS));
+  else _tabWasLoading = false;
   drawChatTabs(ctx, _tabFade, _drawHudBox);
   drawHUD();
   const _bds = _battleDrawShared();
