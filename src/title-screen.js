@@ -317,7 +317,7 @@ function _drawTitleCredit(ctx, cx, cy) {
 
 function _drawTitleLogo(ctx, cx, fl, isSelectState) {
   const ts = titleSt;
-  if (isSelectState || ts.state === 'main-out' || ts.state === 'to-main') return;
+  if (isSelectState || ts.state === 'main-out' || ts.state === 'to-main' || ts.state === 'main-in') return;
   if (!ts.logoFrames) return;
 
   // Box expand/collapse factor
