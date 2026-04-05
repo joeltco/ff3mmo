@@ -170,6 +170,7 @@ const TITLE_FADE_MS      = (TITLE_FADE_MAX + 1) * TITLE_FADE_STEP_MS;
 const TITLE_WAIT_MS      = 0;
 const TITLE_HOLD_MS      = 2000;
 const TITLE_ZBOX_MS      = 200;
+const TITLE_TRANSITION_MS = 500;
 const SELECT_TEXT_STEP_MS = 100;
 const SELECT_TEXT_STEPS   = 4;
 
@@ -2048,19 +2049,18 @@ function updateTitle(dt) {
     case 'main-in':        if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'zbox-open';     titleSt.timer = 0; } break;
     case 'zbox-open':      if (titleSt.timer >= TITLE_ZBOX_MS) { titleSt.state = 'main';          titleSt.timer = 0; } break;
     case 'main':
-      if (keys['z'] || keys['Z']) { keys['z'] = false; keys['Z'] = false; playSFX(SFX.CONFIRM); titleSt.state = 'zbox-close'; titleSt.timer = 0; }
+      if (keys['z'] || keys['Z']) { keys['z'] = false; keys['Z'] = false; playSFX(SFX.CONFIRM); titleSt.state = 'to-select'; titleSt.timer = 0; }
       break;
-    case 'zbox-close':           if (titleSt.timer >= TITLE_ZBOX_MS) { titleSt.state = 'logo-fade-out'; titleSt.timer = 0; } break;
-    case 'logo-fade-out':        if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'select-box-open'; titleSt.timer = 0; setSelectCursor(0); titleSt.deleteMode = false; } break;
+    case 'to-select':            if (titleSt.timer >= TITLE_TRANSITION_MS) { titleSt.state = 'select-box-open'; titleSt.timer = 0; setSelectCursor(0); titleSt.deleteMode = false; } break;
     case 'select-box-open':      if (titleSt.timer >= BOSS_BOX_EXPAND_MS) { titleSt.state = 'select-fade-in'; titleSt.timer = 0; } break;
     case 'select-fade-in':       if (titleSt.timer >= (SELECT_TEXT_STEPS + 1) * SELECT_TEXT_STEP_MS) { titleSt.state = 'select'; titleSt.timer = 0; } break;
     case 'select':               updateTitleSelect(keys); break;
     case 'name-entry':           break;
     case 'select-fade-out':      if (titleSt.timer >= (SELECT_TEXT_STEPS + 1) * SELECT_TEXT_STEP_MS) { titleSt.state = 'select-box-close-fwd'; titleSt.timer = 0; } break;
     case 'select-box-close-fwd': if (titleSt.timer >= BOSS_BOX_EXPAND_MS) { titleSt.state = 'main-out'; titleSt.timer = 0; fadeOutMusic(TITLE_FADE_MS); } break;
-    case 'select-fade-out-back': if (titleSt.timer >= (SELECT_TEXT_STEPS + 1) * SELECT_TEXT_STEP_MS) { titleSt.state = 'select-box-close'; titleSt.timer = 0; } break;
-    case 'select-box-close':     if (titleSt.timer >= BOSS_BOX_EXPAND_MS) { titleSt.state = 'logo-fade-in'; titleSt.timer = 0; } break;
-    case 'logo-fade-in':         if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'zbox-open'; titleSt.timer = 0; } break;
+    case 'select-fade-out-back': if (titleSt.timer >= (SELECT_TEXT_STEPS + 1) * SELECT_TEXT_STEP_MS) { titleSt.state = 'to-main'; titleSt.timer = 0; } break;
+    case 'to-main':              if (titleSt.timer >= TITLE_TRANSITION_MS) { titleSt.state = 'logo-reopen'; titleSt.timer = 0; } break;
+    case 'logo-reopen':          if (titleSt.timer >= BOSS_BOX_EXPAND_MS) { titleSt.state = 'main'; titleSt.timer = 0; } break;
     case 'main-out':             if (titleSt.timer >= TITLE_FADE_MS) _updateTitleMainOutCase(); break;
   }
 }
