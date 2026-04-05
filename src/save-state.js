@@ -1,0 +1,81 @@
+// Save state — owns selectCursor, saveSlots, name entry, and DB persistence.
+// Extracted from game.js so any module can import save state directly.
+
+import { openSaveDB, serverDeleteSlot, parseSaveSlots } from './save.js';
+import { ps, playerStatsSnapshot } from './player-stats.js';
+
+// --- State ---
+export let selectCursor = 0;             // 0-2 (which slot)
+export let saveSlots = [null, null, null]; // null = empty, or Uint8Array of name bytes
+export let savesLoaded = false;            // guard: don't write to DB until loaded from DB first
+export let nameBuffer = [];                // bytes being typed
+export const NAME_MAX_LEN = 7;
+
+// Setters for state that external modules need to write
+export function setSelectCursor(v) { selectCursor = v; }
+export function setSaveSlots(v) { saveSlots = v; }
+export function setNameBuffer(v) { nameBuffer = v; }
+
+// Inventory getter — set by game.js at init to avoid circular dep
+let _getInventory = () => ({});
+export function setInventoryGetter(fn) { _getInventory = fn; }
+
+// --- Save persistence (IndexedDB + server) ---
+export async function saveSlotsToDB() {
+  if (!savesLoaded) return;
+  // Sync live player state into the active save slot before persisting
+  if (saveSlots[selectCursor]) {
+    saveSlots[selectCursor].level = ps.stats.level;
+    saveSlots[selectCursor].exp = ps.stats.exp;
+    saveSlots[selectCursor].stats = playerStatsSnapshot();
+    saveSlots[selectCursor].inventory = { ..._getInventory() };
+    saveSlots[selectCursor].gil = ps.gil;
+    saveSlots[selectCursor].proficiency = { ...ps.proficiency };
+  }
+  try {
+    const inv = _getInventory();
+    const data = saveSlots.map(s => s ? {
+      name: Array.from(s.name),
+      level: s.level || (ps.stats ? ps.stats.level : 1),
+      exp: s.exp != null ? s.exp : (ps.stats ? ps.stats.exp : 0),
+      stats: s.stats || (ps.stats ? playerStatsSnapshot() : null),
+      inventory: s.inventory || inv
+    } : null);
+    // Local IndexedDB
+    const db = await openSaveDB();
+    const tx = db.transaction('roms', 'readwrite');
+    tx.objectStore('roms').put(data, 'saves');
+    // Server sync — push each changed slot
+    if (window.ff3Auth) {
+      data.forEach((slotData, i) => {
+        if (slotData) window.ff3Auth.serverSave(i, slotData).catch(() => {});
+      });
+    }
+  } catch (e) { /* silent fail */ }
+}
+
+export async function loadSlotsFromDB() {
+  try {
+    // Try server first if logged in
+    if (window.ff3Auth) {
+      const serverSlots = await window.ff3Auth.serverLoadSaves().catch(() => null);
+      if (serverSlots) {
+        saveSlots = parseSaveSlots(serverSlots) || saveSlots;
+        savesLoaded = true;
+        return;
+      }
+    }
+    // Fall back to IndexedDB
+    const db = await openSaveDB();
+    const tx = db.transaction('roms', 'readonly');
+    const req = tx.objectStore('roms').get('saves');
+    return new Promise((resolve) => {
+      req.onsuccess = () => {
+        saveSlots = parseSaveSlots(req.result) || saveSlots;
+        savesLoaded = true;
+        resolve();
+      };
+      req.onerror = () => { savesLoaded = true; resolve(); };
+    });
+  } catch (e) { savesLoaded = true; }
+}

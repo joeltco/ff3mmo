@@ -28,7 +28,10 @@ import { BATTLE_MISS, BATTLE_GAME_OVER, BATTLE_ROAR, BATTLE_FIGHT, BATTLE_RUN,
 import { initMonsterSprites, getMonsterCanvas, getMonsterWhiteCanvas,
          getMonsterDeathFrames, hasMonsterSprites } from './monster-sprites.js';
 import { loadBossSprite, getBossBattleCanvas, getBossWhiteCanvas } from './boss-sprites.js';
-import { openSaveDB, serverDeleteSlot, parseSaveSlots } from './save.js';
+import { serverDeleteSlot } from './save.js';
+import { selectCursor, saveSlots, savesLoaded, nameBuffer, NAME_MAX_LEN,
+         setSelectCursor, setSaveSlots, setNameBuffer,
+         saveSlotsToDB, loadSlotsFromDB, setInventoryGetter } from './save-state.js';
 import { _nameToBytes, _nesNameToString, _buildItemRowBytes, _makeGotNText, makeExpText, makeGilText, makeFoundItemText, makeProfLevelUpText } from './text-utils.js';
 import { nesColorFade, _makeFadedPal, _stepPalFade } from './palette.js';
 import { _getPlane0, _rebuild, _shiftHorizWater, _isWater, _buildHorizMixed } from './tile-math.js';
@@ -44,7 +47,7 @@ import { BATTLE_BG_MAP_LOOKUP, renderBattleBg } from './battle-bg.js';
 import { LOAD_FADE_STEP_MS, LOAD_FADE_MAX, drawLoadingOverlay, drawHUDLoadingMoogle } from './loading-screen.js';
 import { initTitleWater, initTitleSky, initTitleUnderwater, initUnderwaterSprites, initTitleOcean, initTitleLogo } from './title-animations.js';
 // BATTLE_SPRITE_ROM, BATTLE_JOB_SIZE, BATTLE_PAL_ROM → sprite-init.js
-import { ps, EQUIP_SLOT_SUBTYPE, getEquipSlotId, setEquipSlotId, recalcDEF, recalcCombatStats, getHitWeapon, isHitRightHand, initPlayerStats, initExpTable, grantExp, fullHeal, playerStatsSnapshot, gainProficiency, getProfHits, getProfLevel, getShieldEvade, PROF_CATEGORIES, WEAPON_PROF_CATEGORY } from './player-stats.js';
+import { ps, EQUIP_SLOT_SUBTYPE, getEquipSlotId, setEquipSlotId, recalcDEF, recalcCombatStats, getHitWeapon, isHitRightHand, initPlayerStats, initExpTable, grantExp, fullHeal, gainProficiency, getProfHits, getProfLevel, getShieldEvade, PROF_CATEGORIES, WEAPON_PROF_CATEGORY } from './player-stats.js';
 import { initProfIcons, getProfIcon } from './prof-icons.js';
 import { chatState, addChatMessage, updateChat, drawChat } from './chat.js';
 import { msgState, showMsgBox, updateMsgBox, drawMsgBox } from './message-box.js';
@@ -76,64 +79,7 @@ import { HEAL_NUM_PAL, DMG_SHOW_MS, resetAllDmgNums, tickDmgNums, tickHealNums, 
 
 const isMobile = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 
-// --- Save data persistence (IndexedDB) ---
-async function saveSlotsToDB() {
-  if (!savesLoaded) return;
-  // Sync live player state into the active save slot before persisting
-  if (saveSlots[selectCursor]) {
-    saveSlots[selectCursor].level = ps.stats.level;
-    saveSlots[selectCursor].exp = ps.stats.exp;
-    saveSlots[selectCursor].stats = playerStatsSnapshot();
-    saveSlots[selectCursor].inventory = { ...playerInventory };
-    saveSlots[selectCursor].gil = ps.gil;
-    saveSlots[selectCursor].proficiency = { ...ps.proficiency };
-  }
-  try {
-    const data = saveSlots.map(s => s ? {
-      name: Array.from(s.name),
-      level: s.level || (ps.stats ? ps.stats.level : 1),
-      exp: s.exp != null ? s.exp : (ps.stats ? ps.stats.exp : 0),
-      stats: s.stats || (ps.stats ? playerStatsSnapshot() : null),
-      inventory: s.inventory || playerInventory
-    } : null);
-    // Local IndexedDB
-    const db = await openSaveDB();
-    const tx = db.transaction('roms', 'readwrite');
-    tx.objectStore('roms').put(data, 'saves');
-    // Server sync — push each changed slot
-    if (window.ff3Auth) {
-      data.forEach((slotData, i) => {
-        if (slotData) window.ff3Auth.serverSave(i, slotData).catch(() => {});
-      });
-    }
-  } catch (e) { /* silent fail */ }
-}
-
-async function loadSlotsFromDB() {
-  try {
-    // Try server first if logged in
-    if (window.ff3Auth) {
-      const serverSlots = await window.ff3Auth.serverLoadSaves().catch(() => null);
-      if (serverSlots) {
-        saveSlots = parseSaveSlots(serverSlots) || saveSlots;
-        savesLoaded = true;
-        return;
-      }
-    }
-    // Fall back to IndexedDB
-    const db = await openSaveDB();
-    const tx = db.transaction('roms', 'readonly');
-    const req = tx.objectStore('roms').get('saves');
-    return new Promise((resolve) => {
-      req.onsuccess = () => {
-        saveSlots = parseSaveSlots(req.result) || saveSlots;
-        savesLoaded = true;
-        resolve();
-      };
-      req.onerror = () => { savesLoaded = true; resolve(); };
-    });
-  } catch (e) { savesLoaded = true; }
-}
+// Save state (selectCursor, saveSlots, saveSlotsToDB, loadSlotsFromDB) → save-state.js
 
 
 const CANVAS_W = 256;          // 16 metatiles wide (NES resolution)
@@ -221,12 +167,7 @@ const TITLE_ZBOX_MS      = 200;
 const SELECT_TEXT_STEP_MS = 100;
 const SELECT_TEXT_STEPS   = 4;
 
-// Player select screen state
-let selectCursor = 0;             // 0-2 (which slot)
-let saveSlots = [null, null, null]; // null = empty, or Uint8Array of name bytes
-let savesLoaded = false;            // guard: don't write to DB until loaded from DB first
-let nameBuffer = [];                // bytes being typed
-const NAME_MAX_LEN = 7;
+// Player select screen state → save-state.js (selectCursor, saveSlots, nameBuffer, etc.)
 
 // HUD info fade-in after title screen ends
 let hudInfoFadeTimer = 0;
@@ -563,6 +504,7 @@ function _onNameEntryKeyDown(e) {
   }
 }
 export function init() {
+  setInventoryGetter(() => playerInventory);
   canvas = document.getElementById('game-canvas');
   ctx = canvas.getContext('2d');
   canvas.width = CANVAS_W;
@@ -824,7 +766,6 @@ function _inputShared() {
   return {
     keys,
     playerInventory,
-    saveSlots,
     battleAllies,
     get battleState()          { return battleState; },
     set battleState(v)          { battleState = v; },
@@ -841,7 +782,6 @@ function _inputShared() {
     get moving()                { return moving; },
     get onWorldMap()            { return onWorldMap; },
     get dungeonFloor()          { return dungeonFloor; },
-    get selectCursor()          { return selectCursor; },
     get isPVPBattle()           { return pvpSt.isPVPBattle; },
     get pvpOpponentStats()      { return pvpSt.pvpOpponentStats; },
     get pvpEnemyAllies()        { return pvpSt.pvpEnemyAllies; },
@@ -849,7 +789,6 @@ function _inputShared() {
     set pvpPlayerTargetIdx(v)   { pvpSt.pvpPlayerTargetIdx = v; },
     get enemyHP()                { return _getEnemyHP(); },
     set enemyHP(v)               { _setEnemyHP(v); },
-    saveSlotsToDB,
     addItem,
     removeItem,
     getRosterVisible,
@@ -863,8 +802,6 @@ function _inputShared() {
 function _pauseShared() {
   return {
     playerInventory,
-    saveSlots,
-    selectCursor,
     cursorTileCanvas,
     rosterScroll: inputSt.rosterScroll,
     _drawBorderedBox,
@@ -1211,10 +1148,6 @@ function _triggerShared() {
 function _titleShared() {
   return {
     waterTick,
-    selectCursor,
-    saveSlots,
-    nameBuffer,
-    nameMaxLen: NAME_MAX_LEN,
     battleSpriteCanvas,
     battleSpriteFadeCanvases,
     silhouetteCanvas,
@@ -2453,22 +2386,22 @@ function _updateTitleSelectCase() {
     } else if (selectCursor === 3) {
       playSFX(SFX.CONFIRM);
       titleSt.deleteMode = true;
-      selectCursor = 0;
+      setSelectCursor(0);
     } else if (saveSlots[selectCursor]) {
       playSFX(SFX.CONFIRM);
       titleSt.state = 'select-fade-out'; titleSt.timer = 0;
     } else {
       playSFX(SFX.CONFIRM);
-      nameBuffer = [];
+      setNameBuffer([]);
       titleSt.state = 'name-entry'; titleSt.timer = 0;
     }
   }
   if (titleSt.deleteMode) {
-    if (keys['ArrowDown']) { keys['ArrowDown'] = false; selectCursor = (selectCursor + 1) % 3; playSFX(SFX.CURSOR); }
-    if (keys['ArrowUp'])   { keys['ArrowUp'] = false;   selectCursor = (selectCursor + 2) % 3; playSFX(SFX.CURSOR); }
+    if (keys['ArrowDown']) { keys['ArrowDown'] = false; setSelectCursor((selectCursor + 1) % 3); playSFX(SFX.CURSOR); }
+    if (keys['ArrowUp'])   { keys['ArrowUp'] = false;   setSelectCursor((selectCursor + 2) % 3); playSFX(SFX.CURSOR); }
   } else {
-    if (keys['ArrowDown']) { keys['ArrowDown'] = false; selectCursor = (selectCursor + 1) % 4; playSFX(SFX.CURSOR); }
-    if (keys['ArrowUp'])   { keys['ArrowUp'] = false;   selectCursor = (selectCursor + 3) % 4; playSFX(SFX.CURSOR); }
+    if (keys['ArrowDown']) { keys['ArrowDown'] = false; setSelectCursor((selectCursor + 1) % 4); playSFX(SFX.CURSOR); }
+    if (keys['ArrowUp'])   { keys['ArrowUp'] = false;   setSelectCursor((selectCursor + 3) % 4); playSFX(SFX.CURSOR); }
   }
   if (_xPressed()) {
     if (titleSt.deleteMode) { playSFX(SFX.CONFIRM); titleSt.deleteMode = false; }
@@ -2534,7 +2467,7 @@ function updateTitle(dt) {
       if (keys['z'] || keys['Z']) { keys['z'] = false; keys['Z'] = false; playSFX(SFX.CONFIRM); titleSt.state = 'zbox-close'; titleSt.timer = 0; }
       break;
     case 'zbox-close':           if (titleSt.timer >= TITLE_ZBOX_MS) { titleSt.state = 'logo-fade-out'; titleSt.timer = 0; } break;
-    case 'logo-fade-out':        if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'select-box-open'; titleSt.timer = 0; selectCursor = 0; titleSt.deleteMode = false; } break;
+    case 'logo-fade-out':        if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'select-box-open'; titleSt.timer = 0; setSelectCursor(0); titleSt.deleteMode = false; } break;
     case 'select-box-open':      if (titleSt.timer >= BOSS_BOX_EXPAND_MS) { titleSt.state = 'select-fade-in'; titleSt.timer = 0; } break;
     case 'select-fade-in':       if (titleSt.timer >= (SELECT_TEXT_STEPS + 1) * SELECT_TEXT_STEP_MS) { titleSt.state = 'select'; titleSt.timer = 0; } break;
     case 'select':               _updateTitleSelectCase(); break;

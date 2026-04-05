@@ -2,6 +2,7 @@
 
 import { drawText, measureText, TEXT_WHITE } from './font-renderer.js';
 import { nesColorFade, _makeFadedPal } from './palette.js';
+import { selectCursor, saveSlots, nameBuffer, NAME_MAX_LEN } from './save-state.js';
 
 // ── NES layout constants — must match game.js ─────────────────────────────
 const CANVAS_W   = 256;
@@ -275,7 +276,7 @@ export function drawPlayerSelectContent(ctx, sbX, sbY, sbW, sbH, shared) {
   const delPal = ts.deleteMode
     ? [0x0F, 0x0F, 0x0F, 0x16]
     : [0x0F, 0x0F, 0x0F, fadedPal[3]];
-  if (!ts.deleteMode && shared.selectCursor === 3) shared.drawCursorFaded(ix, delY - 4, fadeStep);
+  if (!ts.deleteMode && selectCursor === 3) shared.drawCursorFaded(ix, delY - 4, fadeStep);
   drawText(ctx, ix + 38, delY, SELECT_DELETE_TEXT, delPal);
 }
 
@@ -413,14 +414,14 @@ function _drawSelectSlot(ctx, i, ix, slotStartY, slotSpacing, fadeStep, fadedPal
   const ts  = titleSt;
   const sy  = slotStartY + i * slotSpacing;
   const textX = ix + 20, nameX = textX + 18;
-  const isNameEntry = ts.state === 'name-entry' && i === shared.selectCursor;
+  const isNameEntry = ts.state === 'name-entry' && i === selectCursor;
 
-  if (i === shared.selectCursor) shared.drawCursorFaded(ix, sy - 4, fadeStep);
+  if (i === selectCursor) shared.drawCursorFaded(ix, sy - 4, fadeStep);
 
   if (isNameEntry) {
     if (shared.silhouetteCanvas) ctx.drawImage(shared.silhouetteCanvas, textX - 2, sy - 4);
   } else {
-    const portraitSrc = (shared.saveSlots[i] && shared.battleSpriteCanvas) ? shared.battleSpriteCanvas : shared.silhouetteCanvas;
+    const portraitSrc = (saveSlots[i] && shared.battleSpriteCanvas) ? shared.battleSpriteCanvas : shared.silhouetteCanvas;
     if (portraitSrc && fadeStep < SELECT_TEXT_STEPS) {
       let src = portraitSrc;
       if (fadeStep > 0 && portraitSrc === shared.battleSpriteCanvas && shared.battleSpriteFadeCanvases)
@@ -432,13 +433,13 @@ function _drawSelectSlot(ctx, i, ix, slotStartY, slotSpacing, fadeStep, fadedPal
   }
 
   if (isNameEntry) {
-    if (shared.nameBuffer.length > 0) drawText(ctx, nameX, sy, new Uint8Array(shared.nameBuffer), fadedPal);
-    if (shared.nameBuffer.length < shared.nameMaxLen && Math.floor(ts.timer / 400) % 2 === 0) {
+    if (nameBuffer.length > 0) drawText(ctx, nameX, sy, new Uint8Array(nameBuffer), fadedPal);
+    if (nameBuffer.length < NAME_MAX_LEN && Math.floor(ts.timer / 400) % 2 === 0) {
       ctx.fillStyle = '#fcfcfc';
-      ctx.fillRect(nameX + shared.nameBuffer.length * 8 + 1, sy + 7, 6, 1);
+      ctx.fillRect(nameX + nameBuffer.length * 8 + 1, sy + 7, 6, 1);
     }
-  } else if (shared.saveSlots[i]) {
-    drawText(ctx, nameX, sy, shared.saveSlots[i].name, fadedPal);
+  } else if (saveSlots[i]) {
+    drawText(ctx, nameX, sy, saveSlots[i].name, fadedPal);
   } else {
     drawText(ctx, nameX, sy, SELECT_SLOT_TEXT, fadedPal);
   }
