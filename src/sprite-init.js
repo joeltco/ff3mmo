@@ -292,27 +292,33 @@ export function initCursorTile(romData) {
   return { cursorTileCanvas, cursorFadeCanvases };
 }
 
+function _buildSingleTile(romData, offset, palette) {
+  const c = document.createElement('canvas');
+  c.width = 8; c.height = 8;
+  _blitTile(c.getContext('2d'), decodeTile(romData, offset), palette, 0, 0);
+  return c;
+}
+
+function _vflip8(src) {
+  const c = document.createElement('canvas');
+  c.width = 8; c.height = 8;
+  const cx = c.getContext('2d');
+  cx.translate(0, 8); cx.scale(1, -1);
+  cx.drawImage(src, 0, 0);
+  return c;
+}
+
 export function initScrollArrows(romData) {
   const palette = [0x0F, 0x00, 0x10, 0x30];
-  const downArrow = _buildCanvas4ROM(romData, SCROLL_ARROW_ROM, palette);
-  const upArrow = document.createElement('canvas');
-  upArrow.width = 8; upArrow.height = 8;
-  const uctx = upArrow.getContext('2d');
-  uctx.translate(0, 8); uctx.scale(1, -1);
-  uctx.drawImage(downArrow, 0, 0);
-  // Faded versions
+  const downArrow = _buildSingleTile(romData, SCROLL_ARROW_ROM, palette);
+  const upArrow = _vflip8(downArrow);
   const downFade = [], upFade = [];
   for (let step = 1; step <= 4; step++) {
     let fp = [...palette];
     for (let s = 0; s < step; s++) fp = fp.map(c => nesColorFade(c));
-    const df = _buildCanvas4ROM(romData, SCROLL_ARROW_ROM, fp);
+    const df = _buildSingleTile(romData, SCROLL_ARROW_ROM, fp);
     downFade.push(df);
-    const uf = document.createElement('canvas');
-    uf.width = 8; uf.height = 8;
-    const ufc = uf.getContext('2d');
-    ufc.translate(0, 8); ufc.scale(1, -1);
-    ufc.drawImage(df, 0, 0);
-    upFade.push(uf);
+    upFade.push(_vflip8(df));
   }
   return { scrollArrowDown: downArrow, scrollArrowUp: upArrow, scrollArrowDownFade: downFade, scrollArrowUpFade: upFade };
 }
