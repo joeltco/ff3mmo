@@ -1,6 +1,6 @@
 # game.js Refactor TODO
 
-Current size: **4,389 lines**. Target: <4,000 lines.
+Current size: **4,208 lines**. Target: <4,000 lines.
 
 ---
 
@@ -12,10 +12,16 @@ Group ~40 scattered `let xxxCanvas = null` / `let xxxFrames = null` declarations
 ### ~~2. `src/battle-ally.js` extraction (~123L)~~ DONE
 Extracted `updateBattleAlly` + 5 private helpers. `_allyShared()` in game.js (35L). Net: −83L.
 
-### 3. `_processEnemyFlash` + `_updatePlayerDamageShow` (68L combined)
-`_processEnemyFlash` (48L, lines 4056–4103): ally targeting, hit calc, multi-target damage, PVP branching.
-`_updatePlayerDamageShow` (20L, lines 3699–3718): death check, dying indices, PVP victory.
-Could fold into battle-ally.js or keep separate.
+### ~~3. `_processEnemyFlash` + `_updateBattleEnemyTurn`~~ DONE
+Extracted to `src/battle-enemy.js` (~76L). `_enemyShared()` in game.js.
+
+### 3b. `src/battle-items.js` extraction DONE
+Extracted `startMagicItem`, `updateMagicItemThrowHit`, target selection, damage application (~150L).
+`_magicItemShared()` in game.js. Designed for multiple spell items.
+
+### 3c. `src/damage-numbers.js` extraction DONE
+All damage/heal number state, palettes, tick, reset, drawing helper (~102L).
+Miss sprite rendered from ROM tiles $1B4D0/$1B4E0 (green "MISS" with black outline).
 
 ### 4. `battleCtx` grouping (~40 battle vars → 1 object)
 Group `battleState`, `battleTimer`, `bossDamageNum`, `playerDamageNum`, `bossHP`, `bossDefeated`, `battleShakeTimer`, `critFlashTimer`, `turnQueue`, `encounterMonsters`, etc. (lines 289–462) into a `battleCtx` object.
