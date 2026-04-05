@@ -409,8 +409,18 @@ function _drawTitlePressZ(ctx, cx, vpBot) {
     for (let ty = boxY + 8; ty < boxY + boxH - 8; ty += 8)
       for (let tx = boxX + 8; tx < boxX + boxW - 8; tx += 8) ctx.drawImage(FILL, tx, ty);
   }
-  if (t >= 1 && Math.floor(ts.timer / 500) % 2 === 0) {
-    drawText(ctx, boxX + 8, boxY + 8, ts.pressZ, TEXT_WHITE);
+  // Text: fade in on open, blink while idle, fade out on close
+  let textFl = TITLE_FADE_MAX;
+  if (ts.state === 'zbox-open') textFl = TITLE_FADE_MAX - Math.min(Math.floor(ts.timer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
+  else if (ts.state === 'logo-reopen') textFl = TITLE_FADE_MAX - Math.min(Math.floor(ts.timer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
+  else if (ts.state === 'logo-content-out') textFl = Math.min(Math.floor(ts.timer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
+  else if (ts.state === 'to-select') textFl = TITLE_FADE_MAX;
+  else if (ts.state === 'main' || ts.state === 'logo-content-in-back') {
+    textFl = (Math.floor(ts.timer / 500) % 2 === 0) ? 0 : TITLE_FADE_MAX;
+  }
+  if (textFl < TITLE_FADE_MAX) {
+    const pal = textFl === 0 ? TEXT_WHITE : titleFadePal(textFl);
+    drawText(ctx, boxX + 8, boxY + 8, ts.pressZ, pal);
   }
 }
 
