@@ -184,7 +184,11 @@ export function drawChatTabs(ctx, fadeStep) {
   const label = _nameToBytes(CHAT_TABS[activeTab]);
   const tx = HUD_RIGHT_X + 4;
   const ty = TAB_BAR_Y + 4;
-  drawText(ctx, tx, ty, label, TEXT_WHITE);
+  if (tabSelectMode && (Math.floor(Date.now() / 400) & 1)) {
+    // blink — skip draw
+  } else {
+    drawText(ctx, tx, ty, label, TEXT_WHITE);
+  }
 
   ctx.globalAlpha = 1;
   ctx.restore();
