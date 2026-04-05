@@ -245,7 +245,7 @@ export function drawChatTabs(ctx, fadeStep, drawHudBox) {
     for (let s = 0; s < tabFade; s++) pal = pal.map(c => nesColorFade(c));
     const label = _nameToBytes(CHAT_TABS[tabIdx]);
     const lw = measureText(label);
-    drawText(ctx, tx + Math.floor((w - lw) / 2), TAB_BAR_Y + 5, label, pal);
+    drawText(ctx, tx + Math.floor((w - lw) / 2), TAB_BAR_Y + 8, label, pal);
   }
 
   ctx.restore();
