@@ -460,9 +460,9 @@ function _drawSelectSlotRow(ctx, i, selX, rowY, fadeStep, showContent, shared) {
   const ts = titleSt;
   const isNameEntry = ts.state === 'name-entry' && i === selectCursor;
 
-  // Portrait box (left) + info box (right) — roster style
-  shared.drawHudBox(selX, rowY, 32, SEL_ROW_H, fadeStep);
-  shared.drawHudBox(selX + 32, rowY, SEL_W - 32, SEL_ROW_H, fadeStep);
+  // Portrait box (left) + info box (right) — roster style, no border fade
+  shared.drawHudBox(selX, rowY, 32, SEL_ROW_H, 0);
+  shared.drawHudBox(selX + 32, rowY, SEL_W - 32, SEL_ROW_H, 0);
   if (!showContent) return;
 
   // Portrait
