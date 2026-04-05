@@ -20,7 +20,7 @@ const HUD_VIEW_Y = 32;
 const HUD_BOT_H  = 64;
 
 // ── Chat tabs ─────────────────────────────────────────────────────────────
-export const CHAT_TABS = ['ALL', 'ROOM', 'PM', 'SYS'];
+export const CHAT_TABS = ['World', 'Room', 'Private', 'System'];
 export let activeTab = 0;  // index into CHAT_TABS
 export let tabSelectMode = false;
 export function setActiveTab(i) { activeTab = i; }
@@ -54,10 +54,10 @@ export function addChatMessage(text, type, channel) {
 
 function _passesTabFilter(msg) {
   const tab = CHAT_TABS[activeTab];
-  if (tab === 'ALL') return true;
-  if (tab === 'ROOM') return msg.channel === 'room' && msg.loc === getPlayerLocation();
-  if (tab === 'PM') return msg.channel === 'pm';
-  if (tab === 'SYS') return msg.channel === 'sys';
+  if (tab === 'World') return true;
+  if (tab === 'Room') return msg.channel === 'room' && msg.loc === getPlayerLocation();
+  if (tab === 'Private') return msg.channel === 'pm';
+  if (tab === 'System') return msg.channel === 'sys';
   return true;
 }
 
@@ -181,24 +181,14 @@ export function drawChatTabs(ctx, fadeStep) {
   const NES_STEP_ALPHAS = [1.0, 0.76, 0.52, 0.28, 0];
   ctx.globalAlpha = NES_STEP_ALPHAS[Math.min(fadeStep, 4)];
 
-  // 2×2 grid layout: top row [ALL, ROOM], bottom row [PM, SYS]
-  const halfW = Math.floor((CANVAS_W - HUD_RIGHT_X) / 2);
-  for (let i = 0; i < CHAT_TABS.length; i++) {
-    const col = i % 2;
-    const row = Math.floor(i / 2);
-    const label = _nameToBytes(CHAT_TABS[i]);
-    const lw = measureText(label);
-    const tx = HUD_RIGHT_X + col * halfW + Math.floor((halfW - lw) / 2);
-    const ty = TAB_BAR_Y + row * 8;
-    const isActive = i === activeTab;
-    const isSelected = tabSelectMode && i === activeTab;
-
-    if (isSelected && (Math.floor(Date.now() / 400) & 1)) {
-      drawText(ctx, tx, ty, label, TEXT_GREY);
-    } else {
-      drawText(ctx, tx, ty, label, isActive ? TEXT_YELLOW : TEXT_GREY);
-    }
-  }
+  // Single centered label showing current tab
+  const label = _nameToBytes(CHAT_TABS[activeTab]);
+  const lw = measureText(label);
+  const panelW = CANVAS_W - HUD_RIGHT_X;
+  const tx = HUD_RIGHT_X + Math.floor((panelW - lw) / 2);
+  const ty = TAB_BAR_Y + 4;
+  const pal = tabSelectMode ? TEXT_YELLOW : TEXT_GREY;
+  drawText(ctx, tx, ty, label, pal);
 
   ctx.globalAlpha = 1;
   ctx.restore();
