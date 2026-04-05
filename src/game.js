@@ -3006,7 +3006,8 @@ function _gameLoopDraw() {
     fetch('/api/client-error', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ msg: e.message, stack: e.stack }) }).catch(() => {});
   }
   // Draw tabs BEFORE HUD so static HUD canvas draws on top of tab overlap
-  let _tabFade = rosterBattleFade;
+  const _infoFade = HUD_INFO_FADE_STEPS - Math.min(Math.floor(hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
+  let _tabFade = Math.max(rosterBattleFade, _infoFade);
   const _wipeDur = 44 * (1000 / 60);
   const _wFadeMs = _wipeDur / ROSTER_FADE_STEPS;
   if (transSt.dungeon && transSt.state === 'closing') _tabFade = Math.max(_tabFade, Math.min(Math.floor(transSt.timer / _wFadeMs), ROSTER_FADE_STEPS));
