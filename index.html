@@ -603,6 +603,7 @@
       <button id="tv-layout" class="tv-rom-btn" style="display:none">ROW</button>
       <button id="tv-height" class="tv-rom-btn" style="display:none">24</button>
       <button id="tv-pal" class="tv-rom-btn" style="display:none">PAL0</button>
+      <button id="tv-bank" class="tv-rom-btn">CHAR $28</button>
       <button id="tv-poses" class="tv-rom-btn">POSES</button>
       <button id="tv-export" class="tv-rom-btn" style="display:none">EXPORT</button>
       <input id="tv-offset" type="text" placeholder="offset (hex)" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
@@ -969,6 +970,30 @@
     const ONION_KNIGHT_OFFSET = 0x50010; // ROM offset for Onion Knight battle idle frame
     const ONION_FRAME_STEP = 0x100;     // 16 tiles between animation frames
     let onionFrameIdx = 0;
+    // Known CHR data banks in PRG-ROM (MMC3 CHR-RAM: tile data lives in PRG)
+    const CHR_BANKS = [
+      { label: 'BG $00',    off: 0x00010 }, // overworld/bg tiles
+      { label: 'BG $02',    off: 0x04010 },
+      { label: 'BG $04',    off: 0x08010 },
+      { label: 'BG $0A',    off: 0x14010 }, // more bg/map tiles
+      { label: 'BG $0B',    off: 0x16010 },
+      { label: 'BG $0E',    off: 0x1C010 },
+      { label: 'BG $0F',    off: 0x1E010 },
+      { label: 'MON $20',   off: 0x40010 }, // monster graphics
+      { label: 'MON $21',   off: 0x42010 },
+      { label: 'MON $22',   off: 0x44010 },
+      { label: 'MON $23',   off: 0x46010 },
+      { label: 'MON $24',   off: 0x48010 },
+      { label: 'MON $25',   off: 0x4A010 },
+      { label: 'MON $26',   off: 0x4C010 },
+      { label: 'MON $27',   off: 0x4E010 },
+      { label: 'CHAR $28',  off: 0x50010 }, // battle character sprites (Onion Knight)
+      { label: 'CHAR $29',  off: 0x52010 },
+      { label: 'CHAR $2A',  off: 0x54010 },
+      { label: 'CHAR $2B',  off: 0x56010 },
+      { label: 'FX $30',    off: 0x60010 }, // effects/animations
+    ];
+    let chrBankIdx = 15; // default to CHAR $28
     const BATTLE_PALETTES = [
       [0x0F, 0x36, 0x30, 0x16], // pal0 Onion Knight: black, blue, white, red-orange
       [0x0F, 0x16, 0x26, 0x36], // pal1 warm variant
@@ -1101,6 +1126,16 @@
       }
       tileGrid.scrollTop = 0;
     }
+
+    document.getElementById('tv-bank').addEventListener('click', () => {
+      chrBankIdx = (chrBankIdx + 1) % CHR_BANKS.length;
+      const bank = CHR_BANKS[chrBankIdx];
+      tileBaseOffset = bank.off;
+      tilePage = 0;
+      document.getElementById('tv-bank').textContent = bank.label;
+      document.getElementById('tv-offset').value = bank.off.toString(16).toUpperCase();
+      renderTilePage();
+    });
 
     document.getElementById('tv-sprite').addEventListener('click', () => {
       spriteMode = !spriteMode;
