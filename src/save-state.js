@@ -39,7 +39,9 @@ export async function saveSlotsToDB() {
       level: s.level || (ps.stats ? ps.stats.level : 1),
       exp: s.exp != null ? s.exp : (ps.stats ? ps.stats.exp : 0),
       stats: s.stats || (ps.stats ? playerStatsSnapshot() : null),
-      inventory: s.inventory || inv
+      inventory: s.inventory || inv,
+      gil: s.gil || 0,
+      proficiency: s.proficiency || {},
     } : null);
     // Local IndexedDB
     const db = await openSaveDB();
