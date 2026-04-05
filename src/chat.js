@@ -60,12 +60,12 @@ export function addChatMessage(text, type, channel, loc) {
   // Mark background tabs as unread
   const tabMap = { world: 0, room: 1, pm: 2, sys: 3 };
   const tabIdx = tabMap[channel];
-  if (tabIdx !== undefined && tabIdx !== activeTab) _tabUnread[tabIdx] = true;
+  if (tabIdx !== undefined && tabIdx !== activeTab && tabIdx !== 3) _tabUnread[tabIdx] = true;
 }
 
 function _passesTabFilter(msg) {
   const tab = CHAT_TABS[activeTab];
-  if (tab === 'World') return msg.channel === 'world';
+  if (tab === 'World') return msg.channel === 'world' || msg.channel === 'sys';
   if (tab === 'Room') return msg.channel === 'room' && msg.loc === getPlayerLocation();
   if (tab === 'Private') return msg.channel === 'pm';
   if (tab === 'System') return msg.channel === 'sys';
