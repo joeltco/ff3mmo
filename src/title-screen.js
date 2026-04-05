@@ -378,9 +378,13 @@ function _drawTitleShip(ctx, cx, cy, fl) {
   const leftX = cx - 16 - SHIP_DRIFT_PX;
   let shipX;
 
-  if (ts.state === 'to-select') {
-    // Center → left
-    const t = _easeInOut(Math.min(ts.timer / TITLE_TRANSITION_MS, 1));
+  if (ts.state === 'logo-content-out') {
+    // Hold center while content fades
+    shipX = cx - 16;
+  } else if (ts.state === 'to-select') {
+    // Center → left (ease-out only — starts slow, ends fast… reversed: starts slow)
+    const raw = Math.min(ts.timer / TITLE_TRANSITION_MS, 1);
+    const t = raw * raw; // quadratic ease-in — slow start
     shipX = cx - 16 - t * SHIP_DRIFT_PX;
   } else if (ts.state === 'to-main') {
     // Left (with osc snapshot) → center
