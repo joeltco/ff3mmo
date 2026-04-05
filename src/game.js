@@ -1,7 +1,7 @@
 // Game Client — canvas rendering, input handling, game loop
 
 import { parseROM } from './rom-parser.js';
-import { NES_SYSTEM_PALETTE, decodeTile, decodeTiles } from './tile-decoder.js';
+import { NES_SYSTEM_PALETTE, decodeTiles } from './tile-decoder.js';
 import { Sprite, DIR_DOWN, DIR_UP, DIR_LEFT, DIR_RIGHT } from './sprite.js';
 import { loadMap } from './map-loader.js';
 import { MapRenderer } from './map-renderer.js';
@@ -31,17 +31,19 @@ import { loadBossSprite, getBossBattleCanvas, getBossWhiteCanvas } from './boss-
 import { openSaveDB, serverDeleteSlot, parseSaveSlots } from './save.js';
 import { _nameToBytes, _nesNameToString, _buildItemRowBytes, _makeGotNText, makeExpText, makeGilText, makeFoundItemText, makeProfLevelUpText } from './text-utils.js';
 import { nesColorFade, _makeFadedPal, _stepPalFade } from './palette.js';
-import { _getPlane0, _rebuild, _shiftHorizWater, _isWater, _buildHorizMixed, _writePixels64, _writeTilePixels } from './tile-math.js';
-import { BAYER4, DMG_BOUNCE_TABLE, _dmgBounceY } from './data/animation-tables.js';
+import { _getPlane0, _rebuild, _shiftHorizWater, _isWater, _buildHorizMixed } from './tile-math.js';
+import { _dmgBounceY } from './data/animation-tables.js';
 import { _calcBoxExpandSize, _encounterGridPos } from './battle-layout.js';
-import { _makeCanvas16, _makeCanvas16ctx, _hflipCanvas16, _makeWhiteCanvas } from './canvas-utils.js';
+// _makeCanvas16, _makeCanvas16ctx, _hflipCanvas16, _makeWhiteCanvas → sprite-init.js
 import { _updateWorldWater, _updateIndoorWater, resetWorldWaterCache, resetIndoorWaterCache, _buildHorizWaterPair } from './water-animation.js';
 import { initSlashSprites, initKnifeSlashSprites, initSwordSlashSprites } from './slash-effects.js';
 import { initSouthWindSprite } from './south-wind.js';
+import { initFlameRawTiles, initStarTiles, rebuildFlameSprites, clearFlameSprites,
+         getFlameSprites, getFlameFrames, getStarTiles } from './flame-sprites.js';
 import { BATTLE_BG_MAP_LOOKUP, renderBattleBg } from './battle-bg.js';
 import { LOAD_FADE_STEP_MS, LOAD_FADE_MAX, drawLoadingOverlay, drawHUDLoadingMoogle } from './loading-screen.js';
 import { initTitleWater, initTitleSky, initTitleUnderwater, initUnderwaterSprites, initTitleOcean, initTitleLogo } from './title-animations.js';
-import { BATTLE_SPRITE_ROM, BATTLE_JOB_SIZE, BATTLE_PAL_ROM } from './data/jobs.js';
+// BATTLE_SPRITE_ROM, BATTLE_JOB_SIZE, BATTLE_PAL_ROM → sprite-init.js
 import { ps, EQUIP_SLOT_SUBTYPE, getEquipSlotId, setEquipSlotId, recalcDEF, recalcCombatStats, getHitWeapon, isHitRightHand, initPlayerStats, initExpTable, grantExp, fullHeal, playerStatsSnapshot, gainProficiency, getProfHits, getProfLevel, getShieldEvade, PROF_CATEGORIES, WEAPON_PROF_CATEGORY } from './player-stats.js';
 import { initProfIcons, getProfIcon } from './prof-icons.js';
 import { chatState, addChatMessage, updateChat, drawChat } from './chat.js';
@@ -54,28 +56,38 @@ import { checkTrigger, applyPassage, openPassage, handleChest, handleSecretWall,
 import { pvpSt, startPVPBattle, resetPVPState, updatePVPBattle } from './pvp.js';
 import { drawBattle, drawBattleAllies, drawSWExplosion, drawSWDamageNumbers } from './battle-drawing.js';
 import { playSlashSFX } from './battle-sfx.js';
-import { initWeaponSprites, getKnifeBladeCanvas, getKnifeBladeSwungCanvas,
+import { getKnifeBladeCanvas, getKnifeBladeSwungCanvas,
          getDaggerBladeCanvas, getDaggerBladeSwungCanvas,
          getSwordBladeCanvas, getSwordBladeSwungCanvas,
          getFistCanvas, getBlades } from './weapon-sprites.js';
 import { updateBattleAlly } from './battle-ally.js';
 import { updateBattleEnemyTurn } from './battle-enemy.js';
 import { resetBattleItemVars, getTargets, getHitIdx, startMagicItem, updateMagicItemThrowHit } from './battle-items.js';
+import { initBattleSprite as _initBattleSprite, initFakePlayerPortraits as _initFakePlayerPortraits,
+         initCursorTile as _initCursorTile, initAdamantoise as _initAdamantoise,
+         initGoblinSprite as _initGoblinSprite, initInvincibleSprite as _initInvincibleSprite,
+         initMoogleSprite as _initMoogleSprite, initLoadingScreenFadeFrames as _initLoadingScreenFadeFrames } from './sprite-init.js';
 import { HEAL_NUM_PAL, DMG_SHOW_MS, resetAllDmgNums, tickDmgNums, tickHealNums, clearHealNums, initMissSprite,
          getEnemyDmgNum, setEnemyDmgNum, getPlayerDamageNum, setPlayerDamageNum,
          getPlayerHealNum, setPlayerHealNum, getEnemyHealNum, setEnemyHealNum,
          getAllyDamageNums, getSwDmgNums,
          drawBattleNum } from './damage-numbers.js';
-import { OK_IDLE, OK_VICTORY, OK_L_BACK_SWING, OK_L_FWD_T2, OK_L_FWD_T3, OK_R_BACK_SWING, OK_R_FWD_T2, OK_KNEEL,
-         OK_LEG_L_IDLE, OK_LEG_R_IDLE, OK_LEG_L_BACK_L, OK_LEG_R_BACK_L, OK_LEG_L_FWD_L, OK_LEG_R_FWD_L,
-         OK_LEG_L_BACK_R, OK_LEG_R_SWING, OK_LEG_L_KNEEL, OK_LEG_R_KNEEL, OK_LEG_L_VICTORY, OK_LEG_R_VICTORY,
-         OK_DEATH } from './data/job-sprites.js';
+// OK_IDLE, OK_VICTORY, etc. → sprite-init.js
 
 const isMobile = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 
 // --- Save data persistence (IndexedDB) ---
 async function saveSlotsToDB() {
   if (!savesLoaded) return;
+  // Sync live player state into the active save slot before persisting
+  if (saveSlots[selectCursor]) {
+    saveSlots[selectCursor].level = ps.stats.level;
+    saveSlots[selectCursor].exp = ps.stats.exp;
+    saveSlots[selectCursor].stats = playerStatsSnapshot();
+    saveSlots[selectCursor].inventory = { ...playerInventory };
+    saveSlots[selectCursor].gil = ps.gil;
+    saveSlots[selectCursor].proficiency = { ...ps.proficiency };
+  }
   try {
     const data = saveSlots.map(s => s ? {
       name: Array.from(s.name),
@@ -177,46 +189,19 @@ let silhouetteCanvas = null;
 
 // FF1&2 ROM — secondary ROM for monster sprites, etc.
 let ff12Raw = null;
-const FF2_OFFSET = 0x040000;  // FF2 data starts at 256KB in compilation ROM
-const FF2_ADAMANTOISE_SPRITE = 0x04BF10;  // 4 tiles, 16×16, row-major (TL,TR,BL,BR)
+// FF2_OFFSET, FF2_ADAMANTOISE_SPRITE → sprite-init.js
 let adamantoiseFrames = null; // [normal, flipped] canvases
 
 // Boss sprite — positioned in dungeon boss room
 let bossSprite = null;  // { canvas, px, py } or null
 
-// Land Turtle battle sprite — 6×6 tiles (48×48 pixels) from FF3 ROM
-// Boss graphics: bank pair $24/$25 (register $12), address $9B00, 144 tiles total
-// Tilemap shows only tiles $70-$93 (36 tiles) in a 6×6 grid
-// Land Turtle palette colors — reused by Adamantoise map sprite
-const LAND_TURTLE_PAL_TOP = [0x0F, 0x13, 0x23, 0x28];
-const LAND_TURTLE_PAL_BOT = [0x0F, 0x19, 0x18, 0x28];
-
-// Goblin battle sprite — random encounters
-const GOBLIN_GFX_OFF = 0x40010;  // Bank $20:$8000 — size 0 (4×4), gfxID 0
-const GOBLIN_PAL0 = [0x0F, 0x17, 0x28, 0x3C]; // palette $89: black, brown, yellow-green, pale cyan
-const GOBLIN_PAL1 = [0x0F, 0x18, 0x28, 0x11]; // palette $A0: black, olive, yellow-green, blue
-// Per-tile palette assignment (derived from reference sprite)
-const GOBLIN_TILE_PAL = [0,0,0,0, 1,0,1,0, 1,1,1,1, 1,1,1,1];
-const GOBLIN_TILES = 16;  // 4×4 grid
-const GOBLIN_COLS = 4;
+// LAND_TURTLE_PAL_*, GOBLIN_*, MOOGLE_*, INVINCIBLE_* constants → sprite-init.js
+// MONSTER_DEATH_FRAMES → sprite-init.js (imported)
 let goblinBattleCanvas = null;  // 32×32 canvas
 let goblinWhiteCanvas = null;   // 32×32 all-white version for pre-attack flash
 let goblinDeathFrames = null;   // pre-rendered diagonal deterioration frames
-
-// Monster sprites: module in monster-sprites.js (initMonsterSprites, getMonster*)
-const MONSTER_DEATH_FRAMES = 16; // also used for goblin/fake player death frames
-
-// Moogle NPC sprite — loading screen decoration
-const MOOGLE_GFX_ID = 42;
-const MOOGLE_SPRITE_OFF = 0x01C010 + MOOGLE_GFX_ID * 256; // 0x01EA10
-const MOOGLE_PAL = [0x0F, 0x0F, 0x16, 0x30]; // transparent, black outline, red pom-pom, white body
 let moogleFrames = null; // [normal, flipped] canvases
-
-// Invincible airship sprite — title screen, facing east
-const INVINCIBLE_TILE_ROM = 0x17A90;  // Bank $0B:$9A80 — tiles $C0-$FF (64 tiles)
-const INVINCIBLE_PAL = [0x0F, 0x0F, 0x27, 0x30]; // transparent, black, gold, white
 let invincibleFrames = null; // [frameA, frameB] 32×32 canvases (east-facing)
-// titleSt.shipFadeFrames, titleSt.shadowFade → title-screen.js
 
 // Loading screen fade state — LOAD_FADE_STEP_MS, LOAD_FADE_MAX imported from loading-screen.js
 
@@ -353,7 +338,7 @@ const MONSTER_DEATH_MS = 250;            // diagonal tile wipe — 7 visible ste
 const MONSTER_SLIDE_MS = 267;            // 16 frames at 60fps — sprites slide in from left
 const DEFEND_SPARKLE_FRAME_MS = 133;     // 8 NES frames per tile
 const DEFEND_SPARKLE_TOTAL_MS = 533;     // 4 tiles × 133ms
-const DEFEND_SPARKLE_PAL = [0x0F, 0x1B, 0x2B, 0x30];
+// DEFEND_SPARKLE_PAL → sprite-init.js
 // Authentic damage bounce keyframes from FCEUX trace (Y offsets from baseline, up = negative)
 // 30 frames total = 500ms at 60fps
 
@@ -382,7 +367,7 @@ const TEXT_WHITE_ON_BLUE = [0x02, 0x02, 0x02, 0x30];
 
 // Pause menu state → pause-menu.js (pauseSt)
 let prePauseTrack = -1;        // FF3 track playing before pause opened
-const CURSOR_TILE_ROM = 0x01B450;  // hand cursor (4 tiles, 2x2 = 16x16)
+// CURSOR_TILE_ROM → sprite-init.js
 let cursorTileCanvas = null;
 let cursorFadeCanvases = null; // [step1..step4] NES-faded cursor canvases
 // PAUSE_ITEMS → data/strings.js
@@ -529,13 +514,8 @@ let waterTimer = 0;
 let waterTick = 0;    // master tick counter
 const WATER_TICK = 4 * (1000 / 60);  // ~67ms per tick
 
-// Flame sprite state
-let _flameRawTiles = null; // Map<npcId, [[tl,tr,bl,br], [tl,tr,bl,br]]> — raw decoded pixels
-let _flameFrames = null;   // Map<npcId, [canvas, canvas]> — rendered with current map palette
-let _flameSprites = [];    // [{npcId, px, py}] — active flame positions for current map
-
-// Star sprite effect state (teleport warp + pond healing)
-let _starTiles = null;     // [canvas, canvas, canvas] — 3 animation frames (8×8)
+// Flame sprite state → flame-sprites.js
+// Star sprite tiles → flame-sprites.js
 let starEffect = null;     // {frame, radius, angle, spin, onComplete} or null
 let pondStrobeTimer = 0;  // >0 = pond strobe active
 
@@ -609,7 +589,7 @@ export function init() {
     }
   });
   window.addEventListener('keyup', (e) => { keys[e.key] = false; });
-  window.addEventListener('beforeunload', () => { _syncSaveSlotProgress(); saveSlotsToDB(); });
+  window.addEventListener('beforeunload', () => { saveSlotsToDB(); });
 }
 
 function _tileToCanvas(pixels, palette) {
@@ -690,575 +670,7 @@ function initHUD(romData) {
   titleHudFadeCanvases = _buildFadedHUDSet([[HUD_VIEW_X, HUD_VIEW_Y, CANVAS_W, HUD_VIEW_H, false]]);
 }
 
-function _renderPortrait(tiles, layout, palette) {
-  const c = _makeCanvas16(); const pctx = c.getContext('2d');
-  for (let i = 0; i < 4; i++) _blitTile(pctx, tiles[i], palette, layout[i][0], layout[i][1]);
-  return c;
-}
-
-// Shared helper: generate palette-variant portrait frames for a set of decoded tiles
-function _genPosePortraits(poseTiles) {
-  return PLAYER_PALETTES.map(basePal => {
-    const frames = [];
-    for (let step = 0; step <= ROSTER_FADE_STEPS; step++) {
-      const pal = basePal.slice();
-      for (let s = 0; s < step; s++) { pal[1] = nesColorFade(pal[1]); pal[2] = nesColorFade(pal[2]); pal[3] = nesColorFade(pal[3]); }
-      frames.push(_renderPortrait(poseTiles, _BATTLE_LAYOUT, pal));
-    }
-    return frames;
-  });
-}
-// PPU tile data for player poses not already in _FP_IDLE/KNIFE constants
-// Onion Knight pose tiles — imported from src/data/job-sprites.js
-const _FP_ATK_R_TILE  = OK_R_FWD_T2;
-const _FP_ATK_L_TILE3 = OK_L_FWD_T2;
-const _FP_ATK_L_TILE4 = OK_L_FWD_T3;
-const _FP_KNEEL       = OK_KNEEL;
-function _initFakePosePortraits(romData) {
-  const idleTiles = _FP_IDLE_PPU.map(d => decodeTile(d, 0));
-  fakePlayerPortraits         = _genPosePortraits(idleTiles);
-  fakePlayerVictoryPortraits  = _genPosePortraits(_FP_VICTORY.map(d => decodeTile(d, 0)));
-  fakePlayerHitPortraits      = _genPosePortraits([0,1,2,3].map(i => decodeTile(romData, BATTLE_SPRITE_ROM + (30 + i) * 16)));
-  fakePlayerDefendPortraits   = _genPosePortraits(_FP_DEFEND.map(d => decodeTile(d, 0)));
-  fakePlayerAttackPortraits   = _genPosePortraits([idleTiles[0], idleTiles[1], decodeTile(_FP_ATK_R_TILE, 0), idleTiles[3]]);
-  fakePlayerAttackLPortraits  = _genPosePortraits([idleTiles[0], idleTiles[1], idleTiles[2], decodeTile(_FP_KNIFE_L[3], 0)]);
-  fakePlayerKnifeBackPortraits = _genPosePortraits(_FP_KNIFE_BACK.map(d => decodeTile(d, 0)));
-  fakePlayerKnifeRPortraits   = _genPosePortraits(_FP_KNIFE_R.map(d => decodeTile(d, 0)));
-  fakePlayerKnifeLPortraits   = _genPosePortraits(_FP_KNIFE_L.map(d => decodeTile(d, 0)));
-  fakePlayerKneelPortraits    = _genPosePortraits(_FP_KNEEL.map(d => decodeTile(d, 0)));
-}
-// Build a 16×24 h-flipped full-body canvas from 4 top tiles + 2 leg tiles
-function _renderDecodedTile(ctx, tile, pal, ox, oy) { _blitTile(ctx, tile, pal, ox, oy); }
-function _buildFullBody16x24Canvas(topTiles4, legL, legR, pal) {
-  const c = document.createElement('canvas'); c.width = 16; c.height = 24;
-  const bctx = c.getContext('2d');
-  topTiles4.forEach((tile, i) => { const [bx, by] = _BATTLE_LAYOUT[i]; _renderDecodedTile(bctx, tile, pal, bx, by); });
-  [[legL, 0, 16], [legR, 8, 16]].forEach(([tile, lx, ly]) => _renderDecodedTile(bctx, tile, pal, lx, ly));
-  const fl = document.createElement('canvas');
-  fl.width = 16; fl.height = 24;
-  const flctx = fl.getContext('2d');
-  flctx.save(); flctx.translate(16, 0); flctx.scale(-1, 1); flctx.drawImage(c, 0, 0); flctx.restore();
-  return fl;
-}
-// Onion Knight pose tiles — imported from src/data/job-sprites.js
-const _FP_IDLE_PPU    = OK_IDLE;
-const _FP_VICTORY     = OK_VICTORY;       // victory/defend body (arm raised)
-const _FP_KNIFE_BACK  = OK_L_BACK_SWING; // L back swing body (idle + arm pulled)
-const _FP_DEFEND      = OK_VICTORY;       // defend = victory body pose
-const _FP_KNIFE_R     = OK_R_BACK_SWING;
-const _FP_KNIFE_L     = OK_L_BACK_SWING; // L back swing body (fwd swing only changes T2+T3)
-const _FP_LEG_L       = OK_LEG_L_IDLE;
-const _FP_LEG_R       = OK_LEG_R_IDLE;
-const _FP_LEG_L_BACK_L  = OK_LEG_L_BACK_L;
-const _FP_LEG_R_BACK_L  = OK_LEG_R_BACK_L;
-const _FP_LEG_L_FWD_L   = OK_LEG_L_FWD_L;
-const _FP_LEG_R_FWD_L   = OK_LEG_R_FWD_L;
-const _FP_LEG_L_BACK_R  = OK_LEG_L_BACK_R;
-const _FP_LEG_R_SWING   = OK_LEG_R_SWING;
-const _FP_LEG_L_KNEEL   = OK_LEG_L_KNEEL;
-const _FP_LEG_R_KNEEL   = OK_LEG_R_KNEEL;
-const _FP_LEG_L_VICTORY = OK_LEG_L_VICTORY;
-const _FP_LEG_R_VICTORY = OK_LEG_R_VICTORY;
-function _buildIdleFullBodies() {
-  const legL = decodeTile(_FP_LEG_L, 0), legR = decodeTile(_FP_LEG_R, 0);
-  const tiles = _FP_IDLE_PPU.map(d => decodeTile(d, 0));
-  fakePlayerFullBodyCanvases = PLAYER_PALETTES.map(pal => _buildFullBody16x24Canvas(tiles, legL, legR, pal));
-}
-function _buildKnifeFullBodies() {
-  const build = (data, lL, lR, pal) => _buildFullBody16x24Canvas(data.map(d => decodeTile(d, 0)), decodeTile(lL, 0), decodeTile(lR, 0), pal);
-  fakePlayerKnifeRFullBodyCanvases    = PLAYER_PALETTES.map(pal => build(_FP_KNIFE_R,    _FP_LEG_L_BACK_R, _FP_LEG_R_SWING,   pal));
-  fakePlayerKnifeLFullBodyCanvases    = PLAYER_PALETTES.map(pal => build(_FP_KNIFE_L,    _FP_LEG_L_BACK_L, _FP_LEG_R_BACK_L,  pal));
-  fakePlayerKnifeBackFullBodyCanvases = PLAYER_PALETTES.map(pal => build(_FP_KNIFE_BACK, _FP_LEG_L_BACK_L, _FP_LEG_R_BACK_L, pal));
-  // Forward-swing full bodies — arm extended, distinct leg tiles
-  const _FP_L_FWD = [OK_IDLE[0], OK_IDLE[1], OK_L_FWD_T2, OK_L_FWD_T3];
-  const _FP_R_FWD = [OK_IDLE[0], OK_IDLE[1], OK_R_FWD_T2, OK_IDLE[3]];
-  fakePlayerKnifeLFwdFullBodyCanvases = PLAYER_PALETTES.map(pal => build(_FP_L_FWD, _FP_LEG_L_FWD_L, _FP_LEG_R_FWD_L, pal));
-  fakePlayerKnifeRFwdFullBodyCanvases = PLAYER_PALETTES.map(pal => build(_FP_R_FWD, _FP_LEG_L_BACK_R, _FP_LEG_R_SWING, pal));
-  fakePlayerKneelFullBodyCanvases    = PLAYER_PALETTES.map(pal => build(_FP_KNEEL, _FP_LEG_L_KNEEL, _FP_LEG_R_KNEEL, pal));
-  fakePlayerVictoryFullBodyCanvases  = PLAYER_PALETTES.map(pal => build(_FP_VICTORY, _FP_LEG_L_VICTORY, _FP_LEG_R_VICTORY, pal));
-}
-function _buildHitFullBodies(romData) {
-  const legL = decodeTile(_FP_LEG_L, 0), legR = decodeTile(_FP_LEG_R, 0);
-  const hitPortrait4 = [0,1,2,3].map(i => decodeTile(romData, BATTLE_SPRITE_ROM + (30 + i) * 16));
-  const hitLeg2 = [34,35].map(i => decodeTile(romData, BATTLE_SPRITE_ROM + i * 16));
-  fakePlayerHitFullBodyCanvases = PLAYER_PALETTES.map(pal =>
-    _buildFullBody16x24Canvas([...hitPortrait4], hitLeg2[0], hitLeg2[1], pal));
-}
-function _buildDeathPoseCanvases() {
-  const tiles = OK_DEATH.map(d => decodeTile(d, 0));
-  fakePlayerDeathPoseCanvases = PLAYER_PALETTES.map(pal => {
-    const c = document.createElement('canvas'); c.width = 24; c.height = 16;
-    const bctx = c.getContext('2d');
-    // 3 cols × 2 rows, each tile 8×8
-    for (let row = 0; row < 2; row++) {
-      for (let col = 0; col < 3; col++) {
-        _renderDecodedTile(bctx, tiles[row * 3 + col], pal, col * 8, row * 8);
-      }
-    }
-    return c;
-  });
-}
-function _initFakeFullBodyCanvases(romData) {
-  _buildIdleFullBodies();
-  _buildKnifeFullBodies();
-  _buildHitFullBodies(romData);
-  _buildDeathPoseCanvases();
-  fakePlayerDeathFrames = fakePlayerFullBodyCanvases.map(c => _makeDeathFrames(c));
-}
-function initFakePlayerPortraits(romData) {
-  _initFakePosePortraits(romData);
-  _initFakeFullBodyCanvases(romData);
-}
-
-
-function initCursorTile(romData) {
-  const palette = [0x0F, 0x00, 0x10, 0x30]; // cursor palette: black, dark gray, gray, white
-  cursorTileCanvas = _buildCanvas4ROM(romData, CURSOR_TILE_ROM, palette);
-  cursorFadeCanvases = [];
-  for (let step = 1; step <= 4; step++) {
-    let fp = [...palette];
-    for (let s = 0; s < step; s++) fp = fp.map(c => nesColorFade(c));
-    cursorFadeCanvases.push(_buildCanvas4ROM(romData, CURSOR_TILE_ROM, fp));
-  }
-}
-
-// --- Battle sprite low-level helpers ---
-const _BATTLE_LAYOUT = [[0,0],[8,0],[0,8],[8,8]];
-
-// Blit a decoded 8×8 tile onto a canvas context at (x, y), transparent on palette index 0
-function _blitTile(ctx, px, palette, x, y) {
-  const img = ctx.createImageData(8, 8);
-  for (let p = 0; p < 64; p++) {
-    const ci = px[p];
-    if (ci === 0) { img.data[p * 4 + 3] = 0; }
-    else {
-      const rgb = NES_SYSTEM_PALETTE[palette[ci]] || [0, 0, 0];
-      img.data[p * 4] = rgb[0]; img.data[p * 4 + 1] = rgb[1];
-      img.data[p * 4 + 2] = rgb[2]; img.data[p * 4 + 3] = 255;
-    }
-  }
-  ctx.putImageData(img, x, y);
-}
-
-// _blitTileH → weapon-sprites.js
-
-// Build a 16×16 canvas from 4 PPU tile byte arrays using the battle 2×2 layout
-function _buildCanvas4(tilesArr, palette) {
-  const c = _makeCanvas16(); const cx = c.getContext('2d');
-  for (let i = 0; i < 4; i++) {
-    _blitTile(cx, decodeTile(tilesArr[i], 0), palette, _BATTLE_LAYOUT[i][0], _BATTLE_LAYOUT[i][1]);
-  }
-  return c;
-}
-
-// Generate HUD_INFO_FADE_STEPS NES-palette-faded versions of a _buildCanvas4 sprite
-function _buildFadedCanvas4Set(tilesArr, palette) {
-  const arr = [];
-  for (let step = 1; step <= HUD_INFO_FADE_STEPS; step++) {
-    let fp = [...palette];
-    for (let s = 0; s < step; s++) fp = fp.map(c => nesColorFade(c));
-    arr.push(_buildCanvas4(tilesArr, fp));
-  }
-  return arr;
-}
-
-// Build a 16×16 canvas from 4 sequential ROM tiles (16 bytes each) using the battle 2×2 layout
-function _buildCanvas4ROM(romData, offset, palette) {
-  const c = _makeCanvas16(); const cx = c.getContext('2d');
-  for (let i = 0; i < 4; i++) {
-    _blitTile(cx, decodeTile(romData, offset + i * 16), palette, _BATTLE_LAYOUT[i][0], _BATTLE_LAYOUT[i][1]);
-  }
-  return c;
-}
-
-// Draw a single decoded tile onto an existing canvas context (composite, no clear)
-function _drawTileOnto(tileBytes, palette, ctx, x, y) {
-  _blitTile(ctx, decodeTile(tileBytes, 0), palette, x, y);
-}
-
-function _initBattleIdleSprites(romData, palette) {
-  const IDLE_PPU = OK_IDLE;
-  // Idle portrait — 2×2 layout row-major (disasm 3C/82FA OAM data)
-  battleSpriteCanvas = _buildCanvas4(IDLE_PPU, palette);
-  battleSpriteFadeCanvases = _buildFadedCanvas4Set(IDLE_PPU, palette);
-
-  // Silhouette — same shape, all opaque pixels → NES $00 (grey)
-  silhouetteCanvas = document.createElement('canvas');
-  silhouetteCanvas.width = 16; silhouetteCanvas.height = 16;
-  const sctx = silhouetteCanvas.getContext('2d');
-  sctx.drawImage(battleSpriteCanvas, 0, 0);
-  const sdata = sctx.getImageData(0, 0, 16, 16);
-  const darkRgb = NES_SYSTEM_PALETTE[0x00] || [0, 0, 0];
-  for (let p = 0; p < 16 * 16; p++) {
-    if (sdata.data[p * 4 + 3] > 0) {
-      sdata.data[p * 4] = darkRgb[0];
-      sdata.data[p * 4 + 1] = darkRgb[1];
-      sdata.data[p * 4 + 2] = darkRgb[2];
-    }
-  }
-  sctx.putImageData(sdata, 0, 0);
-}
-
-function _initBattleAttackSprites(palette) {
-  const ATK_R_39 = OK_R_FWD_T2; // R fwd swing mid-L tile
-
-  // Right-hand punch (mid-L = $39) — idle + modified lower-left tile
-  battleSpriteAttackCanvas = document.createElement('canvas');
-  battleSpriteAttackCanvas.width = 16; battleSpriteAttackCanvas.height = 16;
-  const actx = battleSpriteAttackCanvas.getContext('2d');
-  actx.drawImage(battleSpriteCanvas, 0, 0);
-  _drawTileOnto(ATK_R_39, palette, actx, 0, 8);
-
-  // Left-hand punch (mid-L = $3B, mid-R = $3C)
-  battleSpriteAttackLCanvas = document.createElement('canvas');
-  battleSpriteAttackLCanvas.width = 16; battleSpriteAttackLCanvas.height = 16;
-  const alctx = battleSpriteAttackLCanvas.getContext('2d');
-  alctx.drawImage(battleSpriteCanvas, 0, 0);
-  // L back swing: mid-left stays idle, mid-right = _FP_KNIFE_L[3]
-  _drawTileOnto(_FP_KNIFE_L[3], palette, alctx, 8, 8);
-}
-
-function _initBattleKnifeBodySprites(palette) {
-  // Knife R/L-hand body poses: same tiles as _FP_KNIFE_R / _FP_KNIFE_L
-  battleSpriteKnifeRCanvas = _buildCanvas4(_FP_KNIFE_R, palette);
-  battleSpriteKnifeLCanvas = _buildCanvas4(_FP_KNIFE_L, palette);
-
-  // Back-swing body pose: same tiles as _FP_KNIFE_BACK
-  battleSpriteKnifeBackCanvas = _buildCanvas4(_FP_KNIFE_BACK, palette);
-}
-
-// _buildBladeCanvas + _initBattleBladeSprites → weapon-sprites.js
-
-function _initBattleRomPoses(romData, palette) {
-  // Victory pose: OK_VICTORY tiles (arms raised, confirmed from PPU debugger)
-  battleSpriteVictoryCanvas = _buildCanvas4(_FP_VICTORY, palette);
-  // Hit/recoil pose: sprite frame 5 in job block (tiles 30-33)
-  battleSpriteHitCanvas = _buildCanvas4ROM(romData, BATTLE_SPRITE_ROM + 30 * 16, palette);
-  // Attack frame 2: ROM frame 3 (tiles 18-21, arm raised)
-  battleSpriteAttack2Canvas = _buildCanvas4ROM(romData, BATTLE_SPRITE_ROM + 18 * 16, palette);
-}
-
-function _initBattleDefendSprites(palette) {
-  // Defend pose: tiles $43-$46 (top 2×2 of 2×3 crouching body)
-  const DEFEND_TILES = [
-    new Uint8Array([0x05,0x0B,0x17,0x03,0x00,0x00,0x0E,0x1F, 0x07,0x0F,0x1F,0x3F,0x43,0x40,0x20,0x00]), // $43
-    new Uint8Array([0x00,0x00,0xA0,0xD0,0xE8,0x78,0x10,0x88, 0x2C,0x59,0xBE,0xD6,0xEF,0xFB,0x75,0x1A]), // $44
-    new Uint8Array([0x04,0xD6,0xD6,0x3F,0xEF,0xF0,0x63,0x0E, 0x00,0x00,0x00,0x24,0xE4,0xF0,0x6F,0x1F]), // $45
-    new Uint8Array([0x90,0x4C,0xCC,0x30,0x7C,0x78,0x30,0x00, 0x32,0x21,0x00,0xB0,0x7C,0x7C,0xB2,0xC2]), // $46
-  ];
-  battleSpriteDefendCanvas = _buildCanvas4(DEFEND_TILES, palette);
-  battleSpriteDefendFadeCanvases = _buildFadedCanvas4Set(DEFEND_TILES, palette);
-
-  // Defend sparkle: tiles $49-$4C, 4 × 8×8 frames
-  const SPARKLE_TILES = [
-    new Uint8Array([0x01,0x00,0x08,0x00,0x00,0x41,0x00,0x02, 0x00,0x00,0x01,0x02,0x00,0x09,0x00,0x12]),
-    new Uint8Array([0x00,0x00,0x00,0x04,0x0A,0x14,0x0A,0x01, 0x00,0x00,0x00,0x18,0x1C,0x0E,0x04,0x00]),
-    new Uint8Array([0x00,0x00,0x20,0x10,0x08,0x04,0x00,0x00, 0x00,0x00,0x30,0x38,0x10,0x00,0x00,0x00]),
-    new Uint8Array([0x80,0x00,0x20,0x00,0x00,0x00,0x00,0x00, 0x80,0x40,0x00,0x00,0x00,0x00,0x00,0x00]),
-  ];
-  defendSparkleFrames = SPARKLE_TILES.map(raw => {
-    const sc = document.createElement('canvas');
-    sc.width = 8; sc.height = 8;
-    _blitTile(sc.getContext('2d'), decodeTile(raw, 0), DEFEND_SPARKLE_PAL, 0, 0);
-    return sc;
-  });
-
-  _initCureSparkleFrames();
-}
-
-function _initCureSparkleFrames() {
-  const CURE_TILE_4D = new Uint8Array([0x00,0x40,0x00,0x10,0x08,0x04,0x03,0x03, 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x01]);
-  const CURE_TILE_4E = new Uint8Array([0x00,0x00,0x00,0x08,0x10,0x60,0x20,0x80, 0x00,0x00,0x00,0x00,0x00,0x00,0xC0,0xC0]);
-  const CURE_PAL = [0x0F, 0x12, 0x22, 0x31];
-  const cureTileCanvases = [CURE_TILE_4D, CURE_TILE_4E].map(raw => {
-    const c = document.createElement('canvas'); c.width = 8; c.height = 8;
-    _blitTile(c.getContext('2d'), decodeTile(raw, 0), CURE_PAL, 0, 0); return c;
-  });
-  const configLayouts = [
-    [[1,0,0,true,false],[0,8,0,true,false],[0,0,8,false,true],[1,8,8,false,true]],
-    [[0,0,0,false,false],[1,8,0,false,false],[1,0,8,true,true],[0,8,8,true,true]],
-  ];
-  cureSparkleFrames = configLayouts.map(config => {
-    const c = _makeCanvas16();
-    const cx = c.getContext('2d');
-    for (const [ti, ox, oy, hf, vf] of config) {
-      cx.save();
-      if (hf && vf) { cx.translate(ox + 8, oy + 8); cx.scale(-1, -1); cx.drawImage(cureTileCanvases[ti], 0, 0); }
-      else if (hf)  { cx.translate(ox + 8, oy);     cx.scale(-1,  1); cx.drawImage(cureTileCanvases[ti], 0, 0); }
-      else if (vf)  { cx.translate(ox,     oy + 8); cx.scale( 1, -1); cx.drawImage(cureTileCanvases[ti], 0, 0); }
-      else          { cx.drawImage(cureTileCanvases[ti], ox, oy); }
-      cx.restore();
-    }
-    return c;
-  });
-}
-
-function _initBattleLowHPSprites(palette) {
-  // Kneel pose: same tiles as _FP_KNEEL
-  battleSpriteKneelCanvas = _buildCanvas4(_FP_KNEEL, palette);
-  battleSpriteKneelFadeCanvases = _buildFadedCanvas4Set(_FP_KNEEL, palette);
-
-  // Sweat frames: 2 × 16×8 (tiles $49/$4A frame A, $4B/$4C frame B)
-  const SWEAT_FRAME_TILES = [
-    [new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 0x04,0x00,0x40,0x00,0x00,0x00,0x00,0x00]),
-     new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 0x20,0x00,0x02,0x00,0x00,0x00,0x00,0x00])],
-    [new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x02,0x10,0x00,0x40,0x00]),
-     new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x40,0x08,0x00,0x02,0x00])],
-  ];
-  sweatFrames = SWEAT_FRAME_TILES.map(frameTiles => {
-    const sc = document.createElement('canvas');
-    sc.width = 16; sc.height = 8;
-    const sctx = sc.getContext('2d');
-    for (let t = 0; t < 2; t++) {
-      _blitTile(sctx, decodeTile(frameTiles[t], 0), palette, t * 8, 0);
-    }
-    return sc;
-  });
-}
-
-function initBattleSprite(romData) {
-  // Battle palette: character palette 0 (ID $FC) at ROM 0x05CF04
-  // 3 bytes = colors 1-3, color 0 always $0F (disasm 2E/9E28 + 2E/9DA2)
-  const palette = [0x0F, romData[BATTLE_PAL_ROM], romData[BATTLE_PAL_ROM + 1], romData[BATTLE_PAL_ROM + 2]];
-
-  _initBattleIdleSprites(romData, palette);
-  _initBattleAttackSprites(palette);
-  _initBattleKnifeBodySprites(palette);
-  initWeaponSprites(palette);
-  _initBattleRomPoses(romData, palette);
-  _initBattleDefendSprites(palette);
-  _initBattleLowHPSprites(palette);
-}
-
-function initAdamantoise(romData) {
-  // 4 tiles at FF2_ADAMANTOISE_SPRITE, row-major: TL, TR, BL, BR
-  // Battle colors with black outline (index 1) for small map sprite
-  const palTop = [0x0F, 0x0F, LAND_TURTLE_PAL_TOP[1], LAND_TURTLE_PAL_TOP[2]];
-  const palBot = [0x0F, 0x0F, LAND_TURTLE_PAL_BOT[3], LAND_TURTLE_PAL_BOT[2]];
-  const tiles = [];
-  for (let i = 0; i < 4; i++) {
-    tiles.push(decodeTile(romData, FF2_ADAMANTOISE_SPRITE + i * 16));
-  }
-
-  const normal = document.createElement('canvas');
-  normal.width = 16;
-  normal.height = 16;
-  const actx = normal.getContext('2d');
-
-  for (let i = 0; i < 4; i++) _renderDecodedTile(actx, tiles[i], i < 2 ? palTop : palBot, _BATTLE_LAYOUT[i][0], _BATTLE_LAYOUT[i][1]);
-
-  // Flipped frame
-  const flipped = _hflipCanvas16(normal);
-
-  adamantoiseFrames = [normal, flipped];
-}
-
-function _renderGoblinSprite(tiles, pal0, pal1, tilePalMap) {
-  const c = document.createElement('canvas');
-  c.width = GOBLIN_COLS * 8;   // 32
-  c.height = GOBLIN_COLS * 8;  // 32
-  const cctx = c.getContext('2d');
-  for (let ty = 0; ty < GOBLIN_COLS; ty++) {
-    for (let tx = 0; tx < GOBLIN_COLS; tx++) {
-      const tileIdx = ty * GOBLIN_COLS + tx;
-      const pal = tilePalMap[tileIdx] === 1 ? pal1 : pal0;
-      _blitTile(cctx, tiles[tileIdx], pal, tx * 8, ty * 8);
-    }
-  }
-  return c;
-}
-
-
-
-function _makeDeathFrames(srcCanvas) {
-  const { width: w, height: h } = srcCanvas;
-  const origData = srcCanvas.getContext('2d').getImageData(0, 0, w, h);
-  const maxThreshold = (w - 1) + (h - 1) + 15;
-  const frames = [];
-  for (let f = 0; f < MONSTER_DEATH_FRAMES; f++) {
-    const fc = document.createElement('canvas'); fc.width = w; fc.height = h;
-    const fctx = fc.getContext('2d'); const fd = fctx.createImageData(w, h);
-    const wave = (f / (MONSTER_DEATH_FRAMES - 1)) * (maxThreshold + 1);
-    for (let py = 0; py < h; py++) {
-      for (let px = 0; px < w; px++) {
-        const idx = (py * w + px) * 4;
-        const threshold = (w - 1 - px) + py + BAYER4[py & 3][px & 3];
-        if (threshold < wave) { fd.data[idx + 3] = 0; }
-        else { fd.data[idx] = origData.data[idx]; fd.data[idx+1] = origData.data[idx+1]; fd.data[idx+2] = origData.data[idx+2]; fd.data[idx+3] = origData.data[idx+3]; }
-      }
-    }
-    fctx.putImageData(fd, 0, 0); frames.push(fc);
-  }
-  return frames;
-}
-
-function initGoblinSprite(romData) {
-  const tiles = [];
-  for (let i = 0; i < GOBLIN_TILES; i++) {
-    tiles.push(decodeTile(romData, GOBLIN_GFX_OFF + i * 16));
-  }
-
-  // Render full-color sprite
-  goblinBattleCanvas = _renderGoblinSprite(tiles, GOBLIN_PAL0, GOBLIN_PAL1, GOBLIN_TILE_PAL);
-
-  goblinWhiteCanvas = _makeWhiteCanvas(goblinBattleCanvas);
-  goblinDeathFrames = _makeDeathFrames(goblinBattleCanvas);
-}
-
-// Generic renderer for PPU-dumped enemy sprites.
-// rawBytes: Uint8Array of (cols*rows*16) bytes — tiles in row-major order.
-
-function _hflipTile(pixels) {
-  const out = new Uint8Array(64);
-  for (let row = 0; row < 8; row++)
-    for (let col = 0; col < 8; col++)
-      out[row * 8 + col] = pixels[row * 8 + (7 - col)];
-  return out;
-}
-
-function _renderInvFrame(tilePixels, grid, pal) {
-  const c = document.createElement('canvas');
-  c.width = 32; c.height = 32;
-  const fctx = c.getContext('2d');
-  for (let row = 0; row < 4; row++) {
-    for (let col = 0; col < 4; col++) {
-      const tileId = grid[row * 4 + col];
-      let pixels = tilePixels.get(tileId);
-      if (!pixels) continue;
-      pixels = _hflipTile(pixels);
-      const img = fctx.createImageData(8, 8);
-      _writePixels64(img, pixels, pal);
-      fctx.putImageData(img, col * 8, row * 8);
-    }
-  }
-  return c;
-}
-
-function _renderInvShadow(tilePixels, pal) {
-  const c = document.createElement('canvas');
-  c.width = 32; c.height = 8;
-  const sctx = c.getContext('2d');
-  const shadowTiles = [0xC0, 0xC1, 0xC1, 0xC0];
-  const shadowFlip  = [false, false, false, true];
-  for (let col = 0; col < 4; col++) {
-    let pixels = tilePixels.get(shadowTiles[col]);
-    if (!pixels) continue;
-    if (shadowFlip[col]) pixels = _hflipTile(pixels);
-    const img = sctx.createImageData(8, 8);
-    _writePixels64(img, pixels, pal);
-    sctx.putImageData(img, col * 8, 0);
-  }
-  return c;
-}
-
-function initInvincibleSprite(romData) {
-  const tilePixels = new Map();
-  for (let i = 0; i < 64; i++)
-    tilePixels.set(0xC0 + i, decodeTile(romData, INVINCIBLE_TILE_ROM + i * 16));
-
-  // East-facing frame a (OAM 3C:8586) — tiles reversed per row + h-flip
-  const frameA_grid = [0xE5,0xE4,0xE3,0xE2, 0xE9,0xE8,0xE7,0xE6, 0xED,0xEC,0xEB,0xEA, 0xF1,0xF0,0xEF,0xEE];
-  // East-facing frame b (OAM 3C:85C7) — alt animation
-  const frameB_grid = [0xF5,0xF4,0xF3,0xF2, 0xF6,0xE8,0xE7,0xE6, 0xF7,0xEC,0xEB,0xEA, 0xFB,0xFA,0xF9,0xF8];
-
-  invincibleFrames = [
-    _renderInvFrame(tilePixels, frameA_grid, INVINCIBLE_PAL),
-    _renderInvFrame(tilePixels, frameB_grid, INVINCIBLE_PAL),
-  ];
-
-  const fadePals = Array.from({ length: TITLE_FADE_MAX + 1 }, (_, fl) =>
-    INVINCIBLE_PAL.map((c, i) => { if (i === 0) return c; let fc = c; for (let s = 0; s < fl; s++) fc = nesColorFade(fc); return fc; })
-  );
-  titleSt.shipFadeFrames = fadePals.map(p => [_renderInvFrame(tilePixels, frameA_grid, p), _renderInvFrame(tilePixels, frameB_grid, p)]);
-  titleSt.shadowFade = fadePals.map(p => _renderInvShadow(tilePixels, p));
-}
-
-function initMoogleSprite(romData) {
-  // South-facing walk: tiles 0-3 (TL, TR, BL, BR) at MOOGLE_SPRITE_OFF
-  const tiles = [];
-  for (let i = 0; i < 4; i++) {
-    tiles.push(decodeTile(romData, MOOGLE_SPRITE_OFF + i * 16));
-  }
-
-  const normal = document.createElement('canvas');
-  normal.width = 16; normal.height = 16;
-  const mctx = normal.getContext('2d');
-  for (let i = 0; i < 4; i++) {
-    _blitTile(mctx, tiles[i], MOOGLE_PAL, _BATTLE_LAYOUT[i][0], _BATTLE_LAYOUT[i][1]);
-  }
-
-  const flipped = _hflipCanvas16(normal);
-
-  moogleFrames = [normal, flipped];
-}
-
-// Pre-render a 16x16 sprite with a faded palette (NES color fade steps applied)
-function renderSpriteFaded(romData, spriteOff, basePal, fadeSteps) {
-  const fadedPal = basePal.map((c, i) => {
-    if (i === 0) return c; // transparent slot stays
-    let fc = c;
-    for (let s = 0; s < fadeSteps; s++) fc = nesColorFade(fc);
-    return fc;
-  });
-
-  const tiles = [];
-  for (let i = 0; i < 4; i++) {
-    tiles.push(decodeTile(romData, spriteOff + i * 16));
-  }
-
-  const [c, cctx] = _makeCanvas16ctx();
-  for (let i = 0; i < 4; i++) {
-    _blitTile(cctx, tiles[i], fadedPal, _BATTLE_LAYOUT[i][0], _BATTLE_LAYOUT[i][1]);
-  }
-  return c;
-}
-
-// Pre-render fade frames for adamantoise (different palette for top/bottom halves)
-function renderBossFaded(romData, fadeSteps) {
-  const palTop = [0x0F, 0x0F, LAND_TURTLE_PAL_TOP[1], LAND_TURTLE_PAL_TOP[2]];
-  const palBot = [0x0F, 0x0F, LAND_TURTLE_PAL_BOT[3], LAND_TURTLE_PAL_BOT[2]];
-  const fadedTop = palTop.map((c, i) => {
-    if (i === 0) return c;
-    let fc = c; for (let s = 0; s < fadeSteps; s++) fc = nesColorFade(fc);
-    return fc;
-  });
-  const fadedBot = palBot.map((c, i) => {
-    if (i === 0) return c;
-    let fc = c; for (let s = 0; s < fadeSteps; s++) fc = nesColorFade(fc);
-    return fc;
-  });
-
-  const tiles = [];
-  for (let i = 0; i < 4; i++) {
-    tiles.push(decodeTile(romData, FF2_ADAMANTOISE_SPRITE + i * 16));
-  }
-
-  const [c, cctx] = _makeCanvas16ctx();
-  for (let i = 0; i < 4; i++) _renderDecodedTile(cctx, tiles[i], i < 2 ? fadedTop : fadedBot, _BATTLE_LAYOUT[i][0], _BATTLE_LAYOUT[i][1]);
-  return c;
-}
-
-function initLoadingScreenFadeFrames(romData) {
-  // Moogle: 4 fade levels (0=bright, 3=black)
-  moogleFadeFrames = [];
-  for (let step = 0; step <= LOAD_FADE_MAX; step++) {
-    const normal = renderSpriteFaded(romData, MOOGLE_SPRITE_OFF, MOOGLE_PAL, step);
-    const flipped = _hflipCanvas16(normal);
-    moogleFadeFrames.push([normal, flipped]);
-  }
-
-  // Boss (adamantoise from FF1&2 ROM): only if ff12Raw loaded
-  if (ff12Raw) {
-    bossFadeFrames = [];
-    for (let step = 0; step <= LOAD_FADE_MAX; step++) {
-      const normal = renderBossFaded(ff12Raw, step);
-      const flipped = _hflipCanvas16(normal);
-      bossFadeFrames.push([normal, flipped]);
-    }
-  }
-}
-
-
+// _renderPortrait through initLoadingScreenFadeFrames → sprite-init.js
 
 // _pauseFadeStep → pause-menu.js
 function _drawHudWithFade(fullCanvas, fadeCanvases, fadeStep) {
@@ -1297,17 +709,7 @@ function _landOnWorldMap(tileX, tileY) {
   playTrack(TRACKS.WORLD_MAP);
 }
 
-function _syncSaveSlotProgress() {
-  if (!saveSlots[selectCursor]) return;
-  saveSlots[selectCursor].level = ps.stats.level;
-  saveSlots[selectCursor].exp = ps.stats.exp;
-  saveSlots[selectCursor].stats = playerStatsSnapshot();
-  saveSlots[selectCursor].inventory = { ...playerInventory };
-  saveSlots[selectCursor].gil = ps.gil;
-  saveSlots[selectCursor].proficiency = { ...ps.proficiency };
-}
 function returnToTitle() {
-  _syncSaveSlotProgress();
   saveSlotsToDB();
   pauseSt.state = 'none';
   fadeOutFF1Music((HUD_INFO_FADE_STEPS + 1) * HUD_INFO_FADE_STEP_MS);
@@ -1829,12 +1231,66 @@ export function getMobileInputMode() {
 
 function _initSpriteAssets(romRaw) {
   initHUD(romRaw);
-  initCursorTile(romRaw);
-  initBattleSprite(romRaw);
-  initFakePlayerPortraits(romRaw);
+
+  // Cursor tile (sprite-init.js)
+  const ct = _initCursorTile(romRaw);
+  cursorTileCanvas = ct.cursorTileCanvas;
+  cursorFadeCanvases = ct.cursorFadeCanvases;
+
+  // Battle sprite (sprite-init.js)
+  const bs = _initBattleSprite(romRaw);
+  battleSpriteCanvas = bs.battleSpriteCanvas;
+  battleSpriteFadeCanvases = bs.battleSpriteFadeCanvases;
+  silhouetteCanvas = bs.silhouetteCanvas;
+  battleSpriteAttackCanvas = bs.battleSpriteAttackCanvas;
+  battleSpriteAttackLCanvas = bs.battleSpriteAttackLCanvas;
+  battleSpriteKnifeRCanvas = bs.battleSpriteKnifeRCanvas;
+  battleSpriteKnifeLCanvas = bs.battleSpriteKnifeLCanvas;
+  battleSpriteKnifeBackCanvas = bs.battleSpriteKnifeBackCanvas;
+  battleSpriteVictoryCanvas = bs.battleSpriteVictoryCanvas;
+  battleSpriteHitCanvas = bs.battleSpriteHitCanvas;
+  battleSpriteAttack2Canvas = bs.battleSpriteAttack2Canvas;
+  battleSpriteDefendCanvas = bs.battleSpriteDefendCanvas;
+  battleSpriteDefendFadeCanvases = bs.battleSpriteDefendFadeCanvases;
+  defendSparkleFrames = bs.defendSparkleFrames;
+  cureSparkleFrames = bs.cureSparkleFrames;
+  battleSpriteKneelCanvas = bs.battleSpriteKneelCanvas;
+  battleSpriteKneelFadeCanvases = bs.battleSpriteKneelFadeCanvases;
+  sweatFrames = bs.sweatFrames;
+
+  // Fake player portraits & full bodies (sprite-init.js)
+  const fp = _initFakePlayerPortraits(romRaw);
+  fakePlayerPortraits = fp.fakePlayerPortraits;
+  fakePlayerVictoryPortraits = fp.fakePlayerVictoryPortraits;
+  fakePlayerHitPortraits = fp.fakePlayerHitPortraits;
+  fakePlayerDefendPortraits = fp.fakePlayerDefendPortraits;
+  fakePlayerAttackPortraits = fp.fakePlayerAttackPortraits;
+  fakePlayerAttackLPortraits = fp.fakePlayerAttackLPortraits;
+  fakePlayerKnifeBackPortraits = fp.fakePlayerKnifeBackPortraits;
+  fakePlayerKnifeRPortraits = fp.fakePlayerKnifeRPortraits;
+  fakePlayerKnifeLPortraits = fp.fakePlayerKnifeLPortraits;
+  fakePlayerKneelPortraits = fp.fakePlayerKneelPortraits;
+  fakePlayerFullBodyCanvases = fp.fakePlayerFullBodyCanvases;
+  fakePlayerKnifeRFullBodyCanvases = fp.fakePlayerKnifeRFullBodyCanvases;
+  fakePlayerKnifeLFullBodyCanvases = fp.fakePlayerKnifeLFullBodyCanvases;
+  fakePlayerKnifeBackFullBodyCanvases = fp.fakePlayerKnifeBackFullBodyCanvases;
+  fakePlayerKnifeLFwdFullBodyCanvases = fp.fakePlayerKnifeLFwdFullBodyCanvases;
+  fakePlayerKnifeRFwdFullBodyCanvases = fp.fakePlayerKnifeRFwdFullBodyCanvases;
+  fakePlayerKneelFullBodyCanvases = fp.fakePlayerKneelFullBodyCanvases;
+  fakePlayerVictoryFullBodyCanvases = fp.fakePlayerVictoryFullBodyCanvases;
+  fakePlayerHitFullBodyCanvases = fp.fakePlayerHitFullBodyCanvases;
+  fakePlayerDeathPoseCanvases = fp.fakePlayerDeathPoseCanvases;
+  fakePlayerDeathFrames = fp.fakePlayerDeathFrames;
+
   initRoster();
   loadBossSprite(0xCC); // Land Turtle — loaded eagerly for now (only boss in game)
-  initGoblinSprite(romRaw);
+
+  // Goblin sprite (sprite-init.js)
+  const gs = _initGoblinSprite(romRaw);
+  goblinBattleCanvas = gs.goblinBattleCanvas;
+  goblinWhiteCanvas = gs.goblinWhiteCanvas;
+  goblinDeathFrames = gs.goblinDeathFrames;
+
   initMonsterSprites();
   swPhaseCanvases = initSouthWindSprite();
   initMissSprite();
@@ -1843,14 +1299,25 @@ function _initSpriteAssets(romRaw) {
   swordSlashFramesR = swordSlashFramesL = initSwordSlashSprites();
   initPlayerStats(romRaw);
   initExpTable(romRaw);
-  initMoogleSprite(romRaw);
-  initLoadingScreenFadeFrames(romRaw);
+
+  // Moogle sprite (sprite-init.js)
+  const ms = _initMoogleSprite(romRaw);
+  moogleFrames = ms.moogleFrames;
+
+  // Loading screen fade frames (sprite-init.js)
+  const lf = _initLoadingScreenFadeFrames(romRaw, ff12Raw);
+  moogleFadeFrames = lf.moogleFadeFrames;
+  bossFadeFrames = lf.bossFadeFrames;
+
   initMusic(romRaw);
-  _initFlameRawTiles(romRaw);
-  _initStarTiles(romRaw);
+  initFlameRawTiles(romRaw);
+  initStarTiles(romRaw);
 }
 function _initTitleAssets(romRaw) {
-  initInvincibleSprite(romRaw);
+  const inv = _initInvincibleSprite(romRaw, TITLE_FADE_MAX);
+  invincibleFrames = inv.invincibleFrames;
+  titleSt.shipFadeFrames = inv.shipFadeFrames;
+  titleSt.shadowFade = inv.shadowFade;
   const _tw = initTitleWater(romRaw, TITLE_FADE_MAX); titleSt.waterFrames = _tw.titleWaterFrames; titleSt.waterFadeTiles = _tw.titleWaterFadeTiles;
   titleSt.skyFrames = initTitleSky(romRaw);
   titleSt.underwaterFrames = initTitleUnderwater(romRaw);
@@ -1915,10 +1382,15 @@ export async function loadROM(arrayBuffer) {
 
 export function loadFF12ROM(arrayBuffer) {
   ff12Raw = new Uint8Array(arrayBuffer);
-  initAdamantoise(ff12Raw);
+  const ad = _initAdamantoise(ff12Raw);
+  adamantoiseFrames = ad.adamantoiseFrames;
   initFF1Music(ff12Raw);
   if (romRaw) initProfIcons(romRaw, ff12Raw);
-  if (romRaw) initLoadingScreenFadeFrames(romRaw); // rebuild with boss fade frames
+  if (romRaw) { // rebuild loading screen fade frames with boss fade
+    const lf2 = _initLoadingScreenFadeFrames(romRaw, ff12Raw);
+    moogleFadeFrames = lf2.moogleFadeFrames;
+    bossFadeFrames = lf2.bossFadeFrames;
+  }
 }
 
 function _calcSpawnY(ex, ey) {
@@ -1994,7 +1466,7 @@ function _loadDungeonFloor(mapId, returnX, returnY) {
   const playerY = returnY !== undefined ? returnY : result.entranceY;
   worldX = playerX * TILE_SIZE; worldY = playerY * TILE_SIZE;
   mapRenderer = new MapRenderer(mapData, playerX, playerY); resetIndoorWaterCache();
-  _flameSprites = [];
+  clearFlameSprites();
   bossSprite = (floorIndex === 4 && adamantoiseFrames && !enemyDefeated)
     ? { frames: adamantoiseFrames, px: 6 * TILE_SIZE, py: 8 * TILE_SIZE } : null;
   disabledTrigger = { x: playerX, y: playerY };
@@ -2296,155 +1768,24 @@ function _startMoveFromKeys(resetOnIdle) {
 }
 
 
-// --- Flame sprite decoding ---
-// Two-frame sprite graphics bank $0A: file offset 0x14010
-// NPC #193 (large torch): gfxByte=$40, offset 0x14010, 8 tiles (2 frames × 4)
-// NPC #194 (small candle): gfxByte=$41, offset 0x14090, 8 tiles (2 frames × 4)
-// Sprite palette 3: transparent, $0F(black), $27(orange), $30(white)
-const FLAME_NPC_DEFS = [
-  { id: 193, offset: 0x14010 },  // large torch flame
-  { id: 194, offset: 0x14090 },  // small candle flame
-];
-// Decode raw flame tile pixels once from ROM (no palette applied yet)
-function _initFlameRawTiles(romData) {
-  if (_flameRawTiles) return;
-  _flameRawTiles = new Map();
-
-  for (const { id, offset } of FLAME_NPC_DEFS) {
-    const frames = [];
-    for (let f = 0; f < 2; f++) {
-      const tileOff = offset + f * 4 * 16;
-      frames.push([
-        decodeTile(romData, tileOff),
-        decodeTile(romData, tileOff + 16),
-        decodeTile(romData, tileOff + 32),
-        decodeTile(romData, tileOff + 48),
-      ]);
-    }
-    _flameRawTiles.set(id, frames);
-  }
-}
-
-// --- Star sprite decoding ---
-// Star sprites from ROM: 2x2 metatile (16x16) — two frames that alternate
-// Frame A (0x014790): diamond star — rays up/down/left/right
-// Frame B (0x0147C0): diagonal star — rays to corners (rotated 45°)
-const STAR_FRAMES = [0x014790, 0x0147D0]; // each is 4 consecutive 8x8 tiles (TL, TR, BL, BR)
-// Palette: 1=dark orange edge, 2=tan/warm yellow body, 3=white center
-const STAR_PALETTE = [null, NES_SYSTEM_PALETTE[0x17], NES_SYSTEM_PALETTE[0x27], NES_SYSTEM_PALETTE[0x30]];
-
-function _initStarTiles(romData) {
-  if (_starTiles) return;
-  _starTiles = [];
-  for (const baseOffset of STAR_FRAMES) {
-    const [c, cctx] = _makeCanvas16ctx();
-    // 4 tiles: TL(+0), TR(+16), BL(+32), BR(+48)
-    const positions = [[0, 0], [8, 0], [0, 8], [8, 8]];
-    for (let t = 0; t < 4; t++) {
-      const pixels = decodeTile(romData, baseOffset + t * 16);
-      const img = cctx.createImageData(8, 8);
-      for (let i = 0; i < 64; i++) {
-        const ci = pixels[i];
-        if (ci === 0) { img.data[i * 4 + 3] = 0; continue; }
-        const rgb = STAR_PALETTE[ci];
-        img.data[i * 4] = rgb[0];
-        img.data[i * 4 + 1] = rgb[1];
-        img.data[i * 4 + 2] = rgb[2];
-        img.data[i * 4 + 3] = 255;
-      }
-      cctx.putImageData(img, positions[t][0], positions[t][1]);
-    }
-    _starTiles.push(c);
-  }
-}
-
-// Render flame frame canvases using the current map's actual sprite palettes
-function _buildNpcPalIdxMap() {
-  const npcPalIdx = new Map();
-  if (mapData.npcs) {
-    for (const npc of mapData.npcs) {
-      if (!_flameRawTiles.has(npc.id) || npcPalIdx.has(npc.id)) continue;
-      npcPalIdx.set(npc.id, ((npc.flags >> 2) & 3) >= 2 ? 1 : 0);
-    }
-  }
-  if (!npcPalIdx.has(193)) npcPalIdx.set(193, 0);
-  if (!npcPalIdx.has(194)) npcPalIdx.set(194, 1);
-  return npcPalIdx;
-}
-
-function _buildFlameCanvas(rawFrames, rgbPal) {
-  const canvases = [];
-  const offsets = [[0, 0], [8, 0], [0, 8], [8, 8]];
-  for (const tiles of rawFrames) {
-    const c = _makeCanvas16();
-    const fctx = c.getContext('2d'); const img = fctx.createImageData(16, 16); const d = img.data;
-    for (let q = 0; q < 4; q++) {
-      const tile = tiles[q]; const [ox, oy] = offsets[q];
-      for (let py = 0; py < 8; py++) {
-        for (let px = 0; px < 8; px++) {
-          const ci = tile[py * 8 + px]; const di = ((oy + py) * 16 + (ox + px)) * 4;
-          if (ci === 0) { d[di + 3] = 0; }
-          else { const rgb = rgbPal[ci]; d[di] = rgb[0]; d[di+1] = rgb[1]; d[di+2] = rgb[2]; d[di+3] = 255; }
-        }
-      }
-    }
-    fctx.putImageData(img, 0, 0); canvases.push(c);
-  }
-  return canvases;
-}
-
-function _renderFlameFrames() {
-  if (!_flameRawTiles || !mapData || !mapData.spritePalettes) return;
-  _flameFrames = new Map();
-  const sp = mapData.spritePalettes;
-  const npcPalIdx = _buildNpcPalIdxMap();
-  for (const [id, rawFrames] of _flameRawTiles) {
-    const rgbPal = sp[npcPalIdx.get(id) || 0].map(ci => NES_SYSTEM_PALETTE[ci & 0x3F]);
-    _flameFrames.set(id, _buildFlameCanvas(rawFrames, rgbPal));
-  }
-}
-
-// Tileset 5 background tiles that need flame overlays
-const FLAME_TILE_MAP_TS5 = new Map([
-  [0x02, 194],  // candle wall → small candle flame
-  [0x31, 193],  // torch mount → large torch flame
-  [0x32, 194],  // torch → small candle flame
-]);
-
-function _rebuildFlameSprites() {
-  _flameSprites = [];
-  if (!mapData || !_flameRawTiles) return;
-  _renderFlameFrames();
-  const flameMap = mapData.tileset === 5 ? FLAME_TILE_MAP_TS5 : null;
-  if (!flameMap) return;
-  const rc = mapRenderer && mapRenderer.hasRoomClip() ? mapRenderer.getRoomClip() : null;
-  const { tilemap } = mapData;
-  for (let y = 0; y < 32; y++) {
-    for (let x = 0; x < 32; x++) {
-      const mid = tilemap[y * 32 + x];
-      const npcId = flameMap.get(mid);
-      if (npcId === undefined) continue;
-      const px = x * TILE_SIZE;
-      const py = y * TILE_SIZE;
-      if (rc && (px < rc.x || px >= rc.x + rc.w || py < rc.y || py >= rc.y + rc.h)) continue;
-      _flameSprites.push({ npcId, px, py });
-    }
-  }
-}
+// Flame/star sprite decode + rendering → flame-sprites.js
+function _rebuildFlameSprites() { rebuildFlameSprites(mapData, mapRenderer, TILE_SIZE); }
 
 
 
 
 function _renderSprites(camX, camY, originX, originY, spriteY) {
-  if (!onWorldMap && _flameSprites.length > 0) {
+  const _fs = getFlameSprites();
+  if (!onWorldMap && _fs.length > 0) {
     const flameFrame = Math.floor(waterTick / 8) & 1;
     const wLeft = camX - originX;
     const wTop = camY - originY;
-    for (const flame of _flameSprites) {
+    const _ff = getFlameFrames();
+    for (const flame of _fs) {
       const sx = flame.px - wLeft;
       const sy = flame.py - wTop;
       if (sx < -16 || sx > CANVAS_W || sy < -16 || sy > CANVAS_H) continue;
-      const frames = _flameFrames.get(flame.npcId);
+      const frames = _ff.get(flame.npcId);
       ctx.drawImage(frames[flameFrame], sx, sy);
     }
   }
@@ -2484,9 +1825,10 @@ function _renderMapAndWater(camX, camY, originX, originY, spriteY) {
   }
 }
 function _renderStarSpiral() {
-  if (!starEffect || !_starTiles) return;
+  const _st = getStarTiles();
+  if (!starEffect || !_st) return;
   const { radius, angle, frame } = starEffect;
-  const tile = _starTiles[(frame >> 4) & 1];
+  const tile = _st[(frame >> 4) & 1];
   for (let i = 0; i < 8; i++) {
     const a = angle + i * Math.PI / 4;
     ctx.drawImage(tile,
@@ -3492,23 +2834,10 @@ function startRandomEncounter() {
     return hb - ha;
   });
   preBattleTrack = TRACKS.CRYSTAL_CAVE;
+  _resetBattleVars();
   // Skip roar/earthquake — go straight to flash-strobe
   battleState = 'flash-strobe';
   battleTimer = 0;
-  inputSt.battleCursor = 0;
-  battleMessage = null;
-  resetAllDmgNums();
-  bossFlashTimer = 0;
-  battleShakeTimer = 0;
-  isDefending = false;
-  battleAllies = [];
-  allyJoinRound = 0;
-  currentAllyAttacker = -1;
-  allyTargetIndex = -1;
-  allyHitResult = null; allyHitIsLeft = false;
-  allyShakeTimer = {};
-  enemyTargetAllyIdx = -1;
-  allyExitTimer = 0;
   playSFX(SFX.BATTLE_SWIPE);
 }
 
@@ -3793,7 +3122,6 @@ function _triggerPVPVictory() {
   ps.gil += encounterGilGained;
   encounterProfLevelUps = gainProficiency(inputSt.battleProfHits, oppLv);
   inputSt.battleProfHits = {}; profLevelUpIdx = 0;
-  _syncSaveSlotProgress();
   saveSlotsToDB();
   enemyDefeated = true;
   isDefending = false; battleState = 'victory-name-out'; battleTimer = 0;
@@ -3821,7 +3149,6 @@ function _updateMonsterDeath() {
         }
       }
       if (encounterDropItem !== null) addItem(encounterDropItem, 1);
-      _syncSaveSlotProgress();
       saveSlotsToDB();
       isDefending = false;
       battleState = 'victory-name-out';
@@ -3943,7 +3270,6 @@ function _updateBossDissolve(dt) {
     grantExp(encounterExpGained); ps.gil += encounterGilGained;
     const _bossLv = _bossData?.level || 8;
     encounterProfLevelUps = gainProficiency(inputSt.battleProfHits, _bossLv); inputSt.battleProfHits = {}; profLevelUpIdx = 0;
-    _syncSaveSlotProgress();
     saveSlotsToDB();
     isDefending = false; battleState = 'victory-name-out'; battleTimer = 0;
   }
