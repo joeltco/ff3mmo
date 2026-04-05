@@ -4,7 +4,8 @@ import { LOCATIONS, PLAYER_POOL, ROSTER_FADE_STEPS } from './data/players.js';
 import { inputSt } from './input-handler.js';
 import { titleSt } from './title-screen.js';
 import { chatState, addChatMessage } from './chat.js';
-import { nesColorFade, NES_SYSTEM_PALETTE } from './palette.js';
+import { nesColorFade } from './palette.js';
+import { NES_SYSTEM_PALETTE } from './tile-decoder.js';
 import { _nameToBytes } from './text-utils.js';
 import { drawText, measureText, TEXT_WHITE } from './font-renderer.js';
 
