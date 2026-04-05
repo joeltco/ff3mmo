@@ -452,6 +452,13 @@ function _drawTitleSelectBox(ctx, cx, shared) {
     else if (ts.state === 'select-fade-out' || ts.state === 'select-fade-out-back') fadeStep = Math.min(Math.floor(ts.timer / SELECT_TEXT_STEP_MS), SELECT_TEXT_STEPS);
   }
 
+  // Label box dimensions
+  const labelH = 24;
+  const selectLabelW = measureText(SELECT_TITLE) + 16;
+  const deleteLabelW = measureText(SELECT_DELETE_TEXT) + 16;
+  const row0Y = topY;
+  const row2Y = topY + 2 * (SEL_ROW_H + gap);
+
   for (let i = 0; i < 3; i++) {
     const rowY = topY + i * (SEL_ROW_H + gap);
     if (sbt < 1) {
@@ -462,6 +469,37 @@ function _drawTitleSelectBox(ctx, cx, shared) {
       shared.drawHudBox(Math.round(rowCX - bw / 2), Math.round(rowCY - bh / 2), bw, bh);
     } else {
       _drawSelectSlotRow(ctx, i, selX, rowY, fadeStep, showContent, shared);
+    }
+  }
+
+  // "Player Select" label — left of top row
+  if (sbt < 1) {
+    const lCX = selX - 4 - selectLabelW / 2, lCY = row0Y + SEL_ROW_H / 2;
+    const lw = Math.max(16, Math.ceil(selectLabelW * sbt / 8) * 8);
+    const lh = Math.max(16, Math.ceil(labelH * sbt / 8) * 8);
+    shared.drawHudBox(Math.round(lCX - lw / 2), Math.round(lCY - lh / 2), lw, lh);
+  } else {
+    const lx = selX - 4 - selectLabelW, ly = row0Y + Math.floor((SEL_ROW_H - labelH) / 2);
+    shared.drawHudBox(lx, ly, selectLabelW, labelH, 0);
+    if (showContent) {
+      const fadedPal = _makeFadedPal(fadeStep);
+      drawText(ctx, lx + 8, ly + 8, SELECT_TITLE, fadedPal);
+    }
+  }
+
+  // "Delete" label — left of bottom row
+  if (sbt < 1) {
+    const dCX = selX - 4 - deleteLabelW / 2, dCY = row2Y + SEL_ROW_H / 2;
+    const dw = Math.max(16, Math.ceil(deleteLabelW * sbt / 8) * 8);
+    const dh = Math.max(16, Math.ceil(labelH * sbt / 8) * 8);
+    shared.drawHudBox(Math.round(dCX - dw / 2), Math.round(dCY - dh / 2), dw, dh);
+  } else {
+    const dx = selX - 4 - deleteLabelW, dy = row2Y + Math.floor((SEL_ROW_H - labelH) / 2);
+    const delPal = titleSt.deleteMode ? [0x0F, 0x0F, 0x0F, 0x16] : _makeFadedPal(fadeStep);
+    shared.drawHudBox(dx, dy, deleteLabelW, labelH, 0);
+    if (showContent) {
+      if (selectCursor === 3) shared.drawCursorFaded(dx - 10, dy + 4, fadeStep);
+      drawText(ctx, dx + 8, dy + 8, SELECT_DELETE_TEXT, delPal);
     }
   }
 }
@@ -562,7 +600,16 @@ export function updateTitleUnderwater(dt) {
 
 export function updateTitleSelect(keys) {
   if (_zPressed(keys)) {
-    if (saveSlots[selectCursor]) {
+    if (selectCursor === 3) {
+      // Delete mode — delete the last-selected slot
+      if (titleSt._lastSlotCursor != null && saveSlots[titleSt._lastSlotCursor]) {
+        playSFX(SFX.CONFIRM);
+        saveSlots[titleSt._lastSlotCursor] = null;
+        serverDeleteSlot(titleSt._lastSlotCursor);
+        saveSlotsToDB();
+        setSelectCursor(titleSt._lastSlotCursor);
+      }
+    } else if (saveSlots[selectCursor]) {
       playSFX(SFX.CONFIRM);
       titleSt.state = 'select-fade-out'; titleSt.timer = 0;
     } else {
@@ -571,10 +618,17 @@ export function updateTitleSelect(keys) {
       titleSt.state = 'name-entry'; titleSt.timer = 0;
     }
   }
-  if (keys['ArrowDown']) { keys['ArrowDown'] = false; setSelectCursor((selectCursor + 1) % 3); playSFX(SFX.CURSOR); }
-  if (keys['ArrowUp'])   { keys['ArrowUp'] = false;   setSelectCursor((selectCursor + 2) % 3); playSFX(SFX.CURSOR); }
+  if (selectCursor === 3) {
+    // On delete — right goes back to slots
+    if (keys['ArrowRight']) { keys['ArrowRight'] = false; setSelectCursor(titleSt._lastSlotCursor || 0); playSFX(SFX.CURSOR); }
+  } else {
+    if (keys['ArrowDown'])  { keys['ArrowDown'] = false;  setSelectCursor((selectCursor + 1) % 3); playSFX(SFX.CURSOR); }
+    if (keys['ArrowUp'])    { keys['ArrowUp'] = false;    setSelectCursor((selectCursor + 2) % 3); playSFX(SFX.CURSOR); }
+    if (keys['ArrowLeft'])  { keys['ArrowLeft'] = false;  titleSt._lastSlotCursor = selectCursor; setSelectCursor(3); playSFX(SFX.CURSOR); }
+  }
   if (_xPressed(keys)) {
-    playSFX(SFX.CONFIRM); titleSt.state = 'select-fade-out-back'; titleSt.timer = 0;
+    if (selectCursor === 3) { playSFX(SFX.CURSOR); setSelectCursor(titleSt._lastSlotCursor || 0); }
+    else { playSFX(SFX.CONFIRM); titleSt.state = 'select-fade-out-back'; titleSt.timer = 0; }
   }
 }
 
