@@ -196,7 +196,7 @@ export function updateChatTabs(dt) {
   }
 }
 
-const TAB_PEEK = 16; // px each collapsed tab peeks out past the one on top
+const TAB_PEEK = 8; // px each collapsed tab peeks out past the one on top
 
 export function drawChatTabs(ctx, fadeStep, drawHudBox) {
   if (!chatState.fontReady) return;
