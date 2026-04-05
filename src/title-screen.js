@@ -2,7 +2,10 @@
 
 import { drawText, measureText, TEXT_WHITE } from './font-renderer.js';
 import { nesColorFade, _makeFadedPal } from './palette.js';
-import { selectCursor, saveSlots, nameBuffer, NAME_MAX_LEN } from './save-state.js';
+import { selectCursor, saveSlots, nameBuffer, NAME_MAX_LEN,
+         setSelectCursor, setNameBuffer, saveSlotsToDB } from './save-state.js';
+import { playSFX, SFX } from './music.js';
+import { serverDeleteSlot } from './save.js';
 
 // ── NES layout constants — must match game.js ─────────────────────────────
 const CANVAS_W   = 256;
@@ -442,5 +445,95 @@ function _drawSelectSlot(ctx, i, ix, slotStartY, slotSpacing, fadeStep, fadedPal
     drawText(ctx, nameX, sy, saveSlots[i].name, fadedPal);
   } else {
     drawText(ctx, nameX, sy, SELECT_SLOT_TEXT, fadedPal);
+  }
+}
+
+// ── Title update functions (moved from game.js) ──────────────────────────
+
+function _zPressed(keys) { if (!keys['z'] && !keys['Z']) return false; keys['z'] = false; keys['Z'] = false; return true; }
+function _xPressed(keys) { if (!keys['x'] && !keys['X']) return false; keys['x'] = false; keys['X'] = false; return true; }
+
+export function updateTitleUnderwater(dt) {
+  if (!titleSt.bubbleTiles) return;
+  if (titleSt.state === 'main-in' || titleSt.state === 'main' || titleSt.state === 'main-out' ||
+      titleSt.state.startsWith('zbox') || titleSt.state.startsWith('select') || titleSt.state === 'name-entry') return;
+  if (titleSt.bubbles.length < 3 && Math.random() < dt * 0.0015) {
+    titleSt.bubbles.push({
+      x: HUD_VIEW_X + 20 + Math.random() * (CANVAS_W - 40),
+      y: HUD_VIEW_H - 4,
+      speed: 18 + Math.random() * 12,
+      zigPhase: Math.random() * Math.PI * 2,
+      zigSpeed: 3 + Math.random() * 3,
+      zigAmp: 8 + Math.random() * 8,
+      timer: 0,
+    });
+  }
+  for (let i = titleSt.bubbles.length - 1; i >= 0; i--) {
+    const b = titleSt.bubbles[i];
+    b.y -= b.speed * dt / 1000;
+    b.timer += dt;
+    if (b.y < -8) titleSt.bubbles.splice(i, 1);
+  }
+  if (!titleSt.fishTriggered && titleSt.state === 'disclaim-wait') {
+    titleSt.fishTriggered = true;
+    titleSt.fish = { x: -10, y: HUD_VIEW_H * 0.7, timer: 0, speed: 80, zigPhase: 0, zigSpeed: 4, zigAmp: 6 };
+  }
+  if (titleSt.fish) {
+    titleSt.fish.x += titleSt.fish.speed * dt / 1000;
+    titleSt.fish.y -= titleSt.fish.speed * 0.4 * dt / 1000;
+    titleSt.fish.timer += dt;
+    if (titleSt.fish.x > CANVAS_W + 10 || titleSt.fish.y < -10) titleSt.fish = null;
+  }
+}
+
+export function updateTitleSelect(keys) {
+  if (_zPressed(keys)) {
+    if (titleSt.deleteMode) {
+      if (selectCursor < 3 && saveSlots[selectCursor]) {
+        playSFX(SFX.CONFIRM);
+        saveSlots[selectCursor] = null;
+        serverDeleteSlot(selectCursor);
+        saveSlotsToDB();
+        titleSt.deleteMode = false;
+      }
+    } else if (selectCursor === 3) {
+      playSFX(SFX.CONFIRM);
+      titleSt.deleteMode = true;
+      setSelectCursor(0);
+    } else if (saveSlots[selectCursor]) {
+      playSFX(SFX.CONFIRM);
+      titleSt.state = 'select-fade-out'; titleSt.timer = 0;
+    } else {
+      playSFX(SFX.CONFIRM);
+      setNameBuffer([]);
+      titleSt.state = 'name-entry'; titleSt.timer = 0;
+    }
+  }
+  if (titleSt.deleteMode) {
+    if (keys['ArrowDown']) { keys['ArrowDown'] = false; setSelectCursor((selectCursor + 1) % 3); playSFX(SFX.CURSOR); }
+    if (keys['ArrowUp'])   { keys['ArrowUp'] = false;   setSelectCursor((selectCursor + 2) % 3); playSFX(SFX.CURSOR); }
+  } else {
+    if (keys['ArrowDown']) { keys['ArrowDown'] = false; setSelectCursor((selectCursor + 1) % 4); playSFX(SFX.CURSOR); }
+    if (keys['ArrowUp'])   { keys['ArrowUp'] = false;   setSelectCursor((selectCursor + 3) % 4); playSFX(SFX.CURSOR); }
+  }
+  if (_xPressed(keys)) {
+    if (titleSt.deleteMode) { playSFX(SFX.CONFIRM); titleSt.deleteMode = false; }
+    else { playSFX(SFX.CONFIRM); titleSt.state = 'select-fade-out-back'; titleSt.timer = 0; }
+  }
+}
+
+export function onNameEntryKeyDown(e) {
+  e.preventDefault();
+  if (e.key === 'Enter' && nameBuffer.length > 0) {
+    saveSlots[selectCursor] = { name: new Uint8Array(nameBuffer), level: 1, exp: 0, stats: null, inventory: {} };
+    saveSlotsToDB();
+    titleSt.state = 'select'; titleSt.timer = 0;
+  } else if (e.key === 'Backspace') {
+    if (nameBuffer.length > 0) nameBuffer.pop();
+    else { titleSt.state = 'select'; titleSt.timer = 0; }
+  } else if (e.key.length === 1 && /[a-zA-Z]/.test(e.key) && nameBuffer.length < NAME_MAX_LEN) {
+    const ch = e.key;
+    if (ch >= 'A' && ch <= 'Z') nameBuffer.push(0x8A + ch.charCodeAt(0) - 65);
+    else nameBuffer.push(0xCA + ch.charCodeAt(0) - 97);
   }
 }

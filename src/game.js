@@ -28,9 +28,9 @@ import { BATTLE_MISS, BATTLE_GAME_OVER, BATTLE_ROAR, BATTLE_FIGHT, BATTLE_RUN,
 import { initMonsterSprites, getMonsterCanvas, getMonsterWhiteCanvas,
          getMonsterDeathFrames, hasMonsterSprites } from './monster-sprites.js';
 import { loadBossSprite, getBossBattleCanvas, getBossWhiteCanvas } from './boss-sprites.js';
-import { serverDeleteSlot } from './save.js';
-import { selectCursor, saveSlots, savesLoaded, nameBuffer, NAME_MAX_LEN,
-         setSelectCursor, setSaveSlots, setNameBuffer,
+// serverDeleteSlot → title-screen.js
+import { selectCursor, saveSlots,
+         setSelectCursor, setSaveSlots,
          saveSlotsToDB, loadSlotsFromDB, setInventoryGetter } from './save-state.js';
 import { _nameToBytes, _nesNameToString, _buildItemRowBytes, _makeGotNText, makeExpText, makeGilText, makeFoundItemText, makeProfLevelUpText } from './text-utils.js';
 import { nesColorFade, _makeFadedPal, _stepPalFade } from './palette.js';
@@ -51,7 +51,8 @@ import { ps, EQUIP_SLOT_SUBTYPE, getEquipSlotId, setEquipSlotId, recalcDEF, reca
 import { initProfIcons, getProfIcon } from './prof-icons.js';
 import { chatState, addChatMessage, updateChat, drawChat } from './chat.js';
 import { msgState, showMsgBox, updateMsgBox, drawMsgBox } from './message-box.js';
-import { titleSt, isTitleActiveState, titleFadeLevel, titleFadePal, drawTitleOcean, drawTitleWater, drawTitleSky, drawTitleUnderwater, drawUnderwaterSprites, drawTitleSkyInHUD, drawTitle, drawPlayerSelectContent } from './title-screen.js';
+import { titleSt, isTitleActiveState, titleFadeLevel, titleFadePal, drawTitleOcean, drawTitleWater, drawTitleSky, drawTitleUnderwater, drawUnderwaterSprites, drawTitleSkyInHUD, drawTitle, drawPlayerSelectContent,
+         updateTitleUnderwater, updateTitleSelect, onNameEntryKeyDown } from './title-screen.js';
 import { pauseSt, updatePauseMenu, drawPauseMenu } from './pause-menu.js';
 import { transSt, topBoxSt, loadingSt, startWipeTransition, updateTransition, updateTopBoxScroll, drawTransitionOverlay } from './transitions.js';
 import { inputSt, handleBattleInput, handleRosterInput, handlePauseInput } from './input-handler.js';
@@ -488,21 +489,7 @@ function _onChatKeyDown(e) {
     chatState.inputText += e.key;
   }
 }
-function _onNameEntryKeyDown(e) {
-  e.preventDefault();
-  if (e.key === 'Enter' && nameBuffer.length > 0) {
-    saveSlots[selectCursor] = { name: new Uint8Array(nameBuffer), level: 1, exp: 0, stats: null, inventory: {} };
-    saveSlotsToDB();
-    titleSt.state = 'select'; titleSt.timer = 0;
-  } else if (e.key === 'Backspace') {
-    if (nameBuffer.length > 0) nameBuffer.pop();
-    else { titleSt.state = 'select'; titleSt.timer = 0; }
-  } else if (e.key.length === 1 && /[a-zA-Z]/.test(e.key) && nameBuffer.length < NAME_MAX_LEN) {
-    const ch = e.key;
-    if (ch >= 'A' && ch <= 'Z') nameBuffer.push(0x8A + ch.charCodeAt(0) - 65);
-    else nameBuffer.push(0xCA + ch.charCodeAt(0) - 97);
-  }
-}
+// _onNameEntryKeyDown → title-screen.js (onNameEntryKeyDown)
 export function init() {
   setInventoryGetter(() => playerInventory);
   canvas = document.getElementById('game-canvas');
@@ -513,7 +500,7 @@ export function init() {
 
   window.addEventListener('keydown', (e) => {
     if (chatState.inputActive) { _onChatKeyDown(e); return; }
-    if (titleSt.state === 'name-entry') { _onNameEntryKeyDown(e); return; }
+    if (titleSt.state === 'name-entry') { onNameEntryKeyDown(e); return; }
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'z', 'Z', 'x', 'X', 'Enter', 's', 'S'].includes(e.key)) {
       e.preventDefault();
       keys[e.key] = true;
@@ -2341,73 +2328,7 @@ function updateRoster(dt) {
 
 // ── Title Screen — titleFadeLevel, titleFadePal, draw functions → title-screen.js ──
 
-function _updateTitleUnderwater(dt) {
-  if (!titleSt.bubbleTiles) return;
-  if (titleSt.state === 'main-in' || titleSt.state === 'main' || titleSt.state === 'main-out' ||
-      titleSt.state.startsWith('zbox') || titleSt.state.startsWith('select') || titleSt.state === 'name-entry') return;
-  if (titleSt.bubbles.length < 3 && Math.random() < dt * 0.0015) {
-    titleSt.bubbles.push({
-      x: HUD_VIEW_X + 20 + Math.random() * (CANVAS_W - 40),
-      y: HUD_VIEW_H - 4,
-      speed: 18 + Math.random() * 12,
-      zigPhase: Math.random() * Math.PI * 2,
-      zigSpeed: 3 + Math.random() * 3,
-      zigAmp: 8 + Math.random() * 8,
-      timer: 0,
-    });
-  }
-  for (let i = titleSt.bubbles.length - 1; i >= 0; i--) {
-    const b = titleSt.bubbles[i];
-    b.y -= b.speed * dt / 1000;
-    b.timer += dt;
-    if (b.y < -8) titleSt.bubbles.splice(i, 1);
-  }
-  if (!titleSt.fishTriggered && titleSt.state === 'disclaim-wait') {
-    titleSt.fishTriggered = true;
-    titleSt.fish = { x: -10, y: HUD_VIEW_H * 0.7, timer: 0, speed: 80, zigPhase: 0, zigSpeed: 4, zigAmp: 6 };
-  }
-  if (titleSt.fish) {
-    titleSt.fish.x += titleSt.fish.speed * dt / 1000;
-    titleSt.fish.y -= titleSt.fish.speed * 0.4 * dt / 1000;
-    titleSt.fish.timer += dt;
-    if (titleSt.fish.x > CANVAS_W + 10 || titleSt.fish.y < -10) titleSt.fish = null;
-  }
-}
-function _updateTitleSelectCase() {
-  if (_zPressed()) {
-    if (titleSt.deleteMode) {
-      if (selectCursor < 3 && saveSlots[selectCursor]) {
-        playSFX(SFX.CONFIRM);
-        saveSlots[selectCursor] = null;
-        serverDeleteSlot(selectCursor);
-        saveSlotsToDB();
-        titleSt.deleteMode = false;
-      }
-    } else if (selectCursor === 3) {
-      playSFX(SFX.CONFIRM);
-      titleSt.deleteMode = true;
-      setSelectCursor(0);
-    } else if (saveSlots[selectCursor]) {
-      playSFX(SFX.CONFIRM);
-      titleSt.state = 'select-fade-out'; titleSt.timer = 0;
-    } else {
-      playSFX(SFX.CONFIRM);
-      setNameBuffer([]);
-      titleSt.state = 'name-entry'; titleSt.timer = 0;
-    }
-  }
-  if (titleSt.deleteMode) {
-    if (keys['ArrowDown']) { keys['ArrowDown'] = false; setSelectCursor((selectCursor + 1) % 3); playSFX(SFX.CURSOR); }
-    if (keys['ArrowUp'])   { keys['ArrowUp'] = false;   setSelectCursor((selectCursor + 2) % 3); playSFX(SFX.CURSOR); }
-  } else {
-    if (keys['ArrowDown']) { keys['ArrowDown'] = false; setSelectCursor((selectCursor + 1) % 4); playSFX(SFX.CURSOR); }
-    if (keys['ArrowUp'])   { keys['ArrowUp'] = false;   setSelectCursor((selectCursor + 3) % 4); playSFX(SFX.CURSOR); }
-  }
-  if (_xPressed()) {
-    if (titleSt.deleteMode) { playSFX(SFX.CONFIRM); titleSt.deleteMode = false; }
-    else { playSFX(SFX.CONFIRM); titleSt.state = 'select-fade-out-back'; titleSt.timer = 0; }
-  }
-}
+// _updateTitleUnderwater, _updateTitleSelectCase → title-screen.js
 function _updateTitleMainOutCase() {
   titleSt.state = 'done';
   hudInfoFadeTimer = 0;
@@ -2443,7 +2364,7 @@ function _updateTitleMainOutCase() {
 function updateTitle(dt) {
   titleSt.timer += dt;
   titleSt.underwaterScroll += dt * 0.11;
-  _updateTitleUnderwater(dt);
+  updateTitleUnderwater(dt);
 
   if (isTitleActiveState()) {
     waterTimer += dt;
@@ -2470,7 +2391,7 @@ function updateTitle(dt) {
     case 'logo-fade-out':        if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'select-box-open'; titleSt.timer = 0; setSelectCursor(0); titleSt.deleteMode = false; } break;
     case 'select-box-open':      if (titleSt.timer >= BOSS_BOX_EXPAND_MS) { titleSt.state = 'select-fade-in'; titleSt.timer = 0; } break;
     case 'select-fade-in':       if (titleSt.timer >= (SELECT_TEXT_STEPS + 1) * SELECT_TEXT_STEP_MS) { titleSt.state = 'select'; titleSt.timer = 0; } break;
-    case 'select':               _updateTitleSelectCase(); break;
+    case 'select':               updateTitleSelect(keys); break;
     case 'name-entry':           break;
     case 'select-fade-out':      if (titleSt.timer >= (SELECT_TEXT_STEPS + 1) * SELECT_TEXT_STEP_MS) { titleSt.state = 'select-box-close-fwd'; titleSt.timer = 0; } break;
     case 'select-box-close-fwd': if (titleSt.timer >= BOSS_BOX_EXPAND_MS) { titleSt.state = 'main-out'; titleSt.timer = 0; fadeOutMusic(TITLE_FADE_MS); } break;
