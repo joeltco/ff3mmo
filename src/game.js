@@ -3371,6 +3371,8 @@ function gameLoop(timestamp) {
   if (titleSt.state !== 'done') {
     updateTitle(dt); drawTitle(ctx, _titleShared()); drawHUD();
     if (titleSt.state !== 'done') drawTitleSkyInHUD(ctx, roundTopBoxCorners); // guard: updateTitle may have set titleSt.state='done'
+    updateChat(dt, 'none');
+    drawChat(ctx, _drawHudBox, 0);
     requestAnimationFrame(gameLoop);
     return;
   }
