@@ -4,6 +4,7 @@ import { PLAYER_POOL, CHAT_PHRASES, ROSTER_FADE_STEPS } from './data/players.js'
 import { selectCursor, saveSlots } from './save-state.js';
 import { _nesNameToString, _nameToBytes } from './text-utils.js';
 import { drawText, measureText, TEXT_YELLOW, TEXT_GREY } from './font-renderer.js';
+import { getPlayerLocation } from './roster.js';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 const CHAT_LINE_H      = 9;
@@ -45,14 +46,16 @@ export function addChatMessage(text, type, channel) {
     if (type === 'console' || type === 'system') channel = 'sys';
     else channel = 'room';
   }
-  chatState.messages.push({ text, type: type || 'chat', channel });
+  const msg = { text, type: type || 'chat', channel };
+  if (channel === 'room') msg.loc = getPlayerLocation();
+  chatState.messages.push(msg);
   while (chatState.messages.length > CHAT_HISTORY) chatState.messages.shift();
 }
 
 function _passesTabFilter(msg) {
   const tab = CHAT_TABS[activeTab];
   if (tab === 'ALL') return true;
-  if (tab === 'ROOM') return msg.channel === 'room';
+  if (tab === 'ROOM') return msg.channel === 'room' && msg.loc === getPlayerLocation();
   if (tab === 'PM') return msg.channel === 'pm';
   if (tab === 'SYS') return msg.channel === 'sys';
   return true;
@@ -139,7 +142,10 @@ export function updateChat(dt, battleState, titleActive) {
     chatState.autoTimer -= dt;
     if (chatState.autoTimer <= 0) {
       chatState.autoTimer = CHAT_AUTO_MIN_MS + Math.random() * (CHAT_AUTO_MAX_MS - CHAT_AUTO_MIN_MS);
-      const p      = PLAYER_POOL[Math.floor(Math.random() * PLAYER_POOL.length)];
+      const loc = getPlayerLocation();
+      const local = PLAYER_POOL.filter(p => p.loc === loc);
+      if (local.length === 0) return;
+      const p      = local[Math.floor(Math.random() * local.length)];
       const phrase = CHAT_PHRASES[Math.floor(Math.random() * CHAT_PHRASES.length)];
       addChatMessage(p.name + ': ' + phrase, 'chat');
     }
