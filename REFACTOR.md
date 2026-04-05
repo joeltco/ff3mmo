@@ -1,48 +1,41 @@
 # game.js Refactor TODO
 
-Current size: **4,208 lines**. Target: <4,000 lines.
+Current size: **3,534 lines** (v1.2.2). Target: <4,000 lines — **achieved**.
 
 ---
 
 ## Next Up
 
-### 1. Canvas cache consolidation (~40 vars → 1 object)
-Group ~40 scattered `let xxxCanvas = null` / `let xxxFrames = null` declarations (lines 134–389) into a single `spriteCache` object. No behavior change — just init cleanup.
+No high-value extractions remaining. Remaining candidates are in "Evaluated — Not Worth It" or "Hard" below.
 
-### ~~2. `src/battle-ally.js` extraction (~123L)~~ DONE
-Extracted `updateBattleAlly` + 5 private helpers. `_allyShared()` in game.js (35L). Net: −83L.
+---
 
-### ~~3. `_processEnemyFlash` + `_updateBattleEnemyTurn`~~ DONE
-Extracted to `src/battle-enemy.js` (~76L). `_enemyShared()` in game.js.
+## Evaluated — Not Worth It
 
-### 3b. `src/battle-items.js` extraction DONE
-Extracted `startMagicItem`, `updateMagicItemThrowHit`, target selection, damage application (~150L).
-`_magicItemShared()` in game.js. Designed for multiple spell items.
+### ~~Canvas cache consolidation (~40 vars → 1 object)~~
+Evaluated: 47 canvas vars, ~300 refs across 8 files, 110+ shared context getters.
+Converting `let x = null` → `spriteCache.x: null` saves **zero lines** and touches
+250–300 sites. High risk, no benefit.
 
-### 3c. `src/damage-numbers.js` extraction DONE
-All damage/heal number state, palettes, tick, reset, drawing helper (~102L).
-Miss sprite rendered from ROM tiles $1B4D0/$1B4E0 (green "MISS" with black outline).
-
-### 4. `battleCtx` grouping (~40 battle vars → 1 object)
-Group `battleState`, `battleTimer`, `bossDamageNum`, `playerDamageNum`, `bossHP`, `bossDefeated`, `battleShakeTimer`, `critFlashTimer`, `turnQueue`, `encounterMonsters`, etc. (lines 289–462) into a `battleCtx` object.
-**Do last** — search/replace pass across the whole file. Enables further extraction.
-
-### 5. `_syncSaveSlotProgress` dedup
-9L function called at 4 sites, always paired with `saveSlotsToDB()`. Fold into `_triggerPVPVictory` / `_triggerBossVictory` / consolidate.
+### ~~`battleCtx` grouping (~40 battle vars → 1 object)~~
+Evaluated: 35 mutable vars, ~867 refs across 8 files.
+Net line savings: ~0 (same keys inside an object). High architectural value
+for *future* battle-state module extraction, but not justified without a concrete
+follow-up. Revisit when extracting a battle engine module.
 
 ---
 
 ## Hard (deeply coupled, needs architectural redesign)
 
 - [ ] Split `_processBossFlash()` (49L) → `_targetAllyForAttack`, `_calculateAllyDamage`, `_calculatePlayerDamage`
-- [ ] Consolidate battle sprite canvas cache (~90L) into `battleSpriteCache` object
-- [ ] Group raw globals (L46–704, ~620L) into state objects: `battleState`, `rosterState`, `chatState`, `transitionState`, `pauseState`, `titleState`
+- [ ] Group raw globals (L46–704, ~620L) into state objects — blocked by shared context overhead
 
 ---
 
 ## Won't Extract (too entangled)
 
-- Roster draw/update — coupled to too many game globals
+- Roster draw/update (357L) — reads/writes ~20 state vars, needs ctx + 10 canvas arrays + 8 helpers. Shared context would eat most savings.
+- Title update logic (139L) — entangled with game state (ps, playerInventory, saveSlots, map loading)
 - Full rendering core — canvas state too entangled
 - Battle state machine — needs architectural redesign first
 
@@ -73,4 +66,22 @@ Group `battleState`, `battleTimer`, `bossDamageNum`, `playerDamageNum`, `bossHP`
 - [x] `src/pvp-math.js` (~30L) — grid layout + cell center shared by game.js + pvp.js
 - [x] `src/battle-sfx.js` (~15L) — `playSlashSFX` replaced 3 inline copies
 - [x] `src/battle-drawing.js` (~1,236L) — biggest single win. 40+ draw helpers extracted.
+</details>
+
+<details>
+<summary>Phase 3 (done items)</summary>
+
+- [x] `src/battle-ally.js` (~123L) — `updateBattleAlly` + 5 helpers. `_allyShared()` in game.js. Net: −83L.
+- [x] `src/battle-enemy.js` (~76L) — `_processEnemyFlash` + `_updateBattleEnemyTurn`. `_enemyShared()` in game.js.
+- [x] `src/battle-items.js` (~150L) — `startMagicItem`, `updateMagicItemThrowHit`, target/damage. `_magicItemShared()` in game.js.
+- [x] `src/damage-numbers.js` (~102L) — All dmg/heal state, palettes, tick, reset, draw. Miss sprite from ROM $1B4D0/$1B4E0.
+</details>
+
+<details>
+<summary>Phase 4 — final push (4,208→3,534L)</summary>
+
+- [x] `src/sprite-init.js` (~636L) — 37 pure init functions: battle sprites, portraits, full-body canvases, goblin, adamantoise, invincible, moogle, cursor, fade frames. ROM in → canvases out. Net: −674L.
+- [x] `src/flame-sprites.js` (~153L) — Flame/star tile decode, palette rendering, sprite positioning. Net: −135L.
+- [x] `_syncSaveSlotProgress` dedup — Merged into `saveSlotsToDB()`. Net: −10L.
+- [x] `startRandomEncounter` dedup — Replaced 15 manual resets with `_resetBattleVars()`. Net: −12L.
 </details>
