@@ -58,7 +58,7 @@ export function addChatMessage(text, type, channel, loc) {
 
 function _passesTabFilter(msg) {
   const tab = CHAT_TABS[activeTab];
-  if (tab === 'World') return true;
+  if (tab === 'World') return msg.channel === 'world';
   if (tab === 'Room') return msg.channel === 'room' && msg.loc === getPlayerLocation();
   if (tab === 'Private') return msg.channel === 'pm';
   if (tab === 'System') return msg.channel === 'sys';
@@ -156,7 +156,7 @@ export function updateChat(dt, battleState, titleActive) {
         : remote[Math.floor(Math.random() * remote.length)];
       if (!p) return;
       const phrase = CHAT_PHRASES[Math.floor(Math.random() * CHAT_PHRASES.length)];
-      addChatMessage(p.name + ': ' + phrase, 'chat', 'room', p.loc);
+      addChatMessage(p.name + ': ' + phrase, 'chat', useLocal ? 'room' : 'world', p.loc);
     }
   }
 }
