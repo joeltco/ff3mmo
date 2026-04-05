@@ -49,7 +49,7 @@ import { initTitleWater, initTitleSky, initTitleUnderwater, initUnderwaterSprite
 // BATTLE_SPRITE_ROM, BATTLE_JOB_SIZE, BATTLE_PAL_ROM → sprite-init.js
 import { ps, EQUIP_SLOT_SUBTYPE, getEquipSlotId, setEquipSlotId, recalcDEF, recalcCombatStats, getHitWeapon, isHitRightHand, initPlayerStats, initExpTable, grantExp, fullHeal, gainProficiency, getProfHits, getProfLevel, getShieldEvade, PROF_CATEGORIES, WEAPON_PROF_CATEGORY } from './player-stats.js';
 import { initProfIcons, getProfIcon } from './prof-icons.js';
-import { chatState, addChatMessage, updateChat, drawChat, drawChatTabs, onChatKeyDown, consoleLog, setCommandContext,
+import { chatState, addChatMessage, updateChat, updateChatTabs, drawChat, drawChatTabs, onChatKeyDown, consoleLog, setCommandContext,
          CHAT_TABS, activeTab, tabSelectMode, setActiveTab, setTabSelectMode } from './chat.js';
 import { rosterBattleFade, setLocationGetter, getPlayerLocation, rosterLocForMapId,
          getRosterVisible, initRoster, updateRoster,
@@ -2974,6 +2974,7 @@ function _gameLoopUpdate(dt) {
   handleInput();
   updateRoster(dt, { battleState, transSt, wipeDuration: 44 * (1000 / 60), hudInfoFadeTimer, hudInfoFadeSteps: HUD_INFO_FADE_STEPS, hudInfoFadeStepMs: HUD_INFO_FADE_STEP_MS });
   updateChat(dt, battleState);
+  updateChatTabs(dt);
   updatePauseMenu(dt, playerInventory);
   updateMsgBox(dt);
   updateBattle(dt);
@@ -3021,7 +3022,7 @@ function _gameLoopDraw() {
     // Tab bar fade: combine battle fade, transition fade, and HUD info fade
     const _infoFade = HUD_INFO_FADE_STEPS - Math.min(Math.floor(hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
     const _tabFade = Math.max(rosterBattleFade, _infoFade);
-    if (transSt.state !== 'loading') drawChatTabs(ctx, _tabFade);
+    if (transSt.state !== 'loading') drawChatTabs(ctx, _tabFade, _drawHudBox);
     drawPauseMenu(ctx, _pauseShared());
     drawMsgBox(ctx, _clipToViewport, _drawBorderedBox);
     drawRosterMenu(_rds);
