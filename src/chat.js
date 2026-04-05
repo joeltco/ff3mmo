@@ -181,11 +181,8 @@ export function drawChatTabs(ctx, fadeStep) {
   const NES_STEP_ALPHAS = [1.0, 0.76, 0.52, 0.28, 0];
   ctx.globalAlpha = NES_STEP_ALPHAS[Math.min(fadeStep, 4)];
 
-  // Single centered label showing current tab
   const label = _nameToBytes(CHAT_TABS[activeTab]);
-  const lw = measureText(label);
-  const panelW = CANVAS_W - HUD_RIGHT_X;
-  const tx = HUD_RIGHT_X + Math.floor((panelW - lw) / 2);
+  const tx = HUD_RIGHT_X + 4;
   const ty = TAB_BAR_Y + 4;
   const pal = tabSelectMode ? TEXT_YELLOW : TEXT_GREY;
   drawText(ctx, tx, ty, label, pal);
