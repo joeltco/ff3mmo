@@ -24,7 +24,7 @@ export const SELECT_TEXT_STEPS    = 4;
 export const SELECT_TEXT_STEP_MS  = 100;
 export const BOSS_BOX_EXPAND_MS   = 300;
 const LOAD_FADE_MAX        = 4;
-const NAME_MAX_LEN         = 7;
+// NAME_MAX_LEN → imported from save-state.js
 
 // ── Text byte arrays (NES encoding) ───────────────────────────────────────
 const TITLE_CREDIT_1  = new Uint8Array([0x8A,0xFF,0xCF,0xCA,0xD7,0xFF,0xD0,0xCA,0xD6,0xCE]);
