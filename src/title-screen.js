@@ -482,8 +482,7 @@ function _drawTitleSelectBox(ctx, cx, shared) {
     const lx = selX - 4 - selectLabelW, ly = row0Y + Math.floor((SEL_ROW_H - labelH) / 2);
     shared.drawHudBox(lx, ly, selectLabelW, labelH, 0);
     if (showContent) {
-      const fadedPal = _makeFadedPal(fadeStep);
-      drawText(ctx, lx + 8, ly + 8, SELECT_TITLE, fadedPal);
+      drawText(ctx, lx + 8, ly + 8, SELECT_TITLE, TEXT_WHITE);
     }
   }
 
@@ -495,10 +494,10 @@ function _drawTitleSelectBox(ctx, cx, shared) {
     shared.drawHudBox(Math.round(dCX - dw / 2), Math.round(dCY - dh / 2), dw, dh);
   } else {
     const dx = selX - 4 - deleteLabelW, dy = row2Y + Math.floor((SEL_ROW_H - labelH) / 2);
-    const delPal = titleSt.deleteMode ? [0x0F, 0x0F, 0x0F, 0x16] : _makeFadedPal(fadeStep);
+    const delPal = selectCursor === 3 ? [0x0F, 0x0F, 0x0F, 0x16] : TEXT_WHITE;
     shared.drawHudBox(dx, dy, deleteLabelW, labelH, 0);
     if (showContent) {
-      if (selectCursor === 3) shared.drawCursorFaded(dx - 10, dy + 4, fadeStep);
+      if (selectCursor === 3) shared.drawCursorFaded(dx - 10, dy + 4, 0);
       drawText(ctx, dx + 8, dy + 8, SELECT_DELETE_TEXT, delPal);
     }
   }
