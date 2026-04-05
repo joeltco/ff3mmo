@@ -23,8 +23,9 @@ const HUD_BOT_H  = 64;
 export const CHAT_TABS = ['World', 'Room', 'Private', 'System'];
 export let activeTab = 0;  // index into CHAT_TABS
 export let tabSelectMode = false;
-export function setActiveTab(i) { activeTab = i; }
-export function setTabSelectMode(v) { tabSelectMode = v; }
+let _tabBlinkStart = 0;
+export function setActiveTab(i) { activeTab = i; _tabBlinkStart = Date.now(); }
+export function setTabSelectMode(v) { tabSelectMode = v; _tabBlinkStart = Date.now(); }
 
 // ── Mutable state (exported so game.js can read/write directly) ────────────
 export const chatState = {
@@ -184,7 +185,7 @@ export function drawChatTabs(ctx, fadeStep) {
   const label = _nameToBytes(CHAT_TABS[activeTab]);
   const tx = HUD_RIGHT_X + 4;
   const ty = TAB_BAR_Y + 4;
-  if (tabSelectMode && (Math.floor(Date.now() / 400) & 1)) {
+  if (tabSelectMode && (Math.floor((Date.now() - _tabBlinkStart) / 400) & 1)) {
     // blink — skip draw
   } else {
     drawText(ctx, tx, ty, label, TEXT_WHITE);
