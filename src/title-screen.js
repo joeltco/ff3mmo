@@ -445,16 +445,11 @@ function _drawTitleSelectBox(ctx, cx, shared) {
   for (let i = 0; i < 3; i++) {
     const rowY = topY + i * (SEL_ROW_H + gap);
     if (sbt < 1) {
-      // Each row closes as two boxes (portrait + info), like roster
-      const pH = Math.max(8, Math.ceil(SEL_ROW_H * sbt / 8) * 8);
-      const pCY = rowY + SEL_ROW_H / 2;
-      // Portrait box
-      const pW = Math.max(8, Math.ceil(32 * sbt / 8) * 8);
-      shared.drawHudBox(Math.round(selX + 16 - pW / 2), Math.round(pCY - pH / 2), pW, pH);
-      // Info box
-      const iFullW = SEL_W - 32;
-      const iW = Math.max(8, Math.ceil(iFullW * sbt / 8) * 8);
-      shared.drawHudBox(Math.round(selX + 32 + iFullW / 2 - iW / 2), Math.round(pCY - pH / 2), iW, pH);
+      // Each box expands/collapses individually
+      const rowCX = selX + SEL_W / 2, rowCY = rowY + SEL_ROW_H / 2;
+      const bw = Math.max(16, Math.ceil(SEL_W * sbt / 8) * 8);
+      const bh = Math.max(16, Math.ceil(SEL_ROW_H * sbt / 8) * 8);
+      shared.drawHudBox(Math.round(rowCX - bw / 2), Math.round(rowCY - bh / 2), bw, bh);
     } else {
       _drawSelectSlotRow(ctx, i, selX, rowY, fadeStep, showContent, shared);
     }
