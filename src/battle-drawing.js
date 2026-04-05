@@ -4,6 +4,7 @@ import { drawText, measureText, TEXT_WHITE } from './font-renderer.js';
 import { nesColorFade, _makeFadedPal } from './palette.js';
 import { _calcBoxExpandSize, _encounterGridPos } from './battle-layout.js';
 import { _dmgBounceY } from './data/animation-tables.js';
+import { DMG_NUM_PAL, HEAL_NUM_PAL, drawBattleNum as _drawBattleNumCtx } from './damage-numbers.js';
 import { getBossBattleCanvas, getBossWhiteCanvas } from './boss-sprites.js';
 import { getMonsterCanvas, getMonsterWhiteCanvas, hasMonsterSprites } from './monster-sprites.js';
 import { getItemNameClean, getMonsterName } from './text-decoder.js';
@@ -39,7 +40,6 @@ const MONSTER_DEATH_MS = 250;
 const MONSTER_SLIDE_MS = 267;
 const SLASH_FRAME_MS = 50;
 const SLASH_FRAMES = 3;
-const DMG_NUM_PAL = [0x0F, 0x0F, 0x0F, 0x25];
 const TEXT_WHITE_ON_BLUE = [0x02, 0x02, 0x02, 0x30];
 const DEFEND_SPARKLE_FRAME_MS = 133;
 const VICTORY_BOX_W = BATTLE_PANEL_W;
@@ -147,20 +147,20 @@ function drawSWDamageNumbers(shared) {
       const mc = getMonsterCanvas(m?.monsterId, _s.goblinBattleCanvas);
       const rH = idx < 2 ? (row0H || sprH) : (row1H || sprH);
       const mh = mc ? mc.height : rH;
-      const bx = tp.x + 16;
+      const mw = mc ? mc.width : 32;
+      const bx = tp.x + mw - 4;
       const baseY = tp.y + (rH - mh) + Math.floor(mh / 2) - 8;
       const by = _dmgBounceY(baseY, dn.timer);
-      const digits = String(dn.value);
-      const numBytes = new Uint8Array(digits.length);
-      for (let i = 0; i < digits.length; i++) numBytes[i] = 0x80 + parseInt(digits[i]);
-      drawText(_s.ctx, bx - Math.floor(digits.length * 4), by, numBytes, DMG_NUM_PAL);
+      _drawBattleNum(bx, by, dn.value, DMG_NUM_PAL);
     }
   } else {
-    // Boss — damage number centered on boss
+    // Boss — damage number on right side of boss sprite
+    const bc = getBossBattleCanvas();
+    const bw = bc ? bc.width : 48;
     for (const [k, dn] of Object.entries(_s.southWindDmgNums)) {
-      const cx = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2);
+      const bx = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2) + Math.floor(bw / 2) - 4;
       const baseY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2) - 8;
-      _drawBattleNum(cx, _dmgBounceY(baseY, dn.timer), dn.value, DMG_NUM_PAL);
+      _drawBattleNum(bx, _dmgBounceY(baseY, dn.timer), dn.value, DMG_NUM_PAL);
     }
   }
 }
@@ -1253,9 +1253,9 @@ function _flushAllyWeaponDraws(weaponDraws) {
     if (wd.type === 'dmg') {
       const { dn, bx, by } = wd;
       if (dn.miss) {
-        drawText(_s.ctx, bx - 8, by, BATTLE_MISS, [0x0F, 0x0F, 0x0F, 0x2B]);
+        drawText(_s.ctx, bx - 8, by, BATTLE_MISS, HEAL_NUM_PAL);
       } else {
-        _drawBattleNum(bx, by, dn.value, dn.heal ? [0x0F, 0x0F, 0x0F, 0x2B] : DMG_NUM_PAL);
+        _drawBattleNum(bx, by, dn.value, dn.heal ? HEAL_NUM_PAL : DMG_NUM_PAL);
       }
     } else if (wd.type === 'sparkle') {
       const { frame, px, py } = wd;
@@ -1291,7 +1291,8 @@ function _encounterMonsterPos(idx) {
   const mc = getMonsterCanvas(m?.monsterId, _s.goblinBattleCanvas);
   const rH = safeIdx < 2 ? (row0H || dSprH) : (row1H || dSprH);
   const mh = mc ? mc.height : rH;
-  return { bx: pos.x + 16, baseY: pos.y + (rH - mh) + Math.floor(mh / 2) - 8 };
+  const mw = mc ? mc.width : 32;
+  return { bx: pos.x + mw - 4, baseY: pos.y + (rH - mh) + Math.floor(mh / 2) - 8 };
 }
 function _drawBossDmgNum() {
   if (!_s.enemyDmgNum || (_s.enemyDefeated && !_s.isRandomEncounter)) return;
@@ -1303,13 +1304,15 @@ function _drawBossDmgNum() {
     bx = bx0;
     baseY = by0 - 8;
   } else {
-    bx = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2) - 4;
+    const bc = getBossBattleCanvas();
+    const bw = bc ? bc.width : 48;
+    bx = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2) + Math.floor(bw / 2) - 4;
     baseY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2) - 8;
   }
   const by = _dmgBounceY(baseY, _s.enemyDmgNum.timer);
   _s.clipToViewport();
   if (_s.enemyDmgNum.miss) {
-    drawText(_s.ctx, bx - 8, by, BATTLE_MISS, [0x0F, 0x0F, 0x0F, 0x2B]);
+    drawText(_s.ctx, bx - 8, by, BATTLE_MISS, HEAL_NUM_PAL);
   } else {
     _drawBattleNum(bx, by, _s.enemyDmgNum.value, DMG_NUM_PAL);
   }
@@ -1322,20 +1325,19 @@ function _drawEnemyHealNum() {
   if (_s.isRandomEncounter && _s.encounterMonsters) {
     ({ bx, baseY } = _encounterMonsterPos(_s.enemyHealNum.index));
   } else {
-    bx = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2) - 4;
+    const bc = getBossBattleCanvas();
+    const bw = bc ? bc.width : 48;
+    bx = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2) + Math.floor(bw / 2) - 4;
     baseY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2) - 8;
   }
   const hy = _dmgBounceY(baseY, _s.enemyHealNum.timer);
   _s.clipToViewport();
-  _drawBattleNum(bx, hy, _s.enemyHealNum.value, [0x0F, 0x0F, 0x0F, 0x2B]);
+  _drawBattleNum(bx, hy, _s.enemyHealNum.value, HEAL_NUM_PAL);
   _s.ctx.restore();
 }
 
 function _drawBattleNum(bx, by, value, pal) {
-  const digits = String(value);
-  const b = new Uint8Array(digits.length);
-  for (let i = 0; i < digits.length; i++) b[i] = 0x80 + parseInt(digits[i]);
-  drawText(_s.ctx, bx - Math.floor(digits.length * 4), by, b, pal);
+  _drawBattleNumCtx(_s.ctx, bx, by, value, pal);
 }
 function drawDamageNumbers() {
   _drawBossDmgNum();
@@ -1346,7 +1348,7 @@ function drawDamageNumbers() {
     const baseY = HUD_VIEW_Y + 16;
     const py = _dmgBounceY(baseY, _s.playerDamageNum.timer);
     if (_s.playerDamageNum.miss) {
-      drawText(_s.ctx, px - 8, py, BATTLE_MISS, [0x0F, 0x0F, 0x0F, 0x2B]);
+      drawText(_s.ctx, px - 8, py, BATTLE_MISS, HEAL_NUM_PAL);
     } else {
       _drawBattleNum(px, py, _s.playerDamageNum.value, DMG_NUM_PAL);
     }
@@ -1357,7 +1359,7 @@ function drawDamageNumbers() {
     const px = HUD_RIGHT_X + 16;
     const baseY = HUD_VIEW_Y + 16;
     const py = _dmgBounceY(baseY, _s.playerHealNum.timer);
-    _drawBattleNum(px, py, _s.playerHealNum.value, [0x0F, 0x0F, 0x0F, 0x2B]);
+    _drawBattleNum(px, py, _s.playerHealNum.value, HEAL_NUM_PAL);
   }
 
   _drawEnemyHealNum();

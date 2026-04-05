@@ -2,6 +2,7 @@
 // Handles Southwind and future magic battle items (spell items).
 
 import { SFX, playSFX } from './music.js';
+import { setSwDmgNum } from './damage-numbers.js';
 
 let _s = null;
 
@@ -10,23 +11,13 @@ let targets = [];       // ordered list of enemy indices to hit
 let hitIdx = 0;         // current target being hit
 let dmgApplied = false; // damage applied this cycle
 let baseDamage = 0;     // rolled once per throw, split among targets
-let dmgNums = {};       // {enemyIdx: {value, timer}} — damage numbers during sw-hit
 
 export function resetBattleItemVars() {
-  targets = []; hitIdx = 0; dmgNums = {};
+  targets = []; hitIdx = 0;
 }
 
 export function getTargets()  { return targets; }
 export function getHitIdx()   { return hitIdx; }
-export function getDmgNums()  { return dmgNums; }
-
-// ── Damage number timer tick (called from _updateBattleTimers) ──────────────
-export function tickDmgNums(dt) {
-  for (const k of Object.keys(dmgNums)) {
-    dmgNums[k].timer += dt;
-    if (dmgNums[k].timer >= 700) delete dmgNums[k];
-  }
-}
 
 // ── Target selection ────────────────────────────────────────────────────────
 function _buildTargets(shared) {
@@ -73,7 +64,7 @@ function _applyDamage(tidx) {
       if (!ally || ally.hp <= 0) return;
       ally.hp = Math.max(0, ally.hp - dmg);
     }
-    dmgNums[tidx] = { value: dmg, timer: 0 };
+    setSwDmgNum(tidx, dmg);
     playSFX(SFX.SW_HIT);
     return;
   }
@@ -86,7 +77,7 @@ function _applyDamage(tidx) {
     if (_s.getEnemyHP() <= 0) return;
     _s.setEnemyHP(Math.max(0, _s.getEnemyHP() - dmg));
   }
-  dmgNums[tidx] = { value: dmg, timer: 0 };
+  setSwDmgNum(tidx, dmg);
   playSFX(SFX.SW_HIT);
 }
 
