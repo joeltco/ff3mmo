@@ -66,7 +66,7 @@ export function addChatMessage(text, type, channel, loc) {
 function _passesTabFilter(msg) {
   const tab = CHAT_TABS[activeTab];
   if (tab === 'World') return msg.channel === 'world' || msg.channel === 'sys';
-  if (tab === 'Room') return msg.channel === 'room' && msg.loc === getPlayerLocation();
+  if (tab === 'Room') return (msg.channel === 'room' && msg.loc === getPlayerLocation()) || msg.channel === 'sys';
   if (tab === 'Private') return msg.channel === 'pm';
   if (tab === 'System') return msg.channel === 'sys';
   return true;
