@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented here.
 
+## 1.3.0 — 2026-04-05
+
+### Console system
+
+- **Chat HUD → console** — chat panel now doubles as a game console
+  - Command system: `/help`, `/clear`, `/who` — lines starting with `/` are parsed as commands
+  - New `'console'` message type renders in green (`#58c858`)
+  - Startup log on title screen: version, ROM info, auth status, save slot count
+  - Console-only rendering during title screen (no auto-chat, no player messages)
+  - Command context system (`setCommandContext`) for game state access (roster names for `/who`)
+- **Moved `_onChatKeyDown` from game.js → chat.js** as `onChatKeyDown` — chat module now owns all input handling
+  - chat.js imports `selectCursor`/`saveSlots` from save-state.js, `_nesNameToString` from text-utils.js directly
+- **Dynamic input line expansion** — chat input starts as 1 line, expands to 2 only when text wraps
+- **Removed version badge** from webpage (`#version-badge` hidden) — version now in console
+- game.js: 3,390L (net +2L from wiring, −16L from extraction)
+
 ## 1.2.4 — 2026-04-05
 
 ### Player select + title update logic → title-screen.js
