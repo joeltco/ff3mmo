@@ -609,7 +609,7 @@ export function init() {
     }
   });
   window.addEventListener('keyup', (e) => { keys[e.key] = false; });
-  window.addEventListener('beforeunload', () => saveSlotsToDB());
+  window.addEventListener('beforeunload', () => { _syncSaveSlotProgress(); saveSlotsToDB(); });
 }
 
 function _tileToCanvas(pixels, palette) {
