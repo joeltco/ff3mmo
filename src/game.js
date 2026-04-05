@@ -49,7 +49,8 @@ import { initTitleWater, initTitleSky, initTitleUnderwater, initUnderwaterSprite
 // BATTLE_SPRITE_ROM, BATTLE_JOB_SIZE, BATTLE_PAL_ROM → sprite-init.js
 import { ps, EQUIP_SLOT_SUBTYPE, getEquipSlotId, setEquipSlotId, recalcDEF, recalcCombatStats, getHitWeapon, isHitRightHand, initPlayerStats, initExpTable, grantExp, fullHeal, gainProficiency, getProfHits, getProfLevel, getShieldEvade, PROF_CATEGORIES, WEAPON_PROF_CATEGORY } from './player-stats.js';
 import { initProfIcons, getProfIcon } from './prof-icons.js';
-import { chatState, addChatMessage, updateChat, drawChat, onChatKeyDown, consoleLog, setCommandContext } from './chat.js';
+import { chatState, addChatMessage, updateChat, drawChat, drawChatTabs, onChatKeyDown, consoleLog, setCommandContext,
+         CHAT_TABS, activeTab, tabSelectMode, setActiveTab, setTabSelectMode } from './chat.js';
 import { rosterBattleFade, setLocationGetter, getPlayerLocation, rosterLocForMapId,
          getRosterVisible, initRoster, updateRoster,
          drawRoster, drawRosterMenu } from './roster.js';
@@ -1493,6 +1494,7 @@ function handleInput() {
   if (starEffect) return;
   if (pondStrobeTimer > 0) return;
   if (chatState.expanded) return;
+  if (tabSelectMode) return;
 
   if (keys['z'] || keys['Z']) {
     keys['z'] = false;
@@ -3016,6 +3018,7 @@ function _gameLoopDraw() {
     if (battleAllies.length > 0 && battleState !== 'none') drawBattleAllies(_bds);
     else drawRoster(_rds);
     drawChat(ctx, _drawHudBox, rosterBattleFade);
+    drawChatTabs(ctx, _drawHudBox, rosterBattleFade);
     drawPauseMenu(ctx, _pauseShared());
     drawMsgBox(ctx, _clipToViewport, _drawBorderedBox);
     drawRosterMenu(_rds);

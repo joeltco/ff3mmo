@@ -4,6 +4,15 @@ All notable changes to this project are documented here.
 
 ## 1.3.1 — 2026-04-05
 
+### Roster extraction + scroll arrows
+
+- **Roster scroll arrows** — replaced hand-drawn canvas triangles with ROM sprite arrows (`$1B490`)
+  - `initScrollArrows(romData)` in sprite-init.js — single 8×8 tile, vertically flipped for up arrow
+  - NES palette fade variants for transition/battle fading
+  - Down arrow: bottom-right corner of bottom-most roster player's info box, blinking 500ms
+  - Up arrow: top-right corner of top-most roster player's info box, blinking 500ms
+  - Only visible when scrolling is available in that direction
+
 ### Roster extraction → roster.js
 
 - **Extracted `src/roster.js`** (367L) — all roster state, update, and draw logic
