@@ -60,6 +60,7 @@ import { initWeaponSprites, getKnifeBladeCanvas, getKnifeBladeSwungCanvas,
          getFistCanvas, getBlades } from './weapon-sprites.js';
 import { updateBattleAlly } from './battle-ally.js';
 import { updateBattleEnemyTurn } from './battle-enemy.js';
+import { resetBattleItemVars, getTargets, getHitIdx, getDmgNums, tickDmgNums, startMagicItem, updateMagicItemThrowHit } from './battle-items.js';
 import { OK_IDLE, OK_VICTORY, OK_L_BACK_SWING, OK_L_FWD_T2, OK_L_FWD_T3, OK_R_BACK_SWING, OK_R_FWD_T2, OK_KNEEL,
          OK_LEG_L_IDLE, OK_LEG_R_IDLE, OK_LEG_L_BACK_L, OK_LEG_R_BACK_L, OK_LEG_L_FWD_L, OK_LEG_R_FWD_L,
          OK_LEG_L_BACK_R, OK_LEG_R_SWING, OK_LEG_L_KNEEL, OK_LEG_R_KNEEL, OK_LEG_L_VICTORY, OK_LEG_R_VICTORY,
@@ -261,12 +262,7 @@ let itemSelectCursor = 0;    // cursor index in item list
 let itemHealAmount = 0;      // actual HP restored (for green number display)
 let playerHealNum = null;    // {value, timer} — green heal number on portrait
 let enemyHealNum = null;     // {value, timer, index} — green heal number on enemy
-let southWindTargets = [];     // ordered list of enemy indices to hit
-let southWindHitIdx = 0;       // current target being hit
-let _swDmgApplied = false;     // damage applied this cycle (after explosion)
-let southWindHitCanvas = null; // unused - kept for compat
 let swPhaseCanvases = [];      // 3-phase expanding ice explosion [16×16, 32×32, 48×48]
-let southWindDmgNums = {};     // {enemyIdx: {value, timer}} — damage numbers during sw-hit
 
 // Inventory helpers
 const INV_SLOTS = 3; // visible inventory rows per page
@@ -1290,7 +1286,7 @@ function _resetBattleVars() {
   isDefending = false; battleAllies = []; allyJoinRound = 0;
   currentAllyAttacker = -1; allyTargetIndex = -1; allyHitResult = null; allyHitIsLeft = false;
   allyDamageNums = {}; allyShakeTimer = {}; enemyTargetAllyIdx = -1; allyExitTimer = 0;
-  southWindTargets = []; southWindHitIdx = 0; southWindDmgNums = {};
+  resetBattleItemVars();
   playerDeathTimer = null; _teamWipeMsgShown = false;
   inputSt.battleProfHits = {};
 }
@@ -1612,6 +1608,25 @@ function _allyShared() {
   };
 }
 
+function _magicItemShared() {
+  return {
+    get battleState()           { return battleState; },
+    set battleState(v)          { battleState = v; },
+    get battleTimer()           { return battleTimer; },
+    set battleTimer(v)          { battleTimer = v; },
+    get isRandomEncounter()     { return isRandomEncounter; },
+    get encounterMonsters()     { return encounterMonsters; },
+    get dyingMonsterIndices()   { return dyingMonsterIndices; },
+    set dyingMonsterIndices(v)  { dyingMonsterIndices = v; },
+    get ps()                    { return ps; },
+    get inputSt()               { return inputSt; },
+    get pvpSt()                 { return pvpSt; },
+    getEnemyHP: _getEnemyHP,
+    setEnemyHP: _setEnemyHP,
+    processNextTurn,
+  };
+}
+
 function _enemyShared() {
   return {
     get battleState()           { return battleState; },
@@ -1681,9 +1696,9 @@ function _battleDrawShared() {
     get encounterDropItem() { return encounterDropItem; },
     get encounterProfLevelUps() { return encounterProfLevelUps; },
     get profLevelUpIdx() { return profLevelUpIdx; },
-    get southWindTargets() { return southWindTargets; },
-    get southWindHitIdx() { return southWindHitIdx; },
-    get southWindDmgNums() { return southWindDmgNums; },
+    get southWindTargets() { return getTargets(); },
+    get southWindHitIdx() { return getHitIdx(); },
+    get southWindDmgNums() { return getDmgNums(); },
     get dyingMonsterIndices() { return dyingMonsterIndices; },
     get encounterMonsters() { return encounterMonsters; },
     get battleAllies() { return battleAllies; },
@@ -1824,7 +1839,7 @@ function _initSpriteAssets(romRaw) {
   loadBossSprite(0xCC); // Land Turtle — loaded eagerly for now (only boss in game)
   initGoblinSprite(romRaw);
   initMonsterSprites();
-  swPhaseCanvases = initSouthWindSprite(); southWindHitCanvas = swPhaseCanvases[0];
+  swPhaseCanvases = initSouthWindSprite();
   slashFrames = slashFramesR = slashFramesL = initSlashSprites();
   knifeSlashFramesR = knifeSlashFramesL = initKnifeSlashSprites();
   swordSlashFramesR = swordSlashFramesL = initSwordSlashSprites();
@@ -3319,30 +3334,6 @@ function buildTurnOrder() {
   return actors;
 }
 
-let swBaseDamage = 0; // rolled once per throw, split among targets
-
-function _applySWDamage(tidx) {
-  const dmg = Math.max(1, Math.floor(swBaseDamage / southWindTargets.length));
-  if (pvpSt.isPVPBattle) {
-    if (tidx === 0) {
-      if (!pvpSt.pvpOpponentStats || pvpSt.pvpOpponentStats.hp <= 0) return;
-      pvpSt.pvpOpponentStats.hp = Math.max(0, pvpSt.pvpOpponentStats.hp - dmg);
-    } else {
-      const ally = pvpSt.pvpEnemyAllies[tidx - 1];
-      if (!ally || ally.hp <= 0) return;
-      ally.hp = Math.max(0, ally.hp - dmg);
-    }
-    southWindDmgNums[tidx] = { value: dmg, timer: 0 };
-    playSFX(SFX.SW_HIT);
-    return;
-  }
-  if (!isRandomEncounter || !encounterMonsters) return;
-  const mon = encounterMonsters[tidx];
-  if (!mon || mon.hp <= 0) return;
-  mon.hp = Math.max(0, mon.hp - dmg);
-  southWindDmgNums[tidx] = { value: dmg, timer: 0 };
-  playSFX(SFX.SW_HIT);
-}
 
 function _playerTurnFight() {
   let ti = inputSt.playerActionPending.targetIndex;
@@ -3360,35 +3351,6 @@ function _playerTurnFight() {
   battleState = 'attack-start'; battleTimer = 0;
 }
 
-function _playerTurnSouthWind() {
-  const _mode = inputSt.playerActionPending.targetMode || 'single';
-  if (pvpSt.isPVPBattle) {
-    // In PVP: 'all' hits all living enemies; 'single' hits selected target index
-    if (_mode === 'all') {
-      southWindTargets = [];
-      if (pvpSt.pvpOpponentStats && pvpSt.pvpOpponentStats.hp > 0) southWindTargets.push(0);
-      pvpSt.pvpEnemyAllies.forEach((a, i) => { if (a.hp > 0) southWindTargets.push(i + 1); });
-    } else {
-      southWindTargets = [inputSt.playerActionPending.target];
-    }
-  } else {
-  const mons = isRandomEncounter && encounterMonsters;
-  const _rightCols = mons ? encounterMonsters.map((m, i) =>
-    (m.hp > 0 && (encounterMonsters.length === 1 || (encounterMonsters.length === 2 && i === 1) || (encounterMonsters.length >= 3 && (i === 1 || i === 3)))) ? i : -1).filter(i => i >= 0) : [];
-  const _leftCols = mons ? encounterMonsters.map((m, i) =>
-    (m.hp > 0 && encounterMonsters.length >= 2 && !_rightCols.includes(i)) ? i : -1).filter(i => i >= 0) : [];
-  if (_mode === 'all') {
-    const ecnt = encounterMonsters ? encounterMonsters.length : 0;
-    southWindTargets = (ecnt <= 2 ? [0, 1] : [0, 1, 2, 3]).filter(i => i < ecnt && encounterMonsters[i].hp > 0);
-  } else if (_mode === 'col-right') southWindTargets = _rightCols;
-  else if (_mode === 'col-left') southWindTargets = _leftCols;
-  else southWindTargets = [inputSt.playerActionPending.target];
-  }
-  southWindHitIdx = 0;
-  const swAttack = Math.floor((ps.stats ? ps.stats.int : 5) / 2) + 55;
-  swBaseDamage = Math.floor((swAttack + Math.floor(Math.random() * Math.floor(swAttack / 2 + 1))) / 2);
-  battleState = 'sw-throw'; battleTimer = 0;
-}
 
 function _playerTurnConsumable() {
   playSFX(SFX.CURE);
@@ -3421,7 +3383,7 @@ function _playerTurnConsumable() {
 function _playerTurnItem() {
   isDefending = false;
   removeItem(inputSt.playerActionPending.itemId);
-  if (ITEMS.get(inputSt.playerActionPending.itemId)?.type === 'battle_item') _playerTurnSouthWind();
+  if (ITEMS.get(inputSt.playerActionPending.itemId)?.type === 'battle_item') startMagicItem(_magicItemShared());
   else _playerTurnConsumable();
 }
 
@@ -3614,10 +3576,7 @@ function _updateBattleTimers(dt) {
   if (pvpSt.pvpOpponentShakeTimer > 0) pvpSt.pvpOpponentShakeTimer = Math.max(0, pvpSt.pvpOpponentShakeTimer - dt);
 
   if (enemyDmgNum) { enemyDmgNum.timer += dt; if (enemyDmgNum.timer >= BATTLE_DMG_SHOW_MS) enemyDmgNum = null; }
-  for (const k of Object.keys(southWindDmgNums)) {
-    southWindDmgNums[k].timer += dt;
-    if (southWindDmgNums[k].timer >= 700) delete southWindDmgNums[k];
-  }
+  tickDmgNums(dt);
   if (playerDamageNum) { playerDamageNum.timer += dt; if (playerDamageNum.timer >= BATTLE_DMG_SHOW_MS) playerDamageNum = null; }
 
   for (const idx in allyDamageNums) {
@@ -3921,64 +3880,14 @@ function _updateBattleDefendItem(dt) {
       processNextTurn();
     }
   } else if (battleState === 'sw-throw' || battleState === 'sw-hit') {
-    return _updateSWThrowHit();
+    return updateMagicItemThrowHit(_magicItemShared());
   } else if (_updateItemMenuFades()) {
     return true;
   } else { return false; }
   return true;
 }
 
-function _updateSWThrowHit() {
-  if (battleState === 'sw-throw') {
-    if (battleTimer >= 250) {
-      if (southWindTargets.length === 0) { processNextTurn(); }
-      else {
-        southWindHitIdx = 0;
-        _swDmgApplied = false;
-        battleState = 'sw-hit'; battleTimer = 0;
-      }
-    }
-    return true;
-  }
-  // sw-hit: explosion 400ms, then damage + shake, hold until 1100ms
-  if (!_swDmgApplied && battleTimer >= 400) {
-    _applySWDamage(southWindTargets[southWindHitIdx]);
-    _swDmgApplied = true;
-  }
-  if (battleTimer >= 1100) {
-    southWindHitIdx++;
-    _swDmgApplied = false;
-    if (southWindHitIdx < southWindTargets.length) {
-      battleTimer = 0;
-    } else {
-      if (pvpSt.isPVPBattle) {
-        // Build dying map for ALL killed PVP enemies (multi-kill from SW 'all')
-        const killed = [];
-        if (pvpSt.pvpOpponentStats && pvpSt.pvpOpponentStats.hp <= 0 && southWindTargets.includes(0)) killed.push(0);
-        southWindTargets.forEach(tidx => {
-          if (tidx > 0 && pvpSt.pvpEnemyAllies[tidx - 1] && pvpSt.pvpEnemyAllies[tidx - 1].hp <= 0) killed.push(tidx);
-        });
-        if (killed.length > 0) {
-          pvpSt.pvpDyingMap = new Map(killed.map((i, n) => [i, n * 60]));
-          battleState = 'pvp-dissolve'; battleTimer = 0; playSFX(SFX.MONSTER_DEATH);
-        } else { processNextTurn(); }
-        return true;
-      }
-      const killed = isRandomEncounter && encounterMonsters
-        ? southWindTargets.filter(i => encounterMonsters[i] && encounterMonsters[i].hp <= 0)
-        : [];
-      if (killed.length > 0) {
-        const waveOrder = [1, 0, 3, 2];
-        const ordered = waveOrder.filter(i => killed.includes(i));
-        for (const i of killed) { if (!ordered.includes(i)) ordered.push(i); }
-        dyingMonsterIndices = new Map(ordered.map((i, n) => [i, n * 60]));
-        playSFX(SFX.MONSTER_DEATH);
-        battleState = 'monster-death'; battleTimer = 0;
-      } else { processNextTurn(); }
-    }
-  }
-  return true;
-}
+
 
 function _updateItemMenuFades() {
   const FADE_DUR = (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS;
