@@ -1254,13 +1254,11 @@ function _startTitleScreen() {
 }
 export async function loadROM(arrayBuffer) {
   const romBytes = new Uint8Array(arrayBuffer);
-  let patchApplied = false;
   try {
     const ipsResp = await fetch('patches/ff3-english.ips');
     if (ipsResp.ok) {
       const ipsData = new Uint8Array(await ipsResp.arrayBuffer());
       applyIPS(romBytes, ipsData);
-      patchApplied = true;
     }
   } catch (_) { /* no patch file — continue with unpatched ROM */ }
 
@@ -1293,7 +1291,7 @@ export async function loadROM(arrayBuffer) {
   // Startup console log
   consoleLog('FF3 MMO v1.2.4');
   consoleLog('ROM: ' + rom.prgBanks + ' PRG, ' + rom.chrBanks + ' CHR, mapper ' + rom.mapper);
-  if (patchApplied) consoleLog('English patch applied');
+  consoleLog('English patch applied');
   const email = localStorage.getItem('ff3_email');
   consoleLog('Auth: ' + (email || 'guest'));
   const saveSrc = window.ff3Auth ? 'server' : 'local';
