@@ -478,7 +478,8 @@ function _drawTitleSelectBox(ctx, cx, shared) {
     shared.drawHudBox(Math.round(dCX - dw / 2), Math.round(dCY - dh / 2), dw, dh);
   } else {
     const dx = selX - 4 - deleteLabelW;
-    const delPal = selectCursor === 3 ? [0x0F, 0x0F, 0x0F, 0x16] : _makeFadedPal(fadeStep);
+    const delPal = [0x0F, 0x0F, 0x0F, selectCursor === 3 ? 0x16 : 0x30];
+    for (let s = 0; s < fadeStep; s++) delPal[3] = nesColorFade(delPal[3]);
     shared.drawHudBox(dx, dy, deleteLabelW, labelH, 0);
     if (showContent) {
       if (selectCursor === 3) shared.drawCursorFaded(dx - 10, dy + 4, 0);
@@ -613,8 +614,7 @@ export function updateTitleSelect(keys) {
     if (keys['ArrowLeft'])  { keys['ArrowLeft'] = false;  titleSt._lastSlotCursor = selectCursor; setSelectCursor(3); playSFX(SFX.CURSOR); }
   }
   if (_xPressed(keys)) {
-    if (selectCursor === 3) { playSFX(SFX.CURSOR); setSelectCursor(titleSt._lastSlotCursor || 0); }
-    else { playSFX(SFX.CONFIRM); titleSt.state = 'select-fade-out-back'; titleSt.timer = 0; }
+    playSFX(SFX.CONFIRM); titleSt.state = 'select-fade-out-back'; titleSt.timer = 0;
   }
 }
 
