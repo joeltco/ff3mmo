@@ -387,7 +387,7 @@ function _drawTitleShip(ctx, cx, cy, fl) {
 function _drawTitlePressZ(ctx, cx, vpBot) {
   const ts = titleSt;
   if (ts.state !== 'zbox-open' && ts.state !== 'main' && ts.state !== 'logo-content-out' &&
-      ts.state !== 'to-select' && ts.state !== 'logo-reopen' && ts.state !== 'logo-content-in' && ts.state !== 'logo-content-in-back') return;
+      ts.state !== 'to-select' && ts.state !== 'logo-reopen' && ts.state !== 'logo-content-in-back') return;
   if (!ts.pressZ) return;
   const pw    = measureText(ts.pressZ);
   const fullW = pw + 16, fullH = 24;
