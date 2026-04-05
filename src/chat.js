@@ -104,7 +104,7 @@ export function onChatKeyDown(e) {
 
 // ── Update / Draw ─────────────────────────────────────────────────────────
 
-export function updateChat(dt, battleState) {
+export function updateChat(dt, battleState, titleActive) {
   const expandTarget = chatState.expanded ? 1 : 0;
   if (chatState.expandAnim < expandTarget)
     chatState.expandAnim = Math.min(1, chatState.expandAnim + dt / CHAT_EXPAND_MS);
@@ -113,7 +113,7 @@ export function updateChat(dt, battleState) {
 
   if (chatState.inputActive) chatState.cursorTimer += dt;
 
-  if (battleState === 'none' && !chatState.inputActive) {
+  if (!titleActive && battleState === 'none' && !chatState.inputActive) {
     chatState.autoTimer -= dt;
     if (chatState.autoTimer <= 0) {
       chatState.autoTimer = CHAT_AUTO_MIN_MS + Math.random() * (CHAT_AUTO_MAX_MS - CHAT_AUTO_MIN_MS);
@@ -124,7 +124,7 @@ export function updateChat(dt, battleState) {
   }
 }
 
-export function drawChat(ctx, drawHudBoxFn, rosterBattleFade) {
+export function drawChat(ctx, drawHudBoxFn, rosterBattleFade, titleActive) {
   if (!chatState.fontReady) return;
   const battleFadeAlpha = 1 - rosterBattleFade / ROSTER_FADE_STEPS;
   if (battleFadeAlpha <= 0) return;
@@ -134,7 +134,7 @@ export function drawChat(ctx, drawHudBoxFn, rosterBattleFade) {
   const curBoxY = CANVAS_H - curBoxH;
   ctx.save();
   _drawChatExpandBG(ctx, drawHudBoxFn, curBoxY, curBoxH, battleFadeAlpha, rosterBattleFade);
-  _drawChatTextArea(ctx, curBoxY, curBoxH, battleFadeAlpha);
+  _drawChatTextArea(ctx, curBoxY, curBoxH, battleFadeAlpha, titleActive);
   ctx.globalAlpha = 1;
   ctx.restore();
 }
@@ -159,9 +159,10 @@ function _chatWrap(ctx, text, maxWidth) {
   return lines.length ? lines : [text];
 }
 
-function _buildChatRows(ctx, lineW, startX) {
+function _buildChatRows(ctx, lineW, startX, titleActive) {
   const rows = [];
   for (const m of chatState.messages) {
+    if (titleActive && m.type !== 'console') continue;
     if (m.type === 'console') {
       for (const line of _chatWrap(ctx, m.text, lineW))
         rows.push({ color: '#58c858', text: line, x: startX });
@@ -220,7 +221,7 @@ function _drawChatExpandBG(ctx, drawHudBoxFn, curBoxY, curBoxH, battleFadeAlpha,
   drawHudBoxFn(0, curBoxY, CANVAS_W, curBoxH, battleFadeStep);
 }
 
-function _drawChatTextArea(ctx, curBoxY, curBoxH, battleFadeAlpha) {
+function _drawChatTextArea(ctx, curBoxY, curBoxH, battleFadeAlpha, titleActive) {
   const innerTop    = curBoxY + 8;
   const innerBottom = curBoxY + curBoxH - 10;
   const innerH      = innerBottom - innerTop;
@@ -229,7 +230,7 @@ function _drawChatTextArea(ctx, curBoxY, curBoxH, battleFadeAlpha) {
   ctx.font = '8px "Press Start 2P"'; ctx.textBaseline = 'bottom';
   const startX = 12;
   const lineW  = CANVAS_W - 8 - startX;
-  const rows = _buildChatRows(ctx, lineW, startX);
+  const rows = _buildChatRows(ctx, lineW, startX, titleActive);
   let inputRows = 0;
   if (chatState.inputActive) {
     const promptW = ctx.measureText('> ').width;
