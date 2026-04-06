@@ -2,6 +2,7 @@
 
 import { readJobBaseStats, readStartingHP, readStartingMP, readJobLevelBonus, buildExpTable } from './data/jobs.js';
 import { ITEMS, isWeapon } from './data/items.js';
+import { BASE_HIT_RATE } from './battle-math.js';
 
 // Mutable player state — replaces the scattered globals in game.js
 export const ps = {
@@ -18,6 +19,10 @@ export const ps = {
   head: 0x00,
   body: 0x00,
   arms: 0x00,
+  hitRate: 80,      // effective hit% from weapon
+  evade: 0,         // total evade% from armor (non-shield)
+  mdef: 0,          // total magic defense from armor
+  attackRoll: 1,    // potential hits (from effective AGI)
   _romData: null,  // stored by initExpTable for use in grantExp
   proficiency: {}, // { subtype: points } — 100 pts per level, max level 16 (1600 pts)
   jobIdx: 0,            // current job index (0=Onion Knight, 1=Warrior, etc.)
@@ -50,14 +55,47 @@ export function setEquipSlotId(eqIdx, id) {
 }
 
 export function recalcCombatStats() {
-  ps.atk = ps.stats.str + (ITEMS.get(ps.weaponR)?.atk || 0) + (ITEMS.get(ps.weaponL)?.atk || 0);
-  recalcDEF();
+  const allSlots = [ps.weaponR, ps.weaponL, ps.head, ps.body, ps.arms];
+  // Sum equipment stat bonuses
+  let strB = 0, agiB = 0, vitB = 0;
+  for (const id of allSlots) {
+    const item = ITEMS.get(id);
+    if (!item) continue;
+    strB += item.strBonus || 0;
+    agiB += item.agiBonus || 0;
+    vitB += item.vitBonus || 0;
+  }
+  const effStr = (ps.stats ? ps.stats.str : 5) + strB;
+  const effAgi = (ps.stats ? ps.stats.agi : 5) + agiB;
+  // ATK = effective STR + weapon attack powers
+  ps.atk = effStr + (ITEMS.get(ps.weaponR)?.atk || 0) + (ITEMS.get(ps.weaponL)?.atk || 0);
+  // Hit rate from equipped weapon (or base if unarmed)
+  const rWpn = isWeapon(ps.weaponR) ? ITEMS.get(ps.weaponR) : null;
+  const lWpn = isWeapon(ps.weaponL) ? ITEMS.get(ps.weaponL) : null;
+  ps.hitRate = (rWpn || lWpn) ? (rWpn ? rWpn.hit : lWpn.hit) : BASE_HIT_RATE;
+  // Attack roll (potential hits) from effective AGI
+  ps.attackRoll = Math.max(1, Math.floor(effAgi / 10));
+  // Armor evade% (non-shield — shield evade handled separately by getShieldEvade)
+  ps.evade = (ITEMS.get(ps.head)?.evade || 0)
+           + (ITEMS.get(ps.body)?.evade || 0)
+           + (ITEMS.get(ps.arms)?.evade || 0);
+  // Magic defense from all equipment
+  ps.mdef = 0;
+  for (const id of allSlots) { ps.mdef += ITEMS.get(id)?.mdef || 0; }
+  // DEF with equipment vitality bonus
+  recalcDEF(vitB);
 }
 
-export function recalcDEF() {
+export function recalcDEF(vitBonus = 0) {
+  // If called standalone (e.g. equip change), re-sum vitBonus
+  if (vitBonus === 0) {
+    for (const id of [ps.weaponR, ps.weaponL, ps.head, ps.body, ps.arms]) {
+      vitBonus += ITEMS.get(id)?.vitBonus || 0;
+    }
+  }
   const rDef = ITEMS.get(ps.weaponR)?.def || 0;
   const lDef = ITEMS.get(ps.weaponL)?.def || 0;
-  ps.def = (ps.stats ? ps.stats.vit : 4)
+  ps.def = (ps.stats ? ps.stats.vit : 4) + vitBonus
     + rDef + lDef
     + (ITEMS.get(ps.head)?.def || 0)
     + (ITEMS.get(ps.body)?.def || 0)
@@ -106,7 +144,7 @@ export function fullHeal() {
 export function grantExp(amount) {
   ps.stats.exp += amount;
   ps.leveledUp = false;
-  while (ps.stats.exp >= ps.stats.expToNext && ps.stats.level < 5) {
+  while (ps.stats.exp >= ps.stats.expToNext && ps.stats.level < 99) {
     ps.stats.level++;
     const lv = ps.stats.level;
 
@@ -243,5 +281,6 @@ export function playerStatsSnapshot() {
     maxHP: ps.stats.maxHP, maxMP: ps.stats.maxMP, hp: ps.hp,
     weaponR: ps.weaponR, weaponL: ps.weaponL,
     head: ps.head, body: ps.body, arms: ps.arms,
+    hitRate: ps.hitRate, evade: ps.evade, mdef: ps.mdef, attackRoll: ps.attackRoll,
   };
 }

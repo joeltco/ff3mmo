@@ -89,5 +89,14 @@ export function generateAllyStats(player) {
   }
   const atk = str + weaponAtk;
   const def = vit + totalDef;
-  return { name: player.name, palIdx: player.palIdx, jobIdx: player.jobIdx || 0, level: lv, hp, maxHP: hp, atk, def, agi, weaponId, weaponL, fadeStep: ROSTER_FADE_STEPS };
+  // Evade/mdef from armor
+  let evade = 0, mdef = 0;
+  if (player.armorId != null) { evade += (ITEMS.get(player.armorId) || {}).evade || 0; mdef += (ITEMS.get(player.armorId) || {}).mdef || 0; }
+  if (player.helmId != null) { evade += (ITEMS.get(player.helmId) || {}).evade || 0; mdef += (ITEMS.get(player.helmId) || {}).mdef || 0; }
+  if (player.shieldId != null) { mdef += (ITEMS.get(player.shieldId) || {}).mdef || 0; }
+  // Hit rate from weapon, attack roll from AGI
+  const wpnItem = ITEMS.get(weaponId);
+  const hitRate = wpnItem ? (wpnItem.hit || 80) : 80;
+  const attackRoll = Math.max(1, Math.floor(agi / 10));
+  return { name: player.name, palIdx: player.palIdx, jobIdx: player.jobIdx || 0, level: lv, hp, maxHP: hp, atk, def, agi, evade, mdef, hitRate, attackRoll, weaponId, weaponL, fadeStep: ROSTER_FADE_STEPS };
 }

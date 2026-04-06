@@ -9,7 +9,7 @@ import { ps, recalcCombatStats, changeJob, getEquipSlotId, setEquipSlotId, EQUIP
          getProfHits, getProfLevel, getHitWeapon, WEAPON_PROF_CATEGORY } from './player-stats.js';
 import { ITEMS, isHandEquippable, isWeapon, weaponSubtype, isBladedWeapon } from './data/items.js';
 import { selectCursor, saveSlots, saveSlotsToDB } from './save-state.js';
-import { BASE_HIT_RATE, rollHits } from './battle-math.js';
+import { rollHits } from './battle-math.js';
 import { _nameToBytes } from './text-utils.js';
 import { MONSTERS } from './data/monsters.js';
 import { JOBS, canJobEquip } from './data/jobs.js';
@@ -121,12 +121,10 @@ function _battleTargetConfirm() {
   const lIsWeapon = isWeapon(ps.weaponL);
   const dualWield = rIsWeapon && lIsWeapon;
   const unarmed = !rIsWeapon && !lIsWeapon;
-  const baseHits = Math.max(1, Math.floor((ps.stats ? ps.stats.agi : 5) / 10));
   const wpnSubtype = weaponSubtype(ps.weaponR) || weaponSubtype(ps.weaponL) || 'unarmed';
   const profBonus = getProfHits(wpnSubtype);
-  const potentialHits = (dualWield || unarmed) ? Math.max(2, baseHits) + profBonus : Math.max(1, baseHits) + profBonus;
-  const wpn = (rIsWeapon ? ITEMS.get(ps.weaponR) : null) || (lIsWeapon ? ITEMS.get(ps.weaponL) : null);
-  const hitRate = wpn ? wpn.hit : BASE_HIT_RATE;
+  const potentialHits = (dualWield || unarmed) ? Math.max(2, ps.attackRoll) + profBonus : Math.max(1, ps.attackRoll) + profBonus;
+  const hitRate = ps.hitRate;
   const profCat = WEAPON_PROF_CATEGORY[wpnSubtype] || wpnSubtype;
   const profLv = getProfLevel(profCat);
   if (_s.isRandomEncounter && _s.encounterMonsters) {

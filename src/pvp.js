@@ -3,7 +3,7 @@
 // private helpers access _s directly.
 
 import { playSFX, stopSFX, SFX, pauseMusic, playTrack, TRACKS } from './music.js';
-import { calcDamage, BOSS_HIT_RATE, GOBLIN_HIT_RATE, CRIT_RATE, CRIT_MULT } from './battle-math.js';
+import { calcDamage, BOSS_HIT_RATE, GOBLIN_HIT_RATE, CRIT_RATE } from './battle-math.js';
 import { ITEMS, isWeapon, weaponSubtype } from './data/items.js';
 import { PLAYER_POOL, generateAllyStats } from './data/players.js';
 import { MONSTERS } from './data/monsters.js';
@@ -314,21 +314,21 @@ function _processEnemyFlash() {
     ? pvpSt.pvpEnemyAllies[pvpSt.pvpCurrentEnemyAllyIdx]
     : pvpSt.pvpOpponentStats;
   const atk = attackerStats ? attackerStats.atk : BOSS_ATK;
-  const hitRate = BOSS_HIT_RATE;
+  const hitRate = attackerStats?.hitRate || BOSS_HIT_RATE;
   const dualWield = attackerStats && isWeapon(attackerStats.weaponId) && isWeapon(attackerStats.weaponL);
-  const baseHits = Math.max(1, Math.floor((attackerStats ? attackerStats.agi : 5) / 10));
+  const baseHits = attackerStats?.attackRoll || Math.max(1, Math.floor((attackerStats ? attackerStats.agi : 5) / 10));
   const potentialHits = dualWield ? Math.max(2, baseHits) : Math.max(1, baseHits);
 
   pvpSt.pvpEnemyHitResults = [];
   pvpSt.pvpEnemyHitIdx = 0;
   pvpSt.pvpEnemyDualWield = dualWield;
+  const critBonus = Math.floor(atk / 4);
   if (targetAlly >= 0) {
     const def = _s.battleAllies[targetAlly].def;
     for (let i = 0; i < potentialHits; i++) {
       if (Math.random() * 100 < hitRate) {
         const crit = Math.random() * 100 < CRIT_RATE;
-        let dmg = calcDamage(atk, def);
-        if (crit) dmg = Math.floor(dmg * CRIT_MULT);
+        const dmg = calcDamage(atk, def, crit, critBonus);
         pvpSt.pvpEnemyHitResults.push({ miss: false, shieldBlock: false, dmg, crit });
       } else {
         pvpSt.pvpEnemyHitResults.push({ miss: true, shieldBlock: false, dmg: 0, crit: false });
@@ -340,10 +340,11 @@ function _processEnemyFlash() {
       const shieldBlocked = shieldEvade > 0 && Math.random() * 100 < shieldEvade;
       if (shieldBlocked) {
         pvpSt.pvpEnemyHitResults.push({ miss: false, shieldBlock: true, dmg: 0, crit: false });
+      } else if (ps.evade > 0 && Math.random() * 100 < ps.evade) {
+        pvpSt.pvpEnemyHitResults.push({ miss: true, shieldBlock: false, dmg: 0, crit: false });
       } else if (Math.random() * 100 < hitRate) {
         const crit = Math.random() * 100 < CRIT_RATE;
-        let dmg = calcDamage(atk, ps.def);
-        if (crit) dmg = Math.floor(dmg * CRIT_MULT);
+        let dmg = calcDamage(atk, ps.def, crit, critBonus);
         if (_s.isDefending) dmg = Math.max(1, Math.floor(dmg / 2));
         pvpSt.pvpEnemyHitResults.push({ miss: false, shieldBlock: false, dmg, crit });
       } else {

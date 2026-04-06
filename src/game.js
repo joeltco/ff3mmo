@@ -16,7 +16,7 @@ import { initFont, drawText, measureText, TEXT_WHITE, TEXT_GREY, TEXT_YELLOW } f
 import { MONSTERS } from './data/monsters.js';
 import { ITEMS, isHandEquippable, isWeapon, weaponSubtype, isBladedWeapon } from './data/items.js';
 import { ENCOUNTERS } from './data/encounters.js';
-import { CRIT_RATE, CRIT_MULT, BASE_HIT_RATE, BOSS_HIT_RATE, GOBLIN_HIT_RATE,
+import { CRIT_RATE, BASE_HIT_RATE, BOSS_HIT_RATE, GOBLIN_HIT_RATE,
          calcDamage, rollHits } from './battle-math.js';
 import { PLAYER_POOL, PLAYER_PALETTES, ROSTER_FADE_STEPS, generateAllyStats } from './data/players.js';
 import { BATTLE_MISS, BATTLE_GAME_OVER, BATTLE_ROAR, BATTLE_FIGHT, BATTLE_RUN,
@@ -301,7 +301,7 @@ const SLASH_FRAMES = 3;                  // number of slash animation frames (on
 const HIT_PAUSE_MS = 150;               // pause showing damage number per hit
 const MISS_SHOW_MS = 300;               // "Miss" text display time
 const PLAYER_DMG_SHOW_MS = 700;         // pause after final hit before enemy counter/death
-// CRIT_RATE, CRIT_MULT, BASE_HIT_RATE, BOSS_HIT_RATE, GOBLIN_HIT_RATE → battle-math.js
+// CRIT_RATE, BASE_HIT_RATE, BOSS_HIT_RATE, GOBLIN_HIT_RATE → battle-math.js
 
 // Top box — battle scene BG or area name
 let topBoxMode = 'name';       // 'name' | 'battle'
@@ -1957,9 +1957,9 @@ function processNextTurn() {
             : pvpSt.pvpOpponentStats.def)
         : BOSS_DEF;
     const dualWield = isWeapon(ally.weaponId) && isWeapon(ally.weaponL);
-    const baseHits = Math.max(1, Math.floor(ally.agi / 10));
+    const baseHits = ally.attackRoll || Math.max(1, Math.floor(ally.agi / 10));
     const potentialHits = dualWield ? Math.max(2, baseHits) : Math.max(1, baseHits);
-    allyHitResults = rollHits(ally.atk, targetDef, 85, potentialHits);
+    allyHitResults = rollHits(ally.atk, targetDef, ally.hitRate || 85, potentialHits);
     allyHitIdx = 0;
     allyHitResult = allyHitResults[0];
     battleState = 'ally-attack-start'; battleTimer = 0;

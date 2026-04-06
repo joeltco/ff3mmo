@@ -1,7 +1,7 @@
 // Battle enemy turn update logic — extracted from game.js
 
 import { calcDamage } from './battle-math.js';
-import { getShieldEvade } from './player-stats.js';
+import { ps, getShieldEvade } from './player-stats.js';
 import { SFX, playSFX } from './music.js';
 
 let _s = null;
@@ -43,6 +43,9 @@ function _processEnemyFlash() {
       _s.playerDamageNum = { miss: true, timer: 0 };
       _s.battleState = 'enemy-damage-show'; _s.battleTimer = 0;
       _s.inputSt.battleProfHits['shield'] = (_s.inputSt.battleProfHits['shield'] || 0) + 1;
+    } else if (ps.evade > 0 && Math.random() * 100 < ps.evade) {
+      _s.playerDamageNum = { miss: true, timer: 0 };
+      _s.battleState = 'enemy-damage-show'; _s.battleTimer = 0;
     } else if (Math.random() * 100 < hitRate) {
       let dmg = calcDamage(atk, _s.ps.def);
       if (_s.isDefending) dmg = Math.max(1, Math.floor(dmg / 2));
