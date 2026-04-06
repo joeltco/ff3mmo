@@ -3,7 +3,7 @@
 import { NES_SYSTEM_PALETTE } from './tile-decoder.js';
 import { drawText, measureText, TEXT_WHITE } from './font-renderer.js';
 import { nesColorFade, _makeFadedPal } from './palette.js';
-import { _nameToBytes } from './text-utils.js';
+import { _nameToBytes, drawLvHpRow } from './text-utils.js';
 import { ps } from './player-stats.js';
 import { selectCursor, saveSlots } from './save-state.js';
 import { pauseSt } from './pause-menu.js';
@@ -258,18 +258,8 @@ function _drawHUDInfoPanel() {
   const nameW = measureText(slot.name);
   drawText(ctx, panelRight - nameW, sy, slot.name, namePal);
   const panelLeft = HUD_RIGHT_X + 32 + 8 + shakeOff;
-  const lvLabel = _nameToBytes('Lv' + String(ps.stats ? ps.stats.level : slot.level));
-  const lvPal = [0x0F, 0x0F, 0x0F, 0x10];
-  for (let s = 0; s < infoFadeStep; s++) lvPal[3] = nesColorFade(lvPal[3]);
-  drawText(ctx, panelLeft, sy + 9, lvLabel, lvPal);
-  const maxHP = ps.stats ? ps.stats.maxHP : 28;
-  const hpNes = ps.hp <= Math.floor(maxHP / 4) ? 0x16
-              : ps.hp <= Math.floor(maxHP / 2) ? 0x28 : 0x2A;
-  const hpPal = [0x0F, 0x0F, 0x0F, hpNes];
-  for (let s = 0; s < infoFadeStep; s++) hpPal[3] = nesColorFade(hpPal[3]);
-  const hpLabel = _nameToBytes(String(ps.hp));
-  const hpW = measureText(hpLabel);
-  drawText(ctx, panelRight - hpW, sy + 9, hpLabel, hpPal);
+  drawLvHpRow(ctx, panelLeft, panelRight, sy + 9,
+    ps.stats ? ps.stats.level : slot.level, ps.hp, ps.stats ? ps.stats.maxHP : 28, infoFadeStep);
   if (deathTextFading) ctx.restore();
 }
 

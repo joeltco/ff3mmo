@@ -10,7 +10,7 @@ import { getMonsterCanvas, getMonsterWhiteCanvas, hasMonsterSprites } from './mo
 import { getItemNameClean, getMonsterName } from './text-decoder.js';
 import { weaponSubtype } from './data/items.js';
 import { ps, getHitWeapon, isHitRightHand } from './player-stats.js';
-import { _nameToBytes, _buildItemRowBytes, makeExpText, makeGilText, makeFoundItemText, makeProfLevelUpText } from './text-utils.js';
+import { _nameToBytes, _buildItemRowBytes, makeExpText, makeGilText, makeFoundItemText, makeProfLevelUpText, drawLvHpRow } from './text-utils.js';
 import { pvpEnemyCellCenter } from './pvp-math.js';
 import { pvpSt, drawBossSpriteBoxPVP } from './pvp.js';
 import { inputSt } from './input-handler.js';
@@ -1265,11 +1265,8 @@ function _drawAllyTexts(i, ally, rowY, isAllyHeal, ppx, ppy, weaponDraws) {
   for (let s = 0; s < ally.fadeStep; s++) namePal[3] = nesColorFade(namePal[3]);
   const nameBytes = _nameToBytes(ally.name);
   drawText(_s.ctx, HUD_RIGHT_X + HUD_RIGHT_W - 8 - measureText(nameBytes), rowY + 8, nameBytes, namePal);
-  const hpBytes = _nameToBytes(String(ally.hp));
-  const allyHpNes = ally.hp <= Math.floor(ally.maxHP / 4) ? 0x16 : ally.hp <= Math.floor(ally.maxHP / 2) ? 0x28 : 0x2A;
-  const hpPal = [0x0F, 0x0F, 0x0F, allyHpNes];
-  for (let s = 0; s < ally.fadeStep; s++) hpPal[3] = nesColorFade(hpPal[3]);
-  drawText(_s.ctx, HUD_RIGHT_X + HUD_RIGHT_W - 8 - measureText(hpBytes), rowY + 16, hpBytes, hpPal);
+  const panelLeft = HUD_RIGHT_X + 32 + 8;
+  drawLvHpRow(_s.ctx, panelLeft, HUD_RIGHT_X + HUD_RIGHT_W - 8, rowY + 16, ally.level || 1, ally.hp, ally.maxHP, ally.fadeStep);
   const dn = _s.allyDamageNums[i];
   if (dn) weaponDraws.push({ type: 'dmg', dn, bx: HUD_RIGHT_X + 20, by: _dmgBounceY(rowY + 16, dn.timer) });
   if (isAllyHeal && _s.cureSparkleFrames.length === 2) {

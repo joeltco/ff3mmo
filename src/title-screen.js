@@ -2,7 +2,7 @@
 
 import { drawText, measureText, TEXT_WHITE } from './font-renderer.js';
 import { nesColorFade, _makeFadedPal } from './palette.js';
-import { _nameToBytes } from './text-utils.js';
+import { _nameToBytes, drawLvHpRow } from './text-utils.js';
 import { selectCursor, saveSlots, nameBuffer, NAME_MAX_LEN,
          setSelectCursor, setNameBuffer, saveSlotsToDB } from './save-state.js';
 import { playSFX, SFX } from './music.js';
@@ -560,22 +560,17 @@ function _drawSelectSlotRow(ctx, i, selX, rowY, fadeStep, showContent, shared) {
     drawText(ctx, infoRight - nw, rowY + 8, nameBytes, fadedPal);
     const infoLeft = selX + 32 + 8;
     const lvl = saveSlots[i].level || 1;
-    const lvLabel = _nameToBytes('Lv' + String(lvl));
-    const lvPal = [0x0F, 0x0F, 0x0F, 0x10];
-    for (let s = 0; s < fadeStep; s++) lvPal[3] = nesColorFade(lvPal[3]);
-    drawText(ctx, infoLeft, rowY + 16, lvLabel, lvPal);
     const slotMaxHP = saveSlots[i].stats ? saveSlots[i].stats.maxHP : null;
     const slotHP = saveSlots[i].hp != null ? saveSlots[i].hp
                  : (saveSlots[i].stats && saveSlots[i].stats.hp != null) ? saveSlots[i].stats.hp
                  : slotMaxHP;
     if (slotHP != null && slotMaxHP) {
-      const hpNes = slotHP <= Math.floor(slotMaxHP / 4) ? 0x16
-                  : slotHP <= Math.floor(slotMaxHP / 2) ? 0x28 : 0x2A;
-      const hpPal = [0x0F, 0x0F, 0x0F, hpNes];
-      for (let s = 0; s < fadeStep; s++) hpPal[3] = nesColorFade(hpPal[3]);
-      const hpLabel = _nameToBytes(String(slotHP));
-      const hpW = measureText(hpLabel);
-      drawText(ctx, infoRight - hpW, rowY + 16, hpLabel, hpPal);
+      drawLvHpRow(ctx, infoLeft, infoRight, rowY + 16, lvl, slotHP, slotMaxHP, fadeStep);
+    } else {
+      const lvLabel = _nameToBytes('Lv' + String(lvl));
+      const lvPal = [0x0F, 0x0F, 0x0F, 0x10];
+      for (let s = 0; s < fadeStep; s++) lvPal[3] = nesColorFade(lvPal[3]);
+      drawText(ctx, infoLeft, rowY + 16, lvLabel, lvPal);
     }
   } else {
     const nw = measureText(SELECT_SLOT_TEXT);

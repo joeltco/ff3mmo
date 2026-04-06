@@ -1,4 +1,6 @@
 import { getItemNameClean } from './text-decoder.js';
+import { drawText, measureText } from './font-renderer.js';
+import { nesColorFade } from './palette.js';
 
 // Convert JS string to NES-encoded Uint8Array (A-Z, a-z, 0-9, space→0xFF)
 export function _nameToBytes(name) {
@@ -55,6 +57,21 @@ export function _makeGotNText(amount, suffix) {
 export function makeExpText(amount) { return _makeGotNText(amount, [0xFF, 0x8E, 0xA1, 0x99, 0xC4]); } // " EXP!"
 export function makeGilText(amount) { return _makeGotNText(amount, [0xFF, 0x90, 0xD2, 0xD5, 0xC4]); } // " Gil!"
 export function makeProfLevelUpText(cat, lv) { return _nameToBytes(cat.toUpperCase() + ' LV ' + lv + '!'); }
+
+// Draw "Lv##" left-aligned + colored HP right-aligned on the same row
+// leftX/rightX = content edges (inside border), y = text baseline, fadeStep = NES color fade steps
+export function drawLvHpRow(ctx, leftX, rightX, y, level, hp, maxHP, fadeStep) {
+  const lvLabel = _nameToBytes('Lv' + String(level));
+  const lvPal = [0x0F, 0x0F, 0x0F, 0x10];
+  for (let s = 0; s < fadeStep; s++) lvPal[3] = nesColorFade(lvPal[3]);
+  drawText(ctx, leftX, y, lvLabel, lvPal);
+  const hpNes = hp <= Math.floor(maxHP / 4) ? 0x16
+              : hp <= Math.floor(maxHP / 2) ? 0x28 : 0x2A;
+  const hpPal = [0x0F, 0x0F, 0x0F, hpNes];
+  for (let s = 0; s < fadeStep; s++) hpPal[3] = nesColorFade(hpPal[3]);
+  const hpLabel = _nameToBytes(String(hp));
+  drawText(ctx, rightX - measureText(hpLabel), y, hpLabel, hpPal);
+}
 
 // "Found [name]!"
 export function makeFoundItemText(itemId) {
