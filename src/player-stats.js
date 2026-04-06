@@ -22,6 +22,7 @@ export const ps = {
   proficiency: {}, // { subtype: points } — 100 pts per level, max level 16 (1600 pts)
   jobIdx: 0,            // current job index (0=Onion Knight, 1=Warrior, etc.)
   unlockedJobs: 0x01,   // bitmask: bit N = job N unlocked. 0x01 = only Onion Knight
+  cp: 0,                // capacity points (0-255), earned from battles, spent on job changes
 };
 
 // Equip slot index mapping: -100=RH, -101=LH, -102=Head, -103=Body, -104=Arms
@@ -204,6 +205,10 @@ export function gainMagicProficiency(magicType) {
   const cat = magicType === 'white' ? 'white' : magicType === 'black' ? 'black' : magicType === 'call' ? 'call' : null;
   if (!cat) return;
   ps.proficiency[cat] = Math.min(1600, (ps.proficiency[cat] || 0) + 1);
+}
+
+export function grantCP(amount) {
+  ps.cp = Math.min(255, ps.cp + amount);
 }
 
 export function changeJob(newJobIdx) {

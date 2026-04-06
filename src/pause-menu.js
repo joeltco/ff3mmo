@@ -467,13 +467,35 @@ function _drawPauseJob(ctx, shared) {
   const fadeStep = _pauseFadeStep('job-in', 'job-out');
   const fadedPal = _makeFadedPal(fadeStep);
   const tx = px + 24;
+  const valRx = px + HUD_VIEW_W - 16;
   let y = finalY + 12;
+  // CP counter at top
+  const cpLabel = _nameToBytes('CP');
+  const cpVal = _nameToBytes(String(ps.cp));
+  drawText(ctx, tx, y, cpLabel, fadedPal);
+  drawText(ctx, valRx - cpVal.length * 8, y, cpVal, fadedPal);
+  y += 14;
+  // Job list
   for (let i = 0; i < pauseSt.jobList.length; i++) {
     const jobIdx = pauseSt.jobList[i];
     const label = _nameToBytes(JOBS[jobIdx].name);
     const isCurrentJob = jobIdx === ps.jobIdx;
-    const pal = isCurrentJob ? [0x0F, 0x0F, 0x0F, 0x2A] : fadedPal; // green for current
-    drawText(ctx, tx, y + i * 12, label, isCurrentJob ? _makeFadedPal(fadeStep).map((c, ci) => ci === 3 ? pal[3] : c) : fadedPal);
+    const cost = JOBS[jobIdx].cpCost;
+    const canAfford = isCurrentJob || ps.cp >= cost;
+    let pal;
+    if (isCurrentJob) {
+      pal = _makeFadedPal(fadeStep); pal[3] = 0x2A; // green
+    } else if (!canAfford) {
+      pal = [0x0F, 0x0F, 0x0F, 0x00]; // grey — can't afford
+    } else {
+      pal = fadedPal;
+    }
+    drawText(ctx, tx, y + i * 12, label, pal);
+    // Show cost to the right (skip for current job)
+    if (!isCurrentJob && cost > 0) {
+      const costBytes = _nameToBytes(String(cost));
+      drawText(ctx, valRx - costBytes.length * 8, y + i * 12, costBytes, pal);
+    }
   }
   if (cursorTileCanvas && pauseSt.state === 'job' && fadeStep === 0) {
     ctx.drawImage(cursorTileCanvas, px + 8, y + pauseSt.jobCursor * 12 - 4);

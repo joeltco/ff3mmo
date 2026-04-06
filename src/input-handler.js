@@ -12,6 +12,7 @@ import { selectCursor, saveSlots, saveSlotsToDB } from './save-state.js';
 import { BASE_HIT_RATE, rollHits } from './battle-math.js';
 import { _nameToBytes } from './text-utils.js';
 import { MONSTERS } from './data/monsters.js';
+import { JOBS } from './data/jobs.js';
 
 // Local constants (must match game.js)
 const HUD_VIEW_X = 0, HUD_VIEW_Y = 32, HUD_VIEW_W = 144, HUD_VIEW_H = 144;
@@ -900,12 +901,21 @@ function _pauseInputJob() {
   if (k['ArrowUp'])   { k['ArrowUp'] = false;   pauseSt.jobCursor = (pauseSt.jobCursor + pauseSt.jobList.length - 1) % pauseSt.jobList.length; playSFX(SFX.CURSOR); }
   if (_zPressed()) {
     const newJobIdx = pauseSt.jobList[pauseSt.jobCursor];
-    if (newJobIdx !== ps.jobIdx) {
-      changeJob(newJobIdx);
-      _s.swapBattleSprites(newJobIdx);
+    if (newJobIdx === ps.jobIdx) {
+      playSFX(SFX.CONFIRM);
+      pauseSt.state = 'job-out'; pauseSt.timer = 0;
+    } else {
+      const cost = JOBS[newJobIdx].cpCost;
+      if (ps.cp >= cost) {
+        ps.cp -= cost;
+        changeJob(newJobIdx);
+        _s.swapBattleSprites(newJobIdx);
+        playSFX(SFX.CONFIRM);
+        pauseSt.state = 'job-out'; pauseSt.timer = 0;
+      } else {
+        playSFX(SFX.ERROR);
+      }
     }
-    playSFX(SFX.CONFIRM);
-    pauseSt.state = 'job-out'; pauseSt.timer = 0;
   }
   if (_xPressed()) { playSFX(SFX.CONFIRM); pauseSt.state = 'job-out'; pauseSt.timer = 0; }
   return true;

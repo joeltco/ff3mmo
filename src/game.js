@@ -46,7 +46,7 @@ import { initFlameRawTiles, initStarTiles, rebuildFlameSprites,
 import { LOAD_FADE_STEP_MS, LOAD_FADE_MAX, drawLoadingOverlay } from './loading-screen.js';
 import { initTitleWater, initTitleSky, initTitleUnderwater, initUnderwaterSprites, initTitleOcean, initTitleLogo } from './title-animations.js';
 // BATTLE_SPRITE_ROM, BATTLE_JOB_SIZE, BATTLE_PAL_ROM → sprite-init.js
-import { ps, EQUIP_SLOT_SUBTYPE, getEquipSlotId, setEquipSlotId, recalcDEF, recalcCombatStats, getHitWeapon, isHitRightHand, initPlayerStats, initExpTable, grantExp, fullHeal, gainProficiency, getProfHits, getProfLevel, getShieldEvade, PROF_CATEGORIES, WEAPON_PROF_CATEGORY } from './player-stats.js';
+import { ps, EQUIP_SLOT_SUBTYPE, getEquipSlotId, setEquipSlotId, recalcDEF, recalcCombatStats, getHitWeapon, isHitRightHand, initPlayerStats, initExpTable, grantExp, grantCP, fullHeal, gainProficiency, getProfHits, getProfLevel, getShieldEvade, PROF_CATEGORIES, WEAPON_PROF_CATEGORY } from './player-stats.js';
 import { initProfIcons, getProfIcon } from './prof-icons.js';
 import { chatState, addChatMessage, updateChat, updateChatTabs, drawChat, drawChatTabs, onChatKeyDown, consoleLog, setCommandContext,
          CHAT_TABS, activeTab, tabSelectMode, setActiveTab, setTabSelectMode } from './chat.js';
@@ -1722,6 +1722,7 @@ function _updateTitleMainOutCase() {
   ps.proficiency = (slot && slot.proficiency) ? { ...slot.proficiency } : {};
   ps.jobIdx = (slot && slot.jobIdx) || 0;
   ps.unlockedJobs = (slot && slot.unlockedJobs != null) ? slot.unlockedJobs : 0x01;
+  ps.cp = (slot && slot.cp) || 0;
   // Swap battle sprites to match saved job
   _swapBattleSprites(ps.jobIdx);
   transSt.pendingTrack = TRACKS.TOWN_UR;
@@ -2283,6 +2284,7 @@ function _triggerPVPVictory() {
   encounterExpGained = 5 * oppLv;
   encounterGilGained = 10 * oppLv;
   grantExp(encounterExpGained);
+  grantCP(1);
   ps.gil += encounterGilGained;
   encounterProfLevelUps = gainProficiency(inputSt.battleProfHits, oppLv);
   inputSt.battleProfHits = {}; profLevelUpIdx = 0;
@@ -2301,6 +2303,7 @@ function _updateMonsterDeath() {
       encounterExpGained = encounterMonsters.reduce((sum, m) => sum + m.exp, 0);
       encounterGilGained = encounterMonsters.reduce((sum, m) => sum + (m.gil || 0), 0);
       grantExp(encounterExpGained);
+      grantCP(encounterMonsters.length);
       ps.gil += encounterGilGained;
       const _avgEnemyLv = Math.round(encounterMonsters.reduce((s, m) => s + (MONSTERS.get(m.monsterId)?.level || 1), 0) / encounterMonsters.length);
       encounterProfLevelUps = gainProficiency(inputSt.battleProfHits, _avgEnemyLv); inputSt.battleProfHits = {}; profLevelUpIdx = 0;
@@ -2433,6 +2436,7 @@ function _updateBossDissolve(dt) {
     const _bossData = MONSTERS.get(0xCC);
     encounterExpGained = _bossData?.exp || 132; encounterGilGained = _bossData?.gil || 500;
     grantExp(encounterExpGained); ps.gil += encounterGilGained;
+    grantCP(10); // boss gives 10 CP
     const _bossLv = _bossData?.level || 8;
     encounterProfLevelUps = gainProficiency(inputSt.battleProfHits, _bossLv); inputSt.battleProfHits = {}; profLevelUpIdx = 0;
     saveSlotsToDB();
