@@ -1998,16 +1998,16 @@ function startRandomEncounter() {
     ? 'grasslands'
     : (['altar_cave_f1','altar_cave_f2','altar_cave_f3','altar_cave_f4'][dungeonFloor] || 'altar_cave_f1');
   const zone = ENCOUNTERS.get(zoneKey);
-  const monPool = zone ? zone.monsters : [0x00];
-  const minG = zone ? zone.minGroup : 1;
-  const maxG = zone ? zone.maxGroup : 4;
-  const count = minG + Math.floor(Math.random() * (maxG - minG + 1));
+  const formations = zone ? zone.formations : [[{ id: 0x00, min: 1, max: 3 }]];
+  const formation = formations[Math.floor(Math.random() * formations.length)];
 
   encounterMonsters = [];
-  for (let i = 0; i < count; i++) {
-    const mid = monPool[Math.floor(Math.random() * monPool.length)];
-    const mData = MONSTERS.get(mid) || MONSTERS.get(0x00);
-    encounterMonsters.push({ monsterId: mid, hp: mData.hp, maxHP: mData.hp, atk: mData.atk, def: mData.def, evade: mData.evade || 0, mdef: mData.mdef || 0, exp: mData.exp, gil: mData.gil || 0, hitRate: mData.hitRate || GOBLIN_HIT_RATE, spAtkRate: mData.spAtkRate || 0, attacks: mData.attacks || null, level: mData.level || 1 });
+  for (const group of formation) {
+    const count = group.min + Math.floor(Math.random() * (group.max - group.min + 1));
+    for (let i = 0; i < count; i++) {
+      const mData = MONSTERS.get(group.id) || MONSTERS.get(0x00);
+      encounterMonsters.push({ monsterId: group.id, hp: mData.hp, maxHP: mData.hp, atk: mData.atk, def: mData.def, evade: mData.evade || 0, mdef: mData.mdef || 0, exp: mData.exp, gil: mData.gil || 0, hitRate: mData.hitRate || GOBLIN_HIT_RATE, spAtkRate: mData.spAtkRate || 0, attacks: mData.attacks || null, level: mData.level || 1 });
+    }
   }
   // Sort tallest monsters first so they land on the top row of the grid
   encounterMonsters.sort((a, b) => {
