@@ -142,7 +142,8 @@ export function fullHeal() {
 }
 
 export function grantExp(amount) {
-  ps.stats.exp += amount;
+  // NES splits EXP across 4 party members; we have 1 player, so divide by 4
+  ps.stats.exp += Math.max(1, Math.floor(amount / 4));
   ps.leveledUp = false;
   while (ps.stats.exp >= ps.stats.expToNext && ps.stats.level < 99) {
     ps.stats.level++;
