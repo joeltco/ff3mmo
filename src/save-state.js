@@ -20,6 +20,10 @@ export function setNameBuffer(v) { nameBuffer = v; }
 let _getInventory = () => ({});
 export function setInventoryGetter(fn) { _getInventory = fn; }
 
+// Position getter — set by game.js at init to avoid circular dep
+let _getPosition = () => ({});
+export function setPositionGetter(fn) { _getPosition = fn; }
+
 // --- Save persistence (IndexedDB + server) ---
 export async function saveSlotsToDB() {
   if (!savesLoaded) return;
@@ -35,6 +39,11 @@ export async function saveSlotsToDB() {
     saveSlots[selectCursor].jobIdx = ps.jobIdx;
     saveSlots[selectCursor].unlockedJobs = ps.unlockedJobs;
     saveSlots[selectCursor].cp = ps.cp;
+    const pos = _getPosition();
+    saveSlots[selectCursor].worldX = pos.worldX;
+    saveSlots[selectCursor].worldY = pos.worldY;
+    saveSlots[selectCursor].onWorldMap = pos.onWorldMap;
+    saveSlots[selectCursor].currentMapId = pos.currentMapId;
   }
   try {
     const inv = _getInventory();
@@ -50,6 +59,10 @@ export async function saveSlotsToDB() {
       jobIdx: s.jobIdx || 0,
       unlockedJobs: s.unlockedJobs != null ? s.unlockedJobs : 0x01,
       cp: s.cp || 0,
+      worldX: s.worldX != null ? s.worldX : null,
+      worldY: s.worldY != null ? s.worldY : null,
+      onWorldMap: s.onWorldMap != null ? s.onWorldMap : null,
+      currentMapId: s.currentMapId != null ? s.currentMapId : null,
     } : null);
     // Local IndexedDB
     const db = await openSaveDB();

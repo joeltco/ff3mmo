@@ -30,7 +30,7 @@ import { loadBossSprite, getBossBattleCanvas, getBossWhiteCanvas } from './boss-
 // serverDeleteSlot → title-screen.js
 import { selectCursor, saveSlots,
          setSelectCursor, setSaveSlots,
-         saveSlotsToDB, loadSlotsFromDB, setInventoryGetter } from './save-state.js';
+         saveSlotsToDB, loadSlotsFromDB, setInventoryGetter, setPositionGetter } from './save-state.js';
 import { _nameToBytes, _buildItemRowBytes, _makeGotNText, makeExpText, makeGilText, makeFoundItemText, makeProfLevelUpText } from './text-utils.js';
 import { nesColorFade, _stepPalFade } from './palette.js';
 import { _getPlane0, _rebuild, _shiftHorizWater, _isWater, _buildHorizMixed } from './tile-math.js';
@@ -455,6 +455,7 @@ let shakePendingAction = null;
 // _onNameEntryKeyDown → title-screen.js (onNameEntryKeyDown)
 export function init() {
   setInventoryGetter(() => playerInventory);
+  setPositionGetter(() => ({ worldX, worldY, onWorldMap, currentMapId }));
   setLocationGetter(() => ({ onWorldMap, currentMapId }));
   canvas = document.getElementById('game-canvas');
   ctx = canvas.getContext('2d');
@@ -1745,9 +1746,22 @@ function _updateTitleMainOutCase() {
   ps.cp = (slot && slot.cp) || 0;
   // Swap battle sprites to match saved job
   _swapBattleSprites(ps.jobIdx);
-  transSt.pendingTrack = TRACKS.TOWN_UR;
-  loadMapById(114);
-  worldY -= 6 * TILE_SIZE;
+  // Restore saved position, or default spawn for new games
+  if (slot && slot.worldX != null && slot.onWorldMap != null) {
+    if (slot.onWorldMap) {
+      transSt.pendingTrack = TRACKS.WORLD_MAP;
+      loadWorldMapAtPosition(Math.floor(slot.worldX / TILE_SIZE), Math.floor(slot.worldY / TILE_SIZE));
+    } else {
+      transSt.pendingTrack = TRACKS.TOWN_UR;
+      loadMapById(slot.currentMapId || 114);
+      worldX = slot.worldX;
+      worldY = slot.worldY;
+    }
+  } else {
+    transSt.pendingTrack = TRACKS.TOWN_UR;
+    loadMapById(114);
+    worldY -= 6 * TILE_SIZE;
+  }
   transSt.state = 'hud-fade-in';
   transSt.timer = 0;
 }
