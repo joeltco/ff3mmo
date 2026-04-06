@@ -1,0 +1,259 @@
+
+=== CHEST CONTENTS ($3C10) ===
+
+chest   0: [0x24] Longsword
+chest   1: [0x73] Leathor
+chest   2: [0xfc] Cure
+chest   3: [0x1f] Dagger
+chest   4: [0x73] Leathor
+chest   5: [0xaf] Antidote
+chest   6: [0xaf] Antidote
+chest   7: [0xa6] Potion
+chest   8: [0xa6] Potion
+chest   9: [0xa6] Potion
+chest  10: [0xb3] ZeusWrath
+chest  11: [0x64] MythrHelm
+chest  12: [0x0e] Staff
+chest  13: [0xa6] Potion
+chest  14: [0xa6] Potion
+chest  15: [0x50] Holy Arrow
+chest  16: [0x4f] Wood Arrow
+chest  17: [0xa7] HiPotion
+chest  18: [0x4f] Wood Arrow
+chest  19: [0xa6] Potion
+chest  20: [0x4a] Bow
+chest  21: [0x58] LeathSh
+chest  22: [0x58] LeathSh
+chest  23: [0xa6] Potion
+chest  24: [0xb1] Bomb Shard
+chest  25: [0xb2] South Wind
+chest  26: [0xc1] Tranquizr
+chest  27: [0xb2] South Wind
+chest  28: [0xb2] South Wind
+chest  29: [0x07] Tonfa
+chest  30: [0x58] LeathSh
+chest  31: [0xfa] Bzzard
+chest  32: [0xa8] Elixir
+chest  33: [0xa6] Potion
+chest  34: [0x4b] Great Bow
+chest  35: [0x51] Iron Arrow
+chest  36: [0xf4] Blind
+chest  37: [0xa6] Potion
+chest  38: [0xad] Mallet
+chest  39: [0xaa] GoldNeedle
+chest  40: [0x8e] MythrBrc
+chest  41: [0x09] MythrilRod
+chest  42: [0xee] Cura
+chest  43: [0x0f] FlameStaff
+chest  44: [0x72] Vest
+chest  45: [0x8e] MythrBrc
+chest  46: [0xaa] GoldNeedle
+chest  47: [0xec] Bzzara
+chest  48: [0xeb] Fira
+chest  49: [0xed] Tara
+chest  50: [0xaa] GoldNeedle
+chest  51: [0xaa] GoldNeedle
+chest  52: [0xb8] LamiaScale
+chest  53: [0x4b] Great Bow
+chest  54: [0x10] Ice Staff
+chest  55: [0xb9] BachusWine
+chest  56: [0xa9] PhoexDown
+chest  57: [0x79] Kenpo Gi
+chest  58: [0x08] Sanjiegun
+chest  59: [0x28] SpentSwrd
+chest  60: [0x7b] Mage Robe
+chest  61: [0x0b] Ice Rod
+chest  62: [0x0a] Flame Rod
+chest  63: [0x99] GysaGreen
+chest  64: [0x98] Magic Key
+chest  65: [0x98] Magic Key
+chest  66: [0x99] GysaGreen
+chest  67: [0x99] GysaGreen
+chest  68: [0x41] Shuriken
+chest  69: [0x52] Bolt Arrow
+chest  70: [0x53] Fire Arrow
+chest  71: [0x3b] Ice Book
+chest  72: [0x81] ScholrRobe
+chest  73: [0x28] SpentSwrd
+chest  74: [0xac] Echo Herbs
+chest  75: [0xb0] Oershroom
+chest  76: [0x90] Gauntlets
+chest  77: [0xac] Echo Herbs
+chest  78: [0x81] ScholrRobe
+chest  79: [0x68] ScholarHat
+chest  80: [0x7e] KniArmor
+chest  81: [0xa9] PhoexDown
+chest  82: [0x5c] HeroicSh
+chest  83: [0xa8] Elixir
+chest  84: [0x4c] Killer Bow
+chest  85: [0xaa] GoldNeedle
+chest  86: [0x3a] Fire Book
+chest  87: [0xf5] Aero
+chest  88: [0x28] SpentSwrd
+chest  89: [0x76] She Armor
+chest  90: [0x65] Shell Helm
+chest  91: [0x27] MythrSwrd
+chest  92: [0x27] MythrSwrd
+chest  93: [0xfc] Cure
+chest  94: [0xa6] Potion
+chest  95: [0x27] MythrSwrd
+chest  96: [0xae] Eye Drops
+chest  97: [0xb2] South Wind
+chest  98: [0xb2] South Wind
+chest  99: [0xb2] South Wind
+chest 100: [0xa7] HiPotion
+chest 101: [0xa7] HiPotion
+chest 102: [0x29] Ice Blade
+chest 103: [0xa7] HiPotion
+chest 104: [0xa6] Potion
+chest 105: [0xb2] South Wind
+chest 106: [0xb2] South Wind
+chest 107: [0xfb] Sleep
+chest 108: [0x24] Longsword
+chest 109: [0x06] Nunchuck
+chest 110: [0x24] Longsword
+chest 111: [0x8b] BrnzeBrac
+chest 112: [0xa6] Potion
+chest 113: [0xa6] Potion
+chest 114: [0xb2] South Wind
+chest 115: [0xa6] Potion
+chest 116: [0xa6] Potion
+chest 117: [0xb2] South Wind
+chest 118: [0xaa] GoldNeedle
+chest 119: [0xaa] GoldNeedle
+chest 120: [0xb3] ZeusWrath
+chest 121: [0xaa] GoldNeedle
+chest 122: [0xb3] ZeusWrath
+chest 123: [0xaa] GoldNeedle
+chest 124: [0xaa] GoldNeedle
+chest 125: [0xab] MaidenKiss
+chest 126: [0x2a] Tyrfing
+chest 127: [0xab] MaidenKiss
+chest 128: [0xb1] Bomb Shard
+chest 129: [0xac] Echo Herbs
+chest 130: [0x78] Flame Mail
+chest 131: [0x2b] Salamand
+chest 132: [0xb3] ZeusWrath
+chest 133: [0x50] Holy Arrow
+chest 134: [0xa9] PhoexDown
+chest 135: [0x2c] RoyalSword
+chest 136: [0xa9] PhoexDown
+chest 137: [0x4d] Rune Bow
+chest 138: [0x3d] Light Book
+chest 139: [0xa8] Elixir
+chest 140: [0x52] Bolt Arrow
+chest 141: [0x55] Medusaow
+chest 142: [0xa9] PhoexDown
+chest 143: [0xb3] ZeusWrath
+chest 144: [0xa6] Potion
+chest 145: [0xa6] Potion
+chest 146: [0xa6] Potion
+chest 147: [0xa7] HiPotion
+chest 148: [0x5f] Aegis Sh
+chest 149: [0x85] ReflectMa
+chest 150: [0x16] Mjlnir
+chest 151: [0xa9] PhoexDown
+chest 152: [0x12] GolemStaff
+chest 153: [0x33] Kotesu
+chest 154: [0x50] Holy Arrow
+chest 155: [0x4f] Wood Arrow
+chest 156: [0x25] Wislayer
+chest 157: [0x4f] Wood Arrow
+chest 158: [0xa6] Potion
+chest 159: [0x4a] Bow
+chest 160: [0x3b] Ice Book
+chest 161: [0x3d] Light Book
+chest 162: [0xa9] PhoexDown
+chest 163: [0x99] GysaGreen
+chest 164: [0x51] Iron Arrow
+chest 165: [0xa4] GnomeBread
+chest 166: [0xa4] GnomeBread
+chest 167: [0xaa] GoldNeedle
+chest 168: [0xa9] PhoexDown
+chest 169: [0xaa] GoldNeedle
+chest 170: [0xa9] PhoexDown
+chest 171: [0xaa] GoldNeedle
+chest 172: [0xaa] GoldNeedle
+chest 173: [0xa5] ???????????
+chest 174: [0x4c] Killer Bow
+chest 175: [0x3d] Light Book
+chest 176: [0x3a] Fire Book
+chest 177: [0x54] Ice Arrow
+chest 178: [0xac] Echo Herbs
+chest 179: [0xb2] South Wind
+chest 180: [0xb2] South Wind
+chest 181: [0xb2] South Wind
+chest 182: [0xbb] Devil Note
+chest 183: [0xac] Echo Herbs
+chest 184: [0xa9] PhoexDown
+chest 185: [0xb9] BachusWine
+chest 186: [0x55] Medusaow
+chest 187: [0xa7] HiPotion
+chest 188: [0xa8] Elixir
+chest 189: [0xa9] PhoexDown
+chest 190: [0xb5] ArcticWind
+chest 191: [0xb6] God Wrath
+chest 192: [0xb7] Earth Drum
+chest 193: [0xb8] LamiaScale
+chest 194: [0xb9] BachusWine
+chest 195: [0xba] TurtleShe
+chest 196: [0xc7] White Musk
+chest 197: [0xbc] Black Hole
+chest 198: [0xbd] Black Musk
+chest 199: [0xbe] LithKiss
+chest 200: [0xbf] RavenYawn
+chest 201: [0xb5] ArcticWind
+chest 202: [0xb6] God Wrath
+chest 203: [0xb7] Earth Drum
+chest 204: [0xb8] LamiaScale
+chest 205: [0xb9] BachusWine
+chest 206: [0xba] TurtleShe
+chest 207: [0xc6] ChcboRage
+chest 208: [0xbc] Black Hole
+chest 209: [0xa8] Elixir
+chest 210: [0xa9] PhoexDown
+chest 211: [0xbd] Black Musk
+chest 212: [0xa5] ???????????
+chest 213: [0xa5] ???????????
+chest 214: [0xa5] ???????????
+chest 215: [0xa5] ???????????
+chest 216: [0xa5] ???????????
+chest 217: [0xa5] ???????????
+chest 218: [0xa5] ???????????
+chest 219: [0xa5] ???????????
+chest 220: [0xa5] ???????????
+chest 221: [0xa5] ???????????
+chest 222: [0xa5] ???????????
+chest 223: [0xa5] ???????????
+chest 224: [0xa5] ???????????
+chest 225: [0xa5] ???????????
+chest 226: [0xa5] ???????????
+chest 227: [0xa5] ???????????
+chest 228: [0xa5] ???????????
+chest 229: [0xa5] ???????????
+chest 230: [0xa5] ???????????
+chest 231: [0xa5] ???????????
+chest 232: [0xa5] ???????????
+chest 233: [0xa5] ???????????
+chest 234: [0xa5] ???????????
+chest 235: [0xa5] ???????????
+chest 236: [0xa5] ???????????
+chest 237: [0xa5] ???????????
+chest 238: [0xa5] ???????????
+chest 239: [0xa5] ???????????
+chest 240: [0xa5] ???????????
+chest 241: [0xa5] ???????????
+chest 242: [0xa5] ???????????
+chest 243: [0xa5] ???????????
+chest 244: [0xa5] ???????????
+chest 245: [0xa5] ???????????
+chest 246: [0xa5] ???????????
+chest 247: [0xa5] ???????????
+chest 248: [0xa5] ???????????
+chest 249: [0xa5] ???????????
+chest 250: [0xa5] ???????????
+chest 251: [0xa5] ???????????
+chest 252: [0xa5] ???????????
+chest 253: [0xa5] ???????????
+chest 254: [0x25] Wislayer
+chest 255: [0xa5] ???????????

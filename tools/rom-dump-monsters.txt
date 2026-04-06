@@ -1,0 +1,233 @@
+
+=== MONSTER STATS ($60010) ===
+
+[0x00] Goblin         Lv:1  HP:5  ATK:5  HIT:60  DEF:1  EVD:10  MDEF:10  MEVD:0  EXP:16  GIL:3  CP:1
+[0x01] Carbuncle      Lv:1  HP:7  ATK:5  HIT:60  DEF:1  EVD:10  MDEF:10  MEVD:0  EXP:16  GIL:5  CP:1  resist:earth  atkElem:earth  spells:[Glare,Glare,Glare,Glare,Glare,Glare,Glare,Glare]
+[0x02] Eye Fang       Lv:1  HP:8  ATK:7  HIT:65  DEF:1  EVD:10  MDEF:10  MEVD:0  EXP:16  GIL:7  CP:1
+[0x03] Blue Wisp      Lv:2  HP:10  ATK:7  HIT:65  DEF:1  EVD:10  MDEF:10  MEVD:0  EXP:20  GIL:10  CP:1  atkElem:holy
+[0x04] Killer Bee     Lv:2  HP:20  ATK:10  HIT:21  DEF:1  EVD:10  MDEF:10  MEVD:0  EXP:20  GIL:12  CP:1  status:0x2
+[0x05] Werewolf       Lv:2  HP:24  ATK:9  HIT:70  DEF:1  EVD:10  MDEF:10  MEVD:0  EXP:20  GIL:14  CP:1
+[0x06] Berserker      Lv:3  HP:30  ATK:10  HIT:75  DEF:1  EVD:10  MDEF:10  MEVD:0  EXP:32  GIL:16  CP:1
+[0x07] Red Wisp       Lv:3  HP:34  ATK:10  HIT:75  DEF:1  EVD:10  MDEF:10  MEVD:0  EXP:32  GIL:18  CP:1  weak:fire+holy  resist:holy  atkElem:holy
+[0x08] Dark Eye       Lv:3  HP:38  ATK:12  HIT:60  DEF:1  EVD:10  MDEF:10  MEVD:0  EXP:32  GIL:20  CP:1  weak:fire+holy  resist:holy  spRate:20%  spells:[Blind,Blind,Blind,Blind,Blind,Blind,Blind,Blind]
+[0x09] Zombie         Lv:4  HP:42  ATK:12  HIT:60  DEF:1  EVD:10  MDEF:10  MEVD:0  EXP:40  GIL:22  CP:1  weak:fire+holy  resist:holy  atkElem:holy
+[0x0a] Mummy          Lv:4  HP:48  ATK:14  HIT:70  DEF:1  EVD:15  MDEF:10  MEVD:0  EXP:40  GIL:24  CP:1  weak:fire+holy  resist:holy  atkElem:holy  spRate:20%  spells:[Poison,Poison,Poison,Poison,Poison,Poison,Poison,Poison]
+[0x0b] Skeleton       Lv:4  HP:54  ATK:13  HIT:65  DEF:1  EVD:15  MDEF:10  MEVD:0  EXP:40  GIL:26  CP:1  weak:fire+holy  resist:holy  atkElem:holy
+[0x0c] CursdCopper    Lv:5  HP:35  ATK:14  HIT:70  DEF:1  EVD:15  MDEF:10  MEVD:0  EXP:48  GIL:28  CP:1  weak:fire+holy  resist:holy  atkElem:holy  spRate:20%  spells:[Glare,Glare,Glare,Glare,Glare,Glare,Glare,Glare]
+[0x0d] Larva          Lv:5  HP:38  ATK:13  HIT:65  DEF:1  EVD:15  MDEF:10  MEVD:0  EXP:48  GIL:30  CP:1  weak:fire+holy  resist:holy  atkElem:holy  spRate:20%  spells:[Blind,Blind,Blind,Blind,Blind,Blind,Blind,Blind]
+[0x0e] Shadow         Lv:5  HP:65  ATK:14  HIT:70  DEF:1  EVD:15  MDEF:10  MEVD:0  EXP:48  GIL:32  CP:1  weak:fire+holy  resist:holy  atkElem:holy  spRate:20%  spells:[Blind,Blind,Blind,Blind,Blind,Blind,Blind,Blind]
+[0x0f] Revenant       Lv:6  HP:70  ATK:10  HIT:21  DEF:1  EVD:20  MDEF:10  MEVD:0  EXP:52  GIL:34  CP:1  weak:fire+holy  resist:holy  atkElem:holy
+[0x10] Firefly        Lv:3  HP:72  ATK:14  HIT:70  DEF:1  EVD:20  MDEF:10  MEVD:0  EXP:52  GIL:36  CP:1  weak:ice+air  resist:fire  atkElem:fire+air  spRate:60%  spells:[Fire,Fire,Fire,Fire,Fire,Fire,Fire,Fire]
+[0x11] Helldiver      Lv:6  HP:85  ATK:10  HIT:21  DEF:1  EVD:20  MDEF:10  MEVD:0  EXP:52  GIL:38  CP:1  weak:air  atkElem:air  status:0x13
+[0x12] Rust Bird      Lv:4  HP:92  ATK:16  HIT:60  DEF:1  EVD:20  MDEF:10  MEVD:0  EXP:60  GIL:40  CP:1  weak:air  atkElem:air  spRate:30%  spells:[Glare,Glare,Glare,Glare,Glare,Glare,Glare,Glare]
+[0x13] Rukh           Lv:7  HP:120  ATK:18  HIT:80  DEF:1  EVD:20  MDEF:10  MEVD:0  EXP:60  GIL:42  CP:1  weak:air  atkElem:air
+[0x14] Basilisk       Lv:7  HP:100  ATK:17  HIT:70  DEF:1  EVD:25  MDEF:10  MEVD:0  EXP:60  GIL:44  CP:1
+[0x15] Bugbear        Lv:8  HP:110  ATK:17  HIT:70  DEF:1  EVD:25  MDEF:15  MEVD:0  EXP:72  GIL:46  CP:1
+[0x16] Mandrake       Lv:5  HP:120  ATK:16  HIT:32  DEF:1  EVD:25  MDEF:15  MEVD:0  EXP:72  GIL:48  CP:1  status:0x41  spRate:20%  spells:[Bad Breath,Bad Breath,Bad Breath,Bad Breath,Bad Breath,Bad Breath,Bad Breath,Bad Breath]
+[0x17] Unei Clone     Lv:30  HP:1500  ATK:110  HIT:80  DEF:9  EVD:45  MDEF:40  MEVD:2  EXP:72  GIL:50  CP:1  resist:dark+bolt+ice+fire+air+earth+holy  spRate:99%  spells:[Tornado,Reflect,Tornado,Blizzard,Tornado,Reflect,Tornado,Blizzard]
+[0x18] Leprechaun     Lv:10  HP:36  ATK:9  HIT:70  DEF:1  EVD:25  MDEF:15  MEVD:0  EXP:80  GIL:52  CP:1
+[0x19] Darkface       Lv:10  HP:55  ATK:10  HIT:75  DEF:1  EVD:30  MDEF:15  MEVD:0  EXP:80  GIL:53  CP:1
+[0x1a] Petit          Lv:3  HP:45  ATK:16  HIT:32  DEF:1  EVD:30  MDEF:15  MEVD:0  EXP:80  GIL:54  CP:1  status:0x40  spRate:80%  spells:[Fire,Bzzard,Thunder,Fire,Bzzard,Thunder,Fire,Bzzard]
+[0x1b] Poison Bat     Lv:10  HP:60  ATK:16  HIT:32  DEF:1  EVD:30  MDEF:15  MEVD:0  EXP:88  GIL:56  CP:1  status:0x2
+[0x1c] Lilliputian    Lv:2  HP:58  ATK:7  HIT:65  DEF:1  EVD:30  MDEF:15  MEVD:0  EXP:88  GIL:58  CP:1  spRate:50%  spells:[Fire,Bzzard,Thunder,Fire,Bzzard,Thunder,Fire,Bzzard]
+[0x1d] Wererat        Lv:10  HP:72  ATK:9  HIT:70  DEF:1  EVD:30  MDEF:15  MEVD:0  EXP:88  GIL:60  CP:1
+[0x1e] Blood Worm     Lv:11  HP:98  ATK:9  HIT:70  DEF:2  EVD:10  MDEF:15  MEVD:0  EXP:96  GIL:62  CP:1
+[0x1f] Killer Fish    Lv:11  HP:85  ATK:21  HIT:70  DEF:2  EVD:10  MDEF:20  MEVD:0  EXP:96  GIL:64  CP:1  weak:bolt
+[0x20] Hermit         Lv:11  HP:105  ATK:21  HIT:32  DEF:2  EVD:10  MDEF:20  MEVD:0  EXP:96  GIL:66  CP:1  weak:bolt  status:0x2
+[0x21] SeaElementl    Lv:12  HP:123  ATK:19  HIT:90  DEF:2  EVD:10  MDEF:20  MEVD:0  EXP:100  GIL:67  CP:1  weak:bolt
+[0x22] Tangie         Lv:6  HP:125  ATK:20  HIT:60  DEF:2  EVD:10  MDEF:20  MEVD:0  EXP:100  GIL:68  CP:1  weak:bolt  spRate:40%  spells:[Glare,Glare,Glare,Glare,Glare,Glare,Glare,Glare]
+[0x23] Sahagin        Lv:12  HP:140  ATK:20  HIT:60  DEF:2  EVD:15  MDEF:20  MEVD:0  EXP:100  GIL:70  CP:1  weak:bolt
+[0x24] Parademon      Lv:6  HP:145  ATK:21  HIT:32  DEF:2  EVD:15  MDEF:20  MEVD:0  EXP:108  GIL:72  CP:1  resist:bolt  atkElem:bolt  status:0x91  spRate:40%  spells:[Bad Breath,Bad Breath,Bad Breath,Bad Breath,Bad Breath,Bad Breath,Bad Breath,Bad Breath]
+[0x25] Griffon        Lv:13  HP:150  ATK:21  HIT:70  DEF:2  EVD:15  MDEF:20  MEVD:0  EXP:108  GIL:74  CP:1
+[0x26] Lynx           Lv:13  HP:165  ATK:21  HIT:70  DEF:2  EVD:15  MDEF:20  MEVD:0  EXP:108  GIL:76  CP:1
+[0x27] Hornet         Lv:14  HP:160  ATK:21  HIT:32  DEF:2  EVD:15  MDEF:20  MEVD:0  EXP:120  GIL:78  CP:1  status:0x2
+[0x28] Knocker        Lv:14  HP:185  ATK:21  HIT:70  DEF:2  EVD:20  MDEF:20  MEVD:0  EXP:120  GIL:80  CP:1
+[0x29] Flyer          Lv:7  HP:190  ATK:22  HIT:80  DEF:2  EVD:20  MDEF:25  MEVD:0  EXP:120  GIL:82  CP:1  weak:air  atkElem:air  spRate:50%  spells:[Glare,Glare,Glare,Glare,Glare,Glare,Glare,Glare]
+[0x2a] Lizardman      Lv:15  HP:200  ATK:22  HIT:80  DEF:2  EVD:20  MDEF:25  MEVD:0  EXP:128  GIL:84  CP:1
+[0x2b] Gorgon         Lv:15  HP:200  ATK:23  HIT:90  DEF:2  EVD:20  MDEF:25  MEVD:0  EXP:128  GIL:86  CP:1
+[0x2c] Red Cap        Lv:8  HP:210  ATK:23  HIT:90  DEF:2  EVD:20  MDEF:25  MEVD:0  EXP:128  GIL:87  CP:1  spRate:50%  spells:[Glare,Glare,Glare,Glare,Glare,Glare,Glare,Glare]
+[0x2d] Barometz       Lv:8  HP:220  ATK:26  HIT:36  DEF:2  EVD:25  MDEF:25  MEVD:0  EXP:132  GIL:88  CP:2  status:0x91  spRate:50%  spells:[Bad Breath,Bad Breath,Bad Breath,Bad Breath,Bad Breath,Bad Breath,Bad Breath,Bad Breath]
+[0x2e] Slime          Lv:8  HP:200  ATK:23  HIT:90  DEF:4  EVD:30  MDEF:30  MEVD:2  EXP:132  GIL:90  CP:2
+[0x2f] Tarantula      Lv:8  HP:200  ATK:24  HIT:60  DEF:2  EVD:25  MDEF:25  MEVD:0  EXP:132  GIL:92  CP:2
+[0x30] Cuphgel        Lv:8  HP:200  ATK:24  HIT:60  DEF:2  EVD:25  MDEF:25  MEVD:0  EXP:144  GIL:94  CP:2
+[0x31] Pugman         Lv:5  HP:109  ATK:16  HIT:60  DEF:2  EVD:25  MDEF:25  MEVD:0  EXP:144  GIL:96  CP:2  spRate:45%  spells:[Poison,Fire,Sleep,Bzzard,Blind,Fire,Poison,Bzzard]
+[0x32] Far Darrig     Lv:5  HP:111  ATK:13  HIT:65  DEF:2  EVD:30  MDEF:25  MEVD:0  EXP:144  GIL:98  CP:2  spRate:45%  spells:[Toad,Blind,Bzzara,Poison,Toad,Bzzara,Toad,Toad]
+[0x33] Blood Bat      Lv:19  HP:114  ATK:26  HIT:80  DEF:2  EVD:30  MDEF:30  MEVD:0  EXP:152  GIL:100  CP:2
+[0x34] Petit Mage     Lv:4  HP:118  ATK:14  HIT:70  DEF:2  EVD:30  MDEF:30  MEVD:0  EXP:152  GIL:101  CP:2  spRate:45%  spells:[Sence,Bzzara,Sence,Bzzara,Sence,Bzzara,Sence,Bzzara]
+[0x35]                Lv:11  HP:120  ATK:27  HIT:90  DEF:2  EVD:30  MDEF:30  MEVD:0  EXP:152  GIL:102  CP:2
+[0x36] Aughisky       Lv:19  HP:122  ATK:27  HIT:90  DEF:2  EVD:30  MDEF:30  MEVD:0  EXP:160  GIL:105  CP:2
+[0x37] Bomb           Lv:9  HP:125  ATK:28  HIT:60  DEF:3  EVD:35  MDEF:30  MEVD:0  EXP:160  GIL:110  CP:2  weak:fire  atkElem:fire  spRate:50%  spells:[Explosion,Explosion,Explosion,Explosion,Explosion,Explosion,Explosion,Explosion]
+[0x38] Manticore      Lv:18  HP:128  ATK:28  HIT:60  DEF:3  EVD:35  MDEF:30  MEVD:0  EXP:160  GIL:112  CP:2  atkElem:ice  spRate:60%  spells:[Bzzard,Bzzard,Bzzard,Bzzard,Bzzard,Bzzard,Bzzard,Bzzard]
+[0x39] Stalagmite     Lv:9  HP:130  ATK:26  HIT:36  DEF:3  EVD:35  MDEF:30  MEVD:0  EXP:160  GIL:115  CP:2  resist:earth  atkElem:earth  status:0x13  spRate:35%  spells:[Glare,Glare,Glare,Glare,Glare,Glare,Glare,Glare]
+[0x3a] Sea Devil      Lv:20  HP:133  ATK:29  HIT:70  DEF:3  EVD:35  MDEF:30  MEVD:0  EXP:180  GIL:116  CP:2  weak:bolt
+[0x3b] Merman         Lv:20  HP:136  ATK:30  HIT:80  DEF:3  EVD:35  MDEF:30  MEVD:0  EXP:180  GIL:118  CP:2  weak:bolt  spRate:65%  spells:[Bzzard,Bzzard,Bzzard,Bzzard,Bzzard,Bzzard,Bzzard,Bzzard]
+[0x3c] RuinousWave    Lv:10  HP:140  ATK:32  HIT:36  DEF:3  EVD:40  MDEF:30  MEVD:0  EXP:180  GIL:120  CP:2  weak:bolt  status:0x91  spRate:40%  spells:[Bad Breath,Bad Breath,Bad Breath,Bad Breath,Bad Breath,Bad Breath,Bad Breath,Bad Breath]
+[0x3d] Balloon        Lv:10  HP:143  ATK:30  HIT:80  DEF:3  EVD:40  MDEF:10  MEVD:1  EXP:180  GIL:125  CP:2  weak:fire  atkElem:fire  spRate:60%  spells:[Explosion,Explosion,Explosion,Explosion,Explosion,Explosion,Explosion,Explosion]
+[0x3e] Myrmecoleon    Lv:21  HP:147  ATK:32  HIT:36  DEF:3  EVD:40  MDEF:10  MEVD:1  EXP:200  GIL:130  CP:2  weak:ice  status:0x13
+[0x3f] Crocotta       Lv:22  HP:150  ATK:31  HIT:90  DEF:3  EVD:40  MDEF:10  MEVD:1  EXP:200  GIL:135  CP:2  weak:ice
+[0x40] Adamantoise    Lv:11  HP:153  ATK:31  HIT:90  DEF:4  EVD:50  MDEF:20  MEVD:1  EXP:200  GIL:135  CP:3  weak:ice  spells:[Guard,Bite,Bite,Guard,Guard,Bite,Guard,Bite]
+[0x41] RMarshmao      Lv:22  HP:155  ATK:32  HIT:60  DEF:4  EVD:25  MDEF:40  MEVD:2  EXP:200  GIL:140  CP:3  weak:fire
+[0x42] Pharaoh        Lv:11  HP:160  ATK:32  HIT:36  DEF:3  EVD:45  MDEF:10  MEVD:1  EXP:240  GIL:145  CP:3  weak:fire+holy  atkElem:holy  status:0x31  spRate:30%  spells:[Glare,Glare,Glare,Glare,Glare,Glare,Glare,Glare]
+[0x43] Lemur          Lv:23  HP:164  ATK:32  HIT:60  DEF:3  EVD:45  MDEF:10  MEVD:1  EXP:240  GIL:150  CP:3  weak:fire+holy  atkElem:holy
+[0x44] Lamia          Lv:12  HP:168  ATK:33  HIT:70  DEF:3  EVD:45  MDEF:10  MEVD:1  EXP:240  GIL:155  CP:3  atkElem:holy  spRate:30%  spells:[Glare,Glare,Glare,Glare,Glare,Glare,Glare,Glare]
+[0x45] Demon          Lv:24  HP:171  ATK:33  HIT:70  DEF:3  EVD:45  MDEF:10  MEVD:1  EXP:288  GIL:158  CP:3
+[0x46] Dullahan       Lv:24  HP:350  ATK:40  HIT:60  DEF:3  EVD:50  MDEF:10  MEVD:1  EXP:288  GIL:160  CP:3
+[0x47] Anet           Lv:24  HP:179  ATK:34  HIT:80  DEF:3  EVD:50  MDEF:15  MEVD:1  EXP:288  GIL:165  CP:3  weak:bolt
+[0x48] Mermaid        Lv:25  HP:182  ATK:35  HIT:90  DEF:3  EVD:50  MDEF:15  MEVD:1  EXP:288  GIL:170  CP:3  weak:bolt
+[0x49] Seahorse       Lv:25  HP:185  ATK:35  HIT:90  DEF:3  EVD:50  MDEF:15  MEVD:1  EXP:320  GIL:175  CP:3  weak:bolt
+[0x4a] Sea Serpent    Lv:25  HP:190  ATK:36  HIT:60  DEF:3  EVD:50  MDEF:15  MEVD:1  EXP:320  GIL:180  CP:3  weak:bolt
+[0x4b] Cockatrice     Lv:26  HP:195  ATK:37  HIT:36  DEF:3  EVD:60  MDEF:15  MEVD:1  EXP:320  GIL:185  CP:3  status:0x3
+[0x4c] Poison Toad    Lv:26  HP:200  ATK:37  HIT:36  DEF:3  EVD:60  MDEF:15  MEVD:1  EXP:360  GIL:190  CP:3  weak:fire  status:0x2
+[0x4d] Twin Heads     Lv:26  HP:205  ATK:36  HIT:60  DEF:3  EVD:60  MDEF:15  MEVD:1  EXP:360  GIL:195  CP:3
+[0x4e] Roper          Lv:27  HP:210  ATK:37  HIT:36  DEF:3  EVD:60  MDEF:15  MEVD:1  EXP:360  GIL:200  CP:3  weak:bolt  status:0x91
+[0x4f] Agaliarept     Lv:27  HP:215  ATK:37  HIT:70  DEF:3  EVD:60  MDEF:15  MEVD:1  EXP:400  GIL:210  CP:3  weak:bolt
+[0x50] Darklegs       Lv:27  HP:220  ATK:37  HIT:70  DEF:3  EVD:10  MDEF:15  MEVD:1  EXP:400  GIL:220  CP:3  weak:bolt
+[0x51] Gigantoad      Lv:28  HP:225  ATK:38  HIT:80  DEF:3  EVD:10  MDEF:20  MEVD:1  EXP:400  GIL:230  CP:3  weak:bolt
+[0x52] Twin Liger     Lv:28  HP:230  ATK:38  HIT:80  DEF:3  EVD:10  MDEF:20  MEVD:1  EXP:440  GIL:240  CP:3
+[0x53] Stroper        Lv:28  HP:400  ATK:64  HIT:36  DEF:3  EVD:10  MDEF:20  MEVD:1  EXP:440  GIL:250  CP:3  weak:bolt  atkElem:bolt  status:0x91  spRate:40%  spells:[Glare,Glare,Glare,Glare,Glare,Glare,Glare,Glare]
+[0x54] Black Flan     Lv:29  HP:240  ATK:39  HIT:90  DEF:5  EVD:50  MDEF:50  MEVD:3  EXP:440  GIL:260  CP:3  weak:air  spRate:60%  spells:[Bad Breath,Bad Breath,Bad Breath,Bad Breath,Bad Breath,Bad Breath,Bad Breath,Bad Breath]
+[0x55] Hellgaroo      Lv:29  HP:245  ATK:39  HIT:90  DEF:3  EVD:15  MDEF:20  MEVD:1  EXP:500  GIL:270  CP:3  spRate:15%  spells:[Blind,Blind,Blind,Blind,Blind,Blind,Blind,Blind]
+[0x56] Vulcan         Lv:29  HP:250  ATK:40  HIT:60  DEF:3  EVD:15  MDEF:20  MEVD:1  EXP:500  GIL:280  CP:3  weak:ice  resist:fire  atkElem:fire  spRate:50%  spells:[Fira,Bzzara,Tara,Fira,Bzzara,Tara,Fira,Bzzara]
+[0x57] Dracrocotta    Lv:30  HP:255  ATK:42  HIT:36  DEF:3  EVD:15  MDEF:20  MEVD:1  EXP:500  GIL:290  CP:3  status:0x41
+[0x58] Magician       Lv:12  HP:260  ATK:24  HIT:60  DEF:3  EVD:15  MDEF:20  MEVD:1  EXP:560  GIL:300  CP:3  spRate:50%  spells:[Fira,Bzzara,Tara,Fira,Bzzara,Tara,Fira,Bzzara]
+[0x59]                Lv:30  HP:265  ATK:42  HIT:70  DEF:3  EVD:15  MDEF:20  MEVD:1  EXP:560  GIL:310  CP:3  spRate:40%  spells:[Toad,Blind,Bzzara,Poison,Toad,Bzzara,Toad,Toad]
+[0x5a] Gold Eagle     Lv:31  HP:270  ATK:42  HIT:70  DEF:4  EVD:20  MDEF:20  MEVD:1  EXP:560  GIL:320  CP:3  resist:bolt
+[0x5b] GoldWarrior    Lv:31  HP:275  ATK:44  HIT:80  DEF:4  EVD:20  MDEF:25  MEVD:1  EXP:600  GIL:330  CP:3  resist:bolt  spRate:40%  spells:[Thunder,Thunder,Thunder,Thunder,Thunder,Thunder,Thunder,Thunder]
+[0x5c] Gold Bear      Lv:31  HP:280  ATK:44  HIT:80  DEF:4  EVD:20  MDEF:25  MEVD:1  EXP:600  GIL:340  CP:3  resist:bolt  spRate:30%  spells:[Break,Break,Break,Break,Break,Break,Break,Break]
+[0x5d] Gold Knight    Lv:32  HP:285  ATK:46  HIT:90  DEF:4  EVD:20  MDEF:25  MEVD:1  EXP:600  GIL:350  CP:3  resist:bolt
+[0x5e] Nightmare      Lv:32  HP:290  ATK:42  HIT:36  DEF:4  EVD:20  MDEF:25  MEVD:1  EXP:700  GIL:360  CP:3  status:0x21  spRate:50%  spells:[Glare,Glare,Glare,Glare,Glare,Glare,Glare,Glare]
+[0x5f] HelgaruMage    Lv:32  HP:295  ATK:46  HIT:90  DEF:4  EVD:25  MDEF:25  MEVD:1  EXP:700  GIL:370  CP:3  spRate:99%  spells:[Break,Fira,Break,Shade,Bzzara,Shade,Break,Tara]
+[0x60] NeedlMonkey    Lv:33  HP:300  ATK:42  HIT:36  DEF:4  EVD:25  MDEF:25  MEVD:1  EXP:700  GIL:380  CP:3  status:0x2
+[0x61] Catoblepas     Lv:33  HP:305  ATK:48  HIT:60  DEF:4  EVD:25  MDEF:25  MEVD:1  EXP:800  GIL:390  CP:3
+[0x62] Sorcerer       Lv:22  HP:310  ATK:29  HIT:70  DEF:4  EVD:25  MDEF:25  MEVD:1  EXP:800  GIL:400  CP:3  spRate:99%  spells:[Fira,Bzzara,Tara,Fira,Bzzara,Tara,Fira,Bzzara]
+[0x63]                Lv:34  HP:315  ATK:50  HIT:70  DEF:4  EVD:25  MDEF:25  MEVD:1  EXP:800  GIL:410  CP:3
+[0x64] Sand Worm      Lv:34  HP:320  ATK:52  HIT:80  DEF:4  EVD:30  MDEF:25  MEVD:1  EXP:960  GIL:420  CP:3
+[0x65] Frostfly       Lv:34  HP:325  ATK:52  HIT:80  DEF:4  EVD:30  MDEF:30  MEVD:1  EXP:960  GIL:430  CP:3  weak:fire  resist:ice+air  atkElem:ice+air  spRate:90%  spells:[Bzzara,Bzzara,Bzzara,Bzzara,Bzzara,Bzzara,Bzzara,Bzzara]
+[0x66]                Lv:35  HP:330  ATK:54  HIT:90  DEF:4  EVD:30  MDEF:30  MEVD:1  EXP:960  GIL:440  CP:3  weak:ice+air  resist:fire  atkElem:fire+air
+[0x67] Simurgh        Lv:35  HP:335  ATK:54  HIT:90  DEF:4  EVD:30  MDEF:30  MEVD:1  EXP:1040  GIL:450  CP:3  weak:air  atkElem:air
+[0x68] Harpy          Lv:35  HP:1000  ATK:56  HIT:60  DEF:4  EVD:30  MDEF:30  MEVD:1  EXP:1040  GIL:460  CP:3  weak:air  atkElem:air
+[0x69] Gargoyle       Lv:36  HP:345  ATK:56  HIT:60  DEF:4  EVD:35  MDEF:30  MEVD:1  EXP:1200  GIL:470  CP:3  weak:air  atkElem:air
+[0x6a] Chimera        Lv:36  HP:350  ATK:48  HIT:36  DEF:4  EVD:35  MDEF:30  MEVD:1  EXP:1200  GIL:475  CP:4  status:0x3
+[0x6b] Demon Horse    Lv:36  HP:355  ATK:37  HIT:36  DEF:4  EVD:35  MDEF:30  MEVD:1  EXP:1320  GIL:480  CP:4  status:0x41
+[0x6c] RokGargoyle    Lv:36  HP:360  ATK:42  HIT:36  DEF:4  EVD:35  MDEF:30  MEVD:1  EXP:1320  GIL:490  CP:4  resist:earth  atkElem:earth  status:0x5  spRate:32%  spells:[Breakga,Breakga,Breakga,Breakga,Breakga,Breakga,Breakga,Breakga]
+[0x6d] Bovian         Lv:37  HP:365  ATK:30  HIT:80  DEF:4  EVD:35  MDEF:30  MEVD:1  EXP:1320  GIL:500  CP:4
+[0x6e] DreadKnight    Lv:37  HP:370  ATK:30  HIT:80  DEF:4  EVD:40  MDEF:30  MEVD:1  EXP:1440  GIL:510  CP:4
+[0x6f] Flyer Mage     Lv:18  HP:555  ATK:34  HIT:80  DEF:4  EVD:40  MDEF:35  MEVD:1  EXP:1440  GIL:520  CP:4  weak:air  atkElem:air  spRate:64%  spells:[Fira,Bzzara,Tara,Fira,Bzzara,Tara,Fira,Bzzara]
+[0x70] Noggle         Lv:38  HP:380  ATK:60  HIT:80  DEF:4  EVD:40  MDEF:35  MEVD:1  EXP:1440  GIL:540  CP:4
+[0x71] Abtu           Lv:38  HP:385  ATK:62  HIT:90  DEF:4  EVD:40  MDEF:35  MEVD:1  EXP:1440  GIL:550  CP:4
+[0x72] NeptoDragon    Lv:39  HP:60000  ATK:62  HIT:90  DEF:4  EVD:40  MDEF:35  MEVD:1  EXP:1560  GIL:560  CP:4
+[0x73] Kagura         Lv:39  HP:395  ATK:64  HIT:60  DEF:4  EVD:45  MDEF:35  MEVD:1  EXP:1560  GIL:580  CP:4
+[0x74] Charybdis      Lv:39  HP:650  ATK:64  HIT:60  DEF:4  EVD:45  MDEF:35  MEVD:1  EXP:1560  GIL:600  CP:4
+[0x75] Dira           Lv:40  HP:1250  ATK:66  HIT:70  DEF:4  EVD:45  MDEF:35  MEVD:1  EXP:1640  GIL:610  CP:4  weak:air  atkElem:air  spells:[Drain,Drain,Drain,Drain,Drain,Drain,Drain,Drain]
+[0x76] ChimeraMage    Lv:40  HP:420  ATK:66  HIT:70  DEF:4  EVD:45  MDEF:35  MEVD:1  EXP:1640  GIL:615  CP:4  spRate:50%  spells:[Thunder,Thunder,Thunder,Thunder,Thunder,Thunder,Thunder,Thunder]
+[0x77] King Lizard    Lv:40  HP:430  ATK:68  HIT:80  DEF:4  EVD:45  MDEF:35  MEVD:1  EXP:1640  GIL:620  CP:4
+[0x78] Pterodactyl    Lv:41  HP:440  ATK:68  HIT:80  DEF:4  EVD:50  MDEF:35  MEVD:1  EXP:1640  GIL:640  CP:4  weak:air  atkElem:air
+[0x79] Wyvern         Lv:41  HP:450  ATK:70  HIT:90  DEF:4  EVD:50  MDEF:40  MEVD:1  EXP:1800  GIL:650  CP:4  atkElem:air
+[0x7a] Behemoth       Lv:41  HP:1550  ATK:70  HIT:90  DEF:4  EVD:50  MDEF:40  MEVD:1  EXP:1800  GIL:660  CP:4
+[0x7b] KingSeahors    Lv:42  HP:470  ATK:72  HIT:60  DEF:4  EVD:50  MDEF:40  MEVD:1  EXP:1800  GIL:680  CP:4
+[0x7c] Dragon         Lv:42  HP:480  ATK:72  HIT:60  DEF:4  EVD:50  MDEF:40  MEVD:1  EXP:2000  GIL:700  CP:4  spRate:80%
+[0x7d] Kyklops        Lv:42  HP:490  ATK:74  HIT:70  DEF:4  EVD:60  MDEF:40  MEVD:1  EXP:2000  GIL:720  CP:4
+[0x7e] Boss Troll     Lv:43  HP:500  ATK:74  HIT:70  DEF:4  EVD:60  MDEF:40  MEVD:1  EXP:2000  GIL:740  CP:4
+[0x7f] Fachan         Lv:43  HP:510  ATK:76  HIT:80  DEF:4  EVD:60  MDEF:40  MEVD:1  EXP:2800  GIL:745  CP:4  spRate:21%  spells:[Breakga,Breakga,Breakga,Breakga,Breakga,Breakga,Breakga,Breakga]
+[0x80] Cenchos        Lv:45  HP:1120  ATK:76  HIT:80  DEF:4  EVD:60  MDEF:40  MEVD:1  EXP:2200  GIL:750  CP:4  BOSS
+[0x81] Balor          Lv:44  HP:530  ATK:78  HIT:90  DEF:4  EVD:60  MDEF:40  MEVD:1  EXP:2200  GIL:760  CP:4  BOSS
+[0x82] Dozmare        Lv:44  HP:540  ATK:78  HIT:90  DEF:4  EVD:10  MDEF:40  MEVD:1  EXP:2200  GIL:780  CP:4  BOSS
+[0x83] Sea Witch      Lv:44  HP:550  ATK:80  HIT:70  DEF:4  EVD:10  MDEF:45  MEVD:1  EXP:2400  GIL:800  CP:4  weak:bolt  BOSS
+[0x84] KierHermit     Lv:45  HP:560  ATK:80  HIT:70  DEF:4  EVD:10  MDEF:45  MEVD:1  EXP:2400  GIL:820  CP:4  weak:bolt  BOSS
+[0x85] Ologhai        Lv:55  HP:570  ATK:83  HIT:80  DEF:4  EVD:10  MDEF:45  MEVD:1  EXP:2400  GIL:840  CP:4  BOSS
+[0x86] Kelpie         Lv:45  HP:580  ATK:83  HIT:80  DEF:4  EVD:10  MDEF:45  MEVD:1  EXP:2800  GIL:850  CP:4  BOSS
+[0x87] Aegir          Lv:46  HP:590  ATK:85  HIT:90  DEF:5  EVD:15  MDEF:45  MEVD:1  EXP:2800  GIL:860  CP:4  BOSS
+[0x88] Pyralis        Lv:46  HP:1500  ATK:85  HIT:90  DEF:5  EVD:15  MDEF:45  MEVD:1  EXP:4800  GIL:880  CP:4  BOSS
+[0x89] Silenus        Lv:36  HP:910  ATK:87  HIT:70  DEF:5  EVD:15  MDEF:45  MEVD:1  EXP:320  GIL:900  CP:4  weak:dark  resist:recovery+bolt+ice+fire+air+earth+holy  spells:[Divide 2,Divide 2,Divide 2,Divide 2,Divide 2,Divide 2,Divide 2,Divide 2]  BOSS
+[0x8a] Gaap           Lv:37  HP:1000  ATK:87  HIT:70  DEF:5  EVD:15  MDEF:45  MEVD:1  EXP:320  GIL:920  CP:4  weak:dark  resist:recovery+bolt+ice+fire+air+earth+holy  spells:[Divide 2,Divide 2,Divide 2,Divide 2,Divide 2,Divide 2,Divide 2,Divide 2]  BOSS
+[0x8b] Azrael         Lv:37  HP:1100  ATK:90  HIT:80  DEF:5  EVD:15  MDEF:45  MEVD:1  EXP:320  GIL:940  CP:4  weak:dark  resist:recovery+bolt+ice+fire+air+earth+holy  spRate:40%  spells:[Multiply,Multiply,Multiply,Multiply,Multiply,Multiply,Multiply,Multiply]  BOSS
+[0x8c] Eater          Lv:47  HP:1150  ATK:90  HIT:80  DEF:5  EVD:20  MDEF:45  MEVD:1  EXP:320  GIL:945  CP:5  spRate:40%  spells:[Multiply,Multiply,Multiply,Multiply,Multiply,Multiply,Multiply,Multiply]  BOSS
+[0x8d]                Lv:48  HP:1200  ATK:93  HIT:90  DEF:5  EVD:20  MDEF:50  MEVD:2  EXP:320  GIL:950  CP:5  spRate:40%  spells:[Multiply,Multiply,Multiply,Multiply,Multiply,Multiply,Multiply,Multiply]  BOSS
+[0x8e] ZombDragon     Lv:48  HP:2000  ATK:93  HIT:90  DEF:5  EVD:20  MDEF:50  MEVD:2  EXP:5000  GIL:960  CP:5  weak:fire+holy  BOSS
+[0x8f] Death Claw     Lv:48  HP:1400  ATK:95  HIT:70  DEF:5  EVD:20  MDEF:50  MEVD:2  EXP:320  GIL:980  CP:5  spells:[Divide 2,Divide 2,Divide 2,Divide 2,Divide 2,Divide 2,Divide 2,Divide 2]  BOSS
+[0x90] HeishHorse     Lv:49  HP:680  ATK:95  HIT:70  DEF:5  EVD:20  MDEF:50  MEVD:2  EXP:5000  GIL:990  CP:5  BOSS
+[0x91] Chronos        Lv:49  HP:1550  ATK:97  HIT:80  DEF:5  EVD:25  MDEF:50  MEVD:2  EXP:320  GIL:1000  CP:5  weak:dark  resist:recovery+bolt+ice+fire+air+earth+holy  spells:[Divide 2,Divide 2,Divide 2,Divide 2,Divide 2,Divide 2,Divide 2,Divide 2]  BOSS
+[0x92] Valefor        Lv:49  HP:1620  ATK:97  HIT:80  DEF:5  EVD:25  MDEF:50  MEVD:2  EXP:320  GIL:1050  CP:5  weak:dark  resist:recovery+bolt+ice+fire+air+earth+holy  spells:[Divide 2,Divide 2,Divide 2,Divide 2,Divide 2,Divide 2,Divide 2,Divide 2]  BOSS
+[0x93] Haniel         Lv:50  HP:1600  ATK:100  HIT:70  DEF:5  EVD:25  MDEF:50  MEVD:2  EXP:320  GIL:1100  CP:5  weak:dark  resist:recovery+bolt+ice+fire+air+earth+holy  spells:[Divide 2,Divide 2,Divide 2,Divide 2,Divide 2,Divide 2,Divide 2,Divide 2]  BOSS
+[0x94] Vassago        Lv:50  HP:720  ATK:100  HIT:70  DEF:5  EVD:25  MDEF:50  MEVD:2  EXP:320  GIL:1150  CP:5  weak:dark  resist:recovery+bolt+ice+fire+air+earth+holy  spells:[Divide 2,Divide 2,Divide 2,Divide 2,Divide 2,Divide 2,Divide 2,Divide 2]  BOSS
+[0x95] Peryton        Lv:50  HP:730  ATK:103  HIT:80  DEF:5  EVD:25  MDEF:50  MEVD:1  EXP:3200  GIL:1200  CP:5  BOSS
+[0x96] Ogre           Lv:51  HP:740  ATK:103  HIT:80  DEF:5  EVD:30  MDEF:50  MEVD:1  EXP:3400  GIL:1250  CP:5  BOSS
+[0x97] Cyclops        Lv:51  HP:750  ATK:105  HIT:90  DEF:5  EVD:30  MDEF:50  MEVD:1  EXP:3400  GIL:1300  CP:5  BOSS
+[0x98] Nemesis        Lv:51  HP:760  ATK:48  HIT:36  DEF:5  EVD:30  MDEF:50  MEVD:1  EXP:3400  GIL:1350  CP:5  status:0x81  spRate:30%  spells:[Glare,Glare,Glare,Glare,Glare,Glare,Glare,Glare]  BOSS
+[0x99] Humbaba        Lv:52  HP:770  ATK:105  HIT:90  DEF:5  EVD:30  MDEF:50  MEVD:1  EXP:3400  GIL:1400  CP:5  BOSS
+[0x9a] DeathNeedle    Lv:52  HP:780  ATK:48  HIT:36  DEF:5  EVD:30  MDEF:50  MEVD:1  EXP:3200  GIL:1450  CP:5  status:0x2  BOSS
+[0x9b] Liger          Lv:52  HP:790  ATK:107  HIT:70  DEF:5  EVD:40  MDEF:50  MEVD:1  EXP:3200  GIL:1500  CP:5  BOSS
+[0x9c] XandeClone     Lv:96  HP:10000  ATK:175  HIT:90  DEF:11  EVD:30  MDEF:40  MEVD:2  EXP:3400  GIL:1550  CP:5  resist:dark+bolt+ice+fire+air+earth+holy  spRate:99%  spells:[Libra,Meteor,Libra,Quake,Libra,Fire,Libra,Meteor]  BOSS
+[0x9d] Aeon           Lv:53  HP:1200  ATK:110  HIT:80  DEF:5  EVD:40  MDEF:50  MEVD:1  EXP:3400  GIL:1600  CP:5  spRate:30%  spells:[Earthquake,Earthquake,Earthquake,Earthquake,Earthquake,Earthquake,Earthquake,Earthquake]  BOSS
+[0x9e] Minotaur       Lv:53  HP:820  ATK:110  HIT:80  DEF:5  EVD:40  MDEF:50  MEVD:1  EXP:3400  GIL:1640  CP:5  BOSS
+[0x9f] Ouroboros      Lv:54  HP:830  ATK:48  HIT:36  DEF:5  EVD:40  MDEF:60  MEVD:1  EXP:3600  GIL:1680  CP:5  weak:bolt  status:0x2  BOSS
+[0xa0] Plancti        Lv:54  HP:840  ATK:113  HIT:90  DEF:5  EVD:50  MDEF:60  MEVD:1  EXP:3600  GIL:1700  CP:5  weak:bolt  spRate:40%  spells:[Glare,Glare,Glare,Glare,Glare,Glare,Glare,Glare]  BOSS
+[0xa1] Sea Lion       Lv:54  HP:850  ATK:113  HIT:90  DEF:5  EVD:50  MDEF:60  MEVD:1  EXP:3800  GIL:1750  CP:5  weak:bolt  BOSS
+[0xa2] Remora         Lv:55  HP:860  ATK:115  HIT:70  DEF:5  EVD:50  MDEF:60  MEVD:1  EXP:3800  GIL:1800  CP:5  weak:bolt  BOSS
+[0xa3] Grenade        Lv:55  HP:870  ATK:115  HIT:70  DEF:5  EVD:50  MDEF:60  MEVD:1  EXP:3800  GIL:1900  CP:5  spRate:50%  spells:[Explosion,Explosion,Explosion,Explosion,Explosion,Explosion,Explosion,Explosion]  BOSS
+[0xa4] Drake          Lv:55  HP:880  ATK:117  HIT:80  DEF:5  EVD:50  MDEF:60  MEVD:1  EXP:3800  GIL:1950  CP:5  BOSS
+[0xa5] Great Boros    Lv:56  HP:890  ATK:64  HIT:36  DEF:7  EVD:60  MDEF:60  MEVD:1  EXP:3800  GIL:2000  CP:5  status:0x2  BOSS
+[0xa6] Saber Liger    Lv:56  HP:900  ATK:117  HIT:80  DEF:7  EVD:60  MDEF:60  MEVD:1  EXP:3800  GIL:2100  CP:5  BOSS
+[0xa7] Queen Lamia    Lv:56  HP:1280  ATK:64  HIT:36  DEF:7  EVD:60  MDEF:60  MEVD:1  EXP:4000  GIL:2200  CP:5  weak:recovery  atkElem:holy  status:0x41  spRate:90%  spells:[Glare,Glare,Glare,Glare,Glare,Glare,Glare,Glare]  BOSS
+[0xa8] Iron Claws     Lv:57  HP:920  ATK:123  HIT:70  DEF:7  EVD:60  MDEF:60  MEVD:1  EXP:3800  GIL:2300  CP:5  BOSS
+[0xa9] Great Demon    Lv:57  HP:2250  ATK:123  HIT:70  DEF:7  EVD:60  MDEF:10  MEVD:2  EXP:3800  GIL:2400  CP:5  spRate:20%  spells:[Summon,Summon,Summon,Summon,Summon,Summon,Summon,Summon]  BOSS
+[0xaa] Thanatos       Lv:57  HP:2200  ATK:125  HIT:80  DEF:7  EVD:20  MDEF:10  MEVD:2  EXP:3800  GIL:2500  CP:5  spRate:21%  spells:[Breakga,Breakga,Breakga,Breakga,Breakga,Breakga,Breakga,Breakga]  BOSS
+[0xab] Bone Dragon    Lv:58  HP:2500  ATK:125  HIT:80  DEF:7  EVD:20  MDEF:10  MEVD:2  EXP:3800  GIL:2600  CP:5  weak:fire+holy  BOSS
+[0xac] KingBehemth    Lv:58  HP:3000  ATK:127  HIT:90  DEF:7  EVD:20  MDEF:10  MEVD:2  EXP:3800  GIL:2700  CP:5  BOSS
+[0xad] Doga Clone     Lv:46  HP:1500  ATK:110  HIT:80  DEF:9  EVD:45  MDEF:40  MEVD:2  EXP:4000  GIL:2800  CP:5  resist:dark+bolt+ice+fire+air+earth+holy  spRate:99%  spells:[Quake,Breakga,Drain,Quake,Breakga,Drain,Quake,Breakga]  BOSS
+[0xae] GreenDragon    Lv:85  HP:10000  ATK:170  HIT:80  DEF:10  EVD:30  MDEF:40  MEVD:2  EXP:4000  GIL:2900  CP:5  BOSS
+[0xaf] Abaia          Lv:59  HP:990  ATK:130  HIT:70  DEF:7  EVD:25  MDEF:10  MEVD:2  EXP:4000  GIL:3000  CP:5  BOSS
+[0xb0] Sleipnir       Lv:59  HP:1000  ATK:133  HIT:80  DEF:7  EVD:25  MDEF:10  MEVD:2  EXP:4000  GIL:3100  CP:5  spRate:30%  spells:[Toad,Blind,Bzzara,Poison,Toad,Bzzara,Toad,Toad]  BOSS
+[0xb1] Haokah         Lv:60  HP:1010  ATK:133  HIT:80  DEF:7  EVD:25  MDEF:10  MEVD:2  EXP:4000  GIL:3200  CP:5  resist:bolt  atkElem:bolt  spRate:70%  spells:[Thunder,Thunder,Thunder,Thunder,Thunder,Thunder,Thunder,Thunder]  BOSS
+[0xb2] Archeron       Lv:60  HP:1020  ATK:135  HIT:90  DEF:7  EVD:25  MDEF:10  MEVD:2  EXP:4000  GIL:3300  CP:5  BOSS
+[0xb3] Oceanus        Lv:60  HP:1030  ATK:135  HIT:90  DEF:7  EVD:25  MDEF:15  MEVD:2  EXP:4200  GIL:3400  CP:5  BOSS
+[0xb4] Amon           Lv:61  HP:7040  ATK:137  HIT:70  DEF:11  EVD:40  MDEF:60  MEVD:2  EXP:4200  GIL:3450  CP:5  spRate:70%  BOSS
+[0xb5] Gomory         Lv:61  HP:4050  ATK:137  HIT:70  DEF:9  EVD:45  MDEF:15  MEVD:2  EXP:4200  GIL:3500  CP:5  spRate:30%  spells:[Drain,Drain,Drain,Drain,Drain,Drain,Drain,Drain]  BOSS
+[0xb6] Bluck          Lv:61  HP:1760  ATK:140  HIT:80  DEF:9  EVD:50  MDEF:15  MEVD:2  EXP:4200  GIL:3600  CP:5  spRate:25%  spells:[Summon,Summon,Summon,Summon,Summon,Summon,Summon,Summon]  BOSS
+[0xb7] Azer           Lv:62  HP:1570  ATK:140  HIT:80  DEF:9  EVD:50  MDEF:15  MEVD:2  EXP:4400  GIL:3700  CP:5  weak:ice  resist:fire  atkElem:fire  spRate:90%  BOSS
+[0xb8] Platinal       Lv:62  HP:4580  ATK:143  HIT:90  DEF:10  EVD:40  MDEF:15  MEVD:2  EXP:4400  GIL:3800  CP:5  spRate:26%  spells:[Breakga,Breakga,Breakga,Breakga,Breakga,Breakga,Breakga,Breakga]  BOSS
+[0xb9] Kum Kum        Lv:62  HP:2090  ATK:64  HIT:36  DEF:9  EVD:60  MDEF:60  MEVD:2  EXP:4400  GIL:3900  CP:5  status:0x5  spRate:80%  spells:[Bzzaga,Breakga,Taga,Death,Death,Breakga,Firaga,Taga]  BOSS
+[0xba] Shinobi        Lv:63  HP:1100  ATK:145  HIT:70  DEF:9  EVD:60  MDEF:15  MEVD:2  EXP:4400  GIL:4000  CP:5  resist:dark+bolt+ice+fire+air+earth+holy  BOSS
+[0xbb] ShadwMaster    Lv:63  HP:2110  ATK:145  HIT:70  DEF:10  EVD:30  MDEF:35  MEVD:2  EXP:4400  GIL:4100  CP:6  resist:dark+bolt+ice+fire+air+earth+holy  spRate:20%  spells:[Protect,Protect,Protect,Protect,Protect,Protect,Protect,Protect]  BOSS
+[0xbc] Kage           Lv:63  HP:2520  ATK:147  HIT:80  DEF:10  EVD:30  MDEF:60  MEVD:3  EXP:4600  GIL:4200  CP:6  spRate:15%  spells:[Blind,Blind,Blind,Blind,Blind,Blind,Blind,Blind]  BOSS
+[0xbd] DarkGeneral    Lv:64  HP:1130  ATK:147  HIT:80  DEF:7  EVD:35  MDEF:20  MEVD:2  EXP:4600  GIL:4300  CP:6  BOSS
+[0xbe]                Lv:64  HP:1140  ATK:150  HIT:90  DEF:7  EVD:40  MDEF:20  MEVD:2  EXP:4600  GIL:4400  CP:6  BOSS
+[0xbf]                Lv:64  HP:1150  ATK:150  HIT:90  DEF:7  EVD:40  MDEF:20  MEVD:2  EXP:4600  GIL:4500  CP:6  BOSS
+[0xc0] GlasLabolas    Lv:65  HP:2160  ATK:153  HIT:70  DEF:9  EVD:50  MDEF:20  MEVD:2  EXP:4600  GIL:4600  CP:6  BOSS
+[0xc1] Yormungand     Lv:65  HP:2570  ATK:153  HIT:70  DEF:9  EVD:60  MDEF:20  MEVD:2  EXP:4600  GIL:4700  CP:6  spRate:30%  spells:[Protect,Protect,Protect,Protect,Protect,Protect,Protect,Protect]  BOSS
+[0xc2] Thor           Lv:65  HP:2180  ATK:155  HIT:80  DEF:9  EVD:60  MDEF:20  MEVD:2  EXP:4800  GIL:4800  CP:6  resist:bolt  atkElem:bolt  spRate:90%  spells:[Thunder,Thunder,Thunder,Thunder,Thunder,Thunder,Thunder,Thunder]  BOSS
+[0xc3] Hecatncheir    Lv:64  HP:6500  ATK:150  HIT:90  DEF:9  EVD:60  MDEF:20  MEVD:2  EXP:4800  GIL:4900  CP:6  BOSS
+[0xc4] Hydra          Lv:66  HP:3600  ATK:157  HIT:90  DEF:9  EVD:60  MDEF:20  MEVD:2  EXP:4800  GIL:5000  CP:6  spRate:20%  spells:[Haste,Haste,Haste,Haste,Haste,Haste,Haste,Haste]  BOSS
+[0xc5] QueenScylla    Lv:66  HP:6220  ATK:157  HIT:90  DEF:10  EVD:20  MDEF:20  MEVD:2  EXP:4800  GIL:5100  CP:6  BOSS
+[0xc6] Garm           Lv:67  HP:4240  ATK:64  HIT:36  DEF:10  EVD:25  MDEF:20  MEVD:2  EXP:4800  GIL:5200  CP:6  status:0x21  spRate:40%  spells:[Drain,Drain,Drain,Drain,Drain,Drain,Drain,Drain]  BOSS
+[0xc7] Twin Dragon    Lv:67  HP:4960  ATK:160  HIT:70  DEF:10  EVD:25  MDEF:25  MEVD:2  EXP:5000  GIL:5300  CP:6  BOSS
+[0xc8] YeowDragon     Lv:85  HP:10000  ATK:170  HIT:80  DEF:10  EVD:30  MDEF:40  MEVD:2  EXP:5000  GIL:5400  CP:6  BOSS
+[0xc9] Bahamut        Lv:1  HP:60000  ATK:7  HIT:65  DEF:8  EVD:50  MDEF:25  MEVD:3  EXP:5000  GIL:5500  CP:6  BOSS
+[0xca] Odin           Lv:68  HP:7000  ATK:157  HIT:90  DEF:10  EVD:30  MDEF:25  MEVD:2  EXP:5000  GIL:5600  CP:6  spRate:65%  spells:[Zantetsuken,Zantetsuken,Zantetsuken,Zantetsuken,Zantetsuken,Zantetsuken,Zantetsuken,Zantetsuken]  BOSS
+[0xcb] Leviathan      Lv:68  HP:7000  ATK:160  HIT:70  DEF:10  EVD:35  MDEF:50  MEVD:3  EXP:5000  GIL:5700  CP:6  spRate:70%  spells:[Tidal Wave,Tidal Wave,Tidal Wave,Tidal Wave,Tidal Wave,Tidal Wave,Tidal Wave,Tidal Wave]  BOSS
+[0xcc] Land Turtle    Lv:8  HP:120  ATK:9  HIT:70  DEF:1  EVD:10  MDEF:32  MEVD:1  EXP:132  GIL:500  CP:120  BOSS
+[0xcd] Djinn          Lv:13  HP:480  ATK:16  HIT:60  DEF:1  EVD:30  MDEF:16  MEVD:1  EXP:160  GIL:700  CP:20  weak:ice  resist:fire  atkElem:fire  spRate:85%  spells:[Fire,Fire,Fire,Fire,Fire,Fire,Fire,Fire]  BOSS
+[0xce] Giant Rat      Lv:2  HP:450  ATK:18  HIT:80  DEF:3  EVD:45  MDEF:16  MEVD:1  EXP:240  GIL:1000  CP:25  spRate:50%  spells:[Fira,Bzzara,Tara,Fira,Bzzara,Tara,Fira,Bzzara]  BOSS
+[0xcf] Medusa         Lv:42  HP:980  ATK:24  HIT:60  DEF:3  EVD:10  MDEF:40  MEVD:2  EXP:360  GIL:1200  CP:25  resist:earth  status:0x3  spRate:80%  spells:[Break,Break,Break,Break,Break,Break,Break,Break]  BOSS
+[0xd0] Gutsco         Lv:12  HP:1400  ATK:36  HIT:60  DEF:3  EVD:35  MDEF:40  MEVD:2  EXP:500  GIL:1500  CP:30  spRate:80%  spells:[Fira,Fira,Fira,Fira,Fira,Fira,Fira,Fira]  BOSS
+[0xd1] Salamander     Lv:19  HP:2100  ATK:39  HIT:90  DEF:3  EVD:10  MDEF:40  MEVD:2  EXP:700  GIL:1800  CP:30  weak:ice  resist:fire  atkElem:fire  spRate:80%  BOSS
+[0xd2] Hein           Lv:12  HP:1600  ATK:40  HIT:60  DEF:11  EVD:60  MDEF:25  MEVD:2  EXP:1040  GIL:2100  CP:35  spRate:99%  spells:[Fira,Bzzara,Tara,Fira,Bzzara,Tara,Fira,Bzzara]  BOSS
+[0xd3] Kraken         Lv:22  HP:1950  ATK:50  HIT:70  DEF:5  EVD:50  MDEF:32  MEVD:1  EXP:1320  GIL:2500  CP:35  spRate:80%  spells:[Fira,Bzzara,Tara,Fira,Bzzara,Tara,Fira,Bzzara]  BOSS
+[0xd4] Goldor         Lv:30  HP:2250  ATK:60  HIT:80  DEF:7  EVD:30  MDEF:48  MEVD:3  EXP:1640  GIL:3300  CP:40  spRate:80%  spells:[Fira,Bzzara,Tara,Fira,Bzzara,Tara,Fira,Bzzara]  BOSS
+[0xd5] Garuda         Lv:30  HP:5000  ATK:107  HIT:70  DEF:9  EVD:60  MDEF:48  MEVD:3  EXP:2200  GIL:3400  CP:240  weak:air  atkElem:bolt  spRate:99%  spells:[Thunder,Thunder,Thunder,Thunder,Thunder,Thunder,Thunder,Thunder]  BOSS
+[0xd6] Bahamut        Lv:50  HP:7500  ATK:143  HIT:90  DEF:10  EVD:35  MDEF:40  MEVD:2  EXP:2800  GIL:3500  CP:45  resist:dark+bolt+ice+fire+air+earth+holy  spRate:80%  spells:[Mega Flare,Mega Flare,Mega Flare,Mega Flare,Mega Flare,Mega Flare,Mega Flare,Mega Flare]  BOSS
+[0xd7] Doga           Lv:30  HP:4500  ATK:110  HIT:80  DEF:10  EVD:40  MDEF:40  MEVD:2  EXP:3400  GIL:4000  CP:45  resist:dark+bolt+ice+fire+air+earth+holy  spRate:99%  spells:[Quake,Breakga,Drain,Quake,Breakga,Drain,Quake,Breakga]  BOSS
+[0xd8] Unei           Lv:30  HP:4500  ATK:110  HIT:80  DEF:10  EVD:40  MDEF:40  MEVD:2  EXP:4000  GIL:4200  CP:50  resist:dark+bolt+ice+fire+air+earth+holy  spRate:99%  spells:[Tornado,Reflect,Tornado,Blizzard,Tornado,Reflect,Tornado,Blizzard]  BOSS
+[0xd9] Titan          Lv:55  HP:7800  ATK:135  HIT:90  DEF:10  EVD:45  MDEF:40  MEVD:2  EXP:4400  GIL:4500  CP:50  resist:dark+bolt+ice+fire+air+earth+holy  spRate:99%  spells:[Flare,Flare,Flare,Flare,Flare,Flare,Flare,Flare]  BOSS
+[0xda] Ninja          Lv:60  HP:5500  ATK:163  HIT:80  DEF:11  EVD:50  MDEF:40  MEVD:2  EXP:4600  GIL:4800  CP:55  resist:dark+bolt+ice+fire+air+earth+holy  spRate:15%  spells:[Blind,Blind,Blind,Blind,Blind,Blind,Blind,Blind]  BOSS
+[0xdb] Kunoichi       Lv:68  HP:9000  ATK:150  HIT:90  DEF:11  EVD:20  MDEF:40  MEVD:2  EXP:4800  GIL:5000  CP:55  resist:dark+bolt+ice+fire+air+earth+holy  spRate:60%  spells:[Mind Blast,Mind Blast,Mind Blast,Mind Blast,Mind Blast,Mind Blast,Mind Blast,Mind Blast]  BOSS
+[0xdc] General        Lv:70  HP:12000  ATK:165  HIT:90  DEF:11  EVD:30  MDEF:40  MEVD:2  EXP:5000  GIL:5200  CP:60  resist:dark+bolt+ice+fire+air+earth+holy  BOSS
+[0xdd] Scylla         Lv:75  HP:10000  ATK:160  HIT:70  DEF:11  EVD:30  MDEF:40  MEVD:2  EXP:5200  GIL:5400  CP:60  status:0x21  spRate:99%  spells:[Flare,Flare,Flare,Flare,Flare,Flare,Flare,Flare]  BOSS
+[0xde] Guardian       Lv:80  HP:12000  ATK:163  HIT:80  DEF:11  EVD:30  MDEF:40  MEVD:2  EXP:5400  GIL:5600  CP:65  spRate:99%  spells:[Quake,Quake,Reflect,Quake,Cura,Quake,Quake,Reflect]  BOSS
+[0xdf] Red Dragon     Lv:85  HP:15000  ATK:170  HIT:80  DEF:11  EVD:30  MDEF:40  MEVD:2  EXP:5600  GIL:5800  CP:65  resist:dark+bolt+ice+fire+air+earth+holy  BOSS
+[0xe0] Demon Xande    Lv:112  HP:21000  ATK:175  HIT:90  DEF:11  EVD:30  MDEF:40  MEVD:2  EXP:0  GIL:0  CP:70  resist:dark+bolt+ice+fire+air+earth+holy  spRate:99%  spells:[Libra,Meteor,Libra,Quake,Libra,Fire,Libra,Meteor]  BOSS
+[0xe1] Cerberus       Lv:85  HP:23000  ATK:40  HIT:32  DEF:11  EVD:40  MDEF:56  MEVD:5  EXP:6000  GIL:6400  CP:70  resist:dark+bolt+ice+fire+air+earth+holy  status:0x5  spRate:99%  spells:[Thunder,Thunder,Thunder,Thunder,Thunder,Thunder,Thunder,Thunder]  BOSS
+[0xe2] 2HeadDragon    Lv:88  HP:29000  ATK:255  HIT:99  DEF:11  EVD:50  MDEF:48  MEVD:3  EXP:7000  GIL:6800  CP:75  resist:dark+bolt+ice+fire+air+earth+holy  BOSS
+[0xe3] Echidna        Lv:89  HP:32000  ATK:185  HIT:70  DEF:11  EVD:50  MDEF:48  MEVD:3  EXP:8000  GIL:7000  CP:75  resist:dark+bolt+ice+fire+air+earth+holy  status:0x10  spRate:99%  spells:[Quake,Breakga,Drain,Meteor,Death,Flare,Drain,Meteor]  BOSS
+[0xe4] Ahriman        Lv:98  HP:35000  ATK:185  HIT:70  DEF:11  EVD:50  MDEF:48  MEVD:3  EXP:9000  GIL:7200  CP:80  resist:dark+bolt+ice+fire+air+earth+holy  spRate:99%  spells:[Meteor,Fire,Quake,Blizzard,Meteor,Thunder,Quake,Cura]  BOSS
+[0xe5] C              Lv:99  HP:45000  ATK:185  HIT:70  DEF:11  EVD:50  MDEF:56  MEVD:5  EXP:0  GIL:0  CP:80  resist:dark+bolt+ice+fire+air+earth+holy  spRate:100%  spells:[ParcleBeam,ParcleBeam,ParcleBeam,ParcleBeam,ParcleBeam,ParcleBeam,ParcleBeam,ParcleBeam]  BOSS

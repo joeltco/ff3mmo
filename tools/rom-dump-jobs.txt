@@ -1,0 +1,50 @@
+
+=== JOB BASE STATS ($72010) ===
+
+[ 0] OnnK           CP:136 LvReq:0 STR:5 AGI:5 VIT:5 INT:5 MND:5 mpIdx:0
+[ 1] W              CP:121 LvReq:0 STR:10 AGI:10 VIT:5 INT:2 MND:3 mpIdx:0
+[ 2] Mk             CP:119 LvReq:0 STR:10 AGI:10 VIT:7 INT:1 MND:2 mpIdx:0
+[ 3] WheMage        CP:153 LvReq:0 STR:5 AGI:6 VIT:4 INT:5 MND:10 mpIdx:1
+[ 4] BkMage         CP:151 LvReq:0 STR:5 AGI:7 VIT:3 INT:10 MND:5 mpIdx:1
+[ 5] R Mage         CP:138 LvReq:0 STR:6 AGI:7 VIT:5 INT:6 MND:6 mpIdx:2
+[ 6] Rg             CP:123 LvReq:9 STR:5 AGI:20 VIT:5 INT:5 MND:5 mpIdx:3
+[ 7] Knigh          CP:140 LvReq:9 STR:10 AGI:10 VIT:10 INT:3 MND:7 mpIdx:0
+[ 8] ief            CP:117 LvReq:9 STR:10 AGI:15 VIT:9 INT:5 MND:1 mpIdx:0
+[ 9] Schol          CP:170 LvReq:9 STR:10 AGI:10 VIT:1 INT:15 MND:4 mpIdx:0
+[10] Geomc          CP:164 LvReq:14 STR:10 AGI:10 VIT:10 INT:20 MND:5 mpIdx:0
+[11] Drago          CP:91 LvReq:14 STR:20 AGI:10 VIT:10 INT:5 MND:10 mpIdx:0
+[12] Vikg           CP:85 LvReq:14 STR:15 AGI:10 VIT:20 INT:5 MND:5 mpIdx:0
+[13] BkBelt         CP:40 LvReq:14 STR:23 AGI:10 VIT:20 INT:1 MND:1 mpIdx:0
+[14] MagK           CP:130 LvReq:14 STR:20 AGI:20 VIT:10 INT:2 MND:3 mpIdx:3
+[15] Evok           CP:216 LvReq:14 STR:10 AGI:10 VIT:5 INT:15 MND:15 mpIdx:4
+[16] Bd             CP:187 LvReq:14 STR:5 AGI:15 VIT:15 INT:10 MND:10 mpIdx:0
+[17] Magu           CP:196 LvReq:29 STR:10 AGI:15 VIT:10 INT:30 MND:5 mpIdx:5
+[18] Dev            CP:204 LvReq:29 STR:15 AGI:10 VIT:15 INT:5 MND:25 mpIdx:6
+[19] Summ           CP:240 LvReq:29 STR:20 AGI:15 VIT:5 INT:15 MND:15 mpIdx:7
+[20] Sage           CP:255 LvReq:39 STR:15 AGI:20 VIT:15 INT:25 MND:25 mpIdx:8
+[21] Nja            CP:0 LvReq:39 STR:25 AGI:25 VIT:20 INT:15 MND:15 mpIdx:9
+
+=== JOB COMMANDS ($69B31) ===
+
+[ 0] OnnK           Attack, Guard, Flee, Item
+[ 1] W              Attack, Guard, Flee, Item
+[ 2] Mk             Attack, Guard, Flee, Item
+[ 3] WheMage        Attack, Magic, Flee, Item
+[ 4] BkMage         Attack, Magic, Flee, Item
+[ 5] R Mage         Attack, Magic, Flee, Item
+[ 6] Rg             Attack, Guard, Magic, Item
+[ 7] Knigh          Attack, Guard, Flee, Item
+[ 8] ief            Attack, Build, Escape, Item
+[ 9] Schol          Attack, Scan, Terrain, Item
+[10] Geomc          Attack, Guard2, Guard, Item
+[11] Drago          Attack, Jump, Guard, Item
+[12] Vikg           Attack, Guard, Flee, Item
+[13] BkBelt         Attack, Sing, Guard, Item
+[14] MagK           Attack, Guard, Magic, Item
+[15] Evok           Attack, Magic, Flee, Item
+[16] Bd             Guard3, Charm, Throw, Item
+[17] Magu           Attack, Magic, Flee, Item
+[18] Dev            Attack, Magic, Flee, Item
+[19] Summ           Attack, Magic, Flee, Item
+[20] Sage           Attack, Magic, Flee, Item
+[21] Nja            Attack, Guard, Flee, Item

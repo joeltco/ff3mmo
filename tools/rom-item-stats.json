@@ -1,0 +1,1146 @@
+{
+  "0x01": {
+    "atk": 36,
+    "hit": 100,
+    "price": 7000
+  },
+  "0x02": {
+    "atk": 42,
+    "hit": 100,
+    "price": 14000
+  },
+  "0x03": {
+    "atk": 48,
+    "hit": 100,
+    "price": 18000,
+    "element": [
+      "bolt",
+      "fire"
+    ],
+    "casts": "0x2d",
+    "castsName": "Aero"
+  },
+  "0x04": {
+    "atk": 37,
+    "hit": 100,
+    "price": 18000,
+    "status": "paralysis",
+    "casts": "0x20",
+    "castsName": "Confuse"
+  },
+  "0x05": {
+    "atk": 60,
+    "hit": 100,
+    "price": 40000,
+    "element": "dark",
+    "status": "poison"
+  },
+  "0x06": {
+    "atk": 12,
+    "hit": 70,
+    "price": 60
+  },
+  "0x07": {
+    "atk": 20,
+    "hit": 80,
+    "price": 500
+  },
+  "0x08": {
+    "atk": 25,
+    "hit": 70,
+    "price": 3000
+  },
+  "0x09": {
+    "atk": 5,
+    "hit": 60,
+    "price": 400
+  },
+  "0x0a": {
+    "atk": 12,
+    "hit": 70,
+    "price": 3000,
+    "element": "fire"
+  },
+  "0x0b": {
+    "atk": 12,
+    "hit": 70,
+    "price": 3000,
+    "element": "ice"
+  },
+  "0x0c": {
+    "atk": 12,
+    "hit": 60,
+    "price": 3000,
+    "element": "bolt"
+  },
+  "0x0d": {
+    "atk": 20,
+    "hit": 80,
+    "price": 30000,
+    "element": [
+      "bolt",
+      "ice",
+      "fire",
+      "air",
+      "earth",
+      "holy"
+    ],
+    "status": [
+      "blind",
+      "poison",
+      "paralysis"
+    ]
+  },
+  "0x0e": {
+    "atk": 3,
+    "hit": 50,
+    "price": 40
+  },
+  "0x0f": {
+    "atk": 8,
+    "hit": 50,
+    "price": 3500,
+    "casts": "0x31",
+    "castsName": "Fire"
+  },
+  "0x10": {
+    "atk": 8,
+    "hit": 50,
+    "price": 3500,
+    "casts": "0x32",
+    "castsName": "Bzzard"
+  },
+  "0x11": {
+    "atk": 8,
+    "hit": 50,
+    "price": 3500,
+    "casts": "0x2a",
+    "castsName": "Thunder"
+  },
+  "0x12": {
+    "atk": 16,
+    "hit": 70,
+    "price": 13500,
+    "element": "earth",
+    "status": [
+      "poison",
+      "paralysis"
+    ],
+    "casts": "0x1c",
+    "castsName": "Break",
+    "strBonus": 5
+  },
+  "0x13": {
+    "atk": 20,
+    "hit": 80,
+    "price": 18000,
+    "casts": "0x1d",
+    "castsName": "Bzzaga"
+  },
+  "0x14": {
+    "atk": 30,
+    "hit": 90,
+    "price": 65000,
+    "casts": "0x34",
+    "castsName": "Cure",
+    "intBonus": 5,
+    "mndBonus": 5
+  },
+  "0x15": {
+    "atk": 25,
+    "hit": 60,
+    "price": 500,
+    "element": "bolt"
+  },
+  "0x16": {
+    "atk": 30,
+    "hit": 70,
+    "price": 14000,
+    "element": "bolt",
+    "casts": "0x25",
+    "castsName": "Tara"
+  },
+  "0x17": {
+    "atk": 45,
+    "hit": 60,
+    "price": 5500,
+    "element": "bolt"
+  },
+  "0x18": {
+    "atk": 75,
+    "hit": 80,
+    "price": 14000,
+    "element": "bolt"
+  },
+  "0x19": {
+    "atk": 50,
+    "hit": 70,
+    "price": 8000,
+    "element": "bolt"
+  },
+  "0x1a": {
+    "atk": 35,
+    "hit": 80,
+    "price": 8000,
+    "element": [
+      "bolt",
+      "air"
+    ],
+    "casts": "0x25",
+    "castsName": "Tara"
+  },
+  "0x1b": {
+    "atk": 50,
+    "hit": 80,
+    "price": 10000,
+    "element": "air",
+    "casts": "0x2d",
+    "castsName": "Aero"
+  },
+  "0x1c": {
+    "atk": 70,
+    "hit": 80,
+    "price": 20000,
+    "element": [
+      "recovery",
+      "air"
+    ]
+  },
+  "0x1d": {
+    "atk": 100,
+    "hit": 80,
+    "price": 45000,
+    "element": [
+      "air",
+      "holy"
+    ]
+  },
+  "0x1e": {
+    "atk": 6,
+    "hit": 85,
+    "price": 20
+  },
+  "0x1f": {
+    "atk": 8,
+    "hit": 85,
+    "price": 60
+  },
+  "0x20": {
+    "atk": 10,
+    "hit": 85,
+    "price": 500
+  },
+  "0x21": {
+    "atk": 30,
+    "hit": 100,
+    "price": 7000
+  },
+  "0x22": {
+    "atk": 45,
+    "hit": 100,
+    "price": 12000,
+    "element": "recovery"
+  },
+  "0x23": {
+    "atk": 60,
+    "hit": 100,
+    "price": 10000,
+    "element": "air",
+    "casts": "0x2d",
+    "castsName": "Aero"
+  },
+  "0x24": {
+    "atk": 10,
+    "hit": 80,
+    "price": 100
+  },
+  "0x25": {
+    "atk": 15,
+    "hit": 80,
+    "price": 1000,
+    "element": "holy"
+  },
+  "0x26": {
+    "atk": 5,
+    "hit": 20,
+    "price": 5000
+  },
+  "0x27": {
+    "atk": 17,
+    "hit": 85,
+    "price": 500
+  },
+  "0x28": {
+    "atk": 25,
+    "hit": 80,
+    "price": 1500,
+    "element": "bolt"
+  },
+  "0x29": {
+    "atk": 40,
+    "hit": 80,
+    "price": 3000,
+    "element": "ice",
+    "casts": "0x32",
+    "castsName": "Bzzard"
+  },
+  "0x2a": {
+    "atk": 29,
+    "hit": 75,
+    "price": 2800
+  },
+  "0x2b": {
+    "atk": 32,
+    "hit": 80,
+    "price": 3000,
+    "element": "fire",
+    "casts": "0x31",
+    "castsName": "Fire"
+  },
+  "0x2c": {
+    "atk": 50,
+    "hit": 80,
+    "price": 5000
+  },
+  "0x2d": {
+    "atk": 60,
+    "hit": 80,
+    "price": 20000
+  },
+  "0x2e": {
+    "atk": 5,
+    "hit": 80,
+    "price": 16500,
+    "element": "holy",
+    "status": [
+      "death",
+      "silence",
+      "mini",
+      "paralysis"
+    ]
+  },
+  "0x2f": {
+    "atk": 65,
+    "hit": 100,
+    "price": 20000,
+    "element": "dark"
+  },
+  "0x30": {
+    "atk": 35,
+    "hit": 80,
+    "price": 16500,
+    "element": "recovery"
+  },
+  "0x31": {
+    "atk": 95,
+    "hit": 80,
+    "price": 16500,
+    "casts": "0x1a",
+    "castsName": "Protect",
+    "vitBonus": 5
+  },
+  "0x32": {
+    "atk": 85,
+    "hit": 80,
+    "price": 20000,
+    "element": "air"
+  },
+  "0x33": {
+    "atk": 105,
+    "hit": 90,
+    "price": 21000,
+    "element": "dark"
+  },
+  "0x34": {
+    "atk": 125,
+    "hit": 100,
+    "price": 22000,
+    "element": "dark"
+  },
+  "0x35": {
+    "atk": 120,
+    "hit": 80,
+    "price": 30000,
+    "element": "earth",
+    "status": [
+      "blind",
+      "paralysis"
+    ]
+  },
+  "0x36": {
+    "atk": 160,
+    "hit": 80,
+    "price": 65000,
+    "strBonus": 5
+  },
+  "0x37": {
+    "atk": 160,
+    "hit": 90,
+    "price": 65000,
+    "element": "dark",
+    "agiBonus": 5,
+    "vitBonus": 5
+  },
+  "0x38": {
+    "atk": 180,
+    "hit": 100,
+    "price": 65500,
+    "element": "dark",
+    "strBonus": 5,
+    "agiBonus": 5,
+    "vitBonus": 5
+  },
+  "0x39": {
+    "atk": 200,
+    "hit": 100,
+    "price": 65500,
+    "strBonus": 5,
+    "agiBonus": 5,
+    "vitBonus": 5
+  },
+  "0x3a": {
+    "atk": 32,
+    "hit": 70,
+    "price": 3300,
+    "element": "fire"
+  },
+  "0x3b": {
+    "atk": 32,
+    "hit": 70,
+    "price": 3300,
+    "element": "ice"
+  },
+  "0x3c": {
+    "atk": 65,
+    "hit": 70,
+    "price": 15000,
+    "element": "fire"
+  },
+  "0x3d": {
+    "atk": 32,
+    "hit": 70,
+    "price": 3300,
+    "element": "bolt"
+  },
+  "0x3e": {
+    "atk": 65,
+    "hit": 80,
+    "price": 15000,
+    "element": "bolt"
+  },
+  "0x3f": {
+    "atk": 35,
+    "hit": 70,
+    "price": 9000
+  },
+  "0x40": {
+    "atk": 160,
+    "hit": 90,
+    "price": 62000
+  },
+  "0x41": {
+    "atk": 200,
+    "hit": 100,
+    "price": 65500
+  },
+  "0x42": {
+    "atk": 65,
+    "hit": 80,
+    "price": 15000,
+    "element": "ice"
+  },
+  "0x43": {
+    "atk": 25,
+    "hit": 80,
+    "price": 4500
+  },
+  "0x44": {
+    "atk": 30,
+    "hit": 80,
+    "price": 5500,
+    "status": [
+      "death",
+      "silence",
+      "mini",
+      "paralysis"
+    ]
+  },
+  "0x45": {
+    "atk": 40,
+    "hit": 100,
+    "price": 5500
+  },
+  "0x46": {
+    "atk": 40,
+    "hit": 70,
+    "price": 8000,
+    "twoHanded": true
+  },
+  "0x47": {
+    "atk": 0,
+    "hit": 60,
+    "price": 7500,
+    "status": [
+      "petrify",
+      "silence",
+      "paralysis"
+    ],
+    "twoHanded": true
+  },
+  "0x48": {
+    "atk": 0,
+    "hit": 80,
+    "price": 21500,
+    "status": [
+      "toad",
+      "mini",
+      "paralysis"
+    ],
+    "twoHanded": true
+  },
+  "0x49": {
+    "atk": 60,
+    "hit": 100,
+    "price": 40000,
+    "twoHanded": true
+  },
+  "0x4a": {
+    "atk": 5,
+    "hit": 90,
+    "price": 100,
+    "twoHanded": true
+  },
+  "0x4b": {
+    "atk": 8,
+    "hit": 85,
+    "price": 1200,
+    "twoHanded": true
+  },
+  "0x4c": {
+    "atk": 15,
+    "hit": 85,
+    "price": 2000,
+    "twoHanded": true
+  },
+  "0x4d": {
+    "atk": 25,
+    "hit": 90,
+    "price": 3000,
+    "twoHanded": true
+  },
+  "0x4e": {
+    "atk": 50,
+    "hit": 100,
+    "price": 42000,
+    "twoHanded": true
+  },
+  "0x4f": {
+    "atk": 6,
+    "hit": 90,
+    "price": 5
+  },
+  "0x50": {
+    "atk": 13,
+    "hit": 85,
+    "price": 10,
+    "element": "holy"
+  },
+  "0x51": {
+    "atk": 17,
+    "hit": 85,
+    "price": 10
+  },
+  "0x52": {
+    "atk": 30,
+    "hit": 85,
+    "price": 30,
+    "element": "bolt"
+  },
+  "0x53": {
+    "atk": 30,
+    "hit": 90,
+    "price": 30,
+    "element": "fire"
+  },
+  "0x54": {
+    "atk": 30,
+    "hit": 90,
+    "price": 30,
+    "element": "ice"
+  },
+  "0x55": {
+    "atk": 20,
+    "hit": 100,
+    "price": 100,
+    "element": "earth",
+    "status": "petrify"
+  },
+  "0x56": {
+    "atk": 70,
+    "hit": 100,
+    "price": 200
+  },
+  "0x57": {
+    "def": 0,
+    "evade": 0,
+    "mdef": 0,
+    "price": 0
+  },
+  "0x58": {
+    "def": 3,
+    "evade": 3,
+    "mdef": 2,
+    "price": 40
+  },
+  "0x59": {
+    "def": 48,
+    "evade": 48,
+    "mdef": 48,
+    "price": 65500,
+    "sResist": "0xfe"
+  },
+  "0x5a": {
+    "def": 5,
+    "evade": 7,
+    "mdef": 7,
+    "price": 180
+  },
+  "0x5b": {
+    "def": 8,
+    "evade": 9,
+    "mdef": 8,
+    "price": 1800,
+    "resist": "fire"
+  },
+  "0x5c": {
+    "def": 10,
+    "evade": 10,
+    "mdef": 12,
+    "price": 3500,
+    "sResist": "0x40"
+  },
+  "0x5d": {
+    "def": 12,
+    "evade": 14,
+    "mdef": 18,
+    "price": 12500,
+    "sResist": "0x20"
+  },
+  "0x5e": {
+    "def": 13,
+    "evade": 14,
+    "mdef": 15,
+    "price": 18000,
+    "resist": "bolt",
+    "sResist": "0x20"
+  },
+  "0x5f": {
+    "def": 16,
+    "evade": 16,
+    "mdef": 25,
+    "price": 28000,
+    "sResist": "0x60",
+    "agiBonus": 5
+  },
+  "0x60": {
+    "def": 20,
+    "evade": 18,
+    "mdef": 35,
+    "price": 38000,
+    "sResist": "0x62",
+    "strBonus": 5,
+    "agiBonus": 5
+  },
+  "0x61": {
+    "def": 20,
+    "evade": 20,
+    "mdef": 30,
+    "price": 50000,
+    "sResist": "0x68",
+    "strBonus": 5,
+    "agiBonus": 5,
+    "vitBonus": 5
+  },
+  "0x62": {
+    "def": 1,
+    "evade": 1,
+    "mdef": 1,
+    "price": 15
+  },
+  "0x63": {
+    "def": 48,
+    "evade": 48,
+    "mdef": 48,
+    "price": 65500,
+    "resist": [
+      "recovery",
+      "ice",
+      "fire",
+      "air",
+      "earth"
+    ],
+    "sResist": "0xfe"
+  },
+  "0x64": {
+    "def": 2,
+    "evade": 4,
+    "mdef": 4,
+    "price": 130
+  },
+  "0x65": {
+    "def": 3,
+    "evade": 5,
+    "mdef": 5,
+    "price": 450
+  },
+  "0x66": {
+    "def": 4,
+    "evade": 6,
+    "mdef": 6,
+    "price": 1200,
+    "resist": "fire"
+  },
+  "0x67": {
+    "def": 4,
+    "evade": 6,
+    "mdef": 4,
+    "price": 1200
+  },
+  "0x68": {
+    "def": 5,
+    "evade": 10,
+    "mdef": 6,
+    "price": 7500
+  },
+  "0x69": {
+    "def": 5,
+    "evade": 8,
+    "mdef": 5,
+    "price": 2000,
+    "strBonus": 5
+  },
+  "0x6a": {
+    "def": 6,
+    "evade": 10,
+    "mdef": 6,
+    "price": 2000,
+    "strBonus": 5,
+    "vitBonus": 5
+  },
+  "0x6b": {
+    "def": 7,
+    "evade": 10,
+    "mdef": 7,
+    "price": 3000
+  },
+  "0x6c": {
+    "def": 7,
+    "evade": 10,
+    "mdef": 7,
+    "price": 8000
+  },
+  "0x6d": {
+    "def": 7,
+    "evade": 10,
+    "mdef": 8,
+    "price": 8000,
+    "agiBonus": 5
+  },
+  "0x6e": {
+    "def": 8,
+    "evade": 12,
+    "mdef": 9,
+    "price": 20000,
+    "resist": "bolt",
+    "sResist": "0x20"
+  },
+  "0x6f": {
+    "def": 10,
+    "evade": 15,
+    "mdef": 11,
+    "price": 32000,
+    "sResist": "0x62"
+  },
+  "0x70": {
+    "def": 12,
+    "evade": 15,
+    "mdef": 15,
+    "price": 50000,
+    "sResist": "0x68"
+  },
+  "0x71": {
+    "def": 9,
+    "evade": 10,
+    "mdef": 10,
+    "price": 10,
+    "resist": [
+      "recovery",
+      "ice",
+      "fire",
+      "air",
+      "earth"
+    ],
+    "sResist": "0xfe"
+  },
+  "0x72": {
+    "def": 1,
+    "evade": 0,
+    "mdef": 0,
+    "price": 50
+  },
+  "0x73": {
+    "def": 2,
+    "evade": 1,
+    "mdef": 1,
+    "price": 95
+  },
+  "0x74": {
+    "def": 48,
+    "evade": 48,
+    "mdef": 48,
+    "price": 65500,
+    "sResist": "0xfe"
+  },
+  "0x75": {
+    "def": 3,
+    "evade": 3,
+    "mdef": 3,
+    "price": 350
+  },
+  "0x76": {
+    "def": 4,
+    "evade": 4,
+    "mdef": 4,
+    "price": 1250
+  },
+  "0x77": {
+    "def": 5,
+    "evade": 6,
+    "mdef": 4,
+    "price": 2400,
+    "resist": "fire"
+  },
+  "0x78": {
+    "def": 5,
+    "evade": 6,
+    "mdef": 4,
+    "price": 2400,
+    "resist": "ice"
+  },
+  "0x79": {
+    "def": 6,
+    "evade": 8,
+    "mdef": 3,
+    "price": 2000
+  },
+  "0x7a": {
+    "def": 8,
+    "evade": 70,
+    "mdef": 5,
+    "price": 3800,
+    "agiBonus": 5
+  },
+  "0x7b": {
+    "def": 9,
+    "evade": 7,
+    "mdef": 7,
+    "price": 2000
+  },
+  "0x7c": {
+    "def": 10,
+    "evade": 8,
+    "mdef": 7,
+    "price": 4000
+  },
+  "0x7d": {
+    "def": 11,
+    "evade": 10,
+    "mdef": 5,
+    "price": 3800,
+    "agiBonus": 5
+  },
+  "0x7e": {
+    "def": 12,
+    "evade": 9,
+    "mdef": 7,
+    "price": 7500,
+    "sResist": "0x40"
+  },
+  "0x7f": {
+    "def": 15,
+    "evade": 10,
+    "mdef": 7,
+    "price": 8000
+  },
+  "0x80": {
+    "def": 15,
+    "evade": 12,
+    "mdef": 7,
+    "price": 5500
+  },
+  "0x81": {
+    "def": 15,
+    "evade": 12,
+    "mdef": 7,
+    "price": 5500
+  },
+  "0x82": {
+    "def": 16,
+    "evade": 12,
+    "mdef": 8,
+    "price": 4200
+  },
+  "0x83": {
+    "def": 17,
+    "evade": 15,
+    "mdef": 9,
+    "price": 25000,
+    "sResist": "0x20"
+  },
+  "0x84": {
+    "def": 18,
+    "evade": 10,
+    "mdef": 10,
+    "price": 33000,
+    "resist": "bolt",
+    "sResist": "0x20"
+  },
+  "0x85": {
+    "def": 20,
+    "evade": 12,
+    "mdef": 12,
+    "price": 35000
+  },
+  "0x86": {
+    "def": 20,
+    "evade": 12,
+    "mdef": 14,
+    "price": 7000,
+    "mndBonus": 5
+  },
+  "0x87": {
+    "def": 20,
+    "evade": 12,
+    "mdef": 14,
+    "price": 7000,
+    "intBonus": 5
+  },
+  "0x88": {
+    "def": 24,
+    "evade": 20,
+    "mdef": 15,
+    "price": 40000,
+    "sResist": "0x62"
+  },
+  "0x89": {
+    "def": 28,
+    "evade": 20,
+    "mdef": 18,
+    "price": 65000,
+    "sResist": "0x68"
+  },
+  "0x8a": {
+    "def": 0,
+    "evade": 0,
+    "mdef": 0,
+    "price": 100
+  },
+  "0x8b": {
+    "def": 1,
+    "evade": 2,
+    "mdef": 3,
+    "price": 80
+  },
+  "0x8c": {
+    "def": 32,
+    "evade": 32,
+    "mdef": 32,
+    "price": 65500,
+    "sResist": "0xfe",
+    "strBonus": 5,
+    "agiBonus": 5,
+    "vitBonus": 5
+  },
+  "0x8d": {
+    "def": 1,
+    "evade": 5,
+    "mdef": 2,
+    "price": 120
+  },
+  "0x8e": {
+    "def": 2,
+    "evade": 7,
+    "mdef": 3,
+    "price": 120
+  },
+  "0x8f": {
+    "def": 3,
+    "evade": 9,
+    "mdef": 4,
+    "price": 2500,
+    "strBonus": 5
+  },
+  "0x90": {
+    "def": 2,
+    "evade": 8,
+    "mdef": 3,
+    "price": 2500
+  },
+  "0x91": {
+    "def": 4,
+    "evade": 11,
+    "mdef": 1,
+    "price": 2500,
+    "strBonus": 5
+  },
+  "0x92": {
+    "def": 5,
+    "evade": 10,
+    "mdef": 6,
+    "price": 5000
+  },
+  "0x93": {
+    "def": 6,
+    "evade": 12,
+    "mdef": 6,
+    "price": 10000,
+    "resist": "bolt",
+    "sResist": "0x20"
+  },
+  "0x94": {
+    "def": 6,
+    "evade": 10,
+    "mdef": 5,
+    "price": 15000,
+    "resist": "bolt",
+    "sResist": "0x20"
+  },
+  "0x95": {
+    "def": 7,
+    "evade": 15,
+    "mdef": 7,
+    "price": 30000,
+    "vitBonus": 5
+  },
+  "0x96": {
+    "def": 9,
+    "evade": 15,
+    "mdef": 7,
+    "price": 30000,
+    "sResist": "0x62"
+  },
+  "0x97": {
+    "price": 50000
+  },
+  "0x98": {
+    "price": 100
+  },
+  "0x99": {
+    "price": 150
+  },
+  "0xa4": {
+    "price": 200
+  },
+  "0xa6": {
+    "price": 150
+  },
+  "0xa7": {
+    "price": 1200
+  },
+  "0xa8": {
+    "price": 3000
+  },
+  "0xa9": {
+    "price": 3000
+  },
+  "0xaa": {
+    "price": 300
+  },
+  "0xab": {
+    "price": 100
+  },
+  "0xac": {
+    "price": 100
+  },
+  "0xad": {
+    "price": 100
+  },
+  "0xae": {
+    "price": 40
+  },
+  "0xaf": {
+    "price": 80
+  },
+  "0xb0": {
+    "price": 2000
+  },
+  "0xb1": {
+    "price": 1000
+  },
+  "0xb2": {
+    "price": 1000
+  },
+  "0xb3": {
+    "price": 1000
+  },
+  "0xb4": {
+    "price": 1500
+  },
+  "0xb5": {
+    "price": 1500
+  },
+  "0xb6": {
+    "price": 1500
+  },
+  "0xb7": {
+    "price": 2500
+  },
+  "0xb8": {
+    "price": 3000
+  },
+  "0xb9": {
+    "price": 3000
+  },
+  "0xba": {
+    "price": 3000
+  },
+  "0xbb": {
+    "price": 3000
+  },
+  "0xbc": {
+    "price": 4000
+  },
+  "0xbd": {
+    "price": 5000
+  },
+  "0xbe": {
+    "price": 3000
+  },
+  "0xbf": {
+    "price": 3000
+  },
+  "0xc0": {
+    "price": 3000
+  },
+  "0xc1": {
+    "price": 3000
+  },
+  "0xc2": {
+    "price": 2000
+  },
+  "0xc3": {
+    "price": 2000
+  },
+  "0xc4": {
+    "price": 2000
+  },
+  "0xc5": {
+    "price": 5000
+  },
+  "0xc6": {
+    "price": 5000
+  },
+  "0xc7": {
+    "price": 5000
+  }
+}
