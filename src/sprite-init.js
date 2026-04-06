@@ -7,7 +7,7 @@ import { _makeCanvas16, _makeCanvas16ctx, _hflipCanvas16, _makeWhiteCanvas } fro
 import { BAYER4 } from './data/animation-tables.js';
 import { _writePixels64 } from './tile-math.js';
 import { PLAYER_PALETTES, ROSTER_FADE_STEPS } from './data/players.js';
-import { BATTLE_SPRITE_ROM, BATTLE_PAL_ROM } from './data/jobs.js';
+import { BATTLE_SPRITE_ROM, BATTLE_JOB_SIZE, BATTLE_PAL_ROM } from './data/jobs.js';
 import { OK_IDLE, OK_VICTORY, OK_L_BACK_SWING, OK_L_FWD_T2, OK_L_FWD_T3, OK_R_BACK_SWING, OK_R_FWD_T2, OK_KNEEL,
          OK_LEG_L_IDLE, OK_LEG_R_IDLE, OK_LEG_L_BACK_L, OK_LEG_R_BACK_L, OK_LEG_L_FWD_L, OK_LEG_R_FWD_L,
          OK_LEG_L_BACK_R, OK_LEG_R_SWING, OK_LEG_L_KNEEL, OK_LEG_R_KNEEL, OK_LEG_L_VICTORY, OK_LEG_R_VICTORY,
@@ -455,6 +455,140 @@ function _initBattleLowHPSprites(palette) {
   });
 
   return { battleSpriteKneelCanvas, battleSpriteKneelFadeCanvases, sweatFrames };
+}
+
+// Read 4 tiles from ROM for a job pose (tile indices relative to job block start)
+function _readJobTiles(romData, jobBase, t0, t1, t2, t3) {
+  return [t0, t1, t2, t3].map(t => decodeTile(romData, jobBase + t * 16));
+}
+
+function _readJobTileRaw(romData, jobBase, tileIdx) {
+  const off = jobBase + tileIdx * 16;
+  return new Uint8Array(romData.buffer.slice ? romData.buffer.slice(off, off + 16) : romData.slice(off, off + 16));
+}
+
+// Build all battle sprite canvases for a given job index (0=Onion Knight, 1=Warrior, etc.)
+export function initBattleSpriteForJob(romData, jobIdx) {
+  const palette = [0x0F, romData[BATTLE_PAL_ROM], romData[BATTLE_PAL_ROM + 1], romData[BATTLE_PAL_ROM + 2]];
+  const jobBase = BATTLE_SPRITE_ROM + jobIdx * BATTLE_JOB_SIZE;
+
+  // For Onion Knight (jobIdx 0), use the PPU-dumped tiles (proven correct)
+  if (jobIdx === 0) return initBattleSprite(romData);
+
+  // For other jobs, read all poses from ROM using same tile indices as OK
+  // Tile layout within a job block (42 tiles total):
+  //   0-3: idle, 4-7: ?, 8-11: ?, 12-15: ?, 16-17: ?, 18-21: attack2,
+  //   22-23: ?, 24-27: victory/defend, 28-29: ?, 30-33: hit, 34-35: ?,
+  //   36-39: kneel, 40-41: ?
+  const idleTiles = _readJobTiles(romData, jobBase, 0, 1, 2, 3);
+  const battleSpriteCanvas = _renderPortrait(idleTiles, _BATTLE_LAYOUT, palette);
+  const battleSpriteFadeCanvases = [];
+  for (let step = 1; step <= HUD_INFO_FADE_STEPS; step++) {
+    let fp = [...palette];
+    for (let s = 0; s < step; s++) fp = fp.map(c => nesColorFade(c));
+    battleSpriteFadeCanvases.push(_renderPortrait(idleTiles, _BATTLE_LAYOUT, fp));
+  }
+
+  // Silhouette
+  const silhouetteCanvas = document.createElement('canvas');
+  silhouetteCanvas.width = 16; silhouetteCanvas.height = 16;
+  const sctx = silhouetteCanvas.getContext('2d');
+  sctx.drawImage(battleSpriteCanvas, 0, 0);
+  const sdata = sctx.getImageData(0, 0, 16, 16);
+  const darkRgb = NES_SYSTEM_PALETTE[0x00] || [0, 0, 0];
+  for (let p = 0; p < 256; p++) {
+    if (sdata.data[p * 4 + 3] > 0) {
+      sdata.data[p * 4] = darkRgb[0]; sdata.data[p * 4 + 1] = darkRgb[1]; sdata.data[p * 4 + 2] = darkRgb[2];
+    }
+  }
+  sctx.putImageData(sdata, 0, 0);
+
+  // Attack — idle body with tile 2 replaced by attack arm tile
+  const battleSpriteAttackCanvas = document.createElement('canvas');
+  battleSpriteAttackCanvas.width = 16; battleSpriteAttackCanvas.height = 16;
+  const actx = battleSpriteAttackCanvas.getContext('2d');
+  actx.drawImage(battleSpriteCanvas, 0, 0);
+  _blitTile(actx, decodeTile(romData, jobBase + 14 * 16), palette, 0, 8); // R fwd arm
+
+  const battleSpriteAttackLCanvas = document.createElement('canvas');
+  battleSpriteAttackLCanvas.width = 16; battleSpriteAttackLCanvas.height = 16;
+  const alctx = battleSpriteAttackLCanvas.getContext('2d');
+  alctx.drawImage(battleSpriteCanvas, 0, 0);
+  _blitTile(alctx, decodeTile(romData, jobBase + 7 * 16), palette, 8, 8); // L back arm
+
+  // Knife body poses — use back/fwd swing tiles
+  const knifeRTiles = _readJobTiles(romData, jobBase, 0, 1, 12, 3);
+  const knifeLTiles = _readJobTiles(romData, jobBase, 0, 1, 2, 7);
+  const knifeBackTiles = _readJobTiles(romData, jobBase, 0, 1, 2, 7);
+  const battleSpriteKnifeRCanvas = _renderPortrait(knifeRTiles, _BATTLE_LAYOUT, palette);
+  const battleSpriteKnifeLCanvas = _renderPortrait(knifeLTiles, _BATTLE_LAYOUT, palette);
+  const battleSpriteKnifeBackCanvas = _renderPortrait(knifeBackTiles, _BATTLE_LAYOUT, palette);
+
+  initWeaponSprites(palette);
+
+  // Victory / Defend (same pose in FF3)
+  const victoryTiles = _readJobTiles(romData, jobBase, 24, 25, 26, 27);
+  const battleSpriteVictoryCanvas = _renderPortrait(victoryTiles, _BATTLE_LAYOUT, palette);
+  const battleSpriteDefendCanvas = _renderPortrait(victoryTiles, _BATTLE_LAYOUT, palette);
+  const battleSpriteDefendFadeCanvases = [];
+  for (let step = 1; step <= HUD_INFO_FADE_STEPS; step++) {
+    let fp = [...palette];
+    for (let s = 0; s < step; s++) fp = fp.map(c => nesColorFade(c));
+    battleSpriteDefendFadeCanvases.push(_renderPortrait(victoryTiles, _BATTLE_LAYOUT, fp));
+  }
+
+  // Hit
+  const battleSpriteHitCanvas = _buildCanvas4ROM(romData, jobBase + 30 * 16, palette);
+
+  // Attack2
+  const battleSpriteAttack2Canvas = _buildCanvas4ROM(romData, jobBase + 18 * 16, palette);
+
+  // Kneel
+  const kneelTiles = _readJobTiles(romData, jobBase, 36, 37, 38, 39);
+  const battleSpriteKneelCanvas = _renderPortrait(kneelTiles, _BATTLE_LAYOUT, palette);
+  const battleSpriteKneelFadeCanvases = [];
+  for (let step = 1; step <= HUD_INFO_FADE_STEPS; step++) {
+    let fp = [...palette];
+    for (let s = 0; s < step; s++) fp = fp.map(c => nesColorFade(c));
+    battleSpriteKneelFadeCanvases.push(_renderPortrait(kneelTiles, _BATTLE_LAYOUT, fp));
+  }
+
+  // Sparkle + cure frames (shared across all jobs)
+  const SPARKLE_TILES = [
+    new Uint8Array([0x01,0x00,0x08,0x00,0x00,0x41,0x00,0x02, 0x00,0x00,0x01,0x02,0x00,0x09,0x00,0x12]),
+    new Uint8Array([0x00,0x00,0x00,0x04,0x0A,0x14,0x0A,0x01, 0x00,0x00,0x00,0x18,0x1C,0x0E,0x04,0x00]),
+    new Uint8Array([0x00,0x00,0x20,0x10,0x08,0x04,0x00,0x00, 0x00,0x00,0x30,0x38,0x10,0x00,0x00,0x00]),
+    new Uint8Array([0x80,0x00,0x20,0x00,0x00,0x00,0x00,0x00, 0x80,0x40,0x00,0x00,0x00,0x00,0x00,0x00]),
+  ];
+  const defendSparkleFrames = SPARKLE_TILES.map(raw => {
+    const sc = document.createElement('canvas'); sc.width = 8; sc.height = 8;
+    _blitTile(sc.getContext('2d'), decodeTile(raw, 0), DEFEND_SPARKLE_PAL, 0, 0); return sc;
+  });
+  const cureSparkleFrames = _initCureSparkleFrames();
+
+  // Sweat frames (shared)
+  const SWEAT_FRAME_TILES = [
+    [new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 0x04,0x00,0x40,0x00,0x00,0x00,0x00,0x00]),
+     new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 0x20,0x00,0x02,0x00,0x00,0x00,0x00,0x00])],
+    [new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x02,0x10,0x00,0x40,0x00]),
+     new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x40,0x08,0x00,0x02,0x00])],
+  ];
+  const sweatFrames = SWEAT_FRAME_TILES.map(frameTiles => {
+    const sc = document.createElement('canvas'); sc.width = 16; sc.height = 8;
+    const sctx2 = sc.getContext('2d');
+    for (let t = 0; t < 2; t++) _blitTile(sctx2, decodeTile(frameTiles[t], 0), palette, t * 8, 0);
+    return sc;
+  });
+
+  return {
+    battleSpriteCanvas, battleSpriteFadeCanvases, silhouetteCanvas,
+    battleSpriteAttackCanvas, battleSpriteAttackLCanvas,
+    battleSpriteKnifeRCanvas, battleSpriteKnifeLCanvas, battleSpriteKnifeBackCanvas,
+    battleSpriteVictoryCanvas, battleSpriteHitCanvas, battleSpriteAttack2Canvas,
+    battleSpriteDefendCanvas, battleSpriteDefendFadeCanvases,
+    defendSparkleFrames, cureSparkleFrames,
+    battleSpriteKneelCanvas, battleSpriteKneelFadeCanvases, sweatFrames,
+  };
 }
 
 export function initBattleSprite(romData) {

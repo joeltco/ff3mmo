@@ -74,7 +74,8 @@ import { initMapLoading, loadMapById, loadWorldMapAt, loadWorldMapAtPosition, se
 import { updateBattleAlly } from './battle-ally.js';
 import { updateBattleEnemyTurn } from './battle-enemy.js';
 import { resetBattleItemVars, getTargets, getHitIdx, startMagicItem, updateMagicItemThrowHit } from './battle-items.js';
-import { initBattleSprite as _initBattleSprite, initFakePlayerPortraits as _initFakePlayerPortraits,
+import { initBattleSprite as _initBattleSprite, initBattleSpriteForJob as _initBattleSpriteForJob,
+         initFakePlayerPortraits as _initFakePlayerPortraits,
          initCursorTile as _initCursorTile, initScrollArrows as _initScrollArrows,
          initAdamantoise as _initAdamantoise,
          initGoblinSprite as _initGoblinSprite, initInvincibleSprite as _initInvincibleSprite,
@@ -1161,7 +1162,7 @@ function _initSpriteAssets(romRaw) {
   scrollArrowUpFade = sa.scrollArrowUpFade;
 
   // Battle sprite (sprite-init.js)
-  const bs = _initBattleSprite(romRaw);
+  const bs = _initBattleSpriteForJob(romRaw, 1); // 0=Onion Knight, 1=Warrior (testing)
   battleSpriteCanvas = bs.battleSpriteCanvas;
   battleSpriteFadeCanvases = bs.battleSpriteFadeCanvases;
   silhouetteCanvas = bs.silhouetteCanvas;
