@@ -1171,6 +1171,7 @@ function _titleShared() {
     battleSpriteCanvas,
     battleSpriteFadeCanvases,
     silhouetteCanvas,
+    fakePlayerPortraits,
     drawBorderedBox,
     drawHudBox,
     drawCursorFaded,

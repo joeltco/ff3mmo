@@ -482,18 +482,18 @@ function _drawSelectSlotRow(ctx, i, selX, rowY, fadeStep, showContent, shared) {
   shared.drawHudBox(selX + 32, rowY, SEL_W - 32, SEL_ROW_H, fadeStep);
   if (!showContent) return;
 
-  // Portrait
+  // Portrait — use per-job fake player portraits keyed by slot's jobIdx
   if (isNameEntry) {
     if (shared.silhouetteCanvas) ctx.drawImage(shared.silhouetteCanvas, selX + 8, rowY + 8);
-  } else {
-    const portraitSrc = (saveSlots[i] && shared.battleSpriteCanvas) ? shared.battleSpriteCanvas : shared.silhouetteCanvas;
-    if (portraitSrc && fadeStep < SELECT_TEXT_STEPS) {
-      let src = portraitSrc;
-      if (fadeStep > 0 && portraitSrc === shared.battleSpriteCanvas && shared.battleSpriteFadeCanvases)
-        src = shared.battleSpriteFadeCanvases[fadeStep - 1];
-      else if (fadeStep > 0) src = null;
-      if (src) ctx.drawImage(src, selX + 8, rowY + 8, ...(portraitSrc === shared.battleSpriteCanvas ? [16, 16] : []));
+  } else if (saveSlots[i] && shared.fakePlayerPortraits) {
+    const jobIdx = saveSlots[i].jobIdx || 0;
+    const jobPortraits = shared.fakePlayerPortraits[jobIdx] || shared.fakePlayerPortraits[0];
+    const palPortraits = jobPortraits && jobPortraits[0]; // palette 0
+    if (palPortraits && fadeStep < SELECT_TEXT_STEPS) {
+      ctx.drawImage(palPortraits[fadeStep], selX + 8, rowY + 8);
     }
+  } else {
+    if (shared.silhouetteCanvas && fadeStep < SELECT_TEXT_STEPS) ctx.drawImage(shared.silhouetteCanvas, selX + 8, rowY + 8);
   }
 
   // Name + level text (right-aligned in info box, like roster)
