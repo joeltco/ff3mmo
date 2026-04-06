@@ -1372,7 +1372,7 @@
       if (!isNaN(val) && val >= 0) { tileBaseOffset = val; tilePage = 0; renderTilePage(); }
     });
 
-    function openTileViewer() {
+    async function openTileViewer() {
       if (!ff3Buffer) return;
       tileRomBuffer = ff3Buffer;
       tileBaseOffset = ONION_KNIGHT_OFFSET;
