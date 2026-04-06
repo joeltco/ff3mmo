@@ -377,7 +377,12 @@ const TURN_TIME_MS = 10000;    // 10 seconds to act before turn is skipped
 
 // Player sprite palettes — from FCEUX PPU trace (dual palette: top/bottom tiles)
 const SPRITE_PAL_TOP = [0x0F, 0x0F, 0x16, 0x30];    // spr_pal0: black, dark red, white
-const SPRITE_PAL_BTM = [0x1A, 0x0F, 0x15, 0x30];    // spr_pal1: black, magenta, white
+const SPRITE_PAL_BTM = [0x1A, 0x0F, 0x15, 0x30];    // spr_pal1: green, black, magenta, white
+// Per-job walk sprite palettes: [topPal, bottomPal]
+const JOB_WALK_PALS = {
+  0: [SPRITE_PAL_TOP, SPRITE_PAL_BTM],   // Onion Knight: red top, green/magenta bottom
+  1: [SPRITE_PAL_TOP, SPRITE_PAL_TOP],   // Warrior: all red
+};
 
 let canvas, ctx;
 let sprite = null;
@@ -600,7 +605,11 @@ function _swapBattleSprites(jobIdx) {
   // Re-init hud drawing shared context so it picks up new canvases
   initHudDrawing(_hudDrawShared());
   // Swap walk sprite to match job
-  if (sprite) sprite.setGfxID(jobIdx);
+  if (sprite) {
+    sprite.setGfxID(jobIdx);
+    const pals = JOB_WALK_PALS[jobIdx] || JOB_WALK_PALS[0];
+    sprite.setPalette(pals[0], pals[1]);
+  }
 }
 
 // _landOnWorldMap → map-loading.js

@@ -53,6 +53,11 @@ export class Sprite {
     this.tileCache = new Map();
   }
 
+  setPalette(top, bottom) {
+    this.palette = top;
+    this.paletteBottom = bottom || top;
+  }
+
   setGfxID(id) {
     const newBase = SPRITE_TILE_BASE + id * 256;
     if (newBase === this.gfxBase) return;
