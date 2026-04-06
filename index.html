@@ -1401,21 +1401,21 @@
       // Seed HIT tiles from ROM (tiles 30-33 portrait + 34-35 legs)
       const _hitBase = 0x50010 + 30 * 16;
       for (let t = 0; t < 6; t++) okPoseTiles[7].tiles[t] = _rom.slice(_hitBase + t * 16, _hitBase + (t + 1) * 16);
-      // Add Warrior (job 1) poses from ROM — exact same labels as OK
-      const _wBase = 0x50010 + 0x02A0;
-      const _wr = (t) => _rom.slice(_wBase + t * 16, _wBase + (t + 1) * 16);
-      const _wPoses = [
-        { label: 'IDLE',         tiles: [_wr(0),_wr(1),_wr(2),_wr(3),_wr(4),_wr(5)], rows: 3 },
-        { label: 'L BACK SWING', tiles: [_wr(0),_wr(1),_wr(2),_wr(7),_wr(10),_wr(11)], rows: 3 },
-        { label: 'L FWD SWING',  tiles: [_wr(0),_wr(1),_wr(8),_wr(9),_wr(10),_wr(11)], rows: 3 },
-        { label: 'R BACK SWING', tiles: [_wr(0),_wr(1),_wr(12),_wr(3),_wr(16),_wr(17)], rows: 3 },
-        { label: 'R FWD SWING',  tiles: [_wr(0),_wr(1),_wr(14),_wr(3),_wr(16),_wr(17)], rows: 3 },
-        { label: 'KNEEL',        tiles: [_wr(36),_wr(37),_wr(38),_wr(39),_wr(40),_wr(41)], rows: 3 },
-        { label: 'VICTORY',      tiles: [_wr(24),_wr(25),_wr(26),_wr(27),_wr(28),_wr(29)], rows: 3 },
-        { label: 'HIT',          tiles: [_wr(30),_wr(31),_wr(32),_wr(33),_wr(34),_wr(35)], rows: 3 },
-        { label: 'DEATH',        tiles: [_wr(36),_wr(37),_wr(38),_wr(39),_wr(40),_wr(41)], rows: 2, cols: 3 },
+      // Add Warrior poses from PPU-dumped tiles (warrior-sprites.js loaded via game module)
+      // Import tile data inline from the module constants
+      const _WR = await import('./src/data/warrior-sprites.js');
+      const _wrPoses = [
+        { label: 'IDLE',         tiles: [..._WR.WR_IDLE, _WR.WR_LEG_L, _WR.WR_LEG_R], rows: 3 },
+        { label: 'L BACK SWING', tiles: [_WR.WR_L_BACK[0], _WR.WR_L_BACK[1], _WR.WR_L_BACK[2], _WR.WR_L_BACK[3], _WR.WR_LEG_L_BACK_L, _WR.WR_LEG_R_BACK_L], rows: 3 },
+        { label: 'L FWD SWING',  tiles: [_WR.WR_IDLE[0], _WR.WR_IDLE[1], _WR.WR_L_FWD_T2, _WR.WR_L_FWD_T3, _WR.WR_LEG_L_FWD_L, _WR.WR_LEG_R_FWD_L], rows: 3 },
+        { label: 'R BACK SWING', tiles: [_WR.WR_IDLE[0], _WR.WR_IDLE[1], _WR.WR_R_BACK_T2, _WR.WR_IDLE[3], _WR.WR_LEG_L_BACK_R, _WR.WR_LEG_R_SWING], rows: 3 },
+        { label: 'R FWD SWING',  tiles: [_WR.WR_IDLE[0], _WR.WR_IDLE[1], _WR.WR_IDLE[2], _WR.WR_IDLE[3], _WR.WR_LEG_L_BACK_R, _WR.WR_LEG_R_SWING], rows: 3 },
+        { label: 'KNEEL',        tiles: [..._WR.WR_KNEEL, _WR.WR_LEG_L_KNEEL, _WR.WR_LEG_R_KNEEL], rows: 3 },
+        { label: 'VICTORY',      tiles: [..._WR.WR_VICTORY, _WR.WR_LEG_L_VICTORY, _WR.WR_LEG_R_VICTORY], rows: 3 },
+        { label: 'HIT',          tiles: [..._WR.WR_HIT, _WR.WR_LEG_L_HIT, _WR.WR_LEG_R_HIT], rows: 3 },
+        { label: 'DEATH',        tiles: [..._WR.WR_DEATH], rows: 2, cols: 3 },
       ];
-      for (const wp of _wPoses) okPoseTiles.push(wp);
+      for (const wp of _wrPoses) okPoseTiles.push(wp);
       renderTilePage();
       tileViewer.style.display = 'flex';
       tileViewerOpen = true;
