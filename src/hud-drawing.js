@@ -257,7 +257,7 @@ function _drawHUDInfoPanel() {
   for (let s = 0; s < infoFadeStep; s++) namePal[3] = nesColorFade(namePal[3]);
   const nameW = measureText(slot.name);
   drawText(ctx, panelRight - nameW, sy, slot.name, namePal);
-  const panelLeft = HUD_RIGHT_X + 8 + 16 + 8 + shakeOff;
+  const panelLeft = HUD_RIGHT_X + 32 + 8 + shakeOff;
   const lvLabel = _nameToBytes('Lv' + String(ps.stats ? ps.stats.level : slot.level));
   const lvPal = [0x0F, 0x0F, 0x0F, 0x10];
   for (let s = 0; s < infoFadeStep; s++) lvPal[3] = nesColorFade(lvPal[3]);

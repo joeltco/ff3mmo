@@ -564,8 +564,10 @@ function _drawSelectSlotRow(ctx, i, selX, rowY, fadeStep, showContent, shared) {
     const lvPal = [0x0F, 0x0F, 0x0F, 0x10];
     for (let s = 0; s < fadeStep; s++) lvPal[3] = nesColorFade(lvPal[3]);
     drawText(ctx, infoLeft, rowY + 16, lvLabel, lvPal);
-    const slotHP = saveSlots[i].hp;
     const slotMaxHP = saveSlots[i].stats ? saveSlots[i].stats.maxHP : null;
+    const slotHP = saveSlots[i].hp != null ? saveSlots[i].hp
+                 : (saveSlots[i].stats && saveSlots[i].stats.hp != null) ? saveSlots[i].stats.hp
+                 : slotMaxHP;
     if (slotHP != null && slotMaxHP) {
       const hpNes = slotHP <= Math.floor(slotMaxHP / 4) ? 0x16
                   : slotHP <= Math.floor(slotMaxHP / 2) ? 0x28 : 0x2A;
