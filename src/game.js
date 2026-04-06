@@ -1746,22 +1746,10 @@ function _updateTitleMainOutCase() {
   ps.cp = (slot && slot.cp) || 0;
   // Swap battle sprites to match saved job
   _swapBattleSprites(ps.jobIdx);
-  // Restore saved position, or default spawn for new games
-  if (slot && slot.worldX != null && slot.onWorldMap != null) {
-    if (slot.onWorldMap) {
-      transSt.pendingTrack = TRACKS.WORLD_MAP;
-      loadWorldMapAtPosition(Math.floor(slot.worldX / TILE_SIZE), Math.floor(slot.worldY / TILE_SIZE));
-    } else {
-      transSt.pendingTrack = TRACKS.TOWN_UR;
-      loadMapById(slot.currentMapId || 114);
-      worldX = slot.worldX;
-      worldY = slot.worldY;
-    }
-  } else {
-    transSt.pendingTrack = TRACKS.TOWN_UR;
-    loadMapById(114);
-    worldY -= 6 * TILE_SIZE;
-  }
+  // Always spawn in Ur
+  transSt.pendingTrack = TRACKS.TOWN_UR;
+  loadMapById(114);
+  worldY -= 6 * TILE_SIZE;
   transSt.state = 'hud-fade-in';
   transSt.timer = 0;
 }
