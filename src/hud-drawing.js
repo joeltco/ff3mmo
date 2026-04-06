@@ -49,13 +49,14 @@ export function drawCursorFaded(cx, cy, fadeStep) {
 export function drawHudBox(x, y, w, h, fadeStep = 0) {
   const tiles = (fadeStep > 0 && _s.borderFadeSets) ? _s.borderFadeSets[fadeStep] : _s.borderTileCanvases;
   if (!tiles) return;
-  const [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR, FILL] = tiles;
+  const [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR] = tiles;
   const ctx = _s.ctx;
+  ctx.fillStyle = '#000';
+  ctx.fillRect(x + 8, y + 8, w - 16, h - 16);
   ctx.drawImage(TL, x, y); ctx.drawImage(TR, x + w - 8, y);
   ctx.drawImage(BL, x, y + h - 8); ctx.drawImage(BR, x + w - 8, y + h - 8);
   for (let tx = x + 8; tx < x + w - 8; tx += 8) { ctx.drawImage(TOP, tx, y); ctx.drawImage(BOT, tx, y + h - 8); }
   for (let ty = y + 8; ty < y + h - 8; ty += 8) { ctx.drawImage(LEFT, x, ty); ctx.drawImage(RIGHT, x + w - 8, ty); }
-  for (let ty = y + 8; ty < y + h - 8; ty += 8) for (let tx = x + 8; tx < x + w - 8; tx += 8) ctx.drawImage(FILL, tx, ty);
 }
 
 export function drawSparkleCorners(frame, px, py) {
@@ -70,16 +71,14 @@ export function drawBorderedBox(x, y, w, h, blue = false) {
   if (!_s.borderTileCanvases) return;
   const ctx = _s.ctx;
   const tileSet = blue ? _s.borderBlueTileCanvases : _s.borderTileCanvases;
-  const [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR, FILL] = tileSet;
+  const [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR] = tileSet;
   if (blue) {
     const nb = NES_SYSTEM_PALETTE[0x02];
     ctx.fillStyle = `rgb(${nb[0]},${nb[1]},${nb[2]})`;
-    ctx.fillRect(x + 8, y + 8, w - 16, h - 16);
   } else {
-    for (let ty = y + 8; ty < y + h - 8; ty += 8)
-      for (let tx = x + 8; tx < x + w - 8; tx += 8)
-        ctx.drawImage(FILL, tx, ty);
+    ctx.fillStyle = '#000';
   }
+  ctx.fillRect(x + 8, y + 8, w - 16, h - 16);
   ctx.drawImage(TL, x, y); ctx.drawImage(TR, x + w - 8, y);
   ctx.drawImage(BL, x, y + h - 8); ctx.drawImage(BR, x + w - 8, y + h - 8);
   for (let tx = x + 8; tx < x + w - 8; tx += 8) { ctx.drawImage(TOP, tx, y); ctx.drawImage(BOT, tx, y + h - 8); }
@@ -96,11 +95,10 @@ export function drawTopBoxBorder(fadeStep) {
   if (!_s.borderFadeSets || fadeStep >= TOPBOX_FADE_STEPS) return;
   const ctx = _s.ctx;
   const tiles = _s.borderFadeSets[fadeStep];
-  const [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR, FILL] = tiles;
+  const [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR] = tiles;
   const x = 0, y = 0, w = CANVAS_W, h = HUD_TOP_H;
-  for (let ty = y + 8; ty < y + h - 8; ty += 8)
-    for (let tx = x + 8; tx < x + w - 8; tx += 8)
-      ctx.drawImage(FILL, tx, ty);
+  ctx.fillStyle = '#000';
+  ctx.fillRect(x + 8, y + 8, w - 16, h - 16);
   ctx.drawImage(TL, x, y); ctx.drawImage(TR, x + w - 8, y);
   ctx.drawImage(BL, x, y + h - 8); ctx.drawImage(BR, x + w - 8, y + h - 8);
   for (let tx = x + 8; tx < x + w - 8; tx += 8) { ctx.drawImage(TOP, tx, y); ctx.drawImage(BOT, tx, y + h - 8); }

@@ -64,14 +64,15 @@ function _drawLoadingInfoBox(cx, vpTop, vpBot, fadeLevel, fadedTextPal) {
 function _drawLoadingRightPanel(fadeLevel) {
   const tiles = (_s.borderFadeSets && _s.borderFadeSets[fadeLevel]) || _s.borderTileCanvases;
   if (!tiles) return;
-  const [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR, FILL] = tiles;
+  const [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR] = tiles;
   const lx = _s.HUD_RIGHT_X, ly = _s.HUD_VIEW_Y + 32, lw = _s.HUD_RIGHT_W, lh = _s.HUD_VIEW_H - 32;
   const ctx = _s.ctx;
+  ctx.fillStyle = '#000';
+  ctx.fillRect(lx + 8, ly + 8, lw - 16, lh - 16);
   ctx.drawImage(TL, lx, ly); ctx.drawImage(TR, lx+lw-8, ly);
   ctx.drawImage(BL, lx, ly+lh-8); ctx.drawImage(BR, lx+lw-8, ly+lh-8);
   for (let tx = lx+8; tx < lx+lw-8; tx += 8) { ctx.drawImage(TOP, tx, ly); ctx.drawImage(BOT, tx, ly+lh-8); }
   for (let ty = ly+8; ty < ly+lh-8; ty += 8) { ctx.drawImage(LEFT, lx, ty); ctx.drawImage(RIGHT, lx+lw-8, ty); }
-  for (let ty = ly+8; ty < ly+lh-8; ty += 8) for (let tx = lx+8; tx < lx+lw-8; tx += 8) ctx.drawImage(FILL, tx, ty);
 }
 
 function _drawLoadingChatBubble(rpCX, rpY, rpH, fadeLevel) {

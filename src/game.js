@@ -501,16 +501,16 @@ function _tileToCanvas(pixels, palette, transparentBg = false) {
 }
 
 function _drawBoxOnCtx(pctx, tileCanvases, x, y, w, h, fill = true) {
-  const [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR, FILL] = tileCanvases;
+  const [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR] = tileCanvases;
+  if (fill) { pctx.fillStyle = '#000'; pctx.fillRect(x + 8, y + 8, w - 16, h - 16); }
   pctx.drawImage(TL, x, y); pctx.drawImage(TR, x + w - 8, y);
   pctx.drawImage(BL, x, y + h - 8); pctx.drawImage(BR, x + w - 8, y + h - 8);
   for (let tx = x + 8; tx < x + w - 8; tx += 8) { pctx.drawImage(TOP, tx, y); pctx.drawImage(BOT, tx, y + h - 8); }
   for (let ty = y + 8; ty < y + h - 8; ty += 8) { pctx.drawImage(LEFT, x, ty); pctx.drawImage(RIGHT, x + w - 8, ty); }
-  if (fill) for (let ty = y + 8; ty < y + h - 8; ty += 8) for (let tx = x + 8; tx < x + w - 8; tx += 8) pctx.drawImage(FILL, tx, ty);
 }
 
 function _initHUDBorderTiles(tiles) {
-  borderTileCanvases = tiles.map(p => _tileToCanvas(p, MENU_PALETTE));
+  borderTileCanvases = tiles.map(p => _tileToCanvas(p, MENU_PALETTE, true));
   cornerMasks = [0, 2, 5, 7].map(idx => {
     const pixels = tiles[idx];
     const c = document.createElement('canvas'); c.width = 8; c.height = 8;
@@ -522,7 +522,7 @@ function _initHUDBorderTiles(tiles) {
   borderFadeSets = [];
   for (let step = 0; step <= LOAD_FADE_MAX; step++) {
     const fadedPal = MENU_PALETTE.map(c => { let fc = c; for (let s = 0; s < step; s++) fc = nesColorFade(fc); return fc; });
-    borderFadeSets.push(tiles.map(p => _tileToCanvas(p, fadedPal)));
+    borderFadeSets.push(tiles.map(p => _tileToCanvas(p, fadedPal, true)));
   }
   // Title screen gets transparent-background border tiles (no black outer edge)
   titleSt.borderTiles = tiles.map(p => _tileToCanvas(p, MENU_PALETTE, true));
