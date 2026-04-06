@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented here.
 
+## 1.3.6 — 2026-04-05
+
+### Job system + Capacity Points
+
+- **Job system** — players start as Onion Knight, unlock Wind Crystal jobs (Warrior, Monk, White Mage, Black Mage, Red Mage) after defeating Land Turtle boss
+- **Job change** — pause menu "Job" opens submenu listing unlocked jobs. Current job highlighted green. Selecting a new job recalculates stats from base + level bonuses for the new job class
+- **Battle sprite swap** — portrait and all battle pose canvases (idle, attack, defend, hit, kneel, victory, knife poses) rebuild from ROM per job via `initBattleSpriteForJob(romData, jobIdx)` in sprite-init.js
+- **Capacity Points (CP)** — earned from battles (1 per enemy killed, 10 for boss). Cap 255. Spent to change jobs (Wind Crystal = 10 CP, later tiers scale 20/30/40/50). Onion Knight always free
+- **Job menu UI** — shows CP counter at top, each job's cost on right, grey text for unaffordable jobs, error SFX on insufficient CP
+- **Save data** — `jobIdx`, `unlockedJobs` (bitmask), and `cp` persisted per save slot
+- **Stat recalc** — `changeJob()` in player-stats.js rebuilds stats from scratch: reads job base stats, replays all level bonuses for the new job at current level, clamps HP/MP
+- **Level-up** — uses current job's stat growth curve instead of hardcoded Onion Knight
+- player-stats.js: 247L, sprite-init.js: 802L, game.js: 2,730L
+
 ## 1.3.5 — 2026-04-05
 
 ### Refactor — HUD drawing + map loading extraction
