@@ -12,7 +12,7 @@ import { selectCursor, saveSlots, saveSlotsToDB } from './save-state.js';
 import { BASE_HIT_RATE, rollHits } from './battle-math.js';
 import { _nameToBytes } from './text-utils.js';
 import { MONSTERS } from './data/monsters.js';
-import { JOBS } from './data/jobs.js';
+import { JOBS, canJobEquip } from './data/jobs.js';
 
 // Local constants (must match game.js)
 const HUD_VIEW_X = 0, HUD_VIEW_Y = 32, HUD_VIEW_W = 144, HUD_VIEW_H = 144;
@@ -204,7 +204,7 @@ function _itemSelectSwap(isEquipPage, gIdx) {
   } else if (!srcEquip && dstEquip) {
     const item = inputSt.itemSelectList[inputSt.itemHeldIdx];
     const handIdx = inputSt.itemPageCursor;
-    if (item && isHandEquippable(ITEMS.get(item.id))) {
+    if (item && isHandEquippable(ITEMS.get(item.id)) && canJobEquip(ps.jobIdx, item.id, ITEMS)) {
       const oldWeapon = handIdx === 0 ? ps.weaponR : ps.weaponL;
       if (handIdx === 0) ps.weaponR = item.id; else ps.weaponL = item.id;
       _s.removeItem(item.id);
@@ -217,7 +217,7 @@ function _itemSelectSwap(isEquipPage, gIdx) {
     const handWeaponId = srcHand === 0 ? ps.weaponR : ps.weaponL;
     const dstIdx = (inputSt.itemPage - 1) * INV_SLOTS + inputSt.itemPageCursor;
     const invItem = inputSt.itemSelectList[dstIdx];
-    if (invItem && isHandEquippable(ITEMS.get(invItem.id))) {
+    if (invItem && isHandEquippable(ITEMS.get(invItem.id)) && canJobEquip(ps.jobIdx, invItem.id, ITEMS)) {
       if (srcHand === 0) ps.weaponR = invItem.id; else ps.weaponL = invItem.id;
       _s.removeItem(invItem.id); _s.addItem(handWeaponId, 1);
       inputSt.itemSelectList[dstIdx] = { id: handWeaponId, count: 1 };
@@ -769,6 +769,19 @@ function _pauseInputInvTarget() {
   return true;
 }
 
+function _enforceEquipRestrictions(jobIdx) {
+  const slots = [-100, -101, -102, -103, -104];
+  for (const eq of slots) {
+    const id = getEquipSlotId(eq);
+    if (id && !canJobEquip(jobIdx, id, ITEMS)) {
+      setEquipSlotId(eq, 0);
+      _s.addItem(id, 1);
+    }
+  }
+  recalcCombatStats();
+  if (selectCursor >= 0 && saveSlots[selectCursor]) { saveSlots[selectCursor].inventory = { ..._s.playerInventory }; saveSlotsToDB(); }
+}
+
 function _equipBestMainSlots() {
   const SLOT_DEFS = [
     { eq: -100, type: 'hand', stat: 'atk' },
@@ -784,6 +797,7 @@ function _equipBestMainSlots() {
       const id = Number(idStr); const item = ITEMS.get(id); if (!item) continue;
       if (sd.type === 'hand' && !isHandEquippable(item)) continue;
       if (sd.type === 'armor' && (item.type !== 'armor' || item.subtype !== sd.subtype)) continue;
+      if (!canJobEquip(ps.jobIdx, id, ITEMS)) continue;
       const val = item[sd.stat] || 0; if (val > bestVal) { bestVal = val; bestId = id; }
     }
     if (bestId !== curId) {
@@ -802,6 +816,7 @@ function _equipBestLeftHand() {
     if (count <= 0) continue;
     const id = Number(idStr); const item = ITEMS.get(id);
     if (!item || !isHandEquippable(item)) continue;
+    if (!canJobEquip(ps.jobIdx, id, ITEMS)) continue;
     if (item.type === 'weapon') { const v = item.atk || 0; if (v > bestWepAtk) { bestWepAtk = v; bestWepId = id; } }
     else if (item.subtype === 'shield') { const v = item.def || 0; if (v > bestShieldDef) { bestShieldDef = v; bestShieldId = id; } }
   }
@@ -841,6 +856,7 @@ function _pauseInputEquip() {
         const id = Number(idStr);
         const item = ITEMS.get(id);
         if (!item) continue;
+        if (!canJobEquip(ps.jobIdx, id, ITEMS)) continue;
         if (isWeaponSlot && isHandEquippable(item)) pauseSt.eqItemList.push({ id, count });
         else if (!isWeaponSlot && item.type === 'armor' && item.subtype === slotSubtype) pauseSt.eqItemList.push({ id, count });
       }
@@ -909,6 +925,7 @@ function _pauseInputJob() {
       if (ps.cp >= cost) {
         ps.cp -= cost;
         changeJob(newJobIdx);
+        _enforceEquipRestrictions(newJobIdx);
         _s.swapBattleSprites(newJobIdx);
         playSFX(SFX.CONFIRM);
         pauseSt.state = 'job-out'; pauseSt.timer = 0;
