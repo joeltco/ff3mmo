@@ -558,7 +558,7 @@ function _drawSelectSlotRow(ctx, i, selX, rowY, fadeStep, showContent, shared) {
     const nameBytes = saveSlots[i].name;
     const nw = measureText(nameBytes);
     drawText(ctx, infoRight - nw, rowY + 8, nameBytes, fadedPal);
-    const infoLeft = selX + 40;
+    const infoLeft = selX + 32 + 8;
     const lvl = saveSlots[i].level || 1;
     const lvLabel = _nameToBytes('Lv' + String(lvl));
     const lvPal = [0x0F, 0x0F, 0x0F, 0x10];

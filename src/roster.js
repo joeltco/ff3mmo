@@ -262,11 +262,20 @@ function _drawRosterRow(ds, p, i, panelTop) {
   const nameW = measureText(nameBytes);
   drawText(ds.ctx, HUD_RIGHT_X + HUD_RIGHT_W - 8 - nameW, rowY + 8, nameBytes, namePal);
 
+  const panelLeft = HUD_RIGHT_X + 32 + 8;
   const lvPal = [0x0F, 0x0F, 0x0F, 0x10];
   for (let s = 0; s < fadeStep; s++) lvPal[3] = nesColorFade(lvPal[3]);
   const lvLabel = _nameToBytes('Lv' + String(p.level));
-  const lvW = measureText(lvLabel);
-  drawText(ds.ctx, HUD_RIGHT_X + HUD_RIGHT_W - 8 - lvW, rowY + 16, lvLabel, lvPal);
+  drawText(ds.ctx, panelLeft, rowY + 16, lvLabel, lvPal);
+  const maxHP = p.maxHP || 28;
+  const hp = p.hp != null ? p.hp : maxHP;
+  const hpNes = hp <= Math.floor(maxHP / 4) ? 0x16
+              : hp <= Math.floor(maxHP / 2) ? 0x28 : 0x2A;
+  const hpPal = [0x0F, 0x0F, 0x0F, hpNes];
+  for (let s = 0; s < fadeStep; s++) hpPal[3] = nesColorFade(hpPal[3]);
+  const hpLabel = _nameToBytes(String(hp));
+  const hpW = measureText(hpLabel);
+  drawText(ds.ctx, HUD_RIGHT_X + HUD_RIGHT_W - 8 - hpW, rowY + 16, hpLabel, hpPal);
 }
 
 function _drawScrollArrows(ds, panelTop, maxVisible, canScrollUp, canScrollDown) {
