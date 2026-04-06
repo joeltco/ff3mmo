@@ -62,15 +62,23 @@
       display: none;
       position: relative;
     }
+    #scanline-canvas {
+      position: absolute;
+      top: 0; left: 0;
+      width: 512px;
+      height: 480px;
+      pointer-events: none;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      display: none;
+    }
+    #canvas-wrapper.crt #scanline-canvas { display: block; }
     #canvas-wrapper.crt::after {
       content: '';
       position: absolute;
-      top: 2px; left: 2px; right: 2px; bottom: 2px;
+      top: 0; left: 0; right: 0; bottom: 0;
       pointer-events: none;
-      background:
-        linear-gradient(to bottom, transparent 70%, rgba(0,0,0,0.25) 70%),
-        radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.65) 100%);
-      background-size: 100% calc(100% / 240), 100% 100%;
+      background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.65) 100%);
     }
     #game-canvas {
       display: block;
@@ -118,8 +126,9 @@
         width: 100vw;
         height: calc(100vw * (480 / 512));
       }
-      #canvas-wrapper.crt::after {
-        background-size: 100% calc(100% / 240), 100% 100%;
+      #scanline-canvas {
+        width: 100vw;
+        height: calc(100vw * (480 / 512));
       }
     }
 
@@ -581,6 +590,7 @@
 
   <div id="canvas-wrapper" class="crt">
     <canvas id="game-canvas"></canvas>
+    <canvas id="scanline-canvas" width="1" height="480"></canvas>
   </div>
   <div id="version-badge">v{{VERSION}}</div>
   <div id="tile-viewer">
@@ -850,6 +860,10 @@
         loadFF12ROM(ff12Buffer);
         await loadROM(ff3Buffer);
         document.getElementById('canvas-wrapper').style.display = 'block';
+        { const sc = document.getElementById('scanline-canvas');
+          const sx = sc.getContext('2d');
+          sx.fillStyle = 'rgba(0,0,0,0.2)';
+          for (let y = 0; y < 240; y++) sx.fillRect(0, y * 2 + 1, 1, 1); }
         document.getElementById('controls-hint').style.display = 'block';
         document.getElementById('rom-picker-wrap').style.display = 'none';
         document.querySelector('h1').style.display = 'none';
