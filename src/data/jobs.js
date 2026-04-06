@@ -41,34 +41,34 @@ export const MAG_WHITE    = 0x01;
 export const MAG_BLACK    = 0x02;
 export const MAG_CALL     = 0x04;  // summon/call magic
 
-// 22 jobs in ROM order (source: shrines.rpgclassics.com/nes/ff3/jobs.shtml)
+// 22 jobs in ROM order — cpCost and lvReq from ROM $72010 (Data Crystal)
 // NES names: OnionKid, Fighter, Monk, WhiteWiz, BlackWiz, RedWiz, Hunter,
 //            Knight, Thief, Scholar, Geomancer, Dragoon, Viking, Karateka,
 //            M.Knight, Conjurer, Bard, Summoner, Shaman, Warlock, Sage, Ninja
 export const JOBS = [
-  // idx  name             weapons                                          armor                        magic            maxMagicLv  cpCost
-  { name: 'Onion Knight', weapons: WPN_SWORD | WPN_KNIFE | WPN_BOW | WPN_ARROW, armor: ARM_ALL,           magic: 0,         maxMagicLv: 0, cpCost: 0  },
-  { name: 'Fighter',      weapons: WPN_SWORD | WPN_KNIFE | WPN_BOW | WPN_ARROW, armor: ARM_ALL,          magic: 0,         maxMagicLv: 0, cpCost: 10 },
-  { name: 'Monk',         weapons: 0,                                      armor: ARM_LIGHT,            magic: 0,         maxMagicLv: 0, cpCost: 10 },
-  { name: 'White Mage',   weapons: WPN_STAFF | WPN_ROD,                    armor: ARM_LIGHT,            magic: MAG_WHITE, maxMagicLv: 7, cpCost: 10 },
-  { name: 'Black Mage',   weapons: WPN_KNIFE | WPN_ROD,                    armor: ARM_LIGHT,            magic: MAG_BLACK, maxMagicLv: 7, cpCost: 10 },
-  { name: 'Red Mage',     weapons: WPN_SWORD | WPN_KNIFE | WPN_BOW | WPN_STAFF | WPN_ROD | WPN_ARROW, armor: ARM_ALL, magic: MAG_WHITE | MAG_BLACK, maxMagicLv: 4, cpCost: 10 },
-  { name: 'Ranger',       weapons: WPN_BOW,                                armor: ARM_LIGHT,            magic: MAG_WHITE, maxMagicLv: 3, cpCost: 20 },
-  { name: 'Knight',       weapons: WPN_SWORD | WPN_KNIFE | WPN_BOOMERANG,   armor: ARM_ALL,              magic: 0,         maxMagicLv: 0, cpCost: 20 },
-  { name: 'Thief',        weapons: WPN_KNIFE | WPN_BOOMERANG,              armor: ARM_ALL,              magic: 0,         maxMagicLv: 0, cpCost: 20 },
-  { name: 'Scholar',      weapons: WPN_BOOK,                               armor: ARM_LIGHT,            magic: 0,         maxMagicLv: 0, cpCost: 20 },
-  { name: 'Geomancer',    weapons: WPN_BELL,                               armor: ARM_LIGHT,            magic: 0,         maxMagicLv: 0, cpCost: 20 },
-  { name: 'Dragoon',      weapons: WPN_SPEAR,                              armor: ARM_ALL,              magic: 0,         maxMagicLv: 0, cpCost: 30 },
-  { name: 'Viking',       weapons: WPN_AXE,                                armor: ARM_ALL,              magic: 0,         maxMagicLv: 0, cpCost: 30 },
-  { name: 'Black Belt',   weapons: WPN_CLAW,                               armor: ARM_LIGHT,            magic: 0,         maxMagicLv: 0, cpCost: 30 },
-  { name: 'Magic Knight', weapons: WPN_KATANA | WPN_SWORD | WPN_BOOMERANG,  armor: ARM_ALL,              magic: MAG_WHITE, maxMagicLv: 3, cpCost: 30 },
-  { name: 'Conjurer',     weapons: WPN_ROD,                                armor: ARM_LIGHT,            magic: MAG_CALL,  maxMagicLv: 8, cpCost: 30 },
-  { name: 'Bard',         weapons: WPN_HARP,                               armor: ARM_LIGHT,            magic: 0,         maxMagicLv: 0, cpCost: 40 },
-  { name: 'Summoner',     weapons: WPN_ROD,                                armor: ARM_LIGHT,            magic: MAG_CALL,  maxMagicLv: 8, cpCost: 40 },
-  { name: 'Devout',       weapons: WPN_STAFF | WPN_ROD,                    armor: ARM_LIGHT,            magic: MAG_WHITE, maxMagicLv: 8, cpCost: 40 },
-  { name: 'Magus',        weapons: WPN_ROD,                                armor: ARM_LIGHT,            magic: MAG_BLACK, maxMagicLv: 8, cpCost: 40 },
-  { name: 'Sage',         weapons: WPN_ROD | WPN_STAFF | WPN_BOOK,         armor: ARM_LIGHT,            magic: MAG_WHITE | MAG_BLACK | MAG_CALL, maxMagicLv: 8, cpCost: 50 },
-  { name: 'Ninja',        weapons: WPN_ALL,                                armor: ARM_ALL,              magic: 0,         maxMagicLv: 0, cpCost: 50 },
+  // idx  name             weapons                                          armor                        magic            maxMagicLv  cpCost  lvReq
+  { name: 'Onion Knight', weapons: WPN_SWORD | WPN_KNIFE | WPN_BOW | WPN_ARROW, armor: ARM_ALL,           magic: 0,         maxMagicLv: 0, cpCost: 136, lvReq:  0 },
+  { name: 'Fighter',      weapons: WPN_SWORD | WPN_KNIFE | WPN_BOW | WPN_ARROW, armor: ARM_ALL,          magic: 0,         maxMagicLv: 0, cpCost: 121, lvReq:  0 },
+  { name: 'Monk',         weapons: 0,                                      armor: ARM_LIGHT,            magic: 0,         maxMagicLv: 0, cpCost: 119, lvReq:  0 },
+  { name: 'White Mage',   weapons: WPN_STAFF | WPN_ROD,                    armor: ARM_LIGHT,            magic: MAG_WHITE, maxMagicLv: 7, cpCost: 153, lvReq:  0 },
+  { name: 'Black Mage',   weapons: WPN_KNIFE | WPN_ROD,                    armor: ARM_LIGHT,            magic: MAG_BLACK, maxMagicLv: 7, cpCost: 151, lvReq:  0 },
+  { name: 'Red Mage',     weapons: WPN_SWORD | WPN_KNIFE | WPN_BOW | WPN_STAFF | WPN_ROD | WPN_ARROW, armor: ARM_ALL, magic: MAG_WHITE | MAG_BLACK, maxMagicLv: 4, cpCost: 138, lvReq:  0 },
+  { name: 'Ranger',       weapons: WPN_BOW,                                armor: ARM_LIGHT,            magic: MAG_WHITE, maxMagicLv: 3, cpCost: 123, lvReq:  9 },
+  { name: 'Knight',       weapons: WPN_SWORD | WPN_KNIFE | WPN_BOOMERANG,   armor: ARM_ALL,              magic: 0,         maxMagicLv: 0, cpCost: 140, lvReq:  9 },
+  { name: 'Thief',        weapons: WPN_KNIFE | WPN_BOOMERANG,              armor: ARM_ALL,              magic: 0,         maxMagicLv: 0, cpCost: 117, lvReq:  9 },
+  { name: 'Scholar',      weapons: WPN_BOOK,                               armor: ARM_LIGHT,            magic: 0,         maxMagicLv: 0, cpCost: 170, lvReq:  9 },
+  { name: 'Geomancer',    weapons: WPN_BELL,                               armor: ARM_LIGHT,            magic: 0,         maxMagicLv: 0, cpCost: 164, lvReq: 14 },
+  { name: 'Dragoon',      weapons: WPN_SPEAR,                              armor: ARM_ALL,              magic: 0,         maxMagicLv: 0, cpCost:  91, lvReq: 14 },
+  { name: 'Viking',       weapons: WPN_AXE,                                armor: ARM_ALL,              magic: 0,         maxMagicLv: 0, cpCost:  85, lvReq: 14 },
+  { name: 'Black Belt',   weapons: WPN_CLAW,                               armor: ARM_LIGHT,            magic: 0,         maxMagicLv: 0, cpCost:  40, lvReq: 14 },
+  { name: 'Magic Knight', weapons: WPN_KATANA | WPN_SWORD | WPN_BOOMERANG,  armor: ARM_ALL,              magic: MAG_WHITE, maxMagicLv: 3, cpCost: 130, lvReq: 14 },
+  { name: 'Conjurer',     weapons: WPN_ROD,                                armor: ARM_LIGHT,            magic: MAG_CALL,  maxMagicLv: 8, cpCost: 216, lvReq: 14 },
+  { name: 'Bard',         weapons: WPN_HARP,                               armor: ARM_LIGHT,            magic: 0,         maxMagicLv: 0, cpCost: 187, lvReq: 14 },
+  { name: 'Summoner',     weapons: WPN_ROD,                                armor: ARM_LIGHT,            magic: MAG_CALL,  maxMagicLv: 8, cpCost: 196, lvReq: 29 },
+  { name: 'Devout',       weapons: WPN_STAFF | WPN_ROD,                    armor: ARM_LIGHT,            magic: MAG_WHITE, maxMagicLv: 8, cpCost: 204, lvReq: 29 },
+  { name: 'Magus',        weapons: WPN_ROD,                                armor: ARM_LIGHT,            magic: MAG_BLACK, maxMagicLv: 8, cpCost: 240, lvReq: 29 },
+  { name: 'Sage',         weapons: WPN_ROD | WPN_STAFF | WPN_BOOK,         armor: ARM_LIGHT,            magic: MAG_WHITE | MAG_BLACK | MAG_CALL, maxMagicLv: 8, cpCost: 255, lvReq: 39 },
+  { name: 'Ninja',        weapons: WPN_ALL,                                armor: ARM_ALL,              magic: 0,         maxMagicLv: 0, cpCost:   0, lvReq: 39 },
 ];
 
 // Convenience — job names array in ROM order
