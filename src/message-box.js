@@ -1,11 +1,12 @@
-// message-box.js — slide-in/hold/slide-out message box overlay (draws over chat HUD panel)
+// message-box.js — slide-in/hold/slide-out message box overlay (draws inside map viewport)
 
 import { drawText, measureText } from './font-renderer.js';
 
 // NES layout constants — must match game.js
 const CANVAS_W   = 256;
-const HUD_BOT_Y  = 176;
-const HUD_BOT_H  = 64;
+const HUD_VIEW_Y = 32;
+const HUD_VIEW_W = 144;
+const HUD_VIEW_H = 144;
 
 const SLIDE_MS = 80;  // faster slide than old viewport box
 
@@ -44,27 +45,27 @@ export function updateMsgBox(dt) {
 export function drawMsgBox(ctx, _clipUnused, drawBorderedBoxFn) {
   if (msgState.state === 'none' || !msgState.bytes) return;
 
-  const boxW      = CANVAS_W;
-  const boxH      = HUD_BOT_H;
+  const boxW      = HUD_VIEW_W;
+  const boxH      = 48;
   const interiorW = boxW - 16;
   const maxChars  = Math.floor(interiorW / 8);
   const lines     = _wrapMsgBytes(msgState.bytes, maxChars);
   const lineH     = 12;
-  const finalY    = HUD_BOT_Y;
+  const finalY    = HUD_VIEW_Y;
 
   let boxY = finalY;
   if (msgState.state === 'slide-in') {
     const t = Math.min(msgState.timer / SLIDE_MS, 1);
-    boxY = (HUD_BOT_Y - boxH) + boxH * t;  // slide down from above into chat panel
+    boxY = HUD_VIEW_Y - boxH + boxH * t;  // slide down from top of viewport
   } else if (msgState.state === 'slide-out') {
     const t = Math.min(msgState.timer / SLIDE_MS, 1);
-    boxY = finalY - boxH * t;               // slide back up out of view
+    boxY = finalY - boxH * t; // slide back up out of viewport
   }
 
-  // Clip to chat panel area
+  // Clip to map viewport area
   ctx.save();
   ctx.beginPath();
-  ctx.rect(0, HUD_BOT_Y, CANVAS_W, HUD_BOT_H);
+  ctx.rect(0, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
   ctx.clip();
 
   drawBorderedBoxFn(0, boxY, boxW, boxH, true);

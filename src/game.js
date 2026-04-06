@@ -517,7 +517,7 @@ function _initHUDBorderTiles(tiles) {
     for (let i = 0; i < 64; i++) if (pixels[i] === 0) img.data[i * 4 + 3] = 255;
     tctx.putImageData(img, 0, 0); return c;
   });
-  borderBlueTileCanvases = tiles.map(p => _tileToCanvas(p, [0x02, 0x00, 0x02, 0x30]));
+  borderBlueTileCanvases = tiles.map(p => _tileToCanvas(p, [0x02, 0x00, 0x02, 0x30], true));
   borderFadeSets = [];
   for (let step = 0; step <= LOAD_FADE_MAX; step++) {
     const fadedPal = MENU_PALETTE.map(c => { let fc = c; for (let s = 0; s < step; s++) fc = nesColorFade(fc); return fc; });
