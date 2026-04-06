@@ -661,8 +661,8 @@ function _pauseInputOpenClose() {
 function _pauseInputMainMenu() {
   if (pauseSt.state !== 'open') return false;
   const k = _s.keys;
-  if (k['ArrowDown']) { k['ArrowDown'] = false; pauseSt.cursor = (pauseSt.cursor + 1) % 6; playSFX(SFX.CURSOR); }
-  if (k['ArrowUp'])   { k['ArrowUp'] = false;   pauseSt.cursor = (pauseSt.cursor + 5) % 6; playSFX(SFX.CURSOR); }
+  if (k['ArrowDown']) { k['ArrowDown'] = false; pauseSt.cursor = (pauseSt.cursor + 1) % 7; playSFX(SFX.CURSOR); }
+  if (k['ArrowUp'])   { k['ArrowUp'] = false;   pauseSt.cursor = (pauseSt.cursor + 6) % 7; playSFX(SFX.CURSOR); }
   if (_zPressed()) {
     if (pauseSt.cursor === 0) {
       playSFX(SFX.CONFIRM);
@@ -674,6 +674,9 @@ function _pauseInputMainMenu() {
       playSFX(SFX.CONFIRM);
       pauseSt.state = 'stats-text-out'; pauseSt.timer = 0;
     } else if (pauseSt.cursor === 5) {
+      playSFX(SFX.CONFIRM);
+      pauseSt.state = 'options-text-out'; pauseSt.timer = 0; pauseSt.optCursor = 0;
+    } else if (pauseSt.cursor === 6) {
       playSFX(SFX.CONFIRM);
       _s.returnToTitle();
     }
@@ -884,6 +887,16 @@ function _pauseInputStats() {
   return true;
 }
 
+function _pauseInputOptions() {
+  if (pauseSt.state !== 'options') return false;
+  const k = _s.keys;
+  if (_zPressed()) {
+    if (pauseSt.optCursor === 0) { _s.toggleCrt(); playSFX(SFX.CONFIRM); }
+  }
+  if (_xPressed()) { playSFX(SFX.CONFIRM); pauseSt.state = 'options-out'; pauseSt.timer = 0; }
+  return true;
+}
+
 // shared = { keys, playerInventory, saveSlots, get selectCursor, get battleState,
 //            get shakeActive, get starEffect, get moving,
 //            saveSlotsToDB, addItem, removeItem, getRosterVisible }
@@ -900,6 +913,8 @@ export function handlePauseInput(shared) {
   if (pauseSt.state.startsWith('eq-')) return true;
   if (_pauseInputStats()) return true;
   if (pauseSt.state.startsWith('stats-')) return true;
+  if (_pauseInputOptions()) return true;
+  if (pauseSt.state.startsWith('options-')) return true;
   if (pauseSt.state !== 'none') return true;
   return false;
 }

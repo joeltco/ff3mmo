@@ -25,7 +25,7 @@ const PAUSE_SCROLL_MS    = 150;
 const PAUSE_TEXT_STEP_MS = 100;
 const PAUSE_TEXT_STEPS   = 4;
 const PAUSE_MENU_W       = 80;
-const PAUSE_MENU_H       = 112;
+const PAUSE_MENU_H       = 128;
 const BATTLE_DMG_SHOW_MS        = 550;
 const DEFEND_SPARKLE_TOTAL_MS   = 533;
 
@@ -33,7 +33,7 @@ const DEFEND_SPARKLE_TOTAL_MS   = 533;
 export const pauseSt = {
   state:        'none',  // 'none'|'scroll-in'|'text-in'|'open'|'text-out'|'scroll-out' + sub-states
   timer:        0,
-  cursor:       0,       // 0-5 main menu cursor
+  cursor:       0,       // 0-6 main menu cursor
   invScroll:    0,       // scroll offset for inventory list
   heldItem:     -1,      // index into inventory entries of held item (-1 = none)
   healNum:      null,    // {value, timer, rosterIdx?} — green heal number during pause item use
@@ -43,6 +43,7 @@ export const pauseSt = {
   eqSlotIdx:    -100,    // which equip slot we're picking an item for
   eqItemList:   [],      // filtered items that fit the selected slot
   eqItemCursor: 0,       // cursor in eqItemList
+  optCursor:    0,       // options sub-menu cursor
 };
 
 // ── Private helpers ────────────────────────────────────────────────────────
@@ -58,6 +59,7 @@ function _pausePanelLayout() {
   const isInvState   = pauseSt.state.startsWith('inv-') || pauseSt.state === 'inventory';
   const isEqState    = pauseSt.state.startsWith('eq-')  || pauseSt.state === 'equip';
   const isStatsState = pauseSt.state.startsWith('stats-') || pauseSt.state === 'stats';
+  const isOptState   = pauseSt.state.startsWith('options-') || pauseSt.state === 'options';
   let panelY = finalY;
   if (pauseSt.state === 'scroll-in') {
     const t = Math.min(pauseSt.timer / PAUSE_SCROLL_MS, 1);
@@ -66,7 +68,7 @@ function _pausePanelLayout() {
     const t = Math.min(pauseSt.timer / PAUSE_SCROLL_MS, 1);
     panelY = finalY - t * ph;
   }
-  return { px, finalY, pw, ph, isInvState, isEqState, isStatsState, panelY };
+  return { px, finalY, pw, ph, isInvState, isEqState, isStatsState, isOptState, panelY };
 }
 
 // ── Update ─────────────────────────────────────────────────────────────────
@@ -130,6 +132,23 @@ function _updatePauseEqTransitions() {
   }
 }
 
+function _updatePauseOptionsTransitions() {
+  const T = (PAUSE_TEXT_STEPS + 1) * PAUSE_TEXT_STEP_MS;
+  if (pauseSt.state === 'options-text-out') {
+    if (pauseSt.timer >= T) { pauseSt.state = 'options-expand'; pauseSt.timer = 0; }
+  } else if (pauseSt.state === 'options-expand') {
+    if (pauseSt.timer >= PAUSE_EXPAND_MS) { pauseSt.state = 'options-in'; pauseSt.timer = 0; }
+  } else if (pauseSt.state === 'options-in') {
+    if (pauseSt.timer >= T) { pauseSt.state = 'options'; pauseSt.timer = 0; }
+  } else if (pauseSt.state === 'options-out') {
+    if (pauseSt.timer >= T) { pauseSt.state = 'options-shrink'; pauseSt.timer = 0; }
+  } else if (pauseSt.state === 'options-shrink') {
+    if (pauseSt.timer >= PAUSE_EXPAND_MS) { pauseSt.state = 'options-text-in'; pauseSt.timer = 0; }
+  } else if (pauseSt.state === 'options-text-in') {
+    if (pauseSt.timer >= T) { pauseSt.state = 'open'; pauseSt.timer = 0; }
+  }
+}
+
 function _updatePauseStatsTransitions() {
   const T = (PAUSE_TEXT_STEPS + 1) * PAUSE_TEXT_STEP_MS;
   if (pauseSt.state === 'stats-text-out') {
@@ -153,22 +172,23 @@ export function updatePauseMenu(dt, playerInventory) {
   if (pauseSt.state.startsWith('inv-'))            _updatePauseInvTransitions(dt, playerInventory);
   else if (pauseSt.state.startsWith('eq-'))        _updatePauseEqTransitions();
   else if (pauseSt.state.startsWith('stats-') || pauseSt.state === 'stats') _updatePauseStatsTransitions();
+  else if (pauseSt.state.startsWith('options-') || pauseSt.state === 'options') _updatePauseOptionsTransitions();
   else                                              _updatePauseMainTransitions(playerInventory);
 }
 
 // ── Draw helpers ───────────────────────────────────────────────────────────
 
 function _drawPauseBox(ctx, shared) {
-  const { px, finalY, pw, ph, isInvState, isEqState, isStatsState, panelY } = _pausePanelLayout();
+  const { px, finalY, pw, ph, isInvState, isEqState, isStatsState, isOptState, panelY } = _pausePanelLayout();
   const { _drawBorderedBox } = shared;
-  if (isInvState || isEqState || isStatsState) {
+  if (isInvState || isEqState || isStatsState || isOptState) {
     let t = 1;
-    if (pauseSt.state === 'inv-expand' || pauseSt.state === 'eq-expand' || pauseSt.state === 'stats-expand') {
+    if (pauseSt.state === 'inv-expand' || pauseSt.state === 'eq-expand' || pauseSt.state === 'stats-expand' || pauseSt.state === 'options-expand') {
       t = Math.min(pauseSt.timer / PAUSE_EXPAND_MS, 1);
-    } else if (pauseSt.state === 'inv-shrink' || pauseSt.state === 'eq-shrink' || pauseSt.state === 'stats-shrink') {
+    } else if (pauseSt.state === 'inv-shrink' || pauseSt.state === 'eq-shrink' || pauseSt.state === 'stats-shrink' || pauseSt.state === 'options-shrink') {
       t = 1 - Math.min(pauseSt.timer / PAUSE_EXPAND_MS, 1);
-    } else if (pauseSt.state === 'inv-text-out' || pauseSt.state === 'eq-text-out' || pauseSt.state === 'stats-text-out' ||
-               pauseSt.state === 'inv-text-in'  || pauseSt.state === 'eq-text-in'  || pauseSt.state === 'stats-text-in') {
+    } else if (pauseSt.state === 'inv-text-out' || pauseSt.state === 'eq-text-out' || pauseSt.state === 'stats-text-out' || pauseSt.state === 'options-text-out' ||
+               pauseSt.state === 'inv-text-in'  || pauseSt.state === 'eq-text-in'  || pauseSt.state === 'stats-text-in'  || pauseSt.state === 'options-text-in') {
       t = 0;
     }
     const bw = Math.round(pw + (HUD_VIEW_W - pw) * t);
@@ -180,22 +200,23 @@ function _drawPauseBox(ctx, shared) {
 }
 
 function _drawPauseMenuText(ctx, shared) {
-  const { px, finalY, pw, ph, isInvState, isEqState, isStatsState, panelY } = _pausePanelLayout();
+  const { px, finalY, pw, ph, isInvState, isEqState, isStatsState, isOptState, panelY } = _pausePanelLayout();
   const { _drawCursorFaded } = shared;
   const showPauseText = pauseSt.state === 'text-in' || pauseSt.state === 'open' || pauseSt.state === 'text-out' ||
                         pauseSt.state === 'inv-text-out' || pauseSt.state === 'inv-text-in' ||
                         pauseSt.state === 'eq-text-out' || pauseSt.state === 'eq-text-in' ||
-                        pauseSt.state === 'stats-text-out' || pauseSt.state === 'stats-text-in';
+                        pauseSt.state === 'stats-text-out' || pauseSt.state === 'stats-text-in' ||
+                        pauseSt.state === 'options-text-out' || pauseSt.state === 'options-text-in';
   if (!showPauseText) return;
   let fadeStep = 0;
-  if (pauseSt.state === 'text-in' || pauseSt.state === 'inv-text-in' || pauseSt.state === 'eq-text-in' || pauseSt.state === 'stats-text-in') {
+  if (pauseSt.state === 'text-in' || pauseSt.state === 'inv-text-in' || pauseSt.state === 'eq-text-in' || pauseSt.state === 'stats-text-in' || pauseSt.state === 'options-text-in') {
     fadeStep = PAUSE_TEXT_STEPS - Math.min(Math.floor(pauseSt.timer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
-  } else if (pauseSt.state === 'text-out' || pauseSt.state === 'inv-text-out' || pauseSt.state === 'eq-text-out' || pauseSt.state === 'stats-text-out') {
+  } else if (pauseSt.state === 'text-out' || pauseSt.state === 'inv-text-out' || pauseSt.state === 'eq-text-out' || pauseSt.state === 'stats-text-out' || pauseSt.state === 'options-text-out') {
     fadeStep = Math.min(Math.floor(pauseSt.timer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
   }
   const fadedPal = _makeFadedPal(fadeStep);
   const textX = px + 24;
-  const startY = ((isInvState || isEqState || isStatsState) ? finalY : panelY) + 12;
+  const startY = ((isInvState || isEqState || isStatsState || isOptState) ? finalY : panelY) + 12;
   for (let i = 0; i < PAUSE_ITEMS.length; i++) {
     drawText(ctx, textX, startY + i * 16, PAUSE_ITEMS[i], fadedPal);
   }
@@ -383,6 +404,38 @@ function _drawPauseStats(ctx, shared) {
   }
 }
 
+const OPT_CRT_LABEL = new Uint8Array([0x8C,0x9B,0x9D]); // "CRT"
+const OPT_ON  = new Uint8Array([0x98,0xD7]); // "On"
+const OPT_OFF = new Uint8Array([0x98,0xCF,0xCF]); // "Off"
+
+function _isCrtOn() {
+  const el = document.getElementById('canvas-wrapper');
+  return el && el.classList.contains('crt');
+}
+
+function _toggleCrt() {
+  const el = document.getElementById('canvas-wrapper');
+  if (el) el.classList.toggle('crt');
+}
+
+function _drawPauseOptions(ctx, shared) {
+  const px = HUD_VIEW_X, finalY = HUD_VIEW_Y;
+  const { cursorTileCanvas } = shared;
+  const show = pauseSt.state === 'options-in' || pauseSt.state === 'options' || pauseSt.state === 'options-out';
+  if (!show) return;
+  const fadeStep = _pauseFadeStep('options-in', 'options-out');
+  const fadedPal = _makeFadedPal(fadeStep);
+  const tx = px + 24;
+  const valRx = px + HUD_VIEW_W - 16;
+  let y = finalY + 12;
+  drawText(ctx, tx, y, OPT_CRT_LABEL, fadedPal);
+  const valBytes = _isCrtOn() ? OPT_ON : OPT_OFF;
+  drawText(ctx, valRx - valBytes.length * 8, y, valBytes, fadedPal);
+  if (cursorTileCanvas && pauseSt.state === 'options' && fadeStep === 0) {
+    ctx.drawImage(cursorTileCanvas, px + 8, y + pauseSt.optCursor * 16 - 4);
+  }
+}
+
 // ── Public draw API ────────────────────────────────────────────────────────
 
 // shared = { playerInventory, saveSlots, selectCursor, cursorTileCanvas, rosterScroll,
@@ -396,6 +449,7 @@ export function drawPauseMenu(ctx, shared) {
   _drawPauseEquipSlots(ctx, shared);
   _drawPauseEquipItems(ctx, shared);
   _drawPauseStats(ctx, shared);
+  _drawPauseOptions(ctx, shared);
   ctx.restore();
   // Target cursor on portrait — drawn after restore so it's unclipped
   const { cursorTileCanvas, rosterScroll } = shared;

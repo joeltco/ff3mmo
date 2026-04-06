@@ -738,6 +738,7 @@ function _inputShared() {
     executeBattleCommand,
     returnToTitle,
     startPVPBattle: (target) => startPVPBattle(_pvpShared(), target),
+    toggleCrt() { document.getElementById('canvas-wrapper').classList.toggle('crt'); },
   };
 }
 
