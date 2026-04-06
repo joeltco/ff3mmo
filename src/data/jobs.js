@@ -47,12 +47,12 @@ export const MAG_CALL     = 0x04;  // summon/call magic
 //            M.Knight, Conjurer, Bard, Summoner, Shaman, Warlock, Sage, Ninja
 export const JOBS = [
   // idx  name             weapons                                          armor                        magic            maxMagicLv  cpCost
-  { name: 'Onion Knight', weapons: WPN_SWORD | WPN_KNIFE | WPN_ARROW,       armor: ARM_ALL,              magic: 0,         maxMagicLv: 0, cpCost: 0  },
-  { name: 'Fighter',      weapons: WPN_SWORD | WPN_KNIFE | WPN_ARROW,       armor: ARM_ALL,              magic: 0,         maxMagicLv: 0, cpCost: 10 },
+  { name: 'Onion Knight', weapons: WPN_SWORD | WPN_KNIFE | WPN_BOW | WPN_ARROW, armor: ARM_ALL,           magic: 0,         maxMagicLv: 0, cpCost: 0  },
+  { name: 'Fighter',      weapons: WPN_SWORD | WPN_KNIFE | WPN_BOW | WPN_ARROW, armor: ARM_ALL,          magic: 0,         maxMagicLv: 0, cpCost: 10 },
   { name: 'Monk',         weapons: 0,                                      armor: ARM_LIGHT,            magic: 0,         maxMagicLv: 0, cpCost: 10 },
   { name: 'White Mage',   weapons: WPN_STAFF | WPN_ROD,                    armor: ARM_LIGHT,            magic: MAG_WHITE, maxMagicLv: 7, cpCost: 10 },
   { name: 'Black Mage',   weapons: WPN_KNIFE | WPN_ROD,                    armor: ARM_LIGHT,            magic: MAG_BLACK, maxMagicLv: 7, cpCost: 10 },
-  { name: 'Red Mage',     weapons: WPN_SWORD | WPN_KNIFE | WPN_STAFF | WPN_ROD | WPN_ARROW, armor: ARM_ALL, magic: MAG_WHITE | MAG_BLACK, maxMagicLv: 4, cpCost: 10 },
+  { name: 'Red Mage',     weapons: WPN_SWORD | WPN_KNIFE | WPN_BOW | WPN_STAFF | WPN_ROD | WPN_ARROW, armor: ARM_ALL, magic: MAG_WHITE | MAG_BLACK, maxMagicLv: 4, cpCost: 10 },
   { name: 'Ranger',       weapons: WPN_BOW,                                armor: ARM_LIGHT,            magic: MAG_WHITE, maxMagicLv: 3, cpCost: 20 },
   { name: 'Knight',       weapons: WPN_SWORD | WPN_KNIFE | WPN_BOOMERANG,   armor: ARM_ALL,              magic: 0,         maxMagicLv: 0, cpCost: 20 },
   { name: 'Thief',        weapons: WPN_KNIFE | WPN_BOOMERANG,              armor: ARM_ALL,              magic: 0,         maxMagicLv: 0, cpCost: 20 },
