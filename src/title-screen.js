@@ -91,10 +91,9 @@ export const titleSt = {
 
 export function isTitleActiveState() {
   const s = titleSt.state;
-  return s === 'main-in' || s === 'logo-box-open' || s === 'logo-content-in' || s === 'logo-content-in-back' ||
-    s === 'zbox-open' || s === 'pressz-fade-in' || s === 'main' || s === 'logo-content-out' ||
-    s === 'to-select' || s === 'to-main' || s === 'logo-reopen' ||
-    s === 'select-box-open' || s === 'select-box-close-fwd' ||
+  return s === 'main-in' || s === 'logo-content-in' || s === 'logo-content-in-back' ||
+    s === 'pressz-fade-in' || s === 'main' || s === 'logo-content-out' ||
+    s === 'to-select' || s === 'to-main' ||
     s === 'select-fade-in' || s === 'select' || s === 'select-fade-out' ||
     s === 'select-fade-out-back' || s === 'name-entry' || s === 'main-out';
 }
@@ -210,10 +209,9 @@ export function drawTitleSkyInHUD(ctx, roundTopBoxCornersFn) {
   if (ts.state === 'main-in') {
     const fl = TITLE_FADE_MAX - Math.min(Math.floor(ts.timer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
     drawTitleSky(ctx, fl); roundTopBoxCornersFn();
-  } else if (ts.state === 'logo-box-open' || ts.state === 'logo-content-in' || ts.state === 'logo-content-in-back' ||
-             ts.state === 'zbox-open' || ts.state === 'pressz-fade-in' || ts.state === 'main' || ts.state === 'logo-content-out' ||
-             ts.state === 'to-select' || ts.state === 'to-main' || ts.state === 'logo-reopen' ||
-             ts.state === 'select-box-open' || ts.state === 'select-box-close-fwd' ||
+  } else if (ts.state === 'logo-content-in' || ts.state === 'logo-content-in-back' ||
+             ts.state === 'pressz-fade-in' || ts.state === 'main' || ts.state === 'logo-content-out' ||
+             ts.state === 'to-select' || ts.state === 'to-main' ||
              ts.state === 'select-fade-in' || ts.state === 'select' || ts.state === 'select-fade-out' ||
              ts.state === 'select-fade-out-back' || ts.state === 'name-entry') {
     drawTitleSky(ctx, 0); roundTopBoxCornersFn();
@@ -254,8 +252,7 @@ export function drawTitle(ctx, shared) {
     if (ts.state === 'main-in') fl = TITLE_FADE_MAX - Math.min(Math.floor(ts.timer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
     else if (ts.state === 'main-out') fl = Math.min(Math.floor(ts.timer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
 
-    const isSelectState = ts.state === 'select-box-open' || ts.state === 'select-box-close-fwd' ||
-      ts.state === 'to-main' ||
+    const isSelectState = ts.state === 'to-main' ||
       ts.state === 'select-fade-in' || ts.state === 'select' ||
       ts.state === 'select-fade-out' || ts.state === 'select-fade-out-back' || ts.state === 'name-entry';
 
@@ -277,7 +274,7 @@ export function drawTitle(ctx, shared) {
 function _easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
 
 function _isShipLeftState(s) {
-  return s === 'select-box-open' || s === 'select-fade-in' || s === 'select' || s === 'name-entry';
+  return s === 'select-fade-in' || s === 'select' || s === 'name-entry';
 }
 
 function _titleParallaxSpeed(row) {
@@ -322,47 +319,30 @@ function _drawTitleLogo(ctx, cx, fl, isSelectState) {
   if (isSelectState || ts.state === 'main-out' || ts.state === 'to-main' || ts.state === 'main-in') return;
   if (!ts.logoFrames) return;
 
-  // Box expand/collapse factor
-  let t = 1;
-  if (ts.state === 'logo-box-open')  t = _easeInOut(Math.min(ts.timer / BOSS_BOX_EXPAND_MS, 1));
-  else if (ts.state === 'to-select') t = 1 - _easeInOut(Math.min(ts.timer / TITLE_TRANSITION_MS, 1));
-  else if (ts.state === 'logo-reopen') t = _easeInOut(Math.min(ts.timer / BOSS_BOX_EXPAND_MS, 1));
-  if (t <= 0) return;
+  // Compute fade level — box + content fade together
+  let boxFl = fl;
+  if (ts.state === 'logo-content-in' || ts.state === 'logo-content-in-back') boxFl = TITLE_FADE_MAX - Math.min(Math.floor(ts.timer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
+  else if (ts.state === 'logo-content-out') boxFl = Math.min(Math.floor(ts.timer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
+  else if (ts.state === 'to-select') boxFl = TITLE_FADE_MAX;
+  if (boxFl >= TITLE_FADE_MAX) return;
 
-  const logoFl = Math.min(fl, ts.logoFrames.length - 1);
-  if (logoFl >= TITLE_FADE_MAX) return;
-  const logoFrame = ts.logoFrames[logoFl];
+  const logoFrame = ts.logoFrames[Math.min(boxFl, ts.logoFrames.length - 1)];
   const fullW = logoFrame.width + 16, fullH = logoFrame.height + 24;
-  const tboxCY = HUD_VIEW_Y + 12 + fullH / 2;
-  const tboxW = fullW;
-  const tboxH = Math.max(16, Math.ceil(fullH * t / 8) * 8);
-  const tboxX = Math.round(cx - tboxW / 2);
-  const tboxY = Math.round(tboxCY - tboxH / 2);
-  const clampedFl = Math.min(fl, LOAD_FADE_MAX);
-  const tBorderSet = (ts.borderFadeSets && fl > 0) ? ts.borderFadeSets[clampedFl] : ts.borderTiles;
+  const tboxY = HUD_VIEW_Y + 12;
+  const tboxX = Math.round(cx - fullW / 2);
+  const tBorderSet = (ts.borderFadeSets && boxFl > 0) ? ts.borderFadeSets[Math.min(boxFl, LOAD_FADE_MAX)] : ts.borderTiles;
   if (tBorderSet) {
     const [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR, FILL] = tBorderSet;
-    ctx.drawImage(TL, tboxX, tboxY); ctx.drawImage(TR, tboxX + tboxW - 8, tboxY);
-    ctx.drawImage(BL, tboxX, tboxY + tboxH - 8); ctx.drawImage(BR, tboxX + tboxW - 8, tboxY + tboxH - 8);
-    for (let tx = tboxX + 8; tx < tboxX + tboxW - 8; tx += 8) { ctx.drawImage(TOP, tx, tboxY); ctx.drawImage(BOT, tx, tboxY + tboxH - 8); }
-    for (let ty = tboxY + 8; ty < tboxY + tboxH - 8; ty += 8) { ctx.drawImage(LEFT, tboxX, ty); ctx.drawImage(RIGHT, tboxX + tboxW - 8, ty); }
-    for (let ty = tboxY + 8; ty < tboxY + tboxH - 8; ty += 8)
-      for (let tx = tboxX + 8; tx < tboxX + tboxW - 8; tx += 8) ctx.drawImage(FILL, tx, ty);
+    ctx.drawImage(TL, tboxX, tboxY); ctx.drawImage(TR, tboxX + fullW - 8, tboxY);
+    ctx.drawImage(BL, tboxX, tboxY + fullH - 8); ctx.drawImage(BR, tboxX + fullW - 8, tboxY + fullH - 8);
+    for (let tx = tboxX + 8; tx < tboxX + fullW - 8; tx += 8) { ctx.drawImage(TOP, tx, tboxY); ctx.drawImage(BOT, tx, tboxY + fullH - 8); }
+    for (let ty = tboxY + 8; ty < tboxY + fullH - 8; ty += 8) { ctx.drawImage(LEFT, tboxX, ty); ctx.drawImage(RIGHT, tboxX + fullW - 8, ty); }
+    for (let ty = tboxY + 8; ty < tboxY + fullH - 8; ty += 8)
+      for (let tx = tboxX + 8; tx < tboxX + fullW - 8; tx += 8) ctx.drawImage(FILL, tx, ty);
   }
-
-  // Content fade — separate from box open/close
-  let contentFl = fl;
-  if (ts.state === 'logo-box-open') contentFl = TITLE_FADE_MAX; // box opening, no content yet
-  else if (ts.state === 'logo-content-in' || ts.state === 'logo-content-in-back') contentFl = TITLE_FADE_MAX - Math.min(Math.floor(ts.timer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
-  else if (ts.state === 'logo-content-out') contentFl = Math.min(Math.floor(ts.timer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
-  else if (ts.state === 'to-select' || ts.state === 'logo-reopen') contentFl = TITLE_FADE_MAX; // box animating, content hidden
-  if (contentFl < TITLE_FADE_MAX) {
-    const contentFrame = ts.logoFrames[Math.min(contentFl, ts.logoFrames.length - 1)];
-    const fullTboxY = HUD_VIEW_Y + 12;
-    ctx.drawImage(contentFrame, tboxX + 8, fullTboxY + 8);
-    const tw2 = measureText(TITLE_MMORPG);
-    drawText(ctx, cx - tw2 / 2, fullTboxY + 8 + contentFrame.height, TITLE_MMORPG, contentFl === 0 ? TEXT_WHITE : titleFadePal(contentFl));
-  }
+  ctx.drawImage(logoFrame, tboxX + 8, tboxY + 8);
+  const tw2 = measureText(TITLE_MMORPG);
+  drawText(ctx, cx - tw2 / 2, tboxY + 8 + logoFrame.height, TITLE_MMORPG, boxFl === 0 ? TEXT_WHITE : titleFadePal(boxFl));
 }
 
 function _drawTitleShip(ctx, cx, cy, fl) {
@@ -385,11 +365,9 @@ function _drawTitleShip(ctx, cx, cy, fl) {
     // Wind-up left
     const t = Math.min(ts.timer / ((SELECT_TEXT_STEPS + 1) * SELECT_TEXT_STEP_MS), 1);
     shipX = leftX - t * SHIP_WINDUP_PX;
-  } else if (ts.state === 'select-box-close-fwd' || ts.state === 'main-out') {
+  } else if (ts.state === 'main-out') {
     // Fly right
-    const elapsed = ts.state === 'select-box-close-fwd' ? ts.timer : BOSS_BOX_EXPAND_MS + ts.timer;
-    const totalFly = BOSS_BOX_EXPAND_MS + TITLE_FADE_MS;
-    const t = Math.min(elapsed / totalFly, 1);
+    const t = Math.min(ts.timer / TITLE_FADE_MS, 1);
     shipX = (leftX - SHIP_WINDUP_PX) + (cx + 300 - (leftX - SHIP_WINDUP_PX)) * t * t;
   } else if (_isShipLeftState(ts.state) || ts.state === 'select-fade-out-back') {
     const osc = Math.sin(ts.shipDriftTimer / 3000 * Math.PI * 2) * SHIP_IDLE_DRIFT;
@@ -409,36 +387,34 @@ function _drawTitleShip(ctx, cx, cy, fl) {
 
 function _drawTitlePressZ(ctx, cx, vpBot) {
   const ts = titleSt;
-  if (ts.state !== 'zbox-open' && ts.state !== 'pressz-fade-in' && ts.state !== 'main' && ts.state !== 'logo-content-out' &&
-      ts.state !== 'to-select' && ts.state !== 'logo-reopen' && ts.state !== 'logo-content-in-back') return;
+  if (ts.state !== 'pressz-fade-in' && ts.state !== 'main' && ts.state !== 'logo-content-out' &&
+      ts.state !== 'to-select' && ts.state !== 'logo-content-in-back') return;
   if (!ts.pressZ) return;
+
+  // Compute fade level — box + text fade together
+  let boxFl = 0;
+  if (ts.state === 'pressz-fade-in' || ts.state === 'logo-content-in-back') boxFl = TITLE_FADE_MAX - Math.min(Math.floor(ts.timer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
+  else if (ts.state === 'logo-content-out') boxFl = Math.min(Math.floor(ts.timer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
+  else if (ts.state === 'to-select') boxFl = TITLE_FADE_MAX;
+  if (boxFl >= TITLE_FADE_MAX) return;
+
   const pw    = measureText(ts.pressZ);
   const fullW = pw + 16, fullH = 24;
-  const boxCY = vpBot - 44 + fullH / 2;
-  let t = 1;
-  if (ts.state === 'zbox-open')         t = Math.min(ts.timer / TITLE_ZBOX_MS, 1);
-  else if (ts.state === 'to-select')   t = 1 - _easeInOut(Math.min(ts.timer / TITLE_TRANSITION_MS, 1));
-  else if (ts.state === 'logo-reopen') t = _easeInOut(Math.min(ts.timer / BOSS_BOX_EXPAND_MS, 1));
-  // logo-content-out, logo-content-in, main: t stays 1
-  if (t <= 0) return;
-  const boxW = fullW, boxH = Math.max(16, Math.round(fullH * t));
-  const boxX = cx - boxW / 2, boxY = Math.round(boxCY - boxH / 2);
-  if (ts.borderTiles) {
-    const [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR, FILL] = ts.borderTiles;
-    ctx.drawImage(TL, boxX, boxY); ctx.drawImage(TR, boxX + boxW - 8, boxY);
-    ctx.drawImage(BL, boxX, boxY + boxH - 8); ctx.drawImage(BR, boxX + boxW - 8, boxY + boxH - 8);
-    for (let tx = boxX + 8; tx < boxX + boxW - 8; tx += 8) { ctx.drawImage(TOP, tx, boxY); ctx.drawImage(BOT, tx, boxY + boxH - 8); }
-    for (let ty = boxY + 8; ty < boxY + boxH - 8; ty += 8) { ctx.drawImage(LEFT, boxX, ty); ctx.drawImage(RIGHT, boxX + boxW - 8, ty); }
-    for (let ty = boxY + 8; ty < boxY + boxH - 8; ty += 8)
-      for (let tx = boxX + 8; tx < boxX + boxW - 8; tx += 8) ctx.drawImage(FILL, tx, ty);
+  const boxY = vpBot - 44;
+  const boxX = cx - fullW / 2;
+  const tBorderSet = (ts.borderFadeSets && boxFl > 0) ? ts.borderFadeSets[Math.min(boxFl, LOAD_FADE_MAX)] : ts.borderTiles;
+  if (tBorderSet) {
+    const [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR, FILL] = tBorderSet;
+    ctx.drawImage(TL, boxX, boxY); ctx.drawImage(TR, boxX + fullW - 8, boxY);
+    ctx.drawImage(BL, boxX, boxY + fullH - 8); ctx.drawImage(BR, boxX + fullW - 8, boxY + fullH - 8);
+    for (let tx = boxX + 8; tx < boxX + fullW - 8; tx += 8) { ctx.drawImage(TOP, tx, boxY); ctx.drawImage(BOT, tx, boxY + fullH - 8); }
+    for (let ty = boxY + 8; ty < boxY + fullH - 8; ty += 8) { ctx.drawImage(LEFT, boxX, ty); ctx.drawImage(RIGHT, boxX + fullW - 8, ty); }
+    for (let ty = boxY + 8; ty < boxY + fullH - 8; ty += 8)
+      for (let tx = boxX + 8; tx < boxX + fullW - 8; tx += 8) ctx.drawImage(FILL, tx, ty);
   }
-  // Text: fade in after box opens, blink while idle, fade out on close
-  let textFl = TITLE_FADE_MAX;
-  if (ts.state === 'zbox-open' || ts.state === 'logo-reopen') textFl = TITLE_FADE_MAX; // box opening, no text yet
-  else if (ts.state === 'pressz-fade-in' || ts.state === 'logo-content-in-back') textFl = TITLE_FADE_MAX - Math.min(Math.floor(ts.timer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
-  else if (ts.state === 'logo-content-out') textFl = Math.min(Math.floor(ts.timer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
-  else if (ts.state === 'to-select') textFl = TITLE_FADE_MAX;
-  else if (ts.state === 'main') {
+  // Text: blink while idle, otherwise matches box fade
+  let textFl = boxFl;
+  if (ts.state === 'main') {
     textFl = (Math.floor(ts.timer / 500) % 2 === 0) ? 0 : TITLE_FADE_MAX;
   }
   if (textFl < TITLE_FADE_MAX) {
@@ -449,31 +425,25 @@ function _drawTitlePressZ(ctx, cx, vpBot) {
 
 function _drawTitleSelectBox(ctx, cx, shared) {
   const ts = titleSt;
-  const isSelectState = ts.state === 'select-box-open' || ts.state === 'select-box-close-fwd' ||
-    ts.state === 'to-main' ||
+  const isSelectState = ts.state === 'to-main' ||
     ts.state === 'select-fade-in' || ts.state === 'select' ||
     ts.state === 'select-fade-out' || ts.state === 'select-fade-out-back' || ts.state === 'name-entry';
   if (!isSelectState) return;
 
-  // Compute expand factor
-  let sbt = 1;
-  if (ts.state === 'select-box-open') sbt = Math.min(ts.timer / BOSS_BOX_EXPAND_MS, 1);
-  else if (ts.state === 'select-box-close-fwd') sbt = 1 - Math.min(ts.timer / BOSS_BOX_EXPAND_MS, 1);
-  else if (ts.state === 'to-main') sbt = 1 - _easeInOut(Math.min(ts.timer / TITLE_TRANSITION_MS, 1));
-  if (sbt <= 0) return;
+  // Compute fade step — boxes + content fade together
+  let fadeStep = 0;
+  if (ts.state === 'select-fade-in') fadeStep = SELECT_TEXT_STEPS - Math.min(Math.floor(ts.timer / SELECT_TEXT_STEP_MS), SELECT_TEXT_STEPS);
+  else if (ts.state === 'select-fade-out' || ts.state === 'select-fade-out-back') fadeStep = Math.min(Math.floor(ts.timer / SELECT_TEXT_STEP_MS), SELECT_TEXT_STEPS);
+  else if (ts.state === 'to-main') fadeStep = SELECT_TEXT_STEPS;
+  if (fadeStep >= SELECT_TEXT_STEPS && ts.state === 'to-main') return;
+
+  const showContent = fadeStep < SELECT_TEXT_STEPS;
 
   // Layout: 3 slot rows with gaps, pushed right one tile
   const selX = Math.round(cx + SELECT_BOX_OFFSET_X - SEL_W / 2) + 8;
   const gap = 4;
   const totalH = 3 * SEL_ROW_H + 2 * gap;
   const topY = HUD_VIEW_Y + Math.floor((HUD_VIEW_H - totalH) / 2);
-
-  const showContent = sbt >= 1 && ts.state !== 'select-box-close-fwd' && ts.state !== 'to-main';
-  let fadeStep = 0;
-  if (showContent) {
-    if (ts.state === 'select-fade-in') fadeStep = SELECT_TEXT_STEPS - Math.min(Math.floor(ts.timer / SELECT_TEXT_STEP_MS), SELECT_TEXT_STEPS);
-    else if (ts.state === 'select-fade-out' || ts.state === 'select-fade-out-back') fadeStep = Math.min(Math.floor(ts.timer / SELECT_TEXT_STEP_MS), SELECT_TEXT_STEPS);
-  }
 
   // Delete box dimensions
   const labelH = 24;
@@ -482,36 +452,22 @@ function _drawTitleSelectBox(ctx, cx, shared) {
 
   for (let i = 0; i < 3; i++) {
     const rowY = topY + i * (SEL_ROW_H + gap);
-    if (sbt < 1) {
-      const rowCX = selX + SEL_W / 2, rowCY = rowY + SEL_ROW_H / 2;
-      const bw = Math.max(16, Math.ceil(SEL_W * sbt / 8) * 8);
-      const bh = Math.max(16, Math.ceil(SEL_ROW_H * sbt / 8) * 8);
-      shared.drawHudBox(Math.round(rowCX - bw / 2), Math.round(rowCY - bh / 2), bw, bh);
-    } else {
-      _drawSelectSlotRow(ctx, i, selX, rowY, fadeStep, showContent, shared);
-    }
+    _drawSelectSlotRow(ctx, i, selX, rowY, fadeStep, showContent, shared);
   }
 
   // "Delete" label — left of bottom row, bottom-aligned
+  const dx = selX - 4 - deleteLabelW;
   const dy = row2Y + SEL_ROW_H - labelH;
-  if (sbt < 1) {
-    const dCX = selX - 4 - deleteLabelW / 2, dCY = dy + labelH / 2;
-    const dw = Math.max(16, Math.ceil(deleteLabelW * sbt / 8) * 8);
-    const dh = Math.max(16, Math.ceil(labelH * sbt / 8) * 8);
-    shared.drawHudBox(Math.round(dCX - dw / 2), Math.round(dCY - dh / 2), dw, dh);
-  } else {
-    const dx = selX - 4 - deleteLabelW;
-    const delPal = [0x0F, 0x0F, 0x0F, selectCursor === 3 ? 0x16 : 0x30];
-    for (let s = 0; s < fadeStep; s++) delPal[3] = nesColorFade(delPal[3]);
-    shared.drawHudBox(dx, dy, deleteLabelW, labelH, 0);
-    if (showContent) {
-      if (selectCursor === 3) shared.drawCursorFaded(dx - 10, dy + 4, 0);
-      drawText(ctx, dx + 8, dy + 8, SELECT_DELETE_TEXT, delPal);
-    }
+  const delPal = [0x0F, 0x0F, 0x0F, selectCursor === 3 ? 0x16 : 0x30];
+  for (let s = 0; s < fadeStep; s++) delPal[3] = nesColorFade(delPal[3]);
+  shared.drawHudBox(dx, dy, deleteLabelW, labelH, fadeStep);
+  if (showContent) {
+    if (selectCursor === 3) shared.drawCursorFaded(dx - 10, dy + 4, fadeStep);
+    drawText(ctx, dx + 8, dy + 8, SELECT_DELETE_TEXT, delPal);
   }
 
   // Draw slot cursors AFTER delete box so they aren't covered
-  if (sbt >= 1 && showContent && selectCursor >= 0 && selectCursor < 3) {
+  if (showContent && selectCursor >= 0 && selectCursor < 3) {
     const cursorRowY = topY + selectCursor * (SEL_ROW_H + gap);
     shared.drawCursorFaded(selX - 10, cursorRowY + 12, fadeStep);
   }
@@ -521,9 +477,9 @@ function _drawSelectSlotRow(ctx, i, selX, rowY, fadeStep, showContent, shared) {
   const ts = titleSt;
   const isNameEntry = ts.state === 'name-entry' && i === selectCursor;
 
-  // Portrait box (left) + info box (right) — roster style, no border fade
-  shared.drawHudBox(selX, rowY, 32, SEL_ROW_H, 0);
-  shared.drawHudBox(selX + 32, rowY, SEL_W - 32, SEL_ROW_H, 0);
+  // Portrait box (left) + info box (right) — with NES fade
+  shared.drawHudBox(selX, rowY, 32, SEL_ROW_H, fadeStep);
+  shared.drawHudBox(selX + 32, rowY, SEL_W - 32, SEL_ROW_H, fadeStep);
   if (!showContent) return;
 
   // Portrait
