@@ -92,8 +92,9 @@ for (let id = 0; id < 232; id++) {
   const spAtkIdx = rom[off + 14];
   const isBoss = !!(rom[BOSS_BIT + Math.floor(id / 8)] & (1 << (id % 8)));
 
-  // Stat indices → actual values
+  // Stat indices → actual values (3 bytes: attackRoll, hit%, attackPower)
   const atkOff = STAT_TABLE + atkHitIdx * 3;
+  const attackRoll = rom[atkOff + 0];
   const atk = rom[atkOff + 2];
   const hitRate = rom[atkOff + 1];
   const defOff = STAT_TABLE + defEvdIdx * 3;
@@ -132,6 +133,7 @@ for (let id = 0; id < 232; id++) {
   props.push(`level: ${level}`);
   props.push(`hp: ${hp.toString().padStart(5)}`);
   props.push(`atk: ${atk.toString().padStart(3)}`);
+  props.push(`attackRoll: ${attackRoll}`);
   props.push(`hitRate: ${hitRate.toString().padStart(3)}`);
   props.push(`def: ${def}`);
   props.push(`evade: ${evade}`);

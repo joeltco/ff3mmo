@@ -20,16 +20,24 @@ function _processEnemyFlash() {
       targetAlly = allyOptions[Math.floor(Math.random() * allyOptions.length)];
     }
   }
-  const hitRate = (_s.currentAttacker >= 0 && _s.encounterMonsters)
-    ? (_s.encounterMonsters[_s.currentAttacker].hitRate || _s.GOBLIN_HIT_RATE) : _s.BOSS_HIT_RATE;
-  const atk = (_s.currentAttacker >= 0 && _s.encounterMonsters)
-    ? _s.encounterMonsters[_s.currentAttacker].atk : _s.BOSS_ATK;
+  const mon = (_s.currentAttacker >= 0 && _s.encounterMonsters) ? _s.encounterMonsters[_s.currentAttacker] : null;
+  const hitRate = mon ? (mon.hitRate || _s.GOBLIN_HIT_RATE) : _s.BOSS_HIT_RATE;
+  const atk = mon ? mon.atk : _s.BOSS_ATK;
+  const rolls = mon ? (mon.attackRoll || 1) : 1;
+  // NES multi-hit: roll attackRoll times, sum damage from hits that land
+  function rollMultiHit(def) {
+    let total = 0, landed = 0;
+    for (let i = 0; i < rolls; i++) {
+      if (Math.random() * 100 < hitRate) { total += calcDamage(atk, def); landed++; }
+    }
+    return { total, landed };
+  }
   if (targetAlly >= 0) {
     _s.enemyTargetAllyIdx = targetAlly;
-    if (Math.random() * 100 < hitRate) {
-      const dmg = calcDamage(atk, _s.battleAllies[targetAlly].def);
-      _s.battleAllies[targetAlly].hp = Math.max(0, _s.battleAllies[targetAlly].hp - dmg);
-      _s.allyDamageNums[targetAlly] = { value: dmg, timer: 0 };
+    const { total, landed } = rollMultiHit(_s.battleAllies[targetAlly].def);
+    if (landed > 0) {
+      _s.battleAllies[targetAlly].hp = Math.max(0, _s.battleAllies[targetAlly].hp - total);
+      _s.allyDamageNums[targetAlly] = { value: total, timer: 0 };
       _s.allyShakeTimer[targetAlly] = _s.BATTLE_SHAKE_MS;
       playSFX(SFX.ATTACK_HIT); _s.battleState = 'ally-hit'; _s.battleTimer = 0;
     } else {
@@ -46,17 +54,20 @@ function _processEnemyFlash() {
     } else if (ps.evade > 0 && Math.random() * 100 < ps.evade) {
       _s.playerDamageNum = { miss: true, timer: 0 };
       _s.battleState = 'enemy-damage-show'; _s.battleTimer = 0;
-    } else if (Math.random() * 100 < hitRate) {
-      let dmg = calcDamage(atk, _s.ps.def);
-      if (_s.isDefending) dmg = Math.max(1, Math.floor(dmg / 2));
-      _s.ps.hp = Math.max(0, _s.ps.hp - dmg);
-      _s.playerDamageNum = { value: dmg, timer: 0 };
-      playSFX(SFX.ATTACK_HIT);
-      _s.battleShakeTimer = _s.BATTLE_SHAKE_MS;
-      _s.battleState = 'enemy-attack'; _s.battleTimer = 0;
     } else {
-      _s.playerDamageNum = { miss: true, timer: 0 };
-      _s.battleState = 'enemy-damage-show'; _s.battleTimer = 0;
+      const { total, landed } = rollMultiHit(_s.ps.def);
+      if (landed > 0) {
+        let dmg = total;
+        if (_s.isDefending) dmg = Math.max(1, Math.floor(dmg / 2));
+        _s.ps.hp = Math.max(0, _s.ps.hp - dmg);
+        _s.playerDamageNum = { value: dmg, timer: 0 };
+        playSFX(SFX.ATTACK_HIT);
+        _s.battleShakeTimer = _s.BATTLE_SHAKE_MS;
+        _s.battleState = 'enemy-attack'; _s.battleTimer = 0;
+      } else {
+        _s.playerDamageNum = { miss: true, timer: 0 };
+        _s.battleState = 'enemy-damage-show'; _s.battleTimer = 0;
+      }
     }
   }
   return true;

@@ -2007,7 +2007,7 @@ function startRandomEncounter() {
     for (let i = 0; i < count; i++) {
       if (encounterMonsters.length >= 4) break; // battle grid supports max 4
       const mData = MONSTERS.get(group.id) || MONSTERS.get(0x00);
-      encounterMonsters.push({ monsterId: group.id, hp: mData.hp, maxHP: mData.hp, atk: mData.atk, def: mData.def, evade: mData.evade || 0, mdef: mData.mdef || 0, exp: mData.exp, gil: mData.gil || 0, hitRate: mData.hitRate || GOBLIN_HIT_RATE, spAtkRate: mData.spAtkRate || 0, attacks: mData.attacks || null, level: mData.level || 1 });
+      encounterMonsters.push({ monsterId: group.id, hp: mData.hp, maxHP: mData.hp, atk: mData.atk, attackRoll: mData.attackRoll || 1, def: mData.def, evade: mData.evade || 0, mdef: mData.mdef || 0, exp: mData.exp, gil: mData.gil || 0, hitRate: mData.hitRate || GOBLIN_HIT_RATE, spAtkRate: mData.spAtkRate || 0, attacks: mData.attacks || null, level: mData.level || 1 });
     }
     if (encounterMonsters.length >= 4) break;
   }
