@@ -1162,7 +1162,7 @@ function _initSpriteAssets(romRaw) {
   scrollArrowUpFade = sa.scrollArrowUpFade;
 
   // Battle sprite (sprite-init.js)
-  const bs = _initBattleSpriteForJob(romRaw, 1); // 0=Onion Knight, 1=Warrior (testing)
+  const bs = _initBattleSpriteForJob(romRaw, 0); // job index from save (TODO)
   battleSpriteCanvas = bs.battleSpriteCanvas;
   battleSpriteFadeCanvases = bs.battleSpriteFadeCanvases;
   silhouetteCanvas = bs.silhouetteCanvas;
