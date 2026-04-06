@@ -2005,9 +2005,11 @@ function startRandomEncounter() {
   for (const group of formation) {
     const count = group.min + Math.floor(Math.random() * (group.max - group.min + 1));
     for (let i = 0; i < count; i++) {
+      if (encounterMonsters.length >= 4) break; // battle grid supports max 4
       const mData = MONSTERS.get(group.id) || MONSTERS.get(0x00);
       encounterMonsters.push({ monsterId: group.id, hp: mData.hp, maxHP: mData.hp, atk: mData.atk, def: mData.def, evade: mData.evade || 0, mdef: mData.mdef || 0, exp: mData.exp, gil: mData.gil || 0, hitRate: mData.hitRate || GOBLIN_HIT_RATE, spAtkRate: mData.spAtkRate || 0, attacks: mData.attacks || null, level: mData.level || 1 });
     }
+    if (encounterMonsters.length >= 4) break;
   }
   // Sort tallest monsters first so they land on the top row of the grid
   encounterMonsters.sort((a, b) => {
