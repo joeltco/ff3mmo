@@ -1,6 +1,6 @@
 # game.js Refactor TODO
 
-Current size: **3,084 lines** (v1.3.3). Target: <4,000 lines — **achieved**.
+Current size: **3,083 lines** (v1.3.4). Target: <4,000 lines — **achieved**.
 
 ---
 

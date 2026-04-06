@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.3.4 — 2026-04-05
+
+### Options menu + CRT filter
+
+- **Options in pause menu** — new "Options" entry above "Quit" in pause menu (7 items, cursor wraps 0–6). Full expand/shrink/fade transitions matching existing sub-menus
+- **CRT filter toggle** — "CRT" option with On/Off display, press Z to toggle. Adds/removes `crt` class on canvas wrapper
+- **Canvas-based scanlines** — replaced CSS gradient scanlines with a 1×480 canvas overlay using `image-rendering: pixelated`. Guarantees pixel-perfect alignment on all screen sizes
+- **Vignette** — radial gradient `::after` overlay (separate from scanlines)
+- pause-menu.js: 466L (was 413L), input-handler.js: 920L (was 908L)
+
 ## 1.3.3 — 2026-04-05
 
 ### Player select rework
