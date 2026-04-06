@@ -31,6 +31,8 @@ export async function saveSlotsToDB() {
     saveSlots[selectCursor].inventory = { ..._getInventory() };
     saveSlots[selectCursor].gil = ps.gil;
     saveSlots[selectCursor].proficiency = { ...ps.proficiency };
+    saveSlots[selectCursor].jobIdx = ps.jobIdx;
+    saveSlots[selectCursor].unlockedJobs = ps.unlockedJobs;
   }
   try {
     const inv = _getInventory();
@@ -42,6 +44,8 @@ export async function saveSlotsToDB() {
       inventory: s.inventory || inv,
       gil: s.gil || 0,
       proficiency: s.proficiency || {},
+      jobIdx: s.jobIdx || 0,
+      unlockedJobs: s.unlockedJobs != null ? s.unlockedJobs : 0x01,
     } : null);
     // Local IndexedDB
     const db = await openSaveDB();

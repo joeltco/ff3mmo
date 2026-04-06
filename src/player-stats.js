@@ -20,6 +20,8 @@ export const ps = {
   arms: 0x00,
   _romData: null,  // stored by initExpTable for use in grantExp
   proficiency: {}, // { subtype: points } — 100 pts per level, max level 16 (1600 pts)
+  jobIdx: 0,            // current job index (0=Onion Knight, 1=Warrior, etc.)
+  unlockedJobs: 0x01,   // bitmask: bit N = job N unlocked. 0x01 = only Onion Knight
 };
 
 // Equip slot index mapping: -100=RH, -101=LH, -102=Head, -103=Body, -104=Arms
@@ -80,7 +82,7 @@ export function isHitRightHand(hitIdx) {
 }
 
 export function initPlayerStats(romData) {
-  const { str, agi, vit, int: int_, mnd, mpIdx } = readJobBaseStats(romData, 0); // Job 0: Onion Knight
+  const { str, agi, vit, int: int_, mnd, mpIdx } = readJobBaseStats(romData, ps.jobIdx);
   const hp = readStartingHP(romData);
   const mp = readStartingMP(romData, mpIdx);
   ps.stats = { str, agi, vit, int: int_, mnd, hp, maxHP: hp, mp, maxMP: mp, level: 1, exp: 0, expToNext: 0 };
@@ -111,8 +113,8 @@ export function grantExp(amount) {
     const hpGain = ps.stats.vit + Math.floor(Math.random() * (Math.floor(ps.stats.vit / 2) + 1)) + lv * 2;
     ps.stats.maxHP = Math.min(9999, ps.stats.maxHP + hpGain);
 
-    // Stat bonuses from ROM — job 0 (Onion Knight)
-    const bonus = readJobLevelBonus(ps._romData, 0, lv);
+    // Stat bonuses from ROM — current job
+    const bonus = readJobLevelBonus(ps._romData, ps.jobIdx, lv);
     ps.stats.str += bonus.str; ps.stats.agi += bonus.agi; ps.stats.vit += bonus.vit;
     ps.stats.int += bonus.int; ps.stats.mnd += bonus.mnd;
     ps.stats.maxMP += bonus.mpGain;
@@ -202,6 +204,31 @@ export function gainMagicProficiency(magicType) {
   const cat = magicType === 'white' ? 'white' : magicType === 'black' ? 'black' : magicType === 'call' ? 'call' : null;
   if (!cat) return;
   ps.proficiency[cat] = Math.min(1600, (ps.proficiency[cat] || 0) + 1);
+}
+
+export function changeJob(newJobIdx) {
+  ps.jobIdx = newJobIdx;
+  // Rebuild stats from scratch for the new job at current level
+  const { str, agi, vit, int: int_, mnd, mpIdx } = readJobBaseStats(ps._romData, newJobIdx);
+  const baseHP = readStartingHP(ps._romData);
+  const baseMP = readStartingMP(ps._romData, mpIdx);
+  let s = { str, agi, vit, int: int_, mnd, maxHP: baseHP, maxMP: baseMP };
+  // Replay level bonuses
+  for (let lv = 2; lv <= ps.stats.level; lv++) {
+    const hpGain = s.vit + Math.floor(Math.random() * (Math.floor(s.vit / 2) + 1)) + lv * 2;
+    s.maxHP = Math.min(9999, s.maxHP + hpGain);
+    const bonus = readJobLevelBonus(ps._romData, newJobIdx, lv);
+    s.str += bonus.str; s.agi += bonus.agi; s.vit += bonus.vit;
+    s.int += bonus.int; s.mnd += bonus.mnd;
+    s.maxMP += bonus.mpGain;
+  }
+  ps.stats.str = s.str; ps.stats.agi = s.agi; ps.stats.vit = s.vit;
+  ps.stats.int = s.int; ps.stats.mnd = s.mnd;
+  ps.stats.maxHP = s.maxHP; ps.stats.maxMP = s.maxMP;
+  // Clamp HP/MP to new maximums
+  ps.hp = Math.min(ps.hp, s.maxHP); ps.stats.hp = ps.hp;
+  ps.mp = Math.min(ps.mp, s.maxMP); ps.stats.mp = ps.mp;
+  recalcCombatStats();
 }
 
 export function playerStatsSnapshot() {

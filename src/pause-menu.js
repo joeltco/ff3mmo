@@ -2,6 +2,7 @@
 
 import { drawText } from './font-renderer.js';
 import { ps, PROF_CATEGORIES, getEquipSlotId } from './player-stats.js';
+import { JOBS } from './data/jobs.js';
 import { _makeFadedPal } from './palette.js';
 import { _nameToBytes, _buildItemRowBytes } from './text-utils.js';
 import { getItemNameClean } from './text-decoder.js';
@@ -44,6 +45,8 @@ export const pauseSt = {
   eqItemList:   [],      // filtered items that fit the selected slot
   eqItemCursor: 0,       // cursor in eqItemList
   optCursor:    0,       // options sub-menu cursor
+  jobCursor:    0,       // job sub-menu cursor
+  jobList:      [],      // unlocked job indices
 };
 
 // ── Private helpers ────────────────────────────────────────────────────────
@@ -60,6 +63,7 @@ function _pausePanelLayout() {
   const isEqState    = pauseSt.state.startsWith('eq-')  || pauseSt.state === 'equip';
   const isStatsState = pauseSt.state.startsWith('stats-') || pauseSt.state === 'stats';
   const isOptState   = pauseSt.state.startsWith('options-') || pauseSt.state === 'options';
+  const isJobState   = pauseSt.state.startsWith('job-') || pauseSt.state === 'job';
   let panelY = finalY;
   if (pauseSt.state === 'scroll-in') {
     const t = Math.min(pauseSt.timer / PAUSE_SCROLL_MS, 1);
@@ -68,7 +72,7 @@ function _pausePanelLayout() {
     const t = Math.min(pauseSt.timer / PAUSE_SCROLL_MS, 1);
     panelY = finalY - t * ph;
   }
-  return { px, finalY, pw, ph, isInvState, isEqState, isStatsState, isOptState, panelY };
+  return { px, finalY, pw, ph, isInvState, isEqState, isStatsState, isOptState, isJobState, panelY };
 }
 
 // ── Update ─────────────────────────────────────────────────────────────────
@@ -149,6 +153,23 @@ function _updatePauseOptionsTransitions() {
   }
 }
 
+function _updatePauseJobTransitions() {
+  const T = (PAUSE_TEXT_STEPS + 1) * PAUSE_TEXT_STEP_MS;
+  if (pauseSt.state === 'job-text-out') {
+    if (pauseSt.timer >= T) { pauseSt.state = 'job-expand'; pauseSt.timer = 0; }
+  } else if (pauseSt.state === 'job-expand') {
+    if (pauseSt.timer >= PAUSE_EXPAND_MS) { pauseSt.state = 'job-in'; pauseSt.timer = 0; }
+  } else if (pauseSt.state === 'job-in') {
+    if (pauseSt.timer >= T) { pauseSt.state = 'job'; pauseSt.timer = 0; }
+  } else if (pauseSt.state === 'job-out') {
+    if (pauseSt.timer >= T) { pauseSt.state = 'job-shrink'; pauseSt.timer = 0; }
+  } else if (pauseSt.state === 'job-shrink') {
+    if (pauseSt.timer >= PAUSE_EXPAND_MS) { pauseSt.state = 'job-text-in'; pauseSt.timer = 0; }
+  } else if (pauseSt.state === 'job-text-in') {
+    if (pauseSt.timer >= T) { pauseSt.state = 'open'; pauseSt.timer = 0; }
+  }
+}
+
 function _updatePauseStatsTransitions() {
   const T = (PAUSE_TEXT_STEPS + 1) * PAUSE_TEXT_STEP_MS;
   if (pauseSt.state === 'stats-text-out') {
@@ -173,22 +194,23 @@ export function updatePauseMenu(dt, playerInventory) {
   else if (pauseSt.state.startsWith('eq-'))        _updatePauseEqTransitions();
   else if (pauseSt.state.startsWith('stats-') || pauseSt.state === 'stats') _updatePauseStatsTransitions();
   else if (pauseSt.state.startsWith('options-') || pauseSt.state === 'options') _updatePauseOptionsTransitions();
+  else if (pauseSt.state.startsWith('job-') || pauseSt.state === 'job') _updatePauseJobTransitions();
   else                                              _updatePauseMainTransitions(playerInventory);
 }
 
 // ── Draw helpers ───────────────────────────────────────────────────────────
 
 function _drawPauseBox(ctx, shared) {
-  const { px, finalY, pw, ph, isInvState, isEqState, isStatsState, isOptState, panelY } = _pausePanelLayout();
+  const { px, finalY, pw, ph, isInvState, isEqState, isStatsState, isOptState, isJobState, panelY } = _pausePanelLayout();
   const { _drawBorderedBox } = shared;
-  if (isInvState || isEqState || isStatsState || isOptState) {
+  if (isInvState || isEqState || isStatsState || isOptState || isJobState) {
     let t = 1;
-    if (pauseSt.state === 'inv-expand' || pauseSt.state === 'eq-expand' || pauseSt.state === 'stats-expand' || pauseSt.state === 'options-expand') {
+    if (pauseSt.state === 'inv-expand' || pauseSt.state === 'eq-expand' || pauseSt.state === 'stats-expand' || pauseSt.state === 'options-expand' || pauseSt.state === 'job-expand') {
       t = Math.min(pauseSt.timer / PAUSE_EXPAND_MS, 1);
-    } else if (pauseSt.state === 'inv-shrink' || pauseSt.state === 'eq-shrink' || pauseSt.state === 'stats-shrink' || pauseSt.state === 'options-shrink') {
+    } else if (pauseSt.state === 'inv-shrink' || pauseSt.state === 'eq-shrink' || pauseSt.state === 'stats-shrink' || pauseSt.state === 'options-shrink' || pauseSt.state === 'job-shrink') {
       t = 1 - Math.min(pauseSt.timer / PAUSE_EXPAND_MS, 1);
-    } else if (pauseSt.state === 'inv-text-out' || pauseSt.state === 'eq-text-out' || pauseSt.state === 'stats-text-out' || pauseSt.state === 'options-text-out' ||
-               pauseSt.state === 'inv-text-in'  || pauseSt.state === 'eq-text-in'  || pauseSt.state === 'stats-text-in'  || pauseSt.state === 'options-text-in') {
+    } else if (pauseSt.state === 'inv-text-out' || pauseSt.state === 'eq-text-out' || pauseSt.state === 'stats-text-out' || pauseSt.state === 'options-text-out' || pauseSt.state === 'job-text-out' ||
+               pauseSt.state === 'inv-text-in'  || pauseSt.state === 'eq-text-in'  || pauseSt.state === 'stats-text-in'  || pauseSt.state === 'options-text-in'  || pauseSt.state === 'job-text-in') {
       t = 0;
     }
     const bw = Math.round(pw + (HUD_VIEW_W - pw) * t);
@@ -200,23 +222,24 @@ function _drawPauseBox(ctx, shared) {
 }
 
 function _drawPauseMenuText(ctx, shared) {
-  const { px, finalY, pw, ph, isInvState, isEqState, isStatsState, isOptState, panelY } = _pausePanelLayout();
+  const { px, finalY, pw, ph, isInvState, isEqState, isStatsState, isOptState, isJobState, panelY } = _pausePanelLayout();
   const { _drawCursorFaded } = shared;
   const showPauseText = pauseSt.state === 'text-in' || pauseSt.state === 'open' || pauseSt.state === 'text-out' ||
                         pauseSt.state === 'inv-text-out' || pauseSt.state === 'inv-text-in' ||
                         pauseSt.state === 'eq-text-out' || pauseSt.state === 'eq-text-in' ||
                         pauseSt.state === 'stats-text-out' || pauseSt.state === 'stats-text-in' ||
-                        pauseSt.state === 'options-text-out' || pauseSt.state === 'options-text-in';
+                        pauseSt.state === 'options-text-out' || pauseSt.state === 'options-text-in' ||
+                        pauseSt.state === 'job-text-out' || pauseSt.state === 'job-text-in';
   if (!showPauseText) return;
   let fadeStep = 0;
-  if (pauseSt.state === 'text-in' || pauseSt.state === 'inv-text-in' || pauseSt.state === 'eq-text-in' || pauseSt.state === 'stats-text-in' || pauseSt.state === 'options-text-in') {
+  if (pauseSt.state === 'text-in' || pauseSt.state === 'inv-text-in' || pauseSt.state === 'eq-text-in' || pauseSt.state === 'stats-text-in' || pauseSt.state === 'options-text-in' || pauseSt.state === 'job-text-in') {
     fadeStep = PAUSE_TEXT_STEPS - Math.min(Math.floor(pauseSt.timer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
-  } else if (pauseSt.state === 'text-out' || pauseSt.state === 'inv-text-out' || pauseSt.state === 'eq-text-out' || pauseSt.state === 'stats-text-out' || pauseSt.state === 'options-text-out') {
+  } else if (pauseSt.state === 'text-out' || pauseSt.state === 'inv-text-out' || pauseSt.state === 'eq-text-out' || pauseSt.state === 'stats-text-out' || pauseSt.state === 'options-text-out' || pauseSt.state === 'job-text-out') {
     fadeStep = Math.min(Math.floor(pauseSt.timer / PAUSE_TEXT_STEP_MS), PAUSE_TEXT_STEPS);
   }
   const fadedPal = _makeFadedPal(fadeStep);
   const textX = px + 24;
-  const startY = ((isInvState || isEqState || isStatsState || isOptState) ? finalY : panelY) + 12;
+  const startY = ((isInvState || isEqState || isStatsState || isOptState || isJobState) ? finalY : panelY) + 12;
   for (let i = 0; i < PAUSE_ITEMS.length; i++) {
     drawText(ctx, textX, startY + i * 16, PAUSE_ITEMS[i], fadedPal);
   }
@@ -436,6 +459,27 @@ function _drawPauseOptions(ctx, shared) {
   }
 }
 
+function _drawPauseJob(ctx, shared) {
+  const px = HUD_VIEW_X, finalY = HUD_VIEW_Y;
+  const { cursorTileCanvas } = shared;
+  const show = pauseSt.state === 'job-in' || pauseSt.state === 'job' || pauseSt.state === 'job-out';
+  if (!show) return;
+  const fadeStep = _pauseFadeStep('job-in', 'job-out');
+  const fadedPal = _makeFadedPal(fadeStep);
+  const tx = px + 24;
+  let y = finalY + 12;
+  for (let i = 0; i < pauseSt.jobList.length; i++) {
+    const jobIdx = pauseSt.jobList[i];
+    const label = _nameToBytes(JOBS[jobIdx].name);
+    const isCurrentJob = jobIdx === ps.jobIdx;
+    const pal = isCurrentJob ? [0x0F, 0x0F, 0x0F, 0x2A] : fadedPal; // green for current
+    drawText(ctx, tx, y + i * 12, label, isCurrentJob ? _makeFadedPal(fadeStep).map((c, ci) => ci === 3 ? pal[3] : c) : fadedPal);
+  }
+  if (cursorTileCanvas && pauseSt.state === 'job' && fadeStep === 0) {
+    ctx.drawImage(cursorTileCanvas, px + 8, y + pauseSt.jobCursor * 12 - 4);
+  }
+}
+
 // ── Public draw API ────────────────────────────────────────────────────────
 
 // shared = { playerInventory, saveSlots, selectCursor, cursorTileCanvas, rosterScroll,
@@ -450,6 +494,7 @@ export function drawPauseMenu(ctx, shared) {
   _drawPauseEquipItems(ctx, shared);
   _drawPauseStats(ctx, shared);
   _drawPauseOptions(ctx, shared);
+  _drawPauseJob(ctx, shared);
   ctx.restore();
   // Target cursor on portrait — drawn after restore so it's unclipped
   const { cursorTileCanvas, rosterScroll } = shared;

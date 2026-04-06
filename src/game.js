@@ -576,6 +576,30 @@ function _resetBattleVars() {
 function _zPressed() { if (!keys['z'] && !keys['Z']) return false; keys['z'] = false; keys['Z'] = false; return true; }
 function _xPressed() { if (!keys['x'] && !keys['X']) return false; keys['x'] = false; keys['X'] = false; return true; }
 
+function _swapBattleSprites(jobIdx) {
+  const bs = _initBattleSpriteForJob(romRaw, jobIdx);
+  battleSpriteCanvas = bs.battleSpriteCanvas;
+  battleSpriteFadeCanvases = bs.battleSpriteFadeCanvases;
+  silhouetteCanvas = bs.silhouetteCanvas;
+  battleSpriteAttackCanvas = bs.battleSpriteAttackCanvas;
+  battleSpriteAttackLCanvas = bs.battleSpriteAttackLCanvas;
+  battleSpriteKnifeRCanvas = bs.battleSpriteKnifeRCanvas;
+  battleSpriteKnifeLCanvas = bs.battleSpriteKnifeLCanvas;
+  battleSpriteKnifeBackCanvas = bs.battleSpriteKnifeBackCanvas;
+  battleSpriteVictoryCanvas = bs.battleSpriteVictoryCanvas;
+  battleSpriteHitCanvas = bs.battleSpriteHitCanvas;
+  battleSpriteAttack2Canvas = bs.battleSpriteAttack2Canvas;
+  battleSpriteDefendCanvas = bs.battleSpriteDefendCanvas;
+  battleSpriteDefendFadeCanvases = bs.battleSpriteDefendFadeCanvases;
+  defendSparkleFrames = bs.defendSparkleFrames;
+  cureSparkleFrames = bs.cureSparkleFrames;
+  battleSpriteKneelCanvas = bs.battleSpriteKneelCanvas;
+  battleSpriteKneelFadeCanvases = bs.battleSpriteKneelFadeCanvases;
+  sweatFrames = bs.sweatFrames;
+  // Re-init hud drawing shared context so it picks up new canvases
+  initHudDrawing(_hudDrawShared());
+}
+
 // _landOnWorldMap → map-loading.js
 
 function returnToTitle() {
@@ -779,6 +803,7 @@ function _inputShared() {
     returnToTitle,
     startPVPBattle: (target) => startPVPBattle(_pvpShared(), target),
     toggleCrt() { document.getElementById('canvas-wrapper').classList.toggle('crt'); },
+    swapBattleSprites: _swapBattleSprites,
   };
 }
 
@@ -1162,7 +1187,7 @@ function _initSpriteAssets(romRaw) {
   scrollArrowUpFade = sa.scrollArrowUpFade;
 
   // Battle sprite (sprite-init.js)
-  const bs = _initBattleSpriteForJob(romRaw, 0); // job index from save (TODO)
+  const bs = _initBattleSpriteForJob(romRaw, ps.jobIdx);
   battleSpriteCanvas = bs.battleSpriteCanvas;
   battleSpriteFadeCanvases = bs.battleSpriteFadeCanvases;
   silhouetteCanvas = bs.silhouetteCanvas;
@@ -1695,6 +1720,10 @@ function _updateTitleMainOutCase() {
   playerInventory = (slot && slot.inventory) ? { ...slot.inventory } : {};
   ps.gil = (slot && slot.gil) || 0;
   ps.proficiency = (slot && slot.proficiency) ? { ...slot.proficiency } : {};
+  ps.jobIdx = (slot && slot.jobIdx) || 0;
+  ps.unlockedJobs = (slot && slot.unlockedJobs != null) ? slot.unlockedJobs : 0x01;
+  // Swap battle sprites to match saved job
+  _swapBattleSprites(ps.jobIdx);
   transSt.pendingTrack = TRACKS.TOWN_UR;
   loadMapById(114);
   worldY -= 6 * TILE_SIZE;
@@ -2400,6 +2429,7 @@ function _updateBossDissolve(dt) {
   if (dBlock !== prevBlock && dBlock > 0 && (dBlock & 3) === 0) playSFX(SFX.BOSS_DEATH);
   if (battleTimer >= BOSS_BLOCKS * BOSS_DISSOLVE_STEPS * BOSS_DISSOLVE_FRAME_MS) {
     enemyDefeated = true; bossSprite = null;
+    ps.unlockedJobs |= 0x3E; // Wind Crystal: bits 1-5 (Warrior, Monk, White Mage, Black Mage, Red Mage)
     const _bossData = MONSTERS.get(0xCC);
     encounterExpGained = _bossData?.exp || 132; encounterGilGained = _bossData?.gil || 500;
     grantExp(encounterExpGained); ps.gil += encounterGilGained;

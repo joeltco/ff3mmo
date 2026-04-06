@@ -5,7 +5,7 @@ import { pauseSt } from './pause-menu.js';
 import { transSt } from './transitions.js';
 import { msgState, showMsgBox } from './message-box.js';
 import { chatState, CHAT_TABS, activeTab, tabSelectMode, setActiveTab, setTabSelectMode, chatScrollOffset, setChatScrollOffset } from './chat.js';
-import { ps, recalcCombatStats, getEquipSlotId, setEquipSlotId, EQUIP_SLOT_SUBTYPE,
+import { ps, recalcCombatStats, changeJob, getEquipSlotId, setEquipSlotId, EQUIP_SLOT_SUBTYPE,
          getProfHits, getProfLevel, getHitWeapon, WEAPON_PROF_CATEGORY } from './player-stats.js';
 import { ITEMS, isHandEquippable, isWeapon, weaponSubtype, isBladedWeapon } from './data/items.js';
 import { selectCursor, saveSlots, saveSlotsToDB } from './save-state.js';
@@ -673,6 +673,12 @@ function _pauseInputMainMenu() {
     } else if (pauseSt.cursor === 3) {
       playSFX(SFX.CONFIRM);
       pauseSt.state = 'stats-text-out'; pauseSt.timer = 0;
+    } else if (pauseSt.cursor === 4) {
+      playSFX(SFX.CONFIRM);
+      pauseSt.jobList = [];
+      for (let i = 0; i < 22; i++) { if ((ps.unlockedJobs >> i) & 1) pauseSt.jobList.push(i); }
+      pauseSt.jobCursor = Math.max(0, pauseSt.jobList.indexOf(ps.jobIdx));
+      pauseSt.state = 'job-text-out'; pauseSt.timer = 0;
     } else if (pauseSt.cursor === 5) {
       playSFX(SFX.CONFIRM);
       pauseSt.state = 'options-text-out'; pauseSt.timer = 0; pauseSt.optCursor = 0;
@@ -887,6 +893,24 @@ function _pauseInputStats() {
   return true;
 }
 
+function _pauseInputJob() {
+  if (pauseSt.state !== 'job') return false;
+  const k = _s.keys;
+  if (k['ArrowDown']) { k['ArrowDown'] = false; pauseSt.jobCursor = (pauseSt.jobCursor + 1) % pauseSt.jobList.length; playSFX(SFX.CURSOR); }
+  if (k['ArrowUp'])   { k['ArrowUp'] = false;   pauseSt.jobCursor = (pauseSt.jobCursor + pauseSt.jobList.length - 1) % pauseSt.jobList.length; playSFX(SFX.CURSOR); }
+  if (_zPressed()) {
+    const newJobIdx = pauseSt.jobList[pauseSt.jobCursor];
+    if (newJobIdx !== ps.jobIdx) {
+      changeJob(newJobIdx);
+      _s.swapBattleSprites(newJobIdx);
+    }
+    playSFX(SFX.CONFIRM);
+    pauseSt.state = 'job-out'; pauseSt.timer = 0;
+  }
+  if (_xPressed()) { playSFX(SFX.CONFIRM); pauseSt.state = 'job-out'; pauseSt.timer = 0; }
+  return true;
+}
+
 function _pauseInputOptions() {
   if (pauseSt.state !== 'options') return false;
   const k = _s.keys;
@@ -913,6 +937,8 @@ export function handlePauseInput(shared) {
   if (pauseSt.state.startsWith('eq-')) return true;
   if (_pauseInputStats()) return true;
   if (pauseSt.state.startsWith('stats-')) return true;
+  if (_pauseInputJob()) return true;
+  if (pauseSt.state.startsWith('job-')) return true;
   if (_pauseInputOptions()) return true;
   if (pauseSt.state.startsWith('options-')) return true;
   if (pauseSt.state !== 'none') return true;

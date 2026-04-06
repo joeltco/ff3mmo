@@ -644,7 +644,7 @@ export function updateTitleSelect(keys) {
 export function onNameEntryKeyDown(e) {
   e.preventDefault();
   if (e.key === 'Enter' && nameBuffer.length > 0) {
-    saveSlots[selectCursor] = { name: new Uint8Array(nameBuffer), level: 1, exp: 0, stats: null, inventory: {} };
+    saveSlots[selectCursor] = { name: new Uint8Array(nameBuffer), level: 1, exp: 0, stats: null, inventory: {}, gil: 0, proficiency: {}, jobIdx: 0, unlockedJobs: 0x01 };
     saveSlotsToDB();
     titleSt.state = 'select'; titleSt.timer = 0;
   } else if (e.key === 'Backspace') {
