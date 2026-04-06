@@ -132,8 +132,8 @@ function drawSWDamageNumbers(shared) {
   if (_s.battleState !== 'sw-hit') return;
   if (pvpSt.isPVPBattle) {
     for (const [k, dn] of Object.entries(_s.southWindDmgNums)) {
-      const { x: bx, y: by } = _pvpEnemyCellCenter(parseInt(k));
-      _drawBattleNum(bx, _dmgBounceY(by, dn.timer), dn.value, DMG_NUM_PAL);
+      const { x: cx, y: cy } = _pvpEnemyCellCenter(parseInt(k));
+      _drawBattleNum(cx + 8, _dmgBounceY(cy + 12, dn.timer), dn.value, DMG_NUM_PAL);
     }
     return;
   }
@@ -1330,9 +1330,10 @@ function _drawBossDmgNum() {
   if (_s.isRandomEncounter && _s.encounterMonsters) {
     ({ bx, baseY } = _encounterMonsterPos(inputSt.targetIndex));
   } else if (pvpSt.isPVPBattle) {
-    const { x: bx0, y: by0 } = _pvpEnemyCellCenter(pvpSt.pvpPlayerTargetIdx < 0 ? 0 : pvpSt.pvpPlayerTargetIdx + 1);
-    bx = bx0;
-    baseY = by0 - 8;
+    const tidx = pvpSt.pvpPlayerTargetIdx < 0 ? 0 : pvpSt.pvpPlayerTargetIdx + 1;
+    const { x: cx, y: cy } = _pvpEnemyCellCenter(tidx);
+    bx = cx + 8;
+    baseY = cy + 12;
   } else {
     const bc = getBossBattleCanvas();
     const bw = bc ? bc.width : 48;
@@ -1356,6 +1357,10 @@ function _drawEnemyHealNum() {
   let bx, baseY;
   if (_s.isRandomEncounter && _s.encounterMonsters) {
     ({ bx, baseY } = _encounterMonsterPos(_s.enemyHealNum.index));
+  } else if (pvpSt.isPVPBattle) {
+    const { x: cx, y: cy } = _pvpEnemyCellCenter(0);
+    bx = cx + 8;
+    baseY = cy + 12;
   } else {
     const bc = getBossBattleCanvas();
     const bw = bc ? bc.width : 48;
