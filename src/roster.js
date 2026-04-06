@@ -252,7 +252,8 @@ function _drawRosterRow(ds, p, i, panelTop) {
   ds.drawHudBox(HUD_RIGHT_X, rowY, 32, ROSTER_ROW_H, fadeStep);
   ds.drawHudBox(HUD_RIGHT_X + 32, rowY, HUD_RIGHT_W - 32, ROSTER_ROW_H, fadeStep);
 
-  const portraits = ds.fakePlayerPortraits[p.palIdx];
+  const jobPortraits = ds.fakePlayerPortraits[p.jobIdx || 0] || ds.fakePlayerPortraits[0];
+  const portraits = jobPortraits && jobPortraits[p.palIdx];
   if (portraits) ds.ctx.drawImage(portraits[fadeStep], HUD_RIGHT_X + 8, rowY + 8);
 
   const namePal = [0x0F, 0x0F, 0x0F, 0x30];

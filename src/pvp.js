@@ -600,7 +600,9 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   }
   const isMain = idx === 0;
   const palIdx = enemy.palIdx;
-  const fullBody = _s.fullBodyCanvases[palIdx] || _s.fullBodyCanvases[0];
+  const _ej = enemy.jobIdx || 0;
+  const _fpb = (map) => (map[_ej] || map[0])[palIdx];
+  const fullBody = _fpb(_s.fullBodyCanvases) || (_s.fullBodyCanvases[0] || [])[0];
   if (!fullBody) return;
   // Hide dead enemies — but keep visible during dissolve and attack sequence
   const isDying = pvpSt.pvpDyingMap.has(idx) && bs === 'pvp-dissolve';
@@ -649,26 +651,25 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   const isOppDefending = isMain && pvpSt.pvpOpponentIsDefending && bs === 'pvp-defend-anim';
   const isOppItemUse   = isMain && (bs === 'pvp-opp-sw-throw' || bs === 'pvp-opp-sw-hit' || bs === 'pvp-opp-potion');
   let body = fullBody;
-  if (isOppHit && _s.hitFullBodyCanvases[palIdx]) {
-    body = _s.hitFullBodyCanvases[palIdx];
+  if (isOppHit && _fpb(_s.hitFullBodyCanvases)) {
+    body = _fpb(_s.hitFullBodyCanvases);
   } else if (isWindUp) {
     // *** PERMANENT RULE — DO NOT CHANGE ***
     // Opponent faces RIGHT. Right-hand swings use LEFT-hand pose sprites, and vice versa.
     // This is NOT a bug — it's how the NES tile layout works for a right-facing sprite.
     // First attack = right hand → knifeLFullBodyCanvases (L pose = correct visual for R-hand swing)
     // Second attack = left hand → knifeRFullBodyCanvases (R pose = correct visual for L-hand swing)
-    body = (isLeftHandWind ? _s.knifeRFullBodyCanvases : _s.knifeLFullBodyCanvases)[palIdx] || fullBody;
+    body = _fpb(isLeftHandWind ? _s.knifeRFullBodyCanvases : _s.knifeLFullBodyCanvases) || fullBody;
   } else if (isAttackState) {
     // *** PERMANENT RULE — DO NOT CHANGE ***
     // Opponent faces RIGHT. Right-hand → L pose sprites. Left-hand → R pose sprites.
-    const atkCvs = isLeftHandAtk ? _s.knifeRFwdFullBodyCanvases : _s.knifeLFwdFullBodyCanvases;
-    body = (atkCvs && atkCvs[palIdx]) || fullBody;
+    body = _fpb(isLeftHandAtk ? _s.knifeRFwdFullBodyCanvases : _s.knifeLFwdFullBodyCanvases) || fullBody;
   } else if ((isOppDefending || isOppItemUse) && _s.victoryFullBodyCanvases) {
-    body = _s.victoryFullBodyCanvases[palIdx] || fullBody;
+    body = _fpb(_s.victoryFullBodyCanvases) || fullBody;
   } else if (isOppVictory && _s.victoryFullBodyCanvases && (Math.floor(Date.now() / 250) & 1)) {
-    body = _s.victoryFullBodyCanvases[palIdx] || fullBody;
+    body = _fpb(_s.victoryFullBodyCanvases) || fullBody;
   } else if (isNearFatalOpp && !isOppVictory && _s.kneelFullBodyCanvases) {
-    body = _s.kneelFullBodyCanvases[palIdx] || fullBody;
+    body = _fpb(_s.kneelFullBodyCanvases) || fullBody;
   }
 
   // Opponent faces RIGHT (pre-flipped body canvas), player faces LEFT.
@@ -704,7 +705,7 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   if (isWindUp && blade) drawBlade();
   if (isDying) {
     const delay = pvpSt.pvpDyingMap.get(idx) || 0;
-    const deathFrames = _s.fakePlayerDeathFrames && _s.fakePlayerDeathFrames[palIdx];
+    const deathFrames = _s.fakePlayerDeathFrames && _fpb(_s.fakePlayerDeathFrames);
     if (deathFrames && deathFrames.length) {
       const progress = Math.min(Math.max(0, _s.battleTimer - delay) / MONSTER_DEATH_MS, 1);
       const fi = Math.min(deathFrames.length - 1, Math.floor(progress * deathFrames.length));

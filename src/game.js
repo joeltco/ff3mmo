@@ -329,27 +329,28 @@ let scrollArrowUpFade = null;    // [step1..step4]
 
 // getPlayerLocation, getRosterPlayers, getRosterVisible, roster state/update/draw ��� roster.js
 // fakePlayer portrait vars stay here (shared by battle-drawing, battle-ally, pvp)
-let fakePlayerPortraits = [];
-let fakePlayerFullBodyCanvases = [];
-let fakePlayerHitFullBodyCanvases = [];
-let fakePlayerVictoryPortraits = [];
-let fakePlayerHitPortraits = [];
-let fakePlayerDefendPortraits = [];
-let fakePlayerKneelPortraits = [];
-let fakePlayerAttackPortraits = [];
-let fakePlayerAttackLPortraits = [];
-let fakePlayerKnifeBackPortraits = [];
-let fakePlayerKnifeRPortraits = [];
-let fakePlayerKnifeLPortraits = [];
-let fakePlayerKnifeRFullBodyCanvases = [];
-let fakePlayerKnifeLFullBodyCanvases = [];
-let fakePlayerKnifeBackFullBodyCanvases = [];
-let fakePlayerKnifeRFwdFullBodyCanvases = [];
-let fakePlayerKnifeLFwdFullBodyCanvases = [];
-let fakePlayerKneelFullBodyCanvases = [];
-let fakePlayerVictoryFullBodyCanvases = [];
-let fakePlayerDeathFrames = [];
-let fakePlayerDeathPoseCanvases = [];
+// All fakePlayer* vars are objects keyed by jobIdx: { 0: [...palIdx entries...], 1: [...] }
+let fakePlayerPortraits = {};
+let fakePlayerFullBodyCanvases = {};
+let fakePlayerHitFullBodyCanvases = {};
+let fakePlayerVictoryPortraits = {};
+let fakePlayerHitPortraits = {};
+let fakePlayerDefendPortraits = {};
+let fakePlayerKneelPortraits = {};
+let fakePlayerAttackPortraits = {};
+let fakePlayerAttackLPortraits = {};
+let fakePlayerKnifeBackPortraits = {};
+let fakePlayerKnifeRPortraits = {};
+let fakePlayerKnifeLPortraits = {};
+let fakePlayerKnifeRFullBodyCanvases = {};
+let fakePlayerKnifeLFullBodyCanvases = {};
+let fakePlayerKnifeBackFullBodyCanvases = {};
+let fakePlayerKnifeRFwdFullBodyCanvases = {};
+let fakePlayerKnifeLFwdFullBodyCanvases = {};
+let fakePlayerKneelFullBodyCanvases = {};
+let fakePlayerVictoryFullBodyCanvases = {};
+let fakePlayerDeathFrames = {};
+let fakePlayerDeathPoseCanvases = {};
 
 // Battle allies — roster players that join combat
 let battleAllies = [];         // [{name, palIdx, level, hp, maxHP, atk, def, agi, fadeStep}]
@@ -1207,29 +1208,30 @@ function _initSpriteAssets(romRaw) {
   battleSpriteKneelFadeCanvases = bs.battleSpriteKneelFadeCanvases;
   sweatFrames = bs.sweatFrames;
 
-  // Fake player portraits & full bodies (sprite-init.js)
-  const fp = _initFakePlayerPortraits(romRaw);
-  fakePlayerPortraits = fp.fakePlayerPortraits;
-  fakePlayerVictoryPortraits = fp.fakePlayerVictoryPortraits;
-  fakePlayerHitPortraits = fp.fakePlayerHitPortraits;
-  fakePlayerDefendPortraits = fp.fakePlayerDefendPortraits;
-  fakePlayerAttackPortraits = fp.fakePlayerAttackPortraits;
-  fakePlayerAttackLPortraits = fp.fakePlayerAttackLPortraits;
-  fakePlayerKnifeBackPortraits = fp.fakePlayerKnifeBackPortraits;
-  fakePlayerKnifeRPortraits = fp.fakePlayerKnifeRPortraits;
-  fakePlayerKnifeLPortraits = fp.fakePlayerKnifeLPortraits;
-  fakePlayerKneelPortraits = fp.fakePlayerKneelPortraits;
-  fakePlayerFullBodyCanvases = fp.fakePlayerFullBodyCanvases;
-  fakePlayerKnifeRFullBodyCanvases = fp.fakePlayerKnifeRFullBodyCanvases;
-  fakePlayerKnifeLFullBodyCanvases = fp.fakePlayerKnifeLFullBodyCanvases;
-  fakePlayerKnifeBackFullBodyCanvases = fp.fakePlayerKnifeBackFullBodyCanvases;
-  fakePlayerKnifeLFwdFullBodyCanvases = fp.fakePlayerKnifeLFwdFullBodyCanvases;
-  fakePlayerKnifeRFwdFullBodyCanvases = fp.fakePlayerKnifeRFwdFullBodyCanvases;
-  fakePlayerKneelFullBodyCanvases = fp.fakePlayerKneelFullBodyCanvases;
-  fakePlayerVictoryFullBodyCanvases = fp.fakePlayerVictoryFullBodyCanvases;
-  fakePlayerHitFullBodyCanvases = fp.fakePlayerHitFullBodyCanvases;
-  fakePlayerDeathPoseCanvases = fp.fakePlayerDeathPoseCanvases;
-  fakePlayerDeathFrames = fp.fakePlayerDeathFrames;
+  // Fake player portraits & full bodies (sprite-init.js) — keyed by jobIdx
+  const fp = _initFakePlayerPortraits(romRaw, [0, 1]);
+  const _fpMap = (key) => { const m = {}; for (const j of [0, 1]) m[j] = fp[j][key]; return m; };
+  fakePlayerPortraits = _fpMap('fakePlayerPortraits');
+  fakePlayerVictoryPortraits = _fpMap('fakePlayerVictoryPortraits');
+  fakePlayerHitPortraits = _fpMap('fakePlayerHitPortraits');
+  fakePlayerDefendPortraits = _fpMap('fakePlayerDefendPortraits');
+  fakePlayerAttackPortraits = _fpMap('fakePlayerAttackPortraits');
+  fakePlayerAttackLPortraits = _fpMap('fakePlayerAttackLPortraits');
+  fakePlayerKnifeBackPortraits = _fpMap('fakePlayerKnifeBackPortraits');
+  fakePlayerKnifeRPortraits = _fpMap('fakePlayerKnifeRPortraits');
+  fakePlayerKnifeLPortraits = _fpMap('fakePlayerKnifeLPortraits');
+  fakePlayerKneelPortraits = _fpMap('fakePlayerKneelPortraits');
+  fakePlayerFullBodyCanvases = _fpMap('fakePlayerFullBodyCanvases');
+  fakePlayerKnifeRFullBodyCanvases = _fpMap('fakePlayerKnifeRFullBodyCanvases');
+  fakePlayerKnifeLFullBodyCanvases = _fpMap('fakePlayerKnifeLFullBodyCanvases');
+  fakePlayerKnifeBackFullBodyCanvases = _fpMap('fakePlayerKnifeBackFullBodyCanvases');
+  fakePlayerKnifeLFwdFullBodyCanvases = _fpMap('fakePlayerKnifeLFwdFullBodyCanvases');
+  fakePlayerKnifeRFwdFullBodyCanvases = _fpMap('fakePlayerKnifeRFwdFullBodyCanvases');
+  fakePlayerKneelFullBodyCanvases = _fpMap('fakePlayerKneelFullBodyCanvases');
+  fakePlayerVictoryFullBodyCanvases = _fpMap('fakePlayerVictoryFullBodyCanvases');
+  fakePlayerHitFullBodyCanvases = _fpMap('fakePlayerHitFullBodyCanvases');
+  fakePlayerDeathPoseCanvases = _fpMap('fakePlayerDeathPoseCanvases');
+  fakePlayerDeathFrames = _fpMap('fakePlayerDeathFrames');
 
   initRoster();
   loadBossSprite(0xCC); // Land Turtle — loaded eagerly for now (only boss in game)

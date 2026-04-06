@@ -646,6 +646,31 @@ function _initFakePosePortraits(romData) {
   };
 }
 
+// Generate all portrait types for a non-OK job from ROM tiles
+function _initJobPosePortraits(romData, jobIdx) {
+  const jobBase = BATTLE_SPRITE_ROM + jobIdx * BATTLE_JOB_SIZE;
+  const idleTiles = _readJobTiles(romData, jobBase, 0, 1, 2, 3);
+  const victoryTiles = _readJobTiles(romData, jobBase, 24, 25, 26, 27);
+  const hitTiles = _readJobTiles(romData, jobBase, 30, 31, 32, 33);
+  const kneelTiles = _readJobTiles(romData, jobBase, 36, 37, 38, 39);
+  const knifeRTiles = _readJobTiles(romData, jobBase, 0, 1, 12, 3);
+  const knifeLTiles = _readJobTiles(romData, jobBase, 0, 1, 2, 7);
+  const atkRTiles = [idleTiles[0], idleTiles[1], decodeTile(romData, jobBase + 14 * 16), idleTiles[3]];
+  const atkLTiles = [idleTiles[0], idleTiles[1], idleTiles[2], decodeTile(romData, jobBase + 7 * 16)];
+  return {
+    fakePlayerPortraits: _genPosePortraits(idleTiles),
+    fakePlayerVictoryPortraits: _genPosePortraits(victoryTiles),
+    fakePlayerHitPortraits: _genPosePortraits(hitTiles),
+    fakePlayerDefendPortraits: _genPosePortraits(victoryTiles),
+    fakePlayerAttackPortraits: _genPosePortraits(atkRTiles),
+    fakePlayerAttackLPortraits: _genPosePortraits(atkLTiles),
+    fakePlayerKnifeBackPortraits: _genPosePortraits(knifeLTiles),
+    fakePlayerKnifeRPortraits: _genPosePortraits(knifeRTiles),
+    fakePlayerKnifeLPortraits: _genPosePortraits(knifeLTiles),
+    fakePlayerKneelPortraits: _genPosePortraits(kneelTiles),
+  };
+}
+
 function _buildIdleFullBodies() {
   const legL = decodeTile(_FP_LEG_L, 0), legR = decodeTile(_FP_LEG_R, 0);
   const tiles = _FP_IDLE_PPU.map(d => decodeTile(d, 0));
@@ -693,22 +718,66 @@ function _buildDeathPoseCanvases() {
   });
 }
 
-export function initFakePlayerPortraits(romData) {
-  const portraits = _initFakePosePortraits(romData);
-  const fakePlayerFullBodyCanvases = _buildIdleFullBodies();
-  const knifeBodies = _buildKnifeFullBodies();
-  const fakePlayerHitFullBodyCanvases = _buildHitFullBodies(romData);
-  const fakePlayerDeathPoseCanvases = _buildDeathPoseCanvases();
-  const fakePlayerDeathFrames = fakePlayerFullBodyCanvases.map(c => _makeDeathFrames(c));
-
+// Build full body canvases for a job from ROM tiles (portrait tiles + leg tiles)
+// ROM layout per pose: 4 portrait tiles + 2 leg tiles
+function _buildJobFullBodies(romData, jobIdx) {
+  const jobBase = BATTLE_SPRITE_ROM + jobIdx * BATTLE_JOB_SIZE;
+  const dt = (t) => decodeTile(romData, jobBase + t * 16);
+  const idleTiles = _readJobTiles(romData, jobBase, 0, 1, 2, 3);
+  const idleLegs = [dt(4), dt(5)];
+  const hitTiles = _readJobTiles(romData, jobBase, 30, 31, 32, 33);
+  const hitLegs = [dt(34), dt(35)];
+  const kneelTiles = _readJobTiles(romData, jobBase, 36, 37, 38, 39);
+  const kneelLegs = [dt(40), dt(41)];
+  const victoryTiles = _readJobTiles(romData, jobBase, 24, 25, 26, 27);
+  const victoryLegs = [dt(28), dt(29)];
+  const knifeRTiles = _readJobTiles(romData, jobBase, 0, 1, 12, 3);
+  const knifeLTiles = _readJobTiles(romData, jobBase, 0, 1, 2, 7);
+  const atkRTiles = [idleTiles[0], idleTiles[1], dt(14), idleTiles[3]];
+  const atkLTiles = [idleTiles[0], idleTiles[1], idleTiles[2], dt(7)];
+  const build = (tiles, lL, lR) => PLAYER_PALETTES.map(pal => _buildFullBody16x24Canvas(tiles, lL, lR, pal));
+  const idleBodies = build(idleTiles, ...idleLegs);
   return {
-    ...portraits,
-    fakePlayerFullBodyCanvases,
-    ...knifeBodies,
-    fakePlayerHitFullBodyCanvases,
-    fakePlayerDeathPoseCanvases,
-    fakePlayerDeathFrames,
+    fakePlayerFullBodyCanvases: idleBodies,
+    fakePlayerHitFullBodyCanvases: build(hitTiles, ...hitLegs),
+    fakePlayerKnifeRFullBodyCanvases: build(knifeRTiles, ...idleLegs),
+    fakePlayerKnifeLFullBodyCanvases: build(knifeLTiles, ...idleLegs),
+    fakePlayerKnifeBackFullBodyCanvases: build(knifeLTiles, ...idleLegs),
+    fakePlayerKnifeRFwdFullBodyCanvases: build(atkRTiles, ...idleLegs),
+    fakePlayerKnifeLFwdFullBodyCanvases: build(atkLTiles, ...idleLegs),
+    fakePlayerKneelFullBodyCanvases: build(kneelTiles, ...kneelLegs),
+    fakePlayerVictoryFullBodyCanvases: build(victoryTiles, ...victoryLegs),
+    fakePlayerDeathPoseCanvases: _buildDeathPoseCanvases(),
+    fakePlayerDeathFrames: idleBodies.map(c => _makeDeathFrames(c)),
   };
+}
+
+export function initFakePlayerPortraits(romData, jobIndices) {
+  // Build per-job portrait and body sets
+  // jobIndices = array of unique job indices to generate for (e.g. [0, 1])
+  const result = {};
+  for (const jobIdx of jobIndices) {
+    let portraits, bodies;
+    if (jobIdx === 0) {
+      portraits = _initFakePosePortraits(romData);
+      const fullBodies = _buildIdleFullBodies();
+      const knifeBodies = _buildKnifeFullBodies();
+      const hitBodies = _buildHitFullBodies(romData);
+      const deathPoses = _buildDeathPoseCanvases();
+      bodies = {
+        fakePlayerFullBodyCanvases: fullBodies,
+        ...knifeBodies,
+        fakePlayerHitFullBodyCanvases: hitBodies,
+        fakePlayerDeathPoseCanvases: deathPoses,
+        fakePlayerDeathFrames: fullBodies.map(c => _makeDeathFrames(c)),
+      };
+    } else {
+      portraits = _initJobPosePortraits(romData, jobIdx);
+      bodies = _buildJobFullBodies(romData, jobIdx);
+    }
+    result[jobIdx] = { ...portraits, ...bodies };
+  }
+  return result;
 }
 
 export function initAdamantoise(romData) {
