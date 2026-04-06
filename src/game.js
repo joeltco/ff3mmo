@@ -2007,7 +2007,7 @@ function startRandomEncounter() {
   for (let i = 0; i < count; i++) {
     const mid = monPool[Math.floor(Math.random() * monPool.length)];
     const mData = MONSTERS.get(mid) || MONSTERS.get(0x00);
-    encounterMonsters.push({ monsterId: mid, hp: mData.hp, maxHP: mData.hp, atk: mData.atk, def: mData.def, exp: mData.exp, gil: mData.gil || 0, hitRate: GOBLIN_HIT_RATE });
+    encounterMonsters.push({ monsterId: mid, hp: mData.hp, maxHP: mData.hp, atk: mData.atk, def: mData.def, evade: mData.evade || 0, mdef: mData.mdef || 0, exp: mData.exp, gil: mData.gil || 0, hitRate: mData.hitRate || GOBLIN_HIT_RATE, spAtkRate: mData.spAtkRate || 0, attacks: mData.attacks || null, level: mData.level || 1 });
   }
   // Sort tallest monsters first so they land on the top row of the grid
   encounterMonsters.sort((a, b) => {
