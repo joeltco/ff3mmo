@@ -28,7 +28,8 @@ export function setPositionGetter(fn) { _getPosition = fn; }
 export async function saveSlotsToDB() {
   if (!savesLoaded) return;
   // Sync live player state into the active save slot before persisting
-  if (saveSlots[selectCursor]) {
+  // Skip if slot has no stats yet (fresh new game, not yet loaded)
+  if (saveSlots[selectCursor] && saveSlots[selectCursor].stats) {
     saveSlots[selectCursor].level = ps.stats.level;
     saveSlots[selectCursor].exp = ps.stats.exp;
     saveSlots[selectCursor].hp = ps.hp;
@@ -52,8 +53,8 @@ export async function saveSlotsToDB() {
       level: s.level || (ps.stats ? ps.stats.level : 1),
       exp: s.exp != null ? s.exp : (ps.stats ? ps.stats.exp : 0),
       hp: s.hp != null ? s.hp : (s.stats ? s.stats.hp : null),
-      stats: s.stats || (ps.stats ? playerStatsSnapshot() : null),
-      inventory: s.inventory || inv,
+      stats: s.stats || null,
+      inventory: s.inventory || {},
       gil: s.gil || 0,
       proficiency: s.proficiency || {},
       jobIdx: s.jobIdx || 0,
