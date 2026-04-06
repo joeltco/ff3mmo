@@ -35,6 +35,20 @@ export const SELECT_TEXT_STEP_MS  = 100;
 export const BOSS_BOX_EXPAND_MS   = 300;
 const LOAD_FADE_MAX        = 4;
 const SEL_ROW_H            = 32;  // same as roster rows
+
+// Draw a box using title-screen transparent border tiles (no black outer edge)
+function _drawTitleBox(ctx, x, y, w, h, fadeStep) {
+  const ts = titleSt;
+  const tBorderSet = (ts.borderFadeSets && fadeStep > 0) ? ts.borderFadeSets[Math.min(fadeStep, LOAD_FADE_MAX)] : ts.borderTiles;
+  if (!tBorderSet) return;
+  const [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR] = tBorderSet;
+  ctx.fillStyle = '#000';
+  ctx.fillRect(x + 8, y + 8, w - 16, h - 16);
+  ctx.drawImage(TL, x, y); ctx.drawImage(TR, x + w - 8, y);
+  ctx.drawImage(BL, x, y + h - 8); ctx.drawImage(BR, x + w - 8, y + h - 8);
+  for (let tx = x + 8; tx < x + w - 8; tx += 8) { ctx.drawImage(TOP, tx, y); ctx.drawImage(BOT, tx, y + h - 8); }
+  for (let ty = y + 8; ty < y + h - 8; ty += 8) { ctx.drawImage(LEFT, x, ty); ctx.drawImage(RIGHT, x + w - 8, ty); }
+}
 const SEL_W                = 112; // same width as roster panel
 // NAME_MAX_LEN → imported from save-state.js
 
@@ -330,16 +344,7 @@ function _drawTitleLogo(ctx, cx, fl, isSelectState) {
   const fullW = logoFrame.width + 16, fullH = logoFrame.height + 24;
   const tboxY = HUD_VIEW_Y + 12;
   const tboxX = Math.round(cx - fullW / 2);
-  const tBorderSet = (ts.borderFadeSets && boxFl > 0) ? ts.borderFadeSets[Math.min(boxFl, LOAD_FADE_MAX)] : ts.borderTiles;
-  if (tBorderSet) {
-    const [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR, FILL] = tBorderSet;
-    ctx.drawImage(TL, tboxX, tboxY); ctx.drawImage(TR, tboxX + fullW - 8, tboxY);
-    ctx.drawImage(BL, tboxX, tboxY + fullH - 8); ctx.drawImage(BR, tboxX + fullW - 8, tboxY + fullH - 8);
-    for (let tx = tboxX + 8; tx < tboxX + fullW - 8; tx += 8) { ctx.drawImage(TOP, tx, tboxY); ctx.drawImage(BOT, tx, tboxY + fullH - 8); }
-    for (let ty = tboxY + 8; ty < tboxY + fullH - 8; ty += 8) { ctx.drawImage(LEFT, tboxX, ty); ctx.drawImage(RIGHT, tboxX + fullW - 8, ty); }
-    for (let ty = tboxY + 8; ty < tboxY + fullH - 8; ty += 8)
-      for (let tx = tboxX + 8; tx < tboxX + fullW - 8; tx += 8) ctx.drawImage(FILL, tx, ty);
-  }
+  _drawTitleBox(ctx, tboxX, tboxY, fullW, fullH, boxFl);
   ctx.drawImage(logoFrame, tboxX + 8, tboxY + 8);
   const tw2 = measureText(TITLE_MMORPG);
   drawText(ctx, cx - tw2 / 2, tboxY + 8 + logoFrame.height, TITLE_MMORPG, boxFl === 0 ? TEXT_WHITE : titleFadePal(boxFl));
@@ -402,16 +407,7 @@ function _drawTitlePressZ(ctx, cx, vpBot) {
   const fullW = pw + 16, fullH = 24;
   const boxY = vpBot - 44;
   const boxX = cx - fullW / 2;
-  const tBorderSet = (ts.borderFadeSets && boxFl > 0) ? ts.borderFadeSets[Math.min(boxFl, LOAD_FADE_MAX)] : ts.borderTiles;
-  if (tBorderSet) {
-    const [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR, FILL] = tBorderSet;
-    ctx.drawImage(TL, boxX, boxY); ctx.drawImage(TR, boxX + fullW - 8, boxY);
-    ctx.drawImage(BL, boxX, boxY + fullH - 8); ctx.drawImage(BR, boxX + fullW - 8, boxY + fullH - 8);
-    for (let tx = boxX + 8; tx < boxX + fullW - 8; tx += 8) { ctx.drawImage(TOP, tx, boxY); ctx.drawImage(BOT, tx, boxY + fullH - 8); }
-    for (let ty = boxY + 8; ty < boxY + fullH - 8; ty += 8) { ctx.drawImage(LEFT, boxX, ty); ctx.drawImage(RIGHT, boxX + fullW - 8, ty); }
-    for (let ty = boxY + 8; ty < boxY + fullH - 8; ty += 8)
-      for (let tx = boxX + 8; tx < boxX + fullW - 8; tx += 8) ctx.drawImage(FILL, tx, ty);
-  }
+  _drawTitleBox(ctx, boxX, boxY, fullW, fullH, boxFl);
   // Text: blink while idle, otherwise matches box fade
   let textFl = boxFl;
   if (ts.state === 'main') {
@@ -458,9 +454,9 @@ function _drawTitleSelectBox(ctx, cx, shared) {
   // "Delete" label — left of bottom row, bottom-aligned
   const dx = selX - 4 - deleteLabelW;
   const dy = row2Y + SEL_ROW_H - labelH;
-  const delPal = [0x0F, 0x0F, 0x0F, selectCursor === 3 ? 0x16 : 0x30];
+  const delPal = [0x0F, 0x0F, 0x0F, titleSt.deleteMode ? 0x16 : selectCursor === 3 ? 0x16 : 0x30];
   for (let s = 0; s < fadeStep; s++) delPal[3] = nesColorFade(delPal[3]);
-  shared.drawHudBox(dx, dy, deleteLabelW, labelH, fadeStep);
+  _drawTitleBox(ctx, dx, dy, deleteLabelW, labelH, fadeStep);
   if (showContent) {
     if (selectCursor === 3) shared.drawCursorFaded(dx - 10, dy + 4, fadeStep);
     drawText(ctx, dx + 8, dy + 8, SELECT_DELETE_TEXT, delPal);
@@ -478,8 +474,8 @@ function _drawSelectSlotRow(ctx, i, selX, rowY, fadeStep, showContent, shared) {
   const isNameEntry = ts.state === 'name-entry' && i === selectCursor;
 
   // Portrait box (left) + info box (right) — with NES fade
-  shared.drawHudBox(selX, rowY, 32, SEL_ROW_H, fadeStep);
-  shared.drawHudBox(selX + 32, rowY, SEL_W - 32, SEL_ROW_H, fadeStep);
+  _drawTitleBox(ctx, selX, rowY, 32, SEL_ROW_H, fadeStep);
+  _drawTitleBox(ctx, selX + 32, rowY, SEL_W - 32, SEL_ROW_H, fadeStep);
   if (!showContent) return;
 
   // Portrait — use per-job fake player portraits keyed by slot's jobIdx
@@ -574,15 +570,20 @@ export function updateTitleUnderwater(dt) {
 
 export function updateTitleSelect(keys) {
   if (_zPressed(keys)) {
-    if (selectCursor === 3) {
-      // Delete mode — delete the last-selected slot
-      if (titleSt._lastSlotCursor != null && saveSlots[titleSt._lastSlotCursor]) {
+    if (titleSt.deleteMode) {
+      // In delete mode — Z on a slot deletes it
+      if (saveSlots[selectCursor]) {
         playSFX(SFX.CONFIRM);
-        saveSlots[titleSt._lastSlotCursor] = null;
-        serverDeleteSlot(titleSt._lastSlotCursor);
+        saveSlots[selectCursor] = null;
+        serverDeleteSlot(selectCursor);
         saveSlotsToDB();
-        setSelectCursor(titleSt._lastSlotCursor);
+        titleSt.deleteMode = false;
       }
+    } else if (selectCursor === 3) {
+      // Activate delete mode — cursor goes back to slots
+      playSFX(SFX.CONFIRM);
+      titleSt.deleteMode = true;
+      setSelectCursor(titleSt._lastSlotCursor || 0);
     } else if (saveSlots[selectCursor]) {
       playSFX(SFX.CONFIRM);
       titleSt.state = 'select-fade-out'; titleSt.timer = 0;
@@ -592,8 +593,12 @@ export function updateTitleSelect(keys) {
       titleSt.state = 'name-entry'; titleSt.timer = 0;
     }
   }
-  if (selectCursor === 3) {
-    // On delete — right goes back to slots
+  if (titleSt.deleteMode) {
+    // Delete mode — navigate slots only, no access to delete button
+    if (keys['ArrowDown'])  { keys['ArrowDown'] = false;  setSelectCursor((selectCursor + 1) % 3); playSFX(SFX.CURSOR); }
+    if (keys['ArrowUp'])    { keys['ArrowUp'] = false;    setSelectCursor((selectCursor + 2) % 3); playSFX(SFX.CURSOR); }
+  } else if (selectCursor === 3) {
+    // On delete button — right goes back to slots
     if (keys['ArrowRight']) { keys['ArrowRight'] = false; setSelectCursor(titleSt._lastSlotCursor || 0); playSFX(SFX.CURSOR); }
   } else {
     if (keys['ArrowDown'])  { keys['ArrowDown'] = false;  setSelectCursor((selectCursor + 1) % 3); playSFX(SFX.CURSOR); }
@@ -601,7 +606,13 @@ export function updateTitleSelect(keys) {
     if (keys['ArrowLeft'])  { keys['ArrowLeft'] = false;  titleSt._lastSlotCursor = selectCursor; setSelectCursor(3); playSFX(SFX.CURSOR); }
   }
   if (_xPressed(keys)) {
-    playSFX(SFX.CONFIRM); titleSt.state = 'select-fade-out-back'; titleSt.timer = 0;
+    if (titleSt.deleteMode) {
+      // Cancel delete mode
+      playSFX(SFX.CURSOR);
+      titleSt.deleteMode = false;
+    } else {
+      playSFX(SFX.CONFIRM); titleSt.state = 'select-fade-out-back'; titleSt.timer = 0;
+    }
   }
 }
 

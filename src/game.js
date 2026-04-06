@@ -485,7 +485,7 @@ export function init() {
   window.addEventListener('beforeunload', () => { saveSlotsToDB(); });
 }
 
-function _tileToCanvas(pixels, palette) {
+function _tileToCanvas(pixels, palette, transparentBg = false) {
   const c = document.createElement('canvas');
   c.width = 8; c.height = 8;
   const tctx = c.getContext('2d');
@@ -493,7 +493,7 @@ function _tileToCanvas(pixels, palette) {
   for (let i = 0; i < 64; i++) {
     const rgb = NES_SYSTEM_PALETTE[palette[pixels[i]]] || [0, 0, 0];
     img.data[i * 4] = rgb[0]; img.data[i * 4 + 1] = rgb[1];
-    img.data[i * 4 + 2] = rgb[2]; img.data[i * 4 + 3] = 255;
+    img.data[i * 4 + 2] = rgb[2]; img.data[i * 4 + 3] = (transparentBg && pixels[i] === 0) ? 0 : 255;
   }
   tctx.putImageData(img, 0, 0);
   return c;
@@ -523,9 +523,14 @@ function _initHUDBorderTiles(tiles) {
     const fadedPal = MENU_PALETTE.map(c => { let fc = c; for (let s = 0; s < step; s++) fc = nesColorFade(fc); return fc; });
     borderFadeSets.push(tiles.map(p => _tileToCanvas(p, fadedPal)));
   }
-  // Wire border tile refs into title-screen.js
-  titleSt.borderTiles = borderTileCanvases;
-  titleSt.borderFadeSets = borderFadeSets;
+  // Title screen gets transparent-background border tiles (no black outer edge)
+  titleSt.borderTiles = tiles.map(p => _tileToCanvas(p, MENU_PALETTE, true));
+  const titleFadeSets = [];
+  for (let step = 0; step <= LOAD_FADE_MAX; step++) {
+    const fadedPal = MENU_PALETTE.map(c => { let fc = c; for (let s = 0; s < step; s++) fc = nesColorFade(fc); return fc; });
+    titleFadeSets.push(tiles.map(p => _tileToCanvas(p, fadedPal, true)));
+  }
+  titleSt.borderFadeSets = titleFadeSets;
 }
 
 function _initHUDCanvases() {
