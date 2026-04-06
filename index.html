@@ -1401,6 +1401,21 @@
       // Seed HIT tiles from ROM (tiles 30-33 portrait + 34-35 legs)
       const _hitBase = 0x50010 + 30 * 16;
       for (let t = 0; t < 6; t++) okPoseTiles[7].tiles[t] = _rom.slice(_hitBase + t * 16, _hitBase + (t + 1) * 16);
+      // Add Warrior (job 1) poses from ROM
+      const _wBase = 0x50010 + 0x02A0; // BATTLE_SPRITE_ROM + 1 * BATTLE_JOB_SIZE
+      const _wr = (t) => _rom.slice(_wBase + t * 16, _wBase + (t + 1) * 16);
+      const _wPoses = [
+        { label: 'W IDLE',     tiles: [_wr(0),_wr(1),_wr(2),_wr(3),_wr(4),_wr(5)], rows: 3 },
+        { label: 'W L BACK',   tiles: [_wr(0),_wr(1),_wr(2),_wr(7),_wr(4),_wr(5)], rows: 3 },
+        { label: 'W L FWD',    tiles: [_wr(0),_wr(1),_wr(2),_wr(7),_wr(4),_wr(5)], rows: 3 },
+        { label: 'W R BACK',   tiles: [_wr(0),_wr(1),_wr(12),_wr(3),_wr(4),_wr(5)], rows: 3 },
+        { label: 'W R FWD',    tiles: [_wr(0),_wr(1),_wr(14),_wr(3),_wr(4),_wr(5)], rows: 3 },
+        { label: 'W KNEEL',    tiles: [_wr(36),_wr(37),_wr(38),_wr(39),_wr(40),_wr(41)], rows: 3 },
+        { label: 'W VICTORY',  tiles: [_wr(24),_wr(25),_wr(26),_wr(27),_wr(28),_wr(29)], rows: 3 },
+        { label: 'W HIT',      tiles: [_wr(30),_wr(31),_wr(32),_wr(33),_wr(34),_wr(35)], rows: 3 },
+        { label: 'W ATK2',     tiles: [_wr(18),_wr(19),_wr(20),_wr(21),_wr(22),_wr(23)], rows: 3 },
+      ];
+      for (const wp of _wPoses) okPoseTiles.push(wp);
       renderTilePage();
       tileViewer.style.display = 'flex';
       tileViewerOpen = true;
