@@ -5,26 +5,25 @@ export const LOCATIONS = ['world', 'ur', 'cave-0', 'cave-1', 'cave-2', 'cave-3',
 
 // Each player has a current location that changes over time (loc is mutated at runtime)
 export const PLAYER_POOL = [
-  // All altar gear (Leather Armor + Cap) — only gear available in-game right now
-  // Some have Leather Shield. Mira and Orin dual-wield.
-  { name: 'Zephyr',  level: 5,  palIdx: 1, camper: false, loc: 'ur',      weaponR: 0x1E,               armorId: 0x73, helmId: 0x62, shieldId: 0x58 }, // Knife / Leather+Cap+Shield
-  { name: 'Mira',    level: 4,  palIdx: 2, camper: false, loc: 'world',   weaponR: 0x1E, weaponL: 0x1E, armorId: 0x73, helmId: 0x62 },                // Knife×2 / Leather+Cap
-  { name: 'Aldric',  level: 5,  palIdx: 3, camper: true,  loc: 'ur',      weaponR: 0x1E,               armorId: 0x73, helmId: 0x62, shieldId: 0x58 }, // Knife / Leather+Cap+Shield
-  { name: 'Suki',    level: 3,  palIdx: 4, camper: false, loc: 'cave-0',  weaponR: 0x1E,               armorId: 0x73, helmId: 0x62 },                 // Knife / Leather+Cap
-  { name: 'Fenris',  level: 5,  palIdx: 5, camper: false, loc: 'cave-1',  weaponR: 0x1F,               armorId: 0x73, helmId: 0x62, shieldId: 0x58 }, // Dagger / Leather+Cap+Shield
-  { name: 'Lenna',   level: 5,  palIdx: 6, camper: true,  loc: 'ur',      weaponR: 0x1E,               armorId: 0x73, helmId: 0x62 },                 // Knife / Leather+Cap
-  { name: 'Grok',    level: 5,  palIdx: 7, camper: false, loc: 'cave-3',  weaponR: 0x24,               armorId: 0x73, helmId: 0x62, shieldId: 0x58 }, // Longsword / Leather+Cap+Shield
-  { name: 'Ivy',     level: 2,  palIdx: 0, camper: false, loc: 'ur',      weaponR: 0x1E,               armorId: 0x73, helmId: 0x62 },                 // Knife / Leather+Cap
-  { name: 'Rook',    level: 5,  palIdx: 3, camper: false, loc: 'cave-2',  weaponR: 0x24,               armorId: 0x73, helmId: 0x62, shieldId: 0x58 }, // Longsword / Leather+Cap+Shield
-  { name: 'Tora',    level: 5,  palIdx: 5, camper: false, loc: 'world',   weaponR: 0x1F,               armorId: 0x73, helmId: 0x62 },                 // Dagger / Leather+Cap
-  { name: 'Blix',    level: 4,  palIdx: 7, camper: false, loc: 'cave-0',  weaponR: 0x1F,               armorId: 0x73, helmId: 0x62 },                 // Dagger / Leather+Cap
-  { name: 'Cassia',  level: 5,  palIdx: 6, camper: true,  loc: 'cave-1',  weaponR: 0x1F,               armorId: 0x73, helmId: 0x62, shieldId: 0x58 }, // Dagger / Leather+Cap+Shield
-  { name: 'Duran',   level: 5,  palIdx: 1, camper: false, loc: 'crystal', weaponR: 0x24,               armorId: 0x73, helmId: 0x62, shieldId: 0x58 }, // Longsword / Leather+Cap+Shield
-  { name: 'Nyx',     level: 1,  palIdx: 4, camper: false, loc: 'ur',      weaponR: 0x1E,               armorId: 0x73, helmId: 0x62 },                 // Knife / Leather+Cap
-  { name: 'Orin',    level: 4,  palIdx: 0, camper: false, loc: 'world',   weaponR: 0x1F, weaponL: 0x1E, armorId: 0x73, helmId: 0x62 },                // Dagger+Knife / Leather+Cap
-  { name: 'Pip',     level: 3,  palIdx: 2, camper: false, loc: 'cave-0',  weaponR: 0x1E,               armorId: 0x73, helmId: 0x62 },                 // Knife / Leather+Cap
-  { name: 'Vex',     level: 5,  palIdx: 7, camper: false, loc: 'cave-2',  weaponR: 0x24,               armorId: 0x73, helmId: 0x62, shieldId: 0x58 }, // Longsword / Leather+Cap+Shield
-  { name: 'Wren',    level: 4,  palIdx: 5, camper: false, loc: 'world',   weaponR: 0x1F,               armorId: 0x73, helmId: 0x62 },                 // Dagger / Leather+Cap
+  // jobIdx: 0=Onion Knight, 1=Fighter. Sword users are Fighters.
+  { name: 'Zephyr',  level: 5,  palIdx: 1, camper: false, loc: 'ur',      jobIdx: 0, weaponR: 0x1E,               armorId: 0x73, helmId: 0x62, shieldId: 0x58 }, // OK — Knife / Leather+Cap+Shield
+  { name: 'Mira',    level: 4,  palIdx: 2, camper: false, loc: 'world',   jobIdx: 0, weaponR: 0x1E, weaponL: 0x1E, armorId: 0x73, helmId: 0x62 },                // OK — Knife×2 / Leather+Cap
+  { name: 'Aldric',  level: 5,  palIdx: 3, camper: true,  loc: 'ur',      jobIdx: 1, weaponR: 0x24,               armorId: 0x73, helmId: 0x62, shieldId: 0x58 }, // Fi — Longsword / Leather+Cap+Shield
+  { name: 'Suki',    level: 3,  palIdx: 4, camper: false, loc: 'cave-0',  jobIdx: 0, weaponR: 0x1E,               armorId: 0x73, helmId: 0x62 },                 // OK — Knife / Leather+Cap
+  { name: 'Fenris',  level: 5,  palIdx: 5, camper: false, loc: 'cave-1',  jobIdx: 1, weaponR: 0x1F,               armorId: 0x73, helmId: 0x62, shieldId: 0x58 }, // Fi — Dagger / Leather+Cap+Shield
+  { name: 'Lenna',   level: 5,  palIdx: 6, camper: true,  loc: 'ur',      jobIdx: 0, weaponR: 0x1E,               armorId: 0x73, helmId: 0x62 },                 // OK — Knife / Leather+Cap
+  { name: 'Grok',    level: 5,  palIdx: 7, camper: false, loc: 'cave-3',  jobIdx: 1, weaponR: 0x24,               armorId: 0x73, helmId: 0x62, shieldId: 0x58 }, // Fi — Longsword / Leather+Cap+Shield
+  { name: 'Ivy',     level: 2,  palIdx: 0, camper: false, loc: 'ur',      jobIdx: 0, weaponR: 0x1E,               armorId: 0x73, helmId: 0x62 },                 // OK — Knife / Leather+Cap
+  { name: 'Rook',    level: 5,  palIdx: 3, camper: false, loc: 'cave-2',  jobIdx: 1, weaponR: 0x24,               armorId: 0x73, helmId: 0x62, shieldId: 0x58 }, // Fi — Longsword / Leather+Cap+Shield
+  { name: 'Tora',    level: 5,  palIdx: 5, camper: false, loc: 'world',   jobIdx: 0, weaponR: 0x1F,               armorId: 0x73, helmId: 0x62 },                 // OK — Dagger / Leather+Cap
+  { name: 'Blix',    level: 4,  palIdx: 7, camper: false, loc: 'cave-0',  jobIdx: 0, weaponR: 0x1F,               armorId: 0x73, helmId: 0x62 },                 // OK — Dagger / Leather+Cap
+  { name: 'Cassia',  level: 5,  palIdx: 6, camper: true,  loc: 'cave-1',  jobIdx: 1, weaponR: 0x28,               armorId: 0x73, helmId: 0x62, shieldId: 0x58 }, // Fi — Serpent Sword / Leather+Cap+Shield
+  { name: 'Duran',   level: 5,  palIdx: 1, camper: false, loc: 'crystal', jobIdx: 1, weaponR: 0x24,               armorId: 0x73, helmId: 0x62, shieldId: 0x58 }, // Fi — Longsword / Leather+Cap+Shield
+  { name: 'Nyx',     level: 1,  palIdx: 4, camper: false, loc: 'ur',      jobIdx: 0, weaponR: 0x1E,               armorId: 0x73, helmId: 0x62 },                 // OK — Knife / Leather+Cap
+  { name: 'Orin',    level: 4,  palIdx: 0, camper: false, loc: 'world',   jobIdx: 1, weaponR: 0x1F, weaponL: 0x1E, armorId: 0x73, helmId: 0x62 },                // Fi — Dagger+Knife / Leather+Cap
+  { name: 'Pip',     level: 3,  palIdx: 2, camper: false, loc: 'cave-0',  jobIdx: 0, weaponR: 0x1E,               armorId: 0x73, helmId: 0x62 },                 // OK — Knife / Leather+Cap
+  { name: 'Vex',     level: 5,  palIdx: 7, camper: false, loc: 'cave-2',  jobIdx: 1, weaponR: 0x24,               armorId: 0x73, helmId: 0x62, shieldId: 0x58 }, // Fi — Longsword / Leather+Cap+Shield
+  { name: 'Wren',    level: 4,  palIdx: 5, camper: false, loc: 'world',   jobIdx: 0, weaponR: 0x1F,               armorId: 0x73, helmId: 0x62 },                 // OK — Dagger / Leather+Cap
 ];
 
 // Palette variants — only color 3 changes (original $16 = red outfit)
