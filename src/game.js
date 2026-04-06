@@ -3,11 +3,10 @@
 import { parseROM } from './rom-parser.js';
 import { NES_SYSTEM_PALETTE, decodeTiles } from './tile-decoder.js';
 import { Sprite, DIR_DOWN, DIR_UP, DIR_LEFT, DIR_RIGHT } from './sprite.js';
-import { loadMap } from './map-loader.js';
-import { MapRenderer } from './map-renderer.js';
+// loadMap, MapRenderer → map-loading.js
 import { loadWorldMap } from './world-map-loader.js';
 import { WorldMapRenderer } from './world-map-renderer.js';
-import { generateFloor, clearDungeonCache } from './dungeon-generator.js';
+import { clearDungeonCache } from './dungeon-generator.js';
 import { initMusic, playTrack, stopMusic, fadeOutMusic, playSFX, stopSFX, TRACKS, SFX,
          initFF1Music, playFF1Track, stopFF1Music, fadeOutFF1Music, clearMusicStash,
          getCurrentTrack, FF1_TRACKS, pauseMusic, resumeMusic } from './music.js';
@@ -23,7 +22,7 @@ import { PLAYER_POOL, PLAYER_PALETTES, ROSTER_FADE_STEPS, generateAllyStats } fr
 import { BATTLE_MISS, BATTLE_GAME_OVER, BATTLE_ROAR, BATTLE_FIGHT, BATTLE_RUN,
          BATTLE_CANT_ESCAPE, BATTLE_RAN_AWAY, BATTLE_DEFEND, BATTLE_VICTORY,
          BATTLE_GOT_EXP, BATTLE_LEVEL_UP, BATTLE_BOSS_NAME, BATTLE_GOBLIN_NAME,
-         BATTLE_MENU_ITEMS, PAUSE_ITEMS, AREA_NAMES, DUNGEON_NAME,
+         BATTLE_MENU_ITEMS, PAUSE_ITEMS,
          POND_RESTORED } from './data/strings.js';
 import { initMonsterSprites, getMonsterCanvas, getMonsterWhiteCanvas,
          getMonsterDeathFrames, hasMonsterSprites } from './monster-sprites.js';
@@ -33,18 +32,18 @@ import { selectCursor, saveSlots,
          setSelectCursor, setSaveSlots,
          saveSlotsToDB, loadSlotsFromDB, setInventoryGetter } from './save-state.js';
 import { _nameToBytes, _buildItemRowBytes, _makeGotNText, makeExpText, makeGilText, makeFoundItemText, makeProfLevelUpText } from './text-utils.js';
-import { nesColorFade, _makeFadedPal, _stepPalFade } from './palette.js';
+import { nesColorFade, _stepPalFade } from './palette.js';
 import { _getPlane0, _rebuild, _shiftHorizWater, _isWater, _buildHorizMixed } from './tile-math.js';
-import { _dmgBounceY } from './data/animation-tables.js';
+// _dmgBounceY → hud-drawing.js
 import { _calcBoxExpandSize, _encounterGridPos } from './battle-layout.js';
 // _makeCanvas16, _makeCanvas16ctx, _hflipCanvas16, _makeWhiteCanvas → sprite-init.js
-import { _updateWorldWater, _updateIndoorWater, resetWorldWaterCache, resetIndoorWaterCache, _buildHorizWaterPair } from './water-animation.js';
+import { _updateWorldWater, _updateIndoorWater, resetWorldWaterCache, _buildHorizWaterPair } from './water-animation.js';
 import { initSlashSprites, initKnifeSlashSprites, initSwordSlashSprites } from './slash-effects.js';
 import { initSouthWindSprite } from './south-wind.js';
-import { initFlameRawTiles, initStarTiles, rebuildFlameSprites, clearFlameSprites,
+import { initFlameRawTiles, initStarTiles, rebuildFlameSprites,
          getFlameSprites, getFlameFrames, getStarTiles } from './flame-sprites.js';
-import { BATTLE_BG_MAP_LOOKUP, renderBattleBg } from './battle-bg.js';
-import { LOAD_FADE_STEP_MS, LOAD_FADE_MAX, drawLoadingOverlay, drawHUDLoadingMoogle } from './loading-screen.js';
+// BATTLE_BG_MAP_LOOKUP, renderBattleBg → map-loading.js
+import { LOAD_FADE_STEP_MS, LOAD_FADE_MAX, drawLoadingOverlay } from './loading-screen.js';
 import { initTitleWater, initTitleSky, initTitleUnderwater, initUnderwaterSprites, initTitleOcean, initTitleLogo } from './title-animations.js';
 // BATTLE_SPRITE_ROM, BATTLE_JOB_SIZE, BATTLE_PAL_ROM → sprite-init.js
 import { ps, EQUIP_SLOT_SUBTYPE, getEquipSlotId, setEquipSlotId, recalcDEF, recalcCombatStats, getHitWeapon, isHitRightHand, initPlayerStats, initExpTable, grantExp, fullHeal, gainProficiency, getProfHits, getProfLevel, getShieldEvade, PROF_CATEGORIES, WEAPON_PROF_CATEGORY } from './player-stats.js';
@@ -68,6 +67,10 @@ import { getKnifeBladeCanvas, getKnifeBladeSwungCanvas,
          getDaggerBladeCanvas, getDaggerBladeSwungCanvas,
          getSwordBladeCanvas, getSwordBladeSwungCanvas,
          getFistCanvas, getBlades } from './weapon-sprites.js';
+import { initHudDrawing, drawHUD, clipToViewport, drawCursorFaded, drawHudBox,
+         drawSparkleCorners, drawBorderedBox, drawHealNum, drawTopBoxBorder,
+         roundTopBoxCorners, grayViewport, drawRosterSparkle, statRowBytes } from './hud-drawing.js';
+import { initMapLoading, loadMapById, loadWorldMapAt, loadWorldMapAtPosition, setupTopBox } from './map-loading.js';
 import { updateBattleAlly } from './battle-ally.js';
 import { updateBattleEnemyTurn } from './battle-enemy.js';
 import { resetBattleItemVars, getTargets, getHitIdx, startMagicItem, updateMagicItemThrowHit } from './battle-items.js';
@@ -76,11 +79,10 @@ import { initBattleSprite as _initBattleSprite, initFakePlayerPortraits as _init
          initAdamantoise as _initAdamantoise,
          initGoblinSprite as _initGoblinSprite, initInvincibleSprite as _initInvincibleSprite,
          initMoogleSprite as _initMoogleSprite, initLoadingScreenFadeFrames as _initLoadingScreenFadeFrames } from './sprite-init.js';
-import { HEAL_NUM_PAL, DMG_SHOW_MS, resetAllDmgNums, tickDmgNums, tickHealNums, clearHealNums, initMissSprite,
+import { DMG_SHOW_MS, resetAllDmgNums, tickDmgNums, tickHealNums, clearHealNums, initMissSprite,
          getEnemyDmgNum, setEnemyDmgNum, getPlayerDamageNum, setPlayerDamageNum,
          getPlayerHealNum, setPlayerHealNum, getEnemyHealNum, setEnemyHealNum,
-         getAllyDamageNums, getSwDmgNums,
-         drawBattleNum } from './damage-numbers.js';
+         getAllyDamageNums, getSwDmgNums } from './damage-numbers.js';
 // OK_IDLE, OK_VICTORY, etc. → sprite-init.js
 
 const isMobile = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
@@ -557,20 +559,7 @@ function initHUD(romData) {
 // _renderPortrait through initLoadingScreenFadeFrames → sprite-init.js
 
 // _pauseFadeStep → pause-menu.js
-function _drawHudWithFade(fullCanvas, fadeCanvases, fadeStep) {
-  if (fadeStep > 0 && fadeCanvases && fadeStep <= fadeCanvases.length) {
-    ctx.drawImage(fadeCanvases[fadeStep - 1], 0, 0);
-    ctx.save(); ctx.beginPath(); ctx.rect(0, HUD_BOT_Y, CANVAS_W, HUD_BOT_H); ctx.clip();
-    ctx.drawImage(fullCanvas, 0, 0); ctx.restore();
-  } else { ctx.drawImage(fullCanvas, 0, 0); }
-}
-
-function _grayViewport() {
-  ctx.filter = 'saturate(0)';
-  ctx.drawImage(ctx.canvas, HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H,
-                            HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
-  ctx.filter = 'none'; ctx.restore();
-}
+// _drawHudWithFade, _grayViewport → hud-drawing.js
 // _pausePanelLayout → pause-menu.js
 function _resetBattleVars() {
   inputSt.battleCursor = 0; battleMessage = null;
@@ -586,12 +575,7 @@ function _resetBattleVars() {
 function _zPressed() { if (!keys['z'] && !keys['Z']) return false; keys['z'] = false; keys['Z'] = false; return true; }
 function _xPressed() { if (!keys['x'] && !keys['X']) return false; keys['x'] = false; keys['X'] = false; return true; }
 
-function _landOnWorldMap(tileX, tileY) {
-  worldX = tileX * TILE_SIZE; worldY = tileY * TILE_SIZE;
-  disabledTrigger = { x: tileX, y: tileY };
-  moving = false; sprite.setDirection(DIR_DOWN); sprite.resetFrame();
-  playTrack(TRACKS.WORLD_MAP);
-}
+// _landOnWorldMap → map-loading.js
 
 function returnToTitle() {
   saveSlotsToDB();
@@ -602,49 +586,104 @@ function returnToTitle() {
   transSt.timer = 0;
   transSt.pendingAction = () => { battleState = 'none'; hudInfoFadeTimer = HUD_INFO_FADE_STEPS * HUD_INFO_FADE_STEP_MS; _startTitleScreen(); };
 }
-/**
- * Set up top box state for a given area.
- * @param {number} mapId — map being loaded
- * @param {boolean} isWorldMap — true if entering world map
- */
-function setupTopBox(mapId, isWorldMap) {
-  if (isWorldMap) {
-    const bgId = romRaw[BATTLE_BG_MAP_LOOKUP] & 0x1F;
-    ({ bgCanvas: topBoxBgCanvas, fadeFrames: topBoxBgFadeFrames } = renderBattleBg(romRaw, bgId));
-    topBoxMode = 'battle';
-    topBoxSt.isTown = false;
-    topBoxSt.nameBytes = null;
-    topBoxSt.state = 'none';
-    topBoxSt.fadeStep = TOPBOX_FADE_STEPS;
-    return;
-  }
+// setupTopBox → map-loading.js
 
-  if (mapId >= 1000) {
-    const romMap = (mapId === 1004) ? 148 : 111;
-    const bgId = romRaw[BATTLE_BG_MAP_LOOKUP + romMap] & 0x1F;
-    ({ bgCanvas: topBoxBgCanvas, fadeFrames: topBoxBgFadeFrames } = renderBattleBg(romRaw, bgId));
-    loadingBgFadeFrames = topBoxBgFadeFrames;
-    topBoxSt.nameBytes = DUNGEON_NAME;
-    topBoxMode = 'battle';
-    topBoxSt.isTown = false;
-    topBoxSt.state = 'none';
-    topBoxSt.fadeStep = TOPBOX_FADE_STEPS;
-    return;
-  }
+function _hudDrawShared() {
+  return {
+    get ctx() { return ctx; },
+    get cursorTileCanvas() { return cursorTileCanvas; },
+    get cursorFadeCanvases() { return cursorFadeCanvases; },
+    get borderTileCanvases() { return borderTileCanvases; },
+    get borderFadeSets() { return borderFadeSets; },
+    get borderBlueTileCanvases() { return borderBlueTileCanvases; },
+    get cornerMasks() { return cornerMasks; },
+    get hudCanvas() { return hudCanvas; },
+    get hudFadeCanvases() { return hudFadeCanvases; },
+    get titleHudCanvas() { return titleHudCanvas; },
+    get titleHudFadeCanvases() { return titleHudFadeCanvases; },
+    get battleSpriteCanvas() { return battleSpriteCanvas; },
+    get battleSpriteFadeCanvases() { return battleSpriteFadeCanvases; },
+    get battleSpriteDefendCanvas() { return battleSpriteDefendCanvas; },
+    get battleSpriteDefendFadeCanvases() { return battleSpriteDefendFadeCanvases; },
+    get battleSpriteKneelCanvas() { return battleSpriteKneelCanvas; },
+    get battleSpriteKneelFadeCanvases() { return battleSpriteKneelFadeCanvases; },
+    get sweatFrames() { return sweatFrames; },
+    get cureSparkleFrames() { return cureSparkleFrames; },
+    get battleState() { return battleState; },
+    get battleShakeTimer() { return battleShakeTimer; },
+    get topBoxBgCanvas() { return topBoxBgCanvas; },
+    get topBoxBgFadeFrames() { return topBoxBgFadeFrames; },
+    get topBoxMode() { return topBoxMode; },
+    get hudInfoFadeTimer() { return hudInfoFadeTimer; },
+    get hudHpLvStep() { return hudHpLvStep; },
+    get playerDeathTimer() { return playerDeathTimer; },
+    get titleState() { return titleSt.state; },
+    get titleTimer() { return titleSt.timer; },
+    TITLE_FADE_STEP_MS,
+    TITLE_FADE_MAX,
+    loadingShared: () => _loadingShared(),
+  };
+}
 
-  // Regular map
-  if (mapId === 114) {
-    if (!topBoxSt.isTown) {
-      topBoxSt.state = 'pending';
-    }
-    topBoxSt.isTown = true;
-    topBoxSt.nameBytes = AREA_NAMES.get(114);
-    topBoxMode = 'name';
-  } else if (!topBoxSt.isTown) {
-    const bgId = romRaw[BATTLE_BG_MAP_LOOKUP + mapId] & 0x1F;
-    ({ bgCanvas: topBoxBgCanvas, fadeFrames: topBoxBgFadeFrames } = renderBattleBg(romRaw, bgId));
-    topBoxMode = 'battle';
-  }
+function _mapLoadShared() {
+  return {
+    get romRaw() { return romRaw; },
+    get sprite() { return sprite; },
+    get mapData() { return mapData; },
+    set mapData(v) { mapData = v; },
+    get mapRenderer() { return mapRenderer; },
+    set mapRenderer(v) { mapRenderer = v; },
+    get worldX() { return worldX; },
+    set worldX(v) { worldX = v; },
+    get worldY() { return worldY; },
+    set worldY(v) { worldY = v; },
+    get currentMapId() { return currentMapId; },
+    set currentMapId(v) { currentMapId = v; },
+    get onWorldMap() { return onWorldMap; },
+    set onWorldMap(v) { onWorldMap = v; },
+    get dungeonFloor() { return dungeonFloor; },
+    set dungeonFloor(v) { dungeonFloor = v; },
+    get dungeonSeed() { return dungeonSeed; },
+    get dungeonDestinations() { return dungeonDestinations; },
+    set dungeonDestinations(v) { dungeonDestinations = v; },
+    get secretWalls() { return secretWalls; },
+    set secretWalls(v) { secretWalls = v; },
+    get falseWalls() { return falseWalls; },
+    set falseWalls(v) { falseWalls = v; },
+    get hiddenTraps() { return hiddenTraps; },
+    set hiddenTraps(v) { hiddenTraps = v; },
+    get rockSwitch() { return rockSwitch; },
+    set rockSwitch(v) { rockSwitch = v; },
+    get warpTile() { return warpTile; },
+    set warpTile(v) { warpTile = v; },
+    get pondTiles() { return pondTiles; },
+    set pondTiles(v) { pondTiles = v; },
+    get bossSprite() { return bossSprite; },
+    set bossSprite(v) { bossSprite = v; },
+    get disabledTrigger() { return disabledTrigger; },
+    set disabledTrigger(v) { disabledTrigger = v; },
+    get moving() { return moving; },
+    set moving(v) { moving = v; },
+    get encounterSteps() { return encounterSteps; },
+    set encounterSteps(v) { encounterSteps = v; },
+    get enemyDefeated() { return enemyDefeated; },
+    set enemyDefeated(v) { enemyDefeated = v; },
+    get openDoor() { return openDoor; },
+    set openDoor(v) { openDoor = v; },
+    get adamantoiseFrames() { return adamantoiseFrames; },
+    get worldMapData() { return worldMapData; },
+    get topBoxBgCanvas() { return topBoxBgCanvas; },
+    set topBoxBgCanvas(v) { topBoxBgCanvas = v; },
+    get topBoxBgFadeFrames() { return topBoxBgFadeFrames; },
+    set topBoxBgFadeFrames(v) { topBoxBgFadeFrames = v; },
+    get loadingBgFadeFrames() { return loadingBgFadeFrames; },
+    set loadingBgFadeFrames(v) { loadingBgFadeFrames = v; },
+    get topBoxMode() { return topBoxMode; },
+    set topBoxMode(v) { topBoxMode = v; },
+    get topBoxSt() { return topBoxSt; },
+    applyPassage: (tilemap) => applyPassage(tilemap),
+    rebuildFlameSprites: _rebuildFlameSprites,
+  };
 }
 
 // Shared state objects passed to transitions.js functions
@@ -747,9 +786,9 @@ function _pauseShared() {
     playerInventory,
     cursorTileCanvas,
     rosterScroll: inputSt.rosterScroll,
-    _drawBorderedBox,
-    _clipToViewport,
-    _drawCursorFaded,
+    drawBorderedBox: drawBorderedBox,
+    clipToViewport: clipToViewport,
+    _drawCursorFaded: drawCursorFaded,
   };
 }
 
@@ -833,8 +872,8 @@ function _pvpShared() {
     isTeamWiped:         _isTeamWiped,
     getPlayerLocation,
     getSlashFramesForWeapon,
-    clipToViewport:  _clipToViewport,
-    drawBorderedBox: _drawBorderedBox,
+    clipToViewport,
+    drawBorderedBox,
     drawText,
     measureText,
     nameToBytes: _nameToBytes,
@@ -1028,12 +1067,12 @@ function _battleDrawShared() {
     get topBoxBgCanvas() { return topBoxBgCanvas; },
     get topBoxBgFadeFrames() { return topBoxBgFadeFrames; },
     topBoxSt,
-    clipToViewport: _clipToViewport,
-    grayViewport: _grayViewport,
-    drawBorderedBox: _drawBorderedBox,
-    drawSparkleCorners: _drawSparkleCorners,
-    drawCursorFaded: _drawCursorFaded,
-    drawHudBox: _drawHudBox,
+    clipToViewport,
+    grayViewport,
+    drawBorderedBox,
+    drawSparkleCorners,
+    drawCursorFaded,
+    drawHudBox,
     isVictoryBattleState: _isVictoryBattleState,
     drawMonsterDeath: _drawMonsterDeath,
     getSlashFramesForWeapon,
@@ -1094,9 +1133,9 @@ function _titleShared() {
     battleSpriteCanvas,
     battleSpriteFadeCanvases,
     silhouetteCanvas,
-    drawBorderedBox: _drawBorderedBox,
-    drawHudBox: _drawHudBox,
-    drawCursorFaded: _drawCursorFaded,
+    drawBorderedBox,
+    drawHudBox,
+    drawCursorFaded,
   };
 }
 
@@ -1257,6 +1296,8 @@ export async function loadROM(arrayBuffer) {
   worldMapRenderer = new WorldMapRenderer(worldMapData);
   resetWorldWaterCache();
   _initTitleAssets(romRaw);
+  initHudDrawing(_hudDrawShared());
+  initMapLoading(_mapLoadShared());
 
   await loadSlotsFromDB();
 
@@ -1289,142 +1330,8 @@ export function loadFF12ROM(arrayBuffer) {
   }
 }
 
-function _calcSpawnY(ex, ey) {
-  // Calculate the correct spawn Y for a non-dungeon map entrance.
-  // Returns the adjusted startY (startX stays = ex).
-  const eMid = mapData.tilemap[ey * 32 + ex];
-  const eM = eMid < 128 ? eMid : eMid & 0x7F;
-  const eColl = mapData.collision[eM];
-  if ((eColl & 0x07) === 3) {
-    // Wall tile — scan north for door $44, then fallback south/north for passable
-    for (let dy = 1; dy < 32; dy++) {
-      const ny = (ey - dy + 32) % 32;
-      if (mapData.tilemap[ny * 32 + ex] === 0x44) return ny;
-    }
-    for (let dy = 1; dy <= 16; dy++) {
-      const ny = ey + dy;
-      if (ny >= 32) break;
-      const mid = mapData.tilemap[ny * 32 + ex];
-      if (mid === mapData.fillTile) break;
-      const m = mid < 128 ? mid : mid & 0x7F;
-      if ((mapData.collision[m] & 0x07) !== 3 && !(mapData.collision[m] & 0x80)) return ny;
-    }
-    for (let dy = 1; dy <= 16; dy++) {
-      const ny = ey - dy;
-      if (ny < 0) break;
-      const mid = mapData.tilemap[ny * 32 + ex];
-      if (mid === mapData.fillTile) break;
-      const m = mid < 128 ? mid : mid & 0x7F;
-      if ((mapData.collision[m] & 0x07) !== 3 && !(mapData.collision[m] & 0x80)) return ny;
-    }
-    return ey;
-  }
-  // Passable entrance — door $44 stays, exit_prev scans north for inner door
-  const entMid = mapData.tilemap[ey * 32 + ex];
-  const entM = entMid < 128 ? entMid : entMid & 0x7F;
-  const entColl = mapData.collision[entM];
-  if (entMid === 0x44) return ey;
-  if ((entColl & 0x80) && ((mapData.collisionByte2[entM] >> 4) & 0x0F) === 0) {
-    for (let dy = 1; dy <= 8; dy++) {
-      const ny = ey - dy;
-      if (ny < 0) break;
-      if (mapData.tilemap[ny * 32 + ex] === 0x44) return ny;
-    }
-  }
-  return ey;
-}
-
-function _openReturnDoor(playerX, playerY) {
-  // If returning to a door tile, show it open until player walks off
-  openDoor = null;
-  const trig = mapRenderer.getTriggerAt(playerX, playerY);
-  if (trig && trig.source === 'dynamic' && trig.type === 1) {
-    const origTileId = mapData.tilemap[playerY * 32 + playerX];
-    const origM = origTileId < 128 ? origTileId : origTileId & 0x7F;
-    if (((mapData.collisionByte2[origM] >> 4) & 0x0F) === 5) {
-      mapRenderer.updateTileAt(playerX, playerY, 0x7E);
-      openDoor = { x: playerX, y: playerY, tileId: origTileId };
-    }
-  }
-}
-
-function _loadDungeonFloor(mapId, returnX, returnY) {
-  const floorIndex = mapId - 1000;
-  dungeonFloor = floorIndex;
-  const result = generateFloor(romRaw, floorIndex, dungeonSeed);
-  mapData = result;
-  secretWalls = result.secretWalls; falseWalls = result.falseWalls;
-  hiddenTraps = result.hiddenTraps; rockSwitch = result.rockSwitch || null;
-  warpTile = result.warpTile || null; pondTiles = result.pondTiles || null;
-  dungeonDestinations = result.dungeonDestinations;
-  currentMapId = mapId;
-  const playerX = returnX !== undefined ? returnX : result.entranceX;
-  const playerY = returnY !== undefined ? returnY : result.entranceY;
-  worldX = playerX * TILE_SIZE; worldY = playerY * TILE_SIZE;
-  mapRenderer = new MapRenderer(mapData, playerX, playerY); resetIndoorWaterCache();
-  clearFlameSprites();
-  bossSprite = (floorIndex === 4 && adamantoiseFrames && !enemyDefeated)
-    ? { frames: adamantoiseFrames, px: 6 * TILE_SIZE, py: 8 * TILE_SIZE } : null;
-  disabledTrigger = { x: playerX, y: playerY };
-  moving = false; sprite.setDirection(DIR_DOWN); sprite.resetFrame();
-  if (floorIndex === 4) playTrack(TRACKS.CRYSTAL_ROOM);
-  if (returnX !== undefined) _openReturnDoor(playerX, playerY);
-}
-
-function _loadRegularMap(mapId, returnX, returnY) {
-  dungeonFloor = -1; encounterSteps = 0; dungeonDestinations = null;
-  secretWalls = null; falseWalls = null; hiddenTraps = null;
-  rockSwitch = null; warpTile = null; pondTiles = null; bossSprite = null;
-  mapData = loadMap(romRaw, mapId);
-  currentMapId = mapId;
-  if (returnX !== undefined) applyPassage(mapData.tilemap);
-  const ex = mapData.entranceX; const ey = mapData.entranceY;
-  const playerX = returnX !== undefined ? returnX : ex;
-  const playerY = returnY !== undefined ? returnY : _calcSpawnY(ex, ey);
-  worldX = playerX * TILE_SIZE; worldY = playerY * TILE_SIZE;
-  mapRenderer = new MapRenderer(mapData, playerX, playerY); resetIndoorWaterCache();
-  if (mapRenderer.hasRoomClip()) {
-    const spawnMid = mapData.tilemap[playerY * 32 + playerX];
-    disabledTrigger = (spawnMid === 0x44 || playerY !== ey) ? { x: playerX, y: playerY } : null;
-  } else { disabledTrigger = null; }
-  _rebuildFlameSprites();
-  moving = false; sprite.setDirection(DIR_DOWN); sprite.resetFrame();
-  if (returnX !== undefined) _openReturnDoor(playerX, playerY);
-  if (mapId === 114 && transSt.pendingTrack == null) playTrack(TRACKS.TOWN_UR);
-}
-
-function loadMapById(mapId, returnX, returnY) {
-  onWorldMap = false;
-  setupTopBox(mapId, false);
-  if (mapId >= 1000) { _loadDungeonFloor(mapId, returnX, returnY); return; }
-  _loadRegularMap(mapId, returnX, returnY);
-}
-
-function loadWorldMapAt(trigId) {
-  onWorldMap = true;
-  mapRenderer = null;
-  mapData = null;
-  bossSprite = null;
-  setupTopBox(0, true);
-
-  // Place player on the leftmost entrance trigger tile
-  const pos = worldMapData.triggerPositions.get(trigId);
-  const tileX = pos ? pos.x : 0;
-  const tileY = pos ? pos.y : 0;
-  _landOnWorldMap(tileX, tileY);
-}
-
-function loadWorldMapAtPosition(tileX, tileY) {
-  onWorldMap = true;
-  dungeonFloor = -1;
-  encounterSteps = 0;
-  enemyDefeated = false;  // boss respawns on dungeon re-entry
-  mapRenderer = null;
-  mapData = null;
-  setupTopBox(0, true);
-
-  _landOnWorldMap(tileX, tileY);
-}
+// _calcSpawnY, _openReturnDoor, _loadDungeonFloor, _loadRegularMap,
+// loadMapById, loadWorldMapAt, loadWorldMapAtPosition → map-loading.js
 
 function startMove(dir) {
   // Calculate target tile
@@ -1742,7 +1649,7 @@ function render() {
   if (shakeActive) camX += (Math.floor(shakeTimer / (1000 / 60)) & 2) ? 2 : -2;
   if (battleShakeTimer > 0) camX += (Math.floor(battleShakeTimer / (1000 / 60)) & 2) ? 2 : -2;
 
-  _clipToViewport();
+  clipToViewport();
   try {
     _renderMapAndWater(camX, camY, SCREEN_CENTER_X, SCREEN_CENTER_Y + 3, SCREEN_CENTER_Y);
     _renderStarSpiral();
@@ -1751,242 +1658,12 @@ function render() {
   }
 }
 
-function statRowBytes(label1, label2, value) {
-  // Build 8-byte row: "HP   28" or "MP   12" — label + right-aligned number
-  const digits = String(value);
-  const bytes = new Uint8Array(8);
-  bytes[0] = label1;
-  bytes[1] = label2;
-  const numStart = 8 - digits.length;
-  for (let i = 2; i < numStart; i++) bytes[i] = 0xFF; // space
-  for (let i = 0; i < digits.length; i++) bytes[numStart + i] = 0x80 + parseInt(digits[i]);
-  return bytes;
-}
+// statRowBytes → hud-drawing.js
 
-function _drawTopBoxBattleBG() {
-  const topShake = ((battleState === 'enemy-attack' || battleState === 'pvp-opp-sw-hit') && battleShakeTimer > 0)
-    ? (Math.floor(battleShakeTimer / 67) & 1 ? 2 : -2) : 0;
-  if (transSt.state !== 'loading' && !topBoxSt.isTown && topBoxBgCanvas) {
-    ctx.drawImage(topBoxBgCanvas, topShake, 0);
-  }
-  if (!topBoxSt.isTown && topBoxBgFadeFrames && transSt.state !== 'none' && transSt.state !== 'door-opening' && transSt.state !== 'loading') {
-    const maxStep = topBoxBgFadeFrames.length - 1;
-    const FADE_STEP_MS = 100;
-    let fadeStep = 0;
-    if (transSt.state === 'closing') {
-      fadeStep = Math.min(Math.floor(transSt.timer / FADE_STEP_MS), maxStep);
-    } else if (transSt.state === 'hold' || transSt.state === 'trap-falling') {
-      fadeStep = maxStep;
-    } else if (transSt.state === 'opening') {
-      if (transSt.topBoxAlreadyBright) fadeStep = 0; // came from hud-fade-in, already bright
-      else fadeStep = Math.max(maxStep - Math.floor(transSt.timer / FADE_STEP_MS), 0);
-    } else if (transSt.state === 'hud-fade-in') {
-      fadeStep = Math.max(maxStep - Math.floor(hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), 0);
-    }
-    if (fadeStep > 0) ctx.drawImage(topBoxBgFadeFrames[fadeStep], 0, 0);
-  }
-  if (!topBoxSt.isTown && transSt.state !== 'loading') roundTopBoxCorners();
-}
-function _drawTopBoxOverlay(isFading) {
-  if (transSt.state === 'loading') {
-    let loadFade = LOAD_FADE_MAX;
-    if (loadingSt.state === 'in') {
-      loadFade = LOAD_FADE_MAX - Math.min(Math.floor(loadingSt.timer / LOAD_FADE_STEP_MS), LOAD_FADE_MAX);
-    } else if (loadingSt.state === 'visible') {
-      loadFade = 0;
-    } else if (loadingSt.state === 'out') {
-      loadFade = Math.min(Math.floor(loadingSt.timer / LOAD_FADE_STEP_MS), LOAD_FADE_MAX);
-    }
-    drawTopBoxBorder(loadFade);
-    if (topBoxSt.nameBytes && !isFading) {
-      const fadedPal = _makeFadedPal(loadFade);
-      const tw = measureText(topBoxSt.nameBytes);
-      drawText(ctx, 8 + Math.floor((240 - tw) / 2), 12, topBoxSt.nameBytes, fadedPal);
-    }
-  } else if (topBoxSt.isTown && topBoxMode === 'name' && topBoxSt.nameBytes) {
-    if (isFading) drawTopBoxBorder(topBoxSt.fadeStep);
-    else if (topBoxSt.state !== 'pending') drawTopBoxBorder(0);
-    if (!isFading && topBoxSt.state !== 'pending') {
-      const tw = measureText(topBoxSt.nameBytes);
-      drawText(ctx, 8 + Math.floor((240 - tw) / 2), 12, topBoxSt.nameBytes, TEXT_WHITE);
-    }
-  }
-  if (isFading && topBoxSt.nameBytes) {
-    if (transSt.state !== 'loading' && !topBoxSt.isTown) drawTopBoxBorder(topBoxSt.fadeStep);
-    const fadedPal = _makeFadedPal(topBoxSt.fadeStep);
-    const tw = measureText(topBoxSt.nameBytes);
-    drawText(ctx, 8 + Math.floor((240 - tw) / 2), 12, topBoxSt.nameBytes, fadedPal);
-  }
-}
-function _drawHUDTopBox() {
-  const isFading = topBoxSt.state === 'fade-in' || topBoxSt.state === 'display' || topBoxSt.state === 'fade-out';
-  _drawTopBoxBattleBG();
-  _drawTopBoxOverlay(isFading);
-}
-
-function _drawPortraitImage(px, py, nfPortrait, isPauseHeal, infoFadeStep) {
-  if (infoFadeStep >= HUD_INFO_FADE_STEPS) return;
-  if (infoFadeStep > 0) {
-    const fadeSets = nfPortrait === battleSpriteKneelCanvas ? battleSpriteKneelFadeCanvases
-                   : nfPortrait === battleSpriteDefendCanvas ? battleSpriteDefendFadeCanvases
-                   : battleSpriteFadeCanvases;
-    if (fadeSets) { ctx.drawImage(fadeSets[infoFadeStep - 1], px, py); return; }
-  }
-  ctx.drawImage(nfPortrait, px, py);
-  if (!isPauseHeal && nfPortrait === battleSpriteKneelCanvas && sweatFrames.length === 2)
-    ctx.drawImage(sweatFrames[Math.floor(Date.now() / 133) & 1], px, py - 3);
-}
-function _drawCureSparkle(px, py, isPauseHeal) {
-  if (!isPauseHeal || cureSparkleFrames.length !== 2 || (pauseSt.healNum && pauseSt.healNum.rosterIdx >= 0)) return;
-  const frame = cureSparkleFrames[Math.floor(pauseSt.timer / 67) & 1];
-  ctx.drawImage(frame, px - 8, py - 7);
-  ctx.save(); ctx.scale(-1,  1); ctx.drawImage(frame, -(px + 23),  py - 7);  ctx.restore();
-  ctx.save(); ctx.scale( 1, -1); ctx.drawImage(frame,   px - 8,  -(py + 24)); ctx.restore();
-  ctx.save(); ctx.scale(-1, -1); ctx.drawImage(frame, -(px + 23), -(py + 24)); ctx.restore();
-}
-function _drawHealNum(bx, by, value, pal) {
-  drawBattleNum(ctx, bx, by, value, pal);
-}
-function _drawPauseHealNum(px, py) {
-  if (!pauseSt.healNum || pauseSt.healNum.rosterIdx >= 0) return;
-  _drawHealNum(px + 8, _dmgBounceY(py + 8, pauseSt.healNum.timer), pauseSt.healNum.value, HEAL_NUM_PAL);
-}
-function _drawHUDPortrait() {
-  const infoFadeStep = HUD_INFO_FADE_STEPS - Math.min(Math.floor(hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
-  if (battleState !== 'none' || !battleSpriteCanvas) return;
-  const isPauseHeal = pauseSt.state === 'inv-heal';
-  const nfPortrait = isPauseHeal && battleSpriteDefendCanvas ? battleSpriteDefendCanvas
-    : (ps.hp > 0 && ps.stats && ps.hp <= Math.floor(ps.stats.maxHP / 4) && battleSpriteKneelCanvas
-       ? battleSpriteKneelCanvas : battleSpriteCanvas);
-  const px = HUD_RIGHT_X + 8, py = HUD_VIEW_Y + 8;
-  _drawPortraitImage(px, py, nfPortrait, isPauseHeal, infoFadeStep);
-  _drawCureSparkle(px, py, isPauseHeal);
-  _drawPauseHealNum(px, py);
-}
-
-function _drawHUDInfoPanel() {
-  // Name + Level in right mini-right panel (right-aligned, like roster players)
-  const infoFadeStep = HUD_INFO_FADE_STEPS - Math.min(Math.floor(hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
-  if (infoFadeStep >= HUD_INFO_FADE_STEPS) return;
-
-  // Player death: text stays during slide, fades out after slide ends (500-800ms)
-  if (playerDeathTimer != null) {
-    if (playerDeathTimer < 500) {
-      // Phase 1 (slide): text stays visible
-    } else if (playerDeathTimer < 800) {
-      // Phase 2 (text fade): alpha fades from 1→0
-      const deathAlpha = 1 - (playerDeathTimer - 500) / 300;
-      ctx.save();
-      ctx.globalAlpha = deathAlpha;
-    } else {
-      return; // Phase 3+: no text
-    }
-  }
-
-  const shakeOff = ((battleState === 'enemy-attack' || battleState === 'pvp-opp-sw-hit') && battleShakeTimer > 0)
-    ? (Math.floor(battleShakeTimer / 67) & 1 ? 2 : -2) : 0;
-  const sy = HUD_VIEW_Y + 8;
-  const panelRight = HUD_RIGHT_X + HUD_RIGHT_W - 8 + shakeOff;
-  const slot = saveSlots[selectCursor];
-  const deathTextFading = playerDeathTimer != null && playerDeathTimer >= 500 && playerDeathTimer < 800;
-  if (!slot) { if (deathTextFading) ctx.restore(); return; }
-  // Name — NES palette fade toward black for game-start fade-in
-  const namePal = [...TEXT_WHITE];
-  for (let s = 0; s < infoFadeStep; s++) namePal[3] = nesColorFade(namePal[3]);
-  const nameW = measureText(slot.name);
-  drawText(ctx, panelRight - nameW, sy, slot.name, namePal);
-  // Level fades out as battle starts, HP fades in — combined with game-start infoFadeStep
-  if (hudHpLvStep < 4) {
-    const lvLabel = _nameToBytes('Lv' + String(ps.stats ? ps.stats.level : slot.level));
-    const lvPal = [0x0F, 0x0F, 0x0F, 0x10];
-    for (let s = 0; s < hudHpLvStep + infoFadeStep; s++) lvPal[3] = nesColorFade(lvPal[3]);
-    const lvW = measureText(lvLabel);
-    drawText(ctx, panelRight - lvW, sy + 9, lvLabel, lvPal);
-  }
-  if (hudHpLvStep > 0) {
-    const maxHP = ps.stats ? ps.stats.maxHP : 28;
-    const hpNes = ps.hp <= Math.floor(maxHP / 4) ? 0x16
-                : ps.hp <= Math.floor(maxHP / 2) ? 0x28 : 0x2A;
-    const hpPal = [0x0F, 0x0F, 0x0F, hpNes];
-    for (let s = 0; s < (4 - hudHpLvStep) + infoFadeStep; s++) hpPal[3] = nesColorFade(hpPal[3]);
-    const hpLabel = _nameToBytes(String(ps.hp));
-    const hpW = measureText(hpLabel);
-    drawText(ctx, panelRight - hpW, sy + 9, hpLabel, hpPal);
-  }
-
-  if (deathTextFading) ctx.restore();
-}
-
-// Loading right panel, moogle, chat bubble → loading-screen.js
-
-function drawHUD() {
-  const isTitleActive = titleSt.state !== 'done';
-  if (isTitleActive && titleHudCanvas) {
-    // Compute border fade level for title states
-    let tfl = 0; // 0 = full brightness — only fade out when leaving title
-    if (titleSt.state === 'main-out') {
-      tfl = Math.min(Math.floor(titleSt.timer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
-    }
-    _drawHudWithFade(titleHudCanvas, titleHudFadeCanvases, tfl);
-  } else if (hudCanvas) {
-    const fadeStep = HUD_INFO_FADE_STEPS - Math.min(Math.floor(hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
-    _drawHudWithFade(hudCanvas, hudFadeCanvases, fadeStep);
-  }
-
-  // Top box content (full 256×32, no static border — border only with text)
-  // Title screen handles its own top box (sky BG)
-  if (titleSt.state !== 'done') return;
-
-  _drawHUDTopBox();
-  _drawHUDPortrait();
-  _drawHUDInfoPanel();
-  if (transSt.state === 'loading' && loadingSt.state !== 'none') {
-    drawHUDLoadingMoogle(_loadingShared());
-  }
-}
-
-// ── Player Roster (right main panel) ──
-
-// Draw a HUD border box on the main canvas ctx, with optional NES fade step
-function _drawSparkleCorners(frame, px, py) {
-  ctx.drawImage(frame, px - 8, py - 7);
-  ctx.save(); ctx.scale(-1, 1); ctx.drawImage(frame, -(px + 23), py - 7); ctx.restore();
-  ctx.save(); ctx.scale(1, -1); ctx.drawImage(frame, px - 8, -(py + 24)); ctx.restore();
-  ctx.save(); ctx.scale(-1, -1); ctx.drawImage(frame, -(px + 23), -(py + 24)); ctx.restore();
-}
-function _drawCursorFaded(cx, cy, fadeStep) {
-  if (!cursorTileCanvas) return;
-  if (fadeStep <= 0) { ctx.drawImage(cursorTileCanvas, cx, cy); return; }
-  if (fadeStep < 4 && cursorFadeCanvases) ctx.drawImage(cursorFadeCanvases[fadeStep - 1], cx, cy);
-}
-function _clipToViewport() {
-  ctx.save(); ctx.beginPath(); ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H); ctx.clip();
-}
-function _drawHudBox(x, y, w, h, fadeStep = 0) {
-  const tiles = (fadeStep > 0 && borderFadeSets) ? borderFadeSets[fadeStep] : borderTileCanvases;
-  if (!tiles) return;
-  const [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR, FILL] = tiles;
-  ctx.drawImage(TL, x, y); ctx.drawImage(TR, x + w - 8, y);
-  ctx.drawImage(BL, x, y + h - 8); ctx.drawImage(BR, x + w - 8, y + h - 8);
-  for (let tx = x + 8; tx < x + w - 8; tx += 8) { ctx.drawImage(TOP, tx, y); ctx.drawImage(BOT, tx, y + h - 8); }
-  for (let ty = y + 8; ty < y + h - 8; ty += 8) { ctx.drawImage(LEFT, x, ty); ctx.drawImage(RIGHT, x + w - 8, ty); }
-  for (let ty = y + 8; ty < y + h - 8; ty += 8) for (let tx = x + 8; tx < x + w - 8; tx += 8) ctx.drawImage(FILL, tx, ty);
-}
-
-
-// roster draw/update/state → roster.js
-// _drawRosterSparkle stays here as callback (needs pauseSt, cureSparkleFrames, _drawHealNum)
-function _drawRosterSparkle(panelTop) {
-  if (!pauseSt.healNum || pauseSt.healNum.rosterIdx < 0 || cureSparkleFrames.length !== 2) return;
-  const visRow = pauseSt.healNum.rosterIdx - inputSt.rosterScroll;
-  if (visRow < 0 || visRow >= 3) return;
-  const px = HUD_RIGHT_X + 8;
-  const py = panelTop + visRow * 32 + 8;
-  const fi = Math.floor(pauseSt.timer / 67) & 1;
-  const frame = cureSparkleFrames[fi];
-  _drawSparkleCorners(frame, px, py);
-  _drawHealNum(px + 8, _dmgBounceY(py + 8, pauseSt.healNum.timer), pauseSt.healNum.value, HEAL_NUM_PAL);
-}
+// _drawTopBoxBattleBG, _drawTopBoxOverlay, _drawHUDTopBox, _drawPortraitImage,
+// _drawCureSparkle, _drawHealNum, _drawPauseHealNum, _drawHUDPortrait,
+// _drawHUDInfoPanel, drawHUD, _drawSparkleCorners, _drawCursorFaded,
+// clipToViewport, drawHudBox, drawRosterSparkle → hud-drawing.js
 
 // ── Title Screen — titleFadeLevel, titleFadePal, draw functions → title-screen.js ──
 
@@ -2085,72 +1762,7 @@ function _drawMonsterDeath(x, y, size, progress, monsterId) {
   ctx.drawImage(frames[frameIdx], x, y);
 }
 
-function _drawBorderedBox(x, y, w, h, blue = false) {
-  if (!borderTileCanvases) return;
-  const tileSet = blue ? borderBlueTileCanvases : borderTileCanvases;
-  const [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR, FILL] = tileSet;
-  // Interior fill
-  if (blue) {
-    const nb = NES_SYSTEM_PALETTE[0x02];
-    ctx.fillStyle = `rgb(${nb[0]},${nb[1]},${nb[2]})`;
-    ctx.fillRect(x + 8, y + 8, w - 16, h - 16);
-  } else {
-    for (let ty = y + 8; ty < y + h - 8; ty += 8) {
-      for (let tx = x + 8; tx < x + w - 8; tx += 8) {
-        ctx.drawImage(FILL, tx, ty);
-      }
-    }
-  }
-  // Corners
-  ctx.drawImage(TL, x, y);
-  ctx.drawImage(TR, x + w - 8, y);
-  ctx.drawImage(BL, x, y + h - 8);
-  ctx.drawImage(BR, x + w - 8, y + h - 8);
-  // Top/bottom edges
-  for (let tx = x + 8; tx < x + w - 8; tx += 8) {
-    ctx.drawImage(TOP, tx, y);
-    ctx.drawImage(BOT, tx, y + h - 8);
-  }
-  // Left/right edges
-  for (let ty = y + 8; ty < y + h - 8; ty += 8) {
-    ctx.drawImage(LEFT, x, ty);
-    ctx.drawImage(RIGHT, x + w - 8, ty);
-  }
-}
-
-// Draw top box border dynamically using faded border tiles.
-// Only called when text is displayed — otherwise the full 32px battle BG shows through.
-function drawTopBoxBorder(fadeStep) {
-  if (!borderFadeSets || fadeStep >= TOPBOX_FADE_STEPS) return;
-  const tiles = borderFadeSets[fadeStep];
-  const [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR, FILL] = tiles;
-  const x = 0, y = 0, w = CANVAS_W, h = HUD_TOP_H;
-  // Interior fill
-  for (let ty = y + 8; ty < y + h - 8; ty += 8)
-    for (let tx = x + 8; tx < x + w - 8; tx += 8)
-      ctx.drawImage(FILL, tx, ty);
-  // Corners
-  ctx.drawImage(TL, x, y); ctx.drawImage(TR, x + w - 8, y);
-  ctx.drawImage(BL, x, y + h - 8); ctx.drawImage(BR, x + w - 8, y + h - 8);
-  // Top/bottom edges
-  for (let tx = x + 8; tx < x + w - 8; tx += 8) {
-    ctx.drawImage(TOP, tx, y); ctx.drawImage(BOT, tx, y + h - 8);
-  }
-  // Left/right edges
-  for (let ty = y + 8; ty < y + h - 8; ty += 8) {
-    ctx.drawImage(LEFT, x, ty); ctx.drawImage(RIGHT, x + w - 8, ty);
-  }
-}
-
-// Round the corners of the top box content (battle BG / sky) using corner masks
-function roundTopBoxCorners() {
-  if (!cornerMasks) return;
-  const [TL, TR, BL, BR] = cornerMasks;
-  ctx.drawImage(TL, 0, 0);
-  ctx.drawImage(TR, CANVAS_W - 8, 0);
-  ctx.drawImage(BL, 0, HUD_TOP_H - 8);
-  ctx.drawImage(BR, CANVAS_W - 8, HUD_TOP_H - 8);
-}
+// drawBorderedBox, drawTopBoxBorder, roundTopBoxCorners → hud-drawing.js
 
 // _drawPauseBox, _drawPauseMenuText, _drawPauseInventory, _drawPauseEquipSlots, _drawPauseEquipItems, _drawPauseStats, drawPauseMenu → pause-menu.js
 
@@ -2948,8 +2560,8 @@ function _drawPondStrobe() {
   if (pondStrobeTimer <= 0) return;
   const frame = Math.floor((BATTLE_FLASH_FRAMES * BATTLE_FLASH_FRAME_MS - pondStrobeTimer) / BATTLE_FLASH_FRAME_MS);
   if (!(frame & 1)) return;
-  _clipToViewport();
-  _grayViewport();
+  clipToViewport();
+  grayViewport();
 }
 
 function _updateStarEffect(dt) {
@@ -3024,24 +2636,24 @@ function _gameLoopDraw() {
   }
   else if (transSt.state === 'opening' && _tabWasLoading) _tabFade = Math.max(_tabFade, ROSTER_FADE_STEPS - Math.min(Math.floor(transSt.timer / _wFadeMs), ROSTER_FADE_STEPS));
   else _tabWasLoading = false;
-  drawChatTabs(ctx, _tabFade, _drawHudBox);
+  drawChatTabs(ctx, _tabFade, drawHudBox);
   drawHUD();
   const _bds = _battleDrawShared();
   try {
     const _rds = {
-      ctx, drawHudBox: _drawHudBox, drawBorderedBox: _drawBorderedBox,
-      clipToViewport: _clipToViewport, cursorTileCanvas,
+      ctx, drawHudBox: drawHudBox, drawBorderedBox: drawBorderedBox,
+      clipToViewport: clipToViewport, cursorTileCanvas,
       scrollArrowUp, scrollArrowDown, scrollArrowUpFade, scrollArrowDownFade,
-      fakePlayerPortraits, drawSparkle: _drawRosterSparkle,
+      fakePlayerPortraits, drawSparkle: drawRosterSparkle,
       transSt, wipeDuration: 44 * (1000 / 60),
       hudInfoFadeTimer, hudInfoFadeSteps: HUD_INFO_FADE_STEPS, hudInfoFadeStepMs: HUD_INFO_FADE_STEP_MS,
       battleState, msgState,
     };
     if (battleAllies.length > 0 && battleState !== 'none') drawBattleAllies(_bds);
     else drawRoster(_rds);
-    drawChat(ctx, _drawHudBox, rosterBattleFade);
+    drawChat(ctx, drawHudBox, rosterBattleFade);
     drawPauseMenu(ctx, _pauseShared());
-    drawMsgBox(ctx, _clipToViewport, _drawBorderedBox);
+    drawMsgBox(ctx, clipToViewport, drawBorderedBox);
     drawRosterMenu(_rds);
     drawBattle(_bds);
     drawSWExplosion(_bds);
@@ -3065,7 +2677,7 @@ function gameLoop(timestamp) {
     updateTitle(dt); drawTitle(ctx, _titleShared()); drawHUD();
     if (titleSt.state !== 'done') drawTitleSkyInHUD(ctx, roundTopBoxCorners); // guard: updateTitle may have set titleSt.state='done'
     updateChat(dt, 'none', true);
-    drawChat(ctx, _drawHudBox, 0, true);
+    drawChat(ctx, drawHudBox, 0, true);
     requestAnimationFrame(gameLoop);
     return;
   }
