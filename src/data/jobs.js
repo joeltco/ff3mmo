@@ -117,36 +117,14 @@ export function readJobLevelBonus(romData, jobIdx, level) {
   };
 }
 
-// Weapon subtype string → WPN_ bitmask flag
-const SUBTYPE_TO_WPN = {
-  sword: WPN_SWORD, knife: WPN_KNIFE, bow: WPN_BOW, arrow: WPN_BOW,
-  staff: WPN_STAFF, rod: WPN_ROD, book: WPN_BOOK, bell: WPN_BELL,
-  harp: WPN_HARP, spear: WPN_SPEAR, axe: WPN_AXE, hammer: WPN_AXE,
-  claw: WPN_CLAW, katana: WPN_KATANA, boomerang: WPN_BOOMERANG,
-  shuriken: WPN_SHURIKEN,
-};
-
-// Armor subtype string → ARM_ bitmask flag
-const SUBTYPE_TO_ARM = {
-  shield: ARM_SHIELD, helmet: ARM_HELMET, body: ARM_BODY, arms: ARM_GLOVES,
-};
-
 // Check if job can equip an item (by item ID, needs ITEMS map passed in)
+// Uses per-item jobs bitmask where bit N = job index N can equip
 export function canJobEquip(jobIdx, itemId, ITEMS) {
   if (!itemId) return true;
   const item = ITEMS.get(itemId);
   if (!item) return true;
-  const job = JOBS[jobIdx];
-  if (!job) return false;
-  if (item.type === 'weapon') {
-    const flag = SUBTYPE_TO_WPN[item.subtype];
-    return flag ? !!(job.weapons & flag) : false;
-  }
-  if (item.type === 'armor') {
-    const flag = SUBTYPE_TO_ARM[item.subtype];
-    return flag ? !!(job.armor & flag) : true;
-  }
-  return true;
+  if (item.jobs === undefined) return true;
+  return !!(item.jobs & (1 << jobIdx));
 }
 
 // Build full exp-to-next table (98 levels, 24-bit LE each)
