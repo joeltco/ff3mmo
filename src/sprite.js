@@ -49,12 +49,20 @@ export class Sprite {
     this.paletteBottom = paletteBottom || paletteColors;
     this.direction = DIR_DOWN;
     this.frame = 0;
+    this.gfxBase = SPRITE_TILE_BASE;
     this.tileCache = new Map();
+  }
+
+  setGfxID(id) {
+    const newBase = SPRITE_TILE_BASE + id * 256;
+    if (newBase === this.gfxBase) return;
+    this.gfxBase = newBase;
+    this.tileCache.clear();
   }
 
   getDecodedTile(tileIndex) {
     if (!this.tileCache.has(tileIndex)) {
-      const offset = SPRITE_TILE_BASE + tileIndex * 16;
+      const offset = this.gfxBase + tileIndex * 16;
       this.tileCache.set(tileIndex, decodeTile(this.romData, offset));
     }
     return this.tileCache.get(tileIndex);

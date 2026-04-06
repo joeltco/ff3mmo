@@ -599,6 +599,8 @@ function _swapBattleSprites(jobIdx) {
   sweatFrames = bs.sweatFrames;
   // Re-init hud drawing shared context so it picks up new canvases
   initHudDrawing(_hudDrawShared());
+  // Swap walk sprite to match job
+  if (sprite) sprite.setGfxID(jobIdx);
 }
 
 // _landOnWorldMap → map-loading.js
