@@ -27,6 +27,7 @@ export async function saveSlotsToDB() {
   if (saveSlots[selectCursor]) {
     saveSlots[selectCursor].level = ps.stats.level;
     saveSlots[selectCursor].exp = ps.stats.exp;
+    saveSlots[selectCursor].hp = ps.hp;
     saveSlots[selectCursor].stats = playerStatsSnapshot();
     saveSlots[selectCursor].inventory = { ..._getInventory() };
     saveSlots[selectCursor].gil = ps.gil;
@@ -41,6 +42,7 @@ export async function saveSlotsToDB() {
       name: Array.from(s.name),
       level: s.level || (ps.stats ? ps.stats.level : 1),
       exp: s.exp != null ? s.exp : (ps.stats ? ps.stats.exp : 0),
+      hp: s.hp != null ? s.hp : (s.stats ? s.stats.hp : null),
       stats: s.stats || (ps.stats ? playerStatsSnapshot() : null),
       inventory: s.inventory || inv,
       gil: s.gil || 0,

@@ -257,24 +257,19 @@ function _drawHUDInfoPanel() {
   for (let s = 0; s < infoFadeStep; s++) namePal[3] = nesColorFade(namePal[3]);
   const nameW = measureText(slot.name);
   drawText(ctx, panelRight - nameW, sy, slot.name, namePal);
-  const hudHpLvStep = _s.hudHpLvStep;
-  if (hudHpLvStep < 4) {
-    const lvLabel = _nameToBytes('Lv' + String(ps.stats ? ps.stats.level : slot.level));
-    const lvPal = [0x0F, 0x0F, 0x0F, 0x10];
-    for (let s = 0; s < hudHpLvStep + infoFadeStep; s++) lvPal[3] = nesColorFade(lvPal[3]);
-    const lvW = measureText(lvLabel);
-    drawText(ctx, panelRight - lvW, sy + 9, lvLabel, lvPal);
-  }
-  if (hudHpLvStep > 0) {
-    const maxHP = ps.stats ? ps.stats.maxHP : 28;
-    const hpNes = ps.hp <= Math.floor(maxHP / 4) ? 0x16
-                : ps.hp <= Math.floor(maxHP / 2) ? 0x28 : 0x2A;
-    const hpPal = [0x0F, 0x0F, 0x0F, hpNes];
-    for (let s = 0; s < (4 - hudHpLvStep) + infoFadeStep; s++) hpPal[3] = nesColorFade(hpPal[3]);
-    const hpLabel = _nameToBytes(String(ps.hp));
-    const hpW = measureText(hpLabel);
-    drawText(ctx, panelRight - hpW, sy + 9, hpLabel, hpPal);
-  }
+  const panelLeft = HUD_RIGHT_X + 8 + shakeOff;
+  const lvLabel = _nameToBytes('Lv' + String(ps.stats ? ps.stats.level : slot.level));
+  const lvPal = [0x0F, 0x0F, 0x0F, 0x10];
+  for (let s = 0; s < infoFadeStep; s++) lvPal[3] = nesColorFade(lvPal[3]);
+  drawText(ctx, panelLeft, sy + 9, lvLabel, lvPal);
+  const maxHP = ps.stats ? ps.stats.maxHP : 28;
+  const hpNes = ps.hp <= Math.floor(maxHP / 4) ? 0x16
+              : ps.hp <= Math.floor(maxHP / 2) ? 0x28 : 0x2A;
+  const hpPal = [0x0F, 0x0F, 0x0F, hpNes];
+  for (let s = 0; s < infoFadeStep; s++) hpPal[3] = nesColorFade(hpPal[3]);
+  const hpLabel = _nameToBytes(String(ps.hp));
+  const hpW = measureText(hpLabel);
+  drawText(ctx, panelRight - hpW, sy + 9, hpLabel, hpPal);
   if (deathTextFading) ctx.restore();
 }
 

@@ -240,7 +240,7 @@ export function playerStatsSnapshot() {
   return {
     str: ps.stats.str, agi: ps.stats.agi, vit: ps.stats.vit,
     int: ps.stats.int, mnd: ps.stats.mnd,
-    maxHP: ps.stats.maxHP, maxMP: ps.stats.maxMP,
+    maxHP: ps.stats.maxHP, maxMP: ps.stats.maxMP, hp: ps.hp,
     weaponR: ps.weaponR, weaponL: ps.weaponL,
     head: ps.head, body: ps.body, arms: ps.arms,
   };

@@ -558,12 +558,23 @@ function _drawSelectSlotRow(ctx, i, selX, rowY, fadeStep, showContent, shared) {
     const nameBytes = saveSlots[i].name;
     const nw = measureText(nameBytes);
     drawText(ctx, infoRight - nw, rowY + 8, nameBytes, fadedPal);
+    const infoLeft = selX + 40;
     const lvl = saveSlots[i].level || 1;
     const lvLabel = _nameToBytes('Lv' + String(lvl));
     const lvPal = [0x0F, 0x0F, 0x0F, 0x10];
     for (let s = 0; s < fadeStep; s++) lvPal[3] = nesColorFade(lvPal[3]);
-    const lvW = measureText(lvLabel);
-    drawText(ctx, infoRight - lvW, rowY + 16, lvLabel, lvPal);
+    drawText(ctx, infoLeft, rowY + 16, lvLabel, lvPal);
+    const slotHP = saveSlots[i].hp;
+    const slotMaxHP = saveSlots[i].stats ? saveSlots[i].stats.maxHP : null;
+    if (slotHP != null && slotMaxHP) {
+      const hpNes = slotHP <= Math.floor(slotMaxHP / 4) ? 0x16
+                  : slotHP <= Math.floor(slotMaxHP / 2) ? 0x28 : 0x2A;
+      const hpPal = [0x0F, 0x0F, 0x0F, hpNes];
+      for (let s = 0; s < fadeStep; s++) hpPal[3] = nesColorFade(hpPal[3]);
+      const hpLabel = _nameToBytes(String(slotHP));
+      const hpW = measureText(hpLabel);
+      drawText(ctx, infoRight - hpW, rowY + 16, hpLabel, hpPal);
+    }
   } else {
     const nw = measureText(SELECT_SLOT_TEXT);
     drawText(ctx, infoRight - nw, rowY + 8, SELECT_SLOT_TEXT, fadedPal);

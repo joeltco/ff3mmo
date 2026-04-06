@@ -1711,7 +1711,8 @@ function _updateTitleMainOutCase() {
     ps.stats.level = slot.level;
     ps.stats.exp = slot.exp;
     ps.stats.expToNext = (slot.level - 1 < 98) ? ps.expTable[slot.level - 1] : 0xFFFFFF;
-    fullHeal();
+    if (slot.hp != null) { ps.hp = Math.min(slot.hp, ps.stats.maxHP); ps.mp = ps.stats.maxMP; }
+    else fullHeal();
     ps.weaponR = slot.stats.weaponR != null ? slot.stats.weaponR : 0x1E;
     ps.weaponL = slot.stats.weaponL != null ? slot.stats.weaponL : 0x00;
     ps.head = slot.stats.head || 0x00;

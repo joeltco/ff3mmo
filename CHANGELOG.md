@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here.
 
+## 1.4.0 — 2026-04-06
+
+### Per-item equip restrictions + Warrior PPU sprites
+
+- **Per-item job restrictions** — every weapon and armor in `items.js` has a `jobs` bitmask (22 bits). `canJobEquip(jobIdx, itemId, ITEMS)` checks per-item, not per-type. Data sourced from RPG Shrines weapon/armor pages
+- **Auto-unequip on job change** — `_enforceEquipRestrictions(jobIdx)` checks all 5 equip slots, returns invalid gear to inventory
+- **Equip filtering** — equip list only shows items the current job can use. Optimum respects job restrictions
+- **Warrior PPU sprites** — `src/data/warrior-sprites.js` with all PPU-dumped poses (idle, L/R back/fwd swing, kneel, victory, hit, death + all leg tiles). Player battle sprites and fake player portraits/bodies use PPU tiles
+- **Per-job fake player sprites** — all `fakePlayer*` vars keyed by `{jobIdx: array[palIdx]}`. Roster, battle-drawing, PVP updated to look up by `ally.jobIdx`
+- **Fake player jobs** — PLAYER_POOL entries have `jobIdx` (0=OK, 1=Fighter). `generateAllyStats` includes `jobIdx`
+- **PVP damage number positioning** — fixed: numbers now appear at sprite right edge + bottom (matching regular encounters), not sprite center
+- **Konami debug viewer** — Warrior poses added to tile viewer (same labels as OK). `openTileViewer()` now async for dynamic import
+
 ## 1.3.6 — 2026-04-05
 
 ### Job system + Capacity Points
