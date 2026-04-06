@@ -786,8 +786,8 @@ function _pauseShared() {
     playerInventory,
     cursorTileCanvas,
     rosterScroll: inputSt.rosterScroll,
-    drawBorderedBox: drawBorderedBox,
-    clipToViewport: clipToViewport,
+    _drawBorderedBox: drawBorderedBox,
+    _clipToViewport: clipToViewport,
     _drawCursorFaded: drawCursorFaded,
   };
 }
