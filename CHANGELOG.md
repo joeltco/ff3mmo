@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.3.5 — 2026-04-05
+
+### Refactor — HUD drawing + map loading extraction
+
+- **`src/hud-drawing.js`** (349L) — HUD rendering, top box, portrait, info panel, utility draw helpers (`clipToViewport`, `drawCursorFaded`, `drawHudBox`, `drawBorderedBox`, `drawSparkleCorners`, `drawHealNum`, `drawTopBoxBorder`, `roundTopBoxCorners`, `grayViewport`, `drawRosterSparkle`, `drawHUD`, `statRowBytes`)
+- **`src/map-loading.js`** (223L) — map/dungeon/world loading (`loadMapById`, `loadWorldMapAt`, `loadWorldMapAtPosition`, `setupTopBox`), spawn calculation, door state, floor generation wiring
+- game.js: **2,695L** (was 3,083L, net −388L)
+
 ## 1.3.4 — 2026-04-05
 
 ### Options menu + CRT filter

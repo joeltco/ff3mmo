@@ -1,6 +1,6 @@
 # game.js Refactor TODO
 
-Current size: **3,083 lines** (v1.3.4). Target: <4,000 lines — **achieved**.
+Current size: **2,695 lines** (v1.3.5). Target: <4,000 lines — **achieved**.
 
 ---
 
@@ -87,4 +87,11 @@ follow-up. Revisit when extracting a battle engine module.
 - [x] `_syncSaveSlotProgress` dedup — Merged into `saveSlotsToDB()`. Net: −10L.
 - [x] `startRandomEncounter` dedup — Replaced 15 manual resets with `_resetBattleVars()`. Net: −12L.
 - [x] Gil + proficiency persistence fix — was missing from DB serialization and parse.
+</details>
+
+<details>
+<summary>Phase 5 — HUD + map loading (3,083→2,695L)</summary>
+
+- [x] `src/hud-drawing.js` (~349L) — HUD rendering, top box, portrait, info panel, utility draw helpers. `_hudDrawShared()` in game.js. Net: −388L.
+- [x] `src/map-loading.js` (~223L) — map/dungeon/world loading, setupTopBox, spawn calc. `_mapLoadShared()` in game.js.
 </details>
