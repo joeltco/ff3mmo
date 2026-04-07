@@ -64,6 +64,7 @@ export function processNextTurn(shared) {
         ps.hp = Math.max(1, ps.hp - poisonDmg);
         _s.setPlayerDamageNum({ value: poisonDmg, timer: 0 });
         _s.battleShakeTimer = _s.BATTLE_SHAKE_MS;
+        playSFX(SFX.ATTACK_HIT);
         turn._statusDone = true;
         _s.turnQueue.unshift(turn);
         _s.battleState = 'poison-tick'; _s.battleTimer = 0;
@@ -88,6 +89,7 @@ export function processNextTurn(shared) {
       if (poisonDmg > 0) {
         ally.hp = Math.max(0, ally.hp - poisonDmg);
         _s.getAllyDamageNums()[turn.index] = { value: poisonDmg, timer: 0 };
+        playSFX(SFX.ATTACK_HIT);
         turn._statusDone = true;
         _s.turnQueue.unshift(turn);
         _s.battleState = 'poison-tick'; _s.battleTimer = 0;
@@ -123,6 +125,7 @@ export function processNextTurn(shared) {
         if (poisonDmg > 0) {
           mon.hp = Math.max(0, mon.hp - poisonDmg);
           _s.setEnemyDmgNum({ value: poisonDmg, timer: 0 });
+          playSFX(SFX.ATTACK_HIT);
           turn._statusDone = true;
           _s.turnQueue.unshift(turn);
           _s.battleState = 'poison-tick'; _s.battleTimer = 0;
