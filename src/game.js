@@ -1575,6 +1575,11 @@ function _onMoveComplete() {
     }
   }
 
+  // NES poison step damage: -1 HP per step, min 1
+  if (ps.status && ps.status.mask & 0x02 && ps.hp > 1) {
+    ps.hp -= 1;
+  }
+
   if (_checkFalseWall()) return;
   if (_checkWarpTile()) return;
 
