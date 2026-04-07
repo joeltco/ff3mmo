@@ -23,7 +23,7 @@ export function handleChest(facedX, facedY, shared) {
   _s = shared;
   _s.mapData.tilemap[facedY * 32 + facedX] = 0x7D;
   const LOOT_TIERS = [
-    { weight: 60, pool: [0xA6] },                    // Common:     Potion
+    { weight: 60, pool: [0xA6, 0xA6, 0xAF, 0xAE] },  // Common:     Potion(2x), Antidote, Eye Drops
     { weight: 28, pool: [0x62, 0x58, 0x1F] },        // Uncommon:   Leather Cap, Leather Shield, Dagger
     { weight: 10, pool: [0x73, 0x8B, 0x24] },        // Rare:       Leather Armor, Bronze Bracers, Longsword
     { weight:  2, pool: [0xB2] },                    // Legendary:  SouthWind

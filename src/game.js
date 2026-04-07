@@ -1728,12 +1728,6 @@ function _updateTitleMainOutCase() {
     recalcCombatStats();
   }
   playerInventory = (slot && slot.inventory) ? { ...slot.inventory } : {};
-  // New game starting items
-  if (Object.keys(playerInventory).length === 0) {
-    playerInventory[0xa6] = 3; // 3 Potions
-    playerInventory[0xaf] = 2; // 2 Antidotes
-    playerInventory[0xae] = 1; // 1 Eye Drops
-  }
   ps.gil = (slot && slot.gil) || 0;
   ps.proficiency = (slot && slot.proficiency) ? { ...slot.proficiency } : {};
   ps.jobIdx = (slot && slot.jobIdx) || 0;
