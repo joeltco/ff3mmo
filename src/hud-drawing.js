@@ -199,9 +199,10 @@ function _drawPortraitImage(px, py, nfPortrait, isPauseHeal, infoFadeStep) {
   const isNearFatal = ps.hp > 0 && ps.stats && ps.hp <= Math.floor(ps.stats.maxHP / 4);
   if (!isPauseHeal && isNearFatal && nfPortrait === _s.battleSpriteKneelCanvas && _s.sweatFrames.length === 2)
     ctx.drawImage(_s.sweatFrames[Math.floor(Date.now() / 133) & 1], px, py - 3);
-  // Poison bubble — disabled until correct PPU tile data is captured
-  // const hasActiveStatus = ps.status && ps.status.mask !== 0;
-  // if (!isPauseHeal && hasActiveStatus && ...) { ... }
+  // Poison bubble on HUD portrait when status active
+  const hasActiveStatus = ps.status && ps.status.mask !== 0;
+  if (!isPauseHeal && hasActiveStatus && !isNearFatal && _s.poisonBubbleFrames && _s.poisonBubbleFrames.length === 2)
+    ctx.drawImage(_s.poisonBubbleFrames[Math.floor(Date.now() / 133) & 1], px + 8, py - 12);
 }
 
 function _drawCureSparkle(px, py, isPauseHeal) {
