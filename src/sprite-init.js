@@ -484,11 +484,11 @@ export function initPoisonBubble() {
     const sc = document.createElement('canvas');
     sc.width = 16; sc.height = 16;
     const sctx = sc.getContext('2d');
-    // 2x2 grid: TL(0,0) BL(0,8) TR(8,0) BR(8,8)
-    _blitTile(sctx, decodeTile(frameTiles[0], 0), POISON_PALETTE, 0, 0);
-    _blitTile(sctx, decodeTile(frameTiles[1], 0), POISON_PALETTE, 0, 8);
-    _blitTile(sctx, decodeTile(frameTiles[2], 0), POISON_PALETTE, 8, 0);
-    _blitTile(sctx, decodeTile(frameTiles[3], 0), POISON_PALETTE, 8, 8);
+    // 2x2 grid: TL=tile3, TR=tile1, BL=tile0, BR=tile2
+    _blitTile(sctx, decodeTile(frameTiles[3], 0), POISON_PALETTE, 0, 0);  // TL
+    _blitTile(sctx, decodeTile(frameTiles[1], 0), POISON_PALETTE, 8, 0);  // TR
+    _blitTile(sctx, decodeTile(frameTiles[0], 0), POISON_PALETTE, 0, 8);  // BL
+    _blitTile(sctx, decodeTile(frameTiles[2], 0), POISON_PALETTE, 8, 8);  // BR
     return sc;
   });
 }
