@@ -56,9 +56,9 @@ export function processNextTurn(shared) {
   const turn = _s.turnQueue.shift();
   if (turn.type === 'player') {
     if (ps.hp <= 0) { processNextTurn(_s); return; }
-    // Status turn-start: poison damage, paralysis skip
+    // Status turn-start: poison damage, paralysis/sleep skip, confuse flag
     if (ps.status && !turn._statusDone) {
-      const { canAct, poisonDmg } = processTurnStart(ps.status, ps.stats ? ps.stats.maxHP : ps.hp);
+      const { canAct, poisonDmg, confused } = processTurnStart(ps.status, ps.stats ? ps.stats.maxHP : ps.hp);
       if (!canAct) { processNextTurn(_s); return; }
       if (poisonDmg > 0) {
         ps.hp = Math.max(1, ps.hp - poisonDmg);
@@ -69,6 +69,20 @@ export function processNextTurn(shared) {
         _s.turnQueue.unshift(turn);
         _s.battleState = 'poison-tick'; _s.battleTimer = 0;
         return;
+      }
+      // Confused: force attack on random alive monster
+      if (confused && _s.isRandomEncounter && _s.encounterMonsters) {
+        const living = _s.encounterMonsters.map((m, i) => m.hp > 0 ? i : -1).filter(i => i >= 0);
+        if (living.length > 0) {
+          const rIdx = living[Math.floor(Math.random() * living.length)];
+          _s.inputSt.playerActionPending = { command: 'fight', targetIndex: rIdx,
+            hitResults: rollHits(ps.atk, _s.encounterMonsters[rIdx].def, ps.hitRate || 80, Math.max(1, ps.attackRoll || 1)),
+            slashFrames: _s.inputSt.playerActionPending.slashFrames,
+            slashOffX: _s.inputSt.playerActionPending.slashOffX,
+            slashOffY: _s.inputSt.playerActionPending.slashOffY,
+            slashX: _s.inputSt.playerActionPending.slashX,
+            slashY: _s.inputSt.playerActionPending.slashY };
+        }
       }
     }
     const cmd = _s.inputSt.playerActionPending.command;
@@ -85,7 +99,7 @@ export function processNextTurn(shared) {
     // Ally status turn-start
     if (ally.status && !turn._statusDone) {
       const { canAct, poisonDmg } = processTurnStart(ally.status, ally.maxHP || ally.hp);
-      if (!canAct || ally.hp <= 0) { processNextTurn(_s); return; }
+      if (!canAct) { processNextTurn(_s); return; }
       if (poisonDmg > 0) {
         ally.hp = Math.max(0, ally.hp - poisonDmg);
         _s.getAllyDamageNums()[turn.index] = { value: poisonDmg, timer: 0 };

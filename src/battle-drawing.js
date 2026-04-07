@@ -275,7 +275,7 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
     }
   }
   // Poison sparkle above portrait when status active
-  if (ps.status && ps.status.mask !== 0 && _s.poisonBubbleFrames && _s.poisonBubbleFrames.length === 2) {
+  if (ps.status && (ps.status.mask & 0x02) && _s.poisonBubbleFrames && _s.poisonBubbleFrames.length === 2) {
     const bFrame = _s.poisonBubbleFrames[Math.floor(Date.now() / 133) & 1];
     _s.ctx.drawImage(bFrame, px, py - 4);
   }

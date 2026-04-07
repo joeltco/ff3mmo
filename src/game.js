@@ -74,7 +74,7 @@ import { initMapLoading, loadMapById, loadWorldMapAt, loadWorldMapAtPosition, se
 import { updateBattleAlly } from './battle-ally.js';
 import { updateBattleEnemyTurn } from './battle-enemy.js';
 import { buildTurnOrder as _buildTurnOrder, processNextTurn as _processNextTurn } from './battle-turn.js';
-import { createStatusState, clearAll as clearAllStatus, tryInflictStatus } from './status-effects.js';
+import { createStatusState, clearAll as clearAllStatus, tryInflictStatus, wakeOnHit } from './status-effects.js';
 import { tickRandomEncounter as _tickRandomEncounter, startRandomEncounter as _startRandomEncounter } from './battle-encounter.js';
 import { resetBattleItemVars, getTargets, getHitIdx, startMagicItem, updateMagicItemThrowHit } from './battle-items.js';
 import { initBattleSprite as _initBattleSprite, initBattleSpriteForJob as _initBattleSpriteForJob,
@@ -2150,6 +2150,8 @@ function _updatePlayerSlash() {
       if (isRandomEncounter && encounterMonsters) {
         const targetMon = encounterMonsters[inputSt.targetIndex];
         targetMon.hp = Math.max(0, targetMon.hp - hit.damage);
+        // Physical hit wakes sleeping targets
+        if (targetMon.status) wakeOnHit(targetMon.status);
         // Weapon on-hit status infliction
         if (targetMon.status && targetMon.hp > 0) {
           const wpnId = getHitWeapon(currentHitIdx);

@@ -3,7 +3,7 @@
 import { calcDamage, elemMultiplier } from './battle-math.js';
 import { ps, getShieldEvade } from './player-stats.js';
 import { SFX, playSFX } from './music.js';
-import { tryInflictStatus, blindHitPenalty } from './status-effects.js';
+import { tryInflictStatus, blindHitPenalty, wakeOnHit } from './status-effects.js';
 
 let _s = null;
 
@@ -31,7 +31,8 @@ const SPECIAL_ATTACKS = {
   'Blind':       { type: 'status', hit: 60, status: 'blind' },
   'Poison':      { type: 'status', hit: 60, status: 'poison' },
   'Glare':       { type: 'status', hit: 80, status: 'paralysis' },
-  'Sleep':       { type: 'status', hit: 15, status: 'paralysis' },
+  'Sleep':       { type: 'status', hit: 60, status: 'sleep' },
+  'Confuse':     { type: 'status', hit: 60, status: 'confuse' },
   'Toad':        { type: 'status', hit: 80, status: 'toad' },
   'Mini':        { type: 'status', hit: 80, status: 'mini' },
   'Silence':     { type: 'status', hit: 80, status: 'silence' },
@@ -156,6 +157,8 @@ function _processEnemyFlash() {
         if (_s.isDefending) dmg = Math.max(1, Math.floor(dmg / 2));
         _s.ps.hp = Math.max(0, _s.ps.hp - dmg);
         _s.playerDamageNum = { value: dmg, timer: 0 };
+        // Physical hit wakes sleeping targets
+        if (ps.status) wakeOnHit(ps.status);
         // Monster statusAtk: try to inflict status on player
         const monStatus = mon ? mon.statusAtk : null;
         if (monStatus && ps.status) {

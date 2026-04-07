@@ -12,6 +12,9 @@ export const STATUS = {
   TOAD:      0x20,
   PETRIFY:   0x40,
   DEATH:     0x80,
+  // NES stores sleep/confuse in a separate byte; we extend the mask
+  SLEEP:     0x100,
+  CONFUSE:   0x200,
 };
 
 export const STATUS_NAMES = {
@@ -23,6 +26,8 @@ export const STATUS_NAMES = {
   [STATUS.TOAD]:      'Toad',
   [STATUS.PETRIFY]:   'Petrify',
   [STATUS.DEATH]:     'Death',
+  [STATUS.SLEEP]:     'Sleep',
+  [STATUS.CONFUSE]:   'Confuse',
 };
 
 // NES-encoded name bytes for battle console display
@@ -32,6 +37,8 @@ export const STATUS_NAME_BYTES = {
   [STATUS.BLIND]:     new Uint8Array([0x8B,0xD5,0xD2,0xD7,0xCD,0xCE,0xCD]),             // Blinded
   [STATUS.SILENCE]:   new Uint8Array([0x9C,0xD2,0xD5,0xCE,0xD7,0xCC,0xCE,0xCD]),       // Silenced
   [STATUS.PETRIFY]:   new Uint8Array([0x99,0xCE,0xDD,0xDB,0xD2,0xCF,0xD2,0xCE,0xCD]), // Petrified
+  [STATUS.SLEEP]:     new Uint8Array([0x8A,0xDC,0xD5,0xCE,0xCE,0xDA]),                 // Asleep
+  [STATUS.CONFUSE]:   new Uint8Array([0x8C,0xD8,0xD7,0xCF,0xDE,0xDC,0xCE,0xCD]),       // Confused
 };
 
 // --- Per-target status state ---
@@ -73,6 +80,8 @@ const NAME_TO_FLAG = {
   toad:      STATUS.TOAD,
   petrify:   STATUS.PETRIFY,
   death:     STATUS.DEATH,
+  sleep:     STATUS.SLEEP,
+  confuse:   STATUS.CONFUSE,
 };
 
 export function tryInflictStatus(targetState, statusName, hitChance = 50) {
@@ -105,6 +114,7 @@ export function tryInflictStatusByte(targetState, statusByte, hitChance = 50) {
 export function processTurnStart(state, maxHP) {
   let canAct = true;
   let poisonDmg = 0;
+  let confused = false;
 
   // Petrify/death = can't act (should already be handled as KO)
   if (hasStatus(state, STATUS.PETRIFY) || hasStatus(state, STATUS.DEATH)) {
@@ -117,6 +127,25 @@ export function processTurnStart(state, maxHP) {
     removeStatus(state, STATUS.PARALYSIS);
   }
 
+  // Sleep = skip turn (NES: wakes on physical hit, or 25% chance per turn)
+  if (hasStatus(state, STATUS.SLEEP)) {
+    if (Math.random() < 0.25) {
+      removeStatus(state, STATUS.SLEEP);
+    } else {
+      canAct = false;
+    }
+  }
+
+  // Confuse = acts but attacks random target (caller handles targeting)
+  if (hasStatus(state, STATUS.CONFUSE)) {
+    confused = true;
+    // NES: 25% chance to snap out per turn
+    if (Math.random() < 0.25) {
+      removeStatus(state, STATUS.CONFUSE);
+      confused = false;
+    }
+  }
+
   // Poison = take damage equal to ~1/16 maxHP per turn (NES formula)
   if (hasStatus(state, STATUS.POISON)) {
     poisonDmg = Math.max(1, Math.floor(maxHP / 16));
@@ -127,7 +156,14 @@ export function processTurnStart(state, maxHP) {
   // Mini = reduced attack (checked by caller)
   // Toad = reduced to basic attack (checked by caller)
 
-  return { canAct, poisonDmg };
+  return { canAct, poisonDmg, confused };
+}
+
+// Wake from sleep when hit by physical attack
+export function wakeOnHit(state) {
+  if (hasStatus(state, STATUS.SLEEP)) {
+    removeStatus(state, STATUS.SLEEP);
+  }
 }
 
 // --- Combat modifiers ---
