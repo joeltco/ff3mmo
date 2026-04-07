@@ -192,16 +192,16 @@ export const ITEMS = new Map([
   [0xa2, { type: 'key', price:     0 }],
   [0xa3, { type: 'key', price:     0 }],
   [0xa4, { type: 'key', price:   200 }],
-  [0xa6, { type: 'consumable', price:   150 }],
-  [0xa7, { type: 'consumable', price:  1200 }],
-  [0xa8, { type: 'consumable', price:  3000 }],
-  [0xa9, { type: 'consumable', price:  3000 }],
-  [0xaa, { type: 'consumable', price:   300 }],
-  [0xab, { type: 'consumable', price:   100 }],
-  [0xac, { type: 'consumable', price:   100 }],
-  [0xad, { type: 'consumable', price:   100 }],
-  [0xae, { type: 'consumable', price:    40 }],
-  [0xaf, { type: 'consumable', price:    80 }],
+  [0xa6, { type: 'consumable', price:   150, effect: 'heal', power: 50 }],       // Potion
+  [0xa7, { type: 'consumable', price:  1200, effect: 'heal', power: 500 }],     // HiPotion
+  [0xa8, { type: 'consumable', price:  3000, effect: 'full_heal' }],             // Elixir
+  [0xa9, { type: 'consumable', price:  3000, effect: 'revive', power: 100 }],   // PhoexDown
+  [0xaa, { type: 'consumable', price:   300, effect: 'cure_status', cures: 'petrify' }],  // GoldNeedle
+  [0xab, { type: 'consumable', price:   100, effect: 'cure_status', cures: 'toad' }],     // MaidenKiss
+  [0xac, { type: 'consumable', price:   100, effect: 'cure_status', cures: 'silence' }],  // Echo Herbs
+  [0xad, { type: 'consumable', price:   100, effect: 'cure_status', cures: 'mini' }],     // Mallet
+  [0xae, { type: 'consumable', price:    40, effect: 'cure_status', cures: 'blind' }],    // Eye Drops
+  [0xaf, { type: 'consumable', price:    80, effect: 'cure_status', cures: 'poison' }],   // Antidote
   [0xb1, { type: 'battle_item', price:  1000 }],
   [0xb2, { type: 'battle_item', price:  1000 }],
   [0xb3, { type: 'battle_item', price:  1000 }],

@@ -2,9 +2,9 @@
 
 import { rollHits } from './battle-math.js';
 import { ps } from './player-stats.js';
-import { isWeapon } from './data/items.js';
+import { ITEMS, isWeapon } from './data/items.js';
 import { SFX, playSFX } from './music.js';
-import { processTurnStart } from './status-effects.js';
+import { processTurnStart, removeStatus, STATUS } from './status-effects.js';
 
 let _s = null; // shared state object, set each call
 
@@ -137,28 +137,60 @@ function _playerTurnFight() {
   _s.battleState = 'attack-start'; _s.battleTimer = 0;
 }
 
+const CURE_NAME_TO_FLAG = {
+  poison: STATUS.POISON, blind: STATUS.BLIND, silence: STATUS.SILENCE,
+  mini: STATUS.MINI, toad: STATUS.TOAD, petrify: STATUS.PETRIFY,
+  paralysis: STATUS.PARALYSIS,
+};
+
 function _playerTurnConsumable() {
+  const itemId = _s.inputSt.playerActionPending.itemId;
+  const itemDat = ITEMS.get(itemId);
+  const effect = itemDat?.effect || 'heal';
+  const power = itemDat?.power || 50;
+
   playSFX(SFX.CURE);
   const { target, allyIndex } = _s.inputSt.playerActionPending;
+
+  if (effect === 'cure_status') {
+    // Status cure items — only target player for now
+    const flag = CURE_NAME_TO_FLAG[itemDat.cures];
+    if (flag && ps.status) removeStatus(ps.status, flag);
+    _s.itemHealAmount = 0;
+    _s.battleState = 'item-use'; _s.battleTimer = 0;
+    return;
+  }
+
+  if (effect === 'full_heal') {
+    // Elixir — full HP restore
+    if (target === 'player' && (allyIndex === undefined || allyIndex < 0)) {
+      const heal = ps.stats.maxHP - ps.hp;
+      ps.hp = ps.stats.maxHP; _s.itemHealAmount = heal; _s.setPlayerHealNum({ value: heal, timer: 0 });
+    }
+    _s.battleState = 'item-use'; _s.battleTimer = 0;
+    return;
+  }
+
+  // Default: heal HP by power amount
   if (target === 'player' && (allyIndex === undefined || allyIndex < 0)) {
-    const heal = Math.min(50, ps.stats.maxHP - ps.hp);
+    const heal = Math.min(power, ps.stats.maxHP - ps.hp);
     ps.hp += heal; _s.itemHealAmount = heal; _s.setPlayerHealNum({ value: heal, timer: 0 });
   } else if (target === 'player' && allyIndex >= 0) {
     const ally = _s.battleAllies[allyIndex];
     if (ally) {
-      const heal = Math.min(50, ally.maxHP - ally.hp);
+      const heal = Math.min(power, ally.maxHP - ally.hp);
       ally.hp += heal; _s.itemHealAmount = heal;
       _s.getAllyDamageNums()[allyIndex] = { value: heal, timer: 0, heal: true };
     }
   } else {
     const mon = _s.isRandomEncounter && _s.encounterMonsters ? _s.encounterMonsters[target] : null;
     if (mon) {
-      const heal = Math.min(50, mon.maxHP - mon.hp);
+      const heal = Math.min(power, mon.maxHP - mon.hp);
       mon.hp += heal; _s.itemHealAmount = heal; _s.setEnemyHealNum({ value: heal, timer: 0, index: target });
     } else {
       const curHP = _s.getEnemyHP();
       const maxHP = _s.pvpSt.isPVPBattle ? (_s.pvpSt.pvpOpponentStats ? _s.pvpSt.pvpOpponentStats.maxHP : 1) : _s.BOSS_MAX_HP;
-      const heal = Math.min(50, maxHP - curHP);
+      const heal = Math.min(power, maxHP - curHP);
       _s.setEnemyHP(curHP + heal); _s.itemHealAmount = heal; _s.setEnemyHealNum({ value: heal, timer: 0, index: 0 });
     }
   }

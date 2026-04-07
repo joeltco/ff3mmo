@@ -10,7 +10,7 @@ import { ps, recalcCombatStats, changeJob, getEquipSlotId, setEquipSlotId, EQUIP
 import { ITEMS, isHandEquippable, isWeapon, weaponSubtype, isBladedWeapon } from './data/items.js';
 import { selectCursor, saveSlots, saveSlotsToDB } from './save-state.js';
 import { rollHits, elemMultiplier } from './battle-math.js';
-import { blindHitPenalty } from './status-effects.js';
+import { blindHitPenalty, removeStatus, STATUS } from './status-effects.js';
 import { _nameToBytes } from './text-utils.js';
 import { MONSTERS } from './data/monsters.js';
 import { JOBS, canJobEquip } from './data/jobs.js';
@@ -733,17 +733,35 @@ function _pauseInputInventory() {
 }
 
 function _applyPauseItemUse(item, rosterTargets) {
-  if (!item || item.effect !== 'restore_hp') { playSFX(SFX.ERROR); return; }
+  if (!item) { playSFX(SFX.ERROR); return; }
+  const eff = item.effect || (item.type === 'consumable' ? 'heal' : null);
+
+  // Cure status items (Antidote, Eye Drops, etc.) — only targets player outside battle
+  if (eff === 'cure_status') {
+    if (ps.status) {
+      const flagMap = { poison: STATUS.POISON, blind: STATUS.BLIND, silence: STATUS.SILENCE, mini: STATUS.MINI, toad: STATUS.TOAD, petrify: STATUS.PETRIFY, paralysis: STATUS.PARALYSIS };
+      const flag = flagMap[item.cures];
+      if (flag) removeStatus(ps.status, flag);
+    }
+    _s.removeItem(pauseSt.useItemId); playSFX(SFX.CURE);
+    pauseSt.healNum = { value: 0, timer: 0 };
+    pauseSt.state = 'inv-heal'; pauseSt.timer = 0;
+    if (selectCursor >= 0 && saveSlots[selectCursor]) { saveSlots[selectCursor].inventory = { ..._s.playerInventory }; saveSlotsToDB(); }
+    return;
+  }
+
+  if (eff !== 'heal' && eff !== 'full_heal' && eff !== 'restore_hp') { playSFX(SFX.ERROR); return; }
+  const healPower = eff === 'full_heal' ? 9999 : (item.power || item.value || 50);
   if (pauseSt.invAllyTarget >= 0) {
     const rp = rosterTargets[pauseSt.invAllyTarget];
     if (!rp) { playSFX(SFX.ERROR); return; }
-    const heal = Math.min(item.value, rp.maxHP - rp.hp);
+    const heal = Math.min(healPower, rp.maxHP - rp.hp);
     rp.hp += heal; _s.removeItem(pauseSt.useItemId); playSFX(SFX.CURE);
     pauseSt.healNum = { value: heal, timer: 0, rosterIdx: pauseSt.invAllyTarget };
     pauseSt.state = 'inv-heal'; pauseSt.timer = 0;
     if (selectCursor >= 0 && saveSlots[selectCursor]) { saveSlots[selectCursor].inventory = { ..._s.playerInventory }; saveSlotsToDB(); }
   } else {
-    const heal = Math.min(item.value, ps.stats.maxHP - ps.hp);
+    const heal = Math.min(healPower, ps.stats.maxHP - ps.hp);
     ps.hp += heal; _s.removeItem(pauseSt.useItemId); playSFX(SFX.CURE);
     pauseSt.healNum = { value: heal, timer: 0 };
     pauseSt.state = 'inv-heal'; pauseSt.timer = 0;
