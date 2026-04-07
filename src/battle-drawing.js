@@ -278,7 +278,7 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
   const hasActiveStatus = ps.status && ps.status.mask !== 0;
   if (hasActiveStatus && _s.poisonBubbleFrames && _s.poisonBubbleFrames.length === 2 && !isAttackPose && !isVictoryPose) {
     const bubbleIdx = Math.floor(Date.now() / 133) & 1;
-    _s.ctx.drawImage(_s.poisonBubbleFrames[bubbleIdx], px, py - 4);
+    _s.ctx.drawImage(_s.poisonBubbleFrames[bubbleIdx], px + 4, py - 12);
   }
   // Item target cursor on player portrait (only when not targeting an ally)
   if (_s.battleState === 'item-target-select' && inputSt.itemTargetType === 'player' && inputSt.itemTargetAllyIndex < 0 && _s.cursorTileCanvas) {
