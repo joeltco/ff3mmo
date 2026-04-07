@@ -274,10 +274,20 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
       _s.ctx.drawImage(_s.sweatFrames[sweatIdx], px, py - 3);
     }
   }
-  // Poison sparkle above portrait when status active
-  if (ps.status && (ps.status.mask & 0x02) && _s.poisonBubbleFrames && _s.poisonBubbleFrames.length === 2) {
-    const bFrame = _s.poisonBubbleFrames[Math.floor(Date.now() / 133) & 1];
-    _s.ctx.drawImage(bFrame, px, py - 4);
+  // Status sprite above portrait — show highest priority active status
+  if (ps.status && ps.status.mask !== 0 && _s.statusSpriteMap) {
+    // Priority order: petrify, sleep, confuse, paralysis, silence, blind, poison
+    const prio = [0x40, 0x100, 0x200, 0x01, 0x10, 0x04, 0x02];
+    for (const flag of prio) {
+      if (ps.status.mask & flag) {
+        const frames = _s.statusSpriteMap.get(flag);
+        if (frames && frames.length === 2) {
+          const f = frames[Math.floor(Date.now() / 133) & 1];
+          _s.ctx.drawImage(f, px, py - 4);
+        }
+        break;
+      }
+    }
   }
   // Item target cursor on player portrait (only when not targeting an ally)
   if (_s.battleState === 'item-target-select' && inputSt.itemTargetType === 'player' && inputSt.itemTargetAllyIndex < 0 && _s.cursorTileCanvas) {

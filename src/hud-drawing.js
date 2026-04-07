@@ -199,10 +199,19 @@ function _drawPortraitImage(px, py, nfPortrait, isPauseHeal, infoFadeStep) {
   const isNearFatal = ps.hp > 0 && ps.stats && ps.hp <= Math.floor(ps.stats.maxHP / 4);
   if (!isPauseHeal && isNearFatal && nfPortrait === _s.battleSpriteKneelCanvas && _s.sweatFrames.length === 2)
     ctx.drawImage(_s.sweatFrames[Math.floor(Date.now() / 133) & 1], px, py - 3);
-  // Poison sparkle above portrait when status active
-  if (ps.status && (ps.status.mask & 0x02) && _s.poisonBubbleFrames && _s.poisonBubbleFrames.length === 2) {
-    const bFrame = _s.poisonBubbleFrames[Math.floor(Date.now() / 133) & 1];
-    ctx.drawImage(bFrame, px, py - 4);
+  // Status sprite above portrait — show highest priority active status
+  if (ps.status && ps.status.mask !== 0 && _s.statusSpriteMap) {
+    const prio = [0x40, 0x100, 0x200, 0x01, 0x10, 0x04, 0x02];
+    for (const flag of prio) {
+      if (ps.status.mask & flag) {
+        const frames = _s.statusSpriteMap.get(flag);
+        if (frames && frames.length === 2) {
+          const f = frames[Math.floor(Date.now() / 133) & 1];
+          ctx.drawImage(f, px, py - 4);
+        }
+        break;
+      }
+    }
   }
 }
 

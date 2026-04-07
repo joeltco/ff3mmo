@@ -83,7 +83,7 @@ import { initBattleSprite as _initBattleSprite, initBattleSpriteForJob as _initB
          initAdamantoise as _initAdamantoise,
          initGoblinSprite as _initGoblinSprite, initInvincibleSprite as _initInvincibleSprite,
          initMoogleSprite as _initMoogleSprite, initLoadingScreenFadeFrames as _initLoadingScreenFadeFrames,
-         initPoisonBubble as _initPoisonBubble } from './sprite-init.js';
+         initStatusSprites as _initStatusSprites } from './sprite-init.js';
 import { DMG_SHOW_MS, resetAllDmgNums, tickDmgNums, tickHealNums, clearHealNums, initMissSprite,
          getEnemyDmgNum, setEnemyDmgNum, getPlayerDamageNum, setPlayerDamageNum,
          getPlayerHealNum, setPlayerHealNum, getEnemyHealNum, setEnemyHealNum,
@@ -143,7 +143,8 @@ let battleSpriteKneelCanvas = null;    // low HP kneel pose 16×16 (PPU $09-$0C)
 let sweatFrames = [];                  // 2 × 16×8 canvases (near-fatal dot animation)
 let defendSparkleFrames = [];          // 4 × 8×8 canvases ($49-$4C)
 let cureSparkleFrames = [];            // 2 × 16×16 canvases (config A/B from $4D/$4E)
-let poisonBubbleFrames = [];           // 2 × 16×8 canvases (poison status animation from ROM $56A50)
+let statusSpriteMap = new Map();        // Map<statusFlag, [frame0, frame1]> — all status animations
+let poisonBubbleFrames = [];           // backward compat ref to poison frames
 // battleFistCanvas → weapon-sprites.js
 let silhouetteCanvas = null;
 
@@ -658,6 +659,7 @@ function _hudDrawShared() {
     get battleSpriteKneelFadeCanvases() { return battleSpriteKneelFadeCanvases; },
     get sweatFrames() { return sweatFrames; },
     get poisonBubbleFrames() { return poisonBubbleFrames; },
+    get statusSpriteMap() { return statusSpriteMap; },
     get cureSparkleFrames() { return cureSparkleFrames; },
     get battleState() { return battleState; },
     get battleShakeTimer() { return battleShakeTimer; },
@@ -1114,6 +1116,7 @@ function _battleDrawShared() {
     get cureSparkleFrames() { return cureSparkleFrames; },
     get sweatFrames() { return sweatFrames; },
     get poisonBubbleFrames() { return poisonBubbleFrames; },
+    get statusSpriteMap() { return statusSpriteMap; },
     get cursorTileCanvas() { return cursorTileCanvas; },
     get cursorFadeCanvases() { return cursorFadeCanvases; },
     get topBoxBgCanvas() { return topBoxBgCanvas; },
@@ -1233,7 +1236,8 @@ function _initSpriteAssets(romRaw) {
   battleSpriteKneelCanvas = bs.battleSpriteKneelCanvas;
   battleSpriteKneelFadeCanvases = bs.battleSpriteKneelFadeCanvases;
   sweatFrames = bs.sweatFrames;
-  poisonBubbleFrames = _initPoisonBubble();
+  statusSpriteMap = _initStatusSprites();
+  poisonBubbleFrames = statusSpriteMap.get(0x02) || [];
 
   // Fake player portraits & full bodies (sprite-init.js) — keyed by jobIdx
   const fp = _initFakePlayerPortraits(romRaw, [0, 1]);
