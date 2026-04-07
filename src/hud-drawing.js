@@ -121,7 +121,7 @@ function _drawTopBoxBattleBG() {
   const ctx = _s.ctx;
   const battleState = _s.battleState;
   const battleShakeTimer = _s.battleShakeTimer;
-  const topShake = ((battleState === 'enemy-attack' || battleState === 'pvp-opp-sw-hit') && battleShakeTimer > 0)
+  const topShake = ((battleState === 'enemy-attack' || battleState === 'poison-tick' || battleState === 'pvp-opp-sw-hit') && battleShakeTimer > 0)
     ? (Math.floor(battleShakeTimer / 67) & 1 ? 2 : -2) : 0;
   if (transSt.state !== 'loading' && !topBoxSt.isTown && _s.topBoxBgCanvas) {
     ctx.drawImage(_s.topBoxBgCanvas, topShake, 0);
@@ -246,7 +246,7 @@ function _drawHUDInfoPanel() {
   }
   const battleShakeTimer = _s.battleShakeTimer;
   const battleState = _s.battleState;
-  const shakeOff = ((battleState === 'enemy-attack' || battleState === 'pvp-opp-sw-hit') && battleShakeTimer > 0)
+  const shakeOff = ((battleState === 'enemy-attack' || battleState === 'poison-tick' || battleState === 'pvp-opp-sw-hit') && battleShakeTimer > 0)
     ? (Math.floor(battleShakeTimer / 67) & 1 ? 2 : -2) : 0;
   const sy = HUD_VIEW_Y + 8;
   const panelRight = HUD_RIGHT_X + HUD_RIGHT_W - 8 + shakeOff;
