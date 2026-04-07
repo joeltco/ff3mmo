@@ -260,6 +260,7 @@ let slashFramesR = null;           // right-hand punch frames (frame $12, 4 effe
 let slashFramesL = null;           // left-hand punch frames (frame $13, 4 effect sets)
 let slashFrames = null;            // alias — points to R or L based on current hit
 let critFlashTimer = -1;           // >=0 while crit backdrop flash is active (1 frame = 16ms)
+let poisonFlashTimer = -1;         // >=0 while overworld poison flash is active
 let knifeSlashFramesR = null;      // knife diagonal slash frames (right hand)
 let knifeSlashFramesL = null;      // knife diagonal slash frames (left hand)
 let swordSlashFramesR = null;      // sword diagonal slash frames (right hand)
@@ -1575,9 +1576,11 @@ function _onMoveComplete() {
     }
   }
 
-  // NES poison step damage: -1 HP per step, min 1
+  // NES poison step damage: -1 HP per step, min 1, SFX + flash
   if (ps.status && ps.status.mask & 0x02 && ps.hp > 1) {
     ps.hp -= 1;
+    playSFX(SFX.ATTACK_HIT);
+    poisonFlashTimer = 0;
   }
 
   if (_checkFalseWall()) return;
@@ -2524,6 +2527,17 @@ function _updateHudHpLvStep(dt) {
   }
 }
 
+function _drawPoisonFlash() {
+  if (poisonFlashTimer < 0) return;
+  if (poisonFlashTimer === 0) poisonFlashTimer = Date.now();
+  if (Date.now() - poisonFlashTimer < 67) {
+    clipToViewport();
+    ctx.fillStyle = 'rgba(128, 0, 64, 0.35)';
+    ctx.fillRect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
+    ctx.restore();
+  } else { poisonFlashTimer = -1; }
+}
+
 function _drawPondStrobe() {
   if (pondStrobeTimer <= 0) return;
   const frame = Math.floor((BATTLE_FLASH_FRAMES * BATTLE_FLASH_FRAME_MS - pondStrobeTimer) / BATTLE_FLASH_FRAME_MS);
@@ -2583,6 +2597,7 @@ function _gameLoopUpdate(dt) {
 function _gameLoopDraw() {
   try {
     render();
+    _drawPoisonFlash();
     drawTransitionOverlay(ctx, _transDrawShared());
     _drawPondStrobe();
     if (transSt.state === 'trap-falling' && sprite) sprite.draw(ctx, SCREEN_CENTER_X, SCREEN_CENTER_Y);
