@@ -199,7 +199,11 @@ function _drawPortraitImage(px, py, nfPortrait, isPauseHeal, infoFadeStep) {
   const isNearFatal = ps.hp > 0 && ps.stats && ps.hp <= Math.floor(ps.stats.maxHP / 4);
   if (!isPauseHeal && isNearFatal && nfPortrait === _s.battleSpriteKneelCanvas && _s.sweatFrames.length === 2)
     ctx.drawImage(_s.sweatFrames[Math.floor(Date.now() / 133) & 1], px, py - 3);
-  // Poison bubble — disabled until tile arrangement is verified
+  // Poison bubble above portrait when status active
+  if (ps.status && ps.status.mask !== 0 && _s.poisonBubbleFrames && _s.poisonBubbleFrames.length === 2) {
+    const bFrame = _s.poisonBubbleFrames[Math.floor(Date.now() / 267) & 1];
+    ctx.drawImage(bFrame, px + 2, py - 14);
+  }
 }
 
 function _drawCureSparkle(px, py, isPauseHeal) {

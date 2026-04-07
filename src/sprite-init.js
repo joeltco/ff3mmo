@@ -466,8 +466,8 @@ function _initBattleLowHPSprites(palette) {
 
 // Poison bubble animation — 2-frame 16×16 sprite (2×2 tiles) from ROM $56A50
 // Frame 1: tiles 0-3 ($56A50-$56A80), Frame 2: tiles 4-7 ($56A90-$56AC0)
-// NES sprPal0: $0F=black, $36=light orange, $30=white, $16=dark red
-const POISON_PALETTE = [0x0F, 0x36, 0x30, 0x16];
+// NES sprPal0: $0F=black, $36=light orange, $16=dark red, $30=white
+const POISON_PALETTE = [0x0F, 0x36, 0x16, 0x30];
 const POISON_FRAME_TILES = [
   [new Uint8Array([0xf0,0xf8,0x7c,0x3e,0x3e,0x3f,0x7f,0x7f, 0x00,0xf0,0xf8,0xfc,0xfc,0xfe,0xfe,0xfe]),  // TL
    new Uint8Array([0xff,0x7e,0x3e,0x1f,0x07,0x0f,0x1f,0x18, 0x7f,0x3f,0x1f,0x07,0x03,0x07,0x08,0x00]),  // BL
@@ -484,10 +484,10 @@ export function initPoisonBubble() {
     const sc = document.createElement('canvas');
     sc.width = 16; sc.height = 16;
     const sctx = sc.getContext('2d');
-    // 2x2 grid: TL=tile3, TR=tile1, BL=tile0, BR=tile2
+    // 2x2 grid: TL=tile3, TR=tile0, BL=tile1, BR=tile2
     _blitTile(sctx, decodeTile(frameTiles[3], 0), POISON_PALETTE, 0, 0);  // TL
-    _blitTile(sctx, decodeTile(frameTiles[1], 0), POISON_PALETTE, 8, 0);  // TR
-    _blitTile(sctx, decodeTile(frameTiles[0], 0), POISON_PALETTE, 0, 8);  // BL
+    _blitTile(sctx, decodeTile(frameTiles[0], 0), POISON_PALETTE, 8, 0);  // TR
+    _blitTile(sctx, decodeTile(frameTiles[1], 0), POISON_PALETTE, 0, 8);  // BL
     _blitTile(sctx, decodeTile(frameTiles[2], 0), POISON_PALETTE, 8, 8);  // BR
     return sc;
   });
