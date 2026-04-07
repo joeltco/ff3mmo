@@ -196,7 +196,8 @@ function _drawPortraitImage(px, py, nfPortrait, isPauseHeal, infoFadeStep) {
     if (fadeSets) { ctx.drawImage(fadeSets[infoFadeStep - 1], px, py); return; }
   }
   ctx.drawImage(nfPortrait, px, py);
-  if (!isPauseHeal && nfPortrait === _s.battleSpriteKneelCanvas && _s.sweatFrames.length === 2)
+  const isNearFatal = ps.hp > 0 && ps.stats && ps.hp <= Math.floor(ps.stats.maxHP / 4);
+  if (!isPauseHeal && isNearFatal && nfPortrait === _s.battleSpriteKneelCanvas && _s.sweatFrames.length === 2)
     ctx.drawImage(_s.sweatFrames[Math.floor(Date.now() / 133) & 1], px, py - 3);
 }
 

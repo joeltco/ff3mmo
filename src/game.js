@@ -587,7 +587,6 @@ function _resetBattleVars() {
   resetBattleItemVars();
   playerDeathTimer = null; _teamWipeMsgShown = false;
   inputSt.battleProfHits = {};
-  ps.status = createStatusState();
 }
 function _zPressed() { if (!keys['z'] && !keys['Z']) return false; keys['z'] = false; keys['Z'] = false; return true; }
 function _xPressed() { if (!keys['x'] && !keys['X']) return false; keys['x'] = false; keys['X'] = false; return true; }

@@ -25,7 +25,7 @@ export const ps = {
   mdef: 0,          // total magic defense from armor
   attackRoll: 1,    // potential hits (from effective AGI)
   elemResist: [],   // array of element strings player resists (from armor)
-  status: null,     // status effect state {mask, poisonDmgTick} — created on battle start
+  status: { mask: 0, poisonDmgTick: 0 },  // status effect state — persists across battles
   _romData: null,  // stored by initExpTable for use in grantExp
   proficiency: {}, // { subtype: points } — 100 pts per level, max level 16 (1600 pts)
   jobIdx: 0,            // current job index (0=Onion Knight, 1=Warrior, etc.)
