@@ -59,7 +59,11 @@ export function processNextTurn(shared) {
     // Status turn-start: poison damage, paralysis skip
     if (ps.status) {
       const { canAct, poisonDmg } = processTurnStart(ps.status, ps.stats ? ps.stats.maxHP : ps.hp);
-      if (poisonDmg > 0) { ps.hp = Math.max(1, ps.hp - poisonDmg); }
+      if (poisonDmg > 0) {
+        ps.hp = Math.max(1, ps.hp - poisonDmg);
+        _s.setPlayerDamageNum({ value: poisonDmg, timer: 0 });
+        _s.battleShakeTimer = _s.BATTLE_SHAKE_MS;
+      }
       if (!canAct) { processNextTurn(_s); return; }
     }
     const cmd = _s.inputSt.playerActionPending.command;
@@ -76,7 +80,10 @@ export function processNextTurn(shared) {
     // Ally status turn-start
     if (ally.status) {
       const { canAct, poisonDmg } = processTurnStart(ally.status, ally.maxHP || ally.hp);
-      if (poisonDmg > 0) { ally.hp = Math.max(0, ally.hp - poisonDmg); }
+      if (poisonDmg > 0) {
+        ally.hp = Math.max(0, ally.hp - poisonDmg);
+        _s.getAllyDamageNums()[turn.index] = { value: poisonDmg, timer: 0 };
+      }
       if (!canAct || ally.hp <= 0) { processNextTurn(_s); return; }
     }
     if (_s.isRandomEncounter && _s.encounterMonsters) {
@@ -104,7 +111,10 @@ export function processNextTurn(shared) {
       const mon = _s.encounterMonsters[turn.index];
       if (mon.status) {
         const { canAct, poisonDmg } = processTurnStart(mon.status, mon.maxHP);
-        if (poisonDmg > 0) { mon.hp = Math.max(0, mon.hp - poisonDmg); }
+        if (poisonDmg > 0) {
+          mon.hp = Math.max(0, mon.hp - poisonDmg);
+          _s.setEnemyDmgNum({ value: poisonDmg, timer: 0, index: turn.index });
+        }
         if (!canAct || mon.hp <= 0) { processNextTurn(_s); return; }
       }
     }
