@@ -1733,6 +1733,7 @@ function _updateTitleMainOutCase() {
   ps.jobIdx = (slot && slot.jobIdx) || 0;
   ps.unlockedJobs = (slot && slot.unlockedJobs != null) ? slot.unlockedJobs : 0x01;
   ps.cp = (slot && slot.cp) || 0;
+  ps.status.mask = (slot && slot.statusMask) || 0;
   // Swap battle sprites to match saved job
   _swapBattleSprites(ps.jobIdx);
   // Always spawn in Ur

@@ -40,6 +40,7 @@ export async function saveSlotsToDB() {
     saveSlots[selectCursor].jobIdx = ps.jobIdx;
     saveSlots[selectCursor].unlockedJobs = ps.unlockedJobs;
     saveSlots[selectCursor].cp = ps.cp;
+    saveSlots[selectCursor].statusMask = ps.status ? ps.status.mask : 0;
     const pos = _getPosition();
     saveSlots[selectCursor].worldX = pos.worldX;
     saveSlots[selectCursor].worldY = pos.worldY;
@@ -60,6 +61,7 @@ export async function saveSlotsToDB() {
       jobIdx: s.jobIdx || 0,
       unlockedJobs: s.unlockedJobs != null ? s.unlockedJobs : 0x01,
       cp: s.cp || 0,
+      statusMask: s.statusMask || 0,
       worldX: s.worldX != null ? s.worldX : null,
       worldY: s.worldY != null ? s.worldY : null,
       onWorldMap: s.onWorldMap != null ? s.onWorldMap : null,
