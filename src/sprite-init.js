@@ -464,6 +464,28 @@ function _initBattleLowHPSprites(palette) {
   return { battleSpriteKneelCanvas, battleSpriteKneelFadeCanvases, sweatFrames };
 }
 
+// Poison bubble animation — 2-frame 16×8 sprite, ROM $56A50
+// Uses NES sprPal0 colors: $0F=black, $36=light orange, $30=white, $16=dark red
+const POISON_PALETTE = [0x0F, 0x36, 0x30, 0x16];
+const POISON_FRAME_TILES = [
+  [new Uint8Array([0xf0,0xf8,0x7c,0x3e,0x3e,0x3f,0x7f,0x7f, 0x00,0xf0,0xf8,0xfc,0xfc,0xfe,0xfe,0xfe]),
+   new Uint8Array([0xff,0x7e,0x3e,0x1f,0x07,0x0f,0x1f,0x18, 0x7f,0x3f,0x1f,0x07,0x03,0x07,0x08,0x00])],
+  [new Uint8Array([0xff,0x7e,0x7c,0xf8,0xf0,0x80,0x00,0x00, 0xfe,0xfc,0xf8,0xf0,0x80,0x00,0x00,0x00]),
+   new Uint8Array([0x07,0x1f,0x3f,0x7e,0x7e,0xfe,0xfe,0xfe, 0x00,0x07,0x1f,0x3f,0x3f,0x7f,0x7f,0x7f])],
+];
+
+export function initPoisonBubble() {
+  return POISON_FRAME_TILES.map(frameTiles => {
+    const sc = document.createElement('canvas');
+    sc.width = 16; sc.height = 8;
+    const sctx = sc.getContext('2d');
+    for (let t = 0; t < 2; t++) {
+      _blitTile(sctx, decodeTile(frameTiles[t], 0), POISON_PALETTE, t * 8, 0);
+    }
+    return sc;
+  });
+}
+
 // Read 4 tiles from ROM for a job pose (tile indices relative to job block start)
 function _readJobTiles(romData, jobBase, t0, t1, t2, t3) {
   return [t0, t1, t2, t3].map(t => decodeTile(romData, jobBase + t * 16));
