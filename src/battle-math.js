@@ -7,16 +7,34 @@ export const BOSS_HIT_RATE = 85;   // boss accuracy
 export const GOBLIN_HIT_RATE = 75; // goblin accuracy
 export const DAMAGE_CAP = 9999;
 
+// NES elemental multiplier: 2x if target is weak, 0.5x if target resists
+// atkElem/weakness/resist can be a string or array of strings
+export function elemMultiplier(atkElem, weakness, resist) {
+  if (!atkElem) return 1;
+  const atk = Array.isArray(atkElem) ? atkElem : [atkElem];
+  const weak = weakness ? (Array.isArray(weakness) ? weakness : [weakness]) : [];
+  const res = resist ? (Array.isArray(resist) ? resist : [resist]) : [];
+  let mult = 1;
+  for (const e of atk) {
+    if (weak.includes(e)) { mult = 2; break; }
+    if (res.includes(e)) { mult = 0.5; }
+  }
+  return mult;
+}
+
 // NES FF3 damage formula: atk + random(0..floor(atk/2)) - def
 // Crit adds flat bonus (NES $28: per-job/weapon crit bonus, additive not multiplicative)
-export function calcDamage(atk, def, crit = false, critBonus = 0) {
+// elemMult: elemental multiplier (1 = neutral, 2 = weak, 0.5 = resist)
+export function calcDamage(atk, def, crit = false, critBonus = 0, elemMult = 1) {
   let dmg = atk + Math.floor(Math.random() * (Math.floor(atk / 2) + 1)) - def;
   if (crit) dmg += critBonus;
+  dmg = Math.floor(dmg * elemMult);
   return Math.min(DAMAGE_CAP, Math.max(1, dmg));
 }
 
 // profLevel: weapon proficiency level (0–16) — adds hit rate, crit rate, and ATK bonuses
-export function rollHits(atk, def, hitRate, potentialHits, profLevel = 0) {
+// elemMult: elemental multiplier (from elemMultiplier())
+export function rollHits(atk, def, hitRate, potentialHits, profLevel = 0, elemMult = 1) {
   const effHitRate = hitRate + profLevel * 0.5;          // +0.5% accuracy per level
   const effCritRate = CRIT_RATE + profLevel * 0.25;      // +0.25% crit per level
   const effAtk = atk + Math.floor(profLevel * 0.5);      // +0.5 ATK per level (floored)
@@ -25,7 +43,7 @@ export function rollHits(atk, def, hitRate, potentialHits, profLevel = 0) {
   for (let i = 0; i < potentialHits; i++) {
     if (Math.random() * 100 < effHitRate) {
       const crit = Math.random() * 100 < effCritRate;
-      const dmg = calcDamage(effAtk, def, crit, critBonus);
+      const dmg = calcDamage(effAtk, def, crit, critBonus, elemMult);
       results.push({ damage: dmg, crit });
     } else {
       results.push({ miss: true });

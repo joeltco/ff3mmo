@@ -9,7 +9,8 @@ import { ps, recalcCombatStats, changeJob, getEquipSlotId, setEquipSlotId, EQUIP
          getProfHits, getProfLevel, getHitWeapon, WEAPON_PROF_CATEGORY } from './player-stats.js';
 import { ITEMS, isHandEquippable, isWeapon, weaponSubtype, isBladedWeapon } from './data/items.js';
 import { selectCursor, saveSlots, saveSlotsToDB } from './save-state.js';
-import { rollHits } from './battle-math.js';
+import { rollHits, elemMultiplier } from './battle-math.js';
+import { blindHitPenalty } from './status-effects.js';
 import { _nameToBytes } from './text-utils.js';
 import { MONSTERS } from './data/monsters.js';
 import { JOBS, canJobEquip } from './data/jobs.js';
@@ -124,11 +125,17 @@ function _battleTargetConfirm() {
   const wpnSubtype = weaponSubtype(ps.weaponR) || weaponSubtype(ps.weaponL) || 'unarmed';
   const profBonus = getProfHits(wpnSubtype);
   const potentialHits = (dualWield || unarmed) ? Math.max(2, ps.attackRoll) + profBonus : Math.max(1, ps.attackRoll) + profBonus;
-  const hitRate = ps.hitRate;
+  const hitRate = ps.hitRate * (ps.status ? blindHitPenalty(ps.status) : 1);
   const profCat = WEAPON_PROF_CATEGORY[wpnSubtype] || wpnSubtype;
   const profLv = getProfLevel(profCat);
+  // Weapon element for elemental multiplier
+  const rElem = rIsWeapon ? (ITEMS.get(ps.weaponR)?.element || null) : null;
+  const lElem = lIsWeapon ? (ITEMS.get(ps.weaponL)?.element || null) : null;
+  const wpnElem = rElem || lElem;
   if (_s.isRandomEncounter && _s.encounterMonsters) {
-    inputSt.hitResults = rollHits(ps.atk, _s.encounterMonsters[inputSt.targetIndex].def, hitRate, potentialHits, profLv);
+    const mon = _s.encounterMonsters[inputSt.targetIndex];
+    const eMult = elemMultiplier(wpnElem, mon.weakness, mon.resist);
+    inputSt.hitResults = rollHits(ps.atk, mon.def, hitRate, potentialHits, profLv, eMult);
   } else {
     const targetDef = _s.isPVPBattle && _s.pvpOpponentStats
       ? (_s.pvpPlayerTargetIdx >= 0

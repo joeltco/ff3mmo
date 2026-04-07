@@ -3,6 +3,7 @@
 import { readJobBaseStats, readStartingHP, readStartingMP, readJobLevelBonus, buildExpTable } from './data/jobs.js';
 import { ITEMS, isWeapon } from './data/items.js';
 import { BASE_HIT_RATE } from './battle-math.js';
+import { createStatusState } from './status-effects.js';
 
 // Mutable player state — replaces the scattered globals in game.js
 export const ps = {
@@ -23,6 +24,8 @@ export const ps = {
   evade: 0,         // total evade% from armor (non-shield)
   mdef: 0,          // total magic defense from armor
   attackRoll: 1,    // potential hits (from effective AGI)
+  elemResist: [],   // array of element strings player resists (from armor)
+  status: null,     // status effect state {mask, poisonDmgTick} — created on battle start
   _romData: null,  // stored by initExpTable for use in grantExp
   proficiency: {}, // { subtype: points } — 100 pts per level, max level 16 (1600 pts)
   jobIdx: 0,            // current job index (0=Onion Knight, 1=Warrior, etc.)
@@ -82,6 +85,13 @@ export function recalcCombatStats() {
   // Magic defense from all equipment
   ps.mdef = 0;
   for (const id of allSlots) { ps.mdef += ITEMS.get(id)?.mdef || 0; }
+  // Elemental resistances from all equipment
+  const resSet = new Set();
+  for (const id of allSlots) {
+    const r = ITEMS.get(id)?.resist;
+    if (r) { const arr = Array.isArray(r) ? r : [r]; arr.forEach(e => resSet.add(e)); }
+  }
+  ps.elemResist = [...resSet];
   // DEF with equipment vitality bonus
   recalcDEF(vitB);
 }

@@ -73,6 +73,9 @@ import { initHudDrawing, drawHUD, clipToViewport, drawCursorFaded, drawHudBox,
 import { initMapLoading, loadMapById, loadWorldMapAt, loadWorldMapAtPosition, setupTopBox } from './map-loading.js';
 import { updateBattleAlly } from './battle-ally.js';
 import { updateBattleEnemyTurn } from './battle-enemy.js';
+import { buildTurnOrder as _buildTurnOrder, processNextTurn as _processNextTurn } from './battle-turn.js';
+import { createStatusState, clearAll as clearAllStatus, tryInflictStatus } from './status-effects.js';
+import { tickRandomEncounter as _tickRandomEncounter, startRandomEncounter as _startRandomEncounter } from './battle-encounter.js';
 import { resetBattleItemVars, getTargets, getHitIdx, startMagicItem, updateMagicItemThrowHit } from './battle-items.js';
 import { initBattleSprite as _initBattleSprite, initBattleSpriteForJob as _initBattleSpriteForJob,
          initFakePlayerPortraits as _initFakePlayerPortraits,
@@ -584,6 +587,7 @@ function _resetBattleVars() {
   resetBattleItemVars();
   playerDeathTimer = null; _teamWipeMsgShown = false;
   inputSt.battleProfHits = {};
+  ps.status = createStatusState();
 }
 function _zPressed() { if (!keys['z'] && !keys['Z']) return false; keys['z'] = false; keys['Z'] = false; return true; }
 function _xPressed() { if (!keys['x'] && !keys['X']) return false; keys['x'] = false; keys['X'] = false; return true; }
@@ -1510,26 +1514,7 @@ function updateMovement(dt) {
   if (t >= 1) _onMoveComplete();
 }
 
-function _tickRandomEncounter() {
-  if (battleState !== 'none') return false;
-  const inDungeon = dungeonFloor >= 0 && dungeonFloor < 4;
-  const onGrass = onWorldMap && worldMapRenderer && (() => {
-    const tileX = Math.floor(worldX / TILE_SIZE);
-    const tileY = Math.floor(worldY / TILE_SIZE);
-    return !worldMapRenderer.getTriggerAt(tileX, tileY);
-  })();
-  if (!inDungeon && !onGrass) return false;
-  encounterSteps++;
-  const threshold = onGrass
-    ? 20 + Math.floor(Math.random() * 20)
-    : 15 + Math.floor(Math.random() * 15);
-  if (encounterSteps >= threshold) {
-    encounterSteps = 0;
-    startRandomEncounter();
-    return true;
-  }
-  return false;
-}
+// _tickRandomEncounter → battle-encounter.js
 
 function _checkFalseWall() {
   if (!falseWalls || falseWalls.size === 0) return false;
@@ -1597,7 +1582,7 @@ function _onMoveComplete() {
   // Check for trigger at current tile
   if (checkTrigger(_triggerShared())) return;
 
-  if (_tickRandomEncounter()) return;
+  if (_tickRandomEncounter(_encounterShared())) return;
 
   _startMoveFromKeys(true);
 }
@@ -1820,164 +1805,73 @@ function _drawMonsterDeath(x, y, size, progress, monsterId) {
 // --- Battle System ---
 
 // calcDamage, rollHits → battle-math.js
+// buildTurnOrder, processNextTurn → battle-turn.js
+// startRandomEncounter, tickRandomEncounter → battle-encounter.js
 
-function buildTurnOrder() {
-  const actors = [];
-  if (ps.hp > 0) {
-    const playerAgi = ps.stats ? ps.stats.agi : 5;
-    actors.push({ type: 'player', priority: (playerAgi * 2) + Math.floor(Math.random() * 256) });
-  }
-  // Allies participate in the same turn queue
-  for (let i = 0; i < battleAllies.length; i++) {
-    if (battleAllies[i].hp > 0)
-      actors.push({ type: 'ally', index: i, priority: (battleAllies[i].agi * 2) + Math.floor(Math.random() * 256) });
-  }
-  if (isRandomEncounter && encounterMonsters) {
-    for (let i = 0; i < encounterMonsters.length; i++) {
-      if (encounterMonsters[i].hp > 0)
-        actors.push({ type: 'enemy', index: i, priority: Math.floor(Math.random() * 256) });
-    }
-  } else if (pvpSt.isPVPBattle) {
-    // Main opponent — only if still alive (use authoritative HP, not enemyHP proxy)
-    if (pvpSt.pvpOpponentStats && pvpSt.pvpOpponentStats.hp > 0)
-      actors.push({ type: 'enemy', index: -1, pvpAllyIdx: -1, priority: Math.floor(Math.random() * 256) });
-    // PVP enemy allies — only alive ones
-    for (let i = 0; i < pvpSt.pvpEnemyAllies.length; i++) {
-      if (pvpSt.pvpEnemyAllies[i].hp > 0)
-        actors.push({ type: 'enemy', index: -1, pvpAllyIdx: i, priority: Math.floor(Math.random() * 256) });
-    }
-  } else {
-    actors.push({ type: 'enemy', index: -1, priority: Math.floor(Math.random() * 256) });
-  }
-  actors.sort((a, b) => b.priority - a.priority);
-  return actors;
+function _turnShared() {
+  return {
+    get battleState()           { return battleState; },
+    set battleState(v)          { battleState = v; },
+    get battleTimer()           { return battleTimer; },
+    set battleTimer(v)          { battleTimer = v; },
+    get battleAllies()          { return battleAllies; },
+    get isRandomEncounter()     { return isRandomEncounter; },
+    set isRandomEncounter(v)    { isRandomEncounter = v; },
+    get encounterMonsters()     { return encounterMonsters; },
+    set encounterMonsters(v)    { encounterMonsters = v; },
+    get turnQueue()             { return turnQueue; },
+    set turnQueue(v)            { turnQueue = v; },
+    get turnTimer()             { return turnTimer; },
+    set turnTimer(v)            { turnTimer = v; },
+    get isDefending()           { return isDefending; },
+    set isDefending(v)          { isDefending = v; },
+    get currentAttacker()       { return currentAttacker; },
+    set currentAttacker(v)      { currentAttacker = v; },
+    get currentAllyAttacker()   { return currentAllyAttacker; },
+    set currentAllyAttacker(v)  { currentAllyAttacker = v; },
+    get allyTargetIndex()       { return allyTargetIndex; },
+    set allyTargetIndex(v)      { allyTargetIndex = v; },
+    get allyHitResults()        { return allyHitResults; },
+    set allyHitResults(v)       { allyHitResults = v; },
+    get allyHitIdx()            { return allyHitIdx; },
+    set allyHitIdx(v)           { allyHitIdx = v; },
+    get allyHitResult()         { return allyHitResult; },
+    set allyHitResult(v)        { allyHitResult = v; },
+    get allyHitIsLeft()         { return allyHitIsLeft; },
+    set allyHitIsLeft(v)        { allyHitIsLeft = v; },
+    get currentHitIdx()         { return currentHitIdx; },
+    set currentHitIdx(v)        { currentHitIdx = v; },
+    get slashFrame()            { return slashFrame; },
+    set slashFrame(v)           { slashFrame = v; },
+    get slashFrames()           { return slashFrames; },
+    set slashFrames(v)          { slashFrames = v; },
+    get slashOffX()             { return slashOffX; },
+    set slashOffX(v)            { slashOffX = v; },
+    get slashOffY()             { return slashOffY; },
+    set slashOffY(v)            { slashOffY = v; },
+    get slashX()                { return slashX; },
+    set slashX(v)               { slashX = v; },
+    get slashY()                { return slashY; },
+    set slashY(v)               { slashY = v; },
+    get itemHealAmount()        { return itemHealAmount; },
+    set itemHealAmount(v)       { itemHealAmount = v; },
+    get inputSt()               { return inputSt; },
+    get pvpSt()                 { return pvpSt; },
+    BOSS_DEF,
+    BOSS_MAX_HP,
+    ITEMS,
+    setPlayerHealNum,
+    setEnemyHealNum,
+    getAllyDamageNums,
+    getEnemyHP: _getEnemyHP,
+    setEnemyHP: _setEnemyHP,
+    removeItem,
+    startMagicItem: () => startMagicItem(_magicItemShared()),
+  };
 }
 
-
-function _playerTurnFight() {
-  let ti = inputSt.playerActionPending.targetIndex;
-  if (isRandomEncounter && encounterMonsters && ti >= 0 && encounterMonsters[ti].hp <= 0) {
-    const living = encounterMonsters.findIndex(m => m.hp > 0);
-    if (living < 0) { processNextTurn(); return; } // all dead — skip, victory will trigger
-    ti = living;
-  }
-  currentHitIdx = 0; slashFrame = 0;
-  inputSt.hitResults = inputSt.playerActionPending.hitResults;
-  inputSt.targetIndex = ti;
-  slashFrames = inputSt.playerActionPending.slashFrames;
-  slashOffX = inputSt.playerActionPending.slashOffX; slashOffY = inputSt.playerActionPending.slashOffY;
-  slashX = inputSt.playerActionPending.slashX; slashY = inputSt.playerActionPending.slashY;
-  battleState = 'attack-start'; battleTimer = 0;
-}
-
-
-function _playerTurnConsumable() {
-  playSFX(SFX.CURE);
-  const { target, allyIndex } = inputSt.playerActionPending;
-  if (target === 'player' && (allyIndex === undefined || allyIndex < 0)) {
-    const heal = Math.min(50, ps.stats.maxHP - ps.hp);
-    ps.hp += heal; itemHealAmount = heal; setPlayerHealNum({ value: heal, timer: 0 });
-  } else if (target === 'player' && allyIndex >= 0) {
-    const ally = battleAllies[allyIndex];
-    if (ally) {
-      const heal = Math.min(50, ally.maxHP - ally.hp);
-      ally.hp += heal; itemHealAmount = heal;
-      getAllyDamageNums()[allyIndex] = { value: heal, timer: 0, heal: true };
-    }
-  } else {
-    const mon = isRandomEncounter && encounterMonsters ? encounterMonsters[target] : null;
-    if (mon) {
-      const heal = Math.min(50, mon.maxHP - mon.hp);
-      mon.hp += heal; itemHealAmount = heal; setEnemyHealNum({ value: heal, timer: 0, index: target });
-    } else {
-      const curHP = _getEnemyHP();
-      const maxHP = pvpSt.isPVPBattle ? (pvpSt.pvpOpponentStats ? pvpSt.pvpOpponentStats.maxHP : 1) : BOSS_MAX_HP;
-      const heal = Math.min(50, maxHP - curHP);
-      _setEnemyHP(curHP + heal); itemHealAmount = heal; setEnemyHealNum({ value: heal, timer: 0, index: 0 });
-    }
-  }
-  battleState = 'item-use'; battleTimer = 0;
-}
-
-function _playerTurnItem() {
-  isDefending = false;
-  removeItem(inputSt.playerActionPending.itemId);
-  if (ITEMS.get(inputSt.playerActionPending.itemId)?.type === 'battle_item') startMagicItem(_magicItemShared());
-  else _playerTurnConsumable();
-}
-
-function _playerTurnRun() {
-  const playerAgi = ps.stats ? ps.stats.agi : 5;
-  let avgLevel = 1;
-  if (encounterMonsters) {
-    const alive = encounterMonsters.filter(m => m.hp > 0);
-    if (alive.length > 0) avgLevel = alive.reduce((s, m) => s + (m.level || 1), 0) / alive.length;
-  }
-  const successRate = Math.min(99, Math.max(1, playerAgi + 25 - Math.floor(avgLevel / 4)));
-  battleState = Math.floor(Math.random() * 100) < successRate ? 'run-name-out' : 'run-fail-name-out';
-  battleTimer = 0;
-}
-
-function processNextTurn() {
-  if (turnQueue.length === 0) {
-    isDefending = false; inputSt.battleCursor = 0; turnTimer = 0;
-    if (ps.hp <= 0) {
-      // Player dead but allies alive — auto-rebuild turn order, skip menu
-      turnQueue = buildTurnOrder();
-      if (turnQueue.length === 0) return; // safety: nobody alive
-      processNextTurn();
-      return;
-    }
-    battleState = 'menu-open'; battleTimer = 0;
-    return;
-  }
-  const turn = turnQueue.shift();
-  if (turn.type === 'player') {
-    if (ps.hp <= 0) { processNextTurn(); return; } // dead player — skip
-    const cmd = inputSt.playerActionPending.command;
-    if (cmd === 'fight') _playerTurnFight();
-    else if (cmd === 'defend') { playSFX(SFX.DEFEND_HIT); battleState = 'defend-anim'; battleTimer = 0; }
-    else if (cmd === 'item') _playerTurnItem();
-    else if (cmd === 'skip') processNextTurn();
-    else if (cmd === 'run') _playerTurnRun();
-  } else if (turn.type === 'ally') {
-    currentAllyAttacker = turn.index;
-    allyHitIsLeft = false;
-    const ally = battleAllies[turn.index];
-    if (!ally || ally.hp <= 0) { processNextTurn(); return; }
-    if (isRandomEncounter && encounterMonsters) {
-      const living = encounterMonsters.map((m, i) => m.hp > 0 ? i : -1).filter(i => i >= 0);
-      if (living.length === 0) { processNextTurn(); return; }
-      allyTargetIndex = living[Math.floor(Math.random() * living.length)];
-    } else { allyTargetIndex = -1; }
-    const targetDef = allyTargetIndex >= 0 ? encounterMonsters[allyTargetIndex].def
-      : pvpSt.isPVPBattle
-        ? (pvpSt.pvpPlayerTargetIdx >= 0
-            ? (pvpSt.pvpEnemyAllies[pvpSt.pvpPlayerTargetIdx] || pvpSt.pvpOpponentStats).def
-            : pvpSt.pvpOpponentStats.def)
-        : BOSS_DEF;
-    const dualWield = isWeapon(ally.weaponId) && isWeapon(ally.weaponL);
-    const baseHits = ally.attackRoll || Math.max(1, Math.floor(ally.agi / 10));
-    const potentialHits = dualWield ? Math.max(2, baseHits) : Math.max(1, baseHits);
-    allyHitResults = rollHits(ally.atk, targetDef, ally.hitRate || 85, potentialHits);
-    allyHitIdx = 0;
-    allyHitResult = allyHitResults[0];
-    battleState = 'ally-attack-start'; battleTimer = 0;
-  } else {
-    currentAttacker = turn.index;
-    if (pvpSt.isPVPBattle) {
-      const pai = turn.pvpAllyIdx ?? -1;
-      pvpSt.pvpCurrentEnemyAllyIdx = pai;
-      // Skip if this attacker is dead
-      if (pai < 0 && (!pvpSt.pvpOpponentStats || pvpSt.pvpOpponentStats.hp <= 0)) { processNextTurn(); return; }
-      if (pai >= 0 && (pvpSt.pvpEnemyAllies[pai]?.hp ?? 0) <= 0) { processNextTurn(); return; }
-      // Reset combo index for each fresh main-opponent turn
-      if (pai < 0) pvpSt.pvpEnemyHitIdx = 0;
-    }
-    if (turn.index >= 0 && encounterMonsters && encounterMonsters[turn.index].hp <= 0) { processNextTurn(); return; }
-    battleState = 'enemy-flash'; battleTimer = 0; pvpSt.pvpPreflashDecided = false;
-  }
-}
+function buildTurnOrder() { return _buildTurnOrder(_turnShared()); }
+function processNextTurn() { _processNextTurn(_turnShared()); }
 
 
 function startBattle() {
@@ -1989,41 +1883,33 @@ function startBattle() {
   playSFX(SFX.EARTHQUAKE);
 }
 
-function startRandomEncounter() {
-  isRandomEncounter = true;
-  inputSt.battleProfHits = {};
-
-  // Pick encounter zone based on location
-  const zoneKey = onWorldMap
-    ? 'grasslands'
-    : (['altar_cave_f1','altar_cave_f2','altar_cave_f3','altar_cave_f4'][dungeonFloor] || 'altar_cave_f1');
-  const zone = ENCOUNTERS.get(zoneKey);
-  const formations = zone ? zone.formations : [[{ id: 0x00, min: 1, max: 3 }]];
-  const formation = formations[Math.floor(Math.random() * formations.length)];
-
-  encounterMonsters = [];
-  for (const group of formation) {
-    const count = group.min + Math.floor(Math.random() * (group.max - group.min + 1));
-    for (let i = 0; i < count; i++) {
-      if (encounterMonsters.length >= 4) break; // battle grid supports max 4
-      const mData = MONSTERS.get(group.id) || MONSTERS.get(0x00);
-      encounterMonsters.push({ monsterId: group.id, hp: mData.hp, maxHP: mData.hp, atk: mData.atk, attackRoll: mData.attackRoll || 1, def: mData.def, evade: mData.evade || 0, mdef: mData.mdef || 0, exp: mData.exp, gil: mData.gil || 0, hitRate: mData.hitRate || GOBLIN_HIT_RATE, spAtkRate: mData.spAtkRate || 0, attacks: mData.attacks || null, level: mData.level || 1 });
-    }
-    if (encounterMonsters.length >= 4) break;
-  }
-  // Sort tallest monsters first so they land on the top row of the grid
-  encounterMonsters.sort((a, b) => {
-    const ha = getMonsterCanvas(a.monsterId, goblinBattleCanvas)?.height || 32;
-    const hb = getMonsterCanvas(b.monsterId, goblinBattleCanvas)?.height || 32;
-    return hb - ha;
-  });
-  preBattleTrack = TRACKS.CRYSTAL_CAVE;
-  _resetBattleVars();
-  // Skip roar/earthquake — go straight to flash-strobe
-  battleState = 'flash-strobe';
-  battleTimer = 0;
-  playSFX(SFX.BATTLE_SWIPE);
+// startRandomEncounter → battle-encounter.js
+function _encounterShared() {
+  return {
+    get battleState()           { return battleState; },
+    set battleState(v)          { battleState = v; },
+    get battleTimer()           { return battleTimer; },
+    set battleTimer(v)          { battleTimer = v; },
+    get isRandomEncounter()     { return isRandomEncounter; },
+    set isRandomEncounter(v)    { isRandomEncounter = v; },
+    get encounterMonsters()     { return encounterMonsters; },
+    set encounterMonsters(v)    { encounterMonsters = v; },
+    get encounterSteps()        { return encounterSteps; },
+    set encounterSteps(v)       { encounterSteps = v; },
+    get preBattleTrack()        { return preBattleTrack; },
+    set preBattleTrack(v)       { preBattleTrack = v; },
+    get onWorldMap()            { return onWorldMap; },
+    get worldMapRenderer()      { return worldMapRenderer; },
+    get worldX()                { return worldX; },
+    get worldY()                { return worldY; },
+    get dungeonFloor()          { return dungeonFloor; },
+    get inputSt()               { return inputSt; },
+    TILE_SIZE,
+    getMonsterCanvas: (id) => getMonsterCanvas(id, goblinBattleCanvas),
+    resetBattleVars: _resetBattleVars,
+  };
 }
+function startRandomEncounter() { _startRandomEncounter(_encounterShared()); }
 
 function executeBattleCommand(index) {
   if (index === 0) {
@@ -2244,7 +2130,17 @@ function _updatePlayerSlash() {
       if (pvpSt.isPVPBattle && pvpSt.pvpOpponentIsDefending)
         hit.damage = Math.max(1, Math.floor(hit.damage / 2));
       if (isRandomEncounter && encounterMonsters) {
-        encounterMonsters[inputSt.targetIndex].hp = Math.max(0, encounterMonsters[inputSt.targetIndex].hp - hit.damage);
+        const targetMon = encounterMonsters[inputSt.targetIndex];
+        targetMon.hp = Math.max(0, targetMon.hp - hit.damage);
+        // Weapon on-hit status infliction
+        if (targetMon.status && targetMon.hp > 0) {
+          const wpnId = getHitWeapon(currentHitIdx);
+          const wpnData = ITEMS.get(wpnId);
+          if (wpnData && wpnData.status) {
+            const arr = Array.isArray(wpnData.status) ? wpnData.status : [wpnData.status];
+            for (const s of arr) tryInflictStatus(targetMon.status, s, wpnData.hit || 50);
+          }
+        }
       } else {
         _setEnemyHP(Math.max(0, _getEnemyHP() - hit.damage));
       }
