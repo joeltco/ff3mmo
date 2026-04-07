@@ -167,7 +167,8 @@ function drawSWDamageNumbers(shared) {
 }
 
 function _getPortraitSrc(isNearFatal, isAttackPose, isHitPose, isDefendPose, isItemUsePose, isVictoryPose) {
-  let src = (isNearFatal && _s.battleSpriteKneelCanvas) ? _s.battleSpriteKneelCanvas : _s.battleSpriteCanvas;
+  const hasActiveStatus = ps.status && ps.status.mask !== 0;
+  let src = ((isNearFatal || hasActiveStatus) && _s.battleSpriteKneelCanvas) ? _s.battleSpriteKneelCanvas : _s.battleSpriteCanvas;
   if (isAttackPose) {
     const _ws = weaponSubtype(getHitWeapon(_s.currentHitIdx));
     if (_ws === 'knife' || _ws === 'dagger') {

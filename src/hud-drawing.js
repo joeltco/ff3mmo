@@ -219,8 +219,9 @@ function _drawHUDPortrait() {
   const infoFadeStep = HUD_INFO_FADE_STEPS - Math.min(Math.floor(_s.hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
   if (_s.battleState !== 'none' || !_s.battleSpriteCanvas) return;
   const isPauseHeal = pauseSt.state === 'inv-heal';
+  const hasActiveStatus = ps.status && ps.status.mask !== 0;
   const nfPortrait = isPauseHeal && _s.battleSpriteDefendCanvas ? _s.battleSpriteDefendCanvas
-    : (ps.hp > 0 && ps.stats && ps.hp <= Math.floor(ps.stats.maxHP / 4) && _s.battleSpriteKneelCanvas
+    : ((ps.hp > 0 && ps.stats && ps.hp <= Math.floor(ps.stats.maxHP / 4) || hasActiveStatus) && _s.battleSpriteKneelCanvas
        ? _s.battleSpriteKneelCanvas : _s.battleSpriteCanvas);
   const px = HUD_RIGHT_X + 8, py = HUD_VIEW_Y + 8;
   _drawPortraitImage(px, py, nfPortrait, isPauseHeal, infoFadeStep);
