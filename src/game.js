@@ -2485,11 +2485,19 @@ function _updateBattleEndSequence(dt) {
   return _updateBossDissolve(dt) || _updateVictorySequence() || _updateBoxClose() || _updateDefeatStates();
 }
 
+const POISON_TICK_MS = 500;
+function _updatePoisonTick() {
+  if (battleState !== 'poison-tick') return false;
+  if (battleTimer >= POISON_TICK_MS) { processNextTurn(); }
+  return true;
+}
+
 function updateBattle(dt) {
   if (battleState === 'none') return;
   battleTimer += Math.min(dt, 33);
   if (pvpSt.isPVPBattle) { updatePVPBattle(dt, _pvpShared()); return; }
   _updateBattleTimers(dt);
+  _updatePoisonTick()         ||
   _updateBattleOpening()      ||
   _updateBattleMenuConfirm()  ||
   _updateBattlePlayerAttack() ||
