@@ -202,7 +202,7 @@ function _drawPortraitImage(px, py, nfPortrait, isPauseHeal, infoFadeStep) {
   // Poison bubble on HUD portrait when status active (not near-fatal sweat)
   const hasActiveStatus = ps.status && ps.status.mask !== 0;
   if (!isPauseHeal && hasActiveStatus && !isNearFatal && _s.poisonBubbleFrames && _s.poisonBubbleFrames.length === 2)
-    ctx.drawImage(_s.poisonBubbleFrames[Math.floor(Date.now() / 133) & 1], px + 4, py - 12);
+    ctx.drawImage(_s.poisonBubbleFrames[Math.floor(Date.now() / 133) & 1], px + 8, py - 12);
 }
 
 function _drawCureSparkle(px, py, isPauseHeal) {
