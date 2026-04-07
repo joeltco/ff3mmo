@@ -274,12 +274,8 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
       _s.ctx.drawImage(_s.sweatFrames[sweatIdx], px, py - 3);
     }
   }
-  // Poison bubble — 2 frames alternating, right side above portrait
-  const hasActiveStatus = ps.status && ps.status.mask !== 0;
-  if (hasActiveStatus && _s.poisonBubbleFrames && _s.poisonBubbleFrames.length === 2 && !isAttackPose && !isVictoryPose) {
-    const bubbleIdx = Math.floor(Date.now() / 133) & 1;
-    _s.ctx.drawImage(_s.poisonBubbleFrames[bubbleIdx], px + 8, py - 12);
-  }
+  // Poison bubble — disabled until tile arrangement is verified
+  // const hasActiveStatus = ps.status && ps.status.mask !== 0;
   // Item target cursor on player portrait (only when not targeting an ally)
   if (_s.battleState === 'item-target-select' && inputSt.itemTargetType === 'player' && inputSt.itemTargetAllyIndex < 0 && _s.cursorTileCanvas) {
     _s.ctx.drawImage(_s.cursorTileCanvas, px - 12, py + 4);
