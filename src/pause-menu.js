@@ -386,7 +386,7 @@ function _drawPauseStats(ctx, shared) {
 
   // Lv left-aligned, Gil right-aligned (Gil can be 6+ digits)
   drawText(ctx, tx, y, _nameToBytes('Lv'), fadedPal);
-  drawText(ctx, tx + 24 + GAP, y, _nameToBytes(String(s.level)), fadedPal);
+  drawText(ctx, tx + 24 + 8, y, _nameToBytes(String(s.level)), fadedPal);
   const gilb = _nameToBytes(String(ps.gil));
   drawText(ctx, statRx - gilb.length * 8, y, gilb, fadedPal);
   drawText(ctx, statRx - gilb.length * 8 - GAP - 24, y, _nameToBytes('Gil'), fadedPal);
