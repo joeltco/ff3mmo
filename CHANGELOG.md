@@ -4,6 +4,17 @@ All notable changes to this project are documented here.
 
 ## 1.5.0 — 2026-04-08
 
+### Title screen, menus, CP fixes
+
+- **Title screen airship physics** — replaced sine-wave oscillation with exponential chase drift. Ship lazily follows a wandering target using two incommensurate sine waves. No overshoot, organic non-repeating movement.
+- **Player select fix** — empty "New Game" slots now show onion knight (job 0) portrait instead of current player's fighter silhouette.
+- **CP earning fixes** — PVP CP now scales with opponent level (was always 1). Random encounter CP uses monster bestiary CP values (was using monster count). Boss CP reads from bestiary data (was hardcoded).
+- **Stats screen layout** — widened to full 136px viewport width. Paired stats (ATK/DEF, etc.) use fixed right column with consistent alignment. Gil on its own full-width row. Removed job/CP from stats (already in job menu).
+- **Equip menu** — "Optimum" abbreviated to "Opt" and moved to top-right of R.Hand row. ATK and DEF display added to bottom row.
+- **Pause menu cursor fading** — all sub-menu cursors (equip, job, options) now fade in/out with NES palette steps instead of snapping on/off. Fixed property name mismatch (`drawCursorFaded` vs `_drawCursorFaded`).
+- **Job menu color fading** — green (current job) and grey (can't afford) text properly fades during transitions using `nesColorFade()`.
+- **Deploy fix** — server git repo reset after history rewrite divergence from previous session's deploy.sh scrub.
+
 ### FF3 Job Levels + Combat Overhaul
 
 - **FF3 job levels** replace FF2 proficiency system. JP earned per battle action, 100 JP per level, max 99. Per-job JP rates from NES disassembly.

@@ -22,7 +22,7 @@ v1.5.0 — Full combat system, PVP duels, job system with 22 jobs, status effect
 - NSF music playback, SFX system
 - Online roster, chat with tabs
 - Email auth, server saves (IndexedDB + DigitalOcean)
-- Title screen with NES fade, CRT filter option
+- Title screen with NES fade, airship chase-drift physics, CRT filter option
 
 ## Requirements
 

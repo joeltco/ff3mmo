@@ -858,8 +858,13 @@ function _equipOptimum() {
 function _pauseInputEquip() {
   if (pauseSt.state !== 'equip') return false;
   const k = _s.keys;
-  if (k['ArrowDown']) { k['ArrowDown'] = false; pauseSt.eqCursor = (pauseSt.eqCursor + 1) % 6; playSFX(SFX.CURSOR); }
-  if (k['ArrowUp'])   { k['ArrowUp'] = false;   pauseSt.eqCursor = (pauseSt.eqCursor + 5) % 6; playSFX(SFX.CURSOR); }
+  if (pauseSt.eqCursor < 5) {
+    if (k['ArrowDown'])  { k['ArrowDown'] = false;  pauseSt.eqCursor = (pauseSt.eqCursor + 1) % 5; playSFX(SFX.CURSOR); }
+    if (k['ArrowUp'])    { k['ArrowUp'] = false;    pauseSt.eqCursor = (pauseSt.eqCursor + 4) % 5; playSFX(SFX.CURSOR); }
+    if (k['ArrowRight']) { k['ArrowRight'] = false;  pauseSt._lastEqSlot = pauseSt.eqCursor; pauseSt.eqCursor = 5; playSFX(SFX.CURSOR); }
+  } else {
+    if (k['ArrowLeft'])  { k['ArrowLeft'] = false;   pauseSt.eqCursor = pauseSt._lastEqSlot || 0; playSFX(SFX.CURSOR); }
+  }
   if (_zPressed()) {
     if (pauseSt.eqCursor === 5) {
       _equipOptimum();
