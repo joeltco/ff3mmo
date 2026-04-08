@@ -304,13 +304,25 @@ function _drawPauseEquipSlots(ctx, shared) {
       drawText(ctx, px + 24, iy + 9, new Uint8Array([0xC2,0xC2,0xC2]), activePal);
     }
   }
-  const optY   = eqStartY + 5 * eqRowH + 4;
+  // "Opt" right-aligned on R.Hand row
   const optPal  = dimSlots ? [0x0F, 0x0F, 0x0F, 0x00] : fadedPal;
-  const optText = new Uint8Array([0x98,0xD9,0xDD,0xD2,0xD6,0xDE,0xD6]);
-  drawText(ctx, px + 24, optY, optText, optPal);
+  const optText = new Uint8Array([0x98,0xD9,0xDD]); // "Opt"
+  const optX = px + HUD_VIEW_W - 16 - optText.length * 8;
+  const optActivePal = (dimSlots && pauseSt.eqCursor === 5) ? fadedPal : optPal;
+  drawText(ctx, optX, eqStartY, optText, optActivePal);
+  // ATK / DEF on bottom row
+  const atkDefY = eqStartY + 5 * eqRowH + 4;
+  const atkDefPal = dimSlots ? [0x0F, 0x0F, 0x0F, 0x00] : fadedPal;
+  drawText(ctx, px + 24, atkDefY, _nameToBytes('ATK'), atkDefPal);
+  drawText(ctx, px + 24 + 32, atkDefY, _nameToBytes(String(ps.atk)), atkDefPal);
+  drawText(ctx, px + 80, atkDefY, _nameToBytes('DEF'), atkDefPal);
+  drawText(ctx, px + 80 + 32, atkDefY, _nameToBytes(String(ps.def)), atkDefPal);
   if (shared.drawCursorFaded) {
-    const curY = pauseSt.eqCursor < 5 ? eqStartY + pauseSt.eqCursor * eqRowH - 4 : optY - 4;
-    shared.drawCursorFaded(px + 8, curY, fadeStep);
+    if (pauseSt.eqCursor < 5) {
+      shared.drawCursorFaded(px + 8, eqStartY + pauseSt.eqCursor * eqRowH - 4, fadeStep);
+    } else {
+      shared.drawCursorFaded(optX - 16, eqStartY - 4, fadeStep);
+    }
   }
 }
 
