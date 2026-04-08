@@ -122,7 +122,7 @@ export function processNextTurn(shared) {
             : _s.pvpSt.pvpOpponentStats.def)
         : _s.BOSS_DEF;
     const dualWield = isWeapon(ally.weaponId) && isWeapon(ally.weaponL);
-    const baseHits = 1 + Math.floor((ally.level || 1) / 7) + Math.floor((ally.jobLevel || 1) / 14) + Math.floor(ally.agi / 8);
+    const baseHits = 1 + Math.floor((ally.level || 1) / 16) + Math.floor(ally.agi / 16);
     const potentialHits = dualWield ? Math.max(2, baseHits) : Math.max(1, baseHits);
     _s.allyHitResults = rollHits(ally.atk, targetDef, ally.hitRate || 85, potentialHits);
     _s.allyHitIdx = 0;

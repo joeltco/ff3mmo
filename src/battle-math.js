@@ -32,11 +32,8 @@ export function calcDamage(atk, def, crit = false, critBonus = 0, elemMult = 1) 
   return Math.min(DAMAGE_CAP, Math.max(1, dmg));
 }
 
-// jobLevel: job level (1–99) — adds hit rate and crit rate bonuses
 // elemMult: elemental multiplier (from elemMultiplier())
-export function rollHits(atk, def, hitRate, potentialHits, jobLevel = 0, elemMult = 1) {
-  const effHitRate = hitRate + jobLevel * 0.5;           // +0.5% accuracy per job level
-  const effCritRate = CRIT_RATE + jobLevel * 0.25;       // +0.25% crit per job level
+export function rollHits(atk, def, hitRate, potentialHits, elemMult = 1) {
   const critBonus = Math.floor(atk / 4);                  // flat crit bonus ~25% of ATK
   const results = [];
   for (let i = 0; i < potentialHits; i++) {

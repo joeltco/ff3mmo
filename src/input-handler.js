@@ -6,7 +6,7 @@ import { transSt } from './transitions.js';
 import { msgState, showMsgBox } from './message-box.js';
 import { chatState, CHAT_TABS, activeTab, tabSelectMode, setActiveTab, setTabSelectMode, chatScrollOffset, setChatScrollOffset } from './chat.js';
 import { ps, recalcCombatStats, changeJob, getEquipSlotId, setEquipSlotId, EQUIP_SLOT_SUBTYPE,
-         getHitWeapon, getJobLevel, jobSwitchCost } from './player-stats.js';
+         getHitWeapon, jobSwitchCost } from './player-stats.js';
 import { ITEMS, isHandEquippable, isWeapon, weaponSubtype, isBladedWeapon } from './data/items.js';
 import { selectCursor, saveSlots, saveSlotsToDB } from './save-state.js';
 import { rollHits, elemMultiplier } from './battle-math.js';
@@ -123,12 +123,10 @@ function _battleTargetConfirm() {
   const dualWield = rIsWeapon && lIsWeapon;
   const unarmed = !rIsWeapon && !lIsWeapon;
   const wpnSubtype = weaponSubtype(ps.weaponR) || weaponSubtype(ps.weaponL) || 'unarmed';
-  // NES FF3 hit count: 1 + floor(CharLv/7) + floor(JobLv/14) + floor(AGI/8)
-  const jobLv = getJobLevel();
+  // NES FF3 hit count (from disasm 31/ABCE): 1 + floor(level/16) + floor(AGI/16)
   const charLv = ps.stats ? ps.stats.level : 1;
   const agi = ps.stats ? ps.stats.agi : 5;
-  const bonusHits = Math.floor(charLv / 7) + Math.floor(jobLv / 14) + Math.floor(agi / 8);
-  const baseHits = 1 + bonusHits;
+  const baseHits = 1 + Math.floor(charLv / 16) + Math.floor(agi / 16);
   const potentialHits = (dualWield || unarmed) ? Math.max(2, baseHits) : Math.max(1, baseHits);
   const hitRate = ps.hitRate * (ps.status ? blindHitPenalty(ps.status) : 1);
   // Weapon element for elemental multiplier
@@ -138,14 +136,14 @@ function _battleTargetConfirm() {
   if (_s.isRandomEncounter && _s.encounterMonsters) {
     const mon = _s.encounterMonsters[inputSt.targetIndex];
     const eMult = elemMultiplier(wpnElem, mon.weakness, mon.resist);
-    inputSt.hitResults = rollHits(ps.atk, mon.def, hitRate, potentialHits, jobLv, eMult);
+    inputSt.hitResults = rollHits(ps.atk, mon.def, hitRate, potentialHits, eMult);
   } else {
     const targetDef = _s.isPVPBattle && _s.pvpOpponentStats
       ? (_s.pvpPlayerTargetIdx >= 0
           ? (_s.pvpEnemyAllies[_s.pvpPlayerTargetIdx] || _s.pvpOpponentStats).def
           : _s.pvpOpponentStats.def)
       : BOSS_DEF;
-    inputSt.hitResults = rollHits(ps.atk, targetDef, hitRate, potentialHits, jobLv);
+    inputSt.hitResults = rollHits(ps.atk, targetDef, hitRate, potentialHits);
   }
   inputSt.battleActionCount++;
   const firstHandR = isWeapon(ps.weaponR) || !isWeapon(ps.weaponL);

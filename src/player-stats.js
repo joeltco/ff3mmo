@@ -70,8 +70,10 @@ export function recalcCombatStats() {
   }
   const effStr = (ps.stats ? ps.stats.str : 5) + strB;
   const effAgi = (ps.stats ? ps.stats.agi : 5) + agiB;
-  // ATK = effective STR + weapon attack powers
-  ps.atk = effStr + (ITEMS.get(ps.weaponR)?.atk || 0) + (ITEMS.get(ps.weaponL)?.atk || 0);
+  // ATK = effective STR + weapon attack powers + floor(AGI/4) + floor(jobLv/4) (from disasm 31/ABEF)
+  const jobLv = getJobLevel();
+  ps.atk = effStr + (ITEMS.get(ps.weaponR)?.atk || 0) + (ITEMS.get(ps.weaponL)?.atk || 0)
+         + Math.floor(effAgi / 4) + Math.floor(jobLv / 4);
   // Hit rate from equipped weapon (or base if unarmed)
   const rWpn = isWeapon(ps.weaponR) ? ITEMS.get(ps.weaponR) : null;
   const lWpn = isWeapon(ps.weaponL) ? ITEMS.get(ps.weaponL) : null;

@@ -316,7 +316,7 @@ function _processEnemyFlash() {
   const atk = attackerStats ? attackerStats.atk : BOSS_ATK;
   const hitRate = attackerStats?.hitRate || BOSS_HIT_RATE;
   const dualWield = attackerStats && isWeapon(attackerStats.weaponId) && isWeapon(attackerStats.weaponL);
-  const baseHits = 1 + Math.floor((attackerStats?.level || 1) / 7) + Math.floor((attackerStats?.jobLevel || 1) / 14) + Math.floor((attackerStats?.agi || 5) / 8);
+  const baseHits = 1 + Math.floor((attackerStats?.level || 1) / 16) + Math.floor((attackerStats?.agi || 5) / 16);
   const potentialHits = dualWield ? Math.max(2, baseHits) : Math.max(1, baseHits);
 
   pvpSt.pvpEnemyHitResults = [];
