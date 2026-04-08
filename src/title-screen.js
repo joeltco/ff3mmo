@@ -27,10 +27,9 @@ const TITLE_TRANSITION_MS  = 800;
 const SHIP_DRIFT_PX        = 56;
 const SHIP_WINDUP_PX       = 20;
 
-// Spring physics for ship drift
-const SHIP_SPRING_K        = 0.0008;  // spring stiffness (force per px per ms²)
-const SHIP_SPRING_DAMP     = 0.020;   // damping — overdamped, no overshoot
-const SHIP_SPRING_NUDGE    = 0.003;   // gentle wind nudge strength (px/ms²)
+// Ship drift — exponential chase toward a wandering target (no overshoot)
+const SHIP_DRIFT_RANGE     = 10;      // max wander distance from anchor (px)
+const SHIP_DRIFT_EASE      = 0.002;   // chase speed (fraction of gap closed per ms)
 const SELECT_BOX_OFFSET_X  = 48;
 const TITLE_SHIP_ANIM_MS   = 100;
 const TITLE_SHADOW_ANIM_MS = 50;
@@ -77,9 +76,7 @@ export const titleSt = {
   waterScroll:       0,
   underwaterScroll:  0,
   shipTimer:         0,
-  shipDriftTimer:    0,     // legacy — kept for shipTimer frame calc
-  shipPosX:          0,     // current X offset from anchor (spring physics)
-  shipVelX:          0,     // current X velocity (px/ms)
+  shipPosX:          0,     // current X offset from anchor (drift physics)
   deleteMode:        false,
 
   // Sprite caches — populated after init
@@ -293,18 +290,15 @@ export function drawTitle(ctx, shared) {
 
 function _easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
 
-// Spring physics: pulls shipPosX toward 0 (anchor) with damping + random nudges
-export function updateShipSpring(dt) {
+// Ship drift: wandering target + exponential chase (can never overshoot)
+export function updateShipDrift(dt) {
   const ts = titleSt;
-  // Spring force toward anchor (0)
-  const springF = -SHIP_SPRING_K * ts.shipPosX;
-  // Damping force opposing velocity
-  const dampF = -SHIP_SPRING_DAMP * ts.shipVelX;
-  // Gentle random nudge (wind) — changes slowly via low-freq noise
-  const nudge = Math.sin(ts.shipTimer * 0.0004) * Math.cos(ts.shipTimer * 0.00017) * SHIP_SPRING_NUDGE;
-
-  ts.shipVelX += (springF + dampF + nudge) * dt;
-  ts.shipPosX += ts.shipVelX * dt;
+  // Wandering target — two incommensurate sine waves so it never repeats
+  const target = (Math.sin(ts.shipTimer * 0.00031) * 0.6 +
+                  Math.sin(ts.shipTimer * 0.00073) * 0.4) * SHIP_DRIFT_RANGE;
+  // Exponential ease toward target — closes gap by fraction per ms, never overshoots
+  const blend = 1 - Math.exp(-SHIP_DRIFT_EASE * dt);
+  ts.shipPosX += (target - ts.shipPosX) * blend;
 }
 
 function _isShipLeftState(s) {
