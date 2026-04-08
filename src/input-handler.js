@@ -149,14 +149,8 @@ function _battleTargetConfirm() {
     }
   }
   if (dualWield) {
-    // Interleave R and L hand results for alternating animation
-    const rResults = rollHand(rWpn);
-    const lResults = rollHand(lWpn);
-    inputSt.hitResults = [];
-    for (let i = 0; i < Math.max(rResults.length, lResults.length); i++) {
-      if (i < rResults.length) inputSt.hitResults.push(rResults[i]);
-      if (i < lResults.length) inputSt.hitResults.push(lResults[i]);
-    }
+    // NES: all right hand hits first, then all left hand hits
+    inputSt.hitResults = [...rollHand(rWpn), ...rollHand(lWpn)];
   } else {
     inputSt.hitResults = rollHand(rWpn || lWpn);
   }
