@@ -871,6 +871,7 @@ function _inputShared() {
     get encounterJobLevelUp() { return encounterJobLevelUp; },
     advanceBattleMsgZ,
     queueBattleMsg,
+    get playerName() { return saveSlots[selectCursor]?.name; },
     get shakeActive()           { return shakeActive; },
     get starEffect()            { return starEffect; },
     get moving()                { return moving; },

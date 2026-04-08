@@ -1,7 +1,8 @@
 // Battle turn order + turn dispatch — extracted from game.js
 
 import { rollHits, calcPotentialHits } from './battle-math.js';
-import { BATTLE_RAN_AWAY, BATTLE_CANT_ESCAPE, BATTLE_DEFEND } from './data/strings.js';
+import { BATTLE_RAN_AWAY, BATTLE_CANT_ESCAPE } from './data/strings.js';
+import { makeNameMsg } from './text-utils.js';
 import { ps } from './player-stats.js';
 import { ITEMS, isWeapon } from './data/items.js';
 import { SFX, playSFX } from './music.js';
@@ -87,8 +88,9 @@ export function processNextTurn(shared) {
       }
     }
     const cmd = _s.inputSt.playerActionPending.command;
-    if (cmd === 'fight') _playerTurnFight();
-    else if (cmd === 'defend') { _s.inputSt.battleActionCount++; _s.queueBattleMsg(BATTLE_DEFEND); playSFX(SFX.DEFEND_HIT); _s.battleState = 'defend-anim'; _s.battleTimer = 0; }
+    const pn = _s.playerName;
+    if (cmd === 'fight') { if (pn) _s.queueBattleMsg(makeNameMsg(pn, ' attacks!')); _playerTurnFight(); }
+    else if (cmd === 'defend') { _s.inputSt.battleActionCount++; if (pn) _s.queueBattleMsg(makeNameMsg(pn, ' defends!')); playSFX(SFX.DEFEND_HIT); _s.battleState = 'defend-anim'; _s.battleTimer = 0; }
     else if (cmd === 'item') { _s.inputSt.battleActionCount++; _playerTurnItem(); }
     else if (cmd === 'skip') processNextTurn(_s);
     else if (cmd === 'run') _playerTurnRun();
