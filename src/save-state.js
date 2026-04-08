@@ -36,7 +36,7 @@ export async function saveSlotsToDB() {
     saveSlots[selectCursor].stats = playerStatsSnapshot();
     saveSlots[selectCursor].inventory = { ..._getInventory() };
     saveSlots[selectCursor].gil = ps.gil;
-    saveSlots[selectCursor].proficiency = { ...ps.proficiency };
+    saveSlots[selectCursor].jobLevels = JSON.parse(JSON.stringify(ps.jobLevels));
     saveSlots[selectCursor].jobIdx = ps.jobIdx;
     saveSlots[selectCursor].unlockedJobs = ps.unlockedJobs;
     saveSlots[selectCursor].cp = ps.cp;
@@ -57,7 +57,7 @@ export async function saveSlotsToDB() {
       stats: s.stats || null,
       inventory: s.inventory || {},
       gil: s.gil || 0,
-      proficiency: s.proficiency || {},
+      jobLevels: s.jobLevels || {},
       jobIdx: s.jobIdx || 0,
       unlockedJobs: s.unlockedJobs != null ? s.unlockedJobs : 0x01,
       cp: s.cp || 0,

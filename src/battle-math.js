@@ -32,18 +32,17 @@ export function calcDamage(atk, def, crit = false, critBonus = 0, elemMult = 1) 
   return Math.min(DAMAGE_CAP, Math.max(1, dmg));
 }
 
-// profLevel: weapon proficiency level (0–16) — adds hit rate, crit rate, and ATK bonuses
+// jobLevel: job level (1–99) — adds hit rate and crit rate bonuses
 // elemMult: elemental multiplier (from elemMultiplier())
-export function rollHits(atk, def, hitRate, potentialHits, profLevel = 0, elemMult = 1) {
-  const effHitRate = hitRate + profLevel * 0.5;          // +0.5% accuracy per level
-  const effCritRate = CRIT_RATE + profLevel * 0.25;      // +0.25% crit per level
-  const effAtk = atk + Math.floor(profLevel * 0.5);      // +0.5 ATK per level (floored)
-  const critBonus = Math.floor(effAtk / 4);               // flat crit bonus ~25% of ATK
+export function rollHits(atk, def, hitRate, potentialHits, jobLevel = 0, elemMult = 1) {
+  const effHitRate = hitRate + jobLevel * 0.5;           // +0.5% accuracy per job level
+  const effCritRate = CRIT_RATE + jobLevel * 0.25;       // +0.25% crit per job level
+  const critBonus = Math.floor(atk / 4);                  // flat crit bonus ~25% of ATK
   const results = [];
   for (let i = 0; i < potentialHits; i++) {
     if (Math.random() * 100 < effHitRate) {
       const crit = Math.random() * 100 < effCritRate;
-      const dmg = calcDamage(effAtk, def, crit, critBonus, elemMult);
+      const dmg = calcDamage(atk, def, crit, critBonus, elemMult);
       results.push({ damage: dmg, crit });
     } else {
       results.push({ miss: true });

@@ -146,7 +146,7 @@ function _processEnemyFlash() {
     if (shieldBlocked) {
       _s.playerDamageNum = { miss: true, timer: 0 };
       _s.battleState = 'enemy-damage-show'; _s.battleTimer = 0;
-      _s.inputSt.battleProfHits['shield'] = (_s.inputSt.battleProfHits['shield'] || 0) + 1;
+      // shield block (no action count needed — passive)
     } else if (ps.evade > 0 && Math.random() * 100 < ps.evade) {
       _s.playerDamageNum = { miss: true, timer: 0 };
       _s.battleState = 'enemy-damage-show'; _s.battleTimer = 0;

@@ -6,14 +6,14 @@ import { transSt } from './transitions.js';
 import { msgState, showMsgBox } from './message-box.js';
 import { chatState, CHAT_TABS, activeTab, tabSelectMode, setActiveTab, setTabSelectMode, chatScrollOffset, setChatScrollOffset } from './chat.js';
 import { ps, recalcCombatStats, changeJob, getEquipSlotId, setEquipSlotId, EQUIP_SLOT_SUBTYPE,
-         getProfHits, getProfLevel, getHitWeapon, WEAPON_PROF_CATEGORY } from './player-stats.js';
+         getHitWeapon, getJobLevel, jobSwitchCost } from './player-stats.js';
 import { ITEMS, isHandEquippable, isWeapon, weaponSubtype, isBladedWeapon } from './data/items.js';
 import { selectCursor, saveSlots, saveSlotsToDB } from './save-state.js';
 import { rollHits, elemMultiplier } from './battle-math.js';
 import { blindHitPenalty, removeStatus, STATUS } from './status-effects.js';
 import { _nameToBytes } from './text-utils.js';
 import { MONSTERS } from './data/monsters.js';
-import { JOBS, canJobEquip } from './data/jobs.js';
+import { canJobEquip } from './data/jobs.js';
 
 // Local constants (must match game.js)
 const HUD_VIEW_X = 0, HUD_VIEW_Y = 32, HUD_VIEW_W = 144, HUD_VIEW_H = 144;
@@ -41,8 +41,8 @@ export const inputSt = {
   itemTargetIndex:    0,
   itemTargetAllyIndex: -1,
   itemTargetMode:     'single',
-  // Proficiency tracking (applied on battle victory)
-  battleProfHits:     {},
+  // Action count for JP (applied on battle victory)
+  battleActionCount:  0,
   // Roster browse/menu
   rosterState:        'none',
   rosterCursor:       0,
@@ -123,11 +123,14 @@ function _battleTargetConfirm() {
   const dualWield = rIsWeapon && lIsWeapon;
   const unarmed = !rIsWeapon && !lIsWeapon;
   const wpnSubtype = weaponSubtype(ps.weaponR) || weaponSubtype(ps.weaponL) || 'unarmed';
-  const profBonus = getProfHits(wpnSubtype);
-  const potentialHits = (dualWield || unarmed) ? Math.max(2, ps.attackRoll) + profBonus : Math.max(1, ps.attackRoll) + profBonus;
+  // NES FF3 hit count: 1 + floor(CharLv/7) + floor(JobLv/14) + floor(AGI/8)
+  const jobLv = getJobLevel();
+  const charLv = ps.stats ? ps.stats.level : 1;
+  const agi = ps.stats ? ps.stats.agi : 5;
+  const bonusHits = Math.floor(charLv / 7) + Math.floor(jobLv / 14) + Math.floor(agi / 8);
+  const baseHits = 1 + bonusHits;
+  const potentialHits = (dualWield || unarmed) ? Math.max(2, baseHits) : Math.max(1, baseHits);
   const hitRate = ps.hitRate * (ps.status ? blindHitPenalty(ps.status) : 1);
-  const profCat = WEAPON_PROF_CATEGORY[wpnSubtype] || wpnSubtype;
-  const profLv = getProfLevel(profCat);
   // Weapon element for elemental multiplier
   const rElem = rIsWeapon ? (ITEMS.get(ps.weaponR)?.element || null) : null;
   const lElem = lIsWeapon ? (ITEMS.get(ps.weaponL)?.element || null) : null;
@@ -135,17 +138,16 @@ function _battleTargetConfirm() {
   if (_s.isRandomEncounter && _s.encounterMonsters) {
     const mon = _s.encounterMonsters[inputSt.targetIndex];
     const eMult = elemMultiplier(wpnElem, mon.weakness, mon.resist);
-    inputSt.hitResults = rollHits(ps.atk, mon.def, hitRate, potentialHits, profLv, eMult);
+    inputSt.hitResults = rollHits(ps.atk, mon.def, hitRate, potentialHits, jobLv, eMult);
   } else {
     const targetDef = _s.isPVPBattle && _s.pvpOpponentStats
       ? (_s.pvpPlayerTargetIdx >= 0
           ? (_s.pvpEnemyAllies[_s.pvpPlayerTargetIdx] || _s.pvpOpponentStats).def
           : _s.pvpOpponentStats.def)
       : BOSS_DEF;
-    inputSt.hitResults = rollHits(ps.atk, targetDef, hitRate, potentialHits, profLv);
+    inputSt.hitResults = rollHits(ps.atk, targetDef, hitRate, potentialHits, jobLv);
   }
-  const hitsLanded = inputSt.hitResults.filter(h => h > 0).length;
-  if (hitsLanded > 0) inputSt.battleProfHits[wpnSubtype] = (inputSt.battleProfHits[wpnSubtype] || 0) + hitsLanded;
+  inputSt.battleActionCount++;
   const firstHandR = isWeapon(ps.weaponR) || !isWeapon(ps.weaponL);
   const firstWpnId = firstHandR ? ps.weaponR : ps.weaponL;
   const pendingSlashFrames = _s.getSlashFramesForWeapon(firstWpnId, firstHandR);
@@ -448,24 +450,19 @@ function _battleInputHoldStates() {
   } else if (_s.battleState === 'exp-hold') {
     if (z) { clearZ(); _s.battleState = 'exp-fade-out'; _s.battleTimer = 0; }
   } else if (_s.battleState === 'gil-hold') {
-    if (z) { clearZ(); _s.battleState = (ps.leveledUp || _s.encounterDropItem !== null) ? 'gil-fade-out' : _s.encounterProfLevelUps.length > 0 ? 'prof-levelup-text-in' : 'victory-text-out'; _s.battleTimer = 0; }
+    if (z) { clearZ(); _s.battleState = (ps.leveledUp || _s.encounterDropItem !== null) ? 'gil-fade-out' : _s.encounterJobLevelUp ? 'joblv-text-in' : 'victory-text-out'; _s.battleTimer = 0; }
   } else if (_s.battleState === 'item-hold') {
-    if (z) { clearZ(); _s.battleState = ps.leveledUp ? 'item-fade-out' : _s.encounterProfLevelUps.length > 0 ? 'prof-levelup-text-in' : 'victory-text-out'; _s.battleTimer = 0; }
+    if (z) { clearZ(); _s.battleState = ps.leveledUp ? 'item-fade-out' : _s.encounterJobLevelUp ? 'joblv-text-in' : 'victory-text-out'; _s.battleTimer = 0; }
   } else if (_s.battleState === 'levelup-hold') {
-    if (z) { clearZ(); _s.battleState = _s.encounterProfLevelUps.length > 0 ? 'prof-levelup-text-in' : 'victory-text-out'; _s.battleTimer = 0; }
-  } else if (_s.battleState === 'prof-levelup-hold') {
-    if (z) {
-      clearZ();
-      if (_s.profLevelUpIdx + 1 < _s.encounterProfLevelUps.length) { _s.profLevelUpIdx++; _s.battleState = 'prof-levelup-text-in'; }
-      else { _s.battleState = 'victory-text-out'; }
-      _s.battleTimer = 0;
-    }
+    if (z) { clearZ(); _s.battleState = _s.encounterJobLevelUp ? 'joblv-text-in' : 'victory-text-out'; _s.battleTimer = 0; }
+  } else if (_s.battleState === 'joblv-hold') {
+    if (z) { clearZ(); _s.battleState = 'victory-text-out'; _s.battleTimer = 0; }
   } else { return false; }
   return true;
 }
 
-// shared = { keys, battleAllies, encounterMonsters, encounterDropItem, encounterProfLevelUps,
-//            profLevelUpIdx (get/set), isRandomEncounter, isPVPBattle, pvpOpponentStats,
+// shared = { keys, battleAllies, encounterMonsters, encounterDropItem, encounterJobLevelUp,
+//            isRandomEncounter, isPVPBattle, pvpOpponentStats,
 //            get/set battleState, get/set battleTimer,
 //            executeBattleCommand, getSlashFramesForWeapon,
 //            addItem, removeItem }
@@ -944,7 +941,7 @@ function _pauseInputJob() {
       playSFX(SFX.CONFIRM);
       pauseSt.state = 'job-out'; pauseSt.timer = 0;
     } else {
-      const cost = JOBS[newJobIdx].cpCost;
+      const cost = jobSwitchCost(newJobIdx);
       if (ps.cp >= cost) {
         ps.cp -= cost;
         changeJob(newJobIdx);

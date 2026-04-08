@@ -1,12 +1,11 @@
 // pause-menu.js — pause menu state, transitions, and rendering
 
 import { drawText } from './font-renderer.js';
-import { ps, PROF_CATEGORIES, getEquipSlotId } from './player-stats.js';
+import { ps, getEquipSlotId, jobSwitchCost, getJobLevel } from './player-stats.js';
 import { JOBS } from './data/jobs.js';
 import { _makeFadedPal } from './palette.js';
 import { _nameToBytes, _buildItemRowBytes } from './text-utils.js';
 import { getItemNameClean } from './text-decoder.js';
-import { getProfIcon } from './prof-icons.js';
 import { stopFF1Music, resumeMusic, playFF1Track, FF1_TRACKS } from './music.js';
 import { PAUSE_ITEMS } from './data/strings.js';
 import { selectCursor, saveSlots } from './save-state.js';
@@ -353,15 +352,12 @@ function _drawPauseStats(ctx, shared) {
   const fadeStep = _pauseFadeStep('stats-in', 'stats-out');
   const fadedPal = _makeFadedPal(fadeStep);
   const tx = px + 8;
-  const panelRx = tx + HUD_VIEW_W - 16;
   const statRx = tx + 96;
-  const profX  = tx + 104;
   const STEP = 11;
   let y = finalY + 8;
 
   const s = ps.stats;
   if (!s) return;
-  const iconAlpha = fadeStep === 0 ? 1 : (PAUSE_TEXT_STEPS - fadeStep) / PAUSE_TEXT_STEPS;
 
   function statRow(label, val) {
     const vb = _nameToBytes(val);
@@ -399,32 +395,14 @@ function _drawPauseStats(ctx, shared) {
   statRow('EXP',  String(s.exp));
   statRow('Next', String(s.expToNext));
   statPair('ATK', String(ps.atk),  'DEF', String(ps.def));
+  statPair('HIT', String(ps.hitRate), 'EVD', String(ps.evade));
   statPair('STR', String(s.str),   'AGI', String(s.agi));
   statPair('VIT', String(s.vit),   'INT', String(s.int));
-  statPair('MND', String(s.mnd), '', '');
-
-  // Gil — bottom-left
-  y += STEP;
+  statPair('MND', String(s.mnd),   'MDF', String(ps.mdef));
   const gilb = _nameToBytes(String(ps.gil));
   drawText(ctx, tx, y, _nameToBytes('Gil'), fadedPal);
   drawText(ctx, statRx - gilb.length * 8, y, gilb, fadedPal);
 
-  const py0 = finalY + 8;
-  for (let i = 0; i < PROF_CATEGORIES.length; i++) {
-    const cat = PROF_CATEGORIES[i];
-    const lv = Math.min(16, Math.floor((ps.proficiency[cat] || 0) / 100));
-    const cy = py0 + i * STEP;
-    const icon = getProfIcon(cat);
-    if (icon) {
-      ctx.save();
-      ctx.globalAlpha = iconAlpha;
-      ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(icon, profX, cy, 8, 8);
-      ctx.restore();
-    }
-    const lvb = _nameToBytes(String(lv));
-    drawText(ctx, panelRx - lvb.length * 8, cy, lvb, fadedPal);
-  }
 }
 
 const OPT_CRT_LABEL = new Uint8Array([0x8C,0x9B,0x9D]); // "CRT"
@@ -480,7 +458,7 @@ function _drawPauseJob(ctx, shared) {
     const jobIdx = pauseSt.jobList[i];
     const label = _nameToBytes(JOBS[jobIdx].name);
     const isCurrentJob = jobIdx === ps.jobIdx;
-    const cost = JOBS[jobIdx].cpCost;
+    const cost = jobSwitchCost(jobIdx);
     const canAfford = isCurrentJob || ps.cp >= cost;
     let pal;
     if (isCurrentJob) {
@@ -491,6 +469,11 @@ function _drawPauseJob(ctx, shared) {
       pal = fadedPal;
     }
     drawText(ctx, tx, y + i * 12, label, pal);
+    // Job level between name and cost
+    const jlv = getJobLevel(jobIdx);
+    const jlvBytes = _nameToBytes(String(jlv));
+    const lvX = valRx - 40;
+    drawText(ctx, lvX - jlvBytes.length * 8, y + i * 12, jlvBytes, pal);
     // Show cost to the right (skip for current job)
     if (!isCurrentJob && cost > 0) {
       const costBytes = _nameToBytes(String(cost));

@@ -1,6 +1,6 @@
 // player-stats.js — player combat stats, equip slots, exp, and derived stat helpers
 
-import { readJobBaseStats, readStartingHP, readStartingMP, readJobLevelBonus, buildExpTable } from './data/jobs.js';
+import { readJobBaseStats, readStartingHP, readStartingMP, readJobLevelBonus, buildExpTable, JOBS } from './data/jobs.js';
 import { ITEMS, isWeapon } from './data/items.js';
 import { BASE_HIT_RATE } from './battle-math.js';
 import { createStatusState } from './status-effects.js';
@@ -27,7 +27,7 @@ export const ps = {
   elemResist: [],   // array of element strings player resists (from armor)
   status: { mask: 0, poisonDmgTick: 0 },  // status effect state — persists across battles
   _romData: null,  // stored by initExpTable for use in grantExp
-  proficiency: {}, // { subtype: points } — 100 pts per level, max level 16 (1600 pts)
+  jobLevels: {},  // { [jobIdx]: { level, jp } } — 100 JP per level, max 99
   jobIdx: 0,            // current job index (0=Onion Knight, 1=Warrior, etc.)
   unlockedJobs: 0x01,   // bitmask: bit N = job N unlocked. 0x01 = only Onion Knight
   cp: 0,                // capacity points (0-255), earned from battles, spent on job changes
@@ -184,80 +184,52 @@ export function grantExp(amount) {
   return { leveledUp: ps.leveledUp };
 }
 
-// --- Proficiency system (FF2-style weapon/magic skill) ---
-// Points: 100 per level, max level 16. Gain = hits landed per battle.
-// Bonus hits: +1 per 4 proficiency levels (so +4 hits at level 16).
-// Categories: sword, knife, axe, spear, staff, bow, unarmed, white, black, call
+// --- Job Level system (NES FF3) ---
+// 100 JP per level, max 1 level per battle, max level 99.
+// JP rates: JLv 1-14 = 20 JP/action, JLv 15+ varies by job.
 
-// Maps animation subtype → proficiency category
-export const WEAPON_PROF_CATEGORY = {
-  sword:     'sword',
-  knife:     'knife',
-  axe:       'axe',
-  hammer:    'axe',
-  spear:     'spear',
-  staff:     'staff',
-  rod:       'staff',
-  bow:       'bow',
-  arrow:     'bow',
-  katana:    'sword',
-  claw:      'unarmed',
-  nunchaku:  'unarmed',
-  book:      'staff',
-  bell:      'staff',
-  harp:      'staff',
-  boomerang: 'bow',
-  shuriken:  'knife',
-  shield:    'shield',
-  unarmed:   'unarmed',
+// JP gain rates per job at JLv 15+ (from NES disassembly)
+const JP_RATES = {
+  0:8, 1:14, 2:14, 3:10, 4:10, 5:12, 6:14, 7:14, 8:14, 9:18,
+  10:14, 11:14, 12:24, 13:14, 14:12, 15:10, 16:10, 17:12, 18:10, 19:10, 20:12, 21:10
 };
 
-export const PROF_CATEGORIES = ['sword','knife','axe','spear','staff','bow','shield','unarmed','white','black','call'];
-
-export function getProfLevel(category) {
-  return Math.min(16, Math.floor((ps.proficiency[category] || 0) / 100));
+export function getJobLevel(jobIdx = ps.jobIdx) {
+  return ps.jobLevels[jobIdx]?.level || 1;
 }
 
-export function getProfHits(subtype) {
-  const cat = WEAPON_PROF_CATEGORY[subtype] || subtype;
-  return Math.floor(getProfLevel(cat) / 4);
+// Call once per battle victory with total actions taken.
+// Returns new level number on level-up, or null.
+export function gainJobJP(actionCount) {
+  const jl = ps.jobLevels[ps.jobIdx] || (ps.jobLevels[ps.jobIdx] = { level: 1, jp: 0 });
+  const rate = jl.level < 15 ? 20 : (JP_RATES[ps.jobIdx] || 14);
+  jl.jp += actionCount * rate;
+  if (jl.jp >= 100 && jl.level < 99) {
+    jl.jp -= 100;
+    jl.level++;
+    return jl.level;
+  }
+  return null;
 }
 
-// Returns effective shield evade% (base + 1% per shield prof level). 0 if no shield equipped.
-export function getShieldEvade(ITEMS) {
+// Shield evade — base evade from shield item only (no proficiency bonus)
+export function getShieldEvade() {
   const shieldItem = ITEMS.get(ps.weaponR)?.subtype === 'shield' ? ITEMS.get(ps.weaponR)
                    : ITEMS.get(ps.weaponL)?.subtype === 'shield' ? ITEMS.get(ps.weaponL)
                    : null;
   if (!shieldItem) return 0;
-  return (shieldItem.evade || 0) + getProfLevel('shield');
-}
-
-// Call once per battle victory with { subtype: hitsLanded }
-// battleRank = avg enemy level; scales points via FF2 formula: hits * max(1, rank - profLevel + 1)
-// Returns array of { cat, newLevel } for any categories that leveled up
-export function gainProficiency(hitsMap, battleRank = 1) {
-  const levelUps = [];
-  for (const [subtype, hits] of Object.entries(hitsMap)) {
-    if (hits <= 0) continue;
-    const cat = WEAPON_PROF_CATEGORY[subtype] || subtype;
-    const oldLevel = getProfLevel(cat);
-    const scaled = hits * Math.max(1, battleRank - oldLevel + 1);
-    ps.proficiency[cat] = Math.min(1600, (ps.proficiency[cat] || 0) + scaled);
-    const newLevel = getProfLevel(cat);
-    if (newLevel > oldLevel) levelUps.push({ cat, newLevel });
-  }
-  return levelUps;
-}
-
-// Call when a spell is cast (magic proficiency gain)
-export function gainMagicProficiency(magicType) {
-  const cat = magicType === 'white' ? 'white' : magicType === 'black' ? 'black' : magicType === 'call' ? 'call' : null;
-  if (!cat) return;
-  ps.proficiency[cat] = Math.min(1600, (ps.proficiency[cat] || 0) + 1);
+  return shieldItem.evade || 0;
 }
 
 export function grantCP(amount) {
   ps.cp = Math.min(255, ps.cp + amount);
+}
+
+// Returns CP cost to switch to a job (base cost minus job level discount)
+export function jobSwitchCost(newJobIdx) {
+  const baseCost = JOBS[newJobIdx]?.cpCost || 0;
+  const targetJobLv = getJobLevel(newJobIdx);
+  return Math.max(0, baseCost - (targetJobLv - 1));
 }
 
 export function changeJob(newJobIdx) {

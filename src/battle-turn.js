@@ -87,8 +87,8 @@ export function processNextTurn(shared) {
     }
     const cmd = _s.inputSt.playerActionPending.command;
     if (cmd === 'fight') _playerTurnFight();
-    else if (cmd === 'defend') { playSFX(SFX.DEFEND_HIT); _s.battleState = 'defend-anim'; _s.battleTimer = 0; }
-    else if (cmd === 'item') _playerTurnItem();
+    else if (cmd === 'defend') { _s.inputSt.battleActionCount++; playSFX(SFX.DEFEND_HIT); _s.battleState = 'defend-anim'; _s.battleTimer = 0; }
+    else if (cmd === 'item') { _s.inputSt.battleActionCount++; _playerTurnItem(); }
     else if (cmd === 'skip') processNextTurn(_s);
     else if (cmd === 'run') _playerTurnRun();
   } else if (turn.type === 'ally') {

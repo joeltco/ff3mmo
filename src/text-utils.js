@@ -1,6 +1,8 @@
 import { getItemNameClean } from './text-decoder.js';
 import { drawText, measureText } from './font-renderer.js';
 import { nesColorFade } from './palette.js';
+import { JOBS } from './data/jobs.js';
+import { ps } from './player-stats.js';
 
 // Convert JS string to NES-encoded Uint8Array (A-Z, a-z, 0-9, space→0xFF)
 export function _nameToBytes(name) {
@@ -56,7 +58,7 @@ export function _makeGotNText(amount, suffix) {
 
 export function makeExpText(amount) { return _makeGotNText(amount, [0xFF, 0x8E, 0xA1, 0x99, 0xC4]); } // " EXP!"
 export function makeGilText(amount) { return _makeGotNText(amount, [0xFF, 0x90, 0xD2, 0xD5, 0xC4]); } // " Gil!"
-export function makeProfLevelUpText(cat, lv) { return _nameToBytes(cat.toUpperCase() + ' LV ' + lv + '!'); }
+export function makeJobLevelUpText(lv) { const name = (JOBS[ps.jobIdx]?.name || 'JOB').toUpperCase(); return _nameToBytes(name + ' LV ' + lv + '!'); }
 
 // Draw "Lv##" left-aligned + colored HP right-aligned on the same row
 // leftX/rightX = content edges (inside border), y = text baseline, fadeStep = NES color fade steps

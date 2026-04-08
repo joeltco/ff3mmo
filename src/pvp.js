@@ -486,7 +486,7 @@ function _processPVPEnemySlash() {
     _s.battleShakeTimer = BATTLE_SHAKE_MS;
   }
   if (pending && pending.shieldBlock) {
-    inputSt.battleProfHits['shield'] = (inputSt.battleProfHits['shield'] || 0) + 1;
+    // shield block counts as an action for JP
   }
   // Advance combo
   if (pvpSt.pvpEnemyHitIdx + 1 < pvpSt.pvpEnemyHitResults.length) {

@@ -31,7 +31,7 @@ import { loadBossSprite, getBossBattleCanvas, getBossWhiteCanvas } from './boss-
 import { selectCursor, saveSlots,
          setSelectCursor, setSaveSlots,
          saveSlotsToDB, loadSlotsFromDB, setInventoryGetter, setPositionGetter } from './save-state.js';
-import { _nameToBytes, _buildItemRowBytes, _makeGotNText, makeExpText, makeGilText, makeFoundItemText, makeProfLevelUpText } from './text-utils.js';
+import { _nameToBytes, _buildItemRowBytes, _makeGotNText, makeExpText, makeGilText, makeFoundItemText } from './text-utils.js';
 import { nesColorFade, _stepPalFade } from './palette.js';
 import { _getPlane0, _rebuild, _shiftHorizWater, _isWater, _buildHorizMixed } from './tile-math.js';
 // _dmgBounceY → hud-drawing.js
@@ -46,8 +46,7 @@ import { initFlameRawTiles, initStarTiles, rebuildFlameSprites,
 import { LOAD_FADE_STEP_MS, LOAD_FADE_MAX, drawLoadingOverlay } from './loading-screen.js';
 import { initTitleWater, initTitleSky, initTitleUnderwater, initUnderwaterSprites, initTitleOcean, initTitleLogo } from './title-animations.js';
 // BATTLE_SPRITE_ROM, BATTLE_JOB_SIZE, BATTLE_PAL_ROM → sprite-init.js
-import { ps, EQUIP_SLOT_SUBTYPE, getEquipSlotId, setEquipSlotId, recalcDEF, recalcCombatStats, getHitWeapon, isHitRightHand, initPlayerStats, initExpTable, grantExp, grantCP, fullHeal, gainProficiency, getProfHits, getProfLevel, getShieldEvade, PROF_CATEGORIES, WEAPON_PROF_CATEGORY } from './player-stats.js';
-import { initProfIcons, getProfIcon } from './prof-icons.js';
+import { ps, EQUIP_SLOT_SUBTYPE, getEquipSlotId, setEquipSlotId, recalcDEF, recalcCombatStats, getHitWeapon, isHitRightHand, initPlayerStats, initExpTable, grantExp, grantCP, fullHeal, getShieldEvade, getJobLevel, gainJobJP } from './player-stats.js';
 import { chatState, addChatMessage, updateChat, updateChatTabs, drawChat, drawChatTabs, onChatKeyDown, consoleLog, setCommandContext,
          CHAT_TABS, activeTab, tabSelectMode, setActiveTab, setTabSelectMode } from './chat.js';
 import { rosterBattleFade, setLocationGetter, getPlayerLocation, rosterLocForMapId,
@@ -246,8 +245,7 @@ let isRandomEncounter = false;
 let encounterMonsters = null;  // [{ hp, maxHP, atk, def, exp }] — array of enemies
 let encounterExpGained = 0;
 let encounterGilGained = 0;
-let encounterProfLevelUps = []; // [{cat, newLevel}] earned this battle
-let profLevelUpIdx = 0;
+let encounterJobLevelUp = null; // new job level on level-up, or null
 let encounterDropItem = null;  // item id dropped on victory (or null)
 let preBattleTrack = null;
 let turnQueue = [];              // [{type:'player'|'enemy', index}] sorted by priority
@@ -590,7 +588,7 @@ function _resetBattleVars() {
   allyShakeTimer = {}; enemyTargetAllyIdx = -1; allyExitTimer = 0;
   resetBattleItemVars();
   playerDeathTimer = null; _teamWipeMsgShown = false;
-  inputSt.battleProfHits = {};
+  inputSt.battleActionCount = 0;
 }
 function _zPressed() { if (!keys['z'] && !keys['Z']) return false; keys['z'] = false; keys['Z'] = false; return true; }
 function _xPressed() { if (!keys['x'] && !keys['X']) return false; keys['x'] = false; keys['X'] = false; return true; }
@@ -807,9 +805,7 @@ function _inputShared() {
     get isRandomEncounter()     { return isRandomEncounter; },
     get encounterMonsters()     { return encounterMonsters; },
     get encounterDropItem()     { return encounterDropItem; },
-    get encounterProfLevelUps() { return encounterProfLevelUps; },
-    get profLevelUpIdx()        { return profLevelUpIdx; },
-    set profLevelUpIdx(v)       { profLevelUpIdx = v; },
+    get encounterJobLevelUp() { return encounterJobLevelUp; },
     get shakeActive()           { return shakeActive; },
     get starEffect()            { return starEffect; },
     get moving()                { return moving; },
@@ -1065,8 +1061,7 @@ function _battleDrawShared() {
     get encounterExpGained() { return encounterExpGained; },
     get encounterGilGained() { return encounterGilGained; },
     get encounterDropItem() { return encounterDropItem; },
-    get encounterProfLevelUps() { return encounterProfLevelUps; },
-    get profLevelUpIdx() { return profLevelUpIdx; },
+    get encounterJobLevelUp() { return encounterJobLevelUp; },
     get southWindTargets() { return getTargets(); },
     get southWindHitIdx() { return getHitIdx(); },
     get southWindDmgNums() { return getSwDmgNums(); },
@@ -1347,8 +1342,6 @@ export async function loadROM(arrayBuffer) {
   romRaw = rom.raw;
   initTextDecoder(romRaw);
   initFont(romRaw);
-  if (ff12Raw) initProfIcons(romRaw, ff12Raw);
-
   _initSpriteAssets(romRaw);
   sprite = new Sprite(romRaw, SPRITE_PAL_TOP, SPRITE_PAL_BTM);
   worldMapData = loadWorldMap(romRaw, 0);
@@ -1381,7 +1374,6 @@ export function loadFF12ROM(arrayBuffer) {
   const ad = _initAdamantoise(ff12Raw);
   adamantoiseFrames = ad.adamantoiseFrames;
   initFF1Music(ff12Raw);
-  if (romRaw) initProfIcons(romRaw, ff12Raw);
   if (romRaw) { // rebuild loading screen fade frames with boss fade
     const lf2 = _initLoadingScreenFadeFrames(romRaw, ff12Raw);
     moogleFadeFrames = lf2.moogleFadeFrames;
@@ -1741,7 +1733,7 @@ function _updateTitleMainOutCase() {
   }
   playerInventory = (slot && slot.inventory) ? { ...slot.inventory } : {};
   ps.gil = (slot && slot.gil) || 0;
-  ps.proficiency = (slot && slot.proficiency) ? { ...slot.proficiency } : {};
+  ps.jobLevels = (slot && slot.jobLevels) ? JSON.parse(JSON.stringify(slot.jobLevels)) : {};
   ps.jobIdx = (slot && slot.jobIdx) || 0;
   ps.unlockedJobs = (slot && slot.unlockedJobs != null) ? slot.unlockedJobs : 0x01;
   ps.cp = (slot && slot.cp) || 0;
@@ -2021,7 +2013,7 @@ function _isVictoryBattleState() {
     battleState === 'gil-text-in' || battleState === 'gil-hold' || battleState === 'gil-fade-out' ||
     battleState === 'levelup-text-in' || battleState === 'levelup-hold' ||
     battleState === 'item-text-in' || battleState === 'item-hold' || battleState === 'item-fade-out' ||
-    battleState === 'prof-levelup-text-in' || battleState === 'prof-levelup-hold' ||
+    battleState === 'joblv-text-in' || battleState === 'joblv-hold' ||
     battleState === 'victory-text-out' || battleState === 'victory-menu-fade' || battleState === 'victory-box-close';
 }
 function _updateAllyExitFade(dt) {
@@ -2225,8 +2217,8 @@ function _triggerPVPVictory() {
   grantExp(encounterExpGained);
   grantCP(1);
   ps.gil += encounterGilGained;
-  encounterProfLevelUps = gainProficiency(inputSt.battleProfHits, oppLv);
-  inputSt.battleProfHits = {}; profLevelUpIdx = 0;
+  encounterJobLevelUp = gainJobJP(inputSt.battleActionCount || 1);
+  inputSt.battleActionCount = 0;
   saveSlotsToDB();
   enemyDefeated = true;
   isDefending = false; battleState = 'victory-name-out'; battleTimer = 0;
@@ -2244,8 +2236,8 @@ function _updateMonsterDeath() {
       grantExp(encounterExpGained);
       grantCP(encounterMonsters.length);
       ps.gil += encounterGilGained;
-      const _avgEnemyLv = Math.round(encounterMonsters.reduce((s, m) => s + (MONSTERS.get(m.monsterId)?.level || 1), 0) / encounterMonsters.length);
-      encounterProfLevelUps = gainProficiency(inputSt.battleProfHits, _avgEnemyLv); inputSt.battleProfHits = {}; profLevelUpIdx = 0;
+      encounterJobLevelUp = gainJobJP(inputSt.battleActionCount || 1);
+      inputSt.battleActionCount = 0;
       encounterDropItem = null;
       for (const m of encounterMonsters) {
         const mData = MONSTERS.get(m.monsterId);
@@ -2376,8 +2368,8 @@ function _updateBossDissolve(dt) {
     encounterExpGained = _bossData?.exp || 132; encounterGilGained = _bossData?.gil || 500;
     grantExp(encounterExpGained); ps.gil += encounterGilGained;
     grantCP(10); // boss gives 10 CP
-    const _bossLv = _bossData?.level || 8;
-    encounterProfLevelUps = gainProficiency(inputSt.battleProfHits, _bossLv); inputSt.battleProfHits = {}; profLevelUpIdx = 0;
+    encounterJobLevelUp = gainJobJP(inputSt.battleActionCount || 1);
+    inputSt.battleActionCount = 0;
     saveSlotsToDB();
     isDefending = false; battleState = 'victory-name-out'; battleTimer = 0;
   }
@@ -2418,9 +2410,9 @@ function _updateVictorySequence() {
     if (battleTimer >= _textMs) { battleState = 'levelup-hold'; battleTimer = 0; }
   } else if (battleState === 'levelup-hold') {
     // waits for Z press
-  } else if (battleState === 'prof-levelup-text-in') {
-    if (battleTimer >= _textMs) { battleState = 'prof-levelup-hold'; battleTimer = 0; }
-  } else if (battleState === 'prof-levelup-hold') {
+  } else if (battleState === 'joblv-text-in') {
+    if (battleTimer >= _textMs) { battleState = 'joblv-hold'; battleTimer = 0; }
+  } else if (battleState === 'joblv-hold') {
     // waits for Z press
   } else if (battleState === 'victory-text-out') {
     if (battleTimer >= _textMs) { battleState = 'victory-menu-fade'; battleTimer = 0; }

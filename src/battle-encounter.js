@@ -36,7 +36,7 @@ export function tickRandomEncounter(shared) {
 export function startRandomEncounter(shared) {
   _s = shared;
   _s.isRandomEncounter = true;
-  _s.inputSt.battleProfHits = {};
+  _s.inputSt.battleActionCount = 0;
 
   const zoneKey = _s.onWorldMap
     ? 'grasslands'
