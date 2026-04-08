@@ -482,8 +482,8 @@ function _drawPauseJob(ctx, shared) {
       drawText(ctx, valRx - costBytes.length * 8, ry, costBytes, pal);
     }
   }
-  if (cursorTileCanvas && pauseSt.state === 'job' && fadeStep === 0) {
-    ctx.drawImage(cursorTileCanvas, px + 8, y + pauseSt.jobCursor * 12 - 4);
+  if (shared.drawCursorFaded) {
+    shared.drawCursorFaded(px + 8, y + pauseSt.jobCursor * 12 - 4, fadeStep);
   }
 }
 
