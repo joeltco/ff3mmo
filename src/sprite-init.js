@@ -14,7 +14,7 @@ import { OK_IDLE, OK_VICTORY, OK_L_BACK_SWING, OK_L_FWD_T2, OK_L_FWD_T3, OK_R_BA
          OK_DEATH } from './data/job-sprites.js';
 import { WR_IDLE, WR_LEG_L, WR_LEG_R, WR_L_BACK, WR_LEG_L_BACK_L, WR_LEG_R_BACK_L,
          WR_L_FWD_T2, WR_L_FWD_T3, WR_LEG_L_FWD_L, WR_LEG_R_FWD_L,
-         WR_R_BACK_T2, WR_LEG_L_BACK_R, WR_LEG_R_SWING,
+         WR_R_BACK_T2, WR_LEG_L_BACK_R, WR_LEG_L_FWD_R, WR_LEG_R_SWING,
          WR_KNEEL, WR_LEG_L_KNEEL, WR_LEG_R_KNEEL,
          WR_VICTORY, WR_LEG_L_VICTORY, WR_LEG_R_VICTORY,
          WR_HIT, WR_LEG_L_HIT, WR_LEG_R_HIT,
@@ -925,7 +925,7 @@ function _buildWarriorFullBodies() {
     fakePlayerKnifeRFullBodyCanvases: build(knifeRTiles, d(WR_LEG_L_BACK_R), d(WR_LEG_R_SWING)),
     fakePlayerKnifeLFullBodyCanvases: build(knifeLTiles, d(WR_LEG_L_BACK_L), d(WR_LEG_R_BACK_L)),
     fakePlayerKnifeBackFullBodyCanvases: build(knifeLTiles, d(WR_LEG_L_BACK_L), d(WR_LEG_R_BACK_L)),
-    fakePlayerKnifeRFwdFullBodyCanvases: build(atkRTiles, d(WR_LEG_L_BACK_R), d(WR_LEG_R_SWING)),
+    fakePlayerKnifeRFwdFullBodyCanvases: build(atkRTiles, d(WR_LEG_L_FWD_R), d(WR_LEG_R_SWING)),
     fakePlayerKnifeLFwdFullBodyCanvases: build(atkLTiles, d(WR_LEG_L_FWD_L), d(WR_LEG_R_FWD_L)),
     fakePlayerKneelFullBodyCanvases: build(kneelTiles, d(WR_LEG_L_KNEEL), d(WR_LEG_R_KNEEL)),
     fakePlayerVictoryFullBodyCanvases: build(victoryTiles, d(WR_LEG_L_VICTORY), d(WR_LEG_R_VICTORY)),
