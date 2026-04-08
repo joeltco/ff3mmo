@@ -373,7 +373,7 @@ function _drawPauseStats(ctx, shared) {
     drawText(ctx, tx, y, l0b, fadedPal);
     drawText(ctx, tx + l0b.length * 8 + GAP, y, v0b, fadedPal);
     drawText(ctx, r1LabelX, y, l1b, fadedPal);
-    drawText(ctx, r1LabelX + l1b.length * 8 + GAP, y, v1b, fadedPal);
+    drawText(ctx, statRx - v1b.length * 8, y, v1b, fadedPal);
     y += STEP;
   }
 
