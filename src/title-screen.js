@@ -495,18 +495,14 @@ function _drawSelectSlotRow(ctx, i, selX, rowY, fadeStep, showContent, shared) {
   _drawTitleBox(ctx, selX + 32, rowY, SEL_W - 32, SEL_ROW_H, fadeStep);
   if (!showContent) return;
 
-  // Portrait — use per-job fake player portraits keyed by slot's jobIdx
-  if (isNameEntry) {
-    if (shared.silhouetteCanvas) ctx.drawImage(shared.silhouetteCanvas, selX + 8, rowY + 8);
-  } else if (saveSlots[i] && shared.fakePlayerPortraits) {
-    const jobIdx = saveSlots[i].jobIdx || 0;
-    const jobPortraits = shared.fakePlayerPortraits[jobIdx] || shared.fakePlayerPortraits[0];
+  // Portrait — per-job portrait for saved slots, onion knight (job 0) for empty/new
+  {
+    const jobIdx = saveSlots[i] ? (saveSlots[i].jobIdx || 0) : 0;
+    const jobPortraits = shared.fakePlayerPortraits && (shared.fakePlayerPortraits[jobIdx] || shared.fakePlayerPortraits[0]);
     const palPortraits = jobPortraits && jobPortraits[0]; // palette 0
     if (palPortraits && fadeStep < SELECT_TEXT_STEPS) {
       ctx.drawImage(palPortraits[fadeStep], selX + 8, rowY + 8);
     }
-  } else {
-    if (shared.silhouetteCanvas && fadeStep < SELECT_TEXT_STEPS) ctx.drawImage(shared.silhouetteCanvas, selX + 8, rowY + 8);
   }
 
   // Name + level text (right-aligned in info box, like roster)
