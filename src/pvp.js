@@ -5,6 +5,7 @@
 import { playSFX, stopSFX, SFX, pauseMusic, playTrack, TRACKS } from './music.js';
 import { rollHits, calcPotentialHits, BOSS_HIT_RATE, GOBLIN_HIT_RATE } from './battle-math.js';
 import { ITEMS, isWeapon, weaponSubtype } from './data/items.js';
+import { _nameToBytes } from './text-utils.js';
 import { PLAYER_POOL, generateAllyStats } from './data/players.js';
 import { MONSTERS } from './data/monsters.js';
 import { ps } from './player-stats.js';
@@ -235,6 +236,10 @@ function _runEnemyAttack(targetAlly) {
   const attackerStats = pvpSt.pvpCurrentEnemyAllyIdx >= 0
     ? pvpSt.pvpEnemyAllies[pvpSt.pvpCurrentEnemyAllyIdx]
     : pvpSt.pvpOpponentStats;
+  // Queue attacker name message
+  if (_s.queueBattleMsg && attackerStats && attackerStats.name) {
+    _s.queueBattleMsg(_nameToBytes(attackerStats.name + ' attacks!'));
+  }
   if (targetAlly >= 0) {
     // Ally target — sum all pre-rolled hits, apply total at once
     _s.enemyTargetAllyIdx = targetAlly;

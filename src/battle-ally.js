@@ -3,6 +3,7 @@
 import { playSlashSFX } from './battle-sfx.js';
 import { isWeapon } from './data/items.js';
 import { SFX, playSFX } from './music.js';
+import { _nameToBytes } from './text-utils.js';
 
 let _s = null;
 
@@ -55,6 +56,9 @@ function _updateAllyAttack() {
     const delay = _s.allyHitIdx === 0 ? ALLY_BACK_MS : ALLY_COMBO_PAUSE_MS;
     if (_s.battleTimer >= delay) {
       const ally = _s.battleAllies[_s.currentAllyAttacker];
+      if (_s.allyHitIdx === 0 && ally && _s.queueBattleMsg) {
+        _s.queueBattleMsg(_nameToBytes((ally.name || 'Ally') + ' attacks!'));
+      }
       const isLeft = (_s.allyHitIdx % 2 === 1) && ally && isWeapon(ally.weaponL);
       _s.allyHitIsLeft = isLeft;
       _s.battleState = 'ally-attack-fwd';

@@ -987,6 +987,8 @@ function _pvpShared() {
     // ── Other functions ───────────────────────────────────────────────────────
     resetBattleVars:     _resetBattleVars,
     processNextTurn,
+    queueBattleMsg,
+    isBattleMsgBusy,
     isTeamWiped:         _isTeamWiped,
     getPlayerLocation,
     getSlashFramesForWeapon,
@@ -1040,6 +1042,7 @@ function _allyShared() {
     ROSTER_FADE_STEPS,
     processNextTurn,
     buildTurnOrder,
+    queueBattleMsg,
     isTeamWiped: _isTeamWiped,
   };
 }
