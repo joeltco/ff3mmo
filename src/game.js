@@ -24,7 +24,7 @@ import { BATTLE_MISS, BATTLE_GAME_OVER, BATTLE_ROAR, BATTLE_FIGHT, BATTLE_RUN,
          BATTLE_GOT_EXP, BATTLE_LEVEL_UP, BATTLE_BOSS_NAME, BATTLE_GOBLIN_NAME,
          BATTLE_CRITICAL, BATTLE_STRIKE_1ST, BATTLE_AMBUSHED, BATTLE_INEFFECTIVE, BATTLE_SLAIN,
          BATTLE_MENU_ITEMS, PAUSE_ITEMS,
-         POND_RESTORED } from './data/strings.js';
+         POND_RESTORED, VERSION } from './data/strings.js';
 import { initMonsterSprites, getMonsterCanvas, getMonsterWhiteCanvas,
          getMonsterDeathFrames, hasMonsterSprites } from './monster-sprites.js';
 import { loadBossSprite, getBossBattleCanvas, getBossWhiteCanvas } from './boss-sprites.js';
@@ -1387,12 +1387,15 @@ export async function loadROM(arrayBuffer) {
     getRosterNames: () => PLAYER_POOL.filter(p => p.loc === getPlayerLocation()).map(p => p.name),
   });
 
-  // Startup console log
-  consoleLog('FF3 MMO v1.3.3');
-  consoleLog('ROM: ' + rom.prgBanks + ' PRG, ' + rom.chrBanks + ' CHR, mapper ' + rom.mapper);
+  // Startup console log — staggered one at a time
   const email = localStorage.getItem('ff3_email');
-  consoleLog('Auth: ' + (email || 'guest'));
-  consoleLog('Type /help for commands');
+  const startupMsgs = [
+    'FF3 MMO v' + VERSION,
+    'ROM: ' + rom.prgBanks + ' PRG, ' + rom.chrBanks + ' CHR, mapper ' + rom.mapper,
+    'Auth: ' + (email || 'guest'),
+    'Type /help for commands',
+  ];
+  startupMsgs.forEach((msg, i) => setTimeout(() => consoleLog(msg), i * 500));
 }
 
 export function loadFF12ROM(arrayBuffer) {
