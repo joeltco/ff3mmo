@@ -1,6 +1,6 @@
 // player-stats.js — player combat stats, equip slots, exp, and derived stat helpers
 
-import { readJobBaseStats, readStartingHP, readStartingMP, readJobLevelBonus, buildExpTable, JOBS } from './data/jobs.js';
+import { readJobBaseStats, readStartingHP, readStartingMP, readJobLevelBonus, buildExpTable, JOBS, JOB_SCALING } from './data/jobs.js';
 import { ITEMS, isWeapon } from './data/items.js';
 import { BASE_HIT_RATE } from './battle-math.js';
 import { createStatusState } from './status-effects.js';
@@ -68,12 +68,20 @@ export function recalcCombatStats() {
     agiB += item.agiBonus || 0;
     vitB += item.vitBonus || 0;
   }
-  const effStr = (ps.stats ? ps.stats.str : 5) + strB;
-  const effAgi = (ps.stats ? ps.stats.agi : 5) + agiB;
-  // ATK = effective STR + weapon attack powers + floor(AGI/4) + floor(jobLv/4) (from disasm 31/ABEF)
   const jobLv = getJobLevel();
-  ps.atk = effStr + (ITEMS.get(ps.weaponR)?.atk || 0) + (ITEMS.get(ps.weaponL)?.atk || 0)
-         + Math.floor(effAgi / 4) + Math.floor(jobLv / 4);
+  const jlb = getJobLevelStatBonus(ps.jobIdx, jobLv);
+  const effStr = (ps.stats ? ps.stats.str : 5) + strB + jlb.str;
+  const effAgi = (ps.stats ? ps.stats.agi : 5) + agiB + jlb.agi;
+  // ATK = effective STR + weapon attack powers + floor(AGI/4) + floor(jobLv/4) (from disasm 31/ABEF)
+  const unarmed = !isWeapon(ps.weaponR) && !isWeapon(ps.weaponL);
+  // Monk(2)/BlackBelt(13) unarmed: STR/4 + level*1.5 + jobLv/4 + 2 (disasm 31/AC76-AC9B)
+  if (unarmed && (ps.jobIdx === 2 || ps.jobIdx === 13)) {
+    const lv = ps.stats ? ps.stats.level : 1;
+    ps.atk = Math.floor(effStr / 4) + Math.floor(lv * 1.5) + Math.floor(jobLv / 4) + 2;
+  } else {
+    ps.atk = effStr + (ITEMS.get(ps.weaponR)?.atk || 0) + (ITEMS.get(ps.weaponL)?.atk || 0)
+           + Math.floor(effAgi / 4) + Math.floor(jobLv / 4);
+  }
   // Hit rate from equipped weapon (or base if unarmed)
   const rWpn = isWeapon(ps.weaponR) ? ITEMS.get(ps.weaponR) : null;
   const lWpn = isWeapon(ps.weaponL) ? ITEMS.get(ps.weaponL) : null;
@@ -94,8 +102,8 @@ export function recalcCombatStats() {
     if (r) { const arr = Array.isArray(r) ? r : [r]; arr.forEach(e => resSet.add(e)); }
   }
   ps.elemResist = [...resSet];
-  // DEF with equipment vitality bonus
-  recalcDEF(vitB);
+  // DEF with equipment + job level vitality bonus
+  recalcDEF(vitB + jlb.vit);
 }
 
 export function recalcDEF(vitBonus = 0) {
@@ -200,6 +208,18 @@ const JP_RATES = {
 
 export function getJobLevel(jobIdx = ps.jobIdx) {
   return ps.jobLevels[jobIdx]?.level || 1;
+}
+
+// Per-job stat bonuses from job level (remake-style scaling)
+export function getJobLevelStatBonus(jobIdx = ps.jobIdx, jobLv = getJobLevel(jobIdx)) {
+  const w = JOB_SCALING[jobIdx] || [0,0,0,0,0];
+  return {
+    str: Math.floor(jobLv * w[0] / 20),
+    agi: Math.floor(jobLv * w[1] / 20),
+    vit: Math.floor(jobLv * w[2] / 20),
+    int: Math.floor(jobLv * w[3] / 20),
+    mnd: Math.floor(jobLv * w[4] / 20),
+  };
 }
 
 // Call once per battle victory with total actions taken.

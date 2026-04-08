@@ -1,7 +1,7 @@
 // pause-menu.js — pause menu state, transitions, and rendering
 
 import { drawText } from './font-renderer.js';
-import { ps, getEquipSlotId, jobSwitchCost, getJobLevel } from './player-stats.js';
+import { ps, getEquipSlotId, jobSwitchCost, getJobLevel, getJobLevelStatBonus } from './player-stats.js';
 import { JOBS, JOB_ABBR } from './data/jobs.js';
 import { _makeFadedPal, nesColorFade } from './palette.js';
 import { _nameToBytes, _buildItemRowBytes } from './text-utils.js';
@@ -410,9 +410,10 @@ function _drawPauseStats(ctx, shared) {
   statRow('Next', String(s.expToNext));
   statPair('ATK', String(ps.atk),  'DEF', String(ps.def));
   statPair('HIT', String(ps.hitRate), 'EVD', String(ps.evade));
-  statPair('STR', String(s.str),   'AGI', String(s.agi));
-  statPair('VIT', String(s.vit),   'INT', String(s.int));
-  statPair('MND', String(s.mnd),   'MDF', String(ps.mdef));
+  const jlb = getJobLevelStatBonus();
+  statPair('STR', String(s.str + jlb.str), 'AGI', String(s.agi + jlb.agi));
+  statPair('VIT', String(s.vit + jlb.vit), 'INT', String(s.int + jlb.int));
+  statPair('MND', String(s.mnd + jlb.mnd), 'MDF', String(ps.mdef));
   statRow('Gil',  String(ps.gil));
   y += STEP;
 

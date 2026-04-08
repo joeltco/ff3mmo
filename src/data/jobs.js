@@ -71,6 +71,35 @@ export const JOBS = [
   { name: 'Ninja',        weapons: WPN_ALL,                                armor: ARM_ALL,              magic: 0,         maxMagicLv: 0, cpCost:   0, lvReq: 39 },
 ];
 
+// Per-job stat scaling from job level (remake-style).
+// Each weight (0-3) controls how strongly that stat grows: bonus = floor(jobLv * weight / 20)
+// At job level 99, weight 3 = +14, weight 2 = +9, weight 1 = +4
+export const JOB_SCALING = [
+  //                        STR  AGI  VIT  INT  MND
+  /*  0 Onion Knight */  [  1,   1,   1,   1,   1 ],
+  /*  1 Fighter      */  [  3,   1,   2,   0,   0 ],
+  /*  2 Monk         */  [  3,   2,   2,   0,   0 ],
+  /*  3 White Mage   */  [  0,   0,   1,   1,   3 ],
+  /*  4 Black Mage   */  [  0,   0,   1,   3,   1 ],
+  /*  5 Red Mage     */  [  1,   1,   1,   2,   2 ],
+  /*  6 Ranger       */  [  2,   2,   1,   0,   1 ],
+  /*  7 Knight       */  [  3,   1,   3,   0,   0 ],
+  /*  8 Thief        */  [  1,   3,   1,   0,   0 ],
+  /*  9 Scholar      */  [  0,   1,   1,   3,   1 ],
+  /* 10 Geomancer    */  [  1,   1,   1,   2,   2 ],
+  /* 11 Dragoon      */  [  2,   2,   2,   0,   0 ],
+  /* 12 Viking       */  [  3,   0,   3,   0,   0 ],
+  /* 13 Black Belt   */  [  3,   2,   2,   0,   0 ],
+  /* 14 Magic Knight */  [  2,   1,   2,   1,   1 ],
+  /* 15 Conjurer     */  [  0,   0,   1,   2,   2 ],
+  /* 16 Bard         */  [  0,   2,   1,   1,   2 ],
+  /* 17 Summoner     */  [  0,   0,   1,   3,   2 ],
+  /* 18 Devout       */  [  0,   0,   2,   1,   3 ],
+  /* 19 Magus        */  [  0,   0,   1,   3,   1 ],
+  /* 20 Sage         */  [  0,   0,   1,   3,   3 ],
+  /* 21 Ninja        */  [  2,   3,   1,   0,   0 ],
+];
+
 // Convenience — job names array in ROM order
 export const JOB_NAMES = JOBS.map(j => j.name);
 

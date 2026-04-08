@@ -6,7 +6,7 @@ import { transSt } from './transitions.js';
 import { msgState, showMsgBox } from './message-box.js';
 import { chatState, CHAT_TABS, activeTab, tabSelectMode, setActiveTab, setTabSelectMode, chatScrollOffset, setChatScrollOffset } from './chat.js';
 import { ps, recalcCombatStats, changeJob, getEquipSlotId, setEquipSlotId, EQUIP_SLOT_SUBTYPE,
-         getHitWeapon, jobSwitchCost } from './player-stats.js';
+         getHitWeapon, jobSwitchCost, getJobLevelStatBonus } from './player-stats.js';
 import { ITEMS, isHandEquippable, isWeapon, weaponSubtype, isBladedWeapon } from './data/items.js';
 import { selectCursor, saveSlots, saveSlotsToDB } from './save-state.js';
 import { rollHits, calcPotentialHits, elemMultiplier } from './battle-math.js';
@@ -124,11 +124,11 @@ function _battleTargetConfirm() {
   const unarmed = !rIsWeapon && !lIsWeapon;
   const wpnSubtype = weaponSubtype(ps.weaponR) || weaponSubtype(ps.weaponL) || 'unarmed';
   const lv = ps.stats ? ps.stats.level : 1;
-  const agi = ps.stats ? ps.stats.agi : 5;
+  const agi = (ps.stats ? ps.stats.agi : 5) + getJobLevelStatBonus().agi;
   const hitsPerHand = calcPotentialHits(lv, agi, false); // base hits per hand
   const blindMult = ps.status ? blindHitPenalty(ps.status) : 1;
-  // Per-hand ATK: effSTR + weapon.atk + AGI/4 + jobLv/4 (disasm 31/ABEF)
-  const baseAtk = ps.atk - (ITEMS.get(ps.weaponR)?.atk || 0) - (ITEMS.get(ps.weaponL)?.atk || 0); // STR + AGI/4 + jobLv/4
+  // Per-hand ATK: strip weapon ATK from ps.atk (Monk/BB unarmed uses special formula, already in ps.atk)
+  const baseAtk = ps.atk - (ITEMS.get(ps.weaponR)?.atk || 0) - (ITEMS.get(ps.weaponL)?.atk || 0);
   const rWpn = rIsWeapon ? ITEMS.get(ps.weaponR) : null;
   const lWpn = lIsWeapon ? ITEMS.get(ps.weaponL) : null;
   // Roll each hand independently (NES loops per hand at 30/9F6A)

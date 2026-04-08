@@ -3,7 +3,7 @@
 import { rollHits, calcPotentialHits } from './battle-math.js';
 import { BATTLE_RAN_AWAY, BATTLE_CANT_ESCAPE } from './data/strings.js';
 import { makeNameMsg } from './text-utils.js';
-import { ps } from './player-stats.js';
+import { ps, getJobLevelStatBonus } from './player-stats.js';
 import { ITEMS, isWeapon } from './data/items.js';
 import { SFX, playSFX } from './music.js';
 import { processTurnStart, removeStatus, STATUS } from './status-effects.js';
@@ -15,7 +15,7 @@ export function buildTurnOrder(shared) {
   _s = shared;
   const actors = [];
   if (ps.hp > 0) {
-    const playerAgi = ps.stats ? ps.stats.agi : 5;
+    const playerAgi = (ps.stats ? ps.stats.agi : 5) + getJobLevelStatBonus().agi;
     actors.push({ type: 'player', priority: (playerAgi * 2) + Math.floor(Math.random() * 256) });
   }
   for (let i = 0; i < _s.battleAllies.length; i++) {
@@ -24,15 +24,21 @@ export function buildTurnOrder(shared) {
   }
   if (_s.isRandomEncounter && _s.encounterMonsters) {
     for (let i = 0; i < _s.encounterMonsters.length; i++) {
-      if (_s.encounterMonsters[i].hp > 0)
-        actors.push({ type: 'enemy', index: i, priority: Math.floor(Math.random() * 256) });
+      if (_s.encounterMonsters[i].hp > 0) {
+        const mAgi = _s.encounterMonsters[i].agi || 0;
+        actors.push({ type: 'enemy', index: i, priority: (mAgi * 2) + Math.floor(Math.random() * 256) });
+      }
     }
   } else if (_s.pvpSt.isPVPBattle) {
-    if (_s.pvpSt.pvpOpponentStats && _s.pvpSt.pvpOpponentStats.hp > 0)
-      actors.push({ type: 'enemy', index: -1, pvpAllyIdx: -1, priority: Math.floor(Math.random() * 256) });
+    if (_s.pvpSt.pvpOpponentStats && _s.pvpSt.pvpOpponentStats.hp > 0) {
+      const oAgi = _s.pvpSt.pvpOpponentStats.agi || 0;
+      actors.push({ type: 'enemy', index: -1, pvpAllyIdx: -1, priority: (oAgi * 2) + Math.floor(Math.random() * 256) });
+    }
     for (let i = 0; i < _s.pvpSt.pvpEnemyAllies.length; i++) {
-      if (_s.pvpSt.pvpEnemyAllies[i].hp > 0)
-        actors.push({ type: 'enemy', index: -1, pvpAllyIdx: i, priority: Math.floor(Math.random() * 256) });
+      if (_s.pvpSt.pvpEnemyAllies[i].hp > 0) {
+        const aAgi = _s.pvpSt.pvpEnemyAllies[i].agi || 0;
+        actors.push({ type: 'enemy', index: -1, pvpAllyIdx: i, priority: (aAgi * 2) + Math.floor(Math.random() * 256) });
+      }
     }
   } else {
     actors.push({ type: 'enemy', index: -1, priority: Math.floor(Math.random() * 256) });
@@ -78,7 +84,7 @@ export function processNextTurn(shared) {
         if (living.length > 0) {
           const rIdx = living[Math.floor(Math.random() * living.length)];
           _s.inputSt.playerActionPending = { command: 'fight', targetIndex: rIdx,
-            hitResults: rollHits(ps.atk, _s.encounterMonsters[rIdx].def, ps.hitRate || 80, calcPotentialHits(ps.stats?.level || 1, ps.stats?.agi || 5, false)),
+            hitResults: rollHits(ps.atk, _s.encounterMonsters[rIdx].def, ps.hitRate || 80, calcPotentialHits(ps.stats?.level || 1, (ps.stats?.agi || 5) + getJobLevelStatBonus().agi, false)),
             slashFrames: _s.inputSt.playerActionPending.slashFrames,
             slashOffX: _s.inputSt.playerActionPending.slashOffX,
             slashOffY: _s.inputSt.playerActionPending.slashOffY,
@@ -246,7 +252,7 @@ function _playerTurnItem() {
 }
 
 function _playerTurnRun() {
-  const playerAgi = ps.stats ? ps.stats.agi : 5;
+  const playerAgi = (ps.stats ? ps.stats.agi : 5) + getJobLevelStatBonus().agi;
   let avgLevel = 1;
   if (_s.encounterMonsters) {
     const alive = _s.encounterMonsters.filter(m => m.hp > 0);
