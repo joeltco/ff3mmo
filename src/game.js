@@ -2171,10 +2171,6 @@ function _finalizeComboHits() {
   }
   setEnemyDmgNum(allMiss ? { miss: true, timer: 0 } : { value: totalDmg, crit: anyCrit, timer: 0 });
   if (pvpSt.isPVPBattle && !allMiss) pvpSt.pvpOpponentShakeTimer = BATTLE_SHAKE_MS;
-  // Queue hit count + crit messages
-  if (hitsLanded > 1) queueBattleMsg(_nameToBytes(hitsLanded + ' Hits!'));
-  else if (allMiss) queueBattleMsg(BATTLE_MISS);
-  if (anyCrit) queueBattleMsg(BATTLE_CRITICAL);
   battleState = 'player-damage-show';
   battleTimer = 0;
 }
