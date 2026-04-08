@@ -173,7 +173,9 @@ function _getPortraitSrc(isNearFatal, isAttackPose, isHitPose, isDefendPose, isI
     const _ws = weaponSubtype(getHitWeapon(_s.currentHitIdx));
     if (_ws === 'knife' || _ws === 'dagger') {
       src = (isHitRightHand(_s.currentHitIdx) ? _s.battleSpriteKnifeRCanvas : _s.battleSpriteKnifeLCanvas) || src;
-    } else if (_s.battleState === 'attack-start') {
+    } else if (_s.battleState === 'attack-back') {
+      src = (isHitRightHand(_s.currentHitIdx) ? _s.battleSpriteAttackCanvas : _s.battleSpriteAttackLCanvas) || src;
+    } else if (_s.battleState === 'attack-fwd') {
       src = (isHitRightHand(_s.currentHitIdx) ? _s.battleSpriteAttackCanvas : _s.battleSpriteAttackLCanvas) || src;
     }
   } else if ((isDefendPose || isItemUsePose) && _s.battleSpriteDefendCanvas) {
@@ -216,7 +218,7 @@ function _drawPortraitWeapon(px, py, before) {
   // before=true: back-swing blade BEHIND body; false: front blade IN FRONT or swung
   const handWeapon = getHitWeapon(_s.currentHitIdx);
   const wpnSt = weaponSubtype(handWeapon);
-  if (_s.battleState === 'attack-start') {
+  if (_s.battleState === 'attack-back') {
     const rightHand = isHitRightHand(_s.currentHitIdx);
     if (before && rightHand) {
       if (wpnSt === 'knife' && handWeapon === 0x1F && _s.battleDaggerBladeCanvas) _s.ctx.drawImage(_s.battleDaggerBladeCanvas, px + 8, py - 7);
@@ -227,7 +229,7 @@ function _drawPortraitWeapon(px, py, before) {
       else if (wpnSt === 'knife' && _s.battleKnifeBladeCanvas) _s.ctx.drawImage(_s.battleKnifeBladeCanvas, px + 16, py - 7);
       else if (wpnSt === 'sword' && _s.battleSwordBladeCanvas) _s.ctx.drawImage(_s.battleSwordBladeCanvas, px + 16, py - 7);
     }
-  } else if (!before && _s.battleState === 'player-slash') {
+  } else if (!before && (_s.battleState === 'attack-fwd' || _s.battleState === 'player-slash')) {
     if (wpnSt === 'knife' && handWeapon === 0x1F && _s.battleDaggerBladeSwungCanvas) _s.ctx.drawImage(_s.battleDaggerBladeSwungCanvas, px - 16, py + 1);
     else if (wpnSt === 'knife' && _s.battleKnifeBladeSwungCanvas) _s.ctx.drawImage(_s.battleKnifeBladeSwungCanvas, px - 16, py + 1);
     else if (wpnSt === 'sword' && _s.battleSwordBladeSwungCanvas) _s.ctx.drawImage(_s.battleSwordBladeSwungCanvas, px - 16, py + 1);
@@ -349,7 +351,7 @@ function _drawBattlePortrait() {
   const shakeOff = ((_s.battleState === 'enemy-attack' || _s.battleState === 'poison-tick' || _s.battleState === 'pvp-opp-sw-hit') && _s.battleShakeTimer > 0)
     ? (Math.floor(_s.battleShakeTimer / 67) & 1 ? 2 : -2) : 0;
   const isVictoryPose = _s.isVictoryBattleState();
-  const isAttackPose = _s.battleState === 'attack-start' || _s.battleState === 'player-slash';
+  const isAttackPose = _s.battleState === 'attack-back' || _s.battleState === 'attack-fwd' || _s.battleState === 'player-slash';
   const isHitPose = (_s.battleState === 'poison-tick' && _s.playerDamageNum && !_s.playerDamageNum.miss) ||
     (_s.battleState === 'enemy-attack' && _s.playerDamageNum && !_s.playerDamageNum.miss) ||
     (_s.battleState === 'enemy-damage-show' && _s.playerDamageNum && !_s.playerDamageNum.miss) ||
@@ -499,7 +501,7 @@ function _battleMenuStates() {
   const isAppear  = bs === 'boss-appear' || bs === 'monster-slide-in';
   const isFade    = bs === 'battle-fade-in';
   const isMenu    = isFade || bs === 'menu-open' || bs === 'target-select' || bs === 'confirm-pause' ||
-    bs === 'attack-start' || bs === 'player-slash' || bs === 'player-hit-show' || bs === 'player-miss-show' ||
+    bs === 'attack-back' || bs === 'attack-fwd' || bs === 'player-slash' || bs === 'player-hit-show' || bs === 'player-miss-show' ||
     bs === 'player-damage-show' || bs === 'monster-death' || bs === 'defend-anim' ||
     bs.startsWith('item-') || bs === 'sw-throw' || bs === 'sw-hit' ||
     bs === 'run-name-out' || bs === 'run-text-in' || bs === 'run-hold' || bs === 'run-text-out' ||
@@ -734,7 +736,7 @@ function _drawEncounterCursors(gridPos, count, slotCenterY) {
 
 function _isEncounterCombatState() {
   return _s.battleState === 'monster-slide-in' || _s.battleState === 'battle-fade-in' || _s.battleState === 'menu-open' ||
-    _s.battleState === 'target-select' || _s.battleState === 'confirm-pause' || _s.battleState === 'attack-start' ||
+    _s.battleState === 'target-select' || _s.battleState === 'confirm-pause' || _s.battleState === 'attack-back' || _s.battleState === 'attack-fwd' ||
     _s.battleState === 'player-slash' || _s.battleState === 'player-hit-show' || _s.battleState === 'player-miss-show' ||
     _s.battleState === 'player-damage-show' || _s.battleState === 'monster-death' || _s.battleState === 'defend-anim' ||
     _s.battleState.startsWith('item-') || _s.battleState === 'sw-throw' || _s.battleState === 'sw-hit' ||
@@ -836,7 +838,7 @@ function drawBossSpriteBox() {
     const isCombatPVP = _s.battleState === 'battle-fade-in' ||
                     _s.battleState === 'enemy-box-expand' || _s.battleState === 'enemy-box-close' ||
                     _s.battleState === 'menu-open' || _s.battleState === 'target-select' || _s.battleState === 'confirm-pause' ||
-                    _s.battleState === 'attack-start' || _s.battleState === 'player-slash' || _s.battleState === 'player-hit-show' ||
+                    _s.battleState === 'attack-back' || _s.battleState === 'attack-fwd' || _s.battleState === 'player-slash' || _s.battleState === 'player-hit-show' ||
                     _s.battleState === 'player-miss-show' ||
                     _s.battleState === 'player-damage-show' || _s.battleState === 'defend-anim' || _s.battleState.startsWith('item-') ||
                     _s.battleState === 'sw-throw' || _s.battleState === 'sw-hit' ||
@@ -868,7 +870,7 @@ function drawBossSpriteBox() {
   const isDissolve = _s.battleState === 'boss-dissolve';
   const isCombat = _s.battleState === 'battle-fade-in' ||
                    _s.battleState === 'menu-open' || _s.battleState === 'target-select' || _s.battleState === 'confirm-pause' ||
-                   _s.battleState === 'attack-start' || _s.battleState === 'player-slash' || _s.battleState === 'player-hit-show' ||
+                   _s.battleState === 'attack-back' || _s.battleState === 'attack-fwd' || _s.battleState === 'player-slash' || _s.battleState === 'player-hit-show' ||
                    _s.battleState === 'player-miss-show' ||
                    _s.battleState === 'player-damage-show' || _s.battleState === 'defend-anim' || _s.battleState.startsWith('item-') || _s.battleState === 'sw-throw' || _s.battleState === 'sw-hit' || _s.battleState === 'run-name-out' || _s.battleState === 'run-text-in' || _s.battleState === 'run-hold' || _s.battleState === 'run-text-out' || _s.battleState === 'run-fail-name-out' || _s.battleState === 'run-fail-text-in' || _s.battleState === 'run-fail-hold' || _s.battleState === 'run-fail-text-out' || _s.battleState === 'run-fail-name-in' || _s.battleState === 'enemy-flash' ||
                    _s.battleState === 'enemy-attack' ||
@@ -1162,7 +1164,7 @@ function _drawAllyRow(i, ally, panelTop, weaponDraws) {
   const isAllyHit = ((_s.battleState === 'ally-hit' || _s.battleState === 'ally-damage-show-enemy') &&
     _s.enemyTargetAllyIdx === i && _s.allyDamageNums[i] && !_s.allyDamageNums[i].miss) ||
     (_s.battleState === 'pvp-opp-sw-hit' && _s.allyShakeTimer[i] > 0);
-  const isAllyAttack = (_s.battleState === 'ally-attack-start') && _s.currentAllyAttacker === i;
+  const isAllyAttack = (_s.battleState === 'ally-attack-back' || _s.battleState === 'ally-attack-fwd') && _s.currentAllyAttacker === i;
   const isAllyHeal = _s.battleState === 'item-use' && inputSt.playerActionPending && inputSt.playerActionPending.allyIndex === i;
   const ppx = HUD_RIGHT_X + 8, ppy = rowY + 8;
   _s.drawHudBox(HUD_RIGHT_X, rowY, 32, ROSTER_ROW_H, ally.fadeStep);

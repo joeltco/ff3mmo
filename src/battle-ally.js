@@ -45,14 +45,27 @@ function _updateAllyJoin() {
 }
 
 // ── Ally attack combo (multi-hit with summed damage) ─────────────────────────
+const ALLY_BACK_MS = 40;
+const ALLY_FWD_MS = 40;
+const ALLY_SLASH_MS = 90;
+const ALLY_COMBO_PAUSE_MS = 30;
+
 function _updateAllyAttack() {
-  if (_s.battleState === 'ally-attack-start') {
-    const delay = _s.allyHitIdx === 0 ? 100 : 50;
+  if (_s.battleState === 'ally-attack-back') {
+    const delay = _s.allyHitIdx === 0 ? ALLY_BACK_MS : ALLY_COMBO_PAUSE_MS;
     if (_s.battleTimer >= delay) {
       const ally = _s.battleAllies[_s.currentAllyAttacker];
-      // Alternate hands: even hits = R, odd hits = L (if dual-wielding)
       const isLeft = (_s.allyHitIdx % 2 === 1) && ally && isWeapon(ally.weaponL);
       _s.allyHitIsLeft = isLeft;
+      _s.battleState = 'ally-attack-fwd';
+      _s.battleTimer = 0;
+    }
+    return true;
+  }
+  if (_s.battleState === 'ally-attack-fwd') {
+    if (_s.battleTimer >= ALLY_FWD_MS) {
+      const ally = _s.battleAllies[_s.currentAllyAttacker];
+      const isLeft = _s.allyHitIsLeft;
       const activeWpn = isLeft ? ally.weaponL : (ally && ally.weaponId);
       const hit = _s.allyHitResults[_s.allyHitIdx];
       _s.allyHitResult = hit;
@@ -63,7 +76,7 @@ function _updateAllyAttack() {
     return true;
   }
   if (_s.battleState === 'ally-slash') {
-    if (_s.battleTimer >= 200) {
+    if (_s.battleTimer >= ALLY_SLASH_MS) {
       const hit = _s.allyHitResults[_s.allyHitIdx];
       if (hit && !hit.miss) {
         // Defend halving for PVP opponent
@@ -83,7 +96,7 @@ function _updateAllyAttack() {
       if (_s.allyHitIdx < _s.allyHitResults.length) {
         const nextAlly = _s.battleAllies[_s.currentAllyAttacker];
         _s.allyHitIsLeft = (_s.allyHitIdx % 2 === 1) && nextAlly && isWeapon(nextAlly.weaponL);
-        _s.battleState = 'ally-attack-start';
+        _s.battleState = 'ally-attack-back';
         _s.battleTimer = 0;
       } else {
         _finalizeAllyCombo();

@@ -97,6 +97,5 @@ export function generateAllyStats(player) {
   // Hit rate from weapon, attack roll from AGI
   const wpnItem = ITEMS.get(weaponId);
   const hitRate = wpnItem ? (wpnItem.hit || 80) : 80;
-  const attackRoll = Math.max(1, Math.floor(agi / 10));
-  return { name: player.name, palIdx: player.palIdx, jobIdx: player.jobIdx || 0, level: lv, hp, maxHP: hp, atk, def, agi, evade, mdef, hitRate, attackRoll, weaponId, weaponL, fadeStep: ROSTER_FADE_STEPS };
+  return { name: player.name, palIdx: player.palIdx, jobIdx: player.jobIdx || 0, level: lv, hp, maxHP: hp, atk, def, agi, evade, mdef, hitRate, weaponId, weaponL, jobLevel: 1, fadeStep: ROSTER_FADE_STEPS };
 }

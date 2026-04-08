@@ -301,9 +301,12 @@ const DEFEND_SPARKLE_TOTAL_MS = 533;     // 4 tiles × 133ms
 const TARGET_CURSOR_BLINK_MS = 133;      // cursor blink rate during target select
 
 // Hit stats & slash animation constants
-const SLASH_FRAME_MS = 50;               // per frame of slash sprite (3 frames = 150ms)
+const SLASH_FRAME_MS = 30;               // per frame of slash sprite (3 frames = 90ms)
 const SLASH_FRAMES = 3;                  // number of slash animation frames (one per effect set)
-const HIT_PAUSE_MS = 150;               // pause showing damage number per hit
+const BACK_SWING_MS = 40;               // back-swing pose duration
+const FWD_SWING_MS = 40;                // forward-swing pose duration
+const HIT_PAUSE_MS = 100;               // pause showing damage number after final hit
+const HIT_COMBO_PAUSE_MS = 30;          // pause between hits in a combo
 const MISS_SHOW_MS = 300;               // "Miss" text display time
 const PLAYER_DMG_SHOW_MS = 700;         // pause after final hit before enemy counter/death
 // CRIT_RATE, BASE_HIT_RATE, BOSS_HIT_RATE, GOBLIN_HIT_RATE → battle-math.js
@@ -2106,16 +2109,24 @@ function _advanceHitCombo() {
     slashFrames = getSlashFramesForWeapon(handWeapon, isHitRightHand(currentHitIdx));
     if (isBladedWeapon(handWeapon)) { slashOffX = 8; slashOffY = -8; }
     else { slashOffX = Math.floor(Math.random() * 40) - 20; slashOffY = Math.floor(Math.random() * 40) - 20; }
-    battleState = 'attack-start';
+    battleState = 'attack-back';
     battleTimer = 0;
   } else {
     _finalizeComboHits();
   }
 }
-function _updatePlayerAttackStart() {
-  if (battleState !== 'attack-start') return false;
-  const startDelay = currentHitIdx === 0 ? 100 : 50;
-  if (battleTimer >= startDelay) {
+function _updatePlayerAttackBack() {
+  if (battleState !== 'attack-back') return false;
+  const delay = currentHitIdx === 0 ? BACK_SWING_MS : HIT_COMBO_PAUSE_MS;
+  if (battleTimer >= delay) {
+    battleState = 'attack-fwd';
+    battleTimer = 0;
+  }
+  return true;
+}
+function _updatePlayerAttackFwd() {
+  if (battleState !== 'attack-fwd') return false;
+  if (battleTimer >= FWD_SWING_MS) {
     const hw0 = getHitWeapon(currentHitIdx);
     const isCrit0 = inputSt.hitResults[currentHitIdx] && inputSt.hitResults[currentHitIdx].crit;
     playSlashSFX(hw0, isCrit0);
@@ -2169,7 +2180,7 @@ function _updatePlayerSlash() {
 }
 function _updatePlayerHitShow() {
   if (battleState !== 'player-hit-show') return false;
-  const hitPause = (currentHitIdx + 1 < inputSt.hitResults.length) ? 50 : HIT_PAUSE_MS;
+  const hitPause = (currentHitIdx + 1 < inputSt.hitResults.length) ? HIT_COMBO_PAUSE_MS : HIT_PAUSE_MS;
   if (battleTimer >= hitPause) _advanceHitCombo();
   return true;
 }
@@ -2258,7 +2269,8 @@ function _updateMonsterDeath() {
   return true;
 }
 function _updateBattlePlayerAttack() {
-  return _updatePlayerAttackStart() ||
+  return _updatePlayerAttackBack() ||
+         _updatePlayerAttackFwd() ||
          _updatePlayerSlash() ||
          _updatePlayerHitShow() ||
          _updatePlayerMissShow() ||

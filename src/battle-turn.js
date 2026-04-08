@@ -122,12 +122,12 @@ export function processNextTurn(shared) {
             : _s.pvpSt.pvpOpponentStats.def)
         : _s.BOSS_DEF;
     const dualWield = isWeapon(ally.weaponId) && isWeapon(ally.weaponL);
-    const baseHits = ally.attackRoll || Math.max(1, Math.floor(ally.agi / 10));
+    const baseHits = 1 + Math.floor((ally.level || 1) / 7) + Math.floor((ally.jobLevel || 1) / 14) + Math.floor(ally.agi / 8);
     const potentialHits = dualWield ? Math.max(2, baseHits) : Math.max(1, baseHits);
     _s.allyHitResults = rollHits(ally.atk, targetDef, ally.hitRate || 85, potentialHits);
     _s.allyHitIdx = 0;
     _s.allyHitResult = _s.allyHitResults[0];
-    _s.battleState = 'ally-attack-start'; _s.battleTimer = 0;
+    _s.battleState = 'ally-attack-back'; _s.battleTimer = 0;
   } else {
     _s.currentAttacker = turn.index;
     // Monster status turn-start: poison damage, paralysis skip
@@ -173,7 +173,7 @@ function _playerTurnFight() {
   _s.slashFrames = _s.inputSt.playerActionPending.slashFrames;
   _s.slashOffX = _s.inputSt.playerActionPending.slashOffX; _s.slashOffY = _s.inputSt.playerActionPending.slashOffY;
   _s.slashX = _s.inputSt.playerActionPending.slashX; _s.slashY = _s.inputSt.playerActionPending.slashY;
-  _s.battleState = 'attack-start'; _s.battleTimer = 0;
+  _s.battleState = 'attack-back'; _s.battleTimer = 0;
 }
 
 const CURE_NAME_TO_FLAG = {
