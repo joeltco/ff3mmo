@@ -595,6 +595,7 @@ export function initBattleSpriteForJob(romData, jobIdx) {
     const battleSpriteAttack2Canvas = _renderPortrait(idleTiles, _BATTLE_LAYOUT, palette);
     // L fwd swing: idle + L fwd T2/T3
     const atkLFwdTiles = [idleTiles[0], idleTiles[1], d(WR_L_FWD_T2), d(WR_L_FWD_T3)];
+    const battleSpriteAttackL2Canvas = _renderPortrait(atkLFwdTiles, _BATTLE_LAYOUT, palette);
     // Knife poses
     const knifeRTiles = [idleTiles[0], idleTiles[1], d(WR_R_BACK_T2), idleTiles[3]];
     const knifeLTiles = [idleTiles[0], idleTiles[1], idleTiles[2], d(WR_L_BACK[3])];
@@ -646,7 +647,7 @@ export function initBattleSpriteForJob(romData, jobIdx) {
       battleSpriteCanvas, battleSpriteFadeCanvases, silhouetteCanvas,
       battleSpriteAttackCanvas, battleSpriteAttackLCanvas,
       battleSpriteKnifeRCanvas, battleSpriteKnifeLCanvas, battleSpriteKnifeBackCanvas,
-      battleSpriteVictoryCanvas, battleSpriteHitCanvas, battleSpriteAttack2Canvas,
+      battleSpriteVictoryCanvas, battleSpriteHitCanvas, battleSpriteAttack2Canvas, battleSpriteAttackL2Canvas,
       battleSpriteDefendCanvas, battleSpriteDefendFadeCanvases,
       defendSparkleFrames, cureSparkleFrames,
       battleSpriteKneelCanvas, battleSpriteKneelFadeCanvases, sweatFrames,

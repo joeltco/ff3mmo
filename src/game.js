@@ -131,8 +131,9 @@ let battleSpriteDefendFadeCanvases = null; // same for defend pose
 let battleSpriteKneelFadeCanvases = null;  // same for kneel pose
 let battleSpriteVictoryCanvas = null;
 let battleSpriteAttackCanvas = null;   // right-hand attack frame 1 (arm raised)
-let battleSpriteAttack2Canvas = null;  // attack frame 2 (arm swung — ROM frame 3)
-let battleSpriteAttackLCanvas = null;  // left-hand attack frame 1
+let battleSpriteAttack2Canvas = null;  // R fwd swing (arm swung)
+let battleSpriteAttackL2Canvas = null; // L fwd swing
+let battleSpriteAttackLCanvas = null;  // left-hand back swing
 let battleSpriteKnifeRCanvas = null;   // R-hand knife front swing (single trace $2B/$2C/$39/$2E)
 let battleSpriteKnifeLCanvas = null;   // L-hand knife front swing (single trace $01/$3F/$03/$40)
 let battleSpriteKnifeBackCanvas = null;// knife back swing body (dual trace $43/$44/$45/$46)
@@ -679,6 +680,7 @@ function _swapBattleSprites(jobIdx) {
   battleSpriteVictoryCanvas = bs.battleSpriteVictoryCanvas;
   battleSpriteHitCanvas = bs.battleSpriteHitCanvas;
   battleSpriteAttack2Canvas = bs.battleSpriteAttack2Canvas;
+  battleSpriteAttackL2Canvas = bs.battleSpriteAttackL2Canvas || null;
   battleSpriteDefendCanvas = bs.battleSpriteDefendCanvas;
   battleSpriteDefendFadeCanvases = bs.battleSpriteDefendFadeCanvases;
   defendSparkleFrames = bs.defendSparkleFrames;
@@ -1160,6 +1162,7 @@ function _battleDrawShared() {
     get battleSpriteCanvas() { return battleSpriteCanvas; },
     get battleSpriteAttackCanvas() { return battleSpriteAttackCanvas; },
     get battleSpriteAttack2Canvas() { return battleSpriteAttack2Canvas; },
+    get battleSpriteAttackL2Canvas() { return battleSpriteAttackL2Canvas; },
     get battleSpriteAttackLCanvas() { return battleSpriteAttackLCanvas; },
     get battleSpriteKnifeRCanvas() { return battleSpriteKnifeRCanvas; },
     get battleSpriteKnifeLCanvas() { return battleSpriteKnifeLCanvas; },
@@ -1309,6 +1312,7 @@ function _initSpriteAssets(romRaw) {
   battleSpriteVictoryCanvas = bs.battleSpriteVictoryCanvas;
   battleSpriteHitCanvas = bs.battleSpriteHitCanvas;
   battleSpriteAttack2Canvas = bs.battleSpriteAttack2Canvas;
+  battleSpriteAttackL2Canvas = bs.battleSpriteAttackL2Canvas || null;
   battleSpriteDefendCanvas = bs.battleSpriteDefendCanvas;
   battleSpriteDefendFadeCanvases = bs.battleSpriteDefendFadeCanvases;
   defendSparkleFrames = bs.defendSparkleFrames;
