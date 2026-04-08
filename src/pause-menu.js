@@ -365,15 +365,16 @@ function _drawPauseStats(ctx, shared) {
     drawText(ctx, statRx - vb.length * 8, y, vb, fadedPal);
     y += STEP;
   }
+  const r1LabelX = tx + 80; // fixed column for right-side labels
   function statPair(l0, v0, l1, v1) {
     const l0b = _nameToBytes(l0), v0b = _nameToBytes(v0);
     const l1b = _nameToBytes(l1), v1b = _nameToBytes(v1);
     // Left: label then value with 1 char gap
     drawText(ctx, tx, y, l0b, fadedPal);
     drawText(ctx, tx + l0b.length * 8 + 8, y, v0b, fadedPal);
-    // Right: value right-aligned to statRx, label just left of it
+    // Right: fixed label column, value right-aligned to statRx
+    drawText(ctx, r1LabelX, y, l1b, fadedPal);
     drawText(ctx, statRx - v1b.length * 8, y, v1b, fadedPal);
-    drawText(ctx, statRx - v1b.length * 8 - 8 - l1b.length * 8, y, l1b, fadedPal);
     y += STEP;
   }
 
