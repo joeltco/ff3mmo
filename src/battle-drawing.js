@@ -10,7 +10,7 @@ import { getMonsterCanvas, getMonsterWhiteCanvas, hasMonsterSprites } from './mo
 import { getItemNameClean, getMonsterName } from './text-decoder.js';
 import { weaponSubtype } from './data/items.js';
 import { ps, getHitWeapon, isHitRightHand } from './player-stats.js';
-import { _nameToBytes, _buildItemRowBytes, makeExpText, makeGilText, makeFoundItemText, makeJobLevelUpText, drawLvHpRow } from './text-utils.js';
+import { _nameToBytes, _buildItemRowBytes, makeExpText, makeGilText, makeCpText, makeFoundItemText, makeJobLevelUpText, drawLvHpRow } from './text-utils.js';
 import { pvpEnemyCellCenter } from './pvp-math.js';
 import { pvpSt, drawBossSpriteBoxPVP } from './pvp.js';
 import { inputSt } from './input-handler.js';
@@ -1043,6 +1043,9 @@ function _victoryBoxStates() {
   const isGilText    = bs === 'gil-text-in';
   const isGilHold    = bs === 'gil-hold';
   const isGilFadeOut = bs === 'gil-fade-out';
+  const isCpText     = bs === 'cp-text-in';
+  const isCpHold     = bs === 'cp-hold';
+  const isCpFadeOut  = bs === 'cp-fade-out';
   const isLevelText  = bs === 'levelup-text-in';
   const isLevelHold  = bs === 'levelup-hold';
   const isJobLvText = bs === 'joblv-text-in';
@@ -1065,6 +1068,7 @@ function _victoryBoxStates() {
   const isRunFail = isRunFailNameOut || isRunFailTextIn || isRunFailHold || isRunFailTextOut || isRunFailNameIn;
   return { isNameOut, isCelebrate, isClose, isVicText, isVicHold, isVicFadeOut,
            isExpText, isExpHold, isExpFadeOut, isGilText, isGilHold, isGilFadeOut,
+           isCpText, isCpHold, isCpFadeOut,
            isLevelText, isLevelHold, isItemText, isItemHold, isItemFadeOut,
            isJobLvText, isJobLvHold,
            isOut, isMenuFadeState, isRunNameOut, isRunTextIn, isRunHold, isRunTextOut,
@@ -1073,15 +1077,16 @@ function _victoryBoxStates() {
 }
 function _drawVictoryMessage(boxX, boxY, s) {
   let fadeStep = 0;
-  if (s.isVicText || s.isExpText || s.isGilText || s.isItemText || s.isLevelText || s.isJobLvText)
+  if (s.isVicText || s.isExpText || s.isGilText || s.isCpText || s.isItemText || s.isLevelText || s.isJobLvText)
     fadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(_s.battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
-  else if (s.isVicFadeOut || s.isExpFadeOut || s.isGilFadeOut || s.isItemFadeOut || s.isOut)
+  else if (s.isVicFadeOut || s.isExpFadeOut || s.isGilFadeOut || s.isCpFadeOut || s.isItemFadeOut || s.isOut)
     fadeStep = Math.min(Math.floor(_s.battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
   const fadedPal = _makeFadedPal(fadeStep);
   let msg;
   if (s.isVicText || s.isVicHold || s.isVicFadeOut) msg = BATTLE_VICTORY;
   else if (s.isExpText || s.isExpHold || s.isExpFadeOut) msg = makeExpText(_s.encounterExpGained);
   else if (s.isGilText || s.isGilHold || s.isGilFadeOut) msg = makeGilText(_s.encounterGilGained);
+  else if (s.isCpText || s.isCpHold || s.isCpFadeOut) msg = makeCpText(_s.encounterCpGained);
   else if (s.isItemText || s.isItemHold || s.isItemFadeOut) msg = _s.encounterDropItem !== null ? makeFoundItemText(_s.encounterDropItem) : null;
   else if (s.isLevelText || s.isLevelHold) msg = BATTLE_LEVEL_UP;
   else if (s.isJobLvText || s.isJobLvHold) { msg = _s.encounterJobLevelUp ? makeJobLevelUpText(_s.encounterJobLevelUp) : null; }
@@ -1095,6 +1100,7 @@ function drawVictoryBox() {
   const s = _victoryBoxStates();
   const showBox = s.isNameOut || s.isCelebrate || s.isClose || s.isVicText || s.isVicHold || s.isVicFadeOut ||
     s.isExpText || s.isExpHold || s.isExpFadeOut || s.isGilText || s.isGilHold || s.isGilFadeOut ||
+    s.isCpText || s.isCpHold || s.isCpFadeOut ||
     s.isItemText || s.isItemHold || s.isItemFadeOut || s.isLevelText || s.isLevelHold ||
     s.isJobLvText || s.isJobLvHold ||
     s.isOut || s.isMenuFadeState || s.isRun || s.isRunFail;

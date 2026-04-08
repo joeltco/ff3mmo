@@ -245,6 +245,7 @@ let isRandomEncounter = false;
 let encounterMonsters = null;  // [{ hp, maxHP, atk, def, exp }] — array of enemies
 let encounterExpGained = 0;
 let encounterGilGained = 0;
+let encounterCpGained = 0;
 let encounterJobLevelUp = null; // new job level on level-up, or null
 let encounterDropItem = null;  // item id dropped on victory (or null)
 let preBattleTrack = null;
@@ -1063,6 +1064,7 @@ function _battleDrawShared() {
     get runSlideBack() { return runSlideBack; },
     get encounterExpGained() { return encounterExpGained; },
     get encounterGilGained() { return encounterGilGained; },
+    get encounterCpGained() { return encounterCpGained; },
     get encounterDropItem() { return encounterDropItem; },
     get encounterJobLevelUp() { return encounterJobLevelUp; },
     get southWindTargets() { return getTargets(); },
@@ -2226,7 +2228,7 @@ function _triggerPVPVictory() {
   encounterExpGained = 5 * oppLv;
   encounterGilGained = 10 * oppLv;
   grantExp(encounterExpGained);
-  grantCP(1);
+  encounterCpGained = 1; grantCP(encounterCpGained);
   ps.gil += encounterGilGained;
   encounterJobLevelUp = gainJobJP(inputSt.battleActionCount || 1);
   inputSt.battleActionCount = 0;
@@ -2245,7 +2247,7 @@ function _updateMonsterDeath() {
       encounterExpGained = encounterMonsters.reduce((sum, m) => sum + m.exp, 0);
       encounterGilGained = encounterMonsters.reduce((sum, m) => sum + (m.gil || 0), 0);
       grantExp(encounterExpGained);
-      grantCP(encounterMonsters.length);
+      encounterCpGained = encounterMonsters.length; grantCP(encounterCpGained);
       ps.gil += encounterGilGained;
       encounterJobLevelUp = gainJobJP(inputSt.battleActionCount || 1);
       inputSt.battleActionCount = 0;
@@ -2379,7 +2381,7 @@ function _updateBossDissolve(dt) {
     const _bossData = MONSTERS.get(0xCC);
     encounterExpGained = _bossData?.exp || 132; encounterGilGained = _bossData?.gil || 500;
     grantExp(encounterExpGained); ps.gil += encounterGilGained;
-    grantCP(10); // boss gives 10 CP
+    encounterCpGained = 10; grantCP(encounterCpGained); // boss gives 10 CP
     encounterJobLevelUp = gainJobJP(inputSt.battleActionCount || 1);
     inputSt.battleActionCount = 0;
     saveSlotsToDB();
@@ -2411,6 +2413,12 @@ function _updateVictorySequence() {
   } else if (battleState === 'gil-hold') {
     // waits for Z press
   } else if (battleState === 'gil-fade-out') {
+    if (battleTimer >= _textMs) { battleState = 'cp-text-in'; battleTimer = 0; }
+  } else if (battleState === 'cp-text-in') {
+    if (battleTimer >= _textMs) { battleState = 'cp-hold'; battleTimer = 0; }
+  } else if (battleState === 'cp-hold') {
+    // waits for Z press
+  } else if (battleState === 'cp-fade-out') {
     if (battleTimer >= _textMs) { battleState = encounterDropItem !== null ? 'item-text-in' : 'levelup-text-in'; battleTimer = 0; }
   } else if (battleState === 'item-text-in') {
     if (battleTimer >= _textMs) { battleState = 'item-hold'; battleTimer = 0; }

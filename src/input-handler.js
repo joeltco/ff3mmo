@@ -444,7 +444,9 @@ function _battleInputHoldStates() {
   } else if (_s.battleState === 'exp-hold') {
     if (z) { clearZ(); _s.battleState = 'exp-fade-out'; _s.battleTimer = 0; }
   } else if (_s.battleState === 'gil-hold') {
-    if (z) { clearZ(); _s.battleState = (ps.leveledUp || _s.encounterDropItem !== null) ? 'gil-fade-out' : _s.encounterJobLevelUp ? 'joblv-text-in' : 'victory-text-out'; _s.battleTimer = 0; }
+    if (z) { clearZ(); _s.battleState = 'gil-fade-out'; _s.battleTimer = 0; }
+  } else if (_s.battleState === 'cp-hold') {
+    if (z) { clearZ(); _s.battleState = (ps.leveledUp || _s.encounterDropItem !== null) ? 'cp-fade-out' : _s.encounterJobLevelUp ? 'joblv-text-in' : 'victory-text-out'; _s.battleTimer = 0; }
   } else if (_s.battleState === 'item-hold') {
     if (z) { clearZ(); _s.battleState = ps.leveledUp ? 'item-fade-out' : _s.encounterJobLevelUp ? 'joblv-text-in' : 'victory-text-out'; _s.battleTimer = 0; }
   } else if (_s.battleState === 'levelup-hold') {

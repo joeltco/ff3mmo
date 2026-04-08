@@ -58,6 +58,7 @@ export function _makeGotNText(amount, suffix) {
 
 export function makeExpText(amount) { return _makeGotNText(amount, [0xFF, 0x8E, 0xA1, 0x99, 0xC4]); } // " EXP!"
 export function makeGilText(amount) { return _makeGotNText(amount, [0xFF, 0x90, 0xD2, 0xD5, 0xC4]); } // " Gil!"
+export function makeCpText(amount) { return _makeGotNText(amount, [0xFF, 0x8C, 0x99, 0xC4]); } // " CP!"
 export function makeJobLevelUpText(lv) { const name = (JOBS[ps.jobIdx]?.name || 'JOB').toUpperCase(); return _nameToBytes(name + ' LV ' + lv + '!'); }
 
 // Draw "Lv##" left-aligned + colored HP right-aligned on the same row
