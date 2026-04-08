@@ -174,8 +174,8 @@ function _getPortraitSrc(isNearFatal, isAttackPose, isHitPose, isDefendPose, isI
       src = (isHitRightHand(_s.currentHitIdx) ? _s.battleSpriteKnifeRCanvas : _s.battleSpriteKnifeLCanvas) || src;
     } else if (_s.battleState === 'attack-back') {
       src = (isHitRightHand(_s.currentHitIdx) ? _s.battleSpriteAttackCanvas : _s.battleSpriteAttackLCanvas) || src;
-    } else if (_s.battleState === 'attack-fwd') {
-      src = (isHitRightHand(_s.currentHitIdx) ? _s.battleSpriteAttackCanvas : _s.battleSpriteAttackLCanvas) || src;
+    } else if (_s.battleState === 'attack-fwd' || _s.battleState === 'player-slash') {
+      src = (_s.battleSpriteAttack2Canvas || _s.battleSpriteAttackCanvas) || src;
     }
   } else if ((isDefendPose || isItemUsePose) && _s.battleSpriteDefendCanvas) {
     src = _s.battleSpriteDefendCanvas;

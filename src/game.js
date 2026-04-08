@@ -372,8 +372,8 @@ const TARGET_CURSOR_BLINK_MS = 133;      // cursor blink rate during target sele
 // Hit stats & slash animation constants
 const SLASH_FRAME_MS = 30;               // per frame of slash sprite (3 frames = 90ms)
 const SLASH_FRAMES = 3;                  // number of slash animation frames (one per effect set)
-const BACK_SWING_MS = 40;               // back-swing pose duration
-const FWD_SWING_MS = 40;                // forward-swing pose duration
+const BACK_SWING_MS = 80;               // back-swing pose duration
+const FWD_SWING_MS = 80;                // forward-swing pose duration
 const HIT_PAUSE_MS = 100;               // pause showing damage number after final hit
 const HIT_COMBO_PAUSE_MS = 30;          // pause between hits in a combo
 const MISS_SHOW_MS = 300;               // "Miss" text display time
