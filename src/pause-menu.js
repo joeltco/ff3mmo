@@ -409,7 +409,12 @@ function _drawPauseStats(ctx, shared) {
   statPair('MND', String(s.mnd),   'MDF', String(ps.mdef));
   const jobAbbr = JOB_ABBR[ps.jobIdx] || '??';
   const jobLv = getJobLevel(ps.jobIdx);
-  statPair(jobAbbr, 'Lv ' + jobLv, 'CP', String(ps.cp));
+  const jab = _nameToBytes(jobAbbr), jvb = _nameToBytes('Lv ' + jobLv);
+  drawText(ctx, tx, y, jab, fadedPal);
+  drawText(ctx, tx + jab.length * 8 + 8, y, jvb, fadedPal);
+  drawText(ctx, r1LabelX, y, _nameToBytes('CP'), fadedPal);
+  drawText(ctx, r1LabelX + 24 + GAP, y, _nameToBytes(String(ps.cp)), fadedPal);
+  y += STEP;
 
 }
 
