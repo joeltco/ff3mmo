@@ -4,6 +4,8 @@ import { calcDamage, elemMultiplier } from './battle-math.js';
 import { ps, getShieldEvade } from './player-stats.js';
 import { SFX, playSFX } from './music.js';
 import { tryInflictStatus, blindHitPenalty, wakeOnHit } from './status-effects.js';
+import { getMonsterName } from './text-decoder.js';
+import { _nameToBytes } from './text-utils.js';
 
 let _s = null;
 
@@ -101,6 +103,11 @@ function _processEnemyFlash() {
     }
   }
   const mon = (_s.currentAttacker >= 0 && _s.encounterMonsters) ? _s.encounterMonsters[_s.currentAttacker] : null;
+
+  // Queue enemy attack message
+  if (mon) {
+    _s.queueBattleMsg(getMonsterName(mon.monsterId) || _nameToBytes('Enemy'));
+  }
 
   // ── Monster special attack check ──────────────────────────────────────────
   if (mon && mon.spAtkRate > 0 && mon.attacks && mon.attacks.length > 0 && targetAlly < 0) {

@@ -2149,12 +2149,16 @@ function _updateBattleMenuConfirm() {
 }
 
 function _finalizeComboHits() {
-  let totalDmg = 0, anyCrit = false, allMiss = true;
+  let totalDmg = 0, anyCrit = false, allMiss = true, hitsLanded = 0;
   for (const h of inputSt.hitResults) {
-    if (!h.miss) { totalDmg += h.damage; allMiss = false; if (h.crit) anyCrit = true; }
+    if (!h.miss) { totalDmg += h.damage; allMiss = false; hitsLanded++; if (h.crit) anyCrit = true; }
   }
   setEnemyDmgNum(allMiss ? { miss: true, timer: 0 } : { value: totalDmg, crit: anyCrit, timer: 0 });
   if (pvpSt.isPVPBattle && !allMiss) pvpSt.pvpOpponentShakeTimer = BATTLE_SHAKE_MS;
+  // Queue hit count + crit messages
+  if (hitsLanded > 1) queueBattleMsg(_nameToBytes(hitsLanded + ' Hits!'));
+  else if (allMiss) queueBattleMsg(BATTLE_MISS);
+  if (anyCrit) queueBattleMsg(BATTLE_CRITICAL);
   battleState = 'player-damage-show';
   battleTimer = 0;
 }
