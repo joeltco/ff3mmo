@@ -6,6 +6,7 @@ tools/out/
 *.png
 *.gif
 node_modules/
+deploy.sh
 ff3mmo.db
 *.fc0
 *.fc8

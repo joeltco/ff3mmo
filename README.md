@@ -170,14 +170,6 @@ tools/
 - **Single-player economy.** All battle earnings (EXP, Gil, CP, JP) divided by 4 since NES designed for 4 party members. Costs stay at NES values.
 - **Modular battle system.** Poses in `battlePoses` map, combat math centralized in `battle-math.js`, all hit rolling through unified `rollHits()`.
 
-## Deploy
-
-```bash
-./deploy.sh "commit message"
-```
-
-Stages, commits, pushes to GitHub, pulls on production server, and restarts via PM2.
-
 ## Legal
 
 - **ROM files are not distributed** -- users supply their own copies
