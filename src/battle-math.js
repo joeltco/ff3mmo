@@ -33,10 +33,10 @@ export function calcDamage(atk, def, crit = false, critBonus = 0, elemMult = 1) 
 }
 
 // NES FF3 hit count (from disasm 31/ABCE-ABE3): 1 + floor(level/16) + floor(AGI/16)
-// dualWield/unarmed: min 2 hits. Single weapon: min 1.
+// dualWield: each hand gets full hits (total = base * 2). Single weapon: min 1.
 export function calcPotentialHits(level, agi, dualWield) {
-  const base = 1 + Math.floor(level / 16) + Math.floor(agi / 16);
-  return dualWield ? Math.max(2, base) : Math.max(1, base);
+  const base = Math.max(1, 1 + Math.floor(level / 16) + Math.floor(agi / 16));
+  return dualWield ? base * 2 : base;
 }
 
 // Roll per-hit results for player/ally/PVP attacks.
