@@ -295,6 +295,9 @@ function advanceBattleMsgZ() {
   }
   return false;
 }
+function isBattleMsgBusy() {
+  return battleMsgCurrent !== null;
+}
 function clearBattleMsgQueue() {
   battleMsgQueue = [];
   battleMsgCurrent = null;
@@ -1090,6 +1093,7 @@ function _enemyShared() {
     BATTLE_DMG_SHOW_MS,
     processNextTurn,
     queueBattleMsg,
+    isBattleMsgBusy,
     isTeamWiped: _isTeamWiped,
   };
 }
@@ -1953,6 +1957,7 @@ function _turnShared() {
     removeItem,
     startMagicItem: () => startMagicItem(_magicItemShared()),
     queueBattleMsg,
+    isBattleMsgBusy,
     get playerName() { return saveSlots[selectCursor]?.name || null; },
     get sprite() { return sprite; },
   };
@@ -2271,7 +2276,8 @@ function _updatePlayerDamageShow() {
         battleState = 'pvp-dissolve'; battleTimer = 0; playSFX(SFX.MONSTER_DEATH);
       } else { battleState = 'boss-dissolve'; battleTimer = 0; playSFX(SFX.BOSS_DEATH); }
     } else {
-      processNextTurn();
+      if (battleMsgCurrent) { battleState = 'msg-wait'; battleTimer = 0; }
+      else processNextTurn();
     }
   }
   return true;
@@ -2352,10 +2358,10 @@ function _updateBattlePlayerAttack() {
 
 function _updateBattleDefendItem(dt) {
   if (battleState === 'defend-anim') {
-    // Defend pose + sparkle for 32 frames (~533ms), then enemy turn
+    // Defend pose + sparkle for 32 frames (~533ms), then wait for msg, then enemy turn
     if (battleTimer >= DEFEND_SPARKLE_TOTAL_MS) {
-      // Remaining turns in queue
-      processNextTurn();
+      if (battleMsgCurrent) { battleState = 'msg-wait'; battleTimer = 0; }
+      else processNextTurn();
     }
   } else if (battleState === 'item-use') {
     // Heal animation — same duration as defend sparkle, then next turn
@@ -2549,6 +2555,7 @@ function updateBattle(dt) {
   if (pvpSt.isPVPBattle) { updatePVPBattle(dt, _pvpShared()); return; }
   _updateBattleTimers(dt);
   _updateBattleMsg(dt);
+  if (battleState === 'msg-wait') { if (!battleMsgCurrent) processNextTurn(); return; }
   _updatePoisonTick()         ||
   _updateBattleOpening()      ||
   _updateBattleMenuConfirm()  ||

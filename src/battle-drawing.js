@@ -504,7 +504,7 @@ function _battleMenuStates() {
     bs === 'run-success' || bs === 'run-fail' || bs === 'enemy-flash' ||
     bs === 'enemy-attack' || bs === 'enemy-damage-show' || bs === 'poison-tick' || bs === 'pvp-second-windup' ||
     bs === 'pvp-ally-appear' || bs === 'pvp-defend-anim' || bs === 'pvp-enemy-slash' ||
-    bs === 'pvp-opp-potion' || bs === 'pvp-opp-sw-throw' || bs === 'pvp-opp-sw-hit' || bs === 'message-hold' ||
+    bs === 'pvp-opp-potion' || bs === 'pvp-opp-sw-throw' || bs === 'pvp-opp-sw-hit' || bs === 'message-hold' || bs === 'msg-wait' ||
     bs.startsWith('ally-') || bs === 'boss-dissolve' ||
     bs === 'defeat-monster-fade' || bs === 'defeat-text' || bs === 'team-wipe';
   const isVictory = _s.isVictoryBattleState() || bs === 'victory-name-out' || bs === 'encounter-box-close' || bs === 'enemy-box-close' || bs === 'defeat-close';
@@ -737,7 +737,7 @@ function _isEncounterCombatState() {
     _s.battleState.startsWith('item-') || _s.battleState === 'sw-throw' || _s.battleState === 'sw-hit' ||
     _s.battleState === 'run-success' || _s.battleState === 'run-fail' ||
     _s.battleState === 'enemy-flash' || _s.battleState === 'enemy-attack' || _s.battleState === 'enemy-damage-show' ||
-    _s.battleState === 'poison-tick' || _s.battleState === 'message-hold' || _s.battleState.startsWith('ally-') ||
+    _s.battleState === 'poison-tick' || _s.battleState === 'message-hold' || _s.battleState === 'msg-wait' || _s.battleState.startsWith('ally-') ||
     _s.battleState === 'defeat-monster-fade' || _s.battleState === 'defeat-text';
 }
 function drawEncounterBox() {
@@ -837,7 +837,7 @@ function drawBossSpriteBox() {
                     _s.battleState === 'sw-throw' || _s.battleState === 'sw-hit' ||
                     _s.battleState === 'enemy-flash' || _s.battleState === 'enemy-attack' ||
                     _s.battleState === 'enemy-damage-show' || _s.battleState === 'poison-tick' || _s.battleState === 'pvp-second-windup' ||
-                    _s.battleState === 'pvp-ally-appear' || _s.battleState === 'message-hold' ||
+                    _s.battleState === 'pvp-ally-appear' || _s.battleState === 'message-hold' || _s.battleState === 'msg-wait' ||
                     _s.battleState.startsWith('ally-') ||
                     _s.battleState === 'pvp-dissolve' || _s.battleState === 'pvp-defend-anim' ||
                     _s.battleState === 'pvp-enemy-slash' || _s.battleState === 'pvp-opp-potion' ||
@@ -862,7 +862,7 @@ function drawBossSpriteBox() {
                    _s.battleState === 'player-miss-show' ||
                    _s.battleState === 'player-damage-show' || _s.battleState === 'defend-anim' || _s.battleState.startsWith('item-') || _s.battleState === 'sw-throw' || _s.battleState === 'sw-hit' || _s.battleState === 'run-success' || _s.battleState === 'run-fail' || _s.battleState === 'enemy-flash' ||
                    _s.battleState === 'enemy-attack' ||
-                   _s.battleState === 'enemy-damage-show' || _s.battleState === 'poison-tick' || _s.battleState === 'message-hold' ||
+                   _s.battleState === 'enemy-damage-show' || _s.battleState === 'poison-tick' || _s.battleState === 'message-hold' || _s.battleState === 'msg-wait' ||
                    _s.battleState.startsWith('ally-') ||
                    _s.battleState === 'defeat-monster-fade' || _s.battleState === 'defeat-text';
   const isVictory = _s.battleState === 'victory-name-out' || _s.battleState === 'victory-celebrate' ||

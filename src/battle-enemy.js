@@ -84,8 +84,9 @@ function _doSpecialAttack(mon, spec) {
     }
     _s.battleState = 'enemy-damage-show'; _s.battleTimer = 0;
   } else {
-    // No-op attacks (Reflect, Sence, etc.) — skip
-    _s.processNextTurn();
+    // No-op attacks (Reflect, Sence, etc.) — wait for msg then skip
+    if (_s.isBattleMsgBusy()) { _s.battleState = 'msg-wait'; _s.battleTimer = 0; }
+    else _s.processNextTurn();
   }
 }
 
@@ -189,6 +190,7 @@ function _processEnemyDamageShowState() {
   if (_s.battleTimer < _s.BATTLE_DMG_SHOW_MS) return;
   if (_s.isTeamWiped()) {
     _s.isDefending = false; _s.battleState = 'team-wipe'; _s.battleTimer = 0;
+  } else if (_s.isBattleMsgBusy()) { _s.battleState = 'msg-wait'; _s.battleTimer = 0;
   } else { _s.processNextTurn(); }
 }
 
