@@ -2,6 +2,31 @@
 
 All notable changes to this project are documented here.
 
+## 1.5.0 — 2026-04-08
+
+### FF3 Job Levels + Combat Overhaul
+
+- **FF3 job levels** replace FF2 proficiency system. JP earned per battle action, 100 JP per level, max 99. Per-job JP rates from NES disassembly.
+- **Job level affects ATK** (`floor(jobLv/4)`) not hit count — verified from disassembly 31/ABEF.
+- **Hit count from disassembly** — `1 + floor(level/16) + floor(AGI/16)` per hand (31/ABCE).
+- **Dual wield NES-accurate** — each hand rolls independently with own ATK/hitRate/element. R hand combo first, then L hand (NES loop at 30/9F6A).
+- **Back/fwd swing animation** — 80ms back swing, 80ms forward swing per hit. Distinct portrait poses using attack2 canvas.
+- **Battle pose system modularized** — 14 canvas variables replaced with `battlePoses` map. One shared getter.
+- **Battle message strip** — right panel (144,160) shows all combat + victory messages. Auto-advance for combat, Z-advance for victory. Horizontal scroll for long messages.
+- **Victory state machine simplified** — ~14 states collapsed to 3 (`victory-celebrate` → `victory-msg` → close).
+- **Run states simplified** — 10 run states collapsed to 2 (`run-success`, `run-fail`).
+- **msg-wait state** — battle turns wait for messages to finish before advancing.
+- **Combat math centralized** — `calcPotentialHits()` and `rollHits()` with opts (shieldEvade, evade, defendHalve, elemMult) in battle-math.js. Used by player, allies, PVP.
+- **Player name in battle messages** — "Joel attacks!", "Joel defends!"
+- **Enemy name messages** — monster name shown when enemy attacks
+- **Stats screen** — added HIT, EVD, MDF rows
+- **Job menu** — 2-letter abbreviations (Fi, Mo, WM, etc.), per-job level display, discounted CP costs
+- **Single-player economy** — all earnings /4 (EXP, Gil, CP, JP). Costs stay NES values.
+- **CP cost discount** — `jobSwitchCost = max(0, baseCost - (jobLv - 1))`
+- **Battle strings from disassembly** — Critical!, Strike first!, Ambushed!, Ineffective, Slain, etc.
+- **Fighter R FWD leg tile fix** — first byte 0xE0 (was 0x00)
+- **prof-icons.js deleted** — FF2 proficiency system fully removed
+
 ## 1.4.0 — 2026-04-06
 
 ### Per-item equip restrictions + Warrior PPU sprites
