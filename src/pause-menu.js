@@ -366,12 +366,14 @@ function _drawPauseStats(ctx, shared) {
     y += STEP;
   }
   function statPair(l0, v0, l1, v1) {
-    const midX = tx + 64;
-    const v0b = _nameToBytes(v0), v1b = _nameToBytes(v1);
-    drawText(ctx, tx, y, _nameToBytes(l0), fadedPal);
-    drawText(ctx, midX - v0b.length * 8, y, v0b, fadedPal);
-    drawText(ctx, midX + 4, y, _nameToBytes(l1), fadedPal);
+    const l0b = _nameToBytes(l0), v0b = _nameToBytes(v0);
+    const l1b = _nameToBytes(l1), v1b = _nameToBytes(v1);
+    // Left: label then value with 1 char gap
+    drawText(ctx, tx, y, l0b, fadedPal);
+    drawText(ctx, tx + l0b.length * 8 + 8, y, v0b, fadedPal);
+    // Right: value right-aligned to statRx, label just left of it
     drawText(ctx, statRx - v1b.length * 8, y, v1b, fadedPal);
+    drawText(ctx, statRx - v1b.length * 8 - 8 - l1b.length * 8, y, l1b, fadedPal);
     y += STEP;
   }
 
