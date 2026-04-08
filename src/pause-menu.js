@@ -384,13 +384,7 @@ function _drawPauseStats(ctx, shared) {
     y += STEP;
   }
 
-  // Lv left-aligned, Gil right-aligned (Gil can be 6+ digits)
-  drawText(ctx, tx, y, _nameToBytes('Lv'), fadedPal);
-  drawText(ctx, tx + 24 + 8, y, _nameToBytes(String(s.level)), fadedPal);
-  const gilb = _nameToBytes(String(ps.gil));
-  drawText(ctx, statRx - gilb.length * 8, y, gilb, fadedPal);
-  drawText(ctx, statRx - gilb.length * 8 - GAP - 24, y, _nameToBytes('Gil'), fadedPal);
-  y += STEP;
+  statRow('Lv',   String(s.level));
   const hpStr = ps.hp + '/' + s.maxHP;
   const mpStr = ps.mp + '/' + s.maxMP;
   const hpb = _nameToBytes(hpStr), mpb = _nameToBytes(mpStr);
@@ -407,13 +401,7 @@ function _drawPauseStats(ctx, shared) {
   statPair('STR', String(s.str),   'AGI', String(s.agi));
   statPair('VIT', String(s.vit),   'INT', String(s.int));
   statPair('MND', String(s.mnd),   'MDF', String(ps.mdef));
-  const jobAbbr = JOB_ABBR[ps.jobIdx] || '??';
-  const jobLv = getJobLevel(ps.jobIdx);
-  const jab = _nameToBytes(jobAbbr), jvb = _nameToBytes('Lv ' + jobLv);
-  drawText(ctx, tx, y, jab, fadedPal);
-  drawText(ctx, tx + jab.length * 8 + 8, y, jvb, fadedPal);
-  drawText(ctx, r1LabelX, y, _nameToBytes('CP'), fadedPal);
-  drawText(ctx, r1LabelX + 24 + GAP, y, _nameToBytes(String(ps.cp)), fadedPal);
+  statRow('Gil',  String(ps.gil));
   y += STEP;
 
 }
