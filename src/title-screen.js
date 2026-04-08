@@ -25,8 +25,12 @@ const TITLE_WAIT_MS        = 0;
 const TITLE_ZBOX_MS        = 200;
 const TITLE_TRANSITION_MS  = 800;
 const SHIP_DRIFT_PX        = 56;
-const SHIP_IDLE_DRIFT      = 12;
 const SHIP_WINDUP_PX       = 20;
+
+// Spring physics for ship drift
+const SHIP_SPRING_K        = 0.0018;  // spring stiffness (force per px per ms²)
+const SHIP_SPRING_DAMP     = 0.006;   // damping coefficient (per ms)
+const SHIP_SPRING_NUDGE    = 0.008;   // gentle random nudge strength (px/ms²)
 const SELECT_BOX_OFFSET_X  = 48;
 const TITLE_SHIP_ANIM_MS   = 100;
 const TITLE_SHADOW_ANIM_MS = 50;
@@ -73,7 +77,9 @@ export const titleSt = {
   waterScroll:       0,
   underwaterScroll:  0,
   shipTimer:         0,
-  shipDriftTimer:    0,     // accumulates during select idle states, starts at 0 on arrival
+  shipDriftTimer:    0,     // legacy — kept for shipTimer frame calc
+  shipPosX:          0,     // current X offset from anchor (spring physics)
+  shipVelX:          0,     // current X velocity (px/ms)
   deleteMode:        false,
 
   // Sprite caches — populated after init
@@ -287,6 +293,20 @@ export function drawTitle(ctx, shared) {
 
 function _easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
 
+// Spring physics: pulls shipPosX toward 0 (anchor) with damping + random nudges
+export function updateShipSpring(dt) {
+  const ts = titleSt;
+  // Spring force toward anchor (0)
+  const springF = -SHIP_SPRING_K * ts.shipPosX;
+  // Damping force opposing velocity
+  const dampF = -SHIP_SPRING_DAMP * ts.shipVelX;
+  // Gentle random nudge (wind) — changes slowly via low-freq noise
+  const nudge = Math.sin(ts.shipTimer * 0.0004) * Math.cos(ts.shipTimer * 0.00017) * SHIP_SPRING_NUDGE;
+
+  ts.shipVelX += (springF + dampF + nudge) * dt;
+  ts.shipPosX += ts.shipVelX * dt;
+}
+
 function _isShipLeftState(s) {
   return s === 'select-fade-in' || s === 'select' || s === 'name-entry';
 }
@@ -360,23 +380,26 @@ function _drawTitleShip(ctx, cx, cy, fl) {
   let shipX;
 
   if (ts.state === 'to-select') {
+    // Eased slide from center to left anchor
     const t = _easeInOut(Math.min(ts.timer / TITLE_TRANSITION_MS, 1));
     shipX = cx - 16 - t * SHIP_DRIFT_PX;
   } else if (ts.state === 'to-main') {
+    // Spring back to center from current left position
     const t = _easeInOut(Math.min(ts.timer / TITLE_TRANSITION_MS, 1));
-    const startOsc = Math.sin(ts.shipDriftTimer / 3000 * Math.PI * 2) * SHIP_IDLE_DRIFT;
-    shipX = (leftX + startOsc) + (cx - 16 - (leftX + startOsc)) * t;
+    const startX = leftX + ts.shipPosX;
+    shipX = startX + (cx - 16 - startX) * t;
   } else if (ts.state === 'select-fade-out') {
     // Wind-up left
     const t = Math.min(ts.timer / ((SELECT_TEXT_STEPS + 1) * SELECT_TEXT_STEP_MS), 1);
-    shipX = leftX - t * SHIP_WINDUP_PX;
+    shipX = leftX + ts.shipPosX - t * SHIP_WINDUP_PX;
   } else if (ts.state === 'main-out') {
     // Fly right
     const t = Math.min(ts.timer / TITLE_FADE_MS, 1);
-    shipX = (leftX - SHIP_WINDUP_PX) + (cx + 300 - (leftX - SHIP_WINDUP_PX)) * t * t;
+    const startX = leftX + ts.shipPosX - SHIP_WINDUP_PX;
+    shipX = startX + (cx + 300 - startX) * t * t;
   } else if (_isShipLeftState(ts.state) || ts.state === 'select-fade-out-back') {
-    const osc = Math.sin(ts.shipDriftTimer / 3000 * Math.PI * 2) * SHIP_IDLE_DRIFT;
-    shipX = leftX + osc;
+    // Spring-driven drift around left anchor
+    shipX = leftX + ts.shipPosX;
   } else {
     shipX = cx - 16;
   }

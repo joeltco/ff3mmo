@@ -55,7 +55,7 @@ import { rosterBattleFade, setLocationGetter, getPlayerLocation, rosterLocForMap
          drawRoster, drawRosterMenu } from './roster.js';
 import { msgState, showMsgBox, updateMsgBox, drawMsgBox } from './message-box.js';
 import { titleSt, isTitleActiveState, titleFadeLevel, titleFadePal, drawTitleOcean, drawTitleWater, drawTitleSky, drawTitleUnderwater, drawUnderwaterSprites, drawTitleSkyInHUD, drawTitle,
-         updateTitleUnderwater, updateTitleSelect, onNameEntryKeyDown } from './title-screen.js';
+         updateTitleUnderwater, updateTitleSelect, onNameEntryKeyDown, updateShipSpring } from './title-screen.js';
 import { pauseSt, updatePauseMenu, drawPauseMenu } from './pause-menu.js';
 import { transSt, topBoxSt, loadingSt, startWipeTransition, updateTransition, updateTopBoxScroll, drawTransitionOverlay } from './transitions.js';
 import { inputSt, handleBattleInput, handleRosterInput, handlePauseInput } from './input-handler.js';
@@ -1787,7 +1787,7 @@ function updateTitle(dt) {
     titleSt.waterScroll += dt * 0.12;
     titleSt.shipTimer += dt;
     const _s = titleSt.state;
-    if (_s === 'select-fade-in' || _s === 'select' || _s === 'name-entry' || _s === 'select-fade-out-back') titleSt.shipDriftTimer += dt;
+    if (_s === 'select-fade-in' || _s === 'select' || _s === 'name-entry' || _s === 'select-fade-out-back') updateShipSpring(dt);
   }
 
   switch (titleSt.state) {
@@ -1806,7 +1806,7 @@ function updateTitle(dt) {
       if (keys['z'] || keys['Z']) { keys['z'] = false; keys['Z'] = false; playSFX(SFX.CONFIRM); titleSt.state = 'logo-content-out'; titleSt.timer = 0; }
       break;
     case 'logo-content-out': if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'to-select'; titleSt.timer = 0; } break;
-    case 'to-select':            if (titleSt.timer >= TITLE_TRANSITION_MS) { titleSt.state = 'select-fade-in'; titleSt.timer = 0; titleSt.shipDriftTimer = 0; setSelectCursor(0); titleSt.deleteMode = false; } break;
+    case 'to-select':            if (titleSt.timer >= TITLE_TRANSITION_MS) { titleSt.state = 'select-fade-in'; titleSt.timer = 0; titleSt.shipPosX = 0; titleSt.shipVelX = 0; setSelectCursor(0); titleSt.deleteMode = false; } break;
     case 'select-fade-in':       if (titleSt.timer >= (SELECT_TEXT_STEPS + 1) * SELECT_TEXT_STEP_MS) { titleSt.state = 'select'; titleSt.timer = 0; } break;
     case 'select':               updateTitleSelect(keys); break;
     case 'name-entry':           break;
