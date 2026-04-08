@@ -3,7 +3,7 @@
 import { drawText } from './font-renderer.js';
 import { ps, getEquipSlotId, jobSwitchCost, getJobLevel } from './player-stats.js';
 import { JOBS, JOB_ABBR } from './data/jobs.js';
-import { _makeFadedPal } from './palette.js';
+import { _makeFadedPal, nesColorFade } from './palette.js';
 import { _nameToBytes, _buildItemRowBytes } from './text-utils.js';
 import { getItemNameClean } from './text-decoder.js';
 import { stopFF1Music, resumeMusic, playFF1Track, FF1_TRACKS } from './music.js';
@@ -462,9 +462,11 @@ function _drawPauseJob(ctx, shared) {
     const canAfford = isCurrentJob || ps.cp >= cost;
     let pal;
     if (isCurrentJob) {
-      pal = _makeFadedPal(fadeStep); pal[3] = 0x2A; // green
+      let g = 0x2A; for (let s = 0; s < fadeStep; s++) g = nesColorFade(g);
+      pal = [0x0F, 0x0F, 0x0F, g]; // green, faded
     } else if (!canAfford) {
-      pal = [0x0F, 0x0F, 0x0F, 0x00]; // grey — can't afford
+      let gr = 0x00; for (let s = 0; s < fadeStep; s++) gr = nesColorFade(gr);
+      pal = [0x0F, 0x0F, 0x0F, gr]; // grey, faded
     } else {
       pal = fadedPal;
     }
