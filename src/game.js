@@ -2552,10 +2552,10 @@ function _updatePoisonTick() {
 function updateBattle(dt) {
   if (battleState === 'none') return;
   battleTimer += Math.min(dt, 33);
-  if (pvpSt.isPVPBattle) { updatePVPBattle(dt, _pvpShared()); return; }
-  _updateBattleTimers(dt);
   _updateBattleMsg(dt);
   if (battleState === 'msg-wait') { if (!battleMsgCurrent) processNextTurn(); return; }
+  if (pvpSt.isPVPBattle) { updatePVPBattle(dt, _pvpShared()); return; }
+  _updateBattleTimers(dt);
   _updatePoisonTick()         ||
   _updateBattleOpening()      ||
   _updateBattleMenuConfirm()  ||
