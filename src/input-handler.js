@@ -9,7 +9,7 @@ import { ps, recalcCombatStats, changeJob, getEquipSlotId, setEquipSlotId, EQUIP
          getHitWeapon, jobSwitchCost } from './player-stats.js';
 import { ITEMS, isHandEquippable, isWeapon, weaponSubtype, isBladedWeapon } from './data/items.js';
 import { selectCursor, saveSlots, saveSlotsToDB } from './save-state.js';
-import { rollHits, elemMultiplier } from './battle-math.js';
+import { rollHits, calcPotentialHits, elemMultiplier } from './battle-math.js';
 import { blindHitPenalty, removeStatus, STATUS } from './status-effects.js';
 import { _nameToBytes } from './text-utils.js';
 import { MONSTERS } from './data/monsters.js';
@@ -123,11 +123,7 @@ function _battleTargetConfirm() {
   const dualWield = rIsWeapon && lIsWeapon;
   const unarmed = !rIsWeapon && !lIsWeapon;
   const wpnSubtype = weaponSubtype(ps.weaponR) || weaponSubtype(ps.weaponL) || 'unarmed';
-  // NES FF3 hit count (from disasm 31/ABCE): 1 + floor(level/16) + floor(AGI/16)
-  const charLv = ps.stats ? ps.stats.level : 1;
-  const agi = ps.stats ? ps.stats.agi : 5;
-  const baseHits = 1 + Math.floor(charLv / 16) + Math.floor(agi / 16);
-  const potentialHits = (dualWield || unarmed) ? Math.max(2, baseHits) : Math.max(1, baseHits);
+  const potentialHits = calcPotentialHits(ps.stats ? ps.stats.level : 1, ps.stats ? ps.stats.agi : 5, dualWield || unarmed);
   const hitRate = ps.hitRate * (ps.status ? blindHitPenalty(ps.status) : 1);
   // Weapon element for elemental multiplier
   const rElem = rIsWeapon ? (ITEMS.get(ps.weaponR)?.element || null) : null;
@@ -136,7 +132,7 @@ function _battleTargetConfirm() {
   if (_s.isRandomEncounter && _s.encounterMonsters) {
     const mon = _s.encounterMonsters[inputSt.targetIndex];
     const eMult = elemMultiplier(wpnElem, mon.weakness, mon.resist);
-    inputSt.hitResults = rollHits(ps.atk, mon.def, hitRate, potentialHits, eMult);
+    inputSt.hitResults = rollHits(ps.atk, mon.def, hitRate, potentialHits, { elemMult: eMult });
   } else {
     const targetDef = _s.isPVPBattle && _s.pvpOpponentStats
       ? (_s.pvpPlayerTargetIdx >= 0

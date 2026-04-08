@@ -32,14 +32,31 @@ export function calcDamage(atk, def, crit = false, critBonus = 0, elemMult = 1) 
   return Math.min(DAMAGE_CAP, Math.max(1, dmg));
 }
 
-// elemMult: elemental multiplier (from elemMultiplier())
-export function rollHits(atk, def, hitRate, potentialHits, elemMult = 1) {
-  const critBonus = Math.floor(atk / 4);                  // flat crit bonus ~25% of ATK
+// NES FF3 hit count (from disasm 31/ABCE-ABE3): 1 + floor(level/16) + floor(AGI/16)
+// dualWield/unarmed: min 2 hits. Single weapon: min 1.
+export function calcPotentialHits(level, agi, dualWield) {
+  const base = 1 + Math.floor(level / 16) + Math.floor(agi / 16);
+  return dualWield ? Math.max(2, base) : Math.max(1, base);
+}
+
+// Roll per-hit results for player/ally/PVP attacks.
+// opts.shieldEvade: % chance to block per hit (0 = no shield)
+// opts.evade: % chance to dodge per hit (0 = no armor evade)
+// opts.defendHalve: true to halve damage (defender is defending)
+// opts.elemMult: elemental multiplier (default 1)
+export function rollHits(atk, def, hitRate, potentialHits, opts = {}) {
+  const { shieldEvade = 0, evade = 0, defendHalve = false, elemMult = 1 } = opts;
+  const critBonus = Math.floor(atk / 4);
   const results = [];
   for (let i = 0; i < potentialHits; i++) {
-    if (Math.random() * 100 < effHitRate) {
-      const crit = Math.random() * 100 < effCritRate;
-      const dmg = calcDamage(atk, def, crit, critBonus, elemMult);
+    if (shieldEvade > 0 && Math.random() * 100 < shieldEvade) {
+      results.push({ shieldBlock: true });
+    } else if (evade > 0 && Math.random() * 100 < evade) {
+      results.push({ miss: true });
+    } else if (Math.random() * 100 < hitRate) {
+      const crit = Math.random() * 100 < CRIT_RATE;
+      let dmg = calcDamage(atk, def, crit, critBonus, elemMult);
+      if (defendHalve) dmg = Math.max(1, Math.floor(dmg / 2));
       results.push({ damage: dmg, crit });
     } else {
       results.push({ miss: true });

@@ -1,6 +1,6 @@
 // Battle turn order + turn dispatch — extracted from game.js
 
-import { rollHits } from './battle-math.js';
+import { rollHits, calcPotentialHits } from './battle-math.js';
 import { ps } from './player-stats.js';
 import { ITEMS, isWeapon } from './data/items.js';
 import { SFX, playSFX } from './music.js';
@@ -76,7 +76,7 @@ export function processNextTurn(shared) {
         if (living.length > 0) {
           const rIdx = living[Math.floor(Math.random() * living.length)];
           _s.inputSt.playerActionPending = { command: 'fight', targetIndex: rIdx,
-            hitResults: rollHits(ps.atk, _s.encounterMonsters[rIdx].def, ps.hitRate || 80, Math.max(1, ps.attackRoll || 1)),
+            hitResults: rollHits(ps.atk, _s.encounterMonsters[rIdx].def, ps.hitRate || 80, calcPotentialHits(ps.stats?.level || 1, ps.stats?.agi || 5, false)),
             slashFrames: _s.inputSt.playerActionPending.slashFrames,
             slashOffX: _s.inputSt.playerActionPending.slashOffX,
             slashOffY: _s.inputSt.playerActionPending.slashOffY,
@@ -122,8 +122,7 @@ export function processNextTurn(shared) {
             : _s.pvpSt.pvpOpponentStats.def)
         : _s.BOSS_DEF;
     const dualWield = isWeapon(ally.weaponId) && isWeapon(ally.weaponL);
-    const baseHits = 1 + Math.floor((ally.level || 1) / 16) + Math.floor(ally.agi / 16);
-    const potentialHits = dualWield ? Math.max(2, baseHits) : Math.max(1, baseHits);
+    const potentialHits = calcPotentialHits(ally.level || 1, ally.agi, dualWield);
     _s.allyHitResults = rollHits(ally.atk, targetDef, ally.hitRate || 85, potentialHits);
     _s.allyHitIdx = 0;
     _s.allyHitResult = _s.allyHitResults[0];
