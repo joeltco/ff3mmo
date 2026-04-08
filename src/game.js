@@ -2251,7 +2251,7 @@ function _triggerPVPVictory() {
   encounterExpGained = 5 * oppLv;
   encounterGilGained = Math.max(1, Math.floor(10 * oppLv / 4));
   grantExp(encounterExpGained);
-  encounterCpGained = Math.max(1, Math.floor(1 / 4)); grantCP(encounterCpGained);
+  encounterCpGained = Math.max(1, Math.floor(oppLv / 4)); grantCP(encounterCpGained);
   ps.gil += encounterGilGained;
   encounterJobLevelUp = gainJobJP(inputSt.battleActionCount || 1);
   inputSt.battleActionCount = 0;
@@ -2271,7 +2271,7 @@ function _updateMonsterDeath() {
       encounterExpGained = encounterMonsters.reduce((sum, m) => sum + m.exp, 0);
       encounterGilGained = Math.max(1, Math.floor(encounterMonsters.reduce((sum, m) => sum + (m.gil || 0), 0) / 4));
       grantExp(encounterExpGained);
-      encounterCpGained = Math.max(1, Math.floor(encounterMonsters.length / 4)); grantCP(encounterCpGained);
+      encounterCpGained = Math.max(1, Math.floor(encounterMonsters.reduce((sum, m) => sum + (m.cp || 1), 0) / 4)); grantCP(encounterCpGained);
       ps.gil += encounterGilGained;
       encounterJobLevelUp = gainJobJP(inputSt.battleActionCount || 1);
       inputSt.battleActionCount = 0;
@@ -2395,7 +2395,7 @@ function _updateBossDissolve(dt) {
     const _bossData = MONSTERS.get(0xCC);
     encounterExpGained = _bossData?.exp || 132; encounterGilGained = Math.max(1, Math.floor((_bossData?.gil || 500) / 4));
     grantExp(encounterExpGained); ps.gil += encounterGilGained;
-    encounterCpGained = Math.max(1, Math.floor(10 / 4)); grantCP(encounterCpGained); // boss gives 2 CP (10/4)
+    encounterCpGained = Math.max(1, Math.floor((_bossData?.cp || 10) / 4)); grantCP(encounterCpGained);
     encounterJobLevelUp = gainJobJP(inputSt.battleActionCount || 1);
     inputSt.battleActionCount = 0;
     saveSlotsToDB();
