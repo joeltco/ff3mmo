@@ -28,9 +28,9 @@ const SHIP_DRIFT_PX        = 56;
 const SHIP_WINDUP_PX       = 20;
 
 // Spring physics for ship drift
-const SHIP_SPRING_K        = 0.0012;  // spring stiffness (force per px per ms²)
-const SHIP_SPRING_DAMP     = 0.014;   // damping coefficient (per ms) — high = settles fast
-const SHIP_SPRING_NUDGE    = 0.004;   // gentle random nudge strength (px/ms²)
+const SHIP_SPRING_K        = 0.0008;  // spring stiffness (force per px per ms²)
+const SHIP_SPRING_DAMP     = 0.020;   // damping — overdamped, no overshoot
+const SHIP_SPRING_NUDGE    = 0.003;   // gentle wind nudge strength (px/ms²)
 const SELECT_BOX_OFFSET_X  = 48;
 const TITLE_SHIP_ANIM_MS   = 100;
 const TITLE_SHADOW_ANIM_MS = 50;
