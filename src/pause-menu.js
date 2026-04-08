@@ -382,7 +382,7 @@ function _drawPauseStats(ctx, shared) {
     y += STEP;
   }
 
-  statRow('Lv',   String(s.level));
+  statPair('Lv', String(s.level), 'Gil', String(ps.gil));
   const hpStr = ps.hp + '/' + s.maxHP;
   const mpStr = ps.mp + '/' + s.maxMP;
   const hpb = _nameToBytes(hpStr), mpb = _nameToBytes(mpStr);
@@ -399,9 +399,9 @@ function _drawPauseStats(ctx, shared) {
   statPair('STR', String(s.str),   'AGI', String(s.agi));
   statPair('VIT', String(s.vit),   'INT', String(s.int));
   statPair('MND', String(s.mnd),   'MDF', String(ps.mdef));
-  const gilb = _nameToBytes(String(ps.gil));
-  drawText(ctx, tx, y, _nameToBytes('Gil'), fadedPal);
-  drawText(ctx, statRx - gilb.length * 8, y, gilb, fadedPal);
+  const jobAbbr = JOB_ABBR[ps.jobIdx] || '??';
+  const jobLv = getJobLevel(ps.jobIdx);
+  statPair(jobAbbr, 'Lv' + jobLv, 'CP', String(ps.cp));
 
 }
 
