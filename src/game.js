@@ -871,7 +871,7 @@ function _inputShared() {
     get encounterJobLevelUp() { return encounterJobLevelUp; },
     advanceBattleMsgZ,
     queueBattleMsg,
-    get playerName() { return saveSlots[selectCursor]?.name; },
+    get playerName() { return saveSlots[selectCursor]?.name || null; },
     get shakeActive()           { return shakeActive; },
     get starEffect()            { return starEffect; },
     get moving()                { return moving; },
@@ -1952,6 +1952,9 @@ function _turnShared() {
     setEnemyHP: _setEnemyHP,
     removeItem,
     startMagicItem: () => startMagicItem(_magicItemShared()),
+    queueBattleMsg,
+    get playerName() { return saveSlots[selectCursor]?.name || null; },
+    get sprite() { return sprite; },
   };
 }
 
