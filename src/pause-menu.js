@@ -308,9 +308,9 @@ function _drawPauseEquipSlots(ctx, shared) {
   const optPal  = dimSlots ? [0x0F, 0x0F, 0x0F, 0x00] : fadedPal;
   const optText = new Uint8Array([0x98,0xD9,0xDD,0xD2,0xD6,0xDE,0xD6]);
   drawText(ctx, px + 24, optY, optText, optPal);
-  if (cursorTileCanvas && pauseSt.state === 'equip' && fadeStep === 0) {
+  if (shared.drawCursorFaded) {
     const curY = pauseSt.eqCursor < 5 ? eqStartY + pauseSt.eqCursor * eqRowH - 4 : optY - 4;
-    ctx.drawImage(cursorTileCanvas, px + 8, curY);
+    shared.drawCursorFaded(px + 8, curY, fadeStep);
   }
 }
 
@@ -338,8 +338,8 @@ function _drawPauseEquipItems(ctx, shared) {
         drawText(ctx, listX + 16, iy, getItemNameClean(entry.id), fadedPal);
       }
     }
-    if (cursorTileCanvas && pauseSt.state === 'eq-item-select' && fadeStep === 0) {
-      ctx.drawImage(cursorTileCanvas, listX, useY + pauseSt.eqItemCursor * 12 - 4);
+    if (shared.drawCursorFaded) {
+      shared.drawCursorFaded(listX, useY + pauseSt.eqItemCursor * 12 - 4, fadeStep);
     }
   }
 }
@@ -433,8 +433,8 @@ function _drawPauseOptions(ctx, shared) {
   drawText(ctx, tx, y, OPT_CRT_LABEL, fadedPal);
   const valBytes = _isCrtOn() ? OPT_ON : OPT_OFF;
   drawText(ctx, valRx - valBytes.length * 8, y, valBytes, fadedPal);
-  if (cursorTileCanvas && pauseSt.state === 'options' && fadeStep === 0) {
-    ctx.drawImage(cursorTileCanvas, px + 8, y + pauseSt.optCursor * 16 - 4);
+  if (shared.drawCursorFaded) {
+    shared.drawCursorFaded(px + 8, y + pauseSt.optCursor * 16 - 4, fadeStep);
   }
 }
 
