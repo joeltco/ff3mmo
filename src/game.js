@@ -22,6 +22,7 @@ import { PLAYER_POOL, PLAYER_PALETTES, ROSTER_FADE_STEPS, generateAllyStats } fr
 import { BATTLE_MISS, BATTLE_GAME_OVER, BATTLE_ROAR, BATTLE_FIGHT, BATTLE_RUN,
          BATTLE_CANT_ESCAPE, BATTLE_RAN_AWAY, BATTLE_DEFEND, BATTLE_VICTORY,
          BATTLE_GOT_EXP, BATTLE_LEVEL_UP, BATTLE_BOSS_NAME, BATTLE_GOBLIN_NAME,
+         BATTLE_CRITICAL, BATTLE_STRIKE_1ST, BATTLE_AMBUSHED, BATTLE_INEFFECTIVE, BATTLE_SLAIN,
          BATTLE_MENU_ITEMS, PAUSE_ITEMS,
          POND_RESTORED } from './data/strings.js';
 import { initMonsterSprites, getMonsterCanvas, getMonsterWhiteCanvas,
@@ -1083,6 +1084,7 @@ function _enemyShared() {
     BATTLE_SHAKE_MS,
     BATTLE_DMG_SHOW_MS,
     processNextTurn,
+    queueBattleMsg,
     isTeamWiped: _isTeamWiped,
   };
 }
@@ -2385,38 +2387,27 @@ function _updateItemMenuFades() {
 }
 
 function _updateBattleRunSuccess() {
-  const T = (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS;
-  if (battleState === 'run-name-out') {
-    if (battleTimer >= T) { sprite.setDirection(DIR_DOWN); playSFX(SFX.RUN_AWAY); battleState = 'run-text-in'; battleTimer = 0; }
-  } else if (battleState === 'run-text-in') {
-    if (battleTimer >= T) { battleState = 'run-hold'; battleTimer = 0; }
-  } else if (battleState === 'run-hold') {
-    if (battleTimer >= 1350) { battleState = 'run-text-out'; battleTimer = 0; }
-  } else if (battleState === 'run-text-out') {
-    if (battleTimer >= T) { runSlideBack = true; battleState = 'encounter-box-close'; battleTimer = 0; }
+  if (battleState === 'run-success') {
+    // Queue message, then wait for it to finish auto-advancing
+    if (!battleMsgCurrent && battleMsgQueue.length === 0) {
+      runSlideBack = true; battleState = 'encounter-box-close'; battleTimer = 0;
+    }
   } else { return false; }
   return true;
 }
 
 function _updateBattleRunFail() {
-  const T = (BATTLE_TEXT_STEPS + 1) * 50;
-  if (battleState === 'run-fail-name-out') {
-    if (battleTimer >= T) { battleState = 'run-fail-text-in'; battleTimer = 0; }
-  } else if (battleState === 'run-fail-text-in') {
-    if (battleTimer >= T) { battleState = 'run-fail-hold'; battleTimer = 0; }
-  } else if (battleState === 'run-fail-hold') {
-    if (battleTimer >= 300) { battleState = 'run-fail-text-out'; battleTimer = 0; }
-  } else if (battleState === 'run-fail-text-out') {
-    if (battleTimer >= T) { battleState = 'run-fail-name-in'; battleTimer = 0; }
-  } else if (battleState === 'run-fail-name-in') {
-    if (battleTimer >= T) processNextTurn();
+  if (battleState === 'run-fail') {
+    if (!battleMsgCurrent && battleMsgQueue.length === 0) {
+      processNextTurn();
+    }
   } else { return false; }
   return true;
 }
 
 function _updateBattleRun() {
-  if (battleState.startsWith('run-fail-')) return _updateBattleRunFail();
-  if (battleState.startsWith('run-')) return _updateBattleRunSuccess();
+  if (battleState === 'run-fail') return _updateBattleRunFail();
+  if (battleState === 'run-success') return _updateBattleRunSuccess();
   return false;
 }
 

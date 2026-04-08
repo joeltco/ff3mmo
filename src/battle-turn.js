@@ -1,6 +1,7 @@
 // Battle turn order + turn dispatch — extracted from game.js
 
 import { rollHits, calcPotentialHits } from './battle-math.js';
+import { BATTLE_RAN_AWAY, BATTLE_CANT_ESCAPE, BATTLE_DEFEND } from './data/strings.js';
 import { ps } from './player-stats.js';
 import { ITEMS, isWeapon } from './data/items.js';
 import { SFX, playSFX } from './music.js';
@@ -87,7 +88,7 @@ export function processNextTurn(shared) {
     }
     const cmd = _s.inputSt.playerActionPending.command;
     if (cmd === 'fight') _playerTurnFight();
-    else if (cmd === 'defend') { _s.inputSt.battleActionCount++; playSFX(SFX.DEFEND_HIT); _s.battleState = 'defend-anim'; _s.battleTimer = 0; }
+    else if (cmd === 'defend') { _s.inputSt.battleActionCount++; _s.queueBattleMsg(BATTLE_DEFEND); playSFX(SFX.DEFEND_HIT); _s.battleState = 'defend-anim'; _s.battleTimer = 0; }
     else if (cmd === 'item') { _s.inputSt.battleActionCount++; _playerTurnItem(); }
     else if (cmd === 'skip') processNextTurn(_s);
     else if (cmd === 'run') _playerTurnRun();
@@ -250,6 +251,12 @@ function _playerTurnRun() {
     if (alive.length > 0) avgLevel = alive.reduce((s, m) => s + (m.level || 1), 0) / alive.length;
   }
   const successRate = Math.min(99, Math.max(1, playerAgi + 25 - Math.floor(avgLevel / 4)));
-  _s.battleState = Math.floor(Math.random() * 100) < successRate ? 'run-name-out' : 'run-fail-name-out';
-  _s.battleTimer = 0;
+  if (Math.floor(Math.random() * 100) < successRate) {
+    _s.queueBattleMsg(BATTLE_RAN_AWAY);
+    playSFX(SFX.RUN_AWAY);
+    _s.battleState = 'run-success'; _s.battleTimer = 0;
+  } else {
+    _s.queueBattleMsg(BATTLE_CANT_ESCAPE);
+    _s.battleState = 'run-fail'; _s.battleTimer = 0;
+  }
 }

@@ -14,8 +14,7 @@ import { _nameToBytes, _buildItemRowBytes, drawLvHpRow } from './text-utils.js';
 import { pvpEnemyCellCenter } from './pvp-math.js';
 import { pvpSt, drawBossSpriteBoxPVP } from './pvp.js';
 import { inputSt } from './input-handler.js';
-import { BATTLE_GAME_OVER, BATTLE_DEFEATED, BATTLE_RAN_AWAY,
-         BATTLE_CANT_ESCAPE, BATTLE_BOSS_NAME, BATTLE_GOBLIN_NAME,
+import { BATTLE_GAME_OVER, BATTLE_DEFEATED, BATTLE_BOSS_NAME, BATTLE_GOBLIN_NAME,
          BATTLE_MENU_ITEMS } from './data/strings.js';
 
 const HUD_VIEW_X = 0, HUD_VIEW_Y = 32, HUD_VIEW_W = 144, HUD_VIEW_H = 144;
@@ -191,8 +190,7 @@ function _getPortraitSrc(isNearFatal, isAttackPose, isHitPose, isDefendPose, isI
 function _drawPortraitFrame(px, py, portraitSrc, isRunPose) {
   if (isRunPose) {
     let slideX = 0;
-    if (_s.battleState === 'run-text-in') slideX = Math.min(_s.battleTimer / 300, 1) * 20;
-    else if (_s.battleState === 'run-hold' || _s.battleState === 'run-text-out') slideX = 20;
+    slideX = Math.min(_s.battleTimer / 300, 1) * 20;
     _s.ctx.save();
     _s.ctx.beginPath();
     _s.ctx.rect(HUD_RIGHT_X + 8, HUD_VIEW_Y + 8, 16, 16);
@@ -256,8 +254,7 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
     const sweatIdx = Math.floor(Date.now() / 133) & 1;
     if (isRunPose) {
       let slideX = 0;
-      if (_s.battleState === 'run-text-in') slideX = Math.min(_s.battleTimer / 300, 1) * 20;
-      else if (_s.battleState === 'run-hold' || _s.battleState === 'run-text-out') slideX = 20;
+      slideX = Math.min(_s.battleTimer / 300, 1) * 20;
       _s.ctx.save();
       _s.ctx.beginPath();
       _s.ctx.rect(HUD_RIGHT_X + 8, HUD_VIEW_Y + 8 - 3, 16, 19);
@@ -359,8 +356,7 @@ function _drawBattlePortrait() {
     (_s.battleState === 'pvp-enemy-slash' && pvpSt.pvpPendingAttack && !pvpSt.pvpPendingAttack.miss && !pvpSt.pvpPendingAttack.shieldBlock);
   const isDefendPose = _s.battleState === 'defend-anim';
   const isItemUsePose = _s.battleState === 'item-use' || _s.battleState === 'sw-throw' || _s.battleState === 'sw-hit';
-  const isRunPose = _s.battleState === 'run-name-out' || _s.battleState === 'run-text-in' ||
-    _s.battleState === 'run-hold' || _s.battleState === 'run-text-out';
+  const isRunPose = _s.battleState === 'run-success';
   const isNearFatal = ps.hp > 0 && ps.stats && ps.hp <= Math.floor(ps.stats.maxHP / 4);
   const portraitSrc = _getPortraitSrc(isNearFatal, isAttackPose, isHitPose, isDefendPose, isItemUsePose, isVictoryPose);
   if (!portraitSrc) return;
@@ -505,9 +501,7 @@ function _battleMenuStates() {
     bs === 'attack-back' || bs === 'attack-fwd' || bs === 'player-slash' || bs === 'player-hit-show' || bs === 'player-miss-show' ||
     bs === 'player-damage-show' || bs === 'monster-death' || bs === 'defend-anim' ||
     bs.startsWith('item-') || bs === 'sw-throw' || bs === 'sw-hit' ||
-    bs === 'run-name-out' || bs === 'run-text-in' || bs === 'run-hold' || bs === 'run-text-out' ||
-    bs === 'run-fail-name-out' || bs === 'run-fail-text-in' || bs === 'run-fail-hold' ||
-    bs === 'run-fail-text-out' || bs === 'run-fail-name-in' || bs === 'enemy-flash' ||
+    bs === 'run-success' || bs === 'run-fail' || bs === 'enemy-flash' ||
     bs === 'enemy-attack' || bs === 'enemy-damage-show' || bs === 'poison-tick' || bs === 'pvp-second-windup' ||
     bs === 'pvp-ally-appear' || bs === 'pvp-defend-anim' || bs === 'pvp-enemy-slash' ||
     bs === 'pvp-opp-potion' || bs === 'pvp-opp-sw-throw' || bs === 'pvp-opp-sw-hit' || bs === 'message-hold' ||
@@ -741,9 +735,7 @@ function _isEncounterCombatState() {
     _s.battleState === 'player-slash' || _s.battleState === 'player-hit-show' || _s.battleState === 'player-miss-show' ||
     _s.battleState === 'player-damage-show' || _s.battleState === 'monster-death' || _s.battleState === 'defend-anim' ||
     _s.battleState.startsWith('item-') || _s.battleState === 'sw-throw' || _s.battleState === 'sw-hit' ||
-    _s.battleState === 'run-name-out' || _s.battleState === 'run-text-in' || _s.battleState === 'run-hold' ||
-    _s.battleState === 'run-text-out' || _s.battleState === 'run-fail-name-out' || _s.battleState === 'run-fail-text-in' ||
-    _s.battleState === 'run-fail-hold' || _s.battleState === 'run-fail-text-out' || _s.battleState === 'run-fail-name-in' ||
+    _s.battleState === 'run-success' || _s.battleState === 'run-fail' ||
     _s.battleState === 'enemy-flash' || _s.battleState === 'enemy-attack' || _s.battleState === 'enemy-damage-show' ||
     _s.battleState === 'poison-tick' || _s.battleState === 'message-hold' || _s.battleState.startsWith('ally-') ||
     _s.battleState === 'defeat-monster-fade' || _s.battleState === 'defeat-text';
@@ -868,7 +860,7 @@ function drawBossSpriteBox() {
                    _s.battleState === 'menu-open' || _s.battleState === 'target-select' || _s.battleState === 'confirm-pause' ||
                    _s.battleState === 'attack-back' || _s.battleState === 'attack-fwd' || _s.battleState === 'player-slash' || _s.battleState === 'player-hit-show' ||
                    _s.battleState === 'player-miss-show' ||
-                   _s.battleState === 'player-damage-show' || _s.battleState === 'defend-anim' || _s.battleState.startsWith('item-') || _s.battleState === 'sw-throw' || _s.battleState === 'sw-hit' || _s.battleState === 'run-name-out' || _s.battleState === 'run-text-in' || _s.battleState === 'run-hold' || _s.battleState === 'run-text-out' || _s.battleState === 'run-fail-name-out' || _s.battleState === 'run-fail-text-in' || _s.battleState === 'run-fail-hold' || _s.battleState === 'run-fail-text-out' || _s.battleState === 'run-fail-name-in' || _s.battleState === 'enemy-flash' ||
+                   _s.battleState === 'player-damage-show' || _s.battleState === 'defend-anim' || _s.battleState.startsWith('item-') || _s.battleState === 'sw-throw' || _s.battleState === 'sw-hit' || _s.battleState === 'run-success' || _s.battleState === 'run-fail' || _s.battleState === 'enemy-flash' ||
                    _s.battleState === 'enemy-attack' ||
                    _s.battleState === 'enemy-damage-show' || _s.battleState === 'poison-tick' || _s.battleState === 'message-hold' ||
                    _s.battleState.startsWith('ally-') ||
@@ -1028,21 +1020,10 @@ function _victoryBoxStates() {
   const isVicMsg     = bs === 'victory-msg';
   const isOut        = bs === 'victory-text-out';
   const isMenuFadeState = bs === 'victory-menu-fade';
-  const isRunNameOut = bs === 'run-name-out';
-  const isRunTextIn  = bs === 'run-text-in';
-  const isRunHold    = bs === 'run-hold';
-  const isRunTextOut = bs === 'run-text-out';
-  const isRunFailNameOut  = bs === 'run-fail-name-out';
-  const isRunFailTextIn   = bs === 'run-fail-text-in';
-  const isRunFailHold     = bs === 'run-fail-hold';
-  const isRunFailTextOut  = bs === 'run-fail-text-out';
-  const isRunFailNameIn   = bs === 'run-fail-name-in';
-  const isRun     = isRunNameOut || isRunTextIn || isRunHold || isRunTextOut;
-  const isRunFail = isRunFailNameOut || isRunFailTextIn || isRunFailHold || isRunFailTextOut || isRunFailNameIn;
+  const isRun     = bs === 'run-success';
+  const isRunFail = bs === 'run-fail';
   return { isNameOut, isCelebrate, isClose, isVicMsg,
-           isOut, isMenuFadeState, isRunNameOut, isRunTextIn, isRunHold, isRunTextOut,
-           isRunFailNameOut, isRunFailTextIn, isRunFailHold, isRunFailTextOut, isRunFailNameIn,
-           isRun, isRunFail };
+           isOut, isMenuFadeState, isRun, isRunFail };
 }
 function drawVictoryBox() {
   const s = _victoryBoxStates();
@@ -1054,49 +1035,18 @@ function drawVictoryBox() {
   const boxY = HUD_BOT_Y;
   if (s.isClose) boxX = Math.round(-(CANVAS_W - 8) * Math.min(_s.battleTimer / (VICTORY_BOX_ROWS * VICTORY_ROW_FRAME_MS), 1));
 
-  if (s.isNameOut || s.isRunNameOut || s.isRunFailNameOut) { _drawVictoryNameOut(boxX, boxY, s.isRunFailNameOut); return; }
-  if (s.isRun) { _drawVictoryRunText(boxX, boxY, s.isRunTextIn, s.isRunTextOut); return; }
-  if (s.isRunFail) { _drawVictoryRunFail(boxX, boxY, s.isRunFailNameIn, s.isRunFailTextIn, s.isRunFailTextOut); return; }
+  if (s.isNameOut) { _drawVictoryNameOut(boxX, boxY); return; }
+  // Run messages and victory rewards render in the message strip, not here
   _s.drawBorderedBox(boxX, boxY, VICTORY_BOX_W, VICTORY_BOX_H);
-  // Victory messages now render in the message strip, not here
 }
 
-function _drawVictoryNameOut(boxX, boxY, isRunFail) {
+function _drawVictoryNameOut(boxX, boxY) {
   _s.drawBorderedBox(boxX, boxY, VICTORY_BOX_W, VICTORY_BOX_H);
-  const stepMs = isRunFail ? 50 : BATTLE_TEXT_STEP_MS;
-  const fadeStep = Math.min(Math.floor(_s.battleTimer / stepMs), BATTLE_TEXT_STEPS);
+  const fadeStep = Math.min(Math.floor(_s.battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
   const fadedPal = _makeFadedPal(fadeStep);
   const enemyName = _battleEnemyName();
   const nameTw = measureText(enemyName);
   drawText(_s.ctx, Math.floor((VICTORY_BOX_W - nameTw) / 2), boxY + Math.floor((VICTORY_BOX_H - 8) / 2), enemyName, fadedPal);
-}
-
-function _drawVictoryRunText(boxX, boxY, isIn, isOut) {
-  _s.drawBorderedBox(boxX, boxY, VICTORY_BOX_W, VICTORY_BOX_H);
-  let fadeStep = 0;
-  if (isIn) fadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(_s.battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
-  else if (isOut) fadeStep = Math.min(Math.floor(_s.battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
-  const fadedPal = _makeFadedPal(fadeStep);
-  const tw = measureText(BATTLE_RAN_AWAY);
-  drawText(_s.ctx, boxX + Math.floor((VICTORY_BOX_W - tw) / 2), boxY + Math.floor((VICTORY_BOX_H - 8) / 2), BATTLE_RAN_AWAY, fadedPal);
-}
-
-function _drawVictoryRunFail(boxX, boxY, isNameIn, isTextIn, isTextOut) {
-  _s.drawBorderedBox(boxX, boxY, VICTORY_BOX_W, VICTORY_BOX_H);
-  const RUN_FAIL_STEP_MS = 50;
-  if (isNameIn) {
-    const fadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(_s.battleTimer / RUN_FAIL_STEP_MS), BATTLE_TEXT_STEPS);
-    const fadedPal = _makeFadedPal(fadeStep);
-    const enemyName = _battleEnemyName();
-    const nameTw = measureText(enemyName);
-    drawText(_s.ctx, boxX + Math.floor((VICTORY_BOX_W - nameTw) / 2), boxY + Math.floor((VICTORY_BOX_H - 8) / 2), enemyName, fadedPal);
-  } else {
-    const fadeStep = isTextIn ? BATTLE_TEXT_STEPS - Math.min(Math.floor(_s.battleTimer / RUN_FAIL_STEP_MS), BATTLE_TEXT_STEPS)
-                              : isTextOut ? Math.min(Math.floor(_s.battleTimer / RUN_FAIL_STEP_MS), BATTLE_TEXT_STEPS) : 0;
-    const fadedPal = _makeFadedPal(fadeStep);
-    const tw = measureText(BATTLE_CANT_ESCAPE);
-    drawText(_s.ctx, boxX + Math.floor((VICTORY_BOX_W - tw) / 2), boxY + Math.floor((VICTORY_BOX_H - 8) / 2), BATTLE_CANT_ESCAPE, fadedPal);
-  }
 }
 
 
