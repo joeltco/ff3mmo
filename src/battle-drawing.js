@@ -170,8 +170,8 @@ function _getPortraitSrc(isNearFatal, isAttackPose, isHitPose, isDefendPose, isI
   const p = _s.battlePoses;
   let src = ((isNearFatal || hasActiveStatus) && p.kneel) ? p.kneel : p.idle;
   if (isAttackPose) {
-    const _ws = weaponSubtype(getHitWeapon(_s.currentHitIdx));
-    const rh = isHitRightHand(_s.currentHitIdx);
+    const _ws = weaponSubtype(getHitWeapon(_s.currentHitIdx, inputSt.rHandHitCount));
+    const rh = isHitRightHand(_s.currentHitIdx, inputSt.rHandHitCount);
     if (_ws === 'knife' || _ws === 'dagger') {
       src = (rh ? p.knifeR : p.knifeL) || src;
     } else if (_s.battleState === 'attack-back') {
@@ -216,10 +216,10 @@ function _drawPortraitFrame(px, py, portraitSrc, isRunPose) {
 
 function _drawPortraitWeapon(px, py, before) {
   // before=true: back-swing blade BEHIND body; false: front blade IN FRONT or swung
-  const handWeapon = getHitWeapon(_s.currentHitIdx);
+  const handWeapon = getHitWeapon(_s.currentHitIdx, inputSt.rHandHitCount);
   const wpnSt = weaponSubtype(handWeapon);
   if (_s.battleState === 'attack-back') {
-    const rightHand = isHitRightHand(_s.currentHitIdx);
+    const rightHand = isHitRightHand(_s.currentHitIdx, inputSt.rHandHitCount);
     if (before && rightHand) {
       if (wpnSt === 'knife' && handWeapon === 0x1F && _s.battleDaggerBladeCanvas) _s.ctx.drawImage(_s.battleDaggerBladeCanvas, px + 8, py - 7);
       else if (wpnSt === 'knife' && _s.battleKnifeBladeCanvas) _s.ctx.drawImage(_s.battleKnifeBladeCanvas, px + 8, py - 7);

@@ -150,9 +150,12 @@ function _battleTargetConfirm() {
   }
   if (dualWield) {
     // NES: all right hand hits first, then all left hand hits
-    inputSt.hitResults = [...rollHand(rWpn), ...rollHand(lWpn)];
+    const rHits = rollHand(rWpn);
+    inputSt.hitResults = [...rHits, ...rollHand(lWpn)];
+    inputSt.rHandHitCount = rHits.length; // split point for hand animation
   } else {
     inputSt.hitResults = rollHand(rWpn || lWpn);
+    inputSt.rHandHitCount = 0; // not dual wielding
   }
   inputSt.battleActionCount++;
   const firstHandR = isWeapon(ps.weaponR) || !isWeapon(ps.weaponL);

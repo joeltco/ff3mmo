@@ -2126,8 +2126,8 @@ function _advanceHitCombo() {
   if (currentHitIdx + 1 < inputSt.hitResults.length) {
     currentHitIdx++;
     slashFrame = 0;
-    const handWeapon = getHitWeapon(currentHitIdx);
-    slashFrames = getSlashFramesForWeapon(handWeapon, isHitRightHand(currentHitIdx));
+    const handWeapon = getHitWeapon(currentHitIdx, inputSt.rHandHitCount);
+    slashFrames = getSlashFramesForWeapon(handWeapon, isHitRightHand(currentHitIdx, inputSt.rHandHitCount));
     if (isBladedWeapon(handWeapon)) { slashOffX = 8; slashOffY = -8; }
     else { slashOffX = Math.floor(Math.random() * 40) - 20; slashOffY = Math.floor(Math.random() * 40) - 20; }
     battleState = 'attack-back';
@@ -2148,7 +2148,7 @@ function _updatePlayerAttackBack() {
 function _updatePlayerAttackFwd() {
   if (battleState !== 'attack-fwd') return false;
   if (battleTimer >= FWD_SWING_MS) {
-    const hw0 = getHitWeapon(currentHitIdx);
+    const hw0 = getHitWeapon(currentHitIdx, inputSt.rHandHitCount);
     const isCrit0 = inputSt.hitResults[currentHitIdx] && inputSt.hitResults[currentHitIdx].crit;
     playSlashSFX(hw0, isCrit0);
     battleState = 'player-slash';
@@ -2161,7 +2161,7 @@ function _updatePlayerSlash() {
   const frame = Math.floor(battleTimer / SLASH_FRAME_MS);
   if (frame !== slashFrame && frame < SLASH_FRAMES) {
     slashFrame = frame;
-    const handWeapon = getHitWeapon(currentHitIdx);
+    const handWeapon = getHitWeapon(currentHitIdx, inputSt.rHandHitCount);
     if (isBladedWeapon(handWeapon)) {
       slashOffX = 8 - slashFrame * 8;
       slashOffY = -8 + slashFrame * 8;
@@ -2182,7 +2182,7 @@ function _updatePlayerSlash() {
         if (targetMon.status) wakeOnHit(targetMon.status);
         // Weapon on-hit status infliction
         if (targetMon.status && targetMon.hp > 0) {
-          const wpnId = getHitWeapon(currentHitIdx);
+          const wpnId = getHitWeapon(currentHitIdx, inputSt.rHandHitCount);
           const wpnData = ITEMS.get(wpnId);
           if (wpnData && wpnData.status) {
             const arr = Array.isArray(wpnData.status) ? wpnData.status : [wpnData.status];

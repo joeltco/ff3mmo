@@ -115,21 +115,22 @@ export function recalcDEF(vitBonus = 0) {
 }
 
 // Get the weapon ID for a given hit index (shields are not weapons)
-export function getHitWeapon(hitIdx) {
+// rHandHitCount: if dual wielding, hits 0..rHandHitCount-1 are R hand, rest are L
+export function getHitWeapon(hitIdx, rHandHitCount = 0) {
   const rW = isWeapon(ps.weaponR);
   const lW = isWeapon(ps.weaponL);
-  if (rW && lW) return (hitIdx % 2 === 0) ? ps.weaponR : ps.weaponL;
+  if (rW && lW && rHandHitCount > 0) return hitIdx < rHandHitCount ? ps.weaponR : ps.weaponL;
   if (rW) return ps.weaponR;
   if (lW) return ps.weaponL;
   return 0; // unarmed
 }
 
-export function isHitRightHand(hitIdx) {
+export function isHitRightHand(hitIdx, rHandHitCount = 0) {
   const rW = isWeapon(ps.weaponR);
   const lW = isWeapon(ps.weaponL);
-  if (rW && lW) return hitIdx % 2 === 0;
+  if (rW && lW && rHandHitCount > 0) return hitIdx < rHandHitCount;
   if (rW || lW) return rW; // single weapon hand
-  return hitIdx % 2 === 0; // unarmed fists: alternate R/L starting with R
+  return true; // unarmed: always R pose
 }
 
 export function initPlayerStats(romData) {
