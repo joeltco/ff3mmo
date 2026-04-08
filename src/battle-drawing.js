@@ -1389,7 +1389,7 @@ function drawBattleMessageStrip() {
   if (fadeStep >= BATTLE_TEXT_STEPS) return;
   const pal = _makeFadedPal(fadeStep);
   const tw = measureText(msg.bytes);
-  const x = MSG_STRIP_X + Math.floor((MSG_STRIP_W - tw) / 2);
+  const x = MSG_STRIP_X;
   drawText(_s.ctx, x, MSG_STRIP_Y + 4, msg.bytes, pal);
 }
 
