@@ -352,7 +352,7 @@ function _drawPauseStats(ctx, shared) {
   const fadeStep = _pauseFadeStep('stats-in', 'stats-out');
   const fadedPal = _makeFadedPal(fadeStep);
   const tx = px + 8;
-  const statRx = tx + 96;
+  const statRx = tx + 128;
   const STEP = 11;
   let y = finalY + 8;
 
@@ -366,7 +366,7 @@ function _drawPauseStats(ctx, shared) {
     y += STEP;
   }
   function statPair(l0, v0, l1, v1) {
-    const midX = tx + 48;
+    const midX = tx + 64;
     const v0b = _nameToBytes(v0), v1b = _nameToBytes(v1);
     drawText(ctx, tx, y, _nameToBytes(l0), fadedPal);
     drawText(ctx, midX - v0b.length * 8, y, v0b, fadedPal);
@@ -401,7 +401,7 @@ function _drawPauseStats(ctx, shared) {
   statPair('MND', String(s.mnd),   'MDF', String(ps.mdef));
   const jobAbbr = JOB_ABBR[ps.jobIdx] || '??';
   const jobLv = getJobLevel(ps.jobIdx);
-  statPair(jobAbbr, 'Lv' + jobLv, 'CP', String(ps.cp));
+  statPair(jobAbbr, 'Lv ' + jobLv, 'CP', String(ps.cp));
 
 }
 
