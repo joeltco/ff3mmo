@@ -31,7 +31,7 @@ import { loadBossSprite, getBossBattleCanvas, getBossWhiteCanvas } from './boss-
 import { selectCursor, saveSlots,
          setSelectCursor, setSaveSlots,
          saveSlotsToDB, loadSlotsFromDB, setInventoryGetter, setPositionGetter } from './save-state.js';
-import { _nameToBytes, _buildItemRowBytes, _makeGotNText, makeExpText, makeGilText, makeFoundItemText } from './text-utils.js';
+import { _nameToBytes, _buildItemRowBytes, _makeGotNText, makeExpText, makeGilText, makeCpText, makeFoundItemText, makeJobLevelUpText } from './text-utils.js';
 import { nesColorFade, _stepPalFade } from './palette.js';
 import { _getPlane0, _rebuild, _shiftHorizWater, _isWater, _buildHorizMixed } from './tile-math.js';
 // _dmgBounceY → hud-drawing.js
@@ -252,6 +252,59 @@ let preBattleTrack = null;
 let turnQueue = [];              // [{type:'player'|'enemy', index}] sorted by priority
 let currentAttacker = -1;      // index of monster currently attacking
 let dyingMonsterIndices = new Map(); // index → startDelayMs for staggered death wipe
+
+// Battle message queue — renders in right panel strip (144, 160, 112, 16)
+let battleMsgQueue = [];       // [{ bytes: Uint8Array, waitForZ: bool }]
+let battleMsgCurrent = null;   // current message object or null
+let battleMsgTimer = 0;        // ms into current message display
+const MSG_FADE_IN_MS = 200;
+const MSG_HOLD_MS = 800;
+const MSG_FADE_OUT_MS = 200;
+const MSG_TOTAL_MS = MSG_FADE_IN_MS + MSG_HOLD_MS + MSG_FADE_OUT_MS;
+
+function queueBattleMsg(bytes, waitForZ = false) {
+  battleMsgQueue.push({ bytes, waitForZ });
+  if (!battleMsgCurrent) _advanceBattleMsg();
+}
+function _advanceBattleMsg() {
+  if (battleMsgQueue.length > 0) {
+    battleMsgCurrent = battleMsgQueue.shift();
+    battleMsgTimer = 0;
+  } else {
+    battleMsgCurrent = null;
+  }
+}
+function _updateBattleMsg(dt) {
+  if (!battleMsgCurrent) return;
+  battleMsgTimer += dt;
+  if (!battleMsgCurrent.waitForZ && battleMsgTimer >= MSG_TOTAL_MS) {
+    _advanceBattleMsg();
+  }
+  // waitForZ messages hold indefinitely — advanced by Z press in input-handler
+}
+function advanceBattleMsgZ() {
+  // Called by input-handler on Z press during victory-msg state
+  if (battleMsgCurrent && battleMsgCurrent.waitForZ) {
+    _advanceBattleMsg();
+    return true;
+  }
+  return false;
+}
+function clearBattleMsgQueue() {
+  battleMsgQueue = [];
+  battleMsgCurrent = null;
+  battleMsgTimer = 0;
+}
+
+function _queueVictoryRewards() {
+  queueBattleMsg(BATTLE_VICTORY, true);
+  queueBattleMsg(makeExpText(encounterExpGained), true);
+  queueBattleMsg(makeGilText(encounterGilGained), true);
+  queueBattleMsg(makeCpText(encounterCpGained), true);
+  if (encounterDropItem !== null) queueBattleMsg(makeFoundItemText(encounterDropItem), true);
+  if (ps.leveledUp) queueBattleMsg(BATTLE_LEVEL_UP, true);
+  if (encounterJobLevelUp) queueBattleMsg(makeJobLevelUpText(encounterJobLevelUp), true);
+}
 
 // Hit animation state
 let currentHitIdx = 0;             // which hit we're animating
@@ -593,6 +646,7 @@ function _resetBattleVars() {
   resetBattleItemVars();
   playerDeathTimer = null; _teamWipeMsgShown = false;
   inputSt.battleActionCount = 0;
+  clearBattleMsgQueue();
 }
 function _zPressed() { if (!keys['z'] && !keys['Z']) return false; keys['z'] = false; keys['Z'] = false; return true; }
 function _xPressed() { if (!keys['x'] && !keys['X']) return false; keys['x'] = false; keys['X'] = false; return true; }
@@ -810,6 +864,8 @@ function _inputShared() {
     get encounterMonsters()     { return encounterMonsters; },
     get encounterDropItem()     { return encounterDropItem; },
     get encounterJobLevelUp() { return encounterJobLevelUp; },
+    advanceBattleMsgZ,
+    queueBattleMsg,
     get shakeActive()           { return shakeActive; },
     get starEffect()            { return starEffect; },
     get moving()                { return moving; },
@@ -1067,6 +1123,9 @@ function _battleDrawShared() {
     get encounterCpGained() { return encounterCpGained; },
     get encounterDropItem() { return encounterDropItem; },
     get encounterJobLevelUp() { return encounterJobLevelUp; },
+    get battleMsgCurrent() { return battleMsgCurrent; },
+    get battleMsgTimer() { return battleMsgTimer; },
+    MSG_FADE_IN_MS, MSG_HOLD_MS, MSG_FADE_OUT_MS, MSG_TOTAL_MS,
     get southWindTargets() { return getTargets(); },
     get southWindHitIdx() { return getHitIdx(); },
     get southWindDmgNums() { return getSwDmgNums(); },
@@ -2012,13 +2071,7 @@ function _updateTurnTimer(dt) {
 
 // _isTitleActiveState → isTitleActiveState() in title-screen.js
 function _isVictoryBattleState() {
-  return battleState === 'victory-celebrate' || battleState === 'victory-text-in' ||
-    battleState === 'victory-hold' || battleState === 'victory-fade-out' ||
-    battleState === 'exp-text-in' || battleState === 'exp-hold' || battleState === 'exp-fade-out' ||
-    battleState === 'gil-text-in' || battleState === 'gil-hold' || battleState === 'gil-fade-out' ||
-    battleState === 'levelup-text-in' || battleState === 'levelup-hold' ||
-    battleState === 'item-text-in' || battleState === 'item-hold' || battleState === 'item-fade-out' ||
-    battleState === 'joblv-text-in' || battleState === 'joblv-hold' ||
+  return battleState === 'victory-celebrate' || battleState === 'victory-msg' ||
     battleState === 'victory-text-out' || battleState === 'victory-menu-fade' || battleState === 'victory-box-close';
 }
 function _updateAllyExitFade(dt) {
@@ -2233,6 +2286,7 @@ function _triggerPVPVictory() {
   encounterJobLevelUp = gainJobJP(inputSt.battleActionCount || 1);
   inputSt.battleActionCount = 0;
   saveSlotsToDB();
+  _queueVictoryRewards();
   enemyDefeated = true;
   isDefending = false; battleState = 'victory-name-out'; battleTimer = 0;
   playSFX(SFX.BOSS_DEATH);
@@ -2261,6 +2315,7 @@ function _updateMonsterDeath() {
       }
       if (encounterDropItem !== null) addItem(encounterDropItem, 1);
       saveSlotsToDB();
+      _queueVictoryRewards();
       isDefending = false;
       battleState = 'victory-name-out';
       battleTimer = 0;
@@ -2385,6 +2440,7 @@ function _updateBossDissolve(dt) {
     encounterJobLevelUp = gainJobJP(inputSt.battleActionCount || 1);
     inputSt.battleActionCount = 0;
     saveSlotsToDB();
+    _queueVictoryRewards();
     isDefending = false; battleState = 'victory-name-out'; battleTimer = 0;
   }
   return true;
@@ -2395,45 +2451,10 @@ function _updateVictorySequence() {
   if (battleState === 'victory-name-out') {
     if (battleTimer >= _textMs) { battleState = 'victory-celebrate'; battleTimer = 0; playTrack(TRACKS.VICTORY); }
   } else if (battleState === 'victory-celebrate') {
-    if (battleTimer >= 400) { battleState = 'victory-text-in'; battleTimer = 0; }
-  } else if (battleState === 'victory-text-in') {
-    if (battleTimer >= _textMs) { battleState = 'victory-hold'; battleTimer = 0; }
-  } else if (battleState === 'victory-hold') {
-    // waits for Z press
-  } else if (battleState === 'victory-fade-out') {
-    if (battleTimer >= _textMs) { battleState = 'exp-text-in'; battleTimer = 0; }
-  } else if (battleState === 'exp-text-in') {
-    if (battleTimer >= _textMs) { battleState = 'exp-hold'; battleTimer = 0; }
-  } else if (battleState === 'exp-hold') {
-    // waits for Z press
-  } else if (battleState === 'exp-fade-out') {
-    if (battleTimer >= _textMs) { battleState = 'gil-text-in'; battleTimer = 0; }
-  } else if (battleState === 'gil-text-in') {
-    if (battleTimer >= _textMs) { battleState = 'gil-hold'; battleTimer = 0; }
-  } else if (battleState === 'gil-hold') {
-    // waits for Z press
-  } else if (battleState === 'gil-fade-out') {
-    if (battleTimer >= _textMs) { battleState = 'cp-text-in'; battleTimer = 0; }
-  } else if (battleState === 'cp-text-in') {
-    if (battleTimer >= _textMs) { battleState = 'cp-hold'; battleTimer = 0; }
-  } else if (battleState === 'cp-hold') {
-    // waits for Z press
-  } else if (battleState === 'cp-fade-out') {
-    if (battleTimer >= _textMs) { battleState = encounterDropItem !== null ? 'item-text-in' : 'levelup-text-in'; battleTimer = 0; }
-  } else if (battleState === 'item-text-in') {
-    if (battleTimer >= _textMs) { battleState = 'item-hold'; battleTimer = 0; }
-  } else if (battleState === 'item-hold') {
-    // waits for Z press
-  } else if (battleState === 'item-fade-out') {
-    if (battleTimer >= _textMs) { battleState = 'levelup-text-in'; battleTimer = 0; }
-  } else if (battleState === 'levelup-text-in') {
-    if (battleTimer >= _textMs) { battleState = 'levelup-hold'; battleTimer = 0; }
-  } else if (battleState === 'levelup-hold') {
-    // waits for Z press
-  } else if (battleState === 'joblv-text-in') {
-    if (battleTimer >= _textMs) { battleState = 'joblv-hold'; battleTimer = 0; }
-  } else if (battleState === 'joblv-hold') {
-    // waits for Z press
+    if (battleTimer >= 400) { battleState = 'victory-msg'; battleTimer = 0; }
+  } else if (battleState === 'victory-msg') {
+    // Messages cycle via Z press (advanceBattleMsgZ). When queue empty, close.
+    if (!battleMsgCurrent) { battleState = 'victory-text-out'; battleTimer = 0; }
   } else if (battleState === 'victory-text-out') {
     if (battleTimer >= _textMs) { battleState = 'victory-menu-fade'; battleTimer = 0; }
   } else if (battleState === 'victory-menu-fade') {
@@ -2524,6 +2545,7 @@ function updateBattle(dt) {
   battleTimer += Math.min(dt, 33);
   if (pvpSt.isPVPBattle) { updatePVPBattle(dt, _pvpShared()); return; }
   _updateBattleTimers(dt);
+  _updateBattleMsg(dt);
   _updatePoisonTick()         ||
   _updateBattleOpening()      ||
   _updateBattleMenuConfirm()  ||

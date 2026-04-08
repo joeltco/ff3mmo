@@ -10,13 +10,13 @@ import { getMonsterCanvas, getMonsterWhiteCanvas, hasMonsterSprites } from './mo
 import { getItemNameClean, getMonsterName } from './text-decoder.js';
 import { weaponSubtype } from './data/items.js';
 import { ps, getHitWeapon, isHitRightHand } from './player-stats.js';
-import { _nameToBytes, _buildItemRowBytes, makeExpText, makeGilText, makeCpText, makeFoundItemText, makeJobLevelUpText, drawLvHpRow } from './text-utils.js';
+import { _nameToBytes, _buildItemRowBytes, drawLvHpRow } from './text-utils.js';
 import { pvpEnemyCellCenter } from './pvp-math.js';
 import { pvpSt, drawBossSpriteBoxPVP } from './pvp.js';
 import { inputSt } from './input-handler.js';
-import { BATTLE_GAME_OVER, BATTLE_DEFEATED, BATTLE_VICTORY, BATTLE_RAN_AWAY,
+import { BATTLE_GAME_OVER, BATTLE_DEFEATED, BATTLE_RAN_AWAY,
          BATTLE_CANT_ESCAPE, BATTLE_BOSS_NAME, BATTLE_GOBLIN_NAME,
-         BATTLE_LEVEL_UP, BATTLE_MENU_ITEMS } from './data/strings.js';
+         BATTLE_MENU_ITEMS } from './data/strings.js';
 
 const HUD_VIEW_X = 0, HUD_VIEW_Y = 32, HUD_VIEW_W = 144, HUD_VIEW_H = 144;
 const HUD_RIGHT_X = 144, HUD_RIGHT_W = 112;
@@ -424,6 +424,7 @@ function drawBattle(shared) {
   drawBattleMenu();
   drawBattleMessage();
   drawVictoryBox();
+  drawBattleMessageStrip();
   drawDamageNumbers();
   _drawBattleDefeat();
 }
@@ -851,12 +852,7 @@ function drawBossSpriteBox() {
                     _s.battleState === 'pvp-opp-sw-throw' || _s.battleState === 'pvp-opp-sw-hit' ||
                     _s.battleState === 'defeat-monster-fade' || _s.battleState === 'defeat-text' || _s.battleState === 'defeat-close' || _s.battleState === 'team-wipe' ||
                     _s.battleState === 'victory-name-out' || _s.battleState === 'victory-celebrate' ||
-                    _s.battleState === 'victory-text-in' || _s.battleState === 'victory-hold' || _s.battleState === 'victory-fade-out' ||
-                    _s.battleState === 'exp-text-in' || _s.battleState === 'exp-hold' || _s.battleState === 'exp-fade-out' ||
-                    _s.battleState === 'gil-text-in' || _s.battleState === 'gil-hold' || _s.battleState === 'gil-fade-out' ||
-                    _s.battleState === 'levelup-text-in' || _s.battleState === 'levelup-hold' ||
-                    _s.battleState === 'item-text-in' || _s.battleState === 'item-hold' || _s.battleState === 'item-fade-out' ||
-                    _s.battleState === 'joblv-text-in' || _s.battleState === 'joblv-hold' ||
+                    _s.battleState === 'victory-msg' ||
                     _s.battleState === 'victory-text-out' || _s.battleState === 'victory-menu-fade' || _s.battleState === 'victory-box-close';
     if (isCombatPVP) drawBossSpriteBoxPVP(_s.pvpShared(), centerX, centerY);
     return;
@@ -878,12 +874,7 @@ function drawBossSpriteBox() {
                    _s.battleState.startsWith('ally-') ||
                    _s.battleState === 'defeat-monster-fade' || _s.battleState === 'defeat-text';
   const isVictory = _s.battleState === 'victory-name-out' || _s.battleState === 'victory-celebrate' ||
-                    _s.battleState === 'victory-text-in' || _s.battleState === 'victory-hold' || _s.battleState === 'victory-fade-out' ||
-                    _s.battleState === 'exp-text-in' || _s.battleState === 'exp-hold' || _s.battleState === 'exp-fade-out' ||
-                    _s.battleState === 'gil-text-in' || _s.battleState === 'gil-hold' || _s.battleState === 'gil-fade-out' ||
-                    _s.battleState === 'levelup-text-in' || _s.battleState === 'levelup-hold' ||
-                    _s.battleState === 'item-text-in' || _s.battleState === 'item-hold' || _s.battleState === 'item-fade-out' ||
-                    _s.battleState === 'joblv-text-in' || _s.battleState === 'joblv-hold' ||
+                    _s.battleState === 'victory-msg' ||
                     _s.battleState === 'victory-text-out' || _s.battleState === 'victory-menu-fade' || _s.battleState === 'victory-box-close';
   if (!isExpand && !isClose && !isAppear && !isDissolve && !isCombat && !isVictory) return;
 
@@ -1034,25 +1025,7 @@ function _victoryBoxStates() {
   const isNameOut    = bs === 'victory-name-out';
   const isCelebrate  = bs === 'victory-celebrate';
   const isClose      = bs === 'victory-box-close';
-  const isVicText    = bs === 'victory-text-in';
-  const isVicHold    = bs === 'victory-hold';
-  const isVicFadeOut = bs === 'victory-fade-out';
-  const isExpText    = bs === 'exp-text-in';
-  const isExpHold    = bs === 'exp-hold';
-  const isExpFadeOut = bs === 'exp-fade-out';
-  const isGilText    = bs === 'gil-text-in';
-  const isGilHold    = bs === 'gil-hold';
-  const isGilFadeOut = bs === 'gil-fade-out';
-  const isCpText     = bs === 'cp-text-in';
-  const isCpHold     = bs === 'cp-hold';
-  const isCpFadeOut  = bs === 'cp-fade-out';
-  const isLevelText  = bs === 'levelup-text-in';
-  const isLevelHold  = bs === 'levelup-hold';
-  const isJobLvText = bs === 'joblv-text-in';
-  const isJobLvHold = bs === 'joblv-hold';
-  const isItemText   = bs === 'item-text-in';
-  const isItemHold   = bs === 'item-hold';
-  const isItemFadeOut = bs === 'item-fade-out';
+  const isVicMsg     = bs === 'victory-msg';
   const isOut        = bs === 'victory-text-out';
   const isMenuFadeState = bs === 'victory-menu-fade';
   const isRunNameOut = bs === 'run-name-out';
@@ -1066,43 +1039,14 @@ function _victoryBoxStates() {
   const isRunFailNameIn   = bs === 'run-fail-name-in';
   const isRun     = isRunNameOut || isRunTextIn || isRunHold || isRunTextOut;
   const isRunFail = isRunFailNameOut || isRunFailTextIn || isRunFailHold || isRunFailTextOut || isRunFailNameIn;
-  return { isNameOut, isCelebrate, isClose, isVicText, isVicHold, isVicFadeOut,
-           isExpText, isExpHold, isExpFadeOut, isGilText, isGilHold, isGilFadeOut,
-           isCpText, isCpHold, isCpFadeOut,
-           isLevelText, isLevelHold, isItemText, isItemHold, isItemFadeOut,
-           isJobLvText, isJobLvHold,
+  return { isNameOut, isCelebrate, isClose, isVicMsg,
            isOut, isMenuFadeState, isRunNameOut, isRunTextIn, isRunHold, isRunTextOut,
            isRunFailNameOut, isRunFailTextIn, isRunFailHold, isRunFailTextOut, isRunFailNameIn,
            isRun, isRunFail };
 }
-function _drawVictoryMessage(boxX, boxY, s) {
-  let fadeStep = 0;
-  if (s.isVicText || s.isExpText || s.isGilText || s.isCpText || s.isItemText || s.isLevelText || s.isJobLvText)
-    fadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(_s.battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
-  else if (s.isVicFadeOut || s.isExpFadeOut || s.isGilFadeOut || s.isCpFadeOut || s.isItemFadeOut || s.isOut)
-    fadeStep = Math.min(Math.floor(_s.battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
-  const fadedPal = _makeFadedPal(fadeStep);
-  let msg;
-  if (s.isVicText || s.isVicHold || s.isVicFadeOut) msg = BATTLE_VICTORY;
-  else if (s.isExpText || s.isExpHold || s.isExpFadeOut) msg = makeExpText(_s.encounterExpGained);
-  else if (s.isGilText || s.isGilHold || s.isGilFadeOut) msg = makeGilText(_s.encounterGilGained);
-  else if (s.isCpText || s.isCpHold || s.isCpFadeOut) msg = makeCpText(_s.encounterCpGained);
-  else if (s.isItemText || s.isItemHold || s.isItemFadeOut) msg = _s.encounterDropItem !== null ? makeFoundItemText(_s.encounterDropItem) : null;
-  else if (s.isLevelText || s.isLevelHold) msg = BATTLE_LEVEL_UP;
-  else if (s.isJobLvText || s.isJobLvHold) { msg = _s.encounterJobLevelUp ? makeJobLevelUpText(_s.encounterJobLevelUp) : null; }
-  else if (s.isOut) msg = ps.leveledUp ? BATTLE_LEVEL_UP : _s.encounterDropItem !== null ? makeFoundItemText(_s.encounterDropItem) : makeGilText(_s.encounterGilGained);
-  if (msg) {
-    const tw = measureText(msg);
-    drawText(_s.ctx, boxX + Math.floor((VICTORY_BOX_W - tw) / 2), boxY + Math.floor((VICTORY_BOX_H - 8) / 2), msg, fadedPal);
-  }
-}
 function drawVictoryBox() {
   const s = _victoryBoxStates();
-  const showBox = s.isNameOut || s.isCelebrate || s.isClose || s.isVicText || s.isVicHold || s.isVicFadeOut ||
-    s.isExpText || s.isExpHold || s.isExpFadeOut || s.isGilText || s.isGilHold || s.isGilFadeOut ||
-    s.isCpText || s.isCpHold || s.isCpFadeOut ||
-    s.isItemText || s.isItemHold || s.isItemFadeOut || s.isLevelText || s.isLevelHold ||
-    s.isJobLvText || s.isJobLvHold ||
+  const showBox = s.isNameOut || s.isCelebrate || s.isClose || s.isVicMsg ||
     s.isOut || s.isMenuFadeState || s.isRun || s.isRunFail;
   if (!showBox) return;
 
@@ -1113,10 +1057,8 @@ function drawVictoryBox() {
   if (s.isNameOut || s.isRunNameOut || s.isRunFailNameOut) { _drawVictoryNameOut(boxX, boxY, s.isRunFailNameOut); return; }
   if (s.isRun) { _drawVictoryRunText(boxX, boxY, s.isRunTextIn, s.isRunTextOut); return; }
   if (s.isRunFail) { _drawVictoryRunFail(boxX, boxY, s.isRunFailNameIn, s.isRunFailTextIn, s.isRunFailTextOut); return; }
-  if (s.isCelebrate) { _s.drawBorderedBox(boxX, boxY, VICTORY_BOX_W, VICTORY_BOX_H); return; }
   _s.drawBorderedBox(boxX, boxY, VICTORY_BOX_W, VICTORY_BOX_H);
-  if (s.isClose) return;
-  _drawVictoryMessage(boxX, boxY, s);
+  // Victory messages now render in the message strip, not here
 }
 
 function _drawVictoryNameOut(boxX, boxY, isRunFail) {
@@ -1424,6 +1366,31 @@ function drawDamageNumbers() {
   }
 
   _drawEnemyHealNum();
+}
+
+// Battle message strip — renders in right panel where chat tabs normally are
+const MSG_STRIP_X = 144;
+const MSG_STRIP_Y = 160;
+const MSG_STRIP_W = 112;
+
+function drawBattleMessageStrip() {
+  const msg = _s.battleMsgCurrent;
+  if (!msg) return;
+  const t = _s.battleMsgTimer;
+  const { MSG_FADE_IN_MS, MSG_HOLD_MS, MSG_FADE_OUT_MS } = _s;
+  let fadeStep = 0;
+  if (t < MSG_FADE_IN_MS) {
+    fadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(t / (MSG_FADE_IN_MS / BATTLE_TEXT_STEPS)), BATTLE_TEXT_STEPS);
+  } else if (t < MSG_FADE_IN_MS + MSG_HOLD_MS) {
+    fadeStep = 0;
+  } else {
+    fadeStep = Math.min(Math.floor((t - MSG_FADE_IN_MS - MSG_HOLD_MS) / (MSG_FADE_OUT_MS / BATTLE_TEXT_STEPS)), BATTLE_TEXT_STEPS);
+  }
+  if (fadeStep >= BATTLE_TEXT_STEPS) return;
+  const pal = _makeFadedPal(fadeStep);
+  const tw = measureText(msg.bytes);
+  const x = MSG_STRIP_X + Math.floor((MSG_STRIP_W - tw) / 2);
+  drawText(_s.ctx, x, MSG_STRIP_Y + 4, msg.bytes, pal);
 }
 
 export { drawBattle, drawBattleAllies, drawSWExplosion, drawSWDamageNumbers };
