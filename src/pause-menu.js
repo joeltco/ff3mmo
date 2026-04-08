@@ -317,11 +317,11 @@ function _drawPauseEquipSlots(ctx, shared) {
   drawText(ctx, px + 24 + 32, atkDefY, _nameToBytes(String(ps.atk)), atkDefPal);
   drawText(ctx, px + 80, atkDefY, _nameToBytes('DEF'), atkDefPal);
   drawText(ctx, px + 80 + 32, atkDefY, _nameToBytes(String(ps.def)), atkDefPal);
-  if (shared.drawCursorFaded) {
+  if (shared._drawCursorFaded) {
     if (pauseSt.eqCursor < 5) {
-      shared.drawCursorFaded(px + 8, eqStartY + pauseSt.eqCursor * eqRowH - 4, fadeStep);
+      shared._drawCursorFaded(px + 8, eqStartY + pauseSt.eqCursor * eqRowH - 4, fadeStep);
     } else {
-      shared.drawCursorFaded(optX - 16, eqStartY - 4, fadeStep);
+      shared._drawCursorFaded(optX - 16, eqStartY - 4, fadeStep);
     }
   }
 }
@@ -350,8 +350,8 @@ function _drawPauseEquipItems(ctx, shared) {
         drawText(ctx, listX + 16, iy, getItemNameClean(entry.id), fadedPal);
       }
     }
-    if (shared.drawCursorFaded) {
-      shared.drawCursorFaded(listX, useY + pauseSt.eqItemCursor * 12 - 4, fadeStep);
+    if (shared._drawCursorFaded) {
+      shared._drawCursorFaded(listX, useY + pauseSt.eqItemCursor * 12 - 4, fadeStep);
     }
   }
 }
@@ -445,8 +445,8 @@ function _drawPauseOptions(ctx, shared) {
   drawText(ctx, tx, y, OPT_CRT_LABEL, fadedPal);
   const valBytes = _isCrtOn() ? OPT_ON : OPT_OFF;
   drawText(ctx, valRx - valBytes.length * 8, y, valBytes, fadedPal);
-  if (shared.drawCursorFaded) {
-    shared.drawCursorFaded(px + 8, y + pauseSt.optCursor * 16 - 4, fadeStep);
+  if (shared._drawCursorFaded) {
+    shared._drawCursorFaded(px + 8, y + pauseSt.optCursor * 16 - 4, fadeStep);
   }
 }
 
@@ -494,8 +494,8 @@ function _drawPauseJob(ctx, shared) {
       drawText(ctx, valRx - costBytes.length * 8, ry, costBytes, pal);
     }
   }
-  if (shared.drawCursorFaded) {
-    shared.drawCursorFaded(px + 8, y + pauseSt.jobCursor * 12 - 4, fadeStep);
+  if (shared._drawCursorFaded) {
+    shared._drawCursorFaded(px + 8, y + pauseSt.jobCursor * 12 - 4, fadeStep);
   }
 }
 
