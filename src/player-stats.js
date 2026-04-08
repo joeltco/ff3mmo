@@ -229,9 +229,9 @@ export function grantCP(amount) {
   ps.cp = Math.min(255, ps.cp + amount);
 }
 
-// Returns CP cost to switch to a job (base cost /4 for single-player, minus job level discount)
+// Returns CP cost to switch to a job (full NES base cost, minus job level discount)
 export function jobSwitchCost(newJobIdx) {
-  const baseCost = Math.floor((JOBS[newJobIdx]?.cpCost || 0) / 4);
+  const baseCost = JOBS[newJobIdx]?.cpCost || 0;
   const targetJobLv = getJobLevel(newJobIdx);
   return Math.max(0, baseCost - (targetJobLv - 1));
 }
