@@ -384,7 +384,13 @@ function _drawPauseStats(ctx, shared) {
     y += STEP;
   }
 
-  statPair('Lv', String(s.level), 'Gil', String(ps.gil));
+  // Lv left-aligned, Gil right-aligned (Gil can be 6+ digits)
+  drawText(ctx, tx, y, _nameToBytes('Lv'), fadedPal);
+  drawText(ctx, tx + 24 + GAP, y, _nameToBytes(String(s.level)), fadedPal);
+  const gilb = _nameToBytes(String(ps.gil));
+  drawText(ctx, statRx - gilb.length * 8, y, gilb, fadedPal);
+  drawText(ctx, statRx - gilb.length * 8 - GAP - 24, y, _nameToBytes('Gil'), fadedPal);
+  y += STEP;
   const hpStr = ps.hp + '/' + s.maxHP;
   const mpStr = ps.mp + '/' + s.maxMP;
   const hpb = _nameToBytes(hpStr), mpb = _nameToBytes(mpStr);
