@@ -123,23 +123,42 @@ function _battleTargetConfirm() {
   const dualWield = rIsWeapon && lIsWeapon;
   const unarmed = !rIsWeapon && !lIsWeapon;
   const wpnSubtype = weaponSubtype(ps.weaponR) || weaponSubtype(ps.weaponL) || 'unarmed';
-  const potentialHits = calcPotentialHits(ps.stats ? ps.stats.level : 1, ps.stats ? ps.stats.agi : 5, dualWield || unarmed);
-  const hitRate = ps.hitRate * (ps.status ? blindHitPenalty(ps.status) : 1);
-  // Weapon element for elemental multiplier
-  const rElem = rIsWeapon ? (ITEMS.get(ps.weaponR)?.element || null) : null;
-  const lElem = lIsWeapon ? (ITEMS.get(ps.weaponL)?.element || null) : null;
-  const wpnElem = rElem || lElem;
-  if (_s.isRandomEncounter && _s.encounterMonsters) {
-    const mon = _s.encounterMonsters[inputSt.targetIndex];
-    const eMult = elemMultiplier(wpnElem, mon.weakness, mon.resist);
-    inputSt.hitResults = rollHits(ps.atk, mon.def, hitRate, potentialHits, { elemMult: eMult });
+  const lv = ps.stats ? ps.stats.level : 1;
+  const agi = ps.stats ? ps.stats.agi : 5;
+  const hitsPerHand = calcPotentialHits(lv, agi, false); // base hits per hand
+  const blindMult = ps.status ? blindHitPenalty(ps.status) : 1;
+  // Per-hand ATK: effSTR + weapon.atk + AGI/4 + jobLv/4 (disasm 31/ABEF)
+  const baseAtk = ps.atk - (ITEMS.get(ps.weaponR)?.atk || 0) - (ITEMS.get(ps.weaponL)?.atk || 0); // STR + AGI/4 + jobLv/4
+  const rWpn = rIsWeapon ? ITEMS.get(ps.weaponR) : null;
+  const lWpn = lIsWeapon ? ITEMS.get(ps.weaponL) : null;
+  // Roll each hand independently (NES loops per hand at 30/9F6A)
+  function rollHand(wpn) {
+    const handAtk = baseAtk + (wpn ? (wpn.atk || 0) : 0);
+    const handHit = (wpn ? (wpn.hit || 80) : 80) * blindMult;
+    const handElem = wpn ? (wpn.element || null) : null;
+    if (_s.isRandomEncounter && _s.encounterMonsters) {
+      const mon = _s.encounterMonsters[inputSt.targetIndex];
+      return rollHits(handAtk, mon.def, handHit, hitsPerHand, { elemMult: elemMultiplier(handElem, mon.weakness, mon.resist) });
+    } else {
+      const targetDef = _s.isPVPBattle && _s.pvpOpponentStats
+        ? (_s.pvpPlayerTargetIdx >= 0
+            ? (_s.pvpEnemyAllies[_s.pvpPlayerTargetIdx] || _s.pvpOpponentStats).def
+            : _s.pvpOpponentStats.def)
+        : BOSS_DEF;
+      return rollHits(handAtk, targetDef, handHit, hitsPerHand);
+    }
+  }
+  if (dualWield) {
+    // Interleave R and L hand results for alternating animation
+    const rResults = rollHand(rWpn);
+    const lResults = rollHand(lWpn);
+    inputSt.hitResults = [];
+    for (let i = 0; i < Math.max(rResults.length, lResults.length); i++) {
+      if (i < rResults.length) inputSt.hitResults.push(rResults[i]);
+      if (i < lResults.length) inputSt.hitResults.push(lResults[i]);
+    }
   } else {
-    const targetDef = _s.isPVPBattle && _s.pvpOpponentStats
-      ? (_s.pvpPlayerTargetIdx >= 0
-          ? (_s.pvpEnemyAllies[_s.pvpPlayerTargetIdx] || _s.pvpOpponentStats).def
-          : _s.pvpOpponentStats.def)
-      : BOSS_DEF;
-    inputSt.hitResults = rollHits(ps.atk, targetDef, hitRate, potentialHits);
+    inputSt.hitResults = rollHand(rWpn || lWpn);
   }
   inputSt.battleActionCount++;
   const firstHandR = isWeapon(ps.weaponR) || !isWeapon(ps.weaponL);
