@@ -189,12 +189,13 @@ export function grantExp(amount) {
 
 // --- Job Level system (NES FF3) ---
 // 100 JP per level, max 1 level per battle, max level 99.
-// JP rates: JLv 1-14 = 20 JP/action, JLv 15+ varies by job.
+// JP rates: NES values / 4 for single-player (NES has 4 party members sharing actions).
+// JLv 1-14 = 5 JP/action (was 20), JLv 15+ varies by job.
 
-// JP gain rates per job at JLv 15+ (from NES disassembly)
+// JP gain rates per job at JLv 15+ (NES values / 4, minimum 2)
 const JP_RATES = {
-  0:8, 1:14, 2:14, 3:10, 4:10, 5:12, 6:14, 7:14, 8:14, 9:18,
-  10:14, 11:14, 12:24, 13:14, 14:12, 15:10, 16:10, 17:12, 18:10, 19:10, 20:12, 21:10
+  0:2, 1:4, 2:4, 3:3, 4:3, 5:3, 6:4, 7:4, 8:4, 9:5,
+  10:4, 11:4, 12:6, 13:4, 14:3, 15:3, 16:3, 17:3, 18:3, 19:3, 20:3, 21:3
 };
 
 export function getJobLevel(jobIdx = ps.jobIdx) {
@@ -205,7 +206,7 @@ export function getJobLevel(jobIdx = ps.jobIdx) {
 // Returns new level number on level-up, or null.
 export function gainJobJP(actionCount) {
   const jl = ps.jobLevels[ps.jobIdx] || (ps.jobLevels[ps.jobIdx] = { level: 1, jp: 0 });
-  const rate = jl.level < 15 ? 20 : (JP_RATES[ps.jobIdx] || 14);
+  const rate = jl.level < 15 ? 5 : (JP_RATES[ps.jobIdx] || 4);
   jl.jp += actionCount * rate;
   if (jl.jp >= 100 && jl.level < 99) {
     jl.jp -= 100;
