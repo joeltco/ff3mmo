@@ -366,7 +366,7 @@ function _drawPauseStats(ctx, shared) {
     y += STEP;
   }
   const GAP = 16; // 2-char gap between labels and values
-  const r1LabelX = tx + 80; // fixed column for right-side labels
+  const r1LabelX = tx + 72; // fixed column for right-side labels
   function statPair(l0, v0, l1, v1) {
     const l0b = _nameToBytes(l0), v0b = _nameToBytes(v0);
     const l1b = _nameToBytes(l1), v1b = _nameToBytes(v1);
