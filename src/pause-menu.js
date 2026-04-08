@@ -2,7 +2,7 @@
 
 import { drawText } from './font-renderer.js';
 import { ps, getEquipSlotId, jobSwitchCost, getJobLevel } from './player-stats.js';
-import { JOBS } from './data/jobs.js';
+import { JOBS, JOB_ABBR } from './data/jobs.js';
 import { _makeFadedPal } from './palette.js';
 import { _nameToBytes, _buildItemRowBytes } from './text-utils.js';
 import { getItemNameClean } from './text-decoder.js';
@@ -456,7 +456,6 @@ function _drawPauseJob(ctx, shared) {
   // Job list
   for (let i = 0; i < pauseSt.jobList.length; i++) {
     const jobIdx = pauseSt.jobList[i];
-    const label = _nameToBytes(JOBS[jobIdx].name);
     const isCurrentJob = jobIdx === ps.jobIdx;
     const cost = jobSwitchCost(jobIdx);
     const canAfford = isCurrentJob || ps.cp >= cost;
@@ -468,16 +467,16 @@ function _drawPauseJob(ctx, shared) {
     } else {
       pal = fadedPal;
     }
-    drawText(ctx, tx, y + i * 12, label, pal);
-    // Job level between name and cost
+    const ry = y + i * 12;
+    // Abbr (2 chars)  Lv (right-aligned 2 chars)  Cost (right-aligned 2 chars)
+    drawText(ctx, tx, ry, _nameToBytes(JOB_ABBR[jobIdx] || '??'), pal);
     const jlv = getJobLevel(jobIdx);
     const jlvBytes = _nameToBytes(String(jlv));
-    const lvX = valRx - 40;
-    drawText(ctx, lvX - jlvBytes.length * 8, y + i * 12, jlvBytes, pal);
-    // Show cost to the right (skip for current job)
+    const lvX = tx + 32; // after abbr + gap
+    drawText(ctx, lvX + 16 - jlvBytes.length * 8, ry, jlvBytes, pal);
     if (!isCurrentJob && cost > 0) {
       const costBytes = _nameToBytes(String(cost));
-      drawText(ctx, valRx - costBytes.length * 8, y + i * 12, costBytes, pal);
+      drawText(ctx, valRx - costBytes.length * 8, ry, costBytes, pal);
     }
   }
   if (cursorTileCanvas && pauseSt.state === 'job' && fadeStep === 0) {

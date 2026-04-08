@@ -74,6 +74,9 @@ export const JOBS = [
 // Convenience — job names array in ROM order
 export const JOB_NAMES = JOBS.map(j => j.name);
 
+// 2-letter abbreviations for compact UI
+export const JOB_ABBR = ['OK','Fi','Mo','WM','BM','RM','Ra','Kn','Th','Sc','Ge','Dr','Vi','BB','MK','Co','Ba','Su','De','Ma','Sa','Ni'];
+
 // Base stats for a job at level 1
 // Returns { str, agi, vit, int, mnd, mpIdx }
 export function readJobBaseStats(romData, jobIdx) {
