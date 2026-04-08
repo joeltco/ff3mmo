@@ -278,10 +278,14 @@ function _advanceBattleMsg() {
 function _updateBattleMsg(dt) {
   if (!battleMsgCurrent) return;
   battleMsgTimer += dt;
-  if (!battleMsgCurrent.waitForZ && battleMsgTimer >= MSG_TOTAL_MS) {
-    _advanceBattleMsg();
+  if (!battleMsgCurrent.waitForZ) {
+    // Extend hold for long messages that need to scroll (8px per char, 112px strip)
+    const textW = battleMsgCurrent.bytes.length * 8;
+    const overflow = Math.max(0, textW - 112);
+    const scrollTime = overflow > 0 ? 400 + overflow / 0.06 + 400 : 0; // pause + scroll + pause
+    const totalMs = MSG_FADE_IN_MS + Math.max(MSG_HOLD_MS, scrollTime) + MSG_FADE_OUT_MS;
+    if (battleMsgTimer >= totalMs) _advanceBattleMsg();
   }
-  // waitForZ messages hold indefinitely — advanced by Z press in input-handler
 }
 function advanceBattleMsgZ() {
   // Called by input-handler on Z press during victory-msg state

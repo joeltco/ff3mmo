@@ -1328,19 +1328,39 @@ function drawBattleMessageStrip() {
   if (!msg) return;
   const t = _s.battleMsgTimer;
   const { MSG_FADE_IN_MS, MSG_HOLD_MS, MSG_FADE_OUT_MS } = _s;
+  const tw = measureText(msg.bytes);
+  const overflow = Math.max(0, tw - MSG_STRIP_W);
+  const scrollTime = overflow > 0 ? 400 + overflow / 0.06 + 400 : 0;
+  const effectiveHold = Math.max(MSG_HOLD_MS, scrollTime);
   let fadeStep = 0;
   if (t < MSG_FADE_IN_MS) {
     fadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(t / (MSG_FADE_IN_MS / BATTLE_TEXT_STEPS)), BATTLE_TEXT_STEPS);
-  } else if (t < MSG_FADE_IN_MS + MSG_HOLD_MS) {
+  } else if (t < MSG_FADE_IN_MS + effectiveHold) {
     fadeStep = 0;
   } else {
-    fadeStep = Math.min(Math.floor((t - MSG_FADE_IN_MS - MSG_HOLD_MS) / (MSG_FADE_OUT_MS / BATTLE_TEXT_STEPS)), BATTLE_TEXT_STEPS);
+    fadeStep = Math.min(Math.floor((t - MSG_FADE_IN_MS - effectiveHold) / (MSG_FADE_OUT_MS / BATTLE_TEXT_STEPS)), BATTLE_TEXT_STEPS);
   }
   if (fadeStep >= BATTLE_TEXT_STEPS) return;
   const pal = _makeFadedPal(fadeStep);
-  const tw = measureText(msg.bytes);
-  const x = MSG_STRIP_X;
-  drawText(_s.ctx, x, MSG_STRIP_Y + 4, msg.bytes, pal);
+  const y = MSG_STRIP_Y + 4;
+  if (tw <= MSG_STRIP_W) {
+    drawText(_s.ctx, MSG_STRIP_X, y, msg.bytes, pal);
+  } else {
+    const SCROLL_PAUSE = 400;
+    const SCROLL_SPEED = 0.06;
+    const scrollMs = overflow / SCROLL_SPEED;
+    const holdT = t - MSG_FADE_IN_MS; // time in hold phase
+    let scrollX = 0;
+    if (holdT < SCROLL_PAUSE) scrollX = 0;
+    else if (holdT < SCROLL_PAUSE + scrollMs) scrollX = (holdT - SCROLL_PAUSE) * SCROLL_SPEED;
+    else scrollX = overflow;
+    _s.ctx.save();
+    _s.ctx.beginPath();
+    _s.ctx.rect(MSG_STRIP_X, MSG_STRIP_Y, MSG_STRIP_W, 16);
+    _s.ctx.clip();
+    drawText(_s.ctx, MSG_STRIP_X - scrollX, y, msg.bytes, pal);
+    _s.ctx.restore();
+  }
 }
 
 export { drawBattle, drawBattleAllies, drawSWExplosion, drawSWDamageNumbers };
