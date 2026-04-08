@@ -585,16 +585,17 @@ export function initBattleSpriteForJob(romData, jobIdx) {
       if (sdata.data[p * 4 + 3] > 0) { sdata.data[p * 4] = darkRgb[0]; sdata.data[p * 4 + 1] = darkRgb[1]; sdata.data[p * 4 + 2] = darkRgb[2]; }
     }
     sctx.putImageData(sdata, 0, 0);
-    const battleSpriteAttackCanvas = document.createElement('canvas');
-    battleSpriteAttackCanvas.width = 16; battleSpriteAttackCanvas.height = 16;
-    const actx2 = battleSpriteAttackCanvas.getContext('2d');
-    actx2.drawImage(battleSpriteCanvas, 0, 0);
-    const battleSpriteAttackLCanvas = document.createElement('canvas');
-    battleSpriteAttackLCanvas.width = 16; battleSpriteAttackLCanvas.height = 16;
-    const alctx2 = battleSpriteAttackLCanvas.getContext('2d');
-    alctx2.drawImage(battleSpriteCanvas, 0, 0);
-    _blitTile(alctx2, d(WR_L_FWD_T2), palette, 0, 8);
-    _blitTile(alctx2, d(WR_L_FWD_T3), palette, 8, 8);
+    // R back swing: idle + R back T2
+    const atkRBackTiles = [idleTiles[0], idleTiles[1], d(WR_R_BACK_T2), idleTiles[3]];
+    const battleSpriteAttackCanvas = _renderPortrait(atkRBackTiles, _BATTLE_LAYOUT, palette);
+    // L back swing: idle + L back T3
+    const atkLBackTiles = [idleTiles[0], idleTiles[1], idleTiles[2], d(WR_L_BACK[3])];
+    const battleSpriteAttackLCanvas = _renderPortrait(atkLBackTiles, _BATTLE_LAYOUT, palette);
+    // R fwd swing: idle body (R FWD uses idle T0-T3)
+    const battleSpriteAttack2Canvas = _renderPortrait(idleTiles, _BATTLE_LAYOUT, palette);
+    // L fwd swing: idle + L fwd T2/T3
+    const atkLFwdTiles = [idleTiles[0], idleTiles[1], d(WR_L_FWD_T2), d(WR_L_FWD_T3)];
+    // Knife poses
     const knifeRTiles = [idleTiles[0], idleTiles[1], d(WR_R_BACK_T2), idleTiles[3]];
     const knifeLTiles = [idleTiles[0], idleTiles[1], idleTiles[2], d(WR_L_BACK[3])];
     const battleSpriteKnifeRCanvas = _renderPortrait(knifeRTiles, _BATTLE_LAYOUT, palette);
@@ -611,7 +612,6 @@ export function initBattleSpriteForJob(romData, jobIdx) {
     }
     const hitTiles = WR_HIT.map(d);
     const battleSpriteHitCanvas = _renderPortrait(hitTiles, _BATTLE_LAYOUT, palette);
-    const battleSpriteAttack2Canvas = _renderPortrait(idleTiles, _BATTLE_LAYOUT, palette); // placeholder
     const kneelTiles = WR_KNEEL.map(d);
     const battleSpriteKneelCanvas = _renderPortrait(kneelTiles, _BATTLE_LAYOUT, palette);
     const battleSpriteKneelFadeCanvases = [];
