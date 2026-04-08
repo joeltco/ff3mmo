@@ -1335,8 +1335,8 @@ function drawBattleMessageStrip() {
   let fadeStep = 0;
   if (t < MSG_FADE_IN_MS) {
     fadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(t / (MSG_FADE_IN_MS / BATTLE_TEXT_STEPS)), BATTLE_TEXT_STEPS);
-  } else if (t < MSG_FADE_IN_MS + effectiveHold) {
-    fadeStep = 0;
+  } else if (msg.waitForZ || t < MSG_FADE_IN_MS + effectiveHold) {
+    fadeStep = 0; // waitForZ: stay solid after fade-in until Z pressed
   } else {
     fadeStep = Math.min(Math.floor((t - MSG_FADE_IN_MS - effectiveHold) / (MSG_FADE_OUT_MS / BATTLE_TEXT_STEPS)), BATTLE_TEXT_STEPS);
   }

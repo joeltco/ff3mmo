@@ -289,9 +289,16 @@ function _updateBattleMsg(dt) {
 }
 function advanceBattleMsgZ() {
   // Called by input-handler on Z press during victory-msg state
+  // Require minimum display time (fade-in + hold) before Z can advance
   if (battleMsgCurrent && battleMsgCurrent.waitForZ) {
-    _advanceBattleMsg();
-    return true;
+    const textW = battleMsgCurrent.bytes.length * 8;
+    const overflow = Math.max(0, textW - 112);
+    const scrollTime = overflow > 0 ? 400 + overflow / 0.06 + 400 : 0;
+    const minTime = MSG_FADE_IN_MS + Math.max(MSG_HOLD_MS, scrollTime);
+    if (battleMsgTimer >= minTime) {
+      _advanceBattleMsg();
+      return true;
+    }
   }
   return false;
 }
