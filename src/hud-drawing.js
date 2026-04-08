@@ -190,14 +190,15 @@ function _drawPortraitImage(px, py, nfPortrait, isPauseHeal, infoFadeStep) {
   const ctx = _s.ctx;
   if (infoFadeStep >= HUD_INFO_FADE_STEPS) return;
   if (infoFadeStep > 0) {
-    const fadeSets = nfPortrait === _s.battleSpriteKneelCanvas ? _s.battleSpriteKneelFadeCanvases
-                   : nfPortrait === _s.battleSpriteDefendCanvas ? _s.battleSpriteDefendFadeCanvases
-                   : _s.battleSpriteFadeCanvases;
+    const bp = _s.battlePoses;
+    const fadeSets = nfPortrait === bp.kneel ? bp.kneelFade
+                   : nfPortrait === bp.defend ? bp.defendFade
+                   : bp.idleFade;
     if (fadeSets) { ctx.drawImage(fadeSets[infoFadeStep - 1], px, py); return; }
   }
   ctx.drawImage(nfPortrait, px, py);
   const isNearFatal = ps.hp > 0 && ps.stats && ps.hp <= Math.floor(ps.stats.maxHP / 4);
-  if (!isPauseHeal && isNearFatal && nfPortrait === _s.battleSpriteKneelCanvas && _s.sweatFrames.length === 2)
+  if (!isPauseHeal && isNearFatal && nfPortrait === _s.battlePoses.kneel && _s.sweatFrames.length === 2)
     ctx.drawImage(_s.sweatFrames[Math.floor(Date.now() / 133) & 1], px, py - 3);
   // Status sprite above portrait — show highest priority active status
   if (ps.status && ps.status.mask !== 0 && _s.statusSpriteMap) {
@@ -232,12 +233,13 @@ function _drawPauseHealNum(px, py) {
 
 function _drawHUDPortrait() {
   const infoFadeStep = HUD_INFO_FADE_STEPS - Math.min(Math.floor(_s.hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
-  if (_s.battleState !== 'none' || !_s.battleSpriteCanvas) return;
+  const bp = _s.battlePoses;
+  if (_s.battleState !== 'none' || !bp.idle) return;
   const isPauseHeal = pauseSt.state === 'inv-heal';
   const hasActiveStatus = ps.status && ps.status.mask !== 0;
-  const nfPortrait = isPauseHeal && _s.battleSpriteDefendCanvas ? _s.battleSpriteDefendCanvas
-    : ((ps.hp > 0 && ps.stats && ps.hp <= Math.floor(ps.stats.maxHP / 4) || hasActiveStatus) && _s.battleSpriteKneelCanvas
-       ? _s.battleSpriteKneelCanvas : _s.battleSpriteCanvas);
+  const nfPortrait = isPauseHeal && bp.defend ? bp.defend
+    : ((ps.hp > 0 && ps.stats && ps.hp <= Math.floor(ps.stats.maxHP / 4) || hasActiveStatus) && bp.kneel
+       ? bp.kneel : bp.idle);
   const px = HUD_RIGHT_X + 8, py = HUD_VIEW_Y + 8;
   _drawPortraitImage(px, py, nfPortrait, isPauseHeal, infoFadeStep);
   _drawCureSparkle(px, py, isPauseHeal);

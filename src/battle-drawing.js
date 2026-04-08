@@ -167,23 +167,24 @@ function drawSWDamageNumbers(shared) {
 
 function _getPortraitSrc(isNearFatal, isAttackPose, isHitPose, isDefendPose, isItemUsePose, isVictoryPose) {
   const hasActiveStatus = ps.status && ps.status.mask !== 0;
-  let src = ((isNearFatal || hasActiveStatus) && _s.battleSpriteKneelCanvas) ? _s.battleSpriteKneelCanvas : _s.battleSpriteCanvas;
+  const p = _s.battlePoses;
+  let src = ((isNearFatal || hasActiveStatus) && p.kneel) ? p.kneel : p.idle;
   if (isAttackPose) {
     const _ws = weaponSubtype(getHitWeapon(_s.currentHitIdx));
+    const rh = isHitRightHand(_s.currentHitIdx);
     if (_ws === 'knife' || _ws === 'dagger') {
-      src = (isHitRightHand(_s.currentHitIdx) ? _s.battleSpriteKnifeRCanvas : _s.battleSpriteKnifeLCanvas) || src;
+      src = (rh ? p.knifeR : p.knifeL) || src;
     } else if (_s.battleState === 'attack-back') {
-      src = (isHitRightHand(_s.currentHitIdx) ? _s.battleSpriteAttackCanvas : _s.battleSpriteAttackLCanvas) || src;
+      src = (rh ? p.rBack : p.lBack) || src;
     } else if (_s.battleState === 'attack-fwd' || _s.battleState === 'player-slash') {
-      const rightHand = isHitRightHand(_s.currentHitIdx);
-      src = (rightHand ? (_s.battleSpriteAttack2Canvas || _s.battleSpriteAttackCanvas) : (_s.battleSpriteAttackL2Canvas || _s.battleSpriteAttackLCanvas)) || src;
+      src = (rh ? (p.rFwd || p.rBack) : (p.lFwd || p.lBack)) || src;
     }
-  } else if ((isDefendPose || isItemUsePose) && _s.battleSpriteDefendCanvas) {
-    src = _s.battleSpriteDefendCanvas;
-  } else if (isHitPose && _s.battleSpriteHitCanvas) {
-    src = _s.battleSpriteHitCanvas;
-  } else if (isVictoryPose && _s.battleSpriteVictoryCanvas) {
-    if (Math.floor(Date.now() / 250) & 1) src = _s.battleSpriteVictoryCanvas;
+  } else if ((isDefendPose || isItemUsePose) && p.defend) {
+    src = p.defend;
+  } else if (isHitPose && p.hit) {
+    src = p.hit;
+  } else if (isVictoryPose && p.victory) {
+    if (Math.floor(Date.now() / 250) & 1) src = p.victory;
   }
   return src;
 }
@@ -327,7 +328,7 @@ function _drawBattlePortrait() {
       _s.ctx.clip();
       const slideT = dt / DEATH_SLIDE_MS;
       const slideY = Math.floor(slideT * 16);
-      if (_s.battleSpriteKneelCanvas) _s.ctx.drawImage(_s.battleSpriteKneelCanvas, px, py + slideY);
+      if (_s.battlePoses.kneel) _s.ctx.drawImage(_s.battlePoses.kneel, px, py + slideY);
       _s.ctx.restore();
     }
 

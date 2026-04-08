@@ -644,13 +644,16 @@ export function initBattleSpriteForJob(romData, jobIdx) {
       return sc;
     });
     return {
-      battleSpriteCanvas, battleSpriteFadeCanvases, silhouetteCanvas,
-      battleSpriteAttackCanvas, battleSpriteAttackLCanvas,
-      battleSpriteKnifeRCanvas, battleSpriteKnifeLCanvas, battleSpriteKnifeBackCanvas,
-      battleSpriteVictoryCanvas, battleSpriteHitCanvas, battleSpriteAttack2Canvas, battleSpriteAttackL2Canvas,
-      battleSpriteDefendCanvas, battleSpriteDefendFadeCanvases,
-      defendSparkleFrames, cureSparkleFrames,
-      battleSpriteKneelCanvas, battleSpriteKneelFadeCanvases, sweatFrames,
+      poses: {
+        idle: battleSpriteCanvas, idleFade: battleSpriteFadeCanvases, silhouette: silhouetteCanvas,
+        rBack: battleSpriteAttackCanvas, lBack: battleSpriteAttackLCanvas,
+        rFwd: battleSpriteAttack2Canvas, lFwd: battleSpriteAttackL2Canvas,
+        knifeR: battleSpriteKnifeRCanvas, knifeL: battleSpriteKnifeLCanvas, knifeBack: battleSpriteKnifeBackCanvas,
+        victory: battleSpriteVictoryCanvas, hit: battleSpriteHitCanvas,
+        defend: battleSpriteDefendCanvas, defendFade: battleSpriteDefendFadeCanvases,
+        kneel: battleSpriteKneelCanvas, kneelFade: battleSpriteKneelFadeCanvases,
+      },
+      defendSparkleFrames, cureSparkleFrames, sweatFrames,
     };
   }
 
@@ -760,13 +763,16 @@ export function initBattleSpriteForJob(romData, jobIdx) {
   });
 
   return {
-    battleSpriteCanvas, battleSpriteFadeCanvases, silhouetteCanvas,
-    battleSpriteAttackCanvas, battleSpriteAttackLCanvas,
-    battleSpriteKnifeRCanvas, battleSpriteKnifeLCanvas, battleSpriteKnifeBackCanvas,
-    battleSpriteVictoryCanvas, battleSpriteHitCanvas, battleSpriteAttack2Canvas,
-    battleSpriteDefendCanvas, battleSpriteDefendFadeCanvases,
-    defendSparkleFrames, cureSparkleFrames,
-    battleSpriteKneelCanvas, battleSpriteKneelFadeCanvases, sweatFrames,
+    poses: {
+      idle: battleSpriteCanvas, idleFade: battleSpriteFadeCanvases, silhouette: silhouetteCanvas,
+      rBack: battleSpriteAttackCanvas, lBack: battleSpriteAttackLCanvas,
+      rFwd: battleSpriteAttack2Canvas, lFwd: null,
+      knifeR: battleSpriteKnifeRCanvas, knifeL: battleSpriteKnifeLCanvas, knifeBack: battleSpriteKnifeBackCanvas,
+      victory: battleSpriteVictoryCanvas, hit: battleSpriteHitCanvas,
+      defend: battleSpriteDefendCanvas, defendFade: battleSpriteDefendFadeCanvases,
+      kneel: battleSpriteKneelCanvas, kneelFade: battleSpriteKneelFadeCanvases,
+    },
+    defendSparkleFrames, cureSparkleFrames, sweatFrames,
   };
 }
 
@@ -782,23 +788,17 @@ export function initBattleSprite(romData) {
   const low = _initBattleLowHPSprites(palette);
 
   return {
-    battleSpriteCanvas: idle.battleSpriteCanvas,
-    battleSpriteFadeCanvases: idle.battleSpriteFadeCanvases,
-    silhouetteCanvas: idle.silhouetteCanvas,
-    battleSpriteAttackCanvas: atk.battleSpriteAttackCanvas,
-    battleSpriteAttackLCanvas: atk.battleSpriteAttackLCanvas,
-    battleSpriteKnifeRCanvas: knife.battleSpriteKnifeRCanvas,
-    battleSpriteKnifeLCanvas: knife.battleSpriteKnifeLCanvas,
-    battleSpriteKnifeBackCanvas: knife.battleSpriteKnifeBackCanvas,
-    battleSpriteVictoryCanvas: rom.battleSpriteVictoryCanvas,
-    battleSpriteHitCanvas: rom.battleSpriteHitCanvas,
-    battleSpriteAttack2Canvas: rom.battleSpriteAttack2Canvas,
-    battleSpriteDefendCanvas: def.battleSpriteDefendCanvas,
-    battleSpriteDefendFadeCanvases: def.battleSpriteDefendFadeCanvases,
+    poses: {
+      idle: idle.battleSpriteCanvas, idleFade: idle.battleSpriteFadeCanvases, silhouette: idle.silhouetteCanvas,
+      rBack: atk.battleSpriteAttackCanvas, lBack: atk.battleSpriteAttackLCanvas,
+      rFwd: rom.battleSpriteAttack2Canvas, lFwd: null,
+      knifeR: knife.battleSpriteKnifeRCanvas, knifeL: knife.battleSpriteKnifeLCanvas, knifeBack: knife.battleSpriteKnifeBackCanvas,
+      victory: rom.battleSpriteVictoryCanvas, hit: rom.battleSpriteHitCanvas,
+      defend: def.battleSpriteDefendCanvas, defendFade: def.battleSpriteDefendFadeCanvases,
+      kneel: low.battleSpriteKneelCanvas, kneelFade: low.battleSpriteKneelFadeCanvases,
+    },
     defendSparkleFrames: def.defendSparkleFrames,
     cureSparkleFrames: def.cureSparkleFrames,
-    battleSpriteKneelCanvas: low.battleSpriteKneelCanvas,
-    battleSpriteKneelFadeCanvases: low.battleSpriteKneelFadeCanvases,
     sweatFrames: low.sweatFrames,
   };
 }

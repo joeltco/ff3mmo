@@ -124,30 +124,16 @@ let borderBlueTileCanvases = null; // same but with blue (0x02) background inste
 let borderFadeSets = null;    // [fadeLevel] → [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR, FILL]
 let cornerMasks = null;       // [TL, TR, BL, BR] 8×8 canvases — black where outside, transparent inside
 
-// Battle sprite — Onion Knight idle frame (16×24, 2×3 tiles)
-let battleSpriteCanvas = null;
-let battleSpriteFadeCanvases = null;       // [step1..step4] NES-faded idle portrait for game-start fade-in
-let battleSpriteDefendFadeCanvases = null; // same for defend pose
-let battleSpriteKneelFadeCanvases = null;  // same for kneel pose
-let battleSpriteVictoryCanvas = null;
-let battleSpriteAttackCanvas = null;   // right-hand attack frame 1 (arm raised)
-let battleSpriteAttack2Canvas = null;  // R fwd swing (arm swung)
-let battleSpriteAttackL2Canvas = null; // L fwd swing
-let battleSpriteAttackLCanvas = null;  // left-hand back swing
-let battleSpriteKnifeRCanvas = null;   // R-hand knife front swing (single trace $2B/$2C/$39/$2E)
-let battleSpriteKnifeLCanvas = null;   // L-hand knife front swing (single trace $01/$3F/$03/$40)
-let battleSpriteKnifeBackCanvas = null;// knife back swing body (dual trace $43/$44/$45/$46)
-// Weapon blade + fist canvases → weapon-sprites.js
-let battleSpriteHitCanvas = null;      // taking damage / recoil
-let battleSpriteDefendCanvas = null;   // defend pose 16×24 (tiles $43-$48)
-let battleSpriteKneelCanvas = null;    // low HP kneel pose 16×16 (PPU $09-$0C)
+// Battle sprite poses — keyed map replaces 14+ individual canvas variables
+let battlePoses = { idle: null, idleFade: [], rBack: null, lBack: null, rFwd: null, lFwd: null,
+  knifeR: null, knifeL: null, knifeBack: null, victory: null, defend: null, defendFade: [],
+  hit: null, kneel: null, kneelFade: [], silhouette: null };
+// Effect sprites (not poses)
 let sweatFrames = [];                  // 2 × 16×8 canvases (near-fatal dot animation)
 let defendSparkleFrames = [];          // 4 × 8×8 canvases ($49-$4C)
 let cureSparkleFrames = [];            // 2 × 16×16 canvases (config A/B from $4D/$4E)
 let statusSpriteMap = new Map();        // Map<statusFlag, [frame0, frame1]> — all status animations
 let poisonBubbleFrames = [];           // backward compat ref to poison frames
-// battleFistCanvas → weapon-sprites.js
-let silhouetteCanvas = null;
 
 // FF1&2 ROM — secondary ROM for monster sprites, etc.
 let ff12Raw = null;
@@ -669,24 +655,9 @@ function _xPressed() { if (!keys['x'] && !keys['X']) return false; keys['x'] = f
 
 function _swapBattleSprites(jobIdx) {
   const bs = _initBattleSpriteForJob(romRaw, jobIdx);
-  battleSpriteCanvas = bs.battleSpriteCanvas;
-  battleSpriteFadeCanvases = bs.battleSpriteFadeCanvases;
-  silhouetteCanvas = bs.silhouetteCanvas;
-  battleSpriteAttackCanvas = bs.battleSpriteAttackCanvas;
-  battleSpriteAttackLCanvas = bs.battleSpriteAttackLCanvas;
-  battleSpriteKnifeRCanvas = bs.battleSpriteKnifeRCanvas;
-  battleSpriteKnifeLCanvas = bs.battleSpriteKnifeLCanvas;
-  battleSpriteKnifeBackCanvas = bs.battleSpriteKnifeBackCanvas;
-  battleSpriteVictoryCanvas = bs.battleSpriteVictoryCanvas;
-  battleSpriteHitCanvas = bs.battleSpriteHitCanvas;
-  battleSpriteAttack2Canvas = bs.battleSpriteAttack2Canvas;
-  battleSpriteAttackL2Canvas = bs.battleSpriteAttackL2Canvas || null;
-  battleSpriteDefendCanvas = bs.battleSpriteDefendCanvas;
-  battleSpriteDefendFadeCanvases = bs.battleSpriteDefendFadeCanvases;
+  battlePoses = bs.poses;
   defendSparkleFrames = bs.defendSparkleFrames;
   cureSparkleFrames = bs.cureSparkleFrames;
-  battleSpriteKneelCanvas = bs.battleSpriteKneelCanvas;
-  battleSpriteKneelFadeCanvases = bs.battleSpriteKneelFadeCanvases;
   sweatFrames = bs.sweatFrames;
   // Re-init hud drawing shared context so it picks up new canvases
   initHudDrawing(_hudDrawShared());
@@ -724,12 +695,7 @@ function _hudDrawShared() {
     get hudFadeCanvases() { return hudFadeCanvases; },
     get titleHudCanvas() { return titleHudCanvas; },
     get titleHudFadeCanvases() { return titleHudFadeCanvases; },
-    get battleSpriteCanvas() { return battleSpriteCanvas; },
-    get battleSpriteFadeCanvases() { return battleSpriteFadeCanvases; },
-    get battleSpriteDefendCanvas() { return battleSpriteDefendCanvas; },
-    get battleSpriteDefendFadeCanvases() { return battleSpriteDefendFadeCanvases; },
-    get battleSpriteKneelCanvas() { return battleSpriteKneelCanvas; },
-    get battleSpriteKneelFadeCanvases() { return battleSpriteKneelFadeCanvases; },
+    get battlePoses() { return battlePoses; },
     get sweatFrames() { return sweatFrames; },
     get poisonBubbleFrames() { return poisonBubbleFrames; },
     get statusSpriteMap() { return statusSpriteMap; },
@@ -1159,21 +1125,7 @@ function _battleDrawShared() {
     get allyShakeTimer() { return allyShakeTimer; },
     get battleMessage() { return battleMessage; },
     ctx,
-    get battleSpriteCanvas() { return battleSpriteCanvas; },
-    get battleSpriteAttackCanvas() { return battleSpriteAttackCanvas; },
-    get battleSpriteAttack2Canvas() { return battleSpriteAttack2Canvas; },
-    get battleSpriteAttackL2Canvas() { return battleSpriteAttackL2Canvas; },
-    get battleSpriteAttackLCanvas() { return battleSpriteAttackLCanvas; },
-    get battleSpriteKnifeRCanvas() { return battleSpriteKnifeRCanvas; },
-    get battleSpriteKnifeLCanvas() { return battleSpriteKnifeLCanvas; },
-    get battleSpriteKnifeBackCanvas() { return battleSpriteKnifeBackCanvas; },
-    get battleSpriteHitCanvas() { return battleSpriteHitCanvas; },
-    get battleSpriteDefendCanvas() { return battleSpriteDefendCanvas; },
-    get battleSpriteKneelCanvas() { return battleSpriteKneelCanvas; },
-    get battleSpriteVictoryCanvas() { return battleSpriteVictoryCanvas; },
-    get battleSpriteFadeCanvases() { return battleSpriteFadeCanvases; },
-    get battleSpriteDefendFadeCanvases() { return battleSpriteDefendFadeCanvases; },
-    get battleSpriteKneelFadeCanvases() { return battleSpriteKneelFadeCanvases; },
+    get battlePoses() { return battlePoses; },
     get battleKnifeBladeCanvas() { return getKnifeBladeCanvas(); },
     get battleKnifeBladeSwungCanvas() { return getKnifeBladeSwungCanvas(); },
     get battleDaggerBladeCanvas() { return getDaggerBladeCanvas(); },
@@ -1268,9 +1220,9 @@ function _triggerShared() {
 function _titleShared() {
   return {
     waterTick,
-    battleSpriteCanvas,
-    battleSpriteFadeCanvases,
-    silhouetteCanvas,
+    battleSpriteCanvas: battlePoses.idle,
+    battleSpriteFadeCanvases: battlePoses.idleFade,
+    silhouetteCanvas: battlePoses.silhouette,
     fakePlayerPortraits,
     drawBorderedBox,
     drawHudBox,
@@ -1301,24 +1253,9 @@ function _initSpriteAssets(romRaw) {
 
   // Battle sprite (sprite-init.js)
   const bs = _initBattleSpriteForJob(romRaw, ps.jobIdx);
-  battleSpriteCanvas = bs.battleSpriteCanvas;
-  battleSpriteFadeCanvases = bs.battleSpriteFadeCanvases;
-  silhouetteCanvas = bs.silhouetteCanvas;
-  battleSpriteAttackCanvas = bs.battleSpriteAttackCanvas;
-  battleSpriteAttackLCanvas = bs.battleSpriteAttackLCanvas;
-  battleSpriteKnifeRCanvas = bs.battleSpriteKnifeRCanvas;
-  battleSpriteKnifeLCanvas = bs.battleSpriteKnifeLCanvas;
-  battleSpriteKnifeBackCanvas = bs.battleSpriteKnifeBackCanvas;
-  battleSpriteVictoryCanvas = bs.battleSpriteVictoryCanvas;
-  battleSpriteHitCanvas = bs.battleSpriteHitCanvas;
-  battleSpriteAttack2Canvas = bs.battleSpriteAttack2Canvas;
-  battleSpriteAttackL2Canvas = bs.battleSpriteAttackL2Canvas || null;
-  battleSpriteDefendCanvas = bs.battleSpriteDefendCanvas;
-  battleSpriteDefendFadeCanvases = bs.battleSpriteDefendFadeCanvases;
+  battlePoses = bs.poses;
   defendSparkleFrames = bs.defendSparkleFrames;
   cureSparkleFrames = bs.cureSparkleFrames;
-  battleSpriteKneelCanvas = bs.battleSpriteKneelCanvas;
-  battleSpriteKneelFadeCanvases = bs.battleSpriteKneelFadeCanvases;
   sweatFrames = bs.sweatFrames;
   statusSpriteMap = _initStatusSprites();
   poisonBubbleFrames = statusSpriteMap.get(0x02) || [];
