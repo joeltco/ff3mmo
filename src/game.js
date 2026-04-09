@@ -1759,10 +1759,6 @@ function _updateTitleMainOutCase() {
     ps.body = slot.stats.body || 0x00;
     ps.arms = slot.stats.arms || 0x00;
     recalcCombatStats();
-  } else if (slot && !slot.stats) {
-    // New character — seed slot with current ps so HP persists on select screen
-    slot.level = 1;
-    slot.hp = ps.hp;
   }
   playerInventory = (slot && slot.inventory) ? { ...slot.inventory } : {};
   ps.gil = (slot && slot.gil) || 0;

@@ -5,6 +5,7 @@ import { nesColorFade, _makeFadedPal } from './palette.js';
 import { _nameToBytes, drawLvHpRow } from './text-utils.js';
 import { selectCursor, saveSlots, nameBuffer, NAME_MAX_LEN,
          setSelectCursor, setNameBuffer, saveSlotsToDB } from './save-state.js';
+import { ps, playerStatsSnapshot } from './player-stats.js';
 import { playSFX, SFX } from './music.js';
 import { serverDeleteSlot } from './save.js';
 
@@ -632,7 +633,7 @@ export function updateTitleSelect(keys) {
 export function onNameEntryKeyDown(e) {
   e.preventDefault();
   if (e.key === 'Enter' && nameBuffer.length > 0) {
-    saveSlots[selectCursor] = { name: new Uint8Array(nameBuffer), level: 1, exp: 0, stats: null, inventory: {}, gil: 0, jobLevels: {}, jobIdx: 0, unlockedJobs: 0x01 };
+    saveSlots[selectCursor] = { name: new Uint8Array(nameBuffer), level: 1, exp: 0, hp: ps.hp, stats: playerStatsSnapshot(), inventory: {}, gil: 0, jobLevels: {}, jobIdx: 0, unlockedJobs: 0x01 };
     saveSlotsToDB();
     titleSt.state = 'select'; titleSt.timer = 0;
   } else if (e.key === 'Backspace') {
