@@ -2,10 +2,9 @@
 
 import { drawText, measureText, TEXT_WHITE } from './font-renderer.js';
 import { nesColorFade, _makeFadedPal } from './palette.js';
-import { _nameToBytes, drawLvHpRow } from './text-utils.js';
+import { _nameToBytes } from './text-utils.js';
 import { selectCursor, saveSlots, nameBuffer, NAME_MAX_LEN,
          setSelectCursor, setNameBuffer, saveSlotsToDB } from './save-state.js';
-import { ps, playerStatsSnapshot } from './player-stats.js';
 import { playSFX, SFX } from './music.js';
 import { serverDeleteSlot } from './save.js';
 
@@ -526,18 +525,17 @@ function _drawSelectSlotRow(ctx, i, selX, rowY, fadeStep, showContent, shared) {
     drawText(ctx, infoRight - nw, rowY + 8, nameBytes, fadedPal);
     const infoLeft = selX + 32 + 8;
     const lvl = saveSlots[i].level || 1;
-    const slotMaxHP = saveSlots[i].stats ? saveSlots[i].stats.maxHP : null;
-    const slotHP = saveSlots[i].hp != null ? saveSlots[i].hp
-                 : (saveSlots[i].stats && saveSlots[i].stats.hp != null) ? saveSlots[i].stats.hp
-                 : slotMaxHP;
-    if (slotHP != null && slotMaxHP) {
-      drawLvHpRow(ctx, infoLeft, infoRight, rowY + 16, lvl, slotHP, slotMaxHP, fadeStep);
-    } else {
-      const lvLabel = _nameToBytes('Lv' + String(lvl));
-      const lvPal = [0x0F, 0x0F, 0x0F, 0x10];
-      for (let s = 0; s < fadeStep; s++) lvPal[3] = nesColorFade(lvPal[3]);
-      drawText(ctx, infoLeft, rowY + 16, lvLabel, lvPal);
-    }
+    const lvLabel = _nameToBytes('Lv' + String(lvl));
+    const lvPal = [0x0F, 0x0F, 0x0F, 0x10];
+    for (let s = 0; s < fadeStep; s++) lvPal[3] = nesColorFade(lvPal[3]);
+    drawText(ctx, infoLeft, rowY + 16, lvLabel, lvPal);
+    // Play time HH:MM right-aligned
+    const t = Math.floor(saveSlots[i].playTime || 0);
+    const hh = String(Math.floor(t / 3600)).padStart(2, '0');
+    const mm = String(Math.floor((t % 3600) / 60)).padStart(2, '0');
+    const timeLabel = _nameToBytes(hh + ':' + mm);
+    const tw = measureText(timeLabel);
+    drawText(ctx, infoRight - tw, rowY + 16, timeLabel, lvPal);
   } else {
     const nw = measureText(SELECT_SLOT_TEXT);
     drawText(ctx, infoRight - nw, rowY + 8, SELECT_SLOT_TEXT, fadedPal);
@@ -633,7 +631,7 @@ export function updateTitleSelect(keys) {
 export function onNameEntryKeyDown(e) {
   e.preventDefault();
   if (e.key === 'Enter' && nameBuffer.length > 0) {
-    saveSlots[selectCursor] = { name: new Uint8Array(nameBuffer), level: 1, exp: 0, hp: ps.hp, stats: playerStatsSnapshot(), inventory: {}, gil: 0, jobLevels: {}, jobIdx: 0, unlockedJobs: 0x01 };
+    saveSlots[selectCursor] = { name: new Uint8Array(nameBuffer), level: 1, exp: 0, stats: null, inventory: {}, gil: 0, jobLevels: {}, jobIdx: 0, unlockedJobs: 0x01, playTime: 0 };
     saveSlotsToDB();
     titleSt.state = 'select'; titleSt.timer = 0;
   } else if (e.key === 'Backspace') {

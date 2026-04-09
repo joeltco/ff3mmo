@@ -41,6 +41,7 @@ export async function saveSlotsToDB() {
     saveSlots[selectCursor].unlockedJobs = ps.unlockedJobs;
     saveSlots[selectCursor].cp = ps.cp;
     saveSlots[selectCursor].statusMask = ps.status ? ps.status.mask : 0;
+    saveSlots[selectCursor].playTime = ps.playTime;
     const pos = _getPosition();
     saveSlots[selectCursor].worldX = pos.worldX;
     saveSlots[selectCursor].worldY = pos.worldY;
@@ -66,6 +67,7 @@ export async function saveSlotsToDB() {
       worldY: s.worldY != null ? s.worldY : null,
       onWorldMap: s.onWorldMap != null ? s.onWorldMap : null,
       currentMapId: s.currentMapId != null ? s.currentMapId : null,
+      playTime: s.playTime || 0,
     } : null);
     // Local IndexedDB
     const db = await openSaveDB();

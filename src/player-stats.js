@@ -30,6 +30,7 @@ export const ps = {
   jobIdx: 0,            // current job index (0=Onion Knight, 1=Warrior, etc.)
   unlockedJobs: 0x01,   // bitmask: bit N = job N unlocked. 0x01 = only Onion Knight
   cp: 0,                // capacity points (0-255), earned from battles, spent on job changes
+  playTime: 0,          // total play time in seconds
 };
 
 // Equip slot index mapping: -100=RH, -101=LH, -102=Head, -103=Body, -104=Arms

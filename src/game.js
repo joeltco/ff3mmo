@@ -1767,6 +1767,7 @@ function _updateTitleMainOutCase() {
   ps.unlockedJobs = (slot && slot.unlockedJobs != null) ? slot.unlockedJobs : 0x01;
   ps.cp = (slot && slot.cp) || 0;
   ps.status.mask = (slot && slot.statusMask) || 0;
+  ps.playTime = (slot && slot.playTime) || 0;
   // Swap battle sprites to match saved job
   _swapBattleSprites(ps.jobIdx);
   // Always spawn in Ur
@@ -2669,6 +2670,8 @@ function gameLoop(timestamp) {
     requestAnimationFrame(gameLoop);
     return;
   }
+
+  ps.playTime += dt / 1000;
 
   try {
     _gameLoopUpdate(dt);
