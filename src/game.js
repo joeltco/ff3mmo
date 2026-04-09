@@ -1759,14 +1759,14 @@ function _updateTitleMainOutCase() {
     ps.body = slot.stats.body || 0x00;
     ps.arms = slot.stats.arms || 0x00;
     recalcCombatStats();
-  } else {
+  } else if (slot) {
     // New character — reset ps to fresh level 1 stats and persist to slot
     initPlayerStats(romRaw);
     initExpTable(romRaw);
     fullHeal();
     recalcCombatStats();
     // Seed slot.stats so saveSlotsToDB sync guard passes
-    if (slot) slot.stats = playerStatsSnapshot();
+    slot.stats = playerStatsSnapshot();
     saveSlotsToDB();
   }
   playerInventory = (slot && slot.inventory) ? { ...slot.inventory } : {};
