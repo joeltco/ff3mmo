@@ -265,6 +265,7 @@ function _advanceBattleMsg() {
 function _updateBattleMsg(dt) {
   if (!battleMsgCurrent) return;
   battleMsgTimer += dt;
+  if (battleMsgCurrent.persist) return;
   if (!battleMsgCurrent.waitForZ) {
     // Extend hold for long messages that need to scroll (8px per char, 112px strip)
     const textW = battleMsgCurrent.bytes.length * 8;
@@ -299,13 +300,9 @@ function clearBattleMsgQueue() {
 }
 
 function _queueVictoryRewards() {
-  queueBattleMsg(BATTLE_VICTORY, true);
-  queueBattleMsg(makeExpText(encounterExpGained), true);
-  queueBattleMsg(makeGilText(encounterGilGained), true);
-  queueBattleMsg(makeCpText(encounterCpGained), true);
-  if (encounterDropItem !== null) queueBattleMsg(makeFoundItemText(encounterDropItem), true);
-  if (ps.leveledUp) queueBattleMsg(BATTLE_LEVEL_UP, true);
-  if (encounterJobLevelUp) queueBattleMsg(makeJobLevelUpText(encounterJobLevelUp), true);
+  // Victory! persists in message strip throughout reward screens
+  battleMsgCurrent = { bytes: BATTLE_VICTORY, waitForZ: false, persist: true };
+  battleMsgTimer = 0;
 }
 
 // Hit animation state
@@ -2041,7 +2038,13 @@ function _updateTurnTimer(dt) {
 
 // _isTitleActiveState → isTitleActiveState() in title-screen.js
 function _isVictoryBattleState() {
-  return battleState === 'victory-celebrate' || battleState === 'victory-msg' ||
+  return battleState === 'victory-celebrate' ||
+    battleState === 'exp-text-in' || battleState === 'exp-hold' || battleState === 'exp-fade-out' ||
+    battleState === 'gil-text-in' || battleState === 'gil-hold' || battleState === 'gil-fade-out' ||
+    battleState === 'cp-text-in' || battleState === 'cp-hold' || battleState === 'cp-fade-out' ||
+    battleState === 'item-text-in' || battleState === 'item-hold' || battleState === 'item-fade-out' ||
+    battleState === 'levelup-text-in' || battleState === 'levelup-hold' || battleState === 'levelup-fade-out' ||
+    battleState === 'joblv-text-in' || battleState === 'joblv-hold' || battleState === 'joblv-fade-out' ||
     battleState === 'victory-text-out' || battleState === 'victory-menu-fade' || battleState === 'victory-box-close';
 }
 function _updateAllyExitFade(dt) {
@@ -2411,12 +2414,39 @@ function _updateVictorySequence() {
   if (battleState === 'victory-name-out') {
     if (battleTimer >= _textMs) { battleState = 'victory-celebrate'; battleTimer = 0; playTrack(TRACKS.VICTORY); }
   } else if (battleState === 'victory-celebrate') {
-    if (battleTimer >= 400) { battleState = 'victory-msg'; battleTimer = 0; }
-  } else if (battleState === 'victory-msg') {
-    // Messages cycle via Z press (advanceBattleMsgZ). When queue empty, close.
-    if (!battleMsgCurrent) { battleState = 'victory-text-out'; battleTimer = 0; }
+    if (battleTimer >= 400) { battleState = 'exp-text-in'; battleTimer = 0; }
+  } else if (battleState === 'exp-text-in') {
+    if (battleTimer >= _textMs) { battleState = 'exp-hold'; battleTimer = 0; }
+  } else if (battleState === 'exp-hold') {
+  } else if (battleState === 'exp-fade-out') {
+    if (battleTimer >= _textMs) { battleState = 'gil-text-in'; battleTimer = 0; }
+  } else if (battleState === 'gil-text-in') {
+    if (battleTimer >= _textMs) { battleState = 'gil-hold'; battleTimer = 0; }
+  } else if (battleState === 'gil-hold') {
+  } else if (battleState === 'gil-fade-out') {
+    if (battleTimer >= _textMs) { battleState = 'cp-text-in'; battleTimer = 0; }
+  } else if (battleState === 'cp-text-in') {
+    if (battleTimer >= _textMs) { battleState = 'cp-hold'; battleTimer = 0; }
+  } else if (battleState === 'cp-hold') {
+  } else if (battleState === 'cp-fade-out') {
+    if (battleTimer >= _textMs) { battleState = encounterDropItem !== null ? 'item-text-in' : ps.leveledUp ? 'levelup-text-in' : encounterJobLevelUp ? 'joblv-text-in' : 'victory-text-out'; battleTimer = 0; }
+  } else if (battleState === 'item-text-in') {
+    if (battleTimer >= _textMs) { battleState = 'item-hold'; battleTimer = 0; }
+  } else if (battleState === 'item-hold') {
+  } else if (battleState === 'item-fade-out') {
+    if (battleTimer >= _textMs) { battleState = ps.leveledUp ? 'levelup-text-in' : encounterJobLevelUp ? 'joblv-text-in' : 'victory-text-out'; battleTimer = 0; }
+  } else if (battleState === 'levelup-text-in') {
+    if (battleTimer >= _textMs) { battleState = 'levelup-hold'; battleTimer = 0; }
+  } else if (battleState === 'levelup-hold') {
+  } else if (battleState === 'levelup-fade-out') {
+    if (battleTimer >= _textMs) { battleState = encounterJobLevelUp ? 'joblv-text-in' : 'victory-text-out'; battleTimer = 0; }
+  } else if (battleState === 'joblv-text-in') {
+    if (battleTimer >= _textMs) { battleState = 'joblv-hold'; battleTimer = 0; }
+  } else if (battleState === 'joblv-hold') {
+  } else if (battleState === 'joblv-fade-out') {
+    if (battleTimer >= _textMs) { battleState = 'victory-text-out'; battleTimer = 0; }
   } else if (battleState === 'victory-text-out') {
-    if (battleTimer >= _textMs) { battleState = 'victory-menu-fade'; battleTimer = 0; }
+    if (battleTimer >= _textMs) { battleMsgCurrent = null; battleState = 'victory-menu-fade'; battleTimer = 0; }
   } else if (battleState === 'victory-menu-fade') {
     if (battleTimer >= _textMs) { battleState = 'victory-box-close'; battleTimer = 0; }
   } else if (battleState === 'victory-box-close') {

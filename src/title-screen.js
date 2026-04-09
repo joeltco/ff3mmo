@@ -524,18 +524,15 @@ function _drawSelectSlotRow(ctx, i, selX, rowY, fadeStep, showContent, shared) {
     const nw = measureText(nameBytes);
     drawText(ctx, infoRight - nw, rowY + 8, nameBytes, fadedPal);
     const infoLeft = selX + 32 + 8;
-    const lvl = saveSlots[i].level || 1;
-    const lvLabel = _nameToBytes('Lv' + String(lvl));
-    const lvPal = [0x0F, 0x0F, 0x0F, 0x10];
-    for (let s = 0; s < fadeStep; s++) lvPal[3] = nesColorFade(lvPal[3]);
-    drawText(ctx, infoLeft, rowY + 16, lvLabel, lvPal);
+    const timePal = [0x0F, 0x0F, 0x0F, 0x10];
+    for (let s = 0; s < fadeStep; s++) timePal[3] = nesColorFade(timePal[3]);
     // Play time HH:MM right-aligned
     const t = Math.floor(saveSlots[i].playTime || 0);
     const hh = String(Math.floor(t / 3600)).padStart(2, '0');
     const mm = String(Math.floor((t % 3600) / 60)).padStart(2, '0');
     const timeLabel = _nameToBytes(hh + ':' + mm);
     const tw = measureText(timeLabel);
-    drawText(ctx, infoRight - tw, rowY + 16, timeLabel, lvPal);
+    drawText(ctx, infoRight - tw, rowY + 16, timeLabel, timePal);
   } else {
     const nw = measureText(SELECT_SLOT_TEXT);
     drawText(ctx, infoRight - nw, rowY + 8, SELECT_SLOT_TEXT, fadedPal);

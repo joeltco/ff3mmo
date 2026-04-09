@@ -29,7 +29,10 @@ export async function saveSlotsToDB() {
   if (!savesLoaded) return;
   // Sync live player state into the active save slot before persisting
   // Skip if slot has no stats yet (fresh new game, not yet loaded)
-  if (saveSlots[selectCursor] && saveSlots[selectCursor].stats) {
+  if (saveSlots[selectCursor]) {
+    saveSlots[selectCursor].playTime = ps.playTime;
+  }
+  if (saveSlots[selectCursor] && ps.stats) {
     saveSlots[selectCursor].level = ps.stats.level;
     saveSlots[selectCursor].exp = ps.stats.exp;
     saveSlots[selectCursor].hp = ps.hp;
@@ -41,7 +44,6 @@ export async function saveSlotsToDB() {
     saveSlots[selectCursor].unlockedJobs = ps.unlockedJobs;
     saveSlots[selectCursor].cp = ps.cp;
     saveSlots[selectCursor].statusMask = ps.status ? ps.status.mask : 0;
-    saveSlots[selectCursor].playTime = ps.playTime;
     const pos = _getPosition();
     saveSlots[selectCursor].worldX = pos.worldX;
     saveSlots[selectCursor].worldY = pos.worldY;

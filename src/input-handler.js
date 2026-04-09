@@ -457,6 +457,18 @@ function _battleInputHoldStates() {
     if (z) { clearZ(); _s.battleState = 'defeat-close'; _s.battleTimer = 0; }
   } else if (_s.battleState === 'victory-msg') {
     if (z) { clearZ(); _s.advanceBattleMsgZ(); _s.battleTimer = 0; }
+  } else if (_s.battleState === 'exp-hold') {
+    if (z) { clearZ(); _s.battleState = 'exp-fade-out'; _s.battleTimer = 0; }
+  } else if (_s.battleState === 'gil-hold') {
+    if (z) { clearZ(); _s.battleState = 'gil-fade-out'; _s.battleTimer = 0; }
+  } else if (_s.battleState === 'cp-hold') {
+    if (z) { clearZ(); _s.battleState = 'cp-fade-out'; _s.battleTimer = 0; }
+  } else if (_s.battleState === 'item-hold') {
+    if (z) { clearZ(); _s.battleState = 'item-fade-out'; _s.battleTimer = 0; }
+  } else if (_s.battleState === 'levelup-hold') {
+    if (z) { clearZ(); _s.battleState = 'levelup-fade-out'; _s.battleTimer = 0; }
+  } else if (_s.battleState === 'joblv-hold') {
+    if (z) { clearZ(); _s.battleState = 'joblv-fade-out'; _s.battleTimer = 0; }
   } else { return false; }
   return true;
 }

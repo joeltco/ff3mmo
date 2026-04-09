@@ -10,11 +10,11 @@ import { getMonsterCanvas, getMonsterWhiteCanvas, hasMonsterSprites } from './mo
 import { getItemNameClean, getMonsterName } from './text-decoder.js';
 import { weaponSubtype } from './data/items.js';
 import { ps, getHitWeapon, isHitRightHand } from './player-stats.js';
-import { _nameToBytes, _buildItemRowBytes, drawLvHpRow } from './text-utils.js';
+import { _nameToBytes, _buildItemRowBytes, drawLvHpRow, makeExpText, makeGilText, makeCpText, makeFoundItemText, makeJobLevelUpText } from './text-utils.js';
 import { pvpEnemyCellCenter } from './pvp-math.js';
 import { pvpSt, drawBossSpriteBoxPVP } from './pvp.js';
 import { inputSt } from './input-handler.js';
-import { BATTLE_GAME_OVER, BATTLE_DEFEATED, BATTLE_BOSS_NAME, BATTLE_GOBLIN_NAME,
+import { BATTLE_GAME_OVER, BATTLE_DEFEATED, BATTLE_LEVEL_UP, BATTLE_BOSS_NAME, BATTLE_GOBLIN_NAME,
          BATTLE_MENU_ITEMS } from './data/strings.js';
 
 const HUD_VIEW_X = 0, HUD_VIEW_Y = 32, HUD_VIEW_W = 144, HUD_VIEW_H = 144;
@@ -845,9 +845,7 @@ function drawBossSpriteBox() {
                     _s.battleState === 'pvp-enemy-slash' || _s.battleState === 'pvp-opp-potion' ||
                     _s.battleState === 'pvp-opp-sw-throw' || _s.battleState === 'pvp-opp-sw-hit' ||
                     _s.battleState === 'defeat-monster-fade' || _s.battleState === 'defeat-text' || _s.battleState === 'defeat-close' || _s.battleState === 'team-wipe' ||
-                    _s.battleState === 'victory-name-out' || _s.battleState === 'victory-celebrate' ||
-                    _s.battleState === 'victory-msg' ||
-                    _s.battleState === 'victory-text-out' || _s.battleState === 'victory-menu-fade' || _s.battleState === 'victory-box-close';
+                    _s.isVictoryBattleState() || _s.battleState === 'victory-name-out';
     if (isCombatPVP) drawBossSpriteBoxPVP(_s.pvpShared(), centerX, centerY);
     return;
   }
@@ -867,9 +865,7 @@ function drawBossSpriteBox() {
                    _s.battleState === 'enemy-damage-show' || _s.battleState === 'poison-tick' || _s.battleState === 'message-hold' || _s.battleState === 'msg-wait' ||
                    _s.battleState.startsWith('ally-') ||
                    _s.battleState === 'defeat-monster-fade' || _s.battleState === 'defeat-text';
-  const isVictory = _s.battleState === 'victory-name-out' || _s.battleState === 'victory-celebrate' ||
-                    _s.battleState === 'victory-msg' ||
-                    _s.battleState === 'victory-text-out' || _s.battleState === 'victory-menu-fade' || _s.battleState === 'victory-box-close';
+  const isVictory = _s.isVictoryBattleState() || _s.battleState === 'victory-name-out';
   if (!isExpand && !isClose && !isAppear && !isDissolve && !isCombat && !isVictory) return;
 
   _drawBossSpriteBoxBoss(centerX, centerY);
@@ -1014,32 +1010,32 @@ function _battleEnemyName() {
   return BATTLE_BOSS_NAME;
 }
 
-function _victoryBoxStates() {
+function _isRewardState() {
+  const bs = _s.battleState;
+  return bs.startsWith('exp-') || bs.startsWith('gil-') || bs.startsWith('cp-') ||
+    bs.startsWith('item-') || bs.startsWith('levelup-') || bs.startsWith('joblv-');
+}
+function drawVictoryBox() {
   const bs = _s.battleState;
   const isNameOut    = bs === 'victory-name-out';
   const isCelebrate  = bs === 'victory-celebrate';
   const isClose      = bs === 'victory-box-close';
-  const isVicMsg     = bs === 'victory-msg';
   const isOut        = bs === 'victory-text-out';
-  const isMenuFadeState = bs === 'victory-menu-fade';
-  const isRun     = bs === 'run-success';
-  const isRunFail = bs === 'run-fail';
-  return { isNameOut, isCelebrate, isClose, isVicMsg,
-           isOut, isMenuFadeState, isRun, isRunFail };
-}
-function drawVictoryBox() {
-  const s = _victoryBoxStates();
-  const showBox = s.isNameOut || s.isCelebrate || s.isClose || s.isVicMsg ||
-    s.isOut || s.isMenuFadeState || s.isRun || s.isRunFail;
+  const isMenuFade   = bs === 'victory-menu-fade';
+  const isRun        = bs === 'run-success';
+  const isRunFail    = bs === 'run-fail';
+  const isReward     = _isRewardState();
+  const showBox = isNameOut || isCelebrate || isClose ||
+    isOut || isMenuFade || isRun || isRunFail || isReward;
   if (!showBox) return;
 
   let boxX = 0;
   const boxY = HUD_BOT_Y;
-  if (s.isClose) boxX = Math.round(-(CANVAS_W - 8) * Math.min(_s.battleTimer / (VICTORY_BOX_ROWS * VICTORY_ROW_FRAME_MS), 1));
+  if (isClose) boxX = Math.round(-(CANVAS_W - 8) * Math.min(_s.battleTimer / (VICTORY_BOX_ROWS * VICTORY_ROW_FRAME_MS), 1));
 
-  if (s.isNameOut) { _drawVictoryNameOut(boxX, boxY); return; }
-  // Run messages and victory rewards render in the message strip, not here
+  if (isNameOut) { _drawVictoryNameOut(boxX, boxY); return; }
   _s.drawBorderedBox(boxX, boxY, VICTORY_BOX_W, VICTORY_BOX_H);
+  if (isReward) _drawRewardText(boxX, boxY);
 }
 
 function _drawVictoryNameOut(boxX, boxY) {
@@ -1051,6 +1047,25 @@ function _drawVictoryNameOut(boxX, boxY) {
   drawText(_s.ctx, Math.floor((VICTORY_BOX_W - nameTw) / 2), boxY + Math.floor((VICTORY_BOX_H - 8) / 2), enemyName, fadedPal);
 }
 
+function _drawRewardText(boxX, boxY) {
+  const bs = _s.battleState;
+  let msg = null;
+  if (bs.startsWith('exp-')) msg = makeExpText(_s.encounterExpGained);
+  else if (bs.startsWith('gil-')) msg = makeGilText(_s.encounterGilGained);
+  else if (bs.startsWith('cp-')) msg = makeCpText(_s.encounterCpGained);
+  else if (bs.startsWith('item-')) msg = _s.encounterDropItem !== null ? makeFoundItemText(_s.encounterDropItem) : null;
+  else if (bs.startsWith('levelup-')) msg = BATTLE_LEVEL_UP;
+  else if (bs.startsWith('joblv-')) msg = _s.encounterJobLevelUp ? makeJobLevelUpText(_s.encounterJobLevelUp) : null;
+  if (!msg) return;
+  let fadeStep = 0;
+  if (bs.endsWith('-text-in'))
+    fadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(_s.battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
+  else if (bs.endsWith('-fade-out'))
+    fadeStep = Math.min(Math.floor(_s.battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
+  const pal = _makeFadedPal(fadeStep);
+  const tw = measureText(msg);
+  drawText(_s.ctx, boxX + Math.floor((VICTORY_BOX_W - tw) / 2), boxY + Math.floor((VICTORY_BOX_H - 8) / 2), msg, pal);
+}
 
 const DEATH_SLIDE_MS    = 500;
 const DEATH_TXTFADE_MS  = 300;
@@ -1335,10 +1350,12 @@ function drawBattleMessageStrip() {
   const scrollTime = overflow > 0 ? 400 + overflow / 0.06 + 400 : 0;
   const effectiveHold = Math.max(MSG_HOLD_MS, scrollTime);
   let fadeStep = 0;
-  if (t < MSG_FADE_IN_MS) {
+  if (msg.persist && _s.battleState === 'victory-text-out') {
+    fadeStep = Math.min(Math.floor(_s.battleTimer / (MSG_FADE_OUT_MS / BATTLE_TEXT_STEPS)), BATTLE_TEXT_STEPS);
+  } else if (t < MSG_FADE_IN_MS) {
     fadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(t / (MSG_FADE_IN_MS / BATTLE_TEXT_STEPS)), BATTLE_TEXT_STEPS);
-  } else if (msg.waitForZ || t < MSG_FADE_IN_MS + effectiveHold) {
-    fadeStep = 0; // waitForZ: stay solid after fade-in until Z pressed
+  } else if (msg.waitForZ || msg.persist || t < MSG_FADE_IN_MS + effectiveHold) {
+    fadeStep = 0; // waitForZ/persist: stay solid after fade-in
   } else {
     fadeStep = Math.min(Math.floor((t - MSG_FADE_IN_MS - effectiveHold) / (MSG_FADE_OUT_MS / BATTLE_TEXT_STEPS)), BATTLE_TEXT_STEPS);
   }
