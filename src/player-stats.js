@@ -23,7 +23,6 @@ export const ps = {
   hitRate: 80,      // effective hit% from weapon
   evade: 0,         // total evade% from armor (non-shield)
   mdef: 0,          // total magic defense from armor
-  attackRoll: 1,    // potential hits (from effective AGI)
   elemResist: [],   // array of element strings player resists (from armor)
   status: { mask: 0, poisonDmgTick: 0 },  // status effect state — persists across battles
   _romData: null,  // stored by initExpTable for use in grantExp
@@ -86,8 +85,6 @@ export function recalcCombatStats() {
   const rWpn = isWeapon(ps.weaponR) ? ITEMS.get(ps.weaponR) : null;
   const lWpn = isWeapon(ps.weaponL) ? ITEMS.get(ps.weaponL) : null;
   ps.hitRate = (rWpn || lWpn) ? (rWpn ? rWpn.hit : lWpn.hit) : BASE_HIT_RATE;
-  // Attack roll (potential hits) from effective AGI
-  ps.attackRoll = Math.max(1, Math.floor(effAgi / 10));
   // Armor evade% (non-shield — shield evade handled separately by getShieldEvade)
   ps.evade = (ITEMS.get(ps.head)?.evade || 0)
            + (ITEMS.get(ps.body)?.evade || 0)
@@ -288,6 +285,6 @@ export function playerStatsSnapshot() {
     maxHP: ps.stats.maxHP, maxMP: ps.stats.maxMP, hp: ps.hp,
     weaponR: ps.weaponR, weaponL: ps.weaponL,
     head: ps.head, body: ps.body, arms: ps.arms,
-    hitRate: ps.hitRate, evade: ps.evade, mdef: ps.mdef, attackRoll: ps.attackRoll,
+    hitRate: ps.hitRate, evade: ps.evade, mdef: ps.mdef,
   };
 }
