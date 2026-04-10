@@ -4,17 +4,23 @@ import { playSlashSFX } from './battle-sfx.js';
 import { isWeapon } from './data/items.js';
 import { SFX, playSFX } from './music.js';
 import { _nameToBytes } from './text-utils.js';
+import { replaceBattleMsg } from './battle-msg.js';
+import { BATTLE_CRITICAL } from './data/strings.js';
 
 let _s = null;
 
 // ── Combo finalization ───────────────────────────────────────────────────────
 function _finalizeAllyCombo() {
-  let totalDmg = 0, anyCrit = false, allMiss = true;
+  let totalDmg = 0, anyCrit = false, allMiss = true, hitsLanded = 0;
   for (const h of _s.allyHitResults) {
-    if (!h.miss) { totalDmg += h.damage; allMiss = false; if (h.crit) anyCrit = true; }
+    if (!h.miss) { totalDmg += h.damage; allMiss = false; hitsLanded++; if (h.crit) anyCrit = true; }
   }
   _s.enemyDmgNum = allMiss ? { miss: true, timer: 0 } : { value: totalDmg, crit: anyCrit, timer: 0 };
   _s.inputSt.targetIndex = _s.allyTargetIndex;
+  if (!allMiss) {
+    if (anyCrit) replaceBattleMsg(BATTLE_CRITICAL);
+    else if (hitsLanded > 1) replaceBattleMsg(_nameToBytes(hitsLanded + ' hits!'));
+  }
 }
 
 // ── After damage-show: check for death/dissolve or advance turn ──────────────

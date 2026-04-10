@@ -92,22 +92,24 @@ function _doSpecialAttack(mon, spec, targetAlly = -1) {
     _s.battleState = 'enemy-attack'; _s.battleTimer = 0;
   } else if (spec.type === 'status' && ps.status) {
     const applied = tryInflictStatus(ps.status, spec.status, spec.hit);
-    // Status-only attacks show as miss if resisted
     if (applied) {
       _s.playerDamageNum = { value: 0, timer: 0, status: spec.status };
       _s.battleShakeTimer = _s.BATTLE_SHAKE_MS;
+      if (STATUS_NAME_BYTES[applied]) replaceBattleMsg(STATUS_NAME_BYTES[applied]);
     } else {
       _s.playerDamageNum = { miss: true, timer: 0 };
     }
     _s.battleState = 'enemy-damage-show'; _s.battleTimer = 0;
   } else if (spec.type === 'multi_status' && ps.status) {
-    let anyApplied = false;
+    let anyApplied = 0;
     for (const s of spec.statuses) {
-      if (tryInflictStatus(ps.status, s, spec.hit)) anyApplied = true;
+      const result = tryInflictStatus(ps.status, s, spec.hit);
+      if (result) anyApplied = result;
     }
     if (anyApplied) {
       _s.playerDamageNum = { value: 0, timer: 0, status: 'multi' };
       _s.battleShakeTimer = _s.BATTLE_SHAKE_MS;
+      if (STATUS_NAME_BYTES[anyApplied]) replaceBattleMsg(STATUS_NAME_BYTES[anyApplied]);
     } else {
       _s.playerDamageNum = { miss: true, timer: 0 };
     }
@@ -145,6 +147,7 @@ function _processEnemyFlash() {
       const atkName = mon.attacks[Math.floor(Math.random() * mon.attacks.length)];
       const spec = SPECIAL_ATTACKS[atkName];
       if (spec && spec.type !== 'none') {
+        replaceBattleMsg(_nameToBytes(atkName + '!'));
         _doSpecialAttack(mon, spec, targetAlly);
         return true;
       }
