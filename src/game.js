@@ -2253,9 +2253,10 @@ function _advancePVPTargetOrVictory() {
 }
 function _triggerPVPVictory() {
   const oppLv = pvpSt.pvpOpponentStats ? pvpSt.pvpOpponentStats.level : 1;
-  encounterExpGained = 5 * oppLv;
+  const rawPvpExp = 5 * oppLv;
+  grantExp(rawPvpExp);
+  encounterExpGained = Math.max(1, Math.floor(rawPvpExp / 4));
   encounterGilGained = Math.max(1, Math.floor(10 * oppLv / 4));
-  grantExp(encounterExpGained);
   encounterCpGained = Math.max(1, Math.floor(oppLv / 4)); grantCP(encounterCpGained);
   ps.gil += encounterGilGained;
   encounterJobLevelUp = gainJobJP(inputSt.battleActionCount || 1);
@@ -2273,9 +2274,10 @@ function _updateMonsterDeath() {
     dyingMonsterIndices = new Map();
     const allDead = encounterMonsters.every(m => m.hp <= 0);
     if (allDead) {
-      encounterExpGained = encounterMonsters.reduce((sum, m) => sum + m.exp, 0);
+      const rawExp = encounterMonsters.reduce((sum, m) => sum + m.exp, 0);
+      grantExp(rawExp);
+      encounterExpGained = Math.max(1, Math.floor(rawExp / 4));
       encounterGilGained = Math.max(1, Math.floor(encounterMonsters.reduce((sum, m) => sum + (m.gil || 0), 0) / 4));
-      grantExp(encounterExpGained);
       encounterCpGained = Math.max(1, Math.floor(encounterMonsters.reduce((sum, m) => sum + (m.cp || 1), 0) / 4)); grantCP(encounterCpGained);
       ps.gil += encounterGilGained;
       encounterJobLevelUp = gainJobJP(inputSt.battleActionCount || 1);
@@ -2398,8 +2400,11 @@ function _updateBossDissolve(dt) {
     enemyDefeated = true; bossSprite = null;
     ps.unlockedJobs |= 0x3E; // Wind Crystal: bits 1-5 (Warrior, Monk, White Mage, Black Mage, Red Mage)
     const _bossData = MONSTERS.get(0xCC);
-    encounterExpGained = _bossData?.exp || 132; encounterGilGained = Math.max(1, Math.floor((_bossData?.gil || 500) / 4));
-    grantExp(encounterExpGained); ps.gil += encounterGilGained;
+    const rawBossExp = _bossData?.exp || 132;
+    grantExp(rawBossExp);
+    encounterExpGained = Math.max(1, Math.floor(rawBossExp / 4));
+    encounterGilGained = Math.max(1, Math.floor((_bossData?.gil || 500) / 4));
+    ps.gil += encounterGilGained;
     encounterCpGained = Math.max(1, Math.floor((_bossData?.cp || 10) / 4)); grantCP(encounterCpGained);
     encounterJobLevelUp = gainJobJP(inputSt.battleActionCount || 1);
     inputSt.battleActionCount = 0;
