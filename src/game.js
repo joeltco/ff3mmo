@@ -1910,6 +1910,7 @@ function _turnShared() {
     startMagicItem: () => startMagicItem(_magicItemShared()),
     queueBattleMsg,
     isBattleMsgBusy,
+    getSlashFramesForWeapon,
     get playerName() { return saveSlots[selectCursor]?.name || null; },
     get sprite() { return sprite; },
   };

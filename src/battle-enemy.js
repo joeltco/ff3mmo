@@ -43,8 +43,36 @@ const SPECIAL_ATTACKS = {
   'Sence':       { type: 'none' },
 };
 
-// ── Execute special attack against player ──────────────────────────────────
-function _doSpecialAttack(mon, spec) {
+// ── Execute special attack against player or ally ──────────────────────────
+function _doSpecialAttack(mon, spec, targetAlly = -1) {
+  if (targetAlly >= 0) {
+    const ally = _s.battleAllies[targetAlly];
+    if (!ally || ally.hp <= 0) { _s.processNextTurn(); return; }
+    if (spec.type === 'damage') {
+      const eMult = elemMultiplier(spec.element, null, null);
+      const raw = Math.floor(spec.power * eMult) - (ally.mdef || 0);
+      const dmg = Math.max(1, raw);
+      ally.hp = Math.max(0, ally.hp - dmg);
+      _s.allyDamageNums[targetAlly] = { value: dmg, timer: 0 };
+      _s.allyShakeTimer[targetAlly] = _s.BATTLE_SHAKE_MS;
+      playSFX(SFX.ATTACK_HIT);
+      _s.battleState = 'ally-hit'; _s.battleTimer = 0;
+    } else if (spec.type === 'status' && ally.status) {
+      const applied = tryInflictStatus(ally.status, spec.status, spec.hit);
+      _s.allyDamageNums[targetAlly] = applied
+        ? { value: 0, timer: 0, status: spec.status }
+        : { miss: true, timer: 0 };
+      _s.battleState = 'ally-damage-show-enemy'; _s.battleTimer = 0;
+    } else if (spec.type === 'multi_status' && ally.status) {
+      let anyApplied = false;
+      for (const s of spec.statuses) { if (tryInflictStatus(ally.status, s, spec.hit)) anyApplied = true; }
+      _s.allyDamageNums[targetAlly] = anyApplied
+        ? { value: 0, timer: 0, status: 'multi' }
+        : { miss: true, timer: 0 };
+      _s.battleState = 'ally-damage-show-enemy'; _s.battleTimer = 0;
+    } else { _s.processNextTurn(); }
+    return;
+  }
   if (spec.type === 'damage') {
     // Magic damage: power - mdef, with elemental multiplier
     const eMult = elemMultiplier(spec.element, null, ps.elemResist);
@@ -111,12 +139,12 @@ function _processEnemyFlash() {
   }
 
   // ── Monster special attack check ──────────────────────────────────────────
-  if (mon && mon.spAtkRate > 0 && mon.attacks && mon.attacks.length > 0 && targetAlly < 0) {
+  if (mon && mon.spAtkRate > 0 && mon.attacks && mon.attacks.length > 0) {
     if (Math.random() * 100 < mon.spAtkRate) {
       const atkName = mon.attacks[Math.floor(Math.random() * mon.attacks.length)];
       const spec = SPECIAL_ATTACKS[atkName];
       if (spec && spec.type !== 'none') {
-        _doSpecialAttack(mon, spec);
+        _doSpecialAttack(mon, spec, targetAlly);
         return true;
       }
     }
@@ -127,11 +155,13 @@ function _processEnemyFlash() {
   const atk = mon ? mon.atk : _s.BOSS_ATK;
   const rolls = mon ? (mon.attackRoll || 1) : 1;
   const monAtkElem = mon ? (mon.atkElem || null) : null;
-  // NES multi-hit: roll attackRoll times, sum damage from hits that land
-  function rollMultiHit(def, targetResist) {
+  // NES multi-hit: roll attackRoll times, per-hit shield/evade/hitRate checks
+  function rollMultiHit(def, targetResist, shieldEvade = 0, armorEvade = 0) {
     const eMult = elemMultiplier(monAtkElem, null, targetResist);
     let total = 0, landed = 0;
     for (let i = 0; i < rolls; i++) {
+      if (shieldEvade > 0 && Math.random() * 100 < shieldEvade) continue;
+      if (armorEvade > 0 && Math.random() * 100 < armorEvade) continue;
       if (Math.random() * 100 < hitRate) { total += calcDamage(atk, def, false, 0, eMult); landed++; }
     }
     return { total, landed };
@@ -149,37 +179,27 @@ function _processEnemyFlash() {
       _s.battleState = 'ally-damage-show-enemy'; _s.battleTimer = 0;
     }
   } else {
-    const shieldEvade = getShieldEvade(_s.ITEMS);
-    const shieldBlocked = shieldEvade > 0 && Math.random() * 100 < shieldEvade;
-    if (shieldBlocked) {
-      _s.playerDamageNum = { miss: true, timer: 0 };
-      _s.battleState = 'enemy-damage-show'; _s.battleTimer = 0;
-      // shield block (no action count needed — passive)
-    } else if (ps.evade > 0 && Math.random() * 100 < ps.evade) {
-      _s.playerDamageNum = { miss: true, timer: 0 };
-      _s.battleState = 'enemy-damage-show'; _s.battleTimer = 0;
-    } else {
-      const { total, landed } = rollMultiHit(_s.ps.def, ps.elemResist);
-      if (landed > 0) {
-        let dmg = total;
-        if (_s.isDefending) dmg = Math.max(1, Math.floor(dmg / 2));
-        _s.ps.hp = Math.max(0, _s.ps.hp - dmg);
-        _s.playerDamageNum = { value: dmg, timer: 0 };
-        // Physical hit wakes sleeping targets
-        if (ps.status) wakeOnHit(ps.status);
-        // Monster statusAtk: try to inflict status on player
-        const monStatus = mon ? mon.statusAtk : null;
-        if (monStatus && ps.status) {
-          const arr = Array.isArray(monStatus) ? monStatus : [monStatus];
-          for (const s of arr) tryInflictStatus(ps.status, s, hitRate);
-        }
-        playSFX(SFX.ATTACK_HIT);
-        _s.battleShakeTimer = _s.BATTLE_SHAKE_MS;
-        _s.battleState = 'enemy-attack'; _s.battleTimer = 0;
-      } else {
-        _s.playerDamageNum = { miss: true, timer: 0 };
-        _s.battleState = 'enemy-damage-show'; _s.battleTimer = 0;
+    const shieldEvade = getShieldEvade();
+    const { total, landed } = rollMultiHit(_s.ps.def, ps.elemResist, shieldEvade, ps.evade);
+    if (landed > 0) {
+      let dmg = total;
+      if (_s.isDefending) dmg = Math.max(1, Math.floor(dmg / 2));
+      _s.ps.hp = Math.max(0, _s.ps.hp - dmg);
+      _s.playerDamageNum = { value: dmg, timer: 0 };
+      // Physical hit wakes sleeping targets
+      if (ps.status) wakeOnHit(ps.status);
+      // Monster statusAtk: try to inflict status on player
+      const monStatus = mon ? mon.statusAtk : null;
+      if (monStatus && ps.status) {
+        const arr = Array.isArray(monStatus) ? monStatus : [monStatus];
+        for (const s of arr) tryInflictStatus(ps.status, s, hitRate);
       }
+      playSFX(SFX.ATTACK_HIT);
+      _s.battleShakeTimer = _s.BATTLE_SHAKE_MS;
+      _s.battleState = 'enemy-attack'; _s.battleTimer = 0;
+    } else {
+      _s.playerDamageNum = { miss: true, timer: 0 };
+      _s.battleState = 'enemy-damage-show'; _s.battleTimer = 0;
     }
   }
   return true;

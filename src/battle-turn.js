@@ -4,9 +4,9 @@ import { rollHits, calcPotentialHits } from './battle-math.js';
 import { BATTLE_RAN_AWAY, BATTLE_CANT_ESCAPE } from './data/strings.js';
 import { makeNameMsg } from './text-utils.js';
 import { ps, getJobLevelStatBonus } from './player-stats.js';
-import { ITEMS, isWeapon } from './data/items.js';
+import { ITEMS, isWeapon, isBladedWeapon } from './data/items.js';
 import { SFX, playSFX } from './music.js';
-import { processTurnStart, removeStatus, STATUS } from './status-effects.js';
+import { processTurnStart, removeStatus, STATUS, blindHitPenalty } from './status-effects.js';
 
 let _s = null; // shared state object, set each call
 
@@ -78,18 +78,56 @@ export function processNextTurn(shared) {
         _s.battleState = 'poison-tick'; _s.battleTimer = 0;
         return;
       }
-      // Confused: force attack on random alive monster
-      if (confused && _s.isRandomEncounter && _s.encounterMonsters) {
-        const living = _s.encounterMonsters.map((m, i) => m.hp > 0 ? i : -1).filter(i => i >= 0);
-        if (living.length > 0) {
-          const rIdx = living[Math.floor(Math.random() * living.length)];
-          _s.inputSt.playerActionPending = { command: 'fight', targetIndex: rIdx,
-            hitResults: rollHits(ps.atk, _s.encounterMonsters[rIdx].def, ps.hitRate || 80, calcPotentialHits(ps.stats?.level || 1, (ps.stats?.agi || 5) + getJobLevelStatBonus().agi, false)),
-            slashFrames: _s.inputSt.playerActionPending.slashFrames,
-            slashOffX: _s.inputSt.playerActionPending.slashOffX,
-            slashOffY: _s.inputSt.playerActionPending.slashOffY,
-            slashX: _s.inputSt.playerActionPending.slashX,
-            slashY: _s.inputSt.playerActionPending.slashY };
+      // Confused: NES picks any random living target (self, ally, or enemy)
+      if (confused) {
+        const pool = [];
+        pool.push({ type: 'self' });
+        for (let i = 0; i < _s.battleAllies.length; i++) {
+          if (_s.battleAllies[i].hp > 0) pool.push({ type: 'ally', index: i });
+        }
+        if (_s.isRandomEncounter && _s.encounterMonsters) {
+          for (let i = 0; i < _s.encounterMonsters.length; i++) {
+            if (_s.encounterMonsters[i].hp > 0) pool.push({ type: 'monster', index: i });
+          }
+        }
+        const pick = pool[Math.floor(Math.random() * pool.length)];
+        const blindMult = ps.status ? blindHitPenalty(ps.status) : 1;
+        const effHitRate = (ps.hitRate || 80) * blindMult;
+        const lv = ps.stats?.level || 1;
+        const agi = (ps.stats?.agi || 5) + getJobLevelStatBonus().agi;
+        const potHits = calcPotentialHits(lv, agi, false);
+        if (pick.type === 'monster') {
+          const mon = _s.encounterMonsters[pick.index];
+          const firstWpnId = isWeapon(ps.weaponR) ? ps.weaponR : ps.weaponL;
+          const firstHandR = isWeapon(ps.weaponR) || !isWeapon(ps.weaponL);
+          const sfn = _s.getSlashFramesForWeapon;
+          const bladed = isBladedWeapon(firstWpnId);
+          _s.inputSt.playerActionPending = { command: 'fight', targetIndex: pick.index,
+            hitResults: rollHits(ps.atk, mon.def, effHitRate, potHits),
+            slashFrames: sfn ? sfn(firstWpnId, firstHandR) : null,
+            slashOffX: bladed ? 8 : Math.floor(Math.random() * 40) - 20,
+            slashOffY: bladed ? -8 : Math.floor(Math.random() * 40) - 20,
+            slashX: 0, slashY: 0 };
+        } else {
+          // Self or ally: roll hits, apply damage directly, skip slash animation
+          const targetDef = pick.type === 'self' ? ps.def : (_s.battleAllies[pick.index].def || 0);
+          const hits = rollHits(ps.atk, targetDef, effHitRate, potHits);
+          let totalDmg = 0;
+          for (const h of hits) { if (!h.miss && !h.shieldBlock) totalDmg += h.damage; }
+          if (totalDmg > 0) {
+            if (pick.type === 'self') {
+              ps.hp = Math.max(0, ps.hp - totalDmg);
+              _s.setPlayerDamageNum({ value: totalDmg, timer: 0 });
+            } else {
+              const ally = _s.battleAllies[pick.index];
+              ally.hp = Math.max(0, ally.hp - totalDmg);
+              _s.getAllyDamageNums()[pick.index] = { value: totalDmg, timer: 0 };
+            }
+            _s.battleShakeTimer = _s.BATTLE_SHAKE_MS;
+            playSFX(SFX.ATTACK_HIT);
+          }
+          _s.battleState = 'poison-tick'; _s.battleTimer = 0;
+          return;
         }
       }
     }
@@ -110,7 +148,7 @@ export function processNextTurn(shared) {
       const { canAct, poisonDmg } = processTurnStart(ally.status, ally.maxHP || ally.hp);
       if (!canAct) { processNextTurn(_s); return; }
       if (poisonDmg > 0) {
-        ally.hp = Math.max(0, ally.hp - poisonDmg);
+        ally.hp = Math.max(1, ally.hp - poisonDmg);
         _s.getAllyDamageNums()[turn.index] = { value: poisonDmg, timer: 0 };
         playSFX(SFX.ATTACK_HIT);
         turn._statusDone = true;

@@ -10,7 +10,7 @@ import { ps, recalcCombatStats, changeJob, getEquipSlotId, setEquipSlotId, EQUIP
 import { ITEMS, isHandEquippable, isWeapon, weaponSubtype, isBladedWeapon } from './data/items.js';
 import { selectCursor, saveSlots, saveSlotsToDB } from './save-state.js';
 import { rollHits, calcPotentialHits, elemMultiplier } from './battle-math.js';
-import { blindHitPenalty, removeStatus, STATUS } from './status-effects.js';
+import { blindHitPenalty, miniToadAtkMult, removeStatus, STATUS } from './status-effects.js';
 import { _nameToBytes } from './text-utils.js';
 import { MONSTERS } from './data/monsters.js';
 import { canJobEquip } from './data/jobs.js';
@@ -127,8 +127,10 @@ function _battleTargetConfirm() {
   const agi = (ps.stats ? ps.stats.agi : 5) + getJobLevelStatBonus().agi;
   const hitsPerHand = calcPotentialHits(lv, agi, false); // base hits per hand
   const blindMult = ps.status ? blindHitPenalty(ps.status) : 1;
+  const atkMult = ps.status ? miniToadAtkMult(ps.status) : 1;
   // Per-hand ATK: strip weapon ATK from ps.atk (Monk/BB unarmed uses special formula, already in ps.atk)
-  const baseAtk = ps.atk - (ITEMS.get(ps.weaponR)?.atk || 0) - (ITEMS.get(ps.weaponL)?.atk || 0);
+  // Mini/Toad reduces effective ATK to 0 (calcDamage clamps result to minimum 1)
+  const baseAtk = (ps.atk - (ITEMS.get(ps.weaponR)?.atk || 0) - (ITEMS.get(ps.weaponL)?.atk || 0)) * atkMult;
   const rWpn = rIsWeapon ? ITEMS.get(ps.weaponR) : null;
   const lWpn = lIsWeapon ? ITEMS.get(ps.weaponL) : null;
   // Roll each hand independently (NES loops per hand at 30/9F6A)
