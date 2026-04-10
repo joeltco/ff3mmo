@@ -72,15 +72,15 @@ export function recalcCombatStats() {
   const jlb = getJobLevelStatBonus(ps.jobIdx, jobLv);
   const effStr = (ps.stats ? ps.stats.str : 5) + strB + jlb.str;
   const effAgi = (ps.stats ? ps.stats.agi : 5) + agiB + jlb.agi;
-  // ATK = effective STR + weapon attack powers + floor(AGI/4) + floor(jobLv/4) (from disasm 31/ABEF)
+  // NES ATK = weapon attack power only (STR/AGI affect hit count, not damage)
+  // Verified from disasm 30/9F44: character stat block offset $19 = weapon ATK, copied to $7443
   const unarmed = !isWeapon(ps.weaponR) && !isWeapon(ps.weaponL);
-  // Monk(2)/BlackBelt(13) unarmed: STR/4 + level*1.5 + jobLv/4 + 2 (disasm 31/AC76-AC9B)
+  // Monk(2)/BlackBelt(13) unarmed: level-based ATK (disasm 31/AC76-AC9B)
   if (unarmed && (ps.jobIdx === 2 || ps.jobIdx === 13)) {
     const lv = ps.stats ? ps.stats.level : 1;
     ps.atk = Math.floor(effStr / 4) + Math.floor(lv * 1.5) + Math.floor(jobLv / 4) + 2;
   } else {
-    ps.atk = effStr + (ITEMS.get(ps.weaponR)?.atk || 0) + (ITEMS.get(ps.weaponL)?.atk || 0)
-           + Math.floor(effAgi / 4) + Math.floor(jobLv / 4);
+    ps.atk = (ITEMS.get(ps.weaponR)?.atk || 0) + (ITEMS.get(ps.weaponL)?.atk || 0);
   }
   // Hit rate from equipped weapon (or base if unarmed)
   const rWpn = isWeapon(ps.weaponR) ? ITEMS.get(ps.weaponR) : null;
