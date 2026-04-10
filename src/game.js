@@ -25,6 +25,10 @@ import { BATTLE_MISS, BATTLE_GAME_OVER, BATTLE_ROAR, BATTLE_FIGHT, BATTLE_RUN,
          BATTLE_CRITICAL, BATTLE_STRIKE_1ST, BATTLE_AMBUSHED, BATTLE_INEFFECTIVE, BATTLE_SLAIN,
          BATTLE_MENU_ITEMS, PAUSE_ITEMS,
          POND_RESTORED, VERSION } from './data/strings.js';
+import { queueBattleMsg, replaceBattleMsg, updateBattleMsg as _updateBattleMsg, advanceBattleMsgZ,
+         isBattleMsgBusy, clearBattleMsgQueue, queueVictoryRewards as _queueVictoryRewards,
+         getBattleMsgCurrent, getBattleMsgTimer, getBattleMsgQueue, setBattleMsgCurrent,
+         MSG_FADE_IN_MS, MSG_HOLD_MS, MSG_FADE_OUT_MS, MSG_TOTAL_MS } from './battle-msg.js';
 import { initMonsterSprites, getMonsterCanvas, getMonsterWhiteCanvas,
          getMonsterDeathFrames, hasMonsterSprites } from './monster-sprites.js';
 import { loadBossSprite, getBossBattleCanvas, getBossWhiteCanvas } from './boss-sprites.js';
@@ -242,68 +246,7 @@ let currentAttacker = -1;      // index of monster currently attacking
 let dyingMonsterIndices = new Map(); // index → startDelayMs for staggered death wipe
 
 // Battle message queue — renders in right panel strip (144, 160, 112, 16)
-let battleMsgQueue = [];       // [{ bytes: Uint8Array, waitForZ: bool }]
-let battleMsgCurrent = null;   // current message object or null
-let battleMsgTimer = 0;        // ms into current message display
-const MSG_FADE_IN_MS = 200;
-const MSG_HOLD_MS = 800;
-const MSG_FADE_OUT_MS = 200;
-const MSG_TOTAL_MS = MSG_FADE_IN_MS + MSG_HOLD_MS + MSG_FADE_OUT_MS;
-
-function queueBattleMsg(bytes, waitForZ = false) {
-  battleMsgQueue.push({ bytes, waitForZ });
-  if (!battleMsgCurrent) _advanceBattleMsg();
-}
-function _advanceBattleMsg() {
-  if (battleMsgQueue.length > 0) {
-    battleMsgCurrent = battleMsgQueue.shift();
-    battleMsgTimer = 0;
-  } else {
-    battleMsgCurrent = null;
-  }
-}
-function _updateBattleMsg(dt) {
-  if (!battleMsgCurrent) return;
-  battleMsgTimer += dt;
-  if (battleMsgCurrent.persist) return;
-  if (!battleMsgCurrent.waitForZ) {
-    // Extend hold for long messages that need to scroll (8px per char, 112px strip)
-    const textW = battleMsgCurrent.bytes.length * 8;
-    const overflow = Math.max(0, textW - 112);
-    const scrollTime = overflow > 0 ? 400 + overflow / 0.06 + 400 : 0; // pause + scroll + pause
-    const totalMs = MSG_FADE_IN_MS + Math.max(MSG_HOLD_MS, scrollTime) + MSG_FADE_OUT_MS;
-    if (battleMsgTimer >= totalMs) _advanceBattleMsg();
-  }
-}
-function advanceBattleMsgZ() {
-  // Called by input-handler on Z press during victory-msg state
-  // Require minimum display time (fade-in + hold) before Z can advance
-  if (battleMsgCurrent && battleMsgCurrent.waitForZ) {
-    const textW = battleMsgCurrent.bytes.length * 8;
-    const overflow = Math.max(0, textW - 112);
-    const scrollTime = overflow > 0 ? 400 + overflow / 0.06 + 400 : 0;
-    const minTime = MSG_FADE_IN_MS + Math.max(MSG_HOLD_MS, scrollTime);
-    if (battleMsgTimer >= minTime) {
-      _advanceBattleMsg();
-      return true;
-    }
-  }
-  return false;
-}
-function isBattleMsgBusy() {
-  return battleMsgCurrent !== null;
-}
-function clearBattleMsgQueue() {
-  battleMsgQueue = [];
-  battleMsgCurrent = null;
-  battleMsgTimer = 0;
-}
-
-function _queueVictoryRewards() {
-  // Victory! persists in message strip throughout reward screens
-  battleMsgCurrent = { bytes: BATTLE_VICTORY, waitForZ: false, persist: true };
-  battleMsgTimer = 0;
-}
+// Battle message system → battle-msg.js
 
 // Hit animation state
 let currentHitIdx = 0;             // which hit we're animating
@@ -1109,8 +1052,8 @@ function _battleDrawShared() {
     get encounterCpGained() { return encounterCpGained; },
     get encounterDropItem() { return encounterDropItem; },
     get encounterJobLevelUp() { return encounterJobLevelUp; },
-    get battleMsgCurrent() { return battleMsgCurrent; },
-    get battleMsgTimer() { return battleMsgTimer; },
+    get battleMsgCurrent() { return getBattleMsgCurrent(); },
+    get battleMsgTimer() { return getBattleMsgTimer(); },
     MSG_FADE_IN_MS, MSG_HOLD_MS, MSG_FADE_OUT_MS, MSG_TOTAL_MS,
     get southWindTargets() { return getTargets(); },
     get southWindHitIdx() { return getHitIdx(); },
@@ -2231,7 +2174,7 @@ function _updatePlayerDamageShow() {
         battleState = 'pvp-dissolve'; battleTimer = 0; playSFX(SFX.MONSTER_DEATH);
       } else { battleState = 'boss-dissolve'; battleTimer = 0; playSFX(SFX.BOSS_DEATH); }
     } else {
-      if (battleMsgCurrent) { battleState = 'msg-wait'; battleTimer = 0; }
+      if (getBattleMsgCurrent()) { battleState = 'msg-wait'; battleTimer = 0; }
       else processNextTurn();
     }
   }
@@ -2317,7 +2260,7 @@ function _updateBattleDefendItem(dt) {
   if (battleState === 'defend-anim') {
     // Defend pose + sparkle for 32 frames (~533ms), then wait for msg, then enemy turn
     if (battleTimer >= DEFEND_SPARKLE_TOTAL_MS) {
-      if (battleMsgCurrent) { battleState = 'msg-wait'; battleTimer = 0; }
+      if (getBattleMsgCurrent()) { battleState = 'msg-wait'; battleTimer = 0; }
       else processNextTurn();
     }
   } else if (battleState === 'item-use') {
@@ -2364,7 +2307,7 @@ function _updateItemMenuFades() {
 function _updateBattleRunSuccess() {
   if (battleState === 'run-success') {
     // Queue message, then wait for it to finish auto-advancing
-    if (!battleMsgCurrent && battleMsgQueue.length === 0) {
+    if (!getBattleMsgCurrent() && getBattleMsgQueue().length === 0) {
       runSlideBack = true; battleState = 'encounter-box-close'; battleTimer = 0;
     }
   } else { return false; }
@@ -2373,7 +2316,7 @@ function _updateBattleRunSuccess() {
 
 function _updateBattleRunFail() {
   if (battleState === 'run-fail') {
-    if (!battleMsgCurrent && battleMsgQueue.length === 0) {
+    if (!getBattleMsgCurrent() && getBattleMsgQueue().length === 0) {
       processNextTurn();
     }
   } else { return false; }
@@ -2452,7 +2395,7 @@ function _updateVictorySequence() {
   } else if (battleState === 'joblv-fade-out') {
     if (battleTimer >= _textMs) { battleState = 'victory-text-out'; battleTimer = 0; }
   } else if (battleState === 'victory-text-out') {
-    if (battleTimer >= _textMs) { battleMsgCurrent = null; battleState = 'victory-menu-fade'; battleTimer = 0; }
+    if (battleTimer >= _textMs) { setBattleMsgCurrent(null); battleState = 'victory-menu-fade'; battleTimer = 0; }
   } else if (battleState === 'victory-menu-fade') {
     if (battleTimer >= _textMs) { battleState = 'victory-box-close'; battleTimer = 0; }
   } else if (battleState === 'victory-box-close') {
@@ -2540,7 +2483,7 @@ function updateBattle(dt) {
   if (battleState === 'none') return;
   battleTimer += Math.min(dt, 33);
   _updateBattleMsg(dt);
-  if (battleState === 'msg-wait') { if (!battleMsgCurrent) processNextTurn(); return; }
+  if (battleState === 'msg-wait') { if (!getBattleMsgCurrent()) processNextTurn(); return; }
   if (pvpSt.isPVPBattle) { updatePVPBattle(dt, _pvpShared()); return; }
   _updateBattleTimers(dt);
   _updatePoisonTick()         ||
