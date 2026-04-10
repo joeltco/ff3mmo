@@ -3,9 +3,10 @@
 import { playSlashSFX } from './battle-sfx.js';
 import { isWeapon } from './data/items.js';
 import { SFX, playSFX } from './music.js';
-import { _nameToBytes } from './text-utils.js';
+import { _nameToBytes, makeVsMsg } from './text-utils.js';
 import { replaceBattleMsg } from './battle-msg.js';
 import { BATTLE_CRITICAL } from './data/strings.js';
+import { getMonsterName } from './text-decoder.js';
 
 let _s = null;
 
@@ -63,7 +64,12 @@ function _updateAllyAttack() {
     if (_s.battleTimer >= delay) {
       const ally = _s.battleAllies[_s.currentAllyAttacker];
       if (_s.allyHitIdx === 0 && ally && _s.queueBattleMsg) {
-        _s.queueBattleMsg(_nameToBytes((ally.name || 'Ally') + ' attacks!'));
+        const allyName = _nameToBytes(ally.name || 'Ally');
+        const ti = _s.allyTargetIndex;
+        const targetName = (_s.encounterMonsters && ti >= 0)
+          ? (getMonsterName(_s.encounterMonsters[ti].monsterId) || _nameToBytes('Enemy'))
+          : null;
+        _s.queueBattleMsg(targetName ? makeVsMsg(allyName, targetName) : _nameToBytes((ally.name || 'Ally') + ' attacks!'));
       }
       const isLeft = (_s.allyHitIdx % 2 === 1) && ally && isWeapon(ally.weaponL);
       _s.allyHitIsLeft = isLeft;

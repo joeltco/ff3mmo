@@ -6,7 +6,7 @@ import { SFX, playSFX } from './music.js';
 import { tryInflictStatus, blindHitPenalty, wakeOnHit, STATUS_NAME_BYTES } from './status-effects.js';
 import { replaceBattleMsg } from './battle-msg.js';
 import { getMonsterName } from './text-decoder.js';
-import { _nameToBytes } from './text-utils.js';
+import { _nameToBytes, makeVsMsg } from './text-utils.js';
 
 let _s = null;
 
@@ -138,7 +138,9 @@ function _processEnemyFlash() {
 
   // Queue enemy attack message
   if (mon) {
-    _s.queueBattleMsg(getMonsterName(mon.monsterId) || _nameToBytes('Enemy'));
+    const monName = getMonsterName(mon.monsterId) || _nameToBytes('Enemy');
+    const targetName = targetAlly >= 0 ? _nameToBytes(_s.battleAllies[targetAlly].name || 'Ally') : _s.playerName;
+    _s.queueBattleMsg(targetName ? makeVsMsg(monName, targetName) : monName);
   }
 
   // ── Monster special attack check ──────────────────────────────────────────

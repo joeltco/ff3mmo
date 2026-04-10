@@ -1014,6 +1014,7 @@ function _enemyShared() {
     queueBattleMsg,
     isBattleMsgBusy,
     isTeamWiped: _isTeamWiped,
+    get playerName() { return saveSlots[selectCursor]?.name || null; },
   };
 }
 

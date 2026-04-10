@@ -69,6 +69,14 @@ export function makeNameMsg(nameBytes, suffix) {
   return out;
 }
 
+// "Attacker:Target" — two NES byte arrays joined with " : "
+const SEP = new Uint8Array([0xFF, 0xC8, 0xFF]); // " : "
+export function makeVsMsg(a, b) {
+  const out = new Uint8Array(a.length + SEP.length + b.length);
+  out.set(a); out.set(SEP, a.length); out.set(b, a.length + SEP.length);
+  return out;
+}
+
 // Draw "Lv##" left-aligned + colored HP right-aligned on the same row
 // leftX/rightX = content edges (inside border), y = text baseline, fadeStep = NES color fade steps
 export function drawLvHpRow(ctx, leftX, rightX, y, level, hp, maxHP, fadeStep) {
