@@ -62,6 +62,7 @@ export function startRandomEncounter(shared) {
         spAtkRate: mData.spAtkRate || 0,
         attacks: mData.attacks || null,
         level: mData.level || 1,
+        agi: mData.level || 1,
         statusAtk: mData.statusAtk || null,
         atkElem: mData.atkElem || null,
         weakness: mData.weakness || null,

@@ -8,12 +8,11 @@
 - But `grantExp()` divides by 4 internally — player actually got 16
 - Gil and CP were already divided before display — EXP was the only inconsistent one
 
-### 2. Monster AGI missing — monsters always go last
-- Zero monsters in `data/monsters.js` define an `agi` field
-- `battle-encounter.js` doesn't copy `agi` to spawned encounters
-- Turn order: `mAgi || 0` → all monsters get priority `0*2 + random(256)`
-- Player gets `agi*2 + random(256)` — almost guaranteed to act first
-- Needs ROM extraction or manual values to fix
+### 2. Monster AGI missing — monsters always went last — FIXED
+- FF3 NES ROM has no monster AGI byte (16-byte record fully mapped)
+- All monsters defaulted to `agi || 0` → priority `0*2 + random(256)`
+- Fix: level-based proxy (`agi = level`). Higher-level monsters compete for turn order.
+- random(256) component still keeps it unpredictable
 
 ## Design Notes
 
