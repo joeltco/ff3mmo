@@ -15,7 +15,7 @@ export const ps = {
   atk: 12,
   def: 4,
   gil: 0,
-  weaponR: 0x1F,   // right hand item ID (Knife), 0 = unarmed
+  weaponR: 0x1E,   // right hand item ID (Knife), 0 = unarmed
   weaponL: 0x00,   // left hand item ID, 0 = unarmed
   head: 0x62,      // Leather Cap
   body: 0x72,      // Cloth Armor
