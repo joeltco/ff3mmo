@@ -3,7 +3,8 @@
 import { calcDamage, elemMultiplier } from './battle-math.js';
 import { ps, getShieldEvade } from './player-stats.js';
 import { SFX, playSFX } from './music.js';
-import { tryInflictStatus, blindHitPenalty, wakeOnHit } from './status-effects.js';
+import { tryInflictStatus, blindHitPenalty, wakeOnHit, STATUS_NAME_BYTES } from './status-effects.js';
+import { replaceBattleMsg } from './battle-msg.js';
 import { getMonsterName } from './text-decoder.js';
 import { _nameToBytes } from './text-utils.js';
 
@@ -192,7 +193,10 @@ function _processEnemyFlash() {
       const monStatus = mon ? mon.statusAtk : null;
       if (monStatus && ps.status) {
         const arr = Array.isArray(monStatus) ? monStatus : [monStatus];
-        for (const s of arr) tryInflictStatus(ps.status, s, hitRate);
+        for (const s of arr) {
+          const applied = tryInflictStatus(ps.status, s, hitRate);
+          if (applied && STATUS_NAME_BYTES[applied]) replaceBattleMsg(STATUS_NAME_BYTES[applied]);
+        }
       }
       playSFX(SFX.ATTACK_HIT);
       _s.battleShakeTimer = _s.BATTLE_SHAKE_MS;

@@ -78,7 +78,7 @@ import { initMapLoading, loadMapById, loadWorldMapAt, loadWorldMapAtPosition, se
 import { updateBattleAlly } from './battle-ally.js';
 import { updateBattleEnemyTurn } from './battle-enemy.js';
 import { buildTurnOrder as _buildTurnOrder, processNextTurn as _processNextTurn } from './battle-turn.js';
-import { createStatusState, clearAll as clearAllStatus, tryInflictStatus, wakeOnHit } from './status-effects.js';
+import { createStatusState, clearAll as clearAllStatus, tryInflictStatus, wakeOnHit, STATUS_NAME_BYTES, STATUS } from './status-effects.js';
 import { tickRandomEncounter as _tickRandomEncounter, startRandomEncounter as _startRandomEncounter } from './battle-encounter.js';
 import { resetBattleItemVars, getTargets, getHitIdx, startMagicItem, updateMagicItemThrowHit } from './battle-items.js';
 import { initBattleSprite as _initBattleSprite, initBattleSpriteForJob as _initBattleSpriteForJob,
@@ -249,6 +249,7 @@ let dyingMonsterIndices = new Map(); // index → startDelayMs for staggered dea
 // Battle message system → battle-msg.js
 
 // Hit animation state
+let comboStatusInflicted = 0;      // status flag inflicted during current combo (for msg replace)
 let currentHitIdx = 0;             // which hit we're animating
 let slashFrame = 0;                // current slash animation frame (0-3)
 let slashX = 0, slashY = 0;       // slash effect base position (target center)
@@ -2070,6 +2071,17 @@ function _finalizeComboHits() {
   }
   setEnemyDmgNum(allMiss ? { miss: true, timer: 0 } : { value: totalDmg, crit: anyCrit, timer: 0 });
   if (pvpSt.isPVPBattle && !allMiss) pvpSt.pvpOpponentShakeTimer = BATTLE_SHAKE_MS;
+  // Replace strip message: status > crit > multi-hit
+  if (!allMiss) {
+    if (comboStatusInflicted && STATUS_NAME_BYTES[comboStatusInflicted]) {
+      replaceBattleMsg(STATUS_NAME_BYTES[comboStatusInflicted]);
+    } else if (anyCrit) {
+      replaceBattleMsg(BATTLE_CRITICAL);
+    } else if (hitsLanded > 1) {
+      replaceBattleMsg(_nameToBytes(hitsLanded + ' hits!'));
+    }
+  }
+  comboStatusInflicted = 0;
   battleState = 'player-damage-show';
   battleTimer = 0;
 }
@@ -2089,6 +2101,7 @@ function _advanceHitCombo() {
 }
 function _updatePlayerAttackBack() {
   if (battleState !== 'attack-back') return false;
+  if (currentHitIdx === 0) comboStatusInflicted = 0;
   const delay = currentHitIdx === 0 ? BACK_SWING_MS : HIT_COMBO_PAUSE_MS;
   if (battleTimer >= delay) {
     battleState = 'attack-fwd';
@@ -2137,7 +2150,10 @@ function _updatePlayerSlash() {
           const wpnData = ITEMS.get(wpnId);
           if (wpnData && wpnData.status) {
             const arr = Array.isArray(wpnData.status) ? wpnData.status : [wpnData.status];
-            for (const s of arr) tryInflictStatus(targetMon.status, s, wpnData.hit || 50);
+            for (const s of arr) {
+              const applied = tryInflictStatus(targetMon.status, s, wpnData.hit || 50);
+              if (applied) comboStatusInflicted = applied;
+            }
           }
         }
       } else {
