@@ -1,5 +1,6 @@
 // Battle enemy turn update logic — extracted from game.js
 
+import { battleSt, getEnemyHP, setEnemyHP } from './battle-state.js';
 import { calcDamage, elemMultiplier } from './battle-math.js';
 import { ps, getShieldEvade } from './player-stats.js';
 import { SFX, playSFX } from './music.js';
@@ -47,7 +48,7 @@ const SPECIAL_ATTACKS = {
 // ── Execute special attack against player or ally ──────────────────────────
 function _doSpecialAttack(mon, spec, targetAlly = -1) {
   if (targetAlly >= 0) {
-    const ally = _s.battleAllies[targetAlly];
+    const ally = battleSt.battleAllies[targetAlly];
     if (!ally || ally.hp <= 0) { _s.processNextTurn(); return; }
     if (spec.type === 'damage') {
       const eMult = elemMultiplier(spec.element, null, null);
@@ -55,22 +56,22 @@ function _doSpecialAttack(mon, spec, targetAlly = -1) {
       const dmg = Math.max(1, raw);
       ally.hp = Math.max(0, ally.hp - dmg);
       _s.allyDamageNums[targetAlly] = { value: dmg, timer: 0 };
-      _s.allyShakeTimer[targetAlly] = _s.BATTLE_SHAKE_MS;
+      battleSt.allyShakeTimer[targetAlly] = _s.BATTLE_SHAKE_MS;
       playSFX(SFX.ATTACK_HIT);
-      _s.battleState = 'ally-hit'; _s.battleTimer = 0;
+      battleSt.battleState = 'ally-hit'; battleSt.battleTimer = 0;
     } else if (spec.type === 'status' && ally.status) {
       const applied = tryInflictStatus(ally.status, spec.status, spec.hit);
       _s.allyDamageNums[targetAlly] = applied
         ? { value: 0, timer: 0, status: spec.status }
         : { miss: true, timer: 0 };
-      _s.battleState = 'ally-damage-show-enemy'; _s.battleTimer = 0;
+      battleSt.battleState = 'ally-damage-show-enemy'; battleSt.battleTimer = 0;
     } else if (spec.type === 'multi_status' && ally.status) {
       let anyApplied = false;
       for (const s of spec.statuses) { if (tryInflictStatus(ally.status, s, spec.hit)) anyApplied = true; }
       _s.allyDamageNums[targetAlly] = anyApplied
         ? { value: 0, timer: 0, status: 'multi' }
         : { miss: true, timer: 0 };
-      _s.battleState = 'ally-damage-show-enemy'; _s.battleTimer = 0;
+      battleSt.battleState = 'ally-damage-show-enemy'; battleSt.battleTimer = 0;
     } else { _s.processNextTurn(); }
     return;
   }
@@ -79,7 +80,7 @@ function _doSpecialAttack(mon, spec, targetAlly = -1) {
     const eMult = elemMultiplier(spec.element, null, ps.elemResist);
     const raw = Math.floor(spec.power * eMult) - (ps.mdef || 0);
     const dmg = Math.max(1, raw);
-    if (_s.isDefending) {
+    if (battleSt.isDefending) {
       const reduced = Math.max(1, Math.floor(dmg / 2));
       _s.ps.hp = Math.max(0, _s.ps.hp - reduced);
       _s.playerDamageNum = { value: reduced, timer: 0 };
@@ -88,18 +89,18 @@ function _doSpecialAttack(mon, spec, targetAlly = -1) {
       _s.playerDamageNum = { value: dmg, timer: 0 };
     }
     playSFX(SFX.ATTACK_HIT);
-    _s.battleShakeTimer = _s.BATTLE_SHAKE_MS;
-    _s.battleState = 'enemy-attack'; _s.battleTimer = 0;
+    battleSt.battleShakeTimer = _s.BATTLE_SHAKE_MS;
+    battleSt.battleState = 'enemy-attack'; battleSt.battleTimer = 0;
   } else if (spec.type === 'status' && ps.status) {
     const applied = tryInflictStatus(ps.status, spec.status, spec.hit);
     if (applied) {
       _s.playerDamageNum = { value: 0, timer: 0, status: spec.status };
-      _s.battleShakeTimer = _s.BATTLE_SHAKE_MS;
+      battleSt.battleShakeTimer = _s.BATTLE_SHAKE_MS;
       if (STATUS_NAME_BYTES[applied]) replaceBattleMsg(STATUS_NAME_BYTES[applied]);
     } else {
       _s.playerDamageNum = { miss: true, timer: 0 };
     }
-    _s.battleState = 'enemy-damage-show'; _s.battleTimer = 0;
+    battleSt.battleState = 'enemy-damage-show'; battleSt.battleTimer = 0;
   } else if (spec.type === 'multi_status' && ps.status) {
     let anyApplied = 0;
     for (const s of spec.statuses) {
@@ -108,38 +109,38 @@ function _doSpecialAttack(mon, spec, targetAlly = -1) {
     }
     if (anyApplied) {
       _s.playerDamageNum = { value: 0, timer: 0, status: 'multi' };
-      _s.battleShakeTimer = _s.BATTLE_SHAKE_MS;
+      battleSt.battleShakeTimer = _s.BATTLE_SHAKE_MS;
       if (STATUS_NAME_BYTES[anyApplied]) replaceBattleMsg(STATUS_NAME_BYTES[anyApplied]);
     } else {
       _s.playerDamageNum = { miss: true, timer: 0 };
     }
-    _s.battleState = 'enemy-damage-show'; _s.battleTimer = 0;
+    battleSt.battleState = 'enemy-damage-show'; battleSt.battleTimer = 0;
   } else {
     // No-op attacks (Reflect, Sence, etc.) — wait for msg then skip
-    if (_s.isBattleMsgBusy()) { _s.battleState = 'msg-wait'; _s.battleTimer = 0; }
+    if (_s.isBattleMsgBusy()) { battleSt.battleState = 'msg-wait'; battleSt.battleTimer = 0; }
     else _s.processNextTurn();
   }
 }
 
 // ── Enemy flash → targeting + hit calc ──────────────────────────────────────
 function _processEnemyFlash() {
-  if (_s.battleState !== 'enemy-flash' || _s.battleTimer < _s.BOSS_PREFLASH_MS) return false;
-  const livingAllies = _s.battleAllies.filter(a => a.hp > 0);
+  if (battleSt.battleState !== 'enemy-flash' || battleSt.battleTimer < _s.BOSS_PREFLASH_MS) return false;
+  const livingAllies = battleSt.battleAllies.filter(a => a.hp > 0);
   let targetAlly = -1;
   if (livingAllies.length > 0) {
-    const allyOptions = _s.battleAllies.map((a, i) => a.hp > 0 ? i : -1).filter(i => i >= 0);
+    const allyOptions = battleSt.battleAllies.map((a, i) => a.hp > 0 ? i : -1).filter(i => i >= 0);
     if (_s.ps.hp <= 0) {
       targetAlly = allyOptions[Math.floor(Math.random() * allyOptions.length)];
     } else if (Math.random() >= 1 / (1 + livingAllies.length)) {
       targetAlly = allyOptions[Math.floor(Math.random() * allyOptions.length)];
     }
   }
-  const mon = (_s.currentAttacker >= 0 && _s.encounterMonsters) ? _s.encounterMonsters[_s.currentAttacker] : null;
+  const mon = (battleSt.currentAttacker >= 0 && battleSt.encounterMonsters) ? battleSt.encounterMonsters[battleSt.currentAttacker] : null;
 
   // Queue enemy attack message
   if (mon) {
     const monName = getMonsterName(mon.monsterId) || _nameToBytes('Enemy');
-    const targetName = targetAlly >= 0 ? _nameToBytes(_s.battleAllies[targetAlly].name || 'Ally') : _s.playerName;
+    const targetName = targetAlly >= 0 ? _nameToBytes(battleSt.battleAllies[targetAlly].name || 'Ally') : _s.playerName;
     _s.queueBattleMsg(targetName ? makeVsMsg(monName, targetName) : monName);
   }
 
@@ -173,23 +174,23 @@ function _processEnemyFlash() {
     return { total, landed };
   }
   if (targetAlly >= 0) {
-    _s.enemyTargetAllyIdx = targetAlly;
-    const { total, landed } = rollMultiHit(_s.battleAllies[targetAlly].def, null);
+    battleSt.enemyTargetAllyIdx = targetAlly;
+    const { total, landed } = rollMultiHit(battleSt.battleAllies[targetAlly].def, null);
     if (landed > 0) {
-      _s.battleAllies[targetAlly].hp = Math.max(0, _s.battleAllies[targetAlly].hp - total);
+      battleSt.battleAllies[targetAlly].hp = Math.max(0, battleSt.battleAllies[targetAlly].hp - total);
       _s.allyDamageNums[targetAlly] = { value: total, timer: 0 };
-      _s.allyShakeTimer[targetAlly] = _s.BATTLE_SHAKE_MS;
-      playSFX(SFX.ATTACK_HIT); _s.battleState = 'ally-hit'; _s.battleTimer = 0;
+      battleSt.allyShakeTimer[targetAlly] = _s.BATTLE_SHAKE_MS;
+      playSFX(SFX.ATTACK_HIT); battleSt.battleState = 'ally-hit'; battleSt.battleTimer = 0;
     } else {
       _s.allyDamageNums[targetAlly] = { miss: true, timer: 0 };
-      _s.battleState = 'ally-damage-show-enemy'; _s.battleTimer = 0;
+      battleSt.battleState = 'ally-damage-show-enemy'; battleSt.battleTimer = 0;
     }
   } else {
     const shieldEvade = getShieldEvade();
     const { total, landed } = rollMultiHit(_s.ps.def, ps.elemResist, shieldEvade, ps.evade);
     if (landed > 0) {
       let dmg = total;
-      if (_s.isDefending) dmg = Math.max(1, Math.floor(dmg / 2));
+      if (battleSt.isDefending) dmg = Math.max(1, Math.floor(dmg / 2));
       _s.ps.hp = Math.max(0, _s.ps.hp - dmg);
       _s.playerDamageNum = { value: dmg, timer: 0 };
       // Physical hit wakes sleeping targets
@@ -204,11 +205,11 @@ function _processEnemyFlash() {
         }
       }
       playSFX(SFX.ATTACK_HIT);
-      _s.battleShakeTimer = _s.BATTLE_SHAKE_MS;
-      _s.battleState = 'enemy-attack'; _s.battleTimer = 0;
+      battleSt.battleShakeTimer = _s.BATTLE_SHAKE_MS;
+      battleSt.battleState = 'enemy-attack'; battleSt.battleTimer = 0;
     } else {
       _s.playerDamageNum = { miss: true, timer: 0 };
-      _s.battleState = 'enemy-damage-show'; _s.battleTimer = 0;
+      battleSt.battleState = 'enemy-damage-show'; battleSt.battleTimer = 0;
     }
   }
   return true;
@@ -216,19 +217,19 @@ function _processEnemyFlash() {
 
 // ── After damage show: check team wipe or advance ───────────────────────────
 function _processEnemyDamageShowState() {
-  if (_s.battleTimer < _s.BATTLE_DMG_SHOW_MS) return;
+  if (battleSt.battleTimer < _s.BATTLE_DMG_SHOW_MS) return;
   if (_s.isTeamWiped()) {
-    _s.isDefending = false; _s.battleState = 'team-wipe'; _s.battleTimer = 0;
-  } else if (_s.isBattleMsgBusy()) { _s.battleState = 'msg-wait'; _s.battleTimer = 0;
+    battleSt.isDefending = false; battleSt.battleState = 'team-wipe'; battleSt.battleTimer = 0;
+  } else if (_s.isBattleMsgBusy()) { battleSt.battleState = 'msg-wait'; battleSt.battleTimer = 0;
   } else { _s.processNextTurn(); }
 }
 
 export function updateBattleEnemyTurn(shared) {
   _s = shared;
   if (_processEnemyFlash()) return true;
-  if (_s.battleState === 'enemy-attack') {
-    if (_s.battleTimer >= _s.BATTLE_SHAKE_MS) { _s.battleState = 'enemy-damage-show'; _s.battleTimer = 0; }
-  } else if (_s.battleState === 'enemy-damage-show') { _processEnemyDamageShowState();
+  if (battleSt.battleState === 'enemy-attack') {
+    if (battleSt.battleTimer >= _s.BATTLE_SHAKE_MS) { battleSt.battleState = 'enemy-damage-show'; battleSt.battleTimer = 0; }
+  } else if (battleSt.battleState === 'enemy-damage-show') { _processEnemyDamageShowState();
   } else { return false; }
   return true;
 }

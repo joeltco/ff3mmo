@@ -1,5 +1,6 @@
 // hud-drawing.js — HUD rendering, top box, portrait, info panel, utility draw helpers
 
+import { battleSt, getEnemyHP, setEnemyHP } from './battle-state.js';
 import { NES_SYSTEM_PALETTE } from './tile-decoder.js';
 import { drawText, measureText, TEXT_WHITE } from './font-renderer.js';
 import { nesColorFade, _makeFadedPal } from './palette.js';
@@ -121,8 +122,8 @@ export function roundTopBoxCorners() {
 
 function _drawTopBoxBattleBG() {
   const ctx = _s.ctx;
-  const battleState = _s.battleState;
-  const battleShakeTimer = _s.battleShakeTimer;
+  const battleState = battleSt.battleState;
+  const battleShakeTimer = battleSt.battleShakeTimer;
   const topShake = ((battleState === 'enemy-attack' || battleState === 'poison-tick' || battleState === 'pvp-opp-sw-hit') && battleShakeTimer > 0)
     ? (Math.floor(battleShakeTimer / 67) & 1 ? 2 : -2) : 0;
   if (transSt.state !== 'loading' && !topBoxSt.isTown && hudSt.topBoxBgCanvas) {
@@ -236,7 +237,7 @@ function _drawPauseHealNum(px, py) {
 function _drawHUDPortrait() {
   const infoFadeStep = HUD_INFO_FADE_STEPS - Math.min(Math.floor(hudSt.hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
   const bp = bsc.battlePoses;
-  if (_s.battleState !== 'none' || !bp.idle) return;
+  if (battleSt.battleState !== 'none' || !bp.idle) return;
   const isPauseHeal = pauseSt.state === 'inv-heal';
   const hasActiveStatus = ps.status && ps.status.mask !== 0;
   const nfPortrait = isPauseHeal && bp.defend ? bp.defend
@@ -262,8 +263,8 @@ function _drawHUDInfoPanel() {
       ctx.save(); ctx.globalAlpha = deathAlpha;
     } else { return; }
   }
-  const battleShakeTimer = _s.battleShakeTimer;
-  const battleState = _s.battleState;
+  const battleShakeTimer = battleSt.battleShakeTimer;
+  const battleState = battleSt.battleState;
   const shakeOff = ((battleState === 'enemy-attack' || battleState === 'poison-tick' || battleState === 'pvp-opp-sw-hit') && battleShakeTimer > 0)
     ? (Math.floor(battleShakeTimer / 67) & 1 ? 2 : -2) : 0;
   const sy = HUD_VIEW_Y + 8;

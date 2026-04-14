@@ -1,5 +1,6 @@
 // input-handler.js — battle, roster, and pause menu input handlers
 
+import { battleSt, getEnemyHP, setEnemyHP } from './battle-state.js';
 import { playSFX, SFX, pauseMusic, playFF1Track, FF1_TRACKS } from './music.js';
 import { pauseSt } from './pause-menu.js';
 import { transSt } from './transitions.js';
@@ -100,8 +101,8 @@ function _battleTargetNav() {
     }
     return;
   }
-  const enc = _s.encounterMonsters;
-  if (!_s.isRandomEncounter || !enc) return;
+  const enc = battleSt.encounterMonsters;
+  if (!battleSt.isRandomEncounter || !enc) return;
   const aliveIdx = enc.reduce((a, m, i) => (m.hp > 0 ? [...a, i] : a), []);
   if (k['ArrowRight'] || k['ArrowDown']) {
     k['ArrowRight'] = false; k['ArrowDown'] = false;
@@ -140,8 +141,8 @@ function _battleTargetConfirm() {
     const handAtk = baseAtk + (wpn ? (wpn.atk || 0) : 0);
     const handHit = (wpn ? (wpn.hit || 80) : 80) * blindMult;
     const handElem = wpn ? (wpn.element || null) : null;
-    if (_s.isRandomEncounter && _s.encounterMonsters) {
-      const mon = _s.encounterMonsters[inputSt.targetIndex];
+    if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
+      const mon = battleSt.encounterMonsters[inputSt.targetIndex];
       return rollHits(handAtk, mon.def, handHit, hitsPerHand, { elemMult: elemMultiplier(handElem, mon.weakness, mon.resist) });
     } else {
       const targetDef = _s.isPVPBattle && _s.pvpOpponentStats
@@ -175,8 +176,8 @@ function _battleTargetConfirm() {
     slashFrames: pendingSlashFrames, slashOffX: pendingOffX, slashOffY: pendingOffY,
     slashX: centerX, slashY: centerY
   };
-  _s.battleState = 'confirm-pause';
-  _s.battleTimer = 0;
+  battleSt.battleState = 'confirm-pause';
+  battleSt.battleTimer = 0;
 }
 
 function _battleInputTargetSelect() {
@@ -184,8 +185,8 @@ function _battleInputTargetSelect() {
   _battleTargetConfirm();
   if (_xPressed()) {
     playSFX(SFX.CONFIRM);
-    _s.battleState = 'menu-open';
-    _s.battleTimer = 0;
+    battleSt.battleState = 'menu-open';
+    battleSt.battleTimer = 0;
   }
 }
 
@@ -194,22 +195,22 @@ function _itemSelectNav(isEquipPage, totalPages, pageRows) {
   if (k['ArrowDown']) {
     k['ArrowDown'] = false;
     if (inputSt.itemPageCursor < pageRows - 1) inputSt.itemPageCursor++;
-    else if (inputSt.itemPage < totalPages - 1) { inputSt.itemSlideDir = -1; inputSt.itemSlideCursor = 0; _s.battleState = 'item-slide'; _s.battleTimer = 0; }
+    else if (inputSt.itemPage < totalPages - 1) { inputSt.itemSlideDir = -1; inputSt.itemSlideCursor = 0; battleSt.battleState = 'item-slide'; battleSt.battleTimer = 0; }
     playSFX(SFX.CURSOR);
   }
   if (k['ArrowUp']) {
     k['ArrowUp'] = false;
     if (inputSt.itemPageCursor > 0) inputSt.itemPageCursor--;
-    else if (inputSt.itemPage > 0) { inputSt.itemSlideDir = 1; inputSt.itemSlideCursor = (inputSt.itemPage - 1) === 0 ? 1 : INV_SLOTS - 1; _s.battleState = 'item-slide'; _s.battleTimer = 0; }
+    else if (inputSt.itemPage > 0) { inputSt.itemSlideDir = 1; inputSt.itemSlideCursor = (inputSt.itemPage - 1) === 0 ? 1 : INV_SLOTS - 1; battleSt.battleState = 'item-slide'; battleSt.battleTimer = 0; }
     playSFX(SFX.CURSOR);
   }
   if (k['ArrowLeft'] && inputSt.itemPage > 0) {
     k['ArrowLeft'] = false; playSFX(SFX.CURSOR);
-    inputSt.itemSlideDir = 1; inputSt.itemSlideCursor = 0; _s.battleState = 'item-slide'; _s.battleTimer = 0;
+    inputSt.itemSlideDir = 1; inputSt.itemSlideCursor = 0; battleSt.battleState = 'item-slide'; battleSt.battleTimer = 0;
   }
   if (k['ArrowRight'] && inputSt.itemPage < totalPages - 1) {
     k['ArrowRight'] = false; playSFX(SFX.CURSOR);
-    inputSt.itemSlideDir = -1; inputSt.itemSlideCursor = 0; _s.battleState = 'item-slide'; _s.battleTimer = 0;
+    inputSt.itemSlideDir = -1; inputSt.itemSlideCursor = 0; battleSt.battleState = 'item-slide'; battleSt.battleTimer = 0;
   }
 }
 
@@ -271,15 +272,15 @@ function _itemSelectZ(isEquipPage, gIdx) {
       const itemDat = ITEMS.get(item.id);
       if (itemDat?.type === 'consumable' || itemDat?.type === 'battle_item') {
         playSFX(SFX.CONFIRM); inputSt.itemHeldIdx = -1; inputSt.itemTargetMode = 'single';
-        if (itemDat.type === 'battle_item' && _s.isRandomEncounter && _s.encounterMonsters) {
+        if (itemDat.type === 'battle_item' && battleSt.isRandomEncounter && battleSt.encounterMonsters) {
           inputSt.itemTargetType = 'enemy';
-          const ecnt = _s.encounterMonsters.length;
-          const ealive = (i) => i < _s.encounterMonsters.length && _s.encounterMonsters[i].hp > 0;
+          const ecnt = battleSt.encounterMonsters.length;
+          const ealive = (i) => i < battleSt.encounterMonsters.length && battleSt.encounterMonsters[i].hp > 0;
           const rightCandidates = ecnt === 1 ? [0] : ecnt === 2 ? [1] : ecnt === 3 ? [1] : [1,3];
           const leftCandidates  = ecnt === 1 ? [0] : ecnt === 2 ? [0] : ecnt === 3 ? [0,2] : [0,2];
           const first = [...rightCandidates,...leftCandidates].find(i => ealive(i));
           inputSt.itemTargetIndex = first !== undefined ? first : 0;
-        } else if (itemDat.type === 'battle_item' && !_s.isRandomEncounter) {
+        } else if (itemDat.type === 'battle_item' && !battleSt.isRandomEncounter) {
           inputSt.itemTargetType = 'enemy';
           // Default to first alive PVP target (grid index)
           const cnt = 1 + (_s.pvpEnemyAllies ? _s.pvpEnemyAllies.length : 0);
@@ -289,7 +290,7 @@ function _itemSelectZ(isEquipPage, gIdx) {
         } else {
           inputSt.itemTargetType = 'player'; inputSt.itemTargetIndex = 0;
         }
-        inputSt.itemTargetAllyIndex = -1; _s.battleState = 'item-target-select'; _s.battleTimer = 0;
+        inputSt.itemTargetAllyIndex = -1; battleSt.battleState = 'item-target-select'; battleSt.battleTimer = 0;
         inputSt.playerActionPending = { command: 'item', itemId: item.id };
       } else { inputSt.itemHeldIdx = -1; playSFX(SFX.CONFIRM); }
     } else { inputSt.itemHeldIdx = -1; playSFX(SFX.CONFIRM); }
@@ -309,13 +310,13 @@ function _battleInputItemSelect() {
   }
   if (_xPressed()) {
     if (inputSt.itemHeldIdx !== -1) { inputSt.itemHeldIdx = -1; playSFX(SFX.CONFIRM); }
-    else { playSFX(SFX.CONFIRM); _s.battleState = 'item-cancel-out'; _s.battleTimer = 0; }
+    else { playSFX(SFX.CONFIRM); battleSt.battleState = 'item-cancel-out'; battleSt.battleTimer = 0; }
   }
 }
 
 function _itemTargetCnt() {
   if (_s.isPVPBattle) return 1 + (_s.pvpEnemyAllies ? _s.pvpEnemyAllies.length : 0);
-  return _s.isRandomEncounter && _s.encounterMonsters ? _s.encounterMonsters.length : (_s.isRandomEncounter ? 0 : 1);
+  return battleSt.isRandomEncounter && battleSt.encounterMonsters ? battleSt.encounterMonsters.length : (battleSt.isRandomEncounter ? 0 : 1);
 }
 function _itemTargetAlive(i) {
   if (_s.isPVPBattle) {
@@ -323,7 +324,7 @@ function _itemTargetAlive(i) {
     const a = _s.pvpEnemyAllies && _s.pvpEnemyAllies[i - 1];
     return !!(a && a.hp > 0);
   }
-  return _s.isRandomEncounter && _s.encounterMonsters && i < _s.encounterMonsters.length && _s.encounterMonsters[i].hp > 0;
+  return battleSt.isRandomEncounter && battleSt.encounterMonsters && i < battleSt.encounterMonsters.length && battleSt.encounterMonsters[i].hp > 0;
 }
 // PVP grid: right col = indices 0,2 (gc=cols-1). Encounter grid: right col = indices 1,3.
 function _itemTargetIsRightCol(i) {
@@ -353,7 +354,7 @@ function _itemTargetNavLeft(isBattleItem) {
       if (found !== undefined) {
         inputSt.itemTargetType = 'enemy'; inputSt.itemTargetIndex = found; inputSt.itemTargetMode = 'single'; playSFX(SFX.CURSOR);
       }
-    } else if (_s.isRandomEncounter) {
+    } else if (battleSt.isRandomEncounter) {
       const rightCandidates = cnt === 1 ? [0] : cnt === 2 ? [1] : cnt === 3 ? [1] : [1, 3];
       const leftCandidates  = cnt === 2 ? [0] : cnt === 3 ? [0, 2] : cnt >= 4 ? [0, 2] : [];
       let found = rightCandidates.find(i => _itemTargetAlive(i));
@@ -394,7 +395,7 @@ function _itemTargetNavRight() {
     }
     return;
   }
-  if (_itemTargetIsRightCol(inputSt.itemTargetIndex) || !_s.isRandomEncounter) {
+  if (_itemTargetIsRightCol(inputSt.itemTargetIndex) || !battleSt.isRandomEncounter) {
     inputSt.itemTargetType = 'player'; playSFX(SFX.CURSOR);
   } else {
     const rightPeer = inputSt.itemTargetIndex === 0 ? 1 : inputSt.itemTargetIndex === 2 ? 3 : -1;
@@ -410,14 +411,14 @@ function _itemTargetNavVertical(isBattleItem) {
   const goUp = !!k['ArrowUp'];
   k['ArrowUp'] = false; k['ArrowDown'] = false;
   const cnt = _itemTargetCnt();
-  if (isBattleItem && inputSt.itemTargetType === 'enemy' && (_s.isPVPBattle || (_s.isRandomEncounter && _s.encounterMonsters))) {
+  if (isBattleItem && inputSt.itemTargetType === 'enemy' && (_s.isPVPBattle || (battleSt.isRandomEncounter && battleSt.encounterMonsters))) {
     if (goUp && inputSt.itemTargetMode === 'single') {
       inputSt.itemTargetMode = _itemTargetIsLeftCol(inputSt.itemTargetIndex) ? 'col-left' : 'col-right';
       playSFX(SFX.CURSOR);
     } else if (!goUp && inputSt.itemTargetMode !== 'single') {
       inputSt.itemTargetMode = 'single'; playSFX(SFX.CURSOR);
     }
-  } else if (inputSt.itemTargetType === 'enemy' && (_s.isPVPBattle || (_s.isRandomEncounter && _s.encounterMonsters))) {
+  } else if (inputSt.itemTargetType === 'enemy' && (_s.isPVPBattle || (battleSt.isRandomEncounter && battleSt.encounterMonsters))) {
     const vertMap = cnt >= 4 ? { 0: 2, 2: 0, 1: 3, 3: 1 } :
                     cnt === 3 ? { 0: 2, 2: 0, 1: 1 } : {};
     const next = vertMap[inputSt.itemTargetIndex];
@@ -425,7 +426,7 @@ function _itemTargetNavVertical(isBattleItem) {
       inputSt.itemTargetIndex = next; playSFX(SFX.CURSOR);
     }
   } else if (inputSt.itemTargetType === 'player') {
-    const livingAllies = _s.battleAllies.filter(a => a.hp > 0);
+    const livingAllies = battleSt.battleAllies.filter(a => a.hp > 0);
     if (!goUp && inputSt.itemTargetAllyIndex < livingAllies.length - 1) {
       inputSt.itemTargetAllyIndex++; playSFX(SFX.CURSOR);
     } else if (goUp && inputSt.itemTargetAllyIndex >= 0) {
@@ -444,10 +445,10 @@ function _battleInputItemTargetSelect() {
     inputSt.playerActionPending.target = inputSt.itemTargetType === 'player' ? 'player' : inputSt.itemTargetIndex;
     inputSt.playerActionPending.allyIndex = inputSt.itemTargetType === 'player' ? inputSt.itemTargetAllyIndex : -1;
     inputSt.playerActionPending.targetMode = inputSt.itemTargetMode;
-    playSFX(SFX.CONFIRM); _s.battleState = 'item-list-out'; _s.battleTimer = 0;
+    playSFX(SFX.CONFIRM); battleSt.battleState = 'item-list-out'; battleSt.battleTimer = 0;
   }
   if (_xPressed()) {
-    inputSt.playerActionPending = null; playSFX(SFX.CONFIRM); _s.battleState = 'item-select'; _s.battleTimer = 0;
+    inputSt.playerActionPending = null; playSFX(SFX.CONFIRM); battleSt.battleState = 'item-select'; battleSt.battleTimer = 0;
   }
 }
 
@@ -455,24 +456,24 @@ function _battleInputHoldStates() {
   const k = _s.keys;
   const z = k['z'] || k['Z'];
   const clearZ = () => { k['z'] = false; k['Z'] = false; };
-  if (_s.battleState === 'roar-hold') {
+  if (battleSt.battleState === 'roar-hold') {
     if (msgState.state === 'hold' && z) { clearZ(); msgState.state = 'slide-out'; msgState.timer = 0; }
-  } else if (_s.battleState === 'defeat-text') {
-    if (z) { clearZ(); _s.battleState = 'defeat-close'; _s.battleTimer = 0; }
-  } else if (_s.battleState === 'victory-msg') {
-    if (z) { clearZ(); _s.advanceBattleMsgZ(); _s.battleTimer = 0; }
-  } else if (_s.battleState === 'exp-hold') {
-    if (z) { clearZ(); _s.battleState = 'exp-fade-out'; _s.battleTimer = 0; }
-  } else if (_s.battleState === 'gil-hold') {
-    if (z) { clearZ(); _s.battleState = 'gil-fade-out'; _s.battleTimer = 0; }
-  } else if (_s.battleState === 'cp-hold') {
-    if (z) { clearZ(); _s.battleState = 'cp-fade-out'; _s.battleTimer = 0; }
-  } else if (_s.battleState === 'item-hold') {
-    if (z) { clearZ(); _s.battleState = 'item-fade-out'; _s.battleTimer = 0; }
-  } else if (_s.battleState === 'levelup-hold') {
-    if (z) { clearZ(); _s.battleState = 'levelup-fade-out'; _s.battleTimer = 0; }
-  } else if (_s.battleState === 'joblv-hold') {
-    if (z) { clearZ(); _s.battleState = 'joblv-fade-out'; _s.battleTimer = 0; }
+  } else if (battleSt.battleState === 'defeat-text') {
+    if (z) { clearZ(); battleSt.battleState = 'defeat-close'; battleSt.battleTimer = 0; }
+  } else if (battleSt.battleState === 'victory-msg') {
+    if (z) { clearZ(); _s.advanceBattleMsgZ(); battleSt.battleTimer = 0; }
+  } else if (battleSt.battleState === 'exp-hold') {
+    if (z) { clearZ(); battleSt.battleState = 'exp-fade-out'; battleSt.battleTimer = 0; }
+  } else if (battleSt.battleState === 'gil-hold') {
+    if (z) { clearZ(); battleSt.battleState = 'gil-fade-out'; battleSt.battleTimer = 0; }
+  } else if (battleSt.battleState === 'cp-hold') {
+    if (z) { clearZ(); battleSt.battleState = 'cp-fade-out'; battleSt.battleTimer = 0; }
+  } else if (battleSt.battleState === 'item-hold') {
+    if (z) { clearZ(); battleSt.battleState = 'item-fade-out'; battleSt.battleTimer = 0; }
+  } else if (battleSt.battleState === 'levelup-hold') {
+    if (z) { clearZ(); battleSt.battleState = 'levelup-fade-out'; battleSt.battleTimer = 0; }
+  } else if (battleSt.battleState === 'joblv-hold') {
+    if (z) { clearZ(); battleSt.battleState = 'joblv-fade-out'; battleSt.battleTimer = 0; }
   } else { return false; }
   return true;
 }
@@ -484,18 +485,18 @@ function _battleInputHoldStates() {
 //            addItem, removeItem }
 export function handleBattleInput(shared) {
   _s = shared;
-  if (_s.battleState === 'none') return false;
+  if (battleSt.battleState === 'none') return false;
   if (_battleInputHoldStates()) return true;
   const k = _s.keys;
-  if (_s.battleState === 'menu-open') {
+  if (battleSt.battleState === 'menu-open') {
     if (k['ArrowDown'])  { k['ArrowDown'] = false;  inputSt.battleCursor ^= 2; playSFX(SFX.CURSOR); }
     if (k['ArrowUp'])    { k['ArrowUp'] = false;    inputSt.battleCursor ^= 2; playSFX(SFX.CURSOR); }
     if (k['ArrowRight']) { k['ArrowRight'] = false; inputSt.battleCursor ^= 1; playSFX(SFX.CURSOR); }
     if (k['ArrowLeft'])  { k['ArrowLeft'] = false;  inputSt.battleCursor ^= 1; playSFX(SFX.CURSOR); }
     if (k['z'] || k['Z']) { k['z'] = false; k['Z'] = false; _s.executeBattleCommand(inputSt.battleCursor); }
-  } else if (_s.battleState === 'target-select') { _battleInputTargetSelect();
-  } else if (_s.battleState === 'item-select') { _battleInputItemSelect();
-  } else if (_s.battleState === 'item-target-select') { _battleInputItemTargetSelect();
+  } else if (battleSt.battleState === 'target-select') { _battleInputTargetSelect();
+  } else if (battleSt.battleState === 'item-select') { _battleInputItemSelect();
+  } else if (battleSt.battleState === 'item-target-select') { _battleInputItemTargetSelect();
   }
   return true;
 }
@@ -593,7 +594,7 @@ export function handleRosterInput(shared) {
       setTabSelectMode(false);
       inputSt.rosterState = 'none';
       playSFX(SFX.CONFIRM);
-    } else if (inputSt.rosterState === 'none' && _s.battleState === 'none' && pauseSt.state === 'none' && transSt.state === 'none' && !_s.shakeActive && !_s.starEffect && !mapSt.moving && msgState.state === 'none') {
+    } else if (inputSt.rosterState === 'none' && battleSt.battleState === 'none' && pauseSt.state === 'none' && transSt.state === 'none' && !_s.shakeActive && !_s.starEffect && !mapSt.moving && msgState.state === 'none') {
       inputSt.rosterState = 'browse';
       inputSt.rosterCursor = 0;
       inputSt.rosterScroll = 0;
@@ -658,7 +659,7 @@ function _pauseInputOpenClose() {
   const k = _s.keys;
   if (k['Enter']) {
     k['Enter'] = false;
-    if (pauseSt.state === 'none' && _s.battleState === 'none' && transSt.state === 'none' && !_s.shakeActive && !_s.starEffect && !mapSt.moving && msgState.state === 'none') {
+    if (pauseSt.state === 'none' && battleSt.battleState === 'none' && transSt.state === 'none' && !_s.shakeActive && !_s.starEffect && !mapSt.moving && msgState.state === 'none') {
       playSFX(SFX.CONFIRM);
       pauseMusic();
       playFF1Track(FF1_TRACKS.MENU_SCREEN);

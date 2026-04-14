@@ -1,5 +1,6 @@
 // Random encounter spawning — extracted from game.js
 
+import { battleSt, getEnemyHP, setEnemyHP } from './battle-state.js';
 import { MONSTERS } from './data/monsters.js';
 import { ENCOUNTERS } from './data/encounters.js';
 import { GOBLIN_HIT_RATE } from './battle-math.js';
@@ -15,7 +16,7 @@ let _s = null;
 // ── Random encounter step counter ──────────────────────────────────────────
 export function tickRandomEncounter(shared) {
   _s = shared;
-  if (_s.battleState !== 'none') return false;
+  if (battleSt.battleState !== 'none') return false;
   const inDungeon = mapSt.dungeonFloor >= 0 && mapSt.dungeonFloor < 4;
   const onGrass = mapSt.onWorldMap && mapSt.worldMapRenderer && (() => {
     const tileX = Math.floor(mapSt.worldX / TILE_SIZE);
@@ -38,7 +39,7 @@ export function tickRandomEncounter(shared) {
 // ── Spawn encounter monsters ───────────────────────────────────────────────
 export function startRandomEncounter(shared) {
   _s = shared;
-  _s.isRandomEncounter = true;
+  battleSt.isRandomEncounter = true;
   _s.inputSt.battleActionCount = 0;
 
   const zoneKey = mapSt.onWorldMap
@@ -48,13 +49,13 @@ export function startRandomEncounter(shared) {
   const formations = zone ? zone.formations : [[{ id: 0x00, min: 1, max: 3 }]];
   const formation = formations[Math.floor(Math.random() * formations.length)];
 
-  _s.encounterMonsters = [];
+  battleSt.encounterMonsters = [];
   for (const group of formation) {
     const count = group.min + Math.floor(Math.random() * (group.max - group.min + 1));
     for (let i = 0; i < count; i++) {
-      if (_s.encounterMonsters.length >= 4) break;
+      if (battleSt.encounterMonsters.length >= 4) break;
       const mData = MONSTERS.get(group.id) || MONSTERS.get(0x00);
-      _s.encounterMonsters.push({
+      battleSt.encounterMonsters.push({
         monsterId: group.id,
         hp: mData.hp, maxHP: mData.hp,
         atk: mData.atk, attackRoll: mData.attackRoll || 1,
@@ -73,17 +74,17 @@ export function startRandomEncounter(shared) {
         status: createStatusState(),
       });
     }
-    if (_s.encounterMonsters.length >= 4) break;
+    if (battleSt.encounterMonsters.length >= 4) break;
   }
   // Sort tallest first for top-row grid placement
-  _s.encounterMonsters.sort((a, b) => {
+  battleSt.encounterMonsters.sort((a, b) => {
     const ha = _s.getMonsterCanvas(a.monsterId)?.height || 32;
     const hb = _s.getMonsterCanvas(b.monsterId)?.height || 32;
     return hb - ha;
   });
-  _s.preBattleTrack = TRACKS.CRYSTAL_CAVE;
+  battleSt.preBattleTrack = TRACKS.CRYSTAL_CAVE;
   _s.resetBattleVars();
-  _s.battleState = 'flash-strobe';
-  _s.battleTimer = 0;
+  battleSt.battleState = 'flash-strobe';
+  battleSt.battleTimer = 0;
   playSFX(SFX.BATTLE_SWIPE);
 }

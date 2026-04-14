@@ -1,6 +1,7 @@
 // Battle magic-item logic — extracted from game.js
 // Handles Southwind and future magic battle items (spell items).
 
+import { battleSt, getEnemyHP, setEnemyHP } from './battle-state.js';
 import { SFX, playSFX } from './music.js';
 import { setSwDmgNum } from './damage-numbers.js';
 
@@ -68,8 +69,8 @@ function _applyDamage(tidx) {
     playSFX(SFX.SW_HIT);
     return;
   }
-  if (_s.isRandomEncounter && _s.encounterMonsters) {
-    const mon = _s.encounterMonsters[tidx];
+  if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
+    const mon = battleSt.encounterMonsters[tidx];
     if (!mon || mon.hp <= 0) return;
     mon.hp = Math.max(0, mon.hp - dmg);
   } else {
