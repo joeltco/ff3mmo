@@ -66,10 +66,10 @@ import { titleSt, isTitleActiveState, titleFadeLevel, titleFadePal, drawTitleOce
          updateTitleUnderwater, updateTitleSelect, onNameEntryKeyDown, updateShipDrift } from './title-screen.js';
 import { pauseSt, updatePauseMenu, drawPauseMenu } from './pause-menu.js';
 import { transSt, topBoxSt, loadingSt, startWipeTransition, updateTransition, updateTopBoxScroll, drawTransitionOverlay } from './transitions.js';
-import { inputSt, handleBattleInput, handleRosterInput, handlePauseInput } from './input-handler.js';
+import { inputSt, handleBattleInput, handleRosterInput, handlePauseInput, initInputHandler } from './input-handler.js';
 import { checkTrigger, applyPassage, openPassage, handleChest, handleSecretWall, handleRockPuzzle, handlePondHeal, findWorldExitIndex, initMapTriggers, triggerWipe } from './map-triggers.js';
-import { pvpSt, startPVPBattle, resetPVPState, updatePVPBattle } from './pvp.js';
-import { drawBattle, drawBattleAllies, drawSWExplosion, drawSWDamageNumbers } from './battle-drawing.js';
+import { pvpSt, startPVPBattle, resetPVPState, updatePVPBattle, initPVP } from './pvp.js';
+import { drawBattle, drawBattleAllies, drawSWExplosion, drawSWDamageNumbers, initBattleDrawing } from './battle-drawing.js';
 import { playSlashSFX } from './battle-sfx.js';
 import { getKnifeBladeCanvas, getKnifeBladeSwungCanvas,
          getDaggerBladeCanvas, getDaggerBladeSwungCanvas,
@@ -538,46 +538,6 @@ function _isTeamWiped() {
 
 // getEnemyHP / setEnemyHP → battle-state.js (as getEnemyHP / setEnemyHP)
 
-// Shared state object passed to input-handler.js functions
-function _inputShared() {
-  return {
-    keys,
-    playerInventory,
-    get battleAllies() { return battleSt.battleAllies; },
-    get battleState()          { return battleSt.battleState; },
-    set battleState(v)          { battleSt.battleState = v; },
-    get battleTimer()           { return battleSt.battleTimer; },
-    set battleTimer(v)          { battleSt.battleTimer = v; },
-    get isRandomEncounter()     { return battleSt.isRandomEncounter; },
-    get encounterMonsters()     { return battleSt.encounterMonsters; },
-    get encounterDropItem()     { return battleSt.encounterDropItem; },
-    get encounterJobLevelUp() { return battleSt.encounterJobLevelUp; },
-    advanceBattleMsgZ,
-    queueBattleMsg,
-    get playerName() { return saveSlots[selectCursor]?.name || null; },
-    get shakeActive()           { return mapSt.shakeActive; },
-    get starEffect()            { return mapSt.starEffect; },
-    get moving()                { return mapSt.moving; },
-    get onWorldMap()            { return mapSt.onWorldMap; },
-    get dungeonFloor()          { return mapSt.dungeonFloor; },
-    get isPVPBattle()           { return pvpSt.isPVPBattle; },
-    get pvpOpponentStats()      { return pvpSt.pvpOpponentStats; },
-    get pvpEnemyAllies()        { return pvpSt.pvpEnemyAllies; },
-    get pvpPlayerTargetIdx()    { return pvpSt.pvpPlayerTargetIdx; },
-    set pvpPlayerTargetIdx(v)   { pvpSt.pvpPlayerTargetIdx = v; },
-    get enemyHP()                { return getEnemyHP(); },
-    set enemyHP(v)               { setEnemyHP(v); },
-    addItem,
-    removeItem,
-    getRosterVisible,
-    executeBattleCommand,
-    returnToTitle,
-    startPVPBattle: (target) => startPVPBattle(_pvpShared(), target),
-    toggleCrt() { document.getElementById('canvas-wrapper').classList.toggle('crt'); },
-    swapBattleSprites: _swapBattleSprites,
-  };
-}
-
 function _pauseShared() {
   return {
     playerInventory,
@@ -589,152 +549,10 @@ function _pauseShared() {
   };
 }
 
-// Shared state object passed to pvp.js
-function _pvpShared() {
-  return {
-    // ── Primitive game state (getters/setters so pvp always reads live values) ──
-    get enemyHP()                { return getEnemyHP(); },
-    set enemyHP(v)               { setEnemyHP(v); },
-    get enemyDefeated()          { return battleSt.enemyDefeated; },
-    set enemyDefeated(v)         { battleSt.enemyDefeated = v; },
-    get isRandomEncounter()     { return battleSt.isRandomEncounter; },
-    set isRandomEncounter(v)    { battleSt.isRandomEncounter = v; },
-    get preBattleTrack()        { return battleSt.preBattleTrack; },
-    set preBattleTrack(v)       { battleSt.preBattleTrack = v; },
-    get battleState()           { return battleSt.battleState; },
-    set battleState(v)          { battleSt.battleState = v; },
-    get battleTimer()           { return battleSt.battleTimer; },
-    set battleTimer(v)          { battleSt.battleTimer = v; },
-    get currentAttacker()       { return battleSt.currentAttacker; },
-    get encounterMonsters()     { return battleSt.encounterMonsters; },
-    get enemyTargetAllyIdx()    { return battleSt.enemyTargetAllyIdx; },
-    set enemyTargetAllyIdx(v)   { battleSt.enemyTargetAllyIdx = v; },
-    get playerDamageNum()       { return getPlayerDamageNum(); },
-    set playerDamageNum(v)      { setPlayerDamageNum(v); },
-    get isDefending()           { return battleSt.isDefending; },
-    set isDefending(v)          { battleSt.isDefending = v; },
-    get battleShakeTimer()      { return battleSt.battleShakeTimer; },
-    set battleShakeTimer(v)     { battleSt.battleShakeTimer = v; },
-    get battleMessage()         { return battleSt.battleMessage; },
-    set battleMessage(v)        { battleSt.battleMessage = v; },
-    get allyJoinRound()         { return battleSt.allyJoinRound; },
-    set allyJoinRound(v)        { battleSt.allyJoinRound = v; },
-    get slashFrame()            { return battleSt.slashFrame; },
-    get slashOffX()             { return battleSt.slashOffX; },
-    get slashOffY()             { return battleSt.slashOffY; },
-    get currentHitIdx()         { return battleSt.currentHitIdx; },
-    get currentAllyAttacker()   { return battleSt.currentAllyAttacker; },
-    get allyHitResult()         { return battleSt.allyHitResult; },
-    // ── Array/object refs (getters so pvp always gets the live array) ─────────
-    get battleAllies()          { return battleSt.battleAllies; },
-    get allyDamageNums()        { return getAllyDamageNums(); },
-    get allyShakeTimer()        { return battleSt.allyShakeTimer; },
-    ctx,
-    // ── Weapon sprite canvases (stable after init) ────────────────────────────
-    get blades() {
-      return {
-        ...getBlades(),
-      };
-    },
-    get enemyHealNum()                 { return getEnemyHealNum(); },
-    set enemyHealNum(v)                { setEnemyHealNum(v); },
-    advancePVPTargetOrVictory: _advancePVPTargetOrVictory,
-    // ── Delegated update functions ────────────────────────────────────────────
-    updateTimers:           (dt) => _updateBattleTimers(dt),
-    handlePlayerAttack:     ()   => _updateBattlePlayerAttack(),
-    handleDefendItem:       (dt) => _updateBattleDefendItem(dt),
-    handleAlly:             updateBattleAlly,
-    handleEndSequence:      (dt) => _updateBattleEndSequence(dt),
-    tryJoinPlayerAlly:       ()  => _tryJoinPlayerAlly(),
-    buildAndProcessNextTurn: ()  => { battleSt.turnQueue = buildTurnOrder(); processNextTurn(); },
-    // ── Other functions ───────────────────────────────────────────────────────
-    resetBattleVars:     _resetBattleVars,
-    processNextTurn,
-    queueBattleMsg,
-    isBattleMsgBusy,
-    isTeamWiped:         _isTeamWiped,
-    getPlayerLocation,
-    clipToViewport,
-    drawBorderedBox,
-    drawText,
-    measureText,
-    nameToBytes: _nameToBytes,
-    get cursorTileCanvas() { return cursorTileCanvas; },
-    get critFlashTimer()  { return battleSt.critFlashTimer; },
-    set critFlashTimer(v) { battleSt.critFlashTimer = v; },
-  };
-}
+// _pvpShared retired — pvp.js uses direct imports + injected callbacks
 
 
-function _battleDrawShared() {
-  return {
-    get battleState() { return battleSt.battleState; },
-    get battleTimer() { return battleSt.battleTimer; },
-    get enemyHP() { return getEnemyHP(); },
-    get enemyDefeated() { return battleSt.enemyDefeated; },
-    get isRandomEncounter() { return battleSt.isRandomEncounter; },
-    get isDefending() { return battleSt.isDefending; },
-    get enemyDmgNum() { return getEnemyDmgNum(); },
-    get playerDamageNum() { return getPlayerDamageNum(); },
-    get playerHealNum() { return getPlayerHealNum(); },
-    get enemyHealNum() { return getEnemyHealNum(); },
-    get battleShakeTimer() { return battleSt.battleShakeTimer; },
-    get critFlashTimer() { return battleSt.critFlashTimer; },
-    set critFlashTimer(v) { battleSt.critFlashTimer = v; },
-    get currentHitIdx() { return battleSt.currentHitIdx; },
-    get currentAttacker() { return battleSt.currentAttacker; },
-    get slashFrame() { return battleSt.slashFrame; },
-    get slashOffX() { return battleSt.slashOffX; },
-    get slashOffY() { return battleSt.slashOffY; },
-    get currentAllyAttacker() { return battleSt.currentAllyAttacker; },
-    get allyHitResult() { return battleSt.allyHitResult; },
-    get allyHitIsLeft() { return battleSt.allyHitIsLeft; },
-    get allyTargetIndex() { return battleSt.allyTargetIndex; },
-    get enemyTargetAllyIdx() { return battleSt.enemyTargetAllyIdx; },
-    get allyJoinRound() { return battleSt.allyJoinRound; },
-    get runSlideBack() { return battleSt.runSlideBack; },
-    get encounterExpGained() { return battleSt.encounterExpGained; },
-    get encounterGilGained() { return battleSt.encounterGilGained; },
-    get encounterCpGained() { return battleSt.encounterCpGained; },
-    get encounterDropItem() { return battleSt.encounterDropItem; },
-    get encounterJobLevelUp() { return battleSt.encounterJobLevelUp; },
-    get battleMsgCurrent() { return getBattleMsgCurrent(); },
-    get battleMsgTimer() { return getBattleMsgTimer(); },
-    MSG_FADE_IN_MS, MSG_HOLD_MS, MSG_FADE_OUT_MS, MSG_TOTAL_MS,
-    get southWindTargets() { return getTargets(); },
-    get southWindHitIdx() { return getHitIdx(); },
-    get southWindDmgNums() { return getSwDmgNums(); },
-    get dyingMonsterIndices() { return battleSt.dyingMonsterIndices; },
-    get encounterMonsters() { return battleSt.encounterMonsters; },
-    get battleAllies() { return battleSt.battleAllies; },
-    get allyDamageNums() { return getAllyDamageNums(); },
-    get allyShakeTimer() { return battleSt.allyShakeTimer; },
-    get battleMessage() { return battleSt.battleMessage; },
-    ctx,
-    get battleKnifeBladeCanvas() { return getKnifeBladeCanvas(); },
-    get battleKnifeBladeSwungCanvas() { return getKnifeBladeSwungCanvas(); },
-    get battleDaggerBladeCanvas() { return getDaggerBladeCanvas(); },
-    get battleDaggerBladeSwungCanvas() { return getDaggerBladeSwungCanvas(); },
-    get battleSwordBladeCanvas() { return getSwordBladeCanvas(); },
-    get battleSwordBladeSwungCanvas() { return getSwordBladeSwungCanvas(); },
-    get battleFistCanvas() { return getFistCanvas(); },
-    get goblinBattleCanvas() { return battleSt.goblinBattleCanvas; },
-    get goblinWhiteCanvas() { return battleSt.goblinWhiteCanvas; },
-    get goblinDeathFrames() { return battleSt.goblinDeathFrames; },
-    get cursorTileCanvas() { return cursorTileCanvas; },
-    get cursorFadeCanvases() { return cursorFadeCanvases; },
-    topBoxSt,
-    clipToViewport,
-    grayViewport,
-    drawBorderedBox,
-    drawSparkleCorners,
-    drawCursorFaded,
-    drawHudBox,
-    isVictoryBattleState: _isVictoryBattleState,
-    drawMonsterDeath: _drawMonsterDeath,
-    pvpShared: () => _pvpShared(),
-  };
-}
+// _battleDrawShared retired — battle-drawing.js uses direct imports + injected callbacks
 
 // Shared state object passed to title-screen.js draw functions
 function _titleShared() {
@@ -870,6 +688,34 @@ export async function loadROM(arrayBuffer) {
   initBattleAlly({ buildTurnOrder, processNextTurn, isTeamWiped: _isTeamWiped });
   initBattleEnemy({ processNextTurn, isTeamWiped: _isTeamWiped });
   initBattleTurn({ removeItem });
+  initInputHandler({
+    keys, playerInventory: () => playerInventory, addItem, removeItem,
+    executeBattleCommand, returnToTitle, swapBattleSprites: _swapBattleSprites,
+    startPVPBattle,
+    toggleCrt: () => document.getElementById('canvas-wrapper').classList.toggle('crt'),
+  });
+  initBattleDrawing({
+    ctx,
+    cursorTileCanvas: () => cursorTileCanvas,
+    drawMonsterDeath: _drawMonsterDeath,
+    isVictoryBattleState: _isVictoryBattleState,
+  });
+  initPVP({
+    ctx,
+    cursorTileCanvas: () => cursorTileCanvas,
+    blades: () => ({ ...getBlades() }),
+    processNextTurn,
+    handleAlly: updateBattleAlly,
+    updateTimers: _updateBattleTimers,
+    handlePlayerAttack: _updateBattlePlayerAttack,
+    handleDefendItem: _updateBattleDefendItem,
+    handleEndSequence: _updateBattleEndSequence,
+    tryJoinPlayerAlly: _tryJoinPlayerAlly,
+    buildAndProcessNextTurn: () => { battleSt.turnQueue = buildTurnOrder(); processNextTurn(); },
+    resetBattleVars: _resetBattleVars,
+    isTeamWiped: _isTeamWiped,
+    advancePVPTargetOrVictory: _advancePVPTargetOrVictory,
+  });
 
   await loadSlotsFromDB();
 
@@ -956,9 +802,9 @@ function startMove(dir) {
 
 function handleInput() {
   if (!sprite) return;
-  if (handleBattleInput(_inputShared())) return;
-  if (handleRosterInput(_inputShared())) return;
-  if (handlePauseInput(_inputShared())) return;
+  if (handleBattleInput()) return;
+  if (handleRosterInput()) return;
+  if (handlePauseInput()) return;
 
   // Universal message box — Z to dismiss during hold
   if (msgState.state !== 'none') {
@@ -1953,7 +1799,7 @@ function updateBattle(dt) {
   battleSt.battleTimer += Math.min(dt, 33);
   _updateBattleMsg(dt);
   if (battleSt.battleState === 'msg-wait') { if (!getBattleMsgCurrent()) processNextTurn(); return; }
-  if (pvpSt.isPVPBattle) { updatePVPBattle(dt, _pvpShared()); return; }
+  if (pvpSt.isPVPBattle) { updatePVPBattle(dt); return; }
   _updateBattleTimers(dt);
   _updatePoisonTick()         ||
   _updateBattleOpening()      ||
@@ -2076,7 +1922,6 @@ function _gameLoopDraw() {
   else _tabWasLoading = false;
   drawChatTabs(ctx, _tabFade, drawHudBox);
   drawHUD();
-  const _bds = _battleDrawShared();
   try {
     const _rds = {
       ctx, drawHudBox: drawHudBox, drawBorderedBox: drawBorderedBox,
@@ -2087,15 +1932,15 @@ function _gameLoopDraw() {
       hudInfoFadeTimer: hudSt.hudInfoFadeTimer, hudInfoFadeSteps: HUD_INFO_FADE_STEPS, hudInfoFadeStepMs: HUD_INFO_FADE_STEP_MS,
       battleState: battleSt.battleState, msgState,
     };
-    if (battleSt.battleAllies.length > 0 && battleSt.battleState !== 'none') drawBattleAllies(_bds);
+    if (battleSt.battleAllies.length > 0 && battleSt.battleState !== 'none') drawBattleAllies();
     else drawRoster(_rds);
     drawChat(ctx, drawHudBox, rosterBattleFade);
     drawPauseMenu(ctx, _pauseShared());
     drawMsgBox(ctx, clipToViewport, drawBorderedBox);
     drawRosterMenu(_rds);
-    drawBattle(_bds);
-    drawSWExplosion(_bds);
-    drawSWDamageNumbers(_bds);
+    drawBattle();
+    drawSWExplosion();
+    drawSWDamageNumbers();
   } catch (e) {
     console.error('[BATTLE DRAW ERROR]', e);
     fetch('/api/client-error', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ msg: e.message, stack: e.stack }) }).catch(() => {});

@@ -17,6 +17,31 @@ import { MONSTERS } from './data/monsters.js';
 import { canJobEquip } from './data/jobs.js';
 import { getSlashFramesForWeapon } from './battle-sprite-cache.js';
 import { mapSt } from './map-state.js';
+import { pvpSt } from './pvp.js';
+import { advanceBattleMsgZ } from './battle-msg.js';
+import { getRosterVisible } from './roster.js';
+
+// Injected at boot — avoids circular import on game.js
+let _keys = {};
+let _playerInventory = () => ({});
+let _addItem = () => {};
+let _removeItem = () => {};
+let _executeBattleCommand = () => {};
+let _returnToTitle = () => {};
+let _swapBattleSprites = () => {};
+let _startPVPBattle = () => {};
+let _toggleCrt = () => {};
+export function initInputHandler(deps) {
+  _keys = deps.keys;
+  _playerInventory = deps.playerInventory;
+  _addItem = deps.addItem;
+  _removeItem = deps.removeItem;
+  _executeBattleCommand = deps.executeBattleCommand;
+  _returnToTitle = deps.returnToTitle;
+  _swapBattleSprites = deps.swapBattleSprites;
+  _startPVPBattle = deps.startPVPBattle;
+  _toggleCrt = deps.toggleCrt;
+}
 
 // Local constants (must match game.js)
 const HUD_VIEW_X = 0, HUD_VIEW_Y = 32, HUD_VIEW_W = 144, HUD_VIEW_H = 144;
@@ -54,19 +79,17 @@ export const inputSt = {
   rosterMenuTimer:    0,
 };
 
-// Module-level shared context — set by each exported handler before delegating
-// to private helpers, so helpers can access it without explicit parameter threading.
-let _s = null;
+// _s bag retired — direct imports + injected callbacks above
 
 // ── Key helpers ────────────────────────────────────────────────────────────
 
 function _zPressed() {
-  const k = _s.keys;
+  const k = _keys;
   if (!k['z'] && !k['Z']) return false;
   k['z'] = false; k['Z'] = false; return true;
 }
 function _xPressed() {
-  const k = _s.keys;
+  const k = _keys;
   if (!k['x'] && !k['X']) return false;
   k['x'] = false; k['X'] = false; return true;
 }
@@ -75,19 +98,19 @@ function _xPressed() {
 
 // Switch PVP target — just change the index; enemyHP getter/setter reads authoritative source
 function _switchPVPTarget(newIdx) {
-  _s.pvpPlayerTargetIdx = newIdx;
+  pvpSt.pvpPlayerTargetIdx = newIdx;
 }
 
 function _battleTargetNav() {
-  const k = _s.keys;
-  if (_s.isPVPBattle) {
+  const k = _keys;
+  if (pvpSt.isPVPBattle) {
     // Build list of alive PVP target indices: -1=main opp, 0,1,...=allies
     // Use authoritative HP: pvpOpponentStats.hp for main, pvpEnemyAllies[i].hp for allies
     const aliveTargets = [];
-    if (_s.pvpOpponentStats && _s.pvpOpponentStats.hp > 0) aliveTargets.push(-1);
-    (_s.pvpEnemyAllies || []).forEach((a, i) => { if (a.hp > 0) aliveTargets.push(i); });
+    if (pvpSt.pvpOpponentStats && pvpSt.pvpOpponentStats.hp > 0) aliveTargets.push(-1);
+    (pvpSt.pvpEnemyAllies || []).forEach((a, i) => { if (a.hp > 0) aliveTargets.push(i); });
     if (aliveTargets.length <= 1) return;
-    const cur = _s.pvpPlayerTargetIdx;
+    const cur = pvpSt.pvpPlayerTargetIdx;
     const ci = aliveTargets.indexOf(cur);
     if (k['ArrowRight'] || k['ArrowDown']) {
       k['ArrowRight'] = false; k['ArrowDown'] = false;
@@ -117,7 +140,7 @@ function _battleTargetNav() {
 }
 
 function _battleTargetConfirm() {
-  const k = _s.keys;
+  const k = _keys;
   if (!k['z'] && !k['Z']) return;
   k['z'] = false; k['Z'] = false;
   playSFX(SFX.CONFIRM);
@@ -145,10 +168,10 @@ function _battleTargetConfirm() {
       const mon = battleSt.encounterMonsters[inputSt.targetIndex];
       return rollHits(handAtk, mon.def, handHit, hitsPerHand, { elemMult: elemMultiplier(handElem, mon.weakness, mon.resist) });
     } else {
-      const targetDef = _s.isPVPBattle && _s.pvpOpponentStats
-        ? (_s.pvpPlayerTargetIdx >= 0
-            ? (_s.pvpEnemyAllies[_s.pvpPlayerTargetIdx] || _s.pvpOpponentStats).def
-            : _s.pvpOpponentStats.def)
+      const targetDef = pvpSt.isPVPBattle && pvpSt.pvpOpponentStats
+        ? (pvpSt.pvpPlayerTargetIdx >= 0
+            ? (pvpSt.pvpEnemyAllies[pvpSt.pvpPlayerTargetIdx] || pvpSt.pvpOpponentStats).def
+            : pvpSt.pvpOpponentStats.def)
         : BOSS_DEF;
       return rollHits(handAtk, targetDef, handHit, hitsPerHand);
     }
@@ -191,7 +214,7 @@ function _battleInputTargetSelect() {
 }
 
 function _itemSelectNav(isEquipPage, totalPages, pageRows) {
-  const k = _s.keys;
+  const k = _keys;
   if (k['ArrowDown']) {
     k['ArrowDown'] = false;
     if (inputSt.itemPageCursor < pageRows - 1) inputSt.itemPageCursor++;
@@ -229,8 +252,8 @@ function _itemSelectSwap(isEquipPage, gIdx) {
     if (item && isHandEquippable(ITEMS.get(item.id)) && canJobEquip(ps.jobIdx, item.id, ITEMS)) {
       const oldWeapon = handIdx === 0 ? ps.weaponR : ps.weaponL;
       if (handIdx === 0) ps.weaponR = item.id; else ps.weaponL = item.id;
-      _s.removeItem(item.id);
-      if (oldWeapon !== 0) _s.addItem(oldWeapon, 1);
+      _removeItem(item.id);
+      if (oldWeapon !== 0) _addItem(oldWeapon, 1);
       inputSt.itemSelectList[inputSt.itemHeldIdx] = oldWeapon !== 0 ? { id: oldWeapon, count: 1 } : null;
       recalcCombatStats(); inputSt.itemHeldIdx = -1; playSFX(SFX.CONFIRM);
     } else { playSFX(SFX.ERROR); inputSt.itemHeldIdx = -1; }
@@ -241,12 +264,12 @@ function _itemSelectSwap(isEquipPage, gIdx) {
     const invItem = inputSt.itemSelectList[dstIdx];
     if (invItem && isHandEquippable(ITEMS.get(invItem.id)) && canJobEquip(ps.jobIdx, invItem.id, ITEMS)) {
       if (srcHand === 0) ps.weaponR = invItem.id; else ps.weaponL = invItem.id;
-      _s.removeItem(invItem.id); _s.addItem(handWeaponId, 1);
+      _removeItem(invItem.id); _addItem(handWeaponId, 1);
       inputSt.itemSelectList[dstIdx] = { id: handWeaponId, count: 1 };
       recalcCombatStats(); inputSt.itemHeldIdx = -1; playSFX(SFX.CONFIRM);
     } else if (!invItem) {
       if (srcHand === 0) ps.weaponR = 0; else ps.weaponL = 0;
-      _s.addItem(handWeaponId, 1);
+      _addItem(handWeaponId, 1);
       inputSt.itemSelectList[dstIdx] = { id: handWeaponId, count: 1 };
       recalcCombatStats(); inputSt.itemHeldIdx = -1; playSFX(SFX.CONFIRM);
     } else { playSFX(SFX.ERROR); inputSt.itemHeldIdx = -1; }
@@ -283,7 +306,7 @@ function _itemSelectZ(isEquipPage, gIdx) {
         } else if (itemDat.type === 'battle_item' && !battleSt.isRandomEncounter) {
           inputSt.itemTargetType = 'enemy';
           // Default to first alive PVP target (grid index)
-          const cnt = 1 + (_s.pvpEnemyAllies ? _s.pvpEnemyAllies.length : 0);
+          const cnt = 1 + (pvpSt.pvpEnemyAllies ? pvpSt.pvpEnemyAllies.length : 0);
           let first = 0;
           for (let ii = 0; ii < cnt; ii++) { if (_itemTargetAlive(ii)) { first = ii; break; } }
           inputSt.itemTargetIndex = first;
@@ -315,20 +338,20 @@ function _battleInputItemSelect() {
 }
 
 function _itemTargetCnt() {
-  if (_s.isPVPBattle) return 1 + (_s.pvpEnemyAllies ? _s.pvpEnemyAllies.length : 0);
+  if (pvpSt.isPVPBattle) return 1 + (pvpSt.pvpEnemyAllies ? pvpSt.pvpEnemyAllies.length : 0);
   return battleSt.isRandomEncounter && battleSt.encounterMonsters ? battleSt.encounterMonsters.length : (battleSt.isRandomEncounter ? 0 : 1);
 }
 function _itemTargetAlive(i) {
-  if (_s.isPVPBattle) {
-    if (i === 0) return _s.pvpOpponentStats && _s.pvpOpponentStats.hp > 0;
-    const a = _s.pvpEnemyAllies && _s.pvpEnemyAllies[i - 1];
+  if (pvpSt.isPVPBattle) {
+    if (i === 0) return pvpSt.pvpOpponentStats && pvpSt.pvpOpponentStats.hp > 0;
+    const a = pvpSt.pvpEnemyAllies && pvpSt.pvpEnemyAllies[i - 1];
     return !!(a && a.hp > 0);
   }
   return battleSt.isRandomEncounter && battleSt.encounterMonsters && i < battleSt.encounterMonsters.length && battleSt.encounterMonsters[i].hp > 0;
 }
 // PVP grid: right col = indices 0,2 (gc=cols-1). Encounter grid: right col = indices 1,3.
 function _itemTargetIsRightCol(i) {
-  if (_s.isPVPBattle) return _itemTargetCnt() <= 1 || i === 0 || i === 2;
+  if (pvpSt.isPVPBattle) return _itemTargetCnt() <= 1 || i === 0 || i === 2;
   const cnt = _itemTargetCnt();
   return cnt === 1 || (cnt === 2 && i === 1) || (cnt >= 3 && (i === 1 || i === 3));
 }
@@ -338,14 +361,14 @@ function _itemTargetNavLeft(isBattleItem) {
   const cnt = _itemTargetCnt();
   if (isBattleItem && inputSt.itemTargetMode !== 'single') {
     // col/all mode → back to single. Left-col candidates differ per mode.
-    const leftCandidates = _s.isPVPBattle
+    const leftCandidates = pvpSt.isPVPBattle
       ? (cnt <= 1 ? [0] : cnt === 2 ? [1] : [1, 3])      // PVP left col = 1,3
       : (cnt <= 1 ? [0] : cnt === 2 ? [0] : [0, 2]);      // encounter left col = 0,2
     const found = leftCandidates.find(i => _itemTargetAlive(i));
     if (found !== undefined) inputSt.itemTargetIndex = found;
     inputSt.itemTargetMode = 'single'; playSFX(SFX.CURSOR);
   } else if (inputSt.itemTargetType === 'player') {
-    if (_s.isPVPBattle) {
+    if (pvpSt.isPVPBattle) {
       // PVP: player → right col of PVP grid (idx 0)
       const rightCandidates = cnt === 1 ? [0] : cnt === 2 ? [0] : cnt === 3 ? [0] : [0, 2];
       const leftCandidates  = cnt === 2 ? [1] : cnt === 3 ? [1, 3] : cnt >= 4 ? [1, 3] : [];
@@ -368,7 +391,7 @@ function _itemTargetNavLeft(isBattleItem) {
   } else if (_itemTargetIsRightCol(inputSt.itemTargetIndex)) {
     // right col → left col
     const idx = inputSt.itemTargetIndex;
-    const [leftPeer, leftOther] = _s.isPVPBattle
+    const [leftPeer, leftOther] = pvpSt.isPVPBattle
       ? [idx === 0 ? 1 : idx === 2 ? 3 : -1, idx === 0 ? 3 : idx === 2 ? 1 : -1]   // PVP: 0→1, 2→3
       : [idx === 1 ? 0 : idx === 3 ? 2 : -1, idx === 1 ? 2 : idx === 3 ? 0 : -1];  // encounter: 1→0, 3→2
     if (leftPeer >= 0 && _itemTargetAlive(leftPeer)) { inputSt.itemTargetIndex = leftPeer; playSFX(SFX.CURSOR); }
@@ -381,7 +404,7 @@ function _itemTargetNavLeft(isBattleItem) {
 
 function _itemTargetNavRight() {
   if (inputSt.itemTargetType !== 'enemy') return;
-  if (_s.isPVPBattle) {
+  if (pvpSt.isPVPBattle) {
     if (_itemTargetIsRightCol(inputSt.itemTargetIndex)) {
       inputSt.itemTargetType = 'player'; playSFX(SFX.CURSOR);
     } else {
@@ -407,18 +430,18 @@ function _itemTargetNavRight() {
 }
 
 function _itemTargetNavVertical(isBattleItem) {
-  const k = _s.keys;
+  const k = _keys;
   const goUp = !!k['ArrowUp'];
   k['ArrowUp'] = false; k['ArrowDown'] = false;
   const cnt = _itemTargetCnt();
-  if (isBattleItem && inputSt.itemTargetType === 'enemy' && (_s.isPVPBattle || (battleSt.isRandomEncounter && battleSt.encounterMonsters))) {
+  if (isBattleItem && inputSt.itemTargetType === 'enemy' && (pvpSt.isPVPBattle || (battleSt.isRandomEncounter && battleSt.encounterMonsters))) {
     if (goUp && inputSt.itemTargetMode === 'single') {
       inputSt.itemTargetMode = _itemTargetIsLeftCol(inputSt.itemTargetIndex) ? 'col-left' : 'col-right';
       playSFX(SFX.CURSOR);
     } else if (!goUp && inputSt.itemTargetMode !== 'single') {
       inputSt.itemTargetMode = 'single'; playSFX(SFX.CURSOR);
     }
-  } else if (inputSt.itemTargetType === 'enemy' && (_s.isPVPBattle || (battleSt.isRandomEncounter && battleSt.encounterMonsters))) {
+  } else if (inputSt.itemTargetType === 'enemy' && (pvpSt.isPVPBattle || (battleSt.isRandomEncounter && battleSt.encounterMonsters))) {
     const vertMap = cnt >= 4 ? { 0: 2, 2: 0, 1: 3, 3: 1 } :
                     cnt === 3 ? { 0: 2, 2: 0, 1: 1 } : {};
     const next = vertMap[inputSt.itemTargetIndex];
@@ -437,7 +460,7 @@ function _itemTargetNavVertical(isBattleItem) {
 
 function _battleInputItemTargetSelect() {
   const isBattleItem = inputSt.playerActionPending && ITEMS.get(inputSt.playerActionPending.itemId)?.type === 'battle_item';
-  const k = _s.keys;
+  const k = _keys;
   if (k['ArrowLeft']) { k['ArrowLeft'] = false; _itemTargetNavLeft(isBattleItem); }
   if (k['ArrowRight']) { k['ArrowRight'] = false; _itemTargetNavRight(); }
   if (k['ArrowUp'] || k['ArrowDown']) _itemTargetNavVertical(isBattleItem);
@@ -453,7 +476,7 @@ function _battleInputItemTargetSelect() {
 }
 
 function _battleInputHoldStates() {
-  const k = _s.keys;
+  const k = _keys;
   const z = k['z'] || k['Z'];
   const clearZ = () => { k['z'] = false; k['Z'] = false; };
   if (battleSt.battleState === 'roar-hold') {
@@ -461,7 +484,7 @@ function _battleInputHoldStates() {
   } else if (battleSt.battleState === 'defeat-text') {
     if (z) { clearZ(); battleSt.battleState = 'defeat-close'; battleSt.battleTimer = 0; }
   } else if (battleSt.battleState === 'victory-msg') {
-    if (z) { clearZ(); _s.advanceBattleMsgZ(); battleSt.battleTimer = 0; }
+    if (z) { clearZ(); advanceBattleMsgZ(); battleSt.battleTimer = 0; }
   } else if (battleSt.battleState === 'exp-hold') {
     if (z) { clearZ(); battleSt.battleState = 'exp-fade-out'; battleSt.battleTimer = 0; }
   } else if (battleSt.battleState === 'gil-hold') {
@@ -483,17 +506,16 @@ function _battleInputHoldStates() {
 //            get/set battleState, get/set battleTimer,
 //            executeBattleCommand, getSlashFramesForWeapon,
 //            addItem, removeItem }
-export function handleBattleInput(shared) {
-  _s = shared;
+export function handleBattleInput() {
   if (battleSt.battleState === 'none') return false;
   if (_battleInputHoldStates()) return true;
-  const k = _s.keys;
+  const k = _keys;
   if (battleSt.battleState === 'menu-open') {
     if (k['ArrowDown'])  { k['ArrowDown'] = false;  inputSt.battleCursor ^= 2; playSFX(SFX.CURSOR); }
     if (k['ArrowUp'])    { k['ArrowUp'] = false;    inputSt.battleCursor ^= 2; playSFX(SFX.CURSOR); }
     if (k['ArrowRight']) { k['ArrowRight'] = false; inputSt.battleCursor ^= 1; playSFX(SFX.CURSOR); }
     if (k['ArrowLeft'])  { k['ArrowLeft'] = false;  inputSt.battleCursor ^= 1; playSFX(SFX.CURSOR); }
-    if (k['z'] || k['Z']) { k['z'] = false; k['Z'] = false; _s.executeBattleCommand(inputSt.battleCursor); }
+    if (k['z'] || k['Z']) { k['z'] = false; k['Z'] = false; _executeBattleCommand(inputSt.battleCursor); }
   } else if (battleSt.battleState === 'target-select') { _battleInputTargetSelect();
   } else if (battleSt.battleState === 'item-select') { _battleInputItemSelect();
   } else if (battleSt.battleState === 'item-target-select') { _battleInputItemTargetSelect();
@@ -504,8 +526,8 @@ export function handleBattleInput(shared) {
 // ── Roster input ───────────────────────────────────────────────────────────
 
 function _rosterInputBrowse() {
-  const rp = _s.getRosterVisible();
-  const k = _s.keys;
+  const rp = getRosterVisible();
+  const k = _keys;
   if (k['ArrowDown']) {
     k['ArrowDown'] = false;
     if (inputSt.rosterCursor < rp.length - 1) {
@@ -541,13 +563,13 @@ function _rosterMenuDuelAction(target) {
   const challengeMsg = new Uint8Array(challenged.length + nameBytes.length + 1);
   challengeMsg.set(challenged, 0); challengeMsg.set(nameBytes, challenged.length); challengeMsg.set(exclam, challenged.length + nameBytes.length);
   showMsgBox(challengeMsg, () => {
-    setTimeout(() => showMsgBox(_nameToBytes(target.name + ' accepted!'), () => _s.startPVPBattle(target)),
+    setTimeout(() => showMsgBox(_nameToBytes(target.name + ' accepted!'), () => _startPVPBattle(target)),
       1500 + Math.floor(Math.random() * 2500));
   });
 }
 
 function _rosterInputMenu() {
-  const k = _s.keys;
+  const k = _keys;
   if (k['ArrowDown']) {
     k['ArrowDown'] = false;
     inputSt.rosterMenuCursor = (inputSt.rosterMenuCursor + 1) % ROSTER_MENU_ITEMS.length;
@@ -560,7 +582,7 @@ function _rosterInputMenu() {
   }
   if (_zPressed()) {
     const action = ROSTER_MENU_ITEMS[inputSt.rosterMenuCursor];
-    const target = _s.getRosterVisible()[inputSt.rosterCursor];
+    const target = getRosterVisible()[inputSt.rosterCursor];
     inputSt.rosterState = 'menu-out';
     inputSt.rosterMenuTimer = 0;
     playSFX(SFX.CONFIRM);
@@ -584,9 +606,8 @@ function _rosterInputMenu() {
 // shared = { keys, get/set battleState, get shakeActive, get starEffect, get moving,
 //            get onWorldMap, get dungeonFloor,
 //            getRosterVisible, startPVPBattle }
-export function handleRosterInput(shared) {
-  _s = shared;
-  const k = _s.keys;
+export function handleRosterInput() {
+  const k = _keys;
   if (k['s'] || k['S']) {
     k['s'] = false; k['S'] = false;
     if (tabSelectMode) {
@@ -594,7 +615,7 @@ export function handleRosterInput(shared) {
       setTabSelectMode(false);
       inputSt.rosterState = 'none';
       playSFX(SFX.CONFIRM);
-    } else if (inputSt.rosterState === 'none' && battleSt.battleState === 'none' && pauseSt.state === 'none' && transSt.state === 'none' && !_s.shakeActive && !_s.starEffect && !mapSt.moving && msgState.state === 'none') {
+    } else if (inputSt.rosterState === 'none' && battleSt.battleState === 'none' && pauseSt.state === 'none' && transSt.state === 'none' && !mapSt.shakeActive && !mapSt.starEffect && !mapSt.moving && msgState.state === 'none') {
       inputSt.rosterState = 'browse';
       inputSt.rosterCursor = 0;
       inputSt.rosterScroll = 0;
@@ -617,7 +638,7 @@ export function handleRosterInput(shared) {
 // ── Tab select input ──────────────────────────────────────────────────────
 
 function _tabSelectInput() {
-  const k = _s.keys;
+  const k = _keys;
   if (k['ArrowLeft']) {
     k['ArrowLeft'] = false;
     setActiveTab((activeTab - 1 + CHAT_TABS.length) % CHAT_TABS.length);
@@ -656,10 +677,10 @@ function _tabSelectInput() {
 // ── Pause input ────────────────────────────────────────────────────────────
 
 function _pauseInputOpenClose() {
-  const k = _s.keys;
+  const k = _keys;
   if (k['Enter']) {
     k['Enter'] = false;
-    if (pauseSt.state === 'none' && battleSt.battleState === 'none' && transSt.state === 'none' && !_s.shakeActive && !_s.starEffect && !mapSt.moving && msgState.state === 'none') {
+    if (pauseSt.state === 'none' && battleSt.battleState === 'none' && transSt.state === 'none' && !mapSt.shakeActive && !mapSt.starEffect && !mapSt.moving && msgState.state === 'none') {
       playSFX(SFX.CONFIRM);
       pauseMusic();
       playFF1Track(FF1_TRACKS.MENU_SCREEN);
@@ -680,7 +701,7 @@ function _pauseInputOpenClose() {
 
 function _pauseInputMainMenu() {
   if (pauseSt.state !== 'open') return false;
-  const k = _s.keys;
+  const k = _keys;
   if (k['ArrowDown']) { k['ArrowDown'] = false; pauseSt.cursor = (pauseSt.cursor + 1) % 7; playSFX(SFX.CURSOR); }
   if (k['ArrowUp'])   { k['ArrowUp'] = false;   pauseSt.cursor = (pauseSt.cursor + 6) % 7; playSFX(SFX.CURSOR); }
   if (_zPressed()) {
@@ -704,7 +725,7 @@ function _pauseInputMainMenu() {
       pauseSt.state = 'options-text-out'; pauseSt.timer = 0; pauseSt.optCursor = 0;
     } else if (pauseSt.cursor === 6) {
       playSFX(SFX.CONFIRM);
-      _s.returnToTitle();
+      _returnToTitle();
     }
   }
   return true;
@@ -728,8 +749,8 @@ function _pauseInvZPress(entries) {
 
 function _pauseInputInventory() {
   if (pauseSt.state !== 'inventory') return false;
-  const entries = Object.entries(_s.playerInventory).filter(([,c]) => c > 0);
-  const k = _s.keys;
+  const entries = Object.entries(_playerInventory()).filter(([,c]) => c > 0);
+  const k = _keys;
   if (k['ArrowDown']) {
     k['ArrowDown'] = false;
     if (pauseSt.invScroll < entries.length - 1) { pauseSt.invScroll++; playSFX(SFX.CURSOR); }
@@ -757,10 +778,10 @@ function _applyPauseItemUse(item, rosterTargets) {
       const flag = flagMap[item.cures];
       if (flag) removeStatus(ps.status, flag);
     }
-    _s.removeItem(pauseSt.useItemId); playSFX(SFX.CURE);
+    _removeItem(pauseSt.useItemId); playSFX(SFX.CURE);
     pauseSt.healNum = { value: 0, timer: 0 };
     pauseSt.state = 'inv-heal'; pauseSt.timer = 0;
-    if (selectCursor >= 0 && saveSlots[selectCursor]) { saveSlots[selectCursor].inventory = { ..._s.playerInventory }; saveSlotsToDB(); }
+    if (selectCursor >= 0 && saveSlots[selectCursor]) { saveSlots[selectCursor].inventory = { ..._playerInventory() }; saveSlotsToDB(); }
     return;
   }
 
@@ -770,23 +791,23 @@ function _applyPauseItemUse(item, rosterTargets) {
     const rp = rosterTargets[pauseSt.invAllyTarget];
     if (!rp) { playSFX(SFX.ERROR); return; }
     const heal = Math.min(healPower, rp.maxHP - rp.hp);
-    rp.hp += heal; _s.removeItem(pauseSt.useItemId); playSFX(SFX.CURE);
+    rp.hp += heal; _removeItem(pauseSt.useItemId); playSFX(SFX.CURE);
     pauseSt.healNum = { value: heal, timer: 0, rosterIdx: pauseSt.invAllyTarget };
     pauseSt.state = 'inv-heal'; pauseSt.timer = 0;
-    if (selectCursor >= 0 && saveSlots[selectCursor]) { saveSlots[selectCursor].inventory = { ..._s.playerInventory }; saveSlotsToDB(); }
+    if (selectCursor >= 0 && saveSlots[selectCursor]) { saveSlots[selectCursor].inventory = { ..._playerInventory() }; saveSlotsToDB(); }
   } else {
     const heal = Math.min(healPower, ps.stats.maxHP - ps.hp);
-    ps.hp += heal; _s.removeItem(pauseSt.useItemId); playSFX(SFX.CURE);
+    ps.hp += heal; _removeItem(pauseSt.useItemId); playSFX(SFX.CURE);
     pauseSt.healNum = { value: heal, timer: 0 };
     pauseSt.state = 'inv-heal'; pauseSt.timer = 0;
-    if (selectCursor >= 0 && saveSlots[selectCursor]) { saveSlots[selectCursor].hp = ps.hp; saveSlots[selectCursor].inventory = { ..._s.playerInventory }; saveSlotsToDB(); }
+    if (selectCursor >= 0 && saveSlots[selectCursor]) { saveSlots[selectCursor].hp = ps.hp; saveSlots[selectCursor].inventory = { ..._playerInventory() }; saveSlotsToDB(); }
   }
 }
 
 function _pauseInputInvTarget() {
   if (pauseSt.state !== 'inv-target') return false;
-  const rosterTargets = _s.getRosterVisible();
-  const k = _s.keys;
+  const rosterTargets = getRosterVisible();
+  const k = _keys;
   if (k['ArrowDown']) {
     k['ArrowDown'] = false;
     if (pauseSt.invAllyTarget < rosterTargets.length - 1) { pauseSt.invAllyTarget++; playSFX(SFX.CURSOR); }
@@ -812,11 +833,11 @@ function _enforceEquipRestrictions(jobIdx) {
     const id = getEquipSlotId(eq);
     if (id && !canJobEquip(jobIdx, id, ITEMS)) {
       setEquipSlotId(eq, 0);
-      _s.addItem(id, 1);
+      _addItem(id, 1);
     }
   }
   recalcCombatStats();
-  if (selectCursor >= 0 && saveSlots[selectCursor]) { saveSlots[selectCursor].inventory = { ..._s.playerInventory }; saveSlotsToDB(); }
+  if (selectCursor >= 0 && saveSlots[selectCursor]) { saveSlots[selectCursor].inventory = { ..._playerInventory() }; saveSlotsToDB(); }
 }
 
 function _equipBestMainSlots() {
@@ -829,7 +850,7 @@ function _equipBestMainSlots() {
   for (const sd of SLOT_DEFS) {
     const curId = getEquipSlotId(sd.eq); const curItem = ITEMS.get(curId);
     let bestId = curId, bestVal = curItem ? (curItem[sd.stat] || 0) : 0;
-    for (const [idStr, count] of Object.entries(_s.playerInventory)) {
+    for (const [idStr, count] of Object.entries(_playerInventory())) {
       if (count <= 0) continue;
       const id = Number(idStr); const item = ITEMS.get(id); if (!item) continue;
       if (sd.type === 'hand' && !isHandEquippable(item)) continue;
@@ -838,8 +859,8 @@ function _equipBestMainSlots() {
       const val = item[sd.stat] || 0; if (val > bestVal) { bestVal = val; bestId = id; }
     }
     if (bestId !== curId) {
-      if (curId !== 0) _s.addItem(curId, 1);
-      if (bestId !== 0) { setEquipSlotId(sd.eq, bestId); _s.removeItem(bestId); } else setEquipSlotId(sd.eq, 0);
+      if (curId !== 0) _addItem(curId, 1);
+      if (bestId !== 0) { setEquipSlotId(sd.eq, bestId); _removeItem(bestId); } else setEquipSlotId(sd.eq, 0);
     }
   }
 }
@@ -849,7 +870,7 @@ function _equipBestLeftHand() {
   let bestWepId = 0, bestWepAtk = 0, bestShieldId = 0, bestShieldDef = 0;
   if (curItem?.type === 'weapon') { bestWepAtk = curItem.atk || 0; bestWepId = curId; }
   else if (curItem?.subtype === 'shield') { bestShieldDef = curItem.def || 0; bestShieldId = curId; }
-  for (const [idStr, count] of Object.entries(_s.playerInventory)) {
+  for (const [idStr, count] of Object.entries(_playerInventory())) {
     if (count <= 0) continue;
     const id = Number(idStr); const item = ITEMS.get(id);
     if (!item || !isHandEquippable(item)) continue;
@@ -859,8 +880,8 @@ function _equipBestLeftHand() {
   }
   const bestId = bestShieldId !== 0 ? bestShieldId : bestWepId;
   if (bestId !== curId) {
-    if (curId !== 0) _s.addItem(curId, 1);
-    if (bestId !== 0) { setEquipSlotId(-101, bestId); _s.removeItem(bestId); } else setEquipSlotId(-101, 0);
+    if (curId !== 0) _addItem(curId, 1);
+    if (bestId !== 0) { setEquipSlotId(-101, bestId); _removeItem(bestId); } else setEquipSlotId(-101, 0);
   }
 }
 
@@ -868,13 +889,13 @@ function _equipOptimum() {
   _equipBestMainSlots();
   _equipBestLeftHand();
   recalcCombatStats();
-  if (selectCursor >= 0 && saveSlots[selectCursor]) { saveSlots[selectCursor].inventory = { ..._s.playerInventory }; saveSlotsToDB(); }
+  if (selectCursor >= 0 && saveSlots[selectCursor]) { saveSlots[selectCursor].inventory = { ..._playerInventory() }; saveSlotsToDB(); }
   playSFX(SFX.CONFIRM);
 }
 
 function _pauseInputEquip() {
   if (pauseSt.state !== 'equip') return false;
-  const k = _s.keys;
+  const k = _keys;
   if (pauseSt.eqCursor < 5) {
     if (k['ArrowDown'])  { k['ArrowDown'] = false;  pauseSt.eqCursor = (pauseSt.eqCursor + 1) % 5; playSFX(SFX.CURSOR); }
     if (k['ArrowUp'])    { k['ArrowUp'] = false;    pauseSt.eqCursor = (pauseSt.eqCursor + 4) % 5; playSFX(SFX.CURSOR); }
@@ -893,7 +914,7 @@ function _pauseInputEquip() {
       pauseSt.eqItemList = [];
       const currentId = getEquipSlotId(pauseSt.eqSlotIdx);
       if (currentId !== 0) pauseSt.eqItemList.push({ id: 0, label: 'remove' });
-      for (const [idStr, count] of Object.entries(_s.playerInventory)) {
+      for (const [idStr, count] of Object.entries(_playerInventory())) {
         if (count <= 0) continue;
         const id = Number(idStr);
         const item = ITEMS.get(id);
@@ -915,7 +936,7 @@ function _pauseInputEquip() {
 
 function _pauseInputEquipItemSelect() {
   if (pauseSt.state !== 'eq-item-select') return false;
-  const k = _s.keys;
+  const k = _keys;
   if (k['ArrowDown']) { k['ArrowDown'] = false; if (pauseSt.eqItemCursor < pauseSt.eqItemList.length - 1) { pauseSt.eqItemCursor++; playSFX(SFX.CURSOR); } }
   if (k['ArrowUp'])   { k['ArrowUp'] = false;   if (pauseSt.eqItemCursor > 0) { pauseSt.eqItemCursor--; playSFX(SFX.CURSOR); } }
   if (_zPressed()) {
@@ -924,15 +945,15 @@ function _pauseInputEquipItemSelect() {
       const oldId = getEquipSlotId(pauseSt.eqSlotIdx);
       if (pick.label === 'remove') {
         setEquipSlotId(pauseSt.eqSlotIdx, 0);
-        if (oldId !== 0) _s.addItem(oldId, 1);
+        if (oldId !== 0) _addItem(oldId, 1);
       } else {
         setEquipSlotId(pauseSt.eqSlotIdx, pick.id);
-        _s.removeItem(pick.id);
-        if (oldId !== 0) _s.addItem(oldId, 1);
+        _removeItem(pick.id);
+        if (oldId !== 0) _addItem(oldId, 1);
       }
       recalcCombatStats();
       if (selectCursor >= 0 && saveSlots[selectCursor]) {
-        saveSlots[selectCursor].inventory = { ..._s.playerInventory };
+        saveSlots[selectCursor].inventory = { ..._playerInventory() };
         saveSlotsToDB();
       }
       playSFX(SFX.CONFIRM);
@@ -954,7 +975,7 @@ function _pauseInputStats() {
 
 function _pauseInputJob() {
   if (pauseSt.state !== 'job') return false;
-  const k = _s.keys;
+  const k = _keys;
   if (k['ArrowDown']) { k['ArrowDown'] = false; pauseSt.jobCursor = (pauseSt.jobCursor + 1) % pauseSt.jobList.length; playSFX(SFX.CURSOR); }
   if (k['ArrowUp'])   { k['ArrowUp'] = false;   pauseSt.jobCursor = (pauseSt.jobCursor + pauseSt.jobList.length - 1) % pauseSt.jobList.length; playSFX(SFX.CURSOR); }
   if (_zPressed()) {
@@ -968,7 +989,7 @@ function _pauseInputJob() {
         ps.cp -= cost;
         changeJob(newJobIdx);
         _enforceEquipRestrictions(newJobIdx);
-        _s.swapBattleSprites(newJobIdx);
+        _swapBattleSprites(newJobIdx);
         playSFX(SFX.CONFIRM);
         pauseSt.state = 'job-out'; pauseSt.timer = 0;
       } else {
@@ -982,9 +1003,9 @@ function _pauseInputJob() {
 
 function _pauseInputOptions() {
   if (pauseSt.state !== 'options') return false;
-  const k = _s.keys;
+  const k = _keys;
   if (_zPressed()) {
-    if (pauseSt.optCursor === 0) { _s.toggleCrt(); playSFX(SFX.CONFIRM); }
+    if (pauseSt.optCursor === 0) { _toggleCrt(); playSFX(SFX.CONFIRM); }
   }
   if (_xPressed()) { playSFX(SFX.CONFIRM); pauseSt.state = 'options-out'; pauseSt.timer = 0; }
   return true;
@@ -993,8 +1014,7 @@ function _pauseInputOptions() {
 // shared = { keys, playerInventory, saveSlots, get selectCursor, get battleState,
 //            get shakeActive, get starEffect, get moving,
 //            saveSlotsToDB, addItem, removeItem, getRosterVisible }
-export function handlePauseInput(shared) {
-  _s = shared;
+export function handlePauseInput() {
   if (_pauseInputOpenClose()) return true;
   if (_pauseInputMainMenu()) return true;
   if (_pauseInputInventory()) return true;
