@@ -46,6 +46,9 @@ import { _updateWorldWater, _updateIndoorWater, resetWorldWaterCache, _buildHori
 import { bsc, getSlashFramesForWeapon, initBattleSpriteCache, loadJobBattleSprites } from './battle-sprite-cache.js';
 import { hudSt, HUD_INFO_FADE_STEPS, HUD_INFO_FADE_STEP_MS, HUD_HPLV_STEP_MS } from './hud-state.js';
 import { mapSt } from './map-state.js';
+import { battleSt, getEnemyHP, setEnemyHP,
+         BOSS_ATK, BOSS_DEF, BOSS_MAX_HP,
+         BATTLE_SHAKE_MS, BATTLE_DMG_SHOW_MS, BOSS_PREFLASH_MS, MONSTER_DEATH_MS } from './battle-state.js';
 import { initFlameRawTiles, initStarTiles,
          getFlameSprites, getFlameFrames, getStarTiles } from './flame-sprites.js';
 // BATTLE_BG_MAP_LOOKUP, renderBattleBg → map-loading.js
@@ -87,7 +90,7 @@ import { initCursorTile as _initCursorTile, initScrollArrows as _initScrollArrow
          initGoblinSprite as _initGoblinSprite, initInvincibleSprite as _initInvincibleSprite,
          initMoogleSprite as _initMoogleSprite, initLoadingScreenFadeFrames as _initLoadingScreenFadeFrames } from './sprite-init.js';
 import { initFakePlayerSprites } from './fake-player-sprites.js';
-import { DMG_SHOW_MS, resetAllDmgNums, tickDmgNums, tickHealNums, clearHealNums, initMissSprite,
+import { resetAllDmgNums, tickDmgNums, tickHealNums, clearHealNums, initMissSprite,
          getEnemyDmgNum, setEnemyDmgNum, getPlayerDamageNum, setPlayerDamageNum,
          getPlayerHealNum, setPlayerHealNum, getEnemyHealNum, setEnemyHealNum,
          getAllyDamageNums, getSwDmgNums } from './damage-numbers.js';
@@ -140,9 +143,7 @@ let ff12Raw = null;
 
 // LAND_TURTLE_PAL_*, GOBLIN_*, MOOGLE_*, INVINCIBLE_* constants → sprite-init.js
 // MONSTER_DEATH_FRAMES → sprite-init.js (imported)
-let goblinBattleCanvas = null;  // 32×32 canvas
-let goblinWhiteCanvas = null;   // 32×32 all-white version for pre-attack flash
-let goblinDeathFrames = null;   // pre-rendered diagonal deterioration frames
+// goblin canvases → battle-state.js
 
 // Title screen state → titleSt in title-screen.js
 // Title timing constants (needed by updateTitle and init functions in game.js)
@@ -165,7 +166,7 @@ const SELECT_TEXT_STEPS   = 4;
 // Inventory system
 let playerInventory = {};    // { itemId: count } — e.g. { 0xA6: 3 }
 let itemSelectCursor = 0;    // cursor index in item list
-let itemHealAmount = 0;      // actual HP restored (for green number display)
+// battleSt.itemHealAmount → battle-state.js
 
 // Inventory helpers
 const INV_SLOTS = 3; // visible inventory rows per page
@@ -184,44 +185,13 @@ function buildItemSelectList() {
 }
 
 // Boss fight state — stats read from monsters.js (Land Turtle 0xCC)
-const _BOSS_DATA = MONSTERS.get(0xCC) || { hp: 120, atk: 8, def: 1 };
-let enemyHP = _BOSS_DATA.hp;
-const BOSS_ATK = _BOSS_DATA.atk, BOSS_DEF = _BOSS_DATA.def, BOSS_MAX_HP = _BOSS_DATA.hp;
-
-let battleState = 'none';
-let battleTimer = 0;
-// sfxCutTimerId moved to battle-sfx.js
-let battleMessage = null;     // Uint8Array for status messages
-let bossFlashTimer = 0;
-let battleShakeTimer = 0;
-// enemyDefeated → map-state.js (temporary — will move to battle-state.js in Step 5)
-let isDefending = false;
-let runSlideBack = false;
-
-// Random encounter state
-// encounterSteps → map-state.js
-let isRandomEncounter = false;
-let encounterMonsters = null;  // [{ hp, maxHP, atk, def, exp }] — array of enemies
-let encounterExpGained = 0;
-let encounterGilGained = 0;
-let encounterCpGained = 0;
-let encounterJobLevelUp = null; // new job level on level-up, or null
-let encounterDropItem = null;  // item id dropped on victory (or null)
-let preBattleTrack = null;
-let turnQueue = [];              // [{type:'player'|'enemy', index}] sorted by priority
-let currentAttacker = -1;      // index of monster currently attacking
-let dyingMonsterIndices = new Map(); // index → startDelayMs for staggered death wipe
+// Battle state (battleSt.battleState, battleSt.battleTimer, battleSt.enemyHP, encounter*, battleSt.turnQueue, etc.) → battle-state.js
+// Boss constants (BOSS_ATK/DEF/MAX_HP) imported from battle-state.js.
 
 // Battle message queue — renders in right panel strip (144, 160, 112, 16)
 // Battle message system → battle-msg.js
 
-// Hit animation state
-let comboStatusInflicted = 0;      // status flag inflicted during current combo (for msg replace)
-let currentHitIdx = 0;             // which hit we're animating
-let slashFrame = 0;                // current slash animation frame (0-3)
-let slashX = 0, slashY = 0;       // slash effect base position (target center)
-let slashOffX = 0, slashOffY = 0; // random offset per frame (punch scatter)
-let critFlashTimer = -1;           // >=0 while crit backdrop flash is active (1 frame = 16ms)
+// Hit animation state (battleSt.comboStatusInflicted, battleSt.currentHitIdx, battleSt.slashFrame, battleSt.slashX/Y, battleSt.slashOffX/Y, battleSt.critFlashTimer) → battle-state.js
 let poisonFlashTimer = -1;         // >=0 while overworld poison flash is active
 // BATTLE_MISS, BATTLE_GAME_OVER → data/strings.js
 
@@ -234,8 +204,7 @@ const BATTLE_FLASH_FRAMES = 65;      // 65 frames of grayscale strobe (~1.08s at
 const BATTLE_FLASH_FRAME_MS = 16.67; // ~1 frame at 60fps
 const BATTLE_MSG_HOLD_MS = 1200;
 const BATTLE_HIT_FLASH_MS = 400;
-const BATTLE_DMG_SHOW_MS = DMG_SHOW_MS;
-const BATTLE_SHAKE_MS = 300;
+// BATTLE_DMG_SHOW_MS, BATTLE_SHAKE_MS → battle-state.js
 const BATTLE_VICTORY_HOLD_MS = 1500;
 const BOSS_BLOCK_SIZE = 16;            // 16×16 pixel blocks for dissolve
 const BOSS_BLOCK_COLS = 3;             // 48/16 = 3 blocks wide
@@ -246,8 +215,7 @@ const BOSS_BOX_EXPAND_MS = 300;        // box expand from center duration
 const BATTLE_PANEL_W = 120;            // left section width in bottom panel
 const VICTORY_BOX_ROWS = 8;             // HUD_BOT_H / 8 — row-by-row expand
 const VICTORY_ROW_FRAME_MS = 16.67;     // 1 NES frame per row
-const BOSS_PREFLASH_MS = 133;            // 8 NES frames — boss pre-attack white blink
-const MONSTER_DEATH_MS = 250;            // diagonal tile wipe — 7 visible steps × 33ms (ROM: 2F/BC68)
+// BOSS_PREFLASH_MS, MONSTER_DEATH_MS → battle-state.js
 const MONSTER_SLIDE_MS = 267;            // 16 frames at 60fps — sprites slide in from left
 const DEFEND_SPARKLE_FRAME_MS = 133;     // 8 NES frames per tile
 const DEFEND_SPARKLE_TOTAL_MS = 533;     // 4 tiles × 133ms
@@ -294,21 +262,9 @@ let scrollArrowUpFade = null;    // [step1..step4]
 // fakePlayer portrait/body canvases live in fake-player-sprites.js (imported above).
 
 // Battle allies — roster players that join combat
-let battleAllies = [];         // [{name, palIdx, level, hp, maxHP, atk, def, agi, fadeStep}]
-let allyJoinTimer = 0;         // ms until next join check
-let allyJoinRound = 0;         // combat round counter
-let currentAllyAttacker = -1;  // index into battleAllies during ally turn
-let allyTargetIndex = -1;      // which enemy the ally is attacking
-let allyHitResult = null;      // current hit result {damage, crit} or {miss} (for drawing compat)
-let allyHitResults = [];       // full combo hit array for current ally turn
-let allyHitIdx = 0;            // current hit index in ally combo
-let allyHitIsLeft = false;     // true when current ally hit is L-hand
-let allyShakeTimer = {};       // {allyIdx: ms remaining}
+// Battle allies + ally-combat state → battle-state.js
 // playerDeathTimer → hud-state.js
-let _teamWipeMsgShown = false;
-let enemyTargetAllyIdx = -1;   // which ally an enemy is targeting (-1 = player)
-let allyExitTimer = 0;         // ms since victory-celebrate started (for ally exit fade)
-let turnTimer = 0;             // ms elapsed while player is deciding; auto-skip at TURN_TIME_MS
+// battleSt._teamWipeMsgShown, battleSt.enemyTargetAllyIdx, battleSt.allyExitTimer, battleSt.turnTimer → battle-state.js
 const TURN_TIME_MS = 10000;    // 10 seconds to act before turn is skipped
 // Chest message box state (same style as roar box)
 // Universal message box — slide-in, instant text, Z dismiss, slide-out
@@ -383,13 +339,13 @@ export function init() {
       e.preventDefault();
       keys[e.key] = true;
     }
-    if (e.key === 'T' && titleSt.state === 'done' && battleState === 'none' &&
+    if (e.key === 'T' && titleSt.state === 'done' && battleSt.battleState === 'none' &&
         pauseSt.state === 'none' && inputSt.rosterState === 'none' && transSt.state !== 'loading' && msgState.state === 'none' && !chatState.inputActive) {
       e.preventDefault();
       chatState.expanded = !chatState.expanded;
       playSFX(chatState.expanded ? SFX.SCREEN_OPEN : SFX.SCREEN_CLOSE);
     }
-    if (e.key === 't' && titleSt.state === 'done' && battleState === 'none' &&
+    if (e.key === 't' && titleSt.state === 'done' && battleSt.battleState === 'none' &&
         pauseSt.state === 'none' && inputSt.rosterState === 'none' && transSt.state !== 'loading' && msgState.state === 'none') {
       e.preventDefault();
       chatState.inputActive = true; chatState.inputText = ''; chatState.cursorTimer = 0;
@@ -488,14 +444,14 @@ function initHUD(romData) {
 // _drawHudWithFade, _grayViewport → hud-drawing.js
 // _pausePanelLayout → pause-menu.js
 function _resetBattleVars() {
-  inputSt.battleCursor = 0; battleMessage = null;
+  inputSt.battleCursor = 0; battleSt.battleMessage = null;
   resetAllDmgNums();
-  encounterDropItem = null; bossFlashTimer = 0; battleShakeTimer = 0;
-  isDefending = false; battleAllies = []; allyJoinRound = 0;
-  currentAllyAttacker = -1; allyTargetIndex = -1; allyHitResult = null; allyHitIsLeft = false;
-  allyShakeTimer = {}; enemyTargetAllyIdx = -1; allyExitTimer = 0;
+  battleSt.encounterDropItem = null; battleSt.bossFlashTimer = 0; battleSt.battleShakeTimer = 0;
+  battleSt.isDefending = false; battleSt.battleAllies = []; battleSt.allyJoinRound = 0;
+  battleSt.currentAllyAttacker = -1; battleSt.allyTargetIndex = -1; battleSt.allyHitResult = null; battleSt.allyHitIsLeft = false;
+  battleSt.allyShakeTimer = {}; battleSt.enemyTargetAllyIdx = -1; battleSt.allyExitTimer = 0;
   resetBattleItemVars();
-  hudSt.playerDeathTimer = null; _teamWipeMsgShown = false;
+  hudSt.playerDeathTimer = null; battleSt._teamWipeMsgShown = false;
   inputSt.battleActionCount = 0;
   clearBattleMsgQueue();
 }
@@ -523,7 +479,7 @@ function returnToTitle() {
   clearMusicStash();
   transSt.state = 'hud-fade-out';
   transSt.timer = 0;
-  transSt.pendingAction = () => { battleState = 'none'; hudSt.hudInfoFadeTimer = HUD_INFO_FADE_STEPS * HUD_INFO_FADE_STEP_MS; _startTitleScreen(); };
+  transSt.pendingAction = () => { battleSt.battleState = 'none'; hudSt.hudInfoFadeTimer = HUD_INFO_FADE_STEPS * HUD_INFO_FADE_STEP_MS; _startTitleScreen(); };
 }
 // setupTopBox → map-loading.js
 
@@ -540,8 +496,8 @@ function _hudDrawShared() {
     get hudFadeCanvases() { return hudFadeCanvases; },
     get titleHudCanvas() { return titleHudCanvas; },
     get titleHudFadeCanvases() { return titleHudFadeCanvases; },
-    get battleState() { return battleState; },
-    get battleShakeTimer() { return battleShakeTimer; },
+    get battleState() { return battleSt.battleState; },
+    get battleShakeTimer() { return battleSt.battleShakeTimer; },
     get titleState() { return titleSt.state; },
     get titleTimer() { return titleSt.timer; },
     TITLE_FADE_STEP_MS,
@@ -577,39 +533,25 @@ function _loadingShared() {
 // Team wipe check — true when player AND all allies are dead
 function _isTeamWiped() {
   if (ps.hp > 0) return false;
-  return battleAllies.every(a => a.hp <= 0);
+  return battleSt.battleAllies.every(a => a.hp <= 0);
 }
 
-// PVP-aware enemy HP access — reads/writes authoritative source directly, no proxy sync needed
-function _getEnemyHP() {
-  if (pvpSt.isPVPBattle) {
-    if (pvpSt.pvpPlayerTargetIdx < 0) return pvpSt.pvpOpponentStats.hp;
-    return pvpSt.pvpEnemyAllies[pvpSt.pvpPlayerTargetIdx].hp;
-  }
-  return enemyHP;
-}
-function _setEnemyHP(v) {
-  if (pvpSt.isPVPBattle) {
-    if (pvpSt.pvpPlayerTargetIdx < 0) pvpSt.pvpOpponentStats.hp = v;
-    else pvpSt.pvpEnemyAllies[pvpSt.pvpPlayerTargetIdx].hp = v;
-  }
-  enemyHP = v;
-}
+// getEnemyHP / setEnemyHP → battle-state.js (as getEnemyHP / setEnemyHP)
 
 // Shared state object passed to input-handler.js functions
 function _inputShared() {
   return {
     keys,
     playerInventory,
-    battleAllies,
-    get battleState()          { return battleState; },
-    set battleState(v)          { battleState = v; },
-    get battleTimer()           { return battleTimer; },
-    set battleTimer(v)          { battleTimer = v; },
-    get isRandomEncounter()     { return isRandomEncounter; },
-    get encounterMonsters()     { return encounterMonsters; },
-    get encounterDropItem()     { return encounterDropItem; },
-    get encounterJobLevelUp() { return encounterJobLevelUp; },
+    get battleAllies() { return battleSt.battleAllies; },
+    get battleState()          { return battleSt.battleState; },
+    set battleState(v)          { battleSt.battleState = v; },
+    get battleTimer()           { return battleSt.battleTimer; },
+    set battleTimer(v)          { battleSt.battleTimer = v; },
+    get isRandomEncounter()     { return battleSt.isRandomEncounter; },
+    get encounterMonsters()     { return battleSt.encounterMonsters; },
+    get encounterDropItem()     { return battleSt.encounterDropItem; },
+    get encounterJobLevelUp() { return battleSt.encounterJobLevelUp; },
     advanceBattleMsgZ,
     queueBattleMsg,
     get playerName() { return saveSlots[selectCursor]?.name || null; },
@@ -623,8 +565,8 @@ function _inputShared() {
     get pvpEnemyAllies()        { return pvpSt.pvpEnemyAllies; },
     get pvpPlayerTargetIdx()    { return pvpSt.pvpPlayerTargetIdx; },
     set pvpPlayerTargetIdx(v)   { pvpSt.pvpPlayerTargetIdx = v; },
-    get enemyHP()                { return _getEnemyHP(); },
-    set enemyHP(v)               { _setEnemyHP(v); },
+    get enemyHP()                { return getEnemyHP(); },
+    set enemyHP(v)               { setEnemyHP(v); },
     addItem,
     removeItem,
     getRosterVisible,
@@ -651,42 +593,42 @@ function _pauseShared() {
 function _pvpShared() {
   return {
     // ── Primitive game state (getters/setters so pvp always reads live values) ──
-    get enemyHP()                { return _getEnemyHP(); },
-    set enemyHP(v)               { _setEnemyHP(v); },
-    get enemyDefeated()          { return mapSt.enemyDefeated; },
-    set enemyDefeated(v)         { mapSt.enemyDefeated = v; },
-    get isRandomEncounter()     { return isRandomEncounter; },
-    set isRandomEncounter(v)    { isRandomEncounter = v; },
-    get preBattleTrack()        { return preBattleTrack; },
-    set preBattleTrack(v)       { preBattleTrack = v; },
-    get battleState()           { return battleState; },
-    set battleState(v)          { battleState = v; },
-    get battleTimer()           { return battleTimer; },
-    set battleTimer(v)          { battleTimer = v; },
-    get currentAttacker()       { return currentAttacker; },
-    get encounterMonsters()     { return encounterMonsters; },
-    get enemyTargetAllyIdx()    { return enemyTargetAllyIdx; },
-    set enemyTargetAllyIdx(v)   { enemyTargetAllyIdx = v; },
+    get enemyHP()                { return getEnemyHP(); },
+    set enemyHP(v)               { setEnemyHP(v); },
+    get enemyDefeated()          { return battleSt.enemyDefeated; },
+    set enemyDefeated(v)         { battleSt.enemyDefeated = v; },
+    get isRandomEncounter()     { return battleSt.isRandomEncounter; },
+    set isRandomEncounter(v)    { battleSt.isRandomEncounter = v; },
+    get preBattleTrack()        { return battleSt.preBattleTrack; },
+    set preBattleTrack(v)       { battleSt.preBattleTrack = v; },
+    get battleState()           { return battleSt.battleState; },
+    set battleState(v)          { battleSt.battleState = v; },
+    get battleTimer()           { return battleSt.battleTimer; },
+    set battleTimer(v)          { battleSt.battleTimer = v; },
+    get currentAttacker()       { return battleSt.currentAttacker; },
+    get encounterMonsters()     { return battleSt.encounterMonsters; },
+    get enemyTargetAllyIdx()    { return battleSt.enemyTargetAllyIdx; },
+    set enemyTargetAllyIdx(v)   { battleSt.enemyTargetAllyIdx = v; },
     get playerDamageNum()       { return getPlayerDamageNum(); },
     set playerDamageNum(v)      { setPlayerDamageNum(v); },
-    get isDefending()           { return isDefending; },
-    set isDefending(v)          { isDefending = v; },
-    get battleShakeTimer()      { return battleShakeTimer; },
-    set battleShakeTimer(v)     { battleShakeTimer = v; },
-    get battleMessage()         { return battleMessage; },
-    set battleMessage(v)        { battleMessage = v; },
-    get allyJoinRound()         { return allyJoinRound; },
-    set allyJoinRound(v)        { allyJoinRound = v; },
-    get slashFrame()            { return slashFrame; },
-    get slashOffX()             { return slashOffX; },
-    get slashOffY()             { return slashOffY; },
-    get currentHitIdx()         { return currentHitIdx; },
-    get currentAllyAttacker()   { return currentAllyAttacker; },
-    get allyHitResult()         { return allyHitResult; },
+    get isDefending()           { return battleSt.isDefending; },
+    set isDefending(v)          { battleSt.isDefending = v; },
+    get battleShakeTimer()      { return battleSt.battleShakeTimer; },
+    set battleShakeTimer(v)     { battleSt.battleShakeTimer = v; },
+    get battleMessage()         { return battleSt.battleMessage; },
+    set battleMessage(v)        { battleSt.battleMessage = v; },
+    get allyJoinRound()         { return battleSt.allyJoinRound; },
+    set allyJoinRound(v)        { battleSt.allyJoinRound = v; },
+    get slashFrame()            { return battleSt.slashFrame; },
+    get slashOffX()             { return battleSt.slashOffX; },
+    get slashOffY()             { return battleSt.slashOffY; },
+    get currentHitIdx()         { return battleSt.currentHitIdx; },
+    get currentAllyAttacker()   { return battleSt.currentAllyAttacker; },
+    get allyHitResult()         { return battleSt.allyHitResult; },
     // ── Array/object refs (getters so pvp always gets the live array) ─────────
-    get battleAllies()          { return battleAllies; },
+    get battleAllies()          { return battleSt.battleAllies; },
     get allyDamageNums()        { return getAllyDamageNums(); },
-    get allyShakeTimer()        { return allyShakeTimer; },
+    get allyShakeTimer()        { return battleSt.allyShakeTimer; },
     ctx,
     // ── Weapon sprite canvases (stable after init) ────────────────────────────
     get blades() {
@@ -704,7 +646,7 @@ function _pvpShared() {
     handleAlly:             ()   => updateBattleAlly(_allyShared()),
     handleEndSequence:      (dt) => _updateBattleEndSequence(dt),
     tryJoinPlayerAlly:       ()  => _tryJoinPlayerAlly(),
-    buildAndProcessNextTurn: ()  => { turnQueue = buildTurnOrder(); processNextTurn(); },
+    buildAndProcessNextTurn: ()  => { battleSt.turnQueue = buildTurnOrder(); processNextTurn(); },
     // ── Other functions ───────────────────────────────────────────────────────
     resetBattleVars:     _resetBattleVars,
     processNextTurn,
@@ -718,41 +660,41 @@ function _pvpShared() {
     measureText,
     nameToBytes: _nameToBytes,
     get cursorTileCanvas() { return cursorTileCanvas; },
-    get critFlashTimer()  { return critFlashTimer; },
-    set critFlashTimer(v) { critFlashTimer = v; },
+    get critFlashTimer()  { return battleSt.critFlashTimer; },
+    set critFlashTimer(v) { battleSt.critFlashTimer = v; },
   };
 }
 
 function _allyShared() {
   return {
-    get battleState()           { return battleState; },
-    set battleState(v)          { battleState = v; },
-    get battleTimer()           { return battleTimer; },
-    set battleTimer(v)          { battleTimer = v; },
-    get enemyHP()                { return _getEnemyHP(); },
-    set enemyHP(v)               { _setEnemyHP(v); },
-    get isRandomEncounter()     { return isRandomEncounter; },
-    get battleAllies()          { return battleAllies; },
-    get currentAllyAttacker()   { return currentAllyAttacker; },
-    get allyTargetIndex()       { return allyTargetIndex; },
-    get allyHitResult()         { return allyHitResult; },
-    set allyHitResult(v)        { allyHitResult = v; },
-    get allyHitResults()        { return allyHitResults; },
-    get allyHitIdx()            { return allyHitIdx; },
-    set allyHitIdx(v)           { allyHitIdx = v; },
-    get allyHitIsLeft()         { return allyHitIsLeft; },
-    set allyHitIsLeft(v)        { allyHitIsLeft = v; },
-    get encounterMonsters()     { return encounterMonsters; },
-    get dyingMonsterIndices()   { return dyingMonsterIndices; },
-    set dyingMonsterIndices(v)  { dyingMonsterIndices = v; },
-    get enemyTargetAllyIdx()    { return enemyTargetAllyIdx; },
-    set enemyTargetAllyIdx(v)   { enemyTargetAllyIdx = v; },
-    get critFlashTimer()        { return critFlashTimer; },
-    set critFlashTimer(v)       { critFlashTimer = v; },
+    get battleState()           { return battleSt.battleState; },
+    set battleState(v)          { battleSt.battleState = v; },
+    get battleTimer()           { return battleSt.battleTimer; },
+    set battleTimer(v)          { battleSt.battleTimer = v; },
+    get enemyHP()                { return getEnemyHP(); },
+    set enemyHP(v)               { setEnemyHP(v); },
+    get isRandomEncounter()     { return battleSt.isRandomEncounter; },
+    get battleAllies()          { return battleSt.battleAllies; },
+    get currentAllyAttacker()   { return battleSt.currentAllyAttacker; },
+    get allyTargetIndex()       { return battleSt.allyTargetIndex; },
+    get allyHitResult()         { return battleSt.allyHitResult; },
+    set allyHitResult(v)        { battleSt.allyHitResult = v; },
+    get allyHitResults()        { return battleSt.allyHitResults; },
+    get allyHitIdx()            { return battleSt.allyHitIdx; },
+    set allyHitIdx(v)           { battleSt.allyHitIdx = v; },
+    get allyHitIsLeft()         { return battleSt.allyHitIsLeft; },
+    set allyHitIsLeft(v)        { battleSt.allyHitIsLeft = v; },
+    get encounterMonsters()     { return battleSt.encounterMonsters; },
+    get dyingMonsterIndices()   { return battleSt.dyingMonsterIndices; },
+    set dyingMonsterIndices(v)  { battleSt.dyingMonsterIndices = v; },
+    get enemyTargetAllyIdx()    { return battleSt.enemyTargetAllyIdx; },
+    set enemyTargetAllyIdx(v)   { battleSt.enemyTargetAllyIdx = v; },
+    get critFlashTimer()        { return battleSt.critFlashTimer; },
+    set critFlashTimer(v)       { battleSt.critFlashTimer = v; },
     get enemyDmgNum()         { return getEnemyDmgNum(); },
     set enemyDmgNum(v)        { setEnemyDmgNum(v); },
-    get turnQueue()             { return turnQueue; },
-    set turnQueue(v)            { turnQueue = v; },
+    get turnQueue()             { return battleSt.turnQueue; },
+    set turnQueue(v)            { battleSt.turnQueue = v; },
     get pvpSt()                 { return pvpSt; },
     get inputSt()               { return inputSt; },
     BOSS_DEF,
@@ -768,42 +710,42 @@ function _allyShared() {
 
 function _magicItemShared() {
   return {
-    get battleState()           { return battleState; },
-    set battleState(v)          { battleState = v; },
-    get battleTimer()           { return battleTimer; },
-    set battleTimer(v)          { battleTimer = v; },
-    get isRandomEncounter()     { return isRandomEncounter; },
-    get encounterMonsters()     { return encounterMonsters; },
-    get dyingMonsterIndices()   { return dyingMonsterIndices; },
-    set dyingMonsterIndices(v)  { dyingMonsterIndices = v; },
+    get battleState()           { return battleSt.battleState; },
+    set battleState(v)          { battleSt.battleState = v; },
+    get battleTimer()           { return battleSt.battleTimer; },
+    set battleTimer(v)          { battleSt.battleTimer = v; },
+    get isRandomEncounter()     { return battleSt.isRandomEncounter; },
+    get encounterMonsters()     { return battleSt.encounterMonsters; },
+    get dyingMonsterIndices()   { return battleSt.dyingMonsterIndices; },
+    set dyingMonsterIndices(v)  { battleSt.dyingMonsterIndices = v; },
     get ps()                    { return ps; },
     get inputSt()               { return inputSt; },
     get pvpSt()                 { return pvpSt; },
-    getEnemyHP: _getEnemyHP,
-    setEnemyHP: _setEnemyHP,
+    getEnemyHP: getEnemyHP,
+    setEnemyHP: setEnemyHP,
     processNextTurn,
   };
 }
 
 function _enemyShared() {
   return {
-    get battleState()           { return battleState; },
-    set battleState(v)          { battleState = v; },
-    get battleTimer()           { return battleTimer; },
-    set battleTimer(v)          { battleTimer = v; },
-    get battleAllies()          { return battleAllies; },
-    get encounterMonsters()     { return encounterMonsters; },
-    get currentAttacker()       { return currentAttacker; },
-    get enemyTargetAllyIdx()    { return enemyTargetAllyIdx; },
-    set enemyTargetAllyIdx(v)   { enemyTargetAllyIdx = v; },
+    get battleState()           { return battleSt.battleState; },
+    set battleState(v)          { battleSt.battleState = v; },
+    get battleTimer()           { return battleSt.battleTimer; },
+    set battleTimer(v)          { battleSt.battleTimer = v; },
+    get battleAllies()          { return battleSt.battleAllies; },
+    get encounterMonsters()     { return battleSt.encounterMonsters; },
+    get currentAttacker()       { return battleSt.currentAttacker; },
+    get enemyTargetAllyIdx()    { return battleSt.enemyTargetAllyIdx; },
+    set enemyTargetAllyIdx(v)   { battleSt.enemyTargetAllyIdx = v; },
     get allyDamageNums()        { return getAllyDamageNums(); },
-    get allyShakeTimer()        { return allyShakeTimer; },
+    get allyShakeTimer()        { return battleSt.allyShakeTimer; },
     get playerDamageNum()       { return getPlayerDamageNum(); },
     set playerDamageNum(v)      { setPlayerDamageNum(v); },
-    get battleShakeTimer()      { return battleShakeTimer; },
-    set battleShakeTimer(v)     { battleShakeTimer = v; },
-    get isDefending()           { return isDefending; },
-    set isDefending(v)          { isDefending = v; },
+    get battleShakeTimer()      { return battleSt.battleShakeTimer; },
+    set battleShakeTimer(v)     { battleSt.battleShakeTimer = v; },
+    get isDefending()           { return battleSt.isDefending; },
+    set isDefending(v)          { battleSt.isDefending = v; },
     get ps()                    { return ps; },
     get inputSt()               { return inputSt; },
     ITEMS,
@@ -823,48 +765,48 @@ function _enemyShared() {
 
 function _battleDrawShared() {
   return {
-    get battleState() { return battleState; },
-    get battleTimer() { return battleTimer; },
-    get enemyHP() { return _getEnemyHP(); },
-    get enemyDefeated() { return mapSt.enemyDefeated; },
-    get isRandomEncounter() { return isRandomEncounter; },
-    get isDefending() { return isDefending; },
+    get battleState() { return battleSt.battleState; },
+    get battleTimer() { return battleSt.battleTimer; },
+    get enemyHP() { return getEnemyHP(); },
+    get enemyDefeated() { return battleSt.enemyDefeated; },
+    get isRandomEncounter() { return battleSt.isRandomEncounter; },
+    get isDefending() { return battleSt.isDefending; },
     get enemyDmgNum() { return getEnemyDmgNum(); },
     get playerDamageNum() { return getPlayerDamageNum(); },
     get playerHealNum() { return getPlayerHealNum(); },
     get enemyHealNum() { return getEnemyHealNum(); },
-    get battleShakeTimer() { return battleShakeTimer; },
-    get critFlashTimer() { return critFlashTimer; },
-    set critFlashTimer(v) { critFlashTimer = v; },
-    get currentHitIdx() { return currentHitIdx; },
-    get currentAttacker() { return currentAttacker; },
-    get slashFrame() { return slashFrame; },
-    get slashOffX() { return slashOffX; },
-    get slashOffY() { return slashOffY; },
-    get currentAllyAttacker() { return currentAllyAttacker; },
-    get allyHitResult() { return allyHitResult; },
-    get allyHitIsLeft() { return allyHitIsLeft; },
-    get allyTargetIndex() { return allyTargetIndex; },
-    get enemyTargetAllyIdx() { return enemyTargetAllyIdx; },
-    get allyJoinRound() { return allyJoinRound; },
-    get runSlideBack() { return runSlideBack; },
-    get encounterExpGained() { return encounterExpGained; },
-    get encounterGilGained() { return encounterGilGained; },
-    get encounterCpGained() { return encounterCpGained; },
-    get encounterDropItem() { return encounterDropItem; },
-    get encounterJobLevelUp() { return encounterJobLevelUp; },
+    get battleShakeTimer() { return battleSt.battleShakeTimer; },
+    get critFlashTimer() { return battleSt.critFlashTimer; },
+    set critFlashTimer(v) { battleSt.critFlashTimer = v; },
+    get currentHitIdx() { return battleSt.currentHitIdx; },
+    get currentAttacker() { return battleSt.currentAttacker; },
+    get slashFrame() { return battleSt.slashFrame; },
+    get slashOffX() { return battleSt.slashOffX; },
+    get slashOffY() { return battleSt.slashOffY; },
+    get currentAllyAttacker() { return battleSt.currentAllyAttacker; },
+    get allyHitResult() { return battleSt.allyHitResult; },
+    get allyHitIsLeft() { return battleSt.allyHitIsLeft; },
+    get allyTargetIndex() { return battleSt.allyTargetIndex; },
+    get enemyTargetAllyIdx() { return battleSt.enemyTargetAllyIdx; },
+    get allyJoinRound() { return battleSt.allyJoinRound; },
+    get runSlideBack() { return battleSt.runSlideBack; },
+    get encounterExpGained() { return battleSt.encounterExpGained; },
+    get encounterGilGained() { return battleSt.encounterGilGained; },
+    get encounterCpGained() { return battleSt.encounterCpGained; },
+    get encounterDropItem() { return battleSt.encounterDropItem; },
+    get encounterJobLevelUp() { return battleSt.encounterJobLevelUp; },
     get battleMsgCurrent() { return getBattleMsgCurrent(); },
     get battleMsgTimer() { return getBattleMsgTimer(); },
     MSG_FADE_IN_MS, MSG_HOLD_MS, MSG_FADE_OUT_MS, MSG_TOTAL_MS,
     get southWindTargets() { return getTargets(); },
     get southWindHitIdx() { return getHitIdx(); },
     get southWindDmgNums() { return getSwDmgNums(); },
-    get dyingMonsterIndices() { return dyingMonsterIndices; },
-    get encounterMonsters() { return encounterMonsters; },
-    get battleAllies() { return battleAllies; },
+    get dyingMonsterIndices() { return battleSt.dyingMonsterIndices; },
+    get encounterMonsters() { return battleSt.encounterMonsters; },
+    get battleAllies() { return battleSt.battleAllies; },
     get allyDamageNums() { return getAllyDamageNums(); },
-    get allyShakeTimer() { return allyShakeTimer; },
-    get battleMessage() { return battleMessage; },
+    get allyShakeTimer() { return battleSt.allyShakeTimer; },
+    get battleMessage() { return battleSt.battleMessage; },
     ctx,
     get battleKnifeBladeCanvas() { return getKnifeBladeCanvas(); },
     get battleKnifeBladeSwungCanvas() { return getKnifeBladeSwungCanvas(); },
@@ -873,9 +815,9 @@ function _battleDrawShared() {
     get battleSwordBladeCanvas() { return getSwordBladeCanvas(); },
     get battleSwordBladeSwungCanvas() { return getSwordBladeSwungCanvas(); },
     get battleFistCanvas() { return getFistCanvas(); },
-    get goblinBattleCanvas() { return goblinBattleCanvas; },
-    get goblinWhiteCanvas() { return goblinWhiteCanvas; },
-    get goblinDeathFrames() { return goblinDeathFrames; },
+    get goblinBattleCanvas() { return battleSt.goblinBattleCanvas; },
+    get goblinWhiteCanvas() { return battleSt.goblinWhiteCanvas; },
+    get goblinDeathFrames() { return battleSt.goblinDeathFrames; },
     get cursorTileCanvas() { return cursorTileCanvas; },
     get cursorFadeCanvases() { return cursorFadeCanvases; },
     topBoxSt,
@@ -937,9 +879,9 @@ function _initSpriteAssets(romRaw) {
 
   // Goblin sprite (sprite-init.js)
   const gs = _initGoblinSprite(romRaw);
-  goblinBattleCanvas = gs.goblinBattleCanvas;
-  goblinWhiteCanvas = gs.goblinWhiteCanvas;
-  goblinDeathFrames = gs.goblinDeathFrames;
+  battleSt.goblinBattleCanvas = gs.goblinBattleCanvas;
+  battleSt.goblinWhiteCanvas = gs.goblinWhiteCanvas;
+  battleSt.goblinDeathFrames = gs.goblinDeathFrames;
 
   initMonsterSprites();
   initMissSprite();
@@ -1069,7 +1011,7 @@ function startMove(dir) {
   const tileY = targetY / TILE_SIZE;
 
   // Block walking onto boss sprite tile
-  if (mapSt.bossSprite && !mapSt.enemyDefeated && tileX === mapSt.bossSprite.px / TILE_SIZE && tileY === mapSt.bossSprite.py / TILE_SIZE) {
+  if (mapSt.bossSprite && !battleSt.enemyDefeated && tileX === mapSt.bossSprite.px / TILE_SIZE && tileY === mapSt.bossSprite.py / TILE_SIZE) {
     sprite.setDirection(dir);
     sprite.resetFrame();
     return;
@@ -1152,7 +1094,7 @@ function handleAction() {
   if (facedX < 0 || facedX >= 32 || facedY < 0 || facedY >= 32) return;
 
   // Boss fight trigger — face Adamantoise at crystal room center
-  if (mapSt.bossSprite && !mapSt.enemyDefeated && facedX === 6 && facedY === 8) {
+  if (mapSt.bossSprite && !battleSt.enemyDefeated && facedX === 6 && facedY === 8) {
     startBattle();
     return;
   }
@@ -1306,7 +1248,7 @@ function _renderSprites(camX, camY, originX, originY, spriteY) {
   }
   // Boss sprite (crystal room) — blink on hit
   if (mapSt.bossSprite) {
-    const blinkHidden = bossFlashTimer > 0 && (Math.floor(bossFlashTimer / 60) & 1);
+    const blinkHidden = battleSt.bossFlashTimer > 0 && (Math.floor(battleSt.bossFlashTimer / 60) & 1);
     if (!blinkHidden) {
       const wLeft = camX - originX;
       const wTop = camY - originY;
@@ -1330,7 +1272,7 @@ function _renderMapAndWater(camX, camY, originX, originY, spriteY) {
     _updateIndoorWater(mapSt.mapRenderer, waterTick);
   }
   if (transSt.state === 'none' &&
-      (battleState === 'none' || battleState === 'flash-strobe' || battleState.startsWith('roar-'))) {
+      (battleSt.battleState === 'none' || battleSt.battleState === 'flash-strobe' || battleSt.battleState.startsWith('roar-'))) {
     _renderSprites(camX, camY, originX, originY, spriteY);
   }
   if (mapSt.onWorldMap && mapSt.worldMapRenderer) {
@@ -1358,7 +1300,7 @@ function render() {
   let camX = Math.round(mapSt.worldX);
   const camY = Math.round(mapSt.worldY);
   if (mapSt.shakeActive) camX += (Math.floor(mapSt.shakeTimer / (1000 / 60)) & 2) ? 2 : -2;
-  if (battleShakeTimer > 0) camX += (Math.floor(battleShakeTimer / (1000 / 60)) & 2) ? 2 : -2;
+  if (battleSt.battleShakeTimer > 0) camX += (Math.floor(battleSt.battleShakeTimer / (1000 / 60)) & 2) ? 2 : -2;
 
   clipToViewport();
   try {
@@ -1471,7 +1413,7 @@ function updateTitle(dt) {
 
 function _drawMonsterDeath(x, y, size, progress, monsterId) {
   // Dithered diagonal dissolve — pre-rendered frames with Bayer 4×4 dither pattern.
-  const frames = getMonsterDeathFrames(monsterId, goblinDeathFrames);
+  const frames = getMonsterDeathFrames(monsterId, battleSt.goblinDeathFrames);
   if (!frames || !frames.length) return;
   const frameIdx = Math.min(frames.length - 1, Math.floor(progress * frames.length));
   ctx.drawImage(frames[frameIdx], x, y);
@@ -1492,53 +1434,53 @@ function _drawMonsterDeath(x, y, size, progress, monsterId) {
 
 function _turnShared() {
   return {
-    get battleState()           { return battleState; },
-    set battleState(v)          { battleState = v; },
-    get battleTimer()           { return battleTimer; },
-    set battleTimer(v)          { battleTimer = v; },
-    get battleAllies()          { return battleAllies; },
-    get isRandomEncounter()     { return isRandomEncounter; },
-    set isRandomEncounter(v)    { isRandomEncounter = v; },
-    get encounterMonsters()     { return encounterMonsters; },
-    set encounterMonsters(v)    { encounterMonsters = v; },
-    get turnQueue()             { return turnQueue; },
-    set turnQueue(v)            { turnQueue = v; },
-    get turnTimer()             { return turnTimer; },
-    set turnTimer(v)            { turnTimer = v; },
-    get isDefending()           { return isDefending; },
-    set isDefending(v)          { isDefending = v; },
-    get currentAttacker()       { return currentAttacker; },
-    set currentAttacker(v)      { currentAttacker = v; },
-    get currentAllyAttacker()   { return currentAllyAttacker; },
-    set currentAllyAttacker(v)  { currentAllyAttacker = v; },
-    get allyTargetIndex()       { return allyTargetIndex; },
-    set allyTargetIndex(v)      { allyTargetIndex = v; },
-    get allyHitResults()        { return allyHitResults; },
-    set allyHitResults(v)       { allyHitResults = v; },
-    get allyHitIdx()            { return allyHitIdx; },
-    set allyHitIdx(v)           { allyHitIdx = v; },
-    get allyHitResult()         { return allyHitResult; },
-    set allyHitResult(v)        { allyHitResult = v; },
-    get allyHitIsLeft()         { return allyHitIsLeft; },
-    set allyHitIsLeft(v)        { allyHitIsLeft = v; },
-    get currentHitIdx()         { return currentHitIdx; },
-    set currentHitIdx(v)        { currentHitIdx = v; },
-    get slashFrame()            { return slashFrame; },
-    set slashFrame(v)           { slashFrame = v; },
-    get slashOffX()             { return slashOffX; },
-    set slashOffX(v)            { slashOffX = v; },
-    get slashOffY()             { return slashOffY; },
-    set slashOffY(v)            { slashOffY = v; },
-    get slashX()                { return slashX; },
-    set slashX(v)               { slashX = v; },
-    get slashY()                { return slashY; },
-    set slashY(v)               { slashY = v; },
-    get itemHealAmount()        { return itemHealAmount; },
-    set itemHealAmount(v)       { itemHealAmount = v; },
+    get battleState()           { return battleSt.battleState; },
+    set battleState(v)          { battleSt.battleState = v; },
+    get battleTimer()           { return battleSt.battleTimer; },
+    set battleTimer(v)          { battleSt.battleTimer = v; },
+    get battleAllies()          { return battleSt.battleAllies; },
+    get isRandomEncounter()     { return battleSt.isRandomEncounter; },
+    set isRandomEncounter(v)    { battleSt.isRandomEncounter = v; },
+    get encounterMonsters()     { return battleSt.encounterMonsters; },
+    set encounterMonsters(v)    { battleSt.encounterMonsters = v; },
+    get turnQueue()             { return battleSt.turnQueue; },
+    set turnQueue(v)            { battleSt.turnQueue = v; },
+    get turnTimer()             { return battleSt.turnTimer; },
+    set turnTimer(v)            { battleSt.turnTimer = v; },
+    get isDefending()           { return battleSt.isDefending; },
+    set isDefending(v)          { battleSt.isDefending = v; },
+    get currentAttacker()       { return battleSt.currentAttacker; },
+    set currentAttacker(v)      { battleSt.currentAttacker = v; },
+    get currentAllyAttacker()   { return battleSt.currentAllyAttacker; },
+    set currentAllyAttacker(v)  { battleSt.currentAllyAttacker = v; },
+    get allyTargetIndex()       { return battleSt.allyTargetIndex; },
+    set allyTargetIndex(v)      { battleSt.allyTargetIndex = v; },
+    get allyHitResults()        { return battleSt.allyHitResults; },
+    set allyHitResults(v)       { battleSt.allyHitResults = v; },
+    get allyHitIdx()            { return battleSt.allyHitIdx; },
+    set allyHitIdx(v)           { battleSt.allyHitIdx = v; },
+    get allyHitResult()         { return battleSt.allyHitResult; },
+    set allyHitResult(v)        { battleSt.allyHitResult = v; },
+    get allyHitIsLeft()         { return battleSt.allyHitIsLeft; },
+    set allyHitIsLeft(v)        { battleSt.allyHitIsLeft = v; },
+    get currentHitIdx()         { return battleSt.currentHitIdx; },
+    set currentHitIdx(v)        { battleSt.currentHitIdx = v; },
+    get slashFrame()            { return battleSt.slashFrame; },
+    set slashFrame(v)           { battleSt.slashFrame = v; },
+    get slashOffX()             { return battleSt.slashOffX; },
+    set slashOffX(v)            { battleSt.slashOffX = v; },
+    get slashOffY()             { return battleSt.slashOffY; },
+    set slashOffY(v)            { battleSt.slashOffY = v; },
+    get slashX()                { return battleSt.slashX; },
+    set slashX(v)               { battleSt.slashX = v; },
+    get slashY()                { return battleSt.slashY; },
+    set slashY(v)               { battleSt.slashY = v; },
+    get itemHealAmount()        { return battleSt.itemHealAmount; },
+    set itemHealAmount(v)       { battleSt.itemHealAmount = v; },
     get inputSt()               { return inputSt; },
     get pvpSt()                 { return pvpSt; },
-    get battleShakeTimer()      { return battleShakeTimer; },
-    set battleShakeTimer(v)     { battleShakeTimer = v; },
+    get battleShakeTimer()      { return battleSt.battleShakeTimer; },
+    set battleShakeTimer(v)     { battleSt.battleShakeTimer = v; },
     BOSS_DEF,
     BOSS_MAX_HP,
     BATTLE_SHAKE_MS,
@@ -1548,8 +1490,8 @@ function _turnShared() {
     setEnemyDmgNum,
     setEnemyHealNum,
     getAllyDamageNums,
-    getEnemyHP: _getEnemyHP,
-    setEnemyHP: _setEnemyHP,
+    getEnemyHP: getEnemyHP,
+    setEnemyHP: setEnemyHP,
     removeItem,
     startMagicItem: () => startMagicItem(_magicItemShared()),
     queueBattleMsg,
@@ -1564,29 +1506,29 @@ function processNextTurn() { _processNextTurn(_turnShared()); }
 
 
 function startBattle() {
-  battleState = 'roar-hold';
-  battleTimer = 0;
-  showMsgBox(BATTLE_ROAR, () => { battleState = 'flash-strobe'; battleTimer = 0; playSFX(SFX.BATTLE_SWIPE); });
+  battleSt.battleState = 'roar-hold';
+  battleSt.battleTimer = 0;
+  showMsgBox(BATTLE_ROAR, () => { battleSt.battleState = 'flash-strobe'; battleSt.battleTimer = 0; playSFX(SFX.BATTLE_SWIPE); });
   _resetBattleVars();
-  enemyHP = BOSS_MAX_HP;
+  battleSt.enemyHP = BOSS_MAX_HP;
   playSFX(SFX.EARTHQUAKE);
 }
 
 // startRandomEncounter → battle-encounter.js
 function _encounterShared() {
   return {
-    get battleState()           { return battleState; },
-    set battleState(v)          { battleState = v; },
-    get battleTimer()           { return battleTimer; },
-    set battleTimer(v)          { battleTimer = v; },
-    get isRandomEncounter()     { return isRandomEncounter; },
-    set isRandomEncounter(v)    { isRandomEncounter = v; },
-    get encounterMonsters()     { return encounterMonsters; },
-    set encounterMonsters(v)    { encounterMonsters = v; },
+    get battleState()           { return battleSt.battleState; },
+    set battleState(v)          { battleSt.battleState = v; },
+    get battleTimer()           { return battleSt.battleTimer; },
+    set battleTimer(v)          { battleSt.battleTimer = v; },
+    get isRandomEncounter()     { return battleSt.isRandomEncounter; },
+    set isRandomEncounter(v)    { battleSt.isRandomEncounter = v; },
+    get encounterMonsters()     { return battleSt.encounterMonsters; },
+    set encounterMonsters(v)    { battleSt.encounterMonsters = v; },
     get encounterSteps()        { return mapSt.encounterSteps; },
     set encounterSteps(v)       { mapSt.encounterSteps = v; },
-    get preBattleTrack()        { return preBattleTrack; },
-    set preBattleTrack(v)       { preBattleTrack = v; },
+    get preBattleTrack()        { return battleSt.preBattleTrack; },
+    set preBattleTrack(v)       { battleSt.preBattleTrack = v; },
     get onWorldMap()            { return mapSt.onWorldMap; },
     get worldMapRenderer()      { return mapSt.worldMapRenderer; },
     get worldX()                { return mapSt.worldX; },
@@ -1594,7 +1536,7 @@ function _encounterShared() {
     get dungeonFloor()          { return mapSt.dungeonFloor; },
     get inputSt()               { return inputSt; },
     TILE_SIZE,
-    getMonsterCanvas: (id) => getMonsterCanvas(id, goblinBattleCanvas),
+    getMonsterCanvas: (id) => getMonsterCanvas(id, battleSt.goblinBattleCanvas),
     resetBattleVars: _resetBattleVars,
   };
 }
@@ -1604,18 +1546,18 @@ function executeBattleCommand(index) {
   if (index === 0) {
     // Fight — go to target select (cursor on enemy)
     playSFX(SFX.CONFIRM);
-    if (isRandomEncounter && encounterMonsters) {
-      inputSt.targetIndex = encounterMonsters.findIndex(m => m.hp > 0);
+    if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
+      inputSt.targetIndex = battleSt.encounterMonsters.findIndex(m => m.hp > 0);
     }
-    battleState = 'target-select';
-    battleTimer = 0;
+    battleSt.battleState = 'target-select';
+    battleSt.battleTimer = 0;
   } else if (index === 1) {
     // Defend — pause for confirm SFX, then build turn queue
     playSFX(SFX.CONFIRM);
-    isDefending = true;
+    battleSt.isDefending = true;
     inputSt.playerActionPending = { command: 'defend' };
-    battleState = 'confirm-pause';
-    battleTimer = 0;
+    battleSt.battleState = 'confirm-pause';
+    battleSt.battleTimer = 0;
   } else if (index === 2) {
     // Item — fade menu text out, show inventory on right side
     playSFX(SFX.CONFIRM);
@@ -1626,42 +1568,42 @@ function executeBattleCommand(index) {
     inputSt.itemPageCursor = 0;
     inputSt.itemSlideDir = 0;
     inputSt.itemSlideCursor = 0;
-    battleState = 'item-menu-out';
-    battleTimer = 0;
+    battleSt.battleState = 'item-menu-out';
+    battleSt.battleTimer = 0;
   } else {
     // Run
-    if (isRandomEncounter) {
+    if (battleSt.isRandomEncounter) {
       playSFX(SFX.CONFIRM);
-      isDefending = false;
+      battleSt.isDefending = false;
       inputSt.playerActionPending = { command: 'run' };
-      battleState = 'confirm-pause';
-      battleTimer = 0;
+      battleSt.battleState = 'confirm-pause';
+      battleSt.battleTimer = 0;
     } else {
       playSFX(SFX.ERROR);
-      battleMessage = BATTLE_CANT_ESCAPE;
-      battleState = 'message-hold';
-      battleTimer = 0;
+      battleSt.battleMessage = BATTLE_CANT_ESCAPE;
+      battleSt.battleState = 'message-hold';
+      battleSt.battleTimer = 0;
     }
   }
 }
 
 // --- Battle update sub-handlers ---
-// Each returns true if it handled the current battleState, false otherwise.
+// Each returns true if it handled the current battleSt.battleState, false otherwise.
 // Called in order from updateBattle; short-circuits on first match (mirrors old if-else chain).
 
 function _updateBattleTimers(dt) {
-  if (bossFlashTimer > 0) bossFlashTimer = Math.max(0, bossFlashTimer - dt);
-  if (battleShakeTimer > 0) battleShakeTimer = Math.max(0, battleShakeTimer - dt);
+  if (battleSt.bossFlashTimer > 0) battleSt.bossFlashTimer = Math.max(0, battleSt.bossFlashTimer - dt);
+  if (battleSt.battleShakeTimer > 0) battleSt.battleShakeTimer = Math.max(0, battleSt.battleShakeTimer - dt);
   if (pvpSt.pvpOpponentShakeTimer > 0) pvpSt.pvpOpponentShakeTimer = Math.max(0, pvpSt.pvpOpponentShakeTimer - dt);
 
   tickDmgNums(dt);
-  for (const idx in allyShakeTimer) {
-    if (allyShakeTimer[idx] > 0) allyShakeTimer[idx] = Math.max(0, allyShakeTimer[idx] - dt);
+  for (const idx in battleSt.allyShakeTimer) {
+    if (battleSt.allyShakeTimer[idx] > 0) battleSt.allyShakeTimer[idx] = Math.max(0, battleSt.allyShakeTimer[idx] - dt);
   }
   // Start player death animation on first frame of hp=0
-  if (ps.hp <= 0 && hudSt.playerDeathTimer == null && battleState !== 'none') { hudSt.playerDeathTimer = 0; }
+  if (ps.hp <= 0 && hudSt.playerDeathTimer == null && battleSt.battleState !== 'none') { hudSt.playerDeathTimer = 0; }
   if (hudSt.playerDeathTimer != null) hudSt.playerDeathTimer += dt;
-  for (const ally of battleAllies) {
+  for (const ally of battleSt.battleAllies) {
     if (ally.deathTimer != null) ally.deathTimer += dt;
   }
 
@@ -1670,70 +1612,70 @@ function _updateBattleTimers(dt) {
 }
 
 function _updateTurnTimer(dt) {
-  const isPlayerDeciding = battleState === 'menu-open' || battleState === 'target-select' ||
-    battleState === 'item-select' || battleState === 'item-target-select' || battleState === 'item-slide';
+  const isPlayerDeciding = battleSt.battleState === 'menu-open' || battleSt.battleState === 'target-select' ||
+    battleSt.battleState === 'item-select' || battleSt.battleState === 'item-target-select' || battleSt.battleState === 'item-slide';
   if (!isPlayerDeciding) return;
-  turnTimer += dt;
-  if (turnTimer >= TURN_TIME_MS) {
-    turnTimer = 0; inputSt.itemHeldIdx = -1;
-    inputSt.playerActionPending = { command: 'skip' }; battleState = 'confirm-pause'; battleTimer = 0;
+  battleSt.turnTimer += dt;
+  if (battleSt.turnTimer >= TURN_TIME_MS) {
+    battleSt.turnTimer = 0; inputSt.itemHeldIdx = -1;
+    inputSt.playerActionPending = { command: 'skip' }; battleSt.battleState = 'confirm-pause'; battleSt.battleTimer = 0;
   }
 }
 
 // _isTitleActiveState → isTitleActiveState() in title-screen.js
 function _isVictoryBattleState() {
-  return battleState === 'victory-celebrate' ||
-    battleState === 'exp-text-in' || battleState === 'exp-hold' || battleState === 'exp-fade-out' ||
-    battleState === 'gil-text-in' || battleState === 'gil-hold' || battleState === 'gil-fade-out' ||
-    battleState === 'cp-text-in' || battleState === 'cp-hold' || battleState === 'cp-fade-out' ||
-    battleState === 'item-text-in' || battleState === 'item-hold' || battleState === 'item-fade-out' ||
-    battleState === 'levelup-text-in' || battleState === 'levelup-hold' || battleState === 'levelup-fade-out' ||
-    battleState === 'joblv-text-in' || battleState === 'joblv-hold' || battleState === 'joblv-fade-out' ||
-    battleState === 'victory-text-out' || battleState === 'victory-menu-fade' || battleState === 'victory-box-close';
+  return battleSt.battleState === 'victory-celebrate' ||
+    battleSt.battleState === 'exp-text-in' || battleSt.battleState === 'exp-hold' || battleSt.battleState === 'exp-fade-out' ||
+    battleSt.battleState === 'gil-text-in' || battleSt.battleState === 'gil-hold' || battleSt.battleState === 'gil-fade-out' ||
+    battleSt.battleState === 'cp-text-in' || battleSt.battleState === 'cp-hold' || battleSt.battleState === 'cp-fade-out' ||
+    battleSt.battleState === 'item-text-in' || battleSt.battleState === 'item-hold' || battleSt.battleState === 'item-fade-out' ||
+    battleSt.battleState === 'levelup-text-in' || battleSt.battleState === 'levelup-hold' || battleSt.battleState === 'levelup-fade-out' ||
+    battleSt.battleState === 'joblv-text-in' || battleSt.battleState === 'joblv-hold' || battleSt.battleState === 'joblv-fade-out' ||
+    battleSt.battleState === 'victory-text-out' || battleSt.battleState === 'victory-menu-fade' || battleSt.battleState === 'victory-box-close';
 }
 function _updateAllyExitFade(dt) {
-  if (battleAllies.length === 0) return;
-  const isVicState = _isVictoryBattleState() && battleState !== 'victory-box-close';
+  if (battleSt.battleAllies.length === 0) return;
+  const isVicState = _isVictoryBattleState() && battleSt.battleState !== 'victory-box-close';
   if (!isVicState) return;
   const ALLY_EXIT_DELAY_MS = 1500, ALLY_EXIT_STEP_MS = 100;
-  allyExitTimer += dt;
-  if (allyExitTimer >= ALLY_EXIT_DELAY_MS) {
-    const stepsDone = Math.floor((allyExitTimer - ALLY_EXIT_DELAY_MS) / ALLY_EXIT_STEP_MS);
+  battleSt.allyExitTimer += dt;
+  if (battleSt.allyExitTimer >= ALLY_EXIT_DELAY_MS) {
+    const stepsDone = Math.floor((battleSt.allyExitTimer - ALLY_EXIT_DELAY_MS) / ALLY_EXIT_STEP_MS);
     const targetFade = Math.min(4, stepsDone);
-    for (let i = 0; i < battleAllies.length; i++) {
-      if (battleAllies[i].fadeStep < targetFade) battleAllies[i].fadeStep = targetFade;
+    for (let i = 0; i < battleSt.battleAllies.length; i++) {
+      if (battleSt.battleAllies[i].fadeStep < targetFade) battleSt.battleAllies[i].fadeStep = targetFade;
     }
   }
 }
 
 function _updateBattleOpening() {
-  if (battleState === 'roar-hold') {
+  if (battleSt.battleState === 'roar-hold') {
     // waits for msgBox Z dismiss → callback sets flash-strobe
-  } else if (battleState === 'flash-strobe') {
-    if (battleTimer >= BATTLE_FLASH_FRAMES * BATTLE_FLASH_FRAME_MS) {
-      if (isRandomEncounter) {
-        battleState = 'encounter-box-expand'; battleTimer = 0; pauseMusic(); playTrack(TRACKS.BATTLE);
+  } else if (battleSt.battleState === 'flash-strobe') {
+    if (battleSt.battleTimer >= BATTLE_FLASH_FRAMES * BATTLE_FLASH_FRAME_MS) {
+      if (battleSt.isRandomEncounter) {
+        battleSt.battleState = 'encounter-box-expand'; battleSt.battleTimer = 0; pauseMusic(); playTrack(TRACKS.BATTLE);
       } else {
-        battleState = 'enemy-box-expand'; battleTimer = 0; pauseMusic(); playTrack(TRACKS.BOSS_BATTLE);
+        battleSt.battleState = 'enemy-box-expand'; battleSt.battleTimer = 0; pauseMusic(); playTrack(TRACKS.BOSS_BATTLE);
       }
     }
-  } else if (battleState === 'encounter-box-expand') {
-    if (battleTimer >= BOSS_BOX_EXPAND_MS) { battleState = 'monster-slide-in'; battleTimer = 0; }
-  } else if (battleState === 'monster-slide-in') {
-    if (battleTimer >= MONSTER_SLIDE_MS) { battleState = 'battle-fade-in'; battleTimer = 0; }
-  } else if (battleState === 'enemy-box-expand') {
-    if (battleTimer >= BOSS_BOX_EXPAND_MS) { battleState = 'boss-appear'; battleTimer = 0; }
-  } else if (battleState === 'boss-appear') {
-    if (battleTimer >= BOSS_BLOCKS * BOSS_DISSOLVE_STEPS * BOSS_DISSOLVE_FRAME_MS) { battleState = 'battle-fade-in'; battleTimer = 0; }
-  } else if (battleState === 'battle-fade-in') {
-    if (battleTimer >= (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS) { battleState = 'menu-open'; battleTimer = 0; }
+  } else if (battleSt.battleState === 'encounter-box-expand') {
+    if (battleSt.battleTimer >= BOSS_BOX_EXPAND_MS) { battleSt.battleState = 'monster-slide-in'; battleSt.battleTimer = 0; }
+  } else if (battleSt.battleState === 'monster-slide-in') {
+    if (battleSt.battleTimer >= MONSTER_SLIDE_MS) { battleSt.battleState = 'battle-fade-in'; battleSt.battleTimer = 0; }
+  } else if (battleSt.battleState === 'enemy-box-expand') {
+    if (battleSt.battleTimer >= BOSS_BOX_EXPAND_MS) { battleSt.battleState = 'boss-appear'; battleSt.battleTimer = 0; }
+  } else if (battleSt.battleState === 'boss-appear') {
+    if (battleSt.battleTimer >= BOSS_BLOCKS * BOSS_DISSOLVE_STEPS * BOSS_DISSOLVE_FRAME_MS) { battleSt.battleState = 'battle-fade-in'; battleSt.battleTimer = 0; }
+  } else if (battleSt.battleState === 'battle-fade-in') {
+    if (battleSt.battleTimer >= (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS) { battleSt.battleState = 'menu-open'; battleSt.battleTimer = 0; }
   } else { return false; }
   return true;
 }
 
 
 function _tryJoinPlayerAlly() {
-  if (battleAllies.length >= 3) return false;
+  if (battleSt.battleAllies.length >= 3) return false;
   const loc = getPlayerLocation();
   const pvpNames = new Set([
     pvpSt.pvpOpponent && pvpSt.pvpOpponent.name,
@@ -1741,23 +1683,23 @@ function _tryJoinPlayerAlly() {
   ].filter(Boolean));
   const eligible = PLAYER_POOL.filter(p =>
     p.loc === loc &&
-    !battleAllies.some(a => a.name === p.name) &&
+    !battleSt.battleAllies.some(a => a.name === p.name) &&
     !pvpNames.has(p.name)
   );
   if (eligible.length === 0 || Math.random() >= 0.5) return false;
-  battleAllies.push(generateAllyStats(eligible[Math.floor(Math.random() * eligible.length)]));
-  battleState = 'ally-fade-in'; battleTimer = 0;
+  battleSt.battleAllies.push(generateAllyStats(eligible[Math.floor(Math.random() * eligible.length)]));
+  battleSt.battleState = 'ally-fade-in'; battleSt.battleTimer = 0;
   return true;
 }
 
 function _updateBattleMenuConfirm() {
-  if (battleState === 'message-hold') {
-    if (battleTimer >= BATTLE_MSG_HOLD_MS) { battleState = 'menu-open'; battleTimer = 0; battleMessage = null; }
-  } else if (battleState === 'confirm-pause') {
-    if (battleTimer >= 150) {
-      allyJoinRound++;
+  if (battleSt.battleState === 'message-hold') {
+    if (battleSt.battleTimer >= BATTLE_MSG_HOLD_MS) { battleSt.battleState = 'menu-open'; battleSt.battleTimer = 0; battleSt.battleMessage = null; }
+  } else if (battleSt.battleState === 'confirm-pause') {
+    if (battleSt.battleTimer >= 150) {
+      battleSt.allyJoinRound++;
       if (_tryJoinPlayerAlly()) return true;
-      turnQueue = buildTurnOrder(); processNextTurn();
+      battleSt.turnQueue = buildTurnOrder(); processNextTurn();
     }
   } else { return false; }
   return true;
@@ -1772,124 +1714,124 @@ function _finalizeComboHits() {
   if (pvpSt.isPVPBattle && !allMiss) pvpSt.pvpOpponentShakeTimer = BATTLE_SHAKE_MS;
   // Replace strip message: status > crit > multi-hit
   if (!allMiss) {
-    if (comboStatusInflicted && STATUS_NAME_BYTES[comboStatusInflicted]) {
-      replaceBattleMsg(STATUS_NAME_BYTES[comboStatusInflicted]);
+    if (battleSt.comboStatusInflicted && STATUS_NAME_BYTES[battleSt.comboStatusInflicted]) {
+      replaceBattleMsg(STATUS_NAME_BYTES[battleSt.comboStatusInflicted]);
     } else if (anyCrit) {
       replaceBattleMsg(BATTLE_CRITICAL);
     } else if (hitsLanded > 1) {
       replaceBattleMsg(_nameToBytes(hitsLanded + ' hits!'));
     }
   }
-  comboStatusInflicted = 0;
-  battleState = 'player-damage-show';
-  battleTimer = 0;
+  battleSt.comboStatusInflicted = 0;
+  battleSt.battleState = 'player-damage-show';
+  battleSt.battleTimer = 0;
 }
 function _advanceHitCombo() {
-  if (currentHitIdx + 1 < inputSt.hitResults.length) {
-    currentHitIdx++;
-    slashFrame = 0;
-    const handWeapon = getHitWeapon(currentHitIdx, inputSt.rHandHitCount);
-    bsc.slashFrames = getSlashFramesForWeapon(handWeapon, isHitRightHand(currentHitIdx, inputSt.rHandHitCount));
-    if (isBladedWeapon(handWeapon)) { slashOffX = 8; slashOffY = -8; }
-    else { slashOffX = Math.floor(Math.random() * 40) - 20; slashOffY = Math.floor(Math.random() * 40) - 20; }
-    battleState = 'attack-back';
-    battleTimer = 0;
+  if (battleSt.currentHitIdx + 1 < inputSt.hitResults.length) {
+    battleSt.currentHitIdx++;
+    battleSt.slashFrame = 0;
+    const handWeapon = getHitWeapon(battleSt.currentHitIdx, inputSt.rHandHitCount);
+    bsc.slashFrames = getSlashFramesForWeapon(handWeapon, isHitRightHand(battleSt.currentHitIdx, inputSt.rHandHitCount));
+    if (isBladedWeapon(handWeapon)) { battleSt.slashOffX = 8; battleSt.slashOffY = -8; }
+    else { battleSt.slashOffX = Math.floor(Math.random() * 40) - 20; battleSt.slashOffY = Math.floor(Math.random() * 40) - 20; }
+    battleSt.battleState = 'attack-back';
+    battleSt.battleTimer = 0;
   } else {
     _finalizeComboHits();
   }
 }
 function _updatePlayerAttackBack() {
-  if (battleState !== 'attack-back') return false;
-  if (currentHitIdx === 0) comboStatusInflicted = 0;
-  const delay = currentHitIdx === 0 ? BACK_SWING_MS : HIT_COMBO_PAUSE_MS;
-  if (battleTimer >= delay) {
-    battleState = 'attack-fwd';
-    battleTimer = 0;
+  if (battleSt.battleState !== 'attack-back') return false;
+  if (battleSt.currentHitIdx === 0) battleSt.comboStatusInflicted = 0;
+  const delay = battleSt.currentHitIdx === 0 ? BACK_SWING_MS : HIT_COMBO_PAUSE_MS;
+  if (battleSt.battleTimer >= delay) {
+    battleSt.battleState = 'attack-fwd';
+    battleSt.battleTimer = 0;
   }
   return true;
 }
 function _updatePlayerAttackFwd() {
-  if (battleState !== 'attack-fwd') return false;
-  if (battleTimer >= FWD_SWING_MS) {
-    const hw0 = getHitWeapon(currentHitIdx, inputSt.rHandHitCount);
-    const isCrit0 = inputSt.hitResults[currentHitIdx] && inputSt.hitResults[currentHitIdx].crit;
+  if (battleSt.battleState !== 'attack-fwd') return false;
+  if (battleSt.battleTimer >= FWD_SWING_MS) {
+    const hw0 = getHitWeapon(battleSt.currentHitIdx, inputSt.rHandHitCount);
+    const isCrit0 = inputSt.hitResults[battleSt.currentHitIdx] && inputSt.hitResults[battleSt.currentHitIdx].crit;
     playSlashSFX(hw0, isCrit0);
-    battleState = 'player-slash';
-    battleTimer = 0;
+    battleSt.battleState = 'player-slash';
+    battleSt.battleTimer = 0;
   }
   return true;
 }
 function _updatePlayerSlash() {
-  if (battleState !== 'player-slash') return false;
-  const frame = Math.floor(battleTimer / SLASH_FRAME_MS);
-  if (frame !== slashFrame && frame < SLASH_FRAMES) {
-    slashFrame = frame;
-    const handWeapon = getHitWeapon(currentHitIdx, inputSt.rHandHitCount);
+  if (battleSt.battleState !== 'player-slash') return false;
+  const frame = Math.floor(battleSt.battleTimer / SLASH_FRAME_MS);
+  if (frame !== battleSt.slashFrame && frame < SLASH_FRAMES) {
+    battleSt.slashFrame = frame;
+    const handWeapon = getHitWeapon(battleSt.currentHitIdx, inputSt.rHandHitCount);
     if (isBladedWeapon(handWeapon)) {
-      slashOffX = 8 - slashFrame * 8;
-      slashOffY = -8 + slashFrame * 8;
+      battleSt.slashOffX = 8 - battleSt.slashFrame * 8;
+      battleSt.slashOffY = -8 + battleSt.slashFrame * 8;
     } else {
-      slashOffX = Math.floor(Math.random() * 40) - 20;
-      slashOffY = Math.floor(Math.random() * 40) - 20;
+      battleSt.slashOffX = Math.floor(Math.random() * 40) - 20;
+      battleSt.slashOffY = Math.floor(Math.random() * 40) - 20;
     }
   }
-  if (battleTimer >= SLASH_FRAMES * SLASH_FRAME_MS) {
-    const hit = inputSt.hitResults[currentHitIdx];
+  if (battleSt.battleTimer >= SLASH_FRAMES * SLASH_FRAME_MS) {
+    const hit = inputSt.hitResults[battleSt.currentHitIdx];
     if (!hit.miss) {
       if (pvpSt.isPVPBattle && pvpSt.pvpOpponentIsDefending)
         hit.damage = Math.max(1, Math.floor(hit.damage / 2));
-      if (isRandomEncounter && encounterMonsters) {
-        const targetMon = encounterMonsters[inputSt.targetIndex];
+      if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
+        const targetMon = battleSt.encounterMonsters[inputSt.targetIndex];
         targetMon.hp = Math.max(0, targetMon.hp - hit.damage);
         // Physical hit wakes sleeping targets
         if (targetMon.status) wakeOnHit(targetMon.status);
         // Weapon on-hit status infliction
         if (targetMon.status && targetMon.hp > 0) {
-          const wpnId = getHitWeapon(currentHitIdx, inputSt.rHandHitCount);
+          const wpnId = getHitWeapon(battleSt.currentHitIdx, inputSt.rHandHitCount);
           const wpnData = ITEMS.get(wpnId);
           if (wpnData && wpnData.status) {
             const arr = Array.isArray(wpnData.status) ? wpnData.status : [wpnData.status];
             for (const s of arr) {
               const applied = tryInflictStatus(targetMon.status, s, wpnData.hit || 50);
-              if (applied) comboStatusInflicted = applied;
+              if (applied) battleSt.comboStatusInflicted = applied;
             }
           }
         }
       } else {
-        _setEnemyHP(Math.max(0, _getEnemyHP() - hit.damage));
+        setEnemyHP(Math.max(0, getEnemyHP() - hit.damage));
       }
-      if (hit.crit) critFlashTimer = 0;
+      if (hit.crit) battleSt.critFlashTimer = 0;
     }
-    battleState = 'player-hit-show';
-    battleTimer = 0;
+    battleSt.battleState = 'player-hit-show';
+    battleSt.battleTimer = 0;
   }
   return true;
 }
 function _updatePlayerHitShow() {
-  if (battleState !== 'player-hit-show') return false;
-  const hitPause = (currentHitIdx + 1 < inputSt.hitResults.length) ? HIT_COMBO_PAUSE_MS : HIT_PAUSE_MS;
-  if (battleTimer >= hitPause) _advanceHitCombo();
+  if (battleSt.battleState !== 'player-hit-show') return false;
+  const hitPause = (battleSt.currentHitIdx + 1 < inputSt.hitResults.length) ? HIT_COMBO_PAUSE_MS : HIT_PAUSE_MS;
+  if (battleSt.battleTimer >= hitPause) _advanceHitCombo();
   return true;
 }
 function _updatePlayerMissShow() {
-  if (battleState !== 'player-miss-show') return false;
-  if (battleTimer >= MISS_SHOW_MS) _advanceHitCombo();
+  if (battleSt.battleState !== 'player-miss-show') return false;
+  if (battleSt.battleTimer >= MISS_SHOW_MS) _advanceHitCombo();
   return true;
 }
 function _updatePlayerDamageShow() {
-  if (battleState !== 'player-damage-show') return false;
-  if (battleTimer >= PLAYER_DMG_SHOW_MS) {
-    if (isRandomEncounter && encounterMonsters && encounterMonsters[inputSt.targetIndex].hp <= 0) {
-      dyingMonsterIndices = new Map([[inputSt.targetIndex, 0]]);
-      battleState = 'monster-death';
-      battleTimer = 0;
+  if (battleSt.battleState !== 'player-damage-show') return false;
+  if (battleSt.battleTimer >= PLAYER_DMG_SHOW_MS) {
+    if (battleSt.isRandomEncounter && battleSt.encounterMonsters && battleSt.encounterMonsters[inputSt.targetIndex].hp <= 0) {
+      battleSt.dyingMonsterIndices = new Map([[inputSt.targetIndex, 0]]);
+      battleSt.battleState = 'monster-death';
+      battleSt.battleTimer = 0;
       playSFX(SFX.MONSTER_DEATH);
-    } else if (!isRandomEncounter && _getEnemyHP() <= 0) {
+    } else if (!battleSt.isRandomEncounter && getEnemyHP() <= 0) {
       if (pvpSt.isPVPBattle) {
-        battleState = 'pvp-dissolve'; battleTimer = 0; playSFX(SFX.MONSTER_DEATH);
-      } else { battleState = 'boss-dissolve'; battleTimer = 0; playSFX(SFX.BOSS_DEATH); }
+        battleSt.battleState = 'pvp-dissolve'; battleSt.battleTimer = 0; playSFX(SFX.MONSTER_DEATH);
+      } else { battleSt.battleState = 'boss-dissolve'; battleSt.battleTimer = 0; playSFX(SFX.BOSS_DEATH); }
     } else {
-      if (getBattleMsgCurrent()) { battleState = 'msg-wait'; battleTimer = 0; }
+      if (getBattleMsgCurrent()) { battleSt.battleState = 'msg-wait'; battleSt.battleTimer = 0; }
       else processNextTurn();
     }
   }
@@ -1913,47 +1855,47 @@ function _triggerPVPVictory() {
   const oppLv = pvpSt.pvpOpponentStats ? pvpSt.pvpOpponentStats.level : 1;
   const rawPvpExp = 5 * oppLv;
   grantExp(rawPvpExp);
-  encounterExpGained = Math.max(1, Math.floor(rawPvpExp / 4));
-  encounterGilGained = Math.max(1, Math.floor(10 * oppLv / 4));
-  encounterCpGained = Math.max(1, Math.floor(oppLv / 4)); grantCP(encounterCpGained);
-  ps.gil += encounterGilGained;
-  encounterJobLevelUp = gainJobJP(inputSt.battleActionCount || 1);
+  battleSt.encounterExpGained = Math.max(1, Math.floor(rawPvpExp / 4));
+  battleSt.encounterGilGained = Math.max(1, Math.floor(10 * oppLv / 4));
+  battleSt.encounterCpGained = Math.max(1, Math.floor(oppLv / 4)); grantCP(battleSt.encounterCpGained);
+  ps.gil += battleSt.encounterGilGained;
+  battleSt.encounterJobLevelUp = gainJobJP(inputSt.battleActionCount || 1);
   inputSt.battleActionCount = 0;
   saveSlotsToDB();
   _queueVictoryRewards();
-  mapSt.enemyDefeated = true;
-  isDefending = false; battleState = 'victory-name-out'; battleTimer = 0;
+  battleSt.enemyDefeated = true;
+  battleSt.isDefending = false; battleSt.battleState = 'victory-name-out'; battleSt.battleTimer = 0;
   playSFX(SFX.BOSS_DEATH);
 }
 function _updateMonsterDeath() {
-  if (battleState !== 'monster-death') return false;
-  const _maxDelay = dyingMonsterIndices.size > 0 ? Math.max(...dyingMonsterIndices.values()) : 0;
-  if (battleTimer >= MONSTER_DEATH_MS + _maxDelay) {
-    dyingMonsterIndices = new Map();
-    const allDead = encounterMonsters.every(m => m.hp <= 0);
+  if (battleSt.battleState !== 'monster-death') return false;
+  const _maxDelay = battleSt.dyingMonsterIndices.size > 0 ? Math.max(...battleSt.dyingMonsterIndices.values()) : 0;
+  if (battleSt.battleTimer >= MONSTER_DEATH_MS + _maxDelay) {
+    battleSt.dyingMonsterIndices = new Map();
+    const allDead = battleSt.encounterMonsters.every(m => m.hp <= 0);
     if (allDead) {
-      const rawExp = encounterMonsters.reduce((sum, m) => sum + m.exp, 0);
+      const rawExp = battleSt.encounterMonsters.reduce((sum, m) => sum + m.exp, 0);
       grantExp(rawExp);
-      encounterExpGained = Math.max(1, Math.floor(rawExp / 4));
-      encounterGilGained = Math.max(1, Math.floor(encounterMonsters.reduce((sum, m) => sum + (m.gil || 0), 0) / 4));
-      encounterCpGained = Math.max(1, Math.floor(encounterMonsters.reduce((sum, m) => sum + (m.cp || 1), 0) / 4)); grantCP(encounterCpGained);
-      ps.gil += encounterGilGained;
-      encounterJobLevelUp = gainJobJP(inputSt.battleActionCount || 1);
+      battleSt.encounterExpGained = Math.max(1, Math.floor(rawExp / 4));
+      battleSt.encounterGilGained = Math.max(1, Math.floor(battleSt.encounterMonsters.reduce((sum, m) => sum + (m.gil || 0), 0) / 4));
+      battleSt.encounterCpGained = Math.max(1, Math.floor(battleSt.encounterMonsters.reduce((sum, m) => sum + (m.cp || 1), 0) / 4)); grantCP(battleSt.encounterCpGained);
+      ps.gil += battleSt.encounterGilGained;
+      battleSt.encounterJobLevelUp = gainJobJP(inputSt.battleActionCount || 1);
       inputSt.battleActionCount = 0;
-      encounterDropItem = null;
-      for (const m of encounterMonsters) {
+      battleSt.encounterDropItem = null;
+      for (const m of battleSt.encounterMonsters) {
         const mData = MONSTERS.get(m.monsterId);
         if (mData && mData.drops && mData.drops.length && Math.random() < 0.25) {
-          encounterDropItem = mData.drops[Math.floor(Math.random() * mData.drops.length)];
+          battleSt.encounterDropItem = mData.drops[Math.floor(Math.random() * mData.drops.length)];
           break;
         }
       }
-      if (encounterDropItem !== null) addItem(encounterDropItem, 1);
+      if (battleSt.encounterDropItem !== null) addItem(battleSt.encounterDropItem, 1);
       saveSlotsToDB();
       _queueVictoryRewards();
-      isDefending = false;
-      battleState = 'victory-name-out';
-      battleTimer = 0;
+      battleSt.isDefending = false;
+      battleSt.battleState = 'victory-name-out';
+      battleSt.battleTimer = 0;
     } else {
       processNextTurn();
     }
@@ -1972,20 +1914,20 @@ function _updateBattlePlayerAttack() {
 
 
 function _updateBattleDefendItem(dt) {
-  if (battleState === 'defend-anim') {
+  if (battleSt.battleState === 'defend-anim') {
     // Defend pose + sparkle for 32 frames (~533ms), then wait for msg, then enemy turn
-    if (battleTimer >= DEFEND_SPARKLE_TOTAL_MS) {
-      if (getBattleMsgCurrent()) { battleState = 'msg-wait'; battleTimer = 0; }
+    if (battleSt.battleTimer >= DEFEND_SPARKLE_TOTAL_MS) {
+      if (getBattleMsgCurrent()) { battleSt.battleState = 'msg-wait'; battleSt.battleTimer = 0; }
       else processNextTurn();
     }
-  } else if (battleState === 'item-use') {
+  } else if (battleSt.battleState === 'item-use') {
     // Heal animation — same duration as defend sparkle, then next turn
     tickHealNums(dt);
-    if (battleTimer >= DEFEND_SPARKLE_TOTAL_MS) {
+    if (battleSt.battleTimer >= DEFEND_SPARKLE_TOTAL_MS) {
       clearHealNums();
       processNextTurn();
     }
-  } else if (battleState === 'sw-throw' || battleState === 'sw-hit') {
+  } else if (battleSt.battleState === 'sw-throw' || battleSt.battleState === 'sw-hit') {
     return updateMagicItemThrowHit(_magicItemShared());
   } else if (_updateItemMenuFades()) {
     return true;
@@ -1997,40 +1939,40 @@ function _updateBattleDefendItem(dt) {
 
 function _updateItemMenuFades() {
   const FADE_DUR = (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS;
-  if (battleState === 'item-menu-out') {
-    if (battleTimer >= FADE_DUR) { battleState = 'item-list-in'; battleTimer = 0; }
-  } else if (battleState === 'item-list-in') {
-    if (battleTimer >= FADE_DUR) { battleState = 'item-select'; battleTimer = 0; }
-  } else if (battleState === 'item-slide') {
-    if (battleTimer >= 200) {
+  if (battleSt.battleState === 'item-menu-out') {
+    if (battleSt.battleTimer >= FADE_DUR) { battleSt.battleState = 'item-list-in'; battleSt.battleTimer = 0; }
+  } else if (battleSt.battleState === 'item-list-in') {
+    if (battleSt.battleTimer >= FADE_DUR) { battleSt.battleState = 'item-select'; battleSt.battleTimer = 0; }
+  } else if (battleSt.battleState === 'item-slide') {
+    if (battleSt.battleTimer >= 200) {
       inputSt.itemPage += (inputSt.itemSlideDir < 0) ? 1 : -1;
       inputSt.itemSlideDir = 0; inputSt.itemPageCursor = inputSt.itemSlideCursor; inputSt.itemSlideCursor = 0;
-      battleState = 'item-select'; battleTimer = 0;
+      battleSt.battleState = 'item-select'; battleSt.battleTimer = 0;
     }
-  } else if (battleState === 'item-cancel-out') {
-    if (battleTimer >= FADE_DUR) { battleState = 'item-cancel-in'; battleTimer = 0; }
-  } else if (battleState === 'item-cancel-in') {
-    if (battleTimer >= FADE_DUR) { inputSt.itemPage = 1; battleState = 'menu-open'; battleTimer = 0; }
-  } else if (battleState === 'item-list-out') {
-    if (battleTimer >= FADE_DUR) { battleState = 'item-use-menu-in'; battleTimer = 0; }
-  } else if (battleState === 'item-use-menu-in') {
-    if (battleTimer >= FADE_DUR) { battleState = 'confirm-pause'; battleTimer = 0; }
+  } else if (battleSt.battleState === 'item-cancel-out') {
+    if (battleSt.battleTimer >= FADE_DUR) { battleSt.battleState = 'item-cancel-in'; battleSt.battleTimer = 0; }
+  } else if (battleSt.battleState === 'item-cancel-in') {
+    if (battleSt.battleTimer >= FADE_DUR) { inputSt.itemPage = 1; battleSt.battleState = 'menu-open'; battleSt.battleTimer = 0; }
+  } else if (battleSt.battleState === 'item-list-out') {
+    if (battleSt.battleTimer >= FADE_DUR) { battleSt.battleState = 'item-use-menu-in'; battleSt.battleTimer = 0; }
+  } else if (battleSt.battleState === 'item-use-menu-in') {
+    if (battleSt.battleTimer >= FADE_DUR) { battleSt.battleState = 'confirm-pause'; battleSt.battleTimer = 0; }
   } else { return false; }
   return true;
 }
 
 function _updateBattleRunSuccess() {
-  if (battleState === 'run-success') {
+  if (battleSt.battleState === 'run-success') {
     // Queue message, then wait for it to finish auto-advancing
     if (!getBattleMsgCurrent() && getBattleMsgQueue().length === 0) {
-      runSlideBack = true; battleState = 'encounter-box-close'; battleTimer = 0;
+      battleSt.runSlideBack = true; battleSt.battleState = 'encounter-box-close'; battleSt.battleTimer = 0;
     }
   } else { return false; }
   return true;
 }
 
 function _updateBattleRunFail() {
-  if (battleState === 'run-fail') {
+  if (battleSt.battleState === 'run-fail') {
     if (!getBattleMsgCurrent() && getBattleMsgQueue().length === 0) {
       processNextTurn();
     }
@@ -2039,8 +1981,8 @@ function _updateBattleRunFail() {
 }
 
 function _updateBattleRun() {
-  if (battleState === 'run-fail') return _updateBattleRunFail();
-  if (battleState === 'run-success') return _updateBattleRunSuccess();
+  if (battleSt.battleState === 'run-fail') return _updateBattleRunFail();
+  if (battleSt.battleState === 'run-success') return _updateBattleRunSuccess();
   return false;
 }
 
@@ -2049,94 +1991,94 @@ function _updateBattleRun() {
 // Enemy turn update logic extracted to battle-enemy.js
 
 function _updateBossDissolve(dt) {
-  if (battleState !== 'boss-dissolve') return false;
-  const dFrame = Math.floor(battleTimer / BOSS_DISSOLVE_FRAME_MS);
+  if (battleSt.battleState !== 'boss-dissolve') return false;
+  const dFrame = Math.floor(battleSt.battleTimer / BOSS_DISSOLVE_FRAME_MS);
   const dBlock = Math.floor(dFrame / BOSS_DISSOLVE_STEPS);
-  const prevBlock = Math.floor(Math.floor((battleTimer - dt) / BOSS_DISSOLVE_FRAME_MS) / BOSS_DISSOLVE_STEPS);
+  const prevBlock = Math.floor(Math.floor((battleSt.battleTimer - dt) / BOSS_DISSOLVE_FRAME_MS) / BOSS_DISSOLVE_STEPS);
   if (dBlock !== prevBlock && dBlock > 0 && (dBlock & 3) === 0) playSFX(SFX.BOSS_DEATH);
-  if (battleTimer >= BOSS_BLOCKS * BOSS_DISSOLVE_STEPS * BOSS_DISSOLVE_FRAME_MS) {
-    mapSt.enemyDefeated = true; mapSt.bossSprite = null;
+  if (battleSt.battleTimer >= BOSS_BLOCKS * BOSS_DISSOLVE_STEPS * BOSS_DISSOLVE_FRAME_MS) {
+    battleSt.enemyDefeated = true; mapSt.bossSprite = null;
     ps.unlockedJobs |= 0x3E; // Wind Crystal: bits 1-5 (Warrior, Monk, White Mage, Black Mage, Red Mage)
     const _bossData = MONSTERS.get(0xCC);
     const rawBossExp = _bossData?.exp || 132;
     grantExp(rawBossExp);
-    encounterExpGained = Math.max(1, Math.floor(rawBossExp / 4));
-    encounterGilGained = Math.max(1, Math.floor((_bossData?.gil || 500) / 4));
-    ps.gil += encounterGilGained;
-    encounterCpGained = Math.max(1, Math.floor((_bossData?.cp || 10) / 4)); grantCP(encounterCpGained);
-    encounterJobLevelUp = gainJobJP(inputSt.battleActionCount || 1);
+    battleSt.encounterExpGained = Math.max(1, Math.floor(rawBossExp / 4));
+    battleSt.encounterGilGained = Math.max(1, Math.floor((_bossData?.gil || 500) / 4));
+    ps.gil += battleSt.encounterGilGained;
+    battleSt.encounterCpGained = Math.max(1, Math.floor((_bossData?.cp || 10) / 4)); grantCP(battleSt.encounterCpGained);
+    battleSt.encounterJobLevelUp = gainJobJP(inputSt.battleActionCount || 1);
     inputSt.battleActionCount = 0;
     saveSlotsToDB();
     _queueVictoryRewards();
-    isDefending = false; battleState = 'victory-name-out'; battleTimer = 0;
+    battleSt.isDefending = false; battleSt.battleState = 'victory-name-out'; battleSt.battleTimer = 0;
   }
   return true;
 }
 
 function _updateVictorySequence() {
   const _textMs = (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS;
-  if (battleState === 'victory-name-out') {
-    if (battleTimer >= _textMs) { battleState = 'victory-celebrate'; battleTimer = 0; playTrack(TRACKS.VICTORY); }
-  } else if (battleState === 'victory-celebrate') {
-    if (battleTimer >= 400) { battleState = 'exp-text-in'; battleTimer = 0; }
-  } else if (battleState === 'exp-text-in') {
-    if (battleTimer >= _textMs) { battleState = 'exp-hold'; battleTimer = 0; }
-  } else if (battleState === 'exp-hold') {
-  } else if (battleState === 'exp-fade-out') {
-    if (battleTimer >= _textMs) { battleState = 'gil-text-in'; battleTimer = 0; }
-  } else if (battleState === 'gil-text-in') {
-    if (battleTimer >= _textMs) { battleState = 'gil-hold'; battleTimer = 0; }
-  } else if (battleState === 'gil-hold') {
-  } else if (battleState === 'gil-fade-out') {
-    if (battleTimer >= _textMs) { battleState = 'cp-text-in'; battleTimer = 0; }
-  } else if (battleState === 'cp-text-in') {
-    if (battleTimer >= _textMs) { battleState = 'cp-hold'; battleTimer = 0; }
-  } else if (battleState === 'cp-hold') {
-  } else if (battleState === 'cp-fade-out') {
-    if (battleTimer >= _textMs) { battleState = encounterDropItem !== null ? 'item-text-in' : ps.leveledUp ? 'levelup-text-in' : encounterJobLevelUp ? 'joblv-text-in' : 'victory-text-out'; battleTimer = 0; }
-  } else if (battleState === 'item-text-in') {
-    if (battleTimer >= _textMs) { battleState = 'item-hold'; battleTimer = 0; }
-  } else if (battleState === 'item-hold') {
-  } else if (battleState === 'item-fade-out') {
-    if (battleTimer >= _textMs) { battleState = ps.leveledUp ? 'levelup-text-in' : encounterJobLevelUp ? 'joblv-text-in' : 'victory-text-out'; battleTimer = 0; }
-  } else if (battleState === 'levelup-text-in') {
-    if (battleTimer >= _textMs) { battleState = 'levelup-hold'; battleTimer = 0; }
-  } else if (battleState === 'levelup-hold') {
-  } else if (battleState === 'levelup-fade-out') {
-    if (battleTimer >= _textMs) { battleState = encounterJobLevelUp ? 'joblv-text-in' : 'victory-text-out'; battleTimer = 0; }
-  } else if (battleState === 'joblv-text-in') {
-    if (battleTimer >= _textMs) { battleState = 'joblv-hold'; battleTimer = 0; }
-  } else if (battleState === 'joblv-hold') {
-  } else if (battleState === 'joblv-fade-out') {
-    if (battleTimer >= _textMs) { battleState = 'victory-text-out'; battleTimer = 0; }
-  } else if (battleState === 'victory-text-out') {
-    if (battleTimer >= _textMs) { setBattleMsgCurrent(null); battleState = 'victory-menu-fade'; battleTimer = 0; }
-  } else if (battleState === 'victory-menu-fade') {
-    if (battleTimer >= _textMs) { battleState = 'victory-box-close'; battleTimer = 0; }
-  } else if (battleState === 'victory-box-close') {
-    if (battleTimer >= VICTORY_BOX_ROWS * VICTORY_ROW_FRAME_MS) {
-      battleState = isRandomEncounter ? 'encounter-box-close' : 'enemy-box-close'; battleTimer = 0;
+  if (battleSt.battleState === 'victory-name-out') {
+    if (battleSt.battleTimer >= _textMs) { battleSt.battleState = 'victory-celebrate'; battleSt.battleTimer = 0; playTrack(TRACKS.VICTORY); }
+  } else if (battleSt.battleState === 'victory-celebrate') {
+    if (battleSt.battleTimer >= 400) { battleSt.battleState = 'exp-text-in'; battleSt.battleTimer = 0; }
+  } else if (battleSt.battleState === 'exp-text-in') {
+    if (battleSt.battleTimer >= _textMs) { battleSt.battleState = 'exp-hold'; battleSt.battleTimer = 0; }
+  } else if (battleSt.battleState === 'exp-hold') {
+  } else if (battleSt.battleState === 'exp-fade-out') {
+    if (battleSt.battleTimer >= _textMs) { battleSt.battleState = 'gil-text-in'; battleSt.battleTimer = 0; }
+  } else if (battleSt.battleState === 'gil-text-in') {
+    if (battleSt.battleTimer >= _textMs) { battleSt.battleState = 'gil-hold'; battleSt.battleTimer = 0; }
+  } else if (battleSt.battleState === 'gil-hold') {
+  } else if (battleSt.battleState === 'gil-fade-out') {
+    if (battleSt.battleTimer >= _textMs) { battleSt.battleState = 'cp-text-in'; battleSt.battleTimer = 0; }
+  } else if (battleSt.battleState === 'cp-text-in') {
+    if (battleSt.battleTimer >= _textMs) { battleSt.battleState = 'cp-hold'; battleSt.battleTimer = 0; }
+  } else if (battleSt.battleState === 'cp-hold') {
+  } else if (battleSt.battleState === 'cp-fade-out') {
+    if (battleSt.battleTimer >= _textMs) { battleSt.battleState = battleSt.encounterDropItem !== null ? 'item-text-in' : ps.leveledUp ? 'levelup-text-in' : battleSt.encounterJobLevelUp ? 'joblv-text-in' : 'victory-text-out'; battleSt.battleTimer = 0; }
+  } else if (battleSt.battleState === 'item-text-in') {
+    if (battleSt.battleTimer >= _textMs) { battleSt.battleState = 'item-hold'; battleSt.battleTimer = 0; }
+  } else if (battleSt.battleState === 'item-hold') {
+  } else if (battleSt.battleState === 'item-fade-out') {
+    if (battleSt.battleTimer >= _textMs) { battleSt.battleState = ps.leveledUp ? 'levelup-text-in' : battleSt.encounterJobLevelUp ? 'joblv-text-in' : 'victory-text-out'; battleSt.battleTimer = 0; }
+  } else if (battleSt.battleState === 'levelup-text-in') {
+    if (battleSt.battleTimer >= _textMs) { battleSt.battleState = 'levelup-hold'; battleSt.battleTimer = 0; }
+  } else if (battleSt.battleState === 'levelup-hold') {
+  } else if (battleSt.battleState === 'levelup-fade-out') {
+    if (battleSt.battleTimer >= _textMs) { battleSt.battleState = battleSt.encounterJobLevelUp ? 'joblv-text-in' : 'victory-text-out'; battleSt.battleTimer = 0; }
+  } else if (battleSt.battleState === 'joblv-text-in') {
+    if (battleSt.battleTimer >= _textMs) { battleSt.battleState = 'joblv-hold'; battleSt.battleTimer = 0; }
+  } else if (battleSt.battleState === 'joblv-hold') {
+  } else if (battleSt.battleState === 'joblv-fade-out') {
+    if (battleSt.battleTimer >= _textMs) { battleSt.battleState = 'victory-text-out'; battleSt.battleTimer = 0; }
+  } else if (battleSt.battleState === 'victory-text-out') {
+    if (battleSt.battleTimer >= _textMs) { setBattleMsgCurrent(null); battleSt.battleState = 'victory-menu-fade'; battleSt.battleTimer = 0; }
+  } else if (battleSt.battleState === 'victory-menu-fade') {
+    if (battleSt.battleTimer >= _textMs) { battleSt.battleState = 'victory-box-close'; battleSt.battleTimer = 0; }
+  } else if (battleSt.battleState === 'victory-box-close') {
+    if (battleSt.battleTimer >= VICTORY_BOX_ROWS * VICTORY_ROW_FRAME_MS) {
+      battleSt.battleState = battleSt.isRandomEncounter ? 'encounter-box-close' : 'enemy-box-close'; battleSt.battleTimer = 0;
     }
   } else { return false; }
   return true;
 }
 
 function _updateBoxClose() {
-  if (battleState === 'encounter-box-close') {
-    if (battleTimer >= BOSS_BOX_EXPAND_MS) {
-      battleState = 'none'; battleTimer = 0; runSlideBack = false;
-      sprite.setDirection(DIR_DOWN); isRandomEncounter = false; encounterMonsters = null;
-      dyingMonsterIndices = new Map(); battleAllies = []; allyJoinRound = 0;
+  if (battleSt.battleState === 'encounter-box-close') {
+    if (battleSt.battleTimer >= BOSS_BOX_EXPAND_MS) {
+      battleSt.battleState = 'none'; battleSt.battleTimer = 0; battleSt.runSlideBack = false;
+      sprite.setDirection(DIR_DOWN); battleSt.isRandomEncounter = false; battleSt.encounterMonsters = null;
+      battleSt.dyingMonsterIndices = new Map(); battleSt.battleAllies = []; battleSt.allyJoinRound = 0;
       stopMusic(); resumeMusic();
     }
     return true;
   }
-  if (battleState === 'enemy-box-close') {
-    if (battleTimer >= BOSS_BOX_EXPAND_MS) {
+  if (battleSt.battleState === 'enemy-box-close') {
+    if (battleSt.battleTimer >= BOSS_BOX_EXPAND_MS) {
       const wasPVP = pvpSt.isPVPBattle;
       resetPVPState();
-      battleState = 'none'; battleTimer = 0; sprite.setDirection(DIR_DOWN);
-      battleAllies = []; allyJoinRound = 0;
+      battleSt.battleState = 'none'; battleSt.battleTimer = 0; sprite.setDirection(DIR_DOWN);
+      battleSt.battleAllies = []; battleSt.allyJoinRound = 0;
       if (!wasPVP) playTrack(TRACKS.CRYSTAL_ROOM);
       else resumeMusic();
     }
@@ -2146,26 +2088,26 @@ function _updateBoxClose() {
 }
 
 function _updateDefeatStates() {
-  if (battleState === 'team-wipe') {
-    if (!_teamWipeMsgShown) { _teamWipeMsgShown = true; }
-    if (battleTimer >= 1200 || _zPressed()) {
-      battleState = 'defeat-close'; battleTimer = 0;
+  if (battleSt.battleState === 'team-wipe') {
+    if (!battleSt._teamWipeMsgShown) { battleSt._teamWipeMsgShown = true; }
+    if (battleSt.battleTimer >= 1200 || _zPressed()) {
+      battleSt.battleState = 'defeat-close'; battleSt.battleTimer = 0;
     }
     return true;
   }
-  if (battleState === 'defeat-monster-fade') {
+  if (battleSt.battleState === 'defeat-monster-fade') {
     stopMusic();
-    if (battleTimer >= 500) { battleState = 'defeat-text'; battleTimer = 0; }
+    if (battleSt.battleTimer >= 500) { battleSt.battleState = 'defeat-text'; battleSt.battleTimer = 0; }
     return true;
   }
-  if (battleState === 'defeat-text') return true; // Z to dismiss handled in handleInput
-  if (battleState === 'defeat-close') {
-    if (battleTimer >= BOSS_BOX_EXPAND_MS) {
+  if (battleSt.battleState === 'defeat-text') return true; // Z to dismiss handled in handleInput
+  if (battleSt.battleState === 'defeat-close') {
+    if (battleSt.battleTimer >= BOSS_BOX_EXPAND_MS) {
       resetPVPState();
-      battleState = 'none'; battleTimer = 0;
-      isRandomEncounter = false;
-      encounterMonsters = null; turnQueue = []; battleAllies = []; allyJoinRound = 0;
-      hudSt.playerDeathTimer = null; _teamWipeMsgShown = false;
+      battleSt.battleState = 'none'; battleSt.battleTimer = 0;
+      battleSt.isRandomEncounter = false;
+      battleSt.encounterMonsters = null; battleSt.turnQueue = []; battleSt.battleAllies = []; battleSt.allyJoinRound = 0;
+      hudSt.playerDeathTimer = null; battleSt._teamWipeMsgShown = false;
       ps.hp = ps.stats ? ps.stats.maxHP : 28;
       ps.mp = ps.stats ? ps.stats.maxMP : 0;
       const worldEntry = mapSt.mapStack.slice().reverse().find(e => e.mapId === 'world');
@@ -2189,16 +2131,16 @@ function _updateBattleEndSequence(dt) {
 
 const POISON_TICK_MS = 500;
 function _updatePoisonTick() {
-  if (battleState !== 'poison-tick') return false;
-  if (battleTimer >= POISON_TICK_MS) { processNextTurn(); }
+  if (battleSt.battleState !== 'poison-tick') return false;
+  if (battleSt.battleTimer >= POISON_TICK_MS) { processNextTurn(); }
   return true;
 }
 
 function updateBattle(dt) {
-  if (battleState === 'none') return;
-  battleTimer += Math.min(dt, 33);
+  if (battleSt.battleState === 'none') return;
+  battleSt.battleTimer += Math.min(dt, 33);
   _updateBattleMsg(dt);
-  if (battleState === 'msg-wait') { if (!getBattleMsgCurrent()) processNextTurn(); return; }
+  if (battleSt.battleState === 'msg-wait') { if (!getBattleMsgCurrent()) processNextTurn(); return; }
   if (pvpSt.isPVPBattle) { updatePVPBattle(dt, _pvpShared()); return; }
   _updateBattleTimers(dt);
   _updatePoisonTick()         ||
@@ -2215,9 +2157,9 @@ function updateBattle(dt) {
 // Battle draw functions extracted to battle-drawing.js
 
 function _updateHudHpLvStep(dt) {
-  const target = (battleState === 'none' || battleState === 'flash-strobe' ||
-    battleState === 'encounter-box-expand' || battleState === 'monster-slide-in' ||
-    battleState === 'enemy-box-expand' || battleState === 'boss-appear') ? 0 : 4;
+  const target = (battleSt.battleState === 'none' || battleSt.battleState === 'flash-strobe' ||
+    battleSt.battleState === 'encounter-box-expand' || battleSt.battleState === 'monster-slide-in' ||
+    battleSt.battleState === 'enemy-box-expand' || battleSt.battleState === 'boss-appear') ? 0 : 4;
   if (hudSt.hudHpLvStep === target) return;
   hudSt.hudHpLvTimer += dt;
   while (hudSt.hudHpLvTimer >= HUD_HPLV_STEP_MS) {
@@ -2273,8 +2215,8 @@ function _gameLoopUpdate(dt) {
   if (hudSt.hudInfoFadeTimer < HUD_INFO_FADE_STEPS * HUD_INFO_FADE_STEP_MS) hudSt.hudInfoFadeTimer += dt;
   _updateHudHpLvStep(dt);
   handleInput();
-  updateRoster(dt, { battleState, transSt, wipeDuration: 44 * (1000 / 60), hudInfoFadeTimer: hudSt.hudInfoFadeTimer, hudInfoFadeSteps: HUD_INFO_FADE_STEPS, hudInfoFadeStepMs: HUD_INFO_FADE_STEP_MS });
-  updateChat(dt, battleState);
+  updateRoster(dt, { battleState: battleSt.battleState, transSt, wipeDuration: 44 * (1000 / 60), hudInfoFadeTimer: hudSt.hudInfoFadeTimer, hudInfoFadeSteps: HUD_INFO_FADE_STEPS, hudInfoFadeStepMs: HUD_INFO_FADE_STEP_MS });
+  updateChat(dt, battleSt.battleState);
   updateChatTabs(dt);
   updatePauseMenu(dt, playerInventory);
   updateMsgBox(dt);
@@ -2331,9 +2273,9 @@ function _gameLoopDraw() {
       drawSparkle: drawRosterSparkle,
       transSt, wipeDuration: 44 * (1000 / 60),
       hudInfoFadeTimer: hudSt.hudInfoFadeTimer, hudInfoFadeSteps: HUD_INFO_FADE_STEPS, hudInfoFadeStepMs: HUD_INFO_FADE_STEP_MS,
-      battleState, msgState,
+      battleState: battleSt.battleState, msgState,
     };
-    if (battleAllies.length > 0 && battleState !== 'none') drawBattleAllies(_bds);
+    if (battleSt.battleAllies.length > 0 && battleSt.battleState !== 'none') drawBattleAllies(_bds);
     else drawRoster(_rds);
     drawChat(ctx, drawHudBox, rosterBattleFade);
     drawPauseMenu(ctx, _pauseShared());
@@ -2372,7 +2314,7 @@ function gameLoop(timestamp) {
     _gameLoopUpdate(dt);
     _gameLoopDraw();
   } catch (e) {
-    console.error('[GAME LOOP ERROR] transSt.state=' + transSt.state + ' battleState=' + battleState, e);
+    console.error('[GAME LOOP ERROR] transSt.state=' + transSt.state + ' battleSt.battleState=' + battleSt.battleState, e);
     requestAnimationFrame(gameLoop);
     return;
   }

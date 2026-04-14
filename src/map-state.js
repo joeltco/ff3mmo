@@ -2,7 +2,6 @@
 // triggered by map tile interactions (shake, star, pond flash).
 //
 // Single `mapSt` object so consumers read/write live values through object properties.
-// NOTE: `enemyDefeated` lives here temporarily; it will move to battle-state.js in Step 5.
 
 export const mapSt = {
   // ── Position ──────────────────────────────────────────────────────
@@ -38,7 +37,6 @@ export const mapSt = {
 
   // ── Boss presence on map ──────────────────────────────────────────
   bossSprite: null,       // {frames, px, py} when boss is visible on floor
-  enemyDefeated: false,   // TEMPORARY — will move to battle-state.js
 
   // ── Encounter ─────────────────────────────────────────────────────
   encounterSteps: 0,

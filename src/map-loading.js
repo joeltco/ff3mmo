@@ -12,6 +12,7 @@ import { BATTLE_BG_MAP_LOOKUP, renderBattleBg } from './battle-bg.js';
 import { AREA_NAMES, DUNGEON_NAME } from './data/strings.js';
 import { hudSt } from './hud-state.js';
 import { mapSt } from './map-state.js';
+import { battleSt } from './battle-state.js';
 import { applyPassage } from './map-triggers.js';
 
 const TILE_SIZE = 16;
@@ -99,7 +100,7 @@ function _loadDungeonFloor(mapId, returnX, returnY) {
   mapSt.mapRenderer = new MapRenderer(result, playerX, playerY);
   resetIndoorWaterCache();
   clearFlameSprites();
-  mapSt.bossSprite = (floorIndex === 4 && hudSt.adamantoiseFrames && !mapSt.enemyDefeated)
+  mapSt.bossSprite = (floorIndex === 4 && hudSt.adamantoiseFrames && !battleSt.enemyDefeated)
     ? { frames: hudSt.adamantoiseFrames, px: 6 * TILE_SIZE, py: 8 * TILE_SIZE } : null;
   mapSt.disabledTrigger = { x: playerX, y: playerY };
   mapSt.moving = false;
@@ -219,7 +220,7 @@ export function loadWorldMapAtPosition(tileX, tileY) {
   mapSt.onWorldMap = true;
   mapSt.dungeonFloor = -1;
   mapSt.encounterSteps = 0;
-  mapSt.enemyDefeated = false;
+  battleSt.enemyDefeated = false;
   mapSt.mapRenderer = null;
   mapSt.mapData = null;
   setupTopBox(0, true);
