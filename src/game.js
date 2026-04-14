@@ -82,12 +82,12 @@ import { createStatusState, clearAll as clearAllStatus, tryInflictStatus, wakeOn
 import { tickRandomEncounter as _tickRandomEncounter, startRandomEncounter as _startRandomEncounter } from './battle-encounter.js';
 import { resetBattleItemVars, getTargets, getHitIdx, startMagicItem, updateMagicItemThrowHit } from './battle-items.js';
 import { initBattleSprite as _initBattleSprite, initBattleSpriteForJob as _initBattleSpriteForJob,
-         initFakePlayerPortraits as _initFakePlayerPortraits,
          initCursorTile as _initCursorTile, initScrollArrows as _initScrollArrows,
          initAdamantoise as _initAdamantoise,
          initGoblinSprite as _initGoblinSprite, initInvincibleSprite as _initInvincibleSprite,
          initMoogleSprite as _initMoogleSprite, initLoadingScreenFadeFrames as _initLoadingScreenFadeFrames,
          initStatusSprites as _initStatusSprites } from './sprite-init.js';
+import { initFakePlayerSprites } from './fake-player-sprites.js';
 import { DMG_SHOW_MS, resetAllDmgNums, tickDmgNums, tickHealNums, clearHealNums, initMissSprite,
          getEnemyDmgNum, setEnemyDmgNum, getPlayerDamageNum, setPlayerDamageNum,
          getPlayerHealNum, setPlayerHealNum, getEnemyHealNum, setEnemyHealNum,
@@ -333,29 +333,7 @@ let scrollArrowUpFade = null;    // [step1..step4]
 // PAUSE_ITEMS → data/strings.js
 
 // getPlayerLocation, getRosterPlayers, getRosterVisible, roster state/update/draw ��� roster.js
-// fakePlayer portrait vars stay here (shared by battle-drawing, battle-ally, pvp)
-// All fakePlayer* vars are objects keyed by jobIdx: { 0: [...palIdx entries...], 1: [...] }
-let fakePlayerPortraits = {};
-let fakePlayerFullBodyCanvases = {};
-let fakePlayerHitFullBodyCanvases = {};
-let fakePlayerVictoryPortraits = {};
-let fakePlayerHitPortraits = {};
-let fakePlayerDefendPortraits = {};
-let fakePlayerKneelPortraits = {};
-let fakePlayerAttackPortraits = {};
-let fakePlayerAttackLPortraits = {};
-let fakePlayerKnifeBackPortraits = {};
-let fakePlayerKnifeRPortraits = {};
-let fakePlayerKnifeLPortraits = {};
-let fakePlayerKnifeRFullBodyCanvases = {};
-let fakePlayerKnifeLFullBodyCanvases = {};
-let fakePlayerKnifeBackFullBodyCanvases = {};
-let fakePlayerKnifeRFwdFullBodyCanvases = {};
-let fakePlayerKnifeLFwdFullBodyCanvases = {};
-let fakePlayerKneelFullBodyCanvases = {};
-let fakePlayerVictoryFullBodyCanvases = {};
-let fakePlayerDeathFrames = {};
-let fakePlayerDeathPoseCanvases = {};
+// fakePlayer portrait/body canvases live in fake-player-sprites.js (imported above).
 
 // Battle allies — roster players that join combat
 let battleAllies = [];         // [{name, palIdx, level, hp, maxHP, atk, def, agi, fadeStep}]
@@ -875,17 +853,6 @@ function _pvpShared() {
         ...getBlades(),
       };
     },
-    get fullBodyCanvases()          { return fakePlayerFullBodyCanvases; },
-    get hitFullBodyCanvases()       { return fakePlayerHitFullBodyCanvases; },
-    get knifeBackFullBodyCanvases()    { return fakePlayerKnifeBackFullBodyCanvases; },
-    get knifeRFullBodyCanvases()       { return fakePlayerKnifeRFullBodyCanvases; },
-    get knifeLFullBodyCanvases()       { return fakePlayerKnifeLFullBodyCanvases; },
-    get knifeRFwdFullBodyCanvases()    { return fakePlayerKnifeRFwdFullBodyCanvases; },
-    get knifeLFwdFullBodyCanvases()    { return fakePlayerKnifeLFwdFullBodyCanvases; },
-    get kneelFullBodyCanvases()        { return fakePlayerKneelFullBodyCanvases; },
-    get deathPoseCanvases()           { return fakePlayerDeathPoseCanvases; },
-    get victoryFullBodyCanvases()      { return fakePlayerVictoryFullBodyCanvases; },
-    get fakePlayerDeathFrames()        { return fakePlayerDeathFrames; },
     get defendSparkleFrames()          { return defendSparkleFrames; },
     get cureSparkleFrames()            { return cureSparkleFrames; },
     get swPhaseCanvases()              { return swPhaseCanvases; },
@@ -1032,7 +999,6 @@ function _battleDrawShared() {
     get enemyHealNum() { return getEnemyHealNum(); },
     get battleShakeTimer() { return battleShakeTimer; },
     get playerDeathTimer() { return playerDeathTimer; },
-    get deathPoseCanvases() { return fakePlayerDeathPoseCanvases; },
     get critFlashTimer() { return critFlashTimer; },
     set critFlashTimer(v) { critFlashTimer = v; },
     get currentHitIdx() { return currentHitIdx; },
@@ -1075,16 +1041,6 @@ function _battleDrawShared() {
     get battleSwordBladeCanvas() { return getSwordBladeCanvas(); },
     get battleSwordBladeSwungCanvas() { return getSwordBladeSwungCanvas(); },
     get battleFistCanvas() { return getFistCanvas(); },
-    get fakePlayerPortraits() { return fakePlayerPortraits; },
-    get fakePlayerVictoryPortraits() { return fakePlayerVictoryPortraits; },
-    get fakePlayerHitPortraits() { return fakePlayerHitPortraits; },
-    get fakePlayerDefendPortraits() { return fakePlayerDefendPortraits; },
-    get fakePlayerKneelPortraits() { return fakePlayerKneelPortraits; },
-    get fakePlayerAttackPortraits() { return fakePlayerAttackPortraits; },
-    get fakePlayerAttackLPortraits() { return fakePlayerAttackLPortraits; },
-    get fakePlayerKnifeBackPortraits() { return fakePlayerKnifeBackPortraits; },
-    get fakePlayerKnifeRPortraits() { return fakePlayerKnifeRPortraits; },
-    get fakePlayerKnifeLPortraits() { return fakePlayerKnifeLPortraits; },
     get goblinBattleCanvas() { return goblinBattleCanvas; },
     get goblinWhiteCanvas() { return goblinWhiteCanvas; },
     get goblinDeathFrames() { return goblinDeathFrames; },
@@ -1165,7 +1121,6 @@ function _titleShared() {
     battleSpriteCanvas: battlePoses.idle,
     battleSpriteFadeCanvases: battlePoses.idleFade,
     silhouetteCanvas: battlePoses.silhouette,
-    fakePlayerPortraits,
     drawBorderedBox,
     drawHudBox,
     drawCursorFaded,
@@ -1202,30 +1157,8 @@ function _initSpriteAssets(romRaw) {
   statusSpriteMap = _initStatusSprites();
   poisonBubbleFrames = statusSpriteMap.get(0x02) || [];
 
-  // Fake player portraits & full bodies (sprite-init.js) — keyed by jobIdx
-  const fp = _initFakePlayerPortraits(romRaw, [0, 1]);
-  const _fpMap = (key) => { const m = {}; for (const j of [0, 1]) m[j] = fp[j][key]; return m; };
-  fakePlayerPortraits = _fpMap('fakePlayerPortraits');
-  fakePlayerVictoryPortraits = _fpMap('fakePlayerVictoryPortraits');
-  fakePlayerHitPortraits = _fpMap('fakePlayerHitPortraits');
-  fakePlayerDefendPortraits = _fpMap('fakePlayerDefendPortraits');
-  fakePlayerAttackPortraits = _fpMap('fakePlayerAttackPortraits');
-  fakePlayerAttackLPortraits = _fpMap('fakePlayerAttackLPortraits');
-  fakePlayerKnifeBackPortraits = _fpMap('fakePlayerKnifeBackPortraits');
-  fakePlayerKnifeRPortraits = _fpMap('fakePlayerKnifeRPortraits');
-  fakePlayerKnifeLPortraits = _fpMap('fakePlayerKnifeLPortraits');
-  fakePlayerKneelPortraits = _fpMap('fakePlayerKneelPortraits');
-  fakePlayerFullBodyCanvases = _fpMap('fakePlayerFullBodyCanvases');
-  fakePlayerKnifeRFullBodyCanvases = _fpMap('fakePlayerKnifeRFullBodyCanvases');
-  fakePlayerKnifeLFullBodyCanvases = _fpMap('fakePlayerKnifeLFullBodyCanvases');
-  fakePlayerKnifeBackFullBodyCanvases = _fpMap('fakePlayerKnifeBackFullBodyCanvases');
-  fakePlayerKnifeLFwdFullBodyCanvases = _fpMap('fakePlayerKnifeLFwdFullBodyCanvases');
-  fakePlayerKnifeRFwdFullBodyCanvases = _fpMap('fakePlayerKnifeRFwdFullBodyCanvases');
-  fakePlayerKneelFullBodyCanvases = _fpMap('fakePlayerKneelFullBodyCanvases');
-  fakePlayerVictoryFullBodyCanvases = _fpMap('fakePlayerVictoryFullBodyCanvases');
-  fakePlayerHitFullBodyCanvases = _fpMap('fakePlayerHitFullBodyCanvases');
-  fakePlayerDeathPoseCanvases = _fpMap('fakePlayerDeathPoseCanvases');
-  fakePlayerDeathFrames = _fpMap('fakePlayerDeathFrames');
+  // Fake player portraits & full bodies — keyed by jobIdx, owned by fake-player-sprites.js
+  initFakePlayerSprites(romRaw, [0, 1]);
 
   initRoster();
   loadBossSprite(0xCC); // Land Turtle — loaded eagerly for now (only boss in game)
@@ -2629,7 +2562,7 @@ function _gameLoopDraw() {
       ctx, drawHudBox: drawHudBox, drawBorderedBox: drawBorderedBox,
       clipToViewport: clipToViewport, cursorTileCanvas,
       scrollArrowUp, scrollArrowDown, scrollArrowUpFade, scrollArrowDownFade,
-      fakePlayerPortraits, drawSparkle: drawRosterSparkle,
+      drawSparkle: drawRosterSparkle,
       transSt, wipeDuration: 44 * (1000 / 60),
       hudInfoFadeTimer, hudInfoFadeSteps: HUD_INFO_FADE_STEPS, hudInfoFadeStepMs: HUD_INFO_FADE_STEP_MS,
       battleState, msgState,

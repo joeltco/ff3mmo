@@ -14,6 +14,10 @@ import { _nameToBytes, _buildItemRowBytes, drawLvHpRow, makeExpText, makeGilText
 import { pvpEnemyCellCenter } from './pvp-math.js';
 import { pvpSt, drawBossSpriteBoxPVP } from './pvp.js';
 import { inputSt } from './input-handler.js';
+import { fakePlayerPortraits, fakePlayerVictoryPortraits, fakePlayerHitPortraits,
+         fakePlayerKneelPortraits, fakePlayerAttackPortraits, fakePlayerAttackLPortraits,
+         fakePlayerKnifeRPortraits, fakePlayerKnifeLPortraits,
+         fakePlayerDeathPoseCanvases } from './fake-player-sprites.js';
 import { BATTLE_GAME_OVER, BATTLE_DEFEATED, BATTLE_LEVEL_UP, BATTLE_BOSS_NAME, BATTLE_GOBLIN_NAME,
          BATTLE_MENU_ITEMS } from './data/strings.js';
 
@@ -335,7 +339,7 @@ function _drawBattlePortrait() {
     // Phase 3: death pose fades in, centered in the name/HP info box
     if (dt >= DEATH_SLIDE_MS + DEATH_TXTFADE_MS) {
       const fadeT = Math.min((dt - DEATH_SLIDE_MS - DEATH_TXTFADE_MS) / DEATH_POSEFADE_MS, 1);
-      const deathCanvas = _s.deathPoseCanvases && (_s.deathPoseCanvases[ps.jobIdx] || _s.deathPoseCanvases[0])[0];
+      const deathCanvas = (fakePlayerDeathPoseCanvases[ps.jobIdx] || fakePlayerDeathPoseCanvases[0])?.[0];
       if (deathCanvas) {
         _s.ctx.globalAlpha = fadeT;
         const dx = HUD_RIGHT_X + HUD_RIGHT_W - 24 - 8;
@@ -1094,7 +1098,7 @@ function _drawAllyRow(i, ally, panelTop, weaponDraws) {
     if (dt < DEATH_SLIDE_MS) {
       const slideT = dt / DEATH_SLIDE_MS;
       const slideY = Math.floor(slideT * 16);
-      const kneelFrames = (_s.fakePlayerKneelPortraits[ally.jobIdx || 0] || _s.fakePlayerKneelPortraits[0])[ally.palIdx];
+      const kneelFrames = (fakePlayerKneelPortraits[ally.jobIdx || 0] || fakePlayerKneelPortraits[0])[ally.palIdx];
       const kneel = kneelFrames && kneelFrames[ally.fadeStep];
       if (kneel) {
         _s.ctx.save();
@@ -1114,7 +1118,7 @@ function _drawAllyRow(i, ally, panelTop, weaponDraws) {
     } else {
       // Phase 3: death pose fades in (24×16, centered in the name/HP info box)
       const fadeT = Math.min((dt - DEATH_SLIDE_MS - DEATH_TXTFADE_MS) / DEATH_POSEFADE_MS, 1);
-      const deathCanvas = _s.deathPoseCanvases && (_s.deathPoseCanvases[ally.jobIdx || 0] || _s.deathPoseCanvases[0])[ally.palIdx];
+      const deathCanvas = (fakePlayerDeathPoseCanvases[ally.jobIdx || 0] || fakePlayerDeathPoseCanvases[0])?.[ally.palIdx];
       if (deathCanvas) {
         _s.ctx.globalAlpha = fadeT;
         const dx = HUD_RIGHT_X + HUD_RIGHT_W - 24 - 8;
@@ -1137,12 +1141,12 @@ function _drawAllyPortrait(i, ally, isVicPose, isAllyAttack, isAllyHit, isNearFa
   const _j = ally.jobIdx || 0;
   const _fp = (map) => (map[_j] || map[0])[ally.palIdx];
   let portraits;
-  if (isVicPose && (Math.floor(Date.now() / 250) & 1) && _fp(_s.fakePlayerVictoryPortraits)) portraits = _fp(_s.fakePlayerVictoryPortraits);
-  else if (isAllyAttack) portraits = _fp(hitLeft ? _s.fakePlayerAttackLPortraits : _s.fakePlayerAttackPortraits);
-  else if (isThisAllySlash) portraits = _fp(_s.allyHitIsLeft ? _s.fakePlayerKnifeLPortraits : _s.fakePlayerKnifeRPortraits);
-  else if (isAllyHit && _fp(_s.fakePlayerHitPortraits)) portraits = _fp(_s.fakePlayerHitPortraits);
-  else if (isNearFatal && _fp(_s.fakePlayerKneelPortraits)) portraits = _fp(_s.fakePlayerKneelPortraits);
-  else portraits = _fp(_s.fakePlayerPortraits);
+  if (isVicPose && (Math.floor(Date.now() / 250) & 1) && _fp(fakePlayerVictoryPortraits)) portraits = _fp(fakePlayerVictoryPortraits);
+  else if (isAllyAttack) portraits = _fp(hitLeft ? fakePlayerAttackLPortraits : fakePlayerAttackPortraits);
+  else if (isThisAllySlash) portraits = _fp(_s.allyHitIsLeft ? fakePlayerKnifeLPortraits : fakePlayerKnifeRPortraits);
+  else if (isAllyHit && _fp(fakePlayerHitPortraits)) portraits = _fp(fakePlayerHitPortraits);
+  else if (isNearFatal && _fp(fakePlayerKneelPortraits)) portraits = _fp(fakePlayerKneelPortraits);
+  else portraits = _fp(fakePlayerPortraits);
   if (!portraits) return;
   if (isAllyAttack) {
     // R-hand back-swing blade goes BEHIND portrait (NES OAM: weapon spr06-09 loses to body spr00-05)

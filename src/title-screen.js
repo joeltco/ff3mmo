@@ -7,6 +7,7 @@ import { selectCursor, saveSlots, nameBuffer, NAME_MAX_LEN,
          setSelectCursor, setNameBuffer, saveSlotsToDB } from './save-state.js';
 import { playSFX, SFX } from './music.js';
 import { serverDeleteSlot } from './save.js';
+import { fakePlayerPortraits } from './fake-player-sprites.js';
 
 // ── NES layout constants — must match game.js ─────────────────────────────
 const CANVAS_W   = 256;
@@ -498,7 +499,7 @@ function _drawSelectSlotRow(ctx, i, selX, rowY, fadeStep, showContent, shared) {
   // Portrait — per-job portrait for saved slots, onion knight (job 0) for empty/new
   {
     const jobIdx = saveSlots[i] ? (saveSlots[i].jobIdx || 0) : 0;
-    const jobPortraits = shared.fakePlayerPortraits && (shared.fakePlayerPortraits[jobIdx] || shared.fakePlayerPortraits[0]);
+    const jobPortraits = fakePlayerPortraits[jobIdx] || fakePlayerPortraits[0];
     const palPortraits = jobPortraits && jobPortraits[0]; // palette 0
     if (palPortraits && fadeStep < SELECT_TEXT_STEPS) {
       ctx.drawImage(palPortraits[fadeStep], selX + 8, rowY + 8);
