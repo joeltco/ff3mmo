@@ -6,6 +6,9 @@ import { GOBLIN_HIT_RATE } from './battle-math.js';
 import { SFX, playSFX } from './music.js';
 import { TRACKS } from './music.js';
 import { createStatusState } from './status-effects.js';
+import { mapSt } from './map-state.js';
+
+const TILE_SIZE = 16;
 
 let _s = null;
 
@@ -13,19 +16,19 @@ let _s = null;
 export function tickRandomEncounter(shared) {
   _s = shared;
   if (_s.battleState !== 'none') return false;
-  const inDungeon = _s.dungeonFloor >= 0 && _s.dungeonFloor < 4;
-  const onGrass = _s.onWorldMap && _s.worldMapRenderer && (() => {
-    const tileX = Math.floor(_s.worldX / _s.TILE_SIZE);
-    const tileY = Math.floor(_s.worldY / _s.TILE_SIZE);
-    return !_s.worldMapRenderer.getTriggerAt(tileX, tileY);
+  const inDungeon = mapSt.dungeonFloor >= 0 && mapSt.dungeonFloor < 4;
+  const onGrass = mapSt.onWorldMap && mapSt.worldMapRenderer && (() => {
+    const tileX = Math.floor(mapSt.worldX / TILE_SIZE);
+    const tileY = Math.floor(mapSt.worldY / TILE_SIZE);
+    return !mapSt.worldMapRenderer.getTriggerAt(tileX, tileY);
   })();
   if (!inDungeon && !onGrass) return false;
-  _s.encounterSteps++;
+  mapSt.encounterSteps++;
   const threshold = onGrass
     ? 20 + Math.floor(Math.random() * 20)
     : 15 + Math.floor(Math.random() * 15);
-  if (_s.encounterSteps >= threshold) {
-    _s.encounterSteps = 0;
+  if (mapSt.encounterSteps >= threshold) {
+    mapSt.encounterSteps = 0;
     startRandomEncounter(_s);
     return true;
   }
@@ -38,9 +41,9 @@ export function startRandomEncounter(shared) {
   _s.isRandomEncounter = true;
   _s.inputSt.battleActionCount = 0;
 
-  const zoneKey = _s.onWorldMap
+  const zoneKey = mapSt.onWorldMap
     ? 'grasslands'
-    : (['altar_cave_f1','altar_cave_f2','altar_cave_f3','altar_cave_f4'][_s.dungeonFloor] || 'altar_cave_f1');
+    : (['altar_cave_f1','altar_cave_f2','altar_cave_f3','altar_cave_f4'][mapSt.dungeonFloor] || 'altar_cave_f1');
   const zone = ENCOUNTERS.get(zoneKey);
   const formations = zone ? zone.formations : [[{ id: 0x00, min: 1, max: 3 }]];
   const formation = formations[Math.floor(Math.random() * formations.length)];

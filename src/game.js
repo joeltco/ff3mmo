@@ -45,7 +45,8 @@ import { _calcBoxExpandSize, _encounterGridPos } from './battle-layout.js';
 import { _updateWorldWater, _updateIndoorWater, resetWorldWaterCache, _buildHorizWaterPair } from './water-animation.js';
 import { bsc, getSlashFramesForWeapon, initBattleSpriteCache, loadJobBattleSprites } from './battle-sprite-cache.js';
 import { hudSt, HUD_INFO_FADE_STEPS, HUD_INFO_FADE_STEP_MS, HUD_HPLV_STEP_MS } from './hud-state.js';
-import { initFlameRawTiles, initStarTiles, rebuildFlameSprites,
+import { mapSt } from './map-state.js';
+import { initFlameRawTiles, initStarTiles,
          getFlameSprites, getFlameFrames, getStarTiles } from './flame-sprites.js';
 // BATTLE_BG_MAP_LOOKUP, renderBattleBg → map-loading.js
 import { LOAD_FADE_STEP_MS, LOAD_FADE_MAX, drawLoadingOverlay } from './loading-screen.js';
@@ -63,7 +64,7 @@ import { titleSt, isTitleActiveState, titleFadeLevel, titleFadePal, drawTitleOce
 import { pauseSt, updatePauseMenu, drawPauseMenu } from './pause-menu.js';
 import { transSt, topBoxSt, loadingSt, startWipeTransition, updateTransition, updateTopBoxScroll, drawTransitionOverlay } from './transitions.js';
 import { inputSt, handleBattleInput, handleRosterInput, handlePauseInput } from './input-handler.js';
-import { checkTrigger, applyPassage, openPassage, handleChest, handleSecretWall, handleRockPuzzle, handlePondHeal, findWorldExitIndex } from './map-triggers.js';
+import { checkTrigger, applyPassage, openPassage, handleChest, handleSecretWall, handleRockPuzzle, handlePondHeal, findWorldExitIndex, initMapTriggers, triggerWipe } from './map-triggers.js';
 import { pvpSt, startPVPBattle, resetPVPState, updatePVPBattle } from './pvp.js';
 import { drawBattle, drawBattleAllies, drawSWExplosion, drawSWDamageNumbers } from './battle-drawing.js';
 import { playSlashSFX } from './battle-sfx.js';
@@ -135,7 +136,7 @@ let ff12Raw = null;
 // loadingBgFadeFrames → hud-state.js
 
 // Boss sprite — positioned in dungeon boss room
-let bossSprite = null;  // { canvas, px, py } or null
+// bossSprite → map-state.js
 
 // LAND_TURTLE_PAL_*, GOBLIN_*, MOOGLE_*, INVINCIBLE_* constants → sprite-init.js
 // MONSTER_DEATH_FRAMES → sprite-init.js (imported)
@@ -193,12 +194,12 @@ let battleTimer = 0;
 let battleMessage = null;     // Uint8Array for status messages
 let bossFlashTimer = 0;
 let battleShakeTimer = 0;
-let enemyDefeated = false;
+// enemyDefeated → map-state.js (temporary — will move to battle-state.js in Step 5)
 let isDefending = false;
 let runSlideBack = false;
 
 // Random encounter state
-let encounterSteps = 0;
+// encounterSteps → map-state.js
 let isRandomEncounter = false;
 let encounterMonsters = null;  // [{ hp, maxHP, atk, def, exp }] — array of enemies
 let encounterExpGained = 0;
@@ -326,44 +327,19 @@ const JOB_WALK_PALS = {
 
 let canvas, ctx;
 let sprite = null;
-let mapRenderer = null;
-let mapData = null;
 let lastTime = 0;
 const keys = {};
 
-// Room transition state
+// Map state (worldX/Y, currentMapId, mapStack, mapData, mapRenderer, onWorldMap,
+// dungeonFloor/Seed/Destinations, secretWalls, falseWalls, hiddenTraps, rockSwitch,
+// warpTile, pondTiles, disabledTrigger, openDoor, bossSprite, moving) → map-state.js
 let romRaw = null;
-let currentMapId = 114;
-let mapStack = [];  // [{mapId, x, y}] for exit_prev
-let disabledTrigger = null;  // {x, y} — spawn exit_prev, disabled so player can't immediately exit
-let openDoor = null;         // {x, y, tileId} — door shown open, swap back when player walks off
-
-// World map state
-let onWorldMap = false;
-let worldMapData = null;
-let worldMapRenderer = null;
-
-// Dungeon state
-let dungeonSeed = null;
-let dungeonFloor = -1;
-let dungeonDestinations = null;
-let secretWalls = null;
-let falseWalls = null;
-let hiddenTraps = null;
-let rockSwitch = null;
-let warpTile = null;
-let pondTiles = null;
-
-// Player world position in pixels
-let worldX = 0;
-let worldY = 0;
 
 // Where the sprite draws on screen (centered in viewport)
 const SCREEN_CENTER_X = HUD_VIEW_X + (HUD_VIEW_W - 16) / 2;    // 64
 const SCREEN_CENTER_Y = HUD_VIEW_Y + (HUD_VIEW_H - 16) / 2 - 3; // 93
 
-// Movement state
-let moving = false;
+// Movement tween internals (not needed outside game.js)
 let moveStartX = 0;
 let moveStartY = 0;
 let moveTargetX = 0;
@@ -377,8 +353,7 @@ const WATER_TICK = 4 * (1000 / 60);  // ~67ms per tick
 
 // Flame sprite state → flame-sprites.js
 // Star sprite tiles → flame-sprites.js
-let starEffect = null;     // {frame, radius, angle, spin, onComplete} or null
-let pondStrobeTimer = 0;  // >0 = pond strobe active
+// starEffect, pondStrobeTimer → map-state.js
 
 
 // Screen wipe timing constants → transitions.js
@@ -387,16 +362,14 @@ let _tabWasLoading = false; // tracks if we just came from a loading screen
 
 // Screen shake state (earthquake effect for secret passages)
 const SHAKE_DURATION = 34 * (1000 / 60);  // 2 × 17 NES frames ≈ 567ms
-let shakeActive = false;
-let shakeTimer = 0;
-let shakePendingAction = null;
+// shakeActive, shakeTimer, shakePendingAction → map-state.js
 
 // _onChatKeyDown → chat.js (onChatKeyDown)
 // _onNameEntryKeyDown → title-screen.js (onNameEntryKeyDown)
 export function init() {
   setInventoryGetter(() => playerInventory);
-  setPositionGetter(() => ({ worldX, worldY, onWorldMap, currentMapId }));
-  setLocationGetter(() => ({ onWorldMap, currentMapId }));
+  setPositionGetter(() => ({ worldX: mapSt.worldX, worldY: mapSt.worldY, onWorldMap: mapSt.onWorldMap, currentMapId: mapSt.currentMapId }));
+  setLocationGetter(() => ({ onWorldMap: mapSt.onWorldMap, currentMapId: mapSt.currentMapId }));
   canvas = document.getElementById('game-canvas');
   ctx = canvas.getContext('2d');
   canvas.width = CANVAS_W;
@@ -577,64 +550,12 @@ function _hudDrawShared() {
   };
 }
 
-function _mapLoadShared() {
-  return {
-    get romRaw() { return romRaw; },
-    get sprite() { return sprite; },
-    get mapData() { return mapData; },
-    set mapData(v) { mapData = v; },
-    get mapRenderer() { return mapRenderer; },
-    set mapRenderer(v) { mapRenderer = v; },
-    get worldX() { return worldX; },
-    set worldX(v) { worldX = v; },
-    get worldY() { return worldY; },
-    set worldY(v) { worldY = v; },
-    get currentMapId() { return currentMapId; },
-    set currentMapId(v) { currentMapId = v; },
-    get onWorldMap() { return onWorldMap; },
-    set onWorldMap(v) { onWorldMap = v; },
-    get dungeonFloor() { return dungeonFloor; },
-    set dungeonFloor(v) { dungeonFloor = v; },
-    get dungeonSeed() { return dungeonSeed; },
-    get dungeonDestinations() { return dungeonDestinations; },
-    set dungeonDestinations(v) { dungeonDestinations = v; },
-    get secretWalls() { return secretWalls; },
-    set secretWalls(v) { secretWalls = v; },
-    get falseWalls() { return falseWalls; },
-    set falseWalls(v) { falseWalls = v; },
-    get hiddenTraps() { return hiddenTraps; },
-    set hiddenTraps(v) { hiddenTraps = v; },
-    get rockSwitch() { return rockSwitch; },
-    set rockSwitch(v) { rockSwitch = v; },
-    get warpTile() { return warpTile; },
-    set warpTile(v) { warpTile = v; },
-    get pondTiles() { return pondTiles; },
-    set pondTiles(v) { pondTiles = v; },
-    get bossSprite() { return bossSprite; },
-    set bossSprite(v) { bossSprite = v; },
-    get disabledTrigger() { return disabledTrigger; },
-    set disabledTrigger(v) { disabledTrigger = v; },
-    get moving() { return moving; },
-    set moving(v) { moving = v; },
-    get encounterSteps() { return encounterSteps; },
-    set encounterSteps(v) { encounterSteps = v; },
-    get enemyDefeated() { return enemyDefeated; },
-    set enemyDefeated(v) { enemyDefeated = v; },
-    get openDoor() { return openDoor; },
-    set openDoor(v) { openDoor = v; },
-    get worldMapData() { return worldMapData; },
-    get topBoxSt() { return topBoxSt; },
-    applyPassage: (tilemap) => applyPassage(tilemap),
-    rebuildFlameSprites: _rebuildFlameSprites,
-  };
-}
-
 // Shared state objects passed to transitions.js functions
 function _transShared() {
   return {
     sprite,
     keys,
-    onShake: () => { shakeActive = true; shakeTimer = 0; },
+    onShake: () => { mapSt.shakeActive = true; mapSt.shakeTimer = 0; },
   };
 }
 function _transDrawShared() {
@@ -653,12 +574,6 @@ function _loadingShared() {
     HUD_RIGHT_X, HUD_RIGHT_W,
   };
 }
-// Wrapper that pre-computes rosterLocChanged before calling transitions.js
-function _triggerWipe(action, destMapId) {
-  const rc = destMapId != null && rosterLocForMapId(destMapId) !== getPlayerLocation();
-  startWipeTransition(action, destMapId, rc);
-}
-
 // Team wipe check — true when player AND all allies are dead
 function _isTeamWiped() {
   if (ps.hp > 0) return false;
@@ -698,11 +613,11 @@ function _inputShared() {
     advanceBattleMsgZ,
     queueBattleMsg,
     get playerName() { return saveSlots[selectCursor]?.name || null; },
-    get shakeActive()           { return shakeActive; },
-    get starEffect()            { return starEffect; },
-    get moving()                { return moving; },
-    get onWorldMap()            { return onWorldMap; },
-    get dungeonFloor()          { return dungeonFloor; },
+    get shakeActive()           { return mapSt.shakeActive; },
+    get starEffect()            { return mapSt.starEffect; },
+    get moving()                { return mapSt.moving; },
+    get onWorldMap()            { return mapSt.onWorldMap; },
+    get dungeonFloor()          { return mapSt.dungeonFloor; },
     get isPVPBattle()           { return pvpSt.isPVPBattle; },
     get pvpOpponentStats()      { return pvpSt.pvpOpponentStats; },
     get pvpEnemyAllies()        { return pvpSt.pvpEnemyAllies; },
@@ -738,8 +653,8 @@ function _pvpShared() {
     // ── Primitive game state (getters/setters so pvp always reads live values) ──
     get enemyHP()                { return _getEnemyHP(); },
     set enemyHP(v)               { _setEnemyHP(v); },
-    get enemyDefeated()          { return enemyDefeated; },
-    set enemyDefeated(v)         { enemyDefeated = v; },
+    get enemyDefeated()          { return mapSt.enemyDefeated; },
+    set enemyDefeated(v)         { mapSt.enemyDefeated = v; },
     get isRandomEncounter()     { return isRandomEncounter; },
     set isRandomEncounter(v)    { isRandomEncounter = v; },
     get preBattleTrack()        { return preBattleTrack; },
@@ -911,7 +826,7 @@ function _battleDrawShared() {
     get battleState() { return battleState; },
     get battleTimer() { return battleTimer; },
     get enemyHP() { return _getEnemyHP(); },
-    get enemyDefeated() { return enemyDefeated; },
+    get enemyDefeated() { return mapSt.enemyDefeated; },
     get isRandomEncounter() { return isRandomEncounter; },
     get isDefending() { return isDefending; },
     get enemyDmgNum() { return getEnemyDmgNum(); },
@@ -973,52 +888,6 @@ function _battleDrawShared() {
     isVictoryBattleState: _isVictoryBattleState,
     drawMonsterDeath: _drawMonsterDeath,
     pvpShared: () => _pvpShared(),
-  };
-}
-
-// Shared state object passed to map-triggers.js
-function _triggerShared() {
-  return {
-    // read-only constants
-    TILE_SIZE,
-    BATTLE_FLASH_FRAMES,
-    BATTLE_FLASH_FRAME_MS,
-    // read-only primitives
-    get worldX()            { return worldX; },
-    get worldY()            { return worldY; },
-    get currentMapId()      { return currentMapId; },
-    get onWorldMap()        { return onWorldMap; },
-    set onWorldMap(v)       { onWorldMap = v; },
-    get disabledTrigger()   { return disabledTrigger; },
-    set disabledTrigger(v)  { disabledTrigger = v; },
-    get dungeonSeed()       { return dungeonSeed; },
-    set dungeonSeed(v)      { dungeonSeed = v; },
-    get mapRenderer()       { return mapRenderer; },
-    set mapRenderer(v)      { mapRenderer = v; },
-    get rockSwitch()        { return rockSwitch; },
-    set rockSwitch(v)       { rockSwitch = v; },
-    set shakeActive(v)      { shakeActive = v; },
-    set shakeTimer(v)       { shakeTimer = v; },
-    set shakePendingAction(v) { shakePendingAction = v; },
-    set starEffect(v)       { starEffect = v; },
-    set pondStrobeTimer(v)  { pondStrobeTimer = v; },
-    // object refs (mutated, not reassigned)
-    mapData,
-    worldMapData,
-    worldMapRenderer,
-    mapStack,
-    dungeonDestinations,
-    hiddenTraps,
-    secretWalls,
-    // functions
-    addItem,
-    loadMapById,
-    loadWorldMapAtPosition,
-    loadWorldMapAt,
-    _triggerWipe,
-    _rebuildFlameSprites,
-    rosterLocForMapId,
-    getPlayerLocation,
   };
 }
 
@@ -1104,7 +973,7 @@ function _initTitleAssets(romRaw) {
 }
 function _startDebugMode() {
   titleSt.state = 'done';
-  dungeonSeed = 1;
+  mapSt.dungeonSeed = 1;
   clearDungeonCache();
   loadMapById(1004);
   playTrack(TRACKS.CRYSTAL_ROOM);
@@ -1144,12 +1013,13 @@ export async function loadROM(arrayBuffer) {
   initFont(romRaw);
   _initSpriteAssets(romRaw);
   sprite = new Sprite(romRaw, SPRITE_PAL_TOP, SPRITE_PAL_BTM);
-  worldMapData = loadWorldMap(romRaw, 0);
-  worldMapRenderer = new WorldMapRenderer(worldMapData);
+  mapSt.worldMapData = loadWorldMap(romRaw, 0);
+  mapSt.worldMapRenderer = new WorldMapRenderer(mapSt.worldMapData);
   resetWorldWaterCache();
   _initTitleAssets(romRaw);
   initHudDrawing(_hudDrawShared());
-  initMapLoading(_mapLoadShared());
+  initMapLoading(romRaw, sprite);
+  initMapTriggers({ addItem });
 
   await loadSlotsFromDB();
 
@@ -1191,42 +1061,42 @@ function startMove(dir) {
   // Calculate target tile
   const dx = dir === DIR_RIGHT ? TILE_SIZE : dir === DIR_LEFT ? -TILE_SIZE : 0;
   const dy = dir === DIR_DOWN ? TILE_SIZE : dir === DIR_UP ? -TILE_SIZE : 0;
-  const targetX = worldX + dx;
-  const targetY = worldY + dy;
+  const targetX = mapSt.worldX + dx;
+  const targetY = mapSt.worldY + dy;
 
   // Check collision — face the direction but don't walk
   const tileX = targetX / TILE_SIZE;
   const tileY = targetY / TILE_SIZE;
 
   // Block walking onto boss sprite tile
-  if (bossSprite && !enemyDefeated && tileX === bossSprite.px / TILE_SIZE && tileY === bossSprite.py / TILE_SIZE) {
+  if (mapSt.bossSprite && !mapSt.enemyDefeated && tileX === mapSt.bossSprite.px / TILE_SIZE && tileY === mapSt.bossSprite.py / TILE_SIZE) {
     sprite.setDirection(dir);
     sprite.resetFrame();
     return;
   }
 
-  const renderer = onWorldMap ? worldMapRenderer : mapRenderer;
+  const renderer = mapSt.onWorldMap ? mapSt.worldMapRenderer : mapSt.mapRenderer;
   if (renderer && !renderer.isPassable(tileX, tileY)) {
     sprite.setDirection(dir);
     sprite.resetFrame();
-    if (onWorldMap && tileX === 95 && tileY === 45) {
+    if (mapSt.onWorldMap && tileX === 95 && tileY === 45) {
       showMsgBox(new Uint8Array([0x8C,0xD8,0xD6,0xD2,0xD7,0xD0,0xFF,0x9C,0xD8,0xD8,0xD7,0xC4])); // "Coming Soon!"
     }
     return;
   }
 
   sprite.setDirection(dir);
-  moving = true;
-  moveStartX = worldX;
-  moveStartY = worldY;
+  mapSt.moving = true;
+  moveStartX = mapSt.worldX;
+  moveStartY = mapSt.worldY;
   moveTimer = 0;
   moveTargetX = targetX;
   moveTargetY = targetY;
 
   // Close open door when player walks off it
-  if (openDoor) {
-    mapRenderer.updateTileAt(openDoor.x, openDoor.y, openDoor.tileId);
-    openDoor = null;
+  if (mapSt.openDoor) {
+    mapSt.mapRenderer.updateTileAt(mapSt.openDoor.x, mapSt.openDoor.y, mapSt.openDoor.tileId);
+    mapSt.openDoor = null;
   }
 }
 
@@ -1249,11 +1119,11 @@ function handleInput() {
     return;
   }
 
-  if (moving) return;
+  if (mapSt.moving) return;
   if (transSt.state !== 'none') return;
-  if (shakeActive) return;
-  if (starEffect) return;
-  if (pondStrobeTimer > 0) return;
+  if (mapSt.shakeActive) return;
+  if (mapSt.starEffect) return;
+  if (mapSt.pondStrobeTimer > 0) return;
   if (chatState.expanded) return;
   if (tabSelectMode) return;
 
@@ -1268,12 +1138,12 @@ function handleInput() {
 }
 
 function handleAction() {
-  if (onWorldMap || !mapRenderer || !mapData) return;
+  if (mapSt.onWorldMap || !mapSt.mapRenderer || !mapSt.mapData) return;
 
   // Get the tile the player is facing
   const dir = sprite.getDirection();
-  const tileX = worldX / TILE_SIZE;
-  const tileY = worldY / TILE_SIZE;
+  const tileX = mapSt.worldX / TILE_SIZE;
+  const tileY = mapSt.worldY / TILE_SIZE;
   const dx = dir === DIR_RIGHT ? 1 : dir === DIR_LEFT ? -1 : 0;
   const dy = dir === DIR_DOWN ? 1 : dir === DIR_UP ? -1 : 0;
   const facedX = tileX + dx;
@@ -1282,36 +1152,36 @@ function handleAction() {
   if (facedX < 0 || facedX >= 32 || facedY < 0 || facedY >= 32) return;
 
   // Boss fight trigger — face Adamantoise at crystal room center
-  if (bossSprite && !enemyDefeated && facedX === 6 && facedY === 8) {
+  if (mapSt.bossSprite && !mapSt.enemyDefeated && facedX === 6 && facedY === 8) {
     startBattle();
     return;
   }
 
-  const facedTile = mapData.tilemap[facedY * 32 + facedX];
+  const facedTile = mapSt.mapData.tilemap[facedY * 32 + facedX];
 
   // Third torch ($32 at col 8, row 16) opens hidden passage
   if (facedTile === 0x32 && facedX === 8 && facedY === 16) {
-    openPassage(_triggerShared());
+    openPassage();
     return;
   }
 
-  if (facedTile === 0x7C)                                         { handleChest(facedX, facedY, _triggerShared()); return; }
-  if (secretWalls && secretWalls.has(`${facedX},${facedY}`))      { handleSecretWall(facedX, facedY, _triggerShared()); return; }
-  if (rockSwitch && rockSwitch.rocks.some(r => facedX === r.x && facedY === r.y)) { handleRockPuzzle(_triggerShared()); return; }
-  if (pondTiles && pondTiles.has(`${facedX},${facedY}`))          { handlePondHeal(_triggerShared()); return; }
+  if (facedTile === 0x7C)                                         { handleChest(facedX, facedY); return; }
+  if (mapSt.secretWalls && mapSt.secretWalls.has(`${facedX},${facedY}`))      { handleSecretWall(facedX, facedY); return; }
+  if (mapSt.rockSwitch && mapSt.rockSwitch.rocks.some(r => facedX === r.x && facedY === r.y)) { handleRockPuzzle(); return; }
+  if (mapSt.pondTiles && mapSt.pondTiles.has(`${facedX},${facedY}`))          { handlePondHeal(); return; }
 }
 
 // _handleChest, _handleSecretWall, _handleRockPuzzle, _handlePondHeal,
 // applyPassage, openPassage → map-triggers.js
 
 function updateMovement(dt) {
-  if (!moving) return;
+  if (!mapSt.moving) return;
 
   moveTimer += dt;
   const t = Math.min(moveTimer / WALK_DURATION, 1);
 
-  worldX = moveStartX + (moveTargetX - moveStartX) * t;
-  worldY = moveStartY + (moveTargetY - moveStartY) * t;
+  mapSt.worldX = moveStartX + (moveTargetX - moveStartX) * t;
+  mapSt.worldY = moveStartY + (moveTargetY - moveStartY) * t;
 
   sprite.setWalkProgress(t);
 
@@ -1321,32 +1191,32 @@ function updateMovement(dt) {
 // _tickRandomEncounter → battle-encounter.js
 
 function _checkFalseWall() {
-  if (!falseWalls || falseWalls.size === 0) return false;
-  const key = `${worldX / TILE_SIZE},${worldY / TILE_SIZE}`;
-  if (!falseWalls.has(key)) return false;
-  const dest = falseWalls.get(key);
-  _triggerWipe(() => {
-    worldX = dest.destX * TILE_SIZE;
-    worldY = dest.destY * TILE_SIZE;
+  if (!mapSt.falseWalls || mapSt.falseWalls.size === 0) return false;
+  const key = `${mapSt.worldX / TILE_SIZE},${mapSt.worldY / TILE_SIZE}`;
+  if (!mapSt.falseWalls.has(key)) return false;
+  const dest = mapSt.falseWalls.get(key);
+  triggerWipe(() => {
+    mapSt.worldX = dest.destX * TILE_SIZE;
+    mapSt.worldY = dest.destY * TILE_SIZE;
     sprite.setDirection(DIR_DOWN);
-    mapRenderer = new MapRenderer(mapData, dest.destX, dest.destY); resetIndoorWaterCache();
+    mapSt.mapRenderer = new MapRenderer(mapSt.mapData, dest.destX, dest.destY); resetIndoorWaterCache();
   });
   return true;
 }
 
 function _checkWarpTile() {
-  if (!warpTile) return false;
-  const tx = worldX / TILE_SIZE;
-  const ty = worldY / TILE_SIZE;
-  if (tx !== warpTile.x || ty !== warpTile.y) return false;
+  if (!mapSt.warpTile) return false;
+  const tx = mapSt.worldX / TILE_SIZE;
+  const ty = mapSt.worldY / TILE_SIZE;
+  if (tx !== mapSt.warpTile.x || ty !== mapSt.warpTile.y) return false;
   sprite.setDirection(DIR_DOWN);
   playSFX(SFX.WARP);
-  starEffect = {
+  mapSt.starEffect = {
     frame: 0, radius: 60, angle: 0, spin: true,
     onComplete: () => {
-      _triggerWipe(() => {
-        while (mapStack.length > 0) {
-          const entry = mapStack.pop();
+      triggerWipe(() => {
+        while (mapSt.mapStack.length > 0) {
+          const entry = mapSt.mapStack.pop();
           if (entry.mapId === 'world') {
             playTrack(TRACKS.WORLD_MAP);
             loadWorldMapAtPosition(entry.x, entry.y);
@@ -1360,23 +1230,23 @@ function _checkWarpTile() {
 }
 
 function _onMoveComplete() {
-  worldX = moveTargetX;
-  worldY = moveTargetY;
-  moving = false;
+  mapSt.worldX = moveTargetX;
+  mapSt.worldY = moveTargetY;
+  mapSt.moving = false;
 
   // Wrap world coordinates on world map
-  if (onWorldMap) {
-    const mapPx = worldMapData.mapWidth * TILE_SIZE;
-    worldX = ((worldX % mapPx) + mapPx) % mapPx;
-    worldY = ((worldY % mapPx) + mapPx) % mapPx;
+  if (mapSt.onWorldMap) {
+    const mapPx = mapSt.worldMapData.mapWidth * TILE_SIZE;
+    mapSt.worldX = ((mapSt.worldX % mapPx) + mapPx) % mapPx;
+    mapSt.worldY = ((mapSt.worldY % mapPx) + mapPx) % mapPx;
   }
 
   // Clear disabled trigger once player moves off it
-  if (disabledTrigger) {
-    const curTX = worldX / TILE_SIZE;
-    const curTY = worldY / TILE_SIZE;
-    if (curTX !== disabledTrigger.x || curTY !== disabledTrigger.y) {
-      disabledTrigger = null;
+  if (mapSt.disabledTrigger) {
+    const curTX = mapSt.worldX / TILE_SIZE;
+    const curTY = mapSt.worldY / TILE_SIZE;
+    if (curTX !== mapSt.disabledTrigger.x || curTY !== mapSt.disabledTrigger.y) {
+      mapSt.disabledTrigger = null;
     }
   }
 
@@ -1391,7 +1261,7 @@ function _onMoveComplete() {
   if (_checkWarpTile()) return;
 
   // Check for trigger at current tile
-  if (checkTrigger(_triggerShared())) return;
+  if (checkTrigger()) return;
 
   if (_tickRandomEncounter(_encounterShared())) return;
 
@@ -1414,15 +1284,14 @@ function _startMoveFromKeys(resetOnIdle) {
 }
 
 
-// Flame/star sprite decode + rendering → flame-sprites.js
-function _rebuildFlameSprites() { rebuildFlameSprites(mapData, mapRenderer, TILE_SIZE); }
+// Flame/star sprite decode + rendering → flame-sprites.js (used directly by map-loading/triggers)
 
 
 
 
 function _renderSprites(camX, camY, originX, originY, spriteY) {
   const _fs = getFlameSprites();
-  if (!onWorldMap && _fs.length > 0) {
+  if (!mapSt.onWorldMap && _fs.length > 0) {
     const flameFrame = Math.floor(waterTick / 8) & 1;
     const wLeft = camX - originX;
     const wTop = camY - originY;
@@ -1436,16 +1305,16 @@ function _renderSprites(camX, camY, originX, originY, spriteY) {
     }
   }
   // Boss sprite (crystal room) — blink on hit
-  if (bossSprite) {
+  if (mapSt.bossSprite) {
     const blinkHidden = bossFlashTimer > 0 && (Math.floor(bossFlashTimer / 60) & 1);
     if (!blinkHidden) {
       const wLeft = camX - originX;
       const wTop = camY - originY;
-      const bx = bossSprite.px - wLeft;
-      const by = bossSprite.py - wTop;
+      const bx = mapSt.bossSprite.px - wLeft;
+      const by = mapSt.bossSprite.py - wTop;
       if (bx > -16 && bx < CANVAS_W && by > -16 && by < CANVAS_H) {
         ctx.imageSmoothingEnabled = false;
-        ctx.drawImage(bossSprite.frames[Math.floor(waterTick / 8) & 1], bx, by);
+        ctx.drawImage(mapSt.bossSprite.frames[Math.floor(waterTick / 8) & 1], bx, by);
       }
     }
   }
@@ -1453,27 +1322,27 @@ function _renderSprites(camX, camY, originX, originY, spriteY) {
 }
 
 function _renderMapAndWater(camX, camY, originX, originY, spriteY) {
-  if (onWorldMap && worldMapRenderer) {
-    worldMapRenderer.draw(ctx, camX, camY, originX, originY);
-    _updateWorldWater(worldMapRenderer, waterTick);
-  } else if (mapRenderer) {
-    mapRenderer.draw(ctx, camX, camY, originX, originY);
-    _updateIndoorWater(mapRenderer, waterTick);
+  if (mapSt.onWorldMap && mapSt.worldMapRenderer) {
+    mapSt.worldMapRenderer.draw(ctx, camX, camY, originX, originY);
+    _updateWorldWater(mapSt.worldMapRenderer, waterTick);
+  } else if (mapSt.mapRenderer) {
+    mapSt.mapRenderer.draw(ctx, camX, camY, originX, originY);
+    _updateIndoorWater(mapSt.mapRenderer, waterTick);
   }
   if (transSt.state === 'none' &&
       (battleState === 'none' || battleState === 'flash-strobe' || battleState.startsWith('roar-'))) {
     _renderSprites(camX, camY, originX, originY, spriteY);
   }
-  if (onWorldMap && worldMapRenderer) {
-    worldMapRenderer.drawOverlay(ctx, camX, camY, originX, originY, SCREEN_CENTER_X, spriteY);
-  } else if (mapRenderer) {
-    mapRenderer.drawOverlay(ctx, camX, camY, originX, originY, SCREEN_CENTER_X, spriteY);
+  if (mapSt.onWorldMap && mapSt.worldMapRenderer) {
+    mapSt.worldMapRenderer.drawOverlay(ctx, camX, camY, originX, originY, SCREEN_CENTER_X, spriteY);
+  } else if (mapSt.mapRenderer) {
+    mapSt.mapRenderer.drawOverlay(ctx, camX, camY, originX, originY, SCREEN_CENTER_X, spriteY);
   }
 }
 function _renderStarSpiral() {
   const _st = getStarTiles();
-  if (!starEffect || !_st) return;
-  const { radius, angle, frame } = starEffect;
+  if (!mapSt.starEffect || !_st) return;
+  const { radius, angle, frame } = mapSt.starEffect;
   const tile = _st[(frame >> 4) & 1];
   for (let i = 0; i < 8; i++) {
     const a = angle + i * Math.PI / 4;
@@ -1486,9 +1355,9 @@ function render() {
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-  let camX = Math.round(worldX);
-  const camY = Math.round(worldY);
-  if (shakeActive) camX += (Math.floor(shakeTimer / (1000 / 60)) & 2) ? 2 : -2;
+  let camX = Math.round(mapSt.worldX);
+  const camY = Math.round(mapSt.worldY);
+  if (mapSt.shakeActive) camX += (Math.floor(mapSt.shakeTimer / (1000 / 60)) & 2) ? 2 : -2;
   if (battleShakeTimer > 0) camX += (Math.floor(battleShakeTimer / (1000 / 60)) & 2) ? 2 : -2;
 
   clipToViewport();
@@ -1547,7 +1416,7 @@ function _updateTitleMainOutCase() {
   // Always spawn in Ur
   transSt.pendingTrack = TRACKS.TOWN_UR;
   loadMapById(114);
-  worldY -= 6 * TILE_SIZE;
+  mapSt.worldY -= 6 * TILE_SIZE;
   transSt.state = 'hud-fade-in';
   transSt.timer = 0;
 }
@@ -1714,15 +1583,15 @@ function _encounterShared() {
     set isRandomEncounter(v)    { isRandomEncounter = v; },
     get encounterMonsters()     { return encounterMonsters; },
     set encounterMonsters(v)    { encounterMonsters = v; },
-    get encounterSteps()        { return encounterSteps; },
-    set encounterSteps(v)       { encounterSteps = v; },
+    get encounterSteps()        { return mapSt.encounterSteps; },
+    set encounterSteps(v)       { mapSt.encounterSteps = v; },
     get preBattleTrack()        { return preBattleTrack; },
     set preBattleTrack(v)       { preBattleTrack = v; },
-    get onWorldMap()            { return onWorldMap; },
-    get worldMapRenderer()      { return worldMapRenderer; },
-    get worldX()                { return worldX; },
-    get worldY()                { return worldY; },
-    get dungeonFloor()          { return dungeonFloor; },
+    get onWorldMap()            { return mapSt.onWorldMap; },
+    get worldMapRenderer()      { return mapSt.worldMapRenderer; },
+    get worldX()                { return mapSt.worldX; },
+    get worldY()                { return mapSt.worldY; },
+    get dungeonFloor()          { return mapSt.dungeonFloor; },
     get inputSt()               { return inputSt; },
     TILE_SIZE,
     getMonsterCanvas: (id) => getMonsterCanvas(id, goblinBattleCanvas),
@@ -2052,7 +1921,7 @@ function _triggerPVPVictory() {
   inputSt.battleActionCount = 0;
   saveSlotsToDB();
   _queueVictoryRewards();
-  enemyDefeated = true;
+  mapSt.enemyDefeated = true;
   isDefending = false; battleState = 'victory-name-out'; battleTimer = 0;
   playSFX(SFX.BOSS_DEATH);
 }
@@ -2186,7 +2055,7 @@ function _updateBossDissolve(dt) {
   const prevBlock = Math.floor(Math.floor((battleTimer - dt) / BOSS_DISSOLVE_FRAME_MS) / BOSS_DISSOLVE_STEPS);
   if (dBlock !== prevBlock && dBlock > 0 && (dBlock & 3) === 0) playSFX(SFX.BOSS_DEATH);
   if (battleTimer >= BOSS_BLOCKS * BOSS_DISSOLVE_STEPS * BOSS_DISSOLVE_FRAME_MS) {
-    enemyDefeated = true; bossSprite = null;
+    mapSt.enemyDefeated = true; mapSt.bossSprite = null;
     ps.unlockedJobs |= 0x3E; // Wind Crystal: bits 1-5 (Warrior, Monk, White Mage, Black Mage, Red Mage)
     const _bossData = MONSTERS.get(0xCC);
     const rawBossExp = _bossData?.exp || 132;
@@ -2299,13 +2168,13 @@ function _updateDefeatStates() {
       hudSt.playerDeathTimer = null; _teamWipeMsgShown = false;
       ps.hp = ps.stats ? ps.stats.maxHP : 28;
       ps.mp = ps.stats ? ps.stats.maxMP : 0;
-      const worldEntry = mapStack.slice().reverse().find(e => e.mapId === 'world');
-      _triggerWipe(() => {
-        dungeonFloor = -1; encounterSteps = 0; mapStack = [];
+      const worldEntry = mapSt.mapStack.slice().reverse().find(e => e.mapId === 'world');
+      triggerWipe(() => {
+        mapSt.dungeonFloor = -1; mapSt.encounterSteps = 0; mapSt.mapStack = [];
         if (worldEntry) {
           loadWorldMapAtPosition(worldEntry.x, worldEntry.y);
         } else {
-          loadWorldMapAt(findWorldExitIndex(currentMapId, worldMapData));
+          loadWorldMapAt(findWorldExitIndex(mapSt.currentMapId, mapSt.worldMapData));
         }
       }, 'world');
     }
@@ -2370,29 +2239,30 @@ function _drawPoisonFlash() {
 }
 
 function _drawPondStrobe() {
-  if (pondStrobeTimer <= 0) return;
-  const frame = Math.floor((BATTLE_FLASH_FRAMES * BATTLE_FLASH_FRAME_MS - pondStrobeTimer) / BATTLE_FLASH_FRAME_MS);
+  if (mapSt.pondStrobeTimer <= 0) return;
+  const frame = Math.floor((BATTLE_FLASH_FRAMES * BATTLE_FLASH_FRAME_MS - mapSt.pondStrobeTimer) / BATTLE_FLASH_FRAME_MS);
   if (!(frame & 1)) return;
   clipToViewport();
   grayViewport();
 }
 
 function _updateStarEffect(dt) {
-  if (!starEffect) return;
-  starEffect.acc = (starEffect.acc || 0) + dt;
-  while (starEffect.acc >= 16.67) {
-    starEffect.acc -= 16.67;
-    starEffect.frame++;
-    starEffect.angle += 0.06;
-    starEffect.radius -= 0.55;
+  if (!mapSt.starEffect) return;
+  const fx = mapSt.starEffect;
+  fx.acc = (fx.acc || 0) + dt;
+  while (fx.acc >= 16.67) {
+    fx.acc -= 16.67;
+    fx.frame++;
+    fx.angle += 0.06;
+    fx.radius -= 0.55;
     // Player spin: cycle directions every 14 frames
-    if (starEffect.spin && starEffect.frame % 14 === 0) {
+    if (fx.spin && fx.frame % 14 === 0) {
       const SPIN_ORDER = [DIR_DOWN, DIR_LEFT, DIR_UP, DIR_RIGHT];
-      sprite.setDirection(SPIN_ORDER[Math.floor(starEffect.frame / 14) % 4]);
+      sprite.setDirection(SPIN_ORDER[Math.floor(fx.frame / 14) % 4]);
     }
-    if (starEffect.radius < 4) {
-      const cb = starEffect.onComplete;
-      starEffect = null;
+    if (fx.radius < 4) {
+      const cb = fx.onComplete;
+      mapSt.starEffect = null;
       if (cb) cb();
       break;
     }
@@ -2412,12 +2282,12 @@ function _gameLoopUpdate(dt) {
   updateMovement(dt);
   updateTransition(dt, _transShared());
   updateTopBoxScroll(dt);
-  if (pondStrobeTimer > 0) pondStrobeTimer = Math.max(0, pondStrobeTimer - dt);
-  if (shakeActive) {
-    shakeTimer += dt;
-    if (shakeTimer >= SHAKE_DURATION) {
-      shakeActive = false;
-      if (shakePendingAction) { shakePendingAction(); shakePendingAction = null; }
+  if (mapSt.pondStrobeTimer > 0) mapSt.pondStrobeTimer = Math.max(0, mapSt.pondStrobeTimer - dt);
+  if (mapSt.shakeActive) {
+    mapSt.shakeTimer += dt;
+    if (mapSt.shakeTimer >= SHAKE_DURATION) {
+      mapSt.shakeActive = false;
+      if (mapSt.shakePendingAction) { mapSt.shakePendingAction(); mapSt.shakePendingAction = null; }
     }
   }
   _updateStarEffect(dt);

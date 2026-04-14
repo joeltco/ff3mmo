@@ -15,6 +15,7 @@ import { _nameToBytes } from './text-utils.js';
 import { MONSTERS } from './data/monsters.js';
 import { canJobEquip } from './data/jobs.js';
 import { getSlashFramesForWeapon } from './battle-sprite-cache.js';
+import { mapSt } from './map-state.js';
 
 // Local constants (must match game.js)
 const HUD_VIEW_X = 0, HUD_VIEW_Y = 32, HUD_VIEW_W = 144, HUD_VIEW_H = 144;
@@ -562,7 +563,7 @@ function _rosterInputMenu() {
     inputSt.rosterState = 'menu-out';
     inputSt.rosterMenuTimer = 0;
     playSFX(SFX.CONFIRM);
-    if (action === 'Battle' && (_s.onWorldMap || _s.dungeonFloor >= 0)) {
+    if (action === 'Battle' && (mapSt.onWorldMap || mapSt.dungeonFloor >= 0)) {
       _rosterMenuDuelAction(target);
     } else {
       const actionBytes = _nameToBytes(action), nameBytes = _nameToBytes(target.name);
@@ -592,7 +593,7 @@ export function handleRosterInput(shared) {
       setTabSelectMode(false);
       inputSt.rosterState = 'none';
       playSFX(SFX.CONFIRM);
-    } else if (inputSt.rosterState === 'none' && _s.battleState === 'none' && pauseSt.state === 'none' && transSt.state === 'none' && !_s.shakeActive && !_s.starEffect && !_s.moving && msgState.state === 'none') {
+    } else if (inputSt.rosterState === 'none' && _s.battleState === 'none' && pauseSt.state === 'none' && transSt.state === 'none' && !_s.shakeActive && !_s.starEffect && !mapSt.moving && msgState.state === 'none') {
       inputSt.rosterState = 'browse';
       inputSt.rosterCursor = 0;
       inputSt.rosterScroll = 0;
@@ -657,7 +658,7 @@ function _pauseInputOpenClose() {
   const k = _s.keys;
   if (k['Enter']) {
     k['Enter'] = false;
-    if (pauseSt.state === 'none' && _s.battleState === 'none' && transSt.state === 'none' && !_s.shakeActive && !_s.starEffect && !_s.moving && msgState.state === 'none') {
+    if (pauseSt.state === 'none' && _s.battleState === 'none' && transSt.state === 'none' && !_s.shakeActive && !_s.starEffect && !mapSt.moving && msgState.state === 'none') {
       playSFX(SFX.CONFIRM);
       pauseMusic();
       playFF1Track(FF1_TRACKS.MENU_SCREEN);

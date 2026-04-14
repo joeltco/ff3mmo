@@ -2,25 +2,28 @@
 
 import { loadMap } from './map-loader.js';
 import { MapRenderer } from './map-renderer.js';
-import { generateFloor, clearDungeonCache } from './dungeon-generator.js';
+import { generateFloor } from './dungeon-generator.js';
 import { playTrack, TRACKS } from './music.js';
 import { DIR_DOWN } from './sprite.js';
 import { resetIndoorWaterCache } from './water-animation.js';
-import { clearFlameSprites } from './flame-sprites.js';
-import { transSt } from './transitions.js';
+import { clearFlameSprites, rebuildFlameSprites } from './flame-sprites.js';
+import { transSt, topBoxSt } from './transitions.js';
 import { BATTLE_BG_MAP_LOOKUP, renderBattleBg } from './battle-bg.js';
 import { AREA_NAMES, DUNGEON_NAME } from './data/strings.js';
 import { hudSt } from './hud-state.js';
+import { mapSt } from './map-state.js';
+import { applyPassage } from './map-triggers.js';
 
 const TILE_SIZE = 16;
 
-// Shared state — set once via initMapLoading()
-let _s = null;
+// Init-once refs — set by game.js at boot
+let romRaw = null;
+let sprite = null;
 
-export function initMapLoading(shared) { _s = shared; }
+export function initMapLoading(rom, spr) { romRaw = rom; sprite = spr; }
 
 function _calcSpawnY(ex, ey) {
-  const mapData = _s.mapData;
+  const mapData = mapSt.mapData;
   const eMid = mapData.tilemap[ey * 32 + ex];
   const eM = eMid < 128 ? eMid : eMid & 0x7F;
   const eColl = mapData.collision[eM];
@@ -62,121 +65,121 @@ function _calcSpawnY(ex, ey) {
 }
 
 function _openReturnDoor(playerX, playerY) {
-  _s.openDoor = null;
-  const mapRenderer = _s.mapRenderer;
-  const mapData = _s.mapData;
+  mapSt.openDoor = null;
+  const mapRenderer = mapSt.mapRenderer;
+  const mapData = mapSt.mapData;
   const trig = mapRenderer.getTriggerAt(playerX, playerY);
   if (trig && trig.source === 'dynamic' && trig.type === 1) {
     const origTileId = mapData.tilemap[playerY * 32 + playerX];
     const origM = origTileId < 128 ? origTileId : origTileId & 0x7F;
     if (((mapData.collisionByte2[origM] >> 4) & 0x0F) === 5) {
       mapRenderer.updateTileAt(playerX, playerY, 0x7E);
-      _s.openDoor = { x: playerX, y: playerY, tileId: origTileId };
+      mapSt.openDoor = { x: playerX, y: playerY, tileId: origTileId };
     }
   }
 }
 
 function _loadDungeonFloor(mapId, returnX, returnY) {
   const floorIndex = mapId - 1000;
-  _s.dungeonFloor = floorIndex;
-  const result = generateFloor(_s.romRaw, floorIndex, _s.dungeonSeed);
-  _s.mapData = result;
-  _s.secretWalls = result.secretWalls;
-  _s.falseWalls = result.falseWalls;
-  _s.hiddenTraps = result.hiddenTraps;
-  _s.rockSwitch = result.rockSwitch || null;
-  _s.warpTile = result.warpTile || null;
-  _s.pondTiles = result.pondTiles || null;
-  _s.dungeonDestinations = result.dungeonDestinations;
-  _s.currentMapId = mapId;
+  mapSt.dungeonFloor = floorIndex;
+  const result = generateFloor(romRaw, floorIndex, mapSt.dungeonSeed);
+  mapSt.mapData = result;
+  mapSt.secretWalls = result.secretWalls;
+  mapSt.falseWalls = result.falseWalls;
+  mapSt.hiddenTraps = result.hiddenTraps;
+  mapSt.rockSwitch = result.rockSwitch || null;
+  mapSt.warpTile = result.warpTile || null;
+  mapSt.pondTiles = result.pondTiles || null;
+  mapSt.dungeonDestinations = result.dungeonDestinations;
+  mapSt.currentMapId = mapId;
   const playerX = returnX !== undefined ? returnX : result.entranceX;
   const playerY = returnY !== undefined ? returnY : result.entranceY;
-  _s.worldX = playerX * TILE_SIZE;
-  _s.worldY = playerY * TILE_SIZE;
-  _s.mapRenderer = new MapRenderer(result, playerX, playerY);
+  mapSt.worldX = playerX * TILE_SIZE;
+  mapSt.worldY = playerY * TILE_SIZE;
+  mapSt.mapRenderer = new MapRenderer(result, playerX, playerY);
   resetIndoorWaterCache();
   clearFlameSprites();
-  _s.bossSprite = (floorIndex === 4 && hudSt.adamantoiseFrames && !_s.enemyDefeated)
+  mapSt.bossSprite = (floorIndex === 4 && hudSt.adamantoiseFrames && !mapSt.enemyDefeated)
     ? { frames: hudSt.adamantoiseFrames, px: 6 * TILE_SIZE, py: 8 * TILE_SIZE } : null;
-  _s.disabledTrigger = { x: playerX, y: playerY };
-  _s.moving = false;
-  _s.sprite.setDirection(DIR_DOWN);
-  _s.sprite.resetFrame();
+  mapSt.disabledTrigger = { x: playerX, y: playerY };
+  mapSt.moving = false;
+  sprite.setDirection(DIR_DOWN);
+  sprite.resetFrame();
   if (floorIndex === 4) playTrack(TRACKS.CRYSTAL_ROOM);
   if (returnX !== undefined) _openReturnDoor(playerX, playerY);
 }
 
 function _loadRegularMap(mapId, returnX, returnY) {
-  _s.dungeonFloor = -1;
-  _s.encounterSteps = 0;
-  _s.dungeonDestinations = null;
-  _s.secretWalls = null;
-  _s.falseWalls = null;
-  _s.hiddenTraps = null;
-  _s.rockSwitch = null;
-  _s.warpTile = null;
-  _s.pondTiles = null;
-  _s.bossSprite = null;
-  const mapData = loadMap(_s.romRaw, mapId);
-  _s.mapData = mapData;
-  _s.currentMapId = mapId;
-  if (returnX !== undefined) _s.applyPassage(mapData.tilemap);
+  mapSt.dungeonFloor = -1;
+  mapSt.encounterSteps = 0;
+  mapSt.dungeonDestinations = null;
+  mapSt.secretWalls = null;
+  mapSt.falseWalls = null;
+  mapSt.hiddenTraps = null;
+  mapSt.rockSwitch = null;
+  mapSt.warpTile = null;
+  mapSt.pondTiles = null;
+  mapSt.bossSprite = null;
+  const mapData = loadMap(romRaw, mapId);
+  mapSt.mapData = mapData;
+  mapSt.currentMapId = mapId;
+  if (returnX !== undefined) applyPassage(mapData.tilemap);
   const ex = mapData.entranceX;
   const ey = mapData.entranceY;
   const playerX = returnX !== undefined ? returnX : ex;
   const playerY = returnY !== undefined ? returnY : _calcSpawnY(ex, ey);
-  _s.worldX = playerX * TILE_SIZE;
-  _s.worldY = playerY * TILE_SIZE;
+  mapSt.worldX = playerX * TILE_SIZE;
+  mapSt.worldY = playerY * TILE_SIZE;
   const mapRenderer = new MapRenderer(mapData, playerX, playerY);
-  _s.mapRenderer = mapRenderer;
+  mapSt.mapRenderer = mapRenderer;
   resetIndoorWaterCache();
   if (mapRenderer.hasRoomClip()) {
     const spawnMid = mapData.tilemap[playerY * 32 + playerX];
-    _s.disabledTrigger = (spawnMid === 0x44 || playerY !== ey) ? { x: playerX, y: playerY } : null;
-  } else { _s.disabledTrigger = null; }
-  _s.rebuildFlameSprites();
-  _s.moving = false;
-  _s.sprite.setDirection(DIR_DOWN);
-  _s.sprite.resetFrame();
+    mapSt.disabledTrigger = (spawnMid === 0x44 || playerY !== ey) ? { x: playerX, y: playerY } : null;
+  } else { mapSt.disabledTrigger = null; }
+  rebuildFlameSprites(mapSt.mapData, mapSt.mapRenderer, TILE_SIZE);
+  mapSt.moving = false;
+  sprite.setDirection(DIR_DOWN);
+  sprite.resetFrame();
   if (returnX !== undefined) _openReturnDoor(playerX, playerY);
   if (mapId === 114 && transSt.pendingTrack == null) playTrack(TRACKS.TOWN_UR);
 }
 
 export function setupTopBox(mapId, isWorldMap) {
   if (isWorldMap) {
-    const bgId = _s.romRaw[BATTLE_BG_MAP_LOOKUP] & 0x1F;
-    const result = renderBattleBg(_s.romRaw, bgId);
+    const bgId = romRaw[BATTLE_BG_MAP_LOOKUP] & 0x1F;
+    const result = renderBattleBg(romRaw, bgId);
     hudSt.topBoxBgCanvas = result.bgCanvas;
     hudSt.topBoxBgFadeFrames = result.fadeFrames;
     hudSt.topBoxMode = 'battle';
-    _s.topBoxSt.isTown = false;
-    _s.topBoxSt.nameBytes = null;
-    _s.topBoxSt.state = 'none';
-    _s.topBoxSt.fadeStep = 4;
+    topBoxSt.isTown = false;
+    topBoxSt.nameBytes = null;
+    topBoxSt.state = 'none';
+    topBoxSt.fadeStep = 4;
     return;
   }
   if (mapId >= 1000) {
     const romMap = (mapId === 1004) ? 148 : 111;
-    const bgId = _s.romRaw[BATTLE_BG_MAP_LOOKUP + romMap] & 0x1F;
-    const result = renderBattleBg(_s.romRaw, bgId);
+    const bgId = romRaw[BATTLE_BG_MAP_LOOKUP + romMap] & 0x1F;
+    const result = renderBattleBg(romRaw, bgId);
     hudSt.topBoxBgCanvas = result.bgCanvas;
     hudSt.topBoxBgFadeFrames = result.fadeFrames;
     hudSt.loadingBgFadeFrames = result.fadeFrames;
-    _s.topBoxSt.nameBytes = DUNGEON_NAME;
+    topBoxSt.nameBytes = DUNGEON_NAME;
     hudSt.topBoxMode = 'battle';
-    _s.topBoxSt.isTown = false;
-    _s.topBoxSt.state = 'none';
-    _s.topBoxSt.fadeStep = 4;
+    topBoxSt.isTown = false;
+    topBoxSt.state = 'none';
+    topBoxSt.fadeStep = 4;
     return;
   }
   if (mapId === 114) {
-    if (!_s.topBoxSt.isTown) { _s.topBoxSt.state = 'pending'; }
-    _s.topBoxSt.isTown = true;
-    _s.topBoxSt.nameBytes = AREA_NAMES.get(114);
+    if (!topBoxSt.isTown) { topBoxSt.state = 'pending'; }
+    topBoxSt.isTown = true;
+    topBoxSt.nameBytes = AREA_NAMES.get(114);
     hudSt.topBoxMode = 'name';
-  } else if (!_s.topBoxSt.isTown) {
-    const bgId = _s.romRaw[BATTLE_BG_MAP_LOOKUP + mapId] & 0x1F;
-    const result = renderBattleBg(_s.romRaw, bgId);
+  } else if (!topBoxSt.isTown) {
+    const bgId = romRaw[BATTLE_BG_MAP_LOOKUP + mapId] & 0x1F;
+    const result = renderBattleBg(romRaw, bgId);
     hudSt.topBoxBgCanvas = result.bgCanvas;
     hudSt.topBoxBgFadeFrames = result.fadeFrames;
     hudSt.topBoxMode = 'battle';
@@ -184,41 +187,41 @@ export function setupTopBox(mapId, isWorldMap) {
 }
 
 export function loadMapById(mapId, returnX, returnY) {
-  _s.onWorldMap = false;
+  mapSt.onWorldMap = false;
   setupTopBox(mapId, false);
   if (mapId >= 1000) { _loadDungeonFloor(mapId, returnX, returnY); return; }
   _loadRegularMap(mapId, returnX, returnY);
 }
 
 function _landOnWorldMap(tileX, tileY) {
-  _s.worldX = tileX * TILE_SIZE;
-  _s.worldY = tileY * TILE_SIZE;
-  _s.disabledTrigger = { x: tileX, y: tileY };
-  _s.moving = false;
-  _s.sprite.setDirection(DIR_DOWN);
-  _s.sprite.resetFrame();
+  mapSt.worldX = tileX * TILE_SIZE;
+  mapSt.worldY = tileY * TILE_SIZE;
+  mapSt.disabledTrigger = { x: tileX, y: tileY };
+  mapSt.moving = false;
+  sprite.setDirection(DIR_DOWN);
+  sprite.resetFrame();
   playTrack(TRACKS.WORLD_MAP);
 }
 
 export function loadWorldMapAt(trigId) {
-  _s.onWorldMap = true;
-  _s.mapRenderer = null;
-  _s.mapData = null;
-  _s.bossSprite = null;
+  mapSt.onWorldMap = true;
+  mapSt.mapRenderer = null;
+  mapSt.mapData = null;
+  mapSt.bossSprite = null;
   setupTopBox(0, true);
-  const pos = _s.worldMapData.triggerPositions.get(trigId);
+  const pos = mapSt.worldMapData.triggerPositions.get(trigId);
   const tileX = pos ? pos.x : 0;
   const tileY = pos ? pos.y : 0;
   _landOnWorldMap(tileX, tileY);
 }
 
 export function loadWorldMapAtPosition(tileX, tileY) {
-  _s.onWorldMap = true;
-  _s.dungeonFloor = -1;
-  _s.encounterSteps = 0;
-  _s.enemyDefeated = false;
-  _s.mapRenderer = null;
-  _s.mapData = null;
+  mapSt.onWorldMap = true;
+  mapSt.dungeonFloor = -1;
+  mapSt.encounterSteps = 0;
+  mapSt.enemyDefeated = false;
+  mapSt.mapRenderer = null;
+  mapSt.mapData = null;
   setupTopBox(0, true);
   _landOnWorldMap(tileX, tileY);
 }
