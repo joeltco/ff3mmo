@@ -1,6 +1,6 @@
 // Battle turn order + turn dispatch — extracted from game.js
 
-import { battleSt, getEnemyHP, setEnemyHP } from './battle-state.js';
+import { battleSt, getEnemyHP, setEnemyHP, BATTLE_SHAKE_MS, BOSS_DEF, BOSS_MAX_HP } from './battle-state.js';
 import { rollHits, calcPotentialHits } from './battle-math.js';
 import { BATTLE_RAN_AWAY, BATTLE_CANT_ESCAPE } from './data/strings.js';
 import { makeNameMsg, makeVsMsg } from './text-utils.js';
@@ -10,12 +10,24 @@ import { ITEMS, isWeapon, isBladedWeapon } from './data/items.js';
 import { SFX, playSFX } from './music.js';
 import { processTurnStart, removeStatus, STATUS, blindHitPenalty } from './status-effects.js';
 import { bsc, getSlashFramesForWeapon } from './battle-sprite-cache.js';
+import { pvpSt } from './pvp.js';
+import { inputSt } from './input-handler.js';
+import { queueBattleMsg } from './battle-msg.js';
+import { getAllyDamageNums, setEnemyDmgNum, setEnemyHealNum, setPlayerDamageNum, setPlayerHealNum } from './damage-numbers.js';
+import { startMagicItem } from './battle-items.js';
+import { selectCursor, saveSlots } from './save-state.js';
 
-let _s = null; // shared state object, set each call
+// Remove the "import battleSt..." line and re-add with more constants
+// (deferred — will be done below)
+
+// Injected at boot — avoids circular import on game.js
+let _removeItem = () => {};
+export function initBattleTurn({ removeItem }) { _removeItem = removeItem; }
+
+function _playerName() { return saveSlots[selectCursor]?.name || null; }
 
 // ── Turn order ─────────────────────────────────────────────────────────────
-export function buildTurnOrder(shared) {
-  _s = shared;
+export function buildTurnOrder() {
   const actors = [];
   if (ps.hp > 0) {
     const playerAgi = (ps.stats ? ps.stats.agi : 5) + getJobLevelStatBonus().agi;
@@ -32,14 +44,14 @@ export function buildTurnOrder(shared) {
         actors.push({ type: 'enemy', index: i, priority: (mAgi * 2) + Math.floor(Math.random() * 256) });
       }
     }
-  } else if (_s.pvpSt.isPVPBattle) {
-    if (_s.pvpSt.pvpOpponentStats && _s.pvpSt.pvpOpponentStats.hp > 0) {
-      const oAgi = _s.pvpSt.pvpOpponentStats.agi || 0;
+  } else if (pvpSt.isPVPBattle) {
+    if (pvpSt.pvpOpponentStats && pvpSt.pvpOpponentStats.hp > 0) {
+      const oAgi = pvpSt.pvpOpponentStats.agi || 0;
       actors.push({ type: 'enemy', index: -1, pvpAllyIdx: -1, priority: (oAgi * 2) + Math.floor(Math.random() * 256) });
     }
-    for (let i = 0; i < _s.pvpSt.pvpEnemyAllies.length; i++) {
-      if (_s.pvpSt.pvpEnemyAllies[i].hp > 0) {
-        const aAgi = _s.pvpSt.pvpEnemyAllies[i].agi || 0;
+    for (let i = 0; i < pvpSt.pvpEnemyAllies.length; i++) {
+      if (pvpSt.pvpEnemyAllies[i].hp > 0) {
+        const aAgi = pvpSt.pvpEnemyAllies[i].agi || 0;
         actors.push({ type: 'enemy', index: -1, pvpAllyIdx: i, priority: (aAgi * 2) + Math.floor(Math.random() * 256) });
       }
     }
@@ -51,14 +63,12 @@ export function buildTurnOrder(shared) {
 }
 
 // ── Turn dispatch ──────────────────────────────────────────────────────────
-export function processNextTurn(shared) {
-  _s = shared;
-  if (battleSt.turnQueue.length === 0) {
-    battleSt.isDefending = false; _s.inputSt.battleCursor = 0; battleSt.turnTimer = 0;
+export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
+    battleSt.isDefending = false; inputSt.battleCursor = 0; battleSt.turnTimer = 0;
     if (ps.hp <= 0) {
-      battleSt.turnQueue = buildTurnOrder(_s);
+      battleSt.turnQueue = buildTurnOrder();
       if (battleSt.turnQueue.length === 0) return;
-      processNextTurn(_s);
+      processNextTurn();
       return;
     }
     battleSt.battleState = 'menu-open'; battleSt.battleTimer = 0;
@@ -66,15 +76,15 @@ export function processNextTurn(shared) {
   }
   const turn = battleSt.turnQueue.shift();
   if (turn.type === 'player') {
-    if (ps.hp <= 0) { processNextTurn(_s); return; }
+    if (ps.hp <= 0) { processNextTurn(); return; }
     // Status turn-start: poison damage, paralysis/sleep skip, confuse flag
     if (ps.status && !turn._statusDone) {
       const { canAct, poisonDmg, confused } = processTurnStart(ps.status, ps.stats ? ps.stats.maxHP : ps.hp);
-      if (!canAct) { processNextTurn(_s); return; }
+      if (!canAct) { processNextTurn(); return; }
       if (poisonDmg > 0) {
         ps.hp = Math.max(1, ps.hp - poisonDmg);
-        _s.setPlayerDamageNum({ value: poisonDmg, timer: 0 });
-        battleSt.battleShakeTimer = _s.BATTLE_SHAKE_MS;
+        setPlayerDamageNum({ value: poisonDmg, timer: 0 });
+        battleSt.battleShakeTimer = BATTLE_SHAKE_MS;
         playSFX(SFX.ATTACK_HIT);
         turn._statusDone = true;
         battleSt.turnQueue.unshift(turn);
@@ -104,7 +114,7 @@ export function processNextTurn(shared) {
           const firstWpnId = isWeapon(ps.weaponR) ? ps.weaponR : ps.weaponL;
           const firstHandR = isWeapon(ps.weaponR) || !isWeapon(ps.weaponL);
           const bladed = isBladedWeapon(firstWpnId);
-          _s.inputSt.playerActionPending = { command: 'fight', targetIndex: pick.index,
+          inputSt.playerActionPending = { command: 'fight', targetIndex: pick.index,
             hitResults: rollHits(ps.atk, mon.def, effHitRate, potHits),
             slashFrames: getSlashFramesForWeapon(firstWpnId, firstHandR),
             slashOffX: bladed ? 8 : Math.floor(Math.random() * 40) - 20,
@@ -119,13 +129,13 @@ export function processNextTurn(shared) {
           if (totalDmg > 0) {
             if (pick.type === 'self') {
               ps.hp = Math.max(0, ps.hp - totalDmg);
-              _s.setPlayerDamageNum({ value: totalDmg, timer: 0 });
+              setPlayerDamageNum({ value: totalDmg, timer: 0 });
             } else {
               const ally = battleSt.battleAllies[pick.index];
               ally.hp = Math.max(0, ally.hp - totalDmg);
-              _s.getAllyDamageNums()[pick.index] = { value: totalDmg, timer: 0 };
+              getAllyDamageNums()[pick.index] = { value: totalDmg, timer: 0 };
             }
-            battleSt.battleShakeTimer = _s.BATTLE_SHAKE_MS;
+            battleSt.battleShakeTimer = BATTLE_SHAKE_MS;
             playSFX(SFX.ATTACK_HIT);
           }
           battleSt.battleState = 'poison-tick'; battleSt.battleTimer = 0;
@@ -133,34 +143,34 @@ export function processNextTurn(shared) {
         }
       }
     }
-    const cmd = _s.inputSt.playerActionPending.command;
-    const pn = _s.playerName;
+    const cmd = inputSt.playerActionPending.command;
+    const pn = _playerName();
     if (cmd === 'fight') {
       if (pn) {
-        const ti = _s.inputSt.playerActionPending.targetIndex;
+        const ti = inputSt.playerActionPending.targetIndex;
         const targetName = (battleSt.isRandomEncounter && battleSt.encounterMonsters && ti >= 0)
           ? (getMonsterName(battleSt.encounterMonsters[ti].monsterId) || makeNameMsg(new Uint8Array(0), 'Enemy'))
           : null;
-        _s.queueBattleMsg(targetName ? makeVsMsg(pn, targetName) : makeNameMsg(pn, ' attacks!'));
+        queueBattleMsg(targetName ? makeVsMsg(pn, targetName) : makeNameMsg(pn, ' attacks!'));
       }
       _playerTurnFight();
     }
-    else if (cmd === 'defend') { _s.inputSt.battleActionCount++; if (pn) _s.queueBattleMsg(makeNameMsg(pn, ' defends!')); playSFX(SFX.DEFEND_HIT); battleSt.battleState = 'defend-anim'; battleSt.battleTimer = 0; }
-    else if (cmd === 'item') { _s.inputSt.battleActionCount++; _playerTurnItem(); }
-    else if (cmd === 'skip') processNextTurn(_s);
+    else if (cmd === 'defend') { inputSt.battleActionCount++; if (pn) queueBattleMsg(makeNameMsg(pn, ' defends!')); playSFX(SFX.DEFEND_HIT); battleSt.battleState = 'defend-anim'; battleSt.battleTimer = 0; }
+    else if (cmd === 'item') { inputSt.battleActionCount++; _playerTurnItem(); }
+    else if (cmd === 'skip') processNextTurn();
     else if (cmd === 'run') _playerTurnRun();
   } else if (turn.type === 'ally') {
     battleSt.currentAllyAttacker = turn.index;
     battleSt.allyHitIsLeft = false;
     const ally = battleSt.battleAllies[turn.index];
-    if (!ally || ally.hp <= 0) { processNextTurn(_s); return; }
+    if (!ally || ally.hp <= 0) { processNextTurn(); return; }
     // Ally status turn-start
     if (ally.status && !turn._statusDone) {
       const { canAct, poisonDmg } = processTurnStart(ally.status, ally.maxHP || ally.hp);
-      if (!canAct) { processNextTurn(_s); return; }
+      if (!canAct) { processNextTurn(); return; }
       if (poisonDmg > 0) {
         ally.hp = Math.max(1, ally.hp - poisonDmg);
-        _s.getAllyDamageNums()[turn.index] = { value: poisonDmg, timer: 0 };
+        getAllyDamageNums()[turn.index] = { value: poisonDmg, timer: 0 };
         playSFX(SFX.ATTACK_HIT);
         turn._statusDone = true;
         battleSt.turnQueue.unshift(turn);
@@ -170,15 +180,15 @@ export function processNextTurn(shared) {
     }
     if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
       const living = battleSt.encounterMonsters.map((m, i) => m.hp > 0 ? i : -1).filter(i => i >= 0);
-      if (living.length === 0) { processNextTurn(_s); return; }
+      if (living.length === 0) { processNextTurn(); return; }
       battleSt.allyTargetIndex = living[Math.floor(Math.random() * living.length)];
     } else { battleSt.allyTargetIndex = -1; }
     const targetDef = battleSt.allyTargetIndex >= 0 ? battleSt.encounterMonsters[battleSt.allyTargetIndex].def
-      : _s.pvpSt.isPVPBattle
-        ? (_s.pvpSt.pvpPlayerTargetIdx >= 0
-            ? (_s.pvpSt.pvpEnemyAllies[_s.pvpSt.pvpPlayerTargetIdx] || _s.pvpSt.pvpOpponentStats).def
-            : _s.pvpSt.pvpOpponentStats.def)
-        : _s.BOSS_DEF;
+      : pvpSt.isPVPBattle
+        ? (pvpSt.pvpPlayerTargetIdx >= 0
+            ? (pvpSt.pvpEnemyAllies[pvpSt.pvpPlayerTargetIdx] || pvpSt.pvpOpponentStats).def
+            : pvpSt.pvpOpponentStats.def)
+        : BOSS_DEF;
     const dualWield = isWeapon(ally.weaponId) && isWeapon(ally.weaponL);
     const potentialHits = calcPotentialHits(ally.level || 1, ally.agi, dualWield);
     battleSt.allyHitResults = rollHits(ally.atk, targetDef, ally.hitRate || 85, potentialHits);
@@ -192,10 +202,10 @@ export function processNextTurn(shared) {
       const mon = battleSt.encounterMonsters[turn.index];
       if (mon.status) {
         const { canAct, poisonDmg } = processTurnStart(mon.status, mon.maxHP);
-        if (!canAct || mon.hp <= 0) { processNextTurn(_s); return; }
+        if (!canAct || mon.hp <= 0) { processNextTurn(); return; }
         if (poisonDmg > 0) {
           mon.hp = Math.max(0, mon.hp - poisonDmg);
-          _s.setEnemyDmgNum({ value: poisonDmg, timer: 0 });
+          setEnemyDmgNum({ value: poisonDmg, timer: 0 });
           playSFX(SFX.ATTACK_HIT);
           turn._statusDone = true;
           battleSt.turnQueue.unshift(turn);
@@ -204,32 +214,32 @@ export function processNextTurn(shared) {
         }
       }
     }
-    if (_s.pvpSt.isPVPBattle) {
+    if (pvpSt.isPVPBattle) {
       const pai = turn.pvpAllyIdx ?? -1;
-      _s.pvpSt.pvpCurrentEnemyAllyIdx = pai;
-      if (pai < 0 && (!_s.pvpSt.pvpOpponentStats || _s.pvpSt.pvpOpponentStats.hp <= 0)) { processNextTurn(_s); return; }
-      if (pai >= 0 && (_s.pvpSt.pvpEnemyAllies[pai]?.hp ?? 0) <= 0) { processNextTurn(_s); return; }
-      if (pai < 0) _s.pvpSt.pvpEnemyHitIdx = 0;
+      pvpSt.pvpCurrentEnemyAllyIdx = pai;
+      if (pai < 0 && (!pvpSt.pvpOpponentStats || pvpSt.pvpOpponentStats.hp <= 0)) { processNextTurn(); return; }
+      if (pai >= 0 && (pvpSt.pvpEnemyAllies[pai]?.hp ?? 0) <= 0) { processNextTurn(); return; }
+      if (pai < 0) pvpSt.pvpEnemyHitIdx = 0;
     }
-    if (turn.index >= 0 && battleSt.encounterMonsters && battleSt.encounterMonsters[turn.index].hp <= 0) { processNextTurn(_s); return; }
-    battleSt.battleState = 'enemy-flash'; battleSt.battleTimer = 0; _s.pvpSt.pvpPreflashDecided = false;
+    if (turn.index >= 0 && battleSt.encounterMonsters && battleSt.encounterMonsters[turn.index].hp <= 0) { processNextTurn(); return; }
+    battleSt.battleState = 'enemy-flash'; battleSt.battleTimer = 0; pvpSt.pvpPreflashDecided = false;
   }
 }
 
 // ── Player turn actions ────────────────────────────────────────────────────
 function _playerTurnFight() {
-  let ti = _s.inputSt.playerActionPending.targetIndex;
+  let ti = inputSt.playerActionPending.targetIndex;
   if (battleSt.isRandomEncounter && battleSt.encounterMonsters && ti >= 0 && battleSt.encounterMonsters[ti].hp <= 0) {
     const living = battleSt.encounterMonsters.findIndex(m => m.hp > 0);
-    if (living < 0) { processNextTurn(_s); return; }
+    if (living < 0) { processNextTurn(); return; }
     ti = living;
   }
   battleSt.currentHitIdx = 0; battleSt.slashFrame = 0;
-  _s.inputSt.hitResults = _s.inputSt.playerActionPending.hitResults;
-  _s.inputSt.targetIndex = ti;
-  bsc.slashFrames = _s.inputSt.playerActionPending.slashFrames;
-  battleSt.slashOffX = _s.inputSt.playerActionPending.slashOffX; battleSt.slashOffY = _s.inputSt.playerActionPending.slashOffY;
-  battleSt.slashX = _s.inputSt.playerActionPending.slashX; battleSt.slashY = _s.inputSt.playerActionPending.slashY;
+  inputSt.hitResults = inputSt.playerActionPending.hitResults;
+  inputSt.targetIndex = ti;
+  bsc.slashFrames = inputSt.playerActionPending.slashFrames;
+  battleSt.slashOffX = inputSt.playerActionPending.slashOffX; battleSt.slashOffY = inputSt.playerActionPending.slashOffY;
+  battleSt.slashX = inputSt.playerActionPending.slashX; battleSt.slashY = inputSt.playerActionPending.slashY;
   battleSt.battleState = 'attack-back'; battleSt.battleTimer = 0;
 }
 
@@ -240,13 +250,13 @@ const CURE_NAME_TO_FLAG = {
 };
 
 function _playerTurnConsumable() {
-  const itemId = _s.inputSt.playerActionPending.itemId;
+  const itemId = inputSt.playerActionPending.itemId;
   const itemDat = ITEMS.get(itemId);
   const effect = itemDat?.effect || 'heal';
   const power = itemDat?.power || 50;
 
   playSFX(SFX.CURE);
-  const { target, allyIndex } = _s.inputSt.playerActionPending;
+  const { target, allyIndex } = inputSt.playerActionPending;
 
   if (effect === 'cure_status') {
     // Status cure items — only target player for now
@@ -261,7 +271,7 @@ function _playerTurnConsumable() {
     // Elixir — full HP restore
     if (target === 'player' && (allyIndex === undefined || allyIndex < 0)) {
       const heal = ps.stats.maxHP - ps.hp;
-      ps.hp = ps.stats.maxHP; battleSt.itemHealAmount = heal; _s.setPlayerHealNum({ value: heal, timer: 0 });
+      ps.hp = ps.stats.maxHP; battleSt.itemHealAmount = heal; setPlayerHealNum({ value: heal, timer: 0 });
     }
     battleSt.battleState = 'item-use'; battleSt.battleTimer = 0;
     return;
@@ -270,24 +280,24 @@ function _playerTurnConsumable() {
   // Default: heal HP by power amount
   if (target === 'player' && (allyIndex === undefined || allyIndex < 0)) {
     const heal = Math.min(power, ps.stats.maxHP - ps.hp);
-    ps.hp += heal; battleSt.itemHealAmount = heal; _s.setPlayerHealNum({ value: heal, timer: 0 });
+    ps.hp += heal; battleSt.itemHealAmount = heal; setPlayerHealNum({ value: heal, timer: 0 });
   } else if (target === 'player' && allyIndex >= 0) {
     const ally = battleSt.battleAllies[allyIndex];
     if (ally) {
       const heal = Math.min(power, ally.maxHP - ally.hp);
       ally.hp += heal; battleSt.itemHealAmount = heal;
-      _s.getAllyDamageNums()[allyIndex] = { value: heal, timer: 0, heal: true };
+      getAllyDamageNums()[allyIndex] = { value: heal, timer: 0, heal: true };
     }
   } else {
     const mon = battleSt.isRandomEncounter && battleSt.encounterMonsters ? battleSt.encounterMonsters[target] : null;
     if (mon) {
       const heal = Math.min(power, mon.maxHP - mon.hp);
-      mon.hp += heal; battleSt.itemHealAmount = heal; _s.setEnemyHealNum({ value: heal, timer: 0, index: target });
+      mon.hp += heal; battleSt.itemHealAmount = heal; setEnemyHealNum({ value: heal, timer: 0, index: target });
     } else {
-      const curHP = _s.getEnemyHP();
-      const maxHP = _s.pvpSt.isPVPBattle ? (_s.pvpSt.pvpOpponentStats ? _s.pvpSt.pvpOpponentStats.maxHP : 1) : _s.BOSS_MAX_HP;
+      const curHP = getEnemyHP();
+      const maxHP = pvpSt.isPVPBattle ? (pvpSt.pvpOpponentStats ? pvpSt.pvpOpponentStats.maxHP : 1) : BOSS_MAX_HP;
       const heal = Math.min(power, maxHP - curHP);
-      _s.setEnemyHP(curHP + heal); battleSt.itemHealAmount = heal; _s.setEnemyHealNum({ value: heal, timer: 0, index: 0 });
+      setEnemyHP(curHP + heal); battleSt.itemHealAmount = heal; setEnemyHealNum({ value: heal, timer: 0, index: 0 });
     }
   }
   battleSt.battleState = 'item-use'; battleSt.battleTimer = 0;
@@ -295,8 +305,8 @@ function _playerTurnConsumable() {
 
 function _playerTurnItem() {
   battleSt.isDefending = false;
-  _s.removeItem(_s.inputSt.playerActionPending.itemId);
-  if (_s.ITEMS.get(_s.inputSt.playerActionPending.itemId)?.type === 'battle_item') _s.startMagicItem();
+  _removeItem(inputSt.playerActionPending.itemId);
+  if (ITEMS.get(inputSt.playerActionPending.itemId)?.type === 'battle_item') startMagicItem();
   else _playerTurnConsumable();
 }
 
@@ -309,11 +319,11 @@ function _playerTurnRun() {
   }
   const successRate = Math.min(99, Math.max(1, playerAgi + 25 - Math.floor(avgLevel / 4)));
   if (Math.floor(Math.random() * 100) < successRate) {
-    _s.queueBattleMsg(BATTLE_RAN_AWAY);
+    queueBattleMsg(BATTLE_RAN_AWAY);
     playSFX(SFX.RUN_AWAY);
     battleSt.battleState = 'run-success'; battleSt.battleTimer = 0;
   } else {
-    _s.queueBattleMsg(BATTLE_CANT_ESCAPE);
+    queueBattleMsg(BATTLE_CANT_ESCAPE);
     battleSt.battleState = 'run-fail'; battleSt.battleTimer = 0;
   }
 }

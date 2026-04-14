@@ -1,15 +1,26 @@
 // Battle enemy turn update logic — extracted from game.js
 
-import { battleSt, getEnemyHP, setEnemyHP } from './battle-state.js';
-import { calcDamage, elemMultiplier } from './battle-math.js';
+import { battleSt, getEnemyHP, setEnemyHP,
+         BATTLE_SHAKE_MS, BATTLE_DMG_SHOW_MS, BOSS_PREFLASH_MS, BOSS_ATK } from './battle-state.js';
+import { calcDamage, elemMultiplier, BOSS_HIT_RATE, GOBLIN_HIT_RATE } from './battle-math.js';
 import { ps, getShieldEvade } from './player-stats.js';
 import { SFX, playSFX } from './music.js';
 import { tryInflictStatus, blindHitPenalty, wakeOnHit, STATUS_NAME_BYTES } from './status-effects.js';
-import { replaceBattleMsg } from './battle-msg.js';
+import { replaceBattleMsg, queueBattleMsg, isBattleMsgBusy } from './battle-msg.js';
 import { getMonsterName } from './text-decoder.js';
 import { _nameToBytes, makeVsMsg } from './text-utils.js';
+import { getPlayerDamageNum, setPlayerDamageNum, getAllyDamageNums } from './damage-numbers.js';
+import { selectCursor, saveSlots } from './save-state.js';
 
-let _s = null;
+// Injected at boot — avoids circular import on game.js
+let _processNextTurn = () => {};
+let _isTeamWiped = () => false;
+export function initBattleEnemy({ processNextTurn, isTeamWiped }) {
+  _processNextTurn = processNextTurn;
+  _isTeamWiped = isTeamWiped;
+}
+
+function _playerName() { return saveSlots[selectCursor]?.name || null; }
 
 // ── Monster special attack definitions ─────────────────────────────────────
 // Maps attack name → { type, power, hit, element, status }
@@ -49,30 +60,30 @@ const SPECIAL_ATTACKS = {
 function _doSpecialAttack(mon, spec, targetAlly = -1) {
   if (targetAlly >= 0) {
     const ally = battleSt.battleAllies[targetAlly];
-    if (!ally || ally.hp <= 0) { _s.processNextTurn(); return; }
+    if (!ally || ally.hp <= 0) { _processNextTurn(); return; }
     if (spec.type === 'damage') {
       const eMult = elemMultiplier(spec.element, null, null);
       const raw = Math.floor(spec.power * eMult) - (ally.mdef || 0);
       const dmg = Math.max(1, raw);
       ally.hp = Math.max(0, ally.hp - dmg);
-      _s.allyDamageNums[targetAlly] = { value: dmg, timer: 0 };
-      battleSt.allyShakeTimer[targetAlly] = _s.BATTLE_SHAKE_MS;
+      getAllyDamageNums()[targetAlly] = { value: dmg, timer: 0 };
+      battleSt.allyShakeTimer[targetAlly] = BATTLE_SHAKE_MS;
       playSFX(SFX.ATTACK_HIT);
       battleSt.battleState = 'ally-hit'; battleSt.battleTimer = 0;
     } else if (spec.type === 'status' && ally.status) {
       const applied = tryInflictStatus(ally.status, spec.status, spec.hit);
-      _s.allyDamageNums[targetAlly] = applied
+      getAllyDamageNums()[targetAlly] = applied
         ? { value: 0, timer: 0, status: spec.status }
         : { miss: true, timer: 0 };
       battleSt.battleState = 'ally-damage-show-enemy'; battleSt.battleTimer = 0;
     } else if (spec.type === 'multi_status' && ally.status) {
       let anyApplied = false;
       for (const s of spec.statuses) { if (tryInflictStatus(ally.status, s, spec.hit)) anyApplied = true; }
-      _s.allyDamageNums[targetAlly] = anyApplied
+      getAllyDamageNums()[targetAlly] = anyApplied
         ? { value: 0, timer: 0, status: 'multi' }
         : { miss: true, timer: 0 };
       battleSt.battleState = 'ally-damage-show-enemy'; battleSt.battleTimer = 0;
-    } else { _s.processNextTurn(); }
+    } else { _processNextTurn(); }
     return;
   }
   if (spec.type === 'damage') {
@@ -82,23 +93,23 @@ function _doSpecialAttack(mon, spec, targetAlly = -1) {
     const dmg = Math.max(1, raw);
     if (battleSt.isDefending) {
       const reduced = Math.max(1, Math.floor(dmg / 2));
-      _s.ps.hp = Math.max(0, _s.ps.hp - reduced);
-      _s.playerDamageNum = { value: reduced, timer: 0 };
+      ps.hp = Math.max(0, ps.hp - reduced);
+      setPlayerDamageNum({ value: reduced, timer: 0 });
     } else {
-      _s.ps.hp = Math.max(0, _s.ps.hp - dmg);
-      _s.playerDamageNum = { value: dmg, timer: 0 };
+      ps.hp = Math.max(0, ps.hp - dmg);
+      setPlayerDamageNum({ value: dmg, timer: 0 });
     }
     playSFX(SFX.ATTACK_HIT);
-    battleSt.battleShakeTimer = _s.BATTLE_SHAKE_MS;
+    battleSt.battleShakeTimer = BATTLE_SHAKE_MS;
     battleSt.battleState = 'enemy-attack'; battleSt.battleTimer = 0;
   } else if (spec.type === 'status' && ps.status) {
     const applied = tryInflictStatus(ps.status, spec.status, spec.hit);
     if (applied) {
-      _s.playerDamageNum = { value: 0, timer: 0, status: spec.status };
-      battleSt.battleShakeTimer = _s.BATTLE_SHAKE_MS;
+      setPlayerDamageNum({ value: 0, timer: 0, status: spec.status });
+      battleSt.battleShakeTimer = BATTLE_SHAKE_MS;
       if (STATUS_NAME_BYTES[applied]) replaceBattleMsg(STATUS_NAME_BYTES[applied]);
     } else {
-      _s.playerDamageNum = { miss: true, timer: 0 };
+      setPlayerDamageNum({ miss: true, timer: 0 });
     }
     battleSt.battleState = 'enemy-damage-show'; battleSt.battleTimer = 0;
   } else if (spec.type === 'multi_status' && ps.status) {
@@ -108,28 +119,28 @@ function _doSpecialAttack(mon, spec, targetAlly = -1) {
       if (result) anyApplied = result;
     }
     if (anyApplied) {
-      _s.playerDamageNum = { value: 0, timer: 0, status: 'multi' };
-      battleSt.battleShakeTimer = _s.BATTLE_SHAKE_MS;
+      setPlayerDamageNum({ value: 0, timer: 0, status: 'multi' });
+      battleSt.battleShakeTimer = BATTLE_SHAKE_MS;
       if (STATUS_NAME_BYTES[anyApplied]) replaceBattleMsg(STATUS_NAME_BYTES[anyApplied]);
     } else {
-      _s.playerDamageNum = { miss: true, timer: 0 };
+      setPlayerDamageNum({ miss: true, timer: 0 });
     }
     battleSt.battleState = 'enemy-damage-show'; battleSt.battleTimer = 0;
   } else {
     // No-op attacks (Reflect, Sence, etc.) — wait for msg then skip
-    if (_s.isBattleMsgBusy()) { battleSt.battleState = 'msg-wait'; battleSt.battleTimer = 0; }
-    else _s.processNextTurn();
+    if (isBattleMsgBusy()) { battleSt.battleState = 'msg-wait'; battleSt.battleTimer = 0; }
+    else _processNextTurn();
   }
 }
 
 // ── Enemy flash → targeting + hit calc ──────────────────────────────────────
 function _processEnemyFlash() {
-  if (battleSt.battleState !== 'enemy-flash' || battleSt.battleTimer < _s.BOSS_PREFLASH_MS) return false;
+  if (battleSt.battleState !== 'enemy-flash' || battleSt.battleTimer < BOSS_PREFLASH_MS) return false;
   const livingAllies = battleSt.battleAllies.filter(a => a.hp > 0);
   let targetAlly = -1;
   if (livingAllies.length > 0) {
     const allyOptions = battleSt.battleAllies.map((a, i) => a.hp > 0 ? i : -1).filter(i => i >= 0);
-    if (_s.ps.hp <= 0) {
+    if (ps.hp <= 0) {
       targetAlly = allyOptions[Math.floor(Math.random() * allyOptions.length)];
     } else if (Math.random() >= 1 / (1 + livingAllies.length)) {
       targetAlly = allyOptions[Math.floor(Math.random() * allyOptions.length)];
@@ -140,8 +151,8 @@ function _processEnemyFlash() {
   // Queue enemy attack message
   if (mon) {
     const monName = getMonsterName(mon.monsterId) || _nameToBytes('Enemy');
-    const targetName = targetAlly >= 0 ? _nameToBytes(battleSt.battleAllies[targetAlly].name || 'Ally') : _s.playerName;
-    _s.queueBattleMsg(targetName ? makeVsMsg(monName, targetName) : monName);
+    const targetName = targetAlly >= 0 ? _nameToBytes(battleSt.battleAllies[targetAlly].name || 'Ally') : _playerName();
+    queueBattleMsg(targetName ? makeVsMsg(monName, targetName) : monName);
   }
 
   // ── Monster special attack check ──────────────────────────────────────────
@@ -157,9 +168,9 @@ function _processEnemyFlash() {
     }
   }
 
-  let hitRate = mon ? (mon.hitRate || _s.GOBLIN_HIT_RATE) : _s.BOSS_HIT_RATE;
+  let hitRate = mon ? (mon.hitRate || GOBLIN_HIT_RATE) : BOSS_HIT_RATE;
   if (mon && mon.status) hitRate *= blindHitPenalty(mon.status);
-  const atk = mon ? mon.atk : _s.BOSS_ATK;
+  const atk = mon ? mon.atk : BOSS_ATK;
   const rolls = mon ? (mon.attackRoll || 1) : 1;
   const monAtkElem = mon ? (mon.atkElem || null) : null;
   // NES multi-hit: roll attackRoll times, per-hit shield/evade/hitRate checks
@@ -178,21 +189,21 @@ function _processEnemyFlash() {
     const { total, landed } = rollMultiHit(battleSt.battleAllies[targetAlly].def, null);
     if (landed > 0) {
       battleSt.battleAllies[targetAlly].hp = Math.max(0, battleSt.battleAllies[targetAlly].hp - total);
-      _s.allyDamageNums[targetAlly] = { value: total, timer: 0 };
-      battleSt.allyShakeTimer[targetAlly] = _s.BATTLE_SHAKE_MS;
+      getAllyDamageNums()[targetAlly] = { value: total, timer: 0 };
+      battleSt.allyShakeTimer[targetAlly] = BATTLE_SHAKE_MS;
       playSFX(SFX.ATTACK_HIT); battleSt.battleState = 'ally-hit'; battleSt.battleTimer = 0;
     } else {
-      _s.allyDamageNums[targetAlly] = { miss: true, timer: 0 };
+      getAllyDamageNums()[targetAlly] = { miss: true, timer: 0 };
       battleSt.battleState = 'ally-damage-show-enemy'; battleSt.battleTimer = 0;
     }
   } else {
     const shieldEvade = getShieldEvade();
-    const { total, landed } = rollMultiHit(_s.ps.def, ps.elemResist, shieldEvade, ps.evade);
+    const { total, landed } = rollMultiHit(ps.def, ps.elemResist, shieldEvade, ps.evade);
     if (landed > 0) {
       let dmg = total;
       if (battleSt.isDefending) dmg = Math.max(1, Math.floor(dmg / 2));
-      _s.ps.hp = Math.max(0, _s.ps.hp - dmg);
-      _s.playerDamageNum = { value: dmg, timer: 0 };
+      ps.hp = Math.max(0, ps.hp - dmg);
+      setPlayerDamageNum({ value: dmg, timer: 0 });
       // Physical hit wakes sleeping targets
       if (ps.status) wakeOnHit(ps.status);
       // Monster statusAtk: try to inflict status on player
@@ -205,10 +216,10 @@ function _processEnemyFlash() {
         }
       }
       playSFX(SFX.ATTACK_HIT);
-      battleSt.battleShakeTimer = _s.BATTLE_SHAKE_MS;
+      battleSt.battleShakeTimer = BATTLE_SHAKE_MS;
       battleSt.battleState = 'enemy-attack'; battleSt.battleTimer = 0;
     } else {
-      _s.playerDamageNum = { miss: true, timer: 0 };
+      setPlayerDamageNum({ miss: true, timer: 0 });
       battleSt.battleState = 'enemy-damage-show'; battleSt.battleTimer = 0;
     }
   }
@@ -217,18 +228,17 @@ function _processEnemyFlash() {
 
 // ── After damage show: check team wipe or advance ───────────────────────────
 function _processEnemyDamageShowState() {
-  if (battleSt.battleTimer < _s.BATTLE_DMG_SHOW_MS) return;
-  if (_s.isTeamWiped()) {
+  if (battleSt.battleTimer < BATTLE_DMG_SHOW_MS) return;
+  if (_isTeamWiped()) {
     battleSt.isDefending = false; battleSt.battleState = 'team-wipe'; battleSt.battleTimer = 0;
-  } else if (_s.isBattleMsgBusy()) { battleSt.battleState = 'msg-wait'; battleSt.battleTimer = 0;
-  } else { _s.processNextTurn(); }
+  } else if (isBattleMsgBusy()) { battleSt.battleState = 'msg-wait'; battleSt.battleTimer = 0;
+  } else { _processNextTurn(); }
 }
 
-export function updateBattleEnemyTurn(shared) {
-  _s = shared;
+export function updateBattleEnemyTurn() {
   if (_processEnemyFlash()) return true;
   if (battleSt.battleState === 'enemy-attack') {
-    if (battleSt.battleTimer >= _s.BATTLE_SHAKE_MS) { battleSt.battleState = 'enemy-damage-show'; battleSt.battleTimer = 0; }
+    if (battleSt.battleTimer >= BATTLE_SHAKE_MS) { battleSt.battleState = 'enemy-damage-show'; battleSt.battleTimer = 0; }
   } else if (battleSt.battleState === 'enemy-damage-show') { _processEnemyDamageShowState();
   } else { return false; }
   return true;

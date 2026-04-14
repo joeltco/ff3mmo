@@ -1,6 +1,6 @@
 // Random encounter spawning — extracted from game.js
 
-import { battleSt, getEnemyHP, setEnemyHP } from './battle-state.js';
+import { battleSt } from './battle-state.js';
 import { MONSTERS } from './data/monsters.js';
 import { ENCOUNTERS } from './data/encounters.js';
 import { GOBLIN_HIT_RATE } from './battle-math.js';
@@ -8,14 +8,17 @@ import { SFX, playSFX } from './music.js';
 import { TRACKS } from './music.js';
 import { createStatusState } from './status-effects.js';
 import { mapSt } from './map-state.js';
+import { inputSt } from './input-handler.js';
+import { getMonsterCanvas } from './monster-sprites.js';
 
 const TILE_SIZE = 16;
 
-let _s = null;
+// Injected at boot
+let _resetBattleVars = () => {};
+export function initBattleEncounter({ resetBattleVars }) { _resetBattleVars = resetBattleVars; }
 
 // ── Random encounter step counter ──────────────────────────────────────────
-export function tickRandomEncounter(shared) {
-  _s = shared;
+export function tickRandomEncounter() {
   if (battleSt.battleState !== 'none') return false;
   const inDungeon = mapSt.dungeonFloor >= 0 && mapSt.dungeonFloor < 4;
   const onGrass = mapSt.onWorldMap && mapSt.worldMapRenderer && (() => {
@@ -30,17 +33,16 @@ export function tickRandomEncounter(shared) {
     : 15 + Math.floor(Math.random() * 15);
   if (mapSt.encounterSteps >= threshold) {
     mapSt.encounterSteps = 0;
-    startRandomEncounter(_s);
+    startRandomEncounter();
     return true;
   }
   return false;
 }
 
 // ── Spawn encounter monsters ───────────────────────────────────────────────
-export function startRandomEncounter(shared) {
-  _s = shared;
+export function startRandomEncounter() {
   battleSt.isRandomEncounter = true;
-  _s.inputSt.battleActionCount = 0;
+  inputSt.battleActionCount = 0;
 
   const zoneKey = mapSt.onWorldMap
     ? 'grasslands'
@@ -78,12 +80,12 @@ export function startRandomEncounter(shared) {
   }
   // Sort tallest first for top-row grid placement
   battleSt.encounterMonsters.sort((a, b) => {
-    const ha = _s.getMonsterCanvas(a.monsterId)?.height || 32;
-    const hb = _s.getMonsterCanvas(b.monsterId)?.height || 32;
+    const ha = getMonsterCanvas(a.monsterId, battleSt.goblinBattleCanvas)?.height || 32;
+    const hb = getMonsterCanvas(b.monsterId, battleSt.goblinBattleCanvas)?.height || 32;
     return hb - ha;
   });
   battleSt.preBattleTrack = TRACKS.CRYSTAL_CAVE;
-  _s.resetBattleVars();
+  _resetBattleVars();
   battleSt.battleState = 'flash-strobe';
   battleSt.battleTimer = 0;
   playSFX(SFX.BATTLE_SWIPE);

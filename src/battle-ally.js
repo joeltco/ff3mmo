@@ -1,15 +1,27 @@
 // Battle ally update logic — extracted from game.js
 
-import { battleSt, getEnemyHP, setEnemyHP } from './battle-state.js';
+import { battleSt, getEnemyHP, setEnemyHP, BATTLE_SHAKE_MS, BATTLE_DMG_SHOW_MS } from './battle-state.js';
 import { playSlashSFX } from './battle-sfx.js';
 import { isWeapon } from './data/items.js';
 import { SFX, playSFX } from './music.js';
 import { _nameToBytes, makeVsMsg } from './text-utils.js';
-import { replaceBattleMsg } from './battle-msg.js';
+import { replaceBattleMsg, queueBattleMsg } from './battle-msg.js';
 import { BATTLE_CRITICAL } from './data/strings.js';
 import { getMonsterName } from './text-decoder.js';
+import { pvpSt } from './pvp.js';
+import { inputSt } from './input-handler.js';
+import { getEnemyDmgNum, setEnemyDmgNum } from './damage-numbers.js';
+import { ROSTER_FADE_STEPS } from './data/players.js';
 
-let _s = null;
+// Injected at boot — avoids circular import on game.js
+let _buildTurnOrder = () => [];
+let _processNextTurn = () => {};
+let _isTeamWiped = () => false;
+export function initBattleAlly({ buildTurnOrder, processNextTurn, isTeamWiped }) {
+  _buildTurnOrder = buildTurnOrder;
+  _processNextTurn = processNextTurn;
+  _isTeamWiped = isTeamWiped;
+}
 
 // ── Combo finalization ───────────────────────────────────────────────────────
 function _finalizeAllyCombo() {
@@ -17,8 +29,8 @@ function _finalizeAllyCombo() {
   for (const h of battleSt.allyHitResults) {
     if (!h.miss) { totalDmg += h.damage; allMiss = false; hitsLanded++; if (h.crit) anyCrit = true; }
   }
-  _s.enemyDmgNum = allMiss ? { miss: true, timer: 0 } : { value: totalDmg, crit: anyCrit, timer: 0 };
-  _s.inputSt.targetIndex = battleSt.allyTargetIndex;
+  setEnemyDmgNum(allMiss ? { miss: true, timer: 0 } : { value: totalDmg, crit: anyCrit, timer: 0 });
+  inputSt.targetIndex = battleSt.allyTargetIndex;
   if (!allMiss) {
     if (anyCrit) replaceBattleMsg(BATTLE_CRITICAL);
     else if (hitsLanded > 1) replaceBattleMsg(_nameToBytes(hitsLanded + ' hits!'));
@@ -31,11 +43,11 @@ function _updateAllyDamageShow() {
     battleSt.dyingMonsterIndices = new Map([[battleSt.allyTargetIndex, 0]]);
     battleSt.battleState = 'monster-death'; battleSt.battleTimer = 0; playSFX(SFX.MONSTER_DEATH);
   } else if (!battleSt.isRandomEncounter && getEnemyHP() <= 0) {
-    if (_s.pvpSt.isPVPBattle) {
+    if (pvpSt.isPVPBattle) {
       battleSt.battleState = 'pvp-dissolve'; battleSt.battleTimer = 0; playSFX(SFX.MONSTER_DEATH);
     } else { battleSt.battleState = 'boss-dissolve'; battleSt.battleTimer = 0; playSFX(SFX.BOSS_DEATH); }
   } else {
-    _s.processNextTurn();
+    _processNextTurn();
   }
 }
 
@@ -46,7 +58,7 @@ function _updateAllyJoin() {
     if (newAlly && battleSt.battleTimer >= 100) {
       newAlly.fadeStep = Math.max(0, newAlly.fadeStep - 1);
       battleSt.battleTimer = 0;
-      if (newAlly.fadeStep <= 0) { battleSt.turnQueue = _s.buildTurnOrder(); _s.processNextTurn(); }
+      if (newAlly.fadeStep <= 0) { battleSt.turnQueue = _buildTurnOrder(); _processNextTurn(); }
     }
     return true;
   }
@@ -64,13 +76,13 @@ function _updateAllyAttack() {
     const delay = battleSt.allyHitIdx === 0 ? ALLY_BACK_MS : ALLY_COMBO_PAUSE_MS;
     if (battleSt.battleTimer >= delay) {
       const ally = battleSt.battleAllies[battleSt.currentAllyAttacker];
-      if (battleSt.allyHitIdx === 0 && ally && _s.queueBattleMsg) {
+      if (battleSt.allyHitIdx === 0 && ally) {
         const allyName = _nameToBytes(ally.name || 'Ally');
         const ti = battleSt.allyTargetIndex;
         const targetName = (battleSt.encounterMonsters && ti >= 0)
           ? (getMonsterName(battleSt.encounterMonsters[ti].monsterId) || _nameToBytes('Enemy'))
           : null;
-        _s.queueBattleMsg(targetName ? makeVsMsg(allyName, targetName) : _nameToBytes((ally.name || 'Ally') + ' attacks!'));
+        queueBattleMsg(targetName ? makeVsMsg(allyName, targetName) : _nameToBytes((ally.name || 'Ally') + ' attacks!'));
       }
       const isLeft = (battleSt.allyHitIdx % 2 === 1) && ally && isWeapon(ally.weaponL);
       battleSt.allyHitIsLeft = isLeft;
@@ -97,14 +109,14 @@ function _updateAllyAttack() {
       const hit = battleSt.allyHitResults[battleSt.allyHitIdx];
       if (hit && !hit.miss) {
         // Defend halving for PVP opponent
-        if (_s.pvpSt.isPVPBattle && _s.pvpSt.pvpOpponentIsDefending && battleSt.allyTargetIndex < 0)
+        if (pvpSt.isPVPBattle && pvpSt.pvpOpponentIsDefending && battleSt.allyTargetIndex < 0)
           hit.damage = Math.max(1, Math.floor(hit.damage / 2));
         // Apply damage per hit
         if (battleSt.allyTargetIndex >= 0 && battleSt.encounterMonsters) {
           battleSt.encounterMonsters[battleSt.allyTargetIndex].hp = Math.max(0, battleSt.encounterMonsters[battleSt.allyTargetIndex].hp - hit.damage);
         } else if (battleSt.allyTargetIndex < 0) {
-          setEnemyHP(Math.max(0), getEnemyHP() - hit.damage);
-          if (_s.pvpSt.isPVPBattle) _s.pvpSt.pvpOpponentShakeTimer = _s.BATTLE_SHAKE_MS;
+          setEnemyHP(Math.max(0, getEnemyHP() - hit.damage));
+          if (pvpSt.isPVPBattle) pvpSt.pvpOpponentShakeTimer = BATTLE_SHAKE_MS;
         }
         if (hit.crit) battleSt.critFlashTimer = 0;
       }
@@ -130,23 +142,23 @@ function _updateAllyAttack() {
 // ── Ally taking enemy hit ────────────────────────────────────────────────────
 function _updateAllyEnemyHit() {
   if (battleSt.battleState === 'ally-hit') {
-    if (battleSt.battleTimer >= _s.BATTLE_SHAKE_MS) { battleSt.battleState = 'ally-damage-show-enemy'; battleSt.battleTimer = 0; }
+    if (battleSt.battleTimer >= BATTLE_SHAKE_MS) { battleSt.battleState = 'ally-damage-show-enemy'; battleSt.battleTimer = 0; }
     return true;
   }
   if (battleSt.battleState === 'ally-damage-show-enemy') {
-    if (battleSt.battleTimer >= _s.BATTLE_DMG_SHOW_MS) {
+    if (battleSt.battleTimer >= BATTLE_DMG_SHOW_MS) {
       const ally = battleSt.battleAllies[battleSt.enemyTargetAllyIdx];
       if (ally && ally.hp <= 0) {
         // Start death animation — visual only, battle continues
         ally.deathTimer = 0;
         battleSt.turnQueue = battleSt.turnQueue.filter(t => !(t.type === 'ally' && t.index === battleSt.enemyTargetAllyIdx));
         battleSt.enemyTargetAllyIdx = -1;
-        if (_s.isTeamWiped()) {
+        if (_isTeamWiped()) {
           battleSt.battleState = 'team-wipe'; battleSt.battleTimer = 0;
         } else {
-          _s.processNextTurn();
+          _processNextTurn();
         }
-      } else { battleSt.enemyTargetAllyIdx = -1; _s.processNextTurn(); }
+      } else { battleSt.enemyTargetAllyIdx = -1; _processNextTurn(); }
     }
     return true;
   }
@@ -158,15 +170,15 @@ function _updateAllyKOSequence() {
   if (battleSt.battleState === 'ally-ko-fade') {
     const koAlly = battleSt.battleAllies[battleSt.enemyTargetAllyIdx];
     if (koAlly && battleSt.battleTimer >= 100) {
-      koAlly.fadeStep = Math.min(_s.ROSTER_FADE_STEPS, koAlly.fadeStep + 1);
+      koAlly.fadeStep = Math.min(ROSTER_FADE_STEPS, koAlly.fadeStep + 1);
       battleSt.battleTimer = 0;
-      if (koAlly.fadeStep >= _s.ROSTER_FADE_STEPS) {
+      if (koAlly.fadeStep >= ROSTER_FADE_STEPS) {
         battleSt.turnQueue = battleSt.turnQueue.filter(t => !(t.type === 'ally' && t.index === battleSt.enemyTargetAllyIdx));
         battleSt.enemyTargetAllyIdx = -1;
-        if (_s.isTeamWiped()) {
+        if (_isTeamWiped()) {
           battleSt.battleState = 'team-wipe'; battleSt.battleTimer = 0;
         } else {
-          _s.processNextTurn();
+          _processNextTurn();
         }
       }
     }
@@ -176,8 +188,7 @@ function _updateAllyKOSequence() {
   return false;
 }
 
-export function updateBattleAlly(shared) {
-  _s = shared;
+export function updateBattleAlly() {
   if (_updateAllyJoin()) return true;
   if (_updateAllyAttack()) return true;
   if (battleSt.battleState === 'ally-damage-show') { if (battleSt.battleTimer >= 700) _updateAllyDamageShow(); return true; }
