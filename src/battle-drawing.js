@@ -15,6 +15,7 @@ import { pvpEnemyCellCenter } from './pvp-math.js';
 import { pvpSt, drawBossSpriteBoxPVP } from './pvp.js';
 import { inputSt } from './input-handler.js';
 import { bsc, getSlashFramesForWeapon } from './battle-sprite-cache.js';
+import { hudSt } from './hud-state.js';
 import { fakePlayerPortraits, fakePlayerVictoryPortraits, fakePlayerHitPortraits,
          fakePlayerKneelPortraits, fakePlayerAttackPortraits, fakePlayerAttackLPortraits,
          fakePlayerKnifeRPortraits, fakePlayerKnifeLPortraits,
@@ -322,8 +323,8 @@ function _drawBattlePortrait() {
   const py = HUD_VIEW_Y + 8;
 
   // Player death animation: slide → text fade → death pose fade
-  if (_s.playerDeathTimer != null) {
-    const dt = Math.min(_s.playerDeathTimer, DEATH_TOTAL_MS);
+  if (hudSt.playerDeathTimer != null) {
+    const dt = Math.min(hudSt.playerDeathTimer, DEATH_TOTAL_MS);
 
     // Phase 1: kneel slides down, clipped to inner portrait area (16×16)
     if (dt < DEATH_SLIDE_MS) {

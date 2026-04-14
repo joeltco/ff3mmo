@@ -10,6 +10,7 @@ import { clearFlameSprites } from './flame-sprites.js';
 import { transSt } from './transitions.js';
 import { BATTLE_BG_MAP_LOOKUP, renderBattleBg } from './battle-bg.js';
 import { AREA_NAMES, DUNGEON_NAME } from './data/strings.js';
+import { hudSt } from './hud-state.js';
 
 const TILE_SIZE = 16;
 
@@ -95,8 +96,8 @@ function _loadDungeonFloor(mapId, returnX, returnY) {
   _s.mapRenderer = new MapRenderer(result, playerX, playerY);
   resetIndoorWaterCache();
   clearFlameSprites();
-  _s.bossSprite = (floorIndex === 4 && _s.adamantoiseFrames && !_s.enemyDefeated)
-    ? { frames: _s.adamantoiseFrames, px: 6 * TILE_SIZE, py: 8 * TILE_SIZE } : null;
+  _s.bossSprite = (floorIndex === 4 && hudSt.adamantoiseFrames && !_s.enemyDefeated)
+    ? { frames: hudSt.adamantoiseFrames, px: 6 * TILE_SIZE, py: 8 * TILE_SIZE } : null;
   _s.disabledTrigger = { x: playerX, y: playerY };
   _s.moving = false;
   _s.sprite.setDirection(DIR_DOWN);
@@ -145,9 +146,9 @@ export function setupTopBox(mapId, isWorldMap) {
   if (isWorldMap) {
     const bgId = _s.romRaw[BATTLE_BG_MAP_LOOKUP] & 0x1F;
     const result = renderBattleBg(_s.romRaw, bgId);
-    _s.topBoxBgCanvas = result.bgCanvas;
-    _s.topBoxBgFadeFrames = result.fadeFrames;
-    _s.topBoxMode = 'battle';
+    hudSt.topBoxBgCanvas = result.bgCanvas;
+    hudSt.topBoxBgFadeFrames = result.fadeFrames;
+    hudSt.topBoxMode = 'battle';
     _s.topBoxSt.isTown = false;
     _s.topBoxSt.nameBytes = null;
     _s.topBoxSt.state = 'none';
@@ -158,11 +159,11 @@ export function setupTopBox(mapId, isWorldMap) {
     const romMap = (mapId === 1004) ? 148 : 111;
     const bgId = _s.romRaw[BATTLE_BG_MAP_LOOKUP + romMap] & 0x1F;
     const result = renderBattleBg(_s.romRaw, bgId);
-    _s.topBoxBgCanvas = result.bgCanvas;
-    _s.topBoxBgFadeFrames = result.fadeFrames;
-    _s.loadingBgFadeFrames = result.fadeFrames;
+    hudSt.topBoxBgCanvas = result.bgCanvas;
+    hudSt.topBoxBgFadeFrames = result.fadeFrames;
+    hudSt.loadingBgFadeFrames = result.fadeFrames;
     _s.topBoxSt.nameBytes = DUNGEON_NAME;
-    _s.topBoxMode = 'battle';
+    hudSt.topBoxMode = 'battle';
     _s.topBoxSt.isTown = false;
     _s.topBoxSt.state = 'none';
     _s.topBoxSt.fadeStep = 4;
@@ -172,13 +173,13 @@ export function setupTopBox(mapId, isWorldMap) {
     if (!_s.topBoxSt.isTown) { _s.topBoxSt.state = 'pending'; }
     _s.topBoxSt.isTown = true;
     _s.topBoxSt.nameBytes = AREA_NAMES.get(114);
-    _s.topBoxMode = 'name';
+    hudSt.topBoxMode = 'name';
   } else if (!_s.topBoxSt.isTown) {
     const bgId = _s.romRaw[BATTLE_BG_MAP_LOOKUP + mapId] & 0x1F;
     const result = renderBattleBg(_s.romRaw, bgId);
-    _s.topBoxBgCanvas = result.bgCanvas;
-    _s.topBoxBgFadeFrames = result.fadeFrames;
-    _s.topBoxMode = 'battle';
+    hudSt.topBoxBgCanvas = result.bgCanvas;
+    hudSt.topBoxBgFadeFrames = result.fadeFrames;
+    hudSt.topBoxMode = 'battle';
   }
 }
 

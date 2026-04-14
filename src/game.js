@@ -44,6 +44,7 @@ import { _calcBoxExpandSize, _encounterGridPos } from './battle-layout.js';
 // _makeCanvas16, _makeCanvas16ctx, _hflipCanvas16, _makeWhiteCanvas → sprite-init.js
 import { _updateWorldWater, _updateIndoorWater, resetWorldWaterCache, _buildHorizWaterPair } from './water-animation.js';
 import { bsc, getSlashFramesForWeapon, initBattleSpriteCache, loadJobBattleSprites } from './battle-sprite-cache.js';
+import { hudSt, HUD_INFO_FADE_STEPS, HUD_INFO_FADE_STEP_MS, HUD_HPLV_STEP_MS } from './hud-state.js';
 import { initFlameRawTiles, initStarTiles, rebuildFlameSprites,
          getFlameSprites, getFlameFrames, getStarTiles } from './flame-sprites.js';
 // BATTLE_BG_MAP_LOOKUP, renderBattleBg → map-loading.js
@@ -130,7 +131,8 @@ let cornerMasks = null;       // [TL, TR, BL, BR] 8×8 canvases — black where 
 // FF1&2 ROM — secondary ROM for monster sprites, etc.
 let ff12Raw = null;
 // FF2_OFFSET, FF2_ADAMANTOISE_SPRITE → sprite-init.js
-let adamantoiseFrames = null; // [normal, flipped] canvases
+// adamantoiseFrames, moogleFrames, invincibleFrames, moogleFadeFrames, bossFadeFrames,
+// loadingBgFadeFrames → hud-state.js
 
 // Boss sprite — positioned in dungeon boss room
 let bossSprite = null;  // { canvas, px, py } or null
@@ -140,15 +142,6 @@ let bossSprite = null;  // { canvas, px, py } or null
 let goblinBattleCanvas = null;  // 32×32 canvas
 let goblinWhiteCanvas = null;   // 32×32 all-white version for pre-attack flash
 let goblinDeathFrames = null;   // pre-rendered diagonal deterioration frames
-let moogleFrames = null; // [normal, flipped] canvases
-let invincibleFrames = null; // [frameA, frameB] 32×32 canvases (east-facing)
-
-// Loading screen fade state — LOAD_FADE_STEP_MS, LOAD_FADE_MAX imported from loading-screen.js
-
-// Loading screen pre-rendered fade frames
-let moogleFadeFrames = null; // [step0=bright, step1, step2, step3=black] per walk frame pair
-let bossFadeFrames = null;   // same structure for adamantoise
-let loadingBgFadeFrames = null; // battle BG fade frames for loading screen
 
 // Title screen state → titleSt in title-screen.js
 // Title timing constants (needed by updateTitle and init functions in game.js)
@@ -164,15 +157,7 @@ const SELECT_TEXT_STEPS   = 4;
 
 // Player select screen state → save-state.js (selectCursor, saveSlots, nameBuffer, etc.)
 
-// HUD info fade-in after title screen ends
-let hudInfoFadeTimer = 0;
-const HUD_INFO_FADE_STEPS = 4;
-const HUD_INFO_FADE_STEP_MS = 200;
-
-// HUD level ↔ HP cross-fade (0=level fully visible, 4=HP fully visible)
-let hudHpLvStep = 0;
-let hudHpLvTimer = 0;
-const HUD_HPLV_STEP_MS = 60;
+// HUD timers (hudInfoFadeTimer, hudHpLvStep/Timer, playerDeathTimer, topBox*) → hud-state.js
 
 // Player stats are now in ps (imported from ./player-stats.js)
 
@@ -283,9 +268,7 @@ const PLAYER_DMG_SHOW_MS = 700;         // pause after final hit before enemy co
 // CRIT_RATE, BASE_HIT_RATE, BOSS_HIT_RATE, GOBLIN_HIT_RATE → battle-math.js
 
 // Top box — battle scene BG or area name
-let topBoxMode = 'name';       // 'name' | 'battle'
-let topBoxBgCanvas = null;     // Pre-rendered 256×32 battle BG strip (frame 0 = original)
-let topBoxBgFadeFrames = null; // [original, step1, step2, ..., black] — NES palette fade
+// topBoxMode, topBoxBgCanvas, topBoxBgFadeFrames → hud-state.js
 
 // Top box scroll animation — blue name banner slides in/out
 const TOPBOX_FADE_STEPS = 4;         // 4 steps: $30→$20→$10→$00→$0F — still used by game.js draw functions
@@ -320,7 +303,7 @@ let allyHitResults = [];       // full combo hit array for current ally turn
 let allyHitIdx = 0;            // current hit index in ally combo
 let allyHitIsLeft = false;     // true when current ally hit is L-hand
 let allyShakeTimer = {};       // {allyIdx: ms remaining}
-let playerDeathTimer = null;   // null = alive, number = ms into death animation
+// playerDeathTimer → hud-state.js
 let _teamWipeMsgShown = false;
 let enemyTargetAllyIdx = -1;   // which ally an enemy is targeting (-1 = player)
 let allyExitTimer = 0;         // ms since victory-celebrate started (for ally exit fade)
@@ -539,7 +522,7 @@ function _resetBattleVars() {
   currentAllyAttacker = -1; allyTargetIndex = -1; allyHitResult = null; allyHitIsLeft = false;
   allyShakeTimer = {}; enemyTargetAllyIdx = -1; allyExitTimer = 0;
   resetBattleItemVars();
-  playerDeathTimer = null; _teamWipeMsgShown = false;
+  hudSt.playerDeathTimer = null; _teamWipeMsgShown = false;
   inputSt.battleActionCount = 0;
   clearBattleMsgQueue();
 }
@@ -567,7 +550,7 @@ function returnToTitle() {
   clearMusicStash();
   transSt.state = 'hud-fade-out';
   transSt.timer = 0;
-  transSt.pendingAction = () => { battleState = 'none'; hudInfoFadeTimer = HUD_INFO_FADE_STEPS * HUD_INFO_FADE_STEP_MS; _startTitleScreen(); };
+  transSt.pendingAction = () => { battleState = 'none'; hudSt.hudInfoFadeTimer = HUD_INFO_FADE_STEPS * HUD_INFO_FADE_STEP_MS; _startTitleScreen(); };
 }
 // setupTopBox → map-loading.js
 
@@ -586,12 +569,6 @@ function _hudDrawShared() {
     get titleHudFadeCanvases() { return titleHudFadeCanvases; },
     get battleState() { return battleState; },
     get battleShakeTimer() { return battleShakeTimer; },
-    get topBoxBgCanvas() { return topBoxBgCanvas; },
-    get topBoxBgFadeFrames() { return topBoxBgFadeFrames; },
-    get topBoxMode() { return topBoxMode; },
-    get hudInfoFadeTimer() { return hudInfoFadeTimer; },
-    get hudHpLvStep() { return hudHpLvStep; },
-    get playerDeathTimer() { return playerDeathTimer; },
     get titleState() { return titleSt.state; },
     get titleTimer() { return titleSt.timer; },
     TITLE_FADE_STEP_MS,
@@ -645,16 +622,7 @@ function _mapLoadShared() {
     set enemyDefeated(v) { enemyDefeated = v; },
     get openDoor() { return openDoor; },
     set openDoor(v) { openDoor = v; },
-    get adamantoiseFrames() { return adamantoiseFrames; },
     get worldMapData() { return worldMapData; },
-    get topBoxBgCanvas() { return topBoxBgCanvas; },
-    set topBoxBgCanvas(v) { topBoxBgCanvas = v; },
-    get topBoxBgFadeFrames() { return topBoxBgFadeFrames; },
-    set topBoxBgFadeFrames(v) { topBoxBgFadeFrames = v; },
-    get loadingBgFadeFrames() { return loadingBgFadeFrames; },
-    set loadingBgFadeFrames(v) { loadingBgFadeFrames = v; },
-    get topBoxMode() { return topBoxMode; },
-    set topBoxMode(v) { topBoxMode = v; },
     get topBoxSt() { return topBoxSt; },
     applyPassage: (tilemap) => applyPassage(tilemap),
     rebuildFlameSprites: _rebuildFlameSprites,
@@ -676,10 +644,6 @@ function _loadingShared() {
   return {
     ctx,
     get transTimer()          { return transSt.timer; },
-    get loadingBgFadeFrames() { return loadingBgFadeFrames; },
-    get moogleFadeFrames()    { return moogleFadeFrames; },
-    get bossFadeFrames()      { return bossFadeFrames; },
-    get adamantoiseFrames()   { return adamantoiseFrames; },
     get borderFadeSets()      { return borderFadeSets; },
     get borderTileCanvases()  { return borderTileCanvases; },
     get isMobile()            { return isMobile; },
@@ -955,7 +919,6 @@ function _battleDrawShared() {
     get playerHealNum() { return getPlayerHealNum(); },
     get enemyHealNum() { return getEnemyHealNum(); },
     get battleShakeTimer() { return battleShakeTimer; },
-    get playerDeathTimer() { return playerDeathTimer; },
     get critFlashTimer() { return critFlashTimer; },
     set critFlashTimer(v) { critFlashTimer = v; },
     get currentHitIdx() { return currentHitIdx; },
@@ -1000,8 +963,6 @@ function _battleDrawShared() {
     get goblinDeathFrames() { return goblinDeathFrames; },
     get cursorTileCanvas() { return cursorTileCanvas; },
     get cursorFadeCanvases() { return cursorFadeCanvases; },
-    get topBoxBgCanvas() { return topBoxBgCanvas; },
-    get topBoxBgFadeFrames() { return topBoxBgFadeFrames; },
     topBoxSt,
     clipToViewport,
     grayViewport,
@@ -1118,12 +1079,12 @@ function _initSpriteAssets(romRaw) {
 
   // Moogle sprite (sprite-init.js)
   const ms = _initMoogleSprite(romRaw);
-  moogleFrames = ms.moogleFrames;
+  hudSt.moogleFrames = ms.moogleFrames;
 
   // Loading screen fade frames (sprite-init.js)
   const lf = _initLoadingScreenFadeFrames(romRaw, ff12Raw);
-  moogleFadeFrames = lf.moogleFadeFrames;
-  bossFadeFrames = lf.bossFadeFrames;
+  hudSt.moogleFadeFrames = lf.moogleFadeFrames;
+  hudSt.bossFadeFrames = lf.bossFadeFrames;
 
   initMusic(romRaw);
   initFlameRawTiles(romRaw);
@@ -1131,7 +1092,7 @@ function _initSpriteAssets(romRaw) {
 }
 function _initTitleAssets(romRaw) {
   const inv = _initInvincibleSprite(romRaw, TITLE_FADE_MAX);
-  invincibleFrames = inv.invincibleFrames;
+  hudSt.invincibleFrames = inv.invincibleFrames;
   titleSt.shipFadeFrames = inv.shipFadeFrames;
   titleSt.shadowFade = inv.shadowFade;
   const _tw = initTitleWater(romRaw, TITLE_FADE_MAX); titleSt.waterFrames = _tw.titleWaterFrames; titleSt.waterFadeTiles = _tw.titleWaterFadeTiles;
@@ -1214,12 +1175,12 @@ export async function loadROM(arrayBuffer) {
 export function loadFF12ROM(arrayBuffer) {
   ff12Raw = new Uint8Array(arrayBuffer);
   const ad = _initAdamantoise(ff12Raw);
-  adamantoiseFrames = ad.adamantoiseFrames;
+  hudSt.adamantoiseFrames = ad.adamantoiseFrames;
   initFF1Music(ff12Raw);
   if (romRaw) { // rebuild loading screen fade frames with boss fade
     const lf2 = _initLoadingScreenFadeFrames(romRaw, ff12Raw);
-    moogleFadeFrames = lf2.moogleFadeFrames;
-    bossFadeFrames = lf2.bossFadeFrames;
+    hudSt.moogleFadeFrames = lf2.moogleFadeFrames;
+    hudSt.bossFadeFrames = lf2.bossFadeFrames;
   }
 }
 
@@ -1551,7 +1512,7 @@ function render() {
 // _updateTitleUnderwater, _updateTitleSelectCase → title-screen.js
 function _updateTitleMainOutCase() {
   titleSt.state = 'done';
-  hudInfoFadeTimer = 0;
+  hudSt.hudInfoFadeTimer = 0;
   const slot = saveSlots[selectCursor];
   if (slot && slot.stats) {
     ps.stats.str = slot.stats.str;
@@ -1829,8 +1790,8 @@ function _updateBattleTimers(dt) {
     if (allyShakeTimer[idx] > 0) allyShakeTimer[idx] = Math.max(0, allyShakeTimer[idx] - dt);
   }
   // Start player death animation on first frame of hp=0
-  if (ps.hp <= 0 && playerDeathTimer == null && battleState !== 'none') { playerDeathTimer = 0; }
-  if (playerDeathTimer != null) playerDeathTimer += dt;
+  if (ps.hp <= 0 && hudSt.playerDeathTimer == null && battleState !== 'none') { hudSt.playerDeathTimer = 0; }
+  if (hudSt.playerDeathTimer != null) hudSt.playerDeathTimer += dt;
   for (const ally of battleAllies) {
     if (ally.deathTimer != null) ally.deathTimer += dt;
   }
@@ -2335,7 +2296,7 @@ function _updateDefeatStates() {
       battleState = 'none'; battleTimer = 0;
       isRandomEncounter = false;
       encounterMonsters = null; turnQueue = []; battleAllies = []; allyJoinRound = 0;
-      playerDeathTimer = null; _teamWipeMsgShown = false;
+      hudSt.playerDeathTimer = null; _teamWipeMsgShown = false;
       ps.hp = ps.stats ? ps.stats.maxHP : 28;
       ps.mp = ps.stats ? ps.stats.maxMP : 0;
       const worldEntry = mapStack.slice().reverse().find(e => e.mapId === 'world');
@@ -2388,12 +2349,12 @@ function _updateHudHpLvStep(dt) {
   const target = (battleState === 'none' || battleState === 'flash-strobe' ||
     battleState === 'encounter-box-expand' || battleState === 'monster-slide-in' ||
     battleState === 'enemy-box-expand' || battleState === 'boss-appear') ? 0 : 4;
-  if (hudHpLvStep === target) return;
-  hudHpLvTimer += dt;
-  while (hudHpLvTimer >= HUD_HPLV_STEP_MS) {
-    hudHpLvTimer -= HUD_HPLV_STEP_MS;
-    hudHpLvStep += hudHpLvStep < target ? 1 : -1;
-    if (hudHpLvStep === target) { hudHpLvTimer = 0; break; }
+  if (hudSt.hudHpLvStep === target) return;
+  hudSt.hudHpLvTimer += dt;
+  while (hudSt.hudHpLvTimer >= HUD_HPLV_STEP_MS) {
+    hudSt.hudHpLvTimer -= HUD_HPLV_STEP_MS;
+    hudSt.hudHpLvStep += hudSt.hudHpLvStep < target ? 1 : -1;
+    if (hudSt.hudHpLvStep === target) { hudSt.hudHpLvTimer = 0; break; }
   }
 }
 
@@ -2439,10 +2400,10 @@ function _updateStarEffect(dt) {
 }
 
 function _gameLoopUpdate(dt) {
-  if (hudInfoFadeTimer < HUD_INFO_FADE_STEPS * HUD_INFO_FADE_STEP_MS) hudInfoFadeTimer += dt;
+  if (hudSt.hudInfoFadeTimer < HUD_INFO_FADE_STEPS * HUD_INFO_FADE_STEP_MS) hudSt.hudInfoFadeTimer += dt;
   _updateHudHpLvStep(dt);
   handleInput();
-  updateRoster(dt, { battleState, transSt, wipeDuration: 44 * (1000 / 60), hudInfoFadeTimer, hudInfoFadeSteps: HUD_INFO_FADE_STEPS, hudInfoFadeStepMs: HUD_INFO_FADE_STEP_MS });
+  updateRoster(dt, { battleState, transSt, wipeDuration: 44 * (1000 / 60), hudInfoFadeTimer: hudSt.hudInfoFadeTimer, hudInfoFadeSteps: HUD_INFO_FADE_STEPS, hudInfoFadeStepMs: HUD_INFO_FADE_STEP_MS });
   updateChat(dt, battleState);
   updateChatTabs(dt);
   updatePauseMenu(dt, playerInventory);
@@ -2476,7 +2437,7 @@ function _gameLoopDraw() {
     fetch('/api/client-error', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ msg: e.message, stack: e.stack }) }).catch(() => {});
   }
   // Draw tabs BEFORE HUD so static HUD canvas draws on top of tab overlap
-  const _infoFade = HUD_INFO_FADE_STEPS - Math.min(Math.floor(hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
+  const _infoFade = HUD_INFO_FADE_STEPS - Math.min(Math.floor(hudSt.hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
   let _tabFade = Math.max(rosterBattleFade, _infoFade);
   const _wipeDur = 44 * (1000 / 60);
   const _wFadeMs = _wipeDur / ROSTER_FADE_STEPS;
@@ -2499,7 +2460,7 @@ function _gameLoopDraw() {
       scrollArrowUp, scrollArrowDown, scrollArrowUpFade, scrollArrowDownFade,
       drawSparkle: drawRosterSparkle,
       transSt, wipeDuration: 44 * (1000 / 60),
-      hudInfoFadeTimer, hudInfoFadeSteps: HUD_INFO_FADE_STEPS, hudInfoFadeStepMs: HUD_INFO_FADE_STEP_MS,
+      hudInfoFadeTimer: hudSt.hudInfoFadeTimer, hudInfoFadeSteps: HUD_INFO_FADE_STEPS, hudInfoFadeStepMs: HUD_INFO_FADE_STEP_MS,
       battleState, msgState,
     };
     if (battleAllies.length > 0 && battleState !== 'none') drawBattleAllies(_bds);

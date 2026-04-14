@@ -13,6 +13,7 @@ import { _dmgBounceY } from './data/animation-tables.js';
 import { HEAL_NUM_PAL, drawBattleNum } from './damage-numbers.js';
 import { inputSt } from './input-handler.js';
 import { bsc } from './battle-sprite-cache.js';
+import { hudSt } from './hud-state.js';
 
 // NES layout constants — must match game.js
 const CANVAS_W = 256;
@@ -124,11 +125,11 @@ function _drawTopBoxBattleBG() {
   const battleShakeTimer = _s.battleShakeTimer;
   const topShake = ((battleState === 'enemy-attack' || battleState === 'poison-tick' || battleState === 'pvp-opp-sw-hit') && battleShakeTimer > 0)
     ? (Math.floor(battleShakeTimer / 67) & 1 ? 2 : -2) : 0;
-  if (transSt.state !== 'loading' && !topBoxSt.isTown && _s.topBoxBgCanvas) {
-    ctx.drawImage(_s.topBoxBgCanvas, topShake, 0);
+  if (transSt.state !== 'loading' && !topBoxSt.isTown && hudSt.topBoxBgCanvas) {
+    ctx.drawImage(hudSt.topBoxBgCanvas, topShake, 0);
   }
-  if (!topBoxSt.isTown && _s.topBoxBgFadeFrames && transSt.state !== 'none' && transSt.state !== 'door-opening' && transSt.state !== 'loading') {
-    const maxStep = _s.topBoxBgFadeFrames.length - 1;
+  if (!topBoxSt.isTown && hudSt.topBoxBgFadeFrames && transSt.state !== 'none' && transSt.state !== 'door-opening' && transSt.state !== 'loading') {
+    const maxStep = hudSt.topBoxBgFadeFrames.length - 1;
     const FADE_STEP_MS = 100;
     let fadeStep = 0;
     if (transSt.state === 'closing') {
@@ -139,9 +140,9 @@ function _drawTopBoxBattleBG() {
       if (transSt.topBoxAlreadyBright) fadeStep = 0;
       else fadeStep = Math.max(maxStep - Math.floor(transSt.timer / FADE_STEP_MS), 0);
     } else if (transSt.state === 'hud-fade-in') {
-      fadeStep = Math.max(maxStep - Math.floor(_s.hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), 0);
+      fadeStep = Math.max(maxStep - Math.floor(hudSt.hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), 0);
     }
-    if (fadeStep > 0) ctx.drawImage(_s.topBoxBgFadeFrames[fadeStep], 0, 0);
+    if (fadeStep > 0) ctx.drawImage(hudSt.topBoxBgFadeFrames[fadeStep], 0, 0);
   }
   if (!topBoxSt.isTown && transSt.state !== 'loading') roundTopBoxCorners();
 }
@@ -163,7 +164,7 @@ function _drawTopBoxOverlay(isFading) {
       const tw = measureText(topBoxSt.nameBytes);
       drawText(ctx, 8 + Math.floor((240 - tw) / 2), 12, topBoxSt.nameBytes, fadedPal);
     }
-  } else if (topBoxSt.isTown && _s.topBoxMode === 'name' && topBoxSt.nameBytes) {
+  } else if (topBoxSt.isTown && hudSt.topBoxMode === 'name' && topBoxSt.nameBytes) {
     if (isFading) drawTopBoxBorder(topBoxSt.fadeStep);
     else if (topBoxSt.state !== 'pending') drawTopBoxBorder(0);
     if (!isFading && topBoxSt.state !== 'pending') {
@@ -233,7 +234,7 @@ function _drawPauseHealNum(px, py) {
 }
 
 function _drawHUDPortrait() {
-  const infoFadeStep = HUD_INFO_FADE_STEPS - Math.min(Math.floor(_s.hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
+  const infoFadeStep = HUD_INFO_FADE_STEPS - Math.min(Math.floor(hudSt.hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
   const bp = bsc.battlePoses;
   if (_s.battleState !== 'none' || !bp.idle) return;
   const isPauseHeal = pauseSt.state === 'inv-heal';
@@ -251,9 +252,9 @@ function _drawHUDPortrait() {
 
 function _drawHUDInfoPanel() {
   const ctx = _s.ctx;
-  const infoFadeStep = HUD_INFO_FADE_STEPS - Math.min(Math.floor(_s.hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
+  const infoFadeStep = HUD_INFO_FADE_STEPS - Math.min(Math.floor(hudSt.hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
   if (infoFadeStep >= HUD_INFO_FADE_STEPS) return;
-  const playerDeathTimer = _s.playerDeathTimer;
+  const playerDeathTimer = hudSt.playerDeathTimer;
   if (playerDeathTimer != null) {
     if (playerDeathTimer < 500) {
     } else if (playerDeathTimer < 800) {
@@ -327,7 +328,7 @@ export function drawHUD() {
     }
     _drawHudWithFade(_s.titleHudCanvas, _s.titleHudFadeCanvases, tfl);
   } else if (_s.hudCanvas) {
-    const fadeStep = HUD_INFO_FADE_STEPS - Math.min(Math.floor(_s.hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
+    const fadeStep = HUD_INFO_FADE_STEPS - Math.min(Math.floor(hudSt.hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
     _drawHudWithFade(_s.hudCanvas, _s.hudFadeCanvases, fadeStep);
   }
   if (_s.titleState !== 'done') return;

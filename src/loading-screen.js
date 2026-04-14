@@ -6,6 +6,7 @@ import { nesColorFade } from './palette.js';
 import { NES_SYSTEM_PALETTE } from './tile-decoder.js';
 import { loadingSt } from './transitions.js';
 import { MONSTERS } from './data/monsters.js';
+import { hudSt } from './hud-state.js';
 
 // Constants
 const LOAD_FADE_STEP_MS = 133;
@@ -30,7 +31,7 @@ function _calcFadeLevel() {
 }
 
 function _drawLoadingBG(vpTop, fadeLevel) {
-  const bgFadeFrames = _s.loadingBgFadeFrames;
+  const bgFadeFrames = hudSt.loadingBgFadeFrames;
   if (!bgFadeFrames || bgFadeFrames.length === 0) return;
   const bgCanvas = bgFadeFrames[Math.min(fadeLevel, bgFadeFrames.length - 1)];
   const scrollX = Math.floor(loadingSt.bgScroll) % 256;
@@ -55,9 +56,9 @@ function _drawLoadingInfoBox(cx, vpTop, vpBot, fadeLevel, fadedTextPal) {
   _s.drawText(_s.ctx, infoBoxX + Math.floor((infoBoxW - floorsW) / 2), infoBoxY + 10, _FLOORS_BYTES, fadedTextPal);
   const bossContentX = infoBoxX + Math.floor((infoBoxW - bossRowW) / 2);
   const bossRowY = infoBoxY + 22;
-  const bossFade = _s.bossFadeFrames;
+  const bossFade = hudSt.bossFadeFrames;
   if (bossFade) _s.ctx.drawImage(bossFade[fadeLevel][Math.floor(_s.transTimer / 400) & 1], bossContentX, bossRowY);
-  else if (_s.adamantoiseFrames) _s.ctx.drawImage(_s.adamantoiseFrames[0], bossContentX, bossRowY);
+  else if (hudSt.adamantoiseFrames) _s.ctx.drawImage(hudSt.adamantoiseFrames[0], bossContentX, bossRowY);
   _s.drawText(_s.ctx, bossContentX + 20, bossRowY + 4, _LODHP_BYTES, fadedTextPal);
 }
 
@@ -98,7 +99,7 @@ function _drawLoadingChatBubble(rpCX, rpY, rpH, fadeLevel) {
 }
 
 function _drawLoadingMoogleSprite(moogleX, moogleY, fadeLevel) {
-  const moogleFade = _s.moogleFadeFrames;
+  const moogleFade = hudSt.moogleFadeFrames;
   if (!moogleFade) return;
   _s.ctx.drawImage(moogleFade[fadeLevel][Math.floor(_s.transTimer / 400) & 1], moogleX, moogleY);
 }
