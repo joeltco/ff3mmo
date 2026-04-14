@@ -12,6 +12,7 @@ import { LOAD_FADE_STEP_MS, LOAD_FADE_MAX, drawHUDLoadingMoogle } from './loadin
 import { _dmgBounceY } from './data/animation-tables.js';
 import { HEAL_NUM_PAL, drawBattleNum } from './damage-numbers.js';
 import { inputSt } from './input-handler.js';
+import { bsc } from './battle-sprite-cache.js';
 
 // NES layout constants — must match game.js
 const CANVAS_W = 256;
@@ -190,7 +191,7 @@ function _drawPortraitImage(px, py, nfPortrait, isPauseHeal, infoFadeStep) {
   const ctx = _s.ctx;
   if (infoFadeStep >= HUD_INFO_FADE_STEPS) return;
   if (infoFadeStep > 0) {
-    const bp = _s.battlePoses;
+    const bp = bsc.battlePoses;
     const fadeSets = nfPortrait === bp.kneel ? bp.kneelFade
                    : nfPortrait === bp.defend ? bp.defendFade
                    : bp.idleFade;
@@ -198,14 +199,14 @@ function _drawPortraitImage(px, py, nfPortrait, isPauseHeal, infoFadeStep) {
   }
   ctx.drawImage(nfPortrait, px, py);
   const isNearFatal = ps.hp > 0 && ps.stats && ps.hp <= Math.floor(ps.stats.maxHP / 4);
-  if (!isPauseHeal && isNearFatal && nfPortrait === _s.battlePoses.kneel && _s.sweatFrames.length === 2)
-    ctx.drawImage(_s.sweatFrames[Math.floor(Date.now() / 133) & 1], px, py - 3);
+  if (!isPauseHeal && isNearFatal && nfPortrait === bsc.battlePoses.kneel && bsc.sweatFrames.length === 2)
+    ctx.drawImage(bsc.sweatFrames[Math.floor(Date.now() / 133) & 1], px, py - 3);
   // Status sprite above portrait — show highest priority active status
-  if (ps.status && ps.status.mask !== 0 && _s.statusSpriteMap) {
+  if (ps.status && ps.status.mask !== 0) {
     const prio = [0x40, 0x100, 0x200, 0x01, 0x10, 0x04, 0x02];
     for (const flag of prio) {
       if (ps.status.mask & flag) {
-        const frames = _s.statusSpriteMap.get(flag);
+        const frames = bsc.statusSpriteMap.get(flag);
         if (frames && frames.length === 2) {
           const f = frames[Math.floor(Date.now() / 133) & 1];
           ctx.drawImage(f, px, py - 4);
@@ -218,8 +219,8 @@ function _drawPortraitImage(px, py, nfPortrait, isPauseHeal, infoFadeStep) {
 
 function _drawCureSparkle(px, py, isPauseHeal) {
   const ctx = _s.ctx;
-  if (!isPauseHeal || _s.cureSparkleFrames.length !== 2 || (pauseSt.healNum && pauseSt.healNum.rosterIdx >= 0)) return;
-  const frame = _s.cureSparkleFrames[Math.floor(pauseSt.timer / 67) & 1];
+  if (!isPauseHeal || bsc.cureSparkleFrames.length !== 2 || (pauseSt.healNum && pauseSt.healNum.rosterIdx >= 0)) return;
+  const frame = bsc.cureSparkleFrames[Math.floor(pauseSt.timer / 67) & 1];
   ctx.drawImage(frame, px - 8, py - 7);
   ctx.save(); ctx.scale(-1,  1); ctx.drawImage(frame, -(px + 23),  py - 7);  ctx.restore();
   ctx.save(); ctx.scale( 1, -1); ctx.drawImage(frame,   px - 8,  -(py + 24)); ctx.restore();
@@ -233,7 +234,7 @@ function _drawPauseHealNum(px, py) {
 
 function _drawHUDPortrait() {
   const infoFadeStep = HUD_INFO_FADE_STEPS - Math.min(Math.floor(_s.hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
-  const bp = _s.battlePoses;
+  const bp = bsc.battlePoses;
   if (_s.battleState !== 'none' || !bp.idle) return;
   const isPauseHeal = pauseSt.state === 'inv-heal';
   const hasActiveStatus = ps.status && ps.status.mask !== 0;
@@ -282,13 +283,13 @@ function _drawHUDInfoPanel() {
 // ── Roster sparkle ────────────────────────────────────────────────────────
 
 export function drawRosterSparkle(panelTop) {
-  if (!pauseSt.healNum || pauseSt.healNum.rosterIdx < 0 || _s.cureSparkleFrames.length !== 2) return;
+  if (!pauseSt.healNum || pauseSt.healNum.rosterIdx < 0 || bsc.cureSparkleFrames.length !== 2) return;
   const visRow = pauseSt.healNum.rosterIdx - inputSt.rosterScroll;
   if (visRow < 0 || visRow >= 3) return;
   const px = HUD_RIGHT_X + 8;
   const py = panelTop + visRow * 32 + 8;
   const fi = Math.floor(pauseSt.timer / 67) & 1;
-  const frame = _s.cureSparkleFrames[fi];
+  const frame = bsc.cureSparkleFrames[fi];
   drawSparkleCorners(frame, px, py);
   drawHealNum(px + 8, _dmgBounceY(py + 8, pauseSt.healNum.timer), pauseSt.healNum.value, HEAL_NUM_PAL);
 }

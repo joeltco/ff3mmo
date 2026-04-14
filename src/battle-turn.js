@@ -8,6 +8,7 @@ import { ps, getJobLevelStatBonus } from './player-stats.js';
 import { ITEMS, isWeapon, isBladedWeapon } from './data/items.js';
 import { SFX, playSFX } from './music.js';
 import { processTurnStart, removeStatus, STATUS, blindHitPenalty } from './status-effects.js';
+import { bsc, getSlashFramesForWeapon } from './battle-sprite-cache.js';
 
 let _s = null; // shared state object, set each call
 
@@ -101,11 +102,10 @@ export function processNextTurn(shared) {
           const mon = _s.encounterMonsters[pick.index];
           const firstWpnId = isWeapon(ps.weaponR) ? ps.weaponR : ps.weaponL;
           const firstHandR = isWeapon(ps.weaponR) || !isWeapon(ps.weaponL);
-          const sfn = _s.getSlashFramesForWeapon;
           const bladed = isBladedWeapon(firstWpnId);
           _s.inputSt.playerActionPending = { command: 'fight', targetIndex: pick.index,
             hitResults: rollHits(ps.atk, mon.def, effHitRate, potHits),
-            slashFrames: sfn ? sfn(firstWpnId, firstHandR) : null,
+            slashFrames: getSlashFramesForWeapon(firstWpnId, firstHandR),
             slashOffX: bladed ? 8 : Math.floor(Math.random() * 40) - 20,
             slashOffY: bladed ? -8 : Math.floor(Math.random() * 40) - 20,
             slashX: 0, slashY: 0 };
@@ -226,7 +226,7 @@ function _playerTurnFight() {
   _s.currentHitIdx = 0; _s.slashFrame = 0;
   _s.inputSt.hitResults = _s.inputSt.playerActionPending.hitResults;
   _s.inputSt.targetIndex = ti;
-  _s.slashFrames = _s.inputSt.playerActionPending.slashFrames;
+  bsc.slashFrames = _s.inputSt.playerActionPending.slashFrames;
   _s.slashOffX = _s.inputSt.playerActionPending.slashOffX; _s.slashOffY = _s.inputSt.playerActionPending.slashOffY;
   _s.slashX = _s.inputSt.playerActionPending.slashX; _s.slashY = _s.inputSt.playerActionPending.slashY;
   _s.battleState = 'attack-back'; _s.battleTimer = 0;

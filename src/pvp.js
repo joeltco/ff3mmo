@@ -13,6 +13,7 @@ import { inputSt } from './input-handler.js';
 import { getShieldEvade } from './player-stats.js';
 import { pvpGridLayout, PVP_CELL_W, PVP_CELL_H } from './pvp-math.js';
 import { playSlashSFX } from './battle-sfx.js';
+import { bsc, getSlashFramesForWeapon } from './battle-sprite-cache.js';
 import { fakePlayerFullBodyCanvases, fakePlayerHitFullBodyCanvases,
          fakePlayerKnifeRFullBodyCanvases, fakePlayerKnifeLFullBodyCanvases,
          fakePlayerKnifeRFwdFullBodyCanvases, fakePlayerKnifeLFwdFullBodyCanvases,
@@ -709,8 +710,8 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   if (isAttackState && blade) drawBlade();
 
   // Near-fatal sweat — h-flipped to match opponent facing left
-  if (isNearFatalOpp && !isOppVictory && !isDying && _s.sweatFrames && _s.sweatFrames.length === 2) {
-    const sf = _s.sweatFrames[Math.floor(Date.now() / 133) & 1];
+  if (isNearFatalOpp && !isOppVictory && !isDying && bsc.sweatFrames && bsc.sweatFrames.length === 2) {
+    const sf = bsc.sweatFrames[Math.floor(Date.now() / 133) & 1];
     const ctx = _s.ctx;
     ctx.save();
     ctx.translate(sprX + sf.width, sprY - 3);
@@ -720,24 +721,24 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   }
 
   // Defend sparkle — 4 frames cycling over 533ms, full-body corners
-  if (isOppDefending && _s.defendSparkleFrames && _s.defendSparkleFrames.length === 4) {
+  if (isOppDefending && bsc.defendSparkleFrames && bsc.defendSparkleFrames.length === 4) {
     const fi = Math.min(3, Math.floor(_s.battleTimer / DEFEND_SPARKLE_FRAME_MS));
-    _drawSparkleAtCorners(sprX, sprY, _s.defendSparkleFrames[fi]);
+    _drawSparkleAtCorners(sprX, sprY, bsc.defendSparkleFrames[fi]);
   }
   // Cure sparkle — alternating over main opponent during potion use
-  if (isMain && bs === 'pvp-opp-potion' && _s.cureSparkleFrames && _s.cureSparkleFrames.length === 2) {
+  if (isMain && bs === 'pvp-opp-potion' && bsc.cureSparkleFrames && bsc.cureSparkleFrames.length === 2) {
     const fi = Math.floor(_s.battleTimer / 67) & 1;
-    _drawSparkleAtCorners(sprX, sprY, _s.cureSparkleFrames[fi]);
+    _drawSparkleAtCorners(sprX, sprY, bsc.cureSparkleFrames[fi]);
   }
 
   // Slash effect overlays on the current target
   if (isCurrentTarget) {
-    if (bs === 'player-slash' && _s.slashFrames && _s.slashFrame < SLASH_FRAMES && playerHitLanded) {
-      _s.ctx.drawImage(_s.slashFrames[_s.slashFrame], sprX + _s.slashOffX, sprY + _s.slashOffY);
+    if (bs === 'player-slash' && bsc.slashFrames && _s.slashFrame < SLASH_FRAMES && playerHitLanded) {
+      _s.ctx.drawImage(bsc.slashFrames[_s.slashFrame], sprX + _s.slashOffX, sprY + _s.slashOffY);
     }
     if (bs === 'ally-slash' && allyHitLanded) {
       const ally = _s.battleAllies[_s.currentAllyAttacker];
-      const aSlashF = ally ? _s.getSlashFramesForWeapon(ally.weaponId, true) : _s.slashFramesR;
+      const aSlashF = ally ? getSlashFramesForWeapon(ally.weaponId, true) : bsc.slashFramesR;
       const af = Math.min(Math.floor(_s.battleTimer / 67), 2);
       if (aSlashF && aSlashF[af]) _s.ctx.drawImage(aSlashF[af], sprX + [0,10,-8][af], sprY + [0,-6,8][af]);
     }

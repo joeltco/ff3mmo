@@ -14,6 +14,7 @@ import { blindHitPenalty, miniToadAtkMult, removeStatus, STATUS } from './status
 import { _nameToBytes } from './text-utils.js';
 import { MONSTERS } from './data/monsters.js';
 import { canJobEquip } from './data/jobs.js';
+import { getSlashFramesForWeapon } from './battle-sprite-cache.js';
 
 // Local constants (must match game.js)
 const HUD_VIEW_X = 0, HUD_VIEW_Y = 32, HUD_VIEW_W = 144, HUD_VIEW_H = 144;
@@ -162,7 +163,7 @@ function _battleTargetConfirm() {
   inputSt.battleActionCount++;
   const firstHandR = isWeapon(ps.weaponR) || !isWeapon(ps.weaponL);
   const firstWpnId = firstHandR ? ps.weaponR : ps.weaponL;
-  const pendingSlashFrames = _s.getSlashFramesForWeapon(firstWpnId, firstHandR);
+  const pendingSlashFrames = getSlashFramesForWeapon(firstWpnId, firstHandR);
   const centerX = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2);
   const centerY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
   const firstWeapon0 = getHitWeapon(0);

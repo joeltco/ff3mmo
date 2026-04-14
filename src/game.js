@@ -43,8 +43,7 @@ import { _getPlane0, _rebuild, _shiftHorizWater, _isWater, _buildHorizMixed } fr
 import { _calcBoxExpandSize, _encounterGridPos } from './battle-layout.js';
 // _makeCanvas16, _makeCanvas16ctx, _hflipCanvas16, _makeWhiteCanvas → sprite-init.js
 import { _updateWorldWater, _updateIndoorWater, resetWorldWaterCache, _buildHorizWaterPair } from './water-animation.js';
-import { initSlashSprites, initKnifeSlashSprites, initSwordSlashSprites } from './slash-effects.js';
-import { initSouthWindSprite } from './south-wind.js';
+import { bsc, getSlashFramesForWeapon, initBattleSpriteCache, loadJobBattleSprites } from './battle-sprite-cache.js';
 import { initFlameRawTiles, initStarTiles, rebuildFlameSprites,
          getFlameSprites, getFlameFrames, getStarTiles } from './flame-sprites.js';
 // BATTLE_BG_MAP_LOOKUP, renderBattleBg → map-loading.js
@@ -81,12 +80,10 @@ import { buildTurnOrder as _buildTurnOrder, processNextTurn as _processNextTurn 
 import { createStatusState, clearAll as clearAllStatus, tryInflictStatus, wakeOnHit, STATUS_NAME_BYTES, STATUS } from './status-effects.js';
 import { tickRandomEncounter as _tickRandomEncounter, startRandomEncounter as _startRandomEncounter } from './battle-encounter.js';
 import { resetBattleItemVars, getTargets, getHitIdx, startMagicItem, updateMagicItemThrowHit } from './battle-items.js';
-import { initBattleSprite as _initBattleSprite, initBattleSpriteForJob as _initBattleSpriteForJob,
-         initCursorTile as _initCursorTile, initScrollArrows as _initScrollArrows,
+import { initCursorTile as _initCursorTile, initScrollArrows as _initScrollArrows,
          initAdamantoise as _initAdamantoise,
          initGoblinSprite as _initGoblinSprite, initInvincibleSprite as _initInvincibleSprite,
-         initMoogleSprite as _initMoogleSprite, initLoadingScreenFadeFrames as _initLoadingScreenFadeFrames,
-         initStatusSprites as _initStatusSprites } from './sprite-init.js';
+         initMoogleSprite as _initMoogleSprite, initLoadingScreenFadeFrames as _initLoadingScreenFadeFrames } from './sprite-init.js';
 import { initFakePlayerSprites } from './fake-player-sprites.js';
 import { DMG_SHOW_MS, resetAllDmgNums, tickDmgNums, tickHealNums, clearHealNums, initMissSprite,
          getEnemyDmgNum, setEnemyDmgNum, getPlayerDamageNum, setPlayerDamageNum,
@@ -128,16 +125,7 @@ let borderBlueTileCanvases = null; // same but with blue (0x02) background inste
 let borderFadeSets = null;    // [fadeLevel] → [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR, FILL]
 let cornerMasks = null;       // [TL, TR, BL, BR] 8×8 canvases — black where outside, transparent inside
 
-// Battle sprite poses — keyed map replaces 14+ individual canvas variables
-let battlePoses = { idle: null, idleFade: [], rBack: null, lBack: null, rFwd: null, lFwd: null,
-  knifeR: null, knifeL: null, knifeBack: null, victory: null, defend: null, defendFade: [],
-  hit: null, kneel: null, kneelFade: [], silhouette: null };
-// Effect sprites (not poses)
-let sweatFrames = [];                  // 2 × 16×8 canvases (near-fatal dot animation)
-let defendSparkleFrames = [];          // 4 × 8×8 canvases ($49-$4C)
-let cureSparkleFrames = [];            // 2 × 16×16 canvases (config A/B from $4D/$4E)
-let statusSpriteMap = new Map();        // Map<statusFlag, [frame0, frame1]> — all status animations
-let poisonBubbleFrames = [];           // backward compat ref to poison frames
+// Battle sprite canvases (poses, sweat, sparkles, status, slash) — owned by battle-sprite-cache.js
 
 // FF1&2 ROM — secondary ROM for monster sprites, etc.
 let ff12Raw = null;
@@ -188,17 +176,10 @@ const HUD_HPLV_STEP_MS = 60;
 
 // Player stats are now in ps (imported from ./player-stats.js)
 
-function getSlashFramesForWeapon(id, rightHand) {
-  const st = weaponSubtype(id);
-  if (st === 'knife' || st === 'dagger') return rightHand ? knifeSlashFramesR : knifeSlashFramesL;
-  if (st === 'sword') return rightHand ? swordSlashFramesR : swordSlashFramesL;
-  return rightHand ? slashFramesR : slashFramesL; // punch
-}
 // Inventory system
 let playerInventory = {};    // { itemId: count } — e.g. { 0xA6: 3 }
 let itemSelectCursor = 0;    // cursor index in item list
 let itemHealAmount = 0;      // actual HP restored (for green number display)
-let swPhaseCanvases = [];      // 3-phase expanding ice explosion [16×16, 32×32, 48×48]
 
 // Inventory helpers
 const INV_SLOTS = 3; // visible inventory rows per page
@@ -254,15 +235,8 @@ let currentHitIdx = 0;             // which hit we're animating
 let slashFrame = 0;                // current slash animation frame (0-3)
 let slashX = 0, slashY = 0;       // slash effect base position (target center)
 let slashOffX = 0, slashOffY = 0; // random offset per frame (punch scatter)
-let slashFramesR = null;           // right-hand punch frames (frame $12, 4 effect sets)
-let slashFramesL = null;           // left-hand punch frames (frame $13, 4 effect sets)
-let slashFrames = null;            // alias — points to R or L based on current hit
 let critFlashTimer = -1;           // >=0 while crit backdrop flash is active (1 frame = 16ms)
 let poisonFlashTimer = -1;         // >=0 while overworld poison flash is active
-let knifeSlashFramesR = null;      // knife diagonal slash frames (right hand)
-let knifeSlashFramesL = null;      // knife diagonal slash frames (left hand)
-let swordSlashFramesR = null;      // sword diagonal slash frames (right hand)
-let swordSlashFramesL = null;      // sword diagonal slash frames (left hand)
 // BATTLE_MISS, BATTLE_GAME_OVER → data/strings.js
 
 // Battle timing constants
@@ -573,11 +547,7 @@ function _zPressed() { if (!keys['z'] && !keys['Z']) return false; keys['z'] = f
 function _xPressed() { if (!keys['x'] && !keys['X']) return false; keys['x'] = false; keys['X'] = false; return true; }
 
 function _swapBattleSprites(jobIdx) {
-  const bs = _initBattleSpriteForJob(romRaw, jobIdx);
-  battlePoses = bs.poses;
-  defendSparkleFrames = bs.defendSparkleFrames;
-  cureSparkleFrames = bs.cureSparkleFrames;
-  sweatFrames = bs.sweatFrames;
+  loadJobBattleSprites(romRaw, jobIdx);
   // Re-init hud drawing shared context so it picks up new canvases
   initHudDrawing(_hudDrawShared());
   // Swap walk sprite to match job
@@ -614,11 +584,6 @@ function _hudDrawShared() {
     get hudFadeCanvases() { return hudFadeCanvases; },
     get titleHudCanvas() { return titleHudCanvas; },
     get titleHudFadeCanvases() { return titleHudFadeCanvases; },
-    get battlePoses() { return battlePoses; },
-    get sweatFrames() { return sweatFrames; },
-    get poisonBubbleFrames() { return poisonBubbleFrames; },
-    get statusSpriteMap() { return statusSpriteMap; },
-    get cureSparkleFrames() { return cureSparkleFrames; },
     get battleState() { return battleState; },
     get battleShakeTimer() { return battleShakeTimer; },
     get topBoxBgCanvas() { return topBoxBgCanvas; },
@@ -784,7 +749,6 @@ function _inputShared() {
     addItem,
     removeItem,
     getRosterVisible,
-    getSlashFramesForWeapon,
     executeBattleCommand,
     returnToTitle,
     startPVPBattle: (target) => startPVPBattle(_pvpShared(), target),
@@ -834,11 +798,9 @@ function _pvpShared() {
     set battleMessage(v)        { battleMessage = v; },
     get allyJoinRound()         { return allyJoinRound; },
     set allyJoinRound(v)        { allyJoinRound = v; },
-    get slashFrames()           { return slashFrames; },
     get slashFrame()            { return slashFrame; },
     get slashOffX()             { return slashOffX; },
     get slashOffY()             { return slashOffY; },
-    get slashFramesR()          { return slashFramesR; },
     get currentHitIdx()         { return currentHitIdx; },
     get currentAllyAttacker()   { return currentAllyAttacker; },
     get allyHitResult()         { return allyHitResult; },
@@ -853,9 +815,6 @@ function _pvpShared() {
         ...getBlades(),
       };
     },
-    get defendSparkleFrames()          { return defendSparkleFrames; },
-    get cureSparkleFrames()            { return cureSparkleFrames; },
-    get swPhaseCanvases()              { return swPhaseCanvases; },
     get enemyHealNum()                 { return getEnemyHealNum(); },
     set enemyHealNum(v)                { setEnemyHealNum(v); },
     advancePVPTargetOrVictory: _advancePVPTargetOrVictory,
@@ -874,14 +833,12 @@ function _pvpShared() {
     isBattleMsgBusy,
     isTeamWiped:         _isTeamWiped,
     getPlayerLocation,
-    getSlashFramesForWeapon,
     clipToViewport,
     drawBorderedBox,
     drawText,
     measureText,
     nameToBytes: _nameToBytes,
     get cursorTileCanvas() { return cursorTileCanvas; },
-    get sweatFrames() { return sweatFrames; },
     get critFlashTimer()  { return critFlashTimer; },
     set critFlashTimer(v) { critFlashTimer = v; },
   };
@@ -1006,8 +963,6 @@ function _battleDrawShared() {
     get slashFrame() { return slashFrame; },
     get slashOffX() { return slashOffX; },
     get slashOffY() { return slashOffY; },
-    get slashFrames() { return slashFrames; },
-    get slashFramesR() { return slashFramesR; },
     get currentAllyAttacker() { return currentAllyAttacker; },
     get allyHitResult() { return allyHitResult; },
     get allyHitIsLeft() { return allyHitIsLeft; },
@@ -1033,7 +988,6 @@ function _battleDrawShared() {
     get allyShakeTimer() { return allyShakeTimer; },
     get battleMessage() { return battleMessage; },
     ctx,
-    get battlePoses() { return battlePoses; },
     get battleKnifeBladeCanvas() { return getKnifeBladeCanvas(); },
     get battleKnifeBladeSwungCanvas() { return getKnifeBladeSwungCanvas(); },
     get battleDaggerBladeCanvas() { return getDaggerBladeCanvas(); },
@@ -1044,12 +998,6 @@ function _battleDrawShared() {
     get goblinBattleCanvas() { return goblinBattleCanvas; },
     get goblinWhiteCanvas() { return goblinWhiteCanvas; },
     get goblinDeathFrames() { return goblinDeathFrames; },
-    get swPhaseCanvases() { return swPhaseCanvases; },
-    get defendSparkleFrames() { return defendSparkleFrames; },
-    get cureSparkleFrames() { return cureSparkleFrames; },
-    get sweatFrames() { return sweatFrames; },
-    get poisonBubbleFrames() { return poisonBubbleFrames; },
-    get statusSpriteMap() { return statusSpriteMap; },
     get cursorTileCanvas() { return cursorTileCanvas; },
     get cursorFadeCanvases() { return cursorFadeCanvases; },
     get topBoxBgCanvas() { return topBoxBgCanvas; },
@@ -1063,7 +1011,6 @@ function _battleDrawShared() {
     drawHudBox,
     isVictoryBattleState: _isVictoryBattleState,
     drawMonsterDeath: _drawMonsterDeath,
-    getSlashFramesForWeapon,
     pvpShared: () => _pvpShared(),
   };
 }
@@ -1118,9 +1065,9 @@ function _triggerShared() {
 function _titleShared() {
   return {
     waterTick,
-    battleSpriteCanvas: battlePoses.idle,
-    battleSpriteFadeCanvases: battlePoses.idleFade,
-    silhouetteCanvas: battlePoses.silhouette,
+    get battleSpriteCanvas()       { return bsc.battlePoses.idle; },
+    get battleSpriteFadeCanvases() { return bsc.battlePoses.idleFade; },
+    get silhouetteCanvas()         { return bsc.battlePoses.silhouette; },
     drawBorderedBox,
     drawHudBox,
     drawCursorFaded,
@@ -1148,14 +1095,9 @@ function _initSpriteAssets(romRaw) {
   scrollArrowDownFade = sa.scrollArrowDownFade;
   scrollArrowUpFade = sa.scrollArrowUpFade;
 
-  // Battle sprite (sprite-init.js)
-  const bs = _initBattleSpriteForJob(romRaw, ps.jobIdx);
-  battlePoses = bs.poses;
-  defendSparkleFrames = bs.defendSparkleFrames;
-  cureSparkleFrames = bs.cureSparkleFrames;
-  sweatFrames = bs.sweatFrames;
-  statusSpriteMap = _initStatusSprites();
-  poisonBubbleFrames = statusSpriteMap.get(0x02) || [];
+  // Battle sprite cache — per-job poses + init-once slash/SW/status
+  loadJobBattleSprites(romRaw, ps.jobIdx);
+  initBattleSpriteCache();
 
   // Fake player portraits & full bodies — keyed by jobIdx, owned by fake-player-sprites.js
   initFakePlayerSprites(romRaw, [0, 1]);
@@ -1170,11 +1112,7 @@ function _initSpriteAssets(romRaw) {
   goblinDeathFrames = gs.goblinDeathFrames;
 
   initMonsterSprites();
-  swPhaseCanvases = initSouthWindSprite();
   initMissSprite();
-  slashFrames = slashFramesR = slashFramesL = initSlashSprites();
-  knifeSlashFramesR = knifeSlashFramesL = initKnifeSlashSprites();
-  swordSlashFramesR = swordSlashFramesL = initSwordSlashSprites();
   initPlayerStats(romRaw);
   initExpTable(romRaw);
 
@@ -1757,8 +1695,6 @@ function _turnShared() {
     set currentHitIdx(v)        { currentHitIdx = v; },
     get slashFrame()            { return slashFrame; },
     set slashFrame(v)           { slashFrame = v; },
-    get slashFrames()           { return slashFrames; },
-    set slashFrames(v)          { slashFrames = v; },
     get slashOffX()             { return slashOffX; },
     set slashOffX(v)            { slashOffX = v; },
     get slashOffY()             { return slashOffY; },
@@ -1788,7 +1724,6 @@ function _turnShared() {
     startMagicItem: () => startMagicItem(_magicItemShared()),
     queueBattleMsg,
     isBattleMsgBusy,
-    getSlashFramesForWeapon,
     get playerName() { return saveSlots[selectCursor]?.name || null; },
     get sprite() { return sprite; },
   };
@@ -2024,7 +1959,7 @@ function _advanceHitCombo() {
     currentHitIdx++;
     slashFrame = 0;
     const handWeapon = getHitWeapon(currentHitIdx, inputSt.rHandHitCount);
-    slashFrames = getSlashFramesForWeapon(handWeapon, isHitRightHand(currentHitIdx, inputSt.rHandHitCount));
+    bsc.slashFrames = getSlashFramesForWeapon(handWeapon, isHitRightHand(currentHitIdx, inputSt.rHandHitCount));
     if (isBladedWeapon(handWeapon)) { slashOffX = 8; slashOffY = -8; }
     else { slashOffX = Math.floor(Math.random() * 40) - 20; slashOffY = Math.floor(Math.random() * 40) - 20; }
     battleState = 'attack-back';

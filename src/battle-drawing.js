@@ -14,6 +14,7 @@ import { _nameToBytes, _buildItemRowBytes, drawLvHpRow, makeExpText, makeGilText
 import { pvpEnemyCellCenter } from './pvp-math.js';
 import { pvpSt, drawBossSpriteBoxPVP } from './pvp.js';
 import { inputSt } from './input-handler.js';
+import { bsc, getSlashFramesForWeapon } from './battle-sprite-cache.js';
 import { fakePlayerPortraits, fakePlayerVictoryPortraits, fakePlayerHitPortraits,
          fakePlayerKneelPortraits, fakePlayerAttackPortraits, fakePlayerAttackLPortraits,
          fakePlayerKnifeRPortraits, fakePlayerKnifeLPortraits,
@@ -70,9 +71,9 @@ function drawSWExplosion(shared) {
   _s = shared;
   // PVP opponent South Wind — explosion centered on current target (player or ally)
   if (pvpSt.isPVPBattle && _s.battleState === 'pvp-opp-sw-hit' && _s.battleTimer < 400) {
-    if (!_s.swPhaseCanvases.length) return;
+    if (!bsc.swPhaseCanvases.length) return;
     const phase = Math.min(2, Math.floor(_s.battleTimer / 133));
-    const canvas = _s.swPhaseCanvases[phase];
+    const canvas = bsc.swPhaseCanvases[phase];
     if (!canvas) return;
     const targets = pvpSt._oppSWTargets;
     const tidx = targets ? targets[pvpSt._oppSWHitIdx] : -1;
@@ -95,9 +96,9 @@ function drawSWExplosion(shared) {
   }
   if (_s.battleState !== 'sw-hit' || _s.battleTimer >= 400) return;
   if (pvpSt.isPVPBattle) {
-    if (!_s.swPhaseCanvases.length) return;
+    if (!bsc.swPhaseCanvases.length) return;
     const phase = Math.min(2, Math.floor(_s.battleTimer / 133));
-    const canvas = _s.swPhaseCanvases[phase];
+    const canvas = bsc.swPhaseCanvases[phase];
     if (!canvas) return;
     const tidx = _s.southWindTargets[_s.southWindHitIdx];
     if (tidx === undefined) return;
@@ -105,9 +106,9 @@ function drawSWExplosion(shared) {
     _s.ctx.drawImage(canvas, cx - Math.floor(canvas.width / 2), cy - Math.floor(canvas.height / 2));
     return;
   }
-  if (!_s.swPhaseCanvases.length) return;
+  if (!bsc.swPhaseCanvases.length) return;
   const phase = Math.min(2, Math.floor(_s.battleTimer / 133));
-  const phaseCanvas = _s.swPhaseCanvases[phase];
+  const phaseCanvas = bsc.swPhaseCanvases[phase];
   if (!phaseCanvas) return;
 
   if (_s.isRandomEncounter && _s.encounterMonsters) {
@@ -171,7 +172,7 @@ function drawSWDamageNumbers(shared) {
 
 function _getPortraitSrc(isNearFatal, isAttackPose, isHitPose, isDefendPose, isItemUsePose, isVictoryPose) {
   const hasActiveStatus = ps.status && ps.status.mask !== 0;
-  const p = _s.battlePoses;
+  const p = bsc.battlePoses;
   let src = ((isNearFatal || hasActiveStatus) && p.kneel) ? p.kneel : p.idle;
   if (isAttackPose) {
     const _ws = weaponSubtype(getHitWeapon(_s.currentHitIdx, inputSt.rHandHitCount));
@@ -244,19 +245,19 @@ function _drawPortraitWeapon(px, py, before) {
 function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal, isRunPose,
                                 isAttackPose, isHitPose, isVictoryPose) {
   // Defend sparkle — 4 corners cycling during defend-anim
-  if (isDefendPose && _s.defendSparkleFrames.length === 4) {
+  if (isDefendPose && bsc.defendSparkleFrames.length === 4) {
     const fi = Math.min(3, Math.floor(_s.battleTimer / DEFEND_SPARKLE_FRAME_MS));
-    const frame = _s.defendSparkleFrames[fi];
+    const frame = bsc.defendSparkleFrames[fi];
     _s.drawSparkleCorners(frame, px, py);
   }
   // Cure sparkle — alternating flips every 67ms during item-use
-  if (_s.battleState === 'item-use' && _s.cureSparkleFrames.length === 2 && !(inputSt.playerActionPending && inputSt.playerActionPending.allyIndex >= 0)) {
+  if (_s.battleState === 'item-use' && bsc.cureSparkleFrames.length === 2 && !(inputSt.playerActionPending && inputSt.playerActionPending.allyIndex >= 0)) {
     const fi = Math.floor(_s.battleTimer / 67) & 1;
-    const frame = _s.cureSparkleFrames[fi];
+    const frame = bsc.cureSparkleFrames[fi];
     _s.drawSparkleCorners(frame, px, py);
   }
   // Near-fatal sweat — 2 frames alternating every 133ms, 3px above portrait
-  if (isNearFatal && _s.sweatFrames.length === 2 && !isAttackPose && !isHitPose && !isVictoryPose && !isDefendPose && !isItemUsePose) {
+  if (isNearFatal && bsc.sweatFrames.length === 2 && !isAttackPose && !isHitPose && !isVictoryPose && !isDefendPose && !isItemUsePose) {
     const sweatIdx = Math.floor(Date.now() / 133) & 1;
     if (isRunPose) {
       let slideX = 0;
@@ -265,7 +266,7 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
       _s.ctx.beginPath();
       _s.ctx.rect(HUD_RIGHT_X + 8, HUD_VIEW_Y + 8 - 3, 16, 19);
       _s.ctx.clip();
-      _s.ctx.drawImage(_s.sweatFrames[sweatIdx], px + slideX, py - 3);
+      _s.ctx.drawImage(bsc.sweatFrames[sweatIdx], px + slideX, py - 3);
       _s.ctx.restore();
     } else if (_s.battleState === 'encounter-box-close' && _s.runSlideBack) {
       const t = Math.min(_s.battleTimer / 300, 1);
@@ -273,19 +274,19 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
       _s.ctx.beginPath();
       _s.ctx.rect(HUD_RIGHT_X + 8, HUD_VIEW_Y + 8 - 3, 16, 19);
       _s.ctx.clip();
-      _s.ctx.drawImage(_s.sweatFrames[sweatIdx], px, py - 3 + (1 - t) * 20);
+      _s.ctx.drawImage(bsc.sweatFrames[sweatIdx], px, py - 3 + (1 - t) * 20);
       _s.ctx.restore();
     } else {
-      _s.ctx.drawImage(_s.sweatFrames[sweatIdx], px, py - 3);
+      _s.ctx.drawImage(bsc.sweatFrames[sweatIdx], px, py - 3);
     }
   }
   // Status sprite above portrait — show highest priority active status
-  if (ps.status && ps.status.mask !== 0 && _s.statusSpriteMap) {
+  if (ps.status && ps.status.mask !== 0 && bsc.statusSpriteMap) {
     // Priority order: petrify, sleep, confuse, paralysis, silence, blind, poison
     const prio = [0x40, 0x100, 0x200, 0x01, 0x10, 0x04, 0x02];
     for (const flag of prio) {
       if (ps.status.mask & flag) {
-        const frames = _s.statusSpriteMap.get(flag);
+        const frames = bsc.statusSpriteMap.get(flag);
         if (frames && frames.length === 2) {
           const f = frames[Math.floor(Date.now() / 133) & 1];
           _s.ctx.drawImage(f, px, py - 4);
@@ -303,7 +304,7 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
     const eWpnId = pvpSt.pvpCurrentEnemyAllyIdx >= 0
       ? pvpSt.pvpEnemyAllies[pvpSt.pvpCurrentEnemyAllyIdx]?.weaponId
       : pvpSt.pvpOpponentStats?.weaponId;
-    const eSlashF = _s.getSlashFramesForWeapon(eWpnId, true);
+    const eSlashF = getSlashFramesForWeapon(eWpnId, true);
     const af = Math.min(2, Math.floor(_s.battleTimer / 67));
     if (eSlashF && eSlashF[af]) {
       const sf = eSlashF[af];
@@ -332,7 +333,7 @@ function _drawBattlePortrait() {
       _s.ctx.clip();
       const slideT = dt / DEATH_SLIDE_MS;
       const slideY = Math.floor(slideT * 16);
-      if (_s.battlePoses.kneel) _s.ctx.drawImage(_s.battlePoses.kneel, px, py + slideY);
+      if (bsc.battlePoses.kneel) _s.ctx.drawImage(bsc.battlePoses.kneel, px, py + slideY);
       _s.ctx.restore();
     }
 
@@ -700,13 +701,13 @@ function _drawEncounterMonsters(gridPos, sprH, boxX, boxY, boxW, boxH, isSlideIn
   _s.ctx.restore();
 }
 function _drawEncounterSlashEffects(gridPos, slideOffX, slotCenterY) {
-  if (_s.battleState === 'player-slash' && _s.slashFrames && _s.slashFrame < SLASH_FRAMES && inputSt.hitResults && inputSt.hitResults[_s.currentHitIdx] && !inputSt.hitResults[_s.currentHitIdx].miss) {
+  if (_s.battleState === 'player-slash' && bsc.slashFrames && _s.slashFrame < SLASH_FRAMES && inputSt.hitResults && inputSt.hitResults[_s.currentHitIdx] && !inputSt.hitResults[_s.currentHitIdx].miss) {
     const pos = gridPos[inputSt.targetIndex];
-    _s.ctx.drawImage(_s.slashFrames[_s.slashFrame], pos.x - slideOffX + _s.slashOffX + 8, slotCenterY(inputSt.targetIndex) + _s.slashOffY);
+    _s.ctx.drawImage(bsc.slashFrames[_s.slashFrame], pos.x - slideOffX + _s.slashOffX + 8, slotCenterY(inputSt.targetIndex) + _s.slashOffY);
   }
   if (_s.battleState === 'ally-slash' && _s.allyHitResult && !_s.allyHitResult.miss) {
     const ally = _s.battleAllies[_s.currentAllyAttacker];
-    const allySlashFrames = ally ? _s.getSlashFramesForWeapon(ally.weaponId, true) : _s.slashFramesR;
+    const allySlashFrames = ally ? getSlashFramesForWeapon(ally.weaponId, true) : bsc.slashFramesR;
     const af = Math.min(Math.floor(_s.battleTimer / 67), 2);
     const pos = gridPos[_s.allyTargetIndex];
     if (pos && allySlashFrames && allySlashFrames[af]) {
@@ -792,14 +793,14 @@ function _drawBossSprite(centerX, centerY) {
     if (!_s.enemyDefeated) _s.ctx.drawImage((frame & 1) ? (getBossWhiteCanvas() || getBossBattleCanvas()) : getBossBattleCanvas(), sprX, sprY);
   } else if (_s.battleState === 'player-slash') {
     if (!(Math.floor(_s.battleTimer / 60) & 1) && !_s.enemyDefeated) _s.ctx.drawImage(getBossBattleCanvas(), sprX, sprY);
-    if (_s.slashFrames && _s.slashFrame < SLASH_FRAMES && !_s.enemyDefeated && inputSt.hitResults && inputSt.hitResults[_s.currentHitIdx] && !inputSt.hitResults[_s.currentHitIdx].miss)
-      _s.ctx.drawImage(_s.slashFrames[_s.slashFrame], centerX - 8 + _s.slashOffX, centerY - 8 + _s.slashOffY);
+    if (bsc.slashFrames && _s.slashFrame < SLASH_FRAMES && !_s.enemyDefeated && inputSt.hitResults && inputSt.hitResults[_s.currentHitIdx] && !inputSt.hitResults[_s.currentHitIdx].miss)
+      _s.ctx.drawImage(bsc.slashFrames[_s.slashFrame], centerX - 8 + _s.slashOffX, centerY - 8 + _s.slashOffY);
   } else if (_s.battleState === 'ally-slash') {
     const blinkHidden = _s.allyHitResult && !_s.allyHitResult.miss && (Math.floor(_s.battleTimer / 60) & 1);
     if (!blinkHidden && !_s.enemyDefeated) _s.ctx.drawImage(getBossBattleCanvas(), sprX, sprY);
     if (!_s.enemyDefeated && _s.allyHitResult && !_s.allyHitResult.miss) {
       const ally = _s.battleAllies[_s.currentAllyAttacker];
-      const allySlashFrames = ally ? _s.getSlashFramesForWeapon(ally.weaponId, true) : _s.slashFramesR;
+      const allySlashFrames = ally ? getSlashFramesForWeapon(ally.weaponId, true) : bsc.slashFramesR;
       const af = Math.min(Math.floor(_s.battleTimer / 67), 2);
       if (allySlashFrames && allySlashFrames[af])
         _s.ctx.drawImage(allySlashFrames[af], centerX - 8 + [0,10,-8][af], centerY - 8 + [0,-6,8][af]);
@@ -1177,16 +1178,16 @@ function _drawAllyPortrait(i, ally, isVicPose, isAllyAttack, isAllyHit, isNearFa
     else if (_s.battleFistCanvas) weaponDraws.push({ img: _s.battleFistCanvas, x: ppx - 4, y: ppy + 10 });
   }
   // Near-fatal sweat — 2 frames alternating every 133ms, 3px above portrait
-  if (isNearFatal && _s.sweatFrames.length === 2 && !isAllyAttack && !isAllyHit && !isVicPose && !isThisAllySlash) {
+  if (isNearFatal && bsc.sweatFrames.length === 2 && !isAllyAttack && !isAllyHit && !isVicPose && !isThisAllySlash) {
     const sweatIdx = Math.floor(Date.now() / 133) & 1;
-    _s.ctx.drawImage(_s.sweatFrames[sweatIdx], ppx, ppy - 3);
+    _s.ctx.drawImage(bsc.sweatFrames[sweatIdx], ppx, ppy - 3);
   }
   // PVP enemy slash overlay on targeted ally during ally-hit — h-flipped (opponent attacks from left)
   if (pvpSt.isPVPBattle && _s.battleState === 'ally-hit' && _s.enemyTargetAllyIdx === i) {
     const eWpnId = pvpSt.pvpCurrentEnemyAllyIdx >= 0
       ? pvpSt.pvpEnemyAllies[pvpSt.pvpCurrentEnemyAllyIdx]?.weaponId
       : pvpSt.pvpOpponentStats?.weaponId;
-    const eSlashF = _s.getSlashFramesForWeapon(eWpnId, true);
+    const eSlashF = getSlashFramesForWeapon(eWpnId, true);
     const af = Math.min(2, Math.floor(_s.battleTimer / 67));
     if (eSlashF && eSlashF[af]) {
       const sf = eSlashF[af];
@@ -1207,8 +1208,8 @@ function _drawAllyTexts(i, ally, rowY, isAllyHeal, ppx, ppy, weaponDraws) {
   drawLvHpRow(_s.ctx, panelLeft, HUD_RIGHT_X + HUD_RIGHT_W - 8, rowY + 16, ally.level || 1, ally.hp, ally.maxHP, ally.fadeStep);
   const dn = _s.allyDamageNums[i];
   if (dn) weaponDraws.push({ type: 'dmg', dn, bx: HUD_RIGHT_X + 20, by: _dmgBounceY(rowY + 16, dn.timer) });
-  if (isAllyHeal && _s.cureSparkleFrames.length === 2) {
-    weaponDraws.push({ type: 'sparkle', frame: _s.cureSparkleFrames[Math.floor(_s.battleTimer / 67) & 1], px: ppx, py: ppy });
+  if (isAllyHeal && bsc.cureSparkleFrames.length === 2) {
+    weaponDraws.push({ type: 'sparkle', frame: bsc.cureSparkleFrames[Math.floor(_s.battleTimer / 67) & 1], px: ppx, py: ppy });
   }
 }
 
