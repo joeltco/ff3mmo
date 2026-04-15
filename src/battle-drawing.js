@@ -25,7 +25,7 @@ import { BATTLE_GAME_OVER, BATTLE_DEFEATED, BATTLE_LEVEL_UP, BATTLE_BOSS_NAME, B
          BATTLE_MENU_ITEMS } from './data/strings.js';
 import { getAllyDamageNums, getEnemyDmgNum, getPlayerDamageNum, getPlayerHealNum, getEnemyHealNum,
          getSwDmgNums } from './damage-numbers.js';
-import { getBattleMsgCurrent, getBattleMsgTimer } from './battle-msg.js';
+import { getBattleMsgCurrent, getBattleMsgTimer, MSG_FADE_IN_MS, MSG_HOLD_MS, MSG_FADE_OUT_MS } from './battle-msg.js';
 import { getHitIdx, getTargets } from './battle-items.js';
 import { getKnifeBladeCanvas, getKnifeBladeSwungCanvas,
          getDaggerBladeCanvas, getDaggerBladeSwungCanvas,
@@ -1370,7 +1370,6 @@ function drawBattleMessageStrip() {
   const msg = getBattleMsgCurrent();
   if (!msg) return;
   const t = getBattleMsgTimer();
-  const { MSG_FADE_IN_MS, MSG_HOLD_MS, MSG_FADE_OUT_MS } = _s;
   const tw = measureText(msg.bytes);
   const overflow = Math.max(0, tw - MSG_STRIP_W);
   const scrollTime = overflow > 0 ? 400 + overflow / 0.06 + 400 : 0;
