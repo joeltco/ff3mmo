@@ -729,7 +729,9 @@ function _drawEncounterSlashEffects(gridPos, slideOffX, slotCenterY) {
   }
   if (battleSt.battleState === 'ally-slash' && battleSt.allyHitResult && !battleSt.allyHitResult.miss) {
     const ally = battleSt.battleAllies[battleSt.currentAllyAttacker];
-    const allySlashFrames = ally ? getSlashFramesForWeapon(ally.weaponId, true) : bsc.slashFramesR;
+    const isLeft = battleSt.allyHitIsLeft;
+    const activeWpnId = ally ? (isLeft ? ally.weaponL : ally.weaponId) : 0;
+    const allySlashFrames = ally ? getSlashFramesForWeapon(activeWpnId, !isLeft) : bsc.slashFramesR;
     const af = Math.min(Math.floor(battleSt.battleTimer / 67), 2);
     const pos = gridPos[battleSt.allyTargetIndex];
     if (pos && allySlashFrames && allySlashFrames[af]) {
@@ -822,7 +824,9 @@ function _drawBossSprite(centerX, centerY) {
     if (!blinkHidden && !battleSt.enemyDefeated) _ctx.drawImage(getBossBattleCanvas(), sprX, sprY);
     if (!battleSt.enemyDefeated && battleSt.allyHitResult && !battleSt.allyHitResult.miss) {
       const ally = battleSt.battleAllies[battleSt.currentAllyAttacker];
-      const allySlashFrames = ally ? getSlashFramesForWeapon(ally.weaponId, true) : bsc.slashFramesR;
+      const isLeft = battleSt.allyHitIsLeft;
+      const activeWpnId = ally ? (isLeft ? ally.weaponL : ally.weaponId) : 0;
+      const allySlashFrames = ally ? getSlashFramesForWeapon(activeWpnId, !isLeft) : bsc.slashFramesR;
       const af = Math.min(Math.floor(battleSt.battleTimer / 67), 2);
       if (allySlashFrames && allySlashFrames[af])
         _ctx.drawImage(allySlashFrames[af], centerX - 8 + [0,10,-8][af], centerY - 8 + [0,-6,8][af]);
