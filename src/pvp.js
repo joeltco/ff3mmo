@@ -6,7 +6,7 @@ import { clipToViewport, drawBorderedBox } from './hud-drawing.js';
 import { getPlayerLocation } from './roster.js';
 import { queueBattleMsg } from './battle-msg.js';
 import { getBlades } from './weapon-sprites.js';
-import { getAllyDamageNums, getPlayerDamageNum, getEnemyHealNum, setEnemyHealNum } from './damage-numbers.js';
+import { getAllyDamageNums, getPlayerDamageNum, setPlayerDamageNum, getEnemyHealNum, setEnemyHealNum } from './damage-numbers.js';
 
 // Injected at boot
 let _ctx = null;
@@ -436,7 +436,7 @@ function _processPVPOppSWHit() {
     const dmg = pvpSt._oppSWPerDmg;
     if (tidx === -1) {
       ps.hp = Math.max(0, ps.hp - dmg);
-      getPlayerDamageNum() = { value: dmg, timer: 0 };
+      setPlayerDamageNum({ value: dmg, timer: 0 });
       battleSt.battleShakeTimer = BATTLE_SHAKE_MS;
     } else {
       const ally = battleSt.battleAllies[tidx];
@@ -451,7 +451,7 @@ function _processPVPOppSWHit() {
   }
   // At 1100ms: next target or done
   if (battleSt.battleTimer >= 1100) {
-    if (tidx === -1) getPlayerDamageNum() = null;
+    if (tidx === -1) setPlayerDamageNum(null);
     pvpSt._oppSWHitIdx++;
     pvpSt._swDmgApplied = false;
     pvpSt._oppSWExplosionPlayed = false;
@@ -525,7 +525,7 @@ function _processPVPEnemySlash() {
     for (const h of pvpSt.pvpEnemyHitResults) {
       if (!h.miss && !h.shieldBlock) { totalDmg += h.dmg; allMiss = false; if (h.crit) anyCrit = true; }
     }
-    getPlayerDamageNum() = allMiss ? { miss: true, timer: 0 } : { value: totalDmg, crit: anyCrit, timer: 0 };
+    setPlayerDamageNum(allMiss ? { miss: true, timer: 0 } : { value: totalDmg, crit: anyCrit, timer: 0 });
     battleSt.battleState = 'enemy-attack'; battleSt.battleTimer = 0;
   }
   return true;
