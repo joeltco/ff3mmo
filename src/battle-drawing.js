@@ -873,7 +873,7 @@ function drawBossSpriteBox() {
                     battleSt.battleState === 'pvp-opp-sw-throw' || battleSt.battleState === 'pvp-opp-sw-hit' ||
                     battleSt.battleState === 'defeat-monster-fade' || battleSt.battleState === 'defeat-text' || battleSt.battleState === 'defeat-close' || battleSt.battleState === 'team-wipe' ||
                     _isVictoryBattleState() || battleSt.battleState === 'victory-name-out';
-    if (isCombatPVP) drawBossSpriteBoxPVP(null, centerX, centerY);
+    if (isCombatPVP) drawBossSpriteBoxPVP(centerX, centerY);
     return;
   }
 
