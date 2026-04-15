@@ -774,7 +774,7 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
       const isLeft = battleSt.allyHitIsLeft;
       const activeWpnId = ally ? (isLeft ? ally.weaponL : ally.weaponId) : 0;
       const aSlashF = ally ? getSlashFramesForWeapon(activeWpnId, !isLeft) : bsc.slashFramesR;
-      const af = Math.min(Math.floor(battleSt.battleTimer / 67), 2);
+      const af = Math.min(Math.floor(battleSt.battleTimer / 30), 2);
       if (aSlashF && aSlashF[af]) _ctx.drawImage(aSlashF[af], sprX + [0,10,-8][af], sprY + [0,-6,8][af]);
     }
   }
