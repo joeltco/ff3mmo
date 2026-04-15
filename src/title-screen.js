@@ -8,6 +8,7 @@ import { selectCursor, saveSlots, nameBuffer, NAME_MAX_LEN,
 import { playSFX, SFX } from './music.js';
 import { serverDeleteSlot } from './save.js';
 import { fakePlayerPortraits } from './fake-player-sprites.js';
+import { drawCursorFaded } from './hud-drawing.js';
 
 // ── NES layout constants — must match game.js ─────────────────────────────
 const CANVAS_W   = 256;
@@ -247,7 +248,7 @@ export function drawTitleSkyInHUD(ctx, roundTopBoxCornersFn) {
   }
 }
 
-export function drawTitle(ctx, shared) {
+export function drawTitle(ctx, waterTick) {
   const ts  = titleSt;
   const TVW = CANVAS_W;
   ctx.fillStyle = '#000';
@@ -277,13 +278,13 @@ export function drawTitle(ctx, shared) {
     ctx.save();
     ctx.beginPath(); ctx.rect(HUD_VIEW_X + 8, HUD_VIEW_Y + 8, TVW - 16, HUD_VIEW_H - 16); ctx.clip();
     drawTitleOcean(ctx, fl);
-    drawTitleWater(ctx, fl, shared.waterTick);
+    drawTitleWater(ctx, fl, waterTick);
     _drawTitleLogo(ctx, cx, fl, isSelectState);
     _drawTitleShip(ctx, cx, cy, fl);
     ctx.restore();
 
     _drawTitlePressZ(ctx, cx, vpBot);
-    _drawTitleSelectBox(ctx, cx, shared);
+    _drawTitleSelectBox(ctx, cx);
   }
 }
 
@@ -437,7 +438,7 @@ function _drawTitlePressZ(ctx, cx, vpBot) {
   }
 }
 
-function _drawTitleSelectBox(ctx, cx, shared) {
+function _drawTitleSelectBox(ctx, cx) {
   const ts = titleSt;
   const isSelectState = ts.state === 'to-main' ||
     ts.state === 'select-fade-in' || ts.state === 'select' ||
@@ -466,7 +467,7 @@ function _drawTitleSelectBox(ctx, cx, shared) {
 
   for (let i = 0; i < 3; i++) {
     const rowY = topY + i * (SEL_ROW_H + gap);
-    _drawSelectSlotRow(ctx, i, selX, rowY, fadeStep, showContent, shared);
+    _drawSelectSlotRow(ctx, i, selX, rowY, fadeStep, showContent);
   }
 
   // "Delete" label — left of bottom row, bottom-aligned
@@ -476,18 +477,18 @@ function _drawTitleSelectBox(ctx, cx, shared) {
   for (let s = 0; s < fadeStep; s++) delPal[3] = nesColorFade(delPal[3]);
   _drawTitleBox(ctx, dx, dy, deleteLabelW, labelH, fadeStep);
   if (showContent) {
-    if (selectCursor === 3) shared.drawCursorFaded(dx - 10, dy + 4, fadeStep);
+    if (selectCursor === 3) drawCursorFaded(dx - 10, dy + 4, fadeStep);
     drawText(ctx, dx + 8, dy + 8, SELECT_DELETE_TEXT, delPal);
   }
 
   // Draw slot cursors AFTER delete box so they aren't covered
   if (showContent && selectCursor >= 0 && selectCursor < 3) {
     const cursorRowY = topY + selectCursor * (SEL_ROW_H + gap);
-    shared.drawCursorFaded(selX - 10, cursorRowY + 12, fadeStep);
+    drawCursorFaded(selX - 10, cursorRowY + 12, fadeStep);
   }
 }
 
-function _drawSelectSlotRow(ctx, i, selX, rowY, fadeStep, showContent, shared) {
+function _drawSelectSlotRow(ctx, i, selX, rowY, fadeStep, showContent) {
   const ts = titleSt;
   const isNameEntry = ts.state === 'name-entry' && i === selectCursor;
 

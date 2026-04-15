@@ -9,6 +9,15 @@ import { getItemNameClean } from './text-decoder.js';
 import { stopFF1Music, resumeMusic, playFF1Track, FF1_TRACKS } from './music.js';
 import { PAUSE_ITEMS } from './data/strings.js';
 import { selectCursor, saveSlots } from './save-state.js';
+import { ui } from './ui-state.js';
+import { inputSt } from './input-handler.js';
+import { drawBorderedBox, clipToViewport, drawCursorFaded } from './hud-drawing.js';
+
+// Injected by initPauseMenu()
+let _playerInventory = () => ({});
+export function initPauseMenu({ playerInventory }) {
+  _playerInventory = playerInventory;
+}
 
 // NES layout constants — must match game.js
 const HUD_VIEW_X  = 0;
@@ -199,9 +208,8 @@ export function updatePauseMenu(dt, playerInventory) {
 
 // ── Draw helpers ───────────────────────────────────────────────────────────
 
-function _drawPauseBox(ctx, shared) {
+function _drawPauseBox(ctx) {
   const { px, finalY, pw, ph, isInvState, isEqState, isStatsState, isOptState, isJobState, panelY } = _pausePanelLayout();
-  const { _drawBorderedBox } = shared;
   if (isInvState || isEqState || isStatsState || isOptState || isJobState) {
     let t = 1;
     if (pauseSt.state === 'inv-expand' || pauseSt.state === 'eq-expand' || pauseSt.state === 'stats-expand' || pauseSt.state === 'options-expand' || pauseSt.state === 'job-expand') {
@@ -214,15 +222,14 @@ function _drawPauseBox(ctx, shared) {
     }
     const bw = Math.round(pw + (HUD_VIEW_W - pw) * t);
     const bh = Math.round(ph + (HUD_VIEW_H - ph) * t);
-    _drawBorderedBox(px, finalY, bw, bh);
+    drawBorderedBox(px, finalY, bw, bh);
   } else {
-    _drawBorderedBox(px, panelY, pw, ph);
+    drawBorderedBox(px, panelY, pw, ph);
   }
 }
 
-function _drawPauseMenuText(ctx, shared) {
+function _drawPauseMenuText(ctx) {
   const { px, finalY, pw, ph, isInvState, isEqState, isStatsState, isOptState, isJobState, panelY } = _pausePanelLayout();
-  const { _drawCursorFaded } = shared;
   const showPauseText = pauseSt.state === 'text-in' || pauseSt.state === 'open' || pauseSt.state === 'text-out' ||
                         pauseSt.state === 'inv-text-out' || pauseSt.state === 'inv-text-in' ||
                         pauseSt.state === 'eq-text-out' || pauseSt.state === 'eq-text-in' ||
@@ -242,18 +249,17 @@ function _drawPauseMenuText(ctx, shared) {
   for (let i = 0; i < PAUSE_ITEMS.length; i++) {
     drawText(ctx, textX, startY + i * 16, PAUSE_ITEMS[i], fadedPal);
   }
-  _drawCursorFaded(px + 8, startY + pauseSt.cursor * 16 - 4, fadeStep);
+  drawCursorFaded(px + 8, startY + pauseSt.cursor * 16 - 4, fadeStep);
 }
 
-function _drawPauseInventory(ctx, shared) {
+function _drawPauseInventory(ctx) {
   const px = HUD_VIEW_X, finalY = HUD_VIEW_Y;
-  const { playerInventory, _drawCursorFaded } = shared;
   const showInvItems = pauseSt.state === 'inv-items-in' || pauseSt.state === 'inventory' || pauseSt.state === 'inv-items-out' ||
     pauseSt.state === 'inv-target' || pauseSt.state === 'inv-heal';
   if (!showInvItems) return;
   const fadeStep = _pauseFadeStep('inv-items-in', 'inv-items-out');
   const fadedPal = _makeFadedPal(fadeStep);
-  const entries = Object.entries(playerInventory).filter(([,c]) => c > 0);
+  const entries = Object.entries(_playerInventory()).filter(([,c]) => c > 0);
   const maxVisible = Math.floor((HUD_VIEW_H - 16) / 14);
   const startIdx = Math.max(0, Math.min(pauseSt.invScroll, Math.max(0, entries.length - maxVisible)));
   for (let i = 0; i < maxVisible && startIdx + i < entries.length; i++) {
@@ -264,17 +270,16 @@ function _drawPauseInventory(ctx, shared) {
     const iy = finalY + 12 + i * 14;
     drawText(ctx, px + 24, iy, rowBytes, fadedPal);
     if (pauseSt.heldItem >= 0 && startIdx + i === pauseSt.heldItem && pauseSt.state !== 'inv-target' && pauseSt.state !== 'inv-heal')
-      _drawCursorFaded(px + 8, iy - 4, fadeStep);
+      drawCursorFaded(px + 8, iy - 4, fadeStep);
     if (startIdx + i === pauseSt.invScroll && pauseSt.state !== 'inv-target' && pauseSt.state !== 'inv-heal') {
       const activeX = pauseSt.heldItem >= 0 ? px + 4 : px + 8;
-      _drawCursorFaded(activeX, iy - 4, fadeStep);
+      drawCursorFaded(activeX, iy - 4, fadeStep);
     }
   }
 }
 
-function _drawPauseEquipSlots(ctx, shared) {
+function _drawPauseEquipSlots(ctx) {
   const px = HUD_VIEW_X, finalY = HUD_VIEW_Y;
-  const { cursorTileCanvas } = shared;
   const showEqSlots = pauseSt.state === 'eq-slots-in' || pauseSt.state === 'equip' || pauseSt.state === 'eq-slots-out' ||
     pauseSt.state === 'eq-items-in' || pauseSt.state === 'eq-item-select' || pauseSt.state === 'eq-items-out';
   if (!showEqSlots) return;
@@ -317,18 +322,17 @@ function _drawPauseEquipSlots(ctx, shared) {
   drawText(ctx, px + 24 + 32, atkDefY, _nameToBytes(String(ps.atk)), atkDefPal);
   drawText(ctx, px + 80, atkDefY, _nameToBytes('DEF'), atkDefPal);
   drawText(ctx, px + 80 + 32, atkDefY, _nameToBytes(String(ps.def)), atkDefPal);
-  if (shared._drawCursorFaded) {
+  if (drawCursorFaded) {
     if (pauseSt.eqCursor < 5) {
-      shared._drawCursorFaded(px + 8, eqStartY + pauseSt.eqCursor * eqRowH - 4, fadeStep);
+      drawCursorFaded(px + 8, eqStartY + pauseSt.eqCursor * eqRowH - 4, fadeStep);
     } else {
-      shared._drawCursorFaded(optX - 16, eqStartY - 4, fadeStep);
+      drawCursorFaded(optX - 16, eqStartY - 4, fadeStep);
     }
   }
 }
 
-function _drawPauseEquipItems(ctx, shared) {
+function _drawPauseEquipItems(ctx) {
   const px = HUD_VIEW_X, finalY = HUD_VIEW_Y;
-  const { cursorTileCanvas } = shared;
   const showEqItems = pauseSt.state === 'eq-items-in' || pauseSt.state === 'eq-item-select' || pauseSt.state === 'eq-items-out';
   if (!showEqItems) return;
   const fadeStep = _pauseFadeStep('eq-items-in', 'eq-items-out');
@@ -350,13 +354,13 @@ function _drawPauseEquipItems(ctx, shared) {
         drawText(ctx, listX + 16, iy, getItemNameClean(entry.id), fadedPal);
       }
     }
-    if (shared._drawCursorFaded) {
-      shared._drawCursorFaded(listX, useY + pauseSt.eqItemCursor * 12 - 4, fadeStep);
+    if (drawCursorFaded) {
+      drawCursorFaded(listX, useY + pauseSt.eqItemCursor * 12 - 4, fadeStep);
     }
   }
 }
 
-function _drawPauseStats(ctx, shared) {
+function _drawPauseStats(ctx) {
   const px = HUD_VIEW_X, finalY = HUD_VIEW_Y;
   // selectCursor, saveSlots imported from save-state.js
   const show = pauseSt.state === 'stats-in' || pauseSt.state === 'stats' || pauseSt.state === 'stats-out';
@@ -433,9 +437,8 @@ function _toggleCrt() {
   if (el) el.classList.toggle('crt');
 }
 
-function _drawPauseOptions(ctx, shared) {
+function _drawPauseOptions(ctx) {
   const px = HUD_VIEW_X, finalY = HUD_VIEW_Y;
-  const { cursorTileCanvas } = shared;
   const show = pauseSt.state === 'options-in' || pauseSt.state === 'options' || pauseSt.state === 'options-out';
   if (!show) return;
   const fadeStep = _pauseFadeStep('options-in', 'options-out');
@@ -446,14 +449,13 @@ function _drawPauseOptions(ctx, shared) {
   drawText(ctx, tx, y, OPT_CRT_LABEL, fadedPal);
   const valBytes = _isCrtOn() ? OPT_ON : OPT_OFF;
   drawText(ctx, valRx - valBytes.length * 8, y, valBytes, fadedPal);
-  if (shared._drawCursorFaded) {
-    shared._drawCursorFaded(px + 8, y + pauseSt.optCursor * 16 - 4, fadeStep);
+  if (drawCursorFaded) {
+    drawCursorFaded(px + 8, y + pauseSt.optCursor * 16 - 4, fadeStep);
   }
 }
 
-function _drawPauseJob(ctx, shared) {
+function _drawPauseJob(ctx) {
   const px = HUD_VIEW_X, finalY = HUD_VIEW_Y;
-  const { cursorTileCanvas } = shared;
   const show = pauseSt.state === 'job-in' || pauseSt.state === 'job' || pauseSt.state === 'job-out';
   if (!show) return;
   const fadeStep = _pauseFadeStep('job-in', 'job-out');
@@ -495,37 +497,35 @@ function _drawPauseJob(ctx, shared) {
       drawText(ctx, valRx - costBytes.length * 8, ry, costBytes, pal);
     }
   }
-  if (shared._drawCursorFaded) {
-    shared._drawCursorFaded(px + 8, y + pauseSt.jobCursor * 12 - 4, fadeStep);
+  if (drawCursorFaded) {
+    drawCursorFaded(px + 8, y + pauseSt.jobCursor * 12 - 4, fadeStep);
   }
 }
 
 // ── Public draw API ────────────────────────────────────────────────────────
 
-// shared = { playerInventory, saveSlots, selectCursor, cursorTileCanvas, rosterScroll,
-//            _drawBorderedBox, _clipToViewport, _drawCursorFaded }
-export function drawPauseMenu(ctx, shared) {
+export function drawPauseMenu(ctx) {
   if (pauseSt.state === 'none') return;
-  shared._clipToViewport();
-  _drawPauseBox(ctx, shared);
-  _drawPauseMenuText(ctx, shared);
-  _drawPauseInventory(ctx, shared);
-  _drawPauseEquipSlots(ctx, shared);
-  _drawPauseEquipItems(ctx, shared);
-  _drawPauseStats(ctx, shared);
-  _drawPauseOptions(ctx, shared);
-  _drawPauseJob(ctx, shared);
+  clipToViewport();
+  _drawPauseBox(ctx);
+  _drawPauseMenuText(ctx);
+  _drawPauseInventory(ctx);
+  _drawPauseEquipSlots(ctx);
+  _drawPauseEquipItems(ctx);
+  _drawPauseStats(ctx);
+  _drawPauseOptions(ctx);
+  _drawPauseJob(ctx);
   ctx.restore();
   // Target cursor on portrait — drawn after restore so it's unclipped
-  const { cursorTileCanvas, rosterScroll } = shared;
-  if (pauseSt.state === 'inv-target' && cursorTileCanvas) {
+  const cursorTile = ui.cursorTileCanvas;
+  if (pauseSt.state === 'inv-target' && cursorTile) {
     if (pauseSt.invAllyTarget >= 0) {
-      const visRow = pauseSt.invAllyTarget - rosterScroll;
+      const visRow = pauseSt.invAllyTarget - inputSt.rosterScroll;
       if (visRow >= 0 && visRow < ROSTER_VISIBLE) {
-        ctx.drawImage(cursorTileCanvas, HUD_RIGHT_X - 4, HUD_VIEW_Y + 32 + visRow * ROSTER_ROW_H + 12);
+        ctx.drawImage(cursorTile, HUD_RIGHT_X - 4, HUD_VIEW_Y + 32 + visRow * ROSTER_ROW_H + 12);
       }
     } else {
-      ctx.drawImage(cursorTileCanvas, HUD_RIGHT_X - 4, HUD_VIEW_Y + 12);
+      ctx.drawImage(cursorTile, HUD_RIGHT_X - 4, HUD_VIEW_Y + 12);
     }
   }
 }

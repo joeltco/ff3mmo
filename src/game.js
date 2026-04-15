@@ -65,8 +65,8 @@ import { rosterBattleFade, setLocationGetter, getPlayerLocation, rosterLocForMap
 import { msgState, showMsgBox, updateMsgBox, drawMsgBox } from './message-box.js';
 import { titleSt, isTitleActiveState, titleFadeLevel, titleFadePal, drawTitleOcean, drawTitleWater, drawTitleSky, drawTitleUnderwater, drawUnderwaterSprites, drawTitleSkyInHUD, drawTitle,
          updateTitleUnderwater, updateTitleSelect, onNameEntryKeyDown, updateShipDrift } from './title-screen.js';
-import { pauseSt, updatePauseMenu, drawPauseMenu } from './pause-menu.js';
-import { transSt, topBoxSt, loadingSt, startWipeTransition, updateTransition, updateTopBoxScroll, drawTransitionOverlay } from './transitions.js';
+import { pauseSt, updatePauseMenu, drawPauseMenu, initPauseMenu } from './pause-menu.js';
+import { transSt, topBoxSt, loadingSt, startWipeTransition, updateTransition, updateTopBoxScroll, drawTransitionOverlay, initTransitions } from './transitions.js';
 import { inputSt, handleBattleInput, handleRosterInput, handlePauseInput, initInputHandler } from './input-handler.js';
 import { checkTrigger, applyPassage, openPassage, handleChest, handleSecretWall, handleRockPuzzle, handlePondHeal, findWorldExitIndex, initMapTriggers, triggerWipe } from './map-triggers.js';
 import { pvpSt, startPVPBattle, resetPVPState, updatePVPBattle, initPVP } from './pvp.js';
@@ -487,14 +487,7 @@ function returnToTitle() {
 // _hudDrawShared / _loadingShared / _transDrawShared retired —
 // hud-drawing, loading-screen, transitions read ui/state modules directly.
 
-// Shared state object passed to transitions.js update functions
-function _transShared() {
-  return {
-    sprite,
-    keys,
-    onShake: () => { mapSt.shakeActive = true; mapSt.shakeTimer = 0; },
-  };
-}
+// _transShared retired — transitions.js is wired via initTransitions() at boot
 // Team wipe check — true when player AND all allies are dead
 function _isTeamWiped() {
   if (ps.hp > 0) return false;
@@ -503,34 +496,14 @@ function _isTeamWiped() {
 
 // getEnemyHP / setEnemyHP → battle-state.js (as getEnemyHP / setEnemyHP)
 
-function _pauseShared() {
-  return {
-    playerInventory,
-    cursorTileCanvas,
-    rosterScroll: inputSt.rosterScroll,
-    _drawBorderedBox: drawBorderedBox,
-    _clipToViewport: clipToViewport,
-    _drawCursorFaded: drawCursorFaded,
-  };
-}
+// _pauseShared retired — pause-menu.js reads ui/inputSt directly + playerInventory via initPauseMenu callback
 
 // _pvpShared retired — pvp.js uses direct imports + injected callbacks
 
 
 // _battleDrawShared retired — battle-drawing.js uses direct imports + injected callbacks
 
-// Shared state object passed to title-screen.js draw functions
-function _titleShared() {
-  return {
-    waterTick,
-    get battleSpriteCanvas()       { return bsc.battlePoses.idle; },
-    get battleSpriteFadeCanvases() { return bsc.battlePoses.idleFade; },
-    get silhouetteCanvas()         { return bsc.battlePoses.silhouette; },
-    drawBorderedBox,
-    drawHudBox,
-    drawCursorFaded,
-  };
-}
+// _titleShared retired — title-screen.js imports drawCursorFaded directly; drawTitle takes waterTick as arg
 
 export function getMobileInputMode() {
   if (chatState.inputActive) return 'chat';
@@ -649,6 +622,8 @@ export async function loadROM(arrayBuffer) {
   initMapLoading(romRaw, sprite);
   initMapTriggers({ addItem });
   initBattleItems({ processNextTurn });
+  initPauseMenu({ playerInventory: () => playerInventory });
+  initTransitions({ keys, getSprite: () => sprite, onShake: () => { mapSt.shakeActive = true; mapSt.shakeTimer = 0; } });
   initBattleEncounter({ resetBattleVars: _resetBattleVars });
   initBattleAlly({ buildTurnOrder, processNextTurn, isTeamWiped: _isTeamWiped });
   initBattleEnemy({ processNextTurn, isTeamWiped: _isTeamWiped });
@@ -1845,7 +1820,7 @@ function _gameLoopUpdate(dt) {
   updateMsgBox(dt);
   updateBattle(dt);
   updateMovement(dt);
-  updateTransition(dt, _transShared());
+  updateTransition(dt);
   updateTopBoxScroll(dt);
   if (mapSt.pondStrobeTimer > 0) mapSt.pondStrobeTimer = Math.max(0, mapSt.pondStrobeTimer - dt);
   if (mapSt.shakeActive) {
@@ -1900,7 +1875,7 @@ function _gameLoopDraw() {
     if (battleSt.battleAllies.length > 0 && battleSt.battleState !== 'none') drawBattleAllies();
     else drawRoster(_rds);
     drawChat(ctx, drawHudBox, rosterBattleFade);
-    drawPauseMenu(ctx, _pauseShared());
+    drawPauseMenu(ctx);
     drawMsgBox(ctx, clipToViewport, drawBorderedBox);
     drawRosterMenu(_rds);
     drawBattle();
@@ -1922,7 +1897,7 @@ function gameLoop(timestamp) {
   lastTime = timestamp;
 
   if (titleSt.state !== 'done') {
-    updateTitle(dt); drawTitle(ctx, _titleShared()); drawHUD();
+    updateTitle(dt); drawTitle(ctx, waterTick); drawHUD();
     if (titleSt.state !== 'done') drawTitleSkyInHUD(ctx, roundTopBoxCorners); // guard: updateTitle may have set titleSt.state='done'
     updateChat(dt, 'none', true);
     drawChat(ctx, drawHudBox, 0, true);

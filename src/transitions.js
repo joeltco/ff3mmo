@@ -4,6 +4,16 @@ import { playSFX, playTrack, SFX, TRACKS } from './music.js';
 import { DIR_LEFT, DIR_UP, DIR_RIGHT, DIR_DOWN } from './sprite.js';
 import { drawLoadingOverlay } from './loading-screen.js';
 
+// Injected by initTransitions()
+let _keys = {};
+let _getSprite = () => null;
+let _onShake = () => {};
+export function initTransitions({ keys, getSprite, onShake }) {
+  _keys = keys;
+  _getSprite = getSprite;
+  _onShake = onShake;
+}
+
 // NES layout constants — must match game.js
 const HUD_VIEW_X = 0;
 const HUD_VIEW_Y = 32;
@@ -66,9 +76,8 @@ export function startWipeTransition(action, destMapId, rosterLocChanged = false)
   playSFX(SFX.SCREEN_CLOSE);
 }
 
-// shared = { sprite, keys, onShake }
-// onShake(): triggers the earthquake shake effect in game.js
-export function updateTransition(dt, shared) {
+// sprite/keys/onShake are wired via initTransitions() at boot.
+export function updateTransition(dt) {
   if (transSt.state === 'none') return;
   transSt.timer += dt;
   if (transSt.state === 'hud-fade-out') {
@@ -87,13 +96,13 @@ export function updateTransition(dt, shared) {
     return;
   } else if (transSt.state === 'trap-reveal') {
     if (transSt.timer >= TRAP_REVEAL_DURATION) { transSt.state = 'closing'; transSt.timer = 0; playSFX(SFX.SCREEN_CLOSE); }
-  } else if (transSt.state === 'trap-falling') { _updateTransitionTrapFall(shared);
+  } else if (transSt.state === 'trap-falling') { _updateTransitionTrapFall();
   } else if (transSt.state === 'door-opening') {
     if (transSt.timer >= DOOR_OPEN_DURATION) { transSt.state = 'closing'; transSt.timer = 0; playSFX(SFX.SCREEN_CLOSE); }
   } else if (transSt.state === 'closing') { _updateTransitionClosing();
   } else if (transSt.state === 'hold') { _updateTransitionHold();
-  } else if (transSt.state === 'loading') { _updateTransitionLoading(dt, shared);
-  } else if (transSt.state === 'opening') { _updateTransitionOpening(shared);
+  } else if (transSt.state === 'loading') { _updateTransitionLoading(dt);
+  } else if (transSt.state === 'opening') { _updateTransitionOpening();
   }
 }
 
@@ -202,7 +211,7 @@ function _updateTransitionHold() {
   }
 }
 
-function _updateTransitionLoading(dt, shared) {
+function _updateTransitionLoading(dt) {
   loadingSt.timer += dt;
   loadingSt.bgScroll += dt * 0.08;
   if (loadingSt.state === 'in') {
@@ -215,7 +224,7 @@ function _updateTransitionLoading(dt, shared) {
       transSt.dungeon = false; playSFX(SFX.SCREEN_OPEN); playTrack(TRACKS.CRYSTAL_CAVE);
     }
   }
-  const keys = shared.keys;
+  const keys = _keys;
   if (loadingSt.state === 'visible' && (keys['z'] || keys['Z'])) {
     keys['z'] = false; keys['Z'] = false;
     loadingSt.state = 'out'; loadingSt.timer = 0;
@@ -225,9 +234,9 @@ function _updateTransitionLoading(dt, shared) {
   }
 }
 
-function _updateTransitionTrapFall(shared) {
+function _updateTransitionTrapFall() {
   const totalSpinTime = SPIN_INTERVAL * SPIN_DIRS_ORDER.length * SPIN_CYCLES;
-  shared.sprite.setDirection(SPIN_DIRS_ORDER[Math.floor(transSt.timer / SPIN_INTERVAL) % SPIN_DIRS_ORDER.length]);
+  _getSprite().setDirection(SPIN_DIRS_ORDER[Math.floor(transSt.timer / SPIN_INTERVAL) % SPIN_DIRS_ORDER.length]);
   if (transSt.timer >= totalSpinTime) {
     if (transSt.pendingAction) {
       try { transSt.pendingAction(); } catch(e) { console.error('[TRANSITION pendingAction ERROR]', e); }
@@ -237,13 +246,13 @@ function _updateTransitionTrapFall(shared) {
   }
 }
 
-function _updateTransitionOpening(shared) {
+function _updateTransitionOpening() {
   if (transSt.timer >= WIPE_DURATION) {
     transSt.state = 'none'; transSt.timer = 0; transSt.rosterLocChanged = false; transSt.topBoxAlreadyBright = false;
     if (transSt.trapShakePending) {
       transSt.trapShakePending = false;
       playSFX(SFX.EARTHQUAKE);
-      shared.onShake();
+      _onShake();
     }
   }
 }
