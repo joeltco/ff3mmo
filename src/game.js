@@ -46,6 +46,7 @@ import { _updateWorldWater, _updateIndoorWater, resetWorldWaterCache, _buildHori
 import { bsc, getSlashFramesForWeapon, initBattleSpriteCache, loadJobBattleSprites } from './battle-sprite-cache.js';
 import { hudSt, HUD_INFO_FADE_STEPS, HUD_INFO_FADE_STEP_MS, HUD_HPLV_STEP_MS } from './hud-state.js';
 import { mapSt } from './map-state.js';
+import { ui, isMobile, drawBoxOnCtx } from './ui-state.js';
 import { battleSt, getEnemyHP, setEnemyHP,
          BOSS_ATK, BOSS_DEF, BOSS_MAX_HP,
          BATTLE_SHAKE_MS, BATTLE_DMG_SHOW_MS, BOSS_PREFLASH_MS, MONSTER_DEATH_MS } from './battle-state.js';
@@ -75,7 +76,7 @@ import { getKnifeBladeCanvas, getKnifeBladeSwungCanvas,
          getDaggerBladeCanvas, getDaggerBladeSwungCanvas,
          getSwordBladeCanvas, getSwordBladeSwungCanvas,
          getFistCanvas, getBlades } from './weapon-sprites.js';
-import { initHudDrawing, drawHUD, clipToViewport, drawCursorFaded, drawHudBox,
+import { drawHUD, clipToViewport, drawCursorFaded, drawHudBox,
          drawSparkleCorners, drawBorderedBox, drawHealNum, drawTopBoxBorder,
          roundTopBoxCorners, grayViewport, drawRosterSparkle, statRowBytes } from './hud-drawing.js';
 import { initMapLoading, loadMapById, loadWorldMapAt, loadWorldMapAtPosition, setupTopBox } from './map-loading.js';
@@ -96,7 +97,7 @@ import { resetAllDmgNums, tickDmgNums, tickHealNums, clearHealNums, initMissSpri
          getAllyDamageNums, getSwDmgNums } from './damage-numbers.js';
 // OK_IDLE, OK_VICTORY, etc. → sprite-init.js
 
-const isMobile = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+// isMobile → ui-state.js
 
 // Save state (selectCursor, saveSlots, saveSlotsToDB, loadSlotsFromDB) → save-state.js
 
@@ -331,6 +332,7 @@ export function init() {
   canvas.width = CANVAS_W;
   canvas.height = CANVAS_H;
   ctx.imageSmoothingEnabled = false;
+  ui.canvas = canvas; ui.ctx = ctx;
 
   window.addEventListener('keydown', (e) => {
     if (chatState.inputActive) { onChatKeyDown(e); return; }
@@ -369,17 +371,11 @@ function _tileToCanvas(pixels, palette, transparentBg = false) {
   return c;
 }
 
-function _drawBoxOnCtx(pctx, tileCanvases, x, y, w, h, fill = true) {
-  const [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR] = tileCanvases;
-  if (fill) { pctx.fillStyle = '#000'; pctx.fillRect(x + 8, y + 8, w - 16, h - 16); }
-  pctx.drawImage(TL, x, y); pctx.drawImage(TR, x + w - 8, y);
-  pctx.drawImage(BL, x, y + h - 8); pctx.drawImage(BR, x + w - 8, y + h - 8);
-  for (let tx = x + 8; tx < x + w - 8; tx += 8) { pctx.drawImage(TOP, tx, y); pctx.drawImage(BOT, tx, y + h - 8); }
-  for (let ty = y + 8; ty < y + h - 8; ty += 8) { pctx.drawImage(LEFT, x, ty); pctx.drawImage(RIGHT, x + w - 8, ty); }
-}
+// drawBoxOnCtx → ui-state.js (as drawBoxOnCtx)
 
 function _initHUDBorderTiles(tiles) {
   borderTileCanvases = tiles.map(p => _tileToCanvas(p, MENU_PALETTE));
+  ui.borderTileCanvases = borderTileCanvases;
   cornerMasks = [0, 2, 5, 7].map(idx => {
     const pixels = tiles[idx];
     const c = document.createElement('canvas'); c.width = 8; c.height = 8;
@@ -387,12 +383,15 @@ function _initHUDBorderTiles(tiles) {
     for (let i = 0; i < 64; i++) if (pixels[i] === 0) img.data[i * 4 + 3] = 255;
     tctx.putImageData(img, 0, 0); return c;
   });
+  ui.cornerMasks = cornerMasks;
   borderBlueTileCanvases = tiles.map(p => _tileToCanvas(p, [0x02, 0x00, 0x02, 0x30], true));
+  ui.borderBlueTileCanvases = borderBlueTileCanvases;
   borderFadeSets = [];
   for (let step = 0; step <= LOAD_FADE_MAX; step++) {
     const fadedPal = MENU_PALETTE.map(c => { let fc = c; for (let s = 0; s < step; s++) fc = nesColorFade(fc); return fc; });
     borderFadeSets.push(tiles.map(p => _tileToCanvas(p, fadedPal)));
   }
+  ui.borderFadeSets = borderFadeSets;
   // Title screen gets transparent-background border tiles (no black outer edge)
   titleSt.borderTiles = tiles.map(p => _tileToCanvas(p, MENU_PALETTE, true));
   const titleFadeSets = [];
@@ -406,14 +405,16 @@ function _initHUDBorderTiles(tiles) {
 function _initHUDCanvases() {
   hudCanvas = document.createElement('canvas'); hudCanvas.width = CANVAS_W; hudCanvas.height = CANVAS_H;
   const hctx = hudCanvas.getContext('2d'); hctx.imageSmoothingEnabled = false;
-  _drawBoxOnCtx(hctx, borderTileCanvases, HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H, false);
-  _drawBoxOnCtx(hctx, borderTileCanvases, HUD_RIGHT_X, HUD_VIEW_Y, 32, 32);
-  _drawBoxOnCtx(hctx, borderTileCanvases, HUD_RIGHT_X + 32, HUD_VIEW_Y, HUD_RIGHT_W - 32, 32);
-  _drawBoxOnCtx(hctx, borderTileCanvases, 0, HUD_BOT_Y, CANVAS_W, HUD_BOT_H);
+  drawBoxOnCtx(hctx, borderTileCanvases, HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H, false);
+  drawBoxOnCtx(hctx, borderTileCanvases, HUD_RIGHT_X, HUD_VIEW_Y, 32, 32);
+  drawBoxOnCtx(hctx, borderTileCanvases, HUD_RIGHT_X + 32, HUD_VIEW_Y, HUD_RIGHT_W - 32, 32);
+  drawBoxOnCtx(hctx, borderTileCanvases, 0, HUD_BOT_Y, CANVAS_W, HUD_BOT_H);
+  ui.hudCanvas = hudCanvas;
   titleHudCanvas = document.createElement('canvas'); titleHudCanvas.width = CANVAS_W; titleHudCanvas.height = CANVAS_H;
   const thctx = titleHudCanvas.getContext('2d'); thctx.imageSmoothingEnabled = false;
-  _drawBoxOnCtx(thctx, borderTileCanvases, HUD_VIEW_X, HUD_VIEW_Y, CANVAS_W, HUD_VIEW_H, false);
-  _drawBoxOnCtx(thctx, borderTileCanvases, 0, HUD_BOT_Y, CANVAS_W, HUD_BOT_H);
+  drawBoxOnCtx(thctx, borderTileCanvases, HUD_VIEW_X, HUD_VIEW_Y, CANVAS_W, HUD_VIEW_H, false);
+  drawBoxOnCtx(thctx, borderTileCanvases, 0, HUD_BOT_Y, CANVAS_W, HUD_BOT_H);
+  ui.titleHudCanvas = titleHudCanvas;
 }
 
 function _buildFadedHUDSet(boxes) {
@@ -421,7 +422,7 @@ function _buildFadedHUDSet(boxes) {
   for (let step = 1; step <= LOAD_FADE_MAX; step++) {
     const c = document.createElement('canvas'); c.width = CANVAS_W; c.height = CANVAS_H;
     const fctx = c.getContext('2d'); fctx.imageSmoothingEnabled = false;
-    for (const [bx, by, bw, bh, fill] of boxes) _drawBoxOnCtx(fctx, borderFadeSets[step], bx, by, bw, bh, fill);
+    for (const [bx, by, bw, bh, fill] of boxes) drawBoxOnCtx(fctx, borderFadeSets[step], bx, by, bw, bh, fill);
     arr.push(c);
   }
   return arr;
@@ -435,7 +436,9 @@ function initHUD(romData) {
     [HUD_RIGHT_X, HUD_VIEW_Y, 32, 32, true],
     [HUD_RIGHT_X + 32, HUD_VIEW_Y, HUD_RIGHT_W - 32, 32, true],
   ]);
+  ui.hudFadeCanvases = hudFadeCanvases;
   titleHudFadeCanvases = _buildFadedHUDSet([[HUD_VIEW_X, HUD_VIEW_Y, CANVAS_W, HUD_VIEW_H, false]]);
+  ui.titleHudFadeCanvases = titleHudFadeCanvases;
 }
 
 // _renderPortrait through initLoadingScreenFadeFrames → sprite-init.js
@@ -460,8 +463,6 @@ function _xPressed() { if (!keys['x'] && !keys['X']) return false; keys['x'] = f
 
 function _swapBattleSprites(jobIdx) {
   loadJobBattleSprites(romRaw, jobIdx);
-  // Re-init hud drawing shared context so it picks up new canvases
-  initHudDrawing(_hudDrawShared());
   // Swap walk sprite to match job
   if (sprite) {
     sprite.setGfxID(jobIdx);
@@ -483,51 +484,15 @@ function returnToTitle() {
 }
 // setupTopBox → map-loading.js
 
-function _hudDrawShared() {
-  return {
-    get ctx() { return ctx; },
-    get cursorTileCanvas() { return cursorTileCanvas; },
-    get cursorFadeCanvases() { return cursorFadeCanvases; },
-    get borderTileCanvases() { return borderTileCanvases; },
-    get borderFadeSets() { return borderFadeSets; },
-    get borderBlueTileCanvases() { return borderBlueTileCanvases; },
-    get cornerMasks() { return cornerMasks; },
-    get hudCanvas() { return hudCanvas; },
-    get hudFadeCanvases() { return hudFadeCanvases; },
-    get titleHudCanvas() { return titleHudCanvas; },
-    get titleHudFadeCanvases() { return titleHudFadeCanvases; },
-    get battleState() { return battleSt.battleState; },
-    get battleShakeTimer() { return battleSt.battleShakeTimer; },
-    get titleState() { return titleSt.state; },
-    get titleTimer() { return titleSt.timer; },
-    TITLE_FADE_STEP_MS,
-    TITLE_FADE_MAX,
-    loadingShared: () => _loadingShared(),
-  };
-}
+// _hudDrawShared / _loadingShared / _transDrawShared retired —
+// hud-drawing, loading-screen, transitions read ui/state modules directly.
 
-// Shared state objects passed to transitions.js functions
+// Shared state object passed to transitions.js update functions
 function _transShared() {
   return {
     sprite,
     keys,
     onShake: () => { mapSt.shakeActive = true; mapSt.shakeTimer = 0; },
-  };
-}
-function _transDrawShared() {
-  return { drawLoadingOverlay: () => drawLoadingOverlay(_loadingShared()) };
-}
-function _loadingShared() {
-  return {
-    ctx,
-    get transTimer()          { return transSt.timer; },
-    get borderFadeSets()      { return borderFadeSets; },
-    get borderTileCanvases()  { return borderTileCanvases; },
-    get isMobile()            { return isMobile; },
-    drawText, measureText, TEXT_WHITE,
-    drawBoxOnCtx: _drawBoxOnCtx,
-    HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H,
-    HUD_RIGHT_X, HUD_RIGHT_W,
   };
 }
 // Team wipe check — true when player AND all allies are dead
@@ -580,6 +545,7 @@ function _initSpriteAssets(romRaw) {
   const ct = _initCursorTile(romRaw);
   cursorTileCanvas = ct.cursorTileCanvas;
   cursorFadeCanvases = ct.cursorFadeCanvases;
+  ui.cursorTileCanvas = cursorTileCanvas; ui.cursorFadeCanvases = cursorFadeCanvases;
 
   // Scroll arrows (sprite-init.js)
   const sa = _initScrollArrows(romRaw);
@@ -680,7 +646,6 @@ export async function loadROM(arrayBuffer) {
   mapSt.worldMapRenderer = new WorldMapRenderer(mapSt.worldMapData);
   resetWorldWaterCache();
   _initTitleAssets(romRaw);
-  initHudDrawing(_hudDrawShared());
   initMapLoading(romRaw, sprite);
   initMapTriggers({ addItem });
   initBattleItems({ processNextTurn });
@@ -1899,7 +1864,7 @@ function _gameLoopDraw() {
   try {
     render();
     _drawPoisonFlash();
-    drawTransitionOverlay(ctx, _transDrawShared());
+    drawTransitionOverlay(ctx);
     _drawPondStrobe();
     if (transSt.state === 'trap-falling' && sprite) sprite.draw(ctx, SCREEN_CENTER_X, SCREEN_CENTER_Y);
   } catch (e) {

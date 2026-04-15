@@ -15,6 +15,11 @@ import { HEAL_NUM_PAL, drawBattleNum } from './damage-numbers.js';
 import { inputSt } from './input-handler.js';
 import { bsc } from './battle-sprite-cache.js';
 import { hudSt } from './hud-state.js';
+import { titleSt } from './title-screen.js';
+import { ui } from './ui-state.js';
+// Title fade constants — mirror of title-screen.js (kept in sync with game.js)
+const TITLE_FADE_STEP_MS = 100;
+const TITLE_FADE_MAX = 4;
 
 // NES layout constants — must match game.js
 const CANVAS_W = 256;
@@ -32,28 +37,25 @@ const HUD_INFO_FADE_STEPS = 4;
 const HUD_INFO_FADE_STEP_MS = 200;
 const TOPBOX_FADE_STEPS = 4;
 
-// Shared state — set once via initHudDrawing()
-let _s = null;
-
-export function initHudDrawing(shared) { _s = shared; }
+// _hudDrawShared bag retired — this module reads ui/titleSt directly.
 
 // ── Utility draw helpers (used by other modules via shared context) ────────
 
 export function clipToViewport() {
-  _s.ctx.save(); _s.ctx.beginPath(); _s.ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H); _s.ctx.clip();
+  ui.ctx.save(); ui.ctx.beginPath(); ui.ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H); ui.ctx.clip();
 }
 
 export function drawCursorFaded(cx, cy, fadeStep) {
-  if (!_s.cursorTileCanvas) return;
-  if (fadeStep <= 0) { _s.ctx.drawImage(_s.cursorTileCanvas, cx, cy); return; }
-  if (fadeStep < 4 && _s.cursorFadeCanvases) _s.ctx.drawImage(_s.cursorFadeCanvases[fadeStep - 1], cx, cy);
+  if (!ui.cursorTileCanvas) return;
+  if (fadeStep <= 0) { ui.ctx.drawImage(ui.cursorTileCanvas, cx, cy); return; }
+  if (fadeStep < 4 && ui.cursorFadeCanvases) ui.ctx.drawImage(ui.cursorFadeCanvases[fadeStep - 1], cx, cy);
 }
 
 export function drawHudBox(x, y, w, h, fadeStep = 0) {
-  const tiles = (fadeStep > 0 && _s.borderFadeSets) ? _s.borderFadeSets[fadeStep] : _s.borderTileCanvases;
+  const tiles = (fadeStep > 0 && ui.borderFadeSets) ? ui.borderFadeSets[fadeStep] : ui.borderTileCanvases;
   if (!tiles) return;
   const [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR] = tiles;
-  const ctx = _s.ctx;
+  const ctx = ui.ctx;
   ctx.fillStyle = '#000';
   ctx.fillRect(x + 8, y + 8, w - 16, h - 16);
   ctx.drawImage(TL, x, y); ctx.drawImage(TR, x + w - 8, y);
@@ -63,7 +65,7 @@ export function drawHudBox(x, y, w, h, fadeStep = 0) {
 }
 
 export function drawSparkleCorners(frame, px, py) {
-  const ctx = _s.ctx;
+  const ctx = ui.ctx;
   ctx.drawImage(frame, px - 8, py - 7);
   ctx.save(); ctx.scale(-1, 1); ctx.drawImage(frame, -(px + 23), py - 7); ctx.restore();
   ctx.save(); ctx.scale(1, -1); ctx.drawImage(frame, px - 8, -(py + 24)); ctx.restore();
@@ -71,9 +73,9 @@ export function drawSparkleCorners(frame, px, py) {
 }
 
 export function drawBorderedBox(x, y, w, h, blue = false) {
-  if (!_s.borderTileCanvases) return;
-  const ctx = _s.ctx;
-  const tileSet = blue ? _s.borderBlueTileCanvases : _s.borderTileCanvases;
+  if (!ui.borderTileCanvases) return;
+  const ctx = ui.ctx;
+  const tileSet = blue ? ui.borderBlueTileCanvases : ui.borderTileCanvases;
   const [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR] = tileSet;
   if (blue) {
     const nb = NES_SYSTEM_PALETTE[0x02];
@@ -89,15 +91,15 @@ export function drawBorderedBox(x, y, w, h, blue = false) {
 }
 
 export function drawHealNum(bx, by, value, pal) {
-  drawBattleNum(_s.ctx, bx, by, value, pal);
+  drawBattleNum(ui.ctx, bx, by, value, pal);
 }
 
 // ── Top box ───────────────────────────────────────────────────────────────
 
 export function drawTopBoxBorder(fadeStep) {
-  if (!_s.borderFadeSets || fadeStep >= TOPBOX_FADE_STEPS) return;
-  const ctx = _s.ctx;
-  const tiles = _s.borderFadeSets[fadeStep];
+  if (!ui.borderFadeSets || fadeStep >= TOPBOX_FADE_STEPS) return;
+  const ctx = ui.ctx;
+  const tiles = ui.borderFadeSets[fadeStep];
   const [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR] = tiles;
   const x = 0, y = 0, w = CANVAS_W, h = HUD_TOP_H;
   ctx.fillStyle = '#000';
@@ -109,9 +111,9 @@ export function drawTopBoxBorder(fadeStep) {
 }
 
 export function roundTopBoxCorners() {
-  if (!_s.cornerMasks) return;
-  const ctx = _s.ctx;
-  const [TL, TR, BL, BR] = _s.cornerMasks;
+  if (!ui.cornerMasks) return;
+  const ctx = ui.ctx;
+  const [TL, TR, BL, BR] = ui.cornerMasks;
   ctx.drawImage(TL, 0, 0);
   ctx.drawImage(TR, CANVAS_W - 8, 0);
   ctx.drawImage(BL, 0, HUD_TOP_H - 8);
@@ -121,7 +123,7 @@ export function roundTopBoxCorners() {
 // ── Top box rendering ─────────────────────────────────────────────────────
 
 function _drawTopBoxBattleBG() {
-  const ctx = _s.ctx;
+  const ctx = ui.ctx;
   const battleState = battleSt.battleState;
   const battleShakeTimer = battleSt.battleShakeTimer;
   const topShake = ((battleState === 'enemy-attack' || battleState === 'poison-tick' || battleState === 'pvp-opp-sw-hit') && battleShakeTimer > 0)
@@ -149,7 +151,7 @@ function _drawTopBoxBattleBG() {
 }
 
 function _drawTopBoxOverlay(isFading) {
-  const ctx = _s.ctx;
+  const ctx = ui.ctx;
   if (transSt.state === 'loading') {
     let loadFade = LOAD_FADE_MAX;
     if (loadingSt.state === 'in') {
@@ -190,7 +192,7 @@ function _drawHUDTopBox() {
 // ── Portrait ──────────────────────────────────────────────────────────────
 
 function _drawPortraitImage(px, py, nfPortrait, isPauseHeal, infoFadeStep) {
-  const ctx = _s.ctx;
+  const ctx = ui.ctx;
   if (infoFadeStep >= HUD_INFO_FADE_STEPS) return;
   if (infoFadeStep > 0) {
     const bp = bsc.battlePoses;
@@ -220,7 +222,7 @@ function _drawPortraitImage(px, py, nfPortrait, isPauseHeal, infoFadeStep) {
 }
 
 function _drawCureSparkle(px, py, isPauseHeal) {
-  const ctx = _s.ctx;
+  const ctx = ui.ctx;
   if (!isPauseHeal || bsc.cureSparkleFrames.length !== 2 || (pauseSt.healNum && pauseSt.healNum.rosterIdx >= 0)) return;
   const frame = bsc.cureSparkleFrames[Math.floor(pauseSt.timer / 67) & 1];
   ctx.drawImage(frame, px - 8, py - 7);
@@ -252,7 +254,7 @@ function _drawHUDPortrait() {
 // ── Info panel ────────────────────────────────────────────────────────────
 
 function _drawHUDInfoPanel() {
-  const ctx = _s.ctx;
+  const ctx = ui.ctx;
   const infoFadeStep = HUD_INFO_FADE_STEPS - Math.min(Math.floor(hudSt.hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
   if (infoFadeStep >= HUD_INFO_FADE_STEPS) return;
   const playerDeathTimer = hudSt.playerDeathTimer;
@@ -299,7 +301,7 @@ export function drawRosterSparkle(panelTop) {
 // ── HUD with fade ─────────────────────────────────────────────────────────
 
 function _drawHudWithFade(fullCanvas, fadeCanvases, fadeStep) {
-  const ctx = _s.ctx;
+  const ctx = ui.ctx;
   if (fadeStep > 0 && fadeCanvases && fadeStep <= fadeCanvases.length) {
     ctx.drawImage(fadeCanvases[fadeStep - 1], 0, 0);
     ctx.save(); ctx.beginPath(); ctx.rect(0, HUD_BOT_Y, CANVAS_W, HUD_BOT_H); ctx.clip();
@@ -308,7 +310,7 @@ function _drawHudWithFade(fullCanvas, fadeCanvases, fadeStep) {
 }
 
 function _grayViewport() {
-  const ctx = _s.ctx;
+  const ctx = ui.ctx;
   ctx.filter = 'saturate(0)';
   ctx.drawImage(ctx.canvas, HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H,
                             HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
@@ -320,24 +322,24 @@ export { _grayViewport as grayViewport };
 // ── Main drawHUD ──────────────────────────────────────────────────────────
 
 export function drawHUD() {
-  const ctx = _s.ctx;
-  const isTitleActive = _s.titleState !== 'done';
-  if (isTitleActive && _s.titleHudCanvas) {
+  const ctx = ui.ctx;
+  const isTitleActive = titleSt.state !== 'done';
+  if (isTitleActive && ui.titleHudCanvas) {
     let tfl = 0;
-    if (_s.titleState === 'main-out') {
-      tfl = Math.min(Math.floor(_s.titleTimer / _s.TITLE_FADE_STEP_MS), _s.TITLE_FADE_MAX);
+    if (titleSt.state === 'main-out') {
+      tfl = Math.min(Math.floor(titleSt.timer / TITLE_FADE_STEP_MS), TITLE_FADE_MAX);
     }
-    _drawHudWithFade(_s.titleHudCanvas, _s.titleHudFadeCanvases, tfl);
-  } else if (_s.hudCanvas) {
+    _drawHudWithFade(ui.titleHudCanvas, ui.titleHudFadeCanvases, tfl);
+  } else if (ui.hudCanvas) {
     const fadeStep = HUD_INFO_FADE_STEPS - Math.min(Math.floor(hudSt.hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
-    _drawHudWithFade(_s.hudCanvas, _s.hudFadeCanvases, fadeStep);
+    _drawHudWithFade(ui.hudCanvas, ui.hudFadeCanvases, fadeStep);
   }
-  if (_s.titleState !== 'done') return;
+  if (titleSt.state !== 'done') return;
   _drawHUDTopBox();
   _drawHUDPortrait();
   _drawHUDInfoPanel();
   if (transSt.state === 'loading' && loadingSt.state !== 'none') {
-    drawHUDLoadingMoogle(_s.loadingShared());
+    drawHUDLoadingMoogle();
   }
 }
 

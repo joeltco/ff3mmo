@@ -2,6 +2,7 @@
 
 import { playSFX, playTrack, SFX, TRACKS } from './music.js';
 import { DIR_LEFT, DIR_UP, DIR_RIGHT, DIR_DOWN } from './sprite.js';
+import { drawLoadingOverlay } from './loading-screen.js';
 
 // NES layout constants — must match game.js
 const HUD_VIEW_X = 0;
@@ -141,8 +142,7 @@ export function updateTopBoxScroll(dt) {
   }
 }
 
-// shared = { drawLoadingOverlay }
-export function drawTransitionOverlay(ctx, shared) {
+export function drawTransitionOverlay(ctx) {
   if (transSt.state === 'none' || transSt.state === 'door-opening' || transSt.state === 'hud-fade-out' || transSt.state === 'trap-reveal') return;
   if (transSt.state === 'hud-fade-in') {
     ctx.fillStyle = '#000';
@@ -163,7 +163,7 @@ export function drawTransitionOverlay(ctx, shared) {
   ctx.fillRect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, Math.ceil(barHeight));
   ctx.fillRect(HUD_VIEW_X, HUD_VIEW_Y + HUD_VIEW_H - Math.ceil(barHeight), HUD_VIEW_W, Math.ceil(barHeight));
 
-  if (transSt.state === 'loading') shared.drawLoadingOverlay();
+  if (transSt.state === 'loading') drawLoadingOverlay();
 }
 
 // ── Private helpers ────────────────────────────────────────────────────────

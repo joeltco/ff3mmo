@@ -1,19 +1,25 @@
-// loading-screen.js — loading screen overlay + right-panel moogle
-//
-// Extracted from game.js. Uses _loadingShared() pattern for game.js state access.
+// loading-screen.js — loading screen overlay + right-panel moogle.
+// Reads ui/transitions state directly (no shared-bag).
 
 import { nesColorFade } from './palette.js';
 import { NES_SYSTEM_PALETTE } from './tile-decoder.js';
-import { loadingSt } from './transitions.js';
+import { loadingSt, transSt } from './transitions.js';
 import { MONSTERS } from './data/monsters.js';
 import { hudSt } from './hud-state.js';
+import { ui, isMobile, drawBoxOnCtx } from './ui-state.js';
+import { drawText, measureText, TEXT_WHITE } from './font-renderer.js';
 
 // Constants
 const LOAD_FADE_STEP_MS = 133;
 const LOAD_FADE_MAX = 4;
 
-// Module-level shared ref
-let _s = null;
+// HUD layout — must match game.js
+const HUD_VIEW_X = 0;
+const HUD_VIEW_Y = 32;
+const HUD_VIEW_W = 144;
+const HUD_VIEW_H = 144;
+const HUD_RIGHT_X = HUD_VIEW_W;
+const HUD_RIGHT_W = 256 - HUD_VIEW_W;
 
 // NES-encoded text constants
 const _LOADING_BYTES = new Uint8Array([0x95,0xD8,0xCA,0xCD,0xD2,0xD7,0xD0,0xFF,0x8D,0xDE,0xD7,0xD0,0xCE,0xD8,0xD7]);
@@ -35,39 +41,39 @@ function _drawLoadingBG(vpTop, fadeLevel) {
   if (!bgFadeFrames || bgFadeFrames.length === 0) return;
   const bgCanvas = bgFadeFrames[Math.min(fadeLevel, bgFadeFrames.length - 1)];
   const scrollX = Math.floor(loadingSt.bgScroll) % 256;
-  const ctx = _s.ctx;
+  const ctx = ui.ctx;
   ctx.save();
-  ctx.beginPath(); ctx.rect(_s.HUD_VIEW_X, vpTop, _s.HUD_VIEW_W, 32); ctx.clip();
-  ctx.drawImage(bgCanvas, _s.HUD_VIEW_X - scrollX, vpTop);
-  ctx.drawImage(bgCanvas, _s.HUD_VIEW_X - scrollX + 256, vpTop);
+  ctx.beginPath(); ctx.rect(HUD_VIEW_X, vpTop, HUD_VIEW_W, 32); ctx.clip();
+  ctx.drawImage(bgCanvas, HUD_VIEW_X - scrollX, vpTop);
+  ctx.drawImage(bgCanvas, HUD_VIEW_X - scrollX + 256, vpTop);
   ctx.restore();
 }
 
 function _drawLoadingInfoBox(cx, vpTop, vpBot, fadeLevel, fadedTextPal) {
-  const hpW = _s.measureText(_LODHP_BYTES);
+  const hpW = measureText(_LODHP_BYTES);
   const bossRowW = 16 + 4 + hpW;
   const infoBoxW = Math.ceil(Math.max(bossRowW + 16, 80) / 8) * 8;
   const infoBoxH = 48;
   const infoBoxX = Math.round(cx - infoBoxW / 2);
   const infoBoxY = Math.round(vpTop + (vpBot - vpTop) / 2 - infoBoxH / 2);
-  const borderSet = _s.borderFadeSets && _s.borderFadeSets[fadeLevel];
-  if (borderSet) _s.drawBoxOnCtx(_s.ctx, borderSet, infoBoxX, infoBoxY, infoBoxW, infoBoxH);
-  const floorsW = _s.measureText(_FLOORS_BYTES);
-  _s.drawText(_s.ctx, infoBoxX + Math.floor((infoBoxW - floorsW) / 2), infoBoxY + 10, _FLOORS_BYTES, fadedTextPal);
+  const borderSet = ui.borderFadeSets && ui.borderFadeSets[fadeLevel];
+  if (borderSet) drawBoxOnCtx(ui.ctx, borderSet, infoBoxX, infoBoxY, infoBoxW, infoBoxH);
+  const floorsW = measureText(_FLOORS_BYTES);
+  drawText(ui.ctx, infoBoxX + Math.floor((infoBoxW - floorsW) / 2), infoBoxY + 10, _FLOORS_BYTES, fadedTextPal);
   const bossContentX = infoBoxX + Math.floor((infoBoxW - bossRowW) / 2);
   const bossRowY = infoBoxY + 22;
   const bossFade = hudSt.bossFadeFrames;
-  if (bossFade) _s.ctx.drawImage(bossFade[fadeLevel][Math.floor(_s.transTimer / 400) & 1], bossContentX, bossRowY);
-  else if (hudSt.adamantoiseFrames) _s.ctx.drawImage(hudSt.adamantoiseFrames[0], bossContentX, bossRowY);
-  _s.drawText(_s.ctx, bossContentX + 20, bossRowY + 4, _LODHP_BYTES, fadedTextPal);
+  if (bossFade) ui.ctx.drawImage(bossFade[fadeLevel][Math.floor(transSt.timer / 400) & 1], bossContentX, bossRowY);
+  else if (hudSt.adamantoiseFrames) ui.ctx.drawImage(hudSt.adamantoiseFrames[0], bossContentX, bossRowY);
+  drawText(ui.ctx, bossContentX + 20, bossRowY + 4, _LODHP_BYTES, fadedTextPal);
 }
 
 function _drawLoadingRightPanel(fadeLevel) {
-  const tiles = (_s.borderFadeSets && _s.borderFadeSets[fadeLevel]) || _s.borderTileCanvases;
+  const tiles = (ui.borderFadeSets && ui.borderFadeSets[fadeLevel]) || ui.borderTileCanvases;
   if (!tiles) return;
   const [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR] = tiles;
-  const lx = _s.HUD_RIGHT_X, ly = _s.HUD_VIEW_Y + 32, lw = _s.HUD_RIGHT_W, lh = _s.HUD_VIEW_H - 32;
-  const ctx = _s.ctx;
+  const lx = HUD_RIGHT_X, ly = HUD_VIEW_Y + 32, lw = HUD_RIGHT_W, lh = HUD_VIEW_H - 32;
+  const ctx = ui.ctx;
   ctx.fillStyle = '#000';
   ctx.fillRect(lx + 8, ly + 8, lw - 16, lh - 16);
   ctx.drawImage(TL, lx, ly); ctx.drawImage(TR, lx+lw-8, ly);
@@ -82,9 +88,9 @@ function _drawLoadingChatBubble(rpCX, rpY, rpH, fadeLevel) {
   let fadedWhite = 0x30;
   for (let s = 0; s < fadeLevel; s++) fadedWhite = nesColorFade(fadedWhite);
   const whiteRgb = NES_SYSTEM_PALETTE[fadedWhite] || [0,0,0];
-  const ctx = _s.ctx;
+  const ctx = ui.ctx;
   ctx.fillStyle = `rgb(${whiteRgb[0]},${whiteRgb[1]},${whiteRgb[2]})`;
-  const bgW = Math.max(_s.measureText(beatBytes), _s.measureText(bossBytes)) + 6;
+  const bgW = Math.max(measureText(beatBytes), measureText(bossBytes)) + 6;
   const bubbleX = Math.round(rpCX - bgW / 2);
   const bubbleY = rpY + Math.floor((rpH - (22 + 5 + 16)) / 2);
   ctx.beginPath(); ctx.roundRect(bubbleX, bubbleY, bgW, 22, 4); ctx.fill();
@@ -93,51 +99,49 @@ function _drawLoadingChatBubble(rpCX, rpY, rpH, fadeLevel) {
   ctx.moveTo(triCX-4, bubbleY+22); ctx.lineTo(triCX, bubbleY+27); ctx.lineTo(triCX+4, bubbleY+22);
   ctx.fill();
   const blackTextPal = [0x0F, fadedWhite, fadedWhite, 0x0F];
-  _s.drawText(ctx, bubbleX+3, bubbleY+2,  beatBytes, blackTextPal);
-  _s.drawText(ctx, bubbleX+3, bubbleY+12, bossBytes, blackTextPal);
+  drawText(ctx, bubbleX+3, bubbleY+2,  beatBytes, blackTextPal);
+  drawText(ctx, bubbleX+3, bubbleY+12, bossBytes, blackTextPal);
   return bubbleY;
 }
 
 function _drawLoadingMoogleSprite(moogleX, moogleY, fadeLevel) {
   const moogleFade = hudSt.moogleFadeFrames;
   if (!moogleFade) return;
-  _s.ctx.drawImage(moogleFade[fadeLevel][Math.floor(_s.transTimer / 400) & 1], moogleX, moogleY);
+  ui.ctx.drawImage(moogleFade[fadeLevel][Math.floor(transSt.timer / 400) & 1], moogleX, moogleY);
 }
 
 // --- Exported functions ---
 
 export { LOAD_FADE_STEP_MS, LOAD_FADE_MAX };
 
-export function drawLoadingOverlay(shared) {
-  _s = shared;
+export function drawLoadingOverlay() {
   const fadeLevel = _calcFadeLevel();
-  const fadedTextPal = _s.TEXT_WHITE.map((c, i) => {
+  const fadedTextPal = TEXT_WHITE.map((c, i) => {
     if (i === 0) return c;
     let fc = c; for (let s = 0; s < fadeLevel; s++) fc = nesColorFade(fc); return fc;
   });
-  const vpTop = _s.HUD_VIEW_Y, vpBot = vpTop + _s.HUD_VIEW_H;
-  const cx = _s.HUD_VIEW_X + _s.HUD_VIEW_W / 2;
+  const vpTop = HUD_VIEW_Y, vpBot = vpTop + HUD_VIEW_H;
+  const cx = HUD_VIEW_X + HUD_VIEW_W / 2;
   _drawLoadingBG(vpTop, fadeLevel);
   _drawLoadingInfoBox(cx, vpTop, vpBot, fadeLevel, fadedTextPal);
-  const promptBytes = _s.isMobile
+  const promptBytes = isMobile
     ? new Uint8Array([0x99,0xDB,0xCE,0xDC,0xDC,0xFF,0x8A])
     : new Uint8Array([0x99,0xDB,0xCE,0xDC,0xDC,0xFF,0xA3]);
   if (loadingSt.state === 'in') {
-    _s.drawText(_s.ctx, cx - _s.measureText(_LOADING_BYTES) / 2, vpBot - 32, _LOADING_BYTES, fadedTextPal);
+    drawText(ui.ctx, cx - measureText(_LOADING_BYTES) / 2, vpBot - 32, _LOADING_BYTES, fadedTextPal);
   } else if (loadingSt.state === 'visible') {
-    _s.drawText(_s.ctx, cx - _s.measureText(_LOADED_BYTES) / 2, vpBot - 32, _LOADED_BYTES, fadedTextPal);
-    if (Math.floor(_s.transTimer / 500) % 2 === 0)
-      _s.drawText(_s.ctx, cx - _s.measureText(promptBytes) / 2, vpBot - 20, promptBytes, fadedTextPal);
+    drawText(ui.ctx, cx - measureText(_LOADED_BYTES) / 2, vpBot - 32, _LOADED_BYTES, fadedTextPal);
+    if (Math.floor(transSt.timer / 500) % 2 === 0)
+      drawText(ui.ctx, cx - measureText(promptBytes) / 2, vpBot - 20, promptBytes, fadedTextPal);
   } else if (loadingSt.state === 'out') {
-    _s.drawText(_s.ctx, cx - _s.measureText(_LOADED_BYTES) / 2, vpBot - 32, _LOADED_BYTES, fadedTextPal);
+    drawText(ui.ctx, cx - measureText(_LOADED_BYTES) / 2, vpBot - 32, _LOADED_BYTES, fadedTextPal);
   }
 }
 
-export function drawHUDLoadingMoogle(shared) {
-  _s = shared;
+export function drawHUDLoadingMoogle() {
   const fadeLevel = _calcFadeLevel();
   _drawLoadingRightPanel(fadeLevel);
-  const rpCX = _s.HUD_RIGHT_X + Math.floor(_s.HUD_RIGHT_W / 2);
-  const bubbleY = _drawLoadingChatBubble(rpCX, _s.HUD_VIEW_Y + 32, _s.HUD_VIEW_H - 32, fadeLevel);
+  const rpCX = HUD_RIGHT_X + Math.floor(HUD_RIGHT_W / 2);
+  const bubbleY = _drawLoadingChatBubble(rpCX, HUD_VIEW_Y + 32, HUD_VIEW_H - 32, fadeLevel);
   _drawLoadingMoogleSprite(Math.round(rpCX - 8), bubbleY + 30, fadeLevel);
 }
