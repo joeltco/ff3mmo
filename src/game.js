@@ -7,36 +7,30 @@ import { Sprite, DIR_DOWN, DIR_UP, DIR_LEFT, DIR_RIGHT } from './sprite.js';
 import { loadWorldMap } from './world-map-loader.js';
 import { WorldMapRenderer } from './world-map-renderer.js';
 import { clearDungeonCache } from './dungeon-generator.js';
-import { initMusic, playTrack, stopMusic, fadeOutMusic, playSFX, stopSFX, TRACKS, SFX,
+import { initMusic, playTrack, stopMusic, playSFX, stopSFX, TRACKS, SFX,
          initFF1Music, playFF1Track, stopFF1Music, fadeOutFF1Music, clearMusicStash,
          getCurrentTrack, FF1_TRACKS, pauseMusic, resumeMusic } from './music.js';
 import { applyIPS } from './ips-patcher.js';
 import { initTextDecoder, getItemNameClean, getMonsterName } from './text-decoder.js';
 import { initFont, drawText, measureText, TEXT_WHITE, TEXT_GREY, TEXT_YELLOW } from './font-renderer.js';
-import { MONSTERS } from './data/monsters.js';
-import { ITEMS, isHandEquippable, isWeapon, weaponSubtype, isBladedWeapon } from './data/items.js';
+import { ITEMS, isHandEquippable, isWeapon, weaponSubtype } from './data/items.js';
 import { ENCOUNTERS } from './data/encounters.js';
-import { CRIT_RATE, BASE_HIT_RATE, BOSS_HIT_RATE, GOBLIN_HIT_RATE,
-         calcDamage, rollHits } from './battle-math.js';
-import { PLAYER_POOL, PLAYER_PALETTES, ROSTER_FADE_STEPS, generateAllyStats } from './data/players.js';
-import { BATTLE_MISS, BATTLE_GAME_OVER, BATTLE_ROAR, BATTLE_FIGHT, BATTLE_RUN,
-         BATTLE_CANT_ESCAPE, BATTLE_RAN_AWAY, BATTLE_DEFEND, BATTLE_VICTORY,
+import { PLAYER_POOL, PLAYER_PALETTES, ROSTER_FADE_STEPS } from './data/players.js';
+import { BATTLE_MISS, BATTLE_GAME_OVER, BATTLE_FIGHT, BATTLE_RUN,
+         BATTLE_RAN_AWAY, BATTLE_DEFEND, BATTLE_VICTORY,
          BATTLE_GOT_EXP, BATTLE_LEVEL_UP, BATTLE_BOSS_NAME, BATTLE_GOBLIN_NAME,
-         BATTLE_CRITICAL, BATTLE_STRIKE_1ST, BATTLE_AMBUSHED, BATTLE_INEFFECTIVE, BATTLE_SLAIN,
          BATTLE_MENU_ITEMS, PAUSE_ITEMS,
          POND_RESTORED, VERSION } from './data/strings.js';
-import { queueBattleMsg, replaceBattleMsg, updateBattleMsg as _updateBattleMsg, advanceBattleMsgZ,
-         isBattleMsgBusy, clearBattleMsgQueue, queueVictoryRewards as _queueVictoryRewards,
-         getBattleMsgCurrent, getBattleMsgTimer, getBattleMsgQueue, setBattleMsgCurrent,
+import { queueBattleMsg, advanceBattleMsgZ,
+         isBattleMsgBusy, getBattleMsgCurrent, getBattleMsgTimer, getBattleMsgQueue,
          MSG_FADE_IN_MS, MSG_HOLD_MS, MSG_FADE_OUT_MS, MSG_TOTAL_MS } from './battle-msg.js';
 import { initMonsterSprites, getMonsterCanvas, getMonsterWhiteCanvas,
          getMonsterDeathFrames, hasMonsterSprites } from './monster-sprites.js';
 import { loadBossSprite, getBossBattleCanvas, getBossWhiteCanvas } from './boss-sprites.js';
 // serverDeleteSlot → title-screen.js
 import { selectCursor, saveSlots,
-         setSelectCursor, setSaveSlots,
-         saveSlotsToDB, loadSlotsFromDB, setInventoryGetter, setPositionGetter } from './save-state.js';
-import { _nameToBytes, _buildItemRowBytes, _makeGotNText, makeExpText, makeGilText, makeCpText, makeFoundItemText, makeJobLevelUpText } from './text-utils.js';
+         setSaveSlots, saveSlotsToDB, loadSlotsFromDB, setInventoryGetter, setPositionGetter } from './save-state.js';
+import { _buildItemRowBytes, _makeGotNText, makeExpText, makeGilText, makeCpText, makeFoundItemText, makeJobLevelUpText } from './text-utils.js';
 import { nesColorFade, _stepPalFade } from './palette.js';
 import { _getPlane0, _rebuild, _shiftHorizWater, _isWater, _buildHorizMixed } from './tile-math.js';
 // _dmgBounceY → hud-drawing.js
@@ -64,14 +58,14 @@ import { rosterBattleFade, setLocationGetter, getPlayerLocation, rosterLocForMap
          drawRoster, drawRosterMenu } from './roster.js';
 import { msgState, showMsgBox, updateMsgBox, drawMsgBox } from './message-box.js';
 import { titleSt, isTitleActiveState, titleFadeLevel, titleFadePal, drawTitleOcean, drawTitleWater, drawTitleSky, drawTitleUnderwater, drawUnderwaterSprites, drawTitleSkyInHUD, drawTitle,
-         updateTitleUnderwater, updateTitleSelect, onNameEntryKeyDown, updateShipDrift } from './title-screen.js';
+         onNameEntryKeyDown, updateTitle, initTitleUpdate } from './title-screen.js';
 import { pauseSt, updatePauseMenu, drawPauseMenu, initPauseMenu } from './pause-menu.js';
 import { transSt, topBoxSt, loadingSt, startWipeTransition, updateTransition, updateTopBoxScroll, drawTransitionOverlay, initTransitions } from './transitions.js';
 import { inputSt, handleBattleInput, handleRosterInput, handlePauseInput, initInputHandler } from './input-handler.js';
-import { checkTrigger, applyPassage, openPassage, handleChest, handleSecretWall, handleRockPuzzle, handlePondHeal, findWorldExitIndex, initMapTriggers, triggerWipe } from './map-triggers.js';
+import { initMapTriggers } from './map-triggers.js';
 import { pvpSt, startPVPBattle, resetPVPState, updatePVPBattle, initPVP } from './pvp.js';
 import { drawBattle, drawBattleAllies, drawSWExplosion, drawSWDamageNumbers, initBattleDrawing } from './battle-drawing.js';
-import { playSlashSFX } from './battle-sfx.js';
+// playSlashSFX → battle-update.js
 import { getKnifeBladeCanvas, getKnifeBladeSwungCanvas,
          getDaggerBladeCanvas, getDaggerBladeSwungCanvas,
          getSwordBladeCanvas, getSwordBladeSwungCanvas,
@@ -83,17 +77,22 @@ import { initMapLoading, loadMapById, loadWorldMapAt, loadWorldMapAtPosition, se
 import { updateBattleAlly, initBattleAlly } from './battle-ally.js';
 import { updateBattleEnemyTurn, initBattleEnemy } from './battle-enemy.js';
 import { buildTurnOrder, processNextTurn, initBattleTurn } from './battle-turn.js';
-import { createStatusState, clearAll as clearAllStatus, tryInflictStatus, wakeOnHit, STATUS_NAME_BYTES, STATUS } from './status-effects.js';
+// status-effects → battle-update.js, battle-encounter.js
 import { tickRandomEncounter, startRandomEncounter, initBattleEncounter } from './battle-encounter.js';
-import { resetBattleItemVars, getTargets, getHitIdx, startMagicItem, updateMagicItemThrowHit, initBattleItems } from './battle-items.js';
+import { initMovement, handleInput, updateMovement, poisonFlashTimer, setPoisonFlashTimer } from './movement.js';
+import { getTargets, getHitIdx, startMagicItem, initBattleItems } from './battle-items.js';
+import { initBattleUpdate, resetBattleVars, isTeamWiped, isVictoryBattleState,
+         startBattle, executeBattleCommand, updateBattle, updateBattleTimers,
+         updateBattlePlayerAttack, updateBattleDefendItem, updateBattleEndSequence,
+         tryJoinPlayerAlly, advancePVPTargetOrVictory } from './battle-update.js';
 import { initCursorTile as _initCursorTile, initScrollArrows as _initScrollArrows,
          initAdamantoise as _initAdamantoise,
          initGoblinSprite as _initGoblinSprite, initInvincibleSprite as _initInvincibleSprite,
          initMoogleSprite as _initMoogleSprite, initLoadingScreenFadeFrames as _initLoadingScreenFadeFrames } from './sprite-init.js';
 import { initFakePlayerSprites } from './fake-player-sprites.js';
-import { resetAllDmgNums, tickDmgNums, tickHealNums, clearHealNums, initMissSprite,
-         getEnemyDmgNum, setEnemyDmgNum, getPlayerDamageNum, setPlayerDamageNum,
-         getPlayerHealNum, setPlayerHealNum, getEnemyHealNum, setEnemyHealNum,
+import { initMissSprite,
+         getEnemyDmgNum, getPlayerDamageNum,
+         getPlayerHealNum, getEnemyHealNum,
          getAllyDamageNums, getSwDmgNums } from './damage-numbers.js';
 // OK_IDLE, OK_VICTORY, etc. → sprite-init.js
 
@@ -105,7 +104,7 @@ import { resetAllDmgNums, tickDmgNums, tickHealNums, clearHealNums, initMissSpri
 const CANVAS_W = 256;          // 16 metatiles wide (NES resolution)
 const CANVAS_H = 240;          // 15 metatiles tall (NES resolution)
 const TILE_SIZE = 16;
-const WALK_DURATION = 16 * (1000 / 60);  // 16 NES frames at 60fps ≈ 267ms per tile
+// WALK_DURATION → movement.js
 
 // HUD layout — 4 panels: top scenery, game viewport, right box, bottom box
 const HUD_TOP_H = 32;                              // 2 tiles — battle scenery (future)
@@ -146,17 +145,8 @@ let ff12Raw = null;
 // MONSTER_DEATH_FRAMES → sprite-init.js (imported)
 // goblin canvases → battle-state.js
 
-// Title screen state → titleSt in title-screen.js
-// Title timing constants (needed by updateTitle and init functions in game.js)
+// Title screen state + timing constants → title-screen.js
 const TITLE_FADE_MAX     = 4;
-const TITLE_FADE_STEP_MS = 100;
-const TITLE_FADE_MS      = (TITLE_FADE_MAX + 1) * TITLE_FADE_STEP_MS;
-const TITLE_WAIT_MS      = 0;
-const TITLE_HOLD_MS      = 2000;
-const TITLE_ZBOX_MS      = 200;
-const TITLE_TRANSITION_MS = 800;
-const SELECT_TEXT_STEP_MS = 100;
-const SELECT_TEXT_STEPS   = 4;
 
 // Player select screen state → save-state.js (selectCursor, saveSlots, nameBuffer, etc.)
 
@@ -166,7 +156,6 @@ const SELECT_TEXT_STEPS   = 4;
 
 // Inventory system
 let playerInventory = {};    // { itemId: count } — e.g. { 0xA6: 3 }
-let itemSelectCursor = 0;    // cursor index in item list
 // battleSt.itemHealAmount → battle-state.js
 
 // Inventory helpers
@@ -193,49 +182,13 @@ function buildItemSelectList() {
 // Battle message system → battle-msg.js
 
 // Hit animation state (battleSt.comboStatusInflicted, battleSt.currentHitIdx, battleSt.slashFrame, battleSt.slashX/Y, battleSt.slashOffX/Y, battleSt.critFlashTimer) → battle-state.js
-let poisonFlashTimer = -1;         // >=0 while overworld poison flash is active
+// poisonFlashTimer → movement.js
 // BATTLE_MISS, BATTLE_GAME_OVER → data/strings.js
 
-// Battle timing constants
-const BATTLE_SCROLL_MS = 150;
-const BATTLE_TEXT_STEP_MS = 50;
-const BATTLE_TEXT_STEPS = 4;
-const BATTLE_ROAR_HOLD_MS = 800;
-const BATTLE_FLASH_FRAMES = 65;      // 65 frames of grayscale strobe (~1.08s at 60fps)
-const BATTLE_FLASH_FRAME_MS = 16.67; // ~1 frame at 60fps
-const BATTLE_MSG_HOLD_MS = 1200;
-const BATTLE_HIT_FLASH_MS = 400;
-// BATTLE_DMG_SHOW_MS, BATTLE_SHAKE_MS → battle-state.js
-const BATTLE_VICTORY_HOLD_MS = 1500;
-const BOSS_BLOCK_SIZE = 16;            // 16×16 pixel blocks for dissolve
-const BOSS_BLOCK_COLS = 3;             // 48/16 = 3 blocks wide
-const BOSS_BLOCKS = 9;                 // 3×3 blocks
-const BOSS_DISSOLVE_STEPS = 8;         // 8 pixel-shift steps per block
-const BOSS_DISSOLVE_FRAME_MS = 16.67;  // 1 NES frame per step
-const BOSS_BOX_EXPAND_MS = 300;        // box expand from center duration
-const BATTLE_PANEL_W = 120;            // left section width in bottom panel
-const VICTORY_BOX_ROWS = 8;             // HUD_BOT_H / 8 — row-by-row expand
-const VICTORY_ROW_FRAME_MS = 16.67;     // 1 NES frame per row
-// BOSS_PREFLASH_MS, MONSTER_DEATH_MS → battle-state.js
-const MONSTER_SLIDE_MS = 267;            // 16 frames at 60fps — sprites slide in from left
-const DEFEND_SPARKLE_FRAME_MS = 133;     // 8 NES frames per tile
-const DEFEND_SPARKLE_TOTAL_MS = 533;     // 4 tiles × 133ms
-// DEFEND_SPARKLE_PAL → sprite-init.js
-// Authentic damage bounce keyframes from FCEUX trace (Y offsets from baseline, up = negative)
-// 30 frames total = 500ms at 60fps
-
-const TARGET_CURSOR_BLINK_MS = 133;      // cursor blink rate during target select
-
-// Hit stats & slash animation constants
-const SLASH_FRAME_MS = 30;               // per frame of slash sprite (3 frames = 90ms)
-const SLASH_FRAMES = 3;                  // number of slash animation frames (one per effect set)
-const BACK_SWING_MS = 80;               // back-swing pose duration
-const FWD_SWING_MS = 80;                // forward-swing pose duration
-const HIT_PAUSE_MS = 100;               // pause showing damage number after final hit
-const HIT_COMBO_PAUSE_MS = 30;          // pause between hits in a combo
-const MISS_SHOW_MS = 300;               // "Miss" text display time
-const PLAYER_DMG_SHOW_MS = 700;         // pause after final hit before enemy counter/death
-// CRIT_RATE, BASE_HIT_RATE, BOSS_HIT_RATE, GOBLIN_HIT_RATE → battle-math.js
+// Battle timing constants → battle-update.js
+// Kept locally for _drawPondStrobe
+const BATTLE_FLASH_FRAMES = 65;
+const BATTLE_FLASH_FRAME_MS = 16.67;
 
 // Top box — battle scene BG or area name
 // topBoxMode, topBoxBgCanvas, topBoxBgFadeFrames → hud-state.js
@@ -266,7 +219,6 @@ let scrollArrowUpFade = null;    // [step1..step4]
 // Battle allies + ally-combat state → battle-state.js
 // playerDeathTimer → hud-state.js
 // battleSt._teamWipeMsgShown, battleSt.enemyTargetAllyIdx, battleSt.allyExitTimer, battleSt.turnTimer → battle-state.js
-const TURN_TIME_MS = 10000;    // 10 seconds to act before turn is skipped
 // Chest message box state (same style as roar box)
 // Universal message box — slide-in, instant text, Z dismiss, slide-out
 // msgState → message-box.js
@@ -296,16 +248,10 @@ let romRaw = null;
 const SCREEN_CENTER_X = HUD_VIEW_X + (HUD_VIEW_W - 16) / 2;    // 64
 const SCREEN_CENTER_Y = HUD_VIEW_Y + (HUD_VIEW_H - 16) / 2 - 3; // 93
 
-// Movement tween internals (not needed outside game.js)
-let moveStartX = 0;
-let moveStartY = 0;
-let moveTargetX = 0;
-let moveTargetY = 0;
-let moveTimer = 0;
+// Movement state → movement.js
 
-// Water animation state
-let waterTimer = 0;
-let waterTick = 0;    // master tick counter
+// Water animation state — shared with title-screen.js via waterSt ref
+const waterSt = { timer: 0, tick: 0 };
 const WATER_TICK = 4 * (1000 / 60);  // ~67ms per tick
 
 // Flame sprite state → flame-sprites.js
@@ -446,20 +392,7 @@ function initHUD(romData) {
 // _pauseFadeStep → pause-menu.js
 // _drawHudWithFade, _grayViewport → hud-drawing.js
 // _pausePanelLayout → pause-menu.js
-function _resetBattleVars() {
-  inputSt.battleCursor = 0; battleSt.battleMessage = null;
-  resetAllDmgNums();
-  battleSt.encounterDropItem = null; battleSt.bossFlashTimer = 0; battleSt.battleShakeTimer = 0;
-  battleSt.isDefending = false; battleSt.battleAllies = []; battleSt.allyJoinRound = 0;
-  battleSt.currentAllyAttacker = -1; battleSt.allyTargetIndex = -1; battleSt.allyHitResult = null; battleSt.allyHitIsLeft = false;
-  battleSt.allyShakeTimer = {}; battleSt.enemyTargetAllyIdx = -1; battleSt.allyExitTimer = 0;
-  resetBattleItemVars();
-  hudSt.playerDeathTimer = null; battleSt._teamWipeMsgShown = false;
-  inputSt.battleActionCount = 0;
-  clearBattleMsgQueue();
-}
-function _zPressed() { if (!keys['z'] && !keys['Z']) return false; keys['z'] = false; keys['Z'] = false; return true; }
-function _xPressed() { if (!keys['x'] && !keys['X']) return false; keys['x'] = false; keys['X'] = false; return true; }
+// _resetBattleVars, _isTeamWiped → battle-update.js
 
 function _swapBattleSprites(jobIdx) {
   loadJobBattleSprites(romRaw, jobIdx);
@@ -488,11 +421,6 @@ function returnToTitle() {
 // hud-drawing, loading-screen, transitions read ui/state modules directly.
 
 // _transShared retired — transitions.js is wired via initTransitions() at boot
-// Team wipe check — true when player AND all allies are dead
-function _isTeamWiped() {
-  if (ps.hp > 0) return false;
-  return battleSt.battleAllies.every(a => a.hp <= 0);
-}
 
 // getEnemyHP / setEnemyHP → battle-state.js (as getEnemyHP / setEnemyHP)
 
@@ -503,7 +431,7 @@ function _isTeamWiped() {
 
 // _battleDrawShared retired — battle-drawing.js uses direct imports + injected callbacks
 
-// _titleShared retired — title-screen.js imports drawCursorFaded directly; drawTitle takes waterTick as arg
+// _titleShared retired — title-screen.js imports drawCursorFaded directly; drawTitle takes waterSt.tick as arg
 
 export function getMobileInputMode() {
   if (chatState.inputActive) return 'chat';
@@ -624,9 +552,12 @@ export async function loadROM(arrayBuffer) {
   initBattleItems({ processNextTurn });
   initPauseMenu({ playerInventory: () => playerInventory });
   initTransitions({ keys, getSprite: () => sprite, onShake: () => { mapSt.shakeActive = true; mapSt.shakeTimer = 0; } });
-  initBattleEncounter({ resetBattleVars: _resetBattleVars });
-  initBattleAlly({ buildTurnOrder, processNextTurn, isTeamWiped: _isTeamWiped });
-  initBattleEnemy({ processNextTurn, isTeamWiped: _isTeamWiped });
+  initMovement({ keys, getSprite: () => sprite });
+  initTitleUpdate({ keys, waterSt, setPlayerInventory: (inv) => { playerInventory = inv; }, swapBattleSprites: _swapBattleSprites });
+  initBattleUpdate({ keys, getSprite: () => sprite, addItem, buildItemSelectList });
+  initBattleEncounter({ resetBattleVars });
+  initBattleAlly({ buildTurnOrder, processNextTurn, isTeamWiped });
+  initBattleEnemy({ processNextTurn, isTeamWiped });
   initBattleTurn({ removeItem });
   initInputHandler({
     keys, playerInventory: () => playerInventory, addItem, removeItem,
@@ -638,7 +569,7 @@ export async function loadROM(arrayBuffer) {
     ctx,
     cursorTileCanvas: () => cursorTileCanvas,
     drawMonsterDeath: _drawMonsterDeath,
-    isVictoryBattleState: _isVictoryBattleState,
+    isVictoryBattleState,
   });
   initPVP({
     ctx,
@@ -646,15 +577,15 @@ export async function loadROM(arrayBuffer) {
     blades: () => ({ ...getBlades() }),
     processNextTurn,
     handleAlly: updateBattleAlly,
-    updateTimers: _updateBattleTimers,
-    handlePlayerAttack: _updateBattlePlayerAttack,
-    handleDefendItem: _updateBattleDefendItem,
-    handleEndSequence: _updateBattleEndSequence,
-    tryJoinPlayerAlly: _tryJoinPlayerAlly,
+    updateTimers: updateBattleTimers,
+    handlePlayerAttack: updateBattlePlayerAttack,
+    handleDefendItem: updateBattleDefendItem,
+    handleEndSequence: updateBattleEndSequence,
+    tryJoinPlayerAlly,
     buildAndProcessNextTurn: () => { battleSt.turnQueue = buildTurnOrder(); processNextTurn(); },
-    resetBattleVars: _resetBattleVars,
-    isTeamWiped: _isTeamWiped,
-    advancePVPTargetOrVictory: _advancePVPTargetOrVictory,
+    resetBattleVars,
+    isTeamWiped,
+    advancePVPTargetOrVictory,
   });
 
   await loadSlotsFromDB();
@@ -693,232 +624,7 @@ export function loadFF12ROM(arrayBuffer) {
 // _calcSpawnY, _openReturnDoor, _loadDungeonFloor, _loadRegularMap,
 // loadMapById, loadWorldMapAt, loadWorldMapAtPosition → map-loading.js
 
-function startMove(dir) {
-  // Calculate target tile
-  const dx = dir === DIR_RIGHT ? TILE_SIZE : dir === DIR_LEFT ? -TILE_SIZE : 0;
-  const dy = dir === DIR_DOWN ? TILE_SIZE : dir === DIR_UP ? -TILE_SIZE : 0;
-  const targetX = mapSt.worldX + dx;
-  const targetY = mapSt.worldY + dy;
-
-  // Check collision — face the direction but don't walk
-  const tileX = targetX / TILE_SIZE;
-  const tileY = targetY / TILE_SIZE;
-
-  // Block walking onto boss sprite tile
-  if (mapSt.bossSprite && !battleSt.enemyDefeated && tileX === mapSt.bossSprite.px / TILE_SIZE && tileY === mapSt.bossSprite.py / TILE_SIZE) {
-    sprite.setDirection(dir);
-    sprite.resetFrame();
-    return;
-  }
-
-  const renderer = mapSt.onWorldMap ? mapSt.worldMapRenderer : mapSt.mapRenderer;
-  if (renderer && !renderer.isPassable(tileX, tileY)) {
-    sprite.setDirection(dir);
-    sprite.resetFrame();
-    if (mapSt.onWorldMap && tileX === 95 && tileY === 45) {
-      showMsgBox(new Uint8Array([0x8C,0xD8,0xD6,0xD2,0xD7,0xD0,0xFF,0x9C,0xD8,0xD8,0xD7,0xC4])); // "Coming Soon!"
-    }
-    return;
-  }
-
-  sprite.setDirection(dir);
-  mapSt.moving = true;
-  moveStartX = mapSt.worldX;
-  moveStartY = mapSt.worldY;
-  moveTimer = 0;
-  moveTargetX = targetX;
-  moveTargetY = targetY;
-
-  // Close open door when player walks off it
-  if (mapSt.openDoor) {
-    mapSt.mapRenderer.updateTileAt(mapSt.openDoor.x, mapSt.openDoor.y, mapSt.openDoor.tileId);
-    mapSt.openDoor = null;
-  }
-}
-
-
-// _battleTargetNav…_handlePauseInput → input-handler.js
-
-
-function handleInput() {
-  if (!sprite) return;
-  if (handleBattleInput()) return;
-  if (handleRosterInput()) return;
-  if (handlePauseInput()) return;
-
-  // Universal message box — Z to dismiss during hold
-  if (msgState.state !== 'none') {
-    if (msgState.state === 'hold' && (keys['z'] || keys['Z'])) {
-      keys['z'] = false; keys['Z'] = false;
-      msgState.state = 'slide-out'; msgState.timer = 0;
-    }
-    return;
-  }
-
-  if (mapSt.moving) return;
-  if (transSt.state !== 'none') return;
-  if (mapSt.shakeActive) return;
-  if (mapSt.starEffect) return;
-  if (mapSt.pondStrobeTimer > 0) return;
-  if (chatState.expanded) return;
-  if (tabSelectMode) return;
-
-  if (keys['z'] || keys['Z']) {
-    keys['z'] = false;
-    keys['Z'] = false;
-    handleAction();
-    return;
-  }
-
-  _startMoveFromKeys();
-}
-
-function handleAction() {
-  if (mapSt.onWorldMap || !mapSt.mapRenderer || !mapSt.mapData) return;
-
-  // Get the tile the player is facing
-  const dir = sprite.getDirection();
-  const tileX = mapSt.worldX / TILE_SIZE;
-  const tileY = mapSt.worldY / TILE_SIZE;
-  const dx = dir === DIR_RIGHT ? 1 : dir === DIR_LEFT ? -1 : 0;
-  const dy = dir === DIR_DOWN ? 1 : dir === DIR_UP ? -1 : 0;
-  const facedX = tileX + dx;
-  const facedY = tileY + dy;
-
-  if (facedX < 0 || facedX >= 32 || facedY < 0 || facedY >= 32) return;
-
-  // Boss fight trigger — face Adamantoise at crystal room center
-  if (mapSt.bossSprite && !battleSt.enemyDefeated && facedX === 6 && facedY === 8) {
-    startBattle();
-    return;
-  }
-
-  const facedTile = mapSt.mapData.tilemap[facedY * 32 + facedX];
-
-  // Third torch ($32 at col 8, row 16) opens hidden passage
-  if (facedTile === 0x32 && facedX === 8 && facedY === 16) {
-    openPassage();
-    return;
-  }
-
-  if (facedTile === 0x7C)                                         { handleChest(facedX, facedY); return; }
-  if (mapSt.secretWalls && mapSt.secretWalls.has(`${facedX},${facedY}`))      { handleSecretWall(facedX, facedY); return; }
-  if (mapSt.rockSwitch && mapSt.rockSwitch.rocks.some(r => facedX === r.x && facedY === r.y)) { handleRockPuzzle(); return; }
-  if (mapSt.pondTiles && mapSt.pondTiles.has(`${facedX},${facedY}`))          { handlePondHeal(); return; }
-}
-
-// _handleChest, _handleSecretWall, _handleRockPuzzle, _handlePondHeal,
-// applyPassage, openPassage → map-triggers.js
-
-function updateMovement(dt) {
-  if (!mapSt.moving) return;
-
-  moveTimer += dt;
-  const t = Math.min(moveTimer / WALK_DURATION, 1);
-
-  mapSt.worldX = moveStartX + (moveTargetX - moveStartX) * t;
-  mapSt.worldY = moveStartY + (moveTargetY - moveStartY) * t;
-
-  sprite.setWalkProgress(t);
-
-  if (t >= 1) _onMoveComplete();
-}
-
-// _tickRandomEncounter → battle-encounter.js
-
-function _checkFalseWall() {
-  if (!mapSt.falseWalls || mapSt.falseWalls.size === 0) return false;
-  const key = `${mapSt.worldX / TILE_SIZE},${mapSt.worldY / TILE_SIZE}`;
-  if (!mapSt.falseWalls.has(key)) return false;
-  const dest = mapSt.falseWalls.get(key);
-  triggerWipe(() => {
-    mapSt.worldX = dest.destX * TILE_SIZE;
-    mapSt.worldY = dest.destY * TILE_SIZE;
-    sprite.setDirection(DIR_DOWN);
-    mapSt.mapRenderer = new MapRenderer(mapSt.mapData, dest.destX, dest.destY); resetIndoorWaterCache();
-  });
-  return true;
-}
-
-function _checkWarpTile() {
-  if (!mapSt.warpTile) return false;
-  const tx = mapSt.worldX / TILE_SIZE;
-  const ty = mapSt.worldY / TILE_SIZE;
-  if (tx !== mapSt.warpTile.x || ty !== mapSt.warpTile.y) return false;
-  sprite.setDirection(DIR_DOWN);
-  playSFX(SFX.WARP);
-  mapSt.starEffect = {
-    frame: 0, radius: 60, angle: 0, spin: true,
-    onComplete: () => {
-      triggerWipe(() => {
-        while (mapSt.mapStack.length > 0) {
-          const entry = mapSt.mapStack.pop();
-          if (entry.mapId === 'world') {
-            playTrack(TRACKS.WORLD_MAP);
-            loadWorldMapAtPosition(entry.x, entry.y);
-            return;
-          }
-        }
-      }, 'world');
-    }
-  };
-  return true;
-}
-
-function _onMoveComplete() {
-  mapSt.worldX = moveTargetX;
-  mapSt.worldY = moveTargetY;
-  mapSt.moving = false;
-
-  // Wrap world coordinates on world map
-  if (mapSt.onWorldMap) {
-    const mapPx = mapSt.worldMapData.mapWidth * TILE_SIZE;
-    mapSt.worldX = ((mapSt.worldX % mapPx) + mapPx) % mapPx;
-    mapSt.worldY = ((mapSt.worldY % mapPx) + mapPx) % mapPx;
-  }
-
-  // Clear disabled trigger once player moves off it
-  if (mapSt.disabledTrigger) {
-    const curTX = mapSt.worldX / TILE_SIZE;
-    const curTY = mapSt.worldY / TILE_SIZE;
-    if (curTX !== mapSt.disabledTrigger.x || curTY !== mapSt.disabledTrigger.y) {
-      mapSt.disabledTrigger = null;
-    }
-  }
-
-  // NES poison step damage: -1 HP per step, min 1, SFX + flash
-  if (ps.status && ps.status.mask & 0x02 && ps.hp > 1) {
-    ps.hp -= 1;
-    playSFX(SFX.ATTACK_HIT);
-    poisonFlashTimer = 0;
-  }
-
-  if (_checkFalseWall()) return;
-  if (_checkWarpTile()) return;
-
-  // Check for trigger at current tile
-  if (checkTrigger()) return;
-
-  if (tickRandomEncounter()) return;
-
-  _startMoveFromKeys(true);
-}
-
-// startWipeTransition, updateTransition, _updateTransition*, updateTopBoxScroll, drawTransitionOverlay → transitions.js
-
-// Loading screen overlay + info box → loading-screen.js
-
-// findWorldExitIndex, _checkWorldMapTrigger, _checkHiddenTrap, _triggerMapTransition,
-// _checkDynType1, _checkDynType4, _checkExitPrev, checkTrigger → map-triggers.js
-
-function _startMoveFromKeys(resetOnIdle) {
-  if (keys['ArrowDown']) startMove(DIR_DOWN);
-  else if (keys['ArrowUp']) startMove(DIR_UP);
-  else if (keys['ArrowLeft']) startMove(DIR_LEFT);
-  else if (keys['ArrowRight']) startMove(DIR_RIGHT);
-  else if (resetOnIdle) sprite.resetFrame();
-}
-
+// startMove, handleInput, handleAction, updateMovement, _onMoveComplete, _startMoveFromKeys → movement.js
 
 // Flame/star sprite decode + rendering → flame-sprites.js (used directly by map-loading/triggers)
 
@@ -928,7 +634,7 @@ function _startMoveFromKeys(resetOnIdle) {
 function _renderSprites(camX, camY, originX, originY, spriteY) {
   const _fs = getFlameSprites();
   if (!mapSt.onWorldMap && _fs.length > 0) {
-    const flameFrame = Math.floor(waterTick / 8) & 1;
+    const flameFrame = Math.floor(waterSt.tick / 8) & 1;
     const wLeft = camX - originX;
     const wTop = camY - originY;
     const _ff = getFlameFrames();
@@ -950,7 +656,7 @@ function _renderSprites(camX, camY, originX, originY, spriteY) {
       const by = mapSt.bossSprite.py - wTop;
       if (bx > -16 && bx < CANVAS_W && by > -16 && by < CANVAS_H) {
         ctx.imageSmoothingEnabled = false;
-        ctx.drawImage(mapSt.bossSprite.frames[Math.floor(waterTick / 8) & 1], bx, by);
+        ctx.drawImage(mapSt.bossSprite.frames[Math.floor(waterSt.tick / 8) & 1], bx, by);
       }
     }
   }
@@ -960,10 +666,10 @@ function _renderSprites(camX, camY, originX, originY, spriteY) {
 function _renderMapAndWater(camX, camY, originX, originY, spriteY) {
   if (mapSt.onWorldMap && mapSt.worldMapRenderer) {
     mapSt.worldMapRenderer.draw(ctx, camX, camY, originX, originY);
-    _updateWorldWater(mapSt.worldMapRenderer, waterTick);
+    _updateWorldWater(mapSt.worldMapRenderer, waterSt.tick);
   } else if (mapSt.mapRenderer) {
     mapSt.mapRenderer.draw(ctx, camX, camY, originX, originY);
-    _updateIndoorWater(mapSt.mapRenderer, waterTick);
+    _updateIndoorWater(mapSt.mapRenderer, waterSt.tick);
   }
   if (transSt.state === 'none' &&
       (battleSt.battleState === 'none' || battleSt.battleState === 'flash-strobe' || battleSt.battleState.startsWith('roar-'))) {
@@ -1014,89 +720,7 @@ function render() {
 
 // ── Title Screen — titleFadeLevel, titleFadePal, draw functions → title-screen.js ──
 
-// _updateTitleUnderwater, _updateTitleSelectCase → title-screen.js
-function _updateTitleMainOutCase() {
-  titleSt.state = 'done';
-  hudSt.hudInfoFadeTimer = 0;
-  const slot = saveSlots[selectCursor];
-  if (slot && slot.stats) {
-    ps.stats.str = slot.stats.str;
-    ps.stats.agi = slot.stats.agi;
-    ps.stats.vit = slot.stats.vit;
-    ps.stats.int = slot.stats.int;
-    ps.stats.mnd = slot.stats.mnd;
-    ps.stats.maxHP = slot.stats.maxHP;
-    ps.stats.maxMP = slot.stats.maxMP;
-    ps.stats.level = slot.level;
-    ps.stats.exp = slot.exp;
-    ps.stats.expToNext = (slot.level - 1 < 98) ? ps.expTable[slot.level - 1] : 0xFFFFFF;
-    if (slot.hp != null) { ps.hp = Math.min(slot.hp, ps.stats.maxHP); ps.mp = ps.stats.maxMP; }
-    else fullHeal();
-    ps.weaponR = slot.stats.weaponR != null ? slot.stats.weaponR : 0x1E;
-    ps.weaponL = slot.stats.weaponL != null ? slot.stats.weaponL : 0x00;
-    ps.head = slot.stats.head || 0x00;
-    ps.body = slot.stats.body || 0x00;
-    ps.arms = slot.stats.arms || 0x00;
-    recalcCombatStats();
-  }
-  playerInventory = (slot && slot.inventory) ? { ...slot.inventory } : {};
-  ps.gil = (slot && slot.gil) || 0;
-  ps.jobLevels = (slot && slot.jobLevels) ? JSON.parse(JSON.stringify(slot.jobLevels)) : {};
-  ps.jobIdx = (slot && slot.jobIdx) || 0;
-  ps.unlockedJobs = (slot && slot.unlockedJobs != null) ? slot.unlockedJobs : 0x01;
-  ps.cp = (slot && slot.cp) || 0;
-  ps.status.mask = (slot && slot.statusMask) || 0;
-  ps.playTime = (slot && slot.playTime) || 0;
-  // Swap battle sprites to match saved job
-  _swapBattleSprites(ps.jobIdx);
-  // Always spawn in Ur
-  transSt.pendingTrack = TRACKS.TOWN_UR;
-  loadMapById(114);
-  mapSt.worldY -= 6 * TILE_SIZE;
-  transSt.state = 'hud-fade-in';
-  transSt.timer = 0;
-}
-function updateTitle(dt) {
-  titleSt.timer += dt;
-  titleSt.underwaterScroll += dt * 0.11;
-  updateTitleUnderwater(dt);
-
-  if (isTitleActiveState()) {
-    waterTimer += dt;
-    if (waterTimer >= WATER_TICK) { waterTimer %= WATER_TICK; waterTick++; }
-    titleSt.waterScroll += dt * 0.12;
-    titleSt.shipTimer += dt;
-    const _s = titleSt.state;
-    if (_s === 'select-fade-in' || _s === 'select' || _s === 'name-entry' || _s === 'select-fade-out-back') updateShipDrift(dt);
-  }
-
-  switch (titleSt.state) {
-    case 'credit-wait':    if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'credit-in';     titleSt.timer = 0; } break;
-    case 'credit-in':      if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'credit-hold';   titleSt.timer = 0; } break;
-    case 'credit-hold':    if (titleSt.timer >= TITLE_HOLD_MS) { titleSt.state = 'credit-out';    titleSt.timer = 0; } break;
-    case 'credit-out':     if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'disclaim-wait'; titleSt.timer = 0; } break;
-    case 'disclaim-wait':  if (titleSt.timer >= TITLE_WAIT_MS) { titleSt.state = 'disclaim-in';   titleSt.timer = 0; } break;
-    case 'disclaim-in':    if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'disclaim-hold'; titleSt.timer = 0; } break;
-    case 'disclaim-hold':  if (titleSt.timer >= TITLE_HOLD_MS) { titleSt.state = 'disclaim-out';  titleSt.timer = 0; } break;
-    case 'disclaim-out':   if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'main-in';       titleSt.timer = 0; } break;
-    case 'main-in':        if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'logo-content-in';  titleSt.timer = 0; } break;
-    case 'logo-content-in': if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'pressz-fade-in';    titleSt.timer = 0; } break;
-    case 'pressz-fade-in': if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'main';          titleSt.timer = 0; } break;
-    case 'main':
-      if (keys['z'] || keys['Z']) { keys['z'] = false; keys['Z'] = false; playSFX(SFX.CONFIRM); titleSt.state = 'logo-content-out'; titleSt.timer = 0; }
-      break;
-    case 'logo-content-out': if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'to-select'; titleSt.timer = 0; } break;
-    case 'to-select':            if (titleSt.timer >= TITLE_TRANSITION_MS) { titleSt.state = 'select-fade-in'; titleSt.timer = 0; titleSt.shipPosX = 0; setSelectCursor(0); titleSt.deleteMode = false; } break;
-    case 'select-fade-in':       if (titleSt.timer >= (SELECT_TEXT_STEPS + 1) * SELECT_TEXT_STEP_MS) { titleSt.state = 'select'; titleSt.timer = 0; } break;
-    case 'select':               updateTitleSelect(keys); break;
-    case 'name-entry':           break;
-    case 'select-fade-out':      if (titleSt.timer >= (SELECT_TEXT_STEPS + 1) * SELECT_TEXT_STEP_MS) { titleSt.state = 'main-out'; titleSt.timer = 0; fadeOutMusic(TITLE_FADE_MS); } break;
-    case 'select-fade-out-back': if (titleSt.timer >= (SELECT_TEXT_STEPS + 1) * SELECT_TEXT_STEP_MS) { titleSt.state = 'to-main'; titleSt.timer = 0; } break;
-    case 'to-main':              if (titleSt.timer >= TITLE_TRANSITION_MS) { titleSt.state = 'logo-content-in-back'; titleSt.timer = 0; } break;
-    case 'logo-content-in-back': if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'main'; titleSt.timer = 0; } break;
-    case 'main-out':             if (titleSt.timer >= TITLE_FADE_MS) _updateTitleMainOutCase(); break;
-  }
-}
+// _updateTitleMainOutCase, updateTitle → title-screen.js
 
 
 // drawTitleOcean..drawPlayerSelectContent → title-screen.js
@@ -1121,639 +745,7 @@ function _drawMonsterDeath(x, y, size, progress, monsterId) {
 
 
 // --- Battle System ---
-
-// calcDamage, rollHits → battle-math.js
-// buildTurnOrder, processNextTurn → battle-turn.js
-// startRandomEncounter, tickRandomEncounter → battle-encounter.js
-
-// buildTurnOrder, processNextTurn → imported directly from battle-turn.js
-
-
-function startBattle() {
-  battleSt.battleState = 'roar-hold';
-  battleSt.battleTimer = 0;
-  showMsgBox(BATTLE_ROAR, () => { battleSt.battleState = 'flash-strobe'; battleSt.battleTimer = 0; playSFX(SFX.BATTLE_SWIPE); });
-  _resetBattleVars();
-  battleSt.enemyHP = BOSS_MAX_HP;
-  playSFX(SFX.EARTHQUAKE);
-}
-
-// startRandomEncounter, tickRandomEncounter → battle-encounter.js (direct calls)
-
-function executeBattleCommand(index) {
-  if (index === 0) {
-    // Fight — go to target select (cursor on enemy)
-    playSFX(SFX.CONFIRM);
-    if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
-      inputSt.targetIndex = battleSt.encounterMonsters.findIndex(m => m.hp > 0);
-    }
-    battleSt.battleState = 'target-select';
-    battleSt.battleTimer = 0;
-  } else if (index === 1) {
-    // Defend — pause for confirm SFX, then build turn queue
-    playSFX(SFX.CONFIRM);
-    battleSt.isDefending = true;
-    inputSt.playerActionPending = { command: 'defend' };
-    battleSt.battleState = 'confirm-pause';
-    battleSt.battleTimer = 0;
-  } else if (index === 2) {
-    // Item — fade menu text out, show inventory on right side
-    playSFX(SFX.CONFIRM);
-    inputSt.itemSelectList = buildItemSelectList();
-    itemSelectCursor = 0;
-    inputSt.itemHeldIdx = -1;
-    inputSt.itemPage = 1;          // start on inventory page 1
-    inputSt.itemPageCursor = 0;
-    inputSt.itemSlideDir = 0;
-    inputSt.itemSlideCursor = 0;
-    battleSt.battleState = 'item-menu-out';
-    battleSt.battleTimer = 0;
-  } else {
-    // Run
-    if (battleSt.isRandomEncounter) {
-      playSFX(SFX.CONFIRM);
-      battleSt.isDefending = false;
-      inputSt.playerActionPending = { command: 'run' };
-      battleSt.battleState = 'confirm-pause';
-      battleSt.battleTimer = 0;
-    } else {
-      playSFX(SFX.ERROR);
-      battleSt.battleMessage = BATTLE_CANT_ESCAPE;
-      battleSt.battleState = 'message-hold';
-      battleSt.battleTimer = 0;
-    }
-  }
-}
-
-// --- Battle update sub-handlers ---
-// Each returns true if it handled the current battleSt.battleState, false otherwise.
-// Called in order from updateBattle; short-circuits on first match (mirrors old if-else chain).
-
-function _updateBattleTimers(dt) {
-  if (battleSt.bossFlashTimer > 0) battleSt.bossFlashTimer = Math.max(0, battleSt.bossFlashTimer - dt);
-  if (battleSt.battleShakeTimer > 0) battleSt.battleShakeTimer = Math.max(0, battleSt.battleShakeTimer - dt);
-  if (pvpSt.pvpOpponentShakeTimer > 0) pvpSt.pvpOpponentShakeTimer = Math.max(0, pvpSt.pvpOpponentShakeTimer - dt);
-
-  tickDmgNums(dt);
-  for (const idx in battleSt.allyShakeTimer) {
-    if (battleSt.allyShakeTimer[idx] > 0) battleSt.allyShakeTimer[idx] = Math.max(0, battleSt.allyShakeTimer[idx] - dt);
-  }
-  // Start player death animation on first frame of hp=0
-  if (ps.hp <= 0 && hudSt.playerDeathTimer == null && battleSt.battleState !== 'none') { hudSt.playerDeathTimer = 0; }
-  if (hudSt.playerDeathTimer != null) hudSt.playerDeathTimer += dt;
-  for (const ally of battleSt.battleAllies) {
-    if (ally.deathTimer != null) ally.deathTimer += dt;
-  }
-
-  _updateTurnTimer(dt);
-  _updateAllyExitFade(dt);
-}
-
-function _updateTurnTimer(dt) {
-  const isPlayerDeciding = battleSt.battleState === 'menu-open' || battleSt.battleState === 'target-select' ||
-    battleSt.battleState === 'item-select' || battleSt.battleState === 'item-target-select' || battleSt.battleState === 'item-slide';
-  if (!isPlayerDeciding) return;
-  battleSt.turnTimer += dt;
-  if (battleSt.turnTimer >= TURN_TIME_MS) {
-    battleSt.turnTimer = 0; inputSt.itemHeldIdx = -1;
-    inputSt.playerActionPending = { command: 'skip' }; battleSt.battleState = 'confirm-pause'; battleSt.battleTimer = 0;
-  }
-}
-
-// _isTitleActiveState → isTitleActiveState() in title-screen.js
-function _isVictoryBattleState() {
-  return battleSt.battleState === 'victory-celebrate' ||
-    battleSt.battleState === 'exp-text-in' || battleSt.battleState === 'exp-hold' || battleSt.battleState === 'exp-fade-out' ||
-    battleSt.battleState === 'gil-text-in' || battleSt.battleState === 'gil-hold' || battleSt.battleState === 'gil-fade-out' ||
-    battleSt.battleState === 'cp-text-in' || battleSt.battleState === 'cp-hold' || battleSt.battleState === 'cp-fade-out' ||
-    battleSt.battleState === 'item-text-in' || battleSt.battleState === 'item-hold' || battleSt.battleState === 'item-fade-out' ||
-    battleSt.battleState === 'levelup-text-in' || battleSt.battleState === 'levelup-hold' || battleSt.battleState === 'levelup-fade-out' ||
-    battleSt.battleState === 'joblv-text-in' || battleSt.battleState === 'joblv-hold' || battleSt.battleState === 'joblv-fade-out' ||
-    battleSt.battleState === 'victory-text-out' || battleSt.battleState === 'victory-menu-fade' || battleSt.battleState === 'victory-box-close';
-}
-function _updateAllyExitFade(dt) {
-  if (battleSt.battleAllies.length === 0) return;
-  const isVicState = _isVictoryBattleState() && battleSt.battleState !== 'victory-box-close';
-  if (!isVicState) return;
-  const ALLY_EXIT_DELAY_MS = 1500, ALLY_EXIT_STEP_MS = 100;
-  battleSt.allyExitTimer += dt;
-  if (battleSt.allyExitTimer >= ALLY_EXIT_DELAY_MS) {
-    const stepsDone = Math.floor((battleSt.allyExitTimer - ALLY_EXIT_DELAY_MS) / ALLY_EXIT_STEP_MS);
-    const targetFade = Math.min(4, stepsDone);
-    for (let i = 0; i < battleSt.battleAllies.length; i++) {
-      if (battleSt.battleAllies[i].fadeStep < targetFade) battleSt.battleAllies[i].fadeStep = targetFade;
-    }
-  }
-}
-
-function _updateBattleOpening() {
-  if (battleSt.battleState === 'roar-hold') {
-    // waits for msgBox Z dismiss → callback sets flash-strobe
-  } else if (battleSt.battleState === 'flash-strobe') {
-    if (battleSt.battleTimer >= BATTLE_FLASH_FRAMES * BATTLE_FLASH_FRAME_MS) {
-      if (battleSt.isRandomEncounter) {
-        battleSt.battleState = 'encounter-box-expand'; battleSt.battleTimer = 0; pauseMusic(); playTrack(TRACKS.BATTLE);
-      } else {
-        battleSt.battleState = 'enemy-box-expand'; battleSt.battleTimer = 0; pauseMusic(); playTrack(TRACKS.BOSS_BATTLE);
-      }
-    }
-  } else if (battleSt.battleState === 'encounter-box-expand') {
-    if (battleSt.battleTimer >= BOSS_BOX_EXPAND_MS) { battleSt.battleState = 'monster-slide-in'; battleSt.battleTimer = 0; }
-  } else if (battleSt.battleState === 'monster-slide-in') {
-    if (battleSt.battleTimer >= MONSTER_SLIDE_MS) { battleSt.battleState = 'battle-fade-in'; battleSt.battleTimer = 0; }
-  } else if (battleSt.battleState === 'enemy-box-expand') {
-    if (battleSt.battleTimer >= BOSS_BOX_EXPAND_MS) { battleSt.battleState = 'boss-appear'; battleSt.battleTimer = 0; }
-  } else if (battleSt.battleState === 'boss-appear') {
-    if (battleSt.battleTimer >= BOSS_BLOCKS * BOSS_DISSOLVE_STEPS * BOSS_DISSOLVE_FRAME_MS) { battleSt.battleState = 'battle-fade-in'; battleSt.battleTimer = 0; }
-  } else if (battleSt.battleState === 'battle-fade-in') {
-    if (battleSt.battleTimer >= (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS) { battleSt.battleState = 'menu-open'; battleSt.battleTimer = 0; }
-  } else { return false; }
-  return true;
-}
-
-
-function _tryJoinPlayerAlly() {
-  if (battleSt.battleAllies.length >= 3) return false;
-  const loc = getPlayerLocation();
-  const pvpNames = new Set([
-    pvpSt.pvpOpponent && pvpSt.pvpOpponent.name,
-    ...pvpSt.pvpEnemyAllies.map(a => a.name),
-  ].filter(Boolean));
-  const eligible = PLAYER_POOL.filter(p =>
-    p.loc === loc &&
-    !battleSt.battleAllies.some(a => a.name === p.name) &&
-    !pvpNames.has(p.name)
-  );
-  if (eligible.length === 0 || Math.random() >= 0.5) return false;
-  battleSt.battleAllies.push(generateAllyStats(eligible[Math.floor(Math.random() * eligible.length)]));
-  battleSt.battleState = 'ally-fade-in'; battleSt.battleTimer = 0;
-  return true;
-}
-
-function _updateBattleMenuConfirm() {
-  if (battleSt.battleState === 'message-hold') {
-    if (battleSt.battleTimer >= BATTLE_MSG_HOLD_MS) { battleSt.battleState = 'menu-open'; battleSt.battleTimer = 0; battleSt.battleMessage = null; }
-  } else if (battleSt.battleState === 'confirm-pause') {
-    if (battleSt.battleTimer >= 150) {
-      battleSt.allyJoinRound++;
-      if (_tryJoinPlayerAlly()) return true;
-      battleSt.turnQueue = buildTurnOrder(); processNextTurn();
-    }
-  } else { return false; }
-  return true;
-}
-
-function _finalizeComboHits() {
-  let totalDmg = 0, anyCrit = false, allMiss = true, hitsLanded = 0;
-  for (const h of inputSt.hitResults) {
-    if (!h.miss) { totalDmg += h.damage; allMiss = false; hitsLanded++; if (h.crit) anyCrit = true; }
-  }
-  setEnemyDmgNum(allMiss ? { miss: true, timer: 0 } : { value: totalDmg, crit: anyCrit, timer: 0 });
-  if (pvpSt.isPVPBattle && !allMiss) pvpSt.pvpOpponentShakeTimer = BATTLE_SHAKE_MS;
-  // Replace strip message: status > crit > multi-hit
-  if (!allMiss) {
-    if (battleSt.comboStatusInflicted && STATUS_NAME_BYTES[battleSt.comboStatusInflicted]) {
-      replaceBattleMsg(STATUS_NAME_BYTES[battleSt.comboStatusInflicted]);
-    } else if (anyCrit) {
-      replaceBattleMsg(BATTLE_CRITICAL);
-    } else if (hitsLanded > 1) {
-      replaceBattleMsg(_nameToBytes(hitsLanded + ' hits!'));
-    }
-  }
-  battleSt.comboStatusInflicted = 0;
-  battleSt.battleState = 'player-damage-show';
-  battleSt.battleTimer = 0;
-}
-function _advanceHitCombo() {
-  if (battleSt.currentHitIdx + 1 < inputSt.hitResults.length) {
-    battleSt.currentHitIdx++;
-    battleSt.slashFrame = 0;
-    const handWeapon = getHitWeapon(battleSt.currentHitIdx, inputSt.rHandHitCount);
-    bsc.slashFrames = getSlashFramesForWeapon(handWeapon, isHitRightHand(battleSt.currentHitIdx, inputSt.rHandHitCount));
-    if (isBladedWeapon(handWeapon)) { battleSt.slashOffX = 8; battleSt.slashOffY = -8; }
-    else { battleSt.slashOffX = Math.floor(Math.random() * 40) - 20; battleSt.slashOffY = Math.floor(Math.random() * 40) - 20; }
-    battleSt.battleState = 'attack-back';
-    battleSt.battleTimer = 0;
-  } else {
-    _finalizeComboHits();
-  }
-}
-function _updatePlayerAttackBack() {
-  if (battleSt.battleState !== 'attack-back') return false;
-  if (battleSt.currentHitIdx === 0) battleSt.comboStatusInflicted = 0;
-  const delay = battleSt.currentHitIdx === 0 ? BACK_SWING_MS : HIT_COMBO_PAUSE_MS;
-  if (battleSt.battleTimer >= delay) {
-    battleSt.battleState = 'attack-fwd';
-    battleSt.battleTimer = 0;
-  }
-  return true;
-}
-function _updatePlayerAttackFwd() {
-  if (battleSt.battleState !== 'attack-fwd') return false;
-  if (battleSt.battleTimer >= FWD_SWING_MS) {
-    const hw0 = getHitWeapon(battleSt.currentHitIdx, inputSt.rHandHitCount);
-    const isCrit0 = inputSt.hitResults[battleSt.currentHitIdx] && inputSt.hitResults[battleSt.currentHitIdx].crit;
-    playSlashSFX(hw0, isCrit0);
-    battleSt.battleState = 'player-slash';
-    battleSt.battleTimer = 0;
-  }
-  return true;
-}
-function _updatePlayerSlash() {
-  if (battleSt.battleState !== 'player-slash') return false;
-  const frame = Math.floor(battleSt.battleTimer / SLASH_FRAME_MS);
-  if (frame !== battleSt.slashFrame && frame < SLASH_FRAMES) {
-    battleSt.slashFrame = frame;
-    const handWeapon = getHitWeapon(battleSt.currentHitIdx, inputSt.rHandHitCount);
-    if (isBladedWeapon(handWeapon)) {
-      battleSt.slashOffX = 8 - battleSt.slashFrame * 8;
-      battleSt.slashOffY = -8 + battleSt.slashFrame * 8;
-    } else {
-      battleSt.slashOffX = Math.floor(Math.random() * 40) - 20;
-      battleSt.slashOffY = Math.floor(Math.random() * 40) - 20;
-    }
-  }
-  if (battleSt.battleTimer >= SLASH_FRAMES * SLASH_FRAME_MS) {
-    const hit = inputSt.hitResults[battleSt.currentHitIdx];
-    if (!hit.miss) {
-      if (pvpSt.isPVPBattle && pvpSt.pvpOpponentIsDefending)
-        hit.damage = Math.max(1, Math.floor(hit.damage / 2));
-      if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
-        const targetMon = battleSt.encounterMonsters[inputSt.targetIndex];
-        targetMon.hp = Math.max(0, targetMon.hp - hit.damage);
-        // Physical hit wakes sleeping targets
-        if (targetMon.status) wakeOnHit(targetMon.status);
-        // Weapon on-hit status infliction
-        if (targetMon.status && targetMon.hp > 0) {
-          const wpnId = getHitWeapon(battleSt.currentHitIdx, inputSt.rHandHitCount);
-          const wpnData = ITEMS.get(wpnId);
-          if (wpnData && wpnData.status) {
-            const arr = Array.isArray(wpnData.status) ? wpnData.status : [wpnData.status];
-            for (const s of arr) {
-              const applied = tryInflictStatus(targetMon.status, s, wpnData.hit || 50);
-              if (applied) battleSt.comboStatusInflicted = applied;
-            }
-          }
-        }
-      } else {
-        setEnemyHP(Math.max(0, getEnemyHP() - hit.damage));
-      }
-      if (hit.crit) battleSt.critFlashTimer = 0;
-    }
-    battleSt.battleState = 'player-hit-show';
-    battleSt.battleTimer = 0;
-  }
-  return true;
-}
-function _updatePlayerHitShow() {
-  if (battleSt.battleState !== 'player-hit-show') return false;
-  const hitPause = (battleSt.currentHitIdx + 1 < inputSt.hitResults.length) ? HIT_COMBO_PAUSE_MS : HIT_PAUSE_MS;
-  if (battleSt.battleTimer >= hitPause) _advanceHitCombo();
-  return true;
-}
-function _updatePlayerMissShow() {
-  if (battleSt.battleState !== 'player-miss-show') return false;
-  if (battleSt.battleTimer >= MISS_SHOW_MS) _advanceHitCombo();
-  return true;
-}
-function _updatePlayerDamageShow() {
-  if (battleSt.battleState !== 'player-damage-show') return false;
-  if (battleSt.battleTimer >= PLAYER_DMG_SHOW_MS) {
-    if (battleSt.isRandomEncounter && battleSt.encounterMonsters && battleSt.encounterMonsters[inputSt.targetIndex].hp <= 0) {
-      battleSt.dyingMonsterIndices = new Map([[inputSt.targetIndex, 0]]);
-      battleSt.battleState = 'monster-death';
-      battleSt.battleTimer = 0;
-      playSFX(SFX.MONSTER_DEATH);
-    } else if (!battleSt.isRandomEncounter && getEnemyHP() <= 0) {
-      if (pvpSt.isPVPBattle) {
-        battleSt.battleState = 'pvp-dissolve'; battleSt.battleTimer = 0; playSFX(SFX.MONSTER_DEATH);
-      } else { battleSt.battleState = 'boss-dissolve'; battleSt.battleTimer = 0; playSFX(SFX.BOSS_DEATH); }
-    } else {
-      if (getBattleMsgCurrent()) { battleSt.battleState = 'msg-wait'; battleSt.battleTimer = 0; }
-      else processNextTurn();
-    }
-  }
-  return true;
-}
-function _advancePVPTargetOrVictory() {
-  if (pvpSt.pvpOpponentStats && pvpSt.pvpOpponentStats.hp > 0) {
-    pvpSt.pvpPlayerTargetIdx = -1;
-    processNextTurn();
-    return;
-  }
-  const aliveAllyIdx = pvpSt.pvpEnemyAllies.findIndex(a => a.hp > 0);
-  if (aliveAllyIdx >= 0) {
-    pvpSt.pvpPlayerTargetIdx = aliveAllyIdx;
-    processNextTurn();
-  } else {
-    _triggerPVPVictory();
-  }
-}
-function _triggerPVPVictory() {
-  const oppLv = pvpSt.pvpOpponentStats ? pvpSt.pvpOpponentStats.level : 1;
-  const rawPvpExp = 5 * oppLv;
-  grantExp(rawPvpExp);
-  battleSt.encounterExpGained = Math.max(1, Math.floor(rawPvpExp / 4));
-  battleSt.encounterGilGained = Math.max(1, Math.floor(10 * oppLv / 4));
-  battleSt.encounterCpGained = Math.max(1, Math.floor(oppLv / 4)); grantCP(battleSt.encounterCpGained);
-  ps.gil += battleSt.encounterGilGained;
-  battleSt.encounterJobLevelUp = gainJobJP(inputSt.battleActionCount || 1);
-  inputSt.battleActionCount = 0;
-  saveSlotsToDB();
-  _queueVictoryRewards();
-  battleSt.enemyDefeated = true;
-  battleSt.isDefending = false; battleSt.battleState = 'victory-name-out'; battleSt.battleTimer = 0;
-  playSFX(SFX.BOSS_DEATH);
-}
-function _updateMonsterDeath() {
-  if (battleSt.battleState !== 'monster-death') return false;
-  const _maxDelay = battleSt.dyingMonsterIndices.size > 0 ? Math.max(...battleSt.dyingMonsterIndices.values()) : 0;
-  if (battleSt.battleTimer >= MONSTER_DEATH_MS + _maxDelay) {
-    battleSt.dyingMonsterIndices = new Map();
-    const allDead = battleSt.encounterMonsters.every(m => m.hp <= 0);
-    if (allDead) {
-      const rawExp = battleSt.encounterMonsters.reduce((sum, m) => sum + m.exp, 0);
-      grantExp(rawExp);
-      battleSt.encounterExpGained = Math.max(1, Math.floor(rawExp / 4));
-      battleSt.encounterGilGained = Math.max(1, Math.floor(battleSt.encounterMonsters.reduce((sum, m) => sum + (m.gil || 0), 0) / 4));
-      battleSt.encounterCpGained = Math.max(1, Math.floor(battleSt.encounterMonsters.reduce((sum, m) => sum + (m.cp || 1), 0) / 4)); grantCP(battleSt.encounterCpGained);
-      ps.gil += battleSt.encounterGilGained;
-      battleSt.encounterJobLevelUp = gainJobJP(inputSt.battleActionCount || 1);
-      inputSt.battleActionCount = 0;
-      battleSt.encounterDropItem = null;
-      for (const m of battleSt.encounterMonsters) {
-        const mData = MONSTERS.get(m.monsterId);
-        if (mData && mData.drops && mData.drops.length && Math.random() < 0.25) {
-          battleSt.encounterDropItem = mData.drops[Math.floor(Math.random() * mData.drops.length)];
-          break;
-        }
-      }
-      if (battleSt.encounterDropItem !== null) addItem(battleSt.encounterDropItem, 1);
-      saveSlotsToDB();
-      _queueVictoryRewards();
-      battleSt.isDefending = false;
-      battleSt.battleState = 'victory-name-out';
-      battleSt.battleTimer = 0;
-    } else {
-      processNextTurn();
-    }
-  }
-  return true;
-}
-function _updateBattlePlayerAttack() {
-  return _updatePlayerAttackBack() ||
-         _updatePlayerAttackFwd() ||
-         _updatePlayerSlash() ||
-         _updatePlayerHitShow() ||
-         _updatePlayerMissShow() ||
-         _updatePlayerDamageShow() ||
-         _updateMonsterDeath();
-}
-
-
-function _updateBattleDefendItem(dt) {
-  if (battleSt.battleState === 'defend-anim') {
-    // Defend pose + sparkle for 32 frames (~533ms), then wait for msg, then enemy turn
-    if (battleSt.battleTimer >= DEFEND_SPARKLE_TOTAL_MS) {
-      if (getBattleMsgCurrent()) { battleSt.battleState = 'msg-wait'; battleSt.battleTimer = 0; }
-      else processNextTurn();
-    }
-  } else if (battleSt.battleState === 'item-use') {
-    // Heal animation — same duration as defend sparkle, then next turn
-    tickHealNums(dt);
-    if (battleSt.battleTimer >= DEFEND_SPARKLE_TOTAL_MS) {
-      clearHealNums();
-      processNextTurn();
-    }
-  } else if (battleSt.battleState === 'sw-throw' || battleSt.battleState === 'sw-hit') {
-    return updateMagicItemThrowHit();
-  } else if (_updateItemMenuFades()) {
-    return true;
-  } else { return false; }
-  return true;
-}
-
-
-
-function _updateItemMenuFades() {
-  const FADE_DUR = (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS;
-  if (battleSt.battleState === 'item-menu-out') {
-    if (battleSt.battleTimer >= FADE_DUR) { battleSt.battleState = 'item-list-in'; battleSt.battleTimer = 0; }
-  } else if (battleSt.battleState === 'item-list-in') {
-    if (battleSt.battleTimer >= FADE_DUR) { battleSt.battleState = 'item-select'; battleSt.battleTimer = 0; }
-  } else if (battleSt.battleState === 'item-slide') {
-    if (battleSt.battleTimer >= 200) {
-      inputSt.itemPage += (inputSt.itemSlideDir < 0) ? 1 : -1;
-      inputSt.itemSlideDir = 0; inputSt.itemPageCursor = inputSt.itemSlideCursor; inputSt.itemSlideCursor = 0;
-      battleSt.battleState = 'item-select'; battleSt.battleTimer = 0;
-    }
-  } else if (battleSt.battleState === 'item-cancel-out') {
-    if (battleSt.battleTimer >= FADE_DUR) { battleSt.battleState = 'item-cancel-in'; battleSt.battleTimer = 0; }
-  } else if (battleSt.battleState === 'item-cancel-in') {
-    if (battleSt.battleTimer >= FADE_DUR) { inputSt.itemPage = 1; battleSt.battleState = 'menu-open'; battleSt.battleTimer = 0; }
-  } else if (battleSt.battleState === 'item-list-out') {
-    if (battleSt.battleTimer >= FADE_DUR) { battleSt.battleState = 'item-use-menu-in'; battleSt.battleTimer = 0; }
-  } else if (battleSt.battleState === 'item-use-menu-in') {
-    if (battleSt.battleTimer >= FADE_DUR) { battleSt.battleState = 'confirm-pause'; battleSt.battleTimer = 0; }
-  } else { return false; }
-  return true;
-}
-
-function _updateBattleRunSuccess() {
-  if (battleSt.battleState === 'run-success') {
-    // Queue message, then wait for it to finish auto-advancing
-    if (!getBattleMsgCurrent() && getBattleMsgQueue().length === 0) {
-      battleSt.runSlideBack = true; battleSt.battleState = 'encounter-box-close'; battleSt.battleTimer = 0;
-    }
-  } else { return false; }
-  return true;
-}
-
-function _updateBattleRunFail() {
-  if (battleSt.battleState === 'run-fail') {
-    if (!getBattleMsgCurrent() && getBattleMsgQueue().length === 0) {
-      processNextTurn();
-    }
-  } else { return false; }
-  return true;
-}
-
-function _updateBattleRun() {
-  if (battleSt.battleState === 'run-fail') return _updateBattleRunFail();
-  if (battleSt.battleState === 'run-success') return _updateBattleRunSuccess();
-  return false;
-}
-
-// Ally battle update logic extracted to battle-ally.js
-
-// Enemy turn update logic extracted to battle-enemy.js
-
-function _updateBossDissolve(dt) {
-  if (battleSt.battleState !== 'boss-dissolve') return false;
-  const dFrame = Math.floor(battleSt.battleTimer / BOSS_DISSOLVE_FRAME_MS);
-  const dBlock = Math.floor(dFrame / BOSS_DISSOLVE_STEPS);
-  const prevBlock = Math.floor(Math.floor((battleSt.battleTimer - dt) / BOSS_DISSOLVE_FRAME_MS) / BOSS_DISSOLVE_STEPS);
-  if (dBlock !== prevBlock && dBlock > 0 && (dBlock & 3) === 0) playSFX(SFX.BOSS_DEATH);
-  if (battleSt.battleTimer >= BOSS_BLOCKS * BOSS_DISSOLVE_STEPS * BOSS_DISSOLVE_FRAME_MS) {
-    battleSt.enemyDefeated = true; mapSt.bossSprite = null;
-    ps.unlockedJobs |= 0x3E; // Wind Crystal: bits 1-5 (Warrior, Monk, White Mage, Black Mage, Red Mage)
-    const _bossData = MONSTERS.get(0xCC);
-    const rawBossExp = _bossData?.exp || 132;
-    grantExp(rawBossExp);
-    battleSt.encounterExpGained = Math.max(1, Math.floor(rawBossExp / 4));
-    battleSt.encounterGilGained = Math.max(1, Math.floor((_bossData?.gil || 500) / 4));
-    ps.gil += battleSt.encounterGilGained;
-    battleSt.encounterCpGained = Math.max(1, Math.floor((_bossData?.cp || 10) / 4)); grantCP(battleSt.encounterCpGained);
-    battleSt.encounterJobLevelUp = gainJobJP(inputSt.battleActionCount || 1);
-    inputSt.battleActionCount = 0;
-    saveSlotsToDB();
-    _queueVictoryRewards();
-    battleSt.isDefending = false; battleSt.battleState = 'victory-name-out'; battleSt.battleTimer = 0;
-  }
-  return true;
-}
-
-function _updateVictorySequence() {
-  const _textMs = (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS;
-  if (battleSt.battleState === 'victory-name-out') {
-    if (battleSt.battleTimer >= _textMs) { battleSt.battleState = 'victory-celebrate'; battleSt.battleTimer = 0; playTrack(TRACKS.VICTORY); }
-  } else if (battleSt.battleState === 'victory-celebrate') {
-    if (battleSt.battleTimer >= 400) { battleSt.battleState = 'exp-text-in'; battleSt.battleTimer = 0; }
-  } else if (battleSt.battleState === 'exp-text-in') {
-    if (battleSt.battleTimer >= _textMs) { battleSt.battleState = 'exp-hold'; battleSt.battleTimer = 0; }
-  } else if (battleSt.battleState === 'exp-hold') {
-  } else if (battleSt.battleState === 'exp-fade-out') {
-    if (battleSt.battleTimer >= _textMs) { battleSt.battleState = 'gil-text-in'; battleSt.battleTimer = 0; }
-  } else if (battleSt.battleState === 'gil-text-in') {
-    if (battleSt.battleTimer >= _textMs) { battleSt.battleState = 'gil-hold'; battleSt.battleTimer = 0; }
-  } else if (battleSt.battleState === 'gil-hold') {
-  } else if (battleSt.battleState === 'gil-fade-out') {
-    if (battleSt.battleTimer >= _textMs) { battleSt.battleState = 'cp-text-in'; battleSt.battleTimer = 0; }
-  } else if (battleSt.battleState === 'cp-text-in') {
-    if (battleSt.battleTimer >= _textMs) { battleSt.battleState = 'cp-hold'; battleSt.battleTimer = 0; }
-  } else if (battleSt.battleState === 'cp-hold') {
-  } else if (battleSt.battleState === 'cp-fade-out') {
-    if (battleSt.battleTimer >= _textMs) { battleSt.battleState = battleSt.encounterDropItem !== null ? 'item-text-in' : ps.leveledUp ? 'levelup-text-in' : battleSt.encounterJobLevelUp ? 'joblv-text-in' : 'victory-text-out'; battleSt.battleTimer = 0; }
-  } else if (battleSt.battleState === 'item-text-in') {
-    if (battleSt.battleTimer >= _textMs) { battleSt.battleState = 'item-hold'; battleSt.battleTimer = 0; }
-  } else if (battleSt.battleState === 'item-hold') {
-  } else if (battleSt.battleState === 'item-fade-out') {
-    if (battleSt.battleTimer >= _textMs) { battleSt.battleState = ps.leveledUp ? 'levelup-text-in' : battleSt.encounterJobLevelUp ? 'joblv-text-in' : 'victory-text-out'; battleSt.battleTimer = 0; }
-  } else if (battleSt.battleState === 'levelup-text-in') {
-    if (battleSt.battleTimer >= _textMs) { battleSt.battleState = 'levelup-hold'; battleSt.battleTimer = 0; }
-  } else if (battleSt.battleState === 'levelup-hold') {
-  } else if (battleSt.battleState === 'levelup-fade-out') {
-    if (battleSt.battleTimer >= _textMs) { battleSt.battleState = battleSt.encounterJobLevelUp ? 'joblv-text-in' : 'victory-text-out'; battleSt.battleTimer = 0; }
-  } else if (battleSt.battleState === 'joblv-text-in') {
-    if (battleSt.battleTimer >= _textMs) { battleSt.battleState = 'joblv-hold'; battleSt.battleTimer = 0; }
-  } else if (battleSt.battleState === 'joblv-hold') {
-  } else if (battleSt.battleState === 'joblv-fade-out') {
-    if (battleSt.battleTimer >= _textMs) { battleSt.battleState = 'victory-text-out'; battleSt.battleTimer = 0; }
-  } else if (battleSt.battleState === 'victory-text-out') {
-    if (battleSt.battleTimer >= _textMs) { setBattleMsgCurrent(null); battleSt.battleState = 'victory-menu-fade'; battleSt.battleTimer = 0; }
-  } else if (battleSt.battleState === 'victory-menu-fade') {
-    if (battleSt.battleTimer >= _textMs) { battleSt.battleState = 'victory-box-close'; battleSt.battleTimer = 0; }
-  } else if (battleSt.battleState === 'victory-box-close') {
-    if (battleSt.battleTimer >= VICTORY_BOX_ROWS * VICTORY_ROW_FRAME_MS) {
-      battleSt.battleState = battleSt.isRandomEncounter ? 'encounter-box-close' : 'enemy-box-close'; battleSt.battleTimer = 0;
-    }
-  } else { return false; }
-  return true;
-}
-
-function _updateBoxClose() {
-  if (battleSt.battleState === 'encounter-box-close') {
-    if (battleSt.battleTimer >= BOSS_BOX_EXPAND_MS) {
-      battleSt.battleState = 'none'; battleSt.battleTimer = 0; battleSt.runSlideBack = false;
-      sprite.setDirection(DIR_DOWN); battleSt.isRandomEncounter = false; battleSt.encounterMonsters = null;
-      battleSt.dyingMonsterIndices = new Map(); battleSt.battleAllies = []; battleSt.allyJoinRound = 0;
-      stopMusic(); resumeMusic();
-    }
-    return true;
-  }
-  if (battleSt.battleState === 'enemy-box-close') {
-    if (battleSt.battleTimer >= BOSS_BOX_EXPAND_MS) {
-      const wasPVP = pvpSt.isPVPBattle;
-      resetPVPState();
-      battleSt.battleState = 'none'; battleSt.battleTimer = 0; sprite.setDirection(DIR_DOWN);
-      battleSt.battleAllies = []; battleSt.allyJoinRound = 0;
-      if (!wasPVP) playTrack(TRACKS.CRYSTAL_ROOM);
-      else resumeMusic();
-    }
-    return true;
-  }
-  return false;
-}
-
-function _updateDefeatStates() {
-  if (battleSt.battleState === 'team-wipe') {
-    if (!battleSt._teamWipeMsgShown) { battleSt._teamWipeMsgShown = true; }
-    if (battleSt.battleTimer >= 1200 || _zPressed()) {
-      battleSt.battleState = 'defeat-close'; battleSt.battleTimer = 0;
-    }
-    return true;
-  }
-  if (battleSt.battleState === 'defeat-monster-fade') {
-    stopMusic();
-    if (battleSt.battleTimer >= 500) { battleSt.battleState = 'defeat-text'; battleSt.battleTimer = 0; }
-    return true;
-  }
-  if (battleSt.battleState === 'defeat-text') return true; // Z to dismiss handled in handleInput
-  if (battleSt.battleState === 'defeat-close') {
-    if (battleSt.battleTimer >= BOSS_BOX_EXPAND_MS) {
-      resetPVPState();
-      battleSt.battleState = 'none'; battleSt.battleTimer = 0;
-      battleSt.isRandomEncounter = false;
-      battleSt.encounterMonsters = null; battleSt.turnQueue = []; battleSt.battleAllies = []; battleSt.allyJoinRound = 0;
-      hudSt.playerDeathTimer = null; battleSt._teamWipeMsgShown = false;
-      ps.hp = ps.stats ? ps.stats.maxHP : 28;
-      ps.mp = ps.stats ? ps.stats.maxMP : 0;
-      const worldEntry = mapSt.mapStack.slice().reverse().find(e => e.mapId === 'world');
-      triggerWipe(() => {
-        mapSt.dungeonFloor = -1; mapSt.encounterSteps = 0; mapSt.mapStack = [];
-        if (worldEntry) {
-          loadWorldMapAtPosition(worldEntry.x, worldEntry.y);
-        } else {
-          loadWorldMapAt(findWorldExitIndex(mapSt.currentMapId, mapSt.worldMapData));
-        }
-      }, 'world');
-    }
-    return true;
-  }
-  return false;
-}
-
-function _updateBattleEndSequence(dt) {
-  return _updateBossDissolve(dt) || _updateVictorySequence() || _updateBoxClose() || _updateDefeatStates();
-}
-
-const POISON_TICK_MS = 500;
-function _updatePoisonTick() {
-  if (battleSt.battleState !== 'poison-tick') return false;
-  if (battleSt.battleTimer >= POISON_TICK_MS) { processNextTurn(); }
-  return true;
-}
-
-function updateBattle(dt) {
-  if (battleSt.battleState === 'none') return;
-  battleSt.battleTimer += Math.min(dt, 33);
-  _updateBattleMsg(dt);
-  if (battleSt.battleState === 'msg-wait') { if (!getBattleMsgCurrent()) processNextTurn(); return; }
-  if (pvpSt.isPVPBattle) { updatePVPBattle(dt); return; }
-  _updateBattleTimers(dt);
-  _updatePoisonTick()         ||
-  _updateBattleOpening()      ||
-  _updateBattleMenuConfirm()  ||
-  _updateBattlePlayerAttack() ||
-  _updateBattleDefendItem(dt) ||
-  _updateBattleRun()          ||
-  updateBattleAlly() ||
-  updateBattleEnemyTurn() ||
-  _updateBattleEndSequence(dt);
-}
-
-// Battle draw functions extracted to battle-drawing.js
-
+// startBattle, executeBattleCommand, updateBattle, all _updateBattle* → battle-update.js
 function _updateHudHpLvStep(dt) {
   const target = (battleSt.battleState === 'none' || battleSt.battleState === 'flash-strobe' ||
     battleSt.battleState === 'encounter-box-expand' || battleSt.battleState === 'monster-slide-in' ||
@@ -1769,13 +761,13 @@ function _updateHudHpLvStep(dt) {
 
 function _drawPoisonFlash() {
   if (poisonFlashTimer < 0) return;
-  if (poisonFlashTimer === 0) poisonFlashTimer = Date.now();
+  if (poisonFlashTimer === 0) setPoisonFlashTimer(Date.now());
   if (Date.now() - poisonFlashTimer < 67) {
     clipToViewport();
     ctx.fillStyle = 'rgba(128, 0, 64, 0.35)';
     ctx.fillRect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
     ctx.restore();
-  } else { poisonFlashTimer = -1; }
+  } else { setPoisonFlashTimer(-1); }
 }
 
 function _drawPondStrobe() {
@@ -1831,8 +823,8 @@ function _gameLoopUpdate(dt) {
     }
   }
   _updateStarEffect(dt);
-  waterTimer += dt;
-  if (waterTimer >= WATER_TICK) { waterTimer %= WATER_TICK; waterTick++; }
+  waterSt.timer += dt;
+  if (waterSt.timer >= WATER_TICK) { waterSt.timer %= WATER_TICK; waterSt.tick++; }
 }
 
 function _gameLoopDraw() {
@@ -1897,7 +889,7 @@ function gameLoop(timestamp) {
   lastTime = timestamp;
 
   if (titleSt.state !== 'done') {
-    updateTitle(dt); drawTitle(ctx, waterTick); drawHUD();
+    updateTitle(dt); drawTitle(ctx, waterSt.tick); drawHUD();
     if (titleSt.state !== 'done') drawTitleSkyInHUD(ctx, roundTopBoxCorners); // guard: updateTitle may have set titleSt.state='done'
     updateChat(dt, 'none', true);
     drawChat(ctx, drawHudBox, 0, true);

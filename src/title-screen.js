@@ -5,7 +5,12 @@ import { nesColorFade, _makeFadedPal } from './palette.js';
 import { _nameToBytes } from './text-utils.js';
 import { selectCursor, saveSlots, nameBuffer, NAME_MAX_LEN,
          setSelectCursor, setNameBuffer, saveSlotsToDB } from './save-state.js';
-import { playSFX, SFX } from './music.js';
+import { playSFX, fadeOutMusic, SFX, TRACKS } from './music.js';
+import { ps, fullHeal, recalcCombatStats } from './player-stats.js';
+import { hudSt } from './hud-state.js';
+import { transSt } from './transitions.js';
+import { mapSt } from './map-state.js';
+import { loadMapById } from './map-loading.js';
 import { serverDeleteSlot } from './save.js';
 import { fakePlayerPortraits } from './fake-player-sprites.js';
 import { drawCursorFaded } from './hud-drawing.js';
@@ -640,5 +645,104 @@ export function onNameEntryKeyDown(e) {
     const ch = e.key;
     if (ch >= 'A' && ch <= 'Z') nameBuffer.push(0x8A + ch.charCodeAt(0) - 65);
     else nameBuffer.push(0xCA + ch.charCodeAt(0) - 97);
+  }
+}
+
+// ── Title update (moved from game.js) ──────────────────────────────────────
+
+const TILE_SIZE = 16;
+const WATER_TICK = 4 * (1000 / 60);  // ~67ms per tick
+
+let _keys = {};
+let _waterSt = { timer: 0, tick: 0 };
+let _setPlayerInventory = () => {};
+let _swapBattleSprites = () => {};
+
+export function initTitleUpdate({ keys, waterSt, setPlayerInventory, swapBattleSprites }) {
+  _keys = keys;
+  _waterSt = waterSt;
+  _setPlayerInventory = setPlayerInventory;
+  _swapBattleSprites = swapBattleSprites;
+}
+
+function _updateTitleMainOutCase() {
+  titleSt.state = 'done';
+  hudSt.hudInfoFadeTimer = 0;
+  const slot = saveSlots[selectCursor];
+  if (slot && slot.stats) {
+    ps.stats.str = slot.stats.str;
+    ps.stats.agi = slot.stats.agi;
+    ps.stats.vit = slot.stats.vit;
+    ps.stats.int = slot.stats.int;
+    ps.stats.mnd = slot.stats.mnd;
+    ps.stats.maxHP = slot.stats.maxHP;
+    ps.stats.maxMP = slot.stats.maxMP;
+    ps.stats.level = slot.level;
+    ps.stats.exp = slot.exp;
+    ps.stats.expToNext = (slot.level - 1 < 98) ? ps.expTable[slot.level - 1] : 0xFFFFFF;
+    if (slot.hp != null) { ps.hp = Math.min(slot.hp, ps.stats.maxHP); ps.mp = ps.stats.maxMP; }
+    else fullHeal();
+    ps.weaponR = slot.stats.weaponR != null ? slot.stats.weaponR : 0x1E;
+    ps.weaponL = slot.stats.weaponL != null ? slot.stats.weaponL : 0x00;
+    ps.head = slot.stats.head || 0x00;
+    ps.body = slot.stats.body || 0x00;
+    ps.arms = slot.stats.arms || 0x00;
+    recalcCombatStats();
+  }
+  _setPlayerInventory((slot && slot.inventory) ? { ...slot.inventory } : {});
+  ps.gil = (slot && slot.gil) || 0;
+  ps.jobLevels = (slot && slot.jobLevels) ? JSON.parse(JSON.stringify(slot.jobLevels)) : {};
+  ps.jobIdx = (slot && slot.jobIdx) || 0;
+  ps.unlockedJobs = (slot && slot.unlockedJobs != null) ? slot.unlockedJobs : 0x01;
+  ps.cp = (slot && slot.cp) || 0;
+  ps.status.mask = (slot && slot.statusMask) || 0;
+  ps.playTime = (slot && slot.playTime) || 0;
+  _swapBattleSprites(ps.jobIdx);
+  transSt.pendingTrack = TRACKS.TOWN_UR;
+  loadMapById(114);
+  mapSt.worldY -= 6 * TILE_SIZE;
+  transSt.state = 'hud-fade-in';
+  transSt.timer = 0;
+}
+
+export function updateTitle(dt) {
+  titleSt.timer += dt;
+  titleSt.underwaterScroll += dt * 0.11;
+  updateTitleUnderwater(dt);
+
+  if (isTitleActiveState()) {
+    _waterSt.timer += dt;
+    if (_waterSt.timer >= WATER_TICK) { _waterSt.timer %= WATER_TICK; _waterSt.tick++; }
+    titleSt.waterScroll += dt * 0.12;
+    titleSt.shipTimer += dt;
+    const _s = titleSt.state;
+    if (_s === 'select-fade-in' || _s === 'select' || _s === 'name-entry' || _s === 'select-fade-out-back') updateShipDrift(dt);
+  }
+
+  switch (titleSt.state) {
+    case 'credit-wait':    if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'credit-in';     titleSt.timer = 0; } break;
+    case 'credit-in':      if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'credit-hold';   titleSt.timer = 0; } break;
+    case 'credit-hold':    if (titleSt.timer >= TITLE_HOLD_MS) { titleSt.state = 'credit-out';    titleSt.timer = 0; } break;
+    case 'credit-out':     if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'disclaim-wait'; titleSt.timer = 0; } break;
+    case 'disclaim-wait':  if (titleSt.timer >= TITLE_WAIT_MS) { titleSt.state = 'disclaim-in';   titleSt.timer = 0; } break;
+    case 'disclaim-in':    if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'disclaim-hold'; titleSt.timer = 0; } break;
+    case 'disclaim-hold':  if (titleSt.timer >= TITLE_HOLD_MS) { titleSt.state = 'disclaim-out';  titleSt.timer = 0; } break;
+    case 'disclaim-out':   if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'main-in';       titleSt.timer = 0; } break;
+    case 'main-in':        if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'logo-content-in';  titleSt.timer = 0; } break;
+    case 'logo-content-in': if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'pressz-fade-in';    titleSt.timer = 0; } break;
+    case 'pressz-fade-in': if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'main';          titleSt.timer = 0; } break;
+    case 'main':
+      if (_keys['z'] || _keys['Z']) { _keys['z'] = false; _keys['Z'] = false; playSFX(SFX.CONFIRM); titleSt.state = 'logo-content-out'; titleSt.timer = 0; }
+      break;
+    case 'logo-content-out': if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'to-select'; titleSt.timer = 0; } break;
+    case 'to-select':            if (titleSt.timer >= TITLE_TRANSITION_MS) { titleSt.state = 'select-fade-in'; titleSt.timer = 0; titleSt.shipPosX = 0; setSelectCursor(0); titleSt.deleteMode = false; } break;
+    case 'select-fade-in':       if (titleSt.timer >= (SELECT_TEXT_STEPS + 1) * SELECT_TEXT_STEP_MS) { titleSt.state = 'select'; titleSt.timer = 0; } break;
+    case 'select':               updateTitleSelect(_keys); break;
+    case 'name-entry':           break;
+    case 'select-fade-out':      if (titleSt.timer >= (SELECT_TEXT_STEPS + 1) * SELECT_TEXT_STEP_MS) { titleSt.state = 'main-out'; titleSt.timer = 0; fadeOutMusic(TITLE_FADE_MS); } break;
+    case 'select-fade-out-back': if (titleSt.timer >= (SELECT_TEXT_STEPS + 1) * SELECT_TEXT_STEP_MS) { titleSt.state = 'to-main'; titleSt.timer = 0; } break;
+    case 'to-main':              if (titleSt.timer >= TITLE_TRANSITION_MS) { titleSt.state = 'logo-content-in-back'; titleSt.timer = 0; } break;
+    case 'logo-content-in-back': if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'main'; titleSt.timer = 0; } break;
+    case 'main-out':             if (titleSt.timer >= TITLE_FADE_MS) _updateTitleMainOutCase(); break;
   }
 }
