@@ -23,15 +23,16 @@ import { advanceBattleMsgZ } from './battle-msg.js';
 import { getRosterVisible } from './roster.js';
 import { playerInventory, addItem, removeItem, INV_SLOTS } from './inventory.js';
 
+// Keyboard poll map — mutated by window listeners, read throughout the codebase.
+export const keys = {};
+
 // Injected at boot — avoids circular import on game.js
-let _keys = {};
 let _executeBattleCommand = () => {};
 let _returnToTitle = () => {};
 let _swapBattleSprites = () => {};
 let _startPVPBattle = () => {};
 let _toggleCrt = () => {};
 export function initInputHandler(deps) {
-  _keys = deps.keys;
   _executeBattleCommand = deps.executeBattleCommand;
   _returnToTitle = deps.returnToTitle;
   _swapBattleSprites = deps.swapBattleSprites;
@@ -44,7 +45,7 @@ function _chatHotkeyAllowed() {
   return titleSt.state === 'done' && battleSt.battleState === 'none' && pauseSt.state === 'none' &&
     inputSt.rosterState === 'none' && transSt.state !== 'loading' && msgState.state === 'none';
 }
-export function initKeyboardListeners(keys) {
+export function initKeyboardListeners() {
   window.addEventListener('keydown', (e) => {
     if (chatState.inputActive) { onChatKeyDown(e); return; }
     if (titleSt.state === 'name-entry') { onNameEntryKeyDown(e); return; }
@@ -102,12 +103,12 @@ export const inputSt = {
 // ── Key helpers ────────────────────────────────────────────────────────────
 
 function _zPressed() {
-  const k = _keys;
+  const k = keys;
   if (!k['z'] && !k['Z']) return false;
   k['z'] = false; k['Z'] = false; return true;
 }
 function _xPressed() {
-  const k = _keys;
+  const k = keys;
   if (!k['x'] && !k['X']) return false;
   k['x'] = false; k['X'] = false; return true;
 }
@@ -120,7 +121,7 @@ function _switchPVPTarget(newIdx) {
 }
 
 function _battleTargetNav() {
-  const k = _keys;
+  const k = keys;
   if (pvpSt.isPVPBattle) {
     // Build list of alive PVP target indices: -1=main opp, 0,1,...=allies
     // Use authoritative HP: pvpOpponentStats.hp for main, pvpEnemyAllies[i].hp for allies
@@ -158,7 +159,7 @@ function _battleTargetNav() {
 }
 
 function _battleTargetConfirm() {
-  const k = _keys;
+  const k = keys;
   if (!k['z'] && !k['Z']) return;
   k['z'] = false; k['Z'] = false;
   playSFX(SFX.CONFIRM);
@@ -232,7 +233,7 @@ function _battleInputTargetSelect() {
 }
 
 function _itemSelectNav(isEquipPage, totalPages, pageRows) {
-  const k = _keys;
+  const k = keys;
   if (k['ArrowDown']) {
     k['ArrowDown'] = false;
     if (inputSt.itemPageCursor < pageRows - 1) inputSt.itemPageCursor++;
@@ -448,7 +449,7 @@ function _itemTargetNavRight() {
 }
 
 function _itemTargetNavVertical(isBattleItem) {
-  const k = _keys;
+  const k = keys;
   const goUp = !!k['ArrowUp'];
   k['ArrowUp'] = false; k['ArrowDown'] = false;
   const cnt = _itemTargetCnt();
@@ -478,7 +479,7 @@ function _itemTargetNavVertical(isBattleItem) {
 
 function _battleInputItemTargetSelect() {
   const isBattleItem = inputSt.playerActionPending && ITEMS.get(inputSt.playerActionPending.itemId)?.type === 'battle_item';
-  const k = _keys;
+  const k = keys;
   if (k['ArrowLeft']) { k['ArrowLeft'] = false; _itemTargetNavLeft(isBattleItem); }
   if (k['ArrowRight']) { k['ArrowRight'] = false; _itemTargetNavRight(); }
   if (k['ArrowUp'] || k['ArrowDown']) _itemTargetNavVertical(isBattleItem);
@@ -494,7 +495,7 @@ function _battleInputItemTargetSelect() {
 }
 
 function _battleInputHoldStates() {
-  const k = _keys;
+  const k = keys;
   const z = k['z'] || k['Z'];
   const clearZ = () => { k['z'] = false; k['Z'] = false; };
   if (battleSt.battleState === 'roar-hold') {
@@ -522,7 +523,7 @@ function _battleInputHoldStates() {
 export function handleBattleInput() {
   if (battleSt.battleState === 'none') return false;
   if (_battleInputHoldStates()) return true;
-  const k = _keys;
+  const k = keys;
   if (battleSt.battleState === 'menu-open') {
     if (k['ArrowDown'])  { k['ArrowDown'] = false;  inputSt.battleCursor ^= 2; playSFX(SFX.CURSOR); }
     if (k['ArrowUp'])    { k['ArrowUp'] = false;    inputSt.battleCursor ^= 2; playSFX(SFX.CURSOR); }
@@ -540,7 +541,7 @@ export function handleBattleInput() {
 
 function _rosterInputBrowse() {
   const rp = getRosterVisible();
-  const k = _keys;
+  const k = keys;
   if (k['ArrowDown']) {
     k['ArrowDown'] = false;
     if (inputSt.rosterCursor < rp.length - 1) {
@@ -582,7 +583,7 @@ function _rosterMenuDuelAction(target) {
 }
 
 function _rosterInputMenu() {
-  const k = _keys;
+  const k = keys;
   if (k['ArrowDown']) {
     k['ArrowDown'] = false;
     inputSt.rosterMenuCursor = (inputSt.rosterMenuCursor + 1) % ROSTER_MENU_ITEMS.length;
@@ -620,7 +621,7 @@ function _rosterInputMenu() {
 //            get onWorldMap, get dungeonFloor,
 //            getRosterVisible, startPVPBattle }
 export function handleRosterInput() {
-  const k = _keys;
+  const k = keys;
   if (k['s'] || k['S']) {
     k['s'] = false; k['S'] = false;
     if (tabSelectMode) {
@@ -651,7 +652,7 @@ export function handleRosterInput() {
 // ── Tab select input ──────────────────────────────────────────────────────
 
 function _tabSelectInput() {
-  const k = _keys;
+  const k = keys;
   if (k['ArrowLeft']) {
     k['ArrowLeft'] = false;
     setActiveTab((activeTab - 1 + CHAT_TABS.length) % CHAT_TABS.length);
@@ -690,7 +691,7 @@ function _tabSelectInput() {
 // ── Pause input ────────────────────────────────────────────────────────────
 
 function _pauseInputOpenClose() {
-  const k = _keys;
+  const k = keys;
   if (k['Enter']) {
     k['Enter'] = false;
     if (pauseSt.state === 'none' && battleSt.battleState === 'none' && transSt.state === 'none' && !mapSt.shakeActive && !mapSt.starEffect && !mapSt.moving && msgState.state === 'none') {
@@ -714,7 +715,7 @@ function _pauseInputOpenClose() {
 
 function _pauseInputMainMenu() {
   if (pauseSt.state !== 'open') return false;
-  const k = _keys;
+  const k = keys;
   if (k['ArrowDown']) { k['ArrowDown'] = false; pauseSt.cursor = (pauseSt.cursor + 1) % 7; playSFX(SFX.CURSOR); }
   if (k['ArrowUp'])   { k['ArrowUp'] = false;   pauseSt.cursor = (pauseSt.cursor + 6) % 7; playSFX(SFX.CURSOR); }
   if (_zPressed()) {
@@ -763,7 +764,7 @@ function _pauseInvZPress(entries) {
 function _pauseInputInventory() {
   if (pauseSt.state !== 'inventory') return false;
   const entries = Object.entries(playerInventory).filter(([,c]) => c > 0);
-  const k = _keys;
+  const k = keys;
   if (k['ArrowDown']) {
     k['ArrowDown'] = false;
     if (pauseSt.invScroll < entries.length - 1) { pauseSt.invScroll++; playSFX(SFX.CURSOR); }
@@ -820,7 +821,7 @@ function _applyPauseItemUse(item, rosterTargets) {
 function _pauseInputInvTarget() {
   if (pauseSt.state !== 'inv-target') return false;
   const rosterTargets = getRosterVisible();
-  const k = _keys;
+  const k = keys;
   if (k['ArrowDown']) {
     k['ArrowDown'] = false;
     if (pauseSt.invAllyTarget < rosterTargets.length - 1) { pauseSt.invAllyTarget++; playSFX(SFX.CURSOR); }
@@ -908,7 +909,7 @@ function _equipOptimum() {
 
 function _pauseInputEquip() {
   if (pauseSt.state !== 'equip') return false;
-  const k = _keys;
+  const k = keys;
   if (pauseSt.eqCursor < 5) {
     if (k['ArrowDown'])  { k['ArrowDown'] = false;  pauseSt.eqCursor = (pauseSt.eqCursor + 1) % 5; playSFX(SFX.CURSOR); }
     if (k['ArrowUp'])    { k['ArrowUp'] = false;    pauseSt.eqCursor = (pauseSt.eqCursor + 4) % 5; playSFX(SFX.CURSOR); }
@@ -949,7 +950,7 @@ function _pauseInputEquip() {
 
 function _pauseInputEquipItemSelect() {
   if (pauseSt.state !== 'eq-item-select') return false;
-  const k = _keys;
+  const k = keys;
   if (k['ArrowDown']) { k['ArrowDown'] = false; if (pauseSt.eqItemCursor < pauseSt.eqItemList.length - 1) { pauseSt.eqItemCursor++; playSFX(SFX.CURSOR); } }
   if (k['ArrowUp'])   { k['ArrowUp'] = false;   if (pauseSt.eqItemCursor > 0) { pauseSt.eqItemCursor--; playSFX(SFX.CURSOR); } }
   if (_zPressed()) {
@@ -988,7 +989,7 @@ function _pauseInputStats() {
 
 function _pauseInputJob() {
   if (pauseSt.state !== 'job') return false;
-  const k = _keys;
+  const k = keys;
   if (k['ArrowDown']) { k['ArrowDown'] = false; pauseSt.jobCursor = (pauseSt.jobCursor + 1) % pauseSt.jobList.length; playSFX(SFX.CURSOR); }
   if (k['ArrowUp'])   { k['ArrowUp'] = false;   pauseSt.jobCursor = (pauseSt.jobCursor + pauseSt.jobList.length - 1) % pauseSt.jobList.length; playSFX(SFX.CURSOR); }
   if (_zPressed()) {
@@ -1016,7 +1017,7 @@ function _pauseInputJob() {
 
 function _pauseInputOptions() {
   if (pauseSt.state !== 'options') return false;
-  const k = _keys;
+  const k = keys;
   if (_zPressed()) {
     if (pauseSt.optCursor === 0) { _toggleCrt(); playSFX(SFX.CONFIRM); }
   }

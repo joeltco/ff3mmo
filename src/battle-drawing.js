@@ -34,17 +34,10 @@ import { getKnifeBladeCanvas, getKnifeBladeSwungCanvas,
 import { clipToViewport, drawCursorFaded, drawHudBox, drawSparkleCorners, drawBorderedBox,
          grayViewport } from './hud-drawing.js';
 import { drawMonsterDeath as _drawMonsterDeath } from './render.js';
+import { ui } from './ui-state.js';
+import { isVictoryBattleState as _isVictoryBattleState } from './battle-update.js';
 
-// Injected at boot
-let _ctx = null;
-let _cursorCanvas = () => null;
-let _isVictoryBattleState = () => false;
-function _cursorTileCanvas() { return _cursorCanvas(); }
-export function initBattleDrawing(deps) {
-  _ctx = deps.ctx;
-  _cursorCanvas = deps.cursorTileCanvas;
-  _isVictoryBattleState = deps.isVictoryBattleState;
-}
+function _cursorTileCanvas() { return ui.cursorTileCanvas; }
 
 const HUD_VIEW_X = 0, HUD_VIEW_Y = 32, HUD_VIEW_W = 144, HUD_VIEW_H = 144;
 const HUD_RIGHT_X = 144, HUD_RIGHT_W = 112;
@@ -110,11 +103,11 @@ function drawSWExplosion() {
       cy = panelTop + tidx * ROSTER_ROW_H + 8 + 8;
     }
     const half = canvas.width / 2;
-    _ctx.save();
-    _ctx.beginPath(); _ctx.rect(0, HUD_VIEW_Y, CANVAS_W, HUD_VIEW_H); _ctx.clip();
-    _ctx.imageSmoothingEnabled = false;
-    _ctx.drawImage(canvas, cx - half, cy - half);
-    _ctx.restore();
+    ui.ctx.save();
+    ui.ctx.beginPath(); ui.ctx.rect(0, HUD_VIEW_Y, CANVAS_W, HUD_VIEW_H); ui.ctx.clip();
+    ui.ctx.imageSmoothingEnabled = false;
+    ui.ctx.drawImage(canvas, cx - half, cy - half);
+    ui.ctx.restore();
     return;
   }
   if (battleSt.battleState !== 'sw-hit' || battleSt.battleTimer >= 400) return;
@@ -126,7 +119,7 @@ function drawSWExplosion() {
     const tidx = getTargets()[getHitIdx()];
     if (tidx === undefined) return;
     const { x: cx, y: cy } = _pvpEnemyCellCenter(tidx);
-    _ctx.drawImage(canvas, cx - Math.floor(canvas.width / 2), cy - Math.floor(canvas.height / 2));
+    ui.ctx.drawImage(canvas, cx - Math.floor(canvas.width / 2), cy - Math.floor(canvas.height / 2));
     return;
   }
   if (!bsc.swPhaseCanvases.length) return;
@@ -145,12 +138,12 @@ function drawSWExplosion() {
     const mh = mc ? mc.height : rH;
     const cx = tp.x + 16;
     const cy = tp.y + (rH - mh) + Math.floor(mh / 2);
-    _ctx.drawImage(phaseCanvas, cx - Math.floor(phaseCanvas.width / 2), cy - Math.floor(phaseCanvas.height / 2));
+    ui.ctx.drawImage(phaseCanvas, cx - Math.floor(phaseCanvas.width / 2), cy - Math.floor(phaseCanvas.height / 2));
   } else {
     // Boss — center on boss sprite
     const cx = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2);
     const cy = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
-    _ctx.drawImage(phaseCanvas, cx - Math.floor(phaseCanvas.width / 2), cy - Math.floor(phaseCanvas.height / 2));
+    ui.ctx.drawImage(phaseCanvas, cx - Math.floor(phaseCanvas.width / 2), cy - Math.floor(phaseCanvas.height / 2));
   }
 }
 
@@ -220,24 +213,24 @@ function _drawPortraitFrame(px, py, portraitSrc, isRunPose) {
   if (isRunPose) {
     let slideX = 0;
     slideX = Math.min(battleSt.battleTimer / 300, 1) * 20;
-    _ctx.save();
-    _ctx.beginPath();
-    _ctx.rect(HUD_RIGHT_X + 8, HUD_VIEW_Y + 8, 16, 16);
-    _ctx.clip();
-    _ctx.translate(px + 16 + slideX, py);
-    _ctx.scale(-1, 1);
-    _ctx.drawImage(portraitSrc, 0, 0);
-    _ctx.restore();
+    ui.ctx.save();
+    ui.ctx.beginPath();
+    ui.ctx.rect(HUD_RIGHT_X + 8, HUD_VIEW_Y + 8, 16, 16);
+    ui.ctx.clip();
+    ui.ctx.translate(px + 16 + slideX, py);
+    ui.ctx.scale(-1, 1);
+    ui.ctx.drawImage(portraitSrc, 0, 0);
+    ui.ctx.restore();
   } else if (battleSt.battleState === 'encounter-box-close' && battleSt.runSlideBack) {
     const t = Math.min(battleSt.battleTimer / 300, 1);
-    _ctx.save();
-    _ctx.beginPath();
-    _ctx.rect(HUD_RIGHT_X + 8, HUD_VIEW_Y + 8, 16, 16);
-    _ctx.clip();
-    _ctx.drawImage(portraitSrc, px, py + (1 - t) * 20);
-    _ctx.restore();
+    ui.ctx.save();
+    ui.ctx.beginPath();
+    ui.ctx.rect(HUD_RIGHT_X + 8, HUD_VIEW_Y + 8, 16, 16);
+    ui.ctx.clip();
+    ui.ctx.drawImage(portraitSrc, px, py + (1 - t) * 20);
+    ui.ctx.restore();
   } else {
-    _ctx.drawImage(portraitSrc, px, py);
+    ui.ctx.drawImage(portraitSrc, px, py);
   }
 }
 
@@ -248,19 +241,19 @@ function _drawPortraitWeapon(px, py, before) {
   if (battleSt.battleState === 'attack-back') {
     const rightHand = isHitRightHand(battleSt.currentHitIdx, inputSt.rHandHitCount);
     if (before && rightHand) {
-      if (wpnSt === 'knife' && handWeapon === 0x1F && getDaggerBladeCanvas()) _ctx.drawImage(getDaggerBladeCanvas(), px + 8, py - 7);
-      else if (wpnSt === 'knife' && getKnifeBladeCanvas()) _ctx.drawImage(getKnifeBladeCanvas(), px + 8, py - 7);
-      else if (wpnSt === 'sword' && getSwordBladeCanvas()) _ctx.drawImage(getSwordBladeCanvas(), px + 8, py - 7);
+      if (wpnSt === 'knife' && handWeapon === 0x1F && getDaggerBladeCanvas()) ui.ctx.drawImage(getDaggerBladeCanvas(), px + 8, py - 7);
+      else if (wpnSt === 'knife' && getKnifeBladeCanvas()) ui.ctx.drawImage(getKnifeBladeCanvas(), px + 8, py - 7);
+      else if (wpnSt === 'sword' && getSwordBladeCanvas()) ui.ctx.drawImage(getSwordBladeCanvas(), px + 8, py - 7);
     } else if (!before && !rightHand) {
-      if (wpnSt === 'knife' && handWeapon === 0x1F && getDaggerBladeCanvas()) _ctx.drawImage(getDaggerBladeCanvas(), px + 16, py - 7);
-      else if (wpnSt === 'knife' && getKnifeBladeCanvas()) _ctx.drawImage(getKnifeBladeCanvas(), px + 16, py - 7);
-      else if (wpnSt === 'sword' && getSwordBladeCanvas()) _ctx.drawImage(getSwordBladeCanvas(), px + 16, py - 7);
+      if (wpnSt === 'knife' && handWeapon === 0x1F && getDaggerBladeCanvas()) ui.ctx.drawImage(getDaggerBladeCanvas(), px + 16, py - 7);
+      else if (wpnSt === 'knife' && getKnifeBladeCanvas()) ui.ctx.drawImage(getKnifeBladeCanvas(), px + 16, py - 7);
+      else if (wpnSt === 'sword' && getSwordBladeCanvas()) ui.ctx.drawImage(getSwordBladeCanvas(), px + 16, py - 7);
     }
   } else if (!before && (battleSt.battleState === 'attack-fwd' || battleSt.battleState === 'player-slash')) {
-    if (wpnSt === 'knife' && handWeapon === 0x1F && getDaggerBladeSwungCanvas()) _ctx.drawImage(getDaggerBladeSwungCanvas(), px - 16, py + 1);
-    else if (wpnSt === 'knife' && getKnifeBladeSwungCanvas()) _ctx.drawImage(getKnifeBladeSwungCanvas(), px - 16, py + 1);
-    else if (wpnSt === 'sword' && getSwordBladeSwungCanvas()) _ctx.drawImage(getSwordBladeSwungCanvas(), px - 16, py + 1);
-    else if (!wpnSt && handWeapon === 0 && getFistCanvas()) _ctx.drawImage(getFistCanvas(), px - 4, py + 10);
+    if (wpnSt === 'knife' && handWeapon === 0x1F && getDaggerBladeSwungCanvas()) ui.ctx.drawImage(getDaggerBladeSwungCanvas(), px - 16, py + 1);
+    else if (wpnSt === 'knife' && getKnifeBladeSwungCanvas()) ui.ctx.drawImage(getKnifeBladeSwungCanvas(), px - 16, py + 1);
+    else if (wpnSt === 'sword' && getSwordBladeSwungCanvas()) ui.ctx.drawImage(getSwordBladeSwungCanvas(), px - 16, py + 1);
+    else if (!wpnSt && handWeapon === 0 && getFistCanvas()) ui.ctx.drawImage(getFistCanvas(), px - 4, py + 10);
   }
 }
 
@@ -284,22 +277,22 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
     if (isRunPose) {
       let slideX = 0;
       slideX = Math.min(battleSt.battleTimer / 300, 1) * 20;
-      _ctx.save();
-      _ctx.beginPath();
-      _ctx.rect(HUD_RIGHT_X + 8, HUD_VIEW_Y + 8 - 3, 16, 19);
-      _ctx.clip();
-      _ctx.drawImage(bsc.sweatFrames[sweatIdx], px + slideX, py - 3);
-      _ctx.restore();
+      ui.ctx.save();
+      ui.ctx.beginPath();
+      ui.ctx.rect(HUD_RIGHT_X + 8, HUD_VIEW_Y + 8 - 3, 16, 19);
+      ui.ctx.clip();
+      ui.ctx.drawImage(bsc.sweatFrames[sweatIdx], px + slideX, py - 3);
+      ui.ctx.restore();
     } else if (battleSt.battleState === 'encounter-box-close' && battleSt.runSlideBack) {
       const t = Math.min(battleSt.battleTimer / 300, 1);
-      _ctx.save();
-      _ctx.beginPath();
-      _ctx.rect(HUD_RIGHT_X + 8, HUD_VIEW_Y + 8 - 3, 16, 19);
-      _ctx.clip();
-      _ctx.drawImage(bsc.sweatFrames[sweatIdx], px, py - 3 + (1 - t) * 20);
-      _ctx.restore();
+      ui.ctx.save();
+      ui.ctx.beginPath();
+      ui.ctx.rect(HUD_RIGHT_X + 8, HUD_VIEW_Y + 8 - 3, 16, 19);
+      ui.ctx.clip();
+      ui.ctx.drawImage(bsc.sweatFrames[sweatIdx], px, py - 3 + (1 - t) * 20);
+      ui.ctx.restore();
     } else {
-      _ctx.drawImage(bsc.sweatFrames[sweatIdx], px, py - 3);
+      ui.ctx.drawImage(bsc.sweatFrames[sweatIdx], px, py - 3);
     }
   }
   // Status sprite above portrait — show highest priority active status
@@ -311,7 +304,7 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
         const frames = bsc.statusSpriteMap.get(flag);
         if (frames && frames.length === 2) {
           const f = frames[Math.floor(Date.now() / 133) & 1];
-          _ctx.drawImage(f, px, py - 4);
+          ui.ctx.drawImage(f, px, py - 4);
         }
         break;
       }
@@ -319,7 +312,7 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
   }
   // Item target cursor on player portrait (only when not targeting an ally)
   if (battleSt.battleState === 'item-target-select' && inputSt.itemTargetType === 'player' && inputSt.itemTargetAllyIndex < 0 && _cursorTileCanvas()) {
-    _ctx.drawImage(_cursorTileCanvas(), px - 12, py + 4);
+    ui.ctx.drawImage(_cursorTileCanvas(), px - 12, py + 4);
   }
   // Enemy slash effect on player portrait during PVP melee attack swing
   if (battleSt.battleState === 'pvp-enemy-slash') {
@@ -330,11 +323,11 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
     const af = Math.min(2, Math.floor(battleSt.battleTimer / 67));
     if (eSlashF && eSlashF[af]) {
       const sf = eSlashF[af];
-      _ctx.save();
-      _ctx.translate(px + sf.width + [-0, -10, 8][af], py + [0, -6, 8][af]);
-      _ctx.scale(-1, 1);
-      _ctx.drawImage(sf, 0, 0);
-      _ctx.restore();
+      ui.ctx.save();
+      ui.ctx.translate(px + sf.width + [-0, -10, 8][af], py + [0, -6, 8][af]);
+      ui.ctx.scale(-1, 1);
+      ui.ctx.drawImage(sf, 0, 0);
+      ui.ctx.restore();
     }
   }
 }
@@ -349,14 +342,14 @@ function _drawBattlePortrait() {
 
     // Phase 1: kneel slides down, clipped to inner portrait area (16×16)
     if (dt < DEATH_SLIDE_MS) {
-      _ctx.save();
-      _ctx.beginPath();
-      _ctx.rect(px, py, 16, 16);
-      _ctx.clip();
+      ui.ctx.save();
+      ui.ctx.beginPath();
+      ui.ctx.rect(px, py, 16, 16);
+      ui.ctx.clip();
       const slideT = dt / DEATH_SLIDE_MS;
       const slideY = Math.floor(slideT * 16);
-      if (bsc.battlePoses.kneel) _ctx.drawImage(bsc.battlePoses.kneel, px, py + slideY);
-      _ctx.restore();
+      if (bsc.battlePoses.kneel) ui.ctx.drawImage(bsc.battlePoses.kneel, px, py + slideY);
+      ui.ctx.restore();
     }
 
     // Phase 3: death pose fades in, centered in the name/HP info box
@@ -364,11 +357,11 @@ function _drawBattlePortrait() {
       const fadeT = Math.min((dt - DEATH_SLIDE_MS - DEATH_TXTFADE_MS) / DEATH_POSEFADE_MS, 1);
       const deathCanvas = (fakePlayerDeathPoseCanvases[ps.jobIdx] || fakePlayerDeathPoseCanvases[0])?.[0];
       if (deathCanvas) {
-        _ctx.globalAlpha = fadeT;
+        ui.ctx.globalAlpha = fadeT;
         const dx = HUD_RIGHT_X + HUD_RIGHT_W - 24 - 8;
         const dy = HUD_VIEW_Y + Math.floor((32 - 16) / 2);
-        _ctx.drawImage(deathCanvas, dx, dy);
-        _ctx.globalAlpha = 1;
+        ui.ctx.drawImage(deathCanvas, dx, dy);
+        ui.ctx.globalAlpha = 1;
       }
     }
     return;
@@ -407,9 +400,9 @@ function _drawBattleCritFlash() {
   if (battleSt.critFlashTimer === 0) battleSt.critFlashTimer = Date.now();
   if (Date.now() - battleSt.critFlashTimer < 17) {
     clipToViewport();
-    _ctx.fillStyle = '#DAA336';
-    _ctx.fillRect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
-    _ctx.restore();
+    ui.ctx.fillStyle = '#DAA336';
+    ui.ctx.fillRect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
+    ui.ctx.restore();
   } else { battleSt.critFlashTimer = -1; }
 }
 function _drawBattleStrobeFlash() {
@@ -422,20 +415,20 @@ function _drawBattleDefeat() {
   const ecx = HUD_VIEW_X + HUD_VIEW_W / 2;
   const ecy = HUD_VIEW_Y + HUD_VIEW_H / 2;
   if (battleSt.battleState === 'defeat-monster-fade') {
-    _ctx.save();
-    _ctx.globalAlpha = Math.min(battleSt.battleTimer / 500, 1);
-    _ctx.fillStyle = '#000';
+    ui.ctx.save();
+    ui.ctx.globalAlpha = Math.min(battleSt.battleTimer / 500, 1);
+    ui.ctx.fillStyle = '#000';
     if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
       const { fullW: fw, fullH: fh } = _encounterBoxDims();
-      _ctx.fillRect(Math.round(ecx - fw / 2) + 8, Math.round(ecy - fh / 2) + 8, fw - 16, fh - 16);
+      ui.ctx.fillRect(Math.round(ecx - fw / 2) + 8, Math.round(ecy - fh / 2) + 8, fw - 16, fh - 16);
     } else {
-      if (!pvpSt.isPVPBattle) _ctx.fillRect(ecx - 24, ecy - 24, 48, 48);
+      if (!pvpSt.isPVPBattle) ui.ctx.fillRect(ecx - 24, ecy - 24, 48, 48);
     }
-    _ctx.restore();
+    ui.ctx.restore();
   }
   if (battleSt.battleState === 'defeat-text') {
     const tw = measureText(BATTLE_GAME_OVER);
-    drawText(_ctx, Math.floor(ecx - tw / 2), Math.floor(ecy - 4), BATTLE_GAME_OVER, TEXT_WHITE);
+    drawText(ui.ctx, Math.floor(ecx - tw / 2), Math.floor(ecy - 4), BATTLE_GAME_OVER, TEXT_WHITE);
   }
 }
 function drawBattle() {
@@ -456,10 +449,10 @@ function drawBattle() {
 function _drawBattleItemList(baseX, rightAreaW, invPal, slidePixel, totalInvPages) {
   const rowH = 14;
   const topY = HUD_BOT_Y + 12;
-  _ctx.save();
-  _ctx.beginPath();
-  _ctx.rect(baseX - 8, HUD_BOT_Y + 8, rightAreaW + 8, HUD_BOT_H - 16);
-  _ctx.clip();
+  ui.ctx.save();
+  ui.ctx.beginPath();
+  ui.ctx.rect(baseX - 8, HUD_BOT_Y + 8, rightAreaW + 8, HUD_BOT_H - 16);
+  ui.ctx.clip();
   for (let pg = 0; pg <= 1 + totalInvPages; pg++) {
     const pageOff = (pg - inputSt.itemPage) * rightAreaW + slidePixel;
     const px = baseX + pageOff;
@@ -470,11 +463,11 @@ function _drawBattleItemList(baseX, rightAreaW, invPal, slidePixel, totalInvPage
       const rName = ps.weaponR !== 0 ? getItemNameClean(ps.weaponR) : new Uint8Array([0xC2,0xC2,0xC2]);
       const rRow = new Uint8Array(RH_LABEL.length + rName.length);
       rRow.set(RH_LABEL, 0); rRow.set(rName, RH_LABEL.length);
-      drawText(_ctx, px + 8, topY, rRow, invPal);
+      drawText(ui.ctx, px + 8, topY, rRow, invPal);
       const lName = ps.weaponL !== 0 ? getItemNameClean(ps.weaponL) : new Uint8Array([0xC2,0xC2,0xC2]);
       const lRow = new Uint8Array(LH_LABEL.length + lName.length);
       lRow.set(LH_LABEL, 0); lRow.set(lName, LH_LABEL.length);
-      drawText(_ctx, px + 8, topY + rowH + 6, lRow, invPal);
+      drawText(ui.ctx, px + 8, topY + rowH + 6, lRow, invPal);
     } else {
       const startIdx = (pg - 1) * INV_SLOTS;
       for (let r = 0; r < INV_SLOTS; r++) {
@@ -485,11 +478,11 @@ function _drawBattleItemList(baseX, rightAreaW, invPal, slidePixel, totalInvPage
         const nameBytes = getItemNameClean(item.id);
         const countStr = String(item.count);
         const rowBytes = _buildItemRowBytes(nameBytes, countStr);
-        drawText(_ctx, px + 8, topY + r * rowH, rowBytes, invPal);
+        drawText(ui.ctx, px + 8, topY + r * rowH, rowBytes, invPal);
       }
     }
   }
-  _ctx.restore();
+  ui.ctx.restore();
 }
 function _drawBattleItemCursors(baseX) {
   if (!_cursorTileCanvas() || battleSt.battleState !== 'item-select') return;
@@ -501,10 +494,10 @@ function _drawBattleItemCursors(baseX) {
     const heldIsEq = inputSt.itemHeldIdx <= -100;
     const heldPage = heldIsEq ? 0 : 1 + Math.floor(inputSt.itemHeldIdx / INV_SLOTS);
     const heldRow  = heldIsEq ? -(inputSt.itemHeldIdx + 100) : inputSt.itemHeldIdx % INV_SLOTS;
-    if (heldPage === inputSt.itemPage) _ctx.drawImage(_cursorTileCanvas(), curPx, rowY(heldPage, heldRow) - 4);
+    if (heldPage === inputSt.itemPage) ui.ctx.drawImage(_cursorTileCanvas(), curPx, rowY(heldPage, heldRow) - 4);
   }
   const activeX = inputSt.itemHeldIdx !== -1 ? curPx - 4 : curPx;
-  _ctx.drawImage(_cursorTileCanvas(), activeX, rowY(inputSt.itemPage, inputSt.itemPageCursor) - 4);
+  ui.ctx.drawImage(_cursorTileCanvas(), activeX, rowY(inputSt.itemPage, inputSt.itemPageCursor) - 4);
 }
 function _drawBattleItemPanel(menuX) {
   const ITEM_SLIDE_MS = 200;
@@ -548,16 +541,16 @@ function drawBattleMenu() {
   if (isSlide) panelOffX = Math.round(-CANVAS_W * (1 - Math.min(battleSt.battleTimer / BOSS_BOX_EXPAND_MS, 1)));
   else if (isClose) panelOffX = Math.round(-CANVAS_W * Math.min(battleSt.battleTimer / (VICTORY_BOX_ROWS * VICTORY_ROW_FRAME_MS), 1));
 
-  _ctx.save();
-  _ctx.beginPath(); _ctx.rect(8, HUD_BOT_Y, CANVAS_W - 16, HUD_BOT_H); _ctx.clip();
-  _ctx.translate(panelOffX, 0);
-  _ctx.fillStyle = '#000';
-  _ctx.fillRect(8, HUD_BOT_Y + 8, CANVAS_W - 16, HUD_BOT_H - 16);
+  ui.ctx.save();
+  ui.ctx.beginPath(); ui.ctx.rect(8, HUD_BOT_Y, CANVAS_W - 16, HUD_BOT_H); ui.ctx.clip();
+  ui.ctx.translate(panelOffX, 0);
+  ui.ctx.fillStyle = '#000';
+  ui.ctx.fillRect(8, HUD_BOT_Y + 8, CANVAS_W - 16, HUD_BOT_H - 16);
 
   const boxW = BATTLE_PANEL_W, boxH = HUD_BOT_H;
   if ((!isVictory && !isRunBox) || (battleSt.battleState === 'encounter-box-close' && battleSt.runSlideBack))
     drawBorderedBox(0, HUD_BOT_Y, boxW, boxH);
-  if (!isMenu && !isVictory) { _ctx.restore(); return; }
+  if (!isMenu && !isVictory) { ui.ctx.restore(); return; }
 
   let fadeStep = 0;
   if (isFade) fadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(battleSt.battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
@@ -579,25 +572,25 @@ function drawBattleMenu() {
         const t = battleSt.battleTimer;
         if (t < 400) {
           const alpha = 1 - t / 400;
-          _ctx.globalAlpha = alpha;
+          ui.ctx.globalAlpha = alpha;
           const rowH = 10;
           const startY = HUD_BOT_Y + Math.floor((boxH - names.length * rowH) / 2);
           names.forEach((nb, i) => {
-            drawText(_ctx, Math.floor((boxW - measureText(nb)) / 2), startY + i * rowH, nb, fadedPal);
+            drawText(ui.ctx, Math.floor((boxW - measureText(nb)) / 2), startY + i * rowH, nb, fadedPal);
           });
-          _ctx.globalAlpha = 1;
+          ui.ctx.globalAlpha = 1;
         } else {
           const alpha = Math.min((t - 400) / 400, 1);
-          _ctx.globalAlpha = alpha;
+          ui.ctx.globalAlpha = alpha;
           const tw = measureText(BATTLE_DEFEATED);
-          drawText(_ctx, Math.floor((boxW - tw) / 2), HUD_BOT_Y + Math.floor((boxH - 8) / 2), BATTLE_DEFEATED, fadedPal);
-          _ctx.globalAlpha = 1;
+          drawText(ui.ctx, Math.floor((boxW - tw) / 2), HUD_BOT_Y + Math.floor((boxH - 8) / 2), BATTLE_DEFEATED, fadedPal);
+          ui.ctx.globalAlpha = 1;
         }
       } else {
         const rowH = 10;
         const startY = HUD_BOT_Y + Math.floor((boxH - names.length * rowH) / 2);
         names.forEach((nb, i) => {
-          drawText(_ctx, Math.floor((boxW - measureText(nb)) / 2), startY + i * rowH, nb, fadedPal);
+          drawText(ui.ctx, Math.floor((boxW - measureText(nb)) / 2), startY + i * rowH, nb, fadedPal);
         });
       }
     } else if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
@@ -605,18 +598,18 @@ function drawBattleMenu() {
       const rowH = 10;
       const startY = HUD_BOT_Y + Math.floor((boxH - names.length * rowH) / 2);
       names.forEach((nb, i) => {
-        drawText(_ctx, Math.floor((boxW - measureText(nb)) / 2), startY + i * rowH, nb, fadedPal);
+        drawText(ui.ctx, Math.floor((boxW - measureText(nb)) / 2), startY + i * rowH, nb, fadedPal);
       });
     } else {
       const enemyName = _battleEnemyName();
-      drawText(_ctx, Math.floor((boxW - measureText(enemyName)) / 2), HUD_BOT_Y + Math.floor((boxH - 8) / 2), enemyName, fadedPal);
+      drawText(ui.ctx, Math.floor((boxW - measureText(enemyName)) / 2), HUD_BOT_Y + Math.floor((boxH - 8) / 2), enemyName, fadedPal);
     }
   }
   const menuX = boxW + 8;
   const positions = [[menuX, HUD_BOT_Y+16], [menuX+56, HUD_BOT_Y+16], [menuX, HUD_BOT_Y+32], [menuX+56, HUD_BOT_Y+32]];
   _drawBattleMenuItems(positions, isVictory, isClose, isFade, fadedPal, menuX);
   _drawBattleMenuCursor(positions, isFade, fadeStep);
-  _ctx.restore();
+  ui.ctx.restore();
 }
 
 function _drawBattleMenuItems(positions, isVictory, isClose, isFade, fadedPal, menuX) {
@@ -640,7 +633,7 @@ function _drawBattleMenuItems(positions, isVictory, isClose, isFade, fadedPal, m
       menuPal = isVictory ? [0x0F, 0x0F, 0x0F, 0x30] : fadedPal;
     }
     for (let i = 0; i < BATTLE_MENU_ITEMS.length; i++)
-      drawText(_ctx, positions[i][0], positions[i][1], BATTLE_MENU_ITEMS[i], menuPal);
+      drawText(ui.ctx, positions[i][0], positions[i][1], BATTLE_MENU_ITEMS[i], menuPal);
   }
   if (isItemShowInv) _drawBattleItemPanel(menuX);
 }
@@ -680,11 +673,11 @@ function _drawEncounterMonsters(gridPos, sprH, boxX, boxY, boxW, boxH, isSlideIn
   let slideOffX = 0;
   if (isSlideIn) slideOffX = Math.floor((1 - Math.min(battleSt.battleTimer / MONSTER_SLIDE_MS, 1)) * (fullW + 32));
 
-  _ctx.save();
-  _ctx.beginPath();
-  _ctx.rect(boxX + 8, boxY + 8, boxW - 16, boxH - 16);
-  _ctx.clip();
-  _ctx.imageSmoothingEnabled = false;
+  ui.ctx.save();
+  ui.ctx.beginPath();
+  ui.ctx.rect(boxX + 8, boxY + 8, boxW - 16, boxH - 16);
+  ui.ctx.clip();
+  ui.ctx.imageSmoothingEnabled = false;
 
   const count = battleSt.encounterMonsters.length;
   for (let i = 0; i < count; i++) {
@@ -714,17 +707,17 @@ function _drawEncounterMonsters(gridPos, sprH, boxX, boxY, boxW, boxH, isSlideIn
       const isHitBlink = (isBeingHit && battleSt.battleState === 'player-slash' && curHit && !curHit.miss && (Math.floor(battleSt.battleTimer / 60) & 1)) ||
                          (isBeingHit && battleSt.battleState === 'ally-slash' && battleSt.allyHitResult && !battleSt.allyHitResult.miss && (Math.floor(battleSt.battleTimer / 60) & 1));
       const isFlashing = battleSt.battleState === 'enemy-flash' && battleSt.currentAttacker === i && Math.floor(battleSt.battleTimer / 33) % 2 === 1;
-      if (!isHitBlink) _ctx.drawImage(isFlashing ? sprWhite : sprNormal, drawX, drawY);
+      if (!isHitBlink) ui.ctx.drawImage(isFlashing ? sprWhite : sprNormal, drawX, drawY);
     }
   }
 
   _drawEncounterSlashEffects(gridPos, slideOffX, slotCenterY);
-  _ctx.restore();
+  ui.ctx.restore();
 }
 function _drawEncounterSlashEffects(gridPos, slideOffX, slotCenterY) {
   if (battleSt.battleState === 'player-slash' && bsc.slashFrames && battleSt.slashFrame < SLASH_FRAMES && inputSt.hitResults && inputSt.hitResults[battleSt.currentHitIdx] && !inputSt.hitResults[battleSt.currentHitIdx].miss) {
     const pos = gridPos[inputSt.targetIndex];
-    _ctx.drawImage(bsc.slashFrames[battleSt.slashFrame], pos.x - slideOffX + battleSt.slashOffX + 8, slotCenterY(inputSt.targetIndex) + battleSt.slashOffY);
+    ui.ctx.drawImage(bsc.slashFrames[battleSt.slashFrame], pos.x - slideOffX + battleSt.slashOffX + 8, slotCenterY(inputSt.targetIndex) + battleSt.slashOffY);
   }
   if (battleSt.battleState === 'ally-slash' && battleSt.allyHitResult && !battleSt.allyHitResult.miss) {
     const ally = battleSt.battleAllies[battleSt.currentAllyAttacker];
@@ -735,7 +728,7 @@ function _drawEncounterSlashEffects(gridPos, slideOffX, slotCenterY) {
     const pos = gridPos[battleSt.allyTargetIndex];
     if (pos && allySlashFrames && allySlashFrames[af]) {
       const scatterX = [0, 10, -8][af], scatterY = [0, -6, 8][af];
-      _ctx.drawImage(allySlashFrames[af], pos.x + 8 + scatterX, slotCenterY(battleSt.allyTargetIndex) + scatterY);
+      ui.ctx.drawImage(allySlashFrames[af], pos.x + 8 + scatterX, slotCenterY(battleSt.allyTargetIndex) + scatterY);
     }
   }
 }
@@ -744,10 +737,10 @@ function _drawEncounterCursors(gridPos, count, slotCenterY) {
   if (!(battleSt.battleState === 'target-select' || (battleSt.battleState === 'item-target-select' && inputSt.itemTargetType === 'enemy')) || !_cursorTileCanvas()) return;
   if (battleSt.battleState === 'target-select') {
     const pos = gridPos[inputSt.targetIndex];
-    _ctx.drawImage(_cursorTileCanvas(), pos.x - 10, slotCenterY(inputSt.targetIndex) - 4);
+    ui.ctx.drawImage(_cursorTileCanvas(), pos.x - 10, slotCenterY(inputSt.targetIndex) - 4);
   } else if (inputSt.itemTargetMode === 'single') {
     const pos = gridPos[inputSt.itemTargetIndex];
-    if (pos) _ctx.drawImage(_cursorTileCanvas(), pos.x - 10, slotCenterY(inputSt.itemTargetIndex) - 4);
+    if (pos) ui.ctx.drawImage(_cursorTileCanvas(), pos.x - 10, slotCenterY(inputSt.itemTargetIndex) - 4);
   } else if (Math.floor(Date.now() / 133) & 1) {
     const _rightCols = count === 1 ? [0] : count === 2 ? [1] : [1, 3];
     const _leftCols  = count === 2 ? [0] : count >= 3 ? [0, 2] : [];
@@ -755,7 +748,7 @@ function _drawEncounterCursors(gridPos, count, slotCenterY) {
     if (inputSt.itemTargetMode === 'all') targets = battleSt.encounterMonsters.map((m, i) => m.hp > 0 ? i : -1).filter(i => i >= 0);
     else if (inputSt.itemTargetMode === 'col-right') targets = _rightCols.filter(i => i < count && battleSt.encounterMonsters[i]?.hp > 0);
     else if (inputSt.itemTargetMode === 'col-left') targets = _leftCols.filter(i => i < count && battleSt.encounterMonsters[i]?.hp > 0);
-    for (const ti of targets) if (gridPos[ti]) _ctx.drawImage(_cursorTileCanvas(), gridPos[ti].x - 10, slotCenterY(ti) - 4);
+    for (const ti of targets) if (gridPos[ti]) ui.ctx.drawImage(_cursorTileCanvas(), gridPos[ti].x - 10, slotCenterY(ti) - 4);
   }
 }
 
@@ -791,7 +784,7 @@ function drawEncounterBox() {
   clipToViewport();
   drawBorderedBox(boxX, boxY, boxW, boxH);
 
-  if (isExpand || isClose || battleSt.battleState === 'defeat-text') { _ctx.restore(); return; }
+  if (isExpand || isClose || battleSt.battleState === 'defeat-text') { ui.ctx.restore(); return; }
 
   const gridPos = _encounterGridPos(boxX, boxY, fullW, fullH, count, sprH, row0H, row1H);
   const rowH = (idx) => idx < 2 ? row0H : row1H;
@@ -803,24 +796,24 @@ function drawEncounterBox() {
   };
   _drawEncounterMonsters(gridPos, sprH, boxX, boxY, boxW, boxH, isSlideIn, fullW, slotCenterY, row0H, row1H);
   _drawEncounterCursors(gridPos, count, slotCenterY);
-  _ctx.restore();
+  ui.ctx.restore();
 }
 
 function _drawBossSprite(centerX, centerY) {
   const sprX = centerX - 24, sprY = centerY - 24;
-  _ctx.imageSmoothingEnabled = false;
+  ui.ctx.imageSmoothingEnabled = false;
   if (battleSt.battleState === 'boss-appear' || battleSt.battleState === 'boss-dissolve') {
     _drawDissolvedSprite(sprX, sprY, battleSt.battleState === 'boss-dissolve');
   } else if (battleSt.battleState === 'enemy-flash') {
     const frame = Math.floor(battleSt.battleTimer / (BOSS_PREFLASH_MS / 8));
-    if (!battleSt.enemyDefeated) _ctx.drawImage((frame & 1) ? (getBossWhiteCanvas() || getBossBattleCanvas()) : getBossBattleCanvas(), sprX, sprY);
+    if (!battleSt.enemyDefeated) ui.ctx.drawImage((frame & 1) ? (getBossWhiteCanvas() || getBossBattleCanvas()) : getBossBattleCanvas(), sprX, sprY);
   } else if (battleSt.battleState === 'player-slash') {
-    if (!(Math.floor(battleSt.battleTimer / 60) & 1) && !battleSt.enemyDefeated) _ctx.drawImage(getBossBattleCanvas(), sprX, sprY);
+    if (!(Math.floor(battleSt.battleTimer / 60) & 1) && !battleSt.enemyDefeated) ui.ctx.drawImage(getBossBattleCanvas(), sprX, sprY);
     if (bsc.slashFrames && battleSt.slashFrame < SLASH_FRAMES && !battleSt.enemyDefeated && inputSt.hitResults && inputSt.hitResults[battleSt.currentHitIdx] && !inputSt.hitResults[battleSt.currentHitIdx].miss)
-      _ctx.drawImage(bsc.slashFrames[battleSt.slashFrame], centerX - 8 + battleSt.slashOffX, centerY - 8 + battleSt.slashOffY);
+      ui.ctx.drawImage(bsc.slashFrames[battleSt.slashFrame], centerX - 8 + battleSt.slashOffX, centerY - 8 + battleSt.slashOffY);
   } else if (battleSt.battleState === 'ally-slash') {
     const blinkHidden = battleSt.allyHitResult && !battleSt.allyHitResult.miss && (Math.floor(battleSt.battleTimer / 60) & 1);
-    if (!blinkHidden && !battleSt.enemyDefeated) _ctx.drawImage(getBossBattleCanvas(), sprX, sprY);
+    if (!blinkHidden && !battleSt.enemyDefeated) ui.ctx.drawImage(getBossBattleCanvas(), sprX, sprY);
     if (!battleSt.enemyDefeated && battleSt.allyHitResult && !battleSt.allyHitResult.miss) {
       const ally = battleSt.battleAllies[battleSt.currentAllyAttacker];
       const isLeft = battleSt.allyHitIsLeft;
@@ -828,10 +821,10 @@ function _drawBossSprite(centerX, centerY) {
       const allySlashFrames = ally ? getSlashFramesForWeapon(activeWpnId, !isLeft) : bsc.slashFramesR;
       const af = Math.min(Math.floor(battleSt.battleTimer / SLASH_FRAME_MS), 2);
       if (allySlashFrames && allySlashFrames[af])
-        _ctx.drawImage(allySlashFrames[af], centerX - 8 + [0,10,-8][af], centerY - 8 + [0,-6,8][af]);
+        ui.ctx.drawImage(allySlashFrames[af], centerX - 8 + [0,10,-8][af], centerY - 8 + [0,-6,8][af]);
     }
   } else {
-    if (!battleSt.enemyDefeated) _ctx.drawImage(getBossBattleCanvas(), sprX, sprY);
+    if (!battleSt.enemyDefeated) ui.ctx.drawImage(getBossBattleCanvas(), sprX, sprY);
   }
 }
 function _drawBossSpriteBoxBoss(centerX, centerY) {
@@ -844,14 +837,14 @@ function _drawBossSpriteBoxBoss(centerX, centerY) {
   const { boxW, boxH } = _calcBoxExpandSize(fullW, fullH, isExpand, isClose, battleSt.battleTimer);
   drawBorderedBox(centerX - Math.floor(boxW / 2), centerY - Math.floor(boxH / 2), boxW, boxH);
 
-  if (isExpand || isClose || battleSt.battleState === 'defeat-text') { _ctx.restore(); return; }
+  if (isExpand || isClose || battleSt.battleState === 'defeat-text') { ui.ctx.restore(); return; }
 
   _drawBossSprite(centerX, centerY);
 
   if ((battleSt.battleState === 'target-select' || (battleSt.battleState === 'item-target-select' && inputSt.itemTargetType === 'enemy')) && _cursorTileCanvas())
-    _ctx.drawImage(_cursorTileCanvas(), centerX - 32 - 16, centerY - 8);
+    ui.ctx.drawImage(_cursorTileCanvas(), centerX - 32 - 16, centerY - 8);
 
-  _ctx.restore();
+  ui.ctx.restore();
 }
 function drawBossSpriteBox() {
   if (battleSt.isRandomEncounter) return;
@@ -917,7 +910,7 @@ function _drawDissolvedSprite(sprX, sprY, reverse) {
       // Appear: blocks before current are fully visible, after are invisible
       if (blockFrame >= BOSS_DISSOLVE_STEPS) {
         // Fully revealed
-        _ctx.drawImage(src, bx, by, BOSS_BLOCK_SIZE, BOSS_BLOCK_SIZE,
+        ui.ctx.drawImage(src, bx, by, BOSS_BLOCK_SIZE, BOSS_BLOCK_SIZE,
                       sprX + bx, sprY + by, BOSS_BLOCK_SIZE, BOSS_BLOCK_SIZE);
       } else if (blockFrame >= 0) {
         // Dissolving in: shift = 7 - blockFrame (7→0)
@@ -935,7 +928,7 @@ function _drawDissolvedSprite(sprX, sprY, reverse) {
         _drawShiftedBlock(sctx, sprX, sprY, bx, by, shift);
       } else {
         // Not yet started — still fully visible
-        _ctx.drawImage(src, bx, by, BOSS_BLOCK_SIZE, BOSS_BLOCK_SIZE,
+        ui.ctx.drawImage(src, bx, by, BOSS_BLOCK_SIZE, BOSS_BLOCK_SIZE,
                       sprX + bx, sprY + by, BOSS_BLOCK_SIZE, BOSS_BLOCK_SIZE);
       }
     }
@@ -971,7 +964,7 @@ function _drawShiftedBlock(sctx, sprX, sprY, bx, by, shift) {
   }
 
   tc.putImageData(out, 0, 0);
-  _ctx.drawImage(_shiftBlockCanvas, sprX + bx, sprY + by);
+  ui.ctx.drawImage(_shiftBlockCanvas, sprX + bx, sprY + by);
 }
 
 function drawBattleMessage() {
@@ -990,9 +983,9 @@ function drawBattleMessage() {
   const tw = measureText(battleSt.battleMessage);
   const tx = centerX + Math.floor((boxW - tw) / 2);
   const ty = msgY + Math.floor((boxH - 8) / 2);
-  drawText(_ctx, tx, ty, battleSt.battleMessage, TEXT_WHITE_ON_BLUE);
+  drawText(ui.ctx, tx, ty, battleSt.battleMessage, TEXT_WHITE_ON_BLUE);
 
-  _ctx.restore();
+  ui.ctx.restore();
 }
 
 
@@ -1074,7 +1067,7 @@ function _drawVictoryNameOut(boxX, boxY) {
   const fadedPal = _makeFadedPal(fadeStep);
   const enemyName = _battleEnemyName();
   const nameTw = measureText(enemyName);
-  drawText(_ctx, Math.floor((VICTORY_BOX_W - nameTw) / 2), boxY + Math.floor((VICTORY_BOX_H - 8) / 2), enemyName, fadedPal);
+  drawText(ui.ctx, Math.floor((VICTORY_BOX_W - nameTw) / 2), boxY + Math.floor((VICTORY_BOX_H - 8) / 2), enemyName, fadedPal);
 }
 
 function _drawRewardText(boxX, boxY) {
@@ -1094,7 +1087,7 @@ function _drawRewardText(boxX, boxY) {
     fadeStep = Math.min(Math.floor(battleSt.battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
   const pal = _makeFadedPal(fadeStep);
   const tw = measureText(msg);
-  drawText(_ctx, boxX + Math.floor((VICTORY_BOX_W - tw) / 2), boxY + Math.floor((VICTORY_BOX_H - 8) / 2), msg, pal);
+  drawText(ui.ctx, boxX + Math.floor((VICTORY_BOX_W - tw) / 2), boxY + Math.floor((VICTORY_BOX_H - 8) / 2), msg, pal);
 }
 
 const DEATH_SLIDE_MS    = 500;
@@ -1118,7 +1111,7 @@ function _drawAllyRow(i, ally, panelTop, weaponDraws) {
   // Death animation: slide → text fade → death pose fade
   if (ally.deathTimer != null) {
     const dt = Math.min(ally.deathTimer, DEATH_TOTAL_MS);
-    _ctx.save();
+    ui.ctx.save();
 
     // Phase 1: kneel portrait slides down, clipped to inner portrait area (16×16)
     if (dt < DEATH_SLIDE_MS) {
@@ -1127,33 +1120,33 @@ function _drawAllyRow(i, ally, panelTop, weaponDraws) {
       const kneelFrames = (fakePlayerKneelPortraits[ally.jobIdx || 0] || fakePlayerKneelPortraits[0])[ally.palIdx];
       const kneel = kneelFrames && kneelFrames[ally.fadeStep];
       if (kneel) {
-        _ctx.save();
-        _ctx.beginPath();
-        _ctx.rect(ppx, ppy, 16, 16);
-        _ctx.clip();
-        _ctx.drawImage(kneel, ppx, ppy + slideY);
-        _ctx.restore();
+        ui.ctx.save();
+        ui.ctx.beginPath();
+        ui.ctx.rect(ppx, ppy, 16, 16);
+        ui.ctx.clip();
+        ui.ctx.drawImage(kneel, ppx, ppy + slideY);
+        ui.ctx.restore();
       }
       _drawAllyTexts(i, ally, rowY, false, ppx, ppy, weaponDraws);
     } else if (dt < DEATH_SLIDE_MS + DEATH_TXTFADE_MS) {
       // Phase 2: name/HP text fades out
       const textAlpha = 1 - (dt - DEATH_SLIDE_MS) / DEATH_TXTFADE_MS;
-      _ctx.globalAlpha = textAlpha;
+      ui.ctx.globalAlpha = textAlpha;
       _drawAllyTexts(i, ally, rowY, false, ppx, ppy, weaponDraws);
-      _ctx.globalAlpha = 1;
+      ui.ctx.globalAlpha = 1;
     } else {
       // Phase 3: death pose fades in (24×16, centered in the name/HP info box)
       const fadeT = Math.min((dt - DEATH_SLIDE_MS - DEATH_TXTFADE_MS) / DEATH_POSEFADE_MS, 1);
       const deathCanvas = (fakePlayerDeathPoseCanvases[ally.jobIdx || 0] || fakePlayerDeathPoseCanvases[0])?.[ally.palIdx];
       if (deathCanvas) {
-        _ctx.globalAlpha = fadeT;
+        ui.ctx.globalAlpha = fadeT;
         const dx = HUD_RIGHT_X + HUD_RIGHT_W - 24 - 8;
         const dy = rowY + Math.floor((ROSTER_ROW_H - 16) / 2);
-        _ctx.drawImage(deathCanvas, dx, dy);
-        _ctx.globalAlpha = 1;
+        ui.ctx.drawImage(deathCanvas, dx, dy);
+        ui.ctx.globalAlpha = 1;
       }
     }
-    _ctx.restore();
+    ui.ctx.restore();
     return;
   }
 
@@ -1180,12 +1173,12 @@ function _drawAllyPortrait(i, ally, isVicPose, isAllyAttack, isAllyHit, isNearFa
     if (!hitLeft) {
       const wpnSt = weaponSubtype(ally.weaponId);
       const backX = ppx + 8;
-      if (wpnSt === 'knife' && ally.weaponId === 0x1F && getDaggerBladeCanvas()) _ctx.drawImage(getDaggerBladeCanvas(), backX, ppy - 7);
-      else if (wpnSt === 'knife' && getKnifeBladeCanvas()) _ctx.drawImage(getKnifeBladeCanvas(), backX, ppy - 7);
-      else if (wpnSt === 'sword' && getSwordBladeCanvas()) _ctx.drawImage(getSwordBladeCanvas(), backX, ppy - 7);
+      if (wpnSt === 'knife' && ally.weaponId === 0x1F && getDaggerBladeCanvas()) ui.ctx.drawImage(getDaggerBladeCanvas(), backX, ppy - 7);
+      else if (wpnSt === 'knife' && getKnifeBladeCanvas()) ui.ctx.drawImage(getKnifeBladeCanvas(), backX, ppy - 7);
+      else if (wpnSt === 'sword' && getSwordBladeCanvas()) ui.ctx.drawImage(getSwordBladeCanvas(), backX, ppy - 7);
     }
   }
-  _ctx.drawImage(portraits[ally.fadeStep], ppx, ppy);
+  ui.ctx.drawImage(portraits[ally.fadeStep], ppx, ppy);
   if (isAllyAttack) {
     if (hitLeft) {
       const wpnSt = weaponSubtype(ally.weaponL);
@@ -1205,7 +1198,7 @@ function _drawAllyPortrait(i, ally, isVicPose, isAllyAttack, isAllyHit, isNearFa
   // Near-fatal sweat — 2 frames alternating every 133ms, 3px above portrait
   if (isNearFatal && bsc.sweatFrames.length === 2 && !isAllyAttack && !isAllyHit && !isVicPose && !isThisAllySlash) {
     const sweatIdx = Math.floor(Date.now() / 133) & 1;
-    _ctx.drawImage(bsc.sweatFrames[sweatIdx], ppx, ppy - 3);
+    ui.ctx.drawImage(bsc.sweatFrames[sweatIdx], ppx, ppy - 3);
   }
   // PVP enemy slash overlay on targeted ally during ally-hit — h-flipped (opponent attacks from left)
   if (pvpSt.isPVPBattle && battleSt.battleState === 'ally-hit' && battleSt.enemyTargetAllyIdx === i) {
@@ -1216,11 +1209,11 @@ function _drawAllyPortrait(i, ally, isVicPose, isAllyAttack, isAllyHit, isNearFa
     const af = Math.min(2, Math.floor(battleSt.battleTimer / 67));
     if (eSlashF && eSlashF[af]) {
       const sf = eSlashF[af];
-      _ctx.save();
-      _ctx.translate(ppx + sf.width + [-0, -10, 8][af], ppy + [0, -6, 8][af]);
-      _ctx.scale(-1, 1);
-      _ctx.drawImage(sf, 0, 0);
-      _ctx.restore();
+      ui.ctx.save();
+      ui.ctx.translate(ppx + sf.width + [-0, -10, 8][af], ppy + [0, -6, 8][af]);
+      ui.ctx.scale(-1, 1);
+      ui.ctx.drawImage(sf, 0, 0);
+      ui.ctx.restore();
     }
   }
 }
@@ -1228,9 +1221,9 @@ function _drawAllyTexts(i, ally, rowY, isAllyHeal, ppx, ppy, weaponDraws) {
   const namePal = [0x0F, 0x0F, 0x0F, 0x30];
   for (let s = 0; s < ally.fadeStep; s++) namePal[3] = nesColorFade(namePal[3]);
   const nameBytes = _nameToBytes(ally.name);
-  drawText(_ctx, HUD_RIGHT_X + HUD_RIGHT_W - 8 - measureText(nameBytes), rowY + 8, nameBytes, namePal);
+  drawText(ui.ctx, HUD_RIGHT_X + HUD_RIGHT_W - 8 - measureText(nameBytes), rowY + 8, nameBytes, namePal);
   const panelLeft = HUD_RIGHT_X + 32 + 8;
-  drawLvHpRow(_ctx, panelLeft, HUD_RIGHT_X + HUD_RIGHT_W - 8, rowY + 16, ally.level || 1, ally.hp, ally.maxHP, ally.fadeStep);
+  drawLvHpRow(ui.ctx, panelLeft, HUD_RIGHT_X + HUD_RIGHT_W - 8, rowY + 16, ally.level || 1, ally.hp, ally.maxHP, ally.fadeStep);
   const dn = getAllyDamageNums()[i];
   if (dn) weaponDraws.push({ type: 'dmg', dn, bx: HUD_RIGHT_X + 20, by: _dmgBounceY(rowY + 16, dn.timer) });
   if (isAllyHeal && bsc.cureSparkleFrames.length === 2) {
@@ -1244,7 +1237,7 @@ function _flushAllyWeaponDraws(weaponDraws) {
       const { dn, bx, by } = wd;
       if (dn.miss) {
         const mc = getMissCanvas();
-        if (mc) _ctx.drawImage(mc, bx - 8, by);
+        if (mc) ui.ctx.drawImage(mc, bx - 8, by);
       } else {
         _drawBattleNum(bx, by, dn.value, dn.heal ? HEAL_NUM_PAL : DMG_NUM_PAL);
       }
@@ -1252,7 +1245,7 @@ function _flushAllyWeaponDraws(weaponDraws) {
       const { frame, px, py } = wd;
       drawSparkleCorners(frame, px, py);
     } else {
-      _ctx.drawImage(wd.img, wd.x, wd.y);
+      ui.ctx.drawImage(wd.img, wd.x, wd.y);
     }
   }
 }
@@ -1261,14 +1254,14 @@ function drawBattleAllies() {
   if (battleSt.battleAllies.length === 0 || battleSt.battleState === 'none') return;
   const panelTop = HUD_VIEW_Y + 32;
   const weaponDraws = [];
-  _ctx.save();
-  _ctx.beginPath();
-  _ctx.rect(HUD_RIGHT_X, panelTop, HUD_RIGHT_W, HUD_VIEW_H - 32);
-  _ctx.clip();
+  ui.ctx.save();
+  ui.ctx.beginPath();
+  ui.ctx.rect(HUD_RIGHT_X, panelTop, HUD_RIGHT_W, HUD_VIEW_H - 32);
+  ui.ctx.clip();
   for (let i = 0; i < battleSt.battleAllies.length; i++) _drawAllyRow(i, battleSt.battleAllies[i], panelTop, weaponDraws);
-  _ctx.restore();
+  ui.ctx.restore();
   if (battleSt.battleState === 'item-target-select' && inputSt.itemTargetType === 'player' && inputSt.itemTargetAllyIndex >= 0 && _cursorTileCanvas()) {
-    _ctx.drawImage(_cursorTileCanvas(), HUD_RIGHT_X - 4, panelTop + inputSt.itemTargetAllyIndex * ROSTER_ROW_H + 12);
+    ui.ctx.drawImage(_cursorTileCanvas(), HUD_RIGHT_X - 4, panelTop + inputSt.itemTargetAllyIndex * ROSTER_ROW_H + 12);
   }
   _flushAllyWeaponDraws(weaponDraws);
 }
@@ -1305,11 +1298,11 @@ function _drawBossDmgNum() {
   clipToViewport();
   if (getEnemyDmgNum().miss) {
     const mc = getMissCanvas();
-    if (mc) _ctx.drawImage(mc, bx - 8, by);
+    if (mc) ui.ctx.drawImage(mc, bx - 8, by);
   } else {
     _drawBattleNum(bx, by, getEnemyDmgNum().value, DMG_NUM_PAL);
   }
-  _ctx.restore();
+  ui.ctx.restore();
 }
 
 function _drawEnemyHealNum() {
@@ -1331,11 +1324,11 @@ function _drawEnemyHealNum() {
   const hy = _dmgBounceY(baseY, getEnemyHealNum().timer);
   clipToViewport();
   _drawBattleNum(bx, hy, getEnemyHealNum().value, HEAL_NUM_PAL);
-  _ctx.restore();
+  ui.ctx.restore();
 }
 
 function _drawBattleNum(bx, by, value, pal) {
-  _drawBattleNumCtx(_ctx, bx, by, value, pal);
+  _drawBattleNumCtx(ui.ctx, bx, by, value, pal);
 }
 function drawDamageNumbers() {
   _drawBossDmgNum();
@@ -1347,7 +1340,7 @@ function drawDamageNumbers() {
     const py = _dmgBounceY(baseY, getPlayerDamageNum().timer);
     if (getPlayerDamageNum().miss) {
       const mc = getMissCanvas();
-      if (mc) _ctx.drawImage(mc, px - 8, py);
+      if (mc) ui.ctx.drawImage(mc, px - 8, py);
     } else {
       _drawBattleNum(px, py, getPlayerDamageNum().value, DMG_NUM_PAL);
     }
@@ -1391,7 +1384,7 @@ function drawBattleMessageStrip() {
   const pal = _makeFadedPal(fadeStep);
   const y = MSG_STRIP_Y + 4;
   if (tw <= MSG_STRIP_W) {
-    drawText(_ctx, MSG_STRIP_X, y, msg.bytes, pal);
+    drawText(ui.ctx, MSG_STRIP_X, y, msg.bytes, pal);
   } else {
     const SCROLL_PAUSE = 400;
     const SCROLL_SPEED = 0.06;
@@ -1401,12 +1394,12 @@ function drawBattleMessageStrip() {
     if (holdT < SCROLL_PAUSE) scrollX = 0;
     else if (holdT < SCROLL_PAUSE + scrollMs) scrollX = (holdT - SCROLL_PAUSE) * SCROLL_SPEED;
     else scrollX = overflow;
-    _ctx.save();
-    _ctx.beginPath();
-    _ctx.rect(MSG_STRIP_X, MSG_STRIP_Y, MSG_STRIP_W, 16);
-    _ctx.clip();
-    drawText(_ctx, MSG_STRIP_X - scrollX, y, msg.bytes, pal);
-    _ctx.restore();
+    ui.ctx.save();
+    ui.ctx.beginPath();
+    ui.ctx.rect(MSG_STRIP_X, MSG_STRIP_Y, MSG_STRIP_W, 16);
+    ui.ctx.clip();
+    drawText(ui.ctx, MSG_STRIP_X - scrollX, y, msg.bytes, pal);
+    ui.ctx.restore();
   }
 }
 

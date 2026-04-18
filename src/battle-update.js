@@ -3,7 +3,8 @@
 
 import { battleSt, getEnemyHP, setEnemyHP, BOSS_MAX_HP,
          BATTLE_SHAKE_MS, MONSTER_DEATH_MS } from './battle-state.js';
-import { inputSt } from './input-handler.js';
+import { inputSt, keys } from './input-handler.js';
+import { sprite } from './player-sprite.js';
 import { pvpSt, resetPVPState, updatePVPBattle } from './pvp.js';
 import { hudSt } from './hud-state.js';
 import { mapSt } from './map-state.js';
@@ -59,17 +60,8 @@ const VICTORY_BOX_ROWS         = 8;
 const VICTORY_ROW_FRAME_MS     = 16.67;
 const POISON_TICK_MS           = 500;
 
-// ── Injected by initBattleUpdate() ─────────────────────────────────────────
-let _keys = {};
-let _getSprite = () => null;
-
-export function initBattleUpdate({ keys, getSprite }) {
-  _keys = keys;
-  _getSprite = getSprite;
-}
-
 // ── Helpers ────────────────────────────────────────────────────────────────
-function _zPressed() { if (!_keys['z'] && !_keys['Z']) return false; _keys['z'] = false; _keys['Z'] = false; return true; }
+function _zPressed() { if (!keys['z'] && !keys['Z']) return false; keys['z'] = false; keys['Z'] = false; return true; }
 
 // ── Exported utilities ─────────────────────────────────────────────────────
 
@@ -636,7 +628,7 @@ function _updateBoxClose() {
   if (battleSt.battleState === 'encounter-box-close') {
     if (battleSt.battleTimer >= BOSS_BOX_EXPAND_MS) {
       battleSt.battleState = 'none'; battleSt.battleTimer = 0; battleSt.runSlideBack = false;
-      _getSprite().setDirection(DIR_DOWN); battleSt.isRandomEncounter = false; battleSt.encounterMonsters = null;
+      sprite.setDirection(DIR_DOWN); battleSt.isRandomEncounter = false; battleSt.encounterMonsters = null;
       battleSt.dyingMonsterIndices = new Map(); battleSt.battleAllies = []; battleSt.allyJoinRound = 0;
       stopMusic(); resumeMusic();
     }
@@ -646,7 +638,7 @@ function _updateBoxClose() {
     if (battleSt.battleTimer >= BOSS_BOX_EXPAND_MS) {
       const wasPVP = pvpSt.isPVPBattle;
       resetPVPState();
-      battleSt.battleState = 'none'; battleSt.battleTimer = 0; _getSprite().setDirection(DIR_DOWN);
+      battleSt.battleState = 'none'; battleSt.battleTimer = 0; sprite.setDirection(DIR_DOWN);
       battleSt.battleAllies = []; battleSt.allyJoinRound = 0;
       if (!wasPVP) playTrack(TRACKS.CRYSTAL_ROOM);
       else resumeMusic();

@@ -7,10 +7,12 @@ import { getPlayerLocation } from './roster.js';
 import { queueBattleMsg } from './battle-msg.js';
 import { getBlades } from './weapon-sprites.js';
 import { getAllyDamageNums, getPlayerDamageNum, setPlayerDamageNum, getEnemyHealNum, setEnemyHealNum } from './damage-numbers.js';
+import { ui } from './ui-state.js';
+
+function _cursorTileCanvas() { return ui.cursorTileCanvas; }
 
 // Injected at boot
 let _ctx = null;
-let _cursorCanvas = () => null;
 let _blades = () => ({});
 let _processNextTurn = () => {};
 let _handleAlly = () => {};
@@ -23,10 +25,8 @@ let _buildAndProcessNextTurn = () => {};
 let _resetBattleVars = () => {};
 let _isTeamWiped = () => false;
 let _advancePVPTargetOrVictory = () => {};
-function _cursorTileCanvas() { return _cursorCanvas(); }
 export function initPVP(deps) {
   _ctx = deps.ctx;
-  _cursorCanvas = deps.cursorTileCanvas;
   _blades = deps.blades || (() => ({ ...getBlades() }));
   _processNextTurn = deps.processNextTurn;
   _handleAlly = deps.handleAlly;

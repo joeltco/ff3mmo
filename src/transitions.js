@@ -3,16 +3,9 @@
 import { playSFX, playTrack, SFX, TRACKS } from './music.js';
 import { DIR_LEFT, DIR_UP, DIR_RIGHT, DIR_DOWN } from './sprite.js';
 import { drawLoadingOverlay } from './loading-screen.js';
-
-// Injected by initTransitions()
-let _keys = {};
-let _getSprite = () => null;
-let _onShake = () => {};
-export function initTransitions({ keys, getSprite, onShake }) {
-  _keys = keys;
-  _getSprite = getSprite;
-  _onShake = onShake;
-}
+import { keys } from './input-handler.js';
+import { sprite } from './player-sprite.js';
+import { mapSt } from './map-state.js';
 
 // NES layout constants — must match game.js
 const HUD_VIEW_X = 0;
@@ -76,7 +69,6 @@ export function startWipeTransition(action, destMapId, rosterLocChanged = false)
   playSFX(SFX.SCREEN_CLOSE);
 }
 
-// sprite/keys/onShake are wired via initTransitions() at boot.
 export function updateTransition(dt) {
   if (transSt.state === 'none') return;
   transSt.timer += dt;
@@ -224,7 +216,6 @@ function _updateTransitionLoading(dt) {
       transSt.dungeon = false; playSFX(SFX.SCREEN_OPEN); playTrack(TRACKS.CRYSTAL_CAVE);
     }
   }
-  const keys = _keys;
   if (loadingSt.state === 'visible' && (keys['z'] || keys['Z'])) {
     keys['z'] = false; keys['Z'] = false;
     loadingSt.state = 'out'; loadingSt.timer = 0;
@@ -236,7 +227,7 @@ function _updateTransitionLoading(dt) {
 
 function _updateTransitionTrapFall() {
   const totalSpinTime = SPIN_INTERVAL * SPIN_DIRS_ORDER.length * SPIN_CYCLES;
-  _getSprite().setDirection(SPIN_DIRS_ORDER[Math.floor(transSt.timer / SPIN_INTERVAL) % SPIN_DIRS_ORDER.length]);
+  sprite.setDirection(SPIN_DIRS_ORDER[Math.floor(transSt.timer / SPIN_INTERVAL) % SPIN_DIRS_ORDER.length]);
   if (transSt.timer >= totalSpinTime) {
     if (transSt.pendingAction) {
       try { transSt.pendingAction(); } catch(e) { console.error('[TRANSITION pendingAction ERROR]', e); }
@@ -252,7 +243,7 @@ function _updateTransitionOpening() {
     if (transSt.trapShakePending) {
       transSt.trapShakePending = false;
       playSFX(SFX.EARTHQUAKE);
-      _onShake();
+      mapSt.shakeActive = true; mapSt.shakeTimer = 0;
     }
   }
 }

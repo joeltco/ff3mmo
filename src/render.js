@@ -9,6 +9,8 @@ import { getMonsterDeathFrames } from './monster-sprites.js';
 import { clipToViewport, grayViewport } from './hud-drawing.js';
 import { DIR_DOWN, DIR_UP, DIR_LEFT, DIR_RIGHT } from './sprite.js';
 import { poisonFlashTimer, setPoisonFlashTimer } from './movement.js';
+import { ui } from './ui-state.js';
+import { sprite } from './player-sprite.js';
 
 const CANVAS_W = 256;
 const CANVAS_H = 240;
@@ -23,13 +25,9 @@ const SCREEN_CENTER_Y = HUD_VIEW_Y + (HUD_VIEW_H - 16) / 2 - 3;
 const BATTLE_FLASH_FRAMES = 65;
 const BATTLE_FLASH_FRAME_MS = 16.67;
 
-let ctx = null;
-let getSprite = () => null;
 let waterSt = null;
 
 export function initRender(opts) {
-  ctx = opts.ctx;
-  getSprite = opts.getSprite;
   waterSt = opts.waterSt;
 }
 
@@ -45,7 +43,7 @@ function _renderSprites(camX, camY, originX, originY, spriteY) {
       const sy = flame.py - wTop;
       if (sx < -16 || sx > CANVAS_W || sy < -16 || sy > CANVAS_H) continue;
       const frames = _ff.get(flame.npcId);
-      ctx.drawImage(frames[flameFrame], sx, sy);
+      ui.ctx.drawImage(frames[flameFrame], sx, sy);
     }
   }
   if (mapSt.bossSprite) {
@@ -56,21 +54,20 @@ function _renderSprites(camX, camY, originX, originY, spriteY) {
       const bx = mapSt.bossSprite.px - wLeft;
       const by = mapSt.bossSprite.py - wTop;
       if (bx > -16 && bx < CANVAS_W && by > -16 && by < CANVAS_H) {
-        ctx.imageSmoothingEnabled = false;
-        ctx.drawImage(mapSt.bossSprite.frames[Math.floor(waterSt.tick / 8) & 1], bx, by);
+        ui.ctx.imageSmoothingEnabled = false;
+        ui.ctx.drawImage(mapSt.bossSprite.frames[Math.floor(waterSt.tick / 8) & 1], bx, by);
       }
     }
   }
-  const sprite = getSprite();
-  if (sprite) sprite.draw(ctx, SCREEN_CENTER_X, spriteY);
+  if (sprite) sprite.draw(ui.ctx, SCREEN_CENTER_X, spriteY);
 }
 
 function _renderMapAndWater(camX, camY, originX, originY, spriteY) {
   if (mapSt.onWorldMap && mapSt.worldMapRenderer) {
-    mapSt.worldMapRenderer.draw(ctx, camX, camY, originX, originY);
+    mapSt.worldMapRenderer.draw(ui.ctx, camX, camY, originX, originY);
     _updateWorldWater(mapSt.worldMapRenderer, waterSt.tick);
   } else if (mapSt.mapRenderer) {
-    mapSt.mapRenderer.draw(ctx, camX, camY, originX, originY);
+    mapSt.mapRenderer.draw(ui.ctx, camX, camY, originX, originY);
     _updateIndoorWater(mapSt.mapRenderer, waterSt.tick);
   }
   if (transSt.state === 'none' &&
@@ -78,9 +75,9 @@ function _renderMapAndWater(camX, camY, originX, originY, spriteY) {
     _renderSprites(camX, camY, originX, originY, spriteY);
   }
   if (mapSt.onWorldMap && mapSt.worldMapRenderer) {
-    mapSt.worldMapRenderer.drawOverlay(ctx, camX, camY, originX, originY, SCREEN_CENTER_X, spriteY);
+    mapSt.worldMapRenderer.drawOverlay(ui.ctx, camX, camY, originX, originY, SCREEN_CENTER_X, spriteY);
   } else if (mapSt.mapRenderer) {
-    mapSt.mapRenderer.drawOverlay(ctx, camX, camY, originX, originY, SCREEN_CENTER_X, spriteY);
+    mapSt.mapRenderer.drawOverlay(ui.ctx, camX, camY, originX, originY, SCREEN_CENTER_X, spriteY);
   }
 }
 
@@ -91,15 +88,15 @@ function _renderStarSpiral() {
   const tile = _st[(frame >> 4) & 1];
   for (let i = 0; i < 8; i++) {
     const a = angle + i * Math.PI / 4;
-    ctx.drawImage(tile,
+    ui.ctx.drawImage(tile,
       Math.round(SCREEN_CENTER_X + 8 + radius * Math.cos(a) - 8),
       Math.round(SCREEN_CENTER_Y + 8 + radius * Math.sin(a) - 8));
   }
 }
 
 export function render() {
-  ctx.fillStyle = '#000';
-  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  ui.ctx.fillStyle = '#000';
+  ui.ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
   let camX = Math.round(mapSt.worldX);
   const camY = Math.round(mapSt.worldY);
@@ -111,7 +108,7 @@ export function render() {
     _renderMapAndWater(camX, camY, SCREEN_CENTER_X, SCREEN_CENTER_Y + 3, SCREEN_CENTER_Y);
     _renderStarSpiral();
   } finally {
-    ctx.restore();
+    ui.ctx.restore();
   }
 }
 
@@ -119,7 +116,7 @@ export function drawMonsterDeath(x, y, size, progress, monsterId) {
   const frames = getMonsterDeathFrames(monsterId, battleSt.goblinDeathFrames);
   if (!frames || !frames.length) return;
   const frameIdx = Math.min(frames.length - 1, Math.floor(progress * frames.length));
-  ctx.drawImage(frames[frameIdx], x, y);
+  ui.ctx.drawImage(frames[frameIdx], x, y);
 }
 
 export function drawPoisonFlash() {
@@ -127,9 +124,9 @@ export function drawPoisonFlash() {
   if (poisonFlashTimer === 0) setPoisonFlashTimer(Date.now());
   if (Date.now() - poisonFlashTimer < 67) {
     clipToViewport();
-    ctx.fillStyle = 'rgba(128, 0, 64, 0.35)';
-    ctx.fillRect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
-    ctx.restore();
+    ui.ctx.fillStyle = 'rgba(128, 0, 64, 0.35)';
+    ui.ctx.fillRect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
+    ui.ctx.restore();
   } else { setPoisonFlashTimer(-1); }
 }
 
@@ -152,7 +149,6 @@ export function updateStarEffect(dt) {
     fx.radius -= 0.55;
     if (fx.spin && fx.frame % 14 === 0) {
       const SPIN_ORDER = [DIR_DOWN, DIR_LEFT, DIR_UP, DIR_RIGHT];
-      const sprite = getSprite();
       if (sprite) sprite.setDirection(SPIN_ORDER[Math.floor(fx.frame / 14) % 4]);
     }
     if (fx.radius < 4) {

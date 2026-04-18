@@ -4,7 +4,8 @@ import { DIR_DOWN, DIR_UP, DIR_LEFT, DIR_RIGHT } from './sprite.js';
 import { mapSt } from './map-state.js';
 import { battleSt } from './battle-state.js';
 import { transSt } from './transitions.js';
-import { inputSt, handleBattleInput, handleRosterInput, handlePauseInput } from './input-handler.js';
+import { inputSt, handleBattleInput, handleRosterInput, handlePauseInput, keys } from './input-handler.js';
+import { sprite } from './player-sprite.js';
 import { pauseSt } from './pause-menu.js';
 import { msgState, showMsgBox } from './message-box.js';
 import { chatState, tabSelectMode } from './chat.js';
@@ -21,15 +22,6 @@ import { resetIndoorWaterCache } from './water-animation.js';
 const TILE_SIZE = 16;
 const WALK_DURATION = 16 * (1000 / 60);  // 16 NES frames at 60fps ≈ 267ms per tile
 
-// ── Injected by initMovement() ─────────────────────────────────────────────
-let _keys = {};
-let _getSprite = () => null;
-
-export function initMovement({ keys, getSprite }) {
-  _keys = keys;
-  _getSprite = getSprite;
-}
-
 // ── Movement state ─────────────────────────────────────────────────────────
 let moveStartX = 0;
 let moveStartY = 0;
@@ -43,7 +35,6 @@ export function setPoisonFlashTimer(v) { poisonFlashTimer = v; }
 // ── Movement ───────────────────────────────────────────────────────────────
 
 export function startMove(dir) {
-  const sprite = _getSprite();
   const dx = dir === DIR_RIGHT ? TILE_SIZE : dir === DIR_LEFT ? -TILE_SIZE : 0;
   const dy = dir === DIR_DOWN ? TILE_SIZE : dir === DIR_UP ? -TILE_SIZE : 0;
   const targetX = mapSt.worldX + dx;
@@ -93,7 +84,7 @@ export function updateMovement(dt) {
   mapSt.worldX = moveStartX + (moveTargetX - moveStartX) * t;
   mapSt.worldY = moveStartY + (moveTargetY - moveStartY) * t;
 
-  _getSprite().setWalkProgress(t);
+  sprite.setWalkProgress(t);
 
   if (t >= 1) _onMoveComplete();
 }
@@ -101,7 +92,6 @@ export function updateMovement(dt) {
 // ── Input dispatch ─────────────────────────────────────────────────────────
 
 export function handleInput() {
-  const sprite = _getSprite();
   if (!sprite) return;
   if (handleBattleInput()) return;
   if (handleRosterInput()) return;
@@ -109,8 +99,8 @@ export function handleInput() {
 
   // Universal message box — Z to dismiss during hold
   if (msgState.state !== 'none') {
-    if (msgState.state === 'hold' && (_keys['z'] || _keys['Z'])) {
-      _keys['z'] = false; _keys['Z'] = false;
+    if (msgState.state === 'hold' && (keys['z'] || keys['Z'])) {
+      keys['z'] = false; keys['Z'] = false;
       msgState.state = 'slide-out'; msgState.timer = 0;
     }
     return;
@@ -124,9 +114,9 @@ export function handleInput() {
   if (chatState.expanded) return;
   if (tabSelectMode) return;
 
-  if (_keys['z'] || _keys['Z']) {
-    _keys['z'] = false;
-    _keys['Z'] = false;
+  if (keys['z'] || keys['Z']) {
+    keys['z'] = false;
+    keys['Z'] = false;
     handleAction();
     return;
   }
@@ -137,7 +127,6 @@ export function handleInput() {
 // ── Tile action (Z press) ──────────────────────────────────────────────────
 
 function handleAction() {
-  const sprite = _getSprite();
   if (mapSt.onWorldMap || !mapSt.mapRenderer || !mapSt.mapData) return;
 
   const dir = sprite.getDirection();
@@ -173,7 +162,6 @@ function handleAction() {
 // ── Move complete ──────────────────────────────────────────────────────────
 
 function _onMoveComplete() {
-  const sprite = _getSprite();
   mapSt.worldX = moveTargetX;
   mapSt.worldY = moveTargetY;
   mapSt.moving = false;
@@ -220,7 +208,7 @@ function _checkFalseWall() {
   triggerWipe(() => {
     mapSt.worldX = dest.destX * TILE_SIZE;
     mapSt.worldY = dest.destY * TILE_SIZE;
-    _getSprite().setDirection(DIR_DOWN);
+    sprite.setDirection(DIR_DOWN);
     mapSt.mapRenderer = new MapRenderer(mapSt.mapData, dest.destX, dest.destY); resetIndoorWaterCache();
   });
   return true;
@@ -231,7 +219,7 @@ function _checkWarpTile() {
   const tx = mapSt.worldX / TILE_SIZE;
   const ty = mapSt.worldY / TILE_SIZE;
   if (tx !== mapSt.warpTile.x || ty !== mapSt.warpTile.y) return false;
-  _getSprite().setDirection(DIR_DOWN);
+  sprite.setDirection(DIR_DOWN);
   playSFX(SFX.WARP);
   mapSt.starEffect = {
     frame: 0, radius: 60, angle: 0, spin: true,
@@ -252,9 +240,9 @@ function _checkWarpTile() {
 }
 
 export function startMoveFromKeys(resetOnIdle) {
-  if (_keys['ArrowDown']) startMove(DIR_DOWN);
-  else if (_keys['ArrowUp']) startMove(DIR_UP);
-  else if (_keys['ArrowLeft']) startMove(DIR_LEFT);
-  else if (_keys['ArrowRight']) startMove(DIR_RIGHT);
-  else if (resetOnIdle) _getSprite().resetFrame();
+  if (keys['ArrowDown']) startMove(DIR_DOWN);
+  else if (keys['ArrowUp']) startMove(DIR_UP);
+  else if (keys['ArrowLeft']) startMove(DIR_LEFT);
+  else if (keys['ArrowRight']) startMove(DIR_RIGHT);
+  else if (resetOnIdle) sprite.resetFrame();
 }

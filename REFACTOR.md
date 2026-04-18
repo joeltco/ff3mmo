@@ -1,12 +1,29 @@
 # game.js Refactor TODO
 
-Current size: **414 lines** (v1.6.0). Target: <4,000 lines — **achieved** (90% under target).
+Current size: **399 lines** (v1.6.0). Target: <4,000 lines — **achieved** (90% under target).
 
 ---
 
 ## Next Up
 
-game.js at 414L is a composition root — imports, module wiring, boot/asset init, top-level game loop. Remaining code is genuine composition; no further extractions worth pursuing.
+game.js at 399L is a composition root — imports, module wiring, boot/asset init, top-level game loop. Remaining code is genuine composition; no further extractions worth pursuing.
+
+---
+
+## Completed — Phase 11 (keys/sprite/cursor/onShake direct-import)
+
+<details>
+<summary>game.js 414L → 399L (−15L); 3 init* functions deleted, 10+ callback shims retired</summary>
+
+- [x] **`keys` ownership moved to `input-handler.js`** — `export const keys = {}` mutated by the keydown listener. 5 modules drop `_keys` shim: input-handler itself, movement, battle-update, title-screen, transitions.
+- [x] **New `src/player-sprite.js` (11L)** — owns the player `Sprite` instance + `setPlayerSprite(s)`. ES live bindings mean importers see the latest value after init. 5 modules drop `_getSprite` shim: render, movement, transitions, battle-update, map-loading.
+- [x] **Cursor reads `ui.cursorTileCanvas` directly** — battle-drawing and pvp drop `_cursorCanvas`/`_cursorTileCanvas` getter shims.
+- [x] **`_ctx` → `ui.ctx` throughout battle-drawing.js** — ~200 call sites rewritten. `initBattleDrawing()` deleted entirely.
+- [x] **`render.js` ctx reads `ui.ctx`** — `initRender()` now takes only `waterSt` (temporary; goes away in next round).
+- [x] **`onShake` callback gone** — transitions.js calls `mapSt.shakeActive = true; mapSt.shakeTimer = 0` inline.
+- [x] **3 init functions fully deleted**: `initMovement`, `initTransitions`, `initBattleUpdate` — all their params were the shims we just dropped.
+- [x] **Dead imports removed from game.js**: `isVictoryBattleState`, `keys`, `initMovement`, `initTransitions`, `initBattleUpdate`, `initBattleDrawing`.
+</details>
 
 ---
 

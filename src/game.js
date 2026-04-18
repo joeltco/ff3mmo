@@ -30,10 +30,11 @@ import { rosterBattleFade, setLocationGetter, getPlayerLocation, initRoster, upd
 import { updateMsgBox, drawMsgBox } from './message-box.js';
 import { titleSt, drawTitleSkyInHUD, drawTitle, updateTitle, initTitleUpdate } from './title-screen.js';
 import { pauseSt, updatePauseMenu, drawPauseMenu } from './pause-menu.js';
-import { transSt, loadingSt, updateTransition, updateTopBoxScroll, drawTransitionOverlay, initTransitions, WIPE_DURATION } from './transitions.js';
+import { transSt, loadingSt, updateTransition, updateTopBoxScroll, drawTransitionOverlay, WIPE_DURATION } from './transitions.js';
 import { initInputHandler, initKeyboardListeners } from './input-handler.js';
+import { sprite, setPlayerSprite } from './player-sprite.js';
 import { startPVPBattle, initPVP } from './pvp.js';
-import { drawBattle, drawBattleAllies, drawSWExplosion, drawSWDamageNumbers, initBattleDrawing } from './battle-drawing.js';
+import { drawBattle, drawBattleAllies, drawSWExplosion, drawSWDamageNumbers } from './battle-drawing.js';
 import { initRender, render, drawPoisonFlash, drawPondStrobe, updateStarEffect } from './render.js';
 import { getBlades } from './weapon-sprites.js';
 import { drawHUD, clipToViewport, drawHudBox, drawBorderedBox, roundTopBoxCorners, updateHudHpLvStep } from './hud-drawing.js';
@@ -42,10 +43,10 @@ import { updateBattleAlly, initBattleAlly } from './battle-ally.js';
 import { initBattleEnemy } from './battle-enemy.js';
 import { buildTurnOrder, processNextTurn } from './battle-turn.js';
 import { initBattleEncounter } from './battle-encounter.js';
-import { initMovement, handleInput, updateMovement } from './movement.js';
+import { handleInput, updateMovement } from './movement.js';
 import { initBattleItems } from './battle-items.js';
 import { addItem, setPlayerInventory } from './inventory.js';
-import { initBattleUpdate, resetBattleVars, isTeamWiped, isVictoryBattleState, executeBattleCommand, updateBattle, updateBattleTimers, updateBattlePlayerAttack, updateBattleDefendItem, updateBattleEndSequence, tryJoinPlayerAlly, advancePVPTargetOrVictory } from './battle-update.js';
+import { resetBattleVars, isTeamWiped, executeBattleCommand, updateBattle, updateBattleTimers, updateBattlePlayerAttack, updateBattleDefendItem, updateBattleEndSequence, tryJoinPlayerAlly, advancePVPTargetOrVictory } from './battle-update.js';
 import { initCursorTile as _initCursorTile, initScrollArrows as _initScrollArrows,
          initAdamantoise as _initAdamantoise,
          initGoblinSprite as _initGoblinSprite, initInvincibleSprite as _initInvincibleSprite,
@@ -63,9 +64,6 @@ const HUD_VIEW_H = 144;
 let ff12Raw = null;  // FF1&2 ROM for Adamantoise sprite + FF1 music
 const TITLE_FADE_MAX = 4;
 
-let cursorTileCanvas = null;
-let cursorFadeCanvases = null; // [step1..step4] NES-faded cursor canvases
-
 // Player sprite palettes — from FCEUX PPU trace (dual palette: top/bottom tiles)
 const SPRITE_PAL_TOP = [0x0F, 0x0F, 0x16, 0x30];    // spr_pal0: black, dark red, white
 const SPRITE_PAL_BTM = [0x1A, 0x0F, 0x15, 0x30];    // spr_pal1: green, black, magenta, white
@@ -76,9 +74,7 @@ const JOB_WALK_PALS = {
 };
 
 let canvas, ctx;
-let sprite = null;
 let lastTime = 0;
-const keys = {};
 
 let romRaw = null;
 
@@ -110,7 +106,7 @@ export function init() {
   ctx.imageSmoothingEnabled = false;
   ui.canvas = canvas; ui.ctx = ctx;
 
-  initKeyboardListeners(keys);
+  initKeyboardListeners();
   window.addEventListener('beforeunload', () => { saveSlotsToDB(); });
 }
 
@@ -145,9 +141,8 @@ function _initSpriteAssets(romRaw) {
 
   // Cursor tile (sprite-init.js)
   const ct = _initCursorTile(romRaw);
-  cursorTileCanvas = ct.cursorTileCanvas;
-  cursorFadeCanvases = ct.cursorFadeCanvases;
-  ui.cursorTileCanvas = cursorTileCanvas; ui.cursorFadeCanvases = cursorFadeCanvases;
+  ui.cursorTileCanvas = ct.cursorTileCanvas;
+  ui.cursorFadeCanvases = ct.cursorFadeCanvases;
 
   // Scroll arrows (sprite-init.js)
   const sa = _initScrollArrows(romRaw);
@@ -243,35 +238,25 @@ export async function loadROM(arrayBuffer) {
   initTextDecoder(romRaw);
   initFont(romRaw);
   _initSpriteAssets(romRaw);
-  sprite = new Sprite(romRaw, SPRITE_PAL_TOP, SPRITE_PAL_BTM);
+  setPlayerSprite(new Sprite(romRaw, SPRITE_PAL_TOP, SPRITE_PAL_BTM));
   mapSt.worldMapData = loadWorldMap(romRaw, 0);
   mapSt.worldMapRenderer = new WorldMapRenderer(mapSt.worldMapData);
   resetWorldWaterCache();
   _initTitleAssets(romRaw);
-  initMapLoading(romRaw, sprite);
+  initMapLoading(romRaw);
   initBattleItems({ processNextTurn });
-  initTransitions({ keys, getSprite: () => sprite, onShake: () => { mapSt.shakeActive = true; mapSt.shakeTimer = 0; } });
-  initMovement({ keys, getSprite: () => sprite });
-  initTitleUpdate({ keys, waterSt, swapBattleSprites: _swapBattleSprites });
-  initBattleUpdate({ keys, getSprite: () => sprite });
+  initTitleUpdate({ waterSt, swapBattleSprites: _swapBattleSprites });
   initBattleEncounter({ resetBattleVars });
   initBattleAlly({ buildTurnOrder, processNextTurn, isTeamWiped });
   initBattleEnemy({ processNextTurn, isTeamWiped });
   initInputHandler({
-    keys,
     executeBattleCommand, returnToTitle, swapBattleSprites: _swapBattleSprites,
     startPVPBattle,
     toggleCrt: () => document.getElementById('canvas-wrapper').classList.toggle('crt'),
   });
-  initRender({ ctx, getSprite: () => sprite, waterSt });
-  initBattleDrawing({
-    ctx,
-    cursorTileCanvas: () => cursorTileCanvas,
-    isVictoryBattleState,
-  });
+  initRender({ waterSt });
   initPVP({
     ctx,
-    cursorTileCanvas: () => cursorTileCanvas,
     blades: () => ({ ...getBlades() }),
     processNextTurn,
     handleAlly: updateBattleAlly,

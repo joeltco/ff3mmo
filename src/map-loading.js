@@ -5,6 +5,7 @@ import { MapRenderer } from './map-renderer.js';
 import { generateFloor } from './dungeon-generator.js';
 import { playTrack, TRACKS } from './music.js';
 import { DIR_DOWN } from './sprite.js';
+import { sprite } from './player-sprite.js';
 import { resetIndoorWaterCache } from './water-animation.js';
 import { clearFlameSprites, rebuildFlameSprites } from './flame-sprites.js';
 import { transSt, topBoxSt } from './transitions.js';
@@ -17,11 +18,10 @@ import { applyPassage } from './map-triggers.js';
 
 const TILE_SIZE = 16;
 
-// Init-once refs — set by game.js at boot
+// Init-once ROM ref — set by game.js at boot
 let romRaw = null;
-let sprite = null;
 
-export function initMapLoading(rom, spr) { romRaw = rom; sprite = spr; }
+export function initMapLoading(rom) { romRaw = rom; }
 
 function _calcSpawnY(ex, ey) {
   const mapData = mapSt.mapData;

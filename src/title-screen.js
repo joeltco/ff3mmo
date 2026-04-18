@@ -15,6 +15,7 @@ import { serverDeleteSlot } from './save.js';
 import { fakePlayerPortraits } from './fake-player-sprites.js';
 import { drawCursorFaded } from './hud-drawing.js';
 import { setPlayerInventory } from './inventory.js';
+import { keys } from './input-handler.js';
 
 // ── NES layout constants — must match game.js ─────────────────────────────
 const CANVAS_W   = 256;
@@ -654,12 +655,10 @@ export function onNameEntryKeyDown(e) {
 const TILE_SIZE = 16;
 const WATER_TICK = 4 * (1000 / 60);  // ~67ms per tick
 
-let _keys = {};
 let _waterSt = { timer: 0, tick: 0 };
 let _swapBattleSprites = () => {};
 
-export function initTitleUpdate({ keys, waterSt, swapBattleSprites }) {
-  _keys = keys;
+export function initTitleUpdate({ waterSt, swapBattleSprites }) {
   _waterSt = waterSt;
   _swapBattleSprites = swapBattleSprites;
 }
@@ -731,12 +730,12 @@ export function updateTitle(dt) {
     case 'logo-content-in': if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'pressz-fade-in';    titleSt.timer = 0; } break;
     case 'pressz-fade-in': if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'main';          titleSt.timer = 0; } break;
     case 'main':
-      if (_keys['z'] || _keys['Z']) { _keys['z'] = false; _keys['Z'] = false; playSFX(SFX.CONFIRM); titleSt.state = 'logo-content-out'; titleSt.timer = 0; }
+      if (keys['z'] || keys['Z']) { keys['z'] = false; keys['Z'] = false; playSFX(SFX.CONFIRM); titleSt.state = 'logo-content-out'; titleSt.timer = 0; }
       break;
     case 'logo-content-out': if (titleSt.timer >= TITLE_FADE_MS) { titleSt.state = 'to-select'; titleSt.timer = 0; } break;
     case 'to-select':            if (titleSt.timer >= TITLE_TRANSITION_MS) { titleSt.state = 'select-fade-in'; titleSt.timer = 0; titleSt.shipPosX = 0; setSelectCursor(0); titleSt.deleteMode = false; } break;
     case 'select-fade-in':       if (titleSt.timer >= (SELECT_TEXT_STEPS + 1) * SELECT_TEXT_STEP_MS) { titleSt.state = 'select'; titleSt.timer = 0; } break;
-    case 'select':               updateTitleSelect(_keys); break;
+    case 'select':               updateTitleSelect(keys); break;
     case 'name-entry':           break;
     case 'select-fade-out':      if (titleSt.timer >= (SELECT_TEXT_STEPS + 1) * SELECT_TEXT_STEP_MS) { titleSt.state = 'main-out'; titleSt.timer = 0; fadeOutMusic(TITLE_FADE_MS); } break;
     case 'select-fade-out-back': if (titleSt.timer >= (SELECT_TEXT_STEPS + 1) * SELECT_TEXT_STEP_MS) { titleSt.state = 'to-main'; titleSt.timer = 0; } break;
