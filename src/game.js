@@ -14,7 +14,7 @@ import { PLAYER_POOL, ROSTER_FADE_STEPS } from './data/players.js';
 import { VERSION } from './data/strings.js';
 import { initMonsterSprites } from './monster-sprites.js';
 import { loadBossSprite } from './boss-sprites.js';
-import { saveSlotsToDB, loadSlotsFromDB, setInventoryGetter, setPositionGetter } from './save-state.js';
+import { saveSlotsToDB, loadSlotsFromDB, setPositionGetter } from './save-state.js';
 import { resetWorldWaterCache } from './water-animation.js';
 import { initBattleSpriteCache, loadJobBattleSprites } from './battle-sprite-cache.js';
 import { hudSt, HUD_INFO_FADE_STEPS, HUD_INFO_FADE_STEP_MS } from './hud-state.js';
@@ -26,13 +26,12 @@ import { LOAD_FADE_STEP_MS, LOAD_FADE_MAX } from './loading-screen.js';
 import { initTitleWater, initTitleSky, initTitleUnderwater, initUnderwaterSprites, initTitleOcean, initTitleLogo } from './title-animations.js';
 import { ps, initPlayerStats, initExpTable } from './player-stats.js';
 import { chatState, updateChat, updateChatTabs, drawChat, drawChatTabs, consoleLog, setCommandContext } from './chat.js';
-import { rosterBattleFade, setLocationGetter, getPlayerLocation, getRosterVisible, initRoster, updateRoster, drawRoster, drawRosterMenu } from './roster.js';
+import { rosterBattleFade, setLocationGetter, getPlayerLocation, initRoster, updateRoster, drawRoster, drawRosterMenu } from './roster.js';
 import { msgState, updateMsgBox, drawMsgBox } from './message-box.js';
 import { titleSt, drawTitleSkyInHUD, drawTitle, updateTitle, initTitleUpdate } from './title-screen.js';
-import { pauseSt, updatePauseMenu, drawPauseMenu, initPauseMenu } from './pause-menu.js';
+import { pauseSt, updatePauseMenu, drawPauseMenu } from './pause-menu.js';
 import { transSt, loadingSt, updateTransition, updateTopBoxScroll, drawTransitionOverlay, initTransitions } from './transitions.js';
-import { inputSt, initInputHandler, initKeyboardListeners } from './input-handler.js';
-import { initMapTriggers } from './map-triggers.js';
+import { initInputHandler, initKeyboardListeners } from './input-handler.js';
 import { startPVPBattle, initPVP } from './pvp.js';
 import { drawBattle, drawBattleAllies, drawSWExplosion, drawSWDamageNumbers, initBattleDrawing } from './battle-drawing.js';
 import { initRender, render, drawPoisonFlash, drawPondStrobe, updateStarEffect } from './render.js';
@@ -41,10 +40,11 @@ import { drawHUD, clipToViewport, drawHudBox, drawBorderedBox, roundTopBoxCorner
 import { initMapLoading, loadMapById } from './map-loading.js';
 import { updateBattleAlly, initBattleAlly } from './battle-ally.js';
 import { initBattleEnemy } from './battle-enemy.js';
-import { buildTurnOrder, processNextTurn, initBattleTurn } from './battle-turn.js';
+import { buildTurnOrder, processNextTurn } from './battle-turn.js';
 import { initBattleEncounter } from './battle-encounter.js';
 import { initMovement, handleInput, updateMovement } from './movement.js';
 import { initBattleItems } from './battle-items.js';
+import { addItem, setPlayerInventory } from './inventory.js';
 import { initBattleUpdate, resetBattleVars, isTeamWiped, isVictoryBattleState, executeBattleCommand, updateBattle, updateBattleTimers, updateBattlePlayerAttack, updateBattleDefendItem, updateBattleEndSequence, tryJoinPlayerAlly, advancePVPTargetOrVictory } from './battle-update.js';
 import { initCursorTile as _initCursorTile, initScrollArrows as _initScrollArrows,
          initAdamantoise as _initAdamantoise,
@@ -62,22 +62,6 @@ const HUD_VIEW_W = 144;
 const HUD_VIEW_H = 144;
 let ff12Raw = null;  // FF1&2 ROM for Adamantoise sprite + FF1 music
 const TITLE_FADE_MAX = 4;
-
-const INV_SLOTS = 3; // visible inventory rows per page
-let playerInventory = {};    // { itemId: count } — e.g. { 0xA6: 3 }
-function addItem(id, count) {
-  playerInventory[id] = (playerInventory[id] || 0) + count;
-}
-function removeItem(id) {
-  if (playerInventory[id] > 0) playerInventory[id]--;
-  if (playerInventory[id] <= 0) delete playerInventory[id];
-}
-function buildItemSelectList() {
-  const entries = Object.entries(playerInventory).filter(([,c]) => c > 0);
-  const list = entries.map(([id, count]) => ({ id: Number(id), count }));
-  while (list.length < INV_SLOTS) list.push(null);
-  return list;
-}
 
 let cursorTileCanvas = null;
 let cursorFadeCanvases = null; // [step1..step4] NES-faded cursor canvases
@@ -116,7 +100,6 @@ let _tabWasLoading = false; // tracks if we just came from a loading screen
 const SHAKE_DURATION = 34 * (1000 / 60);  // 2 × 17 NES frames ≈ 567ms
 
 export function init() {
-  setInventoryGetter(() => playerInventory);
   setPositionGetter(() => ({ worldX: mapSt.worldX, worldY: mapSt.worldY, onWorldMap: mapSt.onWorldMap, currentMapId: mapSt.currentMapId }));
   setLocationGetter(() => ({ onWorldMap: mapSt.onWorldMap, currentMapId: mapSt.currentMapId }));
   canvas = document.getElementById('game-canvas');
@@ -224,7 +207,7 @@ function _startDebugMode() {
   clearDungeonCache();
   loadMapById(1004);
   playTrack(TRACKS.CRYSTAL_ROOM);
-  playerInventory = {};
+  setPlayerInventory({});
   addItem(0x54, 5);
   lastTime = performance.now();
   requestAnimationFrame(gameLoop);
@@ -265,19 +248,16 @@ export async function loadROM(arrayBuffer) {
   resetWorldWaterCache();
   _initTitleAssets(romRaw);
   initMapLoading(romRaw, sprite);
-  initMapTriggers({ addItem });
   initBattleItems({ processNextTurn });
-  initPauseMenu({ playerInventory: () => playerInventory });
   initTransitions({ keys, getSprite: () => sprite, onShake: () => { mapSt.shakeActive = true; mapSt.shakeTimer = 0; } });
   initMovement({ keys, getSprite: () => sprite });
-  initTitleUpdate({ keys, waterSt, setPlayerInventory: (inv) => { playerInventory = inv; }, swapBattleSprites: _swapBattleSprites });
-  initBattleUpdate({ keys, getSprite: () => sprite, addItem, buildItemSelectList });
+  initTitleUpdate({ keys, waterSt, swapBattleSprites: _swapBattleSprites });
+  initBattleUpdate({ keys, getSprite: () => sprite });
   initBattleEncounter({ resetBattleVars });
   initBattleAlly({ buildTurnOrder, processNextTurn, isTeamWiped });
   initBattleEnemy({ processNextTurn, isTeamWiped });
-  initBattleTurn({ removeItem });
   initInputHandler({
-    keys, playerInventory: () => playerInventory, addItem, removeItem,
+    keys,
     executeBattleCommand, returnToTitle, swapBattleSprites: _swapBattleSprites,
     startPVPBattle,
     toggleCrt: () => document.getElementById('canvas-wrapper').classList.toggle('crt'),
@@ -345,7 +325,7 @@ function _gameLoopUpdate(dt) {
   updateRoster(dt, { battleState: battleSt.battleState, transSt, wipeDuration: 44 * (1000 / 60), hudInfoFadeTimer: hudSt.hudInfoFadeTimer, hudInfoFadeSteps: HUD_INFO_FADE_STEPS, hudInfoFadeStepMs: HUD_INFO_FADE_STEP_MS });
   updateChat(dt, battleSt.battleState);
   updateChatTabs(dt);
-  updatePauseMenu(dt, playerInventory);
+  updatePauseMenu(dt);
   updateMsgBox(dt);
   updateBattle(dt);
   updateMovement(dt);

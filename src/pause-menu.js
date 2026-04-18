@@ -12,12 +12,7 @@ import { selectCursor, saveSlots } from './save-state.js';
 import { ui } from './ui-state.js';
 import { inputSt } from './input-handler.js';
 import { drawBorderedBox, clipToViewport, drawCursorFaded } from './hud-drawing.js';
-
-// Injected by initPauseMenu()
-let _playerInventory = () => ({});
-export function initPauseMenu({ playerInventory }) {
-  _playerInventory = playerInventory;
-}
+import { playerInventory } from './inventory.js';
 
 // NES layout constants — must match game.js
 const HUD_VIEW_X  = 0;
@@ -85,7 +80,7 @@ function _pausePanelLayout() {
 
 // ── Update ─────────────────────────────────────────────────────────────────
 
-function _updatePauseMainTransitions(playerInventory) {
+function _updatePauseMainTransitions() {
   const T = (PAUSE_TEXT_STEPS + 1) * PAUSE_TEXT_STEP_MS;
   if (pauseSt.state === 'scroll-in') {
     if (pauseSt.timer >= PAUSE_SCROLL_MS) { pauseSt.state = 'text-in'; pauseSt.timer = 0; }
@@ -98,7 +93,7 @@ function _updatePauseMainTransitions(playerInventory) {
   }
 }
 
-function _updatePauseInvTransitions(dt, playerInventory) {
+function _updatePauseInvTransitions(dt) {
   const T = (PAUSE_TEXT_STEPS + 1) * PAUSE_TEXT_STEP_MS;
   if (pauseSt.state === 'inv-text-out') {
     if (pauseSt.timer >= T) { pauseSt.state = 'inv-expand'; pauseSt.timer = 0; }
@@ -195,15 +190,15 @@ function _updatePauseStatsTransitions() {
   }
 }
 
-export function updatePauseMenu(dt, playerInventory) {
+export function updatePauseMenu(dt) {
   if (pauseSt.state === 'none') return;
   pauseSt.timer += Math.min(dt, 33);
-  if (pauseSt.state.startsWith('inv-'))            _updatePauseInvTransitions(dt, playerInventory);
+  if (pauseSt.state.startsWith('inv-'))            _updatePauseInvTransitions(dt);
   else if (pauseSt.state.startsWith('eq-'))        _updatePauseEqTransitions();
   else if (pauseSt.state.startsWith('stats-') || pauseSt.state === 'stats') _updatePauseStatsTransitions();
   else if (pauseSt.state.startsWith('options-') || pauseSt.state === 'options') _updatePauseOptionsTransitions();
   else if (pauseSt.state.startsWith('job-') || pauseSt.state === 'job') _updatePauseJobTransitions();
-  else                                              _updatePauseMainTransitions(playerInventory);
+  else                                              _updatePauseMainTransitions();
 }
 
 // ── Draw helpers ───────────────────────────────────────────────────────────
@@ -259,7 +254,7 @@ function _drawPauseInventory(ctx) {
   if (!showInvItems) return;
   const fadeStep = _pauseFadeStep('inv-items-in', 'inv-items-out');
   const fadedPal = _makeFadedPal(fadeStep);
-  const entries = Object.entries(_playerInventory()).filter(([,c]) => c > 0);
+  const entries = Object.entries(playerInventory).filter(([,c]) => c > 0);
   const maxVisible = Math.floor((HUD_VIEW_H - 16) / 14);
   const startIdx = Math.max(0, Math.min(pauseSt.invScroll, Math.max(0, entries.length - maxVisible)));
   for (let i = 0; i < maxVisible && startIdx + i < entries.length; i++) {

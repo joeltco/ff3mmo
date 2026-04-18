@@ -17,14 +17,11 @@ import { mapSt } from './map-state.js';
 import { rebuildFlameSprites } from './flame-sprites.js';
 import { loadMapById, loadWorldMapAt, loadWorldMapAtPosition } from './map-loading.js';
 import { rosterLocForMapId, getPlayerLocation } from './roster.js';
+import { addItem } from './inventory.js';
 
 const TILE_SIZE = 16;
 const BATTLE_FLASH_FRAMES = 65;
 const BATTLE_FLASH_FRAME_MS = 16.67;
-
-// Inventory callback — registered at boot to avoid circular import on game.js
-let _addItem = null;
-export function initMapTriggers({ addItem }) { _addItem = addItem; }
 
 // Wipe-transition helper — used here and by game.js
 export function triggerWipe(action, destMapId) {
@@ -46,7 +43,7 @@ export function handleChest(facedX, facedY) {
   let tier = LOOT_TIERS[0];
   for (const t of LOOT_TIERS) { if (roll < t.weight) { tier = t; break; } roll -= t.weight; }
   const itemId = tier.pool[Math.floor(Math.random() * tier.pool.length)];
-  _addItem(itemId, 1);
+  addItem(itemId, 1);
   playSFX(SFX.TREASURE);
   const itemName = getItemNameClean(itemId);
   const found = [0x8F, 0xD8, 0xDE, 0xD7, 0xCD, 0xFF]; // "Found "

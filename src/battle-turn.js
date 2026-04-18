@@ -16,13 +16,7 @@ import { queueBattleMsg } from './battle-msg.js';
 import { getAllyDamageNums, setEnemyDmgNum, setEnemyHealNum, setPlayerDamageNum, setPlayerHealNum } from './damage-numbers.js';
 import { startMagicItem } from './battle-items.js';
 import { selectCursor, saveSlots } from './save-state.js';
-
-// Remove the "import battleSt..." line and re-add with more constants
-// (deferred — will be done below)
-
-// Injected at boot — avoids circular import on game.js
-let _removeItem = () => {};
-export function initBattleTurn({ removeItem }) { _removeItem = removeItem; }
+import { removeItem } from './inventory.js';
 
 function _playerName() { return saveSlots[selectCursor]?.name || null; }
 
@@ -305,7 +299,7 @@ function _playerTurnConsumable() {
 
 function _playerTurnItem() {
   battleSt.isDefending = false;
-  _removeItem(inputSt.playerActionPending.itemId);
+  removeItem(inputSt.playerActionPending.itemId);
   if (ITEMS.get(inputSt.playerActionPending.itemId)?.type === 'battle_item') startMagicItem();
   else _playerTurnConsumable();
 }

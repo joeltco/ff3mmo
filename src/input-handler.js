@@ -21,12 +21,10 @@ import { mapSt } from './map-state.js';
 import { pvpSt } from './pvp.js';
 import { advanceBattleMsgZ } from './battle-msg.js';
 import { getRosterVisible } from './roster.js';
+import { playerInventory, addItem, removeItem, INV_SLOTS } from './inventory.js';
 
 // Injected at boot — avoids circular import on game.js
 let _keys = {};
-let _playerInventory = () => ({});
-let _addItem = () => {};
-let _removeItem = () => {};
 let _executeBattleCommand = () => {};
 let _returnToTitle = () => {};
 let _swapBattleSprites = () => {};
@@ -34,9 +32,6 @@ let _startPVPBattle = () => {};
 let _toggleCrt = () => {};
 export function initInputHandler(deps) {
   _keys = deps.keys;
-  _playerInventory = deps.playerInventory;
-  _addItem = deps.addItem;
-  _removeItem = deps.removeItem;
   _executeBattleCommand = deps.executeBattleCommand;
   _returnToTitle = deps.returnToTitle;
   _swapBattleSprites = deps.swapBattleSprites;
@@ -70,7 +65,6 @@ export function initKeyboardListeners(keys) {
 // Local constants (must match game.js)
 const HUD_VIEW_X = 0, HUD_VIEW_Y = 32, HUD_VIEW_W = 144, HUD_VIEW_H = 144;
 const BOSS_DEF = (MONSTERS.get(0xCC) || { def: 1 }).def;
-const INV_SLOTS = 3;
 const ROSTER_VISIBLE = 3;
 const ROSTER_MENU_ITEMS = ['Party', 'Battle', 'Trade', 'Message', 'Inspect'];
 
@@ -276,8 +270,8 @@ function _itemSelectSwap(isEquipPage, gIdx) {
     if (item && isHandEquippable(ITEMS.get(item.id)) && canJobEquip(ps.jobIdx, item.id, ITEMS)) {
       const oldWeapon = handIdx === 0 ? ps.weaponR : ps.weaponL;
       if (handIdx === 0) ps.weaponR = item.id; else ps.weaponL = item.id;
-      _removeItem(item.id);
-      if (oldWeapon !== 0) _addItem(oldWeapon, 1);
+      removeItem(item.id);
+      if (oldWeapon !== 0) addItem(oldWeapon, 1);
       inputSt.itemSelectList[inputSt.itemHeldIdx] = oldWeapon !== 0 ? { id: oldWeapon, count: 1 } : null;
       recalcCombatStats(); inputSt.itemHeldIdx = -1; playSFX(SFX.CONFIRM);
     } else { playSFX(SFX.ERROR); inputSt.itemHeldIdx = -1; }
@@ -288,12 +282,12 @@ function _itemSelectSwap(isEquipPage, gIdx) {
     const invItem = inputSt.itemSelectList[dstIdx];
     if (invItem && isHandEquippable(ITEMS.get(invItem.id)) && canJobEquip(ps.jobIdx, invItem.id, ITEMS)) {
       if (srcHand === 0) ps.weaponR = invItem.id; else ps.weaponL = invItem.id;
-      _removeItem(invItem.id); _addItem(handWeaponId, 1);
+      removeItem(invItem.id); addItem(handWeaponId, 1);
       inputSt.itemSelectList[dstIdx] = { id: handWeaponId, count: 1 };
       recalcCombatStats(); inputSt.itemHeldIdx = -1; playSFX(SFX.CONFIRM);
     } else if (!invItem) {
       if (srcHand === 0) ps.weaponR = 0; else ps.weaponL = 0;
-      _addItem(handWeaponId, 1);
+      addItem(handWeaponId, 1);
       inputSt.itemSelectList[dstIdx] = { id: handWeaponId, count: 1 };
       recalcCombatStats(); inputSt.itemHeldIdx = -1; playSFX(SFX.CONFIRM);
     } else { playSFX(SFX.ERROR); inputSt.itemHeldIdx = -1; }
@@ -525,11 +519,6 @@ function _battleInputHoldStates() {
   return true;
 }
 
-// shared = { keys, battleAllies, encounterMonsters, encounterDropItem, encounterJobLevelUp,
-//            isRandomEncounter, isPVPBattle, pvpOpponentStats,
-//            get/set battleState, get/set battleTimer,
-//            executeBattleCommand, getSlashFramesForWeapon,
-//            addItem, removeItem }
 export function handleBattleInput() {
   if (battleSt.battleState === 'none') return false;
   if (_battleInputHoldStates()) return true;
@@ -773,7 +762,7 @@ function _pauseInvZPress(entries) {
 
 function _pauseInputInventory() {
   if (pauseSt.state !== 'inventory') return false;
-  const entries = Object.entries(_playerInventory()).filter(([,c]) => c > 0);
+  const entries = Object.entries(playerInventory).filter(([,c]) => c > 0);
   const k = _keys;
   if (k['ArrowDown']) {
     k['ArrowDown'] = false;
@@ -802,10 +791,10 @@ function _applyPauseItemUse(item, rosterTargets) {
       const flag = flagMap[item.cures];
       if (flag) removeStatus(ps.status, flag);
     }
-    _removeItem(pauseSt.useItemId); playSFX(SFX.CURE);
+    removeItem(pauseSt.useItemId); playSFX(SFX.CURE);
     pauseSt.healNum = { value: 0, timer: 0 };
     pauseSt.state = 'inv-heal'; pauseSt.timer = 0;
-    if (selectCursor >= 0 && saveSlots[selectCursor]) { saveSlots[selectCursor].inventory = { ..._playerInventory() }; saveSlotsToDB(); }
+    if (selectCursor >= 0 && saveSlots[selectCursor]) { saveSlots[selectCursor].inventory = { ...playerInventory }; saveSlotsToDB(); }
     return;
   }
 
@@ -815,16 +804,16 @@ function _applyPauseItemUse(item, rosterTargets) {
     const rp = rosterTargets[pauseSt.invAllyTarget];
     if (!rp) { playSFX(SFX.ERROR); return; }
     const heal = Math.min(healPower, rp.maxHP - rp.hp);
-    rp.hp += heal; _removeItem(pauseSt.useItemId); playSFX(SFX.CURE);
+    rp.hp += heal; removeItem(pauseSt.useItemId); playSFX(SFX.CURE);
     pauseSt.healNum = { value: heal, timer: 0, rosterIdx: pauseSt.invAllyTarget };
     pauseSt.state = 'inv-heal'; pauseSt.timer = 0;
-    if (selectCursor >= 0 && saveSlots[selectCursor]) { saveSlots[selectCursor].inventory = { ..._playerInventory() }; saveSlotsToDB(); }
+    if (selectCursor >= 0 && saveSlots[selectCursor]) { saveSlots[selectCursor].inventory = { ...playerInventory }; saveSlotsToDB(); }
   } else {
     const heal = Math.min(healPower, ps.stats.maxHP - ps.hp);
-    ps.hp += heal; _removeItem(pauseSt.useItemId); playSFX(SFX.CURE);
+    ps.hp += heal; removeItem(pauseSt.useItemId); playSFX(SFX.CURE);
     pauseSt.healNum = { value: heal, timer: 0 };
     pauseSt.state = 'inv-heal'; pauseSt.timer = 0;
-    if (selectCursor >= 0 && saveSlots[selectCursor]) { saveSlots[selectCursor].hp = ps.hp; saveSlots[selectCursor].inventory = { ..._playerInventory() }; saveSlotsToDB(); }
+    if (selectCursor >= 0 && saveSlots[selectCursor]) { saveSlots[selectCursor].hp = ps.hp; saveSlots[selectCursor].inventory = { ...playerInventory }; saveSlotsToDB(); }
   }
 }
 
@@ -857,11 +846,11 @@ function _enforceEquipRestrictions(jobIdx) {
     const id = getEquipSlotId(eq);
     if (id && !canJobEquip(jobIdx, id, ITEMS)) {
       setEquipSlotId(eq, 0);
-      _addItem(id, 1);
+      addItem(id, 1);
     }
   }
   recalcCombatStats();
-  if (selectCursor >= 0 && saveSlots[selectCursor]) { saveSlots[selectCursor].inventory = { ..._playerInventory() }; saveSlotsToDB(); }
+  if (selectCursor >= 0 && saveSlots[selectCursor]) { saveSlots[selectCursor].inventory = { ...playerInventory }; saveSlotsToDB(); }
 }
 
 function _equipBestMainSlots() {
@@ -874,7 +863,7 @@ function _equipBestMainSlots() {
   for (const sd of SLOT_DEFS) {
     const curId = getEquipSlotId(sd.eq); const curItem = ITEMS.get(curId);
     let bestId = curId, bestVal = curItem ? (curItem[sd.stat] || 0) : 0;
-    for (const [idStr, count] of Object.entries(_playerInventory())) {
+    for (const [idStr, count] of Object.entries(playerInventory)) {
       if (count <= 0) continue;
       const id = Number(idStr); const item = ITEMS.get(id); if (!item) continue;
       if (sd.type === 'hand' && !isHandEquippable(item)) continue;
@@ -883,8 +872,8 @@ function _equipBestMainSlots() {
       const val = item[sd.stat] || 0; if (val > bestVal) { bestVal = val; bestId = id; }
     }
     if (bestId !== curId) {
-      if (curId !== 0) _addItem(curId, 1);
-      if (bestId !== 0) { setEquipSlotId(sd.eq, bestId); _removeItem(bestId); } else setEquipSlotId(sd.eq, 0);
+      if (curId !== 0) addItem(curId, 1);
+      if (bestId !== 0) { setEquipSlotId(sd.eq, bestId); removeItem(bestId); } else setEquipSlotId(sd.eq, 0);
     }
   }
 }
@@ -894,7 +883,7 @@ function _equipBestLeftHand() {
   let bestWepId = 0, bestWepAtk = 0, bestShieldId = 0, bestShieldDef = 0;
   if (curItem?.type === 'weapon') { bestWepAtk = curItem.atk || 0; bestWepId = curId; }
   else if (curItem?.subtype === 'shield') { bestShieldDef = curItem.def || 0; bestShieldId = curId; }
-  for (const [idStr, count] of Object.entries(_playerInventory())) {
+  for (const [idStr, count] of Object.entries(playerInventory)) {
     if (count <= 0) continue;
     const id = Number(idStr); const item = ITEMS.get(id);
     if (!item || !isHandEquippable(item)) continue;
@@ -904,8 +893,8 @@ function _equipBestLeftHand() {
   }
   const bestId = bestShieldId !== 0 ? bestShieldId : bestWepId;
   if (bestId !== curId) {
-    if (curId !== 0) _addItem(curId, 1);
-    if (bestId !== 0) { setEquipSlotId(-101, bestId); _removeItem(bestId); } else setEquipSlotId(-101, 0);
+    if (curId !== 0) addItem(curId, 1);
+    if (bestId !== 0) { setEquipSlotId(-101, bestId); removeItem(bestId); } else setEquipSlotId(-101, 0);
   }
 }
 
@@ -913,7 +902,7 @@ function _equipOptimum() {
   _equipBestMainSlots();
   _equipBestLeftHand();
   recalcCombatStats();
-  if (selectCursor >= 0 && saveSlots[selectCursor]) { saveSlots[selectCursor].inventory = { ..._playerInventory() }; saveSlotsToDB(); }
+  if (selectCursor >= 0 && saveSlots[selectCursor]) { saveSlots[selectCursor].inventory = { ...playerInventory }; saveSlotsToDB(); }
   playSFX(SFX.CONFIRM);
 }
 
@@ -938,7 +927,7 @@ function _pauseInputEquip() {
       pauseSt.eqItemList = [];
       const currentId = getEquipSlotId(pauseSt.eqSlotIdx);
       if (currentId !== 0) pauseSt.eqItemList.push({ id: 0, label: 'remove' });
-      for (const [idStr, count] of Object.entries(_playerInventory())) {
+      for (const [idStr, count] of Object.entries(playerInventory)) {
         if (count <= 0) continue;
         const id = Number(idStr);
         const item = ITEMS.get(id);
@@ -969,15 +958,15 @@ function _pauseInputEquipItemSelect() {
       const oldId = getEquipSlotId(pauseSt.eqSlotIdx);
       if (pick.label === 'remove') {
         setEquipSlotId(pauseSt.eqSlotIdx, 0);
-        if (oldId !== 0) _addItem(oldId, 1);
+        if (oldId !== 0) addItem(oldId, 1);
       } else {
         setEquipSlotId(pauseSt.eqSlotIdx, pick.id);
-        _removeItem(pick.id);
-        if (oldId !== 0) _addItem(oldId, 1);
+        removeItem(pick.id);
+        if (oldId !== 0) addItem(oldId, 1);
       }
       recalcCombatStats();
       if (selectCursor >= 0 && saveSlots[selectCursor]) {
-        saveSlots[selectCursor].inventory = { ..._playerInventory() };
+        saveSlots[selectCursor].inventory = { ...playerInventory };
         saveSlotsToDB();
       }
       playSFX(SFX.CONFIRM);
@@ -1035,9 +1024,6 @@ function _pauseInputOptions() {
   return true;
 }
 
-// shared = { keys, playerInventory, saveSlots, get selectCursor, get battleState,
-//            get shakeActive, get starEffect, get moving,
-//            saveSlotsToDB, addItem, removeItem, getRosterVisible }
 export function handlePauseInput() {
   if (_pauseInputOpenClose()) return true;
   if (_pauseInputMainMenu()) return true;

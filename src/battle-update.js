@@ -32,6 +32,7 @@ import { DIR_DOWN } from './sprite.js';
 import { tryInflictStatus, wakeOnHit, STATUS_NAME_BYTES } from './status-effects.js';
 import { playSlashSFX } from './battle-sfx.js';
 import { saveSlotsToDB } from './save-state.js';
+import { addItem, buildItemSelectList } from './inventory.js';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 const BATTLE_TEXT_STEP_MS      = 50;
@@ -61,14 +62,10 @@ const POISON_TICK_MS           = 500;
 // ── Injected by initBattleUpdate() ─────────────────────────────────────────
 let _keys = {};
 let _getSprite = () => null;
-let _addItem = () => {};
-let _buildItemSelectList = () => [];
 
-export function initBattleUpdate({ keys, getSprite, addItem, buildItemSelectList }) {
+export function initBattleUpdate({ keys, getSprite }) {
   _keys = keys;
   _getSprite = getSprite;
-  _addItem = addItem;
-  _buildItemSelectList = buildItemSelectList;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -133,7 +130,7 @@ export function executeBattleCommand(index) {
   } else if (index === 2) {
     // Item
     playSFX(SFX.CONFIRM);
-    inputSt.itemSelectList = _buildItemSelectList();
+    inputSt.itemSelectList = buildItemSelectList();
     inputSt.itemHeldIdx = -1;
     inputSt.itemPage = 1;
     inputSt.itemPageCursor = 0;
@@ -479,7 +476,7 @@ function _updateMonsterDeath() {
           break;
         }
       }
-      if (battleSt.encounterDropItem !== null) _addItem(battleSt.encounterDropItem, 1);
+      if (battleSt.encounterDropItem !== null) addItem(battleSt.encounterDropItem, 1);
       saveSlotsToDB();
       _queueVictoryRewards();
       battleSt.isDefending = false;

@@ -1,12 +1,31 @@
 # game.js Refactor TODO
 
-Current size: **449 lines** (v1.6.0). Target: <4,000 lines — **achieved** (89% under target).
+Current size: **429 lines** (v1.6.0). Target: <4,000 lines — **achieved** (89% under target).
 
 ---
 
 ## Next Up
 
-game.js at 449L is a composition root — imports, module wiring, boot/asset init, top-level game loop. Remaining code is genuine composition; no further extractions worth pursuing.
+game.js at 429L is a composition root — imports, module wiring, boot/asset init, top-level game loop. Remaining code is genuine composition; no further extractions worth pursuing.
+
+---
+
+## Completed — Phase 9 (inventory extraction + callback purge)
+
+<details>
+<summary>game.js 449L → 429L (−20L); removed 3 init* shims across 6 consumers</summary>
+
+- [x] `src/inventory.js` (28L) — owns `playerInventory`, `addItem`, `removeItem`, `setPlayerInventory`, `buildItemSelectList`, `INV_SLOTS`. Stable `const` reference; `setPlayerInventory` mutates in place so importers never hold a stale binding.
+- [x] Rewired 6 consumers to import directly instead of callback shims:
+  - `save-state.js` — dropped `setInventoryGetter` + unused `_getInventory` local
+  - `input-handler.js` — dropped `playerInventory`/`addItem`/`removeItem` from `initInputHandler`; dropped duplicate `INV_SLOTS` const; purged two stale `// shared = { ... }` doc blocks
+  - `pause-menu.js` — `initPauseMenu` deleted entirely; `updatePauseMenu(dt)` signature simplified (param threading gone)
+  - `battle-update.js` — dropped `addItem`/`buildItemSelectList` from `initBattleUpdate`
+  - `battle-turn.js` — `initBattleTurn` deleted entirely
+  - `map-triggers.js` — `initMapTriggers` deleted entirely
+  - `title-screen.js` — dropped `setPlayerInventory` callback from `initTitleUpdate`
+- [x] Dead-import audit in game.js: dropped `getRosterVisible` (only consumed in input-handler.js) and `inputSt` (obsolete after Phase 8 chat-hotkey move).
+</details>
 
 ---
 

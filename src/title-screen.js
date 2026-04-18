@@ -14,6 +14,7 @@ import { loadMapById } from './map-loading.js';
 import { serverDeleteSlot } from './save.js';
 import { fakePlayerPortraits } from './fake-player-sprites.js';
 import { drawCursorFaded } from './hud-drawing.js';
+import { setPlayerInventory } from './inventory.js';
 
 // ── NES layout constants — must match game.js ─────────────────────────────
 const CANVAS_W   = 256;
@@ -655,13 +656,11 @@ const WATER_TICK = 4 * (1000 / 60);  // ~67ms per tick
 
 let _keys = {};
 let _waterSt = { timer: 0, tick: 0 };
-let _setPlayerInventory = () => {};
 let _swapBattleSprites = () => {};
 
-export function initTitleUpdate({ keys, waterSt, setPlayerInventory, swapBattleSprites }) {
+export function initTitleUpdate({ keys, waterSt, swapBattleSprites }) {
   _keys = keys;
   _waterSt = waterSt;
-  _setPlayerInventory = setPlayerInventory;
   _swapBattleSprites = swapBattleSprites;
 }
 
@@ -689,7 +688,7 @@ function _updateTitleMainOutCase() {
     ps.arms = slot.stats.arms || 0x00;
     recalcCombatStats();
   }
-  _setPlayerInventory((slot && slot.inventory) ? { ...slot.inventory } : {});
+  setPlayerInventory((slot && slot.inventory) ? { ...slot.inventory } : {});
   ps.gil = (slot && slot.gil) || 0;
   ps.jobLevels = (slot && slot.jobLevels) ? JSON.parse(JSON.stringify(slot.jobLevels)) : {};
   ps.jobIdx = (slot && slot.jobIdx) || 0;

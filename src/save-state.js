@@ -3,6 +3,7 @@
 
 import { openSaveDB, serverDeleteSlot, parseSaveSlots } from './save.js';
 import { ps, playerStatsSnapshot } from './player-stats.js';
+import { playerInventory } from './inventory.js';
 
 // --- State ---
 export let selectCursor = 0;             // 0-2 (which slot)
@@ -15,10 +16,6 @@ export const NAME_MAX_LEN = 7;
 export function setSelectCursor(v) { selectCursor = v; }
 export function setSaveSlots(v) { saveSlots = v; }
 export function setNameBuffer(v) { nameBuffer = v; }
-
-// Inventory getter — set by game.js at init to avoid circular dep
-let _getInventory = () => ({});
-export function setInventoryGetter(fn) { _getInventory = fn; }
 
 // Position getter — set by game.js at init to avoid circular dep
 let _getPosition = () => ({});
@@ -37,7 +34,7 @@ export async function saveSlotsToDB() {
     saveSlots[selectCursor].exp = ps.stats.exp;
     saveSlots[selectCursor].hp = ps.hp;
     saveSlots[selectCursor].stats = playerStatsSnapshot();
-    saveSlots[selectCursor].inventory = { ..._getInventory() };
+    saveSlots[selectCursor].inventory = { ...playerInventory };
     saveSlots[selectCursor].gil = ps.gil;
     saveSlots[selectCursor].jobLevels = JSON.parse(JSON.stringify(ps.jobLevels));
     saveSlots[selectCursor].jobIdx = ps.jobIdx;
@@ -51,7 +48,6 @@ export async function saveSlotsToDB() {
     saveSlots[selectCursor].currentMapId = pos.currentMapId;
   }
   try {
-    const inv = _getInventory();
     const data = saveSlots.map(s => s ? {
       name: Array.from(s.name),
       level: s.level || (ps.stats ? ps.stats.level : 1),
