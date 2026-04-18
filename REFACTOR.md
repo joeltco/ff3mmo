@@ -1,12 +1,26 @@
 # game.js Refactor TODO
 
-Current size: **679 lines** (v1.6.0). Target: <4,000 lines — **achieved** (83% under target).
+Current size: **449 lines** (v1.6.0). Target: <4,000 lines — **achieved** (89% under target).
 
 ---
 
 ## Next Up
 
-game.js at 679L is a composition root — imports, module wiring, top-level game loop, boot/asset init. No further extractions worth pursuing; remaining code is genuine composition.
+game.js at 449L is a composition root — imports, module wiring, boot/asset init, top-level game loop. Remaining code is genuine composition; no further extractions worth pursuing.
+
+---
+
+## Completed — Phase 8 (cleanup + small extractions)
+
+<details>
+<summary>game.js 679L → 449L (−230L, −34%)</summary>
+
+- [x] **Dead-import audit** — removed 114 unused imports across 29 import lines. Examples: entire `battle-msg` suite (10 syms), entire `text-utils` suite (7 syms), most `player-stats` equipment helpers (13 syms), all weapon-sprites canvas getters, chat tab exports, title-screen draw fns, battle-encounter tickers, damage-numbers getters, etc.
+- [x] **Breadcrumb purge** — ~55 stale `// X → module.js` migration comments and "retired" notes deleted.
+- [x] **Dead constants/state** — `TOPBOX_FADE_STEPS`, `TEXT_WHITE_ON_BLUE`, `prePauseTrack`.
+- [x] `initKeyboardListeners(keys)` → `input-handler.js` — moved `window.addEventListener('keydown'/'keyup')` block + chat hotkey logic.
+- [x] `_updateHudHpLvStep` → `hud-drawing.js` as `updateHudHpLvStep`.
+</details>
 
 ---
 
