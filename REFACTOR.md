@@ -29,6 +29,7 @@ Supporting modules split by concern:
 - **Render:** `render.js` (world pipeline), `battle-drawing.js`, `pvp.js`, `hud-drawing.js`, `hud-init.js`.
 - **State:** `ui-state.js` (canvas/ctx/sprites), `hud-state.js`, `map-state.js`, `battle-state.js`, `inventory.js`, `player-sprite.js`, `save-state.js`, `water-animation.js` (waterSt).
 - **Input:** `input-handler.js` (owns `keys`).
+- **Sprites:** `sprite-init.js` (ROM → canvases), `job-sprites.js` (job-change swap), `fake-player-sprites.js`, `battle-sprite-cache.js`, `weapon-sprites.js`, `flame-sprites.js`, `monster-sprites.js`, `boss-sprites.js`.
 - **Other extractions:** battle-update, battle-ally, battle-enemy, battle-turn, battle-encounter, battle-items, damage-numbers, sprite-init, flame-sprites, title-screen, transitions, movement, pause-menu, chat, roster, message-box, map-loading, map-triggers.
 
 All shared-bag (`_xxxShared`) patterns eliminated. All `init*()` callback shims eliminated except where deps are genuinely one-shot config (e.g., `initBattleAlly({ buildTurnOrder, processNextTurn, isTeamWiped })` — pure function references, not callbacks into game.js state). ES live bindings + direct imports used throughout.
