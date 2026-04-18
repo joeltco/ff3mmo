@@ -2,6 +2,50 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.0 — 2026-04-18
+
+### Shared-bag refactor — all 14 bags eliminated
+
+- **State modules extracted** — `battle-state.js`, `battle-sprite-cache.js`, `hud-state.js`, `map-state.js`, `ui-state.js`. Consumers import the state object directly; no more `shared` parameter threading.
+- **`fake-player-sprites.js`** — fake player canvases extracted from game.js (Step 1 of shared-bag refactor).
+- **`battle-update.js` (732L)** — entire battle state machine (opening, attack chain, defend/item, run, boss dissolve, victory, defeat, PVP) extracted from game.js.
+- **`movement.js` (260L)** — player movement, input dispatch, tile collision, action handling extracted. Pre-existing `MapRenderer` / `resetIndoorWaterCache` import bug fixed in `_checkFalseWall`.
+- **`title-screen.js`** — `updateTitle` + `_updateTitleMainOutCase` merged in, sharing a `waterSt` ref with game.js for animation continuity.
+- **game.js: 1,920L → 912L** (52% reduction). Target <4,000L achieved.
+
+### Battle pose audit
+
+- **Konami debugger** now the documented source of truth for pose correctness.
+- **OK main `lFwd` canvas** — was null, now built from `[idle0, idle1, OK_L_FWD_T2, OK_L_FWD_T3]`. L-forward swings no longer fall back to L-back pose.
+- **OK main `rFwd` canvas** — was loading garbage from ROM offset 18 (leg tiles), now built from idle tiles per debugger (R-fwd body = idle, legs-only animation).
+- **OK PVP `KnifeRFwd` LEG_L** — `_FP_LEG_L_BACK_R` → `_FP_LEG_L` (idle).
+- **Warrior ally attack portraits** — now use R_BACK_T2 / L_BACK[3] tiles matching main player + OK ally conventions (were all-idle / L_FWD).
+- **`_FP_ATK_R_TILE`** — was aliased to `OK_R_FWD_T2` which had been "fixed" to idle T2; now correctly points to `OK_R_BACK_SWING[2]`. Restored R-back swing visual.
+- **Konami debugger** — updated Warrior R-FWD LEG_L to `WR_LEG_L_FWD_R` to match code (debugger was stale since commit `e2e401d`).
+
+### Battle message system
+
+- **`battle-msg.js`** extracted. `replaceBattleMsg` swaps text mid-action for crits, hit count, status inflictions, spell names.
+- **Phase 1**: "Attacker : Target" format for player/monster/ally turns.
+- **Phase 2**: crit/hits/status result text replaces Phase 1.
+
+### Combat fixes
+
+- **ATK formula** — weapon power only. STR/AGI affect hit count not damage (NES disasm 30/9F44).
+- **All 231 monster ATK + attackRoll** corrected from ROM stat tables.
+- **Starting equipment** fixed to Knife(0x1E) + Leather Cap + Cloth Armor (matches NES).
+- **Ally slash timing** — 3 frames fit in 90ms `ALLY_SLASH_MS` (was 67ms/frame, frame 2 never shown).
+- **Ally slash hand/weapon** — now uses correct hand and weapon (was always right-hand + `weaponId`).
+- **7 game-logic bugs** fixed: confusion targets any combatant, mini/toad ATK, per-hit shield/evade, special attacks on allies, ally poison floor.
+- **EXP display** — victory screen now shows post-/4 value (matching actual gain).
+- **Monster turn order** — level-based AGI proxy (`agi = level`).
+
+### Other
+
+- **Play time tracking** — `ps.playTime` ticks in game loop, persisted in saves, shown HH:MM on player select.
+- **Victory rewards** — shown in enemy name box, save fix, chat clear.
+- **PVP fixes** — `drawBossSpriteBoxPVP` stale null arg, `pvp.js` invalid LHS assignments, `drawBattleMessageStrip` stale `_s` reference.
+
 ## 1.5.0 — 2026-04-08
 
 ### Title screen, menus, CP fixes

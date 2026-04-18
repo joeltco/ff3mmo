@@ -1,47 +1,43 @@
 # game.js Refactor TODO
 
-Current size: **2,730 lines** (v1.3.6). Target: <4,000 lines — **achieved**.
+Current size: **912 lines** (v1.6.0). Target: <4,000 lines — **achieved** (53% under target).
 
 ---
 
 ## Next Up
 
-No high-value extractions remaining. Remaining candidates are in "Evaluated — Not Worth It" or "Hard" below.
+No high-value extractions remaining. game.js at 912L is essentially a composition root — module init, callback wiring, top-level game loop. Further extraction would be cosmetic.
 
 ---
 
-## Evaluated — Not Worth It
+## Completed — Phase 6 (shared-bag refactor + final extractions)
 
-### ~~Canvas cache consolidation (~40 vars → 1 object)~~
-Evaluated: 47 canvas vars, ~300 refs across 8 files, 110+ shared context getters.
-Converting `let x = null` → `spriteCache.x: null` saves **zero lines** and touches
-250–300 sites. High risk, no benefit.
+<details>
+<summary>Shared-bag elimination (14/14 bags retired)</summary>
 
-### ~~`battleCtx` grouping (~40 battle vars → 1 object)~~
-Evaluated: 35 mutable vars, ~867 refs across 8 files.
-Net line savings: ~0 (same keys inside an object). High architectural value
-for *future* battle-state module extraction, but not justified without a concrete
-follow-up. Revisit when extracting a battle engine module.
+- [x] `src/fake-player-sprites.js` — fake player canvases (Step 1)
+- [x] `src/battle-sprite-cache.js` (60L) — `bsc` state object replaces canvas passing (Step 2)
+- [x] `src/hud-state.js` (28L) — HUD render state (Step 3)
+- [x] `src/map-state.js` (50L) — map/world state (Step 4)
+- [x] `src/battle-state.js` (108L) — full battle state machine data (Step 5)
+- [x] `src/ui-state.js` (30L) — misc UI state
+- [x] 5 battle bags retired — `_magicItem`, `_encounter`, `_ally`, `_enemy`, `_turn`
+- [x] 3 remaining battle bags retired — `_inputShared`, `_pvpShared`, `_battleDrawShared`
+- [x] 3 non-battle bags retired — `hudDraw`, `loading`, `transDraw`
+- [x] 3 final bags retired — `_pauseShared`, `_titleShared`, `_transShared`
+</details>
 
----
+<details>
+<summary>Final game.js extractions (1,920L → 912L)</summary>
 
-## Hard (deeply coupled, needs architectural redesign)
-
-- [ ] Split `_processBossFlash()` (49L) → `_targetAllyForAttack`, `_calculateAllyDamage`, `_calculatePlayerDamage`
-- [ ] Group raw globals (L46–704, ~620L) into state objects — blocked by shared context overhead
-
----
-
-## Won't Extract (too entangled)
-
-- ~~Roster draw/update (357L)~~ — **extracted** to `src/roster.js` (v1.3.1). Shared context pattern worked.
-- Title update logic (139L) — entangled with game state (ps, playerInventory, saveSlots, map loading)
-- Full rendering core — canvas state too entangled
-- Battle state machine — needs architectural redesign first
+- [x] `src/battle-update.js` (732L) — complete battle state machine (opening, attack chain, defend/item, run, boss dissolve, victory/defeat, PVP)
+- [x] `src/movement.js` (260L) — player movement, input dispatch, tile collision, action handling. Fixed pre-existing `MapRenderer`/`resetIndoorWaterCache` import bug in `_checkFalseWall`.
+- [x] `src/title-screen.js` — `updateTitle` + `_updateTitleMainOutCase` merged in with shared `waterSt` ref
+</details>
 
 ---
 
-## Completed
+## Prior Phases
 
 <details>
 <summary>Easy Wins (all done)</summary>
