@@ -1,14 +1,40 @@
-# game.js Refactor TODO
+# game.js Refactor Log
 
-Current size: **172 lines** (v1.6.0). Target: <4,000 lines — **achieved** (96% under target).
+**Status: complete.** game.js is **172 lines** (v1.6.0) — a minimal composition root. Target was <4,000 lines; result is 96% under target (1,920L → 172L, −91%).
+
+## Journey
+
+| Phase | game.js LOC | Delta | Theme |
+|---|---|---|---|
+| Start (post-Phase 5) | 2,695 | — | HUD + map loading extracted |
+| Phase 6 | 912 | −1,783 | 14 shared-bags retired, battle-update/movement/title-screen extracted |
+| Phase 7 | 679 | −233 | render.js + hud-init.js |
+| Phase 8 | 449 | −230 | dead-import sweep (114 symbols), breadcrumb purge |
+| Phase 9 | 429 | −20 | inventory.js; 3 `init*` functions deleted |
+| Phase 10 | 414 | −15 | roster `_rds` bag killed; WIPE_DURATION exported |
+| Phase 11 | 399 | −15 | `keys`/`sprite`/cursor/onShake direct-import; 4 `init*` deleted |
+| Phase 12 | 383 | −16 | `initPVP()` deleted (13-callback bag) |
+| Phase 12b | 377 | −6 | `waterSt` → water-animation.js; `initRender()` deleted |
+| Phase 13 | 257 | −120 | game-loop.js extraction |
+| Phase 14 | 172 | −85 | boot.js extraction |
+
+## Final architecture
+
+game.js contains only: imports, `CANVAS_W/H`, `SPRITE_PAL_TOP/BTM` + `JOB_WALK_PALS`, `init()`, `_swapBattleSprites()`, `returnToTitle()`, `getMobileInputMode()`, `_startDebugMode()`, `_startTitleScreen()`, `loadROM()`, and `export { loadFF12ROM } from './boot.js'`.
+
+Supporting modules split by concern:
+- **Frame loop:** `game-loop.js` — `startGameLoop()`, update/draw dispatch, `_reportError`.
+- **Asset init:** `boot.js` — `initSpriteAssets`, `initTitleAssets`, `loadFF12ROM`.
+- **Render:** `render.js` (world pipeline), `battle-drawing.js`, `pvp.js`, `hud-drawing.js`, `hud-init.js`.
+- **State:** `ui-state.js` (canvas/ctx/sprites), `hud-state.js`, `map-state.js`, `battle-state.js`, `inventory.js`, `player-sprite.js`, `save-state.js`, `water-animation.js` (waterSt).
+- **Input:** `input-handler.js` (owns `keys`).
+- **Other extractions:** battle-update, battle-ally, battle-enemy, battle-turn, battle-encounter, battle-items, damage-numbers, sprite-init, flame-sprites, title-screen, transitions, movement, pause-menu, chat, roster, message-box, map-loading, map-triggers.
+
+All shared-bag (`_xxxShared`) patterns eliminated. All `init*()` callback shims eliminated except where deps are genuinely one-shot config (e.g., `initBattleAlly({ buildTurnOrder, processNextTurn, isTeamWiped })` — pure function references, not callbacks into game.js state). ES live bindings + direct imports used throughout.
 
 ---
 
-## Next Up
-
-game.js at 172L is a minimal composition root — ROM load + module wiring. Asset init lives in `boot.js`, frame loop in `game-loop.js`. Remaining code is genuine composition.
-
----
+## Phase history
 
 ## Completed — Phase 14 (extract boot asset init)
 
