@@ -5,7 +5,8 @@ import { playSFX, SFX, pauseMusic, playFF1Track, FF1_TRACKS } from './music.js';
 import { pauseSt } from './pause-menu.js';
 import { transSt } from './transitions.js';
 import { msgState, showMsgBox } from './message-box.js';
-import { chatState, CHAT_TABS, activeTab, tabSelectMode, setActiveTab, setTabSelectMode, chatScrollOffset, setChatScrollOffset } from './chat.js';
+import { chatState, CHAT_TABS, activeTab, tabSelectMode, setActiveTab, setTabSelectMode, chatScrollOffset, setChatScrollOffset, onChatKeyDown } from './chat.js';
+import { titleSt, onNameEntryKeyDown } from './title-screen.js';
 import { ps, recalcCombatStats, changeJob, getEquipSlotId, setEquipSlotId, EQUIP_SLOT_SUBTYPE,
          getHitWeapon, jobSwitchCost, getJobLevelStatBonus } from './player-stats.js';
 import { ITEMS, isHandEquippable, isWeapon, weaponSubtype, isBladedWeapon } from './data/items.js';
@@ -41,6 +42,29 @@ export function initInputHandler(deps) {
   _swapBattleSprites = deps.swapBattleSprites;
   _startPVPBattle = deps.startPVPBattle;
   _toggleCrt = deps.toggleCrt;
+}
+
+const TRACKED_KEYS = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'z', 'Z', 'x', 'X', 'Enter', 's', 'S'];
+function _chatHotkeyAllowed() {
+  return titleSt.state === 'done' && battleSt.battleState === 'none' && pauseSt.state === 'none' &&
+    inputSt.rosterState === 'none' && transSt.state !== 'loading' && msgState.state === 'none';
+}
+export function initKeyboardListeners(keys) {
+  window.addEventListener('keydown', (e) => {
+    if (chatState.inputActive) { onChatKeyDown(e); return; }
+    if (titleSt.state === 'name-entry') { onNameEntryKeyDown(e); return; }
+    if (TRACKED_KEYS.includes(e.key)) { e.preventDefault(); keys[e.key] = true; }
+    if (e.key === 'T' && _chatHotkeyAllowed() && !chatState.inputActive) {
+      e.preventDefault();
+      chatState.expanded = !chatState.expanded;
+      playSFX(chatState.expanded ? SFX.SCREEN_OPEN : SFX.SCREEN_CLOSE);
+    }
+    if (e.key === 't' && _chatHotkeyAllowed()) {
+      e.preventDefault();
+      chatState.inputActive = true; chatState.inputText = ''; chatState.cursorTimer = 0;
+    }
+  });
+  window.addEventListener('keyup', (e) => { keys[e.key] = false; });
 }
 
 // Local constants (must match game.js)

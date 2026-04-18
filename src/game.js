@@ -3,139 +3,68 @@
 import { parseROM } from './rom-parser.js';
 import { initHUD } from './hud-init.js';
 import { Sprite } from './sprite.js';
-// loadMap, MapRenderer → map-loading.js
 import { loadWorldMap } from './world-map-loader.js';
 import { WorldMapRenderer } from './world-map-renderer.js';
 import { clearDungeonCache } from './dungeon-generator.js';
-import { initMusic, playTrack, stopMusic, playSFX, stopSFX, TRACKS, SFX,
-         initFF1Music, playFF1Track, stopFF1Music, fadeOutFF1Music, clearMusicStash,
-         getCurrentTrack, FF1_TRACKS, pauseMusic, resumeMusic } from './music.js';
+import { initMusic, playTrack, TRACKS, initFF1Music, fadeOutFF1Music, clearMusicStash } from './music.js';
 import { applyIPS } from './ips-patcher.js';
-import { initTextDecoder, getItemNameClean, getMonsterName } from './text-decoder.js';
-import { initFont, drawText, measureText, TEXT_WHITE, TEXT_GREY, TEXT_YELLOW } from './font-renderer.js';
-import { ITEMS, isHandEquippable, isWeapon, weaponSubtype } from './data/items.js';
-import { ENCOUNTERS } from './data/encounters.js';
-import { PLAYER_POOL, PLAYER_PALETTES, ROSTER_FADE_STEPS } from './data/players.js';
-import { BATTLE_MISS, BATTLE_GAME_OVER, BATTLE_FIGHT, BATTLE_RUN,
-         BATTLE_RAN_AWAY, BATTLE_DEFEND, BATTLE_VICTORY,
-         BATTLE_GOT_EXP, BATTLE_LEVEL_UP, BATTLE_BOSS_NAME, BATTLE_GOBLIN_NAME,
-         BATTLE_MENU_ITEMS, PAUSE_ITEMS,
-         POND_RESTORED, VERSION } from './data/strings.js';
-import { queueBattleMsg, advanceBattleMsgZ,
-         isBattleMsgBusy, getBattleMsgCurrent, getBattleMsgTimer, getBattleMsgQueue,
-         MSG_FADE_IN_MS, MSG_HOLD_MS, MSG_FADE_OUT_MS, MSG_TOTAL_MS } from './battle-msg.js';
+import { initTextDecoder } from './text-decoder.js';
+import { initFont } from './font-renderer.js';
+import { PLAYER_POOL, ROSTER_FADE_STEPS } from './data/players.js';
+import { VERSION } from './data/strings.js';
 import { initMonsterSprites } from './monster-sprites.js';
 import { loadBossSprite } from './boss-sprites.js';
-// serverDeleteSlot → title-screen.js
-import { selectCursor, saveSlots,
-         setSaveSlots, saveSlotsToDB, loadSlotsFromDB, setInventoryGetter, setPositionGetter } from './save-state.js';
-import { _buildItemRowBytes, _makeGotNText, makeExpText, makeGilText, makeCpText, makeFoundItemText, makeJobLevelUpText } from './text-utils.js';
-// _makeCanvas16, _makeCanvas16ctx, _hflipCanvas16, _makeWhiteCanvas → sprite-init.js
+import { saveSlotsToDB, loadSlotsFromDB, setInventoryGetter, setPositionGetter } from './save-state.js';
 import { resetWorldWaterCache } from './water-animation.js';
-import { bsc, getSlashFramesForWeapon, initBattleSpriteCache, loadJobBattleSprites } from './battle-sprite-cache.js';
-import { hudSt, HUD_INFO_FADE_STEPS, HUD_INFO_FADE_STEP_MS, HUD_HPLV_STEP_MS } from './hud-state.js';
+import { initBattleSpriteCache, loadJobBattleSprites } from './battle-sprite-cache.js';
+import { hudSt, HUD_INFO_FADE_STEPS, HUD_INFO_FADE_STEP_MS } from './hud-state.js';
 import { mapSt } from './map-state.js';
-import { ui, isMobile, drawBoxOnCtx } from './ui-state.js';
-import { battleSt, getEnemyHP, setEnemyHP,
-         BOSS_ATK, BOSS_DEF, BOSS_MAX_HP,
-         BATTLE_SHAKE_MS, BATTLE_DMG_SHOW_MS, BOSS_PREFLASH_MS, MONSTER_DEATH_MS } from './battle-state.js';
+import { ui, isMobile } from './ui-state.js';
+import { battleSt } from './battle-state.js';
 import { initFlameRawTiles, initStarTiles } from './flame-sprites.js';
-// BATTLE_BG_MAP_LOOKUP, renderBattleBg → map-loading.js
 import { LOAD_FADE_STEP_MS, LOAD_FADE_MAX } from './loading-screen.js';
 import { initTitleWater, initTitleSky, initTitleUnderwater, initUnderwaterSprites, initTitleOcean, initTitleLogo } from './title-animations.js';
-// BATTLE_SPRITE_ROM, BATTLE_JOB_SIZE, BATTLE_PAL_ROM → sprite-init.js
-import { ps, EQUIP_SLOT_SUBTYPE, getEquipSlotId, setEquipSlotId, recalcDEF, recalcCombatStats, getHitWeapon, isHitRightHand, initPlayerStats, initExpTable, grantExp, grantCP, fullHeal, getShieldEvade, getJobLevel, gainJobJP } from './player-stats.js';
-import { chatState, addChatMessage, updateChat, updateChatTabs, drawChat, drawChatTabs, onChatKeyDown, consoleLog, setCommandContext,
-         CHAT_TABS, activeTab, tabSelectMode, setActiveTab, setTabSelectMode } from './chat.js';
-import { rosterBattleFade, setLocationGetter, getPlayerLocation, rosterLocForMapId,
-         getRosterVisible, initRoster, updateRoster,
-         drawRoster, drawRosterMenu } from './roster.js';
-import { msgState, showMsgBox, updateMsgBox, drawMsgBox } from './message-box.js';
-import { titleSt, isTitleActiveState, titleFadeLevel, titleFadePal, drawTitleOcean, drawTitleWater, drawTitleSky, drawTitleUnderwater, drawUnderwaterSprites, drawTitleSkyInHUD, drawTitle,
-         onNameEntryKeyDown, updateTitle, initTitleUpdate } from './title-screen.js';
+import { ps, initPlayerStats, initExpTable } from './player-stats.js';
+import { chatState, updateChat, updateChatTabs, drawChat, drawChatTabs, consoleLog, setCommandContext } from './chat.js';
+import { rosterBattleFade, setLocationGetter, getPlayerLocation, getRosterVisible, initRoster, updateRoster, drawRoster, drawRosterMenu } from './roster.js';
+import { msgState, updateMsgBox, drawMsgBox } from './message-box.js';
+import { titleSt, drawTitleSkyInHUD, drawTitle, updateTitle, initTitleUpdate } from './title-screen.js';
 import { pauseSt, updatePauseMenu, drawPauseMenu, initPauseMenu } from './pause-menu.js';
-import { transSt, topBoxSt, loadingSt, startWipeTransition, updateTransition, updateTopBoxScroll, drawTransitionOverlay, initTransitions } from './transitions.js';
-import { inputSt, handleBattleInput, handleRosterInput, handlePauseInput, initInputHandler } from './input-handler.js';
+import { transSt, loadingSt, updateTransition, updateTopBoxScroll, drawTransitionOverlay, initTransitions } from './transitions.js';
+import { inputSt, initInputHandler, initKeyboardListeners } from './input-handler.js';
 import { initMapTriggers } from './map-triggers.js';
-import { pvpSt, startPVPBattle, resetPVPState, updatePVPBattle, initPVP } from './pvp.js';
+import { startPVPBattle, initPVP } from './pvp.js';
 import { drawBattle, drawBattleAllies, drawSWExplosion, drawSWDamageNumbers, initBattleDrawing } from './battle-drawing.js';
 import { initRender, render, drawPoisonFlash, drawPondStrobe, updateStarEffect } from './render.js';
-// playSlashSFX → battle-update.js
-import { getKnifeBladeCanvas, getKnifeBladeSwungCanvas,
-         getDaggerBladeCanvas, getDaggerBladeSwungCanvas,
-         getSwordBladeCanvas, getSwordBladeSwungCanvas,
-         getFistCanvas, getBlades } from './weapon-sprites.js';
-import { drawHUD, clipToViewport, drawCursorFaded, drawHudBox,
-         drawSparkleCorners, drawBorderedBox, drawHealNum, drawTopBoxBorder,
-         roundTopBoxCorners, grayViewport, drawRosterSparkle, statRowBytes } from './hud-drawing.js';
-import { initMapLoading, loadMapById, loadWorldMapAt, loadWorldMapAtPosition, setupTopBox } from './map-loading.js';
+import { getBlades } from './weapon-sprites.js';
+import { drawHUD, clipToViewport, drawHudBox, drawBorderedBox, roundTopBoxCorners, drawRosterSparkle, updateHudHpLvStep } from './hud-drawing.js';
+import { initMapLoading, loadMapById } from './map-loading.js';
 import { updateBattleAlly, initBattleAlly } from './battle-ally.js';
-import { updateBattleEnemyTurn, initBattleEnemy } from './battle-enemy.js';
+import { initBattleEnemy } from './battle-enemy.js';
 import { buildTurnOrder, processNextTurn, initBattleTurn } from './battle-turn.js';
-// status-effects → battle-update.js, battle-encounter.js
-import { tickRandomEncounter, startRandomEncounter, initBattleEncounter } from './battle-encounter.js';
+import { initBattleEncounter } from './battle-encounter.js';
 import { initMovement, handleInput, updateMovement } from './movement.js';
-import { getTargets, getHitIdx, startMagicItem, initBattleItems } from './battle-items.js';
-import { initBattleUpdate, resetBattleVars, isTeamWiped, isVictoryBattleState,
-         startBattle, executeBattleCommand, updateBattle, updateBattleTimers,
-         updateBattlePlayerAttack, updateBattleDefendItem, updateBattleEndSequence,
-         tryJoinPlayerAlly, advancePVPTargetOrVictory } from './battle-update.js';
+import { initBattleItems } from './battle-items.js';
+import { initBattleUpdate, resetBattleVars, isTeamWiped, isVictoryBattleState, executeBattleCommand, updateBattle, updateBattleTimers, updateBattlePlayerAttack, updateBattleDefendItem, updateBattleEndSequence, tryJoinPlayerAlly, advancePVPTargetOrVictory } from './battle-update.js';
 import { initCursorTile as _initCursorTile, initScrollArrows as _initScrollArrows,
          initAdamantoise as _initAdamantoise,
          initGoblinSprite as _initGoblinSprite, initInvincibleSprite as _initInvincibleSprite,
          initMoogleSprite as _initMoogleSprite, initLoadingScreenFadeFrames as _initLoadingScreenFadeFrames } from './sprite-init.js';
 import { initFakePlayerSprites } from './fake-player-sprites.js';
-import { initMissSprite,
-         getEnemyDmgNum, getPlayerDamageNum,
-         getPlayerHealNum, getEnemyHealNum,
-         getAllyDamageNums, getSwDmgNums } from './damage-numbers.js';
-// OK_IDLE, OK_VICTORY, etc. → sprite-init.js
-
-// isMobile → ui-state.js
-
-// Save state (selectCursor, saveSlots, saveSlotsToDB, loadSlotsFromDB) → save-state.js
-
+import { initMissSprite } from './damage-numbers.js';
 
 const CANVAS_W = 256;          // 16 metatiles wide (NES resolution)
 const CANVAS_H = 240;          // 15 metatiles tall (NES resolution)
 
-// HUD layout — only values needed by SCREEN_CENTER calc below. Full HUD layout → hud-init.js + hud-drawing.js.
 const HUD_VIEW_X = 0;
 const HUD_VIEW_Y = 32;
 const HUD_VIEW_W = 144;
 const HUD_VIEW_H = 144;
-// HUD canvases + border tiles owned by hud-init.js; accessed via ui.*
+let ff12Raw = null;  // FF1&2 ROM for Adamantoise sprite + FF1 music
+const TITLE_FADE_MAX = 4;
 
-// Battle sprite canvases (poses, sweat, sparkles, status, slash) — owned by battle-sprite-cache.js
-
-// FF1&2 ROM — secondary ROM for monster sprites, etc.
-let ff12Raw = null;
-// FF2_OFFSET, FF2_ADAMANTOISE_SPRITE → sprite-init.js
-// adamantoiseFrames, moogleFrames, invincibleFrames, moogleFadeFrames, bossFadeFrames,
-// loadingBgFadeFrames → hud-state.js
-
-// Boss sprite — positioned in dungeon boss room
-// bossSprite → map-state.js
-
-// LAND_TURTLE_PAL_*, GOBLIN_*, MOOGLE_*, INVINCIBLE_* constants → sprite-init.js
-// MONSTER_DEATH_FRAMES → sprite-init.js (imported)
-// goblin canvases → battle-state.js
-
-// Title screen state + timing constants → title-screen.js
-const TITLE_FADE_MAX     = 4;
-
-// Player select screen state → save-state.js (selectCursor, saveSlots, nameBuffer, etc.)
-
-// HUD timers (hudInfoFadeTimer, hudHpLvStep/Timer, playerDeathTimer, topBox*) → hud-state.js
-
-// Player stats are now in ps (imported from ./player-stats.js)
-
-// Inventory system
-let playerInventory = {};    // { itemId: count } — e.g. { 0xA6: 3 }
-// battleSt.itemHealAmount → battle-state.js
-
-// Inventory helpers
 const INV_SLOTS = 3; // visible inventory rows per page
+let playerInventory = {};    // { itemId: count } — e.g. { 0xA6: 3 }
 function addItem(id, count) {
   playerInventory[id] = (playerInventory[id] || 0) + count;
 }
@@ -150,53 +79,12 @@ function buildItemSelectList() {
   return list;
 }
 
-// Boss fight state — stats read from monsters.js (Land Turtle 0xCC)
-// Battle state (battleSt.battleState, battleSt.battleTimer, battleSt.enemyHP, encounter*, battleSt.turnQueue, etc.) → battle-state.js
-// Boss constants (BOSS_ATK/DEF/MAX_HP) imported from battle-state.js.
-
-// Battle message queue — renders in right panel strip (144, 160, 112, 16)
-// Battle message system → battle-msg.js
-
-// Hit animation state (battleSt.comboStatusInflicted, battleSt.currentHitIdx, battleSt.slashFrame, battleSt.slashX/Y, battleSt.slashOffX/Y, battleSt.critFlashTimer) → battle-state.js
-// poisonFlashTimer → movement.js
-// BATTLE_MISS, BATTLE_GAME_OVER → data/strings.js
-
-// Battle timing constants → battle-update.js / render.js
-
-// Top box — battle scene BG or area name
-// topBoxMode, topBoxBgCanvas, topBoxBgFadeFrames → hud-state.js
-
-// Top box scroll animation — blue name banner slides in/out
-const TOPBOX_FADE_STEPS = 4;         // 4 steps: $30→$20→$10→$00→$0F — still used by game.js draw functions
-
-// White text on blue background — colors 1&2 = NES $02 (blue) so cell bg matches fill
-const TEXT_WHITE_ON_BLUE = [0x02, 0x02, 0x02, 0x30];
-
-// AREA_NAMES, DUNGEON_NAME → data/strings.js
-
-// Pause menu state → pause-menu.js (pauseSt)
-let prePauseTrack = -1;        // FF3 track playing before pause opened
-// CURSOR_TILE_ROM → sprite-init.js
 let cursorTileCanvas = null;
 let cursorFadeCanvases = null; // [step1..step4] NES-faded cursor canvases
 let scrollArrowDown = null;
 let scrollArrowUp = null;
-let scrollArrowDownFade = null;  // [step1..step4]
-let scrollArrowUpFade = null;    // [step1..step4]
-// PAUSE_ITEMS → data/strings.js
-
-// getPlayerLocation, getRosterPlayers, getRosterVisible, roster state/update/draw ��� roster.js
-// fakePlayer portrait/body canvases live in fake-player-sprites.js (imported above).
-
-// Battle allies — roster players that join combat
-// Battle allies + ally-combat state → battle-state.js
-// playerDeathTimer → hud-state.js
-// battleSt._teamWipeMsgShown, battleSt.enemyTargetAllyIdx, battleSt.allyExitTimer, battleSt.turnTimer → battle-state.js
-// Chest message box state (same style as roar box)
-// Universal message box — slide-in, instant text, Z dismiss, slide-out
-// msgState → message-box.js
-
-// Battle text byte arrays → data/strings.js
+let scrollArrowDownFade = null;
+let scrollArrowUpFade = null;
 
 // Player sprite palettes — from FCEUX PPU trace (dual palette: top/bottom tiles)
 const SPRITE_PAL_TOP = [0x0F, 0x0F, 0x16, 0x30];    // spr_pal0: black, dark red, white
@@ -212,36 +100,21 @@ let sprite = null;
 let lastTime = 0;
 const keys = {};
 
-// Map state (worldX/Y, currentMapId, mapStack, mapData, mapRenderer, onWorldMap,
-// dungeonFloor/Seed/Destinations, secretWalls, falseWalls, hiddenTraps, rockSwitch,
-// warpTile, pondTiles, disabledTrigger, openDoor, bossSprite, moving) → map-state.js
 let romRaw = null;
 
 // Where the sprite draws on screen (centered in viewport)
 const SCREEN_CENTER_X = HUD_VIEW_X + (HUD_VIEW_W - 16) / 2;    // 64
 const SCREEN_CENTER_Y = HUD_VIEW_Y + (HUD_VIEW_H - 16) / 2 - 3; // 93
 
-// Movement state → movement.js
-
 // Water animation state — shared with title-screen.js via waterSt ref
 const waterSt = { timer: 0, tick: 0 };
 const WATER_TICK = 4 * (1000 / 60);  // ~67ms per tick
 
-// Flame sprite state → flame-sprites.js
-// Star sprite tiles → flame-sprites.js
-// starEffect, pondStrobeTimer → map-state.js
-
-
-// Screen wipe timing constants → transitions.js
-// WIPE_DURATION → transitions.js (roster.js gets it via shared context)
 let _tabWasLoading = false; // tracks if we just came from a loading screen
 
 // Screen shake state (earthquake effect for secret passages)
 const SHAKE_DURATION = 34 * (1000 / 60);  // 2 × 17 NES frames ≈ 567ms
-// shakeActive, shakeTimer, shakePendingAction → map-state.js
 
-// _onChatKeyDown → chat.js (onChatKeyDown)
-// _onNameEntryKeyDown → title-screen.js (onNameEntryKeyDown)
 export function init() {
   setInventoryGetter(() => playerInventory);
   setPositionGetter(() => ({ worldX: mapSt.worldX, worldY: mapSt.worldY, onWorldMap: mapSt.onWorldMap, currentMapId: mapSt.currentMapId }));
@@ -253,37 +126,9 @@ export function init() {
   ctx.imageSmoothingEnabled = false;
   ui.canvas = canvas; ui.ctx = ctx;
 
-  window.addEventListener('keydown', (e) => {
-    if (chatState.inputActive) { onChatKeyDown(e); return; }
-    if (titleSt.state === 'name-entry') { onNameEntryKeyDown(e); return; }
-    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'z', 'Z', 'x', 'X', 'Enter', 's', 'S'].includes(e.key)) {
-      e.preventDefault();
-      keys[e.key] = true;
-    }
-    if (e.key === 'T' && titleSt.state === 'done' && battleSt.battleState === 'none' &&
-        pauseSt.state === 'none' && inputSt.rosterState === 'none' && transSt.state !== 'loading' && msgState.state === 'none' && !chatState.inputActive) {
-      e.preventDefault();
-      chatState.expanded = !chatState.expanded;
-      playSFX(chatState.expanded ? SFX.SCREEN_OPEN : SFX.SCREEN_CLOSE);
-    }
-    if (e.key === 't' && titleSt.state === 'done' && battleSt.battleState === 'none' &&
-        pauseSt.state === 'none' && inputSt.rosterState === 'none' && transSt.state !== 'loading' && msgState.state === 'none') {
-      e.preventDefault();
-      chatState.inputActive = true; chatState.inputText = ''; chatState.cursorTimer = 0;
-    }
-  });
-  window.addEventListener('keyup', (e) => { keys[e.key] = false; });
+  initKeyboardListeners(keys);
   window.addEventListener('beforeunload', () => { saveSlotsToDB(); });
 }
-
-// _tileToCanvas, _initHUDBorderTiles, _initHUDCanvases, _buildFadedHUDSet, initHUD → hud-init.js
-
-// _renderPortrait through initLoadingScreenFadeFrames → sprite-init.js
-
-// _pauseFadeStep → pause-menu.js
-// _drawHudWithFade, _grayViewport → hud-drawing.js
-// _pausePanelLayout → pause-menu.js
-// _resetBattleVars, _isTeamWiped → battle-update.js
 
 function _swapBattleSprites(jobIdx) {
   loadJobBattleSprites(romRaw, jobIdx);
@@ -295,8 +140,6 @@ function _swapBattleSprites(jobIdx) {
   }
 }
 
-// _landOnWorldMap → map-loading.js
-
 function returnToTitle() {
   saveSlotsToDB();
   pauseSt.state = 'none';
@@ -306,23 +149,6 @@ function returnToTitle() {
   transSt.timer = 0;
   transSt.pendingAction = () => { battleSt.battleState = 'none'; hudSt.hudInfoFadeTimer = HUD_INFO_FADE_STEPS * HUD_INFO_FADE_STEP_MS; _startTitleScreen(); };
 }
-// setupTopBox → map-loading.js
-
-// _hudDrawShared / _loadingShared / _transDrawShared retired —
-// hud-drawing, loading-screen, transitions read ui/state modules directly.
-
-// _transShared retired — transitions.js is wired via initTransitions() at boot
-
-// getEnemyHP / setEnemyHP → battle-state.js (as getEnemyHP / setEnemyHP)
-
-// _pauseShared retired — pause-menu.js reads ui/inputSt directly + playerInventory via initPauseMenu callback
-
-// _pvpShared retired — pvp.js uses direct imports + injected callbacks
-
-
-// _battleDrawShared retired — battle-drawing.js uses direct imports + injected callbacks
-
-// _titleShared retired — title-screen.js imports drawCursorFaded directly; drawTitle takes waterSt.tick as arg
 
 export function getMobileInputMode() {
   if (chatState.inputActive) return 'chat';
@@ -512,65 +338,9 @@ export function loadFF12ROM(arrayBuffer) {
   }
 }
 
-// _calcSpawnY, _openReturnDoor, _loadDungeonFloor, _loadRegularMap,
-// loadMapById, loadWorldMapAt, loadWorldMapAtPosition → map-loading.js
-
-// startMove, handleInput, handleAction, updateMovement, _onMoveComplete, _startMoveFromKeys → movement.js
-
-// Flame/star sprite decode + rendering → flame-sprites.js (used directly by map-loading/triggers)
-
-
-
-
-// _renderSprites, _renderMapAndWater, _renderStarSpiral, render → render.js
-
-// statRowBytes → hud-drawing.js
-
-// _drawTopBoxBattleBG, _drawTopBoxOverlay, _drawHUDTopBox, _drawPortraitImage,
-// _drawCureSparkle, _drawHealNum, _drawPauseHealNum, _drawHUDPortrait,
-// _drawHUDInfoPanel, drawHUD, _drawSparkleCorners, _drawCursorFaded,
-// clipToViewport, drawHudBox, drawRosterSparkle → hud-drawing.js
-
-// ── Title Screen — titleFadeLevel, titleFadePal, draw functions → title-screen.js ──
-
-// _updateTitleMainOutCase, updateTitle → title-screen.js
-
-
-// drawTitleOcean..drawPlayerSelectContent → title-screen.js
-
-// --- Pause menu (updatePauseMenu, drawPauseMenu → pause-menu.js) ---
-
-// showMsgBox, updateMsgBox, drawMsgBox → message-box.js
-
-// _drawMonsterDeath → render.js
-
-// drawBorderedBox, drawTopBoxBorder, roundTopBoxCorners → hud-drawing.js
-
-// _drawPauseBox, _drawPauseMenuText, _drawPauseInventory, _drawPauseEquipSlots, _drawPauseEquipItems, _drawPauseStats, drawPauseMenu → pause-menu.js
-
-// --- Slash Sprites (procedural) ---
-
-
-// --- Battle System ---
-// startBattle, executeBattleCommand, updateBattle, all _updateBattle* → battle-update.js
-function _updateHudHpLvStep(dt) {
-  const target = (battleSt.battleState === 'none' || battleSt.battleState === 'flash-strobe' ||
-    battleSt.battleState === 'encounter-box-expand' || battleSt.battleState === 'monster-slide-in' ||
-    battleSt.battleState === 'enemy-box-expand' || battleSt.battleState === 'boss-appear') ? 0 : 4;
-  if (hudSt.hudHpLvStep === target) return;
-  hudSt.hudHpLvTimer += dt;
-  while (hudSt.hudHpLvTimer >= HUD_HPLV_STEP_MS) {
-    hudSt.hudHpLvTimer -= HUD_HPLV_STEP_MS;
-    hudSt.hudHpLvStep += hudSt.hudHpLvStep < target ? 1 : -1;
-    if (hudSt.hudHpLvStep === target) { hudSt.hudHpLvTimer = 0; break; }
-  }
-}
-
-// _drawPoisonFlash, _drawPondStrobe, _updateStarEffect → render.js
-
 function _gameLoopUpdate(dt) {
   if (hudSt.hudInfoFadeTimer < HUD_INFO_FADE_STEPS * HUD_INFO_FADE_STEP_MS) hudSt.hudInfoFadeTimer += dt;
-  _updateHudHpLvStep(dt);
+  updateHudHpLvStep(dt);
   handleInput();
   updateRoster(dt, { battleState: battleSt.battleState, transSt, wipeDuration: 44 * (1000 / 60), hudInfoFadeTimer: hudSt.hudInfoFadeTimer, hudInfoFadeSteps: HUD_INFO_FADE_STEPS, hudInfoFadeStepMs: HUD_INFO_FADE_STEP_MS });
   updateChat(dt, battleSt.battleState);

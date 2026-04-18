@@ -14,7 +14,7 @@ import { _dmgBounceY } from './data/animation-tables.js';
 import { HEAL_NUM_PAL, drawBattleNum } from './damage-numbers.js';
 import { inputSt } from './input-handler.js';
 import { bsc } from './battle-sprite-cache.js';
-import { hudSt } from './hud-state.js';
+import { hudSt, HUD_HPLV_STEP_MS } from './hud-state.js';
 import { titleSt } from './title-screen.js';
 import { ui } from './ui-state.js';
 // Title fade constants — mirror of title-screen.js (kept in sync with game.js)
@@ -352,4 +352,17 @@ export function statRowBytes(label1, label2, value) {
   for (let i = 2; i < numStart; i++) bytes[i] = 0xFF;
   for (let i = 0; i < digits.length; i++) bytes[numStart + i] = 0x80 + parseInt(digits[i]);
   return bytes;
+}
+
+export function updateHudHpLvStep(dt) {
+  const target = (battleSt.battleState === 'none' || battleSt.battleState === 'flash-strobe' ||
+    battleSt.battleState === 'encounter-box-expand' || battleSt.battleState === 'monster-slide-in' ||
+    battleSt.battleState === 'enemy-box-expand' || battleSt.battleState === 'boss-appear') ? 0 : 4;
+  if (hudSt.hudHpLvStep === target) return;
+  hudSt.hudHpLvTimer += dt;
+  while (hudSt.hudHpLvTimer >= HUD_HPLV_STEP_MS) {
+    hudSt.hudHpLvTimer -= HUD_HPLV_STEP_MS;
+    hudSt.hudHpLvStep += hudSt.hudHpLvStep < target ? 1 : -1;
+    if (hudSt.hudHpLvStep === target) { hudSt.hudHpLvTimer = 0; break; }
+  }
 }
