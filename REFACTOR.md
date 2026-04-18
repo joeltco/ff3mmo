@@ -1,12 +1,26 @@
 # game.js Refactor TODO
 
-Current size: **399 lines** (v1.6.0). Target: <4,000 lines — **achieved** (90% under target).
+Current size: **383 lines** (v1.6.0). Target: <4,000 lines — **achieved** (90% under target).
 
 ---
 
 ## Next Up
 
-game.js at 399L is a composition root — imports, module wiring, boot/asset init, top-level game loop. Remaining code is genuine composition; no further extractions worth pursuing.
+game.js at 383L is a composition root — imports, module wiring, boot/asset init, top-level game loop. Remaining code is genuine composition; no further extractions worth pursuing.
+
+---
+
+## Completed — Phase 12 (kill initPVP's 13-callback bag)
+
+<details>
+<summary>pvp.js 781L → 756L (−25L); game.js 399L → 383L (−16L); last initXxx-bag eliminated</summary>
+
+- [x] **`initPVP()` deleted entirely** — was wiring 13 callbacks: `ctx`, `blades`, `processNextTurn`, `handleAlly`, `updateTimers`, `handlePlayerAttack`, `handleDefendItem`, `handleEndSequence`, `tryJoinPlayerAlly`, `buildAndProcessNextTurn`, `resetBattleVars`, `isTeamWiped`, `advancePVPTargetOrVictory`.
+- [x] pvp.js now imports each directly from `battle-turn.js`, `battle-ally.js`, `battle-update.js`, `weapon-sprites.js`, `ui-state.js`. `_buildAndProcessNextTurn` became a local 1-liner since it had no other home.
+- [x] `_ctx` → `ui.ctx` throughout pvp.js (~30 sites).
+- [x] Circular imports (pvp ↔ battle-update, pvp ↔ battle-ally) are fine — all usage happens inside function bodies, not at module-evaluation.
+- [x] Dead imports dropped from game.js: `initPVP`, `getBlades`, `updateBattleAlly`, `updateBattleTimers`, `updateBattlePlayerAttack`, `updateBattleDefendItem`, `updateBattleEndSequence`, `tryJoinPlayerAlly`, `advancePVPTargetOrVictory`.
+</details>
 
 ---
 

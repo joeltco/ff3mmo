@@ -1,5 +1,4 @@
 // PVP duel system — state, AI logic, rendering
-// Callbacks and ctx injected at boot via initPVP().
 
 import { battleSt, getEnemyHP, setEnemyHP } from './battle-state.js';
 import { clipToViewport, drawBorderedBox } from './hud-drawing.js';
@@ -8,38 +7,11 @@ import { queueBattleMsg } from './battle-msg.js';
 import { getBlades } from './weapon-sprites.js';
 import { getAllyDamageNums, getPlayerDamageNum, setPlayerDamageNum, getEnemyHealNum, setEnemyHealNum } from './damage-numbers.js';
 import { ui } from './ui-state.js';
-
-function _cursorTileCanvas() { return ui.cursorTileCanvas; }
-
-// Injected at boot
-let _ctx = null;
-let _blades = () => ({});
-let _processNextTurn = () => {};
-let _handleAlly = () => {};
-let _updateTimers = () => {};
-let _handlePlayerAttack = () => {};
-let _handleDefendItem = () => {};
-let _handleEndSequence = () => {};
-let _tryJoinPlayerAlly = () => {};
-let _buildAndProcessNextTurn = () => {};
-let _resetBattleVars = () => {};
-let _isTeamWiped = () => false;
-let _advancePVPTargetOrVictory = () => {};
-export function initPVP(deps) {
-  _ctx = deps.ctx;
-  _blades = deps.blades || (() => ({ ...getBlades() }));
-  _processNextTurn = deps.processNextTurn;
-  _handleAlly = deps.handleAlly;
-  _updateTimers = deps.updateTimers;
-  _handlePlayerAttack = deps.handlePlayerAttack;
-  _handleDefendItem = deps.handleDefendItem;
-  _handleEndSequence = deps.handleEndSequence;
-  _tryJoinPlayerAlly = deps.tryJoinPlayerAlly;
-  _buildAndProcessNextTurn = deps.buildAndProcessNextTurn;
-  _resetBattleVars = deps.resetBattleVars;
-  _isTeamWiped = deps.isTeamWiped;
-  _advancePVPTargetOrVictory = deps.advancePVPTargetOrVictory;
-}
+import { buildTurnOrder, processNextTurn } from './battle-turn.js';
+import { updateBattleAlly } from './battle-ally.js';
+import { resetBattleVars, isTeamWiped, updateBattleTimers,
+         updateBattlePlayerAttack, updateBattleDefendItem, updateBattleEndSequence,
+         tryJoinPlayerAlly, advancePVPTargetOrVictory } from './battle-update.js';
 import { playSFX, stopSFX, SFX, pauseMusic, playTrack, TRACKS } from './music.js';
 import { rollHits, calcPotentialHits, BOSS_HIT_RATE, GOBLIN_HIT_RATE } from './battle-math.js';
 import { ITEMS, isWeapon, weaponSubtype } from './data/items.js';
@@ -57,6 +29,9 @@ import { fakePlayerFullBodyCanvases, fakePlayerHitFullBodyCanvases,
          fakePlayerKnifeRFwdFullBodyCanvases, fakePlayerKnifeLFwdFullBodyCanvases,
          fakePlayerKneelFullBodyCanvases, fakePlayerVictoryFullBodyCanvases,
          fakePlayerDeathFrames } from './fake-player-sprites.js';
+
+function _cursorTileCanvas() { return ui.cursorTileCanvas; }
+function _buildAndProcessNextTurn() { battleSt.turnQueue = buildTurnOrder(); processNextTurn(); }
 
 // ── Local constants (mirrors game.js values — keep in sync) ──────────────────
 const HUD_VIEW_X = 0, HUD_VIEW_Y = 32, HUD_VIEW_W = 144, HUD_VIEW_H = 144;
@@ -133,7 +108,7 @@ export function startPVPBattle(target) {
   battleSt.battleState  = 'flash-strobe';
   battleSt.battleTimer  = 0;
   playSFX(SFX.BATTLE_SWIPE);
-  _resetBattleVars();
+  resetBattleVars();
   pauseMusic(); // pause map music now; battle track plays when box expands
 }
 
@@ -211,7 +186,7 @@ function _updatePVPMenuConfirm() {
     if (battleSt.battleTimer >= 150) {
       battleSt.allyJoinRound++;
       if (tryJoinPVPEnemyAlly()) return true;
-      if (_tryJoinPlayerAlly()) return true;
+      if (tryJoinPlayerAlly()) return true;
       _buildAndProcessNextTurn();
     }
   } else { return false; }
@@ -234,21 +209,21 @@ function _updatePVPDissolve() {
   if (battleSt.battleTimer >= MONSTER_DEATH_MS + _maxDelay) {
     pvpSt.pvpDyingMap = new Map();
     battleSt.battleTimer = 0;
-    _advancePVPTargetOrVictory();
+    advancePVPTargetOrVictory();
   }
   return true;
 }
 export function updatePVPBattle(dt) {
-  _updateTimers(dt);
+  updateBattleTimers(dt);
   _updatePVPOpening()         ||
   _updatePVPMenuConfirm()     ||
   _updatePVPAllyAppear()      ||
   _updatePVPDissolve()        ||
-  _handlePlayerAttack()     ||
-  _handleDefendItem(dt)     ||
-  _handleAlly()             ||
+  updateBattlePlayerAttack()     ||
+  updateBattleDefendItem(dt)     ||
+  updateBattleAlly()             ||
   updateBattleEnemyTurn()   ||
-  _handleEndSequence(dt);
+  updateBattleEndSequence(dt);
 }
 
 // ── Enemy turn update ─────────────────────────────────────────────────────────
@@ -385,7 +360,7 @@ function _processEnemyFlash() {
 
 function _processPVPDefendAnim() {
   if (battleSt.battleState !== 'pvp-defend-anim') return false;
-  if (battleSt.battleTimer >= DEFEND_SPARKLE_TOTAL_MS) _processNextTurn(); // defend is the full action
+  if (battleSt.battleTimer >= DEFEND_SPARKLE_TOTAL_MS) processNextTurn(); // defend is the full action
   return true;
 }
 
@@ -393,7 +368,7 @@ function _processPVPOppPotion() {
   if (battleSt.battleState !== 'pvp-opp-potion') return false;
   if (battleSt.battleTimer >= DEFEND_SPARKLE_TOTAL_MS) {
     setEnemyHealNum(null);
-    _processNextTurn();
+    processNextTurn();
   }
   return true;
 }
@@ -407,7 +382,7 @@ function _processPVPOppSWThrow() {
     for (let i = 0; i < battleSt.battleAllies.length; i++) {
       if (battleSt.battleAllies[i].hp > 0) targets.push(i);
     }
-    if (targets.length === 0) { _processNextTurn(); return true; }
+    if (targets.length === 0) { processNextTurn(); return true; }
     // Roll damage using INT (5 + level), matching player formula (no defense calc)
     const int = 5 + (pvpSt.pvpOpponentStats.level || 1);
     const swAtk = Math.floor(int / 2) + 55;
@@ -424,7 +399,7 @@ function _processPVPOppSWThrow() {
 function _processPVPOppSWHit() {
   if (battleSt.battleState !== 'pvp-opp-sw-hit') return false;
   const targets = pvpSt._oppSWTargets;
-  if (!targets || targets.length === 0) { _processNextTurn(); return true; }
+  if (!targets || targets.length === 0) { processNextTurn(); return true; }
   const tidx = targets[pvpSt._oppSWHitIdx];
   // At 0ms: explosion SFX
   if (!pvpSt._oppSWExplosionPlayed) {
@@ -468,10 +443,10 @@ function _processPVPOppSWHit() {
           battleSt.turnQueue = battleSt.turnQueue.filter(t => !(t.type === 'ally' && t.index === i));
         }
       }
-      if (_isTeamWiped()) {
+      if (isTeamWiped()) {
         battleSt.isDefending = false; battleSt.battleState = 'team-wipe'; battleSt.battleTimer = 0;
       } else {
-        _processNextTurn();
+        processNextTurn();
       }
     }
   }
@@ -480,9 +455,9 @@ function _processPVPOppSWHit() {
 
 function _processEnemyDamageShow() {
   if (battleSt.battleTimer < BATTLE_DMG_SHOW_MS) return;
-  if (_isTeamWiped()) {
+  if (isTeamWiped()) {
     battleSt.isDefending = false; battleSt.battleState = 'team-wipe'; battleSt.battleTimer = 0;
-  } else { _processNextTurn(); }
+  } else { processNextTurn(); }
 }
 
 function _processPVPSecondWindup() {
@@ -532,9 +507,9 @@ function _processPVPEnemySlash() {
 }
 
 // ── Rendering ─────────────────────────────────────────────────────────────────
-// Mirrors game.js _drawSparkleCorners but uses _ctx. Wraps a 16×24 body at (sprX, sprY).
+// Mirrors game.js _drawSparkleCorners but uses ui.ctx. Wraps a 16×24 body at (sprX, sprY).
 function _drawSparkleAtCorners(sprX, sprY, frame) {
-  const ctx = _ctx;
+  const ctx = ui.ctx;
   ctx.drawImage(frame, sprX - 8, sprY - 7);
   ctx.save(); ctx.scale(-1, 1); ctx.drawImage(frame, -(sprX + 23), sprY - 7); ctx.restore();
   ctx.save(); ctx.scale(1, -1); ctx.drawImage(frame, sprX - 8, -(sprY + 32)); ctx.restore();
@@ -551,7 +526,7 @@ export function drawBossSpriteBoxPVP(centerX, centerY) {
   const pvpBoxH = rows * PVP_CELL_H + 16;
 
   clipToViewport();
-  _ctx.imageSmoothingEnabled = false;
+  ui.ctx.imageSmoothingEnabled = false;
 
   let drawW = pvpBoxW, drawH = pvpBoxH, resizeT = 1;
   if (isExpand) {
@@ -596,7 +571,7 @@ export function drawBossSpriteBoxPVP(centerX, centerY) {
             const [gr, gc] = gridPos[ei] || [0, 0];
             const tx = intLeft + gc * PVP_CELL_W + 4;
             const ty = intTop  + gr * PVP_CELL_H + 4;
-            _ctx.drawImage(_cursorTileCanvas(), tx - 14, ty + 4);
+            ui.ctx.drawImage(_cursorTileCanvas(), tx - 14, ty + 4);
           }
         }
       } else {
@@ -606,11 +581,11 @@ export function drawBossSpriteBoxPVP(centerX, centerY) {
         const [gr, gc] = gridPos[tIdx] || gridPos[0];
         const tx = intLeft + gc * PVP_CELL_W + 4;
         const ty = intTop  + gr * PVP_CELL_H + 4;
-        _ctx.drawImage(_cursorTileCanvas(), tx - 14, ty + 4);
+        ui.ctx.drawImage(_cursorTileCanvas(), tx - 14, ty + 4);
       }
     }
   }
-  _ctx.restore();
+  ui.ctx.restore();
 }
 
 function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, resizeT) {
@@ -701,7 +676,7 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   // Opponent faces RIGHT (pre-flipped body canvas), player faces LEFT.
   // Player (faces left): wind-up at px+8 (right/behind), swung at px-16 (left/forward).
   // Opponent (faces right): body is pre-h-flipped, so blade uses translate+scale(-1,1) to mirror offsets.
-  const blades = _blades();
+  const blades = getBlades();
   let blade = null;
   if (isWindUp || isAttackState) {
     // Same as NES: raised (hflip tile) = back-swing, swung (normal tile) = forward strike
@@ -711,7 +686,7 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
     else if (isAttackState)    blade = blades.fist;
   }
   const drawBlade = () => {
-    const ctx = _ctx;
+    const ctx = ui.ctx;
     // Opponent body is pre-h-flipped — mirror blade coords to match.
     ctx.save();
     ctx.translate(sprX + 16, sprY);
@@ -735,17 +710,17 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
     if (deathFrames && deathFrames.length) {
       const progress = Math.min(Math.max(0, battleSt.battleTimer - delay) / MONSTER_DEATH_MS, 1);
       const fi = Math.min(deathFrames.length - 1, Math.floor(progress * deathFrames.length));
-      _ctx.drawImage(deathFrames[fi], sprX, sprY);
+      ui.ctx.drawImage(deathFrames[fi], sprX, sprY);
     }
   } else {
-    _ctx.drawImage(body, sprX, sprY);
+    ui.ctx.drawImage(body, sprX, sprY);
   }
   if (isAttackState && blade) drawBlade();
 
   // Near-fatal sweat — h-flipped to match opponent facing left
   if (isNearFatalOpp && !isOppVictory && !isDying && bsc.sweatFrames && bsc.sweatFrames.length === 2) {
     const sf = bsc.sweatFrames[Math.floor(Date.now() / 133) & 1];
-    const ctx = _ctx;
+    const ctx = ui.ctx;
     ctx.save();
     ctx.translate(sprX + sf.width, sprY - 3);
     ctx.scale(-1, 1);
@@ -767,7 +742,7 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   // Slash effect overlays on the current target
   if (isCurrentTarget) {
     if (bs === 'player-slash' && bsc.slashFrames && battleSt.slashFrame < SLASH_FRAMES && playerHitLanded) {
-      _ctx.drawImage(bsc.slashFrames[battleSt.slashFrame], sprX + battleSt.slashOffX, sprY + battleSt.slashOffY);
+      ui.ctx.drawImage(bsc.slashFrames[battleSt.slashFrame], sprX + battleSt.slashOffX, sprY + battleSt.slashOffY);
     }
     if (bs === 'ally-slash' && allyHitLanded) {
       const ally = battleSt.battleAllies[battleSt.currentAllyAttacker];
@@ -775,7 +750,7 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
       const activeWpnId = ally ? (isLeft ? ally.weaponL : ally.weaponId) : 0;
       const aSlashF = ally ? getSlashFramesForWeapon(activeWpnId, !isLeft) : bsc.slashFramesR;
       const af = Math.min(Math.floor(battleSt.battleTimer / 30), 2);
-      if (aSlashF && aSlashF[af]) _ctx.drawImage(aSlashF[af], sprX + [0,10,-8][af], sprY + [0,-6,8][af]);
+      if (aSlashF && aSlashF[af]) ui.ctx.drawImage(aSlashF[af], sprX + [0,10,-8][af], sprY + [0,-6,8][af]);
     }
   }
 }

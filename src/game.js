@@ -33,20 +33,19 @@ import { pauseSt, updatePauseMenu, drawPauseMenu } from './pause-menu.js';
 import { transSt, loadingSt, updateTransition, updateTopBoxScroll, drawTransitionOverlay, WIPE_DURATION } from './transitions.js';
 import { initInputHandler, initKeyboardListeners } from './input-handler.js';
 import { sprite, setPlayerSprite } from './player-sprite.js';
-import { startPVPBattle, initPVP } from './pvp.js';
+import { startPVPBattle } from './pvp.js';
 import { drawBattle, drawBattleAllies, drawSWExplosion, drawSWDamageNumbers } from './battle-drawing.js';
 import { initRender, render, drawPoisonFlash, drawPondStrobe, updateStarEffect } from './render.js';
-import { getBlades } from './weapon-sprites.js';
 import { drawHUD, clipToViewport, drawHudBox, drawBorderedBox, roundTopBoxCorners, updateHudHpLvStep } from './hud-drawing.js';
 import { initMapLoading, loadMapById } from './map-loading.js';
-import { updateBattleAlly, initBattleAlly } from './battle-ally.js';
+import { initBattleAlly } from './battle-ally.js';
 import { initBattleEnemy } from './battle-enemy.js';
 import { buildTurnOrder, processNextTurn } from './battle-turn.js';
 import { initBattleEncounter } from './battle-encounter.js';
 import { handleInput, updateMovement } from './movement.js';
 import { initBattleItems } from './battle-items.js';
 import { addItem, setPlayerInventory } from './inventory.js';
-import { resetBattleVars, isTeamWiped, executeBattleCommand, updateBattle, updateBattleTimers, updateBattlePlayerAttack, updateBattleDefendItem, updateBattleEndSequence, tryJoinPlayerAlly, advancePVPTargetOrVictory } from './battle-update.js';
+import { resetBattleVars, isTeamWiped, executeBattleCommand, updateBattle } from './battle-update.js';
 import { initCursorTile as _initCursorTile, initScrollArrows as _initScrollArrows,
          initAdamantoise as _initAdamantoise,
          initGoblinSprite as _initGoblinSprite, initInvincibleSprite as _initInvincibleSprite,
@@ -255,21 +254,6 @@ export async function loadROM(arrayBuffer) {
     toggleCrt: () => document.getElementById('canvas-wrapper').classList.toggle('crt'),
   });
   initRender({ waterSt });
-  initPVP({
-    ctx,
-    blades: () => ({ ...getBlades() }),
-    processNextTurn,
-    handleAlly: updateBattleAlly,
-    updateTimers: updateBattleTimers,
-    handlePlayerAttack: updateBattlePlayerAttack,
-    handleDefendItem: updateBattleDefendItem,
-    handleEndSequence: updateBattleEndSequence,
-    tryJoinPlayerAlly,
-    buildAndProcessNextTurn: () => { battleSt.turnQueue = buildTurnOrder(); processNextTurn(); },
-    resetBattleVars,
-    isTeamWiped,
-    advancePVPTargetOrVictory,
-  });
 
   await loadSlotsFromDB();
 
