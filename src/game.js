@@ -1,4 +1,4 @@
-// Game Client — canvas rendering, input handling, game loop
+// Game Client — boot wiring, ROM loading, composition root
 
 import { parseROM } from './rom-parser.js';
 import { initHUD } from './hud-init.js';
@@ -10,56 +10,47 @@ import { initMusic, playTrack, TRACKS, initFF1Music, fadeOutFF1Music, clearMusic
 import { applyIPS } from './ips-patcher.js';
 import { initTextDecoder } from './text-decoder.js';
 import { initFont } from './font-renderer.js';
-import { PLAYER_POOL, ROSTER_FADE_STEPS } from './data/players.js';
+import { PLAYER_POOL } from './data/players.js';
 import { VERSION } from './data/strings.js';
 import { initMonsterSprites } from './monster-sprites.js';
 import { loadBossSprite } from './boss-sprites.js';
 import { saveSlotsToDB, loadSlotsFromDB, setPositionGetter } from './save-state.js';
-import { resetWorldWaterCache, waterSt, tickWater } from './water-animation.js';
+import { resetWorldWaterCache } from './water-animation.js';
 import { initBattleSpriteCache, loadJobBattleSprites } from './battle-sprite-cache.js';
 import { hudSt, HUD_INFO_FADE_STEPS, HUD_INFO_FADE_STEP_MS } from './hud-state.js';
 import { mapSt } from './map-state.js';
 import { ui, isMobile } from './ui-state.js';
 import { battleSt } from './battle-state.js';
 import { initFlameRawTiles, initStarTiles } from './flame-sprites.js';
-import { LOAD_FADE_STEP_MS, LOAD_FADE_MAX } from './loading-screen.js';
 import { initTitleWater, initTitleSky, initTitleUnderwater, initUnderwaterSprites, initTitleOcean, initTitleLogo } from './title-animations.js';
 import { ps, initPlayerStats, initExpTable } from './player-stats.js';
-import { chatState, updateChat, updateChatTabs, drawChat, drawChatTabs, consoleLog, setCommandContext } from './chat.js';
-import { rosterBattleFade, setLocationGetter, getPlayerLocation, initRoster, updateRoster, drawRoster, drawRosterMenu } from './roster.js';
-import { updateMsgBox, drawMsgBox } from './message-box.js';
-import { titleSt, drawTitleSkyInHUD, drawTitle, updateTitle, initTitleUpdate } from './title-screen.js';
-import { pauseSt, updatePauseMenu, drawPauseMenu } from './pause-menu.js';
-import { transSt, loadingSt, updateTransition, updateTopBoxScroll, drawTransitionOverlay, WIPE_DURATION } from './transitions.js';
+import { chatState, consoleLog, setCommandContext } from './chat.js';
+import { setLocationGetter, getPlayerLocation, initRoster } from './roster.js';
+import { titleSt, initTitleUpdate } from './title-screen.js';
+import { pauseSt } from './pause-menu.js';
+import { transSt } from './transitions.js';
 import { initInputHandler, initKeyboardListeners } from './input-handler.js';
 import { sprite, setPlayerSprite } from './player-sprite.js';
 import { startPVPBattle } from './pvp.js';
-import { drawBattle, drawBattleAllies, drawSWExplosion, drawSWDamageNumbers } from './battle-drawing.js';
-import { render, drawPoisonFlash, drawPondStrobe, updateStarEffect } from './render.js';
-import { drawHUD, clipToViewport, drawHudBox, drawBorderedBox, roundTopBoxCorners, updateHudHpLvStep } from './hud-drawing.js';
 import { initMapLoading, loadMapById } from './map-loading.js';
 import { initBattleAlly } from './battle-ally.js';
 import { initBattleEnemy } from './battle-enemy.js';
 import { buildTurnOrder, processNextTurn } from './battle-turn.js';
 import { initBattleEncounter } from './battle-encounter.js';
-import { handleInput, updateMovement } from './movement.js';
 import { initBattleItems } from './battle-items.js';
 import { addItem, setPlayerInventory } from './inventory.js';
-import { resetBattleVars, isTeamWiped, executeBattleCommand, updateBattle } from './battle-update.js';
+import { resetBattleVars, isTeamWiped, executeBattleCommand } from './battle-update.js';
 import { initCursorTile as _initCursorTile, initScrollArrows as _initScrollArrows,
          initAdamantoise as _initAdamantoise,
          initGoblinSprite as _initGoblinSprite, initInvincibleSprite as _initInvincibleSprite,
          initMoogleSprite as _initMoogleSprite, initLoadingScreenFadeFrames as _initLoadingScreenFadeFrames } from './sprite-init.js';
 import { initFakePlayerSprites } from './fake-player-sprites.js';
 import { initMissSprite } from './damage-numbers.js';
+import { startGameLoop } from './game-loop.js';
 
 const CANVAS_W = 256;          // 16 metatiles wide (NES resolution)
 const CANVAS_H = 240;          // 15 metatiles tall (NES resolution)
 
-const HUD_VIEW_X = 0;
-const HUD_VIEW_Y = 32;
-const HUD_VIEW_W = 144;
-const HUD_VIEW_H = 144;
 let ff12Raw = null;  // FF1&2 ROM for Adamantoise sprite + FF1 music
 const TITLE_FADE_MAX = 4;
 
@@ -72,30 +63,13 @@ const JOB_WALK_PALS = {
   1: [SPRITE_PAL_TOP, SPRITE_PAL_TOP],   // Warrior: all red
 };
 
-let canvas, ctx;
-let lastTime = 0;
-
 let romRaw = null;
-
-// Where the sprite draws on screen (centered in viewport)
-const SCREEN_CENTER_X = HUD_VIEW_X + (HUD_VIEW_W - 16) / 2;    // 64
-const SCREEN_CENTER_Y = HUD_VIEW_Y + (HUD_VIEW_H - 16) / 2 - 3; // 93
-
-let _tabWasLoading = false; // tracks if we just came from a loading screen
-
-// Screen shake state (earthquake effect for secret passages)
-const SHAKE_DURATION = 34 * (1000 / 60);  // 2 × 17 NES frames ≈ 567ms
-
-function _reportError(tag, e) {
-  console.error('[' + tag + ']', e);
-  fetch('/api/client-error', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ msg: e.message, stack: e.stack }) }).catch(() => {});
-}
 
 export function init() {
   setPositionGetter(() => ({ worldX: mapSt.worldX, worldY: mapSt.worldY, onWorldMap: mapSt.onWorldMap, currentMapId: mapSt.currentMapId }));
   setLocationGetter(() => ({ onWorldMap: mapSt.onWorldMap, currentMapId: mapSt.currentMapId }));
-  canvas = document.getElementById('game-canvas');
-  ctx = canvas.getContext('2d');
+  const canvas = document.getElementById('game-canvas');
+  const ctx = canvas.getContext('2d');
   canvas.width = CANVAS_W;
   canvas.height = CANVAS_H;
   ctx.imageSmoothingEnabled = false;
@@ -200,8 +174,7 @@ function _startDebugMode() {
   playTrack(TRACKS.CRYSTAL_ROOM);
   setPlayerInventory({});
   addItem(0x54, 5);
-  lastTime = performance.now();
-  requestAnimationFrame(gameLoop);
+  startGameLoop();
 }
 function _startTitleScreen() {
   titleSt.state = 'credit-wait';
@@ -212,8 +185,7 @@ function _startTitleScreen() {
     ? new Uint8Array([0x99,0xDB,0xCE,0xDC,0xDC,0xFF,0x8A])  // "Press A"
     : new Uint8Array([0x99,0xDB,0xCE,0xDC,0xDC,0xFF,0xA3]); // "Press Z"
   playTrack(TRACKS.TITLE_SCREEN);
-  lastTime = performance.now();
-  requestAnimationFrame(gameLoop);
+  startGameLoop();
 }
 export async function loadROM(arrayBuffer) {
   const romBytes = new Uint8Array(arrayBuffer);
@@ -283,95 +255,3 @@ export function loadFF12ROM(arrayBuffer) {
   }
 }
 
-function _gameLoopUpdate(dt) {
-  if (hudSt.hudInfoFadeTimer < HUD_INFO_FADE_STEPS * HUD_INFO_FADE_STEP_MS) hudSt.hudInfoFadeTimer += dt;
-  updateHudHpLvStep(dt);
-  handleInput();
-  updateRoster(dt);
-  updateChat(dt, battleSt.battleState);
-  updateChatTabs(dt);
-  updatePauseMenu(dt);
-  updateMsgBox(dt);
-  updateBattle(dt);
-  updateMovement(dt);
-  updateTransition(dt);
-  updateTopBoxScroll(dt);
-  if (mapSt.pondStrobeTimer > 0) mapSt.pondStrobeTimer = Math.max(0, mapSt.pondStrobeTimer - dt);
-  if (mapSt.shakeActive) {
-    mapSt.shakeTimer += dt;
-    if (mapSt.shakeTimer >= SHAKE_DURATION) {
-      mapSt.shakeActive = false;
-      if (mapSt.shakePendingAction) { mapSt.shakePendingAction(); mapSt.shakePendingAction = null; }
-    }
-  }
-  updateStarEffect(dt);
-  tickWater(dt);
-}
-
-function _gameLoopDraw() {
-  try {
-    render();
-    drawPoisonFlash();
-    drawTransitionOverlay(ctx);
-    drawPondStrobe();
-    if (transSt.state === 'trap-falling' && sprite) sprite.draw(ctx, SCREEN_CENTER_X, SCREEN_CENTER_Y);
-  } catch (e) { _reportError('RENDER ERROR', e); }
-  // Draw tabs BEFORE HUD so static HUD canvas draws on top of tab overlap
-  const _infoFade = HUD_INFO_FADE_STEPS - Math.min(Math.floor(hudSt.hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
-  let _tabFade = Math.max(rosterBattleFade, _infoFade);
-  const _wFadeMs = WIPE_DURATION / ROSTER_FADE_STEPS;
-  if (transSt.dungeon && transSt.state === 'closing') _tabFade = Math.max(_tabFade, Math.min(Math.floor(transSt.timer / _wFadeMs), ROSTER_FADE_STEPS));
-  else if (transSt.dungeon && (transSt.state === 'hold' || transSt.state === 'trap-falling')) _tabFade = ROSTER_FADE_STEPS;
-  else if (transSt.state === 'loading') {
-    _tabWasLoading = true;
-    _tabFade = ROSTER_FADE_STEPS;
-    if (loadingSt.state === 'out') _tabFade = LOAD_FADE_MAX - Math.min(Math.floor(loadingSt.timer / LOAD_FADE_STEP_MS), LOAD_FADE_MAX);
-  }
-  else if (transSt.state === 'opening' && _tabWasLoading) _tabFade = Math.max(_tabFade, ROSTER_FADE_STEPS - Math.min(Math.floor(transSt.timer / _wFadeMs), ROSTER_FADE_STEPS));
-  else _tabWasLoading = false;
-  drawChatTabs(ctx, _tabFade, drawHudBox);
-  drawHUD();
-  try {
-    if (battleSt.battleAllies.length > 0 && battleSt.battleState !== 'none') drawBattleAllies();
-    else drawRoster();
-    drawChat(ctx, drawHudBox, rosterBattleFade);
-    drawPauseMenu(ctx);
-    drawMsgBox(ctx, clipToViewport, drawBorderedBox);
-    drawRosterMenu();
-    drawBattle();
-    drawSWExplosion();
-    drawSWDamageNumbers();
-  } catch (e) { _reportError('BATTLE DRAW ERROR', e); }
-  if (transSt.state === 'hud-fade-out') {
-    const alpha = Math.min(transSt.timer / ((HUD_INFO_FADE_STEPS + 1) * HUD_INFO_FADE_STEP_MS), 1);
-    ctx.fillStyle = `rgba(0,0,0,${alpha})`;
-    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-  }
-}
-
-function gameLoop(timestamp) {
-  const dt = Math.min(timestamp - lastTime, 50); // cap at 50ms to prevent frame-spike skipping animations
-  lastTime = timestamp;
-
-  if (titleSt.state !== 'done') {
-    updateTitle(dt); drawTitle(ctx, waterSt.tick); drawHUD();
-    if (titleSt.state !== 'done') drawTitleSkyInHUD(ctx, roundTopBoxCorners); // guard: updateTitle may have set titleSt.state='done'
-    updateChat(dt, 'none', true);
-    drawChat(ctx, drawHudBox, 0, true);
-    requestAnimationFrame(gameLoop);
-    return;
-  }
-
-  ps.playTime += dt / 1000;
-
-  try {
-    _gameLoopUpdate(dt);
-    _gameLoopDraw();
-  } catch (e) {
-    console.error('[GAME LOOP ERROR] transSt.state=' + transSt.state + ' battleSt.battleState=' + battleSt.battleState, e);
-    requestAnimationFrame(gameLoop);
-    return;
-  }
-
-  requestAnimationFrame(gameLoop);
-}

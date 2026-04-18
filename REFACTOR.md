@@ -1,12 +1,27 @@
 # game.js Refactor TODO
 
-Current size: **377 lines** (v1.6.0). Target: <4,000 lines — **achieved** (91% under target).
+Current size: **257 lines** (v1.6.0). Target: <4,000 lines — **achieved** (94% under target).
 
 ---
 
 ## Next Up
 
-game.js at 377L is a composition root — imports, module wiring, boot/asset init, top-level game loop. Remaining code is genuine composition; no further extractions worth pursuing.
+game.js at 257L is a pure composition root — ROM loading, asset init, module wiring. Loop logic lives in `game-loop.js` now.
+
+---
+
+## Completed — Phase 13 (extract game loop)
+
+<details>
+<summary>game.js 377L → 257L (−120L); new src/game-loop.js (139L)</summary>
+
+- [x] **New `src/game-loop.js` (139L)** — owns `_gameLoopUpdate`, `_gameLoopDraw`, `gameLoop`, `lastTime`, `_tabWasLoading`, `SHAKE_DURATION`, `SCREEN_CENTER_X/Y`, and the `_reportError(tag, e)` helper.
+- [x] Exports a single `startGameLoop()` — sets `lastTime = performance.now()` and kicks off `requestAnimationFrame(gameLoop)`.
+- [x] `_startDebugMode()` and `_startTitleScreen()` in game.js swapped 2-line `lastTime = …; requestAnimationFrame(gameLoop)` for `startGameLoop()`.
+- [x] `ctx` local removed from game.js; game-loop reads `ui.ctx` directly.
+- [x] 21 imports moved from game.js to game-loop.js (chat, roster, msg-box, pause, transitions, movement, battle-update, battle-drawing, render, hud-drawing, loading-screen, water-animation, data/players, hud-state, battle-state, map-state, ui-state, player-stats, player-sprite, title-screen).
+- [x] Header comment updated from "canvas rendering, input handling, game loop" to "boot wiring, ROM loading, composition root" — reflects the actual role.
+</details>
 
 ---
 
