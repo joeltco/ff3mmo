@@ -6,9 +6,9 @@ import { calcDamage, elemMultiplier, BOSS_HIT_RATE, GOBLIN_HIT_RATE } from './ba
 import { ps, getShieldEvade } from './player-stats.js';
 import { SFX, playSFX } from './music.js';
 import { tryInflictStatus, blindHitPenalty, wakeOnHit, STATUS_NAME_BYTES } from './status-effects.js';
-import { replaceBattleMsg, queueBattleMsg, isBattleMsgBusy } from './battle-msg.js';
+import { replaceBattleMsg, queueBattleMsg, queueActorVerb, isBattleMsgBusy } from './battle-msg.js';
 import { getMonsterName } from './text-decoder.js';
-import { _nameToBytes, makeNameMsg } from './text-utils.js';
+import { _nameToBytes } from './text-utils.js';
 import { getPlayerDamageNum, setPlayerDamageNum, getAllyDamageNums } from './damage-numbers.js';
 import { selectCursor, saveSlots } from './save-state.js';
 
@@ -151,7 +151,7 @@ function _processEnemyFlash() {
   // Queue enemy attack message
   if (mon) {
     const monName = getMonsterName(mon.monsterId) || _nameToBytes('Enemy');
-    queueBattleMsg(makeNameMsg(monName, ' attacks!'));
+    queueActorVerb(monName, 'attacks!');
   }
 
   // ── Monster special attack check ──────────────────────────────────────────

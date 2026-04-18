@@ -61,14 +61,6 @@ export function makeGilText(amount) { return _makeGotNText(amount, [0xFF, 0x90, 
 export function makeCpText(amount) { return _makeGotNText(amount, [0xFF, 0x8C, 0x99, 0xC4]); } // " CP!"
 export function makeJobLevelUpText(lv) { const name = (JOBS[ps.jobIdx]?.name || 'JOB').toUpperCase(); return _nameToBytes(name + ' LV ' + lv + '!'); }
 
-// Concatenate NES name bytes + suffix string → single Uint8Array
-export function makeNameMsg(nameBytes, suffix) {
-  const suffixBytes = _nameToBytes(suffix);
-  const out = new Uint8Array(nameBytes.length + suffixBytes.length);
-  out.set(nameBytes); out.set(suffixBytes, nameBytes.length);
-  return out;
-}
-
 // Draw "Lv##" left-aligned + colored HP right-aligned on the same row
 // leftX/rightX = content edges (inside border), y = text baseline, fadeStep = NES color fade steps
 export function drawLvHpRow(ctx, leftX, rightX, y, level, hp, maxHP, fadeStep) {

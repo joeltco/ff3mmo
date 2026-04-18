@@ -5,7 +5,7 @@ import { playSlashSFX } from './battle-sfx.js';
 import { isWeapon } from './data/items.js';
 import { SFX, playSFX } from './music.js';
 import { _nameToBytes } from './text-utils.js';
-import { replaceBattleMsg, queueBattleMsg } from './battle-msg.js';
+import { replaceBattleMsg, queueActorVerb } from './battle-msg.js';
 import { BATTLE_CRITICAL } from './data/strings.js';
 import { getMonsterName } from './text-decoder.js';
 import { pvpSt } from './pvp.js';
@@ -77,7 +77,7 @@ function _updateAllyAttack() {
     if (battleSt.battleTimer >= delay) {
       const ally = battleSt.battleAllies[battleSt.currentAllyAttacker];
       if (battleSt.allyHitIdx === 0 && ally) {
-        queueBattleMsg(_nameToBytes((ally.name || 'Ally') + ' attacks!'));
+        queueActorVerb(_nameToBytes(ally.name || 'Ally'), 'attacks!');
       }
       const isLeft = (battleSt.allyHitIdx % 2 === 1) && ally && isWeapon(ally.weaponL);
       battleSt.allyHitIsLeft = isLeft;

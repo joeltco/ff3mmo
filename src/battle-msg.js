@@ -2,6 +2,7 @@
 // Extracted from game.js for reuse across battle modules
 
 import { BATTLE_VICTORY } from './data/strings.js';
+import { _nameToBytes } from './text-utils.js';
 
 // ── State ──────────────────────────────────────────────────────────────────
 let battleMsgQueue = [];       // [{ bytes: Uint8Array, waitForZ: bool }]
@@ -32,6 +33,15 @@ function _advanceBattleMsg() {
   } else {
     battleMsgCurrent = null;
   }
+}
+
+// ── Action helper: queue actor + verb as two short messages ───────────────
+// Phase 1 = actor name, Phase 2 = verb ("attacks!", "uses Potion!", etc).
+// Phase 3 (result: Critical!/hits/Miss) is landed by replaceBattleMsg()
+// at impact — replaces whichever phase is current when the swing lands.
+export function queueActorVerb(nameBytes, verbStr) {
+  queueBattleMsg(nameBytes);
+  queueBattleMsg(_nameToBytes(verbStr));
 }
 
 // ── Replace current message text (no fade restart) ─────────────────────────
