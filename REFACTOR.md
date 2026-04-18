@@ -1,12 +1,26 @@
 # game.js Refactor TODO
 
-Current size: **257 lines** (v1.6.0). Target: <4,000 lines — **achieved** (94% under target).
+Current size: **172 lines** (v1.6.0). Target: <4,000 lines — **achieved** (96% under target).
 
 ---
 
 ## Next Up
 
-game.js at 257L is a pure composition root — ROM loading, asset init, module wiring. Loop logic lives in `game-loop.js` now.
+game.js at 172L is a minimal composition root — ROM load + module wiring. Asset init lives in `boot.js`, frame loop in `game-loop.js`. Remaining code is genuine composition.
+
+---
+
+## Completed — Phase 14 (extract boot asset init)
+
+<details>
+<summary>game.js 257L → 172L (−85L); new src/boot.js (106L)</summary>
+
+- [x] **New `src/boot.js` (106L)** — owns `initSpriteAssets(rom)`, `initTitleAssets(rom)`, `loadFF12ROM(buffer)`, `ff12Raw`/`romRaw` module state, `TITLE_FADE_MAX`.
+- [x] game.js imports `initSpriteAssets, initTitleAssets` from boot.js and uses them in `loadROM`.
+- [x] `loadFF12ROM` re-exported via `export { loadFF12ROM } from './boot.js';` — index.html's `import { loadFF12ROM } from './src/game.js'` still works.
+- [x] 15 imports migrated from game.js to boot.js: `initHUD`, `loadBossSprite`, `initBattleSpriteCache`, `initFlameRawTiles/initStarTiles`, 6 `initTitleX` from title-animations, `ps/initPlayerStats/initExpTable`, `initRoster`, `initMonsterSprites`, `initMusic/initFF1Music`, 7 `init*` from sprite-init, `initFakePlayerSprites`, `initMissSprite`.
+- [x] game.js keeps only what `_swapBattleSprites` and `returnToTitle`/`_startTitleScreen`/`_startDebugMode`/`loadROM` actually need.
+</details>
 
 ---
 
