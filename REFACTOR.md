@@ -1,12 +1,27 @@
 # game.js Refactor TODO
 
-Current size: **429 lines** (v1.6.0). Target: <4,000 lines — **achieved** (89% under target).
+Current size: **414 lines** (v1.6.0). Target: <4,000 lines — **achieved** (90% under target).
 
 ---
 
 ## Next Up
 
-game.js at 429L is a composition root — imports, module wiring, boot/asset init, top-level game loop. Remaining code is genuine composition; no further extractions worth pursuing.
+game.js at 414L is a composition root — imports, module wiring, boot/asset init, top-level game loop. Remaining code is genuine composition; no further extractions worth pursuing.
+
+---
+
+## Completed — Phase 10 (roster-draw-state bag kill + error-report dedup)
+
+<details>
+<summary>game.js 429L → 414L (−15L); last shared-bag eliminated from runtime</summary>
+
+- [x] **`_rds` bag retired** — the 13-line draw-state bag + 6-field update-state bag both deleted. `drawRoster()`, `drawRosterMenu()`, `updateRoster(dt)` now take no extra args.
+- [x] **roster.js** — now imports `ui`, `transSt`, `WIPE_DURATION`, `battleSt`, `hudSt`, `HUD_INFO_FADE_STEPS`, `HUD_INFO_FADE_STEP_MS`, `msgState`, `drawHudBox`, `drawBorderedBox`, `clipToViewport`, `drawRosterSparkle` directly. `_rosterTransFade()` and `updateRoster(dt)` shed their shared-bag params. 4 dead pass-throughs removed (`hudInfoFadeTimer/Steps/StepMs`, `wipeDuration`).
+- [x] **Scroll arrows moved to `ui.*`** — `ui.scrollArrowUp/Down/UpFade/DownFade` mirror the sprite-init output. roster.js reads from `ui` directly.
+- [x] `WIPE_DURATION` exported from `transitions.js` — eliminated 3 duplicated `44 * (1000/60)` literals (game.js + roster.js).
+- [x] `_reportError(tag, e)` helper — deduped 2 identical `fetch('/api/client-error', …)` POSTs in `_gameLoopDraw`.
+- [x] Dead imports: `drawRosterSparkle` + `msgState` removed from game.js (both only used by the killed bag).
+</details>
 
 ---
 

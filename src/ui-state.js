@@ -15,6 +15,10 @@ export const ui = {
   hudFadeCanvases: null,          // [fadeLevel 1..4] faded HUD — game start fade-in
   titleHudCanvas: null,           // pre-baked title HUD (no right boxes, full-width viewport)
   titleHudFadeCanvases: null,     // [fadeLevel 1..4] faded title HUD
+  scrollArrowUp: null,            // 8×8 up arrow
+  scrollArrowDown: null,          // 8×8 down arrow
+  scrollArrowUpFade: null,        // [step1..step4] faded up arrows
+  scrollArrowDownFade: null,      // [step1..step4] faded down arrows
 };
 
 export const isMobile = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;

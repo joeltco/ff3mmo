@@ -27,16 +27,16 @@ import { initTitleWater, initTitleSky, initTitleUnderwater, initUnderwaterSprite
 import { ps, initPlayerStats, initExpTable } from './player-stats.js';
 import { chatState, updateChat, updateChatTabs, drawChat, drawChatTabs, consoleLog, setCommandContext } from './chat.js';
 import { rosterBattleFade, setLocationGetter, getPlayerLocation, initRoster, updateRoster, drawRoster, drawRosterMenu } from './roster.js';
-import { msgState, updateMsgBox, drawMsgBox } from './message-box.js';
+import { updateMsgBox, drawMsgBox } from './message-box.js';
 import { titleSt, drawTitleSkyInHUD, drawTitle, updateTitle, initTitleUpdate } from './title-screen.js';
 import { pauseSt, updatePauseMenu, drawPauseMenu } from './pause-menu.js';
-import { transSt, loadingSt, updateTransition, updateTopBoxScroll, drawTransitionOverlay, initTransitions } from './transitions.js';
+import { transSt, loadingSt, updateTransition, updateTopBoxScroll, drawTransitionOverlay, initTransitions, WIPE_DURATION } from './transitions.js';
 import { initInputHandler, initKeyboardListeners } from './input-handler.js';
 import { startPVPBattle, initPVP } from './pvp.js';
 import { drawBattle, drawBattleAllies, drawSWExplosion, drawSWDamageNumbers, initBattleDrawing } from './battle-drawing.js';
 import { initRender, render, drawPoisonFlash, drawPondStrobe, updateStarEffect } from './render.js';
 import { getBlades } from './weapon-sprites.js';
-import { drawHUD, clipToViewport, drawHudBox, drawBorderedBox, roundTopBoxCorners, drawRosterSparkle, updateHudHpLvStep } from './hud-drawing.js';
+import { drawHUD, clipToViewport, drawHudBox, drawBorderedBox, roundTopBoxCorners, updateHudHpLvStep } from './hud-drawing.js';
 import { initMapLoading, loadMapById } from './map-loading.js';
 import { updateBattleAlly, initBattleAlly } from './battle-ally.js';
 import { initBattleEnemy } from './battle-enemy.js';
@@ -65,10 +65,6 @@ const TITLE_FADE_MAX = 4;
 
 let cursorTileCanvas = null;
 let cursorFadeCanvases = null; // [step1..step4] NES-faded cursor canvases
-let scrollArrowDown = null;
-let scrollArrowUp = null;
-let scrollArrowDownFade = null;
-let scrollArrowUpFade = null;
 
 // Player sprite palettes — from FCEUX PPU trace (dual palette: top/bottom tiles)
 const SPRITE_PAL_TOP = [0x0F, 0x0F, 0x16, 0x30];    // spr_pal0: black, dark red, white
@@ -98,6 +94,11 @@ let _tabWasLoading = false; // tracks if we just came from a loading screen
 
 // Screen shake state (earthquake effect for secret passages)
 const SHAKE_DURATION = 34 * (1000 / 60);  // 2 × 17 NES frames ≈ 567ms
+
+function _reportError(tag, e) {
+  console.error('[' + tag + ']', e);
+  fetch('/api/client-error', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ msg: e.message, stack: e.stack }) }).catch(() => {});
+}
 
 export function init() {
   setPositionGetter(() => ({ worldX: mapSt.worldX, worldY: mapSt.worldY, onWorldMap: mapSt.onWorldMap, currentMapId: mapSt.currentMapId }));
@@ -150,10 +151,10 @@ function _initSpriteAssets(romRaw) {
 
   // Scroll arrows (sprite-init.js)
   const sa = _initScrollArrows(romRaw);
-  scrollArrowDown = sa.scrollArrowDown;
-  scrollArrowUp = sa.scrollArrowUp;
-  scrollArrowDownFade = sa.scrollArrowDownFade;
-  scrollArrowUpFade = sa.scrollArrowUpFade;
+  ui.scrollArrowDown = sa.scrollArrowDown;
+  ui.scrollArrowUp = sa.scrollArrowUp;
+  ui.scrollArrowDownFade = sa.scrollArrowDownFade;
+  ui.scrollArrowUpFade = sa.scrollArrowUpFade;
 
   // Battle sprite cache — per-job poses + init-once slash/SW/status
   loadJobBattleSprites(romRaw, ps.jobIdx);
@@ -322,7 +323,7 @@ function _gameLoopUpdate(dt) {
   if (hudSt.hudInfoFadeTimer < HUD_INFO_FADE_STEPS * HUD_INFO_FADE_STEP_MS) hudSt.hudInfoFadeTimer += dt;
   updateHudHpLvStep(dt);
   handleInput();
-  updateRoster(dt, { battleState: battleSt.battleState, transSt, wipeDuration: 44 * (1000 / 60), hudInfoFadeTimer: hudSt.hudInfoFadeTimer, hudInfoFadeSteps: HUD_INFO_FADE_STEPS, hudInfoFadeStepMs: HUD_INFO_FADE_STEP_MS });
+  updateRoster(dt);
   updateChat(dt, battleSt.battleState);
   updateChatTabs(dt);
   updatePauseMenu(dt);
@@ -351,15 +352,11 @@ function _gameLoopDraw() {
     drawTransitionOverlay(ctx);
     drawPondStrobe();
     if (transSt.state === 'trap-falling' && sprite) sprite.draw(ctx, SCREEN_CENTER_X, SCREEN_CENTER_Y);
-  } catch (e) {
-    console.error('[RENDER ERROR]', e);
-    fetch('/api/client-error', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ msg: e.message, stack: e.stack }) }).catch(() => {});
-  }
+  } catch (e) { _reportError('RENDER ERROR', e); }
   // Draw tabs BEFORE HUD so static HUD canvas draws on top of tab overlap
   const _infoFade = HUD_INFO_FADE_STEPS - Math.min(Math.floor(hudSt.hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
   let _tabFade = Math.max(rosterBattleFade, _infoFade);
-  const _wipeDur = 44 * (1000 / 60);
-  const _wFadeMs = _wipeDur / ROSTER_FADE_STEPS;
+  const _wFadeMs = WIPE_DURATION / ROSTER_FADE_STEPS;
   if (transSt.dungeon && transSt.state === 'closing') _tabFade = Math.max(_tabFade, Math.min(Math.floor(transSt.timer / _wFadeMs), ROSTER_FADE_STEPS));
   else if (transSt.dungeon && (transSt.state === 'hold' || transSt.state === 'trap-falling')) _tabFade = ROSTER_FADE_STEPS;
   else if (transSt.state === 'loading') {
@@ -372,28 +369,16 @@ function _gameLoopDraw() {
   drawChatTabs(ctx, _tabFade, drawHudBox);
   drawHUD();
   try {
-    const _rds = {
-      ctx, drawHudBox: drawHudBox, drawBorderedBox: drawBorderedBox,
-      clipToViewport: clipToViewport, cursorTileCanvas,
-      scrollArrowUp, scrollArrowDown, scrollArrowUpFade, scrollArrowDownFade,
-      drawSparkle: drawRosterSparkle,
-      transSt, wipeDuration: 44 * (1000 / 60),
-      hudInfoFadeTimer: hudSt.hudInfoFadeTimer, hudInfoFadeSteps: HUD_INFO_FADE_STEPS, hudInfoFadeStepMs: HUD_INFO_FADE_STEP_MS,
-      battleState: battleSt.battleState, msgState,
-    };
     if (battleSt.battleAllies.length > 0 && battleSt.battleState !== 'none') drawBattleAllies();
-    else drawRoster(_rds);
+    else drawRoster();
     drawChat(ctx, drawHudBox, rosterBattleFade);
     drawPauseMenu(ctx);
     drawMsgBox(ctx, clipToViewport, drawBorderedBox);
-    drawRosterMenu(_rds);
+    drawRosterMenu();
     drawBattle();
     drawSWExplosion();
     drawSWDamageNumbers();
-  } catch (e) {
-    console.error('[BATTLE DRAW ERROR]', e);
-    fetch('/api/client-error', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ msg: e.message, stack: e.stack }) }).catch(() => {});
-  }
+  } catch (e) { _reportError('BATTLE DRAW ERROR', e); }
   if (transSt.state === 'hud-fade-out') {
     const alpha = Math.min(transSt.timer / ((HUD_INFO_FADE_STEPS + 1) * HUD_INFO_FADE_STEP_MS), 1);
     ctx.fillStyle = `rgba(0,0,0,${alpha})`;

@@ -21,7 +21,7 @@ const HUD_VIEW_W = 144;
 const HUD_VIEW_H = 144;
 
 // Transition timing constants
-const WIPE_DURATION          = 44 * (1000 / 60);  // 44 NES frames ≈ 733ms
+export const WIPE_DURATION   = 44 * (1000 / 60);  // 44 NES frames ≈ 733ms
 const WIPE_HOLD              = 100;
 const DOOR_OPEN_DURATION     = 400;
 const TRAP_REVEAL_DURATION   = 400;

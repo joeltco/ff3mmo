@@ -8,6 +8,12 @@ import { nesColorFade } from './palette.js';
 import { _nameToBytes, drawLvHpRow } from './text-utils.js';
 import { drawText, measureText, TEXT_WHITE } from './font-renderer.js';
 import { fakePlayerPortraits } from './fake-player-sprites.js';
+import { ui } from './ui-state.js';
+import { transSt, WIPE_DURATION } from './transitions.js';
+import { battleSt } from './battle-state.js';
+import { hudSt, HUD_INFO_FADE_STEPS, HUD_INFO_FADE_STEP_MS } from './hud-state.js';
+import { msgState } from './message-box.js';
+import { drawHudBox, drawBorderedBox, clipToViewport, drawRosterSparkle } from './hud-drawing.js';
 
 // ── HUD layout constants (must match game.js) ────────────────────────────
 const CANVAS_W   = 256;
@@ -132,16 +138,15 @@ function _rosterStartFadeOut(name) {
 }
 
 // ── Update ────────────────────────────────────────────────────────────────
-// shared: { battleState, transSt, wipeDuration, hudInfoFadeTimer, hudInfoFadeSteps, hudInfoFadeStepMs }
 
-function _rosterTransFade(shared) {
-  const FADE_STEP_MS = shared.wipeDuration / ROSTER_FADE_STEPS;
-  if (shared.transSt.rosterLocChanged) {
-    if (shared.transSt.state === 'closing') return Math.min(Math.floor(shared.transSt.timer / FADE_STEP_MS), ROSTER_FADE_STEPS);
-    if (shared.transSt.state === 'hold' || shared.transSt.state === 'trap-falling') return ROSTER_FADE_STEPS;
-    if (shared.transSt.state === 'opening') return Math.max(ROSTER_FADE_STEPS - Math.floor(shared.transSt.timer / FADE_STEP_MS), 0);
+function _rosterTransFade() {
+  const FADE_STEP_MS = WIPE_DURATION / ROSTER_FADE_STEPS;
+  if (transSt.rosterLocChanged) {
+    if (transSt.state === 'closing') return Math.min(Math.floor(transSt.timer / FADE_STEP_MS), ROSTER_FADE_STEPS);
+    if (transSt.state === 'hold' || transSt.state === 'trap-falling') return ROSTER_FADE_STEPS;
+    if (transSt.state === 'opening') return Math.max(ROSTER_FADE_STEPS - Math.floor(transSt.timer / FADE_STEP_MS), 0);
   }
-  const infoFade = shared.hudInfoFadeSteps - Math.min(Math.floor(shared.hudInfoFadeTimer / shared.hudInfoFadeStepMs), shared.hudInfoFadeSteps);
+  const infoFade = HUD_INFO_FADE_STEPS - Math.min(Math.floor(hudSt.hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
   if (infoFade > 0) return infoFade;
   return 0;
 }
@@ -227,77 +232,73 @@ function _updateMovement(dt, curLoc, battleState) {
   else if (!wasHere && mover.loc === curLoc) _rosterStartFadeIn(mover.name);
 }
 
-export function updateRoster(dt, shared) {
+export function updateRoster(dt) {
   if (inputSt.rosterState === 'menu-in' || inputSt.rosterState === 'menu-out') inputSt.rosterMenuTimer += Math.min(dt, 33);
   if (titleSt.state !== 'done') return;
-  _updateBattleFade(dt, shared.battleState);
+  _updateBattleFade(dt, battleSt.battleState);
   const curLoc = getPlayerLocation();
   _updateLocationReset(curLoc);
   _updateFadeTicks(dt);
   _updateSlideTicks(dt);
-  _updateMovement(dt, curLoc, shared.battleState);
+  _updateMovement(dt, curLoc, battleSt.battleState);
 }
 
 // ── Draw ──────────────────────────────────────────────────────────────────
-// drawShared: { ctx, drawHudBox, drawBorderedBox, clipToViewport, cursorTileCanvas,
-//               drawSparkle, transSt, wipeDuration,
-//               hudInfoFadeTimer, hudInfoFadeSteps, hudInfoFadeStepMs, battleState, msgState }
 
-function _drawRosterRow(ds, p, i, panelTop) {
+function _drawRosterRow(p, i, panelTop) {
   const slideOff = rosterSlideY[p.name] || 0;
   const rowY = panelTop + i * ROSTER_ROW_H + slideOff;
   const playerFade = rosterFadeMap[p.name] || 0;
-  const transFade = _rosterTransFade(ds);
+  const transFade = _rosterTransFade();
   const fadeStep = Math.min(Math.max(playerFade, transFade, rosterBattleFade), ROSTER_FADE_STEPS);
 
-  ds.drawHudBox(HUD_RIGHT_X, rowY, 32, ROSTER_ROW_H, fadeStep);
-  ds.drawHudBox(HUD_RIGHT_X + 32, rowY, HUD_RIGHT_W - 32, ROSTER_ROW_H, fadeStep);
+  drawHudBox(HUD_RIGHT_X, rowY, 32, ROSTER_ROW_H, fadeStep);
+  drawHudBox(HUD_RIGHT_X + 32, rowY, HUD_RIGHT_W - 32, ROSTER_ROW_H, fadeStep);
 
   const jobPortraits = fakePlayerPortraits[p.jobIdx || 0] || fakePlayerPortraits[0];
   const portraits = jobPortraits && jobPortraits[p.palIdx];
-  if (portraits) ds.ctx.drawImage(portraits[fadeStep], HUD_RIGHT_X + 8, rowY + 8);
+  if (portraits) ui.ctx.drawImage(portraits[fadeStep], HUD_RIGHT_X + 8, rowY + 8);
 
   const namePal = [0x0F, 0x0F, 0x0F, 0x30];
   for (let s = 0; s < fadeStep; s++) namePal[3] = nesColorFade(namePal[3]);
   const nameBytes = _nameToBytes(p.name);
   const nameW = measureText(nameBytes);
-  drawText(ds.ctx, HUD_RIGHT_X + HUD_RIGHT_W - 8 - nameW, rowY + 8, nameBytes, namePal);
+  drawText(ui.ctx, HUD_RIGHT_X + HUD_RIGHT_W - 8 - nameW, rowY + 8, nameBytes, namePal);
 
   const panelLeft = HUD_RIGHT_X + 32 + 8;
   const maxHP = p.maxHP || 28;
   const hp = p.hp != null ? p.hp : maxHP;
-  drawLvHpRow(ds.ctx, panelLeft, HUD_RIGHT_X + HUD_RIGHT_W - 8, rowY + 16, p.level, hp, maxHP, fadeStep);
+  drawLvHpRow(ui.ctx, panelLeft, HUD_RIGHT_X + HUD_RIGHT_W - 8, rowY + 16, p.level, hp, maxHP, fadeStep);
 }
 
-function _drawScrollArrows(ds, panelTop, maxVisible, canScrollUp, canScrollDown) {
+function _drawScrollArrows(panelTop, maxVisible, canScrollUp, canScrollDown) {
   if (!canScrollUp && !canScrollDown) return;
   const blink = Math.floor(Date.now() / 500) & 1;
   if (!blink) return;
-  const fadeStep = Math.min(Math.max(_rosterTransFade(ds), rosterBattleFade), ROSTER_FADE_STEPS);
+  const fadeStep = Math.min(Math.max(_rosterTransFade(), rosterBattleFade), ROSTER_FADE_STEPS);
   // Info box right edge minus arrow width minus padding
   const ax = HUD_RIGHT_X + HUD_RIGHT_W - 8 - 2;
   if (canScrollUp) {
     const rowY = panelTop; // top-most row
     const ay = rowY + 2;   // top-right of info box
-    const arrow = (fadeStep > 0 && ds.scrollArrowUpFade) ? ds.scrollArrowUpFade[fadeStep - 1] : ds.scrollArrowUp;
-    if (arrow) ds.ctx.drawImage(arrow, ax, ay);
+    const arrow = (fadeStep > 0 && ui.scrollArrowUpFade) ? ui.scrollArrowUpFade[fadeStep - 1] : ui.scrollArrowUp;
+    if (arrow) ui.ctx.drawImage(arrow, ax, ay);
   }
   if (canScrollDown) {
     const rowY = panelTop + (maxVisible - 1) * ROSTER_ROW_H; // bottom-most row
     const ay = rowY + ROSTER_ROW_H - 8 - 2; // bottom-right of info box
-    const arrow = (fadeStep > 0 && ds.scrollArrowDownFade) ? ds.scrollArrowDownFade[fadeStep - 1] : ds.scrollArrowDown;
-    if (arrow) ds.ctx.drawImage(arrow, ax, ay);
+    const arrow = (fadeStep > 0 && ui.scrollArrowDownFade) ? ui.scrollArrowDownFade[fadeStep - 1] : ui.scrollArrowDown;
+    if (arrow) ui.ctx.drawImage(arrow, ax, ay);
   }
 }
 
-export function drawRoster(ds) {
+export function drawRoster() {
   if (titleSt.state !== 'done') return;
-  if (ds.transSt.state === 'loading') return;
-  if (rosterBattleFade >= ROSTER_FADE_STEPS && ds.battleState !== 'none') return;
+  if (transSt.state === 'loading') return;
+  if (rosterBattleFade >= ROSTER_FADE_STEPS && battleSt.battleState !== 'none') return;
 
   const panelTop = HUD_VIEW_Y + 32;
   const panelH = HUD_VIEW_H - 32;
-  const scrollAreaY = panelTop + ROSTER_VISIBLE * ROSTER_ROW_H;
 
   const players = getRosterVisible();
   const maxVisible = Math.min(ROSTER_VISIBLE, players.length);
@@ -307,20 +308,20 @@ export function drawRoster(ds) {
   const canScrollUp = inputSt.rosterScroll > 0;
   const canScrollDown = inputSt.rosterScroll < maxScroll;
 
-  ds.ctx.save();
-  ds.ctx.beginPath();
-  ds.ctx.rect(HUD_RIGHT_X, panelTop, HUD_RIGHT_W, panelH);
-  ds.ctx.clip();
+  ui.ctx.save();
+  ui.ctx.beginPath();
+  ui.ctx.rect(HUD_RIGHT_X, panelTop, HUD_RIGHT_W, panelH);
+  ui.ctx.clip();
   for (let i = 0; i < maxVisible; i++) {
     const idx = inputSt.rosterScroll + i;
     if (idx >= players.length) break;
-    _drawRosterRow(ds, players[idx], i, panelTop);
+    _drawRosterRow(players[idx], i, panelTop);
   }
-  ds.ctx.restore();
+  ui.ctx.restore();
 
-  _drawScrollArrows(ds, panelTop, maxVisible, canScrollUp, canScrollDown);
+  _drawScrollArrows(panelTop, maxVisible, canScrollUp, canScrollDown);
 
-  ds.drawSparkle(panelTop);
+  drawRosterSparkle(panelTop);
 
   // Cursor
   if (inputSt.rosterState === 'browse' || inputSt.rosterState === 'menu' || inputSt.rosterState === 'menu-in' || inputSt.rosterState === 'menu-out') {
@@ -328,11 +329,11 @@ export function drawRoster(ds) {
     const curTarget = players[inputSt.rosterCursor];
     const curSlide = curTarget ? (rosterSlideY[curTarget.name] || 0) : 0;
     const curY = panelTop + visIdx * ROSTER_ROW_H + curSlide + 12;
-    if (ds.cursorTileCanvas) ds.ctx.drawImage(ds.cursorTileCanvas, HUD_RIGHT_X - 4, curY);
+    if (ui.cursorTileCanvas) ui.ctx.drawImage(ui.cursorTileCanvas, HUD_RIGHT_X - 4, curY);
   }
 }
 
-export function drawRosterMenu(ds) {
+export function drawRosterMenu() {
   if (inputSt.rosterState !== 'menu-in' && inputSt.rosterState !== 'menu' && inputSt.rosterState !== 'menu-out') return;
 
   const menuW = 80;
@@ -349,23 +350,23 @@ export function drawRosterMenu(ds) {
   } else if (inputSt.rosterState === 'menu-out') {
     const t = Math.min(inputSt.rosterMenuTimer / SLIDE_MS, 1);
     menuX = finalX + ((HUD_VIEW_X + HUD_VIEW_W) - finalX) * t;
-    if (t >= 1) { inputSt.rosterState = ds.msgState.state !== 'none' ? 'none' : 'browse'; inputSt.rosterMenuTimer = 0; }
+    if (t >= 1) { inputSt.rosterState = msgState.state !== 'none' ? 'none' : 'browse'; inputSt.rosterMenuTimer = 0; }
   }
 
-  ds.clipToViewport();
-  ds.drawBorderedBox(menuX, menuY, menuW, menuH, false);
+  clipToViewport();
+  drawBorderedBox(menuX, menuY, menuW, menuH, false);
 
   if (inputSt.rosterState === 'menu') {
     const textPal = TEXT_WHITE;
     for (let i = 0; i < ROSTER_MENU_ITEMS.length; i++) {
       const label = ROSTER_MENU_ITEMS[i];
       const labelBytes = _nameToBytes(label);
-      drawText(ds.ctx, menuX + 16, menuY + 8 + i * 14, labelBytes, textPal);
+      drawText(ui.ctx, menuX + 16, menuY + 8 + i * 14, labelBytes, textPal);
     }
-    if (ds.cursorTileCanvas) {
-      ds.ctx.drawImage(ds.cursorTileCanvas, menuX + 2, menuY + 4 + inputSt.rosterMenuCursor * 14);
+    if (ui.cursorTileCanvas) {
+      ui.ctx.drawImage(ui.cursorTileCanvas, menuX + 2, menuY + 4 + inputSt.rosterMenuCursor * 14);
     }
   }
 
-  ds.ctx.restore();
+  ui.ctx.restore();
 }
