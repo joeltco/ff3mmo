@@ -8,7 +8,7 @@ import { inputSt } from './input-handler.js';
 import { SFX, playSFX } from './music.js';
 import { setSwDmgNum } from './damage-numbers.js';
 
-// Injected callback (set via initBattleItems) to avoid circular import on game.js
+// Injected callback (set via initBattleItems) to avoid circular import on main.js
 let _processNextTurn = () => {};
 export function initBattleItems({ processNextTurn }) { _processNextTurn = processNextTurn; }
 

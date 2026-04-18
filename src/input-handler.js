@@ -27,7 +27,7 @@ import { swapBattleSprites } from './job-sprites.js';
 // Keyboard poll map — mutated by window listeners, read throughout the codebase.
 export const keys = {};
 
-// Injected at boot — avoids circular import on game.js
+// Injected at boot — avoids circular import on main.js
 let _executeBattleCommand = () => {};
 let _returnToTitle = () => {};
 let _startPVPBattle = () => {};
@@ -68,7 +68,7 @@ const BOSS_DEF = (MONSTERS.get(0xCC) || { def: 1 }).def;
 const ROSTER_VISIBLE = 3;
 const ROSTER_MENU_ITEMS = ['Party', 'Battle', 'Trade', 'Message', 'Inspect'];
 
-// ── Mutable state (imported by game.js draw/update code) ───────────────────
+// ── Mutable state (imported by main.js draw/update code) ───────────────────
 
 export const inputSt = {
   // Battle menu + targeting

@@ -12,7 +12,7 @@ import { _nameToBytes, makeVsMsg } from './text-utils.js';
 import { getPlayerDamageNum, setPlayerDamageNum, getAllyDamageNums } from './damage-numbers.js';
 import { selectCursor, saveSlots } from './save-state.js';
 
-// Injected at boot — avoids circular import on game.js
+// Injected at boot — avoids circular import on main.js
 let _processNextTurn = () => {};
 let _isTeamWiped = () => false;
 export function initBattleEnemy({ processNextTurn, isTeamWiped }) {

@@ -1,6 +1,6 @@
-# game.js Refactor Log
+# main.js (née game.js) Refactor Log
 
-**Status: complete.** game.js is **149 lines** (v1.6.0) — a minimal composition root. Target was <4,000 lines; result is 96% under target (1,920L → 149L, −92%).
+**Status: complete.** The entry-point file is **149 lines** (v1.6.0) — a minimal composition root. Target was <4,000 lines; result is 96% under target (1,920L → 149L, −92%). Renamed `game.js` → `main.js` post-Phase 15 since "the game" is now in ~30 subsystem modules; this file just wires them.
 
 ## Journey
 

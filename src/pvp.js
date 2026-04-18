@@ -52,7 +52,7 @@ const DEFEND_SPARKLE_FRAME_MS = 133;
 const DEFEND_SPARKLE_TOTAL_MS = 533;
 const ENEMY_SLASH_TOTAL_MS    = 201; // 3 frames × 67ms — slash on player portrait before shake
 
-// ── Mutable PVP state (imported directly by game.js) ─────────────────────────
+// ── Mutable PVP state (imported directly by main.js) ─────────────────────────
 export const pvpSt = {
   isPVPBattle:            false,
   pvpOpponent:            null,   // PLAYER_POOL entry being dueled

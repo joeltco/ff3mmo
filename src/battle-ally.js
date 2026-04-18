@@ -13,7 +13,7 @@ import { inputSt } from './input-handler.js';
 import { getEnemyDmgNum, setEnemyDmgNum } from './damage-numbers.js';
 import { ROSTER_FADE_STEPS } from './data/players.js';
 
-// Injected at boot — avoids circular import on game.js
+// Injected at boot — avoids circular import on main.js
 let _buildTurnOrder = () => [];
 let _processNextTurn = () => {};
 let _isTeamWiped = () => false;
