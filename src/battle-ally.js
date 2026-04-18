@@ -4,7 +4,7 @@ import { battleSt, getEnemyHP, setEnemyHP, BATTLE_SHAKE_MS, BATTLE_DMG_SHOW_MS }
 import { playSlashSFX } from './battle-sfx.js';
 import { isWeapon } from './data/items.js';
 import { SFX, playSFX } from './music.js';
-import { _nameToBytes, makeVsMsg } from './text-utils.js';
+import { _nameToBytes } from './text-utils.js';
 import { replaceBattleMsg, queueBattleMsg } from './battle-msg.js';
 import { BATTLE_CRITICAL } from './data/strings.js';
 import { getMonsterName } from './text-decoder.js';
@@ -77,12 +77,7 @@ function _updateAllyAttack() {
     if (battleSt.battleTimer >= delay) {
       const ally = battleSt.battleAllies[battleSt.currentAllyAttacker];
       if (battleSt.allyHitIdx === 0 && ally) {
-        const allyName = _nameToBytes(ally.name || 'Ally');
-        const ti = battleSt.allyTargetIndex;
-        const targetName = (battleSt.encounterMonsters && ti >= 0)
-          ? (getMonsterName(battleSt.encounterMonsters[ti].monsterId) || _nameToBytes('Enemy'))
-          : null;
-        queueBattleMsg(targetName ? makeVsMsg(allyName, targetName) : _nameToBytes((ally.name || 'Ally') + ' attacks!'));
+        queueBattleMsg(_nameToBytes((ally.name || 'Ally') + ' attacks!'));
       }
       const isLeft = (battleSt.allyHitIdx % 2 === 1) && ally && isWeapon(ally.weaponL);
       battleSt.allyHitIsLeft = isLeft;

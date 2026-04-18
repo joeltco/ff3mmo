@@ -3,7 +3,7 @@
 import { battleSt, getEnemyHP, setEnemyHP, BATTLE_SHAKE_MS, BOSS_DEF, BOSS_MAX_HP } from './battle-state.js';
 import { rollHits, calcPotentialHits } from './battle-math.js';
 import { BATTLE_RAN_AWAY, BATTLE_CANT_ESCAPE } from './data/strings.js';
-import { makeNameMsg, makeVsMsg } from './text-utils.js';
+import { makeNameMsg } from './text-utils.js';
 import { getMonsterName } from './text-decoder.js';
 import { ps, getJobLevelStatBonus } from './player-stats.js';
 import { ITEMS, isWeapon, isBladedWeapon } from './data/items.js';
@@ -140,13 +140,7 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
     const cmd = inputSt.playerActionPending.command;
     const pn = _playerName();
     if (cmd === 'fight') {
-      if (pn) {
-        const ti = inputSt.playerActionPending.targetIndex;
-        const targetName = (battleSt.isRandomEncounter && battleSt.encounterMonsters && ti >= 0)
-          ? (getMonsterName(battleSt.encounterMonsters[ti].monsterId) || makeNameMsg(new Uint8Array(0), 'Enemy'))
-          : null;
-        queueBattleMsg(targetName ? makeVsMsg(pn, targetName) : makeNameMsg(pn, ' attacks!'));
-      }
+      if (pn) queueBattleMsg(makeNameMsg(pn, ' attacks!'));
       _playerTurnFight();
     }
     else if (cmd === 'defend') { inputSt.battleActionCount++; if (pn) queueBattleMsg(makeNameMsg(pn, ' defends!')); playSFX(SFX.DEFEND_HIT); battleSt.battleState = 'defend-anim'; battleSt.battleTimer = 0; }
