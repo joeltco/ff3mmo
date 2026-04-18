@@ -1,17 +1,24 @@
 # game.js Refactor TODO
 
-Current size: **912 lines** (v1.6.0). Target: <4,000 lines — **achieved** (53% under target).
+Current size: **679 lines** (v1.6.0). Target: <4,000 lines — **achieved** (83% under target).
 
 ---
 
 ## Next Up
 
-game.js at 912L is essentially a composition root — module init, callback wiring, top-level game loop. Two clean modules still extractable if desired:
+game.js at 679L is a composition root — imports, module wiring, top-level game loop, boot/asset init. No further extractions worth pursuing; remaining code is genuine composition.
 
-- **HUD canvas init** (~110L, lines 306-388): `_tileToCanvas`, `_initHUDBorderTiles`, `_initHUDCanvases`, `_buildFadedHUDSet`, `initHUD`. Pure ROM→canvas builder — could fold into `hud-drawing.js` or new `hud-init.js`.
-- **Render pipeline** (~160L, lines 634-802): `render`, `_renderSprites`, `_renderMapAndWater`, `_renderStarSpiral`, `_drawPoisonFlash`, `_drawPondStrobe`, `_updateStarEffect`, `_drawMonsterDeath`. Self-contained world renderer.
+---
 
-Extracting both would bring game.js to ~640L. Remaining code (imports, boot/asset init, game loop) is genuine composition and not worth further splitting.
+## Completed — Phase 7 (render + HUD init extractions)
+
+<details>
+<summary>game.js 912L → 679L (−233L, −25%)</summary>
+
+- [x] `src/render.js` (165L) — world rendering pipeline: `render`, `_renderSprites`, `_renderMapAndWater`, `_renderStarSpiral`, `drawMonsterDeath`, `drawPoisonFlash`, `drawPondStrobe`, `updateStarEffect`. `battle-drawing.js` now imports `drawMonsterDeath` directly (callback dropped from `initBattleDrawing`).
+- [x] `src/hud-init.js` (109L) — HUD canvas init: `_tileToCanvas`, `_initHUDBorderTiles`, `_initHUDCanvases`, `_buildFadedHUDSet`, `initHUD`. Border/canvas state local to module, mirrored to `ui.*`.
+- [x] Dead imports cleaned from game.js: `NES_SYSTEM_PALETTE`, `decodeTiles`, `nesColorFade`, `_stepPalFade`, `drawLoadingOverlay`, `TILE_SIZE`, `DIR_DOWN/UP/LEFT/RIGHT`, `getMonsterCanvas/WhiteCanvas/DeathFrames`, `hasMonsterSprites`, `getBossBattleCanvas/WhiteCanvas`, `_updateWorldWater`, `_updateIndoorWater`, `_buildHorizWaterPair`, `getFlameSprites/Frames`, `getStarTiles`, `poisonFlashTimer`, `setPoisonFlashTimer`, `BATTLE_FLASH_FRAMES/MS`, `_getPlane0` et al from tile-math, `_calcBoxExpandSize`, `_encounterGridPos`.
+</details>
 
 ---
 
