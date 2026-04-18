@@ -1,8 +1,8 @@
 // Game Client — canvas rendering, input handling, game loop
 
 import { parseROM } from './rom-parser.js';
-import { NES_SYSTEM_PALETTE, decodeTiles } from './tile-decoder.js';
-import { Sprite, DIR_DOWN, DIR_UP, DIR_LEFT, DIR_RIGHT } from './sprite.js';
+import { initHUD } from './hud-init.js';
+import { Sprite } from './sprite.js';
 // loadMap, MapRenderer → map-loading.js
 import { loadWorldMap } from './world-map-loader.js';
 import { WorldMapRenderer } from './world-map-renderer.js';
@@ -24,19 +24,14 @@ import { BATTLE_MISS, BATTLE_GAME_OVER, BATTLE_FIGHT, BATTLE_RUN,
 import { queueBattleMsg, advanceBattleMsgZ,
          isBattleMsgBusy, getBattleMsgCurrent, getBattleMsgTimer, getBattleMsgQueue,
          MSG_FADE_IN_MS, MSG_HOLD_MS, MSG_FADE_OUT_MS, MSG_TOTAL_MS } from './battle-msg.js';
-import { initMonsterSprites, getMonsterCanvas, getMonsterWhiteCanvas,
-         getMonsterDeathFrames, hasMonsterSprites } from './monster-sprites.js';
-import { loadBossSprite, getBossBattleCanvas, getBossWhiteCanvas } from './boss-sprites.js';
+import { initMonsterSprites } from './monster-sprites.js';
+import { loadBossSprite } from './boss-sprites.js';
 // serverDeleteSlot → title-screen.js
 import { selectCursor, saveSlots,
          setSaveSlots, saveSlotsToDB, loadSlotsFromDB, setInventoryGetter, setPositionGetter } from './save-state.js';
 import { _buildItemRowBytes, _makeGotNText, makeExpText, makeGilText, makeCpText, makeFoundItemText, makeJobLevelUpText } from './text-utils.js';
-import { nesColorFade, _stepPalFade } from './palette.js';
-import { _getPlane0, _rebuild, _shiftHorizWater, _isWater, _buildHorizMixed } from './tile-math.js';
-// _dmgBounceY → hud-drawing.js
-import { _calcBoxExpandSize, _encounterGridPos } from './battle-layout.js';
 // _makeCanvas16, _makeCanvas16ctx, _hflipCanvas16, _makeWhiteCanvas → sprite-init.js
-import { _updateWorldWater, _updateIndoorWater, resetWorldWaterCache, _buildHorizWaterPair } from './water-animation.js';
+import { resetWorldWaterCache } from './water-animation.js';
 import { bsc, getSlashFramesForWeapon, initBattleSpriteCache, loadJobBattleSprites } from './battle-sprite-cache.js';
 import { hudSt, HUD_INFO_FADE_STEPS, HUD_INFO_FADE_STEP_MS, HUD_HPLV_STEP_MS } from './hud-state.js';
 import { mapSt } from './map-state.js';
@@ -44,10 +39,9 @@ import { ui, isMobile, drawBoxOnCtx } from './ui-state.js';
 import { battleSt, getEnemyHP, setEnemyHP,
          BOSS_ATK, BOSS_DEF, BOSS_MAX_HP,
          BATTLE_SHAKE_MS, BATTLE_DMG_SHOW_MS, BOSS_PREFLASH_MS, MONSTER_DEATH_MS } from './battle-state.js';
-import { initFlameRawTiles, initStarTiles,
-         getFlameSprites, getFlameFrames, getStarTiles } from './flame-sprites.js';
+import { initFlameRawTiles, initStarTiles } from './flame-sprites.js';
 // BATTLE_BG_MAP_LOOKUP, renderBattleBg → map-loading.js
-import { LOAD_FADE_STEP_MS, LOAD_FADE_MAX, drawLoadingOverlay } from './loading-screen.js';
+import { LOAD_FADE_STEP_MS, LOAD_FADE_MAX } from './loading-screen.js';
 import { initTitleWater, initTitleSky, initTitleUnderwater, initUnderwaterSprites, initTitleOcean, initTitleLogo } from './title-animations.js';
 // BATTLE_SPRITE_ROM, BATTLE_JOB_SIZE, BATTLE_PAL_ROM → sprite-init.js
 import { ps, EQUIP_SLOT_SUBTYPE, getEquipSlotId, setEquipSlotId, recalcDEF, recalcCombatStats, getHitWeapon, isHitRightHand, initPlayerStats, initExpTable, grantExp, grantCP, fullHeal, getShieldEvade, getJobLevel, gainJobJP } from './player-stats.js';
@@ -65,6 +59,7 @@ import { inputSt, handleBattleInput, handleRosterInput, handlePauseInput, initIn
 import { initMapTriggers } from './map-triggers.js';
 import { pvpSt, startPVPBattle, resetPVPState, updatePVPBattle, initPVP } from './pvp.js';
 import { drawBattle, drawBattleAllies, drawSWExplosion, drawSWDamageNumbers, initBattleDrawing } from './battle-drawing.js';
+import { initRender, render, drawPoisonFlash, drawPondStrobe, updateStarEffect } from './render.js';
 // playSlashSFX → battle-update.js
 import { getKnifeBladeCanvas, getKnifeBladeSwungCanvas,
          getDaggerBladeCanvas, getDaggerBladeSwungCanvas,
@@ -79,7 +74,7 @@ import { updateBattleEnemyTurn, initBattleEnemy } from './battle-enemy.js';
 import { buildTurnOrder, processNextTurn, initBattleTurn } from './battle-turn.js';
 // status-effects → battle-update.js, battle-encounter.js
 import { tickRandomEncounter, startRandomEncounter, initBattleEncounter } from './battle-encounter.js';
-import { initMovement, handleInput, updateMovement, poisonFlashTimer, setPoisonFlashTimer } from './movement.js';
+import { initMovement, handleInput, updateMovement } from './movement.js';
 import { getTargets, getHitIdx, startMagicItem, initBattleItems } from './battle-items.js';
 import { initBattleUpdate, resetBattleVars, isTeamWiped, isVictoryBattleState,
          startBattle, executeBattleCommand, updateBattle, updateBattleTimers,
@@ -103,32 +98,13 @@ import { initMissSprite,
 
 const CANVAS_W = 256;          // 16 metatiles wide (NES resolution)
 const CANVAS_H = 240;          // 15 metatiles tall (NES resolution)
-const TILE_SIZE = 16;
-// WALK_DURATION → movement.js
 
-// HUD layout — 4 panels: top scenery, game viewport, right box, bottom box
-const HUD_TOP_H = 32;                              // 2 tiles — battle scenery (future)
+// HUD layout — only values needed by SCREEN_CENTER calc below. Full HUD layout → hud-init.js + hud-drawing.js.
 const HUD_VIEW_X = 0;
-const HUD_VIEW_Y = HUD_TOP_H;                      // 32
-const HUD_VIEW_W = 144;                             // 9 tiles
-const HUD_VIEW_H = 144;                             // 9 tiles
-const HUD_RIGHT_X = HUD_VIEW_W;                     // 144
-const HUD_RIGHT_W = CANVAS_W - HUD_VIEW_W;          // 112 (7 tiles)
-const HUD_BOT_Y = HUD_VIEW_Y + HUD_VIEW_H;          // 176
-const HUD_BOT_H = CANVAS_H - HUD_BOT_Y;             // 64 (4 tiles)
-
-// Menu border tiles — ROM offset: bank 0D, $1700 into bank, tiles $F7-$FF
-const BORDER_TILE_ROM = 0x1B710 + (0xF7 - 0x70) * 16;  // 0x1BF80
-const BORDER_TILE_COUNT = 9;  // $F7 TL, $F8 top, $F9 TR, $FA left, $FB right, $FC BL, $FD bot, $FE BR, $FF fill
-const MENU_PALETTE = [0x0F, 0x00, 0x0F, 0x30];  // black, grey, black (interior), white
-let hudCanvas = null;
-let hudFadeCanvases = null;      // [fadeLevel 1..4] faded HUD canvases for game-start fade-in
-let titleHudCanvas = null; // title screen HUD — no right boxes, full-width viewport
-let titleHudFadeCanvases = null; // [fadeLevel 1..4] faded title HUD canvases for title fades
-let borderTileCanvases = null; // [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR, FILL]
-let borderBlueTileCanvases = null; // same but with blue (0x02) background instead of black
-let borderFadeSets = null;    // [fadeLevel] → [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR, FILL]
-let cornerMasks = null;       // [TL, TR, BL, BR] 8×8 canvases — black where outside, transparent inside
+const HUD_VIEW_Y = 32;
+const HUD_VIEW_W = 144;
+const HUD_VIEW_H = 144;
+// HUD canvases + border tiles owned by hud-init.js; accessed via ui.*
 
 // Battle sprite canvases (poses, sweat, sparkles, status, slash) — owned by battle-sprite-cache.js
 
@@ -185,10 +161,7 @@ function buildItemSelectList() {
 // poisonFlashTimer → movement.js
 // BATTLE_MISS, BATTLE_GAME_OVER → data/strings.js
 
-// Battle timing constants → battle-update.js
-// Kept locally for _drawPondStrobe
-const BATTLE_FLASH_FRAMES = 65;
-const BATTLE_FLASH_FRAME_MS = 16.67;
+// Battle timing constants → battle-update.js / render.js
 
 // Top box — battle scene BG or area name
 // topBoxMode, topBoxBgCanvas, topBoxBgFadeFrames → hud-state.js
@@ -303,89 +276,7 @@ export function init() {
   window.addEventListener('beforeunload', () => { saveSlotsToDB(); });
 }
 
-function _tileToCanvas(pixels, palette, transparentBg = false) {
-  const c = document.createElement('canvas');
-  c.width = 8; c.height = 8;
-  const tctx = c.getContext('2d');
-  const img = tctx.createImageData(8, 8);
-  for (let i = 0; i < 64; i++) {
-    const rgb = NES_SYSTEM_PALETTE[palette[pixels[i]]] || [0, 0, 0];
-    img.data[i * 4] = rgb[0]; img.data[i * 4 + 1] = rgb[1];
-    img.data[i * 4 + 2] = rgb[2]; img.data[i * 4 + 3] = (transparentBg && pixels[i] === 0) ? 0 : 255;
-  }
-  tctx.putImageData(img, 0, 0);
-  return c;
-}
-
-// drawBoxOnCtx → ui-state.js (as drawBoxOnCtx)
-
-function _initHUDBorderTiles(tiles) {
-  borderTileCanvases = tiles.map(p => _tileToCanvas(p, MENU_PALETTE));
-  ui.borderTileCanvases = borderTileCanvases;
-  cornerMasks = [0, 2, 5, 7].map(idx => {
-    const pixels = tiles[idx];
-    const c = document.createElement('canvas'); c.width = 8; c.height = 8;
-    const tctx = c.getContext('2d'); const img = tctx.createImageData(8, 8);
-    for (let i = 0; i < 64; i++) if (pixels[i] === 0) img.data[i * 4 + 3] = 255;
-    tctx.putImageData(img, 0, 0); return c;
-  });
-  ui.cornerMasks = cornerMasks;
-  borderBlueTileCanvases = tiles.map(p => _tileToCanvas(p, [0x02, 0x00, 0x02, 0x30], true));
-  ui.borderBlueTileCanvases = borderBlueTileCanvases;
-  borderFadeSets = [];
-  for (let step = 0; step <= LOAD_FADE_MAX; step++) {
-    const fadedPal = MENU_PALETTE.map(c => { let fc = c; for (let s = 0; s < step; s++) fc = nesColorFade(fc); return fc; });
-    borderFadeSets.push(tiles.map(p => _tileToCanvas(p, fadedPal)));
-  }
-  ui.borderFadeSets = borderFadeSets;
-  // Title screen gets transparent-background border tiles (no black outer edge)
-  titleSt.borderTiles = tiles.map(p => _tileToCanvas(p, MENU_PALETTE, true));
-  const titleFadeSets = [];
-  for (let step = 0; step <= LOAD_FADE_MAX; step++) {
-    const fadedPal = MENU_PALETTE.map(c => { let fc = c; for (let s = 0; s < step; s++) fc = nesColorFade(fc); return fc; });
-    titleFadeSets.push(tiles.map(p => _tileToCanvas(p, fadedPal, true)));
-  }
-  titleSt.borderFadeSets = titleFadeSets;
-}
-
-function _initHUDCanvases() {
-  hudCanvas = document.createElement('canvas'); hudCanvas.width = CANVAS_W; hudCanvas.height = CANVAS_H;
-  const hctx = hudCanvas.getContext('2d'); hctx.imageSmoothingEnabled = false;
-  drawBoxOnCtx(hctx, borderTileCanvases, HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H, false);
-  drawBoxOnCtx(hctx, borderTileCanvases, HUD_RIGHT_X, HUD_VIEW_Y, 32, 32);
-  drawBoxOnCtx(hctx, borderTileCanvases, HUD_RIGHT_X + 32, HUD_VIEW_Y, HUD_RIGHT_W - 32, 32);
-  drawBoxOnCtx(hctx, borderTileCanvases, 0, HUD_BOT_Y, CANVAS_W, HUD_BOT_H);
-  ui.hudCanvas = hudCanvas;
-  titleHudCanvas = document.createElement('canvas'); titleHudCanvas.width = CANVAS_W; titleHudCanvas.height = CANVAS_H;
-  const thctx = titleHudCanvas.getContext('2d'); thctx.imageSmoothingEnabled = false;
-  drawBoxOnCtx(thctx, borderTileCanvases, HUD_VIEW_X, HUD_VIEW_Y, CANVAS_W, HUD_VIEW_H, false);
-  drawBoxOnCtx(thctx, borderTileCanvases, 0, HUD_BOT_Y, CANVAS_W, HUD_BOT_H);
-  ui.titleHudCanvas = titleHudCanvas;
-}
-
-function _buildFadedHUDSet(boxes) {
-  const arr = [];
-  for (let step = 1; step <= LOAD_FADE_MAX; step++) {
-    const c = document.createElement('canvas'); c.width = CANVAS_W; c.height = CANVAS_H;
-    const fctx = c.getContext('2d'); fctx.imageSmoothingEnabled = false;
-    for (const [bx, by, bw, bh, fill] of boxes) drawBoxOnCtx(fctx, borderFadeSets[step], bx, by, bw, bh, fill);
-    arr.push(c);
-  }
-  return arr;
-}
-
-function initHUD(romData) {
-  _initHUDBorderTiles(decodeTiles(romData, BORDER_TILE_ROM, BORDER_TILE_COUNT));
-  _initHUDCanvases();
-  hudFadeCanvases = _buildFadedHUDSet([
-    [HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H, false],
-    [HUD_RIGHT_X, HUD_VIEW_Y, 32, 32, true],
-    [HUD_RIGHT_X + 32, HUD_VIEW_Y, HUD_RIGHT_W - 32, 32, true],
-  ]);
-  ui.hudFadeCanvases = hudFadeCanvases;
-  titleHudFadeCanvases = _buildFadedHUDSet([[HUD_VIEW_X, HUD_VIEW_Y, CANVAS_W, HUD_VIEW_H, false]]);
-  ui.titleHudFadeCanvases = titleHudFadeCanvases;
-}
+// _tileToCanvas, _initHUDBorderTiles, _initHUDCanvases, _buildFadedHUDSet, initHUD → hud-init.js
 
 // _renderPortrait through initLoadingScreenFadeFrames → sprite-init.js
 
@@ -565,10 +456,10 @@ export async function loadROM(arrayBuffer) {
     startPVPBattle,
     toggleCrt: () => document.getElementById('canvas-wrapper').classList.toggle('crt'),
   });
+  initRender({ ctx, getSprite: () => sprite, waterSt });
   initBattleDrawing({
     ctx,
     cursorTileCanvas: () => cursorTileCanvas,
-    drawMonsterDeath: _drawMonsterDeath,
     isVictoryBattleState,
   });
   initPVP({
@@ -631,85 +522,7 @@ export function loadFF12ROM(arrayBuffer) {
 
 
 
-function _renderSprites(camX, camY, originX, originY, spriteY) {
-  const _fs = getFlameSprites();
-  if (!mapSt.onWorldMap && _fs.length > 0) {
-    const flameFrame = Math.floor(waterSt.tick / 8) & 1;
-    const wLeft = camX - originX;
-    const wTop = camY - originY;
-    const _ff = getFlameFrames();
-    for (const flame of _fs) {
-      const sx = flame.px - wLeft;
-      const sy = flame.py - wTop;
-      if (sx < -16 || sx > CANVAS_W || sy < -16 || sy > CANVAS_H) continue;
-      const frames = _ff.get(flame.npcId);
-      ctx.drawImage(frames[flameFrame], sx, sy);
-    }
-  }
-  // Boss sprite (crystal room) — blink on hit
-  if (mapSt.bossSprite) {
-    const blinkHidden = battleSt.bossFlashTimer > 0 && (Math.floor(battleSt.bossFlashTimer / 60) & 1);
-    if (!blinkHidden) {
-      const wLeft = camX - originX;
-      const wTop = camY - originY;
-      const bx = mapSt.bossSprite.px - wLeft;
-      const by = mapSt.bossSprite.py - wTop;
-      if (bx > -16 && bx < CANVAS_W && by > -16 && by < CANVAS_H) {
-        ctx.imageSmoothingEnabled = false;
-        ctx.drawImage(mapSt.bossSprite.frames[Math.floor(waterSt.tick / 8) & 1], bx, by);
-      }
-    }
-  }
-  if (sprite) sprite.draw(ctx, SCREEN_CENTER_X, spriteY);
-}
-
-function _renderMapAndWater(camX, camY, originX, originY, spriteY) {
-  if (mapSt.onWorldMap && mapSt.worldMapRenderer) {
-    mapSt.worldMapRenderer.draw(ctx, camX, camY, originX, originY);
-    _updateWorldWater(mapSt.worldMapRenderer, waterSt.tick);
-  } else if (mapSt.mapRenderer) {
-    mapSt.mapRenderer.draw(ctx, camX, camY, originX, originY);
-    _updateIndoorWater(mapSt.mapRenderer, waterSt.tick);
-  }
-  if (transSt.state === 'none' &&
-      (battleSt.battleState === 'none' || battleSt.battleState === 'flash-strobe' || battleSt.battleState.startsWith('roar-'))) {
-    _renderSprites(camX, camY, originX, originY, spriteY);
-  }
-  if (mapSt.onWorldMap && mapSt.worldMapRenderer) {
-    mapSt.worldMapRenderer.drawOverlay(ctx, camX, camY, originX, originY, SCREEN_CENTER_X, spriteY);
-  } else if (mapSt.mapRenderer) {
-    mapSt.mapRenderer.drawOverlay(ctx, camX, camY, originX, originY, SCREEN_CENTER_X, spriteY);
-  }
-}
-function _renderStarSpiral() {
-  const _st = getStarTiles();
-  if (!mapSt.starEffect || !_st) return;
-  const { radius, angle, frame } = mapSt.starEffect;
-  const tile = _st[(frame >> 4) & 1];
-  for (let i = 0; i < 8; i++) {
-    const a = angle + i * Math.PI / 4;
-    ctx.drawImage(tile,
-      Math.round(SCREEN_CENTER_X + 8 + radius * Math.cos(a) - 8),
-      Math.round(SCREEN_CENTER_Y + 8 + radius * Math.sin(a) - 8));
-  }
-}
-function render() {
-  ctx.fillStyle = '#000';
-  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-
-  let camX = Math.round(mapSt.worldX);
-  const camY = Math.round(mapSt.worldY);
-  if (mapSt.shakeActive) camX += (Math.floor(mapSt.shakeTimer / (1000 / 60)) & 2) ? 2 : -2;
-  if (battleSt.battleShakeTimer > 0) camX += (Math.floor(battleSt.battleShakeTimer / (1000 / 60)) & 2) ? 2 : -2;
-
-  clipToViewport();
-  try {
-    _renderMapAndWater(camX, camY, SCREEN_CENTER_X, SCREEN_CENTER_Y + 3, SCREEN_CENTER_Y);
-    _renderStarSpiral();
-  } finally {
-    ctx.restore();
-  }
-}
+// _renderSprites, _renderMapAndWater, _renderStarSpiral, render → render.js
 
 // statRowBytes → hud-drawing.js
 
@@ -729,13 +542,7 @@ function render() {
 
 // showMsgBox, updateMsgBox, drawMsgBox → message-box.js
 
-function _drawMonsterDeath(x, y, size, progress, monsterId) {
-  // Dithered diagonal dissolve — pre-rendered frames with Bayer 4×4 dither pattern.
-  const frames = getMonsterDeathFrames(monsterId, battleSt.goblinDeathFrames);
-  if (!frames || !frames.length) return;
-  const frameIdx = Math.min(frames.length - 1, Math.floor(progress * frames.length));
-  ctx.drawImage(frames[frameIdx], x, y);
-}
+// _drawMonsterDeath → render.js
 
 // drawBorderedBox, drawTopBoxBorder, roundTopBoxCorners → hud-drawing.js
 
@@ -759,47 +566,7 @@ function _updateHudHpLvStep(dt) {
   }
 }
 
-function _drawPoisonFlash() {
-  if (poisonFlashTimer < 0) return;
-  if (poisonFlashTimer === 0) setPoisonFlashTimer(Date.now());
-  if (Date.now() - poisonFlashTimer < 67) {
-    clipToViewport();
-    ctx.fillStyle = 'rgba(128, 0, 64, 0.35)';
-    ctx.fillRect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
-    ctx.restore();
-  } else { setPoisonFlashTimer(-1); }
-}
-
-function _drawPondStrobe() {
-  if (mapSt.pondStrobeTimer <= 0) return;
-  const frame = Math.floor((BATTLE_FLASH_FRAMES * BATTLE_FLASH_FRAME_MS - mapSt.pondStrobeTimer) / BATTLE_FLASH_FRAME_MS);
-  if (!(frame & 1)) return;
-  clipToViewport();
-  grayViewport();
-}
-
-function _updateStarEffect(dt) {
-  if (!mapSt.starEffect) return;
-  const fx = mapSt.starEffect;
-  fx.acc = (fx.acc || 0) + dt;
-  while (fx.acc >= 16.67) {
-    fx.acc -= 16.67;
-    fx.frame++;
-    fx.angle += 0.06;
-    fx.radius -= 0.55;
-    // Player spin: cycle directions every 14 frames
-    if (fx.spin && fx.frame % 14 === 0) {
-      const SPIN_ORDER = [DIR_DOWN, DIR_LEFT, DIR_UP, DIR_RIGHT];
-      sprite.setDirection(SPIN_ORDER[Math.floor(fx.frame / 14) % 4]);
-    }
-    if (fx.radius < 4) {
-      const cb = fx.onComplete;
-      mapSt.starEffect = null;
-      if (cb) cb();
-      break;
-    }
-  }
-}
+// _drawPoisonFlash, _drawPondStrobe, _updateStarEffect → render.js
 
 function _gameLoopUpdate(dt) {
   if (hudSt.hudInfoFadeTimer < HUD_INFO_FADE_STEPS * HUD_INFO_FADE_STEP_MS) hudSt.hudInfoFadeTimer += dt;
@@ -822,7 +589,7 @@ function _gameLoopUpdate(dt) {
       if (mapSt.shakePendingAction) { mapSt.shakePendingAction(); mapSt.shakePendingAction = null; }
     }
   }
-  _updateStarEffect(dt);
+  updateStarEffect(dt);
   waterSt.timer += dt;
   if (waterSt.timer >= WATER_TICK) { waterSt.timer %= WATER_TICK; waterSt.tick++; }
 }
@@ -830,9 +597,9 @@ function _gameLoopUpdate(dt) {
 function _gameLoopDraw() {
   try {
     render();
-    _drawPoisonFlash();
+    drawPoisonFlash();
     drawTransitionOverlay(ctx);
-    _drawPondStrobe();
+    drawPondStrobe();
     if (transSt.state === 'trap-falling' && sprite) sprite.draw(ctx, SCREEN_CENTER_X, SCREEN_CENTER_Y);
   } catch (e) {
     console.error('[RENDER ERROR]', e);

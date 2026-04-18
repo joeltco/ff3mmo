@@ -33,17 +33,16 @@ import { getKnifeBladeCanvas, getKnifeBladeSwungCanvas,
          getFistCanvas } from './weapon-sprites.js';
 import { clipToViewport, drawCursorFaded, drawHudBox, drawSparkleCorners, drawBorderedBox,
          grayViewport } from './hud-drawing.js';
+import { drawMonsterDeath as _drawMonsterDeath } from './render.js';
 
 // Injected at boot
 let _ctx = null;
 let _cursorCanvas = () => null;
-let _drawMonsterDeath = () => {};
 let _isVictoryBattleState = () => false;
 function _cursorTileCanvas() { return _cursorCanvas(); }
 export function initBattleDrawing(deps) {
   _ctx = deps.ctx;
   _cursorCanvas = deps.cursorTileCanvas;
-  _drawMonsterDeath = deps.drawMonsterDeath;
   _isVictoryBattleState = deps.isVictoryBattleState;
 }
 
