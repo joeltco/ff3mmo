@@ -5,6 +5,19 @@ const HORIZ_CHR = new Set([0x22, 0x23, 0x24, 0x25]);
 const VERT_CHR = [0x26, 0x27];
 const ANIM_CHR = new Set([0x22, 0x23, 0x24, 0x25, 0x26, 0x27]);
 
+// Global water-animation clock — advanced by tickWater(dt) from the main loop
+// and from the title screen's own loop. Consumers read waterSt.tick.
+export const waterSt = { timer: 0, tick: 0 };
+const WATER_TICK_MS = 4 * (1000 / 60);  // ~67ms per tick (4 NES frames)
+
+export function tickWater(dt) {
+  waterSt.timer += dt;
+  if (waterSt.timer >= WATER_TICK_MS) {
+    waterSt.timer %= WATER_TICK_MS;
+    waterSt.tick++;
+  }
+}
+
 let _waterCache = null;
 let _indoorWaterCache = null;
 

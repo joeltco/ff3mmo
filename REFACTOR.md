@@ -1,12 +1,26 @@
 # game.js Refactor TODO
 
-Current size: **383 lines** (v1.6.0). Target: <4,000 lines — **achieved** (90% under target).
+Current size: **377 lines** (v1.6.0). Target: <4,000 lines — **achieved** (91% under target).
 
 ---
 
 ## Next Up
 
-game.js at 383L is a composition root — imports, module wiring, boot/asset init, top-level game loop. Remaining code is genuine composition; no further extractions worth pursuing.
+game.js at 377L is a composition root — imports, module wiring, boot/asset init, top-level game loop. Remaining code is genuine composition; no further extractions worth pursuing.
+
+---
+
+## Completed — Phase 12b (waterSt → water-animation.js)
+
+<details>
+<summary>game.js 383L → 377L (−6L); initRender deleted, initTitleUpdate simplified</summary>
+
+- [x] **`waterSt` + `WATER_TICK` moved to `water-animation.js`** — natural home. Now exports `waterSt` (`{ timer, tick }`) and `tickWater(dt)` helper.
+- [x] **`initRender()` deleted entirely** — render.js imports `waterSt` directly; no init state.
+- [x] **`initTitleUpdate({ waterSt, ... })` simplified to `initTitleUpdate({ swapBattleSprites })`** — title-screen calls `tickWater(dt)` when in a title-active state, same shared tick.
+- [x] Game loop update shrinks: `waterSt.timer += dt; if (waterSt.timer >= WATER_TICK) { … }` → `tickWater(dt)`.
+- [x] Dead imports removed: `initRender` from game.js.
+</details>
 
 ---
 

@@ -16,6 +16,7 @@ import { fakePlayerPortraits } from './fake-player-sprites.js';
 import { drawCursorFaded } from './hud-drawing.js';
 import { setPlayerInventory } from './inventory.js';
 import { keys } from './input-handler.js';
+import { tickWater } from './water-animation.js';
 
 // ── NES layout constants — must match game.js ─────────────────────────────
 const CANVAS_W   = 256;
@@ -653,13 +654,10 @@ export function onNameEntryKeyDown(e) {
 // ── Title update (moved from game.js) ──────────────────────────────────────
 
 const TILE_SIZE = 16;
-const WATER_TICK = 4 * (1000 / 60);  // ~67ms per tick
 
-let _waterSt = { timer: 0, tick: 0 };
 let _swapBattleSprites = () => {};
 
-export function initTitleUpdate({ waterSt, swapBattleSprites }) {
-  _waterSt = waterSt;
+export function initTitleUpdate({ swapBattleSprites }) {
   _swapBattleSprites = swapBattleSprites;
 }
 
@@ -709,8 +707,7 @@ export function updateTitle(dt) {
   updateTitleUnderwater(dt);
 
   if (isTitleActiveState()) {
-    _waterSt.timer += dt;
-    if (_waterSt.timer >= WATER_TICK) { _waterSt.timer %= WATER_TICK; _waterSt.tick++; }
+    tickWater(dt);
     titleSt.waterScroll += dt * 0.12;
     titleSt.shipTimer += dt;
     const _s = titleSt.state;

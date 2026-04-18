@@ -15,7 +15,7 @@ import { VERSION } from './data/strings.js';
 import { initMonsterSprites } from './monster-sprites.js';
 import { loadBossSprite } from './boss-sprites.js';
 import { saveSlotsToDB, loadSlotsFromDB, setPositionGetter } from './save-state.js';
-import { resetWorldWaterCache } from './water-animation.js';
+import { resetWorldWaterCache, waterSt, tickWater } from './water-animation.js';
 import { initBattleSpriteCache, loadJobBattleSprites } from './battle-sprite-cache.js';
 import { hudSt, HUD_INFO_FADE_STEPS, HUD_INFO_FADE_STEP_MS } from './hud-state.js';
 import { mapSt } from './map-state.js';
@@ -35,7 +35,7 @@ import { initInputHandler, initKeyboardListeners } from './input-handler.js';
 import { sprite, setPlayerSprite } from './player-sprite.js';
 import { startPVPBattle } from './pvp.js';
 import { drawBattle, drawBattleAllies, drawSWExplosion, drawSWDamageNumbers } from './battle-drawing.js';
-import { initRender, render, drawPoisonFlash, drawPondStrobe, updateStarEffect } from './render.js';
+import { render, drawPoisonFlash, drawPondStrobe, updateStarEffect } from './render.js';
 import { drawHUD, clipToViewport, drawHudBox, drawBorderedBox, roundTopBoxCorners, updateHudHpLvStep } from './hud-drawing.js';
 import { initMapLoading, loadMapById } from './map-loading.js';
 import { initBattleAlly } from './battle-ally.js';
@@ -80,10 +80,6 @@ let romRaw = null;
 // Where the sprite draws on screen (centered in viewport)
 const SCREEN_CENTER_X = HUD_VIEW_X + (HUD_VIEW_W - 16) / 2;    // 64
 const SCREEN_CENTER_Y = HUD_VIEW_Y + (HUD_VIEW_H - 16) / 2 - 3; // 93
-
-// Water animation state — shared with title-screen.js via waterSt ref
-const waterSt = { timer: 0, tick: 0 };
-const WATER_TICK = 4 * (1000 / 60);  // ~67ms per tick
 
 let _tabWasLoading = false; // tracks if we just came from a loading screen
 
@@ -244,7 +240,7 @@ export async function loadROM(arrayBuffer) {
   _initTitleAssets(romRaw);
   initMapLoading(romRaw);
   initBattleItems({ processNextTurn });
-  initTitleUpdate({ waterSt, swapBattleSprites: _swapBattleSprites });
+  initTitleUpdate({ swapBattleSprites: _swapBattleSprites });
   initBattleEncounter({ resetBattleVars });
   initBattleAlly({ buildTurnOrder, processNextTurn, isTeamWiped });
   initBattleEnemy({ processNextTurn, isTeamWiped });
@@ -253,7 +249,6 @@ export async function loadROM(arrayBuffer) {
     startPVPBattle,
     toggleCrt: () => document.getElementById('canvas-wrapper').classList.toggle('crt'),
   });
-  initRender({ waterSt });
 
   await loadSlotsFromDB();
 
@@ -310,8 +305,7 @@ function _gameLoopUpdate(dt) {
     }
   }
   updateStarEffect(dt);
-  waterSt.timer += dt;
-  if (waterSt.timer >= WATER_TICK) { waterSt.timer %= WATER_TICK; waterSt.tick++; }
+  tickWater(dt);
 }
 
 function _gameLoopDraw() {

@@ -4,7 +4,7 @@ import { mapSt } from './map-state.js';
 import { battleSt } from './battle-state.js';
 import { transSt } from './transitions.js';
 import { getFlameSprites, getFlameFrames, getStarTiles } from './flame-sprites.js';
-import { _updateWorldWater, _updateIndoorWater } from './water-animation.js';
+import { _updateWorldWater, _updateIndoorWater, waterSt } from './water-animation.js';
 import { getMonsterDeathFrames } from './monster-sprites.js';
 import { clipToViewport, grayViewport } from './hud-drawing.js';
 import { DIR_DOWN, DIR_UP, DIR_LEFT, DIR_RIGHT } from './sprite.js';
@@ -24,12 +24,6 @@ const SCREEN_CENTER_Y = HUD_VIEW_Y + (HUD_VIEW_H - 16) / 2 - 3;
 
 const BATTLE_FLASH_FRAMES = 65;
 const BATTLE_FLASH_FRAME_MS = 16.67;
-
-let waterSt = null;
-
-export function initRender(opts) {
-  waterSt = opts.waterSt;
-}
 
 function _renderSprites(camX, camY, originX, originY, spriteY) {
   const _fs = getFlameSprites();
