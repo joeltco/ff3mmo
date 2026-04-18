@@ -117,7 +117,7 @@ function _genPosePortraits(poseTiles) {
 }
 
 // --- _FP_* pose tile constants ---
-const _FP_ATK_R_TILE  = OK_R_FWD_T2;
+const _FP_ATK_R_TILE  = OK_R_BACK_SWING[2];
 const _FP_ATK_L_TILE3 = OK_L_FWD_T2;
 const _FP_ATK_L_TILE4 = OK_L_FWD_T3;
 const _FP_KNEEL       = OK_KNEEL;
@@ -355,13 +355,11 @@ function _initBattleIdleSprites(romData, palette) {
 }
 
 function _initBattleAttackSprites(palette, battleSpriteCanvas) {
-  const ATK_R_39 = OK_R_FWD_T2;
-
   const battleSpriteAttackCanvas = document.createElement('canvas');
   battleSpriteAttackCanvas.width = 16; battleSpriteAttackCanvas.height = 16;
   const actx = battleSpriteAttackCanvas.getContext('2d');
   actx.drawImage(battleSpriteCanvas, 0, 0);
-  _drawTileOnto(ATK_R_39, palette, actx, 0, 8);
+  _drawTileOnto(_FP_ATK_R_TILE, palette, actx, 0, 8);
 
   const battleSpriteAttackLCanvas = document.createElement('canvas');
   battleSpriteAttackLCanvas.width = 16; battleSpriteAttackLCanvas.height = 16;
@@ -369,7 +367,14 @@ function _initBattleAttackSprites(palette, battleSpriteCanvas) {
   alctx.drawImage(battleSpriteCanvas, 0, 0);
   _drawTileOnto(_FP_KNIFE_L[3], palette, alctx, 8, 8);
 
-  return { battleSpriteAttackCanvas, battleSpriteAttackLCanvas };
+  const battleSpriteAttackL2Canvas = document.createElement('canvas');
+  battleSpriteAttackL2Canvas.width = 16; battleSpriteAttackL2Canvas.height = 16;
+  const al2ctx = battleSpriteAttackL2Canvas.getContext('2d');
+  al2ctx.drawImage(battleSpriteCanvas, 0, 0);
+  _drawTileOnto(OK_L_FWD_T2, palette, al2ctx, 0, 8);
+  _drawTileOnto(OK_L_FWD_T3, palette, al2ctx, 8, 8);
+
+  return { battleSpriteAttackCanvas, battleSpriteAttackLCanvas, battleSpriteAttackL2Canvas };
 }
 
 function _initBattleKnifeBodySprites(palette) {
@@ -382,7 +387,8 @@ function _initBattleKnifeBodySprites(palette) {
 function _initBattleRomPoses(romData, palette) {
   const battleSpriteVictoryCanvas = _buildCanvas4(_FP_VICTORY, palette);
   const battleSpriteHitCanvas = _buildCanvas4ROM(romData, BATTLE_SPRITE_ROM + 30 * 16, palette);
-  const battleSpriteAttack2Canvas = _buildCanvas4ROM(romData, BATTLE_SPRITE_ROM + 18 * 16, palette);
+  // R FWD body = all idle (OK_R_FWD_T2 === OK_IDLE_T2); legs-only animation.
+  const battleSpriteAttack2Canvas = _buildCanvas4([OK_IDLE[0], OK_IDLE[1], OK_R_FWD_T2, OK_IDLE[3]], palette);
   return { battleSpriteVictoryCanvas, battleSpriteHitCanvas, battleSpriteAttack2Canvas };
 }
 
@@ -791,7 +797,7 @@ export function initBattleSprite(romData) {
     poses: {
       idle: idle.battleSpriteCanvas, idleFade: idle.battleSpriteFadeCanvases, silhouette: idle.silhouetteCanvas,
       rBack: atk.battleSpriteAttackCanvas, lBack: atk.battleSpriteAttackLCanvas,
-      rFwd: rom.battleSpriteAttack2Canvas, lFwd: null,
+      rFwd: rom.battleSpriteAttack2Canvas, lFwd: atk.battleSpriteAttackL2Canvas,
       knifeR: knife.battleSpriteKnifeRCanvas, knifeL: knife.battleSpriteKnifeLCanvas, knifeBack: knife.battleSpriteKnifeBackCanvas,
       victory: rom.battleSpriteVictoryCanvas, hit: rom.battleSpriteHitCanvas,
       defend: def.battleSpriteDefendCanvas, defendFade: def.battleSpriteDefendFadeCanvases,
@@ -834,15 +840,13 @@ function _initWarriorPosePortraits() {
   const kneelTiles = WR_KNEEL.map(d);
   const knifeRTiles = [idleTiles[0], idleTiles[1], d(WR_R_BACK_T2), idleTiles[3]];
   const knifeLTiles = [idleTiles[0], idleTiles[1], idleTiles[2], d(WR_L_BACK[3])];
-  const atkRTiles = [idleTiles[0], idleTiles[1], idleTiles[2], idleTiles[3]]; // R fwd = idle body
-  const atkLTiles = [idleTiles[0], idleTiles[1], d(WR_L_FWD_T2), d(WR_L_FWD_T3)];
   return {
     fakePlayerPortraits: _genPosePortraits(idleTiles),
     fakePlayerVictoryPortraits: _genPosePortraits(victoryTiles),
     fakePlayerHitPortraits: _genPosePortraits(hitTiles),
     fakePlayerDefendPortraits: _genPosePortraits(victoryTiles),
-    fakePlayerAttackPortraits: _genPosePortraits(atkRTiles),
-    fakePlayerAttackLPortraits: _genPosePortraits(atkLTiles),
+    fakePlayerAttackPortraits: _genPosePortraits(knifeRTiles),
+    fakePlayerAttackLPortraits: _genPosePortraits(knifeLTiles),
     fakePlayerKnifeBackPortraits: _genPosePortraits(knifeLTiles),
     fakePlayerKnifeRPortraits: _genPosePortraits(knifeRTiles),
     fakePlayerKnifeLPortraits: _genPosePortraits(knifeLTiles),
@@ -864,7 +868,7 @@ function _buildKnifeFullBodies() {
   const _FP_L_FWD = [OK_IDLE[0], OK_IDLE[1], OK_L_FWD_T2, OK_L_FWD_T3];
   const _FP_R_FWD = [OK_IDLE[0], OK_IDLE[1], OK_R_FWD_T2, OK_IDLE[3]];
   const fakePlayerKnifeLFwdFullBodyCanvases = PLAYER_PALETTES.map(pal => build(_FP_L_FWD, _FP_LEG_L_FWD_L, _FP_LEG_R_FWD_L, pal));
-  const fakePlayerKnifeRFwdFullBodyCanvases = PLAYER_PALETTES.map(pal => build(_FP_R_FWD, _FP_LEG_L_BACK_R, _FP_LEG_R_SWING, pal));
+  const fakePlayerKnifeRFwdFullBodyCanvases = PLAYER_PALETTES.map(pal => build(_FP_R_FWD, _FP_LEG_L, _FP_LEG_R_SWING, pal));
   const fakePlayerKneelFullBodyCanvases    = PLAYER_PALETTES.map(pal => build(_FP_KNEEL, _FP_LEG_L_KNEEL, _FP_LEG_R_KNEEL, pal));
   const fakePlayerVictoryFullBodyCanvases  = PLAYER_PALETTES.map(pal => build(_FP_VICTORY, _FP_LEG_L_VICTORY, _FP_LEG_R_VICTORY, pal));
   return {
