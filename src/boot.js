@@ -24,8 +24,8 @@ import { initMissSprite } from './damage-numbers.js';
 
 const TITLE_FADE_MAX = 4;
 
-let ff12Raw = null;  // FF1&2 ROM — Adamantoise sprite + FF1 music
-let romRaw = null;   // Primary FF3 ROM — retained so loadFF12ROM can rebuild fade frames
+let ff12Raw = null;       // FF1&2 ROM — Adamantoise sprite + FF1 music
+export let romRaw = null; // Primary FF3 ROM — live binding: also consumed by job-sprites.js after init
 
 export function initSpriteAssets(rom) {
   romRaw = rom;

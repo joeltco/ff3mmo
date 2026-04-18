@@ -17,6 +17,7 @@ import { drawCursorFaded } from './hud-drawing.js';
 import { setPlayerInventory } from './inventory.js';
 import { keys } from './input-handler.js';
 import { tickWater } from './water-animation.js';
+import { swapBattleSprites } from './job-sprites.js';
 
 // ── NES layout constants — must match game.js ─────────────────────────────
 const CANVAS_W   = 256;
@@ -655,12 +656,6 @@ export function onNameEntryKeyDown(e) {
 
 const TILE_SIZE = 16;
 
-let _swapBattleSprites = () => {};
-
-export function initTitleUpdate({ swapBattleSprites }) {
-  _swapBattleSprites = swapBattleSprites;
-}
-
 function _updateTitleMainOutCase() {
   titleSt.state = 'done';
   hudSt.hudInfoFadeTimer = 0;
@@ -693,7 +688,7 @@ function _updateTitleMainOutCase() {
   ps.cp = (slot && slot.cp) || 0;
   ps.status.mask = (slot && slot.statusMask) || 0;
   ps.playTime = (slot && slot.playTime) || 0;
-  _swapBattleSprites(ps.jobIdx);
+  swapBattleSprites(ps.jobIdx);
   transSt.pendingTrack = TRACKS.TOWN_UR;
   loadMapById(114);
   mapSt.worldY -= 6 * TILE_SIZE;

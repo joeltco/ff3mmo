@@ -1,6 +1,6 @@
 # game.js Refactor Log
 
-**Status: complete.** game.js is **172 lines** (v1.6.0) — a minimal composition root. Target was <4,000 lines; result is 96% under target (1,920L → 172L, −91%).
+**Status: complete.** game.js is **149 lines** (v1.6.0) — a minimal composition root. Target was <4,000 lines; result is 96% under target (1,920L → 149L, −92%).
 
 ## Journey
 
@@ -17,10 +17,11 @@
 | Phase 12b | 377 | −6 | `waterSt` → water-animation.js; `initRender()` deleted |
 | Phase 13 | 257 | −120 | game-loop.js extraction |
 | Phase 14 | 172 | −85 | boot.js extraction |
+| Phase 15 | 149 | −23 | job-sprites.js; `initTitleUpdate` deleted |
 
 ## Final architecture
 
-game.js contains only: imports, `CANVAS_W/H`, `SPRITE_PAL_TOP/BTM` + `JOB_WALK_PALS`, `init()`, `_swapBattleSprites()`, `returnToTitle()`, `getMobileInputMode()`, `_startDebugMode()`, `_startTitleScreen()`, `loadROM()`, and `export { loadFF12ROM } from './boot.js'`.
+game.js contains only: imports, `CANVAS_W/H`, `init()`, `returnToTitle()`, `getMobileInputMode()`, `_startDebugMode()`, `_startTitleScreen()`, `loadROM()`, and `export { loadFF12ROM } from './boot.js'`.
 
 Supporting modules split by concern:
 - **Frame loop:** `game-loop.js` — `startGameLoop()`, update/draw dispatch, `_reportError`.
@@ -35,6 +36,21 @@ All shared-bag (`_xxxShared`) patterns eliminated. All `init*()` callback shims 
 ---
 
 ## Phase history
+
+## Completed — Phase 15 (extract swapBattleSprites to job-sprites.js)
+
+<details>
+<summary>game.js 172L → 149L (−23L); new src/job-sprites.js (25L); initTitleUpdate deleted</summary>
+
+- [x] **New `src/job-sprites.js` (25L)** — owns `SPRITE_PAL_TOP`, `SPRITE_PAL_BTM`, `JOB_WALK_PALS`, and `swapBattleSprites(jobIdx)`.
+- [x] **`romRaw` exported from boot.js as live binding** — job-sprites.js reads it directly; game.js no longer needs a local copy.
+- [x] **title-screen.js** imports `swapBattleSprites` directly; `initTitleUpdate` deleted entirely (nothing left to configure).
+- [x] **input-handler.js** imports `swapBattleSprites` directly; `_swapBattleSprites` shim + init param dropped.
+- [x] game.js: drops `_swapBattleSprites`, `JOB_WALK_PALS`, `loadJobBattleSprites` import, `romRaw` local, `initTitleUpdate` call, `sprite` import, `SPRITE_PAL_TOP/BTM` defs (now imported from job-sprites).
+</details>
+
+---
+
 
 ## Completed — Phase 14 (extract boot asset init)
 

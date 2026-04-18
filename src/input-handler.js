@@ -22,6 +22,7 @@ import { pvpSt } from './pvp.js';
 import { advanceBattleMsgZ } from './battle-msg.js';
 import { getRosterVisible } from './roster.js';
 import { playerInventory, addItem, removeItem, INV_SLOTS } from './inventory.js';
+import { swapBattleSprites } from './job-sprites.js';
 
 // Keyboard poll map — mutated by window listeners, read throughout the codebase.
 export const keys = {};
@@ -29,13 +30,11 @@ export const keys = {};
 // Injected at boot — avoids circular import on game.js
 let _executeBattleCommand = () => {};
 let _returnToTitle = () => {};
-let _swapBattleSprites = () => {};
 let _startPVPBattle = () => {};
 let _toggleCrt = () => {};
 export function initInputHandler(deps) {
   _executeBattleCommand = deps.executeBattleCommand;
   _returnToTitle = deps.returnToTitle;
-  _swapBattleSprites = deps.swapBattleSprites;
   _startPVPBattle = deps.startPVPBattle;
   _toggleCrt = deps.toggleCrt;
 }
@@ -1003,7 +1002,7 @@ function _pauseInputJob() {
         ps.cp -= cost;
         changeJob(newJobIdx);
         _enforceEquipRestrictions(newJobIdx);
-        _swapBattleSprites(newJobIdx);
+        swapBattleSprites(newJobIdx);
         playSFX(SFX.CONFIRM);
         pauseSt.state = 'job-out'; pauseSt.timer = 0;
       } else {
