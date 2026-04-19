@@ -74,6 +74,7 @@ export function startRandomEncounter() {
         weakness: mData.weakness || null,
         resist: mData.resist || null,
         statusResist: mData.statusResist || null,
+        spiritInt: mData.spiritInt || 0,
         status: createStatusState(),
       });
     }

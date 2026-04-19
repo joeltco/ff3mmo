@@ -63,7 +63,11 @@ function _doSpecialAttack(mon, spec, targetAlly = -1) {
     if (!ally || ally.hp <= 0) { _processNextTurn(); return; }
     if (spec.type === 'damage') {
       const eMult = elemMultiplier(spec.element, null, null);
-      const raw = Math.floor(spec.power * eMult) - (ally.mdef || 0);
+      // NES magic damage (31/B1B4-BBE1): atk = floor(INT/2) + power, then +rand(0..atk/2), then -mdef
+      const castStat = mon ? (mon.spiritInt || 0) : 0;
+      const baseAtk = Math.floor(castStat / 2) + spec.power;
+      const roll = baseAtk + Math.floor(Math.random() * (Math.floor(baseAtk / 2) + 1));
+      const raw = Math.floor(roll * eMult) - (ally.mdef || 0);
       const dmg = Math.max(1, raw);
       ally.hp = Math.max(0, ally.hp - dmg);
       getAllyDamageNums()[targetAlly] = { value: dmg, timer: 0 };
@@ -87,9 +91,12 @@ function _doSpecialAttack(mon, spec, targetAlly = -1) {
     return;
   }
   if (spec.type === 'damage') {
-    // Magic damage: power - mdef, with elemental multiplier
+    // NES magic damage (31/B1B4-BBE1): atk = floor(INT/2) + power, then +rand(0..atk/2), then -mdef
     const eMult = elemMultiplier(spec.element, null, ps.elemResist);
-    const raw = Math.floor(spec.power * eMult) - (ps.mdef || 0);
+    const castStat = mon ? (mon.spiritInt || 0) : 0;
+    const baseAtk = Math.floor(castStat / 2) + spec.power;
+    const roll = baseAtk + Math.floor(Math.random() * (Math.floor(baseAtk / 2) + 1));
+    const raw = Math.floor(roll * eMult) - (ps.mdef || 0);
     const dmg = Math.max(1, raw);
     if (battleSt.isDefending) {
       const reduced = Math.max(1, Math.floor(dmg / 2));
@@ -182,7 +189,8 @@ function _processEnemyFlash() {
   }
   if (targetAlly >= 0) {
     battleSt.enemyTargetAllyIdx = targetAlly;
-    const { total, landed } = rollMultiHit(battleSt.battleAllies[targetAlly].def, null);
+    const ally = battleSt.battleAllies[targetAlly];
+    const { total, landed } = rollMultiHit(ally.def, null, ally.shieldEvade || 0, ally.evade || 0);
     if (landed > 0) {
       battleSt.battleAllies[targetAlly].hp = Math.max(0, battleSt.battleAllies[targetAlly].hp - total);
       getAllyDamageNums()[targetAlly] = { value: total, timer: 0 };

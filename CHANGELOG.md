@@ -2,6 +2,29 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.8 — 2026-04-19
+
+### Monster magic damage formula — caster stat + variance
+
+NES magic damage (`31/B17C`) uses:
+```
+atk = floor(caster_INT / 2) + spell_power
+dmg = atk + rand(0..atk/2) - mdef
+```
+
+Ours was a flat `power - mdef`. That ignored the caster's INT entirely, so endgame mages were dealing ~150 flat damage instead of 300+. The `spiritInt` byte (ROM $60010 byte 7) existed in the gen script but was never written to `monsters.js` — same class of omission as `statusResist`.
+
+- **`monsters.js`** — 110 of 231 monsters now have `spiritInt` field (values 17–255). Low-level mages around 17–34, bosses and endgame casters 150–255.
+- **`battle-encounter.js`** — propagates `spiritInt` onto spawned monster instances.
+- **`battle-enemy.js`** — magic damage recalculated per NES: `atk = floor(mon.spiritInt/2) + spec.power`, then `atk + rand(0..atk/2) - mdef` × elemMult, min 1. Applied to both ally-target and player-target paths.
+
+### Ally shield evade
+
+`generateAllyStats()` now exposes `shieldEvade` from the equipped shield. Previously allies with Leather Shield were dropping it in the void; monster physical attacks against allies bypassed the block roll entirely.
+
+- **`src/data/players.js`** — returns `shieldEvade`.
+- **`src/battle-enemy.js`** — monster→ally physical attack now passes `ally.shieldEvade` and `ally.evade` into `rollMultiHit`.
+
 ## 1.6.7 — 2026-04-19
 
 ### Player / ally armor status immunity wired up
