@@ -178,7 +178,7 @@ export const ITEMS = new Map([
   [0x94, { type: 'armor', subtype: 'arms', def: 6, evade: 10, mdef: 5, resist: 'bolt', sResist: 0x20, price: 15000, jobs: Kn|Dr|Vi|Ni }],
   [0x95, { type: 'armor', subtype: 'arms', def: 7, evade: 15, mdef: 7, vitBonus: 5, price: 30000, jobs: ALL_BUT_MK }],
   [0x96, { type: 'armor', subtype: 'arms', def: 9, evade: 15, mdef: 7, sResist: 0x62, price: 30000, jobs: Mk|Ni }],
-  [0x97, { type: 'armor', subtype: 'arms', def: undefined, evade: undefined, mdef: undefined, price: 50000, jobs: On|Fi|Rw|Kn|Dr|Vi|Mk|Ni }],
+  [0x97, { type: 'armor', subtype: 'arms', def: 10, evade: 15, mdef: 10, price: 50000, jobs: On|Fi|Rw|Kn|Dr|Vi|Mk|Ni }],
   [0x98, { type: 'key', price:   100 }],
   [0x99, { type: 'key', price:   150 }],
   [0x9a, { type: 'key', price:     0 }],

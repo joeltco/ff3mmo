@@ -2,6 +2,26 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.4 — 2026-04-19
+
+### Monster special attacks — power/hit corrected from ROM
+
+Seven entries in the hardcoded `SPECIAL_ATTACKS` table in `battle-enemy.js` diverged from the NES spells data (`spells.js`, generated from ROM `$618D0`):
+
+- **Fira** 60 → 55, **Bzzara** 60 → 55, **Thundara** 75 → 55 — damage spells off by 5–20.
+- **Bzzaga** 130 → 85 — 1.5× too strong.
+- **Sleep** hit 60% → 15% — Sleep was landing 4× more often than NES.
+- **Confuse** hit 60% → 25% — same issue.
+- **Silence** hit 80% → 60%.
+
+All 231 monster `spAtkRate` values are ROM-clean, no changes needed there.
+
+### Armor audit — 1 item fixed
+
+- `0x97 CrystalGlove` had `def/evade/mdef: undefined` — now `10/15/10` per ROM. `tools/extract-all.js` armor loop stopped at 0x96 and skipped it.
+
+All 85 weapons and 64 armor items (after this fix) now match ROM at `$61410`.
+
 ## 1.6.3 — 2026-04-19
 
 ### Per-job crit rate and crit bonus (ROM-verified)
