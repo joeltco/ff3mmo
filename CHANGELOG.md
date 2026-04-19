@@ -2,6 +2,37 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.1 — 2026-04-19
+
+### Monster ATK outliers fixed (ROM-verified)
+
+Six monsters had ATK values 3.75-5x their ROM counterparts — typos that survived the 2026-04-09 audit. Restored to ROM values from `$61010` stat table:
+
+- **Killer Bee** (Lv2, Altar Cave): 50 → 10 — was one-shotting starters (~150 dmg × 3 hits)
+- **Revenant** (Lv6, Cave of Seal): 50 → 10
+- **Helldiver** (Lv6, Summit Road): 50 → 10
+- **Mandrake** (Lv5, dummied): 60 → 16
+- **Petit** (Lv3, Nepto Shrine): 60 → 16 — was the highest-ATK low-level monster
+- **Poison Bat** (Lv10, Nepto Shrine): 60 → 16
+
+Remaining monster ATK values are intentionally scaled (median ~0.69× ROM for high-level, ~1.5-2× for low-level single-player balance). `hitRate` verified 231/231 matching ROM; `attackRoll` is deliberately capped at 2-3 (ROM goes up to 11).
+
+### Defeat respawn system
+
+Replaces the prior "teleport to nearest world tile" defeat flow — which could dump you at Ur's entrance after an overworld encounter far from town, or cause stale `currentMapId` state after dungeon wipes.
+
+- **`ps.lastTown`** (defaults to 114 / Ur) tracks the most recent town visited. Updated whenever the player enters a map in `AREA_NAMES`.
+- **On team wipe**: HP/MP restore to max, `mapStack` cleared, player respawns at the entrance of `ps.lastTown` via `loadMapById()`.
+- **Save persistence**: `lastTown` is written to save slots and restored on game load.
+- **Fixes data-loss gap**: defeat-close now calls `saveSlotsToDB()`, so tab-close immediately after a wipe no longer loses the HP/MP restore.
+- Currently only Ur (114) is in `AREA_NAMES`, so all defeats respawn in Ur. Mechanism auto-extends as Kazus / Canaan / etc. are added.
+
+This diverges from NES FF3 (which jumps to `$C000` / program start on defeat — a hard reboot to title for save reload). That model doesn't fit a continuously-auto-saving MMO, so we use a home-town respawn pattern instead.
+
+### Dead code removed
+
+- `findWorldExitIndex`, `loadWorldMapAt`, `loadWorldMapAtPosition` no longer imported by `battle-update.js` — defeat flow no longer uses them.
+
 ## 1.6.0 — 2026-04-18
 
 ### Shared-bag refactor — all 14 bags eliminated
