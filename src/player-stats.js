@@ -248,11 +248,16 @@ export function grantCP(amount) {
   ps.cp = Math.min(255, ps.cp + amount);
 }
 
-// Returns CP cost to switch to a job (full NES base cost, minus job level discount)
+// Cost to switch from current job to newJobIdx.
+// NES formula (disasm 3D/AD85): cost = (|physDiff| + |chaosDiff|) * 4 - newJobLevel, min 0.
+// Alignment byte: high nibble = physical/magical index, low nibble = lawful/chaotic index.
 export function jobSwitchCost(newJobIdx) {
-  const baseCost = JOBS[newJobIdx]?.cpCost || 0;
-  const targetJobLv = getJobLevel(newJobIdx);
-  return Math.max(0, baseCost - (targetJobLv - 1));
+  const currAlign = JOBS[ps.jobIdx]?.alignment ?? 0;
+  const newAlign = JOBS[newJobIdx]?.alignment ?? 0;
+  const physDiff = Math.abs((currAlign >> 4) - (newAlign >> 4));
+  const chaosDiff = Math.abs((currAlign & 0xF) - (newAlign & 0xF));
+  const newJobLv = getJobLevel(newJobIdx);
+  return Math.max(0, (physDiff + chaosDiff) * 4 - newJobLv);
 }
 
 export function changeJob(newJobIdx) {

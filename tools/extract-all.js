@@ -150,7 +150,10 @@ if (section === 'all' || section === 'jobs') {
   console.log('\n=== JOB BASE STATS ($72010) ===\n');
   for (let id = 0; id < 22; id++) {
     const off = JOB_BASE_STATS + id * 8;
-    const cpCost = rom[off+0];
+    // byte 0 is alignment (NOT cpCost — that was a misread).
+    //   high nibble = physical/magical index, low nibble = lawful/chaotic index.
+    // CP change cost is derived dynamically at runtime (see disasm 3D/AD85).
+    const align = rom[off+0];
     const lvReq = rom[off+1];
     const str = rom[off+2];
     const agi = rom[off+3];
@@ -159,7 +162,7 @@ if (section === 'all' || section === 'jobs') {
     const mnd = rom[off+6];
     const mpIdx = rom[off+7];
     const name = jobStr(id);
-    console.log(`[${id.toString().padStart(2)}] ${name.padEnd(14)} CP:${cpCost} LvReq:${lvReq} STR:${str} AGI:${agi} VIT:${vit} INT:${int_} MND:${mnd} mpIdx:${mpIdx}`);
+    console.log(`[${id.toString().padStart(2)}] ${name.padEnd(14)} Align:0x${align.toString(16).padStart(2,'0')} (phys:${align>>4} chaos:${align&0xF})  LvReq:${lvReq} STR:${str} AGI:${agi} VIT:${vit} INT:${int_} MND:${mnd} mpIdx:${mpIdx}`);
   }
 
   // Job commands

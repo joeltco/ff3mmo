@@ -128,7 +128,7 @@ src/
 src/data/
   items.js              Weapon/armor stats, per-item job equip bitmasks (ROM-verified)
   monsters.js           Bestiary: stats, drops, elements, special attacks (ROM-verified)
-  jobs.js               22 jobs: cpCost, lvReq, weapon/armor/magic bitmasks, 2-letter abbreviations
+  jobs.js               22 jobs: alignment, lvReq, weapon/armor/magic bitmasks, 2-letter abbreviations
   spells.js             Spell data from ROM
   encounters.js         Encounter zones by area/floor
   players.js            Fake player pool for roster/PVP allies

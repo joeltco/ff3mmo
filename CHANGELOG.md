@@ -2,6 +2,34 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.2 — 2026-04-19
+
+### Job switch cost formula rewritten (CRITICAL)
+
+Byte 0 of each job record at ROM `$72010` was mislabeled as `cpCost` by `tools/extract-all.js` and that mislabel propagated into `src/data/jobs.js`. The byte is actually **alignment** — high nibble = physical/magical index, low nibble = lawful/chaotic index.
+
+The NES computes job change cost dynamically from the alignment vector between the *current* and *target* jobs (disasm `3D/AD85`):
+
+```
+cost = (|physDiff| + |chaosDiff|) * 4 - newJobLevel, min 0
+```
+
+Our old formula charged a fixed per-target value (40–255) that didn't depend on the current job at all. Every cost was 3–20× too high. Example from Onion Knight starter:
+
+| Target | Old (fixed) | New (alignment-based) |
+|---|---|---|
+| Fighter / Monk / White Mage / Black Mage / Red Mage | 121–153 | 7–8 |
+| Knight / Thief / Scholar | 117–170 | 15 |
+| Black Belt | 40 | 23 |
+| Sage | 255 (capped) | 55 |
+| Ninja | 0 (bug) | 63 |
+
+Ninja was effectively free because its alignment byte is `0x00`; now it correctly costs ~60 CP from a neutral-aligned job. The whole job economy is now NES-calibrated.
+
+- **`src/data/jobs.js`** — `cpCost: N` → `alignment: 0xXX` (same byte, correct label) across all 22 jobs.
+- **`src/player-stats.js`** — `jobSwitchCost()` computes the NES formula; uses current job's alignment.
+- **`tools/extract-all.js`** — prints `Align:0xXX (phys:N chaos:N)` instead of the mislabeled `CP:`.
+
 ## 1.6.1 — 2026-04-19
 
 ### Monster ATK outliers fixed (ROM-verified)
