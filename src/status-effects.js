@@ -155,9 +155,10 @@ export function processTurnStart(state, maxHP) {
     }
   }
 
-  // Poison = take damage equal to ~1/16 maxHP per turn (NES formula)
+  // Poison = take damage equal to floor(maxHP / 16) per turn (NES 35/BADC-BB1E).
+  // No minimum clamp: at maxHP < 16, tick is 0 (matches NES).
   if (hasStatus(state, STATUS.POISON)) {
-    poisonDmg = Math.max(1, Math.floor(maxHP / 16));
+    poisonDmg = Math.floor(maxHP / 16);
   }
 
   // Silence = can't cast magic (checked by caller, not here)

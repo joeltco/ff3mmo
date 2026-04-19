@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.6 — 2026-04-19
+
+### Poison tick — match NES exactly
+
+Battle poison damage was `max(1, floor(maxHP / 16))`. NES (`35/BADC-BB1E`) uses `floor(maxHP / 16)` with no minimum clamp, so tiny enemies with <16 maxHP take 0 poison damage. The `max(1, ...)` clamp was killing small monsters over time in situations NES would leave them alone.
+
+Walk poison (`-1 HP per step, min 1 HP`) already matched NES `3B/A0B1-A10D` exactly.
+
 ## 1.6.5 — 2026-04-19
 
 ### Monster status resistance (ROM data wired up)
