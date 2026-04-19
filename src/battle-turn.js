@@ -5,6 +5,7 @@ import { rollHits, calcPotentialHits } from './battle-math.js';
 import { BATTLE_RAN_AWAY, BATTLE_CANT_ESCAPE } from './data/strings.js';
 import { getMonsterName } from './text-decoder.js';
 import { ps, getJobLevelStatBonus } from './player-stats.js';
+import { JOBS } from './data/jobs.js';
 import { ITEMS, isWeapon, isBladedWeapon } from './data/items.js';
 import { SFX, playSFX } from './music.js';
 import { processTurnStart, removeStatus, STATUS, blindHitPenalty } from './status-effects.js';
@@ -102,13 +103,15 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
         const lv = ps.stats?.level || 1;
         const agi = (ps.stats?.agi || 5) + getJobLevelStatBonus().agi;
         const potHits = calcPotentialHits(lv, agi, false);
+        const _playerJob = JOBS[ps.jobIdx] || {};
+        const _playerCrit = { critPct: _playerJob.critPct || 0, critBonus: _playerJob.critBonus || 0 };
         if (pick.type === 'monster') {
           const mon = battleSt.encounterMonsters[pick.index];
           const firstWpnId = isWeapon(ps.weaponR) ? ps.weaponR : ps.weaponL;
           const firstHandR = isWeapon(ps.weaponR) || !isWeapon(ps.weaponL);
           const bladed = isBladedWeapon(firstWpnId);
           inputSt.playerActionPending = { command: 'fight', targetIndex: pick.index,
-            hitResults: rollHits(ps.atk, mon.def, effHitRate, potHits),
+            hitResults: rollHits(ps.atk, mon.def, effHitRate, potHits, _playerCrit),
             slashFrames: getSlashFramesForWeapon(firstWpnId, firstHandR),
             slashOffX: bladed ? 8 : Math.floor(Math.random() * 40) - 20,
             slashOffY: bladed ? -8 : Math.floor(Math.random() * 40) - 20,
@@ -116,7 +119,7 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
         } else {
           // Self or ally: roll hits, apply damage directly, skip slash animation
           const targetDef = pick.type === 'self' ? ps.def : (battleSt.battleAllies[pick.index].def || 0);
-          const hits = rollHits(ps.atk, targetDef, effHitRate, potHits);
+          const hits = rollHits(ps.atk, targetDef, effHitRate, potHits, _playerCrit);
           let totalDmg = 0;
           for (const h of hits) { if (!h.miss && !h.shieldBlock) totalDmg += h.damage; }
           if (totalDmg > 0) {
@@ -178,7 +181,9 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
         : BOSS_DEF;
     const dualWield = isWeapon(ally.weaponId) && isWeapon(ally.weaponL);
     const potentialHits = calcPotentialHits(ally.level || 1, ally.agi, dualWield);
-    battleSt.allyHitResults = rollHits(ally.atk, targetDef, ally.hitRate || 85, potentialHits);
+    const _allyJob = JOBS[ally.jobIdx || 0] || {};
+    battleSt.allyHitResults = rollHits(ally.atk, targetDef, ally.hitRate || 85, potentialHits,
+      { critPct: _allyJob.critPct || 0, critBonus: _allyJob.critBonus || 0 });
     battleSt.allyHitIdx = 0;
     battleSt.allyHitResult = battleSt.allyHitResults[0];
     battleSt.battleState = 'ally-attack-back'; battleSt.battleTimer = 0;

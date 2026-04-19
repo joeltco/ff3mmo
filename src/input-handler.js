@@ -15,7 +15,7 @@ import { rollHits, calcPotentialHits, elemMultiplier } from './battle-math.js';
 import { blindHitPenalty, miniToadAtkMult, removeStatus, STATUS } from './status-effects.js';
 import { _nameToBytes } from './text-utils.js';
 import { MONSTERS } from './data/monsters.js';
-import { canJobEquip } from './data/jobs.js';
+import { canJobEquip, JOBS } from './data/jobs.js';
 import { getSlashFramesForWeapon } from './battle-sprite-cache.js';
 import { mapSt } from './map-state.js';
 import { pvpSt } from './pvp.js';
@@ -177,6 +177,8 @@ function _battleTargetConfirm() {
   const baseAtk = (ps.atk - (ITEMS.get(ps.weaponR)?.atk || 0) - (ITEMS.get(ps.weaponL)?.atk || 0)) * atkMult;
   const rWpn = rIsWeapon ? ITEMS.get(ps.weaponR) : null;
   const lWpn = lIsWeapon ? ITEMS.get(ps.weaponL) : null;
+  const job = JOBS[ps.jobIdx] || {};
+  const critOpts = { critPct: job.critPct || 0, critBonus: job.critBonus || 0 };
   // Roll each hand independently (NES loops per hand at 30/9F6A)
   function rollHand(wpn) {
     const handAtk = baseAtk + (wpn ? (wpn.atk || 0) : 0);
@@ -184,14 +186,14 @@ function _battleTargetConfirm() {
     const handElem = wpn ? (wpn.element || null) : null;
     if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
       const mon = battleSt.encounterMonsters[inputSt.targetIndex];
-      return rollHits(handAtk, mon.def, handHit, hitsPerHand, { elemMult: elemMultiplier(handElem, mon.weakness, mon.resist) });
+      return rollHits(handAtk, mon.def, handHit, hitsPerHand, { ...critOpts, elemMult: elemMultiplier(handElem, mon.weakness, mon.resist) });
     } else {
       const targetDef = pvpSt.isPVPBattle && pvpSt.pvpOpponentStats
         ? (pvpSt.pvpPlayerTargetIdx >= 0
             ? (pvpSt.pvpEnemyAllies[pvpSt.pvpPlayerTargetIdx] || pvpSt.pvpOpponentStats).def
             : pvpSt.pvpOpponentStats.def)
         : BOSS_DEF;
-      return rollHits(handAtk, targetDef, handHit, hitsPerHand);
+      return rollHits(handAtk, targetDef, handHit, hitsPerHand, critOpts);
     }
   }
   if (dualWield) {

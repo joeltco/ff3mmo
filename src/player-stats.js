@@ -173,10 +173,13 @@ export function grantExp(amount) {
     const hpGain = ps.stats.vit + Math.floor(Math.random() * (Math.floor(ps.stats.vit / 2) + 1)) + lv * 2;
     ps.stats.maxHP = Math.min(9999, ps.stats.maxHP + hpGain);
 
-    // Stat bonuses from ROM — current job
+    // Stat bonuses from ROM — current job. NES caps each stat at 99 (disasm 35/BF92).
     const bonus = readJobLevelBonus(ps._romData, ps.jobIdx, lv);
-    ps.stats.str += bonus.str; ps.stats.agi += bonus.agi; ps.stats.vit += bonus.vit;
-    ps.stats.int += bonus.int; ps.stats.mnd += bonus.mnd;
+    ps.stats.str = Math.min(99, ps.stats.str + bonus.str);
+    ps.stats.agi = Math.min(99, ps.stats.agi + bonus.agi);
+    ps.stats.vit = Math.min(99, ps.stats.vit + bonus.vit);
+    ps.stats.int = Math.min(99, ps.stats.int + bonus.int);
+    ps.stats.mnd = Math.min(99, ps.stats.mnd + bonus.mnd);
     ps.stats.maxMP += bonus.mpGain;
 
     // Full heal on level-up (matches FF3)
@@ -272,8 +275,11 @@ export function changeJob(newJobIdx) {
     const hpGain = s.vit + Math.floor(Math.random() * (Math.floor(s.vit / 2) + 1)) + lv * 2;
     s.maxHP = Math.min(9999, s.maxHP + hpGain);
     const bonus = readJobLevelBonus(ps._romData, newJobIdx, lv);
-    s.str += bonus.str; s.agi += bonus.agi; s.vit += bonus.vit;
-    s.int += bonus.int; s.mnd += bonus.mnd;
+    s.str = Math.min(99, s.str + bonus.str);
+    s.agi = Math.min(99, s.agi + bonus.agi);
+    s.vit = Math.min(99, s.vit + bonus.vit);
+    s.int = Math.min(99, s.int + bonus.int);
+    s.mnd = Math.min(99, s.mnd + bonus.mnd);
     s.maxMP += bonus.mpGain;
   }
   ps.stats.str = s.str; ps.stats.agi = s.agi; ps.stats.vit = s.vit;

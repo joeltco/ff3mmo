@@ -17,6 +17,7 @@ import { rollHits, calcPotentialHits, BOSS_HIT_RATE, GOBLIN_HIT_RATE } from './b
 import { ITEMS, isWeapon, weaponSubtype } from './data/items.js';
 import { _nameToBytes } from './text-utils.js';
 import { PLAYER_POOL, generateAllyStats } from './data/players.js';
+import { JOBS } from './data/jobs.js';
 import { MONSTERS } from './data/monsters.js';
 import { ps } from './player-stats.js';
 import { inputSt } from './input-handler.js';
@@ -341,7 +342,10 @@ function _processEnemyFlash() {
   pvpSt.pvpEnemyHitIdx = 0;
   pvpSt.pvpEnemyDualWield = dualWield;
   const def = targetAlly >= 0 ? battleSt.battleAllies[targetAlly].def : ps.def;
-  const opts = targetAlly >= 0 ? {} : {
+  const attackerJob = JOBS[attackerStats?.jobIdx || 0] || {};
+  const baseOpts = { critPct: attackerJob.critPct || 0, critBonus: attackerJob.critBonus || 0 };
+  const opts = targetAlly >= 0 ? baseOpts : {
+    ...baseOpts,
     shieldEvade: getShieldEvade(ITEMS),
     evade: ps.evade,
     defendHalve: battleSt.isDefending,

@@ -1,7 +1,6 @@
 // Pure combat math — no globals, no DOM, safe to import anywhere
 // Based on NES FF3 disassembly (31/BB28 get_number_of_hits, 31/BB44 calculate_damage)
 
-export const CRIT_RATE = 5;        // 5% crit chance per hit
 export const BASE_HIT_RATE = 80;   // 80% accuracy per hit (unarmed Onion Knight)
 export const BOSS_HIT_RATE = 85;   // boss accuracy
 export const GOBLIN_HIT_RATE = 75; // goblin accuracy
@@ -44,9 +43,11 @@ export function calcPotentialHits(level, agi, dualWield) {
 // opts.evade: % chance to dodge per hit (0 = no armor evade)
 // opts.defendHalve: true to halve damage (defender is defending)
 // opts.elemMult: elemental multiplier (default 1)
+// opts.critPct: % chance to crit per hit (0 if not provided). From attacker's job modifier.
+// opts.critBonus: flat damage added on crit (0 if not provided). From attacker's job modifier.
 export function rollHits(atk, def, hitRate, potentialHits, opts = {}) {
-  const { shieldEvade = 0, evade = 0, defendHalve = false, elemMult = 1 } = opts;
-  const critBonus = Math.floor(atk / 4);
+  const { shieldEvade = 0, evade = 0, defendHalve = false, elemMult = 1,
+          critPct = 0, critBonus = 0 } = opts;
   const results = [];
   for (let i = 0; i < potentialHits; i++) {
     if (shieldEvade > 0 && Math.random() * 100 < shieldEvade) {
@@ -54,7 +55,7 @@ export function rollHits(atk, def, hitRate, potentialHits, opts = {}) {
     } else if (evade > 0 && Math.random() * 100 < evade) {
       results.push({ miss: true });
     } else if (Math.random() * 100 < hitRate) {
-      const crit = Math.random() * 100 < CRIT_RATE;
+      const crit = critPct > 0 && Math.random() * 100 < critPct;
       let dmg = calcDamage(atk, def, crit, critBonus, elemMult);
       if (defendHalve) dmg = Math.max(1, Math.floor(dmg / 2));
       results.push({ damage: dmg, crit });
