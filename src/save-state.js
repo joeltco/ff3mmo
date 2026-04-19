@@ -46,6 +46,7 @@ export async function saveSlotsToDB() {
     saveSlots[selectCursor].worldY = pos.worldY;
     saveSlots[selectCursor].onWorldMap = pos.onWorldMap;
     saveSlots[selectCursor].currentMapId = pos.currentMapId;
+    saveSlots[selectCursor].lastTown = ps.lastTown;
   }
   try {
     const data = saveSlots.map(s => s ? {
@@ -65,6 +66,7 @@ export async function saveSlotsToDB() {
       worldY: s.worldY != null ? s.worldY : null,
       onWorldMap: s.onWorldMap != null ? s.onWorldMap : null,
       currentMapId: s.currentMapId != null ? s.currentMapId : null,
+      lastTown: s.lastTown != null ? s.lastTown : 114,
       playTime: s.playTime || 0,
     } : null);
     // Local IndexedDB

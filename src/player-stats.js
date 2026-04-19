@@ -31,6 +31,7 @@ export const ps = {
   unlockedJobs: 0x01,   // bitmask: bit N = job N unlocked. 0x01 = only Onion Knight
   cp: 0,                // capacity points (0-255), earned from battles, spent on job changes
   playTime: 0,          // total play time in seconds
+  lastTown: 114,        // map ID of last town visited — respawn point on defeat (default Ur)
 };
 
 // Equip slot index mapping: -100=RH, -101=LH, -102=Head, -103=Body, -104=Arms

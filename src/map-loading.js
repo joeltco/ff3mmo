@@ -15,6 +15,7 @@ import { hudSt } from './hud-state.js';
 import { mapSt } from './map-state.js';
 import { battleSt } from './battle-state.js';
 import { applyPassage } from './map-triggers.js';
+import { ps } from './player-stats.js';
 
 const TILE_SIZE = 16;
 
@@ -124,6 +125,7 @@ function _loadRegularMap(mapId, returnX, returnY) {
   const mapData = loadMap(romRaw, mapId);
   mapSt.mapData = mapData;
   mapSt.currentMapId = mapId;
+  if (AREA_NAMES.has(mapId)) ps.lastTown = mapId;
   if (returnX !== undefined) applyPassage(mapData.tilemap);
   const ex = mapData.entranceX;
   const ey = mapData.entranceY;

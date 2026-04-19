@@ -688,6 +688,7 @@ function _updateTitleMainOutCase() {
   ps.cp = (slot && slot.cp) || 0;
   ps.status.mask = (slot && slot.statusMask) || 0;
   ps.playTime = (slot && slot.playTime) || 0;
+  ps.lastTown = (slot && slot.lastTown != null) ? slot.lastTown : 114;
   swapBattleSprites(ps.jobIdx);
   transSt.pendingTrack = TRACKS.TOWN_UR;
   loadMapById(114);

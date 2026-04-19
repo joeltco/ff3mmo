@@ -25,8 +25,8 @@ import { MONSTERS } from './data/monsters.js';
 import { PLAYER_POOL, generateAllyStats } from './data/players.js';
 import { BATTLE_ROAR, BATTLE_CANT_ESCAPE, BATTLE_CRITICAL } from './data/strings.js';
 import { showMsgBox } from './message-box.js';
-import { triggerWipe, findWorldExitIndex } from './map-triggers.js';
-import { loadWorldMapAt, loadWorldMapAtPosition } from './map-loading.js';
+import { triggerWipe } from './map-triggers.js';
+import { loadMapById } from './map-loading.js';
 import { _nameToBytes } from './text-utils.js';
 import { getPlayerLocation } from './roster.js';
 import { DIR_DOWN } from './sprite.js';
@@ -673,15 +673,12 @@ function _updateDefeatStates() {
       hudSt.playerDeathTimer = null; battleSt._teamWipeMsgShown = false;
       ps.hp = ps.stats ? ps.stats.maxHP : 28;
       ps.mp = ps.stats ? ps.stats.maxMP : 0;
-      const worldEntry = mapSt.mapStack.slice().reverse().find(e => e.mapId === 'world');
+      const respawnMapId = ps.lastTown || 114;
       triggerWipe(() => {
         mapSt.dungeonFloor = -1; mapSt.encounterSteps = 0; mapSt.mapStack = [];
-        if (worldEntry) {
-          loadWorldMapAtPosition(worldEntry.x, worldEntry.y);
-        } else {
-          loadWorldMapAt(findWorldExitIndex(mapSt.currentMapId, mapSt.worldMapData));
-        }
-      }, 'world');
+        loadMapById(respawnMapId);
+        saveSlotsToDB();
+      }, respawnMapId);
     }
     return true;
   }
