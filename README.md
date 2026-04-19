@@ -6,7 +6,7 @@ A browser-based NES Final Fantasy III engine that extracts all assets from user-
 
 ## Status
 
-v1.6.1 — Full combat system, PVP duels, job system with 22 jobs, status effects, procedural dungeons, online multiplayer roster, and chat. All game data (items, monsters, spells, encounters, jobs) extracted from ROM via Data Crystal offsets. On defeat, players respawn at the last town they visited with full HP/MP.
+v1.6.8 — Full combat system, PVP duels, job system with 22 jobs, status effects, procedural dungeons, online multiplayer roster, and chat. All game data (items, monsters, spells, encounters, jobs) extracted from ROM via Data Crystal offsets with NES-verified combat formulas (damage, multi-hit, per-job crit, job-alignment switch cost, magic damage with caster INT, per-side status immunity). On defeat, players respawn at the last town they visited with full HP/MP.
 
 ### Features
 
