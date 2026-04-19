@@ -5,9 +5,7 @@ import { playSlashSFX } from './battle-sfx.js';
 import { isWeapon } from './data/items.js';
 import { SFX, playSFX } from './music.js';
 import { _nameToBytes } from './text-utils.js';
-import { replaceBattleMsg, queueActorVerb } from './battle-msg.js';
-import { BATTLE_CRITICAL } from './data/strings.js';
-import { getMonsterName } from './text-decoder.js';
+import { queueBattleMsg } from './battle-msg.js';
 import { pvpSt } from './pvp.js';
 import { inputSt } from './input-handler.js';
 import { getEnemyDmgNum, setEnemyDmgNum } from './damage-numbers.js';
@@ -31,10 +29,6 @@ function _finalizeAllyCombo() {
   }
   setEnemyDmgNum(allMiss ? { miss: true, timer: 0 } : { value: totalDmg, crit: anyCrit, timer: 0 });
   inputSt.targetIndex = battleSt.allyTargetIndex;
-  if (!allMiss) {
-    if (anyCrit) replaceBattleMsg(BATTLE_CRITICAL);
-    else if (hitsLanded > 1) replaceBattleMsg(_nameToBytes(hitsLanded + ' hits!'));
-  }
 }
 
 // ── After damage-show: check for death/dissolve or advance turn ──────────────
@@ -77,7 +71,7 @@ function _updateAllyAttack() {
     if (battleSt.battleTimer >= delay) {
       const ally = battleSt.battleAllies[battleSt.currentAllyAttacker];
       if (battleSt.allyHitIdx === 0 && ally) {
-        queueActorVerb(_nameToBytes(ally.name || 'Ally'), 'attacks!');
+        queueBattleMsg(_nameToBytes(ally.name || 'Ally'));
       }
       const isLeft = (battleSt.allyHitIdx % 2 === 1) && ally && isWeapon(ally.weaponL);
       battleSt.allyHitIsLeft = isLeft;

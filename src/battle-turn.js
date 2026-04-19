@@ -11,7 +11,7 @@ import { processTurnStart, removeStatus, STATUS, blindHitPenalty } from './statu
 import { bsc, getSlashFramesForWeapon } from './battle-sprite-cache.js';
 import { pvpSt } from './pvp.js';
 import { inputSt } from './input-handler.js';
-import { queueBattleMsg, queueActorVerb } from './battle-msg.js';
+import { queueBattleMsg } from './battle-msg.js';
 import { getAllyDamageNums, setEnemyDmgNum, setEnemyHealNum, setPlayerDamageNum, setPlayerHealNum } from './damage-numbers.js';
 import { startMagicItem } from './battle-items.js';
 import { selectCursor, saveSlots } from './save-state.js';
@@ -139,10 +139,10 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
     const cmd = inputSt.playerActionPending.command;
     const pn = _playerName();
     if (cmd === 'fight') {
-      if (pn) queueActorVerb(pn, 'attacks!');
+      if (pn) queueBattleMsg(pn);
       _playerTurnFight();
     }
-    else if (cmd === 'defend') { inputSt.battleActionCount++; if (pn) queueActorVerb(pn, 'defends!'); playSFX(SFX.DEFEND_HIT); battleSt.battleState = 'defend-anim'; battleSt.battleTimer = 0; }
+    else if (cmd === 'defend') { inputSt.battleActionCount++; if (pn) queueBattleMsg(pn); playSFX(SFX.DEFEND_HIT); battleSt.battleState = 'defend-anim'; battleSt.battleTimer = 0; }
     else if (cmd === 'item') { inputSt.battleActionCount++; _playerTurnItem(); }
     else if (cmd === 'skip') processNextTurn();
     else if (cmd === 'run') _playerTurnRun();

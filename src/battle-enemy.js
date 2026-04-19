@@ -5,8 +5,8 @@ import { battleSt, getEnemyHP, setEnemyHP,
 import { calcDamage, elemMultiplier, BOSS_HIT_RATE, GOBLIN_HIT_RATE } from './battle-math.js';
 import { ps, getShieldEvade } from './player-stats.js';
 import { SFX, playSFX } from './music.js';
-import { tryInflictStatus, blindHitPenalty, wakeOnHit, STATUS_NAME_BYTES } from './status-effects.js';
-import { replaceBattleMsg, queueBattleMsg, queueActorVerb, isBattleMsgBusy } from './battle-msg.js';
+import { tryInflictStatus, blindHitPenalty, wakeOnHit } from './status-effects.js';
+import { queueBattleMsg, isBattleMsgBusy } from './battle-msg.js';
 import { getMonsterName } from './text-decoder.js';
 import { _nameToBytes } from './text-utils.js';
 import { getPlayerDamageNum, setPlayerDamageNum, getAllyDamageNums } from './damage-numbers.js';
@@ -107,7 +107,6 @@ function _doSpecialAttack(mon, spec, targetAlly = -1) {
     if (applied) {
       setPlayerDamageNum({ value: 0, timer: 0, status: spec.status });
       battleSt.battleShakeTimer = BATTLE_SHAKE_MS;
-      if (STATUS_NAME_BYTES[applied]) replaceBattleMsg(STATUS_NAME_BYTES[applied]);
     } else {
       setPlayerDamageNum({ miss: true, timer: 0 });
     }
@@ -121,7 +120,6 @@ function _doSpecialAttack(mon, spec, targetAlly = -1) {
     if (anyApplied) {
       setPlayerDamageNum({ value: 0, timer: 0, status: 'multi' });
       battleSt.battleShakeTimer = BATTLE_SHAKE_MS;
-      if (STATUS_NAME_BYTES[anyApplied]) replaceBattleMsg(STATUS_NAME_BYTES[anyApplied]);
     } else {
       setPlayerDamageNum({ miss: true, timer: 0 });
     }
@@ -148,10 +146,10 @@ function _processEnemyFlash() {
   }
   const mon = (battleSt.currentAttacker >= 0 && battleSt.encounterMonsters) ? battleSt.encounterMonsters[battleSt.currentAttacker] : null;
 
-  // Queue enemy attack message
+  // Queue enemy actor name
   if (mon) {
     const monName = getMonsterName(mon.monsterId) || _nameToBytes('Enemy');
-    queueActorVerb(monName, 'attacks!');
+    queueBattleMsg(monName);
   }
 
   // ── Monster special attack check ──────────────────────────────────────────
@@ -160,7 +158,6 @@ function _processEnemyFlash() {
       const atkName = mon.attacks[Math.floor(Math.random() * mon.attacks.length)];
       const spec = SPECIAL_ATTACKS[atkName];
       if (spec && spec.type !== 'none') {
-        replaceBattleMsg(_nameToBytes(atkName + '!'));
         _doSpecialAttack(mon, spec, targetAlly);
         return true;
       }
@@ -209,10 +206,7 @@ function _processEnemyFlash() {
       const monStatus = mon ? mon.statusAtk : null;
       if (monStatus && ps.status) {
         const arr = Array.isArray(monStatus) ? monStatus : [monStatus];
-        for (const s of arr) {
-          const applied = tryInflictStatus(ps.status, s, hitRate);
-          if (applied && STATUS_NAME_BYTES[applied]) replaceBattleMsg(STATUS_NAME_BYTES[applied]);
-        }
+        for (const s of arr) tryInflictStatus(ps.status, s, hitRate);
       }
       playSFX(SFX.ATTACK_HIT);
       battleSt.battleShakeTimer = BATTLE_SHAKE_MS;
