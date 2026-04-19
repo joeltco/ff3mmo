@@ -71,14 +71,14 @@ function _doSpecialAttack(mon, spec, targetAlly = -1) {
       playSFX(SFX.ATTACK_HIT);
       battleSt.battleState = 'ally-hit'; battleSt.battleTimer = 0;
     } else if (spec.type === 'status' && ally.status) {
-      const applied = tryInflictStatus(ally.status, spec.status, spec.hit);
+      const applied = tryInflictStatus(ally.status, spec.status, spec.hit, ally.statusResist);
       getAllyDamageNums()[targetAlly] = applied
         ? { value: 0, timer: 0, status: spec.status }
         : { miss: true, timer: 0 };
       battleSt.battleState = 'ally-damage-show-enemy'; battleSt.battleTimer = 0;
     } else if (spec.type === 'multi_status' && ally.status) {
       let anyApplied = false;
-      for (const s of spec.statuses) { if (tryInflictStatus(ally.status, s, spec.hit)) anyApplied = true; }
+      for (const s of spec.statuses) { if (tryInflictStatus(ally.status, s, spec.hit, ally.statusResist)) anyApplied = true; }
       getAllyDamageNums()[targetAlly] = anyApplied
         ? { value: 0, timer: 0, status: 'multi' }
         : { miss: true, timer: 0 };
@@ -103,7 +103,7 @@ function _doSpecialAttack(mon, spec, targetAlly = -1) {
     battleSt.battleShakeTimer = BATTLE_SHAKE_MS;
     battleSt.battleState = 'enemy-attack'; battleSt.battleTimer = 0;
   } else if (spec.type === 'status' && ps.status) {
-    const applied = tryInflictStatus(ps.status, spec.status, spec.hit);
+    const applied = tryInflictStatus(ps.status, spec.status, spec.hit, ps.statusResist);
     if (applied) {
       setPlayerDamageNum({ value: 0, timer: 0, status: spec.status });
       battleSt.battleShakeTimer = BATTLE_SHAKE_MS;
@@ -114,7 +114,7 @@ function _doSpecialAttack(mon, spec, targetAlly = -1) {
   } else if (spec.type === 'multi_status' && ps.status) {
     let anyApplied = 0;
     for (const s of spec.statuses) {
-      const result = tryInflictStatus(ps.status, s, spec.hit);
+      const result = tryInflictStatus(ps.status, s, spec.hit, ps.statusResist);
       if (result) anyApplied = result;
     }
     if (anyApplied) {
@@ -206,7 +206,7 @@ function _processEnemyFlash() {
       const monStatus = mon ? mon.statusAtk : null;
       if (monStatus && ps.status) {
         const arr = Array.isArray(monStatus) ? monStatus : [monStatus];
-        for (const s of arr) tryInflictStatus(ps.status, s, hitRate);
+        for (const s of arr) tryInflictStatus(ps.status, s, hitRate, ps.statusResist);
       }
       playSFX(SFX.ATTACK_HIT);
       battleSt.battleShakeTimer = BATTLE_SHAKE_MS;

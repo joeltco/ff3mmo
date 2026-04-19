@@ -24,6 +24,7 @@ export const ps = {
   evade: 0,         // total evade% from armor (non-shield)
   mdef: 0,          // total magic defense from armor
   elemResist: [],   // array of element strings player resists (from armor)
+  statusResist: 0,  // bitmask of armor status immunities (NAME_TO_FLAG bits)
   status: { mask: 0, poisonDmgTick: 0 },  // status effect state — persists across battles
   _romData: null,  // stored by initExpTable for use in grantExp
   jobLevels: {},  // { [jobIdx]: { level, jp } } — 100 JP per level, max 99
@@ -101,6 +102,10 @@ export function recalcCombatStats() {
     if (r) { const arr = Array.isArray(r) ? r : [r]; arr.forEach(e => resSet.add(e)); }
   }
   ps.elemResist = [...resSet];
+  // Status resistance bitmask — OR of armor sResist bytes (NES status immunity)
+  let sMask = 0;
+  for (const id of allSlots) { sMask |= ITEMS.get(id)?.sResist || 0; }
+  ps.statusResist = sMask;
   // DEF with equipment + job level vitality bonus
   recalcDEF(vitB + jlb.vit);
 }

@@ -89,13 +89,13 @@ export function generateAllyStats(player) {
   }
   const atk = str + weaponAtk;
   const def = vit + totalDef;
-  // Evade/mdef from armor
-  let evade = 0, mdef = 0;
-  if (player.armorId != null) { evade += (ITEMS.get(player.armorId) || {}).evade || 0; mdef += (ITEMS.get(player.armorId) || {}).mdef || 0; }
-  if (player.helmId != null) { evade += (ITEMS.get(player.helmId) || {}).evade || 0; mdef += (ITEMS.get(player.helmId) || {}).mdef || 0; }
-  if (player.shieldId != null) { mdef += (ITEMS.get(player.shieldId) || {}).mdef || 0; }
+  // Evade/mdef/sResist from armor
+  let evade = 0, mdef = 0, statusResist = 0;
+  if (player.armorId != null) { const a = ITEMS.get(player.armorId) || {}; evade += a.evade || 0; mdef += a.mdef || 0; statusResist |= a.sResist || 0; }
+  if (player.helmId != null) { const a = ITEMS.get(player.helmId) || {}; evade += a.evade || 0; mdef += a.mdef || 0; statusResist |= a.sResist || 0; }
+  if (player.shieldId != null) { const a = ITEMS.get(player.shieldId) || {}; mdef += a.mdef || 0; statusResist |= a.sResist || 0; }
   // Hit rate from weapon, attack roll from AGI
   const wpnItem = ITEMS.get(weaponId);
   const hitRate = wpnItem ? (wpnItem.hit || 80) : 80;
-  return { name: player.name, palIdx: player.palIdx, jobIdx: player.jobIdx || 0, level: lv, hp, maxHP: hp, atk, def, agi, evade, mdef, hitRate, weaponId, weaponL, jobLevel: 1, fadeStep: ROSTER_FADE_STEPS };
+  return { name: player.name, palIdx: player.palIdx, jobIdx: player.jobIdx || 0, level: lv, hp, maxHP: hp, atk, def, agi, evade, mdef, statusResist, hitRate, weaponId, weaponL, jobLevel: 1, fadeStep: ROSTER_FADE_STEPS };
 }
