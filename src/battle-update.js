@@ -350,7 +350,7 @@ function _updatePlayerSlash() {
           if (wpnData && wpnData.status) {
             const arr = Array.isArray(wpnData.status) ? wpnData.status : [wpnData.status];
             for (const s of arr) {
-              const applied = tryInflictStatus(targetMon.status, s, wpnData.hit || 50);
+              const applied = tryInflictStatus(targetMon.status, s, wpnData.hit || 50, targetMon.statusResist);
               if (applied) battleSt.comboStatusInflicted = applied;
             }
           }

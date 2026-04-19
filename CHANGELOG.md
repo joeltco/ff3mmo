@@ -2,6 +2,26 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.5 — 2026-04-19
+
+### Monster status resistance (ROM data wired up)
+
+`tools/gen-monsters-js.js` read byte 13 of each monster record as `statusResist` but never wrote it to `monsters.js`, so every monster was equally vulnerable to every status — bosses included.
+
+30 of 231 monsters have NES status-immunity bits:
+- 26 resist Toad (mostly undead, zombies, dragons, bosses)
+- 6 resist Paralysis (including Unei Clone and 2 end-game bosses)
+- 2 resist both Paralysis + Toad
+- 1 resists Petrify
+
+Now added to `monsters.js` as `statusResist: 'toad'` / `['paralysis','toad']` / etc.
+
+- **`src/status-effects.js`** — `tryInflictStatus()` accepts optional `resist` (name, array, or mask); auto-fails if flag matches.
+- **`src/battle-encounter.js`** — propagates `statusResist` onto spawned monster instances.
+- **`src/battle-update.js`** — weapon on-hit status passes `targetMon.statusResist` (player → monster).
+
+Player-side status immunity from armor `sResist` is tracked on items but not yet aggregated or applied — flagged for follow-up.
+
 ## 1.6.4 — 2026-04-19
 
 ### Monster special attacks — power/hit corrected from ROM

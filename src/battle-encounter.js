@@ -73,6 +73,7 @@ export function startRandomEncounter() {
         atkElem: mData.atkElem || null,
         weakness: mData.weakness || null,
         resist: mData.resist || null,
+        statusResist: mData.statusResist || null,
         status: createStatusState(),
       });
     }

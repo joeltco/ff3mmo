@@ -84,10 +84,19 @@ const NAME_TO_FLAG = {
   confuse:   STATUS.CONFUSE,
 };
 
-export function tryInflictStatus(targetState, statusName, hitChance = 50) {
+// resist: optional — status name, array of names, or bitmask of NAME_TO_FLAG.
+// If the incoming status matches any resisted flag, inflict auto-fails (NES immunity check).
+export function tryInflictStatus(targetState, statusName, hitChance = 50, resist = null) {
   const flag = NAME_TO_FLAG[statusName];
   if (!flag) return 0;
   if (hasStatus(targetState, flag)) return 0; // already afflicted
+  if (resist) {
+    let resistMask = 0;
+    if (typeof resist === 'number') resistMask = resist;
+    else if (typeof resist === 'string') resistMask = NAME_TO_FLAG[resist] || 0;
+    else if (Array.isArray(resist)) { for (const r of resist) resistMask |= NAME_TO_FLAG[r] || 0; }
+    if (resistMask & flag) return 0; // immune
+  }
   if (Math.random() * 100 < hitChance) {
     addStatus(targetState, flag);
     return flag;
