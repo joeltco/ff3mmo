@@ -24,8 +24,13 @@ let imgData = null;
 let img32 = null;
 let canvasCtx = null;
 
-// Savestate slot (single slot — good enough for sprite capture workflows).
+// Savestate slot (single slot — persisted to localStorage so it survives refreshes).
+const SAVESTATE_KEY = 'ff3_emu_savestate_v1';
 let savedState = null;
+try {
+  const stored = localStorage.getItem(SAVESTATE_KEY);
+  if (stored) savedState = JSON.parse(stored);
+} catch { /* ignore */ }
 
 // Animation recorder
 let recording = false;
@@ -276,7 +281,14 @@ function _saveState() {
   if (!nes) return;
   try {
     savedState = JSON.parse(JSON.stringify(nes.toJSON()));
-    _status(`state saved @ frame ${frameCount}`);
+    try {
+      localStorage.setItem(SAVESTATE_KEY, JSON.stringify(savedState));
+      _status(`state saved @ frame ${frameCount} (persisted)`);
+    } catch (e) {
+      // localStorage quota or other issue — still keep in-memory copy.
+      console.warn('[emu] localStorage save failed', e);
+      _status(`state saved @ frame ${frameCount} (in-memory only: ${e.message})`);
+    }
   } catch (e) { _status('save failed: ' + e.message, true); console.error(e); }
 }
 
