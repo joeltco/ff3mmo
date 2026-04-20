@@ -29,10 +29,21 @@ export async function mount(root, context) {
     return;
   }
   rom = new Uint8Array(buf);
-  state = { formationIdx: 0, names: new Map(), overrides: new Map(), tilePalEdits: new Map() };
+  state = {
+    mode: 'atlas', // 'atlas' | 'formation'
+    formationIdx: 0,
+    names: new Map(),
+    overrides: new Map(),
+    tilePalEdits: new Map(),
+    presetIdx: new Map(), // monId → which preset is currently applied
+    // Cached "some formation that contains this monster" so the atlas can pick
+    // reasonable pal0Idx/pal1Idx values without running the full ROM scan each render.
+    monsterPalette: new Map(),
+  };
+  _indexMonsterPalettes();
   await _loadNames();
   dom = _buildDOM(root);
-  _renderFormation();
+  _setMode('atlas');
 }
 
 export function unmount() {
@@ -208,6 +219,7 @@ function _renderFormation() {
   dom.palInfo.append(p0Row, p1Row);
 
   dom.slots.innerHTML = '';
+  dom.slots.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;';
   for (let slot = 0; slot < 4; slot++) {
     const monId = f.mons[slot];
     const cell = document.createElement('div');
@@ -261,6 +273,106 @@ function _renderFormation() {
   }
 }
 
+// ── tilePal presets ─────────────────────────────────────────────────────────
+// `default` = the current MMO fallback (top 2 rows pal0, rest pal1). Cycling
+// goes: default → all-p0 → all-p1 → top-1 → top-3 → bot-half → border.
+// A user picking a preset means "paste this as the tilePal" — explicit.
+const PRESETS = [
+  { name: 'default',   fn: (c, r) => _gen(c, r, (x, y) => y < 2 ? 0 : 1) },
+  { name: 'all-p0',    fn: (c, r) => _gen(c, r, () => 0) },
+  { name: 'all-p1',    fn: (c, r) => _gen(c, r, () => 1) },
+  { name: 'top-1-p0',  fn: (c, r) => _gen(c, r, (x, y) => y < 1 ? 0 : 1) },
+  { name: 'top-3-p0',  fn: (c, r) => _gen(c, r, (x, y) => y < 3 ? 0 : 1) },
+  { name: 'bot-p0',    fn: (c, r) => _gen(c, r, (x, y) => y < Math.ceil(r / 2) ? 1 : 0) },
+  { name: 'border-p0', fn: (c, r) => _gen(c, r, (x, y) => (x === 0 || y === 0 || x === c - 1 || y === r - 1) ? 0 : 1) },
+];
+
+function _gen(cols, rows, fn) {
+  const out = new Array(cols * rows);
+  for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) out[y * cols + x] = fn(x, y);
+  return out;
+}
+
+function _cyclePreset(monId) {
+  const entry = MONSTER_REGISTRY.get(monId);
+  if (!entry) return;
+  const cur = state.presetIdx.get(monId) ?? 0;
+  const nextIdx = (cur + 1) % PRESETS.length;
+  const preset = PRESETS[nextIdx];
+  state.presetIdx.set(monId, nextIdx);
+  if (nextIdx === 0) {
+    // Going back to "default" means "no override" — drop the edit.
+    state.tilePalEdits.delete(monId);
+  } else {
+    state.tilePalEdits.set(monId, preset.fn(entry.cols, entry.rows));
+  }
+  _renderCurrent();
+  _renderOverrides();
+}
+
+// Scan formations once and note one (pal0Idx, pal1Idx) pair for each monster ID —
+// used by the atlas to render every monster with some valid palette even outside
+// the formation-scrolling view.
+function _indexMonsterPalettes() {
+  for (let i = 0; i < FORMATION_COUNT; i++) {
+    const f = _readFormation(i);
+    for (const monId of f.mons) {
+      if (monId === 0xFF) continue;
+      if (!state.monsterPalette.has(monId)) {
+        state.monsterPalette.set(monId, { pal0Idx: f.pal0Idx, pal1Idx: f.pal1Idx });
+      }
+    }
+  }
+}
+
+function _renderAtlas() {
+  dom.palInfo.innerHTML = '';
+  dom.slots.innerHTML = '';
+  dom.slots.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:4px;';
+
+  const ids = Array.from(MONSTER_REGISTRY.keys()).sort((a, b) => a - b);
+  for (const monId of ids) {
+    const entry = MONSTER_REGISTRY.get(monId);
+    const palInfo = state.monsterPalette.get(monId);
+    if (!entry || !palInfo) continue;
+    const pal0 = _readPalette(palInfo.pal0Idx);
+    const pal1 = _readPalette(palInfo.pal1Idx);
+
+    const cell = document.createElement('div');
+    cell.style.cssText = 'background:#141420;border:1px solid #333;border-radius:3px;padding:4px;display:flex;flex-direction:column;gap:2px;align-items:center;cursor:pointer;';
+    cell.title = 'click to cycle through tilePal presets';
+
+    const sprite = _renderMonster(monId, pal0, pal1);
+    if (sprite) cell.appendChild(sprite);
+
+    const name = state.names.get(monId) || '?';
+    const header = document.createElement('div');
+    header.style.cssText = 'color:#c8a832;font-size:9px;font-family:monospace;text-align:center;line-height:1.2;';
+    const presetName = PRESETS[state.presetIdx.get(monId) ?? 0].name;
+    header.innerHTML = `$${monId.toString(16).toUpperCase().padStart(2, '0')} ${name}<br><span style="color:#888">${presetName}</span>`;
+    cell.appendChild(header);
+
+    cell.addEventListener('click', () => _cyclePreset(monId));
+    dom.slots.appendChild(cell);
+  }
+}
+
+function _renderCurrent() {
+  if (state.mode === 'atlas') _renderAtlas();
+  else _renderFormation();
+}
+
+function _setMode(mode) {
+  state.mode = mode;
+  dom.btnAtlas.style.borderColor = mode === 'atlas' ? '#c8a832' : '#444';
+  dom.btnForm.style.borderColor = mode === 'formation' ? '#c8a832' : '#444';
+  dom.formationControls.style.display = mode === 'formation' ? '' : 'none';
+  dom.legend.textContent = mode === 'atlas'
+    ? 'Click a monster to cycle presets: default → all-p0 → all-p1 → top-1-p0 → top-3-p0 → bot-p0 → border-p0.'
+    : 'Click a tile to toggle pal0↔pal1.';
+  _renderCurrent();
+}
+
 function _go(delta) {
   state.formationIdx = (state.formationIdx + delta + FORMATION_COUNT) % FORMATION_COUNT;
   _renderFormation();
@@ -285,7 +397,7 @@ function _buildDOM(parent) {
   const root = document.createElement('div');
   root.style.cssText = 'display:flex;flex-direction:column;gap:8px;flex:1;min-height:0;overflow:auto;padding:6px;';
 
-  // Nav: prev / idx input / next / find-by-monster-id
+  // Mode switcher + formation nav.
   const nav = document.createElement('div');
   nav.style.cssText = 'display:flex;gap:6px;align-items:center;flex-wrap:wrap;';
 
@@ -296,6 +408,13 @@ function _buildDOM(parent) {
     b.addEventListener('click', onClick);
     return b;
   };
+  const btnAtlas = mkBtn('ATLAS', () => _setMode('atlas'));
+  const btnForm = mkBtn('FORMATION', () => _setMode('formation'));
+  nav.append(btnAtlas, btnForm);
+
+  // Formation-only controls (hidden in atlas mode).
+  const formationControls = document.createElement('div');
+  formationControls.style.cssText = 'display:flex;gap:6px;align-items:center;flex-wrap:wrap;';
   const prev = mkBtn('◀', () => _go(-1));
   const next = mkBtn('▶', () => _go(1));
 
@@ -326,7 +445,8 @@ function _buildDOM(parent) {
     if (Number.isFinite(id)) _findNext(id, -1);
   });
 
-  nav.append(prev, formLabel, next, jumpInput, findPrev, findInput, findNext);
+  formationControls.append(prev, formLabel, next, jumpInput, findPrev, findInput, findNext);
+  nav.appendChild(formationControls);
   root.appendChild(nav);
 
   const palInfo = document.createElement('div');
@@ -339,7 +459,6 @@ function _buildDOM(parent) {
 
   const legend = document.createElement('div');
   legend.style.cssText = 'color:#888;font-size:10px;font-family:monospace;';
-  legend.innerHTML = 'Click a tile to toggle pal0↔pal1. Outline: <span style="color:#4898c8">■ pal0</span> · <span style="color:#c857c8">■ pal1</span>';
   root.appendChild(legend);
 
   const outputLabel = document.createElement('div');
@@ -353,5 +472,5 @@ function _buildDOM(parent) {
   root.appendChild(output);
 
   parent.appendChild(root);
-  return { root, formLabel, palInfo, slots, output };
+  return { root, formLabel, palInfo, slots, output, btnAtlas, btnForm, formationControls, legend };
 }
