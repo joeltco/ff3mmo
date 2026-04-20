@@ -121,9 +121,21 @@ function _onFrame(buffer) {
 function _start() {
   if (running) return;
   running = true;
+  // NES NTSC runs at ~60.098 Hz. rAF fires at display refresh (often 90/120Hz on Android),
+  // so we pace frames by wall-clock time rather than running one NES frame per rAF.
+  const FRAME_MS = 1000 / 60.0988;
+  let nextDue = performance.now();
   const tick = () => {
     if (!running || !nes) return;
-    nes.frame();
+    const now = performance.now();
+    // If we fell more than ~5 frames behind (tab was hidden, etc), snap forward.
+    if (now - nextDue > FRAME_MS * 5) nextDue = now;
+    let steps = 0;
+    while (now >= nextDue && steps < 3) {
+      nes.frame();
+      nextDue += FRAME_MS;
+      steps++;
+    }
     rafId = requestAnimationFrame(tick);
   };
   rafId = requestAnimationFrame(tick);
