@@ -94,8 +94,11 @@ function _makeDeathFrames(srcCanvas) {
 /** Initialize all monster sprites from ROM-extracted data. Call once after DOM ready. */
 export function initMonsterSprites() {
   for (const [monsterId, entry] of MONSTER_REGISTRY) {
-    const pal0 = PALETTE_TABLE[entry.pal0] || [0x0F, 0x00, 0x10, 0x20];
-    const pal1 = PALETTE_TABLE[entry.pal1] || [0x0F, 0x00, 0x10, 0x20];
+    // pal0Raw / pal1Raw override the PALETTE_TABLE lookup — used for monsters
+    // whose real in-battle colors come from the sprite palette (SP0/SP1) rather
+    // than the BG palette table the extractor pulled from. Captured via SNAP OAM.
+    const pal0 = entry.pal0Raw || PALETTE_TABLE[entry.pal0] || [0x0F, 0x00, 0x10, 0x20];
+    const pal1 = entry.pal1Raw || PALETTE_TABLE[entry.pal1] || [0x0F, 0x00, 0x10, 0x20];
     const canvas = _renderSprite(entry.raw, entry.cols, entry.rows, pal0, pal1, entry.tilePal);
     monsterBattleCanvas.set(monsterId, canvas);
     monsterWhiteCanvas.set(monsterId, _makeWhiteCanvas(canvas));

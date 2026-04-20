@@ -345,6 +345,86 @@ function _snapshotOAM() {
   _status(`snapshot: ${sprites.length} sprites in ${groups.length} groups`);
 }
 
+// ── BG snapshot (nametable + attribute table) ───────────────────────────────
+// FF3 draws battle monsters as BG tiles, not OAM sprites. This captures the
+// nametable, attribute table, and all non-blank tile patterns so you can see
+// which BG palette each monster tile actually uses.
+
+function _snapshotBG() {
+  if (!nes) return;
+  const v = nes.ppu.vramMem;
+  const tiles = nes.ppu.ptTile;
+  const out = [];
+  out.push(`// BG snapshot @ frame ${frameCount}`);
+  out.push('');
+  out.push(_dumpPalette());
+  out.push('');
+
+  // Nametable 0 at $2000-$23BF (32 cols × 30 rows). Attribute table at $23C0-$23FF.
+  // Attribute byte format DDCCBBAA covers a 32×32 px (4×4 tile) area.
+  const NT = 0x2000, AT = 0x23C0;
+  const getAttr = (col, row) => {
+    // 4×4 tile block → attr byte index. 2×2 within that → which 2 bits.
+    const blockCol = col >> 2, blockRow = row >> 2;
+    const byte = v[AT + blockRow * 8 + blockCol];
+    const subCol = (col >> 1) & 1, subRow = (row >> 1) & 1;
+    const shift = (subRow << 2) | (subCol << 1);
+    return (byte >> shift) & 3;
+  };
+
+  // Find the bounding box of non-blank tiles (so we skip empty borders).
+  let minR = 30, maxR = -1, minC = 32, maxC = -1;
+  for (let r = 0; r < 30; r++) {
+    for (let c = 0; c < 32; c++) {
+      const t = v[NT + r * 32 + c];
+      if (t !== 0) {
+        if (r < minR) minR = r;
+        if (r > maxR) maxR = r;
+        if (c < minC) minC = c;
+        if (c > maxC) maxC = c;
+      }
+    }
+  }
+  if (maxR < 0) { out.push('// (all tiles blank)'); dom.output.value = out.join('\n'); _status('BG empty'); return; }
+
+  out.push(`// bounding box: cols ${minC}..${maxC}, rows ${minR}..${maxR}`);
+  out.push('');
+
+  // ASCII grid: for each non-blank cell show "TT/p" where TT=tile index hex, p=attr palette (0-3)
+  out.push('// Grid (non-blank cells shown as TT/p where p=BG palette 0-3):');
+  for (let r = minR; r <= maxR; r++) {
+    const parts = [`//  r${r.toString().padStart(2, '0')}: `];
+    for (let c = minC; c <= maxC; c++) {
+      const t = v[NT + r * 32 + c];
+      const p = getAttr(c, r);
+      parts.push(t === 0 ? '     ' : `${_hex(t, 2)}/${p} `);
+    }
+    out.push(parts.join(''));
+  }
+  out.push('');
+
+  // Unique tiles with their raw bytes — so you can match against MONSTER_REGISTRY.raw
+  const seen = new Set();
+  out.push('// Unique non-blank tile patterns:');
+  for (let r = minR; r <= maxR; r++) {
+    for (let c = minC; c <= maxC; c++) {
+      const t = v[NT + r * 32 + c];
+      if (t === 0 || seen.has(t)) continue;
+      seen.add(t);
+      // BG tiles are at pattern table $0000-$0FFF → ptTile index 0..255.
+      // FF3 may swap the BG bank via PPU control reg; assume $0000 for now.
+      const tile = tiles[t];
+      if (!tile || !tile.pix) continue;
+      const bytes = _encodeTile(tile.pix);
+      out.push(`// tile $${_hex(t, 2)}`);
+      out.push(`new Uint8Array([${Array.from(bytes).map(b => '0x' + _hex(b, 2)).join(',')}]),`);
+    }
+  }
+
+  dom.output.value = out.join('\n');
+  _status(`BG snapshot: ${seen.size} unique tiles in ${maxC - minC + 1}×${maxR - minR + 1} area`);
+}
+
 // ── Capture ─────────────────────────────────────────────────────────────────
 
 function _dumpPalette() {
@@ -618,8 +698,9 @@ function _buildDOM(parent) {
   const btnSave = mkBtn('SAVE', _saveState);
   const btnLoad = mkBtn('LOAD', _loadState);
   const btnSnap = mkBtn('SNAP OAM', _snapshotOAM);
+  const btnSnapBG = mkBtn('SNAP BG', _snapshotBG);
   const btnWpn = mkBtn('WPN TILES', _dumpWeaponTiles);
-  capRow.append(btnSave, btnLoad, btnSnap, btnWpn);
+  capRow.append(btnSave, btnLoad, btnSnap, btnSnapBG, btnWpn);
   rightCol.appendChild(capRow);
 
   // Tile dump input
@@ -686,7 +767,7 @@ function _buildDOM(parent) {
 
   parent.appendChild(root);
 
-  const d = { root, canvas, status, frame, btnPause, btnStep, btnReset, btnSound, btnSave, btnLoad, btnSnap, btnWpn, tileInput, btnTileDump, output, writeInput };
+  const d = { root, canvas, status, frame, btnPause, btnStep, btnReset, btnSound, btnSave, btnLoad, btnSnap, btnSnapBG, btnWpn, tileInput, btnTileDump, output, writeInput };
   dom = d;
   _installKeys();
   return d;
