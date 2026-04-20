@@ -1,5 +1,6 @@
 // EMU tab — jsnes-backed NES emulator for PPU/OAM/palette capture.
 // jsnes is loaded via <script src="lib/jsnes.min.js"> in index.html, exposed as window.jsnes.
+import { applyIPS } from '../../ips-patcher.js';
 
 const SCREEN_W = 256;
 const SCREEN_H = 240;
@@ -31,7 +32,26 @@ export function mount(root, context) {
   const rom = ctx.getFF3Buffer();
   if (!rom) { _status('No ROM loaded — load FF3 on the title screen first', true); return; }
 
-  _initEmulator(rom);
+  _patchAndInit(rom);
+}
+
+async function _patchAndInit(romBuffer) {
+  // IPS is overwrite-only, so re-applying to an already-patched buffer is a no-op.
+  const patched = new Uint8Array(new Uint8Array(romBuffer));
+  try {
+    _status('fetching English IPS patch…');
+    const resp = await fetch('patches/ff3-english.ips');
+    if (resp.ok) {
+      applyIPS(patched, new Uint8Array(await resp.arrayBuffer()));
+      _status('IPS applied, booting…');
+    } else {
+      _status('no IPS patch found, booting raw ROM…');
+    }
+  } catch (e) {
+    console.warn('[emu] IPS fetch failed', e);
+    _status('IPS fetch failed, booting raw ROM…');
+  }
+  _initEmulator(patched.buffer);
 }
 
 export function unmount() {
