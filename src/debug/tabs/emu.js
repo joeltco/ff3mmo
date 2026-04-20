@@ -53,6 +53,22 @@ let autoCapDebounce = 0;
 let autoCapSeen = new Set();
 let autoCapOutput = [];
 
+// Cycle-all: from a world-map savestate, hammer the DOWN button to trigger a
+// random encounter, then (as soon as $7D67 flips non-zero) override it with
+// our chosen target formation + its 4 monster IDs + its 2 palette indices,
+// pulled straight from ROM's MON_SET table. Keep re-writing for 60 frames
+// so whichever frame the game reads them in, our values win. Snap BG after
+// stabilize, reload savestate, next target. Zero manual play.
+const MON_SET_ROM = 0x2E * 0x2000 + 0x10 + (0x8400 - 0x8000);
+const BTN_DOWN = 5; // jsnes controller button index for DOWN
+let cycleOn = false;
+let cycleTargets = [];
+let cycleIdx = 0;
+let cycleState = 'idle'; // 'idle' | 'load' | 'walking' | 'forcing' | 'capturing'
+let cycleFrame = 0;
+let cycleSeen = new Set();
+let cycleOutput = [];
+
 export function mount(root, context) {
   ctx = context;
   dom = _buildDOM(root);
@@ -150,6 +166,7 @@ function _onFrame(buffer) {
   canvasCtx.putImageData(imgData, 0, 0);
   frameCount++;
   if (autoCapOn) _autoCapTick();
+  if (cycleOn) _cycleTick();
   // Update only the frame counter element — status messages live separately.
   if (dom?.frame) dom.frame.textContent = running ? `f${frameCount}` : `⏸ f${frameCount}`;
 }
@@ -480,6 +497,134 @@ function _autoCapTick() {
   }
 }
 
+// Cycle-all driver — runs in _onFrame. Each state advances the pipeline.
+function _cycleTick() {
+  if (!cycleOn) return;
+  const target = cycleTargets[cycleIdx];
+
+  switch (cycleState) {
+    case 'load': {
+      if (!savedState) { _stopCycle('no savestate — SAVE on the world map first'); return; }
+      if (!savedState.romData && nes.romData) savedState.romData = nes.romData;
+      try { nes.fromJSON(savedState); } catch (e) { _stopCycle('fromJSON failed: ' + e.message); return; }
+      nes.buttonDown(1, BTN_DOWN);
+      cycleState = 'walking';
+      cycleFrame = 0;
+      break;
+    }
+    case 'walking': {
+      cycleFrame++;
+      // Flip direction every 30 frames so we don't walk off-screen or into a wall.
+      if (cycleFrame % 30 === 0) {
+        nes.buttonUp(1, BTN_DOWN);
+        nes.buttonDown(1, BTN_DOWN);
+      }
+      const f = _ram(FORMATION_ADDR);
+      if (f !== 0 && f !== 0xFF) {
+        // Encounter fired — start forcing our target in.
+        nes.buttonUp(1, BTN_DOWN);
+        _forceFormation(target);
+        cycleState = 'forcing';
+        cycleFrame = 0;
+      } else if (cycleFrame > 600) {
+        // 10 sec with no encounter — skip this target.
+        nes.buttonUp(1, BTN_DOWN);
+        _cycleAdvance(`skip $${_hex(target, 2)} (no encounter)`);
+      }
+      break;
+    }
+    case 'forcing': {
+      // Re-write every frame for 60 frames in case graphics load reads late.
+      _forceFormation(target);
+      cycleFrame++;
+      if (cycleFrame > 60) {
+        cycleState = 'capturing';
+        cycleFrame = 0;
+      }
+      break;
+    }
+    case 'capturing': {
+      cycleFrame++;
+      // Wait another 60 frames for BG/attribute to fully render, then snap.
+      if (cycleFrame > 60) {
+        const snap = _bgSnapshotText();
+        if (snap) {
+          cycleSeen.add(target);
+          cycleOutput.push(`// ══════════════ formation $${_hex(target, 2)} ══════════════`);
+          cycleOutput.push(snap);
+          cycleOutput.push('');
+          dom.output.value = cycleOutput.join('\n');
+        }
+        _cycleAdvance(`cap $${_hex(target, 2)} (${cycleSeen.size} total)`);
+      }
+      break;
+    }
+  }
+}
+
+function _forceFormation(n) {
+  const rom = ctx?.getFF3Buffer();
+  if (!rom) return;
+  const view = new Uint8Array(rom);
+  const base = MON_SET_ROM + n * 6;
+  _ramWrite(0x7D67, n);
+  _ramWrite(0x7D69, view[base + 0]);  // pal0 idx
+  _ramWrite(0x7D6A, view[base + 1]);  // pal1 idx
+  _ramWrite(0x7D6B, view[base + 2]);  // mon 0
+  _ramWrite(0x7D6C, view[base + 3]);  // mon 1
+  _ramWrite(0x7D6D, view[base + 4]);  // mon 2
+  _ramWrite(0x7D6E, view[base + 5]);  // mon 3
+}
+
+function _cycleAdvance(msg) {
+  _status(msg);
+  cycleIdx++;
+  if (cycleIdx >= cycleTargets.length) { _stopCycle(`done — ${cycleSeen.size} captured`); return; }
+  cycleState = 'load';
+  cycleFrame = 0;
+}
+
+function _startCycle() {
+  if (!nes) return;
+  if (!savedState) { _status('no savestate — SAVE on the world map first', true); return; }
+  // Default to all 256 formation IDs. User can override by writing e.g.
+  // "0,5,10,20" in the tile-dump input box before clicking.
+  const raw = dom.tileInput.value.trim();
+  if (raw) {
+    cycleTargets = raw.split(/[,\s]+/).map(s => {
+      const v = s.trim();
+      return v.startsWith('$') ? parseInt(v.slice(1), 16) : parseInt(v, v.startsWith('0x') ? 16 : 10);
+    }).filter(Number.isFinite);
+    if (cycleTargets.length === 0) { _status('bad target list', true); return; }
+  } else {
+    cycleTargets = [];
+    for (let i = 0; i < 256; i++) cycleTargets.push(i);
+  }
+  cycleIdx = 0;
+  cycleSeen = new Set();
+  cycleOutput = [];
+  cycleOn = true;
+  cycleState = 'load';
+  cycleFrame = 0;
+  dom.btnCycle.textContent = 'STOP CYCLE';
+  dom.btnCycle.style.borderColor = '#c8a832';
+  _status(`cycling ${cycleTargets.length} formations…`);
+}
+
+function _stopCycle(msg) {
+  cycleOn = false;
+  cycleState = 'idle';
+  dom.btnCycle.textContent = 'CYCLE ALL';
+  dom.btnCycle.style.borderColor = '#444';
+  if (nes) nes.buttonUp(1, BTN_DOWN);
+  _status(msg || `stopped — ${cycleSeen.size} captured`);
+}
+
+function _toggleCycle() {
+  if (cycleOn) _stopCycle();
+  else _startCycle();
+}
+
 function _toggleAutoCap() {
   autoCapOn = !autoCapOn;
   dom.btnAutoCap.textContent = autoCapOn ? 'STOP AUTO' : 'AUTO CAP';
@@ -770,8 +915,9 @@ function _buildDOM(parent) {
   const btnSnap = mkBtn('SNAP OAM', _snapshotOAM);
   const btnSnapBG = mkBtn('SNAP BG', _snapshotBG);
   const btnAutoCap = mkBtn('AUTO CAP', _toggleAutoCap);
+  const btnCycle = mkBtn('CYCLE ALL', _toggleCycle);
   const btnWpn = mkBtn('WPN TILES', _dumpWeaponTiles);
-  capRow.append(btnSave, btnLoad, btnSnap, btnSnapBG, btnAutoCap, btnWpn);
+  capRow.append(btnSave, btnLoad, btnSnap, btnSnapBG, btnAutoCap, btnCycle, btnWpn);
   rightCol.appendChild(capRow);
 
   // Tile dump input
@@ -838,7 +984,7 @@ function _buildDOM(parent) {
 
   parent.appendChild(root);
 
-  const d = { root, canvas, status, frame, btnPause, btnStep, btnReset, btnSound, btnSave, btnLoad, btnSnap, btnSnapBG, btnAutoCap, btnWpn, tileInput, btnTileDump, output, writeInput };
+  const d = { root, canvas, status, frame, btnPause, btnStep, btnReset, btnSound, btnSave, btnLoad, btnSnap, btnSnapBG, btnAutoCap, btnCycle, btnWpn, tileInput, btnTileDump, output, writeInput };
   dom = d;
   _installKeys();
   return d;
