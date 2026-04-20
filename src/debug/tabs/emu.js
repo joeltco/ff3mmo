@@ -22,6 +22,7 @@ let frameCount = 0;
 let imgData = null;
 let img32 = null;
 let canvasCtx = null;
+let romStrCache = null;
 
 export function mount(root, context) {
   ctx = context;
@@ -50,6 +51,7 @@ function _initEmulator(romBuffer) {
   for (let i = 0; i < bytes.length; i += CHUNK) {
     romStr += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + CHUNK)));
   }
+  romStrCache = romStr;
 
   canvasCtx = dom.canvas.getContext('2d');
   imgData = canvasCtx.createImageData(SCREEN_W, SCREEN_H);
@@ -126,11 +128,25 @@ function _step() {
 }
 
 function _reset() {
-  if (!nes) return;
-  nes.reset();
+  if (!window.jsnes || !romStrCache) return;
+  _stop();
+  try {
+    nes = new window.jsnes.NES({
+      onFrame: _onFrame,
+      onAudioSample: () => {},
+      onStatusUpdate: (s) => { console.log('[jsnes]', s); },
+      onBatteryRamWrite: () => {},
+    });
+    nes.loadROM(romStrCache);
+  } catch (e) {
+    _status('reset failed: ' + e.message, true);
+    console.error('[emu] reset', e);
+    return;
+  }
   frameCount = 0;
   _status('reset — running');
-  if (!running) _togglePause();
+  dom.btnPause.textContent = 'PAUSE';
+  _start();
 }
 
 function _status(msg, err = false) {
