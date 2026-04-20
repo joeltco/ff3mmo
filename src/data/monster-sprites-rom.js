@@ -5444,7 +5444,10 @@ export const MONSTER_REGISTRY = new Map([
   [0x02, { raw: C1_G1_RAW, cols: C1_G1_COLS, rows: C1_G1_ROWS, pal0: 53, pal1: 94 }],
   [0x03, { raw: C0_G9_RAW, cols: C0_G9_COLS, rows: C0_G9_ROWS, pal0: 53, pal1: 94, tilePal: [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] }],
   [0x04, { raw: C0_G1_RAW, cols: C0_G1_COLS, rows: C0_G1_ROWS, pal0: 63, pal1: 64 }],
-  [0x05, { raw: C1_G19_RAW, cols: C1_G19_COLS, rows: C1_G19_ROWS, pal0: 143, pal1: 152 }],
+  // Werewolf tilePal verified from live BG attribute-table snapshot 2026-04-20:
+  // only the middle-right 2×2 block uses pal1 (tiles $7A $7B $7E $7F), rest pal0.
+  [0x05, { raw: C1_G19_RAW, cols: C1_G19_COLS, rows: C1_G19_ROWS, pal0: 143, pal1: 152,
+    tilePal: [0,0,0,0, 0,0,0,0, 0,0,1,1, 0,0,1,1, 0,0,0,0, 0,0,0,0] }],
   [0x06, { raw: C2_G14_RAW, cols: C2_G14_COLS, rows: C2_G14_ROWS, pal0: 143, pal1: 152 }],
   [0x07, { raw: C0_G9_RAW, cols: C0_G9_COLS, rows: C0_G9_ROWS, pal0: 112, pal1: 216, tilePal: [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] }],
   [0x08, { raw: C1_G1_RAW, cols: C1_G1_COLS, rows: C1_G1_ROWS, pal0: 112, pal1: 216 }],
