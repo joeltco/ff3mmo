@@ -499,6 +499,122 @@ function _dumpTileByIndex() {
   dom.output.value = `// ${label} (captured @ frame ${frameCount})\nnew Uint8Array([${Array.from(bytes).map(b => '0x' + _hex(b, 2)).join(',')}]),`;
 }
 
+// ── Memory read/write (FF3 party + inventory) ───────────────────────────────
+// FF3J save RAM layout (relative to $6000 SRAM base):
+//   $6100: Character A × 4 (64 bytes each) — job, level, name, HP, MP, stats
+//   $6200: Character B × 4 (64 bytes each) — equipment (head/body/arms/wpn/shield) + magic
+//   $60C0: Inventory item IDs × 32
+//   $60E0: Inventory quantities × 32
+// During gameplay the game operates on this SRAM directly via MMC3 PRG-RAM mapping.
+const SRAM_BASE = 0x6000;
+const CHARS_A_OFF = 0x100;
+const CHARS_B_OFF = 0x200;
+const INV_IDS_OFF = 0x0C0;
+const INV_QTY_OFF = 0x0E0;
+
+function _ram(addr) { return nes?.cpu?.mem?.[addr] ?? 0; }
+function _ramWrite(addr, val) {
+  if (!nes?.cpu) return;
+  nes.cpu.mem[addr] = val & 0xFF;
+}
+
+function _dumpState() {
+  if (!nes) return;
+  const out = [];
+  out.push(`// Party + inventory @ frame ${frameCount}`);
+  out.push('');
+  for (let i = 0; i < 4; i++) {
+    const a = SRAM_BASE + CHARS_A_OFF + i * 0x40;
+    const b = SRAM_BASE + CHARS_B_OFF + i * 0x40;
+    const job = _ram(a + 0x00);
+    const lvl = _ram(a + 0x01);
+    const name = Array.from({length:6}, (_,k) => _ram(a + 0x06 + k).toString(16).padStart(2,'0')).join(' ');
+    const curHP = _ram(a + 0x0C) | (_ram(a + 0x0D) << 8);
+    const maxHP = _ram(a + 0x0E) | (_ram(a + 0x0F) << 8);
+    const equip = Array.from({length:7}, (_,k) => '$' + _hex(_ram(b + k), 2)).join(' ');
+    out.push(`// char${i} @ A:$${_hex(a,4)} B:$${_hex(b,4)}`);
+    out.push(`//   job=$${_hex(job,2)} lvl=${lvl} name=${name}`);
+    out.push(`//   HP=${curHP}/${maxHP}`);
+    out.push(`//   equip (head/body/arms/wpn/shld…): ${equip}`);
+    out.push('');
+  }
+  out.push('// Inventory (32 slots)');
+  for (let i = 0; i < 32; i++) {
+    const id = _ram(SRAM_BASE + INV_IDS_OFF + i);
+    const qty = _ram(SRAM_BASE + INV_QTY_OFF + i);
+    if (id === 0 && qty === 0) continue;
+    out.push(`//   [${String(i).padStart(2)}] id=$${_hex(id,2)} qty=${qty}`);
+  }
+  dom.output.value = out.join('\n');
+  _status(`state dumped @ frame ${frameCount}`);
+}
+
+// Accepts multi-line input like:
+//   $6100=01      — single byte
+//   $6100: 01 02 03 04   — block write
+//   6100=ff,6200=aa      — comma-separated
+// Returns number of bytes written, or throws on parse error.
+function _applyWrites() {
+  if (!nes) return;
+  const text = dom.writeInput.value.trim();
+  if (!text) { _status('nothing to write', true); return; }
+  const edits = [];
+  // split on newlines + commas + semicolons
+  const entries = text.split(/[\n,;]/).map(s => s.trim()).filter(Boolean);
+  for (const e of entries) {
+    // strip // comments
+    const stripped = e.replace(/\/\/.*$/, '').trim();
+    if (!stripped) continue;
+    // allow "$ADDR=VAL" or "$ADDR: VAL VAL VAL"
+    const m = stripped.match(/^\$?([0-9a-fA-F]+)\s*[:=]\s*(.+)$/);
+    if (!m) { _status(`bad edit: ${e}`, true); return; }
+    const addr = parseInt(m[1], 16);
+    const vals = m[2].trim().split(/\s+/).map(v => parseInt(v.replace(/^0x|^\$/, ''), 16));
+    if (vals.some(v => !Number.isFinite(v))) { _status(`bad value: ${e}`, true); return; }
+    for (let k = 0; k < vals.length; k++) edits.push([addr + k, vals[k]]);
+  }
+  for (const [a, v] of edits) _ramWrite(a, v);
+  _status(`wrote ${edits.length} bytes`);
+}
+
+// Preset helpers — these write common scenarios I ask for in chat.
+const PRESETS = {
+  'full-HP': () => {
+    for (let i = 0; i < 4; i++) {
+      const a = SRAM_BASE + CHARS_A_OFF + i * 0x40;
+      const maxL = _ram(a + 0x0E), maxH = _ram(a + 0x0F);
+      _ramWrite(a + 0x0C, maxL); _ramWrite(a + 0x0D, maxH);
+    }
+    return 'all HP → max';
+  },
+  'lvl-99': () => {
+    for (let i = 0; i < 4; i++) _ramWrite(SRAM_BASE + CHARS_A_OFF + i * 0x40 + 0x01, 99);
+    return 'all chars → lvl 99';
+  },
+  'give-all-items': () => {
+    // Fill 32 slots with ids 0x01-0x20, qty 99 each
+    for (let i = 0; i < 32; i++) {
+      _ramWrite(SRAM_BASE + INV_IDS_OFF + i, i + 1);
+      _ramWrite(SRAM_BASE + INV_QTY_OFF + i, 99);
+    }
+    return 'inventory filled (ids 01-20, qty 99)';
+  },
+  'clear-inv': () => {
+    for (let i = 0; i < 32; i++) {
+      _ramWrite(SRAM_BASE + INV_IDS_OFF + i, 0);
+      _ramWrite(SRAM_BASE + INV_QTY_OFF + i, 0);
+    }
+    return 'inventory cleared';
+  },
+};
+
+function _runPreset(name) {
+  if (!nes) return;
+  const fn = PRESETS[name];
+  if (!fn) return;
+  try { _status(fn()); } catch (e) { _status('preset failed: ' + e.message, true); console.error(e); }
+}
+
 function _hex(n, width) {
   return n.toString(16).toUpperCase().padStart(width, '0');
 }
@@ -624,9 +740,42 @@ function _buildDOM(parent) {
   output.style.cssText = 'flex:1;min-height:140px;background:#0f0f18;color:#ccc;font-family:monospace;font-size:10px;border:1px solid #333;border-radius:3px;padding:6px;resize:vertical;';
   root.appendChild(output);
 
+  // Memory edit panel (party + inventory)
+  const editPanel = document.createElement('details');
+  editPanel.style.cssText = 'border:1px solid #333;border-radius:3px;background:#141420;padding:6px;';
+  const summary = document.createElement('summary');
+  summary.textContent = 'PARTY / INVENTORY EDITOR';
+  summary.style.cssText = 'cursor:pointer;color:#c8a832;font-size:11px;font-family:monospace;user-select:none;';
+  editPanel.appendChild(summary);
+
+  const editBody = document.createElement('div');
+  editBody.style.cssText = 'display:flex;flex-direction:column;gap:6px;margin-top:6px;';
+
+  const editBtnRow = document.createElement('div');
+  editBtnRow.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;';
+  const btnDumpState = mkBtn('READ STATE', _dumpState);
+  const btnFullHP = mkBtn('FULL HP', () => _runPreset('full-HP'));
+  const btnLvl99 = mkBtn('LVL 99', () => _runPreset('lvl-99'));
+  const btnGiveAll = mkBtn('GIVE ITEMS', () => _runPreset('give-all-items'));
+  const btnClearInv = mkBtn('CLEAR INV', () => _runPreset('clear-inv'));
+  editBtnRow.append(btnDumpState, btnFullHP, btnLvl99, btnGiveAll, btnClearInv);
+  editBody.appendChild(editBtnRow);
+
+  const writeInput = document.createElement('textarea');
+  writeInput.placeholder = 'write bytes — e.g. $6100=01  or  $6240: 1E 62 72 00';
+  writeInput.style.cssText = 'min-height:48px;background:#0f0f18;color:#ccc;font-family:monospace;font-size:11px;border:1px solid #333;border-radius:3px;padding:6px;resize:vertical;';
+  editBody.appendChild(writeInput);
+
+  const btnApplyWrites = mkBtn('APPLY WRITES', _applyWrites);
+  btnApplyWrites.style.alignSelf = 'flex-start';
+  editBody.appendChild(btnApplyWrites);
+
+  editPanel.appendChild(editBody);
+  root.appendChild(editPanel);
+
   parent.appendChild(root);
 
-  const d = { root, canvas, status, btnPause, btnStep, btnReset, btnSound, btnSave, btnLoad, btnSnap, btnRec, recInput, btnCapture, tileInput, btnTileDump, output };
+  const d = { root, canvas, status, btnPause, btnStep, btnReset, btnSound, btnSave, btnLoad, btnSnap, btnRec, recInput, btnCapture, tileInput, btnTileDump, output, writeInput };
   dom = d;
   _installKeys();
   return d;
