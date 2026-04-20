@@ -29,7 +29,7 @@ export async function mount(root, context) {
     return;
   }
   rom = new Uint8Array(buf);
-  state = { formationIdx: 0, names: new Map(), overrides: new Map() };
+  state = { formationIdx: 0, names: new Map(), overrides: new Map(), tilePalEdits: new Map() };
   await _loadNames();
   dom = _buildDOM(root);
   _renderFormation();
@@ -81,24 +81,58 @@ function _drawTile(cctx, pix, palBytes, x, y) {
   cctx.putImageData(img, x, y);
 }
 
+// Returns the effective per-tile palette map for monId — the user's edits
+// if any, otherwise the ROM-extracted `tilePal`, otherwise all-pal0.
+function _getTilePal(monId) {
+  if (state.tilePalEdits.has(monId)) return state.tilePalEdits.get(monId);
+  const entry = MONSTER_REGISTRY.get(monId);
+  if (!entry) return null;
+  const len = entry.cols * entry.rows;
+  if (entry.tilePal) return entry.tilePal.slice(0, len);
+  return new Array(len).fill(0);
+}
+
+function _toggleTilePal(monId, tileIdx) {
+  const current = _getTilePal(monId);
+  if (!current) return;
+  const next = current.slice();
+  next[tileIdx] = next[tileIdx] ? 0 : 1;
+  state.tilePalEdits.set(monId, next);
+  _renderFormation();
+  _renderOverrides();
+}
+
+// Build a clickable grid of per-tile canvases so the user can toggle each
+// tile between pal0 and pal1. A single canvas wouldn't give us per-tile
+// hit-testing cheaply; tiny-canvas-per-tile keeps it simple.
 function _renderMonster(monId, pal0Bytes, pal1Bytes) {
   const entry = MONSTER_REGISTRY.get(monId);
   if (!entry) return null;
-  const { raw, cols, rows, tilePal } = entry;
-  const w = cols * 8, h = rows * 8;
-  const canvas = document.createElement('canvas');
-  canvas.width = w; canvas.height = h;
-  canvas.style.cssText = `image-rendering:pixelated;width:${w * SPRITE_SCALE}px;height:${h * SPRITE_SCALE}px;background:#000;`;
-  const cctx = canvas.getContext('2d');
+  const { raw, cols, rows } = entry;
+  const tilePal = _getTilePal(monId);
+
+  const grid = document.createElement('div');
+  grid.style.cssText = `display:grid;grid-template-columns:repeat(${cols},${8 * SPRITE_SCALE}px);grid-template-rows:repeat(${rows},${8 * SPRITE_SCALE}px);gap:0;background:#000;line-height:0;`;
+
   for (let ty = 0; ty < rows; ty++) {
     for (let tx = 0; tx < cols; tx++) {
       const tileIdx = ty * cols + tx;
       const pix = decodeTile(raw, tileIdx * 16);
-      const pal = (tilePal && tilePal[tileIdx] === 1) ? pal1Bytes : pal0Bytes;
-      _drawTile(cctx, pix, pal, tx * 8, ty * 8);
+      const usingPal1 = tilePal[tileIdx] === 1;
+      const pal = usingPal1 ? pal1Bytes : pal0Bytes;
+
+      const c = document.createElement('canvas');
+      c.width = 8; c.height = 8;
+      // Outline shows which palette each tile is currently using — cyan=pal0, magenta=pal1.
+      c.style.cssText = `width:${8 * SPRITE_SCALE}px;height:${8 * SPRITE_SCALE}px;image-rendering:pixelated;cursor:pointer;outline:1px solid ${usingPal1 ? '#c857c8' : '#4898c8'};outline-offset:-1px;`;
+      c.title = `tile ${tileIdx} — click to toggle (${usingPal1 ? 'pal1→pal0' : 'pal0→pal1'})`;
+      const cctx = c.getContext('2d');
+      _drawTile(cctx, pix, pal, 0, 0);
+      c.addEventListener('click', () => _toggleTilePal(monId, tileIdx));
+      grid.appendChild(c);
     }
   }
-  return canvas;
+  return grid;
 }
 
 function _palSwatch(palBytes) {
@@ -126,12 +160,23 @@ function _useOverride(monId, pal0Idx, pal1Idx, formationIdx) {
 }
 
 function _renderOverrides() {
+  // Any monster that has EITHER a palette override OR a tilePal edit goes in the dump.
+  const ids = new Set([...state.overrides.keys(), ...state.tilePalEdits.keys()]);
+  if (ids.size === 0) { dom.output.value = ''; return; }
   const lines = ['// paste into src/data/monster-sprites-rom.js (update MONSTER_REGISTRY entries)'];
-  const sorted = Array.from(state.overrides.entries()).sort((a, b) => a[0] - b[0]);
-  for (const [monId, { pal0Idx, pal1Idx, formationIdx }] of sorted) {
+  for (const monId of [...ids].sort((a, b) => a - b)) {
+    const entry = MONSTER_REGISTRY.get(monId);
+    if (!entry) continue;
     const name = state.names.get(monId) || '?';
-    lines.push(`// ${name} (formation $${formationIdx.toString(16).toUpperCase().padStart(2, '0')})`);
-    lines.push(`[0x${monId.toString(16).padStart(2, '0')}, { ..., pal0: ${pal0Idx}, pal1: ${pal1Idx} }],`);
+    const ov = state.overrides.get(monId);
+    const pal0 = ov ? ov.pal0Idx : entry.pal0;
+    const pal1 = ov ? ov.pal1Idx : entry.pal1;
+    const tilePal = state.tilePalEdits.get(monId);
+    const parts = [`pal0: ${pal0}`, `pal1: ${pal1}`];
+    if (tilePal) parts.push(`tilePal: [${tilePal.join(',')}]`);
+    const source = ov ? ` (formation $${ov.formationIdx.toString(16).toUpperCase().padStart(2, '0')})` : '';
+    lines.push(`// ${name}${source}`);
+    lines.push(`[0x${monId.toString(16).padStart(2, '0')}, { ..., ${parts.join(', ')} }],`);
   }
   dom.output.value = lines.join('\n');
 }
@@ -183,11 +228,25 @@ function _renderFormation() {
       cell.appendChild(info);
     }
 
+    const btnRow = document.createElement('div');
+    btnRow.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;justify-content:center;';
     const btn = document.createElement('button');
     btn.textContent = `use this palette`;
     btn.style.cssText = 'padding:4px 8px;background:#1e1e2e;border:1px solid #c8a832;border-radius:3px;color:#c8a832;font-family:monospace;font-size:10px;cursor:pointer;';
     btn.addEventListener('click', () => _useOverride(monId, f.pal0Idx, f.pal1Idx, state.formationIdx));
-    cell.appendChild(btn);
+    btnRow.appendChild(btn);
+    if (state.tilePalEdits.has(monId)) {
+      const reset = document.createElement('button');
+      reset.textContent = 'reset tiles';
+      reset.style.cssText = 'padding:4px 8px;background:#1e1e2e;border:1px solid #666;border-radius:3px;color:#aaa;font-family:monospace;font-size:10px;cursor:pointer;';
+      reset.addEventListener('click', () => {
+        state.tilePalEdits.delete(monId);
+        _renderFormation();
+        _renderOverrides();
+      });
+      btnRow.appendChild(reset);
+    }
+    cell.appendChild(btnRow);
 
     dom.slots.appendChild(cell);
   }
@@ -268,6 +327,11 @@ function _buildDOM(parent) {
   const slots = document.createElement('div');
   slots.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;';
   root.appendChild(slots);
+
+  const legend = document.createElement('div');
+  legend.style.cssText = 'color:#888;font-size:10px;font-family:monospace;';
+  legend.innerHTML = 'Click a tile to toggle pal0↔pal1. Outline: <span style="color:#4898c8">■ pal0</span> · <span style="color:#c857c8">■ pal1</span>';
+  root.appendChild(legend);
 
   const outputLabel = document.createElement('div');
   outputLabel.style.cssText = 'color:#888;font-size:10px;font-family:monospace;margin-top:8px;';
