@@ -24,6 +24,14 @@ let imgData = null;
 let img32 = null;
 let canvasCtx = null;
 
+// Savestate slot (single slot — good enough for sprite capture workflows).
+let savedState = null;
+
+// Animation recorder
+let recording = false;
+let recFrames = [];
+let recTarget = 0;
+
 // Audio — ring buffer filled by jsnes onAudioSample, drained by a ScriptProcessorNode.
 // ScriptProcessor is deprecated but still universally supported and fine for 256×240 NES audio.
 let audioCtx = null;
@@ -131,7 +139,11 @@ function _onFrame(buffer) {
   for (let i = 0; i < SCREEN_W * SCREEN_H; i++) img32[i] = 0xFF000000 | buffer[i];
   canvasCtx.putImageData(imgData, 0, 0);
   frameCount++;
-  if (dom?.status) dom.status.textContent = running ? `frame ${frameCount}` : `paused @ frame ${frameCount}`;
+  if (recording) _captureRecFrame();
+  if (dom?.status) {
+    const rec = recording ? ` · REC ${recFrames.length}/${recTarget}` : '';
+    dom.status.textContent = (running ? `frame ${frameCount}` : `paused @ frame ${frameCount}`) + rec;
+  }
 }
 
 function _start() {
@@ -256,6 +268,150 @@ function _status(msg, err = false) {
   if (!dom?.status) return;
   dom.status.textContent = msg;
   dom.status.style.color = err ? '#f66' : '#c8a832';
+}
+
+// ── Savestate ───────────────────────────────────────────────────────────────
+
+function _saveState() {
+  if (!nes) return;
+  try {
+    savedState = JSON.parse(JSON.stringify(nes.toJSON()));
+    _status(`state saved @ frame ${frameCount}`);
+  } catch (e) { _status('save failed: ' + e.message, true); console.error(e); }
+}
+
+function _loadState() {
+  if (!nes || !savedState) { _status('no saved state', true); return; }
+  try {
+    nes.fromJSON(savedState);
+    _status(`state loaded`);
+  } catch (e) { _status('load failed: ' + e.message, true); console.error(e); }
+}
+
+// ── Animation recorder ──────────────────────────────────────────────────────
+// Records OAM + palette + pattern table each frame for N frames, then emits a
+// deduped animation dump — each unique tile appears once, each frame lists which
+// OAM entries + tile-ids it references.
+
+function _toggleRec() {
+  if (recording) { _stopRec(); return; }
+  const raw = dom.recInput.value.trim();
+  const n = parseInt(raw || '60', 10);
+  if (!Number.isFinite(n) || n <= 0 || n > 600) { _status('record count 1–600', true); return; }
+  recFrames = [];
+  recTarget = n;
+  recording = true;
+  dom.btnRec.textContent = 'STOP';
+  _status(`recording ${n} frames…`);
+}
+
+function _captureRecFrame() {
+  if (!nes) return;
+  const oam = nes.ppu.spriteMem;
+  const sprites = [];
+  for (let i = 0; i < 64; i++) {
+    const y = oam[i * 4], t = oam[i * 4 + 1], a = oam[i * 4 + 2], x = oam[i * 4 + 3];
+    if (y >= 0xF0) continue;
+    sprites.push({ i, y, t, a, x });
+  }
+  recFrames.push({ frame: frameCount, sprites });
+  if (recFrames.length >= recTarget) _stopRec();
+}
+
+function _stopRec() {
+  recording = false;
+  dom.btnRec.textContent = 'REC';
+  if (recFrames.length === 0) { _status('no frames recorded', true); return; }
+  // Collect every unique tile index referenced across all frames.
+  const tileIds = new Set();
+  for (const f of recFrames) for (const s of f.sprites) tileIds.add(s.t);
+  const out = [];
+  out.push(`// Animation: ${recFrames.length} frames, ${tileIds.size} unique tiles`);
+  out.push('');
+  out.push(_dumpPalette());
+  out.push('');
+  out.push('// Tiles referenced by OAM during recording');
+  const tiles = nes.ppu.ptTile;
+  const sorted = Array.from(tileIds).sort((a, b) => a - b);
+  for (const idx of sorted) {
+    // Sprite tile addressing depends on PPU control reg bit — FF3 uses $1000 for
+    // battle sprites. jsnes ptTile is indexed 0–511; OAM tile id + bank offset.
+    const ptIdx = 256 + idx; // assume $1000 bank; raw tile bytes re-encoded
+    const t = tiles[ptIdx];
+    if (!t || !t.pix) continue;
+    const bytes = _encodeTile(t.pix);
+    out.push(`// tile $${_hex(idx, 2)}: new Uint8Array([${Array.from(bytes).map(b => '0x' + _hex(b, 2)).join(',')}]),`);
+  }
+  out.push('');
+  out.push('// Per-frame OAM (i=slot, y, tile, attr, x)');
+  for (const f of recFrames) {
+    const s = f.sprites.map(sp => `{i:${sp.i},y:${sp.y},t:0x${_hex(sp.t, 2)},a:0x${_hex(sp.a, 2)},x:${sp.x}}`).join(',');
+    out.push(`// f${f.frame}: [${s}]`);
+  }
+  dom.output.value = out.join('\n');
+  _status(`recorded ${recFrames.length} frames, ${tileIds.size} unique tiles`);
+}
+
+// ── OAM snapshot (meta-sprite grouping) ─────────────────────────────────────
+// Groups currently-visible sprites into meta-sprites by XY adjacency, so you get
+// clean "this monster" / "this weapon" clusters instead of raw OAM noise.
+
+function _snapshotOAM() {
+  if (!nes) return;
+  const oam = nes.ppu.spriteMem;
+  const sprites = [];
+  for (let i = 0; i < 64; i++) {
+    const y = oam[i * 4], t = oam[i * 4 + 1], a = oam[i * 4 + 2], x = oam[i * 4 + 3];
+    if (y >= 0xF0) continue;
+    sprites.push({ i, y: y + 1, t, a, x, group: -1 });
+  }
+  // Union-find by adjacency: two sprites are in the same group if one's bbox
+  // touches the other (≤8px gap in X or Y).
+  const groups = [];
+  for (const s of sprites) {
+    let merged = -1;
+    for (let g = 0; g < groups.length; g++) {
+      for (const other of groups[g]) {
+        const dx = Math.abs(s.x - other.x), dy = Math.abs(s.y - other.y);
+        if (dx <= 8 && dy <= 24) { // 16-wide / 24-tall tolerance
+          if (merged === -1) { groups[g].push(s); merged = g; }
+          else {
+            groups[merged].push(...groups[g]);
+            groups.splice(g, 1);
+            merged = groups.indexOf(groups[merged]);
+            g--;
+          }
+          break;
+        }
+      }
+    }
+    if (merged === -1) groups.push([s]);
+  }
+  const tiles = nes.ppu.ptTile;
+  const out = [];
+  out.push(`// OAM snapshot @ frame ${frameCount} — ${sprites.length} visible sprites in ${groups.length} groups`);
+  out.push('');
+  out.push(_dumpPalette());
+  out.push('');
+  for (let g = 0; g < groups.length; g++) {
+    const grp = groups[g].sort((a, b) => (a.y - b.y) || (a.x - b.x));
+    const minX = Math.min(...grp.map(s => s.x));
+    const minY = Math.min(...grp.map(s => s.y));
+    out.push(`// ── group ${g} (${grp.length} tiles, origin ${minX},${minY}) ──`);
+    for (const s of grp) {
+      const ptIdx = 256 + s.t;
+      const tile = tiles[ptIdx];
+      if (!tile || !tile.pix) continue;
+      const bytes = _encodeTile(tile.pix);
+      const dx = s.x - minX, dy = s.y - minY;
+      const flags = (s.a & 0x80 ? ' VFLIP' : '') + (s.a & 0x40 ? ' HFLIP' : '');
+      out.push(`//   [${dx},${dy}] tile=$${_hex(s.t, 2)} pal${s.a & 3}${flags}`);
+      out.push(`new Uint8Array([${Array.from(bytes).map(b => '0x' + _hex(b, 2)).join(',')}]),`);
+    }
+    out.push('');
+  }
+  dom.output.value = out.join('\n');
+  _status(`snapshot: ${sprites.length} sprites in ${groups.length} groups`);
 }
 
 // ── Capture ─────────────────────────────────────────────────────────────────
@@ -419,9 +575,23 @@ function _buildDOM(parent) {
   const btnStep = mkBtn('STEP', _step);
   const btnReset = mkBtn('RESET', _reset);
   const btnSound = mkBtn('SOUND', _toggleSound);
-  const btnCapture = mkBtn('CAPTURE', _capture);
-  btnRow.append(btnPause, btnStep, btnReset, btnSound, btnCapture);
+  btnRow.append(btnPause, btnStep, btnReset, btnSound);
   rightCol.appendChild(btnRow);
+
+  // Capture row: savestate, snapshot, record, raw dump
+  const capRow = document.createElement('div');
+  capRow.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;align-items:center;';
+  const btnSave = mkBtn('SAVE', _saveState);
+  const btnLoad = mkBtn('LOAD', _loadState);
+  const btnSnap = mkBtn('SNAP OAM', _snapshotOAM);
+  const btnRec = mkBtn('REC', _toggleRec);
+  const recInput = document.createElement('input');
+  recInput.value = '60';
+  recInput.title = 'frames to record';
+  recInput.style.cssText = 'width:48px;background:#1e1e2e;border:1px solid #444;border-radius:3px;color:#e0e0e0;font-family:monospace;font-size:11px;padding:4px 6px;';
+  const btnCapture = mkBtn('DUMP ALL', _capture);
+  capRow.append(btnSave, btnLoad, btnSnap, btnRec, recInput, btnCapture);
+  rightCol.appendChild(capRow);
 
   // Tile dump input
   const tileRow = document.createElement('div');
@@ -456,7 +626,7 @@ function _buildDOM(parent) {
 
   parent.appendChild(root);
 
-  const d = { root, canvas, status, btnPause, btnStep, btnReset, btnSound, btnCapture, tileInput, btnTileDump, output };
+  const d = { root, canvas, status, btnPause, btnStep, btnReset, btnSound, btnSave, btnLoad, btnSnap, btnRec, recInput, btnCapture, tileInput, btnTileDump, output };
   dom = d;
   _installKeys();
   return d;
