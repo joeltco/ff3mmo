@@ -260,26 +260,40 @@ function _status(msg, err = false) {
 
 // ── Savestate ───────────────────────────────────────────────────────────────
 
+// jsnes.toJSON() includes the full ROM (~256KB → ~1MB as JSON) which blows
+// through localStorage quota on mobile. Strip it before persisting, re-attach
+// on load — the ROM is available from ctx.getFF3Buffer() anyway.
 function _saveState() {
   if (!nes) return;
   try {
-    savedState = JSON.parse(JSON.stringify(nes.toJSON()));
+    const full = nes.toJSON();
+    const romData = full.romData;
+    const slim = { ...full, romData: null };
+    savedState = slim;
     try {
-      localStorage.setItem(SAVESTATE_KEY, JSON.stringify(savedState));
-      _status(`state saved @ frame ${frameCount} (persisted)`);
+      const json = JSON.stringify(slim);
+      localStorage.setItem(SAVESTATE_KEY, json);
+      const kb = Math.round(json.length / 1024);
+      _status(`state saved @ frame ${frameCount} (${kb} KB persisted)`);
     } catch (e) {
-      // localStorage quota or other issue — still keep in-memory copy.
       console.warn('[emu] localStorage save failed', e);
-      _status(`state saved @ frame ${frameCount} (in-memory only: ${e.message})`);
+      _status(`state saved @ frame ${frameCount} (in-memory only — localStorage: ${e.message})`, true);
     }
+    // Keep romData on the in-memory copy so LOAD doesn't need to re-fetch.
+    savedState.romData = romData;
   } catch (e) { _status('save failed: ' + e.message, true); console.error(e); }
 }
 
 function _loadState() {
   if (!nes || !savedState) { _status('no saved state', true); return; }
   try {
+    // If state came from localStorage (refresh), romData was stripped to fit.
+    // nes.romData is the already-loaded ROM string — re-attach for fromJSON.
+    if (!savedState.romData && nes.romData) {
+      savedState.romData = nes.romData;
+    }
     nes.fromJSON(savedState);
-    _status(`state loaded`);
+    _status(`state loaded @ frame ${frameCount}`);
   } catch (e) { _status('load failed: ' + e.message, true); console.error(e); }
 }
 
