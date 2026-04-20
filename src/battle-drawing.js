@@ -1193,7 +1193,7 @@ function _drawAllyPortrait(i, ally, isVicPose, isAllyAttack, isAllyHit, isNearFa
     if (wpnSt === 'knife' && activeWpnId === 0x1F && getDaggerBladeSwungCanvas()) weaponDraws.push({ img: getDaggerBladeSwungCanvas(), x: ppx - 16, y: ppy + 1 });
     else if (wpnSt === 'knife' && getKnifeBladeSwungCanvas()) weaponDraws.push({ img: getKnifeBladeSwungCanvas(), x: ppx - 16, y: ppy + 1 });
     else if (wpnSt === 'sword' && getSwordBladeSwungCanvas()) weaponDraws.push({ img: getSwordBladeSwungCanvas(), x: ppx - 16, y: ppy + 1 });
-    else if (getFistCanvas()) weaponDraws.push({ img: getFistCanvas(), x: ppx - 4, y: ppy + 10 });
+    else if ((wpnSt === 'claw' || (!wpnSt && activeWpnId === 0)) && getFistCanvas()) weaponDraws.push({ img: getFistCanvas(), x: ppx - 4, y: ppy + 10 });
   }
   // Near-fatal sweat — 2 frames alternating every 133ms, 3px above portrait
   if (isNearFatal && bsc.sweatFrames.length === 2 && !isAllyAttack && !isAllyHit && !isVicPose && !isThisAllySlash) {
