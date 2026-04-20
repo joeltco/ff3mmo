@@ -82,14 +82,23 @@ function _drawTile(cctx, pix, palBytes, x, y) {
 }
 
 // Returns the effective per-tile palette map for monId — the user's edits
-// if any, otherwise the ROM-extracted `tilePal`, otherwise all-pal0.
+// if any, otherwise the ROM-extracted `tilePal`, otherwise the MMO's default
+// (top 2 rows = pal0, rest = pal1). The default MUST match src/monster-sprites.js
+// so the FORMATION tab shows what the MMO renders, not what it would render
+// under an all-pal0 assumption.
 function _getTilePal(monId) {
   if (state.tilePalEdits.has(monId)) return state.tilePalEdits.get(monId);
   const entry = MONSTER_REGISTRY.get(monId);
   if (!entry) return null;
-  const len = entry.cols * entry.rows;
-  if (entry.tilePal) return entry.tilePal.slice(0, len);
-  return new Array(len).fill(0);
+  const { cols, rows, tilePal } = entry;
+  if (tilePal) return tilePal.slice(0, cols * rows);
+  const out = new Array(cols * rows);
+  for (let ty = 0; ty < rows; ty++) {
+    for (let tx = 0; tx < cols; tx++) {
+      out[ty * cols + tx] = ty < 2 ? 0 : 1;
+    }
+  }
+  return out;
 }
 
 function _toggleTilePal(monId, tileIdx) {
