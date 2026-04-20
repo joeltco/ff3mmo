@@ -10,7 +10,7 @@ import { PLAYER_PALETTES, ROSTER_FADE_STEPS } from './data/players.js';
 import { BATTLE_SPRITE_ROM, BATTLE_JOB_SIZE, BATTLE_PAL_ROM } from './data/jobs.js';
 import { OK_IDLE, OK_VICTORY, OK_L_BACK_SWING, OK_L_FWD_T2, OK_L_FWD_T3, OK_R_BACK_SWING, OK_R_FWD_T2, OK_KNEEL,
          OK_LEG_L_IDLE, OK_LEG_R_IDLE, OK_LEG_L_BACK_L, OK_LEG_R_BACK_L, OK_LEG_L_FWD_L, OK_LEG_R_FWD_L,
-         OK_LEG_L_BACK_R, OK_LEG_R_SWING, OK_LEG_L_KNEEL, OK_LEG_R_KNEEL, OK_LEG_L_VICTORY, OK_LEG_R_VICTORY,
+         OK_LEG_L_BACK_R, OK_LEG_L_FWD_R, OK_LEG_R_SWING, OK_LEG_L_KNEEL, OK_LEG_R_KNEEL, OK_LEG_L_VICTORY, OK_LEG_R_VICTORY,
          OK_DEATH } from './data/job-sprites.js';
 import { WR_IDLE, WR_LEG_L, WR_LEG_R, WR_L_BACK, WR_LEG_L_BACK_L, WR_LEG_R_BACK_L,
          WR_L_FWD_T2, WR_L_FWD_T3, WR_LEG_L_FWD_L, WR_LEG_R_FWD_L,
@@ -134,6 +134,7 @@ const _FP_LEG_R_BACK_L  = OK_LEG_R_BACK_L;
 const _FP_LEG_L_FWD_L   = OK_LEG_L_FWD_L;
 const _FP_LEG_R_FWD_L   = OK_LEG_R_FWD_L;
 const _FP_LEG_L_BACK_R  = OK_LEG_L_BACK_R;
+const _FP_LEG_L_FWD_R   = OK_LEG_L_FWD_R;
 const _FP_LEG_R_SWING   = OK_LEG_R_SWING;
 const _FP_LEG_L_KNEEL   = OK_LEG_L_KNEEL;
 const _FP_LEG_R_KNEEL   = OK_LEG_R_KNEEL;
@@ -868,7 +869,7 @@ function _buildKnifeFullBodies() {
   const _FP_L_FWD = [OK_IDLE[0], OK_IDLE[1], OK_L_FWD_T2, OK_L_FWD_T3];
   const _FP_R_FWD = [OK_IDLE[0], OK_IDLE[1], OK_R_FWD_T2, OK_IDLE[3]];
   const fakePlayerKnifeLFwdFullBodyCanvases = PLAYER_PALETTES.map(pal => build(_FP_L_FWD, _FP_LEG_L_FWD_L, _FP_LEG_R_FWD_L, pal));
-  const fakePlayerKnifeRFwdFullBodyCanvases = PLAYER_PALETTES.map(pal => build(_FP_R_FWD, _FP_LEG_L, _FP_LEG_R_SWING, pal));
+  const fakePlayerKnifeRFwdFullBodyCanvases = PLAYER_PALETTES.map(pal => build(_FP_R_FWD, _FP_LEG_L_FWD_R, _FP_LEG_R_SWING, pal));
   const fakePlayerKneelFullBodyCanvases    = PLAYER_PALETTES.map(pal => build(_FP_KNEEL, _FP_LEG_L_KNEEL, _FP_LEG_R_KNEEL, pal));
   const fakePlayerVictoryFullBodyCanvases  = PLAYER_PALETTES.map(pal => build(_FP_VICTORY, _FP_LEG_L_VICTORY, _FP_LEG_R_VICTORY, pal));
   return {
