@@ -37,6 +37,13 @@ let recording = false;
 let recFrames = [];
 let recTarget = 0;
 
+// Auto weapon-tile capture — watches PPU $1490-$14CF (tiles $49-$4C) for changes
+// and auto-dumps each unique set to the output textarea. Runs in _onFrame while on.
+let autoWpnOn = false;
+let autoWpnHashes = new Set();
+let autoWpnCount = 0;
+let autoWpnBuffer = [];
+
 // Audio — ring buffer filled by jsnes onAudioSample, drained by a ScriptProcessorNode.
 // ScriptProcessor is deprecated but still universally supported and fine for 256×240 NES audio.
 let audioCtx = null;
@@ -145,9 +152,11 @@ function _onFrame(buffer) {
   canvasCtx.putImageData(imgData, 0, 0);
   frameCount++;
   if (recording) _captureRecFrame();
+  if (autoWpnOn) _autoWpnTick();
   if (dom?.status) {
     const rec = recording ? ` · REC ${recFrames.length}/${recTarget}` : '';
-    dom.status.textContent = (running ? `frame ${frameCount}` : `paused @ frame ${frameCount}`) + rec;
+    const auto = autoWpnOn ? ` · AUTO-WPN ${autoWpnCount}` : '';
+    dom.status.textContent = (running ? `frame ${frameCount}` : `paused @ frame ${frameCount}`) + rec + auto;
   }
 }
 
@@ -511,6 +520,72 @@ function _dumpTileByIndex() {
   dom.output.value = `// ${label} (captured @ frame ${frameCount})\nnew Uint8Array([${Array.from(bytes).map(b => '0x' + _hex(b, 2)).join(',')}]),`;
 }
 
+// ── Auto-weapon capture ─────────────────────────────────────────────────────
+// Runs every frame while toggled on. Hashes the 4 weapon silhouette tiles
+// ($49-$4C at PPU $1490-$14CF). When the hash changes (the game just loaded
+// new weapon CHR — meaning a new weapon is about to swing), append a full
+// capture to the output. Dedupes so the same weapon only lands once.
+
+function _autoWpnTick() {
+  if (!nes?.ppu?.ptTile) return;
+  const tiles = nes.ppu.ptTile;
+  // Tiles $49-$4C → ptTile index 256+0x49 .. 256+0x4C
+  const START = 256 + 0x49;
+  // Fast hash: sum of byte * prime, xor rolling
+  let h = 0x811C9DC5;
+  let hasData = false;
+  for (let i = 0; i < 4; i++) {
+    const t = tiles[START + i];
+    if (!t || !t.pix) return;
+    for (let p = 0; p < 64; p++) {
+      h = Math.imul(h ^ t.pix[p], 0x01000193) >>> 0;
+      if (t.pix[p]) hasData = true;
+    }
+  }
+  if (!hasData) return; // all tiles blank, skip
+  if (autoWpnHashes.has(h)) return; // already captured this one
+  autoWpnHashes.add(h);
+  autoWpnCount++;
+  // Build the capture block
+  const out = [];
+  out.push(`// === Auto-capture #${autoWpnCount} @ frame ${frameCount} (hash 0x${h.toString(16)}) ===`);
+  // Palette
+  const v = nes.ppu.vramMem;
+  for (let p = 4; p < 8; p++) {
+    const row = [];
+    for (let k = 0; k < 4; k++) row.push('0x' + _hex(v[0x3F00 + p * 4 + k], 2));
+    out.push(`// SP${p - 4}: [${row.join(', ')}]`);
+  }
+  // Also read char 0's equipped weapon so we know which weapon was used
+  const wpn = _ram(0x6203);
+  out.push(`// char0 weapon byte (\$6203) = 0x${_hex(wpn, 2)}`);
+  // Tiles $49-$58 (16 tiles) — covers full animID load region
+  for (let i = 0; i < 16; i++) {
+    const t = tiles[256 + 0x49 + i];
+    if (!t || !t.pix) continue;
+    const bytes = _encodeTile(t.pix);
+    out.push(`// tile $${_hex(0x49 + i, 2)}`);
+    out.push(`new Uint8Array([${Array.from(bytes).map(b => '0x' + _hex(b, 2)).join(',')}]),`);
+  }
+  out.push('');
+  autoWpnBuffer.push(out.join('\n'));
+  dom.output.value = autoWpnBuffer.join('\n');
+}
+
+function _toggleAutoWpn() {
+  autoWpnOn = !autoWpnOn;
+  dom.btnAutoWpn.textContent = autoWpnOn ? 'STOP AUTO' : 'AUTO WPN';
+  dom.btnAutoWpn.style.borderColor = autoWpnOn ? '#c8a832' : '#444';
+  if (autoWpnOn) {
+    autoWpnHashes = new Set();
+    autoWpnCount = 0;
+    autoWpnBuffer = [];
+    _status('auto-wpn on — play battles; unique weapon CHRs will accumulate');
+  } else {
+    _status(`auto-wpn off — ${autoWpnCount} unique weapon CHRs captured`);
+  }
+}
+
 // ── Weapon tile extraction ──────────────────────────────────────────────────
 // During a character's attack animation, FF3 decompresses that weapon's CHR
 // data into PPU $1490-$15A0 (weapons live at sprite tiles $49-$5A). We read
@@ -744,13 +819,14 @@ function _buildDOM(parent) {
   const btnLoad = mkBtn('LOAD', _loadState);
   const btnSnap = mkBtn('SNAP OAM', _snapshotOAM);
   const btnWpn = mkBtn('WPN TILES', _dumpWeaponTiles);
+  const btnAutoWpn = mkBtn('AUTO WPN', _toggleAutoWpn);
   const btnRec = mkBtn('REC', _toggleRec);
   const recInput = document.createElement('input');
   recInput.value = '60';
   recInput.title = 'frames to record';
   recInput.style.cssText = 'width:48px;background:#1e1e2e;border:1px solid #444;border-radius:3px;color:#e0e0e0;font-family:monospace;font-size:11px;padding:4px 6px;';
   const btnCapture = mkBtn('DUMP ALL', _capture);
-  capRow.append(btnSave, btnLoad, btnSnap, btnWpn, btnRec, recInput, btnCapture);
+  capRow.append(btnSave, btnLoad, btnSnap, btnWpn, btnAutoWpn, btnRec, recInput, btnCapture);
   rightCol.appendChild(capRow);
 
   // Tile dump input
@@ -819,7 +895,7 @@ function _buildDOM(parent) {
 
   parent.appendChild(root);
 
-  const d = { root, canvas, status, btnPause, btnStep, btnReset, btnSound, btnSave, btnLoad, btnSnap, btnRec, recInput, btnCapture, tileInput, btnTileDump, output, writeInput };
+  const d = { root, canvas, status, btnPause, btnStep, btnReset, btnSound, btnSave, btnLoad, btnSnap, btnWpn, btnAutoWpn, btnRec, recInput, btnCapture, tileInput, btnTileDump, output, writeInput };
   dom = d;
   _installKeys();
   return d;
