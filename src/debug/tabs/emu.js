@@ -272,10 +272,10 @@ function _buildDOM(parent) {
   top.style.cssText = 'display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap;';
 
   const canvasWrap = document.createElement('div');
-  canvasWrap.style.cssText = 'background:#000;display:inline-block;flex-shrink:0;border:1px solid #333;';
+  canvasWrap.style.cssText = 'background:#000;display:inline-block;flex-shrink:0;border:1px solid #333;max-width:100%;';
   const canvas = document.createElement('canvas');
   canvas.width = SCREEN_W; canvas.height = SCREEN_H;
-  canvas.style.cssText = `width:${SCREEN_W * 2}px;height:${SCREEN_H * 2}px;image-rendering:pixelated;display:block;`;
+  canvas.style.cssText = `width:${SCREEN_W}px;max-width:100%;height:auto;aspect-ratio:${SCREEN_W}/${SCREEN_H};image-rendering:pixelated;display:block;`;
   canvasWrap.appendChild(canvas);
   top.appendChild(canvasWrap);
 
