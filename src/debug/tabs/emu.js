@@ -24,6 +24,17 @@ let imgData = null;
 let img32 = null;
 let canvasCtx = null;
 
+// Audio — ring buffer filled by jsnes onAudioSample, drained by a ScriptProcessorNode.
+// ScriptProcessor is deprecated but still universally supported and fine for 256×240 NES audio.
+let audioCtx = null;
+let audioNode = null;
+let audioMuted = true; // start muted so we don't need a user gesture to show the EMU
+const AUDIO_BUF = 8192;
+const audioL = new Float32Array(AUDIO_BUF);
+const audioR = new Float32Array(AUDIO_BUF);
+let audioWrite = 0;
+let audioRead = 0;
+
 export function mount(root, context) {
   ctx = context;
   dom = _buildDOM(root);
@@ -56,6 +67,7 @@ async function _patchAndInit(romBuffer) {
 
 export function unmount() {
   _stop();
+  _teardownAudio();
   if (dom?._keyDown) window.removeEventListener('keydown', dom._keyDown, true);
   if (dom?._keyUp) window.removeEventListener('keyup', dom._keyUp, true);
   if (dom?.root) dom.root.remove();
@@ -75,12 +87,16 @@ function _initEmulator(romBuffer) {
   imgData = canvasCtx.createImageData(SCREEN_W, SCREEN_H);
   img32 = new Uint32Array(imgData.data.buffer);
 
+  // Probe the platform's audio sample rate once so we can tell jsnes to produce samples
+  // at exactly that rate — no resampling needed.
+  const sampleRate = _probeSampleRate();
   try {
     nes = new window.jsnes.NES({
       onFrame: _onFrame,
-      onAudioSample: () => {},
+      onAudioSample: _onAudioSample,
       onStatusUpdate: (s) => { console.log('[jsnes]', s); _status('jsnes: ' + s); },
       onBatteryRamWrite: () => {},
+      sampleRate,
     });
   } catch (e) {
     _status('NES ctor failed: ' + e.message, true); console.error(e); return;
@@ -174,6 +190,66 @@ function _reset() {
   _status('reset — running');
   dom.btnPause.textContent = 'PAUSE';
   _start();
+}
+
+// ── Audio ───────────────────────────────────────────────────────────────────
+
+function _probeSampleRate() {
+  try {
+    const tmp = new (window.AudioContext || window.webkitAudioContext)();
+    const r = tmp.sampleRate;
+    tmp.close?.();
+    return r;
+  } catch { return 44100; }
+}
+
+function _onAudioSample(l, r) {
+  if (audioMuted) return;
+  audioL[audioWrite] = l;
+  audioR[audioWrite] = r;
+  audioWrite = (audioWrite + 1) % AUDIO_BUF;
+  // If we've lapped the read pointer, drop samples (prefer fresh audio over growing lag).
+  if (audioWrite === audioRead) audioRead = (audioRead + 1) % AUDIO_BUF;
+}
+
+function _initAudio() {
+  if (audioCtx) return;
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) { _status('no Web Audio support', true); return; }
+  audioCtx = new AC();
+  audioNode = audioCtx.createScriptProcessor(1024, 0, 2);
+  audioNode.onaudioprocess = (e) => {
+    const outL = e.outputBuffer.getChannelData(0);
+    const outR = e.outputBuffer.getChannelData(1);
+    const len = outL.length;
+    for (let i = 0; i < len; i++) {
+      if (audioRead === audioWrite) { outL[i] = 0; outR[i] = 0; continue; }
+      outL[i] = audioL[audioRead];
+      outR[i] = audioR[audioRead];
+      audioRead = (audioRead + 1) % AUDIO_BUF;
+    }
+  };
+  audioNode.connect(audioCtx.destination);
+}
+
+function _toggleSound() {
+  if (audioMuted) {
+    _initAudio();
+    if (audioCtx?.state === 'suspended') audioCtx.resume();
+    audioMuted = false;
+    dom.btnSound.textContent = 'MUTE';
+  } else {
+    audioMuted = true;
+    if (audioCtx?.state === 'running') audioCtx.suspend();
+    dom.btnSound.textContent = 'SOUND';
+  }
+}
+
+function _teardownAudio() {
+  audioMuted = true;
+  if (audioNode) { try { audioNode.disconnect(); } catch {} audioNode = null; }
+  if (audioCtx) { try { audioCtx.close(); } catch {} audioCtx = null; }
+  audioRead = audioWrite = 0;
 }
 
 function _status(msg, err = false) {
@@ -342,8 +418,9 @@ function _buildDOM(parent) {
   const btnPause = mkBtn('PAUSE', _togglePause);
   const btnStep = mkBtn('STEP', _step);
   const btnReset = mkBtn('RESET', _reset);
+  const btnSound = mkBtn('SOUND', _toggleSound);
   const btnCapture = mkBtn('CAPTURE', _capture);
-  btnRow.append(btnPause, btnStep, btnReset, btnCapture);
+  btnRow.append(btnPause, btnStep, btnReset, btnSound, btnCapture);
   rightCol.appendChild(btnRow);
 
   // Tile dump input
@@ -379,7 +456,7 @@ function _buildDOM(parent) {
 
   parent.appendChild(root);
 
-  const d = { root, canvas, status, btnPause, btnStep, btnReset, btnCapture, tileInput, btnTileDump, output };
+  const d = { root, canvas, status, btnPause, btnStep, btnReset, btnSound, btnCapture, tileInput, btnTileDump, output };
   dom = d;
   _installKeys();
   return d;
