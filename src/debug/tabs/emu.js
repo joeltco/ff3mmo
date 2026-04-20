@@ -91,7 +91,8 @@ function _initEmulator(romBuffer) {
 }
 
 function _onFrame(buffer) {
-  img32.set(buffer);
+  // jsnes frame buffer holds RGB packed as 0x00BBGGRR — we OR in full alpha.
+  for (let i = 0; i < SCREEN_W * SCREEN_H; i++) img32[i] = 0xFF000000 | buffer[i];
   canvasCtx.putImageData(imgData, 0, 0);
   frameCount++;
   if (dom?.status) dom.status.textContent = running ? `frame ${frameCount}` : `paused @ frame ${frameCount}`;
