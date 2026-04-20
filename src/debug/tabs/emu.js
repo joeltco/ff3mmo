@@ -43,35 +43,51 @@ export function unmount() {
 }
 
 function _initEmulator(romBuffer) {
+  _status(`ROM ${romBuffer.byteLength} bytes, converting…`);
   const bytes = new Uint8Array(romBuffer);
   let romStr = '';
-  // Latin-1 string is what jsnes loadROM expects. Chunk to avoid stack limits.
   const CHUNK = 8192;
   for (let i = 0; i < bytes.length; i += CHUNK) {
-    romStr += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+    romStr += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + CHUNK)));
   }
 
   canvasCtx = dom.canvas.getContext('2d');
   imgData = canvasCtx.createImageData(SCREEN_W, SCREEN_H);
   img32 = new Uint32Array(imgData.data.buffer);
 
-  nes = new window.jsnes.NES({
-    onFrame: _onFrame,
-    onAudioSample: () => {},
-    onStatusUpdate: (s) => console.log('[jsnes]', s),
-  });
+  try {
+    nes = new window.jsnes.NES({
+      onFrame: _onFrame,
+      onAudioSample: () => {},
+      onStatusUpdate: (s) => { console.log('[jsnes]', s); _status('jsnes: ' + s); },
+      onBatteryRamWrite: () => {},
+    });
+  } catch (e) {
+    _status('NES ctor failed: ' + e.message, true); console.error(e); return;
+  }
 
+  _status('loading ROM into jsnes…');
   try {
     nes.loadROM(romStr);
   } catch (e) {
-    _status('jsnes loadROM failed: ' + e.message, true);
-    console.error(e);
+    _status('loadROM failed: ' + e.message, true);
+    console.error('[emu] loadROM', e);
     return;
   }
 
+  // Mapper info
+  const mapper = nes.rom?.mapperType;
+  const prgCount = nes.rom?.romCount;
+  const chrCount = nes.rom?.vromCount;
+  _status(`ROM ok — mapper ${mapper}, PRG ${prgCount}×16KB, CHR ${chrCount}×8KB. Starting…`);
+
   frameCount = 0;
   _start();
-  _status('running');
+
+  // If no frame renders within 500ms, report it.
+  setTimeout(() => {
+    if (frameCount === 0 && running) _status('no frames after 500ms — jsnes may be stuck', true);
+  }, 500);
 }
 
 function _onFrame(buffer) {
