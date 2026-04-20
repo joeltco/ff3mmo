@@ -22,7 +22,6 @@ let frameCount = 0;
 let imgData = null;
 let img32 = null;
 let canvasCtx = null;
-let romStrCache = null;
 
 export function mount(root, context) {
   ctx = context;
@@ -51,7 +50,6 @@ function _initEmulator(romBuffer) {
   for (let i = 0; i < bytes.length; i += CHUNK) {
     romStr += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + CHUNK)));
   }
-  romStrCache = romStr;
 
   canvasCtx = dom.canvas.getContext('2d');
   imgData = canvasCtx.createImageData(SCREEN_W, SCREEN_H);
@@ -128,20 +126,17 @@ function _step() {
 }
 
 function _reset() {
-  if (!window.jsnes || !romStrCache) return;
+  if (!nes) return;
   _stop();
+  // nes.reset() clears CPU/PPU/PAPU/mmap state but leaves PC at its default (0x7FFF).
+  // mmap.loadROM() reloads PRG/CHR *and* queues IRQ_RESET so the CPU jumps to the
+  // reset vector ($FFFC/$FFFD) on the next frame — that's the real power-on path.
   try {
-    nes = new window.jsnes.NES({
-      onFrame: _onFrame,
-      onAudioSample: () => {},
-      onStatusUpdate: (s) => { console.log('[jsnes]', s); },
-      onBatteryRamWrite: () => {},
-    });
-    nes.loadROM(romStrCache);
+    nes.reset();
+    nes.mmap.loadROM();
+    nes.ppu.setMirroring(nes.rom.getMirroringType());
   } catch (e) {
-    _status('reset failed: ' + e.message, true);
-    console.error('[emu] reset', e);
-    return;
+    _status('reset failed: ' + e.message, true); console.error('[emu] reset', e); return;
   }
   frameCount = 0;
   _status('reset — running');
