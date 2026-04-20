@@ -32,18 +32,6 @@ try {
   if (stored) savedState = JSON.parse(stored);
 } catch { /* ignore */ }
 
-// Animation recorder
-let recording = false;
-let recFrames = [];
-let recTarget = 0;
-
-// Auto weapon-tile capture — watches PPU $1490-$14CF (tiles $49-$4C) for changes
-// and auto-dumps each unique set to the output textarea. Runs in _onFrame while on.
-let autoWpnOn = false;
-let autoWpnHashes = new Set();
-let autoWpnCount = 0;
-let autoWpnBuffer = [];
-
 // Audio — ring buffer filled by jsnes onAudioSample, drained by a ScriptProcessorNode.
 // ScriptProcessor is deprecated but still universally supported and fine for 256×240 NES audio.
 let audioCtx = null;
@@ -107,16 +95,16 @@ function _initEmulator(romBuffer) {
   imgData = canvasCtx.createImageData(SCREEN_W, SCREEN_H);
   img32 = new Uint32Array(imgData.data.buffer);
 
-  // Probe the platform's audio sample rate once so we can tell jsnes to produce samples
-  // at exactly that rate — no resampling needed.
-  const sampleRate = _probeSampleRate();
+  // jsnes produces samples at 44100 by default. Our ScriptProcessor output will
+  // run at the AudioContext's rate (usually 48000) — a ~9% pitch shift we accept
+  // to avoid making a throwaway AudioContext just to read .sampleRate before boot.
   try {
     nes = new window.jsnes.NES({
       onFrame: _onFrame,
       onAudioSample: _onAudioSample,
       onStatusUpdate: (s) => { console.log('[jsnes]', s); _status('jsnes: ' + s); },
       onBatteryRamWrite: () => {},
-      sampleRate,
+      sampleRate: 44100,
     });
   } catch (e) {
     _status('NES ctor failed: ' + e.message, true); console.error(e); return;
@@ -151,13 +139,8 @@ function _onFrame(buffer) {
   for (let i = 0; i < SCREEN_W * SCREEN_H; i++) img32[i] = 0xFF000000 | buffer[i];
   canvasCtx.putImageData(imgData, 0, 0);
   frameCount++;
-  if (recording) _captureRecFrame();
-  if (autoWpnOn) _autoWpnTick();
-  if (dom?.status) {
-    const rec = recording ? ` · REC ${recFrames.length}/${recTarget}` : '';
-    const auto = autoWpnOn ? ` · AUTO-WPN ${autoWpnCount}` : '';
-    dom.status.textContent = (running ? `frame ${frameCount}` : `paused @ frame ${frameCount}`) + rec + auto;
-  }
+  // Update only the frame counter element — status messages live separately.
+  if (dom?.frame) dom.frame.textContent = running ? `f${frameCount}` : `⏸ f${frameCount}`;
 }
 
 function _start() {
@@ -219,15 +202,6 @@ function _reset() {
 }
 
 // ── Audio ───────────────────────────────────────────────────────────────────
-
-function _probeSampleRate() {
-  try {
-    const tmp = new (window.AudioContext || window.webkitAudioContext)();
-    const r = tmp.sampleRate;
-    tmp.close?.();
-    return r;
-  } catch { return 44100; }
-}
 
 function _onAudioSample(l, r) {
   if (audioMuted) return;
@@ -309,70 +283,6 @@ function _loadState() {
   } catch (e) { _status('load failed: ' + e.message, true); console.error(e); }
 }
 
-// ── Animation recorder ──────────────────────────────────────────────────────
-// Records OAM + palette + pattern table each frame for N frames, then emits a
-// deduped animation dump — each unique tile appears once, each frame lists which
-// OAM entries + tile-ids it references.
-
-function _toggleRec() {
-  if (recording) { _stopRec(); return; }
-  const raw = dom.recInput.value.trim();
-  const n = parseInt(raw || '60', 10);
-  if (!Number.isFinite(n) || n <= 0 || n > 600) { _status('record count 1–600', true); return; }
-  recFrames = [];
-  recTarget = n;
-  recording = true;
-  dom.btnRec.textContent = 'STOP';
-  _status(`recording ${n} frames…`);
-}
-
-function _captureRecFrame() {
-  if (!nes) return;
-  const oam = nes.ppu.spriteMem;
-  const sprites = [];
-  for (let i = 0; i < 64; i++) {
-    const y = oam[i * 4], t = oam[i * 4 + 1], a = oam[i * 4 + 2], x = oam[i * 4 + 3];
-    if (y >= 0xF0) continue;
-    sprites.push({ i, y, t, a, x });
-  }
-  recFrames.push({ frame: frameCount, sprites });
-  if (recFrames.length >= recTarget) _stopRec();
-}
-
-function _stopRec() {
-  recording = false;
-  dom.btnRec.textContent = 'REC';
-  if (recFrames.length === 0) { _status('no frames recorded', true); return; }
-  // Collect every unique tile index referenced across all frames.
-  const tileIds = new Set();
-  for (const f of recFrames) for (const s of f.sprites) tileIds.add(s.t);
-  const out = [];
-  out.push(`// Animation: ${recFrames.length} frames, ${tileIds.size} unique tiles`);
-  out.push('');
-  out.push(_dumpPalette());
-  out.push('');
-  out.push('// Tiles referenced by OAM during recording');
-  const tiles = nes.ppu.ptTile;
-  const sorted = Array.from(tileIds).sort((a, b) => a - b);
-  for (const idx of sorted) {
-    // Sprite tile addressing depends on PPU control reg bit — FF3 uses $1000 for
-    // battle sprites. jsnes ptTile is indexed 0–511; OAM tile id + bank offset.
-    const ptIdx = 256 + idx; // assume $1000 bank; raw tile bytes re-encoded
-    const t = tiles[ptIdx];
-    if (!t || !t.pix) continue;
-    const bytes = _encodeTile(t.pix);
-    out.push(`// tile $${_hex(idx, 2)}: new Uint8Array([${Array.from(bytes).map(b => '0x' + _hex(b, 2)).join(',')}]),`);
-  }
-  out.push('');
-  out.push('// Per-frame OAM (i=slot, y, tile, attr, x)');
-  for (const f of recFrames) {
-    const s = f.sprites.map(sp => `{i:${sp.i},y:${sp.y},t:0x${_hex(sp.t, 2)},a:0x${_hex(sp.a, 2)},x:${sp.x}}`).join(',');
-    out.push(`// f${f.frame}: [${s}]`);
-  }
-  dom.output.value = out.join('\n');
-  _status(`recorded ${recFrames.length} frames, ${tileIds.size} unique tiles`);
-}
-
 // ── OAM snapshot (meta-sprite grouping) ─────────────────────────────────────
 // Groups currently-visible sprites into meta-sprites by XY adjacency, so you get
 // clean "this monster" / "this weapon" clusters instead of raw OAM noise.
@@ -437,34 +347,6 @@ function _snapshotOAM() {
 
 // ── Capture ─────────────────────────────────────────────────────────────────
 
-function _capture() {
-  if (!nes) return;
-  const wasRunning = running;
-  if (running) _stop();
-  const out = [];
-  out.push(`// Capture at frame ${frameCount}`);
-  out.push('');
-  out.push(_dumpOAM());
-  out.push('');
-  out.push(_dumpPalette());
-  out.push('');
-  out.push('// Sprite pattern table at PPU $1000 — 256 tiles, raw 2BPP bytes');
-  out.push(_dumpPatternTable(256, 256)); // tiles 256-511 = $1000-$1FFF
-  dom.output.value = out.join('\n');
-  if (wasRunning) _start();
-}
-
-function _dumpOAM() {
-  const oam = nes.ppu.spriteMem; // 256 bytes
-  const lines = ['// OAM (64 sprites: Y, tile, attr, X)'];
-  for (let i = 0; i < 64; i++) {
-    const y = oam[i * 4], t = oam[i * 4 + 1], a = oam[i * 4 + 2], x = oam[i * 4 + 3];
-    if (y >= 0xF0) continue; // hidden
-    lines.push(`//  [${String(i).padStart(2)}] y=${String(y).padStart(3)}  tile=$${_hex(t, 2)}  attr=$${_hex(a, 2)}  x=${String(x).padStart(3)}  pal${(a & 3)}${(a & 0x80) ? ' VFLIP' : ''}${(a & 0x40) ? ' HFLIP' : ''}`);
-  }
-  return lines.join('\n');
-}
-
 function _dumpPalette() {
   const v = nes.ppu.vramMem;
   const lines = ['// PPU palette ($3F00-$3F1F)'];
@@ -472,23 +354,6 @@ function _dumpPalette() {
     const row = [];
     for (let i = 0; i < 4; i++) row.push('0x' + _hex(v[0x3F00 + p * 4 + i], 2));
     lines.push(`//  ${p < 4 ? 'BG' : 'SP'}${p % 4}: [${row.join(', ')}]`);
-  }
-  return lines.join('\n');
-}
-
-function _dumpPatternTable(startTile, count) {
-  // jsnes decodes pattern tables into nes.ppu.ptTile[] (512 tiles).
-  // We re-encode each to raw 2BPP (16 bytes per tile).
-  const tiles = nes.ppu.ptTile;
-  if (!tiles) return '// pattern table not available';
-  const lines = [];
-  for (let i = 0; i < count; i++) {
-    const idx = startTile + i;
-    const t = tiles[idx];
-    if (!t || !t.pix) continue;
-    const bytes = _encodeTile(t.pix);
-    const label = `tile $${_hex(idx, 3)} (PPU $${_hex((idx & 0xFF) * 16 + (idx >= 256 ? 0x1000 : 0), 4)})`;
-    lines.push(`new Uint8Array([${Array.from(bytes).map(b => '0x' + _hex(b, 2)).join(',')}]), // ${label}`);
   }
   return lines.join('\n');
 }
@@ -520,88 +385,19 @@ function _dumpTileByIndex() {
   dom.output.value = `// ${label} (captured @ frame ${frameCount})\nnew Uint8Array([${Array.from(bytes).map(b => '0x' + _hex(b, 2)).join(',')}]),`;
 }
 
-// ── Auto-weapon capture ─────────────────────────────────────────────────────
-// Runs every frame while toggled on. Hashes the 4 weapon silhouette tiles
-// ($49-$4C at PPU $1490-$14CF). When the hash changes (the game just loaded
-// new weapon CHR — meaning a new weapon is about to swing), append a full
-// capture to the output. Dedupes so the same weapon only lands once.
-
-function _autoWpnTick() {
-  if (!nes?.ppu?.ptTile) return;
-  const tiles = nes.ppu.ptTile;
-  // Tiles $49-$4C → ptTile index 256+0x49 .. 256+0x4C
-  const START = 256 + 0x49;
-  // Fast hash: sum of byte * prime, xor rolling
-  let h = 0x811C9DC5;
-  let hasData = false;
-  for (let i = 0; i < 4; i++) {
-    const t = tiles[START + i];
-    if (!t || !t.pix) return;
-    for (let p = 0; p < 64; p++) {
-      h = Math.imul(h ^ t.pix[p], 0x01000193) >>> 0;
-      if (t.pix[p]) hasData = true;
-    }
-  }
-  if (!hasData) return; // all tiles blank, skip
-  if (autoWpnHashes.has(h)) return; // already captured this one
-  autoWpnHashes.add(h);
-  autoWpnCount++;
-  // Build the capture block
-  const out = [];
-  out.push(`// === Auto-capture #${autoWpnCount} @ frame ${frameCount} (hash 0x${h.toString(16)}) ===`);
-  // Palette
-  const v = nes.ppu.vramMem;
-  for (let p = 4; p < 8; p++) {
-    const row = [];
-    for (let k = 0; k < 4; k++) row.push('0x' + _hex(v[0x3F00 + p * 4 + k], 2));
-    out.push(`// SP${p - 4}: [${row.join(', ')}]`);
-  }
-  // Also read char 0's equipped weapon so we know which weapon was used
-  const wpn = _ram(0x6203);
-  out.push(`// char0 weapon byte (\$6203) = 0x${_hex(wpn, 2)}`);
-  // Tiles $49-$58 (16 tiles) — covers full animID load region
-  for (let i = 0; i < 16; i++) {
-    const t = tiles[256 + 0x49 + i];
-    if (!t || !t.pix) continue;
-    const bytes = _encodeTile(t.pix);
-    out.push(`// tile $${_hex(0x49 + i, 2)}`);
-    out.push(`new Uint8Array([${Array.from(bytes).map(b => '0x' + _hex(b, 2)).join(',')}]),`);
-  }
-  out.push('');
-  autoWpnBuffer.push(out.join('\n'));
-  dom.output.value = autoWpnBuffer.join('\n');
-}
-
-function _toggleAutoWpn() {
-  autoWpnOn = !autoWpnOn;
-  dom.btnAutoWpn.textContent = autoWpnOn ? 'STOP AUTO' : 'AUTO WPN';
-  dom.btnAutoWpn.style.borderColor = autoWpnOn ? '#c8a832' : '#444';
-  if (autoWpnOn) {
-    autoWpnHashes = new Set();
-    autoWpnCount = 0;
-    autoWpnBuffer = [];
-    _status('auto-wpn on — play battles; unique weapon CHRs will accumulate');
-  } else {
-    _status(`auto-wpn off — ${autoWpnCount} unique weapon CHRs captured`);
-  }
-}
-
-// ── Weapon tile extraction ──────────────────────────────────────────────────
-// During a character's attack animation, FF3 decompresses that weapon's CHR
-// data into PPU $1490-$15A0 (weapons live at sprite tiles $49-$5A). We read
-// those tiles out of jsnes's decoded pattern table — reliable since the game
-// does the decompression for us. Dump mid-swing for the cleanest result.
+// ── Weapon tile dump ────────────────────────────────────────────────────────
+// FF3 battle animations decompress the active weapon's CHR into PPU $1490-$15A0
+// (tiles $49-$5A, sprite bank). Pause mid-swing then hit this button — we pull
+// the tiles straight from jsnes's decoded pattern table, whatever the current
+// CHR bank happens to be.
 function _dumpWeaponTiles() {
   if (!nes) return;
   const tiles = nes.ppu.ptTile;
   if (!tiles) { _status('pattern table not ready', true); return; }
-  // PPU $1490 → tile index 256 + ($1490 - $1000)/16 = 256 + 73 = 329.
-  // Dump tiles $49-$5F (23 tiles) to catch any weapon variant.
-  const START = 256 + 0x49;
-  const END = 256 + 0x60;
+  const START = 256 + 0x49; // PPU $1490
+  const END = 256 + 0x60;   // PPU $1600
   const out = [];
-  out.push(`// Weapon tiles from PPU pattern table @ frame ${frameCount}`);
-  out.push('// (dump during an attack-swing frame for accurate data)');
+  out.push(`// Weapon tiles @ frame ${frameCount} (pause mid-swing for clean data)`);
   out.push('');
   out.push(_dumpPalette());
   out.push('');
@@ -695,7 +491,8 @@ function _applyWrites() {
   _status(`wrote ${edits.length} bytes`);
 }
 
-// Preset helpers — these write common scenarios I ask for in chat.
+// Preset helpers — quick scratch writes. Both only touch SRAM, so if the game
+// caches values at battle start these won't take effect mid-battle.
 const PRESETS = {
   'full-HP': () => {
     for (let i = 0; i < 4; i++) {
@@ -704,18 +501,6 @@ const PRESETS = {
       _ramWrite(a + 0x0C, maxL); _ramWrite(a + 0x0D, maxH);
     }
     return 'all HP → max';
-  },
-  'lvl-99': () => {
-    for (let i = 0; i < 4; i++) _ramWrite(SRAM_BASE + CHARS_A_OFF + i * 0x40 + 0x01, 99);
-    return 'all chars → lvl 99';
-  },
-  'give-all-items': () => {
-    // Fill 32 slots with ids 0x01-0x20, qty 99 each
-    for (let i = 0; i < 32; i++) {
-      _ramWrite(SRAM_BASE + INV_IDS_OFF + i, i + 1);
-      _ramWrite(SRAM_BASE + INV_QTY_OFF + i, 99);
-    }
-    return 'inventory filled (ids 01-20, qty 99)';
   },
   'clear-inv': () => {
     for (let i = 0; i < 32; i++) {
@@ -744,13 +529,20 @@ function _release(btn) { if (nes) nes.buttonUp(1, btn); }
 
 function _installKeys() {
   const pressed = new Set();
+  // Don't steal keys while the user is typing in the write-bytes / tile-index inputs.
+  const isTyping = (e) => {
+    const t = e.target;
+    return t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+  };
   dom._keyDown = (e) => {
+    if (isTyping(e)) return;
     const btn = KEY_MAP[e.key];
     if (btn === undefined) return;
     if (!pressed.has(btn)) { _press(btn); pressed.add(btn); }
     e.preventDefault(); e.stopImmediatePropagation();
   };
   dom._keyUp = (e) => {
+    if (isTyping(e)) return;
     const btn = KEY_MAP[e.key];
     if (btn === undefined) return;
     if (pressed.has(btn)) { _release(btn); pressed.delete(btn); }
@@ -791,10 +583,18 @@ function _buildDOM(parent) {
   const rightCol = document.createElement('div');
   rightCol.style.cssText = 'display:flex;flex-direction:column;gap:6px;flex:1;min-width:220px;';
 
+  // Status row: persistent message + live frame counter. Counter updates every frame,
+  // but never overwrites the message text — that was the old bug.
+  const statusRow = document.createElement('div');
+  statusRow.style.cssText = 'display:flex;gap:4px;align-items:stretch;';
   const status = document.createElement('div');
-  status.style.cssText = 'color:#c8a832;font-size:10px;padding:5px 8px;background:#1e1e2e;border:1px solid #444;border-radius:3px;font-family:monospace;';
+  status.style.cssText = 'flex:1;min-width:0;color:#c8a832;font-size:10px;padding:5px 8px;background:#1e1e2e;border:1px solid #444;border-radius:3px;font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
   status.textContent = 'initializing...';
-  rightCol.appendChild(status);
+  const frame = document.createElement('div');
+  frame.style.cssText = 'color:#888;font-size:10px;padding:5px 8px;background:#1e1e2e;border:1px solid #444;border-radius:3px;font-family:monospace;min-width:60px;text-align:right;';
+  frame.textContent = 'f0';
+  statusRow.append(status, frame);
+  rightCol.appendChild(statusRow);
 
   const btnRow = document.createElement('div');
   btnRow.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;';
@@ -812,21 +612,14 @@ function _buildDOM(parent) {
   btnRow.append(btnPause, btnStep, btnReset, btnSound);
   rightCol.appendChild(btnRow);
 
-  // Capture row: savestate, snapshot, record, raw dump
+  // Capture row: savestate + the two actual capture tools.
   const capRow = document.createElement('div');
   capRow.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;align-items:center;';
   const btnSave = mkBtn('SAVE', _saveState);
   const btnLoad = mkBtn('LOAD', _loadState);
   const btnSnap = mkBtn('SNAP OAM', _snapshotOAM);
   const btnWpn = mkBtn('WPN TILES', _dumpWeaponTiles);
-  const btnAutoWpn = mkBtn('AUTO WPN', _toggleAutoWpn);
-  const btnRec = mkBtn('REC', _toggleRec);
-  const recInput = document.createElement('input');
-  recInput.value = '60';
-  recInput.title = 'frames to record';
-  recInput.style.cssText = 'width:48px;background:#1e1e2e;border:1px solid #444;border-radius:3px;color:#e0e0e0;font-family:monospace;font-size:11px;padding:4px 6px;';
-  const btnCapture = mkBtn('DUMP ALL', _capture);
-  capRow.append(btnSave, btnLoad, btnSnap, btnWpn, btnAutoWpn, btnRec, recInput, btnCapture);
+  capRow.append(btnSave, btnLoad, btnSnap, btnWpn);
   rightCol.appendChild(capRow);
 
   // Tile dump input
@@ -875,10 +668,8 @@ function _buildDOM(parent) {
   editBtnRow.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;';
   const btnDumpState = mkBtn('READ STATE', _dumpState);
   const btnFullHP = mkBtn('FULL HP', () => _runPreset('full-HP'));
-  const btnLvl99 = mkBtn('LVL 99', () => _runPreset('lvl-99'));
-  const btnGiveAll = mkBtn('GIVE ITEMS', () => _runPreset('give-all-items'));
   const btnClearInv = mkBtn('CLEAR INV', () => _runPreset('clear-inv'));
-  editBtnRow.append(btnDumpState, btnFullHP, btnLvl99, btnGiveAll, btnClearInv);
+  editBtnRow.append(btnDumpState, btnFullHP, btnClearInv);
   editBody.appendChild(editBtnRow);
 
   const writeInput = document.createElement('textarea');
@@ -895,7 +686,7 @@ function _buildDOM(parent) {
 
   parent.appendChild(root);
 
-  const d = { root, canvas, status, btnPause, btnStep, btnReset, btnSound, btnSave, btnLoad, btnSnap, btnWpn, btnAutoWpn, btnRec, recInput, btnCapture, tileInput, btnTileDump, output, writeInput };
+  const d = { root, canvas, status, frame, btnPause, btnStep, btnReset, btnSound, btnSave, btnLoad, btnSnap, btnWpn, tileInput, btnTileDump, output, writeInput };
   dom = d;
   _installKeys();
   return d;

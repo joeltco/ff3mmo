@@ -2,12 +2,13 @@
 // Access: konami code, ?debug=1 URL param, or ~ key. Gated by canDebug().
 
 const TAB_DEFS = [
-  { id: 'sprites', label: 'SPRITES', loader: () => import('./tabs/sprites.js') },
-  { id: 'emu',     label: 'EMU',     loader: () => import('./tabs/emu.js') },
-  { id: 'data',    label: 'DATA',    loader: () => import('./tabs/data.js') },
-  { id: 'state',   label: 'STATE',   loader: () => import('./tabs/state.js') },
-  { id: 'log',     label: 'LOG',     loader: () => import('./tabs/log.js') },
-  { id: 'perf',    label: 'PERF',    loader: () => import('./tabs/perf.js') },
+  { id: 'sprites',   label: 'SPRITES',   loader: () => import('./tabs/sprites.js') },
+  { id: 'emu',       label: 'EMU',       loader: () => import('./tabs/emu.js') },
+  { id: 'formation', label: 'FORMATION', loader: () => import('./tabs/formation.js') },
+  { id: 'data',      label: 'DATA',      loader: () => import('./tabs/data.js') },
+  { id: 'state',     label: 'STATE',     loader: () => import('./tabs/state.js') },
+  { id: 'log',       label: 'LOG',       loader: () => import('./tabs/log.js') },
+  { id: 'perf',      label: 'PERF',      loader: () => import('./tabs/perf.js') },
 ];
 
 let overlay = null;
