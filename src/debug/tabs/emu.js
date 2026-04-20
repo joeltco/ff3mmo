@@ -499,6 +499,37 @@ function _dumpTileByIndex() {
   dom.output.value = `// ${label} (captured @ frame ${frameCount})\nnew Uint8Array([${Array.from(bytes).map(b => '0x' + _hex(b, 2)).join(',')}]),`;
 }
 
+// ── Weapon tile extraction ──────────────────────────────────────────────────
+// During a character's attack animation, FF3 decompresses that weapon's CHR
+// data into PPU $1490-$15A0 (weapons live at sprite tiles $49-$5A). We read
+// those tiles out of jsnes's decoded pattern table — reliable since the game
+// does the decompression for us. Dump mid-swing for the cleanest result.
+function _dumpWeaponTiles() {
+  if (!nes) return;
+  const tiles = nes.ppu.ptTile;
+  if (!tiles) { _status('pattern table not ready', true); return; }
+  // PPU $1490 → tile index 256 + ($1490 - $1000)/16 = 256 + 73 = 329.
+  // Dump tiles $49-$5F (23 tiles) to catch any weapon variant.
+  const START = 256 + 0x49;
+  const END = 256 + 0x60;
+  const out = [];
+  out.push(`// Weapon tiles from PPU pattern table @ frame ${frameCount}`);
+  out.push('// (dump during an attack-swing frame for accurate data)');
+  out.push('');
+  out.push(_dumpPalette());
+  out.push('');
+  for (let i = START; i < END; i++) {
+    const t = tiles[i];
+    if (!t || !t.pix) continue;
+    const bytes = _encodeTile(t.pix);
+    const ppu = 0x1000 + (i - 256) * 16;
+    out.push(`// tile $${_hex(i - 256, 2)} @ PPU $${_hex(ppu, 4)}`);
+    out.push(`new Uint8Array([${Array.from(bytes).map(b => '0x' + _hex(b, 2)).join(',')}]),`);
+  }
+  dom.output.value = out.join('\n');
+  _status(`dumped ${END - START} weapon tiles @ frame ${frameCount}`);
+}
+
 // ── Memory read/write (FF3 party + inventory) ───────────────────────────────
 // FF3J save RAM layout (relative to $6000 SRAM base):
 //   $6100: Character A × 4 (64 bytes each) — job, level, name, HP, MP, stats
@@ -700,13 +731,14 @@ function _buildDOM(parent) {
   const btnSave = mkBtn('SAVE', _saveState);
   const btnLoad = mkBtn('LOAD', _loadState);
   const btnSnap = mkBtn('SNAP OAM', _snapshotOAM);
+  const btnWpn = mkBtn('WPN TILES', _dumpWeaponTiles);
   const btnRec = mkBtn('REC', _toggleRec);
   const recInput = document.createElement('input');
   recInput.value = '60';
   recInput.title = 'frames to record';
   recInput.style.cssText = 'width:48px;background:#1e1e2e;border:1px solid #444;border-radius:3px;color:#e0e0e0;font-family:monospace;font-size:11px;padding:4px 6px;';
   const btnCapture = mkBtn('DUMP ALL', _capture);
-  capRow.append(btnSave, btnLoad, btnSnap, btnRec, recInput, btnCapture);
+  capRow.append(btnSave, btnLoad, btnSnap, btnWpn, btnRec, recInput, btnCapture);
   rightCol.appendChild(capRow);
 
   // Tile dump input
