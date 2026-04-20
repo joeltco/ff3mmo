@@ -43,6 +43,16 @@ const audioR = new Float32Array(AUDIO_BUF);
 let audioWrite = 0;
 let audioRead = 0;
 
+// Auto-capture: watches $7D67 (formation ID per FF3 memory doc) and auto-dumps
+// BG tilePal data when the battle stabilizes after a formation change. Dedupes
+// by formation ID so walking through random encounters accumulates unique data.
+const FORMATION_ADDR = 0x7D67;
+let autoCapOn = false;
+let autoCapLastFormation = -1;
+let autoCapDebounce = 0;
+let autoCapSeen = new Set();
+let autoCapOutput = [];
+
 export function mount(root, context) {
   ctx = context;
   dom = _buildDOM(root);
@@ -139,6 +149,7 @@ function _onFrame(buffer) {
   for (let i = 0; i < SCREEN_W * SCREEN_H; i++) img32[i] = 0xFF000000 | buffer[i];
   canvasCtx.putImageData(imgData, 0, 0);
   frameCount++;
+  if (autoCapOn) _autoCapTick();
   // Update only the frame counter element — status messages live separately.
   if (dom?.frame) dom.frame.textContent = running ? `f${frameCount}` : `⏸ f${frameCount}`;
 }
@@ -365,7 +376,13 @@ function _snapshotOAM() {
 // which BG palette each monster tile actually uses.
 
 function _snapshotBG() {
-  if (!nes) return;
+  const text = _bgSnapshotText();
+  if (text) { dom.output.value = text; _status(`BG snapshot captured`); }
+  else _status('BG empty', true);
+}
+
+function _bgSnapshotText() {
+  if (!nes) return '';
   const v = nes.ppu.vramMem;
   const tiles = nes.ppu.ptTile;
   const out = [];
@@ -399,7 +416,7 @@ function _snapshotBG() {
       }
     }
   }
-  if (maxR < 0) { out.push('// (all tiles blank)'); dom.output.value = out.join('\n'); _status('BG empty'); return; }
+  if (maxR < 0) return '';
 
   out.push(`// bounding box: cols ${minC}..${maxC}, rows ${minR}..${maxR}`);
   out.push('');
@@ -435,8 +452,47 @@ function _snapshotBG() {
     }
   }
 
-  dom.output.value = out.join('\n');
-  _status(`BG snapshot: ${seen.size} unique tiles in ${maxC - minC + 1}×${maxR - minR + 1} area`);
+  return out.join('\n');
+}
+
+// Auto-capture runs in _onFrame. Watches the formation ID at $7D67 and, when
+// it changes, schedules a BG snapshot after a debounce (battle graphics take
+// ~1-2 sec to load). Dedupes so each formation dumps exactly once.
+function _autoCapTick() {
+  const f = _ram(FORMATION_ADDR);
+  if (f !== autoCapLastFormation) {
+    autoCapLastFormation = f;
+    autoCapDebounce = 120; // ~2 sec at 60Hz
+    return;
+  }
+  if (autoCapDebounce > 0) {
+    autoCapDebounce--;
+    if (autoCapDebounce === 0 && f !== 0 && f !== 0xFF && !autoCapSeen.has(f)) {
+      const snap = _bgSnapshotText();
+      if (snap) {
+        autoCapSeen.add(f);
+        autoCapOutput.push(`// ══════════════ formation $${_hex(f, 2)} ══════════════`);
+        autoCapOutput.push(snap);
+        autoCapOutput.push('');
+        dom.output.value = autoCapOutput.join('\n');
+      }
+    }
+  }
+}
+
+function _toggleAutoCap() {
+  autoCapOn = !autoCapOn;
+  dom.btnAutoCap.textContent = autoCapOn ? 'STOP AUTO' : 'AUTO CAP';
+  dom.btnAutoCap.style.borderColor = autoCapOn ? '#c8a832' : '#444';
+  if (autoCapOn) {
+    autoCapSeen = new Set();
+    autoCapOutput = [];
+    autoCapLastFormation = -1;
+    autoCapDebounce = 0;
+    _status('auto-cap on — play through battles, unique formations accumulate');
+  } else {
+    _status(`auto-cap off — ${autoCapSeen.size} unique formations captured`);
+  }
 }
 
 // ── Capture ─────────────────────────────────────────────────────────────────
@@ -713,8 +769,9 @@ function _buildDOM(parent) {
   const btnLoad = mkBtn('LOAD', _loadState);
   const btnSnap = mkBtn('SNAP OAM', _snapshotOAM);
   const btnSnapBG = mkBtn('SNAP BG', _snapshotBG);
+  const btnAutoCap = mkBtn('AUTO CAP', _toggleAutoCap);
   const btnWpn = mkBtn('WPN TILES', _dumpWeaponTiles);
-  capRow.append(btnSave, btnLoad, btnSnap, btnSnapBG, btnWpn);
+  capRow.append(btnSave, btnLoad, btnSnap, btnSnapBG, btnAutoCap, btnWpn);
   rightCol.appendChild(capRow);
 
   // Tile dump input
@@ -781,7 +838,7 @@ function _buildDOM(parent) {
 
   parent.appendChild(root);
 
-  const d = { root, canvas, status, frame, btnPause, btnStep, btnReset, btnSound, btnSave, btnLoad, btnSnap, btnSnapBG, btnWpn, tileInput, btnTileDump, output, writeInput };
+  const d = { root, canvas, status, frame, btnPause, btnStep, btnReset, btnSound, btnSave, btnLoad, btnSnap, btnSnapBG, btnAutoCap, btnWpn, tileInput, btnTileDump, output, writeInput };
   dom = d;
   _installKeys();
   return d;
