@@ -53,7 +53,7 @@ const LOOT_POOLS = {
     { weight: 25, pool: [0xA6] },
     { weight: 30, pool: [GIL(125, 275)] },
     { weight: 25, pool: [0x73, 0x1F] },                           // Leather Armor, Dagger
-    { weight: 20, pool: [0x8B, 0x8D, 0x24] },                     // Bronze Bracers (mages), Mithril Gloves (fighters), Longsword
+    { weight: 20, pool: [0x8B, 0x24] },                           // Bronze Bracers (mage arm), Longsword
   ],
 };
 const DEFAULT_LOOT = LOOT_POOLS[1000];
