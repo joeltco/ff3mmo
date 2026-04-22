@@ -23,6 +23,77 @@ const TILE_SIZE = 16;
 const BATTLE_FLASH_FRAMES = 65;
 const BATTLE_FLASH_FRAME_MS = 16.67;
 
+// Chest loot pools, keyed by map ID. Each tier has a `weight` and a `pool` of
+// either item IDs (numbers) or `{ gil: [min, max] }` entries.
+// Crystal room (1004) is a boss room and has no chests.
+const GIL = (min, max) => ({ gil: [min, max] });
+const LOOT_POOLS = {
+  114: [ // Ur (town)
+    { weight: 70, pool: [0xA6, 0xA6, 0xAF] },                     // Potion(2x), Antidote
+    { weight: 30, pool: [GIL(10, 30)] },
+  ],
+  1000: [ // Altar Cave F1
+    { weight: 55, pool: [0xA6, 0xA6, 0xAF, 0xAE] },               // Potion(2x), Antidote, Eye Drops
+    { weight: 30, pool: [GIL(20, 60)] },
+    { weight: 15, pool: [0x62] },                                 // Leather Cap
+  ],
+  1001: [ // Altar Cave F2
+    { weight: 45, pool: [0xA6, 0xAF, 0xAE] },
+    { weight: 30, pool: [GIL(40, 100)] },
+    { weight: 20, pool: [0x62, 0x1F] },                           // Leather Cap, Dagger
+    { weight:  5, pool: [0x58] },                                 // Leather Shield
+  ],
+  1002: [ // Altar Cave F3
+    { weight: 35, pool: [0xA6, 0xAF] },
+    { weight: 30, pool: [GIL(75, 175)] },
+    { weight: 25, pool: [0x58, 0x1F] },                           // Leather Shield, Dagger
+    { weight: 10, pool: [0x73] },                                 // Leather Armor
+  ],
+  1003: [ // Altar Cave F4
+    { weight: 25, pool: [0xA6] },
+    { weight: 30, pool: [GIL(125, 275)] },
+    { weight: 25, pool: [0x73, 0x1F] },                           // Leather Armor, Dagger
+    { weight: 20, pool: [0x8B, 0x24] },                           // Bronze Bracers, Longsword
+  ],
+};
+const DEFAULT_LOOT = LOOT_POOLS[1000];
+
+function rollLootEntry(mapId) {
+  const tiers = LOOT_POOLS[mapId] || DEFAULT_LOOT;
+  const total = tiers.reduce((s, t) => s + t.weight, 0);
+  let roll = Math.random() * total;
+  let tier = tiers[0];
+  for (const t of tiers) { if (roll < t.weight) { tier = t; break; } roll -= t.weight; }
+  return tier.pool[Math.floor(Math.random() * tier.pool.length)];
+}
+
+function encodeNumber(n) {
+  const s = String(n);
+  const out = new Uint8Array(s.length);
+  for (let i = 0; i < s.length; i++) out[i] = 0x80 + (s.charCodeAt(i) - 48);
+  return out;
+}
+
+function foundItemMsg(itemId) {
+  const itemName = getItemNameClean(itemId);
+  const found = [0x8F, 0xD8, 0xDE, 0xD7, 0xCD, 0xFF]; // "Found "
+  const msg = new Uint8Array(found.length + itemName.length + 1);
+  msg.set(found, 0); msg.set(itemName, found.length);
+  msg[found.length + itemName.length] = 0xC4; // "!"
+  return msg;
+}
+
+function foundGilMsg(amount) {
+  const found = [0x8F, 0xD8, 0xDE, 0xD7, 0xCD, 0xFF];             // "Found "
+  const num = encodeNumber(amount);
+  const gilWord = [0xFF, 0xD0, 0xD2, 0xD5, 0xC4];                 // " gil!"
+  const msg = new Uint8Array(found.length + num.length + gilWord.length);
+  msg.set(found, 0);
+  msg.set(num, found.length);
+  msg.set(gilWord, found.length + num.length);
+  return msg;
+}
+
 // Wipe-transition helper — used here and by game.js
 export function triggerWipe(action, destMapId) {
   const rc = destMapId != null && rosterLocForMapId(destMapId) !== getPlayerLocation();
@@ -33,23 +104,18 @@ export function triggerWipe(action, destMapId) {
 
 export function handleChest(facedX, facedY) {
   mapSt.mapData.tilemap[facedY * 32 + facedX] = 0x7D;
-  const LOOT_TIERS = [
-    { weight: 60, pool: [0xA6, 0xA6, 0xAF, 0xAE] },  // Common:     Potion(2x), Antidote, Eye Drops
-    { weight: 28, pool: [0x62, 0x58, 0x1F] },        // Uncommon:   Leather Cap, Leather Shield, Dagger
-    { weight: 10, pool: [0x73, 0x8B, 0x24] },        // Rare:       Leather Armor, Bronze Bracers, Longsword
-    { weight:  2, pool: [0xB2] },                    // Legendary:  SouthWind
-  ];
-  let roll = Math.random() * 100;
-  let tier = LOOT_TIERS[0];
-  for (const t of LOOT_TIERS) { if (roll < t.weight) { tier = t; break; } roll -= t.weight; }
-  const itemId = tier.pool[Math.floor(Math.random() * tier.pool.length)];
-  addItem(itemId, 1);
+  const entry = rollLootEntry(mapSt.currentMapId);
+  let msg;
+  if (typeof entry === 'object' && entry.gil) {
+    const [min, max] = entry.gil;
+    const amount = min + Math.floor(Math.random() * (max - min + 1));
+    ps.gil += amount;
+    msg = foundGilMsg(amount);
+  } else {
+    addItem(entry, 1);
+    msg = foundItemMsg(entry);
+  }
   playSFX(SFX.TREASURE);
-  const itemName = getItemNameClean(itemId);
-  const found = [0x8F, 0xD8, 0xDE, 0xD7, 0xCD, 0xFF]; // "Found "
-  const msg = new Uint8Array(found.length + itemName.length + 1);
-  msg.set(found, 0); msg.set(itemName, found.length);
-  msg[found.length + itemName.length] = 0xC4; // "!"
   showMsgBox(msg);
   mapSt.mapRenderer = new MapRenderer(mapSt.mapData, mapSt.worldX / TILE_SIZE, mapSt.worldY / TILE_SIZE);
   resetIndoorWaterCache();
