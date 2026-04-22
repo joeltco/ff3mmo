@@ -11,7 +11,7 @@ import { getMonsterCanvas, getMonsterWhiteCanvas, hasMonsterSprites } from './mo
 import { getItemNameClean, getMonsterName } from './text-decoder.js';
 import { weaponSubtype } from './data/items.js';
 import { ps, getHitWeapon, isHitRightHand } from './player-stats.js';
-import { _nameToBytes, _buildItemRowBytes, drawLvHpRow, makeExpText, makeGilText, makeCpText, makeFoundItemText, makeJobLevelUpText } from './text-utils.js';
+import { _nameToBytes, _buildItemRowBytes, drawLvHpRow, makeExpText, makeGilText, makeCpText, makeItemDropText } from './text-utils.js';
 import { pvpEnemyCellCenter } from './pvp-math.js';
 import { pvpSt, drawBossSpriteBoxPVP } from './pvp.js';
 import { inputSt } from './input-handler.js';
@@ -21,8 +21,8 @@ import { fakePlayerPortraits, fakePlayerVictoryPortraits, fakePlayerHitPortraits
          fakePlayerKneelPortraits, fakePlayerAttackPortraits, fakePlayerAttackLPortraits,
          fakePlayerKnifeRPortraits, fakePlayerKnifeLPortraits,
          fakePlayerDeathPoseCanvases } from './fake-player-sprites.js';
-import { BATTLE_GAME_OVER, BATTLE_DEFEATED, BATTLE_LEVEL_UP, BATTLE_BOSS_NAME, BATTLE_GOBLIN_NAME,
-         BATTLE_MENU_ITEMS } from './data/strings.js';
+import { BATTLE_GAME_OVER, BATTLE_DEFEATED, BATTLE_LEVEL_UP, BATTLE_JOB_LEVEL_UP, BATTLE_FOUND,
+         BATTLE_BOSS_NAME, BATTLE_GOBLIN_NAME, BATTLE_MENU_ITEMS } from './data/strings.js';
 import { getAllyDamageNums, getEnemyDmgNum, getPlayerDamageNum, getPlayerHealNum, getEnemyHealNum,
          getSwDmgNums } from './damage-numbers.js';
 import { getBattleMsgCurrent, getBattleMsgTimer, MSG_FADE_IN_MS, MSG_HOLD_MS, MSG_FADE_OUT_MS } from './battle-msg.js';
@@ -1072,22 +1072,33 @@ function _drawVictoryNameOut(boxX, boxY) {
 
 function _drawRewardText(boxX, boxY) {
   const bs = battleSt.battleState;
-  let msg = null;
-  if (bs.startsWith('exp-')) msg = makeExpText(battleSt.encounterExpGained);
-  else if (bs.startsWith('gil-')) msg = makeGilText(battleSt.encounterGilGained);
-  else if (bs.startsWith('cp-')) msg = makeCpText(battleSt.encounterCpGained);
-  else if (bs.startsWith('item-')) msg = battleSt.encounterDropItem !== null ? makeFoundItemText(battleSt.encounterDropItem) : null;
-  else if (bs.startsWith('levelup-')) msg = BATTLE_LEVEL_UP;
-  else if (bs.startsWith('joblv-')) msg = battleSt.encounterJobLevelUp ? makeJobLevelUpText(battleSt.encounterJobLevelUp) : null;
-  if (!msg) return;
   let fadeStep = 0;
   if (bs.endsWith('-text-in'))
     fadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(battleSt.battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
   else if (bs.endsWith('-fade-out'))
     fadeStep = Math.min(Math.floor(battleSt.battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
   const pal = _makeFadedPal(fadeStep);
-  const tw = measureText(msg);
-  drawText(ui.ctx, boxX + Math.floor((VICTORY_BOX_W - tw) / 2), boxY + Math.floor((VICTORY_BOX_H - 8) / 2), msg, pal);
+  const midY = boxY + Math.floor(VICTORY_BOX_H / 2);
+  const drawCentered = (msg, y) => {
+    const tw = measureText(msg);
+    drawText(ui.ctx, boxX + Math.floor((VICTORY_BOX_W - tw) / 2), y, msg, pal);
+  };
+
+  if (bs.startsWith('item-')) {
+    if (battleSt.encounterDropItem === null) return;
+    drawCentered(BATTLE_FOUND, midY - 10);
+    drawCentered(makeItemDropText(battleSt.encounterDropItem), midY + 2);
+    return;
+  }
+
+  let msg = null;
+  if (bs.startsWith('exp-')) msg = makeExpText(battleSt.encounterExpGained);
+  else if (bs.startsWith('gil-')) msg = makeGilText(battleSt.encounterGilGained);
+  else if (bs.startsWith('cp-')) msg = makeCpText(battleSt.encounterCpGained);
+  else if (bs.startsWith('levelup-')) msg = BATTLE_LEVEL_UP;
+  else if (bs.startsWith('joblv-')) msg = battleSt.encounterJobLevelUp ? BATTLE_JOB_LEVEL_UP : null;
+  if (!msg) return;
+  drawCentered(msg, midY - 4);
 }
 
 const DEATH_SLIDE_MS    = 500;

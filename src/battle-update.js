@@ -624,6 +624,19 @@ function _updateVictorySequence() {
 
 // ── Box close ──────────────────────────────────────────────────────────────
 
+function _respawnAtLastTown() {
+  hudSt.playerDeathTimer = null;
+  battleSt._teamWipeMsgShown = false;
+  ps.hp = ps.stats ? ps.stats.maxHP : 28;
+  ps.mp = ps.stats ? ps.stats.maxMP : 0;
+  const respawnMapId = ps.lastTown || 114;
+  triggerWipe(() => {
+    mapSt.dungeonFloor = -1; mapSt.encounterSteps = 0; mapSt.mapStack = [];
+    loadMapById(respawnMapId);
+    saveSlotsToDB();
+  }, respawnMapId);
+}
+
 function _updateBoxClose() {
   if (battleSt.battleState === 'encounter-box-close') {
     if (battleSt.battleTimer >= BOSS_BOX_EXPAND_MS) {
@@ -631,6 +644,7 @@ function _updateBoxClose() {
       sprite.setDirection(DIR_DOWN); battleSt.isRandomEncounter = false; battleSt.encounterMonsters = null;
       battleSt.dyingMonsterIndices = new Map(); battleSt.battleAllies = []; battleSt.allyJoinRound = 0;
       stopMusic(); resumeMusic();
+      if (ps.hp <= 0) _respawnAtLastTown();
     }
     return true;
   }
@@ -642,6 +656,7 @@ function _updateBoxClose() {
       battleSt.battleAllies = []; battleSt.allyJoinRound = 0;
       if (!wasPVP) playTrack(TRACKS.CRYSTAL_ROOM);
       else resumeMusic();
+      if (ps.hp <= 0) _respawnAtLastTown();
     }
     return true;
   }
@@ -670,15 +685,7 @@ function _updateDefeatStates() {
       battleSt.battleState = 'none'; battleSt.battleTimer = 0;
       battleSt.isRandomEncounter = false;
       battleSt.encounterMonsters = null; battleSt.turnQueue = []; battleSt.battleAllies = []; battleSt.allyJoinRound = 0;
-      hudSt.playerDeathTimer = null; battleSt._teamWipeMsgShown = false;
-      ps.hp = ps.stats ? ps.stats.maxHP : 28;
-      ps.mp = ps.stats ? ps.stats.maxMP : 0;
-      const respawnMapId = ps.lastTown || 114;
-      triggerWipe(() => {
-        mapSt.dungeonFloor = -1; mapSt.encounterSteps = 0; mapSt.mapStack = [];
-        loadMapById(respawnMapId);
-        saveSlotsToDB();
-      }, respawnMapId);
+      _respawnAtLastTown();
     }
     return true;
   }

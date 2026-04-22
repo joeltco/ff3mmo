@@ -1,8 +1,6 @@
 import { getItemNameClean } from './text-decoder.js';
 import { drawText, measureText } from './font-renderer.js';
 import { nesColorFade } from './palette.js';
-import { JOBS } from './data/jobs.js';
-import { ps } from './player-stats.js';
 
 // Convert JS string to NES-encoded Uint8Array (A-Z, a-z, 0-9, space→0xFF)
 export function _nameToBytes(name) {
@@ -59,7 +57,6 @@ export function _makeGotNText(amount, suffix) {
 export function makeExpText(amount) { return _makeGotNText(amount, [0xFF, 0x8E, 0xA1, 0x99, 0xC4]); } // " EXP!"
 export function makeGilText(amount) { return _makeGotNText(amount, [0xFF, 0x90, 0xD2, 0xD5, 0xC4]); } // " Gil!"
 export function makeCpText(amount) { return _makeGotNText(amount, [0xFF, 0x8C, 0x99, 0xC4]); } // " CP!"
-export function makeJobLevelUpText(lv) { const name = (JOBS[ps.jobIdx]?.name || 'JOB').toUpperCase(); return _nameToBytes(name + ' LV ' + lv + '!'); }
 
 // Draw "Lv##" left-aligned + colored HP right-aligned on the same row
 // leftX/rightX = content edges (inside border), y = text baseline, fadeStep = NES color fade steps
@@ -76,13 +73,11 @@ export function drawLvHpRow(ctx, leftX, rightX, y, level, hp, maxHP, fadeStep) {
   drawText(ctx, rightX - measureText(hpLabel), y, hpLabel, hpPal);
 }
 
-// "Found [name]!"
-export function makeFoundItemText(itemId) {
-  const found = [0x8F, 0xD8, 0xDE, 0xD7, 0xCD, 0xFF]; // "Found "
+// "[name]!" — for 2-line drop display paired with BATTLE_FOUND on top row
+export function makeItemDropText(itemId) {
   const name = getItemNameClean(itemId);
-  const arr = new Uint8Array(found.length + name.length + 1);
-  arr.set(found, 0);
-  arr.set(name, found.length);
-  arr[found.length + name.length] = 0xC4; // "!"
+  const arr = new Uint8Array(name.length + 1);
+  arr.set(name, 0);
+  arr[name.length] = 0xC4; // "!"
   return arr;
 }
