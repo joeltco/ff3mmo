@@ -452,21 +452,21 @@ function drawBattle() {
 }
 
 function _drawGameOver() {
-  // Full-screen black + centered "GAME OVER" text + blinking "Z" prompt below.
-  ui.ctx.save();
-  ui.ctx.fillStyle = '#000';
-  ui.ctx.fillRect(0, 0, CANVAS_W, 240);
-  const cx = CANVAS_W / 2;
-  const cy = 120;
+  // Small bordered HUD box centered in the battle viewport with "GAME OVER" + blinking "Press Z".
+  const boxW = 96, boxH = 40;
+  const bx = HUD_VIEW_X + Math.floor((HUD_VIEW_W - boxW) / 2);
+  const by = HUD_VIEW_Y + Math.floor((HUD_VIEW_H - boxH) / 2);
+  drawBorderedBox(bx, by, boxW, boxH);
+  const cx = bx + boxW / 2;
+  const textY = by + 10;
   const tw = measureText(BATTLE_GAME_OVER);
-  drawText(ui.ctx, Math.floor(cx - tw / 2), Math.floor(cy - 12), BATTLE_GAME_OVER, TEXT_WHITE);
-  // Blinking prompt every 500ms
+  drawText(ui.ctx, Math.floor(cx - tw / 2), Math.floor(textY), BATTLE_GAME_OVER, TEXT_WHITE);
+  // Blinking "Press Z" prompt every 500ms
   if ((Math.floor(Date.now() / 500) & 1) === 0) {
     const prompt = _nameToBytes('Press Z');
     const pw = measureText(prompt);
-    drawText(ui.ctx, Math.floor(cx - pw / 2), Math.floor(cy + 16), prompt, TEXT_WHITE);
+    drawText(ui.ctx, Math.floor(cx - pw / 2), Math.floor(textY + 12), prompt, TEXT_WHITE);
   }
-  ui.ctx.restore();
 }
 
 function _drawBattleItemList(baseX, rightAreaW, invPal, slidePixel, totalInvPages) {
