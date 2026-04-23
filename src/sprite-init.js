@@ -23,7 +23,8 @@ import { MO_IDLE, MO_LEG_L, MO_LEG_R,
          MO_R_BACK_T2, MO_LEG_L_BACK_R, MO_LEG_R_BACK_R,
          MO_LEG_L_FWD_R,
          MO_L_BACK_T1, MO_L_BACK_T3,
-         MO_L_FWD_T2, MO_L_FWD_T3 } from './data/monk-sprites.js';
+         MO_L_FWD_T2, MO_L_FWD_T3,
+         MO_DEATH } from './data/monk-sprites.js';
 import { initWeaponSprites } from './weapon-sprites.js';
 import { LOAD_FADE_MAX } from './loading-screen.js';
 
@@ -1004,13 +1005,14 @@ function _buildMonkFullBodies(romData) {
   const legLHit = t(34), legRHit = t(35);
   const build = (tiles, lL, lR) => MONK_PALETTES.map(pal => _buildFullBody16x24Canvas(tiles, lL, lR, pal));
   const idleBodies = build(idleTiles, legL, legR);
-  // Death pose placeholder — 2×2 grid using idle tiles; replace when PPU-captured Monk death exists
+  // PPU-captured death pose — 2 rows × 3 cols (24×16 prone sprite)
+  const deathTiles = MO_DEATH.map(d);
   const deathCanvases = MONK_PALETTES.map(pal => {
     const c = document.createElement('canvas'); c.width = 24; c.height = 16;
     const bctx = c.getContext('2d');
     for (let row = 0; row < 2; row++)
-      for (let col = 0; col < 2; col++)
-        _renderDecodedTile(bctx, idleTiles[row * 2 + col], pal, col * 8, row * 8);
+      for (let col = 0; col < 3; col++)
+        _renderDecodedTile(bctx, deathTiles[row * 3 + col], pal, col * 8, row * 8);
     return c;
   });
   return {
