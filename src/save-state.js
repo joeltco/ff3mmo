@@ -76,21 +76,27 @@ export async function saveSlotsToDB() {
     // Server sync — push each changed slot
     if (window.ff3Auth) {
       data.forEach((slotData, i) => {
-        if (slotData) window.ff3Auth.serverSave(i, slotData).catch(() => {});
+        if (slotData) window.ff3Auth.serverSave(i, slotData).catch(e => console.warn('[save] server sync failed for slot', i, e));
       });
     }
-  } catch (e) { /* silent fail */ }
+  } catch (e) { console.warn('[save] saveSlotsToDB failed:', e); }
 }
 
 export async function loadSlotsFromDB() {
   try {
     // Try server first if logged in
     if (window.ff3Auth) {
-      const serverSlots = await window.ff3Auth.serverLoadSaves().catch(() => null);
+      const serverSlots = await window.ff3Auth.serverLoadSaves().catch(e => { console.warn('[save] serverLoadSaves failed:', e); return null; });
       if (serverSlots) {
-        saveSlots = parseSaveSlots(serverSlots) || saveSlots;
-        savesLoaded = true;
-        return;
+        // Only accept server state if at least one slot has actual data — don't clobber local with a null response
+        const hasData = Array.isArray(serverSlots) && serverSlots.some(s => s != null);
+        if (hasData) {
+          saveSlots = parseSaveSlots(serverSlots) || saveSlots;
+          savesLoaded = true;
+          console.log('[save] loaded from server');
+          return;
+        }
+        console.warn('[save] server returned empty slots, falling back to IndexedDB');
       }
     }
     // Fall back to IndexedDB
