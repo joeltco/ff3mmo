@@ -720,12 +720,13 @@ export function initBattleSpriteForJob(romData, jobIdx) {
   battleSpriteAttackLCanvas.width = 16; battleSpriteAttackLCanvas.height = 16;
   const alctx = battleSpriteAttackLCanvas.getContext('2d');
   alctx.drawImage(battleSpriteCanvas, 0, 0);
-  _blitTile(alctx, decodeTile(romData, jobBase + 7 * 16), palette, 8, 8); // L back arm
+  _blitTile(alctx, decodeTile(romData, jobBase + 6 * 16), palette, 8, 0); // L back head-TR variant
+  _blitTile(alctx, decodeTile(romData, jobBase + 7 * 16), palette, 8, 8); // L back body-TR variant
 
-  // Knife body poses — use back/fwd swing tiles
+  // Knife body poses — swap head-TR and body-TR for L-back (tile indices 6 and 7)
   const knifeRTiles = _readJobTiles(romData, jobBase, 0, 1, 12, 3);
-  const knifeLTiles = _readJobTiles(romData, jobBase, 0, 1, 2, 7);
-  const knifeBackTiles = _readJobTiles(romData, jobBase, 0, 1, 2, 7);
+  const knifeLTiles = _readJobTiles(romData, jobBase, 0, 6, 2, 7);
+  const knifeBackTiles = _readJobTiles(romData, jobBase, 0, 6, 2, 7);
   const battleSpriteKnifeRCanvas = _renderPortrait(knifeRTiles, _BATTLE_LAYOUT, palette);
   const battleSpriteKnifeLCanvas = _renderPortrait(knifeLTiles, _BATTLE_LAYOUT, palette);
   const battleSpriteKnifeBackCanvas = _renderPortrait(knifeBackTiles, _BATTLE_LAYOUT, palette);
@@ -1034,6 +1035,82 @@ function _buildMonkFullBodies(romData) {
 }
 
 
+// Generic ROM-based pose builders — used for jobs without dedicated PPU-captured tile data.
+// Tile index convention (from the FF3 per-job battle sprite layout):
+//   0-3   idle (TL, TR, BL, BR)
+//   4-5   default legs L/R
+//   6     L-back head-TR variant (swapped alongside body-TR during L-back)
+//   7     L-back body-TR variant
+//   8-11  L-fwd body variants (body-TL, body-TR, legL, legR)
+//   14    R-back body-TL variant (arm swap)
+//   18-21 R-fwd body variants (attack2)
+//   24-27 victory/defend/magic-cast (ALL share same 4-tile pose)
+//   30-33 hit portrait; 34-35 hit legs
+//   36-39 kneel portrait; default legs
+// These indices are APPROXIMATIONS — NES MMC3 CHR banking means ROM bytes at these offsets
+// may not exactly match the PPU tiles you'd see during live animation. When a job looks
+// scrambled in battle, PPU-capture the offending pose and move to a dedicated builder.
+function _initGenericJobPosePortraits(romData, jobIdx) {
+  const jobBase = BATTLE_SPRITE_ROM + jobIdx * BATTLE_JOB_SIZE;
+  const t = (idx) => decodeTile(romData, jobBase + idx * 16);
+  const idleTiles    = [t(0), t(1), t(2), t(3)];
+  const knifeRTiles  = [t(0), t(1), t(14), t(3)];
+  const knifeLTiles  = [t(0), t(6), t(2), t(7)];  // swap BOTH head-TR and body-TR for L-back
+  const victoryTiles = [t(24), t(25), t(26), t(27)];
+  const hitTiles     = [t(30), t(31), t(32), t(33)];
+  const kneelTiles   = [t(36), t(37), t(38), t(39)];
+  return {
+    fakePlayerPortraits: _genPosePortraits(idleTiles),
+    fakePlayerVictoryPortraits: _genPosePortraits(victoryTiles),
+    fakePlayerHitPortraits: _genPosePortraits(hitTiles),
+    fakePlayerDefendPortraits: _genPosePortraits(victoryTiles),  // defend == victory
+    fakePlayerAttackPortraits: _genPosePortraits(knifeRTiles),
+    fakePlayerAttackLPortraits: _genPosePortraits(knifeLTiles),
+    fakePlayerKnifeBackPortraits: _genPosePortraits(knifeLTiles),
+    fakePlayerKnifeRPortraits: _genPosePortraits(knifeRTiles),
+    fakePlayerKnifeLPortraits: _genPosePortraits(knifeLTiles),
+    fakePlayerKneelPortraits: _genPosePortraits(kneelTiles),
+  };
+}
+
+function _buildGenericJobFullBodies(romData, jobIdx) {
+  const jobBase = BATTLE_SPRITE_ROM + jobIdx * BATTLE_JOB_SIZE;
+  const t = (idx) => decodeTile(romData, jobBase + idx * 16);
+  const idleTiles    = [t(0), t(1), t(2), t(3)];
+  const knifeRTiles  = [t(0), t(1), t(14), t(3)];
+  const knifeLTiles  = [t(0), t(6), t(2), t(7)];
+  const victoryTiles = [t(24), t(25), t(26), t(27)];
+  const hitTiles     = [t(30), t(31), t(32), t(33)];
+  const kneelTiles   = [t(36), t(37), t(38), t(39)];
+  const atkLTiles    = [t(0), t(1), t(10), t(11)];
+  const legL = t(4), legR = t(5);
+  const legLHit = t(34), legRHit = t(35);
+  const build = (tiles, lL, lR) => PLAYER_PALETTES.map(pal => _buildFullBody16x24Canvas(tiles, lL, lR, pal));
+  const idleBodies = build(idleTiles, legL, legR);
+  // Death placeholder — reuse idle until PPU-captured death exists
+  const deathCanvases = PLAYER_PALETTES.map(pal => {
+    const c = document.createElement('canvas'); c.width = 24; c.height = 16;
+    const bctx = c.getContext('2d');
+    for (let row = 0; row < 2; row++)
+      for (let col = 0; col < 2; col++)
+        _renderDecodedTile(bctx, idleTiles[row * 2 + col], pal, col * 8, row * 8);
+    return c;
+  });
+  return {
+    fakePlayerFullBodyCanvases: idleBodies,
+    fakePlayerHitFullBodyCanvases: build(hitTiles, legLHit, legRHit),
+    fakePlayerKnifeRFullBodyCanvases: build(knifeRTiles, legL, legR),
+    fakePlayerKnifeLFullBodyCanvases: build(knifeLTiles, legL, legR),
+    fakePlayerKnifeBackFullBodyCanvases: build(knifeLTiles, legL, legR),
+    fakePlayerKnifeRFwdFullBodyCanvases: build(idleTiles, legL, legR),
+    fakePlayerKnifeLFwdFullBodyCanvases: build(atkLTiles, legL, legR),
+    fakePlayerKneelFullBodyCanvases: build(kneelTiles, legL, legR),
+    fakePlayerVictoryFullBodyCanvases: build(victoryTiles, legL, legR),  // victory == defend == magic
+    fakePlayerDeathPoseCanvases: deathCanvases,
+    fakePlayerDeathFrames: idleBodies.map(c => _makeDeathFrames(c)),
+  };
+}
+
 export function initFakePlayerPortraits(romData, jobIndices) {
   // Build per-job portrait and body sets
   // jobIndices = array of unique job indices to generate for (e.g. [0, 1, 2])
@@ -1060,9 +1137,12 @@ export function initFakePlayerPortraits(romData, jobIndices) {
       portraits = _initMonkPosePortraits(romData);
       bodies = _buildMonkFullBodies(romData);
     } else {
-      // Future jobs will need their own PPU-dumped tiles
-      portraits = _initWarriorPosePortraits(); // placeholder
-      bodies = _buildWarriorFullBodies();      // placeholder
+      // Generic ROM-based path for jobs 3+ (WM, BM, RM, …, Ninja).
+      // Applies the locked-down pattern: defend=victory=magic, L-back swaps BOTH head-TR + body-TR.
+      // Tiles are read straight from the job's ROM block at jobBase+idx*16. When we PPU-capture
+      // a specific job later, replace this call with a dedicated `_init<Job>PosePortraits`.
+      portraits = _initGenericJobPosePortraits(romData, jobIdx);
+      bodies = _buildGenericJobFullBodies(romData, jobIdx);
     }
     result[jobIdx] = { ...portraits, ...bodies };
   }
