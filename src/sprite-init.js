@@ -19,6 +19,8 @@ import { WR_IDLE, WR_LEG_L, WR_LEG_R, WR_L_BACK, WR_LEG_L_BACK_L, WR_LEG_R_BACK_
          WR_VICTORY, WR_LEG_L_VICTORY, WR_LEG_R_VICTORY,
          WR_HIT, WR_LEG_L_HIT, WR_LEG_R_HIT,
          WR_DEATH } from './data/warrior-sprites.js';
+import { MO_IDLE, MO_LEG_L, MO_LEG_R,
+         MO_R_BACK_T2, MO_LEG_L_BACK_R, MO_LEG_R_BACK_R } from './data/monk-sprites.js';
 import { initWeaponSprites } from './weapon-sprites.js';
 import { LOAD_FADE_MAX } from './loading-screen.js';
 
@@ -954,15 +956,17 @@ function _buildWarriorFullBodies() {
 // convention as the generic ROM path: idle 0-3, L-back swap tile 7, R-back swap tile 14,
 // victory 24-27, hit 30-33 + legs 34-35, kneel 36-39, default legs 4-5.
 // If any pose looks scrambled in-game, PPU-capture the specific tiles (see CLAUDE.md).
+// PPU-captured Monk tiles where available; ROM-read fallback for poses not yet captured.
 function _initMonkPosePortraits(romData) {
+  const d = (raw) => decodeTile(raw, 0);
   const jobBase = BATTLE_SPRITE_ROM + 2 * BATTLE_JOB_SIZE;
   const t = (idx) => decodeTile(romData, jobBase + idx * 16);
-  const idleTiles = [t(0), t(1), t(2), t(3)];
+  const idleTiles    = MO_IDLE.map(d);
+  const knifeRTiles  = [idleTiles[0], idleTiles[1], d(MO_R_BACK_T2), idleTiles[3]]; // R-back: swap body-TL
+  const knifeLTiles  = [idleTiles[0], idleTiles[1], idleTiles[2], t(7)];            // L-back: ROM fallback
   const victoryTiles = [t(24), t(25), t(26), t(27)];
-  const hitTiles = [t(30), t(31), t(32), t(33)];
-  const kneelTiles = [t(36), t(37), t(38), t(39)];
-  const knifeRTiles = [t(0), t(1), t(14), t(3)];
-  const knifeLTiles = [t(0), t(1), t(2), t(7)];
+  const hitTiles     = [t(30), t(31), t(32), t(33)];
+  const kneelTiles   = [t(36), t(37), t(38), t(39)];
   const gen = (tiles) => _genPosePortraits(tiles, MONK_PALETTES);
   return {
     fakePlayerPortraits: gen(idleTiles),
@@ -979,16 +983,18 @@ function _initMonkPosePortraits(romData) {
 }
 
 function _buildMonkFullBodies(romData) {
+  const d = (raw) => decodeTile(raw, 0);
   const jobBase = BATTLE_SPRITE_ROM + 2 * BATTLE_JOB_SIZE;
   const t = (idx) => decodeTile(romData, jobBase + idx * 16);
-  const idleTiles = [t(0), t(1), t(2), t(3)];
+  const idleTiles    = MO_IDLE.map(d);
+  const knifeRTiles  = [idleTiles[0], idleTiles[1], d(MO_R_BACK_T2), idleTiles[3]];
+  const knifeLTiles  = [idleTiles[0], idleTiles[1], idleTiles[2], t(7)];
   const victoryTiles = [t(24), t(25), t(26), t(27)];
-  const hitTiles = [t(30), t(31), t(32), t(33)];
-  const kneelTiles = [t(36), t(37), t(38), t(39)];
-  const knifeRTiles = [t(0), t(1), t(14), t(3)];
-  const knifeLTiles = [t(0), t(1), t(2), t(7)];
-  const atkLTiles = [t(0), t(1), t(10), t(11)];
-  const legL = t(4), legR = t(5);
+  const hitTiles     = [t(30), t(31), t(32), t(33)];
+  const kneelTiles   = [t(36), t(37), t(38), t(39)];
+  const atkLTiles    = [idleTiles[0], idleTiles[1], t(10), t(11)];
+  const legL = d(MO_LEG_L), legR = d(MO_LEG_R);
+  const legLBackR = d(MO_LEG_L_BACK_R), legRBackR = d(MO_LEG_R_BACK_R);
   const legLHit = t(34), legRHit = t(35);
   const build = (tiles, lL, lR) => MONK_PALETTES.map(pal => _buildFullBody16x24Canvas(tiles, lL, lR, pal));
   const idleBodies = build(idleTiles, legL, legR);
@@ -1004,7 +1010,7 @@ function _buildMonkFullBodies(romData) {
   return {
     fakePlayerFullBodyCanvases: idleBodies,
     fakePlayerHitFullBodyCanvases: build(hitTiles, legLHit, legRHit),
-    fakePlayerKnifeRFullBodyCanvases: build(knifeRTiles, legL, legR),
+    fakePlayerKnifeRFullBodyCanvases: build(knifeRTiles, legLBackR, legRBackR),
     fakePlayerKnifeLFullBodyCanvases: build(knifeLTiles, legL, legR),
     fakePlayerKnifeBackFullBodyCanvases: build(knifeLTiles, legL, legR),
     fakePlayerKnifeRFwdFullBodyCanvases: build(idleTiles, legL, legR),
@@ -1015,6 +1021,7 @@ function _buildMonkFullBodies(romData) {
     fakePlayerDeathFrames: idleBodies.map(c => _makeDeathFrames(c)),
   };
 }
+
 
 export function initFakePlayerPortraits(romData, jobIndices) {
   // Build per-job portrait and body sets
