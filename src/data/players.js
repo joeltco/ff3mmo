@@ -25,10 +25,10 @@ export const PLAYER_POOL = [
   { name: 'Vex',     level: 5,  palIdx: 7, camper: false, loc: 'cave-2',  jobIdx: 1, weaponR: 0x24,               armorId: 0x73, helmId: 0x62, shieldId: 0x58 }, // Fi — Longsword / Leather+Cap+Shield
   { name: 'Wren',    level: 4,  palIdx: 5, camper: false, loc: 'world',   jobIdx: 0, weaponR: 0x1F,               armorId: 0x73, helmId: 0x62 },                 // OK — Dagger / Leather+Cap
   { name: 'Kasumi',  level: 4,  palIdx: 4, camper: false, loc: 'cave-0',  jobIdx: 2, weaponR: 0x06,               armorId: 0x73, helmId: 0x62 },                 // Mo — Nunchuck / Leather+Cap
-  { name: 'Jiro',    level: 5,  palIdx: 2, camper: false, loc: 'ur',      jobIdx: 2, weaponR: 0x06,               armorId: 0x73, helmId: 0x62 },                 // Mo — Nunchuck / Leather+Cap
+  { name: 'Jiro',    level: 5,  palIdx: 2, camper: false, loc: 'ur',      jobIdx: 2, weaponR: 0,                  armorId: 0x73, helmId: 0x62 },                 // Mo — Unarmed / Leather+Cap
   { name: 'Ryuji',   level: 5,  palIdx: 7, camper: false, loc: 'cave-2',  jobIdx: 2, weaponR: 0x06,               armorId: 0x73, helmId: 0x62 },                 // Mo — Nunchuck / Leather+Cap
-  { name: 'Hana',    level: 3,  palIdx: 5, camper: false, loc: 'world',   jobIdx: 2, weaponR: 0x06,               armorId: 0x73, helmId: 0x62 },                 // Mo — Nunchuck / Leather+Cap
-  { name: 'Tetsuo',  level: 5,  palIdx: 3, camper: true,  loc: 'cave-1',  jobIdx: 2, weaponR: 0x06,               armorId: 0x73, helmId: 0x62 },                 // Mo — Nunchuck / Leather+Cap
+  { name: 'Hana',    level: 3,  palIdx: 5, camper: false, loc: 'world',   jobIdx: 2, weaponR: 0,                  armorId: 0x73, helmId: 0x62 },                 // Mo — Unarmed / Leather+Cap
+  { name: 'Tetsuo',  level: 5,  palIdx: 3, camper: true,  loc: 'cave-1',  jobIdx: 2, weaponR: 0,                  armorId: 0x73, helmId: 0x62 },                 // Mo — Unarmed / Leather+Cap
 ];
 
 // Palette variants — only color 3 changes (original $16 = red outfit)
