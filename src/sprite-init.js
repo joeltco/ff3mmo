@@ -6,7 +6,7 @@ import { nesColorFade } from './palette.js';
 import { _makeCanvas16, _makeCanvas16ctx, _hflipCanvas16, _makeWhiteCanvas } from './canvas-utils.js';
 import { BAYER4 } from './data/animation-tables.js';
 import { _writePixels64 } from './tile-math.js';
-import { PLAYER_PALETTES, ROSTER_FADE_STEPS } from './data/players.js';
+import { PLAYER_PALETTES, MONK_PALETTES, ROSTER_FADE_STEPS } from './data/players.js';
 import { BATTLE_SPRITE_ROM, BATTLE_JOB_SIZE, BATTLE_PAL_ROM } from './data/jobs.js';
 import { OK_IDLE, OK_VICTORY, OK_L_BACK_SWING, OK_L_FWD_T2, OK_L_FWD_T3, OK_R_BACK_SWING, OK_R_FWD_T2, OK_KNEEL,
          OK_LEG_L_IDLE, OK_LEG_R_IDLE, OK_LEG_L_BACK_L, OK_LEG_R_BACK_L, OK_LEG_L_FWD_L, OK_LEG_R_FWD_L,
@@ -104,8 +104,8 @@ function _renderPortrait(tiles, layout, palette) {
   return c;
 }
 
-function _genPosePortraits(poseTiles) {
-  return PLAYER_PALETTES.map(basePal => {
+function _genPosePortraits(poseTiles, paletteList = PLAYER_PALETTES) {
+  return paletteList.map(basePal => {
     const frames = [];
     for (let step = 0; step <= ROSTER_FADE_STEPS; step++) {
       const pal = basePal.slice();
@@ -963,17 +963,18 @@ function _initMonkPosePortraits(romData) {
   const kneelTiles = [t(36), t(37), t(38), t(39)];
   const knifeRTiles = [t(0), t(1), t(14), t(3)];
   const knifeLTiles = [t(0), t(1), t(2), t(7)];
+  const gen = (tiles) => _genPosePortraits(tiles, MONK_PALETTES);
   return {
-    fakePlayerPortraits: _genPosePortraits(idleTiles),
-    fakePlayerVictoryPortraits: _genPosePortraits(victoryTiles),
-    fakePlayerHitPortraits: _genPosePortraits(hitTiles),
-    fakePlayerDefendPortraits: _genPosePortraits(victoryTiles),
-    fakePlayerAttackPortraits: _genPosePortraits(knifeRTiles),
-    fakePlayerAttackLPortraits: _genPosePortraits(knifeLTiles),
-    fakePlayerKnifeBackPortraits: _genPosePortraits(knifeLTiles),
-    fakePlayerKnifeRPortraits: _genPosePortraits(knifeRTiles),
-    fakePlayerKnifeLPortraits: _genPosePortraits(knifeLTiles),
-    fakePlayerKneelPortraits: _genPosePortraits(kneelTiles),
+    fakePlayerPortraits: gen(idleTiles),
+    fakePlayerVictoryPortraits: gen(victoryTiles),
+    fakePlayerHitPortraits: gen(hitTiles),
+    fakePlayerDefendPortraits: gen(victoryTiles),
+    fakePlayerAttackPortraits: gen(knifeRTiles),
+    fakePlayerAttackLPortraits: gen(knifeLTiles),
+    fakePlayerKnifeBackPortraits: gen(knifeLTiles),
+    fakePlayerKnifeRPortraits: gen(knifeRTiles),
+    fakePlayerKnifeLPortraits: gen(knifeLTiles),
+    fakePlayerKneelPortraits: gen(kneelTiles),
   };
 }
 
@@ -989,10 +990,10 @@ function _buildMonkFullBodies(romData) {
   const atkLTiles = [t(0), t(1), t(10), t(11)];
   const legL = t(4), legR = t(5);
   const legLHit = t(34), legRHit = t(35);
-  const build = (tiles, lL, lR) => PLAYER_PALETTES.map(pal => _buildFullBody16x24Canvas(tiles, lL, lR, pal));
+  const build = (tiles, lL, lR) => MONK_PALETTES.map(pal => _buildFullBody16x24Canvas(tiles, lL, lR, pal));
   const idleBodies = build(idleTiles, legL, legR);
-  // Death pose placeholder — 2×3 grid using idle tiles; replace when PPU-captured Monk death exists
-  const deathCanvases = PLAYER_PALETTES.map(pal => {
+  // Death pose placeholder — 2×2 grid using idle tiles; replace when PPU-captured Monk death exists
+  const deathCanvases = MONK_PALETTES.map(pal => {
     const c = document.createElement('canvas'); c.width = 24; c.height = 16;
     const bctx = c.getContext('2d');
     for (let row = 0; row < 2; row++)
