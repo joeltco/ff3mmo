@@ -427,6 +427,16 @@ export function advancePVPTargetOrVictory() {
 }
 
 function _triggerPVPVictory() {
+  // KO'd player: no rewards, no victory flow — skip straight to box-close (→ game-over).
+  if (ps.hp <= 0) {
+    battleSt.encounterExpGained = 0; battleSt.encounterGilGained = 0; battleSt.encounterCpGained = 0;
+    battleSt.encounterDropItem = null; battleSt.encounterJobLevelUp = false;
+    battleSt.enemyDefeated = true;
+    battleSt.isDefending = false;
+    battleSt.battleState = 'enemy-box-close';
+    battleSt.battleTimer = 0;
+    return;
+  }
   const oppLv = pvpSt.pvpOpponentStats ? pvpSt.pvpOpponentStats.level : 1;
   const rawPvpExp = 5 * oppLv;
   grantExp(rawPvpExp);
@@ -452,6 +462,19 @@ function _updateMonsterDeath() {
     battleSt.dyingMonsterIndices = new Map();
     const allDead = battleSt.encounterMonsters.every(m => m.hp <= 0);
     if (allDead) {
+      // If the player is KO'd, skip rewards AND the victory flow entirely — drop straight to
+      // box-close so the battle HUD closes cleanly and then transitions to 'game-over'.
+      if (ps.hp <= 0) {
+        battleSt.encounterExpGained = 0;
+        battleSt.encounterGilGained = 0;
+        battleSt.encounterCpGained = 0;
+        battleSt.encounterDropItem = null;
+        battleSt.encounterJobLevelUp = false;
+        battleSt.isDefending = false;
+        battleSt.battleState = battleSt.isRandomEncounter ? 'encounter-box-close' : 'enemy-box-close';
+        battleSt.battleTimer = 0;
+        return true;
+      }
       const rawExp = battleSt.encounterMonsters.reduce((sum, m) => sum + m.exp, 0);
       grantExp(rawExp);
       battleSt.encounterExpGained = Math.max(1, Math.floor(rawExp / 4));
@@ -556,6 +579,15 @@ function _updateBossDissolve(dt) {
   if (battleSt.battleTimer >= BOSS_BLOCKS * BOSS_DISSOLVE_STEPS * BOSS_DISSOLVE_FRAME_MS) {
     battleSt.enemyDefeated = true; mapSt.bossSprite = null;
     ps.unlockedJobs |= 0x3E; // Wind Crystal: bits 1-5 (Warrior, Monk, White Mage, Black Mage, Red Mage)
+    // KO'd player: skip rewards and victory, straight to box-close (→ game-over).
+    if (ps.hp <= 0) {
+      battleSt.encounterExpGained = 0; battleSt.encounterGilGained = 0; battleSt.encounterCpGained = 0;
+      battleSt.encounterDropItem = null; battleSt.encounterJobLevelUp = false;
+      battleSt.isDefending = false;
+      battleSt.battleState = 'enemy-box-close';
+      battleSt.battleTimer = 0;
+      return true;
+    }
     const _bossData = MONSTERS.get(0xCC);
     const rawBossExp = _bossData?.exp || 132;
     grantExp(rawBossExp);
@@ -640,23 +672,36 @@ function _respawnAtLastTown() {
 function _updateBoxClose() {
   if (battleSt.battleState === 'encounter-box-close') {
     if (battleSt.battleTimer >= BOSS_BOX_EXPAND_MS) {
-      battleSt.battleState = 'none'; battleSt.battleTimer = 0; battleSt.runSlideBack = false;
+      const playerDead = ps.hp <= 0;
+      battleSt.runSlideBack = false;
       sprite.setDirection(DIR_DOWN); battleSt.isRandomEncounter = false; battleSt.encounterMonsters = null;
       battleSt.dyingMonsterIndices = new Map(); battleSt.battleAllies = []; battleSt.allyJoinRound = 0;
-      stopMusic(); resumeMusic();
-      if (ps.hp <= 0) _respawnAtLastTown();
+      stopMusic();
+      if (playerDead) {
+        battleSt.battleState = 'game-over'; battleSt.battleTimer = 0;
+        playTrack(TRACKS.GAME_OVER);
+      } else {
+        battleSt.battleState = 'none'; battleSt.battleTimer = 0;
+        resumeMusic();
+      }
     }
     return true;
   }
   if (battleSt.battleState === 'enemy-box-close') {
     if (battleSt.battleTimer >= BOSS_BOX_EXPAND_MS) {
       const wasPVP = pvpSt.isPVPBattle;
+      const playerDead = ps.hp <= 0;
       resetPVPState();
-      battleSt.battleState = 'none'; battleSt.battleTimer = 0; sprite.setDirection(DIR_DOWN);
+      sprite.setDirection(DIR_DOWN);
       battleSt.battleAllies = []; battleSt.allyJoinRound = 0;
-      if (!wasPVP) playTrack(TRACKS.CRYSTAL_ROOM);
-      else resumeMusic();
-      if (ps.hp <= 0) _respawnAtLastTown();
+      if (playerDead) {
+        battleSt.battleState = 'game-over'; battleSt.battleTimer = 0;
+        playTrack(TRACKS.GAME_OVER);
+      } else {
+        battleSt.battleState = 'none'; battleSt.battleTimer = 0;
+        if (!wasPVP) playTrack(TRACKS.CRYSTAL_ROOM);
+        else resumeMusic();
+      }
     }
     return true;
   }
@@ -682,14 +727,26 @@ function _updateDefeatStates() {
   if (battleSt.battleState === 'defeat-close') {
     if (battleSt.battleTimer >= BOSS_BOX_EXPAND_MS) {
       resetPVPState();
-      battleSt.battleState = 'none'; battleSt.battleTimer = 0;
       battleSt.isRandomEncounter = false;
       battleSt.encounterMonsters = null; battleSt.turnQueue = []; battleSt.battleAllies = []; battleSt.allyJoinRound = 0;
-      _respawnAtLastTown();
+      battleSt.battleState = 'game-over'; battleSt.battleTimer = 0;
+      stopMusic();
+      playTrack(TRACKS.GAME_OVER);
     }
     return true;
   }
+  if (battleSt.battleState === 'game-over') {
+    // Wait for the user to press Z (see input-handler.js) — which calls _respawnAtLastTown().
+    return true;
+  }
   return false;
+}
+
+// Called from input-handler when Z is pressed during 'game-over' state.
+export function respawnFromGameOver() {
+  battleSt.battleState = 'none'; battleSt.battleTimer = 0;
+  stopMusic();
+  _respawnAtLastTown();
 }
 
 export function updateBattleEndSequence(dt) {

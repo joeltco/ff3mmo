@@ -20,6 +20,7 @@ import { getSlashFramesForWeapon } from './battle-sprite-cache.js';
 import { mapSt } from './map-state.js';
 import { pvpSt } from './pvp.js';
 import { advanceBattleMsgZ } from './battle-msg.js';
+import { respawnFromGameOver } from './battle-update.js';
 import { getRosterVisible } from './roster.js';
 import { playerInventory, addItem, removeItem, INV_SLOTS } from './inventory.js';
 import { swapBattleSprites } from './job-sprites.js';
@@ -503,6 +504,8 @@ function _battleInputHoldStates() {
     if (msgState.state === 'hold' && z) { clearZ(); msgState.state = 'slide-out'; msgState.timer = 0; }
   } else if (battleSt.battleState === 'defeat-text') {
     if (z) { clearZ(); battleSt.battleState = 'defeat-close'; battleSt.battleTimer = 0; }
+  } else if (battleSt.battleState === 'game-over') {
+    if (z) { clearZ(); respawnFromGameOver(); }
   } else if (battleSt.battleState === 'victory-msg') {
     if (z) { clearZ(); advanceBattleMsgZ(); battleSt.battleTimer = 0; }
   } else if (battleSt.battleState === 'exp-hold') {

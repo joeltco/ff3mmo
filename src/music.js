@@ -17,6 +17,7 @@ export const TRACKS = {
   BATTLE:       0x20,  // Battle 1 (normal encounters)
   BOSS_BATTLE:  0x2A,  // Battle 2 (boss battle)
   VICTORY:      0x07,  // Battle victory
+  GAME_OVER:    0x1D,  // Game over jingle — TODO verify, may need another song ID
 };
 
 // SFX — raw NSF track numbers (passed directly to gme_start_track)
