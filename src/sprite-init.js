@@ -24,6 +24,7 @@ import { MO_IDLE, MO_LEG_L, MO_LEG_R,
          MO_LEG_L_FWD_R,
          MO_L_BACK_T1, MO_L_BACK_T3,
          MO_L_FWD_T2, MO_L_FWD_T3,
+         MO_VICTORY, MO_LEG_L_VICTORY, MO_LEG_R_VICTORY,
          MO_DEATH } from './data/monk-sprites.js';
 import { initWeaponSprites } from './weapon-sprites.js';
 import { LOAD_FADE_MAX } from './loading-screen.js';
@@ -968,7 +969,7 @@ function _initMonkPosePortraits(romData) {
   const idleTiles    = MO_IDLE.map(d);
   const knifeRTiles  = [idleTiles[0], idleTiles[1], d(MO_R_BACK_T2), idleTiles[3]];       // R-back: body-TL swaps
   const knifeLTiles  = [idleTiles[0], d(MO_L_BACK_T1), idleTiles[2], d(MO_L_BACK_T3)];    // L-back: head-TR + body-TR swap
-  const victoryTiles = [t(24), t(25), t(26), t(27)];
+  const victoryTiles = MO_VICTORY.map(d);
   const hitTiles     = [t(30), t(31), t(32), t(33)];
   const kneelTiles   = [t(36), t(37), t(38), t(39)];
   const gen = (tiles) => _genPosePortraits(tiles, MONK_PALETTES);
@@ -993,7 +994,7 @@ function _buildMonkFullBodies(romData) {
   const idleTiles    = MO_IDLE.map(d);
   const knifeRTiles  = [idleTiles[0], idleTiles[1], d(MO_R_BACK_T2), idleTiles[3]];
   const knifeLTiles  = [idleTiles[0], d(MO_L_BACK_T1), idleTiles[2], d(MO_L_BACK_T3)];
-  const victoryTiles = [t(24), t(25), t(26), t(27)];
+  const victoryTiles = MO_VICTORY.map(d);
   const hitTiles     = [t(30), t(31), t(32), t(33)];
   const kneelTiles   = [t(36), t(37), t(38), t(39)];
   const atkLTiles    = [idleTiles[0], idleTiles[1], d(MO_L_FWD_T2), d(MO_L_FWD_T3)];
@@ -1024,7 +1025,7 @@ function _buildMonkFullBodies(romData) {
     fakePlayerKnifeRFwdFullBodyCanvases: build(idleTiles, legLFwdR, legRSwing),
     fakePlayerKnifeLFwdFullBodyCanvases: build(atkLTiles, legLFwdL, legRFwdL),
     fakePlayerKneelFullBodyCanvases: build(kneelTiles, legL, legR),
-    fakePlayerVictoryFullBodyCanvases: build(victoryTiles, legL, legR),
+    fakePlayerVictoryFullBodyCanvases: build(victoryTiles, d(MO_LEG_L_VICTORY), d(MO_LEG_R_VICTORY)),
     fakePlayerDeathPoseCanvases: deathCanvases,
     fakePlayerDeathFrames: idleBodies.map(c => _makeDeathFrames(c)),
   };
