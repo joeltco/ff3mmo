@@ -375,7 +375,8 @@ function _initBattleAttackSprites(palette, battleSpriteCanvas) {
   battleSpriteAttackLCanvas.width = 16; battleSpriteAttackLCanvas.height = 16;
   const alctx = battleSpriteAttackLCanvas.getContext('2d');
   alctx.drawImage(battleSpriteCanvas, 0, 0);
-  _drawTileOnto(_FP_KNIFE_L[3], palette, alctx, 8, 8);
+  _drawTileOnto(_FP_KNIFE_L[1], palette, alctx, 8, 0); // L-back head-TR variant
+  _drawTileOnto(_FP_KNIFE_L[3], palette, alctx, 8, 8); // L-back body-TR variant
 
   const battleSpriteAttackL2Canvas = document.createElement('canvas');
   battleSpriteAttackL2Canvas.width = 16; battleSpriteAttackL2Canvas.height = 16;
@@ -430,14 +431,10 @@ function _initCureSparkleFrames() {
 }
 
 function _initBattleDefendSprites(palette) {
-  const DEFEND_TILES = [
-    new Uint8Array([0x05,0x0B,0x17,0x03,0x00,0x00,0x0E,0x1F, 0x07,0x0F,0x1F,0x3F,0x43,0x40,0x20,0x00]),
-    new Uint8Array([0x00,0x00,0xA0,0xD0,0xE8,0x78,0x10,0x88, 0x2C,0x59,0xBE,0xD6,0xEF,0xFB,0x75,0x1A]),
-    new Uint8Array([0x04,0xD6,0xD6,0x3F,0xEF,0xF0,0x63,0x0E, 0x00,0x00,0x00,0x24,0xE4,0xF0,0x6F,0x1F]),
-    new Uint8Array([0x90,0x4C,0xCC,0x30,0x7C,0x78,0x30,0x00, 0x32,0x21,0x00,0xB0,0x7C,0x7C,0xB2,0xC2]),
-  ];
-  const battleSpriteDefendCanvas = _buildCanvas4(DEFEND_TILES, palette);
-  const battleSpriteDefendFadeCanvases = _buildFadedCanvas4Set(DEFEND_TILES, palette);
+  // Defend, item-use, and magic-cast all share the victory pose in FF3.
+  // Using OK_VICTORY directly keeps all three in lock-step — no duplicated byte arrays to drift.
+  const battleSpriteDefendCanvas = _buildCanvas4(OK_VICTORY, palette);
+  const battleSpriteDefendFadeCanvases = _buildFadedCanvas4Set(OK_VICTORY, palette);
 
   const SPARKLE_TILES = [
     new Uint8Array([0x01,0x00,0x08,0x00,0x00,0x41,0x00,0x02, 0x00,0x00,0x01,0x02,0x00,0x09,0x00,0x12]),
@@ -629,6 +626,7 @@ export function initBattleSpriteForJob(romData, jobIdx) {
     const battleSpriteKnifeLCanvas = _renderPortrait(knifeLTiles, _BATTLE_LAYOUT, palette);
     const battleSpriteKnifeBackCanvas = _renderPortrait(knifeLTiles, _BATTLE_LAYOUT, palette);
     initWeaponSprites(palette);
+    // Victory / Defend / Magic-cast all share the same 4-tile pose in FF3.
     const victoryTiles = WR_VICTORY.map(d);
     const battleSpriteVictoryCanvas = _renderPortrait(victoryTiles, _BATTLE_LAYOUT, palette);
     const battleSpriteDefendCanvas = _renderPortrait(victoryTiles, _BATTLE_LAYOUT, palette);
@@ -735,6 +733,7 @@ export function initBattleSpriteForJob(romData, jobIdx) {
   initWeaponSprites(palette);
 
   // Victory / Defend (same pose in FF3)
+  // Victory / Defend / Magic-cast all share the same 4-tile pose in FF3.
   const victoryTiles = _readJobTiles(romData, jobBase, 24, 25, 26, 27);
   const battleSpriteVictoryCanvas = _renderPortrait(victoryTiles, _BATTLE_LAYOUT, palette);
   const battleSpriteDefendCanvas = _renderPortrait(victoryTiles, _BATTLE_LAYOUT, palette);
