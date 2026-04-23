@@ -26,6 +26,7 @@ import { MO_IDLE, MO_LEG_L, MO_LEG_R,
          MO_L_FWD_T2, MO_L_FWD_T3,
          MO_HIT, MO_LEG_R_HIT,
          MO_VICTORY, MO_LEG_L_VICTORY, MO_LEG_R_VICTORY,
+         MO_KNEEL, MO_LEG_L_KNEEL, MO_LEG_R_KNEEL,
          MO_DEATH } from './data/monk-sprites.js';
 import { initWeaponSprites } from './weapon-sprites.js';
 import { LOAD_FADE_MAX } from './loading-screen.js';
@@ -972,7 +973,7 @@ function _initMonkPosePortraits(romData) {
   const knifeLTiles  = [idleTiles[0], d(MO_L_BACK_T1), idleTiles[2], d(MO_L_BACK_T3)];    // L-back: head-TR + body-TR swap
   const victoryTiles = MO_VICTORY.map(d);
   const hitTiles     = MO_HIT.map(d);
-  const kneelTiles   = [t(36), t(37), t(38), t(39)];
+  const kneelTiles   = MO_KNEEL.map(d);
   const gen = (tiles) => _genPosePortraits(tiles, MONK_PALETTES);
   return {
     fakePlayerPortraits: gen(idleTiles),
@@ -997,7 +998,7 @@ function _buildMonkFullBodies(romData) {
   const knifeLTiles  = [idleTiles[0], d(MO_L_BACK_T1), idleTiles[2], d(MO_L_BACK_T3)];
   const victoryTiles = MO_VICTORY.map(d);
   const hitTiles     = MO_HIT.map(d);
-  const kneelTiles   = [t(36), t(37), t(38), t(39)];
+  const kneelTiles   = MO_KNEEL.map(d);
   const atkLTiles    = [idleTiles[0], idleTiles[1], d(MO_L_FWD_T2), d(MO_L_FWD_T3)];
   const legL = d(MO_LEG_L), legR = d(MO_LEG_R);
   const legLBackR = d(MO_LEG_L_BACK_R), legRBackR = d(MO_LEG_R_BACK_R);
@@ -1026,7 +1027,7 @@ function _buildMonkFullBodies(romData) {
     fakePlayerKnifeBackFullBodyCanvases: build(knifeLTiles, legLBackL, legRBackL),
     fakePlayerKnifeRFwdFullBodyCanvases: build(idleTiles, legLFwdR, legRSwing),
     fakePlayerKnifeLFwdFullBodyCanvases: build(atkLTiles, legLFwdL, legRFwdL),
-    fakePlayerKneelFullBodyCanvases: build(kneelTiles, legL, legR),
+    fakePlayerKneelFullBodyCanvases: build(kneelTiles, d(MO_LEG_L_KNEEL), d(MO_LEG_R_KNEEL)),
     fakePlayerVictoryFullBodyCanvases: build(victoryTiles, d(MO_LEG_L_VICTORY), d(MO_LEG_R_VICTORY)),
     fakePlayerDeathPoseCanvases: deathCanvases,
     fakePlayerDeathFrames: idleBodies.map(c => _makeDeathFrames(c)),
