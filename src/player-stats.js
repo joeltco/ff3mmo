@@ -187,8 +187,10 @@ export function grantExp(amount) {
     ps.stats.mnd = Math.min(99, ps.stats.mnd + bonus.mnd);
     ps.stats.maxMP += bonus.mpGain;
 
-    // Full heal on level-up (matches FF3)
-    fullHeal();
+    // Full heal on level-up (matches FF3) — but only if alive. A KO'd player must stay
+    // KO'd so the end-of-battle respawn check in `encounter-box-close` / `enemy-box-close`
+    // fires and wipes them back to their last town.
+    if (ps.hp > 0) fullHeal();
 
     // Update derived combat stats
     recalcCombatStats();
