@@ -950,9 +950,74 @@ function _buildWarriorFullBodies() {
   };
 }
 
+// Monk fake-player portraits/bodies — ROM-read at jobBase 0x50550. Same tile-index
+// convention as the generic ROM path: idle 0-3, L-back swap tile 7, R-back swap tile 14,
+// victory 24-27, hit 30-33 + legs 34-35, kneel 36-39, default legs 4-5.
+// If any pose looks scrambled in-game, PPU-capture the specific tiles (see CLAUDE.md).
+function _initMonkPosePortraits(romData) {
+  const jobBase = BATTLE_SPRITE_ROM + 2 * BATTLE_JOB_SIZE;
+  const t = (idx) => decodeTile(romData, jobBase + idx * 16);
+  const idleTiles = [t(0), t(1), t(2), t(3)];
+  const victoryTiles = [t(24), t(25), t(26), t(27)];
+  const hitTiles = [t(30), t(31), t(32), t(33)];
+  const kneelTiles = [t(36), t(37), t(38), t(39)];
+  const knifeRTiles = [t(0), t(1), t(14), t(3)];
+  const knifeLTiles = [t(0), t(1), t(2), t(7)];
+  return {
+    fakePlayerPortraits: _genPosePortraits(idleTiles),
+    fakePlayerVictoryPortraits: _genPosePortraits(victoryTiles),
+    fakePlayerHitPortraits: _genPosePortraits(hitTiles),
+    fakePlayerDefendPortraits: _genPosePortraits(victoryTiles),
+    fakePlayerAttackPortraits: _genPosePortraits(knifeRTiles),
+    fakePlayerAttackLPortraits: _genPosePortraits(knifeLTiles),
+    fakePlayerKnifeBackPortraits: _genPosePortraits(knifeLTiles),
+    fakePlayerKnifeRPortraits: _genPosePortraits(knifeRTiles),
+    fakePlayerKnifeLPortraits: _genPosePortraits(knifeLTiles),
+    fakePlayerKneelPortraits: _genPosePortraits(kneelTiles),
+  };
+}
+
+function _buildMonkFullBodies(romData) {
+  const jobBase = BATTLE_SPRITE_ROM + 2 * BATTLE_JOB_SIZE;
+  const t = (idx) => decodeTile(romData, jobBase + idx * 16);
+  const idleTiles = [t(0), t(1), t(2), t(3)];
+  const victoryTiles = [t(24), t(25), t(26), t(27)];
+  const hitTiles = [t(30), t(31), t(32), t(33)];
+  const kneelTiles = [t(36), t(37), t(38), t(39)];
+  const knifeRTiles = [t(0), t(1), t(14), t(3)];
+  const knifeLTiles = [t(0), t(1), t(2), t(7)];
+  const atkLTiles = [t(0), t(1), t(10), t(11)];
+  const legL = t(4), legR = t(5);
+  const legLHit = t(34), legRHit = t(35);
+  const build = (tiles, lL, lR) => PLAYER_PALETTES.map(pal => _buildFullBody16x24Canvas(tiles, lL, lR, pal));
+  const idleBodies = build(idleTiles, legL, legR);
+  // Death pose placeholder — 2×3 grid using idle tiles; replace when PPU-captured Monk death exists
+  const deathCanvases = PLAYER_PALETTES.map(pal => {
+    const c = document.createElement('canvas'); c.width = 24; c.height = 16;
+    const bctx = c.getContext('2d');
+    for (let row = 0; row < 2; row++)
+      for (let col = 0; col < 2; col++)
+        _renderDecodedTile(bctx, idleTiles[row * 2 + col], pal, col * 8, row * 8);
+    return c;
+  });
+  return {
+    fakePlayerFullBodyCanvases: idleBodies,
+    fakePlayerHitFullBodyCanvases: build(hitTiles, legLHit, legRHit),
+    fakePlayerKnifeRFullBodyCanvases: build(knifeRTiles, legL, legR),
+    fakePlayerKnifeLFullBodyCanvases: build(knifeLTiles, legL, legR),
+    fakePlayerKnifeBackFullBodyCanvases: build(knifeLTiles, legL, legR),
+    fakePlayerKnifeRFwdFullBodyCanvases: build(idleTiles, legL, legR),
+    fakePlayerKnifeLFwdFullBodyCanvases: build(atkLTiles, legL, legR),
+    fakePlayerKneelFullBodyCanvases: build(kneelTiles, legL, legR),
+    fakePlayerVictoryFullBodyCanvases: build(victoryTiles, legL, legR),
+    fakePlayerDeathPoseCanvases: deathCanvases,
+    fakePlayerDeathFrames: idleBodies.map(c => _makeDeathFrames(c)),
+  };
+}
+
 export function initFakePlayerPortraits(romData, jobIndices) {
   // Build per-job portrait and body sets
-  // jobIndices = array of unique job indices to generate for (e.g. [0, 1])
+  // jobIndices = array of unique job indices to generate for (e.g. [0, 1, 2])
   const result = {};
   for (const jobIdx of jobIndices) {
     let portraits, bodies;
@@ -972,6 +1037,9 @@ export function initFakePlayerPortraits(romData, jobIndices) {
     } else if (jobIdx === 1) {
       portraits = _initWarriorPosePortraits();
       bodies = _buildWarriorFullBodies();
+    } else if (jobIdx === 2) {
+      portraits = _initMonkPosePortraits(romData);
+      bodies = _buildMonkFullBodies(romData);
     } else {
       // Future jobs will need their own PPU-dumped tiles
       portraits = _initWarriorPosePortraits(); // placeholder

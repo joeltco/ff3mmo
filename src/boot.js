@@ -46,7 +46,7 @@ export function initSpriteAssets(rom) {
   initBattleSpriteCache();
 
   // Fake player portraits & full bodies — keyed by jobIdx
-  initFakePlayerSprites(rom, [0, 1]);
+  initFakePlayerSprites(rom, [0, 1, 2]);
 
   initRoster();
   loadBossSprite(0xCC); // Land Turtle — only boss in game
