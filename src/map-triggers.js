@@ -40,7 +40,7 @@ const LOOT_POOLS = {
   1001: [ // Altar Cave F2
     { weight: 45, pool: [0xA6, 0xAF, 0xAE] },
     { weight: 30, pool: [GIL(40, 100)] },
-    { weight: 20, pool: [0x62, 0x1F] },                           // Leather Cap, Dagger
+    { weight: 20, pool: [0x62, 0x1F, 0x06] },                     // Leather Cap, Dagger, Nunchuck
     { weight:  5, pool: [0x58] },                                 // Leather Shield
   ],
   1002: [ // Altar Cave F3

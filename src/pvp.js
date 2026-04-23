@@ -687,6 +687,7 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
     if      (wpn === 'knife' && activeWeaponId === 0x1F) blade = isAttackState ? blades.dagger.swung : blades.dagger.raised;
     else if (wpn === 'knife')  blade = isAttackState ? blades.knife.swung  : blades.knife.raised;
     else if (wpn === 'sword')  blade = isAttackState ? blades.sword.swung  : blades.sword.raised;
+    else if (wpn === 'nunchaku') blade = isAttackState ? blades.nunchaku.swung : blades.nunchaku.raised;
     else if (isAttackState)    blade = blades.fist;
   }
   const drawBlade = () => {

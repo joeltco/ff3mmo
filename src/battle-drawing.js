@@ -30,6 +30,7 @@ import { getHitIdx, getTargets } from './battle-items.js';
 import { getKnifeBladeCanvas, getKnifeBladeSwungCanvas,
          getDaggerBladeCanvas, getDaggerBladeSwungCanvas,
          getSwordBladeCanvas, getSwordBladeSwungCanvas,
+         getNunchakuBladeCanvas, getNunchakuBladeSwungCanvas,
          getFistCanvas } from './weapon-sprites.js';
 import { clipToViewport, drawCursorFaded, drawHudBox, drawSparkleCorners, drawBorderedBox,
          grayViewport } from './hud-drawing.js';
@@ -244,15 +245,18 @@ function _drawPortraitWeapon(px, py, before) {
       if (wpnSt === 'knife' && handWeapon === 0x1F && getDaggerBladeCanvas()) ui.ctx.drawImage(getDaggerBladeCanvas(), px + 8, py - 7);
       else if (wpnSt === 'knife' && getKnifeBladeCanvas()) ui.ctx.drawImage(getKnifeBladeCanvas(), px + 8, py - 7);
       else if (wpnSt === 'sword' && getSwordBladeCanvas()) ui.ctx.drawImage(getSwordBladeCanvas(), px + 8, py - 7);
+      else if (wpnSt === 'nunchaku' && getNunchakuBladeCanvas()) ui.ctx.drawImage(getNunchakuBladeCanvas(), px + 8, py - 7);
     } else if (!before && !rightHand) {
       if (wpnSt === 'knife' && handWeapon === 0x1F && getDaggerBladeCanvas()) ui.ctx.drawImage(getDaggerBladeCanvas(), px + 16, py - 7);
       else if (wpnSt === 'knife' && getKnifeBladeCanvas()) ui.ctx.drawImage(getKnifeBladeCanvas(), px + 16, py - 7);
       else if (wpnSt === 'sword' && getSwordBladeCanvas()) ui.ctx.drawImage(getSwordBladeCanvas(), px + 16, py - 7);
+      else if (wpnSt === 'nunchaku' && getNunchakuBladeCanvas()) ui.ctx.drawImage(getNunchakuBladeCanvas(), px + 16, py - 7);
     }
   } else if (!before && (battleSt.battleState === 'attack-fwd' || battleSt.battleState === 'player-slash')) {
     if (wpnSt === 'knife' && handWeapon === 0x1F && getDaggerBladeSwungCanvas()) ui.ctx.drawImage(getDaggerBladeSwungCanvas(), px - 16, py + 1);
     else if (wpnSt === 'knife' && getKnifeBladeSwungCanvas()) ui.ctx.drawImage(getKnifeBladeSwungCanvas(), px - 16, py + 1);
     else if (wpnSt === 'sword' && getSwordBladeSwungCanvas()) ui.ctx.drawImage(getSwordBladeSwungCanvas(), px - 16, py + 1);
+    else if (wpnSt === 'nunchaku' && getNunchakuBladeSwungCanvas()) ui.ctx.drawImage(getNunchakuBladeSwungCanvas(), px - 16, py + 1);
     else if (!wpnSt && handWeapon === 0 && getFistCanvas()) ui.ctx.drawImage(getFistCanvas(), px - 4, py + 10);
   }
 }
@@ -1187,6 +1191,7 @@ function _drawAllyPortrait(i, ally, isVicPose, isAllyAttack, isAllyHit, isNearFa
       if (wpnSt === 'knife' && ally.weaponId === 0x1F && getDaggerBladeCanvas()) ui.ctx.drawImage(getDaggerBladeCanvas(), backX, ppy - 7);
       else if (wpnSt === 'knife' && getKnifeBladeCanvas()) ui.ctx.drawImage(getKnifeBladeCanvas(), backX, ppy - 7);
       else if (wpnSt === 'sword' && getSwordBladeCanvas()) ui.ctx.drawImage(getSwordBladeCanvas(), backX, ppy - 7);
+      else if (wpnSt === 'nunchaku' && getNunchakuBladeCanvas()) ui.ctx.drawImage(getNunchakuBladeCanvas(), backX, ppy - 7);
     }
   }
   ui.ctx.drawImage(portraits[ally.fadeStep], ppx, ppy);
@@ -1196,6 +1201,7 @@ function _drawAllyPortrait(i, ally, isVicPose, isAllyAttack, isAllyHit, isNearFa
       if (wpnSt === 'knife' && ally.weaponL === 0x1F && getDaggerBladeCanvas()) weaponDraws.push({ img: getDaggerBladeCanvas(), x: ppx + 16, y: ppy - 7 });
       else if (wpnSt === 'knife' && getKnifeBladeCanvas()) weaponDraws.push({ img: getKnifeBladeCanvas(), x: ppx + 16, y: ppy - 7 });
       else if (wpnSt === 'sword' && getSwordBladeCanvas()) weaponDraws.push({ img: getSwordBladeCanvas(), x: ppx + 16, y: ppy - 7 });
+      else if (wpnSt === 'nunchaku' && getNunchakuBladeCanvas()) weaponDraws.push({ img: getNunchakuBladeCanvas(), x: ppx + 16, y: ppy - 7 });
     }
   }
   if (isThisAllySlash) {
@@ -1204,6 +1210,7 @@ function _drawAllyPortrait(i, ally, isVicPose, isAllyAttack, isAllyHit, isNearFa
     if (wpnSt === 'knife' && activeWpnId === 0x1F && getDaggerBladeSwungCanvas()) weaponDraws.push({ img: getDaggerBladeSwungCanvas(), x: ppx - 16, y: ppy + 1 });
     else if (wpnSt === 'knife' && getKnifeBladeSwungCanvas()) weaponDraws.push({ img: getKnifeBladeSwungCanvas(), x: ppx - 16, y: ppy + 1 });
     else if (wpnSt === 'sword' && getSwordBladeSwungCanvas()) weaponDraws.push({ img: getSwordBladeSwungCanvas(), x: ppx - 16, y: ppy + 1 });
+    else if (wpnSt === 'nunchaku' && getNunchakuBladeSwungCanvas()) weaponDraws.push({ img: getNunchakuBladeSwungCanvas(), x: ppx - 16, y: ppy + 1 });
     else if ((wpnSt === 'claw' || (!wpnSt && activeWpnId === 0)) && getFistCanvas()) weaponDraws.push({ img: getFistCanvas(), x: ppx - 4, y: ppy + 10 });
   }
   // Near-fatal sweat — 2 frames alternating every 133ms, 3px above portrait

@@ -51,11 +51,21 @@ const SWORD_TILES = [
 const FIST_TILE = new Uint8Array([0x00,0x00,0x00,0x0C,0x2C,0x4C,0x00,0x00,
                                    0x00,0x00,0x00,0x73,0x53,0x23,0x00,0x00]);
 
+// PPU $1000 capture — Monk wind-up with Nunchuck equipped (SP3 palette, tiles $49/$4A/$4B/$4C).
+// Only $49 and $4C carry the diagonal chain pixels; the other two are blank padding.
+const NUNCHAKU_TILES = [
+  new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]), // $4A
+  new Uint8Array([0x00,0xC0,0x60,0x30,0x18,0x0C,0x06,0x01,0x40,0x60,0x30,0x18,0x0C,0x06,0x02,0x00]), // $49
+  new Uint8Array([0x80,0x40,0x60,0x30,0x18,0x0C,0x06,0x02,0x00,0x60,0x30,0x18,0x0C,0x06,0x03,0x00]), // $4C
+  new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]), // $4B
+];
+
 // ── Canvas storage ───────────────────────────────────────────────────────────
 
 let knifeRaised = null, knifeSwung = null;
 let daggerRaised = null, daggerSwung = null;
 let swordRaised = null, swordSwung = null;
+let nunchakuRaised = null, nunchakuSwung = null;
 let fistCanvas = null;
 
 // ── Build helpers ────────────────────────────────────────────────────────────
@@ -82,6 +92,8 @@ export function initWeaponSprites(palette) {
   daggerRaised = b.raised; daggerSwung = b.swung;
   b = _buildBladeCanvas(SWORD_TILES, [0x0F,0x00,0x32,0x30], pos, so);
   swordRaised = b.raised; swordSwung = b.swung;
+  b = _buildBladeCanvas(NUNCHAKU_TILES, [0x0F,0x00,0x32,0x30], pos, so);
+  nunchakuRaised = b.raised; nunchakuSwung = b.swung;
 
   fistCanvas = document.createElement('canvas');
   fistCanvas.width = 8; fistCanvas.height = 8;
@@ -94,13 +106,16 @@ export function getDaggerBladeCanvas()     { return daggerRaised; }
 export function getDaggerBladeSwungCanvas() { return daggerSwung; }
 export function getSwordBladeCanvas()      { return swordRaised; }
 export function getSwordBladeSwungCanvas()  { return swordSwung; }
+export function getNunchakuBladeCanvas()      { return nunchakuRaised; }
+export function getNunchakuBladeSwungCanvas()  { return nunchakuSwung; }
 export function getFistCanvas()            { return fistCanvas; }
 
 export function getBlades() {
   return {
-    knife:  { raised: knifeRaised,  swung: knifeSwung },
-    dagger: { raised: daggerRaised, swung: daggerSwung },
-    sword:  { raised: swordRaised,  swung: swordSwung },
-    fist:   fistCanvas,
+    knife:    { raised: knifeRaised,    swung: knifeSwung },
+    dagger:   { raised: daggerRaised,   swung: daggerSwung },
+    sword:    { raised: swordRaised,    swung: swordSwung },
+    nunchaku: { raised: nunchakuRaised, swung: nunchakuSwung },
+    fist:     fistCanvas,
   };
 }
