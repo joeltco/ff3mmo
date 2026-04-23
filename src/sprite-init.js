@@ -20,7 +20,8 @@ import { WR_IDLE, WR_LEG_L, WR_LEG_R, WR_L_BACK, WR_LEG_L_BACK_L, WR_LEG_R_BACK_
          WR_HIT, WR_LEG_L_HIT, WR_LEG_R_HIT,
          WR_DEATH } from './data/warrior-sprites.js';
 import { MO_IDLE, MO_LEG_L, MO_LEG_R,
-         MO_R_BACK_T2, MO_LEG_L_BACK_R, MO_LEG_R_BACK_R } from './data/monk-sprites.js';
+         MO_R_BACK_T2, MO_LEG_L_BACK_R, MO_LEG_R_BACK_R,
+         MO_LEG_L_FWD_R } from './data/monk-sprites.js';
 import { initWeaponSprites } from './weapon-sprites.js';
 import { LOAD_FADE_MAX } from './loading-screen.js';
 
@@ -995,6 +996,7 @@ function _buildMonkFullBodies(romData) {
   const atkLTiles    = [idleTiles[0], idleTiles[1], t(10), t(11)];
   const legL = d(MO_LEG_L), legR = d(MO_LEG_R);
   const legLBackR = d(MO_LEG_L_BACK_R), legRBackR = d(MO_LEG_R_BACK_R);
+  const legLFwdR = d(MO_LEG_L_FWD_R), legRSwing = legRBackR; // R leg swing is shared across R-back/R-fwd
   const legLHit = t(34), legRHit = t(35);
   const build = (tiles, lL, lR) => MONK_PALETTES.map(pal => _buildFullBody16x24Canvas(tiles, lL, lR, pal));
   const idleBodies = build(idleTiles, legL, legR);
@@ -1013,7 +1015,7 @@ function _buildMonkFullBodies(romData) {
     fakePlayerKnifeRFullBodyCanvases: build(knifeRTiles, legLBackR, legRBackR),
     fakePlayerKnifeLFullBodyCanvases: build(knifeLTiles, legL, legR),
     fakePlayerKnifeBackFullBodyCanvases: build(knifeLTiles, legL, legR),
-    fakePlayerKnifeRFwdFullBodyCanvases: build(idleTiles, legL, legR),
+    fakePlayerKnifeRFwdFullBodyCanvases: build(idleTiles, legLFwdR, legRSwing),
     fakePlayerKnifeLFwdFullBodyCanvases: build(atkLTiles, legL, legR),
     fakePlayerKneelFullBodyCanvases: build(kneelTiles, legL, legR),
     fakePlayerVictoryFullBodyCanvases: build(victoryTiles, legL, legR),
