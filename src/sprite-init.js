@@ -24,6 +24,7 @@ import { MO_IDLE, MO_LEG_L, MO_LEG_R,
          MO_LEG_L_FWD_R,
          MO_L_BACK_T1, MO_L_BACK_T3,
          MO_L_FWD_T2, MO_L_FWD_T3,
+         MO_HIT, MO_LEG_R_HIT,
          MO_VICTORY, MO_LEG_L_VICTORY, MO_LEG_R_VICTORY,
          MO_DEATH } from './data/monk-sprites.js';
 import { initWeaponSprites } from './weapon-sprites.js';
@@ -970,7 +971,7 @@ function _initMonkPosePortraits(romData) {
   const knifeRTiles  = [idleTiles[0], idleTiles[1], d(MO_R_BACK_T2), idleTiles[3]];       // R-back: body-TL swaps
   const knifeLTiles  = [idleTiles[0], d(MO_L_BACK_T1), idleTiles[2], d(MO_L_BACK_T3)];    // L-back: head-TR + body-TR swap
   const victoryTiles = MO_VICTORY.map(d);
-  const hitTiles     = [t(30), t(31), t(32), t(33)];
+  const hitTiles     = MO_HIT.map(d);
   const kneelTiles   = [t(36), t(37), t(38), t(39)];
   const gen = (tiles) => _genPosePortraits(tiles, MONK_PALETTES);
   return {
@@ -995,7 +996,7 @@ function _buildMonkFullBodies(romData) {
   const knifeRTiles  = [idleTiles[0], idleTiles[1], d(MO_R_BACK_T2), idleTiles[3]];
   const knifeLTiles  = [idleTiles[0], d(MO_L_BACK_T1), idleTiles[2], d(MO_L_BACK_T3)];
   const victoryTiles = MO_VICTORY.map(d);
-  const hitTiles     = [t(30), t(31), t(32), t(33)];
+  const hitTiles     = MO_HIT.map(d);
   const kneelTiles   = [t(36), t(37), t(38), t(39)];
   const atkLTiles    = [idleTiles[0], idleTiles[1], d(MO_L_FWD_T2), d(MO_L_FWD_T3)];
   const legL = d(MO_LEG_L), legR = d(MO_LEG_R);
@@ -1003,7 +1004,8 @@ function _buildMonkFullBodies(romData) {
   const legLFwdR = d(MO_LEG_L_FWD_R), legRSwing = legRBackR; // R leg swing shared across R-back/R-fwd/L-back/L-fwd
   const legLBackL = legLFwdR, legRBackL = legRBackR;          // L-back legs byte-identical to R-fwd L-leg / R-leg swing
   const legLFwdL = legLFwdR, legRFwdL = legRBackR;            // L-fwd legs same bytes
-  const legLHit = t(34), legRHit = t(35);
+  const legLHit = d(MO_LEG_L_FWD_R); // hit leg L bytes are identical to MO_LEG_L_FWD_R ($07)
+  const legRHit = d(MO_LEG_R_HIT);
   const build = (tiles, lL, lR) => MONK_PALETTES.map(pal => _buildFullBody16x24Canvas(tiles, lL, lR, pal));
   const idleBodies = build(idleTiles, legL, legR);
   // PPU-captured death pose — 2 rows × 3 cols (24×16 prone sprite)
