@@ -356,6 +356,7 @@ function _openDefault() {
   poseTiles = OK_POSES.map(p => ({ label: p.label, rows: p.rows, cols: p.cols || 2, tiles: p.tiles.map(t => new Uint8Array(t)) }));
   _seedHitTilesFromROM();
   _seedWarriorPoses().then(() => {
+    _seedMonkPoses();
     _renderTilePage();
   });
 }
@@ -383,6 +384,30 @@ async function _seedWarriorPoses() {
     for (const wp of wrPoses) poseTiles.push(wp);
   } catch (e) {
     console.warn('[debug/sprites] warrior pose load failed', e);
+  }
+}
+
+// Monk poses pulled by ROM offset math. jobBase = BATTLE_SPRITE_ROM + 2 * BATTLE_JOB_SIZE.
+// Tile indices follow the OK/Fighter layout: 0-3 idle, 7 L-back arm, 14 R-back arm,
+// 18-21 R-fwd, 24-27 victory, 30-33 hit, 34-35 hit legs, 36-39 kneel, 4-5 default legs.
+// Per CLAUDE.md rules, ROM→PPU isn't guaranteed 1:1; if any pose looks wrong, PPU-capture it.
+function _seedMonkPoses() {
+  try {
+    const rom = new Uint8Array(ctx.getFF3Buffer());
+    const jobBase = 0x50010 + 2 * 0x2A0; // 0x50550
+    const t = (idx) => rom.slice(jobBase + idx * 16, jobBase + (idx + 1) * 16);
+    const monkPoses = [
+      { label: 'MO IDLE',     tiles: [t(0),  t(1),  t(2),  t(3),  t(4),  t(5)],  rows: 3 },
+      { label: 'MO L BACK',   tiles: [t(0),  t(1),  t(2),  t(7),  t(4),  t(5)],  rows: 3 },
+      { label: 'MO R BACK',   tiles: [t(0),  t(1),  t(14), t(3),  t(4),  t(5)],  rows: 3 },
+      { label: 'MO R FWD',    tiles: [t(18), t(19), t(20), t(21), t(4),  t(5)],  rows: 3 },
+      { label: 'MO VICTORY',  tiles: [t(24), t(25), t(26), t(27), t(4),  t(5)],  rows: 3 },
+      { label: 'MO HIT',      tiles: [t(30), t(31), t(32), t(33), t(34), t(35)], rows: 3 },
+      { label: 'MO KNEEL',    tiles: [t(36), t(37), t(38), t(39), t(4),  t(5)],  rows: 3 },
+    ];
+    for (const mp of monkPoses) poseTiles.push(mp);
+  } catch (e) {
+    console.warn('[debug/sprites] monk pose load failed', e);
   }
 }
 
