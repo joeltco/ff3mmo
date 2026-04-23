@@ -614,8 +614,8 @@ export function initBattleSpriteForJob(romData, jobIdx) {
     // R back swing: idle + R back T2
     const atkRBackTiles = [idleTiles[0], idleTiles[1], d(WR_R_BACK_T2), idleTiles[3]];
     const battleSpriteAttackCanvas = _renderPortrait(atkRBackTiles, _BATTLE_LAYOUT, palette);
-    // L back swing: idle + L back T3
-    const atkLBackTiles = [idleTiles[0], idleTiles[1], idleTiles[2], d(WR_L_BACK[3])];
+    // L back swing: head-TR + body-TR both swap to L-back variants
+    const atkLBackTiles = [idleTiles[0], d(WR_L_BACK[1]), idleTiles[2], d(WR_L_BACK[3])];
     const battleSpriteAttackLCanvas = _renderPortrait(atkLBackTiles, _BATTLE_LAYOUT, palette);
     // R fwd swing: idle body (R FWD uses idle T0-T3)
     const battleSpriteAttack2Canvas = _renderPortrait(idleTiles, _BATTLE_LAYOUT, palette);
@@ -624,7 +624,7 @@ export function initBattleSpriteForJob(romData, jobIdx) {
     const battleSpriteAttackL2Canvas = _renderPortrait(atkLFwdTiles, _BATTLE_LAYOUT, palette);
     // Knife poses
     const knifeRTiles = [idleTiles[0], idleTiles[1], d(WR_R_BACK_T2), idleTiles[3]];
-    const knifeLTiles = [idleTiles[0], idleTiles[1], idleTiles[2], d(WR_L_BACK[3])];
+    const knifeLTiles = [idleTiles[0], d(WR_L_BACK[1]), idleTiles[2], d(WR_L_BACK[3])];
     const battleSpriteKnifeRCanvas = _renderPortrait(knifeRTiles, _BATTLE_LAYOUT, palette);
     const battleSpriteKnifeLCanvas = _renderPortrait(knifeLTiles, _BATTLE_LAYOUT, palette);
     const battleSpriteKnifeBackCanvas = _renderPortrait(knifeLTiles, _BATTLE_LAYOUT, palette);
@@ -859,7 +859,7 @@ function _initWarriorPosePortraits() {
   const hitTiles = WR_HIT.map(d);
   const kneelTiles = WR_KNEEL.map(d);
   const knifeRTiles = [idleTiles[0], idleTiles[1], d(WR_R_BACK_T2), idleTiles[3]];
-  const knifeLTiles = [idleTiles[0], idleTiles[1], idleTiles[2], d(WR_L_BACK[3])];
+  const knifeLTiles = [idleTiles[0], d(WR_L_BACK[1]), idleTiles[2], d(WR_L_BACK[3])];
   return {
     fakePlayerPortraits: _genPosePortraits(idleTiles),
     fakePlayerVictoryPortraits: _genPosePortraits(victoryTiles),
@@ -929,7 +929,7 @@ function _buildWarriorFullBodies() {
   const kneelTiles = WR_KNEEL.map(d);
   const victoryTiles = WR_VICTORY.map(d);
   const knifeRTiles = [idleTiles[0], idleTiles[1], d(WR_R_BACK_T2), idleTiles[3]];
-  const knifeLTiles = [idleTiles[0], idleTiles[1], idleTiles[2], d(WR_L_BACK[3])];
+  const knifeLTiles = [idleTiles[0], d(WR_L_BACK[1]), idleTiles[2], d(WR_L_BACK[3])];
   const atkRTiles = [idleTiles[0], idleTiles[1], idleTiles[2], idleTiles[3]];
   const atkLTiles = [idleTiles[0], idleTiles[1], d(WR_L_FWD_T2), d(WR_L_FWD_T3)];
   const build = (tiles, lL, lR) => PLAYER_PALETTES.map(pal => _buildFullBody16x24Canvas(tiles, lL, lR, pal));
