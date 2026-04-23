@@ -26,6 +26,7 @@ Intentional design decisions that aren't obvious from reading the code. One sect
 - **L-back requires swapping BOTH head-TR and body-TR.** Historical bug: consumers passed `idleTiles[1]` for head-TR instead of the L-back variant's T1. If adding a new job, make sure its `knifeLTiles` pulls head-TR from the L-back data, not idle.
 - **Jobs 3–21 use `_initGenericJobPosePortraits` / `_buildGenericJobFullBodies`** in `sprite-init.js` — reads ROM at each job's `jobBase` using the shared tile-index convention. Approximate due to MMC3 CHR banking; PPU-capture specific poses if a job renders scrambled.
 
-## Known broken data (as of 1.6.11)
+## Monster data
 
-- **Monster ATK and attackRoll values in `src/data/monsters.js` are WRONG.** They diverge from `tools/rom-dump-monsters.txt` (the correct ROM extract). Commit `3a54feb` on 2026-04-10, titled "Fix all 231 monster ATK and attackRoll values from ROM stat tables", decoded the NES stat-set index bitmask incorrectly and inflated most values. Examples: Goblin ATK ROM=5/ours=10, Werewolf ROM=9/ours=15, Berserker ROM=10/ours=20. `tools/rom-dump-monsters.txt` is authoritative — regenerate `monsters.js` from it or a corrected `tools/gen-monsters-js.js`. Do NOT trust the current values until this is resolved.
+- **`src/data/monsters.js` is auto-generated from the ROM** via `tools/gen-monsters-js.js`. That script reads `$60010` (monster props), `$61010` (stat table, indexed via byte 9/12 of the props), `$61210` (attack scripts), gil/EXP/CP tables, and preserves `steal`/`drops`/`location` from the existing file. To regenerate: `node tools/gen-monsters-js.js > src/data/monsters.js`. Verify the result against `tools/rom-dump-monsters.txt` before committing.
+- **`statusResist` order is high-bit-first** (death, petrify, toad, silence, mini, blind, poison, paralysis) — same decoding as `statusAtk`, driven by `statusVal` in the generator.

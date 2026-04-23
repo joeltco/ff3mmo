@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.12 — 2026-04-23
+
+### Monster stats — regenerated from ROM (fixes 3a54feb corruption)
+
+- **`src/data/monsters.js`** regenerated via `tools/gen-monsters-js.js`. All 230 monsters now match `tools/rom-dump-monsters.txt` exactly. Fixes 224 inflated ATK values (Goblin 10→5, Werewolf 15→9, Berserker 20→10, …) and `attackRoll` values from commit `3a54feb`, and restores 16 missing `hp:` fields (Larva, Unei Clone, Darkface, Cuphgel, Lemur, Twin Heads, Twin Liger, Demon Horse, Saber Liger, Queen Lamia, KingBehemth, Abaia, Haokah, Archeron, Amon, Gomory).
+- **`tools/gen-monsters-js.js`** now also emits `spiritInt` (ROM byte 7) and `statusResist` (ROM byte 13) — both were being read but discarded. `statusResist` array order normalized high-bit-first.
+- **`docs/design-notes.md`** — removed the "Known broken data" block; added a short monster-data section pointing at the regen command.
+
 ## 1.6.11 — 2026-04-23
 
 ### Monk job — sprites, palettes, integration (end-to-end)

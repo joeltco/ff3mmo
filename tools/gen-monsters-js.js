@@ -125,6 +125,9 @@ for (let id = 0; id < 232; id++) {
   // Status on attack
   const statusAtk = statusVal(statusOnAtk);
 
+  // Status resist (bitmask, same decoding as statusOnAtk)
+  const statusResistArr = statusVal(statusResist);
+
   // Preserve steal/drops/location from old data
   const old = OLD_MONSTERS.get(id);
 
@@ -149,6 +152,8 @@ for (let id = 0; id < 232; id++) {
   if (statusAtk && statusAtk.length) props.push(`statusAtk: ${statusAtk.length===1?`'${statusAtk[0]}'`:`[${statusAtk.map(s=>`'${s}'`).join(',')}]`}`);
   if (spAtkRate > 0) props.push(`spAtkRate: ${spAtkRate}`);
   if (spAttacks) props.push(`attacks: ${spAttacks}`);
+  if (statusResistArr && statusResistArr.length) props.push(`statusResist: ${statusResistArr.length===1?`'${statusResistArr[0]}'`:`[${statusResistArr.map(s=>`'${s}'`).join(',')}]`}`);
+  if (spiritInt > 0) props.push(`spiritInt: ${spiritInt}`);
   if (isBoss) props.push(`boss: true`);
 
   // Preserve old fields
