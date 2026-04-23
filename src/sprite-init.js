@@ -22,7 +22,8 @@ import { WR_IDLE, WR_LEG_L, WR_LEG_R, WR_L_BACK, WR_LEG_L_BACK_L, WR_LEG_R_BACK_
 import { MO_IDLE, MO_LEG_L, MO_LEG_R,
          MO_R_BACK_T2, MO_LEG_L_BACK_R, MO_LEG_R_BACK_R,
          MO_LEG_L_FWD_R,
-         MO_L_BACK_T1, MO_L_BACK_T3 } from './data/monk-sprites.js';
+         MO_L_BACK_T1, MO_L_BACK_T3,
+         MO_L_FWD_T2, MO_L_FWD_T3 } from './data/monk-sprites.js';
 import { initWeaponSprites } from './weapon-sprites.js';
 import { LOAD_FADE_MAX } from './loading-screen.js';
 
@@ -994,11 +995,12 @@ function _buildMonkFullBodies(romData) {
   const victoryTiles = [t(24), t(25), t(26), t(27)];
   const hitTiles     = [t(30), t(31), t(32), t(33)];
   const kneelTiles   = [t(36), t(37), t(38), t(39)];
-  const atkLTiles    = [idleTiles[0], idleTiles[1], t(10), t(11)];
+  const atkLTiles    = [idleTiles[0], idleTiles[1], d(MO_L_FWD_T2), d(MO_L_FWD_T3)];
   const legL = d(MO_LEG_L), legR = d(MO_LEG_R);
   const legLBackR = d(MO_LEG_L_BACK_R), legRBackR = d(MO_LEG_R_BACK_R);
-  const legLFwdR = d(MO_LEG_L_FWD_R), legRSwing = legRBackR; // R leg swing shared across R-back/R-fwd/L-back
+  const legLFwdR = d(MO_LEG_L_FWD_R), legRSwing = legRBackR; // R leg swing shared across R-back/R-fwd/L-back/L-fwd
   const legLBackL = legLFwdR, legRBackL = legRBackR;          // L-back legs byte-identical to R-fwd L-leg / R-leg swing
+  const legLFwdL = legLFwdR, legRFwdL = legRBackR;            // L-fwd legs same bytes
   const legLHit = t(34), legRHit = t(35);
   const build = (tiles, lL, lR) => MONK_PALETTES.map(pal => _buildFullBody16x24Canvas(tiles, lL, lR, pal));
   const idleBodies = build(idleTiles, legL, legR);
@@ -1018,7 +1020,7 @@ function _buildMonkFullBodies(romData) {
     fakePlayerKnifeLFullBodyCanvases: build(knifeLTiles, legLBackL, legRBackL),
     fakePlayerKnifeBackFullBodyCanvases: build(knifeLTiles, legLBackL, legRBackL),
     fakePlayerKnifeRFwdFullBodyCanvases: build(idleTiles, legLFwdR, legRSwing),
-    fakePlayerKnifeLFwdFullBodyCanvases: build(atkLTiles, legL, legR),
+    fakePlayerKnifeLFwdFullBodyCanvases: build(atkLTiles, legLFwdL, legRFwdL),
     fakePlayerKneelFullBodyCanvases: build(kneelTiles, legL, legR),
     fakePlayerVictoryFullBodyCanvases: build(victoryTiles, legL, legR),
     fakePlayerDeathPoseCanvases: deathCanvases,
