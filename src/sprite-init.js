@@ -563,9 +563,19 @@ function _readJobTileRaw(romData, jobBase, tileIdx) {
   return new Uint8Array(romData.buffer.slice ? romData.buffer.slice(off, off + 16) : romData.slice(off, off + 16));
 }
 
+// Per-job battle palette overrides — PPU captures. Each entry is [color1, color2, color3]
+// (color 0 is always 0x0F transparent). Jobs without an entry fall back to BATTLE_PAL_ROM.
+// Monk uses SP1 slot: 0x27 (orange/skin), 0x18 (olive/hair), 0x21 (blue gi — customizable color).
+const JOB_BATTLE_PAL_OVERRIDE = {
+  2: [0x27, 0x18, 0x21],
+};
+
 // Build all battle sprite canvases for a given job index (0=Onion Knight, 1=Warrior, etc.)
 export function initBattleSpriteForJob(romData, jobIdx) {
-  const palette = [0x0F, romData[BATTLE_PAL_ROM], romData[BATTLE_PAL_ROM + 1], romData[BATTLE_PAL_ROM + 2]];
+  const pov = JOB_BATTLE_PAL_OVERRIDE[jobIdx];
+  const palette = pov
+    ? [0x0F, pov[0], pov[1], pov[2]]
+    : [0x0F, romData[BATTLE_PAL_ROM], romData[BATTLE_PAL_ROM + 1], romData[BATTLE_PAL_ROM + 2]];
   const jobBase = BATTLE_SPRITE_ROM + jobIdx * BATTLE_JOB_SIZE;
 
   // For Onion Knight (jobIdx 0), use the PPU-dumped tiles (proven correct)

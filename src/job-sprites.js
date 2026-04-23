@@ -9,10 +9,16 @@ import { romRaw } from './boot.js';
 export const SPRITE_PAL_TOP = [0x0F, 0x0F, 0x16, 0x30];    // spr_pal0: black, dark red, white
 export const SPRITE_PAL_BTM = [0x1A, 0x0F, 0x15, 0x30];    // spr_pal1: green, black, magenta, white
 
+// Monk walk palette — PPU capture. Head (top) uses SP0 with 0x17 hair / 0x36 skin;
+// body (bottom) uses SP1 with 0x22 blue gi / 0x36 skin. Blue 0x22 is the customizable color.
+export const MO_WALK_TOP = [0x1A, 0x0F, 0x17, 0x36];
+export const MO_WALK_BTM = [0x1A, 0x0F, 0x22, 0x36];
+
 // Per-job walk sprite palettes: [topPal, bottomPal]
 const JOB_WALK_PALS = {
   0: [SPRITE_PAL_TOP, SPRITE_PAL_BTM],   // Onion Knight: red top, green/magenta bottom
   1: [SPRITE_PAL_TOP, SPRITE_PAL_TOP],   // Warrior: all red
+  2: [MO_WALK_TOP, MO_WALK_BTM],         // Monk: brown hair + peach skin top, blue gi bottom
 };
 
 export function swapBattleSprites(jobIdx) {
