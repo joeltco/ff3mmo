@@ -198,8 +198,8 @@ function _getPortraitSrc(isNearFatal, isAttackPose, isHitPose, isDefendPose, isI
     if (_ws === 'knife' || _ws === 'dagger') {
       src = (rh ? p.knifeR : p.knifeL) || src;
     } else if (isUnarmed) {
-      // Unarmed: arms-up pose the whole strike — no separate rFwd with arms-down idle body.
-      src = (rh ? p.rBack : p.lBack) || src;
+      // OAM: R-strike = rBack tiles, L-strike = lFwd tiles (NOT lBack, that's nunchuck-L-back).
+      src = (rh ? p.rBack : (p.lFwd || p.lBack)) || src;
     } else if (battleSt.battleState === 'attack-back') {
       src = (rh ? p.rBack : p.lBack) || src;
     } else if (battleSt.battleState === 'attack-fwd' || battleSt.battleState === 'player-slash') {
@@ -262,7 +262,10 @@ function _drawPortraitWeapon(px, py, before) {
     else if (wpnSt === 'knife' && getKnifeBladeSwungCanvas()) ui.ctx.drawImage(getKnifeBladeSwungCanvas(), px - 16, py + 1);
     else if (wpnSt === 'sword' && getSwordBladeSwungCanvas()) ui.ctx.drawImage(getSwordBladeSwungCanvas(), px - 16, py + 1);
     else if (wpnSt === 'nunchaku' && getNunchakuBladeSwungCanvas()) ui.ctx.drawImage(getNunchakuBladeSwungCanvas(), px - 16, py + 1);
-    else if (!wpnSt && handWeapon === 0 && getFistCanvas()) ui.ctx.drawImage(getFistCanvas(), px - 4, py + 10);
+    else if (!wpnSt && handWeapon === 0 && getFistCanvas()) {
+      const fistDy = (Math.floor(Date.now() / 16) & 1); // OAM: ±1px y-wobble per NES frame
+      ui.ctx.drawImage(getFistCanvas(), px - 4, py + 10 + fistDy);
+    }
   }
 }
 
@@ -1235,7 +1238,10 @@ function _drawAllyPortrait(i, ally, isVicPose, isAllyAttack, isAllyHit, isNearFa
     else if (wpnSt === 'knife' && getKnifeBladeSwungCanvas()) weaponDraws.push({ img: getKnifeBladeSwungCanvas(), x: ppx - 16, y: ppy + 1 });
     else if (wpnSt === 'sword' && getSwordBladeSwungCanvas()) weaponDraws.push({ img: getSwordBladeSwungCanvas(), x: ppx - 16, y: ppy + 1 });
     else if (wpnSt === 'nunchaku' && getNunchakuBladeSwungCanvas()) weaponDraws.push({ img: getNunchakuBladeSwungCanvas(), x: ppx - 16, y: ppy + 1 });
-    else if ((wpnSt === 'claw' || (!wpnSt && activeWpnId === 0)) && getFistCanvas()) weaponDraws.push({ img: getFistCanvas(), x: ppx - 4, y: ppy + 10 });
+    else if ((wpnSt === 'claw' || (!wpnSt && activeWpnId === 0)) && getFistCanvas()) {
+      const fistDy = (Math.floor(Date.now() / 16) & 1); // OAM: ±1px y-wobble per NES frame
+      weaponDraws.push({ img: getFistCanvas(), x: ppx - 4, y: ppy + 10 + fistDy });
+    }
   }
   // Near-fatal sweat — 2 frames alternating every 133ms, 3px above portrait
   if (isNearFatal && bsc.sweatFrames.length === 2 && !isAllyAttack && !isAllyHit && !isVicPose && !isThisAllySlash) {

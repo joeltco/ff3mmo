@@ -142,7 +142,7 @@ export function isHitRightHand(hitIdx, rHandHitCount = 0) {
   const lW = isWeapon(ps.weaponL);
   if (rW && lW && rHandHitCount > 0) return hitIdx < rHandHitCount;
   if (rW || lW) return rW; // single weapon hand
-  return true; // unarmed: always R pose
+  return (hitIdx % 2) === 0; // unarmed: alternate R/L per hit (OAM-verified Monk combo)
 }
 
 export function initPlayerStats(romData) {
