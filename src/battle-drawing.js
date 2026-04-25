@@ -34,6 +34,7 @@ import { hudSt } from './hud-state.js';
 import { fakePlayerPortraits, fakePlayerVictoryPortraits, fakePlayerHitPortraits,
          fakePlayerKneelPortraits, fakePlayerAttackPortraits, fakePlayerAttackLPortraits,
          fakePlayerKnifeRPortraits, fakePlayerKnifeLPortraits,
+         fakePlayerKnifeRFwdPortraits, fakePlayerKnifeLFwdPortraits,
          fakePlayerDeathPoseCanvases } from './fake-player-sprites.js';
 import { BATTLE_GAME_OVER, BATTLE_DEFEATED, BATTLE_LEVEL_UP, BATTLE_JOB_LEVEL_UP, BATTLE_FOUND,
          BATTLE_BOSS_NAME, BATTLE_GOBLIN_NAME, BATTLE_MENU_ITEMS } from './data/strings.js';
@@ -64,12 +65,12 @@ const ROSTER_ROW_H = 32;
 const ALLY_POSE_MAP = {
   rBack:     fakePlayerAttackPortraits,
   lBack:     fakePlayerAttackLPortraits,
-  rFwd:      fakePlayerKnifeRPortraits,
-  lFwd:      fakePlayerKnifeLPortraits,
+  rFwd:      fakePlayerKnifeRFwdPortraits,
+  lFwd:      fakePlayerKnifeLFwdPortraits,
   knifeR:    fakePlayerKnifeRPortraits,
   knifeL:    fakePlayerKnifeLPortraits,
-  knifeRFwd: fakePlayerKnifeRPortraits,
-  knifeLFwd: fakePlayerKnifeLPortraits,
+  knifeRFwd: fakePlayerKnifeRFwdPortraits,
+  knifeLFwd: fakePlayerKnifeLFwdPortraits,
 };
 const BATTLE_TEXT_STEP_MS = 50;
 const BATTLE_TEXT_STEPS = 4;

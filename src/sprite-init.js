@@ -946,11 +946,16 @@ function _initFakePosePortraits(romData) {
   const fakePlayerKnifeBackPortraits = _genPosePortraits(_FP_KNIFE_BACK.map(d => decodeTile(d, 0)));
   const fakePlayerKnifeRPortraits   = _genPosePortraits(_FP_KNIFE_R.map(d => decodeTile(d, 0)));
   const fakePlayerKnifeLPortraits   = _genPosePortraits(_FP_KNIFE_L.map(d => decodeTile(d, 0)));
+  // Forward-strike portraits: R-fwd = idle body (weapon thrust forward, body neutral),
+  // L-fwd = canonical OAM L-strike body using OK_L_FWD tiles.
+  const fakePlayerKnifeRFwdPortraits = _genPosePortraits(idleTiles);
+  const fakePlayerKnifeLFwdPortraits = _genPosePortraits([idleTiles[0], idleTiles[1], decodeTile(OK_L_FWD_T2, 0), decodeTile(OK_L_FWD_T3, 0)]);
   const fakePlayerKneelPortraits    = _genPosePortraits(_FP_KNEEL.map(d => decodeTile(d, 0)));
   return {
     fakePlayerPortraits, fakePlayerVictoryPortraits, fakePlayerHitPortraits,
     fakePlayerDefendPortraits, fakePlayerAttackPortraits, fakePlayerAttackLPortraits,
     fakePlayerKnifeBackPortraits, fakePlayerKnifeRPortraits, fakePlayerKnifeLPortraits,
+    fakePlayerKnifeRFwdPortraits, fakePlayerKnifeLFwdPortraits,
     fakePlayerKneelPortraits,
   };
 }
@@ -964,6 +969,7 @@ function _initWarriorPosePortraits() {
   const kneelTiles = WR_KNEEL.map(d);
   const knifeRTiles = [idleTiles[0], idleTiles[1], d(WR_R_BACK_T2), idleTiles[3]];
   const knifeLTiles = [idleTiles[0], d(WR_L_BACK[1]), idleTiles[2], d(WR_L_BACK[3])];
+  const knifeLFwdTiles = [idleTiles[0], idleTiles[1], d(WR_L_FWD_T2), d(WR_L_FWD_T3)];
   return {
     fakePlayerPortraits: _genPosePortraits(idleTiles),
     fakePlayerVictoryPortraits: _genPosePortraits(victoryTiles),
@@ -974,6 +980,8 @@ function _initWarriorPosePortraits() {
     fakePlayerKnifeBackPortraits: _genPosePortraits(knifeLTiles),
     fakePlayerKnifeRPortraits: _genPosePortraits(knifeRTiles),
     fakePlayerKnifeLPortraits: _genPosePortraits(knifeLTiles),
+    fakePlayerKnifeRFwdPortraits: _genPosePortraits(idleTiles),     // R-fwd = idle body (Warrior)
+    fakePlayerKnifeLFwdPortraits: _genPosePortraits(knifeLFwdTiles), // L-fwd uses WR_L_FWD tiles
     fakePlayerKneelPortraits: _genPosePortraits(kneelTiles),
   };
 }
@@ -1075,6 +1083,7 @@ function _initMonkPosePortraits(romData) {
   const idleTiles    = MO_IDLE.map(d);
   const knifeRTiles  = [idleTiles[0], idleTiles[1], d(MO_R_BACK_T2), idleTiles[3]];       // R-back: body-TL swaps
   const knifeLTiles  = [idleTiles[0], d(MO_L_BACK_T1), idleTiles[2], d(MO_L_BACK_T3)];    // L-back: head-TR + body-TR swap
+  const knifeLFwdTiles = [idleTiles[0], idleTiles[1], d(MO_L_FWD_T2), d(MO_L_FWD_T3)];     // L-fwd: OAM-canonical L-strike body
   const victoryTiles = MO_VICTORY.map(d);
   const hitTiles     = MO_HIT.map(d);
   const kneelTiles   = MO_KNEEL.map(d);
@@ -1089,6 +1098,8 @@ function _initMonkPosePortraits(romData) {
     fakePlayerKnifeBackPortraits: gen(knifeLTiles),
     fakePlayerKnifeRPortraits: gen(knifeRTiles),
     fakePlayerKnifeLPortraits: gen(knifeLTiles),
+    fakePlayerKnifeRFwdPortraits: gen(knifeRTiles),       // R-strike body — same tiles as knifeR for Monk
+    fakePlayerKnifeLFwdPortraits: gen(knifeLFwdTiles),    // L-strike body — MO_L_FWD tiles (canonical)
     fakePlayerKneelPortraits: gen(kneelTiles),
   };
 }
@@ -1160,6 +1171,8 @@ function _initGenericJobPosePortraits(romData, jobIdx) {
   const idleTiles    = [t(0), t(1), t(2), t(3)];
   const knifeRTiles  = [t(0), t(1), t(14), t(3)];
   const knifeLTiles  = [t(0), t(6), t(2), t(7)];  // swap BOTH head-TR and body-TR for L-back
+  // L-fwd body: per ROM convention, body-TL=tile 8, body-TR=tile 9 (combined with idle head row).
+  const knifeLFwdTiles = [t(0), t(1), t(8), t(9)];
   const victoryTiles = [t(24), t(25), t(26), t(27)];
   const hitTiles     = [t(30), t(31), t(32), t(33)];
   const kneelTiles   = [t(36), t(37), t(38), t(39)];
@@ -1173,6 +1186,8 @@ function _initGenericJobPosePortraits(romData, jobIdx) {
     fakePlayerKnifeBackPortraits: _genPosePortraits(knifeLTiles),
     fakePlayerKnifeRPortraits: _genPosePortraits(knifeRTiles),
     fakePlayerKnifeLPortraits: _genPosePortraits(knifeLTiles),
+    fakePlayerKnifeRFwdPortraits: _genPosePortraits(idleTiles),       // R-fwd: idle body
+    fakePlayerKnifeLFwdPortraits: _genPosePortraits(knifeLFwdTiles),  // L-fwd: ROM tiles 8/9
     fakePlayerKneelPortraits: _genPosePortraits(kneelTiles),
   };
 }

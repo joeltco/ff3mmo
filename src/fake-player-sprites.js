@@ -13,6 +13,8 @@ export const fakePlayerAttackLPortraits = {};
 export const fakePlayerKnifeBackPortraits = {};
 export const fakePlayerKnifeRPortraits = {};
 export const fakePlayerKnifeLPortraits = {};
+export const fakePlayerKnifeRFwdPortraits = {};
+export const fakePlayerKnifeLFwdPortraits = {};
 export const fakePlayerFullBodyCanvases = {};
 export const fakePlayerHitFullBodyCanvases = {};
 export const fakePlayerKnifeRFullBodyCanvases = {};
@@ -36,6 +38,8 @@ const _DICTS = {
   fakePlayerKnifeBackPortraits,
   fakePlayerKnifeRPortraits,
   fakePlayerKnifeLPortraits,
+  fakePlayerKnifeRFwdPortraits,
+  fakePlayerKnifeLFwdPortraits,
   fakePlayerFullBodyCanvases,
   fakePlayerHitFullBodyCanvases,
   fakePlayerKnifeRFullBodyCanvases,
