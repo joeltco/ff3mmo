@@ -410,7 +410,7 @@ function _drawBattlePortrait() {
     (battleSt.battleState === 'enemy-attack' && getPlayerDamageNum() && !getPlayerDamageNum().miss) ||
     (battleSt.battleState === 'enemy-damage-show' && getPlayerDamageNum() && !getPlayerDamageNum().miss) ||
     (battleSt.battleState === 'pvp-opp-sw-hit' && battleSt.battleShakeTimer > 0) ||
-    (battleSt.battleState === 'pvp-enemy-slash' && pvpSt.pvpPendingAttack && !pvpSt.pvpPendingAttack.miss && !pvpSt.pvpPendingAttack.shieldBlock);
+    (battleSt.battleState === 'pvp-enemy-slash' && battleSt.enemyTargetAllyIdx < 0 && pvpSt.pvpPendingAttack && !pvpSt.pvpPendingAttack.miss && !pvpSt.pvpPendingAttack.shieldBlock);
   const isDefendPose = battleSt.battleState === 'defend-anim';
   const isItemUsePose = battleSt.battleState === 'item-use' || battleSt.battleState === 'sw-throw' || battleSt.battleState === 'sw-hit';
   const isRunPose = battleSt.battleState === 'run-success';
@@ -420,6 +420,7 @@ function _drawBattlePortrait() {
   const pxs = px + shakeOff;
   // Blink portrait when enemy slash is landing (mirrors opponent blink on player hit)
   const portraitBlink = battleSt.battleState === 'pvp-enemy-slash' &&
+    battleSt.enemyTargetAllyIdx < 0 &&
     pvpSt.pvpPendingAttack && !pvpSt.pvpPendingAttack.miss && !pvpSt.pvpPendingAttack.shieldBlock &&
     (Math.floor(battleSt.battleTimer / 60) & 1);
   if (!portraitBlink) {
