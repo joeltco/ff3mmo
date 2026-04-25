@@ -29,6 +29,7 @@ import { MO_IDLE, MO_LEG_L, MO_LEG_R,
          MO_KNEEL, MO_LEG_L_KNEEL, MO_LEG_R_KNEEL,
          MO_DEATH } from './data/monk-sprites.js';
 import { initWeaponSprites } from './weapon-sprites.js';
+import { getJobPoseTileBundle, buildPlayerPoseCanvases, buildAllyPosePortraits, buildOpponentBodyCanvases, buildDeathPoseCanvases, POSE_KEYS } from './combatant-sprites.js';
 import { LOAD_FADE_MAX } from './loading-screen.js';
 
 // --- Constants (moved from game.js, only used by init code) ---
@@ -62,6 +63,34 @@ const HUD_INFO_FADE_STEPS = 4;  // duplicated from game.js for _buildFadedCanvas
 
 // --- Battle sprite low-level helpers ---
 const _BATTLE_LAYOUT = [[0,0],[8,0],[0,8],[8,8]];
+
+// Shared overlay tiles (defend sparkle + sweat drop). Used by every job's player sprite set.
+const _SHARED_DEFEND_SPARKLE_TILES = [
+  new Uint8Array([0x01,0x00,0x08,0x00,0x00,0x41,0x00,0x02, 0x00,0x00,0x01,0x02,0x00,0x09,0x00,0x12]),
+  new Uint8Array([0x00,0x00,0x00,0x04,0x0A,0x14,0x0A,0x01, 0x00,0x00,0x00,0x18,0x1C,0x0E,0x04,0x00]),
+  new Uint8Array([0x00,0x00,0x20,0x10,0x08,0x04,0x00,0x00, 0x00,0x00,0x30,0x38,0x10,0x00,0x00,0x00]),
+  new Uint8Array([0x80,0x00,0x20,0x00,0x00,0x00,0x00,0x00, 0x80,0x40,0x00,0x00,0x00,0x00,0x00,0x00]),
+];
+const _SHARED_SWEAT_FRAME_TILES = [
+  [new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 0x04,0x00,0x40,0x00,0x00,0x00,0x00,0x00]),
+   new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 0x20,0x00,0x02,0x00,0x00,0x00,0x00,0x00])],
+  [new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x02,0x10,0x00,0x40,0x00]),
+   new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x40,0x08,0x00,0x02,0x00])],
+];
+function _buildSharedDefendSparkleFrames() {
+  return _SHARED_DEFEND_SPARKLE_TILES.map(raw => {
+    const sc = document.createElement('canvas'); sc.width = 8; sc.height = 8;
+    _blitTile(sc.getContext('2d'), decodeTile(raw, 0), DEFEND_SPARKLE_PAL, 0, 0); return sc;
+  });
+}
+function _buildSharedSweatFrames(palette) {
+  return _SHARED_SWEAT_FRAME_TILES.map(frameTiles => {
+    const sc = document.createElement('canvas'); sc.width = 16; sc.height = 8;
+    const sctx2 = sc.getContext('2d');
+    for (let t = 0; t < 2; t++) _blitTile(sctx2, decodeTile(frameTiles[t], 0), palette, t * 8, 0);
+    return sc;
+  });
+}
 
 function _blitTile(ctx, px, palette, x, y) {
   const img = ctx.createImageData(8, 8);
@@ -577,7 +606,61 @@ const JOB_BATTLE_PAL_OVERRIDE = {
 };
 
 // Build all battle sprite canvases for a given job index (0=Onion Knight, 1=Warrior, etc.)
+// Single-source player sprite builder. All 22 jobs run through here — pose tile
+// definitions live in combatant-sprites.js (one bundle per job class), this function
+// just wraps them with palette + fade variants + silhouette + shared overlays.
+function _buildPlayerSpriteSet(romData, jobIdx, palette) {
+  const bundle = getJobPoseTileBundle(romData, jobIdx);
+  const base = buildPlayerPoseCanvases(bundle, palette);
+  const renderFaded = (poseKey) => {
+    const arr = [];
+    for (let step = 1; step <= HUD_INFO_FADE_STEPS; step++) {
+      let fp = [...palette]; for (let s = 0; s < step; s++) fp = fp.map(c => nesColorFade(c));
+      arr.push(_renderPortrait(bundle.bodies[poseKey], _BATTLE_LAYOUT, fp));
+    }
+    return arr;
+  };
+  // Silhouette: re-color all opaque idle pixels to NES $00 (grey/black).
+  const silhouetteCanvas = document.createElement('canvas');
+  silhouetteCanvas.width = 16; silhouetteCanvas.height = 16;
+  const sctx = silhouetteCanvas.getContext('2d');
+  sctx.drawImage(base.idle, 0, 0);
+  const sdata = sctx.getImageData(0, 0, 16, 16);
+  const darkRgb = NES_SYSTEM_PALETTE[0x00] || [0, 0, 0];
+  for (let p = 0; p < 256; p++) {
+    if (sdata.data[p * 4 + 3] > 0) { sdata.data[p * 4] = darkRgb[0]; sdata.data[p * 4 + 1] = darkRgb[1]; sdata.data[p * 4 + 2] = darkRgb[2]; }
+  }
+  sctx.putImageData(sdata, 0, 0);
+
+  initWeaponSprites(palette);
+
+  return {
+    poses: {
+      idle: base.idle, idleFade: renderFaded('idle'), silhouette: silhouetteCanvas,
+      rBack: base.rBack, lBack: base.lBack,
+      rFwd: base.rFwd, lFwd: base.lFwd,
+      knifeR: base.knifeR, knifeL: base.knifeL, knifeBack: base.lBack, // knifeBack legacy alias for L-back canvas
+      victory: base.victory, hit: base.hit,
+      defend: base.victory, defendFade: renderFaded('victory'),
+      kneel: base.kneel, kneelFade: renderFaded('kneel'),
+      palette,
+    },
+    defendSparkleFrames: _buildSharedDefendSparkleFrames(),
+    cureSparkleFrames: _initCureSparkleFrames(),
+    sweatFrames: _buildSharedSweatFrames(palette),
+  };
+}
+
 export function initBattleSpriteForJob(romData, jobIdx) {
+  const pov = JOB_BATTLE_PAL_OVERRIDE[jobIdx];
+  const palette = pov
+    ? [0x0F, pov[0], pov[1], pov[2]]
+    : [0x0F, romData[BATTLE_PAL_ROM], romData[BATTLE_PAL_ROM + 1], romData[BATTLE_PAL_ROM + 2]];
+  return _buildPlayerSpriteSet(romData, jobIdx, palette);
+}
+
+// (legacy below — preserved temporarily for fake-player builders that haven't migrated yet)
+function _legacyInitBattleSpriteForJobInline(romData, jobIdx) {
   const pov = JOB_BATTLE_PAL_OVERRIDE[jobIdx];
   const palette = pov
     ? [0x0F, pov[0], pov[1], pov[2]]
