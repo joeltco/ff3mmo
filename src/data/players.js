@@ -105,7 +105,21 @@ export function generateAllyStats(player) {
     if (player.helmId   != null) totalDef += (ITEMS.get(player.helmId)   || {}).def || 0;
     if (player.shieldId != null) totalDef += (ITEMS.get(player.shieldId) || {}).def || 0;
   }
-  const atk = str + weaponAtk;
+  // Derive weapon ATK from the actual equipped items (so explicit weaponR/weaponL — including 0 for unarmed — overrides the loc default).
+  const rWpnItem = ITEMS.get(weaponId);
+  const lWpnItem = weaponL != null ? ITEMS.get(weaponL) : null;
+  const rIsWpn = !!(rWpnItem && rWpnItem.type === 'weapon' && rWpnItem.subtype !== 'shield');
+  const lIsWpn = !!(lWpnItem && lWpnItem.type === 'weapon' && lWpnItem.subtype !== 'shield');
+  const rWpnAtk = rIsWpn ? (rWpnItem.atk || 0) : 0;
+  const lWpnAtk = lIsWpn ? (lWpnItem.atk || 0) : 0;
+  const isUnarmed = !rIsWpn && !lIsWpn;
+  const isMonkClass = player.jobIdx === 2 || player.jobIdx === 13; // Monk / BlackBelt
+  const jobLv = 1; // ally jobLevel default (matches `jobLevel: 1` returned below)
+  // Monk/BlackBelt unarmed uses canonical level-based formula (player-stats.js:83);
+  // others fall back to STR + sum of equipped weapon ATK so unarmed non-Monk allies don't keep the loc default.
+  const atk = isMonkClass && isUnarmed
+    ? Math.floor(str / 4) + Math.floor(lv * 1.5) + Math.floor(jobLv / 4) + 2
+    : str + rWpnAtk + lWpnAtk;
   const def = vit + totalDef;
   // Evade/mdef/sResist from armor
   let evade = 0, mdef = 0, statusResist = 0;
