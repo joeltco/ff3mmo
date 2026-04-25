@@ -10,6 +10,7 @@ import { pvpSt } from './pvp.js';
 import { inputSt } from './input-handler.js';
 import { getEnemyDmgNum, setEnemyDmgNum } from './damage-numbers.js';
 import { ROSTER_FADE_STEPS } from './data/players.js';
+import { IDLE_FRAME_MS } from './combatant-pose.js';
 
 // Injected at boot — avoids circular import on main.js
 let _buildTurnOrder = () => [];
@@ -68,19 +69,21 @@ const ALLY_COMBO_PAUSE_MS = 30;
 function _updateAllyAttack() {
   if (battleSt.battleState === 'ally-attack-back') {
     const allyNow = battleSt.battleAllies[battleSt.currentAllyAttacker];
-    const allyUnarmed = allyNow && !isWeapon(allyNow.weaponId) && !isWeapon(allyNow.weaponL);
-    const delay = allyUnarmed ? 0 : (battleSt.allyHitIdx === 0 ? ALLY_BACK_MS : ALLY_COMBO_PAUSE_MS);
+    if (!allyNow) return false;
+    const rW = isWeapon(allyNow.weaponId);
+    const lW = isWeapon(allyNow.weaponL);
+    const allyUnarmed = !rW && !lW;
+    const dualOrUnarmed = (rW && lW) || allyUnarmed;
+    // Pre-compute the upcoming hand so we can detect a hand change before committing to it.
+    const willBeLeft = dualOrUnarmed ? (battleSt.allyHitIdx % 2 === 1) : !rW;
+    const handChange = battleSt.allyHitIdx > 0 && battleSt.allyHitIsLeft !== willBeLeft;
+    const delay = handChange ? IDLE_FRAME_MS
+                : (allyUnarmed ? 0 : (battleSt.allyHitIdx === 0 ? ALLY_BACK_MS : ALLY_COMBO_PAUSE_MS));
     if (battleSt.battleTimer >= delay) {
-      const ally = battleSt.battleAllies[battleSt.currentAllyAttacker];
-      if (battleSt.allyHitIdx === 0 && ally) {
-        queueBattleMsg(_nameToBytes(ally.name || 'Ally'));
+      if (battleSt.allyHitIdx === 0) {
+        queueBattleMsg(_nameToBytes(allyNow.name || 'Ally'));
       }
-      const rW = ally && isWeapon(ally.weaponId);
-      const lW = ally && isWeapon(ally.weaponL);
-      const isLeft = (rW && lW) || (!rW && !lW)
-        ? (battleSt.allyHitIdx % 2 === 1)   // dual or unarmed → alternate
-        : !rW;                               // single hand → use whichever has the weapon
-      battleSt.allyHitIsLeft = isLeft;
+      battleSt.allyHitIsLeft = willBeLeft;
       battleSt.battleState = 'ally-attack-fwd';
       battleSt.battleTimer = 0;
     }

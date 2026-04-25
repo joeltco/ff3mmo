@@ -35,7 +35,7 @@ import { fakePlayerFullBodyCanvases, fakePlayerHitFullBodyCanvases,
          fakePlayerKnifeRFwdFullBodyCanvases, fakePlayerKnifeLFwdFullBodyCanvases,
          fakePlayerKneelFullBodyCanvases, fakePlayerVictoryFullBodyCanvases,
          fakePlayerDeathFrames } from './fake-player-sprites.js';
-import { pickAttackPoseKey, pickAttackWeaponSpec, attackWeaponLayer } from './combatant-pose.js';
+import { pickAttackPoseKey, pickAttackWeaponSpec, attackWeaponLayer, IDLE_FRAME_MS } from './combatant-pose.js';
 
 // Opponent body pool adapter: maps the canonical pose key to the fake-player full-body dict.
 // Opponent KEEPS knife back vs fwd as separate canvases (KnifeR = wind-up body, KnifeRFwd = thrust body).
@@ -479,8 +479,12 @@ function _processEnemyDamageShow() {
 }
 
 function _processPVPSecondWindup() {
-  // OAM-canonical: unarmed skips the wind-up entirely.
-  if (!pvpSt.pvpEnemyUnarmed && battleSt.battleTimer < BOSS_PREFLASH_MS) return;
+  // Hand-change inter-hit gap: hold idle for IDLE_FRAME_MS so R↔L combo transitions read cleanly.
+  // Otherwise: unarmed skips the wind-up entirely; armed waits BOSS_PREFLASH_MS.
+  const handChange = pvpSt.pvpEnemyDualWield && pvpSt.pvpEnemyHitIdx > 0;
+  const requiredWait = handChange ? IDLE_FRAME_MS
+                     : (pvpSt.pvpEnemyUnarmed ? 0 : BOSS_PREFLASH_MS);
+  if (battleSt.battleTimer < requiredWait) return;
   // Stage next pre-rolled hit from combo
   const hit = pvpSt.pvpEnemyHitResults[pvpSt.pvpEnemyHitIdx];
   pvpSt.pvpPendingAttack = hit || { miss: true, shieldBlock: false, dmg: 0, crit: false };
@@ -689,9 +693,13 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   const isOppVictory = battleSt.battleState === 'team-wipe' || battleSt.battleState === 'defeat-monster-fade';
   const isOppDefending = isMain && pvpSt.pvpOpponentIsDefending && bs === 'pvp-defend-anim';
   const isOppItemUse   = isMain && (bs === 'pvp-opp-sw-throw' || bs === 'pvp-opp-sw-hit' || bs === 'pvp-opp-potion');
+  // Hand-change inter-hit gap (during wind-up of a subsequent hit when hand swaps): render idle body.
+  const oppHandChangeGap = isWindUp && isThisAttacking && pvpSt.pvpEnemyDualWield && pvpSt.pvpEnemyHitIdx > 0;
   let body = fullBody;
   if (isOppHit && _fpb(fakePlayerHitFullBodyCanvases)) {
     body = _fpb(fakePlayerHitFullBodyCanvases);
+  } else if (oppHandChangeGap) {
+    body = fullBody; // idle pose during the gap
   } else if (isWindUp || isAttackState) {
     // Centralized pose-pick. Mirror rule (opponent face-right pre-flipped canvas) lives in pickAttackPoseKey;
     // unarmed-no-windup rule lives there too — both render the strike pose for back & fwd phases.
@@ -713,7 +721,8 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   }
 
   // Opponent face-right pre-flipped canvas — pickAttackWeaponSpec returns offsets in post-flip space.
-  const _phase = isWindUp ? 'back' : (isAttackState ? 'fwd' : null);
+  // Suppressed entirely during the hand-change idle gap.
+  const _phase = oppHandChangeGap ? null : (isWindUp ? 'back' : (isAttackState ? 'fwd' : null));
   const _handIsL = isWindUp ? isLeftHandWind : isLeftHandAtk;
   const weaponSpec = _phase ? pickAttackWeaponSpec({
     weaponId: activeWeaponId,

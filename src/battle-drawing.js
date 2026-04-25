@@ -217,14 +217,20 @@ function _getPortraitSrc(isNearFatal, isAttackPose, isHitPose, isDefendPose, isI
   if (isAttackPose) {
     const _wpn = getHitWeapon(battleSt.currentHitIdx, inputSt.rHandHitCount);
     const rh = isHitRightHand(battleSt.currentHitIdx, inputSt.rHandHitCount);
-    const key = pickAttackPoseKey({
-      weaponSubtype: weaponSubtype(_wpn),
-      isUnarmed: _wpn === 0,
-      hand: rh ? 'R' : 'L',
-      attackPhase: battleSt.battleState === 'attack-back' ? 'back' : 'fwd',
-      mirror: false,
-    });
-    src = _playerPoseCanvas(p, key) || src;
+    // Inter-hit hand-change gap: hold idle pose during attack-back (after first hit, when hand swaps).
+    const handChangeGap = battleSt.battleState === 'attack-back' && battleSt.currentHitIdx > 0 &&
+      isHitRightHand(battleSt.currentHitIdx - 1, inputSt.rHandHitCount) !== rh;
+    if (!handChangeGap) {
+      const key = pickAttackPoseKey({
+        weaponSubtype: weaponSubtype(_wpn),
+        isUnarmed: _wpn === 0,
+        hand: rh ? 'R' : 'L',
+        attackPhase: battleSt.battleState === 'attack-back' ? 'back' : 'fwd',
+        mirror: false,
+      });
+      src = _playerPoseCanvas(p, key) || src;
+    }
+    // else: leave src at default (idle) so the R→L (or L→R) hand swap reads cleanly
   } else if ((isDefendPose || isItemUsePose) && p.defend) {
     src = p.defend;
   } else if (isHitPose && p.hit) {
@@ -1219,8 +1225,17 @@ function _drawAllyPortrait(i, ally, isVicPose, isAllyAttack, isAllyHit, isNearFa
   const _fp = (map) => (map[_j] || map[0])[ally.palIdx];
   let portraits;
   const allyUnarmed = !isWeapon(ally.weaponId) && !isWeapon(ally.weaponL);
+  // Inter-hit hand-change gap: during ally-attack-back after hit 0, if the upcoming hand differs
+  // from the previous hit's hand, hold idle pose so R↔L transitions read as separate strikes.
+  const _allyRw = isWeapon(ally.weaponId), _allyLw = isWeapon(ally.weaponL);
+  const _allyDualOrUnarmed = (_allyRw && _allyLw) || (!_allyRw && !_allyLw);
+  const _allyUpcomingLeft = _allyDualOrUnarmed ? (battleSt.allyHitIdx % 2 === 1) : !_allyRw;
+  const allyHandChangeGap = battleSt.battleState === 'ally-attack-back' && battleSt.allyHitIdx > 0 &&
+    battleSt.allyHitIsLeft !== _allyUpcomingLeft && battleSt.currentAllyAttacker === i;
   if (isVicPose && (Math.floor(Date.now() / 250) & 1) && _fp(fakePlayerVictoryPortraits)) {
     portraits = _fp(fakePlayerVictoryPortraits);
+  } else if (allyHandChangeGap) {
+    portraits = _fp(fakePlayerPortraits); // idle during the gap, no weapon overlay
   } else if (isAllyAttack || isThisAllySlash) {
     const useLeft = isThisAllySlash ? battleSt.allyHitIsLeft : hitLeft;
     const wpnId = useLeft ? ally.weaponL : ally.weaponId;
@@ -1238,7 +1253,8 @@ function _drawAllyPortrait(i, ally, isVicPose, isAllyAttack, isAllyHit, isNearFa
   if (!portraits) return;
   // Ally weapon draws (back-swing during isAllyAttack, forward strike during isThisAllySlash).
   // Uses the same pose module as player + opponent — layer rule = R-back behind body, L-back/fwd in front.
-  if (isAllyAttack || isThisAllySlash) {
+  // Hand-change gap suppresses the weapon overlay so the body reads as a clean idle frame.
+  if ((isAllyAttack || isThisAllySlash) && !allyHandChangeGap) {
     const useLeft = isThisAllySlash ? battleSt.allyHitIsLeft : hitLeft;
     const wpnId = useLeft ? ally.weaponL : ally.weaponId;
     const phase = isThisAllySlash ? 'fwd' : 'back';

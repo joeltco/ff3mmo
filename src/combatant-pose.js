@@ -9,6 +9,10 @@ import { getKnifeBladeCanvas, getKnifeBladeSwungCanvas,
 
 const FIST_WOBBLE_PERIOD_MS = 100; // shared cadence — same constant across player/ally/opponent
 
+// Inter-hit idle frame: when a combo transitions from R-hand to L-hand (or vice versa),
+// hold the idle pose for this many ms so the swap reads as a separate strike instead of one blur.
+export const IDLE_FRAME_MS = 67;
+
 // Returns the weapon canvas + body-relative offset to draw at, or null if nothing to draw this frame.
 // Mirror flag: opponent uses a pre-flipped (face-right) canvas, so the swinging hand visually swaps
 // — the offset returned is in the post-flip coordinate system.

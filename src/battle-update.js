@@ -9,6 +9,7 @@ import { pvpSt, resetPVPState, updatePVPBattle } from './pvp.js';
 import { hudSt } from './hud-state.js';
 import { mapSt } from './map-state.js';
 import { ps, grantExp, grantCP, getHitWeapon, isHitRightHand, gainJobJP } from './player-stats.js';
+import { IDLE_FRAME_MS } from './combatant-pose.js';
 import { bsc, getSlashFramesForWeapon } from './battle-sprite-cache.js';
 import { buildTurnOrder, processNextTurn } from './battle-turn.js';
 import { updateBattleAlly } from './battle-ally.js';
@@ -299,9 +300,14 @@ function _advanceHitCombo() {
 function _updatePlayerAttackBack() {
   if (battleSt.battleState !== 'attack-back') return false;
   if (battleSt.currentHitIdx === 0) battleSt.comboStatusInflicted = 0;
+  // Hand-change inter-hit pause holds idle pose so R↔L combo transitions read as separate strikes.
+  const handChange = battleSt.currentHitIdx > 0 &&
+    isHitRightHand(battleSt.currentHitIdx, inputSt.rHandHitCount) !==
+    isHitRightHand(battleSt.currentHitIdx - 1, inputSt.rHandHitCount);
   // Unarmed skips the wind-up — NES canonical goes straight to forward strike.
   const isUnarmed = getHitWeapon(battleSt.currentHitIdx, inputSt.rHandHitCount) === 0;
-  const delay = isUnarmed ? 0 : (battleSt.currentHitIdx === 0 ? BACK_SWING_MS : HIT_COMBO_PAUSE_MS);
+  const delay = handChange ? IDLE_FRAME_MS
+              : (isUnarmed ? 0 : (battleSt.currentHitIdx === 0 ? BACK_SWING_MS : HIT_COMBO_PAUSE_MS));
   if (battleSt.battleTimer >= delay) {
     battleSt.battleState = 'attack-fwd';
     battleSt.battleTimer = 0;
