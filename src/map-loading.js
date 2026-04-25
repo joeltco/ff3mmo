@@ -193,6 +193,8 @@ export function loadMapById(mapId, returnX, returnY) {
   mapSt.onWorldMap = false;
   setupTopBox(mapId, false);
   if (mapId >= 1000) { _loadDungeonFloor(mapId, returnX, returnY); return; }
+  // Leaving dungeon → respawn the boss next time we re-enter.
+  battleSt.enemyDefeated = false;
   _loadRegularMap(mapId, returnX, returnY);
 }
 
@@ -208,9 +210,11 @@ function _landOnWorldMap(tileX, tileY) {
 
 export function loadWorldMapAt(trigId) {
   mapSt.onWorldMap = true;
+  mapSt.dungeonFloor = -1;
   mapSt.mapRenderer = null;
   mapSt.mapData = null;
   mapSt.bossSprite = null;
+  battleSt.enemyDefeated = false; // boss respawns whenever player exits to the world map
   setupTopBox(0, true);
   const pos = mapSt.worldMapData.triggerPositions.get(trigId);
   const tileX = pos ? pos.x : 0;
