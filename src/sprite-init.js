@@ -1313,52 +1313,40 @@ function _buildGenericJobFullBodies(romData, jobIdx) {
   };
 }
 
-// Single-source ally + opponent sprite builder. Replaces 9 legacy builders
-// (_initFakePosePortraits, _initWarriorPosePortraits, _initMonkPosePortraits,
-// _initGenericJobPosePortraits, _buildIdleFullBodies, _buildKnifeFullBodies,
-// _buildHitFullBodies, _buildDeathPoseCanvases, _buildWarriorFullBodies,
-// _buildMonkFullBodies, _buildGenericJobFullBodies) with one function that
-// consumes the same bundle the player path uses. Add a pose key once, all paths get it.
-function _buildFakePlayerSet(romData, jobIdx) {
-  const bundle = getJobPoseTileBundle(romData, jobIdx);
-  const portraits = buildAllyPosePortraits(bundle);   // { idle, rBack, lBack, ...12 keys, each: per-palIdx canvas array }
-  const bodies    = buildOpponentBodyCanvases(bundle); // same shape, 16×24 with legs
-  const deathPoses = buildDeathPoseCanvases(bundle);  // null for jobs without PPU-captured death
-  return {
-    // Portrait canvases (16×16) — keyed under the legacy fake-player names that consumers expect
-    fakePlayerPortraits:           portraits.idle,
-    fakePlayerVictoryPortraits:    portraits.victory,
-    fakePlayerHitPortraits:        portraits.hit,
-    fakePlayerDefendPortraits:     portraits.victory, // defend = victory pose in FF3
-    fakePlayerKneelPortraits:      portraits.kneel,
-    fakePlayerAttackPortraits:     portraits.rBack,   // back-swing R
-    fakePlayerAttackLPortraits:    portraits.lBack,   // back-swing L
-    fakePlayerKnifeBackPortraits:  portraits.lBack,   // legacy alias
-    fakePlayerKnifeRPortraits:     portraits.knifeR,
-    fakePlayerKnifeLPortraits:     portraits.knifeL,
-    fakePlayerKnifeRFwdPortraits:  portraits.knifeRFwd, // R-strike forward
-    fakePlayerKnifeLFwdPortraits:  portraits.knifeLFwd, // L-strike forward (OAM-canonical L-fwd body)
-    // Full-body canvases (16×24) for opponent rendering
-    fakePlayerFullBodyCanvases:           bodies.idle,
-    fakePlayerHitFullBodyCanvases:        bodies.hit,
-    fakePlayerKnifeRFullBodyCanvases:     bodies.knifeR,
-    fakePlayerKnifeLFullBodyCanvases:     bodies.knifeL,
-    fakePlayerKnifeBackFullBodyCanvases:  bodies.knifeL,
-    fakePlayerKnifeRFwdFullBodyCanvases:  bodies.knifeRFwd,
-    fakePlayerKnifeLFwdFullBodyCanvases:  bodies.knifeLFwd,
-    fakePlayerKneelFullBodyCanvases:      bodies.kneel,
-    fakePlayerVictoryFullBodyCanvases:    bodies.victory,
-    // Death pose: PPU-captured 24×16 prone for jobs that have it; flipped idle for the rest.
-    fakePlayerDeathPoseCanvases: deathPoses || bodies.idle,
-    fakePlayerDeathFrames:       bodies.idle.map(c => _makeDeathFrames(c)),
-  };
-}
-
 export function initFakePlayerPortraits(romData, jobIndices) {
+  // Build per-job portrait and body sets
   // jobIndices = array of unique job indices to generate for (e.g. [0, 1, 2])
   const result = {};
   for (const jobIdx of jobIndices) {
-    result[jobIdx] = _buildFakePlayerSet(romData, jobIdx);
+    let portraits, bodies;
+    if (jobIdx === 0) {
+      portraits = _initFakePosePortraits(romData);
+      const fullBodies = _buildIdleFullBodies();
+      const knifeBodies = _buildKnifeFullBodies();
+      const hitBodies = _buildHitFullBodies(romData);
+      const deathPoses = _buildDeathPoseCanvases();
+      bodies = {
+        fakePlayerFullBodyCanvases: fullBodies,
+        ...knifeBodies,
+        fakePlayerHitFullBodyCanvases: hitBodies,
+        fakePlayerDeathPoseCanvases: deathPoses,
+        fakePlayerDeathFrames: fullBodies.map(c => _makeDeathFrames(c)),
+      };
+    } else if (jobIdx === 1) {
+      portraits = _initWarriorPosePortraits();
+      bodies = _buildWarriorFullBodies();
+    } else if (jobIdx === 2) {
+      portraits = _initMonkPosePortraits(romData);
+      bodies = _buildMonkFullBodies(romData);
+    } else {
+      // Generic ROM-based path for jobs 3+ (WM, BM, RM, …, Ninja).
+      // Applies the locked-down pattern: defend=victory=magic, L-back swaps BOTH head-TR + body-TR.
+      // Tiles are read straight from the job's ROM block at jobBase+idx*16. When we PPU-capture
+      // a specific job later, replace this call with a dedicated `_init<Job>PosePortraits`.
+      portraits = _initGenericJobPosePortraits(romData, jobIdx);
+      bodies = _buildGenericJobFullBodies(romData, jobIdx);
+    }
+    result[jobIdx] = { ...portraits, ...bodies };
   }
   return result;
 }
