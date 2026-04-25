@@ -9,7 +9,7 @@ import { DMG_NUM_PAL, HEAL_NUM_PAL, drawBattleNum as _drawBattleNumCtx, getMissC
 import { getBossBattleCanvas, getBossWhiteCanvas } from './boss-sprites.js';
 import { getMonsterCanvas, getMonsterWhiteCanvas, hasMonsterSprites } from './monster-sprites.js';
 import { getItemNameClean, getMonsterName } from './text-decoder.js';
-import { weaponSubtype } from './data/items.js';
+import { weaponSubtype, isWeapon } from './data/items.js';
 import { ps, getHitWeapon, isHitRightHand } from './player-stats.js';
 import { _nameToBytes, _buildItemRowBytes, drawLvHpRow, makeExpText, makeGilText, makeCpText, makeItemDropText } from './text-utils.js';
 import { pvpEnemyCellCenter } from './pvp-math.js';
@@ -1202,7 +1202,9 @@ function _drawAllyPortrait(i, ally, isVicPose, isAllyAttack, isAllyHit, isNearFa
   const _j = ally.jobIdx || 0;
   const _fp = (map) => (map[_j] || map[0])[ally.palIdx];
   let portraits;
+  const allyUnarmed = !isWeapon(ally.weaponId) && !isWeapon(ally.weaponL);
   if (isVicPose && (Math.floor(Date.now() / 250) & 1) && _fp(fakePlayerVictoryPortraits)) portraits = _fp(fakePlayerVictoryPortraits);
+  else if (isAllyAttack && allyUnarmed) portraits = _fp(hitLeft ? fakePlayerKnifeLPortraits : fakePlayerKnifeRPortraits);
   else if (isAllyAttack) portraits = _fp(hitLeft ? fakePlayerAttackLPortraits : fakePlayerAttackPortraits);
   else if (isThisAllySlash) portraits = _fp(battleSt.allyHitIsLeft ? fakePlayerKnifeLPortraits : fakePlayerKnifeRPortraits);
   else if (isAllyHit && _fp(fakePlayerHitPortraits)) portraits = _fp(fakePlayerHitPortraits);

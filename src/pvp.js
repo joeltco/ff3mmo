@@ -64,6 +64,7 @@ export const pvpSt = {
   pvpEnemyHitResults:     [],     // pre-rolled hits for current enemy combo
   pvpEnemyHitIdx:         0,      // current hit index in enemy combo
   pvpEnemyDualWield:      false,  // true if current attacker is dual-wielding
+  pvpEnemyUnarmed:        false,  // true if current attacker has no weapons (alternates R/L per OAM)
   pvpPendingAttack:       null,   // {miss, shieldBlock, dmg} — staged during pvp-enemy-slash, applied at end
   pvpPreflashDecided:     false,  // true after defend/item/attack decision made for current enemy-flash
   pvpEnemyAllies:         [],     // fake players who join opponent's side
@@ -128,6 +129,7 @@ export function resetPVPState() {
   pvpSt.pvpEnemyHitResults      = [];
   pvpSt.pvpEnemyHitIdx          = 0;
   pvpSt.pvpEnemyDualWield       = false;
+  pvpSt.pvpEnemyUnarmed         = false;
   pvpSt._oppSWTargets           = [];
   pvpSt._oppSWHitIdx            = 0;
   pvpSt._oppSWPerDmg            = 0;
@@ -314,7 +316,12 @@ function _processEnemyFlash() {
     // Decided: will attack — fall through to windup animation
   }
 
-  if (battleSt.battleTimer < BOSS_PREFLASH_MS) return false;
+  // OAM-canonical: unarmed opponents skip the wind-up wait — straight to the strike.
+  const _earlyAttacker = pvpSt.pvpCurrentEnemyAllyIdx >= 0
+    ? pvpSt.pvpEnemyAllies[pvpSt.pvpCurrentEnemyAllyIdx]
+    : pvpSt.pvpOpponentStats;
+  const _earlyUnarmed = !!(_earlyAttacker && !isWeapon(_earlyAttacker.weaponId) && !isWeapon(_earlyAttacker.weaponL));
+  if (!_earlyUnarmed && battleSt.battleTimer < BOSS_PREFLASH_MS) return false;
 
   // Pre-flash elapsed — resolve attack
   const livingAllies = battleSt.battleAllies.filter(a => a.hp > 0);
@@ -341,6 +348,7 @@ function _processEnemyFlash() {
 
   pvpSt.pvpEnemyHitIdx = 0;
   pvpSt.pvpEnemyDualWield = dualWield;
+  pvpSt.pvpEnemyUnarmed = !!(attackerStats && !isWeapon(attackerStats.weaponId) && !isWeapon(attackerStats.weaponL));
   const def = targetAlly >= 0 ? battleSt.battleAllies[targetAlly].def : ps.def;
   const attackerJob = JOBS[attackerStats?.jobIdx || 0] || {};
   const baseOpts = { critPct: attackerJob.critPct || 0, critBonus: attackerJob.critBonus || 0 };
@@ -465,7 +473,8 @@ function _processEnemyDamageShow() {
 }
 
 function _processPVPSecondWindup() {
-  if (battleSt.battleTimer < BOSS_PREFLASH_MS) return;
+  // OAM-canonical: unarmed skips the wind-up entirely.
+  if (!pvpSt.pvpEnemyUnarmed && battleSt.battleTimer < BOSS_PREFLASH_MS) return;
   // Stage next pre-rolled hit from combo
   const hit = pvpSt.pvpEnemyHitResults[pvpSt.pvpEnemyHitIdx];
   pvpSt.pvpPendingAttack = hit || { miss: true, shieldBlock: false, dmg: 0, crit: false };
@@ -638,8 +647,9 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   // Which hand is this enemy using right now?
   // Even hit index = right hand, odd = left hand (if dual-wielding)
   const isAttackState = isThisAttacking && (bs === 'enemy-attack' || bs === 'pvp-enemy-slash' || bs === 'ally-hit');
-  const isLeftHandWind = isMain && bs === 'pvp-second-windup' && pvpSt.pvpEnemyHitIdx % 2 === 1 && pvpSt.pvpEnemyDualWield;
-  const isLeftHandAtk  = isMain && isAttackState && pvpSt.pvpEnemyHitIdx % 2 === 1 && pvpSt.pvpEnemyDualWield;
+  const handAltActive = pvpSt.pvpEnemyDualWield || pvpSt.pvpEnemyUnarmed; // both alternate R/L per hit
+  const isLeftHandWind = isMain && bs === 'pvp-second-windup' && pvpSt.pvpEnemyHitIdx % 2 === 1 && handAltActive;
+  const isLeftHandAtk  = isMain && isAttackState && pvpSt.pvpEnemyHitIdx % 2 === 1 && handAltActive;
   const activeWeaponId = (isLeftHandWind || isLeftHandAtk)
     ? (enemy.weaponL != null ? enemy.weaponL : enemy.weaponId)
     : enemy.weaponId;
@@ -658,6 +668,10 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   let body = fullBody;
   if (isOppHit && _fpb(fakePlayerHitFullBodyCanvases)) {
     body = _fpb(fakePlayerHitFullBodyCanvases);
+  } else if (isWindUp && pvpSt.pvpEnemyUnarmed) {
+    // OAM-canonical: unarmed has NO wind-up — show the strike pose for the entire animation.
+    // (Mirror rule still applies: opponent faces right, so R-hand → L pose canvas.)
+    body = _fpb(isLeftHandWind ? fakePlayerKnifeRFwdFullBodyCanvases : fakePlayerKnifeLFwdFullBodyCanvases) || fullBody;
   } else if (isWindUp) {
     // *** PERMANENT RULE — DO NOT CHANGE ***
     // Opponent faces RIGHT. Right-hand swings use LEFT-hand pose sprites, and vice versa.
@@ -697,7 +711,8 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
     ctx.translate(sprX + 16, sprY);
     ctx.scale(-1, 1);
     if (isAttackState && blade === blades.fist) {
-      ctx.drawImage(blade, -4, 10);
+      const fistDy = (Math.floor(Date.now() / 16) & 1); // OAM: ±1px y-wobble per NES frame
+      ctx.drawImage(blade, -4, 10 + fistDy);
     } else if (isAttackState) {
       ctx.drawImage(blade, -16, 1);
     } else {

@@ -75,7 +75,8 @@ function _updateAllyAttack() {
       if (battleSt.allyHitIdx === 0 && ally) {
         queueBattleMsg(_nameToBytes(ally.name || 'Ally'));
       }
-      const isLeft = (battleSt.allyHitIdx % 2 === 1) && ally && isWeapon(ally.weaponL);
+      const allyDualOrUnarmed = ally && (isWeapon(ally.weaponL) || (!isWeapon(ally.weaponId) && !isWeapon(ally.weaponL)));
+      const isLeft = (battleSt.allyHitIdx % 2 === 1) && allyDualOrUnarmed;
       battleSt.allyHitIsLeft = isLeft;
       battleSt.battleState = 'ally-attack-fwd';
       battleSt.battleTimer = 0;
@@ -115,7 +116,8 @@ function _updateAllyAttack() {
       battleSt.allyHitIdx = battleSt.allyHitIdx + 1;
       if (battleSt.allyHitIdx < battleSt.allyHitResults.length) {
         const nextAlly = battleSt.battleAllies[battleSt.currentAllyAttacker];
-        battleSt.allyHitIsLeft = (battleSt.allyHitIdx % 2 === 1) && nextAlly && isWeapon(nextAlly.weaponL);
+        const nextDualOrUnarmed = nextAlly && (isWeapon(nextAlly.weaponL) || (!isWeapon(nextAlly.weaponId) && !isWeapon(nextAlly.weaponL)));
+        battleSt.allyHitIsLeft = (battleSt.allyHitIdx % 2 === 1) && nextDualOrUnarmed;
         battleSt.battleState = 'ally-attack-back';
         battleSt.battleTimer = 0;
       } else {
