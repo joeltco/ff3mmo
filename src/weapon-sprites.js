@@ -67,6 +67,7 @@ let daggerRaised = null, daggerSwung = null;
 let swordRaised = null, swordSwung = null;
 let nunchakuRaised = null, nunchakuSwung = null;
 let fistCanvas = null;
+const _fistCache = new Map(); // palette-key → fist canvas (per-character palette)
 
 // ── Build helpers ────────────────────────────────────────────────────────────
 
@@ -108,7 +109,18 @@ export function getSwordBladeCanvas()      { return swordRaised; }
 export function getSwordBladeSwungCanvas()  { return swordSwung; }
 export function getNunchakuBladeCanvas()      { return nunchakuRaised; }
 export function getNunchakuBladeSwungCanvas()  { return nunchakuSwung; }
-export function getFistCanvas()            { return fistCanvas; }
+// Pass the character's body palette to get a fist canvas tinted to match.
+// No-arg form returns the legacy global (warrior-palette) fist for back-compat.
+export function getFistCanvas(palette) {
+  if (!palette) return fistCanvas;
+  const key = palette.join(',');
+  let c = _fistCache.get(key);
+  if (c) return c;
+  c = document.createElement('canvas'); c.width = 8; c.height = 8;
+  _blitTile(c.getContext('2d'), decodeTile(FIST_TILE, 0), palette, 0, 0);
+  _fistCache.set(key, c);
+  return c;
+}
 
 export function getBlades() {
   return {

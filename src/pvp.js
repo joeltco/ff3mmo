@@ -4,7 +4,7 @@ import { battleSt, getEnemyHP, setEnemyHP } from './battle-state.js';
 import { clipToViewport, drawBorderedBox } from './hud-drawing.js';
 import { getPlayerLocation } from './roster.js';
 import { queueBattleMsg } from './battle-msg.js';
-import { getBlades } from './weapon-sprites.js';
+import { getBlades, getFistCanvas } from './weapon-sprites.js';
 import { getAllyDamageNums, getPlayerDamageNum, setPlayerDamageNum, getEnemyHealNum, setEnemyHealNum } from './damage-numbers.js';
 import { ui } from './ui-state.js';
 import { buildTurnOrder, processNextTurn } from './battle-turn.js';
@@ -16,7 +16,12 @@ import { playSFX, stopSFX, SFX, pauseMusic, playTrack, TRACKS } from './music.js
 import { rollHits, calcPotentialHits, BOSS_HIT_RATE, GOBLIN_HIT_RATE } from './battle-math.js';
 import { ITEMS, isWeapon, weaponSubtype } from './data/items.js';
 import { _nameToBytes } from './text-utils.js';
-import { PLAYER_POOL, generateAllyStats } from './data/players.js';
+import { PLAYER_POOL, PLAYER_PALETTES, MONK_PALETTES, generateAllyStats } from './data/players.js';
+
+function _jobPalette(jobIdx, palIdx) {
+  const pool = jobIdx === 2 ? MONK_PALETTES : PLAYER_PALETTES;
+  return pool[palIdx] || pool[0];
+}
 import { JOBS } from './data/jobs.js';
 import { MONSTERS } from './data/monsters.js';
 import { ps } from './player-stats.js';
@@ -711,8 +716,9 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
     ctx.translate(sprX + 16, sprY);
     ctx.scale(-1, 1);
     if (isAttackState && blade === blades.fist) {
+      const fistC = getFistCanvas(_jobPalette(_ej, palIdx)) || blade;
       const fistDy = (Math.floor(Date.now() / 16) & 1); // OAM: ±1px y-wobble per NES frame
-      ctx.drawImage(blade, -4, 10 + fistDy);
+      ctx.drawImage(fistC, -4, 10 + fistDy);
     } else if (isAttackState) {
       ctx.drawImage(blade, -16, 1);
     } else {

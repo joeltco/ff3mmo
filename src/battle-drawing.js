@@ -10,6 +10,12 @@ import { getBossBattleCanvas, getBossWhiteCanvas } from './boss-sprites.js';
 import { getMonsterCanvas, getMonsterWhiteCanvas, hasMonsterSprites } from './monster-sprites.js';
 import { getItemNameClean, getMonsterName } from './text-decoder.js';
 import { weaponSubtype, isWeapon } from './data/items.js';
+import { PLAYER_PALETTES, MONK_PALETTES } from './data/players.js';
+
+function _jobPalette(jobIdx, palIdx) {
+  const pool = jobIdx === 2 ? MONK_PALETTES : PLAYER_PALETTES;
+  return pool[palIdx] || pool[0];
+}
 import { ps, getHitWeapon, isHitRightHand } from './player-stats.js';
 import { _nameToBytes, _buildItemRowBytes, drawLvHpRow, makeExpText, makeGilText, makeCpText, makeItemDropText } from './text-utils.js';
 import { pvpEnemyCellCenter } from './pvp-math.js';
@@ -262,9 +268,12 @@ function _drawPortraitWeapon(px, py, before) {
     else if (wpnSt === 'knife' && getKnifeBladeSwungCanvas()) ui.ctx.drawImage(getKnifeBladeSwungCanvas(), px - 16, py + 1);
     else if (wpnSt === 'sword' && getSwordBladeSwungCanvas()) ui.ctx.drawImage(getSwordBladeSwungCanvas(), px - 16, py + 1);
     else if (wpnSt === 'nunchaku' && getNunchakuBladeSwungCanvas()) ui.ctx.drawImage(getNunchakuBladeSwungCanvas(), px - 16, py + 1);
-    else if (!wpnSt && handWeapon === 0 && getFistCanvas()) {
-      const fistDy = (Math.floor(Date.now() / 16) & 1); // OAM: ±1px y-wobble per NES frame
-      ui.ctx.drawImage(getFistCanvas(), px - 4, py + 10 + fistDy);
+    else if (!wpnSt && handWeapon === 0) {
+      const fistC = getFistCanvas(bsc.battlePoses && bsc.battlePoses.palette);
+      if (fistC) {
+        const fistDy = (Math.floor(Date.now() / 16) & 1); // OAM: ±1px y-wobble per NES frame
+        ui.ctx.drawImage(fistC, px - 4, py + 10 + fistDy);
+      }
     }
   }
 }
@@ -1240,9 +1249,12 @@ function _drawAllyPortrait(i, ally, isVicPose, isAllyAttack, isAllyHit, isNearFa
     else if (wpnSt === 'knife' && getKnifeBladeSwungCanvas()) weaponDraws.push({ img: getKnifeBladeSwungCanvas(), x: ppx - 16, y: ppy + 1 });
     else if (wpnSt === 'sword' && getSwordBladeSwungCanvas()) weaponDraws.push({ img: getSwordBladeSwungCanvas(), x: ppx - 16, y: ppy + 1 });
     else if (wpnSt === 'nunchaku' && getNunchakuBladeSwungCanvas()) weaponDraws.push({ img: getNunchakuBladeSwungCanvas(), x: ppx - 16, y: ppy + 1 });
-    else if ((wpnSt === 'claw' || (!wpnSt && activeWpnId === 0)) && getFistCanvas()) {
-      const fistDy = (Math.floor(Date.now() / 16) & 1); // OAM: ±1px y-wobble per NES frame
-      weaponDraws.push({ img: getFistCanvas(), x: ppx - 4, y: ppy + 10 + fistDy });
+    else if (wpnSt === 'claw' || (!wpnSt && activeWpnId === 0)) {
+      const fistC = getFistCanvas(_jobPalette(ally.jobIdx || 0, ally.palIdx || 0));
+      if (fistC) {
+        const fistDy = (Math.floor(Date.now() / 16) & 1); // OAM: ±1px y-wobble per NES frame
+        weaponDraws.push({ img: fistC, x: ppx - 4, y: ppy + 10 + fistDy });
+      }
     }
   }
   // Near-fatal sweat — 2 frames alternating every 133ms, 3px above portrait
