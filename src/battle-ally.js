@@ -75,8 +75,11 @@ function _updateAllyAttack() {
       if (battleSt.allyHitIdx === 0 && ally) {
         queueBattleMsg(_nameToBytes(ally.name || 'Ally'));
       }
-      const allyDualOrUnarmed = ally && (isWeapon(ally.weaponL) || (!isWeapon(ally.weaponId) && !isWeapon(ally.weaponL)));
-      const isLeft = (battleSt.allyHitIdx % 2 === 1) && allyDualOrUnarmed;
+      const rW = ally && isWeapon(ally.weaponId);
+      const lW = ally && isWeapon(ally.weaponL);
+      const isLeft = (rW && lW) || (!rW && !lW)
+        ? (battleSt.allyHitIdx % 2 === 1)   // dual or unarmed → alternate
+        : !rW;                               // single hand → use whichever has the weapon
       battleSt.allyHitIsLeft = isLeft;
       battleSt.battleState = 'ally-attack-fwd';
       battleSt.battleTimer = 0;
@@ -116,8 +119,11 @@ function _updateAllyAttack() {
       battleSt.allyHitIdx = battleSt.allyHitIdx + 1;
       if (battleSt.allyHitIdx < battleSt.allyHitResults.length) {
         const nextAlly = battleSt.battleAllies[battleSt.currentAllyAttacker];
-        const nextDualOrUnarmed = nextAlly && (isWeapon(nextAlly.weaponL) || (!isWeapon(nextAlly.weaponId) && !isWeapon(nextAlly.weaponL)));
-        battleSt.allyHitIsLeft = (battleSt.allyHitIdx % 2 === 1) && nextDualOrUnarmed;
+        const nrW = nextAlly && isWeapon(nextAlly.weaponId);
+        const nlW = nextAlly && isWeapon(nextAlly.weaponL);
+        battleSt.allyHitIsLeft = (nrW && nlW) || (!nrW && !nlW)
+          ? (battleSt.allyHitIdx % 2 === 1)
+          : !nrW;
         battleSt.battleState = 'ally-attack-back';
         battleSt.battleTimer = 0;
       } else {

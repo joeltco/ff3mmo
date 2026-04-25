@@ -486,9 +486,13 @@ function _processPVPSecondWindup() {
   const attackerStats = pvpSt.pvpCurrentEnemyAllyIdx >= 0
     ? pvpSt.pvpEnemyAllies[pvpSt.pvpCurrentEnemyAllyIdx]
     : pvpSt.pvpOpponentStats;
-  // Alternate weapon hand: even = R, odd = L
-  const isLeftHit = (pvpSt.pvpEnemyHitIdx % 2 === 1) && attackerStats && isWeapon(attackerStats.weaponL);
-  const wId = isLeftHit ? attackerStats.weaponL : (attackerStats ? attackerStats.weaponId : null);
+  // Hand selection: dual or unarmed → alternate per hit; single weapon → that hand only
+  const rW = attackerStats && isWeapon(attackerStats.weaponId);
+  const lW = attackerStats && isWeapon(attackerStats.weaponL);
+  const isLeftHit = (rW && lW) || (!rW && !lW)
+    ? (pvpSt.pvpEnemyHitIdx % 2 === 1)
+    : !rW;
+  const wId = isLeftHit ? (attackerStats ? attackerStats.weaponL : null) : (attackerStats ? attackerStats.weaponId : null);
   if (wId != null) playSlashSFX(wId, hit && hit.crit); else playSFX(SFX.ATTACK_HIT);
   battleSt.battleState = 'pvp-enemy-slash'; battleSt.battleTimer = 0;
 }
@@ -652,9 +656,13 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   // Which hand is this enemy using right now?
   // Even hit index = right hand, odd = left hand (if dual-wielding)
   const isAttackState = isThisAttacking && (bs === 'enemy-attack' || bs === 'pvp-enemy-slash' || bs === 'ally-hit');
-  const handAltActive = pvpSt.pvpEnemyDualWield || pvpSt.pvpEnemyUnarmed; // both alternate R/L per hit
-  const isLeftHandWind = isMain && bs === 'pvp-second-windup' && pvpSt.pvpEnemyHitIdx % 2 === 1 && handAltActive;
-  const isLeftHandAtk  = isMain && isAttackState && pvpSt.pvpEnemyHitIdx % 2 === 1 && handAltActive;
+  // Hand selection: dual or unarmed → alternate per hit; single weapon → that hand only.
+  const eRw = enemy && isWeapon(enemy.weaponId);
+  const eLw = enemy && isWeapon(enemy.weaponL);
+  const altByHit = (eRw && eLw) || (!eRw && !eLw);
+  const _altIsL = altByHit ? (pvpSt.pvpEnemyHitIdx % 2 === 1) : !eRw;
+  const isLeftHandWind = isMain && bs === 'pvp-second-windup' && _altIsL;
+  const isLeftHandAtk  = isMain && isAttackState && _altIsL;
   const activeWeaponId = (isLeftHandWind || isLeftHandAtk)
     ? (enemy.weaponL != null ? enemy.weaponL : enemy.weaponId)
     : enemy.weaponId;
