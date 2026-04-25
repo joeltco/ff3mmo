@@ -341,8 +341,9 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
   if (battleSt.battleState === 'item-target-select' && inputSt.itemTargetType === 'player' && inputSt.itemTargetAllyIndex < 0 && _cursorTileCanvas()) {
     ui.ctx.drawImage(_cursorTileCanvas(), px - 12, py + 4);
   }
-  // Enemy slash effect on player portrait during PVP melee attack swing
-  if (battleSt.battleState === 'pvp-enemy-slash') {
+  // Enemy slash effect on player portrait during PVP melee attack swing.
+  // Skip when the opponent is targeting an ally — the slash gets drawn on that ally's portrait instead (see _drawAllyPortrait).
+  if (battleSt.battleState === 'pvp-enemy-slash' && battleSt.enemyTargetAllyIdx < 0) {
     const eWpnId = pvpSt.pvpCurrentEnemyAllyIdx >= 0
       ? pvpSt.pvpEnemyAllies[pvpSt.pvpCurrentEnemyAllyIdx]?.weaponId
       : pvpSt.pvpOpponentStats?.weaponId;
@@ -1264,8 +1265,10 @@ function _drawAllyPortrait(i, ally, isVicPose, isAllyAttack, isAllyHit, isNearFa
     const sweatIdx = Math.floor(Date.now() / 133) & 1;
     ui.ctx.drawImage(bsc.sweatFrames[sweatIdx], ppx, ppy - 3);
   }
-  // PVP enemy slash overlay on targeted ally during ally-hit — h-flipped (opponent attacks from left)
-  if (pvpSt.isPVPBattle && battleSt.battleState === 'ally-hit' && battleSt.enemyTargetAllyIdx === i) {
+  // PVP enemy slash overlay on targeted ally — h-flipped (opponent attacks from left).
+  // Fires per-hit during the multi-hit pvp-enemy-slash combo, plus the final ally-hit shake state.
+  if (pvpSt.isPVPBattle && battleSt.enemyTargetAllyIdx === i &&
+      (battleSt.battleState === 'pvp-enemy-slash' || battleSt.battleState === 'ally-hit')) {
     const eWpnId = pvpSt.pvpCurrentEnemyAllyIdx >= 0
       ? pvpSt.pvpEnemyAllies[pvpSt.pvpCurrentEnemyAllyIdx]?.weaponId
       : pvpSt.pvpOpponentStats?.weaponId;
