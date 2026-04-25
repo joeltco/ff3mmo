@@ -67,7 +67,9 @@ const ALLY_COMBO_PAUSE_MS = 30;
 
 function _updateAllyAttack() {
   if (battleSt.battleState === 'ally-attack-back') {
-    const delay = battleSt.allyHitIdx === 0 ? ALLY_BACK_MS : ALLY_COMBO_PAUSE_MS;
+    const allyNow = battleSt.battleAllies[battleSt.currentAllyAttacker];
+    const allyUnarmed = allyNow && !isWeapon(allyNow.weaponId) && !isWeapon(allyNow.weaponL);
+    const delay = allyUnarmed ? 0 : (battleSt.allyHitIdx === 0 ? ALLY_BACK_MS : ALLY_COMBO_PAUSE_MS);
     if (battleSt.battleTimer >= delay) {
       const ally = battleSt.battleAllies[battleSt.currentAllyAttacker];
       if (battleSt.allyHitIdx === 0 && ally) {

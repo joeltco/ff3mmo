@@ -191,10 +191,15 @@ function _getPortraitSrc(isNearFatal, isAttackPose, isHitPose, isDefendPose, isI
   const p = bsc.battlePoses;
   let src = ((isNearFatal || hasActiveStatus) && p.kneel) ? p.kneel : p.idle;
   if (isAttackPose) {
-    const _ws = weaponSubtype(getHitWeapon(battleSt.currentHitIdx, inputSt.rHandHitCount));
+    const _wpn = getHitWeapon(battleSt.currentHitIdx, inputSt.rHandHitCount);
+    const _ws = weaponSubtype(_wpn);
     const rh = isHitRightHand(battleSt.currentHitIdx, inputSt.rHandHitCount);
+    const isUnarmed = _wpn === 0;
     if (_ws === 'knife' || _ws === 'dagger') {
       src = (rh ? p.knifeR : p.knifeL) || src;
+    } else if (isUnarmed) {
+      // Unarmed: arms-up pose the whole strike — no separate rFwd with arms-down idle body.
+      src = (rh ? p.rBack : p.lBack) || src;
     } else if (battleSt.battleState === 'attack-back') {
       src = (rh ? p.rBack : p.lBack) || src;
     } else if (battleSt.battleState === 'attack-fwd' || battleSt.battleState === 'player-slash') {

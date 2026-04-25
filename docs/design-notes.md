@@ -26,6 +26,18 @@ Intentional design decisions that aren't obvious from reading the code. One sect
 - **L-back requires swapping BOTH head-TR and body-TR.** Historical bug: consumers passed `idleTiles[1]` for head-TR instead of the L-back variant's T1. If adding a new job, make sure its `knifeLTiles` pulls head-TR from the L-back data, not idle.
 - **Jobs 3–21 use `_initGenericJobPosePortraits` / `_buildGenericJobFullBodies`** in `sprite-init.js` — reads ROM at each job's `jobBase` using the shared tile-index convention. Approximate due to MMC3 CHR banking; PPU-capture specific poses if a job renders scrambled.
 
+## Unarmed combat (fists)
+
+Canonical NES animation pattern, captured from PPU OAM while the Monk punched a target:
+
+- **Base idle** (no combat action): body `$03/$04`, legs `$05/$06`, no fist sprite. Equivalent to `MO_IDLE` + `MO_LEG_L/R`.
+- **R-hand strike**: body `$39/$04`, legs `$3A/$08`, fist tile `$49` visible on the body's left side. Tile bytes match what we call `MO_R_BACK_T2`, `MO_LEG_L_BACK_R`, `MO_LEG_R_BACK_R` — i.e. our `rBack` pose IS the unarmed R-strike pose, with a drawn fist overlay. Pose held for several frames while the hit-flash ($4A–$4D pal3, palette `[0x0F, 0x16, 0x27, 0x30]`) scatters at random positions across the target.
+- **L-hand strike**: body `$3B/$3C`, legs `$3D/$3E`, fist tile `$51` (same bytes as `$49`, different CHR index). These are our `MO_L_FWD_T2/T3` + `MO_LEG_L_FWD_R`/`MO_LEG_R_BACK_R` — i.e. our `lFwd` pose IS the unarmed L-strike pose.
+- **Between-hands idle**: a brief arms-up reset frame between R and L strikes in a combo.
+- **No back-swing phase on either hand.** Unarmed skips the wind-up entirely — the first visible attack frame IS the strike.
+- **Combo alternation**: R → idle → L → idle → R → L → … per hit. When both hand slots are empty (fists), treat as dual-wield for pose alternation purposes, not just for one-hand-only.
+- **Hit-flash sprite is already correct.** `initSlashSprites()` in `src/slash-effects.js` uses tile bytes byte-identical to the OAM `$4A–$4D` with the same `[0x0F, 0x16, 0x27, 0x30]` palette — the two-fist impact is already what we draw for non-bladed hits.
+
 ## Monster data
 
 - **`src/data/monsters.js` is auto-generated from the ROM** via `tools/gen-monsters-js.js`. That script reads `$60010` (monster props), `$61010` (stat table, indexed via byte 9/12 of the props), `$61210` (attack scripts), gil/EXP/CP tables, and preserves `steal`/`drops`/`location` from the existing file. To regenerate: `node tools/gen-monsters-js.js > src/data/monsters.js`. Verify the result against `tools/rom-dump-monsters.txt` before committing.

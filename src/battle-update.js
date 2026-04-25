@@ -299,7 +299,9 @@ function _advanceHitCombo() {
 function _updatePlayerAttackBack() {
   if (battleSt.battleState !== 'attack-back') return false;
   if (battleSt.currentHitIdx === 0) battleSt.comboStatusInflicted = 0;
-  const delay = battleSt.currentHitIdx === 0 ? BACK_SWING_MS : HIT_COMBO_PAUSE_MS;
+  // Unarmed skips the wind-up — NES canonical goes straight to forward strike.
+  const isUnarmed = getHitWeapon(battleSt.currentHitIdx, inputSt.rHandHitCount) === 0;
+  const delay = isUnarmed ? 0 : (battleSt.currentHitIdx === 0 ? BACK_SWING_MS : HIT_COMBO_PAUSE_MS);
   if (battleSt.battleTimer >= delay) {
     battleSt.battleState = 'attack-fwd';
     battleSt.battleTimer = 0;
