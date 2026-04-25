@@ -682,16 +682,19 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   if (isOppHit && _fpb(fakePlayerHitFullBodyCanvases)) {
     body = _fpb(fakePlayerHitFullBodyCanvases);
   } else if (isWindUp && pvpSt.pvpEnemyUnarmed) {
-    // OAM-canonical: unarmed has NO wind-up — show the strike pose for the entire animation.
-    // (Mirror rule still applies: opponent faces right, so R-hand → L pose canvas.)
-    body = _fpb(isLeftHandWind ? fakePlayerKnifeRFwdFullBodyCanvases : fakePlayerKnifeLFwdFullBodyCanvases) || fullBody;
+    // OAM: unarmed has NO wind-up — show the strike pose the entire animation.
+    // Mirror rule (opponent faces right): R-strike → L-fwd body, L-strike → R-back body.
+    body = _fpb(isLeftHandWind ? fakePlayerKnifeRFullBodyCanvases : fakePlayerKnifeLFwdFullBodyCanvases) || fullBody;
   } else if (isWindUp) {
     // *** PERMANENT RULE — DO NOT CHANGE ***
     // Opponent faces RIGHT. Right-hand swings use LEFT-hand pose sprites, and vice versa.
-    // This is NOT a bug — it's how the NES tile layout works for a right-facing sprite.
     // First attack = right hand → knifeLFullBodyCanvases (L pose = correct visual for R-hand swing)
     // Second attack = left hand → knifeRFullBodyCanvases (R pose = correct visual for L-hand swing)
     body = _fpb(isLeftHandWind ? fakePlayerKnifeRFullBodyCanvases : fakePlayerKnifeLFullBodyCanvases) || fullBody;
+  } else if (isAttackState && pvpSt.pvpEnemyUnarmed) {
+    // Unarmed mirror: R-strike → L-fwd body (atkLTiles), L-strike → R-back body (knifeRTiles).
+    // KnifeRFwd canvas uses idle tiles for Monk fake-player, so use KnifeR (back-pose body) for L-strike.
+    body = _fpb(isLeftHandAtk ? fakePlayerKnifeRFullBodyCanvases : fakePlayerKnifeLFwdFullBodyCanvases) || fullBody;
   } else if (isAttackState) {
     // *** PERMANENT RULE — DO NOT CHANGE ***
     // Opponent faces RIGHT. Right-hand → L pose sprites. Left-hand → R pose sprites.
@@ -725,7 +728,7 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
     ctx.scale(-1, 1);
     if (isAttackState && blade === blades.fist) {
       const fistC = getFistCanvas(_jobPalette(_ej, palIdx)) || blade;
-      const fistDy = (Math.floor(Date.now() / 16) & 1); // OAM: ±1px y-wobble per NES frame
+      const fistDy = (Math.floor(battleSt.battleTimer / 45) & 1); // sync to slash frame, resets per strike
       ctx.drawImage(fistC, -4, 10 + fistDy);
     } else if (isAttackState) {
       ctx.drawImage(blade, -16, 1);
