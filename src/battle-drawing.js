@@ -11,11 +11,19 @@ import { getMonsterCanvas, getMonsterWhiteCanvas, hasMonsterSprites } from './mo
 import { getItemNameClean, getMonsterName } from './text-decoder.js';
 import { weaponSubtype, isWeapon } from './data/items.js';
 import { PLAYER_PALETTES, MONK_PALETTES } from './data/players.js';
+import { pickAttackPoseKey } from './combatant-pose.js';
+
+// Player canvas pool fallback chain (player pool collapses knife back/fwd into one canvas).
+const PLAYER_POSE_FALLBACK = { rFwd: 'rBack', lFwd: 'lBack', knifeRFwd: 'knifeR', knifeLFwd: 'knifeL' };
+function _playerPoseCanvas(p, key) {
+  return p[key] || (PLAYER_POSE_FALLBACK[key] && p[PLAYER_POSE_FALLBACK[key]]) || null;
+}
 
 function _jobPalette(jobIdx, palIdx) {
   const pool = jobIdx === 2 ? MONK_PALETTES : PLAYER_PALETTES;
   return pool[palIdx] || pool[0];
 }
+
 import { ps, getHitWeapon, isHitRightHand } from './player-stats.js';
 import { _nameToBytes, _buildItemRowBytes, drawLvHpRow, makeExpText, makeGilText, makeCpText, makeItemDropText } from './text-utils.js';
 import { pvpEnemyCellCenter } from './pvp-math.js';
@@ -53,6 +61,20 @@ const CANVAS_W = 256;
 const BATTLE_PANEL_W = 120;
 const INV_SLOTS = 3;
 const ROSTER_ROW_H = 32;
+
+// Ally portrait pool adapter: maps the canonical pose key to the fake-player canvas dict.
+// Ally pool collapses fwd vs back for knives (no separate KnifeRFwdPortraits) and uses
+// AttackPortraits/AttackLPortraits for non-knife back-swing.
+const ALLY_POSE_MAP = {
+  rBack:     fakePlayerAttackPortraits,
+  lBack:     fakePlayerAttackLPortraits,
+  rFwd:      fakePlayerKnifeRPortraits,
+  lFwd:      fakePlayerKnifeLPortraits,
+  knifeR:    fakePlayerKnifeRPortraits,
+  knifeL:    fakePlayerKnifeLPortraits,
+  knifeRFwd: fakePlayerKnifeRPortraits,
+  knifeLFwd: fakePlayerKnifeLPortraits,
+};
 const BATTLE_TEXT_STEP_MS = 50;
 const BATTLE_TEXT_STEPS = 4;
 const BATTLE_FLASH_FRAME_MS = 16.67;
@@ -198,19 +220,15 @@ function _getPortraitSrc(isNearFatal, isAttackPose, isHitPose, isDefendPose, isI
   let src = ((isNearFatal || hasActiveStatus) && p.kneel) ? p.kneel : p.idle;
   if (isAttackPose) {
     const _wpn = getHitWeapon(battleSt.currentHitIdx, inputSt.rHandHitCount);
-    const _ws = weaponSubtype(_wpn);
     const rh = isHitRightHand(battleSt.currentHitIdx, inputSt.rHandHitCount);
-    const isUnarmed = _wpn === 0;
-    if (_ws === 'knife' || _ws === 'dagger') {
-      src = (rh ? p.knifeR : p.knifeL) || src;
-    } else if (isUnarmed) {
-      // OAM: R-strike = rBack tiles, L-strike = lFwd tiles (NOT lBack, that's nunchuck-L-back).
-      src = (rh ? p.rBack : (p.lFwd || p.lBack)) || src;
-    } else if (battleSt.battleState === 'attack-back') {
-      src = (rh ? p.rBack : p.lBack) || src;
-    } else if (battleSt.battleState === 'attack-fwd' || battleSt.battleState === 'player-slash') {
-      src = (rh ? (p.rFwd || p.rBack) : (p.lFwd || p.lBack)) || src;
-    }
+    const key = pickAttackPoseKey({
+      weaponSubtype: weaponSubtype(_wpn),
+      isUnarmed: _wpn === 0,
+      hand: rh ? 'R' : 'L',
+      attackPhase: battleSt.battleState === 'attack-back' ? 'back' : 'fwd',
+      mirror: false,
+    });
+    src = _playerPoseCanvas(p, key) || src;
   } else if ((isDefendPose || isItemUsePose) && p.defend) {
     src = p.defend;
   } else if (isHitPose && p.hit) {
@@ -1212,11 +1230,20 @@ function _drawAllyPortrait(i, ally, isVicPose, isAllyAttack, isAllyHit, isNearFa
   const _fp = (map) => (map[_j] || map[0])[ally.palIdx];
   let portraits;
   const allyUnarmed = !isWeapon(ally.weaponId) && !isWeapon(ally.weaponL);
-  if (isVicPose && (Math.floor(Date.now() / 250) & 1) && _fp(fakePlayerVictoryPortraits)) portraits = _fp(fakePlayerVictoryPortraits);
-  else if (isAllyAttack && allyUnarmed) portraits = _fp(hitLeft ? fakePlayerKnifeLPortraits : fakePlayerKnifeRPortraits);
-  else if (isAllyAttack) portraits = _fp(hitLeft ? fakePlayerAttackLPortraits : fakePlayerAttackPortraits);
-  else if (isThisAllySlash) portraits = _fp(battleSt.allyHitIsLeft ? fakePlayerKnifeLPortraits : fakePlayerKnifeRPortraits);
-  else if (isAllyHit && _fp(fakePlayerHitPortraits)) portraits = _fp(fakePlayerHitPortraits);
+  if (isVicPose && (Math.floor(Date.now() / 250) & 1) && _fp(fakePlayerVictoryPortraits)) {
+    portraits = _fp(fakePlayerVictoryPortraits);
+  } else if (isAllyAttack || isThisAllySlash) {
+    const useLeft = isThisAllySlash ? battleSt.allyHitIsLeft : hitLeft;
+    const wpnId = useLeft ? ally.weaponL : ally.weaponId;
+    const key = pickAttackPoseKey({
+      weaponSubtype: weaponSubtype(wpnId),
+      isUnarmed: allyUnarmed,
+      hand: useLeft ? 'L' : 'R',
+      attackPhase: isThisAllySlash ? 'fwd' : 'back',
+      mirror: false,
+    });
+    portraits = _fp(ALLY_POSE_MAP[key]);
+  } else if (isAllyHit && _fp(fakePlayerHitPortraits)) portraits = _fp(fakePlayerHitPortraits);
   else if (isNearFatal && _fp(fakePlayerKneelPortraits)) portraits = _fp(fakePlayerKneelPortraits);
   else portraits = _fp(fakePlayerPortraits);
   if (!portraits) return;

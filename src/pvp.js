@@ -35,6 +35,20 @@ import { fakePlayerFullBodyCanvases, fakePlayerHitFullBodyCanvases,
          fakePlayerKnifeRFwdFullBodyCanvases, fakePlayerKnifeLFwdFullBodyCanvases,
          fakePlayerKneelFullBodyCanvases, fakePlayerVictoryFullBodyCanvases,
          fakePlayerDeathFrames } from './fake-player-sprites.js';
+import { pickAttackPoseKey } from './combatant-pose.js';
+
+// Opponent body pool adapter: maps the canonical pose key to the fake-player full-body dict.
+// Opponent KEEPS knife back vs fwd as separate canvases (KnifeR = wind-up body, KnifeRFwd = thrust body).
+const OPP_POSE_MAP = {
+  rBack:     fakePlayerKnifeRFullBodyCanvases,
+  lBack:     fakePlayerKnifeLFullBodyCanvases,
+  rFwd:      fakePlayerKnifeRFwdFullBodyCanvases,
+  lFwd:      fakePlayerKnifeLFwdFullBodyCanvases,
+  knifeR:    fakePlayerKnifeRFullBodyCanvases,
+  knifeL:    fakePlayerKnifeLFullBodyCanvases,
+  knifeRFwd: fakePlayerKnifeRFwdFullBodyCanvases,
+  knifeLFwd: fakePlayerKnifeLFwdFullBodyCanvases,
+};
 
 function _cursorTileCanvas() { return ui.cursorTileCanvas; }
 function _buildAndProcessNextTurn() { battleSt.turnQueue = buildTurnOrder(); processNextTurn(); }
@@ -678,24 +692,18 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   let body = fullBody;
   if (isOppHit && _fpb(fakePlayerHitFullBodyCanvases)) {
     body = _fpb(fakePlayerHitFullBodyCanvases);
-  } else if (isWindUp && pvpSt.pvpEnemyUnarmed) {
-    // OAM: unarmed has NO wind-up — show the strike pose the entire animation.
-    // Mirror rule (opponent faces right): R-strike → L-fwd body, L-strike → R-back body.
-    body = _fpb(isLeftHandWind ? fakePlayerKnifeRFullBodyCanvases : fakePlayerKnifeLFwdFullBodyCanvases) || fullBody;
-  } else if (isWindUp) {
-    // *** PERMANENT RULE — DO NOT CHANGE ***
-    // Opponent faces RIGHT. Right-hand swings use LEFT-hand pose sprites, and vice versa.
-    // First attack = right hand → knifeLFullBodyCanvases (L pose = correct visual for R-hand swing)
-    // Second attack = left hand → knifeRFullBodyCanvases (R pose = correct visual for L-hand swing)
-    body = _fpb(isLeftHandWind ? fakePlayerKnifeRFullBodyCanvases : fakePlayerKnifeLFullBodyCanvases) || fullBody;
-  } else if (isAttackState && pvpSt.pvpEnemyUnarmed) {
-    // Unarmed mirror: R-strike → L-fwd body (atkLTiles), L-strike → R-back body (knifeRTiles).
-    // KnifeRFwd canvas uses idle tiles for Monk fake-player, so use KnifeR (back-pose body) for L-strike.
-    body = _fpb(isLeftHandAtk ? fakePlayerKnifeRFullBodyCanvases : fakePlayerKnifeLFwdFullBodyCanvases) || fullBody;
-  } else if (isAttackState) {
-    // *** PERMANENT RULE — DO NOT CHANGE ***
-    // Opponent faces RIGHT. Right-hand → L pose sprites. Left-hand → R pose sprites.
-    body = _fpb(isLeftHandAtk ? fakePlayerKnifeRFwdFullBodyCanvases : fakePlayerKnifeLFwdFullBodyCanvases) || fullBody;
+  } else if (isWindUp || isAttackState) {
+    // Centralized pose-pick. Mirror rule (opponent face-right pre-flipped canvas) lives in pickAttackPoseKey;
+    // unarmed-no-windup rule lives there too — both render the strike pose for back & fwd phases.
+    const handIsL = isWindUp ? isLeftHandWind : isLeftHandAtk;
+    const key = pickAttackPoseKey({
+      weaponSubtype: wpn,
+      isUnarmed: !!pvpSt.pvpEnemyUnarmed,
+      hand: handIsL ? 'L' : 'R',
+      attackPhase: isWindUp ? 'back' : 'fwd',
+      mirror: true,
+    });
+    body = _fpb(OPP_POSE_MAP[key]) || fullBody;
   } else if (isOppDefending || isOppItemUse) {
     body = _fpb(fakePlayerVictoryFullBodyCanvases) || fullBody;
   } else if (isOppVictory && (Math.floor(Date.now() / 250) & 1)) {
