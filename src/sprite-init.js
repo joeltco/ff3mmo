@@ -1313,11 +1313,53 @@ function _buildGenericJobFullBodies(romData, jobIdx) {
   };
 }
 
+// Unified ally + opponent builder (uses combatant-sprites bundle). Rolled out per-job
+// so any regression has a small surface — see _USE_BUNDLE_FOR_ALLY below.
+function _buildFakePlayerSet(romData, jobIdx) {
+  const bundle = getJobPoseTileBundle(romData, jobIdx);
+  const portraits = buildAllyPosePortraits(bundle);
+  const bodies    = buildOpponentBodyCanvases(bundle);
+  const deathPoses = buildDeathPoseCanvases(bundle);
+  return {
+    fakePlayerPortraits:           portraits.idle,
+    fakePlayerVictoryPortraits:    portraits.victory,
+    fakePlayerHitPortraits:        portraits.hit,
+    fakePlayerDefendPortraits:     portraits.victory,
+    fakePlayerKneelPortraits:      portraits.kneel,
+    fakePlayerAttackPortraits:     portraits.rBack,
+    fakePlayerAttackLPortraits:    portraits.lBack,
+    fakePlayerKnifeBackPortraits:  portraits.lBack,
+    fakePlayerKnifeRPortraits:     portraits.knifeR,
+    fakePlayerKnifeLPortraits:     portraits.knifeL,
+    fakePlayerKnifeRFwdPortraits:  portraits.knifeRFwd,
+    fakePlayerKnifeLFwdPortraits:  portraits.knifeLFwd,
+    fakePlayerFullBodyCanvases:           bodies.idle,
+    fakePlayerHitFullBodyCanvases:        bodies.hit,
+    fakePlayerKnifeRFullBodyCanvases:     bodies.knifeR,
+    fakePlayerKnifeLFullBodyCanvases:     bodies.knifeL,
+    fakePlayerKnifeBackFullBodyCanvases:  bodies.knifeL,
+    fakePlayerKnifeRFwdFullBodyCanvases:  bodies.knifeRFwd,
+    fakePlayerKnifeLFwdFullBodyCanvases:  bodies.knifeLFwd,
+    fakePlayerKneelFullBodyCanvases:      bodies.kneel,
+    fakePlayerVictoryFullBodyCanvases:    bodies.victory,
+    fakePlayerDeathPoseCanvases: deathPoses || bodies.idle,
+    fakePlayerDeathFrames:       bodies.idle.map(c => _makeDeathFrames(c)),
+  };
+}
+
+// Per-job rollout: jobs in this set use the unified bundle path; others stay on legacy.
+// Expand once each is verified visually. Goal: empty the legacy block once all jobs are migrated.
+const _USE_BUNDLE_FOR_ALLY = new Set([0]); // OK first — Warrior/Monk/generic still on legacy
+
 export function initFakePlayerPortraits(romData, jobIndices) {
   // Build per-job portrait and body sets
   // jobIndices = array of unique job indices to generate for (e.g. [0, 1, 2])
   const result = {};
   for (const jobIdx of jobIndices) {
+    if (_USE_BUNDLE_FOR_ALLY.has(jobIdx)) {
+      result[jobIdx] = _buildFakePlayerSet(romData, jobIdx);
+      continue;
+    }
     let portraits, bodies;
     if (jobIdx === 0) {
       portraits = _initFakePosePortraits(romData);
