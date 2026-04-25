@@ -39,7 +39,7 @@ export const PAUSE_ITEMS = [
 export const BATTLE_MENU_ITEMS = [BATTLE_FIGHT, BATTLE_DEFEND, PAUSE_ITEMS[0], BATTLE_RUN];
 
 // Version — single source of truth (update here + package.json)
-export const VERSION = '1.6.31';
+export const VERSION = '1.6.32';
 
 // Area / world strings
 export const AREA_NAMES = new Map([
