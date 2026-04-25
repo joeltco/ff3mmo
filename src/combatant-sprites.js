@@ -12,8 +12,9 @@
 //   • buildOpponentBodyCanvases — opponent full-body path (palette array → 16×24 with legs)
 
 import { decodeTile } from './tile-decoder.js';
-import { PLAYER_PALETTES, MONK_PALETTES } from './data/players.js';
+import { PLAYER_PALETTES, MONK_PALETTES, ROSTER_FADE_STEPS } from './data/players.js';
 import { BATTLE_SPRITE_ROM, BATTLE_JOB_SIZE } from './data/jobs.js';
+import { nesColorFade } from './palette.js';
 import {
   OK_IDLE, OK_VICTORY, OK_L_BACK_SWING, OK_L_FWD_T2, OK_L_FWD_T3,
   OK_R_BACK_SWING, OK_R_FWD_T2, OK_KNEEL,
@@ -279,12 +280,21 @@ export function buildPlayerPoseCanvases(bundle, palette) {
   return out;
 }
 
-// Ally portrait path: palette array → per-palette canvas array per pose key.
-// Returns { idle:[c,c,…], rBack:[c,c,…], … } indexed by pose key, each value is an array indexed by palIdx.
+// Ally portrait path: palette array → per-palette ARRAY OF FADE-STEP canvases per pose key.
+// Returns { idle: [palIdx → [fadeStep → canvas]], … }. Fade-step variants are required by roster
+// rendering and the title-screen save-slot list (legacy _genPosePortraits behavior).
 export function buildAllyPosePortraits(bundle) {
   const out = {};
   for (const key of POSE_KEYS) {
-    out[key] = bundle.palettes.map(pal => _renderPortrait(bundle.bodies[key], pal));
+    out[key] = bundle.palettes.map(basePal => {
+      const frames = [];
+      for (let step = 0; step <= ROSTER_FADE_STEPS; step++) {
+        let pal = [...basePal];
+        for (let s = 0; s < step; s++) pal = pal.map(c => nesColorFade(c));
+        frames.push(_renderPortrait(bundle.bodies[key], pal));
+      }
+      return frames;
+    });
   }
   return out;
 }
