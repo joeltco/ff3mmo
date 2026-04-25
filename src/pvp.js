@@ -263,32 +263,14 @@ function _runEnemyAttack(targetAlly) {
   if (queueBattleMsg && attackerStats && attackerStats.name) {
     queueBattleMsg(_nameToBytes(attackerStats.name + ' attacks!'));
   }
-  if (targetAlly >= 0) {
-    // Ally target — sum all pre-rolled hits, apply total at once
-    battleSt.enemyTargetAllyIdx = targetAlly;
-    let totalDmg = 0, anyCrit = false, allMiss = true;
-    for (const h of pvpSt.pvpEnemyHitResults) {
-      if (!h.miss) { totalDmg += h.dmg; allMiss = false; if (h.crit) anyCrit = true; }
-    }
-    if (!allMiss) {
-      battleSt.battleAllies[targetAlly].hp = Math.max(0, battleSt.battleAllies[targetAlly].hp - totalDmg);
-      getAllyDamageNums()[targetAlly] = { value: totalDmg, crit: anyCrit, timer: 0 };
-      battleSt.allyShakeTimer[targetAlly] = BATTLE_SHAKE_MS;
-      if (anyCrit) battleSt.critFlashTimer = 0;
-      playSFX(attackerStats ? _pvpAttackerSFX(attackerStats.weaponId) : SFX.ATTACK_HIT);
-      battleSt.battleState = 'ally-hit'; battleSt.battleTimer = 0;
-    } else {
-      getAllyDamageNums()[targetAlly] = { miss: true, timer: 0 };
-      battleSt.battleState = 'ally-damage-show-enemy'; battleSt.battleTimer = 0;
-    }
-  } else {
-    // Player target — stage first hit for slash combo
-    pvpSt.pvpPendingAttack = pvpSt.pvpEnemyHitResults[0] || { miss: true, shieldBlock: false, dmg: 0, crit: false };
-    const pendingCrit = pvpSt.pvpPendingAttack && pvpSt.pvpPendingAttack.crit;
-    const wId = attackerStats ? attackerStats.weaponId : null;
-    if (wId != null) playSlashSFX(wId, pendingCrit); else playSFX(SFX.ATTACK_HIT);
-    battleSt.battleState = 'pvp-enemy-slash'; battleSt.battleTimer = 0;
-  }
+  // Stage hit-by-hit combo for both player and ally targets so multi-hit attacks
+  // (especially unarmed R/L alternation) actually animate per strike.
+  battleSt.enemyTargetAllyIdx = targetAlly; // -1 for player, >=0 for ally
+  pvpSt.pvpPendingAttack = pvpSt.pvpEnemyHitResults[0] || { miss: true, shieldBlock: false, dmg: 0, crit: false };
+  const pendingCrit = pvpSt.pvpPendingAttack && pvpSt.pvpPendingAttack.crit;
+  const wId = attackerStats ? attackerStats.weaponId : null;
+  if (wId != null) playSlashSFX(wId, pendingCrit); else playSFX(SFX.ATTACK_HIT);
+  battleSt.battleState = 'pvp-enemy-slash'; battleSt.battleTimer = 0;
 }
 
 function _processEnemyFlash() {
@@ -504,19 +486,22 @@ function _processPVPEnemySlash() {
   if (battleSt.battleTimer < ENEMY_SLASH_TOTAL_MS) return true;
   const pending = pvpSt.pvpPendingAttack;
   pvpSt.pvpPendingAttack = null;
-  // Apply this hit's damage immediately (but don't show number yet — sum at end)
+  const targetAlly = battleSt.enemyTargetAllyIdx; // -1 = player, >=0 = ally
+  // Apply this hit's damage immediately (sum at end for the popup number)
   if (pending && !pending.miss && !pending.shieldBlock) {
-    ps.hp = Math.max(0, ps.hp - pending.dmg);
+    if (targetAlly >= 0) {
+      const ally = battleSt.battleAllies[targetAlly];
+      if (ally) ally.hp = Math.max(0, ally.hp - pending.dmg);
+      battleSt.allyShakeTimer[targetAlly] = BATTLE_SHAKE_MS;
+    } else {
+      ps.hp = Math.max(0, ps.hp - pending.dmg);
+      battleSt.battleShakeTimer = BATTLE_SHAKE_MS;
+    }
     if (pending.crit) battleSt.critFlashTimer = 0;
-    battleSt.battleShakeTimer = BATTLE_SHAKE_MS;
-  }
-  if (pending && pending.shieldBlock) {
-    // shield block counts as an action for JP
   }
   // Advance combo
   if (pvpSt.pvpEnemyHitIdx + 1 < pvpSt.pvpEnemyHitResults.length) {
     pvpSt.pvpEnemyHitIdx++;
-    // More hits — windup for next slash
     battleSt.battleState = 'pvp-second-windup'; battleSt.battleTimer = 0;
   } else {
     // Finalize — sum all hits into one damage number
@@ -524,8 +509,14 @@ function _processPVPEnemySlash() {
     for (const h of pvpSt.pvpEnemyHitResults) {
       if (!h.miss && !h.shieldBlock) { totalDmg += h.dmg; allMiss = false; if (h.crit) anyCrit = true; }
     }
-    setPlayerDamageNum(allMiss ? { miss: true, timer: 0 } : { value: totalDmg, crit: anyCrit, timer: 0 });
-    battleSt.battleState = 'enemy-attack'; battleSt.battleTimer = 0;
+    if (targetAlly >= 0) {
+      getAllyDamageNums()[targetAlly] = allMiss ? { miss: true, timer: 0 } : { value: totalDmg, crit: anyCrit, timer: 0 };
+      battleSt.battleState = allMiss ? 'ally-damage-show-enemy' : 'ally-hit';
+      battleSt.battleTimer = 0;
+    } else {
+      setPlayerDamageNum(allMiss ? { miss: true, timer: 0 } : { value: totalDmg, crit: anyCrit, timer: 0 });
+      battleSt.battleState = 'enemy-attack'; battleSt.battleTimer = 0;
+    }
   }
   return true;
 }
@@ -659,12 +650,13 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   // Even hit index = right hand, odd = left hand (if dual-wielding)
   const isAttackState = isThisAttacking && (bs === 'enemy-attack' || bs === 'pvp-enemy-slash' || bs === 'ally-hit');
   // Hand selection: dual or unarmed → alternate per hit; single weapon → that hand only.
+  // Drives off isThisAttacking (not isMain) so PVP enemy allies also alternate when unarmed.
   const eRw = enemy && isWeapon(enemy.weaponId);
   const eLw = enemy && isWeapon(enemy.weaponL);
   const altByHit = (eRw && eLw) || (!eRw && !eLw);
   const _altIsL = altByHit ? (pvpSt.pvpEnemyHitIdx % 2 === 1) : !eRw;
-  const isLeftHandWind = isMain && bs === 'pvp-second-windup' && _altIsL;
-  const isLeftHandAtk  = isMain && isAttackState && _altIsL;
+  const isLeftHandWind = isThisAttacking && bs === 'pvp-second-windup' && _altIsL;
+  const isLeftHandAtk  = isThisAttacking && isAttackState && _altIsL;
   const activeWeaponId = (isLeftHandWind || isLeftHandAtk)
     ? (enemy.weaponL != null ? enemy.weaponL : enemy.weaponId)
     : enemy.weaponId;
