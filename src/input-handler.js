@@ -165,8 +165,9 @@ function _battleTargetConfirm() {
   playSFX(SFX.CONFIRM);
   const rIsWeapon = isWeapon(ps.weaponR);
   const lIsWeapon = isWeapon(ps.weaponL);
-  const dualWield = rIsWeapon && lIsWeapon;
   const unarmed = !rIsWeapon && !lIsWeapon;
+  // Unarmed = dual fists. Reuses the existing dual-wield code path: 2x hits, R then L, summed damage, single target.
+  const dualWield = (rIsWeapon && lIsWeapon) || unarmed;
   const wpnSubtype = weaponSubtype(ps.weaponR) || weaponSubtype(ps.weaponL) || 'unarmed';
   const lv = ps.stats ? ps.stats.level : 1;
   const agi = (ps.stats ? ps.stats.agi : 5) + getJobLevelStatBonus().agi;

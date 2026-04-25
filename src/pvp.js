@@ -330,14 +330,17 @@ function _processEnemyFlash() {
     : pvpSt.pvpOpponentStats;
   const atk = attackerStats ? attackerStats.atk : BOSS_ATK;
   const hitRate = attackerStats?.hitRate || BOSS_HIT_RATE;
-  const dualWield = attackerStats && isWeapon(attackerStats.weaponId) && isWeapon(attackerStats.weaponL);
-  const isUnarmed = !!(attackerStats && !isWeapon(attackerStats.weaponId) && !isWeapon(attackerStats.weaponL));
-  // Unarmed treats both fists as separate "weapons" → 2x hits, matching dual-wield (so R/L alternation is visible)
-  const potentialHits = calcPotentialHits(attackerStats?.level || 1, attackerStats?.agi || 5, dualWield || isUnarmed);
+  // Unarmed = dual fists. Single dualWield flag drives both hit count and visual alternation,
+  // matching player + ally paths so we don't end up with bespoke per-call-site logic.
+  const aRw = !!(attackerStats && isWeapon(attackerStats.weaponId));
+  const aLw = !!(attackerStats && isWeapon(attackerStats.weaponL));
+  const isUnarmed = !aRw && !aLw;
+  const dualWield = (aRw && aLw) || isUnarmed;
+  const potentialHits = calcPotentialHits(attackerStats?.level || 1, attackerStats?.agi || 5, dualWield);
 
   pvpSt.pvpEnemyHitIdx = 0;
   pvpSt.pvpEnemyDualWield = dualWield;
-  pvpSt.pvpEnemyUnarmed = isUnarmed;
+  pvpSt.pvpEnemyUnarmed = isUnarmed; // still needed by renderer to pick fist canvas vs blade
   const def = targetAlly >= 0 ? battleSt.battleAllies[targetAlly].def : ps.def;
   const attackerJob = JOBS[attackerStats?.jobIdx || 0] || {};
   const baseOpts = { critPct: attackerJob.critPct || 0, critBonus: attackerJob.critBonus || 0 };

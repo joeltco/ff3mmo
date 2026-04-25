@@ -179,7 +179,9 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
             ? (pvpSt.pvpEnemyAllies[pvpSt.pvpPlayerTargetIdx] || pvpSt.pvpOpponentStats).def
             : pvpSt.pvpOpponentStats.def)
         : BOSS_DEF;
-    const dualWield = isWeapon(ally.weaponId) && isWeapon(ally.weaponL);
+    // Unarmed = dual fists (same as player path) → 2x hits.
+    const aRw = isWeapon(ally.weaponId), aLw = isWeapon(ally.weaponL);
+    const dualWield = (aRw && aLw) || (!aRw && !aLw);
     const potentialHits = calcPotentialHits(ally.level || 1, ally.agi, dualWield);
     const _allyJob = JOBS[ally.jobIdx || 0] || {};
     battleSt.allyHitResults = rollHits(ally.atk, targetDef, ally.hitRate || 85, potentialHits,
