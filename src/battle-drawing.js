@@ -11,7 +11,7 @@ import { getMonsterCanvas, getMonsterWhiteCanvas, hasMonsterSprites } from './mo
 import { getItemNameClean, getMonsterName } from './text-decoder.js';
 import { weaponSubtype, isWeapon } from './data/items.js';
 import { PLAYER_PALETTES, MONK_PALETTES } from './data/players.js';
-import { pickAttackPoseKey } from './combatant-pose.js';
+import { pickAttackPoseKey, pickAttackWeaponSpec, attackWeaponLayer } from './combatant-pose.js';
 
 // Player canvas pool fallback chain (player pool collapses knife back/fwd into one canvas).
 const PLAYER_POSE_FALLBACK = { rFwd: 'rBack', lFwd: 'lBack', knifeRFwd: 'knifeR', knifeLFwd: 'knifeL' };
@@ -41,11 +41,7 @@ import { getAllyDamageNums, getEnemyDmgNum, getPlayerDamageNum, getPlayerHealNum
          getSwDmgNums } from './damage-numbers.js';
 import { getBattleMsgCurrent, getBattleMsgTimer, MSG_FADE_IN_MS, MSG_HOLD_MS, MSG_FADE_OUT_MS } from './battle-msg.js';
 import { getHitIdx, getTargets } from './battle-items.js';
-import { getKnifeBladeCanvas, getKnifeBladeSwungCanvas,
-         getDaggerBladeCanvas, getDaggerBladeSwungCanvas,
-         getSwordBladeCanvas, getSwordBladeSwungCanvas,
-         getNunchakuBladeCanvas, getNunchakuBladeSwungCanvas,
-         getFistCanvas } from './weapon-sprites.js';
+// (weapon canvas selection moved to combatant-pose.js — pickAttackWeaponSpec handles all blade/fist getters)
 import { clipToViewport, drawCursorFaded, drawHudBox, drawSparkleCorners, drawBorderedBox,
          grayViewport } from './hud-drawing.js';
 import { drawMonsterDeath as _drawMonsterDeath } from './render.js';
@@ -265,34 +261,26 @@ function _drawPortraitFrame(px, py, portraitSrc, isRunPose) {
 }
 
 function _drawPortraitWeapon(px, py, before) {
-  // before=true: back-swing blade BEHIND body; false: front blade IN FRONT or swung
+  // before=true: behind body (drawn before body); false: in front (drawn after body)
   const handWeapon = getHitWeapon(battleSt.currentHitIdx, inputSt.rHandHitCount);
-  const wpnSt = weaponSubtype(handWeapon);
-  if (battleSt.battleState === 'attack-back') {
-    const rightHand = isHitRightHand(battleSt.currentHitIdx, inputSt.rHandHitCount);
-    if (before && rightHand) {
-      if (wpnSt === 'knife' && handWeapon === 0x1F && getDaggerBladeCanvas()) ui.ctx.drawImage(getDaggerBladeCanvas(), px + 8, py - 7);
-      else if (wpnSt === 'knife' && getKnifeBladeCanvas()) ui.ctx.drawImage(getKnifeBladeCanvas(), px + 8, py - 7);
-      else if (wpnSt === 'sword' && getSwordBladeCanvas()) ui.ctx.drawImage(getSwordBladeCanvas(), px + 8, py - 7);
-      else if (wpnSt === 'nunchaku' && getNunchakuBladeCanvas()) ui.ctx.drawImage(getNunchakuBladeCanvas(), px + 8, py - 7);
-    } else if (!before && !rightHand) {
-      if (wpnSt === 'knife' && handWeapon === 0x1F && getDaggerBladeCanvas()) ui.ctx.drawImage(getDaggerBladeCanvas(), px + 16, py - 7);
-      else if (wpnSt === 'knife' && getKnifeBladeCanvas()) ui.ctx.drawImage(getKnifeBladeCanvas(), px + 16, py - 7);
-      else if (wpnSt === 'sword' && getSwordBladeCanvas()) ui.ctx.drawImage(getSwordBladeCanvas(), px + 16, py - 7);
-      else if (wpnSt === 'nunchaku' && getNunchakuBladeCanvas()) ui.ctx.drawImage(getNunchakuBladeCanvas(), px + 16, py - 7);
-    }
-  } else if (!before && (battleSt.battleState === 'attack-fwd' || battleSt.battleState === 'player-slash')) {
-    if (wpnSt === 'knife' && handWeapon === 0x1F && getDaggerBladeSwungCanvas()) ui.ctx.drawImage(getDaggerBladeSwungCanvas(), px - 16, py + 1);
-    else if (wpnSt === 'knife' && getKnifeBladeSwungCanvas()) ui.ctx.drawImage(getKnifeBladeSwungCanvas(), px - 16, py + 1);
-    else if (wpnSt === 'sword' && getSwordBladeSwungCanvas()) ui.ctx.drawImage(getSwordBladeSwungCanvas(), px - 16, py + 1);
-    else if (wpnSt === 'nunchaku' && getNunchakuBladeSwungCanvas()) ui.ctx.drawImage(getNunchakuBladeSwungCanvas(), px - 16, py + 1);
-    else if (!wpnSt && handWeapon === 0) {
-      const fistC = getFistCanvas(bsc.battlePoses && bsc.battlePoses.palette);
-      if (fistC) {
-        const fistDy = (Math.floor(battleSt.battleTimer / 100) & 1); // shared wobble cadence — same constant across player/ally/opponent
-        ui.ctx.drawImage(fistC, px - 4, py + 10 + fistDy);
-      }
-    }
+  const phase = battleSt.battleState === 'attack-back' ? 'back'
+              : (battleSt.battleState === 'attack-fwd' || battleSt.battleState === 'player-slash') ? 'fwd'
+              : null;
+  if (!phase) return;
+  const rightHand = isHitRightHand(battleSt.currentHitIdx, inputSt.rHandHitCount);
+  const hand = rightHand ? 'R' : 'L';
+  const spec = pickAttackWeaponSpec({
+    weaponId: handWeapon,
+    weaponSubtype: weaponSubtype(handWeapon),
+    isUnarmed: handWeapon === 0,
+    hand, attackPhase: phase, mirror: false,
+    fistPalette: bsc.battlePoses && bsc.battlePoses.palette,
+    fistTimerMs: battleSt.battleTimer,
+  });
+  if (!spec) return;
+  const layer = attackWeaponLayer({ attackPhase: phase, hand, mirror: false });
+  if ((before && layer === 'behind') || (!before && layer === 'front')) {
+    ui.ctx.drawImage(spec.canvas, px + spec.dx, py + spec.dy);
   }
 }
 
@@ -1247,43 +1235,30 @@ function _drawAllyPortrait(i, ally, isVicPose, isAllyAttack, isAllyHit, isNearFa
   else if (isNearFatal && _fp(fakePlayerKneelPortraits)) portraits = _fp(fakePlayerKneelPortraits);
   else portraits = _fp(fakePlayerPortraits);
   if (!portraits) return;
-  if (isAllyAttack) {
-    // R-hand back-swing blade goes BEHIND portrait (NES OAM: weapon spr06-09 loses to body spr00-05)
-    // L-hand back-swing blade goes IN FRONT (NES OAM: weapon spr00-03 beats body spr04-09)
-    if (!hitLeft) {
-      const wpnSt = weaponSubtype(ally.weaponId);
-      const backX = ppx + 8;
-      if (wpnSt === 'knife' && ally.weaponId === 0x1F && getDaggerBladeCanvas()) ui.ctx.drawImage(getDaggerBladeCanvas(), backX, ppy - 7);
-      else if (wpnSt === 'knife' && getKnifeBladeCanvas()) ui.ctx.drawImage(getKnifeBladeCanvas(), backX, ppy - 7);
-      else if (wpnSt === 'sword' && getSwordBladeCanvas()) ui.ctx.drawImage(getSwordBladeCanvas(), backX, ppy - 7);
-      else if (wpnSt === 'nunchaku' && getNunchakuBladeCanvas()) ui.ctx.drawImage(getNunchakuBladeCanvas(), backX, ppy - 7);
+  // Ally weapon draws (back-swing during isAllyAttack, forward strike during isThisAllySlash).
+  // Uses the same pose module as player + opponent — layer rule = R-back behind body, L-back/fwd in front.
+  if (isAllyAttack || isThisAllySlash) {
+    const useLeft = isThisAllySlash ? battleSt.allyHitIsLeft : hitLeft;
+    const wpnId = useLeft ? ally.weaponL : ally.weaponId;
+    const phase = isThisAllySlash ? 'fwd' : 'back';
+    const hand = useLeft ? 'L' : 'R';
+    const allyUnarmedHand = !isWeapon(ally.weaponId) && !isWeapon(ally.weaponL);
+    const spec = pickAttackWeaponSpec({
+      weaponId: wpnId,
+      weaponSubtype: weaponSubtype(wpnId),
+      isUnarmed: allyUnarmedHand,
+      hand, attackPhase: phase, mirror: false,
+      fistPalette: _jobPalette(ally.jobIdx || 0, ally.palIdx || 0),
+      fistTimerMs: battleSt.battleTimer,
+    });
+    if (spec) {
+      const layer = attackWeaponLayer({ attackPhase: phase, hand, mirror: false });
+      if (layer === 'behind') ui.ctx.drawImage(spec.canvas, ppx + spec.dx, ppy + spec.dy);
+      // 'front' draws are queued — they layer above the body, drawn after portrait.
+      else weaponDraws.push({ img: spec.canvas, x: ppx + spec.dx, y: ppy + spec.dy });
     }
   }
   ui.ctx.drawImage(portraits[ally.fadeStep], ppx, ppy);
-  if (isAllyAttack) {
-    if (hitLeft) {
-      const wpnSt = weaponSubtype(ally.weaponL);
-      if (wpnSt === 'knife' && ally.weaponL === 0x1F && getDaggerBladeCanvas()) weaponDraws.push({ img: getDaggerBladeCanvas(), x: ppx + 16, y: ppy - 7 });
-      else if (wpnSt === 'knife' && getKnifeBladeCanvas()) weaponDraws.push({ img: getKnifeBladeCanvas(), x: ppx + 16, y: ppy - 7 });
-      else if (wpnSt === 'sword' && getSwordBladeCanvas()) weaponDraws.push({ img: getSwordBladeCanvas(), x: ppx + 16, y: ppy - 7 });
-      else if (wpnSt === 'nunchaku' && getNunchakuBladeCanvas()) weaponDraws.push({ img: getNunchakuBladeCanvas(), x: ppx + 16, y: ppy - 7 });
-    }
-  }
-  if (isThisAllySlash) {
-    const activeWpnId = battleSt.allyHitIsLeft ? ally.weaponL : ally.weaponId;
-    const wpnSt = weaponSubtype(activeWpnId);
-    if (wpnSt === 'knife' && activeWpnId === 0x1F && getDaggerBladeSwungCanvas()) weaponDraws.push({ img: getDaggerBladeSwungCanvas(), x: ppx - 16, y: ppy + 1 });
-    else if (wpnSt === 'knife' && getKnifeBladeSwungCanvas()) weaponDraws.push({ img: getKnifeBladeSwungCanvas(), x: ppx - 16, y: ppy + 1 });
-    else if (wpnSt === 'sword' && getSwordBladeSwungCanvas()) weaponDraws.push({ img: getSwordBladeSwungCanvas(), x: ppx - 16, y: ppy + 1 });
-    else if (wpnSt === 'nunchaku' && getNunchakuBladeSwungCanvas()) weaponDraws.push({ img: getNunchakuBladeSwungCanvas(), x: ppx - 16, y: ppy + 1 });
-    else if (wpnSt === 'claw' || (!wpnSt && activeWpnId === 0)) {
-      const fistC = getFistCanvas(_jobPalette(ally.jobIdx || 0, ally.palIdx || 0));
-      if (fistC) {
-        const fistDy = (Math.floor(battleSt.battleTimer / 100) & 1); // shared wobble cadence — same constant across player/ally/opponent
-        weaponDraws.push({ img: fistC, x: ppx - 4, y: ppy + 10 + fistDy });
-      }
-    }
-  }
   // Near-fatal sweat — 2 frames alternating every 133ms, 3px above portrait
   if (isNearFatal && bsc.sweatFrames.length === 2 && !isAllyAttack && !isAllyHit && !isVicPose && !isThisAllySlash) {
     const sweatIdx = Math.floor(Date.now() / 133) & 1;

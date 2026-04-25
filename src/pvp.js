@@ -4,7 +4,7 @@ import { battleSt, getEnemyHP, setEnemyHP } from './battle-state.js';
 import { clipToViewport, drawBorderedBox } from './hud-drawing.js';
 import { getPlayerLocation } from './roster.js';
 import { queueBattleMsg } from './battle-msg.js';
-import { getBlades, getFistCanvas } from './weapon-sprites.js';
+// (weapon canvas selection moved to combatant-pose.js — opponent now uses pickAttackWeaponSpec)
 import { getAllyDamageNums, getPlayerDamageNum, setPlayerDamageNum, getEnemyHealNum, setEnemyHealNum } from './damage-numbers.js';
 import { ui } from './ui-state.js';
 import { buildTurnOrder, processNextTurn } from './battle-turn.js';
@@ -35,7 +35,7 @@ import { fakePlayerFullBodyCanvases, fakePlayerHitFullBodyCanvases,
          fakePlayerKnifeRFwdFullBodyCanvases, fakePlayerKnifeLFwdFullBodyCanvases,
          fakePlayerKneelFullBodyCanvases, fakePlayerVictoryFullBodyCanvases,
          fakePlayerDeathFrames } from './fake-player-sprites.js';
-import { pickAttackPoseKey } from './combatant-pose.js';
+import { pickAttackPoseKey, pickAttackWeaponSpec, attackWeaponLayer } from './combatant-pose.js';
 
 // Opponent body pool adapter: maps the canonical pose key to the fake-player full-body dict.
 // Opponent KEEPS knife back vs fwd as separate canvases (KnifeR = wind-up body, KnifeRFwd = thrust body).
@@ -712,40 +712,32 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
     body = _fpb(fakePlayerKneelFullBodyCanvases) || fullBody;
   }
 
-  // Opponent faces RIGHT (pre-flipped body canvas), player faces LEFT.
-  // Player (faces left): wind-up at px+8 (right/behind), swung at px-16 (left/forward).
-  // Opponent (faces right): body is pre-h-flipped, so blade uses translate+scale(-1,1) to mirror offsets.
-  const blades = getBlades();
-  let blade = null;
-  if (isWindUp || isAttackState) {
-    // Same as NES: raised (hflip tile) = back-swing, swung (normal tile) = forward strike
-    if      (wpn === 'knife' && activeWeaponId === 0x1F) blade = isAttackState ? blades.dagger.swung : blades.dagger.raised;
-    else if (wpn === 'knife')  blade = isAttackState ? blades.knife.swung  : blades.knife.raised;
-    else if (wpn === 'sword')  blade = isAttackState ? blades.sword.swung  : blades.sword.raised;
-    else if (wpn === 'nunchaku') blade = isAttackState ? blades.nunchaku.swung : blades.nunchaku.raised;
-    else if (isAttackState)    blade = blades.fist;
-  }
+  // Opponent face-right pre-flipped canvas — pickAttackWeaponSpec returns offsets in post-flip space.
+  const _phase = isWindUp ? 'back' : (isAttackState ? 'fwd' : null);
+  const _handIsL = isWindUp ? isLeftHandWind : isLeftHandAtk;
+  const weaponSpec = _phase ? pickAttackWeaponSpec({
+    weaponId: activeWeaponId,
+    weaponSubtype: wpn,
+    isUnarmed: !!pvpSt.pvpEnemyUnarmed,
+    hand: _handIsL ? 'L' : 'R',
+    attackPhase: _phase,
+    mirror: true,
+    fistPalette: _jobPalette(_ej, palIdx),
+    fistTimerMs: battleSt.battleTimer,
+  }) : null;
+  const _weaponLayer = _phase ? attackWeaponLayer({ attackPhase: _phase, hand: _handIsL ? 'L' : 'R', mirror: true }) : null;
   const drawBlade = () => {
+    if (!weaponSpec) return;
     const ctx = ui.ctx;
-    // Opponent body is pre-h-flipped — mirror blade coords to match.
     ctx.save();
     ctx.translate(sprX + 16, sprY);
     ctx.scale(-1, 1);
-    if (isAttackState && blade === blades.fist) {
-      const fistC = getFistCanvas(_jobPalette(_ej, palIdx)) || blade;
-      const fistDy = (Math.floor(battleSt.battleTimer / 100) & 1); // shared wobble cadence — same constant across player/ally/opponent
-      ctx.drawImage(fistC, -4, 10 + fistDy);
-    } else if (isAttackState) {
-      ctx.drawImage(blade, -16, 1);
-    } else {
-      // L-hand back-swing sits 8px further from body than R-hand (NES: +16 vs +8)
-      ctx.drawImage(blade, isLeftHandWind ? 8 : 16, -7);
-    }
+    ctx.drawImage(weaponSpec.canvas, weaponSpec.dx, weaponSpec.dy);
     ctx.restore();
   };
 
-  // Wind-up: blade behind body (pulled back); swung/fist: blade in front
-  if (isWindUp && blade) drawBlade();
+  // Layer: 'behind' draws before body, 'front' draws after.
+  if (weaponSpec && _weaponLayer === 'behind') drawBlade();
   if (isDying) {
     const delay = pvpSt.pvpDyingMap.get(idx) || 0;
     const deathFrames = _fpb(fakePlayerDeathFrames);
@@ -757,7 +749,7 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   } else {
     ui.ctx.drawImage(body, sprX, sprY);
   }
-  if (isAttackState && blade) drawBlade();
+  if (weaponSpec && _weaponLayer === 'front') drawBlade();
 
   // Near-fatal sweat — h-flipped to match opponent facing left
   if (isNearFatalOpp && !isOppVictory && !isDying && bsc.sweatFrames && bsc.sweatFrames.length === 2) {
