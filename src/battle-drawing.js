@@ -271,7 +271,7 @@ function _drawPortraitWeapon(px, py, before) {
     else if (!wpnSt && handWeapon === 0) {
       const fistC = getFistCanvas(bsc.battlePoses && bsc.battlePoses.palette);
       if (fistC) {
-        const fistDy = (Math.floor(battleSt.battleTimer / 70) & 1); // one slow bob per ~90ms strike, resets per state
+        const fistDy = (Math.floor(battleSt.battleTimer / 100) & 1); // shared wobble cadence — same constant across player/ally/opponent
         ui.ctx.drawImage(fistC, px - 4, py + 10 + fistDy);
       }
     }
@@ -1252,7 +1252,7 @@ function _drawAllyPortrait(i, ally, isVicPose, isAllyAttack, isAllyHit, isNearFa
     else if (wpnSt === 'claw' || (!wpnSt && activeWpnId === 0)) {
       const fistC = getFistCanvas(_jobPalette(ally.jobIdx || 0, ally.palIdx || 0));
       if (fistC) {
-        const fistDy = (Math.floor(battleSt.battleTimer / 70) & 1); // one slow bob per ~90ms strike, resets per state
+        const fistDy = (Math.floor(battleSt.battleTimer / 100) & 1); // shared wobble cadence — same constant across player/ally/opponent
         weaponDraws.push({ img: fistC, x: ppx - 4, y: ppy + 10 + fistDy });
       }
     }

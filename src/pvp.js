@@ -722,8 +722,7 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
     ctx.scale(-1, 1);
     if (isAttackState && blade === blades.fist) {
       const fistC = getFistCanvas(_jobPalette(_ej, palIdx)) || blade;
-      // Opponent slash lasts ~200ms; 150ms cadence → one slow bob per strike (raise mid-strike, reset on next).
-      const fistDy = (Math.floor(battleSt.battleTimer / 150) & 1);
+      const fistDy = (Math.floor(battleSt.battleTimer / 100) & 1); // shared wobble cadence — same constant across player/ally/opponent
       ctx.drawImage(fistC, -4, 10 + fistDy);
     } else if (isAttackState) {
       ctx.drawImage(blade, -16, 1);
