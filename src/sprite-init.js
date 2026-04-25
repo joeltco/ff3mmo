@@ -848,6 +848,11 @@ export function initBattleSpriteForJob(romData, jobIdx) {
   // Attack2
   const battleSpriteAttack2Canvas = _buildCanvas4ROM(romData, jobBase + 18 * 16, palette);
 
+  // L-fwd portrait (unarmed L-strike): per ROM convention, body-TL=tile 8, body-TR=tile 9.
+  // Combined with idle head tiles 0/1. Falls back gracefully on jobs where 8/9 aren't valid.
+  const lFwdTiles = _readJobTiles(romData, jobBase, 0, 1, 8, 9);
+  const battleSpriteAttackL2Canvas = _renderPortrait(lFwdTiles, _BATTLE_LAYOUT, palette);
+
   // Kneel
   const kneelTiles = _readJobTiles(romData, jobBase, 36, 37, 38, 39);
   const battleSpriteKneelCanvas = _renderPortrait(kneelTiles, _BATTLE_LAYOUT, palette);
@@ -889,7 +894,7 @@ export function initBattleSpriteForJob(romData, jobIdx) {
     poses: {
       idle: battleSpriteCanvas, idleFade: battleSpriteFadeCanvases, silhouette: silhouetteCanvas,
       rBack: battleSpriteAttackCanvas, lBack: battleSpriteAttackLCanvas,
-      rFwd: battleSpriteAttack2Canvas, lFwd: null,
+      rFwd: battleSpriteAttack2Canvas, lFwd: battleSpriteAttackL2Canvas,
       knifeR: battleSpriteKnifeRCanvas, knifeL: battleSpriteKnifeLCanvas, knifeBack: battleSpriteKnifeBackCanvas,
       victory: battleSpriteVictoryCanvas, hit: battleSpriteHitCanvas,
       defend: battleSpriteDefendCanvas, defendFade: battleSpriteDefendFadeCanvases,
