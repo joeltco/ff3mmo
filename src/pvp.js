@@ -349,11 +349,13 @@ function _processEnemyFlash() {
   const atk = attackerStats ? attackerStats.atk : BOSS_ATK;
   const hitRate = attackerStats?.hitRate || BOSS_HIT_RATE;
   const dualWield = attackerStats && isWeapon(attackerStats.weaponId) && isWeapon(attackerStats.weaponL);
-  const potentialHits = calcPotentialHits(attackerStats?.level || 1, attackerStats?.agi || 5, dualWield);
+  const isUnarmed = !!(attackerStats && !isWeapon(attackerStats.weaponId) && !isWeapon(attackerStats.weaponL));
+  // Unarmed treats both fists as separate "weapons" → 2x hits, matching dual-wield (so R/L alternation is visible)
+  const potentialHits = calcPotentialHits(attackerStats?.level || 1, attackerStats?.agi || 5, dualWield || isUnarmed);
 
   pvpSt.pvpEnemyHitIdx = 0;
   pvpSt.pvpEnemyDualWield = dualWield;
-  pvpSt.pvpEnemyUnarmed = !!(attackerStats && !isWeapon(attackerStats.weaponId) && !isWeapon(attackerStats.weaponL));
+  pvpSt.pvpEnemyUnarmed = isUnarmed;
   const def = targetAlly >= 0 ? battleSt.battleAllies[targetAlly].def : ps.def;
   const attackerJob = JOBS[attackerStats?.jobIdx || 0] || {};
   const baseOpts = { critPct: attackerJob.critPct || 0, critBonus: attackerJob.critBonus || 0 };
@@ -728,7 +730,8 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
     ctx.scale(-1, 1);
     if (isAttackState && blade === blades.fist) {
       const fistC = getFistCanvas(_jobPalette(_ej, palIdx)) || blade;
-      const fistDy = (Math.floor(battleSt.battleTimer / 45) & 1); // sync to slash frame, resets per strike
+      // Opponent slash lasts ~200ms; 100ms cadence → 1 clean up-down bounce per strike, synced with slash frames.
+      const fistDy = (Math.floor(battleSt.battleTimer / 100) & 1);
       ctx.drawImage(fistC, -4, 10 + fistDy);
     } else if (isAttackState) {
       ctx.drawImage(blade, -16, 1);
