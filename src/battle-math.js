@@ -31,6 +31,17 @@ export function calcDamage(atk, def, crit = false, critBonus = 0, elemMult = 1) 
   return Math.min(DAMAGE_CAP, Math.max(1, dmg));
 }
 
+// NES FF3 attacker ATK (disasm 30/9F44, 31/AC76-AC9B). Single source for player + ally + PVP.
+// rWpnAtk/lWpnAtk: equipped-weapon ATK (0 for unarmed slot or non-weapon item).
+// isMonkClass: true for Monk(2)/BlackBelt(13). When unarmed, uses level-based formula.
+export function calcAttackerAtk({ rWpnAtk, lWpnAtk, isMonkClass, level, str, jobLevel }) {
+  const isUnarmed = !rWpnAtk && !lWpnAtk;
+  if (isUnarmed && isMonkClass) {
+    return Math.floor(str / 4) + Math.floor(level * 1.5) + Math.floor(jobLevel / 4) + 2;
+  }
+  return rWpnAtk + lWpnAtk;
+}
+
 // NES FF3 hit count (from disasm 31/ABCE-ABE3): 1 + floor(level/16) + floor(AGI/16)
 // dualWield: each hand gets full hits (total = base * 2). Single weapon: min 1.
 export function calcPotentialHits(level, agi, dualWield) {

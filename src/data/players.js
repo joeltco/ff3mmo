@@ -1,5 +1,6 @@
 // MMO roster data — fake player pool, palette table, chat phrases
 import { ITEMS } from './items.js';
+import { calcAttackerAtk } from '../battle-math.js';
 
 export const LOCATIONS = ['world', 'ur', 'cave-0', 'cave-1', 'cave-2', 'cave-3', 'crystal'];
 
@@ -91,10 +92,10 @@ export function generateAllyStats(player) {
   const hp = 28 + lv * 6;
   const loc = player.loc;
   // Gear by location (matches chest loot tiers)
-  let weaponId = 0x1E, weaponAtk = 6, totalDef = 1; // default: Knife + Cap
-  if (loc === 'cave-1') { weaponId = 0x1F; weaponAtk = 8; totalDef = 3; }
-  else if (loc === 'cave-2') { weaponId = 0x24; weaponAtk = 10; totalDef = 3; }
-  else if (loc === 'cave-3' || loc === 'crystal') { weaponId = 0x24; weaponAtk = 10; totalDef = 7; }
+  let weaponId = 0x1E, totalDef = 1; // default: Knife + Cap
+  if (loc === 'cave-1') { weaponId = 0x1F; totalDef = 3; }
+  else if (loc === 'cave-2') { weaponId = 0x24; totalDef = 3; }
+  else if (loc === 'cave-3' || loc === 'crystal') { weaponId = 0x24; totalDef = 7; }
   // Override with explicit weapon slots if defined on player entry
   if (player.weaponR != null) weaponId = player.weaponR;
   const weaponL = player.weaponL != null ? player.weaponL : null;
@@ -112,14 +113,10 @@ export function generateAllyStats(player) {
   const lIsWpn = !!(lWpnItem && lWpnItem.type === 'weapon' && lWpnItem.subtype !== 'shield');
   const rWpnAtk = rIsWpn ? (rWpnItem.atk || 0) : 0;
   const lWpnAtk = lIsWpn ? (lWpnItem.atk || 0) : 0;
-  const isUnarmed = !rIsWpn && !lIsWpn;
   const isMonkClass = player.jobIdx === 2 || player.jobIdx === 13; // Monk / BlackBelt
-  const jobLv = 1; // ally jobLevel default (matches `jobLevel: 1` returned below)
-  // Monk/BlackBelt unarmed uses canonical level-based formula (player-stats.js:83);
-  // others fall back to STR + sum of equipped weapon ATK so unarmed non-Monk allies don't keep the loc default.
-  const atk = isMonkClass && isUnarmed
-    ? Math.floor(str / 4) + Math.floor(lv * 1.5) + Math.floor(jobLv / 4) + 2
-    : str + rWpnAtk + lWpnAtk;
+  const atk = calcAttackerAtk({
+    rWpnAtk, lWpnAtk, isMonkClass, level: lv, str, jobLevel: 1,
+  });
   const def = vit + totalDef;
   // Evade/mdef/sResist from armor
   let evade = 0, mdef = 0, statusResist = 0;

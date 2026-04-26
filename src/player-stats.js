@@ -2,7 +2,7 @@
 
 import { readJobBaseStats, readStartingHP, readStartingMP, readJobLevelBonus, buildExpTable, JOBS, JOB_SCALING } from './data/jobs.js';
 import { ITEMS, isWeapon } from './data/items.js';
-import { BASE_HIT_RATE } from './battle-math.js';
+import { BASE_HIT_RATE, calcAttackerAtk } from './battle-math.js';
 import { createStatusState } from './status-effects.js';
 
 // Mutable player state — replaces the scattered globals in game.js
@@ -74,16 +74,14 @@ export function recalcCombatStats() {
   const jlb = getJobLevelStatBonus(ps.jobIdx, jobLv);
   const effStr = (ps.stats ? ps.stats.str : 5) + strB + jlb.str;
   const effAgi = (ps.stats ? ps.stats.agi : 5) + agiB + jlb.agi;
-  // NES ATK = weapon attack power only (STR/AGI affect hit count, not damage)
-  // Verified from disasm 30/9F44: character stat block offset $19 = weapon ATK, copied to $7443
-  const unarmed = !isWeapon(ps.weaponR) && !isWeapon(ps.weaponL);
-  // Monk(2)/BlackBelt(13) unarmed: level-based ATK (disasm 31/AC76-AC9B)
-  if (unarmed && (ps.jobIdx === 2 || ps.jobIdx === 13)) {
-    const lv = ps.stats ? ps.stats.level : 1;
-    ps.atk = Math.floor(effStr / 4) + Math.floor(lv * 1.5) + Math.floor(jobLv / 4) + 2;
-  } else {
-    ps.atk = (ITEMS.get(ps.weaponR)?.atk || 0) + (ITEMS.get(ps.weaponL)?.atk || 0);
-  }
+  ps.atk = calcAttackerAtk({
+    rWpnAtk: isWeapon(ps.weaponR) ? (ITEMS.get(ps.weaponR)?.atk || 0) : 0,
+    lWpnAtk: isWeapon(ps.weaponL) ? (ITEMS.get(ps.weaponL)?.atk || 0) : 0,
+    isMonkClass: ps.jobIdx === 2 || ps.jobIdx === 13,
+    level: ps.stats ? ps.stats.level : 1,
+    str: effStr,
+    jobLevel: jobLv,
+  });
   // Hit rate from equipped weapon (or base if unarmed)
   const rWpn = isWeapon(ps.weaponR) ? ITEMS.get(ps.weaponR) : null;
   const lWpn = isWeapon(ps.weaponL) ? ITEMS.get(ps.weaponL) : null;
