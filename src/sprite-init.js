@@ -1349,7 +1349,7 @@ function _buildFakePlayerSet(romData, jobIdx) {
 
 // Per-job rollout: jobs in this set use the unified bundle path; others stay on legacy.
 // Expand once each is verified visually. Goal: empty the legacy block once all jobs are migrated.
-const _USE_BUNDLE_FOR_ALLY = new Set([0]); // OK first — Warrior/Monk/generic still on legacy
+const _USE_BUNDLE_FOR_ALLY = new Set([0, 1]); // OK + Warrior — Monk/generic still on legacy
 
 export function initFakePlayerPortraits(romData, jobIndices) {
   // Build per-job portrait and body sets
