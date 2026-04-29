@@ -678,12 +678,14 @@ function _updateTitleMainOutCase() {
     ps.head = slot.stats.head || 0x00;
     ps.body = slot.stats.body || 0x00;
     ps.arms = slot.stats.arms || 0x00;
-    recalcCombatStats();
   }
   setPlayerInventory((slot && slot.inventory) ? { ...slot.inventory } : {});
   ps.gil = (slot && slot.gil) || 0;
   ps.jobLevels = (slot && slot.jobLevels) ? JSON.parse(JSON.stringify(slot.jobLevels)) : {};
   ps.jobIdx = (slot && slot.jobIdx) || 0;
+  // Recalc AFTER jobIdx is set — the unarmed Monk/BlackBelt ATK formula in
+  // calcAttackerAtk depends on isMonkClass = (jobIdx === 2 || jobIdx === 13).
+  if (slot) recalcCombatStats();
   ps.unlockedJobs = (slot && slot.unlockedJobs != null) ? slot.unlockedJobs : 0x01;
   ps.cp = (slot && slot.cp) || 0;
   ps.status.mask = (slot && slot.statusMask) || 0;
