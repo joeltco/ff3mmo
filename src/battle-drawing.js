@@ -30,6 +30,7 @@ import { pvpEnemyCellCenter } from './pvp-math.js';
 import { pvpSt, drawBossSpriteBoxPVP } from './pvp.js';
 import { inputSt } from './input-handler.js';
 import { bsc, getSlashFramesForWeapon } from './battle-sprite-cache.js';
+import { drawSlashOverlay } from './slash-effects.js';
 import { hudSt } from './hud-state.js';
 import { fakePlayerPortraits, fakePlayerVictoryPortraits, fakePlayerHitPortraits,
          fakePlayerKneelPortraits, fakePlayerAttackPortraits, fakePlayerAttackLPortraits,
@@ -356,14 +357,7 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
       : pvpSt.pvpOpponentStats?.weaponId;
     const eSlashF = getSlashFramesForWeapon(eWpnId, true);
     const af = Math.min(2, Math.floor(battleSt.battleTimer / 67));
-    if (eSlashF && eSlashF[af]) {
-      const sf = eSlashF[af];
-      ui.ctx.save();
-      ui.ctx.translate(px + sf.width + [-0, -10, 8][af], py + [0, -6, 8][af]);
-      ui.ctx.scale(-1, 1);
-      ui.ctx.drawImage(sf, 0, 0);
-      ui.ctx.restore();
-    }
+    drawSlashOverlay(ui.ctx, eSlashF && eSlashF[af], af, px, py, true);
   }
 }
 
@@ -781,9 +775,8 @@ function _drawEncounterSlashEffects(gridPos, slideOffX, slotCenterY) {
     const allySlashFrames = ally ? getSlashFramesForWeapon(activeWpnId, !isLeft) : bsc.slashFramesR;
     const af = Math.min(Math.floor(battleSt.battleTimer / SLASH_FRAME_MS), 2);
     const pos = gridPos[battleSt.allyTargetIndex];
-    if (pos && allySlashFrames && allySlashFrames[af]) {
-      const scatterX = [0, 10, -8][af], scatterY = [0, -6, 8][af];
-      ui.ctx.drawImage(allySlashFrames[af], pos.x + 8 + scatterX, slotCenterY(battleSt.allyTargetIndex) + scatterY);
+    if (pos && allySlashFrames) {
+      drawSlashOverlay(ui.ctx, allySlashFrames[af], af, pos.x + 8, slotCenterY(battleSt.allyTargetIndex));
     }
   }
 }
@@ -875,8 +868,7 @@ function _drawBossSprite(centerX, centerY) {
       const activeWpnId = ally ? (isLeft ? ally.weaponL : ally.weaponId) : 0;
       const allySlashFrames = ally ? getSlashFramesForWeapon(activeWpnId, !isLeft) : bsc.slashFramesR;
       const af = Math.min(Math.floor(battleSt.battleTimer / SLASH_FRAME_MS), 2);
-      if (allySlashFrames && allySlashFrames[af])
-        ui.ctx.drawImage(allySlashFrames[af], centerX - 8 + [0,10,-8][af], centerY - 8 + [0,-6,8][af]);
+      drawSlashOverlay(ui.ctx, allySlashFrames && allySlashFrames[af], af, centerX - 8, centerY - 8);
     }
   } else {
     if (!battleSt.enemyDefeated) ui.ctx.drawImage(getBossBattleCanvas(), sprX, sprY);
@@ -1292,14 +1284,7 @@ function _drawAllyPortrait(i, ally, isVicPose, isAllyAttack, isAllyHit, isNearFa
       : pvpSt.pvpOpponentStats?.weaponId;
     const eSlashF = getSlashFramesForWeapon(eWpnId, true);
     const af = Math.min(2, Math.floor(battleSt.battleTimer / 67));
-    if (eSlashF && eSlashF[af]) {
-      const sf = eSlashF[af];
-      ui.ctx.save();
-      ui.ctx.translate(ppx + sf.width + [-0, -10, 8][af], ppy + [0, -6, 8][af]);
-      ui.ctx.scale(-1, 1);
-      ui.ctx.drawImage(sf, 0, 0);
-      ui.ctx.restore();
-    }
+    drawSlashOverlay(ui.ctx, eSlashF && eSlashF[af], af, ppx, ppy, true);
   }
 }
 function _drawAllyTexts(i, ally, rowY, isAllyHeal, ppx, ppy, weaponDraws) {

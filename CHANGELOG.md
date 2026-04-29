@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.42 — 2026-04-29
+
+### Slash effect render path centralized
+
+`drawSlashOverlay(ctx, frame, frameIdx, originX, originY, mirror)` added to `src/slash-effects.js`. Owns the per-frame scatter pattern (`[0, 10, -8]` / `[0, -6, 8]`), the optional mirror transform (PVP opponent attacking the player/ally portrait), and the `drawImage` call. No-ops on a null frame so call sites stay terse.
+
+Five non-player slash render sites now collapse to one `drawSlashOverlay(...)` line:
+
+- `battle-drawing.js _drawPortraitOverlays` — PVP opponent slash on player portrait
+- `battle-drawing.js _drawEncounterSlashEffects` — ally slash in random encounters
+- `battle-drawing.js _drawBossSprite` — ally slash on boss
+- `battle-drawing.js _drawAllyPortrait` — PVP opponent slash on ally portrait
+- `pvp.js` PVP grid — ally slash on opponent
+
+Player slash path (battle-update.js / battle-drawing.js:773, 867) intentionally not migrated — it has its own bladed-walk-off + random-punch scatter logic driven by `battleSt.slashOffX/Y` that's incompatible with the deterministic 3-position pattern. Same architectural split as `combatant-pose.js`: centralize where it makes sense, leave intentional differences alone.
+
+No behavior change.
+
 ## 1.6.41 — 2026-04-29
 
 ### Fix: unarmed Monk dealing 2 damage after loading a save

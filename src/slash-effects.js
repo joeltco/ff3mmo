@@ -73,6 +73,33 @@ export function initSwordSlashSprites() {
   return [[D,E],[D,F],[E,F]].map(t => _buildSwordSlashFrame(t, PAL));
 }
 
+// Frame-based scatter pattern shared by ally + PVP-opponent slash overlays.
+// (Player slash uses its own bladed-walk-off / random-punch scatter in battle-update.js.)
+const SLASH_SCATTER_X = [0, 10, -8];
+const SLASH_SCATTER_Y = [0, -6, 8];
+
+// Draws a single slash-effect frame over a target. Used by every non-player render path:
+//   • ally encounter slash, ally boss slash, ally PVP-grid slash → mirror=false
+//   • PVP-opponent slash on player portrait                     → mirror=true (sprite h-flips,
+//     and the X scatter inverts so the dance still trails away from the attacker)
+//
+// Caller picks the frame array (via getSlashFramesForWeapon) and the af index (timer-derived).
+// `frame` may be null/undefined — helper no-ops to keep call sites terse.
+export function drawSlashOverlay(ctx, frame, frameIdx, originX, originY, mirror = false) {
+  if (!frame) return;
+  const dx = SLASH_SCATTER_X[frameIdx] || 0;
+  const dy = SLASH_SCATTER_Y[frameIdx] || 0;
+  if (mirror) {
+    ctx.save();
+    ctx.translate(originX + frame.width - dx, originY + dy);
+    ctx.scale(-1, 1);
+    ctx.drawImage(frame, 0, 0);
+    ctx.restore();
+  } else {
+    ctx.drawImage(frame, originX + dx, originY + dy);
+  }
+}
+
 // Nunchaku impact/hit-flash — PPU capture of tiles $4D/$4E/$4F/$50 on target during forward-strike.
 // Captured as a single 16×16 frame; reused across all 3 slash timing slots.
 export function initNunchakuSlashSprites() {
