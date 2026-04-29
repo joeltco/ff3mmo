@@ -683,9 +683,9 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
     : enemy.weaponId;
   const wpn = weaponSubtype(activeWeaponId);
 
-  // Body canvas — drawn directly (pre-h-flipped canvases face left, matching enemy-side visual style)
-  // MIRRORING RULE: opponent faces left, so R-hand canvases look like L-hand after flip and vice versa.
-  // Use the opposite hand's canvas to get the correct visual for each hand.
+  // Body canvas — drawn directly (pre-h-flipped canvases face right, matching the player).
+  // Mirroring rule lives in pickAttackPoseKey via mirror:true — it inverts L↔R so the swinging
+  // hand renders with the opposite hand's pose tiles (visually correct after the pre-flip).
   const oppHP   = isMain ? (pvpSt.pvpOpponentStats ? pvpSt.pvpOpponentStats.hp : getEnemyHP()) : (enemy.hp != null ? enemy.hp : 0);
   const oppMaxHP = isMain ? (pvpSt.pvpOpponentStats ? pvpSt.pvpOpponentStats.maxHP : 1) : (enemy.maxHP || 1);
   const isNearFatalOpp = oppHP > 0 && oppHP <= Math.floor(oppMaxHP / 4);

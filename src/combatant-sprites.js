@@ -54,12 +54,13 @@ export const POSE_KEYS = [
 ];
 
 function _okBundle(romData) {
+  const jobBase = BATTLE_SPRITE_ROM + 0 * BATTLE_JOB_SIZE; // OK = job 0
   const idle    = OK_IDLE.map(d);
   const victory = OK_VICTORY.map(d);
   const kneel   = OK_KNEEL.map(d);
-  const hitTiles = [0,1,2,3].map(i => decodeTile(romData, BATTLE_SPRITE_ROM + (30 + i) * 16));
-  const hitLegL  = decodeTile(romData, BATTLE_SPRITE_ROM + 34 * 16);
-  const hitLegR  = decodeTile(romData, BATTLE_SPRITE_ROM + 35 * 16);
+  const hitTiles = [0,1,2,3].map(i => decodeTile(romData, jobBase + (30 + i) * 16));
+  const hitLegL  = decodeTile(romData, jobBase + 34 * 16);
+  const hitLegR  = decodeTile(romData, jobBase + 35 * 16);
   // R-back: idle body with R-arm tile overlaid in body-TL slot (OAM-canonical: only one tile changes).
   const rBack = [idle[0], idle[1], d(OK_R_BACK_SWING[2]), idle[3]];
   // L-back: idle body with L-back head-TR + body-TR variants.
