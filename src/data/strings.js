@@ -38,8 +38,11 @@ export const PAUSE_ITEMS = [
 // Battle menu: Fight / Defend / Item / Run
 export const BATTLE_MENU_ITEMS = [BATTLE_FIGHT, BATTLE_DEFEND, PAUSE_ITEMS[0], BATTLE_RUN];
 
-// Version — single source of truth (update here + package.json)
-export const VERSION = '1.6.44';
+// Version — read from the server-substituted #version-badge so package.json is the
+// single source. Falls back to 'dev' if the badge isn't in the DOM (non-browser tooling).
+export const VERSION = (typeof document !== 'undefined'
+  ? (document.getElementById('version-badge')?.textContent || '').replace(/^v/, '')
+  : '') || 'dev';
 
 // Area / world strings
 export const AREA_NAMES = new Map([

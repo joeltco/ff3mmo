@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.46 — 2026-05-01
+
+### Fix: in-game console version banner now reads from `#version-badge` (was hardcoded)
+
+`src/data/strings.js` previously hardcoded `VERSION = '1.6.44'` with a comment claiming "single source of truth (update here + package.json)" — which was the opposite of single-source. The in-game console banner (`'FF3 MMO v' + VERSION` rendered by `src/main.js`) had been silently lagging `package.json` for releases that bumped the version without also editing this file.
+
+`VERSION` now reads from the server-substituted `#version-badge` div (which already gets `{{VERSION}}` replaced in `server.js`). Module scripts are deferred so the DOM is parsed before this evaluates. `package.json` is now the only place to bump.
+
 ## 1.6.45 — 2026-05-01
 
 ### Refactor: Monk ally render migrated to unified bundle path; dead legacy builder deleted
