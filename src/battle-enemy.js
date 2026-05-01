@@ -6,9 +6,7 @@ import { calcDamage, elemMultiplier, BOSS_HIT_RATE, GOBLIN_HIT_RATE } from './ba
 import { ps, getShieldEvade } from './player-stats.js';
 import { SFX, playSFX } from './music.js';
 import { tryInflictStatus, blindHitPenalty, wakeOnHit } from './status-effects.js';
-import { queueBattleMsg, isBattleMsgBusy } from './battle-msg.js';
-import { getMonsterName } from './text-decoder.js';
-import { _nameToBytes } from './text-utils.js';
+import { isBattleMsgBusy } from './battle-msg.js';
 import { getPlayerDamageNum, setPlayerDamageNum, getAllyDamageNums } from './damage-numbers.js';
 import { selectCursor, saveSlots } from './save-state.js';
 
@@ -153,11 +151,8 @@ function _processEnemyFlash() {
   }
   const mon = (battleSt.currentAttacker >= 0 && battleSt.encounterMonsters) ? battleSt.encounterMonsters[battleSt.currentAttacker] : null;
 
-  // Queue enemy actor name
-  if (mon) {
-    const monName = getMonsterName(mon.monsterId) || _nameToBytes('Enemy');
-    queueBattleMsg(monName);
-  }
+  // (Actor name is queued at turn dispatch — battle-turn.js — so its fade-in
+  // overlaps the BOSS_PREFLASH_MS window and is visible by the time the swing lands.)
 
   // ── Monster special attack check ──────────────────────────────────────────
   if (mon && mon.spAtkRate > 0 && mon.attacks && mon.attacks.length > 0) {

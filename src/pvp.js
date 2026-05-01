@@ -3,7 +3,6 @@
 import { battleSt, getEnemyHP, setEnemyHP } from './battle-state.js';
 import { clipToViewport, drawBorderedBox } from './hud-drawing.js';
 import { getPlayerLocation } from './roster.js';
-import { queueBattleMsg } from './battle-msg.js';
 // (weapon canvas selection moved to combatant-pose.js — opponent now uses pickAttackWeaponSpec)
 import { getAllyDamageNums, getPlayerDamageNum, setPlayerDamageNum, getEnemyHealNum, setEnemyHealNum } from './damage-numbers.js';
 import { ui } from './ui-state.js';
@@ -15,7 +14,6 @@ import { resetBattleVars, isTeamWiped, updateBattleTimers,
 import { playSFX, stopSFX, SFX, pauseMusic, playTrack, TRACKS } from './music.js';
 import { rollHits, calcPotentialHits, BOSS_HIT_RATE, GOBLIN_HIT_RATE } from './battle-math.js';
 import { ITEMS, isWeapon, weaponSubtype } from './data/items.js';
-import { _nameToBytes } from './text-utils.js';
 import { PLAYER_POOL, PLAYER_PALETTES, MONK_PALETTES, generateAllyStats } from './data/players.js';
 
 function _jobPalette(jobIdx, palIdx) {
@@ -271,9 +269,8 @@ function _runEnemyAttack(targetAlly) {
   const attackerStats = pvpSt.pvpCurrentEnemyAllyIdx >= 0
     ? pvpSt.pvpEnemyAllies[pvpSt.pvpCurrentEnemyAllyIdx]
     : pvpSt.pvpOpponentStats;
-  if (attackerStats && attackerStats.name) {
-    queueBattleMsg(_nameToBytes(attackerStats.name));
-  }
+  // (Actor name is queued at turn dispatch — battle-turn.js — so its fade-in
+  // overlaps the BOSS_PREFLASH_MS window and is visible by the time the swing lands.)
   // Stage hit-by-hit combo for both player and ally targets so multi-hit attacks
   // (especially unarmed R/L alternation) actually animate per strike.
   battleSt.enemyTargetAllyIdx = targetAlly; // -1 for player, >=0 for ally

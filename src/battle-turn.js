@@ -13,6 +13,7 @@ import { bsc, getSlashFramesForWeapon } from './battle-sprite-cache.js';
 import { pvpSt } from './pvp.js';
 import { inputSt } from './input-handler.js';
 import { queueBattleMsg } from './battle-msg.js';
+import { _nameToBytes } from './text-utils.js';
 import { getAllyDamageNums, setEnemyDmgNum, setEnemyHealNum, setPlayerDamageNum, setPlayerHealNum } from './damage-numbers.js';
 import { startMagicItem } from './battle-items.js';
 import { selectCursor, saveSlots } from './save-state.js';
@@ -216,6 +217,19 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
       if (pai < 0) pvpSt.pvpEnemyHitIdx = 0;
     }
     if (turn.index >= 0 && battleSt.encounterMonsters && battleSt.encounterMonsters[turn.index].hp <= 0) { processNextTurn(); return; }
+    // Queue the actor name BEFORE the preflash so the 200ms message fade-in
+    // overlaps the 133ms BOSS_PREFLASH_MS window. Without this the message
+    // started fading in only after the swing began, so the player saw the hit
+    // land before the name appeared. Both regular and PVP enemy turns route
+    // through here.
+    if (pvpSt.isPVPBattle) {
+      const pai = pvpSt.pvpCurrentEnemyAllyIdx;
+      const stats = pai >= 0 ? pvpSt.pvpEnemyAllies[pai] : pvpSt.pvpOpponentStats;
+      if (stats && stats.name) queueBattleMsg(_nameToBytes(stats.name));
+    } else if (battleSt.currentAttacker >= 0 && battleSt.encounterMonsters) {
+      const mon = battleSt.encounterMonsters[battleSt.currentAttacker];
+      if (mon) queueBattleMsg(getMonsterName(mon.monsterId) || _nameToBytes('Enemy'));
+    }
     battleSt.battleState = 'enemy-flash'; battleSt.battleTimer = 0; pvpSt.pvpPreflashDecided = false;
   }
 }
