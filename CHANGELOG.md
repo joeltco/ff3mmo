@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.44 — 2026-05-01
+
+### Fix: PVP opponent L-hand back-swing missing on dual-wield
+
+`_processPVPSecondWindup` set the wait for hand-change hits to `IDLE_FRAME_MS` (67ms), and `oppHandChangeGap` rendered idle body for that whole window — leaving no time for the back-swing. Dual-wield L-hand jumped straight from idle to fwd-strike.
+
+Now: hand-change wait = `IDLE_FRAME_MS + BOSS_PREFLASH_MS` (armed) — 67ms idle gap, then 133ms back-swing pose with weapon raised. `oppHandChangeGap` only holds idle for the gap portion. Unarmed unchanged (no distinct back-swing pose).
+
 ## 1.6.43 — 2026-05-01
 
 ### Fix: PVP opponent (OK + Warrior) facing wrong way

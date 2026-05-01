@@ -480,11 +480,13 @@ function _processEnemyDamageShow() {
 }
 
 function _processPVPSecondWindup() {
-  // Hand-change inter-hit gap: hold idle for IDLE_FRAME_MS so R↔L combo transitions read cleanly.
-  // Otherwise: unarmed skips the wind-up entirely; armed waits BOSS_PREFLASH_MS.
+  // Hand-change inter-hit gap: hold idle for IDLE_FRAME_MS so R↔L combo transitions read cleanly,
+  // THEN show the back-swing for BOSS_PREFLASH_MS (armed). Without the trailing back-swing, dual-wield
+  // L-hand hits jumped straight from idle to fwd-strike — looked like the back-swing was missing.
+  // Unarmed has no distinct back-swing pose, so handChange wait stays at IDLE_FRAME_MS only.
+  const preflash = pvpSt.pvpEnemyUnarmed ? 0 : BOSS_PREFLASH_MS;
   const handChange = pvpSt.pvpEnemyDualWield && pvpSt.pvpEnemyHitIdx > 0;
-  const requiredWait = handChange ? IDLE_FRAME_MS
-                     : (pvpSt.pvpEnemyUnarmed ? 0 : BOSS_PREFLASH_MS);
+  const requiredWait = handChange ? (IDLE_FRAME_MS + preflash) : preflash;
   if (battleSt.battleTimer < requiredWait) return;
   // Stage next pre-rolled hit from combo
   const hit = pvpSt.pvpEnemyHitResults[pvpSt.pvpEnemyHitIdx];
@@ -694,8 +696,10 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   const isOppVictory = battleSt.battleState === 'team-wipe' || battleSt.battleState === 'defeat-monster-fade';
   const isOppDefending = isMain && pvpSt.pvpOpponentIsDefending && bs === 'pvp-defend-anim';
   const isOppItemUse   = isMain && (bs === 'pvp-opp-sw-throw' || bs === 'pvp-opp-sw-hit' || bs === 'pvp-opp-potion');
-  // Hand-change inter-hit gap (during wind-up of a subsequent hit when hand swaps): render idle body.
-  const oppHandChangeGap = isWindUp && isThisAttacking && pvpSt.pvpEnemyDualWield && pvpSt.pvpEnemyHitIdx > 0;
+  // Hand-change inter-hit gap (during wind-up of a subsequent hit when hand swaps): render idle body
+  // for the first IDLE_FRAME_MS only, then transition to back-swing pose for the remaining wind-up.
+  const oppHandChangeGap = isWindUp && isThisAttacking && pvpSt.pvpEnemyDualWield
+    && pvpSt.pvpEnemyHitIdx > 0 && battleSt.battleTimer < IDLE_FRAME_MS;
   let body = fullBody;
   if (isOppHit && _fpb(fakePlayerHitFullBodyCanvases)) {
     body = _fpb(fakePlayerHitFullBodyCanvases);
