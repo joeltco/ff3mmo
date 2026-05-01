@@ -270,7 +270,13 @@ function _renderFullBody(bodyTiles, legL, legR, palette) {
   _blitTileAt(cx, bodyTiles[3], palette, 8, 8);
   _blitTileAt(cx, legL, palette, 0, 16);
   _blitTileAt(cx, legR, palette, 8, 16);
-  return c;
+  // Opponent canvas faces opposite direction from player — pre-h-flipped here so the
+  // PVP renderer can drawImage() it directly without a transform. Legacy parity with
+  // _buildFullBody16x24Canvas in sprite-init.js (which Monk still uses).
+  const fl = document.createElement('canvas'); fl.width = 16; fl.height = 24;
+  const flctx = fl.getContext('2d');
+  flctx.translate(16, 0); flctx.scale(-1, 1); flctx.drawImage(c, 0, 0);
+  return fl;
 }
 
 // Player path: one palette → one canvas per pose key.
