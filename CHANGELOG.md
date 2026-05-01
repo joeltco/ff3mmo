@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.50 — 2026-05-01
+
+### Fix: typed chat messages now appear in the tab they were sent from
+
+`onChatKeyDown` always called `addChatMessage(text, 'chat')` with no channel, which `addChatMessage` defaulted to `'room'`. The active-tab filter (`_passesTabFilter`) only renders messages whose channel matches the tab — so a user typing on the **World** tab pushed a `room`-channel message that was immediately filtered out, looking like nothing happened. Auto-chat already routed correctly (`'room'` for local, `'world'` for remote) so other people's chats still appeared, masking the bug.
+
+The send path now maps `activeTab → channel`: World → `world`, Room → `room`, Private → `pm`, System → `room` (you can't post to system, so fall back).
+
 ## 1.6.49 — 2026-05-01
 
 ### Fix: PVP opponent attack message now matches the rest of the codebase ("Name" not "Name attacks!")

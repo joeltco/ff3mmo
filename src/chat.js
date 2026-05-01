@@ -125,7 +125,11 @@ export function onChatKeyDown(e) {
       } else {
         const slot = saveSlots[selectCursor];
         const senderName = (slot && slot.name) ? _nesNameToString(slot.name) : 'You';
-        addChatMessage(senderName + ': ' + chatState.inputText, 'chat');
+        // Route to the channel of the active tab so the user's own message renders
+        // wherever they're typing. CHAT_TABS = [World, Room, Private, System];
+        // System tab falls back to 'room' since users can't post to system.
+        const TAB_TO_CHANNEL = ['world', 'room', 'pm', 'room'];
+        addChatMessage(senderName + ': ' + chatState.inputText, 'chat', TAB_TO_CHANNEL[activeTab]);
       }
     }
     chatState.inputActive = false; chatState.inputText = '';
