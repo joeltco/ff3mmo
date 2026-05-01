@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.48 — 2026-05-01
+
+### Refactor: deleted second battle message UI; BATTLE_CANT_ESCAPE now uses queue strip everywhere
+
+The codebase had two battle-context message renderers: the queued fade strip (`battle-msg.js`, used by hit names / attack lines / victory) and a second centered-bordered-box system (`'message-hold'` battle state + `battleSt.battleMessage` field + `drawBattleMessage` renderer in `battle-drawing.js`). The centered box had exactly one caller — boss/non-random escape failure — while random-encounter escape failure already used the queue strip for the same `BATTLE_CANT_ESCAPE` text. Same string, two visual treatments.
+
+**Visual change:** boss-flee failure now shows the same fading strip as random-encounter flee failure. UX is now consistent across both encounter types.
+
+Deletions:
+- `drawBattleMessage()` and its caller in `battle-drawing.js`.
+- `TEXT_WHITE_ON_BLUE` palette const (only used by the deleted renderer).
+- `battleMessage` field on `battleSt` + its reset in `battle-update.js`.
+- `CENTER_MSG_HOLD_MS = 1200` constant (was duplicated in `battle-update.js` and `pvp.js`).
+- Dead `'message-hold'` handler in `pvp.js _updatePVPMenuConfirm` — was unreachable since the only setter lived in `battle-update.js` and PVP doesn't go through that path.
+
+The state name `'message-hold'` is retained (still referenced by 4 draw guards that gate non-message rendering) but its semantics changed from "show centered box for 1200ms" to "wait for queue strip to drain, then re-open battle menu."
+
 ## 1.6.47 — 2026-05-01
 
 ### Refactor: battle message system tightening (no behavior change)

@@ -15,7 +15,7 @@ import { buildTurnOrder, processNextTurn } from './battle-turn.js';
 import { updateBattleAlly } from './battle-ally.js';
 import { updateBattleEnemyTurn } from './battle-enemy.js';
 import { resetBattleItemVars, updateMagicItemThrowHit } from './battle-items.js';
-import { replaceBattleMsg, updateBattleMsg as _updateBattleMsg, clearBattleMsgQueue,
+import { queueBattleMsg, replaceBattleMsg, updateBattleMsg as _updateBattleMsg, clearBattleMsgQueue,
          queueVictoryRewards as _queueVictoryRewards, getBattleMsgCurrent,
          isBattleMsgBusy, clearVictoryPersist } from './battle-msg.js';
 import { resetAllDmgNums, tickDmgNums, tickHealNums, clearHealNums,
@@ -41,7 +41,6 @@ const BATTLE_TEXT_STEP_MS      = 50;
 const BATTLE_TEXT_STEPS        = 4;
 const BATTLE_FLASH_FRAMES      = 65;
 const BATTLE_FLASH_FRAME_MS    = 16.67;
-const CENTER_MSG_HOLD_MS       = 1200; // System B (battleSt.battleMessage centered box) — distinct from battle-msg.js MSG_HOLD_MS
 const BOSS_BOX_EXPAND_MS       = 300;
 const BOSS_BLOCKS              = 9;
 const BOSS_DISSOLVE_STEPS      = 8;
@@ -67,7 +66,7 @@ function _zPressed() { if (!keys['z'] && !keys['Z']) return false; keys['z'] = f
 // ── Exported utilities ─────────────────────────────────────────────────────
 
 export function resetBattleVars() {
-  inputSt.battleCursor = 0; battleSt.battleMessage = null;
+  inputSt.battleCursor = 0;
   resetAllDmgNums();
   battleSt.encounterDropItem = null; battleSt.bossFlashTimer = 0; battleSt.battleShakeTimer = 0;
   battleSt.isDefending = false; battleSt.battleAllies = []; battleSt.allyJoinRound = 0;
@@ -141,7 +140,7 @@ export function executeBattleCommand(index) {
       battleSt.battleTimer = 0;
     } else {
       playSFX(SFX.ERROR);
-      battleSt.battleMessage = BATTLE_CANT_ESCAPE;
+      queueBattleMsg(BATTLE_CANT_ESCAPE);
       battleSt.battleState = 'message-hold';
       battleSt.battleTimer = 0;
     }
@@ -247,7 +246,8 @@ export function tryJoinPlayerAlly() {
 
 function _updateBattleMenuConfirm() {
   if (battleSt.battleState === 'message-hold') {
-    if (battleSt.battleTimer >= CENTER_MSG_HOLD_MS) { battleSt.battleState = 'menu-open'; battleSt.battleTimer = 0; battleSt.battleMessage = null; }
+    // Boss/non-random escape failure: wait for the BATTLE_CANT_ESCAPE strip to drain, then re-open menu.
+    if (!isBattleMsgBusy()) { battleSt.battleState = 'menu-open'; battleSt.battleTimer = 0; }
   } else if (battleSt.battleState === 'confirm-pause') {
     if (battleSt.battleTimer >= 150) {
       battleSt.allyJoinRound++;

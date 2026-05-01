@@ -18,7 +18,6 @@ export const battleSt = {
   // ── State machine ─────────────────────────────────────────────────
   battleState: 'none',
   battleTimer: 0,
-  battleMessage: null,      // Uint8Array for status messages
   battleShakeTimer: 0,
   bossFlashTimer: 0,
   critFlashTimer: -1,

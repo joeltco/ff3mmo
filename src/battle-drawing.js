@@ -88,7 +88,6 @@ const MONSTER_DEATH_MS = 250;
 const MONSTER_SLIDE_MS = 267;
 const SLASH_FRAME_MS = 50;
 const SLASH_FRAMES = 3;
-const TEXT_WHITE_ON_BLUE = [0x02, 0x02, 0x02, 0x30];
 const DEFEND_SPARKLE_FRAME_MS = 133;
 const VICTORY_BOX_W = BATTLE_PANEL_W;
 const VICTORY_BOX_H = HUD_BOT_H;
@@ -470,7 +469,6 @@ function drawBattle() {
   drawEncounterBox();
   drawBossSpriteBox();
   drawBattleMenu();
-  drawBattleMessage();
   drawVictoryBox();
   drawBattleMessageStrip();
   drawDamageNumbers();
@@ -1013,28 +1011,6 @@ function _drawShiftedBlock(sctx, sprX, sprY, bx, by, shift) {
   tc.putImageData(out, 0, 0);
   ui.ctx.drawImage(_shiftBlockCanvas, sprX + bx, sprY + by);
 }
-
-function drawBattleMessage() {
-  if (battleSt.battleState !== 'message-hold' || !battleSt.battleMessage) return;
-
-  const boxW = 104;
-  const boxH = 24;
-  const bossCenterY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
-  const msgY = bossCenterY + 32 + 8; // below boss box (64/2 = 32) + gap
-  const centerX = HUD_VIEW_X + Math.floor((HUD_VIEW_W - boxW) / 2);
-
-  clipToViewport();
-
-  drawBorderedBox(centerX, msgY, boxW, boxH, true);
-
-  const tw = measureText(battleSt.battleMessage);
-  const tx = centerX + Math.floor((boxW - tw) / 2);
-  const ty = msgY + Math.floor((boxH - 8) / 2);
-  drawText(ui.ctx, tx, ty, battleSt.battleMessage, TEXT_WHITE_ON_BLUE);
-
-  ui.ctx.restore();
-}
-
 
 function _battleEnemyNames() {
   const names = [];
