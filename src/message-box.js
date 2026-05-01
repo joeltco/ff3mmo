@@ -27,6 +27,13 @@ export function showMsgBox(bytes, onClose) {
   msgState.onClose = onClose || null;
 }
 
+// Trigger slide-out from the 'hold' phase. No-op if not currently held.
+export function dismissMsgBox() {
+  if (msgState.state !== 'hold') return;
+  msgState.state = 'slide-out';
+  msgState.timer = 0;
+}
+
 export function updateMsgBox(dt) {
   if (msgState.state === 'none') return;
   msgState.timer += Math.min(dt, 33);
@@ -42,7 +49,7 @@ export function updateMsgBox(dt) {
   }
 }
 
-export function drawMsgBox(ctx, _clipUnused, drawBorderedBoxFn) {
+export function drawMsgBox(ctx, drawBorderedBoxFn) {
   if (msgState.state === 'none' || !msgState.bytes) return;
 
   const boxW      = HUD_VIEW_W;

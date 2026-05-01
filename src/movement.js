@@ -7,7 +7,7 @@ import { transSt } from './transitions.js';
 import { inputSt, handleBattleInput, handleRosterInput, handlePauseInput, keys } from './input-handler.js';
 import { sprite } from './player-sprite.js';
 import { pauseSt } from './pause-menu.js';
-import { msgState, showMsgBox } from './message-box.js';
+import { msgState, showMsgBox, dismissMsgBox } from './message-box.js';
 import { chatState, tabSelectMode } from './chat.js';
 import { ps } from './player-stats.js';
 import { playSFX, playTrack, TRACKS, SFX } from './music.js';
@@ -101,7 +101,7 @@ export function handleInput() {
   if (msgState.state !== 'none') {
     if (msgState.state === 'hold' && (keys['z'] || keys['Z'])) {
       keys['z'] = false; keys['Z'] = false;
-      msgState.state = 'slide-out'; msgState.timer = 0;
+      dismissMsgBox();
     }
     return;
   }

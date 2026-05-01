@@ -92,7 +92,7 @@ function _gameLoopDraw() {
     else drawRoster();
     drawChat(ctx, drawHudBox, rosterBattleFade);
     drawPauseMenu(ctx);
-    drawMsgBox(ctx, clipToViewport, drawBorderedBox);
+    drawMsgBox(ctx, drawBorderedBox);
     drawRosterMenu();
     drawBattle();
     drawSWExplosion();

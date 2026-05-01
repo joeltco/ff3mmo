@@ -67,7 +67,7 @@ const BATTLE_FLASH_FRAMES    = 65;
 const BATTLE_FLASH_FRAME_MS  = 16.67;
 const BATTLE_TEXT_STEPS      = 4;
 const BATTLE_TEXT_STEP_MS    = 50;
-const BATTLE_MSG_HOLD_MS     = 1200;
+const CENTER_MSG_HOLD_MS     = 1200; // System B (battleSt.battleMessage centered box) — distinct from battle-msg.js MSG_HOLD_MS
 const MONSTER_DEATH_MS       = 250;
 const DEFEND_SPARKLE_FRAME_MS = 133;
 const DEFEND_SPARKLE_TOTAL_MS = 533;
@@ -204,7 +204,7 @@ function _updatePVPOpening() {
 function _updatePVPMenuConfirm() {
   const bs = battleSt.battleState;
   if (bs === 'message-hold') {
-    if (battleSt.battleTimer >= BATTLE_MSG_HOLD_MS) { battleSt.battleState = 'menu-open'; battleSt.battleTimer = 0; battleSt.battleMessage = null; }
+    if (battleSt.battleTimer >= CENTER_MSG_HOLD_MS) { battleSt.battleState = 'menu-open'; battleSt.battleTimer = 0; battleSt.battleMessage = null; }
   } else if (bs === 'confirm-pause') {
     if (battleSt.battleTimer >= 150) {
       battleSt.allyJoinRound++;
@@ -274,8 +274,7 @@ function _runEnemyAttack(targetAlly) {
   const attackerStats = pvpSt.pvpCurrentEnemyAllyIdx >= 0
     ? pvpSt.pvpEnemyAllies[pvpSt.pvpCurrentEnemyAllyIdx]
     : pvpSt.pvpOpponentStats;
-  // Queue attacker name message
-  if (queueBattleMsg && attackerStats && attackerStats.name) {
+  if (attackerStats && attackerStats.name) {
     queueBattleMsg(_nameToBytes(attackerStats.name + ' attacks!'));
   }
   // Stage hit-by-hit combo for both player and ally targets so multi-hit attacks

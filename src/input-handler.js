@@ -4,7 +4,7 @@ import { battleSt, getEnemyHP, setEnemyHP } from './battle-state.js';
 import { playSFX, SFX, pauseMusic, playFF1Track, FF1_TRACKS } from './music.js';
 import { pauseSt } from './pause-menu.js';
 import { transSt } from './transitions.js';
-import { msgState, showMsgBox } from './message-box.js';
+import { msgState, showMsgBox, dismissMsgBox } from './message-box.js';
 import { chatState, CHAT_TABS, activeTab, tabSelectMode, setActiveTab, setTabSelectMode, chatScrollOffset, setChatScrollOffset, onChatKeyDown } from './chat.js';
 import { titleSt, onNameEntryKeyDown } from './title-screen.js';
 import { ps, recalcCombatStats, changeJob, getEquipSlotId, setEquipSlotId, EQUIP_SLOT_SUBTYPE,
@@ -502,7 +502,7 @@ function _battleInputHoldStates() {
   const z = k['z'] || k['Z'];
   const clearZ = () => { k['z'] = false; k['Z'] = false; };
   if (battleSt.battleState === 'roar-hold') {
-    if (msgState.state === 'hold' && z) { clearZ(); msgState.state = 'slide-out'; msgState.timer = 0; }
+    if (msgState.state === 'hold' && z) { clearZ(); dismissMsgBox(); }
   } else if (battleSt.battleState === 'defeat-text') {
     if (z) { clearZ(); battleSt.battleState = 'defeat-close'; battleSt.battleTimer = 0; }
   } else if (battleSt.battleState === 'game-over') {

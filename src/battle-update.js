@@ -17,7 +17,7 @@ import { updateBattleEnemyTurn } from './battle-enemy.js';
 import { resetBattleItemVars, updateMagicItemThrowHit } from './battle-items.js';
 import { replaceBattleMsg, updateBattleMsg as _updateBattleMsg, clearBattleMsgQueue,
          queueVictoryRewards as _queueVictoryRewards, getBattleMsgCurrent,
-         getBattleMsgQueue, setBattleMsgCurrent } from './battle-msg.js';
+         isBattleMsgBusy, clearVictoryPersist } from './battle-msg.js';
 import { resetAllDmgNums, tickDmgNums, tickHealNums, clearHealNums,
          setEnemyDmgNum } from './damage-numbers.js';
 import { playSFX, stopMusic, pauseMusic, resumeMusic, playTrack, TRACKS, SFX } from './music.js';
@@ -41,7 +41,7 @@ const BATTLE_TEXT_STEP_MS      = 50;
 const BATTLE_TEXT_STEPS        = 4;
 const BATTLE_FLASH_FRAMES      = 65;
 const BATTLE_FLASH_FRAME_MS    = 16.67;
-const BATTLE_MSG_HOLD_MS       = 1200;
+const CENTER_MSG_HOLD_MS       = 1200; // System B (battleSt.battleMessage centered box) — distinct from battle-msg.js MSG_HOLD_MS
 const BOSS_BOX_EXPAND_MS       = 300;
 const BOSS_BLOCKS              = 9;
 const BOSS_DISSOLVE_STEPS      = 8;
@@ -247,7 +247,7 @@ export function tryJoinPlayerAlly() {
 
 function _updateBattleMenuConfirm() {
   if (battleSt.battleState === 'message-hold') {
-    if (battleSt.battleTimer >= BATTLE_MSG_HOLD_MS) { battleSt.battleState = 'menu-open'; battleSt.battleTimer = 0; battleSt.battleMessage = null; }
+    if (battleSt.battleTimer >= CENTER_MSG_HOLD_MS) { battleSt.battleState = 'menu-open'; battleSt.battleTimer = 0; battleSt.battleMessage = null; }
   } else if (battleSt.battleState === 'confirm-pause') {
     if (battleSt.battleTimer >= 150) {
       battleSt.allyJoinRound++;
@@ -562,13 +562,13 @@ function _updateItemMenuFades() {
 
 function _updateBattleRun() {
   if (battleSt.battleState === 'run-fail') {
-    if (!getBattleMsgCurrent() && getBattleMsgQueue().length === 0) {
+    if (!isBattleMsgBusy()) {
       processNextTurn();
     }
     return true;
   }
   if (battleSt.battleState === 'run-success') {
-    if (!getBattleMsgCurrent() && getBattleMsgQueue().length === 0) {
+    if (!isBattleMsgBusy()) {
       battleSt.runSlideBack = true; battleSt.battleState = 'encounter-box-close'; battleSt.battleTimer = 0;
     }
     return true;
@@ -651,7 +651,7 @@ function _updateVictorySequence() {
   } else if (battleSt.battleState === 'joblv-fade-out') {
     if (battleSt.battleTimer >= _textMs) { battleSt.battleState = 'victory-text-out'; battleSt.battleTimer = 0; }
   } else if (battleSt.battleState === 'victory-text-out') {
-    if (battleSt.battleTimer >= _textMs) { setBattleMsgCurrent(null); battleSt.battleState = 'victory-menu-fade'; battleSt.battleTimer = 0; }
+    if (battleSt.battleTimer >= _textMs) { clearVictoryPersist(); battleSt.battleState = 'victory-menu-fade'; battleSt.battleTimer = 0; }
   } else if (battleSt.battleState === 'victory-menu-fade') {
     if (battleSt.battleTimer >= _textMs) { battleSt.battleState = 'victory-box-close'; battleSt.battleTimer = 0; }
   } else if (battleSt.battleState === 'victory-box-close') {

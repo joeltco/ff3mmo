@@ -12,12 +12,10 @@ let battleMsgTimer = 0;        // ms into current message display
 export const MSG_FADE_IN_MS = 200;
 export const MSG_HOLD_MS = 800;
 export const MSG_FADE_OUT_MS = 200;
-export const MSG_TOTAL_MS = MSG_FADE_IN_MS + MSG_HOLD_MS + MSG_FADE_OUT_MS;
 
 // ── Getters (for drawing + shared state objects) ───────────────────────────
 export function getBattleMsgCurrent() { return battleMsgCurrent; }
 export function getBattleMsgTimer() { return battleMsgTimer; }
-export function getBattleMsgQueue() { return battleMsgQueue; }
 
 // ── Queue / advance ────────────────────────────────────────────────────────
 export function queueBattleMsg(bytes, waitForZ = false) {
@@ -96,5 +94,9 @@ export function queueVictoryRewards() {
   battleMsgTimer = 0;
 }
 
-// ── Direct state set (for victory-text-out nulling) ────────────────────────
-export function setBattleMsgCurrent(v) { battleMsgCurrent = v; }
+// ── Clear victory persist ─────────────────────────────────────────────────
+// `queueVictoryRewards` puts a `persist: true` message in `battleMsgCurrent` that
+// `updateBattleMsg` refuses to time out. Call this when victory text-out finishes.
+export function clearVictoryPersist() {
+  if (battleMsgCurrent && battleMsgCurrent.persist) battleMsgCurrent = null;
+}
