@@ -272,7 +272,7 @@ function _runEnemyAttack(targetAlly) {
     ? pvpSt.pvpEnemyAllies[pvpSt.pvpCurrentEnemyAllyIdx]
     : pvpSt.pvpOpponentStats;
   if (attackerStats && attackerStats.name) {
-    queueBattleMsg(_nameToBytes(attackerStats.name + ' attacks!'));
+    queueBattleMsg(_nameToBytes(attackerStats.name));
   }
   // Stage hit-by-hit combo for both player and ally targets so multi-hit attacks
   // (especially unarmed R/L alternation) actually animate per strike.

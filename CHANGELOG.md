@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.49 — 2026-05-01
+
+### Fix: PVP opponent attack message now matches the rest of the codebase ("Name" not "Name attacks!")
+
+`pvp.js _runEnemyAttack` was the only `queueBattleMsg` site in the codebase that suffixed `' attacks!'` to the actor name. Player fight, player defend (`battle-turn.js`), ally attack (`battle-ally.js`), and regular enemy attack (`battle-enemy.js`) all queue just the bare actor name. PVP now matches.
+
 ## 1.6.48 — 2026-05-01
 
 ### Refactor: deleted second battle message UI; BATTLE_CANT_ESCAPE now uses queue strip everywhere
