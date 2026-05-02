@@ -174,33 +174,36 @@ function _monkBundle(romData) {
   };
 }
 
-// Generic ROM-read bundle for jobs 3-21. Tile-index convention (from FF3 per-job battle sprite layout):
-//   0-3   idle (TL, TR, BL, BR)
-//   4-5   default legs L/R
-//   6     L-back head-TR variant (swapped alongside body-TR during L-back)
-//   7     L-back body-TR variant
-//   8-9   L-fwd body-TL, body-TR
-//   10-11 L-fwd legL, legR (some jobs reuse defaults)
-//   14    R-back body-TL variant (R-arm overlay)
-//   18-21 R-fwd attack2 body
-//   24-27 victory/defend/magic-cast
-//   30-33 hit portrait; 34-35 hit legs
-//   36-39 kneel portrait
-// MMC3 banking means these are an APPROXIMATION — if a specific job renders scrambled,
-// PPU-capture and add a dedicated bundle case.
+// Generic ROM-read bundle for jobs 3-21. Canonical FF3 per-job battle sprite tile layout
+// (verified by reverse-mapping PPU-captured OK + Warrior bytes back to ROM tile-indices —
+// the layout is uniform across jobs):
+//   0-3   idle body (TL, TR, BL, BR)
+//   4-5   idle legs L/R
+//   6-7   R-fwd legs L/R
+//   10-11 kneel body BL, BR
+//   12-13 kneel legs L/R
+//   14    R-back body-TL (R-arm overlay)
+//   15    R-back legL (legR shares tile 7)
+//   16-17 L-fwd body-TL, body-TR
+//   18-19 L-fwd legs L/R
+//   20-21 L-back head-TR, body-TR
+//   22-23 L-back legs L/R
+//   24-27 victory/defend body
+//   28-29 victory legs L/R
+//   30-33 hit body
+//   34-35 hit legs L/R
+//   36-37 kneel body TL, TR
 function _genericBundle(romData, jobIdx) {
   const jobBase = BATTLE_SPRITE_ROM + jobIdx * BATTLE_JOB_SIZE;
   const t = (idx) => decodeTile(romData, jobBase + idx * 16);
   const idle    = [t(0), t(1), t(2), t(3)];
   const victory = [t(24), t(25), t(26), t(27)];
   const hit     = [t(30), t(31), t(32), t(33)];
-  const kneel   = [t(36), t(37), t(38), t(39)];
-  const rBack   = [t(0), t(1), t(14), t(3)];
-  const lBack   = [t(0), t(6),  t(2),  t(7)];
-  const rFwd    = [t(0), t(1), t(2),  t(3)];   // attack2 body — most jobs idle here
-  const lFwd    = [t(0), t(1), t(8),  t(9)];
-  const legL = t(4), legR = t(5);
-  const hitLegL = t(34), hitLegR = t(35);
+  const kneel   = [t(36), t(37), t(10), t(11)];
+  const rBack   = [t(0), t(1),  t(14), t(3)];
+  const lBack   = [t(0), t(20), t(2),  t(21)];
+  const rFwd    = [t(0), t(1),  t(2),  t(3)];   // body unchanged on R-fwd; only legs animate
+  const lFwd    = [t(0), t(1),  t(16), t(17)];
   return {
     bodies: {
       idle, rBack, lBack, rFwd, lFwd,
@@ -208,21 +211,19 @@ function _genericBundle(romData, jobIdx) {
       knifeRFwd: rFwd, knifeLFwd: lFwd,
       victory, hit, kneel,
     },
-    // Generic builder doesn't have per-pose leg tiles in ROM — reuse default legs everywhere.
-    // PPU-captured bundles override this for specific jobs.
     legs: {
-      idle:     { L: legL,    R: legR },
-      rBack:    { L: legL,    R: legR },
-      lBack:    { L: legL,    R: legR },
-      rFwd:     { L: legL,    R: legR },
-      lFwd:     { L: legL,    R: legR },
-      knifeR:   { L: legL,    R: legR },
-      knifeL:   { L: legL,    R: legR },
-      knifeRFwd:{ L: legL,    R: legR },
-      knifeLFwd:{ L: legL,    R: legR },
-      victory:  { L: legL,    R: legR },
-      hit:      { L: hitLegL, R: hitLegR },
-      kneel:    { L: legL,    R: legR },
+      idle:     { L: t(4),  R: t(5)  },
+      rBack:    { L: t(15), R: t(7)  },
+      lBack:    { L: t(22), R: t(23) },
+      rFwd:     { L: t(6),  R: t(7)  },
+      lFwd:     { L: t(18), R: t(19) },
+      knifeR:   { L: t(15), R: t(7)  },
+      knifeL:   { L: t(22), R: t(23) },
+      knifeRFwd:{ L: t(6),  R: t(7)  },
+      knifeLFwd:{ L: t(18), R: t(19) },
+      victory:  { L: t(28), R: t(29) },
+      hit:      { L: t(34), R: t(35) },
+      kneel:    { L: t(12), R: t(13) },
     },
     palettes: PLAYER_PALETTES,
     death: null, // generic jobs have no PPU-captured death pose; renderer falls back to idle

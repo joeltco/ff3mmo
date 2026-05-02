@@ -2,6 +2,28 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.52 — 2026-05-02
+
+### Fix: generic-job battle sprites (jobs 3-21) now use correct ROM tile indices for L-back, L-fwd, kneel, and per-pose legs
+
+`_genericBundle` in `combatant-sprites.js` had the L-back/L-fwd body indices and kneel body BL/BR off, and reused default legs for every pose. Symptom: switching to White Mage (or any non-OK/Warrior/Monk job) showed garbage tiles during L-side swings and kneel.
+
+Reverse-mapped the PPU-captured Onion Knight + Warrior bytes back to ROM tile-indices and confirmed a uniform per-job layout:
+
+- 0-3 idle body, 4-5 idle legs
+- 6-7 R-fwd legs
+- 10-11 kneel body BL/BR, 12-13 kneel legs
+- 14 R-back body-TL, 15 R-back legL (legR shares tile 7)
+- 16-17 L-fwd body, 18-19 L-fwd legs
+- 20-21 L-back head-TR + body-TR, 22-23 L-back legs
+- 24-27 victory body, 28-29 victory legs
+- 30-33 hit body, 34-35 hit legs
+- 36-37 kneel body TL/TR
+
+Bug indices were 6/7 (L-back), 8/9 (L-fwd), 38/39 (kneel BL/BR) — those slots hold unrelated data on most jobs, which is why the previous "approximation" disclaimer existed. Pattern is canonical, not approximate.
+
+Player path only this version. Ally legacy path (`_initGenericJobPosePortraits` / `_buildGenericJobFullBodies` in sprite-init.js) still uses the old indices for jobs 3-21 — opponents/allies of those jobs will still glitch until that path is migrated to the bundle.
+
 ## 1.6.51 — 2026-05-01
 
 ### Fix: enemy actor name now appears before the swing lands (was lagging behind animations)
