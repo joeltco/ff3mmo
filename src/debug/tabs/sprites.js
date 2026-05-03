@@ -3,6 +3,7 @@
 // Context expected on mount: { getFF3Buffer(), getFF12Buffer() }
 
 import { decodeTile, NES_SYSTEM_PALETTE } from '../../tile-decoder.js';
+import { JOB_NAMES, BATTLE_SPRITE_ROM, BATTLE_JOB_SIZE } from '../../data/jobs.js';
 
 const TILES_PER_PAGE = 128;
 const SPRITES_PER_PAGE = 16;
@@ -357,7 +358,7 @@ function _openDefault() {
   _seedHitTilesFromROM();
   _seedWarriorPoses()
     .then(() => _seedMonkPoses())
-    .then(() => _renderTilePage());
+    .then(() => { _seedGenericJobPoses(); _renderTilePage(); });
 }
 
 function _seedHitTilesFromROM() {
@@ -404,6 +405,30 @@ async function _seedMonkPoses() {
     for (const mp of monkPoses) poseTiles.push(mp);
   } catch (e) {
     console.warn('[debug/sprites] monk pose load failed', e);
+  }
+}
+
+// Generic-job poses (jobs 3-21) — read tiles directly from ROM using the canonical
+// per-job battle sprite tile layout. Same indices that `_genericBundle` in
+// combatant-sprites.js feeds the player/ally/opponent renderers — pinned here so the
+// POSES tab is the visual ground truth: if a card looks wrong, the bundle is wrong.
+function _seedGenericJobPoses() {
+  const rom = new Uint8Array(ctx.getFF3Buffer());
+  for (let jobIdx = 3; jobIdx < JOB_NAMES.length; jobIdx++) {
+    const jb = BATTLE_SPRITE_ROM + jobIdx * BATTLE_JOB_SIZE;
+    const t = (i) => rom.slice(jb + i * 16, jb + (i + 1) * 16);
+    const label = (JOB_NAMES[jobIdx] || `JOB ${jobIdx}`).toUpperCase();
+    const cards = [
+      { label: `${label} IDLE`,    tiles: [t(0),  t(1),  t(2),  t(3),  t(4),  t(5)],  rows: 3 },
+      { label: `${label} L BACK`,  tiles: [t(0),  t(20), t(2),  t(21), t(22), t(23)], rows: 3 },
+      { label: `${label} L FWD`,   tiles: [t(0),  t(1),  t(16), t(17), t(18), t(19)], rows: 3 },
+      { label: `${label} R BACK`,  tiles: [t(0),  t(1),  t(14), t(3),  t(15), t(7)],  rows: 3 },
+      { label: `${label} R FWD`,   tiles: [t(0),  t(1),  t(2),  t(3),  t(6),  t(7)],  rows: 3 },
+      { label: `${label} KNEEL`,   tiles: [t(36), t(37), t(10), t(11), t(12), t(13)], rows: 3 },
+      { label: `${label} VICTORY`, tiles: [t(24), t(25), t(26), t(27), t(28), t(29)], rows: 3 },
+      { label: `${label} HIT`,     tiles: [t(30), t(31), t(32), t(33), t(34), t(35)], rows: 3 },
+    ];
+    for (const c of cards) poseTiles.push(c);
   }
 }
 
