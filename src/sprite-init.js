@@ -640,6 +640,7 @@ function _buildPlayerSpriteSet(romData, jobIdx, palette) {
       rBack: base.rBack, lBack: base.lBack,
       rFwd: base.rFwd, lFwd: base.lFwd,
       knifeR: base.knifeR, knifeL: base.knifeL, knifeBack: base.lBack, // knifeBack legacy alias for L-back canvas
+      knifeRFwd: base.knifeRFwd, knifeLFwd: base.knifeLFwd,
       victory: base.victory, hit: base.hit,
       defend: base.victory, defendFade: renderFaded('victory'),
       kneel: base.kneel, kneelFade: renderFaded('kneel'),

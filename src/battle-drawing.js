@@ -38,7 +38,10 @@ import { fakePlayerPortraits, fakePlayerVictoryPortraits, fakePlayerHitPortraits
          fakePlayerKnifeRFwdPortraits, fakePlayerKnifeLFwdPortraits,
          fakePlayerDeathPoseCanvases } from './fake-player-sprites.js';
 import { BATTLE_GAME_OVER, BATTLE_DEFEATED, BATTLE_LEVEL_UP, BATTLE_JOB_LEVEL_UP, BATTLE_FOUND,
-         BATTLE_BOSS_NAME, BATTLE_GOBLIN_NAME, BATTLE_MENU_ITEMS } from './data/strings.js';
+         BATTLE_BOSS_NAME, BATTLE_GOBLIN_NAME, BATTLE_MENU_ITEMS, BATTLE_MAGIC } from './data/strings.js';
+
+// Mage jobs (White, Black, Red) see "Magic" in slot 1 instead of "Guard".
+const _MAGE_JOBS = new Set([3, 4, 5]);
 import { getAllyDamageNums, getEnemyDmgNum, getPlayerDamageNum, getPlayerHealNum, getEnemyHealNum,
          getSwDmgNums } from './damage-numbers.js';
 import { getBattleMsgCurrent, getBattleMsgTimer, MSG_FADE_IN_MS, MSG_HOLD_MS, MSG_FADE_OUT_MS } from './battle-msg.js';
@@ -679,8 +682,11 @@ function _drawBattleMenuItems(positions, isVictory, isClose, isFade, fadedPal, m
     } else {
       menuPal = isVictory ? [0x0F, 0x0F, 0x0F, 0x30] : fadedPal;
     }
-    for (let i = 0; i < BATTLE_MENU_ITEMS.length; i++)
-      drawText(ui.ctx, positions[i][0], positions[i][1], BATTLE_MENU_ITEMS[i], menuPal);
+    const isMage = _MAGE_JOBS.has(ps.jobIdx);
+    for (let i = 0; i < BATTLE_MENU_ITEMS.length; i++) {
+      const label = (i === 1 && isMage) ? BATTLE_MAGIC : BATTLE_MENU_ITEMS[i];
+      drawText(ui.ctx, positions[i][0], positions[i][1], label, menuPal);
+    }
   }
   if (isItemShowInv) _drawBattleItemPanel(menuX);
 }

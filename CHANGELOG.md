@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.57 — 2026-05-02
+
+### Fix: knife forward strike on player slot was rendering the back-swing pose
+
+`_buildPlayerSpriteSet` in `sprite-init.js` was assembling `bsc.battlePoses` with `knifeR`, `knifeL`, `knifeBack` but **not** `knifeRFwd` / `knifeLFwd`. The bundle produced both correctly — the fields just weren't carried over to the player canvas object.
+
+When dual-wielding knives, `pickAttackPoseKey` returns `'knifeRFwd'` / `'knifeLFwd'` during the forward strike. `_playerPoseCanvas` saw those keys as undefined and fell through `PLAYER_POSE_FALLBACK` to `'knifeR'` / `'knifeL'` — which are the back-swing canvases. Net result: every knife forward strike rendered the back-swing pose instead of the strike pose. Most visible on Black Mage (frequently dual-wielding daggers as the only equippable weapon).
+
+Now `knifeRFwd` / `knifeLFwd` are exposed on `bsc.battlePoses`. Affects every job, not just black mage.
+
 ## 1.6.56 — 2026-05-02
 
 ### Staff weapon sprite wired in; ally portraits now cover all 22 jobs; staff added to Altar F2 loot
