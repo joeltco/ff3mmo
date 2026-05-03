@@ -24,14 +24,20 @@ const TEXT_STEP_MS = 100;
 const TEXT_STEPS   = 4;
 const FADE_TOTAL   = (TEXT_STEPS + 1) * TEXT_STEP_MS;  // 500ms
 
+// Outer alpha fade for the whole shop overlay — map fades out as shop fades in.
+const OUTER_FADE_MS = 250;
+
 // FF3 NES sell price = floor(buy / 2). Items without a price aren't sellable.
 function sellPrice(item) { return item && item.price > 0 ? Math.floor(item.price / 2) : 0; }
 
 // shopSt.state machine:
 //   'closed'
-//   'menu-in'  → 'menu'  → 'menu-out'  → 'closed'
-//   'buy-in'   → 'buy'   → 'buy-out'   → 'menu-in'   (back to root)
-//   'sell-in'  → 'sell'  → 'sell-out'  → 'menu-in'
+//   'opening' (alpha fade) → 'menu'
+//   'menu'   → 'closing' (Exit / X) → 'closed'   |   → 'menu-out' (Buy / Sell)
+//   'menu-out' (text fade) → 'buy-in' or 'sell-in' (per shopSt.afterFade)
+//   'buy-in'  (text fade) → 'buy'  → 'buy-out'  (text fade) → 'menu-in'
+//   'sell-in' (text fade) → 'sell' → 'sell-out' (text fade) → 'menu-in'
+//   'menu-in' (text fade)  → 'menu'
 // confirm dialog overlays buy/sell idle states (no fade — small + transient)
 export const shopSt = {
   state:   'closed',
@@ -41,6 +47,7 @@ export const shopSt = {
   cursor:  0,       // index into items list (buy) or sellable inventory (sell)
   confirm: false,
   sellList: [],     // cached entries [{ id, count, price }] when entering sell
+  afterFade: null,  // next state after a text fade-out completes
 };
 
 const ROOT_LABELS = ['Buy', 'Sell', 'Exit'];
@@ -50,12 +57,13 @@ const ROOT_LABELS = ['Buy', 'Sell', 'Exit'];
 export function openShop(shopId) {
   const shop = SHOPS.get(shopId);
   if (!shop || !shop.items) return false; // magic shops (spells:) not wired
-  shopSt.state      = 'menu-in';
+  shopSt.state      = 'opening';
   shopSt.timer      = 0;
   shopSt.shopId     = shopId;
   shopSt.rootCursor = 0;
   shopSt.cursor     = 0;
   shopSt.confirm    = false;
+  shopSt.afterFade  = null;
   playSFX(SFX.CONFIRM);
   return true;
 }
@@ -63,6 +71,7 @@ export function openShop(shopId) {
 function _close() {
   shopSt.state = 'closed'; shopSt.shopId = null; shopSt.confirm = false;
   shopSt.cursor = 0; shopSt.rootCursor = 0; shopSt.sellList = [];
+  shopSt.afterFade = null;
 }
 
 function _items() {
@@ -87,19 +96,32 @@ function _rebuildSellList() {
 export function updateShop(dt) {
   if (shopSt.state === 'closed') return;
   shopSt.timer += Math.min(dt, 33);
-  if (shopSt.state === 'menu-in'  && shopSt.timer >= FADE_TOTAL) { shopSt.state = 'menu'; shopSt.timer = 0; }
-  else if (shopSt.state === 'menu-out' && shopSt.timer >= FADE_TOTAL) { _close(); }
+  if (shopSt.state === 'opening' && shopSt.timer >= OUTER_FADE_MS) { shopSt.state = 'menu'; shopSt.timer = 0; }
+  else if (shopSt.state === 'closing' && shopSt.timer >= OUTER_FADE_MS) { _close(); }
+  else if (shopSt.state === 'menu-in'  && shopSt.timer >= FADE_TOTAL) { shopSt.state = 'menu'; shopSt.timer = 0; }
+  else if (shopSt.state === 'menu-out' && shopSt.timer >= FADE_TOTAL) {
+    const next = shopSt.afterFade || 'closing';
+    shopSt.state = next; shopSt.timer = 0; shopSt.afterFade = null;
+  }
   else if (shopSt.state === 'buy-in'  && shopSt.timer >= FADE_TOTAL) { shopSt.state = 'buy';  shopSt.timer = 0; }
   else if (shopSt.state === 'buy-out' && shopSt.timer >= FADE_TOTAL) { shopSt.state = 'menu-in'; shopSt.timer = 0; }
   else if (shopSt.state === 'sell-in' && shopSt.timer >= FADE_TOTAL) { shopSt.state = 'sell'; shopSt.timer = 0; }
   else if (shopSt.state === 'sell-out'&& shopSt.timer >= FADE_TOTAL) { shopSt.state = 'menu-in'; shopSt.timer = 0; }
 }
 
+// Outer alpha for the whole shop draw (0 = fully transparent, 1 = solid)
+function _outerAlpha() {
+  if (shopSt.state === 'opening') return Math.min(shopSt.timer / OUTER_FADE_MS, 1);
+  if (shopSt.state === 'closing') return Math.max(1 - shopSt.timer / OUTER_FADE_MS, 0);
+  return 1;
+}
+
 // ── Input ─────────────────────────────────────────────────────────────────
 
 export function handleShopInput(keys) {
   if (shopSt.state === 'closed') return false;
-  // Block input during fades — animation in progress
+  // Block input during any fade — outer (opening/closing) or inner (text)
+  if (shopSt.state === 'opening' || shopSt.state === 'closing') return true;
   if (shopSt.state.endsWith('-in') || shopSt.state.endsWith('-out')) return true;
 
   if (shopSt.state === 'menu')      _menuInput(keys);
@@ -114,17 +136,19 @@ function _menuInput(keys) {
   if (keys['z'] || keys['Z']) {
     keys['z'] = false; keys['Z'] = false;
     if (shopSt.rootCursor === 0) {
-      shopSt.cursor = 0; shopSt.state = 'buy-in'; shopSt.timer = 0; playSFX(SFX.CONFIRM);
+      shopSt.cursor = 0; shopSt.state = 'menu-out'; shopSt.timer = 0; shopSt.afterFade = 'buy-in';
+      playSFX(SFX.CONFIRM);
     } else if (shopSt.rootCursor === 1) {
       _rebuildSellList();
-      shopSt.cursor = 0; shopSt.state = 'sell-in'; shopSt.timer = 0; playSFX(SFX.CONFIRM);
+      shopSt.cursor = 0; shopSt.state = 'menu-out'; shopSt.timer = 0; shopSt.afterFade = 'sell-in';
+      playSFX(SFX.CONFIRM);
     } else {
-      shopSt.state = 'menu-out'; shopSt.timer = 0; playSFX(SFX.CONFIRM);
+      shopSt.state = 'closing'; shopSt.timer = 0; playSFX(SFX.CONFIRM);
     }
   }
   if (keys['x'] || keys['X'] || keys['Escape']) {
     keys['x'] = false; keys['X'] = false; keys['Escape'] = false;
-    shopSt.state = 'menu-out'; shopSt.timer = 0; playSFX(SFX.CONFIRM);
+    shopSt.state = 'closing'; shopSt.timer = 0; playSFX(SFX.CONFIRM);
   }
 }
 
@@ -201,10 +225,17 @@ function _fadeStepFor(state) {
 export function drawShop() {
   if (shopSt.state === 'closed') return;
   const ctx = ui.ctx;
+  const alpha = _outerAlpha();
+  if (alpha <= 0) return;
+  const prevAlpha = ctx.globalAlpha;
+  ctx.globalAlpha = prevAlpha * alpha;
   clipToViewport();
   drawBorderedBox(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
 
-  if (shopSt.state === 'menu' || shopSt.state === 'menu-in' || shopSt.state === 'menu-out')
+  // Outer fade (opening/closing) always shows the root menu — the only thing
+  // visible during those states. Inner sub-screens render in their own states.
+  if (shopSt.state === 'opening' || shopSt.state === 'closing' ||
+      shopSt.state === 'menu' || shopSt.state === 'menu-in' || shopSt.state === 'menu-out')
     _drawRootMenu(ctx);
   else if (shopSt.state === 'buy' || shopSt.state === 'buy-in' || shopSt.state === 'buy-out')
     _drawList(ctx, _items(), /*isSell*/false);
@@ -212,6 +243,7 @@ export function drawShop() {
     _drawList(ctx, shopSt.sellList, /*isSell*/true);
 
   ctx.restore();
+  ctx.globalAlpha = prevAlpha;
 
   // Confirm overlays the list — only show in idle, never during fades
   if (shopSt.confirm && (shopSt.state === 'buy' || shopSt.state === 'sell')) {

@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.61 — 2026-05-03
+
+### Shops: outer alpha fade — map fades to black as shop fades in
+
+`openShop` now enters `'opening'` (250ms `globalAlpha` 0→1) before settling on the root menu. Exit / X from the root menu enters `'closing'` (alpha 1→0) before fully closing. The bordered box's black interior, drawn with progressive alpha over the live map, gives a crossfade where the map dims as the shop materializes. Sub-screen swaps (menu↔buy↔sell) keep their existing 500ms text-palette fades.
+
+State machine: `closed → opening → menu → (closing | menu-out → buy-in/sell-in) → ...`. `shopSt.afterFade` records the next state when leaving the root menu so a single `menu-out` transition can route to either `buy-in` or `sell-in`.
+
 ## 1.6.60 — 2026-05-03
 
 ### Shops: Buy / Sell / Exit root menu + text-fade transitions
