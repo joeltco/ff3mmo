@@ -9,6 +9,7 @@ import { getPlayerLocation } from './roster.js';
 import { mapSt } from './map-state.js';
 import { sprite } from './player-sprite.js';
 import { DIR_DOWN, DIR_UP, DIR_LEFT, DIR_RIGHT } from './sprite.js';
+import { playFF1Track, stopFF1Music, pauseMusic, resumeMusic } from './music.js';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 const CHAT_LINE_H      = 9;
@@ -98,6 +99,19 @@ registerCommand('who', 'Show players in area', (_args, ctx) => {
   const names = ctx.getRosterNames();
   addChatMessage(names.length + ' player(s) in area:', 'console');
   for (const n of names) addChatMessage('  ' + n, 'console');
+});
+
+registerCommand('ff1', 'Play FF1 NSF track N (or "stop" to resume map music)', (args) => {
+  const a = (args || '').trim().toLowerCase();
+  if (a === '' || a === 'stop' || a === 'off') {
+    stopFF1Music(); resumeMusic();
+    addChatMessage('FF1 NSF stopped, map music resumed', 'console');
+    return;
+  }
+  const n = parseInt(a, 10);
+  if (!Number.isFinite(n) || n < 0) { addChatMessage('Usage: /ff1 <track-index> | /ff1 stop', 'console'); return; }
+  pauseMusic(); playFF1Track(n);
+  addChatMessage('FF1 NSF track ' + n, 'console');
 });
 
 registerCommand('pos', 'Show player tile + faced tile', () => {

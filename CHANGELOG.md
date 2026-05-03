@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.65 — 2026-05-03
+
+### Shops: NES palette-step fade for the map ↔ shop transition + `/ff1` console command
+
+Replaced the alpha-based outer fade with an actual NES PPU-style palette fade. New module `src/nes-fade.js` exports `buildNesFadeFrames(srcCanvas, sx, sy, sw, sh, steps)`: snapshots a region of the canvas, quantizes each pixel to its nearest NES palette index, then uses `nesColorFade` to produce N+1 progressively darker frames (frame 0 = original, frame N = nearly black). Cached nearest-color lookup keeps the snapshot ~50ms one-time on shop open.
+
+Shop state machine now does the transition in two distinct phases per direction:
+
+- **Open**: `map-out` (320ms — 5 NES fade frames of the map snapshot, lazy-built on first frame) → `shop-in` (500ms — black bg + faded bordered box via `drawHudBox(fadeStep)` + faded text) → `menu`.
+- **Close**: `shop-out` → `map-in` → `closed`. Reuses the same snapshot.
+
+Sub-screen swaps (root menu ↔ buy/sell list) keep the existing 500ms text-palette fade — they don't touch the map.
+
+Also new console command: `/ff1 <n>` plays FF1 NSF track index N (pauses map music). `/ff1 stop` resumes map music. Use to ear-check the right index for `FF1_TRACKS.SHOP` since 8/12/17 are all wrong.
+
 ## 1.6.64 — 2026-05-03
 
 ### Shops: FF1 NSF shop track → 8 (FF1&2 cart song ordering)
