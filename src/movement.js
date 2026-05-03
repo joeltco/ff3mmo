@@ -97,7 +97,7 @@ export function handleInput() {
   if (!sprite) return;
   // Shop has top priority — block all other input while open. Message box can
   // open over a shop (e.g. "Bought X!") and is handled below.
-  if (shopSt.open && msgState.state === 'none' && handleShopInput(keys)) return;
+  if (shopSt.state !== 'closed' && msgState.state === 'none' && handleShopInput(keys)) return;
   if (handleBattleInput()) return;
   if (handleRosterInput()) return;
   if (handlePauseInput()) return;

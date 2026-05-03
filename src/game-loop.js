@@ -14,7 +14,7 @@ import { rosterBattleFade, updateRoster, drawRoster, drawRosterMenu } from './ro
 import { updateMsgBox, drawMsgBox } from './message-box.js';
 import { titleSt, drawTitleSkyInHUD, drawTitle, updateTitle } from './title-screen.js';
 import { updatePauseMenu, drawPauseMenu } from './pause-menu.js';
-import { drawShop } from './shop.js';
+import { drawShop, updateShop } from './shop.js';
 import { transSt, loadingSt, updateTransition, updateTopBoxScroll,
          drawTransitionOverlay, WIPE_DURATION } from './transitions.js';
 import { handleInput, updateMovement } from './movement.js';
@@ -47,6 +47,7 @@ function _gameLoopUpdate(dt) {
   updateChat(dt, battleSt.battleState);
   updateChatTabs(dt);
   updatePauseMenu(dt);
+  updateShop(dt);
   updateMsgBox(dt);
   updateBattle(dt);
   updateMovement(dt);
