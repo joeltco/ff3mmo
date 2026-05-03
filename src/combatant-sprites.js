@@ -175,11 +175,12 @@ function _monkBundle(romData) {
 }
 
 // Generic ROM-read bundle for jobs 3-21. Canonical FF3 per-job battle sprite tile layout
-// (verified by reverse-mapping PPU-captured OK + Warrior bytes back to ROM tile-indices —
-// the layout is uniform across jobs):
+// (verified by reverse-mapping PPU-captured OK + Monk bytes back to ROM tile-indices —
+// the layout is uniform across jobs; Warrior is the one known outlier on kneel TL/TR):
 //   0-3   idle body (TL, TR, BL, BR)
 //   4-5   idle legs L/R
 //   6-7   R-fwd legs L/R
+//   8-9   kneel body TL, TR (head bowed)
 //   10-11 kneel body BL, BR
 //   12-13 kneel legs L/R
 //   14    R-back body-TL (R-arm overlay)
@@ -192,14 +193,13 @@ function _monkBundle(romData) {
 //   28-29 victory legs L/R
 //   30-33 hit body
 //   34-35 hit legs L/R
-//   36-37 kneel body TL, TR
 function _genericBundle(romData, jobIdx) {
   const jobBase = BATTLE_SPRITE_ROM + jobIdx * BATTLE_JOB_SIZE;
   const t = (idx) => decodeTile(romData, jobBase + idx * 16);
   const idle    = [t(0), t(1), t(2), t(3)];
   const victory = [t(24), t(25), t(26), t(27)];
   const hit     = [t(30), t(31), t(32), t(33)];
-  const kneel   = [t(36), t(37), t(10), t(11)];
+  const kneel   = [t(8), t(9), t(10), t(11)];
   const rBack   = [t(0), t(1),  t(14), t(3)];
   const lBack   = [t(0), t(20), t(2),  t(21)];
   const rFwd    = [t(0), t(1),  t(2),  t(3)];   // body unchanged on R-fwd; only legs animate

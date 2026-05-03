@@ -424,7 +424,7 @@ function _seedGenericJobPoses() {
       { label: `${label} L FWD`,   tiles: [t(0),  t(1),  t(16), t(17), t(18), t(19)], rows: 3 },
       { label: `${label} R BACK`,  tiles: [t(0),  t(1),  t(14), t(3),  t(15), t(7)],  rows: 3 },
       { label: `${label} R FWD`,   tiles: [t(0),  t(1),  t(2),  t(3),  t(6),  t(7)],  rows: 3 },
-      { label: `${label} KNEEL`,   tiles: [t(36), t(37), t(10), t(11), t(12), t(13)], rows: 3 },
+      { label: `${label} KNEEL`,   tiles: [t(8),  t(9),  t(10), t(11), t(12), t(13)], rows: 3 },
       { label: `${label} VICTORY`, tiles: [t(24), t(25), t(26), t(27), t(28), t(29)], rows: 3 },
       { label: `${label} HIT`,     tiles: [t(30), t(31), t(32), t(33), t(34), t(35)], rows: 3 },
     ];

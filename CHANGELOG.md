@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.54 — 2026-05-02
+
+### Fix: kneel head TL/TR for jobs 3-21 was reading the wrong ROM tile-indices
+
+`_genericBundle` had kneel head at t(36)/t(37). That's correct for Warrior — and so were the previous PPU captures — but Warrior is the outlier: Onion Knight, Monk, and (per visual confirmation in the POSES tab) every job 3+ stores kneel head TL/TR at t(8)/t(9). Fixed both `_genericBundle` and the corresponding POSES tab card.
+
 ## 1.6.53 — 2026-05-02
 
 ### POSES debug tab now seeds jobs 3-21 from ROM using the canonical tile layout
