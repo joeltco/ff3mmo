@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.58 — 2026-05-03
+
+### Console: `/pos` command for inspecting player and faced tile
+
+New chat command — prints current map ID, player tile (X,Y), facing direction, and the faced tile's coordinates + tile ID (hex). On the world map, just prints world tile coords. Needed to identify shop counter tiles in Ur (and any future map work) without recompiling debug hooks.
+
 ## 1.6.57 — 2026-05-02
 
 ### Fix: knife forward strike on player slot was rendering the back-swing pose

@@ -6,6 +6,9 @@ import { _nesNameToString, _nameToBytes } from './text-utils.js';
 import { drawText, measureText, TEXT_WHITE } from './font-renderer.js';
 import { nesColorFade } from './palette.js';
 import { getPlayerLocation } from './roster.js';
+import { mapSt } from './map-state.js';
+import { sprite } from './player-sprite.js';
+import { DIR_DOWN, DIR_UP, DIR_LEFT, DIR_RIGHT } from './sprite.js';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 const CHAT_LINE_H      = 9;
@@ -95,6 +98,26 @@ registerCommand('who', 'Show players in area', (_args, ctx) => {
   const names = ctx.getRosterNames();
   addChatMessage(names.length + ' player(s) in area:', 'console');
   for (const n of names) addChatMessage('  ' + n, 'console');
+});
+
+registerCommand('pos', 'Show player tile + faced tile', () => {
+  if (mapSt.onWorldMap) {
+    const tx = (mapSt.worldX / 16) | 0, ty = (mapSt.worldY / 16) | 0;
+    addChatMessage('world ' + tx + ',' + ty, 'console');
+    return;
+  }
+  if (!mapSt.mapData || !sprite) { addChatMessage('No map loaded', 'console'); return; }
+  const tx = (mapSt.worldX / 16) | 0, ty = (mapSt.worldY / 16) | 0;
+  const dir = sprite.getDirection();
+  const dx = dir === DIR_RIGHT ? 1 : dir === DIR_LEFT ? -1 : 0;
+  const dy = dir === DIR_DOWN ? 1 : dir === DIR_UP ? -1 : 0;
+  const dirName = dir === DIR_DOWN ? 'down' : dir === DIR_UP ? 'up' : dir === DIR_LEFT ? 'left' : 'right';
+  const fx = tx + dx, fy = ty + dy;
+  const inB = fx >= 0 && fx < 32 && fy >= 0 && fy < 32;
+  const tile = inB ? mapSt.mapData.tilemap[fy * 32 + fx] : -1;
+  const tileHex = inB ? '0x' + tile.toString(16).padStart(2, '0') : 'oob';
+  addChatMessage('map ' + mapSt.currentMapId + ' @ ' + tx + ',' + ty + ' face ' + dirName, 'console');
+  addChatMessage('faced ' + fx + ',' + fy + ' tile ' + tileHex, 'console');
 });
 
 let _commandCtx = {};
