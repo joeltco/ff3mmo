@@ -14,6 +14,7 @@ import { rosterBattleFade, updateRoster, drawRoster, drawRosterMenu } from './ro
 import { updateMsgBox, drawMsgBox } from './message-box.js';
 import { titleSt, drawTitleSkyInHUD, drawTitle, updateTitle } from './title-screen.js';
 import { updatePauseMenu, drawPauseMenu } from './pause-menu.js';
+import { drawShop } from './shop.js';
 import { transSt, loadingSt, updateTransition, updateTopBoxScroll,
          drawTransitionOverlay, WIPE_DURATION } from './transitions.js';
 import { handleInput, updateMovement } from './movement.js';
@@ -92,6 +93,7 @@ function _gameLoopDraw() {
     else drawRoster();
     drawChat(ctx, drawHudBox, rosterBattleFade);
     drawPauseMenu(ctx);
+    drawShop();
     drawMsgBox(ctx, drawBorderedBox);
     drawRosterMenu();
     drawBattle();

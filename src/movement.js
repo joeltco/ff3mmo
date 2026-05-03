@@ -13,6 +13,8 @@ import { ps } from './player-stats.js';
 import { playSFX, playTrack, TRACKS, SFX } from './music.js';
 import { checkTrigger, openPassage, handleChest, handleSecretWall,
          handleRockPuzzle, handlePondHeal, triggerWipe } from './map-triggers.js';
+import { shopSt, openShop, handleShopInput } from './shop.js';
+import { findShopAtCounter } from './data/shops.js';
 import { loadWorldMapAtPosition } from './map-loading.js';
 import { tickRandomEncounter } from './battle-encounter.js';
 import { startBattle } from './battle-update.js';
@@ -93,6 +95,9 @@ export function updateMovement(dt) {
 
 export function handleInput() {
   if (!sprite) return;
+  // Shop has top priority — block all other input while open. Message box can
+  // open over a shop (e.g. "Bought X!") and is handled below.
+  if (shopSt.open && msgState.state === 'none' && handleShopInput(keys)) return;
   if (handleBattleInput()) return;
   if (handleRosterInput()) return;
   if (handlePauseInput()) return;
@@ -152,6 +157,10 @@ function handleAction() {
     openPassage();
     return;
   }
+
+  // Shop counter — open buy menu
+  const shopId = findShopAtCounter(mapSt.currentMapId, facedX, facedY);
+  if (shopId && openShop(shopId)) return;
 
   if (facedTile === 0x7C)                                         { handleChest(facedX, facedY); return; }
   if (mapSt.secretWalls && mapSt.secretWalls.has(`${facedX},${facedY}`))      { handleSecretWall(facedX, facedY); return; }
