@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.63 — 2026-05-03
+
+### Shops: switch FF1 NSF shop track from 17 → 12
+
+Per Gemini, the FF1 shop theme is NSF track 12 (song $4D), not 17.
+
 ## 1.6.62 — 2026-05-03
 
 ### Shops: FF1 NSF shop track plays while menu is open

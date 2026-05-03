@@ -48,7 +48,7 @@ export const SFX = {
 // FF1 track indices (0-based, for ff1 NSF)
 export const FF1_TRACKS = {
   MENU_SCREEN: 16,  // Song $51 (music_track $11) — FF1 menu music
-  SHOP:        17,  // Song $52 (music_track $12) — assumed next track in NSF
+  SHOP:        12,  // Song $4D (music_track $0D) — FF1 shop theme
 };
 
 let nsfData = null;    // Built NSF Uint8Array
