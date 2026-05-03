@@ -5,6 +5,7 @@ import { getKnifeBladeCanvas, getKnifeBladeSwungCanvas,
          getDaggerBladeCanvas, getDaggerBladeSwungCanvas,
          getSwordBladeCanvas, getSwordBladeSwungCanvas,
          getNunchakuBladeCanvas, getNunchakuBladeSwungCanvas,
+         getStaffBladeCanvas, getStaffBladeSwungCanvas,
          getFistCanvas } from './weapon-sprites.js';
 
 const FIST_WOBBLE_PERIOD_MS = 100; // shared cadence — same constant across player/ally/opponent
@@ -18,7 +19,7 @@ export const IDLE_FRAME_MS = 67;
 // — the offset returned is in the post-flip coordinate system.
 export function pickAttackWeaponSpec({
   weaponId,            // hand's weapon item ID
-  weaponSubtype,       // 'knife' | 'dagger' | 'sword' | 'nunchaku' | 'claw' | null
+  weaponSubtype,       // 'knife' | 'dagger' | 'sword' | 'nunchaku' | 'staff' | 'claw' | null
   isUnarmed,           // both hand slots empty
   hand,                // 'R' | 'L'
   attackPhase,         // 'back' | 'fwd'
@@ -47,8 +48,10 @@ export function pickAttackWeaponSpec({
     raised = getSwordBladeCanvas(); swung = getSwordBladeSwungCanvas();
   } else if (weaponSubtype === 'nunchaku') {
     raised = getNunchakuBladeCanvas(); swung = getNunchakuBladeSwungCanvas();
+  } else if (weaponSubtype === 'staff') {
+    raised = getStaffBladeCanvas(); swung = getStaffBladeSwungCanvas();
   } else {
-    return null; // claw / unknown / no weapon → no blade overlay
+    return null; // rod / claw / unknown / no weapon → no blade overlay (TODO: rod sprite)
   }
 
   if (attackPhase === 'fwd') {
@@ -78,7 +81,7 @@ export function attackWeaponLayer({ attackPhase, hand, mirror }) {
 // ally: ALLY_POSE_MAP, opponent: OPP_POSE_MAP).
 
 export function pickAttackPoseKey({
-  weaponSubtype,    // 'knife' | 'dagger' | 'sword' | 'nunchaku' | 'claw' | null
+  weaponSubtype,    // 'knife' | 'dagger' | 'sword' | 'nunchaku' | 'staff' | 'claw' | null
   isUnarmed,        // bool — both hand slots empty
   hand,             // 'R' | 'L' (the swinging hand)
   attackPhase,      // 'back' | 'fwd'

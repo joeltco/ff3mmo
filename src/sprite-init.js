@@ -1018,9 +1018,10 @@ function _buildFakePlayerSet(romData, jobIdx) {
   };
 }
 
-// Per-job rollout: jobs in this set use the unified bundle path; others stay on legacy.
-// Expand once each is verified visually. Goal: empty the legacy block once all jobs are migrated.
-const _USE_BUNDLE_FOR_ALLY = new Set([0, 1, 2]); // OK + Warrior + Monk — generic still on legacy
+// All 22 jobs go through the unified bundle path. Jobs 0/1/2 use PPU-captured bundles;
+// jobs 3-21 use `_genericBundle` (canonical ROM tile-index pattern, verified in POSES tab).
+// The legacy per-jobIdx if/else below is now dead and kept only as historical reference.
+const _USE_BUNDLE_FOR_ALLY = new Set(Array.from({ length: 22 }, (_, i) => i));
 
 export function initFakePlayerPortraits(romData, jobIndices) {
   // Build per-job portrait and body sets

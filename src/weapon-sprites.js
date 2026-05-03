@@ -60,12 +60,26 @@ const NUNCHAKU_TILES = [
   new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]), // $4B
 ];
 
+// PPU $1000 capture — White Mage R-back swing with staff equipped (SP3 palette).
+// OAM layout for the 2×2 weapon block (all HFLIP):
+//   [TL] $4A   [TR] $49
+//   [BL] $4C   [BR] $4B
+// Tile $49 carries the staff head + grip; $4C carries the diagonal shaft.
+// $4A and $4B are sparse padding (single pixels each).
+const STAFF_TILES = [
+  new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x80,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]), // $4A — TL
+  new Uint8Array([0x18,0x06,0x02,0x9A,0x09,0x03,0x01,0x00,0x60,0x78,0xFC,0x44,0x06,0x04,0x06,0x03]), // $49 — TR
+  new Uint8Array([0x40,0x20,0x10,0x08,0x04,0x0A,0x05,0x03,0x80,0xC0,0x60,0x30,0x18,0x04,0x02,0x00]), // $4C — BL
+  new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00]), // $4B — BR
+];
+
 // ── Canvas storage ───────────────────────────────────────────────────────────
 
 let knifeRaised = null, knifeSwung = null;
 let daggerRaised = null, daggerSwung = null;
 let swordRaised = null, swordSwung = null;
 let nunchakuRaised = null, nunchakuSwung = null;
+let staffRaised = null, staffSwung = null;
 let fistCanvas = null;
 const _fistCache = new Map(); // palette-key → fist canvas (per-character palette)
 
@@ -95,6 +109,9 @@ export function initWeaponSprites(palette) {
   swordRaised = b.raised; swordSwung = b.swung;
   b = _buildBladeCanvas(NUNCHAKU_TILES, [0x0F,0x00,0x32,0x30], pos, so);
   nunchakuRaised = b.raised; nunchakuSwung = b.swung;
+  // Staff palette = SP3 from White Mage staff capture: black / dark brown / gold / pale gold
+  b = _buildBladeCanvas(STAFF_TILES, [0x0F,0x17,0x27,0x37], pos, so);
+  staffRaised = b.raised; staffSwung = b.swung;
 
   fistCanvas = document.createElement('canvas');
   fistCanvas.width = 8; fistCanvas.height = 8;
@@ -109,6 +126,8 @@ export function getSwordBladeCanvas()      { return swordRaised; }
 export function getSwordBladeSwungCanvas()  { return swordSwung; }
 export function getNunchakuBladeCanvas()      { return nunchakuRaised; }
 export function getNunchakuBladeSwungCanvas()  { return nunchakuSwung; }
+export function getStaffBladeCanvas()         { return staffRaised; }
+export function getStaffBladeSwungCanvas()     { return staffSwung; }
 // Pass the character's body palette to get a fist canvas tinted to match.
 // No-arg form returns the legacy global (warrior-palette) fist for back-compat.
 export function getFistCanvas(palette) {
@@ -128,6 +147,7 @@ export function getBlades() {
     dagger:   { raised: daggerRaised,   swung: daggerSwung },
     sword:    { raised: swordRaised,    swung: swordSwung },
     nunchaku: { raised: nunchakuRaised, swung: nunchakuSwung },
+    staff:    { raised: staffRaised,    swung: staffSwung },
     fist:     fistCanvas,
   };
 }
