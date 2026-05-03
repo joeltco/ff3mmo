@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.55 — 2026-05-02
+
+### Battle menu: "Defend" relabelled to "Guard"
+
+`BATTLE_DEFEND` constant in `data/strings.js` renamed to `BATTLE_GUARD`, bytes re-encoded for "Guard" (G u a r d). Only call site was the local `BATTLE_MENU_ITEMS` array in the same file; no other code touches the label.
+
 ## 1.6.54 — 2026-05-02
 
 ### Fix: kneel head TL/TR for jobs 3-21 was reading the wrong ROM tile-indices
