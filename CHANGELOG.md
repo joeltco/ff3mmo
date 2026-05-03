@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.62 — 2026-05-03
+
+### Shops: FF1 NSF shop track plays while menu is open
+
+`openShop` now `pauseMusic()` + `playFF1Track(FF1_TRACKS.SHOP)`; `_close` calls `stopFF1Music()` + `resumeMusic()` — same pattern the pause menu uses with `MENU_SCREEN`. New constant `FF1_TRACKS.SHOP = 17` — the next NSF track index after `MENU_SCREEN` (16). If the wrong song plays, bump the index and re-deploy; can't verify without ear-checking against the FF1 NSF.
+
 ## 1.6.61 — 2026-05-03
 
 ### Shops: outer alpha fade — map fades to black as shop fades in

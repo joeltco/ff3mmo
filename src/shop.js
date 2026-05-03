@@ -13,7 +13,7 @@ import { SHOPS } from './data/shops.js';
 import { ps } from './player-stats.js';
 import { addItem, removeItem, playerInventory } from './inventory.js';
 import { showMsgBox } from './message-box.js';
-import { playSFX, SFX } from './music.js';
+import { playSFX, SFX, pauseMusic, resumeMusic, playFF1Track, stopFF1Music, FF1_TRACKS } from './music.js';
 import { ui } from './ui-state.js';
 
 const HUD_VIEW_X = 0, HUD_VIEW_Y = 32, HUD_VIEW_W = 144, HUD_VIEW_H = 144;
@@ -65,6 +65,8 @@ export function openShop(shopId) {
   shopSt.confirm    = false;
   shopSt.afterFade  = null;
   playSFX(SFX.CONFIRM);
+  pauseMusic();
+  playFF1Track(FF1_TRACKS.SHOP);
   return true;
 }
 
@@ -72,6 +74,8 @@ function _close() {
   shopSt.state = 'closed'; shopSt.shopId = null; shopSt.confirm = false;
   shopSt.cursor = 0; shopSt.rootCursor = 0; shopSt.sellList = [];
   shopSt.afterFade = null;
+  stopFF1Music();
+  resumeMusic();
 }
 
 function _items() {
