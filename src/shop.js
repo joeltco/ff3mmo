@@ -97,18 +97,50 @@ function _items() {
   return shop ? shop.items : [];
 }
 
-// True if the cursor is on a weapon/armor the player's current job can equip.
-// Used by hud-drawing to flip the HUD portrait into a victory-pose flicker.
-export function shopHoverEquippable() {
-  if (shopSt.state !== 'buy' && shopSt.state !== 'sell') return false;
+function _hoverItemId() {
+  if (shopSt.state !== 'buy' && shopSt.state !== 'sell') return null;
   const id = shopSt.state === 'buy'
     ? _items()[shopSt.cursor]
     : (shopSt.sellList[shopSt.cursor] && shopSt.sellList[shopSt.cursor].id);
+  return id == null ? null : id;
+}
+
+// True if the cursor is on a weapon/armor the player's current job can equip.
+// Used by hud-drawing to flip the HUD portrait into a victory-pose flicker.
+export function shopHoverEquippable() {
+  const id = _hoverItemId();
   if (id == null) return false;
   const item = ITEMS.get(id);
   if (!item || (item.type !== 'weapon' && item.type !== 'armor')) return false;
   return ((item.jobs || 0) & (1 << (ps.jobIdx || 0))) !== 0;
 }
+
+// ATK/DEF delta vs the slot the hovered item would replace. Returns positive
+// (upgrade), negative (downgrade), or 0 (same / not applicable / not equippable).
+// Weapons compare against the better of weaponR / weaponL; armor compares
+// against the matching slot. Shields compare against any equipped shield.
+export function shopHoverStatDelta() {
+  if (!shopHoverEquippable()) return 0;
+  const item = ITEMS.get(_hoverItemId());
+  if (!item) return 0;
+  if (item.type === 'weapon' && item.subtype !== 'shield') {
+    const cur = Math.max(_atkOf(ps.weaponR), _atkOf(ps.weaponL));
+    return (item.atk || 0) - cur;
+  }
+  if (item.type === 'armor') {
+    if (item.subtype === 'shield') {
+      return (item.def || 0) - Math.max(_shieldDefOf(ps.weaponR), _shieldDefOf(ps.weaponL));
+    }
+    if (item.subtype === 'helmet') return (item.def || 0) - _defOf(ps.head);
+    if (item.subtype === 'body')   return (item.def || 0) - _defOf(ps.body);
+    if (item.subtype === 'arms')   return (item.def || 0) - _defOf(ps.arms);
+  }
+  return 0;
+}
+
+function _atkOf(id)       { const i = ITEMS.get(id); return (i && i.type === 'weapon' && i.subtype !== 'shield') ? (i.atk || 0) : 0; }
+function _defOf(id)       { const i = ITEMS.get(id); return (i && i.type === 'armor') ? (i.def || 0) : 0; }
+function _shieldDefOf(id) { const i = ITEMS.get(id); return (i && i.type === 'armor' && i.subtype === 'shield') ? (i.def || 0) : 0; }
 
 function _rebuildSellList() {
   const out = [];

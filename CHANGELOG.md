@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.68 — 2026-05-03
+
+### Shops: green ▲ / red ▼ delta triangle in HUD name row
+
+When the shop cursor is on a weapon/armor the player can equip and the slot it would replace has different ATK (weapons) or DEF (armor), an 8×8 triangle is drawn at the left padding of the HUD info panel (`HUD_RIGHT_X + 40, HUD_VIEW_Y + 8`). Green ▲ for upgrade, red ▼ for downgrade. Hidden when delta = 0 / non-equipment / non-equippable. Triangle pixels are filled directly via `ctx.fillRect` per-row (NES color $2A / $16, faded with `nesColorFade` to track the existing HUD info-panel fade).
+
+Comparison rules in `shopHoverStatDelta()`:
+- weapon (non-shield): `item.atk` vs `max(weaponR.atk, weaponL.atk)`
+- shield: `item.def` vs `max(weaponR shield def, weaponL shield def)`
+- helmet / body / arms: `item.def` vs the matching slot's def
+
 ## 1.6.67 — 2026-05-03
 
 ### Shops: HUD portrait flickers victory pose when cursor is on equippable gear
