@@ -97,6 +97,19 @@ function _items() {
   return shop ? shop.items : [];
 }
 
+// True if the cursor is on a weapon/armor the player's current job can equip.
+// Used by hud-drawing to flip the HUD portrait into a victory-pose flicker.
+export function shopHoverEquippable() {
+  if (shopSt.state !== 'buy' && shopSt.state !== 'sell') return false;
+  const id = shopSt.state === 'buy'
+    ? _items()[shopSt.cursor]
+    : (shopSt.sellList[shopSt.cursor] && shopSt.sellList[shopSt.cursor].id);
+  if (id == null) return false;
+  const item = ITEMS.get(id);
+  if (!item || (item.type !== 'weapon' && item.type !== 'armor')) return false;
+  return ((item.jobs || 0) & (1 << (ps.jobIdx || 0))) !== 0;
+}
+
 function _rebuildSellList() {
   const out = [];
   for (const [k, count] of Object.entries(playerInventory)) {

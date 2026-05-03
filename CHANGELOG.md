@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.67 — 2026-05-03
+
+### Shops: HUD portrait flickers victory pose when cursor is on equippable gear
+
+In a shop's buy or sell list, when the cursor is on a weapon/armor that the player's current job can equip (`item.jobs & (1 << ps.jobIdx)`), the existing HUD portrait at top-right (drawn by `_drawHUDPortrait` in hud-drawing.js) alternates between `bp.victory` and `bp.idle` every 250ms — same cadence as the battle ally victory portrait. Otherwise the portrait keeps its normal kneel/defend/idle logic.
+
+`shopHoverEquippable()` exported from shop.js — returns false outside buy/sell, false for non-equipment, false for items the current job can't wield.
+
 ## 1.6.66 — 2026-05-03
 
 ### Shops: FF1 NSF shop track → 14 (verified by ear)

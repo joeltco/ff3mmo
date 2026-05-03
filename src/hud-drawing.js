@@ -17,6 +17,7 @@ import { bsc } from './battle-sprite-cache.js';
 import { hudSt, HUD_HPLV_STEP_MS } from './hud-state.js';
 import { titleSt } from './title-screen.js';
 import { ui } from './ui-state.js';
+import { shopHoverEquippable } from './shop.js';
 // Title fade constants — mirror of title-screen.js (kept in sync with game.js)
 const TITLE_FADE_STEP_MS = 100;
 const TITLE_FADE_MAX = 4;
@@ -242,9 +243,15 @@ function _drawHUDPortrait() {
   if (battleSt.battleState !== 'none' || !bp.idle) return;
   const isPauseHeal = pauseSt.state === 'inv-heal';
   const hasActiveStatus = ps.status && ps.status.mask !== 0;
-  const nfPortrait = isPauseHeal && bp.defend ? bp.defend
-    : ((ps.hp > 0 && ps.stats && ps.hp <= Math.floor(ps.stats.maxHP / 4) || hasActiveStatus) && bp.kneel
-       ? bp.kneel : bp.idle);
+  // Shop equip-preview: when cursor is on a weapon/armor the current job can
+  // equip, flicker between victory and idle (same 250ms cadence the battle
+  // ally portrait uses for victory).
+  const showShopVictory = bp.victory && shopHoverEquippable();
+  const nfPortrait = showShopVictory
+    ? ((Math.floor(Date.now() / 250) & 1) ? bp.victory : bp.idle)
+    : (isPauseHeal && bp.defend ? bp.defend
+        : ((ps.hp > 0 && ps.stats && ps.hp <= Math.floor(ps.stats.maxHP / 4) || hasActiveStatus) && bp.kneel
+           ? bp.kneel : bp.idle));
   const px = HUD_RIGHT_X + 8, py = HUD_VIEW_Y + 8;
   _drawPortraitImage(px, py, nfPortrait, isPauseHeal, infoFadeStep);
   _drawCureSparkle(px, py, isPauseHeal);
