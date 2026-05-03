@@ -2,6 +2,10 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.66 — 2026-05-03
+
+### Shops: FF1 NSF shop track → 14 (verified by ear)
+
 ## 1.6.65 — 2026-05-03
 
 ### Shops: NES palette-step fade for the map ↔ shop transition + `/ff1` console command
