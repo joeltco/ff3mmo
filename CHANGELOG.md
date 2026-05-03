@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.64 — 2026-05-03
+
+### Shops: FF1 NSF shop track → 8 (FF1&2 cart song ordering)
+
+The NSF is built from the FF1&2 (Japan) compilation cart, not standalone FF1, so the track index doesn't match the FF1-only NSF song lists. Track 8 per Gemini.
+
 ## 1.6.63 — 2026-05-03
 
 ### Shops: switch FF1 NSF shop track from 17 → 12
