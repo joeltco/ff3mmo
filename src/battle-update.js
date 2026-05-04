@@ -349,16 +349,23 @@ function _updatePlayerSlash() {
   if (battleSt.battleState !== 'player-slash') return false;
   const handWeapon = getHitWeapon(battleSt.currentHitIdx, inputSt.rHandHitCount);
   const pattern = getSlashPattern(handWeapon);
-  const frame = Math.floor(battleSt.battleTimer / SLASH_FRAME_MS);
-  if (frame !== battleSt.slashFrame && frame < pattern.totalFrames) {
-    battleSt.slashFrame = frame;
-    // Only re-set offset on hold-window boundaries (matches NES single-roll-per-hit
-    // for impact weapons and per-frame stepping for bladed).
-    if (frame % pattern.holdFrames === 0) setSlashOffsetForFrame(battleSt, handWeapon, frame);
+  const hit = inputSt.hitResults[battleSt.currentHitIdx];
+  const isMiss = hit && hit.miss;
+  // Skip the slash hold on a miss — drawSlashOverlay is gated by `!miss` already
+  // (battle-drawing.js _drawEncounterSlashEffects + _drawBossSlashEffects), so
+  // the wait is dead time. Run frame-advance + offset-update logic only when
+  // there's actually a slash to animate.
+  if (!isMiss) {
+    const frame = Math.floor(battleSt.battleTimer / SLASH_FRAME_MS);
+    if (frame !== battleSt.slashFrame && frame < pattern.totalFrames) {
+      battleSt.slashFrame = frame;
+      // Only re-set offset on hold-window boundaries (matches NES single-roll-per-hit
+      // for impact weapons and per-frame stepping for bladed).
+      if (frame % pattern.holdFrames === 0) setSlashOffsetForFrame(battleSt, handWeapon, frame);
+    }
   }
-  if (battleSt.battleTimer >= pattern.totalFrames * SLASH_FRAME_MS) {
-    const hit = inputSt.hitResults[battleSt.currentHitIdx];
-    if (!hit.miss) {
+  if (isMiss || battleSt.battleTimer >= pattern.totalFrames * SLASH_FRAME_MS) {
+    if (!isMiss) {
       if (pvpSt.isPVPBattle && pvpSt.pvpOpponentIsDefending)
         hit.damage = Math.max(1, Math.floor(hit.damage / 2));
       if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {

@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.3 — 2026-05-04
+
+### Player + ally slash also skip the impact hold on a miss
+
+Same fix as 1.7.2 (PVP-enemy slash) applied symmetrically to the two outgoing slash paths so the whole combat chain is consistent — there's never a frozen pause when the slash sprite isn't going to render.
+
+- `_updatePlayerSlash` in `battle-update.js`: on miss, skip the per-frame slash-offset advance and the `pattern.totalFrames * SLASH_FRAME_MS` wait. Routes straight to `player-hit-show`.
+- `ally-slash` state in `battle-ally.js`: same — on miss, skip the `ALLY_SLASH_MS` hold; advance the combo or finalise immediately.
+- Hit and crit paths unchanged in both.
+
 ## 1.7.2 — 2026-05-04
 
 ### PVP-enemy slash skips its impact hold on a miss

@@ -107,9 +107,12 @@ function _updateAllyAttack() {
     return true;
   }
   if (battleSt.battleState === 'ally-slash') {
-    if (battleSt.battleTimer >= ALLY_SLASH_MS) {
-      const hit = battleSt.allyHitResults[battleSt.allyHitIdx];
-      if (hit && !hit.miss) {
+    const hit = battleSt.allyHitResults[battleSt.allyHitIdx];
+    const isMiss = hit && hit.miss;
+    // Skip the slash hold on a miss — drawSlashOverlay is gated by `!miss`, so
+    // the wait is dead time. Ally body forward-strike was already shown.
+    if (isMiss || battleSt.battleTimer >= ALLY_SLASH_MS) {
+      if (!isMiss && hit) {
         // Defend halving for PVP opponent
         if (pvpSt.isPVPBattle && pvpSt.pvpOpponentIsDefending && battleSt.allyTargetIndex < 0)
           hit.damage = Math.max(1, Math.floor(hit.damage / 2));
