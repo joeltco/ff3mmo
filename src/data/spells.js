@@ -98,7 +98,18 @@ export const SPELLS = new Map([
 // Only spells the player can cast need entries; unknown lookups default to 0.
 export const SPELL_MP_COST = new Map([
   [0x34, 4],  // Cure
+  [0x35, 2],  // Poisona
 ]);
+
+// Magic-shop buy price per spell (gil). NES FF3 sells level-1 white magic for 100 gil.
+export const SPELL_BUY_PRICE = new Map([
+  [0x34, 100],  // Cure
+  [0x35, 100],  // Poisona
+]);
+
+export function getSpellBuyPrice(spellId) {
+  return SPELL_BUY_PRICE.get(spellId) ?? 0;
+}
 
 export function getSpellMPCost(spellId) {
   return SPELL_MP_COST.get(spellId) ?? 0;

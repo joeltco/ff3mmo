@@ -9,6 +9,18 @@ import { inputSt } from './input-handler.js';
 import { SFX, playSFX } from './music.js';
 import { setPlayerHealNum, getAllyDamageNums, tickHealNums, clearHealNums } from './damage-numbers.js';
 import { SPELLS, getSpellMPCost } from './data/spells.js';
+import { STATUS, removeStatus } from './status-effects.js';
+
+// Map spell.type → STATUS flag for cure_status spells (Poisona, Bndna, etc.)
+const SPELL_CURE_FLAG = {
+  poison:    STATUS.POISON,
+  blind:     STATUS.BLIND,
+  silence:   STATUS.SILENCE,
+  mini:      STATUS.MINI,
+  toad:      STATUS.TOAD,
+  petrify:   STATUS.PETRIFY,
+  paralysis: STATUS.PARALYSIS,
+};
 
 let _processNextTurn = () => {};
 export function initSpellCast({ processNextTurn }) { _processNextTurn = processNextTurn; }
@@ -57,8 +69,22 @@ export function startSpellCast(spellId, targetSpec) {
 function _applySpellEffect(target) {
   const spell = SPELLS.get(_spellId);
   if (!spell) return;
-  // v1: ally-target heal only (Cure family). Element 'recovery' = heal.
+  const isCureStatus = spell.target === 'cure_status';
   const isHeal = spell.element === 'recovery';
+  if (isCureStatus) {
+    const flag = SPELL_CURE_FLAG[spell.type];
+    if (target === 'player') {
+      if (flag && ps.status) removeStatus(ps.status, flag);
+      setPlayerHealNum({ value: 0, timer: 0 });
+    } else {
+      const ally = battleSt.battleAllies[target];
+      if (!ally) return;
+      if (flag && ally.status) removeStatus(ally.status, flag);
+      getAllyDamageNums()[target] = { value: 0, timer: 0, heal: true };
+    }
+    playSFX(SFX.CURE);
+    return;
+  }
   if (target === 'player') {
     const heal = Math.min(_baseAmount, ps.stats.maxHP - ps.hp);
     ps.hp += heal;

@@ -24,8 +24,8 @@ export const SHOPS = new Map([
   }],
   ['ur_magic', {
     mapId: 3, counter: { x: 4, y: 4 },
-    spells: [0x35],
-    // Poisona (spell ID, not item ID) — buy flow not yet implemented
+    spells: [0x34, 0x35],
+    // Cure, Poisona (White Magic level 1)
   }],
 ]);
 

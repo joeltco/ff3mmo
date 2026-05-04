@@ -100,6 +100,25 @@ export function drawSlashOverlay(ctx, frame, frameIdx, originX, originY, mirror 
   }
 }
 
+// Staff impact/hit-flash — PPU capture of tiles $4D/$4E/$4F/$50 on target during a White Mage
+// staff swing (group 1 of OAM snapshot @ frame 13784, origin 32,58, SP3 palette).
+// Single 16×16 frame for v1 (re-used across all 3 slash timing slots, same as nunchaku).
+// Re-capture mid + late frames of the slash to make it a true 3-frame anim later.
+export function initStaffSlashSprites() {
+  const PAL = [0x0F, 0x17, 0x27, 0x37];   // SP3: black / dark brown / gold / pale gold
+  const TILES = [
+    new Uint8Array([0x00,0x00,0x20,0x70,0x30,0x28,0x10,0x00,0x04,0x00,0x20,0x38,0x79,0x30,0x00,0x00]), // $4D — TL
+    new Uint8Array([0x08,0x1C,0x18,0x08,0x00,0x00,0x00,0x00,0x00,0x1C,0x0E,0x0C,0x80,0x80,0x00,0x00]), // $4E — TR
+    new Uint8Array([0x00,0x00,0x02,0x06,0x06,0x00,0x00,0x00,0x00,0x00,0x06,0x0E,0x0C,0x00,0x00,0x00]), // $4F — BL
+    new Uint8Array([0x80,0x00,0x00,0x08,0x00,0x00,0x00,0x00,0x80,0x40,0x18,0x10,0x00,0x00,0x00,0x00]), // $50 — BR
+  ];
+  const c = _makeCanvas16();
+  const cctx = c.getContext('2d'); const img = cctx.createImageData(16, 16);
+  _decode2BPPTiles(img, TILES, [[0,0],[8,0],[0,8],[8,8]], PAL);
+  cctx.putImageData(img, 0, 0);
+  return [c, c, c];
+}
+
 // Nunchaku impact/hit-flash — PPU capture of tiles $4D/$4E/$4F/$50 on target during forward-strike.
 // Captured as a single 16×16 frame; reused across all 3 slash timing slots.
 export function initNunchakuSlashSprites() {

@@ -39,7 +39,7 @@ export const ps = {
 // Starting spells granted when a player first switches into a mage job.
 // Keyed by jobIdx. White Mage = 3, Black Mage = 4, Red Mage = 5.
 const STARTING_SPELLS = {
-  3: [0x34], // White Mage: Cure
+  3: [0x34, 0x35], // White Mage: Cure, Poisona
 };
 
 export function grantStartingSpells(jobIdx = ps.jobIdx) {

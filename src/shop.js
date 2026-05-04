@@ -16,9 +16,10 @@ import { drawText, measureText } from './font-renderer.js';
 import { drawBorderedBox, drawCursorFaded, clipToViewport } from './hud-drawing.js';
 import { _makeFadedPal } from './palette.js';
 import { _nameToBytes } from './text-utils.js';
-import { getItemNameClean } from './text-decoder.js';
+import { getItemNameClean, getSpellNameClean } from './text-decoder.js';
 import { ITEMS } from './data/items.js';
 import { SHOPS } from './data/shops.js';
+import { SPELLS, getSpellBuyPrice } from './data/spells.js';
 import { ps } from './player-stats.js';
 import { addItem, removeItem, playerInventory } from './inventory.js';
 import { showMsgBox } from './message-box.js';
@@ -78,7 +79,7 @@ const ROOT_LABELS = ['Buy', 'Sell', 'Exit'];
 
 export function openShop(shopId) {
   const shop = SHOPS.get(shopId);
-  if (!shop || !shop.items) return false; // magic shops (spells:) not wired
+  if (!shop || (!shop.items && !shop.spells)) return false;
   shopSt.state      = 'map-out';
   shopSt.timer      = 0;
   shopSt.shopId     = shopId;
@@ -101,13 +102,21 @@ function _close() {
   resumeMusic();
 }
 
+function _isSpellShop() {
+  const shop = SHOPS.get(shopSt.shopId);
+  return !!(shop && shop.spells);
+}
+
+// Catalog IDs for the active shop — items (for item shops) or spells (for magic shops).
 function _items() {
   const shop = SHOPS.get(shopSt.shopId);
-  return shop ? shop.items : [];
+  if (!shop) return [];
+  return shop.spells || shop.items || [];
 }
 
 function _hoverItemId() {
   if (shopSt.state !== 'buy' && shopSt.state !== 'sell') return null;
+  if (_isSpellShop()) return null;
   const id = shopSt.state === 'buy'
     ? _items()[shopSt.cursor]
     : (shopSt.sellList[shopSt.cursor] && shopSt.sellList[shopSt.cursor].id);
@@ -117,6 +126,7 @@ function _hoverItemId() {
 // True if the cursor is on a weapon/armor the player's current job can equip.
 // Used by hud-drawing to flip the HUD portrait into a victory-pose flicker.
 export function shopHoverEquippable() {
+  if (_isSpellShop()) return false;
   const id = _hoverItemId();
   if (id == null) return false;
   const item = ITEMS.get(id);
@@ -135,6 +145,7 @@ export function shopHoverEquippable() {
 // an upgrade just because the off-hand is empty.
 // Shields compare against the existing shield (at most one can be equipped).
 export function shopHoverStatDelta() {
+  if (_isSpellShop()) return null;
   if (!shopHoverEquippable()) return null;
   const id = _hoverItemId();
   const item = ITEMS.get(id);
@@ -220,6 +231,7 @@ function _menuInput(keys) {
       shopSt.cursor = 0; shopSt.state = 'menu-out'; shopSt.timer = 0; shopSt.afterFade = 'buy-in';
       playSFX(SFX.CONFIRM);
     } else if (shopSt.rootCursor === 1) {
+      if (_isSpellShop()) { playSFX(SFX.ERROR); return; }   // can't sell spells
       _rebuildSellList();
       shopSt.cursor = 0; shopSt.state = 'menu-out'; shopSt.timer = 0; shopSt.afterFade = 'sell-in';
       playSFX(SFX.CONFIRM);
@@ -263,6 +275,7 @@ function _listInput(keys, list, isSell) {
 }
 
 function _attemptBuy(itemId) {
+  if (_isSpellShop()) { _attemptBuySpell(itemId); return; }
   const item = ITEMS.get(itemId);
   if (!item) { playSFX(SFX.ERROR); return; }
   if (ps.gil < item.price) {
@@ -275,6 +288,38 @@ function _attemptBuy(itemId) {
   saveSlotsToDB();
   playSFX(SFX.TREASURE);
   showMsgBox(_actionMsg('Bought ', itemId));
+}
+
+function _attemptBuySpell(spellId) {
+  const spell = SPELLS.get(spellId);
+  if (!spell) { playSFX(SFX.ERROR); return; }
+  const price = getSpellBuyPrice(spellId);
+  if (ps.knownSpells && ps.knownSpells.includes(spellId)) {
+    playSFX(SFX.ERROR);
+    showMsgBox(_nameToBytes('Already known!'));
+    return;
+  }
+  if (ps.gil < price) {
+    playSFX(SFX.ERROR);
+    showMsgBox(_nameToBytes('Not enough gil!'));
+    return;
+  }
+  ps.gil -= price;
+  if (!ps.knownSpells) ps.knownSpells = [];
+  ps.knownSpells.push(spellId);
+  saveSlotsToDB();
+  playSFX(SFX.TREASURE);
+  showMsgBox(_spellActionMsg('Learned ', spellId));
+}
+
+function _spellActionMsg(prefixStr, spellId) {
+  const prefix = _nameToBytes(prefixStr);
+  const name   = getSpellNameClean(spellId);
+  const out    = new Uint8Array(prefix.length + name.length + 1);
+  out.set(prefix, 0);
+  out.set(name, prefix.length);
+  out[prefix.length + name.length] = 0xC4; // !
+  return out;
 }
 
 function _attemptSell(entry) {
@@ -398,7 +443,19 @@ function _drawList(ctx, list, isSell) {
     return;
   }
 
+  const isSpell = _isSpellShop();
   for (let i = 0; i < list.length; i++) {
+    if (isSpell) {
+      const id = list[i];
+      if (!SPELLS.get(id)) continue;
+      const price = getSpellBuyPrice(id);
+      const y     = listY0 + i * ROW_H;
+      const name  = getSpellNameClean(id);
+      const pNum  = _nameToBytes(String(price));
+      drawText(ctx, nameX, y, name, pal);
+      drawText(ctx, priceX - measureText(pNum), y, pNum, pal);
+      continue;
+    }
     const id    = isSell ? list[i].id    : list[i];
     const price = isSell ? list[i].price : (ITEMS.get(id) && ITEMS.get(id).price) || 0;
     if (!ITEMS.get(id)) continue;
@@ -419,9 +476,13 @@ const CONFIRM_TEXT_PAL = [0x02, 0x02, 0x02, 0x30];
 
 function _drawConfirm(target, isSell) {
   if (!target) return;
+  const isSpell = _isSpellShop();
   const itemId = isSell ? target.id : target;
-  const item   = ITEMS.get(itemId);
-  if (!item) return;
+  if (isSpell) {
+    if (!SPELLS.get(itemId)) return;
+  } else if (!ITEMS.get(itemId)) {
+    return;
+  }
   const ctx = ui.ctx;
   const boxW = HUD_VIEW_W;
   const boxH = 40;
@@ -429,9 +490,9 @@ function _drawConfirm(target, isSell) {
   clipToViewport();
   drawBorderedBox(HUD_VIEW_X, boxY, boxW, boxH, true);
 
-  const verb = isSell ? 'Sell ' : 'Buy ';
+  const verb = isSell ? 'Sell ' : (isSpell ? 'Learn ' : 'Buy ');
   const prefix = _nameToBytes(verb);
-  const name   = getItemNameClean(itemId);
+  const name   = isSpell ? getSpellNameClean(itemId) : getItemNameClean(itemId);
   const line1  = new Uint8Array(prefix.length + name.length + 1);
   line1.set(prefix, 0);
   line1.set(name, prefix.length);

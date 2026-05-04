@@ -4,7 +4,7 @@
 
 import { weaponSubtype } from './data/items.js';
 import { initBattleSpriteForJob, initStatusSprites } from './sprite-init.js';
-import { initSlashSprites, initKnifeSlashSprites, initSwordSlashSprites, initNunchakuSlashSprites } from './slash-effects.js';
+import { initSlashSprites, initKnifeSlashSprites, initSwordSlashSprites, initNunchakuSlashSprites, initStaffSlashSprites } from './slash-effects.js';
 import { initSouthWindSprite } from './south-wind.js';
 
 export const bsc = {
@@ -33,6 +33,8 @@ export const bsc = {
   swordSlashFramesL: null,
   nunchakuSlashFramesR: null,
   nunchakuSlashFramesL: null,
+  staffSlashFramesR: null,
+  staffSlashFramesL: null,
 };
 
 export function getSlashFramesForWeapon(id, rightHand) {
@@ -40,6 +42,7 @@ export function getSlashFramesForWeapon(id, rightHand) {
   if (st === 'knife' || st === 'dagger') return rightHand ? bsc.knifeSlashFramesR : bsc.knifeSlashFramesL;
   if (st === 'sword') return rightHand ? bsc.swordSlashFramesR : bsc.swordSlashFramesL;
   if (st === 'nunchaku') return rightHand ? bsc.nunchakuSlashFramesR : bsc.nunchakuSlashFramesL;
+  if (st === 'staff' || st === 'rod') return rightHand ? bsc.staffSlashFramesR : bsc.staffSlashFramesL;
   return rightHand ? bsc.slashFramesR : bsc.slashFramesL;
 }
 
@@ -50,6 +53,7 @@ export function initBattleSpriteCache() {
   bsc.knifeSlashFramesR = bsc.knifeSlashFramesL = initKnifeSlashSprites();
   bsc.swordSlashFramesR = bsc.swordSlashFramesL = initSwordSlashSprites();
   bsc.nunchakuSlashFramesR = bsc.nunchakuSlashFramesL = initNunchakuSlashSprites();
+  bsc.staffSlashFramesR = bsc.staffSlashFramesL = initStaffSlashSprites();
   bsc.statusSpriteMap = initStatusSprites();
   bsc.poisonBubbleFrames = bsc.statusSpriteMap.get(0x02) || [];
 }

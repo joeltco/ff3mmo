@@ -804,6 +804,17 @@ function _pauseInputMagicZ() {
   pauseSt.timer = 0;
 }
 
+// Map spell.type → STATUS flag for cure_status spells (Poisona, Bndna, etc.)
+const PAUSE_CURE_FLAG = {
+  poison:    STATUS.POISON,
+  blind:     STATUS.BLIND,
+  silence:   STATUS.SILENCE,
+  mini:      STATUS.MINI,
+  toad:      STATUS.TOAD,
+  petrify:   STATUS.PETRIFY,
+  paralysis: STATUS.PARALYSIS,
+};
+
 // Apply a pause-menu spell cast on the current target (player or roster ally).
 function _applyPauseSpellUse(rosterTargets) {
   const spellId = pauseSt.useSpellId;
@@ -812,8 +823,28 @@ function _applyPauseSpellUse(rosterTargets) {
   const cost = getSpellMPCost(spellId);
   if (ps.mp < cost) { playSFX(SFX.ERROR); return; }
   ps.mp -= cost;
-  // White magic uses MND; black magic uses INT.
-  const isWhite = spell.element === 'recovery' || spell.target === 'cure_status' || spell.target === 'revive';
+
+  // Status-cure spells (Poisona, Bndna, …) — remove the matching status and bounce a 0-heal number.
+  if (spell.target === 'cure_status') {
+    const flag = PAUSE_CURE_FLAG[spell.type];
+    if (pauseSt.invAllyTarget >= 0) {
+      const rp = rosterTargets[pauseSt.invAllyTarget];
+      if (!rp) { playSFX(SFX.ERROR); return; }
+      if (flag && rp.status) removeStatus(rp.status, flag);
+      pauseSt.healNum = { value: 0, timer: 0, rosterIdx: pauseSt.invAllyTarget };
+    } else {
+      if (flag && ps.status) removeStatus(ps.status, flag);
+      pauseSt.healNum = { value: 0, timer: 0 };
+    }
+    playSFX(SFX.CURE);
+    pauseSt.state = 'inv-heal'; pauseSt.timer = 0;
+    pauseSt.useSpellId = 0;
+    saveSlotsToDB();
+    return;
+  }
+
+  // Healing spells — white magic uses MND, black magic would use INT.
+  const isWhite = spell.element === 'recovery';
   const stat = ps.stats ? (isWhite ? (ps.stats.mnd || 5) : (ps.stats.int || 5)) : 5;
   const atk = Math.floor(stat / 2) + spell.power;
   const amt = atk + Math.floor(Math.random() * (Math.floor(atk / 2) + 1));
