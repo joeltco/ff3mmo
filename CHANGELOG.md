@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.90 — 2026-05-04
+
+### PvP-enemy + ally slash overlays use the same per-weapon scatter as the player
+
+`drawSlashOverlay` now takes a `weaponId` and applies the same rule as `_updatePlayerSlash`: bladed → clean UR→LL diagonal, non-bladed → random ±8 per frame. Previously ally + PvP-opponent slashes were stuck on the legacy `[0,10,-8] / [0,-6,8]` shake regardless of weapon.
+
 ## 1.6.89 — 2026-05-04
 
 ### Slash scatter back to simple per-frame random for staff/nunchaku/fists

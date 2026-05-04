@@ -364,7 +364,7 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
       : pvpSt.pvpOpponentStats?.weaponId;
     const eSlashF = getSlashFramesForWeapon(eWpnId, true);
     const af = Math.min(2, Math.floor(battleSt.battleTimer / 67));
-    drawSlashOverlay(ui.ctx, eSlashF && eSlashF[af], af, px, py, true);
+    drawSlashOverlay(ui.ctx, eSlashF && eSlashF[af], af, px, py, true, eWpnId || 0);
   }
 }
 
@@ -825,7 +825,7 @@ function _drawEncounterSlashEffects(gridPos, slideOffX, slotCenterY) {
     const af = Math.min(Math.floor(battleSt.battleTimer / SLASH_FRAME_MS), 2);
     const pos = gridPos[battleSt.allyTargetIndex];
     if (pos && allySlashFrames) {
-      drawSlashOverlay(ui.ctx, allySlashFrames[af], af, pos.x + 8, slotCenterY(battleSt.allyTargetIndex));
+      drawSlashOverlay(ui.ctx, allySlashFrames[af], af, pos.x + 8, slotCenterY(battleSt.allyTargetIndex), false, activeWpnId || 0);
     }
   }
 }
@@ -918,7 +918,7 @@ function _drawBossSprite(centerX, centerY) {
       const activeWpnId = ally ? (isLeft ? ally.weaponL : ally.weaponId) : 0;
       const allySlashFrames = ally ? getSlashFramesForWeapon(activeWpnId, !isLeft) : bsc.slashFramesR;
       const af = Math.min(Math.floor(battleSt.battleTimer / SLASH_FRAME_MS), 2);
-      drawSlashOverlay(ui.ctx, allySlashFrames && allySlashFrames[af], af, centerX - 8, centerY - 8);
+      drawSlashOverlay(ui.ctx, allySlashFrames && allySlashFrames[af], af, centerX - 8, centerY - 8, false, activeWpnId || 0);
     }
   } else {
     if (!battleSt.enemyDefeated) ui.ctx.drawImage(getBossBattleCanvas(), sprX, sprY);
@@ -1313,7 +1313,7 @@ function _drawAllyPortrait(i, ally, isVicPose, isAllyAttack, isAllyHit, isNearFa
       : pvpSt.pvpOpponentStats?.weaponId;
     const eSlashF = getSlashFramesForWeapon(eWpnId, true);
     const af = Math.min(2, Math.floor(battleSt.battleTimer / 67));
-    drawSlashOverlay(ui.ctx, eSlashF && eSlashF[af], af, ppx, ppy, true);
+    drawSlashOverlay(ui.ctx, eSlashF && eSlashF[af], af, ppx, ppy, true, eWpnId || 0);
   }
 }
 function _drawAllyTexts(i, ally, rowY, isAllyHeal, ppx, ppy, weaponDraws) {

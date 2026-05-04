@@ -1,5 +1,6 @@
 import { NES_SYSTEM_PALETTE } from './tile-decoder.js';
 import { _makeCanvas16 } from './canvas-utils.js';
+import { isBladedWeapon } from './data/items.js';
 
 function _decode2BPPTiles(imgData, tiles, layout, pal) {
   for (let t = 0; t < tiles.length; t++) {
@@ -73,11 +74,16 @@ export function initSwordSlashSprites() {
   return [[D,E],[D,F],[E,F]].map(t => _buildSwordSlashFrame(t, PAL));
 }
 
-// Frame-based scatter pattern shared by ally + PVP-opponent slash overlays.
-// (Player slash uses its own bladed-walk-off / random-non-bladed scatter inline
-// in battle-update.js — random per frame for staff/nunchaku/fists.)
-const SLASH_SCATTER_X = [0, 10, -8];
-const SLASH_SCATTER_Y = [0, -6, 8];
+// Frame-based scatter for ally + PVP-opponent slash overlays.
+// Mirrors the player-slash inline logic in battle-update.js:
+//   bladed     → clean UR→LL diagonal (8,-8) → (0,0) → (-8,8)
+//   non-bladed → small random ±8 per frame
+const _BLADED_X = [8, 0, -8];
+const _BLADED_Y = [-8, 0, 8];
+function _scatterFor(weaponId, frameIdx) {
+  if (isBladedWeapon(weaponId)) return { dx: _BLADED_X[frameIdx] || 0, dy: _BLADED_Y[frameIdx] || 0 };
+  return { dx: Math.floor(Math.random() * 16) - 8, dy: Math.floor(Math.random() * 16) - 8 };
+}
 
 
 // Draws a single slash-effect frame over a target. Used by every non-player render path:
@@ -88,10 +94,9 @@ const SLASH_SCATTER_Y = [0, -6, 8];
 // Caller picks the frame array (via getSlashFramesForWeapon) and the af index (timer-derived).
 // Pass `weaponId` so each weapon picks its own scatter pattern (staff swings down, fists punch
 // in a tight cluster, blades clean-diagonal). `frame` may be null/undefined — helper no-ops.
-export function drawSlashOverlay(ctx, frame, frameIdx, originX, originY, mirror = false) {
+export function drawSlashOverlay(ctx, frame, frameIdx, originX, originY, mirror = false, weaponId = 0) {
   if (!frame) return;
-  const dx = SLASH_SCATTER_X[frameIdx] || 0;
-  const dy = SLASH_SCATTER_Y[frameIdx] || 0;
+  const { dx, dy } = _scatterFor(weaponId, frameIdx);
   if (mirror) {
     ctx.save();
     ctx.translate(originX + frame.width - dx, originY + dy);
