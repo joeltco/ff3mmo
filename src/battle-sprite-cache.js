@@ -4,7 +4,7 @@
 
 import { weaponSubtype } from './data/items.js';
 import { initBattleSpriteForJob, initStatusSprites } from './sprite-init.js';
-import { initSlashSprites, initKnifeSlashSprites, initSwordSlashSprites, initNunchakuSlashSprites, initStaffSlashSprites } from './slash-effects.js';
+import { initSlashSprites, initKnifeSlashSprites, initSwordSlashSprites, initStaffSlashSprites } from './slash-effects.js';
 import { initSouthWindSprite } from './south-wind.js';
 
 export const bsc = {
@@ -52,8 +52,10 @@ export function initBattleSpriteCache() {
   bsc.slashFrames = bsc.slashFramesR = bsc.slashFramesL = initSlashSprites();
   bsc.knifeSlashFramesR = bsc.knifeSlashFramesL = initKnifeSlashSprites();
   bsc.swordSlashFramesR = bsc.swordSlashFramesL = initSwordSlashSprites();
-  bsc.nunchakuSlashFramesR = bsc.nunchakuSlashFramesL = initNunchakuSlashSprites();
+  // Staff and nunchaku share the same slash hit-flash sprite — PPU captures of both
+  // weapons returned byte-identical tile data (just at different CHR addresses).
   bsc.staffSlashFramesR = bsc.staffSlashFramesL = initStaffSlashSprites();
+  bsc.nunchakuSlashFramesR = bsc.nunchakuSlashFramesL = bsc.staffSlashFramesR;
   bsc.statusSpriteMap = initStatusSprites();
   bsc.poisonBubbleFrames = bsc.statusSpriteMap.get(0x02) || [];
 }

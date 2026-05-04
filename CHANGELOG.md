@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.85 — 2026-05-04
+
+### Nunchaku slash now shares the staff slash sprite
+
+Second-frame PPU capture of the staff slash returned tile bytes byte-for-byte identical to frame 1 (just at different CHR addresses — $4D == $55, $4E == $56, etc.). The OAM positions differ per frame (origin shifts (+5,+66) between hits), and that bouncing is already handled by `drawSlashOverlay`'s scatter array — so the existing single-sprite `initStaffSlashSprites()` is correct as-is.
+
+Per a hunch from PPU watching, also pointed nunchaku slash at the same `bsc.staffSlashFramesR` cache (was using a separate capture). The old `initNunchakuSlashSprites()` is left in `slash-effects.js` for now in case the hunch is wrong, but it's no longer called.
+
+Per-frame positioning (OAM showed a much bigger vertical arc than the generic scatter does) is a polish followup — staff would benefit from a downward-arc scatter override.
+
 ## 1.6.84 — 2026-05-04
 
 ### Magic content: Poisona spell, Ur magic shop, staff slash sprite
