@@ -38,6 +38,24 @@ Canonical NES animation pattern, captured from PPU OAM while the Monk punched a 
 - **Combo alternation**: R → idle → L → idle → R → L → … per hit. When both hand slots are empty (fists), treat as dual-wield for pose alternation purposes, not just for one-hand-only.
 - **Hit-flash sprite is already correct.** `initSlashSprites()` in `src/slash-effects.js` uses tile bytes byte-identical to the OAM `$4A–$4D` with the same `[0x0F, 0x16, 0x27, 0x30]` palette — the two-fist impact is already what we draw for non-bladed hits.
 
+## Shops
+
+- **Counters, not NPCs.** Shops in Ur are interior maps (3 = magic, 4 = armor, 5 = weapon, 8 = item). Pressing Z facing a registered counter tile opens the shop. Counter coords + `mapId` are stored on each entry in `src/data/shops.js`; lookup via `findShopAtCounter(mapId, x, y)` in `movement.js#handleAction`.
+- **Catalog item IDs only — prices come from `data/items.js`.** That file is auto-generated from the FF3 NES ROM at `$21E10`, so prices are canonical. Sell price = `floor(buy / 2)`.
+- **Magic shop is a no-op.** `openShop` returns false when the catalog has `spells:` instead of `items:` — magic-buy flow needs `spells.js` integration. The counter is detected; nothing happens on Z. Defer until ready.
+- **Two-phase NES transition.** Outer fade uses `buildNesFadeFrames` (`src/nes-fade.js`) — snapshots the inner viewport, NES-quantizes each pixel, applies `nesColorFade` N times to produce stepped fade frames. Phase 1 (`map-out`) plays them forward over 320ms; phase 2 (`shop-in`) fills inner area black + text-palette fades in over 500ms. Reverse on close. **Snapshot the INNER area only** (`INNER_X = 8, INNER_Y = 40, INNER_W = 128, INNER_H = 128`) so the static HUD canvas's viewport border doesn't fade with it.
+- **HUD portrait flickers victory pose for equippable gear.** `_drawHUDPortrait` checks `shopHoverEquippable()` — if true and `bp.victory` exists, alternates victory ↔ idle every 250ms (same cadence as battle ally victory). Falls back to normal kneel/defend/idle.
+- **ATK/DEF delta triangle.** `shopHoverStatDelta()` returns `null` for "no indicator", a number otherwise. Green ▲ for upgrade, red ▼ for downgrade, white = for same. Drawn in the 8×8 left-padding of the HUD info panel via per-row `ctx.fillRect` (NES `$2A` / `$16` / `$30`). Weapon comparison uses `Math.max(weaponR, weaponL)` with a same-ID short-circuit (so a duplicate of what's wielded reads as `=`); shields use `Math.max` of any equipped shield slot.
+- **Music: FF1 NSF track 14.** Shop opens with `pauseMusic() + playFF1Track(FF1_TRACKS.SHOP)`; closes with `stopFF1Music() + resumeMusic()`. Mirrors the pause-menu pattern with `MENU_SCREEN`.
+- **Confirm dialog uses blue text palette.** Box is `drawBorderedBox(.., true)` (NES `$02` blue). Text uses `[0x02, 0x02, 0x02, 0x30]` so the font shadow (color index 1/2) blends into the blue bg — same trick `message-box.js` uses. Mobile shows `A=Yes  B=No`, desktop shows `Z=Yes  X=No` via `isMobile` from `ui-state.js`.
+
+## Saves
+
+- **`saveSlotsToDB()` is the single source of truth for the save schema.** Every persisted field is copied from `ps` / `playerInventory` / position getter inside that function. Callers must NOT also copy fields inline — that pattern was removed in the v1.6.74 audit. New callers just invoke `saveSlotsToDB()`.
+- **Save triggers.** Every mutation that changes durable state must invoke `saveSlotsToDB()` before the player can lose it: shop buy/sell, chest pickup, pond heal, pause-menu item use / equip / auto-equip / job-switch enforce, battle victory (monster, boss, PVP), title screen actions, page `beforeunload`. Without an explicit trigger, state lives only in memory until one of the others fires.
+- **MP is persisted.** Older saves reset MP to `maxMP` on every load; v1.6.74 added `mp` and `statusPoisonTick` to the save shape, so spent mana and active poison ticks now survive a session.
+- **Server + IndexedDB dual-write.** Each save call writes the full slot array to local IndexedDB AND pushes per-changed-slot to the server via `window.ff3Auth.serverSave`. Server load is preferred on boot (only if at least one slot has data) with IndexedDB as fallback.
+
 ## Monster data
 
 - **`src/data/monsters.js` is auto-generated from the ROM** via `tools/gen-monsters-js.js`. That script reads `$60010` (monster props), `$61010` (stat table, indexed via byte 9/12 of the props), `$61210` (attack scripts), gil/EXP/CP tables, and preserves `steal`/`drops`/`location` from the existing file. To regenerate: `node tools/gen-monsters-js.js > src/data/monsters.js`. Verify the result against `tools/rom-dump-monsters.txt` before committing.

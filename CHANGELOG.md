@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.76 — 2026-05-04
+
+### Docs: README + design-notes catch up to the shop / save work
+
+- README status line bumped from v1.6.9 → v1.6.75 and now mentions town shops as a feature. Added "Shops" entry to the architecture module list.
+- New "Shops" section in `docs/design-notes.md` covering counter-tile detection, the two-phase NES fade, the equip-preview portrait + delta triangle, FF1 NSF track 14, and the blue confirm-text palette.
+- New "Saves" section noting `saveSlotsToDB()` is the single source of truth for the save schema (post v1.6.74 audit), all known save trigger points, and that MP + poison tick are now persisted.
+
 ## 1.6.75 — 2026-05-03
 
 ### Shops: blue confirm dialog now uses blue text-bg + mobile-aware A/B prompts
