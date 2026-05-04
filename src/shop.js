@@ -128,15 +128,19 @@ export function shopHoverEquippable() {
 //   > 0   → upgrade (green ▲)
 //   < 0   → downgrade (red ▼)
 //   = 0   → same stat (white =)
-// Weapons compare against the WORSE of weaponR / weaponL — empty hands count
-// as 0, so any equip into an empty slot reads as an upgrade. Shields compare
-// against the existing shield (if any) — at most one shield can be equipped.
+// Weapons compare against the BEST of weaponR / weaponL (the user upgrades
+// their main weapon, not their dual-wield padding). If the same item ID is
+// already in either hand, treat as = regardless of slot — a duplicate isn't
+// an upgrade just because the off-hand is empty.
+// Shields compare against the existing shield (at most one can be equipped).
 export function shopHoverStatDelta() {
   if (!shopHoverEquippable()) return null;
-  const item = ITEMS.get(_hoverItemId());
+  const id = _hoverItemId();
+  const item = ITEMS.get(id);
   if (!item) return null;
   if (item.type === 'weapon' && item.subtype !== 'shield') {
-    const cur = Math.min(_atkOf(ps.weaponR), _atkOf(ps.weaponL));
+    if (ps.weaponR === id || ps.weaponL === id) return 0; // already wielding this exact weapon
+    const cur = Math.max(_atkOf(ps.weaponR), _atkOf(ps.weaponL));
     return (item.atk || 0) - cur;
   }
   if (item.type === 'armor') {

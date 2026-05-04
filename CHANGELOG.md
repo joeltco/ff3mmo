@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.72 — 2026-05-03
+
+### Shops: weapon delta no longer treats empty off-hand as a free upgrade
+
+Switched weapon comparison from `Math.min(weaponR.atk, weaponL.atk)` back to `Math.max`. With one hand empty, MIN reads as 0 and made every weapon look like an upgrade ("fill the empty hand"). MAX compares against the best weapon already wielded, which matches "is this a real upgrade to my main weapon".
+
+Added explicit short-circuit: if the hovered weapon ID matches `ps.weaponR` or `ps.weaponL`, return 0 (white =). A duplicate of what's already equipped shouldn't show ▲ just because the off-hand is empty.
+
 ## 1.6.71 — 2026-05-03
 
 ### Shops: HUD viewport border no longer fades during the NES map fade
