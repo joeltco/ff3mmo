@@ -286,26 +286,36 @@ function _drawHUDInfoPanel() {
   const nameW = measureText(slot.name);
   drawText(ctx, panelRight - nameW, sy, slot.name, namePal);
   const panelLeft = HUD_RIGHT_X + 32 + 8 + shakeOff;
-  // Shop hover delta indicator — green ▲ for upgrade, red ▼ for downgrade.
+  // Shop hover delta indicator — green ▲ upgrade, red ▼ downgrade, white = same.
   const delta = shopHoverStatDelta();
-  if (delta !== 0) _drawDeltaTriangle(ctx, panelLeft, sy, delta > 0, infoFadeStep);
+  if (delta !== null) _drawDeltaMark(ctx, panelLeft, sy, delta, infoFadeStep);
   drawLvHpRow(ctx, panelLeft, panelRight, sy + 9,
     ps.stats ? ps.stats.level : slot.level, ps.hp, ps.stats ? ps.stats.maxHP : 28, infoFadeStep);
   if (deathTextFading) ctx.restore();
 }
 
-// 8×8 triangle drawn directly into the HUD info panel's left padding.
-// up=true → green ▲ (rows 2..5 widening). up=false → red ▼ (mirrored).
-function _drawDeltaTriangle(ctx, x, y, up, fadeStep) {
-  let nesColor = up ? 0x2A : 0x16;            // light green / red
+// 8×8 delta indicator drawn into the HUD info panel's left padding.
+//   delta > 0 → green ▲ (NES $2A)
+//   delta < 0 → red   ▼ (NES $16)
+//   delta = 0 → white = (NES $30)
+function _drawDeltaMark(ctx, x, y, delta, fadeStep) {
+  let nesColor;
+  let rows;  // array of [xOffset, width] per fill row, starting at y+2
+  if (delta > 0) {
+    nesColor = 0x2A;
+    rows = [[3, 2], [2, 4], [1, 6], [0, 8]]; // ▲
+  } else if (delta < 0) {
+    nesColor = 0x16;
+    rows = [[0, 8], [1, 6], [2, 4], [3, 2]]; // ▼
+  } else {
+    nesColor = 0x30;
+    rows = [[0, 8], null, [0, 8], null];     // = (bars at rows 2 and 4)
+  }
   for (let s = 0; s < fadeStep; s++) nesColor = nesColorFade(nesColor);
   const rgb = NES_SYSTEM_PALETTE[nesColor] || [0, 0, 0];
   ctx.fillStyle = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
-  // Per-row (xOff, width) — pyramid grows from 2px wide to 8px wide.
-  const rows = up
-    ? [[3, 2], [2, 4], [1, 6], [0, 8]]   // ▲ rows 2..5
-    : [[0, 8], [1, 6], [2, 4], [3, 2]];  // ▼ rows 2..5
   for (let r = 0; r < rows.length; r++) {
+    if (!rows[r]) continue;
     const [xo, w] = rows[r];
     ctx.fillRect(x + xo, y + 2 + r, w, 1);
   }

@@ -115,16 +115,20 @@ export function shopHoverEquippable() {
   return ((item.jobs || 0) & (1 << (ps.jobIdx || 0))) !== 0;
 }
 
-// ATK/DEF delta vs the slot the hovered item would replace. Returns positive
-// (upgrade), negative (downgrade), or 0 (same / not applicable / not equippable).
-// Weapons compare against the better of weaponR / weaponL; armor compares
-// against the matching slot. Shields compare against any equipped shield.
+// ATK/DEF delta vs the slot the hovered item would replace.
+//   null  → no indicator (not equipment / not equippable / unknown subtype)
+//   > 0   → upgrade (green ▲)
+//   < 0   → downgrade (red ▼)
+//   = 0   → same stat (white =)
+// Weapons compare against the WORSE of weaponR / weaponL — empty hands count
+// as 0, so any equip into an empty slot reads as an upgrade. Shields compare
+// against the existing shield (if any) — at most one shield can be equipped.
 export function shopHoverStatDelta() {
-  if (!shopHoverEquippable()) return 0;
+  if (!shopHoverEquippable()) return null;
   const item = ITEMS.get(_hoverItemId());
-  if (!item) return 0;
+  if (!item) return null;
   if (item.type === 'weapon' && item.subtype !== 'shield') {
-    const cur = Math.max(_atkOf(ps.weaponR), _atkOf(ps.weaponL));
+    const cur = Math.min(_atkOf(ps.weaponR), _atkOf(ps.weaponL));
     return (item.atk || 0) - cur;
   }
   if (item.type === 'armor') {
@@ -135,7 +139,7 @@ export function shopHoverStatDelta() {
     if (item.subtype === 'body')   return (item.def || 0) - _defOf(ps.body);
     if (item.subtype === 'arms')   return (item.def || 0) - _defOf(ps.arms);
   }
-  return 0;
+  return null;
 }
 
 function _atkOf(id)       { const i = ITEMS.get(id); return (i && i.type === 'weapon' && i.subtype !== 'shield') ? (i.atk || 0) : 0; }

@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.69 — 2026-05-03
+
+### Shops: white = indicator on equal stat + empty-slot weapons now read as upgrades
+
+- **Equals indicator**: `shopHoverStatDelta()` now returns `null` for "no indicator" (non-equipment / not equippable / unknown subtype) and a number for actual deltas. `_drawDeltaMark()` (renamed from `_drawDeltaTriangle`) routes `> 0` → green ▲, `< 0` → red ▼, `= 0` → white = (two 8-wide bars at rows 2 and 4 in the same 8×8 box). HUD only draws when `delta !== null`, so non-equippable items still show no indicator.
+- **Empty-slot fix**: weapon delta now compares `item.atk` against `Math.min(weaponR.atk, weaponL.atk)` instead of `Math.max`. With one hand empty (atk treated as 0), any new weapon reads as a clear upgrade — matches the "fill the empty hand" intent. Shields keep `Math.max` since at most one shield can be equipped.
+
 ## 1.6.68 — 2026-05-03
 
 ### Shops: green ▲ / red ▼ delta triangle in HUD name row
