@@ -671,7 +671,10 @@ function _updateTitleMainOutCase() {
     ps.stats.level = slot.level;
     ps.stats.exp = slot.exp;
     ps.stats.expToNext = (slot.level - 1 < 98) ? ps.expTable[slot.level - 1] : 0xFFFFFF;
-    if (slot.hp != null) { ps.hp = Math.min(slot.hp, ps.stats.maxHP); ps.mp = ps.stats.maxMP; }
+    if (slot.hp != null) {
+      ps.hp = Math.min(slot.hp, ps.stats.maxHP);
+      ps.mp = (slot.mp != null) ? Math.min(slot.mp, ps.stats.maxMP) : ps.stats.maxMP;
+    }
     else fullHeal();
     ps.weaponR = slot.stats.weaponR != null ? slot.stats.weaponR : 0x1E;
     ps.weaponL = slot.stats.weaponL != null ? slot.stats.weaponL : 0x00;
@@ -689,6 +692,7 @@ function _updateTitleMainOutCase() {
   ps.unlockedJobs = (slot && slot.unlockedJobs != null) ? slot.unlockedJobs : 0x01;
   ps.cp = (slot && slot.cp) || 0;
   ps.status.mask = (slot && slot.statusMask) || 0;
+  ps.status.poisonDmgTick = (slot && slot.statusPoisonTick) || 0;
   ps.playTime = (slot && slot.playTime) || 0;
   ps.lastTown = (slot && slot.lastTown != null) ? slot.lastTown : 114;
   swapBattleSprites(ps.jobIdx);

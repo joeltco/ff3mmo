@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.74 — 2026-05-03
+
+### Save: persist MP + poison tick, save chests/pond, centralize the schema in `saveSlotsToDB`
+
+Audit revealed three classes of bugs.
+
+**Missing fields**
+- `ps.mp` was never persisted — `title-screen.js` reset it to `maxMP` on every load. Added `mp` to the saved schema and the load path (`save.js`, `save-state.js`, `title-screen.js`).
+- `ps.status.poisonDmgTick` was lost — only the status mask was saved. Added `statusPoisonTick` to schema + load.
+
+**Mutations that didn't trigger a save**
+- `handleChest` (gil + items from chests) and `handlePondHeal` (HP/MP restore) in `map-triggers.js` now call `saveSlotsToDB()` after mutating `ps`. Previously a crash before the next save trigger lost the pickup or heal.
+
+**Schema duplication / drift risk**
+- `saveSlotsToDB()` already copied `playerInventory` into the active slot, but every caller was *also* doing `saveSlots[selectCursor].inventory = { ...playerInventory };` inline. New callers could forget the inline copy and silently clobber. Removed all 6 inline copies in `input-handler.js` and the helper in `shop.js` — `saveSlotsToDB()` is now the single source of truth for what gets serialized. Callers just invoke it.
+
 ## 1.6.73 — 2026-05-03
 
 ### Shops: persist inventory + gil to DB after every buy / sell

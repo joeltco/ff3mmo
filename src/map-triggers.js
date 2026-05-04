@@ -18,6 +18,7 @@ import { rebuildFlameSprites } from './flame-sprites.js';
 import { loadMapById, loadWorldMapAt, loadWorldMapAtPosition } from './map-loading.js';
 import { rosterLocForMapId, getPlayerLocation } from './roster.js';
 import { addItem } from './inventory.js';
+import { saveSlotsToDB } from './save-state.js';
 
 const TILE_SIZE = 16;
 const BATTLE_FLASH_FRAMES = 65;
@@ -117,6 +118,7 @@ export function handleChest(facedX, facedY) {
   }
   playSFX(SFX.TREASURE);
   showMsgBox(msg);
+  saveSlotsToDB();
   mapSt.mapRenderer = new MapRenderer(mapSt.mapData, mapSt.worldX / TILE_SIZE, mapSt.worldY / TILE_SIZE);
   resetIndoorWaterCache();
 }
@@ -148,6 +150,7 @@ export function handlePondHeal() {
       playSFX(SFX.CURE);
       ps.hp = ps.stats.maxHP;
       ps.mp = ps.stats.maxMP;
+      saveSlotsToDB();
       mapSt.pondStrobeTimer = BATTLE_FLASH_FRAMES * BATTLE_FLASH_FRAME_MS;
       setTimeout(() => showMsgBox(POND_RESTORED, null), BATTLE_FLASH_FRAMES * BATTLE_FLASH_FRAME_MS);
     }

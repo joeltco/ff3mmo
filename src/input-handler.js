@@ -800,7 +800,7 @@ function _applyPauseItemUse(item, rosterTargets) {
     removeItem(pauseSt.useItemId); playSFX(SFX.CURE);
     pauseSt.healNum = { value: 0, timer: 0 };
     pauseSt.state = 'inv-heal'; pauseSt.timer = 0;
-    if (selectCursor >= 0 && saveSlots[selectCursor]) { saveSlots[selectCursor].inventory = { ...playerInventory }; saveSlotsToDB(); }
+    saveSlotsToDB();
     return;
   }
 
@@ -813,13 +813,13 @@ function _applyPauseItemUse(item, rosterTargets) {
     rp.hp += heal; removeItem(pauseSt.useItemId); playSFX(SFX.CURE);
     pauseSt.healNum = { value: heal, timer: 0, rosterIdx: pauseSt.invAllyTarget };
     pauseSt.state = 'inv-heal'; pauseSt.timer = 0;
-    if (selectCursor >= 0 && saveSlots[selectCursor]) { saveSlots[selectCursor].inventory = { ...playerInventory }; saveSlotsToDB(); }
+    saveSlotsToDB();
   } else {
     const heal = Math.min(healPower, ps.stats.maxHP - ps.hp);
     ps.hp += heal; removeItem(pauseSt.useItemId); playSFX(SFX.CURE);
     pauseSt.healNum = { value: heal, timer: 0 };
     pauseSt.state = 'inv-heal'; pauseSt.timer = 0;
-    if (selectCursor >= 0 && saveSlots[selectCursor]) { saveSlots[selectCursor].hp = ps.hp; saveSlots[selectCursor].inventory = { ...playerInventory }; saveSlotsToDB(); }
+    saveSlotsToDB();
   }
 }
 
@@ -856,7 +856,7 @@ function _enforceEquipRestrictions(jobIdx) {
     }
   }
   recalcCombatStats();
-  if (selectCursor >= 0 && saveSlots[selectCursor]) { saveSlots[selectCursor].inventory = { ...playerInventory }; saveSlotsToDB(); }
+  saveSlotsToDB();
 }
 
 function _equipBestMainSlots() {
@@ -908,7 +908,7 @@ function _equipOptimum() {
   _equipBestMainSlots();
   _equipBestLeftHand();
   recalcCombatStats();
-  if (selectCursor >= 0 && saveSlots[selectCursor]) { saveSlots[selectCursor].inventory = { ...playerInventory }; saveSlotsToDB(); }
+  saveSlotsToDB();
   playSFX(SFX.CONFIRM);
 }
 
@@ -971,10 +971,7 @@ function _pauseInputEquipItemSelect() {
         if (oldId !== 0) addItem(oldId, 1);
       }
       recalcCombatStats();
-      if (selectCursor >= 0 && saveSlots[selectCursor]) {
-        saveSlots[selectCursor].inventory = { ...playerInventory };
-        saveSlotsToDB();
-      }
+      saveSlotsToDB();
       playSFX(SFX.CONFIRM);
     }
     pauseSt.state = 'eq-items-out'; pauseSt.timer = 0;

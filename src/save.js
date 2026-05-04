@@ -14,7 +14,28 @@ export function parseSaveSlots(data) {
   if (!Array.isArray(data)) return null;
   return data.map(s => {
     if (!s) return null;
-    if (Array.isArray(s)) return { name: new Uint8Array(s), level: 1, exp: 0, hp: null, stats: null, inventory: {}, gil: 0, jobLevels: {}, jobIdx: 0, unlockedJobs: 0x01, cp: 0, playTime: 0 };
-    return { name: new Uint8Array(s.name), level: s.level || 1, exp: s.exp || 0, hp: s.hp != null ? s.hp : null, stats: s.stats || null, inventory: s.inventory || {}, gil: s.gil || 0, jobLevels: s.jobLevels || {}, jobIdx: s.jobIdx || 0, unlockedJobs: s.unlockedJobs != null ? s.unlockedJobs : 0x01, cp: s.cp || 0, playTime: s.playTime || 0, worldX: s.worldX != null ? s.worldX : null, worldY: s.worldY != null ? s.worldY : null, onWorldMap: s.onWorldMap != null ? s.onWorldMap : null, currentMapId: s.currentMapId != null ? s.currentMapId : null };
+    if (Array.isArray(s)) return { name: new Uint8Array(s), level: 1, exp: 0, hp: null, mp: null, stats: null, inventory: {}, gil: 0, jobLevels: {}, jobIdx: 0, unlockedJobs: 0x01, cp: 0, statusMask: 0, statusPoisonTick: 0, lastTown: 114, playTime: 0 };
+    return {
+      name: new Uint8Array(s.name),
+      level: s.level || 1,
+      exp: s.exp || 0,
+      hp: s.hp != null ? s.hp : null,
+      mp: s.mp != null ? s.mp : null,
+      stats: s.stats || null,
+      inventory: s.inventory || {},
+      gil: s.gil || 0,
+      jobLevels: s.jobLevels || {},
+      jobIdx: s.jobIdx || 0,
+      unlockedJobs: s.unlockedJobs != null ? s.unlockedJobs : 0x01,
+      cp: s.cp || 0,
+      statusMask: s.statusMask || 0,
+      statusPoisonTick: s.statusPoisonTick || 0,
+      lastTown: s.lastTown != null ? s.lastTown : 114,
+      playTime: s.playTime || 0,
+      worldX: s.worldX != null ? s.worldX : null,
+      worldY: s.worldY != null ? s.worldY : null,
+      onWorldMap: s.onWorldMap != null ? s.onWorldMap : null,
+      currentMapId: s.currentMapId != null ? s.currentMapId : null,
+    };
   });
 }

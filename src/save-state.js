@@ -22,31 +22,37 @@ let _getPosition = () => ({});
 export function setPositionGetter(fn) { _getPosition = fn; }
 
 // --- Save persistence (IndexedDB + server) ---
+//
+// Single source of truth for what gets serialized: this function copies every
+// live `ps` / `playerInventory` / position field into the active slot. Callers
+// just invoke `saveSlotsToDB()` — they MUST NOT also copy fields inline,
+// otherwise the schema lives in two places.
 export async function saveSlotsToDB() {
   if (!savesLoaded) return;
-  // Sync live player state into the active save slot before persisting
-  // Skip if slot has no stats yet (fresh new game, not yet loaded)
-  if (saveSlots[selectCursor]) {
-    saveSlots[selectCursor].playTime = ps.playTime;
+  const slot = saveSlots[selectCursor];
+  if (slot) {
+    slot.playTime = ps.playTime;
   }
-  if (saveSlots[selectCursor] && ps.stats) {
-    saveSlots[selectCursor].level = ps.stats.level;
-    saveSlots[selectCursor].exp = ps.stats.exp;
-    saveSlots[selectCursor].hp = ps.hp;
-    saveSlots[selectCursor].stats = playerStatsSnapshot();
-    saveSlots[selectCursor].inventory = { ...playerInventory };
-    saveSlots[selectCursor].gil = ps.gil;
-    saveSlots[selectCursor].jobLevels = JSON.parse(JSON.stringify(ps.jobLevels));
-    saveSlots[selectCursor].jobIdx = ps.jobIdx;
-    saveSlots[selectCursor].unlockedJobs = ps.unlockedJobs;
-    saveSlots[selectCursor].cp = ps.cp;
-    saveSlots[selectCursor].statusMask = ps.status ? ps.status.mask : 0;
+  if (slot && ps.stats) {
+    slot.level = ps.stats.level;
+    slot.exp = ps.stats.exp;
+    slot.hp = ps.hp;
+    slot.mp = ps.mp;
+    slot.stats = playerStatsSnapshot();
+    slot.inventory = { ...playerInventory };
+    slot.gil = ps.gil;
+    slot.jobLevels = JSON.parse(JSON.stringify(ps.jobLevels));
+    slot.jobIdx = ps.jobIdx;
+    slot.unlockedJobs = ps.unlockedJobs;
+    slot.cp = ps.cp;
+    slot.statusMask = ps.status ? ps.status.mask : 0;
+    slot.statusPoisonTick = ps.status ? (ps.status.poisonDmgTick || 0) : 0;
     const pos = _getPosition();
-    saveSlots[selectCursor].worldX = pos.worldX;
-    saveSlots[selectCursor].worldY = pos.worldY;
-    saveSlots[selectCursor].onWorldMap = pos.onWorldMap;
-    saveSlots[selectCursor].currentMapId = pos.currentMapId;
-    saveSlots[selectCursor].lastTown = ps.lastTown;
+    slot.worldX = pos.worldX;
+    slot.worldY = pos.worldY;
+    slot.onWorldMap = pos.onWorldMap;
+    slot.currentMapId = pos.currentMapId;
+    slot.lastTown = ps.lastTown;
   }
   try {
     const data = saveSlots.map(s => s ? {
@@ -54,6 +60,7 @@ export async function saveSlotsToDB() {
       level: s.level || (ps.stats ? ps.stats.level : 1),
       exp: s.exp != null ? s.exp : (ps.stats ? ps.stats.exp : 0),
       hp: s.hp != null ? s.hp : (s.stats ? s.stats.hp : null),
+      mp: s.mp != null ? s.mp : null,
       stats: s.stats || null,
       inventory: s.inventory || {},
       gil: s.gil || 0,
@@ -62,6 +69,7 @@ export async function saveSlotsToDB() {
       unlockedJobs: s.unlockedJobs != null ? s.unlockedJobs : 0x01,
       cp: s.cp || 0,
       statusMask: s.statusMask || 0,
+      statusPoisonTick: s.statusPoisonTick || 0,
       worldX: s.worldX != null ? s.worldX : null,
       worldY: s.worldY != null ? s.worldY : null,
       onWorldMap: s.onWorldMap != null ? s.onWorldMap : null,
