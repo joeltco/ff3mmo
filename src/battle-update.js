@@ -11,6 +11,7 @@ import { mapSt } from './map-state.js';
 import { ps, grantExp, grantCP, getHitWeapon, isHitRightHand, gainJobJP } from './player-stats.js';
 import { IDLE_FRAME_MS } from './combatant-pose.js';
 import { bsc, getSlashFramesForWeapon, getSlashPattern, setSlashOffsetForFrame } from './battle-sprite-cache.js';
+import { SLASH_FRAME_MS, shouldDrawSlash, getSlashHoldMs } from './slash-effects.js';
 import { buildTurnOrder, processNextTurn } from './battle-turn.js';
 import { updateBattleAlly } from './battle-ally.js';
 import { updateBattleEnemyTurn } from './battle-enemy.js';
@@ -47,7 +48,7 @@ const BOSS_BLOCKS              = 9;
 const BOSS_DISSOLVE_STEPS      = 8;
 const BOSS_DISSOLVE_FRAME_MS   = 16.67;
 const MONSTER_SLIDE_MS         = 267;
-const SLASH_FRAME_MS           = 30;
+// SLASH_FRAME_MS / shouldDrawSlash / getSlashHoldMs imported from slash-effects.js (above).
 const BACK_SWING_MS            = 80;
 const FWD_SWING_MS             = 80;
 const HIT_PAUSE_MS             = 100;
@@ -348,14 +349,10 @@ function _updatePlayerAttackFwd() {
 function _updatePlayerSlash() {
   if (battleSt.battleState !== 'player-slash') return false;
   const handWeapon = getHitWeapon(battleSt.currentHitIdx, inputSt.rHandHitCount);
-  const pattern = getSlashPattern(handWeapon);
   const hit = inputSt.hitResults[battleSt.currentHitIdx];
-  const isMiss = hit && hit.miss;
-  // Skip the slash hold on a miss — drawSlashOverlay is gated by `!miss` already
-  // (battle-drawing.js _drawEncounterSlashEffects + _drawBossSlashEffects), so
-  // the wait is dead time. Run frame-advance + offset-update logic only when
-  // there's actually a slash to animate.
-  if (!isMiss) {
+  const drawSlash = shouldDrawSlash(hit);
+  if (drawSlash) {
+    const pattern = getSlashPattern(handWeapon);
     const frame = Math.floor(battleSt.battleTimer / SLASH_FRAME_MS);
     if (frame !== battleSt.slashFrame && frame < pattern.totalFrames) {
       battleSt.slashFrame = frame;
@@ -364,8 +361,8 @@ function _updatePlayerSlash() {
       if (frame % pattern.holdFrames === 0) setSlashOffsetForFrame(battleSt, handWeapon, frame);
     }
   }
-  if (isMiss || battleSt.battleTimer >= pattern.totalFrames * SLASH_FRAME_MS) {
-    if (!isMiss) {
+  if (!drawSlash || battleSt.battleTimer >= getSlashHoldMs(handWeapon)) {
+    if (drawSlash) {
       if (pvpSt.isPVPBattle && pvpSt.pvpOpponentIsDefending)
         hit.damage = Math.max(1, Math.floor(hit.damage / 2));
       if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {

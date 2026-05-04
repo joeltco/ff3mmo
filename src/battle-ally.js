@@ -2,7 +2,7 @@
 
 import { battleSt, getEnemyHP, setEnemyHP, BATTLE_SHAKE_MS, BATTLE_DMG_SHOW_MS } from './battle-state.js';
 import { playSlashSFX } from './battle-sfx.js';
-import { resetSlashScatterCache } from './slash-effects.js';
+import { resetSlashScatterCache, shouldDrawSlash } from './slash-effects.js';
 import { isWeapon } from './data/items.js';
 import { SFX, playSFX } from './music.js';
 import { _nameToBytes } from './text-utils.js';
@@ -108,11 +108,9 @@ function _updateAllyAttack() {
   }
   if (battleSt.battleState === 'ally-slash') {
     const hit = battleSt.allyHitResults[battleSt.allyHitIdx];
-    const isMiss = hit && hit.miss;
-    // Skip the slash hold on a miss — drawSlashOverlay is gated by `!miss`, so
-    // the wait is dead time. Ally body forward-strike was already shown.
-    if (isMiss || battleSt.battleTimer >= ALLY_SLASH_MS) {
-      if (!isMiss && hit) {
+    const drawSlash = shouldDrawSlash(hit);
+    if (!drawSlash || battleSt.battleTimer >= ALLY_SLASH_MS) {
+      if (drawSlash) {
         // Defend halving for PVP opponent
         if (pvpSt.isPVPBattle && pvpSt.pvpOpponentIsDefending && battleSt.allyTargetIndex < 0)
           hit.damage = Math.max(1, Math.floor(hit.damage / 2));

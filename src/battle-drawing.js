@@ -31,7 +31,7 @@ import { pvpEnemyCellCenter } from './pvp-math.js';
 import { pvpSt, drawBossSpriteBoxPVP } from './pvp.js';
 import { inputSt } from './input-handler.js';
 import { bsc, getSlashFramesForWeapon } from './battle-sprite-cache.js';
-import { drawSlashOverlay } from './slash-effects.js';
+import { drawSlashOverlay, SLASH_FRAME_MS, shouldDrawSlash } from './slash-effects.js';
 import { hudSt } from './hud-state.js';
 import { fakePlayerPortraits, fakePlayerVictoryPortraits, fakePlayerHitPortraits,
          fakePlayerKneelPortraits, fakePlayerAttackPortraits, fakePlayerAttackLPortraits,
@@ -90,7 +90,9 @@ const BOSS_DISSOLVE_FRAME_MS = 16.67;
 const BATTLE_SHAKE_MS = 300;
 const MONSTER_DEATH_MS = 250;
 const MONSTER_SLIDE_MS = 267;
-const SLASH_FRAME_MS = 50;
+// SLASH_FRAME_MS imported from slash-effects.js (single source of truth — pre-1.7.4
+// this was 50 here vs 30 in battle-update.js, which made ally `af` sprite-frame
+// indexing lag the state machine).
 const SLASH_FRAMES = 3;
 const DEFEND_SPARKLE_FRAME_MS = 133;
 const VICTORY_BOX_W = BATTLE_PANEL_W;
@@ -814,8 +816,8 @@ function _drawEncounterMonsters(gridPos, sprH, boxX, boxY, boxW, boxH, isSlideIn
       _drawMonsterDeath(drawX, drawY, thisH, Math.min(Math.max(0, battleSt.battleTimer - delay) / MONSTER_DEATH_MS, 1), mid);
     } else {
       const curHit = inputSt.hitResults && inputSt.hitResults[battleSt.currentHitIdx];
-      const isHitBlink = (isBeingHit && battleSt.battleState === 'player-slash' && curHit && !curHit.miss && (Math.floor(battleSt.battleTimer / 60) & 1)) ||
-                         (isBeingHit && battleSt.battleState === 'ally-slash' && battleSt.allyHitResult && !battleSt.allyHitResult.miss && (Math.floor(battleSt.battleTimer / 60) & 1));
+      const isHitBlink = (isBeingHit && battleSt.battleState === 'player-slash' && shouldDrawSlash(curHit) && (Math.floor(battleSt.battleTimer / 60) & 1)) ||
+                         (isBeingHit && battleSt.battleState === 'ally-slash' && shouldDrawSlash(battleSt.allyHitResult) && (Math.floor(battleSt.battleTimer / 60) & 1));
       const isFlashing = battleSt.battleState === 'enemy-flash' && battleSt.currentAttacker === i && Math.floor(battleSt.battleTimer / 33) % 2 === 1;
       if (!isHitBlink) ui.ctx.drawImage(isFlashing ? sprWhite : sprNormal, drawX, drawY);
     }
@@ -825,11 +827,12 @@ function _drawEncounterMonsters(gridPos, sprH, boxX, boxY, boxW, boxH, isSlideIn
   ui.ctx.restore();
 }
 function _drawEncounterSlashEffects(gridPos, slideOffX, slotCenterY) {
-  if (battleSt.battleState === 'player-slash' && bsc.slashFrames && battleSt.slashFrame < SLASH_FRAMES && inputSt.hitResults && inputSt.hitResults[battleSt.currentHitIdx] && !inputSt.hitResults[battleSt.currentHitIdx].miss) {
+  if (battleSt.battleState === 'player-slash' && bsc.slashFrames && battleSt.slashFrame < SLASH_FRAMES &&
+      shouldDrawSlash(inputSt.hitResults && inputSt.hitResults[battleSt.currentHitIdx])) {
     const pos = gridPos[inputSt.targetIndex];
     ui.ctx.drawImage(bsc.slashFrames[battleSt.slashFrame], pos.x - slideOffX + battleSt.slashOffX + 8, slotCenterY(inputSt.targetIndex) + battleSt.slashOffY);
   }
-  if (battleSt.battleState === 'ally-slash' && battleSt.allyHitResult && !battleSt.allyHitResult.miss) {
+  if (battleSt.battleState === 'ally-slash' && shouldDrawSlash(battleSt.allyHitResult)) {
     const ally = battleSt.battleAllies[battleSt.currentAllyAttacker];
     const isLeft = battleSt.allyHitIsLeft;
     const activeWpnId = ally ? (isLeft ? ally.weaponL : ally.weaponId) : 0;
@@ -919,12 +922,13 @@ function _drawBossSprite(centerX, centerY) {
     if (!battleSt.enemyDefeated) ui.ctx.drawImage((frame & 1) ? (getBossWhiteCanvas() || getBossBattleCanvas()) : getBossBattleCanvas(), sprX, sprY);
   } else if (battleSt.battleState === 'player-slash') {
     if (!(Math.floor(battleSt.battleTimer / 60) & 1) && !battleSt.enemyDefeated) ui.ctx.drawImage(getBossBattleCanvas(), sprX, sprY);
-    if (bsc.slashFrames && battleSt.slashFrame < SLASH_FRAMES && !battleSt.enemyDefeated && inputSt.hitResults && inputSt.hitResults[battleSt.currentHitIdx] && !inputSt.hitResults[battleSt.currentHitIdx].miss)
+    if (bsc.slashFrames && battleSt.slashFrame < SLASH_FRAMES && !battleSt.enemyDefeated &&
+        shouldDrawSlash(inputSt.hitResults && inputSt.hitResults[battleSt.currentHitIdx]))
       ui.ctx.drawImage(bsc.slashFrames[battleSt.slashFrame], centerX - 8 + battleSt.slashOffX, centerY - 8 + battleSt.slashOffY);
   } else if (battleSt.battleState === 'ally-slash') {
-    const blinkHidden = battleSt.allyHitResult && !battleSt.allyHitResult.miss && (Math.floor(battleSt.battleTimer / 60) & 1);
+    const blinkHidden = shouldDrawSlash(battleSt.allyHitResult) && (Math.floor(battleSt.battleTimer / 60) & 1);
     if (!blinkHidden && !battleSt.enemyDefeated) ui.ctx.drawImage(getBossBattleCanvas(), sprX, sprY);
-    if (!battleSt.enemyDefeated && battleSt.allyHitResult && !battleSt.allyHitResult.miss) {
+    if (!battleSt.enemyDefeated && shouldDrawSlash(battleSt.allyHitResult)) {
       const ally = battleSt.battleAllies[battleSt.currentAllyAttacker];
       const isLeft = battleSt.allyHitIsLeft;
       const activeWpnId = ally ? (isLeft ? ally.weaponL : ally.weaponId) : 0;

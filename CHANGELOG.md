@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.4 — 2026-05-04
+
+### Slash logic consolidated into `slash-effects.js`
+
+After 1.7.1 → 1.7.3 added the same skip-on-miss and timer-gate logic to three different state machines (`battle-update.js`, `battle-ally.js`, `pvp.js`), the duplication was getting out of hand. Pulled all the cross-cutting slash concerns into `slash-effects.js`:
+
+- **`SLASH_FRAME_MS = 30`** — was split (30 ms in `battle-update.js`, 50 ms in `battle-drawing.js`). The drawing-side 50 ms made the ally `af` sprite-canvas index lag the state machine's `slashFrame`, so ally slash sprites would skip frames or stall. Now single-source.
+- **`shouldDrawSlash(hit)`** — central predicate replacing inline `hit && !hit.miss` checks in 8 different sites across `battle-update.js`, `battle-ally.js`, `pvp.js`, and `battle-drawing.js`. Future rules (shield-block fast-skip, dead-target, etc.) live in one place.
+- **`getSlashHoldMs(weaponId)`** — wraps `pattern.totalFrames * SLASH_FRAME_MS` so player slash code doesn't need to recompute it inline.
+- All five touched modules now import from `slash-effects.js`. No behavior change in this release beyond the implicit ally-`af` fix from unified `SLASH_FRAME_MS` (ally slash sprite frames now advance at the same cadence as the state machine).
+
 ## 1.7.3 — 2026-05-04
 
 ### Player + ally slash also skip the impact hold on a miss

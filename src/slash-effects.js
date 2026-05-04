@@ -74,6 +74,32 @@ export function initSwordSlashSprites() {
   return [[D,E],[D,F],[E,F]].map(t => _buildSwordSlashFrame(t, PAL));
 }
 
+// Time per NES frame in the slash animation. 60 Hz NES is 16.67 ms / frame, but
+// the engine slows it ~2× so the slash reads as a distinct event rather than a
+// blur. Single source of truth for player + ally + PVP + drawing — pre-1.7.4
+// this was split (30 ms in battle-update.js, 50 ms in battle-drawing.js), which
+// meant ally `af` indexing lagged behind the state-machine's slashFrame.
+export const SLASH_FRAME_MS = 30;
+
+// Predicate: should this hit get a slash overlay? False on miss — drawSlashOverlay
+// no-ops, and the state machine should skip the slash hold so there's no dead time
+// between the body's forward swing and the next hit / damage display. Currently
+// just `hit && !hit.miss`; centralised so future rules (shield-block, dead-target,
+// etc.) live in one place instead of being scattered across battle-update.js,
+// battle-ally.js, pvp.js, and battle-drawing.js.
+export function shouldDrawSlash(hit) {
+  return !!hit && !hit.miss;
+}
+
+// Total slash hold (ms) for a weapon — sum of per-position holdFrames across the
+// pattern. Used by player slash; ally/PVP currently use their own constants for
+// historical reasons (ALLY_SLASH_MS, ENEMY_SLASH_TOTAL_MS) — those can migrate to
+// per-weapon timing later.
+export function getSlashHoldMs(weaponId) {
+  const pattern = getSlashPattern(weaponId);
+  return pattern.totalFrames * SLASH_FRAME_MS;
+}
+
 // PPU-derived per-weapon slash scatter patterns — single source of truth for
 // player, ally, and PVP-opponent slash rendering. Captured frame-by-frame from
 // FF3 NES via the EMU tab (see docs/EMU-PLAN.md and design-notes#battle-attack-animation).
