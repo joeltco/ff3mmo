@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.83 — 2026-05-04
+
+### Cure uses Potion's CURE SFX; pause-menu inv-target cursor aligns with roster rows
+
+- **Battle Cure now plays `SFX.CURE`** instead of `SFX.SW_HIT`. `_applySpellEffect` in `spell-cast.js` branches on `spell.element === 'recovery'` so heal spells get the same chime as Potion. Damage spells will keep the SW hit sfx until per-spell sfx land.
+- **Pause-menu inv-target cursor was drifting** lower by 8px per ally row — `pauseSt.menu.js` had `ROSTER_ROW_H = 24` while the actual roster (`roster.js`) draws rows at `ROSTER_ROW_H = 32`. Changed to 32 so Potion AND Cure target cursors land on the right portrait row.
+
 ## 1.6.82 — 2026-05-04
 
 ### Battle spell-list cost no longer clipped off the right edge

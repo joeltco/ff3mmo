@@ -58,6 +58,7 @@ function _applySpellEffect(target) {
   const spell = SPELLS.get(_spellId);
   if (!spell) return;
   // v1: ally-target heal only (Cure family). Element 'recovery' = heal.
+  const isHeal = spell.element === 'recovery';
   if (target === 'player') {
     const heal = Math.min(_baseAmount, ps.stats.maxHP - ps.hp);
     ps.hp += heal;
@@ -70,7 +71,7 @@ function _applySpellEffect(target) {
     ally.hp += heal;
     getAllyDamageNums()[target] = { value: heal, timer: 0, heal: true };
   }
-  playSFX(SFX.SW_HIT);
+  playSFX(isHeal ? SFX.CURE : SFX.SW_HIT);
 }
 
 // Drives 'magic-cast' (windup) and 'magic-hit' (anim+effect) states.
