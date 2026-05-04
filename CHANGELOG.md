@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.89 — 2026-05-04
+
+### Slash scatter back to simple per-frame random for staff/nunchaku/fists
+
+Reverted the per-weapon scatter system (1.6.86) and the 2-frame "skip slot N" hack (1.6.88). Back to: blades get the clean UR→LL diagonal (unchanged), everything else gets a small per-frame random offset (`Math.random()*16 - 8`) per the 3 timing slots. `SLASH_FRAMES` stays at 3 for all weapons; `drawSlashOverlay` is back to its original signature using the legacy `[0,10,-8] / [0,-6,8]` shake for ally/PVP slashes. `getSlashScatter` and the per-weapon scatter constants removed.
+
 ## 1.6.88 — 2026-05-04
 
 ### Slash effect for staff/nunchaku/fists is 2 frames AFTER the swing

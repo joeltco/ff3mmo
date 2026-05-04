@@ -22,8 +22,7 @@ import { queueBattleMsg, replaceBattleMsg, updateBattleMsg as _updateBattleMsg, 
 import { resetAllDmgNums, tickDmgNums, tickHealNums, clearHealNums,
          setEnemyDmgNum } from './damage-numbers.js';
 import { playSFX, stopMusic, pauseMusic, resumeMusic, playTrack, TRACKS, SFX } from './music.js';
-import { ITEMS } from './data/items.js';
-import { getSlashScatter } from './slash-effects.js';
+import { ITEMS, isBladedWeapon } from './data/items.js';
 import { MONSTERS } from './data/monsters.js';
 import { PLAYER_POOL, generateAllyStats } from './data/players.js';
 import { BATTLE_ROAR, BATTLE_CANT_ESCAPE, BATTLE_CRITICAL } from './data/strings.js';
@@ -306,11 +305,8 @@ function _advanceHitCombo() {
     battleSt.slashFrame = 0;
     const handWeapon = getHitWeapon(battleSt.currentHitIdx, inputSt.rHandHitCount);
     bsc.slashFrames = getSlashFramesForWeapon(handWeapon, isHitRightHand(battleSt.currentHitIdx, inputSt.rHandHitCount));
-    {
-      const sc = getSlashScatter(handWeapon);
-      battleSt.slashOffX = sc.x[0];
-      battleSt.slashOffY = sc.y[0];
-    }
+    if (isBladedWeapon(handWeapon)) { battleSt.slashOffX = 8; battleSt.slashOffY = -8; }
+    else { battleSt.slashOffX = Math.floor(Math.random() * 16) - 8; battleSt.slashOffY = Math.floor(Math.random() * 16) - 8; }
     battleSt.battleState = 'attack-back';
     battleSt.battleTimer = 0;
   } else {
@@ -354,9 +350,13 @@ function _updatePlayerSlash() {
   if (frame !== battleSt.slashFrame && frame < SLASH_FRAMES) {
     battleSt.slashFrame = frame;
     const handWeapon = getHitWeapon(battleSt.currentHitIdx, inputSt.rHandHitCount);
-    const sc = getSlashScatter(handWeapon);
-    battleSt.slashOffX = sc.x[battleSt.slashFrame] || 0;
-    battleSt.slashOffY = sc.y[battleSt.slashFrame] || 0;
+    if (isBladedWeapon(handWeapon)) {
+      battleSt.slashOffX = 8 - battleSt.slashFrame * 8;
+      battleSt.slashOffY = -8 + battleSt.slashFrame * 8;
+    } else {
+      battleSt.slashOffX = Math.floor(Math.random() * 16) - 8;
+      battleSt.slashOffY = Math.floor(Math.random() * 16) - 8;
+    }
   }
   if (battleSt.battleTimer >= SLASH_FRAMES * SLASH_FRAME_MS) {
     const hit = inputSt.hitResults[battleSt.currentHitIdx];

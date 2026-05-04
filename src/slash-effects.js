@@ -1,6 +1,5 @@
 import { NES_SYSTEM_PALETTE } from './tile-decoder.js';
 import { _makeCanvas16 } from './canvas-utils.js';
-import { weaponSubtype, isBladedWeapon } from './data/items.js';
 
 function _decode2BPPTiles(imgData, tiles, layout, pal) {
   for (let t = 0; t < tiles.length; t++) {
@@ -74,25 +73,11 @@ export function initSwordSlashSprites() {
   return [[D,E],[D,F],[E,F]].map(t => _buildSwordSlashFrame(t, PAL));
 }
 
-// Per-weapon scatter patterns for the 3-frame slash impact dance. Index = frame (0..2).
-//
-// NES convention (PPU-verified for staff): slash animation is 2 frames per hit —
-// frame 1 is the player wind-up with no slash sprite (handled by `attack-back` state),
-// frame 2 is the strike with the slash sprite drawn at ONE static position. Staves,
-// nunchaku, and fists therefore use a static scatter (no movement during the strike).
-// Bladed weapons keep their classic diagonal sweep — they're not yet PPU-verified.
-const _STAFF_SCATTER   = { x: [0, 0, 0], y: [0, 0, 0] };          // static — staff/nunchaku/rod
-const _PUNCH_SCATTER   = { x: [0, 0, 0], y: [0, 0, 0] };          // static — fists
-const _BLADE_SCATTER   = { x: [ 8,  0, -8], y: [ -8,   0,  8] }; // clean UR→LL diagonal — knives/swords
-const _DEFAULT_SCATTER = { x: [ 0, 10, -8], y: [  0,  -6,  8] }; // legacy shake fallback
-
-export function getSlashScatter(weaponId) {
-  if (weaponId === 0) return _PUNCH_SCATTER;        // unarmed
-  if (isBladedWeapon(weaponId)) return _BLADE_SCATTER;
-  const st = weaponSubtype(weaponId);
-  if (st === 'staff' || st === 'rod' || st === 'nunchaku') return _STAFF_SCATTER;
-  return _DEFAULT_SCATTER;
-}
+// Frame-based scatter pattern shared by ally + PVP-opponent slash overlays.
+// (Player slash uses its own bladed-walk-off / random-non-bladed scatter inline
+// in battle-update.js — random per frame for staff/nunchaku/fists.)
+const SLASH_SCATTER_X = [0, 10, -8];
+const SLASH_SCATTER_Y = [0, -6, 8];
 
 
 // Draws a single slash-effect frame over a target. Used by every non-player render path:
@@ -103,11 +88,10 @@ export function getSlashScatter(weaponId) {
 // Caller picks the frame array (via getSlashFramesForWeapon) and the af index (timer-derived).
 // Pass `weaponId` so each weapon picks its own scatter pattern (staff swings down, fists punch
 // in a tight cluster, blades clean-diagonal). `frame` may be null/undefined — helper no-ops.
-export function drawSlashOverlay(ctx, frame, frameIdx, originX, originY, mirror = false, weaponId = 0) {
+export function drawSlashOverlay(ctx, frame, frameIdx, originX, originY, mirror = false) {
   if (!frame) return;
-  const scatter = getSlashScatter(weaponId);
-  const dx = scatter.x[frameIdx] || 0;
-  const dy = scatter.y[frameIdx] || 0;
+  const dx = SLASH_SCATTER_X[frameIdx] || 0;
+  const dy = SLASH_SCATTER_Y[frameIdx] || 0;
   if (mirror) {
     ctx.save();
     ctx.translate(originX + frame.width - dx, originY + dy);
