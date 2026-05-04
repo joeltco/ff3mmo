@@ -8,7 +8,9 @@ import { _dmgBounceY } from './data/animation-tables.js';
 import { DMG_NUM_PAL, HEAL_NUM_PAL, drawBattleNum as _drawBattleNumCtx, getMissCanvas } from './damage-numbers.js';
 import { getBossBattleCanvas, getBossWhiteCanvas } from './boss-sprites.js';
 import { getMonsterCanvas, getMonsterWhiteCanvas, hasMonsterSprites } from './monster-sprites.js';
-import { getItemNameClean, getMonsterName } from './text-decoder.js';
+import { getItemNameClean, getMonsterName, getSpellName } from './text-decoder.js';
+import { getSpellMPCost } from './data/spells.js';
+import { getSpellTargets, getSpellHitIdx } from './spell-cast.js';
 import { weaponSubtype, isWeapon } from './data/items.js';
 import { PLAYER_PALETTES, MONK_PALETTES } from './data/players.js';
 import { pickAttackPoseKey, pickAttackWeaponSpec, attackWeaponLayer } from './combatant-pose.js';
@@ -114,6 +116,32 @@ function _encounterGridLayout() {
 }
 
 function drawSWExplosion() {
+  // Player magic cast — explosion on the spell target (player/ally for ally-target spells)
+  if (battleSt.battleState === 'magic-hit' && battleSt.battleTimer < 400) {
+    if (!bsc.swPhaseCanvases.length) return;
+    const phase = Math.min(2, Math.floor(battleSt.battleTimer / 133));
+    const canvas = bsc.swPhaseCanvases[phase];
+    if (!canvas) return;
+    const targets = getSpellTargets();
+    const tgt = targets[getSpellHitIdx()];
+    if (tgt === undefined) return;
+    let cx, cy;
+    if (tgt === 'player') {
+      cx = HUD_RIGHT_X + 8 + 8;
+      cy = HUD_VIEW_Y + 8 + 12;
+    } else {
+      const panelTop = HUD_VIEW_Y + 32;
+      cx = HUD_RIGHT_X + 8 + 8;
+      cy = panelTop + tgt * ROSTER_ROW_H + 8 + 8;
+    }
+    const half = canvas.width / 2;
+    ui.ctx.save();
+    ui.ctx.beginPath(); ui.ctx.rect(0, HUD_VIEW_Y, CANVAS_W, HUD_VIEW_H); ui.ctx.clip();
+    ui.ctx.imageSmoothingEnabled = false;
+    ui.ctx.drawImage(canvas, cx - half, cy - half);
+    ui.ctx.restore();
+    return;
+  }
   // PVP opponent South Wind — explosion centered on current target (player or ally)
   if (pvpSt.isPVPBattle && battleSt.battleState === 'pvp-opp-sw-hit' && battleSt.battleTimer < 400) {
     if (!bsc.swPhaseCanvases.length) return;
@@ -408,7 +436,7 @@ function _drawBattlePortrait() {
     (battleSt.battleState === 'pvp-opp-sw-hit' && battleSt.battleShakeTimer > 0) ||
     (battleSt.battleState === 'pvp-enemy-slash' && battleSt.enemyTargetAllyIdx < 0 && pvpSt.pvpPendingAttack && !pvpSt.pvpPendingAttack.miss && !pvpSt.pvpPendingAttack.shieldBlock);
   const isDefendPose = battleSt.battleState === 'defend-anim';
-  const isItemUsePose = battleSt.battleState === 'item-use' || battleSt.battleState === 'sw-throw' || battleSt.battleState === 'sw-hit';
+  const isItemUsePose = battleSt.battleState === 'item-use' || battleSt.battleState === 'sw-throw' || battleSt.battleState === 'sw-hit' || battleSt.battleState === 'magic-cast' || battleSt.battleState === 'magic-hit';
   const isRunPose = battleSt.battleState === 'run-success';
   const isNearFatal = ps.hp > 0 && ps.stats && ps.hp <= Math.floor(ps.stats.maxHP / 4);
   const portraitSrc = _getPortraitSrc(isNearFatal, isAttackPose, isHitPose, isDefendPose, isItemUsePose, isVictoryPose);
@@ -557,11 +585,47 @@ function _drawBattleItemPanel(menuX) {
   if (battleSt.battleState === 'item-list-in') invFadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(battleSt.battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
   else if (battleSt.battleState === 'item-cancel-out' || battleSt.battleState === 'item-list-out') invFadeStep = Math.min(Math.floor(battleSt.battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
   for (let s = 0; s < invFadeStep; s++) invPal[3] = nesColorFade(invPal[3]);
+  if (inputSt.menuMode === 'magic') {
+    _drawBattleSpellList(menuX, rightAreaW, invPal);
+    _drawBattleSpellCursor(menuX);
+    return;
+  }
   const totalInvPages = Math.max(1, Math.ceil(inputSt.itemSelectList.length / INV_SLOTS));
   let slidePixel = 0;
   if (battleSt.battleState === 'item-slide') slidePixel = inputSt.itemSlideDir * Math.min(battleSt.battleTimer / ITEM_SLIDE_MS, 1) * rightAreaW;
   _drawBattleItemList(menuX, rightAreaW, invPal, slidePixel, totalInvPages);
   _drawBattleItemCursors(menuX);
+}
+
+function _drawBattleSpellList(baseX, rightAreaW, palette) {
+  const rowH = 14;
+  const topY = HUD_BOT_Y + 12;
+  ui.ctx.save();
+  ui.ctx.beginPath();
+  ui.ctx.rect(baseX - 8, HUD_BOT_Y + 8, rightAreaW + 8, HUD_BOT_H - 16);
+  ui.ctx.clip();
+  const list = inputSt.spellSelectList;
+  for (let i = 0; i < list.length; i++) {
+    const spellId = list[i];
+    const name = getSpellName(spellId);
+    const cost = getSpellMPCost(spellId);
+    drawText(ui.ctx, baseX + 8, topY + i * rowH, name, palette);
+    if (cost > 0) {
+      const costStr = String(cost);
+      const costBytes = new Uint8Array(costStr.length);
+      for (let c = 0; c < costStr.length; c++) costBytes[c] = 0x80 + parseInt(costStr[c]);
+      const costX = baseX + rightAreaW - 4 - measureText(costBytes);
+      drawText(ui.ctx, costX, topY + i * rowH, costBytes, palette);
+    }
+  }
+  ui.ctx.restore();
+}
+
+function _drawBattleSpellCursor(baseX) {
+  if (!_cursorTileCanvas() || battleSt.battleState !== 'item-select' || inputSt.menuMode !== 'magic') return;
+  const rowH = 14;
+  const topY = HUD_BOT_Y + 12;
+  ui.ctx.drawImage(_cursorTileCanvas(), baseX - 8, topY + inputSt.itemPageCursor * rowH - 4);
 }
 function _battleMenuStates() {
   const bs = battleSt.battleState;
@@ -572,6 +636,7 @@ function _battleMenuStates() {
     bs === 'attack-back' || bs === 'attack-fwd' || bs === 'player-slash' || bs === 'player-hit-show' || bs === 'player-miss-show' ||
     bs === 'player-damage-show' || bs === 'monster-death' || bs === 'defend-anim' ||
     bs.startsWith('item-') || bs === 'sw-throw' || bs === 'sw-hit' ||
+    bs === 'magic-cast' || bs === 'magic-hit' ||
     bs === 'run-success' || bs === 'run-fail' || bs === 'enemy-flash' ||
     bs === 'enemy-attack' || bs === 'enemy-damage-show' || bs === 'poison-tick' || bs === 'pvp-second-windup' ||
     bs === 'pvp-ally-appear' || bs === 'pvp-defend-anim' || bs === 'pvp-enemy-slash' ||

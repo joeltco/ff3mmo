@@ -6,7 +6,7 @@ import { _nameToBytes } from './text-utils.js';
 import { selectCursor, saveSlots, nameBuffer, NAME_MAX_LEN,
          setSelectCursor, setNameBuffer, saveSlotsToDB } from './save-state.js';
 import { playSFX, fadeOutMusic, SFX, TRACKS } from './music.js';
-import { ps, fullHeal, recalcCombatStats } from './player-stats.js';
+import { ps, fullHeal, recalcCombatStats, grantStartingSpells } from './player-stats.js';
 import { hudSt } from './hud-state.js';
 import { transSt } from './transitions.js';
 import { mapSt } from './map-state.js';
@@ -695,6 +695,8 @@ function _updateTitleMainOutCase() {
   ps.status.poisonDmgTick = (slot && slot.statusPoisonTick) || 0;
   ps.playTime = (slot && slot.playTime) || 0;
   ps.lastTown = (slot && slot.lastTown != null) ? slot.lastTown : 114;
+  ps.knownSpells = (slot && Array.isArray(slot.knownSpells)) ? [...slot.knownSpells] : [];
+  grantStartingSpells(ps.jobIdx);
   swapBattleSprites(ps.jobIdx);
   transSt.pendingTrack = TRACKS.TOWN_UR;
   loadMapById(114);

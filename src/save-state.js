@@ -53,6 +53,7 @@ export async function saveSlotsToDB() {
     slot.onWorldMap = pos.onWorldMap;
     slot.currentMapId = pos.currentMapId;
     slot.lastTown = ps.lastTown;
+    slot.knownSpells = ps.knownSpells ? [...ps.knownSpells] : [];
   }
   try {
     const data = saveSlots.map(s => s ? {
@@ -76,6 +77,7 @@ export async function saveSlotsToDB() {
       currentMapId: s.currentMapId != null ? s.currentMapId : null,
       lastTown: s.lastTown != null ? s.lastTown : 114,
       playTime: s.playTime || 0,
+      knownSpells: Array.isArray(s.knownSpells) ? [...s.knownSpells] : [],
     } : null);
     // Local IndexedDB
     const db = await openSaveDB();

@@ -10,6 +10,7 @@ import { titleSt, onNameEntryKeyDown } from './title-screen.js';
 import { ps, recalcCombatStats, changeJob, getEquipSlotId, setEquipSlotId, EQUIP_SLOT_SUBTYPE,
          getHitWeapon, jobSwitchCost, getJobLevelStatBonus } from './player-stats.js';
 import { ITEMS, isHandEquippable, isWeapon, weaponSubtype, isBladedWeapon } from './data/items.js';
+import { SPELLS, getSpellMPCost } from './data/spells.js';
 import { selectCursor, saveSlots, saveSlotsToDB } from './save-state.js';
 import { rollHits, calcPotentialHits, elemMultiplier } from './battle-math.js';
 import { blindHitPenalty, miniToadAtkMult, removeStatus, STATUS } from './status-effects.js';
@@ -88,6 +89,9 @@ export const inputSt = {
   itemTargetIndex:    0,
   itemTargetAllyIndex: -1,
   itemTargetMode:     'single',
+  // Magic menu (piggybacks on item-* states; menuMode toggles list/input/draw branches)
+  menuMode:           'item',   // 'item' or 'magic'
+  spellSelectList:    [],       // active spell IDs when menuMode === 'magic'
   // Action count for JP (applied on battle victory)
   battleActionCount:  0,
   // Roster browse/menu
@@ -345,6 +349,7 @@ function _itemSelectZ(isEquipPage, gIdx) {
 }
 
 function _battleInputItemSelect() {
+  if (inputSt.menuMode === 'magic') { _battleInputMagicSelect(); return; }
   const isEquipPage = inputSt.itemPage === 0;
   const pageRows = isEquipPage ? 2 : INV_SLOTS;
   const totalPages = 1 + Math.max(1, Math.ceil(inputSt.itemSelectList.length / INV_SLOTS));
@@ -356,6 +361,39 @@ function _battleInputItemSelect() {
   if (_xPressed()) {
     if (inputSt.itemHeldIdx !== -1) { inputSt.itemHeldIdx = -1; playSFX(SFX.CONFIRM); }
     else { playSFX(SFX.CONFIRM); battleSt.battleState = 'item-cancel-out'; battleSt.battleTimer = 0; }
+  }
+}
+
+function _battleInputMagicSelect() {
+  const list = inputSt.spellSelectList;
+  const k = keys;
+  if (k['ArrowDown']) {
+    k['ArrowDown'] = false;
+    if (inputSt.itemPageCursor < list.length - 1) { inputSt.itemPageCursor++; playSFX(SFX.CURSOR); }
+  }
+  if (k['ArrowUp']) {
+    k['ArrowUp'] = false;
+    if (inputSt.itemPageCursor > 0) { inputSt.itemPageCursor--; playSFX(SFX.CURSOR); }
+  }
+  if (_zPressed()) {
+    const spellId = list[inputSt.itemPageCursor];
+    const spell = SPELLS.get(spellId);
+    if (!spell) { playSFX(SFX.ERROR); return; }
+    const cost = getSpellMPCost(spellId);
+    if (ps.mp < cost) { playSFX(SFX.ERROR); return; }
+    playSFX(SFX.CONFIRM);
+    inputSt.itemTargetType = 'player';
+    inputSt.itemTargetIndex = 0;
+    inputSt.itemTargetAllyIndex = -1;
+    inputSt.itemTargetMode = 'single';
+    inputSt.playerActionPending = { command: 'magic', spellId };
+    battleSt.battleState = 'item-target-select';
+    battleSt.battleTimer = 0;
+  }
+  if (_xPressed()) {
+    playSFX(SFX.CONFIRM);
+    battleSt.battleState = 'item-cancel-out';
+    battleSt.battleTimer = 0;
   }
 }
 
@@ -481,11 +519,20 @@ function _itemTargetNavVertical(isBattleItem) {
 }
 
 function _battleInputItemTargetSelect() {
-  const isBattleItem = inputSt.playerActionPending && ITEMS.get(inputSt.playerActionPending.itemId)?.type === 'battle_item';
+  const isMagic = inputSt.playerActionPending?.command === 'magic';
+  const magicSpell = isMagic ? SPELLS.get(inputSt.playerActionPending.spellId) : null;
+  const isAllyOnly = magicSpell && (magicSpell.target === 'ally' || magicSpell.element === 'recovery');
+  const isBattleItem = inputSt.playerActionPending && !isMagic && ITEMS.get(inputSt.playerActionPending.itemId)?.type === 'battle_item';
   const k = keys;
-  if (k['ArrowLeft']) { k['ArrowLeft'] = false; _itemTargetNavLeft(isBattleItem); }
-  if (k['ArrowRight']) { k['ArrowRight'] = false; _itemTargetNavRight(); }
-  if (k['ArrowUp'] || k['ArrowDown']) _itemTargetNavVertical(isBattleItem);
+  if (isAllyOnly) {
+    // Ally-target spell: lock to player/ally side; only up/down navigates.
+    k['ArrowLeft'] = false; k['ArrowRight'] = false;
+    if (k['ArrowUp'] || k['ArrowDown']) _itemTargetNavVertical(false);
+  } else {
+    if (k['ArrowLeft']) { k['ArrowLeft'] = false; _itemTargetNavLeft(isBattleItem); }
+    if (k['ArrowRight']) { k['ArrowRight'] = false; _itemTargetNavRight(); }
+    if (k['ArrowUp'] || k['ArrowDown']) _itemTargetNavVertical(isBattleItem);
+  }
   if (_zPressed()) {
     inputSt.playerActionPending.target = inputSt.itemTargetType === 'player' ? 'player' : inputSt.itemTargetIndex;
     inputSt.playerActionPending.allyIndex = inputSt.itemTargetType === 'player' ? inputSt.itemTargetAllyIndex : -1;

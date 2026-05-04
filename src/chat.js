@@ -10,6 +10,10 @@ import { mapSt } from './map-state.js';
 import { sprite } from './player-sprite.js';
 import { DIR_DOWN, DIR_UP, DIR_LEFT, DIR_RIGHT } from './sprite.js';
 import { playFF1Track, stopFF1Music, pauseMusic, resumeMusic } from './music.js';
+import { ps, changeJob } from './player-stats.js';
+import { JOBS } from './data/jobs.js';
+import { swapBattleSprites } from './job-sprites.js';
+import { saveSlotsToDB } from './save-state.js';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 const CHAT_LINE_H      = 9;
@@ -132,6 +136,24 @@ registerCommand('pos', 'Show player tile + faced tile', () => {
   const tileHex = inB ? '0x' + tile.toString(16).padStart(2, '0') : 'oob';
   addChatMessage('map ' + mapSt.currentMapId + ' @ ' + tx + ',' + ty + ' face ' + dirName, 'console');
   addChatMessage('faced ' + fx + ',' + fy + ' tile ' + tileHex, 'console');
+});
+
+registerCommand('job', 'Switch to job N (0-21). Bypasses CP cost. /job lists all.', (args) => {
+  if (!args) {
+    addChatMessage('Current: ' + ps.jobIdx + ' (' + (JOBS[ps.jobIdx]?.name || '?') + ')', 'console');
+    JOBS.forEach((j, i) => addChatMessage(i + ': ' + j.name, 'console'));
+    return;
+  }
+  const n = parseInt(args, 10);
+  if (isNaN(n) || n < 0 || n >= JOBS.length) { addChatMessage('Bad job idx', 'console'); return; }
+  ps.unlockedJobs |= (1 << n);
+  changeJob(n);
+  swapBattleSprites(n);
+  saveSlotsToDB();
+  addChatMessage('Job: ' + n + ' (' + JOBS[n].name + ')', 'console');
+  if (ps.knownSpells && ps.knownSpells.length > 0) {
+    addChatMessage('Known spells: ' + ps.knownSpells.map(s => '0x' + s.toString(16)).join(','), 'console');
+  }
 });
 
 let _commandCtx = {};

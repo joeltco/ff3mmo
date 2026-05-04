@@ -31,6 +31,7 @@ import { initBattleEnemy } from './battle-enemy.js';
 import { buildTurnOrder, processNextTurn } from './battle-turn.js';
 import { initBattleEncounter } from './battle-encounter.js';
 import { initBattleItems } from './battle-items.js';
+import { initSpellCast } from './spell-cast.js';
 import { addItem, setPlayerInventory } from './inventory.js';
 import { resetBattleVars, isTeamWiped, executeBattleCommand } from './battle-update.js';
 import { startGameLoop } from './game-loop.js';
@@ -117,6 +118,7 @@ export async function loadROM(arrayBuffer) {
   initTitleAssets(rawBytes);
   initMapLoading(rawBytes);
   initBattleItems({ processNextTurn });
+  initSpellCast({ processNextTurn });
   initBattleEncounter({ resetBattleVars });
   initBattleAlly({ buildTurnOrder, processNextTurn, isTeamWiped });
   initBattleEnemy({ processNextTurn, isTeamWiped });

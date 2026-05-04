@@ -16,7 +16,8 @@ import { queueBattleMsg } from './battle-msg.js';
 import { _nameToBytes } from './text-utils.js';
 import { getAllyDamageNums, setEnemyDmgNum, setEnemyHealNum, setPlayerDamageNum, setPlayerHealNum } from './damage-numbers.js';
 import { startMagicItem } from './battle-items.js';
-import { selectCursor, saveSlots } from './save-state.js';
+import { startSpellCast } from './spell-cast.js';
+import { selectCursor, saveSlots, saveSlotsToDB } from './save-state.js';
 import { removeItem } from './inventory.js';
 
 function _playerName() { return saveSlots[selectCursor]?.name || null; }
@@ -148,6 +149,7 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
     }
     else if (cmd === 'defend') { inputSt.battleActionCount++; if (pn) queueBattleMsg(pn); playSFX(SFX.DEFEND_HIT); battleSt.battleState = 'defend-anim'; battleSt.battleTimer = 0; }
     else if (cmd === 'item') { inputSt.battleActionCount++; _playerTurnItem(); }
+    else if (cmd === 'magic') { inputSt.battleActionCount++; _playerTurnMagic(); }
     else if (cmd === 'skip') processNextTurn();
     else if (cmd === 'run') _playerTurnRun();
   } else if (turn.type === 'ally') {
@@ -316,6 +318,17 @@ function _playerTurnItem() {
   removeItem(inputSt.playerActionPending.itemId);
   if (ITEMS.get(inputSt.playerActionPending.itemId)?.type === 'battle_item') startMagicItem();
   else _playerTurnConsumable();
+}
+
+function _playerTurnMagic() {
+  battleSt.isDefending = false;
+  const pending = inputSt.playerActionPending;
+  if (!pending) { processNextTurn(); return; }
+  // For v1, ally-target Cure: target is 'player' or an ally index.
+  const allyIndex = pending.target === 'player' ? (pending.allyIndex ?? -1) : -1;
+  startSpellCast(pending.spellId, { allyIndex });
+  // MP changed; persist immediately so a crash doesn't refund the cost.
+  saveSlotsToDB();
 }
 
 function _playerTurnRun() {

@@ -93,3 +93,13 @@ export const SPELLS = new Map([
   [0x56, { power: 120, hit:  60, element: 'air', type: 'damage', target: 'enemy', anim: 0x00 }], // Tornado
   [0x57, { power: 120, hit:  40, element: 'earth', type: 'damage', target: 'enemy', anim: 0x03 }], // Avalanche
 ]);
+
+// MP cost per spell (player-cast). Approximates NES per-level slot cost as a flat MP value.
+// Only spells the player can cast need entries; unknown lookups default to 0.
+export const SPELL_MP_COST = new Map([
+  [0x34, 4],  // Cure
+]);
+
+export function getSpellMPCost(spellId) {
+  return SPELL_MP_COST.get(spellId) ?? 0;
+}

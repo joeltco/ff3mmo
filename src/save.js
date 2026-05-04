@@ -14,7 +14,7 @@ export function parseSaveSlots(data) {
   if (!Array.isArray(data)) return null;
   return data.map(s => {
     if (!s) return null;
-    if (Array.isArray(s)) return { name: new Uint8Array(s), level: 1, exp: 0, hp: null, mp: null, stats: null, inventory: {}, gil: 0, jobLevels: {}, jobIdx: 0, unlockedJobs: 0x01, cp: 0, statusMask: 0, statusPoisonTick: 0, lastTown: 114, playTime: 0 };
+    if (Array.isArray(s)) return { name: new Uint8Array(s), level: 1, exp: 0, hp: null, mp: null, stats: null, inventory: {}, gil: 0, jobLevels: {}, jobIdx: 0, unlockedJobs: 0x01, cp: 0, statusMask: 0, statusPoisonTick: 0, lastTown: 114, playTime: 0, knownSpells: [] };
     return {
       name: new Uint8Array(s.name),
       level: s.level || 1,
@@ -36,6 +36,7 @@ export function parseSaveSlots(data) {
       worldY: s.worldY != null ? s.worldY : null,
       onWorldMap: s.onWorldMap != null ? s.onWorldMap : null,
       currentMapId: s.currentMapId != null ? s.currentMapId : null,
+      knownSpells: Array.isArray(s.knownSpells) ? [...s.knownSpells] : [],
     };
   });
 }

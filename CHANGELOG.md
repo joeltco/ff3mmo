@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.77 — 2026-05-04
+
+### Magic v1: White Mage Cure end-to-end
+
+First slice of the player-cast magic system. Battle slot 1 for mage jobs (3/4/5) now opens a spell-select menu, picks a known spell, target-selects an ally (player for v1), deducts MP, plays a placeholder cast animation (SouthWind sprite reused), applies heal via the NES magic damage formula, and persists MP + `knownSpells` across saves.
+
+- New `ps.knownSpells: []` on player-stats; `grantStartingSpells(jobIdx)` auto-grants per-job starting spells on `changeJob` and on save load. White Mage (job 3) starts with Cure (`0x34`).
+- New `src/spell-cast.js` — `startSpellCast(spellId, target)` / `updateSpellCast(dt)` driving `magic-cast` (250ms windup) → `magic-hit` (400ms anim → apply heal → hold to 1100ms) state pair, modelled on the SouthWind throw/hit loop.
+- Battle menu plumbing piggybacks on the item-* state machine via a new `inputSt.menuMode = 'item' | 'magic'` flag. Spell-select reuses the item-list panel; ally-target spells lock the target cursor to the player/ally side.
+- New `SPELL_MP_COST` table in `data/spells.js` (Cure = 4 MP for v1).
+- Save schema: `knownSpells` added to `save-state.js` + `save.js` + title-screen restore. On load, `grantStartingSpells(ps.jobIdx)` runs so existing mage saves get their starter spells without manual job re-switch.
+- New `/job N` console command for testing — bypasses CP cost, shows known spells.
+- Cast visual is a placeholder: SouthWind sprite reused as the spell anim. Per-spell PPU traces will land later.
+
 ## 1.6.76 — 2026-05-04
 
 ### Docs: README + design-notes catch up to the shop / save work

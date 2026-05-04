@@ -15,6 +15,7 @@ import { buildTurnOrder, processNextTurn } from './battle-turn.js';
 import { updateBattleAlly } from './battle-ally.js';
 import { updateBattleEnemyTurn } from './battle-enemy.js';
 import { resetBattleItemVars, updateMagicItemThrowHit } from './battle-items.js';
+import { updateSpellCast, resetSpellCastVars } from './spell-cast.js';
 import { queueBattleMsg, replaceBattleMsg, updateBattleMsg as _updateBattleMsg, clearBattleMsgQueue,
          queueVictoryRewards as _queueVictoryRewards, getBattleMsgCurrent,
          isBattleMsgBusy, clearVictoryPersist } from './battle-msg.js';
@@ -113,15 +114,31 @@ export function executeBattleCommand(index) {
     battleSt.battleState = 'target-select';
     battleSt.battleTimer = 0;
   } else if (index === 1) {
-    // Defend
-    playSFX(SFX.CONFIRM);
-    battleSt.isDefending = true;
-    inputSt.playerActionPending = { command: 'defend' };
-    battleSt.battleState = 'confirm-pause';
-    battleSt.battleTimer = 0;
+    // Slot 1: Defend for non-mages, Magic for mages (jobs 3/4/5).
+    const isMage = ps.jobIdx === 3 || ps.jobIdx === 4 || ps.jobIdx === 5;
+    if (isMage && ps.knownSpells && ps.knownSpells.length > 0) {
+      playSFX(SFX.CONFIRM);
+      inputSt.menuMode = 'magic';
+      inputSt.spellSelectList = [...ps.knownSpells];
+      inputSt.itemHeldIdx = -1;
+      inputSt.itemPage = 1;
+      inputSt.itemPageCursor = 0;
+      inputSt.itemSlideDir = 0;
+      inputSt.itemSlideCursor = 0;
+      battleSt.battleState = 'item-menu-out';
+      battleSt.battleTimer = 0;
+    } else {
+      // Defend
+      playSFX(SFX.CONFIRM);
+      battleSt.isDefending = true;
+      inputSt.playerActionPending = { command: 'defend' };
+      battleSt.battleState = 'confirm-pause';
+      battleSt.battleTimer = 0;
+    }
   } else if (index === 2) {
     // Item
     playSFX(SFX.CONFIRM);
+    inputSt.menuMode = 'item';
     inputSt.itemSelectList = buildItemSelectList();
     inputSt.itemHeldIdx = -1;
     inputSt.itemPage = 1;
@@ -528,6 +545,8 @@ export function updateBattleDefendItem(dt) {
     }
   } else if (battleSt.battleState === 'sw-throw' || battleSt.battleState === 'sw-hit') {
     return updateMagicItemThrowHit();
+  } else if (battleSt.battleState === 'magic-cast' || battleSt.battleState === 'magic-hit') {
+    return updateSpellCast(dt);
   } else if (_updateItemMenuFades()) {
     return true;
   } else { return false; }
