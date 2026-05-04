@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.0 — 2026-05-04
+
+### EMU debugger: REC N FRAMES — multi-frame OAM/BG capture (Phase 3)
+
+Animation work like the 3-frame staff slash, spell anims, and any future N-frame sprite work no longer needs N separate pause-snap-step cycles. New `REC OAM` and `REC BG` buttons capture N consecutive frames in one pass.
+
+- **New REC row** in the EMU tab below the SAVE/LOAD/SNAP capture row. Two buttons (`REC OAM`, `REC BG`) plus `frames` (default 3, max 60) and `gap` (default 1, max 30) numeric inputs. `gap=1` captures consecutive frames; `gap=N` advances N frames between snaps for slower anims.
+- **Async loop drives `nes.frame()` between snaps** with a `setTimeout(0)` yield each step, so the canvas updates live during the record (you watch the animation play) and the cancel tap stays responsive. Tap the active REC button mid-run to cancel — text changes to `CANCEL (i/N)` while recording.
+- **Output is one paste-ready block.** Each frame's snap is preceded by a `// ═══ frame N (snap @ fXXXXX) ═══════` divider. Per-frame OAM blocks include the PPU palette (in case it shifts mid-anim) and all meta-sprite groups. Per-frame BG blocks include the nametable grid + unique tile patterns.
+- **Refactor:** `_snapshotOAM` body extracted into a pure `_oamSnapshotText()` helper used by both single-snap and the REC loop. `_bgSnapshotText` was already pure — REC reuses it directly.
+
 ## 1.6.99 — 2026-05-04
 
 ### EMU debugger: scene library framework (Phase 1.2)

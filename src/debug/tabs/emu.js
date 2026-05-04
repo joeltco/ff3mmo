@@ -540,6 +540,14 @@ function _exportScene() {
 
 function _snapshotOAM() {
   if (!nes) return;
+  const { text, sprites, groups } = _oamSnapshotText();
+  dom.output.value = text;
+  _status(`snapshot: ${sprites} sprites in ${groups} groups`);
+}
+
+// Pure text builder used by both single-snap and REC OAM loop. Returns text
+// plus group/sprite counts so the caller can render a status line.
+function _oamSnapshotText() {
   const oam = nes.ppu.spriteMem;
   const sprites = [];
   for (let i = 0; i < 64; i++) {
@@ -592,8 +600,7 @@ function _snapshotOAM() {
     }
     out.push('');
   }
-  dom.output.value = out.join('\n');
-  _status(`snapshot: ${sprites.length} sprites in ${groups.length} groups`);
+  return { text: out.join('\n'), sprites: sprites.length, groups: groups.length };
 }
 
 // ── BG snapshot (nametable + attribute table) ───────────────────────────────
@@ -679,6 +686,91 @@ function _bgSnapshotText() {
   }
 
   return out.join('\n');
+}
+
+// ── Multi-frame record (REC OAM / REC BG) ───────────────────────────────────
+// Captures OAM/BG across N consecutive frames so animations land in the output
+// textarea as one paste-ready block. Drives the emulator manually via nes.frame()
+// since the rAF tick is paused for the duration. Tap the active REC button mid-
+// run to cancel.
+
+const REC_FRAMES_MIN = 1, REC_FRAMES_MAX = 60;
+const REC_GAP_MIN = 1, REC_GAP_MAX = 30;
+
+let recordingActive = false;
+let recCancel = false;
+
+function _toggleRec(kind) {
+  if (recordingActive) {
+    recCancel = true;
+    _status('REC: cancel requested…');
+    return;
+  }
+  if (!nes) return;
+  const frames = _clampInt(dom.recFramesInput?.value, 3, REC_FRAMES_MIN, REC_FRAMES_MAX);
+  const gap = _clampInt(dom.recGapInput?.value, 1, REC_GAP_MIN, REC_GAP_MAX);
+  if (frames == null) { _status(`frames: ${REC_FRAMES_MIN}-${REC_FRAMES_MAX}`, true); return; }
+  if (gap == null) { _status(`gap: ${REC_GAP_MIN}-${REC_GAP_MAX}`, true); return; }
+  recordingActive = true;
+  recCancel = false;
+  _recordFrames(kind, frames, gap).finally(() => {
+    recordingActive = false;
+    recCancel = false;
+  });
+}
+
+function _clampInt(raw, defaultVal, min, max) {
+  const n = parseInt(raw, 10);
+  if (!Number.isFinite(n)) return defaultVal;
+  if (n < min || n > max) return null;
+  return n;
+}
+
+async function _recordFrames(kind, count, gap) {
+  const wasRunning = running;
+  if (wasRunning) _stop();
+  const startFrame = frameCount;
+  const blocks = [];
+  blocks.push(`// REC ${kind} × ${count} frames @ start f${startFrame}, gap=${gap}`);
+  blocks.push(`// (gap = number of frames advanced between snaps; gap=1 means consecutive)`);
+  blocks.push('');
+  const button = (kind === 'OAM') ? dom.btnRecOam : dom.btnRecBg;
+  const origLabel = button.textContent;
+  try {
+    for (let i = 0; i < count; i++) {
+      if (recCancel) {
+        _status(`REC ${kind}: cancelled at frame ${i}/${count}`);
+        break;
+      }
+      button.textContent = `CANCEL (${i + 1}/${count})`;
+      _status(`REC ${kind}: snap ${i + 1}/${count} @ f${frameCount}`);
+      const snap = (kind === 'OAM') ? _oamSnapshotText().text : _bgSnapshotText();
+      blocks.push(`// ═══ frame ${i} (snap @ f${frameCount}) ═══════════════════════════════════════════════`);
+      blocks.push('');
+      blocks.push(snap || `// (empty ${kind} snap)`);
+      blocks.push('');
+      // Skip the advance after the final snap.
+      if (i < count - 1) {
+        for (let g = 0; g < gap; g++) {
+          if (recCancel) break;
+          nes.frame();
+          // Yield to the event loop so the UI updates and the cancel tap is responsive.
+          await new Promise(r => setTimeout(r, 0));
+        }
+      }
+    }
+    dom.output.value = blocks.join('\n');
+    if (!recCancel) {
+      const finalFrame = frameCount;
+      _status(`REC ${kind}: done — ${count} frames captured (f${startFrame}..f${finalFrame})`);
+    }
+  } catch (e) {
+    _status(`REC ${kind} failed: ${e.message}`, true);
+    console.error('[emu] REC failed', e);
+  } finally {
+    button.textContent = origLabel;
+    if (wasRunning) _start();
+  }
 }
 
 // ── Capture ─────────────────────────────────────────────────────────────────
@@ -977,6 +1069,33 @@ function _buildDOM(parent) {
   capRow.append(btnSave, btnLoad, btnSnap, btnSnapBG, btnWpn);
   rightCol.appendChild(capRow);
 
+  // REC row: multi-frame OAM/BG capture. Drives nes.frame() between snaps;
+  // tap the active REC button mid-run to cancel.
+  const recRow = document.createElement('div');
+  recRow.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;align-items:center;';
+  const btnRecOam = mkBtn('REC OAM', () => _toggleRec('OAM'));
+  const btnRecBg = mkBtn('REC BG', () => _toggleRec('BG'));
+  const recFramesLabel = document.createElement('span');
+  recFramesLabel.textContent = 'frames:';
+  recFramesLabel.style.cssText = 'color:#888;font-size:11px;font-family:monospace;';
+  const recFramesInput = document.createElement('input');
+  recFramesInput.type = 'number';
+  recFramesInput.value = '3';
+  recFramesInput.min = String(REC_FRAMES_MIN);
+  recFramesInput.max = String(REC_FRAMES_MAX);
+  recFramesInput.style.cssText = 'width:48px;background:#1e1e2e;border:1px solid #444;border-radius:3px;color:#e0e0e0;font-family:monospace;font-size:11px;padding:4px 6px;';
+  const recGapLabel = document.createElement('span');
+  recGapLabel.textContent = 'gap:';
+  recGapLabel.style.cssText = 'color:#888;font-size:11px;font-family:monospace;';
+  const recGapInput = document.createElement('input');
+  recGapInput.type = 'number';
+  recGapInput.value = '1';
+  recGapInput.min = String(REC_GAP_MIN);
+  recGapInput.max = String(REC_GAP_MAX);
+  recGapInput.style.cssText = 'width:48px;background:#1e1e2e;border:1px solid #444;border-radius:3px;color:#e0e0e0;font-family:monospace;font-size:11px;padding:4px 6px;';
+  recRow.append(btnRecOam, btnRecBg, recFramesLabel, recFramesInput, recGapLabel, recGapInput);
+  rightCol.appendChild(recRow);
+
   // Tile dump input
   const tileRow = document.createElement('div');
   tileRow.style.cssText = 'display:flex;gap:4px;align-items:center;';
@@ -1098,7 +1217,7 @@ function _buildDOM(parent) {
 
   parent.appendChild(root);
 
-  const d = { root, canvas, status, frame, btnPause, btnStep, btnReset, btnSound, btnSave, btnLoad, btnSnap, btnSnapBG, btnWpn, btnCopy, btnSaveFile, slotButtons, tileInput, btnTileDump, output, writeInput, scenesSummary, scenesList, sceneNameInput, sceneDescInput };
+  const d = { root, canvas, status, frame, btnPause, btnStep, btnReset, btnSound, btnSave, btnLoad, btnSnap, btnSnapBG, btnWpn, btnRecOam, btnRecBg, recFramesInput, recGapInput, btnCopy, btnSaveFile, slotButtons, tileInput, btnTileDump, output, writeInput, scenesSummary, scenesList, sceneNameInput, sceneDescInput };
   dom = d;
   _installKeys();
   _refreshSlotButtons();
