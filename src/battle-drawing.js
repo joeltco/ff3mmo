@@ -10,7 +10,7 @@ import { getBossBattleCanvas, getBossWhiteCanvas } from './boss-sprites.js';
 import { getMonsterCanvas, getMonsterWhiteCanvas, hasMonsterSprites } from './monster-sprites.js';
 import { getItemNameClean, getMonsterName, getSpellNameClean } from './text-decoder.js';
 import { getSpellMPCost } from './data/spells.js';
-import { weaponSubtype, isWeapon } from './data/items.js';
+import { weaponSubtype, isWeapon, isBladedWeapon } from './data/items.js';
 import { PLAYER_PALETTES, MONK_PALETTES } from './data/players.js';
 import { pickAttackPoseKey, pickAttackWeaponSpec, attackWeaponLayer } from './combatant-pose.js';
 
@@ -814,6 +814,11 @@ function _drawEncounterMonsters(gridPos, sprH, boxX, boxY, boxW, boxH, isSlideIn
 }
 function _drawEncounterSlashEffects(gridPos, slideOffX, slotCenterY) {
   if (battleSt.battleState === 'player-slash' && bsc.slashFrames && battleSt.slashFrame < SLASH_FRAMES && inputSt.hitResults && inputSt.hitResults[battleSt.currentHitIdx] && !inputSt.hitResults[battleSt.currentHitIdx].miss) {
+    // Non-bladed weapons (staves/nunchaku/fists) per NES: 2-frame slash effect that
+    // appears AFTER the arm comes down — skip drawing on frame 0 so the visible
+    // slash starts on frame 1 and holds through frame 2 (~100ms post-swing).
+    const handW = getHitWeapon(battleSt.currentHitIdx, inputSt.rHandHitCount);
+    if (!isBladedWeapon(handW) && battleSt.slashFrame === 0) return;
     const pos = gridPos[inputSt.targetIndex];
     ui.ctx.drawImage(bsc.slashFrames[battleSt.slashFrame], pos.x - slideOffX + battleSt.slashOffX + 8, slotCenterY(inputSt.targetIndex) + battleSt.slashOffY);
   }
@@ -907,7 +912,10 @@ function _drawBossSprite(centerX, centerY) {
     if (!battleSt.enemyDefeated) ui.ctx.drawImage((frame & 1) ? (getBossWhiteCanvas() || getBossBattleCanvas()) : getBossBattleCanvas(), sprX, sprY);
   } else if (battleSt.battleState === 'player-slash') {
     if (!(Math.floor(battleSt.battleTimer / 60) & 1) && !battleSt.enemyDefeated) ui.ctx.drawImage(getBossBattleCanvas(), sprX, sprY);
-    if (bsc.slashFrames && battleSt.slashFrame < SLASH_FRAMES && !battleSt.enemyDefeated && inputSt.hitResults && inputSt.hitResults[battleSt.currentHitIdx] && !inputSt.hitResults[battleSt.currentHitIdx].miss)
+    // Skip slash sprite on frame 0 for non-bladed weapons — see _drawEncounterSlashEffects
+    const handW = getHitWeapon(battleSt.currentHitIdx, inputSt.rHandHitCount);
+    const skipFirst = !isBladedWeapon(handW) && battleSt.slashFrame === 0;
+    if (!skipFirst && bsc.slashFrames && battleSt.slashFrame < SLASH_FRAMES && !battleSt.enemyDefeated && inputSt.hitResults && inputSt.hitResults[battleSt.currentHitIdx] && !inputSt.hitResults[battleSt.currentHitIdx].miss)
       ui.ctx.drawImage(bsc.slashFrames[battleSt.slashFrame], centerX - 8 + battleSt.slashOffX, centerY - 8 + battleSt.slashOffY);
   } else if (battleSt.battleState === 'ally-slash') {
     const blinkHidden = battleSt.allyHitResult && !battleSt.allyHitResult.miss && (Math.floor(battleSt.battleTimer / 60) & 1);

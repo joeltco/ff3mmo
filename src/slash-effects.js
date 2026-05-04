@@ -75,13 +75,14 @@ export function initSwordSlashSprites() {
 }
 
 // Per-weapon scatter patterns for the 3-frame slash impact dance. Index = frame (0..2).
-// Picked so each weapon "swings" the way its NES animation does instead of the generic
-// shake we used to apply to everything except bladed weapons.
 //
-// Bladed weapons drive their offsets directly in `_updatePlayerSlash` (clean diagonal).
-// Everything else routes through `getSlashScatter(weaponId)`.
-const _STAFF_SCATTER   = { x: [-2,  4,  8], y: [-16,   0, 16] }; // downward arc — staff/nunchaku/rod (PPU-captured)
-const _PUNCH_SCATTER   = { x: [-6,  4, -2], y: [ -4,   4,  8] }; // tight fist-impact cluster — fists
+// NES convention (PPU-verified for staff): slash animation is 2 frames per hit —
+// frame 1 is the player wind-up with no slash sprite (handled by `attack-back` state),
+// frame 2 is the strike with the slash sprite drawn at ONE static position. Staves,
+// nunchaku, and fists therefore use a static scatter (no movement during the strike).
+// Bladed weapons keep their classic diagonal sweep — they're not yet PPU-verified.
+const _STAFF_SCATTER   = { x: [0, 0, 0], y: [0, 0, 0] };          // static — staff/nunchaku/rod
+const _PUNCH_SCATTER   = { x: [0, 0, 0], y: [0, 0, 0] };          // static — fists
 const _BLADE_SCATTER   = { x: [ 8,  0, -8], y: [ -8,   0,  8] }; // clean UR→LL diagonal — knives/swords
 const _DEFAULT_SCATTER = { x: [ 0, 10, -8], y: [  0,  -6,  8] }; // legacy shake fallback
 

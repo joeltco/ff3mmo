@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.88 — 2026-05-04
+
+### Slash effect for staff/nunchaku/fists is 2 frames AFTER the swing
+
+Per PPU OAM comparison: the NES staff slash effect plays for **2 game frames** AFTER the player's arm has come down on the forward strike. Frame 1 of the effect is held empty (no slash sprite rendered yet); frame 2 has the sprite at one static position on the target. Both PPU snapshots showed a forward-strike pose, just at slightly different sub-poses — neither was a wind-up.
+
+Previous engine ran a 3-frame scatter dance over the entire 150ms `player-slash` window. Now:
+- `_STAFF_SCATTER` and `_PUNCH_SCATTER` are static `(0,0)` (sprite holds at one position).
+- Both encounter and boss slash render paths skip drawing the slash sprite on `slashFrame === 0` for non-bladed weapons — so the visible flash starts on frame 1 and holds through frame 2 (~100ms post-swing).
+- Bladed weapons untouched (no PPU verification yet — they keep the UR→LL diagonal).
+
 ## 1.6.87 — 2026-05-04
 
 ### Pause-menu inv-target cursor: scroll the roster instead of walking off
