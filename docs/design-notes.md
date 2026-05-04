@@ -16,7 +16,7 @@ Intentional design decisions that aren't obvious from reading the code. One sect
 
 ## Death / respawn
 
-- **Victory pose is also Defend and Magic-cast.** Canonical FF3 uses the same 4-tile arms-up stance for all three. In `src/battle-drawing.js:203`, defend and item-use portraits both route through `p.defend` — which is built from victory tiles for every job. When magic-cast is added, route `isMagicPose` through the same branch.
+- **Victory pose is also Defend and Magic-cast.** Canonical FF3 uses the same 4-tile arms-up stance for all three. In `src/battle-drawing.js`, defend, item-use, and magic-cast (`magic-cast`/`magic-hit` states) portraits all route through `p.defend` via the `isItemUsePose` branch — `p.defend` is built from victory tiles for every job.
 - **HP is NOT restored on level-up.** Preserves death state through the end-of-battle respawn check. `src/player-stats.js:grantExp` deliberately omits `fullHeal()`.
 - **Game Over screen.** When `ps.hp <= 0` at box-close or defeat-close, battle enters the `'game-over'` state. Small bordered HUD box (96×40) shows "GAME OVER" with a blinking "Press Z" prompt. `TRACKS.GAME_OVER` plays. Z press → `respawnFromGameOver()` → `_respawnAtLastTown()` (full HP/MP restore at `ps.lastTown`).
 
@@ -35,19 +35,42 @@ Canonical NES animation pattern, captured from PPU OAM while the Monk punched a 
 - **L-hand strike**: body `$3B/$3C`, legs `$3D/$3E`, fist tile `$51` (same bytes as `$49`, different CHR index). These are our `MO_L_FWD_T2/T3` + `MO_LEG_L_FWD_R`/`MO_LEG_R_BACK_R` — i.e. our `lFwd` pose IS the unarmed L-strike pose.
 - **Between-hands idle**: a brief arms-up reset frame between R and L strikes in a combo.
 - **No back-swing phase on either hand.** Unarmed skips the wind-up entirely — the first visible attack frame IS the strike.
-- **Combo alternation**: R → idle → L → idle → R → L → … per hit. When both hand slots are empty (fists), treat as dual-wield for pose alternation purposes, not just for one-hand-only.
+- **Combo alternation**: fists alternate R/L every hit (`isHitRightHand` returns `(hitIdx % 2) === 0` when unarmed). Each fist hit gets 3 random-scatter slash frames + a ±2px x / ±1px y wiggle on the fist sprite during `player-slash` for impact shake. **Idle pose break only at hand change** (R↔L), not between same-hand hits.
 - **Hit-flash sprite is already correct.** `initSlashSprites()` in `src/slash-effects.js` uses tile bytes byte-identical to the OAM `$4A–$4D` with the same `[0x0F, 0x16, 0x27, 0x30]` palette — the two-fist impact is already what we draw for non-bladed hits.
 
 ## Shops
 
 - **Counters, not NPCs.** Shops in Ur are interior maps (3 = magic, 4 = armor, 5 = weapon, 8 = item). Pressing Z facing a registered counter tile opens the shop. Counter coords + `mapId` are stored on each entry in `src/data/shops.js`; lookup via `findShopAtCounter(mapId, x, y)` in `movement.js#handleAction`.
 - **Catalog item IDs only — prices come from `data/items.js`.** That file is auto-generated from the FF3 NES ROM at `$21E10`, so prices are canonical. Sell price = `floor(buy / 2)`.
-- **Magic shop is a no-op.** `openShop` returns false when the catalog has `spells:` instead of `items:` — magic-buy flow needs `spells.js` integration. The counter is detected; nothing happens on Z. Defer until ready.
+- **Magic shop is wired.** `openShop` accepts `spells:` catalogs. Spell list shows name + `SPELL_BUY_PRICE` right-aligned; confirm dialog reads "Learn X?". Buying deducts gil and pushes the spell ID into `ps.knownSpells`. Re-buying a known spell is rejected with "Already known". Sell tab is blocked for spell shops (can't sell spells). Ur magic shop sells Cure (100 gil) + Poisona (100 gil).
 - **Two-phase NES transition.** Outer fade uses `buildNesFadeFrames` (`src/nes-fade.js`) — snapshots the inner viewport, NES-quantizes each pixel, applies `nesColorFade` N times to produce stepped fade frames. Phase 1 (`map-out`) plays them forward over 320ms; phase 2 (`shop-in`) fills inner area black + text-palette fades in over 500ms. Reverse on close. **Snapshot the INNER area only** (`INNER_X = 8, INNER_Y = 40, INNER_W = 128, INNER_H = 128`) so the static HUD canvas's viewport border doesn't fade with it.
 - **HUD portrait flickers victory pose for equippable gear.** `_drawHUDPortrait` checks `shopHoverEquippable()` — if true and `bp.victory` exists, alternates victory ↔ idle every 250ms (same cadence as battle ally victory). Falls back to normal kneel/defend/idle.
 - **ATK/DEF delta triangle.** `shopHoverStatDelta()` returns `null` for "no indicator", a number otherwise. Green ▲ for upgrade, red ▼ for downgrade, white = for same. Drawn in the 8×8 left-padding of the HUD info panel via per-row `ctx.fillRect` (NES `$2A` / `$16` / `$30`). Weapon comparison uses `Math.max(weaponR, weaponL)` with a same-ID short-circuit (so a duplicate of what's wielded reads as `=`); shields use `Math.max` of any equipped shield slot.
 - **Music: FF1 NSF track 14.** Shop opens with `pauseMusic() + playFF1Track(FF1_TRACKS.SHOP)`; closes with `stopFF1Music() + resumeMusic()`. Mirrors the pause-menu pattern with `MENU_SCREEN`.
 - **Confirm dialog uses blue text palette.** Box is `drawBorderedBox(.., true)` (NES `$02` blue). Text uses `[0x02, 0x02, 0x02, 0x30]` so the font shadow (color index 1/2) blends into the blue bg — same trick `message-box.js` uses. Mobile shows `A=Yes  B=No`, desktop shows `Z=Yes  X=No` via `isMobile` from `ui-state.js`.
+
+## Magic
+
+- **Spell knowledge is per-player, not per-job.** `ps.knownSpells = []` is an array of spell IDs the player has learned. Spells are granted by `grantStartingSpells(jobIdx)` on `changeJob` (and on save load), or bought from the magic shop. White Mage starts with Cure (`0x34`) and Poisona (`0x35`). `STARTING_SPELLS` map is in `player-stats.js`.
+- **MP cost is flat per spell.** `SPELL_MP_COST` map in `data/spells.js` maps spell ID → MP cost. v1: Cure = 4, Poisona = 2. Approximates NES per-level slot cost as a flat MP value.
+- **White magic uses MND, black magic uses INT.** Per NES FF3 disasm. `_rollMagicAmount(power, useMnd)` in `spell-cast.js` and `_applyPauseSpellUse` in `input-handler.js` both branch on `spell.element === 'recovery'` (or `target === 'cure_status'`/`'revive'`) → MND, else INT. Formula: `floor(stat/2) + power + rand(0..floor(atk/2))`.
+- **Battle slot 1 = Magic for mage jobs (3/4/5).** `executeBattleCommand(1)` checks `_MAGE_JOBS` + `ps.knownSpells.length > 0` and routes to magic mode (otherwise Defend). Magic uses `inputSt.menuMode = 'magic'` to piggyback on the item-menu state machine — same `item-menu-out` → `item-list-in` → `item-select` → `item-target-select` fades, branched on `menuMode` for spell-list rendering / spell-pick input.
+- **Battle cast pipeline.** `cmd === 'magic'` in `_playerTurnMagic` (battle-turn.js) → `startSpellCast(spellId, { allyIndex })` in `spell-cast.js`. Deducts MP, rolls amount, sets up state machine: `magic-cast` (250ms windup, victory pose via `isItemUsePose`) → `magic-hit` (400ms anim, apply heal/damage, hold to 1100ms, end turn). Cure plays `SFX.CURE` (same as Potion); damage spells default to `SFX.SW_HIT` (placeholder). Visual: cure-sparkle on player portrait via `bsc.cureSparkleFrames` when target is self. Per-spell anim sprites still need PPU capture.
+- **Status-cure spells** (Poisona, Bndna, etc.) — `spell.target === 'cure_status'` branch in `_applySpellEffect`. `SPELL_CURE_FLAG` map (`spell.type` → `STATUS.*`) drives `removeStatus(...)` on target. Heal-num is rendered as `value: 0` so the green-number bounce still shows the cast happened.
+- **Pause-menu Magic uses inv-* state machine** via `pauseSt.menuMode = 'inv' | 'magic'`. Spell list with MP cost right-aligned. Picking a spell stashes ID in `pauseSt.useSpellId` and routes to `inv-target` for player/roster pick — Cure on roster heals that player's HP; Poisona removes their poison status. Returns to spell list after the heal anim. `menuMode` resets to `'inv'` on `inv-text-in` → `'open'`.
+
+## Battle attack animation
+
+- **Per-hit cycle.** Each hit goes through three states: `attack-back` (wind-up pose) → `attack-fwd` (transition, `FWD_SWING_MS`) → `player-slash` (impact, `SLASH_FRAMES * SLASH_FRAME_MS = 150ms`).
+- **Back-swing duration.** Hit 0 always uses `BACK_SWING_MS` (~167ms, full visible wind-up). Same-hand subsequent hits also use `BACK_SWING_MS` (every weapon hit gets the full wind-up). Hand change inserts `IDLE_FRAME_MS` (67ms) in idle pose. Fists skip the back-swing entirely (`delay = 0` when unarmed) — punches go straight to forward strike.
+- **Idle pose only at hand boundary.** `_getPortraitSrc` `handChangeGap` flag fires when `attack-back && currentHitIdx > 0 && hand changed` — drops back to idle pose for the gap. Same-hand inter-hit gap stays in back-swing pose.
+- **Slash scatter is per-weapon.** `_updatePlayerSlash` in `battle-update.js`: bladed → clean UR→LL diagonal `(8,-8) → (0,0) → (-8,8)`; everything else (staff/nunchaku/fists) → small per-frame random `Math.floor(Math.random()*16)-8` per axis. `drawSlashOverlay` in `slash-effects.js` mirrors the same logic for ally/PVP-opponent slash overlays via the new `weaponId` param.
+- **Slash sprite per weapon subtype.** `getSlashFramesForWeapon(id, rightHand)` in `battle-sprite-cache.js` routes:
+  - knife/dagger → `bsc.knifeSlashFramesR/L`
+  - sword → `bsc.swordSlashFramesR/L`
+  - staff/rod/nunchaku → `bsc.staffSlashFramesR/L` (PPU-captured tiles `$4D-$50` SP3 palette; nunchaku piggy-backs on the staff cache after PPU verified byte-identical)
+  - fists → `bsc.slashFrames` (initSlashSprites red two-fist impact)
+- **Fist sprite wiggle.** `_drawPortraitWeapon` in `battle-drawing.js` wiggles the fist sprite ±2px x / ±1px y at ~30ms cadence during `player-slash` only when `handWeapon === 0`. Weapons unaffected.
 
 ## Saves
 

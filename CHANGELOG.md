@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.95 — 2026-05-04
+
+### Docs: README + design-notes catch up to magic + animation work
+
+- README status line bumped to v1.6.94 and now mentions player-cast magic. Architecture module list adds `Magic — spell-cast, data/spells`.
+- New "Magic" section in `docs/design-notes.md` covering `ps.knownSpells`, MND vs INT stat, `menuMode = 'magic'` piggyback, battle cast pipeline, status-cure flow, pause-menu submenu.
+- New "Battle attack animation" section documenting per-hit cycle (back-swing every hit, idle only at hand change, fists skip back-swing), per-weapon slash scatter (bladed = diagonal, else random per frame), per-weapon slash sprite routing, and fist sprite wiggle.
+- Updated stale notes: magic-cast pose now lives in the `isItemUsePose` branch (was "TODO"); magic shop is wired (was "no-op"); fist combo notes updated for shipped behavior.
+
 ## 1.6.94 — 2026-05-04
 
 ### Fist sprite wiggles during punch slash

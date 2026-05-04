@@ -6,7 +6,7 @@ A browser-based NES Final Fantasy III engine that extracts all assets from user-
 
 ## Status
 
-v1.6.75 — Full combat system, PVP duels, job system with 22 jobs, status effects, procedural dungeons, simulated roster, local chat, and town shops (Buy/Sell/Exit, NES palette fade transition, FF1 NSF shop music, equip-preview HUD portrait + ATK/DEF delta indicator). All game data (items, monsters, spells, encounters, jobs) extracted from ROM via Data Crystal offsets with NES-verified combat formulas (damage, multi-hit, per-job crit, job-alignment switch cost, magic damage with caster INT, per-side status immunity). On defeat, players respawn at the last town they visited with full HP/MP.
+v1.6.94 — Full combat system, PVP duels, job system with 22 jobs, status effects, procedural dungeons, simulated roster, local chat, town shops (Buy/Sell/Exit, NES palette fade transition, FF1 NSF shop music, equip-preview HUD portrait + ATK/DEF delta indicator), and player-cast magic (Cure + Poisona for White Mage, magic shop in Ur, battle + pause-menu spell-pick with target select, MND-based heal formula). All game data (items, monsters, spells, encounters, jobs) extracted from ROM via Data Crystal offsets with NES-verified combat formulas (damage, multi-hit, per-job crit, job-alignment switch cost, magic damage with caster INT/MND, per-side status immunity). On defeat, players respawn at the last town they visited with full HP/MP.
 
 Networked multiplayer (WebSocket presence, real chat, real PVP) is planned — see [MULTIPLAYER.md](MULTIPLAYER.md). The current roster is populated from a fake player pool.
 
@@ -85,6 +85,7 @@ tools/            ROM extractors, map/sprite viewers, debug utilities
 - **Audio** — `music`, `nsf-builder`, `ff1-nsf-builder`
 - **Social** — `chat`, `roster`, `message-box`
 - **Shops** — `shop`, `nes-fade`, `data/shops`
+- **Magic** — `spell-cast`, `data/spells`
 - **ROM/text** — `rom-parser`, `ips-patcher`, `text-decoder`, `text-utils`, `font-renderer`, `tile-decoder`, `tile-math`, `palette`
 
 See `docs/history/REFACTOR.md` for the history of how the monolithic `game.js` was decomposed into these modules, and `src/*.js` files for current details.
