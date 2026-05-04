@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.80 — 2026-05-04
+
+### Pause menu Magic submenu — proper spell list, not instant cast
+
+Z on Magic in the pause menu now opens a real spell-select submenu. Piggybacks on the inventory state machine (`inv-text-out` → `inv-expand` → `inv-items-in` → `inventory`) via a new `pauseSt.menuMode = 'inv' | 'magic'` flag (mirrors the battle menu pattern).
+
+- Magic mode renders `ps.knownSpells` with MP costs right-aligned, navigates with Up/Down, Z casts the highlighted spell on self (v1: ally-only spells), X exits back to the main pause menu.
+- Cast reuses the existing `inv-heal` flow — green heal number bounces over the player portrait with the cure-sparkle overlay.
+- Returning from `inv-heal` keeps the spell list visible (state stays `'inventory'`, menuMode stays `'magic'`) so the player can cast again or X out.
+- `menuMode` resets to `'inv'` on `inv-text-in` → `'open'` so a future Item-cursor open starts in inventory mode.
+
 ## 1.6.79 — 2026-05-04
 
 ### Magic v1 polish: cure-sparkle visual, MND-based heal, encounter visibility

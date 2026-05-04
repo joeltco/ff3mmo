@@ -5,7 +5,8 @@ import { ps, getEquipSlotId, jobSwitchCost, getJobLevel, getJobLevelStatBonus } 
 import { JOBS, JOB_ABBR } from './data/jobs.js';
 import { _makeFadedPal, nesColorFade } from './palette.js';
 import { _nameToBytes, _buildItemRowBytes } from './text-utils.js';
-import { getItemNameClean } from './text-decoder.js';
+import { getItemNameClean, getSpellNameClean } from './text-decoder.js';
+import { SPELLS, getSpellMPCost } from './data/spells.js';
 import { stopFF1Music, resumeMusic, playFF1Track, FF1_TRACKS } from './music.js';
 import { PAUSE_ITEMS } from './data/strings.js';
 import { selectCursor, saveSlots } from './save-state.js';
@@ -50,7 +51,10 @@ export const pauseSt = {
   optCursor:    0,       // options sub-menu cursor
   jobCursor:    0,       // job sub-menu cursor
   jobList:      [],      // unlocked job indices
-  magMode:      false,   // v1: true while inv-heal is animating a Magic cast (so it returns to 'open' not 'inventory')
+  // Magic submenu (piggybacks on inv-* state machine; menuMode toggles list/input/draw branches)
+  menuMode:     'inv',   // 'inv' or 'magic'
+  magicCursor:  0,       // active spell index when menuMode === 'magic'
+  magicHeldId:  -1,      // -1 = none, else spell ID being confirmed (analogue to heldItem)
 };
 
 // ── Private helpers ────────────────────────────────────────────────────────
@@ -107,19 +111,20 @@ function _updatePauseInvTransitions(dt) {
   } else if (pauseSt.state === 'inv-shrink') {
     if (pauseSt.timer >= PAUSE_EXPAND_MS) { pauseSt.state = 'inv-text-in'; pauseSt.timer = 0; }
   } else if (pauseSt.state === 'inv-text-in') {
-    if (pauseSt.timer >= T) { pauseSt.state = 'open'; pauseSt.timer = 0; }
+    if (pauseSt.timer >= T) {
+      pauseSt.state = 'open'; pauseSt.timer = 0;
+      pauseSt.menuMode = 'inv';   // reset so a future Item-cursor open starts in inv mode
+    }
   } else if (pauseSt.state === 'inv-heal') {
     if (pauseSt.healNum) { pauseSt.healNum.timer += dt; if (pauseSt.healNum.timer >= BATTLE_DMG_SHOW_MS) pauseSt.healNum = null; }
     if (pauseSt.timer >= DEFEND_SPARKLE_TOTAL_MS) {
       pauseSt.healNum = null;
-      if (pauseSt.magMode) {
-        pauseSt.magMode = false;
-        pauseSt.state = 'open'; pauseSt.timer = 0;
-      } else {
+      if (pauseSt.menuMode === 'inv') {
         const entries = Object.entries(playerInventory).filter(([,c]) => c > 0);
         if (pauseSt.invScroll >= entries.length) pauseSt.invScroll = Math.max(0, entries.length - 1);
-        pauseSt.state = 'inventory'; pauseSt.timer = 0;
       }
+      // Magic mode: stay in 'inventory' state; the spell list re-renders via menuMode branch.
+      pauseSt.state = 'inventory'; pauseSt.timer = 0;
     }
   }
 }
@@ -258,6 +263,7 @@ function _drawPauseInventory(ctx) {
   const showInvItems = pauseSt.state === 'inv-items-in' || pauseSt.state === 'inventory' || pauseSt.state === 'inv-items-out' ||
     pauseSt.state === 'inv-target' || pauseSt.state === 'inv-heal';
   if (!showInvItems) return;
+  if (pauseSt.menuMode === 'magic') { _drawPauseMagicList(ctx); return; }
   const fadeStep = _pauseFadeStep('inv-items-in', 'inv-items-out');
   const fadedPal = _makeFadedPal(fadeStep);
   const entries = Object.entries(playerInventory).filter(([,c]) => c > 0);
@@ -275,6 +281,31 @@ function _drawPauseInventory(ctx) {
     if (startIdx + i === pauseSt.invScroll && pauseSt.state !== 'inv-target' && pauseSt.state !== 'inv-heal') {
       const activeX = pauseSt.heldItem >= 0 ? px + 4 : px + 8;
       drawCursorFaded(activeX, iy - 4, fadeStep);
+    }
+  }
+}
+
+function _drawPauseMagicList(ctx) {
+  const px = HUD_VIEW_X, finalY = HUD_VIEW_Y;
+  const fadeStep = _pauseFadeStep('inv-items-in', 'inv-items-out');
+  const fadedPal = _makeFadedPal(fadeStep);
+  const list = ps.knownSpells || [];
+  const colW = HUD_VIEW_W;
+  const costRightX = px + colW - 16;
+  for (let i = 0; i < list.length; i++) {
+    const id = list[i];
+    const name = getSpellNameClean(id);
+    const iy = finalY + 12 + i * 14;
+    drawText(ctx, px + 24, iy, name, fadedPal);
+    const cost = getSpellMPCost(id);
+    if (cost > 0) {
+      const costStr = String(cost);
+      const costBytes = new Uint8Array(costStr.length);
+      for (let c = 0; c < costStr.length; c++) costBytes[c] = 0x80 + parseInt(costStr[c]);
+      drawText(ctx, costRightX - costBytes.length * 8, iy, costBytes, fadedPal);
+    }
+    if (i === pauseSt.magicCursor && pauseSt.state !== 'inv-target' && pauseSt.state !== 'inv-heal') {
+      drawCursorFaded(px + 8, iy - 4, fadeStep);
     }
   }
 }

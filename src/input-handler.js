@@ -799,18 +799,26 @@ function _pauseInputMainMenu() {
   return true;
 }
 
-// v1 pause-menu Magic: instant cast Cure on self. Proper spell-pick UI is TODO.
+// Pause-menu Magic submenu — opens the inventory state machine in 'magic' mode.
 function _pauseInputMagicZ() {
   const known = ps.knownSpells || [];
   if (known.length === 0) { playSFX(SFX.ERROR); return; }
-  const cureId = 0x34;
-  if (!known.includes(cureId)) { playSFX(SFX.ERROR); return; }
-  const cost = getSpellMPCost(cureId);
-  if (ps.mp < cost) { playSFX(SFX.ERROR); return; }
-  const spell = SPELLS.get(cureId);
+  playSFX(SFX.CONFIRM);
+  pauseSt.menuMode = 'magic';
+  pauseSt.magicCursor = 0;
+  pauseSt.magicHeldId = -1;
+  pauseSt.state = 'inv-text-out';
+  pauseSt.timer = 0;
+}
+
+// Cast a spell from the pause menu. v1: only ally-target heals.
+function _pauseCastSpell(spellId) {
+  const spell = SPELLS.get(spellId);
   if (!spell) { playSFX(SFX.ERROR); return; }
+  const cost = getSpellMPCost(spellId);
+  if (ps.mp < cost) { playSFX(SFX.ERROR); return; }
   ps.mp -= cost;
-  // White magic uses MND; for Cure (recovery) that's the right stat per NES FF3.
+  // White magic uses MND.
   const stat = ps.stats ? (ps.stats.mnd || 5) : 5;
   const atk = Math.floor(stat / 2) + spell.power;
   const amt = atk + Math.floor(Math.random() * (Math.floor(atk / 2) + 1));
@@ -818,7 +826,6 @@ function _pauseInputMagicZ() {
   ps.hp += heal;
   playSFX(SFX.CURE);
   pauseSt.healNum = { value: heal, timer: 0 };
-  pauseSt.magMode = true;
   pauseSt.state = 'inv-heal'; pauseSt.timer = 0;
   saveSlotsToDB();
 }
@@ -841,6 +848,7 @@ function _pauseInvZPress(entries) {
 
 function _pauseInputInventory() {
   if (pauseSt.state !== 'inventory') return false;
+  if (pauseSt.menuMode === 'magic') return _pauseInputMagicList();
   const entries = Object.entries(playerInventory).filter(([,c]) => c > 0);
   const k = keys;
   if (k['ArrowDown']) {
@@ -855,6 +863,29 @@ function _pauseInputInventory() {
   if (_xPressed()) {
     if (pauseSt.heldItem !== -1) { pauseSt.heldItem = -1; playSFX(SFX.CONFIRM); }
     else { playSFX(SFX.CONFIRM); pauseSt.state = 'inv-items-out'; pauseSt.timer = 0; }
+  }
+  return true;
+}
+
+function _pauseInputMagicList() {
+  const list = ps.knownSpells || [];
+  const k = keys;
+  if (k['ArrowDown']) {
+    k['ArrowDown'] = false;
+    if (pauseSt.magicCursor < list.length - 1) { pauseSt.magicCursor++; playSFX(SFX.CURSOR); }
+  }
+  if (k['ArrowUp']) {
+    k['ArrowUp'] = false;
+    if (pauseSt.magicCursor > 0) { pauseSt.magicCursor--; playSFX(SFX.CURSOR); }
+  }
+  if (_zPressed()) {
+    const spellId = list[pauseSt.magicCursor];
+    if (spellId == null) { playSFX(SFX.ERROR); return true; }
+    _pauseCastSpell(spellId);
+  }
+  if (_xPressed()) {
+    playSFX(SFX.CONFIRM);
+    pauseSt.state = 'inv-items-out'; pauseSt.timer = 0;
   }
   return true;
 }
