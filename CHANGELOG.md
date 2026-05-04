@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.98 — 2026-05-04
+
+### Fix: EMU savestate `LOAD` only worked once per `SAVE`
+
+The 1.6.97 multi-slot work shipped with a latent bug inherited from the original single-slot code: `nes.fromJSON(state)` aliases the saved object's inner arrays into the running NES (jsnes' generic helper does `target[prop] = source[prop]` — straight reference assignment, no copies). After the first `LOAD`, every CPU/PPU mutation between then and the next `LOAD` silently rewrote the savestate, so `LOAD` #2 was effectively a no-op against drifted data.
+
+Slots now store the savestate as a **JSON string** instead of a parsed object. `LOAD` parses a fresh copy each time, so the running emulator and the saved slot stay decoupled. A small `slotFrames` sidecar caches the frame number per slot so the slot-select status line doesn't need to re-parse a 100–500 KB string just to display `@ fN`.
+
 ## 1.6.97 — 2026-05-04
 
 ### EMU debugger: 4-slot savestates (Phase 1.1)

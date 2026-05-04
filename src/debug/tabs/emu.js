@@ -26,22 +26,39 @@ let canvasCtx = null;
 
 // Savestate slots — persisted to localStorage so they survive refreshes.
 // Four numbered slots; SAVE/LOAD always act on the currently-selected slot.
+//
+// IMPORTANT: slots store the savestate as a JSON *string*, not a parsed object.
+// jsnes' fromJSON does `target[prop] = source[prop]` (raw ref assignment, no
+// copy), so the saved object's inner arrays alias the running NES's arrays —
+// every CPU/PPU mutation between two LOADs silently rewrites the savestate.
+// Parsing fresh on each LOAD decouples the saved state from the running emu.
 const SAVESTATE_VERSION = 'v1';
 const SLOT_COUNT = 4;
 const SAVESTATE_LEGACY_KEY = 'ff3_emu_savestate_v1';
 const _slotKey = (i) => `ff3_emu_savestate_slot_${i}_${SAVESTATE_VERSION}`;
-let savedStates = new Array(SLOT_COUNT).fill(null);
+let savedStates = new Array(SLOT_COUNT).fill(null);  // JSON string or null
+let slotFrames = new Array(SLOT_COUNT).fill(null);   // cached frame # for status display
 let selectedSlot = 0;
+function _readSlotFrame(json) {
+  if (!json) return null;
+  // Cheap regex peek; avoids a full JSON.parse just to populate slot button labels.
+  const m = json.match(/"frame":(\d+)/);
+  return m ? Number(m[1]) : null;
+}
 try {
   for (let i = 0; i < SLOT_COUNT; i++) {
     const stored = localStorage.getItem(_slotKey(i));
-    if (stored) savedStates[i] = JSON.parse(stored);
+    if (stored) {
+      savedStates[i] = stored;
+      slotFrames[i] = _readSlotFrame(stored);
+    }
   }
   // Migrate the pre-1.6.97 single-slot key into slot 0 if slot 0 is otherwise empty.
   if (!savedStates[0]) {
     const legacy = localStorage.getItem(SAVESTATE_LEGACY_KEY);
     if (legacy) {
-      savedStates[0] = JSON.parse(legacy);
+      savedStates[0] = legacy;
+      slotFrames[0] = _readSlotFrame(legacy);
       try {
         localStorage.setItem(_slotKey(0), legacy);
         localStorage.removeItem(SAVESTATE_LEGACY_KEY);
@@ -346,17 +363,23 @@ function _withPause(fn) {
 
 // jsnes.toJSON() includes the full ROM (~256KB → ~1MB as JSON) which blows
 // through localStorage quota on mobile. Strip it before persisting, re-attach
-// on load — the ROM is available from ctx.getFF3Buffer() anyway.
+// on load — the ROM is available from nes.romData anyway.
+//
+// Slots are stored as JSON strings (not parsed objects) to avoid jsnes'
+// fromJSON aliasing — see SAVESTATE block at the top of the file.
 function _saveState() {
   if (!nes) return;
   const slot = selectedSlot;
   try {
     const full = nes.toJSON();
-    const romData = full.romData;
-    const slim = { ...full, romData: null, frame: frameCount };
-    savedStates[slot] = slim;
+    full.romData = null;
+    full.frame = frameCount;
+    let json;
+    try { json = JSON.stringify(full); }
+    catch (e) { _status('save serialization failed: ' + e.message, true); return; }
+    savedStates[slot] = json;
+    slotFrames[slot] = frameCount;
     try {
-      const json = JSON.stringify(slim);
       localStorage.setItem(_slotKey(slot), json);
       const kb = Math.round(json.length / 1024);
       _status(`S${slot + 1}: saved @ frame ${frameCount} (${kb} KB)`);
@@ -364,8 +387,6 @@ function _saveState() {
       console.warn('[emu] localStorage save failed', e);
       _status(`S${slot + 1}: saved @ frame ${frameCount} (in-memory only — ${e.message})`, true);
     }
-    // Keep romData on the in-memory copy so LOAD doesn't need to re-fetch.
-    savedStates[slot].romData = romData;
     _refreshSlotButtons();
   } catch (e) { _status('save failed: ' + e.message, true); console.error(e); }
 }
@@ -373,11 +394,11 @@ function _saveState() {
 function _loadState() {
   if (!nes) return;
   const slot = selectedSlot;
-  const state = savedStates[slot];
-  if (!state) { _status(`S${slot + 1}: empty`, true); return; }
+  const json = savedStates[slot];
+  if (!json) { _status(`S${slot + 1}: empty`, true); return; }
   try {
-    // If state came from localStorage (refresh), romData was stripped to fit.
-    // nes.romData is the already-loaded ROM string — re-attach for fromJSON.
+    // Parse a fresh copy on every LOAD — see savestate-aliasing comment above.
+    const state = JSON.parse(json);
     if (!state.romData && nes.romData) state.romData = nes.romData;
     nes.fromJSON(state);
     const frameLabel = state.frame != null ? ` (@ f${state.frame})` : '';
@@ -390,8 +411,9 @@ function _selectSlot(i) {
   selectedSlot = i;
   _refreshSlotButtons();
   const populated = !!savedStates[i];
-  const frameLabel = populated && savedStates[i].frame != null ? ` (@ f${savedStates[i].frame})` : populated ? '' : ' (empty)';
-  _status(`slot ${i + 1} selected${frameLabel}`);
+  const frame = slotFrames[i];
+  const tail = !populated ? ' (empty)' : (frame != null ? ` (@ f${frame})` : '');
+  _status(`slot ${i + 1} selected${tail}`);
 }
 
 function _refreshSlotButtons() {
