@@ -317,12 +317,9 @@ export function drawShop() {
   ctx.fillStyle = '#000';
   ctx.fillRect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
 
-  // Bordered box: faded during shop-in / shop-out (using borderFadeSets), full
-  // during all other visible states.
-  let boxFadeStep = 0;
-  if      (shopSt.state === 'shop-in')  boxFadeStep = TEXT_STEPS - Math.min(Math.floor(shopSt.timer / TEXT_STEP_MS), TEXT_STEPS);
-  else if (shopSt.state === 'shop-out') boxFadeStep = Math.min(Math.floor(shopSt.timer / TEXT_STEP_MS), TEXT_STEPS);
-  drawHudBox(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H, boxFadeStep);
+  // Bordered box always at full opacity — the HUD-style border doesn't fade.
+  // Text inside still fades via its own palette steps.
+  drawHudBox(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H, 0);
 
   clipToViewport();
 

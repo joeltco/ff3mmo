@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.70 — 2026-05-03
+
+### Shops: bordered box no longer fades — only text fades
+
+Shop `drawHudBox(... boxFadeStep)` was stepping the border-tile palette during shop-in / shop-out, which read as the HUD border itself fading. Locked to fadeStep 0 — the box pops in/out at full opacity, only the text inside still does the 4-step palette fade.
+
 ## 1.6.69 — 2026-05-03
 
 ### Shops: white = indicator on equal stat + empty-slot weapons now read as upgrades
