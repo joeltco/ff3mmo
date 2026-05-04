@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.97 — 2026-05-04
+
+### EMU debugger: 4-slot savestates (Phase 1.1)
+
+Replaces the single SAVE / LOAD slot with four numbered slots (`S1` … `S4`) so multiple captured moments can persist side by side instead of clobbering each other.
+
+- New slot row above the SAVE / LOAD buttons. Tap `S1` … `S4` to select; the selected slot has a gold border and bold text. Populated slots show a `•` and green text; empty slots stay gold.
+- `SAVE` and `LOAD` always operate on the currently-selected slot. Status messages are now slot-aware (`S2: saved @ frame 12345 (24 KB)`, `S3: empty`).
+- Saved state now records `frame` so `LOAD` can report which frame the slot was captured at (`S2: loaded (@ f12345)`).
+- Each slot persists at `localStorage[ff3_emu_savestate_slot_${i}_v1]`. The pre-1.6.97 single-slot key (`ff3_emu_savestate_v1`) auto-migrates into slot 0 on first boot if slot 0 is empty.
+
 ## 1.6.96 — 2026-05-04
 
 ### EMU debugger: Phase 0 — mobile QoL + capture race fix

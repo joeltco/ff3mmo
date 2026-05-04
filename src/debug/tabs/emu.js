@@ -24,12 +24,30 @@ let imgData = null;
 let img32 = null;
 let canvasCtx = null;
 
-// Savestate slot (single slot — persisted to localStorage so it survives refreshes).
-const SAVESTATE_KEY = 'ff3_emu_savestate_v1';
-let savedState = null;
+// Savestate slots — persisted to localStorage so they survive refreshes.
+// Four numbered slots; SAVE/LOAD always act on the currently-selected slot.
+const SAVESTATE_VERSION = 'v1';
+const SLOT_COUNT = 4;
+const SAVESTATE_LEGACY_KEY = 'ff3_emu_savestate_v1';
+const _slotKey = (i) => `ff3_emu_savestate_slot_${i}_${SAVESTATE_VERSION}`;
+let savedStates = new Array(SLOT_COUNT).fill(null);
+let selectedSlot = 0;
 try {
-  const stored = localStorage.getItem(SAVESTATE_KEY);
-  if (stored) savedState = JSON.parse(stored);
+  for (let i = 0; i < SLOT_COUNT; i++) {
+    const stored = localStorage.getItem(_slotKey(i));
+    if (stored) savedStates[i] = JSON.parse(stored);
+  }
+  // Migrate the pre-1.6.97 single-slot key into slot 0 if slot 0 is otherwise empty.
+  if (!savedStates[0]) {
+    const legacy = localStorage.getItem(SAVESTATE_LEGACY_KEY);
+    if (legacy) {
+      savedStates[0] = JSON.parse(legacy);
+      try {
+        localStorage.setItem(_slotKey(0), legacy);
+        localStorage.removeItem(SAVESTATE_LEGACY_KEY);
+      } catch { /* keep in-memory only */ }
+    }
+  }
 } catch { /* ignore */ }
 
 // Audio — ring buffer filled by jsnes onAudioSample, drained by a ScriptProcessorNode.
@@ -331,36 +349,63 @@ function _withPause(fn) {
 // on load — the ROM is available from ctx.getFF3Buffer() anyway.
 function _saveState() {
   if (!nes) return;
+  const slot = selectedSlot;
   try {
     const full = nes.toJSON();
     const romData = full.romData;
-    const slim = { ...full, romData: null };
-    savedState = slim;
+    const slim = { ...full, romData: null, frame: frameCount };
+    savedStates[slot] = slim;
     try {
       const json = JSON.stringify(slim);
-      localStorage.setItem(SAVESTATE_KEY, json);
+      localStorage.setItem(_slotKey(slot), json);
       const kb = Math.round(json.length / 1024);
-      _status(`state saved @ frame ${frameCount} (${kb} KB persisted)`);
+      _status(`S${slot + 1}: saved @ frame ${frameCount} (${kb} KB)`);
     } catch (e) {
       console.warn('[emu] localStorage save failed', e);
-      _status(`state saved @ frame ${frameCount} (in-memory only — localStorage: ${e.message})`, true);
+      _status(`S${slot + 1}: saved @ frame ${frameCount} (in-memory only — ${e.message})`, true);
     }
     // Keep romData on the in-memory copy so LOAD doesn't need to re-fetch.
-    savedState.romData = romData;
+    savedStates[slot].romData = romData;
+    _refreshSlotButtons();
   } catch (e) { _status('save failed: ' + e.message, true); console.error(e); }
 }
 
 function _loadState() {
-  if (!nes || !savedState) { _status('no saved state', true); return; }
+  if (!nes) return;
+  const slot = selectedSlot;
+  const state = savedStates[slot];
+  if (!state) { _status(`S${slot + 1}: empty`, true); return; }
   try {
     // If state came from localStorage (refresh), romData was stripped to fit.
     // nes.romData is the already-loaded ROM string — re-attach for fromJSON.
-    if (!savedState.romData && nes.romData) {
-      savedState.romData = nes.romData;
-    }
-    nes.fromJSON(savedState);
-    _status(`state loaded @ frame ${frameCount}`);
+    if (!state.romData && nes.romData) state.romData = nes.romData;
+    nes.fromJSON(state);
+    const frameLabel = state.frame != null ? ` (@ f${state.frame})` : '';
+    _status(`S${slot + 1}: loaded${frameLabel}`);
   } catch (e) { _status('load failed: ' + e.message, true); console.error(e); }
+}
+
+function _selectSlot(i) {
+  if (i < 0 || i >= SLOT_COUNT) return;
+  selectedSlot = i;
+  _refreshSlotButtons();
+  const populated = !!savedStates[i];
+  const frameLabel = populated && savedStates[i].frame != null ? ` (@ f${savedStates[i].frame})` : populated ? '' : ' (empty)';
+  _status(`slot ${i + 1} selected${frameLabel}`);
+}
+
+function _refreshSlotButtons() {
+  if (!dom?.slotButtons) return;
+  for (let i = 0; i < SLOT_COUNT; i++) {
+    const b = dom.slotButtons[i];
+    if (!b) continue;
+    const populated = !!savedStates[i];
+    const selected = i === selectedSlot;
+    b.style.borderColor = selected ? '#c8a832' : '#444';
+    b.style.color = populated ? '#7ec27e' : '#c8a832';
+    b.style.fontWeight = selected ? 'bold' : 'normal';
+    b.textContent = `S${i + 1}${populated ? '•' : ''}`;
+  }
 }
 
 // ── OAM snapshot (meta-sprite grouping) ─────────────────────────────────────
@@ -777,6 +822,23 @@ function _buildDOM(parent) {
   btnRow.append(btnPause, btnStep, btnReset, btnSound);
   rightCol.appendChild(btnRow);
 
+  // Slot row: 4 numbered savestate slots. Tap to select; gold border = selected,
+  // green text + bullet = populated. SAVE/LOAD always act on the selected slot.
+  const slotRow = document.createElement('div');
+  slotRow.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;align-items:center;';
+  const slotLabel = document.createElement('span');
+  slotLabel.textContent = 'Slot:';
+  slotLabel.style.cssText = 'color:#888;font-size:11px;font-family:monospace;';
+  slotRow.appendChild(slotLabel);
+  const slotButtons = [];
+  for (let i = 0; i < SLOT_COUNT; i++) {
+    const b = mkBtn(`S${i + 1}`, () => _selectSlot(i));
+    b.style.minWidth = '34px';
+    slotButtons.push(b);
+    slotRow.appendChild(b);
+  }
+  rightCol.appendChild(slotRow);
+
   // Capture row: savestate + the two actual capture tools.
   const capRow = document.createElement('div');
   capRow.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;align-items:center;';
@@ -862,9 +924,10 @@ function _buildDOM(parent) {
 
   parent.appendChild(root);
 
-  const d = { root, canvas, status, frame, btnPause, btnStep, btnReset, btnSound, btnSave, btnLoad, btnSnap, btnSnapBG, btnWpn, btnCopy, btnSaveFile, tileInput, btnTileDump, output, writeInput };
+  const d = { root, canvas, status, frame, btnPause, btnStep, btnReset, btnSound, btnSave, btnLoad, btnSnap, btnSnapBG, btnWpn, btnCopy, btnSaveFile, slotButtons, tileInput, btnTileDump, output, writeInput };
   dom = d;
   _installKeys();
+  _refreshSlotButtons();
   return d;
 }
 
