@@ -292,7 +292,14 @@ function _drawPortraitWeapon(px, py, before) {
   if (!spec) return;
   const layer = attackWeaponLayer({ attackPhase: phase, hand, mirror: false });
   if ((before && layer === 'behind') || (!before && layer === 'front')) {
-    ui.ctx.drawImage(spec.canvas, px + spec.dx, py + spec.dy);
+    // Fist sprite wiggles during player-slash — alternates ±2px x and ±1px y at
+    // ~30ms cadence so each punch reads with impact shake.
+    let wx = 0, wy = 0;
+    if (handWeapon === 0 && battleSt.battleState === 'player-slash') {
+      wx = (Math.floor(battleSt.battleTimer / 33) & 1) ? 2 : -2;
+      wy = (Math.floor(battleSt.battleTimer / 50) & 1) ? 1 : -1;
+    }
+    ui.ctx.drawImage(spec.canvas, px + spec.dx + wx, py + spec.dy + wy);
   }
 }
 

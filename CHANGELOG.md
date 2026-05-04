@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.94 — 2026-05-04
+
+### Fist sprite wiggles during punch slash
+
+Each punch's fist sprite now wiggles ±2px x / ±1px y at ~30ms cadence during `player-slash` so the impact reads with shake. Applied in `_drawPortraitWeapon` only when `handWeapon === 0` (unarmed) and state is `player-slash` — weapons unaffected.
+
 ## 1.6.93 — 2026-05-04
 
 ### Every weapon hit now gets a full back-swing (was 30ms flash for repeats)
