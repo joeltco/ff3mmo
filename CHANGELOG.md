@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.81 — 2026-05-04
+
+### Cure target select: cycle player/allies/enemies; pause-menu Cure works like a Potion
+
+**Battle:** removed the ally-only lock on heal spells in `_battleInputItemTargetSelect`. Left/Right now navigates to enemies the same way item-target select does — symmetric with how Potion behaves. Picking an enemy with Cure in v1 still heals the caster (since damage spells aren't wired yet); will route correctly once Black Mage spells land.
+
+**Pause menu:** Cure now goes through the same target-select cursor as Potion — Z on a spell stashes it in `pauseSt.useSpellId` and transitions to `inv-target`, where Up/Down cycles player → roster allies. Confirming with Z calls `_applyPauseSpellUse` which deducts MP, applies the heal to the chosen target, and sets `pauseSt.healNum` (with `rosterIdx` if an ally was picked) so the green-number bounce lands on the right portrait.
+
 ## 1.6.80 — 2026-05-04
 
 ### Pause menu Magic submenu — proper spell list, not instant cast

@@ -54,7 +54,7 @@ export const pauseSt = {
   // Magic submenu (piggybacks on inv-* state machine; menuMode toggles list/input/draw branches)
   menuMode:     'inv',   // 'inv' or 'magic'
   magicCursor:  0,       // active spell index when menuMode === 'magic'
-  magicHeldId:  -1,      // -1 = none, else spell ID being confirmed (analogue to heldItem)
+  useSpellId:   0,       // spell ID stashed between magic-list Z press and inv-target confirm (0 = none)
 };
 
 // ── Private helpers ────────────────────────────────────────────────────────

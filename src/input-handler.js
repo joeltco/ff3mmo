@@ -520,19 +520,12 @@ function _itemTargetNavVertical(isBattleItem) {
 
 function _battleInputItemTargetSelect() {
   const isMagic = inputSt.playerActionPending?.command === 'magic';
-  const magicSpell = isMagic ? SPELLS.get(inputSt.playerActionPending.spellId) : null;
-  const isAllyOnly = magicSpell && (magicSpell.target === 'ally' || magicSpell.element === 'recovery');
   const isBattleItem = inputSt.playerActionPending && !isMagic && ITEMS.get(inputSt.playerActionPending.itemId)?.type === 'battle_item';
   const k = keys;
-  if (isAllyOnly) {
-    // Ally-target spell: lock to player/ally side; only up/down navigates.
-    k['ArrowLeft'] = false; k['ArrowRight'] = false;
-    if (k['ArrowUp'] || k['ArrowDown']) _itemTargetNavVertical(false);
-  } else {
-    if (k['ArrowLeft']) { k['ArrowLeft'] = false; _itemTargetNavLeft(isBattleItem); }
-    if (k['ArrowRight']) { k['ArrowRight'] = false; _itemTargetNavRight(); }
-    if (k['ArrowUp'] || k['ArrowDown']) _itemTargetNavVertical(isBattleItem);
-  }
+  // Navigation is symmetric for items and spells — left/right reaches enemies, up/down cycles allies.
+  if (k['ArrowLeft']) { k['ArrowLeft'] = false; _itemTargetNavLeft(isBattleItem); }
+  if (k['ArrowRight']) { k['ArrowRight'] = false; _itemTargetNavRight(); }
+  if (k['ArrowUp'] || k['ArrowDown']) _itemTargetNavVertical(isBattleItem);
   if (_zPressed()) {
     inputSt.playerActionPending.target = inputSt.itemTargetType === 'player' ? 'player' : inputSt.itemTargetIndex;
     inputSt.playerActionPending.allyIndex = inputSt.itemTargetType === 'player' ? inputSt.itemTargetAllyIndex : -1;
@@ -811,22 +804,33 @@ function _pauseInputMagicZ() {
   pauseSt.timer = 0;
 }
 
-// Cast a spell from the pause menu. v1: only ally-target heals.
-function _pauseCastSpell(spellId) {
+// Apply a pause-menu spell cast on the current target (player or roster ally).
+function _applyPauseSpellUse(rosterTargets) {
+  const spellId = pauseSt.useSpellId;
   const spell = SPELLS.get(spellId);
   if (!spell) { playSFX(SFX.ERROR); return; }
   const cost = getSpellMPCost(spellId);
   if (ps.mp < cost) { playSFX(SFX.ERROR); return; }
   ps.mp -= cost;
-  // White magic uses MND.
-  const stat = ps.stats ? (ps.stats.mnd || 5) : 5;
+  // White magic uses MND; black magic uses INT.
+  const isWhite = spell.element === 'recovery' || spell.target === 'cure_status' || spell.target === 'revive';
+  const stat = ps.stats ? (isWhite ? (ps.stats.mnd || 5) : (ps.stats.int || 5)) : 5;
   const atk = Math.floor(stat / 2) + spell.power;
   const amt = atk + Math.floor(Math.random() * (Math.floor(atk / 2) + 1));
-  const heal = Math.min(amt, ps.stats.maxHP - ps.hp);
-  ps.hp += heal;
+  if (pauseSt.invAllyTarget >= 0) {
+    const rp = rosterTargets[pauseSt.invAllyTarget];
+    if (!rp) { playSFX(SFX.ERROR); return; }
+    const heal = Math.min(amt, rp.maxHP - rp.hp);
+    rp.hp += heal;
+    pauseSt.healNum = { value: heal, timer: 0, rosterIdx: pauseSt.invAllyTarget };
+  } else {
+    const heal = Math.min(amt, ps.stats.maxHP - ps.hp);
+    ps.hp += heal;
+    pauseSt.healNum = { value: heal, timer: 0 };
+  }
   playSFX(SFX.CURE);
-  pauseSt.healNum = { value: heal, timer: 0 };
   pauseSt.state = 'inv-heal'; pauseSt.timer = 0;
+  pauseSt.useSpellId = 0;
   saveSlotsToDB();
 }
 
@@ -881,7 +885,13 @@ function _pauseInputMagicList() {
   if (_zPressed()) {
     const spellId = list[pauseSt.magicCursor];
     if (spellId == null) { playSFX(SFX.ERROR); return true; }
-    _pauseCastSpell(spellId);
+    const spell = SPELLS.get(spellId);
+    if (!spell) { playSFX(SFX.ERROR); return true; }
+    if (ps.mp < getSpellMPCost(spellId)) { playSFX(SFX.ERROR); return true; }
+    playSFX(SFX.CONFIRM);
+    pauseSt.useSpellId = spellId;
+    pauseSt.invAllyTarget = -1;   // start on player
+    pauseSt.state = 'inv-target'; pauseSt.timer = 0;
   }
   if (_xPressed()) {
     playSFX(SFX.CONFIRM);
@@ -940,11 +950,13 @@ function _pauseInputInvTarget() {
     if (pauseSt.invAllyTarget > -1) { pauseSt.invAllyTarget--; playSFX(SFX.CURSOR); }
   }
   if (_zPressed()) {
-    _applyPauseItemUse(ITEMS.get(pauseSt.useItemId), rosterTargets);
+    if (pauseSt.useSpellId > 0) _applyPauseSpellUse(rosterTargets);
+    else _applyPauseItemUse(ITEMS.get(pauseSt.useItemId), rosterTargets);
   }
   if (_xPressed()) {
     pauseSt.state = 'inventory'; pauseSt.timer = 0;
     pauseSt.heldItem = -1;
+    pauseSt.useSpellId = 0;
     playSFX(SFX.CONFIRM);
   }
   return true;
