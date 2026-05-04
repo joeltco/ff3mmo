@@ -222,10 +222,10 @@ function _getPortraitSrc(isNearFatal, isAttackPose, isHitPose, isDefendPose, isI
   if (isAttackPose) {
     const _wpn = getHitWeapon(battleSt.currentHitIdx, inputSt.rHandHitCount);
     const rh = isHitRightHand(battleSt.currentHitIdx, inputSt.rHandHitCount);
-    // Inter-hit hand-change gap: hold idle pose during attack-back (after first hit, when hand swaps).
-    const handChangeGap = battleSt.battleState === 'attack-back' && battleSt.currentHitIdx > 0 &&
-      isHitRightHand(battleSt.currentHitIdx - 1, inputSt.rHandHitCount) !== rh;
-    if (!handChangeGap) {
+    // Every inter-hit attack-back (hit > 0) holds the idle pose so each strike reads
+    // as a discrete hit, regardless of whether the hand changed or not.
+    const interHitGap = battleSt.battleState === 'attack-back' && battleSt.currentHitIdx > 0;
+    if (!interHitGap) {
       const key = pickAttackPoseKey({
         weaponSubtype: weaponSubtype(_wpn),
         isUnarmed: _wpn === 0,

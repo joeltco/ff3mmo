@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.91 — 2026-05-04
+
+### Idle pose break between EVERY combo hit (not just R↔L hand swaps)
+
+Previously the inter-hit gap held the back-swing pose for `HIT_COMBO_PAUSE_MS` (~30ms) and only inserted the idle pose on actual hand changes. Per "each hand should get whatever number of hits, each hit getting the 3 slash frames, idle pose, next hand repeats", every hit after the first now gets a `IDLE_FRAME_MS` (67ms) idle pose break before the next strike — same-hand and hand-change alike.
+
+`_updatePlayerAttackBack` simplified: hit 0 = weapon back-swing (skipped for fists), hit 1+ = idle break. `_getPortraitSrc` renamed `handChangeGap` → `interHitGap` and fires for every hit > 0.
+
 ## 1.6.90 — 2026-05-04
 
 ### PvP-enemy + ally slash overlays use the same per-weapon scatter as the player

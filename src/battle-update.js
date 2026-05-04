@@ -317,14 +317,12 @@ function _advanceHitCombo() {
 function _updatePlayerAttackBack() {
   if (battleSt.battleState !== 'attack-back') return false;
   if (battleSt.currentHitIdx === 0) battleSt.comboStatusInflicted = 0;
-  // Hand-change inter-hit pause holds idle pose so R↔L combo transitions read as separate strikes.
-  const handChange = battleSt.currentHitIdx > 0 &&
-    isHitRightHand(battleSt.currentHitIdx, inputSt.rHandHitCount) !==
-    isHitRightHand(battleSt.currentHitIdx - 1, inputSt.rHandHitCount);
-  // Unarmed skips the wind-up — NES canonical goes straight to forward strike.
+  // First hit of the round = weapon back-swing (skipped for fists, which go straight forward).
+  // Every subsequent hit (whether same hand or hand-change) gets an idle pose break so each
+  // hit reads as its own strike instead of running together.
   const isUnarmed = getHitWeapon(battleSt.currentHitIdx, inputSt.rHandHitCount) === 0;
-  const delay = handChange ? IDLE_FRAME_MS
-              : (isUnarmed ? 0 : (battleSt.currentHitIdx === 0 ? BACK_SWING_MS : HIT_COMBO_PAUSE_MS));
+  const delay = (battleSt.currentHitIdx > 0) ? IDLE_FRAME_MS
+              : (isUnarmed ? 0 : BACK_SWING_MS);
   if (battleSt.battleTimer >= delay) {
     battleSt.battleState = 'attack-fwd';
     battleSt.battleTimer = 0;
