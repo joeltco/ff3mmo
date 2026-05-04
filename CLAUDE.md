@@ -43,7 +43,7 @@ Before writing new code, read the relevant `docs/design-notes.md` section. Each 
 | A chest loot pool / item drop | `design-notes#loot-drops` | `LOOT_POOLS` in `src/map-triggers.js`, keyed by `mapId` |
 | A status effect or immunity | (see status section in `data/items.js` `sResist`, `data/monsters.js` `statusResist`) | `src/status-effects.js`, `src/battle-enemy.js` (`tryInflictStatus` call sites) |
 | A save schema field | `design-notes#saves` | `saveSlotsToDB()` in `src/save-state.js` is the single source of truth — every persisted field flows through there |
-| A new attack/slash animation timing | `design-notes#battle-attack-animation` | `src/battle-update.js` (`_updatePlayerSlash`, `_advanceHitCombo`), `src/slash-effects.js`, `src/battle-sprite-cache.js` (`getSlashFramesForWeapon`) |
+| A new attack/slash animation timing | `design-notes#battle-attack-animation` | `src/slash-effects.js` is the single source — `SLASH_FRAME_MS`, `getSlashPattern(weaponId)`, `setSlashOffsetForFrame`, `shouldDrawSlash`, `getSlashHoldMs`, `drawSlashOverlay`. Player slash machine lives in `src/battle-update.js` (`_updatePlayerSlash`); ally / PVP-opponent paths in `src/battle-ally.js` / `src/pvp.js` consume the same predicate + helpers. |
 
 Deferred work and known followups live in `design-notes.md#followups`. Check there before assuming something is missing — it may be intentionally not yet shipped.
 
@@ -56,11 +56,14 @@ The Konami code (↑↑↓↓←→←→ X Z Start) opens a tabbed debug panel.
 3. **Workflow:** open Konami debugger → EMU tab → play the ROM to the moment you want → PAUSE → click the right capture button. Output lands in the textarea as paste-ready `new Uint8Array([...]),` literals plus PPU palette + origin coords.
    - **SNAP OAM** — groups visible sprites by XY adjacency into clean meta-sprite clusters. Use for portraits, weapon overlays, slash effects, status sprites.
    - **SNAP BG** — dumps nametable + attribute table + unique BG tile patterns with an ASCII grid showing `TT/p` (tile / palette) per cell. Use for monster sprites.
+   - **REC OAM / REC BG** — multi-frame capture. Auto-pauses, drives `nes.frame()` forward N times, snaps each frame, dumps a single concatenated block with `// ═══ frame N` dividers. Inputs: `frames` (default 3, max 60), `gap` (frames advanced between snaps; default 1 = consecutive). Tap the active REC button mid-run to cancel. **Use this whenever you need an N-frame animation** (slash anim, spell cast, sprite shake) — single-frame SNAP OAM is too coarse for animations because NES holds each anim state 2–4 frames per pose. v1.7.0+; this is the highest-leverage tool in the EMU tab.
    - **WPN TILES** — dumps PPU $1490–$1600 (sprite-bank slots $49–$60 where battle weapon CHR is decompressed mid-swing). Pause mid-swing, hit the button.
    - **Tile-by-index** — enter `$NN` or decimal in the input field to dump one specific tile.
-4. **SAVE / LOAD savestate** is persisted to localStorage so you can re-enter the same scene across refreshes without replaying the ROM.
-5. Land the captured `new Uint8Array([...])` blocks in the file that owns that subsystem's tile data — typically `src/data/<job>-sprites.js`, `src/weapon-sprites.js`, `src/slash-effects.js`, or `src/data/monster-sprites.js`. Match the surrounding pattern; don't invent new locations.
-6. **Portrait sprites use the top 4 tiles (16×16) of a 2×3 (16×24) body.** Same as idle/hit/victory.
+4. **4 numbered savestate slots (`S1` / `S2` / `S3` / `S4`)** persist to localStorage so you can park multiple captured moments side by side without overwriting. Tap a slot to select; gold border = selected, green text + `•` = populated. SAVE / LOAD always operate on the selected slot.
+5. **`SCENES` panel** (collapsed by default) lists curated savestates committed at `src/debug/scenes/*.json`. Tap a row's `LOAD` button to jump the emulator to that frame in one tap. To add a scene: pause at the right moment → fill `name` + `description` → tap `EXPORT SCENE` → output textarea fills with the full JSON → `SAVE FILE` (or `COPY` to chat) → commit to `src/debug/scenes/<name>.json` + add metadata to `src/debug/scenes/index.json`. Schema in `src/debug/scenes/README.md`.
+6. **Output toolbar** has `COPY` (clipboard with `execCommand` fallback for older WebViews) and `SAVE FILE` (downloads `emu-snap-fNNNN.txt`). Important on mobile where selecting a 50-line textarea is painful.
+7. Land the captured `new Uint8Array([...])` blocks in the file that owns that subsystem's tile data — typically `src/data/<job>-sprites.js`, `src/weapon-sprites.js`, `src/slash-effects.js`, or `src/data/monster-sprites.js`. Match the surrounding pattern; don't invent new locations.
+8. **Portrait sprites use the top 4 tiles (16×16) of a 2×3 (16×24) body.** Same as idle/hit/victory.
 
 ### EMU tab — also has live SRAM read/write
 

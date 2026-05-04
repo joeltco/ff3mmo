@@ -4,6 +4,27 @@ Tracks the audit findings from `docs/design-notes.md` discussion. Phase 0 is mob
 
 Each phase is mergeable on its own. Bumps `package.json` + a CHANGELOG entry per release per the deploy convention.
 
+## Status (as of v1.7.4)
+
+| Phase | Status | Released |
+|---|---|---|
+| 0 — mobile QoL + capture race | ✅ shipped | v1.6.96 |
+| 1.1 — multi-slot savestates | ✅ shipped | v1.6.97 (+ aliasing fix v1.6.98) |
+| 1.2 — scene library framework | ✅ shipped | v1.6.99 |
+| 1.3 — scene capture flow (`EXPORT SCENE`) | ✅ shipped | v1.6.99 |
+| 1.4 — initial committed scenes | ⚪ pending | — |
+| 2 — DIFF-AGAINST-FILE | ⚪ pending | — |
+| 3 — REC N FRAMES (multi-frame OAM/BG) | ✅ shipped | v1.7.0 |
+| 4 — polish & harden | ⚪ partial — auto-pause on capture done in v1.6.96; rest pending | — |
+| 5 — nice-to-haves | ⚪ deferred | — |
+
+Adjacent work driven by REC N FRAMES captures:
+- v1.7.1 — per-weapon slash scatter table (PPU-derived); pattern + helpers in `slash-effects.js`
+- v1.7.2 / 1.7.3 — slash skip on miss across PVP / player / ally paths
+- v1.7.4 — slash logic consolidated (`SLASH_FRAME_MS`, `shouldDrawSlash`, `getSlashHoldMs` single-sourced)
+
+User feedback (v1.7.0 retro): **REC N FRAMES is the highest-leverage feature in the EMU debugger.** Future EMU work should weight ideas by how much they extend the capture pipeline. The DEDUPE toggle (Phase 4.6 below) is the obvious next-leverage move on REC itself — NES holds anim states 2–4 frames per pose, so a 20-frame REC produces ~4–6 actually distinct states. DEDUPE collapses identical consecutive frames into one block with a `// frames 0..3 (4× same)` header, cutting textarea length 60–70 % and making transitions jump out.
+
 **Constraints baked into every phase:**
 
 - Test target is **mobile browser over SSH**. No keyboard-only paths; tap targets ≥ 34 px; new panels collapsible (`<details>`) so they don't crowd the viewport.

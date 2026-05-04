@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.5 — 2026-05-04
+
+### Docs catchup for the 1.7.x line
+
+Stale-session sweep — README, CLAUDE.md, EMU-PLAN, and design-notes were lagging the v1.6.94 → v1.7.4 jump.
+
+- **README.md** — status bumped from 1.6.94 to 1.7.4. Added a paragraph on the EMU debugger tab (REC N FRAMES, 4-slot savestates, scene library, SRAM editor) and the per-weapon slash work that came out of those captures. Architecture concern list adds a `Debug` row covering `src/debug/{panel,bus,tabs/*}` and `src/debug/scenes/`.
+- **CLAUDE.md** — PPU capture section now documents `REC OAM` / `REC BG` (multi-frame, the highest-leverage tool), 4-slot savestates with selection UX, and the `SCENES` panel + commit flow. `COPY` / `SAVE FILE` output toolbar called out as mobile-critical. The "where things live" table's slash row now points at `slash-effects.js` as single-source.
+- **docs/EMU-PLAN.md** — new "Status (as of v1.7.4)" table marks Phase 0, 1.1, 1.2, 1.3, and 3 as shipped (with release versions); Phase 1.4, 2, 4, 5 still pending. Adjacent-work section captures the v1.7.1–1.7.4 slash refactor that fell out of REC captures, plus a note that DEDUPE toggle is the obvious next-leverage move on REC itself.
+- **docs/design-notes.md** — "Battle attack animation" section rewritten for the consolidated `slash-effects.js` exports (`SLASH_FRAME_MS`, `getSlashPattern`, `setSlashOffsetForFrame`, `shouldDrawSlash`, `getSlashHoldMs`). Per-hit cycle line updated for per-weapon hold (blade 90 ms, impact 60 ms) and miss skip-on-miss.
+
+No code changes in this release.
+
 ## 1.7.4 — 2026-05-04
 
 ### Slash logic consolidated into `slash-effects.js`

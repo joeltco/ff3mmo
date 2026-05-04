@@ -6,7 +6,9 @@ A browser-based NES Final Fantasy III engine that extracts all assets from user-
 
 ## Status
 
-v1.6.94 — Full combat system, PVP duels, job system with 22 jobs, status effects, procedural dungeons, simulated roster, local chat, town shops (Buy/Sell/Exit, NES palette fade transition, FF1 NSF shop music, equip-preview HUD portrait + ATK/DEF delta indicator), and player-cast magic (Cure + Poisona for White Mage, magic shop in Ur, battle + pause-menu spell-pick with target select, MND-based heal formula). All game data (items, monsters, spells, encounters, jobs) extracted from ROM via Data Crystal offsets with NES-verified combat formulas (damage, multi-hit, per-job crit, job-alignment switch cost, magic damage with caster INT/MND, per-side status immunity). On defeat, players respawn at the last town they visited with full HP/MP.
+v1.7.4 — Full combat system, PVP duels, job system with 22 jobs, status effects, procedural dungeons, simulated roster, local chat, town shops (Buy/Sell/Exit, NES palette fade transition, FF1 NSF shop music, equip-preview HUD portrait + ATK/DEF delta indicator), and player-cast magic (Cure + Poisona for White Mage, magic shop in Ur, battle + pause-menu spell-pick with target select, MND-based heal formula). All game data (items, monsters, spells, encounters, jobs) extracted from ROM via Data Crystal offsets with NES-verified combat formulas (damage, multi-hit, per-job crit, job-alignment switch cost, magic damage with caster INT/MND, per-side status immunity). On defeat, players respawn at the last town they visited with full HP/MP.
+
+The 1.7.x line shipped an in-browser **EMU debugger tab** (jsnes-backed; opens via Konami code) with multi-frame OAM/BG capture, 4-slot savestates, a committed scene library, and live SRAM read/write — drives PPU-accurate sprite work without leaving the browser. Per-weapon slash scatter (bladed deterministic UR→LL, impact RNG-per-hit) and miss-skip across player / ally / PVP slash paths landed off the back of those captures.
 
 Networked multiplayer (WebSocket presence, real chat, real PVP) is planned — see [MULTIPLAYER.md](MULTIPLAYER.md). The current roster is populated from a fake player pool.
 
@@ -86,6 +88,7 @@ tools/            ROM extractors, map/sprite viewers, debug utilities
 - **Social** — `chat`, `roster`, `message-box`
 - **Shops** — `shop`, `nes-fade`, `data/shops`
 - **Magic** — `spell-cast`, `data/spells`
+- **Debug** — `debug/panel`, `debug/bus`, `debug/tabs/{emu,sprites,formation,data,state,log,perf}`, `debug/scenes/*` (Konami / `?debug=1` / `~` to open; jsnes-backed EMU tab with REC N FRAMES + scene library + SRAM editor)
 - **ROM/text** — `rom-parser`, `ips-patcher`, `text-decoder`, `text-utils`, `font-renderer`, `tile-decoder`, `tile-math`, `palette`
 
 See `docs/history/REFACTOR.md` for the history of how the monolithic `game.js` was decomposed into these modules, and `src/*.js` files for current details.
