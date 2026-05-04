@@ -502,7 +502,12 @@ function _processPVPSecondWindup() {
 
 function _processPVPEnemySlash() {
   if (battleSt.battleState !== 'pvp-enemy-slash') return false;
-  if (battleSt.battleTimer < ENEMY_SLASH_TOTAL_MS) return true;
+  // Skip the slash-impact hold on a miss — drawSlashOverlay is gated by `!miss`
+  // (battle-drawing.js _drawAllyPortrait / _drawPortraitOverlays), so the full
+  // ENEMY_SLASH_TOTAL_MS wait is dead time with no visual. Forward-strike pose
+  // was already shown by the windup; jump straight to damage display.
+  const isMiss = pvpSt.pvpPendingAttack && pvpSt.pvpPendingAttack.miss;
+  if (!isMiss && battleSt.battleTimer < ENEMY_SLASH_TOTAL_MS) return true;
   const pending = pvpSt.pvpPendingAttack;
   pvpSt.pvpPendingAttack = null;
   const targetAlly = battleSt.enemyTargetAllyIdx; // -1 = player, >=0 = ally

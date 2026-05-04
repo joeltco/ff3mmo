@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.2 — 2026-05-04
+
+### PVP-enemy slash skips its impact hold on a miss
+
+`_processPVPEnemySlash` in `pvp.js` always waited the full `ENEMY_SLASH_TOTAL_MS` regardless of the hit outcome. The slash sprite render path was already gated by `!miss`, so on a miss the entire wait was dead time after the body's forward swing — no visual, just a pause before the MISS popup.
+
+Now on miss, the state short-circuits and routes straight to combo advance / damage display. Hits and shield blocks (which still want the impact frames) are unchanged. Affects PVP-opponent slashes targeting both the player and any ally.
+
 ## 1.7.1 — 2026-05-04
 
 ### Per-weapon slash scatter from PPU captures
