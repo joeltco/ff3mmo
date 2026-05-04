@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.71 — 2026-05-03
+
+### Shops: HUD viewport border no longer fades during the NES map fade
+
+Root cause: the snapshot fed to `buildNesFadeFrames` covered the full HUD_VIEW area, which includes the 8px-wide HUD border tiles around the map. NES-quantizing + palette-stepping that snapshot dimmed the border tiles along with the map content. Same problem applied to the shop-visible phases — `fillRect` was wiping the borders too, then `drawHudBox` redrew them, but during `map-out`/`map-in` there was no redraw.
+
+Fix: confine all shop drawing to the inner content rect (`INNER_X = 8, INNER_Y = 40, INNER_W = 128, INNER_H = 128`). Snapshot the inner area only; draw fade frames at the inner area; black-fill the inner area; rely on the static HUD canvas (drawn each frame by `drawHUD` before `drawShop`) for the border. `drawHudBox` import dropped from shop.js — no longer needed.
+
 ## 1.6.70 — 2026-05-03
 
 ### Shops: bordered box no longer fades — only text fades

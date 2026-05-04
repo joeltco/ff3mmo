@@ -13,7 +13,7 @@
 // Magic shops not wired yet.
 
 import { drawText, measureText } from './font-renderer.js';
-import { drawBorderedBox, drawHudBox, drawCursorFaded, clipToViewport } from './hud-drawing.js';
+import { drawBorderedBox, drawCursorFaded, clipToViewport } from './hud-drawing.js';
 import { _makeFadedPal } from './palette.js';
 import { _nameToBytes } from './text-utils.js';
 import { getItemNameClean } from './text-decoder.js';
@@ -27,6 +27,14 @@ import { ui } from './ui-state.js';
 import { buildNesFadeFrames } from './nes-fade.js';
 
 const HUD_VIEW_X = 0, HUD_VIEW_Y = 32, HUD_VIEW_W = 144, HUD_VIEW_H = 144;
+// Inner area inside the viewport's HUD border tiles (8px frame each side).
+// All shop drawing — snapshot, fade frames, black fill — must stay inside
+// these bounds so the static HUD-canvas border around the viewport isn't
+// touched (and therefore doesn't fade with the snapshot).
+const INNER_X = HUD_VIEW_X + 8;
+const INNER_Y = HUD_VIEW_Y + 8;
+const INNER_W = HUD_VIEW_W - 16;
+const INNER_H = HUD_VIEW_H - 16;
 const ROW_H = 12;
 
 // Inner text-fade timing — matches pause-menu PAUSE_TEXT_STEP_MS / PAUSE_TEXT_STEPS
@@ -304,22 +312,21 @@ export function drawShop() {
   // ── Outer NES fade phases (map ↔ black) ──────────────────────────────────
   if (shopSt.state === 'map-out' || shopSt.state === 'map-in') {
     if (!shopSt.fadeFrames) {
-      // First frame of map-out — capture the live viewport before drawing over it.
-      shopSt.fadeFrames = buildNesFadeFrames(ctx.canvas, HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H, NES_FADE_STEPS);
+      // First frame of map-out — capture the live inner viewport (skip the
+      // HUD border tiles around it) before drawing over it.
+      shopSt.fadeFrames = buildNesFadeFrames(ctx.canvas, INNER_X, INNER_Y, INNER_W, INNER_H, NES_FADE_STEPS);
     }
     const step = _outerFadeStep();
     const frame = shopSt.fadeFrames[Math.max(0, Math.min(step, NES_FADE_STEPS))];
-    if (frame) ctx.drawImage(frame, HUD_VIEW_X, HUD_VIEW_Y);
+    if (frame) ctx.drawImage(frame, INNER_X, INNER_Y);
     return;
   }
 
-  // ── Shop visible phases — black bg + (faded) bordered box + text ─────────
+  // ── Shop visible phases — black inner fill + text ────────────────────────
+  // The static HUD canvas already drew the viewport border this frame; we
+  // only fill the inner area so the border isn't disturbed.
   ctx.fillStyle = '#000';
-  ctx.fillRect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
-
-  // Bordered box always at full opacity — the HUD-style border doesn't fade.
-  // Text inside still fades via its own palette steps.
-  drawHudBox(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H, 0);
+  ctx.fillRect(INNER_X, INNER_Y, INNER_W, INNER_H);
 
   clipToViewport();
 
