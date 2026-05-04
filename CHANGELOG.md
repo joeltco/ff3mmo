@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.87 — 2026-05-04
+
+### Pause-menu inv-target cursor: scroll the roster instead of walking off
+
+`pauseSt.invAllyTarget` Down past the visible roster window now bumps `inputSt.rosterScroll` so the roster panel scrolls in sync (mirroring the way normal roster browsing scrolls). Up below the visible window pulls scroll back. Also fixed `pause-menu.js` `ROSTER_VISIBLE` from `5` to `3` to match `roster.js` — that mismatch is what let the cursor walk one extra row past the bottom into empty space before stopping.
+
 ## 1.6.86 — 2026-05-04
 
 ### Per-weapon slash scatter — staves swing down, fists land in a tight cluster

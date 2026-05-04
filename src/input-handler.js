@@ -972,13 +972,28 @@ function _pauseInputInvTarget() {
   if (pauseSt.state !== 'inv-target') return false;
   const rosterTargets = getRosterVisible();
   const k = keys;
+  // Roster panel only renders 3 rows at a time. When the cursor moves past the
+  // visible window we have to scroll inputSt.rosterScroll so the actual roster
+  // panel scrolls in sync (otherwise the cursor walks off into empty space).
+  const PAUSE_ROSTER_VISIBLE = 3;
   if (k['ArrowDown']) {
     k['ArrowDown'] = false;
-    if (pauseSt.invAllyTarget < rosterTargets.length - 1) { pauseSt.invAllyTarget++; playSFX(SFX.CURSOR); }
+    if (pauseSt.invAllyTarget < rosterTargets.length - 1) {
+      pauseSt.invAllyTarget++;
+      const visRow = pauseSt.invAllyTarget - inputSt.rosterScroll;
+      if (visRow >= PAUSE_ROSTER_VISIBLE) inputSt.rosterScroll++;
+      playSFX(SFX.CURSOR);
+    }
   }
   if (k['ArrowUp']) {
     k['ArrowUp'] = false;
-    if (pauseSt.invAllyTarget > -1) { pauseSt.invAllyTarget--; playSFX(SFX.CURSOR); }
+    if (pauseSt.invAllyTarget > -1) {
+      pauseSt.invAllyTarget--;
+      if (pauseSt.invAllyTarget >= 0 && pauseSt.invAllyTarget < inputSt.rosterScroll) {
+        inputSt.rosterScroll = pauseSt.invAllyTarget;
+      }
+      playSFX(SFX.CURSOR);
+    }
   }
   if (_zPressed()) {
     if (pauseSt.useSpellId > 0) _applyPauseSpellUse(rosterTargets);

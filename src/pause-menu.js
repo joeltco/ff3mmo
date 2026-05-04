@@ -21,7 +21,7 @@ const HUD_VIEW_Y  = 32;
 const HUD_VIEW_W  = 144;
 const HUD_VIEW_H  = 144;
 const HUD_RIGHT_X = 144;
-const ROSTER_VISIBLE = 5;
+const ROSTER_VISIBLE = 3;    // must match roster.js — visible row count for the right-side panel
 const ROSTER_ROW_H   = 32;   // must match roster.js — was 24, caused inv-target cursor to drift down per row
 
 // Pause timing constants
