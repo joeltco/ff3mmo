@@ -430,6 +430,110 @@ function _refreshSlotButtons() {
   }
 }
 
+// ── Scene library ───────────────────────────────────────────────────────────
+// Committed savestates in src/debug/scenes/. Index manifest at scenes/index.json
+// lists metadata; each scene's full state lives at scenes/<name>.json. See
+// src/debug/scenes/README.md for the schema and authoring flow.
+
+const SCENES_INDEX_URL = 'src/debug/scenes/index.json';
+const SCENE_NAME_RE = /^[a-z0-9-]+$/;
+
+async function _fetchScenesIndex() {
+  try {
+    const resp = await fetch(SCENES_INDEX_URL, { cache: 'no-store' });
+    if (!resp.ok) return [];
+    const data = await resp.json();
+    return Array.isArray(data) ? data : [];
+  } catch (e) {
+    console.warn('[emu] scenes index fetch failed', e);
+    return [];
+  }
+}
+
+async function _refreshScenesList() {
+  if (!dom?.scenesList) return;
+  dom.scenesList.innerHTML = '';
+  const scenes = await _fetchScenesIndex();
+  if (dom.scenesSummary) dom.scenesSummary.textContent = `SCENES (${scenes.length})`;
+  if (!scenes.length) {
+    const empty = document.createElement('div');
+    empty.style.cssText = 'color:#888;font-size:11px;padding:6px;font-style:italic;';
+    empty.textContent = 'No scenes yet — capture one below.';
+    dom.scenesList.appendChild(empty);
+    return;
+  }
+  for (const meta of scenes) {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:6px;align-items:center;padding:6px 0;border-bottom:1px solid #222;';
+    const info = document.createElement('div');
+    info.style.cssText = 'flex:1;min-width:0;font-family:monospace;overflow:hidden;';
+    const name = document.createElement('div');
+    name.textContent = meta.name;
+    name.style.cssText = 'color:#c8a832;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+    const desc = document.createElement('div');
+    desc.textContent = meta.description || '';
+    desc.style.cssText = 'color:#888;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+    info.append(name, desc);
+    const btn = document.createElement('button');
+    btn.textContent = 'LOAD';
+    btn.style.cssText = 'padding:6px 10px;background:#1e1e2e;border:1px solid #444;border-radius:3px;color:#c8a832;font-family:monospace;font-size:11px;cursor:pointer;flex-shrink:0;min-width:54px;';
+    btn.addEventListener('click', () => _loadScene(meta.name));
+    row.append(info, btn);
+    dom.scenesList.appendChild(row);
+  }
+}
+
+async function _loadScene(name) {
+  if (!nes) return;
+  if (!SCENE_NAME_RE.test(name)) { _status(`scene name invalid: ${name}`, true); return; }
+  _status(`scene ${name}: fetching…`);
+  let scene;
+  try {
+    const resp = await fetch(`src/debug/scenes/${name}.json`, { cache: 'no-store' });
+    if (!resp.ok) { _status(`scene ${name}: HTTP ${resp.status}`, true); return; }
+    scene = await resp.json();
+  } catch (e) { _status(`scene ${name}: fetch failed — ${e.message}`, true); return; }
+  if (!scene?.state) { _status(`scene ${name}: missing state`, true); return; }
+  const wasRunning = running;
+  if (wasRunning) _stop();
+  try {
+    // Decouple from the cached scene object — same aliasing reason as savestate slots.
+    const state = JSON.parse(JSON.stringify(scene.state));
+    if (!state.romData && nes.romData) state.romData = nes.romData;
+    nes.fromJSON(state);
+    const frameLabel = scene.frame != null ? ` (@ f${scene.frame})` : '';
+    _status(`scene ${name}: loaded${frameLabel}`);
+  } catch (e) {
+    _status(`scene ${name}: apply failed — ${e.message}`, true);
+    console.error(e);
+  } finally {
+    if (wasRunning) _start();
+  }
+}
+
+function _exportScene() {
+  if (!nes) return;
+  const name = (dom.sceneNameInput?.value || '').trim();
+  const desc = (dom.sceneDescInput?.value || '').trim();
+  if (!name) { _status('scene name required', true); dom.sceneNameInput?.focus(); return; }
+  if (!SCENE_NAME_RE.test(name)) { _status('name: lowercase letters, digits, hyphens only', true); return; }
+  try {
+    const full = nes.toJSON();
+    full.romData = null;
+    const scene = {
+      name,
+      description: desc,
+      captured: new Date().toISOString().slice(0, 10),
+      frame: frameCount,
+      state: full,
+    };
+    const json = JSON.stringify(scene, null, 2);
+    dom.output.value = json;
+    const kb = Math.round(json.length / 1024);
+    _status(`scene "${name}" written to output (${kb} KB) — COPY or SAVE FILE to commit`);
+  } catch (e) { _status('export failed: ' + e.message, true); console.error(e); }
+}
+
 // ── OAM snapshot (meta-sprite grouping) ─────────────────────────────────────
 // Groups currently-visible sprites into meta-sprites by XY adjacency, so you get
 // clean "this monster" / "this weapon" clusters instead of raw OAM noise.
@@ -913,6 +1017,54 @@ function _buildDOM(parent) {
   output.style.cssText = 'flex:1;min-height:140px;background:#0f0f18;color:#ccc;font-family:monospace;font-size:10px;border:1px solid #333;border-radius:3px;padding:6px;resize:vertical;';
   root.appendChild(output);
 
+  // Scenes panel — committed savestate library at src/debug/scenes/.
+  // See src/debug/scenes/README.md for the schema and authoring flow.
+  const scenesPanel = document.createElement('details');
+  scenesPanel.style.cssText = 'border:1px solid #333;border-radius:3px;background:#141420;padding:6px;';
+  const scenesSummary = document.createElement('summary');
+  scenesSummary.textContent = 'SCENES';
+  scenesSummary.style.cssText = 'cursor:pointer;color:#c8a832;font-size:11px;font-family:monospace;user-select:none;';
+  scenesPanel.appendChild(scenesSummary);
+
+  const scenesBody = document.createElement('div');
+  scenesBody.style.cssText = 'display:flex;flex-direction:column;gap:6px;margin-top:6px;';
+
+  const scenesTopRow = document.createElement('div');
+  scenesTopRow.style.cssText = 'display:flex;gap:4px;align-items:center;';
+  const btnRefreshScenes = mkBtn('REFRESH', _refreshScenesList);
+  scenesTopRow.appendChild(btnRefreshScenes);
+  scenesBody.appendChild(scenesTopRow);
+
+  const scenesList = document.createElement('div');
+  scenesList.style.cssText = 'display:flex;flex-direction:column;gap:0;max-height:200px;overflow-y:auto;';
+  scenesBody.appendChild(scenesList);
+
+  const scenesDivider = document.createElement('div');
+  scenesDivider.style.cssText = 'border-top:1px solid #333;margin:4px 0 0 0;padding-top:4px;color:#888;font-size:10px;font-family:monospace;';
+  scenesDivider.textContent = 'EXPORT current state as a new scene:';
+  scenesBody.appendChild(scenesDivider);
+
+  const sceneNameInput = document.createElement('input');
+  sceneNameInput.placeholder = 'name (lowercase a-z, 0-9, -)';
+  sceneNameInput.autocapitalize = 'none';
+  sceneNameInput.autocomplete = 'off';
+  sceneNameInput.spellcheck = false;
+  sceneNameInput.style.cssText = 'background:#1e1e2e;border:1px solid #444;border-radius:3px;color:#e0e0e0;font-family:monospace;font-size:11px;padding:6px 8px;';
+  scenesBody.appendChild(sceneNameInput);
+
+  const sceneDescInput = document.createElement('input');
+  sceneDescInput.placeholder = 'short description';
+  sceneDescInput.autocomplete = 'off';
+  sceneDescInput.style.cssText = 'background:#1e1e2e;border:1px solid #444;border-radius:3px;color:#e0e0e0;font-family:monospace;font-size:11px;padding:6px 8px;';
+  scenesBody.appendChild(sceneDescInput);
+
+  const btnExportScene = mkBtn('EXPORT SCENE', _exportScene);
+  btnExportScene.style.alignSelf = 'flex-start';
+  scenesBody.appendChild(btnExportScene);
+
+  scenesPanel.appendChild(scenesBody);
+  root.appendChild(scenesPanel);
+
   // Memory edit panel (party + inventory)
   const editPanel = document.createElement('details');
   editPanel.style.cssText = 'border:1px solid #333;border-radius:3px;background:#141420;padding:6px;';
@@ -946,10 +1098,12 @@ function _buildDOM(parent) {
 
   parent.appendChild(root);
 
-  const d = { root, canvas, status, frame, btnPause, btnStep, btnReset, btnSound, btnSave, btnLoad, btnSnap, btnSnapBG, btnWpn, btnCopy, btnSaveFile, slotButtons, tileInput, btnTileDump, output, writeInput };
+  const d = { root, canvas, status, frame, btnPause, btnStep, btnReset, btnSound, btnSave, btnLoad, btnSnap, btnSnapBG, btnWpn, btnCopy, btnSaveFile, slotButtons, tileInput, btnTileDump, output, writeInput, scenesSummary, scenesList, sceneNameInput, sceneDescInput };
   dom = d;
   _installKeys();
   _refreshSlotButtons();
+  // Fire-and-forget: populate the SCENES panel header count without blocking mount.
+  _refreshScenesList();
   return d;
 }
 

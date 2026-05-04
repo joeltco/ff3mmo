@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.99 — 2026-05-04
+
+### EMU debugger: scene library framework (Phase 1.2)
+
+Committed savestates of canonical FF3 moments, loaded on demand from a new `SCENES` panel in the EMU tab. Solves the "single-slot localStorage means every capture clobbers the previous" problem and makes captured moments **portable across browsers** — anyone who clones the repo gets the same `LOAD` buttons.
+
+- **New dir** `src/debug/scenes/` with `index.json` (manifest) and `<name>.json` (full scene file). Schema documented in `src/debug/scenes/README.md`.
+- **`SCENES` collapsible panel** below the output textarea. On open, fetches `index.json` and renders one row per scene (name + description + tappable `LOAD` button). Header summary shows the count: `SCENES (3)`. `REFRESH` button re-fetches without a page reload.
+- **`LOAD` per scene** fetches `<name>.json`, auto-pauses the emulator, applies via `nes.fromJSON` after a `JSON.parse(JSON.stringify(...))` deep-clone (same aliasing-decoupling reason as the slot fix in 1.6.98), then resumes. `nes.romData` re-attached if the scene file's `state.romData` is null (which it always is — `romData` is intentionally stripped on export).
+- **`EXPORT SCENE` form** at the bottom of the panel — name input (lowercase letters / digits / hyphens) + description input + button. Tap `EXPORT SCENE` and the full scene JSON (with metadata header + slim `nes.toJSON()` state) lands in the output textarea, paste-ready. From there `COPY` or `SAVE FILE` shares the JSON for committing into the repo.
+- Scene library ships **empty** in this release. Initial captures land per future release as we accumulate them.
+
 ## 1.6.98 — 2026-05-04
 
 ### Fix: EMU savestate `LOAD` only worked once per `SAVE`
