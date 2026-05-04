@@ -591,7 +591,10 @@ function _drawBattleSpellList(baseX, rightAreaW, palette) {
       const costStr = String(cost);
       const costBytes = new Uint8Array(costStr.length);
       for (let c = 0; c < costStr.length; c++) costBytes[c] = 0x80 + parseInt(costStr[c]);
-      const costX = baseX + rightAreaW - 4 - measureText(costBytes);
+      // Bottom panel's outer clip is rect(8, HUD_BOT_Y, CANVAS_W-16, HUD_BOT_H) so the
+      // right edge sits at x=248. Place cost so its right edge is at x=240 (8px margin).
+      const PANEL_INNER_RIGHT = CANVAS_W - 16;
+      const costX = PANEL_INNER_RIGHT - measureText(costBytes);
       drawText(ui.ctx, costX, topY + i * rowH, costBytes, palette);
     }
   }

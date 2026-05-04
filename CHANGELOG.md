@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.82 — 2026-05-04
+
+### Battle spell-list cost no longer clipped off the right edge
+
+The bottom panel's outer clip is `rect(8, HUD_BOT_Y, CANVAS_W-16, HUD_BOT_H)` — right edge at x=248. The Cure cost was being drawn at x=244-252, so the right half of the "4" was getting clipped, looking like a stray glyph hanging off the panel. Re-anchored cost to `CANVAS_W - 16 - measureText(...)` so its right edge sits at x=240 (8px margin from the clip).
+
 ## 1.6.81 — 2026-05-04
 
 ### Cure target select: cycle player/allies/enemies; pause-menu Cure works like a Potion
