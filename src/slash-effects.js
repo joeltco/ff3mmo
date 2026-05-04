@@ -1,6 +1,6 @@
 import { NES_SYSTEM_PALETTE } from './tile-decoder.js';
 import { _makeCanvas16 } from './canvas-utils.js';
-import { isBladedWeapon } from './data/items.js';
+import { weaponSubtype } from './data/items.js';
 
 function _decode2BPPTiles(imgData, tiles, layout, pal) {
   for (let t = 0; t < tiles.length; t++) {
@@ -74,15 +74,78 @@ export function initSwordSlashSprites() {
   return [[D,E],[D,F],[E,F]].map(t => _buildSwordSlashFrame(t, PAL));
 }
 
-// Frame-based scatter for ally + PVP-opponent slash overlays.
-// Mirrors the player-slash inline logic in battle-update.js:
-//   bladed     → clean UR→LL diagonal (8,-8) → (0,0) → (-8,8)
-//   non-bladed → small random ±8 per frame
-const _BLADED_X = [8, 0, -8];
-const _BLADED_Y = [-8, 0, 8];
+// PPU-derived per-weapon slash scatter patterns — single source of truth for
+// player, ally, and PVP-opponent slash rendering. Captured frame-by-frame from
+// FF3 NES via the EMU tab (see docs/EMU-PLAN.md and design-notes#battle-attack-animation).
+//
+// Bladed weapons cut through the target — deterministic UR→LL diagonal across
+// 3 frames, step (-16, +16). Impact weapons (fists, staves, nunchaku, etc.) hit
+// a single point and re-roll a random scatter offset per hit, held 2 frames.
+// Multi-hit combos visibly scatter because each hit re-rolls — what you see in
+// a Monk's R-hand combo planting 4 different impacts in 8 frames.
+const _SLASH_PATTERN_BLADE = {
+  positions: [[16, -16], [0, 0], [-16, 16]],
+  holdFrames: 1,
+  rng: null,
+  totalFrames: 3,
+};
+const _SLASH_PATTERN_IMPACT = {
+  positions: null,
+  holdFrames: 2,
+  rng: { x: 12, y: 20 },
+  totalFrames: 2,
+};
+
+export function getSlashPattern(weaponId) {
+  const st = weaponSubtype(weaponId);
+  if (st === 'knife' || st === 'sword' || st === 'katana' || st === 'dagger') return _SLASH_PATTERN_BLADE;
+  return _SLASH_PATTERN_IMPACT;
+}
+
+// Sets state.slashOffX/slashOffY for the given weapon at the given slash frame.
+// Deterministic patterns pick the position by `floor(frame / holdFrames)`.
+// RNG patterns roll a fresh offset within the pattern's range — caller must only
+// invoke at hold-window boundaries (frame % holdFrames === 0) to match NES
+// single-roll-per-hit behavior.
+export function setSlashOffsetForFrame(state, weaponId, frame) {
+  const pattern = getSlashPattern(weaponId);
+  if (pattern.positions) {
+    const posIdx = Math.min(Math.floor(frame / pattern.holdFrames), pattern.positions.length - 1);
+    state.slashOffX = pattern.positions[posIdx][0];
+    state.slashOffY = pattern.positions[posIdx][1];
+  } else if (pattern.rng) {
+    state.slashOffX = Math.floor(Math.random() * (pattern.rng.x * 2 + 1)) - pattern.rng.x;
+    state.slashOffY = Math.floor(Math.random() * (pattern.rng.y * 2 + 1)) - pattern.rng.y;
+  }
+}
+
+// Render-side scatter for ally + PVP-opponent slash overlays. Reads the same
+// per-weapon pattern as the player; for RNG patterns, caches the roll on a
+// module-local until the hold-window advances so render calls within the same
+// NES frame agree (no per-render jitter).
+let _scatterCacheKey = '';
+let _scatterCacheDx = 0;
+let _scatterCacheDy = 0;
 function _scatterFor(weaponId, frameIdx) {
-  if (isBladedWeapon(weaponId)) return { dx: _BLADED_X[frameIdx] || 0, dy: _BLADED_Y[frameIdx] || 0 };
-  return { dx: Math.floor(Math.random() * 16) - 8, dy: Math.floor(Math.random() * 16) - 8 };
+  const pattern = getSlashPattern(weaponId);
+  if (pattern.positions) {
+    const posIdx = Math.min(Math.floor(frameIdx / pattern.holdFrames), pattern.positions.length - 1);
+    return { dx: pattern.positions[posIdx][0], dy: pattern.positions[posIdx][1] };
+  }
+  const window = Math.floor(frameIdx / pattern.holdFrames);
+  const key = `${weaponId}:${window}`;
+  if (key !== _scatterCacheKey) {
+    _scatterCacheKey = key;
+    _scatterCacheDx = Math.floor(Math.random() * (pattern.rng.x * 2 + 1)) - pattern.rng.x;
+    _scatterCacheDy = Math.floor(Math.random() * (pattern.rng.y * 2 + 1)) - pattern.rng.y;
+  }
+  return { dx: _scatterCacheDx, dy: _scatterCacheDy };
+}
+
+// Resets the ally/PVP scatter cache so a new hit re-rolls (called between hits).
+// Player slash uses caller-managed state (battleSt) so doesn't need this.
+export function resetSlashScatterCache() {
+  _scatterCacheKey = '';
 }
 
 

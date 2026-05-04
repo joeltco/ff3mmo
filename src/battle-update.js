@@ -10,7 +10,7 @@ import { hudSt } from './hud-state.js';
 import { mapSt } from './map-state.js';
 import { ps, grantExp, grantCP, getHitWeapon, isHitRightHand, gainJobJP } from './player-stats.js';
 import { IDLE_FRAME_MS } from './combatant-pose.js';
-import { bsc, getSlashFramesForWeapon } from './battle-sprite-cache.js';
+import { bsc, getSlashFramesForWeapon, getSlashPattern, setSlashOffsetForFrame } from './battle-sprite-cache.js';
 import { buildTurnOrder, processNextTurn } from './battle-turn.js';
 import { updateBattleAlly } from './battle-ally.js';
 import { updateBattleEnemyTurn } from './battle-enemy.js';
@@ -22,7 +22,7 @@ import { queueBattleMsg, replaceBattleMsg, updateBattleMsg as _updateBattleMsg, 
 import { resetAllDmgNums, tickDmgNums, tickHealNums, clearHealNums,
          setEnemyDmgNum } from './damage-numbers.js';
 import { playSFX, stopMusic, pauseMusic, resumeMusic, playTrack, TRACKS, SFX } from './music.js';
-import { ITEMS, isBladedWeapon } from './data/items.js';
+import { ITEMS } from './data/items.js';
 import { MONSTERS } from './data/monsters.js';
 import { PLAYER_POOL, generateAllyStats } from './data/players.js';
 import { BATTLE_ROAR, BATTLE_CANT_ESCAPE, BATTLE_CRITICAL } from './data/strings.js';
@@ -48,7 +48,6 @@ const BOSS_DISSOLVE_STEPS      = 8;
 const BOSS_DISSOLVE_FRAME_MS   = 16.67;
 const MONSTER_SLIDE_MS         = 267;
 const SLASH_FRAME_MS           = 30;
-const SLASH_FRAMES             = 3;
 const BACK_SWING_MS            = 80;
 const FWD_SWING_MS             = 80;
 const HIT_PAUSE_MS             = 100;
@@ -305,8 +304,7 @@ function _advanceHitCombo() {
     battleSt.slashFrame = 0;
     const handWeapon = getHitWeapon(battleSt.currentHitIdx, inputSt.rHandHitCount);
     bsc.slashFrames = getSlashFramesForWeapon(handWeapon, isHitRightHand(battleSt.currentHitIdx, inputSt.rHandHitCount));
-    if (isBladedWeapon(handWeapon)) { battleSt.slashOffX = 8; battleSt.slashOffY = -8; }
-    else { battleSt.slashOffX = Math.floor(Math.random() * 16) - 8; battleSt.slashOffY = Math.floor(Math.random() * 16) - 8; }
+    setSlashOffsetForFrame(battleSt, handWeapon, 0);
     battleSt.battleState = 'attack-back';
     battleSt.battleTimer = 0;
   } else {
@@ -349,19 +347,16 @@ function _updatePlayerAttackFwd() {
 
 function _updatePlayerSlash() {
   if (battleSt.battleState !== 'player-slash') return false;
+  const handWeapon = getHitWeapon(battleSt.currentHitIdx, inputSt.rHandHitCount);
+  const pattern = getSlashPattern(handWeapon);
   const frame = Math.floor(battleSt.battleTimer / SLASH_FRAME_MS);
-  if (frame !== battleSt.slashFrame && frame < SLASH_FRAMES) {
+  if (frame !== battleSt.slashFrame && frame < pattern.totalFrames) {
     battleSt.slashFrame = frame;
-    const handWeapon = getHitWeapon(battleSt.currentHitIdx, inputSt.rHandHitCount);
-    if (isBladedWeapon(handWeapon)) {
-      battleSt.slashOffX = 8 - battleSt.slashFrame * 8;
-      battleSt.slashOffY = -8 + battleSt.slashFrame * 8;
-    } else {
-      battleSt.slashOffX = Math.floor(Math.random() * 16) - 8;
-      battleSt.slashOffY = Math.floor(Math.random() * 16) - 8;
-    }
+    // Only re-set offset on hold-window boundaries (matches NES single-roll-per-hit
+    // for impact weapons and per-frame stepping for bladed).
+    if (frame % pattern.holdFrames === 0) setSlashOffsetForFrame(battleSt, handWeapon, frame);
   }
-  if (battleSt.battleTimer >= SLASH_FRAMES * SLASH_FRAME_MS) {
+  if (battleSt.battleTimer >= pattern.totalFrames * SLASH_FRAME_MS) {
     const hit = inputSt.hitResults[battleSt.currentHitIdx];
     if (!hit.miss) {
       if (pvpSt.isPVPBattle && pvpSt.pvpOpponentIsDefending)

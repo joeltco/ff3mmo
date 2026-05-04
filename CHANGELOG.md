@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.1 — 2026-05-04
+
+### Per-weapon slash scatter from PPU captures
+
+Replaces the 1.6.89 "bladed = clean diagonal, else random ±8 per frame" heuristic with a PPU-derived per-weapon table. Driven by 20-frame OAM captures (OK dual-wield knife, WM staff, Monk full dual-fist combo) via the new EMU REC tool.
+
+- **New single source of truth** in `src/slash-effects.js`: `getSlashPattern(weaponId)` plus `setSlashOffsetForFrame(state, weaponId, frame)` for player and `_scatterFor(weaponId, frameIdx)` for ally/PVP. `battle-sprite-cache.js` re-exports the helpers so consumers don't need to know which file owns what.
+- **Bladed** (knife / sword / katana / dagger): deterministic UR→LL diagonal, 3 frames at `[(16,-16), (0,0), (-16,16)]`, 1 frame each. PPU showed step `(-16, +16)` per frame — the previous `(-8, +8)` step was half-magnitude.
+- **Impact** (fists, staff, rod, nunchaku, claw, hammer, etc.): single RNG-scattered position per hit, range `±12 x / ±20 y`, held 2 frames. Multi-hit combos re-roll per hit. The previous "staff = downward arc" / "fists = tight cluster" overrides from 1.6.86 were wrong — staff impacts are the same RNG-on-target as fists.
+- **Player path** (`battle-update.js _updatePlayerSlash`, `_advanceHitCombo`, `input-handler.js` first-hit queue) replaced inline bladed/random branches with `setSlashOffsetForFrame`. RNG-pattern weapons re-set offset only on hold-window boundaries (`frame % holdFrames === 0`), matching NES single-roll-per-hit.
+- **Ally / PVP path** (`drawSlashOverlay`) now uses the same pattern table. Module-local cache stabilises the RNG roll across render calls within a hold-window — fixes a pre-existing per-render jitter where `Math.random()` re-rolled every frame draw. `resetSlashScatterCache()` is called when starting any new ally hit (`battle-ally.js`) or PVP-enemy slash (`pvp.js`) so RNG re-rolls cleanly per hit.
+- **Fist body wiggle moved from sprite to body group.** 1.6.94 wiggled only the fist sprite at ±2 x / ±1 y, which detached the fist from the arm. PPU shows the **whole body group** alternates ±1 x while bladed strikes hold steady. `_drawPortraitWeapon` no longer wiggles; the parent draw site shifts `pxs` ±1 px x during fist `player-slash`.
+- **Followups doc updated** — design-notes "Battle attack animation" section rewritten; "Staff slash 3-frame anim" and "Staff/rod downward-arc scatter" entries deleted from Followups (both were misreads of single-capture noise).
+
 ## 1.7.0 — 2026-05-04
 
 ### EMU debugger: REC N FRAMES — multi-frame OAM/BG capture (Phase 3)

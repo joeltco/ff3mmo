@@ -292,14 +292,9 @@ function _drawPortraitWeapon(px, py, before) {
   if (!spec) return;
   const layer = attackWeaponLayer({ attackPhase: phase, hand, mirror: false });
   if ((before && layer === 'behind') || (!before && layer === 'front')) {
-    // Fist sprite wiggles during player-slash — alternates ±2px x and ±1px y at
-    // ~30ms cadence so each punch reads with impact shake.
-    let wx = 0, wy = 0;
-    if (handWeapon === 0 && battleSt.battleState === 'player-slash') {
-      wx = (Math.floor(battleSt.battleTimer / 33) & 1) ? 2 : -2;
-      wy = (Math.floor(battleSt.battleTimer / 50) & 1) ? 1 : -1;
-    }
-    ui.ctx.drawImage(spec.canvas, px + spec.dx + wx, py + spec.dy + wy);
+    // Body-group wiggle (applied at the parent draw site for fist-only player-slash)
+    // already shifts px/py — fist sprite follows the body, no extra wiggle here.
+    ui.ctx.drawImage(spec.canvas, px + spec.dx, py + spec.dy);
   }
 }
 
@@ -426,7 +421,16 @@ function _drawBattlePortrait() {
   const isNearFatal = ps.hp > 0 && ps.stats && ps.hp <= Math.floor(ps.stats.maxHP / 4);
   const portraitSrc = _getPortraitSrc(isNearFatal, isAttackPose, isHitPose, isDefendPose, isItemUsePose, isVictoryPose);
   if (!portraitSrc) return;
-  const pxs = px + shakeOff;
+  // Fist impact wiggle — whole body (incl. fist sprite) jitters ±1 px x at ~30ms
+  // cadence during a fist's player-slash. Matches the NES OAM trace where the
+  // entire Monk body group origin alternates 180/181 between impact frames.
+  // Only fires when this hit is unarmed; bladed strikes hold rock-steady.
+  let bodyWiggleX = 0;
+  if (battleSt.battleState === 'player-slash' &&
+      getHitWeapon(battleSt.currentHitIdx, inputSt.rHandHitCount) === 0) {
+    bodyWiggleX = (Math.floor(battleSt.battleTimer / 33) & 1) ? 1 : -1;
+  }
+  const pxs = px + shakeOff + bodyWiggleX;
   // Blink portrait when enemy slash is landing (mirrors opponent blink on player hit)
   const portraitBlink = battleSt.battleState === 'pvp-enemy-slash' &&
     battleSt.enemyTargetAllyIdx < 0 &&

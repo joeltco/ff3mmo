@@ -28,7 +28,7 @@ import { getShieldEvade } from './player-stats.js';
 import { pvpGridLayout, PVP_CELL_W, PVP_CELL_H } from './pvp-math.js';
 import { playSlashSFX } from './battle-sfx.js';
 import { bsc, getSlashFramesForWeapon } from './battle-sprite-cache.js';
-import { drawSlashOverlay } from './slash-effects.js';
+import { drawSlashOverlay, resetSlashScatterCache } from './slash-effects.js';
 import { fakePlayerFullBodyCanvases, fakePlayerHitFullBodyCanvases,
          fakePlayerKnifeRFullBodyCanvases, fakePlayerKnifeLFullBodyCanvases,
          fakePlayerKnifeRFwdFullBodyCanvases, fakePlayerKnifeLFwdFullBodyCanvases,
@@ -278,6 +278,7 @@ function _runEnemyAttack(targetAlly) {
   const pendingCrit = pvpSt.pvpPendingAttack && pvpSt.pvpPendingAttack.crit;
   const wId = attackerStats ? attackerStats.weaponId : null;
   if (wId != null) playSlashSFX(wId, pendingCrit); else playSFX(SFX.ATTACK_HIT);
+  resetSlashScatterCache();
   battleSt.battleState = 'pvp-enemy-slash'; battleSt.battleTimer = 0;
 }
 
@@ -495,6 +496,7 @@ function _processPVPSecondWindup() {
     : !rW;
   const wId = isLeftHit ? (attackerStats ? attackerStats.weaponL : null) : (attackerStats ? attackerStats.weaponId : null);
   if (wId != null) playSlashSFX(wId, hit && hit.crit); else playSFX(SFX.ATTACK_HIT);
+  resetSlashScatterCache();
   battleSt.battleState = 'pvp-enemy-slash'; battleSt.battleTimer = 0;
 }
 

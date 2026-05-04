@@ -46,6 +46,11 @@ export function getSlashFramesForWeapon(id, rightHand) {
   return rightHand ? bsc.slashFramesR : bsc.slashFramesL;
 }
 
+// Per-weapon slash scatter pattern + offset helpers live in slash-effects.js
+// (alongside drawSlashOverlay and the slash sprite builders). Re-export here so
+// callers don't need to know which file owns what.
+export { getSlashPattern, setSlashOffsetForFrame } from './slash-effects.js';
+
 // Init-once caches (slash/SW/status). Call once per ROM load.
 export function initBattleSpriteCache() {
   bsc.swPhaseCanvases = initSouthWindSprite();

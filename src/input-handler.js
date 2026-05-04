@@ -9,7 +9,7 @@ import { chatState, CHAT_TABS, activeTab, tabSelectMode, setActiveTab, setTabSel
 import { titleSt, onNameEntryKeyDown } from './title-screen.js';
 import { ps, recalcCombatStats, changeJob, getEquipSlotId, setEquipSlotId, EQUIP_SLOT_SUBTYPE,
          getHitWeapon, jobSwitchCost, getJobLevelStatBonus } from './player-stats.js';
-import { ITEMS, isHandEquippable, isWeapon, weaponSubtype, isBladedWeapon } from './data/items.js';
+import { ITEMS, isHandEquippable, isWeapon, weaponSubtype } from './data/items.js';
 import { SPELLS, getSpellMPCost } from './data/spells.js';
 import { selectCursor, saveSlots, saveSlotsToDB } from './save-state.js';
 import { rollHits, calcPotentialHits, elemMultiplier } from './battle-math.js';
@@ -17,7 +17,7 @@ import { blindHitPenalty, miniToadAtkMult, removeStatus, STATUS } from './status
 import { _nameToBytes } from './text-utils.js';
 import { MONSTERS } from './data/monsters.js';
 import { canJobEquip, JOBS } from './data/jobs.js';
-import { getSlashFramesForWeapon } from './battle-sprite-cache.js';
+import { getSlashFramesForWeapon, setSlashOffsetForFrame } from './battle-sprite-cache.js';
 import { mapSt } from './map-state.js';
 import { pvpSt } from './pvp.js';
 import { advanceBattleMsgZ } from './battle-msg.js';
@@ -218,11 +218,13 @@ function _battleTargetConfirm() {
   const centerX = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2);
   const centerY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
   const firstWeapon0 = getHitWeapon(0);
-  const pendingOffX = isBladedWeapon(firstWeapon0) ? 8 : Math.floor(Math.random() * 40) - 20;
-  const pendingOffY = isBladedWeapon(firstWeapon0) ? -8 : Math.floor(Math.random() * 40) - 20;
+  // First-hit scatter offsets come from the per-weapon pattern (see battle-sprite-cache.js).
+  // Cheat-set on a temporary object so we can stash them into playerActionPending.
+  const pendingOffsets = { slashOffX: 0, slashOffY: 0 };
+  setSlashOffsetForFrame(pendingOffsets, firstWeapon0, 0);
   inputSt.playerActionPending = {
     command: 'fight', targetIndex: inputSt.targetIndex, hitResults: inputSt.hitResults,
-    slashFrames: pendingSlashFrames, slashOffX: pendingOffX, slashOffY: pendingOffY,
+    slashFrames: pendingSlashFrames, slashOffX: pendingOffsets.slashOffX, slashOffY: pendingOffsets.slashOffY,
     slashX: centerX, slashY: centerY
   };
   battleSt.battleState = 'confirm-pause';

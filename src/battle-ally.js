@@ -2,6 +2,7 @@
 
 import { battleSt, getEnemyHP, setEnemyHP, BATTLE_SHAKE_MS, BATTLE_DMG_SHOW_MS } from './battle-state.js';
 import { playSlashSFX } from './battle-sfx.js';
+import { resetSlashScatterCache } from './slash-effects.js';
 import { isWeapon } from './data/items.js';
 import { SFX, playSFX } from './music.js';
 import { _nameToBytes } from './text-utils.js';
@@ -97,6 +98,9 @@ function _updateAllyAttack() {
       const hit = battleSt.allyHitResults[battleSt.allyHitIdx];
       battleSt.allyHitResult = hit;
       playSlashSFX(activeWpn, hit && hit.crit);
+      // Re-roll RNG scatter for impact weapons on every new hit so the cached
+      // value from the previous hit (or another slash path) doesn't bleed in.
+      resetSlashScatterCache();
       battleSt.battleState = 'ally-slash';
       battleSt.battleTimer = 0;
     }
