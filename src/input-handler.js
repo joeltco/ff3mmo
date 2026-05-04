@@ -810,8 +810,9 @@ function _pauseInputMagicZ() {
   const spell = SPELLS.get(cureId);
   if (!spell) { playSFX(SFX.ERROR); return; }
   ps.mp -= cost;
-  const intStat = ps.stats ? ps.stats.int : 5;
-  const atk = Math.floor(intStat / 2) + spell.power;
+  // White magic uses MND; for Cure (recovery) that's the right stat per NES FF3.
+  const stat = ps.stats ? (ps.stats.mnd || 5) : 5;
+  const atk = Math.floor(stat / 2) + spell.power;
   const amt = atk + Math.floor(Math.random() * (Math.floor(atk / 2) + 1));
   const heal = Math.min(amt, ps.stats.maxHP - ps.hp);
   ps.hp += heal;

@@ -27,9 +27,11 @@ export function resetSpellCastVars() {
   _spellId = 0; _targets = []; _hitIdx = 0; _effectApplied = false; _baseAmount = 0;
 }
 
-function _rollMagicAmount(power) {
-  const intStat = ps.stats ? ps.stats.int : 5;
-  const atk = Math.floor(intStat / 2) + power;
+// NES FF3 magic formula (31/B1B4): atk = floor(stat/2) + power, +rand(0..atk/2).
+// White magic (recovery / status) uses caster MND; black magic (damage) uses INT.
+function _rollMagicAmount(power, useMnd) {
+  const stat = ps.stats ? (useMnd ? (ps.stats.mnd || 5) : (ps.stats.int || 5)) : 5;
+  const atk = Math.floor(stat / 2) + power;
   return atk + Math.floor(Math.random() * (Math.floor(atk / 2) + 1));
 }
 
@@ -43,7 +45,8 @@ export function startSpellCast(spellId, targetSpec) {
   _effectApplied = false;
   const allyIndex = (targetSpec && targetSpec.allyIndex != null) ? targetSpec.allyIndex : -1;
   _targets = [allyIndex < 0 ? 'player' : allyIndex];
-  _baseAmount = _rollMagicAmount(spell.power);
+  const isWhite = spell.element === 'recovery' || spell.target === 'cure_status' || spell.target === 'revive';
+  _baseAmount = _rollMagicAmount(spell.power, isWhite);
   // MP deduction (cost may be 0 for unmapped spells in v1)
   const cost = getSpellMPCost(spellId);
   ps.mp = Math.max(0, ps.mp - cost);

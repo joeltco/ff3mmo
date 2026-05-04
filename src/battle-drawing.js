@@ -10,7 +10,6 @@ import { getBossBattleCanvas, getBossWhiteCanvas } from './boss-sprites.js';
 import { getMonsterCanvas, getMonsterWhiteCanvas, hasMonsterSprites } from './monster-sprites.js';
 import { getItemNameClean, getMonsterName, getSpellNameClean } from './text-decoder.js';
 import { getSpellMPCost } from './data/spells.js';
-import { getSpellTargets, getSpellHitIdx } from './spell-cast.js';
 import { weaponSubtype, isWeapon } from './data/items.js';
 import { PLAYER_PALETTES, MONK_PALETTES } from './data/players.js';
 import { pickAttackPoseKey, pickAttackWeaponSpec, attackWeaponLayer } from './combatant-pose.js';
@@ -116,32 +115,6 @@ function _encounterGridLayout() {
 }
 
 function drawSWExplosion() {
-  // Player magic cast — explosion on the spell target (player/ally for ally-target spells)
-  if (battleSt.battleState === 'magic-hit' && battleSt.battleTimer < 400) {
-    if (!bsc.swPhaseCanvases.length) return;
-    const phase = Math.min(2, Math.floor(battleSt.battleTimer / 133));
-    const canvas = bsc.swPhaseCanvases[phase];
-    if (!canvas) return;
-    const targets = getSpellTargets();
-    const tgt = targets[getSpellHitIdx()];
-    if (tgt === undefined) return;
-    let cx, cy;
-    if (tgt === 'player') {
-      cx = HUD_RIGHT_X + 8 + 8;
-      cy = HUD_VIEW_Y + 8 + 12;
-    } else {
-      const panelTop = HUD_VIEW_Y + 32;
-      cx = HUD_RIGHT_X + 8 + 8;
-      cy = panelTop + tgt * ROSTER_ROW_H + 8 + 8;
-    }
-    const half = canvas.width / 2;
-    ui.ctx.save();
-    ui.ctx.beginPath(); ui.ctx.rect(0, HUD_VIEW_Y, CANVAS_W, HUD_VIEW_H); ui.ctx.clip();
-    ui.ctx.imageSmoothingEnabled = false;
-    ui.ctx.drawImage(canvas, cx - half, cy - half);
-    ui.ctx.restore();
-    return;
-  }
   // PVP opponent South Wind — explosion centered on current target (player or ally)
   if (pvpSt.isPVPBattle && battleSt.battleState === 'pvp-opp-sw-hit' && battleSt.battleTimer < 400) {
     if (!bsc.swPhaseCanvases.length) return;
@@ -330,8 +303,12 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
     const frame = bsc.defendSparkleFrames[fi];
     drawSparkleCorners(frame, px, py);
   }
-  // Cure sparkle — alternating flips every 67ms during item-use
-  if (battleSt.battleState === 'item-use' && bsc.cureSparkleFrames.length === 2 && !(inputSt.playerActionPending && inputSt.playerActionPending.allyIndex >= 0)) {
+  // Cure sparkle — alternating flips every 67ms during item-use AND during a player-target magic heal cast.
+  const isCureItemUse = battleSt.battleState === 'item-use' && !(inputSt.playerActionPending && inputSt.playerActionPending.allyIndex >= 0);
+  const isCureMagicSelf = (battleSt.battleState === 'magic-cast' || battleSt.battleState === 'magic-hit')
+    && inputSt.playerActionPending && inputSt.playerActionPending.command === 'magic'
+    && (inputSt.playerActionPending.target === 'player' || inputSt.playerActionPending.allyIndex < 0);
+  if ((isCureItemUse || isCureMagicSelf) && bsc.cureSparkleFrames.length === 2) {
     const fi = Math.floor(battleSt.battleTimer / 67) & 1;
     const frame = bsc.cureSparkleFrames[fi];
     drawSparkleCorners(frame, px, py);
@@ -875,6 +852,7 @@ function _isEncounterCombatState() {
     battleSt.battleState === 'player-slash' || battleSt.battleState === 'player-hit-show' || battleSt.battleState === 'player-miss-show' ||
     battleSt.battleState === 'player-damage-show' || battleSt.battleState === 'monster-death' || battleSt.battleState === 'defend-anim' ||
     battleSt.battleState.startsWith('item-') || battleSt.battleState === 'sw-throw' || battleSt.battleState === 'sw-hit' ||
+    battleSt.battleState === 'magic-cast' || battleSt.battleState === 'magic-hit' ||
     battleSt.battleState === 'run-success' || battleSt.battleState === 'run-fail' ||
     battleSt.battleState === 'enemy-flash' || battleSt.battleState === 'enemy-attack' || battleSt.battleState === 'enemy-damage-show' ||
     battleSt.battleState === 'poison-tick' || battleSt.battleState === 'message-hold' || battleSt.battleState === 'msg-wait' || battleSt.battleState.startsWith('ally-') ||
@@ -976,6 +954,7 @@ function drawBossSpriteBox() {
                     battleSt.battleState === 'player-miss-show' ||
                     battleSt.battleState === 'player-damage-show' || battleSt.battleState === 'defend-anim' || battleSt.battleState.startsWith('item-') ||
                     battleSt.battleState === 'sw-throw' || battleSt.battleState === 'sw-hit' ||
+                    battleSt.battleState === 'magic-cast' || battleSt.battleState === 'magic-hit' ||
                     battleSt.battleState === 'enemy-flash' || battleSt.battleState === 'enemy-attack' ||
                     battleSt.battleState === 'enemy-damage-show' || battleSt.battleState === 'poison-tick' || battleSt.battleState === 'pvp-second-windup' ||
                     battleSt.battleState === 'pvp-ally-appear' || battleSt.battleState === 'message-hold' || battleSt.battleState === 'msg-wait' ||
@@ -999,7 +978,7 @@ function drawBossSpriteBox() {
                    battleSt.battleState === 'menu-open' || battleSt.battleState === 'target-select' || battleSt.battleState === 'confirm-pause' ||
                    battleSt.battleState === 'attack-back' || battleSt.battleState === 'attack-fwd' || battleSt.battleState === 'player-slash' || battleSt.battleState === 'player-hit-show' ||
                    battleSt.battleState === 'player-miss-show' ||
-                   battleSt.battleState === 'player-damage-show' || battleSt.battleState === 'defend-anim' || battleSt.battleState.startsWith('item-') || battleSt.battleState === 'sw-throw' || battleSt.battleState === 'sw-hit' || battleSt.battleState === 'run-success' || battleSt.battleState === 'run-fail' || battleSt.battleState === 'enemy-flash' ||
+                   battleSt.battleState === 'player-damage-show' || battleSt.battleState === 'defend-anim' || battleSt.battleState.startsWith('item-') || battleSt.battleState === 'sw-throw' || battleSt.battleState === 'sw-hit' || battleSt.battleState === 'magic-cast' || battleSt.battleState === 'magic-hit' || battleSt.battleState === 'run-success' || battleSt.battleState === 'run-fail' || battleSt.battleState === 'enemy-flash' ||
                    battleSt.battleState === 'enemy-attack' ||
                    battleSt.battleState === 'enemy-damage-show' || battleSt.battleState === 'poison-tick' || battleSt.battleState === 'message-hold' || battleSt.battleState === 'msg-wait' ||
                    battleSt.battleState.startsWith('ally-') ||

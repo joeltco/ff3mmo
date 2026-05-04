@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.79 — 2026-05-04
+
+### Magic v1 polish: cure-sparkle visual, MND-based heal, encounter visibility
+
+- **Cure visual swapped from SouthWind ice burst to the cure sparkle.** `bsc.cureSparkleFrames` (the same alternating-flip overlay used for pause-menu Potion heals and battle-item Potion) now flickers on the player portrait during `magic-cast` / `magic-hit` whenever a player-target heal is mid-cast. The SouthWind explosion no longer renders for spell casts.
+- **Heal formula now uses MND (caster's mind), not INT.** Per NES FF3 disasm, white magic uses MND and black magic uses INT. `_rollMagicAmount(power, useMnd)` in `spell-cast.js` picks the right stat based on the spell's element (`recovery` → MND); pause-menu Cure does the same.
+- **Encounter monsters no longer disappear during a cast.** `_isEncounterCombatState` and the PVP/boss equivalent state-lists now include `magic-cast`/`magic-hit`, so monsters stay drawn while the spell animates instead of hiding for ~1.1s.
+
 ## 1.6.78 — 2026-05-04
 
 ### Magic v1 fixups: pause-menu Cure, MP refill on /job, strip spell-name padding
