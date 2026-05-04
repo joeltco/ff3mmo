@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.93 — 2026-05-04
+
+### Every weapon hit now gets a full back-swing (was 30ms flash for repeats)
+
+`HIT_COMBO_PAUSE_MS` (30ms) was being used for every hit after the first within the same hand — that's barely two NES frames in back-swing pose, so it visually looked like the back-swing was skipped. Now every hit uses `BACK_SWING_MS` (~167ms) so the wind-up is clearly visible per hit. Fists still skip the back-swing entirely (punches go straight forward). Hand change still inserts the idle pose break.
+
 ## 1.6.92 — 2026-05-04
 
 ### Idle pose only at hand change (revert from per-hit)

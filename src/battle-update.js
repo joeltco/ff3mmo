@@ -324,8 +324,10 @@ function _updatePlayerAttackBack() {
     isHitRightHand(battleSt.currentHitIdx, inputSt.rHandHitCount) !==
     isHitRightHand(battleSt.currentHitIdx - 1, inputSt.rHandHitCount);
   const isUnarmed = getHitWeapon(battleSt.currentHitIdx, inputSt.rHandHitCount) === 0;
+  // Every hit gets a full back-swing (BACK_SWING_MS). Hand change inserts an idle pose
+  // first. Fists skip the back-swing entirely — punches go straight to forward strike.
   const delay = handChange ? IDLE_FRAME_MS
-              : (isUnarmed ? 0 : (battleSt.currentHitIdx === 0 ? BACK_SWING_MS : HIT_COMBO_PAUSE_MS));
+              : (isUnarmed ? 0 : BACK_SWING_MS);
   if (battleSt.battleTimer >= delay) {
     battleSt.battleState = 'attack-fwd';
     battleSt.battleTimer = 0;
