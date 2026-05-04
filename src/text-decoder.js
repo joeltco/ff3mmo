@@ -151,6 +151,29 @@ export function getSpellName(spellId) {
 }
 
 /**
+ * Get spell name bytes with magic-school icon tiles (0x5C-0x7B) and
+ * trailing spaces stripped. Use this anywhere we want just the name letters.
+ * @param {number} spellId
+ * @returns {Uint8Array}
+ */
+export function getSpellNameClean(spellId) {
+  const bytes = getSpellName(spellId);
+  const out = [];
+  // Allowlist: digits 0x80-0x89, uppercase 0x8A-0xA3, lowercase 0xCA-0xE3,
+  // basic punctuation 0xC4/0xC5/0xC8/0xC9, space 0xFF. Drops magic-school
+  // icon tiles and any other padding bytes the ROM stores around the name.
+  for (const b of bytes) {
+    const isLetter = (b >= 0x8A && b <= 0xA3) || (b >= 0xCA && b <= 0xE3);
+    const isDigit = b >= 0x80 && b <= 0x89;
+    const isPunct = b === 0xC4 || b === 0xC5 || b === 0xC8 || b === 0xC9;
+    const isSpace = b === 0xFF;
+    if (isLetter || isDigit || isPunct || isSpace) out.push(b);
+  }
+  while (out.length > 0 && out[out.length - 1] === 0xFF) out.pop();
+  return new Uint8Array(out);
+}
+
+/**
  * Get job name bytes.
  * @param {number} jobId — job index (0x00-0x15)
  * @returns {Uint8Array}

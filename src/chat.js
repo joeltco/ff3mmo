@@ -10,7 +10,7 @@ import { mapSt } from './map-state.js';
 import { sprite } from './player-sprite.js';
 import { DIR_DOWN, DIR_UP, DIR_LEFT, DIR_RIGHT } from './sprite.js';
 import { playFF1Track, stopFF1Music, pauseMusic, resumeMusic } from './music.js';
-import { ps, changeJob } from './player-stats.js';
+import { ps, changeJob, fullHeal } from './player-stats.js';
 import { JOBS } from './data/jobs.js';
 import { swapBattleSprites } from './job-sprites.js';
 import { saveSlotsToDB } from './save-state.js';
@@ -148,12 +148,28 @@ registerCommand('job', 'Switch to job N (0-21). Bypasses CP cost. /job lists all
   if (isNaN(n) || n < 0 || n >= JOBS.length) { addChatMessage('Bad job idx', 'console'); return; }
   ps.unlockedJobs |= (1 << n);
   changeJob(n);
+  fullHeal();
   swapBattleSprites(n);
   saveSlotsToDB();
-  addChatMessage('Job: ' + n + ' (' + JOBS[n].name + ')', 'console');
+  addChatMessage('Job: ' + n + ' (' + JOBS[n].name + ') HP/MP refilled', 'console');
   if (ps.knownSpells && ps.knownSpells.length > 0) {
     addChatMessage('Known spells: ' + ps.knownSpells.map(s => '0x' + s.toString(16)).join(','), 'console');
   }
+});
+
+registerCommand('heal', 'Restore HP and MP to max', () => {
+  fullHeal();
+  saveSlotsToDB();
+  addChatMessage('HP ' + ps.hp + '/' + ps.stats.maxHP + '  MP ' + ps.mp + '/' + ps.stats.maxMP, 'console');
+});
+
+registerCommand('mp', 'Set current MP to N (or show current)', (args) => {
+  if (!args) { addChatMessage('MP ' + ps.mp + '/' + ps.stats.maxMP, 'console'); return; }
+  const n = parseInt(args, 10);
+  if (isNaN(n)) { addChatMessage('Bad MP', 'console'); return; }
+  ps.mp = Math.max(0, Math.min(n, ps.stats.maxMP));
+  saveSlotsToDB();
+  addChatMessage('MP ' + ps.mp + '/' + ps.stats.maxMP, 'console');
 });
 
 let _commandCtx = {};

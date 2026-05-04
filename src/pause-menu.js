@@ -50,6 +50,7 @@ export const pauseSt = {
   optCursor:    0,       // options sub-menu cursor
   jobCursor:    0,       // job sub-menu cursor
   jobList:      [],      // unlocked job indices
+  magMode:      false,   // v1: true while inv-heal is animating a Magic cast (so it returns to 'open' not 'inventory')
 };
 
 // ── Private helpers ────────────────────────────────────────────────────────
@@ -111,9 +112,14 @@ function _updatePauseInvTransitions(dt) {
     if (pauseSt.healNum) { pauseSt.healNum.timer += dt; if (pauseSt.healNum.timer >= BATTLE_DMG_SHOW_MS) pauseSt.healNum = null; }
     if (pauseSt.timer >= DEFEND_SPARKLE_TOTAL_MS) {
       pauseSt.healNum = null;
-      const entries = Object.entries(playerInventory).filter(([,c]) => c > 0);
-      if (pauseSt.invScroll >= entries.length) pauseSt.invScroll = Math.max(0, entries.length - 1);
-      pauseSt.state = 'inventory'; pauseSt.timer = 0;
+      if (pauseSt.magMode) {
+        pauseSt.magMode = false;
+        pauseSt.state = 'open'; pauseSt.timer = 0;
+      } else {
+        const entries = Object.entries(playerInventory).filter(([,c]) => c > 0);
+        if (pauseSt.invScroll >= entries.length) pauseSt.invScroll = Math.max(0, entries.length - 1);
+        pauseSt.state = 'inventory'; pauseSt.timer = 0;
+      }
     }
   }
 }

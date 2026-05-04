@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.78 — 2026-05-04
+
+### Magic v1 fixups: pause-menu Cure, MP refill on /job, strip spell-name padding
+
+- **Pause menu Magic now casts Cure on self.** `pauseSt.cursor === 1` (Magic) was a no-op since the menu shipped — Z press now deducts MP, applies the heal via the existing `inv-heal` flow with green-number bounce, and returns to the main pause menu (new `pauseSt.magMode` flag distinguishes from Item heals so we go back to `'open'` instead of `'inventory'`). Proper spell-pick UI is TODO; v1 shorts straight to Cure.
+- **`/job N` now full-heals.** Switching jobs in the test console restores HP+MP to max so a freshly-switched White Mage can actually cast Cure (4 MP) without the Z press silently failing the cost gate.
+- **New `/heal` and `/mp [N]` console commands** for ad-hoc top-ups during testing.
+- **`getSpellNameClean(spellId)`** in `text-decoder.js` — allowlist filter (letters, digits, basic punct, space) that strips the magic-school icon tile and any trailing padding bytes the ROM stores around spell names. Battle spell list now uses it; "Cure" no longer renders with a stray glyph at the right edge of the row.
+
 ## 1.6.77 — 2026-05-04
 
 ### Magic v1: White Mage Cure end-to-end

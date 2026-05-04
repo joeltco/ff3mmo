@@ -774,6 +774,8 @@ function _pauseInputMainMenu() {
     if (pauseSt.cursor === 0) {
       playSFX(SFX.CONFIRM);
       pauseSt.state = 'inv-text-out'; pauseSt.timer = 0; pauseSt.invScroll = 0;
+    } else if (pauseSt.cursor === 1) {
+      _pauseInputMagicZ();
     } else if (pauseSt.cursor === 2) {
       playSFX(SFX.CONFIRM);
       pauseSt.state = 'eq-text-out'; pauseSt.timer = 0; pauseSt.eqCursor = 0;
@@ -795,6 +797,29 @@ function _pauseInputMainMenu() {
     }
   }
   return true;
+}
+
+// v1 pause-menu Magic: instant cast Cure on self. Proper spell-pick UI is TODO.
+function _pauseInputMagicZ() {
+  const known = ps.knownSpells || [];
+  if (known.length === 0) { playSFX(SFX.ERROR); return; }
+  const cureId = 0x34;
+  if (!known.includes(cureId)) { playSFX(SFX.ERROR); return; }
+  const cost = getSpellMPCost(cureId);
+  if (ps.mp < cost) { playSFX(SFX.ERROR); return; }
+  const spell = SPELLS.get(cureId);
+  if (!spell) { playSFX(SFX.ERROR); return; }
+  ps.mp -= cost;
+  const intStat = ps.stats ? ps.stats.int : 5;
+  const atk = Math.floor(intStat / 2) + spell.power;
+  const amt = atk + Math.floor(Math.random() * (Math.floor(atk / 2) + 1));
+  const heal = Math.min(amt, ps.stats.maxHP - ps.hp);
+  ps.hp += heal;
+  playSFX(SFX.CURE);
+  pauseSt.healNum = { value: heal, timer: 0 };
+  pauseSt.magMode = true;
+  pauseSt.state = 'inv-heal'; pauseSt.timer = 0;
+  saveSlotsToDB();
 }
 
 function _pauseInvZPress(entries) {

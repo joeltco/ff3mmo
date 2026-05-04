@@ -8,7 +8,7 @@ import { _dmgBounceY } from './data/animation-tables.js';
 import { DMG_NUM_PAL, HEAL_NUM_PAL, drawBattleNum as _drawBattleNumCtx, getMissCanvas } from './damage-numbers.js';
 import { getBossBattleCanvas, getBossWhiteCanvas } from './boss-sprites.js';
 import { getMonsterCanvas, getMonsterWhiteCanvas, hasMonsterSprites } from './monster-sprites.js';
-import { getItemNameClean, getMonsterName, getSpellName } from './text-decoder.js';
+import { getItemNameClean, getMonsterName, getSpellNameClean } from './text-decoder.js';
 import { getSpellMPCost } from './data/spells.js';
 import { getSpellTargets, getSpellHitIdx } from './spell-cast.js';
 import { weaponSubtype, isWeapon } from './data/items.js';
@@ -607,7 +607,7 @@ function _drawBattleSpellList(baseX, rightAreaW, palette) {
   const list = inputSt.spellSelectList;
   for (let i = 0; i < list.length; i++) {
     const spellId = list[i];
-    const name = getSpellName(spellId);
+    const name = getSpellNameClean(spellId);
     const cost = getSpellMPCost(spellId);
     drawText(ui.ctx, baseX + 8, topY + i * rowH, name, palette);
     if (cost > 0) {
