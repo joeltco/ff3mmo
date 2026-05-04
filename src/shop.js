@@ -25,6 +25,7 @@ import { showMsgBox } from './message-box.js';
 import { playSFX, SFX, pauseMusic, resumeMusic, playFF1Track, stopFF1Music, FF1_TRACKS } from './music.js';
 import { ui } from './ui-state.js';
 import { buildNesFadeFrames } from './nes-fade.js';
+import { selectCursor, saveSlots, saveSlotsToDB } from './save-state.js';
 
 const HUD_VIEW_X = 0, HUD_VIEW_Y = 32, HUD_VIEW_W = 144, HUD_VIEW_H = 144;
 // Inner area inside the viewport's HUD border tiles (8px frame each side).
@@ -271,6 +272,7 @@ function _attemptBuy(itemId) {
   }
   ps.gil -= item.price;
   addItem(itemId, 1);
+  _persistInventoryAndGil();
   playSFX(SFX.TREASURE);
   showMsgBox(_actionMsg('Bought ', itemId));
 }
@@ -279,8 +281,16 @@ function _attemptSell(entry) {
   if (!entry || !entry.id || entry.count <= 0) { playSFX(SFX.ERROR); return; }
   ps.gil += entry.price;
   removeItem(entry.id);
+  _persistInventoryAndGil();
   playSFX(SFX.TREASURE);
   showMsgBox(_actionMsg('Sold ', entry.id));
+}
+
+function _persistInventoryAndGil() {
+  if (selectCursor < 0 || !saveSlots[selectCursor]) return;
+  saveSlots[selectCursor].inventory = { ...playerInventory };
+  saveSlots[selectCursor].gil = ps.gil;
+  saveSlotsToDB();
 }
 
 function _actionMsg(prefixStr, itemId) {

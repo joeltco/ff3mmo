@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.73 — 2026-05-03
+
+### Shops: persist inventory + gil to DB after every buy / sell
+
+`_attemptBuy` / `_attemptSell` now copy `playerInventory` and `ps.gil` into the active save slot and call `saveSlotsToDB()` immediately — same pattern as the pause-menu inventory mutations in input-handler.js. Without this, shop transactions only survived until the next battle ended, the page closed cleanly, or an inventory action in the pause menu — closing the tab mid-shop would lose them.
+
 ## 1.6.72 — 2026-05-03
 
 ### Shops: weapon delta no longer treats empty off-hand as a free upgrade
