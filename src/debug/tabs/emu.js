@@ -239,10 +239,14 @@ function _toggleSound() {
     if (audioCtx?.state === 'suspended') audioCtx.resume();
     audioMuted = false;
     dom.btnSound.textContent = 'MUTE';
+    dom.btnSound.style.borderColor = '#3a8a3a';
+    dom.btnSound.style.color = '#7ec27e';
   } else {
     audioMuted = true;
     if (audioCtx?.state === 'running') audioCtx.suspend();
     dom.btnSound.textContent = 'SOUND';
+    dom.btnSound.style.borderColor = '#444';
+    dom.btnSound.style.color = '#c8a832';
   }
 }
 
@@ -257,6 +261,67 @@ function _status(msg, err = false) {
   if (!dom?.status) return;
   dom.status.textContent = msg;
   dom.status.style.color = err ? '#f66' : '#c8a832';
+}
+
+// ── Output helpers (copy / save / flash) ────────────────────────────────────
+
+async function _copyOutput() {
+  if (!dom?.output) return;
+  const text = dom.output.value;
+  if (!text) { _status('output is empty', true); return; }
+  // Modern path — fails on non-secure contexts and some mobile WebViews.
+  try {
+    await navigator.clipboard.writeText(text);
+    _flashButton(dom.btnCopy, 'COPIED ✓', 800);
+    _status(`copied ${text.length} chars`);
+    return;
+  } catch { /* fall through */ }
+  // Legacy fallback — select + execCommand.
+  try {
+    dom.output.select();
+    dom.output.setSelectionRange(0, text.length);
+    document.execCommand('copy');
+    dom.output.setSelectionRange(0, 0);
+    _flashButton(dom.btnCopy, 'COPIED ✓', 800);
+    _status(`copied ${text.length} chars (legacy)`);
+  } catch (e) {
+    _status('copy failed: ' + e.message, true);
+  }
+}
+
+function _saveOutputFile() {
+  if (!dom?.output) return;
+  const text = dom.output.value;
+  if (!text) { _status('output is empty', true); return; }
+  const blob = new Blob([text], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `emu-snap-f${frameCount}.txt`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 100);
+  _status(`saved emu-snap-f${frameCount}.txt`);
+}
+
+function _flashButton(btn, label, ms) {
+  if (!btn) return;
+  const orig = btn.dataset.origLabel || btn.textContent;
+  btn.dataset.origLabel = orig;
+  btn.textContent = label;
+  setTimeout(() => {
+    if (btn.textContent === label) btn.textContent = orig;
+  }, ms);
+}
+
+// Pauses the emulator for the duration of fn() so PPU/OAM/VRAM reads can't be
+// torn by a frame tick mid-walk. Resumes only if it was running before.
+function _withPause(fn) {
+  if (!nes) return;
+  const wasRunning = running;
+  if (wasRunning) _stop();
+  try { fn(); } finally { if (wasRunning) _start(); }
 }
 
 // ── Savestate ───────────────────────────────────────────────────────────────
@@ -717,9 +782,10 @@ function _buildDOM(parent) {
   capRow.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;align-items:center;';
   const btnSave = mkBtn('SAVE', _saveState);
   const btnLoad = mkBtn('LOAD', _loadState);
-  const btnSnap = mkBtn('SNAP OAM', _snapshotOAM);
-  const btnSnapBG = mkBtn('SNAP BG', _snapshotBG);
-  const btnWpn = mkBtn('WPN TILES', _dumpWeaponTiles);
+  // Capture buttons auto-pause the emulator so a mid-frame PPU read can't tear.
+  const btnSnap = mkBtn('SNAP OAM', () => _withPause(_snapshotOAM));
+  const btnSnapBG = mkBtn('SNAP BG', () => _withPause(_snapshotBG));
+  const btnWpn = mkBtn('WPN TILES', () => _withPause(_dumpWeaponTiles));
   capRow.append(btnSave, btnLoad, btnSnap, btnSnapBG, btnWpn);
   rightCol.appendChild(capRow);
 
@@ -732,7 +798,7 @@ function _buildDOM(parent) {
   const tileInput = document.createElement('input');
   tileInput.placeholder = '0-511 or $xxx';
   tileInput.style.cssText = 'flex:1;min-width:0;background:#1e1e2e;border:1px solid #444;border-radius:3px;color:#e0e0e0;font-family:monospace;font-size:11px;padding:4px 6px;';
-  const btnTileDump = mkBtn('DUMP', _dumpTileByIndex);
+  const btnTileDump = mkBtn('DUMP', () => _withPause(_dumpTileByIndex));
   tileRow.append(tileLabel, tileInput, btnTileDump);
   rightCol.appendChild(tileRow);
 
@@ -747,6 +813,15 @@ function _buildDOM(parent) {
 
   top.appendChild(rightCol);
   root.appendChild(top);
+
+  // Output toolbar — tap-friendly copy + download for the textarea below.
+  // Selecting a 50-line textarea on touch is painful; these are the difference between usable and not.
+  const outRow = document.createElement('div');
+  outRow.style.cssText = 'display:flex;gap:4px;align-items:center;';
+  const btnCopy = mkBtn('COPY', _copyOutput);
+  const btnSaveFile = mkBtn('SAVE FILE', _saveOutputFile);
+  outRow.append(btnCopy, btnSaveFile);
+  root.appendChild(outRow);
 
   const output = document.createElement('textarea');
   output.readOnly = true;
@@ -787,7 +862,7 @@ function _buildDOM(parent) {
 
   parent.appendChild(root);
 
-  const d = { root, canvas, status, frame, btnPause, btnStep, btnReset, btnSound, btnSave, btnLoad, btnSnap, btnSnapBG, btnWpn, tileInput, btnTileDump, output, writeInput };
+  const d = { root, canvas, status, frame, btnPause, btnStep, btnReset, btnSound, btnSave, btnLoad, btnSnap, btnSnapBG, btnWpn, btnCopy, btnSaveFile, tileInput, btnTileDump, output, writeInput };
   dom = d;
   _installKeys();
   return d;

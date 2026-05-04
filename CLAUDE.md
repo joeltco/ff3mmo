@@ -20,7 +20,7 @@
 - Web search for sprite references when you can just download the actual sprite and analyze it
 - Re-verify data you already verified — if it was wrong the first time, your METHOD is wrong
 - **NEVER guess ROM offsets for sprite data** — ROM bytes ≠ PPU bytes due to CHR bank switching
-- **NEVER use raw ROM offsets (BATTLE_SPRITE_ROM + N) for new sprite frames** — existing frames were mapped by previous devs, new frames MUST be captured from PPU via FCEUX Lua
+- **NEVER use raw ROM offsets (BATTLE_SPRITE_ROM + N) for new sprite frames** — existing frames were mapped by previous devs, new frames MUST be captured from a running PPU (use the EMU tab — see below)
 
 ### NEVER GUESS GAME DATA — LOOK IT UP FIRST
 - **NEVER state item effects, stats, drop locations, or game mechanics from memory.** Always fetch a primary source first.
@@ -30,11 +30,44 @@
 
 ### The user is the source of truth for visual correctness. The ROM is not.
 
-### PPU tile capture — MANDATORY process for new battle sprites:
-1. **NES sprites use CHR bank switching (MMC3).** ROM bytes do NOT map 1:1 to PPU tile data.
-2. **The ONLY way to get correct tile data is to dump it from PPU $1000 during the animation in FCEUX.**
-3. PPU $0000 = background tiles. PPU $1000 = sprite tiles. **ALWAYS use $1000 for sprites.**
-4. Write a Lua script that **auto-triggers on the correct OAM state** (don't rely on manual timing).
-5. Dump: tile RAW bytes, sprite palettes (PPU $3F10+), and OAM positions for verification.
-6. Use the dumped RAW bytes as hardcoded `new Uint8Array([...])` in game.js.
-7. **Portrait sprites use the top 4 tiles (16×16) of a 2×3 (16×24) body.** Same as idle/hit/victory.
+### Where things live — common task starting points
+
+Before writing new code, read the relevant `docs/design-notes.md` section. Each one captures the *why* behind the existing design and surfaces non-obvious invariants.
+
+| Want to add / change… | Read first | Relevant code |
+|---|---|---|
+| A new spell | `design-notes#magic` | `src/spell-cast.js`, `src/data/spells.js` (`SPELL_MP_COST`, `SPELL_BUY_PRICE`), `src/player-stats.js` (`STARTING_SPELLS`, `grantStartingSpells`) |
+| A new shop or shop catalog | `design-notes#shops` | `src/data/shops.js` (counter coords + `mapId`), `src/shop.js`, `src/movement.js` (`handleAction` counter lookup) |
+| A new battle sprite / job pose | `design-notes#battle-sprite-pattern` + PPU capture process below | `src/sprite-init.js`, `src/combatant-sprites.js` (`getJobPoseTileBundle`, `_genericBundle`), `src/data/<job>-sprites.js` |
+| A new monster or fix monster stats | `design-notes#monster-data` | Run `node tools/gen-monsters-js.js > src/data/monsters.js` — **do not hand-edit `monsters.js`** |
+| A chest loot pool / item drop | `design-notes#loot-drops` | `LOOT_POOLS` in `src/map-triggers.js`, keyed by `mapId` |
+| A status effect or immunity | (see status section in `data/items.js` `sResist`, `data/monsters.js` `statusResist`) | `src/status-effects.js`, `src/battle-enemy.js` (`tryInflictStatus` call sites) |
+| A save schema field | `design-notes#saves` | `saveSlotsToDB()` in `src/save-state.js` is the single source of truth — every persisted field flows through there |
+| A new attack/slash animation timing | `design-notes#battle-attack-animation` | `src/battle-update.js` (`_updatePlayerSlash`, `_advanceHitCombo`), `src/slash-effects.js`, `src/battle-sprite-cache.js` (`getSlashFramesForWeapon`) |
+
+Deferred work and known followups live in `design-notes.md#followups`. Check there before assuming something is missing — it may be intentionally not yet shipped.
+
+### PPU tile capture — use the EMU tab in the Konami debugger
+
+The Konami code (↑↑↓↓←→←→ X Z Start) opens a tabbed debug panel. The **EMU tab** (`src/debug/tabs/emu.js`) is a jsnes-backed in-browser FF3 emulator with live OAM/BG/CHR capture — it replaces the old FCEUX Lua workflow for any new sprite, monster tile, weapon frame, or palette work.
+
+1. **NES sprites use CHR bank switching (MMC3).** ROM bytes do NOT map 1:1 to PPU tile data — always capture from a running PPU, never hand-translate ROM offsets for new frames.
+2. **PPU $0000 = background tiles. PPU $1000 = sprite tiles.** FF3 draws battle monsters as BG tiles (use SNAP BG); player/ally portraits, weapon overlays, slash effects, status anim sprites are OAM sprites at $1000 (use SNAP OAM).
+3. **Workflow:** open Konami debugger → EMU tab → play the ROM to the moment you want → PAUSE → click the right capture button. Output lands in the textarea as paste-ready `new Uint8Array([...]),` literals plus PPU palette + origin coords.
+   - **SNAP OAM** — groups visible sprites by XY adjacency into clean meta-sprite clusters. Use for portraits, weapon overlays, slash effects, status sprites.
+   - **SNAP BG** — dumps nametable + attribute table + unique BG tile patterns with an ASCII grid showing `TT/p` (tile / palette) per cell. Use for monster sprites.
+   - **WPN TILES** — dumps PPU $1490–$1600 (sprite-bank slots $49–$60 where battle weapon CHR is decompressed mid-swing). Pause mid-swing, hit the button.
+   - **Tile-by-index** — enter `$NN` or decimal in the input field to dump one specific tile.
+4. **SAVE / LOAD savestate** is persisted to localStorage so you can re-enter the same scene across refreshes without replaying the ROM.
+5. Land the captured `new Uint8Array([...])` blocks in the file that owns that subsystem's tile data — typically `src/data/<job>-sprites.js`, `src/weapon-sprites.js`, `src/slash-effects.js`, or `src/data/monster-sprites.js`. Match the surrounding pattern; don't invent new locations.
+6. **Portrait sprites use the top 4 tiles (16×16) of a 2×3 (16×24) body.** Same as idle/hit/victory.
+
+### EMU tab — also has live SRAM read/write
+
+Beyond sprite capture, the same EMU tab exposes the running ROM's FF3J SRAM for testing and verification:
+
+- **STATE** — dumps party (4 chars × 64 bytes at `$6100`/`$6200` — job/level/name/HP/equip) + inventory (32 slots at `$60C0`/`$60E0`). Read-only inspection.
+- **Write input** — pokes bytes via `$ADDR=VAL`, `$ADDR: v v v` (block write), or comma-separated. Strips `// comments`. Useful for forcing party state to reproduce a bug.
+- **Presets** — `full-HP`, `clear-inv`. Note: SRAM-only writes; values cached at battle start won't update mid-battle.
+
+When in doubt about FF3J SRAM offsets, `src/debug/tabs/emu.js` constants (`SRAM_BASE`, `CHARS_A_OFF`, `CHARS_B_OFF`, `INV_IDS_OFF`, `INV_QTY_OFF`) are the canonical reference.

@@ -138,6 +138,9 @@ function _installTriggers() {
     if (e.key === '`' || e.key === '~') {
       if (!isOpen && canDebug()) { e.preventDefault(); open(); }
     } else if (isOpen && e.key === 'Escape') {
+      // Don't close while the user is mid-edit in a panel input/textarea.
+      const t = document.activeElement;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
       e.preventDefault(); close();
     }
   }, true);

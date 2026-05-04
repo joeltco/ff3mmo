@@ -2,9 +2,11 @@
 
 Replace fake `PLAYER_POOL` with real connected players.
 
+**Current state: not started.** The plan below has not been implemented. The live game still uses the simulated roster from `src/data/players.js` (see README "Status"). This doc is kept as the design target for when networked play lands.
+
 ---
 
-## Step 1: WebSocket Presence (current)
+## Step 1: WebSocket Presence
 
 **Goal:** Server knows who's online and where. Clients see real players in roster.
 
