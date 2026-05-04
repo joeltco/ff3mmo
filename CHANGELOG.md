@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.75 — 2026-05-03
+
+### Shops: blue confirm dialog now uses blue text-bg + mobile-aware A/B prompts
+
+The buy/sell confirm dialog renders on a blue (`drawBorderedBox(.., true)`) background, but the text was using `_makeFadedPal(0)` = `[0x0F, 0x0F, 0x0F, 0x30]` — color 1/2 (font shadow) was black, leaving a black halo around each glyph on the blue box. Switched to `[0x02, 0x02, 0x02, 0x30]` (the same palette `message-box.js` uses for "Bought X!" toasts), so the shadow renders blue and disappears into the bg.
+
+Confirm hint also now reads `A=Yes  B=No` on touch devices and `Z=Yes  X=No` on desktop — same `isMobile` check `loading-screen.js` uses for its "Press A" prompt.
+
 ## 1.6.74 — 2026-05-03
 
 ### Save: persist MP + poison tick, save chests/pond, centralize the schema in `saveSlotsToDB`

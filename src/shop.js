@@ -23,7 +23,7 @@ import { ps } from './player-stats.js';
 import { addItem, removeItem, playerInventory } from './inventory.js';
 import { showMsgBox } from './message-box.js';
 import { playSFX, SFX, pauseMusic, resumeMusic, playFF1Track, stopFF1Music, FF1_TRACKS } from './music.js';
-import { ui } from './ui-state.js';
+import { ui, isMobile } from './ui-state.js';
 import { buildNesFadeFrames } from './nes-fade.js';
 import { saveSlotsToDB } from './save-state.js';
 
@@ -412,6 +412,11 @@ function _drawList(ctx, list, isSell) {
     drawCursorFaded(HUD_VIEW_X + 8, listY0 + shopSt.cursor * ROW_H - 4, 0);
 }
 
+// Text palette tuned for the blue confirm box: color 1/2 (font shadow) map
+// to NES $02 (the same blue as the box bg), so the shadow is invisible and
+// the white glyph reads cleanly. Color 0 stays transparent.
+const CONFIRM_TEXT_PAL = [0x02, 0x02, 0x02, 0x30];
+
 function _drawConfirm(target, isSell) {
   if (!target) return;
   const itemId = isSell ? target.id : target;
@@ -431,9 +436,10 @@ function _drawConfirm(target, isSell) {
   line1.set(prefix, 0);
   line1.set(name, prefix.length);
   line1[prefix.length + name.length] = 0xC5; // ?
-  drawText(ctx, HUD_VIEW_X + 12, boxY + 10, line1, _makeFadedPal(0));
+  drawText(ctx, HUD_VIEW_X + 12, boxY + 10, line1, CONFIRM_TEXT_PAL);
 
-  const hint = _nameToBytes('Z=Yes  X=No');
-  drawText(ctx, HUD_VIEW_X + boxW - 12 - measureText(hint), boxY + 24, hint, _makeFadedPal(0));
+  // Mobile shows on-screen A/B buttons; desktop uses Z/X keys.
+  const hint = _nameToBytes(isMobile ? 'A=Yes  B=No' : 'Z=Yes  X=No');
+  drawText(ctx, HUD_VIEW_X + boxW - 12 - measureText(hint), boxY + 24, hint, CONFIRM_TEXT_PAL);
   ctx.restore();
 }
