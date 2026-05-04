@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.6.92 — 2026-05-04
+
+### Idle pose only at hand change (revert from per-hit)
+
+Reverting the per-hit idle break from 1.6.91. Pattern is: right hand back→forward repeats for however many R hits, then ONE idle pose at the hand change boundary, then left hand back→forward repeats for however many L hits. Same-hand subsequent hits stay in back-swing pose between strikes (no idle in between).
+
+`_updatePlayerAttackBack` back to the handChange branch using `IDLE_FRAME_MS`, with `HIT_COMBO_PAUSE_MS` for same-hand hits and `BACK_SWING_MS` for hit 0. `_getPortraitSrc` `interHitGap` renamed back to `handChangeGap` and only fires when the hand actually swapped.
+
 ## 1.6.91 — 2026-05-04
 
 ### Idle pose break between EVERY combo hit (not just R↔L hand swaps)

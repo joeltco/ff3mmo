@@ -317,12 +317,15 @@ function _advanceHitCombo() {
 function _updatePlayerAttackBack() {
   if (battleSt.battleState !== 'attack-back') return false;
   if (battleSt.currentHitIdx === 0) battleSt.comboStatusInflicted = 0;
-  // First hit of the round = weapon back-swing (skipped for fists, which go straight forward).
-  // Every subsequent hit (whether same hand or hand-change) gets an idle pose break so each
-  // hit reads as its own strike instead of running together.
+  // Within the same hand: just back-swing → forward, no idle break (HIT_COMBO_PAUSE_MS).
+  // At hand change (R→L or L→R): idle pose break so the new hand's swing reads as its own.
+  // First hit of the round: full back-swing wind-up (skipped for fists).
+  const handChange = battleSt.currentHitIdx > 0 &&
+    isHitRightHand(battleSt.currentHitIdx, inputSt.rHandHitCount) !==
+    isHitRightHand(battleSt.currentHitIdx - 1, inputSt.rHandHitCount);
   const isUnarmed = getHitWeapon(battleSt.currentHitIdx, inputSt.rHandHitCount) === 0;
-  const delay = (battleSt.currentHitIdx > 0) ? IDLE_FRAME_MS
-              : (isUnarmed ? 0 : BACK_SWING_MS);
+  const delay = handChange ? IDLE_FRAME_MS
+              : (isUnarmed ? 0 : (battleSt.currentHitIdx === 0 ? BACK_SWING_MS : HIT_COMBO_PAUSE_MS));
   if (battleSt.battleTimer >= delay) {
     battleSt.battleState = 'attack-fwd';
     battleSt.battleTimer = 0;
