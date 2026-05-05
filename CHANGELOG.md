@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.22 — 2026-05-05
+
+### EMU debugger — REC `DEDUPE` toggle (60–70% smaller spell captures)
+
+A 120-frame OAM REC of a spell anim is 400-800 KB — past mobile clipboard limits. NES holds each animation state 2-4 frames per pose, so most of those bytes are duplicate tile dumps for visually identical frames. New `DEDUPE` button next to `REC OAM` / `REC BG`: when ON, _recordFrames hashes each snap (with the per-frame `@ frame N` header normalised away) and emits identical consecutive frames as a single `// frames N..M (Kx same as frame N)` divider instead of repeating the full tile dump. The PPUCTRL + SFX strip headers added in 1.7.21 are part of the hash, so the frame where `$7F49` flips from `$00` to `$A1` (cast SFX fires) emits in full and stands out.
+
+- Toggle button visual mirrors `SOUND` / `MUTE`: green border + checkmark when ON, default border when OFF. Per-session toggle (no persistence).
+- Default OFF — preserves the per-frame paste-ready format the cure-anim work was built on.
+- Status row at run completion reports `Nx/Ny unique frames` so you can eyeball the compression ratio.
+
+`src/debug/tabs/emu.js` only.
+
 ## 1.7.21 — 2026-05-05
 
 ### EMU debugger — SFX strip + PPUCTRL header on every OAM/BG snap

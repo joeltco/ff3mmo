@@ -710,6 +710,23 @@ const REC_GAP_MIN = 1, REC_GAP_MAX = 30;
 
 let recordingActive = false;
 let recCancel = false;
+// When ON, _recordFrames hashes each snap's text (with the per-frame `@ frame N`
+// header normalised away) and emits identical consecutive frames as a single
+// `// frames N..M (Mx same as frame N)` divider instead of repeating the tile
+// dump. NES holds each anim state 2-4 frames per pose, so a 120-frame cure REC
+// shrinks ~60-70%. Per-session toggle; default OFF preserves the per-frame
+// paste-ready format the cure-anim work was built on.
+let recDedupe = false;
+
+function _toggleDedupe() {
+  recDedupe = !recDedupe;
+  if (dom?.btnDedupe) {
+    dom.btnDedupe.style.borderColor = recDedupe ? '#3a8a3a' : '#444';
+    dom.btnDedupe.style.color = recDedupe ? '#7ec27e' : '#c8a832';
+    dom.btnDedupe.textContent = recDedupe ? 'DEDUPE✓' : 'DEDUPE';
+  }
+  _status(`REC DEDUPE: ${recDedupe ? 'ON — collapses identical consecutive frames' : 'OFF'}`);
+}
 
 function _toggleRec(kind) {
   if (recordingActive) {
@@ -742,11 +759,25 @@ async function _recordFrames(kind, count, gap) {
   if (wasRunning) _stop();
   const startFrame = frameCount;
   const blocks = [];
-  blocks.push(`// REC ${kind} × ${count} frames @ start f${startFrame}, gap=${gap}`);
+  blocks.push(`// REC ${kind} × ${count} frames @ start f${startFrame}, gap=${gap}${recDedupe ? ', DEDUPE on' : ''}`);
   blocks.push(`// (gap = number of frames advanced between snaps; gap=1 means consecutive)`);
   blocks.push('');
   const button = (kind === 'OAM') ? dom.btnRecOam : dom.btnRecBg;
   const origLabel = button.textContent;
+  // Dedupe state: track the normalised-key of the most recently *emitted*
+  // frame, plus its index. When the next snap's key matches, skip the body and
+  // emit a `frames N..M (Kx same)` summary on the next distinct frame (or at
+  // end-of-run). The `@ frame N` tag gets normalised so it doesn't poison the
+  // comparison — every snap header carries that and would always differ.
+  let prevKey = null;
+  let prevEmittedIdx = -1;
+  let emittedCount = 0;
+  const flushRunSummary = (runEnd) => {
+    if (prevEmittedIdx < 0 || runEnd <= prevEmittedIdx) return;
+    const span = runEnd - prevEmittedIdx;
+    blocks.push(`// ── frames ${prevEmittedIdx + 1}..${runEnd} (${span}× same as frame ${prevEmittedIdx}) ──`);
+    blocks.push('');
+  };
   try {
     for (let i = 0; i < count; i++) {
       if (recCancel) {
@@ -756,10 +787,21 @@ async function _recordFrames(kind, count, gap) {
       button.textContent = `CANCEL (${i + 1}/${count})`;
       _status(`REC ${kind}: snap ${i + 1}/${count} @ f${frameCount}`);
       const snap = (kind === 'OAM') ? _oamSnapshotText().text : _bgSnapshotText();
-      blocks.push(`// ═══ frame ${i} (snap @ f${frameCount}) ═══════════════════════════════════════════════`);
-      blocks.push('');
-      blocks.push(snap || `// (empty ${kind} snap)`);
-      blocks.push('');
+      const key = recDedupe ? snap.replace(/@ frame \d+/g, '@ frame ?') : null;
+
+      if (recDedupe && prevKey !== null && key === prevKey) {
+        // Repeat — defer; summary lands when the next distinct frame emits or
+        // at end-of-loop.
+      } else {
+        if (recDedupe) flushRunSummary(i - 1);
+        blocks.push(`// ═══ frame ${i} (snap @ f${frameCount}) ═══════════════════════════════════════════════`);
+        blocks.push('');
+        blocks.push(snap || `// (empty ${kind} snap)`);
+        blocks.push('');
+        prevKey = key;
+        prevEmittedIdx = i;
+        emittedCount++;
+      }
       // Skip the advance after the final snap.
       if (i < count - 1) {
         for (let g = 0; g < gap; g++) {
@@ -770,10 +812,12 @@ async function _recordFrames(kind, count, gap) {
         }
       }
     }
+    if (recDedupe && !recCancel) flushRunSummary(count - 1);
     dom.output.value = blocks.join('\n');
     if (!recCancel) {
       const finalFrame = frameCount;
-      _status(`REC ${kind}: done — ${count} frames captured (f${startFrame}..f${finalFrame})`);
+      const tail = recDedupe ? ` — ${emittedCount}/${count} unique frames` : ` — ${count} frames captured`;
+      _status(`REC ${kind}: done${tail} (f${startFrame}..f${finalFrame})`);
     }
   } catch (e) {
     _status(`REC ${kind} failed: ${e.message}`, true);
@@ -1176,6 +1220,7 @@ function _buildDOM(parent) {
   recRow.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;align-items:center;';
   const btnRecOam = mkBtn('REC OAM', () => _toggleRec('OAM'));
   const btnRecBg = mkBtn('REC BG', () => _toggleRec('BG'));
+  const btnDedupe = mkBtn('DEDUPE', _toggleDedupe);
   const recFramesLabel = document.createElement('span');
   recFramesLabel.textContent = 'frames:';
   recFramesLabel.style.cssText = 'color:#888;font-size:11px;font-family:monospace;';
@@ -1194,7 +1239,7 @@ function _buildDOM(parent) {
   recGapInput.min = String(REC_GAP_MIN);
   recGapInput.max = String(REC_GAP_MAX);
   recGapInput.style.cssText = 'width:48px;background:#1e1e2e;border:1px solid #444;border-radius:3px;color:#e0e0e0;font-family:monospace;font-size:11px;padding:4px 6px;';
-  recRow.append(btnRecOam, btnRecBg, recFramesLabel, recFramesInput, recGapLabel, recGapInput);
+  recRow.append(btnRecOam, btnRecBg, btnDedupe, recFramesLabel, recFramesInput, recGapLabel, recGapInput);
   rightCol.appendChild(recRow);
 
   // Tile dump input
@@ -1321,7 +1366,7 @@ function _buildDOM(parent) {
 
   parent.appendChild(root);
 
-  const d = { root, canvas, status, frame, btnPause, btnStep, btnReset, btnSound, btnSave, btnLoad, btnSnap, btnSnapBG, btnWpn, btnRecOam, btnRecBg, recFramesInput, recGapInput, btnCopy, btnSaveFile, slotButtons, tileInput, btnTileDump, output, writeInput, scenesSummary, scenesList, sceneNameInput, sceneDescInput };
+  const d = { root, canvas, status, frame, btnPause, btnStep, btnReset, btnSound, btnSave, btnLoad, btnSnap, btnSnapBG, btnWpn, btnRecOam, btnRecBg, btnDedupe, recFramesInput, recGapInput, btnCopy, btnSaveFile, slotButtons, tileInput, btnTileDump, output, writeInput, scenesSummary, scenesList, sceneNameInput, sceneDescInput };
   dom = d;
   _installKeys();
   _refreshSlotButtons();
