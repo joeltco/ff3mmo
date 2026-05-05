@@ -4,7 +4,7 @@ Tracks the audit findings from `docs/design-notes.md` discussion. Phase 0 is mob
 
 Each phase is mergeable on its own. Bumps `package.json` + a CHANGELOG entry per release per the deploy convention.
 
-## Status (as of v1.7.4)
+## Status (as of v1.7.21)
 
 | Phase | Status | Released |
 |---|---|---|
@@ -12,16 +12,23 @@ Each phase is mergeable on its own. Bumps `package.json` + a CHANGELOG entry per
 | 1.1 — multi-slot savestates | ✅ shipped | v1.6.97 (+ aliasing fix v1.6.98) |
 | 1.2 — scene library framework | ✅ shipped | v1.6.99 |
 | 1.3 — scene capture flow (`EXPORT SCENE`) | ✅ shipped | v1.6.99 |
-| 1.4 — initial committed scenes | ⚪ pending | — |
+| 1.4 — initial committed scenes | ⚪ pending — `index.json` ships `[]`; `SCENES` panel renders empty | — |
 | 2 — DIFF-AGAINST-FILE | ⚪ pending | — |
-| 3 — REC N FRAMES (multi-frame OAM/BG) | ✅ shipped | v1.7.0 |
+| 3 — REC N FRAMES (multi-frame OAM/BG) | ✅ shipped | v1.7.0 (cap raised 60→240 in v1.7.9) |
 | 4 — polish & harden | ⚪ partial — auto-pause on capture done in v1.6.96; rest pending | — |
 | 5 — nice-to-haves | ⚪ deferred | — |
+
+SRAM-preset extension (out-of-plan, drove the magic-capture phase):
+- v1.7.6 — `WM SPELLS` / `BM SPELLS` / `CALL SPELLS` preset buttons on the PARTY/INVENTORY editor; pokes job + level + MP + spell-list bytes for a one-tap "ready to cast" loadout
+- v1.7.7 — fix: spell-list bytes are a per-level bitfield (`bits 0-2 = black, 3-5 = white, 6 = summon`), not raw spell IDs
+- v1.7.8 — `CALL SPELLS` replaced with `ALL SPELLS` (`0x7F` mask + Sage job); `WM` / `BM` bit assignments unswapped
 
 Adjacent work driven by REC N FRAMES captures:
 - v1.7.1 — per-weapon slash scatter table (PPU-derived); pattern + helpers in `slash-effects.js`
 - v1.7.2 / 1.7.3 — slash skip on miss across PVP / player / ally paths
 - v1.7.4 — slash logic consolidated (`SLASH_FRAME_MS`, `shouldDrawSlash`, `getSlashHoldMs` single-sourced)
+- v1.7.10–1.7.20 — full PPU-captured Cure animation. New `src/cure-anim.js` module owns tile bytes, decode, frame builders, and phase boundaries (build-up 800 ms → lunge 200 ms → cast 217 ms → heal 283 ms → return 167 ms; total 1667 ms). 1.7.13 corrected the 8-sparkle ring to a static body-relative position. 1.7.14 / 1.7.16 wired a real cast SFX — `MAGIC_CAST = 0x62`, verified against `everything8215/ff3` disasm at 33/B0D8 (black) and 33/B0FF (white). 1.7.17 derived ring spin rate (~5°/NES-frame → 1200 ms/turn) from inter-frame OAM angles. 1.7.20 pinned naming: rotating tiles are **stars**, the pulsing thing left of the caster is a **flame**.
+- v1.7.21 — every OAM/BG snap now leads with a `_dumpPpuctrl()` block (sprite size, sprite bank, BG bank, base NT — annotated against the snapshot's hardcoded $1000/$0000/$2000 reads) and a `_dumpSfxStrip()` block reading FF3J's `$7F49` SFX queue (translates a non-zero high-bit byte to its `music.js` NSF track number, `byte − 0x3F`). Closes the last "leave the EMU tab to read disasm" step in the magic-cast pipeline — future spell SFX numbers come from REC OAM headers instead of `LDA #$XX / STA $7F49` searches. Also fixed a latent grouping merge-bug in `_oamSnapshotText` (`groups[merged]` after splice resolved to the wrong element when `g < merged`); now tracks the merged group by reference.
 
 User feedback (v1.7.0 retro): **REC N FRAMES is the highest-leverage feature in the EMU debugger.** Future EMU work should weight ideas by how much they extend the capture pipeline. The DEDUPE toggle (Phase 4.6 below) is the obvious next-leverage move on REC itself — NES holds anim states 2–4 frames per pose, so a 20-frame REC produces ~4–6 actually distinct states. DEDUPE collapses identical consecutive frames into one block with a `// frames 0..3 (4× same)` header, cutting textarea length 60–70 % and making transitions jump out.
 

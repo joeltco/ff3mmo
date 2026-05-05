@@ -556,30 +556,37 @@ function _oamSnapshotText() {
     sprites.push({ i, y: y + 1, t, a, x, group: -1 });
   }
   // Union-find by adjacency: two sprites are in the same group if one's bbox
-  // touches the other (≤8px gap in X or Y).
+  // touches the other (≤8px gap in X, ≤24 in Y). Track the merged group by
+  // *reference* rather than index — `groups[merged]` after a splice resolves to
+  // the wrong element when g < merged.
   const groups = [];
   for (const s of sprites) {
-    let merged = -1;
+    let mergedGroup = null;
     for (let g = 0; g < groups.length; g++) {
+      let touch = false;
       for (const other of groups[g]) {
         const dx = Math.abs(s.x - other.x), dy = Math.abs(s.y - other.y);
-        if (dx <= 8 && dy <= 24) { // 16-wide / 24-tall tolerance
-          if (merged === -1) { groups[g].push(s); merged = g; }
-          else {
-            groups[merged].push(...groups[g]);
-            groups.splice(g, 1);
-            merged = groups.indexOf(groups[merged]);
-            g--;
-          }
-          break;
-        }
+        if (dx <= 8 && dy <= 24) { touch = true; break; }
+      }
+      if (!touch) continue;
+      if (mergedGroup === null) {
+        groups[g].push(s);
+        mergedGroup = groups[g];
+      } else {
+        mergedGroup.push(...groups[g]);
+        groups.splice(g, 1);
+        g--;
       }
     }
-    if (merged === -1) groups.push([s]);
+    if (mergedGroup === null) groups.push([s]);
   }
   const tiles = nes.ppu.ptTile;
   const out = [];
   out.push(`// OAM snapshot @ frame ${frameCount} — ${sprites.length} visible sprites in ${groups.length} groups`);
+  out.push('');
+  out.push(_dumpPpuctrl());
+  out.push('');
+  out.push(_dumpSfxStrip());
   out.push('');
   out.push(_dumpPalette());
   out.push('');
@@ -620,6 +627,10 @@ function _bgSnapshotText() {
   const tiles = nes.ppu.ptTile;
   const out = [];
   out.push(`// BG snapshot @ frame ${frameCount}`);
+  out.push('');
+  out.push(_dumpPpuctrl());
+  out.push('');
+  out.push(_dumpSfxStrip());
   out.push('');
   out.push(_dumpPalette());
   out.push('');
@@ -782,6 +793,53 @@ function _dumpPalette() {
     const row = [];
     for (let i = 0; i < 4; i++) row.push('0x' + _hex(v[0x3F00 + p * 4 + i], 2));
     lines.push(`//  ${p < 4 ? 'BG' : 'SP'}${p % 4}: [${row.join(', ')}]`);
+  }
+  return lines.join('\n');
+}
+
+// PPUCTRL is split into individual flag fields by jsnes rather than mirrored as
+// a raw byte. Reassemble for the snapshot header so the OAM/BG bank assumptions
+// in this file (sprite tile lookup at $1000, BG tile lookup at $0000, base NT
+// at $2000) become visible diagnostics — if FF3 ever runs a magic anim with
+// PPUCTRL flipped, the captured banks land here instead of silently misreading.
+function _dumpPpuctrl() {
+  if (!nes?.ppu) return '// PPU layout: (ppu not ready)';
+  const p = nes.ppu;
+  const ntBase = 0x2000 + (p.f_nTblAddress | 0) * 0x400;
+  const spSize = p.f_spriteSize ? '8x16' : '8x8';
+  const spBank = p.f_spPatternTable ? 0x1000 : 0x0000;
+  const bgBank = p.f_bgPatternTable ? 0x1000 : 0x0000;
+  const lines = [];
+  lines.push('// PPU layout @ capture');
+  lines.push(`//   sprite size : ${spSize}`);
+  lines.push(`//   sprite bank : $${_hex(spBank, 4)}  (snapshot reads from $1000)`);
+  lines.push(`//   BG bank     : $${_hex(bgBank, 4)}  (snapshot reads from $0000)`);
+  lines.push(`//   base NT     : $${_hex(ntBase, 4)}  (snapshot reads NT 0)`);
+  return lines.join('\n');
+}
+
+// FF3J's sound engine uses RAM $7F49 as the SFX request register: ROM writes
+// `0x80 | sfxId` to fire a SFX, `0xFF` to cut. Capturing this strip per-snap
+// removes the disasm step from the magic-cast pipeline (1.7.16 had to source
+// MAGIC_CAST from `LDA #$A1 / STA $7F49` at FF3J 33/B0FF). NSF track number
+// our music.js uses = ROM byte − 0x3F. Surrounding bytes shown for context.
+const SFX_REQ_BASE = 0x7F48;
+const SFX_REQ_LEN  = 8;
+function _dumpSfxStrip() {
+  if (!nes?.cpu?.mem) return '// SFX request strip: (cpu not ready)';
+  const lines = [];
+  lines.push(`// SFX request strip $${_hex(SFX_REQ_BASE, 4)}-$${_hex(SFX_REQ_BASE + SFX_REQ_LEN - 1, 4)} (FF3J: $7F49 = SFX queue)`);
+  for (let i = 0; i < SFX_REQ_LEN; i++) {
+    const a = SFX_REQ_BASE + i;
+    const v = nes.cpu.mem[a] | 0;
+    let note = '';
+    if (a === 0x7F49) {
+      if (v === 0x00) note = '  (idle)';
+      else if (v === 0xFF) note = '  (cut SFX)';
+      else if (v >= 0x80) note = `  -> NSF track $${_hex(v - 0x3F, 2)} (music.js)`;
+      else note = '  (raw — high bit not set)';
+    }
+    lines.push(`//   $${_hex(a, 4)} = $${_hex(v, 2)}${note}`);
   }
   return lines.join('\n');
 }

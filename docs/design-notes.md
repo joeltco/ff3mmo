@@ -6,8 +6,8 @@ Intentional design decisions that aren't obvious from reading the code. One sect
 
 Deferred work that's been noted in changelog entries but doesn't yet have a home in code. Tracked here so it doesn't get buried in release notes.
 
-- **Damage spells (Black Mage)** — only Cure + Poisona shipped (1.6.77). INT-based formula and `magic-cast`/`magic-hit` pipeline are already there; needs spell content (Fire/Blizzard/Bolt etc.), per-spell SFX, and per-spell anim sprites.
-- **Per-spell anim + SFX** — current cast visual is the SouthWind sprite reused; damage spells fall back to `SFX.SW_HIT` (1.6.77, 1.6.83). Each spell needs its own PPU-captured tile set + SFX entry.
+- **Damage spells (Black Mage)** — only Cure + Poisona shipped (1.6.77). INT-based formula and `magic-cast`/`magic-hit` pipeline are already there; needs spell content (Fire/Blizzard/Bolt etc.), per-spell SFX, and per-spell anim sprites. Cure now has a full PPU-captured anim (`src/cure-anim.js`, 1.7.10–1.7.20); damage spells still need the same treatment.
+- **Per-spell anim + SFX** — Cure animation is fully captured (build-up flame + 8-sparkle star ring + heal-phase tile flicker) and white-magic cast SFX is wired (`SFX.MAGIC_CAST = 0x62`, FF3J disasm 33/B0FF). Poisona and damage spells still fall through to legacy 1100 ms timing with `SFX.SW_HIT` as a placeholder hit sound (`spell-cast.js:105`). Each remaining spell needs its own PPU-captured tile set; damage spells additionally need a per-element hit SFX entry.
 - **Rod weapon sprite** — OAM not yet captured (1.6.56). Falls through to no-overlay; rods aren't in any shop or loot pool, so latent.
 - **Ally render path for jobs 3–21** — opponent (PVP) rendering is on the unified bundle path for all 22 jobs; ally rendering is on bundle for {OK, Warrior, Monk} only, generic 3–21 still on the legacy `_initGenericJobPosePortraits` / `_buildGenericJobFullBodies` path with the older tile-index pattern (1.6.45, 1.6.52). Latent today since `boot.js` only seeds `[0, 1, 2]`; will surface as soon as a fake-player entry uses jobIdx ≥ 3.
 - **Delete Monk legacy ally helpers** — `_initMonkPosePortraits` / `_buildMonkFullBodies` were kept "for one release as a rollback safety net" after 1.6.45 migrated Monk ally render to the bundle path. Once visually verified across a release, delete them.
@@ -33,7 +33,7 @@ Deferred work that's been noted in changelog entries but doesn't yet have a home
 
 ## Battle sprite pattern
 
-- **Per-job tile indices are universal.** Every job stores its poses at the same PPU tile indices — idle `$01-$06`, R-back body-TL `$39`, L-back head-TR `$3F` + body-TR `$40` + legs `$41/$42`, L-fwd body `$3B/$3C` + legs `$3D/$3E`, R-fwd legs `$07/$08`, hit `$39-$3E`, kneel `$09-$0E`, victory `$39-$3E` + leg variants, death swaps a different CHR bank at `$01-$06`. Byte contents differ per job; mapping is shared. See `/home/joeltco/.claude/projects/-home-joeltco/memory/reference_battle-pose-tile-map.md` for the full table.
+- **Per-job tile indices are universal.** Every job stores its poses at the same PPU tile indices — idle `$01-$06`, R-back body-TL `$39`, L-back head-TR `$3F` + body-TR `$40` + legs `$41/$42`, L-fwd body `$3B/$3C` + legs `$3D/$3E`, R-fwd legs `$07/$08`, hit `$39-$3E`, kneel `$09-$0E`, victory `$39-$3E` + leg variants, death swaps a different CHR bank at `$01-$06`. Byte contents differ per job; mapping is shared.
 - **L-back requires swapping BOTH head-TR and body-TR.** Historical bug: consumers passed `idleTiles[1]` for head-TR instead of the L-back variant's T1. If adding a new job, make sure its `knifeLTiles` pulls head-TR from the L-back data, not idle.
 - **Jobs 3–21 use `_initGenericJobPosePortraits` / `_buildGenericJobFullBodies`** in `sprite-init.js` — reads ROM at each job's `jobBase` using the shared tile-index convention. Approximate due to MMC3 CHR banking; PPU-capture specific poses if a job renders scrambled.
 

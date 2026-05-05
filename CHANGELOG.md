@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.21 — 2026-05-05
+
+### EMU debugger — SFX strip + PPUCTRL header on every OAM/BG snap
+
+The magic-capture pipeline had one step that still required leaving the EMU tab: identifying the SFX number a spell played. 1.7.16's `MAGIC_CAST = 0x62` was sourced from FF3J disasm (`LDA #$A1 / STA $7F49` at 33/B0FF) rather than the running ROM. Two snapshot-header additions close that gap and make the existing OAM/BG bank assumptions visible diagnostics.
+
+- **`_dumpSfxStrip()`** — reads `$7F48-$7F4F` from the running CPU RAM and emits one line per byte at the top of every OAM/BG snapshot. `$7F49` is FF3J's SFX queue; the inline note translates a non-zero high-bit value to the `music.js` NSF track number (`byte − 0x3F`), so e.g. `$A1 → NSF track $62` lands paste-ready next to the rest of the capture. Recognises `$00` (idle) and `$FF` (cut SFX).
+- **`_dumpPpuctrl()`** — reassembles jsnes's split `f_spriteSize` / `f_spPatternTable` / `f_bgPatternTable` / `f_nTblAddress` flags into a 4-line header so any divergence from the snapshot's hardcoded "sprite=$1000, BG=$0000, NT=$2000" assumption surfaces in the output instead of silently misreading the wrong bank. Each line annotates what the snapshot actually reads from for cross-reference.
+- **OAM grouping merge bug** — `_oamSnapshotText`'s adjacency union-find used `groups.indexOf(groups[merged])` after a splice. When `g < merged`, `groups[merged]` post-splice resolves to a different element, `indexOf` returns -1, and the next adjacency on the same sprite double-adds it to a fresh singleton group. Tracked the merged group by *reference* instead — `mergedGroup.push(...)` survives the splice without lookup. Latent before today; would have surfaced on long captures with non-monotonic merges.
+
+REC OAM / REC BG inherit both helpers automatically since they delegate to `_oamSnapshotText` / `_bgSnapshotText` per frame.
+
+`src/debug/tabs/emu.js` only.
+
 ## 1.7.20 — 2026-05-05
 
 ### Cure-anim vocabulary — `flame` and `stars`, not "circle" and "bg sparkle"
