@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.25 — 2026-05-05
+
+### Suppress 0-value heal popups (Poisona, Antidote, full-HP overheal)
+
+Status-cure spells (Poisona, Bndna, Esuna, Stone) and cure-status items (Antidote, Eye Drops, etc.) push a `{ value: 0, ... }` heal-num purely to drive the sparkle animation + `inv-heal` state-machine timing — there's no HP delta to display. The renderer was happily drawing "0" on the portrait.
+
+`drawBattleNum` in `damage-numbers.js` now returns early when `value === 0`. Single point of change covers both battle and pause-menu, both player and ally, both spell and item paths. Sparkle anim is gated on heal-num *existence* not value, so it's unaffected — Poisona/Antidote still render the cure-sparkle visual, just without the pointless "0" floating above the portrait. Side benefit: full-HP cure-overheal (`heal = min(amount, maxHP - hp) === 0`) also no longer pops a "0".
+
+`src/damage-numbers.js` only.
+
 ## 1.7.24 — 2026-05-05
 
 ### Per-school SP3 palette for white-magic cast anim

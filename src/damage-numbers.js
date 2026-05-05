@@ -136,7 +136,14 @@ export function initMissSprite() {
 export function getMissCanvas() { return missCanvas; }
 
 // ── Drawing ─────────────────────────────────────────────────────────────────
+// Zero-value popups are suppressed: status-cure spells (Poisona, Bndna, etc.)
+// and cure-status items (Antidote, Eye Drops, etc.) push `value: 0` heal-nums
+// purely to drive the sparkle anim + state-machine timing — there's no actual
+// HP delta to display. Same for full-HP cure overheal where amount caps at 0.
+// Sparkle renders are gated on heal-num *existence*, not value, so they're
+// unaffected. Damage 0 is also covered (a numeric 0 dmg has no useful read).
 export function drawBattleNum(ctx, bx, by, value, pal) {
+  if (value === 0) return;
   const digits = String(value);
   const b = new Uint8Array(digits.length);
   for (let i = 0; i < digits.length; i++) b[i] = 0x80 + parseInt(digits[i]);
