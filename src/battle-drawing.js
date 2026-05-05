@@ -9,7 +9,7 @@ import { DMG_NUM_PAL, HEAL_NUM_PAL, drawBattleNum as _drawBattleNumCtx, getMissC
 import { getBossBattleCanvas, getBossWhiteCanvas } from './boss-sprites.js';
 import { getMonsterCanvas, getMonsterWhiteCanvas, hasMonsterSprites } from './monster-sprites.js';
 import { getItemNameClean, getMonsterName, getSpellNameClean } from './text-decoder.js';
-import { getSpellMPCost } from './data/spells.js';
+import { getSpellMPCost, SPELLS } from './data/spells.js';
 import { weaponSubtype, isWeapon } from './data/items.js';
 import { PLAYER_PALETTES, MONK_PALETTES } from './data/players.js';
 import { pickAttackPoseKey, pickAttackWeaponSpec, attackWeaponLayer } from './combatant-pose.js';
@@ -32,8 +32,8 @@ import { pvpSt, drawBossSpriteBoxPVP } from './pvp.js';
 import { inputSt } from './input-handler.js';
 import { bsc, getSlashFramesForWeapon } from './battle-sprite-cache.js';
 import { drawSlashOverlay, SLASH_FRAME_MS, shouldDrawSlash } from './slash-effects.js';
-import { getCureAnimElapsedMs } from './spell-cast.js';
-import { getCureFlameFrameIdx, shouldDrawStars, shouldDrawHealSparkle } from './cure-anim.js';
+import { getCureAnimElapsedMs, getCurrentSpellId } from './spell-cast.js';
+import { getCureFlameFrameIdx, shouldDrawStars, shouldDrawHealSparkle, getCureAnimAssets } from './cure-anim.js';
 import { hudSt } from './hud-state.js';
 import { fakePlayerPortraits, fakePlayerVictoryPortraits, fakePlayerHitPortraits,
          fakePlayerKneelPortraits, fakePlayerAttackPortraits, fakePlayerAttackLPortraits,
@@ -323,14 +323,21 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
     && inputSt.playerActionPending && inputSt.playerActionPending.command === 'magic'
     && (inputSt.playerActionPending.allyIndex == null || inputSt.playerActionPending.allyIndex < 0);
   const cureMs = isMagicState ? getCureAnimElapsedMs() : -1;
-  if (cureMs >= 0 && bsc.cureFlameFrames.length === 5) {
+  // Per-school palette: the FF3 ROM shares tile bytes across white-magic
+  // spells but uses a different SP3 palette per school. Cure renders blue,
+  // Poisona renders magenta. Pick the right pre-decoded bundle by the active
+  // spell at render time. Item-use Cure (potions) stays on the recovery-only
+  // sprite-init path since it's always Cure-equivalent.
+  const _activeSpell = isMagicState ? SPELLS.get(getCurrentSpellId()) : null;
+  const cureAnim = _activeSpell ? getCureAnimAssets(_activeSpell) : null;
+  if (cureMs >= 0 && cureAnim && cureAnim.flameFrames.length === 5) {
     // Draw order: stars FIRST (background), flame on TOP. Where the ring's
     // left arc passes behind the flame, the flame's detailed pixels read
     // clearly instead of being overwritten by passing stars.
-    if (shouldDrawStars(cureMs) && bsc.cureStarTile) {
+    if (shouldDrawStars(cureMs) && cureAnim.starTile) {
       // 8 stars on a radius-15 ring around the portrait, rotating CW at the
       // OAM-measured rate (~5°/NES-frame × 60 fps = 300°/s = 1.2 s per turn).
-      const star = bsc.cureStarTile;
+      const star = cureAnim.starTile;
       const cx = px + 8, cy = py + 8;
       const r = 15;
       const N = 8;
@@ -346,20 +353,20 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
     if (flameIdx >= 0) {
       // Flame 16×16 immediately LEFT of portrait, dropped 5 px to match
       // the OAM where flame starts at group y=13 vs body at group y=8.
-      ui.ctx.drawImage(bsc.cureFlameFrames[flameIdx], px - 16, py + 5);
+      ui.ctx.drawImage(cureAnim.flameFrames[flameIdx], px - 16, py + 5);
     }
   }
-  // Heal sparkle (phase 4) on player portrait — ONE 16×16 sparkle drawn on the
-  // portrait, alternating between two flip arrangements every 67 ms. The OAM
-  // captures show a single sparkle on the body at relative [0,5]-[16,13], NOT
-  // a corner-mirrored quadruple. Item-use Cure (potions) reuses the same single
-  // sparkle since its anim phase data isn't captured separately.
-  if ((isCureItemUse || isCureMagicSelf) && bsc.cureSparkleFrames.length === 2) {
-    const showHeal = isCureItemUse || (cureMs >= 0 && shouldDrawHealSparkle(cureMs));
-    if (showHeal) {
-      const fi = Math.floor(battleSt.battleTimer / 67) & 1;
-      ui.ctx.drawImage(bsc.cureSparkleFrames[fi], px, py);
-    }
+  // Heal sparkle (phase 4) — ONE 16×16 sparkle on the portrait, alternating
+  // between two flip arrangements every 67 ms. Magic-cast picks the per-school
+  // sparkle from cureAnim; item-use stays on the recovery-only sprite-init
+  // version (potions are always Cure-equivalent).
+  const _sparkleFi = Math.floor(battleSt.battleTimer / 67) & 1;
+  if (isCureItemUse && bsc.cureSparkleFrames.length === 2) {
+    ui.ctx.drawImage(bsc.cureSparkleFrames[_sparkleFi], px, py);
+  }
+  if (isCureMagicSelf && cureMs >= 0 && shouldDrawHealSparkle(cureMs)
+      && cureAnim && cureAnim.sparkleFrames.length === 2) {
+    ui.ctx.drawImage(cureAnim.sparkleFrames[_sparkleFi], px, py);
   }
   // Near-fatal sweat — 2 frames alternating every 133ms, 3px above portrait
   if (isNearFatal && bsc.sweatFrames.length === 2 && !isAttackPose && !isHitPose && !isVictoryPose && !isDefendPose && !isItemUsePose) {
@@ -1255,7 +1262,18 @@ function _drawAllyRow(i, ally, panelTop, weaponDraws) {
     && inputSt.playerActionPending.allyIndex === i;
   const _allyCureMs = isAllyHealMagic ? getCureAnimElapsedMs() : -1;
   // For magic, only show heal sparkles during phase 4 (the actual heal moment).
-  const isAllyHeal = isAllyHealItem || (isAllyHealMagic && _allyCureMs >= 0 && shouldDrawHealSparkle(_allyCureMs));
+  // Per-school palette pickup mirrors the player path: magic uses the active
+  // spell's bundle (`Cure → blue`, `Poisona → magenta`); item-use stays on the
+  // recovery-only sprite-init frames.
+  const _allySpell = isAllyHealMagic ? SPELLS.get(getCurrentSpellId()) : null;
+  const _allyCureAnim = _allySpell ? getCureAnimAssets(_allySpell) : null;
+  const _allyMagicSparkle = isAllyHealMagic && _allyCureMs >= 0
+    && shouldDrawHealSparkle(_allyCureMs)
+    && _allyCureAnim && _allyCureAnim.sparkleFrames.length === 2
+    ? _allyCureAnim.sparkleFrames : null;
+  const _allyItemSparkle = isAllyHealItem && bsc.cureSparkleFrames.length === 2
+    ? bsc.cureSparkleFrames : null;
+  const _allyHealSparkleSet = _allyMagicSparkle || _allyItemSparkle;
   const ppx = HUD_RIGHT_X + 8, ppy = rowY + 8;
   drawHudBox(HUD_RIGHT_X, rowY, 32, ROSTER_ROW_H, ally.fadeStep);
   drawHudBox(HUD_RIGHT_X + 32, rowY, HUD_RIGHT_W - 32, ROSTER_ROW_H, ally.fadeStep);
@@ -1304,7 +1322,7 @@ function _drawAllyRow(i, ally, panelTop, weaponDraws) {
 
   const isNearFatal = ally.hp > 0 && ally.hp <= Math.floor(ally.maxHP / 4);
   _drawAllyPortrait(i, ally, isVicPose, isAllyAttack, isAllyHit, isNearFatal, ppx, ppy, weaponDraws);
-  _drawAllyTexts(i, ally, rowY, isAllyHeal, ppx, ppy, weaponDraws);
+  _drawAllyTexts(i, ally, rowY, _allyHealSparkleSet, ppx, ppy, weaponDraws);
 }
 function _drawAllyPortrait(i, ally, isVicPose, isAllyAttack, isAllyHit, isNearFatal, ppx, ppy, weaponDraws) {
   const isThisAllySlash = battleSt.battleState === 'ally-slash' && battleSt.currentAllyAttacker === i;
@@ -1381,7 +1399,7 @@ function _drawAllyPortrait(i, ally, isVicPose, isAllyAttack, isAllyHit, isNearFa
     drawSlashOverlay(ui.ctx, eSlashF && eSlashF[af], af, ppx, ppy, true, eWpnId || 0);
   }
 }
-function _drawAllyTexts(i, ally, rowY, isAllyHeal, ppx, ppy, weaponDraws) {
+function _drawAllyTexts(i, ally, rowY, healSparkleSet, ppx, ppy, weaponDraws) {
   const namePal = [0x0F, 0x0F, 0x0F, 0x30];
   for (let s = 0; s < ally.fadeStep; s++) namePal[3] = nesColorFade(namePal[3]);
   const nameBytes = _nameToBytes(ally.name);
@@ -1390,8 +1408,9 @@ function _drawAllyTexts(i, ally, rowY, isAllyHeal, ppx, ppy, weaponDraws) {
   drawLvHpRow(ui.ctx, panelLeft, HUD_RIGHT_X + HUD_RIGHT_W - 8, rowY + 16, ally.level || 1, ally.hp, ally.maxHP, ally.fadeStep);
   const dn = getAllyDamageNums()[i];
   if (dn) weaponDraws.push({ type: 'dmg', dn, bx: HUD_RIGHT_X + 20, by: _dmgBounceY(rowY + 16, dn.timer) });
-  if (isAllyHeal && bsc.cureSparkleFrames.length === 2) {
-    weaponDraws.push({ type: 'sparkle', frame: bsc.cureSparkleFrames[Math.floor(battleSt.battleTimer / 67) & 1], px: ppx, py: ppy });
+  if (healSparkleSet) {
+    const fi = Math.floor(battleSt.battleTimer / 67) & 1;
+    weaponDraws.push({ type: 'sparkle', frame: healSparkleSet[fi], px: ppx, py: ppy });
   }
 }
 

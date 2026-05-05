@@ -2,6 +2,25 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.24 — 2026-05-05
+
+### Per-school SP3 palette for white-magic cast anim
+
+1.7.23 widened the cure-anim render gate to status-cure + revive on the assumption that Cure and Poisona shared everything. They share **tile bytes** (verified) but **not the SP3 palette** — Cure's hardcoded `[0x0F, 0x12, 0x22, 0x31]` rendered Poisona's magic circle in Cure-blue when the actual ROM renders it magenta/orange. Caught by re-reading the user's REC OAM dump SP3 row (`[0x0F, 0x15, 0x27, 0x30]`) — should have flagged the diff in 1.7.23, didn't.
+
+`cure-anim.js` refactored to decode tile canvases per palette at init:
+
+- `WHITE_MAGIC_PAL` map keyed by school (`recovery` / `cure_status` / `revive`). Recovery keeps Cure's blue. Status-cure uses the captured magenta. Revive defaults to status-cure's palette as a placeholder until Raise gets its own REC.
+- `_decodeForPalette(pal)` builds the full bundle (`flameFrames` × 5, `starTile`, 2-frame `sparkleFrames`) for one palette. Init runs it twice (recovery + status; revive aliases status), so 2 distinct decode passes.
+- New `getCureAnimAssets(spell)` getter: returns the right pre-decoded bundle by spell. Unknown spells / non-white-magic return null.
+- Backward compat: `initCureAnimSprites()` still returns the recovery bundle at the top level so `bsc.cureFlameFrames` / `cureStarTile` / `cureSparkleFrames` keep working for HUD pause-heal, item-use Cure, PVP-potion etc.
+
+`battle-drawing.js` magic-cast and ally-magic-heal paths now look up the active spell at render time (`SPELLS.get(getCurrentSpellId())`) and use `getCureAnimAssets(spell)` to pick the per-school flame, stars, and heal sparkle. Item-use Cure (potion path) is unchanged — always recovery palette via `bsc.cureSparkleFrames`. Ally heal sparkle render rewired through a single `healSparkleSet` arg to `_drawAllyTexts` so magic vs item-use no longer share a hardcoded asset.
+
+Test: cast Cure on self → blue circle/sparkles. Cast Poisona on a poisoned ally → magenta/orange circle/sparkles. Both now match what the FF3 ROM actually renders.
+
+`src/cure-anim.js`, `src/battle-drawing.js`.
+
 ## 1.7.23 — 2026-05-05
 
 ### White-magic anim widened from Cure-only to the whole school

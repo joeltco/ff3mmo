@@ -1,5 +1,14 @@
 // Cure spell animation — captured from FF3 NES via EMU tab REC OAM (100 frames).
-// White-magic SP3 palette is fixed in the ROM: [0x0F, 0x12, 0x22, 0x31].
+//
+// White-magic spells share the same tile sequence ($4A-$57 build-up flame,
+// $49 stars, $4A/$49 heal-phase) but DIFFERENT SP3 palettes per school —
+// confirmed by REC OAM of Poisona vs. Cure (2026-05-05): tile bytes byte-
+// identical, palette differs:
+//   recovery (Cure family)      — [0x0F, 0x12, 0x22, 0x31] blue / cyan / white
+//   cure_status (Poisona/Bndna) — [0x0F, 0x15, 0x27, 0x30] magenta / orange / white
+//   revive (Raise)              — placeholder; same as cure_status until captured
+// Tile canvases are pre-decoded once per palette at init; render path picks
+// the right asset bundle by spell via `getCureAnimAssets(spell)`.
 //
 // Vocabulary (the user's; pin it here so future-me doesn't drift):
 //   "flame"       — pulsing 4-size sprite drawn LEFT of the player; tiles $4A
@@ -22,7 +31,11 @@
 import { NES_SYSTEM_PALETTE } from './tile-decoder.js';
 import { _makeCanvas16 } from './canvas-utils.js';
 
-const PAL = [0x0F, 0x12, 0x22, 0x31];
+const WHITE_MAGIC_PAL = {
+  recovery:    [0x0F, 0x12, 0x22, 0x31],  // Cure family — blue / cyan / white
+  cure_status: [0x0F, 0x15, 0x27, 0x30],  // Poisona / Bndna / Esuna / Stone — magenta / orange / white (REC OAM 2026-05-05)
+  revive:      [0x0F, 0x15, 0x27, 0x30],  // Arise / Raise — placeholder; same as cure_status until captured
+};
 
 // ── Build-up phase tiles ($4A-$57 flame + $49 small star) ──────────────────
 
@@ -64,7 +77,7 @@ function _decodeTilePixels(d) {
   return out;
 }
 
-function _make8(tile) {
+function _make8(tile, pal) {
   const c = document.createElement('canvas'); c.width = 8; c.height = 8;
   const cx = c.getContext('2d');
   const px = _decodeTilePixels(tile);
@@ -72,7 +85,7 @@ function _make8(tile) {
   for (let p = 0; p < 64; p++) {
     const ci = px[p];
     if (ci === 0) { img.data[p * 4 + 3] = 0; continue; }
-    const rgb = NES_SYSTEM_PALETTE[PAL[ci]] || [0, 0, 0];
+    const rgb = NES_SYSTEM_PALETTE[pal[ci]] || [0, 0, 0];
     img.data[p * 4] = rgb[0]; img.data[p * 4 + 1] = rgb[1];
     img.data[p * 4 + 2] = rgb[2]; img.data[p * 4 + 3] = 255;
   }
@@ -99,18 +112,35 @@ function _quad4(tl, tr, bl, br) {
   return c;
 }
 
-// ── Public init ─────────────────────────────────────────────────────────────
+// 2-frame heal sparkle, alternates orientation every 67 ms. Same TL/TR/BL/BR
+// rotation pattern as `sprite-init.js _initCureSparkleFrames` so the magic-
+// cast and item-use Cure paths match visually for the recovery palette.
+function _buildSparkleFrames(t4aHeal, t49Heal) {
+  const tiles = [t4aHeal, t49Heal];
+  const layouts = [
+    [[1,0,0,true,false],[0,8,0,true,false],[0,0,8,false,true],[1,8,8,false,true]],
+    [[0,0,0,false,false],[1,8,0,false,false],[1,0,8,true,true],[0,8,8,true,true]],
+  ];
+  return layouts.map(config => {
+    const c = _makeCanvas16(); const cx = c.getContext('2d');
+    for (const [ti, ox, oy, hf, vf] of config) {
+      cx.save();
+      if (hf && vf) { cx.translate(ox + 8, oy + 8); cx.scale(-1, -1); cx.drawImage(tiles[ti], 0, 0); }
+      else if (hf)  { cx.translate(ox + 8, oy);     cx.scale(-1,  1); cx.drawImage(tiles[ti], 0, 0); }
+      else if (vf)  { cx.translate(ox,     oy + 8); cx.scale( 1, -1); cx.drawImage(tiles[ti], 0, 0); }
+      else          { cx.drawImage(tiles[ti], ox, oy); }
+      cx.restore();
+    }
+    return c;
+  });
+}
 
-// Returns:
-//   flameFrames:      [size1, size2, size3, size4, brackets] — 5× 16×16 canvases
-//   starTile:         8×8 canvas (build-up rotating-star tile, T_49_STAR)
-//   healSparkleFrame: 16×16 canvas (phase-4 target sparkle, captured from f73)
-export function initCureAnimSprites() {
-  const t4a = _make8(T_4A);
-  const t4b = _make8(T_4B), t4c = _make8(T_4C), t4d = _make8(T_4D), t4e = _make8(T_4E);
-  const t4f = _make8(T_4F), t50 = _make8(T_50), t51 = _make8(T_51), t52 = _make8(T_52);
-  const t53 = _make8(T_53), t54 = _make8(T_54), t55 = _make8(T_55), t56 = _make8(T_56);
-  const t57 = _make8(T_57);
+function _decodeForPalette(pal) {
+  const t4a = _make8(T_4A, pal);
+  const t4b = _make8(T_4B, pal), t4c = _make8(T_4C, pal), t4d = _make8(T_4D, pal), t4e = _make8(T_4E, pal);
+  const t4f = _make8(T_4F, pal), t50 = _make8(T_50, pal), t51 = _make8(T_51, pal), t52 = _make8(T_52, pal);
+  const t53 = _make8(T_53, pal), t54 = _make8(T_54, pal), t55 = _make8(T_55, pal), t56 = _make8(T_56, pal);
+  const t57 = _make8(T_57, pal);
 
   const flameFrames = [
     _flippedQuad(t4a),               // size 1 — smallest ring
@@ -120,16 +150,53 @@ export function initCureAnimSprites() {
     _flippedQuad(t57),               // brackets — release flash
   ];
 
-  const starTile = _make8(T_49_STAR);
+  const starTile = _make8(T_49_STAR, pal);
 
-  // Heal sparkle: same TL/TR/BL/BR pattern as captured frame 73, where $4A
-  // (small dot) frames the corners and $49 (big asterisk) sits inside.
-  // From f73: [0,5] $4A HFLIP, [8,5] $49 HFLIP, [0,13] $49 VFLIP, [8,13] $4A VFLIP.
-  const t4aHeal = _make8(T_4A_HEAL);
-  const t49Heal = _make8(T_49_HEAL);
-  const healSparkleFrame = _quad4(t4aHeal, t49Heal, t49Heal, t4aHeal);
+  const t4aHeal = _make8(T_4A_HEAL, pal);
+  const t49Heal = _make8(T_49_HEAL, pal);
+  const sparkleFrames = _buildSparkleFrames(t4aHeal, t49Heal);
 
-  return { flameFrames, starTile, healSparkleFrame };
+  return { flameFrames, starTile, sparkleFrames };
+}
+
+// ── Public init ─────────────────────────────────────────────────────────────
+
+let _animsByKey = null;  // { recovery, cure_status, revive } → bundle (deduped by palette)
+
+// Backward compat: returns the recovery school's bundle so existing callers
+// (battle-sprite-cache, HUD pause-heal etc.) keep working unchanged. New code
+// should call `getCureAnimAssets(spell)` to pick the per-school palette.
+//
+// `healSparkleFrame` alias is the first frame of `sparkleFrames`, kept so
+// older imports don't break — production render uses the 2-frame `sparkleFrames`.
+export function initCureAnimSprites() {
+  _animsByKey = {};
+  const cache = {};
+  for (const [key, pal] of Object.entries(WHITE_MAGIC_PAL)) {
+    const palKey = pal.join('-');
+    if (!cache[palKey]) cache[palKey] = _decodeForPalette(pal);
+    _animsByKey[key] = cache[palKey];
+  }
+  const recov = _animsByKey.recovery;
+  return {
+    flameFrames: recov.flameFrames,
+    starTile: recov.starTile,
+    sparkleFrames: recov.sparkleFrames,
+    healSparkleFrame: recov.sparkleFrames[0],
+  };
+}
+
+// Pick the right pre-decoded asset bundle for a spell. Returns null for non-
+// white-magic spells, or before init has run.
+//
+// Bundle shape: { flameFrames, starTile, sparkleFrames }
+export function getCureAnimAssets(spell) {
+  if (!spell || !_animsByKey) return null;
+  const key = spell.target === 'cure_status' ? 'cure_status'
+            : spell.target === 'revive'      ? 'revive'
+            : spell.element === 'recovery'   ? 'recovery'
+            : null;
+  return key ? _animsByKey[key] : null;
 }
 
 // ── Phase mapping (ms-based, 60 Hz NES capture × 16.67ms/frame) ─────────────
