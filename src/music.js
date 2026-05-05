@@ -31,6 +31,7 @@ export const SFX = {
   WARP:         0x9D,  // SFX $5C + $41
   POND_DRINK:   0x91,  // SFX $50 + $41 — healing drink (play half)
   CURE:         0x4A,  // SFX $09 + $41 — cure spell sound
+  MAGIC_CAST:   0x62,  // SFX $21 + $41 — magic pre-animation channel sound (FF3J disasm 33/B0D8 black, 33/B0FF white: LDA #$A1 / STA $7F49)
   BATTLE_SWIPE: 0x56,  // SFX $15 + $41 — battle encounter swoosh
   BOSS_DEATH:   0x7D,  // SFX $3C + $41 — boss dissolve crumble
   CURSOR:       0x59,  // SFX $18 + $41 — menu cursor movement

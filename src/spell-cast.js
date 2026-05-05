@@ -65,6 +65,10 @@ export function startSpellCast(spellId, targetSpec) {
   ps.mp = Math.max(0, ps.mp - cost);
   battleSt.battleState = 'magic-cast';
   battleSt.battleTimer = 0;
+  // Cast SFX — FF3J disasm at 33/B0D8 (black) and 33/B0FF (white) writes $A1 to
+  // $7F49 immediately at the pre-magic-animation start, before any spell-specific
+  // SFX. Fires for every player-cast spell regardless of school.
+  playSFX(SFX.MAGIC_CAST);
 }
 
 function _applySpellEffect(target) {

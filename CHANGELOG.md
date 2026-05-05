@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.16 — 2026-05-05
+
+### Magic-cast SFX wired from FF3J disassembly
+
+Added `SFX.MAGIC_CAST = 0x62` (NES SFX `$21`, ROM byte `$A1`). Confirmed in the everything8215/ff3 disassembly at:
+- `33/B0D8`: `LDA #$A1 / STA $7F49` — black magic pre-animation
+- `33/B0FF`: `LDA #$A1 / STA $7F49` — white magic pre-animation
+
+Both schools use the same pre-anim channel sound. `startSpellCast` now fires `MAGIC_CAST` at the moment the state flips to `magic-cast`, matching the NES timing where the channel sound plays at the start of the pre-animation (our build-up phase). Heal-effect chime at `_applySpellEffect` time is unchanged. Should replace 1.7.14's incorrect `SFX.CURE` duplicate.
+
+`src/music.js` (new SFX entry), `src/spell-cast.js` (one-line `playSFX` call).
+
 ## 1.7.15 — 2026-05-05
 
 ### Revert duplicated CURE sfx at cast start
