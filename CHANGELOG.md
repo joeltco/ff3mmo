@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.11 — 2026-05-05
+
+### Cure spell — bg sparkles now orbit the player
+
+1.7.10 drew 4 sparkles pinned at the portrait corners. The OAM actually has 8 `$49` sparkles forming a ring around the body (top, upper-L/R, L/R, lower-L/R, bottom) with positions jittering every NES frame — a twinkling halo, not corner decor. Replaced the 4 fixed positions with an 8-sparkle ring orbiting the portrait center, advancing one step every 67 ms so the ring spins instead of jitters (deterministic; reads the same to the eye). Radius 13×14 puts the sparkles just outside the 16×16 portrait box.
+
+`src/battle-drawing.js` only — single render block; no tile data or timing changes.
+
 ## 1.7.10 — 2026-05-05
 
 ### Cure spell — full PPU-captured animation

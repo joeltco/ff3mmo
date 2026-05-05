@@ -328,12 +328,20 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
       ui.ctx.drawImage(bsc.cureCircleFrames[circleIdx], px - 16, py);
     }
     if (shouldDrawBgSparkle(cureMs) && bsc.cureBgSparkle) {
-      // Fixed scatter mimicking OAM RNG positions — just outside the portrait box.
+      // 8-sparkle ring orbiting the portrait — matches the OAM where 8 $49 tiles
+      // encircle the body at top/upper-L/upper-R/L/R/lower-L/lower-R/bottom.
+      // Ring rotates one step every 67ms (NES uses RNG jitter; rotation reads
+      // the same to the eye and is deterministic).
       const s = bsc.cureBgSparkle;
-      ui.ctx.drawImage(s, px - 8, py - 6);
-      ui.ctx.drawImage(s, px + 14, py - 6);
-      ui.ctx.drawImage(s, px - 8, py + 14);
-      ui.ctx.drawImage(s, px + 14, py + 14);
+      const cx = px + 8, cy = py + 8;
+      const rx = 13, ry = 14;
+      const phase = (cureMs / 67) % 8;
+      for (let i = 0; i < 8; i++) {
+        const a = ((i + phase) / 8) * Math.PI * 2 - Math.PI / 2;
+        const sx = Math.round(cx + Math.cos(a) * rx - 4);
+        const sy = Math.round(cy + Math.sin(a) * ry - 4);
+        ui.ctx.drawImage(s, sx, sy);
+      }
     }
   }
   // Heal sparkle (phase 4) on player portrait — replaces the legacy 67ms flicker.
