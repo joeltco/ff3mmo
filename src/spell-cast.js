@@ -65,12 +65,6 @@ export function startSpellCast(spellId, targetSpec) {
   ps.mp = Math.max(0, ps.mp - cost);
   battleSt.battleState = 'magic-cast';
   battleSt.battleTimer = 0;
-  // Cast SFX — the FF3 NES magic chime that plays as the build-up starts
-  // (channeling). Same sound also fires at heal-effect application; leaving
-  // both so the spell has a chime at cast and another at resolution.
-  if (spell.element === 'recovery' || spell.target === 'cure_status' || spell.target === 'revive') {
-    playSFX(SFX.CURE);
-  }
 }
 
 function _applySpellEffect(target) {

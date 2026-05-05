@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.15 — 2026-05-05
+
+### Revert duplicated CURE sfx at cast start
+
+1.7.14 fired `SFX.CURE` at `startSpellCast` to act as the cast chime, but FF3 NES has a distinct cast/channel SFX (separate from the cure heal chime), and reusing CURE just doubled the same sound. Reverted to no-cast-sfx until the actual cast SFX number is wired in. Heal-effect chime at `_applySpellEffect` time is unchanged.
+
+`src/spell-cast.js` — single revert.
+
 ## 1.7.14 — 2026-05-05
 
 ### Cure spell — cast SFX at build-up start + real ring rotation
