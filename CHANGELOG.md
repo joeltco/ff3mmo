@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.10 — 2026-05-05
+
+### Cure spell — full PPU-captured animation
+
+Replaces the placeholder corner-sparkle flicker with the actual FF3 NES Cure animation, frame-mapped from a 100-frame REC OAM capture. The animation has five distinct phases over ~1667 ms:
+
+| Phase | Duration | What renders |
+|---|---|---|
+| build-up | 800 ms | Magic circle pulses 4 sizes (`$4A`, `$4B-$4E`, `$4F-$52`, `$53-$56`) + scattered `$49` sparkles |
+| lunge | 200 ms | Sparkles continue; circle gone |
+| cast | 217 ms | Engine's existing item-use pose holds |
+| heal | 283 ms | Captured `$4A`/`$49` sparkles flicker on the target portrait — 4-color asterisk, way more detail than the old placeholder |
+| return | 167 ms | Anim resolves |
+
+Tiles `$49` and `$4A` re-bank mid-animation (MMC3 CHR switch) — the small build-up sparkle and the large heal-phase sparkle are different bytes, captured separately and decoded via the SP3 palette `[0x0F, 0x12, 0x22, 0x31]`.
+
+New `src/cure-anim.js` owns tile bytes, decode, frame builders, and phase boundary helpers (`getCureCircleFrameIdx`, `shouldDrawBgSparkle`, `shouldDrawHealSparkle`). `src/spell-cast.js` re-times recovery spells to the full 1667 ms (status-cure + damage spells keep their legacy 1100 ms timing until those are captured). `src/sprite-init.js` `_initCureSparkleFrames` now uses the real captured heal-phase tile bytes — so item-use Cure (potions) also gets the upgraded sparkle flicker for free. `src/battle-drawing.js` draws the magic circle 16×16 to the left of the player portrait (caster-side, regardless of target) plus four bg sparkles around the portrait corners during build-up; heal sparkles render on the target portrait (self or ally) during phase 4.
+
 ## 1.7.9 — 2026-05-05
 
 ### REC OAM/BG max frames bumped 60 → 240

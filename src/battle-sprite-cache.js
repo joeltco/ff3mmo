@@ -6,6 +6,7 @@ import { weaponSubtype } from './data/items.js';
 import { initBattleSpriteForJob, initStatusSprites } from './sprite-init.js';
 import { initSlashSprites, initKnifeSlashSprites, initSwordSlashSprites, initStaffSlashSprites } from './slash-effects.js';
 import { initSouthWindSprite } from './south-wind.js';
+import { initCureAnimSprites } from './cure-anim.js';
 
 export const bsc = {
   // Per-job poses (reassigned on job swap)
@@ -15,6 +16,11 @@ export const bsc = {
   sweatFrames: [],
   defendSparkleFrames: [],
   cureSparkleFrames: [],
+
+  // Cure spell — captured from PPU via REC OAM. Built once at boot.
+  cureCircleFrames: [],     // [size1, size2, size3, size4, brackets]
+  cureBgSparkle: null,      // 8×8 build-up sparkle
+  cureHealSparkleFrame: null, // 16×16 phase-4 target sparkle (replaces placeholder later)
 
   // Status animation sprites (built once at boot; `poisonBubbleFrames` is an alias into the map)
   statusSpriteMap: new Map(),
@@ -63,6 +69,10 @@ export function initBattleSpriteCache() {
   bsc.nunchakuSlashFramesR = bsc.nunchakuSlashFramesL = bsc.staffSlashFramesR;
   bsc.statusSpriteMap = initStatusSprites();
   bsc.poisonBubbleFrames = bsc.statusSpriteMap.get(0x02) || [];
+  const cure = initCureAnimSprites();
+  bsc.cureCircleFrames = cure.circleFrames;
+  bsc.cureBgSparkle = cure.bgSparkle;
+  bsc.cureHealSparkleFrame = cure.healSparkleFrame;
 }
 
 // Per-job battle sprites — call at boot and on job change.

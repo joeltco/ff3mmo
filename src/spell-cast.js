@@ -10,6 +10,7 @@ import { SFX, playSFX } from './music.js';
 import { setPlayerHealNum, getAllyDamageNums, tickHealNums, clearHealNums } from './damage-numbers.js';
 import { SPELLS, getSpellMPCost } from './data/spells.js';
 import { STATUS, removeStatus } from './status-effects.js';
+import { CURE_PHASE_MS, CURE_T_HEAL, CURE_TOTAL_MS } from './cure-anim.js';
 
 // Map spell.type → STATUS flag for cure_status spells (Poisona, Bndna, etc.)
 const SPELL_CURE_FLAG = {
@@ -100,10 +101,27 @@ function _applySpellEffect(target) {
   playSFX(isHeal ? SFX.CURE : SFX.SW_HIT);
 }
 
+// Returns true if the captured cure anim (magic circle build-up + cast pose +
+// heal sparkle) applies — recovery spells only. Status cures and damage spells
+// keep the legacy short timing until their own captures land.
+function _isCureAnimSpell() {
+  const spell = SPELLS.get(_spellId);
+  return !!(spell && spell.element === 'recovery');
+}
+
 // Drives 'magic-cast' (windup) and 'magic-hit' (anim+effect) states.
+// For recovery spells, timing matches the FF3 NES OAM capture (~1667ms total).
 export function updateSpellCast(dt) {
+  const useCureAnim = _isCureAnimSpell();
+  const castDur     = useCureAnim ? CURE_PHASE_MS.buildup : 250;
+  // CURE_T_HEAL is measured from t=0 of the *whole* anim; magic-hit starts at
+  // CURE_T_LUNGE (= buildup end), so heal-effect time within magic-hit is the
+  // delta from CURE_T_LUNGE.
+  const hitEffectMs = useCureAnim ? (CURE_T_HEAL - CURE_PHASE_MS.buildup) : 400;
+  const hitTotalMs  = useCureAnim ? (CURE_TOTAL_MS - CURE_PHASE_MS.buildup) : 1100;
+
   if (battleSt.battleState === 'magic-cast') {
-    if (battleSt.battleTimer >= 250) {
+    if (battleSt.battleTimer >= castDur) {
       if (_targets.length === 0) { _processNextTurn(); return true; }
       _hitIdx = 0; _effectApplied = false;
       battleSt.battleState = 'magic-hit'; battleSt.battleTimer = 0;
@@ -112,11 +130,11 @@ export function updateSpellCast(dt) {
   }
   if (battleSt.battleState !== 'magic-hit') return false;
   tickHealNums(dt);
-  if (!_effectApplied && battleSt.battleTimer >= 400) {
+  if (!_effectApplied && battleSt.battleTimer >= hitEffectMs) {
     _applySpellEffect(_targets[_hitIdx]);
     _effectApplied = true;
   }
-  if (battleSt.battleTimer >= 1100) {
+  if (battleSt.battleTimer >= hitTotalMs) {
     _hitIdx++;
     _effectApplied = false;
     if (_hitIdx < _targets.length) {
@@ -127,4 +145,14 @@ export function updateSpellCast(dt) {
     }
   }
   return true;
+}
+
+// Renderer hook: returns ms elapsed since cure-anim t=0, or -1 if not in a
+// recovery-spell cast/hit state. Lets battle-drawing pick magic-circle frames
+// without re-reading battleState semantics.
+export function getCureAnimElapsedMs() {
+  if (!_isCureAnimSpell()) return -1;
+  if (battleSt.battleState === 'magic-cast') return battleSt.battleTimer;
+  if (battleSt.battleState === 'magic-hit') return CURE_PHASE_MS.buildup + battleSt.battleTimer;
+  return -1;
 }

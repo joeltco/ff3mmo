@@ -32,6 +32,8 @@ import { pvpSt, drawBossSpriteBoxPVP } from './pvp.js';
 import { inputSt } from './input-handler.js';
 import { bsc, getSlashFramesForWeapon } from './battle-sprite-cache.js';
 import { drawSlashOverlay, SLASH_FRAME_MS, shouldDrawSlash } from './slash-effects.js';
+import { getCureAnimElapsedMs } from './spell-cast.js';
+import { getCureCircleFrameIdx, shouldDrawBgSparkle, shouldDrawHealSparkle } from './cure-anim.js';
 import { hudSt } from './hud-state.js';
 import { fakePlayerPortraits, fakePlayerVictoryPortraits, fakePlayerHitPortraits,
          fakePlayerKneelPortraits, fakePlayerAttackPortraits, fakePlayerAttackLPortraits,
@@ -308,15 +310,41 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
     const frame = bsc.defendSparkleFrames[fi];
     drawSparkleCorners(frame, px, py);
   }
-  // Cure sparkle — alternating flips every 67ms during item-use AND during a player-target magic heal cast.
+  // Cure animation — captured PPU/OAM (see cure-anim.js). Build-up + lunge run
+  // caster-side (always at the player portrait, regardless of target). The heal
+  // sparkle (phase 4) only renders here when the target is the player; ally-
+  // target heal sparkles are drawn at the ally portrait below.
+  const isMagicState = battleSt.battleState === 'magic-cast' || battleSt.battleState === 'magic-hit';
   const isCureItemUse = battleSt.battleState === 'item-use' && !(inputSt.playerActionPending && inputSt.playerActionPending.allyIndex >= 0);
-  const isCureMagicSelf = (battleSt.battleState === 'magic-cast' || battleSt.battleState === 'magic-hit')
+  const isCureMagicSelf = isMagicState
     && inputSt.playerActionPending && inputSt.playerActionPending.command === 'magic'
     && (inputSt.playerActionPending.target === 'player' || inputSt.playerActionPending.allyIndex < 0);
+  const cureMs = isMagicState ? getCureAnimElapsedMs() : -1;
+  if (cureMs >= 0 && bsc.cureCircleFrames.length === 5) {
+    const circleIdx = getCureCircleFrameIdx(cureMs);
+    if (circleIdx >= 0) {
+      // Magic circle 16×16 centered to the LEFT of the portrait — points toward
+      // the enemy area, matching the OAM origin offset (circle is left of WM body).
+      ui.ctx.drawImage(bsc.cureCircleFrames[circleIdx], px - 16, py);
+    }
+    if (shouldDrawBgSparkle(cureMs) && bsc.cureBgSparkle) {
+      // Fixed scatter mimicking OAM RNG positions — just outside the portrait box.
+      const s = bsc.cureBgSparkle;
+      ui.ctx.drawImage(s, px - 8, py - 6);
+      ui.ctx.drawImage(s, px + 14, py - 6);
+      ui.ctx.drawImage(s, px - 8, py + 14);
+      ui.ctx.drawImage(s, px + 14, py + 14);
+    }
+  }
+  // Heal sparkle (phase 4) on player portrait — replaces the legacy 67ms flicker.
+  // For item-use Cure (potions), keep the legacy timer-based flicker since item-
+  // use has no captured anim phase data.
   if ((isCureItemUse || isCureMagicSelf) && bsc.cureSparkleFrames.length === 2) {
-    const fi = Math.floor(battleSt.battleTimer / 67) & 1;
-    const frame = bsc.cureSparkleFrames[fi];
-    drawSparkleCorners(frame, px, py);
+    const showHeal = isCureItemUse || (cureMs >= 0 && shouldDrawHealSparkle(cureMs));
+    if (showHeal) {
+      const fi = Math.floor(battleSt.battleTimer / 67) & 1;
+      drawSparkleCorners(bsc.cureSparkleFrames[fi], px, py);
+    }
   }
   // Near-fatal sweat — 2 frames alternating every 133ms, 3px above portrait
   if (isNearFatal && bsc.sweatFrames.length === 2 && !isAttackPose && !isHitPose && !isVictoryPose && !isDefendPose && !isItemUsePose) {
@@ -1206,7 +1234,13 @@ function _drawAllyRow(i, ally, panelTop, weaponDraws) {
     battleSt.enemyTargetAllyIdx === i && getAllyDamageNums()[i] && !getAllyDamageNums()[i].miss) ||
     (battleSt.battleState === 'pvp-opp-sw-hit' && battleSt.allyShakeTimer[i] > 0);
   const isAllyAttack = (battleSt.battleState === 'ally-attack-back' || battleSt.battleState === 'ally-attack-fwd') && battleSt.currentAllyAttacker === i;
-  const isAllyHeal = battleSt.battleState === 'item-use' && inputSt.playerActionPending && inputSt.playerActionPending.allyIndex === i;
+  const isAllyHealItem = battleSt.battleState === 'item-use' && inputSt.playerActionPending && inputSt.playerActionPending.allyIndex === i;
+  const isAllyHealMagic = (battleSt.battleState === 'magic-cast' || battleSt.battleState === 'magic-hit')
+    && inputSt.playerActionPending && inputSt.playerActionPending.command === 'magic'
+    && inputSt.playerActionPending.allyIndex === i;
+  const _allyCureMs = isAllyHealMagic ? getCureAnimElapsedMs() : -1;
+  // For magic, only show heal sparkles during phase 4 (the actual heal moment).
+  const isAllyHeal = isAllyHealItem || (isAllyHealMagic && _allyCureMs >= 0 && shouldDrawHealSparkle(_allyCureMs));
   const ppx = HUD_RIGHT_X + 8, ppy = rowY + 8;
   drawHudBox(HUD_RIGHT_X, rowY, 32, ROSTER_ROW_H, ally.fadeStep);
   drawHudBox(HUD_RIGHT_X + 32, rowY, HUD_RIGHT_W - 32, ROSTER_ROW_H, ally.fadeStep);
