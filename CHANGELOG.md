@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.9 — 2026-05-05
+
+### REC OAM/BG max frames bumped 60 → 240
+
+A 60-frame cap was too short for magic captures — full spell animations (caster build-up + magic circle + cast moment + followthrough) run 2-3 seconds and exceed the 1-second window. Bumped to 240 (4 seconds at 60fps) so even long spells (Cure, summons, multi-target) fit in one capture.
+
+`REC_FRAMES_MAX = 240` in `src/debug/tabs/emu.js`. Input field `max` attribute updates automatically. Lower bound stays at 1.
+
 ## 1.7.8 — 2026-05-04
 
 ### Magic-grant buttons — bit-field correction + ALL SPELLS

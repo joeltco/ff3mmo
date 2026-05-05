@@ -694,7 +694,7 @@ function _bgSnapshotText() {
 // since the rAF tick is paused for the duration. Tap the active REC button mid-
 // run to cancel.
 
-const REC_FRAMES_MIN = 1, REC_FRAMES_MAX = 60;
+const REC_FRAMES_MIN = 1, REC_FRAMES_MAX = 240;
 const REC_GAP_MIN = 1, REC_GAP_MAX = 30;
 
 let recordingActive = false;
