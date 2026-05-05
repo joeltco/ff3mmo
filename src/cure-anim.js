@@ -144,16 +144,27 @@ export const CURE_T_CAST   = CURE_T_LUNGE + CURE_PHASE_MS.lunge;
 export const CURE_T_HEAL   = CURE_T_CAST + CURE_PHASE_MS.cast;
 export const CURE_T_RETURN = CURE_T_HEAL + CURE_PHASE_MS.heal;
 
-// During build-up the OAM cycles sizes ~67ms each; the brackets flash holds
-// the final ~200ms. Returns 0..4 (size1, size2, size3, size4, brackets) or -1.
+// Build-up cycle, transcribed from OAM frame-by-frame (cure_bg, f0-47):
+//   f0-3   size 1 ($4A ×4 with corner flips)
+//   f4-7   size 2 normal
+//   f8-11  size 2 h-mirror (visually similar to size 2)
+//   f12-15 size 3 normal
+//   f16-19 size 4 normal
+//   f20-23 size 4 h-mirror
+//   f24-27 size 3 normal
+//   f28-31 size 4 normal
+//   f32-35 size 4 h-mirror
+//   f36-47 brackets ($57)
+// h-mirror variants collapse to their non-mirrored size (the eye doesn't
+// distinguish a symmetric ring from its mirror); cycle reduces to 9 hops at
+// 67 ms each, then brackets for ~200 ms.
+const _CIRCLE_SEQ = [0, 1, 1, 2, 3, 3, 2, 3, 3];
+
 export function getCureCircleFrameIdx(elapsedMs) {
   if (elapsedMs < 0 || elapsedMs >= CURE_T_LUNGE) return -1;
-  // First 600ms: 9 hops × 67ms cycling 1→2→3→4→3→2→1→3→4.
-  // Last 200ms: brackets.
-  if (elapsedMs >= 600) return 4;
-  const SEQ = [0, 1, 0, 2, 3, 1, 0, 2, 3];
-  const step = Math.min(SEQ.length - 1, Math.floor(elapsedMs / 67));
-  return SEQ[step];
+  if (elapsedMs >= 600) return 4; // brackets
+  const step = Math.min(_CIRCLE_SEQ.length - 1, Math.floor(elapsedMs / 67));
+  return _CIRCLE_SEQ[step];
 }
 
 // True while the build-up bg sparkles ($49 small) should be drawn — phases 1+2

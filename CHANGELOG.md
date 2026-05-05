@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.13 — 2026-05-05
+
+### Cure spell — three corrections from re-reading the OAM frame-by-frame
+
+1. **Sparkle ring is static, not rotating.** The OAM has 8 `$49` sparkles at fixed body-relative offsets `(4,-8), (-7,-4), (15,-4), (-11,7), (19,7), (-7,18), (15,18), (4,22)` with sub-pixel jitter that's invisible at our render rate. 1.7.11 made them orbit at one step per 67 ms, which read like a beyblade. Now placed statically at the captured offsets.
+
+2. **Circle pulse cycle off-by-one fixed.** Re-tabulating cure_bg f0-47: f0-3 size 1, f4-7 size 2, f8-11 size 2 h-mirror, f12-15 size 3, f16-19 size 4, f20-23 size 4 h-mirror, f24-27 size 3, f28-31 size 4, f32-35 size 4 h-mirror, f36-47 brackets. 1.7.10/.11 had size-3 at the f28-31 slot instead of size 4. Cycle is now `[0,1,1,2,3,3,2,3,3]` followed by brackets, collapsing the h-mirror variants into their non-mirrored size (eye doesn't distinguish).
+
+3. **Circle vertical offset.** OAM has the circle at group y=13 vs body at group y=8, i.e. 5 px below body top. 1.7.10 drew it top-aligned with the portrait. Now offset by `+5` in y to match.
+
+`src/cure-anim.js` (cycle), `src/battle-drawing.js` (sparkle ring + circle position).
+
 ## 1.7.12 — 2026-05-05
 
 ### Cure heal sparkle — single tile on body, not corner-mirrored

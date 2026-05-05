@@ -323,24 +323,24 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
   if (cureMs >= 0 && bsc.cureCircleFrames.length === 5) {
     const circleIdx = getCureCircleFrameIdx(cureMs);
     if (circleIdx >= 0) {
-      // Magic circle 16×16 centered to the LEFT of the portrait — points toward
-      // the enemy area, matching the OAM origin offset (circle is left of WM body).
-      ui.ctx.drawImage(bsc.cureCircleFrames[circleIdx], px - 16, py);
+      // Magic circle 16×16 immediately LEFT of portrait, dropped 5 px to match
+      // the OAM where circle starts at group y=13 vs body at group y=8.
+      ui.ctx.drawImage(bsc.cureCircleFrames[circleIdx], px - 16, py + 5);
     }
     if (shouldDrawBgSparkle(cureMs) && bsc.cureBgSparkle) {
-      // 8-sparkle ring orbiting the portrait — matches the OAM where 8 $49 tiles
-      // encircle the body at top/upper-L/upper-R/L/R/lower-L/lower-R/bottom.
-      // Ring rotates one step every 67ms (NES uses RNG jitter; rotation reads
-      // the same to the eye and is deterministic).
+      // 8 sparkles encircling the body+circle scene at the OAM frame-0 offsets
+      // (body-relative, since group origin = body top-left). NES jitters these
+      // ±1-2px per frame; that's invisible at our render rate, so static reads
+      // the same. Lower three sparkles (y > 16) extend below the 16×16 portrait
+      // box but stay within the ally panel area.
       const s = bsc.cureBgSparkle;
-      const cx = px + 8, cy = py + 8;
-      const rx = 13, ry = 14;
-      const phase = (cureMs / 67) % 8;
-      for (let i = 0; i < 8; i++) {
-        const a = ((i + phase) / 8) * Math.PI * 2 - Math.PI / 2;
-        const sx = Math.round(cx + Math.cos(a) * rx - 4);
-        const sy = Math.round(cy + Math.sin(a) * ry - 4);
-        ui.ctx.drawImage(s, sx, sy);
+      const SPARKLE_OFFSETS = [
+        [ 4, -8], [-7, -4], [15, -4],   // top, upper-L, upper-R
+        [-11, 7], [19,  7],             // left, right
+        [-7, 18], [15, 18], [ 4, 22],   // lower-L, lower-R, bottom
+      ];
+      for (const [dx, dy] of SPARKLE_OFFSETS) {
+        ui.ctx.drawImage(s, px + dx, py + dy);
       }
     }
   }
