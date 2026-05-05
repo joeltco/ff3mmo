@@ -853,6 +853,11 @@ const CHARS_A_OFF = 0x100;
 const CHARS_B_OFF = 0x200;
 const INV_IDS_OFF = 0x0C0;
 const INV_QTY_OFF = 0x0E0;
+// Per-char struct offsets (within the 64-byte block at $6100/$6200/etc)
+const JOB_OFF = 0x00;          // char A: $6100 job id
+const LEVEL_OFF = 0x01;        // char A: $6101 level (starts at 0)
+const MP_OFF = 0x30;           // char A: $6130-$613F (8 levels × current/max)
+const SPELL_LIST_OFF = 0x07;   // char B: $6207-$620E (1 spell id per level)
 
 function _ram(addr) { return nes?.cpu?.mem?.[addr] ?? 0; }
 function _ramWrite(addr, val) {
@@ -937,7 +942,38 @@ const PRESETS = {
     }
     return 'inventory cleared';
   },
+  'wm-spells': () => _grantMagic(0x03, WM_SPELLS, 'WM'),
+  'bm-spells': () => _grantMagic(0x04, BM_SPELLS, 'BM'),
+  'call-spells': () => _grantMagic(0x13, CALL_SPELLS, 'Call'),
 };
+
+// Spell IDs equipped per magic level (L1 → L8). Cross-referenced from
+// tools/rom-dump-spells.txt and rpgclassics FF3 NES spell tables.
+// WM/BM only fill 7 levels (their max in their pure job); L8 is Sage-only.
+// Call IDs are best-guess effect spells from the summon table; verify empirically.
+const WM_SPELLS = [0x34, 0x2D, 0x26, 0x1F, 0x18, 0x13, 0x0A, 0x00];
+//                 Cure  Aero  Cura  Libra Curaga Haste Curaja —
+const BM_SPELLS = [0x31, 0x2A, 0x23, 0x1C, 0x15, 0x0E, 0x07, 0x00];
+//                 Fire  Bolt  Fira  Break Taga  Firaga Quake —
+const CALL_SPELLS = [0x48, 0x3A, 0x3B, 0x39, 0x3D, 0x3E, 0x41, 0x42];
+//                  Sumn  Bliz  Thun  Fire  Quake Glare Tidal ParcBm
+
+function _grantMagic(jobId, spellIds, label) {
+  const a = SRAM_BASE + CHARS_A_OFF;       // char 1 part A ($6100)
+  const b = SRAM_BASE + CHARS_B_OFF;       // char 1 part B ($6200)
+  _ramWrite(a + JOB_OFF, jobId);
+  _ramWrite(a + LEVEL_OFF, 50);
+  // MP: 0x09 / 0x09 (current/max) per level — high enough to cast freely.
+  for (let lvl = 0; lvl < 8; lvl++) {
+    _ramWrite(a + MP_OFF + lvl * 2 + 0, 0x09);
+    _ramWrite(a + MP_OFF + lvl * 2 + 1, 0x09);
+  }
+  // Spell list: 1 byte per level at $6207-$620E.
+  for (let lvl = 0; lvl < 8; lvl++) {
+    _ramWrite(b + SPELL_LIST_OFF + lvl, spellIds[lvl] & 0xFF);
+  }
+  return `char A → ${label} (job ${_hex(jobId, 2)}, lv50, 8 spells set)`;
+}
 
 function _runPreset(name) {
   if (!nes) return;
@@ -1200,7 +1236,10 @@ function _buildDOM(parent) {
   const btnDumpState = mkBtn('READ STATE', _dumpState);
   const btnFullHP = mkBtn('FULL HP', () => _runPreset('full-HP'));
   const btnClearInv = mkBtn('CLEAR INV', () => _runPreset('clear-inv'));
-  editBtnRow.append(btnDumpState, btnFullHP, btnClearInv);
+  const btnWMSpells = mkBtn('WM SPELLS', () => _runPreset('wm-spells'));
+  const btnBMSpells = mkBtn('BM SPELLS', () => _runPreset('bm-spells'));
+  const btnCallSpells = mkBtn('CALL SPELLS', () => _runPreset('call-spells'));
+  editBtnRow.append(btnDumpState, btnFullHP, btnClearInv, btnWMSpells, btnBMSpells, btnCallSpells);
   editBody.appendChild(editBtnRow);
 
   const writeInput = document.createElement('textarea');

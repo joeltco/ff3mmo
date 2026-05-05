@@ -2,6 +2,25 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.6 — 2026-05-04
+
+### EMU debugger — magic-grant preset buttons
+
+Three new preset buttons in the **PARTY / INVENTORY EDITOR** panel, next to `FULL HP` / `CLEAR INV`. Each one pokes char A's SRAM to make the running FF3 ROM ready to cast a school of magic — for use with the REC OAM/BG capture pipeline to grab spell animations.
+
+- **`WM SPELLS`** — sets job to White Mage (`$6100=03`), level 50, MP 9/9 across all 8 levels (`$6130-$613F`), and equips Cure / Aero / Cura / Libra / Curaga / Haste / Curaja at L1-L7 (`$6207-$620E`). L8 left zeroed (Sage-only).
+- **`BM SPELLS`** — Black Mage (`$6100=04`), same setup, equips Fire / Thunder / Fira / Break / Taga / Firaga / Quake at L1-L7.
+- **`CALL SPELLS`** — Summoner (`$6100=13`), equips a best-guess summon-effect mapping (Summon / Blizzard / Thunder / Fire / Earthquake / Glare / Tidal Wave / ParcleBeam at L1-L8). Empirical — may need tuning once we observe what each level dispatches in-battle.
+
+Spell IDs cross-referenced from `tools/rom-dump-spells.txt` and the rpgclassics FF3 NES spell tables. SRAM offsets sourced from the everything8215/ff3 disassembly (`field-ram.txt`):
+
+- `$6100` — char A job ID
+- `$6101` — char A level
+- `$6130-$613F` — MP (current/max × 8 levels)
+- `$6207-$620E` — char B equipped spell list (1 byte per level)
+
+Constants (`JOB_OFF`, `LEVEL_OFF`, `MP_OFF`, `SPELL_LIST_OFF`) added to `src/debug/tabs/emu.js` alongside the existing `INV_IDS_OFF` / `INV_QTY_OFF` so future SRAM presets have a clean foundation. Unlocks the magic-capture phase of the EMU plan — workflow: tap a button → enter battle → cast → REC OAM through animation → paste back.
+
 ## 1.7.5 — 2026-05-04
 
 ### Docs catchup for the 1.7.x line
