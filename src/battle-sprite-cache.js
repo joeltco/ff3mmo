@@ -18,9 +18,9 @@ export const bsc = {
   cureSparkleFrames: [],
 
   // Cure spell — captured from PPU via REC OAM. Built once at boot.
-  cureCircleFrames: [],     // [size1, size2, size3, size4, brackets]
-  cureBgSparkle: null,      // 8×8 build-up sparkle
-  cureHealSparkleFrame: null, // 16×16 phase-4 target sparkle (replaces placeholder later)
+  cureFlameFrames: [],        // 5× 16×16 flame to the LEFT of caster: [size1..size4, brackets]
+  cureStarTile: null,         // 8×8 tile, drawn 8× as the rotating ring of stars around caster
+  cureHealSparkleFrame: null, // 16×16 ONE sparkle on the heal target (phase 4)
 
   // Status animation sprites (built once at boot; `poisonBubbleFrames` is an alias into the map)
   statusSpriteMap: new Map(),
@@ -70,8 +70,8 @@ export function initBattleSpriteCache() {
   bsc.statusSpriteMap = initStatusSprites();
   bsc.poisonBubbleFrames = bsc.statusSpriteMap.get(0x02) || [];
   const cure = initCureAnimSprites();
-  bsc.cureCircleFrames = cure.circleFrames;
-  bsc.cureBgSparkle = cure.bgSparkle;
+  bsc.cureFlameFrames = cure.flameFrames;
+  bsc.cureStarTile = cure.starTile;
   bsc.cureHealSparkleFrame = cure.healSparkleFrame;
 }
 

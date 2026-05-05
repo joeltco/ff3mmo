@@ -33,7 +33,7 @@ import { inputSt } from './input-handler.js';
 import { bsc, getSlashFramesForWeapon } from './battle-sprite-cache.js';
 import { drawSlashOverlay, SLASH_FRAME_MS, shouldDrawSlash } from './slash-effects.js';
 import { getCureAnimElapsedMs } from './spell-cast.js';
-import { getCureCircleFrameIdx, shouldDrawBgSparkle, shouldDrawHealSparkle } from './cure-anim.js';
+import { getCureFlameFrameIdx, shouldDrawStars, shouldDrawHealSparkle } from './cure-anim.js';
 import { hudSt } from './hud-state.js';
 import { fakePlayerPortraits, fakePlayerVictoryPortraits, fakePlayerHitPortraits,
          fakePlayerKneelPortraits, fakePlayerAttackPortraits, fakePlayerAttackLPortraits,
@@ -323,14 +323,14 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
     && inputSt.playerActionPending && inputSt.playerActionPending.command === 'magic'
     && (inputSt.playerActionPending.allyIndex == null || inputSt.playerActionPending.allyIndex < 0);
   const cureMs = isMagicState ? getCureAnimElapsedMs() : -1;
-  if (cureMs >= 0 && bsc.cureCircleFrames.length === 5) {
-    // Draw order: sparkle ring FIRST (background), magic circle on TOP.
-    // Where the ring's left arc passes behind the magic circle, the circle's
-    // detailed pixels read clearly instead of being overwritten by sparkles.
-    if (shouldDrawBgSparkle(cureMs) && bsc.cureBgSparkle) {
-      // 8 sparkles on a radius-15 ring around the portrait, rotating CW at the
+  if (cureMs >= 0 && bsc.cureFlameFrames.length === 5) {
+    // Draw order: stars FIRST (background), flame on TOP. Where the ring's
+    // left arc passes behind the flame, the flame's detailed pixels read
+    // clearly instead of being overwritten by passing stars.
+    if (shouldDrawStars(cureMs) && bsc.cureStarTile) {
+      // 8 stars on a radius-15 ring around the portrait, rotating CW at the
       // OAM-measured rate (~5°/NES-frame × 60 fps = 300°/s = 1.2 s per turn).
-      const s = bsc.cureBgSparkle;
+      const star = bsc.cureStarTile;
       const cx = px + 8, cy = py + 8;
       const r = 15;
       const N = 8;
@@ -339,14 +339,14 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
         const a = (i / N) * Math.PI * 2 + rotRad - Math.PI / 2; // start at top
         const sx = Math.round(cx + Math.cos(a) * r - 4);
         const sy = Math.round(cy + Math.sin(a) * r - 4);
-        ui.ctx.drawImage(s, sx, sy);
+        ui.ctx.drawImage(star, sx, sy);
       }
     }
-    const circleIdx = getCureCircleFrameIdx(cureMs);
-    if (circleIdx >= 0) {
-      // Magic circle 16×16 immediately LEFT of portrait, dropped 5 px to match
-      // the OAM where circle starts at group y=13 vs body at group y=8.
-      ui.ctx.drawImage(bsc.cureCircleFrames[circleIdx], px - 16, py + 5);
+    const flameIdx = getCureFlameFrameIdx(cureMs);
+    if (flameIdx >= 0) {
+      // Flame 16×16 immediately LEFT of portrait, dropped 5 px to match
+      // the OAM where flame starts at group y=13 vs body at group y=8.
+      ui.ctx.drawImage(bsc.cureFlameFrames[flameIdx], px - 16, py + 5);
     }
   }
   // Heal sparkle (phase 4) on player portrait — ONE 16×16 sparkle drawn on the

@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.20 — 2026-05-05
+
+### Cure-anim vocabulary — `flame` and `stars`, not "circle" and "bg sparkle"
+
+The user named the visual elements: the rotating tiles are **stars**, and the pulsing thing to the left of the caster is a **flame**. My code had been calling them "circle" (for the flame) and "bg sparkle" (for the stars), which was confusing and conflated three distinct visuals (flame, stars, heal sparkle). Renamed throughout so future changes don't drift.
+
+- `cure-anim.js`: `circleFrames` → `flameFrames`, `bgSparkle` → `starTile`, `getCureCircleFrameIdx` → `getCureFlameFrameIdx`, `shouldDrawBgSparkle` → `shouldDrawStars`. Pinned the vocabulary in a header comment.
+- `battle-sprite-cache.js`: `cureCircleFrames` → `cureFlameFrames`, `cureBgSparkle` → `cureStarTile`.
+- `battle-drawing.js`: imports + render block updated to match.
+
+No behavior change.
+
 ## 1.7.19 — 2026-05-05
 
 ### Cure draw order — magic circle on top of sparkle ring

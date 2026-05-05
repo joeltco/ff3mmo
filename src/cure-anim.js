@@ -1,22 +1,30 @@
 // Cure spell animation — captured from FF3 NES via EMU tab REC OAM (100 frames).
 // White-magic SP3 palette is fixed in the ROM: [0x0F, 0x12, 0x22, 0x31].
 //
-// The captured animation has 5 distinguishable phases (60 Hz NES → ms):
-//   build-up (f0-47, 800ms)  — magic circle pulses 4 sizes + sparkle scatter
+// Vocabulary (the user's; pin it here so future-me doesn't drift):
+//   "flame"       — pulsing 4-size sprite drawn LEFT of the player; tiles $4A
+//                   (size 1) → $4B-$4E (size 2) → $4F-$52 (size 3) → $53-$56
+//                   (size 4) → $57 brackets (release flash).
+//   "stars"       — 8 rotating $49 tiles forming a ring around the player.
+//   "heal sparkle" — ONE 16×16 ($4A + $49 after CHR rebank) drawn on whoever
+//                   the spell is healing. NOT the same thing as the stars.
+//
+// The captured animation has 5 phases (60 Hz NES → ms):
+//   build-up (f0-47, 800ms)  — flame pulses 4 sizes + stars rotate around player
 //   lunge    (f48-59, 200ms) — caster slides; in our 16×16 portrait we hold
 //   cast     (f60-72, 217ms) — body swap (engine's existing item-use pose)
-//   heal     (f73-89, 283ms) — target sparkles ($4A + $49 after CHR rebank)
+//   heal     (f73-89, 283ms) — heal sparkle on target ($4A + $49 after CHR rebank)
 //   return   (f90-99, 167ms) — caster slides further, anim ends
 //
-// Tiles $4A, $49 mean different pixels in the build-up vs. heal phases due to
-// MMC3 CHR bank switching. Both byte sets are captured here.
+// Tiles $4A and $49 mean different pixels in the build-up vs. heal phases due
+// to MMC3 CHR bank switching. Both byte sets are captured here.
 
 import { NES_SYSTEM_PALETTE } from './tile-decoder.js';
 import { _makeCanvas16 } from './canvas-utils.js';
 
 const PAL = [0x0F, 0x12, 0x22, 0x31];
 
-// ── Build-up phase tiles ($4A-$57 + $49 small sparkle) ─────────────────────
+// ── Build-up phase tiles ($4A-$57 flame + $49 small star) ──────────────────
 
 const T_4A = new Uint8Array([0x00,0x00,0x00,0x00,0x03,0x04,0x0B,0x0B, 0x00,0x00,0x00,0x00,0x00,0x03,0x07,0x07]);
 
@@ -37,7 +45,7 @@ const T_56 = new Uint8Array([0xD8,0xC8,0xE8,0xD8,0xB0,0xE0,0x00,0x00, 0xE0,0xF0,
 
 const T_57 = new Uint8Array([0x00,0x00,0x30,0x20,0x08,0x04,0x00,0x00, 0x00,0x00,0x30,0x38,0x10,0x00,0x00,0x00]);
 
-const T_49_SMALL = new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 0x10,0x38,0xFE,0x7C,0x7C,0x6C,0x44,0x00]);
+const T_49_STAR = new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 0x10,0x38,0xFE,0x7C,0x7C,0x6C,0x44,0x00]);
 
 // ── Heal phase tiles (CHR bank-switched at f73) ─────────────────────────────
 const T_4A_HEAL = new Uint8Array([0x00,0x00,0x00,0x00,0x08,0x00,0x00,0x00, 0x00,0x00,0x00,0x08,0x1C,0x08,0x00,0x00]);
@@ -94,9 +102,9 @@ function _quad4(tl, tr, bl, br) {
 // ── Public init ─────────────────────────────────────────────────────────────
 
 // Returns:
-//   circleFrames: [size1, size2, size3, size4, brackets]    — 5× 16×16 canvases
-//   bgSparkle:    8×8 canvas (build-up sparkle, T_49_SMALL)
-//   healSparkleFrame: 16×16 canvas (heal-phase $4A+$49 sparkle, captured from f73)
+//   flameFrames:      [size1, size2, size3, size4, brackets] — 5× 16×16 canvases
+//   starTile:         8×8 canvas (build-up rotating-star tile, T_49_STAR)
+//   healSparkleFrame: 16×16 canvas (phase-4 target sparkle, captured from f73)
 export function initCureAnimSprites() {
   const t4a = _make8(T_4A);
   const t4b = _make8(T_4B), t4c = _make8(T_4C), t4d = _make8(T_4D), t4e = _make8(T_4E);
@@ -104,7 +112,7 @@ export function initCureAnimSprites() {
   const t53 = _make8(T_53), t54 = _make8(T_54), t55 = _make8(T_55), t56 = _make8(T_56);
   const t57 = _make8(T_57);
 
-  const circleFrames = [
+  const flameFrames = [
     _flippedQuad(t4a),               // size 1 — smallest ring
     _quad4(t4b, t4c, t4d, t4e),      // size 2
     _quad4(t4f, t50, t51, t52),      // size 3
@@ -112,7 +120,7 @@ export function initCureAnimSprites() {
     _flippedQuad(t57),               // brackets — release flash
   ];
 
-  const bgSparkle = _make8(T_49_SMALL);
+  const starTile = _make8(T_49_STAR);
 
   // Heal sparkle: same TL/TR/BL/BR pattern as captured frame 73, where $4A
   // (small dot) frames the corners and $49 (big asterisk) sits inside.
@@ -121,16 +129,16 @@ export function initCureAnimSprites() {
   const t49Heal = _make8(T_49_HEAL);
   const healSparkleFrame = _quad4(t4aHeal, t49Heal, t49Heal, t4aHeal);
 
-  return { circleFrames, bgSparkle, healSparkleFrame };
+  return { flameFrames, starTile, healSparkleFrame };
 }
 
 // ── Phase mapping (ms-based, 60 Hz NES capture × 16.67ms/frame) ─────────────
 
 export const CURE_PHASE_MS = {
-  buildup: 800,    // f0-47   magic circle pulses + bg sparkles
+  buildup: 800,    // f0-47   flame pulses + stars rotate
   lunge:   200,    // f48-59  caster slides (visual no-op in our portrait)
   cast:    217,    // f60-72  cast pose hold (engine's item-use pose)
-  heal:    283,    // f73-89  target sparkles + heal number
+  heal:    283,    // f73-89  heal sparkle on target + heal number
   ret:     167,    // f90-99  return — anim ends
 };
 
@@ -144,7 +152,7 @@ export const CURE_T_CAST   = CURE_T_LUNGE + CURE_PHASE_MS.lunge;
 export const CURE_T_HEAL   = CURE_T_CAST + CURE_PHASE_MS.cast;
 export const CURE_T_RETURN = CURE_T_HEAL + CURE_PHASE_MS.heal;
 
-// Build-up cycle, transcribed from OAM frame-by-frame (cure_bg, f0-47):
+// Flame pulse cycle, transcribed from OAM frame-by-frame (cure_bg, f0-47):
 //   f0-3   size 1 ($4A ×4 with corner flips)
 //   f4-7   size 2 normal
 //   f8-11  size 2 h-mirror (visually similar to size 2)
@@ -158,18 +166,20 @@ export const CURE_T_RETURN = CURE_T_HEAL + CURE_PHASE_MS.heal;
 // h-mirror variants collapse to their non-mirrored size (the eye doesn't
 // distinguish a symmetric ring from its mirror); cycle reduces to 9 hops at
 // 67 ms each, then brackets for ~200 ms.
-const _CIRCLE_SEQ = [0, 1, 1, 2, 3, 3, 2, 3, 3];
+const _FLAME_SEQ = [0, 1, 1, 2, 3, 3, 2, 3, 3];
 
-export function getCureCircleFrameIdx(elapsedMs) {
+// Returns 0..4 (size1, size2, size3, size4, brackets) or -1 if not in build-up.
+export function getCureFlameFrameIdx(elapsedMs) {
   if (elapsedMs < 0 || elapsedMs >= CURE_T_LUNGE) return -1;
   if (elapsedMs >= 600) return 4; // brackets
-  const step = Math.min(_CIRCLE_SEQ.length - 1, Math.floor(elapsedMs / 67));
-  return _CIRCLE_SEQ[step];
+  const step = Math.min(_FLAME_SEQ.length - 1, Math.floor(elapsedMs / 67));
+  return _FLAME_SEQ[step];
 }
 
-// True while the build-up bg sparkles ($49 small) should be drawn — phases 1+2
-// (f0-59 in capture). Sparkles continue through the lunge.
-export function shouldDrawBgSparkle(elapsedMs) {
+// True while the rotating stars should be drawn — phases 1+2 (f0-59 in
+// capture). Stars continue through the lunge phase even though the flame
+// disappears at the end of build-up.
+export function shouldDrawStars(elapsedMs) {
   return elapsedMs >= 0 && elapsedMs < CURE_T_CAST;
 }
 
