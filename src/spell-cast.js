@@ -105,12 +105,19 @@ function _applySpellEffect(target) {
   playSFX(isHeal ? SFX.CURE : SFX.SW_HIT);
 }
 
-// Returns true if the captured cure anim (magic circle build-up + cast pose +
-// heal sparkle) applies — recovery spells only. Status cures and damage spells
-// keep the legacy short timing until their own captures land.
+// Returns true if the captured white-magic anim (magic circle build-up + cast
+// pose + heal sparkle) applies. The FF3 ROM shares this animation across the
+// whole white-magic school — REC OAM of Poisona showed tiles $4A-$57 byte-
+// identical to Cure's, same SP3 palette `[0x0F, 0x15, 0x27, 0x30]`, same per-
+// frame progression. So recovery (Cure family), status-cure (Poisona, Bndna,
+// etc.) and revive (Raise) all use it. Damage spells aren't captured yet and
+// keep the legacy 1100 ms timing.
 function _isCureAnimSpell() {
   const spell = SPELLS.get(_spellId);
-  return !!(spell && spell.element === 'recovery');
+  if (!spell) return false;
+  return spell.element === 'recovery'
+      || spell.target === 'cure_status'
+      || spell.target === 'revive';
 }
 
 // Drives 'magic-cast' (windup) and 'magic-hit' (anim+effect) states.

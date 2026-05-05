@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.23 — 2026-05-05
+
+### White-magic anim widened from Cure-only to the whole school
+
+A 120-frame REC OAM capture of Poisona showed tiles `$4A-$57` byte-identical to the Cure capture (same SP3 palette `[0x0F, 0x15, 0x27, 0x30]`, same per-frame progression: small `$4B/$4C` → medium `$4D/$4E` → large `$4F/$50` → XL with mirroring `$53-$56` → brackets `$57`). The FF3 ROM uses one shared "white-magic cast" animation — the cure-anim work captured general-purpose white-magic tiles, not Cure-specific.
+
+`_isCureAnimSpell()` in `spell-cast.js` widened from `spell.element === 'recovery'` to also cover `spell.target === 'cure_status'` (Poisona, Bndna, etc.) and `spell.target === 'revive'` (Raise). Effects propagate automatically:
+
+- Status-cure spells now run through the full 1667 ms cure-anim timing (build-up 800 ms → lunge 200 ms → cast 217 ms → heal 283 ms → return 167 ms) instead of the legacy 1100 ms placeholder.
+- Magic-circle + 8-star ring renders caster-side via `getCureAnimElapsedMs()` (battle-drawing.js gates off the same predicate).
+- Heal-phase sparkle on the cured target via `shouldDrawHealSparkle()`.
+- `MAGIC_CAST` SFX at `magic-cast` start was already universal (fired in `startSpellCast` regardless of school per FF3J 33/B0D8/B0FF). `_applySpellEffect`'s `SFX.CURE` chime at heal-time now lands at the captured 1217 ms mark instead of 400 ms.
+
+Damage spells are not yet captured; they still keep the legacy 1100 ms timing. Followups in `docs/design-notes.md` updated accordingly.
+
+`src/spell-cast.js` (one function widened), `docs/design-notes.md` (followups).
+
 ## 1.7.22 — 2026-05-05
 
 ### EMU debugger — REC `DEDUPE` toggle (60–70% smaller spell captures)
