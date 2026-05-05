@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.7 — 2026-05-04
+
+### Magic-grant buttons — bitfield encoding fix
+
+1.7.6's WM/BM/CALL buttons wrote raw spell IDs (e.g. `0x34` for Cure) to `$6207-$620E`. Wrong encoding — the byte is a **bitfield**, not a spell ID. Each level packs 7 spells: bits 0-2 = the 3 white spells, bits 3-5 = the 3 black spells, bit 6 = the summon. Source: `ff3j.asm` at `3D/A1F4` (`LDA spell_mask,X / ORA $6207,X` — masks `01,02,04,08,10,20,40` × 8 levels).
+
+Writing `0x34` (binary `00110100`) for Cure was setting bits 2, 4, 5 → "Sight, Fire, Ice" all at once across two schools, hence "spells are all mixed up".
+
+Fix: write a per-school MASK to all 8 level bytes:
+
+- **WM SPELLS** → `0x07` per level (all 3 white spells)
+- **BM SPELLS** → `0x38` per level (all 3 black spells)
+- **CALL SPELLS** → `0x40` per level (the summon spell)
+
+Also added a job-level bump at `$6210+jobId*2 = 99` so all 8 magic levels actually unlock — without that, char level alone wasn't enough to access higher tiers.
+
 ## 1.7.6 — 2026-05-04
 
 ### EMU debugger — magic-grant preset buttons

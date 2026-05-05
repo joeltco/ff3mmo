@@ -942,37 +942,38 @@ const PRESETS = {
     }
     return 'inventory cleared';
   },
-  'wm-spells': () => _grantMagic(0x03, WM_SPELLS, 'WM'),
-  'bm-spells': () => _grantMagic(0x04, BM_SPELLS, 'BM'),
-  'call-spells': () => _grantMagic(0x13, CALL_SPELLS, 'Call'),
+  'wm-spells': () => _grantMagic(0x03, WM_MASK, 'WM'),
+  'bm-spells': () => _grantMagic(0x04, BM_MASK, 'BM'),
+  'call-spells': () => _grantMagic(0x13, CALL_MASK, 'Call'),
 };
 
-// Spell IDs equipped per magic level (L1 → L8). Cross-referenced from
-// tools/rom-dump-spells.txt and rpgclassics FF3 NES spell tables.
-// WM/BM only fill 7 levels (their max in their pure job); L8 is Sage-only.
-// Call IDs are best-guess effect spells from the summon table; verify empirically.
-const WM_SPELLS = [0x34, 0x2D, 0x26, 0x1F, 0x18, 0x13, 0x0A, 0x00];
-//                 Cure  Aero  Cura  Libra Curaga Haste Curaja —
-const BM_SPELLS = [0x31, 0x2A, 0x23, 0x1C, 0x15, 0x0E, 0x07, 0x00];
-//                 Fire  Bolt  Fira  Break Taga  Firaga Quake —
-const CALL_SPELLS = [0x48, 0x3A, 0x3B, 0x39, 0x3D, 0x3E, 0x41, 0x42];
-//                  Sumn  Bliz  Thun  Fire  Quake Glare Tidal ParcBm
+// $6207-$620E is a BITFIELD, not a spell ID — bits 0-2 = the level's 3 white
+// spells, 3-5 = the 3 black spells, 6 = the summon. Source: ff3j.asm 3D/A1F4.
+// Set the relevant bits per level to grant every spell in the school. Job
+// level (at $6210+job*2 in struct B) gates which levels actually unlock,
+// so we bump that to 99 too.
+const WM_MASK   = 0x07;  // bits 0,1,2 — all 3 white spells per level
+const BM_MASK   = 0x38;  // bits 3,4,5 — all 3 black spells per level
+const CALL_MASK = 0x40;  // bit 6 — the summon spell per level
+const JOB_LEVELS_OFF = 0x10;  // char B: $6210+job*2 (job level), +1 (exp)
 
-function _grantMagic(jobId, spellIds, label) {
+function _grantMagic(jobId, levelMask, label) {
   const a = SRAM_BASE + CHARS_A_OFF;       // char 1 part A ($6100)
   const b = SRAM_BASE + CHARS_B_OFF;       // char 1 part B ($6200)
   _ramWrite(a + JOB_OFF, jobId);
   _ramWrite(a + LEVEL_OFF, 50);
+  // Bump job level for the active job so all 8 magic levels unlock.
+  _ramWrite(b + JOB_LEVELS_OFF + jobId * 2, 99);
   // MP: 0x09 / 0x09 (current/max) per level — high enough to cast freely.
   for (let lvl = 0; lvl < 8; lvl++) {
     _ramWrite(a + MP_OFF + lvl * 2 + 0, 0x09);
     _ramWrite(a + MP_OFF + lvl * 2 + 1, 0x09);
   }
-  // Spell list: 1 byte per level at $6207-$620E.
+  // Spell knowledge bitfield: same mask for all 8 levels.
   for (let lvl = 0; lvl < 8; lvl++) {
-    _ramWrite(b + SPELL_LIST_OFF + lvl, spellIds[lvl] & 0xFF);
+    _ramWrite(b + SPELL_LIST_OFF + lvl, levelMask);
   }
-  return `char A → ${label} (job ${_hex(jobId, 2)}, lv50, 8 spells set)`;
+  return `char A → ${label} (job ${_hex(jobId, 2)}, lv50, joblv99, mask ${_hex(levelMask, 2)})`;
 }
 
 function _runPreset(name) {
