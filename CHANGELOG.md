@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.14 — 2026-05-05
+
+### Cure spell — cast SFX at build-up start + real ring rotation
+
+Two fixes:
+
+1. **Cast SFX fires at build-up start.** `SFX.CURE` was only playing at heal-effect application (~1217 ms in). Now also fires at the moment `startSpellCast` flips to `magic-cast` state, matching the FF3 NES chime that plays as the magic circle starts forming. Status-cure (Poisona) and revive (Raise) get the same cast chime; damage spells unchanged.
+2. **Sparkle ring actually rotates now.** 1.7.13 used `Array.shift` to "rotate" 8 sparkles through 8 fixed positions, which is a no-op — same canvas at the same 8 spots. Replaced with real polar math: 8 sparkles on a radius-15 ring centered at body-relative `(4, 7)`, completing one full turn every 4 s.
+
+`src/spell-cast.js` (cast SFX), `src/battle-drawing.js` (rotation math).
+
 ## 1.7.13 — 2026-05-05
 
 ### Cure spell — three corrections from re-reading the OAM frame-by-frame

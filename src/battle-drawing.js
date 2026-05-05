@@ -328,19 +328,21 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
       ui.ctx.drawImage(bsc.cureCircleFrames[circleIdx], px - 16, py + 5);
     }
     if (shouldDrawBgSparkle(cureMs) && bsc.cureBgSparkle) {
-      // 8 sparkles encircling the body+circle scene at the OAM frame-0 offsets
-      // (body-relative, since group origin = body top-left). NES jitters these
-      // ±1-2px per frame; that's invisible at our render rate, so static reads
-      // the same. Lower three sparkles (y > 16) extend below the 16×16 portrait
-      // box but stay within the ally panel area.
+      // 8 sparkles on a ring around the body+circle scene. The OAM has fixed
+      // base positions with ±1-2 px per-frame jitter; we render real rotation
+      // around the ring center to give a visible halo motion. Center derived
+      // from OAM frame 0 (top sparkle x=4, ring vertical extent y=-8..22 →
+      // center y=7); radius 15 matches the captured spacing. Period 4 s.
       const s = bsc.cureBgSparkle;
-      const SPARKLE_OFFSETS = [
-        [ 4, -8], [-7, -4], [15, -4],   // top, upper-L, upper-R
-        [-11, 7], [19,  7],             // left, right
-        [-7, 18], [15, 18], [ 4, 22],   // lower-L, lower-R, bottom
-      ];
-      for (const [dx, dy] of SPARKLE_OFFSETS) {
-        ui.ctx.drawImage(s, px + dx, py + dy);
+      const cx = px + 4, cy = py + 7;       // ring center, body-relative
+      const r = 15;                          // radius
+      const N = 8;
+      const rotRad = (cureMs / 4000) * Math.PI * 2; // one full turn / 4 s
+      for (let i = 0; i < N; i++) {
+        const a = (i / N) * Math.PI * 2 + rotRad - Math.PI / 2; // start at top
+        const sx = Math.round(cx + Math.cos(a) * r - 4);
+        const sy = Math.round(cy + Math.sin(a) * r - 4);
+        ui.ctx.drawImage(s, sx, sy);
       }
     }
   }
