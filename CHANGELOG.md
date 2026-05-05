@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.12 — 2026-05-05
+
+### Cure heal sparkle — single tile on body, not corner-mirrored
+
+1.7.10/.11 routed the heal-phase sparkle through the existing `drawSparkleCorners` helper (used by Defend, item-use, etc.), which mirrors the 16×16 frame to all four portrait corners. The OAM captures show the heal sparkle is a single 16×16 placed on the body at relative `[0,5]-[16,13]`, not four mirrored copies. Replaced the corner-mirror helper with a plain `drawImage` at portrait position for both player-self and ally-target heal paths.
+
+`src/battle-drawing.js` only — two render sites.
+
 ## 1.7.11 — 2026-05-05
 
 ### Cure spell — bg sparkles now orbit the player

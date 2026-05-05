@@ -344,14 +344,16 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
       }
     }
   }
-  // Heal sparkle (phase 4) on player portrait — replaces the legacy 67ms flicker.
-  // For item-use Cure (potions), keep the legacy timer-based flicker since item-
-  // use has no captured anim phase data.
+  // Heal sparkle (phase 4) on player portrait — ONE 16×16 sparkle drawn on the
+  // portrait, alternating between two flip arrangements every 67 ms. The OAM
+  // captures show a single sparkle on the body at relative [0,5]-[16,13], NOT
+  // a corner-mirrored quadruple. Item-use Cure (potions) reuses the same single
+  // sparkle since its anim phase data isn't captured separately.
   if ((isCureItemUse || isCureMagicSelf) && bsc.cureSparkleFrames.length === 2) {
     const showHeal = isCureItemUse || (cureMs >= 0 && shouldDrawHealSparkle(cureMs));
     if (showHeal) {
       const fi = Math.floor(battleSt.battleTimer / 67) & 1;
-      drawSparkleCorners(bsc.cureSparkleFrames[fi], px, py);
+      ui.ctx.drawImage(bsc.cureSparkleFrames[fi], px, py);
     }
   }
   // Near-fatal sweat — 2 frames alternating every 133ms, 3px above portrait
@@ -1400,7 +1402,9 @@ function _flushAllyWeaponDraws(weaponDraws) {
       }
     } else if (wd.type === 'sparkle') {
       const { frame, px, py } = wd;
-      drawSparkleCorners(frame, px, py);
+      // OAM has a single 16×16 sparkle on the target body at [0,5]-[16,13],
+      // not a corner-mirrored quadruple — match the captured pattern.
+      ui.ctx.drawImage(frame, px, py);
     } else {
       ui.ctx.drawImage(wd.img, wd.x, wd.y);
     }
