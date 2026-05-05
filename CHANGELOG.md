@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.18 — 2026-05-05
+
+### Cure on ally — heal sparkle only on the target, not the caster too
+
+`isCureMagicSelf` was checking `target === 'player'`, which means "player-side target" and is true for BOTH self-cast and ally-cast (since allies are player-side). So when casting Cure on an ally, the heal sparkle was drawing on the player AND the targeted ally. The actual self/ally distinction is `allyIndex`: `< 0` = self, `>= 0` = ally N. Tightened the check to `allyIndex == null || allyIndex < 0`.
+
+Caster-side animation (magic circle + 8-sparkle ring) is unchanged — it still draws on the player in both cases, since the player is the caster regardless of target. Only the heal-effect sparkle moves correctly to the target.
+
+`src/battle-drawing.js` — one condition.
+
 ## 1.7.17 — 2026-05-05
 
 ### Cure sparkle ring — center fix + speed match to NES rate

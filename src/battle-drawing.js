@@ -316,9 +316,12 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
   // target heal sparkles are drawn at the ally portrait below.
   const isMagicState = battleSt.battleState === 'magic-cast' || battleSt.battleState === 'magic-hit';
   const isCureItemUse = battleSt.battleState === 'item-use' && !(inputSt.playerActionPending && inputSt.playerActionPending.allyIndex >= 0);
+  // Self-cast only: allyIndex < 0 (or absent) means target is the player.
+  // `target === 'player'` is "player-side target" which includes allies — using
+  // it here was the bug that drew the heal sparkle on the player for ally Cure.
   const isCureMagicSelf = isMagicState
     && inputSt.playerActionPending && inputSt.playerActionPending.command === 'magic'
-    && (inputSt.playerActionPending.target === 'player' || inputSt.playerActionPending.allyIndex < 0);
+    && (inputSt.playerActionPending.allyIndex == null || inputSt.playerActionPending.allyIndex < 0);
   const cureMs = isMagicState ? getCureAnimElapsedMs() : -1;
   if (cureMs >= 0 && bsc.cureCircleFrames.length === 5) {
     const circleIdx = getCureCircleFrameIdx(cureMs);
