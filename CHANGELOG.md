@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.17 — 2026-05-05
+
+### Cure sparkle ring — center fix + speed match to NES rate
+
+Two bugs, both from doing the math wrong on the OAM dump.
+
+**Off-center.** I'd built the ring centroid from sparkle TOP-LEFT positions (the OAM's `[x,y]` is the 8×8 tile's TL corner). The actual ring center is the centroid of sparkle CENTERS, which is body-relative `(8, 11)` — i.e., body horizontal center, slightly below body vertical center. In our 16-tall portrait that's effectively `(px+8, py+8)`. 1.7.16 had it at `(px+4, py+7)` — 4 left, 1 up of where it should be.
+
+**Speed.** Tracked the top-sparkle angle through f0..f3: `-90°, -86.2°, -78.7°, -75.1°` → ~5°/NES-frame. At 60 fps that's 300°/s, or one full turn every 1.2 s. 1.7.16 was 4 s/turn (3.3× too slow); now 1200 ms/turn matches the captured rate.
+
+`src/battle-drawing.js` — three numbers (`cx`, `cy`, period).
+
 ## 1.7.16 — 2026-05-05
 
 ### Magic-cast SFX wired from FF3J disassembly

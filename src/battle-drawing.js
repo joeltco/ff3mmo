@@ -328,16 +328,18 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
       ui.ctx.drawImage(bsc.cureCircleFrames[circleIdx], px - 16, py + 5);
     }
     if (shouldDrawBgSparkle(cureMs) && bsc.cureBgSparkle) {
-      // 8 sparkles on a ring around the body+circle scene. The OAM has fixed
-      // base positions with ±1-2 px per-frame jitter; we render real rotation
-      // around the ring center to give a visible halo motion. Center derived
-      // from OAM frame 0 (top sparkle x=4, ring vertical extent y=-8..22 →
-      // center y=7); radius 15 matches the captured spacing. Period 4 s.
+      // 8 sparkles on a radius-15 ring around the portrait, rotating CW at the
+      // OAM-measured rate. Tracked frames f0-f3: top sparkle angle goes -90°,
+      // -86.2°, -78.7°, -75.1° → ~5°/NES-frame × 60 fps = 300°/s = 1.2 s per
+      // full turn. Ring center is the centroid of sparkle CENTERS (not their
+      // top-left corners) → body-relative (8, 11), which in our 16-tall
+      // portrait is the portrait center (px+8, py+8). 1.7.16 had it off by
+      // (4, 4) because I'd used TL positions for the centroid.
       const s = bsc.cureBgSparkle;
-      const cx = px + 4, cy = py + 7;       // ring center, body-relative
-      const r = 15;                          // radius
+      const cx = px + 8, cy = py + 8;
+      const r = 15;
       const N = 8;
-      const rotRad = (cureMs / 4000) * Math.PI * 2; // one full turn / 4 s
+      const rotRad = (cureMs / 1200) * Math.PI * 2; // CW, 1.2 s / turn
       for (let i = 0; i < N; i++) {
         const a = (i / N) * Math.PI * 2 + rotRad - Math.PI / 2; // start at top
         const sx = Math.round(cx + Math.cos(a) * r - 4);
