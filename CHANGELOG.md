@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.19 — 2026-05-05
+
+### Cure draw order — magic circle on top of sparkle ring
+
+Swapped the draw order in the cure-anim render block: sparkle ring renders first (background), magic circle renders on top. Previously the circle rendered first and the rotating sparkles painted over its detailed pixels where the ring's left arc swept past. Now the circle's detail reads clean even when a sparkle passes behind it.
+
+`src/battle-drawing.js` — two `drawImage` calls swapped.
+
 ## 1.7.18 — 2026-05-05
 
 ### Cure on ally — heal sparkle only on the target, not the caster too

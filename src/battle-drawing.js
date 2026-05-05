@@ -324,31 +324,29 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
     && (inputSt.playerActionPending.allyIndex == null || inputSt.playerActionPending.allyIndex < 0);
   const cureMs = isMagicState ? getCureAnimElapsedMs() : -1;
   if (cureMs >= 0 && bsc.cureCircleFrames.length === 5) {
-    const circleIdx = getCureCircleFrameIdx(cureMs);
-    if (circleIdx >= 0) {
-      // Magic circle 16×16 immediately LEFT of portrait, dropped 5 px to match
-      // the OAM where circle starts at group y=13 vs body at group y=8.
-      ui.ctx.drawImage(bsc.cureCircleFrames[circleIdx], px - 16, py + 5);
-    }
+    // Draw order: sparkle ring FIRST (background), magic circle on TOP.
+    // Where the ring's left arc passes behind the magic circle, the circle's
+    // detailed pixels read clearly instead of being overwritten by sparkles.
     if (shouldDrawBgSparkle(cureMs) && bsc.cureBgSparkle) {
       // 8 sparkles on a radius-15 ring around the portrait, rotating CW at the
-      // OAM-measured rate. Tracked frames f0-f3: top sparkle angle goes -90°,
-      // -86.2°, -78.7°, -75.1° → ~5°/NES-frame × 60 fps = 300°/s = 1.2 s per
-      // full turn. Ring center is the centroid of sparkle CENTERS (not their
-      // top-left corners) → body-relative (8, 11), which in our 16-tall
-      // portrait is the portrait center (px+8, py+8). 1.7.16 had it off by
-      // (4, 4) because I'd used TL positions for the centroid.
+      // OAM-measured rate (~5°/NES-frame × 60 fps = 300°/s = 1.2 s per turn).
       const s = bsc.cureBgSparkle;
       const cx = px + 8, cy = py + 8;
       const r = 15;
       const N = 8;
-      const rotRad = (cureMs / 1200) * Math.PI * 2; // CW, 1.2 s / turn
+      const rotRad = (cureMs / 1200) * Math.PI * 2; // CW
       for (let i = 0; i < N; i++) {
         const a = (i / N) * Math.PI * 2 + rotRad - Math.PI / 2; // start at top
         const sx = Math.round(cx + Math.cos(a) * r - 4);
         const sy = Math.round(cy + Math.sin(a) * r - 4);
         ui.ctx.drawImage(s, sx, sy);
       }
+    }
+    const circleIdx = getCureCircleFrameIdx(cureMs);
+    if (circleIdx >= 0) {
+      // Magic circle 16×16 immediately LEFT of portrait, dropped 5 px to match
+      // the OAM where circle starts at group y=13 vs body at group y=8.
+      ui.ctx.drawImage(bsc.cureCircleFrames[circleIdx], px - 16, py + 5);
     }
   }
   // Heal sparkle (phase 4) on player portrait — ONE 16×16 sparkle drawn on the
