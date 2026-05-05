@@ -2,6 +2,28 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.8 — 2026-05-04
+
+### Magic-grant buttons — bit-field correction + ALL SPELLS
+
+1.7.7 still had the white/black bits inverted, and the CALL button was wrong: bit 6 doesn't grant summons (Chocb/Shiva/Ramuh/etc.) — those are inventory book items at `$60C0-$60FF`. Bit 6 grants the underlying *summon-effect spells* (FF3J names: Bahamur, Heatra, Spark, Catas, Hyper, Icen, Leviath, Escape — the spells that summons cast into).
+
+Verified bit-mapping by cross-ref'ing L8 spell IDs against the disassembly mask table:
+
+| Bit | Mask | School | L1 / L8 example |
+|---|---|---|---|
+| 0-2 | 0x01 / 0x02 / 0x04 | **Black** | Sleep/Fire/Ice → Flare/Death/Meteor |
+| 3-5 | 0x08 / 0x10 / 0x20 | **White** | Pure/Cure/Sight → WWind/Life2/Holy |
+| 6 | 0x40 | Summon-effect | Escape → Bahamur |
+
+Changes:
+
+- **WM SPELLS** now writes `0x38` (bits 3-5) — was `0x07`, swapped.
+- **BM SPELLS** now writes `0x07` (bits 0-2) — was `0x38`, swapped.
+- **CALL SPELLS** removed; replaced with **ALL SPELLS** writing `0x7F` (all 7 bits) and setting job to Sage (`$6100=14`). Sage is the only job that can naturally use bits across all schools, and the all-bits mask gets every animation-bearing spell in the bitfield in one tap.
+
+For real summon books (Chocb/Shiva/etc.), TODO is a separate `SUMMON BOOKS` preset that pokes the 8 summon-book item IDs into inventory — needs item-table research.
+
 ## 1.7.7 — 2026-05-04
 
 ### Magic-grant buttons — bitfield encoding fix

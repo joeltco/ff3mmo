@@ -944,17 +944,23 @@ const PRESETS = {
   },
   'wm-spells': () => _grantMagic(0x03, WM_MASK, 'WM'),
   'bm-spells': () => _grantMagic(0x04, BM_MASK, 'BM'),
-  'call-spells': () => _grantMagic(0x13, CALL_MASK, 'Call'),
+  'all-spells': () => _grantMagic(0x14, ALL_MASK, 'Sage'),
 };
 
-// $6207-$620E is a BITFIELD, not a spell ID — bits 0-2 = the level's 3 white
-// spells, 3-5 = the 3 black spells, 6 = the summon. Source: ff3j.asm 3D/A1F4.
-// Set the relevant bits per level to grant every spell in the school. Job
-// level (at $6210+job*2 in struct B) gates which levels actually unlock,
-// so we bump that to 99 too.
-const WM_MASK   = 0x07;  // bits 0,1,2 — all 3 white spells per level
-const BM_MASK   = 0x38;  // bits 3,4,5 — all 3 black spells per level
-const CALL_MASK = 0x40;  // bit 6 — the summon spell per level
+// $6207-$620E is a BITFIELD, not a spell ID — 7 spells per level packed:
+//   bits 0-2 = the 3 BLACK spells of that level
+//   bits 3-5 = the 3 WHITE spells of that level
+//   bit  6   = the level's "summon-effect" spell (Bahamur, Heatra, Spark, etc.)
+// Source: ff3j.asm 3D/A1F4 (`LDA spell_mask,X / ORA $6207,X`, masks 01,02,04,
+// 08,10,20,40 × 8 levels) cross-referenced with the spell ID table at L8
+// (Flare/Death/Meteor at bits 0-2, WWind/Life2/Holy at 3-5, Bahamur at 6).
+//
+// Real summon books (Chocb/Shiva/Ramuh/Ifrit/Titan/Odin/Levia/Baham) are
+// inventory ITEMS, not bits in $6207. TODO: add a SUMMON BOOKS preset that
+// pokes the right item IDs into $60C0-$60FF.
+const BM_MASK  = 0x07;  // bits 0,1,2 — all 3 black spells per level
+const WM_MASK  = 0x38;  // bits 3,4,5 — all 3 white spells per level
+const ALL_MASK = 0x7F;  // every bit — black + white + summon-effect (Sage's spread)
 const JOB_LEVELS_OFF = 0x10;  // char B: $6210+job*2 (job level), +1 (exp)
 
 function _grantMagic(jobId, levelMask, label) {
@@ -1239,8 +1245,8 @@ function _buildDOM(parent) {
   const btnClearInv = mkBtn('CLEAR INV', () => _runPreset('clear-inv'));
   const btnWMSpells = mkBtn('WM SPELLS', () => _runPreset('wm-spells'));
   const btnBMSpells = mkBtn('BM SPELLS', () => _runPreset('bm-spells'));
-  const btnCallSpells = mkBtn('CALL SPELLS', () => _runPreset('call-spells'));
-  editBtnRow.append(btnDumpState, btnFullHP, btnClearInv, btnWMSpells, btnBMSpells, btnCallSpells);
+  const btnAllSpells = mkBtn('ALL SPELLS', () => _runPreset('all-spells'));
+  editBtnRow.append(btnDumpState, btnFullHP, btnClearInv, btnWMSpells, btnBMSpells, btnAllSpells);
   editBody.appendChild(editBtnRow);
 
   const writeInput = document.createElement('textarea');
