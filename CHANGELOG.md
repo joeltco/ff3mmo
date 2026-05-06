@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.38 — 2026-05-06
+
+### Ally miss-swing hold bumped to 200ms
+
+1.7.35 fixed the early-advance bug on miss but kept the 90ms slash hold for both hit and miss. Hits stayed readable because the white slash-flash overlay draws the eye to the strike. Misses have no flash, so 90ms (5 frames) of body + swung weapon canvas alone reads as a blink — the user reported "still not seeing" the fwd staff on miss after reloading. Split the hold: hits keep 90ms (flash carries the visual weight), misses now hold 200ms (12 frames) so the swung-staff frame reads clearly without the flash.
+
+`src/battle-ally.js` only.
+
 ## 1.7.37 — 2026-05-06
 
 ### WM heal threshold restored to 60%
