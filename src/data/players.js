@@ -122,7 +122,10 @@ export function generateAllyStats(player) {
   const atk = calcAttackerAtk({
     rWpnAtk, lWpnAtk, isMonkClass, level: lv, str, jobLevel: 1,
   });
-  const def = vit + totalDef;
+  // floor(vit/2) — mirrors the player's recalcDEF and the floor(str/2) attacker
+  // formula. Prior `vit + totalDef` left NPC allies tankier than their stat-screen
+  // ATK could overcome, especially in PVP where both sides use this helper.
+  const def = Math.floor(vit / 2) + totalDef;
   // Evade/mdef/sResist from armor
   let evade = 0, mdef = 0, statusResist = 0;
   if (player.armorId != null) { const a = ITEMS.get(player.armorId) || {}; evade += a.evade || 0; mdef += a.mdef || 0; statusResist |= a.sResist || 0; }

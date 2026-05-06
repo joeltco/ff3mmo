@@ -112,7 +112,7 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
           const firstHandR = isWeapon(ps.weaponR) || !isWeapon(ps.weaponL);
           const bladed = isBladedWeapon(firstWpnId);
           inputSt.playerActionPending = { command: 'fight', targetIndex: pick.index,
-            hitResults: rollHits(ps.atk, mon.def, effHitRate, potHits, _playerCrit),
+            hitResults: rollHits(ps.atk, mon.def, effHitRate, potHits, { ..._playerCrit, evade: mon.evade || 0 }),
             slashFrames: getSlashFramesForWeapon(firstWpnId, firstHandR),
             slashOffX: bladed ? 8 : Math.floor(Math.random() * 40) - 20,
             slashOffY: bladed ? -8 : Math.floor(Math.random() * 40) - 20,
@@ -171,19 +171,24 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
       if (living.length === 0) { processNextTurn(); return; }
       battleSt.allyTargetIndex = living[Math.floor(Math.random() * living.length)];
     } else { battleSt.allyTargetIndex = -1; }
-    const targetDef = battleSt.allyTargetIndex >= 0 ? battleSt.encounterMonsters[battleSt.allyTargetIndex].def
-      : pvpSt.isPVPBattle
-        ? (pvpSt.pvpPlayerTargetIdx >= 0
-            ? (pvpSt.pvpEnemyAllies[pvpSt.pvpPlayerTargetIdx] || pvpSt.pvpOpponentStats).def
-            : pvpSt.pvpOpponentStats.def)
-        : BOSS_DEF;
+    const monTgt = battleSt.allyTargetIndex >= 0 ? battleSt.encounterMonsters[battleSt.allyTargetIndex] : null;
+    const pvpTgt = !monTgt && pvpSt.isPVPBattle
+      ? (pvpSt.pvpPlayerTargetIdx >= 0
+          ? (pvpSt.pvpEnemyAllies[pvpSt.pvpPlayerTargetIdx] || pvpSt.pvpOpponentStats)
+          : pvpSt.pvpOpponentStats)
+      : null;
+    const targetDef = monTgt ? monTgt.def : pvpTgt ? pvpTgt.def : BOSS_DEF;
     // Unarmed = dual fists (same as player path) → 2x hits.
     const aRw = isWeapon(ally.weaponId), aLw = isWeapon(ally.weaponL);
     const dualWield = (aRw && aLw) || (!aRw && !aLw);
     const potentialHits = calcPotentialHits(ally.level || 1, ally.agi, dualWield);
     const _allyJob = JOBS[ally.jobIdx || 0] || {};
-    battleSt.allyHitResults = rollHits(ally.atk, targetDef, ally.hitRate || 85, potentialHits,
-      { critPct: _allyJob.critPct || 0, critBonus: _allyJob.critBonus || 0 });
+    battleSt.allyHitResults = rollHits(ally.atk, targetDef, ally.hitRate || 85, potentialHits, {
+      critPct: _allyJob.critPct || 0,
+      critBonus: _allyJob.critBonus || 0,
+      shieldEvade: pvpTgt ? (pvpTgt.shieldEvade || 0) : 0,
+      evade: monTgt ? (monTgt.evade || 0) : pvpTgt ? (pvpTgt.evade || 0) : 0,
+    });
     battleSt.allyHitIdx = 0;
     battleSt.allyHitResult = battleSt.allyHitResults[0];
     battleSt.battleState = 'ally-attack-back'; battleSt.battleTimer = 0;

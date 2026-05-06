@@ -44,10 +44,12 @@ export function calcAttackerAtk({ rWpnAtk, lWpnAtk, isMonkClass, level, str, job
   return rWpnAtk + lWpnAtk + Math.floor(str / 2);
 }
 
-// NES FF3 hit count (from disasm 31/ABCE-ABE3): 1 + floor(level/16) + floor(AGI/16)
-// dualWield: each hand gets full hits (total = base * 2). Single weapon: min 1.
+// Hit count: 1 + floor(level/12) + floor(AGI/12). NES uses /16; we tightened to
+// /12 so mid-levels (~12-24) feel snappier — at /16 you're stuck on 1 hit
+// through level 15, which felt flat. dualWield: each hand gets full hits
+// (total = base * 2). Single weapon: min 1.
 export function calcPotentialHits(level, agi, dualWield) {
-  const base = Math.max(1, 1 + Math.floor(level / 16) + Math.floor(agi / 16));
+  const base = Math.max(1, 1 + Math.floor(level / 12) + Math.floor(agi / 12));
   return dualWield ? base * 2 : base;
 }
 

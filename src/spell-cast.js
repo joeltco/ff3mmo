@@ -77,6 +77,20 @@ function _applySpellEffect(target) {
   if (!spell) return;
   const isCureStatus = spell.target === 'cure_status';
   const isHeal = spell.element === 'recovery';
+  // Hit-rate gate for offensive spells. Friendly targets (cure_status, heal,
+  // revive) skip the roll — Poisona on a poisoned ally shouldn't fail. Future
+  // player-cast offensive status spells (Sleep / Confuse / Blind on enemies)
+  // route through `enemy` / `enemy_status` and roll spell.hit vs 100. Auto-
+  // success when spell.hit is missing or 100.
+  const isOffensive = spell.target === 'enemy' || spell.target === 'enemy_status' || spell.target === 'all_enemies';
+  if (isOffensive && spell.hit > 0 && spell.hit < 100) {
+    if (Math.random() * 100 >= spell.hit) {
+      // Resisted — render miss-style heal num so the caster sees the spell whiffed.
+      if (target === 'player') setPlayerHealNum({ value: 0, miss: true, timer: 0 });
+      else getAllyDamageNums()[target] = { value: 0, miss: true, timer: 0 };
+      return;
+    }
+  }
   if (isCureStatus) {
     const flag = SPELL_CURE_FLAG[spell.type];
     if (target === 'player') {

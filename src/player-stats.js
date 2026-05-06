@@ -135,7 +135,11 @@ export function recalcDEF(vitBonus = 0) {
   }
   const rDef = ITEMS.get(ps.weaponR)?.def || 0;
   const lDef = ITEMS.get(ps.weaponL)?.def || 0;
-  ps.def = (ps.stats ? ps.stats.vit : 4) + vitBonus
+  // DEF uses floor(vit/2) to mirror the floor(str/2) attacker formula —
+  // without it the asymmetry leaves defenders much tankier than the
+  // displayed ATK/DEF spread implies.
+  const effVit = (ps.stats ? ps.stats.vit : 4) + vitBonus;
+  ps.def = Math.floor(effVit / 2)
     + rDef + lDef
     + (ITEMS.get(ps.head)?.def || 0)
     + (ITEMS.get(ps.body)?.def || 0)

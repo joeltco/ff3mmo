@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.60 — 2026-05-06
+
+### Damage audit follow-ups — apply all five flagged items
+
+1. **Player/ally → PVP enemy now rolls target shield/evade.** `input-handler.js` `rollHand` and `battle-turn.js` ally-attack now thread `tgt.shieldEvade` / `tgt.evade` into `rollHits`. Mirror of 1.7.59 — opponents' shields and evade armor used to work only on defense.
+2. **Player/ally → monster now rolls `mon.evade`.** Every monster row carries `evade: 10`+ but it was being ignored, giving players a quiet ~10% accuracy buff. Routed through `rollHand` for the main attack path and the confused-attack-monster branch.
+3. **DEF formula halves vit.** `recalcDEF` (player) and `generateAllyStats` (NPCs) now compute `floor(vit/2) + armor.def` instead of `vit + armor.def`. Matches the `floor(str/2)` attacker formula from 1.7.58 — restores symmetry so the displayed ATK/DEF spread tracks actual outcomes. Existing players will see lower DEF in the pause menu; that number is the one the damage roll always actually used.
+4. **Hit count divisors 16 → 12.** `calcPotentialHits = 1 + floor(level/12) + floor(agi/12)`. Mid-levels (12-24) now grow hit counts visibly instead of staying glued to 1 hit through level 15.
+5. **Spell hit-rate gate added for offensive targets.** `spell-cast._applySpellEffect` now rolls `spell.hit` for `enemy` / `enemy_status` / `all_enemies` targets when hit < 100. Friendly targets (cure_status, ally heal, revive) skip the roll — Poisona on a poisoned ally still always succeeds. No-op for current player kit (only Cure/Poisona are castable); ready for future Sleep/Confuse/Blind on enemies.
+
 ## 1.7.59 — 2026-05-06
 
 ### PVP enemy → roster ally — apply ally shield/evade (was silently dropped)

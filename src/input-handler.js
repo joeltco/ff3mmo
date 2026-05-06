@@ -192,14 +192,23 @@ function _battleTargetConfirm() {
     const handElem = wpn ? (wpn.element || null) : null;
     if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
       const mon = battleSt.encounterMonsters[inputSt.targetIndex];
-      return rollHits(handAtk, mon.def, handHit, hitsPerHand, { ...critOpts, elemMult: elemMultiplier(handElem, mon.weakness, mon.resist) });
+      return rollHits(handAtk, mon.def, handHit, hitsPerHand, {
+        ...critOpts,
+        elemMult: elemMultiplier(handElem, mon.weakness, mon.resist),
+        evade: mon.evade || 0,
+      });
     } else {
-      const targetDef = pvpSt.isPVPBattle && pvpSt.pvpOpponentStats
+      const tgt = pvpSt.isPVPBattle && pvpSt.pvpOpponentStats
         ? (pvpSt.pvpPlayerTargetIdx >= 0
-            ? (pvpSt.pvpEnemyAllies[pvpSt.pvpPlayerTargetIdx] || pvpSt.pvpOpponentStats).def
-            : pvpSt.pvpOpponentStats.def)
-        : BOSS_DEF;
-      return rollHits(handAtk, targetDef, handHit, hitsPerHand, critOpts);
+            ? (pvpSt.pvpEnemyAllies[pvpSt.pvpPlayerTargetIdx] || pvpSt.pvpOpponentStats)
+            : pvpSt.pvpOpponentStats)
+        : null;
+      const targetDef = tgt ? tgt.def : BOSS_DEF;
+      return rollHits(handAtk, targetDef, handHit, hitsPerHand, {
+        ...critOpts,
+        shieldEvade: tgt ? (tgt.shieldEvade || 0) : 0,
+        evade: tgt ? (tgt.evade || 0) : 0,
+      });
     }
   }
   if (dualWield) {
