@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.45 — 2026-05-06
+
+### Hotfix — re-disable 1.7.42 enemy-magic / item AI hooks (1.7.44 still freezing)
+
+1.7.44's poison-tick handler fix did not unblock the user. Reverting the AI call-sites again (matching 1.7.43) while keeping the poison-tick fix in place. Confirms whether the freeze is in the new magic/item AI vs elsewhere.
+
+- `_processEnemyFlash` reverted to main-opp-only defend / self-heal-50 / sword-throw decision tree.
+- `_tryAllyItem` invocation removed from WM AI chain.
+- `updatePoisonTick` still wired into the PVP dispatcher (1.7.44 fix preserved).
+
+`src/pvp.js`, `src/battle-turn.js`.
+
 ## 1.7.44 — 2026-05-06
 
 ### Fix: poison-tick handler missing from PVP dispatcher (real cause of 1.7.42 softlock)
