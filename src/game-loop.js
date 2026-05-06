@@ -19,6 +19,7 @@ import { transSt, loadingSt, updateTransition, updateTopBoxScroll,
          drawTransitionOverlay, WIPE_DURATION } from './transitions.js';
 import { handleInput, updateMovement } from './movement.js';
 import { updateBattle } from './battle-update.js';
+import { pvpSt } from './pvp.js';
 import { drawBattle, drawBattleAllies, drawSWExplosion, drawSWDamageNumbers } from './battle-drawing.js';
 import { render, drawPoisonFlash, drawPondStrobe, updateStarEffect } from './render.js';
 import { drawHUD, clipToViewport, drawHudBox, drawBorderedBox,
@@ -34,9 +35,69 @@ const SHAKE_DURATION = 34 * (1000 / 60);  // 2 × 17 NES frames ≈ 567ms
 let lastTime = 0;
 let _tabWasLoading = false;   // tracks if we just came from a loading screen
 
+function _battleCtx() {
+  return {
+    state: battleSt.battleState,
+    timer: Math.round(battleSt.battleTimer),
+    queueLen: battleSt.turnQueue ? battleSt.turnQueue.length : -1,
+    pvp: pvpSt.isPVPBattle,
+    pvpAllyIdx: pvpSt.pvpCurrentEnemyAllyIdx,
+    pvpPreflashDecided: pvpSt.pvpPreflashDecided,
+    psHp: ps.hp,
+    psHasStatus: !!(ps.status && ps.status.mask),
+    allyCount: battleSt.battleAllies ? battleSt.battleAllies.length : 0,
+    enemyAllies: pvpSt.pvpEnemyAllies ? pvpSt.pvpEnemyAllies.length : 0,
+  };
+}
+
 function _reportError(tag, e) {
-  console.error('[' + tag + ']', e);
-  fetch('/api/client-error', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ msg: e.message, stack: e.stack }) }).catch(() => {});
+  const ctx = _battleCtx();
+  console.error('[' + tag + ']', e, ctx);
+  fetch('/api/client-error', { method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ msg: '[' + tag + '] ' + e.message, stack: e.stack, ctx }) }).catch(() => {});
+}
+
+// ── Freeze watchdog ──────────────────────────────────────────────────────────
+// Catches state-machine freezes that don't throw exceptions (a state with no
+// advance handler — exactly the class of bug that hit 1.7.42). If battleState
+// stays in a non-idle state for >5s without changing AND battleTimer keeps
+// growing, fire one report per stuck spell so the server log can identify the
+// orphan state. Idle states (menu-open, target-select, item-*) are excluded
+// because they wait on user input.
+const FREEZE_THRESHOLD_MS = 5000;
+const _frozenIdleStates = new Set([
+  'menu-open', 'target-select', 'confirm-pause',
+  'item-menu-out', 'item-list-in', 'item-select', 'item-cancel-out', 'item-cancel-in',
+  'item-list-out', 'item-slide', 'item-target-select', 'item-use-menu-in',
+  'message-hold', 'msg-wait',
+  'none', 'roar-hold', 'defeat-text', 'game-over', 'victory-msg',
+  'exp-hold', 'gil-hold', 'cp-hold', 'item-hold',
+]);
+let _watchState = null;
+let _watchSince = 0;
+let _watchReported = false;
+function _tickFreezeWatchdog(now) {
+  const cur = battleSt.battleState;
+  if (!cur || cur === 'none' || _frozenIdleStates.has(cur)) {
+    _watchState = cur;
+    _watchSince = now;
+    _watchReported = false;
+    return;
+  }
+  if (cur !== _watchState) {
+    _watchState = cur;
+    _watchSince = now;
+    _watchReported = false;
+    return;
+  }
+  if (!_watchReported && now - _watchSince >= FREEZE_THRESHOLD_MS) {
+    _watchReported = true;
+    const ctx = _battleCtx();
+    const msg = '[FREEZE WATCHDOG] state=' + cur + ' stuck for ' + Math.round((now - _watchSince) / 1000) + 's';
+    console.error(msg, ctx);
+    fetch('/api/client-error', { method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ msg, stack: '', ctx }) }).catch(() => {});
+  }
 }
 
 function _gameLoopUpdate(dt) {
@@ -128,15 +189,28 @@ function gameLoop(timestamp) {
     _gameLoopUpdate(dt);
     _gameLoopDraw();
   } catch (e) {
-    console.error('[GAME LOOP ERROR] transSt.state=' + transSt.state + ' battleSt.battleState=' + battleSt.battleState, e);
+    _reportError('GAME LOOP ERROR', e);
     requestAnimationFrame(gameLoop);
     return;
   }
 
+  _tickFreezeWatchdog(timestamp);
   requestAnimationFrame(gameLoop);
 }
 
 export function startGameLoop() {
   lastTime = performance.now();
+  // Global handlers — catch anything that escaped the per-frame try/catch,
+  // including async failures (fetch/setTimeout) that would otherwise be silent.
+  if (!window._ff3mmoErrorHandlersInstalled) {
+    window._ff3mmoErrorHandlersInstalled = true;
+    window.addEventListener('error', (ev) => {
+      _reportError('WINDOW ERROR', ev.error || { message: ev.message, stack: '' });
+    });
+    window.addEventListener('unhandledrejection', (ev) => {
+      const r = ev.reason;
+      _reportError('UNHANDLED REJECTION', r instanceof Error ? r : { message: String(r), stack: '' });
+    });
+  }
   requestAnimationFrame(gameLoop);
 }

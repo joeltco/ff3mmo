@@ -71,7 +71,8 @@ export async function handleAPI(req, res) {
   // POST /api/client-error — log client-side errors to pm2 logs
   if (path === '/api/client-error' && req.method === 'POST') {
     const body = await readBody(req);
-    console.error('[CLIENT ERROR]', body.msg, '\n', body.stack || '');
+    const ctxStr = body.ctx ? '\n  ctx: ' + JSON.stringify(body.ctx) : '';
+    console.error('[CLIENT ERROR]', body.msg, ctxStr, body.stack ? '\n' + body.stack : '');
     res.writeHead(204); res.end();
     return true;
   }

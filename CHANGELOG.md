@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.46 — 2026-05-06
+
+### Freeze watchdog + global error handlers + battle context in error reports
+
+The 1.7.42 freeze investigation has been blind because the existing client-error reporting only wrapped the *render* path (line 76 + 103 of `game-loop.js`) and didn't include any state context. Errors in the update path were caught at the outer game-loop try/catch but only `console.error`'d locally — never POSTed to the server. State-machine freezes that don't throw exceptions (an orphan state with no advance handler) had no detection at all.
+
+Three additions to make the next freeze self-diagnose:
+
+1. **`_battleCtx()`** snapshot included in every `/api/client-error` POST: `battleState`, `battleTimer`, `turnQueue.length`, `pvpCurrentEnemyAllyIdx`, `pvpPreflashDecided`, `psHp`, `psHasStatus`, `battleAllies.length`, `pvpEnemyAllies.length`. Server pretty-prints it on the same log line as the message.
+
+2. **Freeze watchdog** ticks once per frame after the game loop. If `battleState` stays in a *non-idle* state (excludes `menu-open`, `target-select`, `item-*`, `msg-wait`, etc.) for >5s without changing, fires one `[FREEZE WATCHDOG]` report identifying the stuck state. One report per stuck spell — won't spam.
+
+3. **Global `window.error` + `unhandledrejection` handlers** installed in `startGameLoop`. Catches anything that escapes the per-frame try/catch, including async failures (fetch / setTimeout) that were previously silent.
+
+The outer game-loop catch now also POSTs via `_reportError` (was console-only). Server-side, `console.error` in `api.js:74` includes `body.ctx` JSON-stringified so `pm2 logs` shows the full state at error time.
+
+`src/game-loop.js`, `api.js`.
+
 ## 1.7.45 — 2026-05-06
 
 ### Hotfix — re-disable 1.7.42 enemy-magic / item AI hooks (1.7.44 still freezing)
