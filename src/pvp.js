@@ -34,7 +34,7 @@ import { _nameToBytes } from './text-utils.js';
 import { queueBattleMsg } from './battle-msg.js';
 import { tickHealNums, clearHealNums } from './damage-numbers.js';
 import { SPELLS } from './data/spells.js';
-import { getCureFlameFrameIdx, getCureAnimAssets } from './cure-anim.js';
+import { drawSpellCasterEffect } from './spell-anim.js';
 import { fakePlayerFullBodyCanvases, fakePlayerHitFullBodyCanvases,
          fakePlayerKnifeRFullBodyCanvases, fakePlayerKnifeLFullBodyCanvases,
          fakePlayerKnifeRFwdFullBodyCanvases, fakePlayerKnifeLFwdFullBodyCanvases,
@@ -1008,40 +1008,10 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
     }
   }
 
-  // PVP enemy magic cast — flame + 8-star ring on the caster cell. Mirrors the
-  // ally-magic-cast layout in battle-drawing.js (_drawAllyCastAnim) but drawn
-  // on the right side of the enemy body (toward the player on the right of
-  // the screen).
+  // PVP enemy magic cast — per-spell visual dispatched by spell-anim.js.
+  // Caster effect renders only during the cast phase (not hit phase).
   const isCastState = bs === 'pvp-enemy-magic-cast' || bs === 'pvp-enemy-magic-hit';
-  if (isCastState && pvpSt.pvpMagicCasterCellIdx === idx) {
-    const spell = SPELLS.get(pvpSt.pvpMagicSpellId);
-    const cureAnim = spell ? getCureAnimAssets(spell) : null;
-    if (cureAnim && cureAnim.flameFrames.length === 5) {
-      const castDur = PVP_MAGIC_CAST_MS;
-      const elapsed = bs === 'pvp-enemy-magic-cast'
-        ? Math.min(battleSt.battleTimer, castDur)
-        : castDur;
-      // Stars rotate around the body head/torso during the cast phase only.
-      if (bs === 'pvp-enemy-magic-cast' && cureAnim.starTile) {
-        const cx = sprX + 8, cy = sprY + 8;
-        const r = 15;
-        const N = 8;
-        const rotRad = (battleSt.battleTimer / 1200) * Math.PI * 2;
-        for (let s = 0; s < N; s++) {
-          const a = (s / N) * Math.PI * 2 + rotRad - Math.PI / 2;
-          const stx = Math.round(cx + Math.cos(a) * r - 4);
-          const sty = Math.round(cy + Math.sin(a) * r - 4);
-          ui.ctx.drawImage(cureAnim.starTile, stx, sty);
-        }
-      }
-      // Flame: pulses 4 sizes during cast. Drawn RIGHT of the body — mirror of
-      // the ally side's `ppx - 16` (which is left of the right-side ally).
-      if (bs === 'pvp-enemy-magic-cast') {
-        const flameIdx = getCureFlameFrameIdx(elapsed);
-        if (flameIdx >= 0) {
-          ui.ctx.drawImage(cureAnim.flameFrames[flameIdx], sprX + 16, sprY + 5);
-        }
-      }
-    }
+  if (isCastState && pvpSt.pvpMagicCasterCellIdx === idx && bs === 'pvp-enemy-magic-cast') {
+    drawSpellCasterEffect(ui.ctx, pvpSt.pvpMagicSpellId, battleSt.battleTimer, sprX, sprY);
   }
 }

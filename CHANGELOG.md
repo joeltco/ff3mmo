@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.49 — 2026-05-06
+
+### Per-spell animation registry (fixes: Poisona used Cure's tile bytes with palette swap)
+
+Two REC OAM captures (Cure @ frame 2877, Poisona @ frame 827) confirmed the 2026-05-05 "shared tile bytes, palette differs" assumption was wrong. Cure's `$49`/`$4A` (cross-star + dot) and Poisona's `$49`–`$50` (8-tile wing pattern) are entirely different sprites — and the "flame buildup f0-47 size 1→4" model in cure-anim.js was fabricated. Real Cure has no flame at all; it's just stars cycling. Real Poisona is a different shape entirely.
+
+Replaced `cure-anim.js` with `spell-anim.js`: per-spell registry keyed by spell ID. Each entry owns its tile bytes, palette, and phase render functions. Render sites call `drawSpellCasterEffect(ctx, spellId, ms, x, y)` / `drawSpellTargetEffect(ctx, spellId, ms, x, y)` — they no longer know about flame vs stars vs wings vs curves. Adding a future spell anim is one new entry in the registry; no render-site changes.
+
+- Cure (0x34): 4 sprites cycling HFLIP/VFLIP across `[0,5]/[8,5]/[0,13]/[8,13]` for 1017ms, then `$66` sparkle on target.
+- Poisona (0x35): 8-tile wing pattern alternating phase A (`$49`–`$4C`) and phase B (`$4D`–`$50`), then `$07`/`$08` curve sprite on target.
+- Removed 5-frame flame buildup, rotating-ring star math, and `WHITE_MAGIC_PAL` palette-swap shortcut — none of those exist in the real animations.
+
+Touched: `src/spell-anim.js` (new), `src/battle-drawing.js`, `src/pvp.js`, `src/spell-cast.js`, `src/battle-sprite-cache.js`. `src/cure-anim.js` deleted.
+
 ## 1.7.48 — 2026-05-06
 
 ### Slash-flash hit-gate is now single-source (fixes: misses showed slash on user portrait in PVP)

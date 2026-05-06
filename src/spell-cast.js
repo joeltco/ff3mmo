@@ -10,7 +10,7 @@ import { SFX, playSFX } from './music.js';
 import { setPlayerHealNum, getAllyDamageNums, tickHealNums, clearHealNums } from './damage-numbers.js';
 import { SPELLS, getSpellMPCost } from './data/spells.js';
 import { STATUS, removeStatus } from './status-effects.js';
-import { CURE_PHASE_MS, CURE_T_HEAL, CURE_TOTAL_MS } from './cure-anim.js';
+import { CURE_PHASE_MS, CURE_T_HEAL, CURE_TOTAL_MS } from './spell-anim.js';
 
 // Map spell.type → STATUS flag for cure_status spells (Poisona, Bndna, etc.)
 const SPELL_CURE_FLAG = {
