@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.48 — 2026-05-06
+
+### Slash-flash hit-gate is now single-source (fixes: misses showed slash on user portrait in PVP)
+
+PVP-enemy slash overlay drawn on the user's own portrait at `battle-drawing.js:425` had **no hit/miss gate** — every swing flashed a slash, even on misses and shield-blocks. The portrait-blink and hit-pose checks 50 lines below correctly guarded with `pvpPendingAttack && !miss && !shieldBlock`, but the slash flash didn't.
+
+Root cause was structural: the gate was caller-driven, scattered across 6 different `drawSlashOverlay` call sites, and the `slash-effects.js` comment block told callers "you MUST gate the flash". One missed wrap and the whole subsystem leaks visuals.
+
+Moved the gate INSIDE `drawSlashOverlay`. New signature folds `mirror` / `weaponId` / `hit` into an opts object, and `hit !== undefined && !shouldDrawSlash(hit)` short-circuits the draw. `shouldDrawSlash` now also rejects shield-block (monster hits have no `shieldBlock` field, so existing encounter paths unaffected). All 5 call sites updated to the opts shape and pass the relevant hit object (`pvpPendingAttack` / `allyHitResult`).
+
+Result: any future `drawSlashOverlay` call automatically inherits the gate. The "callers MUST remember to wrap with shouldDrawSlash" footgun is gone.
+
 ## 1.7.47 — 2026-05-06
 
 ### Real death poses for all 22 jobs (was: mirrored idle)

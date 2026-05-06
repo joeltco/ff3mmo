@@ -82,17 +82,21 @@ export function initSwordSlashSprites() {
 export const SLASH_FRAME_MS = 30;
 
 // Predicate: should this hit get a slash flash overlay? False on miss —
-// drawSlashOverlay no-ops on miss. Centralised so future rules (shield-block,
-// dead-target, etc.) live in one place instead of being scattered across
-// battle-update.js, battle-ally.js, pvp.js, and battle-drawing.js.
+// shouldDrawSlash is the canonical predicate for "should this hit produce a slash flash?".
+// Used by `drawSlashOverlay` (which gates internally — see its `hit` opt), and by adjacent
+// state callers (blink visibility, hit-pose) that need the same answer.
 //
-// IMPORTANT: callers MUST NOT short-circuit the slash state machine on miss —
+// IMPORTANT: callers MUST NOT short-circuit the slash STATE MACHINE on miss —
 // the body-pose dwell is governed by SWING_HOLD_MS regardless of hit/miss so
-// hits and misses share the same strike rhythm. The flash is suppressed via
-// `if (drawSlash) { … }` inside the draw / damage-apply blocks; the state
-// machine advances purely on `battleTimer >= SWING_HOLD_MS`.
+// hits and misses share the same strike rhythm. The flash is the only thing
+// suppressed; the state machine advances purely on `battleTimer >= SWING_HOLD_MS`.
+//
+// Returns true only on a clean landed hit (not miss, not shield-block). Shield-block has
+// its own visual (shield icon + block sound) so the slash flash is suppressed there too.
+// Hit objects without a `shieldBlock` field (monster hits) are unaffected — `!undefined`
+// evaluates true so only `miss` excludes them.
 export function shouldDrawSlash(hit) {
-  return !!hit && !hit.miss;
+  return !!hit && !hit.miss && !hit.shieldBlock;
 }
 
 // SWING_HOLD_MS — single source of truth for how long any combatant (player,
@@ -194,11 +198,17 @@ export function resetSlashScatterCache() {
 //   • PVP-opponent slash on player portrait                     → mirror=true (sprite h-flips,
 //     and the X scatter inverts so the dance still trails away from the attacker)
 //
+// Hit/miss gating lives HERE (single source of truth). Pass `hit` in opts and the helper
+// no-ops on miss / shield-block — callers don't need to wrap in `shouldDrawSlash` themselves.
+// If `hit` is omitted, the helper draws unconditionally (back-compat / monster targets that
+// don't have a hit-result object).
+//
 // Caller picks the frame array (via getSlashFramesForWeapon) and the af index (timer-derived).
-// Pass `weaponId` so each weapon picks its own scatter pattern (staff swings down, fists punch
-// in a tight cluster, blades clean-diagonal). `frame` may be null/undefined — helper no-ops.
-export function drawSlashOverlay(ctx, frame, frameIdx, originX, originY, mirror = false, weaponId = 0) {
+// `frame` may be null/undefined — helper no-ops. `weaponId` controls per-weapon scatter pattern.
+export function drawSlashOverlay(ctx, frame, frameIdx, originX, originY, opts = {}) {
+  const { mirror = false, weaponId = 0, hit } = opts;
   if (!frame) return;
+  if (hit !== undefined && !shouldDrawSlash(hit)) return;
   const { dx, dy } = _scatterFor(weaponId, frameIdx);
   if (mirror) {
     ctx.save();

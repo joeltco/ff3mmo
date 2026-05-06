@@ -422,13 +422,14 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
   }
   // Enemy slash effect on player portrait during PVP melee attack swing.
   // Skip when the opponent is targeting an ally — the slash gets drawn on that ally's portrait instead (see _drawAllyPortrait).
+  // Hit/miss gating is enforced inside drawSlashOverlay via the `hit` opt (single source).
   if (battleSt.battleState === 'pvp-enemy-slash' && battleSt.enemyTargetAllyIdx < 0) {
     const eWpnId = pvpSt.pvpCurrentEnemyAllyIdx >= 0
       ? pvpSt.pvpEnemyAllies[pvpSt.pvpCurrentEnemyAllyIdx]?.weaponId
       : pvpSt.pvpOpponentStats?.weaponId;
     const eSlashF = getSlashFramesForWeapon(eWpnId, true);
     const af = Math.min(2, Math.floor(battleSt.battleTimer / 67));
-    drawSlashOverlay(ui.ctx, eSlashF && eSlashF[af], af, px, py, true, eWpnId || 0);
+    drawSlashOverlay(ui.ctx, eSlashF && eSlashF[af], af, px, py, { mirror: true, weaponId: eWpnId || 0, hit: pvpSt.pvpPendingAttack });
   }
 }
 
@@ -899,7 +900,7 @@ function _drawEncounterSlashEffects(gridPos, slideOffX, slotCenterY) {
     const af = Math.min(Math.floor(battleSt.battleTimer / SLASH_FRAME_MS), 2);
     const pos = gridPos[battleSt.allyTargetIndex];
     if (pos && allySlashFrames) {
-      drawSlashOverlay(ui.ctx, allySlashFrames[af], af, pos.x + 8, slotCenterY(battleSt.allyTargetIndex), false, activeWpnId || 0);
+      drawSlashOverlay(ui.ctx, allySlashFrames[af], af, pos.x + 8, slotCenterY(battleSt.allyTargetIndex), { weaponId: activeWpnId || 0, hit: battleSt.allyHitResult });
     }
   }
 }
@@ -993,7 +994,7 @@ function _drawBossSprite(centerX, centerY) {
       const activeWpnId = ally ? (isLeft ? ally.weaponL : ally.weaponId) : 0;
       const allySlashFrames = ally ? getSlashFramesForWeapon(activeWpnId, !isLeft) : bsc.slashFramesR;
       const af = Math.min(Math.floor(battleSt.battleTimer / SLASH_FRAME_MS), 2);
-      drawSlashOverlay(ui.ctx, allySlashFrames && allySlashFrames[af], af, centerX - 8, centerY - 8, false, activeWpnId || 0);
+      drawSlashOverlay(ui.ctx, allySlashFrames && allySlashFrames[af], af, centerX - 8, centerY - 8, { weaponId: activeWpnId || 0, hit: battleSt.allyHitResult });
     }
   } else {
     if (!battleSt.enemyDefeated) ui.ctx.drawImage(getBossBattleCanvas(), sprX, sprY);
@@ -1418,7 +1419,7 @@ function _drawAllyPortrait(i, ally, isVicPose, isAllyAttack, isAllyHit, isNearFa
       : pvpSt.pvpOpponentStats?.weaponId;
     const eSlashF = getSlashFramesForWeapon(eWpnId, true);
     const af = Math.min(2, Math.floor(battleSt.battleTimer / 67));
-    drawSlashOverlay(ui.ctx, eSlashF && eSlashF[af], af, ppx, ppy, true, eWpnId || 0);
+    drawSlashOverlay(ui.ctx, eSlashF && eSlashF[af], af, ppx, ppy, { mirror: true, weaponId: eWpnId || 0, hit: pvpSt.pvpPendingAttack });
   }
 }
 function _drawAllyTexts(i, ally, rowY, healSparkleSet, ppx, ppy, weaponDraws) {

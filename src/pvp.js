@@ -1004,7 +1004,7 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
       const activeWpnId = ally ? (isLeft ? ally.weaponL : ally.weaponId) : 0;
       const aSlashF = ally ? getSlashFramesForWeapon(activeWpnId, !isLeft) : bsc.slashFramesR;
       const af = Math.min(Math.floor(battleSt.battleTimer / 30), 2);
-      drawSlashOverlay(ui.ctx, aSlashF && aSlashF[af], af, sprX, sprY);
+      drawSlashOverlay(ui.ctx, aSlashF && aSlashF[af], af, sprX, sprY, { weaponId: activeWpnId || 0, hit: battleSt.allyHitResult });
     }
   }
 
