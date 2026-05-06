@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.52 — 2026-05-06
+
+### Hotfix: restore OK_* sprite imports in sprite-init.js (game wouldn't load)
+
+v1.7.50's "trim corresponding imports" step deleted the `OK_*` import block from `sprite-init.js`, but the `_FP_*` module-scope constants at lines 141-163 (`_FP_KNEEL = OK_KNEEL`, `_FP_KNIFE_R = OK_R_BACK_SWING`, the OK_LEG_* aliases, etc.) still reference them at module load. Result: a `ReferenceError: OK_R_BACK_SWING is not defined` at line 141 fired before the page's `<script type="module">` block could attach the password-gate listener — so submitting the dev password did nothing. Re-imported the OK idle / victory / kneel / swing / leg constants used by the player-portrait builders. WR_* / MO_* stay deleted (those jobs have already moved to the bundle path).
+
 ## 1.7.51 — 2026-05-06
 
 ### Poison damage moves to end-of-round, no shake, no hit-pose

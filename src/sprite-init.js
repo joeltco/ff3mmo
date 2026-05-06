@@ -8,9 +8,18 @@ import { BAYER4 } from './data/animation-tables.js';
 import { _writePixels64 } from './tile-math.js';
 import { PLAYER_PALETTES, MONK_PALETTES, ROSTER_FADE_STEPS } from './data/players.js';
 import { BATTLE_SPRITE_ROM, BATTLE_JOB_SIZE, BATTLE_PAL_ROM } from './data/jobs.js';
-// OK / WR / MO sprite tile constants are no longer imported here — every
-// per-job pose lives in combatant-sprites.js's job bundles, which sprite-init
-// consumes via `_buildFakePlayerSet` → `getJobPoseTileBundle`.
+// WR / MO tile constants are no longer imported — those jobs now go through
+// `_buildFakePlayerSet` → `getJobPoseTileBundle`. OK_* tiles are still used by
+// the player-portrait builders below (`_FP_*` constants), which haven't been
+// migrated to the bundle path yet.
+import {
+  OK_IDLE, OK_VICTORY, OK_KNEEL,
+  OK_R_BACK_SWING, OK_L_BACK_SWING, OK_L_FWD_T2, OK_L_FWD_T3, OK_R_FWD_T2,
+  OK_LEG_L_IDLE, OK_LEG_R_IDLE,
+  OK_LEG_L_BACK_L, OK_LEG_R_BACK_L, OK_LEG_L_FWD_L, OK_LEG_R_FWD_L,
+  OK_LEG_L_BACK_R, OK_LEG_L_FWD_R, OK_LEG_R_SWING,
+  OK_LEG_L_KNEEL, OK_LEG_R_KNEEL, OK_LEG_L_VICTORY, OK_LEG_R_VICTORY,
+} from './data/job-sprites.js';
 import { initWeaponSprites } from './weapon-sprites.js';
 import { getJobPoseTileBundle, buildPlayerPoseCanvases, buildAllyPosePortraits, buildOpponentBodyCanvases, buildDeathPoseCanvases, POSE_KEYS } from './combatant-sprites.js';
 import { LOAD_FADE_MAX } from './loading-screen.js';
