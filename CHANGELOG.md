@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.61 — 2026-05-06
+
+### Drop-rate audit — null entries no longer eat the encounter's drop slot
+
+ROM-extracted `drops` tables include `null` placeholder slots (Sahagin/Lamia all-null, Crocotta `[0xA6,0xB2,null]`, multiple lv-60+ bosses). The drop loop in `battle-update.js` rolled uniformly across the array and broke on the first 25% trigger — but a null pick still claimed the encounter's drop slot, silently zeroing out subsequent mobs' chances and dropping nothing.
+
+Effective drop rates pre-fix:
+- `[0xA6,0xB2,null]`: 16.7% (vs nominal 25%) and blocks other mobs.
+- `[null,null,null,null]`: 0% drop, 25% chance to block the entire encounter.
+- `[0xA8,null]` (bosses): 12.5% real.
+
+Fix: filter nulls before checking length and rolling. The array becomes the pool of valid items; ROM null placeholders are skipped. All-null drop tables now yield no drop attempt and don't block siblings.
+
+Audit also looked at the alleged mid-game EXP plateau — that was an averaging artifact from bosses/outliers in the level buckets. Non-boss mobs scale smoothly from ~80 EXP at lv 5 → 1,640 at lv 40 → continuing climb. No data fix needed.
+
 ## 1.7.60 — 2026-05-06
 
 ### Damage audit follow-ups — apply all five flagged items

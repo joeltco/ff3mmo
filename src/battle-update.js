@@ -516,8 +516,13 @@ function _updateMonsterDeath() {
       battleSt.encounterDropItem = null;
       for (const m of battleSt.encounterMonsters) {
         const mData = MONSTERS.get(m.monsterId);
-        if (mData && mData.drops && mData.drops.length && Math.random() < 0.25) {
-          battleSt.encounterDropItem = mData.drops[Math.floor(Math.random() * mData.drops.length)];
+        // Filter null drops first — ROM-extracted drop tables include null placeholder
+        // slots (Sahagin/Lamia all-null, several bosses end with null). Without this,
+        // a null roll would still claim the encounter's drop slot via `break` and
+        // silently zero out subsequent mobs' chances.
+        const validDrops = mData?.drops?.filter(d => d != null) || [];
+        if (validDrops.length && Math.random() < 0.25) {
+          battleSt.encounterDropItem = validDrops[Math.floor(Math.random() * validDrops.length)];
           break;
         }
       }
