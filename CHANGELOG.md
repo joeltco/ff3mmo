@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.32 — 2026-05-06
+
+### Staff visible during cast pose — player and ally
+
+WMs hold their staff in their hand canonically; FF3 NES victory-pose body tiles (which our magic-cast pose reuses) don't include the weapon graphics, so during cast the staff visually disappeared. Now we overlay the "raised" weapon canvas (R-back position, dx=8, dy=-7 from the body) on top of the cast-pose body for both:
+
+- Player path (`_drawPortraitOverlays`) when `battleState === 'magic-cast'` or `'magic-hit'`. Gated on `isWeapon(ps.weaponR)` so unarmed/rod cases skip cleanly.
+- Ally path (`_drawAllyPortrait`) when `isAllyCastingMagic && isWeapon(ally.weaponId)`. Same R-back canvas, ally portrait position.
+
+Item-use (Potion etc.) intentionally skips this overlay since potions don't involve a weapon. The raised canvas position matches the back-swing offset, so visually the staff reads as held overhead during the cast.
+
+`src/battle-drawing.js` only.
+
 ## 1.7.31 — 2026-05-06
 
 ### WM ally cast animation — flame + stars on the caster portrait
