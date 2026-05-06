@@ -239,6 +239,7 @@ function _updateAllyMagicCast(dt) {
       battleSt.allyMagicCasterIdx = -1;
       battleSt.allyMagicTargetIdx = -1;
       battleSt.allyMagicSpellId = 0;
+      battleSt.allyMagicItemMode = false;
       _processNextTurn();
     }
     return true;

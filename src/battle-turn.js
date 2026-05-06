@@ -176,6 +176,9 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
     if (_tryAllyCure(ally, turn.index)) return;
     // White Mage status AI — if anyone (incl self) is poisoned and ally knows Poisona (0x35), cast it.
     if (_tryAllyPoisona(ally, turn.index)) return;
+    // Item AI — any ally can pop a Cure Potion / Antidote on a teammate. Cheap
+    // fallback when no spell-cast applies (no MND-gating on items).
+    if (_tryAllyItem(ally, turn.index)) return;
     if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
       const living = battleSt.encounterMonsters.map((m, i) => m.hp > 0 ? i : -1).filter(i => i >= 0);
       if (living.length === 0) { processNextTurn(); return; }
@@ -271,6 +274,7 @@ function _tryAllyCure(ally, allyIdx) {
   battleSt.allyMagicSpellId      = 0x34;
   battleSt.allyMagicHealAmount   = heal;
   battleSt.allyMagicEffectApplied = false;
+  battleSt.allyMagicItemMode     = false;
   queueBattleMsg(_nameToBytes(ally.name || 'Ally'));
   playSFX(SFX.MAGIC_CAST);
   battleSt.battleState = 'ally-magic-cast';
@@ -311,8 +315,60 @@ function _tryAllyPoisona(ally, allyIdx) {
   battleSt.allyMagicSpellId       = 0x35;
   battleSt.allyMagicHealAmount    = 0;
   battleSt.allyMagicEffectApplied = false;
+  battleSt.allyMagicItemMode      = false;
   queueBattleMsg(_nameToBytes(ally.name || 'Ally'));
   playSFX(SFX.MAGIC_CAST);
+  battleSt.battleState = 'ally-magic-cast';
+  battleSt.battleTimer = 0;
+  return true;
+}
+
+// ── Ally item AI (cure potion / antidote) ──────────────────────────────────
+// Roster ally consumes a Cure Potion (target heal 50) or Antidote (cure POISON
+// on target). Reuses the ally-magic-cast / ally-magic-hit pipeline with
+// allyMagicItemMode=true to suppress the cast flame; sparkle + heal-num still
+// render on the target as with spell casts.
+function _tryAllyItem(ally, allyIdx) {
+  if (Math.random() >= 0.25) return false;
+  // Antidote: any teammate (incl self / player) with POISON
+  let targetType = null, targetIdx = -1, spellSentinel = 0;
+  if (ps.hp > 0 && ps.status && hasStatus(ps.status, STATUS.POISON)) {
+    targetType = 'player'; targetIdx = -1; spellSentinel = 0x35;
+  } else if (ally.status && hasStatus(ally.status, STATUS.POISON)) {
+    targetType = 'ally'; targetIdx = allyIdx; spellSentinel = 0x35;
+  } else {
+    for (let i = 0; i < battleSt.battleAllies.length; i++) {
+      if (i === allyIdx) continue;
+      const o = battleSt.battleAllies[i];
+      if (!o || o.hp <= 0 || !o.status) continue;
+      if (hasStatus(o.status, STATUS.POISON)) { targetType = 'ally'; targetIdx = i; spellSentinel = 0x35; break; }
+    }
+  }
+  // Cure Potion: lowest-HP teammate < 50%
+  if (!targetType) {
+    const candidates = [];
+    if (ps.hp > 0 && ps.stats && ps.stats.maxHP) {
+      candidates.push({ type: 'player', idx: -1, pct: ps.hp / ps.stats.maxHP });
+    }
+    for (let i = 0; i < battleSt.battleAllies.length; i++) {
+      const o = battleSt.battleAllies[i];
+      if (!o || o.hp <= 0 || !o.maxHP) continue;
+      candidates.push({ type: 'ally', idx: i, pct: o.hp / o.maxHP });
+    }
+    candidates.sort((a, b) => a.pct - b.pct);
+    const lowest = candidates[0];
+    if (!lowest || lowest.pct >= 0.5) return false;
+    targetType = lowest.type; targetIdx = lowest.idx; spellSentinel = 0x34;
+  }
+  battleSt.allyMagicCasterIdx     = allyIdx;
+  battleSt.allyMagicTargetType    = targetType;
+  battleSt.allyMagicTargetIdx     = targetIdx;
+  battleSt.allyMagicSpellId       = spellSentinel;
+  battleSt.allyMagicHealAmount    = 50;
+  battleSt.allyMagicEffectApplied = false;
+  battleSt.allyMagicItemMode      = true;
+  queueBattleMsg(_nameToBytes(ally.name || 'Ally'));
+  playSFX(SFX.CURE);
   battleSt.battleState = 'ally-magic-cast';
   battleSt.battleTimer = 0;
   return true;

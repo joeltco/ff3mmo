@@ -75,6 +75,7 @@ export const battleSt = {
   allyMagicSpellId: 0,
   allyMagicHealAmount: 0,             // pre-rolled heal value
   allyMagicEffectApplied: false,
+  allyMagicItemMode: false,           // true = consumable (potion/antidote), suppresses cast flame visual
 
   // ── Item use ──────────────────────────────────────────────────────
   itemHealAmount: 0,

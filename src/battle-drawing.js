@@ -1480,6 +1480,9 @@ function drawBattleAllies() {
 function _drawAllyCastAnim(panelTop) {
   const isCastState = battleSt.battleState === 'ally-magic-cast' || battleSt.battleState === 'ally-magic-hit';
   if (!isCastState) return;
+  // Item mode (Cure Potion / Antidote) suppresses the cast flame + star ring —
+  // caster pose + target sparkle still render normally.
+  if (battleSt.allyMagicItemMode) return;
   const i = battleSt.allyMagicCasterIdx;
   if (i < 0) return;
   const ally = battleSt.battleAllies[i];
@@ -1568,7 +1571,8 @@ function _drawEnemyHealNum() {
   if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
     ({ bx, baseY } = _encounterMonsterPos(getEnemyHealNum().index));
   } else if (pvpSt.isPVPBattle) {
-    const { x: cx, y: cy } = _pvpEnemyCellCenter(0);
+    const cellIdx = getEnemyHealNum().index || 0;
+    const { x: cx, y: cy } = _pvpEnemyCellCenter(cellIdx);
     bx = cx + 8;
     baseY = cy + 12;
   } else {

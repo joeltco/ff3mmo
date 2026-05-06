@@ -29,6 +29,12 @@ import { pvpGridLayout, PVP_CELL_W, PVP_CELL_H } from './pvp-math.js';
 import { playSlashSFX } from './battle-sfx.js';
 import { bsc, getSlashFramesForWeapon } from './battle-sprite-cache.js';
 import { drawSlashOverlay, resetSlashScatterCache, shouldDrawSlash, SWING_HOLD_MS } from './slash-effects.js';
+import { removeStatus, hasStatus, STATUS } from './status-effects.js';
+import { _nameToBytes } from './text-utils.js';
+import { queueBattleMsg } from './battle-msg.js';
+import { tickHealNums, clearHealNums } from './damage-numbers.js';
+import { SPELLS } from './data/spells.js';
+import { getCureFlameFrameIdx, getCureAnimAssets } from './cure-anim.js';
 import { fakePlayerFullBodyCanvases, fakePlayerHitFullBodyCanvases,
          fakePlayerKnifeRFullBodyCanvases, fakePlayerKnifeLFullBodyCanvases,
          fakePlayerKnifeRFwdFullBodyCanvases, fakePlayerKnifeLFwdFullBodyCanvases,
@@ -98,6 +104,18 @@ export const pvpSt = {
   _oppSWPerDmg:           0,        // pre-rolled damage per target
   _swDmgApplied:          false,    // damage applied this cycle
   _oppSWExplosionPlayed:  false,    // explosion SFX played this target
+  // PVP enemy magic — mirror of ally-magic-cast / ally-magic-hit on the enemy side.
+  // Cell-idx convention: 0 = main opponent, 1+ = pvpEnemyAllies[cellIdx-1].
+  pvpMagicCasterCellIdx:  -1,
+  pvpMagicTargetCellIdx:  -1,
+  pvpMagicSpellId:        0,
+  pvpMagicHealAmount:     0,
+  pvpMagicEffectApplied:  false,
+  // PVP enemy item — generalized version of the old self-only potion path.
+  // Active during pvp-opp-potion. Target cell drives sparkle + heal-num placement.
+  pvpItemCasterCellIdx:   -1,
+  pvpItemTargetCellIdx:   -1,
+  pvpItemKind:            null,    // 'potion' | 'antidote'
 };
 
 // ── Shared context ────────────────────────────────────────────────────────────
@@ -152,6 +170,14 @@ export function resetPVPState() {
   pvpSt._oppSWPerDmg            = 0;
   pvpSt._swDmgApplied           = false;
   pvpSt._oppSWExplosionPlayed   = false;
+  pvpSt.pvpMagicCasterCellIdx   = -1;
+  pvpSt.pvpMagicTargetCellIdx   = -1;
+  pvpSt.pvpMagicSpellId         = 0;
+  pvpSt.pvpMagicHealAmount      = 0;
+  pvpSt.pvpMagicEffectApplied   = false;
+  pvpSt.pvpItemCasterCellIdx    = -1;
+  pvpSt.pvpItemTargetCellIdx    = -1;
+  pvpSt.pvpItemKind             = null;
 }
 
 // ── Ally joining ──────────────────────────────────────────────────────────────
@@ -239,17 +265,18 @@ export function updatePVPBattle(dt) {
   _updatePVPDissolve()        ||
   updateBattlePlayerAttack()     ||
   updateBattleDefendItem(dt)     ||
-  updateBattleAlly()             ||
-  updateBattleEnemyTurn()   ||
+  updateBattleAlly(dt)           ||
+  updateBattleEnemyTurn(dt) ||
   updateBattleEndSequence(dt);
 }
 
 // ── Enemy turn update ─────────────────────────────────────────────────────────
-function updateBattleEnemyTurn() {
+function updateBattleEnemyTurn(dt) {
   if (_processEnemyFlash()) return true;
   if (_processPVPDefendAnim()) return true;
   if (_processPVPEnemySlash()) return true;
   if (_processPVPOppPotion()) return true;
+  if (_processPVPEnemyMagic(dt)) return true;
   if (_processPVPOppSWThrow()) return true;
   if (_processPVPOppSWHit()) return true;
   if (battleSt.battleState === 'enemy-attack') {
@@ -285,27 +312,35 @@ function _runEnemyAttack(targetAlly) {
 function _processEnemyFlash() {
   if (battleSt.battleState !== 'enemy-flash') return false;
 
-  // On first tick of enemy-flash, decide defend/item for PVP main opponent (skip backswing for non-attack)
-  if (!pvpSt.pvpPreflashDecided && pvpSt.isPVPBattle && pvpSt.pvpCurrentEnemyAllyIdx < 0) {
+  // On first tick of enemy-flash, decide defend/item/magic for the current PVP attacker.
+  // Cell-idx convention: 0 = main opp, 1+ = pvpEnemyAllies[idx-1].
+  if (!pvpSt.pvpPreflashDecided && pvpSt.isPVPBattle) {
     pvpSt.pvpPreflashDecided = true;
-    if (Math.random() < 0.30) {
+    const isMain = pvpSt.pvpCurrentEnemyAllyIdx < 0;
+    const casterCellIdx = isMain ? 0 : (pvpSt.pvpCurrentEnemyAllyIdx + 1);
+    const caster = _pvpEnemyByCellIdx(casterCellIdx);
+
+    // Defend roll — main opp only (kept original behavior)
+    if (isMain && Math.random() < 0.30) {
       pvpSt.pvpOpponentIsDefending = true;
       pvpSt.pvpPendingTargetAlly = -1;
       playSFX(SFX.DEFEND_HIT);
       battleSt.battleState = 'pvp-defend-anim'; battleSt.battleTimer = 0;
       return true;
     }
-    const maxHP = pvpSt.pvpOpponentStats.maxHP;
-    const curHP = pvpSt.pvpOpponentStats.hp;
-    const heal = Math.min(50, maxHP - curHP);
-    if (curHP < maxHP * 0.5 && heal > 0 && Math.random() < 0.25) {
-      pvpSt.pvpOpponentStats.hp = curHP + heal;
-      setEnemyHealNum({ value: heal, timer: 0 });
-      playSFX(SFX.CURE);
-      battleSt.battleState = 'pvp-opp-potion'; battleSt.battleTimer = 0;
-      return true;
+
+    // Magic AI — Poisona first (cheap, conditional), then Cure (when team needs it).
+    // Available to any enemy (main opp or ally) that knows the spell.
+    if (caster) {
+      if (_tryPVPEnemyPoisona(caster, casterCellIdx)) return true;
+      if (_tryPVPEnemyCure(caster, casterCellIdx)) return true;
     }
-    if (Math.random() < 0.15) {
+
+    // Item AI — generalized cure-potion / antidote on any teammate.
+    if (_tryPVPEnemyItem(casterCellIdx)) return true;
+
+    // Sword-throw roll — main opp only
+    if (isMain && Math.random() < 0.15) {
       battleSt.battleState = 'pvp-opp-sw-throw'; battleSt.battleTimer = 0;
       return true;
     }
@@ -381,9 +416,181 @@ function _processPVPOppPotion() {
   if (battleSt.battleState !== 'pvp-opp-potion') return false;
   if (battleSt.battleTimer >= DEFEND_SPARKLE_TOTAL_MS) {
     setEnemyHealNum(null);
+    pvpSt.pvpItemCasterCellIdx = -1;
+    pvpSt.pvpItemTargetCellIdx = -1;
+    pvpSt.pvpItemKind = null;
     processNextTurn();
   }
   return true;
+}
+
+// ── PVP enemy item AI (cure potion / antidote) ──────────────────────────────
+// Generalized form of the old main-opp self-only potion roll. Any caster cell
+// (0=main, 1+=allies) can use one item per turn on any teammate. Priority:
+// poisoned teammate (antidote) → lowest-HP teammate <50% (potion). Same
+// sparkle animation as before; renders over the TARGET cell, not the caster.
+function _tryPVPEnemyItem(casterCellIdx) {
+  // 25% activation chance — matches the original main-opp potion rate.
+  if (Math.random() >= 0.25) return false;
+  // Antidote: any teammate with POISON
+  for (const cellIdx of _pvpEnemyTeamCellIdxs()) {
+    const t = _pvpEnemyByCellIdx(cellIdx);
+    if (!t || !t.status) continue;
+    if (hasStatus(t.status, STATUS.POISON)) {
+      removeStatus(t.status, STATUS.POISON);
+      pvpSt.pvpItemCasterCellIdx = casterCellIdx;
+      pvpSt.pvpItemTargetCellIdx = cellIdx;
+      pvpSt.pvpItemKind = 'antidote';
+      setEnemyHealNum({ value: 0, timer: 0, index: cellIdx });
+      playSFX(SFX.CURE);
+      battleSt.battleState = 'pvp-opp-potion'; battleSt.battleTimer = 0;
+      return true;
+    }
+  }
+  // Cure Potion: lowest-HP teammate below 50%
+  let bestCellIdx = -1, bestPct = 1;
+  for (const cellIdx of _pvpEnemyTeamCellIdxs()) {
+    const t = _pvpEnemyByCellIdx(cellIdx);
+    if (!t || !t.maxHP) continue;
+    const pct = t.hp / t.maxHP;
+    if (pct < bestPct) { bestPct = pct; bestCellIdx = cellIdx; }
+  }
+  if (bestCellIdx < 0 || bestPct >= 0.5) return false;
+  const t = _pvpEnemyByCellIdx(bestCellIdx);
+  const heal = Math.min(50, (t.maxHP || t.hp) - t.hp);
+  if (heal <= 0) return false;
+  t.hp += heal;
+  pvpSt.pvpItemCasterCellIdx = casterCellIdx;
+  pvpSt.pvpItemTargetCellIdx = bestCellIdx;
+  pvpSt.pvpItemKind = 'potion';
+  setEnemyHealNum({ value: heal, timer: 0, index: bestCellIdx });
+  playSFX(SFX.CURE);
+  battleSt.battleState = 'pvp-opp-potion'; battleSt.battleTimer = 0;
+  return true;
+}
+
+// ── PVP enemy magic AI ───────────────────────────────────────────────────────
+// Mirror of _tryAllyCure / _tryAllyPoisona in battle-turn.js, scoped to the
+// PVP enemy team (main opp + their allies). Cell-idx convention: 0 = main
+// opponent, 1+ = pvpEnemyAllies[cellIdx-1]. Same animation pipeline as the
+// ally cast (600ms windup → 1000ms hit, effect at 400ms), but the caster pose
+// + flame + sparkle are rendered on the enemy side.
+const PVP_MAGIC_CAST_MS   = 600;
+const PVP_MAGIC_EFFECT_MS = 400;
+const PVP_MAGIC_HIT_MS    = 1000;
+
+function _pvpEnemyByCellIdx(idx) {
+  if (idx === 0) return pvpSt.pvpOpponentStats;
+  return pvpSt.pvpEnemyAllies[idx - 1] || null;
+}
+function _pvpEnemyTeamCellIdxs() {
+  const out = [];
+  if (pvpSt.pvpOpponentStats && pvpSt.pvpOpponentStats.hp > 0) out.push(0);
+  for (let i = 0; i < pvpSt.pvpEnemyAllies.length; i++) {
+    const a = pvpSt.pvpEnemyAllies[i];
+    if (a && a.hp > 0) out.push(i + 1);
+  }
+  return out;
+}
+
+function _tryPVPEnemyCure(caster, casterCellIdx) {
+  if (!caster || !caster.knownSpells || !caster.knownSpells.includes(0x34)) return false;
+  // Build candidates among living enemy teammates with maxHP set.
+  const candidates = [];
+  for (const cellIdx of _pvpEnemyTeamCellIdxs()) {
+    const t = _pvpEnemyByCellIdx(cellIdx);
+    if (!t || !t.maxHP) continue;
+    candidates.push({ cellIdx, pct: t.hp / t.maxHP });
+  }
+  candidates.sort((a, b) => a.pct - b.pct);
+  const lowest = candidates[0];
+  if (!lowest || lowest.pct >= 0.6) return false;
+  // Cure power 42 — same formula as ally Cure
+  const mnd = caster.mnd || 5;
+  const atk = Math.floor(mnd / 2) + 42;
+  const heal = atk + Math.floor(Math.random() * (Math.floor(atk / 2) + 1));
+  pvpSt.pvpMagicCasterCellIdx  = casterCellIdx;
+  pvpSt.pvpMagicTargetCellIdx  = lowest.cellIdx;
+  pvpSt.pvpMagicSpellId        = 0x34;
+  pvpSt.pvpMagicHealAmount     = heal;
+  pvpSt.pvpMagicEffectApplied  = false;
+  queueBattleMsg(_nameToBytes(caster.name || 'Foe'));
+  playSFX(SFX.MAGIC_CAST);
+  battleSt.battleState = 'pvp-enemy-magic-cast';
+  battleSt.battleTimer = 0;
+  return true;
+}
+
+function _tryPVPEnemyPoisona(caster, casterCellIdx) {
+  if (!caster || !caster.knownSpells || !caster.knownSpells.includes(0x35)) return false;
+  // Priority: self → other teammates (in cell-idx order).
+  let targetCellIdx = -1;
+  if (caster.status && hasStatus(caster.status, STATUS.POISON)) {
+    targetCellIdx = casterCellIdx;
+  } else {
+    for (const cellIdx of _pvpEnemyTeamCellIdxs()) {
+      if (cellIdx === casterCellIdx) continue;
+      const t = _pvpEnemyByCellIdx(cellIdx);
+      if (!t || !t.status) continue;
+      if (hasStatus(t.status, STATUS.POISON)) { targetCellIdx = cellIdx; break; }
+    }
+  }
+  if (targetCellIdx < 0) return false;
+  pvpSt.pvpMagicCasterCellIdx  = casterCellIdx;
+  pvpSt.pvpMagicTargetCellIdx  = targetCellIdx;
+  pvpSt.pvpMagicSpellId        = 0x35;
+  pvpSt.pvpMagicHealAmount     = 0;
+  pvpSt.pvpMagicEffectApplied  = false;
+  queueBattleMsg(_nameToBytes(caster.name || 'Foe'));
+  playSFX(SFX.MAGIC_CAST);
+  battleSt.battleState = 'pvp-enemy-magic-cast';
+  battleSt.battleTimer = 0;
+  return true;
+}
+
+function _applyPVPEnemyMagicEffect() {
+  const target = _pvpEnemyByCellIdx(pvpSt.pvpMagicTargetCellIdx);
+  if (!target) return;
+  if (pvpSt.pvpMagicSpellId === 0x35) {
+    if (target.status) removeStatus(target.status, STATUS.POISON);
+    setEnemyHealNum({ value: 0, timer: 0, index: pvpSt.pvpMagicTargetCellIdx });
+    playSFX(SFX.CURE);
+    return;
+  }
+  // 0x34 Cure
+  const heal = pvpSt.pvpMagicHealAmount;
+  const maxHP = target.maxHP || target.hp;
+  const realHeal = Math.min(heal, maxHP - target.hp);
+  target.hp += realHeal;
+  setEnemyHealNum({ value: realHeal, timer: 0, index: pvpSt.pvpMagicTargetCellIdx });
+  playSFX(SFX.CURE);
+}
+
+function _processPVPEnemyMagic(dt) {
+  if (battleSt.battleState === 'pvp-enemy-magic-cast') {
+    if (battleSt.battleTimer >= PVP_MAGIC_CAST_MS) {
+      battleSt.battleState = 'pvp-enemy-magic-hit';
+      battleSt.battleTimer = 0;
+      pvpSt.pvpMagicEffectApplied = false;
+    }
+    return true;
+  }
+  if (battleSt.battleState === 'pvp-enemy-magic-hit') {
+    tickHealNums(dt);
+    if (!pvpSt.pvpMagicEffectApplied && battleSt.battleTimer >= PVP_MAGIC_EFFECT_MS) {
+      _applyPVPEnemyMagicEffect();
+      pvpSt.pvpMagicEffectApplied = true;
+    }
+    if (battleSt.battleTimer >= PVP_MAGIC_HIT_MS) {
+      clearHealNums();
+      pvpSt.pvpMagicCasterCellIdx = -1;
+      pvpSt.pvpMagicTargetCellIdx = -1;
+      pvpSt.pvpMagicSpellId = 0;
+      processNextTurn();
+    }
+    return true;
+  }
+  return false;
 }
 
 function _processPVPOppSWThrow() {
@@ -690,7 +897,14 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   // Opponent victory = team wiped or old defeat path
   const isOppVictory = battleSt.battleState === 'team-wipe' || battleSt.battleState === 'defeat-monster-fade';
   const isOppDefending = isMain && pvpSt.pvpOpponentIsDefending && bs === 'pvp-defend-anim';
-  const isOppItemUse   = isMain && (bs === 'pvp-opp-sw-throw' || bs === 'pvp-opp-sw-hit' || bs === 'pvp-opp-potion');
+  // Caster victory pose: any cell that's the active item caster during pvp-opp-potion,
+  // any cell that's the active magic caster during pvp-enemy-magic-cast/hit, OR main
+  // opp during the legacy SW-throw / SW-hit paths. Mirrors the ally-magic caster pose.
+  const isPotionCaster = bs === 'pvp-opp-potion' && pvpSt.pvpItemCasterCellIdx === idx;
+  const isMagicCaster  = (bs === 'pvp-enemy-magic-cast' || bs === 'pvp-enemy-magic-hit') &&
+                          pvpSt.pvpMagicCasterCellIdx === idx;
+  const isLegacySWUse  = isMain && (bs === 'pvp-opp-sw-throw' || bs === 'pvp-opp-sw-hit');
+  const isOppItemUse   = isPotionCaster || isMagicCaster || isLegacySWUse;
   // Hand-change inter-hit gap (during wind-up of a subsequent hit when hand swaps): render idle body
   // for the first IDLE_FRAME_MS only, then transition to back-swing pose for the remaining wind-up.
   const oppHandChangeGap = isWindUp && isThisAttacking && pvpSt.pvpEnemyDualWield
@@ -776,8 +990,12 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
     const fi = Math.min(3, Math.floor(battleSt.battleTimer / DEFEND_SPARKLE_FRAME_MS));
     _drawSparkleAtCorners(sprX, sprY, bsc.defendSparkleFrames[fi]);
   }
-  // Cure sparkle — alternating over main opponent during potion use
-  if (isMain && bs === 'pvp-opp-potion' && bsc.cureSparkleFrames && bsc.cureSparkleFrames.length === 2) {
+  // Cure sparkle — drawn on the TARGET cell during item use AND during the hit
+  // phase of an enemy magic cast (Cure / Poisona). Caster pose is handled above
+  // via isOppItemUse; this is the on-target visual confirmation.
+  const isPotionTarget = bs === 'pvp-opp-potion' && pvpSt.pvpItemTargetCellIdx === idx;
+  const isMagicTarget  = bs === 'pvp-enemy-magic-hit' && pvpSt.pvpMagicTargetCellIdx === idx;
+  if ((isPotionTarget || isMagicTarget) && bsc.cureSparkleFrames && bsc.cureSparkleFrames.length === 2) {
     const fi = Math.floor(battleSt.battleTimer / 67) & 1;
     _drawSparkleAtCorners(sprX, sprY, bsc.cureSparkleFrames[fi]);
   }
@@ -794,6 +1012,43 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
       const aSlashF = ally ? getSlashFramesForWeapon(activeWpnId, !isLeft) : bsc.slashFramesR;
       const af = Math.min(Math.floor(battleSt.battleTimer / 30), 2);
       drawSlashOverlay(ui.ctx, aSlashF && aSlashF[af], af, sprX, sprY);
+    }
+  }
+
+  // PVP enemy magic cast — flame + 8-star ring on the caster cell. Mirrors the
+  // ally-magic-cast layout in battle-drawing.js (_drawAllyCastAnim) but drawn
+  // on the right side of the enemy body (toward the player on the right of
+  // the screen).
+  const isCastState = bs === 'pvp-enemy-magic-cast' || bs === 'pvp-enemy-magic-hit';
+  if (isCastState && pvpSt.pvpMagicCasterCellIdx === idx) {
+    const spell = SPELLS.get(pvpSt.pvpMagicSpellId);
+    const cureAnim = spell ? getCureAnimAssets(spell) : null;
+    if (cureAnim && cureAnim.flameFrames.length === 5) {
+      const castDur = PVP_MAGIC_CAST_MS;
+      const elapsed = bs === 'pvp-enemy-magic-cast'
+        ? Math.min(battleSt.battleTimer, castDur)
+        : castDur;
+      // Stars rotate around the body head/torso during the cast phase only.
+      if (bs === 'pvp-enemy-magic-cast' && cureAnim.starTile) {
+        const cx = sprX + 8, cy = sprY + 8;
+        const r = 15;
+        const N = 8;
+        const rotRad = (battleSt.battleTimer / 1200) * Math.PI * 2;
+        for (let s = 0; s < N; s++) {
+          const a = (s / N) * Math.PI * 2 + rotRad - Math.PI / 2;
+          const stx = Math.round(cx + Math.cos(a) * r - 4);
+          const sty = Math.round(cy + Math.sin(a) * r - 4);
+          ui.ctx.drawImage(cureAnim.starTile, stx, sty);
+        }
+      }
+      // Flame: pulses 4 sizes during cast. Drawn RIGHT of the body — mirror of
+      // the ally side's `ppx - 16` (which is left of the right-side ally).
+      if (bs === 'pvp-enemy-magic-cast') {
+        const flameIdx = getCureFlameFrameIdx(elapsed);
+        if (flameIdx >= 0) {
+          ui.ctx.drawImage(cureAnim.flameFrames[flameIdx], sprX + 16, sprY + 5);
+        }
+      }
     }
   }
 }

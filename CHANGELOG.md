@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.42 — 2026-05-06
+
+### PVP enemy support magic + items + roster ally items
+
+PVP enemies (main opp + their allies) now cast Cure / Poisona on each other and use Cure Potions / Antidotes on each other. Roster allies pick up the same item AI.
+
+**PVP enemy magic** — `_tryPVPEnemyCure` / `_tryPVPEnemyPoisona` in `pvp.js` mirror the `_tryAllyCure` / `_tryAllyPoisona` AI from `battle-turn.js`, scoped to the enemy team. New states `pvp-enemy-magic-cast` (600 ms) → `pvp-enemy-magic-hit` (1000 ms, effect at 400 ms) mirror the ally-magic state machine; `_processPVPEnemyMagic` is wired into `updateBattleEnemyTurn`.
+
+**Mirrored cast animation** — `_drawPVPEnemyCell` now recognizes the caster cell for the new states, swaps the body to victory pose, and renders the flame + 8-star ring via the same `getCureAnimAssets` / `getCureFlameFrameIdx` pipeline. Flame draws at `sprX + 16, sprY + 5` — the visual mirror of the ally side's `ppx - 16, ppy + 5`. Sparkle on the target cell during hit phase reuses `bsc.cureSparkleFrames`.
+
+**PVP enemy items** — generalized the old main-opp self-only potion roll into `_tryPVPEnemyItem`, callable by any enemy on any teammate. Antidote (any poisoned teammate) takes priority over Cure Potion (lowest-HP teammate < 50%). Reuses the existing `pvp-opp-potion` state but with new `pvpItemCasterCellIdx` / `pvpItemTargetCellIdx` fields driving caster pose + target sparkle. The 25% trigger rate matches the original main-opp behavior.
+
+**Roster ally items** — `_tryAllyItem` in `battle-turn.js` adds Cure Potion / Antidote to the WM AI chain (Cure → Poisona → Item). Reuses the `ally-magic-cast` / `ally-magic-hit` pipeline with a new `battleSt.allyMagicItemMode` flag that suppresses the cast flame visual; caster pose + target sparkle still render. SFX is `CURE` instead of `MAGIC_CAST`.
+
+**Heal-num targeting** — `_drawEnemyHealNum` PVP branch now honors `getEnemyHealNum().index` so heal numbers float over the actual targeted cell (was previously always cell 0).
+
+`src/pvp.js` (AI + state machine + render), `src/battle-turn.js` (ally item AI), `src/battle-ally.js` (item-mode reset), `src/battle-state.js` (allyMagicItemMode field), `src/battle-drawing.js` (cast flame gate + heal-num index).
+
 ## 1.7.41 — 2026-05-06
 
 ### Roster allies can now actually be poisoned (and Poisona AI can target them)
