@@ -377,22 +377,6 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
   if (isAllyCureOnPlayer && bsc.cureSparkleFrames.length === 2) {
     ui.ctx.drawImage(bsc.cureSparkleFrames[_sparkleFi], px, py);
   }
-  // Player cast pose weapon overlay — keep the player's weapon (staff for WM)
-  // visible while casting magic. Body is in victory pose (arms up); render the
-  // raised weapon canvas at the R-back offset so the weapon reads as held.
-  // Magic only — not item-use, since potions don't involve a weapon.
-  const isPlayerMagicState = battleSt.battleState === 'magic-cast' || battleSt.battleState === 'magic-hit';
-  if (isPlayerMagicState && isWeapon(ps.weaponR)) {
-    const spec = pickAttackWeaponSpec({
-      weaponId: ps.weaponR,
-      weaponSubtype: weaponSubtype(ps.weaponR),
-      isUnarmed: false,
-      hand: 'R', attackPhase: 'back', mirror: false,
-      fistPalette: bsc.battlePoses && bsc.battlePoses.palette,
-      fistTimerMs: battleSt.battleTimer,
-    });
-    if (spec) ui.ctx.drawImage(spec.canvas, px + spec.dx, py + spec.dy);
-  }
   // Near-fatal sweat — 2 frames alternating every 133ms, 3px above portrait
   if (isNearFatal && bsc.sweatFrames.length === 2 && !isAttackPose && !isHitPose && !isVictoryPose && !isDefendPose && !isItemUsePose) {
     const sweatIdx = Math.floor(Date.now() / 133) & 1;
@@ -1418,21 +1402,6 @@ function _drawAllyPortrait(i, ally, isVicPose, isAllyAttack, isAllyHit, isNearFa
       // 'front' draws are queued — they layer above the body, drawn after portrait.
       else weaponDraws.push({ img: spec.canvas, x: ppx + spec.dx, y: ppy + spec.dy });
     }
-  }
-  // Cast pose weapon overlay — keep the WM's staff visible while they're
-  // casting. The body is in victory pose (arms up); we draw the "raised"
-  // weapon canvas at the same R-back offset as if mid-windup, so the staff
-  // reads as held overhead. Matches the player path's cast overlay below.
-  if (isAllyCastingMagic && isWeapon(ally.weaponId)) {
-    const spec = pickAttackWeaponSpec({
-      weaponId: ally.weaponId,
-      weaponSubtype: weaponSubtype(ally.weaponId),
-      isUnarmed: false,
-      hand: 'R', attackPhase: 'back', mirror: false,
-      fistPalette: _jobPalette(ally.jobIdx || 0, ally.palIdx || 0),
-      fistTimerMs: battleSt.battleTimer,
-    });
-    if (spec) ui.ctx.drawImage(spec.canvas, ppx + spec.dx, ppy + spec.dy);
   }
   ui.ctx.drawImage(portraits[ally.fadeStep], ppx, ppy);
   // Near-fatal sweat — 2 frames alternating every 133ms, 3px above portrait

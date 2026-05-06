@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.33 — 2026-05-06
+
+### Revert: staff overlay during cast pose
+
+1.7.32 added a staff overlay during magic-cast pose for player and ally — that was wrong. NES FF3 white-magic cast doesn't show the weapon; the body is the canonical victory pose with empty hands. Reverted.
+
+`src/battle-drawing.js` only.
+
 ## 1.7.32 — 2026-05-06
 
 ### Staff visible during cast pose — player and ally
