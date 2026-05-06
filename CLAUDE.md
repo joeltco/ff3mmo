@@ -1,5 +1,15 @@
 # Project Rules
 
+## ⚠️ EMERGENCY — QUARANTINE — CLAUDE CODE IS FUCKING EVERYTHING UP ⚠️
+
+**As of 2026-05-06**: Claude Code is absolutely fucking everything the fuck up on this project. EMERGENCY EMERGENCY. QUARANTINE QUARANTINE.
+
+The v1.7.49 spell-anim rewrite was wrong — it deleted the working white-magic cast animation (flame + rotating stars) and replaced it with a misinterpreted-capture static overlay. v1.7.50 then deleted sprite-init imports without grepping for downstream references, soft-bricking the page so the dev password gate didn't even work. v1.7.52 hot-fixed that. v1.7.53 reverted v1.7.49 wholesale.
+
+**Do not touch `cure-anim.js`, `spell-anim.js`, or any spell/cast animation code without explicit user direction.** Do not "improve" or "rewrite" working animation code. Do not interpret REC OAM captures unless the user has confirmed which phase a frame represents. Do not delete imports or constants without grepping every usage in the same file first. Headless-load the live site after every deploy and grep the console for `ReferenceError|TypeError|SyntaxError|Uncaught` before declaring success.
+
+If the user is angry and saying something is broken: it is. They know. Stop arguing. Stop analyzing. Revert.
+
 ## STOP WASTING TOKENS — Hard Limits
 
 ### When the user says something LOOKS wrong visually:
