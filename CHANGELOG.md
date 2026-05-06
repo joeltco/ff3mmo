@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.41 — 2026-05-06
+
+### Roster allies can now actually be poisoned (and Poisona AI can target them)
+
+`generateAllyStats` in `src/data/players.js` was not assigning a `status` object, so every roster ally (and PVP opponent + their allies) had `status === undefined`. Two consequences:
+
+1. Every `tryInflictStatus(ally.status, …)` call in `battle-enemy.js` silently no-op'd — enemies could never poison roster allies.
+2. The WM `_tryAllyPoisona` AI in `battle-turn.js` could only ever detect a poisoned *player*, since the `other.status` guard short-circuited every ally check. Ally-on-ally Poisona never fired in practice.
+
+Fixed by importing `createStatusState` from `status-effects.js` and adding `status: createStatusState()` to the `generateAllyStats` return object. Now allies can be poisoned, the per-ally turn-start poison-tick path in `battle-turn.js` (already wired) actually runs, and WM allies will cast Poisona on poisoned teammates.
+
+`src/data/players.js`.
+
 ## 1.7.40 — 2026-05-06
 
 ### Unified swing-pose dwell across player / ally / PVP opponent

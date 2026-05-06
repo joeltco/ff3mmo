@@ -1,6 +1,7 @@
 // MMO roster data — fake player pool, palette table, chat phrases
 import { ITEMS } from './items.js';
 import { calcAttackerAtk } from '../battle-math.js';
+import { createStatusState } from '../status-effects.js';
 
 export const LOCATIONS = ['world', 'ur', 'cave-0', 'cave-1', 'cave-2', 'cave-3', 'crystal'];
 
@@ -133,5 +134,5 @@ export function generateAllyStats(player) {
   const hitRate = wpnItem ? (wpnItem.hit || 80) : 80;
   // Pass through known spells so battle-turn's WM heal AI can decide what to cast.
   const knownSpells = Array.isArray(player.knownSpells) ? [...player.knownSpells] : [];
-  return { name: player.name, palIdx: player.palIdx, jobIdx: player.jobIdx || 0, level: lv, hp, maxHP: hp, atk, def, agi, mnd, evade, mdef, shieldEvade, statusResist, hitRate, weaponId, weaponL, knownSpells, jobLevel: 1, fadeStep: ROSTER_FADE_STEPS };
+  return { name: player.name, palIdx: player.palIdx, jobIdx: player.jobIdx || 0, level: lv, hp, maxHP: hp, atk, def, agi, mnd, evade, mdef, shieldEvade, statusResist, hitRate, weaponId, weaponL, knownSpells, jobLevel: 1, fadeStep: ROSTER_FADE_STEPS, status: createStatusState() };
 }
