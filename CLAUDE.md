@@ -1,14 +1,16 @@
 # Project Rules
 
-## ⚠️ EMERGENCY — QUARANTINE — CLAUDE CODE IS FUCKING EVERYTHING UP ⚠️
+## Spell-animation hard rules (lessons from the v1.7.49 disaster)
 
-**As of 2026-05-06**: Claude Code is absolutely fucking everything the fuck up on this project. EMERGENCY EMERGENCY. QUARANTINE QUARANTINE.
+The v1.7.49 spell-anim rewrite was reverted in v1.7.53; the captured Poisona target tiles were re-landed correctly in v1.7.54–v1.7.56. Don't repeat the failure modes that got us there:
 
-The v1.7.49 spell-anim rewrite was wrong — it deleted the working white-magic cast animation (flame + rotating stars) and replaced it with a misinterpreted-capture static overlay. v1.7.50 then deleted sprite-init imports without grepping for downstream references, soft-bricking the page so the dev password gate didn't even work. v1.7.52 hot-fixed that. v1.7.53 reverted v1.7.49 wholesale.
+- **Don't "improve" or "rewrite" working animation code.** Touch `cure-anim.js` only when the user has reported a specific visual bug.
+- **Don't interpret a REC OAM capture as a specific phase** (cast / heal / target effect) unless the user has confirmed which phase the captured frames are from. v1.7.49 wired the on-target Poisona frames to the caster phase because nobody verified.
+- **Don't delete imports or constants without grepping every usage in the same file first.** v1.7.50 dropped `OK_*` imports while module-scope `_FP_*` aliases still referenced them; the page wouldn't load past the dev-password gate.
+- **Headless-load the live site after every deploy** and grep the console for `ReferenceError|TypeError|SyntaxError|Uncaught` before declaring success. `node --check` doesn't catch orphaned references that fire at module evaluation.
+- **When adding a per-spell visual to a magic system, audit ALL render paths** — player-self, player-ally-target, ally-on-player, ally-on-ally, PVP-on-player, PVP-on-ally — and verify each pulls the spell ID from the right source (`getCurrentSpellId()` is the player's cast only; ally-cast paths use `battleSt.allyMagicSpellId`; PVP-cast uses `pvpSt.pvpMagicSpellId`). v1.7.54 missed the ally-cast paths and v1.7.55 had to follow up.
 
-**Do not touch `cure-anim.js`, `spell-anim.js`, or any spell/cast animation code without explicit user direction.** Do not "improve" or "rewrite" working animation code. Do not interpret REC OAM captures unless the user has confirmed which phase a frame represents. Do not delete imports or constants without grepping every usage in the same file first. Headless-load the live site after every deploy and grep the console for `ReferenceError|TypeError|SyntaxError|Uncaught` before declaring success.
-
-If the user is angry and saying something is broken: it is. They know. Stop arguing. Stop analyzing. Revert.
+If the user reports a visual bug, believe them and fix or revert — don't argue or re-analyze.
 
 ## STOP WASTING TOKENS — Hard Limits
 
