@@ -2,6 +2,25 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.29 — 2026-05-06
+
+### Roster redistribution — every floor has a healer, Ur slimmed down
+
+Population was lopsided after the WM additions: ur=6, world=5, cave-0=4, cave-1/2=3, cave-3=1, crystal=1. Every WM was clustered in ur/world/cave-0; deeper caves had nothing but Fighters and Monks. Ur is the safe-zone starter map and didn't need a third of the player base hanging around there.
+
+Six relocations:
+
+- **Zephyr** (lv5 WM): ur → cave-3
+- **Suki** (lv3 WM): cave-0 → cave-1
+- **Blix** (lv4 WM): cave-0 → cave-2
+- **Vex** (lv5 Fi): cave-2 → cave-3
+- **Wren** (lv4 OK): world → cave-0
+- **Jiro** (lv5 Mo): ur → crystal
+
+New distribution: ur 4 / world 4 / cave-0 3 / cave-1 4 / cave-2 3 / cave-3 3 / crystal 2. Every cave 0-3 has at least one WM. Ur is now 2 campers (Aldric Fi + Lenna WM) plus Ivy (WM lv2) and Nyx (OK lv1) — appropriate for a starter zone. Caves 1-3 each gain a healer for harder encounters; crystal gets a Monk for non-Fi variety. Roster movement keeps them shuffling, so any given moment in any given location should have a reasonable mix.
+
+`src/data/players.js` only.
+
 ## 1.7.28 — 2026-05-06
 
 ### Four more White Mages — 8 total on the roster
