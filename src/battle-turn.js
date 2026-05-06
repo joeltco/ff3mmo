@@ -255,10 +255,12 @@ function _tryAllyCure(ally, allyIdx) {
     if (!other.maxHP) continue;
     candidates.push({ type: 'ally', idx: i, pct: other.hp / other.maxHP });
   }
-  // Need at least one teammate below 60% HP. Pick the lowest pct.
+  // Need at least one teammate below 40% HP. Pick the lowest pct. Threshold
+  // tuned down from 60% to make WMs swing the staff more often — heals were
+  // firing every other turn at 60% which read visually as "staff disappearing".
   candidates.sort((a, b) => a.pct - b.pct);
   const lowest = candidates[0];
-  if (!lowest || lowest.pct >= 0.6) return false;
+  if (!lowest || lowest.pct >= 0.4) return false;
   // Cure power 42, formula: floor(MND/2) + power + rand(0..floor(atk/2))
   const mnd = ally.mnd || 5;
   const atk = Math.floor(mnd / 2) + 42;

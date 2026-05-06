@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.34 — 2026-05-06
+
+### WM heal threshold 60% → 40%
+
+The 60% threshold meant WM allies cast Cure on most turns once anyone took a hit, which visually read as "staff disappearing on certain turns." Dropped to 40% so WMs swing the staff way more often — they only heal when someone is genuinely low (memo to self: 40% HP is the canonical NES FF3 "ouch" threshold for AI heal triggers).
+
+`src/battle-turn.js` only.
+
 ## 1.7.33 — 2026-05-06
 
 ### Revert: staff overlay during cast pose
