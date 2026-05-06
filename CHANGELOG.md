@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.57 — 2026-05-06
+
+### End-of-round poison tick — drop SFX
+
+`_applyEndOfRoundPoison` was firing `SFX.ATTACK_HIT` once per round whenever any combatant took poison damage. Removed — the red damage numbers + flash already convey the tick, and stacking it under the existing turn-end audio was just noise.
+
 ## 1.7.56 — 2026-05-06
 
 ### Poisona target effect — center on portrait (was top-half only)

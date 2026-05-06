@@ -276,7 +276,6 @@ function _applyEndOfRoundPoison() {
       anyTicked = true;
     }
   }
-  if (anyTicked) playSFX(SFX.ATTACK_HIT);
   return anyTicked;
 }
 
