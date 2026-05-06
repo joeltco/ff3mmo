@@ -38,8 +38,11 @@ export const ps = {
 
 // Starting spells granted when a player first switches into a mage job.
 // Keyed by jobIdx. White Mage = 3, Black Mage = 4, Red Mage = 5.
+// NES canon: WM starts with the full Lv1 white kit (Cure, Poisona, Sight).
+// We ship Cure + Poisona only — Sight (0x36) is deferred until the overworld
+// minimap-reveal system exists. Add 0x36 to this array once Sight has behavior.
 const STARTING_SPELLS = {
-  3: [0x34, 0x35], // White Mage: Cure, Poisona
+  3: [0x34, 0x35], // White Mage: Cure, Poisona  (Sight 0x36 deferred)
 };
 
 export function grantStartingSpells(jobIdx = ps.jobIdx) {

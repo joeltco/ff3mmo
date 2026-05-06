@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.26 — 2026-05-05
+
+### White-magic numbers audit — equalised MP cost, missing-entry guard, drop dead clamp
+
+Five low-risk corrections after auditing the v1 white-magic system:
+
+- **Cure MP 4 → 2.** Asymmetric Cure=4 / Poisona=2 had no source. NES FF3 uses level-slot MP — both Cure and Poisona consume one Lv1 slot, same cost. Equalising to 2 each makes the WM start kit (~6 MP) yield ~3 casts before sleep, matching the canonical "3 Lv1 slots" feel.
+- **`getSpellMPCost` no longer silently defaults to 0.** Old behaviour: any spell ID added to `ps.knownSpells` without a `SPELL_MP_COST` entry was free to cast. New behaviour: warn once via `console.warn` and return 99 (effectively uncastable) so the omission surfaces immediately in playtest. Latent footgun gone.
+- **Dropped dead `Math.max(0, ps.mp - cost)` clamp** in `startSpellCast`. All three call sites already gate on `ps.mp >= cost` upstream (`input-handler.js:385`, `:825`, `:923`) so the clamp only ever masked an upstream bug. If MP goes negative now, an upstream check is missing and we want to notice.
+- **`STARTING_SPELLS` comment** flags Sight (0x36) as canon-deferred so the WM Lv1 kit gap is intentional and visible at the data site.
+- **Ur magic shop comment** notes the higher-tier rollout plan (Cura mid-game, Curaga late-game) so future shop authoring has the canonical reference inline.
+
+`src/data/spells.js`, `src/spell-cast.js`, `src/player-stats.js`, `src/data/shops.js`.
+
 ## 1.7.25 — 2026-05-05
 
 ### Suppress 0-value heal popups (Poisona, Antidote, full-HP overheal)

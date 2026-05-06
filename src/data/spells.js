@@ -95,9 +95,13 @@ export const SPELLS = new Map([
 ]);
 
 // MP cost per spell (player-cast). Approximates NES per-level slot cost as a flat MP value.
-// Only spells the player can cast need entries; unknown lookups default to 0.
+// In NES FF3, Cure + Poisona both consume one Lv1 white-magic slot — same cost.
+// Equalised to 2 MP each so the WM start kit (~6 MP) gives ~3 casts before sleep,
+// matching the canonical "3 Lv1 slots" feel.
+// Adding a new player-castable spell? Put an entry here OR `getSpellMPCost` will
+// warn and return 99 (effectively uncastable) so the omission shows up immediately.
 export const SPELL_MP_COST = new Map([
-  [0x34, 4],  // Cure
+  [0x34, 2],  // Cure
   [0x35, 2],  // Poisona
 ]);
 
@@ -111,6 +115,16 @@ export function getSpellBuyPrice(spellId) {
   return SPELL_BUY_PRICE.get(spellId) ?? 0;
 }
 
+// Returns the spell's flat MP cost. If a player-castable spell is missing from
+// SPELL_MP_COST, that's a bug — warn once and return 99 (effectively uncastable)
+// so the omission surfaces in playtest instead of silently making the spell free.
+const _warnedMissingMP = new Set();
 export function getSpellMPCost(spellId) {
-  return SPELL_MP_COST.get(spellId) ?? 0;
+  const v = SPELL_MP_COST.get(spellId);
+  if (v != null) return v;
+  if (!_warnedMissingMP.has(spellId)) {
+    _warnedMissingMP.add(spellId);
+    console.warn(`[spells] no SPELL_MP_COST entry for spell $${spellId.toString(16).padStart(2,'0')} — defaulting to 99`);
+  }
+  return 99;
 }

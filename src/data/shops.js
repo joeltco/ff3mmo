@@ -25,7 +25,9 @@ export const SHOPS = new Map([
   ['ur_magic', {
     mapId: 3, counter: { x: 4, y: 4 },
     spells: [0x34, 0x35],
-    // Cure, Poisona (White Magic level 1)
+    // Cure, Poisona (White Magic Lv1) — 100 gil each, NES canon for starter town.
+    // Higher tiers (Cura/Cure2 in mid-game towns, Curaga/Cure3 later) ship with
+    // their respective magic-shop catalogs as those towns come online.
   }],
 ]);
 

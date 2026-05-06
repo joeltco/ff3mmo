@@ -60,9 +60,10 @@ export function startSpellCast(spellId, targetSpec) {
   _targets = [allyIndex < 0 ? 'player' : allyIndex];
   const isWhite = spell.element === 'recovery' || spell.target === 'cure_status' || spell.target === 'revive';
   _baseAmount = _rollMagicAmount(spell.power, isWhite);
-  // MP deduction (cost may be 0 for unmapped spells in v1)
-  const cost = getSpellMPCost(spellId);
-  ps.mp = Math.max(0, ps.mp - cost);
+  // MP deduction. Callers MUST gate on `ps.mp >= cost` upstream
+  // (input-handler.js does this for both battle and pause paths). No clamp here
+  // — if MP goes negative, an upstream check is missing and we want to notice.
+  ps.mp -= getSpellMPCost(spellId);
   battleSt.battleState = 'magic-cast';
   battleSt.battleTimer = 0;
   // Cast SFX — FF3J disasm at 33/B0D8 (black) and 33/B0FF (white) writes $A1 to
