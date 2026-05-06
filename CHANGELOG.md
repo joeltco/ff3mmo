@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.53 — 2026-05-06
+
+### Revert v1.7.49 spell-anim rewrite — restore working Cure + Poisona animations
+
+The v1.7.49 "per-spell animation registry" rewrite was wrong. It deleted the working white-magic cast animation (flame buildup + rotating stars around the caster) and replaced it with a static overlay built from a misinterpreted REC OAM capture. Cure (blue palette) and Poisona (orange palette) both lost their cast animation; Poisona also lost its target spell-effect. Reverted commit 0841b98 wholesale: `cure-anim.js` is back, `spell-anim.js` is gone, and call sites in `battle-drawing.js`, `battle-sprite-cache.js`, `pvp.js`, `spell-cast.js` are restored to the 1.7.48 shape. Cast + spell animations work again for both spells.
+
 ## 1.7.52 — 2026-05-06
 
 ### Hotfix: restore OK_* sprite imports in sprite-init.js (game wouldn't load)
@@ -42,6 +48,8 @@ Replaced `cure-anim.js` with `spell-anim.js`: per-spell registry keyed by spell 
 
 Touched: `src/spell-anim.js` (new), `src/battle-drawing.js`, `src/pvp.js`, `src/spell-cast.js`, `src/battle-sprite-cache.js`. `src/cure-anim.js` deleted.
 
+=======
+>>>>>>> parent of 0841b98 (v1.7.49 — per-spell animation registry; rip out cure-anim shared-palette hack, real captured tiles for Cure + Poisona)
 ## 1.7.48 — 2026-05-06
 
 ### Slash-flash hit-gate is now single-source (fixes: misses showed slash on user portrait in PVP)
