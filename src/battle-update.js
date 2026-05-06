@@ -73,6 +73,8 @@ export function resetBattleVars() {
   battleSt.isDefending = false; battleSt.battleAllies = []; battleSt.allyJoinRound = 0;
   battleSt.currentAllyAttacker = -1; battleSt.allyTargetIndex = -1; battleSt.allyHitResult = null; battleSt.allyHitIsLeft = false;
   battleSt.allyShakeTimer = {}; battleSt.enemyTargetAllyIdx = -1; battleSt.allyExitTimer = 0;
+  battleSt.allyMagicCasterIdx = -1; battleSt.allyMagicTargetIdx = -1; battleSt.allyMagicSpellId = 0;
+  battleSt.allyMagicHealAmount = 0; battleSt.allyMagicEffectApplied = false; battleSt.allyMagicTargetType = 'player';
   resetBattleItemVars();
   hudSt.playerDeathTimer = null; battleSt._teamWipeMsgShown = false;
   inputSt.battleActionCount = 0;
@@ -805,7 +807,7 @@ export function updateBattle(dt) {
   updateBattlePlayerAttack()       ||
   updateBattleDefendItem(dt)       ||
   _updateBattleRun()               ||
-  updateBattleAlly()               ||
+  updateBattleAlly(dt)             ||
   updateBattleEnemyTurn()          ||
   updateBattleEndSequence(dt);
 }

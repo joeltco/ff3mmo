@@ -368,6 +368,15 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
       && cureAnim && cureAnim.sparkleFrames.length === 2) {
     ui.ctx.drawImage(cureAnim.sparkleFrames[_sparkleFi], px, py);
   }
+  // Ally-cast heal on player (WM ally Cure → player). Shows the recovery-school
+  // sparkle on the player portrait during the heal phase of ally-magic-hit.
+  // Heal-num triggers visibility window (suppressed for 0-value via drawBattleNum).
+  const isAllyCureOnPlayer = battleSt.battleState === 'ally-magic-hit'
+    && battleSt.allyMagicTargetType === 'player'
+    && battleSt.allyMagicEffectApplied;
+  if (isAllyCureOnPlayer && bsc.cureSparkleFrames.length === 2) {
+    ui.ctx.drawImage(bsc.cureSparkleFrames[_sparkleFi], px, py);
+  }
   // Near-fatal sweat — 2 frames alternating every 133ms, 3px above portrait
   if (isNearFatal && bsc.sweatFrames.length === 2 && !isAttackPose && !isHitPose && !isVictoryPose && !isDefendPose && !isItemUsePose) {
     const sweatIdx = Math.floor(Date.now() / 133) & 1;
@@ -1273,7 +1282,14 @@ function _drawAllyRow(i, ally, panelTop, weaponDraws) {
     ? _allyCureAnim.sparkleFrames : null;
   const _allyItemSparkle = isAllyHealItem && bsc.cureSparkleFrames.length === 2
     ? bsc.cureSparkleFrames : null;
-  const _allyHealSparkleSet = _allyMagicSparkle || _allyItemSparkle;
+  // WM ally cast Cure on this ally — show recovery sparkle during heal phase.
+  const isAllyCureOnAlly = battleSt.battleState === 'ally-magic-hit'
+    && battleSt.allyMagicTargetType === 'ally'
+    && battleSt.allyMagicTargetIdx === i
+    && battleSt.allyMagicEffectApplied;
+  const _allyAllyCureSparkle = isAllyCureOnAlly && bsc.cureSparkleFrames.length === 2
+    ? bsc.cureSparkleFrames : null;
+  const _allyHealSparkleSet = _allyMagicSparkle || _allyItemSparkle || _allyAllyCureSparkle;
   const ppx = HUD_RIGHT_X + 8, ppy = rowY + 8;
   drawHudBox(HUD_RIGHT_X, rowY, 32, ROSTER_ROW_H, ally.fadeStep);
   drawHudBox(HUD_RIGHT_X + 32, rowY, HUD_RIGHT_W - 32, ROSTER_ROW_H, ally.fadeStep);
@@ -1338,7 +1354,13 @@ function _drawAllyPortrait(i, ally, isVicPose, isAllyAttack, isAllyHit, isNearFa
   const _allyUpcomingLeft = _allyDualOrUnarmed ? (battleSt.allyHitIdx % 2 === 1) : !_allyRw;
   const allyHandChangeGap = battleSt.battleState === 'ally-attack-back' && battleSt.allyHitIdx > 0 &&
     battleSt.allyHitIsLeft !== _allyUpcomingLeft && battleSt.currentAllyAttacker === i;
-  if (isVicPose && (Math.floor(Date.now() / 250) & 1) && _fp(fakePlayerVictoryPortraits)) {
+  // WM caster pose during ally-magic-cast / ally-magic-hit — same arm-up pose as
+  // victory/defend/magic. Held steady (no flicker) for the full cast duration.
+  const isAllyCastingMagic = (battleSt.battleState === 'ally-magic-cast' || battleSt.battleState === 'ally-magic-hit')
+    && battleSt.allyMagicCasterIdx === i;
+  if (isAllyCastingMagic && _fp(fakePlayerVictoryPortraits)) {
+    portraits = _fp(fakePlayerVictoryPortraits);
+  } else if (isVicPose && (Math.floor(Date.now() / 250) & 1) && _fp(fakePlayerVictoryPortraits)) {
     portraits = _fp(fakePlayerVictoryPortraits);
   } else if (allyHandChangeGap) {
     portraits = _fp(fakePlayerPortraits); // idle during the gap, no weapon overlay

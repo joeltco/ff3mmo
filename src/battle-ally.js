@@ -9,9 +9,10 @@ import { _nameToBytes } from './text-utils.js';
 import { queueBattleMsg } from './battle-msg.js';
 import { pvpSt } from './pvp.js';
 import { inputSt } from './input-handler.js';
-import { getEnemyDmgNum, setEnemyDmgNum } from './damage-numbers.js';
+import { getEnemyDmgNum, setEnemyDmgNum, setPlayerHealNum, getAllyDamageNums, tickHealNums, clearHealNums } from './damage-numbers.js';
 import { ROSTER_FADE_STEPS } from './data/players.js';
 import { IDLE_FRAME_MS } from './combatant-pose.js';
+import { ps } from './player-stats.js';
 
 // Injected at boot — avoids circular import on main.js
 let _buildTurnOrder = () => [];
@@ -172,6 +173,60 @@ function _updateAllyEnemyHit() {
   return false;
 }
 
+// ── Ally magic cast (WM heal AI) ─────────────────────────────────────────────
+// Mirrors the player magic-cast → magic-hit pipeline but caster is an ally.
+// Timing: 600 ms windup (ally-magic-cast) → 1000 ms hit phase (effect at 400 ms,
+// turn ends at 1000 ms). No magic-circle on caster portrait yet — render shows
+// caster in victory pose + heal sparkle on target during hit phase.
+const ALLY_MAGIC_CAST_MS  = 600;
+const ALLY_MAGIC_EFFECT_MS = 400;  // within hit phase
+const ALLY_MAGIC_HIT_MS   = 1000;
+
+function _applyAllyCureEffect() {
+  const heal = battleSt.allyMagicHealAmount;
+  if (battleSt.allyMagicTargetType === 'player') {
+    if (!ps.stats) return;
+    const realHeal = Math.min(heal, (ps.stats.maxHP || 0) - ps.hp);
+    ps.hp += realHeal;
+    setPlayerHealNum({ value: realHeal, timer: 0 });
+  } else {
+    const target = battleSt.battleAllies[battleSt.allyMagicTargetIdx];
+    if (!target) return;
+    const maxHP = target.maxHP || target.hp;
+    const realHeal = Math.min(heal, maxHP - target.hp);
+    target.hp += realHeal;
+    getAllyDamageNums()[battleSt.allyMagicTargetIdx] = { value: realHeal, timer: 0, heal: true };
+  }
+  playSFX(SFX.CURE);
+}
+
+function _updateAllyMagicCast(dt) {
+  if (battleSt.battleState === 'ally-magic-cast') {
+    if (battleSt.battleTimer >= ALLY_MAGIC_CAST_MS) {
+      battleSt.battleState = 'ally-magic-hit';
+      battleSt.battleTimer = 0;
+      battleSt.allyMagicEffectApplied = false;
+    }
+    return true;
+  }
+  if (battleSt.battleState === 'ally-magic-hit') {
+    tickHealNums(dt);
+    if (!battleSt.allyMagicEffectApplied && battleSt.battleTimer >= ALLY_MAGIC_EFFECT_MS) {
+      _applyAllyCureEffect();
+      battleSt.allyMagicEffectApplied = true;
+    }
+    if (battleSt.battleTimer >= ALLY_MAGIC_HIT_MS) {
+      clearHealNums();
+      battleSt.allyMagicCasterIdx = -1;
+      battleSt.allyMagicTargetIdx = -1;
+      battleSt.allyMagicSpellId = 0;
+      _processNextTurn();
+    }
+    return true;
+  }
+  return false;
+}
+
 // ── Ally KO sequence ─────────────────────────────────────────────────────────
 function _updateAllyKOSequence() {
   if (battleSt.battleState === 'ally-ko-fade') {
@@ -195,9 +250,10 @@ function _updateAllyKOSequence() {
   return false;
 }
 
-export function updateBattleAlly() {
+export function updateBattleAlly(dt) {
   if (_updateAllyJoin()) return true;
   if (_updateAllyAttack()) return true;
+  if (_updateAllyMagicCast(dt)) return true;
   if (battleSt.battleState === 'ally-damage-show') { if (battleSt.battleTimer >= 700) _updateAllyDamageShow(); return true; }
   if (_updateAllyEnemyHit()) return true;
   if (_updateAllyKOSequence()) return true;

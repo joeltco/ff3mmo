@@ -12,17 +12,17 @@ export const PLAYER_POOL = [
   { name: 'Aldric',  level: 5,  palIdx: 3, camper: true,  loc: 'ur',      jobIdx: 1, weaponR: 0x24,               armorId: 0x73, helmId: 0x62, shieldId: 0x58 }, // Fi — Longsword / Leather+Cap+Shield
   { name: 'Suki',    level: 3,  palIdx: 4, camper: false, loc: 'cave-0',  jobIdx: 0, weaponR: 0x1E,               armorId: 0x73, helmId: 0x62 },                 // OK — Knife / Leather+Cap
   { name: 'Fenris',  level: 5,  palIdx: 5, camper: false, loc: 'cave-1',  jobIdx: 1, weaponR: 0x1F,               armorId: 0x73, helmId: 0x62, shieldId: 0x58 }, // Fi — Dagger / Leather+Cap+Shield
-  { name: 'Lenna',   level: 5,  palIdx: 6, camper: true,  loc: 'ur',      jobIdx: 0, weaponR: 0x1E,               armorId: 0x73, helmId: 0x62 },                 // OK — Knife / Leather+Cap
+  { name: 'Lenna',   level: 5,  palIdx: 6, camper: true,  loc: 'ur',      jobIdx: 3, weaponR: 0x0E,               armorId: 0x73, helmId: 0x62, knownSpells: [0x34, 0x35] }, // WM — Staff / Leather+Cap (Cure, Poisona)
   { name: 'Grok',    level: 5,  palIdx: 7, camper: false, loc: 'cave-3',  jobIdx: 1, weaponR: 0x24,               armorId: 0x73, helmId: 0x62, shieldId: 0x58 }, // Fi — Longsword / Leather+Cap+Shield
-  { name: 'Ivy',     level: 2,  palIdx: 0, camper: false, loc: 'ur',      jobIdx: 0, weaponR: 0x1E,               armorId: 0x73, helmId: 0x62 },                 // OK — Knife / Leather+Cap
+  { name: 'Ivy',     level: 2,  palIdx: 0, camper: false, loc: 'ur',      jobIdx: 3, weaponR: 0x0E,               armorId: 0x73, helmId: 0x62, knownSpells: [0x34] },       // WM — Staff / Leather+Cap (Cure)
   { name: 'Rook',    level: 5,  palIdx: 3, camper: false, loc: 'cave-2',  jobIdx: 1, weaponR: 0x24,               armorId: 0x73, helmId: 0x62, shieldId: 0x58 }, // Fi — Longsword / Leather+Cap+Shield
-  { name: 'Tora',    level: 5,  palIdx: 5, camper: false, loc: 'world',   jobIdx: 0, weaponR: 0x1F,               armorId: 0x73, helmId: 0x62 },                 // OK — Dagger / Leather+Cap
+  { name: 'Tora',    level: 5,  palIdx: 5, camper: false, loc: 'world',   jobIdx: 3, weaponR: 0x0E,               armorId: 0x73, helmId: 0x62, knownSpells: [0x34, 0x35] }, // WM — Staff / Leather+Cap (Cure, Poisona)
   { name: 'Blix',    level: 4,  palIdx: 7, camper: false, loc: 'cave-0',  jobIdx: 0, weaponR: 0x1F,               armorId: 0x73, helmId: 0x62 },                 // OK — Dagger / Leather+Cap
   { name: 'Cassia',  level: 5,  palIdx: 6, camper: true,  loc: 'cave-1',  jobIdx: 1, weaponR: 0x28,               armorId: 0x73, helmId: 0x62, shieldId: 0x58 }, // Fi — Serpent Sword / Leather+Cap+Shield
   { name: 'Duran',   level: 5,  palIdx: 1, camper: false, loc: 'crystal', jobIdx: 1, weaponR: 0x24,               armorId: 0x73, helmId: 0x62, shieldId: 0x58 }, // Fi — Longsword / Leather+Cap+Shield
   { name: 'Nyx',     level: 1,  palIdx: 4, camper: false, loc: 'ur',      jobIdx: 0, weaponR: 0x1E,               armorId: 0x73, helmId: 0x62 },                 // OK — Knife / Leather+Cap
   { name: 'Orin',    level: 4,  palIdx: 0, camper: false, loc: 'world',   jobIdx: 1, weaponR: 0x1F, weaponL: 0x1E, armorId: 0x73, helmId: 0x62 },                // Fi — Dagger+Knife / Leather+Cap
-  { name: 'Pip',     level: 3,  palIdx: 2, camper: false, loc: 'cave-0',  jobIdx: 0, weaponR: 0x1E,               armorId: 0x73, helmId: 0x62 },                 // OK — Knife / Leather+Cap
+  { name: 'Pip',     level: 3,  palIdx: 2, camper: false, loc: 'cave-0',  jobIdx: 3, weaponR: 0x0E,               armorId: 0x73, helmId: 0x62, knownSpells: [0x34, 0x35] }, // WM — Staff / Leather+Cap (Cure, Poisona)
   { name: 'Vex',     level: 5,  palIdx: 7, camper: false, loc: 'cave-2',  jobIdx: 1, weaponR: 0x24,               armorId: 0x73, helmId: 0x62, shieldId: 0x58 }, // Fi — Longsword / Leather+Cap+Shield
   { name: 'Wren',    level: 4,  palIdx: 5, camper: false, loc: 'world',   jobIdx: 0, weaponR: 0x1F,               armorId: 0x73, helmId: 0x62 },                 // OK — Dagger / Leather+Cap
   { name: 'Kasumi',  level: 4,  palIdx: 4, camper: false, loc: 'cave-0',  jobIdx: 2, weaponR: 0x06,               armorId: 0x73, helmId: 0x62 },                 // Mo — Nunchuck / Leather+Cap
@@ -89,6 +89,10 @@ export function generateAllyStats(player) {
   const str = 5 + lv;
   const agi = 5 + lv;
   const vit = 5 + lv;
+  // MND scales harder for white-magic jobs so their Cure heals are useful;
+  // formula: 5 + lv*W where W=3 for WM (jobIdx 3), W=2 for Red Mage (5), W=1 otherwise.
+  const mndW = player.jobIdx === 3 ? 3 : player.jobIdx === 5 ? 2 : 1;
+  const mnd = 5 + lv * mndW;
   const hp = 28 + lv * 6;
   const loc = player.loc;
   // Gear by location (matches chest loot tiers)
@@ -127,5 +131,7 @@ export function generateAllyStats(player) {
   // Hit rate from weapon, attack roll from AGI
   const wpnItem = ITEMS.get(weaponId);
   const hitRate = wpnItem ? (wpnItem.hit || 80) : 80;
-  return { name: player.name, palIdx: player.palIdx, jobIdx: player.jobIdx || 0, level: lv, hp, maxHP: hp, atk, def, agi, evade, mdef, shieldEvade, statusResist, hitRate, weaponId, weaponL, jobLevel: 1, fadeStep: ROSTER_FADE_STEPS };
+  // Pass through known spells so battle-turn's WM heal AI can decide what to cast.
+  const knownSpells = Array.isArray(player.knownSpells) ? [...player.knownSpells] : [];
+  return { name: player.name, palIdx: player.palIdx, jobIdx: player.jobIdx || 0, level: lv, hp, maxHP: hp, atk, def, agi, mnd, evade, mdef, shieldEvade, statusResist, hitRate, weaponId, weaponL, knownSpells, jobLevel: 1, fadeStep: ROSTER_FADE_STEPS };
 }

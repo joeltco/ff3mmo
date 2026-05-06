@@ -171,6 +171,9 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
         return;
       }
     }
+    // White Mage heal AI — pick lowest-HP-pct teammate (player or other ally) below 60% HP.
+    // If anyone needs healing AND ally knows Cure (0x34), cast on them. Else fall through.
+    if (_tryAllyCure(ally, turn.index)) return;
     if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
       const living = battleSt.encounterMonsters.map((m, i) => m.hp > 0 ? i : -1).filter(i => i >= 0);
       if (living.length === 0) { processNextTurn(); return; }
@@ -234,6 +237,43 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
     }
     battleSt.battleState = 'enemy-flash'; battleSt.battleTimer = 0; pvpSt.pvpPreflashDecided = false;
   }
+}
+
+// ── Ally heal AI (White Mage) ──────────────────────────────────────────────
+// Returns true if ally cast Cure this turn (caller should NOT also do attack).
+function _tryAllyCure(ally, allyIdx) {
+  if (!ally.knownSpells || !ally.knownSpells.includes(0x34)) return false;
+  // Build heal candidates: player + every other living ally. Each entry tracks
+  // hpPct so we can pick the one most in need. Threshold: < 0.6 = needs heal.
+  const candidates = [];
+  if (ps.hp > 0 && ps.stats && ps.stats.maxHP) {
+    candidates.push({ type: 'player', idx: -1, pct: ps.hp / ps.stats.maxHP });
+  }
+  for (let i = 0; i < battleSt.battleAllies.length; i++) {
+    const other = battleSt.battleAllies[i];
+    if (!other || other.hp <= 0) continue;
+    if (!other.maxHP) continue;
+    candidates.push({ type: 'ally', idx: i, pct: other.hp / other.maxHP });
+  }
+  // Need at least one teammate below 60% HP. Pick the lowest pct.
+  candidates.sort((a, b) => a.pct - b.pct);
+  const lowest = candidates[0];
+  if (!lowest || lowest.pct >= 0.6) return false;
+  // Cure power 42, formula: floor(MND/2) + power + rand(0..floor(atk/2))
+  const mnd = ally.mnd || 5;
+  const atk = Math.floor(mnd / 2) + 42;
+  const heal = atk + Math.floor(Math.random() * (Math.floor(atk / 2) + 1));
+  battleSt.allyMagicCasterIdx    = allyIdx;
+  battleSt.allyMagicTargetType   = lowest.type;
+  battleSt.allyMagicTargetIdx    = lowest.idx;
+  battleSt.allyMagicSpellId      = 0x34;
+  battleSt.allyMagicHealAmount   = heal;
+  battleSt.allyMagicEffectApplied = false;
+  queueBattleMsg(_nameToBytes(ally.name || 'Ally'));
+  playSFX(SFX.MAGIC_CAST);
+  battleSt.battleState = 'ally-magic-cast';
+  battleSt.battleTimer = 0;
+  return true;
 }
 
 // ── Player turn actions ────────────────────────────────────────────────────

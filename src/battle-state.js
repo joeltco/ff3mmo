@@ -68,6 +68,14 @@ export const battleSt = {
   enemyTargetAllyIdx: -1,
   _teamWipeMsgShown: false,
 
+  // ── Ally cast (WM heal AI) ────────────────────────────────────────
+  allyMagicCasterIdx: -1,             // ally index of the caster
+  allyMagicTargetType: 'player',      // 'player' | 'ally'
+  allyMagicTargetIdx: -1,             // ally index when target type is 'ally'
+  allyMagicSpellId: 0,
+  allyMagicHealAmount: 0,             // pre-rolled heal value
+  allyMagicEffectApplied: false,
+
   // ── Item use ──────────────────────────────────────────────────────
   itemHealAmount: 0,
 

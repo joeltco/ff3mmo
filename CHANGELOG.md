@@ -2,6 +2,29 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.27 — 2026-05-06
+
+### White Mages on the roster — they actually heal you in battle now
+
+Replaced 4 Onion Knights in `PLAYER_POOL` with White Mages (jobIdx 3): Lenna (Ur, lv5, Cure+Poisona), Ivy (Ur, lv2, Cure), Tora (world map, lv5, Cure+Poisona), Pip (cave-0, lv3, Cure+Poisona). Each equipped with Staff (0x0E) + Leather Armor (0x73) + Leather Cap (0x62) — the staff gives them a real (if weak) attack so they're not useless when nobody needs healing. Per-WM color is the same red-trim variation `PLAYER_PALETTES` already offers (palIdx 0/2/5/6) — the color slot 3 is what changes per slot, identical scheme to the OK roster they're replacing.
+
+White Mage ally AI:
+
+- `generateAllyStats` now returns `mnd` and `knownSpells`. MND scales as `5 + lv*W` where W=3 for WM, W=2 for Red Mage, W=1 otherwise. Cure heal at lv5 WM (MND 20) lands ~52-78 HP.
+- `_tryAllyCure` (battle-turn.js) runs at the top of every WM ally turn before the attack roll. Builds a candidate list of every living teammate (player + other allies + self), picks the lowest HP%, and casts Cure if anyone is below 60% HP. Otherwise falls through to the staff attack.
+- New battle states `ally-magic-cast` (600 ms windup) → `ally-magic-hit` (1000 ms total, effect applied at 400 ms). Mirror of the player magic-cast / magic-hit pipeline but with caster=ally.
+- `SFX.MAGIC_CAST` at cast start, `SFX.CURE` at heal moment. Same chime as player Cure.
+
+Visuals:
+
+- WM caster portrait switches to victory pose for the cast duration (same arms-up pose used for victory, defend, magic-cast on the player). Held steady, not flickering.
+- Heal sparkle (recovery palette) renders on the target portrait — player or ally — during the heal phase. Reuses `bsc.cureSparkleFrames` (the existing recovery-school sparkle) so no new asset work.
+- Heal number bounces on the target portrait via the existing `setPlayerHealNum` / `getAllyDamageNums` paths. 0-value popup suppression from 1.7.25 covers full-HP overheal automatically.
+
+Ally caster magic-circle (the flame + 8-star ring) is **not** rendered yet — that requires per-ally portrait positioning math which needs its own pass. Functional gameplay first; polish to follow.
+
+`src/data/players.js`, `src/battle-state.js`, `src/battle-turn.js`, `src/battle-ally.js`, `src/battle-update.js`, `src/battle-drawing.js`.
+
 ## 1.7.26 — 2026-05-05
 
 ### White-magic numbers audit — equalised MP cost, missing-entry guard, drop dead clamp
