@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.54 — 2026-05-06
+
+### Poisona target spell-effect — recover captured tiles, wire to TARGET (not caster)
+
+The 8 captured tiles `POISONA_T49–T50` (REC OAM 2026-05-06) are the real on-target Poisona effect. v1.7.49 captured them correctly but mis-wired them as the *caster* build-up animation (then v1.7.53 reverted everything). This restores those bytes and wires them to the TARGET during the heal phase — the caster animation (flame + rotating stars in magenta) is unchanged because it was already correct. Two-state animation toggling every 67 ms over the 283 ms heal window; `cure_status` school only (Poisona/Bndna/Esuna/Stone). Cure (recovery) keeps its existing heal sparkle. New helper `getCureTargetFrames(spell, animBundle)` picks the right frame set per spell school; both player-self and ally-target heal sites in `battle-drawing.js` route through it.
+
 ## 1.7.53 — 2026-05-06
 
 ### Revert v1.7.49 spell-anim rewrite — restore working Cure + Poisona animations

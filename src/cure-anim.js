@@ -64,6 +64,21 @@ const T_49_STAR = new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 0x10,
 const T_4A_HEAL = new Uint8Array([0x00,0x00,0x00,0x00,0x08,0x00,0x00,0x00, 0x00,0x00,0x00,0x08,0x1C,0x08,0x00,0x00]);
 const T_49_HEAL = new Uint8Array([0x10,0x10,0x28,0xD6,0x28,0x10,0x10,0x00, 0x00,0x00,0x10,0x38,0x10,0x00,0x00,0x00]);
 
+// ── Poisona target effect (cure_status only) ────────────────────────────────
+// 8 unique tiles forming a 2-state animation that plays OVER THE TARGET during
+// the heal phase. Captured via REC OAM 2026-05-06. v1.7.49 had these bytes
+// correct but mis-wired them as the caster build-up; v1.7.54 routes them to
+// the target where they belong. State A: $49/$4A/$4B/$4C; State B: $4D/$4E/$4F/$50.
+// All tiles drawn HFLIP; toggle every 67 ms over the heal window (283 ms).
+const POISONA_TGT_T49 = new Uint8Array([0x00,0x02,0x00,0x0C,0x00,0x40,0x00,0x20, 0x00,0x05,0x1C,0x30,0x30,0x20,0x68,0x60]);
+const POISONA_TGT_T4A = new Uint8Array([0x00,0x80,0x38,0x04,0x04,0x02,0x02,0x00, 0x00,0x60,0x00,0x00,0x00,0x00,0x00,0x00]);
+const POISONA_TGT_T4B = new Uint8Array([0x30,0x20,0x18,0x08,0x0E,0x4B,0x03,0x00, 0x60,0x70,0x30,0x3C,0x1F,0x47,0x00,0x00]);
+const POISONA_TGT_T4C = new Uint8Array([0x00,0x30,0x38,0xB8,0x78,0xE0,0x00,0x10, 0x04,0x30,0x38,0x78,0xF2,0xD0,0x80,0x10]);
+const POISONA_TGT_T4D = new Uint8Array([0x00,0x06,0x18,0x20,0x20,0x20,0x00,0x40, 0x00,0x00,0x00,0x00,0x00,0x40,0x40,0x00]);
+const POISONA_TGT_T4E = new Uint8Array([0x00,0x00,0x00,0x38,0x70,0x7D,0x0C,0x14, 0x00,0x00,0x00,0x38,0x7C,0x79,0x1C,0x0E]);
+const POISONA_TGT_T4F = new Uint8Array([0x00,0x40,0x10,0x10,0x00,0x01,0x04,0x00, 0x40,0x00,0x60,0x20,0x38,0x1F,0x03,0x00]);
+const POISONA_TGT_T50 = new Uint8Array([0x06,0x0E,0x08,0x3C,0xA0,0xC0,0x00,0x00, 0x0C,0x0C,0x1C,0x18,0x78,0xF0,0xC4,0x00]);
+
 // ── Decode helpers ──────────────────────────────────────────────────────────
 
 function _decodeTilePixels(d) {
@@ -135,6 +150,32 @@ function _buildSparkleFrames(t4aHeal, t49Heal) {
   });
 }
 
+// Build the 2-frame Poisona target effect. Each frame is a 16×24 canvas
+// matching portrait dimensions so consumers can drawImage at portrait origin
+// without offset math. Tiles all drawn HFLIP; positioned at y+5 (top row) and
+// y+13 (bottom row) per the captured layout.
+function _buildPoisonaTargetFrames(pal) {
+  const a49 = _make8(POISONA_TGT_T49, pal), a4a = _make8(POISONA_TGT_T4A, pal);
+  const a4b = _make8(POISONA_TGT_T4B, pal), a4c = _make8(POISONA_TGT_T4C, pal);
+  const b4d = _make8(POISONA_TGT_T4D, pal), b4e = _make8(POISONA_TGT_T4E, pal);
+  const b4f = _make8(POISONA_TGT_T4F, pal), b50 = _make8(POISONA_TGT_T50, pal);
+  const _frame = (tl, tr, bl, br) => {
+    const c = document.createElement('canvas'); c.width = 16; c.height = 24;
+    const cx = c.getContext('2d');
+    const _hflip = (tile, ox, oy) => {
+      cx.save(); cx.translate(ox + 8, oy); cx.scale(-1, 1);
+      cx.drawImage(tile, 0, 0); cx.restore();
+    };
+    _hflip(tl, 0, 5);  _hflip(tr, 8, 5);
+    _hflip(bl, 0, 13); _hflip(br, 8, 13);
+    return c;
+  };
+  return [
+    _frame(a4a, a49, a4c, a4b),  // state A
+    _frame(b4e, b4d, b50, b4f),  // state B
+  ];
+}
+
 function _decodeForPalette(pal) {
   const t4a = _make8(T_4A, pal);
   const t4b = _make8(T_4B, pal), t4c = _make8(T_4C, pal), t4d = _make8(T_4D, pal), t4e = _make8(T_4E, pal);
@@ -177,6 +218,13 @@ export function initCureAnimSprites() {
     if (!cache[palKey]) cache[palKey] = _decodeForPalette(pal);
     _animsByKey[key] = cache[palKey];
   }
+  // cure_status gets the dedicated Poisona target effect on top of the shared
+  // bundle. Spread to break reference equality with `revive` (same palette,
+  // different anim — only Poisona/Bndna/Esuna/Stone use these target frames).
+  _animsByKey.cure_status = {
+    ..._animsByKey.cure_status,
+    poisonaTargetFrames: _buildPoisonaTargetFrames(WHITE_MAGIC_PAL.cure_status),
+  };
   const recov = _animsByKey.recovery;
   return {
     flameFrames: recov.flameFrames,
@@ -253,4 +301,15 @@ export function shouldDrawStars(elapsedMs) {
 // True while the heal-phase target sparkle should be drawn (phase 4).
 export function shouldDrawHealSparkle(elapsedMs) {
   return elapsedMs >= CURE_T_HEAL && elapsedMs < CURE_T_RETURN;
+}
+
+// Pick the right target-effect frame set for the heal phase. cure_status
+// spells (Poisona family) use the captured 2-frame target effect; recovery
+// (Cure) and revive fall back to the heal sparkle.
+export function getCureTargetFrames(spell, animBundle) {
+  if (!animBundle) return null;
+  if (spell && spell.target === 'cure_status' && animBundle.poisonaTargetFrames) {
+    return animBundle.poisonaTargetFrames;
+  }
+  return animBundle.sparkleFrames || null;
 }

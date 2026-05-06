@@ -33,7 +33,7 @@ import { inputSt } from './input-handler.js';
 import { bsc, getSlashFramesForWeapon } from './battle-sprite-cache.js';
 import { drawSlashOverlay, SLASH_FRAME_MS, shouldDrawSlash } from './slash-effects.js';
 import { getCureAnimElapsedMs, getCurrentSpellId } from './spell-cast.js';
-import { getCureFlameFrameIdx, shouldDrawStars, shouldDrawHealSparkle, getCureAnimAssets } from './cure-anim.js';
+import { getCureFlameFrameIdx, shouldDrawStars, shouldDrawHealSparkle, getCureAnimAssets, getCureTargetFrames } from './cure-anim.js';
 import { hudSt } from './hud-state.js';
 import { fakePlayerPortraits, fakePlayerVictoryPortraits, fakePlayerHitPortraits,
          fakePlayerKneelPortraits, fakePlayerAttackPortraits, fakePlayerAttackLPortraits,
@@ -364,9 +364,11 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
   if (isCureItemUse && bsc.cureSparkleFrames.length === 2) {
     ui.ctx.drawImage(bsc.cureSparkleFrames[_sparkleFi], px, py);
   }
-  if (isCureMagicSelf && cureMs >= 0 && shouldDrawHealSparkle(cureMs)
-      && cureAnim && cureAnim.sparkleFrames.length === 2) {
-    ui.ctx.drawImage(cureAnim.sparkleFrames[_sparkleFi], px, py);
+  if (isCureMagicSelf && cureMs >= 0 && shouldDrawHealSparkle(cureMs) && cureAnim) {
+    const _selfTgt = getCureTargetFrames(_activeSpell, cureAnim);
+    if (_selfTgt && _selfTgt.length === 2) {
+      ui.ctx.drawImage(_selfTgt[_sparkleFi], px, py);
+    }
   }
   // Ally-cast heal on player (WM ally Cure → player). Shows the recovery-school
   // sparkle on the player portrait during the heal phase of ally-magic-hit.
@@ -1277,10 +1279,11 @@ function _drawAllyRow(i, ally, panelTop, weaponDraws) {
   // recovery-only sprite-init frames.
   const _allySpell = isAllyHealMagic ? SPELLS.get(getCurrentSpellId()) : null;
   const _allyCureAnim = _allySpell ? getCureAnimAssets(_allySpell) : null;
-  const _allyMagicSparkle = isAllyHealMagic && _allyCureMs >= 0
+  const _allyMagicTargetFrames = isAllyHealMagic && _allyCureMs >= 0
     && shouldDrawHealSparkle(_allyCureMs)
-    && _allyCureAnim && _allyCureAnim.sparkleFrames.length === 2
-    ? _allyCureAnim.sparkleFrames : null;
+    ? getCureTargetFrames(_allySpell, _allyCureAnim) : null;
+  const _allyMagicSparkle = _allyMagicTargetFrames && _allyMagicTargetFrames.length === 2
+    ? _allyMagicTargetFrames : null;
   const _allyItemSparkle = isAllyHealItem && bsc.cureSparkleFrames.length === 2
     ? bsc.cureSparkleFrames : null;
   // WM ally cast Cure on this ally — show recovery sparkle during heal phase.
