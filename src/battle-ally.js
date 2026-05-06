@@ -13,6 +13,7 @@ import { getEnemyDmgNum, setEnemyDmgNum, setPlayerHealNum, getAllyDamageNums, ti
 import { ROSTER_FADE_STEPS } from './data/players.js';
 import { IDLE_FRAME_MS } from './combatant-pose.js';
 import { ps } from './player-stats.js';
+import { removeStatus, STATUS } from './status-effects.js';
 
 // Injected at boot — avoids circular import on main.js
 let _buildTurnOrder = () => [];
@@ -182,7 +183,24 @@ const ALLY_MAGIC_CAST_MS  = 600;
 const ALLY_MAGIC_EFFECT_MS = 400;  // within hit phase
 const ALLY_MAGIC_HIT_MS   = 1000;
 
-function _applyAllyCureEffect() {
+function _applyAllyMagicEffect() {
+  const spellId = battleSt.allyMagicSpellId;
+  // 0x35 Poisona — strip POISON flag from target, no HP change. Sparkle still
+  // shows via the heal-num placeholder ({value:0, heal:true}) on the target.
+  if (spellId === 0x35) {
+    if (battleSt.allyMagicTargetType === 'player') {
+      if (ps.status) removeStatus(ps.status, STATUS.POISON);
+      setPlayerHealNum({ value: 0, timer: 0 });
+    } else {
+      const target = battleSt.battleAllies[battleSt.allyMagicTargetIdx];
+      if (!target) return;
+      if (target.status) removeStatus(target.status, STATUS.POISON);
+      getAllyDamageNums()[battleSt.allyMagicTargetIdx] = { value: 0, timer: 0, heal: true };
+    }
+    playSFX(SFX.CURE);
+    return;
+  }
+  // 0x34 Cure (default heal path)
   const heal = battleSt.allyMagicHealAmount;
   if (battleSt.allyMagicTargetType === 'player') {
     if (!ps.stats) return;
@@ -212,7 +230,7 @@ function _updateAllyMagicCast(dt) {
   if (battleSt.battleState === 'ally-magic-hit') {
     tickHealNums(dt);
     if (!battleSt.allyMagicEffectApplied && battleSt.battleTimer >= ALLY_MAGIC_EFFECT_MS) {
-      _applyAllyCureEffect();
+      _applyAllyMagicEffect();
       battleSt.allyMagicEffectApplied = true;
     }
     if (battleSt.battleTimer >= ALLY_MAGIC_HIT_MS) {

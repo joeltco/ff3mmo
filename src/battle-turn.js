@@ -8,7 +8,7 @@ import { ps, getJobLevelStatBonus } from './player-stats.js';
 import { JOBS } from './data/jobs.js';
 import { ITEMS, isWeapon, isBladedWeapon } from './data/items.js';
 import { SFX, playSFX } from './music.js';
-import { processTurnStart, removeStatus, STATUS, blindHitPenalty } from './status-effects.js';
+import { processTurnStart, removeStatus, STATUS, blindHitPenalty, hasStatus } from './status-effects.js';
 import { bsc, getSlashFramesForWeapon } from './battle-sprite-cache.js';
 import { pvpSt } from './pvp.js';
 import { inputSt } from './input-handler.js';
@@ -174,6 +174,8 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
     // White Mage heal AI — pick lowest-HP-pct teammate (player or other ally) below 60% HP.
     // If anyone needs healing AND ally knows Cure (0x34), cast on them. Else fall through.
     if (_tryAllyCure(ally, turn.index)) return;
+    // White Mage status AI — if anyone (incl self) is poisoned and ally knows Poisona (0x35), cast it.
+    if (_tryAllyPoisona(ally, turn.index)) return;
     if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
       const living = battleSt.encounterMonsters.map((m, i) => m.hp > 0 ? i : -1).filter(i => i >= 0);
       if (living.length === 0) { processNextTurn(); return; }
@@ -270,6 +272,46 @@ function _tryAllyCure(ally, allyIdx) {
   battleSt.allyMagicTargetIdx    = lowest.idx;
   battleSt.allyMagicSpellId      = 0x34;
   battleSt.allyMagicHealAmount   = heal;
+  battleSt.allyMagicEffectApplied = false;
+  queueBattleMsg(_nameToBytes(ally.name || 'Ally'));
+  playSFX(SFX.MAGIC_CAST);
+  battleSt.battleState = 'ally-magic-cast';
+  battleSt.battleTimer = 0;
+  return true;
+}
+
+// ── Ally Poisona AI ────────────────────────────────────────────────────────
+// Returns true if ally cast Poisona this turn. Targets first poisoned teammate
+// (player → self → other allies). MP-gated upstream by knownSpells presence;
+// no need to deduct MP here since fake-roster allies don't track MP.
+function _tryAllyPoisona(ally, allyIdx) {
+  if (!ally.knownSpells || !ally.knownSpells.includes(0x35)) return false;
+  let target = null;
+  if (ps.hp > 0 && ps.status && hasStatus(ps.status, STATUS.POISON)) {
+    target = { type: 'player', idx: -1 };
+  }
+  if (!target) {
+    if (ally.status && hasStatus(ally.status, STATUS.POISON)) {
+      target = { type: 'ally', idx: allyIdx };
+    }
+  }
+  if (!target) {
+    for (let i = 0; i < battleSt.battleAllies.length; i++) {
+      if (i === allyIdx) continue;
+      const other = battleSt.battleAllies[i];
+      if (!other || other.hp <= 0 || !other.status) continue;
+      if (hasStatus(other.status, STATUS.POISON)) {
+        target = { type: 'ally', idx: i };
+        break;
+      }
+    }
+  }
+  if (!target) return false;
+  battleSt.allyMagicCasterIdx     = allyIdx;
+  battleSt.allyMagicTargetType    = target.type;
+  battleSt.allyMagicTargetIdx     = target.idx;
+  battleSt.allyMagicSpellId       = 0x35;
+  battleSt.allyMagicHealAmount    = 0;
   battleSt.allyMagicEffectApplied = false;
   queueBattleMsg(_nameToBytes(ally.name || 'Ally'));
   playSFX(SFX.MAGIC_CAST);

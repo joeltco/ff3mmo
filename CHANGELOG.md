@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.36 — 2026-05-06
+
+### WM roster allies cast Poisona on poisoned teammates
+
+White Mage roster allies now scan player + self + other allies for the POISON status flag and cast Poisona on the first match. Priority order: player → self → other allies. Cure (HP heal) still gets first dibs on the turn — if anyone is below 40% HP, that takes precedence; otherwise we look for poison to clean. The existing `ally-magic-cast → ally-magic-hit` pipeline handles the visuals (flame+stars on caster portrait already palette-dispatch via `getCureAnimAssets(spell)`, so Poisona's magenta SP3 shows correctly). On effect application the apply function now dispatches on `allyMagicSpellId`: 0x35 strips POISON via `removeStatus`, 0x34 keeps the existing HP heal path. Caster must have 0x35 in `knownSpells`.
+
+`src/battle-turn.js` (added `_tryAllyPoisona`, wired after `_tryAllyCure`), `src/battle-ally.js` (renamed `_applyAllyCureEffect` → `_applyAllyMagicEffect`, added Poisona branch).
+
 ## 1.7.35 — 2026-05-06
 
 ### Ally swing pose holds full duration on miss
