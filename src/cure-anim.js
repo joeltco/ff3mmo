@@ -150,24 +150,24 @@ function _buildSparkleFrames(t4aHeal, t49Heal) {
   });
 }
 
-// Build the 2-frame Poisona target effect. Each frame is a 16×24 canvas
-// matching portrait dimensions so consumers can drawImage at portrait origin
-// without offset math. Tiles all drawn HFLIP; positioned at y+5 (top row) and
-// y+13 (bottom row) per the captured layout.
+// Build the 2-frame Poisona target effect. 16×16 canvas matching the heal-
+// sparkle dimensions so consumers can drawImage at portrait origin and the
+// effect fills the portrait exactly (TL/TR at y=0, BL/BR at y=8). All tiles
+// drawn HFLIP per the captured layout.
 function _buildPoisonaTargetFrames(pal) {
   const a49 = _make8(POISONA_TGT_T49, pal), a4a = _make8(POISONA_TGT_T4A, pal);
   const a4b = _make8(POISONA_TGT_T4B, pal), a4c = _make8(POISONA_TGT_T4C, pal);
   const b4d = _make8(POISONA_TGT_T4D, pal), b4e = _make8(POISONA_TGT_T4E, pal);
   const b4f = _make8(POISONA_TGT_T4F, pal), b50 = _make8(POISONA_TGT_T50, pal);
   const _frame = (tl, tr, bl, br) => {
-    const c = document.createElement('canvas'); c.width = 16; c.height = 24;
+    const c = _makeCanvas16();
     const cx = c.getContext('2d');
     const _hflip = (tile, ox, oy) => {
       cx.save(); cx.translate(ox + 8, oy); cx.scale(-1, 1);
       cx.drawImage(tile, 0, 0); cx.restore();
     };
-    _hflip(tl, 0, 5);  _hflip(tr, 8, 5);
-    _hflip(bl, 0, 13); _hflip(br, 8, 13);
+    _hflip(tl, 0, 0); _hflip(tr, 8, 0);
+    _hflip(bl, 0, 8); _hflip(br, 8, 8);
     return c;
   };
   return [

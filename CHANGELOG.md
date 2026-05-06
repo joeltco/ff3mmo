@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.56 — 2026-05-06
+
+### Poisona target effect — center on portrait (was top-half only)
+
+v1.7.54 built the Poisona target frames on a 16×24 canvas with tiles at y=5 and y=13 — those offsets were copied from v1.7.49's caster placement, not target placement. Result on a 16×16 portrait: top tile sat in the upper-middle, bottom tile mostly hung off the bottom of the portrait. Switched to a 16×16 canvas (matching `sparkleFrames` via `_makeCanvas16`) with TL/TR at y=0 and BL/BR at y=8 — the effect now fills the portrait exactly, same footprint as the heal sparkle.
+
 ## 1.7.55 — 2026-05-06
 
 ### Ally-cast Poisona on player/ally — show Poisona effect, not Cure sparkle
