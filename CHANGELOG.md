@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.35 — 2026-05-06
+
+### Ally swing pose holds full duration on miss
+
+The actual culprit for "WM staff swing looks fucked up on certain turns": on a missed attack `shouldDrawSlash(hit)` returned false, which short-circuited the `ally-slash` state machine and advanced it on the very next frame. Result: the forward-swung staff canvas was visible for ~16ms (1 frame at 60fps) instead of the full 90ms, reading as a broken/blink swing. Fixed by holding `ally-slash` for the full `ALLY_SLASH_MS` regardless of hit/miss — the slash *overlay* is still correctly suppressed on miss via `drawSlash`, only the body pose hold is preserved. Hit and miss now read at identical pace.
+
+`src/battle-ally.js` only.
+
 ## 1.7.34 — 2026-05-06
 
 ### WM heal threshold 60% → 40%

@@ -110,7 +110,7 @@ function _updateAllyAttack() {
   if (battleSt.battleState === 'ally-slash') {
     const hit = battleSt.allyHitResults[battleSt.allyHitIdx];
     const drawSlash = shouldDrawSlash(hit);
-    if (!drawSlash || battleSt.battleTimer >= ALLY_SLASH_MS) {
+    if (battleSt.battleTimer >= ALLY_SLASH_MS) {
       if (drawSlash) {
         // Defend halving for PVP opponent
         if (pvpSt.isPVPBattle && pvpSt.pvpOpponentIsDefending && battleSt.allyTargetIndex < 0)
