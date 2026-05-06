@@ -176,9 +176,6 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
     if (_tryAllyCure(ally, turn.index)) return;
     // White Mage status AI — if anyone (incl self) is poisoned and ally knows Poisona (0x35), cast it.
     if (_tryAllyPoisona(ally, turn.index)) return;
-    // Item AI — any ally can pop a Cure Potion / Antidote on a teammate. Cheap
-    // fallback when no spell-cast applies (no MND-gating on items).
-    if (_tryAllyItem(ally, turn.index)) return;
     if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
       const living = battleSt.encounterMonsters.map((m, i) => m.hp > 0 ? i : -1).filter(i => i >= 0);
       if (living.length === 0) { processNextTurn(); return; }

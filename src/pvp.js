@@ -312,35 +312,27 @@ function _runEnemyAttack(targetAlly) {
 function _processEnemyFlash() {
   if (battleSt.battleState !== 'enemy-flash') return false;
 
-  // On first tick of enemy-flash, decide defend/item/magic for the current PVP attacker.
-  // Cell-idx convention: 0 = main opp, 1+ = pvpEnemyAllies[idx-1].
-  if (!pvpSt.pvpPreflashDecided && pvpSt.isPVPBattle) {
+  // On first tick of enemy-flash, decide defend/item for PVP main opponent (skip backswing for non-attack)
+  if (!pvpSt.pvpPreflashDecided && pvpSt.isPVPBattle && pvpSt.pvpCurrentEnemyAllyIdx < 0) {
     pvpSt.pvpPreflashDecided = true;
-    const isMain = pvpSt.pvpCurrentEnemyAllyIdx < 0;
-    const casterCellIdx = isMain ? 0 : (pvpSt.pvpCurrentEnemyAllyIdx + 1);
-    const caster = _pvpEnemyByCellIdx(casterCellIdx);
-
-    // Defend roll — main opp only (kept original behavior)
-    if (isMain && Math.random() < 0.30) {
+    if (Math.random() < 0.30) {
       pvpSt.pvpOpponentIsDefending = true;
       pvpSt.pvpPendingTargetAlly = -1;
       playSFX(SFX.DEFEND_HIT);
       battleSt.battleState = 'pvp-defend-anim'; battleSt.battleTimer = 0;
       return true;
     }
-
-    // Magic AI — Poisona first (cheap, conditional), then Cure (when team needs it).
-    // Available to any enemy (main opp or ally) that knows the spell.
-    if (caster) {
-      if (_tryPVPEnemyPoisona(caster, casterCellIdx)) return true;
-      if (_tryPVPEnemyCure(caster, casterCellIdx)) return true;
+    const maxHP = pvpSt.pvpOpponentStats.maxHP;
+    const curHP = pvpSt.pvpOpponentStats.hp;
+    const heal = Math.min(50, maxHP - curHP);
+    if (curHP < maxHP * 0.5 && heal > 0 && Math.random() < 0.25) {
+      pvpSt.pvpOpponentStats.hp = curHP + heal;
+      setEnemyHealNum({ value: heal, timer: 0 });
+      playSFX(SFX.CURE);
+      battleSt.battleState = 'pvp-opp-potion'; battleSt.battleTimer = 0;
+      return true;
     }
-
-    // Item AI — generalized cure-potion / antidote on any teammate.
-    if (_tryPVPEnemyItem(casterCellIdx)) return true;
-
-    // Sword-throw roll — main opp only
-    if (isMain && Math.random() < 0.15) {
+    if (Math.random() < 0.15) {
       battleSt.battleState = 'pvp-opp-sw-throw'; battleSt.battleTimer = 0;
       return true;
     }

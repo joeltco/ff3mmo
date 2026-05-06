@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.43 — 2026-05-06
+
+### Hotfix — disable 1.7.42 enemy-magic / item AI hooks (PVP softlock)
+
+PVP softlock reproduced live after opponent turn (no cursor on battle menu). Reverted the AI **call-sites** for the new systems while keeping the underlying state machines + render hooks in place so we can re-enable selectively after diagnosis.
+
+- `_processEnemyFlash` reverted to the original main-opp-only defend / self-heal-50 / sword-throw decision tree. PVP enemy magic + the generalized `_tryPVPEnemyItem` are no longer invoked.
+- `_tryAllyItem` invocation in `battle-turn.js` removed from the WM AI chain. Roster ally Cure / Poisona spell AI still fires (1.7.41 behavior).
+
+The 1.7.42 implementations (`_tryPVPEnemyCure`, `_tryPVPEnemyPoisona`, `_tryPVPEnemyItem`, `_processPVPEnemyMagic`, `_tryAllyItem`, `allyMagicItemMode`) remain in the codebase but are unreachable. Heal-num cell-idx targeting + render gates also remain — they are no-ops without the AI calling them.
+
+`src/pvp.js`, `src/battle-turn.js`.
+
 ## 1.7.42 — 2026-05-06
 
 ### PVP enemy support magic + items + roster ally items
