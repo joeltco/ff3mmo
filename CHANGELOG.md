@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.50 — 2026-05-06
+
+### Drop OK/WR/MO_DEATH constants and the dead legacy sprite path
+
+The 1.7.47 ROM-stride derivation made the hardcoded `OK_DEATH` / `WR_DEATH` / `MO_DEATH` PPU-capture constants redundant — every job's death tiles, including 0/1/2, live at `jobBase + 0x240` in the per-job battle CHR slot. Extracted `_deathTilesForJob(romData, jobIdx)` in `combatant-sprites.js`; all four bundles (OK / WR / MO / generic) now use it. The byte-for-byte constants in `data/job-sprites.js`, `data/warrior-sprites.js`, `data/monk-sprites.js` are gone.
+
+Also deleted the 295-line legacy ally-sprite branch in `sprite-init.js` (`_initFakePosePortraits`, `_buildIdleFullBodies`, `_buildKnifeFullBodies`, `_buildHitFullBodies`, `_buildDeathPoseCanvases`, `_buildWarriorFullBodies`, `_initWarriorPosePortraits`, `_initMonkPosePortraits`, `_buildMonkFullBodies`, `_initGenericJobPosePortraits`, `_buildGenericJobFullBodies`). All 22 jobs went through `_buildFakePlayerSet` since 1.7.42 — the old per-job if/else was unreachable code preserved only as historical reference. Trimmed the corresponding imports.
+
+POSES debug tab loses the WR DEATH / MO DEATH visualization cards; the death tiles are now ROM-only data, the tab can re-add a ROM-read card later if needed.
+
 ## 1.7.49 — 2026-05-06
 
 ### Per-spell animation registry (fixes: Poisona used Cure's tile bytes with palette swap)

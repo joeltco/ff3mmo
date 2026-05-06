@@ -25,25 +25,34 @@ import {
   OK_LEG_R_SWING,
   OK_LEG_L_KNEEL, OK_LEG_R_KNEEL,
   OK_LEG_L_VICTORY, OK_LEG_R_VICTORY,
-  OK_DEATH,
 } from './data/job-sprites.js';
 import {
   WR_IDLE, WR_LEG_L, WR_LEG_R, WR_L_BACK, WR_LEG_L_BACK_L, WR_LEG_R_BACK_L,
   WR_LEG_L_FWD_L, WR_LEG_R_FWD_L, WR_LEG_L_BACK_R, WR_LEG_R_SWING,
   WR_LEG_L_FWD_R, WR_LEG_L_HIT, WR_LEG_R_HIT, WR_LEG_L_KNEEL, WR_LEG_R_KNEEL,
   WR_LEG_L_VICTORY, WR_LEG_R_VICTORY, WR_R_BACK_T2, WR_HIT, WR_VICTORY,
-  WR_L_FWD_T2, WR_L_FWD_T3, WR_KNEEL, WR_DEATH,
+  WR_L_FWD_T2, WR_L_FWD_T3, WR_KNEEL,
 } from './data/warrior-sprites.js';
 import {
   MO_IDLE, MO_LEG_L, MO_LEG_R, MO_R_BACK_T2, MO_LEG_L_BACK_R, MO_LEG_R_BACK_R,
   MO_LEG_L_FWD_R, MO_L_BACK_T1, MO_L_BACK_T3, MO_L_FWD_T2, MO_L_FWD_T3,
   MO_HIT, MO_LEG_R_HIT, MO_VICTORY, MO_LEG_L_VICTORY, MO_LEG_R_VICTORY,
-  MO_KNEEL, MO_LEG_L_KNEEL, MO_LEG_R_KNEEL, MO_DEATH,
+  MO_KNEEL, MO_LEG_L_KNEEL, MO_LEG_R_KNEEL,
 } from './data/monk-sprites.js';
 
 // ── Bundle definitions ────────────────────────────────────────────────────────
 
 const d = (raw) => decodeTile(raw, 0);
+
+// Death tiles for any job: 6 tiles (3 cols × 2 rows, 24×16 prone) at
+// jobBase + 0x240 within the per-job battle CHR slot. Verified byte-for-byte
+// against PPU-captured OK/WR/MO_DEATH (those constants were removed once the
+// stride was confirmed for all 22 jobs — see CHANGELOG 1.7.47).
+function _deathTilesForJob(romData, jobIdx) {
+  const jobBase = BATTLE_SPRITE_ROM + jobIdx * BATTLE_JOB_SIZE;
+  const t = (idx) => decodeTile(romData, jobBase + idx * 16);
+  return { tiles: [t(36), t(37), t(38), t(39), t(40), t(41)], cols: 3 };
+}
 
 // Canonical pose keys. Adding a new pose? Add it here, populate it in every job bundle below,
 // and add it to the renderers — and that's it. No more "we forgot to add it to ally/opponent."
@@ -95,7 +104,7 @@ function _okBundle(romData) {
       kneel:   { L: d(OK_LEG_L_KNEEL),   R: d(OK_LEG_R_KNEEL)   },
     },
     palettes: PLAYER_PALETTES,
-    death: { tiles: OK_DEATH.map(d), cols: 3 },
+    death: _deathTilesForJob(romData, 0),
   };
 }
 
@@ -130,7 +139,7 @@ function _warriorBundle(romData) {
       kneel:   { L: d(WR_LEG_L_KNEEL),   R: d(WR_LEG_R_KNEEL)   },
     },
     palettes: PLAYER_PALETTES,
-    death: { tiles: WR_DEATH.map(d), cols: 3 },
+    death: _deathTilesForJob(romData, 1),
   };
 }
 
@@ -170,7 +179,7 @@ function _monkBundle(romData) {
       kneel:   { L: d(MO_LEG_L_KNEEL),   R: d(MO_LEG_R_KNEEL)   },
     },
     palettes: MONK_PALETTES,
-    death: { tiles: MO_DEATH.map(d), cols: 3 },
+    death: _deathTilesForJob(romData, 2),
   };
 }
 
@@ -227,9 +236,7 @@ function _genericBundle(romData, jobIdx) {
       kneel:    { L: t(12), R: t(13) },
     },
     palettes: PLAYER_PALETTES,
-    // Death tiles live at jobBase + 0x240 (tile indices 36-41), 3×2 prone grid.
-    // Verified against PPU-captured OK/WR/MO_DEATH at jobs 0/1/2 — same stride for all 22 jobs.
-    death: { tiles: [t(36), t(37), t(38), t(39), t(40), t(41)], cols: 3 },
+    death: _deathTilesForJob(romData, jobIdx),
   };
 }
 

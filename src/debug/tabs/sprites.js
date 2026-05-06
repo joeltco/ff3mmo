@@ -379,7 +379,9 @@ async function _seedWarriorPoses() {
       { label: 'WR KNEEL',    tiles: [...WR.WR_KNEEL, WR.WR_LEG_L_KNEEL, WR.WR_LEG_R_KNEEL], rows: 3 },
       { label: 'WR VICTORY',  tiles: [...WR.WR_VICTORY, WR.WR_LEG_L_VICTORY, WR.WR_LEG_R_VICTORY], rows: 3 },
       { label: 'WR HIT',      tiles: [...WR.WR_HIT, WR.WR_LEG_L_HIT, WR.WR_LEG_R_HIT], rows: 3 },
-      { label: 'WR DEATH',    tiles: [...WR.WR_DEATH], rows: 2, cols: 3 },
+      // WR DEATH constant was dropped — death tiles are now ROM-derived in
+      // combatant-sprites.js (_deathTilesForJob). The POSES tab can re-add a
+      // ROM-read DEATH card once it has access to the loaded ROM.
     ];
     for (const wp of wrPoses) poseTiles.push(wp);
   } catch (e) {
@@ -400,7 +402,7 @@ async function _seedMonkPoses() {
       { label: 'MO VICTORY',  tiles: [...MO.MO_VICTORY, MO.MO_LEG_L_VICTORY, MO.MO_LEG_R_VICTORY], rows: 3 },
       { label: 'MO HIT',      tiles: [...MO.MO_HIT, MO.MO_LEG_L_FWD_R, MO.MO_LEG_R_HIT], rows: 3 },
       { label: 'MO KNEEL',    tiles: [...MO.MO_KNEEL, MO.MO_LEG_L_KNEEL, MO.MO_LEG_R_KNEEL], rows: 3 },
-      { label: 'MO DEATH',    tiles: [...MO.MO_DEATH], rows: 2, cols: 3 },
+      // MO DEATH constant was dropped — see WR DEATH note above.
     ];
     for (const mp of monkPoses) poseTiles.push(mp);
   } catch (e) {
