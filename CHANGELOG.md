@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.47 — 2026-05-06
+
+### Real death poses for all 22 jobs (was: mirrored idle)
+
+Defeated allies in the roster panel were showing a *mirrored idle pose* instead of a death sprite — and not just the orientation was wrong, there literally was no death pose data for any job except 0/1/2. `_genericBundle` in `combatant-sprites.js:229` hardcoded `death: null`, so 19 jobs (White Mage, Black Mage, etc.) hit the `bodies.idle` fallback at `sprite-init.js:1021` — which uses `buildOpponentBodyCanvases` output (pre-h-flipped for opponent rendering), drawn directly without counter-flip at `battle-drawing.js:1326`.
+
+Reverse-mapping the captured `OK_DEATH` / `WR_DEATH` / `MO_DEATH` constants back to ROM offsets revealed they all live at `BATTLE_SPRITE_ROM + jobIdx * BATTLE_JOB_SIZE + 0x240` — tile indices 36-41 within each job's 42-tile per-job slot. Verified byte-for-byte against the PPU-captured constants for jobs 0/1/2; the same stride applies to all 22 jobs since the per-job ROM block is uniform.
+
+`_genericBundle` now reads the 6 death tiles (3 cols × 2 rows, 24×16 prone) directly from ROM, eliminating the need for per-job PPU capture. Roster ally death pose now renders the canonical lying-down sprite for every job.
+
 ## 1.7.46 — 2026-05-06
 
 ### Freeze watchdog + global error handlers + battle context in error reports
@@ -19,6 +29,14 @@ Three additions to make the next freeze self-diagnose:
 The outer game-loop catch now also POSTs via `_reportError` (was console-only). Server-side, `console.error` in `api.js:74` includes `body.ctx` JSON-stringified so `pm2 logs` shows the full state at error time.
 
 `src/game-loop.js`, `api.js`.
+
+### Postscript — actual root cause of the user-reported freeze
+
+Once the diagnostic infra was deployed, `pm2 logs` immediately showed `[CLIENT ERROR] _s is not defined` at `drawBattleMessageStrip@battle-drawing.js:1373:60` firing every frame. Investigation revealed the production server was stuck at **1.7.34** — none of the 1.7.41–1.7.46 commits had reached production because `git push` alone doesn't trigger the server-side `git pull` (that requires `./deploy.sh` or the equivalent `ssh root@... 'cd /var/www/ff3mmo && git pull && pm2 restart server --update-env'`).
+
+The `_s` reference was an artifact of the pre-1.7.34 "legacy `_s` bag" pattern that was retired but left an orphan reference in 1.7.34's `drawBattleMessageStrip`. The 1.7.42 magic/item AI was *never* the cause of the freeze — it never ran in production. Pulled 1.7.46 to the server; freeze gone.
+
+Memory updated (`feedback_ff3mmo_deploys.md`) so future "deploy" instructions trigger an actual `./deploy.sh` invocation, not just `git push`.
 
 ## 1.7.45 — 2026-05-06
 

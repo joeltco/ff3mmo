@@ -193,6 +193,7 @@ function _monkBundle(romData) {
 //   28-29 victory legs L/R
 //   30-33 hit body
 //   34-35 hit legs L/R
+//   36-41 death (24×16 prone, 3 cols × 2 rows) — same stride as OK/WR/MO_DEATH
 function _genericBundle(romData, jobIdx) {
   const jobBase = BATTLE_SPRITE_ROM + jobIdx * BATTLE_JOB_SIZE;
   const t = (idx) => decodeTile(romData, jobBase + idx * 16);
@@ -226,7 +227,9 @@ function _genericBundle(romData, jobIdx) {
       kneel:    { L: t(12), R: t(13) },
     },
     palettes: PLAYER_PALETTES,
-    death: null, // generic jobs have no PPU-captured death pose; renderer falls back to idle
+    // Death tiles live at jobBase + 0x240 (tile indices 36-41), 3×2 prone grid.
+    // Verified against PPU-captured OK/WR/MO_DEATH at jobs 0/1/2 — same stride for all 22 jobs.
+    death: { tiles: [t(36), t(37), t(38), t(39), t(40), t(41)], cols: 3 },
   };
 }
 
