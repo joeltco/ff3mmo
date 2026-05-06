@@ -2,7 +2,7 @@
 
 import { battleSt, getEnemyHP, setEnemyHP, BATTLE_SHAKE_MS, BATTLE_DMG_SHOW_MS } from './battle-state.js';
 import { playSlashSFX } from './battle-sfx.js';
-import { resetSlashScatterCache, shouldDrawSlash } from './slash-effects.js';
+import { resetSlashScatterCache, shouldDrawSlash, SWING_HOLD_MS } from './slash-effects.js';
 import { isWeapon } from './data/items.js';
 import { SFX, playSFX } from './music.js';
 import { _nameToBytes } from './text-utils.js';
@@ -66,11 +66,8 @@ function _updateAllyJoin() {
 // ── Ally attack combo (multi-hit with summed damage) ─────────────────────────
 const ALLY_BACK_MS = 40;
 const ALLY_FWD_MS = 40;
-// Hit and miss hold the swing pose for the same duration so the strike rhythm
-// is consistent regardless of outcome. 90ms was too brief for misses to read
-// without the slash-flash overlay; 200ms (12 frames) lets the swung-weapon
-// canvas register clearly on both hit and miss.
-const ALLY_SLASH_MS = 200;
+// Slash phase dwell comes from SWING_HOLD_MS in slash-effects.js — one source
+// of truth shared across player / ally / PVP opponent paths.
 const ALLY_COMBO_PAUSE_MS = 30;
 
 function _updateAllyAttack() {
@@ -115,7 +112,7 @@ function _updateAllyAttack() {
   if (battleSt.battleState === 'ally-slash') {
     const hit = battleSt.allyHitResults[battleSt.allyHitIdx];
     const drawSlash = shouldDrawSlash(hit);
-    if (battleSt.battleTimer >= ALLY_SLASH_MS) {
+    if (battleSt.battleTimer >= SWING_HOLD_MS) {
       if (drawSlash) {
         // Defend halving for PVP opponent
         if (pvpSt.isPVPBattle && pvpSt.pvpOpponentIsDefending && battleSt.allyTargetIndex < 0)

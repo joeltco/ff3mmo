@@ -28,7 +28,7 @@ import { getShieldEvade } from './player-stats.js';
 import { pvpGridLayout, PVP_CELL_W, PVP_CELL_H } from './pvp-math.js';
 import { playSlashSFX } from './battle-sfx.js';
 import { bsc, getSlashFramesForWeapon } from './battle-sprite-cache.js';
-import { drawSlashOverlay, resetSlashScatterCache, shouldDrawSlash } from './slash-effects.js';
+import { drawSlashOverlay, resetSlashScatterCache, shouldDrawSlash, SWING_HOLD_MS } from './slash-effects.js';
 import { fakePlayerFullBodyCanvases, fakePlayerHitFullBodyCanvases,
          fakePlayerKnifeRFullBodyCanvases, fakePlayerKnifeLFullBodyCanvases,
          fakePlayerKnifeRFwdFullBodyCanvases, fakePlayerKnifeLFwdFullBodyCanvases,
@@ -68,7 +68,7 @@ const BATTLE_TEXT_STEP_MS    = 50;
 const MONSTER_DEATH_MS       = 250;
 const DEFEND_SPARKLE_FRAME_MS = 133;
 const DEFEND_SPARKLE_TOTAL_MS = 533;
-const ENEMY_SLASH_TOTAL_MS    = 201; // 3 frames × 67ms — slash on player portrait before shake
+// Slash phase dwell unified via SWING_HOLD_MS from slash-effects.js.
 
 // ── Mutable PVP state (imported directly by main.js) ─────────────────────────
 export const pvpSt = {
@@ -502,7 +502,7 @@ function _processPVPSecondWindup() {
 
 function _processPVPEnemySlash() {
   if (battleSt.battleState !== 'pvp-enemy-slash') return false;
-  if (shouldDrawSlash(pvpSt.pvpPendingAttack) && battleSt.battleTimer < ENEMY_SLASH_TOTAL_MS) return true;
+  if (battleSt.battleTimer < SWING_HOLD_MS) return true;
   const pending = pvpSt.pvpPendingAttack;
   pvpSt.pvpPendingAttack = null;
   const targetAlly = battleSt.enemyTargetAllyIdx; // -1 = player, >=0 = ally

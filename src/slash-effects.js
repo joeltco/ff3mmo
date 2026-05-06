@@ -81,20 +81,34 @@ export function initSwordSlashSprites() {
 // meant ally `af` indexing lagged behind the state-machine's slashFrame.
 export const SLASH_FRAME_MS = 30;
 
-// Predicate: should this hit get a slash overlay? False on miss — drawSlashOverlay
-// no-ops, and the state machine should skip the slash hold so there's no dead time
-// between the body's forward swing and the next hit / damage display. Currently
-// just `hit && !hit.miss`; centralised so future rules (shield-block, dead-target,
-// etc.) live in one place instead of being scattered across battle-update.js,
-// battle-ally.js, pvp.js, and battle-drawing.js.
+// Predicate: should this hit get a slash flash overlay? False on miss —
+// drawSlashOverlay no-ops on miss. Centralised so future rules (shield-block,
+// dead-target, etc.) live in one place instead of being scattered across
+// battle-update.js, battle-ally.js, pvp.js, and battle-drawing.js.
+//
+// IMPORTANT: callers MUST NOT short-circuit the slash state machine on miss —
+// the body-pose dwell is governed by SWING_HOLD_MS regardless of hit/miss so
+// hits and misses share the same strike rhythm. The flash is suppressed via
+// `if (drawSlash) { … }` inside the draw / damage-apply blocks; the state
+// machine advances purely on `battleTimer >= SWING_HOLD_MS`.
 export function shouldDrawSlash(hit) {
   return !!hit && !hit.miss;
 }
 
-// Total slash hold (ms) for a weapon — sum of per-position holdFrames across the
-// pattern. Used by player slash; ally/PVP currently use their own constants for
-// historical reasons (ALLY_SLASH_MS, ENEMY_SLASH_TOTAL_MS) — those can migrate to
-// per-weapon timing later.
+// SWING_HOLD_MS — single source of truth for how long any combatant (player,
+// ally, PVP opponent) holds the forward-strike body pose during the slash phase
+// of a melee attack. Independent of hit/miss and weapon type so the strike
+// rhythm reads consistently across all paths. ~200ms = 12 frames at 60fps,
+// long enough that the swung-weapon canvas registers without a slash flash to
+// draw the eye (misses) and without feeling sluggish on hit. Replaces the per-
+// weapon `getSlashHoldMs` body-hold and the legacy `ALLY_SLASH_MS` /
+// `ENEMY_SLASH_TOTAL_MS` constants.
+export const SWING_HOLD_MS = 200;
+
+// Total slash flash hold (ms) for a weapon — sum of per-position holdFrames
+// across the slash overlay pattern. ONLY governs the white slash flash overlay
+// animation timing (per-frame scatter offsets); does NOT govern body-pose
+// dwell — that's SWING_HOLD_MS above.
 export function getSlashHoldMs(weaponId) {
   const pattern = getSlashPattern(weaponId);
   return pattern.totalFrames * SLASH_FRAME_MS;

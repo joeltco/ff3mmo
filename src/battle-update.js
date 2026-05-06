@@ -11,7 +11,7 @@ import { mapSt } from './map-state.js';
 import { ps, grantExp, grantCP, getHitWeapon, isHitRightHand, gainJobJP } from './player-stats.js';
 import { IDLE_FRAME_MS } from './combatant-pose.js';
 import { bsc, getSlashFramesForWeapon, getSlashPattern, setSlashOffsetForFrame } from './battle-sprite-cache.js';
-import { SLASH_FRAME_MS, shouldDrawSlash, getSlashHoldMs } from './slash-effects.js';
+import { SLASH_FRAME_MS, shouldDrawSlash, SWING_HOLD_MS } from './slash-effects.js';
 import { buildTurnOrder, processNextTurn } from './battle-turn.js';
 import { updateBattleAlly } from './battle-ally.js';
 import { updateBattleEnemyTurn } from './battle-enemy.js';
@@ -48,7 +48,7 @@ const BOSS_BLOCKS              = 9;
 const BOSS_DISSOLVE_STEPS      = 8;
 const BOSS_DISSOLVE_FRAME_MS   = 16.67;
 const MONSTER_SLIDE_MS         = 267;
-// SLASH_FRAME_MS / shouldDrawSlash / getSlashHoldMs imported from slash-effects.js (above).
+// SLASH_FRAME_MS / shouldDrawSlash / SWING_HOLD_MS imported from slash-effects.js (above).
 const BACK_SWING_MS            = 80;
 const FWD_SWING_MS             = 80;
 const HIT_PAUSE_MS             = 100;
@@ -363,7 +363,7 @@ function _updatePlayerSlash() {
       if (frame % pattern.holdFrames === 0) setSlashOffsetForFrame(battleSt, handWeapon, frame);
     }
   }
-  if (!drawSlash || battleSt.battleTimer >= getSlashHoldMs(handWeapon)) {
+  if (battleSt.battleTimer >= SWING_HOLD_MS) {
     if (drawSlash) {
       if (pvpSt.isPVPBattle && pvpSt.pvpOpponentIsDefending)
         hit.damage = Math.max(1, Math.floor(hit.damage / 2));

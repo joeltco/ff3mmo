@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.40 — 2026-05-06
+
+### Unified swing-pose dwell across player / ally / PVP opponent
+
+Removed the three independent swing-hold constants — `ALLY_SLASH_MS` (battle-ally.js), `ENEMY_SLASH_TOTAL_MS` (pvp.js), and the per-weapon `getSlashHoldMs(weaponId)` body-hold (battle-update.js) — and replaced them with a single `SWING_HOLD_MS = 200ms` constant exported from `slash-effects.js`. Every melee state machine now reads from one source.
+
+Also dropped the `!drawSlash || …` short-circuit from the player AND PVP-opponent slash phases. Same root cause as the ally bug fixed in 1.7.35: missed attacks were advancing the slash state machine on frame 1 because `shouldDrawSlash` returned false. Now hit and miss share the same body-pose dwell on every path, and only the slash *flash overlay* is suppressed on miss (correctly, via `if (drawSlash)` inside the draw blocks). `shouldDrawSlash` doc updated to flag the invariant: callers must NOT short-circuit the state machine on miss.
+
+`getSlashHoldMs` still exists, but is now scoped to the per-frame slash-flash overlay timing only — not the body-pose hold.
+
+`src/slash-effects.js` (added `SWING_HOLD_MS`, updated `shouldDrawSlash` doc), `src/battle-update.js` (player), `src/battle-ally.js` (ally), `src/pvp.js` (PVP opponent).
+
 ## 1.7.39 — 2026-05-06
 
 ### Ally swing duration unified across hit/miss
