@@ -4,7 +4,7 @@ Tracks the audit findings from `docs/design-notes.md` discussion. Phase 0 is mob
 
 Each phase is mergeable on its own. Bumps `package.json` + a CHANGELOG entry per release per the deploy convention.
 
-## Status (as of v1.7.21)
+## Status (as of v1.7.50)
 
 | Phase | Status | Released |
 |---|---|---|
@@ -29,6 +29,11 @@ Adjacent work driven by REC N FRAMES captures:
 - v1.7.4 — slash logic consolidated (`SLASH_FRAME_MS`, `shouldDrawSlash`, `getSlashHoldMs` single-sourced)
 - v1.7.10–1.7.20 — full PPU-captured Cure animation. New `src/cure-anim.js` module owns tile bytes, decode, frame builders, and phase boundaries (build-up 800 ms → lunge 200 ms → cast 217 ms → heal 283 ms → return 167 ms; total 1667 ms). 1.7.13 corrected the 8-sparkle ring to a static body-relative position. 1.7.14 / 1.7.16 wired a real cast SFX — `MAGIC_CAST = 0x62`, verified against `everything8215/ff3` disasm at 33/B0D8 (black) and 33/B0FF (white). 1.7.17 derived ring spin rate (~5°/NES-frame → 1200 ms/turn) from inter-frame OAM angles. 1.7.20 pinned naming: rotating tiles are **stars**, the pulsing thing left of the caster is a **flame**.
 - v1.7.21 — every OAM/BG snap now leads with a `_dumpPpuctrl()` block (sprite size, sprite bank, BG bank, base NT — annotated against the snapshot's hardcoded $1000/$0000/$2000 reads) and a `_dumpSfxStrip()` block reading FF3J's `$7F49` SFX queue (translates a non-zero high-bit byte to its `music.js` NSF track number, `byte − 0x3F`). Closes the last "leave the EMU tab to read disasm" step in the magic-cast pipeline — future spell SFX numbers come from REC OAM headers instead of `LDA #$XX / STA $7F49` searches. Also fixed a latent grouping merge-bug in `_oamSnapshotText` (`groups[merged]` after splice resolved to the wrong element when `g < merged`); now tracks the merged group by reference.
+- v1.7.47–1.7.50 — REC OAM-driven cleanup pass:
+  - **1.7.47** — death tiles are at `jobBase + 0x240` for all 22 jobs (verified byte-for-byte against captured OK/WR/MO_DEATH); `_genericBundle` reads them from ROM. Fixes the "WM ally death pose shows mirrored idle" bug.
+  - **1.7.48** — slash hit-gate folded inside `drawSlashOverlay` (`opts.hit` short-circuits via `shouldDrawSlash`; caller-side wraps no longer required). Fixes "missed PVP swing flashes slash on user portrait".
+  - **1.7.49** — `src/cure-anim.js` **deleted**, replaced by `src/spell-anim.js`. Per-spell registry keyed by spell ID; each entry owns its tile bytes + phase render. The 1.7.10–1.7.20 "Cure animation" entry above is **superseded**: captured Poisona REC OAM revealed the "shared tile bytes, palette differs" claim was wrong (Cure and Poisona use entirely different tiles) and the 5-size flame buildup was fabricated (real Cure has no flame, just stars cycling). Adding a damage-spell anim is one new registry entry.
+  - **1.7.50** — removed the now-redundant `OK_DEATH` / `WR_DEATH` / `MO_DEATH` byte constants and the 295-line dead legacy sprite-init branch (`_initFakePosePortraits`, `_buildIdleFullBodies`, etc.). All 22 jobs flow through `_buildFakePlayerSet` → `getJobPoseTileBundle`.
 
 User feedback (v1.7.0 retro): **REC N FRAMES is the highest-leverage feature in the EMU debugger.** Future EMU work should weight ideas by how much they extend the capture pipeline. The DEDUPE toggle (Phase 4.6 below) is the obvious next-leverage move on REC itself — NES holds anim states 2–4 frames per pose, so a 20-frame REC produces ~4–6 actually distinct states. DEDUPE collapses identical consecutive frames into one block with a `// frames 0..3 (4× same)` header, cutting textarea length 60–70 % and making transitions jump out.
 

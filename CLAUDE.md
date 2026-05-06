@@ -37,13 +37,14 @@ Before writing new code, read the relevant `docs/design-notes.md` section. Each 
 | Want to add / change… | Read first | Relevant code |
 |---|---|---|
 | A new spell | `design-notes#magic` | `src/spell-cast.js`, `src/data/spells.js` (`SPELL_MP_COST`, `SPELL_BUY_PRICE`), `src/player-stats.js` (`STARTING_SPELLS`, `grantStartingSpells`) |
+| A new spell animation | `design-notes#magic` + PPU capture process below | `src/spell-anim.js` — per-spell registry keyed by spell ID. Drop in tile bytes + phase render functions; render sites dispatch via `drawSpellCasterEffect` / `drawSpellTargetEffect` (no render-site changes needed). |
 | A new shop or shop catalog | `design-notes#shops` | `src/data/shops.js` (counter coords + `mapId`), `src/shop.js`, `src/movement.js` (`handleAction` counter lookup) |
 | A new battle sprite / job pose | `design-notes#battle-sprite-pattern` + PPU capture process below | `src/sprite-init.js`, `src/combatant-sprites.js` (`getJobPoseTileBundle`, `_genericBundle`), `src/data/<job>-sprites.js` |
 | A new monster or fix monster stats | `design-notes#monster-data` | Run `node tools/gen-monsters-js.js > src/data/monsters.js` — **do not hand-edit `monsters.js`** |
 | A chest loot pool / item drop | `design-notes#loot-drops` | `LOOT_POOLS` in `src/map-triggers.js`, keyed by `mapId` |
 | A status effect or immunity | (see status section in `data/items.js` `sResist`, `data/monsters.js` `statusResist`) | `src/status-effects.js`, `src/battle-enemy.js` (`tryInflictStatus` call sites) |
 | A save schema field | `design-notes#saves` | `saveSlotsToDB()` in `src/save-state.js` is the single source of truth — every persisted field flows through there |
-| A new attack/slash animation timing | `design-notes#battle-attack-animation` | `src/slash-effects.js` is the single source — `SLASH_FRAME_MS`, `getSlashPattern(weaponId)`, `setSlashOffsetForFrame`, `shouldDrawSlash`, `getSlashHoldMs`, `drawSlashOverlay`. Player slash machine lives in `src/battle-update.js` (`_updatePlayerSlash`); ally / PVP-opponent paths in `src/battle-ally.js` / `src/pvp.js` consume the same predicate + helpers. |
+| A new attack/slash animation timing | `design-notes#battle-attack-animation` | `src/slash-effects.js` is the single source — `SLASH_FRAME_MS`, `getSlashPattern(weaponId)`, `setSlashOffsetForFrame`, `shouldDrawSlash`, `getSlashHoldMs`, `drawSlashOverlay(ctx, frame, frameIdx, x, y, opts)` (opts: `mirror`, `weaponId`, `hit` — passing `hit` opts into internal miss/shield-block gating; 1.7.48). Player slash machine lives in `src/battle-update.js` (`_updatePlayerSlash`); ally / PVP-opponent paths in `src/battle-ally.js` / `src/pvp.js` consume the same predicate + helpers. |
 
 Deferred work and known followups live in `design-notes.md#followups`. Check there before assuming something is missing — it may be intentionally not yet shipped.
 
