@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.31 — 2026-05-06
+
+### WM ally cast animation — flame + stars on the caster portrait
+
+1.7.27 shipped the WM ally heal AI but explicitly deferred the magic-circle visuals: "Ally caster magic-circle (the flame + 8-star ring) is **not** rendered yet — that requires per-ally portrait positioning math which needs its own pass." This is that pass.
+
+`_drawAllyCastAnim` runs after `_flushAllyWeaponDraws` in `drawBattleAllies`, deliberately OUTSIDE the right-panel clip so the flame can extend left of the ally portrait into the map area (matching the player-cast layout where the flame at `px-16` reaches into the enemy side). Renders during `ally-magic-cast` and `ally-magic-hit`:
+
+- 8-star ring rotates around the caster portrait at radius 15, CW at the OAM-canonical 1.2 s/turn rate. Stars drawn during `ally-magic-cast` only (matches player's `shouldDrawStars` gate ending at `CURE_T_CAST`).
+- Flame pulses 4 sizes during the 600 ms cast windup, then brackets/release at the end, drawn 16 px left of the portrait. Hidden during `ally-magic-hit`.
+- Spell palette picked via `getCureAnimAssets(spell)` from `battleSt.allyMagicSpellId` so per-school palettes (Cure blue / Poisona magenta) work.
+
+Caster pose was already wired to victory in 1.7.27. Heal sparkle on target was already wired for both player-target and ally-target heals. The missing piece was the caster-side flame + stars; now in.
+
+`src/battle-drawing.js` only.
+
 ## 1.7.30 — 2026-05-06
 
 ### Fix: starting a new game cloned the previously-played slot

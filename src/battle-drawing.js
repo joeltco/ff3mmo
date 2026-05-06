@@ -1471,6 +1471,56 @@ function drawBattleAllies() {
     ui.ctx.drawImage(_cursorTileCanvas(), HUD_RIGHT_X - 4, panelTop + inputSt.itemTargetAllyIndex * ROSTER_ROW_H + 12);
   }
   _flushAllyWeaponDraws(weaponDraws);
+  // Cast animation (flame + 8-star ring) for the WM ally caster — rendered
+  // OUTSIDE the panel clip so the flame can extend left of the ally portrait
+  // toward the enemy side, matching the player-cast layout.
+  _drawAllyCastAnim(panelTop);
+}
+
+function _drawAllyCastAnim(panelTop) {
+  const isCastState = battleSt.battleState === 'ally-magic-cast' || battleSt.battleState === 'ally-magic-hit';
+  if (!isCastState) return;
+  const i = battleSt.allyMagicCasterIdx;
+  if (i < 0) return;
+  const ally = battleSt.battleAllies[i];
+  if (!ally) return;
+  const spell = SPELLS.get(battleSt.allyMagicSpellId);
+  const cureAnim = spell ? getCureAnimAssets(spell) : null;
+  if (!cureAnim || cureAnim.flameFrames.length !== 5) return;
+  // Elapsed within the cast portion: 0..600 ms during ally-magic-cast, then
+  // capped at the brackets/release frame during ally-magic-hit. Stars keep
+  // rotating through the full cast+hit window (matches CURE_T_CAST > buildup
+  // timing the player path uses).
+  const castDur = 600;
+  const elapsed = battleSt.battleState === 'ally-magic-cast'
+    ? Math.min(battleSt.battleTimer, castDur)
+    : castDur; // hold at brackets during hit phase
+  const shakeOff = (battleSt.allyShakeTimer[i] > 0) ? (Math.floor(battleSt.allyShakeTimer[i] / 67) & 1 ? 2 : -2) : 0;
+  const rowY = panelTop + i * ROSTER_ROW_H + shakeOff;
+  const ppx = HUD_RIGHT_X + 8;
+  const ppy = rowY + 8;
+  // Stars: 8 around a radius-15 ring, rotating CW. Show only during ally-
+  // magic-cast (not the post-cast hit phase) — same gate as the player.
+  if (battleSt.battleState === 'ally-magic-cast' && cureAnim.starTile) {
+    const cx = ppx + 8, cy = ppy + 8;
+    const r = 15;
+    const N = 8;
+    const rotRad = (battleSt.battleTimer / 1200) * Math.PI * 2;
+    for (let s = 0; s < N; s++) {
+      const a = (s / N) * Math.PI * 2 + rotRad - Math.PI / 2;
+      const sx = Math.round(cx + Math.cos(a) * r - 4);
+      const sy = Math.round(cy + Math.sin(a) * r - 4);
+      ui.ctx.drawImage(cureAnim.starTile, sx, sy);
+    }
+  }
+  // Flame: pulses 4 sizes during cast, brackets at end. Drawn LEFT of the
+  // ally portrait at ppx-16, ppy+5 (mirrors player layout).
+  if (battleSt.battleState === 'ally-magic-cast') {
+    const flameIdx = getCureFlameFrameIdx(elapsed);
+    if (flameIdx >= 0) {
+      ui.ctx.drawImage(cureAnim.flameFrames[flameIdx], ppx - 16, ppy + 5);
+    }
+  }
 }
 
 function _encounterMonsterPos(idx) {
