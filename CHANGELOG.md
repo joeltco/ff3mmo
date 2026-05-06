@@ -2,6 +2,25 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.44 — 2026-05-06
+
+### Fix: poison-tick handler missing from PVP dispatcher (real cause of 1.7.42 softlock)
+
+Root cause of the post-1.7.42 softlock found and fixed. The bug was **not** in the new magic AI — it was a pre-existing PVP dispatcher gap exposed by 1.7.41's `status: createStatusState()` addition to `generateAllyStats`.
+
+**The bug:** `_updatePoisonTick` (battle-update.js:789) only existed in the non-PVP dispatcher chain at line 804. The PVP dispatcher (`updatePVPBattle` in pvp.js) never wired it in. When a poisoned actor's turn started, `battle-turn.js` set `battleSt.battleState = 'poison-tick'` to display the poison damage tick, but in PVP nothing advanced that state. Softlock — exactly matching the reported symptoms (state stuck mid-turn, menu panel renders because `poison-tick` is in `isMenu`, but cursor doesn't draw because state isn't `menu-open`).
+
+**Why it surfaced now:** Before 1.7.41, roster allies had no `status` field, so `tryInflictStatus(ally.status, …)` calls in `battle-enemy.js` silently no-op'd — allies couldn't actually be poisoned. 1.7.41 fixed that, allowing the latent PVP poison-tick gap to deadlock the turn loop.
+
+**Fix:** Exported `updatePoisonTick` from `battle-update.js` and added it to the front of the PVP dispatcher chain.
+
+**Re-enabled the 1.7.42 systems** that were unfairly disabled in the 1.7.43 hotfix:
+- PVP enemy magic AI (Cure / Poisona on each other) — `_tryPVPEnemyPoisona` + `_tryPVPEnemyCure` back in `_processEnemyFlash`
+- PVP enemy item AI (Cure Potion / Antidote on any teammate) — `_tryPVPEnemyItem` back in `_processEnemyFlash`
+- Roster ally item AI — `_tryAllyItem` back in the WM AI chain
+
+`src/battle-update.js`, `src/pvp.js`, `src/battle-turn.js`.
+
 ## 1.7.43 — 2026-05-06
 
 ### Hotfix — disable 1.7.42 enemy-magic / item AI hooks (PVP softlock)

@@ -786,11 +786,12 @@ export function updateBattleEndSequence(dt) {
 
 // ── Poison tick ────────────────────────────────────────────────────────────
 
-function _updatePoisonTick() {
+export function updatePoisonTick() {
   if (battleSt.battleState !== 'poison-tick') return false;
   if (battleSt.battleTimer >= POISON_TICK_MS) { processNextTurn(); }
   return true;
 }
+const _updatePoisonTick = updatePoisonTick;
 
 // ── Main update ────────────────────────────────────────────────────────────
 
