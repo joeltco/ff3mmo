@@ -7,17 +7,17 @@ export const LOCATIONS = ['world', 'ur', 'cave-0', 'cave-1', 'cave-2', 'cave-3',
 // Each player has a current location that changes over time (loc is mutated at runtime)
 export const PLAYER_POOL = [
   // jobIdx: 0=Onion Knight, 1=Fighter. Sword users are Fighters.
-  { name: 'Zephyr',  level: 5,  palIdx: 1, camper: false, loc: 'ur',      jobIdx: 0, weaponR: 0x1E,               armorId: 0x73, helmId: 0x62, shieldId: 0x58 }, // OK — Knife / Leather+Cap+Shield
-  { name: 'Mira',    level: 4,  palIdx: 2, camper: false, loc: 'world',   jobIdx: 0, weaponR: 0x1E, weaponL: 0x1E, armorId: 0x73, helmId: 0x62 },                // OK — Knife×2 / Leather+Cap
+  { name: 'Zephyr',  level: 5,  palIdx: 1, camper: false, loc: 'ur',      jobIdx: 3, weaponR: 0x0E,               armorId: 0x73, helmId: 0x62, knownSpells: [0x34, 0x35] }, // WM — Staff / Leather+Cap (Cure, Poisona)
+  { name: 'Mira',    level: 4,  palIdx: 2, camper: false, loc: 'world',   jobIdx: 3, weaponR: 0x0E,               armorId: 0x73, helmId: 0x62, knownSpells: [0x34, 0x35] }, // WM — Staff / Leather+Cap (Cure, Poisona)
   { name: 'Aldric',  level: 5,  palIdx: 3, camper: true,  loc: 'ur',      jobIdx: 1, weaponR: 0x24,               armorId: 0x73, helmId: 0x62, shieldId: 0x58 }, // Fi — Longsword / Leather+Cap+Shield
-  { name: 'Suki',    level: 3,  palIdx: 4, camper: false, loc: 'cave-0',  jobIdx: 0, weaponR: 0x1E,               armorId: 0x73, helmId: 0x62 },                 // OK — Knife / Leather+Cap
+  { name: 'Suki',    level: 3,  palIdx: 4, camper: false, loc: 'cave-0',  jobIdx: 3, weaponR: 0x0E,               armorId: 0x73, helmId: 0x62, knownSpells: [0x34, 0x35] }, // WM — Staff / Leather+Cap (Cure, Poisona)
   { name: 'Fenris',  level: 5,  palIdx: 5, camper: false, loc: 'cave-1',  jobIdx: 1, weaponR: 0x1F,               armorId: 0x73, helmId: 0x62, shieldId: 0x58 }, // Fi — Dagger / Leather+Cap+Shield
   { name: 'Lenna',   level: 5,  palIdx: 6, camper: true,  loc: 'ur',      jobIdx: 3, weaponR: 0x0E,               armorId: 0x73, helmId: 0x62, knownSpells: [0x34, 0x35] }, // WM — Staff / Leather+Cap (Cure, Poisona)
   { name: 'Grok',    level: 5,  palIdx: 7, camper: false, loc: 'cave-3',  jobIdx: 1, weaponR: 0x24,               armorId: 0x73, helmId: 0x62, shieldId: 0x58 }, // Fi — Longsword / Leather+Cap+Shield
   { name: 'Ivy',     level: 2,  palIdx: 0, camper: false, loc: 'ur',      jobIdx: 3, weaponR: 0x0E,               armorId: 0x73, helmId: 0x62, knownSpells: [0x34] },       // WM — Staff / Leather+Cap (Cure)
   { name: 'Rook',    level: 5,  palIdx: 3, camper: false, loc: 'cave-2',  jobIdx: 1, weaponR: 0x24,               armorId: 0x73, helmId: 0x62, shieldId: 0x58 }, // Fi — Longsword / Leather+Cap+Shield
   { name: 'Tora',    level: 5,  palIdx: 5, camper: false, loc: 'world',   jobIdx: 3, weaponR: 0x0E,               armorId: 0x73, helmId: 0x62, knownSpells: [0x34, 0x35] }, // WM — Staff / Leather+Cap (Cure, Poisona)
-  { name: 'Blix',    level: 4,  palIdx: 7, camper: false, loc: 'cave-0',  jobIdx: 0, weaponR: 0x1F,               armorId: 0x73, helmId: 0x62 },                 // OK — Dagger / Leather+Cap
+  { name: 'Blix',    level: 4,  palIdx: 7, camper: false, loc: 'cave-0',  jobIdx: 3, weaponR: 0x0E,               armorId: 0x73, helmId: 0x62, knownSpells: [0x34, 0x35] }, // WM — Staff / Leather+Cap (Cure, Poisona)
   { name: 'Cassia',  level: 5,  palIdx: 6, camper: true,  loc: 'cave-1',  jobIdx: 1, weaponR: 0x28,               armorId: 0x73, helmId: 0x62, shieldId: 0x58 }, // Fi — Serpent Sword / Leather+Cap+Shield
   { name: 'Duran',   level: 5,  palIdx: 1, camper: false, loc: 'crystal', jobIdx: 1, weaponR: 0x24,               armorId: 0x73, helmId: 0x62, shieldId: 0x58 }, // Fi — Longsword / Leather+Cap+Shield
   { name: 'Nyx',     level: 1,  palIdx: 4, camper: false, loc: 'ur',      jobIdx: 0, weaponR: 0x1E,               armorId: 0x73, helmId: 0x62 },                 // OK — Knife / Leather+Cap

@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.28 — 2026-05-06
+
+### Four more White Mages — 8 total on the roster
+
+Converted four more Onion Knights to White Mages: Zephyr (Ur, lv5, palIdx 1 / blue trim), Mira (world, lv4, palIdx 2 / green trim), Suki (cave-0, lv3, palIdx 4 / yellow trim), Blix (cave-0, lv4, palIdx 7 / pink trim). All carry Staff + Leather + Cap and know Cure + Poisona.
+
+Roster mix is now: 8 WMs, 8 Fighters, 4 Monks, 2 OKs, 1 OK-Knife (Mira) — well-distributed across all locations. Roster movement (`_updateMovement`) shuffles non-camper players around naturally, so any given location will have at least one WM most of the time.
+
+`src/data/players.js` only.
+
 ## 1.7.27 — 2026-05-06
 
 ### White Mages on the roster — they actually heal you in battle now
