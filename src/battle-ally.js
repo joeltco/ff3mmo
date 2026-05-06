@@ -66,11 +66,11 @@ function _updateAllyJoin() {
 // ── Ally attack combo (multi-hit with summed damage) ─────────────────────────
 const ALLY_BACK_MS = 40;
 const ALLY_FWD_MS = 40;
-const ALLY_SLASH_MS = 90;
-// Miss hold is extended because there's no slash-flash overlay drawing the eye —
-// 90ms (5 frames) of just the body + weapon canvas reads as a blink. Bumping to
-// 200ms makes the missed swing clearly readable.
-const ALLY_SLASH_MISS_MS = 200;
+// Hit and miss hold the swing pose for the same duration so the strike rhythm
+// is consistent regardless of outcome. 90ms was too brief for misses to read
+// without the slash-flash overlay; 200ms (12 frames) lets the swung-weapon
+// canvas register clearly on both hit and miss.
+const ALLY_SLASH_MS = 200;
 const ALLY_COMBO_PAUSE_MS = 30;
 
 function _updateAllyAttack() {
@@ -115,8 +115,7 @@ function _updateAllyAttack() {
   if (battleSt.battleState === 'ally-slash') {
     const hit = battleSt.allyHitResults[battleSt.allyHitIdx];
     const drawSlash = shouldDrawSlash(hit);
-    const holdMs = drawSlash ? ALLY_SLASH_MS : ALLY_SLASH_MISS_MS;
-    if (battleSt.battleTimer >= holdMs) {
+    if (battleSt.battleTimer >= ALLY_SLASH_MS) {
       if (drawSlash) {
         // Defend halving for PVP opponent
         if (pvpSt.isPVPBattle && pvpSt.pvpOpponentIsDefending && battleSt.allyTargetIndex < 0)

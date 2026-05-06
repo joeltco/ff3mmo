@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.39 — 2026-05-06
+
+### Ally swing duration unified across hit/miss
+
+Removed the hit/miss split from 1.7.38. Both now use `ALLY_SLASH_MS = 200ms` for the slash phase so the strike rhythm is identical regardless of outcome. The slash-flash overlay still only draws on hit, but the body+weapon hold is consistent.
+
+`src/battle-ally.js` only.
+
 ## 1.7.38 — 2026-05-06
 
 ### Ally miss-swing hold bumped to 200ms
