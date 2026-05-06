@@ -67,26 +67,25 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
       processNextTurn();
       return;
     }
+    // End-of-round poison: every poisoned actor (player + allies + monsters /
+    // PVP opponents) ticks simultaneously, damage numbers pop together, no
+    // portrait shake or hit-pose. Differs from NES (per-turn-start tick) but
+    // matches the requested UX of one consolidated end-of-round phase.
+    if (_applyEndOfRoundPoison()) {
+      battleSt.battleState = 'poison-end-tick'; battleSt.battleTimer = 0;
+      return;
+    }
     battleSt.battleState = 'menu-open'; battleSt.battleTimer = 0;
     return;
   }
   const turn = battleSt.turnQueue.shift();
   if (turn.type === 'player') {
     if (ps.hp <= 0) { processNextTurn(); return; }
-    // Status turn-start: poison damage, paralysis/sleep skip, confuse flag
+    // Status turn-start: paralysis/sleep skip, confuse flag.
+    // Poison damage is deferred to end-of-round (see _applyEndOfRoundPoison).
     if (ps.status && !turn._statusDone) {
-      const { canAct, poisonDmg, confused } = processTurnStart(ps.status, ps.stats ? ps.stats.maxHP : ps.hp);
+      const { canAct, confused } = processTurnStart(ps.status, ps.stats ? ps.stats.maxHP : ps.hp);
       if (!canAct) { processNextTurn(); return; }
-      if (poisonDmg > 0) {
-        ps.hp = Math.max(1, ps.hp - poisonDmg);
-        setPlayerDamageNum({ value: poisonDmg, timer: 0 });
-        battleSt.battleShakeTimer = BATTLE_SHAKE_MS;
-        playSFX(SFX.ATTACK_HIT);
-        turn._statusDone = true;
-        battleSt.turnQueue.unshift(turn);
-        battleSt.battleState = 'poison-tick'; battleSt.battleTimer = 0;
-        return;
-      }
       // Confused: NES picks any random living target (self, ally, or enemy)
       if (confused) {
         const pool = [];
@@ -157,19 +156,10 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
     battleSt.allyHitIsLeft = false;
     const ally = battleSt.battleAllies[turn.index];
     if (!ally || ally.hp <= 0) { processNextTurn(); return; }
-    // Ally status turn-start
+    // Ally status turn-start (paralysis/sleep). Poison damage deferred.
     if (ally.status && !turn._statusDone) {
-      const { canAct, poisonDmg } = processTurnStart(ally.status, ally.maxHP || ally.hp);
+      const { canAct } = processTurnStart(ally.status, ally.maxHP || ally.hp);
       if (!canAct) { processNextTurn(); return; }
-      if (poisonDmg > 0) {
-        ally.hp = Math.max(1, ally.hp - poisonDmg);
-        getAllyDamageNums()[turn.index] = { value: poisonDmg, timer: 0 };
-        playSFX(SFX.ATTACK_HIT);
-        turn._statusDone = true;
-        battleSt.turnQueue.unshift(turn);
-        battleSt.battleState = 'poison-tick'; battleSt.battleTimer = 0;
-        return;
-      }
     }
     // White Mage heal AI — pick lowest-HP-pct teammate (player or other ally) below 60% HP.
     // If anyone needs healing AND ally knows Cure (0x34), cast on them. Else fall through to Poisona check / attack.
@@ -199,21 +189,12 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
     battleSt.battleState = 'ally-attack-back'; battleSt.battleTimer = 0;
   } else {
     battleSt.currentAttacker = turn.index;
-    // Monster status turn-start: poison damage, paralysis skip
+    // Monster status turn-start: paralysis skip. Poison damage deferred.
     if (turn.index >= 0 && battleSt.encounterMonsters && battleSt.encounterMonsters[turn.index] && !turn._statusDone) {
       const mon = battleSt.encounterMonsters[turn.index];
       if (mon.status) {
-        const { canAct, poisonDmg } = processTurnStart(mon.status, mon.maxHP);
+        const { canAct } = processTurnStart(mon.status, mon.maxHP);
         if (!canAct || mon.hp <= 0) { processNextTurn(); return; }
-        if (poisonDmg > 0) {
-          mon.hp = Math.max(0, mon.hp - poisonDmg);
-          setEnemyDmgNum({ value: poisonDmg, timer: 0 });
-          playSFX(SFX.ATTACK_HIT);
-          turn._statusDone = true;
-          battleSt.turnQueue.unshift(turn);
-          battleSt.battleState = 'poison-tick'; battleSt.battleTimer = 0;
-          return;
-        }
       }
     }
     if (pvpSt.isPVPBattle) {
@@ -239,6 +220,64 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
     }
     battleSt.battleState = 'enemy-flash'; battleSt.battleTimer = 0; pvpSt.pvpPreflashDecided = false;
   }
+}
+
+// ── End-of-round poison ────────────────────────────────────────────────────
+// Walks every living combatant once. Anyone with the POISON flag takes
+// floor(maxHP/16) and gets a damage-num popped on their slot. Player + allies
+// clamp to HP 1 (NES never lets poison kill from full); enemies/monsters can
+// die. Returns true if any actor ticked (caller drives the hold-state).
+function _applyEndOfRoundPoison() {
+  let anyTicked = false;
+  if (ps.hp > 0 && ps.status && hasStatus(ps.status, STATUS.POISON)) {
+    const max = ps.stats ? ps.stats.maxHP : ps.hp;
+    const dmg = Math.floor(max / 16);
+    if (dmg > 0) {
+      ps.hp = Math.max(1, ps.hp - dmg);
+      setPlayerDamageNum({ value: dmg, timer: 0 });
+      anyTicked = true;
+    }
+  }
+  for (let i = 0; i < battleSt.battleAllies.length; i++) {
+    const ally = battleSt.battleAllies[i];
+    if (!ally || ally.hp <= 0 || !ally.status) continue;
+    if (!hasStatus(ally.status, STATUS.POISON)) continue;
+    const dmg = Math.floor((ally.maxHP || ally.hp) / 16);
+    if (dmg <= 0) continue;
+    ally.hp = Math.max(1, ally.hp - dmg);
+    getAllyDamageNums()[i] = { value: dmg, timer: 0 };
+    anyTicked = true;
+  }
+  if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
+    for (let i = 0; i < battleSt.encounterMonsters.length; i++) {
+      const mon = battleSt.encounterMonsters[i];
+      if (!mon || mon.hp <= 0 || !mon.status) continue;
+      if (!hasStatus(mon.status, STATUS.POISON)) continue;
+      const dmg = Math.floor((mon.maxHP || mon.hp) / 16);
+      if (dmg <= 0) continue;
+      mon.hp = Math.max(0, mon.hp - dmg);
+      setEnemyDmgNum({ value: dmg, timer: 0, index: i });
+      anyTicked = true;
+    }
+  }
+  if (pvpSt.isPVPBattle) {
+    const opp = pvpSt.pvpOpponentStats;
+    if (opp && opp.hp > 0 && opp.status && hasStatus(opp.status, STATUS.POISON)) {
+      const dmg = Math.floor((opp.maxHP || opp.hp) / 16);
+      if (dmg > 0) { opp.hp = Math.max(0, opp.hp - dmg); setEnemyDmgNum({ value: dmg, timer: 0 }); anyTicked = true; }
+    }
+    for (let i = 0; i < pvpSt.pvpEnemyAllies.length; i++) {
+      const e = pvpSt.pvpEnemyAllies[i];
+      if (!e || e.hp <= 0 || !e.status) continue;
+      if (!hasStatus(e.status, STATUS.POISON)) continue;
+      const dmg = Math.floor((e.maxHP || e.hp) / 16);
+      if (dmg <= 0) continue;
+      e.hp = Math.max(0, e.hp - dmg);
+      anyTicked = true;
+    }
+  }
+  if (anyTicked) playSFX(SFX.ATTACK_HIT);
+  return anyTicked;
 }
 
 // ── Ally heal AI (White Mage) ──────────────────────────────────────────────

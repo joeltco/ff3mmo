@@ -60,6 +60,7 @@ const TURN_TIME_MS             = 10000;
 const VICTORY_BOX_ROWS         = 8;
 const VICTORY_ROW_FRAME_MS     = 16.67;
 const POISON_TICK_MS           = 500;
+const POISON_END_HOLD_MS       = 700;
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function _zPressed() { if (!keys['z'] && !keys['Z']) return false; keys['z'] = false; keys['Z'] = false; return true; }
@@ -787,9 +788,23 @@ export function updateBattleEndSequence(dt) {
 // ── Poison tick ────────────────────────────────────────────────────────────
 
 export function updatePoisonTick() {
-  if (battleSt.battleState !== 'poison-tick') return false;
-  if (battleSt.battleTimer >= POISON_TICK_MS) { processNextTurn(); }
-  return true;
+  const bs = battleSt.battleState;
+  if (bs === 'poison-tick') {
+    // Confused-self-hit hold (battle-turn.js confused branch). Keeps shake +
+    // hit-pose; resumes the turn queue.
+    if (battleSt.battleTimer >= POISON_TICK_MS) processNextTurn();
+    return true;
+  }
+  if (bs === 'poison-end-tick') {
+    // End-of-round multi-actor poison: hold long enough for the damage-num
+    // bounce (DMG_SHOW_MS=550ms) to land, then open the menu.
+    if (battleSt.battleTimer >= POISON_END_HOLD_MS) {
+      battleSt.battleState = 'menu-open';
+      battleSt.battleTimer = 0;
+    }
+    return true;
+  }
+  return false;
 }
 const _updatePoisonTick = updatePoisonTick;
 

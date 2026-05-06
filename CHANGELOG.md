@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.51 — 2026-05-06
+
+### Poison damage moves to end-of-round, no shake, no hit-pose
+
+Poison damage no longer ticks at each combatant's turn-start. Instead, after every round (queue empty, before the menu reopens), `_applyEndOfRoundPoison` walks player + battle allies + monsters + PVP opponent + PVP enemy allies once, applies `floor(maxHP/16)` to anyone with the POISON flag, and pops their damage numbers at the same moment. Player + allies clamp to HP 1 (NES never lets poison kill); enemies/monsters can still die from the tick.
+
+New `'poison-end-tick'` battle state holds for 700ms (long enough for the 550ms damage-num bounce to land) then transitions straight to `'menu-open'`. Distinct from the existing `'poison-tick'` state, which is still used by the confused-self-attack hold and keeps its shake + hit-pose. The end-of-round state is intentionally absent from the shake conditions in `hud-drawing.js` and `battle-drawing.js` and from the `isHitPose` predicate — no portrait shake, no damage pose, just damage numbers. It IS in the broad in-combat classifiers so encounter UI keeps rendering during the hold.
+
+If multiple party members are poisoned, all their damage numbers display simultaneously: player gets `setPlayerDamageNum`, each ally gets `getAllyDamageNums()[i]`, the enemy slot is shared (single-slot constraint, last write wins for multi-monster poison — acceptable since the focus is the player team).
+
 ## 1.7.50 — 2026-05-06
 
 ### Drop OK/WR/MO_DEATH constants and the dead legacy sprite path
