@@ -34,12 +34,14 @@ export function calcDamage(atk, def, crit = false, critBonus = 0, elemMult = 1) 
 // NES FF3 attacker ATK (disasm 30/9F44, 31/AC76-AC9B). Single source for player + ally + PVP.
 // rWpnAtk/lWpnAtk: equipped-weapon ATK (0 for unarmed slot or non-weapon item).
 // isMonkClass: true for Monk(2)/BlackBelt(13). When unarmed, uses level-based formula.
+// Non-Monks add floor(str/2) — without it, weapon ATK alone is too low to overcome
+// any equipped defender's DEF (vit + armor stack) and damage clamps to 1.
 export function calcAttackerAtk({ rWpnAtk, lWpnAtk, isMonkClass, level, str, jobLevel }) {
   const isUnarmed = !rWpnAtk && !lWpnAtk;
   if (isUnarmed && isMonkClass) {
     return Math.floor(str / 4) + Math.floor(level * 1.5) + Math.floor(jobLevel / 4) + 2;
   }
-  return rWpnAtk + lWpnAtk;
+  return rWpnAtk + lWpnAtk + Math.floor(str / 2);
 }
 
 // NES FF3 hit count (from disasm 31/ABCE-ABE3): 1 + floor(level/16) + floor(AGI/16)

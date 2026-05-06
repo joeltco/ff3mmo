@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.58 — 2026-05-06
+
+### Damage formula — non-Monks add floor(str/2) to attacker ATK
+
+The non-Monk path in `calcAttackerAtk` was returning raw `wpn1.atk + wpn2.atk` with no STR contribution, while the Monk-unarmed path mixed in str/4 + level scaling. Symptom: a level 9 Onion Knight with a Long Sword (atk 10) hitting a low-level Warrior (vit 10 + leather + cap + shield ~9 def) computed `10 + rand(0..5) - 19` → always clamped to 1 HP, no matter the level.
+
+Fix: non-Monks now return `wpn.atk + floor(str/2)`. STR finally matters for swords/axes/bows. The per-hand split in `input-handler.js` already strips raw weapon ATK out before redistributing per hand, so str/2 survives the strip and applies to every hit. Allies (`generateAllyStats`) and PVP attackers route through the same helper, so the buff cascades to every non-Monk path.
+
+The pause-menu ATK readout (`ps.atk`) will jump for existing players — that's the intended display, matching the underlying damage roll for the first time.
+
 ## 1.7.57 — 2026-05-06
 
 ### End-of-round poison tick — drop SFX
