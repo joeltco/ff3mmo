@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.59 — 2026-05-06
+
+### PVP enemy → roster ally — apply ally shield/evade (was silently dropped)
+
+In `pvp.js` the PVP enemy attack path branched on `targetAlly >= 0`: when the enemy hit one of the player's roster allies, opts collapsed to just crit options — `ally.shieldEvade` and `ally.evade` (populated by `generateAllyStats`) were never read, so PVP enemy swings landed at 100% on roster allies regardless of the ally's shield or armor. The non-PVP `battle-enemy.js` path already does this correctly via `rollMultiHit(ally.def, null, ally.shieldEvade || 0, ally.evade || 0)` — PVP just forgot.
+
+Fix: pass `ally.shieldEvade`/`ally.evade` into the `rollHits` opts when targeting a roster ally. Player-target branch unchanged.
+
+### Audit findings (not yet fixed — flagged for review)
+
+- **Player/ally → PVP enemy shield/evade also dropped.** Symmetric oversight: `input-handler.js:194-202` and `battle-turn.js:174-186` build `targetDef` from `pvpOpponentStats`/`pvpEnemyAllies` but never thread the target's `shieldEvade`/`evade` into `rollHits`. So PVP opponents' shields and evade armor only work on defense, never on offense — meaningful at 16-20% block on late-game shields.
+- **Monster evade ignored on player swings.** Every monster row in `data/monsters.js` carries `evade: 10`, but `input-handler.js`'s `rollHand` doesn't pass `evade` to `rollHits`. Currently a global 10% accuracy buff to players vs NES canon. Fixing it would noticeably tighten encounter difficulty.
+- **ATK/DEF stat asymmetry.** Post-1.7.58, non-Monk attackers add `floor(str/2)` but defenders still use full `vit + armor` (`player-stats.js:138`, `players.js:125`). Tanky kits remain stronger than their stat-screen ATK suggests; a matching `floor(vit/2) + armor` would close the loop and is closer to canonical NES FF3 stat-screen DEF.
+- **Hit count scales slowly.** `calcPotentialHits = 1 + floor(level/16) + floor(agi/16)`. NES-canonical, but in practice means 1 hit per swing through level 15. Bumping the divisors would make mid-levels feel snappier.
+- **Spell `hit` field unused for player-cast.** `spell-cast.js:_applySpellEffect` never checks `spell.hit`. Cure-status spells like Poisona (data hit:50) always succeed on the targeted ally. Fine for friendlies, but if you ever add player-cast offensive status (Sleep, Confuse, Blind on enemies), you'll need a hit roll.
+
 ## 1.7.58 — 2026-05-06
 
 ### Damage formula — non-Monks add floor(str/2) to attacker ATK

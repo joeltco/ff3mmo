@@ -381,7 +381,14 @@ function _processEnemyFlash() {
   const def = targetAlly >= 0 ? battleSt.battleAllies[targetAlly].def : ps.def;
   const attackerJob = JOBS[attackerStats?.jobIdx || 0] || {};
   const baseOpts = { critPct: attackerJob.critPct || 0, critBonus: attackerJob.critBonus || 0 };
-  const opts = targetAlly >= 0 ? baseOpts : {
+  const opts = targetAlly >= 0 ? {
+    // PVP enemy hits one of player's roster allies — apply that ally's shield/evade
+    // (matches battle-enemy.js path for monster-vs-ally; was being skipped here so
+    // ally shields and evade armor did nothing in PVP).
+    ...baseOpts,
+    shieldEvade: battleSt.battleAllies[targetAlly].shieldEvade || 0,
+    evade: battleSt.battleAllies[targetAlly].evade || 0,
+  } : {
     ...baseOpts,
     shieldEvade: getShieldEvade(ITEMS),
     evade: ps.evade,
