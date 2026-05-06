@@ -7,6 +7,7 @@ import { _dmgBounceY } from './data/animation-tables.js';
 // ── Palettes ────────────────────────────────────────────────────────────────
 export const DMG_NUM_PAL  = [0x0F, 0x0F, 0x0F, 0x25]; // red/orange damage
 export const HEAL_NUM_PAL = [0x0F, 0x0F, 0x0F, 0x2B]; // green heal
+export const CRIT_NUM_PAL = [0x0F, 0x0F, 0x0F, 0x28]; // gold/yellow crit
 
 // ── Duration ────────────────────────────────────────────────────────────────
 export const DMG_SHOW_MS    = 550;  // standard display time

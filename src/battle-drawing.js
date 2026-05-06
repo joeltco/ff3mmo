@@ -5,7 +5,7 @@ import { drawText, measureText, TEXT_WHITE } from './font-renderer.js';
 import { nesColorFade, _makeFadedPal } from './palette.js';
 import { _calcBoxExpandSize, _encounterGridPos } from './battle-layout.js';
 import { _dmgBounceY } from './data/animation-tables.js';
-import { DMG_NUM_PAL, HEAL_NUM_PAL, drawBattleNum as _drawBattleNumCtx, getMissCanvas } from './damage-numbers.js';
+import { DMG_NUM_PAL, HEAL_NUM_PAL, CRIT_NUM_PAL, drawBattleNum as _drawBattleNumCtx, getMissCanvas } from './damage-numbers.js';
 import { getBossBattleCanvas, getBossWhiteCanvas } from './boss-sprites.js';
 import { getMonsterCanvas, getMonsterWhiteCanvas, hasMonsterSprites } from './monster-sprites.js';
 import { getItemNameClean, getMonsterName, getSpellNameClean } from './text-decoder.js';
@@ -527,7 +527,9 @@ function _drawBattlePortrait() {
 function _drawBattleCritFlash() {
   if (battleSt.critFlashTimer < 0) return;
   if (battleSt.critFlashTimer === 0) battleSt.critFlashTimer = Date.now();
-  if (Date.now() - battleSt.critFlashTimer < 17) {
+  // 67ms = ~4 frames at 60fps. 17ms (1 frame) was below the perceptual floor —
+  // crits felt invisible. 67ms registers as a deliberate flash without strobing.
+  if (Date.now() - battleSt.critFlashTimer < 67) {
     clipToViewport();
     ui.ctx.fillStyle = '#DAA336';
     ui.ctx.fillRect(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H);
@@ -1481,7 +1483,7 @@ function _flushAllyWeaponDraws(weaponDraws) {
         const mc = getMissCanvas();
         if (mc) ui.ctx.drawImage(mc, bx - 8, by);
       } else {
-        _drawBattleNum(bx, by, dn.value, dn.heal ? HEAL_NUM_PAL : DMG_NUM_PAL);
+        _drawBattleNum(bx, by, dn.value, dn.heal ? HEAL_NUM_PAL : (dn.crit ? CRIT_NUM_PAL : DMG_NUM_PAL));
       }
     } else if (wd.type === 'sparkle') {
       const { frame, px, py } = wd;
@@ -1597,7 +1599,7 @@ function _drawBossDmgNum() {
     const mc = getMissCanvas();
     if (mc) ui.ctx.drawImage(mc, bx - 8, by);
   } else {
-    _drawBattleNum(bx, by, getEnemyDmgNum().value, DMG_NUM_PAL);
+    _drawBattleNum(bx, by, getEnemyDmgNum().value, getEnemyDmgNum().crit ? CRIT_NUM_PAL : DMG_NUM_PAL);
   }
   ui.ctx.restore();
 }
@@ -1640,7 +1642,7 @@ function drawDamageNumbers() {
       const mc = getMissCanvas();
       if (mc) ui.ctx.drawImage(mc, px - 8, py);
     } else {
-      _drawBattleNum(px, py, getPlayerDamageNum().value, DMG_NUM_PAL);
+      _drawBattleNum(px, py, getPlayerDamageNum().value, getPlayerDamageNum().crit ? CRIT_NUM_PAL : DMG_NUM_PAL);
     }
   }
 

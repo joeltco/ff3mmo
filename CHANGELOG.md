@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.63 — 2026-05-06
+
+### Crits are visible now
+
+The `crit: true` flag on damage nums was plumbed through every attack path (player, ally, enemy, PVP) — and the renderer ignored it. The only crit feedback was a 17ms (one frame) gold screen flash that was below the perceptual floor; players couldn't tell which hit was the big one.
+
+Two fixes:
+1. **`CRIT_NUM_PAL` (gold/yellow `0x28`)** added to `damage-numbers.js`. The three damage-side renderers in `battle-drawing.js` (player→enemy, enemy→player, ally→enemy) now branch on `dn.crit` and use the gold palette for crit hits. Heal/swDmg paths untouched (heals don't crit; battle items auto-resolve).
+2. **Crit screen flash 17ms → 67ms** (~4 frames). Long enough to register as a deliberate flash, short enough to avoid strobing on multi-hit crit chains.
+
 ## 1.7.62 — 2026-05-06
 
 ### Remove the offensive-spell miss gate added in 1.7.60
