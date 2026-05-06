@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.62 — 2026-05-06
+
+### Remove the offensive-spell miss gate added in 1.7.60
+
+The hit-roll gate was routed through the heal-num path (`setPlayerHealNum({miss: true})`, `allyDamageNums[target] = {miss: true}`). Two problems:
+1. Heals don't miss — using the heal-num path for an offensive whiff was the wrong display channel.
+2. Unreachable: `_applySpellEffect(target)` only runs for friendly targets (`'player'` or ally index). Offensive spells (`enemy`, `enemy_status`, `all_enemies`) never reach this function in the current pipeline — when those spells get added later, the hit roll belongs at the offense-side dispatch, not here.
+
+Net: no behavior change today (gate was dead code), one fewer wrong-path landmine when offensive player-cast spells get implemented.
+
 ## 1.7.61 — 2026-05-06
 
 ### Drop-rate audit — null entries no longer eat the encounter's drop slot
