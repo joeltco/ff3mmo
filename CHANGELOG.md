@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.55 — 2026-05-06
+
+### Ally-cast Poisona on player/ally — show Poisona effect, not Cure sparkle
+
+v1.7.54 wired Poisona's target effect for the player-cast paths but missed both ally-cast paths in `battle-drawing.js`: ally → player and ally → ally were both hardcoded to `bsc.cureSparkleFrames` regardless of which spell the ally cast. Result: WM ally casting Poisona on the player (or another ally) showed the blue Cure sparkle instead of the magenta Poisona effect. Both branches now look up the actual cast spell via `battleSt.allyMagicSpellId` and route through `getCureTargetFrames`. Item-mode heals (potions) still use the recovery sparkle as before.
+
 ## 1.7.54 — 2026-05-06
 
 ### Poisona target spell-effect — recover captured tiles, wire to TARGET (not caster)

@@ -370,13 +370,29 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
       ui.ctx.drawImage(_selfTgt[_sparkleFi], px, py);
     }
   }
-  // Ally-cast heal on player (WM ally Cure → player). Shows the recovery-school
-  // sparkle on the player portrait during the heal phase of ally-magic-hit.
-  // Heal-num triggers visibility window (suppressed for 0-value via drawBattleNum).
-  const isAllyCureOnPlayer = battleSt.battleState === 'ally-magic-hit'
+  // Ally-cast magic on player. Picks the per-spell target effect based on the
+  // ally's actual spell (`allyMagicSpellId`) — Cure → recovery sparkle,
+  // Poisona → poisonaTargetFrames. Falls back to bsc.cureSparkleFrames only
+  // if the spell bundle is unavailable.
+  const isAllyMagicOnPlayer = battleSt.battleState === 'ally-magic-hit'
     && battleSt.allyMagicTargetType === 'player'
-    && battleSt.allyMagicEffectApplied;
-  if (isAllyCureOnPlayer && bsc.cureSparkleFrames.length === 2) {
+    && battleSt.allyMagicEffectApplied
+    && !battleSt.allyMagicItemMode;
+  if (isAllyMagicOnPlayer) {
+    const _allyCastSpell = SPELLS.get(battleSt.allyMagicSpellId);
+    const _allyCastAnim = _allyCastSpell ? getCureAnimAssets(_allyCastSpell) : null;
+    const _allyCastTgt = getCureTargetFrames(_allyCastSpell, _allyCastAnim);
+    const _frames = (_allyCastTgt && _allyCastTgt.length === 2) ? _allyCastTgt : bsc.cureSparkleFrames;
+    if (_frames && _frames.length === 2) {
+      ui.ctx.drawImage(_frames[_sparkleFi], px, py);
+    }
+  }
+  // Ally-item heal on player (potions) — always recovery sparkle.
+  const isAllyItemOnPlayer = battleSt.battleState === 'ally-magic-hit'
+    && battleSt.allyMagicTargetType === 'player'
+    && battleSt.allyMagicEffectApplied
+    && battleSt.allyMagicItemMode;
+  if (isAllyItemOnPlayer && bsc.cureSparkleFrames.length === 2) {
     ui.ctx.drawImage(bsc.cureSparkleFrames[_sparkleFi], px, py);
   }
   // Near-fatal sweat — 2 frames alternating every 133ms, 3px above portrait
@@ -1286,13 +1302,30 @@ function _drawAllyRow(i, ally, panelTop, weaponDraws) {
     ? _allyMagicTargetFrames : null;
   const _allyItemSparkle = isAllyHealItem && bsc.cureSparkleFrames.length === 2
     ? bsc.cureSparkleFrames : null;
-  // WM ally cast Cure on this ally — show recovery sparkle during heal phase.
-  const isAllyCureOnAlly = battleSt.battleState === 'ally-magic-hit'
+  // WM ally cast magic on this ally — pick the per-spell target effect based
+  // on the caster ally's `allyMagicSpellId` (Poisona → poisonaTargetFrames,
+  // Cure → recovery sparkle). Item-mode (potions) always uses recovery.
+  const isAllyMagicOnAlly = battleSt.battleState === 'ally-magic-hit'
     && battleSt.allyMagicTargetType === 'ally'
     && battleSt.allyMagicTargetIdx === i
-    && battleSt.allyMagicEffectApplied;
-  const _allyAllyCureSparkle = isAllyCureOnAlly && bsc.cureSparkleFrames.length === 2
-    ? bsc.cureSparkleFrames : null;
+    && battleSt.allyMagicEffectApplied
+    && !battleSt.allyMagicItemMode;
+  let _allyAllyCureSparkle = null;
+  if (isAllyMagicOnAlly) {
+    const _aaSpell = SPELLS.get(battleSt.allyMagicSpellId);
+    const _aaAnim = _aaSpell ? getCureAnimAssets(_aaSpell) : null;
+    const _aaTgt = getCureTargetFrames(_aaSpell, _aaAnim);
+    _allyAllyCureSparkle = (_aaTgt && _aaTgt.length === 2)
+      ? _aaTgt
+      : (bsc.cureSparkleFrames.length === 2 ? bsc.cureSparkleFrames : null);
+  } else if (battleSt.battleState === 'ally-magic-hit'
+      && battleSt.allyMagicTargetType === 'ally'
+      && battleSt.allyMagicTargetIdx === i
+      && battleSt.allyMagicEffectApplied
+      && battleSt.allyMagicItemMode
+      && bsc.cureSparkleFrames.length === 2) {
+    _allyAllyCureSparkle = bsc.cureSparkleFrames;
+  }
   const _allyHealSparkleSet = _allyMagicSparkle || _allyItemSparkle || _allyAllyCureSparkle;
   const ppx = HUD_RIGHT_X + 8, ppy = rowY + 8;
   drawHudBox(HUD_RIGHT_X, rowY, 32, ROSTER_ROW_H, ally.fadeStep);
