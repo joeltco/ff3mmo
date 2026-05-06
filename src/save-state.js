@@ -11,6 +11,13 @@ export let saveSlots = [null, null, null]; // null = empty, or Uint8Array of nam
 export let savesLoaded = false;            // guard: don't write to DB until loaded from DB first
 export let nameBuffer = [];                // bytes being typed
 export const NAME_MAX_LEN = 7;
+// True only when `ps` currently holds the data for `saveSlots[selectCursor]` —
+// i.e., the user is actively playing that slot. Set by _updateTitleMainOutCase
+// when a slot is loaded; cleared by returnToTitle. Used by saveSlotsToDB to
+// avoid baking stale `ps` state into a freshly-created shell slot during name
+// entry (the bug that copied an existing save into "new" games).
+export let psAligned = false;
+export function setPsAligned(v) { psAligned = !!v; }
 
 // Setters for state that external modules need to write
 export function setSelectCursor(v) { selectCursor = v; }
@@ -30,10 +37,14 @@ export function setPositionGetter(fn) { _getPosition = fn; }
 export async function saveSlotsToDB() {
   if (!savesLoaded) return;
   const slot = saveSlots[selectCursor];
-  if (slot) {
+  // Only bake live `ps` state into the slot when ps is actually aligned with
+  // this slot. Without the gate, name-entry's saveSlotsToDB call writes the
+  // previously-loaded slot's data into the new shell slot — making "new game"
+  // start with the previous slot's level/inventory/gil/etc.
+  if (slot && psAligned) {
     slot.playTime = ps.playTime;
   }
-  if (slot && ps.stats) {
+  if (slot && psAligned && ps.stats) {
     slot.level = ps.stats.level;
     slot.exp = ps.stats.exp;
     slot.hp = ps.hp;

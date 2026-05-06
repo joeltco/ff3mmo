@@ -4,9 +4,9 @@ import { drawText, measureText, TEXT_WHITE } from './font-renderer.js';
 import { nesColorFade, _makeFadedPal } from './palette.js';
 import { _nameToBytes } from './text-utils.js';
 import { selectCursor, saveSlots, nameBuffer, NAME_MAX_LEN,
-         setSelectCursor, setNameBuffer, saveSlotsToDB } from './save-state.js';
+         setSelectCursor, setNameBuffer, saveSlotsToDB, setPsAligned } from './save-state.js';
 import { playSFX, fadeOutMusic, SFX, TRACKS } from './music.js';
-import { ps, fullHeal, recalcCombatStats, grantStartingSpells } from './player-stats.js';
+import { ps, fullHeal, recalcCombatStats, grantStartingSpells, initPlayerStats } from './player-stats.js';
 import { hudSt } from './hud-state.js';
 import { transSt } from './transitions.js';
 import { mapSt } from './map-state.js';
@@ -660,6 +660,19 @@ function _updateTitleMainOutCase() {
   titleSt.state = 'done';
   hudSt.hudInfoFadeTimer = 0;
   const slot = saveSlots[selectCursor];
+  // Fresh slot (just-named, no stats yet) — reinitialise ps from ROM defaults
+  // so we don't carry over the previously-played slot's state. The stats branch
+  // below is skipped for fresh slots; this is the single point where a brand-
+  // new game gets a clean ps. Equipment isn't touched by initPlayerStats so we
+  // reset it explicitly here to the canonical OK starter loadout.
+  if (slot && !slot.stats && ps._romData) {
+    initPlayerStats(ps._romData);
+    ps.weaponR = 0x1E;  // Knife
+    ps.weaponL = 0x00;  // unarmed
+    ps.head    = 0x62;  // Leather Cap
+    ps.body    = 0x72;  // Cloth Armor
+    ps.arms    = 0x00;
+  }
   if (slot && slot.stats) {
     ps.stats.str = slot.stats.str;
     ps.stats.agi = slot.stats.agi;
@@ -703,6 +716,8 @@ function _updateTitleMainOutCase() {
   mapSt.worldY -= 6 * TILE_SIZE;
   transSt.state = 'hud-fade-in';
   transSt.timer = 0;
+  // ps is now aligned with the active slot — saveSlotsToDB can safely bake.
+  setPsAligned(true);
 }
 
 export function updateTitle(dt) {

@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.30 — 2026-05-06
+
+### Fix: starting a new game cloned the previously-played slot
+
+Reproduction: play any slot → return to title via pause-menu → create a new save in an empty slot. The new game began with the previous slot's level, inventory, gil, equipment, knownSpells, lastTown, and world position — fully cloned.
+
+Root cause: `returnToTitle()` (`src/main.js`) didn't clear `ps`, so the previous slot's data stayed live in memory. Then in title's name-entry flow, `saveSlotsToDB()` ran on the freshly-created shell slot and unconditionally baked the still-loaded `ps` state into it (every field — stats, hp, mp, inventory, gil, jobLevels, jobIdx, unlockedJobs, knownSpells, world position, lastTown). When the user then pressed Z to enter that "new" slot, `_updateTitleMainOutCase` saw populated `slot.stats` and copied it back into `ps` — guaranteeing the clone.
+
+Fix is a `psAligned` gate:
+
+- `psAligned` flag in `save-state.js` (default false). Cleared by `returnToTitle` after the final save; set true at the end of `_updateTitleMainOutCase` once a slot is loaded into `ps`.
+- `saveSlotsToDB` skips the entire `ps → slot` bake when `psAligned === false`. Slot-level shells (just name + defaults) still persist via the `data.forEach` loop, so navigating away mid-name-entry doesn't lose the slot. The full bake resumes on the first in-game save after `_updateTitleMainOutCase` flips the flag.
+- `_updateTitleMainOutCase` now reinitialises `ps` from ROM defaults when entering a slot whose `stats` is null (a fresh slot). Calls `initPlayerStats(ps._romData)` and resets equipment to canonical OK-starter loadout (Knife, Leather Cap, Cloth Armor) — the equipment slots aren't touched by `initPlayerStats` so they need explicit reset.
+
+Side benefits: returning to title from an existing slot and immediately starting a new game now gives a true clean start. Page-refresh + new game still works as before (boot inits ps fresh, psAligned starts false).
+
+`src/save-state.js`, `src/title-screen.js`, `src/main.js`.
+
 ## 1.7.29 — 2026-05-06
 
 ### Roster redistribution — every floor has a healer, Ur slimmed down

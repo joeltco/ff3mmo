@@ -11,7 +11,7 @@ import { initTextDecoder } from './text-decoder.js';
 import { initFont } from './font-renderer.js';
 import { PLAYER_POOL } from './data/players.js';
 import { VERSION } from './data/strings.js';
-import { saveSlotsToDB, loadSlotsFromDB, setPositionGetter } from './save-state.js';
+import { saveSlotsToDB, loadSlotsFromDB, setPositionGetter, setPsAligned } from './save-state.js';
 import { resetWorldWaterCache } from './water-animation.js';
 import { hudSt, HUD_INFO_FADE_STEPS, HUD_INFO_FADE_STEP_MS } from './hud-state.js';
 import { mapSt } from './map-state.js';
@@ -58,6 +58,11 @@ export function init() {
 
 function returnToTitle() {
   saveSlotsToDB();
+  // ps no longer represents the active slot — gate future saves until a slot
+  // is loaded again via _updateTitleMainOutCase. Without this flip, the next
+  // saveSlotsToDB during name entry would bake the previous slot's data into
+  // the new shell.
+  setPsAligned(false);
   pauseSt.state = 'none';
   fadeOutFF1Music((HUD_INFO_FADE_STEPS + 1) * HUD_INFO_FADE_STEP_MS);
   clearMusicStash();
