@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.37 — 2026-05-06
+
+### WM heal threshold restored to 60%
+
+The 1.7.34 drop to 40% was a misdiagnosis — WMs *appearing* to disappear on certain turns was actually the missed-attack swing-blink bug fixed in 1.7.35. Now that swings render at full duration regardless of hit/miss, restored the canonical 60% heal threshold so WMs heal preemptively at meaningful HP loss rather than waiting for someone to be near death.
+
+`src/battle-turn.js` only.
+
 ## 1.7.36 — 2026-05-06
 
 ### WM roster allies cast Poisona on poisoned teammates
