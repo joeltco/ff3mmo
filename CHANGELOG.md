@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.78 — 2026-05-07
+
+### Damage-number audit: dedicated digit sprites + final bounce frames
+
+REC OAM capture (FF3J, frames 1209-1258) audited the damage popup. Two issues found and fixed:
+
+- **Digits used the text font, not the chunky FF3J battle-digit sprites.** `drawBattleNum` rendered through `drawText` with tile IDs `$80-$89` (the regular A-Z+0-9 text font). NES FF3 actually uses a separate, bolder digit sprite set at sprite tile slots `$56-$5F`. Pulled all 10 tiles (signature-matched `$5B`/`$5C` from the OAM dump against the ROM at `0x1B170`, then dumped 10 sequential 16-byte tiles → digits 0-9). Land them as `BATTLE_DIGIT_TILES` next to the existing `MISS_TILE_*` constants. New `drawBattleNum` builds 8x8 canvases per (digit × palette), cached on first use, and `ctx.drawImage`s them — no more font-renderer detour.
+- **Bounce table cut off ~50 ms early.** Frames 0-29 of the existing `DMG_BOUNCE_TABLE` matched the OAM Y trace pixel-for-pixel; the trailing 3 frames were missing — capture continues falling to +5, +6 and holds at +6 for one frame before vanishing at frame 33 (~549 ms total = `DMG_SHOW_MS`). Old impl froze at +3. Appended `5, 6, 6` to the table.
+- **Palette layout updated to match the new tile data.** Battle-digit tiles use color index 1 = outline, 2 = fill (per the SP3 palette FF3 sets at PPU `$3F1D` = `[0x0F, 0x0F, 0x25, *]` in the capture). The old text-font path used color index 3. Updated `DMG_NUM_PAL` / `HEAL_NUM_PAL` / `CRIT_NUM_PAL` to put the fill color in slot 2.
+
+To swap heal/crit colors (Cure heals already render green via `HEAL_NUM_PAL`'s `0x2B`), change the slot-2 NES master color in the palette constant.
+
 ## 1.7.77 — 2026-05-07
 
 ### Boss + PVP boxes use transparent-edge tiles
