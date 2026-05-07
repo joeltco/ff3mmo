@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.68 — 2026-05-06
+
+### Fix HUD flash on enemy death
+
+The new `pre-monster-death` state from 1.7.67 wasn't in the `isMenu` / `_isEncounterCombatState` predicates in `battle-drawing.js`, so the battle HUD/encounter box closed for the 85 ms pause and reopened — visible as a flash. Added `pre-monster-death` to both predicates so the HUD stays drawn through the kill beat.
+
 ## 1.7.67 — 2026-05-06
 
 ### Attack timing audit fixes — slash weight + anticipation beats
