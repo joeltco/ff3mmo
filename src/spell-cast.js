@@ -13,7 +13,7 @@ import { setPlayerHealNum, setPlayerDamageNum, getAllyDamageNums, setEnemyDmgNum
 import { SPELLS, getSpellMPCost, isMultiTargetSpell } from './data/spells.js';
 import { STATUS, removeStatus } from './status-effects.js';
 import { CURE_PHASE_MS, CURE_T_HEAL, CURE_TOTAL_MS } from './cure-anim.js';
-import { queueBattleMsg } from './battle-msg.js';
+import { queueBattleMsg, isBattleMsgBusy } from './battle-msg.js';
 import { _nameToBytes } from './text-utils.js';
 import { elemMultiplier } from './battle-math.js';
 import { pvpSt } from './pvp.js';
@@ -360,7 +360,16 @@ export function updateSpellCast(dt) {
       battleSt.battleTimer = 0;
     } else {
       clearHealNums();
-      _processNextTurn();
+      // If a battle message is still on screen (Sight's "Ineffective", a
+      // future spell-text dialog, etc.), defer the turn advance through the
+      // existing `msg-wait` gate so the player actually reads it. Same
+      // pattern enemy no-op attacks (battle-enemy.js:134) use.
+      if (isBattleMsgBusy()) {
+        battleSt.battleState = 'msg-wait';
+        battleSt.battleTimer = 0;
+      } else {
+        _processNextTurn();
+      }
     }
   }
   return true;

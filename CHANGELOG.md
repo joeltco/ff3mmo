@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.84 — 2026-05-07
+
+### Spell-cast turn advance gates on battle-message clear
+
+`updateSpellCast` now defers `_processNextTurn()` through the existing `msg-wait` state when a battle message is still on screen at the end of `magic-hit`, instead of firing the next turn instantly. Same pattern `battle-enemy.js:134` uses for no-op enemy attacks.
+
+Why: Sight queues "Ineffective" at hitEffectMs (~417 ms into the 867 ms hit phase), but the message needs ~1200 ms to fade-in/hold/fade-out. Magic-hit was ending 450 ms after the queue, so the next monster attack started before the player could read the text. Now the loop sits in `msg-wait` until `getBattleMsgCurrent()` clears, then advances. No-op for spells that don't queue a message — they hit `isBattleMsgBusy() === false` and process the next turn the same frame as before.
+
 ## 1.7.83 — 2026-05-07
 
 ### Sight: "Ineffective" battle message instead of MISS sprite
