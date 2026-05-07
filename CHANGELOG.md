@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.87 — 2026-05-07
+
+### Fire (Black Mage Lv1) — first BM damage spell
+
+Fire (spell ID `0x31`) is now player-castable as the Black Mage's starting spell. The visual decomposes into the three universal black-magic phases the user named — cast / projectile / spell-animation:
+
+- **Cast** — caster-side wand-flash buildup. Reuses the shared `$4A-$57` flame sequence with a new fire palette `[0x0F, 0x16, 0x27, 0x30]` (red / orange / white) added to `cure-anim.js`'s school palette table. `getCureAnimAssets(spell)` now dispatches Fire by `spell.element === 'fire'`.
+- **Projectile (throw)** — `sight-anim.js` was promoted to `projectile-anim.js` (the user's "remap" — the throw is delivery, not a spell animation). Same `$58` 8×8 sprite VFLIP-toggling caster→target, but palette is now keyed per-school via `getProjectilePalKey(spell)`. Sight + Fire share the bitmap; future BM throws plug in by adding a palette entry. `boot.js`'s `initSightProjectile()` becomes `initProjectile()`.
+- **Spell animation (impact)** — new `fire-anim.js` owns the 6-tile `$01-$06` 16×24 flame, captured from REC OAM 2026-05-07 f9627 (frames 66-108, palette SP1 `[0x0F, 0x27, 0x18, 0x21]` yellow / orange-brown / blue). Static across the impact window — confirmed identical at frames 70/80/95 — so we render one canvas held over the post-flight portion of the heal phase. Sight has no spell-animation slot (per the user: "obviously sight doesn't have a spell animation, so it's blank, says ineffective in the battle messages").
+
+Battle-side wiring: `battle-drawing.js`'s on-target render now dispatches projectile (first 60% of heal window) → fire impact (last 40%) when `spell.element === 'fire'`, otherwise falls back to the existing Sight projectile-only path or Cure/Poisona sparkle. `spell-cast.js`'s `_isCureAnimSpell` includes fire so the timing matches. The damage path plays `SFX.FIRE_BOOM` (NSF track `$55` = SFX `$14 + $41`, ear-test pending) instead of `SFX.SW_HIT` for fire spells.
+
+Spell tables: `0x31` added to `SPELL_MP_COST` (2) and `SPELL_BUY_PRICE` (100). Black Mage starting kit (`STARTING_SPELLS[4]`) is `[0x31]`. Defensive `0x31` early-returns added to `battle-ally.js`'s `_applyAllyMagicEffect` and `pvp.js`'s `_applyPVPEnemyMagicEffect` so a stray Fire spell ID from a sync error or future BM-ally selector doesn't fall through and accidentally heal the target via the default Cure path.
+
 ## 1.7.86 — 2026-05-07
 
 ### Pause-menu sparkle fully routed through cure-anim (drops 4-corner mirror)

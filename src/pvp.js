@@ -563,6 +563,14 @@ function _applyPVPEnemyMagicEffect() {
     playSFX(SFX.SIGHT);
     return;
   }
+  // 0x31 Fire — defensive guard. PVP fire damage from a remote opponent isn't
+  // wired through this fn yet (heal/cure-only path); without the guard a
+  // remote fire cast would fall through to the Cure heal below. Boom SFX
+  // plays so the player sees feedback; damage TODO when PVP BM lands.
+  if (pvpSt.pvpMagicSpellId === 0x31) {
+    playSFX(SFX.FIRE_BOOM);
+    return;
+  }
   if (pvpSt.pvpMagicSpellId === 0x35) {
     if (target.status) removeStatus(target.status, STATUS.POISON);
     setEnemyHealNum({ value: 0, timer: 0, index: pvpSt.pvpMagicTargetCellIdx });

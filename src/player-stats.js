@@ -41,6 +41,7 @@ export const ps = {
 // NES canon: WM starts with the full Lv1 white kit (Cure, Poisona, Sight).
 const STARTING_SPELLS = {
   3: [0x34, 0x35, 0x36], // White Mage: Cure, Poisona, Sight
+  4: [0x31],             // Black Mage: Fire (Lv1 only for now; ice/bolt deferred)
 };
 
 export function grantStartingSpells(jobIdx = ps.jobIdx) {

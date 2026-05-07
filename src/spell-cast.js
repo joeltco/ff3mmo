@@ -240,7 +240,7 @@ function _applyEnemyEffect(idx, spell) {
     setEnemyHP(Math.max(0, getEnemyHP() - dmg));
     _setEnemyDmg(idx, dmg, false);
     battleSt.battleShakeTimer = BATTLE_SHAKE_MS;
-    playSFX(SFX.SW_HIT);
+    playSFX(spell.element === 'fire' ? SFX.FIRE_BOOM : SFX.SW_HIT);
     return;
   }
   if (!mon || mon.hp <= 0) return;
@@ -320,7 +320,8 @@ function _isCureAnimSpell() {
   return spell.element === 'recovery'
       || spell.target === 'cure_status'
       || spell.target === 'revive'
-      || spell.target === 'sight';
+      || spell.target === 'sight'
+      || spell.element === 'fire';
 }
 
 export function isSightSpell(spellId) {

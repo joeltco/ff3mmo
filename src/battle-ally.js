@@ -194,6 +194,14 @@ function _applyAllyMagicEffect() {
     playSFX(SFX.SIGHT);
     return;
   }
+  // 0x31 Fire — ally AI doesn't cast offensive magic on enemies today; this
+  // guard exists so a stray Fire spellId (sync error, future BM ally) doesn't
+  // fall through and accidentally heal the target via the default Cure path.
+  // Boom SFX plays; damage application is the player-cast pipeline's job.
+  if (spellId === 0x31) {
+    playSFX(SFX.FIRE_BOOM);
+    return;
+  }
   // 0x35 Poisona — strip POISON flag from target, no HP change. Sparkle still
   // shows via the heal-num placeholder ({value:0, heal:true}) on the target.
   if (spellId === 0x35) {

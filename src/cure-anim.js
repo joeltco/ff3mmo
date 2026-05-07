@@ -33,11 +33,16 @@ import { _makeCanvas16 } from './canvas-utils.js';
 import { ITEMS } from './data/items.js';
 import { SPELLS } from './data/spells.js';
 
+// Per-school cast palette. The shared $4A-$57 flame buildup gets palette-
+// swapped per school — same tile shapes, different colors. Originally white-
+// magic only; now also covers BM cast (Fire 2026-05-07) and is conceptually
+// SCHOOL_PAL despite the legacy name. Add a key when capturing a new school.
 const WHITE_MAGIC_PAL = {
   recovery:    [0x0F, 0x12, 0x22, 0x31],  // Cure family — blue / cyan / white
   cure_status: [0x0F, 0x15, 0x27, 0x30],  // Poisona / Bndna / Esuna / Stone — magenta / orange / white (REC OAM 2026-05-05)
   revive:      [0x0F, 0x15, 0x27, 0x30],  // Arise / Raise — placeholder; same as cure_status until captured
   sight:       [0x0F, 0x29, 0x31, 0x30],  // Sight — green / light cyan / white (REC OAM 2026-05-07)
+  fire:        [0x0F, 0x16, 0x27, 0x30],  // Fire (BM Lv1) — red / orange / white (REC OAM 2026-05-07 f9627)
 };
 
 // ── Build-up phase tiles ($4A-$57 flame + $49 small star) ──────────────────
@@ -246,6 +251,7 @@ export function getCureAnimAssets(spell) {
   const key = spell.target === 'cure_status' ? 'cure_status'
             : spell.target === 'revive'      ? 'revive'
             : spell.target === 'sight'       ? 'sight'
+            : spell.element === 'fire'       ? 'fire'
             : spell.element === 'recovery'   ? 'recovery'
             : null;
   return key ? _animsByKey[key] : null;

@@ -34,7 +34,8 @@ import { bsc, getSlashFramesForWeapon } from './battle-sprite-cache.js';
 import { drawSlashOverlay, SLASH_FRAME_MS, shouldDrawSlash } from './slash-effects.js';
 import { getCureAnimElapsedMs, getCurrentSpellId, getSpellTargets, getSpellHitIdx } from './spell-cast.js';
 import { getCureFlameFrameIdx, shouldDrawStars, shouldDrawHealSparkle, getCureAnimAssets, getCureTargetFrames, getItemSparkleFrames, CURE_T_HEAL, CURE_PHASE_MS } from './cure-anim.js';
-import { getSightProjectileTile, getSightProjectilePos } from './sight-anim.js';
+import { getProjectileTile, getProjectilePos, PROJECTILE_FLIGHT_FRAC } from './projectile-anim.js';
+import { getFireImpactCanvas } from './fire-anim.js';
 import { hudSt } from './hud-state.js';
 import { fakePlayerPortraits, fakePlayerVictoryPortraits, fakePlayerHitPortraits,
          fakePlayerKneelPortraits, fakePlayerAttackPortraits, fakePlayerAttackLPortraits,
@@ -614,10 +615,10 @@ function _drawPlayerSpellTargetSparkleOnEnemy() {
   if (cureMs < 0 || !shouldDrawHealSparkle(cureMs)) return;
   const spell = SPELLS.get(getCurrentSpellId());
   if (!spell) return;
-  const isSight = spell.target === 'sight';
-  const cureAnim = !isSight ? getCureAnimAssets(spell) : null;
-  const frames = !isSight ? getCureTargetFrames(spell, cureAnim) : null;
-  if (!isSight && (!frames || frames.length !== 2)) return;
+  const isThrown = spell.target === 'sight' || spell.element === 'fire';
+  const cureAnim = !isThrown ? getCureAnimAssets(spell) : null;
+  const frames = !isThrown ? getCureTargetFrames(spell, cureAnim) : null;
+  if (!isThrown && (!frames || frames.length !== 2)) return;
   const fi = Math.floor(battleSt.battleTimer / 67) & 1;
 
   // Enemy sprite center — encounter / PVP / boss differ.
@@ -644,16 +645,25 @@ function _drawPlayerSpellTargetSparkleOnEnemy() {
     cx = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2);
     cy = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
   }
-  if (isSight) {
-    // Projectile flies caster-portrait → target enemy. Caster is the player
-    // portrait at (HUD_RIGHT_X+8, HUD_VIEW_Y+8); add 8 to center on its 16×16.
-    const tile = getSightProjectileTile();
-    if (!tile) return;
+  if (isThrown) {
+    // Throw caster-portrait → target enemy, then per-spell impact at endpoint.
+    // Caster is the player portrait at (HUD_RIGHT_X+8, HUD_VIEW_Y+8); add 8 to
+    // center on its 16×16. Sight has no impact visual ("Ineffective" battle
+    // message handles the feedback). Fire renders a 16×24 flame on the target.
     const sx = HUD_RIGHT_X + 8 + 8;
     const sy = HUD_VIEW_Y + 8 + 8;
     const t01 = (cureMs - CURE_T_HEAL) / CURE_PHASE_MS.heal;
-    const pos = getSightProjectilePos(sx, sy, cx, cy, t01);
-    if (pos.drawn) ui.ctx.drawImage(tile, Math.round(pos.x - 4), Math.round(pos.y - 4));
+    if (t01 < PROJECTILE_FLIGHT_FRAC) {
+      const tile = getProjectileTile(spell);
+      if (!tile) return;
+      const pos = getProjectilePos(sx, sy, cx, cy, t01);
+      if (pos.drawn) ui.ctx.drawImage(tile, Math.round(pos.x - 4), Math.round(pos.y - 4));
+      return;
+    }
+    if (spell.element === 'fire') {
+      const flame = getFireImpactCanvas();
+      if (flame) ui.ctx.drawImage(flame, cx - 8, cy - 12);
+    }
     return;
   }
   ui.ctx.drawImage(frames[fi], cx - 8, cy - 8);

@@ -101,6 +101,7 @@ export const SPELLS = new Map([
 // Adding a new player-castable spell? Put an entry here OR `getSpellMPCost` will
 // warn and return 99 (effectively uncastable) so the omission shows up immediately.
 export const SPELL_MP_COST = new Map([
+  [0x31, 2],  // Fire (BM Lv1)
   [0x34, 2],  // Cure
   [0x35, 2],  // Poisona
   [0x36, 2],  // Sight
@@ -108,6 +109,7 @@ export const SPELL_MP_COST = new Map([
 
 // Magic-shop buy price per spell (gil). NES FF3 sells level-1 white magic for 100 gil.
 export const SPELL_BUY_PRICE = new Map([
+  [0x31, 100],  // Fire (BM Lv1)
   [0x34, 100],  // Cure
   [0x35, 100],  // Poisona
   [0x36, 100],  // Sight
