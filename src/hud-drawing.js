@@ -73,10 +73,15 @@ export function drawSparkleCorners(frame, px, py) {
   ctx.save(); ctx.scale(-1, -1); ctx.drawImage(frame, -(px + 23), -(py + 24)); ctx.restore();
 }
 
-export function drawBorderedBox(x, y, w, h, blue = false) {
+// blue: use the blue-tinted variant + blue interior fill.
+// transparentEdge: use the title-screen tile set whose outer edge has alpha=0
+// (no black halo around the box). Interior is still filled black so text reads.
+export function drawBorderedBox(x, y, w, h, blue = false, transparentEdge = false) {
   if (!ui.borderTileCanvases) return;
   const ctx = ui.ctx;
-  const tileSet = blue ? ui.borderBlueTileCanvases : ui.borderTileCanvases;
+  const tileSet = blue ? ui.borderBlueTileCanvases
+    : transparentEdge && ui.borderTransparentTileCanvases ? ui.borderTransparentTileCanvases
+    : ui.borderTileCanvases;
   const [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR] = tileSet;
   if (blue) {
     const nb = NES_SYSTEM_PALETTE[0x02];

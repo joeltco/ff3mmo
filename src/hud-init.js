@@ -58,8 +58,13 @@ function _initHUDBorderTiles(tiles) {
     borderFadeSets.push(tiles.map(p => _tileToCanvas(p, fadedPal)));
   }
   ui.borderFadeSets = borderFadeSets;
-  // Title screen gets transparent-background border tiles (no black outer edge)
-  titleSt.borderTiles = tiles.map(p => _tileToCanvas(p, MENU_PALETTE, true));
+  // Title screen gets transparent-background border tiles (no black outer edge).
+  // Same tile set is exposed on `ui.borderTransparentTileCanvases` so any draw
+  // path (battle encounter box, etc) can opt into the no-black-edge style
+  // without cross-importing titleSt.
+  const transparentTiles = tiles.map(p => _tileToCanvas(p, MENU_PALETTE, true));
+  titleSt.borderTiles = transparentTiles;
+  ui.borderTransparentTileCanvases = transparentTiles;
   const titleFadeSets = [];
   for (let step = 0; step <= LOAD_FADE_MAX; step++) {
     const fadedPal = MENU_PALETTE.map(c => { let fc = c; for (let s = 0; s < step; s++) fc = nesColorFade(fc); return fc; });

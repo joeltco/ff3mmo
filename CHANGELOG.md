@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.70 — 2026-05-06
+
+### Battle encounter box — transparent edge (no black halo)
+
+The battle viewport (where enemies render) used `drawBorderedBox`'s default tile set whose corners/edges have an opaque black background, creating a black halo around the box. Title-screen player-select boxes use a transparent-edge tile set (`titleSt.borderTiles`) made via the third `transparent: true` flag in `_tileToCanvas`.
+
+- Exposed the same transparent tile set on `ui.borderTransparentTileCanvases` (alongside `titleSt.borderTiles`) so any draw site can opt in without cross-importing title state.
+- Added a `transparentEdge` flag to `drawBorderedBox` — picks the transparent-edge tile set when set.
+- `drawEncounterBox` now passes `transparentEdge: true`. Interior is still filled black for text legibility; only the outer corner/edge tiles change.
+
+### Revert 1.7.69
+
+The "drop the black pre-fill past the panel edge" change in 1.7.69 was a misread of the report — the user meant the encounter box at the top of the screen, not the menu panel at the bottom. Restored the original `fillRect(8, ..., CANVAS_W - 16, ...)` behavior.
+
 ## 1.7.69 — 2026-05-06
 
 ### Battle HUD — drop the black bar past the panel edge
