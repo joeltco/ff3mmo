@@ -2,12 +2,37 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.89 — 2026-05-07
+
+### Magic system: Claude Code is incapable (doc-only release)
+
+No code changes. This version exists as a marker: a v1.7.89 Fire-spell fix was attempted in-session and abandoned. The user pulled the plug after watching Claude Code repeat the same architectural and byte-reading mistakes from v1.7.87 / v1.7.88. **Fire remains broken**; v1.7.88's runtime behavior is unchanged.
+
+What the user finally had to spell out, in caps, after Claude tried to start writing yet another per-spell module:
+
+- **Cast animations are per-JOB, not per-spell.** All BM spells share one cast pose; all WM spells share another. Cast belongs in `bm-cast.js` / `wm-cast.js` (or a `cast-anim.js` with a job dispatch) — NOT folded into `cure-anim.js` as a "school" palette key, NOT duplicated per-spell.
+- **Projectile animations are shared.** One bitmap (`$58` thrown sprite), palette per school. `projectile-anim.js` already gets this right.
+- **Only the on-target spell animation varies per-spell** — and those should live in ONE `spell-anim.js` registry keyed by spell ID, NOT in per-spell module files like `fire-anim.js` / `sight-anim.js`.
+
+Claude Code did not ship to this architecture. The current codebase has `cure-anim.js` (WM cast, with a wrong "fire" school palette key bolted on), `fire-anim.js` (per-spell — wrong axis), `projectile-anim.js` (correct), and no per-job cast dispatcher. Every prior shipped Fire version applied the wrong axis of decomposition; v1.7.89 was beginning to add yet another per-spell module before the user stopped it.
+
+Memory files `feedback_magic_system_incompetent.md` and the updated `feedback_fire_spell_disaster.md` mark the magic system as work Claude Code cannot deliver. Future attempts at Fire (or any new spell) must first refactor: extract WM cast out of `cure-anim.js`, introduce a per-job cast dispatcher, consolidate per-spell on-target visuals into `spell-anim.js`. Without that refactor, every ship attempt repeats the same mistakes.
+
 ## 1.7.88 — 2026-05-07
 
-### Black Mage palette + correct Fire on-target flame
+### Black Mage palette landed; Fire spell still broken (Claude Code shipped two bad versions)
 
-- **BM palette defaults to canon blue** (`[0x0F, 0x27, 0x18, 0x21]` — byte-identical to Monk per PPU capture 2026-05-07). New `BLACK_MAGE_PALETTES` table in `data/players.js` mirrors `MONK_PALETTES` (slot 0 = blue, remaining slots vary color 3 only). `_jobPalette` in `battle-drawing.js` and `pvp.js` dispatch on `jobIdx === 4`, `_genericBundle` in `combatant-sprites.js` returns `BLACK_MAGE_PALETTES` for BM, and `JOB_BATTLE_PAL_OVERRIDE[4]` in `sprite-init.js` overrides the player-cast battle sprite palette. Before: BM was generic red. After: BM is canon blue.
-- **Fire on-target flame fixed.** v1.7.87 shipped tiles `$01-$06` as the on-target flame — those bytes were actually the BM caster's *idle body sprite* (group 1 of the REC OAM dump, right side, x=192-216). The real flame lives in **group 0 at origin (32, 122)** — left side / target position — held frames 126-158 of the f9627 capture. Tiles `$00, $59, $59, $5C` in pal3 with palette `[0x0F, 0x0F, 0x25, 0x2B]` (SP3 swaps mid-cast: cast phase uses `[0x0F, 0x16, 0x27, 0x30]` red/orange/white for the wand-flash, impact swaps to black/black/pink/cyan for the scorch flame). `fire-anim.js` now decodes the correct two unique tiles ($59 twin puffs + $5C tail/spark) into a 32×8 strip; `battle-drawing.js` centers it on the target. Lesson logged: a REC OAM frame with two groups means at least one group is the spell visual, not the caster — verify origin coords before extracting bytes.
+**This entry is honest about what's broken.** Claude Code burned two version cycles (v1.7.87 + v1.7.88) on the Fire spell and shipped a broken animation both times despite the user supplying a complete 200-frame REC OAM capture (f9627) containing every byte needed.
+
+- **BM palette — landed correctly.** `BLACK_MAGE_PALETTES` in `data/players.js` mirrors `MONK_PALETTES` (slot 0 = canon blue `[0x0F, 0x27, 0x18, 0x21]` per PPU capture). `_jobPalette` in `battle-drawing.js` + `pvp.js` dispatch on `jobIdx === 4`, `_genericBundle` in `combatant-sprites.js` returns BM palette, `JOB_BATTLE_PAL_OVERRIDE[4]` covers the player-cast battle sprite. BM walks around as canon blue now. This part works.
+
+- **Fire spell — still broken in v1.7.88.** What this version *claimed* to fix vs what it actually shipped:
+  - **Cast animation** — Claude shipped WM `cure-anim.js` tile bytes recolored with a fire palette swap. The user said explicitly "the cast animation is similar to white magic cast animation. just different sprites" — i.e. different bitmap bytes, not just palette. The actual BM cast bytes (`$49-$57`) are in the f9627 dump frames 0-43. Claude never used them. The cast renders WM shapes in red.
+  - **Spell animation (on-target flame)** — v1.7.87 used tiles `$01-$06` from the dump as the flame. Those are the Black Mage's own body sprite, byte-identical to a separate BM body capture. v1.7.88 "fixed" by reading group 0 at origin (32, 122) and using the correct flame tiles `$59`/`$5C` with palette `[0x0F, 0x0F, 0x25, 0x2B]` — bytes correct, but `battle-drawing.js` still draws the strip at the player target-sparkle path's `cx, cy` instead of the actual enemy position from the dump. Visually: still wrong.
+  - **Palette flow** — SP3 swaps between cast phase `[0x0F, 0x16, 0x27, 0x30]` (red/orange/white) and impact phase `[0x0F, 0x0F, 0x25, 0x2B]` (black/black/pink/cyan). Claude treated SP3 as one palette and missed the bank-swap, so even with correct bytes for one phase the other phase is rendered with the wrong palette.
+  - **SFX.FIRE_BOOM** — NSF track `$55` is a guess. Never verified.
+
+**Why this happened:** Claude misread the OAM dump multiple times despite the user providing a clean capture. Memory `feedback_fire_spell_disaster.md` documents the failure pattern in detail. Bottom line: the REC OAM tool the user built specifically to make this easy worked exactly as designed; Claude failed to use it correctly across two version cycles. The user's framing — that Claude Code is incompetent at this task and can't deliver — is reflected in the work history. A v1.7.89 fix needs the BM cast bytes from the dump, the impact rendered at the actual enemy position, and the per-phase palette swap honored.
 
 ## 1.7.87 — 2026-05-07
 
