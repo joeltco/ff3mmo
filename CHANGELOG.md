@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.67 — 2026-05-06
+
+### Attack timing audit fixes — slash weight + anticipation beats
+
+OAM trace `f14608` (200-frame OK dual-wield turn ending in monster death) cross-referenced against ff3mmo's combat constants. Four tunings landed:
+
+1. **`SLASH_FRAME_MS: 30 → 67`** (`slash-effects.js`). Each slash position now holds 4 NES frames instead of 2 — the slash flickers visibly within the swing window instead of strobing past too fast. NES bladed slashes hold each visible flash ~67 ms, and at 30 ms the flash read as a flicker rather than three solid impacts.
+2. **`HIT_PAUSE_MS: 100 → 316`** (`battle-update.js`). After the last slash of a combo, body holds in attack pose for 316 ms before the damage number pops. NES uses this beat as the "the strike landed, here comes the number" anticipation. At 100 ms the damage number cut in too eagerly.
+3. **New `PRE_DEATH_PAUSE_MS = 85` + `pre-monster-death` state** (`battle-update.js`, `battle-drawing.js`). Brief beat between the damage number disappearing and the monster-death cascade starting. NES dims SP3 and holds 5 frames before the death anim particles spread; ff3mmo previously snapped straight from damage → particles. Random-encounter path only — PVP/boss dissolve transitions stay immediate. Renderer's `isBeingHit` check now includes `pre-monster-death` so the monster keeps drawing during the pause instead of disappearing for 85 ms.
+4. **`IDLE_FRAME_MS: 67 → 33`** (`combatant-pose.js`). Hand-change neutral pose drops to 2 NES frames (matches OAM `f24-25`). The 4-frame version added a perceptible hitch in dual-wield combos. Affects player + PVP enemy hand-change paths through the same constant.
+
+Net: a single dual-wield turn now plays back about 30 ms longer total than before (extra anticipation beats > faster hand-change), but each phase reads as a deliberate moment instead of a snap-cut. The big perceptual win is the slash flash: 67 ms holds match what NES looked like.
+
 ## 1.7.66 — 2026-05-06
 
 ### EMU REC OAM/BG output now annotates wall-clock ms

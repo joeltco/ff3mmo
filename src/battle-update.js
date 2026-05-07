@@ -51,10 +51,17 @@ const MONSTER_SLIDE_MS         = 267;
 // SLASH_FRAME_MS / shouldDrawSlash / SWING_HOLD_MS imported from slash-effects.js (above).
 const BACK_SWING_MS            = 80;
 const FWD_SWING_MS             = 80;
-const HIT_PAUSE_MS             = 100;
+// Post-swing anticipation beat — body in attack pose, no slash, no damage num.
+// NES holds this for 316 ms (OAM f14608 frames 50-71) before the damage popup;
+// gives the strike weight before the number lands. Was 100 ms.
+const HIT_PAUSE_MS             = 316;
 const HIT_COMBO_PAUSE_MS       = 30;
 const MISS_SHOW_MS             = 300;
 const PLAYER_DMG_SHOW_MS       = 700;
+// Brief pause between damage-show and the monster-death animation. NES holds
+// 85 ms here (OAM f14608 frames 105-109) with the SP3 palette dimmed — the
+// "the hit registered, now they fall" beat. Was 0 (immediate transition).
+const PRE_DEATH_PAUSE_MS       = 85;
 const DEFEND_SPARKLE_TOTAL_MS  = 533;
 const TURN_TIME_MS             = 10000;
 const VICTORY_BOX_ROWS         = 8;
@@ -413,10 +420,8 @@ function _updatePlayerDamageShow() {
   if (battleSt.battleState !== 'player-damage-show') return false;
   if (battleSt.battleTimer >= PLAYER_DMG_SHOW_MS) {
     if (battleSt.isRandomEncounter && battleSt.encounterMonsters && battleSt.encounterMonsters[inputSt.targetIndex].hp <= 0) {
-      battleSt.dyingMonsterIndices = new Map([[inputSt.targetIndex, 0]]);
-      battleSt.battleState = 'monster-death';
+      battleSt.battleState = 'pre-monster-death';
       battleSt.battleTimer = 0;
-      playSFX(SFX.MONSTER_DEATH);
     } else if (!battleSt.isRandomEncounter && getEnemyHP() <= 0) {
       if (pvpSt.isPVPBattle) {
         battleSt.battleState = 'pvp-dissolve'; battleSt.battleTimer = 0; playSFX(SFX.MONSTER_DEATH);
@@ -429,6 +434,22 @@ function _updatePlayerDamageShow() {
   return true;
 }
 
+// Brief beat between damage-show and the death cascade — NES dims SP3 then
+// rolls the death anim, giving the kill a "settle" moment instead of snapping
+// straight from number → particles. Random-encounter path only; PVP/boss
+// dissolve transitions stay immediate (their dissolve effect handles its own
+// pre-anim breath).
+function _updatePreMonsterDeath() {
+  if (battleSt.battleState !== 'pre-monster-death') return false;
+  if (battleSt.battleTimer >= PRE_DEATH_PAUSE_MS) {
+    battleSt.dyingMonsterIndices = new Map([[inputSt.targetIndex, 0]]);
+    battleSt.battleState = 'monster-death';
+    battleSt.battleTimer = 0;
+    playSFX(SFX.MONSTER_DEATH);
+  }
+  return true;
+}
+
 export function updateBattlePlayerAttack() {
   return _updatePlayerAttackBack() ||
          _updatePlayerAttackFwd() ||
@@ -436,6 +457,7 @@ export function updateBattlePlayerAttack() {
          _updatePlayerHitShow() ||
          _updatePlayerMissShow() ||
          _updatePlayerDamageShow() ||
+         _updatePreMonsterDeath() ||
          _updateMonsterDeath();
 }
 

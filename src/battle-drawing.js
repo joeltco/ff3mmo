@@ -930,7 +930,8 @@ function _drawEncounterMonsters(gridPos, sprH, boxX, boxY, boxW, boxH, isSlideIn
     const isDying = battleSt.dyingMonsterIndices.has(i) && battleSt.battleState === 'monster-death';
     const isBeingHit = (i === inputSt.targetIndex &&
       (battleSt.battleState === 'player-slash' || battleSt.battleState === 'player-hit-show' ||
-       battleSt.battleState === 'player-miss-show' || battleSt.battleState === 'player-damage-show')) ||
+       battleSt.battleState === 'player-miss-show' || battleSt.battleState === 'player-damage-show' ||
+       battleSt.battleState === 'pre-monster-death')) ||
       (i === battleSt.allyTargetIndex && (battleSt.battleState === 'ally-slash' || battleSt.battleState === 'ally-damage-show')) ||
       (battleSt.battleState === 'sw-hit' && getTargets().includes(i));
     if (!alive && !isDying && !isBeingHit) continue;

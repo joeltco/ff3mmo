@@ -79,7 +79,10 @@ export function initSwordSlashSprites() {
 // blur. Single source of truth for player + ally + PVP + drawing — pre-1.7.4
 // this was split (30 ms in battle-update.js, 50 ms in battle-drawing.js), which
 // meant ally `af` indexing lagged behind the state-machine's slashFrame.
-export const SLASH_FRAME_MS = 30;
+// 67 ms = 4 NES frames per slash position. NES bladed slashes hold each visible
+// flash ~67 ms (OAM-derived from f14608 dual-wield capture); the prior 30 ms
+// felt like a flicker rather than three solid impacts within the 333 ms swing.
+export const SLASH_FRAME_MS = 67;
 
 // Predicate: should this hit get a slash flash overlay? False on miss —
 // shouldDrawSlash is the canonical predicate for "should this hit produce a slash flash?".

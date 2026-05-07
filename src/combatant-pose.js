@@ -12,7 +12,9 @@ const FIST_WOBBLE_PERIOD_MS = 100; // shared cadence — same constant across pl
 
 // Inter-hit idle frame: when a combo transitions from R-hand to L-hand (or vice versa),
 // hold the idle pose for this many ms so the swap reads as a separate strike instead of one blur.
-export const IDLE_FRAME_MS = 67;
+// 33 ms = 2 NES frames — matches OAM f14608 dual-wield hand-change at frames 24-25.
+// Was 67 ms (4 frames) which read as a hitch in heavier combos.
+export const IDLE_FRAME_MS = 33;
 
 // Returns the weapon canvas + body-relative offset to draw at, or null if nothing to draw this frame.
 // Mirror flag: opponent uses a pre-flipped (face-right) canvas, so the swinging hand visually swaps
