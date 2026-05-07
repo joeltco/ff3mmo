@@ -221,18 +221,22 @@ function drawSWDamageNumbers() {
   }
 }
 
-// Pick the right on-target sparkle frames for an item being used. Status-cure
-// items (antidote, gold needle, maiden kiss, etc.) get the magenta poisona
-// frames; heal/full-heal items get the recovery sparkle. Falls back to bsc
-// recovery sparkle if the cure-anim bundle isn't built yet.
+// Pick the right on-target sparkle frames for an item being used. Antidote
+// (cures poison) routes to the captured Poisona target frames (magenta) since
+// FF3 NES dispatches antidote through the Poisona effect. Other status-cure
+// items (gold needle, maiden kiss, eye drops, echo herbs, mallet) each have
+// their own NES animations that aren't captured yet — they fall back to the
+// recovery sparkle as a placeholder. Heal/full-heal items use the recovery
+// sparkle (cure-potion blue), the actual matching animation.
 function _itemSparkleFrames(itemId) {
   const itm = itemId != null ? ITEMS.get(itemId) : null;
-  const synth = itm && itm.effect === 'cure_status'
-    ? { target: 'cure_status' }
-    : { element: 'recovery' };
-  const bundle = getCureAnimAssets(synth);
-  const frames = getCureTargetFrames(synth, bundle);
-  if (frames && frames.length === 2) return frames;
+  const isAntidote = itm && itm.effect === 'cure_status' && itm.cures === 'poison';
+  if (isAntidote) {
+    const synth = { target: 'cure_status' };
+    const bundle = getCureAnimAssets(synth);
+    const frames = getCureTargetFrames(synth, bundle);
+    if (frames && frames.length === 2) return frames;
+  }
   return bsc.cureSparkleFrames && bsc.cureSparkleFrames.length === 2 ? bsc.cureSparkleFrames : null;
 }
 

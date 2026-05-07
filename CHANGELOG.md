@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.72 — 2026-05-07
+
+### Antidote-only routing for poisona target frames
+
+1.7.71 routed every `cure_status` item to the captured Poisona target frames. That over-reached: only antidote shares Poisona's animation (FF3 NES literally dispatches antidote through the Poisona effect). Gold needle, maiden kiss, eye drops, echo herbs, mallet each have their own NES animations not yet captured.
+
+- `_itemSparkleFrames` now narrows to `cures === 'poison'` (antidote only). Other `cure_status` items fall back to the recovery sparkle as a placeholder until each animation is captured. PVP item path was already antidote-specific via `pvpItemKind === 'antidote'`; ally-item AI only sets the Poisona sentinel for poisoned targets — both paths already correct.
+
 ## 1.7.71 — 2026-05-07
 
 ### Antidote item-use animation — magenta poisona sparkle (was wrongly recovery blue)
