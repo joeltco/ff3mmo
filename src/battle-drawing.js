@@ -786,8 +786,11 @@ function drawBattleMenu() {
   ui.ctx.save();
   ui.ctx.beginPath(); ui.ctx.rect(8, HUD_BOT_Y, CANVAS_W - 16, HUD_BOT_H); ui.ctx.clip();
   ui.ctx.translate(panelOffX, 0);
-  ui.ctx.fillStyle = '#000';
-  ui.ctx.fillRect(8, HUD_BOT_Y + 8, CANVAS_W - 16, HUD_BOT_H - 16);
+  // Pre-fill removed — drawBorderedBox below already fills the panel interior
+  // (BATTLE_PANEL_W wide). The old `fillRect(8, ..., CANVAS_W - 16, ...)` blacked
+  // out the entire bottom strip including the area beyond the panel, which read
+  // as a thick black bar under chat. Letting that area stay transparent matches
+  // the title HUD style.
 
   const boxW = BATTLE_PANEL_W, boxH = HUD_BOT_H;
   if ((!isVictory && !isRunBox) || (battleSt.battleState === 'encounter-box-close' && battleSt.runSlideBack))

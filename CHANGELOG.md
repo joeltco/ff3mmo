@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.69 — 2026-05-06
+
+### Battle HUD — drop the black bar past the panel edge
+
+`drawBattlePanelBox` pre-filled `fillRect(8, HUD_BOT_Y+8, CANVAS_W-16, HUD_BOT_H-16)` before calling `drawBorderedBox`. That fill spanned the full canvas width but the panel itself is only `BATTLE_PANEL_W = 120` — the extra 136 px past the panel edge rendered as black, sitting under chat tabs / right-side area. Removed the pre-fill; `drawBorderedBox` already fills its own interior, so the panel still draws correctly and the area outside it stays transparent (matching title HUD style).
+
 ## 1.7.68 — 2026-05-06
 
 ### Fix HUD flash on enemy death
