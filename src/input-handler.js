@@ -875,6 +875,21 @@ function _applyPauseSpellUse(rosterTargets) {
     return;
   }
 
+  // 0x36 Sight — out-of-battle scan has no gameplay effect; guard against
+  // the heal math below using `power: 0` to accidentally tick a few HP.
+  if (spell.target === 'sight') {
+    if (pauseSt.invAllyTarget >= 0) {
+      pauseSt.healNum = { value: 0, timer: 0, rosterIdx: pauseSt.invAllyTarget };
+    } else {
+      pauseSt.healNum = { value: 0, timer: 0 };
+    }
+    playSFX(SFX.CURE);
+    pauseSt.state = 'inv-heal'; pauseSt.timer = 0;
+    pauseSt.useSpellId = 0;
+    saveSlotsToDB();
+    return;
+  }
+
   // Healing spells — white magic uses MND, black magic would use INT.
   const isWhite = spell.element === 'recovery';
   const stat = ps.stats ? (isWhite ? (ps.stats.mnd || 5) : (ps.stats.int || 5)) : 5;
@@ -950,6 +965,10 @@ function _pauseInputMagicList() {
     if (spellId == null) { playSFX(SFX.ERROR); return true; }
     const spell = SPELLS.get(spellId);
     if (!spell) { playSFX(SFX.ERROR); return true; }
+    // Sight (0x36) is a map-reveal spell in NES canon; we don't have an
+    // overworld minimap-reveal system yet, so block out-of-battle casting at
+    // the menu level — no MP cost, no target picker, no fake heal.
+    if (spell.target === 'sight') { playSFX(SFX.ERROR); return true; }
     if (ps.mp < getSpellMPCost(spellId)) { playSFX(SFX.ERROR); return true; }
     playSFX(SFX.CONFIRM);
     pauseSt.useSpellId = spellId;

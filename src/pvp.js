@@ -556,6 +556,12 @@ function _tryPVPEnemyPoisona(caster, casterCellIdx) {
 function _applyPVPEnemyMagicEffect() {
   const target = _pvpEnemyByCellIdx(pvpSt.pvpMagicTargetCellIdx);
   if (!target) return;
+  // 0x36 Sight — no gameplay effect; defensive guard against the Cure
+  // fall-through below if a remote PVP opponent casts Sight from a synced state.
+  if (pvpSt.pvpMagicSpellId === 0x36) {
+    playSFX(SFX.CURE);
+    return;
+  }
   if (pvpSt.pvpMagicSpellId === 0x35) {
     if (target.status) removeStatus(target.status, STATUS.POISON);
     setEnemyHealNum({ value: 0, timer: 0, index: pvpSt.pvpMagicTargetCellIdx });

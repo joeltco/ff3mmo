@@ -186,6 +186,14 @@ const ALLY_MAGIC_HIT_MS   = 1000;
 
 function _applyAllyMagicEffect() {
   const spellId = battleSt.allyMagicSpellId;
+  // 0x36 Sight — no gameplay effect; defensive guard so the Cure fall-through
+  // below doesn't accidentally heal the target if some future AI selector or
+  // sentinel sets allyMagicSpellId to Sight. Cast anim still plays via the
+  // shared white-magic flame (cure-anim.js routes target === 'sight').
+  if (spellId === 0x36) {
+    playSFX(SFX.CURE);
+    return;
+  }
   // 0x35 Poisona — strip POISON flag from target, no HP change. Sparkle still
   // shows via the heal-num placeholder ({value:0, heal:true}) on the target.
   if (spellId === 0x35) {

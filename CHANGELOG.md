@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.81 — 2026-05-07
+
+### Sight: ally / PVP / pause-menu safety guards (open-beta hardening)
+
+Defensive guards so a `0x36` Sight spell ID can't fall through to the heal math in any of the three other cast paths that don't naturally pick Sight today:
+
+- `src/battle-ally.js` — `_applyAllyMagicEffect` early-returns for `spellId === 0x36`. Today's roster AI hard-codes `0x34` / `0x35` selectors (`battle-turn.js:290, 330`) so this won't fire under normal play, but a future selector or sentinel write would otherwise heal the target by `allyMagicHealAmount`.
+- `src/pvp.js` — `_applyPVPEnemyMagicEffect` early-returns for `pvpMagicSpellId === 0x36`. Local PVP AI doesn't pick Sight, but a remote opponent's synced state could.
+- `src/input-handler.js` — pause-menu spell list (`_pauseInputMagicList`) blocks Sight at the cursor: pressing Z on Sight plays `SFX.ERROR` and stays in the list. Sight is a map-reveal spell in NES canon and we don't have the overworld minimap-reveal system yet, so out-of-battle casting is intentionally inert. `_applyPauseSpellUse` keeps an early-return for `target === 'sight'` as defense-in-depth (so even if some future code path skips the menu block, the heal math doesn't run).
+
+The menu block plays `SFX.ERROR` so the user gets clear "can't cast this from here" feedback. The two effect-apply guards (battle-ally, pvp, plus the dead-code defense in `_applyPauseSpellUse`) play `SFX.CURE` to match the in-battle Sight impact SFX, since by the time those run the spell has already been "cast" — they're just preventing the wrong gameplay effect.
+
 ## 1.7.80 — 2026-05-07
 
 ### Sight (white magic Lv1) wired up
