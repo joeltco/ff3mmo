@@ -758,9 +758,14 @@ async function _recordFrames(kind, count, gap) {
   const wasRunning = running;
   if (wasRunning) _stop();
   const startFrame = frameCount;
+  // NES NTSC: 60.0988 fps → 16.639 ms/frame. Wall-clock annotations are
+  // computed from NES frame deltas (REC drives nes.frame() in a loop, so
+  // elapsed time = elapsed frames × 16.639). Emit-time pacing isn't relevant.
+  const NES_MS_PER_FRAME = 16.639;
   const blocks = [];
   blocks.push(`// REC ${kind} × ${count} frames @ start f${startFrame}, gap=${gap}${recDedupe ? ', DEDUPE on' : ''}`);
   blocks.push(`// (gap = number of frames advanced between snaps; gap=1 means consecutive)`);
+  blocks.push(`// (timing: NES NTSC ~16.639 ms/frame; t≈ relative to start of capture)`);
   blocks.push('');
   const button = (kind === 'OAM') ? dom.btnRecOam : dom.btnRecBg;
   const origLabel = button.textContent;
@@ -775,7 +780,8 @@ async function _recordFrames(kind, count, gap) {
   const flushRunSummary = (runEnd) => {
     if (prevEmittedIdx < 0 || runEnd <= prevEmittedIdx) return;
     const span = runEnd - prevEmittedIdx;
-    blocks.push(`// ── frames ${prevEmittedIdx + 1}..${runEnd} (${span}× same as frame ${prevEmittedIdx}) ──`);
+    const spanMs = Math.round(span * gap * NES_MS_PER_FRAME);
+    blocks.push(`// ── frames ${prevEmittedIdx + 1}..${runEnd} (${span}× same as frame ${prevEmittedIdx}, span ≈ ${spanMs}ms) ──`);
     blocks.push('');
   };
   try {
@@ -794,7 +800,8 @@ async function _recordFrames(kind, count, gap) {
         // at end-of-loop.
       } else {
         if (recDedupe) flushRunSummary(i - 1);
-        blocks.push(`// ═══ frame ${i} (snap @ f${frameCount}) ═══════════════════════════════════════════════`);
+        const tMs = Math.round((frameCount - startFrame) * NES_MS_PER_FRAME);
+        blocks.push(`// ═══ frame ${i} (snap @ f${frameCount}, t≈${tMs}ms) ═══════════════════════════════════════════════`);
         blocks.push('');
         blocks.push(snap || `// (empty ${kind} snap)`);
         blocks.push('');

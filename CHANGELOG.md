@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.66 — 2026-05-06
+
+### EMU REC OAM/BG output now annotates wall-clock ms
+
+Capture output had NES frame counters but no millisecond timing — translating an animation phase into a duration (e.g., "Cure buildup is 800ms") meant manually multiplying frame counts by 16.639. Added inline ms annotations:
+
+- **Per-frame divider** — `// ═══ frame I (snap @ fF, t≈Xms) ═══` where `t` is relative to the start of the REC run.
+- **Dedupe summary** — `// ── frames N..M (Kx same as frame N, span ≈ Yms) ──` so the duration a pose held is read directly off the line.
+- **Header** notes the conversion factor (NES NTSC ~16.639 ms/frame).
+
+Math derived from NES frame deltas (REC drives `nes.frame()` in a loop, so elapsed wall-clock time = elapsed NES frames × 16.639 ms). Speeds up translating captures into anim phase timings — the next time damage spell anims need their phase boundaries set in code, you read them off the dump directly.
+
 ## 1.7.65 — 2026-05-06
 
 ### Spell target sparkle now renders on enemy targets
