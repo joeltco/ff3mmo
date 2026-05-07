@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.92 — 2026-05-07
+
+### `smoke.sh` — poll for 200 instead of single-shot
+
+v1.7.91's smoke gate raced pm2 restart and false-failed on a 502 (nginx had no upstream for ~3 s after restart). The HTTP check now polls up to 20 s for a 200 before declaring failure. Verified against the v1.7.91 deploy that triggered the bug.
+
 ## 1.7.91 — 2026-05-07
 
 ### `smoke.sh` — headless deploy gate

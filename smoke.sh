@@ -47,10 +47,17 @@ trap 'cleanup_local; rm -f "$LOG"' EXIT
 
 echo "smoke: $URL"
 
-# 1. Page returns 200.
-HTTP=$(curl -s -o /dev/null -w "%{http_code}" "$URL")
+# 1. Page returns 200. Poll up to 20 s — pm2 restart takes ~3 s to rebind the
+# port and the deploy script fires us right after the restart, so single-shot
+# curl will see a transient 502/503 from nginx.
+HTTP=000
+for _ in $(seq 1 40); do
+  HTTP=$(curl -s -o /dev/null -w "%{http_code}" "$URL")
+  [[ "$HTTP" == "200" ]] && break
+  sleep 0.5
+done
 if [[ "$HTTP" != "200" ]]; then
-  echo "smoke: FAIL — $URL returned HTTP $HTTP"
+  echo "smoke: FAIL — $URL still returning HTTP $HTTP after 20 s"
   exit 1
 fi
 
