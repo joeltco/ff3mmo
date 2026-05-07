@@ -32,7 +32,7 @@ import { pvpSt, drawBossSpriteBoxPVP } from './pvp.js';
 import { inputSt } from './input-handler.js';
 import { bsc, getSlashFramesForWeapon } from './battle-sprite-cache.js';
 import { drawSlashOverlay, SLASH_FRAME_MS, shouldDrawSlash } from './slash-effects.js';
-import { getCureAnimElapsedMs, getCurrentSpellId } from './spell-cast.js';
+import { getCureAnimElapsedMs, getCurrentSpellId, getSpellTargets, getSpellHitIdx } from './spell-cast.js';
 import { getCureFlameFrameIdx, shouldDrawStars, shouldDrawHealSparkle, getCureAnimAssets, getCureTargetFrames } from './cure-anim.js';
 import { hudSt } from './hud-state.js';
 import { fakePlayerPortraits, fakePlayerVictoryPortraits, fakePlayerHitPortraits,
@@ -572,11 +572,62 @@ function drawBattle() {
   _drawBattleStrobeFlash();
   drawEncounterBox();
   drawBossSpriteBox();
+  _drawPlayerSpellTargetSparkleOnEnemy();
   drawBattleMenu();
   drawVictoryBox();
   drawBattleMessageStrip();
   drawDamageNumbers();
   _drawBattleDefeat();
+}
+
+// Player-cast magic targeting an enemy — render the heal-phase sparkle on the
+// enemy sprite so the target effect mirrors the friendly-target paths.
+// Spell-ID source: getCurrentSpellId() (player-cast). Per the spell-anim hard
+// rules, ally-cast and PVP-cast versions of this same effect would read from
+// battleSt.allyMagicSpellId / pvpSt.pvpMagicSpellId — neither path exists yet
+// (no AI offensive magic on enemies), so add those branches when needed.
+function _drawPlayerSpellTargetSparkleOnEnemy() {
+  if (battleSt.battleState !== 'magic-hit') return;
+  const targets = getSpellTargets();
+  const hitIdx = getSpellHitIdx();
+  if (!targets || hitIdx >= targets.length) return;
+  const tgt = targets[hitIdx];
+  if (!tgt || tgt.type !== 'enemy') return;
+  const cureMs = getCureAnimElapsedMs();
+  if (cureMs < 0 || !shouldDrawHealSparkle(cureMs)) return;
+  const spell = SPELLS.get(getCurrentSpellId());
+  if (!spell) return;
+  const cureAnim = getCureAnimAssets(spell);
+  if (!cureAnim) return;
+  const frames = getCureTargetFrames(spell, cureAnim);
+  if (!frames || frames.length !== 2) return;
+  const fi = Math.floor(battleSt.battleTimer / 67) & 1;
+
+  // Enemy sprite center — encounter / PVP / boss differ.
+  let cx, cy;
+  if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
+    const m = battleSt.encounterMonsters[tgt.index];
+    if (!m) return;
+    const { sprH, row0H, row1H, gridPos } = _encounterGridLayout();
+    if (tgt.index >= gridPos.length) return;
+    const pos = gridPos[tgt.index];
+    const mc = getMonsterCanvas(m.monsterId, battleSt.goblinBattleCanvas);
+    const mw = mc ? mc.width : 32;
+    const mh = mc ? mc.height : sprH;
+    const rH = tgt.index < 2 ? (row0H || sprH) : (row1H || sprH);
+    cx = pos.x + Math.floor(mw / 2);
+    cy = pos.y + (rH - mh) + Math.floor(mh / 2);
+  } else if (pvpSt.isPVPBattle) {
+    const { x, y } = _pvpEnemyCellCenter(tgt.index);
+    cx = x; cy = y;
+  } else {
+    const bc = getBossBattleCanvas();
+    const bw = bc ? bc.width : 48;
+    const bh = bc ? bc.height : 48;
+    cx = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2);
+    cy = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
+  }
+  ui.ctx.drawImage(frames[fi], cx - 8, cy - 8);
 }
 
 function _drawGameOver() {

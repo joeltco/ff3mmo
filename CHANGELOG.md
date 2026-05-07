@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.65 — 2026-05-06
+
+### Spell target sparkle now renders on enemy targets
+
+Player-cast magic on an enemy was missing the heal-phase sparkle (only the caster's buildup + cast pose were visible; the enemy got the damage number but no on-target effect). Added `_drawPlayerSpellTargetSparkleOnEnemy` between `drawBossSpriteBox` and `drawBattleMenu` in the battle render order.
+
+Per the spell-anim hard-rules:
+- **Spell-ID source** for this new path is `getCurrentSpellId()` — the player-cast spell. Ally-cast and PVP-cast versions of an offensive-on-enemy effect would read from `battleSt.allyMagicSpellId` / `pvpSt.pvpMagicSpellId` respectively, but neither path exists yet (no AI offensive magic). Add those branches when the AI gets damage spells.
+- **Phase wiring**: gated on `shouldDrawHealSparkle(cureMs)` — same gate as the friendly-target paths, so the sparkle plays in phase 4 (heal moment) and not earlier phases. Reuses `getCureTargetFrames` for per-school sparkle (Cure → recovery, Poisona → magenta).
+- **Canvas dimensions**: 16×16 frames from `getCureTargetFrames`, rendered centered on the enemy sprite (encounter / PVP / boss positions handled per layout).
+- **Cure-anim quarantine respected**: only added a new render call site, did not modify `cure-anim.js`.
+
 ## 1.7.64 — 2026-05-06
 
 ### Player magic on enemies — full pipeline (Cure on undead, ready for black magic)
