@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.76 — 2026-05-07
+
+### All-allies cursor blink
+
+When the multi-target Cure picker is on `'all'`, the cursor now blinks (133 ms cadence) on every living ally — player portrait + every roster row. Same blink rate as the existing all/col-left/col-right enemy-side cursors. Single-target picks still draw a solid cursor on just the picked combatant.
+
+- `_drawBattlePortrait`: player-portrait cursor branch now draws solid in single-target, blinks in `'all'`.
+- Roster cursor pass after `_drawAllyRow` loop: single-target draws once on the picked row; `'all'` draws on every living ally row, blinking.
+
 ## 1.7.75 — 2026-05-07
 
 ### Cure all-allies picker — Right press, not Up

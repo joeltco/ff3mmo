@@ -441,9 +441,14 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
       }
     }
   }
-  // Item target cursor on player portrait (only when not targeting an ally)
-  if (battleSt.battleState === 'item-target-select' && inputSt.itemTargetType === 'player' && inputSt.itemTargetAllyIndex < 0 && _cursorTileCanvas()) {
-    ui.ctx.drawImage(_cursorTileCanvas(), px - 12, py + 4);
+  // Item target cursor on player portrait. Single-target: solid cursor when
+  // the player slot is picked. All-allies: blink (133 ms, same cadence as the
+  // encounter all/col cursors) on every ally including the player.
+  if (battleSt.battleState === 'item-target-select' && inputSt.itemTargetType === 'player' && _cursorTileCanvas()) {
+    const isAll = inputSt.itemTargetMode !== 'single';
+    const showSingle = !isAll && inputSt.itemTargetAllyIndex < 0;
+    const showAll = isAll && (Math.floor(Date.now() / 133) & 1);
+    if (showSingle || showAll) ui.ctx.drawImage(_cursorTileCanvas(), px - 12, py + 4);
   }
   // Enemy slash effect on player portrait during PVP melee attack swing.
   // Skip when the opponent is targeting an ally — the slash gets drawn on that ally's portrait instead (see _drawAllyPortrait).
@@ -1565,8 +1570,18 @@ function drawBattleAllies() {
   ui.ctx.clip();
   for (let i = 0; i < battleSt.battleAllies.length; i++) _drawAllyRow(i, battleSt.battleAllies[i], panelTop, weaponDraws);
   ui.ctx.restore();
-  if (battleSt.battleState === 'item-target-select' && inputSt.itemTargetType === 'player' && inputSt.itemTargetAllyIndex >= 0 && _cursorTileCanvas()) {
-    ui.ctx.drawImage(_cursorTileCanvas(), HUD_RIGHT_X - 4, panelTop + inputSt.itemTargetAllyIndex * ROSTER_ROW_H + 12);
+  if (battleSt.battleState === 'item-target-select' && inputSt.itemTargetType === 'player' && _cursorTileCanvas()) {
+    // Single-target ally pick: one solid cursor on the picked row.
+    // All-allies: blinking cursor on every living ally (player handled in _drawBattlePortrait).
+    if (inputSt.itemTargetMode === 'single' && inputSt.itemTargetAllyIndex >= 0) {
+      ui.ctx.drawImage(_cursorTileCanvas(), HUD_RIGHT_X - 4, panelTop + inputSt.itemTargetAllyIndex * ROSTER_ROW_H + 12);
+    } else if (inputSt.itemTargetMode !== 'single' && (Math.floor(Date.now() / 133) & 1)) {
+      for (let i = 0; i < battleSt.battleAllies.length; i++) {
+        const a = battleSt.battleAllies[i];
+        if (!a || a.hp <= 0) continue;
+        ui.ctx.drawImage(_cursorTileCanvas(), HUD_RIGHT_X - 4, panelTop + i * ROSTER_ROW_H + 12);
+      }
+    }
   }
   _flushAllyWeaponDraws(weaponDraws);
   // Cast animation (flame + 8-star ring) for the WM ally caster — rendered
