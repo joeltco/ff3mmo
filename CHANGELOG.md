@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.91 — 2026-05-07
+
+### `smoke.sh` — headless deploy gate
+
+New `smoke.sh` headless-loads ff3mmo.com (or `--local` to boot `npm start` on `localhost:3000` and tear it down after) and greps the Chromium console for `Uncaught` / `ReferenceError` / `TypeError` / `SyntaxError` / `net::ERR_` — the catch-net the memory file `feedback_ff3mmo_deploy_smoke_test.md` has been pointing at since v1.7.49 (`node --check` misses orphaned imports; only a real browser surfaces module-evaluation-time failures). `deploy.sh` now invokes it after the pm2 restart, so a broken-on-prod commit fails the deploy script with the matched error lines instead of staying silently broken until someone notices in-game. No auto-rollback — pm2 is left at the just-deployed revision; the user decides whether to revert. Runtime code unchanged.
+
 ## 1.7.90 — 2026-05-07
 
 ### Magic system refactor: cast / projectile / spell-anim
