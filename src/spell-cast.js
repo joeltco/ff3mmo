@@ -13,6 +13,8 @@ import { setPlayerHealNum, setPlayerDamageNum, getAllyDamageNums, setEnemyDmgNum
 import { SPELLS, getSpellMPCost, isMultiTargetSpell } from './data/spells.js';
 import { STATUS, removeStatus } from './status-effects.js';
 import { CURE_PHASE_MS, CURE_T_HEAL, CURE_TOTAL_MS } from './cure-anim.js';
+import { queueBattleMsg } from './battle-msg.js';
+import { _nameToBytes } from './text-utils.js';
 import { elemMultiplier } from './battle-math.js';
 import { pvpSt } from './pvp.js';
 
@@ -179,11 +181,11 @@ function _applyEnemyEffect(idx, spell) {
   const mon = isBoss ? null : _getEnemyAt(idx);
 
   // Sight is a no-op against enemies — the spell's effect is the visual
-  // (cast anim + projectile flight). Renders MISS as the "ineffective" tag.
+  // (cast anim + projectile flight) plus the "Ineffective" battle message.
   // Impact SFX is `SFX.SIGHT` (NSF track $81 = SFX $40 + $41) per the REC
   // OAM capture's idle→$40 trigger at frame 39 of the f5887 dump.
   if (spell.target === 'sight') {
-    _setEnemyDmg(idx, 0, true);
+    queueBattleMsg(_nameToBytes('Ineffective'));
     playSFX(SFX.SIGHT);
     return;
   }
@@ -260,14 +262,10 @@ function _applySpellEffect(target) {
   }
 
   // Sight on a friendly target — picker now defaults to enemy, but the user
-  // can still navigate Right back to the player side. Show a MISS tag on the
-  // chosen ally to indicate the spell did nothing. SFX matches the enemy path.
+  // can still navigate Right back to the player side. Battle message says
+  // "Ineffective"; SFX matches the enemy path.
   if (spell.target === 'sight') {
-    if (target.type === 'player') {
-      setPlayerDamageNum({ miss: true, timer: 0 });
-    } else {
-      getAllyDamageNums()[target.index] = { miss: true, timer: 0 };
-    }
+    queueBattleMsg(_nameToBytes('Ineffective'));
     playSFX(SFX.SIGHT);
     return;
   }

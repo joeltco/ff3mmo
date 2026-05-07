@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.83 — 2026-05-07
+
+### Sight: "Ineffective" battle message instead of MISS sprite
+
+`spell-cast.js` Sight branches (enemy + friendly target) drop the green MISS-sprite tag and instead `queueBattleMsg(_nameToBytes('Ineffective'))`. Cleaner read for the player and matches NES-canon battle-text feedback style. SFX (`SFX.SIGHT`) and the cast anim + projectile flight unchanged.
+
+The general-purpose MISS render path added in 1.7.80 (`setSwDmgNum` opts.miss, `battle-drawing.js` SW draws) stays — it's still used by regular damage spells whose hit roll fails.
+
 ## 1.7.82 — 2026-05-07
 
 ### Sight: enemy-default targeting + dedicated impact SFX
