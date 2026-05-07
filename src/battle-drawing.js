@@ -1094,7 +1094,7 @@ function _drawBossSpriteBoxBoss(centerX, centerY) {
   clipToViewport();
 
   const { boxW, boxH } = _calcBoxExpandSize(fullW, fullH, isExpand, isClose, battleSt.battleTimer);
-  drawBorderedBox(centerX - Math.floor(boxW / 2), centerY - Math.floor(boxH / 2), boxW, boxH);
+  drawBorderedBox(centerX - Math.floor(boxW / 2), centerY - Math.floor(boxH / 2), boxW, boxH, false, true);
 
   if (isExpand || isClose || battleSt.battleState === 'defeat-text') { ui.ctx.restore(); return; }
 

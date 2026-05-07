@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.77 — 2026-05-07
+
+### Boss + PVP boxes use transparent-edge tiles
+
+1.7.70 landed transparent edges only for the random-encounter box; boss + PVP enemy boxes still drew the solid black halo. Both now pass `transparentEdge=true` to `drawBorderedBox`, matching the encounter look.
+
+- `battle-drawing.js:1097` — boss `_drawBossSpriteBoxBoss`
+- `pvp.js:791` — PVP enemy box
+
 ## 1.7.76 — 2026-05-07
 
 ### All-allies cursor blink
