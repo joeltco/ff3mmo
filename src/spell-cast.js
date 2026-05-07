@@ -1,16 +1,20 @@
 // Spell-cast engine — player-cast magic flow.
-// Modelled on battle-items.js (Southwind throw/hit). For v1 we only handle
-// White Mage Cure: ally-target heal using the NES magic damage formula
-// (atk = floor(INT/2) + power, +rand(0..atk/2)) applied as healing.
+// Handles ally-target heal/cure (Cure, Poisona) and enemy-target damage paths.
+// Pipeline: input → startSpellCast → 'magic-cast' (buildup) → 'magic-hit' (apply
+// effect + anim) → next turn. Damage spells aren't captured yet (legacy 1100 ms
+// timing); recovery spells use the OAM-captured cure-anim (~1667 ms).
 
-import { battleSt } from './battle-state.js';
+import { battleSt, getEnemyHP, setEnemyHP, BATTLE_SHAKE_MS } from './battle-state.js';
 import { ps } from './player-stats.js';
 import { inputSt } from './input-handler.js';
 import { SFX, playSFX } from './music.js';
-import { setPlayerHealNum, getAllyDamageNums, tickHealNums, clearHealNums } from './damage-numbers.js';
+import { setPlayerHealNum, getAllyDamageNums, setEnemyDmgNum, setEnemyHealNum, setSwDmgNum,
+         tickHealNums, clearHealNums } from './damage-numbers.js';
 import { SPELLS, getSpellMPCost } from './data/spells.js';
 import { STATUS, removeStatus } from './status-effects.js';
 import { CURE_PHASE_MS, CURE_T_HEAL, CURE_TOTAL_MS } from './cure-anim.js';
+import { elemMultiplier } from './battle-math.js';
+import { pvpSt } from './pvp.js';
 
 // Map spell.type → STATUS flag for cure_status spells (Poisona, Bndna, etc.)
 const SPELL_CURE_FLAG = {
@@ -28,16 +32,15 @@ export function initSpellCast({ processNextTurn }) { _processNextTurn = processN
 
 // ── Module-local state, reset per cast ──────────────────────────────────────
 let _spellId = 0;
-let _targets = [];      // ['player'] or [allyIndex] for ally spells
+let _targets = [];      // [{type: 'player'|'ally'|'enemy', index?}]
 let _hitIdx = 0;
 let _effectApplied = false;
-let _baseAmount = 0;    // pre-rolled heal/damage amount
 
 export function getSpellTargets() { return _targets; }
 export function getSpellHitIdx() { return _hitIdx; }
 export function getCurrentSpellId() { return _spellId; }
 export function resetSpellCastVars() {
-  _spellId = 0; _targets = []; _hitIdx = 0; _effectApplied = false; _baseAmount = 0;
+  _spellId = 0; _targets = []; _hitIdx = 0; _effectApplied = false;
 }
 
 // NES FF3 magic formula (31/B1B4): atk = floor(stat/2) + power, +rand(0..atk/2).
@@ -48,21 +51,33 @@ function _rollMagicAmount(power, useMnd) {
   return atk + Math.floor(Math.random() * (Math.floor(atk / 2) + 1));
 }
 
-// targetSpec: { allyIndex: -1 } for player, { allyIndex: N } for ally N.
-// (For v1, ally spells only — Cure on player or ally.)
+// NES FF3 marks undead as "weak to holy AND resists holy" — the contradictory
+// pair is the data signature. Used so recovery spells (Cure family) damage
+// undead instead of healing them.
+function _isUndead(mon) {
+  if (!mon) return false;
+  const w = Array.isArray(mon.weakness) ? mon.weakness : (mon.weakness ? [mon.weakness] : []);
+  const r = Array.isArray(mon.resist) ? mon.resist : (mon.resist ? [mon.resist] : []);
+  return w.includes('holy') && r.includes('holy');
+}
+
+// targetSpec accepts:
+//   { allyIndex: -1 }      → player self
+//   { allyIndex: N }       → roster ally N
+//   { enemyIndex: N }      → encounter monster N / PVP cell N / boss (any non-random/PVP)
 export function startSpellCast(spellId, targetSpec) {
   const spell = SPELLS.get(spellId);
   if (!spell) { _processNextTurn(); return; }
   _spellId = spellId;
   _hitIdx = 0;
   _effectApplied = false;
-  const allyIndex = (targetSpec && targetSpec.allyIndex != null) ? targetSpec.allyIndex : -1;
-  _targets = [allyIndex < 0 ? 'player' : allyIndex];
-  const isWhite = spell.element === 'recovery' || spell.target === 'cure_status' || spell.target === 'revive';
-  _baseAmount = _rollMagicAmount(spell.power, isWhite);
-  // MP deduction. Callers MUST gate on `ps.mp >= cost` upstream
-  // (input-handler.js does this for both battle and pause paths). No clamp here
-  // — if MP goes negative, an upstream check is missing and we want to notice.
+  if (targetSpec && targetSpec.enemyIndex != null && targetSpec.enemyIndex >= 0) {
+    _targets = [{ type: 'enemy', index: targetSpec.enemyIndex }];
+  } else if (targetSpec && targetSpec.allyIndex != null && targetSpec.allyIndex >= 0) {
+    _targets = [{ type: 'ally', index: targetSpec.allyIndex }];
+  } else {
+    _targets = [{ type: 'player' }];
+  }
   ps.mp -= getSpellMPCost(spellId);
   battleSt.battleState = 'magic-cast';
   battleSt.battleTimer = 0;
@@ -72,36 +87,134 @@ export function startSpellCast(spellId, targetSpec) {
   playSFX(SFX.MAGIC_CAST);
 }
 
+function _getEnemyAt(idx) {
+  if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
+    return battleSt.encounterMonsters[idx];
+  }
+  if (pvpSt.isPVPBattle) {
+    return idx === 0 ? pvpSt.pvpOpponentStats : pvpSt.pvpEnemyAllies[idx - 1];
+  }
+  return null; // boss path uses getEnemyHP/setEnemyHP, no monster object
+}
+
+function _setEnemyDmg(idx, value, miss) {
+  if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
+    setSwDmgNum(idx, miss ? 0 : value);
+    return;
+  }
+  if (pvpSt.isPVPBattle) {
+    setSwDmgNum(idx, miss ? 0 : value);
+    return;
+  }
+  setEnemyDmgNum(miss ? { miss: true, timer: 0 } : { value, timer: 0 });
+}
+
+function _applyEnemyEffect(idx, spell) {
+  const isEncounter = battleSt.isRandomEncounter && battleSt.encounterMonsters;
+  const isPVP = pvpSt.isPVPBattle;
+  const isBoss = !isEncounter && !isPVP;
+  const mon = isBoss ? null : _getEnemyAt(idx);
+
+  // Recovery spell → undead damages, non-undead heals (NES default; player
+  // chose to spend MP on a non-undead enemy, so they get healed).
+  const isRecovery = spell.element === 'recovery';
+  const useMnd = isRecovery || spell.target === 'cure_status' || spell.target === 'revive';
+
+  // Hit roll (offensive non-recovery only). Recovery on undead always hits at NES hit:100.
+  if (!isRecovery && spell.hit > 0 && spell.hit < 100) {
+    if (Math.random() * 100 >= spell.hit) {
+      _setEnemyDmg(idx, 0, true);
+      return;
+    }
+  }
+
+  const amount = _rollMagicAmount(spell.power, useMnd);
+
+  if (isRecovery) {
+    if (isBoss) {
+      // Boss path: no monster object so we can't detect undead. Default to heal
+      // (matches NES non-undead behavior).
+      const curHP = getEnemyHP();
+      const heal = Math.min(amount, 9999 - curHP);
+      setEnemyHP(curHP + heal);
+      setEnemyHealNum({ value: heal, timer: 0, index: idx });
+      playSFX(SFX.CURE);
+      return;
+    }
+    if (!mon || mon.hp <= 0) return;
+    if (_isUndead(mon)) {
+      const dmg = Math.max(1, amount);
+      mon.hp = Math.max(0, mon.hp - dmg);
+      _setEnemyDmg(idx, dmg, false);
+      battleSt.battleShakeTimer = BATTLE_SHAKE_MS;
+      playSFX(SFX.SW_HIT);
+    } else {
+      const heal = Math.min(amount, (mon.maxHP || mon.hp) - mon.hp);
+      mon.hp += heal;
+      setEnemyHealNum({ value: heal, timer: 0, index: idx });
+      playSFX(SFX.CURE);
+    }
+    return;
+  }
+
+  // Non-recovery (damage) spell on enemy.
+  if (isBoss) {
+    const dmg = Math.max(1, amount);
+    setEnemyHP(Math.max(0, getEnemyHP() - dmg));
+    _setEnemyDmg(idx, dmg, false);
+    battleSt.battleShakeTimer = BATTLE_SHAKE_MS;
+    playSFX(SFX.SW_HIT);
+    return;
+  }
+  if (!mon || mon.hp <= 0) return;
+  const mult = elemMultiplier(spell.element, mon.weakness, mon.resist);
+  const dmg = Math.max(1, Math.floor(amount * mult));
+  mon.hp = Math.max(0, mon.hp - dmg);
+  _setEnemyDmg(idx, dmg, false);
+  battleSt.battleShakeTimer = BATTLE_SHAKE_MS;
+  playSFX(SFX.SW_HIT);
+}
+
 function _applySpellEffect(target) {
   const spell = SPELLS.get(_spellId);
   if (!spell) return;
+
+  if (target.type === 'enemy') {
+    _applyEnemyEffect(target.index, spell);
+    return;
+  }
+
+  // Friendly target paths (player / ally)
   const isCureStatus = spell.target === 'cure_status';
   const isHeal = spell.element === 'recovery';
+  const useMnd = isHeal || isCureStatus || spell.target === 'revive';
+  const amount = _rollMagicAmount(spell.power, useMnd);
+
   if (isCureStatus) {
     const flag = SPELL_CURE_FLAG[spell.type];
-    if (target === 'player') {
+    if (target.type === 'player') {
       if (flag && ps.status) removeStatus(ps.status, flag);
       setPlayerHealNum({ value: 0, timer: 0 });
     } else {
-      const ally = battleSt.battleAllies[target];
+      const ally = battleSt.battleAllies[target.index];
       if (!ally) return;
       if (flag && ally.status) removeStatus(ally.status, flag);
-      getAllyDamageNums()[target] = { value: 0, timer: 0, heal: true };
+      getAllyDamageNums()[target.index] = { value: 0, timer: 0, heal: true };
     }
     playSFX(SFX.CURE);
     return;
   }
-  if (target === 'player') {
-    const heal = Math.min(_baseAmount, ps.stats.maxHP - ps.hp);
+  if (target.type === 'player') {
+    const heal = Math.min(amount, ps.stats.maxHP - ps.hp);
     ps.hp += heal;
     setPlayerHealNum({ value: heal, timer: 0 });
   } else {
-    const ally = battleSt.battleAllies[target];
+    const ally = battleSt.battleAllies[target.index];
     if (!ally) return;
     const maxHP = ally.maxHP || ally.hp;
-    const heal = Math.min(_baseAmount, maxHP - ally.hp);
+    const heal = Math.min(amount, maxHP - ally.hp);
     ally.hp += heal;
-    getAllyDamageNums()[target] = { value: heal, timer: 0, heal: true };
+    getAllyDamageNums()[target.index] = { value: heal, timer: 0, heal: true };
   }
   playSFX(isHeal ? SFX.CURE : SFX.SW_HIT);
 }

@@ -502,9 +502,13 @@ function _playerTurnMagic() {
   battleSt.isDefending = false;
   const pending = inputSt.playerActionPending;
   if (!pending) { processNextTurn(); return; }
-  // For v1, ally-target Cure: target is 'player' or an ally index.
-  const allyIndex = pending.target === 'player' ? (pending.allyIndex ?? -1) : -1;
-  startSpellCast(pending.spellId, { allyIndex });
+  // pending.target === 'player' → friendly (player or ally via allyIndex).
+  // pending.target is a number → enemy slot in encounter / PVP grid (or boss = 0).
+  if (pending.target === 'player') {
+    startSpellCast(pending.spellId, { allyIndex: pending.allyIndex ?? -1 });
+  } else {
+    startSpellCast(pending.spellId, { enemyIndex: pending.target });
+  }
   // MP changed; persist immediately so a crash doesn't refund the cost.
   saveSlotsToDB();
 }

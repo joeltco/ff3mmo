@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.64 — 2026-05-06
+
+### Player magic on enemies — full pipeline (Cure on undead, ready for black magic)
+
+`spell-cast.js` only handled friendly targets (`'player'` or ally index); enemy-target dispatch was silently re-routed to player. Now the engine walks all three target types end-to-end:
+
+- **`_targets` refactor.** Now `[{type, index?}]` — `'player'`, `'ally'+index`, or `'enemy'+index`. `startSpellCast` accepts `{enemyIndex: N}` alongside the existing `{allyIndex: N}`.
+- **`_applyEnemyEffect` added.** Routes by spell flavor:
+  - **Recovery on undead** → damage path (atk = floor(MND/2) + power, +rand). Undead detection uses the NES ROM signature: monster has `weakness: 'holy'` AND `resist: 'holy'` (the contradiction is the flag). Catches Red Wisp, Dark Eye, Zombie, Mummy, Skeleton, CursdCopper, Larva, Shadow, Revenant; future undead picked up automatically by ROM data.
+  - **Recovery on non-undead enemy** → heals them (NES default — your MP, your problem).
+  - **Damage spells on enemy** → atk = floor(INT/2) + power, +rand, × `elemMultiplier(spell.element, mon.weakness, mon.resist)`. Hit rolled if `spell.hit < 100`. Routes through `setSwDmgNum` (encounter / PVP) or `setEnemyDmgNum` (boss).
+- **`_playerTurnMagic` dispatch.** Reads `pending.target`: `'player'` → friendly; numeric → enemy slot. The targeting menu already let you cycle through enemies; the magic engine just wasn't listening.
+- **`drawSWDamageNumbers` extended** to fire on `'magic-hit'` so spell damage on encounter/PVP enemies actually displays. Boss damage routes through the existing `_drawBossDmgNum` path.
+
+**Animation deferred.** Recovery-spell cure-anim (sparkle on portrait) only renders for friendly targets; enemy-target casts get the buildup + cast pose on the caster, then the damage number on the enemy with no target-side sparkle. Damage spell anims aren't captured yet — black magic anims will land separately. Per the spell-anim hard-rules memory, didn't touch `cure-anim.js` for this change.
+
 ## 1.7.63 — 2026-05-06
 
 ### Crits are visible now

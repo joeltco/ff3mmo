@@ -182,7 +182,9 @@ function drawSWExplosion() {
 }
 
 function drawSWDamageNumbers() {
-  if (battleSt.battleState !== 'sw-hit') return;
+  // Fires for both 'sw-hit' (battle items / Southwind) and 'magic-hit' (player-
+  // cast spell damage on encounter/PVP enemies).
+  if (battleSt.battleState !== 'sw-hit' && battleSt.battleState !== 'magic-hit') return;
   if (pvpSt.isPVPBattle) {
     for (const [k, dn] of Object.entries(getSwDmgNums())) {
       const { x: cx, y: cy } = _pvpEnemyCellCenter(parseInt(k));
