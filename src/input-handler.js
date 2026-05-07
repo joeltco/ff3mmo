@@ -430,6 +430,12 @@ function _itemTargetIsLeftCol(i) { return _itemTargetCnt() >= 2 && !_itemTargetI
 
 function _itemTargetNavLeft(allowMulti) {
   const cnt = _itemTargetCnt();
+  // Multi-target spells: when in 'all-allies' on the player side, Left returns
+  // to single-ally pick. From single-ally, Left then crosses to the enemy side
+  // via the existing battle-item path (col-toggle / cross-side) below.
+  if (allowMulti && inputSt.itemTargetType === 'player' && inputSt.itemTargetMode !== 'single') {
+    inputSt.itemTargetMode = 'single'; inputSt.itemTargetAllyIndex = -1; playSFX(SFX.CURSOR); return;
+  }
   if (allowMulti && inputSt.itemTargetMode !== 'single') {
     // col/all mode → back to single. Left-col candidates differ per mode.
     const leftCandidates = pvpSt.isPVPBattle
@@ -473,7 +479,13 @@ function _itemTargetNavLeft(allowMulti) {
   }
 }
 
-function _itemTargetNavRight() {
+function _itemTargetNavRight(allowMulti) {
+  // Multi-target spells: Right from any ally pick (player or roster ally,
+  // single mode) flips to 'all-allies'. Right from 'all-allies' is a no-op
+  // (the cursor is already at the rightmost picker state on this side).
+  if (allowMulti && inputSt.itemTargetType === 'player' && inputSt.itemTargetMode === 'single') {
+    inputSt.itemTargetMode = 'all'; playSFX(SFX.CURSOR); return;
+  }
   if (inputSt.itemTargetType !== 'enemy') return;
   if (pvpSt.isPVPBattle) {
     if (_itemTargetIsRightCol(inputSt.itemTargetIndex)) {
@@ -520,14 +532,11 @@ function _itemTargetNavVertical(allowMulti) {
       inputSt.itemTargetIndex = next; playSFX(SFX.CURSOR);
     }
   } else if (inputSt.itemTargetType === 'player') {
+    // Up/Down only cycles allies on the player side — never toggles 'all'.
+    // Multi-target 'all-allies' is reached via Right (see _itemTargetNavRight).
+    if (allowMulti && inputSt.itemTargetMode !== 'single') return; // freeze cycle while in all-mode
     const livingAllies = battleSt.battleAllies.filter(a => a.hp > 0);
-    // Multi-target spells (Cure family): Up from the player slot toggles
-    // 'all-allies'; Down from 'all' returns to the player slot.
-    if (allowMulti && goUp && inputSt.itemTargetMode === 'single' && inputSt.itemTargetAllyIndex < 0) {
-      inputSt.itemTargetMode = 'all'; playSFX(SFX.CURSOR);
-    } else if (allowMulti && !goUp && inputSt.itemTargetMode !== 'single') {
-      inputSt.itemTargetMode = 'single'; inputSt.itemTargetAllyIndex = -1; playSFX(SFX.CURSOR);
-    } else if (!goUp && inputSt.itemTargetAllyIndex < livingAllies.length - 1) {
+    if (!goUp && inputSt.itemTargetAllyIndex < livingAllies.length - 1) {
       inputSt.itemTargetAllyIndex++; playSFX(SFX.CURSOR);
     } else if (goUp && inputSt.itemTargetAllyIndex >= 0) {
       inputSt.itemTargetAllyIndex--; playSFX(SFX.CURSOR);
@@ -547,7 +556,7 @@ function _battleInputItemTargetSelect() {
   const k = keys;
   // Navigation is symmetric for items and spells — left/right reaches enemies, up/down cycles allies.
   if (k['ArrowLeft']) { k['ArrowLeft'] = false; _itemTargetNavLeft(allowMulti); }
-  if (k['ArrowRight']) { k['ArrowRight'] = false; _itemTargetNavRight(); }
+  if (k['ArrowRight']) { k['ArrowRight'] = false; _itemTargetNavRight(allowMulti); }
   if (k['ArrowUp'] || k['ArrowDown']) _itemTargetNavVertical(allowMulti);
   if (_zPressed()) {
     inputSt.playerActionPending.target = inputSt.itemTargetType === 'player' ? 'player' : inputSt.itemTargetIndex;

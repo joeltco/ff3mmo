@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.75 — 2026-05-07
+
+### Cure all-allies picker — Right press, not Up
+
+1.7.74 wired the all-allies toggle to Up from the player slot. Replaced with Right press from any ally pick (player or roster ally, single mode) — feels closer to Southwind's Right-cross-side-then-vertical pattern and keeps Up/Down purely for cycling allies. Left from 'all-allies' returns to single-ally; another Left then crosses to the enemy side as before.
+
+- `_itemTargetNavRight` takes `allowMulti`; player-side single + Right → `'all'`.
+- `_itemTargetNavLeft` exits `'all-allies'` to single-ally before crossing to enemy side.
+- `_itemTargetNavVertical` no longer touches mode on the player side; freezes ally-cycle while in all-mode so Up/Down doesn't accidentally drop out of it.
+
 ## 1.7.74 — 2026-05-07
 
 ### Multi-target Cure spell — Southwind-style divided heal/damage
