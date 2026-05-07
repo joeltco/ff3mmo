@@ -57,6 +57,7 @@ Before writing new code, read the relevant `docs/design-notes.md` section. Each 
 | A status effect or immunity | (see status section in `data/items.js` `sResist`, `data/monsters.js` `statusResist`) | `src/status-effects.js`, `src/battle-enemy.js` (`tryInflictStatus` call sites) |
 | A save schema field | `design-notes#saves` | `saveSlotsToDB()` in `src/save-state.js` is the single source of truth — every persisted field flows through there |
 | A new attack/slash animation timing | `design-notes#battle-attack-animation` | `src/slash-effects.js` is the single source — `SLASH_FRAME_MS`, `getSlashPattern(weaponId)`, `setSlashOffsetForFrame`, `shouldDrawSlash`, `getSlashHoldMs`, `drawSlashOverlay(ctx, frame, frameIdx, x, y, opts)` (opts: `mirror`, `weaponId`, `hit` — passing `hit` opts into internal miss/shield-block gating; 1.7.48). Player slash machine lives in `src/battle-update.js` (`_updatePlayerSlash`); ally / PVP-opponent paths in `src/battle-ally.js` / `src/pvp.js` consume the same predicate + helpers. |
+| Damage / heal number color or bounce | `design-notes#damage--heal-numbers` | `src/damage-numbers.js` — `BATTLE_DIGIT_TILES` (10 8x8 sprites for digits 0-9, ROM `0x1B170` = sprite slots `$56-$5F`), `DMG_NUM_PAL` / `HEAL_NUM_PAL` / `CRIT_NUM_PAL` (slot 2 = fill color), `drawBattleNum`. `DMG_BOUNCE_TABLE` lives in `src/data/animation-tables.js` (33-frame REC OAM trace). |
 
 Deferred work and known followups live in `design-notes.md#followups`. Check there before assuming something is missing — it may be intentionally not yet shipped.
 

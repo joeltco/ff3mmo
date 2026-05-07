@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.79 — 2026-05-07
+
+### Docs: design-notes for multi-target Cure + battle-digit sprites
+
+No code changes. Updated `docs/design-notes.md`:
+
+- **Magic** section: documented multi-target spell pattern (`MULTI_TARGET_SPELLS` set, picker UX — Right toggles all-allies, 133 ms blink), updated `startSpellCast` API line to mention `targetMode`.
+- **Damage / heal numbers** (new section): records that battle popups use dedicated chunky digit sprites at ROM `0x1B170` (slots `$56-$5F`, digit N = `$56 + N`), how `drawBattleNum` caches per-palette canvases, palette layout (slot 2 = fill), and the 33-frame REC-OAM-traced `DMG_BOUNCE_TABLE`. Future "what shade of green is the heal popup" / "why does the bounce freeze" lookups land here.
+- `CLAUDE.md` "Where things live" table got a row for damage/heal numbers pointing at the new section.
+
 ## 1.7.78 — 2026-05-07
 
 ### Damage-number audit: dedicated digit sprites + final bounce frames
