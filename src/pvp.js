@@ -34,7 +34,7 @@ import { _nameToBytes } from './text-utils.js';
 import { queueBattleMsg } from './battle-msg.js';
 import { tickHealNums, clearHealNums } from './damage-numbers.js';
 import { SPELLS } from './data/spells.js';
-import { getCureFlameFrameIdx, getCureAnimAssets } from './cure-anim.js';
+import { getCureFlameFrameIdx, getCureAnimAssets, getCureTargetFrames } from './cure-anim.js';
 import { fakePlayerFullBodyCanvases, fakePlayerHitFullBodyCanvases,
          fakePlayerKnifeRFullBodyCanvases, fakePlayerKnifeLFullBodyCanvases,
          fakePlayerKnifeRFwdFullBodyCanvases, fakePlayerKnifeLFwdFullBodyCanvases,
@@ -991,13 +991,29 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
     _drawSparkleAtCorners(sprX, sprY, bsc.defendSparkleFrames[fi]);
   }
   // Cure sparkle — drawn on the TARGET cell during item use AND during the hit
-  // phase of an enemy magic cast (Cure / Poisona). Caster pose is handled above
-  // via isOppItemUse; this is the on-target visual confirmation.
+  // phase of an enemy magic cast (Cure / Poisona). Item routes by pvpItemKind
+  // ('antidote' → magenta poisona frames, 'potion' → blue recovery sparkle);
+  // magic routes by pvpMagicSpellId via the per-spell bundle.
   const isPotionTarget = bs === 'pvp-opp-potion' && pvpSt.pvpItemTargetCellIdx === idx;
   const isMagicTarget  = bs === 'pvp-enemy-magic-hit' && pvpSt.pvpMagicTargetCellIdx === idx;
-  if ((isPotionTarget || isMagicTarget) && bsc.cureSparkleFrames && bsc.cureSparkleFrames.length === 2) {
-    const fi = Math.floor(battleSt.battleTimer / 67) & 1;
-    _drawSparkleAtCorners(sprX, sprY, bsc.cureSparkleFrames[fi]);
+  if (isPotionTarget || isMagicTarget) {
+    let _frames = null;
+    if (isPotionTarget) {
+      const _synth = pvpSt.pvpItemKind === 'antidote'
+        ? { target: 'cure_status' }
+        : { element: 'recovery' };
+      const _b = getCureAnimAssets(_synth);
+      _frames = getCureTargetFrames(_synth, _b);
+    } else {
+      const _spell = SPELLS.get(pvpSt.pvpMagicSpellId);
+      const _b = _spell ? getCureAnimAssets(_spell) : null;
+      _frames = getCureTargetFrames(_spell, _b);
+    }
+    if (!(_frames && _frames.length === 2)) _frames = bsc.cureSparkleFrames;
+    if (_frames && _frames.length === 2) {
+      const fi = Math.floor(battleSt.battleTimer / 67) & 1;
+      _drawSparkleAtCorners(sprX, sprY, _frames[fi]);
+    }
   }
 
   // Slash effect overlays on the current target

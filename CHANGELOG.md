@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.71 — 2026-05-07
+
+### Antidote item-use animation — magenta poisona sparkle (was wrongly recovery blue)
+
+All five item-use sparkle render sites (player→self, ally→player, player→ally, ally→ally, PVP item/magic) hard-coded `bsc.cureSparkleFrames` (the Cure-spell heal sparkle in recovery blue) regardless of which item was used. Antidote (and any `cure_status` item — gold needle, maiden kiss, eye drops, echo herbs, mallet) should render the captured 2-frame Poisona target effect (`poisonaTargetFrames`) in the cure_status magenta palette, matching the FF3 NES capture (REC OAM antidote 2026-05-07).
+
+- Added `_itemSparkleFrames(itemId)` helper in `battle-drawing.js`: looks up the item, synthesizes a spell shape (`{target:'cure_status'}` for status-cure, else `{element:'recovery'}`), and routes through the existing `getCureAnimAssets` + `getCureTargetFrames` so the per-school palette + per-effect frame set both pick up automatically.
+- Player→self item (line 366): replaced hard-coded `cureSparkleFrames` with helper call keyed off `inputSt.playerActionPending.itemId`.
+- Player→ally item (`_allyItemSparkle`): same helper.
+- Ally→player & ally→ally items: dropped the `&& !battleSt.allyMagicItemMode` filter that branched item mode to a separate hard-coded path. The ally-item AI already sets `allyMagicSpellId` to a sentinel (`0x34` Cure for potion, `0x35` Poisona for antidote), so the existing per-spell-id lookup picks the correct frames for both modes once the filter is gone.
+- PVP item target (`pvp-opp-potion`): routes by `pvpSt.pvpItemKind` ('antidote' → cure_status synth, 'potion' → recovery synth).
+- PVP magic target (`pvp-enemy-magic-hit`): now also routes through `getCureTargetFrames(SPELLS.get(pvpMagicSpellId))` instead of the hard-coded recovery sparkle (PVP Poisona was rendering in blue too — same bug, fixed in passing).
+
+Cure potion path is unchanged in behavior: synthetic `{element:'recovery'}` resolves to the recovery bundle's `sparkleFrames`, which is still the same `bsc.cureSparkleFrames`-equivalent the old code rendered.
+
 ## 1.7.70 — 2026-05-06
 
 ### Battle encounter box — transparent edge (no black halo)
