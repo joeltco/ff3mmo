@@ -22,7 +22,8 @@ import { initCursorTile, initScrollArrows, initAdamantoise,
 import { initFakePlayerSprites } from './fake-player-sprites.js';
 import { initMissSprite } from './damage-numbers.js';
 import { initProjectile } from './projectile-anim.js';
-import { initFireImpact } from './fire-anim.js';
+import { initCastAnim } from './cast-anim.js';
+import { initSpellAnim } from './spell-anim.js';
 
 const TITLE_FADE_MAX = 4;
 
@@ -61,7 +62,8 @@ export function initSpriteAssets(rom) {
   initMonsterSprites();
   initMissSprite();
   initProjectile();
-  initFireImpact();
+  initCastAnim();
+  initSpellAnim();
   initPlayerStats(rom);
   initExpTable(rom);
 

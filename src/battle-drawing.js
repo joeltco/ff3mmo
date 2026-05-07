@@ -34,10 +34,11 @@ import { pvpSt, drawBossSpriteBoxPVP } from './pvp.js';
 import { inputSt } from './input-handler.js';
 import { bsc, getSlashFramesForWeapon } from './battle-sprite-cache.js';
 import { drawSlashOverlay, SLASH_FRAME_MS, shouldDrawSlash } from './slash-effects.js';
-import { getCureAnimElapsedMs, getCurrentSpellId, getSpellTargets, getSpellHitIdx } from './spell-cast.js';
-import { getCureFlameFrameIdx, shouldDrawStars, shouldDrawHealSparkle, getCureAnimAssets, getCureTargetFrames, getItemSparkleFrames, CURE_T_HEAL, CURE_PHASE_MS } from './cure-anim.js';
+import { getCastAnimElapsedMs, getCurrentSpellId, getSpellTargets, getSpellHitIdx } from './spell-cast.js';
+import { getCastAsset, getCastFlameFrameIdx, shouldDrawCastStars, jobToCastKey,
+         CAST_T_HEAL, CAST_T_RETURN, CAST_PHASE_MS } from './cast-anim.js';
+import { getSpellAnim, getSpellAnimForItem, getSpellAnimFrame } from './spell-anim.js';
 import { getProjectileTile, getProjectilePos, PROJECTILE_FLIGHT_FRAC } from './projectile-anim.js';
-import { getFireImpactCanvas } from './fire-anim.js';
 import { hudSt } from './hud-state.js';
 import { fakePlayerPortraits, fakePlayerVictoryPortraits, fakePlayerHitPortraits,
          fakePlayerKneelPortraits, fakePlayerAttackPortraits, fakePlayerAttackLPortraits,
@@ -232,12 +233,12 @@ function drawSWDamageNumbers() {
 }
 
 // Pick the right on-target sparkle frames for an item being used. Routes via
-// the item's declared `animSpellId` through `getItemSparkleFrames` (cure-anim);
-// items whose spell-animation hasn't been captured yet fall back to the
-// recovery sparkle placeholder.
+// the item's declared `animSpellId` through spell-anim.js; items whose spell
+// animation hasn't been captured yet fall back to the legacy 4-corner Cure
+// sparkle from sprite-init.js.
 function _itemSparkleFrames(itemId) {
-  const frames = getItemSparkleFrames(itemId);
-  if (frames && frames.length === 2) return frames;
+  const bundle = getSpellAnimForItem(itemId);
+  if (bundle && bundle.frames && bundle.frames.length === 2) return bundle.frames;
   return bsc.cureSparkleFrames && bsc.cureSparkleFrames.length === 2 ? bsc.cureSparkleFrames : null;
 }
 
@@ -332,82 +333,68 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
     const frame = bsc.defendSparkleFrames[fi];
     drawSparkleCorners(frame, px, py);
   }
-  // Cure animation — captured PPU/OAM (see cure-anim.js). Build-up + lunge run
-  // caster-side (always at the player portrait, regardless of target). The heal
-  // sparkle (phase 4) only renders here when the target is the player; ally-
-  // target heal sparkles are drawn at the ally portrait below.
+  // Cast animation — per-job (see cast-anim.js). Build-up + lunge run caster-
+  // side (always at the player portrait, regardless of target). The on-target
+  // sparkle (heal phase) only renders here when the target is the player;
+  // ally-target sparkles are drawn at the ally portrait below.
   const isMagicState = battleSt.battleState === 'magic-cast' || battleSt.battleState === 'magic-hit';
   const isCureItemUse = battleSt.battleState === 'item-use' && !(inputSt.playerActionPending && inputSt.playerActionPending.allyIndex >= 0);
-  // Drive the heal-sparkle gate from the spell-cast iterator (current target),
-  // not playerActionPending. Multi-target Cure walks _targets[] and sparkles
-  // each in turn — the iterator says "is the player the active target right
-  // now?" which works for single-target self, multi-target all-allies, and
-  // any future variant without re-reading menu state.
   const _curSpellTargets = isMagicState ? getSpellTargets() : null;
   const _curSpellTgt = _curSpellTargets && _curSpellTargets.length > 0
     ? _curSpellTargets[Math.min(getSpellHitIdx(), _curSpellTargets.length - 1)] : null;
   const isCureMagicSelf = isMagicState && _curSpellTgt && _curSpellTgt.type === 'player';
-  const cureMs = isMagicState ? getCureAnimElapsedMs() : -1;
-  // Per-school palette: the FF3 ROM shares tile bytes across white-magic
-  // spells but uses a different SP3 palette per school. Cure renders blue,
-  // Poisona renders magenta. Pick the right pre-decoded bundle by the active
-  // spell at render time. Item-use Cure (potions) stays on the recovery-only
-  // sprite-init path since it's always Cure-equivalent.
-  const _activeSpell = isMagicState ? SPELLS.get(getCurrentSpellId()) : null;
-  const cureAnim = _activeSpell ? getCureAnimAssets(_activeSpell) : null;
-  if (cureMs >= 0 && cureAnim && cureAnim.flameFrames.length === 5) {
-    // Draw order: stars FIRST (background), flame on TOP. Where the ring's
-    // left arc passes behind the flame, the flame's detailed pixels read
-    // clearly instead of being overwritten by passing stars.
-    if (shouldDrawStars(cureMs) && cureAnim.starTile) {
+  const cureMs = isMagicState ? getCastAnimElapsedMs() : -1;
+  // Cast asset comes from the caster's job (WM, BM). Spell ID is only relevant
+  // for the on-target effect below.
+  const _castKey = isMagicState ? jobToCastKey(ps.jobIdx) : null;
+  const _castAsset = _castKey ? getCastAsset(_castKey) : null;
+  if (cureMs >= 0 && _castAsset && _castAsset.flameFrames.length === 5) {
+    // Stars (WM only — BM has null starTile). Draw FIRST so flame renders on top.
+    if (shouldDrawCastStars(cureMs) && _castAsset.starTile) {
       // 8 stars on a radius-15 ring around the portrait, rotating CW at the
       // OAM-measured rate (~5°/NES-frame × 60 fps = 300°/s = 1.2 s per turn).
-      const star = cureAnim.starTile;
+      const star = _castAsset.starTile;
       const cx = px + 8, cy = py + 8;
       const r = 15;
       const N = 8;
       const rotRad = (cureMs / 1200) * Math.PI * 2; // CW
       for (let i = 0; i < N; i++) {
-        const a = (i / N) * Math.PI * 2 + rotRad - Math.PI / 2; // start at top
+        const a = (i / N) * Math.PI * 2 + rotRad - Math.PI / 2;
         const sx = Math.round(cx + Math.cos(a) * r - 4);
         const sy = Math.round(cy + Math.sin(a) * r - 4);
         ui.ctx.drawImage(star, sx, sy);
       }
     }
-    const flameIdx = getCureFlameFrameIdx(cureMs);
+    const flameIdx = getCastFlameFrameIdx(cureMs, _castKey);
     if (flameIdx >= 0) {
-      // Flame 16×16 immediately LEFT of portrait, dropped 5 px to match
-      // the OAM where flame starts at group y=13 vs body at group y=8.
-      ui.ctx.drawImage(cureAnim.flameFrames[flameIdx], px - 16, py + 5);
+      // Anchor varies by job (WM: 16×16 to the left; BM: 40×32 wrapping the body).
+      ui.ctx.drawImage(_castAsset.flameFrames[flameIdx],
+                       px + _castAsset.flameDx, py + _castAsset.flameDy);
     }
   }
-  // Heal sparkle (phase 4) — ONE 16×16 sparkle on the portrait, alternating
-  // between two flip arrangements every 67 ms. Magic-cast picks the per-school
-  // sparkle from cureAnim. Items route by effect: heal/full_heal → recovery
-  // sparkle (cure-potion blue), cure_status → poisonaTargetFrames (antidote
-  // family magenta).
+  // On-target sparkle — per-spell visual on the target portrait during heal
+  // phase. Items route by `item.animSpellId` through spell-anim.
   const _sparkleFi = Math.floor(battleSt.battleTimer / 67) & 1;
   if (isCureItemUse) {
     const _frames = _itemSparkleFrames(inputSt.playerActionPending?.itemId);
     if (_frames && _frames.length === 2) ui.ctx.drawImage(_frames[_sparkleFi], px, py);
   }
-  if (isCureMagicSelf && cureMs >= 0 && shouldDrawHealSparkle(cureMs) && cureAnim) {
-    const _selfTgt = getCureTargetFrames(_activeSpell, cureAnim);
-    if (_selfTgt && _selfTgt.length === 2) {
-      ui.ctx.drawImage(_selfTgt[_sparkleFi], px, py);
+  if (isCureMagicSelf && cureMs >= CAST_T_HEAL && cureMs < CAST_T_RETURN) {
+    const _bundle = getSpellAnim(getCurrentSpellId());
+    if (_bundle && _bundle.kind === 'portrait-2frame') {
+      ui.ctx.drawImage(_bundle.frames[_sparkleFi], px, py);
     }
   }
   // Ally-cast magic OR item on player. The ally-item AI sets allyMagicSpellId
   // to a sentinel (0x34 Cure for potion, 0x35 Poisona for antidote) so the
-  // per-spell-id lookup below picks the correct frames for both modes.
+  // per-spell-id lookup picks the correct frames for both modes.
   const isAllyHealOnPlayer = battleSt.battleState === 'ally-magic-hit'
     && battleSt.allyMagicTargetType === 'player'
     && battleSt.allyMagicEffectApplied;
   if (isAllyHealOnPlayer) {
-    const _allyCastSpell = SPELLS.get(battleSt.allyMagicSpellId);
-    const _allyCastAnim = _allyCastSpell ? getCureAnimAssets(_allyCastSpell) : null;
-    const _allyCastTgt = getCureTargetFrames(_allyCastSpell, _allyCastAnim);
-    const _frames = (_allyCastTgt && _allyCastTgt.length === 2) ? _allyCastTgt : bsc.cureSparkleFrames;
+    const _allyBundle = getSpellAnim(battleSt.allyMagicSpellId);
+    const _frames = (_allyBundle && _allyBundle.kind === 'portrait-2frame')
+      ? _allyBundle.frames : bsc.cureSparkleFrames;
     if (_frames && _frames.length === 2) {
       ui.ctx.drawImage(_frames[_sparkleFi], px, py);
     }
@@ -613,14 +600,14 @@ function _drawPlayerSpellTargetSparkleOnEnemy() {
   if (!targets || hitIdx >= targets.length) return;
   const tgt = targets[hitIdx];
   if (!tgt || tgt.type !== 'enemy') return;
-  const cureMs = getCureAnimElapsedMs();
-  if (cureMs < 0 || !shouldDrawHealSparkle(cureMs)) return;
-  const spell = SPELLS.get(getCurrentSpellId());
+  const cureMs = getCastAnimElapsedMs();
+  if (cureMs < CAST_T_HEAL || cureMs >= CAST_T_RETURN) return;
+  const spellId = getCurrentSpellId();
+  const spell = SPELLS.get(spellId);
   if (!spell) return;
+  const bundle = getSpellAnim(spellId);
   const isThrown = spell.target === 'sight' || spell.element === 'fire';
-  const cureAnim = !isThrown ? getCureAnimAssets(spell) : null;
-  const frames = !isThrown ? getCureTargetFrames(spell, cureAnim) : null;
-  if (!isThrown && (!frames || frames.length !== 2)) return;
+  if (!isThrown && (!bundle || bundle.kind !== 'portrait-2frame')) return;
   const fi = Math.floor(battleSt.battleTimer / 67) & 1;
 
   // Enemy sprite center — encounter / PVP / boss differ.
@@ -648,15 +635,13 @@ function _drawPlayerSpellTargetSparkleOnEnemy() {
     cy = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
   }
   if (isThrown) {
-    // Throw caster-portrait → target enemy, then per-spell impact at endpoint.
+    // Throw: caster portrait → target enemy. First 60% of heal phase = projectile
+    // in flight; last 40% = on-target impact (per spell-anim bundle, if any).
     // Caster is the player portrait at (HUD_RIGHT_X+8, HUD_VIEW_Y+8); add 8 to
-    // center on its 16×16. Sight has no impact visual ("Ineffective" battle
-    // message handles the feedback). Fire renders a 32×8 flame strip on the
-    // target — captured layout from REC OAM 2026-05-07 f9627 group 0 at
-    // origin (32,122).
+    // center on its 16×16.
     const sx = HUD_RIGHT_X + 8 + 8;
     const sy = HUD_VIEW_Y + 8 + 8;
-    const t01 = (cureMs - CURE_T_HEAL) / CURE_PHASE_MS.heal;
+    const t01 = (cureMs - CAST_T_HEAL) / CAST_PHASE_MS.heal;
     if (t01 < PROJECTILE_FLIGHT_FRAC) {
       const tile = getProjectileTile(spell);
       if (!tile) return;
@@ -664,14 +649,17 @@ function _drawPlayerSpellTargetSparkleOnEnemy() {
       if (pos.drawn) ui.ctx.drawImage(tile, Math.round(pos.x - 4), Math.round(pos.y - 4));
       return;
     }
-    if (spell.element === 'fire') {
-      const flame = getFireImpactCanvas();
-      // Center 32×8 strip on target (cx, cy) — strip is 32 wide, 8 tall.
-      if (flame) ui.ctx.drawImage(flame, cx - 16, cy - 4);
+    // On-target burst — Fire renders the 16×40 flame strip from spell-anim;
+    // Sight has no on-target visual (battle msg handles feedback).
+    if (bundle && bundle.kind === 'burst-strip-2frame') {
+      const impactMs = (cureMs - CAST_T_HEAL) - PROJECTILE_FLIGHT_FRAC * CAST_PHASE_MS.heal;
+      const frame = getSpellAnimFrame(bundle, impactMs);
+      if (frame) ui.ctx.drawImage(frame, cx - Math.floor(bundle.width / 2),
+                                          cy - Math.floor(bundle.height / 2));
     }
     return;
   }
-  ui.ctx.drawImage(frames[fi], cx - 8, cy - 8);
+  ui.ctx.drawImage(bundle.frames[fi], cx - 8, cy - 8);
 }
 
 function _drawGameOver() {
@@ -1395,18 +1383,15 @@ function _drawAllyRow(i, ally, panelTop, weaponDraws) {
   const _aCurTgt = _aTargets && _aTargets.length > 0
     ? _aTargets[Math.min(getSpellHitIdx(), _aTargets.length - 1)] : null;
   const isAllyHealMagic = _aMagicState && _aCurTgt && _aCurTgt.type === 'ally' && _aCurTgt.index === i;
-  const _allyCureMs = isAllyHealMagic ? getCureAnimElapsedMs() : -1;
+  const _allyCureMs = isAllyHealMagic ? getCastAnimElapsedMs() : -1;
   // For magic, only show heal sparkles during phase 4 (the actual heal moment).
   // Per-school palette pickup mirrors the player path: magic uses the active
   // spell's bundle (`Cure → blue`, `Poisona → magenta`); item-use routes by
   // item.effect (heal → recovery sparkle, cure_status → poisona magenta).
-  const _allySpell = isAllyHealMagic ? SPELLS.get(getCurrentSpellId()) : null;
-  const _allyCureAnim = _allySpell ? getCureAnimAssets(_allySpell) : null;
-  const _allyMagicTargetFrames = isAllyHealMagic && _allyCureMs >= 0
-    && shouldDrawHealSparkle(_allyCureMs)
-    ? getCureTargetFrames(_allySpell, _allyCureAnim) : null;
-  const _allyMagicSparkle = _allyMagicTargetFrames && _allyMagicTargetFrames.length === 2
-    ? _allyMagicTargetFrames : null;
+  const _allyMagicBundle = isAllyHealMagic ? getSpellAnim(getCurrentSpellId()) : null;
+  const _allyMagicSparkle = isAllyHealMagic && _allyCureMs >= CAST_T_HEAL && _allyCureMs < CAST_T_RETURN
+    && _allyMagicBundle && _allyMagicBundle.kind === 'portrait-2frame'
+    ? _allyMagicBundle.frames : null;
   const _allyItemSparkle = isAllyHealItem
     ? _itemSparkleFrames(inputSt.playerActionPending?.itemId)
     : null;
@@ -1419,11 +1404,9 @@ function _drawAllyRow(i, ally, panelTop, weaponDraws) {
     && battleSt.allyMagicEffectApplied;
   let _allyAllyCureSparkle = null;
   if (isAllyHealOnAlly) {
-    const _aaSpell = SPELLS.get(battleSt.allyMagicSpellId);
-    const _aaAnim = _aaSpell ? getCureAnimAssets(_aaSpell) : null;
-    const _aaTgt = getCureTargetFrames(_aaSpell, _aaAnim);
-    _allyAllyCureSparkle = (_aaTgt && _aaTgt.length === 2)
-      ? _aaTgt
+    const _aaBundle = getSpellAnim(battleSt.allyMagicSpellId);
+    _allyAllyCureSparkle = (_aaBundle && _aaBundle.kind === 'portrait-2frame')
+      ? _aaBundle.frames
       : (bsc.cureSparkleFrames.length === 2 ? bsc.cureSparkleFrames : null);
   }
   const _allyHealSparkleSet = _allyMagicSparkle || _allyItemSparkle || _allyAllyCureSparkle;
@@ -1634,12 +1617,12 @@ function _drawAllyCastAnim(panelTop) {
   if (i < 0) return;
   const ally = battleSt.battleAllies[i];
   if (!ally) return;
-  const spell = SPELLS.get(battleSt.allyMagicSpellId);
-  const cureAnim = spell ? getCureAnimAssets(spell) : null;
-  if (!cureAnim || cureAnim.flameFrames.length !== 5) return;
+  const castKey = jobToCastKey(ally.jobIdx || 0);
+  const castAsset = castKey ? getCastAsset(castKey) : null;
+  if (!castAsset || castAsset.flameFrames.length !== 5) return;
   // Elapsed within the cast portion: 0..600 ms during ally-magic-cast, then
   // capped at the brackets/release frame during ally-magic-hit. Stars keep
-  // rotating through the full cast+hit window (matches CURE_T_CAST > buildup
+  // rotating through the full cast+hit window (matches CAST_T_CAST > buildup
   // timing the player path uses).
   const castDur = 600;
   const elapsed = battleSt.battleState === 'ally-magic-cast'
@@ -1649,9 +1632,9 @@ function _drawAllyCastAnim(panelTop) {
   const rowY = panelTop + i * ROSTER_ROW_H + shakeOff;
   const ppx = HUD_RIGHT_X + 8;
   const ppy = rowY + 8;
-  // Stars: 8 around a radius-15 ring, rotating CW. Show only during ally-
-  // magic-cast (not the post-cast hit phase) — same gate as the player.
-  if (battleSt.battleState === 'ally-magic-cast' && cureAnim.starTile) {
+  // Stars: WM only (BM has null starTile). 8 around a radius-15 ring, CW.
+  // Show only during ally-magic-cast (not the post-cast hit phase).
+  if (battleSt.battleState === 'ally-magic-cast' && castAsset.starTile) {
     const cx = ppx + 8, cy = ppy + 8;
     const r = 15;
     const N = 8;
@@ -1660,15 +1643,15 @@ function _drawAllyCastAnim(panelTop) {
       const a = (s / N) * Math.PI * 2 + rotRad - Math.PI / 2;
       const sx = Math.round(cx + Math.cos(a) * r - 4);
       const sy = Math.round(cy + Math.sin(a) * r - 4);
-      ui.ctx.drawImage(cureAnim.starTile, sx, sy);
+      ui.ctx.drawImage(castAsset.starTile, sx, sy);
     }
   }
-  // Flame: pulses 4 sizes during cast, brackets at end. Drawn LEFT of the
-  // ally portrait at ppx-16, ppy+5 (mirrors player layout).
+  // Flame: per-job size cycle. WM = 16×16 to the left; BM = 40×32 wrapping body.
   if (battleSt.battleState === 'ally-magic-cast') {
-    const flameIdx = getCureFlameFrameIdx(elapsed);
+    const flameIdx = getCastFlameFrameIdx(elapsed, castKey);
     if (flameIdx >= 0) {
-      ui.ctx.drawImage(cureAnim.flameFrames[flameIdx], ppx - 16, ppy + 5);
+      ui.ctx.drawImage(castAsset.flameFrames[flameIdx],
+                       ppx + castAsset.flameDx, ppy + castAsset.flameDy);
     }
   }
 }

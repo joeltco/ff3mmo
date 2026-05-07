@@ -15,25 +15,21 @@ import { HEAL_NUM_PAL, drawBattleNum } from './damage-numbers.js';
 import { inputSt } from './input-handler.js';
 import { bsc } from './battle-sprite-cache.js';
 import { SPELLS } from './data/spells.js';
-import { getCureAnimAssets, getCureTargetFrames, getItemSparkleFrames } from './cure-anim.js';
+import { getSpellAnim, getSpellAnimForItem } from './spell-anim.js';
 
 // Single source for "what target frames does this pause-menu cast use?" —
 // dispatches by stash on `pauseSt.healNum`: spellId for magic casts, itemId
-// for consumables. Items route through `getItemSparkleFrames` which already
-// looks up `ITEMS.get(itemId).animSpellId` and returns the correct
-// per-school frames (Cure → recovery sparkle, Antidote → poisonaTargetFrames,
-// etc.). No more `bsc.cureSparkleFrames` 4-corner mirror — the whole pause
-// path now matches the battle path (single 16×16 target frame on portrait).
+// for consumables. Items route through `getSpellAnimForItem` which looks up
+// `ITEMS.get(itemId).animSpellId` and returns the per-spell on-target bundle.
+// No more `bsc.cureSparkleFrames` 4-corner mirror — pause path matches
+// battle path (single 16×16 target frame on portrait).
 function _pauseTargetFrames() {
   const hn = pauseSt.healNum;
   if (!hn) return null;
-  if (hn.spellId != null) {
-    const spell = SPELLS.get(hn.spellId);
-    const bundle = spell ? getCureAnimAssets(spell) : null;
-    return bundle ? getCureTargetFrames(spell, bundle) : null;
-  }
-  if (hn.itemId != null) return getItemSparkleFrames(hn.itemId);
-  return null;
+  let bundle = null;
+  if (hn.spellId != null) bundle = getSpellAnim(hn.spellId);
+  else if (hn.itemId != null) bundle = getSpellAnimForItem(hn.itemId);
+  return (bundle && bundle.kind === 'portrait-2frame') ? bundle.frames : null;
 }
 import { hudSt, HUD_HPLV_STEP_MS } from './hud-state.js';
 import { titleSt } from './title-screen.js';

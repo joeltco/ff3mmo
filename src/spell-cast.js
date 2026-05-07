@@ -1,8 +1,9 @@
 // Spell-cast engine — player-cast magic flow.
 // Handles ally-target heal/cure (Cure, Poisona) and enemy-target damage paths.
 // Pipeline: input → startSpellCast → 'magic-cast' (buildup) → 'magic-hit' (apply
-// effect + anim) → next turn. Damage spells aren't captured yet (legacy 1100 ms
-// timing); recovery spells use the OAM-captured cure-anim (~1667 ms).
+// effect + anim) → next turn. Spells with un-captured visuals fall back to the
+// legacy 1100 ms timing; captured spells (Cure, Poisona, Sight, Fire) use the
+// CAST_PHASE_MS model from cast-anim.js (~1667 ms).
 
 import { battleSt, getEnemyHP, setEnemyHP, BATTLE_SHAKE_MS } from './battle-state.js';
 import { ps } from './player-stats.js';
@@ -12,7 +13,7 @@ import { setPlayerHealNum, setPlayerDamageNum, getAllyDamageNums, setEnemyDmgNum
          tickHealNums, clearHealNums } from './damage-numbers.js';
 import { SPELLS, getSpellMPCost, isMultiTargetSpell } from './data/spells.js';
 import { STATUS, removeStatus } from './status-effects.js';
-import { CURE_PHASE_MS, CURE_T_HEAL, CURE_TOTAL_MS } from './cure-anim.js';
+import { CAST_PHASE_MS, CAST_T_HEAL, CAST_TOTAL_MS } from './cast-anim.js';
 import { queueBattleMsg, isBattleMsgBusy } from './battle-msg.js';
 import { _nameToBytes } from './text-utils.js';
 import { elemMultiplier } from './battle-math.js';
@@ -312,9 +313,9 @@ function _applySpellEffect(target) {
 // whole white-magic school — REC OAM of Poisona showed tiles $4A-$57 byte-
 // identical to Cure's, same SP3 palette `[0x0F, 0x15, 0x27, 0x30]`, same per-
 // frame progression. So recovery (Cure family), status-cure (Poisona, Bndna,
-// etc.) and revive (Raise) all use it. Damage spells aren't captured yet and
-// keep the legacy 1100 ms timing.
-function _isCureAnimSpell() {
+// etc.), revive (Raise), and captured BM damage spells (Fire) all use it.
+// Spells with un-captured visuals fall back to the legacy 250/400/1100 timing.
+function _isCastAnimSpell() {
   const spell = SPELLS.get(_spellId);
   if (!spell) return false;
   return spell.element === 'recovery'
@@ -332,13 +333,13 @@ export function isSightSpell(spellId) {
 // Drives 'magic-cast' (windup) and 'magic-hit' (anim+effect) states.
 // For recovery spells, timing matches the FF3 NES OAM capture (~1667ms total).
 export function updateSpellCast(dt) {
-  const useCureAnim = _isCureAnimSpell();
-  const castDur     = useCureAnim ? CURE_PHASE_MS.buildup : 250;
-  // CURE_T_HEAL is measured from t=0 of the *whole* anim; magic-hit starts at
-  // CURE_T_LUNGE (= buildup end), so heal-effect time within magic-hit is the
-  // delta from CURE_T_LUNGE.
-  const hitEffectMs = useCureAnim ? (CURE_T_HEAL - CURE_PHASE_MS.buildup) : 400;
-  const hitTotalMs  = useCureAnim ? (CURE_TOTAL_MS - CURE_PHASE_MS.buildup) : 1100;
+  const useCastAnim = _isCastAnimSpell();
+  const castDur     = useCastAnim ? CAST_PHASE_MS.buildup : 250;
+  // CAST_T_HEAL is measured from t=0 of the *whole* anim; magic-hit starts at
+  // CAST_T_LUNGE (= buildup end), so heal-effect time within magic-hit is the
+  // delta from CAST_T_LUNGE.
+  const hitEffectMs = useCastAnim ? (CAST_T_HEAL - CAST_PHASE_MS.buildup) : 400;
+  const hitTotalMs  = useCastAnim ? (CAST_TOTAL_MS - CAST_PHASE_MS.buildup) : 1100;
 
   if (battleSt.battleState === 'magic-cast') {
     if (battleSt.battleTimer >= castDur) {
@@ -376,12 +377,12 @@ export function updateSpellCast(dt) {
   return true;
 }
 
-// Renderer hook: returns ms elapsed since cure-anim t=0, or -1 if not in a
-// recovery-spell cast/hit state. Lets battle-drawing pick magic-circle frames
-// without re-reading battleState semantics.
-export function getCureAnimElapsedMs() {
-  if (!_isCureAnimSpell()) return -1;
+// Renderer hook: returns ms elapsed since cast t=0, or -1 if not in a
+// captured-anim cast/hit state. Lets battle-drawing pick cast/projectile/spell
+// animation frames without re-reading battleState semantics.
+export function getCastAnimElapsedMs() {
+  if (!_isCastAnimSpell()) return -1;
   if (battleSt.battleState === 'magic-cast') return battleSt.battleTimer;
-  if (battleSt.battleState === 'magic-hit') return CURE_PHASE_MS.buildup + battleSt.battleTimer;
+  if (battleSt.battleState === 'magic-hit') return CAST_PHASE_MS.buildup + battleSt.battleTimer;
   return -1;
 }

@@ -36,7 +36,8 @@ import { _nameToBytes } from './text-utils.js';
 import { queueBattleMsg } from './battle-msg.js';
 import { tickHealNums, clearHealNums } from './damage-numbers.js';
 import { SPELLS } from './data/spells.js';
-import { getCureFlameFrameIdx, getCureAnimAssets, getCureTargetFrames, getItemSparkleFrames } from './cure-anim.js';
+import { getCastAsset, getCastFlameFrameIdx, jobToCastKey } from './cast-anim.js';
+import { getSpellAnim, getSpellAnimForItem } from './spell-anim.js';
 import { fakePlayerFullBodyCanvases, fakePlayerHitFullBodyCanvases,
          fakePlayerKnifeRFullBodyCanvases, fakePlayerKnifeLFullBodyCanvases,
          fakePlayerKnifeRFwdFullBodyCanvases, fakePlayerKnifeLFwdFullBodyCanvases,
@@ -1021,11 +1022,11 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   if (isPotionTarget || isMagicTarget) {
     let _frames = null;
     if (isPotionTarget) {
-      _frames = getItemSparkleFrames(pvpSt.pvpItemId);
+      const _b = getSpellAnimForItem(pvpSt.pvpItemId);
+      _frames = (_b && _b.kind === 'portrait-2frame') ? _b.frames : null;
     } else {
-      const _spell = SPELLS.get(pvpSt.pvpMagicSpellId);
-      const _b = _spell ? getCureAnimAssets(_spell) : null;
-      _frames = getCureTargetFrames(_spell, _b);
+      const _b = getSpellAnim(pvpSt.pvpMagicSpellId);
+      _frames = (_b && _b.kind === 'portrait-2frame') ? _b.frames : null;
     }
     if (!(_frames && _frames.length === 2)) _frames = bsc.cureSparkleFrames;
     if (_frames && _frames.length === 2) {
@@ -1055,15 +1056,19 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   // the screen).
   const isCastState = bs === 'pvp-enemy-magic-cast' || bs === 'pvp-enemy-magic-hit';
   if (isCastState && pvpSt.pvpMagicCasterCellIdx === idx) {
-    const spell = SPELLS.get(pvpSt.pvpMagicSpellId);
-    const cureAnim = spell ? getCureAnimAssets(spell) : null;
-    if (cureAnim && cureAnim.flameFrames.length === 5) {
+    // PVP enemy caster — pick cast asset by THEIR job, not by spell.
+    const _opp = pvpSt.pvpMagicCasterCellIdx === 0
+      ? pvpSt.pvpOpponent
+      : pvpSt.pvpEnemyAllies[pvpSt.pvpMagicCasterCellIdx - 1];
+    const castKey = _opp ? jobToCastKey(_opp.jobIdx) : null;
+    const castAsset = castKey ? getCastAsset(castKey) : null;
+    if (castAsset && castAsset.flameFrames.length === 5) {
       const castDur = PVP_MAGIC_CAST_MS;
       const elapsed = bs === 'pvp-enemy-magic-cast'
         ? Math.min(battleSt.battleTimer, castDur)
         : castDur;
-      // Stars rotate around the body head/torso during the cast phase only.
-      if (bs === 'pvp-enemy-magic-cast' && cureAnim.starTile) {
+      // Stars: WM only. BM has null starTile.
+      if (bs === 'pvp-enemy-magic-cast' && castAsset.starTile) {
         const cx = sprX + 8, cy = sprY + 8;
         const r = 15;
         const N = 8;
@@ -1072,15 +1077,17 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
           const a = (s / N) * Math.PI * 2 + rotRad - Math.PI / 2;
           const stx = Math.round(cx + Math.cos(a) * r - 4);
           const sty = Math.round(cy + Math.sin(a) * r - 4);
-          ui.ctx.drawImage(cureAnim.starTile, stx, sty);
+          ui.ctx.drawImage(castAsset.starTile, stx, sty);
         }
       }
-      // Flame: pulses 4 sizes during cast. Drawn RIGHT of the body — mirror of
-      // the ally side's `ppx - 16` (which is left of the right-side ally).
+      // Flame: per-job size cycle. Mirrored to the RIGHT of the body since the
+      // PVP enemy faces left toward the player; offset is the asset's own
+      // flameDx negated.
       if (bs === 'pvp-enemy-magic-cast') {
-        const flameIdx = getCureFlameFrameIdx(elapsed);
+        const flameIdx = getCastFlameFrameIdx(elapsed, castKey);
         if (flameIdx >= 0) {
-          ui.ctx.drawImage(cureAnim.flameFrames[flameIdx], sprX + 16, sprY + 5);
+          ui.ctx.drawImage(castAsset.flameFrames[flameIdx],
+                           sprX - castAsset.flameDx, sprY + castAsset.flameDy);
         }
       }
     }

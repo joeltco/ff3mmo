@@ -2,6 +2,26 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.90 — 2026-05-07
+
+### Magic system refactor: cast / projectile / spell-anim
+
+Per the architectural rule the user has restated across the v1.7.49 / v1.7.87 / v1.7.88 / v1.7.89 disasters, magic visuals are now decomposed by anatomical part, not by spell. Three modules, no more:
+
+- **`src/cast-anim.js`** — caster-side flame ring, dispatched by `jobToCastKey(jobIdx)`. WM (jobIdx 3, 5) and BM (jobIdx 4) carry distinct tile bytes (BM extracted from REC OAM 2026-05-07 f9627 frames 0-43, group at origin (176, 41) — the actual outer ring `$49/$4A/$4F/$50` + middle ring `$4B-$4E` + inner pulse cycle `$51/$52/$54/$55/$56/$57`). Single palette per job — the prior per-school palette swap (Cure blue / Poisona magenta / etc.) was the wrong axis of decomposition and is dropped. Phase timing constants `CAST_PHASE_MS`, `CAST_T_LUNGE/CAST/HEAL/RETURN`, `CAST_TOTAL_MS` (renamed from `CURE_*`).
+- **`src/projectile-anim.js`** — unchanged. Already correctly modeled the throw as a shared bitmap with per-school palette.
+- **`src/spell-anim.js`** — per-spell on-target effects, registry keyed by spell ID. Cure (`0x34`) sparkle, Poisona (`0x35`) target frames, Fire (`0x31`) impact burst, Sight (`0x36`) explicitly null. Fire impact bytes are the real `$49-$52` 16×40 vertical flame from REC OAM f9627 group at origin (40, 104) frames 75-106, palette SP3 `[0x0F, 0x16, 0x27, 0x30]` (red/orange/white). HFLIP-toggle frame B is captured behavior. Items (Cure Potion, Antidote, etc.) dispatch through `getSpellAnimForItem(itemId)` via `item.animSpellId`.
+
+**Fire — finally correct.** Prior versions shipped digit-tile bytes (`$59`/`$5C` from the (32, 122) damage-number popup, palette `[0x0F, 0x0F, 0x25, 0x2B]` = `DMG_NUM_PAL`) as the Fire impact. Three rounds of Claude misreading the dump's group-zero as the impact when it was actually the damage-number; the real impact is group at (40, 104). The `fire-anim.js` module is deleted; its bytes were wrong from the start.
+
+**BM cast — finally correct bytes.** `cure-anim.js` had a `fire` palette key that recolored WM cast tile bytes red. The bytes were wrong (BM cast bytes differ from WM cast bytes per CHR-bank reload between phases). BM cast now renders its own captured ring around the BM portrait, no longer a recolored WM flame.
+
+**Deleted:** `src/cure-anim.js`, `src/fire-anim.js`. Both were architectural dead-ends: `cure-anim.js` mixed WM cast (job concern) with on-target sparkles (spell concern) with item-spell lookups (cross-cutting); `fire-anim.js` was per-spell which is the wrong axis. Their content moved to the right modules.
+
+**Render dispatch sites updated** (~9): `battle-drawing.js` (player cast flame, player self-target sparkle, ally-cast on player target, player-cast on enemy target with throw split, ally-cast caster flame), `pvp.js` (PVP enemy-cast on player target, PVP enemy caster flame — opponent's job drives the cast asset, no more spell-driven dispatch), `hud-drawing.js` (pause-menu target sparkle), `spell-cast.js` (timing imports renamed), `boot.js` + `battle-sprite-cache.js` (init plumbing). The `bsc.cureFlameFrames` / `bsc.cureStarTile` / `bsc.cureHealSparkleFrame` aliases were dead and have been removed; `bsc.cureSparkleFrames` (legacy 4-corner mirror from `sprite-init.js`) is kept as the last-resort fallback when `getSpellAnim` returns null for an item without a captured animation.
+
+Per memory `feedback_ff3mmo_deploy_smoke_test.md`: needs headless smoke before deploy. The architecture is sound; the bytes are from the dump; render-site syntax checks clean. Visual correctness in-browser is the next gate.
+
 ## 1.7.89 — 2026-05-07
 
 ### Magic system: Claude Code is incapable (doc-only release)

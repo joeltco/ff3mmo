@@ -11,7 +11,7 @@
 //
 // This module owns the throw/delivery phase only — NOT the on-target spell
 // animation. After the throw lands the caller hands off to the per-spell impact
-// (sight = battle msg, fire = fire-anim flame, etc.).
+// in spell-anim.js (sight = battle msg, fire = spell-anim flame burst, etc.).
 
 import { NES_SYSTEM_PALETTE } from './tile-decoder.js';
 
@@ -72,7 +72,7 @@ export function initProjectile() {
 
 // Pick the projectile palette key for a spell. Returns null if the spell
 // doesn't use a thrown projectile (e.g., recovery/cure_status — those land
-// straight on the target via cure-anim's heal sparkle).
+// straight on the target via spell-anim's portrait sparkle).
 export function getProjectilePalKey(spell) {
   if (!spell) return null;
   if (spell.target === 'sight') return 'sight';

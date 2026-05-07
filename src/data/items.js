@@ -195,10 +195,10 @@ export const ITEMS = new Map([
   // FF3 NES dispatches consumables to white-magic spells (per rpgclassics item
   // reference). `animSpellId` lets render paths look up the on-target sparkle
   // animation via SPELLS — no per-item hard-coding. Capture an animation, add
-  // the spell ID to `CAPTURED_TARGET_SPELLS` in cure-anim.js, and every item
-  // that references it picks up the new frames automatically. Items without
-  // `animSpellId` (Elixir, Echo Herbs) have no spell mapping in NES — they
-  // fall back to the recovery sparkle placeholder.
+  // an entry to spell-anim.js's `_bySpellId` registry keyed by the spell ID,
+  // and every item that references it picks up the new frames automatically.
+  // Items without `animSpellId` (Elixir, Echo Herbs) have no spell mapping in
+  // NES — they fall back to the legacy 4-corner Cure sparkle placeholder.
   [0xa6, { type: 'consumable', price:   150, effect: 'heal', power: 50, animSpellId: 0x34 }],         // Potion → Cure
   [0xa7, { type: 'consumable', price:  1200, effect: 'heal', power: 500, animSpellId: 0x26 }],        // HiPotion → Cura (Cure2)
   [0xa8, { type: 'consumable', price:  3000, effect: 'full_heal' }],                                   // Elixir (no spell)
