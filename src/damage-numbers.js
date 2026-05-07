@@ -45,8 +45,8 @@ export function createHeal(value)       { return { value, timer: 0 }; }
 export function createHealIdx(value, index) { return { value, timer: 0, index }; }
 export function createAllyHeal(value)   { return { value, timer: 0, heal: true }; }
 
-export function setSwDmgNum(tidx, value) {
-  swDmgNums[tidx] = { value, timer: 0 };
+export function setSwDmgNum(tidx, value, opts = {}) {
+  swDmgNums[tidx] = { value, timer: 0, miss: !!opts.miss };
 }
 
 // ── Reset (called at battle start) ─────────────────────────────────────────

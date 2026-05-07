@@ -8,7 +8,7 @@ import { battleSt, getEnemyHP, setEnemyHP, BATTLE_SHAKE_MS } from './battle-stat
 import { ps } from './player-stats.js';
 import { inputSt } from './input-handler.js';
 import { SFX, playSFX } from './music.js';
-import { setPlayerHealNum, getAllyDamageNums, setEnemyDmgNum, setEnemyHealNum, setSwDmgNum,
+import { setPlayerHealNum, setPlayerDamageNum, getAllyDamageNums, setEnemyDmgNum, setEnemyHealNum, setSwDmgNum,
          tickHealNums, clearHealNums } from './damage-numbers.js';
 import { SPELLS, getSpellMPCost, isMultiTargetSpell } from './data/spells.js';
 import { STATUS, removeStatus } from './status-effects.js';
@@ -162,11 +162,11 @@ function _getEnemyAt(idx) {
 
 function _setEnemyDmg(idx, value, miss) {
   if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
-    setSwDmgNum(idx, miss ? 0 : value);
+    setSwDmgNum(idx, miss ? 0 : value, { miss: !!miss });
     return;
   }
   if (pvpSt.isPVPBattle) {
-    setSwDmgNum(idx, miss ? 0 : value);
+    setSwDmgNum(idx, miss ? 0 : value, { miss: !!miss });
     return;
   }
   setEnemyDmgNum(miss ? { miss: true, timer: 0 } : { value, timer: 0 });
@@ -177,6 +177,17 @@ function _applyEnemyEffect(idx, spell) {
   const isPVP = pvpSt.isPVPBattle;
   const isBoss = !isEncounter && !isPVP;
   const mon = isBoss ? null : _getEnemyAt(idx);
+
+  // Sight is a no-op against enemies — the spell's effect is the visual
+  // (cast anim + projectile flight). Renders MISS as the "ineffective" tag.
+  // Impact SFX matches the captured `$7F49 = $40` queue residual seen in
+  // the REC OAM dump (frame 39, ~650ms after capture start) — same convention
+  // Cure / Poisona use at their heal moment, so SFX.CURE is the right pick.
+  if (spell.target === 'sight') {
+    _setEnemyDmg(idx, 0, true);
+    playSFX(SFX.CURE);
+    return;
+  }
 
   // Recovery spell → undead damages, non-undead heals (NES default; player
   // chose to spend MP on a non-undead enemy, so they get healed).
@@ -249,6 +260,18 @@ function _applySpellEffect(target) {
     return;
   }
 
+  // Sight on a friendly target — picker default is player-side, so allow it
+  // and just show a MISS tag on the chosen ally. No HP / status change.
+  if (spell.target === 'sight') {
+    if (target.type === 'player') {
+      setPlayerDamageNum({ miss: true, timer: 0 });
+    } else {
+      getAllyDamageNums()[target.index] = { miss: true, timer: 0 };
+    }
+    playSFX(SFX.CURE);
+    return;
+  }
+
   // Friendly target paths (player / ally)
   const isCureStatus = spell.target === 'cure_status';
   const isHeal = spell.element === 'recovery';
@@ -298,7 +321,13 @@ function _isCureAnimSpell() {
   if (!spell) return false;
   return spell.element === 'recovery'
       || spell.target === 'cure_status'
-      || spell.target === 'revive';
+      || spell.target === 'revive'
+      || spell.target === 'sight';
+}
+
+export function isSightSpell(spellId) {
+  const s = SPELLS.get(spellId);
+  return !!(s && s.target === 'sight');
 }
 
 // Drives 'magic-cast' (windup) and 'magic-hit' (anim+effect) states.

@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.80 — 2026-05-07
+
+### Sight (white magic Lv1) wired up
+
+Third Lv1 white-magic spell now ships. Cast plays the same flame buildup as Cure / Poisona but in the FF3J Sight palette `[0x0F, 0x29, 0x31, 0x30]` (green / light cyan / white) per the REC OAM capture; after the cast pose, the captured `$58` projectile sprite flies from the caster portrait to the target, V-flipping every frame; on impact the target shows the green MISS sprite as the "ineffective" tag and `SFX.CURE` fires (same `$7F49 = $40` queue residual Cure / Poisona use at their heal moment, confirmed by a third REC OAM dump that caught the trigger transition idle → `$40` at frame 39). Sight has no gameplay effect yet — placeholder until the overworld minimap-reveal system exists.
+
+- `src/data/spells.js`: Sight (`0x36`) added to `SPELL_MP_COST` (2 MP) and `SPELL_BUY_PRICE` (100 gil).
+- `src/data/shops.js`: `ur_magic` now sells Cure, Poisona, Sight.
+- `src/player-stats.js`: White Mage starting kit now Cure + Poisona + Sight (deferred comment removed).
+- `src/cure-anim.js`: added `'sight'` palette to `WHITE_MAGIC_PAL`; `getCureAnimAssets` routes `target === 'sight'` to it. Asset bundle is decoded once at init like the others.
+- `src/sight-anim.js` (new): owns the `$58` projectile tile, init builds normal + V-flipped 8×8 canvases, `getSightProjectilePos(sx, sy, tx, ty, t01)` interpolates caster→target over the first 60 % of the heal window then holds at endpoint.
+- `src/spell-cast.js`: `_isCureAnimSpell` includes `target === 'sight'` so Sight gets the white-magic flame timing. Both `_applyEnemyEffect` and `_applySpellEffect` tag the target with a MISS and fire `SFX.CURE` for the impact, then early-return.
+- `src/damage-numbers.js`: `setSwDmgNum(tidx, value, opts)` now accepts `{ miss }`. Encounter / PVP draw paths in `battle-drawing.js` render the green MISS sprite when `dn.miss` instead of the value.
+- `src/battle-drawing.js`: `_drawPlayerSpellTargetSparkleOnEnemy` skips the on-target sparkle for Sight and instead draws the projectile at the interpolated position.
+- `src/boot.js`: calls `initSightProjectile()` alongside the other tile inits.
+
 ## 1.7.79 — 2026-05-07
 
 ### Docs: design-notes for multi-target Cure + battle-digit sprites

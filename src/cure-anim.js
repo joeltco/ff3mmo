@@ -37,6 +37,7 @@ const WHITE_MAGIC_PAL = {
   recovery:    [0x0F, 0x12, 0x22, 0x31],  // Cure family — blue / cyan / white
   cure_status: [0x0F, 0x15, 0x27, 0x30],  // Poisona / Bndna / Esuna / Stone — magenta / orange / white (REC OAM 2026-05-05)
   revive:      [0x0F, 0x15, 0x27, 0x30],  // Arise / Raise — placeholder; same as cure_status until captured
+  sight:       [0x0F, 0x29, 0x31, 0x30],  // Sight — green / light cyan / white (REC OAM 2026-05-07)
 };
 
 // ── Build-up phase tiles ($4A-$57 flame + $49 small star) ──────────────────
@@ -244,6 +245,7 @@ export function getCureAnimAssets(spell) {
   if (!spell || !_animsByKey) return null;
   const key = spell.target === 'cure_status' ? 'cure_status'
             : spell.target === 'revive'      ? 'revive'
+            : spell.target === 'sight'       ? 'sight'
             : spell.element === 'recovery'   ? 'recovery'
             : null;
   return key ? _animsByKey[key] : null;

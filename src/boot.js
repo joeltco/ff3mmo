@@ -21,6 +21,7 @@ import { initCursorTile, initScrollArrows, initAdamantoise,
          initLoadingScreenFadeFrames } from './sprite-init.js';
 import { initFakePlayerSprites } from './fake-player-sprites.js';
 import { initMissSprite } from './damage-numbers.js';
+import { initSightProjectile } from './sight-anim.js';
 
 const TITLE_FADE_MAX = 4;
 
@@ -58,6 +59,7 @@ export function initSpriteAssets(rom) {
 
   initMonsterSprites();
   initMissSprite();
+  initSightProjectile();
   initPlayerStats(rom);
   initExpTable(rom);
 

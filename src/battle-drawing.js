@@ -33,7 +33,8 @@ import { inputSt } from './input-handler.js';
 import { bsc, getSlashFramesForWeapon } from './battle-sprite-cache.js';
 import { drawSlashOverlay, SLASH_FRAME_MS, shouldDrawSlash } from './slash-effects.js';
 import { getCureAnimElapsedMs, getCurrentSpellId, getSpellTargets, getSpellHitIdx } from './spell-cast.js';
-import { getCureFlameFrameIdx, shouldDrawStars, shouldDrawHealSparkle, getCureAnimAssets, getCureTargetFrames, getItemSparkleFrames } from './cure-anim.js';
+import { getCureFlameFrameIdx, shouldDrawStars, shouldDrawHealSparkle, getCureAnimAssets, getCureTargetFrames, getItemSparkleFrames, CURE_T_HEAL, CURE_PHASE_MS } from './cure-anim.js';
+import { getSightProjectileTile, getSightProjectilePos } from './sight-anim.js';
 import { hudSt } from './hud-state.js';
 import { fakePlayerPortraits, fakePlayerVictoryPortraits, fakePlayerHitPortraits,
          fakePlayerKneelPortraits, fakePlayerAttackPortraits, fakePlayerAttackLPortraits,
@@ -185,10 +186,13 @@ function drawSWDamageNumbers() {
   // Fires for both 'sw-hit' (battle items / Southwind) and 'magic-hit' (player-
   // cast spell damage on encounter/PVP enemies).
   if (battleSt.battleState !== 'sw-hit' && battleSt.battleState !== 'magic-hit') return;
+  const mc = getMissCanvas();
   if (pvpSt.isPVPBattle) {
     for (const [k, dn] of Object.entries(getSwDmgNums())) {
       const { x: cx, y: cy } = _pvpEnemyCellCenter(parseInt(k));
-      _drawBattleNum(cx + 8, _dmgBounceY(cy + 12, dn.timer), dn.value, DMG_NUM_PAL);
+      const by = _dmgBounceY(cy + 12, dn.timer);
+      if (dn.miss && mc) ui.ctx.drawImage(mc, cx + 8 - 8, by - 4);
+      else _drawBattleNum(cx + 8, by, dn.value, DMG_NUM_PAL);
     }
     return;
   }
@@ -199,14 +203,15 @@ function drawSWDamageNumbers() {
       if (idx >= swGridPos.length) continue;
       const tp = swGridPos[idx];
       const m = battleSt.encounterMonsters[idx];
-      const mc = getMonsterCanvas(m?.monsterId, battleSt.goblinBattleCanvas);
+      const mcv = getMonsterCanvas(m?.monsterId, battleSt.goblinBattleCanvas);
       const rH = idx < 2 ? (row0H || sprH) : (row1H || sprH);
-      const mh = mc ? mc.height : rH;
-      const mw = mc ? mc.width : 32;
+      const mh = mcv ? mcv.height : rH;
+      const mw = mcv ? mcv.width : 32;
       const bx = tp.x + mw - 4;
       const baseY = tp.y + rH - 8;
       const by = _dmgBounceY(baseY, dn.timer);
-      _drawBattleNum(bx, by, dn.value, DMG_NUM_PAL);
+      if (dn.miss && mc) ui.ctx.drawImage(mc, bx - 8, by - 4);
+      else _drawBattleNum(bx, by, dn.value, DMG_NUM_PAL);
     }
   } else {
     // Boss — damage number on bottom-right of boss sprite
@@ -216,7 +221,9 @@ function drawSWDamageNumbers() {
     for (const [k, dn] of Object.entries(getSwDmgNums())) {
       const bx = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2) + Math.floor(bw / 2) - 4;
       const baseY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2) + Math.floor(bh / 2) - 8;
-      _drawBattleNum(bx, _dmgBounceY(baseY, dn.timer), dn.value, DMG_NUM_PAL);
+      const by = _dmgBounceY(baseY, dn.timer);
+      if (dn.miss && mc) ui.ctx.drawImage(mc, bx - 8, by - 4);
+      else _drawBattleNum(bx, by, dn.value, DMG_NUM_PAL);
     }
   }
 }
@@ -607,10 +614,10 @@ function _drawPlayerSpellTargetSparkleOnEnemy() {
   if (cureMs < 0 || !shouldDrawHealSparkle(cureMs)) return;
   const spell = SPELLS.get(getCurrentSpellId());
   if (!spell) return;
-  const cureAnim = getCureAnimAssets(spell);
-  if (!cureAnim) return;
-  const frames = getCureTargetFrames(spell, cureAnim);
-  if (!frames || frames.length !== 2) return;
+  const isSight = spell.target === 'sight';
+  const cureAnim = !isSight ? getCureAnimAssets(spell) : null;
+  const frames = !isSight ? getCureTargetFrames(spell, cureAnim) : null;
+  if (!isSight && (!frames || frames.length !== 2)) return;
   const fi = Math.floor(battleSt.battleTimer / 67) & 1;
 
   // Enemy sprite center — encounter / PVP / boss differ.
@@ -636,6 +643,18 @@ function _drawPlayerSpellTargetSparkleOnEnemy() {
     const bh = bc ? bc.height : 48;
     cx = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2);
     cy = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
+  }
+  if (isSight) {
+    // Projectile flies caster-portrait → target enemy. Caster is the player
+    // portrait at (HUD_RIGHT_X+8, HUD_VIEW_Y+8); add 8 to center on its 16×16.
+    const tile = getSightProjectileTile();
+    if (!tile) return;
+    const sx = HUD_RIGHT_X + 8 + 8;
+    const sy = HUD_VIEW_Y + 8 + 8;
+    const t01 = (cureMs - CURE_T_HEAL) / CURE_PHASE_MS.heal;
+    const pos = getSightProjectilePos(sx, sy, cx, cy, t01);
+    if (pos.drawn) ui.ctx.drawImage(tile, Math.round(pos.x - 4), Math.round(pos.y - 4));
+    return;
   }
   ui.ctx.drawImage(frames[fi], cx - 8, cy - 8);
 }
