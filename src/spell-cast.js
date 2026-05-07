@@ -180,12 +180,11 @@ function _applyEnemyEffect(idx, spell) {
 
   // Sight is a no-op against enemies — the spell's effect is the visual
   // (cast anim + projectile flight). Renders MISS as the "ineffective" tag.
-  // Impact SFX matches the captured `$7F49 = $40` queue residual seen in
-  // the REC OAM dump (frame 39, ~650ms after capture start) — same convention
-  // Cure / Poisona use at their heal moment, so SFX.CURE is the right pick.
+  // Impact SFX is `SFX.SIGHT` (NSF track $81 = SFX $40 + $41) per the REC
+  // OAM capture's idle→$40 trigger at frame 39 of the f5887 dump.
   if (spell.target === 'sight') {
     _setEnemyDmg(idx, 0, true);
-    playSFX(SFX.CURE);
+    playSFX(SFX.SIGHT);
     return;
   }
 
@@ -260,15 +259,16 @@ function _applySpellEffect(target) {
     return;
   }
 
-  // Sight on a friendly target — picker default is player-side, so allow it
-  // and just show a MISS tag on the chosen ally. No HP / status change.
+  // Sight on a friendly target — picker now defaults to enemy, but the user
+  // can still navigate Right back to the player side. Show a MISS tag on the
+  // chosen ally to indicate the spell did nothing. SFX matches the enemy path.
   if (spell.target === 'sight') {
     if (target.type === 'player') {
       setPlayerDamageNum({ miss: true, timer: 0 });
     } else {
       getAllyDamageNums()[target.index] = { miss: true, timer: 0 };
     }
-    playSFX(SFX.CURE);
+    playSFX(SFX.SIGHT);
     return;
   }
 

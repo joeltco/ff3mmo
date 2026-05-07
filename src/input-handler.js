@@ -393,8 +393,21 @@ function _battleInputMagicSelect() {
     const cost = getSpellMPCost(spellId);
     if (ps.mp < cost) { playSFX(SFX.ERROR); return; }
     playSFX(SFX.CONFIRM);
-    inputSt.itemTargetType = 'player';
-    inputSt.itemTargetIndex = 0;
+    // Default-target side per spell semantics. Heal / status-cure white magic
+    // defaults to player so the common case is one Z-press on self; Sight
+    // (scan) defaults to enemy because that's almost always who you want to
+    // inspect. Other targets (Right) still reach all the cells.
+    if (spell.target === 'sight') {
+      let firstLive = 0;
+      for (let i = 0; i < _itemTargetCnt(); i++) {
+        if (_itemTargetAlive(i)) { firstLive = i; break; }
+      }
+      inputSt.itemTargetType = 'enemy';
+      inputSt.itemTargetIndex = firstLive;
+    } else {
+      inputSt.itemTargetType = 'player';
+      inputSt.itemTargetIndex = 0;
+    }
     inputSt.itemTargetAllyIndex = -1;
     inputSt.itemTargetMode = 'single';
     inputSt.playerActionPending = { command: 'magic', spellId };
@@ -883,7 +896,7 @@ function _applyPauseSpellUse(rosterTargets) {
     } else {
       pauseSt.healNum = { value: 0, timer: 0 };
     }
-    playSFX(SFX.CURE);
+    playSFX(SFX.SIGHT);
     pauseSt.state = 'inv-heal'; pauseSt.timer = 0;
     pauseSt.useSpellId = 0;
     saveSlotsToDB();

@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.82 — 2026-05-07
+
+### Sight: enemy-default targeting + dedicated impact SFX
+
+- **`src/input-handler.js` battle picker** — pressing Z on Sight now jumps the cursor to the first living enemy instead of the player, since you're scanning, not healing. Other white-magic spells keep player-default. Right still navigates back to the player side.
+- **`src/music.js` SFX table** — new entry `SFX.SIGHT = 0x81` (NSF track $81 = SFX $40 + $41), matching the captured `$7F49 = $40` queue residual seen in the f5887 REC OAM dump (idle → $40 transition at frame 39, ~650 ms after capture start). v1.7.80 fired `SFX.CURE` here based on a stale `design-notes.md` claim that Cure also leaves $40 — that claim was wrong, the resulting cure-chime on Sight impact was wrong.
+- **All four Sight effect paths** (`spell-cast.js` enemy + friendly, `battle-ally.js`, `pvp.js`, `input-handler.js` pause-cast) now play `SFX.SIGHT` instead of `SFX.CURE`. The pause-menu spell-list block still plays `SFX.ERROR` since that path is "you can't cast this from here," not "you cast it."
+
 ## 1.7.81 — 2026-05-07
 
 ### Sight: ally / PVP / pause-menu safety guards (open-beta hardening)

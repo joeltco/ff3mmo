@@ -44,6 +44,7 @@ export const SFX = {
   TREASURE:     0x80,  // SFX $3F + $41 — treasure chest open (3F/E982: LDA #$BF → $7F49)
   RUN_AWAY:     0x74,  // SFX $33 + $41 — escape success (ROM writes $B3 to $7F49 at PC=$BCBC)
   SW_HIT:       0x5D,  // SFX $1C + $41 — SouthWind ice hit per enemy (from battle-item-trace)
+  SIGHT:        0x81,  // SFX $40 + $41 — Sight scan/projectile impact (REC OAM 2026-05-07: idle→$40 transition at frame 39 of f5887 capture, ~650ms after capture start)
 };
 
 // FF1 track indices (0-based, for ff1 NSF)

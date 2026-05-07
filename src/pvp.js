@@ -557,9 +557,10 @@ function _applyPVPEnemyMagicEffect() {
   const target = _pvpEnemyByCellIdx(pvpSt.pvpMagicTargetCellIdx);
   if (!target) return;
   // 0x36 Sight — no gameplay effect; defensive guard against the Cure
-  // fall-through below if a remote PVP opponent casts Sight from a synced state.
+  // fall-through below if a remote PVP opponent casts Sight from a synced
+  // state. Impact SFX matches the player-cast path.
   if (pvpSt.pvpMagicSpellId === 0x36) {
-    playSFX(SFX.CURE);
+    playSFX(SFX.SIGHT);
     return;
   }
   if (pvpSt.pvpMagicSpellId === 0x35) {
