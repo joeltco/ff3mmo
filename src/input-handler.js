@@ -1006,8 +1006,9 @@ function _applyPauseItemUse(item, rosterTargets) {
       const flag = flagMap[item.cures];
       if (flag) removeStatus(ps.status, flag);
     }
-    removeItem(pauseSt.useItemId); playSFX(SFX.CURE);
-    pauseSt.healNum = { value: 0, timer: 0 };
+    const itemId = pauseSt.useItemId;
+    removeItem(itemId); playSFX(SFX.CURE);
+    pauseSt.healNum = { value: 0, timer: 0, itemId };
     pauseSt.state = 'inv-heal'; pauseSt.timer = 0;
     saveSlotsToDB();
     return;
@@ -1015,18 +1016,19 @@ function _applyPauseItemUse(item, rosterTargets) {
 
   if (eff !== 'heal' && eff !== 'full_heal' && eff !== 'restore_hp') { playSFX(SFX.ERROR); return; }
   const healPower = eff === 'full_heal' ? 9999 : (item.power || item.value || 50);
+  const itemId = pauseSt.useItemId;
   if (pauseSt.invAllyTarget >= 0) {
     const rp = rosterTargets[pauseSt.invAllyTarget];
     if (!rp) { playSFX(SFX.ERROR); return; }
     const heal = Math.min(healPower, rp.maxHP - rp.hp);
-    rp.hp += heal; removeItem(pauseSt.useItemId); playSFX(SFX.CURE);
-    pauseSt.healNum = { value: heal, timer: 0, rosterIdx: pauseSt.invAllyTarget };
+    rp.hp += heal; removeItem(itemId); playSFX(SFX.CURE);
+    pauseSt.healNum = { value: heal, timer: 0, rosterIdx: pauseSt.invAllyTarget, itemId };
     pauseSt.state = 'inv-heal'; pauseSt.timer = 0;
     saveSlotsToDB();
   } else {
     const heal = Math.min(healPower, ps.stats.maxHP - ps.hp);
-    ps.hp += heal; removeItem(pauseSt.useItemId); playSFX(SFX.CURE);
-    pauseSt.healNum = { value: heal, timer: 0 };
+    ps.hp += heal; removeItem(itemId); playSFX(SFX.CURE);
+    pauseSt.healNum = { value: heal, timer: 0, itemId };
     pauseSt.state = 'inv-heal'; pauseSt.timer = 0;
     saveSlotsToDB();
   }

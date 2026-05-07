@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.86 — 2026-05-07
+
+### Pause-menu sparkle fully routed through cure-anim (drops 4-corner mirror)
+
+The pause-menu Cure/Poisona/Potion/Antidote sparkle path was running on a parallel legacy implementation (`bsc.cureSparkleFrames` from `sprite-init.js`, drawn as a 4-corner-mirrored blue Cure tile) that ignored the captured per-school assets used in battle. v1.7.85 partially fixed it for the spell path; this version finishes the job:
+
+- New `_pauseTargetFrames()` helper in `hud-drawing.js` is the single source: reads `pauseSt.healNum.spellId` for magic casts, falls back to `pauseSt.healNum.itemId` for consumables (which routes through `getItemSparkleFrames(itemId)` — the existing battle-side helper that looks up `ITEMS.get(itemId).animSpellId` and resolves the right per-school frames via `cure-anim.js`).
+- `_drawCureSparkle` (self-target portrait) and `drawRosterSparkle` (roster row) both call `_pauseTargetFrames()` and draw a single 16×16 frame on the portrait — matching the battle Cure / Cure-Potion render exactly.
+- `_applyPauseItemUse` stashes `itemId` on every heal-num (Cure Potion, HiPotion, full-heal items, Antidote, Eye Drops, etc.) so the render can resolve the correct frames.
+- Drops the 4-corner mirror render entirely from the pause-menu path. `bsc.cureSparkleFrames` is still built (battle-drawing.js / pvp.js use it as a fallback), but pause-menu no longer touches it.
+
+Net effect: Cure Potion and Cure spell render the same blue centered sparkle. Antidote and Poisona spell render the same magenta `poisonaTargetFrames`. No more "Cure Potion looks like 4 tiles" or "Antidote shows blue heal" mismatch.
+
 ## 1.7.85 — 2026-05-07
 
 ### Pause-menu Poisona renders the correct (magenta) target effect

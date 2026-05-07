@@ -15,7 +15,26 @@ import { HEAL_NUM_PAL, drawBattleNum } from './damage-numbers.js';
 import { inputSt } from './input-handler.js';
 import { bsc } from './battle-sprite-cache.js';
 import { SPELLS } from './data/spells.js';
-import { getCureAnimAssets, getCureTargetFrames } from './cure-anim.js';
+import { getCureAnimAssets, getCureTargetFrames, getItemSparkleFrames } from './cure-anim.js';
+
+// Single source for "what target frames does this pause-menu cast use?" —
+// dispatches by stash on `pauseSt.healNum`: spellId for magic casts, itemId
+// for consumables. Items route through `getItemSparkleFrames` which already
+// looks up `ITEMS.get(itemId).animSpellId` and returns the correct
+// per-school frames (Cure → recovery sparkle, Antidote → poisonaTargetFrames,
+// etc.). No more `bsc.cureSparkleFrames` 4-corner mirror — the whole pause
+// path now matches the battle path (single 16×16 target frame on portrait).
+function _pauseTargetFrames() {
+  const hn = pauseSt.healNum;
+  if (!hn) return null;
+  if (hn.spellId != null) {
+    const spell = SPELLS.get(hn.spellId);
+    const bundle = spell ? getCureAnimAssets(spell) : null;
+    return bundle ? getCureTargetFrames(spell, bundle) : null;
+  }
+  if (hn.itemId != null) return getItemSparkleFrames(hn.itemId);
+  return null;
+}
 import { hudSt, HUD_HPLV_STEP_MS } from './hud-state.js';
 import { titleSt } from './title-screen.js';
 import { ui } from './ui-state.js';
@@ -230,28 +249,12 @@ function _drawPortraitImage(px, py, nfPortrait, isPauseHeal, infoFadeStep) {
 }
 
 function _drawCureSparkle(px, py, isPauseHeal) {
-  const ctx = ui.ctx;
   if (!isPauseHeal) return;
   if (pauseSt.healNum && pauseSt.healNum.rosterIdx >= 0) return;
-  // Per-spell target effect: Poisona / Bndna / Esuna / Stone use the magenta
-  // 16×16 poisonaTargetFrames drawn ON the portrait. Cure (recovery) keeps
-  // the 4-corner mirrored blue sparkle. Items go through animSpellId so a
-  // future pause-menu item-cast lands here too.
-  const spellId = pauseSt.healNum?.spellId;
-  const spell = spellId != null ? SPELLS.get(spellId) : null;
-  const bundle = spell ? getCureAnimAssets(spell) : null;
-  const tgtFrames = bundle ? getCureTargetFrames(spell, bundle) : null;
+  const frames = _pauseTargetFrames();
+  if (!frames || frames.length !== 2) return;
   const fi = Math.floor(pauseSt.timer / 67) & 1;
-  if (spell && spell.target === 'cure_status' && tgtFrames && tgtFrames.length === 2) {
-    ctx.drawImage(tgtFrames[fi], px, py);
-    return;
-  }
-  if (bsc.cureSparkleFrames.length !== 2) return;
-  const frame = bsc.cureSparkleFrames[fi];
-  ctx.drawImage(frame, px - 8, py - 7);
-  ctx.save(); ctx.scale(-1,  1); ctx.drawImage(frame, -(px + 23),  py - 7);  ctx.restore();
-  ctx.save(); ctx.scale( 1, -1); ctx.drawImage(frame,   px - 8,  -(py + 24)); ctx.restore();
-  ctx.save(); ctx.scale(-1, -1); ctx.drawImage(frame, -(px + 23), -(py + 24)); ctx.restore();
+  ui.ctx.drawImage(frames[fi], px, py);
 }
 
 function _drawPauseHealNum(px, py) {
@@ -352,16 +355,9 @@ export function drawRosterSparkle(panelTop) {
   const px = HUD_RIGHT_X + 8;
   const py = panelTop + visRow * 32 + 8;
   const fi = Math.floor(pauseSt.timer / 67) & 1;
-  // Per-spell target effect (see _drawCureSparkle): Poisona family draws the
-  // magenta 16×16 frame centered on the portrait; Cure keeps the corner sparkle.
-  const spellId = pauseSt.healNum?.spellId;
-  const spell = spellId != null ? SPELLS.get(spellId) : null;
-  const bundle = spell ? getCureAnimAssets(spell) : null;
-  const tgtFrames = bundle ? getCureTargetFrames(spell, bundle) : null;
-  if (spell && spell.target === 'cure_status' && tgtFrames && tgtFrames.length === 2) {
-    ui.ctx.drawImage(tgtFrames[fi], px, py);
-  } else if (bsc.cureSparkleFrames.length === 2) {
-    drawSparkleCorners(bsc.cureSparkleFrames[fi], px, py);
+  const frames = _pauseTargetFrames();
+  if (frames && frames.length === 2) {
+    ui.ctx.drawImage(frames[fi], px, py);
   }
   drawHealNum(px + 8, _dmgBounceY(py + 8, pauseSt.healNum.timer), pauseSt.healNum.value, HEAL_NUM_PAL);
 }
