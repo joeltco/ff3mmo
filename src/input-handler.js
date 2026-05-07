@@ -876,10 +876,10 @@ function _applyPauseSpellUse(rosterTargets) {
       const rp = rosterTargets[pauseSt.invAllyTarget];
       if (!rp) { playSFX(SFX.ERROR); return; }
       if (flag && rp.status) removeStatus(rp.status, flag);
-      pauseSt.healNum = { value: 0, timer: 0, rosterIdx: pauseSt.invAllyTarget };
+      pauseSt.healNum = { value: 0, timer: 0, rosterIdx: pauseSt.invAllyTarget, spellId };
     } else {
       if (flag && ps.status) removeStatus(ps.status, flag);
-      pauseSt.healNum = { value: 0, timer: 0 };
+      pauseSt.healNum = { value: 0, timer: 0, spellId };
     }
     playSFX(SFX.CURE);
     pauseSt.state = 'inv-heal'; pauseSt.timer = 0;
@@ -913,11 +913,11 @@ function _applyPauseSpellUse(rosterTargets) {
     if (!rp) { playSFX(SFX.ERROR); return; }
     const heal = Math.min(amt, rp.maxHP - rp.hp);
     rp.hp += heal;
-    pauseSt.healNum = { value: heal, timer: 0, rosterIdx: pauseSt.invAllyTarget };
+    pauseSt.healNum = { value: heal, timer: 0, rosterIdx: pauseSt.invAllyTarget, spellId };
   } else {
     const heal = Math.min(amt, ps.stats.maxHP - ps.hp);
     ps.hp += heal;
-    pauseSt.healNum = { value: heal, timer: 0 };
+    pauseSt.healNum = { value: heal, timer: 0, spellId };
   }
   playSFX(SFX.CURE);
   pauseSt.state = 'inv-heal'; pauseSt.timer = 0;

@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.85 — 2026-05-07
+
+### Pause-menu Poisona renders the correct (magenta) target effect
+
+Pause-menu spell cast routes through the right per-spell target frames now: `_drawCureSparkle` (self-target portrait) and `drawRosterSparkle` (roster-row portrait) check `pauseSt.healNum.spellId` and pull `getCureTargetFrames(spell, getCureAnimAssets(spell))` to pick the assets. Cure (recovery) keeps the existing 4-corner mirrored blue sparkle; Poisona / Bndna / Esuna / Stone draw the magenta 16×16 `poisonaTargetFrames` centered on the portrait. `_applyPauseSpellUse` stashes `spellId` on the heal-num so the render path can look it up after `pauseSt.useSpellId` is cleared.
+
+Before: any pause-cast played the blue Cure sparkle even for status-cure spells. After: each spell shows its own captured target effect.
+
 ## 1.7.84 — 2026-05-07
 
 ### Spell-cast turn advance gates on battle-message clear
