@@ -192,16 +192,23 @@ export const ITEMS = new Map([
   [0xa2, { type: 'key', price:     0 }],
   [0xa3, { type: 'key', price:     0 }],
   [0xa4, { type: 'key', price:   200 }],
-  [0xa6, { type: 'consumable', price:   150, effect: 'heal', power: 50 }],       // Potion
-  [0xa7, { type: 'consumable', price:  1200, effect: 'heal', power: 500 }],     // HiPotion
-  [0xa8, { type: 'consumable', price:  3000, effect: 'full_heal' }],             // Elixir
-  [0xa9, { type: 'consumable', price:  3000, effect: 'revive', power: 100 }],   // PhoexDown
-  [0xaa, { type: 'consumable', price:   300, effect: 'cure_status', cures: 'petrify' }],  // GoldNeedle
-  [0xab, { type: 'consumable', price:   100, effect: 'cure_status', cures: 'toad' }],     // MaidenKiss
-  [0xac, { type: 'consumable', price:   100, effect: 'cure_status', cures: 'silence' }],  // Echo Herbs
-  [0xad, { type: 'consumable', price:   100, effect: 'cure_status', cures: 'mini' }],     // Mallet
-  [0xae, { type: 'consumable', price:    40, effect: 'cure_status', cures: 'blind' }],    // Eye Drops
-  [0xaf, { type: 'consumable', price:    80, effect: 'cure_status', cures: 'poison' }],   // Antidote
+  // FF3 NES dispatches consumables to white-magic spells (per rpgclassics item
+  // reference). `animSpellId` lets render paths look up the on-target sparkle
+  // animation via SPELLS — no per-item hard-coding. Capture an animation, add
+  // the spell ID to `CAPTURED_TARGET_SPELLS` in cure-anim.js, and every item
+  // that references it picks up the new frames automatically. Items without
+  // `animSpellId` (Elixir, Echo Herbs) have no spell mapping in NES — they
+  // fall back to the recovery sparkle placeholder.
+  [0xa6, { type: 'consumable', price:   150, effect: 'heal', power: 50, animSpellId: 0x34 }],         // Potion → Cure
+  [0xa7, { type: 'consumable', price:  1200, effect: 'heal', power: 500, animSpellId: 0x26 }],        // HiPotion → Cura (Cure2)
+  [0xa8, { type: 'consumable', price:  3000, effect: 'full_heal' }],                                   // Elixir (no spell)
+  [0xa9, { type: 'consumable', price:  3000, effect: 'revive', power: 100, animSpellId: 0x19 }],      // PhoexDown → Raise (Life)
+  [0xaa, { type: 'consumable', price:   300, effect: 'cure_status', cures: 'petrify', animSpellId: 0x12 }], // GoldNeedle → Stona (Soft)
+  [0xab, { type: 'consumable', price:   100, effect: 'cure_status', cures: 'toad',    animSpellId: 0x2e }], // MaidenKiss → Toad
+  [0xac, { type: 'consumable', price:   100, effect: 'cure_status', cures: 'silence' }],              // Echo Herbs (no spell)
+  [0xad, { type: 'consumable', price:   100, effect: 'cure_status', cures: 'mini',    animSpellId: 0x2f }], // Mallet → Mini
+  [0xae, { type: 'consumable', price:    40, effect: 'cure_status', cures: 'blind',   animSpellId: 0x28 }], // Eye Drops → Bndna (Wash)
+  [0xaf, { type: 'consumable', price:    80, effect: 'cure_status', cures: 'poison',  animSpellId: 0x35 }], // Antidote → Poisona (Pure)
   [0xb1, { type: 'battle_item', price:  1000 }],
   [0xb2, { type: 'battle_item', price:  1000 }],
   [0xb3, { type: 'battle_item', price:  1000 }],

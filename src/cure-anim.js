@@ -30,6 +30,8 @@
 
 import { NES_SYSTEM_PALETTE } from './tile-decoder.js';
 import { _makeCanvas16 } from './canvas-utils.js';
+import { ITEMS } from './data/items.js';
+import { SPELLS } from './data/spells.js';
 
 const WHITE_MAGIC_PAL = {
   recovery:    [0x0F, 0x12, 0x22, 0x31],  // Cure family — blue / cyan / white
@@ -312,4 +314,30 @@ export function getCureTargetFrames(spell, animBundle) {
     return animBundle.poisonaTargetFrames;
   }
   return animBundle.sparkleFrames || null;
+}
+
+// ── Item → spell-animation lookup ───────────────────────────────────────────
+// FF3 NES consumables dispatch to white-magic spells (Potion → Cure, Antidote
+// → Poisona, etc.); each item record carries its `animSpellId` declaratively.
+// Render paths call `getItemSparkleFrames(itemId)` and route uniformly through
+// the per-spell animation pipeline — no per-item special-casing.
+//
+// Only spells with on-target frames captured from FF3 NES OAM should be in
+// CAPTURED_TARGET_SPELLS. Items pointing to a non-captured spell (e.g. Mallet
+// → Mini today) return null from this helper and the caller falls back to the
+// recovery sparkle placeholder. To wire up a newly-captured animation: add
+// the spell ID here, no item-record changes needed.
+const CAPTURED_TARGET_SPELLS = new Set([
+  0x34,  // Cure (recovery sparkle, blue)
+  0x35,  // Poisona (poisonaTargetFrames, magenta)
+]);
+
+export function getItemSparkleFrames(itemId) {
+  const itm = itemId != null ? ITEMS.get(itemId) : null;
+  const sid = itm && itm.animSpellId;
+  if (sid == null || !CAPTURED_TARGET_SPELLS.has(sid)) return null;
+  const spell = SPELLS.get(sid);
+  if (!spell) return null;
+  const bundle = getCureAnimAssets(spell);
+  return getCureTargetFrames(spell, bundle);
 }

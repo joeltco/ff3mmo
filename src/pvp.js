@@ -34,7 +34,7 @@ import { _nameToBytes } from './text-utils.js';
 import { queueBattleMsg } from './battle-msg.js';
 import { tickHealNums, clearHealNums } from './damage-numbers.js';
 import { SPELLS } from './data/spells.js';
-import { getCureFlameFrameIdx, getCureAnimAssets, getCureTargetFrames } from './cure-anim.js';
+import { getCureFlameFrameIdx, getCureAnimAssets, getCureTargetFrames, getItemSparkleFrames } from './cure-anim.js';
 import { fakePlayerFullBodyCanvases, fakePlayerHitFullBodyCanvases,
          fakePlayerKnifeRFullBodyCanvases, fakePlayerKnifeLFullBodyCanvases,
          fakePlayerKnifeRFwdFullBodyCanvases, fakePlayerKnifeLFwdFullBodyCanvases,
@@ -116,6 +116,7 @@ export const pvpSt = {
   pvpItemCasterCellIdx:   -1,
   pvpItemTargetCellIdx:   -1,
   pvpItemKind:            null,    // 'potion' | 'antidote'
+  pvpItemId:              -1,      // item ID (drives animation lookup via items.animSpellId)
 };
 
 // ── Shared context ────────────────────────────────────────────────────────────
@@ -178,6 +179,7 @@ export function resetPVPState() {
   pvpSt.pvpItemCasterCellIdx    = -1;
   pvpSt.pvpItemTargetCellIdx    = -1;
   pvpSt.pvpItemKind             = null;
+  pvpSt.pvpItemId               = -1;
 }
 
 // ── Ally joining ──────────────────────────────────────────────────────────────
@@ -419,6 +421,7 @@ function _processPVPOppPotion() {
     pvpSt.pvpItemCasterCellIdx = -1;
     pvpSt.pvpItemTargetCellIdx = -1;
     pvpSt.pvpItemKind = null;
+    pvpSt.pvpItemId = -1;
     processNextTurn();
   }
   return true;
@@ -441,6 +444,7 @@ function _tryPVPEnemyItem(casterCellIdx) {
       pvpSt.pvpItemCasterCellIdx = casterCellIdx;
       pvpSt.pvpItemTargetCellIdx = cellIdx;
       pvpSt.pvpItemKind = 'antidote';
+      pvpSt.pvpItemId = 0xaf;
       setEnemyHealNum({ value: 0, timer: 0, index: cellIdx });
       playSFX(SFX.CURE);
       battleSt.battleState = 'pvp-opp-potion'; battleSt.battleTimer = 0;
@@ -463,6 +467,7 @@ function _tryPVPEnemyItem(casterCellIdx) {
   pvpSt.pvpItemCasterCellIdx = casterCellIdx;
   pvpSt.pvpItemTargetCellIdx = bestCellIdx;
   pvpSt.pvpItemKind = 'potion';
+  pvpSt.pvpItemId = 0xa6;
   setEnemyHealNum({ value: heal, timer: 0, index: bestCellIdx });
   playSFX(SFX.CURE);
   battleSt.battleState = 'pvp-opp-potion'; battleSt.battleTimer = 0;
@@ -991,19 +996,15 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
     _drawSparkleAtCorners(sprX, sprY, bsc.defendSparkleFrames[fi]);
   }
   // Cure sparkle — drawn on the TARGET cell during item use AND during the hit
-  // phase of an enemy magic cast (Cure / Poisona). Item routes by pvpItemKind
-  // ('antidote' → magenta poisona frames, 'potion' → blue recovery sparkle);
-  // magic routes by pvpMagicSpellId via the per-spell bundle.
+  // phase of an enemy magic cast. Item routes via the item's `animSpellId`
+  // (declarative on the item record); magic routes by `pvpMagicSpellId` via
+  // the per-spell bundle.
   const isPotionTarget = bs === 'pvp-opp-potion' && pvpSt.pvpItemTargetCellIdx === idx;
   const isMagicTarget  = bs === 'pvp-enemy-magic-hit' && pvpSt.pvpMagicTargetCellIdx === idx;
   if (isPotionTarget || isMagicTarget) {
     let _frames = null;
     if (isPotionTarget) {
-      const _synth = pvpSt.pvpItemKind === 'antidote'
-        ? { target: 'cure_status' }
-        : { element: 'recovery' };
-      const _b = getCureAnimAssets(_synth);
-      _frames = getCureTargetFrames(_synth, _b);
+      _frames = getItemSparkleFrames(pvpSt.pvpItemId);
     } else {
       const _spell = SPELLS.get(pvpSt.pvpMagicSpellId);
       const _b = _spell ? getCureAnimAssets(_spell) : null;

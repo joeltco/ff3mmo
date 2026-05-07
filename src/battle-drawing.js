@@ -10,7 +10,7 @@ import { getBossBattleCanvas, getBossWhiteCanvas } from './boss-sprites.js';
 import { getMonsterCanvas, getMonsterWhiteCanvas, hasMonsterSprites } from './monster-sprites.js';
 import { getItemNameClean, getMonsterName, getSpellNameClean } from './text-decoder.js';
 import { getSpellMPCost, SPELLS } from './data/spells.js';
-import { ITEMS, weaponSubtype, isWeapon } from './data/items.js';
+import { weaponSubtype, isWeapon } from './data/items.js';
 import { PLAYER_PALETTES, MONK_PALETTES } from './data/players.js';
 import { pickAttackPoseKey, pickAttackWeaponSpec, attackWeaponLayer } from './combatant-pose.js';
 
@@ -33,7 +33,7 @@ import { inputSt } from './input-handler.js';
 import { bsc, getSlashFramesForWeapon } from './battle-sprite-cache.js';
 import { drawSlashOverlay, SLASH_FRAME_MS, shouldDrawSlash } from './slash-effects.js';
 import { getCureAnimElapsedMs, getCurrentSpellId, getSpellTargets, getSpellHitIdx } from './spell-cast.js';
-import { getCureFlameFrameIdx, shouldDrawStars, shouldDrawHealSparkle, getCureAnimAssets, getCureTargetFrames } from './cure-anim.js';
+import { getCureFlameFrameIdx, shouldDrawStars, shouldDrawHealSparkle, getCureAnimAssets, getCureTargetFrames, getItemSparkleFrames } from './cure-anim.js';
 import { hudSt } from './hud-state.js';
 import { fakePlayerPortraits, fakePlayerVictoryPortraits, fakePlayerHitPortraits,
          fakePlayerKneelPortraits, fakePlayerAttackPortraits, fakePlayerAttackLPortraits,
@@ -221,22 +221,13 @@ function drawSWDamageNumbers() {
   }
 }
 
-// Pick the right on-target sparkle frames for an item being used. Antidote
-// (cures poison) routes to the captured Poisona target frames (magenta) since
-// FF3 NES dispatches antidote through the Poisona effect. Other status-cure
-// items (gold needle, maiden kiss, eye drops, echo herbs, mallet) each have
-// their own NES animations that aren't captured yet — they fall back to the
-// recovery sparkle as a placeholder. Heal/full-heal items use the recovery
-// sparkle (cure-potion blue), the actual matching animation.
+// Pick the right on-target sparkle frames for an item being used. Routes via
+// the item's declared `animSpellId` through `getItemSparkleFrames` (cure-anim);
+// items whose spell-animation hasn't been captured yet fall back to the
+// recovery sparkle placeholder.
 function _itemSparkleFrames(itemId) {
-  const itm = itemId != null ? ITEMS.get(itemId) : null;
-  const isAntidote = itm && itm.effect === 'cure_status' && itm.cures === 'poison';
-  if (isAntidote) {
-    const synth = { target: 'cure_status' };
-    const bundle = getCureAnimAssets(synth);
-    const frames = getCureTargetFrames(synth, bundle);
-    if (frames && frames.length === 2) return frames;
-  }
+  const frames = getItemSparkleFrames(itemId);
+  if (frames && frames.length === 2) return frames;
   return bsc.cureSparkleFrames && bsc.cureSparkleFrames.length === 2 ? bsc.cureSparkleFrames : null;
 }
 

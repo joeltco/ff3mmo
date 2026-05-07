@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.73 — 2026-05-07
+
+### Item-use animations: declarative item→spell mapping
+
+Refactored item-use animation routing so consumables declare which spell they dispatch (FF3 NES item-use is literally a spell call: Potion → Cure, Antidote → Poisona, Mallet → Mini, etc.) and the render system pulls the animation off the spell record. Previously each render path (player, ally, PVP) had its own hard-coded "if antidote then magenta" branch.
+
+- **items.js**: each consumable now carries `animSpellId` per the rpgclassics FF3 item reference: Potion→Cure (0x34), HiPotion→Cura (0x26), PhoexDown→Raise (0x19), GoldNeedle→Stona (0x12), MaidenKiss→Toad (0x2e), Mallet→Mini (0x2f), Eye Drops→Bndna (0x28), Antidote→Poisona (0x35). Elixir and Echo Herbs have no spell mapping in NES — left without `animSpellId`, fall back to placeholder.
+- **cure-anim.js**: new `getItemSparkleFrames(itemId)` helper reads `item.animSpellId`, gates on `CAPTURED_TARGET_SPELLS` (currently `{0x34, 0x35}`), looks up the spell, and returns the captured target frames via the existing `getCureAnimAssets` + `getCureTargetFrames` pipeline. Items pointing at a non-captured spell return null → caller falls back to recovery sparkle placeholder.
+- **battle-drawing.js**: `_itemSparkleFrames` is now a 2-line wrapper over the shared helper. Player→self, player→ally, ally→player, ally→ally paths all flow through it.
+- **pvp.js**: added `pvpSt.pvpItemId` (set when the AI picks an item), routed PVP item render through `getItemSparkleFrames(pvpSt.pvpItemId)` — same code path as everywhere else.
+
+To wire up a newly-captured animation (e.g. once Mini's NES OAM is captured): add the spell ID to `CAPTURED_TARGET_SPELLS` in cure-anim.js and add the per-spell tile/palette assets to the bundle. No changes needed at any render site or in items.js — every consumable that already references the spell auto-picks up the new frames.
+
 ## 1.7.72 — 2026-05-07
 
 ### Antidote-only routing for poisona target frames
