@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.88 — 2026-05-07
+
+### Black Mage palette + correct Fire on-target flame
+
+- **BM palette defaults to canon blue** (`[0x0F, 0x27, 0x18, 0x21]` — byte-identical to Monk per PPU capture 2026-05-07). New `BLACK_MAGE_PALETTES` table in `data/players.js` mirrors `MONK_PALETTES` (slot 0 = blue, remaining slots vary color 3 only). `_jobPalette` in `battle-drawing.js` and `pvp.js` dispatch on `jobIdx === 4`, `_genericBundle` in `combatant-sprites.js` returns `BLACK_MAGE_PALETTES` for BM, and `JOB_BATTLE_PAL_OVERRIDE[4]` in `sprite-init.js` overrides the player-cast battle sprite palette. Before: BM was generic red. After: BM is canon blue.
+- **Fire on-target flame fixed.** v1.7.87 shipped tiles `$01-$06` as the on-target flame — those bytes were actually the BM caster's *idle body sprite* (group 1 of the REC OAM dump, right side, x=192-216). The real flame lives in **group 0 at origin (32, 122)** — left side / target position — held frames 126-158 of the f9627 capture. Tiles `$00, $59, $59, $5C` in pal3 with palette `[0x0F, 0x0F, 0x25, 0x2B]` (SP3 swaps mid-cast: cast phase uses `[0x0F, 0x16, 0x27, 0x30]` red/orange/white for the wand-flash, impact swaps to black/black/pink/cyan for the scorch flame). `fire-anim.js` now decodes the correct two unique tiles ($59 twin puffs + $5C tail/spark) into a 32×8 strip; `battle-drawing.js` centers it on the target. Lesson logged: a REC OAM frame with two groups means at least one group is the spell visual, not the caster — verify origin coords before extracting bytes.
+
 ## 1.7.87 — 2026-05-07
 
 ### Fire (Black Mage Lv1) — first BM damage spell

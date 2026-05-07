@@ -598,7 +598,8 @@ function _readJobTileRaw(romData, jobBase, tileIdx) {
 // (color 0 is always 0x0F transparent). Jobs without an entry fall back to BATTLE_PAL_ROM.
 // Monk uses SP1 slot: 0x27 (orange/skin), 0x18 (olive/hair), 0x21 (blue gi — customizable color).
 const JOB_BATTLE_PAL_OVERRIDE = {
-  2: [0x27, 0x18, 0x21],
+  2: [0x27, 0x18, 0x21],  // Monk — canonical blue gi
+  4: [0x27, 0x18, 0x21],  // Black Mage — same canon palette as Monk per PPU capture 2026-05-07
 };
 
 // Build all battle sprite canvases for a given job index (0=Onion Knight, 1=Warrior, etc.)

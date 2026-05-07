@@ -59,6 +59,21 @@ export const MONK_PALETTES = [
   [0x0F, 0x27, 0x18, 0x15], // pink
 ];
 
+// Black Mage variants — PPU capture 2026-05-07 confirmed SP1 = [0x0F, 0x27,
+// 0x18, 0x21], byte-identical to Monk's base palette. BM and Monk share canon
+// default-blue in FF3J. Slot 0 keeps that; remaining slots vary color 3 only,
+// matching the Monk palette pattern.
+export const BLACK_MAGE_PALETTES = [
+  [0x0F, 0x27, 0x18, 0x21], // canonical blue
+  [0x0F, 0x27, 0x18, 0x16], // red
+  [0x0F, 0x27, 0x18, 0x1A], // green
+  [0x0F, 0x27, 0x18, 0x14], // purple
+  [0x0F, 0x27, 0x18, 0x28], // yellow
+  [0x0F, 0x27, 0x18, 0x11], // cyan
+  [0x0F, 0x27, 0x18, 0x17], // orange
+  [0x0F, 0x27, 0x18, 0x15], // pink
+];
+
 export const CHAT_PHRASES = [
   'anyone near floor 3?',
   'need heals',

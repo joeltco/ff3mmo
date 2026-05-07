@@ -12,7 +12,7 @@
 //   • buildOpponentBodyCanvases — opponent full-body path (palette array → 16×24 with legs)
 
 import { decodeTile } from './tile-decoder.js';
-import { PLAYER_PALETTES, MONK_PALETTES, ROSTER_FADE_STEPS } from './data/players.js';
+import { PLAYER_PALETTES, MONK_PALETTES, BLACK_MAGE_PALETTES, ROSTER_FADE_STEPS } from './data/players.js';
 import { BATTLE_SPRITE_ROM, BATTLE_JOB_SIZE } from './data/jobs.js';
 import { nesColorFade } from './palette.js';
 import {
@@ -235,7 +235,7 @@ function _genericBundle(romData, jobIdx) {
       hit:      { L: t(34), R: t(35) },
       kneel:    { L: t(12), R: t(13) },
     },
-    palettes: PLAYER_PALETTES,
+    palettes: jobIdx === 4 ? BLACK_MAGE_PALETTES : PLAYER_PALETTES,
     death: _deathTilesForJob(romData, jobIdx),
   };
 }

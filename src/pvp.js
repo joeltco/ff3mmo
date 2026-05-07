@@ -14,10 +14,12 @@ import { resetBattleVars, isTeamWiped, updateBattleTimers, updatePoisonTick,
 import { playSFX, stopSFX, SFX, pauseMusic, playTrack, TRACKS } from './music.js';
 import { rollHits, calcPotentialHits, BOSS_HIT_RATE, GOBLIN_HIT_RATE } from './battle-math.js';
 import { ITEMS, isWeapon, weaponSubtype } from './data/items.js';
-import { PLAYER_POOL, PLAYER_PALETTES, MONK_PALETTES, generateAllyStats } from './data/players.js';
+import { PLAYER_POOL, PLAYER_PALETTES, MONK_PALETTES, BLACK_MAGE_PALETTES, generateAllyStats } from './data/players.js';
 
 function _jobPalette(jobIdx, palIdx) {
-  const pool = jobIdx === 2 ? MONK_PALETTES : PLAYER_PALETTES;
+  const pool = jobIdx === 2 ? MONK_PALETTES
+             : jobIdx === 4 ? BLACK_MAGE_PALETTES
+             : PLAYER_PALETTES;
   return pool[palIdx] || pool[0];
 }
 import { JOBS } from './data/jobs.js';

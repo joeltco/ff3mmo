@@ -11,7 +11,7 @@ import { getMonsterCanvas, getMonsterWhiteCanvas, hasMonsterSprites } from './mo
 import { getItemNameClean, getMonsterName, getSpellNameClean } from './text-decoder.js';
 import { getSpellMPCost, SPELLS } from './data/spells.js';
 import { weaponSubtype, isWeapon } from './data/items.js';
-import { PLAYER_PALETTES, MONK_PALETTES } from './data/players.js';
+import { PLAYER_PALETTES, MONK_PALETTES, BLACK_MAGE_PALETTES } from './data/players.js';
 import { pickAttackPoseKey, pickAttackWeaponSpec, attackWeaponLayer } from './combatant-pose.js';
 
 // Player canvas pool fallback chain (player pool collapses knife back/fwd into one canvas).
@@ -21,7 +21,9 @@ function _playerPoseCanvas(p, key) {
 }
 
 function _jobPalette(jobIdx, palIdx) {
-  const pool = jobIdx === 2 ? MONK_PALETTES : PLAYER_PALETTES;
+  const pool = jobIdx === 2 ? MONK_PALETTES
+             : jobIdx === 4 ? BLACK_MAGE_PALETTES
+             : PLAYER_PALETTES;
   return pool[palIdx] || pool[0];
 }
 
@@ -649,7 +651,9 @@ function _drawPlayerSpellTargetSparkleOnEnemy() {
     // Throw caster-portrait → target enemy, then per-spell impact at endpoint.
     // Caster is the player portrait at (HUD_RIGHT_X+8, HUD_VIEW_Y+8); add 8 to
     // center on its 16×16. Sight has no impact visual ("Ineffective" battle
-    // message handles the feedback). Fire renders a 16×24 flame on the target.
+    // message handles the feedback). Fire renders a 32×8 flame strip on the
+    // target — captured layout from REC OAM 2026-05-07 f9627 group 0 at
+    // origin (32,122).
     const sx = HUD_RIGHT_X + 8 + 8;
     const sy = HUD_VIEW_Y + 8 + 8;
     const t01 = (cureMs - CURE_T_HEAL) / CURE_PHASE_MS.heal;
@@ -662,7 +666,8 @@ function _drawPlayerSpellTargetSparkleOnEnemy() {
     }
     if (spell.element === 'fire') {
       const flame = getFireImpactCanvas();
-      if (flame) ui.ctx.drawImage(flame, cx - 8, cy - 12);
+      // Center 32×8 strip on target (cx, cy) — strip is 32 wide, 8 tall.
+      if (flame) ui.ctx.drawImage(flame, cx - 16, cy - 4);
     }
     return;
   }
