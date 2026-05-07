@@ -505,6 +505,25 @@
 
   <script src="lib/libgme.js"></script>
   <script src="lib/jsnes.min.js"></script>
+  <script>
+    // Early error reporter — installed BEFORE the module graph evaluates so
+    // import-time / module-eval throws (the v1.7.49-class disaster) reach
+    // pm2 logs. The in-game reporter wires up much later from startGameLoop.
+    (function () {
+      function send(label, err) {
+        try {
+          var msg = (err && (err.message || err.toString())) || String(err || 'unknown');
+          var stack = (err && err.stack) || '';
+          fetch('/api/client-error', { method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ msg: '[BOOT ' + label + '] ' + msg, stack: stack, ctx: { ua: navigator.userAgent, url: location.href } }),
+            keepalive: true });
+        } catch (_) {}
+      }
+      window.addEventListener('error', function (ev) { send('ERROR', ev.error || { message: ev.message }); });
+      window.addEventListener('unhandledrejection', function (ev) { send('REJECTION', ev.reason); });
+    })();
+  </script>
   <script type="module">
     import { init, loadROM, loadFF12ROM, getMobileInputMode } from './src/main.js';
 

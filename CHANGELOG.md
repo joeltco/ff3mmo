@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.93 — 2026-05-07
+
+- Early error reporter installed in index.html before module graph evaluates,
+  so import-time / module-eval throws (the v1.7.49-class disaster) actually
+  reach `/api/client-error` instead of dying silently before
+  `startGameLoop` wires its global handlers. User-reported "stuck on dev
+  password screen" with no pm2 log entries: that was the gap.
+
 ## 1.7.92 — 2026-05-07
 
 ### `smoke.sh` — poll for 200 instead of single-shot
