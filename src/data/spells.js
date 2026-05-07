@@ -115,6 +115,12 @@ export function getSpellBuyPrice(spellId) {
   return SPELL_BUY_PRICE.get(spellId) ?? 0;
 }
 
+// Spells whose target picker offers all-allies / all-enemies / column modes,
+// with one rolled amount divided across the chosen targets — same Southwind-
+// style split. Item path (potions) never reads this; it stays single-target.
+export const MULTI_TARGET_SPELLS = new Set([0x34]); // Cure
+export function isMultiTargetSpell(spellId) { return MULTI_TARGET_SPELLS.has(spellId); }
+
 // Returns the spell's flat MP cost. If a player-castable spell is missing from
 // SPELL_MP_COST, that's a bug — warn once and return 99 (effectively uncastable)
 // so the omission surfaces in playtest instead of silently making the spell free.

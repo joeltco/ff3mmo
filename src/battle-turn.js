@@ -504,10 +504,13 @@ function _playerTurnMagic() {
   if (!pending) { processNextTurn(); return; }
   // pending.target === 'player' → friendly (player or ally via allyIndex).
   // pending.target is a number → enemy slot in encounter / PVP grid (or boss = 0).
+  // pending.targetMode: 'single' | 'all' | 'col-left' | 'col-right' (set by the
+  // target picker; multi-target Cure relies on this to build the target list).
+  const tm = pending.targetMode || 'single';
   if (pending.target === 'player') {
-    startSpellCast(pending.spellId, { allyIndex: pending.allyIndex ?? -1 });
+    startSpellCast(pending.spellId, { allyIndex: pending.allyIndex ?? -1, targetMode: tm });
   } else {
-    startSpellCast(pending.spellId, { enemyIndex: pending.target });
+    startSpellCast(pending.spellId, { enemyIndex: pending.target, targetMode: tm });
   }
   // MP changed; persist immediately so a crash doesn't refund the cost.
   saveSlotsToDB();

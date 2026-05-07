@@ -10,7 +10,7 @@ import { titleSt, onNameEntryKeyDown } from './title-screen.js';
 import { ps, recalcCombatStats, changeJob, getEquipSlotId, setEquipSlotId, EQUIP_SLOT_SUBTYPE,
          getHitWeapon, jobSwitchCost, getJobLevelStatBonus } from './player-stats.js';
 import { ITEMS, isHandEquippable, isWeapon, weaponSubtype } from './data/items.js';
-import { SPELLS, getSpellMPCost } from './data/spells.js';
+import { SPELLS, getSpellMPCost, isMultiTargetSpell } from './data/spells.js';
 import { selectCursor, saveSlots, saveSlotsToDB } from './save-state.js';
 import { rollHits, calcPotentialHits, elemMultiplier } from './battle-math.js';
 import { blindHitPenalty, miniToadAtkMult, removeStatus, STATUS } from './status-effects.js';
@@ -428,9 +428,9 @@ function _itemTargetIsRightCol(i) {
 }
 function _itemTargetIsLeftCol(i) { return _itemTargetCnt() >= 2 && !_itemTargetIsRightCol(i); }
 
-function _itemTargetNavLeft(isBattleItem) {
+function _itemTargetNavLeft(allowMulti) {
   const cnt = _itemTargetCnt();
-  if (isBattleItem && inputSt.itemTargetMode !== 'single') {
+  if (allowMulti && inputSt.itemTargetMode !== 'single') {
     // col/all mode → back to single. Left-col candidates differ per mode.
     const leftCandidates = pvpSt.isPVPBattle
       ? (cnt <= 1 ? [0] : cnt === 2 ? [1] : [1, 3])      // PVP left col = 1,3
@@ -467,8 +467,8 @@ function _itemTargetNavLeft(isBattleItem) {
       : [idx === 1 ? 0 : idx === 3 ? 2 : -1, idx === 1 ? 2 : idx === 3 ? 0 : -1];  // encounter: 1→0, 3→2
     if (leftPeer >= 0 && _itemTargetAlive(leftPeer)) { inputSt.itemTargetIndex = leftPeer; playSFX(SFX.CURSOR); }
     else if (leftOther >= 0 && _itemTargetAlive(leftOther)) { inputSt.itemTargetIndex = leftOther; playSFX(SFX.CURSOR); }
-    else if (isBattleItem) { inputSt.itemTargetMode = 'all'; playSFX(SFX.CURSOR); }
-  } else if (isBattleItem && _itemTargetIsLeftCol(inputSt.itemTargetIndex)) {
+    else if (allowMulti) { inputSt.itemTargetMode = 'all'; playSFX(SFX.CURSOR); }
+  } else if (allowMulti && _itemTargetIsLeftCol(inputSt.itemTargetIndex)) {
     inputSt.itemTargetMode = 'all'; playSFX(SFX.CURSOR);
   }
 }
@@ -500,12 +500,12 @@ function _itemTargetNavRight() {
   }
 }
 
-function _itemTargetNavVertical(isBattleItem) {
+function _itemTargetNavVertical(allowMulti) {
   const k = keys;
   const goUp = !!k['ArrowUp'];
   k['ArrowUp'] = false; k['ArrowDown'] = false;
   const cnt = _itemTargetCnt();
-  if (isBattleItem && inputSt.itemTargetType === 'enemy' && (pvpSt.isPVPBattle || (battleSt.isRandomEncounter && battleSt.encounterMonsters))) {
+  if (allowMulti && inputSt.itemTargetType === 'enemy' && (pvpSt.isPVPBattle || (battleSt.isRandomEncounter && battleSt.encounterMonsters))) {
     if (goUp && inputSt.itemTargetMode === 'single') {
       inputSt.itemTargetMode = _itemTargetIsLeftCol(inputSt.itemTargetIndex) ? 'col-left' : 'col-right';
       playSFX(SFX.CURSOR);
@@ -521,7 +521,13 @@ function _itemTargetNavVertical(isBattleItem) {
     }
   } else if (inputSt.itemTargetType === 'player') {
     const livingAllies = battleSt.battleAllies.filter(a => a.hp > 0);
-    if (!goUp && inputSt.itemTargetAllyIndex < livingAllies.length - 1) {
+    // Multi-target spells (Cure family): Up from the player slot toggles
+    // 'all-allies'; Down from 'all' returns to the player slot.
+    if (allowMulti && goUp && inputSt.itemTargetMode === 'single' && inputSt.itemTargetAllyIndex < 0) {
+      inputSt.itemTargetMode = 'all'; playSFX(SFX.CURSOR);
+    } else if (allowMulti && !goUp && inputSt.itemTargetMode !== 'single') {
+      inputSt.itemTargetMode = 'single'; inputSt.itemTargetAllyIndex = -1; playSFX(SFX.CURSOR);
+    } else if (!goUp && inputSt.itemTargetAllyIndex < livingAllies.length - 1) {
       inputSt.itemTargetAllyIndex++; playSFX(SFX.CURSOR);
     } else if (goUp && inputSt.itemTargetAllyIndex >= 0) {
       inputSt.itemTargetAllyIndex--; playSFX(SFX.CURSOR);
@@ -532,11 +538,17 @@ function _itemTargetNavVertical(isBattleItem) {
 function _battleInputItemTargetSelect() {
   const isMagic = inputSt.playerActionPending?.command === 'magic';
   const isBattleItem = inputSt.playerActionPending && !isMagic && ITEMS.get(inputSt.playerActionPending.itemId)?.type === 'battle_item';
+  // Multi-target spells (Cure family) get the same all/column picker as
+  // battle-items. Other spells stay single-target — and item-use stays single
+  // even for items whose animSpellId points at a multi-target spell, since the
+  // user is choosing one consumable, not casting.
+  const isMultiSpell = isMagic && isMultiTargetSpell(inputSt.playerActionPending.spellId);
+  const allowMulti = isBattleItem || isMultiSpell;
   const k = keys;
   // Navigation is symmetric for items and spells — left/right reaches enemies, up/down cycles allies.
-  if (k['ArrowLeft']) { k['ArrowLeft'] = false; _itemTargetNavLeft(isBattleItem); }
+  if (k['ArrowLeft']) { k['ArrowLeft'] = false; _itemTargetNavLeft(allowMulti); }
   if (k['ArrowRight']) { k['ArrowRight'] = false; _itemTargetNavRight(); }
-  if (k['ArrowUp'] || k['ArrowDown']) _itemTargetNavVertical(isBattleItem);
+  if (k['ArrowUp'] || k['ArrowDown']) _itemTargetNavVertical(allowMulti);
   if (_zPressed()) {
     inputSt.playerActionPending.target = inputSt.itemTargetType === 'player' ? 'player' : inputSt.itemTargetIndex;
     inputSt.playerActionPending.allyIndex = inputSt.itemTargetType === 'player' ? inputSt.itemTargetAllyIndex : -1;

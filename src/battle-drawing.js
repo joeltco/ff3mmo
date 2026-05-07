@@ -328,12 +328,15 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
   // target heal sparkles are drawn at the ally portrait below.
   const isMagicState = battleSt.battleState === 'magic-cast' || battleSt.battleState === 'magic-hit';
   const isCureItemUse = battleSt.battleState === 'item-use' && !(inputSt.playerActionPending && inputSt.playerActionPending.allyIndex >= 0);
-  // Self-cast only: allyIndex < 0 (or absent) means target is the player.
-  // `target === 'player'` is "player-side target" which includes allies — using
-  // it here was the bug that drew the heal sparkle on the player for ally Cure.
-  const isCureMagicSelf = isMagicState
-    && inputSt.playerActionPending && inputSt.playerActionPending.command === 'magic'
-    && (inputSt.playerActionPending.allyIndex == null || inputSt.playerActionPending.allyIndex < 0);
+  // Drive the heal-sparkle gate from the spell-cast iterator (current target),
+  // not playerActionPending. Multi-target Cure walks _targets[] and sparkles
+  // each in turn — the iterator says "is the player the active target right
+  // now?" which works for single-target self, multi-target all-allies, and
+  // any future variant without re-reading menu state.
+  const _curSpellTargets = isMagicState ? getSpellTargets() : null;
+  const _curSpellTgt = _curSpellTargets && _curSpellTargets.length > 0
+    ? _curSpellTargets[Math.min(getSpellHitIdx(), _curSpellTargets.length - 1)] : null;
+  const isCureMagicSelf = isMagicState && _curSpellTgt && _curSpellTgt.type === 'player';
   const cureMs = isMagicState ? getCureAnimElapsedMs() : -1;
   // Per-school palette: the FF3 ROM shares tile bytes across white-magic
   // spells but uses a different SP3 palette per school. Cure renders blue,
@@ -1345,9 +1348,14 @@ function _drawAllyRow(i, ally, panelTop, weaponDraws) {
     (battleSt.battleState === 'pvp-opp-sw-hit' && battleSt.allyShakeTimer[i] > 0);
   const isAllyAttack = (battleSt.battleState === 'ally-attack-back' || battleSt.battleState === 'ally-attack-fwd') && battleSt.currentAllyAttacker === i;
   const isAllyHealItem = battleSt.battleState === 'item-use' && inputSt.playerActionPending && inputSt.playerActionPending.allyIndex === i;
-  const isAllyHealMagic = (battleSt.battleState === 'magic-cast' || battleSt.battleState === 'magic-hit')
-    && inputSt.playerActionPending && inputSt.playerActionPending.command === 'magic'
-    && inputSt.playerActionPending.allyIndex === i;
+  // Iterator-based ally-target gate (mirrors the player-self path above).
+  // Single-target Cure on this ally: _curSpellTgt = {type:'ally', index:i}.
+  // Multi-target Cure: same shape — sparkle walks each ally as _hitIdx ticks.
+  const _aMagicState = battleSt.battleState === 'magic-cast' || battleSt.battleState === 'magic-hit';
+  const _aTargets = _aMagicState ? getSpellTargets() : null;
+  const _aCurTgt = _aTargets && _aTargets.length > 0
+    ? _aTargets[Math.min(getSpellHitIdx(), _aTargets.length - 1)] : null;
+  const isAllyHealMagic = _aMagicState && _aCurTgt && _aCurTgt.type === 'ally' && _aCurTgt.index === i;
   const _allyCureMs = isAllyHealMagic ? getCureAnimElapsedMs() : -1;
   // For magic, only show heal sparkles during phase 4 (the actual heal moment).
   // Per-school palette pickup mirrors the player path: magic uses the active

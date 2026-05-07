@@ -10,7 +10,7 @@ import { inputSt } from './input-handler.js';
 import { SFX, playSFX } from './music.js';
 import { setPlayerHealNum, getAllyDamageNums, setEnemyDmgNum, setEnemyHealNum, setSwDmgNum,
          tickHealNums, clearHealNums } from './damage-numbers.js';
-import { SPELLS, getSpellMPCost } from './data/spells.js';
+import { SPELLS, getSpellMPCost, isMultiTargetSpell } from './data/spells.js';
 import { STATUS, removeStatus } from './status-effects.js';
 import { CURE_PHASE_MS, CURE_T_HEAL, CURE_TOTAL_MS } from './cure-anim.js';
 import { elemMultiplier } from './battle-math.js';
@@ -35,12 +35,16 @@ let _spellId = 0;
 let _targets = [];      // [{type: 'player'|'ally'|'enemy', index?}]
 let _hitIdx = 0;
 let _effectApplied = false;
+// Multi-target divides one rolled amount across all targets (Southwind pattern).
+// -1 = single-target, per-target re-roll (legacy behavior). >=0 = pre-rolled
+// pool divided by targets.length at apply time.
+let _baseAmount = -1;
 
 export function getSpellTargets() { return _targets; }
 export function getSpellHitIdx() { return _hitIdx; }
 export function getCurrentSpellId() { return _spellId; }
 export function resetSpellCastVars() {
-  _spellId = 0; _targets = []; _hitIdx = 0; _effectApplied = false;
+  _spellId = 0; _targets = []; _hitIdx = 0; _effectApplied = false; _baseAmount = -1;
 }
 
 // NES FF3 magic formula (31/B1B4): atk = floor(stat/2) + power, +rand(0..atk/2).
@@ -61,23 +65,82 @@ function _isUndead(mon) {
   return w.includes('holy') && r.includes('holy');
 }
 
+// Build the encounter/PVP "right column" predicate for a given side.
+function _isEnemyRightCol(idx, count) {
+  if (pvpSt.isPVPBattle) return idx === 0 || idx === 2;
+  return count === 1 || (count === 2 && idx === 1) || (count >= 3 && (idx === 1 || idx === 3));
+}
+
 // targetSpec accepts:
-//   { allyIndex: -1 }      → player self
-//   { allyIndex: N }       → roster ally N
-//   { enemyIndex: N }      → encounter monster N / PVP cell N / boss (any non-random/PVP)
+//   { allyIndex: -1 }                       → player self
+//   { allyIndex: N }                        → roster ally N
+//   { enemyIndex: N }                       → encounter monster / PVP cell / boss
+//   { allyIndex: -1, targetMode: 'all' }    → all living party (player + roster)
+//   { enemyIndex: 0, targetMode: 'all' }    → all living enemies
+//   { enemyIndex: N, targetMode: 'col-X' }  → encounter/PVP enemy column
 export function startSpellCast(spellId, targetSpec) {
   const spell = SPELLS.get(spellId);
   if (!spell) { _processNextTurn(); return; }
   _spellId = spellId;
   _hitIdx = 0;
   _effectApplied = false;
-  if (targetSpec && targetSpec.enemyIndex != null && targetSpec.enemyIndex >= 0) {
+  _baseAmount = -1;
+
+  const mode = (targetSpec && targetSpec.targetMode) || 'single';
+  const onAllies = !!targetSpec && (targetSpec.enemyIndex == null);
+
+  if (mode !== 'single' && onAllies) {
+    // All-allies (Cure family heal divided across living party).
+    _targets = [];
+    if (ps.hp > 0) _targets.push({ type: 'player' });
+    (battleSt.battleAllies || []).forEach((a, i) => {
+      if (a && a.hp > 0) _targets.push({ type: 'ally', index: i });
+    });
+  } else if (mode !== 'single' && !onAllies) {
+    // All / column on enemy side. Boss path stays single (no group).
+    _targets = [];
+    if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
+      const mons = battleSt.encounterMonsters;
+      mons.forEach((m, i) => {
+        if (!m || m.hp <= 0) return;
+        const right = _isEnemyRightCol(i, mons.length);
+        if (mode === 'all'
+            || (mode === 'col-right' && right)
+            || (mode === 'col-left'  && !right && mons.length >= 2)) {
+          _targets.push({ type: 'enemy', index: i });
+        }
+      });
+    } else if (pvpSt.isPVPBattle) {
+      // PVP grid: idx 0 = opponent (right col), 1+ = pvpEnemyAllies (left col).
+      const oppAlive = pvpSt.pvpOpponentStats && pvpSt.pvpOpponentStats.hp > 0;
+      if ((mode === 'all' || mode === 'col-right') && oppAlive) {
+        _targets.push({ type: 'enemy', index: 0 });
+      }
+      if (mode === 'all' || mode === 'col-left') {
+        (pvpSt.pvpEnemyAllies || []).forEach((a, i) => {
+          if (a && a.hp > 0) _targets.push({ type: 'enemy', index: i + 1 });
+        });
+      }
+    } else {
+      _targets = [{ type: 'enemy', index: 0 }];
+    }
+  } else if (targetSpec && targetSpec.enemyIndex != null && targetSpec.enemyIndex >= 0) {
     _targets = [{ type: 'enemy', index: targetSpec.enemyIndex }];
   } else if (targetSpec && targetSpec.allyIndex != null && targetSpec.allyIndex >= 0) {
     _targets = [{ type: 'ally', index: targetSpec.allyIndex }];
   } else {
     _targets = [{ type: 'player' }];
   }
+
+  // Multi-target → roll once at cast time, divide at apply time. Single-target
+  // keeps per-target re-roll (legacy). Skips status/revive cures (no amount).
+  if (_targets.length > 1 && spell.power > 0) {
+    const useMnd = spell.element === 'recovery'
+      || spell.target === 'cure_status'
+      || spell.target === 'revive';
+    _baseAmount = _rollMagicAmount(spell.power, useMnd);
+  }
+
   ps.mp -= getSpellMPCost(spellId);
   battleSt.battleState = 'magic-cast';
   battleSt.battleTimer = 0;
@@ -128,7 +191,9 @@ function _applyEnemyEffect(idx, spell) {
     }
   }
 
-  const amount = _rollMagicAmount(spell.power, useMnd);
+  const amount = _baseAmount >= 0
+    ? Math.max(1, Math.floor(_baseAmount / _targets.length))
+    : _rollMagicAmount(spell.power, useMnd);
 
   if (isRecovery) {
     if (isBoss) {
@@ -188,7 +253,9 @@ function _applySpellEffect(target) {
   const isCureStatus = spell.target === 'cure_status';
   const isHeal = spell.element === 'recovery';
   const useMnd = isHeal || isCureStatus || spell.target === 'revive';
-  const amount = _rollMagicAmount(spell.power, useMnd);
+  const amount = _baseAmount >= 0
+    ? Math.max(1, Math.floor(_baseAmount / _targets.length))
+    : _rollMagicAmount(spell.power, useMnd);
 
   if (isCureStatus) {
     const flag = SPELL_CURE_FLAG[spell.type];

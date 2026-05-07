@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.74 — 2026-05-07
+
+### Multi-target Cure spell — Southwind-style divided heal/damage
+
+Cure (0x34) is now multi-target. Player can heal the whole party (one rolled amount divided across living allies) or hit a column / all enemies (divided damage on undead, divided heal on non-undead per NES default). Same picker UX as Southwind: from the player slot press Up to toggle "all-allies"; from the enemy side, Up toggles col-left / col-right / all. Single-target single-ally / single-enemy still works. PVP player gets the same picker for both own party and opposing roster. Potions stay single-target — the multi-target gate keys off the spell ID, never the item path.
+
+- **data/spells.js**: new `MULTI_TARGET_SPELLS = new Set([0x34])` + `isMultiTargetSpell(id)` helper. Single source of truth — the input picker, the cast resolver, and any future multi-target spell all read from it. Cura/Curaja/etc. flip on by adding the ID.
+- **spell-cast.js**: `startSpellCast` now accepts `targetMode: 'single' | 'all' | 'col-left' | 'col-right'` and builds `_targets[]` from it. New module-local `_baseAmount` is rolled once at cast time when `_targets.length > 1`; `_applyEnemyEffect` / `_applySpellEffect` use `Math.max(1, floor(_baseAmount / _targets.length))` instead of re-rolling per target. Single-target keeps the legacy per-target re-roll (no behavior change for single-target casts).
+- **input-handler.js**: `_battleInputItemTargetSelect` now flips `allowMulti` on for multi-target spells (renamed `isBattleItem` → `allowMulti` through the nav helpers). Player-side: Up from the player slot toggles `'all'`; Down from `'all'` returns to single. Enemy-side picker reuses the existing battle-item col/all logic — no new code.
+- **battle-turn.js**: `_playerTurnMagic` forwards `pending.targetMode` into the spec.
+- **battle-drawing.js**: self-cast and ally-target heal-sparkle gates now read from the spell-cast iterator (`getSpellTargets()[getSpellHitIdx()]`) instead of `playerActionPending.allyIndex`. The sparkle naturally walks each target as `_hitIdx` ticks; multi-target Cure on the whole party draws the heal sparkle on player → ally1 → ally2 in sequence with no extra branching.
+- Ally-AI Cure (`_tryAllyCure` in battle-turn.js) and PVP-opponent Cure (`_tryPVPEnemyCure` in pvp.js) keep their existing single-target lowest-HP heuristics — the multi-target option is a player choice, not an AI behavior change.
+
 ## 1.7.73 — 2026-05-07
 
 ### Item-use animations: declarative item→spell mapping
