@@ -493,9 +493,23 @@ function _playerTurnConsumable() {
 
 function _playerTurnItem() {
   battleSt.isDefending = false;
-  removeItem(inputSt.playerActionPending.itemId);
-  if (ITEMS.get(inputSt.playerActionPending.itemId)?.type === 'battle_item') startMagicItem();
-  else _playerTurnConsumable();
+  const pending = inputSt.playerActionPending;
+  removeItem(pending.itemId);
+  const item = ITEMS.get(pending.itemId);
+  if (item?.type === 'battle_item') {
+    // Modular path: items with `animSpellId` route through the spell-cast
+    // engine as item-use, sharing the spell-anim registry's impact visual.
+    // Items without animSpellId fall back to the legacy hardcoded SouthWind
+    // animation (kept until every battle_item gets a mapping).
+    if (item.animSpellId != null) {
+      const tm = pending.targetMode || 'single';
+      startSpellCast(item.animSpellId, { enemyIndex: pending.target, targetMode: tm }, { isItemUse: true });
+    } else {
+      startMagicItem();
+    }
+  } else {
+    _playerTurnConsumable();
+  }
 }
 
 function _playerTurnMagic() {

@@ -210,7 +210,7 @@ export const ITEMS = new Map([
   [0xae, { type: 'consumable', price:    40, effect: 'cure_status', cures: 'blind',   animSpellId: 0x28 }], // Eye Drops → Bndna (Wash)
   [0xaf, { type: 'consumable', price:    80, effect: 'cure_status', cures: 'poison',  animSpellId: 0x35 }], // Antidote → Poisona (Pure)
   [0xb1, { type: 'battle_item', price:  1000 }],
-  [0xb2, { type: 'battle_item', price:  1000 }],
+  [0xb2, { type: 'battle_item', price:  1000, animSpellId: 0x3a }], // SouthWind → Blizzara / Bzzra (Lv2 ice)
   [0xb3, { type: 'battle_item', price:  1000 }],
   [0xb4, { type: 'battle_item', price:  1500 }],
   [0xb5, { type: 'battle_item', price:  1500 }],

@@ -21,6 +21,7 @@
 import { NES_SYSTEM_PALETTE } from './tile-decoder.js';
 import { _makeCanvas16 } from './canvas-utils.js';
 import { ITEMS } from './data/items.js';
+import { initSouthWindSprite } from './south-wind.js';
 
 // ── Palettes per spell family ─────────────────────────────────────────────
 //
@@ -292,6 +293,11 @@ export function initSpellAnim() {
   const poisonaTgt     = _buildPoisonaTarget(PAL_CURE_STATUS);
   const fireImpact     = _buildFireImpactFrames(PAL_FIRE_IMPACT);
   const blizzardImpact = _buildBlizzardImpactFrames(PAL_BLIZZARD_IMPACT);
+  // Blizzara ($3a) reuses the 3-phase ice explosion canvases originally built
+  // for the SouthWind item (south-wind.js). Per project memory, SouthWind IS
+  // Blizzara in ff3mmo design — same animation, same SFX, same element. The
+  // 3 phases are 16×16 → 32×32 → 48×48 expanding; rendered via 'aoe-3phase'.
+  const blizzaraImpact = initSouthWindSprite();  // [phase1, phase2, phase3]
 
   _bySpellId = {
     // White magic — recovery family (Cure)
@@ -310,6 +316,12 @@ export function initSpellAnim() {
     // controls canvas-center draw alignment.
     0x32: { kind: 'burst-strip-2frame', frames: blizzardImpact, width: 48, height: 48,
             anchor: 'enemy-center', toggleMs: 67 },
+    // Black magic — Blizzara / Bzzra (Lv2 ice). 3-phase one-shot expansion:
+    // phase 0 (16×16) → phase 1 (32×32) → phase 2 (48×48), each phase held
+    // ~133 ms (~400 ms total) then frame holds at phase 2 until impact ends.
+    // Per project canon, this is also what the SouthWind item renders — the
+    // item dispatches via animSpellId to this same spell-anim entry.
+    0x3a: { kind: 'aoe-3phase', frames: blizzaraImpact, anchor: 'enemy-center', phaseDurMs: 133 },
     // Sight (0x36) intentionally absent — battle msg handles "Ineffective".
   };
 }
@@ -332,8 +344,16 @@ export function getSpellAnimForItem(itemId) {
 
 // Convenience: pick the current animation frame for a 2-state effect using
 // the bundle's `toggleMs` cadence. Returns null if bundle is null/wrong-kind.
+//
+// For 'aoe-3phase' (one-shot expanding burst), uses `phaseDurMs` instead and
+// caps at the last frame instead of cycling — phase 0 → 1 → 2 → hold 2.
 export function getSpellAnimFrame(bundle, elapsedMs) {
   if (!bundle || !bundle.frames || bundle.frames.length === 0) return null;
+  if (bundle.kind === 'aoe-3phase') {
+    const dur = bundle.phaseDurMs || 133;
+    const idx = Math.min(bundle.frames.length - 1, Math.max(0, Math.floor(elapsedMs / dur)));
+    return bundle.frames[idx];
+  }
   const idx = Math.floor(elapsedMs / (bundle.toggleMs || 67)) % bundle.frames.length;
   return bundle.frames[idx];
 }

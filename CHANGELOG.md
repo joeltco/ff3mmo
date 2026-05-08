@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.115 — 2026-05-08
+
+### Blizzara ($3a) wired; SouthWind item dispatches through spell-cast as item-use
+
+Step 1 of consolidating the SouthWind item path with the modular spell system. Per project canon (`project_ff3mmo_southwind_blizzara.md`), the SouthWind item IS the Blizzara/Bzzra/Ice2 delivery vector — same animation, same SFX, same element. Now both paths share the visual.
+
+- Spell `$3a` registered: `SPELL_CAST_PAL` + `SPELL_PROJECTILE_PAL` use the icy palette `[0x0F, 0x11, 0x21, 0x31]`. `SPELL_SCHOOL[0x3a] = 'black'`. `SPELL_MP_COST[0x3a] = 5`, `SPELL_BUY_PRICE[0x3a] = 700` (Lv2 placeholder; revisit).
+- New `spell-anim` kind `'aoe-3phase'` — one-shot expanding burst (16×16 → 32×32 → 48×48) with per-phase 133 ms hold, capped at the last frame so it lingers through impact end. Frames sourced via `initSouthWindSprite()` so spell-anim owns the canvases (no dependence on the legacy `bsc.swPhaseCanvases` cache).
+- `getSpellAnimFrame` handles the new kind: `phaseDurMs` not `toggleMs`, capped not modulo. Dispatcher `drawSpellEffectAtTargets` adds an `aoe-3phase` branch that centers per-frame (each phase has a different canvas size).
+- `startSpellCast(spellId, targetSpec, opts)` gains `opts.isItemUse`. Skips MP deduction, the `MAGIC_CAST` pre-anim SFX, and the BM/WM cast pose entirely (`_isCastAnimSpell` returns false for items → `castDur` falls back to legacy 250 ms throw, `hitTotalMs` to 1100 ms — matches the old `sw-throw`/`sw-hit` timing exactly).
+- `isCurrentCastItemUse()` exported. Render path uses it to skip the throw projectile (items go straight to impact) and aligns impact-phase timer to magic-hit start.
+- Item-use thrown-damage SFX now fires at magic-hit timer = 0 (impact start), not at the projectile-end offset (which was meaningless for items).
+- `items.js`: `0xb2` (SouthWind) gets `animSpellId: 0x3a`. Routes through `startSpellCast(0x3a, …, { isItemUse: true })` in `_playerTurnItem`. Other `battle_item`s without an `animSpellId` still use the legacy `startMagicItem()` path (sw-throw/sw-hit states + bespoke damage formula). Cleanup of the legacy path deferred until every battle_item has a spell mapping.
+
 ## 1.7.114 — 2026-05-08
 
 ### Blizzard ($32) acquireable — BM and RM start with it; 2 MP, 100 gil

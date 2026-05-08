@@ -34,7 +34,7 @@ import { pvpSt, drawBossSpriteBoxPVP } from './pvp.js';
 import { inputSt } from './input-handler.js';
 import { bsc, getSlashFramesForWeapon } from './battle-sprite-cache.js';
 import { drawSlashOverlay, SLASH_FRAME_MS, shouldDrawSlash } from './slash-effects.js';
-import { getCastAnimElapsedMs, getCurrentSpellId, getSpellTargets, getSpellHitIdx } from './spell-cast.js';
+import { getCastAnimElapsedMs, getCurrentSpellId, getSpellTargets, getSpellHitIdx, isCurrentCastItemUse } from './spell-cast.js';
 import { drawCasterCastBehind, drawCasterCastFront,
          jobToCastKey, CAST_T_LUNGE, CAST_T_HEAL, CAST_T_RETURN, CAST_PHASE_MS,
          CAST_T_THROW_PROJ_START, CAST_T_THROW_IMPACT_START, CAST_T_THROW_RETURN,
@@ -673,6 +673,11 @@ function drawSpellEffectAtTargets(ctx, targets, spellId, elapsedMs) {
     } else if (bundle.kind === 'burst-strip-2frame') {
       ctx.drawImage(frame, tc.x - Math.floor(bundle.width / 2),
                            tc.y - Math.floor(bundle.height / 2));
+    } else if (bundle.kind === 'aoe-3phase') {
+      // 3-phase expanding burst — each phase has a different canvas size, so
+      // center per-frame (frame.width / 2) rather than from the bundle.
+      ctx.drawImage(frame, tc.x - Math.floor(frame.width / 2),
+                           tc.y - Math.floor(frame.height / 2));
     }
   }
 }
@@ -708,6 +713,13 @@ function _drawPlayerSpellTargetSparkleOnEnemy() {
   const sy = HUD_VIEW_Y + 8 + 8;
 
   if (isThrown) {
+    // Item-use (SouthWind, etc.) skips the cast windup AND projectile flight —
+    // items go straight to impact. magic-hit timer = 0 at impact start, so
+    // impactMs = cureMs directly.
+    if (isCurrentCastItemUse()) {
+      drawSpellEffectAtTargets(ui.ctx, enemyTargets, spellId, cureMs);
+      return;
+    }
     // Throw timeline: projectile fan-out during projectile phase, then all
     // impact bursts play concurrently during impact phase.
     if (cureMs < CAST_T_THROW_PROJ_START || cureMs >= CAST_T_THROW_RETURN) return;

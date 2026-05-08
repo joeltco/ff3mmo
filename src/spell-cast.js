@@ -46,6 +46,10 @@ let _baseAmount = -1;
 // doesn't double up. Lets the SFX trigger fire EARLY (at spell-anim start)
 // instead of waiting until the damage-number pops at hitEffectMs.
 let _sfxPlayed = false;
+// True when the cast was triggered by a battle item (SouthWind, etc.) rather
+// than a spellcaster job action. Items skip the BM/WM cast pose, MP cost, and
+// MAGIC_CAST SFX — they go straight from a 250 ms throw window to magic-hit.
+let _isItemUse = false;
 
 function _playSpellSFXOnce(sfx) {
   if (_sfxPlayed) return;
@@ -71,6 +75,10 @@ function _damageImpactSFX(el) {
 export function getSpellTargets() { return _targets; }
 export function getSpellHitIdx() { return _hitIdx; }
 export function getCurrentSpellId() { return _spellId; }
+// True when the active cast was triggered by a battle item, not a job's spell
+// action. Render paths use this to skip the throw projectile (items go straight
+// to impact) and to align the impact-phase timer to magic-hit start (0 ms).
+export function isCurrentCastItemUse() { return _isItemUse; }
 export function resetSpellCastVars() {
   _spellId = 0; _targets = []; _hitIdx = 0; _effectApplied = false; _baseAmount = -1;
   _sfxPlayed = false;
@@ -107,7 +115,7 @@ function _isEnemyRightCol(idx, count) {
 //   { allyIndex: -1, targetMode: 'all' }    → all living party (player + roster)
 //   { enemyIndex: 0, targetMode: 'all' }    → all living enemies
 //   { enemyIndex: N, targetMode: 'col-X' }  → encounter/PVP enemy column
-export function startSpellCast(spellId, targetSpec) {
+export function startSpellCast(spellId, targetSpec, opts = {}) {
   const spell = SPELLS.get(spellId);
   if (!spell) { _processNextTurn(); return; }
   _spellId = spellId;
@@ -115,6 +123,7 @@ export function startSpellCast(spellId, targetSpec) {
   _effectApplied = false;
   _baseAmount = -1;
   _sfxPlayed = false;
+  _isItemUse = !!opts.isItemUse;
 
   const mode = (targetSpec && targetSpec.targetMode) || 'single';
   const onAllies = !!targetSpec && (targetSpec.enemyIndex == null);
@@ -171,13 +180,19 @@ export function startSpellCast(spellId, targetSpec) {
     _baseAmount = _rollMagicAmount(spell.power, useMnd);
   }
 
-  ps.mp -= getSpellMPCost(spellId);
+  // Item-use skips MP deduction (items have no MP cost) and the MAGIC_CAST
+  // pre-animation SFX (items aren't a spell-cast — they're a throw).
+  if (!_isItemUse) {
+    ps.mp -= getSpellMPCost(spellId);
+  }
   battleSt.battleState = 'magic-cast';
   battleSt.battleTimer = 0;
   // Cast SFX — FF3J disasm at 33/B0D8 (black) and 33/B0FF (white) writes $A1 to
   // $7F49 immediately at the pre-magic-animation start, before any spell-specific
   // SFX. Fires for every player-cast spell regardless of school.
-  playSFX(SFX.MAGIC_CAST);
+  if (!_isItemUse) {
+    playSFX(SFX.MAGIC_CAST);
+  }
 }
 
 function _getEnemyAt(idx) {
@@ -353,6 +368,9 @@ function _applySpellEffect(target) {
 // etc.), revive (Raise), and captured BM damage spells (Fire) all use it.
 // Spells with un-captured visuals fall back to the legacy 250/400/1100 timing.
 function _isCastAnimSpell() {
+  // Items skip the BM/WM cast pose entirely — they go straight from throw to
+  // hit with no buildup window, so timing falls back to legacy 250ms→1100ms.
+  if (_isItemUse) return false;
   const spell = SPELLS.get(_spellId);
   if (!spell) return false;
   return spell.element === 'recovery'
@@ -398,8 +416,10 @@ export function updateSpellCast(dt) {
   // _applyEnemyEffect / _applySpellEffect at hitEffectMs.
   const _hasCrossFactionTarget = _targets.some(t => t && t.type === 'enemy');
   const _isThrownDamage = isThrown && spell && spell.type === 'damage' && _hasCrossFactionTarget;
+  // Item-use skips the cast windup, so magic-hit starts the impact at timer=0
+  // — fire SFX immediately. Spell-cast keeps the projectile-end offset.
   const sfxStartMs = _isThrownDamage
-    ? (CAST_T_THROW_IMPACT_START - CAST_PHASE_MS.buildup)
+    ? (_isItemUse ? 0 : (CAST_T_THROW_IMPACT_START - CAST_PHASE_MS.buildup))
     : -1;
 
   if (battleSt.battleState === 'magic-cast') {

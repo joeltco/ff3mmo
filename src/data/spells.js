@@ -106,6 +106,7 @@ export const SPELL_MP_COST = new Map([
   [0x34, 2],  // Cure
   [0x35, 2],  // Poisona
   [0x36, 2],  // Sight
+  [0x3a, 5],  // Blizzara / Bzzra / Ice2 (BM Lv2 — also delivered by SouthWind item)
 ]);
 
 // Magic-shop buy price per spell (gil). NES FF3 sells level-1 white magic for 100 gil.
@@ -115,6 +116,7 @@ export const SPELL_BUY_PRICE = new Map([
   [0x34, 100],  // Cure
   [0x35, 100],  // Poisona
   [0x36, 100],  // Sight
+  [0x3a, 700],  // Blizzara / Bzzra (BM Lv2 — placeholder Lv2 price; revisit)
 ]);
 
 export function getSpellBuyPrice(spellId) {
@@ -142,6 +144,7 @@ const SPELL_SCHOOL = new Map([
   [0x34, 'white'],  // Cure
   [0x35, 'white'],  // Poisona
   [0x36, 'white'],  // Sight
+  [0x3a, 'black'],  // Blizzara / Bzzra Lv2 (also delivered by SouthWind item via animSpellId)
 ]);
 
 export function getSpellSchool(spellId) {
