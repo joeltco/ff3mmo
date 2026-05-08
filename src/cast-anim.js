@@ -1,46 +1,68 @@
-// Caster-side cast animation, dispatched by JOB (not by spell).
+// Caster-side cast animation, dispatched by JOB + SPELL.
 //
-// Architectural rule (the user has stated this across multiple sessions):
-//   • Cast animations are PER-JOB. Every White Mage spell shares the WM cast
-//     pose; every Black Mage spell shares the BM cast pose.
-//   • Projectile is shared across thrown spells (see projectile-anim.js).
-//   • Only the on-target effect varies per spell (see spell-anim.js).
+// Architecture (the user's standing rule):
+//   • Per-JOB AURA: WM = 8-star ring rotating around portrait. BM = halo
+//     wrapping portrait (40×32, with cast-pose body composited inside).
+//   • UNIVERSAL FLAME: same 16×16 size-cycling flame asset for every cast.
+//     Drawn LEFT of the portrait, ON TOP of the aura. Acts like a weapon
+//     overlay — visible whenever a spell is being cast, regardless of job.
+//     (PVP/opponent casters mirror it to the right of their body.)
+//   • PER-SPELL PALETTE: aura + flame tinted by the spell's color (Cure
+//     blue, Fire red, Poisona magenta, Sight green, etc.). Per-job default
+//     applies for unregistered spells.
 //
-// Each job entry owns:
-//   - `flameFrames` — array of pre-decoded canvases for the size cycle
-//   - `starTile`    — optional 8×8 rotating star (WM only)
-//   - `flameDx/Dy`  — anchor offset from portrait origin
-//   - `getFlameFrameIdx(elapsedMs)` — picks which size to draw
+// Render order callers must follow (bottom → top):
+//   1. Aura  (stars OR halo)  — wraps portrait
+//   2. Flame (universal)      — left of portrait, on top
 //
-// Caller computes elapsedMs from cast t=0 and passes its portrait origin; the
-// render sites stay thin. Tile bytes for both jobs were captured via REC OAM.
+// Tile bytes captured via REC OAM 2026-05-04 (WM) and 2026-05-07 f9627 (BM).
+// Parity-gated via tools/parity-check-spell.js (bm-cast, bm-cast-body).
+// Don't hand-edit tile bytes — use the harness.
 
 import { NES_SYSTEM_PALETTE } from './tile-decoder.js';
 import { _makeCanvas16 } from './canvas-utils.js';
 
-// Single palette per job. Per the user's rule: WM cast looks the same for all
-// WM spells. Earlier code in cure-anim.js swapped palette per school (Cure blue
-// vs Poisona magenta vs revive); that was the wrong axis of decomposition and
-// is dropped here. Only the on-target effect (in spell-anim.js) varies.
-const WM_PAL = [0x0F, 0x12, 0x22, 0x31];  // blue / cyan / white
-const BM_PAL = [0x0F, 0x16, 0x27, 0x30];  // red / orange / white (REC OAM 2026-05-07 f9627)
-// Pal1 from f9627 frame 0 (SP1) — used for the BM cast-pose body tiles ($43-
-// $48) drawn inside the halo. Distinct from BM_PAL: the body recolors during
-// cast (the dump captures both palettes simultaneously in one frame).
+// ── Per-job default palettes ──────────────────────────────────────────────
+// Used when a spell isn't registered in SPELL_CAST_PAL below.
+const WM_DEFAULT_PAL = [0x0F, 0x12, 0x22, 0x31];  // blue / cyan / white
+const BM_DEFAULT_PAL = [0x0F, 0x16, 0x27, 0x30];  // red / orange / white (REC OAM 2026-05-07 f9627)
+
+// BM cast-pose body palette (pal1 from f9627 frame 0). The body recolor is
+// per-job (it's the BM character's casting pose), not per-spell — a Blizzard
+// cast still draws the BM body in this same recolor with a cyan halo around it.
 const BM_BODY_PAL = [0x0F, 0x27, 0x18, 0x21];
+
+// ── Per-spell cast palette overrides ──────────────────────────────────────
+// Keyed by spell ID. Only the aura + flame tints change per spell — geometry
+// stays per-job. Add new entries as spells get wired. Unregistered spells
+// fall back to the caster's job default (WM_DEFAULT_PAL / BM_DEFAULT_PAL).
+//
+// Adding a spell:
+//   1. Pick the school's canonical palette (or capture a new one).
+//   2. Add an entry below.
+//   3. (Optional) Mirror the same palette in PROJECTILE_PAL_BY_SPELL
+//      (projectile-anim.js) and the on-target effect (spell-anim.js).
+const SPELL_CAST_PAL = new Map([
+  [0x31, [0x0F, 0x16, 0x27, 0x30]],  // Fire     — red/orange
+  [0x34, [0x0F, 0x12, 0x22, 0x31]],  // Cure     — blue/cyan
+  [0x35, [0x0F, 0x15, 0x27, 0x30]],  // Poisona  — magenta
+  [0x36, [0x0F, 0x29, 0x31, 0x30]],  // Sight    — green
+]);
 
 // ── Phase timings (60 Hz NES capture × 16.67 ms/frame) ────────────────────
 //
-// Same model as the WM Cure capture from 2026-05-04 (was CURE_PHASE_MS in
-// cure-anim.js). The timings hold for all magic-cast — only the visuals
-// rendered during each phase differ per job/spell.
+// Heal-style (Cure / Poisona): cast pose ~800 ms, then on-target sparkle
+// during a single 'heal' window. Throw-style (Fire and future BM damage):
+// cast pose ~800 ms, projectile flies ~150 ms, impact burst ~550 ms.
+// Both share the same total length so spell-cast.js's magic-hit timer
+// doesn't need to branch.
 
 export const CAST_PHASE_MS = {
-  buildup: 800,    // f0-47   flame pulses on caster
-  lunge:   200,    // f48-59  caster slides (visual no-op in our portrait)
-  cast:    217,    // f60-72  cast pose hold
-  heal:    283,    // f73-89  on-target effect plays here (see spell-anim.js)
-  ret:     167,    // f90-99  return — anim ends
+  buildup: 800,    // cast pose / aura builds
+  lunge:   200,    // caster slides (visual no-op in our portrait)
+  cast:    217,    // cast pose hold
+  heal:    283,    // on-target effect plays here (heal-style only)
+  ret:     167,    // return — anim ends
 };
 
 export const CAST_T_LUNGE  = CAST_PHASE_MS.buildup;
@@ -49,49 +71,47 @@ export const CAST_T_HEAL   = CAST_T_CAST + CAST_PHASE_MS.cast;
 export const CAST_T_RETURN = CAST_T_HEAL + CAST_PHASE_MS.heal;
 export const CAST_TOTAL_MS = CAST_T_RETURN + CAST_PHASE_MS.ret;
 
-// ── Thrown-spell timing (Fire, future BM damage) ──────────────────────────
-// Heal-style timing (above) crammed projectile + impact into one 283 ms phase
-// and inserted 417 ms of dead time (lunge + cast hold) where the dump shows
-// no visual happens for thrown spells. Throw timings reflect the f9627
-// dump: cast pose 0-46f (~767ms), projectile 46-55f (~150ms), impact
-// 75-106f (~517ms after a brief gap). We collapse the gap into projectile
-// for runtime continuity, keep total = CAST_TOTAL_MS so spell-cast.js's
-// magic-hit timer doesn't need to branch.
+// Throw timings (Fire and any future thrown spell).
 export const CAST_PHASE_MS_THROW = {
-  buildup:    800,    // cast pose visible (matches heal-style buildup)
-  projectile: 150,    // projectile flies caster → target
-  impact:     550,    // on-target burst — replaces lunge+cast+heal slots
+  buildup:    800,
+  projectile: 150,
+  impact:     550,
   ret:        167,
 };
 export const CAST_T_THROW_PROJ_START   = CAST_PHASE_MS_THROW.buildup;
 export const CAST_T_THROW_IMPACT_START = CAST_T_THROW_PROJ_START + CAST_PHASE_MS_THROW.projectile;
 export const CAST_T_THROW_RETURN       = CAST_T_THROW_IMPACT_START + CAST_PHASE_MS_THROW.impact;
 
-// ── WM cast tile bytes ($4A-$57 flame, $49 small star) ────────────────────
-// Captured 2026-05-04 (REC OAM). Bytes verbatim from the prior cure-anim.js.
-
-const WM_T_4A = new Uint8Array([0x00,0x00,0x00,0x00,0x03,0x04,0x0B,0x0B, 0x00,0x00,0x00,0x00,0x00,0x03,0x07,0x07]);
-
-const WM_T_4B = new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,0x01,0x01,0x01,0x03]);
-const WM_T_4C = new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,0x00,0x00,0x80,0x80]);
-const WM_T_4D = new Uint8Array([0x01,0x03,0x03,0x01,0x00,0x00,0x00,0x00, 0x03,0x07,0x07,0x07,0x03,0x00,0x00,0x00]);
-const WM_T_4E = new Uint8Array([0x00,0x80,0x80,0x00,0x00,0x00,0x00,0x00, 0xC0,0xC0,0xC0,0xC0,0x80,0x00,0x00,0x00]);
-
-const WM_T_4F = new Uint8Array([0x01,0x01,0x03,0x02,0x02,0x04,0x05,0x09, 0x00,0x00,0x00,0x01,0x01,0x03,0x03,0x07]);
-const WM_T_50 = new Uint8Array([0x00,0x00,0x80,0x80,0x40,0x40,0x40,0x60, 0x00,0x00,0x00,0x00,0x80,0x80,0x80,0x80]);
-const WM_T_51 = new Uint8Array([0x0B,0x0B,0x0B,0x09,0x04,0x03,0x00,0x00, 0x07,0x07,0x07,0x07,0x03,0x00,0x00,0x00]);
-const WM_T_52 = new Uint8Array([0xA0,0xB0,0xB0,0xA0,0x60,0xC0,0x00,0x00, 0xC0,0xC0,0xC0,0xC0,0x80,0x00,0x00,0x00]);
-
-const WM_T_53 = new Uint8Array([0x00,0x00,0x04,0x00,0x01,0x09,0x02,0x06, 0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x01]);
-const WM_T_54 = new Uint8Array([0x80,0x80,0x40,0xD0,0xD0,0x60,0x20,0xB0, 0x00,0x00,0x00,0x00,0x00,0x80,0xC0,0xC0]);
-const WM_T_55 = new Uint8Array([0x0D,0x09,0x0B,0x09,0x04,0x03,0x00,0x00, 0x03,0x07,0x07,0x07,0x03,0x00,0x00,0x00]);
-const WM_T_56 = new Uint8Array([0xD8,0xC8,0xE8,0xD8,0xB0,0xE0,0x00,0x00, 0xE0,0xF0,0xF0,0xE0,0xC0,0x00,0x00,0x00]);
-
-const WM_T_57 = new Uint8Array([0x00,0x00,0x30,0x20,0x08,0x04,0x00,0x00, 0x00,0x00,0x30,0x38,0x10,0x00,0x00,0x00]);
+// ── WM aura tile bytes ($49 star) ─────────────────────────────────────────
+// Captured 2026-05-04 (REC OAM). Single 8×8 tile, rotated CW around portrait.
 
 const WM_T_49_STAR = new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 0x10,0x38,0xFE,0x7C,0x7C,0x6C,0x44,0x00]);
 
-// ── BM cast tile bytes ($49-$57) ──────────────────────────────────────────
+// ── Universal flame tile bytes ($4A-$57) ──────────────────────────────────
+// Captured 2026-05-04 (REC OAM, WM Cure). Five size-cycling 16×16 frames.
+// These bytes are reused for ALL casts — the only thing that varies per spell
+// is the palette applied at decode time.
+
+const FLAME_T_4A = new Uint8Array([0x00,0x00,0x00,0x00,0x03,0x04,0x0B,0x0B, 0x00,0x00,0x00,0x00,0x00,0x03,0x07,0x07]);
+
+const FLAME_T_4B = new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,0x01,0x01,0x01,0x03]);
+const FLAME_T_4C = new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,0x00,0x00,0x80,0x80]);
+const FLAME_T_4D = new Uint8Array([0x01,0x03,0x03,0x01,0x00,0x00,0x00,0x00, 0x03,0x07,0x07,0x07,0x03,0x00,0x00,0x00]);
+const FLAME_T_4E = new Uint8Array([0x00,0x80,0x80,0x00,0x00,0x00,0x00,0x00, 0xC0,0xC0,0xC0,0xC0,0x80,0x00,0x00,0x00]);
+
+const FLAME_T_4F = new Uint8Array([0x01,0x01,0x03,0x02,0x02,0x04,0x05,0x09, 0x00,0x00,0x00,0x01,0x01,0x03,0x03,0x07]);
+const FLAME_T_50 = new Uint8Array([0x00,0x00,0x80,0x80,0x40,0x40,0x40,0x60, 0x00,0x00,0x00,0x00,0x80,0x80,0x80,0x80]);
+const FLAME_T_51 = new Uint8Array([0x0B,0x0B,0x0B,0x09,0x04,0x03,0x00,0x00, 0x07,0x07,0x07,0x07,0x03,0x00,0x00,0x00]);
+const FLAME_T_52 = new Uint8Array([0xA0,0xB0,0xB0,0xA0,0x60,0xC0,0x00,0x00, 0xC0,0xC0,0xC0,0xC0,0x80,0x00,0x00,0x00]);
+
+const FLAME_T_53 = new Uint8Array([0x00,0x00,0x04,0x00,0x01,0x09,0x02,0x06, 0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x01]);
+const FLAME_T_54 = new Uint8Array([0x80,0x80,0x40,0xD0,0xD0,0x60,0x20,0xB0, 0x00,0x00,0x00,0x00,0x00,0x80,0xC0,0xC0]);
+const FLAME_T_55 = new Uint8Array([0x0D,0x09,0x0B,0x09,0x04,0x03,0x00,0x00, 0x03,0x07,0x07,0x07,0x03,0x00,0x00,0x00]);
+const FLAME_T_56 = new Uint8Array([0xD8,0xC8,0xE8,0xD8,0xB0,0xE0,0x00,0x00, 0xE0,0xF0,0xF0,0xE0,0xC0,0x00,0x00,0x00]);
+
+const FLAME_T_57 = new Uint8Array([0x00,0x00,0x30,0x20,0x08,0x04,0x00,0x00, 0x00,0x00,0x30,0x38,0x10,0x00,0x00,0x00]);
+
+// ── BM halo tile bytes ($49-$57) ──────────────────────────────────────────
 // Captured 2026-05-07 (REC OAM f9627). Group at origin (176, 41) frames 0-43.
 // Outer corners + middle ring stay constant; inner-corner tile rotates through
 // $51/$52 (size 0) → $54 (size 1) → $55 (size 2) → $56 (size 3) → $57 (size 4
@@ -118,10 +138,9 @@ const BM_T_56 = new Uint8Array([0x07,0x0C,0x18,0x19,0x33,0x37,0x27,0x27, 0x00,0x
 const BM_T_57 = new Uint8Array([0x00,0x00,0x0A,0x10,0x00,0x22,0x00,0x00, 0x00,0x00,0x02,0x00,0x04,0x02,0x08,0x00]);
 
 // BM cast-pose body tiles ($43-$48 pal1). Captured 2026-05-07 (REC OAM f9627
-// frame 0, group at origin 176,41). These are the recolored player body that
-// the NES draws INSIDE the halo during cast (replacing the runtime idle
-// portrait). Without these the halo had a transparent middle and the runtime
-// portrait would show through with wrong palette / wrong pose.
+// frame 0, group at origin 176,41). The recolored player body that the NES
+// draws INSIDE the halo during cast (replacing the runtime idle portrait).
+// Body palette is per-job, never per-spell.
 const BM_T_43_BODY = new Uint8Array([0x00,0x00,0x00,0x00,0x01,0x7F,0x03,0x00, 0x00,0x00,0x00,0x00,0x00,0x00,0x3C,0x07]);
 const BM_T_44_BODY = new Uint8Array([0x03,0x0E,0x1C,0x78,0xE0,0x80,0xC0,0xF0, 0x00,0x01,0x02,0x06,0x1C,0x7C,0x3C,0x08]);
 const BM_T_45_BODY = new Uint8Array([0x00,0x04,0x84,0xF0,0xE0,0x00,0xDF,0xDF, 0x00,0x00,0x00,0x30,0x20,0x00,0x1F,0x1F]);
@@ -175,50 +194,44 @@ function _quad4(tl, tr, bl, br) {
   return c;
 }
 
-// ── Per-job decode ────────────────────────────────────────────────────────
+// ── Universal flame decode ────────────────────────────────────────────────
 
-function _decodeWMCast() {
-  const t4a = _make8(WM_T_4A, WM_PAL);
-  const t4b = _make8(WM_T_4B, WM_PAL), t4c = _make8(WM_T_4C, WM_PAL);
-  const t4d = _make8(WM_T_4D, WM_PAL), t4e = _make8(WM_T_4E, WM_PAL);
-  const t4f = _make8(WM_T_4F, WM_PAL), t50 = _make8(WM_T_50, WM_PAL);
-  const t51 = _make8(WM_T_51, WM_PAL), t52 = _make8(WM_T_52, WM_PAL);
-  const t53 = _make8(WM_T_53, WM_PAL), t54 = _make8(WM_T_54, WM_PAL);
-  const t55 = _make8(WM_T_55, WM_PAL), t56 = _make8(WM_T_56, WM_PAL);
-  const t57 = _make8(WM_T_57, WM_PAL);
-
-  const flameFrames = [
+function _decodeFlameFrames(pal) {
+  const t4a = _make8(FLAME_T_4A, pal);
+  const t4b = _make8(FLAME_T_4B, pal), t4c = _make8(FLAME_T_4C, pal);
+  const t4d = _make8(FLAME_T_4D, pal), t4e = _make8(FLAME_T_4E, pal);
+  const t4f = _make8(FLAME_T_4F, pal), t50 = _make8(FLAME_T_50, pal);
+  const t51 = _make8(FLAME_T_51, pal), t52 = _make8(FLAME_T_52, pal);
+  const t53 = _make8(FLAME_T_53, pal), t54 = _make8(FLAME_T_54, pal);
+  const t55 = _make8(FLAME_T_55, pal), t56 = _make8(FLAME_T_56, pal);
+  const t57 = _make8(FLAME_T_57, pal);
+  return [
     _flippedQuad(t4a),               // size 1 — smallest ring
     _quad4(t4b, t4c, t4d, t4e),      // size 2
     _quad4(t4f, t50, t51, t52),      // size 3
     _quad4(t53, t54, t55, t56),      // size 4 — XL ring
     _flippedQuad(t57),               // brackets — release flash
   ];
-  const starTile = _make8(WM_T_49_STAR, WM_PAL);
-  return { flameFrames, starTile };
 }
 
-// BM cast: 32×32 halo around the player portrait. Outer ring + middle ring
-// stay constant; inner pulse tile cycles per size. Frame 0 layout (origin
-// 176,41 in the dump) is mirrored across both axes — the captured tiles cover
-// only the upper-left quadrant of the halo and the rest is built from flips.
-//
-// Layout (each entry = 8×8 tile slot relative to the 32×32 halo canvas):
-//   row 0 (y=0)    [8,0]=$49      [16,0]=$4A      [24,0]=$50 V H  [32,0]=$4F V H
-//   row 1 (y=8)    [0,8]=$51/etc  [8,8]=$52/etc + $4B  [16,8]=$4C  [24,8]=$4E V H  [32,8]=$4D V H
-//   row 2 (y=16)   mirror of row 1 across x-axis
-//   row 3 (y=24)   mirror of row 0 across x-axis
-//
-// Halo is drawn at (portrait_x - 8, portrait_y - 4) so the 32×32 halo wraps
-// the 16×16 portrait centered (8 px overhang each side, 4 px top/bottom).
-function _buildBMCastFrame(innerTile) {
-  const t49 = _make8(BM_T_49, BM_PAL), t4a = _make8(BM_T_4A, BM_PAL);
-  const t4f = _make8(BM_T_4F, BM_PAL), t50 = _make8(BM_T_50, BM_PAL);
-  const t4b = _make8(BM_T_4B, BM_PAL), t4c = _make8(BM_T_4C, BM_PAL);
-  const t4d = _make8(BM_T_4D, BM_PAL), t4e = _make8(BM_T_4E, BM_PAL);
-  const inner = _make8(innerTile, BM_PAL);
-  // Cast-pose body tiles (pal1) — drawn INSIDE the halo at the dump's
-  // captured positions: [16,3]/[24,3]/[16,11]/[24,11]/[16,19]/[24,19].
+// ── WM aura: rotating star tile ───────────────────────────────────────────
+
+function _decodeWMStarTile(pal) {
+  return _make8(WM_T_49_STAR, pal);
+}
+
+// ── BM aura: 40×32 halo wrapping portrait (with body composited inside) ──
+// Halo + body in one 40×32 canvas. Halo decoded with the spell's palette;
+// body decoded with the per-job BM_BODY_PAL (constant). This keeps the BM
+// character's body recolor consistent across all BM spells while the halo
+// hue tracks the spell.
+
+function _buildBMHaloFrame(innerTile, haloPal) {
+  const t49 = _make8(BM_T_49, haloPal), t4a = _make8(BM_T_4A, haloPal);
+  const t4f = _make8(BM_T_4F, haloPal), t50 = _make8(BM_T_50, haloPal);
+  const t4b = _make8(BM_T_4B, haloPal), t4c = _make8(BM_T_4C, haloPal);
+  const t4d = _make8(BM_T_4D, haloPal), t4e = _make8(BM_T_4E, haloPal);
+  const inner = _make8(innerTile, haloPal);
   const b43 = _make8(BM_T_43_BODY, BM_BODY_PAL), b44 = _make8(BM_T_44_BODY, BM_BODY_PAL);
   const b45 = _make8(BM_T_45_BODY, BM_BODY_PAL), b46 = _make8(BM_T_46_BODY, BM_BODY_PAL);
   const b47 = _make8(BM_T_47_BODY, BM_BODY_PAL), b48 = _make8(BM_T_48_BODY, BM_BODY_PAL);
@@ -234,13 +247,12 @@ function _buildBMCastFrame(innerTile) {
     cx.restore();
   };
 
-  // Row 0 (y=0): top corner ring (halo only — body starts at y=3)
+  // Row 0 (y=0): top corner ring
   draw(t49, 8,  0, false, false);
   draw(t4a, 16, 0, false, false);
   draw(t50, 24, 0, true,  true);
   draw(t4f, 32, 0, true,  true);
-  // Body upper at canvas y=3 (offset by 3 from halo grid — drawn AFTER halo
-  // row 0 so it covers the row-0 body-column tiles in its overlap region).
+  // Body upper at canvas y=3
   draw(b43, 16, 3, false, false);
   draw(b44, 24, 3, false, false);
   // Row 1 (y=8): inner-corner pulse + middle ring
@@ -250,20 +262,20 @@ function _buildBMCastFrame(innerTile) {
   draw(t4c,  16, 8, false, false);
   draw(t4e,  24, 8, true,  true);
   draw(t4d,  32, 8, true,  true);
-  // Body middle at canvas y=11 (covers middle-ring body-column tiles).
+  // Body middle at canvas y=11
   draw(b45, 16, 11, false, false);
   draw(b46, 24, 11, false, false);
-  // Row 2 (y=16): mirror of row 1 (inner pulse VFLIP, middle ring shifted)
+  // Row 2 (y=16): mirror of row 1
   draw(inner, 0, 16, false, true);
   draw(inner, 8, 16, true,  true);
   draw(t4d,   8, 16, false, false);
   draw(t4e,  16, 16, false, false);
   draw(t4c,  24, 16, true,  true);
   draw(t4b,  32, 16, true,  true);
-  // Body lower at canvas y=19.
+  // Body lower at canvas y=19
   draw(b47, 16, 19, false, false);
   draw(b48, 24, 19, false, false);
-  // Row 3 (y=24): bottom corner ring (V H of row 0)
+  // Row 3 (y=24): bottom corner ring
   draw(t4f,  8,  24, false, false);
   draw(t50, 16, 24, false, false);
   draw(t4a, 24, 24, true,  true);
@@ -272,67 +284,130 @@ function _buildBMCastFrame(innerTile) {
   return c;
 }
 
-function _decodeBMCast() {
-  // 5 size frames cycling through the inner-pulse tile. Outer ring is identical
-  // across all 5; only the corner-flash tile rotates. Matches WM's 5-size shape
-  // so the dispatch site can use the same `flameFrames[idx]` API.
-  const flameFrames = [
-    _buildBMCastFrame(BM_T_51),  // size 0/1 — base (also uses $52 alongside; close enough for first ship)
-    _buildBMCastFrame(BM_T_54),  // size 2
-    _buildBMCastFrame(BM_T_55),  // size 3
-    _buildBMCastFrame(BM_T_56),  // size 4
-    _buildBMCastFrame(BM_T_57),  // brackets — release flash
+function _decodeBMHaloFrames(pal) {
+  // 5 size-cycling frames. Outer ring is identical across all 5; only the
+  // inner-pulse tile rotates ($51 → $54 → $55 → $56 → $57 release flash).
+  return [
+    _buildBMHaloFrame(BM_T_51, pal),
+    _buildBMHaloFrame(BM_T_54, pal),
+    _buildBMHaloFrame(BM_T_55, pal),
+    _buildBMHaloFrame(BM_T_56, pal),
+    _buildBMHaloFrame(BM_T_57, pal),
   ];
-  return { flameFrames, starTile: null };  // BM has no separate rotating-star ring
+}
+
+// ── Per-(job, palette) bundle ─────────────────────────────────────────────
+
+function _buildBundle(jobKey, pal) {
+  const flameFrames = _decodeFlameFrames(pal);
+  if (jobKey === 'wm') {
+    return {
+      jobKey,
+      auraKind: 'stars',
+      starTile: _decodeWMStarTile(pal),
+      haloFrames: null,
+      flameFrames,
+      // Flame anchor relative to portrait origin (16×16 portrait).
+      flameDx: -16, flameDy: 5,
+      flameW: 16, flameH: 16,
+      // Aura (stars) — drawn by ring math at portrait center; no fixed canvas.
+      haloDx: 0, haloDy: 0, haloW: 0, haloH: 0,
+    };
+  }
+  if (jobKey === 'bm') {
+    return {
+      jobKey,
+      auraKind: 'halo',
+      starTile: null,
+      haloFrames: _decodeBMHaloFrames(pal),
+      flameFrames,
+      // Flame anchor: same offset as WM so the universal flame sits in the
+      // same place relative to the portrait regardless of job.
+      flameDx: -16, flameDy: 5,
+      flameW: 16, flameH: 16,
+      // Halo anchor: 40×32 canvas wraps the 16×16 portrait. Body-area inside
+      // the halo aligns with the runtime portrait at (px, py) when the canvas
+      // is drawn at (px - 16, py - 3).
+      haloDx: -16, haloDy: -3, haloW: 40, haloH: 32,
+    };
+  }
+  return null;
 }
 
 // ── Public API ────────────────────────────────────────────────────────────
 
-let _byKey = null;  // { wm: { flameFrames, starTile, ... }, bm: { ... } }
+let _byJob   = null;   // { wm: <default bundle>, bm: <default bundle> }
+let _bySpell = null;   // Map<spellId, { wm: <bundle> | null, bm: <bundle> | null }>
 
 export function initCastAnim() {
-  _byKey = {
-    wm: { ..._decodeWMCast(), flameDx: -16, flameDy:  5, flameW: 16, flameH: 16 },
-    // BM 40×32 canvas has the body-area at canvas (16, 3)..(32, 27) per the
-    // dump (f9627 frame 0: body tiles $43-$48 at [16,3]/[24,3]/[16,11]/[24,11]/
-    // [16,19]/[24,19]). To align that body-area with the 16×16 portrait at
-    // (px, py), draw the canvas at (px - 16, py - 3).
-    bm: { ..._decodeBMCast(), flameDx: -16, flameDy: -3, flameW: 40, flameH: 32 },
+  _byJob = {
+    wm: _buildBundle('wm', WM_DEFAULT_PAL),
+    bm: _buildBundle('bm', BM_DEFAULT_PAL),
   };
+  _bySpell = new Map();
+  for (const [spellId, pal] of SPELL_CAST_PAL.entries()) {
+    _bySpell.set(spellId, {
+      wm: _buildBundle('wm', pal),
+      bm: _buildBundle('bm', pal),
+    });
+  }
 }
 
-// Map jobIdx → cast key. WM (3) and RM (5) share WM cast; BM (4) is its own.
-// Non-mage jobs return null (no cast visual).
+// Map jobIdx → cast key. WM (3) and RM (5) share WM cast pose; BM (4) is its
+// own. Caller (9) is reserved for future call-magic visuals.
 const _MAGE_CAST_KEY = { 3: 'wm', 4: 'bm', 5: 'wm' };
 export function jobToCastKey(jobIdx) {
   return _MAGE_CAST_KEY[jobIdx] || null;
 }
 
-// Returns the cast asset bundle for a job, or null. Bundle shape:
-//   { flameFrames: [c0..c4], starTile: c|null, flameDx, flameDy, flameW, flameH }
+// Returns the cast-visual bundle for (jobIdx, spellId). Falls back to the
+// per-job default palette when the spell isn't registered in SPELL_CAST_PAL.
+// Returns null for non-mage jobs.
+export function getCastVisual(jobIdx, spellId) {
+  const jobKey = jobToCastKey(jobIdx);
+  if (!jobKey || !_byJob) return null;
+  if (spellId != null && _bySpell) {
+    const perSpell = _bySpell.get(spellId);
+    if (perSpell && perSpell[jobKey]) return perSpell[jobKey];
+  }
+  return _byJob[jobKey];
+}
+
+// Backward-compat shim — returns the per-job default bundle (no spell tint).
+// New callers should use `getCastVisual(jobIdx, spellId)` directly. The
+// returned bundle's shape is identical, so existing render code that reads
+// `flameFrames`, `starTile`, `flameDx`, `flameDy` keeps working; new fields
+// (`auraKind`, `haloFrames`, etc.) are simply ignored by old callers.
 export function getCastAsset(jobKey) {
-  if (!jobKey || !_byKey) return null;
-  return _byKey[jobKey] || null;
+  if (!jobKey || !_byJob) return null;
+  return _byJob[jobKey] || null;
 }
 
 // Flame size cycle, ms-keyed. Same cadence both jobs (~67 ms/step):
-//   WM:   size1 → size2 → size2 → size3 → size4 (REC OAM 2026-05-04)
-//   BM:   size0 → size0 → size1 → size2 → size3 (REC OAM 2026-05-07 f9627)
-// then brackets ($57) for the last 200 ms of buildup. Returns -1 outside the
-// buildup window.
-const _WM_FLAME_SEQ = [0, 1, 1, 2, 3, 3, 2, 3, 3];
-const _BM_FLAME_SEQ = [0, 0, 0, 1, 2, 2, 3, 3, 3];
+//   size1 → size2 → size2 → size3 → size4 → ... → brackets
+// Returns -1 outside the buildup window.
+const _FLAME_SEQ = [0, 1, 1, 2, 3, 3, 2, 3, 3];
 
-export function getCastFlameFrameIdx(elapsedMs, jobKey) {
+export function getCastFlameFrameIdx(elapsedMs) {
   if (elapsedMs < 0 || elapsedMs >= CAST_T_LUNGE) return -1;
-  if (elapsedMs >= 600) return 4;  // brackets ($57 / WM_T_57)
-  const seq = jobKey === 'bm' ? _BM_FLAME_SEQ : _WM_FLAME_SEQ;
-  const step = Math.min(seq.length - 1, Math.floor(elapsedMs / 67));
-  return seq[step];
+  if (elapsedMs >= 600) return 4;  // brackets — release flash
+  const step = Math.min(_FLAME_SEQ.length - 1, Math.floor(elapsedMs / 67));
+  return _FLAME_SEQ[step];
 }
 
-// Stars rotate during buildup + lunge (phases 1+2). BM has no stars (returns
-// null starTile from getCastAsset), so this is effectively WM-only.
+// BM halo size cycle, ms-keyed. Same cadence as the flame so caller can drive
+// both off the same elapsedMs. Returns -1 outside the buildup window.
+const _HALO_SEQ = [0, 0, 0, 1, 2, 2, 3, 3, 3];
+
+export function getCastHaloFrameIdx(elapsedMs) {
+  if (elapsedMs < 0 || elapsedMs >= CAST_T_LUNGE) return -1;
+  if (elapsedMs >= 600) return 4;  // release flash
+  const step = Math.min(_HALO_SEQ.length - 1, Math.floor(elapsedMs / 67));
+  return _HALO_SEQ[step];
+}
+
+// Stars rotate during buildup + lunge (phases 1+2). BM has no stars
+// (auraKind === 'halo'), so this is effectively WM-only.
 export function shouldDrawCastStars(elapsedMs) {
   return elapsedMs >= 0 && elapsedMs < CAST_T_CAST;
 }

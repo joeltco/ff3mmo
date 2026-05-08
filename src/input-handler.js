@@ -10,7 +10,7 @@ import { titleSt, onNameEntryKeyDown } from './title-screen.js';
 import { ps, recalcCombatStats, changeJob, getEquipSlotId, setEquipSlotId, EQUIP_SLOT_SUBTYPE,
          getHitWeapon, jobSwitchCost, getJobLevelStatBonus } from './player-stats.js';
 import { ITEMS, isHandEquippable, isWeapon, weaponSubtype } from './data/items.js';
-import { SPELLS, getSpellMPCost, isMultiTargetSpell } from './data/spells.js';
+import { SPELLS, getSpellMPCost, isMultiTargetSpell, getCastableKnownSpells } from './data/spells.js';
 import { selectCursor, saveSlots, saveSlotsToDB } from './save-state.js';
 import { rollHits, calcPotentialHits, elemMultiplier } from './battle-math.js';
 import { blindHitPenalty, miniToadAtkMult, removeStatus, STATUS } from './status-effects.js';
@@ -840,7 +840,7 @@ function _pauseInputMainMenu() {
 
 // Pause-menu Magic submenu — opens the inventory state machine in 'magic' mode.
 function _pauseInputMagicZ() {
-  const known = ps.knownSpells || [];
+  const known = getCastableKnownSpells(ps.jobIdx, ps.knownSpells);
   if (known.length === 0) { playSFX(SFX.ERROR); return; }
   playSFX(SFX.CONFIRM);
   pauseSt.menuMode = 'magic';
@@ -964,7 +964,7 @@ function _pauseInputInventory() {
 }
 
 function _pauseInputMagicList() {
-  const list = ps.knownSpells || [];
+  const list = getCastableKnownSpells(ps.jobIdx, ps.knownSpells);
   const k = keys;
   if (k['ArrowDown']) {
     k['ArrowDown'] = false;

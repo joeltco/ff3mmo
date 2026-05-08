@@ -6,7 +6,7 @@ import { JOBS, JOB_ABBR } from './data/jobs.js';
 import { _makeFadedPal, nesColorFade } from './palette.js';
 import { _nameToBytes, _buildItemRowBytes } from './text-utils.js';
 import { getItemNameClean, getSpellNameClean } from './text-decoder.js';
-import { SPELLS, getSpellMPCost } from './data/spells.js';
+import { SPELLS, getSpellMPCost, getCastableKnownSpells } from './data/spells.js';
 import { stopFF1Music, resumeMusic, playFF1Track, FF1_TRACKS } from './music.js';
 import { PAUSE_ITEMS } from './data/strings.js';
 import { selectCursor, saveSlots } from './save-state.js';
@@ -289,7 +289,7 @@ function _drawPauseMagicList(ctx) {
   const px = HUD_VIEW_X, finalY = HUD_VIEW_Y;
   const fadeStep = _pauseFadeStep('inv-items-in', 'inv-items-out');
   const fadedPal = _makeFadedPal(fadeStep);
-  const list = ps.knownSpells || [];
+  const list = getCastableKnownSpells(ps.jobIdx, ps.knownSpells);
   const colW = HUD_VIEW_W;
   const costRightX = px + colW - 16;
   for (let i = 0; i < list.length; i++) {

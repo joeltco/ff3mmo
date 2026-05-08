@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.101 — 2026-05-08
+
+### Magic system: modularized — per-spell palette on cast/projectile, parallel multi-target, school-gated by job
+
+Tightened the magic system to the rule set the user laid down:
+- **Cast = per-job geometry, per-spell palette.** WM = stars circling + universal flame on left, on top. BM = halo wrapping portrait + universal flame on left, on top. Same flame asset for both jobs (16×16 size cycle, parity-gated bytes preserved). Aura + flame palette tints per spell ID — Cure blue, Fire red, Poisona magenta, Sight green. Per-job palette default applies for unregistered spells.
+- **Projectile = one bitmap (`T_58`), palette per spell.** Collapsed `T_58_FIRE` + `T_58_SIGHT` to a single bitmap; per-spell palette via `SPELL_PROJECTILE_PAL` (mirrors `SPELL_CAST_PAL`). Added `ELEMENT_FALLBACK_PAL` for spells without an explicit entry. `T_58_SIGHT` bytes preserved as a comment for parity history.
+- **Faction-axis projectile gate.** Cross-faction casts (player→enemy, ally→enemy, pvp-enemy→player/ally) project; same-faction casts (heal on self, ally) skip the projectile and jump straight to the on-target effect.
+- **Parallel multi-target apply.** `updateSpellCast` no longer iterates `_hitIdx` serially. At `hitEffectMs` every target in `_targets` gets the effect simultaneously — projectile fans out, all impact bursts play concurrently, all damage numbers pop together. Kill routing operates on the all-at-once kill set.
+- **Centralized render dispatch.** `drawCasterCast(ctx, px, py, jobIdx, spellId, elapsedMs, mirrorFlame)`, `drawProjectileFan(ctx, sx, sy, casterFaction, targets, ...)`, `drawSpellEffectAtTargets(ctx, targets, spellId, elapsedMs)` are the single sources of truth in `battle-drawing.js`. The duplicated cast-render blocks in `_drawPortraitOverlays`, `_drawAllyCastAnim`, and `pvp.js` enemy-cast all collapse into these helpers; pvp.js's flame mirrors right via the same dispatcher.
+- **School-gated spells.** Magic shop, battle magic menu, and pause Magic submenu now filter by job. WM = white only, BM = black only, RM = both, Caller (job 9) = call magic (deferred). `getSpellSchool` / `canCastSpell` / `canLearnSpell` / `getCastableKnownSpells` live in `data/spells.js`. RM starting spells = Cure + Fire (cross-school starter).
+- **Renamed source constants** (no byte changes): `WM_T_*` flame tiles → `FLAME_T_*` (universal), `WM_PAL` → `WM_DEFAULT_PAL`, `BM_PAL` → `BM_DEFAULT_PAL`, `T_58_FIRE` → `T_58`. Parity gates updated to match — fire / fire-projectile / bm-cast / bm-cast-body all PASS against `~/emu-snap-f9627.txt`.
+
 ## 1.7.100 — 2026-05-08
 
 ### BM cast: full halo+body composite, drawn on top — design-correct (WM=stars, BM=halo, never changes)

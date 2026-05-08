@@ -125,6 +125,58 @@ export function getSpellBuyPrice(spellId) {
 export const MULTI_TARGET_SPELLS = new Set([0x34]); // Cure
 export function isMultiTargetSpell(spellId) { return MULTI_TARGET_SPELLS.has(spellId); }
 
+// ── Spell school dispatch (job gating) ────────────────────────────────────
+//
+// Schools:
+//   'white' — recovery, status-cure, revive, sight (defensive/utility)
+//   'black' — damage, debuffs, instant-death (offensive)
+//   'call'  — summons (Caller job, deferred — no entries yet)
+//
+// Only player-castable spells need entries. Add a row when you wire a new
+// spell so the magic shop / battle menu / pause menu gate it correctly.
+const SPELL_SCHOOL = new Map([
+  [0x31, 'black'],  // Fire
+  [0x34, 'white'],  // Cure
+  [0x35, 'white'],  // Poisona
+  [0x36, 'white'],  // Sight
+]);
+
+export function getSpellSchool(spellId) {
+  return SPELL_SCHOOL.get(spellId) || null;
+}
+
+// Job → schools the job can cast. WM (3) and BM (4) are single-school; RM
+// (5) is hybrid (both white + black, lower-level only in NES canon — not
+// enforced here yet). Caller (9) is reserved for future call magic.
+const JOB_SCHOOLS = {
+  3: new Set(['white']),
+  4: new Set(['black']),
+  5: new Set(['white', 'black']),
+  9: new Set(['call']),
+};
+
+// Returns true if `jobIdx` is allowed to cast `spellId` (school + job match).
+// Used to filter battle/pause magic menus and gate magic-shop "Learn X?".
+export function canCastSpell(jobIdx, spellId) {
+  const school = getSpellSchool(spellId);
+  if (!school) return false;
+  const allowed = JOB_SCHOOLS[jobIdx];
+  return !!(allowed && allowed.has(school));
+}
+
+export function canLearnSpell(jobIdx, spellId) {
+  return canCastSpell(jobIdx, spellId);
+}
+
+// Filter a known-spells list down to what the current job can actually cast.
+// Use this anywhere the magic UI builds a list from ps.knownSpells (battle
+// menu, pause menu) so a hybrid player carrying off-school spells from a
+// past job doesn't see unusable entries.
+export function getCastableKnownSpells(jobIdx, knownSpells) {
+  if (!Array.isArray(knownSpells)) return [];
+  return knownSpells.filter(id => canCastSpell(jobIdx, id));
+}
+
 // Returns the spell's flat MP cost. If a player-castable spell is missing from
 // SPELL_MP_COST, that's a bug — warn once and return 99 (effectively uncastable)
 // so the omission surfaces in playtest instead of silently making the spell free.

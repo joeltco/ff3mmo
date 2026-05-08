@@ -35,8 +35,8 @@ import { inputSt } from './input-handler.js';
 import { bsc, getSlashFramesForWeapon } from './battle-sprite-cache.js';
 import { drawSlashOverlay, SLASH_FRAME_MS, shouldDrawSlash } from './slash-effects.js';
 import { getCastAnimElapsedMs, getCurrentSpellId, getSpellTargets, getSpellHitIdx } from './spell-cast.js';
-import { getCastAsset, getCastFlameFrameIdx, shouldDrawCastStars, jobToCastKey,
-         CAST_T_HEAL, CAST_T_RETURN, CAST_PHASE_MS,
+import { getCastVisual, getCastFlameFrameIdx, getCastHaloFrameIdx, shouldDrawCastStars,
+         jobToCastKey, CAST_T_LUNGE, CAST_T_HEAL, CAST_T_RETURN, CAST_PHASE_MS,
          CAST_T_THROW_PROJ_START, CAST_T_THROW_IMPACT_START, CAST_T_THROW_RETURN,
          CAST_PHASE_MS_THROW } from './cast-anim.js';
 import { getSpellAnim, getSpellAnimForItem, getSpellAnimFrame } from './spell-anim.js';
@@ -335,47 +335,20 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
     const frame = bsc.defendSparkleFrames[fi];
     drawSparkleCorners(frame, px, py);
   }
-  // Cast animation — per-job (see cast-anim.js). Build-up + lunge run caster-
-  // side (always at the player portrait, regardless of target). The on-target
-  // sparkle (heal phase) only renders here when the target is the player;
-  // ally-target sparkles are drawn at the ally portrait below.
+  // Cast animation — dispatched via drawCasterCast (the single source of
+  // truth). WM = stars + flame; BM = halo + flame. Per-spell palette tints
+  // both. The on-target sparkle (heal phase) only renders here when ANY
+  // target is the player; ally-target sparkles are drawn at the ally
+  // portrait below; enemy-target effects are drawn by the player-spell
+  // target dispatch.
   const isMagicState = battleSt.battleState === 'magic-cast' || battleSt.battleState === 'magic-hit';
   const isCureItemUse = battleSt.battleState === 'item-use' && !(inputSt.playerActionPending && inputSt.playerActionPending.allyIndex >= 0);
   const _curSpellTargets = isMagicState ? getSpellTargets() : null;
-  const _curSpellTgt = _curSpellTargets && _curSpellTargets.length > 0
-    ? _curSpellTargets[Math.min(getSpellHitIdx(), _curSpellTargets.length - 1)] : null;
-  const isCureMagicSelf = isMagicState && _curSpellTgt && _curSpellTgt.type === 'player';
+  const isCureMagicSelf = isMagicState && _curSpellTargets &&
+    _curSpellTargets.some(t => t && t.type === 'player');
   const cureMs = isMagicState ? getCastAnimElapsedMs() : -1;
-  // Cast asset comes from the caster's job (WM, BM). Spell ID is only relevant
-  // for the on-target effect below.
-  const _castKey = isMagicState ? jobToCastKey(ps.jobIdx) : null;
-  const _castAsset = _castKey ? getCastAsset(_castKey) : null;
-  if (cureMs >= 0 && _castAsset && _castAsset.flameFrames.length === 5) {
-    // WM = stars rotating around portrait + small flame to the LEFT, on top.
-    // BM = halo wrapping portrait (40×32 with halo + body-pal1 inside), on top.
-    // Both paths draw in this overlay layer (after the portrait frame) so the
-    // cast flame / animating pulse renders ON TOP of the player.
-    if (shouldDrawCastStars(cureMs) && _castAsset.starTile) {
-      // 8 stars on a radius-15 ring around the portrait, rotating CW at the
-      // OAM-measured rate (~5°/NES-frame × 60 fps = 300°/s = 1.2 s per turn).
-      const star = _castAsset.starTile;
-      const cx = px + 8, cy = py + 8;
-      const r = 15;
-      const N = 8;
-      const rotRad = (cureMs / 1200) * Math.PI * 2; // CW
-      for (let i = 0; i < N; i++) {
-        const a = (i / N) * Math.PI * 2 + rotRad - Math.PI / 2;
-        const sx = Math.round(cx + Math.cos(a) * r - 4);
-        const sy = Math.round(cy + Math.sin(a) * r - 4);
-        ui.ctx.drawImage(star, sx, sy);
-      }
-    }
-    const flameIdx = getCastFlameFrameIdx(cureMs, _castKey);
-    if (flameIdx >= 0) {
-      // Anchor varies by job (WM: 16×16 to the left; BM: 40×32 wrapping body).
-      ui.ctx.drawImage(_castAsset.flameFrames[flameIdx],
-                       px + _castAsset.flameDx, py + _castAsset.flameDy);
-    }
+  if (cureMs >= 0) {
+    drawCasterCast(ui.ctx, px, py, ps.jobIdx, getCurrentSpellId(), cureMs);
   }
   // On-target sparkle — per-spell visual on the target portrait during heal
   // phase. Items route by `item.animSpellId` through spell-anim.
@@ -592,88 +565,206 @@ function drawBattle() {
   _drawBattleDefeat();
 }
 
-// Player-cast magic targeting an enemy — render the heal-phase sparkle on the
-// enemy sprite so the target effect mirrors the friendly-target paths.
-// Spell-ID source: getCurrentSpellId() (player-cast). Per the spell-anim hard
-// rules, ally-cast and PVP-cast versions of this same effect would read from
-// battleSt.allyMagicSpellId / pvpSt.pvpMagicSpellId — neither path exists yet
-// (no AI offensive magic on enemies), so add those branches when needed.
-function _drawPlayerSpellTargetSparkleOnEnemy() {
-  if (battleSt.battleState !== 'magic-hit') return;
-  const targets = getSpellTargets();
-  const hitIdx = getSpellHitIdx();
-  if (!targets || hitIdx >= targets.length) return;
-  const tgt = targets[hitIdx];
-  if (!tgt || tgt.type !== 'enemy') return;
-  const cureMs = getCastAnimElapsedMs();
-  const spellId = getCurrentSpellId();
-  const spell = SPELLS.get(spellId);
-  if (!spell) return;
-  const bundle = getSpellAnim(spellId);
-  const isThrown = spell.target === 'sight' || spell.element === 'fire';
-  // Heal-style spells render only during the heal window. Thrown spells use a
-  // different phase model (projectile + impact in distinct windows) so the
-  // gating happens inside the isThrown branch below.
-  if (!isThrown) {
-    if (cureMs < CAST_T_HEAL || cureMs >= CAST_T_RETURN) return;
-    if (!bundle || bundle.kind !== 'portrait-2frame') return;
-  } else {
-    if (cureMs < CAST_T_THROW_PROJ_START || cureMs >= CAST_T_THROW_RETURN) return;
-  }
-  const fi = Math.floor(battleSt.battleTimer / 67) & 1;
+// ── Centralized magic render helpers ─────────────────────────────────────
+//
+// These are the SINGLE source of truth for cast / projectile / on-target
+// rendering during magic-cast / magic-hit phases. All three render paths
+// (player, ally, PVP enemy) call into them so adding a new spell or
+// adjusting a phase only requires editing one site.
+//
+// Faction-axis projectile rule (the user's standing rule): a projectile
+// renders only when caster.faction !== target.faction (cross-faction).
+// Same-faction casts (heal on self, ally) skip the projectile and jump
+// straight to the on-target effect.
 
-  // Enemy sprite center — encounter / PVP / boss differ.
-  let cx, cy;
+// Draw a caster's cast aura + flame. Always drawn in this order:
+//   1. Aura (stars OR halo) — bottom layer, wraps portrait
+//   2. Flame — top layer, always visible during buildup
+// `mirrorFlame=true` flips the flame to the right side of the portrait
+// (used by PVP enemy casters who face left toward the player party).
+function drawCasterCast(ctx, px, py, jobIdx, spellId, elapsedMs, mirrorFlame = false) {
+  if (elapsedMs < 0) return;
+  const visual = getCastVisual(jobIdx, spellId);
+  if (!visual) return;
+  // 1. Aura
+  if (visual.auraKind === 'stars' && shouldDrawCastStars(elapsedMs) && visual.starTile) {
+    const cx = px + 8, cy = py + 8;
+    const r = 15, N = 8;
+    const rotRad = (elapsedMs / 1200) * Math.PI * 2;
+    for (let i = 0; i < N; i++) {
+      const a = (i / N) * Math.PI * 2 + rotRad - Math.PI / 2;
+      const sx = Math.round(cx + Math.cos(a) * r - 4);
+      const sy = Math.round(cy + Math.sin(a) * r - 4);
+      ctx.drawImage(visual.starTile, sx, sy);
+    }
+  } else if (visual.auraKind === 'halo' && visual.haloFrames) {
+    const haloIdx = getCastHaloFrameIdx(elapsedMs);
+    if (haloIdx >= 0) {
+      ctx.drawImage(visual.haloFrames[haloIdx], px + visual.haloDx, py + visual.haloDy);
+    }
+  }
+  // 2. Flame — universal, on top
+  const flameIdx = getCastFlameFrameIdx(elapsedMs);
+  if (flameIdx >= 0 && visual.flameFrames) {
+    const flame = visual.flameFrames[flameIdx];
+    if (mirrorFlame) {
+      // Mirror to the right edge: flip horizontally and reposition so the
+      // flame appears symmetrically opposite (to the right of the portrait
+      // instead of left).
+      ctx.save();
+      ctx.translate(px + 16 - visual.flameDx, py + visual.flameDy);
+      ctx.scale(-1, 1);
+      ctx.drawImage(flame, 0, 0);
+      ctx.restore();
+    } else {
+      ctx.drawImage(flame, px + visual.flameDx, py + visual.flameDy);
+    }
+  }
+}
+
+// Resolve the (x, y) center of a magic target. Used by the projectile fan
+// and on-target effect helpers. Returns null if the target can't be
+// resolved (dead enemy, missing layout data).
+function _getMagicTargetCenter(tgt) {
+  if (!tgt) return null;
+  if (tgt.type === 'player') {
+    return { x: HUD_RIGHT_X + 8 + 8, y: HUD_VIEW_Y + 8 + 8 };
+  }
+  if (tgt.type === 'ally') {
+    const panelTop = HUD_VIEW_Y + 32;
+    const ppy = panelTop + tgt.index * ROSTER_ROW_H + 8;
+    return { x: HUD_RIGHT_X + 8 + 8, y: ppy + 8 };
+  }
+  // tgt.type === 'enemy'
   if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
     const m = battleSt.encounterMonsters[tgt.index];
-    if (!m) return;
+    if (!m) return null;
     const { sprH, row0H, row1H, gridPos } = _encounterGridLayout();
-    if (tgt.index >= gridPos.length) return;
+    if (tgt.index >= gridPos.length) return null;
     const pos = gridPos[tgt.index];
     const mc = getMonsterCanvas(m.monsterId, battleSt.goblinBattleCanvas);
     const mw = mc ? mc.width : 32;
     const mh = mc ? mc.height : sprH;
     const rH = tgt.index < 2 ? (row0H || sprH) : (row1H || sprH);
-    cx = pos.x + Math.floor(mw / 2);
-    cy = pos.y + (rH - mh) + Math.floor(mh / 2);
-  } else if (pvpSt.isPVPBattle) {
-    const { x, y } = _pvpEnemyCellCenter(tgt.index);
-    cx = x; cy = y;
-  } else {
-    const bc = getBossBattleCanvas();
-    const bw = bc ? bc.width : 48;
-    const bh = bc ? bc.height : 48;
-    cx = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2);
-    cy = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
+    return {
+      x: pos.x + Math.floor(mw / 2),
+      y: pos.y + (rH - mh) + Math.floor(mh / 2),
+    };
   }
+  if (pvpSt.isPVPBattle) {
+    const { x, y } = _pvpEnemyCellCenter(tgt.index);
+    return { x, y };
+  }
+  // Boss
+  return {
+    x: HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2),
+    y: HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2),
+  };
+}
+
+// Caster faction: player + ally = 'party'; pvp-enemy + encounter-enemy = 'foe'.
+// Same-faction caster→target skips projectile.
+function _isCrossFaction(casterFaction, tgt) {
+  if (!tgt) return false;
+  const tgtFaction = (tgt.type === 'enemy') ? 'foe' : 'party';
+  return casterFaction !== tgtFaction;
+}
+
+// Draw a projectile fan-out from caster center to each target center.
+// Renders ONLY for cross-faction targets (same-faction targets render no
+// projectile per the user's standing rule).
+function drawProjectileFan(ctx, sx, sy, casterFaction, targets, spellId, spell, t01) {
+  if (t01 < 0 || t01 > 1) return;
+  const tile = getProjectileTile(spellId, spell);
+  if (!tile) return;
+  for (const tgt of targets) {
+    if (!_isCrossFaction(casterFaction, tgt)) continue;
+    const tc = _getMagicTargetCenter(tgt);
+    if (!tc) continue;
+    const x = sx + (tc.x - sx) * t01;
+    const y = sy + (tc.y - sy) * t01;
+    ctx.drawImage(tile, Math.round(x - 4), Math.round(y - 4));
+  }
+}
+
+// Draw the on-target spell-anim effect at every target. Bundles can be
+// 'portrait-2frame' (16×16, anchored at portrait top-left) or
+// 'burst-strip-2frame' (variable size, anchored at sprite center).
+function drawSpellEffectAtTargets(ctx, targets, spellId, elapsedMs) {
+  const bundle = getSpellAnim(spellId);
+  if (!bundle) return;
+  const frame = getSpellAnimFrame(bundle, elapsedMs);
+  if (!frame) return;
+  for (const tgt of targets) {
+    const tc = _getMagicTargetCenter(tgt);
+    if (!tc) continue;
+    if (bundle.kind === 'portrait-2frame') {
+      // Portrait-anchored 16×16: draw at (centerX - 8, centerY - 8) which
+      // matches portrait top-left (since portrait is 16×16 centered on tc).
+      ctx.drawImage(frame, tc.x - 8, tc.y - 8);
+    } else if (bundle.kind === 'burst-strip-2frame') {
+      ctx.drawImage(frame, tc.x - Math.floor(bundle.width / 2),
+                           tc.y - Math.floor(bundle.height / 2));
+    }
+  }
+}
+
+// Player-cast magic targeting an enemy — render the projectile fan +
+// on-target burst on every cross-faction target. Same-faction targets
+// (player-self, ally) render their on-target effect via portrait overlay
+// helpers in _drawPortraitOverlays / _drawAllyRow.
+// Spell-ID source: getCurrentSpellId() (player-cast). Ally-cast and
+// PVP-cast versions read from battleSt.allyMagicSpellId / pvpSt.pvpMagicSpellId
+// when offensive magic ships for those paths.
+function _drawPlayerSpellTargetSparkleOnEnemy() {
+  if (battleSt.battleState !== 'magic-hit') return;
+  const targets = getSpellTargets();
+  if (!targets || targets.length === 0) return;
+  const cureMs = getCastAnimElapsedMs();
+  const spellId = getCurrentSpellId();
+  const spell = SPELLS.get(spellId);
+  if (!spell) return;
+  // Filter to enemy (cross-faction) targets only — same-faction targets
+  // render their on-target effect via portrait overlays (see _drawPortrait-
+  // Overlays player-self path and _drawAllyRow ally-target sparkle).
+  const enemyTargets = targets.filter(t => t.type === 'enemy');
+  if (enemyTargets.length === 0) return;
+
+  const isThrown = spell.target === 'sight' || spell.element === 'fire';
+  const sx = HUD_RIGHT_X + 8 + 8;
+  const sy = HUD_VIEW_Y + 8 + 8;
+
   if (isThrown) {
-    // Throw timeline (matches f9627 dump): cast pose during buildup, projectile
-    // flies during projectile phase, impact burst during impact phase, ret to
-    // wrap up. Sight has no on-target visual (battle msg handles feedback).
-    // Caster is the player portrait at (HUD_RIGHT_X+8, HUD_VIEW_Y+8); add 8 to
-    // center on its 16×16.
-    const sx = HUD_RIGHT_X + 8 + 8;
-    const sy = HUD_VIEW_Y + 8 + 8;
+    // Throw timeline: projectile fan-out during projectile phase, then all
+    // impact bursts play concurrently during impact phase.
+    if (cureMs < CAST_T_THROW_PROJ_START || cureMs >= CAST_T_THROW_RETURN) return;
     if (cureMs < CAST_T_THROW_IMPACT_START) {
-      // Projectile phase: linear flight caster → target across the full window.
       const t01 = (cureMs - CAST_T_THROW_PROJ_START) / CAST_PHASE_MS_THROW.projectile;
-      const tile = getProjectileTile(spell);
-      if (!tile) return;
-      const x = sx + (cx - sx) * t01;
-      const y = sy + (cy - sy) * t01;
-      ui.ctx.drawImage(tile, Math.round(x - 4), Math.round(y - 4));
+      drawProjectileFan(ui.ctx, sx, sy, 'party', enemyTargets, spellId, spell, t01);
       return;
     }
-    // Impact phase: on-target burst.
-    if (bundle && bundle.kind === 'burst-strip-2frame') {
-      const impactMs = cureMs - CAST_T_THROW_IMPACT_START;
-      const frame = getSpellAnimFrame(bundle, impactMs);
-      if (frame) ui.ctx.drawImage(frame, cx - Math.floor(bundle.width / 2),
-                                          cy - Math.floor(bundle.height / 2));
-    }
+    // Impact phase: burst on every target simultaneously. Sight has no
+    // on-target bundle so this is a no-op for Sight (battle msg handles it).
+    const impactMs = cureMs - CAST_T_THROW_IMPACT_START;
+    drawSpellEffectAtTargets(ui.ctx, enemyTargets, spellId, impactMs);
     return;
   }
-  ui.ctx.drawImage(bundle.frames[fi], cx - 8, cy - 8);
+
+  // Heal-style spells (Cure on undead, etc.). Render projectile during the
+  // pre-heal window, then on-target effect during the heal window.
+  if (cureMs < CAST_T_LUNGE) return;
+  if (cureMs < CAST_T_HEAL) {
+    // Project from end-of-buildup (CAST_T_LUNGE) to start-of-heal (CAST_T_HEAL).
+    // Window length = CAST_PHASE_MS.lunge + CAST_PHASE_MS.cast = 417 ms.
+    const projWindow = CAST_T_HEAL - CAST_T_LUNGE;
+    const t01 = (cureMs - CAST_T_LUNGE) / projWindow;
+    drawProjectileFan(ui.ctx, sx, sy, 'party', enemyTargets, spellId, spell, t01);
+    return;
+  }
+  if (cureMs < CAST_T_RETURN) {
+    const effectMs = cureMs - CAST_T_HEAL;
+    drawSpellEffectAtTargets(ui.ctx, enemyTargets, spellId, effectMs);
+  }
 }
 
 function _drawGameOver() {
@@ -1632,50 +1723,25 @@ function drawBattleAllies() {
 function _drawAllyCastAnim(panelTop) {
   const isCastState = battleSt.battleState === 'ally-magic-cast' || battleSt.battleState === 'ally-magic-hit';
   if (!isCastState) return;
-  // Item mode (Cure Potion / Antidote) suppresses the cast flame + star ring —
+  // Item mode (Cure Potion / Antidote) suppresses the cast aura + flame —
   // caster pose + target sparkle still render normally.
   if (battleSt.allyMagicItemMode) return;
   const i = battleSt.allyMagicCasterIdx;
   if (i < 0) return;
   const ally = battleSt.battleAllies[i];
   if (!ally) return;
-  const castKey = jobToCastKey(ally.jobIdx || 0);
-  const castAsset = castKey ? getCastAsset(castKey) : null;
-  if (!castAsset || castAsset.flameFrames.length !== 5) return;
   // Elapsed within the cast portion: 0..600 ms during ally-magic-cast, then
-  // capped at the brackets/release frame during ally-magic-hit. Stars keep
-  // rotating through the full cast+hit window (matches CAST_T_CAST > buildup
-  // timing the player path uses).
+  // capped at the brackets/release frame during ally-magic-hit so the flame
+  // settles to its final pose for the rest of the window.
   const castDur = 600;
   const elapsed = battleSt.battleState === 'ally-magic-cast'
     ? Math.min(battleSt.battleTimer, castDur)
-    : castDur; // hold at brackets during hit phase
+    : castDur;
   const shakeOff = (battleSt.allyShakeTimer[i] > 0) ? (Math.floor(battleSt.allyShakeTimer[i] / 67) & 1 ? 2 : -2) : 0;
   const rowY = panelTop + i * ROSTER_ROW_H + shakeOff;
   const ppx = HUD_RIGHT_X + 8;
   const ppy = rowY + 8;
-  // Stars: WM only (BM has null starTile). 8 around a radius-15 ring, CW.
-  // Show only during ally-magic-cast (not the post-cast hit phase).
-  if (battleSt.battleState === 'ally-magic-cast' && castAsset.starTile) {
-    const cx = ppx + 8, cy = ppy + 8;
-    const r = 15;
-    const N = 8;
-    const rotRad = (battleSt.battleTimer / 1200) * Math.PI * 2;
-    for (let s = 0; s < N; s++) {
-      const a = (s / N) * Math.PI * 2 + rotRad - Math.PI / 2;
-      const sx = Math.round(cx + Math.cos(a) * r - 4);
-      const sy = Math.round(cy + Math.sin(a) * r - 4);
-      ui.ctx.drawImage(castAsset.starTile, sx, sy);
-    }
-  }
-  // Flame: per-job size cycle. WM = 16×16 to the left; BM = 40×32 wrapping body.
-  if (battleSt.battleState === 'ally-magic-cast') {
-    const flameIdx = getCastFlameFrameIdx(elapsed, castKey);
-    if (flameIdx >= 0) {
-      ui.ctx.drawImage(castAsset.flameFrames[flameIdx],
-                       ppx + castAsset.flameDx, ppy + castAsset.flameDy);
-    }
-  }
+  drawCasterCast(ui.ctx, ppx, ppy, ally.jobIdx || 0, battleSt.allyMagicSpellId, elapsed);
 }
 
 function _encounterMonsterPos(idx) {

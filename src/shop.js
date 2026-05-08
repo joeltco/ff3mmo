@@ -19,7 +19,7 @@ import { _nameToBytes } from './text-utils.js';
 import { getItemNameClean, getSpellNameClean } from './text-decoder.js';
 import { ITEMS } from './data/items.js';
 import { SHOPS } from './data/shops.js';
-import { SPELLS, getSpellBuyPrice } from './data/spells.js';
+import { SPELLS, getSpellBuyPrice, canLearnSpell } from './data/spells.js';
 import { ps } from './player-stats.js';
 import { addItem, removeItem, playerInventory } from './inventory.js';
 import { showMsgBox } from './message-box.js';
@@ -294,6 +294,11 @@ function _attemptBuySpell(spellId) {
   const spell = SPELLS.get(spellId);
   if (!spell) { playSFX(SFX.ERROR); return; }
   const price = getSpellBuyPrice(spellId);
+  if (!canLearnSpell(ps.jobIdx, spellId)) {
+    playSFX(SFX.ERROR);
+    showMsgBox(_nameToBytes("Can't learn that!"));
+    return;
+  }
   if (ps.knownSpells && ps.knownSpells.includes(spellId)) {
     playSFX(SFX.ERROR);
     showMsgBox(_nameToBytes('Already known!'));

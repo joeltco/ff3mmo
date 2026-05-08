@@ -17,6 +17,7 @@ import { updateBattleAlly } from './battle-ally.js';
 import { updateBattleEnemyTurn } from './battle-enemy.js';
 import { resetBattleItemVars, updateMagicItemThrowHit } from './battle-items.js';
 import { updateSpellCast, resetSpellCastVars } from './spell-cast.js';
+import { canCastSpell } from './data/spells.js';
 import { queueBattleMsg, replaceBattleMsg, updateBattleMsg as _updateBattleMsg, clearBattleMsgQueue,
          queueVictoryRewards as _queueVictoryRewards, getBattleMsgCurrent,
          isBattleMsgBusy, clearVictoryPersist } from './battle-msg.js';
@@ -126,10 +127,14 @@ export function executeBattleCommand(index) {
   } else if (index === 1) {
     // Slot 1: Defend for non-mages, Magic for mages (jobs 3/4/5).
     const isMage = ps.jobIdx === 3 || ps.jobIdx === 4 || ps.jobIdx === 5;
-    if (isMage && ps.knownSpells && ps.knownSpells.length > 0) {
+    // Filter to spells the current job can actually cast (school gate).
+    // E.g., a White Mage carrying Fire from a previous BM stint won't see
+    // Fire in their battle menu — RM sees both.
+    const castableKnown = (ps.knownSpells || []).filter(id => canCastSpell(ps.jobIdx, id));
+    if (isMage && castableKnown.length > 0) {
       playSFX(SFX.CONFIRM);
       inputSt.menuMode = 'magic';
-      inputSt.spellSelectList = [...ps.knownSpells];
+      inputSt.spellSelectList = castableKnown;
       inputSt.itemHeldIdx = -1;
       inputSt.itemPage = 1;
       inputSt.itemPageCursor = 0;

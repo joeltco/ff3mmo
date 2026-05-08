@@ -26,8 +26,8 @@ const SPELLS = {
   'fire-projectile': {
     name: 'Fire projectile ($58 fly)',
     sourceFile: 'src/projectile-anim.js',
-    sourceConstants: ['T_58_FIRE'],
-    sourcePalette: null, // palette is in PROJECTILE_PAL[fire] — handled below
+    sourceConstants: ['T_58'],
+    sourcePalette: null, // palette is in SPELL_PROJECTILE_PAL[0x31] — handled below
     expectedTileIds: [0x58],
     expectedPalette: [0x0F, 0x16, 0x27, 0x30],
     matchByFrameRange: [46, 55],
@@ -36,7 +36,7 @@ const SPELLS = {
     name: 'BM cast pose ($49-$57 ring)',
     sourceFile: 'src/cast-anim.js',
     sourceConstants: ['BM_T_49','BM_T_4A','BM_T_4B','BM_T_4C','BM_T_4D','BM_T_4E','BM_T_4F','BM_T_50','BM_T_51','BM_T_52','BM_T_54','BM_T_55','BM_T_56','BM_T_57'],
-    sourcePalette: 'BM_PAL',
+    sourcePalette: 'BM_DEFAULT_PAL',
     expectedTileIds: [0x49,0x4A,0x4B,0x4C,0x4D,0x4E,0x4F,0x50,0x51,0x52,0x54,0x55,0x56,0x57],
     expectedPalette: [0x0F, 0x16, 0x27, 0x30],
     matchByOrigin: { x: 176, y: 41, frameRange: [0, 43] },
@@ -151,12 +151,14 @@ function main() {
     srcBytes.set(spec.expectedTileIds[i], bytes);
   }
 
-  // Palette: prefer named const; fall back to PROJECTILE_PAL[fire] for projectile.
+  // Palette: prefer named const; fall back to ELEMENT_FALLBACK_PAL[fire] for
+  // the fire-projectile gate (post-refactor projectile-anim.js stores the
+  // canonical fire palette in the element-fallback map).
   let srcPalette = null;
   if (spec.sourcePalette) {
     srcPalette = extractPaletteConstant(source, spec.sourcePalette);
   } else if (spellName === 'fire-projectile') {
-    srcPalette = extractMapEntry(source, 'PROJECTILE_PAL', 'fire');
+    srcPalette = extractMapEntry(source, 'ELEMENT_FALLBACK_PAL', 'fire');
   }
   if (!srcPalette) { console.error(`FAIL: source palette not found`); process.exit(1); }
 

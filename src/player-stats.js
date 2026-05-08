@@ -38,10 +38,12 @@ export const ps = {
 
 // Starting spells granted when a player first switches into a mage job.
 // Keyed by jobIdx. White Mage = 3, Black Mage = 4, Red Mage = 5.
-// NES canon: WM starts with the full Lv1 white kit (Cure, Poisona, Sight).
+// School-gating (data/spells.js JOB_SCHOOLS): WM = white only, BM = black
+// only, RM = both. RM starts with one entry from each school.
 const STARTING_SPELLS = {
   3: [0x34, 0x35, 0x36], // White Mage: Cure, Poisona, Sight
-  4: [0x31],             // Black Mage: Fire (Lv1 only for now; ice/bolt deferred)
+  4: [0x31],             // Black Mage: Fire
+  5: [0x34, 0x31],       // Red Mage: Cure + Fire (cross-school starter)
 };
 
 export function grantStartingSpells(jobIdx = ps.jobIdx) {

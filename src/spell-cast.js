@@ -375,54 +375,50 @@ export function updateSpellCast(dt) {
   }
   if (battleSt.battleState !== 'magic-hit') return false;
   tickHealNums(dt);
+  // Multi-target apply is PARALLEL: at hitEffectMs, every target in _targets
+  // gets the effect applied at once (damage numbers pop simultaneously,
+  // projectile fan-out lands together, all impact bursts play concurrently).
+  // _hitIdx stays at 0 — kept for render-site back-compat that reads it as
+  // an index but is otherwise vestigial under parallel apply.
   if (!_effectApplied && battleSt.battleTimer >= hitEffectMs) {
-    _applySpellEffect(_targets[_hitIdx]);
+    for (const tgt of _targets) _applySpellEffect(tgt);
     _effectApplied = true;
   }
   if (battleSt.battleTimer >= hitTotalMs) {
-    _hitIdx++;
-    _effectApplied = false;
-    if (_hitIdx < _targets.length) {
-      battleSt.battleTimer = 0;
-    } else {
-      clearHealNums();
-      // If the spell killed any enemies, route through the same monster-death
-      // / boss-dissolve / pvp-dissolve transitions the melee path uses, so the
-      // victory flow fires when the last monster is killed by a spell.
-      // (Without this, a spell-killing-last-enemy would just call
-      // _processNextTurn — which loops over a dead enemy roster forever:
-      // soft-lock.)
-      const killedEnemyIndices = [];
-      if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
-        for (const t of _targets) {
-          if (t.type === 'enemy' && battleSt.encounterMonsters[t.index]?.hp <= 0) {
-            killedEnemyIndices.push(t.index);
-          }
+    clearHealNums();
+    // If the spell killed any enemies, route through the same monster-death
+    // / boss-dissolve / pvp-dissolve transitions the melee path uses, so the
+    // victory flow fires when the last monster is killed by a spell.
+    const killedEnemyIndices = [];
+    if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
+      for (const t of _targets) {
+        if (t.type === 'enemy' && battleSt.encounterMonsters[t.index]?.hp <= 0) {
+          killedEnemyIndices.push(t.index);
         }
       }
-      if (killedEnemyIndices.length > 0) {
-        battleSt.dyingMonsterIndices = new Map(killedEnemyIndices.map(i => [i, 0]));
-        battleSt.battleState = 'monster-death';
+    }
+    if (killedEnemyIndices.length > 0) {
+      battleSt.dyingMonsterIndices = new Map(killedEnemyIndices.map(i => [i, 0]));
+      battleSt.battleState = 'monster-death';
+      battleSt.battleTimer = 0;
+      playSFX(SFX.MONSTER_DEATH);
+    } else if (!battleSt.isRandomEncounter && getEnemyHP() <= 0) {
+      if (pvpSt.isPVPBattle) {
+        battleSt.battleState = 'pvp-dissolve';
         battleSt.battleTimer = 0;
         playSFX(SFX.MONSTER_DEATH);
-      } else if (!battleSt.isRandomEncounter && getEnemyHP() <= 0) {
-        if (pvpSt.isPVPBattle) {
-          battleSt.battleState = 'pvp-dissolve';
-          battleSt.battleTimer = 0;
-          playSFX(SFX.MONSTER_DEATH);
-        } else {
-          battleSt.battleState = 'boss-dissolve';
-          battleSt.battleTimer = 0;
-          playSFX(SFX.BOSS_DEATH);
-        }
-      } else if (isBattleMsgBusy()) {
-        // Battle message still on screen (Sight's "Ineffective", future
-        // spell-text dialog, etc.) — defer turn advance through msg-wait gate.
-        battleSt.battleState = 'msg-wait';
-        battleSt.battleTimer = 0;
       } else {
-        _processNextTurn();
+        battleSt.battleState = 'boss-dissolve';
+        battleSt.battleTimer = 0;
+        playSFX(SFX.BOSS_DEATH);
       }
+    } else if (isBattleMsgBusy()) {
+      // Battle message still on screen (Sight's "Ineffective", future
+      // spell-text dialog, etc.) — defer turn advance through msg-wait gate.
+      battleSt.battleState = 'msg-wait';
+      battleSt.battleTimer = 0;
+    } else {
+      _processNextTurn();
     }
   }
   return true;
