@@ -344,7 +344,10 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
   const isCureMagicSelf = isMagicState && _curSpellTargets &&
     _curSpellTargets.some(t => t && t.type === 'player');
   const cureMs = isMagicState ? getCastAnimElapsedMs() : -1;
-  if (cureMs >= 0) {
+  // Cast pose renders ONLY during the buildup state — projectile / impact /
+  // heal sparkle all play during 'magic-hit', and the cast must be cleared
+  // before any of them start drawing. PVP + ally paths follow the same gate.
+  if (battleSt.battleState === 'magic-cast' && cureMs >= 0) {
     drawCasterCastFront(ui.ctx, px + 8, py + 8, ps.jobIdx, getCurrentSpellId(), cureMs, false);
   }
   // On-target sparkle — per-spell visual on the target portrait during heal
@@ -502,9 +505,10 @@ function _drawBattlePortrait() {
     (Math.floor(battleSt.battleTimer / 60) & 1);
   // Cast BEHIND pass — BM halo wraps portrait, drawn UNDER the portrait so
   // the live portrait shows on top with no need to overpaint with body
-  // tiles. WM has no behind layer.
-  const _isMagicCastNow = battleSt.battleState === 'magic-cast' || battleSt.battleState === 'magic-hit';
-  if (_isMagicCastNow) {
+  // tiles. WM has no behind layer. Halo only renders during the buildup
+  // state ('magic-cast') — by 'magic-hit' the projectile is in flight and
+  // cast visuals must be gone. PVP + ally paths follow the same gate.
+  if (battleSt.battleState === 'magic-cast') {
     const _cMs = getCastAnimElapsedMs();
     if (_cMs >= 0) drawCasterCastBehind(ui.ctx, pxs + 8, py + 8, ps.jobIdx, getCurrentSpellId(), _cMs, false);
   }
@@ -704,11 +708,13 @@ function _drawPlayerSpellTargetSparkleOnEnemy() {
   if (enemyTargets.length === 0) return;
 
   // Mirror the spell-cast.js gate: any cross-faction damage element + sight
-  // takes the throw path (cast windup → projectile → impact burst).
+  // + thrown status types take the throw path (cast windup → projectile →
+  // impact burst).
   const isThrown = spell.target === 'sight'
                 || spell.element === 'fire'
                 || spell.element === 'ice'
-                || spell.element === 'bolt';
+                || spell.element === 'bolt'
+                || spell.type === 'sleep';
   const sx = HUD_RIGHT_X + 8 + 8;
   const sy = HUD_VIEW_Y + 8 + 8;
 

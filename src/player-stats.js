@@ -42,8 +42,8 @@ export const ps = {
 // only, RM = both. RM starts with one entry from each school.
 const STARTING_SPELLS = {
   3: [0x34, 0x35, 0x36],       // White Mage: Cure, Poisona, Sight
-  4: [0x31, 0x32],             // Black Mage: Fire + Bzzard
-  5: [0x34, 0x31, 0x32],       // Red Mage: Cure + Fire + Bzzard (cross-school starter)
+  4: [0x31, 0x32, 0x33],       // Black Mage: Fire + Bzzard + Sleep
+  5: [0x34, 0x31, 0x32, 0x33], // Red Mage: Cure + Fire + Bzzard + Sleep (cross-school starter)
 };
 
 export function grantStartingSpells(jobIdx = ps.jobIdx) {

@@ -103,6 +103,7 @@ export const SPELLS = new Map([
 export const SPELL_MP_COST = new Map([
   [0x31, 2],  // Fire (BM Lv1)
   [0x32, 2],  // Bzzard / Blizzard Lv1 (BM)
+  [0x33, 3],  // Sleep (BM Lv1 status)
   [0x34, 2],  // Cure
   [0x35, 2],  // Poisona
   [0x36, 2],  // Sight
@@ -113,6 +114,7 @@ export const SPELL_MP_COST = new Map([
 export const SPELL_BUY_PRICE = new Map([
   [0x31, 100],  // Fire (BM Lv1)
   [0x32, 100],  // Bzzard / Blizzard Lv1 (BM)
+  [0x33, 200],  // Sleep (BM Lv1 status)
   [0x34, 100],  // Cure
   [0x35, 100],  // Poisona
   [0x36, 100],  // Sight
@@ -141,6 +143,7 @@ export function isMultiTargetSpell(spellId) { return MULTI_TARGET_SPELLS.has(spe
 const SPELL_SCHOOL = new Map([
   [0x31, 'black'],  // Fire
   [0x32, 'black'],  // Bzzard / Blizzard Lv1
+  [0x33, 'black'],  // Sleep Lv1
   [0x34, 'white'],  // Cure
   [0x35, 'white'],  // Poisona
   [0x36, 'white'],  // Sight

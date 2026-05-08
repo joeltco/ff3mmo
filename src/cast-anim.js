@@ -41,6 +41,7 @@ const BM_BODY_PAL = [0x0F, 0x27, 0x18, 0x21];
 const SPELL_CAST_PAL = new Map([
   [0x31, [0x0F, 0x16, 0x27, 0x30]],  // Fire     — red/orange
   [0x32, [0x0F, 0x11, 0x21, 0x31]],  // Blizzard — icy blue (REC OAM f766 SP3)
+  [0x33, [0x0F, 0x15, 0x27, 0x30]],  // Sleep    — magenta (REC OAM sleep-emu-snap SP3)
   [0x3a, [0x0F, 0x11, 0x21, 0x31]],  // Blizzara — icy blue (Lv2; same palette family as Lv1)
   [0x34, [0x0F, 0x12, 0x22, 0x31]],  // Cure     — blue/cyan
   [0x35, [0x0F, 0x15, 0x27, 0x30]],  // Poisona  — magenta
@@ -418,10 +419,12 @@ export function getCastFlameFrameIdx(elapsedMs) {
 }
 
 // All cast visuals (stars, halo, flame) disappear at the buildup boundary
-// (CAST_T_LUNGE = 800 ms) so they're cleared BEFORE any spell animation
-// starts: projectile at CAST_T_THROW_PROJ_START = 800 ms (thrown spells)
-// and heal sparkle at CAST_T_HEAL = 1217 ms (heal-style spells). Both come
-// after the cast visuals end.
+// (CAST_T_LUNGE = 800 ms) — the elapsedMs-gated check below is defensive.
+// The PRIMARY guarantee comes from call-site state gating: cast pose only
+// renders during 'magic-cast' / 'pvp-enemy-magic-cast' / 'ally-magic-cast',
+// never during the *-magic-hit state where projectile + impact + heal
+// sparkle live. Both layers must hold for the cast → projectile handoff to
+// stay clean.
 
 export function shouldDrawCastStars(elapsedMs) {
   return elapsedMs >= 0 && elapsedMs < CAST_T_LUNGE;

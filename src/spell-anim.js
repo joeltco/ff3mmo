@@ -33,6 +33,7 @@ const PAL_CURE       = [0x0F, 0x12, 0x22, 0x31];  // Cure / HiPotion / etc.
 const PAL_CURE_STATUS = [0x0F, 0x15, 0x27, 0x30]; // Poisona / Antidote / Bndna
 const PAL_FIRE_IMPACT = [0x0F, 0x16, 0x27, 0x30]; // Fire (REC OAM 2026-05-07 f9627)
 const PAL_BLIZZARD_IMPACT = [0x0F, 0x11, 0x21, 0x31]; // Blizzard (REC OAM f766 SP3)
+const PAL_SLEEP_IMPACT = [0x0F, 0x15, 0x27, 0x30]; // Sleep (REC OAM sleep-emu-snap SP3)
 
 // ── Cure-family heal sparkle ($4A_HEAL + $49_HEAL after CHR rebank) ───────
 // Captured 2026-05-04. The tile slots are the same numeric IDs used by the WM
@@ -91,6 +92,27 @@ const BLIZZARD_T_49 = new Uint8Array([0x00,0x00,0x00,0x30,0x00,0x00,0x00,0x00, 0
 const BLIZZARD_T_4A = new Uint8Array([0x00,0x00,0x20,0x70,0x20,0x00,0x00,0x00, 0x00,0x00,0x00,0x20,0x00,0x00,0x00,0x00]);
 const BLIZZARD_T_4B = new Uint8Array([0x00,0x00,0x00,0x08,0x14,0x08,0x00,0x00, 0x00,0x00,0x00,0x00,0x08,0x00,0x00,0x00]);
 const BLIZZARD_T_4C = new Uint8Array([0x00,0x00,0x00,0x00,0x08,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]);
+
+// ── Sleep impact tile bytes ($4B-$56) ─────────────────────────────────────
+// Captured 2026-05-08 (REC OAM sleep-emu-snap.txt, frames 75-95). 12 unique
+// tiles forming three 16×16 sub-cluster sprites (α=$4B-$4E, β=$4F-$52,
+// γ=$53-$56). 24 OAM entries per frame tile six 16×16 cells across a 48×48
+// area; each frame is one of three cyclic-permutation layouts (A/B/C, each
+// rotates the cluster types by +1 around the 6 positions). NES holds each
+// layout 4 frames (~67 ms), so the 3-layout cycle takes ~200 ms.
+
+const SLEEP_T_4B = new Uint8Array([0x00,0x00,0x00,0x00,0x01,0x01,0x02,0x04, 0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x03]);
+const SLEEP_T_4C = new Uint8Array([0x00,0x00,0x00,0x00,0xC0,0x20,0xD0,0xF0, 0x00,0x00,0x00,0x00,0x00,0xC0,0xE0,0x40]);
+const SLEEP_T_4D = new Uint8Array([0x05,0x03,0x03,0x00,0x00,0x00,0x00,0x00, 0x03,0x01,0x00,0x00,0x00,0x00,0x00,0x00]);
+const SLEEP_T_4E = new Uint8Array([0xF0,0xA0,0x60,0xC0,0x00,0x00,0x00,0x00, 0x20,0xC0,0x80,0x00,0x00,0x00,0x00,0x00]);
+const SLEEP_T_4F = new Uint8Array([0x00,0x1C,0x36,0x4F,0x4F,0x47,0x67,0x33, 0x00,0x00,0x0C,0x3E,0x3C,0x3E,0x1F,0x0E]);
+const SLEEP_T_50 = new Uint8Array([0x00,0x70,0xF8,0xEC,0xEC,0x8C,0xCC,0xF0, 0x00,0x00,0x60,0xF0,0x70,0x70,0x70,0xC8]);
+const SLEEP_T_51 = new Uint8Array([0x2F,0x0E,0x5F,0x4E,0x7E,0x76,0x3B,0x0F, 0x10,0x39,0x3F,0x3B,0x19,0x09,0x04,0x00]);
+const SLEEP_T_52 = new Uint8Array([0xE4,0xB2,0x46,0x66,0x7C,0xDC,0xC0,0x80, 0x78,0xDC,0xB8,0x98,0x80,0x00,0x00,0x00]);
+const SLEEP_T_53 = new Uint8Array([0x04,0x00,0x20,0x58,0x59,0x08,0x10,0x00, 0x00,0x00,0x00,0x20,0x30,0x30,0x00,0x00]);
+const SLEEP_T_54 = new Uint8Array([0x08,0x10,0x16,0x04,0x80,0x80,0x00,0x00, 0x00,0x0C,0x08,0x08,0x00,0x00,0x00,0x00]);
+const SLEEP_T_55 = new Uint8Array([0x00,0x00,0x06,0x08,0x0A,0x00,0x00,0x00, 0x00,0x00,0x00,0x06,0x04,0x00,0x00,0x00]);
+const SLEEP_T_56 = new Uint8Array([0x00,0x40,0x08,0x18,0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]);
 
 // ── Decode helpers ────────────────────────────────────────────────────────
 
@@ -257,6 +279,66 @@ const _BLIZZARD_LAYOUT_D = [
 const BLIZZARD_CANVAS_W = 48;
 const BLIZZARD_CANVAS_H = 48;
 
+// ── Sleep impact: 48×48 area-of-effect, 3 cyclic-rotation layouts ─────────
+// 12 unique tiles indexed 0..11 (α=$4B-$4E at 0..3, β=$4F-$52 at 4..7,
+// γ=$53-$56 at 8..11). Each layout places six 16×16 sub-clusters (a 4-tile
+// quad each) across the 48×48 area; layouts B and C are +1 / +2 cyclic
+// rotations of the cluster types, giving the "twinkle" feel.
+//   Layout A (frame 75, 1248ms): α,β | β,γ | γ,α
+//   Layout B (frame 79, 1314ms): β,γ | γ,α | α,β
+//   Layout C (frame 83, 1381ms): γ,α | α,β | β,γ
+
+const _SLEEP_LAYOUT_A = [
+  [0,  0, 0],[1,  8, 0],[4, 24, 0],[5, 32, 0],
+  [2,  0, 8],[3,  8, 8],[6, 24, 8],[7, 32, 8],
+  [4,  8,16],[5, 16,16],[8, 32,16],[9, 40,16],
+  [6,  8,24],[7, 16,24],[10,32,24],[11,40,24],
+  [8,  0,32],[9,  8,32],[0, 24,32],[1, 32,32],
+  [10, 0,40],[11, 8,40],[2, 24,40],[3, 32,40],
+];
+const _SLEEP_LAYOUT_B = [
+  [4,  0, 0],[5,  8, 0],[8, 24, 0],[9, 32, 0],
+  [6,  0, 8],[7,  8, 8],[10,24, 8],[11,32, 8],
+  [8,  8,16],[9, 16,16],[0, 32,16],[1, 40,16],
+  [10, 8,24],[11,16,24],[2, 32,24],[3, 40,24],
+  [0,  0,32],[1,  8,32],[4, 24,32],[5, 32,32],
+  [2,  0,40],[3,  8,40],[6, 24,40],[7, 32,40],
+];
+const _SLEEP_LAYOUT_C = [
+  [8,  0, 0],[9,  8, 0],[0, 24, 0],[1, 32, 0],
+  [10, 0, 8],[11, 8, 8],[2, 24, 8],[3, 32, 8],
+  [0,  8,16],[1, 16,16],[4, 32,16],[5, 40,16],
+  [2,  8,24],[3, 16,24],[6, 32,24],[7, 40,24],
+  [4,  0,32],[5,  8,32],[8, 24,32],[9, 32,32],
+  [6,  0,40],[7,  8,40],[10,24,40],[11,32,40],
+];
+
+const SLEEP_CANVAS_W = 48;
+const SLEEP_CANVAS_H = 48;
+
+function _buildSleepImpactFrames(pal) {
+  const tiles = [
+    _make8(SLEEP_T_4B, pal), _make8(SLEEP_T_4C, pal),
+    _make8(SLEEP_T_4D, pal), _make8(SLEEP_T_4E, pal),
+    _make8(SLEEP_T_4F, pal), _make8(SLEEP_T_50, pal),
+    _make8(SLEEP_T_51, pal), _make8(SLEEP_T_52, pal),
+    _make8(SLEEP_T_53, pal), _make8(SLEEP_T_54, pal),
+    _make8(SLEEP_T_55, pal), _make8(SLEEP_T_56, pal),
+  ];
+  const _drawLayout = (layout) => {
+    const c = document.createElement('canvas');
+    c.width = SLEEP_CANVAS_W; c.height = SLEEP_CANVAS_H;
+    const cx = c.getContext('2d');
+    for (const [ti, ox, oy] of layout) cx.drawImage(tiles[ti], ox, oy);
+    return c;
+  };
+  return [
+    _drawLayout(_SLEEP_LAYOUT_A),
+    _drawLayout(_SLEEP_LAYOUT_B),
+    _drawLayout(_SLEEP_LAYOUT_C),
+  ];
+}
+
 function _buildBlizzardImpactFrames(pal) {
   const tiles = [
     _make8(BLIZZARD_T_49, pal), _make8(BLIZZARD_T_4A, pal),
@@ -293,6 +375,7 @@ export function initSpellAnim() {
   const poisonaTgt     = _buildPoisonaTarget(PAL_CURE_STATUS);
   const fireImpact     = _buildFireImpactFrames(PAL_FIRE_IMPACT);
   const blizzardImpact = _buildBlizzardImpactFrames(PAL_BLIZZARD_IMPACT);
+  const sleepImpact    = _buildSleepImpactFrames(PAL_SLEEP_IMPACT);
   // Blizzara ($3a) reuses the 3-phase ice explosion canvases originally built
   // for the SouthWind item (south-wind.js). Per project memory, SouthWind IS
   // Blizzara in ff3mmo design — same animation, same SFX, same element. The
@@ -315,6 +398,12 @@ export function initSpellAnim() {
     // 'burst-strip-2frame' kind — frame count is just a modulo, the kind only
     // controls canvas-center draw alignment.
     0x32: { kind: 'burst-strip-2frame', frames: blizzardImpact, width: 48, height: 48,
+            anchor: 'enemy-center', toggleMs: 67 },
+    // Black magic — Sleep (Lv1 status). 3 cyclic-rotation layouts cycle at
+    // ~67 ms (NES 4-frame hold) — the cluster types rotate around six 16×16
+    // positions across a 48×48 area for the "twinkle" feel. Reuses the
+    // 'burst-strip-2frame' kind (modulo cycle, canvas-center anchor).
+    0x33: { kind: 'burst-strip-2frame', frames: sleepImpact, width: 48, height: 48,
             anchor: 'enemy-center', toggleMs: 67 },
     // Black magic — Blizzara / Bzzra (Lv2 ice). 3-phase one-shot expansion:
     // phase 0 (16×16) → phase 1 (32×32) → phase 2 (48×48), each phase held

@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.119 — 2026-05-08
+
+### Sleep ($33) — last Lv1 BM spell shipped end-to-end
+
+- Wired Sleep through the full cast → projectile → impact pipeline using the OAM parity harness against `sleep-emu-snap.txt`. 12 unique impact tiles (`$4B–$56`) form three 16×16 sub-cluster sprites (α/β/γ) that tile across a 48×48 area in three cyclic-rotation layouts at 67 ms each. All tiles + palette parity-PASS.
+- Added `_THROWN_STATUS_TYPES` set (currently `{'sleep'}`) so status-type spells can join Fire/Blizzard on the cast → projectile → impact path. Generalized `_damageImpactSFX` into `_spellImpactSFX(spell)` which routes by element (fire/ice) or by `spell.type` (sleep). The thrown-to-enemy SFX gate now covers any thrown spell with a cross-faction target except Sight (which keeps its own SFX inside `_applyEnemyEffect`).
+- New SFX entry `SLEEP_PUFF: 0x95` (NSF track $95). Verified via the v1.7.111+ EMU dumper: CPU writes `$D4` to `$7F49` at frame 74 of `sleep-emu-snap`, just before the impact group appears at frame 75.
+- Added Sleep ($33) to `SPELL_SCHOOL` (black), `SPELL_MP_COST` (3), `SPELL_BUY_PRICE` (200), and to `STARTING_SPELLS` for BM (4) + RM (5). `SPELL_CAST_PAL` and `SPELL_PROJECTILE_PAL` get `[0x0F, 0x15, 0x27, 0x30]` (magenta family — same SP3 the dump shows).
+- Battle-drawing's throw-path mirror gate extended to `spell.type === 'sleep'` so the projectile fan + impact burst render.
+- Parity harness extended with `sleep` and `sleep-projectile` specs in `tools/parity-check-spell.js`.
+
+### Cast → projectile handoff hardened
+
+Player cast pose call sites in `battle-drawing.js` now strictly state-gate on `'magic-cast'` only — they previously fired in `'magic-hit'` too and relied on internal `< CAST_T_LUNGE` checks to suppress draws while the projectile was in flight. PVP and ally paths already gated this way; the player path now matches. Defense in depth: the elapsedMs gates inside `cast-anim.js` are kept as a fallback. Pipeline is now: full cast loop → cast clears → projectile → projectile clears → impact → impact clears → damage number.
+
 ## 1.7.118 — 2026-05-08
 
 ### Final 3 battle items mapped — all 20 now modular

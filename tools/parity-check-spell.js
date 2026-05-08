@@ -59,6 +59,24 @@ const SPELLS = {
     expectedPalette: [0x0F, 0x11, 0x21, 0x31],
     matchByFrameRange: [11, 19],
   },
+  sleep: {
+    name: 'Sleep impact (BM Lv1, $33)',
+    sourceFile: 'src/spell-anim.js',
+    sourceConstants: ['SLEEP_T_4B','SLEEP_T_4C','SLEEP_T_4D','SLEEP_T_4E','SLEEP_T_4F','SLEEP_T_50','SLEEP_T_51','SLEEP_T_52','SLEEP_T_53','SLEEP_T_54','SLEEP_T_55','SLEEP_T_56'],
+    sourcePalette: 'PAL_SLEEP_IMPACT',
+    expectedTileIds: [0x4B,0x4C,0x4D,0x4E,0x4F,0x50,0x51,0x52,0x53,0x54,0x55,0x56],
+    expectedPalette: [0x0F, 0x15, 0x27, 0x30],
+    matchByOrigin: { x: 24, y: 96, frameRange: [75, 95] },
+  },
+  'sleep-projectile': {
+    name: 'Sleep projectile ($58 fly, magenta palette)',
+    sourceFile: 'src/projectile-anim.js',
+    sourceConstants: ['T_58'],
+    sourcePalette: null, // resolved via SPELL_PROJECTILE_PAL[0x33] below
+    expectedTileIds: [0x58],
+    expectedPalette: [0x0F, 0x15, 0x27, 0x30],
+    matchByFrameRange: [46, 55],
+  },
   'bm-cast-flame': {
     name: 'BM cast flame ($51-$57)',
     sourceFile: 'src/cast-anim.js',
@@ -185,6 +203,8 @@ function main() {
     srcPalette = extractMapEntry(source, 'ELEMENT_FALLBACK_PAL', 'fire');
   } else if (spellName === 'blizzard-projectile') {
     srcPalette = extractMapEntry(source, 'ELEMENT_FALLBACK_PAL', 'ice');
+  } else if (spellName === 'sleep-projectile') {
+    srcPalette = extractMapEntry(source, 'SPELL_PROJECTILE_PAL', '0x33');
   }
   if (!srcPalette) { console.error(`FAIL: source palette not found`); process.exit(1); }
 
