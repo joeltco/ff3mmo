@@ -20,9 +20,13 @@ export const LOCATIONS = ['world', 'ur', 'cave-0', 'cave-1', 'cave-2', 'cave-3',
 // equip mask):
 //
 //   OK (jobIdx 0):
-//     Weapons: Knife $1E, Dagger $1F, Longsword $24, Bow $4A + Arrow $4F
+//     Weapons: Knife $1E, Dagger $1F, Longsword $24
 //     Body: Leather $73 | Helm: Cap $62 | Shield: Leather Shield $58 ✓
 //     (no Bracers — `Ww|Bw|Rw|...` mask, OK not in)
+//     (Bow $4A / Arrow $4F exist in items.js with `twoHanded: true` but the
+//      flag isn't read by the battle/draw code yet — bow ammo + ranged
+//      attack mechanics are not wired. Don't equip bows on pool entries
+//      until that lands.)
 //
 //   Fi (jobIdx 1):
 //     Weapons: Knife $1E, Dagger $1F, Longsword $24
@@ -66,7 +70,7 @@ export const PLAYER_POOL = [
   { name: 'Wren',    level: 4, palIdx: 5, camper: false, loc: 'cave-0',  jobIdx: 0, weaponR: 0x1F,                armorId: 0x73, helmId: 0x62, shieldId: 0x58 },                  // OK — Dagger + Shield
   { name: 'Brom',    level: 3, palIdx: 6, camper: false, loc: 'cave-1',  jobIdx: 0, weaponR: 0x1F, weaponL: 0x1E, armorId: 0x73, helmId: 0x62 },                                  // OK — Dagger + Knife (dual-wield)
   { name: 'Lir',     level: 2, palIdx: 2, camper: false, loc: 'world',   jobIdx: 0, weaponR: 0x1E,                armorId: 0x73, helmId: 0x62 },                                  // OK — Knife
-  { name: 'Eska',    level: 3, palIdx: 4, camper: true,  loc: 'crystal', jobIdx: 0, weaponR: 0x4A, weaponL: 0x4F, armorId: 0x73, helmId: 0x62 },                                  // OK — Bow + Wooden Arrow (two-handed, no shield)
+  { name: 'Eska',    level: 3, palIdx: 4, camper: true,  loc: 'crystal', jobIdx: 0, weaponR: 0x1F,                armorId: 0x73, helmId: 0x62, shieldId: 0x58 },                  // OK — Dagger + Shield
   // ── Fighter (5) — strong/martial names ──
   { name: 'Aldric',  level: 5, palIdx: 3, camper: true,  loc: 'ur',      jobIdx: 1, weaponR: 0x24,                armorId: 0x73, helmId: 0x62, shieldId: 0x58 },                  // Fi — Longsword + Shield (classic knight)
   { name: 'Fenris',  level: 5, palIdx: 5, camper: false, loc: 'cave-1',  jobIdx: 1, weaponR: 0x1F,                armorId: 0x73, helmId: 0x62, shieldId: 0x58 },                  // Fi — Dagger + Shield (light fighter)

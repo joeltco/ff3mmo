@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.134 — 2026-05-08
+
+### Pulled bow from Eska — bow + arrow not wired yet
+
+v1.7.133 gave Eska Bow + Wooden Arrow for variety, but the `twoHanded` flag in items.js isn't read by the battle/draw code, and there's no ammo consumption or ranged-attack mechanic. Eska would have been modeled as a generic dual-wield (avg-atk × 2 hits), not actually shooting a bow. Swapped to Dagger + Shield. Doc-block updated to flag bows as "not wired — don't equip on pool entries until ranged-attack mechanics land."
+
 ## 1.7.133 — 2026-05-08
 
 ### Player pool equipment audit + per-job equip matrix doc
