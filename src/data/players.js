@@ -5,58 +5,104 @@ import { createStatusState } from '../status-effects.js';
 
 export const LOCATIONS = ['world', 'ur', 'cave-0', 'cave-1', 'cave-2', 'cave-3', 'crystal'];
 
-// Polished pool: 5 entries per starting job (OK/Fi/Mo/WM/BM/RM = 30 total).
-// Names are theme-matched per class — generic-fantasy for OK/Fi, Japanese
-// for Monk (Ryuji-style), soft/healer for WM, mage-flavor for BM (Vivi-
-// style), hybrid-heroic for RM. palIdx is varied within each job so colors
-// don't repeat among same-class characters at the same location. Locations
-// are spread across all 7 zones so PVP rolls have a mix everywhere.
+// ─────────────────────────────────────────────────────────────────────────
+// PLAYER_POOL — fake players the local player encounters across the world.
+// Used by the roster HUD, chat sender pool, and PVP enemy generation.
+// 5 entries per starting job (OK/Fi/Mo/WM/BM/RM = 30 total).
 //
-// Equipment per job:
-//   OK: Knife/Dagger + Leather+Cap (no shield)
-//   Fi: Longsword/Dagger + Leather+Cap+Shield
-//   Mo: Unarmed/Nunchuck + Leather+Cap
-//   WM: Staff + Leather+Cap, knownSpells subset of [Cure, Poisona, Sight]
-//   BM: Staff + Leather+Cap, knownSpells subset of [Fire, Blizzard, Sleep]
-//   RM: Longsword (with shield) or Dagger + Leather+Cap, knownSpells mix of
-//       Cure + BM Lv1 subset
+// Tier: Altar Cave + Ur. NO items, weapons, or armor past `cave-3`/`crystal`
+// drops. Players are pre-Altar-Cave to early-post-Altar-Cave. Anything
+// pricier than ~150 gil is off-limits unless it lives in an Altar-Cave
+// chest pool (see `LOOT_POOLS` in `map-triggers.js`).
+//
+// Per-job equip matrix (cross-checked against `data/items.js` jobs masks
+// 2026-05-08 — all entries below have been verified to satisfy their job's
+// equip mask):
+//
+//   OK (jobIdx 0):
+//     Weapons: Knife $1E, Dagger $1F, Longsword $24, Bow $4A + Arrow $4F
+//     Body: Leather $73 | Helm: Cap $62 | Shield: Leather Shield $58 ✓
+//     (no Bracers — `Ww|Bw|Rw|...` mask, OK not in)
+//
+//   Fi (jobIdx 1):
+//     Weapons: Knife $1E, Dagger $1F, Longsword $24
+//     Body: Leather | Helm: Cap | Shield ✓
+//     (no Bracers)
+//
+//   Mo (jobIdx 2):
+//     Weapons: Nunchuck $06 (Mo|Ni only) OR Unarmed (str-scaled)
+//     Body: Leather | Helm: Cap | NO Shield (mask: On|Fi|Rw|Kn|Th|Dr|Vi|Ni)
+//
+//   WM (jobIdx 3):
+//     Weapons: Staff $0E (Ww|Rw|Sh|Sa|Ni)
+//     Body: Leather | Helm: Cap | NO Shield
+//     (Bracers $8B is Ww-equippable but `armsId` slot isn't tracked yet
+//      in `generateAllyStats` — defer once that lands)
+//
+//   BM (jobIdx 4):
+//     Weapons: Knife $1E, Dagger $1F (Bw in mask). NOTE: Bw is NOT in any
+//       basic Staff $0E-$13 mask in this codebase — staves are Ww/Rw only.
+//       Rod $09 is Bw-equippable (atk 5 / hit 60 / 400 gil) but isn't sold
+//       in Ur and isn't in the Altar-Cave chest pool, so BMs at this tier
+//       wield Knife or Dagger.
+//     Body: Leather | Helm: Cap | NO Shield
+//
+//   RM (jobIdx 5) — hybrid; the most equipment options at this tier:
+//     Weapons: Knife $1E, Dagger $1F, Staff $0E
+//     Body: Leather | Helm: Cap | Shield $58 ✓ (Rw in mask)
+//
+// `palIdx` 0..7 picks the per-job palette slot. Within each job, slots are
+// varied so two characters at the same location don't collide visually:
+// PLAYER_PALETTES (OK/Fi default), MONK_PALETTES (Mo), BLACK_MAGE_PALETTES
+// (all blue tints, BM), RED_MAGE_PALETTES (all red tints, RM).
+//
+// `knownSpells` is what fake-player AI casts in PVP. Sight $36 is dead
+// weight on AI (it's the player's enemy-HP peek) — never include it on
+// fake-player entries.
+// ─────────────────────────────────────────────────────────────────────────
 export const PLAYER_POOL = [
   // ── Onion Knight (5) — apprentice / orphan vibe ──
-  { name: 'Nyx',     level: 1, palIdx: 0, camper: false, loc: 'ur',      jobIdx: 0, weaponR: 0x1E,                armorId: 0x73, helmId: 0x62 },                                                          // OK — Knife
-  { name: 'Wren',    level: 4, palIdx: 5, camper: false, loc: 'cave-0',  jobIdx: 0, weaponR: 0x1F,                armorId: 0x73, helmId: 0x62 },                                                          // OK — Dagger
-  { name: 'Brom',    level: 3, palIdx: 6, camper: false, loc: 'cave-1',  jobIdx: 0, weaponR: 0x1F,                armorId: 0x73, helmId: 0x62 },                                                          // OK — Dagger
-  { name: 'Lir',     level: 2, palIdx: 2, camper: false, loc: 'world',   jobIdx: 0, weaponR: 0x1E,                armorId: 0x73, helmId: 0x62 },                                                          // OK — Knife
-  { name: 'Eska',    level: 3, palIdx: 4, camper: true,  loc: 'crystal', jobIdx: 0, weaponR: 0x1F, weaponL: 0x1E, armorId: 0x73, helmId: 0x62 },                                                          // OK — Dagger+Knife
+  { name: 'Nyx',     level: 1, palIdx: 0, camper: false, loc: 'ur',      jobIdx: 0, weaponR: 0x1E,                armorId: 0x73, helmId: 0x62 },                                  // OK — Knife
+  { name: 'Wren',    level: 4, palIdx: 5, camper: false, loc: 'cave-0',  jobIdx: 0, weaponR: 0x1F,                armorId: 0x73, helmId: 0x62, shieldId: 0x58 },                  // OK — Dagger + Shield
+  { name: 'Brom',    level: 3, palIdx: 6, camper: false, loc: 'cave-1',  jobIdx: 0, weaponR: 0x1F, weaponL: 0x1E, armorId: 0x73, helmId: 0x62 },                                  // OK — Dagger + Knife (dual-wield)
+  { name: 'Lir',     level: 2, palIdx: 2, camper: false, loc: 'world',   jobIdx: 0, weaponR: 0x1E,                armorId: 0x73, helmId: 0x62 },                                  // OK — Knife
+  { name: 'Eska',    level: 3, palIdx: 4, camper: true,  loc: 'crystal', jobIdx: 0, weaponR: 0x4A, weaponL: 0x4F, armorId: 0x73, helmId: 0x62 },                                  // OK — Bow + Wooden Arrow (two-handed, no shield)
   // ── Fighter (5) — strong/martial names ──
-  { name: 'Aldric',  level: 5, palIdx: 3, camper: true,  loc: 'ur',      jobIdx: 1, weaponR: 0x24,                armorId: 0x73, helmId: 0x62, shieldId: 0x58 },                                          // Fi — Longsword
-  { name: 'Fenris',  level: 5, palIdx: 5, camper: false, loc: 'cave-1',  jobIdx: 1, weaponR: 0x1F,                armorId: 0x73, helmId: 0x62, shieldId: 0x58 },                                          // Fi — Dagger
-  { name: 'Grok',    level: 5, palIdx: 7, camper: false, loc: 'cave-3',  jobIdx: 1, weaponR: 0x24,                armorId: 0x73, helmId: 0x62, shieldId: 0x58 },                                          // Fi — Longsword
-  { name: 'Cassia',  level: 5, palIdx: 6, camper: true,  loc: 'cave-2',  jobIdx: 1, weaponR: 0x28,                armorId: 0x73, helmId: 0x62, shieldId: 0x58 },                                          // Fi — Serpent Sword
-  { name: 'Duran',   level: 5, palIdx: 1, camper: false, loc: 'crystal', jobIdx: 1, weaponR: 0x24,                armorId: 0x73, helmId: 0x62, shieldId: 0x58 },                                          // Fi — Longsword
+  { name: 'Aldric',  level: 5, palIdx: 3, camper: true,  loc: 'ur',      jobIdx: 1, weaponR: 0x24,                armorId: 0x73, helmId: 0x62, shieldId: 0x58 },                  // Fi — Longsword + Shield (classic knight)
+  { name: 'Fenris',  level: 5, palIdx: 5, camper: false, loc: 'cave-1',  jobIdx: 1, weaponR: 0x1F,                armorId: 0x73, helmId: 0x62, shieldId: 0x58 },                  // Fi — Dagger + Shield (light fighter)
+  { name: 'Grok',    level: 5, palIdx: 7, camper: false, loc: 'cave-3',  jobIdx: 1, weaponR: 0x24,                armorId: 0x73, helmId: 0x62, shieldId: 0x58 },                  // Fi — Longsword + Shield
+  { name: 'Cassia',  level: 5, palIdx: 6, camper: true,  loc: 'cave-2',  jobIdx: 1, weaponR: 0x24,                armorId: 0x73, helmId: 0x62, shieldId: 0x58 },                  // Fi — Longsword + Shield (was Serpent Sword $28 — out of tier, fixed v1.7.133)
+  { name: 'Duran',   level: 5, palIdx: 1, camper: false, loc: 'crystal', jobIdx: 1, weaponR: 0x1F, weaponL: 0x1E, armorId: 0x73, helmId: 0x62 },                                  // Fi — Dagger + Knife (dual-wield, agile fighter)
   // ── Monk (5) — Japanese names ──
-  { name: 'Kasumi',  level: 4, palIdx: 4, camper: false, loc: 'cave-0',  jobIdx: 2, weaponR: 0x06,                armorId: 0x73, helmId: 0x62 },                                                          // Mo — Nunchuck
-  { name: 'Jiro',    level: 5, palIdx: 2, camper: false, loc: 'crystal', jobIdx: 2, weaponR: 0,                   armorId: 0x73, helmId: 0x62 },                                                          // Mo — Unarmed
-  { name: 'Ryuji',   level: 5, palIdx: 7, camper: false, loc: 'cave-2',  jobIdx: 2, weaponR: 0x06,                armorId: 0x73, helmId: 0x62 },                                                          // Mo — Nunchuck
-  { name: 'Hana',    level: 3, palIdx: 5, camper: false, loc: 'world',   jobIdx: 2, weaponR: 0,                   armorId: 0x73, helmId: 0x62 },                                                          // Mo — Unarmed
-  { name: 'Tetsuo',  level: 5, palIdx: 3, camper: true,  loc: 'cave-1',  jobIdx: 2, weaponR: 0,                   armorId: 0x73, helmId: 0x62 },                                                          // Mo — Unarmed
+  { name: 'Kasumi',  level: 4, palIdx: 4, camper: false, loc: 'cave-0',  jobIdx: 2, weaponR: 0x06,                armorId: 0x73, helmId: 0x62 },                                  // Mo — Nunchuck
+  { name: 'Jiro',    level: 5, palIdx: 2, camper: false, loc: 'crystal', jobIdx: 2, weaponR: 0,                   armorId: 0x73, helmId: 0x62 },                                  // Mo — Unarmed
+  { name: 'Ryuji',   level: 5, palIdx: 7, camper: false, loc: 'cave-2',  jobIdx: 2, weaponR: 0x06,                armorId: 0x73, helmId: 0x62 },                                  // Mo — Nunchuck
+  { name: 'Hana',    level: 3, palIdx: 5, camper: false, loc: 'world',   jobIdx: 2, weaponR: 0,                   armorId: 0x73, helmId: 0x62 },                                  // Mo — Unarmed
+  { name: 'Tetsuo',  level: 5, palIdx: 3, camper: true,  loc: 'cave-1',  jobIdx: 2, weaponR: 0,                   armorId: 0x73, helmId: 0x62 },                                  // Mo — Unarmed
   // ── White Mage (5) — soft/healer names ──
-  { name: 'Zephyr',  level: 5, palIdx: 1, camper: false, loc: 'cave-3',  jobIdx: 3, weaponR: 0x0E,                armorId: 0x73, helmId: 0x62, knownSpells: [0x34, 0x35] },                               // WM — Staff (Cure, Poisona)
-  { name: 'Mira',    level: 4, palIdx: 2, camper: false, loc: 'world',   jobIdx: 3, weaponR: 0x0E,                armorId: 0x73, helmId: 0x62, knownSpells: [0x34, 0x35] },                               // WM — Staff (Cure, Poisona)
-  { name: 'Suki',    level: 3, palIdx: 4, camper: false, loc: 'cave-1',  jobIdx: 3, weaponR: 0x0E,                armorId: 0x73, helmId: 0x62, knownSpells: [0x34, 0x35] },                               // WM — Staff (Cure, Poisona)
-  { name: 'Lenna',   level: 5, palIdx: 6, camper: true,  loc: 'ur',      jobIdx: 3, weaponR: 0x0E,                armorId: 0x73, helmId: 0x62, knownSpells: [0x34, 0x35] },                               // WM — Staff (Cure, Poisona)
-  { name: 'Ivy',     level: 2, palIdx: 0, camper: false, loc: 'cave-0',  jobIdx: 3, weaponR: 0x0E,                armorId: 0x73, helmId: 0x62, knownSpells: [0x34] },                                     // WM — Staff (Cure)
+  { name: 'Zephyr',  level: 5, palIdx: 1, camper: false, loc: 'cave-3',  jobIdx: 3, weaponR: 0x0E,                armorId: 0x73, helmId: 0x62, knownSpells: [0x34, 0x35] },       // WM — Staff (Cure, Poisona)
+  { name: 'Mira',    level: 4, palIdx: 2, camper: false, loc: 'world',   jobIdx: 3, weaponR: 0x0E,                armorId: 0x73, helmId: 0x62, knownSpells: [0x34, 0x35] },       // WM — Staff (Cure, Poisona)
+  { name: 'Suki',    level: 3, palIdx: 4, camper: false, loc: 'cave-1',  jobIdx: 3, weaponR: 0x0E,                armorId: 0x73, helmId: 0x62, knownSpells: [0x34] },             // WM — Staff (Cure)
+  { name: 'Lenna',   level: 5, palIdx: 6, camper: true,  loc: 'ur',      jobIdx: 3, weaponR: 0x0E,                armorId: 0x73, helmId: 0x62, knownSpells: [0x34, 0x35] },       // WM — Staff (Cure, Poisona)
+  { name: 'Ivy',     level: 2, palIdx: 0, camper: false, loc: 'cave-0',  jobIdx: 3, weaponR: 0x0E,                armorId: 0x73, helmId: 0x62, knownSpells: [0x34] },             // WM — Staff (Cure)
   // ── Black Mage (5) — mage names; palette is all-blue tints (BLACK_MAGE_PALETTES) ──
-  { name: 'Vivi',    level: 4, palIdx: 1, camper: false, loc: 'world',   jobIdx: 4, weaponR: 0x0E,                armorId: 0x73, helmId: 0x62, knownSpells: [0x31, 0x32] },                               // BM — Staff (Fire, Blizzard)
-  { name: 'Nephele', level: 5, palIdx: 2, camper: true,  loc: 'cave-2',  jobIdx: 4, weaponR: 0x0E,                armorId: 0x73, helmId: 0x62, knownSpells: [0x31, 0x32, 0x33] },                         // BM — Staff (Fire, Blizzard, Sleep)
-  { name: 'Korra',   level: 3, palIdx: 4, camper: false, loc: 'cave-0',  jobIdx: 4, weaponR: 0x0E,                armorId: 0x73, helmId: 0x62, knownSpells: [0x31] },                                     // BM — Staff (Fire)
-  { name: 'Theron',  level: 5, palIdx: 6, camper: false, loc: 'crystal', jobIdx: 4, weaponR: 0x0E,                armorId: 0x73, helmId: 0x62, knownSpells: [0x31, 0x32, 0x33] },                         // BM — Staff (Fire, Blizzard, Sleep)
-  { name: 'Mara',    level: 4, palIdx: 0, camper: false, loc: 'ur',      jobIdx: 4, weaponR: 0x0E,                armorId: 0x73, helmId: 0x62, knownSpells: [0x31, 0x33] },                               // BM — Staff (Fire, Sleep)
+  // BM CAN'T equip basic Staff $0E in this codebase (mask is Ww|Rw|Sh|Sa|Ni;
+  // Bw not in). They wield Knives/Daggers at Altar-Cave tier — offensive
+  // output comes from Lv1 Black Magic, not weapon ATK.
+  { name: 'Vivi',    level: 4, palIdx: 1, camper: false, loc: 'world',   jobIdx: 4, weaponR: 0x1F,                armorId: 0x73, helmId: 0x62, knownSpells: [0x31, 0x32] },       // BM — Dagger (Fire, Blizzard)
+  { name: 'Nephele', level: 5, palIdx: 2, camper: true,  loc: 'cave-2',  jobIdx: 4, weaponR: 0x1F,                armorId: 0x73, helmId: 0x62, knownSpells: [0x31, 0x32, 0x33] }, // BM — Dagger (Fire, Blizzard, Sleep)
+  { name: 'Korra',   level: 3, palIdx: 4, camper: false, loc: 'cave-0',  jobIdx: 4, weaponR: 0x1E,                armorId: 0x73, helmId: 0x62, knownSpells: [0x31] },             // BM — Knife (Fire)
+  { name: 'Theron',  level: 5, palIdx: 6, camper: false, loc: 'crystal', jobIdx: 4, weaponR: 0x1F,                armorId: 0x73, helmId: 0x62, knownSpells: [0x31, 0x32, 0x33] }, // BM — Dagger (Fire, Blizzard, Sleep)
+  { name: 'Mara',    level: 4, palIdx: 0, camper: false, loc: 'ur',      jobIdx: 4, weaponR: 0x1E,                armorId: 0x73, helmId: 0x62, knownSpells: [0x31, 0x33] },       // BM — Knife (Fire, Sleep)
   // ── Red Mage (5) — hybrid heroic names; palette is all-red tints (RED_MAGE_PALETTES) ──
-  { name: 'Asher',   level: 5, palIdx: 1, camper: false, loc: 'ur',      jobIdx: 5, weaponR: 0x1F,                armorId: 0x73, helmId: 0x62, knownSpells: [0x34, 0x31] },                                 // RM — Dagger (Cure, Fire)
-  { name: 'Verena',  level: 4, palIdx: 3, camper: false, loc: 'cave-1',  jobIdx: 5, weaponR: 0x1F,                armorId: 0x73, helmId: 0x62, knownSpells: [0x34, 0x31, 0x32] },                         // RM — Dagger (Cure, Fire, Blizzard)
-  { name: 'Caelum',  level: 5, palIdx: 5, camper: true,  loc: 'cave-3',  jobIdx: 5, weaponR: 0x1F,                armorId: 0x73, helmId: 0x62, knownSpells: [0x34, 0x31, 0x32, 0x33] },                   // RM — Dagger (Cure, Fire, Blizzard, Sleep)
-  { name: 'Quill',   level: 3, palIdx: 7, camper: false, loc: 'world',   jobIdx: 5, weaponR: 0x1F,                armorId: 0x73, helmId: 0x62, knownSpells: [0x34] },                                     // RM — Dagger (Cure)
-  { name: 'Soren',   level: 4, palIdx: 0, camper: false, loc: 'cave-2',  jobIdx: 5, weaponR: 0x1F,                armorId: 0x73, helmId: 0x62, knownSpells: [0x34, 0x31] },                               // RM — Dagger (Cure, Fire)
+  // RM is the most-equippable hybrid at this tier: Knife/Dagger/Staff +
+  // Shield. Mix here to show range — sword-style RM, dagger-only caster
+  // RM, staff-and-shield staff RM.
+  { name: 'Asher',   level: 5, palIdx: 1, camper: false, loc: 'ur',      jobIdx: 5, weaponR: 0x1F,                armorId: 0x73, helmId: 0x62, shieldId: 0x58, knownSpells: [0x34, 0x31] },               // RM — Dagger + Shield (knight-mage)
+  { name: 'Verena',  level: 4, palIdx: 3, camper: false, loc: 'cave-1',  jobIdx: 5, weaponR: 0x1F,                armorId: 0x73, helmId: 0x62,                 knownSpells: [0x34, 0x31, 0x32] },         // RM — Dagger (caster RM, no shield)
+  { name: 'Caelum',  level: 5, palIdx: 5, camper: true,  loc: 'cave-3',  jobIdx: 5, weaponR: 0x0E,                armorId: 0x73, helmId: 0x62, shieldId: 0x58, knownSpells: [0x34, 0x31, 0x32, 0x33] },   // RM — Staff + Shield (staff RM)
+  { name: 'Quill',   level: 3, palIdx: 7, camper: false, loc: 'world',   jobIdx: 5, weaponR: 0x1F,                armorId: 0x73, helmId: 0x62,                 knownSpells: [0x34] },                     // RM — Dagger (caster RM)
+  { name: 'Soren',   level: 4, palIdx: 0, camper: false, loc: 'cave-2',  jobIdx: 5, weaponR: 0x1E,                armorId: 0x73, helmId: 0x62, shieldId: 0x58, knownSpells: [0x34, 0x31] },               // RM — Knife + Shield
 ];
 
 // Palette variants — only color 3 changes (original $16 = red outfit)

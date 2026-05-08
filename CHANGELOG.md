@@ -2,6 +2,27 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.133 — 2026-05-08
+
+### Player pool equipment audit + per-job equip matrix doc
+
+Audited every fake-player entry's gear against the actual `jobs` mask in `items.js`. Three issues found, all fixed:
+
+1. **Cassia had Serpent Sword (`$28`, atk 25, 1500 gil)** — way past Altar Cave + Ur tier. Swapped to Longsword (`$24`).
+2. **All 5 BMs wielded Staff (`$0E`)** — but `$0E` jobs mask is `Ww|Rw|Sh|Sa|Ni`. **`Bw` (Black Mage) is NOT in that mask.** None of the BMs could actually equip their weapon. Bug since v1.7.126 when I added them. Fixed: BMs now wield Knife (`$1E`) or Dagger (`$1F`) per the items table — their offensive output comes from Lv1 Black Magic, not weapon ATK.
+3. **RMs had no shields.** Per `$58` mask `On|Fi|Rw|Kn|Th|Dr|Vi|Ni`, RM IS allowed. Re-added shields to Asher / Caelum / Soren. Verena and Quill stay shieldless (caster-style RM). Caelum now uses Staff `$0E` + Shield (RM is the only mage class that can pair staff with shield in this codebase).
+
+Pool diversity also bumped:
+- Eska (OK, lv3, crystal): now Bow `$4A` + Wooden Arrow `$4F` — two-handed archer variety
+- Brom (OK, lv3, cave-1): Dagger + Knife dual-wield
+- Duran (Fi, lv5, crystal): Dagger + Knife dual-wield (instead of yet another longsword)
+- Caelum (RM, lv5): Staff + Shield (only RM swinging a staff)
+- BMs split between Knife (lv3-4) and Dagger (lv4-5)
+
+Doc: full per-job equip matrix added to the `PLAYER_POOL` header comment in `data/players.js`. Lists which weapons / body / helm / shield each starting job can equip at Altar Cave + Ur tier, with the relevant `items.js` masks called out. Bracers (`$8B`, mage-arm) noted as deferred until `armsId` slot lands in `generateAllyStats`.
+
+New tool: `tools/audit-player-pool-equip.mjs` cross-checks every pool entry against its job's equip mask. Run after any PLAYER_POOL or items.js edit. Fails loud on mismatch.
+
 ## 1.7.132 — 2026-05-08
 
 ### Dual-wield damage de-tuned (was quadratic, now linear)
