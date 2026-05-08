@@ -27,6 +27,7 @@ const JOB_WALK_PALS = {
   1: [SPRITE_PAL_TOP, SPRITE_PAL_TOP],   // Warrior: all red
   2: [MO_WALK_TOP, MO_WALK_BTM],         // Monk: brown hair + peach skin top, blue gi bottom
   4: [BM_WALK_TOP, BM_WALK_BTM],         // Black Mage: peach face top, blue robe bottom
+  5: [SPRITE_PAL_TOP, SPRITE_PAL_TOP],   // Red Mage: all red (same pattern as Warrior)
 };
 
 export function swapBattleSprites(jobIdx) {

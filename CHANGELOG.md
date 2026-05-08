@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.125 — 2026-05-08
+
+### RM overworld walk palette wired
+
+Red Mage (job 5) was falling back to Onion Knight (red top, green/magenta bottom). Per the user's call, RM's canon look is all-red — same pattern as Warrior — so `JOB_WALK_PALS[5]` now uses `[SPRITE_PAL_TOP, SPRITE_PAL_TOP]`.
+
 ## 1.7.124 — 2026-05-08
 
 ### BM overworld walk palette wired
