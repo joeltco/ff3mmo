@@ -34,7 +34,7 @@ import { pvpSt, drawBossSpriteBoxPVP } from './pvp.js';
 import { inputSt } from './input-handler.js';
 import { bsc, getSlashFramesForWeapon } from './battle-sprite-cache.js';
 import { drawSlashOverlay, SLASH_FRAME_MS, shouldDrawSlash } from './slash-effects.js';
-import { getCastAnimElapsedMs, getCurrentSpellId, getSpellTargets, getSpellHitIdx, isCurrentCastItemUse } from './spell-cast.js';
+import { getCastAnimElapsedMs, getCurrentSpellId, getSpellTargets, getSpellHitIdx, isCurrentCastItemUse, getMagicHitPhase } from './spell-cast.js';
 import { drawCasterCastBehind, drawCasterCastFront,
          jobToCastKey, CAST_T_LUNGE, CAST_T_HEAL, CAST_T_RETURN, CAST_PHASE_MS,
          CAST_T_THROW_PROJ_START, CAST_T_THROW_IMPACT_START, CAST_T_THROW_RETURN,
@@ -738,28 +738,34 @@ function _drawPlayerSpellTargetSparkleOnEnemy() {
   const sy = HUD_VIEW_Y + 8 + 8;
 
   // Item-use (SouthWind / battle items via animSpellId) skips cast windup AND
-  // projectile flight — items go straight to impact. magic-hit timer = 0 at
-  // impact start, so impactMs = cureMs directly. Applies regardless of the
-  // spell's element so non-thrown elements (earth Quake, holy WhiteMusk,
-  // no-elem Flare) still render their impact visual on enemy targets.
+  // projectile flight — items go straight to impact, in the per-target walk
+  // order (TL→TR→BL→BR) for thrown cross-faction targets. Single-target
+  // items render the impact at that one target. Non-thrown self/ally item
+  // effects don't reach this draw site.
   if (isCurrentCastItemUse()) {
-    drawSpellEffectAtTargets(ui.ctx, enemyTargets, spellId, cureMs);
+    if (enemyTargets.length === 0) return;
+    const idx = Math.min(getSpellHitIdx(), enemyTargets.length - 1);
+    if (idx < 0) return;
+    drawSpellEffectAtTargets(ui.ctx, [enemyTargets[idx]], spellId, battleSt.battleTimer);
     return;
   }
 
   if (isThrown) {
-    // Throw timeline: projectile fan-out during projectile phase, then all
-    // impact bursts play concurrently during impact phase.
-    if (cureMs < CAST_T_THROW_PROJ_START || cureMs >= CAST_T_THROW_RETURN) return;
-    if (cureMs < CAST_T_THROW_IMPACT_START) {
-      const t01 = (cureMs - CAST_T_THROW_PROJ_START) / CAST_PHASE_MS_THROW.projectile;
+    // Throw timeline: projectile fan parallel to ALL targets, then per-target
+    // impact bursts step through TL→TR→BL→BR (sorted in spell-cast.js). Phase
+    // is reported by the engine — `battleTimer` resets per per-target window
+    // during 'impact-walk', so we use it directly for the burst frame timer.
+    const phase = getMagicHitPhase();
+    if (phase === 'projectile') {
+      const t01 = battleSt.battleTimer / CAST_PHASE_MS_THROW.projectile;
       drawProjectileFan(ui.ctx, sx, sy, 'party', enemyTargets, spellId, spell, t01);
       return;
     }
-    // Impact phase: burst on every target simultaneously. Sight has no
-    // on-target bundle so this is a no-op for Sight (battle msg handles it).
-    const impactMs = cureMs - CAST_T_THROW_IMPACT_START;
-    drawSpellEffectAtTargets(ui.ctx, enemyTargets, spellId, impactMs);
+    // 'impact-walk': render the impact burst on the CURRENT target only.
+    // Sight has no on-target bundle, so drawSpellEffectAtTargets no-ops.
+    const idx = Math.min(getSpellHitIdx(), enemyTargets.length - 1);
+    if (idx < 0) return;
+    drawSpellEffectAtTargets(ui.ctx, [enemyTargets[idx]], spellId, battleSt.battleTimer);
     return;
   }
 

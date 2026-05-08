@@ -13,7 +13,8 @@ import { setPlayerHealNum, setPlayerDamageNum, getAllyDamageNums, setEnemyDmgNum
          tickHealNums, clearHealNums } from './damage-numbers.js';
 import { SPELLS, getSpellMPCost, isMultiTargetSpell } from './data/spells.js';
 import { STATUS, addStatus, removeStatus, tryInflictStatus, STATUS_NAME_BYTES } from './status-effects.js';
-import { CAST_PHASE_MS, CAST_T_HEAL, CAST_TOTAL_MS, CAST_T_THROW_RETURN, CAST_T_THROW_IMPACT_START } from './cast-anim.js';
+import { CAST_PHASE_MS, CAST_PHASE_MS_THROW, CAST_T_HEAL, CAST_TOTAL_MS, CAST_T_THROW_RETURN, CAST_T_THROW_IMPACT_START } from './cast-anim.js';
+import { pvpGridLayout } from './pvp-math.js';
 import { queueBattleMsg, isBattleMsgBusy } from './battle-msg.js';
 import { _nameToBytes } from './text-utils.js';
 import { elemMultiplier } from './battle-math.js';
@@ -50,6 +51,14 @@ let _sfxPlayed = false;
 // than a spellcaster job action. Items skip the BM/WM cast pose, MP cost, and
 // MAGIC_CAST SFX — they go straight from a 250 ms throw window to magic-hit.
 let _isItemUse = false;
+// Substate within 'magic-hit' for thrown cross-faction spells. 'projectile'
+// runs the parallel fan-out (single battleTimer 0..150). 'impact-walk' runs
+// the per-target serial impact bursts (battleTimer resets per target). Single-
+// target throws and heal-style casts stay in 'impact-walk' for the whole
+// magic-hit duration with the original timing — the walk code only kicks in
+// when isThrown && cross-faction targets exist (any count, including 1).
+let _magicHitPhase = 'impact-walk';
+export function getMagicHitPhase() { return _magicHitPhase; }
 
 function _playSpellSFXOnce(sfx) {
   if (_sfxPlayed) return;
@@ -85,6 +94,7 @@ function _queueStatusMsg(flag) {
 // SW_HIT for unmapped spells.
 function _spellImpactSFX(spell) {
   if (!spell) return SFX.SW_HIT;
+  if (spell.target === 'sight') return SFX.SIGHT;
   if (spell.element === 'fire') return SFX.FIRE_BOOM;       // NSF $82 — REC OAM f1301
   if (spell.element === 'ice')  return SFX.SW_HIT;          // NSF $5D — REC OAM f766 (Blizzard $9C → $5D)
   if (spell.type === 'sleep')   return SFX.SLEEP_PUFF;      // NSF $95 — REC OAM sleep-emu-snap
@@ -101,6 +111,7 @@ export function isCurrentCastItemUse() { return _isItemUse; }
 export function resetSpellCastVars() {
   _spellId = 0; _targets = []; _hitIdx = 0; _effectApplied = false; _baseAmount = -1;
   _sfxPlayed = false;
+  _magicHitPhase = 'impact-walk';
 }
 
 // NES FF3 magic formula (31/B1B4): atk = floor(stat/2) + power, +rand(0..atk/2).
@@ -119,6 +130,29 @@ function _isUndead(mon) {
   const w = Array.isArray(mon.weakness) ? mon.weakness : (mon.weakness ? [mon.weakness] : []);
   const r = Array.isArray(mon.resist) ? mon.resist : (mon.resist ? [mon.resist] : []);
   return w.includes('holy') && r.includes('holy');
+}
+
+// Visual (row, col) position for an enemy by index — used to sort _targets
+// into TL→TR→BL→BR walk order so the per-target impact bursts step through
+// the grid in reading order. For encounter, mirrors `_encounterGridPos`'s
+// layout (4-mon = 2x2, 3-mon = top pair + middle bottom, 2-mon = horizontal
+// pair, 1-mon = single). For PVP, defers to `pvpGridLayout`'s gridPos table.
+function _enemyVisualPos(idx) {
+  if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
+    const cnt = battleSt.encounterMonsters.length;
+    if (cnt <= 2) return { row: 0, col: idx };
+    if (cnt === 3) return idx < 2 ? { row: 0, col: idx } : { row: 1, col: 0 };
+    // 4-mon: 0=TL, 1=TR, 2=BL, 3=BR
+    return { row: idx < 2 ? 0 : 1, col: idx % 2 };
+  }
+  if (pvpSt.isPVPBattle) {
+    const total = 1 + (pvpSt.pvpEnemyAllies ? pvpSt.pvpEnemyAllies.length : 0);
+    const { gridPos } = pvpGridLayout(total);
+    const safe = Math.min(idx, gridPos.length - 1);
+    const [gr, gc] = gridPos[safe];
+    return { row: gr, col: gc };
+  }
+  return { row: 0, col: 0 };
 }
 
 // Build the encounter/PVP "right column" predicate for a given side.
@@ -196,6 +230,16 @@ export function startSpellCast(spellId, targetSpec, opts = {}) {
   // picker may have selected an enemy but the buff applies to the player.
   if (spell.target === 'haste' || spell.target === 'protect' || spell.target === 'reflect') {
     _targets = [{ type: 'player' }];
+  }
+
+  // Multi-target enemy walk order: top→bottom, left→right (visual reading
+  // order). The impact-walk phase steps through _targets in this order so
+  // the spell-anim plays TL → TR → BL → BR like the legacy SouthWind walk.
+  if (_targets.length > 1 && _targets.every(t => t && t.type === 'enemy')) {
+    _targets.sort((a, b) => {
+      const pa = _enemyVisualPos(a.index), pb = _enemyVisualPos(b.index);
+      return pa.row - pb.row || pa.col - pb.col;
+    });
   }
 
   // Multi-target → roll once at cast time, divide at apply time. Single-target
@@ -572,62 +616,116 @@ export function updateSpellCast(dt) {
     if (battleSt.battleTimer >= castDur) {
       if (_targets.length === 0) { _processNextTurn(); return true; }
       _hitIdx = 0; _effectApplied = false;
+      // Thrown spells with cross-faction target(s) get the projectile fan
+      // first, then the per-target serial impact walk. Heal-style + boss-
+      // path single-target stay in 'impact-walk' for the whole magic-hit
+      // duration. Item-use skips the projectile sub-phase entirely (legacy
+      // SouthWind behavior: items have no projectile flight, just the per-
+      // target impact walk).
+      _magicHitPhase = (isThrown && _hasCrossFactionTarget && !_isItemUse) ? 'projectile' : 'impact-walk';
+      _sfxPlayed = false;
       battleSt.battleState = 'magic-hit'; battleSt.battleTimer = 0;
     }
     return true;
   }
   if (battleSt.battleState !== 'magic-hit') return false;
   tickHealNums(dt);
+
+  // Phase 1 — projectile fan-out (parallel, ~150ms). Render path draws all
+  // enemyTargets simultaneously. No effect apply during this phase.
+  if (_magicHitPhase === 'projectile') {
+    const projDur = CAST_PHASE_MS_THROW.projectile;
+    if (battleSt.battleTimer >= projDur) {
+      _magicHitPhase = 'impact-walk';
+      battleSt.battleTimer = 0;
+      _hitIdx = 0;
+      _effectApplied = false;
+      _sfxPlayed = false;
+    }
+    return true;
+  }
+
+  // Phase 2a — thrown impact walk: per-target serial impact + damage hold.
+  // Each target gets its own ~1050ms window: 0..550 impact burst, 550 = apply
+  // effect (damage / status roll), 550..1050 hold for the damage-number
+  // bounce. SFX fires per-target at the start of each window.
+  if (isThrown && _hasCrossFactionTarget) {
+    const impactDur = CAST_PHASE_MS_THROW.impact;       // 550 ms
+    const damageHoldMs = 500;
+    const perTargetMs = impactDur + damageHoldMs;
+    if (!_sfxPlayed) _playSpellSFXOnce(_spellImpactSFX(spell));
+    if (!_effectApplied && battleSt.battleTimer >= impactDur) {
+      _applySpellEffect(_targets[_hitIdx]);
+      _effectApplied = true;
+    }
+    if (battleSt.battleTimer >= perTargetMs) {
+      _hitIdx++;
+      if (_hitIdx < _targets.length) {
+        battleSt.battleTimer = 0;
+        _effectApplied = false;
+        _sfxPlayed = false;
+        return true;
+      }
+      // Walk complete — pin _hitIdx to last target so any render reads stay
+      // in-bounds, then run the shared transition tail.
+      _hitIdx = _targets.length - 1;
+      _finishMagicHit();
+    }
+    return true;
+  }
+
+  // Phase 2b — heal-style / single-target / sight: original parallel apply.
   if (sfxStartMs >= 0 && !_sfxPlayed && battleSt.battleTimer >= sfxStartMs) {
     _playSpellSFXOnce(_spellImpactSFX(spell));
   }
-  // Multi-target apply is PARALLEL: at hitEffectMs, every target in _targets
-  // gets the effect applied at once (damage numbers pop simultaneously,
-  // projectile fan-out lands together, all impact bursts play concurrently).
-  // _hitIdx stays at 0 — kept for render-site back-compat that reads it as
-  // an index but is otherwise vestigial under parallel apply.
   if (!_effectApplied && battleSt.battleTimer >= hitEffectMs) {
     for (const tgt of _targets) _applySpellEffect(tgt);
     _effectApplied = true;
   }
   if (battleSt.battleTimer >= hitTotalMs) {
-    clearHealNums();
-    // If the spell killed any enemies, route through the same monster-death
-    // / boss-dissolve / pvp-dissolve transitions the melee path uses, so the
-    // victory flow fires when the last monster is killed by a spell.
-    const killedEnemyIndices = [];
-    if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
-      for (const t of _targets) {
-        if (t.type === 'enemy' && battleSt.encounterMonsters[t.index]?.hp <= 0) {
-          killedEnemyIndices.push(t.index);
-        }
-      }
-    }
-    if (killedEnemyIndices.length > 0) {
-      battleSt.dyingMonsterIndices = new Map(killedEnemyIndices.map(i => [i, 0]));
-      battleSt.battleState = 'monster-death';
-      battleSt.battleTimer = 0;
-      playSFX(SFX.MONSTER_DEATH);
-    } else if (!battleSt.isRandomEncounter && getEnemyHP() <= 0) {
-      if (pvpSt.isPVPBattle) {
-        battleSt.battleState = 'pvp-dissolve';
-        battleSt.battleTimer = 0;
-        playSFX(SFX.MONSTER_DEATH);
-      } else {
-        battleSt.battleState = 'boss-dissolve';
-        battleSt.battleTimer = 0;
-        playSFX(SFX.BOSS_DEATH);
-      }
-    } else if (isBattleMsgBusy()) {
-      // Battle message still on screen (Sight's "Ineffective", future
-      // spell-text dialog, etc.) — defer turn advance through msg-wait gate.
-      battleSt.battleState = 'msg-wait';
-      battleSt.battleTimer = 0;
-    } else {
-      _processNextTurn();
-    }
+    _finishMagicHit();
   }
   return true;
+}
+
+// Shared transition tail: clears heal numbers, detects spell-kills, and
+// routes to monster-death / boss-dissolve / pvp-dissolve / msg-wait /
+// next-turn the same way the legacy parallel-apply branch did. Called by
+// both the throw-walk completion and the heal-style total-time completion.
+function _finishMagicHit() {
+  clearHealNums();
+  const killedEnemyIndices = [];
+  if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
+    for (const t of _targets) {
+      if (t.type === 'enemy' && battleSt.encounterMonsters[t.index]?.hp <= 0) {
+        killedEnemyIndices.push(t.index);
+      }
+    }
+  }
+  if (killedEnemyIndices.length > 0) {
+    battleSt.dyingMonsterIndices = new Map(killedEnemyIndices.map(i => [i, 0]));
+    battleSt.battleState = 'monster-death';
+    battleSt.battleTimer = 0;
+    playSFX(SFX.MONSTER_DEATH);
+  } else if (!battleSt.isRandomEncounter && getEnemyHP() <= 0) {
+    if (pvpSt.isPVPBattle) {
+      battleSt.battleState = 'pvp-dissolve';
+      battleSt.battleTimer = 0;
+      playSFX(SFX.MONSTER_DEATH);
+    } else {
+      battleSt.battleState = 'boss-dissolve';
+      battleSt.battleTimer = 0;
+      playSFX(SFX.BOSS_DEATH);
+    }
+  } else if (isBattleMsgBusy()) {
+    // Battle message still on screen (Sight's "Ineffective", status-name
+    // strips, future spell-text dialog) — defer turn advance through
+    // msg-wait gate.
+    battleSt.battleState = 'msg-wait';
+    battleSt.battleTimer = 0;
+  } else {
+    _processNextTurn();
+  }
 }
 
 // Renderer hook: returns ms elapsed since cast t=0, or -1 if not in a

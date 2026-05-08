@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.123 — 2026-05-08
+
+### Multi-target throw: parallel projectile fan, serial impact walk
+
+The new spell-cast engine had collapsed multi-target throws into a fully-parallel apply (one impact frame, all damage numbers pop together). Reverted to the legacy SouthWind pattern: projectile fan-out is parallel (every target gets a sphere), but the impact bursts walk targets one at a time in TL → TR → BL → BR reading order.
+
+- `_targets` is sorted by visual `(row, col)` after the multi-enemy build using a small `_enemyVisualPos` helper that mirrors `_encounterGridPos` for encounters and `pvpGridLayout`'s `gridPos` for PVP.
+- New `_magicHitPhase` substate inside `magic-hit`. Throws with cross-faction targets enter `'projectile'` (battleTimer 0..150 ms = parallel fan), then transition to `'impact-walk'` (per-target window: 550 ms impact + 500 ms damage-number hold = 1050 ms each). Each iteration resets `battleTimer`, `_effectApplied`, `_sfxPlayed` so the SFX fires per target. After all targets are walked, the shared `_finishMagicHit()` tail runs the kill detection / monster-death / boss-dissolve / pvp-dissolve / msg-wait routing.
+- Item-use skips the projectile sub-phase (legacy SW: items have no projectile flight) but still walks impacts serially. SouthWind, Bomb Shard, Arctic Wind, etc. land impacts TL → TR → BL → BR.
+- Heal-style + single-target self-buff stay on the original parallel-apply path — the walk only engages when `isThrown && cross-faction`.
+- Renderer reads `getMagicHitPhase()` + `getSpellHitIdx()` to pick which targets to draw. Projectile phase fans to all `enemyTargets`; impact-walk phase draws the burst at the current `enemyTargets[hitIdx]` only, using the per-target `battleTimer` as the burst-frame clock.
+- Sight gets its own `_spellImpactSFX` branch (`target === 'sight'` → `SFX.SIGHT`) so the engine plays the right impact SFX during the walk without double-firing inside `_applyEnemyEffect`.
+
 ## 1.7.122 — 2026-05-08
 
 ### Sleep target picker defaults to enemy side
