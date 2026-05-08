@@ -5,42 +5,58 @@ import { createStatusState } from '../status-effects.js';
 
 export const LOCATIONS = ['world', 'ur', 'cave-0', 'cave-1', 'cave-2', 'cave-3', 'crystal'];
 
-// Each player has a current location that changes over time (loc is mutated at runtime)
+// Polished pool: 5 entries per starting job (OK/Fi/Mo/WM/BM/RM = 30 total).
+// Names are theme-matched per class — generic-fantasy for OK/Fi, Japanese
+// for Monk (Ryuji-style), soft/healer for WM, mage-flavor for BM (Vivi-
+// style), hybrid-heroic for RM. palIdx is varied within each job so colors
+// don't repeat among same-class characters at the same location. Locations
+// are spread across all 7 zones so PVP rolls have a mix everywhere.
+//
+// Equipment per job:
+//   OK: Knife/Dagger + Leather+Cap (no shield)
+//   Fi: Longsword/Dagger + Leather+Cap+Shield
+//   Mo: Unarmed/Nunchuck + Leather+Cap
+//   WM: Staff + Leather+Cap, knownSpells subset of [Cure, Poisona, Sight]
+//   BM: Staff + Leather+Cap, knownSpells subset of [Fire, Blizzard, Sleep]
+//   RM: Longsword (with shield) or Dagger + Leather+Cap, knownSpells mix of
+//       Cure + BM Lv1 subset
 export const PLAYER_POOL = [
-  // jobIdx: 0=Onion Knight, 1=Fighter. Sword users are Fighters.
-  { name: 'Zephyr',  level: 5,  palIdx: 1, camper: false, loc: 'cave-3',  jobIdx: 3, weaponR: 0x0E,               armorId: 0x73, helmId: 0x62, knownSpells: [0x34, 0x35] }, // WM — Staff / Leather+Cap (Cure, Poisona)
-  { name: 'Mira',    level: 4,  palIdx: 2, camper: false, loc: 'world',   jobIdx: 3, weaponR: 0x0E,               armorId: 0x73, helmId: 0x62, knownSpells: [0x34, 0x35] }, // WM — Staff / Leather+Cap (Cure, Poisona)
-  { name: 'Aldric',  level: 5,  palIdx: 3, camper: true,  loc: 'ur',      jobIdx: 1, weaponR: 0x24,               armorId: 0x73, helmId: 0x62, shieldId: 0x58 }, // Fi — Longsword / Leather+Cap+Shield
-  { name: 'Suki',    level: 3,  palIdx: 4, camper: false, loc: 'cave-1',  jobIdx: 3, weaponR: 0x0E,               armorId: 0x73, helmId: 0x62, knownSpells: [0x34, 0x35] }, // WM — Staff / Leather+Cap (Cure, Poisona)
-  { name: 'Fenris',  level: 5,  palIdx: 5, camper: false, loc: 'cave-1',  jobIdx: 1, weaponR: 0x1F,               armorId: 0x73, helmId: 0x62, shieldId: 0x58 }, // Fi — Dagger / Leather+Cap+Shield
-  { name: 'Lenna',   level: 5,  palIdx: 6, camper: true,  loc: 'ur',      jobIdx: 3, weaponR: 0x0E,               armorId: 0x73, helmId: 0x62, knownSpells: [0x34, 0x35] }, // WM — Staff / Leather+Cap (Cure, Poisona)
-  { name: 'Grok',    level: 5,  palIdx: 7, camper: false, loc: 'cave-3',  jobIdx: 1, weaponR: 0x24,               armorId: 0x73, helmId: 0x62, shieldId: 0x58 }, // Fi — Longsword / Leather+Cap+Shield
-  { name: 'Ivy',     level: 2,  palIdx: 0, camper: false, loc: 'ur',      jobIdx: 3, weaponR: 0x0E,               armorId: 0x73, helmId: 0x62, knownSpells: [0x34] },       // WM — Staff / Leather+Cap (Cure)
-  { name: 'Rook',    level: 5,  palIdx: 3, camper: false, loc: 'cave-2',  jobIdx: 1, weaponR: 0x24,               armorId: 0x73, helmId: 0x62, shieldId: 0x58 }, // Fi — Longsword / Leather+Cap+Shield
-  { name: 'Tora',    level: 5,  palIdx: 5, camper: false, loc: 'world',   jobIdx: 3, weaponR: 0x0E,               armorId: 0x73, helmId: 0x62, knownSpells: [0x34, 0x35] }, // WM — Staff / Leather+Cap (Cure, Poisona)
-  { name: 'Blix',    level: 4,  palIdx: 7, camper: false, loc: 'cave-2',  jobIdx: 3, weaponR: 0x0E,               armorId: 0x73, helmId: 0x62, knownSpells: [0x34, 0x35] }, // WM — Staff / Leather+Cap (Cure, Poisona)
-  { name: 'Cassia',  level: 5,  palIdx: 6, camper: true,  loc: 'cave-1',  jobIdx: 1, weaponR: 0x28,               armorId: 0x73, helmId: 0x62, shieldId: 0x58 }, // Fi — Serpent Sword / Leather+Cap+Shield
-  { name: 'Duran',   level: 5,  palIdx: 1, camper: false, loc: 'crystal', jobIdx: 1, weaponR: 0x24,               armorId: 0x73, helmId: 0x62, shieldId: 0x58 }, // Fi — Longsword / Leather+Cap+Shield
-  { name: 'Nyx',     level: 1,  palIdx: 4, camper: false, loc: 'ur',      jobIdx: 0, weaponR: 0x1E,               armorId: 0x73, helmId: 0x62 },                 // OK — Knife / Leather+Cap
-  { name: 'Orin',    level: 4,  palIdx: 0, camper: false, loc: 'world',   jobIdx: 1, weaponR: 0x1F, weaponL: 0x1E, armorId: 0x73, helmId: 0x62 },                // Fi — Dagger+Knife / Leather+Cap
-  { name: 'Pip',     level: 3,  palIdx: 2, camper: false, loc: 'cave-0',  jobIdx: 3, weaponR: 0x0E,               armorId: 0x73, helmId: 0x62, knownSpells: [0x34, 0x35] }, // WM — Staff / Leather+Cap (Cure, Poisona)
-  { name: 'Vex',     level: 5,  palIdx: 7, camper: false, loc: 'cave-3',  jobIdx: 1, weaponR: 0x24,               armorId: 0x73, helmId: 0x62, shieldId: 0x58 }, // Fi — Longsword / Leather+Cap+Shield
-  { name: 'Wren',    level: 4,  palIdx: 5, camper: false, loc: 'cave-0',  jobIdx: 0, weaponR: 0x1F,               armorId: 0x73, helmId: 0x62 },                 // OK — Dagger / Leather+Cap
-  { name: 'Kasumi',  level: 4,  palIdx: 4, camper: false, loc: 'cave-0',  jobIdx: 2, weaponR: 0x06,               armorId: 0x73, helmId: 0x62 },                 // Mo — Nunchuck / Leather+Cap
-  { name: 'Jiro',    level: 5,  palIdx: 2, camper: false, loc: 'crystal', jobIdx: 2, weaponR: 0,                  armorId: 0x73, helmId: 0x62 },                 // Mo — Unarmed / Leather+Cap
-  { name: 'Ryuji',   level: 5,  palIdx: 7, camper: false, loc: 'cave-2',  jobIdx: 2, weaponR: 0x06,               armorId: 0x73, helmId: 0x62 },                 // Mo — Nunchuck / Leather+Cap
-  { name: 'Hana',    level: 3,  palIdx: 5, camper: false, loc: 'world',   jobIdx: 2, weaponR: 0,                  armorId: 0x73, helmId: 0x62 },                 // Mo — Unarmed / Leather+Cap
-  { name: 'Tetsuo',  level: 5,  palIdx: 3, camper: true,  loc: 'cave-1',  jobIdx: 2, weaponR: 0,                  armorId: 0x73, helmId: 0x62 },                 // Mo — Unarmed / Leather+Cap
-  // jobIdx 4 = Black Mage. Staff + Leather+Cap, knownSpells from BM Lv1: Fire/Blizzard/Sleep.
-  { name: 'Vivi',    level: 4,  palIdx: 1, camper: false, loc: 'world',   jobIdx: 4, weaponR: 0x0E,               armorId: 0x73, helmId: 0x62, knownSpells: [0x31, 0x32] },             // BM — Staff / Leather+Cap (Fire, Blizzard)
-  { name: 'Nephele', level: 5,  palIdx: 2, camper: true,  loc: 'cave-2',  jobIdx: 4, weaponR: 0x0E,               armorId: 0x73, helmId: 0x62, knownSpells: [0x31, 0x32, 0x33] },       // BM — Staff / Leather+Cap (Fire, Blizzard, Sleep)
-  { name: 'Korra',   level: 3,  palIdx: 4, camper: false, loc: 'cave-0',  jobIdx: 4, weaponR: 0x0E,               armorId: 0x73, helmId: 0x62, knownSpells: [0x31] },                   // BM — Staff / Leather+Cap (Fire)
-  { name: 'Theron',  level: 5,  palIdx: 6, camper: false, loc: 'crystal', jobIdx: 4, weaponR: 0x0E,               armorId: 0x73, helmId: 0x62, knownSpells: [0x31, 0x32, 0x33] },       // BM — Staff / Leather+Cap (Fire, Blizzard, Sleep)
-  // jobIdx 5 = Red Mage. Hybrid — Longsword/Dagger + Leather+Cap+Shield. knownSpells mix WM Lv1 + BM Lv1 (Cure/Fire/Blizzard/Sleep).
-  { name: 'Asher',   level: 5,  palIdx: 1, camper: false, loc: 'ur',      jobIdx: 5, weaponR: 0x24,               armorId: 0x73, helmId: 0x62, shieldId: 0x58, knownSpells: [0x34, 0x31] },             // RM — Longsword / Leather+Cap+Shield (Cure, Fire)
-  { name: 'Verena',  level: 4,  palIdx: 3, camper: false, loc: 'cave-1',  jobIdx: 5, weaponR: 0x1F,               armorId: 0x73, helmId: 0x62, knownSpells: [0x34, 0x31, 0x32] },                       // RM — Dagger / Leather+Cap (Cure, Fire, Blizzard)
-  { name: 'Caelum',  level: 5,  palIdx: 5, camper: true,  loc: 'cave-3',  jobIdx: 5, weaponR: 0x24,               armorId: 0x73, helmId: 0x62, shieldId: 0x58, knownSpells: [0x34, 0x31, 0x32, 0x33] }, // RM — Longsword / Leather+Cap+Shield (Cure, Fire, Blizzard, Sleep)
-  { name: 'Quill',   level: 3,  palIdx: 7, camper: false, loc: 'world',   jobIdx: 5, weaponR: 0x1F,               armorId: 0x73, helmId: 0x62, knownSpells: [0x34] },                                   // RM — Dagger / Leather+Cap (Cure)
+  // ── Onion Knight (5) — apprentice / orphan vibe ──
+  { name: 'Nyx',     level: 1, palIdx: 0, camper: false, loc: 'ur',      jobIdx: 0, weaponR: 0x1E,                armorId: 0x73, helmId: 0x62 },                                                          // OK — Knife
+  { name: 'Wren',    level: 4, palIdx: 5, camper: false, loc: 'cave-0',  jobIdx: 0, weaponR: 0x1F,                armorId: 0x73, helmId: 0x62 },                                                          // OK — Dagger
+  { name: 'Brom',    level: 3, palIdx: 6, camper: false, loc: 'cave-1',  jobIdx: 0, weaponR: 0x1F,                armorId: 0x73, helmId: 0x62 },                                                          // OK — Dagger
+  { name: 'Lir',     level: 2, palIdx: 2, camper: false, loc: 'world',   jobIdx: 0, weaponR: 0x1E,                armorId: 0x73, helmId: 0x62 },                                                          // OK — Knife
+  { name: 'Eska',    level: 3, palIdx: 4, camper: true,  loc: 'crystal', jobIdx: 0, weaponR: 0x1F, weaponL: 0x1E, armorId: 0x73, helmId: 0x62 },                                                          // OK — Dagger+Knife
+  // ── Fighter (5) — strong/martial names ──
+  { name: 'Aldric',  level: 5, palIdx: 3, camper: true,  loc: 'ur',      jobIdx: 1, weaponR: 0x24,                armorId: 0x73, helmId: 0x62, shieldId: 0x58 },                                          // Fi — Longsword
+  { name: 'Fenris',  level: 5, palIdx: 5, camper: false, loc: 'cave-1',  jobIdx: 1, weaponR: 0x1F,                armorId: 0x73, helmId: 0x62, shieldId: 0x58 },                                          // Fi — Dagger
+  { name: 'Grok',    level: 5, palIdx: 7, camper: false, loc: 'cave-3',  jobIdx: 1, weaponR: 0x24,                armorId: 0x73, helmId: 0x62, shieldId: 0x58 },                                          // Fi — Longsword
+  { name: 'Cassia',  level: 5, palIdx: 6, camper: true,  loc: 'cave-2',  jobIdx: 1, weaponR: 0x28,                armorId: 0x73, helmId: 0x62, shieldId: 0x58 },                                          // Fi — Serpent Sword
+  { name: 'Duran',   level: 5, palIdx: 1, camper: false, loc: 'crystal', jobIdx: 1, weaponR: 0x24,                armorId: 0x73, helmId: 0x62, shieldId: 0x58 },                                          // Fi — Longsword
+  // ── Monk (5) — Japanese names ──
+  { name: 'Kasumi',  level: 4, palIdx: 4, camper: false, loc: 'cave-0',  jobIdx: 2, weaponR: 0x06,                armorId: 0x73, helmId: 0x62 },                                                          // Mo — Nunchuck
+  { name: 'Jiro',    level: 5, palIdx: 2, camper: false, loc: 'crystal', jobIdx: 2, weaponR: 0,                   armorId: 0x73, helmId: 0x62 },                                                          // Mo — Unarmed
+  { name: 'Ryuji',   level: 5, palIdx: 7, camper: false, loc: 'cave-2',  jobIdx: 2, weaponR: 0x06,                armorId: 0x73, helmId: 0x62 },                                                          // Mo — Nunchuck
+  { name: 'Hana',    level: 3, palIdx: 5, camper: false, loc: 'world',   jobIdx: 2, weaponR: 0,                   armorId: 0x73, helmId: 0x62 },                                                          // Mo — Unarmed
+  { name: 'Tetsuo',  level: 5, palIdx: 3, camper: true,  loc: 'cave-1',  jobIdx: 2, weaponR: 0,                   armorId: 0x73, helmId: 0x62 },                                                          // Mo — Unarmed
+  // ── White Mage (5) — soft/healer names ──
+  { name: 'Zephyr',  level: 5, palIdx: 1, camper: false, loc: 'cave-3',  jobIdx: 3, weaponR: 0x0E,                armorId: 0x73, helmId: 0x62, knownSpells: [0x34, 0x35] },                               // WM — Staff (Cure, Poisona)
+  { name: 'Mira',    level: 4, palIdx: 2, camper: false, loc: 'world',   jobIdx: 3, weaponR: 0x0E,                armorId: 0x73, helmId: 0x62, knownSpells: [0x34, 0x35] },                               // WM — Staff (Cure, Poisona)
+  { name: 'Suki',    level: 3, palIdx: 4, camper: false, loc: 'cave-1',  jobIdx: 3, weaponR: 0x0E,                armorId: 0x73, helmId: 0x62, knownSpells: [0x34, 0x35] },                               // WM — Staff (Cure, Poisona)
+  { name: 'Lenna',   level: 5, palIdx: 6, camper: true,  loc: 'ur',      jobIdx: 3, weaponR: 0x0E,                armorId: 0x73, helmId: 0x62, knownSpells: [0x34, 0x35, 0x36] },                         // WM — Staff (Cure, Poisona, Sight)
+  { name: 'Ivy',     level: 2, palIdx: 0, camper: false, loc: 'cave-0',  jobIdx: 3, weaponR: 0x0E,                armorId: 0x73, helmId: 0x62, knownSpells: [0x34] },                                     // WM — Staff (Cure)
+  // ── Black Mage (5) — mage names; palette is all-blue tints (BLACK_MAGE_PALETTES) ──
+  { name: 'Vivi',    level: 4, palIdx: 1, camper: false, loc: 'world',   jobIdx: 4, weaponR: 0x0E,                armorId: 0x73, helmId: 0x62, knownSpells: [0x31, 0x32] },                               // BM — Staff (Fire, Blizzard)
+  { name: 'Nephele', level: 5, palIdx: 2, camper: true,  loc: 'cave-2',  jobIdx: 4, weaponR: 0x0E,                armorId: 0x73, helmId: 0x62, knownSpells: [0x31, 0x32, 0x33] },                         // BM — Staff (Fire, Blizzard, Sleep)
+  { name: 'Korra',   level: 3, palIdx: 4, camper: false, loc: 'cave-0',  jobIdx: 4, weaponR: 0x0E,                armorId: 0x73, helmId: 0x62, knownSpells: [0x31] },                                     // BM — Staff (Fire)
+  { name: 'Theron',  level: 5, palIdx: 6, camper: false, loc: 'crystal', jobIdx: 4, weaponR: 0x0E,                armorId: 0x73, helmId: 0x62, knownSpells: [0x31, 0x32, 0x33] },                         // BM — Staff (Fire, Blizzard, Sleep)
+  { name: 'Mara',    level: 4, palIdx: 0, camper: false, loc: 'ur',      jobIdx: 4, weaponR: 0x0E,                armorId: 0x73, helmId: 0x62, knownSpells: [0x31, 0x33] },                               // BM — Staff (Fire, Sleep)
+  // ── Red Mage (5) — hybrid heroic names; palette is all-red tints (RED_MAGE_PALETTES) ──
+  { name: 'Asher',   level: 5, palIdx: 1, camper: false, loc: 'ur',      jobIdx: 5, weaponR: 0x24,                armorId: 0x73, helmId: 0x62, shieldId: 0x58, knownSpells: [0x34, 0x31] },               // RM — Longsword (Cure, Fire)
+  { name: 'Verena',  level: 4, palIdx: 3, camper: false, loc: 'cave-1',  jobIdx: 5, weaponR: 0x1F,                armorId: 0x73, helmId: 0x62, knownSpells: [0x34, 0x31, 0x32] },                         // RM — Dagger (Cure, Fire, Blizzard)
+  { name: 'Caelum',  level: 5, palIdx: 5, camper: true,  loc: 'cave-3',  jobIdx: 5, weaponR: 0x24,                armorId: 0x73, helmId: 0x62, shieldId: 0x58, knownSpells: [0x34, 0x31, 0x32, 0x33] },   // RM — Longsword (Cure, Fire, Blizzard, Sleep)
+  { name: 'Quill',   level: 3, palIdx: 7, camper: false, loc: 'world',   jobIdx: 5, weaponR: 0x1F,                armorId: 0x73, helmId: 0x62, knownSpells: [0x34] },                                     // RM — Dagger (Cure)
+  { name: 'Soren',   level: 4, palIdx: 0, camper: false, loc: 'cave-2',  jobIdx: 5, weaponR: 0x24,                armorId: 0x73, helmId: 0x62, shieldId: 0x58, knownSpells: [0x34, 0x31] },               // RM — Longsword (Cure, Fire)
 ];
 
 // Palette variants — only color 3 changes (original $16 = red outfit)
@@ -69,19 +85,35 @@ export const MONK_PALETTES = [
   [0x0F, 0x27, 0x18, 0x15], // pink
 ];
 
-// Black Mage variants — PPU capture 2026-05-07 confirmed SP1 = [0x0F, 0x27,
-// 0x18, 0x21], byte-identical to Monk's base palette. BM and Monk share canon
-// default-blue in FF3J. Slot 0 keeps that; remaining slots vary color 3 only,
-// matching the Monk palette pattern.
+// Black Mage variants — only the ROBE color (color 3) varies, and it's
+// always a tint of blue. PPU capture 2026-05-07 confirmed SP1 = [0x0F, 0x27,
+// 0x18, 0x21] for the canon default; remaining slots are 7 different blue
+// tints from the NES system palette. Skin/hair/outline stay fixed across
+// all 8 slots.
 export const BLACK_MAGE_PALETTES = [
-  [0x0F, 0x27, 0x18, 0x21], // canonical blue
-  [0x0F, 0x27, 0x18, 0x16], // red
-  [0x0F, 0x27, 0x18, 0x1A], // green
-  [0x0F, 0x27, 0x18, 0x14], // purple
-  [0x0F, 0x27, 0x18, 0x28], // yellow
-  [0x0F, 0x27, 0x18, 0x11], // cyan
-  [0x0F, 0x27, 0x18, 0x17], // orange
-  [0x0F, 0x27, 0x18, 0x15], // pink
+  [0x0F, 0x27, 0x18, 0x21], // canon light blue (default)
+  [0x0F, 0x27, 0x18, 0x11], // azure / royal blue
+  [0x0F, 0x27, 0x18, 0x12], // deep blue-violet
+  [0x0F, 0x27, 0x18, 0x22], // sky blue
+  [0x0F, 0x27, 0x18, 0x1C], // cyan
+  [0x0F, 0x27, 0x18, 0x2C], // light cyan
+  [0x0F, 0x27, 0x18, 0x01], // deep blue
+  [0x0F, 0x27, 0x18, 0x31], // pale blue
+];
+
+// Red Mage variants — only the ROBE color (color 3) varies, and it's
+// always a tint of red. Skin (0x36) + outline (0x0F) + white inner (0x30)
+// stay fixed; canonical red ($16) is slot 0. Same palette skeleton as
+// PLAYER_PALETTES but the row only spans the red half of the system palette.
+export const RED_MAGE_PALETTES = [
+  [0x0F, 0x36, 0x30, 0x16], // canon red (default)
+  [0x0F, 0x36, 0x30, 0x15], // magenta
+  [0x0F, 0x36, 0x30, 0x14], // purple-red
+  [0x0F, 0x36, 0x30, 0x17], // orange-red
+  [0x0F, 0x36, 0x30, 0x25], // light red
+  [0x0F, 0x36, 0x30, 0x24], // pink
+  [0x0F, 0x36, 0x30, 0x05], // dark red
+  [0x0F, 0x36, 0x30, 0x35], // pale red
 ];
 
 export const CHAT_PHRASES = [

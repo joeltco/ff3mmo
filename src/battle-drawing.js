@@ -11,7 +11,7 @@ import { getMonsterCanvas, getMonsterWhiteCanvas, hasMonsterSprites } from './mo
 import { getItemNameClean, getMonsterName, getSpellNameClean } from './text-decoder.js';
 import { getSpellMPCost, SPELLS } from './data/spells.js';
 import { weaponSubtype, isWeapon } from './data/items.js';
-import { PLAYER_PALETTES, MONK_PALETTES, BLACK_MAGE_PALETTES } from './data/players.js';
+import { PLAYER_PALETTES, MONK_PALETTES, BLACK_MAGE_PALETTES, RED_MAGE_PALETTES } from './data/players.js';
 import { pickAttackPoseKey, pickAttackWeaponSpec, attackWeaponLayer } from './combatant-pose.js';
 
 // Player canvas pool fallback chain (player pool collapses knife back/fwd into one canvas).
@@ -23,6 +23,7 @@ function _playerPoseCanvas(p, key) {
 function _jobPalette(jobIdx, palIdx) {
   const pool = jobIdx === 2 ? MONK_PALETTES
              : jobIdx === 4 ? BLACK_MAGE_PALETTES
+             : jobIdx === 5 ? RED_MAGE_PALETTES
              : PLAYER_PALETTES;
   return pool[palIdx] || pool[0];
 }

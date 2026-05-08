@@ -14,11 +14,12 @@ import { resetBattleVars, isTeamWiped, updateBattleTimers, updatePoisonTick,
 import { playSFX, stopSFX, SFX, pauseMusic, playTrack, TRACKS } from './music.js';
 import { rollHits, calcPotentialHits, BOSS_HIT_RATE, GOBLIN_HIT_RATE } from './battle-math.js';
 import { ITEMS, isWeapon, weaponSubtype } from './data/items.js';
-import { PLAYER_POOL, PLAYER_PALETTES, MONK_PALETTES, BLACK_MAGE_PALETTES, generateAllyStats } from './data/players.js';
+import { PLAYER_POOL, PLAYER_PALETTES, MONK_PALETTES, BLACK_MAGE_PALETTES, RED_MAGE_PALETTES, generateAllyStats } from './data/players.js';
 
 function _jobPalette(jobIdx, palIdx) {
   const pool = jobIdx === 2 ? MONK_PALETTES
              : jobIdx === 4 ? BLACK_MAGE_PALETTES
+             : jobIdx === 5 ? RED_MAGE_PALETTES
              : PLAYER_PALETTES;
   return pool[palIdx] || pool[0];
 }
@@ -31,7 +32,7 @@ import { pvpGridLayout, PVP_CELL_W, PVP_CELL_H } from './pvp-math.js';
 import { playSlashSFX } from './battle-sfx.js';
 import { bsc, getSlashFramesForWeapon } from './battle-sprite-cache.js';
 import { drawSlashOverlay, resetSlashScatterCache, shouldDrawSlash, SWING_HOLD_MS } from './slash-effects.js';
-import { removeStatus, hasStatus, STATUS } from './status-effects.js';
+import { removeStatus, hasStatus, STATUS, tryInflictStatus, STATUS_NAME_BYTES } from './status-effects.js';
 import { _nameToBytes } from './text-utils.js';
 import { queueBattleMsg } from './battle-msg.js';
 import { tickHealNums, clearHealNums } from './damage-numbers.js';
@@ -111,10 +112,15 @@ export const pvpSt = {
   // PVP enemy magic — mirror of ally-magic-cast / ally-magic-hit on the enemy side.
   // Cell-idx convention: 0 = main opponent, 1+ = pvpEnemyAllies[cellIdx-1].
   pvpMagicCasterCellIdx:  -1,
-  pvpMagicTargetCellIdx:  -1,
+  pvpMagicTargetCellIdx:  -1,    // for heal/cure-status (target on enemy team)
   pvpMagicSpellId:        0,
   pvpMagicHealAmount:     0,
   pvpMagicEffectApplied:  false,
+  // Offensive cast — when an enemy BM/RM casts Fire / Blizzard / Sleep on the
+  // player party. -1 = player, 0+ = battleAllies[idx]. Mutually exclusive
+  // with pvpMagicTargetCellIdx (heal-style); whichever is set drives apply.
+  pvpMagicPartyTargetIdx: -100,   // -100 = no party target; -1 = player; 0+ = ally
+  pvpMagicDamageRoll:     0,
   // PVP enemy item — generalized version of the old self-only potion path.
   // Active during pvp-opp-potion. Target cell drives sparkle + heal-num placement.
   pvpItemCasterCellIdx:   -1,
@@ -180,6 +186,8 @@ export function resetPVPState() {
   pvpSt.pvpMagicSpellId         = 0;
   pvpSt.pvpMagicHealAmount      = 0;
   pvpSt.pvpMagicEffectApplied   = false;
+  pvpSt.pvpMagicPartyTargetIdx  = -100;
+  pvpSt.pvpMagicDamageRoll      = 0;
   pvpSt.pvpItemCasterCellIdx    = -1;
   pvpSt.pvpItemTargetCellIdx    = -1;
   pvpSt.pvpItemKind             = null;
@@ -319,29 +327,52 @@ function _runEnemyAttack(targetAlly) {
 function _processEnemyFlash() {
   if (battleSt.battleState !== 'enemy-flash') return false;
 
-  // On first tick of enemy-flash, decide defend/item for PVP main opponent (skip backswing for non-attack)
-  if (!pvpSt.pvpPreflashDecided && pvpSt.isPVPBattle && pvpSt.pvpCurrentEnemyAllyIdx < 0) {
+  // On first tick of enemy-flash, decide the action for the active caster.
+  // Cell 0 = main opp, 1+ = enemy allies. Mage AI (Cure/Poisona) runs for
+  // ANY caster with knownSpells — this is what lets a fake-player WM/RM heal
+  // teammates across the whole board (incl. casting on a downed-low ally
+  // even when they're cell 1/2/3, not just self). Main-opp-specific actions
+  // (defend / potion / SW-throw) stay gated below so allies don't trigger
+  // the SouthWind throw or shield-defend stance.
+  if (!pvpSt.pvpPreflashDecided && pvpSt.isPVPBattle) {
     pvpSt.pvpPreflashDecided = true;
-    if (Math.random() < 0.30) {
-      pvpSt.pvpOpponentIsDefending = true;
-      pvpSt.pvpPendingTargetAlly = -1;
-      playSFX(SFX.DEFEND_HIT);
-      battleSt.battleState = 'pvp-defend-anim'; battleSt.battleTimer = 0;
-      return true;
+    const casterCellIdx = pvpSt.pvpCurrentEnemyAllyIdx < 0
+      ? 0
+      : pvpSt.pvpCurrentEnemyAllyIdx + 1;
+    const caster = _pvpEnemyByCellIdx(casterCellIdx);
+    // Mage AI — heal an injured teammate (Cure), cure poison (Poisona),
+    // or cast offensive (Fire/Blizzard/Sleep) on the player party. Heal
+    // takes priority so a mage with Cure tends to stabilize the team
+    // before pivoting to offense. RM with both schools naturally covers
+    // both — Cure when team is hurt, BM-Lv1 otherwise.
+    if (caster && Array.isArray(caster.knownSpells) && caster.knownSpells.length > 0) {
+      if (_tryPVPEnemyCure(caster, casterCellIdx)) return true;
+      if (_tryPVPEnemyPoisona(caster, casterCellIdx)) return true;
+      if (_tryPVPEnemyOffensiveCast(caster, casterCellIdx)) return true;
     }
-    const maxHP = pvpSt.pvpOpponentStats.maxHP;
-    const curHP = pvpSt.pvpOpponentStats.hp;
-    const heal = Math.min(50, maxHP - curHP);
-    if (curHP < maxHP * 0.5 && heal > 0 && Math.random() < 0.25) {
-      pvpSt.pvpOpponentStats.hp = curHP + heal;
-      setEnemyHealNum({ value: heal, timer: 0 });
-      playSFX(SFX.CURE);
-      battleSt.battleState = 'pvp-opp-potion'; battleSt.battleTimer = 0;
-      return true;
-    }
-    if (Math.random() < 0.15) {
-      battleSt.battleState = 'pvp-opp-sw-throw'; battleSt.battleTimer = 0;
-      return true;
+    // Main opp only: defend / potion / SouthWind throw decisions.
+    if (pvpSt.pvpCurrentEnemyAllyIdx < 0) {
+      if (Math.random() < 0.30) {
+        pvpSt.pvpOpponentIsDefending = true;
+        pvpSt.pvpPendingTargetAlly = -1;
+        playSFX(SFX.DEFEND_HIT);
+        battleSt.battleState = 'pvp-defend-anim'; battleSt.battleTimer = 0;
+        return true;
+      }
+      const maxHP = pvpSt.pvpOpponentStats.maxHP;
+      const curHP = pvpSt.pvpOpponentStats.hp;
+      const heal = Math.min(50, maxHP - curHP);
+      if (curHP < maxHP * 0.5 && heal > 0 && Math.random() < 0.25) {
+        pvpSt.pvpOpponentStats.hp = curHP + heal;
+        setEnemyHealNum({ value: heal, timer: 0 });
+        playSFX(SFX.CURE);
+        battleSt.battleState = 'pvp-opp-potion'; battleSt.battleTimer = 0;
+        return true;
+      }
+      if (Math.random() < 0.15) {
+        battleSt.battleState = 'pvp-opp-sw-throw'; battleSt.battleTimer = 0;
+        return true;
+      }
     }
     // Decided: will attack — fall through to windup animation
   }
@@ -530,6 +561,56 @@ function _tryPVPEnemyCure(caster, casterCellIdx) {
   return true;
 }
 
+// PVP enemy offensive cast — BM/RM on the enemy team picks a target on the
+// player party (player or living ally) and casts one of Fire/Blizzard/Sleep
+// from their knownSpells list. Pre-rolls damage so the apply path can pop
+// the damage number without re-rolling. Returns true when a cast was queued
+// (caller should `return true` from the dispatch).
+function _tryPVPEnemyOffensiveCast(caster, casterCellIdx) {
+  if (!caster || !Array.isArray(caster.knownSpells)) return false;
+  // Activation gate — keep casts feeling like a "sometimes" choice, not the
+  // default. WMs without offensive spells fall through to attack as before.
+  const offensive = caster.knownSpells.filter(s => s === 0x31 || s === 0x32 || s === 0x33);
+  if (offensive.length === 0) return false;
+  if (Math.random() >= 0.45) return false;
+  // Pick a target on the player party — player + living roster allies. Skip
+  // the player when KO'd. Random pick among the alive set for variety.
+  const partyTargets = [];
+  if (ps.hp > 0) partyTargets.push(-1);
+  for (let i = 0; i < battleSt.battleAllies.length; i++) {
+    const a = battleSt.battleAllies[i];
+    if (a && a.hp > 0) partyTargets.push(i);
+  }
+  if (partyTargets.length === 0) return false;
+  const targetIdx = partyTargets[Math.floor(Math.random() * partyTargets.length)];
+  const spellId = offensive[Math.floor(Math.random() * offensive.length)];
+  const spell = SPELLS.get(spellId);
+  if (!spell) return false;
+  // Damage roll — Fire/Blizzard use INT-equivalent; fake-player stats don't
+  // track INT yet, so use the caster's atk-side stat (mnd as a stand-in is
+  // wrong here — INT≈agi for now since both scale with level). Sleep is
+  // status (power=0); skip the damage roll for it.
+  let dmg = 0;
+  if (spell.power > 0) {
+    const stat = caster.agi || 5;
+    const baseAtk = Math.floor(stat / 2) + spell.power;
+    dmg = baseAtk + Math.floor(Math.random() * (Math.floor(baseAtk / 2) + 1));
+    dmg = Math.max(1, dmg);
+  }
+  pvpSt.pvpMagicCasterCellIdx  = casterCellIdx;
+  pvpSt.pvpMagicTargetCellIdx  = -1;
+  pvpSt.pvpMagicPartyTargetIdx = targetIdx;
+  pvpSt.pvpMagicSpellId        = spellId;
+  pvpSt.pvpMagicHealAmount     = 0;
+  pvpSt.pvpMagicDamageRoll     = dmg;
+  pvpSt.pvpMagicEffectApplied  = false;
+  queueBattleMsg(_nameToBytes(caster.name || 'Foe'));
+  playSFX(SFX.MAGIC_CAST);
+  battleSt.battleState = 'pvp-enemy-magic-cast';
+  battleSt.battleTimer = 0;
+  return true;
+}
+
 function _tryPVPEnemyPoisona(caster, casterCellIdx) {
   if (!caster || !caster.knownSpells || !caster.knownSpells.includes(0x35)) return false;
   // Priority: self → other teammates (in cell-idx order).
@@ -558,21 +639,60 @@ function _tryPVPEnemyPoisona(caster, casterCellIdx) {
 }
 
 function _applyPVPEnemyMagicEffect() {
-  const target = _pvpEnemyByCellIdx(pvpSt.pvpMagicTargetCellIdx);
-  if (!target) return;
-  // 0x36 Sight — no gameplay effect; defensive guard against the Cure
-  // fall-through below if a remote PVP opponent casts Sight from a synced
-  // state. Impact SFX matches the player-cast path.
-  if (pvpSt.pvpMagicSpellId === 0x36) {
-    playSFX(SFX.SIGHT);
+  // Offensive cast on player party — Fire / Blizzard / Sleep targeting the
+  // player or a roster ally. Routed via pvpMagicPartyTargetIdx (-1 = player,
+  // 0+ = ally). Mutually exclusive with the heal-style path below.
+  const partyIdx = pvpSt.pvpMagicPartyTargetIdx;
+  if (partyIdx > -100) {
+    const sid = pvpSt.pvpMagicSpellId;
+    const partyTgt = partyIdx === -1 ? ps : (battleSt.battleAllies[partyIdx] || null);
+    if (!partyTgt || partyTgt.hp <= 0) {
+      pvpSt.pvpMagicPartyTargetIdx = -100;
+      return;
+    }
+    if (sid === 0x33) {
+      // Sleep — status roll against partyTgt.statusResist + spell.hit (15%).
+      const spell = SPELLS.get(0x33);
+      const hitChance = spell ? spell.hit : 15;
+      const resist = partyTgt.statusResist || 0;
+      if (partyTgt.status) {
+        const applied = tryInflictStatus(partyTgt.status, 'sleep', hitChance, resist);
+        if (applied) {
+          playSFX(SFX.SLEEP_PUFF);
+          if (STATUS_NAME_BYTES[applied]) queueBattleMsg(STATUS_NAME_BYTES[applied]);
+        } else {
+          // Miss feedback — show 0/miss damage on the target.
+          if (partyIdx === -1) setPlayerDamageNum({ miss: true, timer: 0 });
+          else getAllyDamageNums()[partyIdx] = { miss: true, timer: 0 };
+        }
+      }
+    } else {
+      // Fire / Blizzard — straight damage from pre-rolled `pvpMagicDamageRoll`,
+      // reduced by target.mdef. Target HP clamped to 0 minimum. Shake the
+      // target on hit for feedback parity with melee damage.
+      const mdef = partyTgt.mdef || 0;
+      const dmg = Math.max(1, (pvpSt.pvpMagicDamageRoll | 0) - mdef);
+      partyTgt.hp = Math.max(0, partyTgt.hp - dmg);
+      if (partyIdx === -1) {
+        setPlayerDamageNum({ value: dmg, timer: 0 });
+        battleSt.battleShakeTimer = BATTLE_SHAKE_MS;
+      } else {
+        getAllyDamageNums()[partyIdx] = { value: dmg, timer: 0 };
+        battleSt.allyShakeTimer[partyIdx] = BATTLE_SHAKE_MS;
+      }
+      if (sid === 0x31) playSFX(SFX.FIRE_BOOM);
+      else playSFX(SFX.SW_HIT); // Blizzard's ice impact
+    }
+    pvpSt.pvpMagicPartyTargetIdx = -100;
     return;
   }
-  // 0x31 Fire — defensive guard. PVP fire damage from a remote opponent isn't
-  // wired through this fn yet (heal/cure-only path); without the guard a
-  // remote fire cast would fall through to the Cure heal below. Boom SFX
-  // plays so the player sees feedback; damage TODO when PVP BM lands.
-  if (pvpSt.pvpMagicSpellId === 0x31) {
-    playSFX(SFX.FIRE_BOOM);
+
+  // Heal / cure-status — target on the enemy team (cell-idx).
+  const target = _pvpEnemyByCellIdx(pvpSt.pvpMagicTargetCellIdx);
+  if (!target) return;
+  // 0x36 Sight — no gameplay effect; impact SFX matches the player-cast path.
+  if (pvpSt.pvpMagicSpellId === 0x36) {
+    playSFX(SFX.SIGHT);
     return;
   }
   if (pvpSt.pvpMagicSpellId === 0x35) {
@@ -609,7 +729,9 @@ function _processPVPEnemyMagic(dt) {
       clearHealNums();
       pvpSt.pvpMagicCasterCellIdx = -1;
       pvpSt.pvpMagicTargetCellIdx = -1;
+      pvpSt.pvpMagicPartyTargetIdx = -100;
       pvpSt.pvpMagicSpellId = 0;
+      pvpSt.pvpMagicDamageRoll = 0;
       processNextTurn();
     }
     return true;

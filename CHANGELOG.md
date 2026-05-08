@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.127 — 2026-05-08
+
+### Pool refactor + RM palette + PVP mage AI
+
+- **Player pool rebalanced**: 30 entries, 5 per starting job (OK / Fi / Mo / WM / BM / RM). Names matched to class theme — Vivi/Nephele/Korra/Theron/Mara for BMs, Asher/Verena/Caelum/Quill/Soren for RMs, kept Japanese names for Monks (Kasumi/Jiro/Ryuji/Hana/Tetsuo). palIdx varied within each job so colors don't collide. Locations spread across all 7 zones for PVP join roll variety. Equipment matches class: BM Staff, RM Longsword/Dagger, etc. knownSpells scaled by level.
+- **`BLACK_MAGE_PALETTES` is now all blue tints**: the 8 slots vary only the robe color, all within the blue family — canon light blue (`$21`), azure (`$11`), deep blue-violet (`$12`), sky blue (`$22`), cyan (`$1C`), light cyan (`$2C`), deep blue (`$01`), pale blue (`$31`).
+- **`RED_MAGE_PALETTES` added**: 8 slots, all red tints — canon red (`$16`), magenta (`$15`), purple-red (`$14`), orange-red (`$17`), light red (`$25`), pink (`$24`), dark red (`$05`), pale red (`$35`). Wired into `_jobPalette` in `battle-drawing.js`, `pvp.js`, and `combatant-sprites.js` for `jobIdx === 5`.
+- **Fake-player mage AI hooked up across the whole board**: `_tryPVPEnemyCure` and `_tryPVPEnemyPoisona` now run for ANY caster (main opp + enemy allies, cells 0-3) with knownSpells, not just the main opp. WMs and RMs heal injured teammates on any cell.
+- **BM/RM offensive cast AI**: new `_tryPVPEnemyOffensiveCast` that picks a target on the player party (player or living roster ally) and casts Fire / Blizzard / Sleep based on the caster's knownSpells. ~45% activation rate. `_applyPVPEnemyMagicEffect` extended with a party-target branch that applies damage (Fire/Blizzard, mdef-reduced) or status (Sleep, `tryInflictStatus` against the target's `statusResist`). Damage triggers shake feedback on the player or ally target. Sleep miss falls through to a damage-num "Miss" indicator. RM with both schools naturally pivots — heal when team is hurt, BM-Lv1 otherwise.
+- New `pvpSt` fields: `pvpMagicPartyTargetIdx` (`-100` = none / `-1` = player / `0+` = ally) and `pvpMagicDamageRoll` (pre-rolled Fire/Blizzard damage). Reset on PVP state init + at the end of magic-hit.
+
+Visual polish for the offensive cast (projectile fan from caster cell to player party + impact burst on the target portrait) is deferred — currently the cast pose plays, then the SFX + damage number land at impact apply time.
+
 ## 1.7.126 — 2026-05-08
 
 ### BM + RM added to fake player pool
