@@ -2,6 +2,29 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.116 — 2026-05-08
+
+### Battle items wired through spell-cast — 11 of 20 mapped to spell IDs
+
+Continuing the modularization. Battle items now route through the spell-cast engine via `animSpellId` per shrines.rpgclassics canon (with tier raised one step for "wind" items per the ff3mmo `SouthWind = Lv2` design rule):
+
+| Item | Spell |
+|---|---|
+| $b1 Bomb Shard | Fire `$39` (Lv2 fire) |
+| $b2 South Wind | Blizzara `$3a` (already shipped) |
+| $b3 Zeus' Wrath | Thunder `$3b` (Lv2 bolt) |
+| $b4 Bomb Arm | Fira `$23` (Lv3 fire) |
+| $b5 Arctic Wind | Bzzaga `$1d` (Lv3 ice) |
+| $b6 God's Wrath | Tara `$25` (Lv3 bolt) |
+| $b7 Earth Drum | Quake `$07` |
+| $bf Raven Yawn | Aero `$2d` |
+| $c6 Chocobo's Wrath | Flare `$00` |
+| $c7 White Musk | Holy `$05` |
+
+Status / buff items ($b8 Confuse, $b9 Haste, $ba Protect, $bb Death, $bc Erase, $be Drain, $c3 Sleep) stay on the legacy `startMagicItem` path until the spell-cast engine extends to those target types. Comments in `data/items.js` mark each one's canonical spell so the consolidation finishes in one diff later. $bd Black Musk, $c1 Tranquilizer, $c5 Curtain remain unmapped (ambiguous — not in the shrine table; need user direction).
+
+The render path for item-use moved out of the `isThrown` gate — non-thrown damage elements (earth Quake, holy White Musk, no-element Flare) now render their impact visual on enemy targets via the shared spell-anim dispatcher. Spells without registered impact visuals ($07/$23/$25/$1d/$2d/$00/$05/$3b/$39) play SFX-only until OAM captures land for them.
+
 ## 1.7.115 — 2026-05-08
 
 ### Blizzara ($3a) wired; SouthWind item dispatches through spell-cast as item-use

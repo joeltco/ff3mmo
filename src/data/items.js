@@ -209,26 +209,37 @@ export const ITEMS = new Map([
   [0xad, { type: 'consumable', price:   100, effect: 'cure_status', cures: 'mini',    animSpellId: 0x2f }], // Mallet → Mini
   [0xae, { type: 'consumable', price:    40, effect: 'cure_status', cures: 'blind',   animSpellId: 0x28 }], // Eye Drops → Bndna (Wash)
   [0xaf, { type: 'consumable', price:    80, effect: 'cure_status', cures: 'poison',  animSpellId: 0x35 }], // Antidote → Poisona (Pure)
-  [0xb1, { type: 'battle_item', price:  1000 }],
-  [0xb2, { type: 'battle_item', price:  1000, animSpellId: 0x3a }], // SouthWind → Blizzara / Bzzra (Lv2 ice)
-  [0xb3, { type: 'battle_item', price:  1000 }],
-  [0xb4, { type: 'battle_item', price:  1500 }],
-  [0xb5, { type: 'battle_item', price:  1500 }],
-  [0xb6, { type: 'battle_item', price:  1500 }],
-  [0xb7, { type: 'battle_item', price:  2500 }],
-  [0xb8, { type: 'battle_item', price:  3000 }],
-  [0xb9, { type: 'battle_item', price:  3000 }],
-  [0xba, { type: 'battle_item', price:  3000 }],
-  [0xbb, { type: 'battle_item', price:  3000 }],
-  [0xbc, { type: 'battle_item', price:  4000 }],
-  [0xbd, { type: 'battle_item', price:  5000 }],
-  [0xbe, { type: 'battle_item', price:  3000 }],
-  [0xbf, { type: 'battle_item', price:  3000 }],
-  [0xc1, { type: 'battle_item', price:  3000 }],
-  [0xc3, { type: 'battle_item', price:  2000 }],
-  [0xc5, { type: 'battle_item', price:  5000 }],
-  [0xc6, { type: 'battle_item', price:  5000 }],
-  [0xc7, { type: 'battle_item', price:  5000 }],
+  // Battle items — `animSpellId` routes through the modular spell-cast engine
+  // as item-use (skips MP, MAGIC_CAST SFX, BM/WM cast pose). Mappings follow
+  // shrines.rpgclassics FF3 NES canon, with tier raised one step for "wind"
+  // items per the ff3mmo design rule (SouthWind = Blizzara/Lv2, not Lv1).
+  //
+  // Only DAMAGE-type spells are wired so far — the spell-cast engine doesn't
+  // yet handle status / buff / drain target types correctly (it'd apply the
+  // wrong effect). Items mapped to Confuse/Haste/Protect/Death/Erase/Sleep/
+  // Drain stay on the legacy `startMagicItem` path until the engine extends
+  // to those target types. Comments below mark each unmapped item's canonical
+  // spell so the consolidation finishes in one diff later.
+  [0xb1, { type: 'battle_item', price:  1000, animSpellId: 0x39 }], // Bomb Shard → Fire (Lv2 fire, power 40)
+  [0xb2, { type: 'battle_item', price:  1000, animSpellId: 0x3a }], // South Wind → Blizzara (Lv2 ice)
+  [0xb3, { type: 'battle_item', price:  1000, animSpellId: 0x3b }], // Zeus' Wrath → Thunder (Lv2 bolt, power 40)
+  [0xb4, { type: 'battle_item', price:  1500, animSpellId: 0x23 }], // Bomb Arm → Fira (Lv3 fire, power 55)
+  [0xb5, { type: 'battle_item', price:  1500, animSpellId: 0x1d }], // Arctic Wind → Bzzaga (Lv3 ice, power 85)
+  [0xb6, { type: 'battle_item', price:  1500, animSpellId: 0x25 }], // God's Wrath → Tara (Lv3 bolt, power 55)
+  [0xb7, { type: 'battle_item', price:  2500, animSpellId: 0x07 }], // Earth Drum → Quake (earth, power 133)
+  [0xb8, { type: 'battle_item', price:  3000 }],                    // Lamia Scale → Confuse $20 (legacy: status target unwired)
+  [0xb9, { type: 'battle_item', price:  3000 }],                    // Bachus Wine → Haste $13 (legacy: buff target unwired)
+  [0xba, { type: 'battle_item', price:  3000 }],                    // Turtle Shell → Protect $1a (legacy: buff target unwired)
+  [0xbb, { type: 'battle_item', price:  3000 }],                    // Devil Note → Death $01 (legacy: death target unwired)
+  [0xbc, { type: 'battle_item', price:  4000 }],                    // Black Hole → Erase $17 (legacy: dispel target unwired)
+  [0xbd, { type: 'battle_item', price:  5000 }],                    // Black Musk — unmapped (ambiguous; not in shrine table)
+  [0xbe, { type: 'battle_item', price:  3000 }],                    // Lilith Kiss → Drain $09 (legacy: drain target unwired)
+  [0xbf, { type: 'battle_item', price:  3000, animSpellId: 0x2d }], // Raven Yawn → Aero (per shrine: Imp'sYawn = Aero, ice/air damage)
+  [0xc1, { type: 'battle_item', price:  3000 }],                    // Tranquilizer — unmapped (ambiguous; not in shrine table)
+  [0xc3, { type: 'battle_item', price:  2000 }],                    // Sheep Pillow → Sleep $33 (legacy: status target unwired)
+  [0xc5, { type: 'battle_item', price:  5000 }],                    // Curtain — unmapped (ambiguous; not in shrine table)
+  [0xc6, { type: 'battle_item', price:  5000, animSpellId: 0x00 }], // Chocobo's Wrath → Flare
+  [0xc7, { type: 'battle_item', price:  5000, animSpellId: 0x05 }], // White Musk → Holy
 ]);
 
 export function isWeapon(id) { const i = ITEMS.get(id); return i && i.type === 'weapon' && i.subtype !== 'shield'; }

@@ -712,14 +712,17 @@ function _drawPlayerSpellTargetSparkleOnEnemy() {
   const sx = HUD_RIGHT_X + 8 + 8;
   const sy = HUD_VIEW_Y + 8 + 8;
 
+  // Item-use (SouthWind / battle items via animSpellId) skips cast windup AND
+  // projectile flight — items go straight to impact. magic-hit timer = 0 at
+  // impact start, so impactMs = cureMs directly. Applies regardless of the
+  // spell's element so non-thrown elements (earth Quake, holy WhiteMusk,
+  // no-elem Flare) still render their impact visual on enemy targets.
+  if (isCurrentCastItemUse()) {
+    drawSpellEffectAtTargets(ui.ctx, enemyTargets, spellId, cureMs);
+    return;
+  }
+
   if (isThrown) {
-    // Item-use (SouthWind, etc.) skips the cast windup AND projectile flight —
-    // items go straight to impact. magic-hit timer = 0 at impact start, so
-    // impactMs = cureMs directly.
-    if (isCurrentCastItemUse()) {
-      drawSpellEffectAtTargets(ui.ctx, enemyTargets, spellId, cureMs);
-      return;
-    }
     // Throw timeline: projectile fan-out during projectile phase, then all
     // impact bursts play concurrently during impact phase.
     if (cureMs < CAST_T_THROW_PROJ_START || cureMs >= CAST_T_THROW_RETURN) return;
