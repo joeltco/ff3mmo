@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.96 — 2026-05-07
+
+### BM cast halo no longer covers player; spell-kill victory soft-lock fixed
+
+- **Cast halo over portrait** (`src/battle-drawing.js`) — the BM 40×32 halo's body-area columns (canvas x=16-32) overlap the 16×16 portrait. The dump's cast pose covers that overlap with separate pal1 body tiles `$43-$48`; we don't have those captured yet. Stopgap: draw BM halo BEHIND the portrait via new `_drawPortraitCastHaloBehind`, called before `_drawPortraitFrame`. The portrait now covers the halo's body-area, leaving only the outer ring visible. WM halo (drawn 16 px to the LEFT of the portrait, no overlap) is unchanged — still rendered in `_drawPortraitOverlays`.
+- **Spell-kill victory soft-lock** (`src/spell-cast.js`) — `updateSpellCast` was calling `_processNextTurn()` directly when the magic-hit window ended, even when the spell killed the last enemy. The melee path routes through `pre-monster-death → monster-death`, which checks `allDead` and fires the victory flow; the spell path skipped that check entirely, so a spell-killed encounter looped on a dead enemy roster forever. Now: after the last hit, if any targeted enemy hit 0 HP, transition to `monster-death` (encounter), `boss-dissolve` (boss), or `pvp-dissolve` (PVP). Mirrors `_updateAllyDamageShow` (battle-ally.js:40-49) and `_updatePlayerDamageShow` (battle-update.js:419-435).
+
 ## 1.7.95 — 2026-05-07
 
 ### Fire timing + cast halo position fixed (matches f9627 dump)
