@@ -38,6 +38,7 @@ import { tickHealNums, clearHealNums } from './damage-numbers.js';
 import { SPELLS } from './data/spells.js';
 import { drawCasterCastBehind, drawCasterCastFront, jobToCastKey } from './cast-anim.js';
 import { getSpellAnim, getSpellAnimForItem } from './spell-anim.js';
+import { drawStatusSpriteAbove } from './battle-drawing.js';
 import { fakePlayerFullBodyCanvases, fakePlayerHitFullBodyCanvases,
          fakePlayerKnifeRFullBodyCanvases, fakePlayerKnifeLFullBodyCanvases,
          fakePlayerKnifeRFwdFullBodyCanvases, fakePlayerKnifeLFwdFullBodyCanvases,
@@ -1019,6 +1020,10 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
     ctx.drawImage(sf, 0, 0);
     ctx.restore();
   }
+
+  // Status sprite — h-flipped to match the body's right-facing orientation.
+  // Same single-source helper as player + ally; only the mirror flag differs.
+  if (!isDying) drawStatusSpriteAbove(ui.ctx, enemy && enemy.status, sprX, sprY - 4, true);
 
   // Defend sparkle — 4 frames cycling over 533ms, full-body corners
   if (isOppDefending && bsc.defendSparkleFrames && bsc.defendSparkleFrames.length === 4) {

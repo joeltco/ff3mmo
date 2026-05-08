@@ -401,21 +401,8 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
       ui.ctx.drawImage(bsc.sweatFrames[sweatIdx], px, py - 3);
     }
   }
-  // Status sprite above portrait — show highest priority active status
-  if (ps.status && ps.status.mask !== 0 && bsc.statusSpriteMap) {
-    // Priority order: petrify, sleep, confuse, paralysis, silence, blind, poison
-    const prio = [0x40, 0x100, 0x200, 0x01, 0x10, 0x04, 0x02];
-    for (const flag of prio) {
-      if (ps.status.mask & flag) {
-        const frames = bsc.statusSpriteMap.get(flag);
-        if (frames && frames.length === 2) {
-          const f = frames[Math.floor(Date.now() / 133) & 1];
-          ui.ctx.drawImage(f, px, py - 4);
-        }
-        break;
-      }
-    }
-  }
+  // Status sprite above portrait — show highest priority active status.
+  drawStatusSpriteAbove(ui.ctx, ps.status, px, py - 4);
   // Item target cursor on player portrait. Single-target: solid cursor when
   // the player slot is picked. All-allies: blink (133 ms, same cadence as the
   // encounter all/col cursors) on every ally including the player.
@@ -589,6 +576,38 @@ function drawBattle() {
 // Cast render helpers `drawCasterCastBehind` / `drawCasterCastFront` are
 // imported from cast-anim.js — single source of truth, no per-render-site
 // reimplementation. Called below by player + ally + (PVP via pvp.js).
+
+// Status overlay — single source for the 16×8 status sprite drawn above a
+// combatant's body. Player + roster ally + PVP enemy all route here so the
+// priority order, frame cadence, and tile cache lookup live in one place.
+//
+// Priority order: petrify > sleep > confuse > paralysis > silence > blind > poison.
+// Highest-priority active flag wins; lower flags don't draw concurrently.
+//
+// `mirror=true` h-flips the sprite around its 16-px width — used for PVP
+// enemy bodies (which face right, opposite the player party). Status sprite
+// tiles are asymmetric (the sleep "Z"s are slanted), so PVP must flip to
+// match the body orientation.
+const _STATUS_PRIO = [0x40, 0x100, 0x200, 0x01, 0x10, 0x04, 0x02];
+export function drawStatusSpriteAbove(ctx, statusObj, x, y, mirror = false) {
+  if (!statusObj || !statusObj.mask || !bsc.statusSpriteMap) return;
+  for (const flag of _STATUS_PRIO) {
+    if (!(statusObj.mask & flag)) continue;
+    const frames = bsc.statusSpriteMap.get(flag);
+    if (!frames || frames.length !== 2) return;
+    const f = frames[Math.floor(Date.now() / 133) & 1];
+    if (mirror) {
+      ctx.save();
+      ctx.translate(x + f.width, y);
+      ctx.scale(-1, 1);
+      ctx.drawImage(f, 0, 0);
+      ctx.restore();
+    } else {
+      ctx.drawImage(f, x, y);
+    }
+    return;
+  }
+}
 
 // Resolve the (x, y) center of a magic target. Used by the projectile fan
 // and on-target effect helpers. Returns null if the target can't be
@@ -1636,6 +1655,9 @@ function _drawAllyPortrait(i, ally, isVicPose, isAllyAttack, isAllyHit, isNearFa
     const sweatIdx = Math.floor(Date.now() / 133) & 1;
     ui.ctx.drawImage(bsc.sweatFrames[sweatIdx], ppx, ppy - 3);
   }
+  // Status sprite — same priority + cadence as the player portrait. Allies
+  // face left like the player, so no mirror.
+  drawStatusSpriteAbove(ui.ctx, ally.status, ppx, ppy - 4);
   // PVP enemy slash overlay on targeted ally — h-flipped (opponent attacks from left).
   // Fires per-hit during the multi-hit pvp-enemy-slash combo, plus the final ally-hit shake state.
   if (pvpSt.isPVPBattle && battleSt.enemyTargetAllyIdx === i &&

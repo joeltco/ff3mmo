@@ -12,7 +12,7 @@ import { SFX, playSFX } from './music.js';
 import { setPlayerHealNum, setPlayerDamageNum, getAllyDamageNums, setEnemyDmgNum, setEnemyHealNum, setSwDmgNum,
          tickHealNums, clearHealNums } from './damage-numbers.js';
 import { SPELLS, getSpellMPCost, isMultiTargetSpell } from './data/spells.js';
-import { STATUS, addStatus, removeStatus, tryInflictStatus } from './status-effects.js';
+import { STATUS, addStatus, removeStatus, tryInflictStatus, STATUS_NAME_BYTES } from './status-effects.js';
 import { CAST_PHASE_MS, CAST_T_HEAL, CAST_TOTAL_MS, CAST_T_THROW_RETURN, CAST_T_THROW_IMPACT_START } from './cast-anim.js';
 import { queueBattleMsg, isBattleMsgBusy } from './battle-msg.js';
 import { _nameToBytes } from './text-utils.js';
@@ -70,6 +70,15 @@ function _isThrownDamageElement(el) { return _THROWN_DAMAGE_ELEMENTS.has(el); }
 // timeline as Fire/Blizzard. Add new entries when wiring more thrown statuses.
 const _THROWN_STATUS_TYPES = new Set(['sleep']);
 function _isThrownStatusType(t) { return _THROWN_STATUS_TYPES.has(t); }
+
+// Queue the post-encoded status name (e.g., "Asleep" / "Confused") on the
+// battle message strip when a status lands. Mirrors the existing
+// 'Ineffective' miss path — short single-line messages, no target-name
+// prefix yet (revisit when the two-stage FF3-NES message strip lands).
+function _queueStatusMsg(flag) {
+  const bytes = STATUS_NAME_BYTES[flag];
+  if (bytes) queueBattleMsg(bytes);
+}
 
 // SFX index per spell. Captured via the v1.7.111 EMU dumper's pre-consume
 // `$Cx` write trace. Add new entries when wiring new spells. Falls back to
@@ -283,7 +292,10 @@ function _applyEnemyEffect(idx, spell) {
       let anyApplied = 0;
       for (const name of candidates) {
         const f = tryInflictStatus(mon.status, name, spell.hit, mon.statusResist);
-        if (f) anyApplied |= f;
+        if (f) {
+          anyApplied |= f;
+          _queueStatusMsg(f);
+        }
       }
       if (anyApplied) {
         _playSpellSFXOnce(SFX.SW_HIT);
@@ -296,7 +308,8 @@ function _applyEnemyEffect(idx, spell) {
     if (mon.status) {
       const applied = tryInflictStatus(mon.status, spell.type, spell.hit, mon.statusResist);
       if (applied) {
-        _playSpellSFXOnce(SFX.SW_HIT);
+        _playSpellSFXOnce(_spellImpactSFX(spell));
+        _queueStatusMsg(applied);
       } else {
         _setEnemyDmg(idx, 0, true);  // miss
       }

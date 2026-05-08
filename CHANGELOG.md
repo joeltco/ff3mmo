@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.120 — 2026-05-08
+
+### Status sprite overlays + battle messages on status hit
+
+- Single-source `drawStatusSpriteAbove(ctx, statusObj, x, y, mirror)` exported from `battle-drawing.js`. Priority order (petrify > sleep > confuse > paralysis > silence > blind > poison) and 133ms 2-frame cadence live in one place. Player + roster ally + PVP enemy all route through it instead of inlining the lookup.
+- Roster ally portraits now show the status sprite above the portrait at `(ppx, ppy - 4)`, matching the player path (no mirror — allies face left like the player).
+- PVP enemy bodies now show the status sprite at `(sprX, sprY - 4)` h-flipped (`mirror=true`) so the asymmetric Z's / glyphs match the body's right-facing orientation. Suppressed during the dissolve phase.
+- Battle messages: when a player-cast status spell lands on an enemy (Sleep, Confuse, Death's instakill is unchanged), the corresponding `STATUS_NAME_BYTES[flag]` is queued — "Asleep" / "Confused" / etc. The all_status path (Tranquilizer / Shade) queues one message per landed status. Non-Sheep status SFX path now uses `_spellImpactSFX(spell)` so future status spells with custom SFX route correctly (Sleep already fires its SFX at impact start via the throw path; this is a no-op for it).
+- Battle-enemy parity: when a monster lands a status on a player or ally, the same `STATUS_NAME_BYTES` message is queued through the same `queueBattleMsg` channel. Single source for status-text plumbing.
+- Encounter monsters (non-player sprites) intentionally do NOT render the status overlay — overlays are player/PVP-player-sprite only by design.
+
 ## 1.7.119 — 2026-05-08
 
 ### Sleep ($33) — last Lv1 BM spell shipped end-to-end

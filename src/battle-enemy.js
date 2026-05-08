@@ -5,8 +5,8 @@ import { battleSt, getEnemyHP, setEnemyHP,
 import { calcDamage, elemMultiplier, BOSS_HIT_RATE, GOBLIN_HIT_RATE } from './battle-math.js';
 import { ps, getShieldEvade } from './player-stats.js';
 import { SFX, playSFX } from './music.js';
-import { tryInflictStatus, blindHitPenalty, wakeOnHit } from './status-effects.js';
-import { isBattleMsgBusy } from './battle-msg.js';
+import { tryInflictStatus, blindHitPenalty, wakeOnHit, STATUS_NAME_BYTES } from './status-effects.js';
+import { isBattleMsgBusy, queueBattleMsg } from './battle-msg.js';
 import { getPlayerDamageNum, setPlayerDamageNum, getAllyDamageNums } from './damage-numbers.js';
 import { selectCursor, saveSlots } from './save-state.js';
 
@@ -77,10 +77,17 @@ function _doSpecialAttack(mon, spec, targetAlly = -1) {
       getAllyDamageNums()[targetAlly] = applied
         ? { value: 0, timer: 0, status: spec.status }
         : { miss: true, timer: 0 };
+      if (applied && STATUS_NAME_BYTES[applied]) queueBattleMsg(STATUS_NAME_BYTES[applied]);
       battleSt.battleState = 'ally-damage-show-enemy'; battleSt.battleTimer = 0;
     } else if (spec.type === 'multi_status' && ally.status) {
       let anyApplied = false;
-      for (const s of spec.statuses) { if (tryInflictStatus(ally.status, s, spec.hit, ally.statusResist)) anyApplied = true; }
+      for (const s of spec.statuses) {
+        const f = tryInflictStatus(ally.status, s, spec.hit, ally.statusResist);
+        if (f) {
+          anyApplied = true;
+          if (STATUS_NAME_BYTES[f]) queueBattleMsg(STATUS_NAME_BYTES[f]);
+        }
+      }
       getAllyDamageNums()[targetAlly] = anyApplied
         ? { value: 0, timer: 0, status: 'multi' }
         : { miss: true, timer: 0 };
@@ -112,6 +119,7 @@ function _doSpecialAttack(mon, spec, targetAlly = -1) {
     if (applied) {
       setPlayerDamageNum({ value: 0, timer: 0, status: spec.status });
       battleSt.battleShakeTimer = BATTLE_SHAKE_MS;
+      if (STATUS_NAME_BYTES[applied]) queueBattleMsg(STATUS_NAME_BYTES[applied]);
     } else {
       setPlayerDamageNum({ miss: true, timer: 0 });
     }
@@ -120,7 +128,10 @@ function _doSpecialAttack(mon, spec, targetAlly = -1) {
     let anyApplied = 0;
     for (const s of spec.statuses) {
       const result = tryInflictStatus(ps.status, s, spec.hit, ps.statusResist);
-      if (result) anyApplied = result;
+      if (result) {
+        anyApplied = result;
+        if (STATUS_NAME_BYTES[result]) queueBattleMsg(STATUS_NAME_BYTES[result]);
+      }
     }
     if (anyApplied) {
       setPlayerDamageNum({ value: 0, timer: 0, status: 'multi' });
