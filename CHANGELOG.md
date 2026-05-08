@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.130 — 2026-05-08
+
+### Fixed RM weapon — Long Sword → Sage Sword
+
+Caught: my v1.7.127 pool had Asher / Caelum / Soren wielding Longsword (`0x24`), which has `jobs: On|Fi|Kn|Ni` — Red Mage isn't in that mask. Per the items table, the canonical RM-equippable swords are `0x25` (Sage Sword, atk 15, holy element, `jobs: Rw|Ni`) and `0x2a` (atk 29). Swapped the three sword-wielding RMs to `0x25`. Lower-level RMs (Verena, Quill) keep Dagger `0x1F` which is RM-OK.
+
 ## 1.7.129 — 2026-05-08
 
 ### PVP-enemy offensive cast visuals + directional projectile

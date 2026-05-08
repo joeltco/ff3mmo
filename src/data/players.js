@@ -52,11 +52,11 @@ export const PLAYER_POOL = [
   { name: 'Theron',  level: 5, palIdx: 6, camper: false, loc: 'crystal', jobIdx: 4, weaponR: 0x0E,                armorId: 0x73, helmId: 0x62, knownSpells: [0x31, 0x32, 0x33] },                         // BM — Staff (Fire, Blizzard, Sleep)
   { name: 'Mara',    level: 4, palIdx: 0, camper: false, loc: 'ur',      jobIdx: 4, weaponR: 0x0E,                armorId: 0x73, helmId: 0x62, knownSpells: [0x31, 0x33] },                               // BM — Staff (Fire, Sleep)
   // ── Red Mage (5) — hybrid heroic names; palette is all-red tints (RED_MAGE_PALETTES) ──
-  { name: 'Asher',   level: 5, palIdx: 1, camper: false, loc: 'ur',      jobIdx: 5, weaponR: 0x24,                armorId: 0x73, helmId: 0x62, shieldId: 0x58, knownSpells: [0x34, 0x31] },               // RM — Longsword (Cure, Fire)
+  { name: 'Asher',   level: 5, palIdx: 1, camper: false, loc: 'ur',      jobIdx: 5, weaponR: 0x25,                armorId: 0x73, helmId: 0x62, shieldId: 0x58, knownSpells: [0x34, 0x31] },               // RM — Sage Sword (Cure, Fire)
   { name: 'Verena',  level: 4, palIdx: 3, camper: false, loc: 'cave-1',  jobIdx: 5, weaponR: 0x1F,                armorId: 0x73, helmId: 0x62, knownSpells: [0x34, 0x31, 0x32] },                         // RM — Dagger (Cure, Fire, Blizzard)
-  { name: 'Caelum',  level: 5, palIdx: 5, camper: true,  loc: 'cave-3',  jobIdx: 5, weaponR: 0x24,                armorId: 0x73, helmId: 0x62, shieldId: 0x58, knownSpells: [0x34, 0x31, 0x32, 0x33] },   // RM — Longsword (Cure, Fire, Blizzard, Sleep)
+  { name: 'Caelum',  level: 5, palIdx: 5, camper: true,  loc: 'cave-3',  jobIdx: 5, weaponR: 0x25,                armorId: 0x73, helmId: 0x62, shieldId: 0x58, knownSpells: [0x34, 0x31, 0x32, 0x33] },   // RM — Sage Sword (Cure, Fire, Blizzard, Sleep)
   { name: 'Quill',   level: 3, palIdx: 7, camper: false, loc: 'world',   jobIdx: 5, weaponR: 0x1F,                armorId: 0x73, helmId: 0x62, knownSpells: [0x34] },                                     // RM — Dagger (Cure)
-  { name: 'Soren',   level: 4, palIdx: 0, camper: false, loc: 'cave-2',  jobIdx: 5, weaponR: 0x24,                armorId: 0x73, helmId: 0x62, shieldId: 0x58, knownSpells: [0x34, 0x31] },               // RM — Longsword (Cure, Fire)
+  { name: 'Soren',   level: 4, palIdx: 0, camper: false, loc: 'cave-2',  jobIdx: 5, weaponR: 0x25,                armorId: 0x73, helmId: 0x62, shieldId: 0x58, knownSpells: [0x34, 0x31] },               // RM — Sage Sword (Cure, Fire)
 ];
 
 // Palette variants — only color 3 changes (original $16 = red outfit)
