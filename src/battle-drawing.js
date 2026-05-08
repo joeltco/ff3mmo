@@ -36,9 +36,11 @@ import { bsc, getSlashFramesForWeapon } from './battle-sprite-cache.js';
 import { drawSlashOverlay, SLASH_FRAME_MS, shouldDrawSlash } from './slash-effects.js';
 import { getCastAnimElapsedMs, getCurrentSpellId, getSpellTargets, getSpellHitIdx } from './spell-cast.js';
 import { getCastAsset, getCastFlameFrameIdx, shouldDrawCastStars, jobToCastKey,
-         CAST_T_HEAL, CAST_T_RETURN, CAST_PHASE_MS } from './cast-anim.js';
+         CAST_T_HEAL, CAST_T_RETURN, CAST_PHASE_MS,
+         CAST_T_THROW_PROJ_START, CAST_T_THROW_IMPACT_START, CAST_T_THROW_RETURN,
+         CAST_PHASE_MS_THROW } from './cast-anim.js';
 import { getSpellAnim, getSpellAnimForItem, getSpellAnimFrame } from './spell-anim.js';
-import { getProjectileTile, getProjectilePos, PROJECTILE_FLIGHT_FRAC } from './projectile-anim.js';
+import { getProjectileTile } from './projectile-anim.js';
 import { hudSt } from './hud-state.js';
 import { fakePlayerPortraits, fakePlayerVictoryPortraits, fakePlayerHitPortraits,
          fakePlayerKneelPortraits, fakePlayerAttackPortraits, fakePlayerAttackLPortraits,
@@ -601,13 +603,20 @@ function _drawPlayerSpellTargetSparkleOnEnemy() {
   const tgt = targets[hitIdx];
   if (!tgt || tgt.type !== 'enemy') return;
   const cureMs = getCastAnimElapsedMs();
-  if (cureMs < CAST_T_HEAL || cureMs >= CAST_T_RETURN) return;
   const spellId = getCurrentSpellId();
   const spell = SPELLS.get(spellId);
   if (!spell) return;
   const bundle = getSpellAnim(spellId);
   const isThrown = spell.target === 'sight' || spell.element === 'fire';
-  if (!isThrown && (!bundle || bundle.kind !== 'portrait-2frame')) return;
+  // Heal-style spells render only during the heal window. Thrown spells use a
+  // different phase model (projectile + impact in distinct windows) so the
+  // gating happens inside the isThrown branch below.
+  if (!isThrown) {
+    if (cureMs < CAST_T_HEAL || cureMs >= CAST_T_RETURN) return;
+    if (!bundle || bundle.kind !== 'portrait-2frame') return;
+  } else {
+    if (cureMs < CAST_T_THROW_PROJ_START || cureMs >= CAST_T_THROW_RETURN) return;
+  }
   const fi = Math.floor(battleSt.battleTimer / 67) & 1;
 
   // Enemy sprite center — encounter / PVP / boss differ.
@@ -635,24 +644,26 @@ function _drawPlayerSpellTargetSparkleOnEnemy() {
     cy = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
   }
   if (isThrown) {
-    // Throw: caster portrait → target enemy. First 60% of heal phase = projectile
-    // in flight; last 40% = on-target impact (per spell-anim bundle, if any).
+    // Throw timeline (matches f9627 dump): cast pose during buildup, projectile
+    // flies during projectile phase, impact burst during impact phase, ret to
+    // wrap up. Sight has no on-target visual (battle msg handles feedback).
     // Caster is the player portrait at (HUD_RIGHT_X+8, HUD_VIEW_Y+8); add 8 to
     // center on its 16×16.
     const sx = HUD_RIGHT_X + 8 + 8;
     const sy = HUD_VIEW_Y + 8 + 8;
-    const t01 = (cureMs - CAST_T_HEAL) / CAST_PHASE_MS.heal;
-    if (t01 < PROJECTILE_FLIGHT_FRAC) {
+    if (cureMs < CAST_T_THROW_IMPACT_START) {
+      // Projectile phase: linear flight caster → target across the full window.
+      const t01 = (cureMs - CAST_T_THROW_PROJ_START) / CAST_PHASE_MS_THROW.projectile;
       const tile = getProjectileTile(spell);
       if (!tile) return;
-      const pos = getProjectilePos(sx, sy, cx, cy, t01);
-      if (pos.drawn) ui.ctx.drawImage(tile, Math.round(pos.x - 4), Math.round(pos.y - 4));
+      const x = sx + (cx - sx) * t01;
+      const y = sy + (cy - sy) * t01;
+      ui.ctx.drawImage(tile, Math.round(x - 4), Math.round(y - 4));
       return;
     }
-    // On-target burst — Fire renders the 16×40 flame strip from spell-anim;
-    // Sight has no on-target visual (battle msg handles feedback).
+    // Impact phase: on-target burst.
     if (bundle && bundle.kind === 'burst-strip-2frame') {
-      const impactMs = (cureMs - CAST_T_HEAL) - PROJECTILE_FLIGHT_FRAC * CAST_PHASE_MS.heal;
+      const impactMs = cureMs - CAST_T_THROW_IMPACT_START;
       const frame = getSpellAnimFrame(bundle, impactMs);
       if (frame) ui.ctx.drawImage(frame, cx - Math.floor(bundle.width / 2),
                                           cy - Math.floor(bundle.height / 2));

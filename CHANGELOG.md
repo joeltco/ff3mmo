@@ -2,6 +2,28 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.95 — 2026-05-07
+
+### Fire timing + cast halo position fixed (matches f9627 dump)
+
+**Cast halo position** — `src/cast-anim.js` BM `flameDx/flameDy` was `(-8, -4)` against a 40×32 canvas. The dump shows the body-area inside the halo canvas at `(16, 3)..(32, 27)` (BM body tiles `$43-$48` at `[16,3]/[24,3]/[16,11]/[24,11]/[16,19]/[24,19]`). To align that body-area with the runtime portrait at `(px, py)`, offsets must be `(-16, -3)`. Old offsets drew the halo 8 px right + 1 px down of where the portrait was — so the halo's left ring fell on the portrait instead of beside it.
+
+**Phase timing** — old timing crammed projectile + impact into one 283 ms heal phase (60% projectile / 40% impact) and inserted 417 ms of dead time (`lunge` + `cast hold`) where the dump shows nothing happens for thrown spells:
+
+| | Old | Dump (f9627) | New |
+|---|---|---|---|
+| cast pose visible | 0–800 ms | 0–767 ms | 0–800 ms |
+| no visual (lunge + cast hold) | 800–1217 ms | — | — |
+| projectile flying | inside 1217–1387 ms | 767–917 ms | 800–950 ms |
+| impact burst | inside 1387–1500 ms | 1250–1767 ms | 950–1500 ms |
+| return | 1500–1667 ms | — | 1500–1667 ms |
+
+New `CAST_PHASE_MS_THROW` lives next to `CAST_PHASE_MS` in `cast-anim.js`. Heal-style spells (Cure, Poisona) keep the original timing untouched. Total duration stays at `CAST_TOTAL_MS = 1667 ms` so `spell-cast.js`'s magic-hit timer doesn't need to branch.
+
+`battle-drawing.js` `_drawPlayerSpellTargetSparkleOnEnemy` now branches on `isThrown`: gates render window by `[CAST_T_THROW_PROJ_START, CAST_T_THROW_RETURN)`, dispatches projectile during projectile phase (linear interp caster→target across the full window) and impact during impact phase. `PROJECTILE_FLIGHT_FRAC` (the old 60/40 split) is no longer imported here.
+
+Parity gates re-verified PASS on bytes (impact, projectile, BM cast). This change touches timing + position only — the byte tables didn't move.
+
 ## 1.7.94 — 2026-05-07
 
 ### Fire projectile bytes fixed; OAM parity-gate harness shipped

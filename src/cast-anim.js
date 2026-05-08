@@ -45,6 +45,24 @@ export const CAST_T_HEAL   = CAST_T_CAST + CAST_PHASE_MS.cast;
 export const CAST_T_RETURN = CAST_T_HEAL + CAST_PHASE_MS.heal;
 export const CAST_TOTAL_MS = CAST_T_RETURN + CAST_PHASE_MS.ret;
 
+// ── Thrown-spell timing (Fire, future BM damage) ──────────────────────────
+// Heal-style timing (above) crammed projectile + impact into one 283 ms phase
+// and inserted 417 ms of dead time (lunge + cast hold) where the dump shows
+// no visual happens for thrown spells. Throw timings reflect the f9627
+// dump: cast pose 0-46f (~767ms), projectile 46-55f (~150ms), impact
+// 75-106f (~517ms after a brief gap). We collapse the gap into projectile
+// for runtime continuity, keep total = CAST_TOTAL_MS so spell-cast.js's
+// magic-hit timer doesn't need to branch.
+export const CAST_PHASE_MS_THROW = {
+  buildup:    800,    // cast pose visible (matches heal-style buildup)
+  projectile: 150,    // projectile flies caster → target
+  impact:     550,    // on-target burst — replaces lunge+cast+heal slots
+  ret:        167,
+};
+export const CAST_T_THROW_PROJ_START   = CAST_PHASE_MS_THROW.buildup;
+export const CAST_T_THROW_IMPACT_START = CAST_T_THROW_PROJ_START + CAST_PHASE_MS_THROW.projectile;
+export const CAST_T_THROW_RETURN       = CAST_T_THROW_IMPACT_START + CAST_PHASE_MS_THROW.impact;
+
 // ── WM cast tile bytes ($4A-$57 flame, $49 small star) ────────────────────
 // Captured 2026-05-04 (REC OAM). Bytes verbatim from the prior cure-anim.js.
 
@@ -244,7 +262,11 @@ let _byKey = null;  // { wm: { flameFrames, starTile, ... }, bm: { ... } }
 export function initCastAnim() {
   _byKey = {
     wm: { ..._decodeWMCast(), flameDx: -16, flameDy:  5, flameW: 16, flameH: 16 },
-    bm: { ..._decodeBMCast(), flameDx:  -8, flameDy: -4, flameW: 40, flameH: 32 },
+    // BM 40×32 canvas has the body-area at canvas (16, 3)..(32, 27) per the
+    // dump (f9627 frame 0: body tiles $43-$48 at [16,3]/[24,3]/[16,11]/[24,11]/
+    // [16,19]/[24,19]). To align that body-area with the 16×16 portrait at
+    // (px, py), draw the canvas at (px - 16, py - 3).
+    bm: { ..._decodeBMCast(), flameDx: -16, flameDy: -3, flameW: 40, flameH: 32 },
   };
 }
 
