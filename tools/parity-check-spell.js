@@ -41,6 +41,15 @@ const SPELLS = {
     expectedPalette: [0x0F, 0x16, 0x27, 0x30],
     matchByOrigin: { x: 176, y: 41, frameRange: [0, 43] },
   },
+  'bm-cast-body': {
+    name: 'BM cast pose body ($43-$48 pal1)',
+    sourceFile: 'src/cast-anim.js',
+    sourceConstants: ['BM_T_43_BODY','BM_T_44_BODY','BM_T_45_BODY','BM_T_46_BODY','BM_T_47_BODY','BM_T_48_BODY'],
+    sourcePalette: 'BM_BODY_PAL',
+    expectedTileIds: [0x43,0x44,0x45,0x46,0x47,0x48],
+    expectedPalette: [0x0F, 0x27, 0x18, 0x21],
+    matchByOrigin: { x: 176, y: 41, frameRange: [0, 43] },
+  },
 };
 
 // Extract a `new Uint8Array([...])` constant from a JS source by name.

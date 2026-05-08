@@ -24,6 +24,10 @@ import { _makeCanvas16 } from './canvas-utils.js';
 // is dropped here. Only the on-target effect (in spell-anim.js) varies.
 const WM_PAL = [0x0F, 0x12, 0x22, 0x31];  // blue / cyan / white
 const BM_PAL = [0x0F, 0x16, 0x27, 0x30];  // red / orange / white (REC OAM 2026-05-07 f9627)
+// Pal1 from f9627 frame 0 (SP1) — used for the BM cast-pose body tiles ($43-
+// $48) drawn inside the halo. Distinct from BM_PAL: the body recolors during
+// cast (the dump captures both palettes simultaneously in one frame).
+const BM_BODY_PAL = [0x0F, 0x27, 0x18, 0x21];
 
 // ── Phase timings (60 Hz NES capture × 16.67 ms/frame) ────────────────────
 //
@@ -113,6 +117,18 @@ const BM_T_55 = new Uint8Array([0x00,0x00,0x07,0x1C,0x31,0x67,0x4F,0x4F, 0x00,0x
 const BM_T_56 = new Uint8Array([0x07,0x0C,0x18,0x19,0x33,0x37,0x27,0x27, 0x00,0x03,0x07,0x07,0x0F,0x0F,0x1F,0x1F]);
 const BM_T_57 = new Uint8Array([0x00,0x00,0x0A,0x10,0x00,0x22,0x00,0x00, 0x00,0x00,0x02,0x00,0x04,0x02,0x08,0x00]);
 
+// BM cast-pose body tiles ($43-$48 pal1). Captured 2026-05-07 (REC OAM f9627
+// frame 0, group at origin 176,41). These are the recolored player body that
+// the NES draws INSIDE the halo during cast (replacing the runtime idle
+// portrait). Without these the halo had a transparent middle and the runtime
+// portrait would show through with wrong palette / wrong pose.
+const BM_T_43_BODY = new Uint8Array([0x00,0x00,0x00,0x00,0x01,0x7F,0x03,0x00, 0x00,0x00,0x00,0x00,0x00,0x00,0x3C,0x07]);
+const BM_T_44_BODY = new Uint8Array([0x03,0x0E,0x1C,0x78,0xE0,0x80,0xC0,0xF0, 0x00,0x01,0x02,0x06,0x1C,0x7C,0x3C,0x08]);
+const BM_T_45_BODY = new Uint8Array([0x00,0x04,0x84,0xF0,0xE0,0x00,0xDF,0xDF, 0x00,0x00,0x00,0x30,0x20,0x00,0x1F,0x1F]);
+const BM_T_46_BODY = new Uint8Array([0x00,0x00,0x80,0x84,0x02,0x7A,0x8E,0xFC, 0xFC,0x1E,0x07,0x04,0x02,0x7A,0x8E,0xFC]);
+const BM_T_47_BODY = new Uint8Array([0x9F,0x1F,0x5F,0x6F,0x6F,0x87,0x6B,0xF4, 0x1F,0x1F,0x5F,0x6F,0x6F,0x87,0x0B,0x04]);
+const BM_T_48_BODY = new Uint8Array([0xFC,0xF8,0xF8,0xF8,0xFC,0xFC,0xFE,0xFF, 0xFC,0xF8,0xF8,0xF8,0xFC,0xFC,0xFE,0xFF]);
+
 // ── Decode helpers ────────────────────────────────────────────────────────
 
 function _decodeTilePixels(d) {
@@ -182,19 +198,90 @@ function _decodeWMCast() {
   return { flameFrames, starTile };
 }
 
-// BM cast: WM-style small flame to the LEFT of the portrait, drawn on top of
-// everything. The previous halo-wrapping-portrait approach (40×32 canvas)
-// covered the player even with body-area transparency and required separate
-// pal1 body tiles to look correct. Per the user's preference: ship the WM
-// rendering pattern (16×16 flame to the left) for BM too, using the size-
-// cycle tiles ($51, $54-$57) flipped into a symmetric quad.
+// BM cast: 32×32 halo around the player portrait. Outer ring + middle ring
+// stay constant; inner pulse tile cycles per size. Frame 0 layout (origin
+// 176,41 in the dump) is mirrored across both axes — the captured tiles cover
+// only the upper-left quadrant of the halo and the rest is built from flips.
+//
+// Layout (each entry = 8×8 tile slot relative to the 32×32 halo canvas):
+//   row 0 (y=0)    [8,0]=$49      [16,0]=$4A      [24,0]=$50 V H  [32,0]=$4F V H
+//   row 1 (y=8)    [0,8]=$51/etc  [8,8]=$52/etc + $4B  [16,8]=$4C  [24,8]=$4E V H  [32,8]=$4D V H
+//   row 2 (y=16)   mirror of row 1 across x-axis
+//   row 3 (y=24)   mirror of row 0 across x-axis
+//
+// Halo is drawn at (portrait_x - 8, portrait_y - 4) so the 32×32 halo wraps
+// the 16×16 portrait centered (8 px overhang each side, 4 px top/bottom).
+function _buildBMCastFrame(innerTile) {
+  const t49 = _make8(BM_T_49, BM_PAL), t4a = _make8(BM_T_4A, BM_PAL);
+  const t4f = _make8(BM_T_4F, BM_PAL), t50 = _make8(BM_T_50, BM_PAL);
+  const t4b = _make8(BM_T_4B, BM_PAL), t4c = _make8(BM_T_4C, BM_PAL);
+  const t4d = _make8(BM_T_4D, BM_PAL), t4e = _make8(BM_T_4E, BM_PAL);
+  const inner = _make8(innerTile, BM_PAL);
+  // Cast-pose body tiles (pal1) — drawn INSIDE the halo at the dump's
+  // captured positions: [16,3]/[24,3]/[16,11]/[24,11]/[16,19]/[24,19].
+  const b43 = _make8(BM_T_43_BODY, BM_BODY_PAL), b44 = _make8(BM_T_44_BODY, BM_BODY_PAL);
+  const b45 = _make8(BM_T_45_BODY, BM_BODY_PAL), b46 = _make8(BM_T_46_BODY, BM_BODY_PAL);
+  const b47 = _make8(BM_T_47_BODY, BM_BODY_PAL), b48 = _make8(BM_T_48_BODY, BM_BODY_PAL);
+
+  const c = document.createElement('canvas'); c.width = 40; c.height = 32;
+  const cx = c.getContext('2d');
+
+  const draw = (tile, x, y, hf, vf) => {
+    cx.save();
+    cx.translate(x + (hf ? 8 : 0), y + (vf ? 8 : 0));
+    cx.scale(hf ? -1 : 1, vf ? -1 : 1);
+    cx.drawImage(tile, 0, 0);
+    cx.restore();
+  };
+
+  // Row 0 (y=0): top corner ring (halo only — body starts at y=3)
+  draw(t49, 8,  0, false, false);
+  draw(t4a, 16, 0, false, false);
+  draw(t50, 24, 0, true,  true);
+  draw(t4f, 32, 0, true,  true);
+  // Body upper at canvas y=3 (offset by 3 from halo grid — drawn AFTER halo
+  // row 0 so it covers the row-0 body-column tiles in its overlap region).
+  draw(b43, 16, 3, false, false);
+  draw(b44, 24, 3, false, false);
+  // Row 1 (y=8): inner-corner pulse + middle ring
+  draw(inner, 0, 8, false, false);
+  draw(inner, 8, 8, true,  false);
+  draw(t4b,   8, 8, false, false);
+  draw(t4c,  16, 8, false, false);
+  draw(t4e,  24, 8, true,  true);
+  draw(t4d,  32, 8, true,  true);
+  // Body middle at canvas y=11 (covers middle-ring body-column tiles).
+  draw(b45, 16, 11, false, false);
+  draw(b46, 24, 11, false, false);
+  // Row 2 (y=16): mirror of row 1 (inner pulse VFLIP, middle ring shifted)
+  draw(inner, 0, 16, false, true);
+  draw(inner, 8, 16, true,  true);
+  draw(t4d,   8, 16, false, false);
+  draw(t4e,  16, 16, false, false);
+  draw(t4c,  24, 16, true,  true);
+  draw(t4b,  32, 16, true,  true);
+  // Body lower at canvas y=19.
+  draw(b47, 16, 19, false, false);
+  draw(b48, 24, 19, false, false);
+  // Row 3 (y=24): bottom corner ring (V H of row 0)
+  draw(t4f,  8,  24, false, false);
+  draw(t50, 16, 24, false, false);
+  draw(t4a, 24, 24, true,  true);
+  draw(t49, 32, 24, true,  true);
+
+  return c;
+}
+
 function _decodeBMCast() {
+  // 5 size frames cycling through the inner-pulse tile. Outer ring is identical
+  // across all 5; only the corner-flash tile rotates. Matches WM's 5-size shape
+  // so the dispatch site can use the same `flameFrames[idx]` API.
   const flameFrames = [
-    _flippedQuad(_make8(BM_T_51, BM_PAL)),  // size 0 — smallest pulse
-    _flippedQuad(_make8(BM_T_54, BM_PAL)),  // size 1
-    _flippedQuad(_make8(BM_T_55, BM_PAL)),  // size 2
-    _flippedQuad(_make8(BM_T_56, BM_PAL)),  // size 3 — largest
-    _flippedQuad(_make8(BM_T_57, BM_PAL)),  // brackets — release flash
+    _buildBMCastFrame(BM_T_51),  // size 0/1 — base (also uses $52 alongside; close enough for first ship)
+    _buildBMCastFrame(BM_T_54),  // size 2
+    _buildBMCastFrame(BM_T_55),  // size 3
+    _buildBMCastFrame(BM_T_56),  // size 4
+    _buildBMCastFrame(BM_T_57),  // brackets — release flash
   ];
   return { flameFrames, starTile: null };  // BM has no separate rotating-star ring
 }
@@ -206,8 +293,11 @@ let _byKey = null;  // { wm: { flameFrames, starTile, ... }, bm: { ... } }
 export function initCastAnim() {
   _byKey = {
     wm: { ..._decodeWMCast(), flameDx: -16, flameDy:  5, flameW: 16, flameH: 16 },
-    // BM uses the same 16×16 flame-to-the-left layout as WM (flameDx -16).
-    bm: { ..._decodeBMCast(), flameDx: -16, flameDy:  5, flameW: 16, flameH: 16 },
+    // BM 40×32 canvas has the body-area at canvas (16, 3)..(32, 27) per the
+    // dump (f9627 frame 0: body tiles $43-$48 at [16,3]/[24,3]/[16,11]/[24,11]/
+    // [16,19]/[24,19]). To align that body-area with the 16×16 portrait at
+    // (px, py), draw the canvas at (px - 16, py - 3).
+    bm: { ..._decodeBMCast(), flameDx: -16, flameDy: -3, flameW: 40, flameH: 32 },
   };
 }
 

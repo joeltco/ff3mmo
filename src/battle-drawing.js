@@ -351,7 +351,10 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
   const _castKey = isMagicState ? jobToCastKey(ps.jobIdx) : null;
   const _castAsset = _castKey ? getCastAsset(_castKey) : null;
   if (cureMs >= 0 && _castAsset && _castAsset.flameFrames.length === 5) {
-    // Stars (WM only — BM has null starTile). Draw FIRST so flame renders on top.
+    // WM = stars rotating around portrait + small flame to the LEFT, on top.
+    // BM = halo wrapping portrait (40×32 with halo + body-pal1 inside), on top.
+    // Both paths draw in this overlay layer (after the portrait frame) so the
+    // cast flame / animating pulse renders ON TOP of the player.
     if (shouldDrawCastStars(cureMs) && _castAsset.starTile) {
       // 8 stars on a radius-15 ring around the portrait, rotating CW at the
       // OAM-measured rate (~5°/NES-frame × 60 fps = 300°/s = 1.2 s per turn).
@@ -369,7 +372,7 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
     }
     const flameIdx = getCastFlameFrameIdx(cureMs, _castKey);
     if (flameIdx >= 0) {
-      // Both jobs render a 16×16 flame to the left of the portrait, on top.
+      // Anchor varies by job (WM: 16×16 to the left; BM: 40×32 wrapping body).
       ui.ctx.drawImage(_castAsset.flameFrames[flameIdx],
                        px + _castAsset.flameDx, py + _castAsset.flameDy);
     }

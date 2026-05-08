@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.100 — 2026-05-08
+
+### BM cast: full halo+body composite, drawn on top — design-correct (WM=stars, BM=halo, never changes)
+
+Reverted the v1.7.99 WM-style restructure. BM cast is back to the 40×32 halo wrapping the player, but now includes the captured pal1 body tiles (`$43-$48`) inside the halo at the dump's positions ([16,3]/[24,3]/[16,11]/[24,11]/[16,19]/[24,19]). With the body baked into the canvas, the halo can render ON TOP of the runtime portrait without "drawing over the player" — the body tiles cover the portrait area with the correct cast-pose pixels (recolored pal1 = `[0x0F, 0x27, 0x18, 0x21]`), the halo wraps around it, and the size-cycling cast flame on the left wing renders on top of everything else.
+
+- `_buildBMCastFrame` in `src/cast-anim.js` — adds 6 `draw(b43..b48, ...)` calls AFTER the corresponding halo rows so the body covers row-0/row-1/row-2 body-column halo tiles in their overlap region. Bytes captured 2026-05-07 from f9627 frame 0 group at origin (176, 41), verified via new `bm-cast-body` parity gate.
+- `src/battle-drawing.js` — removed `_drawPortraitCastHaloBehind`. BM halo now renders in `_drawPortraitOverlays` (after `_drawPortraitFrame`), same layer as WM cast. Sole layering rule: cast renders on top of the portrait — body tiles inside the halo cover the runtime portrait pixels.
+- `tools/parity-check-spell.js` — new `bm-cast-body` spec. All four gates PASS: fire / fire-projectile / bm-cast / bm-cast-body.
+
 ## 1.7.99 — 2026-05-08
 
 ### BM cast styled like WM cast: flame to the left, on top of portrait
