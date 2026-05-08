@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.112 — 2026-05-08
+
+### Fire SFX corrected to NSF $82 (was $81 — inferred from broken polling)
+
+Recaptured Fire with the v1.7.111 EMU dumper (`emu-snap-f1301.txt`). At frame 19 the CPU writes `$C1` to `$7F49` — fresh request — which the dumper resolves to NSF track `$C1 - $3F = $82`. The prior `0x81` was inferred from the residual byte `$40` left in `$7F49` after the audio engine consumed the high-bit pulse. That residual is NOT the requested SFX index (the engine does its own bookkeeping; the consume path doesn't simply clear the high bit), so the inference was double-wrong and produced an off-by-one. SIGHT (also `$81` from the same broken inference) is now flagged as UNVERIFIED in `music.js` — recapture with the new dumper to fix.
+
 ## 1.7.111 — 2026-05-08
 
 ### EMU SFX dumper now captures pre-consume CPU writes to $7F48-$7F4F

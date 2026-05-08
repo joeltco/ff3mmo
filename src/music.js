@@ -44,8 +44,8 @@ export const SFX = {
   TREASURE:     0x80,  // SFX $3F + $41 — treasure chest open (3F/E982: LDA #$BF → $7F49)
   RUN_AWAY:     0x74,  // SFX $33 + $41 — escape success (ROM writes $B3 to $7F49 at PC=$BCBC)
   SW_HIT:       0x5D,  // SFX $1C + $41 — SouthWind ice hit per enemy (from battle-item-trace)
-  SIGHT:        0x81,  // SFX $40 + $41 — Sight scan/projectile impact (REC OAM 2026-05-07: idle→$40 transition at frame 39 of f5887 capture, ~650ms after capture start)
-  FIRE_BOOM:    0x81,  // SFX $40 + $41 — Fire spell impact. Verified via REC OAM f9627: $7F49 holds only $00/$40 across the full 200-frame Fire cast. Same NSF track as SIGHT — NES reuses one "splash impact" SFX for both spells. (Was 0x55 before v1.7.110; that was an unverified guess.)
+  SIGHT:        0x81,  // SFX $40 + $41 — Sight scan/projectile impact. UNVERIFIED: was inferred from a $7F49=$40 residual in the f5887 capture, but post-1.7.111 we know that residual byte is the audio engine's post-consume bookkeeping value, not the requested SFX index. Recapture Sight with the v1.7.111+ EMU dumper to get the actual `$Cx` write and update.
+  FIRE_BOOM:    0x82,  // SFX $41 + $41 — Fire spell impact. Verified via REC OAM f1301 (2026-05-08, post-v1.7.111 dumper): CPU writes `$C1` to $7F49 at frame 19 → NSF track `$C1 - $3F = $82`. Was 0x81 before v1.7.112; that was inferred from the post-consume residual `$40`, which is NOT the requested index — the engine does its own bookkeeping after consuming the high-bit pulse.
 };
 
 // FF1 track indices (0-based, for ff1 NSF)
