@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.110 — 2026-05-08
+
+### FIRE_BOOM SFX corrected to NES value (0x81)
+
+Verified via REC OAM f9627: across the 200-frame BM Fire cast, `$7F49` (the NES SFX queue) holds only `$00` (idle) or `$40` (request). NSF track = `$40 + $41 = 0x81` — identical to SIGHT. NES reuses one impact SFX track for both Fire and Sight (generic "splash impact"). FIRE_BOOM was previously set to `0x55` (an unverified candidate that happened to share the value of SCREEN_OPEN). Now `0x81`.
+
 ## 1.7.109 — 2026-05-08
 
 ### Spell SFX plays during the spell animation (not at damage-number pop)

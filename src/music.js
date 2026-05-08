@@ -45,7 +45,7 @@ export const SFX = {
   RUN_AWAY:     0x74,  // SFX $33 + $41 — escape success (ROM writes $B3 to $7F49 at PC=$BCBC)
   SW_HIT:       0x5D,  // SFX $1C + $41 — SouthWind ice hit per enemy (from battle-item-trace)
   SIGHT:        0x81,  // SFX $40 + $41 — Sight scan/projectile impact (REC OAM 2026-05-07: idle→$40 transition at frame 39 of f5887 capture, ~650ms after capture start)
-  FIRE_BOOM:    0x55,  // SFX $14 + $41 — Fire spell on-target explosion. REC OAM 2026-05-07 f9627: idle→$40 trigger at frame 74 (~1231ms), 8 frames after $01-$06 explosion tiles appear at frame 66. Candidate; ear-test required.
+  FIRE_BOOM:    0x81,  // SFX $40 + $41 — Fire spell impact. Verified via REC OAM f9627: $7F49 holds only $00/$40 across the full 200-frame Fire cast. Same NSF track as SIGHT — NES reuses one "splash impact" SFX for both spells. (Was 0x55 before v1.7.110; that was an unverified guess.)
 };
 
 // FF1 track indices (0-based, for ff1 NSF)
