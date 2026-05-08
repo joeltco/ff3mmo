@@ -2,6 +2,28 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.103 — 2026-05-08
+
+### BM cast: halo + separate cast flame (correct OAM structure this time)
+
+v1.7.102's "BM spark" was the Onion Knight body sprite ($0F-$14 pal1) — misidentified from the OAM dump. Dropped. The actual BM cast structure (verified across f9627 frames 0-43):
+
+- **Halo** = outer ring + middle ring only (`$49, $4A, $4F, $50` outer corners + `$4B, $4C, $4D, $4E` middle ring). STATIC — single 40×32 canvas, no size cycle. Drawn BEHIND the portrait.
+- **Cast flame** = SEPARATE 16×16 sprite drawn ON TOP of halo at the LEFT wing position (canvas (0,8)+(8,8)+(0,16)+(8,16) within the cast group). Size-cycles `$51, $52, $53, $54, $55, $56, $57` over ~535 ms then holds the release-flash ($57) until cast ends. Anchor matches WM flame (left of sprite at portrait_y+5).
+
+Per-frame animation (each step ≈ 67 ms, captured from f9627 dump):
+- step 0/2: pulse layout A — TL=$51, TR=$52, BL=$52(VH), BR=$51(VH)
+- step 1/3: pulse layout B — TL=$52(H), TR=$51(H), BL=$51(V), BR=$52(V)
+- step 4: $53 in flipped-quad
+- step 5: $54 in flipped-quad
+- step 6: $55 in flipped-quad
+- step 7: $56 in flipped-quad
+- step 8+: $57 in flipped-quad (release flash, held)
+
+Shared anchor and rendering pattern with WM cast flame: both jobs draw the cast flame at the same position (left of sprite, same flameDx/flameDy), only the underlying tile bytes + frame sequence differ. WM uses `_FLAME_SEQ` (5 frames), BM uses `_BM_FLAME_SEQ` (7 frames + held).
+
+`drawCasterCastBehind` now expects `haloCanvas` (single canvas, since halo is static); `drawCasterCastFront` picks the frame-index function by `visual.jobKey`. Removed `getCastHaloFrameIdx`, `_HALO_SEQ`, `shouldDrawCastSpark`, all `BM_SPARK_T_*` constants, and the `bm-spark` parity gate. Added `BM_T_53` byte data (was missing from v1.7.102; size-state 4 of the cast flame). New `bm-halo` and `bm-cast-flame` parity gates split the old `bm-cast` gate. All 4 gates (fire, fire-projectile, bm-halo, bm-cast-flame) PASS against ~/emu-snap-f9627.txt.
+
 ## 1.7.102 — 2026-05-08
 
 ### BM cast: halo behind portrait, body composite dropped, spark by the hand

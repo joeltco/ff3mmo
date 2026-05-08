@@ -115,27 +115,24 @@ const BM_T_4C = new Uint8Array([0xAD,0x57,0x3F,0xDF,0x7F,0xBF,0xFF,0xBF, 0x52,0x
 const BM_T_4D = new Uint8Array([0x69,0x71,0x6A,0xB1,0x72,0x18,0x35,0x58, 0xFE,0x7E,0x7D,0xFE,0x7D,0x3F,0x3E,0x7F]);
 const BM_T_4E = new Uint8Array([0xFF,0x7F,0xFF,0x7F,0xBF,0x7F,0x2F,0x5D, 0x00,0x80,0x00,0x80,0x40,0x80,0xD0,0xA2]);
 
-// Inner pulse — paired tile (size cycle on the inner one).
-// $52 = outer-of-pair (constant across cycle), $51/$54/$55/$56/$57 = inner-of-
-// pair (cycles by size).
+// ── BM cast flame tile bytes ($51-$57) ────────────────────────────────────
+// Captured 2026-05-07 (REC OAM f9627 frames 0-43 at canvas (0,8)+(8,8)+
+// (0,16)+(8,16) — the cast flame group). 16×16 sprite drawn at the LEFT of
+// the BM body, ON TOP of the halo. NOT part of the halo — separate sprite
+// element. Animation cycles 9 size states over ~535ms then holds the
+// release-flash ($57) for the rest of the buildup window.
+//
+// $51 + $52 form the "pulse" pair used across the first 4 size states (sizes
+// 1A, 1B, 1A, 1B — 67 ms each, so the flame "shimmers" before growing).
+// $53–$57 each fill a 16×16 in flipped-quad layout (single tile across all
+// 4 quadrants with H/V flips).
 const BM_T_51 = new Uint8Array([0x80,0x40,0x10,0x28,0x1A,0x05,0x0A,0x01, 0x00,0x00,0x20,0x10,0x0C,0x0E,0x07,0x07]);
 const BM_T_52 = new Uint8Array([0x00,0x00,0x00,0x08,0x20,0xD0,0x60,0xA0, 0x00,0x00,0x00,0x00,0x10,0x20,0xC0,0xC0]);
+const BM_T_53 = new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x0F,0xF0, 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x0F]);
 const BM_T_54 = new Uint8Array([0x00,0x00,0x00,0x00,0x07,0x18,0x67,0xCF, 0x00,0x00,0x00,0x00,0x00,0x07,0x1F,0x3F]);
 const BM_T_55 = new Uint8Array([0x00,0x00,0x07,0x1C,0x31,0x67,0x4F,0x4F, 0x00,0x00,0x00,0x03,0x0F,0x1F,0x3F,0x3F]);
 const BM_T_56 = new Uint8Array([0x07,0x0C,0x18,0x19,0x33,0x37,0x27,0x27, 0x00,0x03,0x07,0x07,0x0F,0x0F,0x1F,0x1F]);
 const BM_T_57 = new Uint8Array([0x00,0x00,0x0A,0x10,0x00,0x22,0x00,0x00, 0x00,0x00,0x02,0x00,0x04,0x02,0x08,0x00]);
-
-// ── BM spark tile bytes ($0F-$14) ─────────────────────────────────────────
-// Captured 2026-05-08 (REC OAM f937 snap). 16×24 sprite (2 wide × 3 tall),
-// pal1 (BM_BODY_PAL). Drawn at "by the hand" position — to the left of the
-// portrait for left-facing player/ally, mirrored to the right for PVP
-// opponents. Replaces the universal flame for BM (WM keeps its own flame).
-const BM_SPARK_T_0F = new Uint8Array([0x00,0x00,0x0A,0x16,0x2F,0x03,0x00,0x0C, 0x00,0x00,0x0E,0x1E,0x3F,0x7F,0x83,0x40]);
-const BM_SPARK_T_10 = new Uint8Array([0x00,0x00,0x00,0xE0,0x70,0xB8,0xD8,0x68, 0x00,0x6C,0x19,0xFE,0x76,0xBB,0xDB,0xED]);
-const BM_SPARK_T_11 = new Uint8Array([0x1F,0x04,0x16,0x16,0x0F,0x0F,0x60,0xC6, 0x00,0x00,0x00,0x00,0x50,0xE0,0x60,0x1E]);
-const BM_SPARK_T_12 = new Uint8Array([0x18,0x80,0x48,0xCC,0x00,0x00,0x70,0xD8, 0x59,0x32,0x38,0x0C,0xB0,0x78,0x70,0x1C]);
-const BM_SPARK_T_13 = new Uint8Array([0xCC,0x58,0x2F,0x3F,0x3F,0x1F,0x00,0x00, 0x1E,0x5F,0x3F,0x3F,0x3F,0x1F,0x07,0x0F]);
-const BM_SPARK_T_14 = new Uint8Array([0xD8,0x70,0x80,0xE0,0xE0,0xC0,0x00,0x00, 0x1C,0x74,0x84,0xE6,0xE6,0xC6,0xC7,0xC7]);
 
 // ── Decode helpers ────────────────────────────────────────────────────────
 
@@ -210,25 +207,28 @@ function _decodeWMStarTile(pal) {
 }
 
 // ── BM halo decode ────────────────────────────────────────────────────────
-// 40×32 canvas. Halo only — body composite removed (halo now renders BEHIND
-// the portrait, so the live portrait shows on top with no need to overpaint
-// the body). Outer ring + middle ring stay constant; inner-pulse pair
-// ($52 + size-tile) cycles per frame.
+// 40×32 STATIC canvas — outer ring + middle ring only. Drawn BEHIND the
+// portrait/body so the live portrait shows on top. The cast flame ($51-$57)
+// is a SEPARATE sprite drawn over the halo at the left wing position; it
+// is NOT part of the halo (was conflated in v1.7.100/101).
 //
-// OAM layout (left half — right half is the H-flip mirror of the left):
-//   (0, 8)  $52 HFLIP             ← inner pulse outer (constant)
-//   (8, 8)  $51 HFLIP             ← inner pulse inner (size-cycles)
-//   (0, 16) inner-tile VFLIP      ← row 2 mirror
-//   (8, 16) $52 VFLIP             ← row 2 mirror
-// All halo tiles use the SPELL palette (red for Fire, blue for Cure, etc.).
+// OAM layout (per f9627 frame 0, group origin 176,41):
+//   row 0 (y=0):  $49 [8,0], $4A [16,0], $50 V H [24,0], $4F V H [32,0]
+//   row 1 (y=8):                   $4B [8,8] OR $4D V H — both appear at (8,8)
+//                                  Actually $4B is at row 1 (y=8) only;
+//                                  $4D V H is at (32, 8). Let me verify.
+//
+// Re-reading f9627 frame 0:
+//   [8,0]   $49        [16,0]  $4A        [24,0]  $50 V H    [32,0]  $4F V H
+//   [8,8]   $4B        [16,8]  $4C        [24,8]  $4E V H    [32,8]  $4D V H
+//   [8,16]  $4D        [16,16] $4E        [24,16] $4C V H    [32,16] $4B V H
+//   [8,24]  $4F        [16,24] $50        [24,24] $4A V H    [32,24] $49 V H
 
-function _buildBMHaloFrame(innerTile, haloPal) {
+function _buildBMHaloCanvas(haloPal) {
   const t49 = _make8(BM_T_49, haloPal), t4a = _make8(BM_T_4A, haloPal);
-  const t4f = _make8(BM_T_4F, haloPal), t50 = _make8(BM_T_50, haloPal);
   const t4b = _make8(BM_T_4B, haloPal), t4c = _make8(BM_T_4C, haloPal);
   const t4d = _make8(BM_T_4D, haloPal), t4e = _make8(BM_T_4E, haloPal);
-  const inner = _make8(innerTile, haloPal);
-  const t52   = _make8(BM_T_52, haloPal);
+  const t4f = _make8(BM_T_4F, haloPal), t50 = _make8(BM_T_50, haloPal);
 
   const c = document.createElement('canvas'); c.width = 40; c.height = 32;
   const cx = c.getContext('2d');
@@ -241,65 +241,90 @@ function _buildBMHaloFrame(innerTile, haloPal) {
     cx.restore();
   };
 
-  // Row 0 (y=0): top corner ring. OAM: $4F VFLIP at [8,0], $50 VFLIP at
-  // [16,0], $4A HFLIP at [24,0], $49 HFLIP at [32,0].
-  draw(t4f,  8, 0, false, true);
-  draw(t50, 16, 0, false, true);
-  draw(t4a, 24, 0, true,  false);
-  draw(t49, 32, 0, true,  false);
-  // Row 1 (y=8): inner-pulse pair on left + middle ring.
-  // OAM: $52 HFLIP at [0,8], $51 HFLIP at [8,8], $4D VFLIP at [8,8],
-  //       $4E VFLIP at [16,8], $4C HFLIP at [24,8], $4B HFLIP at [32,8].
-  draw(t52,    0, 8, true,  false);
-  draw(inner,  8, 8, true,  false);
-  draw(t4d,    8, 8, false, true);
-  draw(t4e,   16, 8, false, true);
-  draw(t4c,   24, 8, true,  false);
-  draw(t4b,   32, 8, true,  false);
-  // Row 2 (y=16): mirror of row 1 across X axis (swaps inner pair, V-flips).
-  // OAM: $51 VFLIP at [0,16], $52 VFLIP at [8,16], $4B VFLIP at [8,16],
-  //       $4C VFLIP at [16,16], $4E HFLIP at [24,16], $4D HFLIP at [32,16].
-  draw(inner,  0, 16, false, true);
-  draw(t52,    8, 16, false, true);
-  draw(t4b,    8, 16, false, true);
-  draw(t4c,   16, 16, false, true);
-  draw(t4e,   24, 16, true,  false);
-  draw(t4d,   32, 16, true,  false);
-  // Row 3 (y=24): bottom corner ring (mirror of row 0 across Y).
-  // OAM: $49 VFLIP at [8,24], $4A VFLIP at [16,24], $50 HFLIP at [24,24],
-  //       $4F HFLIP at [32,24].
-  draw(t49,  8,  24, false, true);
-  draw(t4a, 16,  24, false, true);
-  draw(t50, 24,  24, true,  false);
-  draw(t4f, 32,  24, true,  false);
+  // Row 0: outer ring top
+  draw(t49,  8, 0, false, false);
+  draw(t4a, 16, 0, false, false);
+  draw(t50, 24, 0, true,  true);
+  draw(t4f, 32, 0, true,  true);
+  // Row 1: middle ring upper
+  draw(t4b,  8, 8, false, false);
+  draw(t4c, 16, 8, false, false);
+  draw(t4e, 24, 8, true,  true);
+  draw(t4d, 32, 8, true,  true);
+  // Row 2: middle ring lower (V-flipped pair of row 1)
+  draw(t4d,  8, 16, false, false);
+  draw(t4e, 16, 16, false, false);
+  draw(t4c, 24, 16, true,  true);
+  draw(t4b, 32, 16, true,  true);
+  // Row 3: outer ring bottom (V-flipped pair of row 0)
+  draw(t4f,  8,  24, false, false);
+  draw(t50, 16, 24, false, false);
+  draw(t4a, 24, 24, true,  true);
+  draw(t49, 32, 24, true,  true);
 
   return c;
 }
 
-function _decodeBMHaloFrames(pal) {
+// ── BM cast flame decode ──────────────────────────────────────────────────
+// 16×16 sprite, 7 size states. Drawn ON TOP of halo at the LEFT wing
+// position (anchored to the sprite's left edge — same flame-anchor as WM).
+//
+// Animation per f9627 (~67ms per step):
+//   step 0 (frames 0-3):    pulse layout A — TL=$51, TR=$52, BL=$52(V H), BR=$51(V H)
+//   step 1 (frames 4-7):    pulse layout B — TL=$52(H), TR=$51(H), BL=$51(V), BR=$52(V)
+//   step 2 (frames 8-11):   pulse layout A
+//   step 3 (frames 12-15):  pulse layout B
+//   step 4 (frames 16-19):  $53 in flipped-quad
+//   step 5 (frames 20-23):  $54 in flipped-quad
+//   step 6 (frames 24-27):  $55 in flipped-quad
+//   step 7 (frames 28-31):  $56 in flipped-quad
+//   step 8+ (frames 32-43): $57 in flipped-quad — release flash, held
+
+function _buildBMFlameLayoutA(t51, t52) {
+  // TL=$51, TR=$52, BL=$52(V H), BR=$51(V H)
+  const c = _makeCanvas16(); const cx = c.getContext('2d');
+  cx.drawImage(t51, 0, 0);
+  cx.drawImage(t52, 8, 0);
+  cx.save(); cx.translate(8,  16); cx.scale(-1, -1); cx.drawImage(t52, 0, 0); cx.restore();
+  cx.save(); cx.translate(16, 16); cx.scale(-1, -1); cx.drawImage(t51, 0, 0); cx.restore();
+  return c;
+}
+
+function _buildBMFlameLayoutB(t51, t52) {
+  // TL=$52(H), TR=$51(H), BL=$51(V), BR=$52(V)
+  const c = _makeCanvas16(); const cx = c.getContext('2d');
+  cx.save(); cx.translate(8,  0); cx.scale(-1, 1); cx.drawImage(t52, 0, 0); cx.restore();
+  cx.save(); cx.translate(16, 0); cx.scale(-1, 1); cx.drawImage(t51, 0, 0); cx.restore();
+  cx.save(); cx.translate(0,  16); cx.scale(1, -1); cx.drawImage(t51, 0, 0); cx.restore();
+  cx.save(); cx.translate(8,  16); cx.scale(1, -1); cx.drawImage(t52, 0, 0); cx.restore();
+  return c;
+}
+
+function _decodeBMCastFlameFrames(pal) {
+  const t51 = _make8(BM_T_51, pal), t52 = _make8(BM_T_52, pal);
+  const t53 = _make8(BM_T_53, pal), t54 = _make8(BM_T_54, pal);
+  const t55 = _make8(BM_T_55, pal), t56 = _make8(BM_T_56, pal);
+  const t57 = _make8(BM_T_57, pal);
   return [
-    _buildBMHaloFrame(BM_T_51, pal),
-    _buildBMHaloFrame(BM_T_54, pal),
-    _buildBMHaloFrame(BM_T_55, pal),
-    _buildBMHaloFrame(BM_T_56, pal),
-    _buildBMHaloFrame(BM_T_57, pal),
+    _buildBMFlameLayoutA(t51, t52),  // 0
+    _buildBMFlameLayoutB(t51, t52),  // 1
+    _flippedQuad(t53),                // 2
+    _flippedQuad(t54),                // 3
+    _flippedQuad(t55),                // 4
+    _flippedQuad(t56),                // 5
+    _flippedQuad(t57),                // 6 (release flash, held)
   ];
 }
 
-// ── BM spark decode ───────────────────────────────────────────────────────
-// 16×24 canvas (2 wide × 3 tall), pal1 (BM_BODY_PAL constant). Single static
-// frame for now — animating swing pattern needs more frame captures.
+// BM cast flame size cycle, ms-keyed (~67 ms/step). Sequence runs 0→5 then
+// holds frame 6 for the rest of the buildup window.
+const _BM_FLAME_SEQ = [0, 1, 0, 1, 2, 3, 4, 5];
 
-function _decodeBMSparkCanvas() {
-  const t0f = _make8(BM_SPARK_T_0F, BM_BODY_PAL), t10 = _make8(BM_SPARK_T_10, BM_BODY_PAL);
-  const t11 = _make8(BM_SPARK_T_11, BM_BODY_PAL), t12 = _make8(BM_SPARK_T_12, BM_BODY_PAL);
-  const t13 = _make8(BM_SPARK_T_13, BM_BODY_PAL), t14 = _make8(BM_SPARK_T_14, BM_BODY_PAL);
-  const c = document.createElement('canvas'); c.width = 16; c.height = 24;
-  const cx = c.getContext('2d');
-  cx.drawImage(t0f, 0, 0);  cx.drawImage(t10, 8, 0);
-  cx.drawImage(t11, 0, 8);  cx.drawImage(t12, 8, 8);
-  cx.drawImage(t13, 0, 16); cx.drawImage(t14, 8, 16);
-  return c;
+function _getBMCastFlameFrameIdx(elapsedMs) {
+  if (elapsedMs < 0 || elapsedMs >= CAST_T_LUNGE) return -1;
+  const step = Math.floor(elapsedMs / 67);
+  if (step >= _BM_FLAME_SEQ.length) return 6;  // release flash held
+  return _BM_FLAME_SEQ[step];
 }
 
 // ── Per-(job, palette) bundle ─────────────────────────────────────────────
@@ -311,24 +336,24 @@ function _buildBundle(jobKey, pal) {
       // Aura: rotating star tile. Drawn AFTER portrait (front layer), since
       // stars sweep through the portrait area and need to render on top.
       starTile: _decodeWMStarTile(pal),
-      haloFrames: null,
-      // Front spark: WM flame. 16×16 size-cycling, anchored to the LEFT of
-      // sprite center vertically centered with the sprite.
+      haloCanvas: null,
+      // Front cast flame: WM 5-frame size cycle (own bytes — different from
+      // BM), 16×16, anchored to the LEFT of sprite.
       flameFrames: _decodeWMFlameFrames(pal),
-      sparkCanvas: null,
     };
   }
   if (jobKey === 'bm') {
     return {
       jobKey,
-      // Aura: 40×32 halo wrapping sprite, drawn BEHIND portrait so the live
-      // portrait shows through unchanged.
+      // Aura: 40×32 STATIC halo wrapping sprite, drawn BEHIND portrait. The
+      // halo is just outer + middle rings — the cast flame is a separate
+      // sprite rendered over the halo at the left wing (see flameFrames).
       starTile: null,
-      haloFrames: _decodeBMHaloFrames(pal),
-      // Front spark: BM 16×24 spark "by the hand" — drawn AFTER portrait.
-      // Static (single frame) for now; palette-independent (always pal1).
-      flameFrames: null,
-      sparkCanvas: _decodeBMSparkCanvas(),
+      haloCanvas: _buildBMHaloCanvas(pal),
+      // Front cast flame: 16×16 size-cycling, anchored to the LEFT of the
+      // sprite (same anchor as WM flame), drawn AFTER portrait + ON TOP of
+      // halo. 7 frames cycling per the f9627 OAM sequence.
+      flameFrames: _decodeBMCastFlameFrames(pal),
     };
   }
   return null;
@@ -338,8 +363,6 @@ function _buildBundle(jobKey, pal) {
 
 let _byJob   = null;
 let _bySpell = null;
-// BM spark uses pal1 constant — built once, shared across all spells/spell-IDs.
-let _bmSparkShared = null;
 
 export function initCastAnim() {
   _byJob = {
@@ -353,9 +376,6 @@ export function initCastAnim() {
       bm: _buildBundle('bm', pal),
     });
   }
-  // Spark is shared (pal1 doesn't depend on spell), but each BM bundle has
-  // its own reference for API symmetry.
-  _bmSparkShared = _byJob.bm.sparkCanvas;
 }
 
 const _MAGE_CAST_KEY = { 3: 'wm', 4: 'bm', 5: 'wm' };
@@ -391,24 +411,14 @@ export function getCastFlameFrameIdx(elapsedMs) {
   return _FLAME_SEQ[step];
 }
 
-// BM halo size cycle, ms-keyed (~67ms/step).
-const _HALO_SEQ = [0, 0, 0, 1, 2, 2, 3, 3, 3];
-export function getCastHaloFrameIdx(elapsedMs) {
-  if (elapsedMs < 0 || elapsedMs >= CAST_T_LUNGE) return -1;
-  if (elapsedMs >= 600) return 4;
-  const step = Math.min(_HALO_SEQ.length - 1, Math.floor(elapsedMs / 67));
-  return _HALO_SEQ[step];
-}
-
 // WM stars draw during buildup + lunge phases. BM has no stars.
 export function shouldDrawCastStars(elapsedMs) {
   return elapsedMs >= 0 && elapsedMs < CAST_T_CAST;
 }
 
-// Returns true while the BM spark should render. Visible during the full
-// buildup + lunge window (matches the user's "stay in the same spot" — the
-// spark is the static cast indicator analogous to WM's flame).
-export function shouldDrawCastSpark(elapsedMs) {
+// BM halo is shown for the full cast window (buildup + lunge). It's static
+// (single canvas) — no per-frame index.
+export function shouldDrawHalo(elapsedMs) {
   return elapsedMs >= 0 && elapsedMs < CAST_T_CAST;
 }
 
@@ -431,19 +441,16 @@ export function shouldDrawCastSpark(elapsedMs) {
 const _SPRITE_HALF_W = 8;        // half-width of all current sprites (16 wide)
 const _HALO_HALF_W   = 20;       // halo canvas is 40×32
 const _HALO_HALF_H   = 16;
-const _FLAME_W       = 16;       // WM flame canvas is 16×16
+const _FLAME_W       = 16;       // cast flame canvas is 16×16 (WM + BM)
 const _FLAME_DY      = -3;       // flame top relative to sprite center
-const _SPARK_W       = 16;       // BM spark canvas is 16×24
-const _SPARK_DY      = -12;      // spark vertical center matches sprite center
 
-// Halo (BM only) — drawn BEHIND the sprite. WM has no behind-layer.
+// Halo (BM only) — drawn BEHIND the sprite. Static (single canvas, not
+// frame-cycling). WM has no behind-layer.
 export function drawCasterCastBehind(ctx, centerX, centerY, jobIdx, spellId, elapsedMs, mirror = false) {
-  if (elapsedMs < 0) return;
+  if (elapsedMs < 0 || !shouldDrawHalo(elapsedMs)) return;
   const visual = getCastVisual(jobIdx, spellId);
-  if (!visual || !visual.haloFrames) return;
-  const haloIdx = getCastHaloFrameIdx(elapsedMs);
-  if (haloIdx < 0) return;
-  const halo = visual.haloFrames[haloIdx];
+  if (!visual || !visual.haloCanvas) return;
+  const halo = visual.haloCanvas;
   if (mirror) {
     ctx.save();
     ctx.translate(centerX + _HALO_HALF_W, centerY - _HALO_HALF_H);
@@ -455,7 +462,9 @@ export function drawCasterCastBehind(ctx, centerX, centerY, jobIdx, spellId, ela
   }
 }
 
-// WM stars + WM flame OR BM spark — drawn AFTER the sprite.
+// WM stars + cast flame (WM or BM bytes) — drawn AFTER the sprite. The cast
+// flame anchors at the LEFT of the sprite center (or right when mirrored)
+// for both jobs; only the underlying tile bytes + animation sequence differ.
 export function drawCasterCastFront(ctx, centerX, centerY, jobIdx, spellId, elapsedMs, mirror = false) {
   if (elapsedMs < 0) return;
   const visual = getCastVisual(jobIdx, spellId);
@@ -473,11 +482,15 @@ export function drawCasterCastFront(ctx, centerX, centerY, jobIdx, spellId, elap
     }
   }
 
-  // WM flame: 16×16 size-cycling, abuts the sprite's left edge (or right
-  // edge when mirrored).
+  // Cast flame: 16×16 size-cycling. WM uses _FLAME_SEQ (5 frames). BM uses
+  // _BM_FLAME_SEQ (7 frames + held release flash). Job key picks the frame-
+  // index function; both jobs share the same anchor (left of sprite, or
+  // right when mirrored).
   if (visual.flameFrames) {
-    const flameIdx = getCastFlameFrameIdx(elapsedMs);
-    if (flameIdx >= 0) {
+    const flameIdx = (visual.jobKey === 'bm')
+      ? _getBMCastFlameFrameIdx(elapsedMs)
+      : getCastFlameFrameIdx(elapsedMs);
+    if (flameIdx >= 0 && visual.flameFrames[flameIdx]) {
       const flame = visual.flameFrames[flameIdx];
       if (mirror) {
         ctx.save();
@@ -488,20 +501,6 @@ export function drawCasterCastFront(ctx, centerX, centerY, jobIdx, spellId, elap
       } else {
         ctx.drawImage(flame, centerX - _SPRITE_HALF_W - _FLAME_W, centerY + _FLAME_DY);
       }
-    }
-  }
-
-  // BM spark: 16×24 static, abuts the sprite's left edge (right when
-  // mirrored). Vertical center matches the sprite center.
-  if (visual.sparkCanvas && shouldDrawCastSpark(elapsedMs)) {
-    if (mirror) {
-      ctx.save();
-      ctx.translate(centerX + _SPRITE_HALF_W + _SPARK_W, centerY + _SPARK_DY);
-      ctx.scale(-1, 1);
-      ctx.drawImage(visual.sparkCanvas, 0, 0);
-      ctx.restore();
-    } else {
-      ctx.drawImage(visual.sparkCanvas, centerX - _SPRITE_HALF_W - _SPARK_W, centerY + _SPARK_DY);
     }
   }
 }
