@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.98 — 2026-05-08
+
+### Spell-killed enemy no longer flickers off before death wipe
+
+`_drawEncounterMonsters`'s `isBeingHit` predicate listed `player-slash`, `player-damage-show`, `pre-monster-death`, `ally-slash`, `ally-damage-show`, `sw-hit` — but **not** `magic-hit`. When a thrown spell's damage applied at impact end (1500 ms into the cast anim) the enemy's HP dropped to 0, but the state stayed in `magic-hit` for another 500 ms (the damage-number bounce window). With HP=0, not dying yet, and not "being hit" by any listed state, the loop's `if (!alive && !isDying && !isBeingHit) continue;` skipped rendering — the sprite vanished for half a second before `monster-death` started its wipe. Reads like a flash because the gap is short.
+
+Fixed by adding a `isMagicHitTarget` branch: during `magic-hit`, any encounter monster index that's in the current spell's target list keeps rendering even at HP=0. Sequence is now: cast halo → projectile → impact burst → damage number on (still-rendered) enemy → state transitions to `monster-death` → wipe.
+
 ## 1.7.97 — 2026-05-08
 
 ### Damage spell targeting + damage-number timing

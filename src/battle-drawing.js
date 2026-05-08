@@ -997,12 +997,20 @@ function _drawEncounterMonsters(gridPos, sprH, boxX, boxY, boxW, boxH, isSlideIn
   for (let i = 0; i < count; i++) {
     const alive = battleSt.encounterMonsters[i].hp > 0;
     const isDying = battleSt.dyingMonsterIndices.has(i) && battleSt.battleState === 'monster-death';
+    // Spell targets must keep rendering during magic-hit even after HP hits 0 —
+    // damage applies mid-state for thrown spells, then the state runs another
+    // ~500 ms (damage-number bounce window) before transitioning to
+    // monster-death. Without this branch the sprite vanishes for that window
+    // and the death wipe looks like a sudden flash-then-disappear.
+    const isMagicHitTarget = battleSt.battleState === 'magic-hit' &&
+      getSpellTargets().some(t => t.type === 'enemy' && t.index === i);
     const isBeingHit = (i === inputSt.targetIndex &&
       (battleSt.battleState === 'player-slash' || battleSt.battleState === 'player-hit-show' ||
        battleSt.battleState === 'player-miss-show' || battleSt.battleState === 'player-damage-show' ||
        battleSt.battleState === 'pre-monster-death')) ||
       (i === battleSt.allyTargetIndex && (battleSt.battleState === 'ally-slash' || battleSt.battleState === 'ally-damage-show')) ||
-      (battleSt.battleState === 'sw-hit' && getTargets().includes(i));
+      (battleSt.battleState === 'sw-hit' && getTargets().includes(i)) ||
+      isMagicHitTarget;
     if (!alive && !isDying && !isBeingHit) continue;
 
     const pos = gridPos[i];
