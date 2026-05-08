@@ -35,7 +35,7 @@ import { inputSt } from './input-handler.js';
 import { bsc, getSlashFramesForWeapon } from './battle-sprite-cache.js';
 import { drawSlashOverlay, SLASH_FRAME_MS, shouldDrawSlash } from './slash-effects.js';
 import { getCastAnimElapsedMs, getCurrentSpellId, getSpellTargets, getSpellHitIdx } from './spell-cast.js';
-import { getCastVisual, getCastFlameFrameIdx, getCastHaloFrameIdx, shouldDrawCastStars,
+import { drawCasterCastBehind, drawCasterCastFront,
          jobToCastKey, CAST_T_LUNGE, CAST_T_HEAL, CAST_T_RETURN, CAST_PHASE_MS,
          CAST_T_THROW_PROJ_START, CAST_T_THROW_IMPACT_START, CAST_T_THROW_RETURN,
          CAST_PHASE_MS_THROW } from './cast-anim.js';
@@ -335,12 +335,9 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
     const frame = bsc.defendSparkleFrames[fi];
     drawSparkleCorners(frame, px, py);
   }
-  // Cast animation — dispatched via drawCasterCast (the single source of
-  // truth). WM = stars + flame; BM = halo + flame. Per-spell palette tints
-  // both. The on-target sparkle (heal phase) only renders here when ANY
-  // target is the player; ally-target sparkles are drawn at the ally
-  // portrait below; enemy-target effects are drawn by the player-spell
-  // target dispatch.
+  // Cast FRONT pass — drawn AFTER the portrait. WM = rotating stars +
+  // flame on left; BM = spark on left ("by the hand"). The behind-pass
+  // (BM halo only) runs in `_drawBattlePortrait` BEFORE the portrait draw.
   const isMagicState = battleSt.battleState === 'magic-cast' || battleSt.battleState === 'magic-hit';
   const isCureItemUse = battleSt.battleState === 'item-use' && !(inputSt.playerActionPending && inputSt.playerActionPending.allyIndex >= 0);
   const _curSpellTargets = isMagicState ? getSpellTargets() : null;
@@ -348,7 +345,7 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
     _curSpellTargets.some(t => t && t.type === 'player');
   const cureMs = isMagicState ? getCastAnimElapsedMs() : -1;
   if (cureMs >= 0) {
-    drawCasterCast(ui.ctx, px, py, ps.jobIdx, getCurrentSpellId(), cureMs);
+    drawCasterCastFront(ui.ctx, px + 8, py + 8, ps.jobIdx, getCurrentSpellId(), cureMs, false);
   }
   // On-target sparkle — per-spell visual on the target portrait during heal
   // phase. Items route by `item.animSpellId` through spell-anim.
@@ -503,6 +500,14 @@ function _drawBattlePortrait() {
     battleSt.enemyTargetAllyIdx < 0 &&
     pvpSt.pvpPendingAttack && !pvpSt.pvpPendingAttack.miss && !pvpSt.pvpPendingAttack.shieldBlock &&
     (Math.floor(battleSt.battleTimer / 60) & 1);
+  // Cast BEHIND pass — BM halo wraps portrait, drawn UNDER the portrait so
+  // the live portrait shows on top with no need to overpaint with body
+  // tiles. WM has no behind layer.
+  const _isMagicCastNow = battleSt.battleState === 'magic-cast' || battleSt.battleState === 'magic-hit';
+  if (_isMagicCastNow) {
+    const _cMs = getCastAnimElapsedMs();
+    if (_cMs >= 0) drawCasterCastBehind(ui.ctx, pxs + 8, py + 8, ps.jobIdx, getCurrentSpellId(), _cMs, false);
+  }
   if (!portraitBlink) {
     if (isAttackPose) _drawPortraitWeapon(pxs, py, true);
     _drawPortraitFrame(pxs, py, portraitSrc, isRunPose);
@@ -577,50 +582,9 @@ function drawBattle() {
 // Same-faction casts (heal on self, ally) skip the projectile and jump
 // straight to the on-target effect.
 
-// Draw a caster's cast aura + flame. Always drawn in this order:
-//   1. Aura (stars OR halo) — bottom layer, wraps portrait
-//   2. Flame — top layer, always visible during buildup
-// `mirrorFlame=true` flips the flame to the right side of the portrait
-// (used by PVP enemy casters who face left toward the player party).
-function drawCasterCast(ctx, px, py, jobIdx, spellId, elapsedMs, mirrorFlame = false) {
-  if (elapsedMs < 0) return;
-  const visual = getCastVisual(jobIdx, spellId);
-  if (!visual) return;
-  // 1. Aura
-  if (visual.auraKind === 'stars' && shouldDrawCastStars(elapsedMs) && visual.starTile) {
-    const cx = px + 8, cy = py + 8;
-    const r = 15, N = 8;
-    const rotRad = (elapsedMs / 1200) * Math.PI * 2;
-    for (let i = 0; i < N; i++) {
-      const a = (i / N) * Math.PI * 2 + rotRad - Math.PI / 2;
-      const sx = Math.round(cx + Math.cos(a) * r - 4);
-      const sy = Math.round(cy + Math.sin(a) * r - 4);
-      ctx.drawImage(visual.starTile, sx, sy);
-    }
-  } else if (visual.auraKind === 'halo' && visual.haloFrames) {
-    const haloIdx = getCastHaloFrameIdx(elapsedMs);
-    if (haloIdx >= 0) {
-      ctx.drawImage(visual.haloFrames[haloIdx], px + visual.haloDx, py + visual.haloDy);
-    }
-  }
-  // 2. Flame — universal, on top
-  const flameIdx = getCastFlameFrameIdx(elapsedMs);
-  if (flameIdx >= 0 && visual.flameFrames) {
-    const flame = visual.flameFrames[flameIdx];
-    if (mirrorFlame) {
-      // Mirror to the right edge: flip horizontally and reposition so the
-      // flame appears symmetrically opposite (to the right of the portrait
-      // instead of left).
-      ctx.save();
-      ctx.translate(px + 16 - visual.flameDx, py + visual.flameDy);
-      ctx.scale(-1, 1);
-      ctx.drawImage(flame, 0, 0);
-      ctx.restore();
-    } else {
-      ctx.drawImage(flame, px + visual.flameDx, py + visual.flameDy);
-    }
-  }
-}
+// Cast render helpers `drawCasterCastBehind` / `drawCasterCastFront` are
+// imported from cast-anim.js — single source of truth, no per-render-site
+// reimplementation. Called below by player + ally + (PVP via pvp.js).
 
 // Resolve the (x, y) center of a magic target. Used by the projectile fan
 // and on-target effect helpers. Returns null if the target can't be
@@ -1694,6 +1658,10 @@ function drawBattleAllies() {
   if (battleSt.battleAllies.length === 0 || battleSt.battleState === 'none') return;
   const panelTop = HUD_VIEW_Y + 32;
   const weaponDraws = [];
+  // Pass 1: cast BEHIND (BM halo) for the casting ally — rendered OUTSIDE
+  // the panel clip so the halo can extend left past the panel boundary.
+  _drawAllyCastAnimBehind(panelTop);
+  // Pass 2: ally rows INSIDE the panel clip.
   ui.ctx.save();
   ui.ctx.beginPath();
   ui.ctx.rect(HUD_RIGHT_X, panelTop, HUD_RIGHT_W, HUD_VIEW_H - 32);
@@ -1714,34 +1682,47 @@ function drawBattleAllies() {
     }
   }
   _flushAllyWeaponDraws(weaponDraws);
-  // Cast animation (flame + 8-star ring) for the WM ally caster — rendered
-  // OUTSIDE the panel clip so the flame can extend left of the ally portrait
-  // toward the enemy side, matching the player-cast layout.
-  _drawAllyCastAnim(panelTop);
+  // Pass 3: cast FRONT (stars/flame for WM, spark for BM) for the casting
+  // ally — rendered OUTSIDE the panel clip so it can extend left.
+  _drawAllyCastAnimFront(panelTop);
 }
 
-function _drawAllyCastAnim(panelTop) {
+// Resolve the casting ally's center coords + elapsedMs, or null if no ally
+// is currently casting. Used by both the behind- and front-pass helpers so
+// their gating stays in sync.
+function _allyCastContext(panelTop) {
   const isCastState = battleSt.battleState === 'ally-magic-cast' || battleSt.battleState === 'ally-magic-hit';
-  if (!isCastState) return;
-  // Item mode (Cure Potion / Antidote) suppresses the cast aura + flame —
-  // caster pose + target sparkle still render normally.
-  if (battleSt.allyMagicItemMode) return;
+  if (!isCastState) return null;
+  if (battleSt.allyMagicItemMode) return null;  // item mode suppresses cast visuals
   const i = battleSt.allyMagicCasterIdx;
-  if (i < 0) return;
+  if (i < 0) return null;
   const ally = battleSt.battleAllies[i];
-  if (!ally) return;
-  // Elapsed within the cast portion: 0..600 ms during ally-magic-cast, then
-  // capped at the brackets/release frame during ally-magic-hit so the flame
-  // settles to its final pose for the rest of the window.
+  if (!ally) return null;
   const castDur = 600;
   const elapsed = battleSt.battleState === 'ally-magic-cast'
     ? Math.min(battleSt.battleTimer, castDur)
     : castDur;
   const shakeOff = (battleSt.allyShakeTimer[i] > 0) ? (Math.floor(battleSt.allyShakeTimer[i] / 67) & 1 ? 2 : -2) : 0;
   const rowY = panelTop + i * ROSTER_ROW_H + shakeOff;
-  const ppx = HUD_RIGHT_X + 8;
-  const ppy = rowY + 8;
-  drawCasterCast(ui.ctx, ppx, ppy, ally.jobIdx || 0, battleSt.allyMagicSpellId, elapsed);
+  return {
+    centerX: HUD_RIGHT_X + 8 + 8,
+    centerY: rowY + 8 + 8,
+    jobIdx: ally.jobIdx || 0,
+    spellId: battleSt.allyMagicSpellId,
+    elapsed,
+  };
+}
+
+function _drawAllyCastAnimBehind(panelTop) {
+  const c = _allyCastContext(panelTop);
+  if (!c) return;
+  drawCasterCastBehind(ui.ctx, c.centerX, c.centerY, c.jobIdx, c.spellId, c.elapsed, false);
+}
+
+function _drawAllyCastAnimFront(panelTop) {
+  const c = _allyCastContext(panelTop);
+  if (!c) return;
+  drawCasterCastFront(ui.ctx, c.centerX, c.centerY, c.jobIdx, c.spellId, c.elapsed, false);
 }
 
 function _encounterMonsterPos(idx) {

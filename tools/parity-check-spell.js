@@ -41,14 +41,22 @@ const SPELLS = {
     expectedPalette: [0x0F, 0x16, 0x27, 0x30],
     matchByOrigin: { x: 176, y: 41, frameRange: [0, 43] },
   },
-  'bm-cast-body': {
-    name: 'BM cast pose body ($43-$48 pal1)',
+  // 'bm-cast-body' was the cast-pose body composite ($43-$48 pal1) used in
+  // v1.7.100/101 to overpaint the runtime portrait while the halo drew on
+  // top. Dropped 1.7.102+ — halo now renders BEHIND the portrait, so the
+  // live portrait shows through and no body composite is needed. Bytes are
+  // in git history if a future feature wants them back.
+  'bm-spark': {
+    name: 'BM cast spark ($0F-$14 pal1)',
     sourceFile: 'src/cast-anim.js',
-    sourceConstants: ['BM_T_43_BODY','BM_T_44_BODY','BM_T_45_BODY','BM_T_46_BODY','BM_T_47_BODY','BM_T_48_BODY'],
+    sourceConstants: ['BM_SPARK_T_0F','BM_SPARK_T_10','BM_SPARK_T_11','BM_SPARK_T_12','BM_SPARK_T_13','BM_SPARK_T_14'],
     sourcePalette: 'BM_BODY_PAL',
-    expectedTileIds: [0x43,0x44,0x45,0x46,0x47,0x48],
+    expectedTileIds: [0x0F,0x10,0x11,0x12,0x13,0x14],
     expectedPalette: [0x0F, 0x27, 0x18, 0x21],
-    matchByOrigin: { x: 176, y: 41, frameRange: [0, 43] },
+    // Spark group origin in the f937 capture: same group origin (176, 41)
+    // as the halo+body cluster; spark tiles are at canvas (32, 31)+ within
+    // the group. matchByOrigin filter is keyed on the group, not per-tile.
+    matchByOrigin: { x: 176, y: 41, frameRange: [0, 1000] },
   },
 };
 

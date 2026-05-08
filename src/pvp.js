@@ -36,7 +36,7 @@ import { _nameToBytes } from './text-utils.js';
 import { queueBattleMsg } from './battle-msg.js';
 import { tickHealNums, clearHealNums } from './damage-numbers.js';
 import { SPELLS } from './data/spells.js';
-import { getCastVisual, getCastFlameFrameIdx, getCastHaloFrameIdx, shouldDrawCastStars, jobToCastKey } from './cast-anim.js';
+import { drawCasterCastBehind, drawCasterCastFront, jobToCastKey } from './cast-anim.js';
 import { getSpellAnim, getSpellAnimForItem } from './spell-anim.js';
 import { fakePlayerFullBodyCanvases, fakePlayerHitFullBodyCanvases,
          fakePlayerKnifeRFullBodyCanvases, fakePlayerKnifeLFullBodyCanvases,
@@ -984,6 +984,21 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
 
   // Layer: 'behind' draws before body, 'front' draws after.
   if (weaponSpec && _weaponLayer === 'behind') drawBlade();
+  // Cast BEHIND pass — BM halo wrapping the PVP body, drawn UNDER the body
+  // so the body shows on top. WM has no behind-layer. Mirrored=true since
+  // PVP opponents face right toward the player party (halo's inner-pulse
+  // wing should point right, toward the party).
+  if (bs === 'pvp-enemy-magic-cast' || bs === 'pvp-enemy-magic-hit') {
+    if (pvpSt.pvpMagicCasterCellIdx === idx) {
+      const _opp = pvpSt.pvpMagicCasterCellIdx === 0
+        ? pvpSt.pvpOpponent
+        : pvpSt.pvpEnemyAllies[pvpSt.pvpMagicCasterCellIdx - 1];
+      const elapsed = bs === 'pvp-enemy-magic-cast'
+        ? Math.min(battleSt.battleTimer, PVP_MAGIC_CAST_MS)
+        : PVP_MAGIC_CAST_MS;
+      if (_opp) drawCasterCastBehind(ui.ctx, sprX + 8, sprY + 12, _opp.jobIdx, pvpSt.pvpMagicSpellId, elapsed, true);
+    }
+  }
   if (isDying) {
     const delay = pvpSt.pvpDyingMap.get(idx) || 0;
     const deathFrames = _fpb(fakePlayerDeathFrames);
@@ -1050,11 +1065,8 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
     }
   }
 
-  // PVP enemy magic cast — aura + flame on the caster cell. Mirrors the
-  // ally-magic-cast layout but flame is drawn on the RIGHT side of the body
-  // (PVP enemies face left toward the player party). Single dispatch via
-  // _drawPvpCasterCast so the cast geometry stays in lockstep with the
-  // player + ally paths.
+  // Cast FRONT pass — drawn AFTER body. WM = stars + flame, BM = spark.
+  // mirror=true since PVP opponents face right (sparks on body's right).
   const isCastState = bs === 'pvp-enemy-magic-cast' || bs === 'pvp-enemy-magic-hit';
   if (isCastState && pvpSt.pvpMagicCasterCellIdx === idx) {
     const _opp = pvpSt.pvpMagicCasterCellIdx === 0
@@ -1063,49 +1075,6 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
     const elapsed = bs === 'pvp-enemy-magic-cast'
       ? Math.min(battleSt.battleTimer, PVP_MAGIC_CAST_MS)
       : PVP_MAGIC_CAST_MS;
-    if (_opp) _drawPvpCasterCast(sprX, sprY, _opp.jobIdx, pvpSt.pvpMagicSpellId, elapsed);
-  }
-}
-
-// PVP enemy version of drawCasterCast — same logic, but the flame mirrors to
-// the RIGHT of the sprite (PVP enemies face left). Inlined here rather than
-// imported from battle-drawing.js to avoid a circular import; battle-drawing
-// already imports pvp.js for pvpSt.
-function _drawPvpCasterCast(sprX, sprY, jobIdx, spellId, elapsedMs) {
-  if (elapsedMs < 0) return;
-  const visual = getCastVisual(jobIdx, spellId);
-  if (!visual) return;
-  // 1. Aura
-  if (visual.auraKind === 'stars' && shouldDrawCastStars(elapsedMs) && visual.starTile) {
-    const cx = sprX + 8, cy = sprY + 8;
-    const r = 15, N = 8;
-    const rotRad = (elapsedMs / 1200) * Math.PI * 2;
-    for (let i = 0; i < N; i++) {
-      const a = (i / N) * Math.PI * 2 + rotRad - Math.PI / 2;
-      const stx = Math.round(cx + Math.cos(a) * r - 4);
-      const sty = Math.round(cy + Math.sin(a) * r - 4);
-      ui.ctx.drawImage(visual.starTile, stx, sty);
-    }
-  } else if (visual.auraKind === 'halo' && visual.haloFrames) {
-    const haloIdx = getCastHaloFrameIdx(elapsedMs);
-    if (haloIdx >= 0) {
-      // Mirror halo horizontally so it wraps the left-facing PVP body.
-      const halo = visual.haloFrames[haloIdx];
-      ui.ctx.save();
-      ui.ctx.translate(sprX + 16 - visual.haloDx, sprY + visual.haloDy);
-      ui.ctx.scale(-1, 1);
-      ui.ctx.drawImage(halo, 0, 0);
-      ui.ctx.restore();
-    }
-  }
-  // 2. Flame mirrored to the right side
-  const flameIdx = getCastFlameFrameIdx(elapsedMs);
-  if (flameIdx >= 0 && visual.flameFrames) {
-    const flame = visual.flameFrames[flameIdx];
-    ui.ctx.save();
-    ui.ctx.translate(sprX + 16 - visual.flameDx, sprY + visual.flameDy);
-    ui.ctx.scale(-1, 1);
-    ui.ctx.drawImage(flame, 0, 0);
-    ui.ctx.restore();
+    if (_opp) drawCasterCastFront(ui.ctx, sprX + 8, sprY + 12, _opp.jobIdx, pvpSt.pvpMagicSpellId, elapsed, true);
   }
 }

@@ -2,6 +2,27 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.102 — 2026-05-08
+
+### BM cast: halo behind portrait, body composite dropped, spark by the hand
+
+Per user OAM re-inspection: the BM cast in v1.7.100/101 had two flaws — (1) inner-pulse used `$51` in both pair positions instead of the OAM's `$52 + $51` pair (the "close enough for first ship" approximation), and (2) the universal flame I added in v1.7.101 was the wrong front element for BM (BM has its own captured spark sprite, distinct from WM's flame).
+
+Restructured BM cast to match the OAM:
+- **Halo renders BEHIND the portrait** (no more body composite). The live portrait shows through unchanged on top — no need to overpaint with recolored body tiles. `_buildBMHaloFrame` drops the `b43-b48` body composite step.
+- **Inner-pulse pair fixed**: `$52` HFLIP at canvas (0,8) + `$51` HFLIP at (8,8), mirrored across X axis with `$51` VFLIP at (0,16) + `$52` VFLIP at (8,16). Matches the f937 OAM snap exactly.
+- **BM spark added**: 16×24 element from tiles `$0F-$14` (pal1, BM_BODY_PAL constant), drawn AFTER the portrait at "by the hand" position — to the left of portrait for left-facing player/ally, mirrored to the right for PVP opponents. Replaces the universal flame for BM. Static (single frame) for now; animating swing pattern needs more frame captures.
+- WM cast unchanged — WM keeps its rotating stars + 16×16 flame on left.
+
+Render dispatch split into Behind + Front phases:
+- `drawCasterCastBehind(ctx, centerX, centerY, jobIdx, spellId, elapsedMs, mirror)` — BM halo only. Called BEFORE portrait/sprite draw.
+- `drawCasterCastFront(ctx, centerX, centerY, jobIdx, spellId, elapsedMs, mirror)` — WM stars + flame OR BM spark. Called AFTER portrait/sprite draw.
+- Helpers live in `cast-anim.js` (single source). Both `battle-drawing.js` and `pvp.js` import them; no circular import.
+- `centerX`/`centerY` is the SPRITE CENTER so the same helpers work for 16×16 portraits and 16×24 PVP bodies — caller computes center from sprite size.
+- `drawBattleAllies` restructured into 3 passes: (1) BM halo OUTSIDE panel clip (so halo can extend left of panel), (2) ally rows INSIDE clip, (3) front layer OUTSIDE clip. Same pattern in `_drawBattlePortrait` for the player and `_drawOpponent` for PVP.
+
+Parity gates: `bm-cast-body` removed (body composite dropped); new `bm-spark` gate added for the `$0F-$14` tiles. `fire`, `fire-projectile`, `bm-cast` all PASS.
+
 ## 1.7.101 — 2026-05-08
 
 ### Magic system: modularized — per-spell palette on cast/projectile, parallel multi-target, school-gated by job
