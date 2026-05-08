@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.129 — 2026-05-08
+
+### PVP-enemy offensive cast visuals + directional projectile
+
+The $58 projectile tile has a directional trailing flame — canonical capture is right→left (player→enemy). When a PVP-enemy BM/RM casts toward the player party, the projectile now h-flips so the flame keeps trailing behind the orb instead of leading it.
+
+- `getProjectileTile(spellId, spell, hflip)` accepts a direction flag. The bundle cache pre-builds h-flipped variants alongside the v-flip wobble pair so neither hot path allocates per frame.
+- `drawProjectileFan` auto-detects hflip per target via `sx < tc.x` (caster left-of-target = travel rightward = needs flip). Backward-compatible: player-cast right→left still uses the canonical orientation.
+- New `_drawPVPEnemyOffensiveCast` in `battle-drawing.js`, mirror of `_drawPlayerSpellTargetSparkleOnEnemy` for the opposite direction. Hooks into the draw loop right after the player-cast renderer. Same modular helpers (`drawProjectileFan` + `drawSpellEffectAtTargets` + `_getMagicTargetCenter` + `_isCrossFaction`) — the helpers were already direction-agnostic; only a new caller was needed.
+- Phase split inside `pvp-enemy-magic-hit`: 0..150 ms projectile flight from caster cell to player/ally portrait, then impact burst at the target for the rest of the hit window. `_applyPVPEnemyMagicEffect` (at PVP_MAGIC_EFFECT_MS=400) still drives the actual damage/status apply + damage-number pop in the middle of the burst.
+
+Audit notes (no refactor needed): the cast/projectile/impact pipeline is already modular — `_isCrossFaction` abstracts faction logic, `_getMagicTargetCenter` resolves any target type's screen position, `drawProjectileFan` and `drawSpellEffectAtTargets` are direction-blind. Adding the PVP-enemy direction was a pure additive change, no shared logic moved.
+
 ## 1.7.128 — 2026-05-08
 
 ### Pulled Sight from fake-player knownSpells

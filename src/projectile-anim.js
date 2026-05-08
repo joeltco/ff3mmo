@@ -98,9 +98,24 @@ let _bySpell = null;       // Map<spellId, { normal, vflip }>
 let _byElement = null;     // { fire: {normal, vflip}, ice: {...}, ... }
 let _default = null;       // fallback bundle
 
+function _hflip(src) {
+  const c = document.createElement('canvas'); c.width = src.width; c.height = src.height;
+  const cx = c.getContext('2d');
+  cx.translate(src.width, 0); cx.scale(-1, 1); cx.drawImage(src, 0, 0);
+  return c;
+}
+
 function _bundle(pal) {
   const normal = _make8(T_58, pal);
-  return { normal, vflip: _vflip(normal) };
+  const normalH = _hflip(normal);
+  return {
+    normal, vflip: _vflip(normal),
+    // h-flipped pair for projectiles traveling left→right (PVP-enemy-cast on
+    // player party). The $58 tile bytes have a directional trailing flame —
+    // the canonical capture was right→left (player→enemy), so left→right
+    // flight needs an h-flip to keep the flame trailing behind the orb.
+    normalHflip: normalH, vflipHflip: _vflip(normalH),
+  };
 }
 
 export function initProjectile() {
@@ -137,15 +152,18 @@ function _resolveBundle(spellId, spell) {
 
 // Returns the right 8×8 canvas (normal or vflipped) for the current frame.
 // VFLIP toggle is at 60 Hz (~17ms) per the NES capture; we use Date.now()/17
-// for a smooth wobble independent of dt.
-export function getProjectileTile(spellOrId, spellMaybe) {
-  // Backward-compat: legacy callers pass `(spell)`. New callers should pass
-  // `(spellId, spell)` so the per-spell-ID lookup hits.
+// for a smooth wobble independent of dt. Pass `hflip=true` for projectiles
+// traveling left→right so the trailing flame stays behind the orb.
+export function getProjectileTile(spellOrId, spellMaybe, hflip = false) {
+  // Backward-compat: legacy callers pass `(spell)`. Newer callers can pass
+  // `(spellId, spell)` or `(spellId, spell, hflip)` to drive direction.
   const spellId = (typeof spellOrId === 'number') ? spellOrId : null;
   const spell   = (typeof spellOrId === 'object') ? spellOrId : (spellMaybe || null);
   const bundle = _resolveBundle(spellId, spell);
   if (!bundle) return null;
-  return ((Math.floor(Date.now() / 17) & 1) === 0) ? bundle.normal : bundle.vflip;
+  const phase = (Math.floor(Date.now() / 17) & 1) === 0;
+  if (hflip) return phase ? bundle.normalHflip : bundle.vflipHflip;
+  return phase ? bundle.normal : bundle.vflip;
 }
 
 // First 60% of the throw window is flight (caster → target); last 40% is

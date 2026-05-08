@@ -555,6 +555,7 @@ function drawBattle() {
   drawEncounterBox();
   drawBossSpriteBox();
   _drawPlayerSpellTargetSparkleOnEnemy();
+  _drawPVPEnemyOffensiveCast();
   drawBattleMenu();
   drawVictoryBox();
   drawBattleMessageStrip();
@@ -664,15 +665,20 @@ function _isCrossFaction(casterFaction, tgt) {
 
 // Draw a projectile fan-out from caster center to each target center.
 // Renders ONLY for cross-faction targets (same-faction targets render no
-// projectile per the user's standing rule).
+// projectile per the user's standing rule). The $58 tile has a directional
+// trailing flame — canonical capture is right→left (player→enemy), so we
+// auto-h-flip when the projectile travels left→right (e.g. a PVP enemy
+// casting toward the player party). Per-target hflip means a multi-target
+// fan can mix directions if the layout demands.
 function drawProjectileFan(ctx, sx, sy, casterFaction, targets, spellId, spell, t01) {
   if (t01 < 0 || t01 > 1) return;
-  const tile = getProjectileTile(spellId, spell);
-  if (!tile) return;
   for (const tgt of targets) {
     if (!_isCrossFaction(casterFaction, tgt)) continue;
     const tc = _getMagicTargetCenter(tgt);
     if (!tc) continue;
+    const hflip = sx < tc.x;
+    const tile = getProjectileTile(spellId, spell, hflip);
+    if (!tile) continue;
     const x = sx + (tc.x - sx) * t01;
     const y = sy + (tc.y - sy) * t01;
     ctx.drawImage(tile, Math.round(x - 4), Math.round(y - 4));
@@ -785,6 +791,46 @@ function _drawPlayerSpellTargetSparkleOnEnemy() {
     const effectMs = cureMs - CAST_T_HEAL;
     drawSpellEffectAtTargets(ui.ctx, enemyTargets, spellId, effectMs);
   }
+}
+
+// PVP-enemy offensive cast — mirror of `_drawPlayerSpellTargetSparkleOnEnemy`
+// for the opposite direction. When a fake-player BM/RM in PVP casts Fire /
+// Blizzard / Sleep on the player party, this renders the projectile fan
+// (parallel) and impact burst (single target — current AI picks one) using
+// the same `drawProjectileFan` + `drawSpellEffectAtTargets` helpers. The
+// helpers auto-handle hflip via sx vs tx, so the trailing flame stays
+// behind the orb regardless of travel direction.
+function _drawPVPEnemyOffensiveCast() {
+  if (!pvpSt.isPVPBattle) return;
+  if (battleSt.battleState !== 'pvp-enemy-magic-hit') return;
+  const partyIdx = pvpSt.pvpMagicPartyTargetIdx;
+  if (partyIdx <= -100) return;
+  const spellId = pvpSt.pvpMagicSpellId;
+  if (spellId !== 0x31 && spellId !== 0x32 && spellId !== 0x33) return;
+  const spell = SPELLS.get(spellId);
+  if (!spell) return;
+  const casterCellIdx = pvpSt.pvpMagicCasterCellIdx;
+  if (casterCellIdx < 0) return;
+  const cc = _pvpEnemyCellCenter(casterCellIdx);
+  // Build a single-target list — current AI picks one party target per cast.
+  // Project from caster cell center to player/ally portrait center.
+  const targetSpec = partyIdx === -1
+    ? { type: 'player' }
+    : { type: 'ally', index: partyIdx };
+  // Phase split: first ~150 ms = projectile flight, rest = impact burst.
+  // PVP_MAGIC_HIT_MS is 1000, so impact gets ~850 ms — plenty for the full
+  // burst-strip cycle + apply timing (apply happens at PVP_MAGIC_EFFECT_MS=400).
+  const ms = battleSt.battleTimer;
+  const PROJ_MS = CAST_PHASE_MS_THROW.projectile;
+  if (ms < PROJ_MS) {
+    const t01 = ms / PROJ_MS;
+    drawProjectileFan(ui.ctx, cc.x, cc.y, 'foe', [targetSpec], spellId, spell, t01);
+    return;
+  }
+  // Impact burst on the party target. Sleep has no portrait-anchored bundle
+  // — drawSpellEffectAtTargets is a no-op for `kind === undefined`. Fire/
+  // Blizzard burst-strip-2frame canvases render centered on the target.
+  drawSpellEffectAtTargets(ui.ctx, [targetSpec], spellId, ms - PROJ_MS);
 }
 
 function _drawGameOver() {
