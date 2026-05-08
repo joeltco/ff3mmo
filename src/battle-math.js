@@ -36,12 +36,23 @@ export function calcDamage(atk, def, crit = false, critBonus = 0, elemMult = 1) 
 // isMonkClass: true for Monk(2)/BlackBelt(13). When unarmed, uses level-based formula.
 // Non-Monks add floor(str/2) — without it, weapon ATK alone is too low to overcome
 // any equipped defender's DEF (vit + armor stack) and damage clamps to 1.
+//
+// Dual-wield: per-hit ATK uses the AVERAGE of both weapon ATKs, not the sum.
+// `calcPotentialHits` already doubles the hit count when dualWield=true, so
+// each hand "strikes" once per turn at near-single-weapon power. Summing
+// both ATKs and doubling hits compounded into quadratic damage (caught
+// 2026-05-08 — lv3 OK D+K hit the Altar Cave boss for 40+ dmg/turn,
+// roughly 2× canon). Average + double-hit lands close to NES canon, where
+// each hand's strike resolves separately at that hand's own weapon ATK.
 export function calcAttackerAtk({ rWpnAtk, lWpnAtk, isMonkClass, level, str, jobLevel }) {
   const isUnarmed = !rWpnAtk && !lWpnAtk;
   if (isUnarmed && isMonkClass) {
     return Math.floor(str / 4) + Math.floor(level * 1.5) + Math.floor(jobLevel / 4) + 2;
   }
-  return rWpnAtk + lWpnAtk + Math.floor(str / 2);
+  const wpnAtk = (rWpnAtk > 0 && lWpnAtk > 0)
+    ? Math.floor((rWpnAtk + lWpnAtk) / 2)
+    : (rWpnAtk + lWpnAtk);  // single-wield: one slot is 0, so this is just the equipped weapon
+  return wpnAtk + Math.floor(str / 2);
 }
 
 // Hit count: 1 + floor(level/12) + floor(AGI/12). NES uses /16; we tightened to

@@ -2,6 +2,25 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.132 — 2026-05-08
+
+### Dual-wield damage de-tuned (was quadratic, now linear)
+
+User caught: a level-3 Onion Knight with Dagger + Knife was hitting Land Turtle for 40+ dmg/turn — pre-Altar-Cave gear shouldn't crater a boss in three turns. Cause: two layers compounded.
+
+1. `calcAttackerAtk` returned `rWpnAtk + lWpnAtk + floor(str/2)` for non-Monk dual-wield — both weapon ATKs **summed**.
+2. `calcPotentialHits` with `dualWield=true` returned `base × 2` — hits **doubled**.
+
+So a dual-wielder got 2 hits at the SUMMED atk of both weapons → quadratic damage. Lv3 OK D+K = 18 atk × 2 hits = 34-52 dmg/turn vs Land Turtle's def 1.
+
+Fix: per-hit ATK now uses the **average** of both weapon ATKs when dual-wielding, not the sum. The 2-hit count is preserved so each "hand" still strikes once per turn at near-single-weapon power. This lands close to NES canon, where each hand's strike resolves separately at that hand's own weapon ATK.
+
+- Lv3 OK D+K: was 34-52 dmg/turn → now 20-32 dmg/turn (~37% drop)
+- Single-wield damage is **unchanged** (one slot is 0, so the average reduces to the equipped weapon's ATK).
+- Monk unarmed special-case is **unchanged**.
+
+Note: the underlying `def: 1` value across the entire bestiary (`gen-monsters-js.js` likely reads the wrong byte from the stat-table layout) is a separate issue. Bosses should have higher DEF than mooks but currently don't. Tackle in a follow-up.
+
 ## 1.7.131 — 2026-05-08
 
 ### RMs back to Daggers — sword + made-up name pulled
