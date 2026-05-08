@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.131 — 2026-05-08
+
+### RMs back to Daggers — sword + made-up name pulled
+
+Two errors in v1.7.130:
+
+1. **I fabricated the name "Sage Sword"** for item `$25` in the comments. I have no source for that name; I assumed it from the item's RM/Ninja access + holy element. Violates the never-fabricate rule and the "look it up first" rule. There is no excuse — the actual name lives in ROM via `getItemNameClean(0x25)` and I should have either decoded it or webfetched a primary source.
+2. **The item tier was wrong for early game.** Item `$25` is price 1000 — players are pre-Altar Cave. RMs at this stage shouldn't have any sword.
+
+Fix: all 5 RMs (Asher, Verena, Caelum, Quill, Soren) use Dagger `$1F` (price 60, atk 8). Shields removed too — RMs are caster hybrids, not Fighter-tier melee.
+
 ## 1.7.130 — 2026-05-08
 
 ### Fixed RM weapon — Long Sword → Sage Sword
