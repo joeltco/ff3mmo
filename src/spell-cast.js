@@ -12,7 +12,7 @@ import { SFX, playSFX } from './music.js';
 import { setPlayerHealNum, setPlayerDamageNum, getAllyDamageNums, setEnemyDmgNum, setEnemyHealNum, setSwDmgNum,
          tickHealNums, clearHealNums } from './damage-numbers.js';
 import { SPELLS, getSpellMPCost, isMultiTargetSpell } from './data/spells.js';
-import { STATUS, removeStatus } from './status-effects.js';
+import { STATUS, addStatus, removeStatus, tryInflictStatus } from './status-effects.js';
 import { CAST_PHASE_MS, CAST_T_HEAL, CAST_TOTAL_MS, CAST_T_THROW_RETURN, CAST_T_THROW_IMPACT_START } from './cast-anim.js';
 import { queueBattleMsg, isBattleMsgBusy } from './battle-msg.js';
 import { _nameToBytes } from './text-utils.js';
@@ -171,6 +171,14 @@ export function startSpellCast(spellId, targetSpec, opts = {}) {
     _targets = [{ type: 'player' }];
   }
 
+  // Self-buff spells (Haste, Protect) always target the caster, regardless of
+  // what enemy/ally the user picked. Battle items like BachusWine / TurtleShell
+  // route through here as item-use; the picker may have selected an enemy but
+  // the buff applies to the player.
+  if (spell.target === 'haste' || spell.target === 'protect') {
+    _targets = [{ type: 'player' }];
+  }
+
   // Multi-target → roll once at cast time, divide at apply time. Single-target
   // keeps per-target re-roll (legacy). Skips status/revive cures (no amount).
   if (_targets.length > 1 && spell.power > 0) {
@@ -230,6 +238,75 @@ function _applyEnemyEffect(idx, spell) {
   if (spell.target === 'sight') {
     queueBattleMsg(_nameToBytes('Ineffective'));
     _playSpellSFXOnce(SFX.SIGHT);
+    return;
+  }
+
+  // target='enemy_status' — try to inflict a status condition (Confuse, Sleep,
+  // Death). The spell's `type` field names the status. Battle items like
+  // LamiaScale/SheepPillow/DevilNote dispatch through here.
+  if (spell.target === 'enemy_status') {
+    if (!mon) {
+      // Boss path — no monster object. Treat as ineffective for now.
+      queueBattleMsg(_nameToBytes('Ineffective'));
+      _playSpellSFXOnce(SFX.SW_HIT);
+      return;
+    }
+    if (mon.hp <= 0) return;
+    if (spell.type === 'death') {
+      // Instakill check against spell.hit, blocked by death-resistant monsters.
+      if (Math.random() * 100 < spell.hit) {
+        if (mon.status) addStatus(mon.status, STATUS.DEATH);
+        mon.hp = 0;
+        _setEnemyDmg(idx, 0, false);
+        _playSpellSFXOnce(SFX.MONSTER_DEATH);
+      } else {
+        _setEnemyDmg(idx, 0, true);  // miss
+      }
+      return;
+    }
+    // confuse / sleep / blind / mini / silence / etc. — name = spell.type.
+    if (mon.status) {
+      const applied = tryInflictStatus(mon.status, spell.type, spell.hit, mon.statusResist);
+      if (applied) {
+        _playSpellSFXOnce(SFX.SW_HIT);
+      } else {
+        _setEnemyDmg(idx, 0, true);  // miss
+      }
+    }
+    return;
+  }
+
+  // target='erase' — clear positive statuses from enemy. No buff state on
+  // monsters in the project yet, so this is a SFX-only acknowledgement.
+  if (spell.target === 'erase') {
+    _playSpellSFXOnce(SFX.SW_HIT);
+    return;
+  }
+
+  // target='drain' — damage enemy + heal caster (the player) by the same amount.
+  // Reverses on undead per NES canon (heal enemy, no player heal).
+  if (spell.target === 'drain') {
+    if (!mon || mon.hp <= 0) return;
+    const drainAmt = _baseAmount >= 0
+      ? Math.max(1, Math.floor(_baseAmount / _targets.length))
+      : _rollMagicAmount(spell.power, true);
+    if (_isUndead(mon)) {
+      const heal = Math.min(drainAmt, (mon.maxHP || mon.hp) - mon.hp);
+      mon.hp += heal;
+      setEnemyHealNum({ value: heal, timer: 0, index: idx });
+      _playSpellSFXOnce(SFX.CURE);
+      return;
+    }
+    const dmg = Math.max(1, drainAmt);
+    mon.hp = Math.max(0, mon.hp - dmg);
+    _setEnemyDmg(idx, dmg, false);
+    const playerHeal = Math.min(dmg, (ps.stats?.maxHP ?? ps.hp) - ps.hp);
+    if (playerHeal > 0) {
+      ps.hp += playerHeal;
+      setPlayerHealNum({ value: playerHeal, timer: 0 });
+    }
+    battleSt.battleShakeTimer = BATTLE_SHAKE_MS;
+    _playSpellSFXOnce(SFX.CURE);
     return;
   }
 
@@ -310,6 +387,22 @@ function _applySpellEffect(target) {
   if (spell.target === 'sight') {
     queueBattleMsg(_nameToBytes('Ineffective'));
     _playSpellSFXOnce(SFX.SIGHT);
+    return;
+  }
+
+  // Self-buff spells (Haste, Protect) — feedback only for now. The buff
+  // mechanics (haste = double speed, protect = halve damage) aren't yet
+  // tracked in the player state machine, so the SFX + battle message are
+  // the player's confirmation that the item did SOMETHING. Wire real buff
+  // mechanics when the buff system lands.
+  if (spell.target === 'haste') {
+    queueBattleMsg(_nameToBytes('Haste'));
+    _playSpellSFXOnce(SFX.CURE);
+    return;
+  }
+  if (spell.target === 'protect') {
+    queueBattleMsg(_nameToBytes('Protect'));
+    _playSpellSFXOnce(SFX.CURE);
     return;
   }
 

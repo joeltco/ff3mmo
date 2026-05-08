@@ -2,6 +2,30 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.117 — 2026-05-08
+
+### Spell-cast handles status / drain / self-buff target types — remaining 7 battle items now route through modular path
+
+`_applyEnemyEffect` extended:
+- `target='enemy_status'` (Confuse, Sleep, Death) — calls `tryInflictStatus(mon.status, spell.type, spell.hit, mon.statusResist)`. Death gets a special instakill check that sets `mon.hp=0` on success and plays `MONSTER_DEATH` SFX. Misses show damage=0 with the `miss` flag (Ineffective tooltip).
+- `target='erase'` — SFX-only acknowledgement (no enemy buff state exists yet to dispel).
+- `target='drain'` — damages enemy and heals player by the same amount; reverses on undead per NES canon (heals enemy, no player heal).
+
+`startSpellCast` now overrides `_targets` to `[{type:'player'}]` for self-buff spells (`target='haste'` / `target='protect'`) regardless of the target picker's selection — battle items like BachusWine and TurtleShell may have an enemy targeted but the buff applies to the player.
+
+`_applySpellEffect` (player path) gains placeholder branches for `target='haste'` and `target='protect'` — battle message + CURE SFX, no real buff mechanics yet (haste = double speed, protect = halve damage need a player-state buff system that doesn't exist; mechanics are stubbed until that lands).
+
+Items now mapped on the new path:
+- $b8 Lamia Scale → Confuse `$20`
+- $b9 Bachus Wine → Haste `$13` (mechanics stub)
+- $ba Turtle Shell → Protect `$1a` (mechanics stub)
+- $bb Devil Note → Death `$01`
+- $bc Black Hole → Erase `$17` (no-op visual until enemy buffs exist)
+- $be Lilith Kiss → Drain `$09`
+- $c3 Sheep Pillow → Sleep `$33`
+
+17 of 20 battle items now route through the modular spell-cast path. Remaining 3 unmapped: $bd Black Musk, $c1 Tranquilizer, $c5 Curtain (not in shrine canon, need user direction).
+
 ## 1.7.116 — 2026-05-08
 
 ### Battle items wired through spell-cast — 11 of 20 mapped to spell IDs
