@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.121 — 2026-05-08
+
+### Fire / Blizzard / Sleep all multi-targetable
+
+`MULTI_TARGET_SPELLS` now includes `$31` Fire, `$32` Blizzard, and `$33` Sleep alongside `$34` Cure. The targeting nav was already wired (battle-items + Cure use the same picker): Left on the leftmost enemy enters all-enemies mode; Up on the top enemy of a column enters col-mode. Engine paths were also already in place — `startSpellCast`'s `mode !== 'single' && !onAllies` branch builds the multi-enemy `_targets` list, the projectile fan draws to every enemy target, and damage spells with `power > 0` roll once and divide by `_targets.length` (Sleep's `power: 0` skips division — each target rolls `tryInflictStatus` independently against `spell.hit`, the FF3-canon behavior).
+
 ## 1.7.120 — 2026-05-08
 
 ### Status sprite overlays + battle messages on status hit

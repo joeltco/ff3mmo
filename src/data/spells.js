@@ -128,7 +128,12 @@ export function getSpellBuyPrice(spellId) {
 // Spells whose target picker offers all-allies / all-enemies / column modes,
 // with one rolled amount divided across the chosen targets — same Southwind-
 // style split. Item path (potions) never reads this; it stays single-target.
-export const MULTI_TARGET_SPELLS = new Set([0x34]); // Cure
+export const MULTI_TARGET_SPELLS = new Set([
+  0x31,  // Fire    (BM Lv1)
+  0x32,  // Blizzard (BM Lv1)
+  0x33,  // Sleep   (BM Lv1 status)
+  0x34,  // Cure    (WM Lv1)
+]);
 export function isMultiTargetSpell(spellId) { return MULTI_TARGET_SPELLS.has(spellId); }
 
 // ── Spell school dispatch (job gating) ────────────────────────────────────
