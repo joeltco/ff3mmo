@@ -53,6 +53,21 @@ function _playSpellSFXOnce(sfx) {
   _sfxPlayed = true;
 }
 
+// Cross-faction damage spells that take the throw path (cast windup → projectile
+// → impact burst). Add new offensive elements here when wiring more BM spells.
+// Keeping this in one place per the modularize-cross-cutting-gates rule.
+const _THROWN_DAMAGE_ELEMENTS = new Set(['fire', 'ice', 'bolt']);
+function _isThrownDamageElement(el) { return _THROWN_DAMAGE_ELEMENTS.has(el); }
+
+// SFX index per offensive damage element. Captured via the v1.7.111 EMU
+// dumper's pre-consume `$Cx` write trace. Add new entries when wiring new
+// damage spells. Falls back to SW_HIT for unmapped elements.
+function _damageImpactSFX(el) {
+  if (el === 'fire') return SFX.FIRE_BOOM;       // NSF $82 — REC OAM f1301
+  if (el === 'ice')  return SFX.SW_HIT;          // NSF $5D — REC OAM f766 (Blizzard $9C → $5D)
+  return SFX.SW_HIT;
+}
+
 export function getSpellTargets() { return _targets; }
 export function getSpellHitIdx() { return _hitIdx; }
 export function getCurrentSpellId() { return _spellId; }
@@ -253,7 +268,7 @@ function _applyEnemyEffect(idx, spell) {
     setEnemyHP(Math.max(0, getEnemyHP() - dmg));
     _setEnemyDmg(idx, dmg, false);
     battleSt.battleShakeTimer = BATTLE_SHAKE_MS;
-    _playSpellSFXOnce(spell.element === 'fire' ? SFX.FIRE_BOOM : SFX.SW_HIT);
+    _playSpellSFXOnce(_damageImpactSFX(spell.element));
     return;
   }
   if (!mon || mon.hp <= 0) return;
@@ -344,7 +359,7 @@ function _isCastAnimSpell() {
       || spell.target === 'cure_status'
       || spell.target === 'revive'
       || spell.target === 'sight'
-      || spell.element === 'fire';
+      || _isThrownDamageElement(spell.element);
 }
 
 export function isSightSpell(spellId) {
@@ -357,7 +372,7 @@ export function isSightSpell(spellId) {
 export function updateSpellCast(dt) {
   const useCastAnim = _isCastAnimSpell();
   const spell = SPELLS.get(_spellId);
-  const isThrown = !!(spell && (spell.target === 'sight' || spell.element === 'fire'));
+  const isThrown = !!(spell && (spell.target === 'sight' || _isThrownDamageElement(spell.element)));
   const castDur  = useCastAnim ? CAST_PHASE_MS.buildup : 250;
   // hitEffectMs = when within magic-hit the spell effect applies (and damage /
   // heal number appears). hitTotalMs = total duration of magic-hit state.
@@ -398,7 +413,7 @@ export function updateSpellCast(dt) {
   if (battleSt.battleState !== 'magic-hit') return false;
   tickHealNums(dt);
   if (sfxStartMs >= 0 && !_sfxPlayed && battleSt.battleTimer >= sfxStartMs) {
-    _playSpellSFXOnce(spell.element === 'fire' ? SFX.FIRE_BOOM : SFX.SW_HIT);
+    _playSpellSFXOnce(_damageImpactSFX(spell.element));
   }
   // Multi-target apply is PARALLEL: at hitEffectMs, every target in _targets
   // gets the effect applied at once (damage numbers pop simultaneously,

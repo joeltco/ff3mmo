@@ -698,7 +698,12 @@ function _drawPlayerSpellTargetSparkleOnEnemy() {
   const enemyTargets = targets.filter(t => t.type === 'enemy');
   if (enemyTargets.length === 0) return;
 
-  const isThrown = spell.target === 'sight' || spell.element === 'fire';
+  // Mirror the spell-cast.js gate: any cross-faction damage element + sight
+  // takes the throw path (cast windup → projectile → impact burst).
+  const isThrown = spell.target === 'sight'
+                || spell.element === 'fire'
+                || spell.element === 'ice'
+                || spell.element === 'bolt';
   const sx = HUD_RIGHT_X + 8 + 8;
   const sy = HUD_VIEW_Y + 8 + 8;
 

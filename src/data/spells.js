@@ -136,6 +136,7 @@ export function isMultiTargetSpell(spellId) { return MULTI_TARGET_SPELLS.has(spe
 // spell so the magic shop / battle menu / pause menu gate it correctly.
 const SPELL_SCHOOL = new Map([
   [0x31, 'black'],  // Fire
+  [0x32, 'black'],  // Bzzard / Blizzard Lv1
   [0x34, 'white'],  // Cure
   [0x35, 'white'],  // Poisona
   [0x36, 'white'],  // Sight

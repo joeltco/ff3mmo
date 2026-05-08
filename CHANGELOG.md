@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.113 — 2026-05-08
+
+### Blizzard ($32) wired — cast tint, projectile, 48×48 ice-shard impact, SFX
+
+End-to-end Blizzard plumbing. Cast halo + flame use the BM per-job pose tinted with the captured icy palette `[0x0F, 0x11, 0x21, 0x31]` (REC OAM f766 SP3). Projectile reuses the shared `$58` sphere with the same palette. Impact is a 48×48 area burst built from 4 unique 8×8 shard tiles ($49–$4C, captured mechanically from f766 frame 20) cycling through 4 OAM layouts (no-flip → HFLIP → VFLIP → V+HFLIP) at NES 4-frame hold (~67 ms each, ~266 ms total).
+
+Plumbing changes:
+- `SPELL_CAST_PAL` + `SPELL_PROJECTILE_PAL` now keyed by `0x32`.
+- `SPELL_SCHOOL[0x32] = 'black'` so BM/RM can pick it.
+- `_isThrownDamageElement(el)` helper centralizes the cast-anim/throw-path gates so future damage elements (bolt, ice variants) drop into one set instead of N call sites — per the modularize-cross-cutting-gates rule.
+- `_damageImpactSFX(el)` maps element → captured SFX index. `'ice' → SFX.SW_HIT` (NSF $5D, verified from REC OAM f766 frame 19 `write $7F49 = $9C → NSF $5D`). `'fire' → FIRE_BOOM` (NSF $82, verified prior turn).
+
+Parity gate spec added (`blizzard` + `blizzard-projectile`); not run this commit because the f766 dump only exists inline. Save the dump and run `node tools/parity-check-spell.js blizzard ~/emu-snap-f766.txt` to verify byte tables.
+
 ## 1.7.112 — 2026-05-08
 
 ### Fire SFX corrected to NSF $82 (was $81 — inferred from broken polling)

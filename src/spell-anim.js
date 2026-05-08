@@ -31,6 +31,7 @@ import { ITEMS } from './data/items.js';
 const PAL_CURE       = [0x0F, 0x12, 0x22, 0x31];  // Cure / HiPotion / etc.
 const PAL_CURE_STATUS = [0x0F, 0x15, 0x27, 0x30]; // Poisona / Antidote / Bndna
 const PAL_FIRE_IMPACT = [0x0F, 0x16, 0x27, 0x30]; // Fire (REC OAM 2026-05-07 f9627)
+const PAL_BLIZZARD_IMPACT = [0x0F, 0x11, 0x21, 0x31]; // Blizzard (REC OAM f766 SP3)
 
 // ── Cure-family heal sparkle ($4A_HEAL + $49_HEAL after CHR rebank) ───────
 // Captured 2026-05-04. The tile slots are the same numeric IDs used by the WM
@@ -75,6 +76,20 @@ const FIRE_T_4F = new Uint8Array([0x31,0x79,0xDB,0xD3,0xC3,0xC7,0x67,0x37, 0x0F,
 const FIRE_T_50 = new Uint8Array([0x9C,0x9C,0xBD,0x2D,0x29,0x4B,0x5F,0x96, 0xE0,0xE0,0xC0,0xD0,0xD0,0xB0,0xA0,0xE8]);
 const FIRE_T_51 = new Uint8Array([0xB3,0xB3,0x73,0x79,0x19,0x18,0x1E,0x0F, 0x0F,0x0F,0x0F,0x07,0x07,0x07,0x01,0x00]);
 const FIRE_T_52 = new Uint8Array([0xA6,0xEE,0x4C,0x4C,0x0C,0x3C,0x78,0xE0, 0xF8,0xF0,0xF0,0xF0,0xF0,0xC0,0x80,0x00]);
+
+// ── Blizzard impact (4 unique shard tiles, 4 OAM layouts cycling) ─────────
+// Captured 2026-05-08 (REC OAM f766, group at origin (24,96) frames 20-35,
+// ~266 ms). Shards are STATIC bytes — animation comes from 4 distinct OAM
+// layouts that scramble position + flip flags: A=no-flip, B=HFLIP, C=VFLIP,
+// D=VFLIP+HFLIP. NES holds each layout 4 frames (~67 ms).
+//
+// Each tile pattern is a tiny "+" / "·" shaped ice fleck. 12 OAM entries per
+// frame reuse these 4 patterns to fill a 48×48 area around the target.
+
+const BLIZZARD_T_49 = new Uint8Array([0x00,0x00,0x00,0x30,0x00,0x00,0x00,0x00, 0x00,0x00,0x30,0x78,0x30,0x00,0x00,0x00]);
+const BLIZZARD_T_4A = new Uint8Array([0x00,0x00,0x20,0x70,0x20,0x00,0x00,0x00, 0x00,0x00,0x00,0x20,0x00,0x00,0x00,0x00]);
+const BLIZZARD_T_4B = new Uint8Array([0x00,0x00,0x00,0x08,0x14,0x08,0x00,0x00, 0x00,0x00,0x00,0x00,0x08,0x00,0x00,0x00]);
+const BLIZZARD_T_4C = new Uint8Array([0x00,0x00,0x00,0x00,0x08,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]);
 
 // ── Decode helpers ────────────────────────────────────────────────────────
 
@@ -197,14 +212,86 @@ function _buildFireImpactFrames(pal) {
   return [frameA, frameB];
 }
 
+// ── Blizzard impact: 48×48 area-of-effect, 4 OAM layouts ──────────────────
+// Each layout is the OAM record from the dump. Format: [tileIdx, x, y, hflip, vflip].
+// tileIdx 0=$49, 1=$4A, 2=$4B, 3=$4C.
+//
+// f766 frame 20 (layout A, no flip):
+const _BLIZZARD_LAYOUT_A = [
+  [3, 8,0,false,false],[0,40,0,false,false],
+  [1,16,8,false,false],[2,32,8,false,false],
+  [0, 0,16,false,false],[3,40,16,false,false],
+  [1,16,24,false,false],[2,24,24,false,false],
+  [0,24,32,false,false],[3,40,32,false,false],
+  [2, 8,40,false,false],[1,40,40,false,false],
+];
+// f766 frame 24 (layout B, HFLIP — un-mirrored x = 48 - x_oam - 8):
+const _BLIZZARD_LAYOUT_B = [
+  [0, 0,0,true,false],[3,32,0,true,false],
+  [2, 8,8,true,false],[1,24,8,true,false],
+  [3, 0,16,true,false],[0,40,16,true,false],
+  [2,16,24,true,false],[1,24,24,true,false],
+  [3, 0,32,true,false],[0,16,32,true,false],
+  [1, 0,40,true,false],[2,32,40,true,false],
+];
+// f766 frame 28 (layout C, VFLIP):
+const _BLIZZARD_LAYOUT_C = [
+  [2, 8,0,false,true],[1,40,0,false,true],
+  [0,24,8,false,true],[3,40,8,false,true],
+  [1,16,16,false,true],[2,24,16,false,true],
+  [0, 0,24,false,true],[3,40,24,false,true],
+  [1,16,32,false,true],[2,32,32,false,true],
+  [3, 8,40,false,true],[0,40,40,false,true],
+];
+// f766 frame 32 (layout D, VFLIP + HFLIP):
+const _BLIZZARD_LAYOUT_D = [
+  [1, 0,0,true,true],[2,32,0,true,true],
+  [3, 0,8,true,true],[0,16,8,true,true],
+  [2,16,16,true,true],[1,24,16,true,true],
+  [3, 0,24,true,true],[0,40,24,true,true],
+  [2, 8,32,true,true],[1,24,32,true,true],
+  [0, 0,40,true,true],[3,32,40,true,true],
+];
+
+const BLIZZARD_CANVAS_W = 48;
+const BLIZZARD_CANVAS_H = 48;
+
+function _buildBlizzardImpactFrames(pal) {
+  const tiles = [
+    _make8(BLIZZARD_T_49, pal), _make8(BLIZZARD_T_4A, pal),
+    _make8(BLIZZARD_T_4B, pal), _make8(BLIZZARD_T_4C, pal),
+  ];
+  const _drawLayout = (layout) => {
+    const c = document.createElement('canvas');
+    c.width = BLIZZARD_CANVAS_W; c.height = BLIZZARD_CANVAS_H;
+    const cx = c.getContext('2d');
+    for (const [ti, ox, oy, hf, vf] of layout) {
+      cx.save();
+      if (hf && vf) { cx.translate(ox + 8, oy + 8); cx.scale(-1, -1); cx.drawImage(tiles[ti], 0, 0); }
+      else if (hf)  { cx.translate(ox + 8, oy);     cx.scale(-1,  1); cx.drawImage(tiles[ti], 0, 0); }
+      else if (vf)  { cx.translate(ox,     oy + 8); cx.scale( 1, -1); cx.drawImage(tiles[ti], 0, 0); }
+      else          { cx.drawImage(tiles[ti], ox, oy); }
+      cx.restore();
+    }
+    return c;
+  };
+  return [
+    _drawLayout(_BLIZZARD_LAYOUT_A),
+    _drawLayout(_BLIZZARD_LAYOUT_B),
+    _drawLayout(_BLIZZARD_LAYOUT_C),
+    _drawLayout(_BLIZZARD_LAYOUT_D),
+  ];
+}
+
 // ── Public API ────────────────────────────────────────────────────────────
 
 let _bySpellId = null;
 
 export function initSpellAnim() {
-  const cureSparkle  = _buildCureSparkle(PAL_CURE);
-  const poisonaTgt   = _buildPoisonaTarget(PAL_CURE_STATUS);
-  const fireImpact   = _buildFireImpactFrames(PAL_FIRE_IMPACT);
+  const cureSparkle    = _buildCureSparkle(PAL_CURE);
+  const poisonaTgt     = _buildPoisonaTarget(PAL_CURE_STATUS);
+  const fireImpact     = _buildFireImpactFrames(PAL_FIRE_IMPACT);
+  const blizzardImpact = _buildBlizzardImpactFrames(PAL_BLIZZARD_IMPACT);
 
   _bySpellId = {
     // White magic — recovery family (Cure)
@@ -216,6 +303,12 @@ export function initSpellAnim() {
             anchor: 'portrait-center', toggleMs: 67 },
     // Black magic — Fire (Lv1)
     0x31: { kind: 'burst-strip-2frame', frames: fireImpact, width: 16, height: 40,
+            anchor: 'enemy-center', toggleMs: 67 },
+    // Black magic — Blizzard / Bzzard (Lv1 ice). 4 OAM layouts cycle at NES
+    // 4-frame hold (~67 ms): no-flip → HFLIP → VFLIP → V+HFLIP. Reuses the
+    // 'burst-strip-2frame' kind — frame count is just a modulo, the kind only
+    // controls canvas-center draw alignment.
+    0x32: { kind: 'burst-strip-2frame', frames: blizzardImpact, width: 48, height: 48,
             anchor: 'enemy-center', toggleMs: 67 },
     // Sight (0x36) intentionally absent — battle msg handles "Ineffective".
   };

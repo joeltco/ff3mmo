@@ -41,6 +41,24 @@ const SPELLS = {
     expectedPalette: [0x0F, 0x16, 0x27, 0x30],
     matchByOrigin: { x: 176, y: 41, frameRange: [0, 43] },
   },
+  blizzard: {
+    name: 'Blizzard impact (BM Lv1, $32)',
+    sourceFile: 'src/spell-anim.js',
+    sourceConstants: ['BLIZZARD_T_49','BLIZZARD_T_4A','BLIZZARD_T_4B','BLIZZARD_T_4C'],
+    sourcePalette: 'PAL_BLIZZARD_IMPACT',
+    expectedTileIds: [0x49,0x4A,0x4B,0x4C],
+    expectedPalette: [0x0F, 0x11, 0x21, 0x31],
+    matchByOrigin: { x: 24, y: 96, frameRange: [20, 35] },
+  },
+  'blizzard-projectile': {
+    name: 'Blizzard projectile ($58 fly, ice palette)',
+    sourceFile: 'src/projectile-anim.js',
+    sourceConstants: ['T_58'],
+    sourcePalette: null, // resolved via SPELL_PROJECTILE_PAL[0x32] below
+    expectedTileIds: [0x58],
+    expectedPalette: [0x0F, 0x11, 0x21, 0x31],
+    matchByFrameRange: [11, 19],
+  },
   'bm-cast-flame': {
     name: 'BM cast flame ($51-$57)',
     sourceFile: 'src/cast-anim.js',
@@ -165,6 +183,8 @@ function main() {
     srcPalette = extractPaletteConstant(source, spec.sourcePalette);
   } else if (spellName === 'fire-projectile') {
     srcPalette = extractMapEntry(source, 'ELEMENT_FALLBACK_PAL', 'fire');
+  } else if (spellName === 'blizzard-projectile') {
+    srcPalette = extractMapEntry(source, 'ELEMENT_FALLBACK_PAL', 'ice');
   }
   if (!srcPalette) { console.error(`FAIL: source palette not found`); process.exit(1); }
 
