@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.114 — 2026-05-08
+
+### Blizzard ($32) acquireable — BM and RM start with it; 2 MP, 100 gil
+
+`STARTING_SPELLS` now grants Blizzard alongside Fire to BM (job 4) and RM (job 5). `SPELL_MP_COST` and `SPELL_BUY_PRICE` get matching `[0x32, 2]` and `[0x32, 100]` entries (mirroring Fire's stats — NES canon for Lv1 black magic). Existing BM/RM saves pick up Blizzard automatically on next load: `title-screen.js:712` re-runs `grantStartingSpells` per load and the function only adds new spells, never removes.
+
 ## 1.7.113 — 2026-05-08
 
 ### Blizzard ($32) wired — cast tint, projectile, 48×48 ice-shard impact, SFX

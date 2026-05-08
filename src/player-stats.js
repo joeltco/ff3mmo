@@ -41,9 +41,9 @@ export const ps = {
 // School-gating (data/spells.js JOB_SCHOOLS): WM = white only, BM = black
 // only, RM = both. RM starts with one entry from each school.
 const STARTING_SPELLS = {
-  3: [0x34, 0x35, 0x36], // White Mage: Cure, Poisona, Sight
-  4: [0x31],             // Black Mage: Fire
-  5: [0x34, 0x31],       // Red Mage: Cure + Fire (cross-school starter)
+  3: [0x34, 0x35, 0x36],       // White Mage: Cure, Poisona, Sight
+  4: [0x31, 0x32],             // Black Mage: Fire + Bzzard
+  5: [0x34, 0x31, 0x32],       // Red Mage: Cure + Fire + Bzzard (cross-school starter)
 };
 
 export function grantStartingSpells(jobIdx = ps.jobIdx) {
