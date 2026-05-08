@@ -396,15 +396,22 @@ function _battleInputMagicSelect() {
     // Default-target side per spell semantics. Heal / status-cure white magic
     // defaults to player so the common case is one Z-press on self. Sight
     // (scan) and damage spells (Fire, future BM family) default to enemy —
-    // first live cell — since that's the primary use case.
+    // RIGHTMOST live cell first (closest to player party), like normal melee
+    // targeting feels — fall back to first-live if no right-col alive.
     const defaultsToEnemy = spell.target === 'sight' || spell.type === 'damage';
     if (defaultsToEnemy) {
-      let firstLive = 0;
-      for (let i = 0; i < _itemTargetCnt(); i++) {
-        if (_itemTargetAlive(i)) { firstLive = i; break; }
+      let pick = -1;
+      const cnt = _itemTargetCnt();
+      for (let i = 0; i < cnt; i++) {
+        if (_itemTargetIsRightCol(i) && _itemTargetAlive(i)) { pick = i; break; }
+      }
+      if (pick < 0) {
+        for (let i = 0; i < cnt; i++) {
+          if (_itemTargetAlive(i)) { pick = i; break; }
+        }
       }
       inputSt.itemTargetType = 'enemy';
-      inputSt.itemTargetIndex = firstLive;
+      inputSt.itemTargetIndex = Math.max(0, pick);
     } else {
       inputSt.itemTargetType = 'player';
       inputSt.itemTargetIndex = 0;

@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.108 — 2026-05-08
+
+### Offensive magic defaults to rightmost enemy
+
+Spell picker for damage spells (Fire, etc.) and Sight now lands on the rightmost living enemy (the cell closest to the player party) instead of the first-live in array order. Encounter right col = idx 1/3; PVP right col = idx 0/2. Falls back to first-live if no right-col cell is alive.
+
 ## 1.7.107 — 2026-05-08
 
 ### BM halo centering — drop empty 8-px strip so canvas center matches content center
