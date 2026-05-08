@@ -230,7 +230,11 @@ function _buildBMHaloCanvas(haloPal) {
   const t4d = _make8(BM_T_4D, haloPal), t4e = _make8(BM_T_4E, haloPal);
   const t4f = _make8(BM_T_4F, haloPal), t50 = _make8(BM_T_50, haloPal);
 
-  const c = document.createElement('canvas'); c.width = 40; c.height = 32;
+  // 32×32 canvas — exactly matches halo content footprint. (The OAM puts
+  // the halo + cast flame in one 40-wide group, but the cast flame is a
+  // separate sprite in our render, so the halo canvas drops the leftmost
+  // 8-px strip.)
+  const c = document.createElement('canvas'); c.width = 32; c.height = 32;
   const cx = c.getContext('2d');
 
   const draw = (tile, x, y, hf, vf) => {
@@ -242,25 +246,25 @@ function _buildBMHaloCanvas(haloPal) {
   };
 
   // Row 0: outer ring top
-  draw(t49,  8, 0, false, false);
-  draw(t4a, 16, 0, false, false);
-  draw(t50, 24, 0, true,  true);
-  draw(t4f, 32, 0, true,  true);
+  draw(t49,  0, 0, false, false);
+  draw(t4a,  8, 0, false, false);
+  draw(t50, 16, 0, true,  true);
+  draw(t4f, 24, 0, true,  true);
   // Row 1: middle ring upper
-  draw(t4b,  8, 8, false, false);
-  draw(t4c, 16, 8, false, false);
-  draw(t4e, 24, 8, true,  true);
-  draw(t4d, 32, 8, true,  true);
+  draw(t4b,  0, 8, false, false);
+  draw(t4c,  8, 8, false, false);
+  draw(t4e, 16, 8, true,  true);
+  draw(t4d, 24, 8, true,  true);
   // Row 2: middle ring lower (V-flipped pair of row 1)
-  draw(t4d,  8, 16, false, false);
-  draw(t4e, 16, 16, false, false);
-  draw(t4c, 24, 16, true,  true);
-  draw(t4b, 32, 16, true,  true);
+  draw(t4d,  0, 16, false, false);
+  draw(t4e,  8, 16, false, false);
+  draw(t4c, 16, 16, true,  true);
+  draw(t4b, 24, 16, true,  true);
   // Row 3: outer ring bottom (V-flipped pair of row 0)
-  draw(t4f,  8,  24, false, false);
-  draw(t50, 16, 24, false, false);
-  draw(t4a, 24, 24, true,  true);
-  draw(t49, 32, 24, true,  true);
+  draw(t4f,  0, 24, false, false);
+  draw(t50,  8, 24, false, false);
+  draw(t4a, 16, 24, true,  true);
+  draw(t49, 24, 24, true,  true);
 
   return c;
 }
@@ -442,7 +446,7 @@ export function shouldDrawHalo(elapsedMs) {
 // for all current portraits and PVP bodies.
 
 const _SPRITE_HALF_W = 8;        // half-width of all current sprites (16 wide)
-const _HALO_HALF_W   = 20;       // halo canvas is 40×32
+const _HALO_HALF_W   = 16;       // halo canvas is 32×32 — content centered
 const _HALO_HALF_H   = 16;
 const _FLAME_W       = 16;       // cast flame canvas is 16×16 (WM + BM)
 const _FLAME_DY      = -3;       // flame top relative to sprite center

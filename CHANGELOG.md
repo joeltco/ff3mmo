@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.107 — 2026-05-08
+
+### BM halo centering — drop empty 8-px strip so canvas center matches content center
+
+Halo was built into a 40×32 canvas with the leftmost 8 px empty (legacy from when the halo-and-cast-flame group was a single 40-wide cluster in the OAM). Centering the canvas put the visible halo content 4 px to the right of the sprite center. Rebuilt as a 32×32 canvas — exactly the halo footprint — so canvas center is now content center. Halo wraps the player/ally portrait symmetrically (8 px overhang on each side) and the PVP body symmetrically (8 px left/right, 4 px top/bottom). Cast flame still overlaps the halo's leftmost ring tile by one column, matching the NES OAM stacking.
+
 ## 1.7.106 — 2026-05-08
 
 ### PVP target centering — projectile + burst align with body, not cell
