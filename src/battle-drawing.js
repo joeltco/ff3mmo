@@ -1688,20 +1688,18 @@ function drawBattleAllies() {
 }
 
 // Resolve the casting ally's center coords + elapsedMs, or null if no ally
-// is currently casting. Used by both the behind- and front-pass helpers so
-// their gating stays in sync.
+// is currently casting OR the cast visuals should be hidden (during
+// ally-magic-hit, the cast is over and the spell animation takes over).
 function _allyCastContext(panelTop) {
-  const isCastState = battleSt.battleState === 'ally-magic-cast' || battleSt.battleState === 'ally-magic-hit';
-  if (!isCastState) return null;
+  // Cast visuals only render during the buildup state (ally-magic-cast).
+  // During ally-magic-hit the spell animation plays; cast visuals are gone.
+  if (battleSt.battleState !== 'ally-magic-cast') return null;
   if (battleSt.allyMagicItemMode) return null;  // item mode suppresses cast visuals
   const i = battleSt.allyMagicCasterIdx;
   if (i < 0) return null;
   const ally = battleSt.battleAllies[i];
   if (!ally) return null;
-  const castDur = 600;
-  const elapsed = battleSt.battleState === 'ally-magic-cast'
-    ? Math.min(battleSt.battleTimer, castDur)
-    : castDur;
+  const elapsed = Math.min(battleSt.battleTimer, 600);
   const shakeOff = (battleSt.allyShakeTimer[i] > 0) ? (Math.floor(battleSt.allyShakeTimer[i] / 67) & 1 ? 2 : -2) : 0;
   const rowY = panelTop + i * ROSTER_ROW_H + shakeOff;
   return {

@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.105 — 2026-05-08
+
+### Ally + PVP cast: visuals also clear before spell animation
+
+`_allyCastContext` and the PVP enemy cast blocks were freezing `elapsed` at the cast duration (600 ms) during the hit state so the flame would hold its release frame through the spell animation. With v1.7.104 the cast visuals end at CAST_T_LUNGE = 800 ms, but 600 ms is still inside the visible window — so on ally Cure and PVP enemy magic, the halo + stars + flame stayed on screen during the heal sparkle / projectile. Fixed by gating the cast helpers to only run during `ally-magic-cast` / `pvp-enemy-magic-cast` (buildup state) and skipping them entirely during the hit state.
+
 ## 1.7.104 — 2026-05-08
 
 ### Cast visuals clear before spell animation starts

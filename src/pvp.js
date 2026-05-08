@@ -986,18 +986,15 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   if (weaponSpec && _weaponLayer === 'behind') drawBlade();
   // Cast BEHIND pass — BM halo wrapping the PVP body, drawn UNDER the body
   // so the body shows on top. WM has no behind-layer. Mirrored=true since
-  // PVP opponents face right toward the player party (halo's inner-pulse
-  // wing should point right, toward the party).
-  if (bs === 'pvp-enemy-magic-cast' || bs === 'pvp-enemy-magic-hit') {
-    if (pvpSt.pvpMagicCasterCellIdx === idx) {
-      const _opp = pvpSt.pvpMagicCasterCellIdx === 0
-        ? pvpSt.pvpOpponent
-        : pvpSt.pvpEnemyAllies[pvpSt.pvpMagicCasterCellIdx - 1];
-      const elapsed = bs === 'pvp-enemy-magic-cast'
-        ? Math.min(battleSt.battleTimer, PVP_MAGIC_CAST_MS)
-        : PVP_MAGIC_CAST_MS;
-      if (_opp) drawCasterCastBehind(ui.ctx, sprX + 8, sprY + 12, _opp.jobIdx, pvpSt.pvpMagicSpellId, elapsed, true);
-    }
+  // PVP opponents face right (halo's inner-pulse wing should point right).
+  // Only render during pvp-enemy-magic-cast (buildup) — during pvp-enemy-
+  // magic-hit the cast visuals are gone and the spell animation plays.
+  if (bs === 'pvp-enemy-magic-cast' && pvpSt.pvpMagicCasterCellIdx === idx) {
+    const _opp = pvpSt.pvpMagicCasterCellIdx === 0
+      ? pvpSt.pvpOpponent
+      : pvpSt.pvpEnemyAllies[pvpSt.pvpMagicCasterCellIdx - 1];
+    const elapsed = Math.min(battleSt.battleTimer, PVP_MAGIC_CAST_MS);
+    if (_opp) drawCasterCastBehind(ui.ctx, sprX + 8, sprY + 12, _opp.jobIdx, pvpSt.pvpMagicSpellId, elapsed, true);
   }
   if (isDying) {
     const delay = pvpSt.pvpDyingMap.get(idx) || 0;
@@ -1065,16 +1062,14 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
     }
   }
 
-  // Cast FRONT pass — drawn AFTER body. WM = stars + flame, BM = spark.
-  // mirror=true since PVP opponents face right (sparks on body's right).
-  const isCastState = bs === 'pvp-enemy-magic-cast' || bs === 'pvp-enemy-magic-hit';
-  if (isCastState && pvpSt.pvpMagicCasterCellIdx === idx) {
+  // Cast FRONT pass — stars + cast flame drawn AFTER body. mirror=true so
+  // flame anchors on the right side. Only during pvp-enemy-magic-cast —
+  // during the hit phase the spell animation runs instead.
+  if (bs === 'pvp-enemy-magic-cast' && pvpSt.pvpMagicCasterCellIdx === idx) {
     const _opp = pvpSt.pvpMagicCasterCellIdx === 0
       ? pvpSt.pvpOpponent
       : pvpSt.pvpEnemyAllies[pvpSt.pvpMagicCasterCellIdx - 1];
-    const elapsed = bs === 'pvp-enemy-magic-cast'
-      ? Math.min(battleSt.battleTimer, PVP_MAGIC_CAST_MS)
-      : PVP_MAGIC_CAST_MS;
+    const elapsed = Math.min(battleSt.battleTimer, PVP_MAGIC_CAST_MS);
     if (_opp) drawCasterCastFront(ui.ctx, sprX + 8, sprY + 12, _opp.jobIdx, pvpSt.pvpMagicSpellId, elapsed, true);
   }
 }
