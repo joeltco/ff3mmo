@@ -411,15 +411,18 @@ export function getCastFlameFrameIdx(elapsedMs) {
   return _FLAME_SEQ[step];
 }
 
-// WM stars draw during buildup + lunge phases. BM has no stars.
+// All cast visuals (stars, halo, flame) disappear at the buildup boundary
+// (CAST_T_LUNGE = 800 ms) so they're cleared BEFORE any spell animation
+// starts: projectile at CAST_T_THROW_PROJ_START = 800 ms (thrown spells)
+// and heal sparkle at CAST_T_HEAL = 1217 ms (heal-style spells). Both come
+// after the cast visuals end.
+
 export function shouldDrawCastStars(elapsedMs) {
-  return elapsedMs >= 0 && elapsedMs < CAST_T_CAST;
+  return elapsedMs >= 0 && elapsedMs < CAST_T_LUNGE;
 }
 
-// BM halo is shown for the full cast window (buildup + lunge). It's static
-// (single canvas) — no per-frame index.
 export function shouldDrawHalo(elapsedMs) {
-  return elapsedMs >= 0 && elapsedMs < CAST_T_CAST;
+  return elapsedMs >= 0 && elapsedMs < CAST_T_LUNGE;
 }
 
 // ── Centralized render helpers ───────────────────────────────────────────

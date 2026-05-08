@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.104 — 2026-05-08
+
+### Cast visuals clear before spell animation starts
+
+`shouldDrawHalo` and `shouldDrawCastStars` now end at `CAST_T_LUNGE` (800 ms) instead of `CAST_T_CAST` (1000 ms) so the halo + stars + flame are all gone before any spell animation begins:
+
+- Thrown spells (Fire): projectile starts at CAST_T_THROW_PROJ_START = 800 ms — cast visuals end at the same boundary.
+- Heal-style (Cure, Poisona): heal sparkle starts at CAST_T_HEAL = 1217 ms — cast visuals end 417 ms earlier with the cast pose held quiet between.
+
+Previously the halo extended 200 ms into the magic-hit state for Fire, overlapping the projectile flight.
+
 ## 1.7.103 — 2026-05-08
 
 ### BM cast: halo + separate cast flame (correct OAM structure this time)
