@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.111 — 2026-05-08
+
+### EMU SFX dumper now captures pre-consume CPU writes to $7F48-$7F4F
+
+The EMU tab's SFX strip dumper was polling `nes.cpu.mem[$7F49]` at frame boundaries. FF3J's audio engine consumes the high-bit pulse (`$80 | sfxId`) within the same NES frame the CPU writes it, so frame-boundary polling only ever caught the post-consume residual byte (e.g. `$40` after Fire's `$C0 → consumed`). That made it impossible to distinguish per-spell SFX from the dump alone — every spell whose index byte landed at `$40` looked identical to Fire.
+
+Fixed by hooking jsnes' `onBatteryRamWrite` callback (mapper writes to `$6000-$7FFF`) to log every write to `$7F48-$7F4F` into `_sfxWrites`. Each snap drains the buffer into the dump output as `// write $7F49 = $Cx -> NSF track $xx (music.js)` lines, so the actual fresh request is captured even when the residual byte never shows the high bit set. Buffer clears at REC start so the first snap reflects only activity within the capture window.
+
 ## 1.7.110 — 2026-05-08
 
 ### FIRE_BOOM SFX corrected to NES value (0x81)

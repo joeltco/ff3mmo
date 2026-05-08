@@ -139,7 +139,7 @@ function _initEmulator(romBuffer) {
       onFrame: _onFrame,
       onAudioSample: _onAudioSample,
       onStatusUpdate: (s) => { console.log('[jsnes]', s); _status('jsnes: ' + s); },
-      onBatteryRamWrite: () => {},
+      onBatteryRamWrite: _onBatteryRamWriteSfx,
       sampleRate: 44100,
     });
   } catch (e) {
@@ -758,6 +758,9 @@ async function _recordFrames(kind, count, gap) {
   const wasRunning = running;
   if (wasRunning) _stop();
   const startFrame = frameCount;
+  // Clear any pre-REC accumulated SFX writes so the first snap reflects only
+  // activity within the capture window.
+  _sfxWrites.length = 0;
   // NES NTSC: 60.0988 fps → 16.639 ms/frame. Wall-clock annotations are
   // computed from NES frame deltas (REC drives nes.frame() in a loop, so
   // elapsed time = elapsed frames × 16.639). Emit-time pacing isn't relevant.
@@ -870,16 +873,48 @@ function _dumpPpuctrl() {
 }
 
 // FF3J's sound engine uses RAM $7F49 as the SFX request register: ROM writes
-// `0x80 | sfxId` to fire a SFX, `0xFF` to cut. Capturing this strip per-snap
-// removes the disasm step from the magic-cast pipeline (1.7.16 had to source
-// MAGIC_CAST from `LDA #$A1 / STA $7F49` at FF3J 33/B0FF). NSF track number
-// our music.js uses = ROM byte − 0x3F. Surrounding bytes shown for context.
+// `0x80 | sfxId` to fire a SFX, `0xFF` to cut. NSF track our music.js uses =
+// ROM byte − 0x3F.
+//
+// IMPORTANT: snap-time polling of `nes.cpu.mem[$7F49]` is NOT sufficient. The
+// audio engine consumes the high-bit pulse within the same NES frame that
+// it's written, so a frame-boundary snapshot only ever sees the post-consume
+// residual (e.g. $40 after Fire's $C0 → consumed). To distinguish per-spell
+// SFX, the EMU intercepts every CPU write to $7F48-$7F4F via jsnes'
+// `onBatteryRamWrite` hook and queues the (addr,val) pair in `_sfxWrites`.
+// Each snap drains the queue into the dump output, so a fresh `$Cx → NSF $xx`
+// line appears even when the residual byte never shows the high bit set.
 const SFX_REQ_BASE = 0x7F48;
 const SFX_REQ_LEN  = 8;
+let _sfxWrites = []; // {addr, val} accumulated since last snap
+
+function _onBatteryRamWriteSfx(addr, val) {
+  if (addr >= SFX_REQ_BASE && addr < SFX_REQ_BASE + SFX_REQ_LEN) {
+    _sfxWrites.push({ addr: addr | 0, val: val & 0xFF });
+  }
+}
+
 function _dumpSfxStrip() {
   if (!nes?.cpu?.mem) return '// SFX request strip: (cpu not ready)';
   const lines = [];
   lines.push(`// SFX request strip $${_hex(SFX_REQ_BASE, 4)}-$${_hex(SFX_REQ_BASE + SFX_REQ_LEN - 1, 4)} (FF3J: $7F49 = SFX queue)`);
+
+  // Drain CPU writes to $7F48-$7F4F captured since last snap. These are the
+  // pre-consume values, which the polled-residual loop below cannot see.
+  if (_sfxWrites.length > 0) {
+    for (const w of _sfxWrites) {
+      let note = '';
+      if (w.addr === 0x7F49) {
+        if (w.val === 0xFF) note = '  (cut SFX)';
+        else if (w.val >= 0x80) note = `  -> NSF track $${_hex(w.val - 0x3F, 2)} (music.js)`;
+      }
+      lines.push(`//   write $${_hex(w.addr, 4)} = $${_hex(w.val, 2)}${note}`);
+    }
+    _sfxWrites.length = 0;
+  } else {
+    lines.push(`//   (no CPU writes to $7F48-$7F4F since last snap)`);
+  }
+
   for (let i = 0; i < SFX_REQ_LEN; i++) {
     const a = SFX_REQ_BASE + i;
     const v = nes.cpu.mem[a] | 0;
@@ -888,7 +923,7 @@ function _dumpSfxStrip() {
       if (v === 0x00) note = '  (idle)';
       else if (v === 0xFF) note = '  (cut SFX)';
       else if (v >= 0x80) note = `  -> NSF track $${_hex(v - 0x3F, 2)} (music.js)`;
-      else note = '  (raw — high bit not set)';
+      else note = '  (raw — high bit not set; see write log above for the fresh request)';
     }
     lines.push(`//   $${_hex(a, 4)} = $${_hex(v, 2)}${note}`);
   }
