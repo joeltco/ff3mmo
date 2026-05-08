@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.106 — 2026-05-08
+
+### PVP target centering — projectile + burst align with body, not cell
+
+`_getMagicTargetCenter` was using `pvpEnemyCellCenter` (24×32 cell center) for PVP enemy targets, while the PVP-side cast halo centers on body center. Body sits 4 px below cell center inside the cell (cell is 24×32, body 16×24 with 4 px top/bottom padding). Adjusted the spell-target center to body center (cellTop+16) so projectile flight and impact burst land at the same vertical position the PVP cast halo wraps.
+
 ## 1.7.105 — 2026-05-08
 
 ### Ally + PVP cast: visuals also clear before spell animation

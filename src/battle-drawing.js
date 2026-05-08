@@ -616,8 +616,12 @@ function _getMagicTargetCenter(tgt) {
     };
   }
   if (pvpSt.isPVPBattle) {
+    // pvpEnemyCellCenter returns the 24×32 CELL center; the body inside is
+    // 16×24 starting 4 px from cell top, so body center is 4 px below cell
+    // center. Aim the projectile + burst at body center for vertical
+    // alignment with the PVP-side cast halo (which centers on the body).
     const { x, y } = _pvpEnemyCellCenter(tgt.index);
-    return { x, y };
+    return { x, y: y + 4 };
   }
   // Boss
   return {
