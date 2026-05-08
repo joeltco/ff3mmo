@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.126 — 2026-05-08
+
+### BM + RM added to fake player pool
+
+Pool grows from 23 → 31 with 4 Black Mages (Vivi, Nephele, Korra, Theron) and 4 Red Mages (Asher, Verena, Caelum, Quill). All starting jobs (OK / Fi / Mo / WM / BM / RM) are now represented.
+
+- BMs equip Staff (`0x0E`) + Leather+Cap (`0x73` / `0x62`), `knownSpells` chosen from BM Lv1 (Fire `0x31`, Blizzard `0x32`, Sleep `0x33`) by level — lower-level BMs know fewer spells.
+- RMs are hybrid: Longsword (`0x24`) + shield for the higher-level / more martial slots, Dagger (`0x1F`) for lower-level. `knownSpells` mix WM + BM Lv1 (Cure `0x34` plus subset of Fire/Blizzard/Sleep). `generateAllyStats` already gives RM the canonical mid-MND scaling (`mndW = 2`).
+- Locations spread across `world / ur / cave-0..3 / crystal` so each class shows up at multiple zones for the roster HUD + PVP join roll.
+- BM render palettes already wired (BLACK_MAGE_PALETTES for battle, BM_WALK_TOP/BTM for overworld). RM uses PLAYER_PALETTES + Onion Knight walk fallback per the user's "RM is all red" call.
+
+PVP offensive-magic AI for BM/RM is NOT wired here — fake BMs/RMs in PVP currently fall back to physical attacks with their staff/sword. Wiring offensive cast routines (`_tryPVPEnemyFire` / `_tryPVPEnemySleep` / etc.) is a separate task.
+
 ## 1.7.125 — 2026-05-08
 
 ### RM overworld walk palette wired

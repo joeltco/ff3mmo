@@ -31,6 +31,16 @@ export const PLAYER_POOL = [
   { name: 'Ryuji',   level: 5,  palIdx: 7, camper: false, loc: 'cave-2',  jobIdx: 2, weaponR: 0x06,               armorId: 0x73, helmId: 0x62 },                 // Mo — Nunchuck / Leather+Cap
   { name: 'Hana',    level: 3,  palIdx: 5, camper: false, loc: 'world',   jobIdx: 2, weaponR: 0,                  armorId: 0x73, helmId: 0x62 },                 // Mo — Unarmed / Leather+Cap
   { name: 'Tetsuo',  level: 5,  palIdx: 3, camper: true,  loc: 'cave-1',  jobIdx: 2, weaponR: 0,                  armorId: 0x73, helmId: 0x62 },                 // Mo — Unarmed / Leather+Cap
+  // jobIdx 4 = Black Mage. Staff + Leather+Cap, knownSpells from BM Lv1: Fire/Blizzard/Sleep.
+  { name: 'Vivi',    level: 4,  palIdx: 1, camper: false, loc: 'world',   jobIdx: 4, weaponR: 0x0E,               armorId: 0x73, helmId: 0x62, knownSpells: [0x31, 0x32] },             // BM — Staff / Leather+Cap (Fire, Blizzard)
+  { name: 'Nephele', level: 5,  palIdx: 2, camper: true,  loc: 'cave-2',  jobIdx: 4, weaponR: 0x0E,               armorId: 0x73, helmId: 0x62, knownSpells: [0x31, 0x32, 0x33] },       // BM — Staff / Leather+Cap (Fire, Blizzard, Sleep)
+  { name: 'Korra',   level: 3,  palIdx: 4, camper: false, loc: 'cave-0',  jobIdx: 4, weaponR: 0x0E,               armorId: 0x73, helmId: 0x62, knownSpells: [0x31] },                   // BM — Staff / Leather+Cap (Fire)
+  { name: 'Theron',  level: 5,  palIdx: 6, camper: false, loc: 'crystal', jobIdx: 4, weaponR: 0x0E,               armorId: 0x73, helmId: 0x62, knownSpells: [0x31, 0x32, 0x33] },       // BM — Staff / Leather+Cap (Fire, Blizzard, Sleep)
+  // jobIdx 5 = Red Mage. Hybrid — Longsword/Dagger + Leather+Cap+Shield. knownSpells mix WM Lv1 + BM Lv1 (Cure/Fire/Blizzard/Sleep).
+  { name: 'Asher',   level: 5,  palIdx: 1, camper: false, loc: 'ur',      jobIdx: 5, weaponR: 0x24,               armorId: 0x73, helmId: 0x62, shieldId: 0x58, knownSpells: [0x34, 0x31] },             // RM — Longsword / Leather+Cap+Shield (Cure, Fire)
+  { name: 'Verena',  level: 4,  palIdx: 3, camper: false, loc: 'cave-1',  jobIdx: 5, weaponR: 0x1F,               armorId: 0x73, helmId: 0x62, knownSpells: [0x34, 0x31, 0x32] },                       // RM — Dagger / Leather+Cap (Cure, Fire, Blizzard)
+  { name: 'Caelum',  level: 5,  palIdx: 5, camper: true,  loc: 'cave-3',  jobIdx: 5, weaponR: 0x24,               armorId: 0x73, helmId: 0x62, shieldId: 0x58, knownSpells: [0x34, 0x31, 0x32, 0x33] }, // RM — Longsword / Leather+Cap+Shield (Cure, Fire, Blizzard, Sleep)
+  { name: 'Quill',   level: 3,  palIdx: 7, camper: false, loc: 'world',   jobIdx: 5, weaponR: 0x1F,               armorId: 0x73, helmId: 0x62, knownSpells: [0x34] },                                   // RM — Dagger / Leather+Cap (Cure)
 ];
 
 // Palette variants — only color 3 changes (original $16 = red outfit)
