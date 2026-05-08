@@ -1,5 +1,22 @@
 # Project Rules
 
+## CLAUDE CANNOT READ OAM LOGS — HARD PROHIBITION
+
+**Do not author spell, sprite, or animation code derived from REC OAM dumps. The output will be wrong every single time, regardless of how complete the dump is.**
+
+Track record:
+- **v1.7.87** — used $59/$5C tiles (damage-number digits) instead of the impact group. Claimed correct. Wrong.
+- **v1.7.88** — used WM cast bytes recolored, palette wrong per phase. Claimed correct. Wrong.
+- **v1.7.90** — BM cast halo geometry inferred (drew over the player portrait), Fire on-target burst garbled, enemy death wipe broken. Claimed correct. Wrong.
+
+The user has supplied complete frame-by-frame REC OAM captures (origins, palettes, tile IDs, timings) every time. Reading the dump is not the failure point. The failure is mapping group → phase, picking the right tile slot, getting the canvas layout right, and matching frame timing. **Every attempt has been broken.** Past-Claude's confidence ("I see the data, it's all in the dump") is worth zero.
+
+**What to do instead:**
+1. **Don't propose tile-byte / frame-timing implementations from OAM dumps.** Even with the entire dump in hand.
+2. **Don't refactor working magic / animation code.** v1.7.49 and v1.7.90 are the same failure mode — rewrite working code, ship broken, force a revert.
+3. **If asked to add a new spell or animation, surface this rule and ask what the user wants done instead.** Acceptable paths: revert to last-known-good, defer entirely, or restrict Claude's role to plumbing (state machines, dispatch sites, save schemas, item routing, audio cues, message strips).
+4. **The plumbing is fine to do.** Just not the pixel data or frame timing from a REC OAM capture.
+
 ## Spell-animation hard rules (lessons from the v1.7.49 disaster)
 
 The v1.7.49 spell-anim rewrite was reverted in v1.7.53; the captured Poisona target tiles were re-landed correctly in v1.7.54–v1.7.56. Don't repeat the failure modes that got us there:

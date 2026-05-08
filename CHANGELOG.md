@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.94 — 2026-05-07
+
+### Fire projectile bytes fixed; OAM parity-gate harness shipped
+
+- `src/projectile-anim.js` — split `T_58` into `T_58_SIGHT` (unchanged from `f5783`) and `T_58_FIRE` (new, from `f9627` frames 46-55). Header comment was wrong: it claimed "the bitmap is identical across spells; only the palette changes." MMC3 reloads the CHR slot per scene — Sight and Fire have distinct `$58` bytes (11 of 16 bytes differ). Past versions shipped Sight bytes recolored to fire palette, which is why the projectile rendered as the wrong shape.
+- New tooling under `tools/`:
+  - `render-oam-dump.js` — mechanical NES 2bpp tile decoder; turns a REC OAM dump into per-frame PNGs + a contact sheet. Zero interpretation; deterministic.
+  - `classify-spell-phases.js` — frame-order rules (party x ≥ 160, enemy x ≤ 128, monster-row y 40–60, SP3 palette transitions) auto-tag cast / projectile / impact / scorch / death-wipe / popup phases of a dump.
+  - `parity-check-spell.js` — diffs source-code tile-byte constants against the dump's actual bytes for a named spell. Currently covers Fire impact ($31), Fire projectile, BM cast pose. Exits non-zero on any byte mismatch.
+- Verified PASS at deploy time:
+  - `fire` (impact, 10 tiles `$49–$52` + palette)
+  - `fire-projectile` ($58 + palette)
+  - `bm-cast` (14 tiles `$49–$57` + palette)
+- The harness only checks tile bytes + palette, not render-site dispatch or position math. If a spell still looks wrong in-game with PASS gates, the bug is downstream of the byte tables.
+- `CLAUDE.md` — hard-prohibition rule formalized at the top of project rules: Claude cannot author spell/sprite/animation code from REC OAM dumps directly. The harness is the in-bounds path forward — extract bytes mechanically, gate parity, ship.
+
 ## 1.7.93 — 2026-05-07
 
 - Early error reporter installed in index.html before module graph evaluates,

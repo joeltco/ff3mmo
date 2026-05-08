@@ -1,11 +1,12 @@
 // Projectile delivery for thrown spells (Sight, Fire, future BM damage).
-// FF3 NES uses a single 8x8 sprite ($58) that flies caster→target after the
-// cast pose, VFLIP-toggling every frame. The bitmap is identical across spells;
-// only the palette changes per school.
+// FF3 NES uses an 8x8 sprite at slot $58 that flies caster→target after the
+// cast pose, VFLIP-toggling every frame. The bytes in slot $58 are NOT shared
+// across spells — MMC3 reloads the CHR slot per-scene, so Sight and Fire each
+// have their own $58 bitmap.
 //
 // Captured trajectories (OAM origin coords):
 //   Sight (REC OAM 2026-05-07, f5783): (176, 53) → (38, 128) over ~10 frames
-//   Fire  (REC OAM 2026-05-07, f9627): same $58 tile in fire palette
+//   Fire  (REC OAM 2026-05-07, f9627): same trajectory shape, distinct bytes
 // The runtime render path interpolates between caster-portrait (x,y) and
 // target-portrait (x,y), so captured endpoints aren't reused — only the timing.
 //
@@ -15,15 +16,29 @@
 
 import { NES_SYSTEM_PALETTE } from './tile-decoder.js';
 
-const T_58 = new Uint8Array([
+// Sight projectile bytes (REC OAM 2026-05-07 f5783).
+const T_58_SIGHT = new Uint8Array([
   0x00, 0x32, 0x48, 0xB4, 0xA4, 0x49, 0x30, 0x00,
   0x00, 0x04, 0x30, 0x78, 0x78, 0x32, 0x00, 0x00,
+]);
+
+// Fire projectile bytes (REC OAM 2026-05-07 f9627, frames 46-55, tile $58).
+// Distinct from Sight's $58 — CHR-bank reload between scenes.
+const T_58_FIRE = new Uint8Array([
+  0x00, 0x14, 0x59, 0xAC, 0xB8, 0x5E, 0x28, 0x00,
+  0x00, 0x00, 0x38, 0x70, 0x70, 0x38, 0x00, 0x00,
 ]);
 
 // Palette per school. Add a new key when capturing a new BM/WM throw palette.
 const PROJECTILE_PAL = {
   sight: [0x0F, 0x29, 0x31, 0x30],  // green / light cyan / white
   fire:  [0x0F, 0x16, 0x27, 0x30],  // red / orange / white (REC OAM 2026-05-07 f9627)
+};
+
+// Per-school projectile bitmap. Lookup matches PROJECTILE_PAL keys.
+const PROJECTILE_TILE = {
+  sight: T_58_SIGHT,
+  fire:  T_58_FIRE,
 };
 
 let _byKey = null;  // { sight: { normal, vflip }, fire: { normal, vflip } }
@@ -65,7 +80,7 @@ function _vflip(src) {
 export function initProjectile() {
   _byKey = {};
   for (const [key, pal] of Object.entries(PROJECTILE_PAL)) {
-    const normal = _make8(T_58, pal);
+    const normal = _make8(PROJECTILE_TILE[key], pal);
     _byKey[key] = { normal, vflip: _vflip(normal) };
   }
 }
