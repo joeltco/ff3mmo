@@ -13,7 +13,7 @@ import { setPlayerHealNum, setPlayerDamageNum, getAllyDamageNums, setEnemyDmgNum
          tickHealNums, clearHealNums } from './damage-numbers.js';
 import { SPELLS, getSpellMPCost, isMultiTargetSpell } from './data/spells.js';
 import { STATUS, removeStatus } from './status-effects.js';
-import { CAST_PHASE_MS, CAST_T_HEAL, CAST_TOTAL_MS } from './cast-anim.js';
+import { CAST_PHASE_MS, CAST_T_HEAL, CAST_TOTAL_MS, CAST_T_THROW_RETURN } from './cast-anim.js';
 import { queueBattleMsg, isBattleMsgBusy } from './battle-msg.js';
 import { _nameToBytes } from './text-utils.js';
 import { elemMultiplier } from './battle-math.js';
@@ -271,6 +271,16 @@ function _applySpellEffect(target) {
     return;
   }
 
+  // Damage spells (Fire, future BM family) on a friendly target — picker
+  // defaults to enemy, but if the user navigates to a friendly cell the spell
+  // would otherwise fall through to the heal path below and silently restore
+  // HP. Surface "Ineffective" instead and don't apply any effect.
+  if (spell.type === 'damage') {
+    queueBattleMsg(_nameToBytes('Ineffective'));
+    playSFX(SFX.ERROR);
+    return;
+  }
+
   // Friendly target paths (player / ally)
   const isCureStatus = spell.target === 'cure_status';
   const isHeal = spell.element === 'recovery';
@@ -334,12 +344,26 @@ export function isSightSpell(spellId) {
 // For recovery spells, timing matches the FF3 NES OAM capture (~1667ms total).
 export function updateSpellCast(dt) {
   const useCastAnim = _isCastAnimSpell();
-  const castDur     = useCastAnim ? CAST_PHASE_MS.buildup : 250;
-  // CAST_T_HEAL is measured from t=0 of the *whole* anim; magic-hit starts at
-  // CAST_T_LUNGE (= buildup end), so heal-effect time within magic-hit is the
-  // delta from CAST_T_LUNGE.
-  const hitEffectMs = useCastAnim ? (CAST_T_HEAL - CAST_PHASE_MS.buildup) : 400;
-  const hitTotalMs  = useCastAnim ? (CAST_TOTAL_MS - CAST_PHASE_MS.buildup) : 1100;
+  const spell = SPELLS.get(_spellId);
+  const isThrown = !!(spell && (spell.target === 'sight' || spell.element === 'fire'));
+  const castDur  = useCastAnim ? CAST_PHASE_MS.buildup : 250;
+  // hitEffectMs = when within magic-hit the spell effect applies (and damage /
+  // heal number appears). hitTotalMs = total duration of magic-hit state.
+  // Both measured from magic-hit start (= elapsedMs CAST_PHASE_MS.buildup).
+  //
+  // - Heal-style (Cure, Poisona): effect at CAST_T_HEAL boundary (sparkle
+  //   start), total = CAST_TOTAL_MS - buildup (matches OAM Cure timing).
+  // - Throw-style (Fire): effect at impact END so the damage number doesn't
+  //   pop mid-burst — extend total by 500 ms so the number's bounce
+  //   actually plays before the state transitions to monster-death.
+  const hitEffectMs = useCastAnim
+    ? (isThrown ? (CAST_T_THROW_RETURN - CAST_PHASE_MS.buildup)
+                : (CAST_T_HEAL - CAST_PHASE_MS.buildup))
+    : 400;
+  const hitTotalMs  = useCastAnim
+    ? (isThrown ? (CAST_T_THROW_RETURN - CAST_PHASE_MS.buildup + 500)
+                : (CAST_TOTAL_MS - CAST_PHASE_MS.buildup))
+    : 1100;
 
   if (battleSt.battleState === 'magic-cast') {
     if (battleSt.battleTimer >= castDur) {

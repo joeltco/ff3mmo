@@ -394,10 +394,11 @@ function _battleInputMagicSelect() {
     if (ps.mp < cost) { playSFX(SFX.ERROR); return; }
     playSFX(SFX.CONFIRM);
     // Default-target side per spell semantics. Heal / status-cure white magic
-    // defaults to player so the common case is one Z-press on self; Sight
-    // (scan) defaults to enemy because that's almost always who you want to
-    // inspect. Other targets (Right) still reach all the cells.
-    if (spell.target === 'sight') {
+    // defaults to player so the common case is one Z-press on self. Sight
+    // (scan) and damage spells (Fire, future BM family) default to enemy —
+    // first live cell — since that's the primary use case.
+    const defaultsToEnemy = spell.target === 'sight' || spell.type === 'damage';
+    if (defaultsToEnemy) {
       let firstLive = 0;
       for (let i = 0; i < _itemTargetCnt(); i++) {
         if (_itemTargetAlive(i)) { firstLive = i; break; }

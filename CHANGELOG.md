@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.97 — 2026-05-08
+
+### Damage spell targeting + damage-number timing
+
+- **Default target = enemy for damage spells** (`src/input-handler.js`) — the spell-target picker defaulted to player for everything except Sight, so Fire opened the picker on self. Now any spell with `target === 'sight'` or `type === 'damage'` defaults to the first live enemy. Heal / status-cure / revive still default to player (one Z-press on self stays the common path for Cure).
+- **Self-target on damage spell no longer heals** (`src/spell-cast.js`) — friendly-target damage spells were falling through to the heal branch (any non-sight, non-cure-status spell on player → `ps.hp += amount`). Casting Fire on self literally restored HP. Now `_applySpellEffect` short-circuits damage spells on friendly targets with the same "Ineffective" battle msg + ERROR sfx that Sight uses, no HP change.
+- **Damage number timing** (`src/spell-cast.js`) — old `hitEffectMs` for thrown spells fired the damage at `CAST_T_HEAL - buildup` = 417 ms into magic-hit, which lands mid-impact-burst (impact spans 150–700 ms inside magic-hit). Damage number popped while the flame was still erupting. Now thrown spells:
+  - apply damage at impact END (`CAST_T_THROW_RETURN - buildup` = 700 ms), so the number appears as the burst resolves
+  - extend `hitTotalMs` by 500 ms so the damage number's bounce actually plays before the state transitions to `monster-death` / `boss-dissolve` / `pvp-dissolve`
+- Heal-style timing untouched — Cure / Poisona keep `hitEffectMs = CAST_T_HEAL - buildup` and the original total.
+
 ## 1.7.96 — 2026-05-07
 
 ### BM cast halo no longer covers player; spell-kill victory soft-lock fixed
