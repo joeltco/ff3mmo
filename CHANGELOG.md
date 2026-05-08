@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.122 — 2026-05-08
+
+### Sleep target picker defaults to enemy side
+
+Pressing Z on Sleep was landing the cursor on the player portrait — the gate at `input-handler.js:401` only flagged `target === 'sight'` or `type === 'damage'` as enemy-default. Sleep is `type: 'sleep'`, `target: 'enemy_status'` — neither matched. Extended the gate to cover any spell that targets the enemy side: `'enemy'`, `'enemy_status'`, `'all_enemies'`, plus the existing `'sight'` and damage-type. Future status spells (Confuse, Death, all_status family) get correct defaults out of the gate.
+
 ## 1.7.121 — 2026-05-08
 
 ### Fire / Blizzard / Sleep all multi-targetable

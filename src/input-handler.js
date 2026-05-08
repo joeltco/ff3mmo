@@ -395,10 +395,15 @@ function _battleInputMagicSelect() {
     playSFX(SFX.CONFIRM);
     // Default-target side per spell semantics. Heal / status-cure white magic
     // defaults to player so the common case is one Z-press on self. Sight
-    // (scan) and damage spells (Fire, future BM family) default to enemy —
-    // RIGHTMOST live cell first (closest to player party), like normal melee
-    // targeting feels — fall back to first-live if no right-col alive.
-    const defaultsToEnemy = spell.target === 'sight' || spell.type === 'damage';
+    // (scan), damage spells (Fire family), and enemy-status spells (Sleep,
+    // Confuse, Death, all_status family) default to enemy — RIGHTMOST live
+    // cell first (closest to player party), like normal melee targeting
+    // feels — fall back to first-live if no right-col alive.
+    const defaultsToEnemy = spell.target === 'sight'
+                         || spell.target === 'enemy'
+                         || spell.target === 'enemy_status'
+                         || spell.target === 'all_enemies'
+                         || spell.type === 'damage';
     if (defaultsToEnemy) {
       let pick = -1;
       const cnt = _itemTargetCnt();
