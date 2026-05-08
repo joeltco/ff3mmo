@@ -232,12 +232,12 @@ export const ITEMS = new Map([
   [0xba, { type: 'battle_item', price:  3000, animSpellId: 0x1a }], // Turtle Shell → Protect (self-buff; mechanics stub until buff system)
   [0xbb, { type: 'battle_item', price:  3000, animSpellId: 0x01 }], // Devil Note → Death (instakill enemy_status)
   [0xbc, { type: 'battle_item', price:  4000, animSpellId: 0x17 }], // Black Hole → Erase (no-op until enemy buff state exists)
-  [0xbd, { type: 'battle_item', price:  5000 }],                    // Black Musk — unmapped (ambiguous; not in shrine table)
+  [0xbd, { type: 'battle_item', price:  5000, animSpellId: 0x01 }], // Black Musk → Death (instakill enemy_status; same as Devil Note)
   [0xbe, { type: 'battle_item', price:  3000, animSpellId: 0x09 }], // Lilith Kiss → Drain (damage enemy + heal player)
   [0xbf, { type: 'battle_item', price:  3000, animSpellId: 0x2d }], // Raven Yawn → Aero (per shrine: Imp'sYawn = Aero, ice/air damage)
-  [0xc1, { type: 'battle_item', price:  3000 }],                    // Tranquilizer — unmapped (ambiguous; not in shrine table)
+  [0xc1, { type: 'battle_item', price:  3000, animSpellId: 0x1e }], // Tranquilizer → Shade (all_status, includes paralysis)
   [0xc3, { type: 'battle_item', price:  2000, animSpellId: 0x33 }], // Sheep Pillow → Sleep (enemy_status)
-  [0xc5, { type: 'battle_item', price:  5000 }],                    // Curtain — unmapped (ambiguous; not in shrine table)
+  [0xc5, { type: 'battle_item', price:  5000, animSpellId: 0x0c }], // Curtain → Reflect (self-buff stub until reflect mechanics ship)
   [0xc6, { type: 'battle_item', price:  5000, animSpellId: 0x00 }], // Chocobo's Wrath → Flare
   [0xc7, { type: 'battle_item', price:  5000, animSpellId: 0x05 }], // White Musk → Holy
 ]);

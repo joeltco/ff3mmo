@@ -171,11 +171,11 @@ export function startSpellCast(spellId, targetSpec, opts = {}) {
     _targets = [{ type: 'player' }];
   }
 
-  // Self-buff spells (Haste, Protect) always target the caster, regardless of
-  // what enemy/ally the user picked. Battle items like BachusWine / TurtleShell
-  // route through here as item-use; the picker may have selected an enemy but
-  // the buff applies to the player.
-  if (spell.target === 'haste' || spell.target === 'protect') {
+  // Self-buff spells (Haste, Protect, Reflect) always target the caster,
+  // regardless of what enemy/ally the user picked. Battle items like
+  // BachusWine / TurtleShell / Curtain route through here as item-use; the
+  // picker may have selected an enemy but the buff applies to the player.
+  if (spell.target === 'haste' || spell.target === 'protect' || spell.target === 'reflect') {
     _targets = [{ type: 'player' }];
   }
 
@@ -259,6 +259,24 @@ function _applyEnemyEffect(idx, spell) {
         mon.hp = 0;
         _setEnemyDmg(idx, 0, false);
         _playSpellSFXOnce(SFX.MONSTER_DEATH);
+      } else {
+        _setEnemyDmg(idx, 0, true);  // miss
+      }
+      return;
+    }
+    // type='all_status' (Shade) — try every "major" debuff against the enemy,
+    // each rolled independently against spell.hit. Tranquilizer dispatches
+    // through this; per FF3 NES Shade attempts paralysis and other statuses.
+    if (spell.type === 'all_status') {
+      if (!mon.status) return;
+      const candidates = ['paralysis', 'blind', 'silence', 'sleep', 'confuse'];
+      let anyApplied = 0;
+      for (const name of candidates) {
+        const f = tryInflictStatus(mon.status, name, spell.hit, mon.statusResist);
+        if (f) anyApplied |= f;
+      }
+      if (anyApplied) {
+        _playSpellSFXOnce(SFX.SW_HIT);
       } else {
         _setEnemyDmg(idx, 0, true);  // miss
       }
@@ -402,6 +420,14 @@ function _applySpellEffect(target) {
   }
   if (spell.target === 'protect') {
     queueBattleMsg(_nameToBytes('Protect'));
+    _playSpellSFXOnce(SFX.CURE);
+    return;
+  }
+  if (spell.target === 'reflect') {
+    // Curtain (item) → Reflect spell. Real reflect mechanics (bounce magic
+    // back at attacker for a limited time) need a player-state buff system
+    // that doesn't exist yet — stub like haste/protect.
+    queueBattleMsg(_nameToBytes('Reflect'));
     _playSpellSFXOnce(SFX.CURE);
     return;
   }

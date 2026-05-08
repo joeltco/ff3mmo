@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.118 — 2026-05-08
+
+### Final 3 battle items mapped — all 20 now modular
+
+- $bd Black Musk → Death `$01` (instakill, same handler as Devil Note)
+- $c1 Tranquilizer → Shade `$1e` (all_status — engine extended to roll paralysis/blind/silence/sleep/confuse against spell.hit each)
+- $c5 Curtain → Reflect `$0c` (self-buff stub until reflect mechanics ship; `target='reflect'` joins haste/protect in the self-target override list)
+
+`_applyEnemyEffect` gains a `type='all_status'` branch — for each candidate status it calls `tryInflictStatus(mon.status, name, spell.hit, mon.statusResist)` independently. Tranquilizer paralyzes + may also blind/silence/sleep/confuse depending on rolls. `_applySpellEffect` (player path) gains a `target='reflect'` branch that mirrors haste/protect (battle msg + CURE SFX, mechanics deferred).
+
+All 20 battle items now route through `startSpellCast` as `isItemUse: true`. The legacy `startMagicItem` path is dead code for items but still wired in `battle-update.js:583` for the `sw-throw`/`sw-hit` battle states. Cleanup of those (and `bsc.swPhaseCanvases`, the `pvp-opp-sw-hit` PVP wiring) is now safe to do in a follow-up.
+
 ## 1.7.117 — 2026-05-08
 
 ### Spell-cast handles status / drain / self-buff target types — remaining 7 battle items now route through modular path
