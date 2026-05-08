@@ -13,7 +13,7 @@ import { setPlayerHealNum, setPlayerDamageNum, getAllyDamageNums, setEnemyDmgNum
          tickHealNums, clearHealNums } from './damage-numbers.js';
 import { SPELLS, getSpellMPCost, isMultiTargetSpell } from './data/spells.js';
 import { STATUS, removeStatus } from './status-effects.js';
-import { CAST_PHASE_MS, CAST_T_HEAL, CAST_TOTAL_MS, CAST_T_THROW_RETURN } from './cast-anim.js';
+import { CAST_PHASE_MS, CAST_T_HEAL, CAST_TOTAL_MS, CAST_T_THROW_RETURN, CAST_T_THROW_IMPACT_START } from './cast-anim.js';
 import { queueBattleMsg, isBattleMsgBusy } from './battle-msg.js';
 import { _nameToBytes } from './text-utils.js';
 import { elemMultiplier } from './battle-math.js';
@@ -42,12 +42,23 @@ let _effectApplied = false;
 // -1 = single-target, per-target re-roll (legacy behavior). >=0 = pre-rolled
 // pool divided by targets.length at apply time.
 let _baseAmount = -1;
+// Fires once per cast — set when the spell SFX has played so the apply path
+// doesn't double up. Lets the SFX trigger fire EARLY (at spell-anim start)
+// instead of waiting until the damage-number pops at hitEffectMs.
+let _sfxPlayed = false;
+
+function _playSpellSFXOnce(sfx) {
+  if (_sfxPlayed) return;
+  playSFX(sfx);
+  _sfxPlayed = true;
+}
 
 export function getSpellTargets() { return _targets; }
 export function getSpellHitIdx() { return _hitIdx; }
 export function getCurrentSpellId() { return _spellId; }
 export function resetSpellCastVars() {
   _spellId = 0; _targets = []; _hitIdx = 0; _effectApplied = false; _baseAmount = -1;
+  _sfxPlayed = false;
 }
 
 // NES FF3 magic formula (31/B1B4): atk = floor(stat/2) + power, +rand(0..atk/2).
@@ -88,6 +99,7 @@ export function startSpellCast(spellId, targetSpec) {
   _hitIdx = 0;
   _effectApplied = false;
   _baseAmount = -1;
+  _sfxPlayed = false;
 
   const mode = (targetSpec && targetSpec.targetMode) || 'single';
   const onAllies = !!targetSpec && (targetSpec.enemyIndex == null);
@@ -187,7 +199,7 @@ function _applyEnemyEffect(idx, spell) {
   // OAM capture's idle→$40 trigger at frame 39 of the f5887 dump.
   if (spell.target === 'sight') {
     queueBattleMsg(_nameToBytes('Ineffective'));
-    playSFX(SFX.SIGHT);
+    _playSpellSFXOnce(SFX.SIGHT);
     return;
   }
 
@@ -216,7 +228,7 @@ function _applyEnemyEffect(idx, spell) {
       const heal = Math.min(amount, 9999 - curHP);
       setEnemyHP(curHP + heal);
       setEnemyHealNum({ value: heal, timer: 0, index: idx });
-      playSFX(SFX.CURE);
+      _playSpellSFXOnce(SFX.CURE);
       return;
     }
     if (!mon || mon.hp <= 0) return;
@@ -225,12 +237,12 @@ function _applyEnemyEffect(idx, spell) {
       mon.hp = Math.max(0, mon.hp - dmg);
       _setEnemyDmg(idx, dmg, false);
       battleSt.battleShakeTimer = BATTLE_SHAKE_MS;
-      playSFX(SFX.SW_HIT);
+      _playSpellSFXOnce(SFX.SW_HIT);
     } else {
       const heal = Math.min(amount, (mon.maxHP || mon.hp) - mon.hp);
       mon.hp += heal;
       setEnemyHealNum({ value: heal, timer: 0, index: idx });
-      playSFX(SFX.CURE);
+      _playSpellSFXOnce(SFX.CURE);
     }
     return;
   }
@@ -241,7 +253,7 @@ function _applyEnemyEffect(idx, spell) {
     setEnemyHP(Math.max(0, getEnemyHP() - dmg));
     _setEnemyDmg(idx, dmg, false);
     battleSt.battleShakeTimer = BATTLE_SHAKE_MS;
-    playSFX(spell.element === 'fire' ? SFX.FIRE_BOOM : SFX.SW_HIT);
+    _playSpellSFXOnce(spell.element === 'fire' ? SFX.FIRE_BOOM : SFX.SW_HIT);
     return;
   }
   if (!mon || mon.hp <= 0) return;
@@ -250,7 +262,7 @@ function _applyEnemyEffect(idx, spell) {
   mon.hp = Math.max(0, mon.hp - dmg);
   _setEnemyDmg(idx, dmg, false);
   battleSt.battleShakeTimer = BATTLE_SHAKE_MS;
-  playSFX(SFX.SW_HIT);
+  _playSpellSFXOnce(SFX.SW_HIT);
 }
 
 function _applySpellEffect(target) {
@@ -267,7 +279,7 @@ function _applySpellEffect(target) {
   // "Ineffective"; SFX matches the enemy path.
   if (spell.target === 'sight') {
     queueBattleMsg(_nameToBytes('Ineffective'));
-    playSFX(SFX.SIGHT);
+    _playSpellSFXOnce(SFX.SIGHT);
     return;
   }
 
@@ -277,7 +289,7 @@ function _applySpellEffect(target) {
   // HP. Surface "Ineffective" instead and don't apply any effect.
   if (spell.type === 'damage') {
     queueBattleMsg(_nameToBytes('Ineffective'));
-    playSFX(SFX.ERROR);
+    _playSpellSFXOnce(SFX.ERROR);
     return;
   }
 
@@ -300,7 +312,7 @@ function _applySpellEffect(target) {
       if (flag && ally.status) removeStatus(ally.status, flag);
       getAllyDamageNums()[target.index] = { value: 0, timer: 0, heal: true };
     }
-    playSFX(SFX.CURE);
+    _playSpellSFXOnce(SFX.CURE);
     return;
   }
   if (target.type === 'player') {
@@ -315,7 +327,7 @@ function _applySpellEffect(target) {
     ally.hp += heal;
     getAllyDamageNums()[target.index] = { value: heal, timer: 0, heal: true };
   }
-  playSFX(isHeal ? SFX.CURE : SFX.SW_HIT);
+  _playSpellSFXOnce(isHeal ? SFX.CURE : SFX.SW_HIT);
 }
 
 // Returns true if the captured white-magic anim (magic circle build-up + cast
@@ -364,6 +376,16 @@ export function updateSpellCast(dt) {
     ? (isThrown ? (CAST_T_THROW_RETURN - CAST_PHASE_MS.buildup + 500)
                 : (CAST_TOTAL_MS - CAST_PHASE_MS.buildup))
     : 1100;
+  // sfxStartMs = when the spell SFX plays. For thrown damage spells with
+  // a cross-faction target, fire at IMPACT START (when the burst begins
+  // rendering) so the boom sound plays during the visual rather than at
+  // the damage-number pop. Heal-style and Sight keep firing SFX inside
+  // _applyEnemyEffect / _applySpellEffect at hitEffectMs.
+  const _hasCrossFactionTarget = _targets.some(t => t && t.type === 'enemy');
+  const _isThrownDamage = isThrown && spell && spell.type === 'damage' && _hasCrossFactionTarget;
+  const sfxStartMs = _isThrownDamage
+    ? (CAST_T_THROW_IMPACT_START - CAST_PHASE_MS.buildup)
+    : -1;
 
   if (battleSt.battleState === 'magic-cast') {
     if (battleSt.battleTimer >= castDur) {
@@ -375,6 +397,9 @@ export function updateSpellCast(dt) {
   }
   if (battleSt.battleState !== 'magic-hit') return false;
   tickHealNums(dt);
+  if (sfxStartMs >= 0 && !_sfxPlayed && battleSt.battleTimer >= sfxStartMs) {
+    _playSpellSFXOnce(spell.element === 'fire' ? SFX.FIRE_BOOM : SFX.SW_HIT);
+  }
   // Multi-target apply is PARALLEL: at hitEffectMs, every target in _targets
   // gets the effect applied at once (damage numbers pop simultaneously,
   // projectile fan-out lands together, all impact bursts play concurrently).

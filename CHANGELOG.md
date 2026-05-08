@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.109 — 2026-05-08
+
+### Spell SFX plays during the spell animation (not at damage-number pop)
+
+For thrown damage spells (Fire, future BM family) the impact SFX now fires at IMPACT START — when the burst begins rendering — instead of at the damage-number pop (impact end + 700 ms). Adds `_playSpellSFXOnce` module-local guard so the apply path doesn't double-up if SFX already played early. Multi-target plays one SFX at burst start instead of one per target.
+
+Heal-style spells (Cure, Poisona) still fire SFX at heal-sparkle start (= hitEffectMs) since the sparkle and heal number naturally sync. Sight + "Ineffective" friendly-target rejection also unchanged. Only the cross-faction thrown-damage path was wrong.
+
 ## 1.7.108 — 2026-05-08
 
 ### Offensive magic defaults to rightmost enemy
