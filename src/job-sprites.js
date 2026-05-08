@@ -14,11 +14,19 @@ export const SPRITE_PAL_BTM = [0x1A, 0x0F, 0x15, 0x30];    // spr_pal1: green, b
 export const MO_WALK_TOP = [0x1A, 0x0F, 0x17, 0x36];
 export const MO_WALK_BTM = [0x1A, 0x0F, 0x22, 0x36];
 
+// Black Mage walk palette — PPU capture (REC OAM frame 1629, default party).
+// Hat/face (top SP0) uses 0x27 peach for the brim/face highlight; robe
+// (bottom SP1) uses 0x21 canon-blue for the cloak. Color 3 = 0x36 (light
+// pink) on both halves for the trim/highlight outline.
+export const BM_WALK_TOP = [0x1A, 0x0F, 0x27, 0x36];
+export const BM_WALK_BTM = [0x1A, 0x0F, 0x21, 0x36];
+
 // Per-job walk sprite palettes: [topPal, bottomPal]
 const JOB_WALK_PALS = {
   0: [SPRITE_PAL_TOP, SPRITE_PAL_BTM],   // Onion Knight: red top, green/magenta bottom
   1: [SPRITE_PAL_TOP, SPRITE_PAL_TOP],   // Warrior: all red
   2: [MO_WALK_TOP, MO_WALK_BTM],         // Monk: brown hair + peach skin top, blue gi bottom
+  4: [BM_WALK_TOP, BM_WALK_BTM],         // Black Mage: peach face top, blue robe bottom
 };
 
 export function swapBattleSprites(jobIdx) {

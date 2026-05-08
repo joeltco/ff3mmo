@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.124 — 2026-05-08
+
+### BM overworld walk palette wired
+
+Black Mage (job 4) was missing from `JOB_WALK_PALS` in `job-sprites.js`, so a BM in the overworld was falling back to the Onion Knight red palette. Added `BM_WALK_TOP = [0x1A, 0x0F, 0x27, 0x36]` (face/hat brim) and `BM_WALK_BTM = [0x1A, 0x0F, 0x21, 0x36]` (canonical blue robe + light-pink trim) per the OAM dump (REC OAM frame 1629, SP0/SP1). Wired in `JOB_WALK_PALS[4]`. WM (3) and RM (5) still fall back to Onion Knight defaults — their PPU captures haven't landed yet.
+
 ## 1.7.123 — 2026-05-08
 
 ### Multi-target throw: parallel projectile fan, serial impact walk
