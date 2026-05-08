@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.128 — 2026-05-08
+
+### Pulled Sight from fake-player knownSpells
+
+Lenna had `[Cure, Poisona, Sight]` from the v1.7.127 pool refactor. Sight is dead weight on fake-player AI — it's the player's enemy-HP peek; a fake mage casting it just burns a turn. Trimmed to `[Cure, Poisona]` to match the rest of the WM pool.
+
 ## 1.7.127 — 2026-05-08
 
 ### Pool refactor + RM palette + PVP mage AI

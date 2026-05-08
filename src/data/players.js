@@ -43,7 +43,7 @@ export const PLAYER_POOL = [
   { name: 'Zephyr',  level: 5, palIdx: 1, camper: false, loc: 'cave-3',  jobIdx: 3, weaponR: 0x0E,                armorId: 0x73, helmId: 0x62, knownSpells: [0x34, 0x35] },                               // WM — Staff (Cure, Poisona)
   { name: 'Mira',    level: 4, palIdx: 2, camper: false, loc: 'world',   jobIdx: 3, weaponR: 0x0E,                armorId: 0x73, helmId: 0x62, knownSpells: [0x34, 0x35] },                               // WM — Staff (Cure, Poisona)
   { name: 'Suki',    level: 3, palIdx: 4, camper: false, loc: 'cave-1',  jobIdx: 3, weaponR: 0x0E,                armorId: 0x73, helmId: 0x62, knownSpells: [0x34, 0x35] },                               // WM — Staff (Cure, Poisona)
-  { name: 'Lenna',   level: 5, palIdx: 6, camper: true,  loc: 'ur',      jobIdx: 3, weaponR: 0x0E,                armorId: 0x73, helmId: 0x62, knownSpells: [0x34, 0x35, 0x36] },                         // WM — Staff (Cure, Poisona, Sight)
+  { name: 'Lenna',   level: 5, palIdx: 6, camper: true,  loc: 'ur',      jobIdx: 3, weaponR: 0x0E,                armorId: 0x73, helmId: 0x62, knownSpells: [0x34, 0x35] },                               // WM — Staff (Cure, Poisona)
   { name: 'Ivy',     level: 2, palIdx: 0, camper: false, loc: 'cave-0',  jobIdx: 3, weaponR: 0x0E,                armorId: 0x73, helmId: 0x62, knownSpells: [0x34] },                                     // WM — Staff (Cure)
   // ── Black Mage (5) — mage names; palette is all-blue tints (BLACK_MAGE_PALETTES) ──
   { name: 'Vivi',    level: 4, palIdx: 1, camper: false, loc: 'world',   jobIdx: 4, weaponR: 0x0E,                armorId: 0x73, helmId: 0x62, knownSpells: [0x31, 0x32] },                               // BM — Staff (Fire, Blizzard)
