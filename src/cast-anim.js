@@ -182,75 +182,19 @@ function _decodeWMCast() {
   return { flameFrames, starTile };
 }
 
-// BM cast: 32×32 halo around the player portrait. Outer ring + middle ring
-// stay constant; inner pulse tile cycles per size. Frame 0 layout (origin
-// 176,41 in the dump) is mirrored across both axes — the captured tiles cover
-// only the upper-left quadrant of the halo and the rest is built from flips.
-//
-// Layout (each entry = 8×8 tile slot relative to the 32×32 halo canvas):
-//   row 0 (y=0)    [8,0]=$49      [16,0]=$4A      [24,0]=$50 V H  [32,0]=$4F V H
-//   row 1 (y=8)    [0,8]=$51/etc  [8,8]=$52/etc + $4B  [16,8]=$4C  [24,8]=$4E V H  [32,8]=$4D V H
-//   row 2 (y=16)   mirror of row 1 across x-axis
-//   row 3 (y=24)   mirror of row 0 across x-axis
-//
-// Halo is drawn at (portrait_x - 8, portrait_y - 4) so the 32×32 halo wraps
-// the 16×16 portrait centered (8 px overhang each side, 4 px top/bottom).
-function _buildBMCastFrame(innerTile) {
-  const t49 = _make8(BM_T_49, BM_PAL), t4a = _make8(BM_T_4A, BM_PAL);
-  const t4f = _make8(BM_T_4F, BM_PAL), t50 = _make8(BM_T_50, BM_PAL);
-  const t4b = _make8(BM_T_4B, BM_PAL), t4c = _make8(BM_T_4C, BM_PAL);
-  const t4d = _make8(BM_T_4D, BM_PAL), t4e = _make8(BM_T_4E, BM_PAL);
-  const inner = _make8(innerTile, BM_PAL);
-
-  const c = document.createElement('canvas'); c.width = 40; c.height = 32;
-  const cx = c.getContext('2d');
-
-  const draw = (tile, x, y, hf, vf) => {
-    cx.save();
-    cx.translate(x + (hf ? 8 : 0), y + (vf ? 8 : 0));
-    cx.scale(hf ? -1 : 1, vf ? -1 : 1);
-    cx.drawImage(tile, 0, 0);
-    cx.restore();
-  };
-
-  // Row 0 (y=0): top corner ring
-  draw(t49, 8,  0, false, false);
-  draw(t4a, 16, 0, false, false);
-  draw(t50, 24, 0, true,  true);
-  draw(t4f, 32, 0, true,  true);
-  // Row 1 (y=8): inner-corner pulse + middle ring
-  draw(inner, 0, 8, false, false);
-  draw(inner, 8, 8, true,  false);
-  draw(t4b,   8, 8, false, false);
-  draw(t4c,  16, 8, false, false);
-  draw(t4e,  24, 8, true,  true);
-  draw(t4d,  32, 8, true,  true);
-  // Row 2 (y=16): mirror of row 1 (inner pulse VFLIP, middle ring shifted)
-  draw(inner, 0, 16, false, true);
-  draw(inner, 8, 16, true,  true);
-  draw(t4d,   8, 16, false, false);
-  draw(t4e,  16, 16, false, false);
-  draw(t4c,  24, 16, true,  true);
-  draw(t4b,  32, 16, true,  true);
-  // Row 3 (y=24): bottom corner ring (V H of row 0)
-  draw(t4f,  8,  24, false, false);
-  draw(t50, 16, 24, false, false);
-  draw(t4a, 24, 24, true,  true);
-  draw(t49, 32, 24, true,  true);
-
-  return c;
-}
-
+// BM cast: WM-style small flame to the LEFT of the portrait, drawn on top of
+// everything. The previous halo-wrapping-portrait approach (40×32 canvas)
+// covered the player even with body-area transparency and required separate
+// pal1 body tiles to look correct. Per the user's preference: ship the WM
+// rendering pattern (16×16 flame to the left) for BM too, using the size-
+// cycle tiles ($51, $54-$57) flipped into a symmetric quad.
 function _decodeBMCast() {
-  // 5 size frames cycling through the inner-pulse tile. Outer ring is identical
-  // across all 5; only the corner-flash tile rotates. Matches WM's 5-size shape
-  // so the dispatch site can use the same `flameFrames[idx]` API.
   const flameFrames = [
-    _buildBMCastFrame(BM_T_51),  // size 0/1 — base (also uses $52 alongside; close enough for first ship)
-    _buildBMCastFrame(BM_T_54),  // size 2
-    _buildBMCastFrame(BM_T_55),  // size 3
-    _buildBMCastFrame(BM_T_56),  // size 4
-    _buildBMCastFrame(BM_T_57),  // brackets — release flash
+    _flippedQuad(_make8(BM_T_51, BM_PAL)),  // size 0 — smallest pulse
+    _flippedQuad(_make8(BM_T_54, BM_PAL)),  // size 1
+    _flippedQuad(_make8(BM_T_55, BM_PAL)),  // size 2
+    _flippedQuad(_make8(BM_T_56, BM_PAL)),  // size 3 — largest
+    _flippedQuad(_make8(BM_T_57, BM_PAL)),  // brackets — release flash
   ];
   return { flameFrames, starTile: null };  // BM has no separate rotating-star ring
 }
@@ -262,11 +206,8 @@ let _byKey = null;  // { wm: { flameFrames, starTile, ... }, bm: { ... } }
 export function initCastAnim() {
   _byKey = {
     wm: { ..._decodeWMCast(), flameDx: -16, flameDy:  5, flameW: 16, flameH: 16 },
-    // BM 40×32 canvas has the body-area at canvas (16, 3)..(32, 27) per the
-    // dump (f9627 frame 0: body tiles $43-$48 at [16,3]/[24,3]/[16,11]/[24,11]/
-    // [16,19]/[24,19]). To align that body-area with the 16×16 portrait at
-    // (px, py), draw the canvas at (px - 16, py - 3).
-    bm: { ..._decodeBMCast(), flameDx: -16, flameDy: -3, flameW: 40, flameH: 32 },
+    // BM uses the same 16×16 flame-to-the-left layout as WM (flameDx -16).
+    bm: { ..._decodeBMCast(), flameDx: -16, flameDy:  5, flameW: 16, flameH: 16 },
   };
 }
 

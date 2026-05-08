@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.99 — 2026-05-08
+
+### BM cast styled like WM cast: flame to the left, on top of portrait
+
+Per user direction: drop the 40×32 halo-wrapping-portrait approach and use the same rendering pattern as WM — small 16×16 flame to the LEFT of the portrait (`flameDx: -16, flameDy: 5`), drawn on top of everything in `_drawPortraitOverlays`. The halo wrap kept hiding the player no matter which layer it was drawn at, and required separate pal1 body tiles to look right.
+
+`_decodeBMCast` now builds 5 frames from the size-cycle tiles (`$51` → `$54` → `$55` → `$56` → `$57` brackets) using `_flippedQuad` (single 8×8 → 16×16 symmetric). Same size cycle the halo used; same shape of API. Removed `_drawPortraitCastHaloBehind` from `battle-drawing.js`. Parity gates still PASS (the byte tables didn't move — just dropped the halo composition step).
+
+Existing `flameFrames.length === 5` API stays — only the per-frame canvas dimensions changed (40×32 → 16×16) and the rendering layer (behind-portrait → overlays).
+
 ## 1.7.98 — 2026-05-08
 
 ### Spell-killed enemy no longer flickers off before death wipe

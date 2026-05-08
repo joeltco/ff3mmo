@@ -327,28 +327,6 @@ function _drawPortraitWeapon(px, py, before) {
   }
 }
 
-// BM cast halo wraps the player portrait (40×32 around 16×16). The halo's
-// body-area columns (canvas x=16-32) overlap the portrait — in the FF3 dump
-// the body is drawn as separate pal1 tiles ($43-$48) on top of the halo. We
-// don't have those captured yet, so the cleanest stopgap is to draw the halo
-// BEHIND the portrait — the portrait covers the halo's body-area, leaving
-// only the outer ring visible. Called from the parent draw site BEFORE the
-// portrait frame so layering is correct.
-function _drawPortraitCastHaloBehind(px, py) {
-  const isMagicState = battleSt.battleState === 'magic-cast' || battleSt.battleState === 'magic-hit';
-  if (!isMagicState) return;
-  const castKey = jobToCastKey(ps.jobIdx);
-  if (castKey !== 'bm') return; // WM halo is to the left of portrait — handled in overlays
-  const castAsset = getCastAsset(castKey);
-  if (!castAsset || castAsset.flameFrames.length !== 5) return;
-  const cureMs = getCastAnimElapsedMs();
-  if (cureMs < 0) return;
-  const flameIdx = getCastFlameFrameIdx(cureMs, castKey);
-  if (flameIdx < 0) return;
-  ui.ctx.drawImage(castAsset.flameFrames[flameIdx],
-                   px + castAsset.flameDx, py + castAsset.flameDy);
-}
-
 function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal, isRunPose,
                                 isAttackPose, isHitPose, isVictoryPose) {
   // Defend sparkle — 4 corners cycling during defend-anim
@@ -372,9 +350,8 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
   // for the on-target effect below.
   const _castKey = isMagicState ? jobToCastKey(ps.jobIdx) : null;
   const _castAsset = _castKey ? getCastAsset(_castKey) : null;
-  if (cureMs >= 0 && _castAsset && _castAsset.flameFrames.length === 5 && _castKey !== 'bm') {
-    // WM halo only — BM halo is drawn behind the portrait via
-    // _drawPortraitCastHaloBehind in the parent draw site.
+  if (cureMs >= 0 && _castAsset && _castAsset.flameFrames.length === 5) {
+    // Stars (WM only — BM has null starTile). Draw FIRST so flame renders on top.
     if (shouldDrawCastStars(cureMs) && _castAsset.starTile) {
       // 8 stars on a radius-15 ring around the portrait, rotating CW at the
       // OAM-measured rate (~5°/NES-frame × 60 fps = 300°/s = 1.2 s per turn).
@@ -392,7 +369,7 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
     }
     const flameIdx = getCastFlameFrameIdx(cureMs, _castKey);
     if (flameIdx >= 0) {
-      // Anchor varies by job (WM: 16×16 to the left).
+      // Both jobs render a 16×16 flame to the left of the portrait, on top.
       ui.ctx.drawImage(_castAsset.flameFrames[flameIdx],
                        px + _castAsset.flameDx, py + _castAsset.flameDy);
     }
@@ -551,9 +528,6 @@ function _drawBattlePortrait() {
     pvpSt.pvpPendingAttack && !pvpSt.pvpPendingAttack.miss && !pvpSt.pvpPendingAttack.shieldBlock &&
     (Math.floor(battleSt.battleTimer / 60) & 1);
   if (!portraitBlink) {
-    // BM cast halo draws BEHIND the portrait so the halo's body-area columns
-    // don't cover the player sprite (no captured pal1 body tiles yet).
-    _drawPortraitCastHaloBehind(pxs, py);
     if (isAttackPose) _drawPortraitWeapon(pxs, py, true);
     _drawPortraitFrame(pxs, py, portraitSrc, isRunPose);
     if (isAttackPose) _drawPortraitWeapon(pxs, py, false);
