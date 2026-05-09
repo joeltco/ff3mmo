@@ -17,7 +17,6 @@ export const TRACKS = {
   BATTLE:       0x20,  // Battle 1 (normal encounters)
   BOSS_BATTLE:  0x2A,  // Battle 2 (boss battle)
   VICTORY:      0x07,  // Battle victory
-  GAME_OVER:    0x2B,  // "The Requiem" — game over theme (FF3 NES song $2B per track list)
 };
 
 // SFX — raw NSF track numbers (passed directly to gme_start_track)

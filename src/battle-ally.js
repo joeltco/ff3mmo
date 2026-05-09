@@ -164,7 +164,8 @@ function _updateAllyEnemyHit() {
         battleSt.turnQueue = battleSt.turnQueue.filter(t => !(t.type === 'ally' && t.index === battleSt.enemyTargetAllyIdx));
         battleSt.enemyTargetAllyIdx = -1;
         if (_isTeamWiped()) {
-          battleSt.battleState = 'team-wipe'; battleSt.battleTimer = 0;
+          battleSt.battleState = battleSt.isRandomEncounter ? 'encounter-box-close' : 'enemy-box-close';
+          battleSt.battleTimer = 0;
         } else {
           _processNextTurn();
         }
@@ -274,7 +275,8 @@ function _updateAllyKOSequence() {
         battleSt.turnQueue = battleSt.turnQueue.filter(t => !(t.type === 'ally' && t.index === battleSt.enemyTargetAllyIdx));
         battleSt.enemyTargetAllyIdx = -1;
         if (_isTeamWiped()) {
-          battleSt.battleState = 'team-wipe'; battleSt.battleTimer = 0;
+          battleSt.battleState = battleSt.isRandomEncounter ? 'encounter-box-close' : 'enemy-box-close';
+          battleSt.battleTimer = 0;
         } else {
           _processNextTurn();
         }

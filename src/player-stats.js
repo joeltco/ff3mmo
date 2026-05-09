@@ -169,10 +169,8 @@ export function isHitRightHand(hitIdx, rHandHitCount = 0) {
 
 export function initPlayerStats(romData) {
   // Stats come from the per-job matrix in data/players.js — same source the
-  // fake-player path uses. ROM stat readers (`readJobBaseStats` /
-  // `readStartingHP` / `readStartingMP`) are no longer consulted; the matrix
-  // is the single source of truth so a level-N RM has identical numbers
-  // whether you're playing the character or fighting one in PVP.
+  // fake-player path uses, so a level-N RM has identical numbers whether
+  // you're playing the character or fighting one in PVP.
   ps._romData = romData;
   const s = computeJobStats(ps.jobIdx, 1);
   ps.stats = {
@@ -220,7 +218,7 @@ export function grantExp(amount) {
 
     // No full heal on level-up — HP is preserved at whatever it was (current HP is always ≤
     // new maxHP since maxHP only grows). KO'd players stay KO'd so the end-of-battle respawn
-    // check in `encounter-box-close` / `enemy-box-close` / `defeat-close` fires correctly.
+    // check in `encounter-box-close` / `enemy-box-close` fires correctly.
 
     // Update derived combat stats
     recalcCombatStats();

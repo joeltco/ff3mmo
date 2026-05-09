@@ -215,9 +215,7 @@ export const ROSTER_FADE_STEPS = 4;
 //
 // Both `generateAllyStats` (PVP enemies + roster allies) AND `initPlayerStats`
 // / `grantExp` / `changeJob` (local player) read from this matrix via
-// `computeJobStats`. There is no second stat path. ROM-driven stat readers
-// (`readJobBaseStats`, `readJobLevelBonus`) are no longer used for stats —
-// kept as ROM utilities only if/when something else needs them.
+// `computeJobStats`. There is no second stat path.
 const _JOB_STAT_WEIGHTS = {
   0: { str: 1, agi: 1, vit: 1, int: 1, mnd: 1, mp: 0 },
   1: { str: 2, agi: 1, vit: 2, int: 1, mnd: 1, mp: 0 },

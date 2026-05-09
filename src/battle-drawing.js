@@ -5,7 +5,7 @@ import { drawText, measureText, TEXT_WHITE } from './font-renderer.js';
 import { nesColorFade, _makeFadedPal } from './palette.js';
 import { _calcBoxExpandSize, _encounterGridPos } from './battle-layout.js';
 import { _dmgBounceY } from './data/animation-tables.js';
-import { DMG_NUM_PAL, HEAL_NUM_PAL, CRIT_NUM_PAL, drawBattleNum as _drawBattleNumCtx, getMissCanvas } from './damage-numbers.js';
+import { DMG_NUM_PAL, HEAL_NUM_PAL, drawBattleNum as _drawBattleNumCtx, getMissCanvas } from './damage-numbers.js';
 import { getBossBattleCanvas, getBossWhiteCanvas } from './boss-sprites.js';
 import { getMonsterCanvas, getMonsterWhiteCanvas, hasMonsterSprites } from './monster-sprites.js';
 import { getItemNameClean, getMonsterName, getSpellNameClean } from './text-decoder.js';
@@ -48,7 +48,7 @@ import { fakePlayerPortraits, fakePlayerVictoryPortraits, fakePlayerHitPortraits
          fakePlayerKnifeRPortraits, fakePlayerKnifeLPortraits,
          fakePlayerKnifeRFwdPortraits, fakePlayerKnifeLFwdPortraits,
          fakePlayerDeathPoseCanvases } from './fake-player-sprites.js';
-import { BATTLE_GAME_OVER, BATTLE_DEFEATED, BATTLE_LEVEL_UP, BATTLE_JOB_LEVEL_UP, BATTLE_FOUND,
+import { BATTLE_LEVEL_UP, BATTLE_JOB_LEVEL_UP, BATTLE_FOUND,
          BATTLE_BOSS_NAME, BATTLE_GOBLIN_NAME, BATTLE_MENU_ITEMS, BATTLE_MAGIC } from './data/strings.js';
 
 // Mage jobs (White, Black, Red) see "Magic" in slot 1 instead of "Guard".
@@ -56,7 +56,6 @@ const _MAGE_JOBS = new Set([3, 4, 5]);
 import { getAllyDamageNums, getEnemyDmgNum, getPlayerDamageNum, getPlayerHealNum, getEnemyHealNum,
          getSwDmgNums } from './damage-numbers.js';
 import { getBattleMsgCurrent, getBattleMsgTimer, MSG_FADE_IN_MS, MSG_HOLD_MS, MSG_FADE_OUT_MS } from './battle-msg.js';
-import { getHitIdx, getTargets } from './battle-items.js';
 // (weapon canvas selection moved to combatant-pose.js — pickAttackWeaponSpec handles all blade/fist getters)
 import { clipToViewport, drawCursorFaded, drawHudBox, drawSparkleCorners, drawBorderedBox,
          grayViewport } from './hud-drawing.js';
@@ -128,71 +127,32 @@ function _encounterGridLayout() {
 
 function drawSWExplosion() {
   // PVP opponent South Wind — explosion centered on current target (player or ally)
-  if (pvpSt.isPVPBattle && battleSt.battleState === 'pvp-opp-sw-hit' && battleSt.battleTimer < 400) {
-    if (!bsc.swPhaseCanvases.length) return;
-    const phase = Math.min(2, Math.floor(battleSt.battleTimer / 133));
-    const canvas = bsc.swPhaseCanvases[phase];
-    if (!canvas) return;
-    const targets = pvpSt._oppSWTargets;
-    const tidx = targets ? targets[pvpSt._oppSWHitIdx] : -1;
-    let cx, cy;
-    if (tidx === -1) {
-      cx = HUD_RIGHT_X + 8 + 8;
-      cy = HUD_VIEW_Y + 8 + 12;
-    } else {
-      const panelTop = HUD_VIEW_Y + 32;
-      cx = HUD_RIGHT_X + 8 + 8;
-      cy = panelTop + tidx * ROSTER_ROW_H + 8 + 8;
-    }
-    const half = canvas.width / 2;
-    ui.ctx.save();
-    ui.ctx.beginPath(); ui.ctx.rect(0, HUD_VIEW_Y, CANVAS_W, HUD_VIEW_H); ui.ctx.clip();
-    ui.ctx.imageSmoothingEnabled = false;
-    ui.ctx.drawImage(canvas, cx - half, cy - half);
-    ui.ctx.restore();
-    return;
-  }
-  if (battleSt.battleState !== 'sw-hit' || battleSt.battleTimer >= 400) return;
-  if (pvpSt.isPVPBattle) {
-    if (!bsc.swPhaseCanvases.length) return;
-    const phase = Math.min(2, Math.floor(battleSt.battleTimer / 133));
-    const canvas = bsc.swPhaseCanvases[phase];
-    if (!canvas) return;
-    const tidx = getTargets()[getHitIdx()];
-    if (tidx === undefined) return;
-    const { x: cx, y: cy } = _pvpEnemyCellCenter(tidx);
-    ui.ctx.drawImage(canvas, cx - Math.floor(canvas.width / 2), cy - Math.floor(canvas.height / 2));
-    return;
-  }
+  if (!pvpSt.isPVPBattle || battleSt.battleState !== 'pvp-opp-sw-hit' || battleSt.battleTimer >= 400) return;
   if (!bsc.swPhaseCanvases.length) return;
   const phase = Math.min(2, Math.floor(battleSt.battleTimer / 133));
-  const phaseCanvas = bsc.swPhaseCanvases[phase];
-  if (!phaseCanvas) return;
-
-  if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
-    const { count, boxX, boxY, sprH, row0H, row1H, gridPos: swGridPos } = _encounterGridLayout();
-    const tidx = getTargets()[getHitIdx()];
-    if (tidx === undefined || tidx >= swGridPos.length) return;
-    const tp = swGridPos[tidx];
-    const m = battleSt.encounterMonsters[tidx];
-    const mc = getMonsterCanvas(m?.monsterId, battleSt.goblinBattleCanvas);
-    const rH = tidx < 2 ? (row0H || sprH) : (row1H || sprH);
-    const mh = mc ? mc.height : rH;
-    const cx = tp.x + 16;
-    const cy = tp.y + (rH - mh) + Math.floor(mh / 2);
-    ui.ctx.drawImage(phaseCanvas, cx - Math.floor(phaseCanvas.width / 2), cy - Math.floor(phaseCanvas.height / 2));
+  const canvas = bsc.swPhaseCanvases[phase];
+  if (!canvas) return;
+  const targets = pvpSt._oppSWTargets;
+  const tidx = targets ? targets[pvpSt._oppSWHitIdx] : -1;
+  let cx, cy;
+  if (tidx === -1) {
+    cx = HUD_RIGHT_X + 8 + 8;
+    cy = HUD_VIEW_Y + 8 + 12;
   } else {
-    // Boss — center on boss sprite
-    const cx = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2);
-    const cy = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
-    ui.ctx.drawImage(phaseCanvas, cx - Math.floor(phaseCanvas.width / 2), cy - Math.floor(phaseCanvas.height / 2));
+    const panelTop = HUD_VIEW_Y + 32;
+    cx = HUD_RIGHT_X + 8 + 8;
+    cy = panelTop + tidx * ROSTER_ROW_H + 8 + 8;
   }
+  const half = canvas.width / 2;
+  ui.ctx.save();
+  ui.ctx.beginPath(); ui.ctx.rect(0, HUD_VIEW_Y, CANVAS_W, HUD_VIEW_H); ui.ctx.clip();
+  ui.ctx.imageSmoothingEnabled = false;
+  ui.ctx.drawImage(canvas, cx - half, cy - half);
+  ui.ctx.restore();
 }
 
 function drawSWDamageNumbers() {
-  // Fires for both 'sw-hit' (battle items / Southwind) and 'magic-hit' (player-
-  // cast spell damage on encounter/PVP enemies).
-  if (battleSt.battleState !== 'sw-hit' && battleSt.battleState !== 'magic-hit') return;
+  if (battleSt.battleState !== 'magic-hit') return;
   const mc = getMissCanvas();
   if (pvpSt.isPVPBattle) {
     for (const [k, dn] of Object.entries(getSwDmgNums())) {
@@ -471,7 +431,7 @@ function _drawBattlePortrait() {
     (battleSt.battleState === 'pvp-opp-sw-hit' && battleSt.battleShakeTimer > 0) ||
     (battleSt.battleState === 'pvp-enemy-slash' && battleSt.enemyTargetAllyIdx < 0 && pvpSt.pvpPendingAttack && !pvpSt.pvpPendingAttack.miss && !pvpSt.pvpPendingAttack.shieldBlock);
   const isDefendPose = battleSt.battleState === 'defend-anim';
-  const isItemUsePose = battleSt.battleState === 'item-use' || battleSt.battleState === 'sw-throw' || battleSt.battleState === 'sw-hit' || battleSt.battleState === 'magic-cast' || battleSt.battleState === 'magic-hit';
+  const isItemUsePose = battleSt.battleState === 'item-use' || battleSt.battleState === 'magic-cast' || battleSt.battleState === 'magic-hit';
   const isRunPose = battleSt.battleState === 'run-success';
   const isNearFatal = ps.hp > 0 && ps.stats && ps.hp <= Math.floor(ps.stats.maxHP / 4);
   const portraitSrc = _getPortraitSrc(isNearFatal, isAttackPose, isHitPose, isDefendPose, isItemUsePose, isVictoryPose);
@@ -526,29 +486,8 @@ function _drawBattleStrobeFlash() {
   clipToViewport();
   grayViewport();
 }
-function _drawBattleDefeat() {
-  const ecx = HUD_VIEW_X + HUD_VIEW_W / 2;
-  const ecy = HUD_VIEW_Y + HUD_VIEW_H / 2;
-  if (battleSt.battleState === 'defeat-monster-fade') {
-    ui.ctx.save();
-    ui.ctx.globalAlpha = Math.min(battleSt.battleTimer / 500, 1);
-    ui.ctx.fillStyle = '#000';
-    if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
-      const { fullW: fw, fullH: fh } = _encounterBoxDims();
-      ui.ctx.fillRect(Math.round(ecx - fw / 2) + 8, Math.round(ecy - fh / 2) + 8, fw - 16, fh - 16);
-    } else {
-      if (!pvpSt.isPVPBattle) ui.ctx.fillRect(ecx - 24, ecy - 24, 48, 48);
-    }
-    ui.ctx.restore();
-  }
-  if (battleSt.battleState === 'defeat-text') {
-    const tw = measureText(BATTLE_GAME_OVER);
-    drawText(ui.ctx, Math.floor(ecx - tw / 2), Math.floor(ecy - 4), BATTLE_GAME_OVER, TEXT_WHITE);
-  }
-}
 function drawBattle() {
   if (battleSt.battleState === 'none') return;
-  if (battleSt.battleState === 'game-over') { _drawGameOver(); return; }
   _drawBattleCritFlash();
   _drawBattlePortrait();
   _drawBattleStrobeFlash();
@@ -560,7 +499,6 @@ function drawBattle() {
   drawVictoryBox();
   drawBattleMessageStrip();
   drawDamageNumbers();
-  _drawBattleDefeat();
 }
 
 // ── Centralized magic render helpers ─────────────────────────────────────
@@ -833,24 +771,6 @@ function _drawPVPEnemyOffensiveCast() {
   drawSpellEffectAtTargets(ui.ctx, [targetSpec], spellId, ms - PROJ_MS);
 }
 
-function _drawGameOver() {
-  // Small bordered HUD box centered in the battle viewport with "GAME OVER" + blinking "Press Z".
-  const boxW = 96, boxH = 40;
-  const bx = HUD_VIEW_X + Math.floor((HUD_VIEW_W - boxW) / 2);
-  const by = HUD_VIEW_Y + Math.floor((HUD_VIEW_H - boxH) / 2);
-  drawBorderedBox(bx, by, boxW, boxH);
-  const cx = bx + boxW / 2;
-  const textY = by + 10;
-  const tw = measureText(BATTLE_GAME_OVER);
-  drawText(ui.ctx, Math.floor(cx - tw / 2), Math.floor(textY), BATTLE_GAME_OVER, TEXT_WHITE);
-  // Blinking "Press Z" prompt every 500ms
-  if ((Math.floor(Date.now() / 500) & 1) === 0) {
-    const prompt = _nameToBytes('Press Z');
-    const pw = measureText(prompt);
-    drawText(ui.ctx, Math.floor(cx - pw / 2), Math.floor(textY + 12), prompt, TEXT_WHITE);
-  }
-}
-
 function _drawBattleItemList(baseX, rightAreaW, invPal, slidePixel, totalInvPages) {
   const rowH = 14;
   const topY = HUD_BOT_Y + 12;
@@ -1016,17 +936,16 @@ function _battleMenuStates() {
   const isMenu    = isFade || bs === 'menu-open' || bs === 'target-select' || bs === 'confirm-pause' ||
     bs === 'attack-back' || bs === 'attack-fwd' || bs === 'player-slash' || bs === 'player-hit-show' || bs === 'player-miss-show' ||
     bs === 'player-damage-show' || bs === 'pre-monster-death' || bs === 'monster-death' || bs === 'defend-anim' ||
-    bs.startsWith('item-') || bs === 'sw-throw' || bs === 'sw-hit' ||
+    bs.startsWith('item-') ||
     bs === 'magic-cast' || bs === 'magic-hit' ||
     bs === 'run-success' || bs === 'run-fail' || bs === 'enemy-flash' ||
     bs === 'enemy-attack' || bs === 'enemy-damage-show' || bs === 'poison-tick' || bs === 'poison-end-tick' || bs === 'pvp-second-windup' ||
     bs === 'pvp-ally-appear' || bs === 'pvp-defend-anim' || bs === 'pvp-enemy-slash' ||
     bs === 'pvp-opp-potion' || bs === 'pvp-opp-sw-throw' || bs === 'pvp-opp-sw-hit' || bs === 'message-hold' || bs === 'msg-wait' ||
-    bs.startsWith('ally-') || bs === 'boss-dissolve' ||
-    bs === 'defeat-monster-fade' || bs === 'defeat-text' || bs === 'team-wipe';
-  const isVictory = _isVictoryBattleState() || bs === 'victory-name-out' || bs === 'encounter-box-close' || bs === 'enemy-box-close' || bs === 'defeat-close';
+    bs.startsWith('ally-') || bs === 'boss-dissolve';
+  const isVictory = _isVictoryBattleState() || bs === 'victory-name-out' || bs === 'encounter-box-close' || bs === 'enemy-box-close';
   const isRunBox  = bs.startsWith('run-');
-  const isClose   = bs === 'victory-box-close' || bs === 'encounter-box-close' || bs === 'enemy-box-close' || bs === 'defeat-close';
+  const isClose   = bs === 'victory-box-close' || bs === 'encounter-box-close' || bs === 'enemy-box-close';
   return { isSlide, isAppear, isFade, isMenu, isVictory, isRunBox, isClose };
 }
 function drawBattleMenu() {
@@ -1052,7 +971,6 @@ function drawBattleMenu() {
   if (isFade) fadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(battleSt.battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
   const fadedPal = _makeFadedPal(fadeStep);
   if (!isVictory && !isRunBox) {
-    const isTeamWipe = battleSt.battleState === 'team-wipe';
     if (pvpSt.isPVPBattle) {
       // Collect all living PVP enemy names and stack them
       const names = [];
@@ -1063,32 +981,11 @@ function drawBattleMenu() {
         if (a && a.hp > 0 && i >= pvpSt.pvpPlayerTargetIdx)
           names.push(_nameToBytes(a.name));
       }
-      if (isTeamWipe) {
-        // Crossfade: names out (0-400ms), "Defeated" in (400-800ms)
-        const t = battleSt.battleTimer;
-        if (t < 400) {
-          const alpha = 1 - t / 400;
-          ui.ctx.globalAlpha = alpha;
-          const rowH = 10;
-          const startY = HUD_BOT_Y + Math.floor((boxH - names.length * rowH) / 2);
-          names.forEach((nb, i) => {
-            drawText(ui.ctx, Math.floor((boxW - measureText(nb)) / 2), startY + i * rowH, nb, fadedPal);
-          });
-          ui.ctx.globalAlpha = 1;
-        } else {
-          const alpha = Math.min((t - 400) / 400, 1);
-          ui.ctx.globalAlpha = alpha;
-          const tw = measureText(BATTLE_DEFEATED);
-          drawText(ui.ctx, Math.floor((boxW - tw) / 2), HUD_BOT_Y + Math.floor((boxH - 8) / 2), BATTLE_DEFEATED, fadedPal);
-          ui.ctx.globalAlpha = 1;
-        }
-      } else {
-        const rowH = 10;
-        const startY = HUD_BOT_Y + Math.floor((boxH - names.length * rowH) / 2);
-        names.forEach((nb, i) => {
-          drawText(ui.ctx, Math.floor((boxW - measureText(nb)) / 2), startY + i * rowH, nb, fadedPal);
-        });
-      }
+      const rowH = 10;
+      const startY = HUD_BOT_Y + Math.floor((boxH - names.length * rowH) / 2);
+      names.forEach((nb, i) => {
+        drawText(ui.ctx, Math.floor((boxW - measureText(nb)) / 2), startY + i * rowH, nb, fadedPal);
+      });
     } else if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
       const names = _battleEnemyNames();
       const rowH = 10;
@@ -1194,7 +1091,6 @@ function _drawEncounterMonsters(gridPos, sprH, boxX, boxY, boxW, boxH, isSlideIn
        battleSt.battleState === 'player-miss-show' || battleSt.battleState === 'player-damage-show' ||
        battleSt.battleState === 'pre-monster-death')) ||
       (i === battleSt.allyTargetIndex && (battleSt.battleState === 'ally-slash' || battleSt.battleState === 'ally-damage-show')) ||
-      (battleSt.battleState === 'sw-hit' && getTargets().includes(i)) ||
       isMagicHitTarget;
     if (!alive && !isDying && !isBeingHit) continue;
 
@@ -1265,17 +1161,16 @@ function _isEncounterCombatState() {
     battleSt.battleState === 'target-select' || battleSt.battleState === 'confirm-pause' || battleSt.battleState === 'attack-back' || battleSt.battleState === 'attack-fwd' ||
     battleSt.battleState === 'player-slash' || battleSt.battleState === 'player-hit-show' || battleSt.battleState === 'player-miss-show' ||
     battleSt.battleState === 'player-damage-show' || battleSt.battleState === 'pre-monster-death' || battleSt.battleState === 'monster-death' || battleSt.battleState === 'defend-anim' ||
-    battleSt.battleState.startsWith('item-') || battleSt.battleState === 'sw-throw' || battleSt.battleState === 'sw-hit' ||
+    battleSt.battleState.startsWith('item-') ||
     battleSt.battleState === 'magic-cast' || battleSt.battleState === 'magic-hit' ||
     battleSt.battleState === 'run-success' || battleSt.battleState === 'run-fail' ||
     battleSt.battleState === 'enemy-flash' || battleSt.battleState === 'enemy-attack' || battleSt.battleState === 'enemy-damage-show' ||
-    battleSt.battleState === 'poison-tick' || battleSt.battleState === 'poison-end-tick' || battleSt.battleState === 'message-hold' || battleSt.battleState === 'msg-wait' || battleSt.battleState.startsWith('ally-') ||
-    battleSt.battleState === 'defeat-monster-fade' || battleSt.battleState === 'defeat-text';
+    battleSt.battleState === 'poison-tick' || battleSt.battleState === 'poison-end-tick' || battleSt.battleState === 'message-hold' || battleSt.battleState === 'msg-wait' || battleSt.battleState.startsWith('ally-');
 }
 function drawEncounterBox() {
   if (!battleSt.isRandomEncounter || !battleSt.encounterMonsters) return;
   const isExpand = battleSt.battleState === 'encounter-box-expand';
-  const isClose = battleSt.battleState === 'encounter-box-close' || battleSt.battleState === 'defeat-close';
+  const isClose = battleSt.battleState === 'encounter-box-close';
   const isSlideIn = battleSt.battleState === 'monster-slide-in';
   const isCombat = _isEncounterCombatState();
   const isVictory = _isVictoryBattleState() || battleSt.battleState === 'victory-name-out';
@@ -1295,7 +1190,7 @@ function drawEncounterBox() {
   // black halo around the encounter box.
   drawBorderedBox(boxX, boxY, boxW, boxH, false, true);
 
-  if (isExpand || isClose || battleSt.battleState === 'defeat-text') { ui.ctx.restore(); return; }
+  if (isExpand || isClose) { ui.ctx.restore(); return; }
 
   const gridPos = _encounterGridPos(boxX, boxY, fullW, fullH, count, sprH, row0H, row1H);
   const rowH = (idx) => idx < 2 ? row0H : row1H;
@@ -1340,7 +1235,7 @@ function _drawBossSprite(centerX, centerY) {
 }
 function _drawBossSpriteBoxBoss(centerX, centerY) {
   const isExpand = battleSt.battleState === 'enemy-box-expand';
-  const isClose  = battleSt.battleState === 'enemy-box-close' || (!battleSt.isRandomEncounter && battleSt.battleState === 'defeat-close');
+  const isClose  = battleSt.battleState === 'enemy-box-close';
   const fullW = 64, fullH = 64;
 
   clipToViewport();
@@ -1348,7 +1243,7 @@ function _drawBossSpriteBoxBoss(centerX, centerY) {
   const { boxW, boxH } = _calcBoxExpandSize(fullW, fullH, isExpand, isClose, battleSt.battleTimer);
   drawBorderedBox(centerX - Math.floor(boxW / 2), centerY - Math.floor(boxH / 2), boxW, boxH, false, true);
 
-  if (isExpand || isClose || battleSt.battleState === 'defeat-text') { ui.ctx.restore(); return; }
+  if (isExpand || isClose) { ui.ctx.restore(); return; }
 
   _drawBossSprite(centerX, centerY);
 
@@ -1370,7 +1265,6 @@ function drawBossSpriteBox() {
                     battleSt.battleState === 'attack-back' || battleSt.battleState === 'attack-fwd' || battleSt.battleState === 'player-slash' || battleSt.battleState === 'player-hit-show' ||
                     battleSt.battleState === 'player-miss-show' ||
                     battleSt.battleState === 'player-damage-show' || battleSt.battleState === 'defend-anim' || battleSt.battleState.startsWith('item-') ||
-                    battleSt.battleState === 'sw-throw' || battleSt.battleState === 'sw-hit' ||
                     battleSt.battleState === 'magic-cast' || battleSt.battleState === 'magic-hit' ||
                     battleSt.battleState === 'enemy-flash' || battleSt.battleState === 'enemy-attack' ||
                     battleSt.battleState === 'enemy-damage-show' || battleSt.battleState === 'poison-tick' || battleSt.battleState === 'poison-end-tick' || battleSt.battleState === 'pvp-second-windup' ||
@@ -1379,7 +1273,6 @@ function drawBossSpriteBox() {
                     battleSt.battleState === 'pvp-dissolve' || battleSt.battleState === 'pvp-defend-anim' ||
                     battleSt.battleState === 'pvp-enemy-slash' || battleSt.battleState === 'pvp-opp-potion' ||
                     battleSt.battleState === 'pvp-opp-sw-throw' || battleSt.battleState === 'pvp-opp-sw-hit' ||
-                    battleSt.battleState === 'defeat-monster-fade' || battleSt.battleState === 'defeat-text' || battleSt.battleState === 'defeat-close' || battleSt.battleState === 'team-wipe' ||
                     _isVictoryBattleState() || battleSt.battleState === 'victory-name-out';
     if (isCombatPVP) drawBossSpriteBoxPVP(centerX, centerY);
     return;
@@ -1388,18 +1281,17 @@ function drawBossSpriteBox() {
   if (!getBossBattleCanvas()) return;
 
   const isExpand = battleSt.battleState === 'enemy-box-expand';
-  const isClose = battleSt.battleState === 'enemy-box-close' || battleSt.battleState === 'defeat-close';
+  const isClose = battleSt.battleState === 'enemy-box-close';
   const isAppear = battleSt.battleState === 'boss-appear';
   const isDissolve = battleSt.battleState === 'boss-dissolve';
   const isCombat = battleSt.battleState === 'battle-fade-in' ||
                    battleSt.battleState === 'menu-open' || battleSt.battleState === 'target-select' || battleSt.battleState === 'confirm-pause' ||
                    battleSt.battleState === 'attack-back' || battleSt.battleState === 'attack-fwd' || battleSt.battleState === 'player-slash' || battleSt.battleState === 'player-hit-show' ||
                    battleSt.battleState === 'player-miss-show' ||
-                   battleSt.battleState === 'player-damage-show' || battleSt.battleState === 'defend-anim' || battleSt.battleState.startsWith('item-') || battleSt.battleState === 'sw-throw' || battleSt.battleState === 'sw-hit' || battleSt.battleState === 'magic-cast' || battleSt.battleState === 'magic-hit' || battleSt.battleState === 'run-success' || battleSt.battleState === 'run-fail' || battleSt.battleState === 'enemy-flash' ||
+                   battleSt.battleState === 'player-damage-show' || battleSt.battleState === 'defend-anim' || battleSt.battleState.startsWith('item-') || battleSt.battleState === 'magic-cast' || battleSt.battleState === 'magic-hit' || battleSt.battleState === 'run-success' || battleSt.battleState === 'run-fail' || battleSt.battleState === 'enemy-flash' ||
                    battleSt.battleState === 'enemy-attack' ||
                    battleSt.battleState === 'enemy-damage-show' || battleSt.battleState === 'poison-tick' || battleSt.battleState === 'poison-end-tick' || battleSt.battleState === 'message-hold' || battleSt.battleState === 'msg-wait' ||
-                   battleSt.battleState.startsWith('ally-') ||
-                   battleSt.battleState === 'defeat-monster-fade' || battleSt.battleState === 'defeat-text';
+                   battleSt.battleState.startsWith('ally-');
   const isVictory = _isVictoryBattleState() || battleSt.battleState === 'victory-name-out';
   if (!isExpand && !isClose && !isAppear && !isDissolve && !isCombat && !isVictory) return;
 
@@ -1797,7 +1689,7 @@ function _flushAllyWeaponDraws(weaponDraws) {
         const mc = getMissCanvas();
         if (mc) ui.ctx.drawImage(mc, bx - 8, by);
       } else {
-        _drawBattleNum(bx, by, dn.value, dn.heal ? HEAL_NUM_PAL : (dn.crit ? CRIT_NUM_PAL : DMG_NUM_PAL));
+        _drawBattleNum(bx, by, dn.value, dn.heal ? HEAL_NUM_PAL : DMG_NUM_PAL);
       }
     } else if (wd.type === 'sparkle') {
       const { frame, px, py } = wd;
@@ -1913,7 +1805,7 @@ function _drawBossDmgNum() {
     const mc = getMissCanvas();
     if (mc) ui.ctx.drawImage(mc, bx - 8, by);
   } else {
-    _drawBattleNum(bx, by, getEnemyDmgNum().value, getEnemyDmgNum().crit ? CRIT_NUM_PAL : DMG_NUM_PAL);
+    _drawBattleNum(bx, by, getEnemyDmgNum().value, DMG_NUM_PAL);
   }
   ui.ctx.restore();
 }
@@ -1956,7 +1848,7 @@ function drawDamageNumbers() {
       const mc = getMissCanvas();
       if (mc) ui.ctx.drawImage(mc, px - 8, py);
     } else {
-      _drawBattleNum(px, py, getPlayerDamageNum().value, getPlayerDamageNum().crit ? CRIT_NUM_PAL : DMG_NUM_PAL);
+      _drawBattleNum(px, py, getPlayerDamageNum().value, DMG_NUM_PAL);
     }
   }
 

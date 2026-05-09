@@ -10,10 +10,13 @@ import { mapSt } from './map-state.js';
 import { sprite } from './player-sprite.js';
 import { DIR_DOWN, DIR_UP, DIR_LEFT, DIR_RIGHT } from './sprite.js';
 import { playFF1Track, stopFF1Music, pauseMusic, resumeMusic } from './music.js';
-import { ps, changeJob, fullHeal } from './player-stats.js';
+import { ps, changeJob, fullHeal, grantExp } from './player-stats.js';
 import { JOBS } from './data/jobs.js';
 import { swapBattleSprites } from './job-sprites.js';
 import { saveSlotsToDB } from './save-state.js';
+import { ITEMS } from './data/items.js';
+import { addItem } from './inventory.js';
+import { getItemNameClean, getSpellNameClean, bytesToAscii } from './text-decoder.js';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 const CHAT_LINE_H      = 9;
@@ -82,16 +85,32 @@ function _passesTabFilter(msg) {
 
 // ── Commands ──────────────────────────────────────────────────────────────
 
+// Dev whitelist — emails that can run state-mutating commands. Authoritative
+// only as a UX gate (client-side state mutation only); the day server-auth
+// PVP ships, the server has to enforce. Add teammate emails here.
+const DEV_EMAILS = new Set([
+  'joeltaylor734@gmail.com',
+]);
+
+export function isDev() {
+  const email = (localStorage.getItem('ff3_email') || '').toLowerCase();
+  return DEV_EMAILS.has(email);
+}
+
 const COMMANDS = new Map();
 
-function registerCommand(name, desc, handler) {
-  COMMANDS.set(name, { desc, handler });
+function registerCommand(name, desc, handler, opts = {}) {
+  COMMANDS.set(name, { desc, handler, dev: !!opts.dev });
 }
 
 registerCommand('help', 'List available commands', () => {
   addChatMessage('Available commands:', 'console');
-  for (const [name, cmd] of COMMANDS)
-    addChatMessage('  /' + name + ' — ' + cmd.desc, 'console');
+  const dev = isDev();
+  for (const [name, cmd] of COMMANDS) {
+    if (cmd.dev && !dev) continue;
+    const tag = cmd.dev ? ' [dev]' : '';
+    addChatMessage('  /' + name + tag + ' — ' + cmd.desc, 'console');
+  }
 });
 
 registerCommand('clear', 'Clear console', () => {
@@ -116,7 +135,7 @@ registerCommand('ff1', 'Play FF1 NSF track N (or "stop" to resume map music)', (
   if (!Number.isFinite(n) || n < 0) { addChatMessage('Usage: /ff1 <track-index> | /ff1 stop', 'console'); return; }
   pauseMusic(); playFF1Track(n);
   addChatMessage('FF1 NSF track ' + n, 'console');
-});
+}, { dev: true });
 
 registerCommand('pos', 'Show player tile + faced tile', () => {
   if (mapSt.onWorldMap) {
@@ -153,15 +172,25 @@ registerCommand('job', 'Switch to job N (0-21). Bypasses CP cost. /job lists all
   saveSlotsToDB();
   addChatMessage('Job: ' + n + ' (' + JOBS[n].name + ') HP/MP refilled', 'console');
   if (ps.knownSpells && ps.knownSpells.length > 0) {
-    addChatMessage('Known spells: ' + ps.knownSpells.map(s => '0x' + s.toString(16)).join(','), 'console');
+    const list = ps.knownSpells.map(s => '$' + s.toString(16).padStart(2, '0')).join(',');
+    addChatMessage('Known spells: ' + list, 'console');
   }
-});
+}, { dev: true });
 
 registerCommand('heal', 'Restore HP and MP to max', () => {
   fullHeal();
   saveSlotsToDB();
   addChatMessage('HP ' + ps.hp + '/' + ps.stats.maxHP + '  MP ' + ps.mp + '/' + ps.stats.maxMP, 'console');
-});
+}, { dev: true });
+
+registerCommand('hp', 'Set current HP to N (or show current). N=0 = KO test.', (args) => {
+  if (!args || !ps.stats) { addChatMessage('HP ' + ps.hp + '/' + (ps.stats?.maxHP || '?'), 'console'); return; }
+  const n = parseInt(args, 10);
+  if (!Number.isFinite(n)) { addChatMessage('Bad HP', 'console'); return; }
+  ps.hp = Math.max(0, Math.min(n, ps.stats.maxHP));
+  saveSlotsToDB();
+  addChatMessage('HP ' + ps.hp + '/' + ps.stats.maxHP, 'console');
+}, { dev: true });
 
 registerCommand('mp', 'Set current MP to N (or show current)', (args) => {
   if (!args) { addChatMessage('MP ' + ps.mp + '/' + ps.stats.maxMP, 'console'); return; }
@@ -170,7 +199,94 @@ registerCommand('mp', 'Set current MP to N (or show current)', (args) => {
   ps.mp = Math.max(0, Math.min(n, ps.stats.maxMP));
   saveSlotsToDB();
   addChatMessage('MP ' + ps.mp + '/' + ps.stats.maxMP, 'console');
-});
+}, { dev: true });
+
+registerCommand('gil', 'Set gil to N (or show current)', (args) => {
+  if (!args) { addChatMessage('Gil: ' + ps.gil, 'console'); return; }
+  const n = parseInt(args, 10);
+  if (!Number.isFinite(n) || n < 0) { addChatMessage('Bad gil', 'console'); return; }
+  ps.gil = Math.min(999999, n);
+  saveSlotsToDB();
+  addChatMessage('Gil: ' + ps.gil, 'console');
+}, { dev: true });
+
+registerCommand('cp', 'Set capacity points to N (or show current)', (args) => {
+  if (!args) { addChatMessage('CP: ' + (ps.cp || 0), 'console'); return; }
+  const n = parseInt(args, 10);
+  if (!Number.isFinite(n) || n < 0) { addChatMessage('Bad CP', 'console'); return; }
+  ps.cp = Math.min(99999, n);
+  saveSlotsToDB();
+  addChatMessage('CP: ' + ps.cp, 'console');
+}, { dev: true });
+
+registerCommand('level', 'Force player level to N via grantExp loop (1-99)', (args) => {
+  if (!args) { addChatMessage('Level: ' + ps.stats.level, 'console'); return; }
+  const target = parseInt(args, 10);
+  if (!Number.isFinite(target) || target < 1 || target > 99) { addChatMessage('Bad level (1-99)', 'console'); return; }
+  let safety = 200;  // cap loops in case grantExp can't push level (edge case)
+  while (ps.stats.level < target && safety-- > 0) grantExp(ps.stats.expToNext || 1);
+  saveSlotsToDB();
+  addChatMessage('Level: ' + ps.stats.level + '  HP=' + ps.hp + '/' + ps.stats.maxHP + '  MP=' + ps.mp + '/' + ps.stats.maxMP, 'console');
+}, { dev: true });
+
+registerCommand('give', 'Give item: /give <hexId> [qty]. e.g. /give b1 3', (args) => {
+  const parts = (args || '').trim().split(/\s+/);
+  if (!parts[0]) { addChatMessage('Usage: /give <hexId> [qty]', 'console'); return; }
+  const id = parseInt(parts[0], 16);
+  const qty = parts[1] ? parseInt(parts[1], 10) : 1;
+  if (!Number.isFinite(id) || id < 0 || id > 0xFF) { addChatMessage('Bad item id', 'console'); return; }
+  if (!Number.isFinite(qty) || qty < 1) { addChatMessage('Bad qty', 'console'); return; }
+  if (!ITEMS.get(id)) { addChatMessage('Unknown item $' + id.toString(16).padStart(2, '0'), 'console'); return; }
+  addItem(id, qty);
+  saveSlotsToDB();
+  const name = bytesToAscii(getItemNameClean(id) || []);
+  addChatMessage('+' + qty + 'x $' + id.toString(16).padStart(2, '0') + ' ' + name, 'console');
+}, { dev: true });
+
+registerCommand('spell', 'Grant spell: /spell <hexId>. e.g. /spell 33', (args) => {
+  if (!args) { addChatMessage('Usage: /spell <hexId>', 'console'); return; }
+  const id = parseInt(args.trim(), 16);
+  if (!Number.isFinite(id) || id < 0 || id > 0xFF) { addChatMessage('Bad spell id', 'console'); return; }
+  if (!ps.knownSpells) ps.knownSpells = [];
+  if (ps.knownSpells.includes(id)) {
+    addChatMessage('Already known: $' + id.toString(16).padStart(2, '0'), 'console');
+    return;
+  }
+  ps.knownSpells.push(id);
+  saveSlotsToDB();
+  const name = bytesToAscii(getSpellNameClean(id) || []);
+  addChatMessage('Learned $' + id.toString(16).padStart(2, '0') + ' ' + name, 'console');
+}, { dev: true });
+
+registerCommand('warp', 'Teleport to map id N (decimal)', (args, ctx) => {
+  if (!args) { addChatMessage('Current map: ' + mapSt.currentMapId, 'console'); return; }
+  if (!ctx.loadMapById) { addChatMessage('Warp not available', 'console'); return; }
+  const id = parseInt(args, 10);
+  if (!Number.isFinite(id) || id < 0) { addChatMessage('Bad map id', 'console'); return; }
+  ctx.loadMapById(id);
+  addChatMessage('Warped to map ' + id, 'console');
+}, { dev: true });
+
+// /devhelp — categorized listing of dev-only commands. Hidden for non-devs.
+// Public /help already filters out dev commands; /devhelp gives a tighter,
+// grouped view for fast lookup during testing.
+registerCommand('devhelp', 'Dev commands grouped by category', () => {
+  const groups = [
+    ['Player state',  ['hp', 'mp', 'heal', 'level', 'gil', 'cp']],
+    ['Job & spells',  ['job', 'spell']],
+    ['Items',         ['give']],
+    ['Navigation',    ['warp']],
+    ['Audio',         ['ff1']],
+  ];
+  addChatMessage('Dev commands:', 'console');
+  for (const [label, names] of groups) {
+    addChatMessage('  -- ' + label + ' --', 'console');
+    for (const n of names) {
+      const cmd = COMMANDS.get(n);
+      if (cmd) addChatMessage('  /' + n + ' — ' + cmd.desc, 'console');
+    }
+  }
+}, { dev: true });
 
 let _commandCtx = {};
 export function setCommandContext(ctx) { _commandCtx = ctx; }
@@ -181,7 +297,12 @@ function _execCommand(input) {
   const name = (spaceIdx === -1 ? trimmed : trimmed.slice(0, spaceIdx)).toLowerCase();
   const args = spaceIdx === -1 ? '' : trimmed.slice(spaceIdx + 1).trim();
   const cmd = COMMANDS.get(name);
-  if (!cmd) { addChatMessage('Unknown command: /' + name + '. Type /help', 'console'); return; }
+  // Non-devs see "Unknown command" for dev commands too — no leak that they
+  // exist. /help filters them out so a real player has no surface area.
+  if (!cmd || (cmd.dev && !isDev())) {
+    addChatMessage('Unknown command: /' + name + '. Type /help', 'console');
+    return;
+  }
   cmd.handler(args, _commandCtx);
 }
 

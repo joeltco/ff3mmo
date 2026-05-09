@@ -422,6 +422,12 @@ export function getSpellAnim(spellId) {
   return _bySpellId[spellId] || null;
 }
 
+// Count of spells with a registered on-target visual bundle. Used by the
+// startup console for honest catalog counts.
+export function getRegisteredSpellAnimCount() {
+  return _bySpellId ? Object.keys(_bySpellId).length : 0;
+}
+
 // Item → spell-anim lookup. FF3 NES consumables dispatch to white-magic
 // spells (Potion → Cure, Antidote → Poisona, etc.) via `item.animSpellId`.
 // Returns the same bundle shape as `getSpellAnim`.

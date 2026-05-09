@@ -4,11 +4,7 @@
 export const BATTLE_SPRITE_ROM    = 0x050010;  // Bank 28/$8000 — battle character graphics (disasm 2F/AB3D)
 export const BATTLE_JOB_SIZE      = 0x02A0;    // 672 bytes (42 tiles) per job
 export const BATTLE_PAL_ROM       = 0x05CF04;  // char palette 0 — 3 bytes (colors 1-3, color 0 = $0F)
-export const JOB_BASE_STATS_OFF   = 0x072010;  // 22 jobs × 8 bytes: [adj, minLvl, STR, AGI, VIT, INT, MND, mpIdx]
-export const CHAR_INIT_HP_OFF     = 0x073BE8;  // 2 bytes little-endian
-export const CHAR_INIT_MP_OFF     = 0x073B98;  // 10 entries × 8 bytes (indexed by job mpIdx)
 export const LEVEL_EXP_TABLE_OFF  = 0x0720C0;  // 98 × 3 bytes (24-bit LE per level)
-export const LEVEL_STAT_BONUS_OFF = 0x0721E6;  // 22 jobs × 98 levels × 2 bytes
 
 // Weapon type flags (bitmask for job.weapons)
 export const WPN_SWORD    = 0x001;
@@ -108,49 +104,6 @@ export const JOB_NAMES = JOBS.map(j => j.name);
 
 // 2-letter abbreviations for compact UI
 export const JOB_ABBR = ['OK','Fi','Mo','WM','BM','RM','Ra','Kn','Th','Sc','Ge','Dr','Vi','BB','MK','Co','Ba','Su','De','Ma','Sa','Ni'];
-
-// Base stats for a job at level 1
-// Returns { str, agi, vit, int, mnd, mpIdx }
-export function readJobBaseStats(romData, jobIdx) {
-  const off = JOB_BASE_STATS_OFF + jobIdx * 8;
-  return {
-    str:   romData[off + 2],
-    agi:   romData[off + 3],
-    vit:   romData[off + 4],
-    int:   romData[off + 5],
-    mnd:   romData[off + 6],
-    mpIdx: romData[off + 7],
-  };
-}
-
-// Starting HP (2 bytes little-endian)
-export function readStartingHP(romData) {
-  return romData[CHAR_INIT_HP_OFF] | (romData[CHAR_INIT_HP_OFF + 1] << 8);
-}
-
-// Starting MP for a given mpIdx (8 bytes per entry, take level 1)
-export function readStartingMP(romData, mpIdx) {
-  return romData[CHAR_INIT_MP_OFF + mpIdx * 8];
-}
-
-// Stat/MP bonuses granted at a level-up
-// Returns { str, agi, vit, int, mnd, mpGain } — add each to the corresponding stat
-export function readJobLevelBonus(romData, jobIdx, level) {
-  const off = LEVEL_STAT_BONUS_OFF + jobIdx * 196 + (level - 1) * 2;
-  const byte1 = romData[off];
-  const byte2 = romData[off + 1];
-  const amt = byte1 & 0x07;
-  let mpBits = byte2, mpGain = 0;
-  while (mpBits) { mpGain += mpBits & 1; mpBits >>= 1; }
-  return {
-    str: (byte1 & 0x80) ? amt : 0,
-    agi: (byte1 & 0x40) ? amt : 0,
-    vit: (byte1 & 0x20) ? amt : 0,
-    int: (byte1 & 0x10) ? amt : 0,
-    mnd: (byte1 & 0x08) ? amt : 0,
-    mpGain,
-  };
-}
 
 // Check if job can equip an item (by item ID, needs ITEMS map passed in)
 // Uses per-item jobs bitmask where bit N = job index N can equip

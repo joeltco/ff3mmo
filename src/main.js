@@ -17,7 +17,7 @@ import { hudSt, HUD_INFO_FADE_STEPS, HUD_INFO_FADE_STEP_MS } from './hud-state.j
 import { mapSt } from './map-state.js';
 import { ui, isMobile } from './ui-state.js';
 import { battleSt } from './battle-state.js';
-import { chatState, consoleLog, setCommandContext } from './chat.js';
+import { chatState, consoleLog, setCommandContext, isDev } from './chat.js';
 import { setLocationGetter, getPlayerLocation } from './roster.js';
 import { titleSt } from './title-screen.js';
 import { pauseSt } from './pause-menu.js';
@@ -30,9 +30,12 @@ import { initBattleAlly } from './battle-ally.js';
 import { initBattleEnemy } from './battle-enemy.js';
 import { buildTurnOrder, processNextTurn } from './battle-turn.js';
 import { initBattleEncounter } from './battle-encounter.js';
-import { initBattleItems } from './battle-items.js';
 import { initSpellCast } from './spell-cast.js';
 import { addItem, setPlayerInventory } from './inventory.js';
+import { ITEMS } from './data/items.js';
+import { MONSTERS } from './data/monsters.js';
+import { saveSlots } from './save-state.js';
+import { getRegisteredSpellAnimCount } from './spell-anim.js';
 import { resetBattleVars, isTeamWiped, executeBattleCommand } from './battle-update.js';
 import { startGameLoop } from './game-loop.js';
 import { initSpriteAssets, initTitleAssets } from './boot.js';
@@ -99,6 +102,7 @@ function _startTitleScreen() {
   startGameLoop();
 }
 export async function loadROM(arrayBuffer) {
+  const _bootStart = performance.now();
   const romBytes = new Uint8Array(arrayBuffer);
   try {
     const ipsResp = await fetch('patches/ff3-english.ips');
@@ -122,7 +126,6 @@ export async function loadROM(arrayBuffer) {
   resetWorldWaterCache();
   initTitleAssets(rawBytes);
   initMapLoading(rawBytes);
-  initBattleItems({ processNextTurn });
   initSpellCast({ processNextTurn });
   initBattleEncounter({ resetBattleVars });
   initBattleAlly({ buildTurnOrder, processNextTurn, isTeamWiped });
@@ -137,20 +140,38 @@ export async function loadROM(arrayBuffer) {
   if (window.DEBUG_BOSS) { _startDebugMode(); return; }
   _startTitleScreen();
 
-  // Wire console command context
+  // Wire console command context — APIs that commands consume but can't
+  // import directly (circular dep risk).
   setCommandContext({
     getRosterNames: () => PLAYER_POOL.filter(p => p.loc === getPlayerLocation()).map(p => p.name),
+    loadMapById,
   });
 
-  // Startup console log — staggered one at a time
+  // Startup console log — every line is real data pulled from the running
+  // session. No fake metrics, no decorative numbers. Values:
+  //   - VERSION: from data/strings.js (matches package.json on deploy)
+  //   - rom.*: parsed iNES header counts + size formula (16k PRG, 8k CHR)
+  //   - ITEMS.size / MONSTERS.size: actual Map sizes after data/* loads
+  //   - getRegisteredSpellAnimCount(): spells with on-target visual bundle
+  //   - saveSlots: array of [name|null, name|null, name|null]; populated count
+  //   - email + dev: from localStorage + DEV_EMAILS whitelist (chat.js)
+  //   - boot: performance.now() delta from loadROM start
   const email = localStorage.getItem('ff3_email');
+  const dev = isDev();
+  const slotsUsed = saveSlots.filter(s => s != null).length;
+  const prgKB = rom.prgSize / 1024;
+  const chrKB = (rom.chrBanks * 8);
+  const bootMs = Math.round(performance.now() - _bootStart);
   const startupMsgs = [
     'FF3 MMO v' + VERSION,
-    'ROM: ' + rom.prgBanks + ' PRG, ' + rom.chrBanks + ' CHR, mapper ' + rom.mapper,
-    'Auth: ' + (email || 'guest'),
-    'Type /help for commands',
+    'ROM ok  PRG=' + rom.prgBanks + 'x16k (' + prgKB + 'k)  CHR=' + rom.chrBanks + 'x8k (' + chrKB + 'k)  mapper=' + rom.mapper,
+    'Catalog: ' + ITEMS.size + ' items, ' + MONSTERS.size + ' monsters, ' + getRegisteredSpellAnimCount() + ' spell anims',
+    'Save slots: ' + slotsUsed + '/3 used',
+    'Auth: ' + (email || 'guest') + (dev ? ' [dev]' : ''),
+    'Boot: ' + bootMs + 'ms',
+    dev ? 'Type /help or /devhelp' : 'Type /help for commands',
   ];
-  startupMsgs.forEach((msg, i) => setTimeout(() => consoleLog(msg), i * 500));
+  startupMsgs.forEach((msg, i) => setTimeout(() => consoleLog(msg), i * 350));
 }
 
 

@@ -810,7 +810,9 @@ function _processPVPOppSWHit() {
         }
       }
       if (isTeamWiped()) {
-        battleSt.isDefending = false; battleSt.battleState = 'team-wipe'; battleSt.battleTimer = 0;
+        battleSt.isDefending = false;
+        battleSt.battleState = 'enemy-box-close';
+        battleSt.battleTimer = 0;
       } else {
         processNextTurn();
       }
@@ -822,7 +824,9 @@ function _processPVPOppSWHit() {
 function _processEnemyDamageShow() {
   if (battleSt.battleTimer < BATTLE_DMG_SHOW_MS) return;
   if (isTeamWiped()) {
-    battleSt.isDefending = false; battleSt.battleState = 'team-wipe'; battleSt.battleTimer = 0;
+    battleSt.isDefending = false;
+    battleSt.battleState = 'enemy-box-close';
+    battleSt.battleTimer = 0;
   } else { processNextTurn(); }
 }
 
@@ -906,7 +910,7 @@ function _drawSparkleAtCorners(sprX, sprY, frame) {
 export function drawBossSpriteBoxPVP(centerX, centerY) {
   const bs = battleSt.battleState;
   const isExpand = bs === 'enemy-box-expand';
-  const isClose  = bs === 'enemy-box-close' || (!battleSt.isRandomEncounter && bs === 'defeat-close');
+  const isClose  = bs === 'enemy-box-close';
   const totalEnemies = 1 + pvpSt.pvpEnemyAllies.length;
   const { cols, rows, gridPos } = pvpGridLayout(totalEnemies);
   const pvpBoxW = cols * PVP_CELL_W + 16;
@@ -932,7 +936,7 @@ export function drawBossSpriteBoxPVP(centerX, centerY) {
   drawBorderedBox(centerX - Math.floor(drawW / 2), centerY - Math.floor(drawH / 2), drawW, drawH, false, true);
 
   const visibleAllies = resizeT >= 1 ? pvpSt.pvpEnemyAllies.length : pvpSt.pvpEnemyAllies.length - 1;
-  if (!isExpand && !isClose && bs !== 'defeat-text') {
+  if (!isExpand && !isClose) {
     const intLeft = centerX - cols * Math.floor(PVP_CELL_W / 2);
     const intTop  = centerY - rows * Math.floor(PVP_CELL_H / 2);
     const allEnemies = [pvpSt.pvpOpponentStats, ...pvpSt.pvpEnemyAllies.slice(0, visibleAllies)];
@@ -995,11 +999,10 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   // Hide dead enemies — but keep visible during dissolve and attack sequence
   const isDying = pvpSt.pvpDyingMap.has(idx) && bs === 'pvp-dissolve';
   const isCurrentTarget = isMain ? pvpSt.pvpPlayerTargetIdx < 0 : (idx - 1) === pvpSt.pvpPlayerTargetIdx;
-  const isSWHit = bs === 'sw-hit' || bs === 'sw-throw';
   const isBeingKilled = isCurrentTarget && (bs === 'player-slash' || bs === 'player-hit-show' ||
     bs === 'player-damage-show' || bs === 'ally-slash' || bs === 'ally-damage-show');
-  if (isMain && (battleSt.enemyDefeated || (pvpSt.pvpOpponentStats && pvpSt.pvpOpponentStats.hp <= 0)) && !isDying && !isBeingKilled && !isSWHit) return;
-  if (!isMain && (battleSt.enemyDefeated || enemy.hp <= 0) && !isDying && !isBeingKilled && !isSWHit) return;
+  if (isMain && (battleSt.enemyDefeated || (pvpSt.pvpOpponentStats && pvpSt.pvpOpponentStats.hp <= 0)) && !isDying && !isBeingKilled) return;
+  if (!isMain && (battleSt.enemyDefeated || enemy.hp <= 0) && !isDying && !isBeingKilled) return;
   // Shake left when taking damage (mirrors player's right-shake on hit)
   if (isCurrentTarget && pvpSt.pvpOpponentShakeTimer > 0) {
     sprX += (Math.floor(pvpSt.pvpOpponentShakeTimer / 67) & 1) ? -2 : 2;
@@ -1040,8 +1043,7 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   const oppHP   = isMain ? (pvpSt.pvpOpponentStats ? pvpSt.pvpOpponentStats.hp : getEnemyHP()) : (enemy.hp != null ? enemy.hp : 0);
   const oppMaxHP = isMain ? (pvpSt.pvpOpponentStats ? pvpSt.pvpOpponentStats.maxHP : 1) : (enemy.maxHP || 1);
   const isNearFatalOpp = oppHP > 0 && oppHP <= Math.floor(oppMaxHP / 4);
-  // Opponent victory = team wiped or old defeat path
-  const isOppVictory = battleSt.battleState === 'team-wipe' || battleSt.battleState === 'defeat-monster-fade';
+  const isOppVictory = false;
   const isOppDefending = isMain && pvpSt.pvpOpponentIsDefending && bs === 'pvp-defend-anim';
   // Caster victory pose: any cell that's the active item caster during pvp-opp-potion,
   // any cell that's the active magic caster during pvp-enemy-magic-cast/hit, OR main

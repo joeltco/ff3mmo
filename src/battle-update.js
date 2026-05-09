@@ -3,7 +3,7 @@
 
 import { battleSt, getEnemyHP, setEnemyHP, BOSS_MAX_HP,
          BATTLE_SHAKE_MS, MONSTER_DEATH_MS } from './battle-state.js';
-import { inputSt, keys } from './input-handler.js';
+import { inputSt } from './input-handler.js';
 import { sprite } from './player-sprite.js';
 import { pvpSt, resetPVPState, updatePVPBattle } from './pvp.js';
 import { hudSt } from './hud-state.js';
@@ -15,7 +15,6 @@ import { SLASH_FRAME_MS, shouldDrawSlash, SWING_HOLD_MS } from './slash-effects.
 import { buildTurnOrder, processNextTurn } from './battle-turn.js';
 import { updateBattleAlly } from './battle-ally.js';
 import { updateBattleEnemyTurn } from './battle-enemy.js';
-import { resetBattleItemVars, updateMagicItemThrowHit } from './battle-items.js';
 import { updateSpellCast, resetSpellCastVars } from './spell-cast.js';
 import { canCastSpell } from './data/spells.js';
 import { queueBattleMsg, replaceBattleMsg, updateBattleMsg as _updateBattleMsg, clearBattleMsgQueue,
@@ -70,9 +69,6 @@ const VICTORY_ROW_FRAME_MS     = 16.67;
 const POISON_TICK_MS           = 500;
 const POISON_END_HOLD_MS       = 700;
 
-// ── Helpers ────────────────────────────────────────────────────────────────
-function _zPressed() { if (!keys['z'] && !keys['Z']) return false; keys['z'] = false; keys['Z'] = false; return true; }
-
 // ── Exported utilities ─────────────────────────────────────────────────────
 
 export function resetBattleVars() {
@@ -84,8 +80,7 @@ export function resetBattleVars() {
   battleSt.allyShakeTimer = {}; battleSt.enemyTargetAllyIdx = -1; battleSt.allyExitTimer = 0;
   battleSt.allyMagicCasterIdx = -1; battleSt.allyMagicTargetIdx = -1; battleSt.allyMagicSpellId = 0;
   battleSt.allyMagicHealAmount = 0; battleSt.allyMagicEffectApplied = false; battleSt.allyMagicTargetType = 'player';
-  resetBattleItemVars();
-  hudSt.playerDeathTimer = null; battleSt._teamWipeMsgShown = false;
+  hudSt.playerDeathTimer = null;
   inputSt.battleActionCount = 0;
   clearBattleMsgQueue();
 }
@@ -484,7 +479,7 @@ export function advancePVPTargetOrVictory() {
 }
 
 function _triggerPVPVictory() {
-  // KO'd player: no rewards, no victory flow — skip straight to box-close (→ game-over).
+  // KO'd player: no rewards, no victory flow — straight to box-close (→ respawn).
   if (ps.hp <= 0) {
     battleSt.encounterExpGained = 0; battleSt.encounterGilGained = 0; battleSt.encounterCpGained = 0;
     battleSt.encounterDropItem = null; battleSt.encounterJobLevelUp = false;
@@ -520,7 +515,7 @@ function _updateMonsterDeath() {
     const allDead = battleSt.encounterMonsters.every(m => m.hp <= 0);
     if (allDead) {
       // If the player is KO'd, skip rewards AND the victory flow entirely — drop straight to
-      // box-close so the battle HUD closes cleanly and then transitions to 'game-over'.
+      // box-close so the battle HUD closes cleanly, then respawn.
       if (ps.hp <= 0) {
         battleSt.encounterExpGained = 0;
         battleSt.encounterGilGained = 0;
@@ -580,8 +575,6 @@ export function updateBattleDefendItem(dt) {
       clearHealNums();
       processNextTurn();
     }
-  } else if (battleSt.battleState === 'sw-throw' || battleSt.battleState === 'sw-hit') {
-    return updateMagicItemThrowHit();
   } else if (battleSt.battleState === 'magic-cast' || battleSt.battleState === 'magic-hit') {
     return updateSpellCast(dt);
   } else if (_updateItemMenuFades()) {
@@ -643,7 +636,7 @@ function _updateBossDissolve(dt) {
   if (battleSt.battleTimer >= BOSS_BLOCKS * BOSS_DISSOLVE_STEPS * BOSS_DISSOLVE_FRAME_MS) {
     battleSt.enemyDefeated = true; mapSt.bossSprite = null;
     ps.unlockedJobs |= 0x3E; // Wind Crystal: bits 1-5 (Warrior, Monk, White Mage, Black Mage, Red Mage)
-    // KO'd player: skip rewards and victory, straight to box-close (→ game-over).
+    // KO'd player: skip rewards and victory, straight to box-close (→ respawn).
     if (ps.hp <= 0) {
       battleSt.encounterExpGained = 0; battleSt.encounterGilGained = 0; battleSt.encounterCpGained = 0;
       battleSt.encounterDropItem = null; battleSt.encounterJobLevelUp = false;
@@ -722,7 +715,6 @@ function _updateVictorySequence() {
 
 function _respawnAtLastTown() {
   hudSt.playerDeathTimer = null;
-  battleSt._teamWipeMsgShown = false;
   ps.hp = ps.stats ? ps.stats.maxHP : 28;
   ps.mp = ps.stats ? ps.stats.maxMP : 0;
   const respawnMapId = ps.lastTown || 114;
@@ -741,13 +733,9 @@ function _updateBoxClose() {
       sprite.setDirection(DIR_DOWN); battleSt.isRandomEncounter = false; battleSt.encounterMonsters = null;
       battleSt.dyingMonsterIndices = new Map(); battleSt.battleAllies = []; battleSt.allyJoinRound = 0;
       stopMusic();
-      if (playerDead) {
-        battleSt.battleState = 'game-over'; battleSt.battleTimer = 0;
-        playTrack(TRACKS.GAME_OVER);
-      } else {
-        battleSt.battleState = 'none'; battleSt.battleTimer = 0;
-        resumeMusic();
-      }
+      battleSt.battleState = 'none'; battleSt.battleTimer = 0;
+      if (playerDead) _respawnAtLastTown();
+      else resumeMusic();
     }
     return true;
   }
@@ -758,63 +746,20 @@ function _updateBoxClose() {
       resetPVPState();
       sprite.setDirection(DIR_DOWN);
       battleSt.battleAllies = []; battleSt.allyJoinRound = 0;
+      battleSt.battleState = 'none'; battleSt.battleTimer = 0;
       if (playerDead) {
-        battleSt.battleState = 'game-over'; battleSt.battleTimer = 0;
-        playTrack(TRACKS.GAME_OVER);
-      } else {
-        battleSt.battleState = 'none'; battleSt.battleTimer = 0;
-        if (!wasPVP) playTrack(TRACKS.CRYSTAL_ROOM);
-        else resumeMusic();
-      }
+        stopMusic();
+        _respawnAtLastTown();
+      } else if (!wasPVP) playTrack(TRACKS.CRYSTAL_ROOM);
+      else resumeMusic();
     }
     return true;
   }
   return false;
-}
-
-// ── Defeat ─────────────────────────────────────────────────────────────────
-
-function _updateDefeatStates() {
-  if (battleSt.battleState === 'team-wipe') {
-    if (!battleSt._teamWipeMsgShown) { battleSt._teamWipeMsgShown = true; }
-    if (battleSt.battleTimer >= 1200 || _zPressed()) {
-      battleSt.battleState = 'defeat-close'; battleSt.battleTimer = 0;
-    }
-    return true;
-  }
-  if (battleSt.battleState === 'defeat-monster-fade') {
-    stopMusic();
-    if (battleSt.battleTimer >= 500) { battleSt.battleState = 'defeat-text'; battleSt.battleTimer = 0; }
-    return true;
-  }
-  if (battleSt.battleState === 'defeat-text') return true; // Z to dismiss handled in handleInput
-  if (battleSt.battleState === 'defeat-close') {
-    if (battleSt.battleTimer >= BOSS_BOX_EXPAND_MS) {
-      resetPVPState();
-      battleSt.isRandomEncounter = false;
-      battleSt.encounterMonsters = null; battleSt.turnQueue = []; battleSt.battleAllies = []; battleSt.allyJoinRound = 0;
-      battleSt.battleState = 'game-over'; battleSt.battleTimer = 0;
-      stopMusic();
-      playTrack(TRACKS.GAME_OVER);
-    }
-    return true;
-  }
-  if (battleSt.battleState === 'game-over') {
-    // Wait for the user to press Z (see input-handler.js) — which calls _respawnAtLastTown().
-    return true;
-  }
-  return false;
-}
-
-// Called from input-handler when Z is pressed during 'game-over' state.
-export function respawnFromGameOver() {
-  battleSt.battleState = 'none'; battleSt.battleTimer = 0;
-  stopMusic();
-  _respawnAtLastTown();
 }
 
 export function updateBattleEndSequence(dt) {
-  return _updateBossDissolve(dt) || _updateVictorySequence() || _updateBoxClose() || _updateDefeatStates();
+  return _updateBossDissolve(dt) || _updateVictorySequence() || _updateBoxClose();
 }
 
 // ── Poison tick ────────────────────────────────────────────────────────────

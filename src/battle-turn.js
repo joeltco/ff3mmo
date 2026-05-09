@@ -15,7 +15,6 @@ import { inputSt } from './input-handler.js';
 import { queueBattleMsg } from './battle-msg.js';
 import { _nameToBytes } from './text-utils.js';
 import { getAllyDamageNums, setEnemyDmgNum, setEnemyHealNum, setPlayerDamageNum, setPlayerHealNum } from './damage-numbers.js';
-import { startMagicItem } from './battle-items.js';
 import { startSpellCast } from './spell-cast.js';
 import { selectCursor, saveSlots, saveSlotsToDB } from './save-state.js';
 import { removeItem } from './inventory.js';
@@ -497,16 +496,8 @@ function _playerTurnItem() {
   removeItem(pending.itemId);
   const item = ITEMS.get(pending.itemId);
   if (item?.type === 'battle_item') {
-    // Modular path: items with `animSpellId` route through the spell-cast
-    // engine as item-use, sharing the spell-anim registry's impact visual.
-    // Items without animSpellId fall back to the legacy hardcoded SouthWind
-    // animation (kept until every battle_item gets a mapping).
-    if (item.animSpellId != null) {
-      const tm = pending.targetMode || 'single';
-      startSpellCast(item.animSpellId, { enemyIndex: pending.target, targetMode: tm }, { isItemUse: true });
-    } else {
-      startMagicItem();
-    }
+    const tm = pending.targetMode || 'single';
+    startSpellCast(item.animSpellId, { enemyIndex: pending.target, targetMode: tm }, { isItemUse: true });
   } else {
     _playerTurnConsumable();
   }

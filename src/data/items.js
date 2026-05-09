@@ -213,13 +213,6 @@ export const ITEMS = new Map([
   // as item-use (skips MP, MAGIC_CAST SFX, BM/WM cast pose). Mappings follow
   // shrines.rpgclassics FF3 NES canon, with tier raised one step for "wind"
   // items per the ff3mmo design rule (SouthWind = Blizzara/Lv2, not Lv1).
-  //
-  // Only DAMAGE-type spells are wired so far — the spell-cast engine doesn't
-  // yet handle status / buff / drain target types correctly (it'd apply the
-  // wrong effect). Items mapped to Confuse/Haste/Protect/Death/Erase/Sleep/
-  // Drain stay on the legacy `startMagicItem` path until the engine extends
-  // to those target types. Comments below mark each unmapped item's canonical
-  // spell so the consolidation finishes in one diff later.
   [0xb1, { type: 'battle_item', price:  1000, animSpellId: 0x39 }], // Bomb Shard → Fire (Lv2 fire, power 40)
   [0xb2, { type: 'battle_item', price:  1000, animSpellId: 0x3a }], // South Wind → Blizzara (Lv2 ice)
   [0xb3, { type: 'battle_item', price:  1000, animSpellId: 0x3b }], // Zeus' Wrath → Thunder (Lv2 bolt, power 40)

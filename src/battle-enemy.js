@@ -237,7 +237,9 @@ function _processEnemyFlash() {
 function _processEnemyDamageShowState() {
   if (battleSt.battleTimer < BATTLE_DMG_SHOW_MS) return;
   if (_isTeamWiped()) {
-    battleSt.isDefending = false; battleSt.battleState = 'team-wipe'; battleSt.battleTimer = 0;
+    battleSt.isDefending = false;
+    battleSt.battleState = battleSt.isRandomEncounter ? 'encounter-box-close' : 'enemy-box-close';
+    battleSt.battleTimer = 0;
   } else if (isBattleMsgBusy()) { battleSt.battleState = 'msg-wait'; battleSt.battleTimer = 0;
   } else { _processNextTurn(); }
 }

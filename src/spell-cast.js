@@ -445,7 +445,7 @@ function _applyEnemyEffect(idx, spell) {
     setEnemyHP(Math.max(0, getEnemyHP() - dmg));
     _setEnemyDmg(idx, dmg, false);
     battleSt.battleShakeTimer = BATTLE_SHAKE_MS;
-    _playSpellSFXOnce(_damageImpactSFX(spell.element));
+    _playSpellSFXOnce(_spellImpactSFX(spell));
     return;
   }
   if (!mon || mon.hp <= 0) return;

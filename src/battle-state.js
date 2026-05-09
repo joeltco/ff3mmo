@@ -66,7 +66,6 @@ export const battleSt = {
   allyShakeTimer: {},       // {allyIdx: ms remaining}
   allyExitTimer: 0,
   enemyTargetAllyIdx: -1,
-  _teamWipeMsgShown: false,
 
   // ── Ally cast (WM heal AI) ────────────────────────────────────────
   allyMagicCasterIdx: -1,             // ally index of the caster

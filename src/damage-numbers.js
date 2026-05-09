@@ -8,10 +8,9 @@ import { NES_SYSTEM_PALETTE } from './tile-decoder.js';
 // 4-entry NES master palette: [transparent, outline, fill, unused].
 // Battle-digit sprite tiles ($56-$5F) use color index 1 for outline, 2 for fill;
 // matches the SP3 palette FF3 sets at PPU $3F1D ([0x0F, 0x0F, 0x25, *]) seen in
-// the OAM REC capture (2026-05-07). Heal/crit just swap the fill color.
-export const DMG_NUM_PAL  = [0x0F, 0x0F, 0x25, 0x0F]; // red/pink damage
+// the OAM REC capture (2026-05-07). Heal swaps the fill color.
+export const DMG_NUM_PAL  = [0x0F, 0x0F, 0x25, 0x0F]; // red/pink damage (also used for crits — flag drives SFX + flash, not color)
 export const HEAL_NUM_PAL = [0x0F, 0x0F, 0x2B, 0x0F]; // green heal
-export const CRIT_NUM_PAL = [0x0F, 0x0F, 0x28, 0x0F]; // gold/yellow crit
 
 // ── Duration ────────────────────────────────────────────────────────────────
 export const DMG_SHOW_MS    = 550;  // standard display time

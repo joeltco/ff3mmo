@@ -2,6 +2,98 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.143 — 2026-05-08
+
+### Console: dev-gated commands, real startup metrics, eight new dev commands
+
+**Two-tier command system.** `registerCommand(name, desc, handler, { dev })` now takes an options bag with a `dev` flag. The dispatcher rejects dev commands for non-devs by replying with the standard "Unknown command: /x. Type /help" — same response as a typo, no information leak that the command exists. `/help` filters its listing per-user: real players see only public commands, devs see public + `[dev]`-tagged commands.
+
+**Dev whitelist** in `chat.js` (`DEV_EMAILS`): `joeltaylor734@gmail.com`. Add teammate emails on the same line. Match is against `localStorage.getItem('ff3_email')`, lowercased. Authoritative as a UX gate only — all current commands mutate client-side state, so a determined player could spoof localStorage. The day server-authoritative PVP ships, the server has to enforce; commenting in chat.js notes this.
+
+**Public tier (4 commands, anyone)**: `/help`, `/clear`, `/who`, `/pos`.
+
+**Dev tier (13 commands)**:
+- `/devhelp` — grouped listing of dev commands by category (Player state, Job & spells, Items, Navigation, Audio).
+- `/job N` — switch job, full heal, save, list spells. (existing)
+- `/heal` — full HP+MP. (existing)
+- `/mp [N]` — get or set MP. (existing)
+- `/ff1 N` / `/ff1 stop` — FF1 NSF track playback. (existing)
+- `/hp [N]` — get or set HP. N=0 forces KO for death-flow testing.
+- `/gil [N]` — get or set gil for shop testing.
+- `/cp [N]` — get or set capacity points.
+- `/level N` — force player level via repeated `grantExp(expToNext)`. Capped at 200 iterations as a safety in case grantExp can't push level (edge case).
+- `/give <hexId> [qty]` — grant an item by hex id. Validates against `ITEMS` map; logs the resolved item name via `bytesToAscii(getItemNameClean(id))`. e.g. `/give b1 3` for 3 Bomb Shards.
+- `/spell <hexId>` — grant a spell to `ps.knownSpells`. Logs resolved spell name. e.g. `/spell 33` for Sleep.
+- `/warp N` — teleport to map id N (decimal). Plumbed via `setCommandContext({ loadMapById })` to avoid circular imports.
+
+**Decoder fix**: `bytesToAscii` already existed in `text-decoder.js` and uses the proper `CHAR_MAP` (digits 0x80-0x89, A-Z 0x8A-0xA3, a-z 0xCA-0xE3, plus symbols). My first-pass hand-rolled decoder in chat.js had wrong ranges and got dropped before commit.
+
+### Startup console — real catalog data, no decoration
+
+The 4-line boot log was sparse and slightly outdated. Now 7 lines, every value pulled from a live source:
+
+```
+FF3 MMO v1.7.143
+ROM ok  PRG=8x16k (128k)  CHR=16x8k (128k)  mapper=1
+Catalog: 200 items, 231 monsters, 6 spell anims
+Save slots: 2/3 used
+Auth: joeltaylor734@gmail.com [dev]
+Boot: 234ms
+Type /help or /devhelp
+```
+
+Sources: `VERSION` (matches package.json on deploy via data/strings.js), `rom.*` from parsed iNES header, `ITEMS.size` / `MONSTERS.size` from the data Maps, `getRegisteredSpellAnimCount()` (new export from spell-anim.js — counts spells with on-target visual bundles), `saveSlots.filter(s => s != null).length` from save-state, `isDev()` for the `[dev]` tag, `performance.now()` delta from `loadROM` start for boot time. Stagger reduced from 500ms → 350ms per line so the full 7-line log finishes in ~2.5s instead of 3.5s.
+
+Cadence will land different per machine — `Boot: Nms` is honest (typically 150-400ms on the user's hardware, longer on cold-boot mobile).
+
+## 1.7.142 — 2026-05-08
+
+### ESLint as a static gate + crit damage numbers stop being gold
+
+ESLint flat config wired up. Catches the v1.7.49/v1.7.50 class of bug — orphan imports, undefined references, dead destructures — at static-check time, before smoke.sh has to find it at runtime. `npm run lint:errors` fails on errors only and is now a precondition in `deploy.sh` (runs before `git commit`, so a broken module aborts the deploy with no push). `npm run lint` shows everything including warnings (170 currently, mostly unused-vars in legacy code — aspirational cleanup, not a gate).
+
+Caught one real bug on the first run: `_damageImpactSFX` reference in `spell-cast.js:448` was an orphan from the v1.7.119 rename to `_spellImpactSFX(spell)`. The non-recovery boss damage path would have thrown a ReferenceError the first time someone cast a damage spell at a boss with the player KO'd. Now patched. This is exactly the pattern the lint gate is meant to catch.
+
+Rules: `no-undef` and `no-undef-init` are errors (the gate). `no-unused-vars` warns with `^_` ignore pattern matching the existing convention. `no-redeclare` and `no-useless-assignment` warn (legacy patterns we won't chase). Browser-side files get `globals.browser` plus `Module` (Emscripten GME) and `jsnes` (vendored debug emulator); node-side files (`server.js`, `api.js`, `tools/`) get `globals.node`.
+
+Smoke.sh stays — runtime catches things ESLint can't see (CSP errors, network failures, render-loop crashes). The two are complementary: lint = static, smoke = runtime.
+
+### Crit damage numbers no longer gold
+
+`CRIT_NUM_PAL` and the gold-fill render branch removed. Critical hits now render in the standard red `DMG_NUM_PAL` like every other damage tick. The `crit` flag on damage rolls still drives the slash SFX swap and `critFlashTimer` screen flash — only the digit color is reverted.
+
+## 1.7.141 — 2026-05-08
+
+### Legacy code cleanup
+
+Quiet diff-day. The carryover from earlier consolidations is gone.
+
+**Battle-items module deleted entirely.** `src/battle-items.js` (172 lines) is gone — `startMagicItem`, `updateMagicItemThrowHit`, `_buildTargets`, `_applyDamage`, `getTargets`, `getHitIdx`, `resetBattleItemVars`, `initBattleItems`. Every battle item has had `animSpellId` since v1.7.118 so the legacy fallback path was never executed; battle-turn.js drops the `else { startMagicItem(); }` branch and just calls `startSpellCast` unconditionally for `type === 'battle_item'`.
+
+**Battle states `'sw-throw'` and `'sw-hit'` removed.** No emitter remains. The `updateMagicItemThrowHit` handler in battle-update.js, the `drawSWExplosion` legacy branches (PVP-target render path + encounter render path + boss render path), the `getTargets()` lookup inside the encounter sprite gate, and the half-dozen state guards across `drawEncounterBox` / `drawBossSpriteBox` / `drawBossSpriteBoxPVP` / `_isEncounterCombatState` / `_battleMenuStates` / `_drawBattlePortrait`'s `isItemUsePose` — all gone. `drawSWExplosion` is now PVP-only (single branch); `drawSWDamageNumbers` runs only during `magic-hit`.
+
+**KEPT** (still alive in the engine): `'pvp-opp-sw-throw'` / `'pvp-opp-sw-hit'`. Non-mage main opponents still throw a SouthWind item at 15% chance (pvp.js:373). `bsc.swPhaseCanvases` and `initSouthWindSprite` stay — the PVP path renders through them, and `spell-anim.js` reuses `initSouthWindSprite` for Blizzara's impact phases.
+
+**ROM stat readers in `data/jobs.js` deleted.** `readJobBaseStats`, `readJobLevelBonus`, `readStartingHP`, `readStartingMP` and their offset constants `JOB_BASE_STATS_OFF` / `CHAR_INIT_HP_OFF` / `CHAR_INIT_MP_OFF` / `LEVEL_STAT_BONUS_OFF`. Superseded by `computeJobStats` in v1.7.138; nothing has imported them since. `LEVEL_EXP_TABLE_OFF` is the only ROM offset still consulted (by the exp curve loader).
+
+**Stale comments swept** from `player-stats.js`, `data/players.js`, `data/items.js`. The "Items mapped to … stay on the legacy `startMagicItem` path" block in items.js was outright wrong — every item routes through `startSpellCast` now.
+
+Net diff across the full v1.7.140 + v1.7.141 cleanup pass: −465 lines, +111 added (mostly comment + state-list edits). One file deleted. All `node --check` pass.
+
+## 1.7.140 — 2026-05-08
+
+### Game Over sequence removed — all deaths respawn directly
+
+All death paths now act the same: the battle-end box closes, then the wipe transition fires and the player respawns at `lastTown` at full HP/MP. No "Game Over" boxed screen, no "Press Z" prompt, no "The Requiem" track, no team-wipe / "Defeated" crossfade.
+
+Removed states (engine-side): `team-wipe`, `defeat-monster-fade`, `defeat-text`, `defeat-close`, `game-over`. The five death-state handlers in `_updateDefeatStates` are gone — `updateBattleEndSequence` is now `boss-dissolve → victory-sequence → box-close` only.
+
+`_updateBoxClose` is the single death sink: when the encounter / enemy box-close completes with `ps.hp <= 0`, it stops music and calls `_respawnAtLastTown()` directly. Previously routed through `'game-over'` and waited for Z.
+
+Origin sites (battle-enemy.js, battle-ally.js, pvp.js) that used to set `'team-wipe'` on full-team wipe now set the appropriate box-close state directly, skipping the 1.2s death-pose hold and the "Defeated" PVP crossfade.
+
+Cleanup landed alongside: `BATTLE_GAME_OVER` and `BATTLE_DEFEATED` strings dropped, `TRACKS.GAME_OVER` track def dropped, `respawnFromGameOver` export dropped, `_teamWipeMsgShown` battleSt field dropped, `_zPressed` helper + `keys` import in battle-update.js dropped (only consumer was the deleted defeat handler), every dead-state guard removed from drawEncounterBox / drawBossSpriteBox / drawBattleMenu / drawBossSpriteBoxPVP.
+
 ## 1.7.139 — 2026-05-08
 
 ### Existing-save stat migration
