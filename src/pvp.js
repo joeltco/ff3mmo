@@ -692,6 +692,19 @@ function _applyPVPEnemyMagicEffect() {
       if (sid === 0x31) playSFX(SFX.FIRE_BOOM);
       else playSFX(SFX.SW_HIT); // Blizzard's ice impact
     }
+    // Death trigger — roster ally KO from a spell needs the same death-anim
+    // hookup the SouthWind path uses (pvp.js:816). `deathTimer` drives the
+    // fall/fade; pulling the turn from `turnQueue` stops the dead ally from
+    // taking actions. Without this, ally HP drops to 0 but they keep standing
+    // and the game still hands them turns. Player KO (partyIdx === -1) is
+    // handled by the existing top-level death timer in `hudSt`, no-op here.
+    if (partyIdx >= 0) {
+      const ally = battleSt.battleAllies[partyIdx];
+      if (ally && ally.hp <= 0 && ally.deathTimer == null) {
+        ally.deathTimer = 0;
+        battleSt.turnQueue = battleSt.turnQueue.filter(t => !(t.type === 'ally' && t.index === partyIdx));
+      }
+    }
     pvpSt.pvpMagicPartyTargetIdx = -100;
     return;
   }

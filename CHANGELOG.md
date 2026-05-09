@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.157 — 2026-05-09
+
+### fix: roster ally death on PVP enemy spell
+
+PVP enemy casting Fire / Blizzard on a roster ally dropped the ally's HP to 0 but didn't trigger the death animation or pull them from the turn queue. The ally kept standing, the game still handed them turns, and the only visible effect was a damage number followed by silence.
+
+Mirrored the death hookup the SouthWind opponent path uses (`pvp.js:816`): after damage application, if `partyIdx >= 0 && ally.hp <= 0 && ally.deathTimer == null`, set `ally.deathTimer = 0` and filter the ally out of `battleSt.turnQueue`. Player KO (partyIdx === -1) is unaffected — the existing top-level death timer in `hudSt` handles it.
+
+Did NOT extend the same fix to ally-cast → enemy KO (encounter monster or PVP enemy ally not dying when an ally BM/RM lands a kill spell on them) because the user didn't report it; will land separately if/when needed. The state-machine path for player-cast enemy KO is its own thing (`spell-cast.js:722` transitions to `monster-death`); ally-cast doesn't have that state transition wired today.
+
 ## 1.7.156 — 2026-05-09
 
 ### fix: encounter cursor crash + in-game error surface
