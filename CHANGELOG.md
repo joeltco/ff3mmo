@@ -2,6 +2,28 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.137 — 2026-05-08
+
+### Fake-player stat audit — RM is hybrid, Fi/Mo are physical, casters are specialists
+
+Fake-player `generateAllyStats` now applies a per-job stat-weight matrix instead of treating every job's str/agi/vit as a flat `5 + lv`. Adds INT to the return object too — was missing, so the PVP offensive cast AI in `pvp.js` was hacking around it by using `caster.agi` as a stand-in. Now:
+
+```
+            str  agi  vit  int  mnd
+   OK (0)    1    1    1    1    1     apprentice — flat baseline
+   Fi (1)    2    1    2    1    1     melee — strong + tanky
+   Mo (2)    2    2    2    1    1     melee — strong + agile + tanky
+   WM (3)    1    1    1    1    3     pure white caster
+   BM (4)    1    1    1    3    1     pure black caster
+   RM (5)    1    1    1    2    2     hybrid — medium in both schools
+```
+
+`stat = 5 + lv * W`. Specialists hit W=3 in their core. Red Mage is the hybrid: W=2 in BOTH int AND mnd, putting their per-cast magic output at ~67% of a specialist's stat contribution at the same level — meaningful magic, but a focused WM/BM still outclasses them per-school. RM phys is W=1 across the board (same as pure casters; Fi/Mo are W=2 STR for clearly-stronger melee).
+
+`_tryPVPEnemyOffensiveCast` switched from `caster.agi` to the proper `caster.int`. RM-cast Fire / Blizzard / Sleep now hits softer than BM-cast for the same spell.
+
+Note: this affects fake players only. The local player path (`initPlayerStats` / `grantExp` in `player-stats.js`) reads canonical FF3 NES ROM stat tables — already correct, untouched.
+
 ## 1.7.136 — 2026-05-08
 
 ### Battle magic menu polish — gray-out, layout, scroll

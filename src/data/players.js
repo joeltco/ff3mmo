@@ -192,15 +192,41 @@ export const CHAT_PHRASES = [
 
 export const ROSTER_FADE_STEPS = 4;
 
+// Per-job stat-weight matrix for fake-player level scaling. `5 + lv*W` per
+// stat. Specialist jobs hit W=3 in their core stat (Fi/Mo str+vit, WM mnd,
+// BM int). Red Mage is the hybrid: W=2 in BOTH int AND mnd, putting their
+// magic output at ~67% of a specialist's at the same level — meaningful
+// magic, but a focused WM/BM still outclasses them per-school. RM phys is
+// the same as the pure casters (W=1) — they're not melee fighters.
+//
+// The local player path (`initPlayerStats` / `grantExp` in player-stats.js)
+// reads the canonical ROM stat tables, so this matrix is fake-player-only.
+//
+//          str  agi  vit  int  mnd
+//   OK (0)  1    1    1    1    1     apprentice — flat baseline
+//   Fi (1)  2    1    2    1    1     melee — strong + tanky
+//   Mo (2)  2    2    2    1    1     melee — strong + agile + tanky
+//   WM (3)  1    1    1    1    3     pure white caster
+//   BM (4)  1    1    1    3    1     pure black caster
+//   RM (5)  1    1    1    2    2     hybrid — medium in both schools
+const _JOB_STAT_WEIGHTS = {
+  0: { str: 1, agi: 1, vit: 1, int: 1, mnd: 1 },
+  1: { str: 2, agi: 1, vit: 2, int: 1, mnd: 1 },
+  2: { str: 2, agi: 2, vit: 2, int: 1, mnd: 1 },
+  3: { str: 1, agi: 1, vit: 1, int: 1, mnd: 3 },
+  4: { str: 1, agi: 1, vit: 1, int: 3, mnd: 1 },
+  5: { str: 1, agi: 1, vit: 1, int: 2, mnd: 2 },
+};
+const _DEFAULT_STAT_WEIGHTS = { str: 1, agi: 1, vit: 1, int: 1, mnd: 1 };
+
 export function generateAllyStats(player) {
   const lv = player.level;
-  const str = 5 + lv;
-  const agi = 5 + lv;
-  const vit = 5 + lv;
-  // MND scales harder for white-magic jobs so their Cure heals are useful;
-  // formula: 5 + lv*W where W=3 for WM (jobIdx 3), W=2 for Red Mage (5), W=1 otherwise.
-  const mndW = player.jobIdx === 3 ? 3 : player.jobIdx === 5 ? 2 : 1;
-  const mnd = 5 + lv * mndW;
+  const w = _JOB_STAT_WEIGHTS[player.jobIdx] || _DEFAULT_STAT_WEIGHTS;
+  const str = 5 + lv * w.str;
+  const agi = 5 + lv * w.agi;
+  const vit = 5 + lv * w.vit;
+  const int_ = 5 + lv * w.int;
+  const mnd = 5 + lv * w.mnd;
   const hp = 28 + lv * 6;
   const loc = player.loc;
   // Gear by location (matches chest loot tiers)
@@ -244,5 +270,5 @@ export function generateAllyStats(player) {
   const hitRate = wpnItem ? (wpnItem.hit || 80) : 80;
   // Pass through known spells so battle-turn's WM heal AI can decide what to cast.
   const knownSpells = Array.isArray(player.knownSpells) ? [...player.knownSpells] : [];
-  return { name: player.name, palIdx: player.palIdx, jobIdx: player.jobIdx || 0, level: lv, hp, maxHP: hp, atk, def, agi, mnd, evade, mdef, shieldEvade, statusResist, hitRate, weaponId, weaponL, knownSpells, jobLevel: 1, fadeStep: ROSTER_FADE_STEPS, status: createStatusState() };
+  return { name: player.name, palIdx: player.palIdx, jobIdx: player.jobIdx || 0, level: lv, hp, maxHP: hp, atk, def, agi, int: int_, mnd, evade, mdef, shieldEvade, statusResist, hitRate, weaponId, weaponL, knownSpells, jobLevel: 1, fadeStep: ROSTER_FADE_STEPS, status: createStatusState() };
 }

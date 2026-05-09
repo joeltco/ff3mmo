@@ -586,13 +586,13 @@ function _tryPVPEnemyOffensiveCast(caster, casterCellIdx) {
   const spellId = offensive[Math.floor(Math.random() * offensive.length)];
   const spell = SPELLS.get(spellId);
   if (!spell) return false;
-  // Damage roll — Fire/Blizzard use INT-equivalent; fake-player stats don't
-  // track INT yet, so use the caster's atk-side stat (mnd as a stand-in is
-  // wrong here — INT≈agi for now since both scale with level). Sleep is
-  // status (power=0); skip the damage roll for it.
+  // Damage roll — Fire/Blizzard use INT (NES FF3 black-magic formula). RM's
+  // INT is W=2 (~67% of a pure BM at the same level) so an RM-cast Fire
+  // hits noticeably softer than a BM-cast Fire. Sleep is status (power=0);
+  // skip the damage roll for it.
   let dmg = 0;
   if (spell.power > 0) {
-    const stat = caster.agi || 5;
+    const stat = caster.int || 5;
     const baseAtk = Math.floor(stat / 2) + spell.power;
     dmg = baseAtk + Math.floor(Math.random() * (Math.floor(baseAtk / 2) + 1));
     dmg = Math.max(1, dmg);
