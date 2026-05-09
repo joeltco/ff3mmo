@@ -7,7 +7,7 @@ import { isWeapon } from './data/items.js';
 import { SFX, playSFX } from './music.js';
 import { _nameToBytes } from './text-utils.js';
 import { queueBattleMsg } from './battle-msg.js';
-import { BATTLE_ALLY } from './data/strings.js';
+import { BATTLE_ALLY, BATTLE_SLAIN } from './data/strings.js';
 import { pvpSt } from './pvp.js';
 import { inputSt } from './input-handler.js';
 import { getEnemyDmgNum, setEnemyDmgNum, setPlayerHealNum, getAllyDamageNums, tickHealNums, clearHealNums, setSwDmgNum } from './damage-numbers.js';
@@ -308,11 +308,42 @@ function _updateAllyMagicCast(dt) {
     }
     if (battleSt.battleTimer >= ALLY_MAGIC_HIT_MS) {
       clearHealNums();
+      // Kill detection — if the offensive cast dropped an enemy to 0 HP,
+      // route to the same death state the player cast uses (`spell-cast.js:
+      // _finishMagicHit`). Without this the dead enemy sits at 0 HP with
+      // no death anim; the encounter never transitions to victory if it was
+      // the last living enemy.
+      const tgtType = battleSt.allyMagicTargetType;
+      const tgtIdx = battleSt.allyMagicTargetIdx;
+      let routedToDeath = false;
+      if (tgtType === 'enemy' && battleSt.encounterMonsters) {
+        const m = battleSt.encounterMonsters[tgtIdx];
+        if (m && m.hp <= 0) {
+          replaceBattleMsg(BATTLE_SLAIN);
+          battleSt.dyingMonsterIndices = new Map([[tgtIdx, 0]]);
+          battleSt.battleState = 'monster-death';
+          battleSt.battleTimer = 0;
+          playSFX(SFX.MONSTER_DEATH);
+          routedToDeath = true;
+        }
+      } else if (tgtType === 'pvp-enemy') {
+        const tgt = tgtIdx === 0
+          ? pvpSt.pvpOpponentStats
+          : pvpSt.pvpEnemyAllies[tgtIdx - 1];
+        if (tgt && tgt.hp <= 0) {
+          replaceBattleMsg(BATTLE_SLAIN);
+          pvpSt.pvpDyingMap = new Map([[tgtIdx, 0]]);
+          battleSt.battleState = 'pvp-dissolve';
+          battleSt.battleTimer = 0;
+          playSFX(SFX.MONSTER_DEATH);
+          routedToDeath = true;
+        }
+      }
       battleSt.allyMagicCasterIdx = -1;
       battleSt.allyMagicTargetIdx = -1;
       battleSt.allyMagicSpellId = 0;
       battleSt.allyMagicItemMode = false;
-      _processNextTurn();
+      if (!routedToDeath) _processNextTurn();
     }
     return true;
   }

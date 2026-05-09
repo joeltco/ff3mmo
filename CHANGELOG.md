@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.158 — 2026-05-09
+
+### fix: enemy death from ally offensive cast
+
+Confirmed the analogous bug in the other direction — when a roster ally BM/RM landed a kill spell on an encounter monster or PVP enemy, the target sat at 0 HP with no death animation. If it was the last living enemy, the battle never transitioned to victory because the all-dead check (`battle-update.js:521` for encounter, `advancePVPTargetOrVictory` for PVP) only fires from `monster-death` / `pvp-dissolve` state — and the ally cast pipeline went straight to `_processNextTurn` instead.
+
+Added kill detection at the end of `_updateAllyMagicCast`'s hit phase, mirroring `spell-cast.js:_finishMagicHit`:
+- `targetType === 'enemy'` + `encounterMonsters[idx].hp <= 0` → set `dyingMonsterIndices` + transition to `'monster-death'` + `MONSTER_DEATH` SFX + replace strip with `BATTLE_SLAIN`.
+- `targetType === 'pvp-enemy'` + `pvpOpponentStats` or `pvpEnemyAllies[idx-1]` at 0 HP → set `pvpDyingMap` + transition to `'pvp-dissolve'` + same SFX/strip.
+- Otherwise fall through to `_processNextTurn` as before.
+
+Skips the next-turn call when routed to death so the death-state animation timer drives the next transition. Existing encounter-victory (`monster-death` state) and PVP-victory (`advancePVPTargetOrVictory` from `pvp-dissolve`) paths handle "all enemies dead" correctly without further changes.
+
 ## 1.7.157 — 2026-05-09
 
 ### fix: roster ally death on PVP enemy spell
