@@ -192,42 +192,75 @@ export const CHAT_PHRASES = [
 
 export const ROSTER_FADE_STEPS = 4;
 
-// Per-job stat-weight matrix for fake-player level scaling. `5 + lv*W` per
-// stat. Specialist jobs hit W=3 in their core stat (Fi/Mo str+vit, WM mnd,
-// BM int). Red Mage is the hybrid: W=2 in BOTH int AND mnd, putting their
+// ─────────────────────────────────────────────────────────────────────────
+// Per-job stat-weight matrix — SINGLE SOURCE OF TRUTH for both local-player
+// and fake-player stats. Each stat is `5 + level * W` (or `level * W_mp` for
+// MP, since non-casters have no MP at all). HP is always `28 + level * 6`
+// regardless of job — HP scales with level, not job — so it's not in the
+// matrix.
+//
+// Specialist jobs hit W=3 in their core stat (Fi/Mo str+vit, WM mnd, BM
+// int). Red Mage is the hybrid: W=2 in BOTH int AND mnd, putting their
 // magic output at ~67% of a specialist's at the same level — meaningful
 // magic, but a focused WM/BM still outclasses them per-school. RM phys is
 // the same as the pure casters (W=1) — they're not melee fighters.
 //
-// The local player path (`initPlayerStats` / `grantExp` in player-stats.js)
-// reads the canonical ROM stat tables, so this matrix is fake-player-only.
+//          str  agi  vit  int  mnd  mp
+//   OK (0)  1    1    1    1    1   0    apprentice — flat baseline, no MP
+//   Fi (1)  2    1    2    1    1   0    melee — strong + tanky, no MP
+//   Mo (2)  2    2    2    1    1   0    melee — strong + agile + tanky, no MP
+//   WM (3)  1    1    1    1    3   3    pure white caster
+//   BM (4)  1    1    1    3    1   3    pure black caster
+//   RM (5)  1    1    1    2    2   2    hybrid — medium in both schools
 //
-//          str  agi  vit  int  mnd
-//   OK (0)  1    1    1    1    1     apprentice — flat baseline
-//   Fi (1)  2    1    2    1    1     melee — strong + tanky
-//   Mo (2)  2    2    2    1    1     melee — strong + agile + tanky
-//   WM (3)  1    1    1    1    3     pure white caster
-//   BM (4)  1    1    1    3    1     pure black caster
-//   RM (5)  1    1    1    2    2     hybrid — medium in both schools
+// Both `generateAllyStats` (PVP enemies + roster allies) AND `initPlayerStats`
+// / `grantExp` / `changeJob` (local player) read from this matrix via
+// `computeJobStats`. There is no second stat path. ROM-driven stat readers
+// (`readJobBaseStats`, `readJobLevelBonus`) are no longer used for stats —
+// kept as ROM utilities only if/when something else needs them.
 const _JOB_STAT_WEIGHTS = {
-  0: { str: 1, agi: 1, vit: 1, int: 1, mnd: 1 },
-  1: { str: 2, agi: 1, vit: 2, int: 1, mnd: 1 },
-  2: { str: 2, agi: 2, vit: 2, int: 1, mnd: 1 },
-  3: { str: 1, agi: 1, vit: 1, int: 1, mnd: 3 },
-  4: { str: 1, agi: 1, vit: 1, int: 3, mnd: 1 },
-  5: { str: 1, agi: 1, vit: 1, int: 2, mnd: 2 },
+  0: { str: 1, agi: 1, vit: 1, int: 1, mnd: 1, mp: 0 },
+  1: { str: 2, agi: 1, vit: 2, int: 1, mnd: 1, mp: 0 },
+  2: { str: 2, agi: 2, vit: 2, int: 1, mnd: 1, mp: 0 },
+  3: { str: 1, agi: 1, vit: 1, int: 1, mnd: 3, mp: 3 },
+  4: { str: 1, agi: 1, vit: 1, int: 3, mnd: 1, mp: 3 },
+  5: { str: 1, agi: 1, vit: 1, int: 2, mnd: 2, mp: 2 },
 };
-const _DEFAULT_STAT_WEIGHTS = { str: 1, agi: 1, vit: 1, int: 1, mnd: 1 };
+const _DEFAULT_STAT_WEIGHTS = { str: 1, agi: 1, vit: 1, int: 1, mnd: 1, mp: 0 };
+
+// Single helper: compute all stats for any (jobIdx, level). Used by both
+// the local-player path and the fake-player path so RM (or any job) is
+// the same character whether you're playing it or fighting it.
+export function computeJobStats(jobIdx, level) {
+  const w = _JOB_STAT_WEIGHTS[jobIdx] || _DEFAULT_STAT_WEIGHTS;
+  return {
+    str:    5 + level * w.str,
+    agi:    5 + level * w.agi,
+    vit:    5 + level * w.vit,
+    int:    5 + level * w.int,
+    mnd:    5 + level * w.mnd,
+    maxHP: 28 + level * 6,
+    maxMP: w.mp > 0 ? (5 + level * w.mp) : 0,
+  };
+}
+
+// Per-level deltas — for incremental level-up bookkeeping. Same matrix as
+// `computeJobStats` but expressed as the diff that gets added per level.
+export function getJobLevelDelta(jobIdx) {
+  const w = _JOB_STAT_WEIGHTS[jobIdx] || _DEFAULT_STAT_WEIGHTS;
+  return {
+    str: w.str, agi: w.agi, vit: w.vit, int: w.int, mnd: w.mnd,
+    hpGain: 6,
+    mpGain: w.mp,
+  };
+}
 
 export function generateAllyStats(player) {
   const lv = player.level;
-  const w = _JOB_STAT_WEIGHTS[player.jobIdx] || _DEFAULT_STAT_WEIGHTS;
-  const str = 5 + lv * w.str;
-  const agi = 5 + lv * w.agi;
-  const vit = 5 + lv * w.vit;
-  const int_ = 5 + lv * w.int;
-  const mnd = 5 + lv * w.mnd;
-  const hp = 28 + lv * 6;
+  const s = computeJobStats(player.jobIdx, lv);
+  const { str, agi, vit, mnd } = s;
+  const int_ = s.int;
+  const hp = s.maxHP;
   const loc = player.loc;
   // Gear by location (matches chest loot tiers)
   let weaponId = 0x1E, totalDef = 1; // default: Knife + Cap

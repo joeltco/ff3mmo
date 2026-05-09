@@ -2,6 +2,40 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.138 — 2026-05-08
+
+### Single stat path — local player + fake players unified
+
+v1.7.137 only fixed fake-player stats, leaving the local player on the ROM-driven path. Result: a level-N RM in your party had different numbers than a level-N RM as a PVP enemy. Same job, two characters. Drift, my fault, fixing now.
+
+The per-job weight matrix is now the **single source of truth** for both paths:
+
+- `data/players.js` exports `computeJobStats(jobIdx, level)` (returns `{str, agi, vit, int, mnd, maxHP, maxMP}`) and `getJobLevelDelta(jobIdx)` (returns the per-level deltas).
+- `generateAllyStats` calls `computeJobStats`.
+- `initPlayerStats` calls `computeJobStats(ps.jobIdx, 1)`. ROM readers (`readJobBaseStats`, `readStartingHP`, `readStartingMP`) are no longer consulted for stats.
+- `grantExp` level-up loop adds `getJobLevelDelta(ps.jobIdx)` per stat instead of rolling random ROM bonuses. Deterministic — at level N, stats match the matrix exactly.
+- `changeJob` rebuilds via `computeJobStats(newJobIdx, currentLevel)`. Switching jobs to a level-N character produces the same numbers as if the player had been that job all along.
+
+The matrix:
+
+```
+            str  agi  vit  int  mnd  mp
+   OK (0)    1    1    1    1    1   0
+   Fi (1)    2    1    2    1    1   0
+   Mo (2)    2    2    2    1    1   0
+   WM (3)    1    1    1    1    3   3
+   BM (4)    1    1    1    3    1   3
+   RM (5)    1    1    1    2    2   2     hybrid — W=2 in both schools
+```
+
+Each stat = `5 + level * W` (or `5 + level * W_mp` for MP, `0` for non-casters; HP is always `28 + level * 6`). RM at level N has 67% of a specialist's per-school stat contribution — clearly weaker per-school than WM/BM, but flexible across both.
+
+`_tryPVPEnemyOffensiveCast` (PVP enemy BM/RM offensive cast) now reads `caster.int` directly (was a hack using `caster.agi` because INT didn't exist).
+
+**Caveat for existing saves**: characters that already have stats loaded from the previous ROM-driven formula keep those stats. The next `level-up` adds matrix deltas, so the stats rebase forward. New games + new fake players use the matrix from the start. If you want existing-save migration to recompute current stats from the matrix, say the word and I'll wire it.
+
+ROM stat readers (`readJobBaseStats`, `readJobLevelBonus`, `readStartingHP`, `readStartingMP`) are now dead code in `data/jobs.js`. Left in place for now (harmless); cleanup can happen in a separate pass.
+
 ## 1.7.137 — 2026-05-08
 
 ### Fake-player stat audit — RM is hybrid, Fi/Mo are physical, casters are specialists

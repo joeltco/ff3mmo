@@ -1,6 +1,7 @@
 // player-stats.js — player combat stats, equip slots, exp, and derived stat helpers
 
-import { readJobBaseStats, readStartingHP, readStartingMP, readJobLevelBonus, buildExpTable, JOBS, JOB_SCALING } from './data/jobs.js';
+import { buildExpTable, JOBS, JOB_SCALING } from './data/jobs.js';
+import { computeJobStats, getJobLevelDelta } from './data/players.js';
 import { ITEMS, isWeapon } from './data/items.js';
 import { BASE_HIT_RATE, calcAttackerAtk } from './battle-math.js';
 import { createStatusState } from './status-effects.js';
@@ -167,12 +168,21 @@ export function isHitRightHand(hitIdx, rHandHitCount = 0) {
 }
 
 export function initPlayerStats(romData) {
-  const { str, agi, vit, int: int_, mnd, mpIdx } = readJobBaseStats(romData, ps.jobIdx);
-  const hp = readStartingHP(romData);
-  const mp = readStartingMP(romData, mpIdx);
-  ps.stats = { str, agi, vit, int: int_, mnd, hp, maxHP: hp, mp, maxMP: mp, level: 1, exp: 0, expToNext: 0 };
-  ps.hp = hp;
-  ps.mp = mp;
+  // Stats come from the per-job matrix in data/players.js — same source the
+  // fake-player path uses. ROM stat readers (`readJobBaseStats` /
+  // `readStartingHP` / `readStartingMP`) are no longer consulted; the matrix
+  // is the single source of truth so a level-N RM has identical numbers
+  // whether you're playing the character or fighting one in PVP.
+  ps._romData = romData;
+  const s = computeJobStats(ps.jobIdx, 1);
+  ps.stats = {
+    str: s.str, agi: s.agi, vit: s.vit, int: s.int, mnd: s.mnd,
+    hp: s.maxHP, maxHP: s.maxHP,
+    mp: s.maxMP, maxMP: s.maxMP,
+    level: 1, exp: 0, expToNext: 0,
+  };
+  ps.hp = s.maxHP;
+  ps.mp = s.maxMP;
   recalcCombatStats();
 }
 
@@ -195,18 +205,18 @@ export function grantExp(amount) {
     ps.stats.level++;
     const lv = ps.stats.level;
 
-    // HP growth: vit + random(0, floor(vit/2)) + level * 2 (from disasm 35/BECA-BF09)
-    const hpGain = ps.stats.vit + Math.floor(Math.random() * (Math.floor(ps.stats.vit / 2) + 1)) + lv * 2;
-    ps.stats.maxHP = Math.min(9999, ps.stats.maxHP + hpGain);
-
-    // Stat bonuses from ROM — current job. NES caps each stat at 99 (disasm 35/BF92).
-    const bonus = readJobLevelBonus(ps._romData, ps.jobIdx, lv);
-    ps.stats.str = Math.min(99, ps.stats.str + bonus.str);
-    ps.stats.agi = Math.min(99, ps.stats.agi + bonus.agi);
-    ps.stats.vit = Math.min(99, ps.stats.vit + bonus.vit);
-    ps.stats.int = Math.min(99, ps.stats.int + bonus.int);
-    ps.stats.mnd = Math.min(99, ps.stats.mnd + bonus.mnd);
-    ps.stats.maxMP += bonus.mpGain;
+    // Per-level stat deltas come from the same matrix the fake-player path
+    // uses. Deterministic — at any given level, str = 5 + lv*W, etc. — so a
+    // local-player RM and a fake-player RM at the same level have identical
+    // numbers. No more ROM random rolls.
+    const d = getJobLevelDelta(ps.jobIdx);
+    ps.stats.str = Math.min(99, ps.stats.str + d.str);
+    ps.stats.agi = Math.min(99, ps.stats.agi + d.agi);
+    ps.stats.vit = Math.min(99, ps.stats.vit + d.vit);
+    ps.stats.int = Math.min(99, ps.stats.int + d.int);
+    ps.stats.mnd = Math.min(99, ps.stats.mnd + d.mnd);
+    ps.stats.maxHP = Math.min(9999, ps.stats.maxHP + d.hpGain);
+    ps.stats.maxMP += d.mpGain;
 
     // No full heal on level-up — HP is preserved at whatever it was (current HP is always ≤
     // new maxHP since maxHP only grows). KO'd players stay KO'd so the end-of-battle respawn
@@ -292,26 +302,17 @@ export function jobSwitchCost(newJobIdx) {
 
 export function changeJob(newJobIdx) {
   ps.jobIdx = newJobIdx;
-  // Rebuild stats from scratch for the new job at current level
-  const { str, agi, vit, int: int_, mnd, mpIdx } = readJobBaseStats(ps._romData, newJobIdx);
-  const baseHP = readStartingHP(ps._romData);
-  const baseMP = readStartingMP(ps._romData, mpIdx);
-  let s = { str, agi, vit, int: int_, mnd, maxHP: baseHP, maxMP: baseMP };
-  // Replay level bonuses
-  for (let lv = 2; lv <= ps.stats.level; lv++) {
-    const hpGain = s.vit + Math.floor(Math.random() * (Math.floor(s.vit / 2) + 1)) + lv * 2;
-    s.maxHP = Math.min(9999, s.maxHP + hpGain);
-    const bonus = readJobLevelBonus(ps._romData, newJobIdx, lv);
-    s.str = Math.min(99, s.str + bonus.str);
-    s.agi = Math.min(99, s.agi + bonus.agi);
-    s.vit = Math.min(99, s.vit + bonus.vit);
-    s.int = Math.min(99, s.int + bonus.int);
-    s.mnd = Math.min(99, s.mnd + bonus.mnd);
-    s.maxMP += bonus.mpGain;
-  }
-  ps.stats.str = s.str; ps.stats.agi = s.agi; ps.stats.vit = s.vit;
-  ps.stats.int = s.int; ps.stats.mnd = s.mnd;
-  ps.stats.maxHP = s.maxHP; ps.stats.maxMP = s.maxMP;
+  // Stats for the new job at the current level — single matrix lookup.
+  // Deterministic: a job change on a level-N character produces the same
+  // numbers it would have if the player had been that job from level 1.
+  const s = computeJobStats(newJobIdx, ps.stats.level);
+  ps.stats.str = Math.min(99, s.str);
+  ps.stats.agi = Math.min(99, s.agi);
+  ps.stats.vit = Math.min(99, s.vit);
+  ps.stats.int = Math.min(99, s.int);
+  ps.stats.mnd = Math.min(99, s.mnd);
+  ps.stats.maxHP = s.maxHP;
+  ps.stats.maxMP = s.maxMP;
   // Clamp HP/MP to new maximums
   ps.hp = Math.min(ps.hp, s.maxHP); ps.stats.hp = ps.hp;
   ps.mp = Math.min(ps.mp, s.maxMP); ps.stats.mp = ps.mp;
