@@ -8,7 +8,7 @@ import { inputSt, handleBattleInput, handleRosterInput, handlePauseInput, keys }
 import { sprite } from './player-sprite.js';
 import { pauseSt } from './pause-menu.js';
 import { msgState, showMsgBox, dismissMsgBox } from './message-box.js';
-import { chatState, tabSelectMode, chatScrollOffset, setChatScrollOffset } from './chat.js';
+import { chatState, tabSelectMode, chatScrollOffset, setChatScrollOffset, canChatScrollUp, canChatScrollDown } from './chat.js';
 import { ps } from './player-stats.js';
 import { playSFX, playTrack, TRACKS, SFX } from './music.js';
 import { checkTrigger, openPassage, handleChest, handleSecretWall,
@@ -117,16 +117,21 @@ export function handleInput() {
   if (mapSt.starEffect) return;
   if (mapSt.pondStrobeTimer > 0) return;
   if (chatState.expanded) {
-    // Up/down scrolls the chat log; setChatScrollOffset clamps to the
-    // top of the buffer (cached from the last draw frame).
+    // Up/down scrolls the chat log; gate SFX on whether scrolling actually
+    // happens (no sound if the buffer fits or we're already pinned at the
+    // top/bottom). setChatScrollOffset clamps regardless.
     if (keys['ArrowUp']) {
       keys['ArrowUp'] = false;
-      setChatScrollOffset(chatScrollOffset + 1);
-      playSFX(SFX.CURSOR);
+      if (canChatScrollUp()) {
+        setChatScrollOffset(chatScrollOffset + 1);
+        playSFX(SFX.CURSOR);
+      }
     } else if (keys['ArrowDown']) {
       keys['ArrowDown'] = false;
-      setChatScrollOffset(chatScrollOffset - 1);
-      playSFX(SFX.CURSOR);
+      if (canChatScrollDown()) {
+        setChatScrollOffset(chatScrollOffset - 1);
+        playSFX(SFX.CURSOR);
+      }
     }
     return;
   }

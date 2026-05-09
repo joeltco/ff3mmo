@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.149 — 2026-05-09
+
+### fix: chat scroll SFX only when scroll actually happens
+
+Up/Down in the expanded chat log was playing `SFX.CURSOR` on every press, even when there was nothing to scroll (buffer fit in the visible area, or already pinned at the top/bottom). Now gated on `canChatScrollUp()` / `canChatScrollDown()` — silent when no movement.
+
 ## 1.7.148 — 2026-05-09
 
 ### feat: chat log scroll
