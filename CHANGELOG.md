@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.165 — 2026-05-09
+
+### diag: cast windup telemetry pipes to pm2 logs
+
+User reports BM halo still missing on roster ally cast after v1.7.164 modular fix. v1.7.162 telemetry only logged to in-game chat (`consoleLog`); from SSH (no browser dev tools, no chat visibility) I can't see what's happening. Upgraded:
+
+- `_logCastBehindMiss` now ALSO POSTs to `/api/client-error` so the message lands in `pm2 logs server --err`. Same one-shot dedup per `(jobIdx, spellId, resolved-jobKey)` tag.
+- New `logCastSuccess(role, jobIdx, spellId)` exported from `cast-anim.js`. Fires once per `(role, job, spell)` when the halo successfully renders. Pipes to chat + pm2.
+- `_drawAllyCastWindup` calls `logCastSuccess('ally-windup-behind|front', ...)` BEFORE invoking `drawCasterCastBehind/Front`. So pm2 will show:
+  - `[cast-render] role=ally-windup-behind job=N spell=$NN` if the windup function is reached.
+  - `[cast-render] role=halo job=N spell=$NN` if the halo successfully draws.
+  - `[cast-behind-miss] job=N spell=$NN resolved=...` if `getCastVisual` failed to return a BM bundle.
+
+Trigger an ally BM cast post-deploy and `ssh root@68.183.59.19 "pm2 logs server --err --nostream --lines 30 | grep cast-"` will tell us EXACTLY where the chain breaks: state never enters → no log; windup gate fails → no log; resolve fails → miss log; resolve OK → success log but no visible halo means clip / position / rendering issue downstream.
+
 ## 1.7.164 — 2026-05-09
 
 ### fix: ally cast windup renders over HUD, outside panel clip

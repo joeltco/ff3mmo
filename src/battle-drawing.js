@@ -39,7 +39,7 @@ import { getCastAnimElapsedMs, getCurrentSpellId, getSpellTargets, getSpellHitId
 import { drawCasterCastBehind, drawCasterCastFront,
          jobToCastKey, CAST_T_LUNGE, CAST_T_HEAL, CAST_T_RETURN, CAST_PHASE_MS,
          CAST_T_THROW_PROJ_START, CAST_T_THROW_IMPACT_START, CAST_T_THROW_RETURN,
-         CAST_PHASE_MS_THROW } from './cast-anim.js';
+         CAST_PHASE_MS_THROW, logCastSuccess } from './cast-anim.js';
 import { getSpellAnim, getSpellAnimForItem, getSpellAnimFrame } from './spell-anim.js';
 import { getProjectileTile } from './projectile-anim.js';
 import { hudSt } from './hud-state.js';
@@ -1795,6 +1795,10 @@ function _drawAllyCastWindup(layer) {
   const shakeOff = (battleSt.allyShakeTimer[i] > 0) ? (Math.floor(battleSt.allyShakeTimer[i] / 67) & 1 ? 2 : -2) : 0;
   const ppx = HUD_RIGHT_X + 8 + shakeOff;
   const ppy = panelTop + i * ROSTER_ROW_H + 8;
+  // Telemetry: confirms _drawAllyCastWindup is reached + which (job, spell)
+  // is being passed. Layered with the cast-anim miss/success logs so we get
+  // a full trace: windup-called → halo-rendered OR cast-behind-miss.
+  logCastSuccess('ally-windup-' + layer, ally.jobIdx || 0, battleSt.allyMagicSpellId);
   const fn = layer === 'behind' ? drawCasterCastBehind : drawCasterCastFront;
   fn(ui.ctx, ppx + 8, ppy + 8, ally.jobIdx || 0, battleSt.allyMagicSpellId, battleSt.battleTimer, false);
 }
