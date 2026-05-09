@@ -75,6 +75,7 @@ export const battleSt = {
   allyMagicHealAmount: 0,             // pre-rolled heal value
   allyMagicDamageRoll: 0,             // pre-rolled damage value for offensive casts (Fire/Bzzard/etc.)
   allyMagicEffectApplied: false,
+  allyMagicSfxPlayed:    false,  // gated SFX at impact start, separate from apply timing
   allyMagicItemMode: false,           // true = consumable (potion/antidote), suppresses cast flame visual
 
   // ── Item use ──────────────────────────────────────────────────────

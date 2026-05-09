@@ -109,6 +109,7 @@ export const pvpSt = {
   pvpMagicSpellId:        0,
   pvpMagicHealAmount:     0,
   pvpMagicEffectApplied:  false,
+  pvpMagicSfxPlayed:      false,  // gated SFX at impact start (separate from apply timing)
   // Offensive cast — when an enemy BM/RM casts Fire / Blizzard / Sleep on the
   // player party. -1 = player, 0+ = battleAllies[idx]. Mutually exclusive
   // with pvpMagicTargetCellIdx (heal-style); whichever is set drives apply.
@@ -517,6 +518,9 @@ function _tryPVPEnemyItem(casterCellIdx) {
 // frame-timeline breakdown; PVP-enemy mirrors it (just with mirror=true on
 // the cast windup since opponents face right).
 const PVP_MAGIC_CAST_MS   = CAST_PHASE_MS_THROW.buildup;        // 800
+// SFX at IMPACT START — same rule as player + ally throw paths.
+const PVP_MAGIC_SFX_MS    = CAST_PHASE_MS_THROW.projectile +    // 250
+                            CAST_PHASE_MS_THROW.preImpactGap;
 // Effect at end of postImpactGap — burst fully plays out, beat, then damage pops.
 const PVP_MAGIC_EFFECT_MS = CAST_PHASE_MS_THROW.projectile +    // 900
                             CAST_PHASE_MS_THROW.preImpactGap +
@@ -671,17 +675,16 @@ function _applyPVPEnemyMagicEffect() {
       if (partyIdx === -1) battleSt.battleShakeTimer = BATTLE_SHAKE_MS;
       else battleSt.allyShakeTimer[partyIdx] = BATTLE_SHAKE_MS;
     };
+    // SFX already fired at impact start (engine timer-driven); helpers don't double-fire.
     if (sid === 0x33) {
       const spell = SPELLS.get(0x33);
       applyMagicStatus(partyTgt, 'sleep', spell ? spell.hit : 15, {
-        sfx: SFX.SLEEP_PUFF,
         onStatusMsg: replaceBattleMsg,
         onMiss: () => setDmgNum({ miss: true }),
       });
     } else {
       const spell = SPELLS.get(sid);
       applyMagicDamage(partyTgt, pvpSt.pvpMagicDamageRoll | 0, spell, {
-        sfx: sid === 0x31 ? SFX.FIRE_BOOM : SFX.SW_HIT,
         onDmgNum: (dmg) => setDmgNum({ value: dmg }),
         onShake: triggerShake,
       });
@@ -734,11 +737,22 @@ function _processPVPEnemyMagic(dt) {
       battleSt.battleState = 'pvp-enemy-magic-hit';
       battleSt.battleTimer = 0;
       pvpSt.pvpMagicEffectApplied = false;
+      pvpSt.pvpMagicSfxPlayed = false;
     }
     return true;
   }
   if (battleSt.battleState === 'pvp-enemy-magic-hit') {
     tickHealNums(dt);
+    // Impact SFX at IMPACT START — same rule as player + ally.
+    if (!pvpSt.pvpMagicSfxPlayed && battleSt.battleTimer >= PVP_MAGIC_SFX_MS) {
+      const sid = pvpSt.pvpMagicSpellId;
+      const sfx = sid === 0x31 ? SFX.FIRE_BOOM
+                : sid === 0x32 ? SFX.SW_HIT
+                : sid === 0x33 ? SFX.SLEEP_PUFF
+                : null;
+      if (sfx != null) playSFX(sfx);
+      pvpSt.pvpMagicSfxPlayed = true;
+    }
     if (!pvpSt.pvpMagicEffectApplied && battleSt.battleTimer >= PVP_MAGIC_EFFECT_MS) {
       _applyPVPEnemyMagicEffect();
       pvpSt.pvpMagicEffectApplied = true;

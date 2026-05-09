@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.177 — 2026-05-09
+
+### fix: spell SFX fires at impact START (during burst, not after)
+
+Ally + PVP-enemy offensive casts were playing FIRE_BOOM / SW_HIT / SLEEP_PUFF inside the apply helpers — which fire at damage-apply time = AFTER the burst ends + post-impact gap. So the boom sound played 100 ms after the visual burst finished. Wrong.
+
+Player thrown impact-walk already fires SFX at impact START (`spell-cast.js:650`). Mirrored that for ally + PVP-enemy:
+- New constants: `ALLY_MAGIC_SFX_MS` and `PVP_MAGIC_SFX_MS` = `projectile + preImpactGap = 250` ms (impact start = first frame of burst).
+- Engine update loops (`_updateAllyMagicCast` and `_processPVPEnemyMagic`) gate SFX play on `battleTimer >= *_MAGIC_SFX_MS` with a `*MagicSfxPlayed` flag. Reset to false on state transition into the hit phase.
+- Removed `opts.sfx` from `applyMagicDamage` / `applyMagicStatus` calls in the offensive branches (no double-fire).
+- Heal / cure-status / sight branches still use `opts.sfx` since they don't have an impact-burst phase — SFX at apply time is correct for those.
+
+New `battleSt.allyMagicSfxPlayed` and `pvpSt.pvpMagicSfxPlayed` fields, reset in `resetBattleVars` / state-transition entry points.
+
+Now SFX hits with the burst frame, not 100 ms after the burst ends.
+
 ## 1.7.176 — 2026-05-09
 
 ### diag: role-aware cast windup telemetry

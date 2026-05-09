@@ -205,10 +205,13 @@ function _updateAllyEnemyHit() {
 // — slight tightening from the prior 400 ms (heal pops earlier, still visible
 // for ~700 ms via tickHealNums until clearHealNums on hit end).
 const ALLY_MAGIC_CAST_MS   = CAST_PHASE_MS_THROW.buildup;       // 800
+// SFX fires at IMPACT START — same rule the player thrown impact-walk uses
+// (`spell-cast.js:650`). Without this, FIRE_BOOM / SW_HIT / SLEEP_PUFF would
+// fire at damage-apply time = AFTER burst ends, sounding stale.
+const ALLY_MAGIC_SFX_MS    = CAST_PHASE_MS_THROW.projectile +   // 250
+                             CAST_PHASE_MS_THROW.preImpactGap;
 // Effect (damage / heal) fires AFTER the impact burst + post-impact gap.
-// Sequence: cast → projectile → preImpactGap → impact → postImpactGap → damage.
-// Damage number then bounces during the ret window. Same rule as the player
-// thrown impact-walk per-target window.
+// Sequence: cast → projectile → preImpactGap → impact (SFX) → postImpactGap → damage.
 const ALLY_MAGIC_EFFECT_MS = CAST_PHASE_MS_THROW.projectile +   // 900
                              CAST_PHASE_MS_THROW.preImpactGap +
                              CAST_PHASE_MS_THROW.impact +
@@ -255,8 +258,9 @@ function _applyAllyMagicEffect() {
   if (spellId === 0x31 || spellId === 0x32 || spellId === 0x33) {
     const tgt = _allyMagicEnemyTarget();
     if (spellId === 0x33) {
+      // SFX already played at impact start (engine timer-driven); helper
+      // doesn't double-fire. Damage number / status msg fire here.
       applyMagicStatus(tgt, 'sleep', spell.hit || 15, {
-        sfx: SFX.SLEEP_PUFF,
         onStatusMsg: replaceBattleMsg,
         onLand: () => _setAllyMagicEnemyDmgNum({ value: 0, timer: 0, status: 'sleep' }),
         onMiss: () => _setAllyMagicEnemyDmgNum({ miss: true, timer: 0 }),
@@ -264,7 +268,6 @@ function _applyAllyMagicEffect() {
       return;
     }
     applyMagicDamage(tgt, battleSt.allyMagicDamageRoll || 0, spell, {
-      sfx: spellId === 0x31 ? SFX.FIRE_BOOM : SFX.SW_HIT,
       onDmgNum: (dmg) => _setAllyMagicEnemyDmgNum({ value: dmg, timer: 0 }),
     });
     return;
@@ -301,11 +304,23 @@ function _updateAllyMagicCast(dt) {
       battleSt.battleState = 'ally-magic-hit';
       battleSt.battleTimer = 0;
       battleSt.allyMagicEffectApplied = false;
+      battleSt.allyMagicSfxPlayed = false;
     }
     return true;
   }
   if (battleSt.battleState === 'ally-magic-hit') {
     tickHealNums(dt);
+    // Impact SFX at IMPACT START (after projectile + preImpactGap), before the
+    // damage number pops. Mirrors `spell-cast.js:650`.
+    if (!battleSt.allyMagicSfxPlayed && battleSt.battleTimer >= ALLY_MAGIC_SFX_MS) {
+      const sid = battleSt.allyMagicSpellId;
+      const sfx = sid === 0x31 ? SFX.FIRE_BOOM
+                : sid === 0x32 ? SFX.SW_HIT
+                : sid === 0x33 ? SFX.SLEEP_PUFF
+                : null;
+      if (sfx != null) playSFX(sfx);
+      battleSt.allyMagicSfxPlayed = true;
+    }
     if (!battleSt.allyMagicEffectApplied && battleSt.battleTimer >= ALLY_MAGIC_EFFECT_MS) {
       _applyAllyMagicEffect();
       battleSt.allyMagicEffectApplied = true;
