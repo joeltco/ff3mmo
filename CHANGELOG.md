@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.176 — 2026-05-09
+
+### diag: role-aware cast windup telemetry
+
+User reports BM halo not visible on PVP opponent. The existing `[cast-render]` telemetry inside `drawCasterCastBehind` doesn't include the caller's role — both ally and PVP-enemy log identically as `role=halo`, can't tell which fired.
+
+Added a one-shot `[windup-call] role:layer:job:spell at(x,y)` log in `drawCastWindup` that POSTs to `/api/client-error` (visible in `pm2 logs`). Fires once per unique `(role, layer, jobIdx, spellId)`. Trigger a PVP-enemy BM Fire cast and `ssh root@68.183.59.19 "pm2 logs server --err --nostream --lines 20 | grep windup-call"` will tell us:
+
+- `[windup-call] pvp-enemy:behind:4:31 at(N,M)` → render IS firing for PVP-enemy BM Fire cast at coords (N,M). Visibility issue, not a wiring issue. Fix: position adjustment.
+- No `pvp-enemy:behind` entries → `_resolveCastContext('pvp-enemy', idx)` returning null. Likely `pvpSt.pvpMagicCasterCellIdx !== idx` mismatch or `opp.jobIdx` undefined.
+- `pvp-enemy:behind:0:NN` (job=0) → opp.jobIdx not set on the casting opponent — fall through to OK which has no halo.
+
+Trigger one cast and I'll grep the logs.
+
 ## 1.7.175 — 2026-05-09
 
 ### tune: gaps between spell pipeline phases (smoother pacing)
