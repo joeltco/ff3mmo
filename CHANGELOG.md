@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.139 — 2026-05-08
+
+### Existing-save stat migration
+
+Save load now recomputes base stats from `computeJobStats(slot.jobIdx, slot.level)` instead of trusting the saved `str/agi/vit/int/mnd/maxHP/maxMP` blob. Saves created before v1.7.138 had stats from the old ROM-random path; this brings them onto the unified matrix retroactively. Existing characters get the canonical numbers for their job + level.
+
+Untouched on load: `level`, `exp`, `gil`, `inventory`, `weaponR/L`, `head/body/arms`, `jobLevels`, `unlockedJobs`, `cp`, `knownSpells`, `worldX/Y`, `lastTown`. HP and MP are clamped to the (possibly new) max values — so a character that previously had a higher max HP from favorable ROM rolls comes back capped at the matrix value.
+
 ## 1.7.138 — 2026-05-08
 
 ### Single stat path — local player + fake players unified

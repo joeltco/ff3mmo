@@ -7,6 +7,7 @@ import { selectCursor, saveSlots, nameBuffer, NAME_MAX_LEN,
          setSelectCursor, setNameBuffer, saveSlotsToDB, setPsAligned } from './save-state.js';
 import { playSFX, fadeOutMusic, SFX, TRACKS } from './music.js';
 import { ps, fullHeal, recalcCombatStats, grantStartingSpells, initPlayerStats } from './player-stats.js';
+import { computeJobStats } from './data/players.js';
 import { hudSt } from './hud-state.js';
 import { transSt } from './transitions.js';
 import { mapSt } from './map-state.js';
@@ -674,16 +675,26 @@ function _updateTitleMainOutCase() {
     ps.arms    = 0x00;
   }
   if (slot && slot.stats) {
-    ps.stats.str = slot.stats.str;
-    ps.stats.agi = slot.stats.agi;
-    ps.stats.vit = slot.stats.vit;
-    ps.stats.int = slot.stats.int;
-    ps.stats.mnd = slot.stats.mnd;
-    ps.stats.maxHP = slot.stats.maxHP;
-    ps.stats.maxMP = slot.stats.maxMP;
-    ps.stats.level = slot.level;
+    // Stat migration v1.7.139 — recompute base stats from the per-job matrix
+    // (`computeJobStats`) instead of trusting the saved numbers. Saves
+    // created before v1.7.138 had stats from the old ROM-random path; this
+    // load-time recompute brings them onto the same matrix the local-player
+    // and fake-player code now share. Inventory / equipment / gil / level /
+    // exp / known spells all stay untouched. HP and MP are clamped to the
+    // (possibly new) max values.
+    const slotJob = slot.jobIdx || 0;
+    const slotLv  = slot.level || 1;
+    const computed = computeJobStats(slotJob, slotLv);
+    ps.stats.str = computed.str;
+    ps.stats.agi = computed.agi;
+    ps.stats.vit = computed.vit;
+    ps.stats.int = computed.int;
+    ps.stats.mnd = computed.mnd;
+    ps.stats.maxHP = computed.maxHP;
+    ps.stats.maxMP = computed.maxMP;
+    ps.stats.level = slotLv;
     ps.stats.exp = slot.exp;
-    ps.stats.expToNext = (slot.level - 1 < 98) ? ps.expTable[slot.level - 1] : 0xFFFFFF;
+    ps.stats.expToNext = (slotLv - 1 < 98) ? ps.expTable[slotLv - 1] : 0xFFFFFF;
     if (slot.hp != null) {
       ps.hp = Math.min(slot.hp, ps.stats.maxHP);
       ps.mp = (slot.mp != null) ? Math.min(slot.mp, ps.stats.maxMP) : ps.stats.maxMP;
