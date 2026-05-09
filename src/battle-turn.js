@@ -3,7 +3,7 @@
 import { battleSt, getEnemyHP, setEnemyHP, BATTLE_SHAKE_MS, BOSS_DEF, BOSS_MAX_HP } from './battle-state.js';
 import { rollHits, calcPotentialHits } from './battle-math.js';
 import { BATTLE_RAN_AWAY, BATTLE_CANT_ESCAPE, BATTLE_ALLY } from './data/strings.js';
-import { getMonsterName } from './text-decoder.js';
+import { getMonsterName, getSpellNameClean, getItemNameClean } from './text-decoder.js';
 import { ps, getJobLevelStatBonus } from './player-stats.js';
 import { JOBS } from './data/jobs.js';
 import { ITEMS, isWeapon, isBladedWeapon } from './data/items.js';
@@ -12,7 +12,7 @@ import { processTurnStart, removeStatus, STATUS, blindHitPenalty, hasStatus } fr
 import { bsc, getSlashFramesForWeapon } from './battle-sprite-cache.js';
 import { pvpSt } from './pvp.js';
 import { inputSt } from './input-handler.js';
-import { queueBattleMsg } from './battle-msg.js';
+import { queueBattleMsg, replaceBattleMsg } from './battle-msg.js';
 import { _nameToBytes } from './text-utils.js';
 import { getAllyDamageNums, setEnemyDmgNum, setEnemyHealNum, setPlayerDamageNum, setPlayerHealNum } from './damage-numbers.js';
 import { startSpellCast } from './spell-cast.js';
@@ -146,8 +146,8 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
       _playerTurnFight();
     }
     else if (cmd === 'defend') { inputSt.battleActionCount++; if (pn) queueBattleMsg(pn); playSFX(SFX.DEFEND_HIT); battleSt.battleState = 'defend-anim'; battleSt.battleTimer = 0; }
-    else if (cmd === 'item') { inputSt.battleActionCount++; _playerTurnItem(); }
-    else if (cmd === 'magic') { inputSt.battleActionCount++; _playerTurnMagic(); }
+    else if (cmd === 'item') { inputSt.battleActionCount++; if (pn) queueBattleMsg(pn); _playerTurnItem(); }
+    else if (cmd === 'magic') { inputSt.battleActionCount++; if (pn) queueBattleMsg(pn); _playerTurnMagic(); }
     else if (cmd === 'skip') processNextTurn();
     else if (cmd === 'run') _playerTurnRun();
   } else if (turn.type === 'ally') {
@@ -315,6 +315,7 @@ function _tryAllyCure(ally, allyIdx) {
   battleSt.allyMagicEffectApplied = false;
   battleSt.allyMagicItemMode     = false;
   queueBattleMsg(ally.name ? _nameToBytes(ally.name) : BATTLE_ALLY);
+  replaceBattleMsg(getSpellNameClean(0x34));
   playSFX(SFX.MAGIC_CAST);
   battleSt.battleState = 'ally-magic-cast';
   battleSt.battleTimer = 0;
@@ -356,6 +357,7 @@ function _tryAllyPoisona(ally, allyIdx) {
   battleSt.allyMagicEffectApplied = false;
   battleSt.allyMagicItemMode      = false;
   queueBattleMsg(ally.name ? _nameToBytes(ally.name) : BATTLE_ALLY);
+  replaceBattleMsg(getSpellNameClean(0x35));
   playSFX(SFX.MAGIC_CAST);
   battleSt.battleState = 'ally-magic-cast';
   battleSt.battleTimer = 0;
@@ -407,6 +409,7 @@ function _tryAllyItem(ally, allyIdx) {
   battleSt.allyMagicEffectApplied = false;
   battleSt.allyMagicItemMode      = true;
   queueBattleMsg(ally.name ? _nameToBytes(ally.name) : BATTLE_ALLY);
+  replaceBattleMsg(getSpellNameClean(spellSentinel));
   playSFX(SFX.CURE);
   battleSt.battleState = 'ally-magic-cast';
   battleSt.battleTimer = 0;
@@ -442,6 +445,8 @@ function _playerTurnConsumable() {
   const effect = itemDat?.effect || 'heal';
   const power = itemDat?.power || 50;
 
+  // Player name was queued at command dispatch; swap in the item name now.
+  replaceBattleMsg(getItemNameClean(itemId));
   playSFX(SFX.CURE);
   const { target, allyIndex } = inputSt.playerActionPending;
 
@@ -497,7 +502,7 @@ function _playerTurnItem() {
   const item = ITEMS.get(pending.itemId);
   if (item?.type === 'battle_item') {
     const tm = pending.targetMode || 'single';
-    startSpellCast(item.animSpellId, { enemyIndex: pending.target, targetMode: tm }, { isItemUse: true });
+    startSpellCast(item.animSpellId, { enemyIndex: pending.target, targetMode: tm }, { isItemUse: true, itemId: pending.itemId });
   } else {
     _playerTurnConsumable();
   }

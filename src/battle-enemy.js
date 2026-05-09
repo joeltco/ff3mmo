@@ -6,7 +6,8 @@ import { calcDamage, elemMultiplier, BOSS_HIT_RATE, GOBLIN_HIT_RATE } from './ba
 import { ps, getShieldEvade } from './player-stats.js';
 import { SFX, playSFX } from './music.js';
 import { tryInflictStatus, blindHitPenalty, wakeOnHit, STATUS_NAME_BYTES } from './status-effects.js';
-import { isBattleMsgBusy, queueBattleMsg } from './battle-msg.js';
+import { isBattleMsgBusy, queueBattleMsg, replaceBattleMsg } from './battle-msg.js';
+import { _nameToBytes } from './text-utils.js';
 import { getPlayerDamageNum, setPlayerDamageNum, getAllyDamageNums } from './damage-numbers.js';
 import { selectCursor, saveSlots } from './save-state.js';
 
@@ -77,7 +78,7 @@ function _doSpecialAttack(mon, spec, targetAlly = -1) {
       getAllyDamageNums()[targetAlly] = applied
         ? { value: 0, timer: 0, status: spec.status }
         : { miss: true, timer: 0 };
-      if (applied && STATUS_NAME_BYTES[applied]) queueBattleMsg(STATUS_NAME_BYTES[applied]);
+      if (applied && STATUS_NAME_BYTES[applied]) replaceBattleMsg(STATUS_NAME_BYTES[applied]);
       battleSt.battleState = 'ally-damage-show-enemy'; battleSt.battleTimer = 0;
     } else if (spec.type === 'multi_status' && ally.status) {
       let anyApplied = false;
@@ -85,7 +86,7 @@ function _doSpecialAttack(mon, spec, targetAlly = -1) {
         const f = tryInflictStatus(ally.status, s, spec.hit, ally.statusResist);
         if (f) {
           anyApplied = true;
-          if (STATUS_NAME_BYTES[f]) queueBattleMsg(STATUS_NAME_BYTES[f]);
+          if (STATUS_NAME_BYTES[f]) replaceBattleMsg(STATUS_NAME_BYTES[f]);
         }
       }
       getAllyDamageNums()[targetAlly] = anyApplied
@@ -119,7 +120,7 @@ function _doSpecialAttack(mon, spec, targetAlly = -1) {
     if (applied) {
       setPlayerDamageNum({ value: 0, timer: 0, status: spec.status });
       battleSt.battleShakeTimer = BATTLE_SHAKE_MS;
-      if (STATUS_NAME_BYTES[applied]) queueBattleMsg(STATUS_NAME_BYTES[applied]);
+      if (STATUS_NAME_BYTES[applied]) replaceBattleMsg(STATUS_NAME_BYTES[applied]);
     } else {
       setPlayerDamageNum({ miss: true, timer: 0 });
     }
@@ -130,7 +131,7 @@ function _doSpecialAttack(mon, spec, targetAlly = -1) {
       const result = tryInflictStatus(ps.status, s, spec.hit, ps.statusResist);
       if (result) {
         anyApplied = result;
-        if (STATUS_NAME_BYTES[result]) queueBattleMsg(STATUS_NAME_BYTES[result]);
+        if (STATUS_NAME_BYTES[result]) replaceBattleMsg(STATUS_NAME_BYTES[result]);
       }
     }
     if (anyApplied) {
@@ -171,6 +172,8 @@ function _processEnemyFlash() {
       const atkName = mon.attacks[Math.floor(Math.random() * mon.attacks.length)];
       const spec = SPECIAL_ATTACKS[atkName];
       if (spec && spec.type !== 'none') {
+        // Monster name was queued at turn dispatch; swap in the attack name.
+        replaceBattleMsg(_nameToBytes(atkName));
         _doSpecialAttack(mon, spec, targetAlly);
         return true;
       }

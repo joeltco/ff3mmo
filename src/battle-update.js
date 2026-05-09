@@ -27,7 +27,7 @@ import { playSFX, stopMusic, pauseMusic, resumeMusic, playTrack, TRACKS, SFX } f
 import { ITEMS } from './data/items.js';
 import { MONSTERS } from './data/monsters.js';
 import { PLAYER_POOL, generateAllyStats } from './data/players.js';
-import { BATTLE_ROAR, BATTLE_CANT_ESCAPE, BATTLE_CRITICAL } from './data/strings.js';
+import { BATTLE_ROAR, BATTLE_CANT_ESCAPE, BATTLE_CRITICAL, BATTLE_SLAIN } from './data/strings.js';
 import { showMsgBox } from './message-box.js';
 import { triggerWipe } from './map-triggers.js';
 import { loadMapById } from './map-loading.js';
@@ -424,9 +424,11 @@ function _updatePlayerDamageShow() {
   if (battleSt.battleState !== 'player-damage-show') return false;
   if (battleSt.battleTimer >= PLAYER_DMG_SHOW_MS) {
     if (battleSt.isRandomEncounter && battleSt.encounterMonsters && battleSt.encounterMonsters[inputSt.targetIndex].hp <= 0) {
+      replaceBattleMsg(BATTLE_SLAIN);
       battleSt.battleState = 'pre-monster-death';
       battleSt.battleTimer = 0;
     } else if (!battleSt.isRandomEncounter && getEnemyHP() <= 0) {
+      replaceBattleMsg(BATTLE_SLAIN);
       if (pvpSt.isPVPBattle) {
         battleSt.battleState = 'pvp-dissolve'; battleSt.battleTimer = 0; playSFX(SFX.MONSTER_DEATH);
       } else { battleSt.battleState = 'boss-dissolve'; battleSt.battleTimer = 0; playSFX(SFX.BOSS_DEATH); }

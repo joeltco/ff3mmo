@@ -15,9 +15,10 @@ import { SPELLS, getSpellMPCost, isMultiTargetSpell } from './data/spells.js';
 import { STATUS, addStatus, removeStatus, tryInflictStatus, STATUS_NAME_BYTES } from './status-effects.js';
 import { CAST_PHASE_MS, CAST_PHASE_MS_THROW, CAST_T_HEAL, CAST_TOTAL_MS, CAST_T_THROW_RETURN, CAST_T_THROW_IMPACT_START } from './cast-anim.js';
 import { pvpGridLayout } from './pvp-math.js';
-import { queueBattleMsg, isBattleMsgBusy } from './battle-msg.js';
-import { BATTLE_INEFFECTIVE, BATTLE_HASTE, BATTLE_PROTECT, BATTLE_REFLECT } from './data/strings.js';
+import { queueBattleMsg, replaceBattleMsg, isBattleMsgBusy } from './battle-msg.js';
+import { BATTLE_INEFFECTIVE, BATTLE_HASTE, BATTLE_PROTECT, BATTLE_REFLECT, BATTLE_SLAIN } from './data/strings.js';
 import { _nameToBytes } from './text-utils.js';
+import { getSpellNameClean, getItemNameClean } from './text-decoder.js';
 import { elemMultiplier } from './battle-math.js';
 import { pvpSt } from './pvp.js';
 import { applyBuff, BUFF_HASTE, BUFF_PROTECT, BUFF_REFLECT } from './buffs.js';
@@ -88,7 +89,7 @@ function _isThrownStatusType(t) { return _THROWN_STATUS_TYPES.has(t); }
 // prefix yet (revisit when the two-stage FF3-NES message strip lands).
 function _queueStatusMsg(flag) {
   const bytes = STATUS_NAME_BYTES[flag];
-  if (bytes) queueBattleMsg(bytes);
+  if (bytes) replaceBattleMsg(bytes);
 }
 
 // SFX index per spell. Captured via the v1.7.111 EMU dumper's pre-consume
@@ -179,6 +180,15 @@ export function startSpellCast(spellId, targetSpec, opts = {}) {
   _baseAmount = -1;
   _sfxPlayed = false;
   _isItemUse = !!opts.isItemUse;
+
+  // Strip name: item name on item-use, spell name on spell-cast. Replace
+  // (don't queue) so the actor name already on the strip swaps in-place;
+  // queue depth stays at 1 per turn.
+  if (_isItemUse && opts.itemId != null) {
+    replaceBattleMsg(getItemNameClean(opts.itemId));
+  } else {
+    replaceBattleMsg(getSpellNameClean(spellId));
+  }
 
   const mode = (targetSpec && targetSpec.targetMode) || 'single';
   const onAllies = !!targetSpec && (targetSpec.enemyIndex == null);
@@ -301,7 +311,7 @@ function _applyEnemyEffect(idx, spell) {
   // Impact SFX is `SFX.SIGHT` (NSF track $81 = SFX $40 + $41) per the REC
   // OAM capture's idle→$40 trigger at frame 39 of the f5887 dump.
   if (spell.target === 'sight') {
-    queueBattleMsg(BATTLE_INEFFECTIVE);
+    replaceBattleMsg(BATTLE_INEFFECTIVE);
     _playSpellSFXOnce(SFX.SIGHT);
     return;
   }
@@ -312,7 +322,7 @@ function _applyEnemyEffect(idx, spell) {
   if (spell.target === 'enemy_status') {
     if (!mon) {
       // Boss path — no monster object. Treat as ineffective for now.
-      queueBattleMsg(BATTLE_INEFFECTIVE);
+      replaceBattleMsg(BATTLE_INEFFECTIVE);
       _playSpellSFXOnce(SFX.SW_HIT);
       return;
     }
@@ -472,7 +482,7 @@ function _applySpellEffect(target) {
   // can still navigate Right back to the player side. Battle message says
   // "Ineffective"; SFX matches the enemy path.
   if (spell.target === 'sight') {
-    queueBattleMsg(BATTLE_INEFFECTIVE);
+    replaceBattleMsg(BATTLE_INEFFECTIVE);
     _playSpellSFXOnce(SFX.SIGHT);
     return;
   }
@@ -486,19 +496,19 @@ function _applySpellEffect(target) {
   // we ship the bounce path.
   if (spell.target === 'haste') {
     applyBuff(ps, BUFF_HASTE);
-    queueBattleMsg(BATTLE_HASTE);
+    replaceBattleMsg(BATTLE_HASTE);
     _playSpellSFXOnce(SFX.CURE);
     return;
   }
   if (spell.target === 'protect') {
     applyBuff(ps, BUFF_PROTECT);
-    queueBattleMsg(BATTLE_PROTECT);
+    replaceBattleMsg(BATTLE_PROTECT);
     _playSpellSFXOnce(SFX.CURE);
     return;
   }
   if (spell.target === 'reflect') {
     applyBuff(ps, BUFF_REFLECT);
-    queueBattleMsg(BATTLE_REFLECT);
+    replaceBattleMsg(BATTLE_REFLECT);
     _playSpellSFXOnce(SFX.CURE);
     return;
   }
@@ -508,7 +518,7 @@ function _applySpellEffect(target) {
   // would otherwise fall through to the heal path below and silently restore
   // HP. Surface "Ineffective" instead and don't apply any effect.
   if (spell.type === 'damage') {
-    queueBattleMsg(BATTLE_INEFFECTIVE);
+    replaceBattleMsg(BATTLE_INEFFECTIVE);
     _playSpellSFXOnce(SFX.ERROR);
     return;
   }
@@ -707,11 +717,13 @@ function _finishMagicHit() {
     }
   }
   if (killedEnemyIndices.length > 0) {
+    replaceBattleMsg(BATTLE_SLAIN);
     battleSt.dyingMonsterIndices = new Map(killedEnemyIndices.map(i => [i, 0]));
     battleSt.battleState = 'monster-death';
     battleSt.battleTimer = 0;
     playSFX(SFX.MONSTER_DEATH);
   } else if (!battleSt.isRandomEncounter && getEnemyHP() <= 0) {
+    replaceBattleMsg(BATTLE_SLAIN);
     if (pvpSt.isPVPBattle) {
       battleSt.battleState = 'pvp-dissolve';
       battleSt.battleTimer = 0;

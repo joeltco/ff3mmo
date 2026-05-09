@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.146 — 2026-05-09
+
+### feat: battle message coverage — actor → action → result
+
+The strip used to go silent on Magic, Item, and monster spells; now every turn names the actor *and* what they're doing. Filled in five gaps from the audit.
+
+**The single-slot invariant.** Every turn pushes ONE message via `queueBattleMsg` (the actor's name on turn dispatch). Every subsequent in-turn event — spell name, item name, status result, "Critical!", "N hits!", "Slain!" — uses `replaceBattleMsg`, which swaps text in-place without growing the queue. This guarantees the strip displays for at most one message-cycle (~1.2s) per turn, regardless of how many sub-events fire. Battle visuals (cast windup, projectile flight, damage numbers, HP drop) never get blocked by piled-up text. Converted ~10 mid-turn `queueBattleMsg` calls in `battle-enemy.js` / `spell-cast.js` / `pvp.js` to enforce this invariant.
+
+**Player name on Magic / Item.** `battle-turn.js:148-150` — Fight + Defend already queued the player name; Magic + Item now do too. The strip stops going silent when you cast Cure or use a Potion.
+
+**Spell name on cast.** Single chokepoint in `startSpellCast`: at entry, `replaceBattleMsg(getSpellNameClean(spellId))`. Covers player casts, battle items (which pass `itemId` and show the item name instead), and downstream impact-walk paths. Ally cast paths (Cure / Poisona / item-mode in `battle-turn.js:317,358,409`) and PVP foe cast paths (`pvp.js:559,609,636`) follow the same pattern: queue caster name, replace with spell name.
+
+**Item name on consumables.** `_playerTurnConsumable` now calls `replaceBattleMsg(getItemNameClean(itemId))` — Potion, Hi-Potion, Ether, Elixir, Antidote, etc. all surface their name. Battle items (FireScroll, BachusWine, etc.) inherit the same path through `startSpellCast`'s item-name branch.
+
+**Monster spell name.** `battle-enemy.js` — when a monster rolls a special attack (`mon.spAtkRate`), the attack name (Fire / Bzzaga / Bad Breath / etc.) replaces the monster name on the strip before damage resolves. Player can now read what hit them.
+
+**"Slain!" on enemy KO.** `BATTLE_SLAIN` was defined but never queued. Now fires at all 5 KO transitions: physical kills (encounter, boss, PVP) in `battle-update.js`, magic kills (encounter, boss, PVP) in `_finishMagicHit`. Strip shows "Slain!" while the death fade plays.
+
 ## 1.7.145 — 2026-05-09
 
 ### polish: tighten battle message system

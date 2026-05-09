@@ -34,7 +34,8 @@ import { bsc, getSlashFramesForWeapon } from './battle-sprite-cache.js';
 import { drawSlashOverlay, resetSlashScatterCache, shouldDrawSlash, SWING_HOLD_MS } from './slash-effects.js';
 import { removeStatus, hasStatus, STATUS, tryInflictStatus, STATUS_NAME_BYTES } from './status-effects.js';
 import { _nameToBytes } from './text-utils.js';
-import { queueBattleMsg } from './battle-msg.js';
+import { getSpellNameClean } from './text-decoder.js';
+import { queueBattleMsg, replaceBattleMsg } from './battle-msg.js';
 import { BATTLE_FOE } from './data/strings.js';
 import { tickHealNums, clearHealNums } from './damage-numbers.js';
 import { SPELLS } from './data/spells.js';
@@ -557,6 +558,7 @@ function _tryPVPEnemyCure(caster, casterCellIdx) {
   pvpSt.pvpMagicHealAmount     = heal;
   pvpSt.pvpMagicEffectApplied  = false;
   queueBattleMsg(caster.name ? _nameToBytes(caster.name) : BATTLE_FOE);
+  replaceBattleMsg(getSpellNameClean(0x34));
   playSFX(SFX.MAGIC_CAST);
   battleSt.battleState = 'pvp-enemy-magic-cast';
   battleSt.battleTimer = 0;
@@ -607,6 +609,7 @@ function _tryPVPEnemyOffensiveCast(caster, casterCellIdx) {
   pvpSt.pvpMagicDamageRoll     = dmg;
   pvpSt.pvpMagicEffectApplied  = false;
   queueBattleMsg(caster.name ? _nameToBytes(caster.name) : BATTLE_FOE);
+  replaceBattleMsg(getSpellNameClean(spellId));
   playSFX(SFX.MAGIC_CAST);
   battleSt.battleState = 'pvp-enemy-magic-cast';
   battleSt.battleTimer = 0;
@@ -634,6 +637,7 @@ function _tryPVPEnemyPoisona(caster, casterCellIdx) {
   pvpSt.pvpMagicHealAmount     = 0;
   pvpSt.pvpMagicEffectApplied  = false;
   queueBattleMsg(caster.name ? _nameToBytes(caster.name) : BATTLE_FOE);
+  replaceBattleMsg(getSpellNameClean(0x35));
   playSFX(SFX.MAGIC_CAST);
   battleSt.battleState = 'pvp-enemy-magic-cast';
   battleSt.battleTimer = 0;
@@ -661,7 +665,7 @@ function _applyPVPEnemyMagicEffect() {
         const applied = tryInflictStatus(partyTgt.status, 'sleep', hitChance, resist);
         if (applied) {
           playSFX(SFX.SLEEP_PUFF);
-          if (STATUS_NAME_BYTES[applied]) queueBattleMsg(STATUS_NAME_BYTES[applied]);
+          if (STATUS_NAME_BYTES[applied]) replaceBattleMsg(STATUS_NAME_BYTES[applied]);
         } else {
           // Miss feedback — show 0/miss damage on the target.
           if (partyIdx === -1) setPlayerDamageNum({ miss: true, timer: 0 });
