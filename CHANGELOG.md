@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.163 — 2026-05-09
+
+### refactor: ally cast render uses the player pattern (not a parallel path)
+
+User caught the actual problem: roster ally cast had a SEPARATE render path (`_drawAllyCastAnimBehind` / `_drawAllyCastAnimFront` + `_allyCastContext` helper) that lived in `drawBattleAllies` outside the panel clip, while the player called `drawCasterCastBehind/Front` INLINE from `_drawBattlePortrait:451-454`. Two different render code paths for the same conceptual thing — caused intermittent ally halo failures because the two paths kept drifting (the v1.7.150 mistake compounding through 1.7.153 / 1.7.162).
+
+**Fix:** ally cast renders inline in `_drawAllyPortrait` exactly like player. Same shape:
+- `if (battleState === 'magic-cast'/'ally-magic-cast' && right caster) drawCasterCastBehind(...)` — before portrait draw.
+- ` ui.ctx.drawImage(portraits[fadeStep], ...)` — portrait.
+- `if (...) drawCasterCastFront(...)` — after portrait.
+
+Player passes `ps.jobIdx` + `getCurrentSpellId()` + `getCastAnimElapsedMs()`; ally passes `ally.jobIdx || 0` + `battleSt.allyMagicSpellId` + `battleSt.battleTimer`. Otherwise identical. No `_allyCastContext` helper, no separate clip-vs-no-clip pass, no parallel structure.
+
+Net: -50 lines. Removed `_drawAllyCastAnimBehind`, `_drawAllyCastAnimFront`, `_allyCastContext`, plus their two call sites bracketing the panel-clip pass in `drawBattleAllies`. The pre-clip / post-clip "halo extends past panel boundary" comment was stale anyway — the BM halo is 32×32, fully contained within the 32-wide ally row, never extends past the panel.
+
+Lesson saved to memory: when adding a render feature for a new role (ally / PVP enemy / encounter monster), MIRROR the existing player render structure inline at the equivalent draw site, not a parallel `_drawXCastAnim` helper. The instinct to "encapsulate per role" creates two paths that drift; inline-with-the-portrait keeps player + ally lockstep.
+
 ## 1.7.162 — 2026-05-09
 
 ### fix: target stays visible during ally-magic-hit + cast-behind miss telemetry

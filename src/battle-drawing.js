@@ -1686,7 +1686,25 @@ function _drawAllyPortrait(i, ally, isVicPose, isAllyAttack, isAllyHit, isNearFa
       else weaponDraws.push({ img: spec.canvas, x: ppx + spec.dx, y: ppy + spec.dy });
     }
   }
+  // Cast BEHIND pass — mirrors the PLAYER pattern at `_drawBattlePortrait:451`.
+  // Same `drawCasterCastBehind` helper, same arg semantics, just sourced from
+  // `battleSt.allyMagic*` and `ally.jobIdx` instead of `ps.jobIdx` /
+  // `getCurrentSpellId()`. No separate `_drawAllyCastAnimBehind` / `_allyCastContext`
+  // helpers anymore — that split was the v1.7.150 mistake.
+  if (battleSt.battleState === 'ally-magic-cast' &&
+      battleSt.allyMagicCasterIdx === i &&
+      !battleSt.allyMagicItemMode) {
+    drawCasterCastBehind(ui.ctx, ppx + 8, ppy + 8, ally.jobIdx || 0,
+      battleSt.allyMagicSpellId, battleSt.battleTimer, false);
+  }
   ui.ctx.drawImage(portraits[ally.fadeStep], ppx, ppy);
+  // Cast FRONT pass — same pattern, after portrait so stars/flame layer above.
+  if (battleSt.battleState === 'ally-magic-cast' &&
+      battleSt.allyMagicCasterIdx === i &&
+      !battleSt.allyMagicItemMode) {
+    drawCasterCastFront(ui.ctx, ppx + 8, ppy + 8, ally.jobIdx || 0,
+      battleSt.allyMagicSpellId, battleSt.battleTimer, false);
+  }
   // Near-fatal sweat — 2 frames alternating every 133ms, 3px above portrait
   if (isNearFatal && bsc.sweatFrames.length === 2 && !isAllyAttack && !isAllyHit && !isVicPose && !isThisAllySlash) {
     const sweatIdx = Math.floor(Date.now() / 133) & 1;
@@ -1747,10 +1765,10 @@ function drawBattleAllies() {
   if (battleSt.battleAllies.length === 0 || battleSt.battleState === 'none') return;
   const panelTop = HUD_VIEW_Y + 32;
   const weaponDraws = [];
-  // Pass 1: cast BEHIND (BM halo) for the casting ally — rendered OUTSIDE
-  // the panel clip so the halo can extend left past the panel boundary.
-  _drawAllyCastAnimBehind(panelTop);
-  // Pass 2: ally rows INSIDE the panel clip.
+  // Ally rows render INSIDE the panel clip. Cast halo + flame render INLINE
+  // inside `_drawAllyPortrait` (mirrors `_drawBattlePortrait`'s player cast
+  // pattern at line 451). No separate `_drawAllyCastAnim*` passes — the split
+  // diverged from the player path; was the v1.7.150 mistake.
   ui.ctx.save();
   ui.ctx.beginPath();
   ui.ctx.rect(HUD_RIGHT_X, panelTop, HUD_RIGHT_W, HUD_VIEW_H - 32);
@@ -1771,48 +1789,6 @@ function drawBattleAllies() {
     }
   }
   _flushAllyWeaponDraws(weaponDraws);
-  // Pass 3: cast FRONT (stars/flame for WM, spark for BM) for the casting
-  // ally — rendered OUTSIDE the panel clip so it can extend left.
-  _drawAllyCastAnimFront(panelTop);
-}
-
-// Resolve the casting ally's center coords + elapsedMs, or null if no ally
-// is currently casting OR the cast visuals should be hidden (during
-// ally-magic-hit, the cast is over and the spell animation takes over).
-function _allyCastContext(panelTop) {
-  // Cast visuals only render during the buildup state (ally-magic-cast).
-  // During ally-magic-hit the spell animation plays; cast visuals are gone.
-  if (battleSt.battleState !== 'ally-magic-cast') return null;
-  if (battleSt.allyMagicItemMode) return null;  // item mode suppresses cast visuals
-  const i = battleSt.allyMagicCasterIdx;
-  if (i < 0) return null;
-  const ally = battleSt.battleAllies[i];
-  if (!ally) return null;
-  // Match the player cast windup duration so the BM/RM halo + flame size-cycle
-  // completes its full pulse — was clamped to 600 ms when ALLY_MAGIC_CAST_MS
-  // was 600. cast-anim renderers gate internally on CAST_T_LUNGE.
-  const elapsed = Math.min(battleSt.battleTimer, CAST_PHASE_MS_THROW.buildup);
-  const shakeOff = (battleSt.allyShakeTimer[i] > 0) ? (Math.floor(battleSt.allyShakeTimer[i] / 67) & 1 ? 2 : -2) : 0;
-  const rowY = panelTop + i * ROSTER_ROW_H + shakeOff;
-  return {
-    centerX: HUD_RIGHT_X + 8 + 8,
-    centerY: rowY + 8 + 8,
-    jobIdx: ally.jobIdx || 0,
-    spellId: battleSt.allyMagicSpellId,
-    elapsed,
-  };
-}
-
-function _drawAllyCastAnimBehind(panelTop) {
-  const c = _allyCastContext(panelTop);
-  if (!c) return;
-  drawCasterCastBehind(ui.ctx, c.centerX, c.centerY, c.jobIdx, c.spellId, c.elapsed, false);
-}
-
-function _drawAllyCastAnimFront(panelTop) {
-  const c = _allyCastContext(panelTop);
-  if (!c) return;
-  drawCasterCastFront(ui.ctx, c.centerX, c.centerY, c.jobIdx, c.spellId, c.elapsed, false);
 }
 
 function _encounterMonsterPos(idx) {
