@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.154 — 2026-05-09
+
+### chore: drop catalog line from startup console
+
+Removed the `Catalog: N items, M monsters, K spell anims` line from the boot message. Dropped the now-unused `ITEMS` / `MONSTERS` / `getRegisteredSpellAnimCount` imports from `main.js`.
+
 ## 1.7.153 — 2026-05-09
 
 ### fix: ally cast windup duration matches player

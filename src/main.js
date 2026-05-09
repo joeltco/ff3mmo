@@ -32,10 +32,7 @@ import { buildTurnOrder, processNextTurn } from './battle-turn.js';
 import { initBattleEncounter } from './battle-encounter.js';
 import { initSpellCast } from './spell-cast.js';
 import { addItem, setPlayerInventory } from './inventory.js';
-import { ITEMS } from './data/items.js';
-import { MONSTERS } from './data/monsters.js';
 import { saveSlots } from './save-state.js';
-import { getRegisteredSpellAnimCount } from './spell-anim.js';
 import { resetBattleVars, isTeamWiped, executeBattleCommand } from './battle-update.js';
 import { startGameLoop } from './game-loop.js';
 import { initSpriteAssets, initTitleAssets } from './boot.js';
@@ -151,8 +148,6 @@ export async function loadROM(arrayBuffer) {
   // session. No fake metrics, no decorative numbers. Values:
   //   - VERSION: from data/strings.js (matches package.json on deploy)
   //   - rom.*: parsed iNES header counts + size formula (16k PRG, 8k CHR)
-  //   - ITEMS.size / MONSTERS.size: actual Map sizes after data/* loads
-  //   - getRegisteredSpellAnimCount(): spells with on-target visual bundle
   //   - saveSlots: array of [name|null, name|null, name|null]; populated count
   //   - email + dev: from localStorage + DEV_EMAILS whitelist (chat.js)
   //   - boot: performance.now() delta from loadROM start
@@ -165,7 +160,6 @@ export async function loadROM(arrayBuffer) {
   const startupMsgs = [
     'FF3 MMO v' + VERSION,
     'ROM ok  PRG=' + rom.prgBanks + 'x16k (' + prgKB + 'k)  CHR=' + rom.chrBanks + 'x8k (' + chrKB + 'k)  mapper=' + rom.mapper,
-    'Catalog: ' + ITEMS.size + ' items, ' + MONSTERS.size + ' monsters, ' + getRegisteredSpellAnimCount() + ' spell anims',
     'Save slots: ' + slotsUsed + '/3 used',
     'Auth: ' + (email || 'guest') + (dev ? ' [dev]' : ''),
     'Boot: ' + bootMs + 'ms',
