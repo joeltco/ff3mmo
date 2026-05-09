@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.167 — 2026-05-09
+
+### refactor: cast windup unified across all three roles
+
+User correctly called out that cast windup detection was still per-role inline blocks (one in `_drawBattlePortrait`, one in `_drawAllyPortrait`, one in `pvp.js:_drawCellSprite`) — three separate `if (state) drawCasterCastBehind/Front(...)` patterns reading role-specific state. Same conceptual thing, three places. Real modularization needed.
+
+**`src/combatant-cast.js`** — new module. Single export `drawCastWindup(layer, ctx, role, idx, x, y, mirror)`. Internal `_resolveCastContext(role, idx)` reads role-specific state and returns `{ jobIdx, spellId, elapsed }` or `null`. Roles: `'player'` (uses `getCastAnimElapsedMs()` + `getCurrentSpellId()`), `'ally'` (matches `battleSt.allyMagicCasterIdx === idx`, reads `battleSt.allyMagic*` + `ally.jobIdx`), `'pvp-enemy'` (matches `pvpSt.pvpMagicCasterCellIdx === idx`, reads `pvpSt.pvpMagic*` + opponent jobIdx).
+
+**Three call sites collapsed:**
+- `_drawBattlePortrait:451` (cast behind, before portrait): `drawCastWindup('behind', ui.ctx, 'player', 0, pxs+8, py+8)`.
+- `_drawBattlePortrait:304` (cast front, after portrait): `drawCastWindup('front', ui.ctx, 'player', 0, px+8, py+8)`.
+- `_drawAllyPortrait` (before/after `drawImage(portraits[fadeStep])`): `drawCastWindup('behind'|'front', ui.ctx, 'ally', i, ppx+8, ppy+8)`.
+- `pvp.js:_drawCellSprite` (before/after body draw): `drawCastWindup('behind'|'front', ui.ctx, 'pvp-enemy', idx, sprX+8, sprY+12, true)`.
+
+ALL THREE ROLES now go through the SAME function. Adding a fourth role (encounter monster cast, future Caller job, etc.) is a switch-case in `_resolveCastContext`, not a fourth render block. Adding a new gating condition (e.g., suppress during a specific sub-phase) is one edit, not three.
+
+Cast windup divergence finally gone — was the v1.7.150 → v1.7.166 thrash spread across 17 versions. Spell-throw animation (the projectile + impact phase: `_drawPlayerSpellTargetSparkleOnEnemy` + `_drawAllyOffensiveCast` + `_drawPVPEnemyOffensiveCast`) is the next consolidation target — same shape, three render fns to merge.
+
 ## 1.7.166 — 2026-05-09
 
 ### fix: ally cast uses the SAME system as user portrait (clip removed)

@@ -40,6 +40,7 @@ import { drawCasterCastBehind, drawCasterCastFront,
          jobToCastKey, CAST_T_LUNGE, CAST_T_HEAL, CAST_T_RETURN, CAST_PHASE_MS,
          CAST_T_THROW_PROJ_START, CAST_T_THROW_IMPACT_START, CAST_T_THROW_RETURN,
          CAST_PHASE_MS_THROW } from './cast-anim.js';
+import { drawCastWindup } from './combatant-cast.js';
 import { getSpellAnim, getSpellAnimForItem, getSpellAnimFrame } from './spell-anim.js';
 import { getProjectileTile } from './projectile-anim.js';
 import { hudSt } from './hud-state.js';
@@ -297,12 +298,10 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
   const isCureMagicSelf = isMagicState && _curSpellTargets &&
     _curSpellTargets.some(t => t && t.type === 'player');
   const cureMs = isMagicState ? getCastAnimElapsedMs() : -1;
-  // Cast pose renders ONLY during the buildup state — projectile / impact /
-  // heal sparkle all play during 'magic-hit', and the cast must be cleared
-  // before any of them start drawing. PVP + ally paths follow the same gate.
-  if (battleSt.battleState === 'magic-cast' && cureMs >= 0) {
-    drawCasterCastFront(ui.ctx, px + 8, py + 8, ps.jobIdx, getCurrentSpellId(), cureMs, false);
-  }
+  // Cast windup FRONT — single entry point shared with ally + PVP enemy.
+  // `combatant-cast.js:drawCastWindup` resolves state per role (player here
+  // means engine-tracked elapsed via getCastAnimElapsedMs).
+  drawCastWindup('front', ui.ctx, 'player', 0, px + 8, py + 8);
   // On-target sparkle — per-spell visual on the target portrait during heal
   // phase. Items route by `item.animSpellId` through spell-anim.
   const _sparkleFi = Math.floor(battleSt.battleTimer / 67) & 1;
@@ -443,15 +442,8 @@ function _drawBattlePortrait() {
     battleSt.enemyTargetAllyIdx < 0 &&
     pvpSt.pvpPendingAttack && !pvpSt.pvpPendingAttack.miss && !pvpSt.pvpPendingAttack.shieldBlock &&
     (Math.floor(battleSt.battleTimer / 60) & 1);
-  // Cast BEHIND pass — BM halo wraps portrait, drawn UNDER the portrait so
-  // the live portrait shows on top with no need to overpaint with body
-  // tiles. WM has no behind layer. Halo only renders during the buildup
-  // state ('magic-cast') — by 'magic-hit' the projectile is in flight and
-  // cast visuals must be gone. PVP + ally paths follow the same gate.
-  if (battleSt.battleState === 'magic-cast') {
-    const _cMs = getCastAnimElapsedMs();
-    if (_cMs >= 0) drawCasterCastBehind(ui.ctx, pxs + 8, py + 8, ps.jobIdx, getCurrentSpellId(), _cMs, false);
-  }
+  // Cast windup BEHIND — single entry point shared with ally + PVP enemy.
+  drawCastWindup('behind', ui.ctx, 'player', 0, pxs + 8, py + 8);
   if (!portraitBlink) {
     if (isAttackPose) _drawPortraitWeapon(pxs, py, true);
     _drawPortraitFrame(pxs, py, portraitSrc, isRunPose);
@@ -1686,22 +1678,12 @@ function _drawAllyPortrait(i, ally, isVicPose, isAllyAttack, isAllyHit, isNearFa
       else weaponDraws.push({ img: spec.canvas, x: ppx + spec.dx, y: ppy + spec.dy });
     }
   }
-  // Cast BEHIND — same shape as `_drawBattlePortrait:451`. Halo draws under
-  // portrait. No clip, no wrapper helper — exactly the player block.
-  if (battleSt.battleState === 'ally-magic-cast' &&
-      battleSt.allyMagicCasterIdx === i &&
-      !battleSt.allyMagicItemMode) {
-    drawCasterCastBehind(ui.ctx, ppx + 8, ppy + 8, ally.jobIdx || 0,
-      battleSt.allyMagicSpellId, battleSt.battleTimer, false);
-  }
+  // Cast windup — same `drawCastWindup` helper player uses. Behind portrait
+  // for halo, after portrait for stars/flame. Identical call shape; only the
+  // role + idx differ.
+  drawCastWindup('behind', ui.ctx, 'ally', i, ppx + 8, ppy + 8);
   ui.ctx.drawImage(portraits[ally.fadeStep], ppx, ppy);
-  // Cast FRONT — same shape as `_drawBattlePortrait:304`. Stars/flame over portrait.
-  if (battleSt.battleState === 'ally-magic-cast' &&
-      battleSt.allyMagicCasterIdx === i &&
-      !battleSt.allyMagicItemMode) {
-    drawCasterCastFront(ui.ctx, ppx + 8, ppy + 8, ally.jobIdx || 0,
-      battleSt.allyMagicSpellId, battleSt.battleTimer, false);
-  }
+  drawCastWindup('front', ui.ctx, 'ally', i, ppx + 8, ppy + 8);
   // Near-fatal sweat — 2 frames alternating every 133ms, 3px above portrait
   if (isNearFatal && bsc.sweatFrames.length === 2 && !isAllyAttack && !isAllyHit && !isVicPose && !isThisAllySlash) {
     const sweatIdx = Math.floor(Date.now() / 133) & 1;
