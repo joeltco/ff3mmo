@@ -19,7 +19,7 @@ import { SPELLS } from './data/spells.js';
 import { replaceBattleMsg } from './battle-msg.js';
 import { CAST_PHASE_MS_THROW } from './cast-anim.js';
 import { applyMagicDamage, applyMagicStatus, applyMagicHeal,
-         applyMagicCureStatus, applyMagicSight } from './combatant-cast.js';
+         applyMagicCureStatus, applyMagicSight, playSpellImpactSFX } from './combatant-cast.js';
 
 // Injected at boot — avoids circular import on main.js
 let _buildTurnOrder = () => [];
@@ -310,15 +310,11 @@ function _updateAllyMagicCast(dt) {
   }
   if (battleSt.battleState === 'ally-magic-hit') {
     tickHealNums(dt);
-    // Impact SFX at IMPACT START (after projectile + preImpactGap), before the
-    // damage number pops. Mirrors `spell-cast.js:650`.
+    // Impact SFX at IMPACT START — `playSpellImpactSFX` is the SHARED selector
+    // (combatant-cast.js); same call used by player + PVP-enemy engines.
     if (!battleSt.allyMagicSfxPlayed && battleSt.battleTimer >= ALLY_MAGIC_SFX_MS) {
-      const sid = battleSt.allyMagicSpellId;
-      const sfx = sid === 0x31 ? SFX.FIRE_BOOM
-                : sid === 0x32 ? SFX.SW_HIT
-                : sid === 0x33 ? SFX.SLEEP_PUFF
-                : null;
-      if (sfx != null) playSFX(sfx);
+      const spell = SPELLS.get(battleSt.allyMagicSpellId);
+      if (spell) playSpellImpactSFX(spell);
       battleSt.allyMagicSfxPlayed = true;
     }
     if (!battleSt.allyMagicEffectApplied && battleSt.battleTimer >= ALLY_MAGIC_EFFECT_MS) {

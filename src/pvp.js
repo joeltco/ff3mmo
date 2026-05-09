@@ -42,7 +42,7 @@ import { tickHealNums, clearHealNums } from './damage-numbers.js';
 import { SPELLS } from './data/spells.js';
 import { drawCasterCastBehind, drawCasterCastFront, jobToCastKey, CAST_PHASE_MS_THROW } from './cast-anim.js';
 import { drawCastWindup, applyMagicDamage, applyMagicStatus, applyMagicHeal,
-         applyMagicCureStatus, applyMagicSight } from './combatant-cast.js';
+         applyMagicCureStatus, applyMagicSight, playSpellImpactSFX } from './combatant-cast.js';
 import { getSpellAnim, getSpellAnimForItem } from './spell-anim.js';
 import { drawStatusSpriteAbove } from './battle-drawing.js';
 import { fakePlayerFullBodyCanvases, fakePlayerHitFullBodyCanvases,
@@ -743,14 +743,10 @@ function _processPVPEnemyMagic(dt) {
   }
   if (battleSt.battleState === 'pvp-enemy-magic-hit') {
     tickHealNums(dt);
-    // Impact SFX at IMPACT START — same rule as player + ally.
+    // Impact SFX at IMPACT START — `playSpellImpactSFX` is the SHARED selector.
     if (!pvpSt.pvpMagicSfxPlayed && battleSt.battleTimer >= PVP_MAGIC_SFX_MS) {
-      const sid = pvpSt.pvpMagicSpellId;
-      const sfx = sid === 0x31 ? SFX.FIRE_BOOM
-                : sid === 0x32 ? SFX.SW_HIT
-                : sid === 0x33 ? SFX.SLEEP_PUFF
-                : null;
-      if (sfx != null) playSFX(sfx);
+      const spell = SPELLS.get(pvpSt.pvpMagicSpellId);
+      if (spell) playSpellImpactSFX(spell);
       pvpSt.pvpMagicSfxPlayed = true;
     }
     if (!pvpSt.pvpMagicEffectApplied && battleSt.battleTimer >= PVP_MAGIC_EFFECT_MS) {

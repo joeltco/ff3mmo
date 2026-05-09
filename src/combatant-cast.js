@@ -121,6 +121,27 @@ function _resolveThrowRender(role, caster, target) {
 
 // Single-target throw with simple projectile/impact split. Used by ally + PVP-enemy.
 // Time reference: battleSt.battleTimer (resets on state entry).
+// ── Spell SFX selector (single source) ─────────────────────────────────────
+// Maps a spell to its impact SFX. Used by the engine at impact START for thrown
+// spells (fire / ice / bolt / sleep / sight). Heal-style spells (CURE) are
+// handled by the apply helpers via opts.sfx since they don't have an impact-
+// burst phase. One function for all three roles — was previously duplicated as
+// `_spellImpactSFX` in spell-cast.js + inline ternaries in pvp.js / battle-ally.js.
+export function getSpellImpactSFX(spell) {
+  if (!spell) return SFX.SW_HIT;
+  if (spell.target === 'sight') return SFX.SIGHT;
+  if (spell.element === 'fire')  return SFX.FIRE_BOOM;   // NSF $82 — Fire impact
+  if (spell.element === 'ice')   return SFX.SW_HIT;      // NSF $5D — Blizzard impact
+  if (spell.type === 'sleep')    return SFX.SLEEP_PUFF;  // NSF $95 — Sleep puff
+  return SFX.SW_HIT;
+}
+
+// Plays the impact SFX for a spell. One call site for all three role engines.
+export function playSpellImpactSFX(spell) {
+  const sfx = getSpellImpactSFX(spell);
+  if (sfx != null) playSFX(sfx);
+}
+
 // ── Shared damage / status application ─────────────────────────────────────
 //
 // Three roles applied Fire / Bzzard / Sleep effects with copy-paste-similar

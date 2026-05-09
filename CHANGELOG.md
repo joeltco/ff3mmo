@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.178 — 2026-05-09
+
+### refactor: spell SFX selector unified across all 3 roles
+
+User caught a double-fire bug: player thrown spells were playing SFX twice — once at impact start (engine), once at apply time (helper via `opts.sfx`). And the SFX selector logic was duplicated three different ways: `_spellImpactSFX` (spell-cast.js), inline ternaries in `_processPVPEnemyMagic` and `_updateAllyMagicCast`. SFX wasn't part of the modularization.
+
+Fixed:
+- **`combatant-cast.js:getSpellImpactSFX(spell)`** — single source for impact SFX selection. fire→FIRE_BOOM, ice→SW_HIT, sleep→SLEEP_PUFF, sight→SIGHT, default SW_HIT. Was duplicated in 3 files.
+- **`combatant-cast.js:playSpellImpactSFX(spell)`** — convenience wrapper for the engine call.
+- All three engines (player `spell-cast.js`, ally `battle-ally.js`, PVP-enemy `pvp.js`) now call the same `playSpellImpactSFX(spell)` at impact start. Was inline switch statements per role.
+- `spell-cast.js:_spellImpactSFX` is now a thin alias to `getSpellImpactSFX` (kept for grep-discoverability).
+- Apply helpers (`applyMagicDamage`, `applyMagicStatus`) take `opts.sfx` only for non-thrown spells. Thrown spells (fire/ice/bolt damage, sleep status) pass `sfx: null` since the engine already fired at impact start. No more double-fire.
+
+Player path before/after:
+- Fire on enemy: engine fires `FIRE_BOOM` at impact start (250 ms) ✓ + helper fired `SW_HIT` at apply time (650 ms) ✗ DOUBLE → fixed: helper passes `sfx: null`.
+- Sleep on enemy: engine fires `SLEEP_PUFF` at impact start ✓ + helper fired `SLEEP_PUFF` at apply time ✗ DOUBLE → fixed: gated on `_isThrownStatusType(spell.type)`.
+- Confuse / blind / silence on enemy: engine doesn't fire (non-thrown) ✓ helper fires at apply time via opts.sfx ✓ — correct, kept.
+
 ## 1.7.177 — 2026-05-09
 
 ### fix: spell SFX fires at impact START (during burst, not after)

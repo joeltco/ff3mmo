@@ -17,7 +17,7 @@ import { CAST_PHASE_MS, CAST_PHASE_MS_THROW, CAST_T_HEAL, CAST_TOTAL_MS, CAST_T_
 import { applyMagicDamage, applyMagicStatus, applyMagicHeal,
          applyMagicCureStatus, applyMagicSight, applyMagicDrain,
          applyMagicRecovery, applyMagicAllStatus, applyMagicInstakill,
-         applyMagicErase } from './combatant-cast.js';
+         applyMagicErase, getSpellImpactSFX } from './combatant-cast.js';
 import { pvpGridLayout } from './pvp-math.js';
 import { queueBattleMsg, replaceBattleMsg, isBattleMsgBusy } from './battle-msg.js';
 import { BATTLE_INEFFECTIVE, BATTLE_HASTE, BATTLE_PROTECT, BATTLE_REFLECT, BATTLE_SLAIN } from './data/strings.js';
@@ -99,14 +99,10 @@ function _queueStatusMsg(flag) {
 // SFX index per spell. Captured via the v1.7.111 EMU dumper's pre-consume
 // `$Cx` write trace. Add new entries when wiring new spells. Falls back to
 // SW_HIT for unmapped spells.
-function _spellImpactSFX(spell) {
-  if (!spell) return SFX.SW_HIT;
-  if (spell.target === 'sight') return SFX.SIGHT;
-  if (spell.element === 'fire') return SFX.FIRE_BOOM;       // NSF $82 — REC OAM f1301
-  if (spell.element === 'ice')  return SFX.SW_HIT;          // NSF $5D — REC OAM f766 (Blizzard $9C → $5D)
-  if (spell.type === 'sleep')   return SFX.SLEEP_PUFF;      // NSF $95 — REC OAM sleep-emu-snap
-  return SFX.SW_HIT;
-}
+// Spell impact SFX selector moved to `combatant-cast.js:getSpellImpactSFX` —
+// single source for all three role engines (player + ally + PVP-enemy). Local
+// alias for grep-discoverability and existing call sites.
+const _spellImpactSFX = (spell) => getSpellImpactSFX(spell);
 
 export function getSpellTargets() { return _targets; }
 export function getSpellHitIdx() { return _hitIdx; }
@@ -352,10 +348,12 @@ function _applyEnemyEffect(idx, spell) {
       return;
     }
     // confuse / sleep / blind / mini / silence / etc. — name = spell.type.
-    // Shared `applyMagicStatus` helper (combatant-cast.js) — same path ally
-    // + PVP-enemy use for Sleep.
+    // Shared `applyMagicStatus` helper (combatant-cast.js). SFX: thrown status
+    // (sleep) gets fired by the engine at impact start; non-thrown status
+    // (confuse / blind / mini / silence) fires SFX at apply time via opts.sfx
+    // since there's no impact-burst phase for those.
     applyMagicStatus(mon, spell.type, spell.hit, {
-      sfx: _spellImpactSFX(spell),
+      sfx: _isThrownStatusType(spell.type) ? null : _spellImpactSFX(spell),
       onLand: _queueStatusMsg,
       onMiss: () => _setEnemyDmg(idx, 0, true),
     });
@@ -441,10 +439,11 @@ function _applyEnemyEffect(idx, spell) {
     return;
   }
   if (!mon || mon.hp <= 0) return;
-  // Shared `applyMagicDamage` helper — same path ally + PVP-enemy use for
-  // Fire/Bzzard. Element multiplier + mdef applied internally.
+  // Shared `applyMagicDamage` helper. SFX: thrown elements (fire/ice/bolt) get
+  // fired by the engine at impact start; non-thrown damage fires here via
+  // opts.sfx. Most damage spells are thrown so opts.sfx is usually null.
   applyMagicDamage(mon, amount, spell, {
-    sfx: SFX.SW_HIT,
+    sfx: _isThrownDamageElement(spell.element) ? null : SFX.SW_HIT,
     onDmgNum: (dealt) => _setEnemyDmg(idx, dealt, false),
     onShake: () => { battleSt.battleShakeTimer = BATTLE_SHAKE_MS; },
   });
