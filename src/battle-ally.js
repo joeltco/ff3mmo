@@ -18,6 +18,7 @@ import { removeStatus, STATUS, STATUS_NAME_BYTES, tryInflictStatus } from './sta
 import { SPELLS } from './data/spells.js';
 import { elemMultiplier } from './battle-math.js';
 import { replaceBattleMsg } from './battle-msg.js';
+import { CAST_PHASE_MS_THROW } from './cast-anim.js';
 
 // Injected at boot — avoids circular import on main.js
 let _buildTurnOrder = () => [];
@@ -180,12 +181,15 @@ function _updateAllyEnemyHit() {
   return false;
 }
 
-// ── Ally magic cast (WM heal AI) ─────────────────────────────────────────────
+// ── Ally magic cast pipeline ─────────────────────────────────────────────────
 // Mirrors the player magic-cast → magic-hit pipeline but caster is an ally.
-// Timing: 600 ms windup (ally-magic-cast) → 1000 ms hit phase (effect at 400 ms,
-// turn ends at 1000 ms). No magic-circle on caster portrait yet — render shows
-// caster in victory pose + heal sparkle on target during hit phase.
-const ALLY_MAGIC_CAST_MS  = 600;
+// Cast windup duration matches the player thrown-spell buildup so the BM/RM
+// halo + flame cycle (size-cycle $51-$57, paired pulse — see cast-anim.js)
+// has time to play out fully. Hit phase is 1000 ms total: projectile fan
+// (150 ms via CAST_PHASE_MS_THROW.projectile) followed by impact burst on
+// the target. Effect (damage / heal apply) fires at 400 ms — mid-impact for
+// offensive casts, mid-hit-phase for heal casts.
+const ALLY_MAGIC_CAST_MS  = CAST_PHASE_MS_THROW.buildup;  // 800 ms — matches player windup
 const ALLY_MAGIC_EFFECT_MS = 400;  // within hit phase
 const ALLY_MAGIC_HIT_MS   = 1000;
 

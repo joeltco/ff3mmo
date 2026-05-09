@@ -1783,7 +1783,10 @@ function _allyCastContext(panelTop) {
   if (i < 0) return null;
   const ally = battleSt.battleAllies[i];
   if (!ally) return null;
-  const elapsed = Math.min(battleSt.battleTimer, 600);
+  // Match the player cast windup duration so the BM/RM halo + flame size-cycle
+  // completes its full pulse — was clamped to 600 ms when ALLY_MAGIC_CAST_MS
+  // was 600. cast-anim renderers gate internally on CAST_T_LUNGE.
+  const elapsed = Math.min(battleSt.battleTimer, CAST_PHASE_MS_THROW.buildup);
   const shakeOff = (battleSt.allyShakeTimer[i] > 0) ? (Math.floor(battleSt.allyShakeTimer[i] / 67) & 1 ? 2 : -2) : 0;
   const rowY = panelTop + i * ROSTER_ROW_H + shakeOff;
   return {

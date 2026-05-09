@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.153 — 2026-05-09
+
+### fix: ally cast windup duration matches player
+
+`ALLY_MAGIC_CAST_MS` was hardcoded to 600 ms; the player's thrown-spell buildup is 800 ms (`CAST_PHASE_MS_THROW.buildup`). The BM/RM halo + flame size-cycle ($51-$57, paired pulse) didn't have time to complete a full pulse, so the cast windup looked truncated for ally casts. `_allyCastContext` was also clamping `elapsed` to 600 ms on the draw side, which would have cut the cycle off even with a longer state.
+
+Fixed both: `ALLY_MAGIC_CAST_MS = CAST_PHASE_MS_THROW.buildup` (800), and `_allyCastContext` clamps to the same constant. The cast halo + flame now play through their full pulse before the projectile fan begins.
+
+The shipped renderers (`_drawAllyCastAnimBehind` / `_drawAllyCastAnimFront` in `battle-drawing.js`, dispatching to `drawCasterCastBehind` / `drawCasterCastFront` from `cast-anim.js`) already pass `ally.jobIdx` and `battleSt.allyMagicSpellId` through, so BM and RM both resolve to the right cast bundle (`jobToCastKey`) for offensive casts. No code change needed there — only the timing.
+
 ## 1.7.152 — 2026-05-09
 
 ### docs: fix wrong comment in ally cast renderer
