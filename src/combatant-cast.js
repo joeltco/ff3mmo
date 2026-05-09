@@ -142,6 +142,62 @@ export function playSpellImpactSFX(spell) {
   if (sfx != null) playSFX(sfx);
 }
 
+// ── Unified spell-effect dispatcher ──────────────────────────────────────
+// Single entry point for ALL spell effect application. Dispatches by spell
+// shape (target / element / type) to the right helper. Each role calls this
+// with role-specific `opts` (target object + I/O callbacks + pre-rolled
+// amount + isUndead flag for drain/recovery). Eliminates the per-role inline
+// switch statements that were keying off spell IDs.
+//
+// Caller responsibility: resolve `target` from role state, build `opts` with
+// the role's I/O bindings (onDmgNum / onHealNum / onShake / etc.), pass the
+// pre-rolled `opts.amount` if the spell is amount-based (damage / heal /
+// drain / recovery).
+export function applySpell(spell, target, opts = {}) {
+  if (!spell) return;
+  // Sight — no target needed.
+  if (spell.target === 'sight') {
+    applyMagicSight(opts);
+    return;
+  }
+  // Erase — no target needed.
+  if (spell.target === 'erase') {
+    applyMagicErase(opts);
+    return;
+  }
+  if (!target) return;
+  // enemy_status — death / all_status / single status name.
+  if (spell.target === 'enemy_status') {
+    if (spell.type === 'death') {
+      applyMagicInstakill(target, spell.hit, opts);
+      return;
+    }
+    if (spell.type === 'all_status') {
+      applyMagicAllStatus(target, spell.hit, opts);
+      return;
+    }
+    applyMagicStatus(target, spell.type, spell.hit, opts);
+    return;
+  }
+  // Drain — damage target + heal caster, undead reverses.
+  if (spell.target === 'drain') {
+    applyMagicDrain(target, opts.amount || 0, opts);
+    return;
+  }
+  // Cure-status — Poisona / Antidote.
+  if (spell.target === 'cure_status') {
+    applyMagicCureStatus(target, opts.statusFlag, opts);
+    return;
+  }
+  // Recovery — heal non-undead, damage undead.
+  if (spell.element === 'recovery') {
+    applyMagicRecovery(target, opts.amount || 0, opts);
+    return;
+  }
+  // Default: damage spell (Fire / Bzzard / Bolt / etc.).
+  applyMagicDamage(target, opts.amount || 0, spell, opts);
+}
+
 // ── Shared damage / status application ─────────────────────────────────────
 //
 // Three roles applied Fire / Bzzard / Sleep effects with copy-paste-similar

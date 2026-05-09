@@ -2,6 +2,54 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.179 — 2026-05-09
+
+### refactor: applySpell unified dispatcher + pickCombatantBody covers player
+
+Final two pipeline stages unified.
+
+**`combatant-cast.js:applySpell(spell, target, opts)`** — single entry point that dispatches by spell shape (`spell.target` / `spell.element` / `spell.type`) to the right effect helper. Replaces the inline ID-based switches in each role's apply fn:
+
+| Spell shape | Helper called |
+|---|---|
+| `target === 'sight'` | `applyMagicSight` |
+| `target === 'erase'` | `applyMagicErase` |
+| `target === 'enemy_status'` + `type === 'death'` | `applyMagicInstakill` |
+| `target === 'enemy_status'` + `type === 'all_status'` | `applyMagicAllStatus` |
+| `target === 'enemy_status'` + named status (sleep/confuse/blind/etc.) | `applyMagicStatus` |
+| `target === 'drain'` | `applyMagicDrain` |
+| `target === 'cure_status'` | `applyMagicCureStatus` |
+| `element === 'recovery'` | `applyMagicRecovery` |
+| Default (damage) | `applyMagicDamage` |
+
+Every spell type now goes through one dispatch — the same dispatcher whether the caster is player, ally, or PVP-enemy. Caller resolves target object + builds opts (callbacks + pre-rolled amount + isUndead etc.); helper handles the rest. Future-prep: when ally/PVP-enemy AI gets drain/recovery/death/Shade/erase, the call site is one line — `applySpell(spell, target, opts)`.
+
+**`combatant-pose.js:pickCombatantBody('player', ...)` extension** — function now handles the player role too. Returns from `bsc.battlePoses[poseKey]` directly (player has a single active palette baked in via `loadJobBattleSprites`; jobIdx + palIdx args ignored for this role). API surface is now identical across all 3 roles. Existing player render sites still use direct `bsc.battlePoses[key]` access for performance; the wrapper is available when role-symmetric code wants it.
+
+### Pipeline modularization — fully complete
+
+Every spell-pipeline stage has a single shared helper called by all three roles:
+
+| Stage | Helper |
+|---|---|
+| Cast windup | `drawCastWindup(layer, ctx, role, idx, x, y, mirror)` |
+| Throw anim (projectile + impact) | `drawSpellThrow(role, ctx, caster, target)` |
+| Impact SFX selector | `getSpellImpactSFX` / `playSpellImpactSFX(spell)` |
+| Spell effect dispatcher | `applySpell(spell, target, opts)` |
+| Damage application | `applyMagicDamage` |
+| Status application | `applyMagicStatus` |
+| Heal | `applyMagicHeal` |
+| Cure-status | `applyMagicCureStatus` |
+| Sight | `applyMagicSight` |
+| Drain | `applyMagicDrain` |
+| Recovery (undead-aware) | `applyMagicRecovery` |
+| All-status (Shade) | `applyMagicAllStatus` |
+| Instakill (Death) | `applyMagicInstakill` |
+| Erase | `applyMagicErase` |
+| Pose body | `pickCombatantBody(role, key, jobIdx, palIdx)` |
+
+All in `combatant-cast.js` (or `combatant-pose.js` for poses). Each role's apply fn / render site is a thin wrapper that resolves role-specific state + I/O bindings and hands off.
+
 ## 1.7.178 — 2026-05-09
 
 ### refactor: spell SFX selector unified across all 3 roles

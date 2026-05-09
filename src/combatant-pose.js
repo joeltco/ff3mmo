@@ -15,6 +15,7 @@ import {
   fakePlayerKnifeRFwdFullBodyCanvases, fakePlayerKnifeLFwdFullBodyCanvases,
 } from './fake-player-sprites.js';
 import { consoleLog, isDev } from './chat.js';
+import { bsc } from './battle-sprite-cache.js';
 
 const FIST_WOBBLE_PERIOD_MS = 100; // shared cadence — same constant across player/ally/opponent
 
@@ -160,8 +161,18 @@ const _POSE_MAPS = {
 // idle portrait for ally). When the resolution fails for an attack-state pose,
 // emits a one-shot dev-console warning so future intermittent pose drops have
 // a paper trail (was: silent fall-through to idle which read as "no back-swing").
+//
+// Player role: returns from `bsc.battlePoses[poseKey]` directly (rebuilt on job
+// change in `loadJobBattleSprites`). The player has a single active palette, so
+// `jobIdx` / `palIdx` args are ignored for this role — kept in the signature
+// so the API surface is identical across all 3 roles.
 const _missLogged = new Set();
 export function pickCombatantBody(role, poseKey, jobIdx, palIdx) {
+  if (role === 'player') {
+    // Player pool is keyed by pose name in `bsc.battlePoses` (rebuilt on job
+    // change). No per-palette dimension; jobIdx + palIdx args ignored.
+    return bsc.battlePoses && bsc.battlePoses[poseKey];
+  }
   const map = _POSE_MAPS[role];
   if (!map) return undefined;
   const dict = map[poseKey];
