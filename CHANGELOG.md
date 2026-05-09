@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.164 — 2026-05-09
+
+### fix: ally cast windup renders over HUD, outside panel clip
+
+v1.7.163 inlined the ally cast render into `_drawAllyPortrait` to mirror the player pattern, but `_drawAllyPortrait` runs INSIDE the panel clip (`HUD_RIGHT_X, panelTop, HUD_RIGHT_W, ...`). The BM cast flame anchors at `centerX - _SPRITE_HALF_W - _FLAME_W = ppx + 8 - 24 = HUD_RIGHT_X - 8` for an ally at column-left, so the flame's left half (16 px wide canvas, anchored at x=136 for ally row when HUD_RIGHT_X=144) was being clipped by the panel rect.
+
+**Fix:** ally cast windup renders in `drawBattleAllies` via `_drawAllyCastWindup(layer)` — pre-clip pass for `'behind'` (halo), post-clip pass for `'front'` (stars/flame). The helper is a thin inline gate (state + caster idx + ally validity), same shape the player uses at `_drawBattlePortrait:451-454`, lifted out of the row loop only because it must render outside the panel clip. NOT a parallel `_allyCastContext` helper — the gating is fully inline, just hoisted to the right z-layer.
+
+**Z-layer audit:** all three cast windups (player + ally + PVP-enemy) now render after `drawHUD` (so they layer over the baked HUD canvas + info panel) and before `drawChat / drawMsgBox / drawPauseMenu / drawShop / drawRosterMenu` overlays. PVP enemy cast renders inside `drawBattle` via `drawBossSpriteBoxPVP` → `_drawCellSprite`. Player cast renders inside `drawBattle` via `_drawBattlePortrait`. Ally cast renders in `drawBattleAllies` (called between `drawHUD` and `drawBattle`). All three are post-HUD; only the chat-fully-expanded edge case obscures (and that obscures the whole ally row regardless of cast).
+
+The pre/post-clip pattern is the SAME shape the v1.7.150 helpers used; the difference is that the gating + draw is now ONE inline body shared between behind/front via a `layer` param, instead of `_allyCastContext` returning a context dict that two separate fns consume.
+
 ## 1.7.163 — 2026-05-09
 
 ### refactor: ally cast render uses the player pattern (not a parallel path)
