@@ -59,21 +59,29 @@ export function calcAttackerAtk({ rWpnAtk, lWpnAtk, isMonkClass, level, str, job
 // /12 so mid-levels (~12-24) feel snappier — at /16 you're stuck on 1 hit
 // through level 15, which felt flat. dualWield: each hand gets full hits
 // (total = base * 2). Single weapon: min 1.
-export function calcPotentialHits(level, agi, dualWield) {
+// `hasted`: doubles the final hit count (buffs.js BUFF_HASTE). Stacks with
+// dual-wield — a hasted dual-wielder takes 4× the base count.
+export function calcPotentialHits(level, agi, dualWield, hasted = false) {
   const base = Math.max(1, 1 + Math.floor(level / 12) + Math.floor(agi / 12));
-  return dualWield ? base * 2 : base;
+  let n = dualWield ? base * 2 : base;
+  if (hasted) n *= 2;
+  return n;
 }
 
 // Roll per-hit results for player/ally/PVP attacks.
 // opts.shieldEvade: % chance to block per hit (0 = no shield)
 // opts.evade: % chance to dodge per hit (0 = no armor evade)
 // opts.defendHalve: true to halve damage (defender is defending)
+// opts.targetProtected: true if defender has BUFF_PROTECT — halves physical
+//   damage like defendHalve. Stacks multiplicatively with defendHalve so a
+//   defending + Protected target takes 1/4 damage (canon: both flags halve
+//   independently).
 // opts.elemMult: elemental multiplier (default 1)
 // opts.critPct: % chance to crit per hit (0 if not provided). From attacker's job modifier.
 // opts.critBonus: flat damage added on crit (0 if not provided). From attacker's job modifier.
 export function rollHits(atk, def, hitRate, potentialHits, opts = {}) {
-  const { shieldEvade = 0, evade = 0, defendHalve = false, elemMult = 1,
-          critPct = 0, critBonus = 0 } = opts;
+  const { shieldEvade = 0, evade = 0, defendHalve = false, targetProtected = false,
+          elemMult = 1, critPct = 0, critBonus = 0 } = opts;
   const results = [];
   for (let i = 0; i < potentialHits; i++) {
     if (shieldEvade > 0 && Math.random() * 100 < shieldEvade) {
@@ -84,6 +92,7 @@ export function rollHits(atk, def, hitRate, potentialHits, opts = {}) {
       const crit = critPct > 0 && Math.random() * 100 < critPct;
       let dmg = calcDamage(atk, def, crit, critBonus, elemMult);
       if (defendHalve) dmg = Math.max(1, Math.floor(dmg / 2));
+      if (targetProtected) dmg = Math.max(1, Math.floor(dmg / 2));
       results.push({ damage: dmg, crit });
     } else {
       results.push({ miss: true });

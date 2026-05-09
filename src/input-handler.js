@@ -174,7 +174,9 @@ function _battleTargetConfirm() {
   const wpnSubtype = weaponSubtype(ps.weaponR) || weaponSubtype(ps.weaponL) || 'unarmed';
   const lv = ps.stats ? ps.stats.level : 1;
   const agi = (ps.stats ? ps.stats.agi : 5) + getJobLevelStatBonus().agi;
-  const hitsPerHand = calcPotentialHits(lv, agi, false); // base hits per hand
+  // Haste doubles per-hand hits. Buff is set by Bachus Wine / future Haste cast.
+  const hasted = !!(ps.buffs && ps.buffs.haste);
+  const hitsPerHand = calcPotentialHits(lv, agi, false, hasted); // base hits per hand
   const blindMult = ps.status ? blindHitPenalty(ps.status) : 1;
   const atkMult = ps.status ? miniToadAtkMult(ps.status) : 1;
   // Per-hand ATK: strip weapon ATK from ps.atk (Monk/BB unarmed uses special formula, already in ps.atk)

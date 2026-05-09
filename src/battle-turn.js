@@ -2,7 +2,7 @@
 
 import { battleSt, getEnemyHP, setEnemyHP, BATTLE_SHAKE_MS, BOSS_DEF, BOSS_MAX_HP } from './battle-state.js';
 import { rollHits, calcPotentialHits } from './battle-math.js';
-import { BATTLE_RAN_AWAY, BATTLE_CANT_ESCAPE } from './data/strings.js';
+import { BATTLE_RAN_AWAY, BATTLE_CANT_ESCAPE, BATTLE_ALLY } from './data/strings.js';
 import { getMonsterName } from './text-decoder.js';
 import { ps, getJobLevelStatBonus } from './player-stats.js';
 import { JOBS } from './data/jobs.js';
@@ -314,7 +314,7 @@ function _tryAllyCure(ally, allyIdx) {
   battleSt.allyMagicHealAmount   = heal;
   battleSt.allyMagicEffectApplied = false;
   battleSt.allyMagicItemMode     = false;
-  queueBattleMsg(_nameToBytes(ally.name || 'Ally'));
+  queueBattleMsg(ally.name ? _nameToBytes(ally.name) : BATTLE_ALLY);
   playSFX(SFX.MAGIC_CAST);
   battleSt.battleState = 'ally-magic-cast';
   battleSt.battleTimer = 0;
@@ -355,7 +355,7 @@ function _tryAllyPoisona(ally, allyIdx) {
   battleSt.allyMagicHealAmount    = 0;
   battleSt.allyMagicEffectApplied = false;
   battleSt.allyMagicItemMode      = false;
-  queueBattleMsg(_nameToBytes(ally.name || 'Ally'));
+  queueBattleMsg(ally.name ? _nameToBytes(ally.name) : BATTLE_ALLY);
   playSFX(SFX.MAGIC_CAST);
   battleSt.battleState = 'ally-magic-cast';
   battleSt.battleTimer = 0;
@@ -406,7 +406,7 @@ function _tryAllyItem(ally, allyIdx) {
   battleSt.allyMagicHealAmount    = 50;
   battleSt.allyMagicEffectApplied = false;
   battleSt.allyMagicItemMode      = true;
-  queueBattleMsg(_nameToBytes(ally.name || 'Ally'));
+  queueBattleMsg(ally.name ? _nameToBytes(ally.name) : BATTLE_ALLY);
   playSFX(SFX.CURE);
   battleSt.battleState = 'ally-magic-cast';
   battleSt.battleTimer = 0;

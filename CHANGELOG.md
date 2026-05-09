@@ -2,6 +2,48 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.145 — 2026-05-09
+
+### polish: tighten battle message system
+
+Internal cleanup. No behavior change — battle text fades and scrolls exactly as before.
+
+**Single source of truth for message timings.** The scroll-overflow + total-display formula previously lived in three places: `updateBattleMsg` and `advanceBattleMsgZ` in `battle-msg.js`, plus `drawBattleMessageStrip` in `battle-drawing.js`. Two of them used naive `bytes.length * 8` for width while the third used `measureText()`, which would have drifted on any string containing control bytes. Folded into one `computeMsgTimings(msg)` helper exported from `battle-msg.js` and consumed by all three sites. Fade-out now finishes the same frame the queue advances, guaranteed.
+
+**Shared layout/scroll constants.** `MSG_STRIP_X` / `MSG_STRIP_Y` / `MSG_STRIP_W` and the scroll-pause / scroll-speed numbers (`400` and `0.06` previously hardcoded in two places) now export from `battle-msg.js`. `battle-drawing.js` imports them so the clip rect, scroll math, and overflow gate read the same numbers.
+
+**Pre-baked phrase bytes for static messages.** Added `BATTLE_HASTE` / `BATTLE_PROTECT` / `BATTLE_REFLECT` / `BATTLE_ALLY` / `BATTLE_FOE` to `data/strings.js` (alongside the existing `BATTLE_INEFFECTIVE`). Replaced ~10 dynamic `_nameToBytes('...')` allocations per cast/turn with the constants in `spell-cast.js`, `battle-turn.js`, `battle-ally.js`, `pvp.js`. Per-cast GC pressure drops; named ally / opponent paths still go through `_nameToBytes` since those are dynamic.
+
+## 1.7.144 — 2026-05-08
+
+### Player buff system — foundation (Haste, Protect, Reflect)
+
+End-game buffs are now real, not stubs. Foundation lands the data model + math hooks; the gameplay surfaces (Bachus Wine = Haste, Turtle Shell = Protect, Curtain = Reflect — already pointing at these spell IDs via `animSpellId` since v1.7.118) finally do something when used.
+
+**`src/buffs.js`** (new, 50 lines): `applyBuff(combatant, buffKey)` / `hasBuff(combatant, buffKey)` / `clearAllBuffs(combatant)` plus `BUFF_HASTE` / `BUFF_PROTECT` / `BUFF_REFLECT` constants and an `ALL_BUFFS` array. Storage shape on the combatant is plain object `{ haste?: true, protect?: true, reflect?: true }`. Re-apply is idempotent (no stacking, matches FF3 NES canon). Helpers are null-safe so any combatant lacking the field works fine.
+
+**`ps.buffs = {}`** added to player state. NOT in the save schema — buffs are battle-bound. `resetBattleVars` calls `clearAllBuffs(ps)` at battle start so a Haste from the previous fight doesn't carry over.
+
+**Spell-cast wiring** (`spell-cast.js:478-502`): the three self-buff handler stubs that previously fired only the SFX + battle-msg now actually call `applyBuff(ps, ...)`. So Bachus Wine grants Haste in-state, Turtle Shell grants Protect, Curtain grants Reflect. Same SFX/msg flow as before — the difference is the buff actually persists for the rest of the battle.
+
+**Math hooks**:
+- `calcPotentialHits(level, agi, dualWield, hasted = false)` — when hasted, doubles the final hit count. Stacks with dual-wield (a hasted dual-wielder gets 4× the base count). Wired in `input-handler.js:177` for the player attack path.
+- `rollHits(opts.targetProtected = false)` — when set, halves damage independently of `defendHalve`. Both flags can stack; canon FF3 NES treats Protect + Defend as multiplicative (1/4 damage). Wired into the PVP enemy-attack-on-player path (`pvp.js:432`) and the monster-physical-on-player path (`battle-enemy.js:215`, post-roll halve since that path uses a custom multi-hit roller). Magic damage paths intentionally skip Protect — canon Protect is physical-only.
+
+**Reflect**: data-only for v0. Buff sets, but no spell-bouncing yet. Bouncing requires target retargeting in the spell-cast engine — non-trivial and out of scope for foundation. Marked TODO at the apply site.
+
+**`/buff` dev command** (chat.js): `/buff` shows active, `/buff haste|protect|reflect` applies one, `/buff clear` wipes. Added to `/devhelp` under a new "Buffs" group.
+
+**Deferred to v1** (NOT shipped):
+- Per-ally buffs (`battleAllies[i].buffs`)
+- PVP-enemy buffs (`pvpOpponentStats.buffs` + `pvpEnemyAllies[i].buffs`)
+- Encounter-monster buffs (`encounterMonsters[i].buffs`)
+- Reflect bounce — retargeting + caster lookup + visual
+- Turn-decay for Reflect (~10 turns canon)
+- Buff icons on portraits (visual indicator above sprite — pattern exists for status overlays via `drawStatusSpriteAbove`)
+
+**Test**: `buffs.js` smoke-tested via `node -e` (apply / has / clear / idempotent re-apply / null-safe). All assertions pass. Per-call-site behavior is exercised through actual gameplay; no regression test infrastructure yet (queued for the Vitest pass).
+
 ## 1.7.143 — 2026-05-08
 
 ### Console: dev-gated commands, real startup metrics, eight new dev commands

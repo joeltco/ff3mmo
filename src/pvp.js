@@ -35,6 +35,7 @@ import { drawSlashOverlay, resetSlashScatterCache, shouldDrawSlash, SWING_HOLD_M
 import { removeStatus, hasStatus, STATUS, tryInflictStatus, STATUS_NAME_BYTES } from './status-effects.js';
 import { _nameToBytes } from './text-utils.js';
 import { queueBattleMsg } from './battle-msg.js';
+import { BATTLE_FOE } from './data/strings.js';
 import { tickHealNums, clearHealNums } from './damage-numbers.js';
 import { SPELLS } from './data/spells.js';
 import { drawCasterCastBehind, drawCasterCastFront, jobToCastKey } from './cast-anim.js';
@@ -430,6 +431,7 @@ function _processEnemyFlash() {
     shieldEvade: getShieldEvade(ITEMS),
     evade: ps.evade,
     defendHalve: battleSt.isDefending,
+    targetProtected: !!(ps.buffs && ps.buffs.protect),
   };
   const raw = rollHits(atk, def, hitRate, potentialHits, opts);
   // Map to PVP result format: { miss, shieldBlock, dmg, crit }
@@ -554,7 +556,7 @@ function _tryPVPEnemyCure(caster, casterCellIdx) {
   pvpSt.pvpMagicSpellId        = 0x34;
   pvpSt.pvpMagicHealAmount     = heal;
   pvpSt.pvpMagicEffectApplied  = false;
-  queueBattleMsg(_nameToBytes(caster.name || 'Foe'));
+  queueBattleMsg(caster.name ? _nameToBytes(caster.name) : BATTLE_FOE);
   playSFX(SFX.MAGIC_CAST);
   battleSt.battleState = 'pvp-enemy-magic-cast';
   battleSt.battleTimer = 0;
@@ -604,7 +606,7 @@ function _tryPVPEnemyOffensiveCast(caster, casterCellIdx) {
   pvpSt.pvpMagicHealAmount     = 0;
   pvpSt.pvpMagicDamageRoll     = dmg;
   pvpSt.pvpMagicEffectApplied  = false;
-  queueBattleMsg(_nameToBytes(caster.name || 'Foe'));
+  queueBattleMsg(caster.name ? _nameToBytes(caster.name) : BATTLE_FOE);
   playSFX(SFX.MAGIC_CAST);
   battleSt.battleState = 'pvp-enemy-magic-cast';
   battleSt.battleTimer = 0;
@@ -631,7 +633,7 @@ function _tryPVPEnemyPoisona(caster, casterCellIdx) {
   pvpSt.pvpMagicSpellId        = 0x35;
   pvpSt.pvpMagicHealAmount     = 0;
   pvpSt.pvpMagicEffectApplied  = false;
-  queueBattleMsg(_nameToBytes(caster.name || 'Foe'));
+  queueBattleMsg(caster.name ? _nameToBytes(caster.name) : BATTLE_FOE);
   playSFX(SFX.MAGIC_CAST);
   battleSt.battleState = 'pvp-enemy-magic-cast';
   battleSt.battleTimer = 0;

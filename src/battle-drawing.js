@@ -55,7 +55,10 @@ import { BATTLE_LEVEL_UP, BATTLE_JOB_LEVEL_UP, BATTLE_FOUND,
 const _MAGE_JOBS = new Set([3, 4, 5]);
 import { getAllyDamageNums, getEnemyDmgNum, getPlayerDamageNum, getPlayerHealNum, getEnemyHealNum,
          getSwDmgNums } from './damage-numbers.js';
-import { getBattleMsgCurrent, getBattleMsgTimer, MSG_FADE_IN_MS, MSG_HOLD_MS, MSG_FADE_OUT_MS } from './battle-msg.js';
+import { getBattleMsgCurrent, getBattleMsgTimer, computeMsgTimings,
+         MSG_FADE_IN_MS, MSG_FADE_OUT_MS,
+         MSG_STRIP_X, MSG_STRIP_Y, MSG_STRIP_W,
+         MSG_SCROLL_PAUSE_MS, MSG_SCROLL_SPEED_PX_MS } from './battle-msg.js';
 // (weapon canvas selection moved to combatant-pose.js — pickAttackWeaponSpec handles all blade/fist getters)
 import { clipToViewport, drawCursorFaded, drawHudBox, drawSparkleCorners, drawBorderedBox,
          grayViewport } from './hud-drawing.js';
@@ -1863,42 +1866,34 @@ function drawDamageNumbers() {
   _drawEnemyHealNum();
 }
 
-// Battle message strip — renders in right panel where chat tabs normally are
-const MSG_STRIP_X = 144;
-const MSG_STRIP_Y = 160;
-const MSG_STRIP_W = 112;
+// Battle message strip — renders in right panel where chat tabs normally are.
+// Layout + timings come from battle-msg.js so update + render share one source.
 
 function drawBattleMessageStrip() {
   const msg = getBattleMsgCurrent();
   if (!msg) return;
   const t = getBattleMsgTimer();
-  const tw = measureText(msg.bytes);
-  const overflow = Math.max(0, tw - MSG_STRIP_W);
-  const scrollTime = overflow > 0 ? 400 + overflow / 0.06 + 400 : 0;
-  const effectiveHold = Math.max(MSG_HOLD_MS, scrollTime);
+  const { overflow, scrollMs, hold } = computeMsgTimings(msg);
   let fadeStep = 0;
   if (msg.persist && battleSt.battleState === 'victory-text-out') {
     fadeStep = Math.min(Math.floor(battleSt.battleTimer / (MSG_FADE_OUT_MS / BATTLE_TEXT_STEPS)), BATTLE_TEXT_STEPS);
   } else if (t < MSG_FADE_IN_MS) {
     fadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(t / (MSG_FADE_IN_MS / BATTLE_TEXT_STEPS)), BATTLE_TEXT_STEPS);
-  } else if (msg.waitForZ || msg.persist || t < MSG_FADE_IN_MS + effectiveHold) {
+  } else if (msg.waitForZ || msg.persist || t < MSG_FADE_IN_MS + hold) {
     fadeStep = 0; // waitForZ/persist: stay solid after fade-in
   } else {
-    fadeStep = Math.min(Math.floor((t - MSG_FADE_IN_MS - effectiveHold) / (MSG_FADE_OUT_MS / BATTLE_TEXT_STEPS)), BATTLE_TEXT_STEPS);
+    fadeStep = Math.min(Math.floor((t - MSG_FADE_IN_MS - hold) / (MSG_FADE_OUT_MS / BATTLE_TEXT_STEPS)), BATTLE_TEXT_STEPS);
   }
   if (fadeStep >= BATTLE_TEXT_STEPS) return;
   const pal = _makeFadedPal(fadeStep);
   const y = MSG_STRIP_Y + 4;
-  if (tw <= MSG_STRIP_W) {
+  if (overflow === 0) {
     drawText(ui.ctx, MSG_STRIP_X, y, msg.bytes, pal);
   } else {
-    const SCROLL_PAUSE = 400;
-    const SCROLL_SPEED = 0.06;
-    const scrollMs = overflow / SCROLL_SPEED;
-    const holdT = t - MSG_FADE_IN_MS; // time in hold phase
+    const holdT = t - MSG_FADE_IN_MS;
     let scrollX = 0;
-    if (holdT < SCROLL_PAUSE) scrollX = 0;
-    else if (holdT < SCROLL_PAUSE + scrollMs) scrollX = (holdT - SCROLL_PAUSE) * SCROLL_SPEED;
+    if (holdT < MSG_SCROLL_PAUSE_MS) scrollX = 0;
+    else if (holdT < MSG_SCROLL_PAUSE_MS + scrollMs) scrollX = (holdT - MSG_SCROLL_PAUSE_MS) * MSG_SCROLL_SPEED_PX_MS;
     else scrollX = overflow;
     ui.ctx.save();
     ui.ctx.beginPath();

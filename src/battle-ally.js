@@ -7,6 +7,7 @@ import { isWeapon } from './data/items.js';
 import { SFX, playSFX } from './music.js';
 import { _nameToBytes } from './text-utils.js';
 import { queueBattleMsg } from './battle-msg.js';
+import { BATTLE_ALLY } from './data/strings.js';
 import { pvpSt } from './pvp.js';
 import { inputSt } from './input-handler.js';
 import { getEnemyDmgNum, setEnemyDmgNum, setPlayerHealNum, getAllyDamageNums, tickHealNums, clearHealNums } from './damage-numbers.js';
@@ -85,7 +86,7 @@ function _updateAllyAttack() {
                 : (allyUnarmed ? 0 : (battleSt.allyHitIdx === 0 ? ALLY_BACK_MS : ALLY_COMBO_PAUSE_MS));
     if (battleSt.battleTimer >= delay) {
       if (battleSt.allyHitIdx === 0) {
-        queueBattleMsg(_nameToBytes(allyNow.name || 'Ally'));
+        queueBattleMsg(allyNow.name ? _nameToBytes(allyNow.name) : BATTLE_ALLY);
       }
       battleSt.allyHitIsLeft = willBeLeft;
       battleSt.battleState = 'ally-attack-fwd';

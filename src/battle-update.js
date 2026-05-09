@@ -17,6 +17,7 @@ import { updateBattleAlly } from './battle-ally.js';
 import { updateBattleEnemyTurn } from './battle-enemy.js';
 import { updateSpellCast, resetSpellCastVars } from './spell-cast.js';
 import { canCastSpell } from './data/spells.js';
+import { clearAllBuffs } from './buffs.js';
 import { queueBattleMsg, replaceBattleMsg, updateBattleMsg as _updateBattleMsg, clearBattleMsgQueue,
          queueVictoryRewards as _queueVictoryRewards, getBattleMsgCurrent,
          isBattleMsgBusy, clearVictoryPersist } from './battle-msg.js';
@@ -81,6 +82,9 @@ export function resetBattleVars() {
   battleSt.allyMagicCasterIdx = -1; battleSt.allyMagicTargetIdx = -1; battleSt.allyMagicSpellId = 0;
   battleSt.allyMagicHealAmount = 0; battleSt.allyMagicEffectApplied = false; battleSt.allyMagicTargetType = 'player';
   hudSt.playerDeathTimer = null;
+  // Buffs are battle-bound — wipe haste/protect/reflect so each battle starts
+  // clean. When per-ally / per-enemy buffs ship, clear those here too.
+  clearAllBuffs(ps);
   inputSt.battleActionCount = 0;
   clearBattleMsgQueue();
 }

@@ -16,9 +16,11 @@ import { STATUS, addStatus, removeStatus, tryInflictStatus, STATUS_NAME_BYTES } 
 import { CAST_PHASE_MS, CAST_PHASE_MS_THROW, CAST_T_HEAL, CAST_TOTAL_MS, CAST_T_THROW_RETURN, CAST_T_THROW_IMPACT_START } from './cast-anim.js';
 import { pvpGridLayout } from './pvp-math.js';
 import { queueBattleMsg, isBattleMsgBusy } from './battle-msg.js';
+import { BATTLE_INEFFECTIVE, BATTLE_HASTE, BATTLE_PROTECT, BATTLE_REFLECT } from './data/strings.js';
 import { _nameToBytes } from './text-utils.js';
 import { elemMultiplier } from './battle-math.js';
 import { pvpSt } from './pvp.js';
+import { applyBuff, BUFF_HASTE, BUFF_PROTECT, BUFF_REFLECT } from './buffs.js';
 
 // Map spell.type → STATUS flag for cure_status spells (Poisona, Bndna, etc.)
 const SPELL_CURE_FLAG = {
@@ -299,7 +301,7 @@ function _applyEnemyEffect(idx, spell) {
   // Impact SFX is `SFX.SIGHT` (NSF track $81 = SFX $40 + $41) per the REC
   // OAM capture's idle→$40 trigger at frame 39 of the f5887 dump.
   if (spell.target === 'sight') {
-    queueBattleMsg(_nameToBytes('Ineffective'));
+    queueBattleMsg(BATTLE_INEFFECTIVE);
     _playSpellSFXOnce(SFX.SIGHT);
     return;
   }
@@ -310,7 +312,7 @@ function _applyEnemyEffect(idx, spell) {
   if (spell.target === 'enemy_status') {
     if (!mon) {
       // Boss path — no monster object. Treat as ineffective for now.
-      queueBattleMsg(_nameToBytes('Ineffective'));
+      queueBattleMsg(BATTLE_INEFFECTIVE);
       _playSpellSFXOnce(SFX.SW_HIT);
       return;
     }
@@ -470,31 +472,33 @@ function _applySpellEffect(target) {
   // can still navigate Right back to the player side. Battle message says
   // "Ineffective"; SFX matches the enemy path.
   if (spell.target === 'sight') {
-    queueBattleMsg(_nameToBytes('Ineffective'));
+    queueBattleMsg(BATTLE_INEFFECTIVE);
     _playSpellSFXOnce(SFX.SIGHT);
     return;
   }
 
-  // Self-buff spells (Haste, Protect) — feedback only for now. The buff
-  // mechanics (haste = double speed, protect = halve damage) aren't yet
-  // tracked in the player state machine, so the SFX + battle message are
-  // the player's confirmation that the item did SOMETHING. Wire real buff
-  // mechanics when the buff system lands.
+  // Self-buff spells (Haste, Protect, Reflect) — apply to ps via buffs.js.
+  // Haste doubles potential hits per turn (calcPotentialHits respects it).
+  // Protect halves incoming physical damage (rollHits respects it).
+  // Reflect — buff is set, but spell-bouncing isn't wired yet (would need
+  // target retargeting in this file). For now Reflect is cosmetic: msg fires,
+  // buff records, but offensive enemy spells still hit normally. TODO when
+  // we ship the bounce path.
   if (spell.target === 'haste') {
-    queueBattleMsg(_nameToBytes('Haste'));
+    applyBuff(ps, BUFF_HASTE);
+    queueBattleMsg(BATTLE_HASTE);
     _playSpellSFXOnce(SFX.CURE);
     return;
   }
   if (spell.target === 'protect') {
-    queueBattleMsg(_nameToBytes('Protect'));
+    applyBuff(ps, BUFF_PROTECT);
+    queueBattleMsg(BATTLE_PROTECT);
     _playSpellSFXOnce(SFX.CURE);
     return;
   }
   if (spell.target === 'reflect') {
-    // Curtain (item) → Reflect spell. Real reflect mechanics (bounce magic
-    // back at attacker for a limited time) need a player-state buff system
-    // that doesn't exist yet — stub like haste/protect.
-    queueBattleMsg(_nameToBytes('Reflect'));
+    applyBuff(ps, BUFF_REFLECT);
+    queueBattleMsg(BATTLE_REFLECT);
     _playSpellSFXOnce(SFX.CURE);
     return;
   }
@@ -504,7 +508,7 @@ function _applySpellEffect(target) {
   // would otherwise fall through to the heal path below and silently restore
   // HP. Surface "Ineffective" instead and don't apply any effect.
   if (spell.type === 'damage') {
-    queueBattleMsg(_nameToBytes('Ineffective'));
+    queueBattleMsg(BATTLE_INEFFECTIVE);
     _playSpellSFXOnce(SFX.ERROR);
     return;
   }

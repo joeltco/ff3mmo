@@ -1,7 +1,10 @@
-// Battle message strip — state, queue, timing, update logic
-// Extracted from game.js for reuse across battle modules
+// Battle message strip — state, queue, timing, update logic.
+// Single source of truth for the message-strip layout, timings, and
+// scroll math; battle-drawing imports from here so the strip render and
+// the queue advance can never disagree.
 
 import { BATTLE_VICTORY } from './data/strings.js';
+import { measureText } from './font-renderer.js';
 
 // ── State ──────────────────────────────────────────────────────────────────
 let battleMsgQueue = [];       // [{ bytes: Uint8Array, waitForZ: bool }]
@@ -9,9 +12,35 @@ let battleMsgCurrent = null;   // current message object or null
 let battleMsgTimer = 0;        // ms into current message display
 
 // ── Timing constants ───────────────────────────────────────────────────────
-export const MSG_FADE_IN_MS = 200;
-export const MSG_HOLD_MS = 800;
+export const MSG_FADE_IN_MS  = 200;
+export const MSG_HOLD_MS     = 800;
 export const MSG_FADE_OUT_MS = 200;
+
+// ── Strip layout (shared with battle-drawing) ──────────────────────────────
+export const MSG_STRIP_X = 144;
+export const MSG_STRIP_Y = 160;
+export const MSG_STRIP_W = 112;
+
+// ── Scroll constants (shared with battle-drawing) ──────────────────────────
+export const MSG_SCROLL_PAUSE_MS    = 400;  // pause before/after scroll travel
+export const MSG_SCROLL_SPEED_PX_MS = 0.06; // px traveled per ms
+
+// ── Per-message timings (single source) ────────────────────────────────────
+// Both the queue advance and the strip render derive from this — guarantees
+// the message disappears the same frame the fade-out finishes.
+export function computeMsgTimings(msg) {
+  const tw = measureText(msg.bytes);
+  const overflow = Math.max(0, tw - MSG_STRIP_W);
+  const scrollMs = overflow > 0 ? overflow / MSG_SCROLL_SPEED_PX_MS : 0;
+  const scrollTime = overflow > 0
+    ? MSG_SCROLL_PAUSE_MS + scrollMs + MSG_SCROLL_PAUSE_MS
+    : 0;
+  const hold = Math.max(MSG_HOLD_MS, scrollTime);
+  return {
+    tw, overflow, scrollMs, hold,
+    total: MSG_FADE_IN_MS + hold + MSG_FADE_OUT_MS,
+  };
+}
 
 // ── Getters (for drawing + shared state objects) ───────────────────────────
 export function getBattleMsgCurrent() { return battleMsgCurrent; }
@@ -41,34 +70,22 @@ export function replaceBattleMsg(bytes) {
     return;
   }
   battleMsgCurrent = { ...battleMsgCurrent, bytes };
-  // Keep fade-in progress, reset hold from now
-  if (battleMsgTimer > MSG_FADE_IN_MS) {
-    battleMsgTimer = MSG_FADE_IN_MS;
-  }
+  if (battleMsgTimer > MSG_FADE_IN_MS) battleMsgTimer = MSG_FADE_IN_MS;
 }
 
 // ── Update (call once per frame) ───────────────────────────────────────────
 export function updateBattleMsg(dt) {
   if (!battleMsgCurrent) return;
   battleMsgTimer += dt;
-  if (battleMsgCurrent.persist) return;
-  if (!battleMsgCurrent.waitForZ) {
-    const textW = battleMsgCurrent.bytes.length * 8;
-    const overflow = Math.max(0, textW - 112);
-    const scrollTime = overflow > 0 ? 400 + overflow / 0.06 + 400 : 0;
-    const totalMs = MSG_FADE_IN_MS + Math.max(MSG_HOLD_MS, scrollTime) + MSG_FADE_OUT_MS;
-    if (battleMsgTimer >= totalMs) _advanceBattleMsg();
-  }
+  if (battleMsgCurrent.persist || battleMsgCurrent.waitForZ) return;
+  if (battleMsgTimer >= computeMsgTimings(battleMsgCurrent).total) _advanceBattleMsg();
 }
 
-// ── Z-advance (victory screen) ────────────────────────────────────────────
+// ── Z-advance (victory screen / waitForZ messages) ─────────────────────────
 export function advanceBattleMsgZ() {
   if (battleMsgCurrent && battleMsgCurrent.waitForZ) {
-    const textW = battleMsgCurrent.bytes.length * 8;
-    const overflow = Math.max(0, textW - 112);
-    const scrollTime = overflow > 0 ? 400 + overflow / 0.06 + 400 : 0;
-    const minTime = MSG_FADE_IN_MS + Math.max(MSG_HOLD_MS, scrollTime);
-    if (battleMsgTimer >= minTime) {
+    const { hold } = computeMsgTimings(battleMsgCurrent);
+    if (battleMsgTimer >= MSG_FADE_IN_MS + hold) {
       _advanceBattleMsg();
       return true;
     }
@@ -94,7 +111,6 @@ export function queueVictoryRewards() {
   battleMsgTimer = 0;
 }
 
-// ── Clear victory persist ─────────────────────────────────────────────────
 // `queueVictoryRewards` puts a `persist: true` message in `battleMsgCurrent` that
 // `updateBattleMsg` refuses to time out. Call this when victory text-out finishes.
 export function clearVictoryPersist() {

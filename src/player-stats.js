@@ -35,6 +35,7 @@ export const ps = {
   playTime: 0,          // total play time in seconds
   lastTown: 114,        // map ID of last town visited — respawn point on defeat (default Ur)
   knownSpells: [],      // array of spell IDs the player has learned (granted by job + magic shop)
+  buffs: {},            // active battle buffs (haste/protect/reflect). Cleared on resetBattleVars; not persisted.
 };
 
 // Starting spells granted when a player first switches into a mage job.

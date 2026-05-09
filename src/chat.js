@@ -17,6 +17,7 @@ import { saveSlotsToDB } from './save-state.js';
 import { ITEMS } from './data/items.js';
 import { addItem } from './inventory.js';
 import { getItemNameClean, getSpellNameClean, bytesToAscii } from './text-decoder.js';
+import { applyBuff, hasBuff, clearAllBuffs, ALL_BUFFS } from './buffs.js';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 const CHAT_LINE_H      = 9;
@@ -258,6 +259,23 @@ registerCommand('spell', 'Grant spell: /spell <hexId>. e.g. /spell 33', (args) =
   addChatMessage('Learned $' + id.toString(16).padStart(2, '0') + ' ' + name, 'console');
 }, { dev: true });
 
+registerCommand('buff', 'Set buff: /buff haste|protect|reflect, /buff clear, or /buff (show)', (args) => {
+  const a = (args || '').trim().toLowerCase();
+  if (!a) {
+    const active = ALL_BUFFS.filter(k => hasBuff(ps, k));
+    addChatMessage('Buffs: ' + (active.length ? active.join(',') : '(none)'), 'console');
+    return;
+  }
+  if (a === 'clear' || a === 'off' || a === 'none') {
+    clearAllBuffs(ps);
+    addChatMessage('Buffs cleared', 'console');
+    return;
+  }
+  if (!ALL_BUFFS.includes(a)) { addChatMessage('Unknown buff: ' + a + '. Try haste|protect|reflect', 'console'); return; }
+  applyBuff(ps, a);
+  addChatMessage('Applied: ' + a + '  (clears at next battle start)', 'console');
+}, { dev: true });
+
 registerCommand('warp', 'Teleport to map id N (decimal)', (args, ctx) => {
   if (!args) { addChatMessage('Current map: ' + mapSt.currentMapId, 'console'); return; }
   if (!ctx.loadMapById) { addChatMessage('Warp not available', 'console'); return; }
@@ -273,6 +291,7 @@ registerCommand('warp', 'Teleport to map id N (decimal)', (args, ctx) => {
 registerCommand('devhelp', 'Dev commands grouped by category', () => {
   const groups = [
     ['Player state',  ['hp', 'mp', 'heal', 'level', 'gil', 'cp']],
+    ['Buffs',         ['buff']],
     ['Job & spells',  ['job', 'spell']],
     ['Items',         ['give']],
     ['Navigation',    ['warp']],

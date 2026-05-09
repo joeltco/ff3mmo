@@ -212,6 +212,9 @@ function _processEnemyFlash() {
     if (landed > 0) {
       let dmg = total;
       if (battleSt.isDefending) dmg = Math.max(1, Math.floor(dmg / 2));
+      // Protect halves physical damage independently of Defend; both stack.
+      // Canon FF3 NES Protect is physical-only — leave magic damage paths alone.
+      if (ps.buffs && ps.buffs.protect) dmg = Math.max(1, Math.floor(dmg / 2));
       ps.hp = Math.max(0, ps.hp - dmg);
       setPlayerDamageNum({ value: dmg, timer: 0 });
       // Physical hit wakes sleeping targets
