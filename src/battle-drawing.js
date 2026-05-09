@@ -1111,12 +1111,19 @@ function _drawEncounterMonsters(gridPos, sprH, boxX, boxY, boxW, boxH, isSlideIn
     // and the death wipe looks like a sudden flash-then-disappear.
     const isMagicHitTarget = battleSt.battleState === 'magic-hit' &&
       getSpellTargets().some(t => t.type === 'enemy' && t.index === i);
+    // Same rule for ALLY cast on encounter monster — the impact burst plays
+    // for ~850 ms after damage applies; without this the killed monster
+    // vanishes mid-burst (caught 2026-05-09 — user reported "spell animation
+    // makes target disappear during").
+    const isAllyMagicHitTarget = battleSt.battleState === 'ally-magic-hit' &&
+      battleSt.allyMagicTargetType === 'enemy' &&
+      battleSt.allyMagicTargetIdx === i;
     const isBeingHit = (i === inputSt.targetIndex &&
       (battleSt.battleState === 'player-slash' || battleSt.battleState === 'player-hit-show' ||
        battleSt.battleState === 'player-miss-show' || battleSt.battleState === 'player-damage-show' ||
        battleSt.battleState === 'pre-monster-death')) ||
       (i === battleSt.allyTargetIndex && (battleSt.battleState === 'ally-slash' || battleSt.battleState === 'ally-damage-show')) ||
-      isMagicHitTarget;
+      isMagicHitTarget || isAllyMagicHitTarget;
     if (!alive && !isDying && !isBeingHit) continue;
 
     const pos = gridPos[i];

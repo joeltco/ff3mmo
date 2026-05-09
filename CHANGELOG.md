@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.162 — 2026-05-09
+
+### fix: target stays visible during ally-magic-hit + cast-behind miss telemetry
+
+**Target disappears during ally cast impact.** When an ally Fire/Bzzard hit dropped an encounter monster or PVP enemy to 0 HP, the body sprite vanished mid-burst because the "keep visible while being hit" gate didn't include `'ally-magic-hit'`. Same fix on both render sites:
+- `_drawEncounterMonsters` (`battle-drawing.js:1118`) — added `isAllyMagicHitTarget` (`battleSt.allyMagicTargetType === 'enemy'` + matching idx), folded into the existing `isBeingHit` OR.
+- `_drawCellSprite` (`pvp.js:1010`) — added `isMagicHitKill` (player cast on PVP) and `isAllyMagicHitKill` (ally cast on PVP, both with the idx-0=opp / 1+=enemy-ally convention spell-cast uses), folded into a unified `keepVisible` predicate. Replaces the earlier `isBeingKilled`-only gate that silently dropped magic-hit kills on PVP enemies — same root pattern as the encounter side, also now fixed.
+
+Now imports `getSpellTargets` from `spell-cast.js` in `pvp.js` for the player-cast PVP target check.
+
+**Cast-behind miss telemetry.** `drawCasterCastBehind` now emits a one-shot dev console log (`[cast-behind-miss] job=N spell=$NN resolved=jobKey`) whenever the caller is in the buildup window (so they expect a halo) but `getCastVisual` resolves to a non-BM bundle (no haloCanvas). User reported "roster ally BM halo isn't rendering on cast" — without runtime debugging, this telemetry will surface the exact (jobIdx, spellId) the renderer is seeing next session. If `resolved=wm` shows up for what should be a black-school spell, `jobToCastKey` is mis-classifying. If `resolved=null`, the bundle didn't initialize for that job. If `resolved=bm` but no halo still draws, the canvas is rendering off-screen / behind the ally portrait clip — that's a positioning issue elsewhere.
+
 ## 1.7.161 — 2026-05-09
 
 ### refactor: combatant pose maps consolidated + miss telemetry

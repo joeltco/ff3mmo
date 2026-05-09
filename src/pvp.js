@@ -5,6 +5,7 @@ import { clipToViewport, drawBorderedBox } from './hud-drawing.js';
 import { getPlayerLocation } from './roster.js';
 // (weapon canvas selection moved to combatant-pose.js — opponent now uses pickAttackWeaponSpec)
 import { getAllyDamageNums, getPlayerDamageNum, setPlayerDamageNum, getEnemyHealNum, setEnemyHealNum } from './damage-numbers.js';
+import { getSpellTargets } from './spell-cast.js';
 import { ui } from './ui-state.js';
 import { buildTurnOrder, processNextTurn } from './battle-turn.js';
 import { updateBattleAlly } from './battle-ally.js';
@@ -1006,13 +1007,23 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   const _fpb = (map) => (map[_ej] || map[0])[palIdx];
   const fullBody = _fpb(fakePlayerFullBodyCanvases) || (fakePlayerFullBodyCanvases[0] || [])[0];
   if (!fullBody) return;
-  // Hide dead enemies — but keep visible during dissolve and attack sequence
+  // Hide dead enemies — but keep visible during dissolve, attack, and magic-hit sequences.
   const isDying = pvpSt.pvpDyingMap.has(idx) && bs === 'pvp-dissolve';
   const isCurrentTarget = isMain ? pvpSt.pvpPlayerTargetIdx < 0 : (idx - 1) === pvpSt.pvpPlayerTargetIdx;
   const isBeingKilled = isCurrentTarget && (bs === 'player-slash' || bs === 'player-hit-show' ||
     bs === 'player-damage-show' || bs === 'ally-slash' || bs === 'ally-damage-show');
-  if (isMain && (battleSt.enemyDefeated || (pvpSt.pvpOpponentStats && pvpSt.pvpOpponentStats.hp <= 0)) && !isDying && !isBeingKilled) return;
-  if (!isMain && (battleSt.enemyDefeated || enemy.hp <= 0) && !isDying && !isBeingKilled) return;
+  // Magic-hit kills: keep this PVP cell rendered through the impact burst window
+  // even after HP hits 0, so the target doesn't vanish mid-animation. Player
+  // cast → check `getSpellTargets` (idx convention 0 = opponent, 1+ = enemy
+  // ally idx-1). Ally cast → check `battleSt.allyMagicTargetType === 'pvp-enemy'`
+  // with the same idx convention.
+  const isMagicHitKill = bs === 'magic-hit' && getSpellTargets().some(t => t.type === 'enemy' && t.index === idx);
+  const isAllyMagicHitKill = bs === 'ally-magic-hit' &&
+    battleSt.allyMagicTargetType === 'pvp-enemy' &&
+    battleSt.allyMagicTargetIdx === idx;
+  const keepVisible = isDying || isBeingKilled || isMagicHitKill || isAllyMagicHitKill;
+  if (isMain && (battleSt.enemyDefeated || (pvpSt.pvpOpponentStats && pvpSt.pvpOpponentStats.hp <= 0)) && !keepVisible) return;
+  if (!isMain && (battleSt.enemyDefeated || enemy.hp <= 0) && !keepVisible) return;
   // Shake left when taking damage (mirrors player's right-shake on hit)
   if (isCurrentTarget && pvpSt.pvpOpponentShakeTimer > 0) {
     sprX += (Math.floor(pvpSt.pvpOpponentShakeTimer / 67) & 1) ? -2 : 2;

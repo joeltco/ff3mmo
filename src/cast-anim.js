@@ -26,6 +26,7 @@
 import { NES_SYSTEM_PALETTE } from './tile-decoder.js';
 import { _makeCanvas16 } from './canvas-utils.js';
 import { getSpellSchool } from './data/spells.js';
+import { consoleLog, isDev } from './chat.js';
 
 // ── Per-job default palettes ──────────────────────────────────────────────
 const WM_DEFAULT_PAL = [0x0F, 0x12, 0x22, 0x31];  // blue / cyan / white
@@ -471,10 +472,20 @@ const _FLAME_DY      = -3;       // flame top relative to sprite center
 
 // Halo (BM only) — drawn BEHIND the sprite. Static (single canvas, not
 // frame-cycling). WM has no behind-layer.
+//
+// Telemetry: when the call fires inside the buildup window (caller is actively
+// expecting a halo) but `getCastVisual` resolves to a non-BM bundle (no
+// haloCanvas), emit a one-shot dev log. Useful when "BM ally cast doesn't
+// show a halo" turns out to mean `jobToCastKey` resolved to 'wm' for the
+// (jobIdx, spellId) — e.g., a non-mage jobIdx that shouldn't have offensive
+// magic anyway, or a missing spell-school registration.
 export function drawCasterCastBehind(ctx, centerX, centerY, jobIdx, spellId, elapsedMs, mirror = false) {
   if (elapsedMs < 0 || !shouldDrawHalo(elapsedMs)) return;
   const visual = getCastVisual(jobIdx, spellId);
-  if (!visual || !visual.haloCanvas) return;
+  if (!visual || !visual.haloCanvas) {
+    _logCastBehindMiss(jobIdx, spellId, visual);
+    return;
+  }
   const halo = visual.haloCanvas;
   if (mirror) {
     ctx.save();
@@ -485,6 +496,16 @@ export function drawCasterCastBehind(ctx, centerX, centerY, jobIdx, spellId, ela
   } else {
     ctx.drawImage(halo, centerX - _HALO_HALF_W, centerY - _HALO_HALF_H);
   }
+}
+const _castMissLogged = new Set();
+function _logCastBehindMiss(jobIdx, spellId, visual) {
+  const tag = jobIdx + ':' + (spellId == null ? '?' : spellId.toString(16)) + ':' +
+    (visual ? (visual.jobKey || 'no-key') : 'no-visual');
+  if (_castMissLogged.has(tag)) return;
+  _castMissLogged.add(tag);
+  if (isDev()) consoleLog('[cast-behind-miss] job=' + jobIdx + ' spell=$' +
+    (spellId == null ? '?' : spellId.toString(16)) + ' resolved=' +
+    (visual ? (visual.jobKey || '?') : 'null'));
 }
 
 // WM stars + cast flame (WM or BM bytes) — drawn AFTER the sprite. The cast
