@@ -2,6 +2,28 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.169 — 2026-05-09
+
+### fix: damage number AFTER spell animation (not during)
+
+v1.7.168 set ally + PVP `EFFECT_MS` to projectile end (150 ms = impact START), so the damage number popped on the first frame of the burst. User said the sequence is "cast → projectile → spell anim → damage number" — strictly sequential, damage AFTER the burst plays out. The player path already does this; comment at `spell-cast.js:602` literally says "effect at impact END so the damage number doesn't" overlap the burst. I missed it.
+
+Fixed: `ALLY_MAGIC_EFFECT_MS` and `PVP_MAGIC_EFFECT_MS` now equal `CAST_PHASE_MS_THROW.projectile + CAST_PHASE_MS_THROW.impact = 700` — fires when the burst ENDS. The 167 ms ret window then displays the damage number cleanly before state transitions.
+
+Frame timeline (corrected):
+```
+[*-magic-cast]   0   → 800   cast windup
+[*-magic-hit]    0   → 150   projectile fan
+                 150 → 700   spell anim (impact burst)
+                 700 ←        damage applies + dmg number pops
+                 700 → 867   ret window — damage number displays alone
+[next state]
+```
+
+Damage number lives 700 ms via SW_DMG_SHOW_MS — visible from t=700 through t=1400 (overlapping into the next state, ticking down via `tickDmgNums` regardless of state).
+
+Saving lesson: when the user lists steps in order, treat them as strictly sequential. Don't assume parallel timing without re-reading.
+
 ## 1.7.168 — 2026-05-09
 
 ### tune: ally + PVP magic timings derive from CAST_PHASE_MS_THROW

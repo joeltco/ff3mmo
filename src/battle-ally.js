@@ -203,9 +203,15 @@ function _updateAllyEnemyHit() {
 // heal sparkle plays the entire hit phase. EFFECT applies at the same 150 ms
 // — slight tightening from the prior 400 ms (heal pops earlier, still visible
 // for ~700 ms via tickHealNums until clearHealNums on hit end).
-const ALLY_MAGIC_CAST_MS   = CAST_PHASE_MS_THROW.buildup;     // 800
-const ALLY_MAGIC_EFFECT_MS = CAST_PHASE_MS_THROW.projectile;  // 150 — fires at impact start
-const ALLY_MAGIC_HIT_MS    = CAST_PHASE_MS_THROW.projectile + // 867 — full throw window
+const ALLY_MAGIC_CAST_MS   = CAST_PHASE_MS_THROW.buildup;       // 800
+// Effect (damage / heal) fires at IMPACT END, after the burst plays out.
+// Sequence is: cast → projectile → spell anim → damage number. Player throw
+// path uses the same rule (`spell-cast.js:602`: "effect at impact END so the
+// damage number doesn't" overlap the burst). Was 150 ms (impact start) which
+// popped the number during the burst — wrong.
+const ALLY_MAGIC_EFFECT_MS = CAST_PHASE_MS_THROW.projectile +   // 700 — projectile + impact, fires when burst ends
+                             CAST_PHASE_MS_THROW.impact;
+const ALLY_MAGIC_HIT_MS    = CAST_PHASE_MS_THROW.projectile +   // 867 — full throw window
                              CAST_PHASE_MS_THROW.impact +
                              CAST_PHASE_MS_THROW.ret;
 

@@ -515,9 +515,11 @@ function _tryPVPEnemyItem(casterCellIdx) {
 // the player throw pipeline byte-for-byte. See `battle-ally.js` for the full
 // frame-timeline breakdown; PVP-enemy mirrors it (just with mirror=true on
 // the cast windup since opponents face right).
-const PVP_MAGIC_CAST_MS   = CAST_PHASE_MS_THROW.buildup;     // 800
-const PVP_MAGIC_EFFECT_MS = CAST_PHASE_MS_THROW.projectile;  // 150 — fires at impact start
-const PVP_MAGIC_HIT_MS    = CAST_PHASE_MS_THROW.projectile + // 867 — full throw window
+const PVP_MAGIC_CAST_MS   = CAST_PHASE_MS_THROW.buildup;        // 800
+// Effect at IMPACT END (after burst plays out) — same rule as player throw.
+const PVP_MAGIC_EFFECT_MS = CAST_PHASE_MS_THROW.projectile +    // 700
+                            CAST_PHASE_MS_THROW.impact;
+const PVP_MAGIC_HIT_MS    = CAST_PHASE_MS_THROW.projectile +    // 867 — full throw window
                             CAST_PHASE_MS_THROW.impact +
                             CAST_PHASE_MS_THROW.ret;
 
