@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.181 — 2026-05-09
+
+### fix: Cure double-SFX (engine SW_HIT + helper CURE)
+
+`getSpellImpactSFX(spell)` returned `SFX.SW_HIT` as a fallback for any unknown spell shape. For Cure (target='cure_status'/'recovery', not a thrown impact spell), this caused the engine to play SW_HIT at impact start, then the helper played CURE at apply time. Two SFX per Cure cast.
+
+The fallback is wrong. Engine should only fire SFX for spells that HAVE an impact-burst phase — fire / ice / sleep / sight. For everything else (Cure, Poisona, Drain on non-undead, Recovery on non-undead, etc.), the apply helper's `opts.sfx` plays at apply-time and that's correct.
+
+Fixed: `getSpellImpactSFX` returns `null` for non-thrown spells. `playSpellImpactSFX` is a no-op when selector returns null. Cure / Poisona now play exactly one SFX (CURE at apply time via helper).
+
 ## 1.7.180 — 2026-05-09
 
 ### tune: damage number sticks after bounce, then state transitions
