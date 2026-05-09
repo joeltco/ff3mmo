@@ -122,22 +122,28 @@ function _resolveThrowRender(role, caster, target) {
 // Single-target throw with simple projectile/impact split. Used by ally + PVP-enemy.
 // Time reference: battleSt.battleTimer (resets on state entry).
 // ── Spell SFX selector (single source) ─────────────────────────────────────
-// Maps a spell to its impact-start SFX. Used by the engine at impact START for
-// thrown spells (fire / ice / bolt / sleep / sight) that have an impact-burst
-// visual. Returns `null` for non-thrown spells (Cure, Poisona, Drain on
-// non-undead, Recovery on non-undead, etc.) — those don't have an impact phase
-// so SFX fires at apply-time via the helper's `opts.sfx` instead.
+// Maps a spell to its impact-start SFX. The engine fires this for spells whose
+// timing follows the THROWN-style window (`CAST_PHASE_MS_THROW`: cross-faction,
+// projectile fan + impact burst at a fixed offset from cast end) — Fire,
+// Bzzard, Sleep, Sight. For these, SFX at impact-start syncs with the burst
+// canvas appearing on the target.
 //
-// Was previously returning SFX.SW_HIT as a fallback for unknown spells, which
-// caused Cure to double-fire (engine SW_HIT at impact start + helper CURE at
-// apply time). Caught 2026-05-09.
+// Heal-style spells (Cure, Poisona) ALSO have impact visuals — the heal
+// sparkle (`portrait-2frame` bundle) renders on the target portrait — but the
+// timing is heal-window-driven (different phase structure, no projectile).
+// For these, the apply helper plays its own SFX at apply-time via `opts.sfx`,
+// which aligns with the heal-num pop. Returning `null` here lets the engine
+// skip its impact-start SFX without double-fire.
+//
+// Returning a SFX.SW_HIT fallback (previous behavior) caused Cure to play
+// SW_HIT at impact-start AND CURE at apply time. Fixed v1.7.181.
 export function getSpellImpactSFX(spell) {
   if (!spell) return null;
   if (spell.target === 'sight') return SFX.SIGHT;
   if (spell.element === 'fire')  return SFX.FIRE_BOOM;   // NSF $82 — Fire impact
   if (spell.element === 'ice')   return SFX.SW_HIT;      // NSF $5D — Blizzard impact
   if (spell.type === 'sleep')    return SFX.SLEEP_PUFF;  // NSF $95 — Sleep puff
-  return null;  // non-thrown spell — apply-time helper plays its own SFX
+  return null;  // heal-style or non-impact-engine spell — apply helper covers SFX
 }
 
 // Plays the impact SFX for a spell. One call site for all three role engines.

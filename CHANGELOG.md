@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.182 — 2026-05-09
+
+### refactor: dedupe `_decodeTilePixels` + `_make8` helpers
+
+Three files (`spell-anim.js`, `cast-anim.js`, `projectile-anim.js`) had byte-identical copies of the 2BPP NES tile → 8×8 canvas helper. `tile-decoder.js`'s `decodeTile` already produces the same `Uint8Array(64)` palette-index decode, so the local duplicates were pure tech debt.
+
+Added to `canvas-utils.js`:
+- `_make8Canvas(tile, pal)` — uses `decodeTile` from `tile-decoder.js`; identical output to the old local `_make8`.
+- `_hflipCanvas(src)` — size-agnostic; replaces local copies in `spell-anim.js` and `projectile-anim.js`.
+- `_vflipCanvas(src)` — size-agnostic; replaces `_vflip` in `projectile-anim.js`.
+
+`_hflipCanvas16` (16×16 fixed-size) is preserved unchanged — `sprite-init.js` consumes it.
+
+Net: -74 lines across 3 files, zero behavior change. First task in `docs/REFACTOR-PLAN.md`.
+
 ## 1.7.181 — 2026-05-09
 
 ### fix: Cure double-SFX (engine SW_HIT + helper CURE)

@@ -18,8 +18,7 @@
 // `null` is a valid return — Sight (0x36) has no on-target visual; the
 // "Ineffective" battle message handles user feedback.
 
-import { NES_SYSTEM_PALETTE } from './tile-decoder.js';
-import { _makeCanvas16 } from './canvas-utils.js';
+import { _makeCanvas16, _make8Canvas, _hflipCanvas } from './canvas-utils.js';
 import { ITEMS } from './data/items.js';
 import { initSouthWindSprite } from './south-wind.js';
 
@@ -114,42 +113,13 @@ const SLEEP_T_54 = new Uint8Array([0x08,0x10,0x16,0x04,0x80,0x80,0x00,0x00, 0x00
 const SLEEP_T_55 = new Uint8Array([0x00,0x00,0x06,0x08,0x0A,0x00,0x00,0x00, 0x00,0x00,0x00,0x06,0x04,0x00,0x00,0x00]);
 const SLEEP_T_56 = new Uint8Array([0x00,0x40,0x08,0x18,0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]);
 
-// ── Decode helpers ────────────────────────────────────────────────────────
-
-function _decodeTilePixels(d) {
-  const out = new Uint8Array(64);
-  for (let row = 0; row < 8; row++) {
-    const lo = d[row], hi = d[row + 8];
-    for (let bit = 7; bit >= 0; bit--) {
-      out[row * 8 + (7 - bit)] = ((lo >> bit) & 1) | (((hi >> bit) & 1) << 1);
-    }
-  }
-  return out;
-}
-
-function _make8(tile, pal) {
-  const c = document.createElement('canvas'); c.width = 8; c.height = 8;
-  const cx = c.getContext('2d');
-  const px = _decodeTilePixels(tile);
-  const img = cx.createImageData(8, 8);
-  for (let p = 0; p < 64; p++) {
-    const ci = px[p];
-    if (ci === 0) { img.data[p * 4 + 3] = 0; continue; }
-    const rgb = NES_SYSTEM_PALETTE[pal[ci]] || [0, 0, 0];
-    img.data[p * 4] = rgb[0]; img.data[p * 4 + 1] = rgb[1];
-    img.data[p * 4 + 2] = rgb[2]; img.data[p * 4 + 3] = 255;
-  }
-  cx.putImageData(img, 0, 0);
-  return c;
-}
-
 // ── Cure sparkle: 2-frame 16×16 portrait overlay ──────────────────────────
 // Same TL/TR/BL/BR rotation pattern as `sprite-init.js _initCureSparkleFrames`
 // so this stays visually identical to the legacy item-use Cure path.
 
 function _buildCureSparkle(pal) {
-  const t4aHeal = _make8(CURE_T_4A_HEAL, pal);
-  const t49Heal = _make8(CURE_T_49_HEAL, pal);
+  const t4aHeal = _make8Canvas(CURE_T_4A_HEAL, pal);
+  const t49Heal = _make8Canvas(CURE_T_49_HEAL, pal);
   const tiles = [t4aHeal, t49Heal];
   const layouts = [
     [[1,0,0,true,false],[0,8,0,true,false],[0,0,8,false,true],[1,8,8,false,true]],
@@ -172,10 +142,10 @@ function _buildCureSparkle(pal) {
 // ── Poisona target: 2-state 16×16 portrait overlay ────────────────────────
 
 function _buildPoisonaTarget(pal) {
-  const a49 = _make8(POISONA_T_49, pal), a4a = _make8(POISONA_T_4A, pal);
-  const a4b = _make8(POISONA_T_4B, pal), a4c = _make8(POISONA_T_4C, pal);
-  const b4d = _make8(POISONA_T_4D, pal), b4e = _make8(POISONA_T_4E, pal);
-  const b4f = _make8(POISONA_T_4F, pal), b50 = _make8(POISONA_T_50, pal);
+  const a49 = _make8Canvas(POISONA_T_49, pal), a4a = _make8Canvas(POISONA_T_4A, pal);
+  const a4b = _make8Canvas(POISONA_T_4B, pal), a4c = _make8Canvas(POISONA_T_4C, pal);
+  const b4d = _make8Canvas(POISONA_T_4D, pal), b4e = _make8Canvas(POISONA_T_4E, pal);
+  const b4f = _make8Canvas(POISONA_T_4F, pal), b50 = _make8Canvas(POISONA_T_50, pal);
   const _frame = (tl, tr, bl, br) => {
     const c = _makeCanvas16();
     const cx = c.getContext('2d');
@@ -213,22 +183,13 @@ function _build16x40(tiles8, pal) {
   return c;
 }
 
-function _hflipCanvas(src) {
-  const c = document.createElement('canvas');
-  c.width = src.width; c.height = src.height;
-  const cx = c.getContext('2d');
-  cx.translate(src.width, 0); cx.scale(-1, 1);
-  cx.drawImage(src, 0, 0);
-  return c;
-}
-
 function _buildFireImpactFrames(pal) {
   const ts = [
-    _make8(FIRE_T_49, pal), _make8(FIRE_T_4A, pal),
-    _make8(FIRE_T_4B, pal), _make8(FIRE_T_4C, pal),
-    _make8(FIRE_T_4D, pal), _make8(FIRE_T_4E, pal),
-    _make8(FIRE_T_4F, pal), _make8(FIRE_T_50, pal),
-    _make8(FIRE_T_51, pal), _make8(FIRE_T_52, pal),
+    _make8Canvas(FIRE_T_49, pal), _make8Canvas(FIRE_T_4A, pal),
+    _make8Canvas(FIRE_T_4B, pal), _make8Canvas(FIRE_T_4C, pal),
+    _make8Canvas(FIRE_T_4D, pal), _make8Canvas(FIRE_T_4E, pal),
+    _make8Canvas(FIRE_T_4F, pal), _make8Canvas(FIRE_T_50, pal),
+    _make8Canvas(FIRE_T_51, pal), _make8Canvas(FIRE_T_52, pal),
   ];
   const frameA = _build16x40(ts, pal);
   const frameB = _hflipCanvas(frameA);
@@ -318,12 +279,12 @@ const SLEEP_CANVAS_H = 48;
 
 function _buildSleepImpactFrames(pal) {
   const tiles = [
-    _make8(SLEEP_T_4B, pal), _make8(SLEEP_T_4C, pal),
-    _make8(SLEEP_T_4D, pal), _make8(SLEEP_T_4E, pal),
-    _make8(SLEEP_T_4F, pal), _make8(SLEEP_T_50, pal),
-    _make8(SLEEP_T_51, pal), _make8(SLEEP_T_52, pal),
-    _make8(SLEEP_T_53, pal), _make8(SLEEP_T_54, pal),
-    _make8(SLEEP_T_55, pal), _make8(SLEEP_T_56, pal),
+    _make8Canvas(SLEEP_T_4B, pal), _make8Canvas(SLEEP_T_4C, pal),
+    _make8Canvas(SLEEP_T_4D, pal), _make8Canvas(SLEEP_T_4E, pal),
+    _make8Canvas(SLEEP_T_4F, pal), _make8Canvas(SLEEP_T_50, pal),
+    _make8Canvas(SLEEP_T_51, pal), _make8Canvas(SLEEP_T_52, pal),
+    _make8Canvas(SLEEP_T_53, pal), _make8Canvas(SLEEP_T_54, pal),
+    _make8Canvas(SLEEP_T_55, pal), _make8Canvas(SLEEP_T_56, pal),
   ];
   const _drawLayout = (layout) => {
     const c = document.createElement('canvas');
@@ -341,8 +302,8 @@ function _buildSleepImpactFrames(pal) {
 
 function _buildBlizzardImpactFrames(pal) {
   const tiles = [
-    _make8(BLIZZARD_T_49, pal), _make8(BLIZZARD_T_4A, pal),
-    _make8(BLIZZARD_T_4B, pal), _make8(BLIZZARD_T_4C, pal),
+    _make8Canvas(BLIZZARD_T_49, pal), _make8Canvas(BLIZZARD_T_4A, pal),
+    _make8Canvas(BLIZZARD_T_4B, pal), _make8Canvas(BLIZZARD_T_4C, pal),
   ];
   const _drawLayout = (layout) => {
     const c = document.createElement('canvas');

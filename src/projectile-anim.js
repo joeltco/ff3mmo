@@ -12,7 +12,7 @@
 // (x,y); captured endpoints from the OAM dumps aren't reused — only the
 // timing constants in cast-anim.js's CAST_PHASE_MS_THROW.
 
-import { NES_SYSTEM_PALETTE } from './tile-decoder.js';
+import { _make8Canvas, _hflipCanvas, _vflipCanvas } from './canvas-utils.js';
 
 // Universal projectile bytes (REC OAM 2026-05-07 f9627, frames 46-55, tile
 // $58). Round sphere shape — works for every school with palette swap.
@@ -56,65 +56,22 @@ const ELEMENT_FALLBACK_PAL = {
 
 const DEFAULT_PAL = [0x0F, 0x16, 0x27, 0x30];  // matches Fire
 
-// ── Decode helpers ────────────────────────────────────────────────────────
-
-function _decodePixels(d) {
-  const out = new Uint8Array(64);
-  for (let row = 0; row < 8; row++) {
-    const lo = d[row], hi = d[row + 8];
-    for (let bit = 7; bit >= 0; bit--) {
-      out[row * 8 + (7 - bit)] = ((lo >> bit) & 1) | (((hi >> bit) & 1) << 1);
-    }
-  }
-  return out;
-}
-
-function _make8(tile, pal) {
-  const c = document.createElement('canvas'); c.width = 8; c.height = 8;
-  const cx = c.getContext('2d');
-  const px = _decodePixels(tile);
-  const img = cx.createImageData(8, 8);
-  for (let p = 0; p < 64; p++) {
-    const ci = px[p];
-    if (ci === 0) { img.data[p * 4 + 3] = 0; continue; }
-    const rgb = NES_SYSTEM_PALETTE[pal[ci]] || [0, 0, 0];
-    img.data[p * 4] = rgb[0]; img.data[p * 4 + 1] = rgb[1];
-    img.data[p * 4 + 2] = rgb[2]; img.data[p * 4 + 3] = 255;
-  }
-  cx.putImageData(img, 0, 0);
-  return c;
-}
-
-function _vflip(src) {
-  const c = document.createElement('canvas'); c.width = 8; c.height = 8;
-  const cx = c.getContext('2d');
-  cx.translate(0, 8); cx.scale(1, -1); cx.drawImage(src, 0, 0);
-  return c;
-}
-
 // ── Per-spell decoded canvas cache ────────────────────────────────────────
 
 let _bySpell = null;       // Map<spellId, { normal, vflip }>
 let _byElement = null;     // { fire: {normal, vflip}, ice: {...}, ... }
 let _default = null;       // fallback bundle
 
-function _hflip(src) {
-  const c = document.createElement('canvas'); c.width = src.width; c.height = src.height;
-  const cx = c.getContext('2d');
-  cx.translate(src.width, 0); cx.scale(-1, 1); cx.drawImage(src, 0, 0);
-  return c;
-}
-
 function _bundle(pal) {
-  const normal = _make8(T_58, pal);
-  const normalH = _hflip(normal);
+  const normal = _make8Canvas(T_58, pal);
+  const normalH = _hflipCanvas(normal);
   return {
-    normal, vflip: _vflip(normal),
+    normal, vflip: _vflipCanvas(normal),
     // h-flipped pair for projectiles traveling left→right (PVP-enemy-cast on
     // player party). The $58 tile bytes have a directional trailing flame —
     // the canonical capture was right→left (player→enemy), so left→right
     // flight needs an h-flip to keep the flame trailing behind the orb.
-    normalHflip: normalH, vflipHflip: _vflip(normalH),
+    normalHflip: normalH, vflipHflip: _vflipCanvas(normalH),
   };
 }
 

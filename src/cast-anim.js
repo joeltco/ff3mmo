@@ -23,8 +23,7 @@
 // f9627 + later snapshot for the spark). Don't hand-edit tile bytes — use
 // the harness (tools/render-oam-dump.js + parity-check-spell.js).
 
-import { NES_SYSTEM_PALETTE } from './tile-decoder.js';
-import { _makeCanvas16 } from './canvas-utils.js';
+import { _makeCanvas16, _make8Canvas } from './canvas-utils.js';
 import { getSpellSchool } from './data/spells.js';
 import { consoleLog, isDev } from './chat.js';
 
@@ -148,35 +147,6 @@ const BM_T_55 = new Uint8Array([0x00,0x00,0x07,0x1C,0x31,0x67,0x4F,0x4F, 0x00,0x
 const BM_T_56 = new Uint8Array([0x07,0x0C,0x18,0x19,0x33,0x37,0x27,0x27, 0x00,0x03,0x07,0x07,0x0F,0x0F,0x1F,0x1F]);
 const BM_T_57 = new Uint8Array([0x00,0x00,0x0A,0x10,0x00,0x22,0x00,0x00, 0x00,0x00,0x02,0x00,0x04,0x02,0x08,0x00]);
 
-// ── Decode helpers ────────────────────────────────────────────────────────
-
-function _decodeTilePixels(d) {
-  const out = new Uint8Array(64);
-  for (let row = 0; row < 8; row++) {
-    const lo = d[row], hi = d[row + 8];
-    for (let bit = 7; bit >= 0; bit--) {
-      out[row * 8 + (7 - bit)] = ((lo >> bit) & 1) | (((hi >> bit) & 1) << 1);
-    }
-  }
-  return out;
-}
-
-function _make8(tile, pal) {
-  const c = document.createElement('canvas'); c.width = 8; c.height = 8;
-  const cx = c.getContext('2d');
-  const px = _decodeTilePixels(tile);
-  const img = cx.createImageData(8, 8);
-  for (let p = 0; p < 64; p++) {
-    const ci = px[p];
-    if (ci === 0) { img.data[p * 4 + 3] = 0; continue; }
-    const rgb = NES_SYSTEM_PALETTE[pal[ci]] || [0, 0, 0];
-    img.data[p * 4] = rgb[0]; img.data[p * 4 + 1] = rgb[1];
-    img.data[p * 4 + 2] = rgb[2]; img.data[p * 4 + 3] = 255;
-  }
-  cx.putImageData(img, 0, 0);
-  return c;
-}
-
 // 4-quadrant flipped layout: TL = src, TR = HFLIP, BL = VFLIP, BR = both.
 function _flippedQuad(tile8) {
   const c = _makeCanvas16(); const cx = c.getContext('2d');
@@ -197,14 +167,14 @@ function _quad4(tl, tr, bl, br) {
 // ── WM flame decode ───────────────────────────────────────────────────────
 
 function _decodeWMFlameFrames(pal) {
-  const t4a = _make8(FLAME_T_4A, pal);
-  const t4b = _make8(FLAME_T_4B, pal), t4c = _make8(FLAME_T_4C, pal);
-  const t4d = _make8(FLAME_T_4D, pal), t4e = _make8(FLAME_T_4E, pal);
-  const t4f = _make8(FLAME_T_4F, pal), t50 = _make8(FLAME_T_50, pal);
-  const t51 = _make8(FLAME_T_51, pal), t52 = _make8(FLAME_T_52, pal);
-  const t53 = _make8(FLAME_T_53, pal), t54 = _make8(FLAME_T_54, pal);
-  const t55 = _make8(FLAME_T_55, pal), t56 = _make8(FLAME_T_56, pal);
-  const t57 = _make8(FLAME_T_57, pal);
+  const t4a = _make8Canvas(FLAME_T_4A, pal);
+  const t4b = _make8Canvas(FLAME_T_4B, pal), t4c = _make8Canvas(FLAME_T_4C, pal);
+  const t4d = _make8Canvas(FLAME_T_4D, pal), t4e = _make8Canvas(FLAME_T_4E, pal);
+  const t4f = _make8Canvas(FLAME_T_4F, pal), t50 = _make8Canvas(FLAME_T_50, pal);
+  const t51 = _make8Canvas(FLAME_T_51, pal), t52 = _make8Canvas(FLAME_T_52, pal);
+  const t53 = _make8Canvas(FLAME_T_53, pal), t54 = _make8Canvas(FLAME_T_54, pal);
+  const t55 = _make8Canvas(FLAME_T_55, pal), t56 = _make8Canvas(FLAME_T_56, pal);
+  const t57 = _make8Canvas(FLAME_T_57, pal);
   return [
     _flippedQuad(t4a),
     _quad4(t4b, t4c, t4d, t4e),
@@ -217,7 +187,7 @@ function _decodeWMFlameFrames(pal) {
 // ── WM aura decode (single rotating star tile) ────────────────────────────
 
 function _decodeWMStarTile(pal) {
-  return _make8(WM_T_49_STAR, pal);
+  return _make8Canvas(WM_T_49_STAR, pal);
 }
 
 // ── BM halo decode ────────────────────────────────────────────────────────
@@ -239,10 +209,10 @@ function _decodeWMStarTile(pal) {
 //   [8,24]  $4F        [16,24] $50        [24,24] $4A V H    [32,24] $49 V H
 
 function _buildBMHaloCanvas(haloPal) {
-  const t49 = _make8(BM_T_49, haloPal), t4a = _make8(BM_T_4A, haloPal);
-  const t4b = _make8(BM_T_4B, haloPal), t4c = _make8(BM_T_4C, haloPal);
-  const t4d = _make8(BM_T_4D, haloPal), t4e = _make8(BM_T_4E, haloPal);
-  const t4f = _make8(BM_T_4F, haloPal), t50 = _make8(BM_T_50, haloPal);
+  const t49 = _make8Canvas(BM_T_49, haloPal), t4a = _make8Canvas(BM_T_4A, haloPal);
+  const t4b = _make8Canvas(BM_T_4B, haloPal), t4c = _make8Canvas(BM_T_4C, haloPal);
+  const t4d = _make8Canvas(BM_T_4D, haloPal), t4e = _make8Canvas(BM_T_4E, haloPal);
+  const t4f = _make8Canvas(BM_T_4F, haloPal), t50 = _make8Canvas(BM_T_50, haloPal);
 
   // 32×32 canvas — exactly matches halo content footprint. (The OAM puts
   // the halo + cast flame in one 40-wide group, but the cast flame is a
@@ -319,10 +289,10 @@ function _buildBMFlameLayoutB(t51, t52) {
 }
 
 function _decodeBMCastFlameFrames(pal) {
-  const t51 = _make8(BM_T_51, pal), t52 = _make8(BM_T_52, pal);
-  const t53 = _make8(BM_T_53, pal), t54 = _make8(BM_T_54, pal);
-  const t55 = _make8(BM_T_55, pal), t56 = _make8(BM_T_56, pal);
-  const t57 = _make8(BM_T_57, pal);
+  const t51 = _make8Canvas(BM_T_51, pal), t52 = _make8Canvas(BM_T_52, pal);
+  const t53 = _make8Canvas(BM_T_53, pal), t54 = _make8Canvas(BM_T_54, pal);
+  const t55 = _make8Canvas(BM_T_55, pal), t56 = _make8Canvas(BM_T_56, pal);
+  const t57 = _make8Canvas(BM_T_57, pal);
   return [
     _buildBMFlameLayoutA(t51, t52),  // 0
     _buildBMFlameLayoutB(t51, t52),  // 1
