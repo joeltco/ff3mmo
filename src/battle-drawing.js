@@ -1131,6 +1131,7 @@ function _drawEncounterMonsters(gridPos, sprH, boxX, boxY, boxW, boxH, isSlideIn
     if (!alive && !isDying && !isBeingHit) continue;
 
     const pos = gridPos[i];
+    if (!pos) continue;  // gridPos / encounterMonsters length mismatch — skip rather than crash the rest of drawBattle
     const drawX = pos.x - slideOffX;
     const mid = battleSt.encounterMonsters[i].monsterId;
     const sprNormal = getMonsterCanvas(mid, battleSt.goblinBattleCanvas);
@@ -1157,8 +1158,10 @@ function _drawEncounterMonsters(gridPos, sprH, boxX, boxY, boxW, boxH, isSlideIn
 function _drawEncounterSlashEffects(gridPos, slideOffX, slotCenterY) {
   if (battleSt.battleState === 'player-slash' && bsc.slashFrames && battleSt.slashFrame < SLASH_FRAMES &&
       shouldDrawSlash(inputSt.hitResults && inputSt.hitResults[battleSt.currentHitIdx])) {
+    // Same defensive guard as _drawEncounterCursors below — targetIndex can
+    // drift out of gridPos if a monster died mid-frame.
     const pos = gridPos[inputSt.targetIndex];
-    ui.ctx.drawImage(bsc.slashFrames[battleSt.slashFrame], pos.x - slideOffX + battleSt.slashOffX + 8, slotCenterY(inputSt.targetIndex) + battleSt.slashOffY);
+    if (pos) ui.ctx.drawImage(bsc.slashFrames[battleSt.slashFrame], pos.x - slideOffX + battleSt.slashOffX + 8, slotCenterY(inputSt.targetIndex) + battleSt.slashOffY);
   }
   if (battleSt.battleState === 'ally-slash' && shouldDrawSlash(battleSt.allyHitResult)) {
     const ally = battleSt.battleAllies[battleSt.currentAllyAttacker];
@@ -1817,7 +1820,8 @@ function _drawAllyCastAnimFront(panelTop) {
 
 function _encounterMonsterPos(idx) {
   const { sprH: dSprH, row0H, row1H, gridPos } = _encounterGridLayout();
-  const safeIdx = idx < gridPos.length ? idx : 0;
+  if (gridPos.length === 0) return { bx: 0, baseY: 0 };  // empty layout — caller will draw at (0,0); same guard rail as the other gridPos sites.
+  const safeIdx = (idx >= 0 && idx < gridPos.length) ? idx : 0;
   const pos = gridPos[safeIdx];
   const m = battleSt.encounterMonsters[safeIdx];
   const mc = getMonsterCanvas(m?.monsterId, battleSt.goblinBattleCanvas);

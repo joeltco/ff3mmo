@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.159 — 2026-05-09
+
+### fix: more unguarded gridPos lookups in battle drawing
+
+v1.7.156 added an `if (pos)` guard at one of three identical crash sites; missed the other two. Same root pattern: `const pos = gridPos[X]; pos.x` with no null check, throws when the index drifts out of `gridPos` (monster died mid-frame, encounterMonsters / gridPos length mismatch). The throw inside `try/catch` at `game-loop.js:153` skips the rest of the battle/chat/menu/ally draw block, so HUD + roster portraits + chat all vanish until the bad state passes.
+
+Sites fixed:
+- `_drawEncounterSlashEffects:1160` — player-slash on a dying monster.
+- `_drawEncounterMonsters:1133` — main monster loop, gridPos / encounterMonsters length mismatch.
+- `_encounterMonsterPos:1820` — already had a `safeIdx < gridPos.length ? idx : 0` clamp, but `gridPos[0]` is still undefined when gridPos is empty. Returns a safe `{ bx: 0, baseY: 0 }` zero-position now instead of crashing the caller (`_drawBossDmgNum`, `_drawEnemyHealNum`).
+
+Audit-grep ran across all `gridPos[...]` lookups in `battle-drawing.js`; remaining sites either had pre-existing guards (`if (pos)`, `if (idx >= gridPos.length) return null`) or are inside the `_encounterGridLayout` builder itself.
+
+Lesson saved to memory: when fixing a pattern bug, grep ALL occurrences in the same file before declaring the fix done; one-site fixes leak when the same anti-pattern was copy-pasted.
+
 ## 1.7.158 — 2026-05-09
 
 ### fix: enemy death from ally offensive cast
