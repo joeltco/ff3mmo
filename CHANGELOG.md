@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.135 — 2026-05-08
+
+### RM cast visual is now school-aware
+
+Red Mage was hardcoded to use the WM cast visual (`{ 3: 'wm', 4: 'bm', 5: 'wm' }`). Now `jobToCastKey(jobIdx, spellId)` looks up `getSpellSchool(spellId)` for `jobIdx === 5` and returns `'bm'` for black-magic spells, `'wm'` for white. RM casting Cure renders WM rotating-stars; RM casting Fire/Blizzard/Sleep renders the BM halo + flame. `getCastVisual` already passes `spellId` through, so the dispatch threads end-to-end with no other render-site changes.
+
 ## 1.7.134 — 2026-05-08
 
 ### Pulled bow from Eska — bow + arrow not wired yet

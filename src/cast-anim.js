@@ -25,6 +25,7 @@
 
 import { NES_SYSTEM_PALETTE } from './tile-decoder.js';
 import { _makeCanvas16 } from './canvas-utils.js';
+import { getSpellSchool } from './data/spells.js';
 
 // ── Per-job default palettes ──────────────────────────────────────────────
 const WM_DEFAULT_PAL = [0x0F, 0x12, 0x22, 0x31];  // blue / cyan / white
@@ -385,15 +386,27 @@ export function initCastAnim() {
   }
 }
 
-const _MAGE_CAST_KEY = { 3: 'wm', 4: 'bm', 5: 'wm' };
-export function jobToCastKey(jobIdx) {
+// Job → cast-visual key. WM gets the rotating-stars + halo-less aura;
+// BM gets the halo-and-flame look. Red Mage is hybrid: it follows the
+// SPELL'S school, not the job's. RM casting Cure (white) renders WM
+// stars; RM casting Fire (black) renders the BM halo. Falls back to
+// 'wm' when the spell ID isn't registered (better than nothing for
+// uncatalogued white-flavor effects).
+const _MAGE_CAST_KEY = { 3: 'wm', 4: 'bm' };
+export function jobToCastKey(jobIdx, spellId) {
+  if (jobIdx === 5) {
+    // Red Mage — pick visual by the spell's school.
+    const school = spellId != null ? getSpellSchool(spellId) : null;
+    if (school === 'black') return 'bm';
+    return 'wm';
+  }
   return _MAGE_CAST_KEY[jobIdx] || null;
 }
 
 // Returns the cast-visual bundle for (jobIdx, spellId). Falls back to per-job
 // default palette when the spell isn't registered.
 export function getCastVisual(jobIdx, spellId) {
-  const jobKey = jobToCastKey(jobIdx);
+  const jobKey = jobToCastKey(jobIdx, spellId);
   if (!jobKey || !_byJob) return null;
   if (spellId != null && _bySpell) {
     const perSpell = _bySpell.get(spellId);
