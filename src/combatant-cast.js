@@ -13,11 +13,13 @@
 // function so the player + ally + PVP enemy paths are literally the same
 // code — only the (role, idx) input differs.
 
-import { drawCasterCastBehind, drawCasterCastFront, CAST_PHASE_MS_THROW } from './cast-anim.js';
+import { drawCasterCastBehind, drawCasterCastFront,
+         CAST_PHASE_MS_THROW, CAST_T_LUNGE, CAST_T_HEAL, CAST_T_RETURN } from './cast-anim.js';
 import { battleSt } from './battle-state.js';
 import { ps } from './player-stats.js';
 import { pvpSt } from './pvp.js';
-import { getCastAnimElapsedMs, getCurrentSpellId } from './spell-cast.js';
+import { getCastAnimElapsedMs, getCurrentSpellId, getSpellTargets,
+         getMagicHitPhase, getSpellHitIdx, isCurrentCastItemUse } from './spell-cast.js';
 import { SPELLS } from './data/spells.js';
 
 // Resolve role-specific cast context. Returns { jobIdx, spellId, elapsed }
@@ -64,31 +66,117 @@ export function drawCastWindup(layer, ctx, role, idx, x, y, mirror = false) {
 }
 
 // Spell throw animation (projectile fan → impact burst). Single helper for
-// ally and PVP-enemy single-target offensive casts. The player path has
-// extra complexity (multi-target impact-walk, heal-style projectile-during-
-// heal-window, item-use skip-windup) and stays in `_drawPlayerSpellTarget-
-// SparkleOnEnemy` for now.
+// ALL three roles: player, ally, PVP-enemy. Resolver handles the role-specific
+// flows internally; renderer is two branches (projectile / impact).
+//
+// Player flows: 1) item-use (skip projectile, single-target impact at hit-idx);
+//               2) thrown (parallel projectile fan + serial impact-walk);
+//               3) heal-style (projectile during heal-window, impact during
+//                  heal window, both targeting all enemy targets in parallel).
+// Ally / PVP-enemy: single-target throw (projectile then impact, simple split).
 //
 // Caller passes:
-//   role   — 'ally' | 'pvp-enemy'. Identifies which state machine to read.
-//   ctx    — render context (typically ui.ctx).
+//   role   — 'player' | 'ally' | 'pvp-enemy'. Identifies which state machine.
+//   ctx    — render context.
 //   caster — { x, y, faction } resolved by caller (per-role layout math).
-//   target — { type, index } in the spec _getMagicTargetCenter understands.
+//   target — { type, index }. For player, pass null — resolver derives from
+//            getSpellTargets() filtered to enemy faction.
 export function drawSpellThrow(role, ctx, caster, target) {
-  const cfg = _resolveThrowContext(role);
-  if (!cfg) return;
-  const { ms, spellId, spell } = cfg;
-  const projMs = CAST_PHASE_MS_THROW.projectile;
-  if (ms < 0) return;
-  if (ms < projMs) {
-    // Projectile fan from caster center to target — drawProjectileFan handles
-    // the cross-faction filter, so caller passes faction explicitly.
-    _drawProjectileFan(ctx, caster, [target], spellId, spell, ms / projMs);
+  const r = _resolveThrowRender(role, caster, target);
+  if (!r) return;
+  if (r.phase === 'projectile') {
+    _drawProjectileFan(ctx, caster.x, caster.y, caster.faction, r.targets, r.spellId, r.spell, r.t01);
     return;
   }
-  // Impact burst on target. Sleep / Sight have undefined `kind` bundles —
-  // _drawSpellEffectAtTargets is a no-op for those (per spell-anim.js).
-  _drawSpellEffectAtTargets(ctx, [target], spellId, ms - projMs);
+  // r.phase === 'impact'
+  _drawSpellEffectAtTargets(ctx, r.targets, r.spellId, r.impactMs);
+}
+
+// Returns { phase, targets, t01? | impactMs?, spellId, spell } or null.
+function _resolveThrowRender(role, caster, target) {
+  if (role === 'player') return _resolvePlayerThrow(caster);
+  if (role === 'ally') return _resolveSimpleThrow('ally', target);
+  if (role === 'pvp-enemy') return _resolveSimpleThrow('pvp-enemy', target);
+  return null;
+}
+
+// Single-target throw with simple projectile/impact split. Used by ally + PVP-enemy.
+// Time reference: battleSt.battleTimer (resets on state entry).
+function _resolveSimpleThrow(role, target) {
+  if (!target) return null;
+  let stateName, spellId;
+  if (role === 'ally') {
+    if (battleSt.battleState !== 'ally-magic-hit') return null;
+    const tgtType = battleSt.allyMagicTargetType;
+    if (tgtType !== 'enemy' && tgtType !== 'pvp-enemy') return null;
+    spellId = battleSt.allyMagicSpellId;
+    stateName = 'ally-magic-hit';
+  } else {
+    if (!pvpSt.isPVPBattle) return null;
+    if (battleSt.battleState !== 'pvp-enemy-magic-hit') return null;
+    if (pvpSt.pvpMagicPartyTargetIdx <= -100) return null;
+    spellId = pvpSt.pvpMagicSpellId;
+    stateName = 'pvp-enemy-magic-hit';
+  }
+  if (spellId !== 0x31 && spellId !== 0x32 && spellId !== 0x33) return null;
+  const spell = SPELLS.get(spellId);
+  if (!spell) return null;
+  const ms = battleSt.battleTimer;
+  if (ms < 0) return null;
+  const projMs = CAST_PHASE_MS_THROW.projectile;
+  if (ms < projMs) return { phase: 'projectile', targets: [target], t01: ms / projMs, spellId, spell };
+  return { phase: 'impact', targets: [target], impactMs: ms - projMs, spellId, spell };
+}
+
+// Player throw — three flows resolved off the same getter set as the legacy
+// `_drawPlayerSpellTargetSparkleOnEnemy`. Caster position is the player
+// portrait center; caller passes it via the `caster` arg.
+function _resolvePlayerThrow(_caster) {
+  if (battleSt.battleState !== 'magic-hit') return null;
+  const targets = getSpellTargets();
+  if (!targets || targets.length === 0) return null;
+  const enemyTargets = targets.filter(t => t.type === 'enemy');
+  if (enemyTargets.length === 0) return null;
+  const spellId = getCurrentSpellId();
+  const spell = SPELLS.get(spellId);
+  if (!spell) return null;
+  // Item-use (battle items routed via animSpellId): skip cast windup AND
+  // projectile, go straight to impact at the current hit-walk target.
+  if (isCurrentCastItemUse()) {
+    const idx = Math.min(getSpellHitIdx(), enemyTargets.length - 1);
+    if (idx < 0) return null;
+    return { phase: 'impact', targets: [enemyTargets[idx]], impactMs: battleSt.battleTimer, spellId, spell };
+  }
+  // Thrown spell (cross-faction damage + sight + thrown status). Engine
+  // reports phase via `getMagicHitPhase()`; battleTimer resets per per-target
+  // window during 'impact-walk', so we use it directly for the burst clock.
+  const isThrown = spell.target === 'sight'
+                || spell.element === 'fire'
+                || spell.element === 'ice'
+                || spell.element === 'bolt'
+                || spell.type === 'sleep';
+  if (isThrown) {
+    const phase = getMagicHitPhase();
+    if (phase === 'projectile') {
+      return { phase: 'projectile', targets: enemyTargets, t01: battleSt.battleTimer / CAST_PHASE_MS_THROW.projectile, spellId, spell };
+    }
+    const idx = Math.min(getSpellHitIdx(), enemyTargets.length - 1);
+    if (idx < 0) return null;
+    return { phase: 'impact', targets: [enemyTargets[idx]], impactMs: battleSt.battleTimer, spellId, spell };
+  }
+  // Heal-style (Cure on undead, etc.) — projectile during the heal window,
+  // impact during the heal window. Same parallel-target pattern player has
+  // used since v1.7.x; engine elapsed via getCastAnimElapsedMs.
+  const cureMs = getCastAnimElapsedMs();
+  if (cureMs < CAST_T_LUNGE) return null;
+  if (cureMs < CAST_T_HEAL) {
+    const projWindow = CAST_T_HEAL - CAST_T_LUNGE;
+    return { phase: 'projectile', targets: enemyTargets, t01: (cureMs - CAST_T_LUNGE) / projWindow, spellId, spell };
+  }
+  if (cureMs < CAST_T_RETURN) {
+    return { phase: 'impact', targets: enemyTargets, impactMs: cureMs - CAST_T_HEAL, spellId, spell };
+  }
+  return null;
 }
 
 // Imports from battle-drawing.js — used only inside fn bodies, so the cycle
@@ -99,26 +187,3 @@ export function drawSpellThrow(role, ctx, caster, target) {
 import { drawProjectileFan as _drawProjectileFan,
          drawSpellEffectAtTargets as _drawSpellEffectAtTargets } from './battle-drawing.js';
 
-function _resolveThrowContext(role) {
-  if (role === 'ally') {
-    if (battleSt.battleState !== 'ally-magic-hit') return null;
-    const tgtType = battleSt.allyMagicTargetType;
-    if (tgtType !== 'enemy' && tgtType !== 'pvp-enemy') return null;
-    const spellId = battleSt.allyMagicSpellId;
-    if (spellId !== 0x31 && spellId !== 0x32 && spellId !== 0x33) return null;
-    const spell = SPELLS.get(spellId);
-    if (!spell) return null;
-    return { ms: battleSt.battleTimer, spellId, spell };
-  }
-  if (role === 'pvp-enemy') {
-    if (!pvpSt.isPVPBattle) return null;
-    if (battleSt.battleState !== 'pvp-enemy-magic-hit') return null;
-    if (pvpSt.pvpMagicPartyTargetIdx <= -100) return null;
-    const spellId = pvpSt.pvpMagicSpellId;
-    if (spellId !== 0x31 && spellId !== 0x32 && spellId !== 0x33) return null;
-    const spell = SPELLS.get(spellId);
-    if (!spell) return null;
-    return { ms: battleSt.battleTimer, spellId, spell };
-  }
-  return null;
-}

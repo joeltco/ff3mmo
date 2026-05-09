@@ -643,77 +643,11 @@ export function drawSpellEffectAtTargets(ctx, targets, spellId, elapsedMs) {
 // PVP-cast versions read from battleSt.allyMagicSpellId / pvpSt.pvpMagicSpellId
 // when offensive magic ships for those paths.
 function _drawPlayerSpellTargetSparkleOnEnemy() {
-  if (battleSt.battleState !== 'magic-hit') return;
-  const targets = getSpellTargets();
-  if (!targets || targets.length === 0) return;
-  const cureMs = getCastAnimElapsedMs();
-  const spellId = getCurrentSpellId();
-  const spell = SPELLS.get(spellId);
-  if (!spell) return;
-  // Filter to enemy (cross-faction) targets only — same-faction targets
-  // render their on-target effect via portrait overlays (see _drawPortrait-
-  // Overlays player-self path and _drawAllyRow ally-target sparkle).
-  const enemyTargets = targets.filter(t => t.type === 'enemy');
-  if (enemyTargets.length === 0) return;
-
-  // Mirror the spell-cast.js gate: any cross-faction damage element + sight
-  // + thrown status types take the throw path (cast windup → projectile →
-  // impact burst).
-  const isThrown = spell.target === 'sight'
-                || spell.element === 'fire'
-                || spell.element === 'ice'
-                || spell.element === 'bolt'
-                || spell.type === 'sleep';
+  // All player throw flows (item-use, thrown, heal-style) resolved inside
+  // `drawSpellThrow('player', ...)`. Caster = player portrait center.
   const sx = HUD_RIGHT_X + 8 + 8;
   const sy = HUD_VIEW_Y + 8 + 8;
-
-  // Item-use (SouthWind / battle items via animSpellId) skips cast windup AND
-  // projectile flight — items go straight to impact, in the per-target walk
-  // order (TL→TR→BL→BR) for thrown cross-faction targets. Single-target
-  // items render the impact at that one target. Non-thrown self/ally item
-  // effects don't reach this draw site.
-  if (isCurrentCastItemUse()) {
-    if (enemyTargets.length === 0) return;
-    const idx = Math.min(getSpellHitIdx(), enemyTargets.length - 1);
-    if (idx < 0) return;
-    drawSpellEffectAtTargets(ui.ctx, [enemyTargets[idx]], spellId, battleSt.battleTimer);
-    return;
-  }
-
-  if (isThrown) {
-    // Throw timeline: projectile fan parallel to ALL targets, then per-target
-    // impact bursts step through TL→TR→BL→BR (sorted in spell-cast.js). Phase
-    // is reported by the engine — `battleTimer` resets per per-target window
-    // during 'impact-walk', so we use it directly for the burst frame timer.
-    const phase = getMagicHitPhase();
-    if (phase === 'projectile') {
-      const t01 = battleSt.battleTimer / CAST_PHASE_MS_THROW.projectile;
-      drawProjectileFan(ui.ctx, sx, sy, 'party', enemyTargets, spellId, spell, t01);
-      return;
-    }
-    // 'impact-walk': render the impact burst on the CURRENT target only.
-    // Sight has no on-target bundle, so drawSpellEffectAtTargets no-ops.
-    const idx = Math.min(getSpellHitIdx(), enemyTargets.length - 1);
-    if (idx < 0) return;
-    drawSpellEffectAtTargets(ui.ctx, [enemyTargets[idx]], spellId, battleSt.battleTimer);
-    return;
-  }
-
-  // Heal-style spells (Cure on undead, etc.). Render projectile during the
-  // pre-heal window, then on-target effect during the heal window.
-  if (cureMs < CAST_T_LUNGE) return;
-  if (cureMs < CAST_T_HEAL) {
-    // Project from end-of-buildup (CAST_T_LUNGE) to start-of-heal (CAST_T_HEAL).
-    // Window length = CAST_PHASE_MS.lunge + CAST_PHASE_MS.cast = 417 ms.
-    const projWindow = CAST_T_HEAL - CAST_T_LUNGE;
-    const t01 = (cureMs - CAST_T_LUNGE) / projWindow;
-    drawProjectileFan(ui.ctx, sx, sy, 'party', enemyTargets, spellId, spell, t01);
-    return;
-  }
-  if (cureMs < CAST_T_RETURN) {
-    const effectMs = cureMs - CAST_T_HEAL;
-    drawSpellEffectAtTargets(ui.ctx, enemyTargets, spellId, effectMs);
-  }
+  drawSpellThrow('player', ui.ctx, { x: sx, y: sy, faction: 'party' }, null);
 }
 
 // PVP-enemy offensive cast — mirror of `_drawPlayerSpellTargetSparkleOnEnemy`

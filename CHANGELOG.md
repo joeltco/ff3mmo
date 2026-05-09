@@ -2,6 +2,36 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.171 — 2026-05-09
+
+### refactor: spell throw animation unified for ALL THREE roles
+
+User pushed back on the v1.7.170 partial unification ("ally + PVP only, player kept separate") — wanted everything pulling from the same helper. Done.
+
+`drawSpellThrow(role, ctx, caster, target)` in `combatant-cast.js` now handles all three roles via a `_resolveThrowRender` dispatcher. Roles + flows:
+
+| Role | Flow | Phase split |
+|---|---|---|
+| `'player'` | Item-use | Skip projectile, single-target impact at `getSpellHitIdx()` |
+| `'player'` | Thrown (Fire / Bzzard / Sleep / Sight) | `getMagicHitPhase()` reports phase; parallel projectile, serial impact-walk |
+| `'player'` | Heal-style (Cure on undead) | Projectile during heal-window (`CAST_T_LUNGE..CAST_T_HEAL`), parallel impact during heal window |
+| `'ally'` | Single-target throw | `ms < CAST_PHASE_MS_THROW.projectile` → projectile, else impact |
+| `'pvp-enemy'` | Single-target throw | Same simple split |
+
+Renderer is two branches (`phase === 'projectile'` → `drawProjectileFan`, else → `drawSpellEffectAtTargets`). All three player flows + ally + pvp-enemy converge on the same render call.
+
+**Call sites:**
+- `_drawPlayerSpellTargetSparkleOnEnemy` — was 73 lines of branching, now 5 lines (caster coords + one helper call).
+- `_drawAllyOffensiveCast` — 7 lines.
+- `_drawPVPEnemyOffensiveCast` — 11 lines (one extra branch for partyIdx → player vs ally target spec).
+
+`getSpellTargets`, `getMagicHitPhase`, `getSpellHitIdx`, `isCurrentCastItemUse`, `getCastAnimElapsedMs`, `getCurrentSpellId` now imported into `combatant-cast.js` so the player-flow resolver has full access to engine state.
+
+Pipeline modularization complete:
+- ✅ Cast windup — `drawCastWindup(layer, ctx, role, idx, x, y, mirror)` (v1.7.167)
+- ✅ Throw anim — `drawSpellThrow(role, ctx, caster, target)` (v1.7.171, all 3 roles)
+- ❌ Damage application — three apply fns still split. Next consolidation target if/when needed.
+
 ## 1.7.170 — 2026-05-09
 
 ### refactor: spell throw animation unified (ally + PVP-enemy)
