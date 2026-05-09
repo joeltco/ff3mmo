@@ -33,7 +33,9 @@ export const ps = {
   unlockedJobs: 0x01,   // bitmask: bit N = job N unlocked. 0x01 = only Onion Knight
   cp: 0,                // capacity points (0-255), earned from battles, spent on job changes
   playTime: 0,          // total play time in seconds
-  lastTown: 114,        // map ID of last town visited — respawn point on defeat (default Ur)
+  lastTown: 114,        // map ID of last town visited — legacy fallback for respawn
+  lastWorldExitX: null, // overworld tile X where player last landed from a structure exit
+  lastWorldExitY: null, // overworld tile Y — paired with X, used for death respawn when slain on overworld
   knownSpells: [],      // array of spell IDs the player has learned (granted by job + magic shop)
   buffs: {},            // active battle buffs (haste/protect/reflect). Cleared on resetBattleVars; not persisted.
 };

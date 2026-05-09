@@ -14,7 +14,7 @@ import { AREA_NAMES, DUNGEON_NAME } from './data/strings.js';
 import { hudSt } from './hud-state.js';
 import { mapSt } from './map-state.js';
 import { battleSt } from './battle-state.js';
-import { applyPassage } from './map-triggers.js';
+import { applyPassage, triggerWipe } from './map-triggers.js';
 import { ps } from './player-stats.js';
 
 const TILE_SIZE = 16;
@@ -205,6 +205,11 @@ function _landOnWorldMap(tileX, tileY) {
   mapSt.moving = false;
   sprite.setDirection(DIR_DOWN);
   sprite.resetFrame();
+  // Death-respawn point: any time the player lands on overworld (from a town
+  // exit, dungeon exit, or warp), this is "the last place they exited" — used
+  // as the respawn target if they die on overworld later.
+  ps.lastWorldExitX = tileX;
+  ps.lastWorldExitY = tileY;
   playTrack(TRACKS.WORLD_MAP);
 }
 
@@ -231,4 +236,33 @@ export function loadWorldMapAtPosition(tileX, tileY) {
   mapSt.mapData = null;
   setupTopBox(0, true);
   _landOnWorldMap(tileX, tileY);
+}
+
+// Wipe-and-respawn after a player KO. Single chokepoint for the post-death
+// load: battle-update calls this after resetting hp/mp/death timers.
+//   - Slain on overworld → land at the last overworld exit (the spot the
+//     player most recently appeared on the world map, set by _landOnWorldMap).
+//   - Slain not on overworld → reload the current map at its entrance tile.
+//   - No exit recorded yet (fresh save dies in their first encounter, etc.)
+//     → fall back to ps.lastTown (default Ur).
+export function respawnAfterDeath() {
+  const wasOnOverworld = mapSt.onWorldMap;
+  const currentMapId = mapSt.currentMapId;
+  const exitX = ps.lastWorldExitX;
+  const exitY = ps.lastWorldExitY;
+  const useExit = wasOnOverworld && exitX != null && exitY != null;
+  const fallbackMapId = ps.lastTown || 114;
+  const wipeHintMapId = useExit ? null : (!wasOnOverworld && currentMapId != null ? currentMapId : fallbackMapId);
+  triggerWipe(() => {
+    mapSt.dungeonFloor = -1;
+    mapSt.encounterSteps = 0;
+    mapSt.mapStack = [];
+    if (useExit) {
+      loadWorldMapAtPosition(exitX, exitY);
+    } else if (!wasOnOverworld && currentMapId != null) {
+      loadMapById(currentMapId);
+    } else {
+      loadMapById(fallbackMapId);
+    }
+  }, wipeHintMapId);
 }

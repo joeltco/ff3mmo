@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.147 — 2026-05-09
+
+### feat: smarter death respawn
+
+Death respawn used to dump every KO at `ps.lastTown` (default Ur), regardless of where you died. Now the respawn point reflects where the death happened.
+
+- **Slain on overworld** → respawn at the last spot you stood on overworld after exiting a town/dungeon. So a death 50 tiles east of Ur sends you back to Ur's overworld exit, not Ur's interior.
+- **Slain not on overworld** (in a dungeon, town, PVP) → respawn at the entrance tile of whatever map you were in. Die on dungeon floor 5, you respawn at floor 5's entrance — your descent progress isn't wiped.
+- **Fresh save with no exits recorded yet** → falls back to `ps.lastTown` (legacy behavior).
+
+**`ps.lastWorldExitX` / `ps.lastWorldExitY`** added to player state and the save schema. Updated in `_landOnWorldMap` (the single chokepoint where the player lands on the world map from any source — town exit, dungeon exit, warp). Persists across sessions; loaded from slot in `title-screen.js`.
+
+**`respawnAfterDeath()`** added as a single-source helper in `map-loading.js` (the location concern, not the battle concern). `battle-update.js` `_respawnAtLastTown` is now a thin wrapper that resets HP/MP/death-timer and delegates the wipe + map load to it. The branching logic (overworld coords vs. current-map entrance vs. fallback) lives in one place.
+
+`loadWorldMapAtPosition` was already the single-source coords helper used by movement and triggers; respawn reuses it instead of duplicating.
+
 ## 1.7.146 — 2026-05-09
 
 ### feat: battle message coverage — actor → action → result

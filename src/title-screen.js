@@ -719,6 +719,8 @@ function _updateTitleMainOutCase() {
   ps.status.poisonDmgTick = (slot && slot.statusPoisonTick) || 0;
   ps.playTime = (slot && slot.playTime) || 0;
   ps.lastTown = (slot && slot.lastTown != null) ? slot.lastTown : 114;
+  ps.lastWorldExitX = (slot && slot.lastWorldExitX != null) ? slot.lastWorldExitX : null;
+  ps.lastWorldExitY = (slot && slot.lastWorldExitY != null) ? slot.lastWorldExitY : null;
   ps.knownSpells = (slot && Array.isArray(slot.knownSpells)) ? [...slot.knownSpells] : [];
   grantStartingSpells(ps.jobIdx);
   swapBattleSprites(ps.jobIdx);

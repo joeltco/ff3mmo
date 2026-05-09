@@ -29,8 +29,7 @@ import { MONSTERS } from './data/monsters.js';
 import { PLAYER_POOL, generateAllyStats } from './data/players.js';
 import { BATTLE_ROAR, BATTLE_CANT_ESCAPE, BATTLE_CRITICAL, BATTLE_SLAIN } from './data/strings.js';
 import { showMsgBox } from './message-box.js';
-import { triggerWipe } from './map-triggers.js';
-import { loadMapById } from './map-loading.js';
+import { respawnAfterDeath } from './map-loading.js';
 import { _nameToBytes } from './text-utils.js';
 import { getPlayerLocation } from './roster.js';
 import { DIR_DOWN } from './sprite.js';
@@ -723,12 +722,8 @@ function _respawnAtLastTown() {
   hudSt.playerDeathTimer = null;
   ps.hp = ps.stats ? ps.stats.maxHP : 28;
   ps.mp = ps.stats ? ps.stats.maxMP : 0;
-  const respawnMapId = ps.lastTown || 114;
-  triggerWipe(() => {
-    mapSt.dungeonFloor = -1; mapSt.encounterSteps = 0; mapSt.mapStack = [];
-    loadMapById(respawnMapId);
-    saveSlotsToDB();
-  }, respawnMapId);
+  respawnAfterDeath();
+  saveSlotsToDB();
 }
 
 function _updateBoxClose() {

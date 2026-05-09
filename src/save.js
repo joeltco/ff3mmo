@@ -31,6 +31,8 @@ export function parseSaveSlots(data) {
       statusMask: s.statusMask || 0,
       statusPoisonTick: s.statusPoisonTick || 0,
       lastTown: s.lastTown != null ? s.lastTown : 114,
+      lastWorldExitX: s.lastWorldExitX != null ? s.lastWorldExitX : null,
+      lastWorldExitY: s.lastWorldExitY != null ? s.lastWorldExitY : null,
       playTime: s.playTime || 0,
       worldX: s.worldX != null ? s.worldX : null,
       worldY: s.worldY != null ? s.worldY : null,

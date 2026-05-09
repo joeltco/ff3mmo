@@ -64,6 +64,8 @@ export async function saveSlotsToDB() {
     slot.onWorldMap = pos.onWorldMap;
     slot.currentMapId = pos.currentMapId;
     slot.lastTown = ps.lastTown;
+    slot.lastWorldExitX = ps.lastWorldExitX;
+    slot.lastWorldExitY = ps.lastWorldExitY;
     slot.knownSpells = ps.knownSpells ? [...ps.knownSpells] : [];
   }
   try {
@@ -87,6 +89,8 @@ export async function saveSlotsToDB() {
       onWorldMap: s.onWorldMap != null ? s.onWorldMap : null,
       currentMapId: s.currentMapId != null ? s.currentMapId : null,
       lastTown: s.lastTown != null ? s.lastTown : 114,
+      lastWorldExitX: s.lastWorldExitX != null ? s.lastWorldExitX : null,
+      lastWorldExitY: s.lastWorldExitY != null ? s.lastWorldExitY : null,
       playTime: s.playTime || 0,
       knownSpells: Array.isArray(s.knownSpells) ? [...s.knownSpells] : [],
     } : null);
