@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.183 — 2026-05-09
+
+### refactor: split battle menu + victory box → `battle-draw-menu.js`
+
+`battle-drawing.js` was 1801 lines mixing 7 concerns. First chunk extracted: bottom-panel rendering — action menu (Fight/Guard/Magic/Item/Run), enemy-name box, item list, spell list, victory celebration, reward text.
+
+**New file** `src/battle-draw-menu.js` (438 lines) owns: `drawBattleMenu`, `drawVictoryBox`, plus all internal helpers (`_drawBattleItemList/Cursors/Panel`, `_drawBattleSpellList/Cursor`, `_battleMenuStates`, `_drawBattleMenuItems/Cursor`, `_battleEnemyNames/Name`, `_isRewardState`, `_drawVictoryNameOut`, `_drawRewardText`).
+
+**`battle-drawing.js`** 1801 → 1404 (-397). Imports `drawBattleMenu`, `drawVictoryBox` and calls them from `drawBattle`. Cleaned now-unused imports: `getItemNameClean`, `getMonsterName`, `getSpellNameClean`, `getSpellMPCost`, `makeExpText`, `makeGilText`, `makeCpText`, `makeItemDropText`, `BATTLE_LEVEL_UP`, `BATTLE_JOB_LEVEL_UP`, `BATTLE_FOUND`, `BATTLE_BOSS_NAME`, `BATTLE_GOBLIN_NAME`, `BATTLE_MENU_ITEMS`, `BATTLE_MAGIC`, `_MAGE_JOBS`, `drawCursorFaded`, plus dead constants `HUD_BOT_Y`, `HUD_BOT_H`, `BATTLE_PANEL_W`, `INV_SLOTS`, `BATTLE_TEXT_STEP_MS`, `BOSS_BOX_EXPAND_MS`, `BATTLE_SHAKE_MS`, `VICTORY_*`.
+
+Zero behavior change. Phase 2a of `docs/REFACTOR-PLAN.md` (3 phases remain: encounter/boss, ally rows, player portrait).
+
 ## 1.7.182 — 2026-05-09
 
 ### refactor: dedupe `_decodeTilePixels` + `_make8` helpers
