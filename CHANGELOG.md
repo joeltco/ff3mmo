@@ -2,6 +2,45 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.168 — 2026-05-09
+
+### tune: ally + PVP magic timings derive from CAST_PHASE_MS_THROW
+
+Audited the four-stage spell pipeline (cast windup → projectile → impact burst → damage number) across all three roles. Player path uses the canonical `CAST_PHASE_MS_THROW` constants from `cast-anim.js` (buildup 800 / projectile 150 / impact 550 / ret 167 = 1667 ms total). Ally and PVP-enemy paths had their own hardcoded numbers (`*_MAGIC_HIT_MS = 1000`, `*_EFFECT_MS = 400`), giving an 850 ms impact phase vs the player's 550 ms and a damage-pop offset of 250 ms after impact start vs the player's 0 ms. Felt draggy + out of sync.
+
+Aligned ally + PVP-enemy timings to derive from the same constants:
+
+| Role | Cast windup | Projectile | Impact | Damage applies | Hit total |
+|---|---|---|---|---|---|
+| Player throw | 800 | 150 | 550 | impact start (=projectile end) | per-target 717 + ret 167 |
+| Ally (was) | 800 | 150 | 850 | hit-phase 400 ms | 1000 |
+| Ally (now) | 800 | 150 | **550** | **hit-phase 150 ms (impact start)** | **867** |
+| PVP-enemy (was) | 800 | 150 | 850 | hit-phase 400 ms | 1000 |
+| PVP-enemy (now) | 800 | 150 | **550** | **hit-phase 150 ms (impact start)** | **867** |
+
+```js
+// battle-ally.js
+const ALLY_MAGIC_CAST_MS   = CAST_PHASE_MS_THROW.buildup;     // 800
+const ALLY_MAGIC_EFFECT_MS = CAST_PHASE_MS_THROW.projectile;  // 150
+const ALLY_MAGIC_HIT_MS    = CAST_PHASE_MS_THROW.projectile +
+                             CAST_PHASE_MS_THROW.impact +
+                             CAST_PHASE_MS_THROW.ret;          // 867
+```
+
+(Same in `pvp.js`.) If the player throw timing ever changes, all three roles update automatically. No more drift.
+
+**Smoothness audit**: damage number now pops on the first frame of the impact burst (right when the orb lands), not 250 ms later. SW_DMG_SHOW_MS = 700 ms, so the number is visible from hit-phase t=150ms through t=850ms, overlapping the ret window and auto-clearing via `tickDmgNums` in `updateBattle` — no flicker on state transition. Heal casts (same-faction, no projectile) get the same 150 ms apply timing; heal sparkle still plays the entire hit phase via `tickHealNums` until `clearHealNums` on hit-end.
+
+Frame timeline (ally cast on cross-faction target, e.g. BM ally Fire on monster):
+```
+[ally-magic-cast]  0   → 800   cast windup (halo behind portrait, flame size-cycle in front)
+[ally-magic-hit]   0   → 150   projectile fan from caster to target
+                   150 → 700   impact burst (8 frames @67ms toggle)
+                   150 ←        damage roll applies + setSwDmgNum
+                   700 → 867   ret hold (matches player canonical)
+[monster-death | pvp-dissolve | next-turn]
+```
+
 ## 1.7.167 — 2026-05-09
 
 ### refactor: cast windup unified across all three roles

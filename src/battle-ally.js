@@ -182,16 +182,32 @@ function _updateAllyEnemyHit() {
 }
 
 // ── Ally magic cast pipeline ─────────────────────────────────────────────────
-// Mirrors the player magic-cast → magic-hit pipeline but caster is an ally.
-// Cast windup duration matches the player thrown-spell buildup so the BM/RM
-// halo + flame cycle (size-cycle $51-$57, paired pulse — see cast-anim.js)
-// has time to play out fully. Hit phase is 1000 ms total: projectile fan
-// (150 ms via CAST_PHASE_MS_THROW.projectile) followed by impact burst on
-// the target. Effect (damage / heal apply) fires at 400 ms — mid-impact for
-// offensive casts, mid-hit-phase for heal casts.
-const ALLY_MAGIC_CAST_MS  = CAST_PHASE_MS_THROW.buildup;  // 800 ms — matches player windup
-const ALLY_MAGIC_EFFECT_MS = 400;  // within hit phase
-const ALLY_MAGIC_HIT_MS   = 1000;
+// Mirrors the player magic-cast → magic-hit pipeline byte-for-byte. ALL timings
+// derive from `CAST_PHASE_MS_THROW` (cast-anim.js) — same constants the player
+// throw path reads — so the four-stage pipeline (cast windup → projectile →
+// impact burst → damage number) lines up across all three roles.
+//
+// Frame timeline for an ally cast on a cross-faction target (offensive):
+//   [ally-magic-cast]  0    →  800 ms   cast windup (halo + flame)
+//   [ally-magic-hit]   0    →  150 ms   projectile fan caster→target
+//                      150  →  700 ms   impact burst on target (550 ms = 8 frames @67ms)
+//                      150  ←           damage applies + setSwDmgNum at impact START
+//                      700  →  867 ms   ret window (post-impact hold, matches player)
+//   [monster-death | next-turn]
+//
+// Damage number lifetime: setSwDmgNum at hit-phase t=150ms. SW_DMG_SHOW_MS=700,
+// so number visible until hit-phase t=850ms — overlaps the ret window cleanly,
+// auto-clears via tickDmgNums in updateBattle. No state-transition flicker.
+//
+// Same-faction (heal) cast skips projectile (no fan rendered for same-faction);
+// heal sparkle plays the entire hit phase. EFFECT applies at the same 150 ms
+// — slight tightening from the prior 400 ms (heal pops earlier, still visible
+// for ~700 ms via tickHealNums until clearHealNums on hit end).
+const ALLY_MAGIC_CAST_MS   = CAST_PHASE_MS_THROW.buildup;     // 800
+const ALLY_MAGIC_EFFECT_MS = CAST_PHASE_MS_THROW.projectile;  // 150 — fires at impact start
+const ALLY_MAGIC_HIT_MS    = CAST_PHASE_MS_THROW.projectile + // 867 — full throw window
+                             CAST_PHASE_MS_THROW.impact +
+                             CAST_PHASE_MS_THROW.ret;
 
 // Resolve the offensive-cast target object from the ally-magic state.
 // Idx convention matches `spell-cast.js:_getEnemyAt`:

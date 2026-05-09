@@ -511,9 +511,15 @@ function _tryPVPEnemyItem(casterCellIdx) {
 // Cast windup matches the player thrown-spell buildup so the BM/RM halo +
 // flame size-cycle has time to play out fully (was 600 ms — truncated the
 // pulse). Hit phase + effect timing unchanged.
-const PVP_MAGIC_CAST_MS   = CAST_PHASE_MS_THROW.buildup;  // 800 ms
-const PVP_MAGIC_EFFECT_MS = 400;
-const PVP_MAGIC_HIT_MS    = 1000;
+// PVP-enemy magic timing — all derived from `CAST_PHASE_MS_THROW` to match
+// the player throw pipeline byte-for-byte. See `battle-ally.js` for the full
+// frame-timeline breakdown; PVP-enemy mirrors it (just with mirror=true on
+// the cast windup since opponents face right).
+const PVP_MAGIC_CAST_MS   = CAST_PHASE_MS_THROW.buildup;     // 800
+const PVP_MAGIC_EFFECT_MS = CAST_PHASE_MS_THROW.projectile;  // 150 — fires at impact start
+const PVP_MAGIC_HIT_MS    = CAST_PHASE_MS_THROW.projectile + // 867 — full throw window
+                            CAST_PHASE_MS_THROW.impact +
+                            CAST_PHASE_MS_THROW.ret;
 
 function _pvpEnemyByCellIdx(idx) {
   if (idx === 0) return pvpSt.pvpOpponentStats;
