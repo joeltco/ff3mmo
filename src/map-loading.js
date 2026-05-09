@@ -240,29 +240,36 @@ export function loadWorldMapAtPosition(tileX, tileY) {
 
 // Wipe-and-respawn after a player KO. Single chokepoint for the post-death
 // load: battle-update calls this after resetting hp/mp/death timers.
-//   - Slain on overworld → land at the last overworld exit (the spot the
-//     player most recently appeared on the world map, set by _landOnWorldMap).
-//   - Slain not on overworld → reload the current map at its entrance tile.
-//   - No exit recorded yet (fresh save dies in their first encounter, etc.)
-//     → fall back to ps.lastTown (default Ur).
+//
+// Rule: always respawn at the LAST OVERWORLD EXIT POINT (`ps.lastWorldExitX/Y`,
+// set by `_landOnWorldMap` whenever the player lands on the world map from a
+// town/dungeon exit or warp). This means:
+//   - Die on overworld → respawn at the spot you most recently came out of a
+//     structure (the meaningful "checkpoint").
+//   - Die in a dungeon → respawn OUTSIDE the dungeon on the world map at its
+//     overworld entrance tile. You lose dungeon progress; this matches the
+//     user's expectation that "death dumps you outside the cave, not at floor
+//     1's entrance tile inside it" (caught 2026-05-09 — Altar Cave death sent
+//     player to the cave's interior entrance, which felt like progress retained
+//     when really HP/MP got restored without leaving the dungeon).
+//   - Die in a town → respawn outside on overworld, same rule.
+//
+// Fallback: if `lastWorldExitX/Y` is null (fresh save that died in its very
+// first encounter before ever exiting Ur), fall back to `ps.lastTown` (default
+// Ur, 114).
 export function respawnAfterDeath() {
-  const wasOnOverworld = mapSt.onWorldMap;
-  const currentMapId = mapSt.currentMapId;
   const exitX = ps.lastWorldExitX;
   const exitY = ps.lastWorldExitY;
-  const useExit = wasOnOverworld && exitX != null && exitY != null;
+  const useExit = exitX != null && exitY != null;
   const fallbackMapId = ps.lastTown || 114;
-  const wipeHintMapId = useExit ? null : (!wasOnOverworld && currentMapId != null ? currentMapId : fallbackMapId);
   triggerWipe(() => {
     mapSt.dungeonFloor = -1;
     mapSt.encounterSteps = 0;
     mapSt.mapStack = [];
     if (useExit) {
       loadWorldMapAtPosition(exitX, exitY);
-    } else if (!wasOnOverworld && currentMapId != null) {
-      loadMapById(currentMapId);
     } else {
       loadMapById(fallbackMapId);
     }
-  }, wipeHintMapId);
+  }, useExit ? null : fallbackMapId);
 }

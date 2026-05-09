@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.155 — 2026-05-09
+
+### fix: PVP cast windup duration + respawn outside dungeon
+
+**PVP-enemy cast windup truncated.** `PVP_MAGIC_CAST_MS` was hardcoded to 600 ms, same root cause as the ally cast bug fixed in 1.7.153 — the BM/RM halo + flame size-cycle ($51-$57 paired pulse) couldn't complete a full pulse. Bumped to `CAST_PHASE_MS_THROW.buildup` (800 ms). Cast renderers in `pvp.js:1131` and `pvp.js:1211` were already wired through `drawCasterCastBehind` / `drawCasterCastFront`; only the duration was wrong.
+
+**Respawn rule simplified.** Death always lands on the world map at the last overworld exit point (`ps.lastWorldExitX/Y`) regardless of where you died. Previously: dying not-on-overworld respawned you at the *current map's entrance tile*, which for dungeons meant respawning *inside* the cave at floor 1's interior entry — felt like progress retained when really HP/MP just got restored. Now dying in Altar Cave dumps you outside the cave on overworld; dying in a town dumps you outside the town on overworld; dying on overworld dumps you at the last structure exit. Fallback to `ps.lastTown` (Ur) if `lastWorldExitX/Y` was never set (fresh save died on first encounter).
+
 ## 1.7.154 — 2026-05-09
 
 ### chore: drop catalog line from startup console

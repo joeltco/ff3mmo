@@ -39,7 +39,7 @@ import { queueBattleMsg, replaceBattleMsg } from './battle-msg.js';
 import { BATTLE_FOE } from './data/strings.js';
 import { tickHealNums, clearHealNums } from './damage-numbers.js';
 import { SPELLS } from './data/spells.js';
-import { drawCasterCastBehind, drawCasterCastFront, jobToCastKey } from './cast-anim.js';
+import { drawCasterCastBehind, drawCasterCastFront, jobToCastKey, CAST_PHASE_MS_THROW } from './cast-anim.js';
 import { getSpellAnim, getSpellAnimForItem } from './spell-anim.js';
 import { drawStatusSpriteAbove } from './battle-drawing.js';
 import { fakePlayerFullBodyCanvases, fakePlayerHitFullBodyCanvases,
@@ -518,7 +518,10 @@ function _tryPVPEnemyItem(casterCellIdx) {
 // opponent, 1+ = pvpEnemyAllies[cellIdx-1]. Same animation pipeline as the
 // ally cast (600ms windup → 1000ms hit, effect at 400ms), but the caster pose
 // + flame + sparkle are rendered on the enemy side.
-const PVP_MAGIC_CAST_MS   = 600;
+// Cast windup matches the player thrown-spell buildup so the BM/RM halo +
+// flame size-cycle has time to play out fully (was 600 ms — truncated the
+// pulse). Hit phase + effect timing unchanged.
+const PVP_MAGIC_CAST_MS   = CAST_PHASE_MS_THROW.buildup;  // 800 ms
 const PVP_MAGIC_EFFECT_MS = 400;
 const PVP_MAGIC_HIT_MS    = 1000;
 
