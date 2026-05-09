@@ -2,6 +2,40 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.180 — 2026-05-09
+
+### tune: damage number sticks after bounce, then state transitions
+
+User asked for damage numbers to stick visible for a short period after the bounce settles, then transition to next turn / death wipe. Was: number disappeared exactly when bounce ended (`DMG_SHOW_MS = 550 = bounce duration`); felt rushed.
+
+**`damage-numbers.js`** split the show duration into two phases:
+- `DMG_BOUNCE_MS = 550` — matches `DMG_BOUNCE_TABLE` (33 frames @ 16.67 ms). Number arcs up, falls back, settles at +6 px (last table entry).
+- `DMG_STICK_MS = 200` — hold settled number motionless for 200 ms after bounce. `_dmgBounceY` clamps `frame` to the last table entry, so during stick the digits render still at their settled position.
+- `DMG_SHOW_MS = DMG_BOUNCE_MS + DMG_STICK_MS = 750` — total visible duration before clear.
+- `SW_DMG_SHOW_MS` unified with `DMG_SHOW_MS` (was 700; now 750).
+
+**State machine timings extended to honor the full bounce + stick:**
+- Player thrown impact-walk per-target window: was `impact(550) + postGap(100) + damageHold(500) = 1150`. Now `impact(550) + postGap(100) + DMG_SHOW_MS(750) = 1400`.
+- `ALLY_MAGIC_HIT_MS`: was `effect(900) + ret(167) = 1067`. Now `effect(900) + DMG_SHOW_MS(750) = 1650`.
+- `PVP_MAGIC_HIT_MS`: same — `effect(900) + DMG_SHOW_MS(750) = 1650`.
+
+The `ret` phase from `CAST_PHASE_MS_THROW` is no longer used by the simple ally/PVP paths — `DMG_SHOW_MS` (bounce + stick) IS the post-damage hold. Player engine swapped its hardcoded `damageHoldMs = 500` for `DMG_SHOW_MS` so all three roles use the same constant.
+
+Frame timeline (cross-faction throw, all 3 roles):
+```
+buildup       0   →  800    cast windup
+projectile    0   →  150    orb flies
+preImpactGap  150 →  250    beat
+impact        250 →  800    burst plays  (SFX at 250)
+postImpactGap 800 →  900    beat
+damage @ 900               damage applies
+bounce        900 →  1450   number arcs up + settles
+stick         1450 →  1650  number motionless at settled position
+[next turn / death wipe]
+```
+
+Net pacing: cross-faction cast is now ~1650 ms hit phase + 800 ms windup = 2450 ms total. Was ~1067+800 = 1867 ms. ~600 ms slower per cast for the polish.
+
 ## 1.7.179 — 2026-05-09
 
 ### refactor: applySpell unified dispatcher + pickCombatantBody covers player

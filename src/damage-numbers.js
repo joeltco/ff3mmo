@@ -13,8 +13,19 @@ export const DMG_NUM_PAL  = [0x0F, 0x0F, 0x25, 0x0F]; // red/pink damage (also u
 export const HEAL_NUM_PAL = [0x0F, 0x0F, 0x2B, 0x0F]; // green heal
 
 // ── Duration ────────────────────────────────────────────────────────────────
-export const DMG_SHOW_MS    = 550;  // standard display time
-export const SW_DMG_SHOW_MS = 700;  // southwind display time
+// Damage number lifecycle: bounce → stick → clear.
+//   - DMG_BOUNCE_MS — matches DMG_BOUNCE_TABLE (33 frames @ 16.67ms).
+//     The number arcs up, settles back, and ends at the last bounce-table
+//     frame (+6 px below baseline).
+//   - DMG_STICK_MS — hold the settled number visible AFTER the bounce so
+//     the player has a clear "this is the damage" beat before the next turn
+//     / death wipe takes over. `_dmgBounceY` clamps `frame` to the last
+//     table entry, so during stick the number renders motionless at +6.
+//   - DMG_SHOW_MS — bounce + stick. Number cleared after this.
+export const DMG_BOUNCE_MS  = 550;
+export const DMG_STICK_MS   = 200;
+export const DMG_SHOW_MS    = DMG_BOUNCE_MS + DMG_STICK_MS;  // 750
+export const SW_DMG_SHOW_MS = DMG_SHOW_MS;                    // unified
 
 // ── State ───────────────────────────────────────────────────────────────────
 // Each is null when inactive, or { value, timer, crit?, miss?, heal?, index? }

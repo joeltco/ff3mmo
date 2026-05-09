@@ -38,7 +38,7 @@ import { _nameToBytes } from './text-utils.js';
 import { getSpellNameClean } from './text-decoder.js';
 import { queueBattleMsg, replaceBattleMsg } from './battle-msg.js';
 import { BATTLE_FOE } from './data/strings.js';
-import { tickHealNums, clearHealNums } from './damage-numbers.js';
+import { tickHealNums, clearHealNums, DMG_SHOW_MS } from './damage-numbers.js';
 import { SPELLS } from './data/spells.js';
 import { drawCasterCastBehind, drawCasterCastFront, jobToCastKey, CAST_PHASE_MS_THROW } from './cast-anim.js';
 import { drawCastWindup, applyMagicDamage, applyMagicStatus, applyMagicHeal,
@@ -526,8 +526,8 @@ const PVP_MAGIC_EFFECT_MS = CAST_PHASE_MS_THROW.projectile +    // 900
                             CAST_PHASE_MS_THROW.preImpactGap +
                             CAST_PHASE_MS_THROW.impact +
                             CAST_PHASE_MS_THROW.postImpactGap;
-const PVP_MAGIC_HIT_MS    = PVP_MAGIC_EFFECT_MS +                // 1067
-                            CAST_PHASE_MS_THROW.ret;
+// Hit phase ends after damage number's full bounce + stick (DMG_SHOW_MS).
+const PVP_MAGIC_HIT_MS    = PVP_MAGIC_EFFECT_MS + DMG_SHOW_MS;   // 1650
 
 function _pvpEnemyByCellIdx(idx) {
   if (idx === 0) return pvpSt.pvpOpponentStats;

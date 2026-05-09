@@ -10,7 +10,7 @@ import { ps } from './player-stats.js';
 import { inputSt } from './input-handler.js';
 import { SFX, playSFX } from './music.js';
 import { setPlayerHealNum, setPlayerDamageNum, getAllyDamageNums, setEnemyDmgNum, setEnemyHealNum, setSwDmgNum,
-         tickHealNums, clearHealNums } from './damage-numbers.js';
+         tickHealNums, clearHealNums, DMG_SHOW_MS } from './damage-numbers.js';
 import { SPELLS, getSpellMPCost, isMultiTargetSpell } from './data/spells.js';
 import { STATUS, addStatus, removeStatus, tryInflictStatus, STATUS_NAME_BYTES } from './status-effects.js';
 import { CAST_PHASE_MS, CAST_PHASE_MS_THROW, CAST_T_HEAL, CAST_TOTAL_MS, CAST_T_THROW_RETURN, CAST_T_THROW_IMPACT_START } from './cast-anim.js';
@@ -651,8 +651,8 @@ export function updateSpellCast(dt) {
     const impactDur     = CAST_PHASE_MS_THROW.impact;          // 550
     const postGap       = CAST_PHASE_MS_THROW.postImpactGap;   // 100
     const damageStartMs = impactDur + postGap;                  // 650 — when damage applies
-    const damageHoldMs  = 500;
-    const perTargetMs   = damageStartMs + damageHoldMs;        // 1150
+    const damageHoldMs  = DMG_SHOW_MS;                          // 750 — full bounce + stick
+    const perTargetMs   = damageStartMs + damageHoldMs;        // 1400
     if (!_sfxPlayed) _playSpellSFXOnce(_spellImpactSFX(spell));
     if (!_effectApplied && battleSt.battleTimer >= damageStartMs) {
       _applySpellEffect(_targets[_hitIdx]);

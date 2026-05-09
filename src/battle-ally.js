@@ -10,7 +10,7 @@ import { queueBattleMsg } from './battle-msg.js';
 import { BATTLE_ALLY, BATTLE_SLAIN } from './data/strings.js';
 import { pvpSt } from './pvp.js';
 import { inputSt } from './input-handler.js';
-import { getEnemyDmgNum, setEnemyDmgNum, setPlayerHealNum, getAllyDamageNums, tickHealNums, clearHealNums, setSwDmgNum } from './damage-numbers.js';
+import { getEnemyDmgNum, setEnemyDmgNum, setPlayerHealNum, getAllyDamageNums, tickHealNums, clearHealNums, setSwDmgNum, DMG_SHOW_MS } from './damage-numbers.js';
 import { ROSTER_FADE_STEPS } from './data/players.js';
 import { IDLE_FRAME_MS } from './combatant-pose.js';
 import { ps } from './player-stats.js';
@@ -211,13 +211,15 @@ const ALLY_MAGIC_CAST_MS   = CAST_PHASE_MS_THROW.buildup;       // 800
 const ALLY_MAGIC_SFX_MS    = CAST_PHASE_MS_THROW.projectile +   // 250
                              CAST_PHASE_MS_THROW.preImpactGap;
 // Effect (damage / heal) fires AFTER the impact burst + post-impact gap.
-// Sequence: cast → projectile → preImpactGap → impact (SFX) → postImpactGap → damage.
+// Sequence: cast → projectile → preImpactGap → impact (SFX) → postImpactGap → damage → bounce → stick → end.
 const ALLY_MAGIC_EFFECT_MS = CAST_PHASE_MS_THROW.projectile +   // 900
                              CAST_PHASE_MS_THROW.preImpactGap +
                              CAST_PHASE_MS_THROW.impact +
                              CAST_PHASE_MS_THROW.postImpactGap;
-const ALLY_MAGIC_HIT_MS    = ALLY_MAGIC_EFFECT_MS +              // 1067 — full throw window
-                             CAST_PHASE_MS_THROW.ret;
+// Hit phase ends after damage number's full bounce + stick. The damage number
+// stays visible motionless for `DMG_STICK_MS` after the bounce so the next-turn
+// / death-wipe transition has a clear beat to read the number.
+const ALLY_MAGIC_HIT_MS    = ALLY_MAGIC_EFFECT_MS + DMG_SHOW_MS;  // 1650
 
 // Resolve the offensive-cast target object from the ally-magic state.
 // Idx convention matches `spell-cast.js:_getEnemyAt`:
