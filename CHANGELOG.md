@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.160 — 2026-05-09
+
+### fix: PVP enemy box vanishes during magic cast/hit
+
+`drawBossSpriteBox` at `battle-drawing.js:1306-1320` enumerates the battle states during which the PVP enemy box (the entire left-side battle area showing opponent + enemy allies) renders. The whitelist included every other PVP action state — `pvp-defend-anim`, `pvp-enemy-slash`, `pvp-opp-potion`, `pvp-opp-sw-throw/hit`, `pvp-dissolve` — but was missing **`pvp-enemy-magic-cast`** and **`pvp-enemy-magic-hit`**.
+
+So during *any* PVP enemy spell cast (Cure, Poisona, Fire, Blizzard, Sleep), `drawBossSpriteBoxPVP` was skipped → the entire PVP enemy box and everything in it (the casters, their teammates, weapon overlays, status icons) vanished until the action ended. No throw, no pm2 log — just a missing state in the gate. Added both states.
+
+Found by listing what disappears (PVP HUD + bodies) → reading `drawBossSpriteBox` → diffing the whitelist against the actual PVP magic state names. Lesson: when a render bug doesn't throw, the most common cause is a state-name whitelist that was extended for one feature but missed by another.
+
 ## 1.7.159 — 2026-05-09
 
 ### fix: more unguarded gridPos lookups in battle drawing

@@ -1317,6 +1317,7 @@ function drawBossSpriteBox() {
                     battleSt.battleState === 'pvp-dissolve' || battleSt.battleState === 'pvp-defend-anim' ||
                     battleSt.battleState === 'pvp-enemy-slash' || battleSt.battleState === 'pvp-opp-potion' ||
                     battleSt.battleState === 'pvp-opp-sw-throw' || battleSt.battleState === 'pvp-opp-sw-hit' ||
+                    battleSt.battleState === 'pvp-enemy-magic-cast' || battleSt.battleState === 'pvp-enemy-magic-hit' ||
                     _isVictoryBattleState() || battleSt.battleState === 'victory-name-out';
     if (isCombatPVP) drawBossSpriteBoxPVP(centerX, centerY);
     return;
