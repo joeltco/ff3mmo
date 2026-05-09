@@ -16,6 +16,7 @@ import { queueBattleMsg, replaceBattleMsg } from './battle-msg.js';
 import { _nameToBytes } from './text-utils.js';
 import { getAllyDamageNums, setEnemyDmgNum, setEnemyHealNum, setPlayerDamageNum, setPlayerHealNum } from './damage-numbers.js';
 import { startSpellCast } from './spell-cast.js';
+import { SPELLS } from './data/spells.js';
 import { selectCursor, saveSlots, saveSlotsToDB } from './save-state.js';
 import { removeItem } from './inventory.js';
 
@@ -165,6 +166,9 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
     if (_tryAllyCure(ally, turn.index)) return;
     // White Mage status AI — if anyone (incl self) is poisoned and ally knows Poisona (0x35), cast it.
     if (_tryAllyPoisona(ally, turn.index)) return;
+    // Black/Red Mage offensive AI — if ally knows Fire/Bzzard/Sleep, sometimes cast on a living monster.
+    // Encounter-only for v1; PVP target path TODO.
+    if (_tryAllyOffensiveCast(ally, turn.index)) return;
     if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
       const living = battleSt.encounterMonsters.map((m, i) => m.hp > 0 ? i : -1).filter(i => i >= 0);
       if (living.length === 0) { processNextTurn(); return; }
@@ -358,6 +362,77 @@ function _tryAllyPoisona(ally, allyIdx) {
   battleSt.allyMagicItemMode      = false;
   queueBattleMsg(ally.name ? _nameToBytes(ally.name) : BATTLE_ALLY);
   replaceBattleMsg(getSpellNameClean(0x35));
+  playSFX(SFX.MAGIC_CAST);
+  battleSt.battleState = 'ally-magic-cast';
+  battleSt.battleTimer = 0;
+  return true;
+}
+
+// ── Ally offensive cast AI (BM/RM Fire/Bzzard/Sleep) ───────────────────────
+// Roster ally on the player team picks a random offensive spell from
+// `ally.knownSpells` (Fire 0x31 / Bzzard 0x32 / Sleep 0x33), targets a
+// random living encounter monster, pre-rolls damage (INT-based, mirrors
+// `_tryPVPEnemyOffensiveCast` in pvp.js), and queues an `ally-magic-cast`
+// turn. Apply path lives in `battle-ally.js:_applyAllyMagicEffect`.
+//
+// Activation gate (~45%) keeps offensive magic feeling like a *sometimes*
+// choice instead of the default — same gate as the PVP-enemy mirror.
+// MP-gated upstream by `knownSpells` presence (fake-roster allies don't
+// track MP). Encounter-only for v1; PVP target path TODO.
+function _tryAllyOffensiveCast(ally, allyIdx) {
+  if (!ally || !Array.isArray(ally.knownSpells)) return false;
+  const offensive = ally.knownSpells.filter(s => s === 0x31 || s === 0x32 || s === 0x33);
+  if (offensive.length === 0) return false;
+  if (Math.random() >= 0.45) return false;
+
+  // Pick a living enemy target. Encounter battles → random monster slot.
+  // PVP battles → random alive cell, using the same idx convention as
+  // `spell-cast.js:_getEnemyAt`:
+  //   'enemy'      → encounterMonsters[idx]
+  //   'pvp-enemy'  → idx === 0 → pvpOpponentStats; idx >= 1 → pvpEnemyAllies[idx - 1]
+  // Reusing that convention lets us pipe damage display through `setSwDmgNum`
+  // (the same multi-target damage-num system the player cast uses).
+  let targetType = null, targetIdx = -1;
+  if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
+    const livingIdxs = battleSt.encounterMonsters
+      .map((m, i) => (m && m.hp > 0) ? i : -1)
+      .filter(i => i >= 0);
+    if (livingIdxs.length === 0) return false;
+    targetType = 'enemy';
+    targetIdx = livingIdxs[Math.floor(Math.random() * livingIdxs.length)];
+  } else if (pvpSt.isPVPBattle) {
+    const candidates = [];
+    if (pvpSt.pvpOpponentStats && pvpSt.pvpOpponentStats.hp > 0) candidates.push(0);
+    (pvpSt.pvpEnemyAllies || []).forEach((a, i) => { if (a && a.hp > 0) candidates.push(i + 1); });
+    if (candidates.length === 0) return false;
+    targetType = 'pvp-enemy';
+    targetIdx = candidates[Math.floor(Math.random() * candidates.length)];
+  } else {
+    return false;
+  }
+
+  const spellId = offensive[Math.floor(Math.random() * offensive.length)];
+  const spell = SPELLS.get(spellId);
+  if (!spell) return false;
+  // Damage roll — INT for damage spells (NES black-magic formula). Sleep is
+  // status-only (power=0), no damage roll.
+  let dmg = 0;
+  if (spell.power > 0) {
+    const stat = ally.int || 5;
+    const baseAtk = Math.floor(stat / 2) + spell.power;
+    dmg = baseAtk + Math.floor(Math.random() * (Math.floor(baseAtk / 2) + 1));
+    dmg = Math.max(1, dmg);
+  }
+  battleSt.allyMagicCasterIdx     = allyIdx;
+  battleSt.allyMagicTargetType    = targetType;
+  battleSt.allyMagicTargetIdx     = targetIdx;
+  battleSt.allyMagicSpellId       = spellId;
+  battleSt.allyMagicHealAmount    = 0;
+  battleSt.allyMagicDamageRoll    = dmg;
+  battleSt.allyMagicEffectApplied = false;
+  battleSt.allyMagicItemMode      = false;
+  queueBattleMsg(ally.name ? _nameToBytes(ally.name) : BATTLE_ALLY);
+  replaceBattleMsg(getSpellNameClean(spellId));
   playSFX(SFX.MAGIC_CAST);
   battleSt.battleState = 'ally-magic-cast';
   battleSt.battleTimer = 0;

@@ -73,6 +73,7 @@ export const battleSt = {
   allyMagicTargetIdx: -1,             // ally index when target type is 'ally'
   allyMagicSpellId: 0,
   allyMagicHealAmount: 0,             // pre-rolled heal value
+  allyMagicDamageRoll: 0,             // pre-rolled damage value for offensive casts (Fire/Bzzard/etc.)
   allyMagicEffectApplied: false,
   allyMagicItemMode: false,           // true = consumable (potion/antidote), suppresses cast flame visual
 

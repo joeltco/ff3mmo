@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.150 — 2026-05-09
+
+### feat: BM/RM ally AI casts black magic
+
+Black Mage and Red Mage roster allies now actually cast offensive magic instead of falling through to the physical attack path. Previously a Lv4 BM Vivi with Fire + Bzzard in `knownSpells` would just stab with her dagger; now she casts.
+
+**`_tryAllyOffensiveCast` in `battle-turn.js`** — picks Fire (0x31) / Bzzard (0x32) / Sleep (0x33) from `ally.knownSpells`, picks a random living target, pre-rolls damage from the ally's INT (`floor(INT/2) + power`, NES black-magic formula). 45% activation gate so it feels like a *sometimes* choice, mirroring the PVP-enemy mirror in `pvp.js`. Dispatched after `_tryAllyCure` and `_tryAllyPoisona` so RM allies still heal when teammates need it before going offensive.
+
+**Encounter + PVP both supported.** Encounter battles target a random living `encounterMonsters` slot. PVP battles target a random living `pvpEnemyAllies` cell or `pvpOpponentStats` — same idx convention `spell-cast.js:_getEnemyAt` uses (idx 0 = opponent, 1+ = enemy ally idx-1), so damage display piggybacks on the existing `setSwDmgNum` path.
+
+**Damage application in `battle-ally.js:_applyAllyMagicEffect`** — replaced the no-op Fire guard (which used to short-circuit "ally AI doesn't cast offensive magic") with real damage application. Element multiplier from spell, mdef from target, stored in `battleSt.allyMagicDamageRoll`. Sleep (0x33) takes the status path: `tryInflictStatus` against target.statusResist + spell.hit, plays SLEEP_PUFF, replaces strip with status name on landing, miss display on whiff.
+
+**`drawSWDamageNumbers` extended** to render during `'ally-magic-hit'` as well as `'magic-hit'`, so the damage number lands on the actual target slot — not on the player's currently-selected enemy.
+
+**Visual polish gap (intentional, deferred):** the cast windup (caster pose + magic flame on ally portrait) plays correctly. The on-target impact anim (fire burst / blizzard splash) does NOT render yet — only the damage number pops. Gameplay is correct (HP drops, status applies). Visual impact-anim wiring can come later when needed.
+
 ## 1.7.149 — 2026-05-09
 
 ### fix: chat scroll SFX only when scroll actually happens

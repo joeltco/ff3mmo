@@ -10,11 +10,14 @@ import { queueBattleMsg } from './battle-msg.js';
 import { BATTLE_ALLY } from './data/strings.js';
 import { pvpSt } from './pvp.js';
 import { inputSt } from './input-handler.js';
-import { getEnemyDmgNum, setEnemyDmgNum, setPlayerHealNum, getAllyDamageNums, tickHealNums, clearHealNums } from './damage-numbers.js';
+import { getEnemyDmgNum, setEnemyDmgNum, setPlayerHealNum, getAllyDamageNums, tickHealNums, clearHealNums, setSwDmgNum } from './damage-numbers.js';
 import { ROSTER_FADE_STEPS } from './data/players.js';
 import { IDLE_FRAME_MS } from './combatant-pose.js';
 import { ps } from './player-stats.js';
-import { removeStatus, STATUS } from './status-effects.js';
+import { removeStatus, STATUS, STATUS_NAME_BYTES, tryInflictStatus } from './status-effects.js';
+import { SPELLS } from './data/spells.js';
+import { elemMultiplier } from './battle-math.js';
+import { replaceBattleMsg } from './battle-msg.js';
 
 // Injected at boot — avoids circular import on main.js
 let _buildTurnOrder = () => [];
@@ -186,6 +189,30 @@ const ALLY_MAGIC_CAST_MS  = 600;
 const ALLY_MAGIC_EFFECT_MS = 400;  // within hit phase
 const ALLY_MAGIC_HIT_MS   = 1000;
 
+// Resolve the offensive-cast target object from the ally-magic state.
+// Idx convention matches `spell-cast.js:_getEnemyAt`:
+//   'enemy'      → encounterMonsters[idx]
+//   'pvp-enemy'  → 0 → pvpOpponentStats; 1+ → pvpEnemyAllies[idx - 1]
+function _allyMagicEnemyTarget() {
+  if (battleSt.allyMagicTargetType === 'enemy') {
+    return battleSt.encounterMonsters && battleSt.encounterMonsters[battleSt.allyMagicTargetIdx];
+  }
+  if (battleSt.allyMagicTargetType === 'pvp-enemy') {
+    if (battleSt.allyMagicTargetIdx === 0) return pvpSt.pvpOpponentStats;
+    return pvpSt.pvpEnemyAllies && pvpSt.pvpEnemyAllies[battleSt.allyMagicTargetIdx - 1];
+  }
+  return null;
+}
+
+// Set the damage/miss display for an offensive ally cast. Uses `setSwDmgNum`
+// (per-target indexed) so the number lands on the actual target slot, not
+// on the player's currently-selected enemy. `drawSWDamageNumbers` is the
+// renderer; gated to fire during 'ally-magic-hit' as well as 'magic-hit'.
+function _setAllyMagicEnemyDmgNum(num) {
+  if (battleSt.allyMagicTargetType !== 'enemy' && battleSt.allyMagicTargetType !== 'pvp-enemy') return;
+  setSwDmgNum(battleSt.allyMagicTargetIdx, num.value || 0, { miss: !!num.miss });
+}
+
 function _applyAllyMagicEffect() {
   const spellId = battleSt.allyMagicSpellId;
   // 0x36 Sight — no gameplay effect; defensive guard so the Cure fall-through
@@ -196,12 +223,35 @@ function _applyAllyMagicEffect() {
     playSFX(SFX.SIGHT);
     return;
   }
-  // 0x31 Fire — ally AI doesn't cast offensive magic on enemies today; this
-  // guard exists so a stray Fire spellId (sync error, future BM ally) doesn't
-  // fall through and accidentally heal the target via the default Cure path.
-  // Boom SFX plays; damage application is the player-cast pipeline's job.
-  if (spellId === 0x31) {
-    playSFX(SFX.FIRE_BOOM);
+  // BM/RM offensive cast — Fire (0x31), Bzzard (0x32), Sleep (0x33). Set
+  // up by `_tryAllyOffensiveCast` in battle-turn.js with target type
+  // 'enemy' (encounterMonsters[idx]) or 'pvp-enemy' (idx -1 = opponent,
+  // 0+ = pvpEnemyAllies[idx]). Sleep is status-only, no damage.
+  if (spellId === 0x31 || spellId === 0x32 || spellId === 0x33) {
+    const tgt = _allyMagicEnemyTarget();
+    if (!tgt || tgt.hp <= 0) return;
+    const spell = SPELLS.get(spellId);
+    if (spellId === 0x33) {
+      if (tgt.status && spell) {
+        const applied = tryInflictStatus(tgt.status, 'sleep', spell.hit || 15, tgt.statusResist || 0);
+        if (applied) {
+          playSFX(SFX.SLEEP_PUFF);
+          if (STATUS_NAME_BYTES.sleep) replaceBattleMsg(STATUS_NAME_BYTES.sleep);
+          _setAllyMagicEnemyDmgNum({ value: 0, timer: 0, status: 'sleep' });
+        } else {
+          _setAllyMagicEnemyDmgNum({ miss: true, timer: 0 });
+        }
+      }
+      return;
+    }
+    // Fire / Bzzard — apply pre-rolled damage with element multiplier + mdef.
+    let dmg = battleSt.allyMagicDamageRoll || 0;
+    const elem = spell ? spell.element : null;
+    const eMult = elemMultiplier(elem, tgt.weakness, tgt.resist);
+    dmg = Math.max(1, Math.floor(dmg * eMult) - (tgt.mdef || 0));
+    tgt.hp = Math.max(0, tgt.hp - dmg);
+    _setAllyMagicEnemyDmgNum({ value: dmg, timer: 0 });
+    playSFX(spellId === 0x31 ? SFX.FIRE_BOOM : SFX.SW_HIT);
     return;
   }
   // 0x35 Poisona — strip POISON flag from target, no HP change. Sparkle still

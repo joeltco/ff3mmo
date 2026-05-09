@@ -79,7 +79,8 @@ export function resetBattleVars() {
   battleSt.currentAllyAttacker = -1; battleSt.allyTargetIndex = -1; battleSt.allyHitResult = null; battleSt.allyHitIsLeft = false;
   battleSt.allyShakeTimer = {}; battleSt.enemyTargetAllyIdx = -1; battleSt.allyExitTimer = 0;
   battleSt.allyMagicCasterIdx = -1; battleSt.allyMagicTargetIdx = -1; battleSt.allyMagicSpellId = 0;
-  battleSt.allyMagicHealAmount = 0; battleSt.allyMagicEffectApplied = false; battleSt.allyMagicTargetType = 'player';
+  battleSt.allyMagicHealAmount = 0; battleSt.allyMagicDamageRoll = 0;
+  battleSt.allyMagicEffectApplied = false; battleSt.allyMagicTargetType = 'player';
   hudSt.playerDeathTimer = null;
   // Buffs are battle-bound — wipe haste/protect/reflect so each battle starts
   // clean. When per-ally / per-enemy buffs ship, clear those here too.

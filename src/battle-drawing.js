@@ -155,7 +155,7 @@ function drawSWExplosion() {
 }
 
 function drawSWDamageNumbers() {
-  if (battleSt.battleState !== 'magic-hit') return;
+  if (battleSt.battleState !== 'magic-hit' && battleSt.battleState !== 'ally-magic-hit') return;
   const mc = getMissCanvas();
   if (pvpSt.isPVPBattle) {
     for (const [k, dn] of Object.entries(getSwDmgNums())) {
