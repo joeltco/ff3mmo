@@ -43,24 +43,12 @@ import { drawCasterCastBehind, drawCasterCastFront, jobToCastKey, CAST_PHASE_MS_
 import { getSpellAnim, getSpellAnimForItem } from './spell-anim.js';
 import { drawStatusSpriteAbove } from './battle-drawing.js';
 import { fakePlayerFullBodyCanvases, fakePlayerHitFullBodyCanvases,
-         fakePlayerKnifeRFullBodyCanvases, fakePlayerKnifeLFullBodyCanvases,
-         fakePlayerKnifeRFwdFullBodyCanvases, fakePlayerKnifeLFwdFullBodyCanvases,
          fakePlayerKneelFullBodyCanvases, fakePlayerVictoryFullBodyCanvases,
          fakePlayerDeathFrames } from './fake-player-sprites.js';
-import { pickAttackPoseKey, pickAttackWeaponSpec, attackWeaponLayer, IDLE_FRAME_MS } from './combatant-pose.js';
+import { pickAttackPoseKey, pickAttackWeaponSpec, attackWeaponLayer, pickCombatantBody, IDLE_FRAME_MS } from './combatant-pose.js';
 
-// Opponent body pool adapter: maps the canonical pose key to the fake-player full-body dict.
-// Opponent KEEPS knife back vs fwd as separate canvases (KnifeR = wind-up body, KnifeRFwd = thrust body).
-const OPP_POSE_MAP = {
-  rBack:     fakePlayerKnifeRFullBodyCanvases,
-  lBack:     fakePlayerKnifeLFullBodyCanvases,
-  rFwd:      fakePlayerKnifeRFwdFullBodyCanvases,
-  lFwd:      fakePlayerKnifeLFwdFullBodyCanvases,
-  knifeR:    fakePlayerKnifeRFullBodyCanvases,
-  knifeL:    fakePlayerKnifeLFullBodyCanvases,
-  knifeRFwd: fakePlayerKnifeRFwdFullBodyCanvases,
-  knifeLFwd: fakePlayerKnifeLFwdFullBodyCanvases,
-};
+// (Opponent body pose map moved to combatant-pose.js — `pickCombatantBody('opp', key, jobIdx, palIdx)`
+//  is the single source of truth for both ally portraits and opp full-bodies as of v1.7.161.)
 
 function _cursorTileCanvas() { return ui.cursorTileCanvas; }
 function _buildAndProcessNextTurn() { battleSt.turnQueue = buildTurnOrder(); processNextTurn(); }
@@ -1095,7 +1083,7 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
       attackPhase: isWindUp ? 'back' : 'fwd',
       mirror: true,
     });
-    body = _fpb(OPP_POSE_MAP[key]) || fullBody;
+    body = pickCombatantBody('opp', key, _ej, palIdx) || fullBody;
   } else if (isOppDefending || isOppItemUse) {
     body = _fpb(fakePlayerVictoryFullBodyCanvases) || fullBody;
   } else if (isOppVictory && (Math.floor(Date.now() / 250) & 1)) {

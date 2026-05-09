@@ -12,7 +12,7 @@ import { getItemNameClean, getMonsterName, getSpellNameClean } from './text-deco
 import { getSpellMPCost, SPELLS } from './data/spells.js';
 import { weaponSubtype, isWeapon } from './data/items.js';
 import { PLAYER_PALETTES, MONK_PALETTES, BLACK_MAGE_PALETTES, RED_MAGE_PALETTES } from './data/players.js';
-import { pickAttackPoseKey, pickAttackWeaponSpec, attackWeaponLayer } from './combatant-pose.js';
+import { pickAttackPoseKey, pickAttackWeaponSpec, attackWeaponLayer, pickCombatantBody } from './combatant-pose.js';
 
 // Player canvas pool fallback chain (player pool collapses knife back/fwd into one canvas).
 const PLAYER_POSE_FALLBACK = { rFwd: 'rBack', lFwd: 'lBack', knifeRFwd: 'knifeR', knifeLFwd: 'knifeL' };
@@ -76,19 +76,8 @@ const BATTLE_PANEL_W = 120;
 const INV_SLOTS = 3;
 const ROSTER_ROW_H = 32;
 
-// Ally portrait pool adapter: maps the canonical pose key to the fake-player canvas dict.
-// Ally pool collapses fwd vs back for knives (no separate KnifeRFwdPortraits) and uses
-// AttackPortraits/AttackLPortraits for non-knife back-swing.
-const ALLY_POSE_MAP = {
-  rBack:     fakePlayerAttackPortraits,
-  lBack:     fakePlayerAttackLPortraits,
-  rFwd:      fakePlayerKnifeRFwdPortraits,
-  lFwd:      fakePlayerKnifeLFwdPortraits,
-  knifeR:    fakePlayerKnifeRPortraits,
-  knifeL:    fakePlayerKnifeLPortraits,
-  knifeRFwd: fakePlayerKnifeRFwdPortraits,
-  knifeLFwd: fakePlayerKnifeLFwdPortraits,
-};
+// (Ally portrait pose map moved to combatant-pose.js — `pickCombatantBody('ally', ...)`
+//  is the single source of truth for both ally portraits and opp full-bodies as of v1.7.161.)
 const BATTLE_TEXT_STEP_MS = 50;
 const BATTLE_TEXT_STEPS = 4;
 const BATTLE_FLASH_FRAME_MS = 16.67;
@@ -1661,7 +1650,7 @@ function _drawAllyPortrait(i, ally, isVicPose, isAllyAttack, isAllyHit, isNearFa
       attackPhase: isThisAllySlash ? 'fwd' : 'back',
       mirror: false,
     });
-    portraits = _fp(ALLY_POSE_MAP[key]);
+    portraits = pickCombatantBody('ally', key, _j, ally.palIdx);
   } else if (isAllyHit && _fp(fakePlayerHitPortraits)) portraits = _fp(fakePlayerHitPortraits);
   else if (isNearFatal && _fp(fakePlayerKneelPortraits)) portraits = _fp(fakePlayerKneelPortraits);
   else portraits = _fp(fakePlayerPortraits);

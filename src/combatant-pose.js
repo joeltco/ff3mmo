@@ -7,6 +7,14 @@ import { getKnifeBladeCanvas, getKnifeBladeSwungCanvas,
          getNunchakuBladeCanvas, getNunchakuBladeSwungCanvas,
          getStaffBladeCanvas, getStaffBladeSwungCanvas,
          getFistCanvas } from './weapon-sprites.js';
+import {
+  fakePlayerAttackPortraits, fakePlayerAttackLPortraits,
+  fakePlayerKnifeRPortraits, fakePlayerKnifeLPortraits,
+  fakePlayerKnifeRFwdPortraits, fakePlayerKnifeLFwdPortraits,
+  fakePlayerKnifeRFullBodyCanvases, fakePlayerKnifeLFullBodyCanvases,
+  fakePlayerKnifeRFwdFullBodyCanvases, fakePlayerKnifeLFwdFullBodyCanvases,
+} from './fake-player-sprites.js';
+import { consoleLog, isDev } from './chat.js';
 
 const FIST_WOBBLE_PERIOD_MS = 100; // shared cadence — same constant across player/ally/opponent
 
@@ -108,3 +116,81 @@ export function pickAttackPoseKey({
   if (attackPhase === 'back') return visualHand === 'R' ? 'rBack' : 'lBack';
   return visualHand === 'R' ? 'rFwd' : 'lFwd';
 }
+
+// ── Pose-key → canvas-pool maps ─────────────────────────────────────────────
+// Lives here, NOT in pvp.js / battle-drawing.js, so adding a new pose key only
+// requires editing this file. The two roles ('ally' = roster ally portrait,
+// 'opp' = PVP opponent full-body) historically had separate maps in different
+// files, which made it easy to add a key to one and miss the other. Player
+// (`bsc.battlePoses[key]`) is its own pool keyed by job — different shape, not
+// wrapped here yet.
+//
+// Aliasing notes:
+//   - Non-knife back-swing keys (rBack/lBack) point at knifeR/L canvases for
+//     opp because the knife back-swing is a more distinct silhouette than the
+//     1-tile-swap rBack/lBack pose; sword/staff opponents end up sharing the
+//     knife back-swing visually. Intentional — see 2026-05-09 audit notes.
+//   - Ally rBack/lBack uses fakePlayerAttack/AttackLPortraits (the non-knife
+//     pool — different from opp).
+const _POSE_MAPS = {
+  ally: {
+    rBack:     fakePlayerAttackPortraits,
+    lBack:     fakePlayerAttackLPortraits,
+    rFwd:      fakePlayerKnifeRFwdPortraits,
+    lFwd:      fakePlayerKnifeLFwdPortraits,
+    knifeR:    fakePlayerKnifeRPortraits,
+    knifeL:    fakePlayerKnifeLPortraits,
+    knifeRFwd: fakePlayerKnifeRFwdPortraits,
+    knifeLFwd: fakePlayerKnifeLFwdPortraits,
+  },
+  opp: {
+    rBack:     fakePlayerKnifeRFullBodyCanvases,
+    lBack:     fakePlayerKnifeLFullBodyCanvases,
+    rFwd:      fakePlayerKnifeRFwdFullBodyCanvases,
+    lFwd:      fakePlayerKnifeLFwdFullBodyCanvases,
+    knifeR:    fakePlayerKnifeRFullBodyCanvases,
+    knifeL:    fakePlayerKnifeLFullBodyCanvases,
+    knifeRFwd: fakePlayerKnifeRFwdFullBodyCanvases,
+    knifeLFwd: fakePlayerKnifeLFwdFullBodyCanvases,
+  },
+};
+
+// Resolve the canvas for a (role, poseKey, jobIdx, palIdx). Returns undefined
+// if missing — caller decides the fallback (typically idle full-body for opp,
+// idle portrait for ally). When the resolution fails for an attack-state pose,
+// emits a one-shot dev-console warning so future intermittent pose drops have
+// a paper trail (was: silent fall-through to idle which read as "no back-swing").
+const _missLogged = new Set();
+export function pickCombatantBody(role, poseKey, jobIdx, palIdx) {
+  const map = _POSE_MAPS[role];
+  if (!map) return undefined;
+  const dict = map[poseKey];
+  if (!dict) {
+    _logMiss(role, poseKey, jobIdx, palIdx, 'no-dict');
+    return undefined;
+  }
+  const arr = dict[jobIdx] || dict[0];
+  if (!arr) {
+    _logMiss(role, poseKey, jobIdx, palIdx, 'no-job-entry');
+    return undefined;
+  }
+  const canvas = arr[palIdx];
+  if (!canvas) {
+    _logMiss(role, poseKey, jobIdx, palIdx, 'no-palette-canvas');
+    return undefined;
+  }
+  return canvas;
+}
+
+function _logMiss(role, key, jobIdx, palIdx, reason) {
+  const tag = role + ':' + key + ':' + jobIdx + ':' + palIdx + ':' + reason;
+  if (_missLogged.has(tag)) return;
+  _missLogged.add(tag);
+  if (isDev()) consoleLog('[pose-miss] ' + tag);
+}
+
+// Pose keys that represent active attack frames. Used by render sites to
+// flag missing-pose telemetry vs benign idle/victory transitions.
+export const ATTACK_POSE_KEYS = new Set([
+  'rBack', 'lBack', 'rFwd', 'lFwd', 'knifeR', 'knifeL', 'knifeRFwd', 'knifeLFwd',
+]);

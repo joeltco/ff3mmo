@@ -2,6 +2,34 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.161 — 2026-05-09
+
+### refactor: combatant pose maps consolidated + miss telemetry
+
+User audit ask after intermittent PVP back-swing dropouts. Three pose-resolution sites had grown apart:
+
+- `bsc.battlePoses[key]` — player (battle-sprite-cache).
+- `ALLY_POSE_MAP` — roster ally portraits, lived in `battle-drawing.js:82`.
+- `OPP_POSE_MAP` — PVP opponent full-body, lived in `pvp.js:54`.
+
+Adding a new pose key required editing three different files and was easy to miss one. Worse, the ally-portrait and opp-body maps had different aliasing rules (ally's non-knife `rBack` → `fakePlayerAttackPortraits`; opp's non-knife `rBack` → `fakePlayerKnifeRFullBodyCanvases`) — by design, but undocumented and split across files.
+
+**Changes:**
+- Both `ALLY_POSE_MAP` and `OPP_POSE_MAP` consolidated into `combatant-pose.js` as `_POSE_MAPS = { ally, opp }`.
+- New `pickCombatantBody(role, poseKey, jobIdx, palIdx)` helper — single source of truth for pose canvas resolution. Returns `undefined` on miss instead of crashing.
+- `pvp.js:1098` was `body = _fpb(OPP_POSE_MAP[key]) || fullBody` → now `pickCombatantBody('opp', key, _ej, palIdx) || fullBody`.
+- `battle-drawing.js:1653` was `portraits = _fp(ALLY_POSE_MAP[key])` → now `pickCombatantBody('ally', key, _j, ally.palIdx)`.
+- Removed unused `fakePlayerKnife*FullBodyCanvases` imports from `pvp.js` (only the local map referenced them).
+
+**Telemetry:** `pickCombatantBody` now emits a one-shot dev-console log on every distinct miss reason (`no-dict` / `no-job-entry` / `no-palette-canvas`) with `role:key:jobIdx:palIdx:reason`. Dev-gated. So if the back-swing drops again on a hard-reloaded build, the next session shows `[pose-miss] opp:rBack:7:5:no-palette-canvas` (or whatever) in the in-game console — gives us the exact missing canvas instead of guessing.
+
+Also exported `ATTACK_POSE_KEYS` set for future render sites that want to gate telemetry to attack frames specifically (idle/victory misses are benign).
+
+### Audit findings (informational)
+
+- `combatant-sprites.js:_genericBundle` builds `bodies.rBack/lBack/rFwd/lFwd` for every job, but `_buildFakePlayerSet` (`sprite-init.js`) drops them — non-knife body dicts (`fakePlayerRBackFullBody…`) are never created. The opp map aliases through `fakePlayerKnife*FullBodyCanvases` instead. Documented but left as-is; the alias produces a more visually distinct back-swing silhouette than the 1-tile-swap rBack/lBack would.
+- The opp body branch at `pvp.js:1082-1105` is a 7-way if/else (hit / hand-change gap / attack / defending / item / victory / near-fatal). Not centralized into a `pickOpponentBody` helper yet — bigger refactor, deferred.
+
 ## 1.7.160 — 2026-05-09
 
 ### fix: PVP enemy box vanishes during magic cast/hit
