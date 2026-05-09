@@ -40,7 +40,7 @@ import { drawCasterCastBehind, drawCasterCastFront,
          jobToCastKey, CAST_T_LUNGE, CAST_T_HEAL, CAST_T_RETURN, CAST_PHASE_MS,
          CAST_T_THROW_PROJ_START, CAST_T_THROW_IMPACT_START, CAST_T_THROW_RETURN,
          CAST_PHASE_MS_THROW } from './cast-anim.js';
-import { drawCastWindup } from './combatant-cast.js';
+import { drawCastWindup, drawSpellThrow } from './combatant-cast.js';
 import { getSpellAnim, getSpellAnimForItem, getSpellAnimFrame } from './spell-anim.js';
 import { getProjectileTile } from './projectile-anim.js';
 import { hudSt } from './hud-state.js';
@@ -593,7 +593,7 @@ function _isCrossFaction(casterFaction, tgt) {
 // auto-h-flip when the projectile travels left→right (e.g. a PVP enemy
 // casting toward the player party). Per-target hflip means a multi-target
 // fan can mix directions if the layout demands.
-function drawProjectileFan(ctx, sx, sy, casterFaction, targets, spellId, spell, t01) {
+export function drawProjectileFan(ctx, sx, sy, casterFaction, targets, spellId, spell, t01) {
   if (t01 < 0 || t01 > 1) return;
   for (const tgt of targets) {
     if (!_isCrossFaction(casterFaction, tgt)) continue;
@@ -611,7 +611,7 @@ function drawProjectileFan(ctx, sx, sy, casterFaction, targets, spellId, spell, 
 // Draw the on-target spell-anim effect at every target. Bundles can be
 // 'portrait-2frame' (16×16, anchored at portrait top-left) or
 // 'burst-strip-2frame' (variable size, anchored at sprite center).
-function drawSpellEffectAtTargets(ctx, targets, spellId, elapsedMs) {
+export function drawSpellEffectAtTargets(ctx, targets, spellId, elapsedMs) {
   const bundle = getSpellAnim(spellId);
   if (!bundle) return;
   const frame = getSpellAnimFrame(bundle, elapsedMs);
@@ -725,35 +725,17 @@ function _drawPlayerSpellTargetSparkleOnEnemy() {
 // behind the orb regardless of travel direction.
 function _drawPVPEnemyOffensiveCast() {
   if (!pvpSt.isPVPBattle) return;
-  if (battleSt.battleState !== 'pvp-enemy-magic-hit') return;
+  if (pvpSt.pvpMagicCasterCellIdx < 0) return;
+  if (pvpSt.pvpMagicPartyTargetIdx <= -100) return;
+  // Caller resolves caster position + target spec; the shared `drawSpellThrow`
+  // helper in combatant-cast.js handles state gating, projectile/impact phase
+  // split, spell-anim dispatch.
+  const cc = _pvpEnemyCellCenter(pvpSt.pvpMagicCasterCellIdx);
   const partyIdx = pvpSt.pvpMagicPartyTargetIdx;
-  if (partyIdx <= -100) return;
-  const spellId = pvpSt.pvpMagicSpellId;
-  if (spellId !== 0x31 && spellId !== 0x32 && spellId !== 0x33) return;
-  const spell = SPELLS.get(spellId);
-  if (!spell) return;
-  const casterCellIdx = pvpSt.pvpMagicCasterCellIdx;
-  if (casterCellIdx < 0) return;
-  const cc = _pvpEnemyCellCenter(casterCellIdx);
-  // Build a single-target list — current AI picks one party target per cast.
-  // Project from caster cell center to player/ally portrait center.
-  const targetSpec = partyIdx === -1
+  const target = partyIdx === -1
     ? { type: 'player' }
     : { type: 'ally', index: partyIdx };
-  // Phase split: first ~150 ms = projectile flight, rest = impact burst.
-  // PVP_MAGIC_HIT_MS is 1000, so impact gets ~850 ms — plenty for the full
-  // burst-strip cycle + apply timing (apply happens at PVP_MAGIC_EFFECT_MS=400).
-  const ms = battleSt.battleTimer;
-  const PROJ_MS = CAST_PHASE_MS_THROW.projectile;
-  if (ms < PROJ_MS) {
-    const t01 = ms / PROJ_MS;
-    drawProjectileFan(ui.ctx, cc.x, cc.y, 'foe', [targetSpec], spellId, spell, t01);
-    return;
-  }
-  // Impact burst on the party target. Sleep has no portrait-anchored bundle
-  // — drawSpellEffectAtTargets is a no-op for `kind === undefined`. Fire/
-  // Blizzard burst-strip-2frame canvases render centered on the target.
-  drawSpellEffectAtTargets(ui.ctx, [targetSpec], spellId, ms - PROJ_MS);
+  drawSpellThrow('pvp-enemy', ui.ctx, { x: cc.x, y: cc.y, faction: 'foe' }, target);
 }
 
 // Roster-ally offensive cast — Fire / Bzzard / Sleep on an encounter monster
@@ -763,29 +745,13 @@ function _drawPVPEnemyOffensiveCast() {
 // resolves to encounterMonsters[idx] OR _pvpEnemyCellCenter(idx) (idx 0 =
 // opponent, 1+ = enemy ally idx-1) — same convention used everywhere else.
 function _drawAllyOffensiveCast() {
-  if (battleSt.battleState !== 'ally-magic-hit') return;
-  const targetType = battleSt.allyMagicTargetType;
-  if (targetType !== 'enemy' && targetType !== 'pvp-enemy') return;
-  const spellId = battleSt.allyMagicSpellId;
-  if (spellId !== 0x31 && spellId !== 0x32 && spellId !== 0x33) return;
-  const spell = SPELLS.get(spellId);
-  if (!spell) return;
-  const casterIdx = battleSt.allyMagicCasterIdx;
-  if (casterIdx < 0) return;
+  if (battleSt.allyMagicCasterIdx < 0) return;
+  // Caller resolves caster position; shared `drawSpellThrow` does the rest.
   const panelTop = HUD_VIEW_Y + 32;
   const sx = HUD_RIGHT_X + 8 + 8;
-  const sy = panelTop + casterIdx * ROSTER_ROW_H + 8 + 8;
-  const targetSpec = { type: 'enemy', index: battleSt.allyMagicTargetIdx };
-  const ms = battleSt.battleTimer;
-  const PROJ_MS = CAST_PHASE_MS_THROW.projectile;
-  if (ms < PROJ_MS) {
-    drawProjectileFan(ui.ctx, sx, sy, 'party', [targetSpec], spellId, spell, ms / PROJ_MS);
-    return;
-  }
-  // All three (Fire / Bzzard / Sleep) have burst-strip-2frame bundles in
-  // spell-anim.js — `drawSpellEffectAtTargets` dispatches by bundle kind and
-  // renders centered on the target.
-  drawSpellEffectAtTargets(ui.ctx, [targetSpec], spellId, ms - PROJ_MS);
+  const sy = panelTop + battleSt.allyMagicCasterIdx * ROSTER_ROW_H + 8 + 8;
+  const target = { type: 'enemy', index: battleSt.allyMagicTargetIdx };
+  drawSpellThrow('ally', ui.ctx, { x: sx, y: sy, faction: 'party' }, target);
 }
 
 function _drawBattleItemList(baseX, rightAreaW, invPal, slidePixel, totalInvPages) {

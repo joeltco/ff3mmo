@@ -2,6 +2,28 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.170 — 2026-05-09
+
+### refactor: spell throw animation unified (ally + PVP-enemy)
+
+Continuing the cast-pipeline modularization. v1.7.167 unified cast windup. This unifies the throw animation (projectile fan → impact burst) for ally and PVP-enemy paths.
+
+**`combatant-cast.js:drawSpellThrow(role, ctx, caster, target)`** — single entry point. Caller resolves role-specific caster position + target spec; helper handles state gating, projectile/impact phase split, and spell-anim dispatch via `drawProjectileFan` / `drawSpellEffectAtTargets`. Internal `_resolveThrowContext(role)` reads role-specific state (`battleSt.allyMagic*` for ally, `pvpSt.pvpMagic*` for pvp-enemy) and returns `{ ms, spellId, spell }` or `null`.
+
+**Call sites collapsed:**
+- `_drawAllyOffensiveCast` — was 24 lines of state checks + projectile/impact branching, now 7 lines: caster position math + one `drawSpellThrow('ally', ...)` call.
+- `_drawPVPEnemyOffensiveCast` — was 31 lines with the same pattern, now 11 lines (one extra branch for `partyIdx === -1` → player vs ally target spec).
+
+`drawProjectileFan` and `drawSpellEffectAtTargets` are now exported from `battle-drawing.js` so `combatant-cast.js` can import them directly. The cycle (battle-drawing → combatant-cast → battle-drawing) resolves lazily — both imports are only used inside fn bodies, not at module top-level.
+
+**Player path NOT consolidated yet.** `_drawPlayerSpellTargetSparkleOnEnemy` has three orthogonal flows (multi-target impact-walk via `getMagicHitPhase()` + `getSpellHitIdx()`, heal-style projectile-during-heal-window, item-use skip-windup) that don't fit the simple ally/PVP single-target-throw model. Trying to fold them in would either bloat the helper or split it back into role-specific branches. Kept separate; can be revisited if/when ally + PVP get multi-target.
+
+Cast pipeline modularization status:
+- Cast windup ✅ unified (v1.7.167) — `drawCastWindup` for all 3 roles.
+- Spell throw anim ✅ unified for ally + pvp-enemy (v1.7.170).
+- Spell throw anim ⚠️ player still standalone (multi-target / heal-style / item-use complexity).
+- Damage application — three apply fns still exist (`spell-cast.js:_applyEnemyEffect`, `battle-ally.js:_applyAllyMagicEffect`, `pvp.js:_applyPVPEnemyMagicEffect`). Each role has its own roll + `setSwDmgNum`/etc. logic. Future consolidation target.
+
 ## 1.7.169 — 2026-05-09
 
 ### fix: damage number AFTER spell animation (not during)

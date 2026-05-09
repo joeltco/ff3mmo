@@ -13,11 +13,12 @@
 // function so the player + ally + PVP enemy paths are literally the same
 // code — only the (role, idx) input differs.
 
-import { drawCasterCastBehind, drawCasterCastFront } from './cast-anim.js';
+import { drawCasterCastBehind, drawCasterCastFront, CAST_PHASE_MS_THROW } from './cast-anim.js';
 import { battleSt } from './battle-state.js';
 import { ps } from './player-stats.js';
 import { pvpSt } from './pvp.js';
 import { getCastAnimElapsedMs, getCurrentSpellId } from './spell-cast.js';
+import { SPELLS } from './data/spells.js';
 
 // Resolve role-specific cast context. Returns { jobIdx, spellId, elapsed }
 // or null if this role is not currently casting (or doesn't match `idx`).
@@ -60,4 +61,64 @@ export function drawCastWindup(layer, ctx, role, idx, x, y, mirror = false) {
   if (!c) return;
   const fn = layer === 'behind' ? drawCasterCastBehind : drawCasterCastFront;
   fn(ctx, x, y, c.jobIdx, c.spellId, c.elapsed, mirror);
+}
+
+// Spell throw animation (projectile fan → impact burst). Single helper for
+// ally and PVP-enemy single-target offensive casts. The player path has
+// extra complexity (multi-target impact-walk, heal-style projectile-during-
+// heal-window, item-use skip-windup) and stays in `_drawPlayerSpellTarget-
+// SparkleOnEnemy` for now.
+//
+// Caller passes:
+//   role   — 'ally' | 'pvp-enemy'. Identifies which state machine to read.
+//   ctx    — render context (typically ui.ctx).
+//   caster — { x, y, faction } resolved by caller (per-role layout math).
+//   target — { type, index } in the spec _getMagicTargetCenter understands.
+export function drawSpellThrow(role, ctx, caster, target) {
+  const cfg = _resolveThrowContext(role);
+  if (!cfg) return;
+  const { ms, spellId, spell } = cfg;
+  const projMs = CAST_PHASE_MS_THROW.projectile;
+  if (ms < 0) return;
+  if (ms < projMs) {
+    // Projectile fan from caster center to target — drawProjectileFan handles
+    // the cross-faction filter, so caller passes faction explicitly.
+    _drawProjectileFan(ctx, caster, [target], spellId, spell, ms / projMs);
+    return;
+  }
+  // Impact burst on target. Sleep / Sight have undefined `kind` bundles —
+  // _drawSpellEffectAtTargets is a no-op for those (per spell-anim.js).
+  _drawSpellEffectAtTargets(ctx, [target], spellId, ms - projMs);
+}
+
+// Imports from battle-drawing.js — used only inside fn bodies, so the cycle
+// (battle-drawing → combatant-cast → battle-drawing) resolves lazily at call
+// time. The two helpers are pure-render: they take a target spec and draw
+// against a canvas context. battle-drawing owns them because they reference
+// `_getMagicTargetCenter` which knows about encounter-grid + PVP-cell layout.
+import { drawProjectileFan as _drawProjectileFan,
+         drawSpellEffectAtTargets as _drawSpellEffectAtTargets } from './battle-drawing.js';
+
+function _resolveThrowContext(role) {
+  if (role === 'ally') {
+    if (battleSt.battleState !== 'ally-magic-hit') return null;
+    const tgtType = battleSt.allyMagicTargetType;
+    if (tgtType !== 'enemy' && tgtType !== 'pvp-enemy') return null;
+    const spellId = battleSt.allyMagicSpellId;
+    if (spellId !== 0x31 && spellId !== 0x32 && spellId !== 0x33) return null;
+    const spell = SPELLS.get(spellId);
+    if (!spell) return null;
+    return { ms: battleSt.battleTimer, spellId, spell };
+  }
+  if (role === 'pvp-enemy') {
+    if (!pvpSt.isPVPBattle) return null;
+    if (battleSt.battleState !== 'pvp-enemy-magic-hit') return null;
+    if (pvpSt.pvpMagicPartyTargetIdx <= -100) return null;
+    const spellId = pvpSt.pvpMagicSpellId;
+    if (spellId !== 0x31 && spellId !== 0x32 && spellId !== 0x33) return null;
+    const spell = SPELLS.get(spellId);
+    if (!spell) return null;
+    return { ms: battleSt.battleTimer, spellId, spell };
+  }
+  return null;
 }
