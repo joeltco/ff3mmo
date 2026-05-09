@@ -41,7 +41,8 @@ import { BATTLE_FOE } from './data/strings.js';
 import { tickHealNums, clearHealNums } from './damage-numbers.js';
 import { SPELLS } from './data/spells.js';
 import { drawCasterCastBehind, drawCasterCastFront, jobToCastKey, CAST_PHASE_MS_THROW } from './cast-anim.js';
-import { drawCastWindup, applyMagicDamage, applyMagicStatus } from './combatant-cast.js';
+import { drawCastWindup, applyMagicDamage, applyMagicStatus, applyMagicHeal,
+         applyMagicCureStatus, applyMagicSight } from './combatant-cast.js';
 import { getSpellAnim, getSpellAnimForItem } from './spell-anim.js';
 import { drawStatusSpriteAbove } from './battle-drawing.js';
 import { fakePlayerFullBodyCanvases, fakePlayerHitFullBodyCanvases,
@@ -701,27 +702,29 @@ function _applyPVPEnemyMagicEffect() {
     return;
   }
 
-  // Heal / cure-status — target on the enemy team (cell-idx).
+  // Heal / cure-status — target on the enemy team (cell-idx). Routes through
+  // the shared helpers (combatant-cast.js) — same path player + ally use.
   const target = _pvpEnemyByCellIdx(pvpSt.pvpMagicTargetCellIdx);
   if (!target) return;
-  // 0x36 Sight — no gameplay effect; impact SFX matches the player-cast path.
+  const cellIdx = pvpSt.pvpMagicTargetCellIdx;
+  const onHealNum = (n) => setEnemyHealNum({ value: n, timer: 0, index: cellIdx });
+
   if (pvpSt.pvpMagicSpellId === 0x36) {
-    playSFX(SFX.SIGHT);
+    applyMagicSight({ sfx: SFX.SIGHT });
     return;
   }
   if (pvpSt.pvpMagicSpellId === 0x35) {
-    if (target.status) removeStatus(target.status, STATUS.POISON);
-    setEnemyHealNum({ value: 0, timer: 0, index: pvpSt.pvpMagicTargetCellIdx });
-    playSFX(SFX.CURE);
+    applyMagicCureStatus(target, STATUS.POISON, {
+      sfx: SFX.CURE,
+      onSparkle: () => onHealNum(0),
+    });
     return;
   }
   // 0x34 Cure
-  const heal = pvpSt.pvpMagicHealAmount;
-  const maxHP = target.maxHP || target.hp;
-  const realHeal = Math.min(heal, maxHP - target.hp);
-  target.hp += realHeal;
-  setEnemyHealNum({ value: realHeal, timer: 0, index: pvpSt.pvpMagicTargetCellIdx });
-  playSFX(SFX.CURE);
+  applyMagicHeal(target, pvpSt.pvpMagicHealAmount, {
+    sfx: SFX.CURE,
+    onHealNum,
+  });
 }
 
 function _processPVPEnemyMagic(dt) {

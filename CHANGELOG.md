@@ -2,6 +2,37 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.173 — 2026-05-09
+
+### refactor: heal / sight / cure-status unified across all 3 roles
+
+Three more shared helpers in `combatant-cast.js`:
+- `applyMagicHeal(target, amount, opts)` — clamps to maxHP, increments HP, fires `onHealNum`, plays SFX. Works on `ps`, `battleAllies[i]`, `pvpEnemyAllies[i]`, encounter monster.
+- `applyMagicCureStatus(target, statusFlag, opts)` — `removeStatus` + sparkle placeholder + SFX.
+- `applyMagicSight(opts)` — ineffective msg + impact SFX.
+
+Wired all three roles' apply fns:
+- `spell-cast.js:_applyEnemyEffect` — Sight branch routes through `applyMagicSight`.
+- `spell-cast.js:_applySpellEffect` — friendly Sight + cure-status + heal all route through the shared helpers.
+- `battle-ally.js:_applyAllyMagicEffect` — Sight + Poisona + Cure all route through them.
+- `pvp.js:_applyPVPEnemyMagicEffect` — Sight + Poisona + Cure on enemy team allies all route through them.
+
+Each role still resolves its own target object + heal-num callback (player → `setPlayerHealNum` / ally-array slot, ally → same shapes per target type, PVP-enemy → `setEnemyHealNum` with cellIdx). The math + state-mutation lives in the helpers; only the per-role I/O bindings stay in role files.
+
+### Spell pipeline modularization status
+
+| Spell type | Helper | Roles wired |
+|---|---|---|
+| Damage (Fire/Bzzard) | `applyMagicDamage` | Player + Ally + PVP-enemy |
+| Status (Sleep / Confuse / etc.) | `applyMagicStatus` | Player + Ally + PVP-enemy |
+| Heal (Cure) | `applyMagicHeal` | Player + Ally + PVP-enemy |
+| Cure-status (Poisona / Antidote) | `applyMagicCureStatus` | Player + Ally + PVP-enemy |
+| Sight | `applyMagicSight` | Player + Ally + PVP-enemy |
+| Cast windup | `drawCastWindup` | Player + Ally + PVP-enemy |
+| Throw anim (projectile + impact) | `drawSpellThrow` | Player + Ally + PVP-enemy |
+
+Player-only spell types still in `_applyEnemyEffect` (no other role currently casts them): drain, recovery-on-undead, all-status (Shade), instakill (Death), erase. These are forward-compatible — when a future ally/PVP AI gets one of these spells, the helper extraction is straightforward.
+
 ## 1.7.172 — 2026-05-09
 
 ### refactor: damage / status application unified across all 3 roles

@@ -14,11 +14,12 @@ import { getEnemyDmgNum, setEnemyDmgNum, setPlayerHealNum, getAllyDamageNums, ti
 import { ROSTER_FADE_STEPS } from './data/players.js';
 import { IDLE_FRAME_MS } from './combatant-pose.js';
 import { ps } from './player-stats.js';
-import { removeStatus, STATUS } from './status-effects.js';
+import { STATUS } from './status-effects.js';
 import { SPELLS } from './data/spells.js';
 import { replaceBattleMsg } from './battle-msg.js';
 import { CAST_PHASE_MS_THROW } from './cast-anim.js';
-import { applyMagicDamage, applyMagicStatus } from './combatant-cast.js';
+import { applyMagicDamage, applyMagicStatus, applyMagicHeal,
+         applyMagicCureStatus, applyMagicSight } from './combatant-cast.js';
 
 // Injected at boot — avoids circular import on main.js
 let _buildTurnOrder = () => [];
@@ -241,24 +242,19 @@ function _setAllyMagicEnemyDmgNum(num) {
 
 function _applyAllyMagicEffect() {
   const spellId = battleSt.allyMagicSpellId;
-  // 0x36 Sight — no gameplay effect; defensive guard so the Cure fall-through
-  // below doesn't accidentally heal the target if some future AI selector or
-  // sentinel sets allyMagicSpellId to Sight. Cast anim still plays via the
-  // shared white-magic flame, impact SFX matches the player-cast path.
+  const spell = SPELLS.get(spellId);
+  if (!spell) return;
+
+  // 0x36 Sight
   if (spellId === 0x36) {
-    playSFX(SFX.SIGHT);
+    applyMagicSight({ sfx: SFX.SIGHT });
     return;
   }
-  // BM/RM offensive cast — Fire (0x31), Bzzard (0x32), Sleep (0x33). Set
-  // up by `_tryAllyOffensiveCast` in battle-turn.js with target type
-  // 'enemy' (encounterMonsters[idx]) or 'pvp-enemy' (idx -1 = opponent,
-  // 0+ = pvpEnemyAllies[idx]). Sleep is status-only, no damage.
+
+  // 0x31/0x32/0x33 — Fire / Bzzard / Sleep on enemy target
   if (spellId === 0x31 || spellId === 0x32 || spellId === 0x33) {
     const tgt = _allyMagicEnemyTarget();
-    const spell = SPELLS.get(spellId);
-    if (!spell) return;
     if (spellId === 0x33) {
-      // Sleep — shared `applyMagicStatus` helper. Hit chance from spell + target resist.
       applyMagicStatus(tgt, 'sleep', spell.hit || 15, {
         sfx: SFX.SLEEP_PUFF,
         onStatusMsg: replaceBattleMsg,
@@ -267,44 +263,36 @@ function _applyAllyMagicEffect() {
       });
       return;
     }
-    // Fire / Bzzard — shared `applyMagicDamage` helper.
     applyMagicDamage(tgt, battleSt.allyMagicDamageRoll || 0, spell, {
       sfx: spellId === 0x31 ? SFX.FIRE_BOOM : SFX.SW_HIT,
       onDmgNum: (dmg) => _setAllyMagicEnemyDmgNum({ value: dmg, timer: 0 }),
     });
     return;
   }
-  // 0x35 Poisona — strip POISON flag from target, no HP change. Sparkle still
-  // shows via the heal-num placeholder ({value:0, heal:true}) on the target.
+
+  // Heal-side (target is friendly: player or ally). Resolve target object +
+  // heal-number callback per target type, hand off to shared helpers.
+  const isPlayerTgt = battleSt.allyMagicTargetType === 'player';
+  const tgt = isPlayerTgt ? ps : battleSt.battleAllies[battleSt.allyMagicTargetIdx];
+  if (!tgt) return;
+  const onHealNum = isPlayerTgt
+    ? (n) => setPlayerHealNum({ value: n, timer: 0 })
+    : (n) => { getAllyDamageNums()[battleSt.allyMagicTargetIdx] = { value: n, timer: 0, heal: true }; };
+
+  // 0x35 Poisona — strip POISON flag (heal-num placeholder {value:0} = sparkle).
   if (spellId === 0x35) {
-    if (battleSt.allyMagicTargetType === 'player') {
-      if (ps.status) removeStatus(ps.status, STATUS.POISON);
-      setPlayerHealNum({ value: 0, timer: 0 });
-    } else {
-      const target = battleSt.battleAllies[battleSt.allyMagicTargetIdx];
-      if (!target) return;
-      if (target.status) removeStatus(target.status, STATUS.POISON);
-      getAllyDamageNums()[battleSt.allyMagicTargetIdx] = { value: 0, timer: 0, heal: true };
-    }
-    playSFX(SFX.CURE);
+    applyMagicCureStatus(tgt, STATUS.POISON, {
+      sfx: SFX.CURE,
+      onSparkle: () => onHealNum(0),
+    });
     return;
   }
-  // 0x34 Cure (default heal path)
-  const heal = battleSt.allyMagicHealAmount;
-  if (battleSt.allyMagicTargetType === 'player') {
-    if (!ps.stats) return;
-    const realHeal = Math.min(heal, (ps.stats.maxHP || 0) - ps.hp);
-    ps.hp += realHeal;
-    setPlayerHealNum({ value: realHeal, timer: 0 });
-  } else {
-    const target = battleSt.battleAllies[battleSt.allyMagicTargetIdx];
-    if (!target) return;
-    const maxHP = target.maxHP || target.hp;
-    const realHeal = Math.min(heal, maxHP - target.hp);
-    target.hp += realHeal;
-    getAllyDamageNums()[battleSt.allyMagicTargetIdx] = { value: realHeal, timer: 0, heal: true };
-  }
-  playSFX(SFX.CURE);
+
+  // 0x34 Cure (default) — heal pre-rolled allyMagicHealAmount.
+  applyMagicHeal(tgt, battleSt.allyMagicHealAmount, {
+    sfx: SFX.CURE,
+    onHealNum,
+  });
 }
 
 function _updateAllyMagicCast(dt) {

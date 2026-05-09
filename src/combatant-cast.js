@@ -22,7 +22,7 @@ import { getCastAnimElapsedMs, getCurrentSpellId, getSpellTargets,
          getMagicHitPhase, getSpellHitIdx, isCurrentCastItemUse } from './spell-cast.js';
 import { SPELLS } from './data/spells.js';
 import { elemMultiplier } from './battle-math.js';
-import { tryInflictStatus, STATUS_NAME_BYTES } from './status-effects.js';
+import { tryInflictStatus, removeStatus, STATUS_NAME_BYTES } from './status-effects.js';
 import { playSFX, SFX } from './music.js';
 
 // Resolve role-specific cast context. Returns { jobIdx, spellId, elapsed }
@@ -127,6 +127,37 @@ export function applyMagicDamage(target, baseDmg, spell, opts = {}) {
   if (opts.sfx) playSFX(opts.sfx);
   if (target.hp <= 0 && opts.onKill) opts.onKill();
   return dmg;
+}
+
+// Heal target by `amount`, clamped to maxHP. Returns actual heal dealt.
+// Works on `ps` (player), `battleAllies[i]`, `pvpEnemyAllies[i]`, encounter
+// monster — any object with `hp` + optional `maxHP` or `stats.maxHP`.
+export function applyMagicHeal(target, amount, opts = {}) {
+  if (!target) return 0;
+  const maxHP = target.maxHP || (target.stats && target.stats.maxHP) || target.hp || 0;
+  const realHeal = Math.min(amount, maxHP - (target.hp || 0));
+  target.hp = (target.hp || 0) + realHeal;
+  if (opts.onHealNum) opts.onHealNum(realHeal);
+  if (opts.sfx) playSFX(opts.sfx);
+  return realHeal;
+}
+
+// Strip a status flag from target (Poisona, Antidote). `statusFlag` is one of
+// the STATUS bitmask flags. Returns true if the flag was set + removed.
+export function applyMagicCureStatus(target, statusFlag, opts = {}) {
+  if (!target || !target.status) return false;
+  const wasSet = !!(target.status.mask & statusFlag);
+  removeStatus(target.status, statusFlag);
+  if (opts.onSparkle) opts.onSparkle();
+  if (opts.sfx) playSFX(opts.sfx);
+  return wasSet;
+}
+
+// Sight no-op: ineffective msg + impact SFX. Same shape across all three roles
+// (player + ally + PVP-enemy each had inline branches doing the same thing).
+export function applyMagicSight(opts = {}) {
+  if (opts.onIneffectiveMsg) opts.onIneffectiveMsg();
+  if (opts.sfx) playSFX(opts.sfx);
 }
 
 // Try to inflict a status (Sleep, etc.) on a target. Returns the applied

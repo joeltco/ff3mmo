@@ -14,7 +14,8 @@ import { setPlayerHealNum, setPlayerDamageNum, getAllyDamageNums, setEnemyDmgNum
 import { SPELLS, getSpellMPCost, isMultiTargetSpell } from './data/spells.js';
 import { STATUS, addStatus, removeStatus, tryInflictStatus, STATUS_NAME_BYTES } from './status-effects.js';
 import { CAST_PHASE_MS, CAST_PHASE_MS_THROW, CAST_T_HEAL, CAST_TOTAL_MS, CAST_T_THROW_RETURN, CAST_T_THROW_IMPACT_START } from './cast-anim.js';
-import { applyMagicDamage, applyMagicStatus } from './combatant-cast.js';
+import { applyMagicDamage, applyMagicStatus, applyMagicHeal,
+         applyMagicCureStatus, applyMagicSight } from './combatant-cast.js';
 import { pvpGridLayout } from './pvp-math.js';
 import { queueBattleMsg, replaceBattleMsg, isBattleMsgBusy } from './battle-msg.js';
 import { BATTLE_INEFFECTIVE, BATTLE_HASTE, BATTLE_PROTECT, BATTLE_REFLECT, BATTLE_SLAIN } from './data/strings.js';
@@ -312,8 +313,10 @@ function _applyEnemyEffect(idx, spell) {
   // Impact SFX is `SFX.SIGHT` (NSF track $81 = SFX $40 + $41) per the REC
   // OAM capture's idle→$40 trigger at frame 39 of the f5887 dump.
   if (spell.target === 'sight') {
-    replaceBattleMsg(BATTLE_INEFFECTIVE);
-    _playSpellSFXOnce(SFX.SIGHT);
+    applyMagicSight({
+      sfx: SFX.SIGHT,
+      onIneffectiveMsg: () => replaceBattleMsg(BATTLE_INEFFECTIVE),
+    });
     return;
   }
 
@@ -479,11 +482,13 @@ function _applySpellEffect(target) {
   }
 
   // Sight on a friendly target — picker now defaults to enemy, but the user
-  // can still navigate Right back to the player side. Battle message says
-  // "Ineffective"; SFX matches the enemy path.
+  // can still navigate Right back to the player side. Shared `applyMagicSight`
+  // helper (combatant-cast.js); same path ally + PVP-enemy use.
   if (spell.target === 'sight') {
-    replaceBattleMsg(BATTLE_INEFFECTIVE);
-    _playSpellSFXOnce(SFX.SIGHT);
+    applyMagicSight({
+      sfx: SFX.SIGHT,
+      onIneffectiveMsg: () => replaceBattleMsg(BATTLE_INEFFECTIVE),
+    });
     return;
   }
 
@@ -531,33 +536,30 @@ function _applySpellEffect(target) {
     ? Math.max(1, Math.floor(_baseAmount / _targets.length))
     : _rollMagicAmount(spell.power, useMnd);
 
+  // Friendly target — resolve target object + heal-num callback per type.
+  const isPlayerTgt = target.type === 'player';
+  const tgt = isPlayerTgt ? ps : battleSt.battleAllies[target.index];
+  if (!tgt) return;
+  const onHealNum = isPlayerTgt
+    ? (n) => setPlayerHealNum({ value: n, timer: 0 })
+    : (n) => { getAllyDamageNums()[target.index] = { value: n, timer: 0, heal: true }; };
+
+  // Cure-status (Poisona, Antidote) — shared helper.
   if (isCureStatus) {
     const flag = SPELL_CURE_FLAG[spell.type];
-    if (target.type === 'player') {
-      if (flag && ps.status) removeStatus(ps.status, flag);
-      setPlayerHealNum({ value: 0, timer: 0 });
-    } else {
-      const ally = battleSt.battleAllies[target.index];
-      if (!ally) return;
-      if (flag && ally.status) removeStatus(ally.status, flag);
-      getAllyDamageNums()[target.index] = { value: 0, timer: 0, heal: true };
-    }
-    _playSpellSFXOnce(SFX.CURE);
+    applyMagicCureStatus(tgt, flag, {
+      sfx: SFX.CURE,
+      onSparkle: () => onHealNum(0),
+    });
     return;
   }
-  if (target.type === 'player') {
-    const heal = Math.min(amount, ps.stats.maxHP - ps.hp);
-    ps.hp += heal;
-    setPlayerHealNum({ value: heal, timer: 0 });
-  } else {
-    const ally = battleSt.battleAllies[target.index];
-    if (!ally) return;
-    const maxHP = ally.maxHP || ally.hp;
-    const heal = Math.min(amount, maxHP - ally.hp);
-    ally.hp += heal;
-    getAllyDamageNums()[target.index] = { value: heal, timer: 0, heal: true };
-  }
-  _playSpellSFXOnce(isHeal ? SFX.CURE : SFX.SW_HIT);
+
+  // Cure (heal) — shared helper. SFX is CURE for recovery spells, SW_HIT
+  // legacy for non-recovery friendly heals (rare).
+  applyMagicHeal(tgt, amount, {
+    sfx: isHeal ? SFX.CURE : SFX.SW_HIT,
+    onHealNum,
+  });
 }
 
 // Returns true if the captured white-magic anim (magic circle build-up + cast
