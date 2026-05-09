@@ -9,7 +9,7 @@ import { ROSTER_FADE_STEPS } from './data/players.js';
 import { ps } from './player-stats.js';
 import { sprite } from './player-sprite.js';
 import { waterSt, tickWater } from './water-animation.js';
-import { updateChat, updateChatTabs, drawChat, drawChatTabs } from './chat.js';
+import { updateChat, updateChatTabs, drawChat, drawChatTabs, isDev, consoleLog } from './chat.js';
 import { rosterBattleFade, updateRoster, drawRoster, drawRosterMenu } from './roster.js';
 import { updateMsgBox, drawMsgBox } from './message-box.js';
 import { titleSt, drawTitleSkyInHUD, drawTitle, updateTitle } from './title-screen.js';
@@ -50,11 +50,34 @@ function _battleCtx() {
   };
 }
 
+// In-game error surface so the dev sees crashes without browser dev tools or
+// pm2 log tailing. Dev-gated (non-devs see "Unknown command" for /devhelp,
+// they don't need to see error spam). Same message rate-limited per-tag so a
+// throwing-every-frame draw fn doesn't flood the chat buffer — the first hit
+// is what matters; subsequent identical errors bump a counter.
+const _errSeen = new Map();  // tag+msg → { count, lastShown }
 function _reportError(tag, e) {
   const ctx = _battleCtx();
   console.error('[' + tag + ']', e, ctx);
   fetch('/api/client-error', { method: 'POST', headers: {'Content-Type':'application/json'},
     body: JSON.stringify({ msg: '[' + tag + '] ' + e.message, stack: e.stack, ctx }) }).catch(() => {});
+  if (isDev()) {
+    const key = tag + '::' + (e.message || '');
+    const seen = _errSeen.get(key) || { count: 0, lastShown: 0 };
+    seen.count++;
+    // Show on first occurrence + every 60 hits after (keeps the buffer alive).
+    if (seen.count === 1 || (seen.count % 60 === 0)) {
+      consoleLog('[' + tag + '] ' + (e.message || 'unknown') + (seen.count > 1 ? ' (x' + seen.count + ')' : ''));
+      // Stack frame closest to user code — strip URL + col, keep file:line.
+      const firstFrame = (e.stack || '').split('\n').find(l => l.includes('/src/'));
+      if (firstFrame) {
+        const m = firstFrame.match(/(\w+)@.*\/src\/(\S+\.js):(\d+)/);
+        if (m) consoleLog('  ' + m[1] + ' (' + m[2] + ':' + m[3] + ')');
+      }
+      seen.lastShown = seen.count;
+    }
+    _errSeen.set(key, seen);
+  }
 }
 
 // ── Freeze watchdog ──────────────────────────────────────────────────────────

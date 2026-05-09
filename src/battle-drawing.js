@@ -1176,8 +1176,13 @@ function _drawEncounterSlashEffects(gridPos, slideOffX, slotCenterY) {
 function _drawEncounterCursors(gridPos, count, slotCenterY) {
   if (!(battleSt.battleState === 'target-select' || (battleSt.battleState === 'item-target-select' && inputSt.itemTargetType === 'enemy')) || !_cursorTileCanvas()) return;
   if (battleSt.battleState === 'target-select') {
+    // Defensive: if targetIndex drifted out of gridPos (monster died mid-frame,
+    // sticky targetIndex from a previous N-monster encounter, etc.), skip the
+    // cursor draw rather than throw. The item-target branch below already
+    // guards the same way. Crash here used to wipe the rest of drawBattle
+    // every frame, taking the chat / msg strip / damage nums with it.
     const pos = gridPos[inputSt.targetIndex];
-    ui.ctx.drawImage(_cursorTileCanvas(), pos.x - 10, slotCenterY(inputSt.targetIndex) - 4);
+    if (pos) ui.ctx.drawImage(_cursorTileCanvas(), pos.x - 10, slotCenterY(inputSt.targetIndex) - 4);
   } else if (inputSt.itemTargetMode === 'single') {
     const pos = gridPos[inputSt.itemTargetIndex];
     if (pos) ui.ctx.drawImage(_cursorTileCanvas(), pos.x - 10, slotCenterY(inputSt.itemTargetIndex) - 4);

@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.156 — 2026-05-09
+
+### fix: encounter cursor crash + in-game error surface
+
+**Battle HUD vanishing.** `_drawEncounterCursors:1180` crashed every frame when `inputSt.targetIndex` drifted out of `gridPos` (monster died mid-frame, sticky targetIndex from a previous encounter). The throw was caught by `game-loop.js`'s `try/catch` around the battle/chat/menu/ally draw block, but everything below the crash in that block — `drawBattle`, `drawSWExplosion`, `drawSWDamageNumbers`, `drawChat`, `drawMsgBox`, `drawRosterMenu` — got skipped. From the user's POV, "battle HUD and everything in it disappears." Static HP top-box (rendered by `drawHUD`, which runs before the try block) survives. Added the same `if (pos)` guard the item-target branch already had.
+
+**`_reportError` now surfaces in the in-game chat console (dev-gated).** First occurrence of any unique `tag::message` shows immediately; repeats are silenced for 60 hits then re-show with a counter (`(x60)`). Includes the first `/src/<file>.js:<line>` frame from the stack so you can identify the bad draw fn without SSH or browser dev tools. Pre-existing `/api/client-error` POST still fires (kept for prod analytics + `pm2 logs`).
+
+Caught via `pm2 logs server --err` — same `[BATTLE DRAW ERROR] can't access property "x" of undefined / pos is undefined` repeating every frame at `target-select` state. Lesson: when a HUD-vanishes-mid-battle bug happens, the error logs are already piped to `/api/client-error` → pm2; tail those over SSH instead of asking the user to grab browser console.
+
 ## 1.7.155 — 2026-05-09
 
 ### fix: PVP cast windup duration + respawn outside dungeon
