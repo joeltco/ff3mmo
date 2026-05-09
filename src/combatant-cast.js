@@ -21,6 +21,9 @@ import { pvpSt } from './pvp.js';
 import { getCastAnimElapsedMs, getCurrentSpellId, getSpellTargets,
          getMagicHitPhase, getSpellHitIdx, isCurrentCastItemUse } from './spell-cast.js';
 import { SPELLS } from './data/spells.js';
+import { elemMultiplier } from './battle-math.js';
+import { tryInflictStatus, STATUS_NAME_BYTES } from './status-effects.js';
+import { playSFX, SFX } from './music.js';
 
 // Resolve role-specific cast context. Returns { jobIdx, spellId, elapsed }
 // or null if this role is not currently casting (or doesn't match `idx`).
@@ -102,6 +105,46 @@ function _resolveThrowRender(role, caster, target) {
 
 // Single-target throw with simple projectile/impact split. Used by ally + PVP-enemy.
 // Time reference: battleSt.battleTimer (resets on state entry).
+// ── Shared damage / status application ─────────────────────────────────────
+//
+// Three roles applied Fire / Bzzard / Sleep effects with copy-paste-similar
+// code: roll damage with element multiplier + mdef, decrement HP, set damage
+// number, play SFX. Sleep used `tryInflictStatus` with the same hit + resist
+// pattern in all three. Lifted into shared helpers; each role passes its own
+// damage-number / shake / status-msg callbacks.
+
+// Apply Fire / Bzzard damage to an enemy target. Pre-rolled `baseDmg` from
+// the role-specific damage roller (player uses `_rollMagicAmount`, ally/PVP
+// use `*MagicDamageRoll`). Returns the actual damage dealt (post-mult/mdef).
+export function applyMagicDamage(target, baseDmg, spell, opts = {}) {
+  if (!target || target.hp <= 0) return 0;
+  const eMult = elemMultiplier(spell.element, target.weakness, target.resist);
+  const mdef = target.mdef || 0;
+  const dmg = Math.max(1, Math.floor(baseDmg * eMult) - mdef);
+  target.hp = Math.max(0, target.hp - dmg);
+  if (opts.onDmgNum) opts.onDmgNum(dmg);
+  if (opts.onShake) opts.onShake();
+  if (opts.sfx) playSFX(opts.sfx);
+  if (target.hp <= 0 && opts.onKill) opts.onKill();
+  return dmg;
+}
+
+// Try to inflict a status (Sleep, etc.) on a target. Returns the applied
+// status flag (truthy) on land, 0 on miss.
+export function applyMagicStatus(target, statusName, hitChance, opts = {}) {
+  if (!target || !target.status) return 0;
+  const resist = target.statusResist || 0;
+  const applied = tryInflictStatus(target.status, statusName, hitChance, resist);
+  if (applied) {
+    if (opts.sfx) playSFX(opts.sfx);
+    if (opts.onStatusMsg && STATUS_NAME_BYTES[applied]) opts.onStatusMsg(STATUS_NAME_BYTES[applied]);
+    if (opts.onLand) opts.onLand(applied);
+    return applied;
+  }
+  if (opts.onMiss) opts.onMiss();
+  return 0;
+}
+
 function _resolveSimpleThrow(role, target) {
   if (!target) return null;
   let stateName, spellId;

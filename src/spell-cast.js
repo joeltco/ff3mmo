@@ -14,6 +14,7 @@ import { setPlayerHealNum, setPlayerDamageNum, getAllyDamageNums, setEnemyDmgNum
 import { SPELLS, getSpellMPCost, isMultiTargetSpell } from './data/spells.js';
 import { STATUS, addStatus, removeStatus, tryInflictStatus, STATUS_NAME_BYTES } from './status-effects.js';
 import { CAST_PHASE_MS, CAST_PHASE_MS_THROW, CAST_T_HEAL, CAST_TOTAL_MS, CAST_T_THROW_RETURN, CAST_T_THROW_IMPACT_START } from './cast-anim.js';
+import { applyMagicDamage, applyMagicStatus } from './combatant-cast.js';
 import { pvpGridLayout } from './pvp-math.js';
 import { queueBattleMsg, replaceBattleMsg, isBattleMsgBusy } from './battle-msg.js';
 import { BATTLE_INEFFECTIVE, BATTLE_HASTE, BATTLE_PROTECT, BATTLE_REFLECT, BATTLE_SLAIN } from './data/strings.js';
@@ -361,15 +362,13 @@ function _applyEnemyEffect(idx, spell) {
       return;
     }
     // confuse / sleep / blind / mini / silence / etc. — name = spell.type.
-    if (mon.status) {
-      const applied = tryInflictStatus(mon.status, spell.type, spell.hit, mon.statusResist);
-      if (applied) {
-        _playSpellSFXOnce(_spellImpactSFX(spell));
-        _queueStatusMsg(applied);
-      } else {
-        _setEnemyDmg(idx, 0, true);  // miss
-      }
-    }
+    // Shared `applyMagicStatus` helper (combatant-cast.js) — same path ally
+    // + PVP-enemy use for Sleep.
+    applyMagicStatus(mon, spell.type, spell.hit, {
+      sfx: _spellImpactSFX(spell),
+      onLand: _queueStatusMsg,
+      onMiss: () => _setEnemyDmg(idx, 0, true),
+    });
     return;
   }
 
@@ -461,12 +460,13 @@ function _applyEnemyEffect(idx, spell) {
     return;
   }
   if (!mon || mon.hp <= 0) return;
-  const mult = elemMultiplier(spell.element, mon.weakness, mon.resist);
-  const dmg = Math.max(1, Math.floor(amount * mult));
-  mon.hp = Math.max(0, mon.hp - dmg);
-  _setEnemyDmg(idx, dmg, false);
-  battleSt.battleShakeTimer = BATTLE_SHAKE_MS;
-  _playSpellSFXOnce(SFX.SW_HIT);
+  // Shared `applyMagicDamage` helper — same path ally + PVP-enemy use for
+  // Fire/Bzzard. Element multiplier + mdef applied internally.
+  applyMagicDamage(mon, amount, spell, {
+    sfx: SFX.SW_HIT,
+    onDmgNum: (dealt) => _setEnemyDmg(idx, dealt, false),
+    onShake: () => { battleSt.battleShakeTimer = BATTLE_SHAKE_MS; },
+  });
 }
 
 function _applySpellEffect(target) {

@@ -33,7 +33,7 @@ import { pvpGridLayout, PVP_CELL_W, PVP_CELL_H } from './pvp-math.js';
 import { playSlashSFX } from './battle-sfx.js';
 import { bsc, getSlashFramesForWeapon } from './battle-sprite-cache.js';
 import { drawSlashOverlay, resetSlashScatterCache, shouldDrawSlash, SWING_HOLD_MS } from './slash-effects.js';
-import { removeStatus, hasStatus, STATUS, tryInflictStatus, STATUS_NAME_BYTES } from './status-effects.js';
+import { removeStatus, hasStatus, STATUS } from './status-effects.js';
 import { _nameToBytes } from './text-utils.js';
 import { getSpellNameClean } from './text-decoder.js';
 import { queueBattleMsg, replaceBattleMsg } from './battle-msg.js';
@@ -41,7 +41,7 @@ import { BATTLE_FOE } from './data/strings.js';
 import { tickHealNums, clearHealNums } from './damage-numbers.js';
 import { SPELLS } from './data/spells.js';
 import { drawCasterCastBehind, drawCasterCastFront, jobToCastKey, CAST_PHASE_MS_THROW } from './cast-anim.js';
-import { drawCastWindup } from './combatant-cast.js';
+import { drawCastWindup, applyMagicDamage, applyMagicStatus } from './combatant-cast.js';
 import { getSpellAnim, getSpellAnimForItem } from './spell-anim.js';
 import { drawStatusSpriteAbove } from './battle-drawing.js';
 import { fakePlayerFullBodyCanvases, fakePlayerHitFullBodyCanvases,
@@ -657,38 +657,32 @@ function _applyPVPEnemyMagicEffect() {
       pvpSt.pvpMagicPartyTargetIdx = -100;
       return;
     }
+    // Damage / status routes through the SHARED applyMagicDamage / applyMagicStatus
+    // helpers in combatant-cast.js — same pattern player + ally use. Per-role
+    // callbacks handle role-specific damage-num + shake placement (player has
+    // its own damage num, allies have an indexed map).
+    const setDmgNum = (n) => {
+      if (partyIdx === -1) setPlayerDamageNum({ ...n, timer: 0 });
+      else getAllyDamageNums()[partyIdx] = { ...n, timer: 0 };
+    };
+    const triggerShake = () => {
+      if (partyIdx === -1) battleSt.battleShakeTimer = BATTLE_SHAKE_MS;
+      else battleSt.allyShakeTimer[partyIdx] = BATTLE_SHAKE_MS;
+    };
     if (sid === 0x33) {
-      // Sleep — status roll against partyTgt.statusResist + spell.hit (15%).
       const spell = SPELLS.get(0x33);
-      const hitChance = spell ? spell.hit : 15;
-      const resist = partyTgt.statusResist || 0;
-      if (partyTgt.status) {
-        const applied = tryInflictStatus(partyTgt.status, 'sleep', hitChance, resist);
-        if (applied) {
-          playSFX(SFX.SLEEP_PUFF);
-          if (STATUS_NAME_BYTES[applied]) replaceBattleMsg(STATUS_NAME_BYTES[applied]);
-        } else {
-          // Miss feedback — show 0/miss damage on the target.
-          if (partyIdx === -1) setPlayerDamageNum({ miss: true, timer: 0 });
-          else getAllyDamageNums()[partyIdx] = { miss: true, timer: 0 };
-        }
-      }
+      applyMagicStatus(partyTgt, 'sleep', spell ? spell.hit : 15, {
+        sfx: SFX.SLEEP_PUFF,
+        onStatusMsg: replaceBattleMsg,
+        onMiss: () => setDmgNum({ miss: true }),
+      });
     } else {
-      // Fire / Blizzard — straight damage from pre-rolled `pvpMagicDamageRoll`,
-      // reduced by target.mdef. Target HP clamped to 0 minimum. Shake the
-      // target on hit for feedback parity with melee damage.
-      const mdef = partyTgt.mdef || 0;
-      const dmg = Math.max(1, (pvpSt.pvpMagicDamageRoll | 0) - mdef);
-      partyTgt.hp = Math.max(0, partyTgt.hp - dmg);
-      if (partyIdx === -1) {
-        setPlayerDamageNum({ value: dmg, timer: 0 });
-        battleSt.battleShakeTimer = BATTLE_SHAKE_MS;
-      } else {
-        getAllyDamageNums()[partyIdx] = { value: dmg, timer: 0 };
-        battleSt.allyShakeTimer[partyIdx] = BATTLE_SHAKE_MS;
-      }
-      if (sid === 0x31) playSFX(SFX.FIRE_BOOM);
-      else playSFX(SFX.SW_HIT); // Blizzard's ice impact
+      const spell = SPELLS.get(sid);
+      applyMagicDamage(partyTgt, pvpSt.pvpMagicDamageRoll | 0, spell, {
+        sfx: sid === 0x31 ? SFX.FIRE_BOOM : SFX.SW_HIT,
+        onDmgNum: (dmg) => setDmgNum({ value: dmg }),
+        onShake: triggerShake,
+      });
     }
     // Death trigger — roster ally KO from a spell needs the same death-anim
     // hookup the SouthWind path uses (pvp.js:816). `deathTimer` drives the

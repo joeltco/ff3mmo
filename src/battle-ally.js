@@ -14,11 +14,11 @@ import { getEnemyDmgNum, setEnemyDmgNum, setPlayerHealNum, getAllyDamageNums, ti
 import { ROSTER_FADE_STEPS } from './data/players.js';
 import { IDLE_FRAME_MS } from './combatant-pose.js';
 import { ps } from './player-stats.js';
-import { removeStatus, STATUS, STATUS_NAME_BYTES, tryInflictStatus } from './status-effects.js';
+import { removeStatus, STATUS } from './status-effects.js';
 import { SPELLS } from './data/spells.js';
-import { elemMultiplier } from './battle-math.js';
 import { replaceBattleMsg } from './battle-msg.js';
 import { CAST_PHASE_MS_THROW } from './cast-anim.js';
+import { applyMagicDamage, applyMagicStatus } from './combatant-cast.js';
 
 // Injected at boot — avoids circular import on main.js
 let _buildTurnOrder = () => [];
@@ -255,29 +255,23 @@ function _applyAllyMagicEffect() {
   // 0+ = pvpEnemyAllies[idx]). Sleep is status-only, no damage.
   if (spellId === 0x31 || spellId === 0x32 || spellId === 0x33) {
     const tgt = _allyMagicEnemyTarget();
-    if (!tgt || tgt.hp <= 0) return;
     const spell = SPELLS.get(spellId);
+    if (!spell) return;
     if (spellId === 0x33) {
-      if (tgt.status && spell) {
-        const applied = tryInflictStatus(tgt.status, 'sleep', spell.hit || 15, tgt.statusResist || 0);
-        if (applied) {
-          playSFX(SFX.SLEEP_PUFF);
-          if (STATUS_NAME_BYTES.sleep) replaceBattleMsg(STATUS_NAME_BYTES.sleep);
-          _setAllyMagicEnemyDmgNum({ value: 0, timer: 0, status: 'sleep' });
-        } else {
-          _setAllyMagicEnemyDmgNum({ miss: true, timer: 0 });
-        }
-      }
+      // Sleep — shared `applyMagicStatus` helper. Hit chance from spell + target resist.
+      applyMagicStatus(tgt, 'sleep', spell.hit || 15, {
+        sfx: SFX.SLEEP_PUFF,
+        onStatusMsg: replaceBattleMsg,
+        onLand: () => _setAllyMagicEnemyDmgNum({ value: 0, timer: 0, status: 'sleep' }),
+        onMiss: () => _setAllyMagicEnemyDmgNum({ miss: true, timer: 0 }),
+      });
       return;
     }
-    // Fire / Bzzard — apply pre-rolled damage with element multiplier + mdef.
-    let dmg = battleSt.allyMagicDamageRoll || 0;
-    const elem = spell ? spell.element : null;
-    const eMult = elemMultiplier(elem, tgt.weakness, tgt.resist);
-    dmg = Math.max(1, Math.floor(dmg * eMult) - (tgt.mdef || 0));
-    tgt.hp = Math.max(0, tgt.hp - dmg);
-    _setAllyMagicEnemyDmgNum({ value: dmg, timer: 0 });
-    playSFX(spellId === 0x31 ? SFX.FIRE_BOOM : SFX.SW_HIT);
+    // Fire / Bzzard — shared `applyMagicDamage` helper.
+    applyMagicDamage(tgt, battleSt.allyMagicDamageRoll || 0, spell, {
+      sfx: spellId === 0x31 ? SFX.FIRE_BOOM : SFX.SW_HIT,
+      onDmgNum: (dmg) => _setAllyMagicEnemyDmgNum({ value: dmg, timer: 0 }),
+    });
     return;
   }
   // 0x35 Poisona — strip POISON flag from target, no HP change. Sparkle still

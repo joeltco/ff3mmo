@@ -2,6 +2,36 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.172 — 2026-05-09
+
+### refactor: damage / status application unified across all 3 roles
+
+Final piece of the cast-pipeline modularization. Previously each role had its own copy of the Fire/Bzzard damage application (element multiplier + mdef + HP decrement + dmg num + shake + SFX) and Sleep status application (tryInflictStatus + msg + miss display + SFX). Three near-identical paths.
+
+**`combatant-cast.js`** exports two shared helpers:
+- `applyMagicDamage(target, baseDmg, spell, opts)` — element/resist multiplier, mdef reduction, HP decrement, optional callbacks (`onDmgNum`, `onShake`, `onKill`), auto-plays `opts.sfx`. Returns the actual damage dealt.
+- `applyMagicStatus(target, statusName, hitChance, opts)` — `tryInflictStatus` against `target.statusResist`, optional callbacks (`onStatusMsg(bytes)`, `onLand(flag)`, `onMiss`), auto-plays `opts.sfx`. Returns the applied status flag (or 0 on miss).
+
+**Three apply fns wired:**
+- `spell-cast.js:_applyEnemyEffect` — Fire/Bzzard branch (line 462) and the single-status sub-branch within `enemy_status` (line 363) now call the helpers.
+- `battle-ally.js:_applyAllyMagicEffect` — Fire/Bzzard/Sleep branch.
+- `pvp.js:_applyPVPEnemyMagicEffect` — Fire/Bzzard/Sleep branch.
+
+Each call site dropped from ~10-15 inline lines to a 3-7 line helper invocation with role-specific callbacks. Removed redundant imports (`elemMultiplier`, `tryInflictStatus`, `STATUS_NAME_BYTES`) from the role files since they now live in `combatant-cast.js`.
+
+**Player path retains additional spell-type branches** (sight, drain, recovery, all_status, death/instakill, erase) since ally + PVP-enemy don't cast those. Those branches stay in `_applyEnemyEffect` — extracting them would add complexity without saving lines. The COMMON ground (Fire/Bzzard damage + Sleep status) is now one place.
+
+### Pipeline modularization complete
+
+| Stage | Status | Single helper |
+|---|---|---|
+| Cast windup | ✅ All 3 roles | `drawCastWindup(layer, ctx, role, idx, x, y, mirror)` |
+| Throw anim (projectile + impact burst) | ✅ All 3 roles | `drawSpellThrow(role, ctx, caster, target)` |
+| Damage application (Fire/Bzzard) | ✅ All 3 roles | `applyMagicDamage(target, baseDmg, spell, opts)` |
+| Status application (Sleep) | ✅ All 3 roles | `applyMagicStatus(target, name, hitChance, opts)` |
+
+All in `combatant-cast.js` (despite the name — it grew beyond just cast windup).
+
 ## 1.7.171 — 2026-05-09
 
 ### refactor: spell throw animation unified for ALL THREE roles
