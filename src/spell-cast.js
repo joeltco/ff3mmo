@@ -628,7 +628,11 @@ export function updateSpellCast(dt) {
   // Phase 1 — projectile fan-out (parallel, ~150ms). Render path draws all
   // enemyTargets simultaneously. No effect apply during this phase.
   if (_magicHitPhase === 'projectile') {
-    const projDur = CAST_PHASE_MS_THROW.projectile;
+    // Projectile phase includes the preImpactGap — projectile renders for
+    // `projectile` ms then nothing for `preImpactGap` ms before transitioning
+    // to impact-walk. The renderer (combatant-cast.js drawSpellThrow) gates
+    // its render on ms < projectile, so the gap is naturally empty.
+    const projDur = CAST_PHASE_MS_THROW.projectile + CAST_PHASE_MS_THROW.preImpactGap;
     if (battleSt.battleTimer >= projDur) {
       _magicHitPhase = 'impact-walk';
       battleSt.battleTimer = 0;
@@ -639,16 +643,19 @@ export function updateSpellCast(dt) {
     return true;
   }
 
-  // Phase 2a — thrown impact walk: per-target serial impact + damage hold.
-  // Each target gets its own ~1050ms window: 0..550 impact burst, 550 = apply
-  // effect (damage / status roll), 550..1050 hold for the damage-number
-  // bounce. SFX fires per-target at the start of each window.
+  // Phase 2a — thrown impact walk: per-target serial impact + post-impact gap
+  // + damage hold. Each target gets a ~1150ms window: 0..550 impact burst,
+  // 550..650 post-impact gap (no render), 650 = apply effect (damage applies +
+  // damage number pops), 650..1150 hold for the damage-number bounce. SFX
+  // fires per-target at the start of each window.
   if (isThrown && _hasCrossFactionTarget) {
-    const impactDur = CAST_PHASE_MS_THROW.impact;       // 550 ms
-    const damageHoldMs = 500;
-    const perTargetMs = impactDur + damageHoldMs;
+    const impactDur     = CAST_PHASE_MS_THROW.impact;          // 550
+    const postGap       = CAST_PHASE_MS_THROW.postImpactGap;   // 100
+    const damageStartMs = impactDur + postGap;                  // 650 — when damage applies
+    const damageHoldMs  = 500;
+    const perTargetMs   = damageStartMs + damageHoldMs;        // 1150
     if (!_sfxPlayed) _playSpellSFXOnce(_spellImpactSFX(spell));
-    if (!_effectApplied && battleSt.battleTimer >= impactDur) {
+    if (!_effectApplied && battleSt.battleTimer >= damageStartMs) {
       _applySpellEffect(_targets[_hitIdx]);
       _effectApplied = true;
     }

@@ -205,15 +205,15 @@ function _updateAllyEnemyHit() {
 // — slight tightening from the prior 400 ms (heal pops earlier, still visible
 // for ~700 ms via tickHealNums until clearHealNums on hit end).
 const ALLY_MAGIC_CAST_MS   = CAST_PHASE_MS_THROW.buildup;       // 800
-// Effect (damage / heal) fires at IMPACT END, after the burst plays out.
-// Sequence is: cast → projectile → spell anim → damage number. Player throw
-// path uses the same rule (`spell-cast.js:602`: "effect at impact END so the
-// damage number doesn't" overlap the burst). Was 150 ms (impact start) which
-// popped the number during the burst — wrong.
-const ALLY_MAGIC_EFFECT_MS = CAST_PHASE_MS_THROW.projectile +   // 700 — projectile + impact, fires when burst ends
-                             CAST_PHASE_MS_THROW.impact;
-const ALLY_MAGIC_HIT_MS    = CAST_PHASE_MS_THROW.projectile +   // 867 — full throw window
+// Effect (damage / heal) fires AFTER the impact burst + post-impact gap.
+// Sequence: cast → projectile → preImpactGap → impact → postImpactGap → damage.
+// Damage number then bounces during the ret window. Same rule as the player
+// thrown impact-walk per-target window.
+const ALLY_MAGIC_EFFECT_MS = CAST_PHASE_MS_THROW.projectile +   // 900
+                             CAST_PHASE_MS_THROW.preImpactGap +
                              CAST_PHASE_MS_THROW.impact +
+                             CAST_PHASE_MS_THROW.postImpactGap;
+const ALLY_MAGIC_HIT_MS    = ALLY_MAGIC_EFFECT_MS +              // 1067 — full throw window
                              CAST_PHASE_MS_THROW.ret;
 
 // Resolve the offensive-cast target object from the ally-magic state.

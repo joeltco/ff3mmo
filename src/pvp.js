@@ -517,11 +517,12 @@ function _tryPVPEnemyItem(casterCellIdx) {
 // frame-timeline breakdown; PVP-enemy mirrors it (just with mirror=true on
 // the cast windup since opponents face right).
 const PVP_MAGIC_CAST_MS   = CAST_PHASE_MS_THROW.buildup;        // 800
-// Effect at IMPACT END (after burst plays out) — same rule as player throw.
-const PVP_MAGIC_EFFECT_MS = CAST_PHASE_MS_THROW.projectile +    // 700
-                            CAST_PHASE_MS_THROW.impact;
-const PVP_MAGIC_HIT_MS    = CAST_PHASE_MS_THROW.projectile +    // 867 — full throw window
+// Effect at end of postImpactGap — burst fully plays out, beat, then damage pops.
+const PVP_MAGIC_EFFECT_MS = CAST_PHASE_MS_THROW.projectile +    // 900
+                            CAST_PHASE_MS_THROW.preImpactGap +
                             CAST_PHASE_MS_THROW.impact +
+                            CAST_PHASE_MS_THROW.postImpactGap;
+const PVP_MAGIC_HIT_MS    = PVP_MAGIC_EFFECT_MS +                // 1067
                             CAST_PHASE_MS_THROW.ret;
 
 function _pvpEnemyByCellIdx(idx) {

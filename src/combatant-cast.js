@@ -281,8 +281,13 @@ function _resolveSimpleThrow(role, target) {
   const ms = battleSt.battleTimer;
   if (ms < 0) return null;
   const projMs = CAST_PHASE_MS_THROW.projectile;
+  const preGap = CAST_PHASE_MS_THROW.preImpactGap;
+  const impactMs = CAST_PHASE_MS_THROW.impact;
+  // Phase split: projectile → gap (no render) → impact → gap (no render, dmg pops here) → ret.
   if (ms < projMs) return { phase: 'projectile', targets: [target], t01: ms / projMs, spellId, spell };
-  return { phase: 'impact', targets: [target], impactMs: ms - projMs, spellId, spell };
+  if (ms < projMs + preGap) return null;
+  if (ms < projMs + preGap + impactMs) return { phase: 'impact', targets: [target], impactMs: ms - projMs - preGap, spellId, spell };
+  return null;
 }
 
 // Player throw — three flows resolved off the same getter set as the legacy
@@ -315,8 +320,15 @@ function _resolvePlayerThrow(_caster) {
   if (isThrown) {
     const phase = getMagicHitPhase();
     if (phase === 'projectile') {
+      // Projectile phase lasts `projectile + preImpactGap` ms in the engine.
+      // The fan renders for the first `projectile` ms (drawProjectileFan
+      // bails on t01 > 1 anyway, but explicit gate is clearer).
+      if (battleSt.battleTimer >= CAST_PHASE_MS_THROW.projectile) return null;
       return { phase: 'projectile', targets: enemyTargets, t01: battleSt.battleTimer / CAST_PHASE_MS_THROW.projectile, spellId, spell };
     }
+    // 'impact-walk': battleTimer resets per-target. Burst plays for `impact` ms,
+    // then post-impact gap (no render), then damage applies + hold (no burst).
+    if (battleSt.battleTimer >= CAST_PHASE_MS_THROW.impact) return null;
     const idx = Math.min(getSpellHitIdx(), enemyTargets.length - 1);
     if (idx < 0) return null;
     return { phase: 'impact', targets: [enemyTargets[idx]], impactMs: battleSt.battleTimer, spellId, spell };

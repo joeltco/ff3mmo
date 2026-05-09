@@ -64,15 +64,24 @@ export const CAST_T_HEAL   = CAST_T_CAST + CAST_PHASE_MS.cast;
 export const CAST_T_RETURN = CAST_T_HEAL + CAST_PHASE_MS.heal;
 export const CAST_TOTAL_MS = CAST_T_RETURN + CAST_PHASE_MS.ret;
 
+// Throw spell timing — six phases including gaps between visual stages so the
+// pipeline reads as discrete steps rather than blurred-together. Sequence:
+// buildup → projectile → preImpactGap → impact → postImpactGap → ret. Damage
+// applies at the end of the postImpactGap window (i.e., AFTER the impact burst
+// fully plays out), then the damage number bounces during ret + the engine's
+// damage-hold tail. Same constants drive player + ally + PVP-enemy throws.
 export const CAST_PHASE_MS_THROW = {
-  buildup:    800,
-  projectile: 150,
-  impact:     550,
-  ret:        167,
+  buildup:       800,
+  projectile:    150,
+  preImpactGap:  100,  // breathing room: orb lands, beat, then burst begins
+  impact:        550,
+  postImpactGap: 100,  // breathing room: burst ends, beat, then damage pops
+  ret:           167,
 };
 export const CAST_T_THROW_PROJ_START   = CAST_PHASE_MS_THROW.buildup;
-export const CAST_T_THROW_IMPACT_START = CAST_T_THROW_PROJ_START + CAST_PHASE_MS_THROW.projectile;
-export const CAST_T_THROW_RETURN       = CAST_T_THROW_IMPACT_START + CAST_PHASE_MS_THROW.impact;
+export const CAST_T_THROW_IMPACT_START = CAST_T_THROW_PROJ_START + CAST_PHASE_MS_THROW.projectile + CAST_PHASE_MS_THROW.preImpactGap;
+export const CAST_T_THROW_DAMAGE_START = CAST_T_THROW_IMPACT_START + CAST_PHASE_MS_THROW.impact + CAST_PHASE_MS_THROW.postImpactGap;
+export const CAST_T_THROW_RETURN       = CAST_T_THROW_DAMAGE_START + CAST_PHASE_MS_THROW.ret;
 
 // ── WM aura: rotating star tile ───────────────────────────────────────────
 const WM_T_49_STAR = new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 0x10,0x38,0xFE,0x7C,0x7C,0x6C,0x44,0x00]);

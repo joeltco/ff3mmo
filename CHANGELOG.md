@@ -2,6 +2,36 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.175 — 2026-05-09
+
+### tune: gaps between spell pipeline phases (smoother pacing)
+
+User wants the four-stage pipeline to read as discrete steps with breathing room, not blurred-together. Sequence now: cast → projectile → **gap** → spell anim → **gap** → damage number bounce. Same spacing that the slash → damage flow already has (HIT_PAUSE_MS = 316 ms between slash end and damage number).
+
+Added two phase constants to `CAST_PHASE_MS_THROW`:
+- `preImpactGap: 100` — orb lands, 100 ms beat, burst begins.
+- `postImpactGap: 100` — burst ends, 100 ms beat, damage number pops.
+
+Throw timeline (all 3 roles):
+```
+buildup        0   →  800   cast windup (halo + flame on caster)
+projectile     0   →  150   orb travels caster → target
+preImpactGap   150 →  250   nothing rendered — beat
+impact         250 →  800   burst plays on target (550 ms)
+postImpactGap  800 →  900   nothing rendered — beat
+damage @ 900                damage applies, dmg number pops
+ret            900 →  1067  damage number bounces during ret
+```
+
+Engine + helper changes:
+- `spell-cast.js` projectile phase duration extended by `preImpactGap`. Per-target impact-walk damage applies at `impact + postImpactGap = 650 ms` (was 550). Per-target window now 1150 ms (was 1050).
+- `combatant-cast.js:_resolveSimpleThrow` (ally + PVP-enemy) phase split has explicit `null` returns during gap windows so the renderer draws nothing.
+- `combatant-cast.js:_resolvePlayerThrow` thrown branch gates impact render on `battleTimer < impact` so the burst stops at impact end and the post-impact gap renders nothing.
+- `ALLY_MAGIC_EFFECT_MS` / `PVP_MAGIC_EFFECT_MS` = 900 (was 700).
+- `ALLY_MAGIC_HIT_MS` / `PVP_MAGIC_HIT_MS` = 1067 (was 867).
+
+Slash → damage flow already had a 316 ms gap (`HIT_PAUSE_MS`) between slash end and damage number; no change needed there.
+
 ## 1.7.174 — 2026-05-09
 
 ### refactor: player-only spell types extracted into helpers
