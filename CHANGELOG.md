@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.151 — 2026-05-09
+
+### fix: ally offensive cast spell animations
+
+v1.7.150 shipped BM/RM ally AI casts that applied damage but didn't render the on-target spell anim — a half-done deferral that should have been part of the same change. The bundles already exist (Fire/Bzzard/Sleep are wired for player casts and PVP-enemy casts); just needed a third draw site.
+
+**`_drawAllyOffensiveCast` in `battle-drawing.js`** — mirror of `_drawPVPEnemyOffensiveCast` for the ally caster. Source = ally portrait center (right column, row N keyed by `battleSt.allyMagicCasterIdx`). Target spec = `{type:'enemy', index: allyMagicTargetIdx}`, which `_getMagicTargetCenter` resolves to `encounterMonsters[idx]` for encounter or `_pvpEnemyCellCenter(idx)` for PVP (idx 0 = opponent, 1+ = enemy ally idx-1).
+
+Phase split matches the PVP-enemy mirror: first `CAST_PHASE_MS_THROW.projectile` (150 ms) of `ally-magic-hit` renders the projectile fan via `drawProjectileFan`; remaining time renders the impact via `drawSpellEffectAtTargets`. Sleep is intentionally a no-op visual (no on-target bundle — same as the player and PVP paths). Fire and Bzzard now show their burst-strip cycle on the actual target slot.
+
 ## 1.7.150 — 2026-05-09
 
 ### feat: BM/RM ally AI casts black magic

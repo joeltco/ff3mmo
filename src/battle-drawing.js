@@ -498,6 +498,7 @@ function drawBattle() {
   drawBossSpriteBox();
   _drawPlayerSpellTargetSparkleOnEnemy();
   _drawPVPEnemyOffensiveCast();
+  _drawAllyOffensiveCast();
   drawBattleMenu();
   drawVictoryBox();
   drawBattleMessageStrip();
@@ -771,6 +772,38 @@ function _drawPVPEnemyOffensiveCast() {
   // Impact burst on the party target. Sleep has no portrait-anchored bundle
   // — drawSpellEffectAtTargets is a no-op for `kind === undefined`. Fire/
   // Blizzard burst-strip-2frame canvases render centered on the target.
+  drawSpellEffectAtTargets(ui.ctx, [targetSpec], spellId, ms - PROJ_MS);
+}
+
+// Roster-ally offensive cast — Fire / Bzzard / Sleep on an encounter monster
+// or PVP-enemy cell. Mirror of `_drawPVPEnemyOffensiveCast` for the ally
+// caster on the player side. Source = ally portrait center (right column,
+// row N); target = `{type:'enemy', index}` which `_getMagicTargetCenter`
+// resolves to encounterMonsters[idx] OR _pvpEnemyCellCenter(idx) (idx 0 =
+// opponent, 1+ = enemy ally idx-1) — same convention used everywhere else.
+function _drawAllyOffensiveCast() {
+  if (battleSt.battleState !== 'ally-magic-hit') return;
+  const targetType = battleSt.allyMagicTargetType;
+  if (targetType !== 'enemy' && targetType !== 'pvp-enemy') return;
+  const spellId = battleSt.allyMagicSpellId;
+  if (spellId !== 0x31 && spellId !== 0x32 && spellId !== 0x33) return;
+  const spell = SPELLS.get(spellId);
+  if (!spell) return;
+  const casterIdx = battleSt.allyMagicCasterIdx;
+  if (casterIdx < 0) return;
+  const panelTop = HUD_VIEW_Y + 32;
+  const sx = HUD_RIGHT_X + 8 + 8;
+  const sy = panelTop + casterIdx * ROSTER_ROW_H + 8 + 8;
+  const targetSpec = { type: 'enemy', index: battleSt.allyMagicTargetIdx };
+  const ms = battleSt.battleTimer;
+  const PROJ_MS = CAST_PHASE_MS_THROW.projectile;
+  if (ms < PROJ_MS) {
+    drawProjectileFan(ui.ctx, sx, sy, 'party', [targetSpec], spellId, spell, ms / PROJ_MS);
+    return;
+  }
+  // Sleep has no on-target bundle (kind === undefined) — drawSpellEffectAtTargets
+  // no-ops for those. Fire/Bzzard render their burst-strip canvas centered on
+  // the target.
   drawSpellEffectAtTargets(ui.ctx, [targetSpec], spellId, ms - PROJ_MS);
 }
 
