@@ -801,9 +801,9 @@ function _drawAllyOffensiveCast() {
     drawProjectileFan(ui.ctx, sx, sy, 'party', [targetSpec], spellId, spell, ms / PROJ_MS);
     return;
   }
-  // Sleep has no on-target bundle (kind === undefined) — drawSpellEffectAtTargets
-  // no-ops for those. Fire/Bzzard render their burst-strip canvas centered on
-  // the target.
+  // All three (Fire / Bzzard / Sleep) have burst-strip-2frame bundles in
+  // spell-anim.js — `drawSpellEffectAtTargets` dispatches by bundle kind and
+  // renders centered on the target.
   drawSpellEffectAtTargets(ui.ctx, [targetSpec], spellId, ms - PROJ_MS);
 }
 

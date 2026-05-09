@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.152 — 2026-05-09
+
+### docs: fix wrong comment in ally cast renderer
+
+`_drawAllyOffensiveCast`'s comment claimed Sleep had no on-target bundle. Wrong — `spell-anim.js:406` registers `0x33: { kind: 'burst-strip-2frame', frames: sleepImpact, width: 48, height: 48 }`. Sleep already renders correctly through the same `drawSpellEffectAtTargets` dispatch. Fixed the comment to match reality. No code change.
+
 ## 1.7.151 — 2026-05-09
 
 ### fix: ally offensive cast spell animations
