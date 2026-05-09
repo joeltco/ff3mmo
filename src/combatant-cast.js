@@ -22,7 +22,7 @@ import { getCastAnimElapsedMs, getCurrentSpellId, getSpellTargets,
          getMagicHitPhase, getSpellHitIdx, isCurrentCastItemUse } from './spell-cast.js';
 import { SPELLS } from './data/spells.js';
 import { elemMultiplier } from './battle-math.js';
-import { tryInflictStatus, removeStatus, STATUS_NAME_BYTES } from './status-effects.js';
+import { tryInflictStatus, removeStatus, addStatus, STATUS, STATUS_NAME_BYTES } from './status-effects.js';
 import { playSFX, SFX } from './music.js';
 
 // Resolve role-specific cast context. Returns { jobIdx, spellId, elapsed }
@@ -157,6 +157,89 @@ export function applyMagicCureStatus(target, statusFlag, opts = {}) {
 // (player + ally + PVP-enemy each had inline branches doing the same thing).
 export function applyMagicSight(opts = {}) {
   if (opts.onIneffectiveMsg) opts.onIneffectiveMsg();
+  if (opts.sfx) playSFX(opts.sfx);
+}
+
+// Drain — damage target + heal caster by the same amount. Undead reverses
+// (heals target, no caster heal — NES canon). Caller provides target dmg-num,
+// shake, and caster-heal callbacks. Returns the actual damage dealt (or
+// healed-on-undead value).
+export function applyMagicDrain(target, amount, opts = {}) {
+  if (!target || target.hp <= 0) return 0;
+  if (opts.isUndead) {
+    return applyMagicHeal(target, amount, { sfx: SFX.CURE, onHealNum: opts.onTargetHealNum });
+  }
+  const dmg = Math.max(1, amount);
+  target.hp = Math.max(0, target.hp - dmg);
+  if (opts.onTargetDmgNum) opts.onTargetDmgNum(dmg);
+  if (opts.onShake) opts.onShake();
+  if (opts.onCasterHeal) opts.onCasterHeal(dmg);
+  if (opts.sfx) playSFX(opts.sfx);
+  if (target.hp <= 0 && opts.onKill) opts.onKill();
+  return dmg;
+}
+
+// Recovery — heal non-undead, damage undead. Player Cure on enemy. Caller
+// indicates `opts.isUndead`. SFX defaults: heal=CURE, damage=SW_HIT.
+export function applyMagicRecovery(target, amount, opts = {}) {
+  if (!target || target.hp <= 0) return 0;
+  if (opts.isUndead) {
+    const dmg = Math.max(1, amount);
+    target.hp = Math.max(0, target.hp - dmg);
+    if (opts.onDmgNum) opts.onDmgNum(dmg);
+    if (opts.onShake) opts.onShake();
+    playSFX(opts.damageSfx || SFX.SW_HIT);
+    if (target.hp <= 0 && opts.onKill) opts.onKill();
+    return dmg;
+  }
+  return applyMagicHeal(target, amount, { sfx: opts.healSfx || SFX.CURE, onHealNum: opts.onHealNum });
+}
+
+// All-status (Shade, Tranquilizer) — try every "major" debuff against target,
+// each rolled independently against `hitChance`. `opts.candidates` lets caller
+// override the default list. Calls `onStatusLand(flag)` per landed status so
+// caller can queue per-status battle messages. Returns the OR'd applied mask.
+export function applyMagicAllStatus(target, hitChance, opts = {}) {
+  if (!target || !target.status) return 0;
+  const candidates = opts.candidates || ['paralysis', 'blind', 'silence', 'sleep', 'confuse'];
+  const resist = target.statusResist || 0;
+  let anyApplied = 0;
+  for (const name of candidates) {
+    const f = tryInflictStatus(target.status, name, hitChance, resist);
+    if (f) {
+      anyApplied |= f;
+      if (opts.onStatusLand) opts.onStatusLand(f);
+    }
+  }
+  if (anyApplied) {
+    if (opts.sfx) playSFX(opts.sfx);
+  } else if (opts.onMiss) {
+    opts.onMiss();
+  }
+  return anyApplied;
+}
+
+// Instakill (Death) — `hitChance` roll. On land, sets HP to 0 and applies the
+// DEATH status flag. Caller provides death-anim trigger via `onKill` (typical:
+// trigger monster-death state / ally.deathTimer / pvp-dissolve).
+export function applyMagicInstakill(target, hitChance, opts = {}) {
+  if (!target || target.hp <= 0) return false;
+  if (Math.random() * 100 < hitChance) {
+    if (target.status) addStatus(target.status, STATUS.DEATH);
+    target.hp = 0;
+    if (opts.onDmgNum) opts.onDmgNum(0);
+    if (opts.sfx) playSFX(opts.sfx);
+    if (opts.onKill) opts.onKill();
+    return true;
+  }
+  if (opts.onMiss) opts.onMiss();
+  return false;
+}
+
+// Erase — clear positive statuses / buffs. Currently SFX-only since monster
+// buff state isn't tracked yet; helper is forward-compatible (future buff
+// state would clear here via opts.target.buffs).
+export function applyMagicErase(opts = {}) {
   if (opts.sfx) playSFX(opts.sfx);
 }
 

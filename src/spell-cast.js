@@ -15,7 +15,9 @@ import { SPELLS, getSpellMPCost, isMultiTargetSpell } from './data/spells.js';
 import { STATUS, addStatus, removeStatus, tryInflictStatus, STATUS_NAME_BYTES } from './status-effects.js';
 import { CAST_PHASE_MS, CAST_PHASE_MS_THROW, CAST_T_HEAL, CAST_TOTAL_MS, CAST_T_THROW_RETURN, CAST_T_THROW_IMPACT_START } from './cast-anim.js';
 import { applyMagicDamage, applyMagicStatus, applyMagicHeal,
-         applyMagicCureStatus, applyMagicSight } from './combatant-cast.js';
+         applyMagicCureStatus, applyMagicSight, applyMagicDrain,
+         applyMagicRecovery, applyMagicAllStatus, applyMagicInstakill,
+         applyMagicErase } from './combatant-cast.js';
 import { pvpGridLayout } from './pvp-math.js';
 import { queueBattleMsg, replaceBattleMsg, isBattleMsgBusy } from './battle-msg.js';
 import { BATTLE_INEFFECTIVE, BATTLE_HASTE, BATTLE_PROTECT, BATTLE_REFLECT, BATTLE_SLAIN } from './data/strings.js';
@@ -332,36 +334,21 @@ function _applyEnemyEffect(idx, spell) {
     }
     if (mon.hp <= 0) return;
     if (spell.type === 'death') {
-      // Instakill check against spell.hit, blocked by death-resistant monsters.
-      if (Math.random() * 100 < spell.hit) {
-        if (mon.status) addStatus(mon.status, STATUS.DEATH);
-        mon.hp = 0;
-        _setEnemyDmg(idx, 0, false);
-        _playSpellSFXOnce(SFX.MONSTER_DEATH);
-      } else {
-        _setEnemyDmg(idx, 0, true);  // miss
-      }
+      // Shared `applyMagicInstakill` helper.
+      applyMagicInstakill(mon, spell.hit, {
+        sfx: SFX.MONSTER_DEATH,
+        onDmgNum: () => _setEnemyDmg(idx, 0, false),
+        onMiss: () => _setEnemyDmg(idx, 0, true),
+      });
       return;
     }
-    // type='all_status' (Shade) — try every "major" debuff against the enemy,
-    // each rolled independently against spell.hit. Tranquilizer dispatches
-    // through this; per FF3 NES Shade attempts paralysis and other statuses.
+    // type='all_status' (Shade / Tranquilizer) — shared `applyMagicAllStatus`.
     if (spell.type === 'all_status') {
-      if (!mon.status) return;
-      const candidates = ['paralysis', 'blind', 'silence', 'sleep', 'confuse'];
-      let anyApplied = 0;
-      for (const name of candidates) {
-        const f = tryInflictStatus(mon.status, name, spell.hit, mon.statusResist);
-        if (f) {
-          anyApplied |= f;
-          _queueStatusMsg(f);
-        }
-      }
-      if (anyApplied) {
-        _playSpellSFXOnce(SFX.SW_HIT);
-      } else {
-        _setEnemyDmg(idx, 0, true);  // miss
-      }
+      applyMagicAllStatus(mon, spell.hit, {
+        sfx: SFX.SW_HIT,
+        onStatusLand: _queueStatusMsg,
+        onMiss: () => _setEnemyDmg(idx, 0, true),
+      });
       return;
     }
     // confuse / sleep / blind / mini / silence / etc. — name = spell.type.
@@ -375,37 +362,32 @@ function _applyEnemyEffect(idx, spell) {
     return;
   }
 
-  // target='erase' — clear positive statuses from enemy. No buff state on
-  // monsters in the project yet, so this is a SFX-only acknowledgement.
+  // target='erase' — shared `applyMagicErase` helper.
   if (spell.target === 'erase') {
-    _playSpellSFXOnce(SFX.SW_HIT);
+    applyMagicErase({ sfx: SFX.SW_HIT });
     return;
   }
 
-  // target='drain' — damage enemy + heal caster (the player) by the same amount.
-  // Reverses on undead per NES canon (heal enemy, no player heal).
+  // target='drain' — shared `applyMagicDrain` helper.
   if (spell.target === 'drain') {
     if (!mon || mon.hp <= 0) return;
     const drainAmt = _baseAmount >= 0
       ? Math.max(1, Math.floor(_baseAmount / _targets.length))
       : _rollMagicAmount(spell.power, true);
-    if (_isUndead(mon)) {
-      const heal = Math.min(drainAmt, (mon.maxHP || mon.hp) - mon.hp);
-      mon.hp += heal;
-      setEnemyHealNum({ value: heal, timer: 0, index: idx });
-      _playSpellSFXOnce(SFX.CURE);
-      return;
-    }
-    const dmg = Math.max(1, drainAmt);
-    mon.hp = Math.max(0, mon.hp - dmg);
-    _setEnemyDmg(idx, dmg, false);
-    const playerHeal = Math.min(dmg, (ps.stats?.maxHP ?? ps.hp) - ps.hp);
-    if (playerHeal > 0) {
-      ps.hp += playerHeal;
-      setPlayerHealNum({ value: playerHeal, timer: 0 });
-    }
-    battleSt.battleShakeTimer = BATTLE_SHAKE_MS;
-    _playSpellSFXOnce(SFX.CURE);
+    applyMagicDrain(mon, drainAmt, {
+      sfx: SFX.CURE,
+      isUndead: _isUndead(mon),
+      onTargetDmgNum: (dmg) => _setEnemyDmg(idx, dmg, false),
+      onTargetHealNum: (heal) => setEnemyHealNum({ value: heal, timer: 0, index: idx }),
+      onShake: () => { battleSt.battleShakeTimer = BATTLE_SHAKE_MS; },
+      onCasterHeal: (amt) => {
+        const realHeal = Math.min(amt, (ps.stats?.maxHP ?? ps.hp) - ps.hp);
+        if (realHeal > 0) {
+          ps.hp += realHeal;
+          setPlayerHealNum({ value: realHeal, timer: 0 });
+        }
+      },
+    });
     return;
   }
 
@@ -429,7 +411,8 @@ function _applyEnemyEffect(idx, spell) {
   if (isRecovery) {
     if (isBoss) {
       // Boss path: no monster object so we can't detect undead. Default to heal
-      // (matches NES non-undead behavior).
+      // (matches NES non-undead behavior). Direct HP manipulation here since
+      // boss uses getEnemyHP/setEnemyHP, not a monster object.
       const curHP = getEnemyHP();
       const heal = Math.min(amount, 9999 - curHP);
       setEnemyHP(curHP + heal);
@@ -438,18 +421,13 @@ function _applyEnemyEffect(idx, spell) {
       return;
     }
     if (!mon || mon.hp <= 0) return;
-    if (_isUndead(mon)) {
-      const dmg = Math.max(1, amount);
-      mon.hp = Math.max(0, mon.hp - dmg);
-      _setEnemyDmg(idx, dmg, false);
-      battleSt.battleShakeTimer = BATTLE_SHAKE_MS;
-      _playSpellSFXOnce(SFX.SW_HIT);
-    } else {
-      const heal = Math.min(amount, (mon.maxHP || mon.hp) - mon.hp);
-      mon.hp += heal;
-      setEnemyHealNum({ value: heal, timer: 0, index: idx });
-      _playSpellSFXOnce(SFX.CURE);
-    }
+    // Shared `applyMagicRecovery` helper — heals non-undead, damages undead.
+    applyMagicRecovery(mon, amount, {
+      isUndead: _isUndead(mon),
+      onDmgNum: (dmg) => _setEnemyDmg(idx, dmg, false),
+      onHealNum: (heal) => setEnemyHealNum({ value: heal, timer: 0, index: idx }),
+      onShake: () => { battleSt.battleShakeTimer = BATTLE_SHAKE_MS; },
+    });
     return;
   }
 

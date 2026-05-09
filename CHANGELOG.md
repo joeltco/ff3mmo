@@ -2,6 +2,42 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.174 — 2026-05-09
+
+### refactor: player-only spell types extracted into helpers
+
+Final spell-system unification — every spell type now goes through a `combatant-cast.js` helper. Previously, drain / recovery / all-status / instakill / erase only had inline implementations in `_applyEnemyEffect` because no other role casts them today. Extracted anyway — when a future ally / PVP-enemy AI gets one of these spells, the call site is one line.
+
+**Five new helpers in `combatant-cast.js`:**
+- `applyMagicDrain(target, amount, opts)` — damages target + heals caster, undead reverses (heals target, no caster heal). Caller provides `onTargetDmgNum` / `onTargetHealNum` / `onCasterHeal` callbacks.
+- `applyMagicRecovery(target, amount, opts)` — heals non-undead, damages undead. `opts.isUndead` indicates which path.
+- `applyMagicAllStatus(target, hitChance, opts)` — Shade / Tranquilizer pattern, rolls every "major" debuff against `hitChance`. Default candidate list: paralysis / blind / silence / sleep / confuse, override via `opts.candidates`. Calls `onStatusLand(flag)` per landed status for per-status battle messages.
+- `applyMagicInstakill(target, hitChance, opts)` — Death roll, sets HP=0 + DEATH status flag on land. `onKill` triggers death anim.
+- `applyMagicErase(opts)` — SFX-only today (no monster buff state); forward-compatible.
+
+`_applyEnemyEffect` (`spell-cast.js`) now dispatches by spell type to these helpers. Shrunk substantially — the inline drain/recovery/all-status/instakill/erase blocks are now 5-12 line calls with callbacks. The `_isUndead(mon)` branching is decided by the caller and passed as `opts.isUndead`.
+
+### Spell pipeline modularization — fully unified
+
+Every spell type used by any role goes through a shared `combatant-cast.js` helper:
+
+| Spell type | Helper | Used by |
+|---|---|---|
+| Damage (Fire / Bzzard / Bolt) | `applyMagicDamage` | Player + Ally + PVP-enemy |
+| Status (Sleep / Confuse / Blind / etc.) | `applyMagicStatus` | Player + Ally + PVP-enemy |
+| Heal (Cure) | `applyMagicHeal` | Player + Ally + PVP-enemy |
+| Cure-status (Poisona / Antidote) | `applyMagicCureStatus` | Player + Ally + PVP-enemy |
+| Sight | `applyMagicSight` | Player + Ally + PVP-enemy |
+| Drain | `applyMagicDrain` | Player (Ally / PVP-enemy ready) |
+| Recovery (undead-aware) | `applyMagicRecovery` | Player (Ally / PVP-enemy ready) |
+| All-status (Shade) | `applyMagicAllStatus` | Player (Ally / PVP-enemy ready) |
+| Instakill (Death) | `applyMagicInstakill` | Player (Ally / PVP-enemy ready) |
+| Erase | `applyMagicErase` | Player (Ally / PVP-enemy ready) |
+| Cast windup | `drawCastWindup` | Player + Ally + PVP-enemy |
+| Throw anim (projectile + impact) | `drawSpellThrow` | Player + Ally + PVP-enemy |
+
+All math + state mutation lives in `combatant-cast.js`. Each role's apply fn is a thin dispatcher that resolves its target object + I/O callbacks and hands off. When a future role gets a new spell type, the call site is one helper invocation — no parallel implementation.
+
 ## 1.7.173 — 2026-05-09
 
 ### refactor: heal / sight / cure-status unified across all 3 roles
