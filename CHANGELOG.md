@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.136 — 2026-05-08
+
+### Battle magic menu polish — gray-out, layout, scroll
+
+Three improvements to `_drawBattleSpellList` in `battle-drawing.js`:
+
+1. **Unaffordable spells fade to gray.** Spells where `cost > ps.mp` render with palette slot 3 swapped to NES `$10` (gray) — affordable rows stay full-color. Same glyph pass; just a per-row palette toggle, no extra render cost.
+2. **Empty-state defense.** "No spells" message if `spellSelectList` ever comes through empty. Shouldn't happen in normal play, but better than a blank panel.
+3. **Layout fix — overflow gone.** `rowH` 14 → 12 so 4 rows fit in the 48 px content area (was 3 rows + spillover). Added a scroll window: when `list.length > 4`, `scrollTop` is derived from the cursor each frame (centers cursor when possible, clamps at both ends — pure-derive, no new state). Cursor draws at the relative-to-window row. The pre-existing 8×8 `ui.scrollArrowUp/Down` sprites are pinned to the right edge of the panel and blink at 250 ms cadence when hidden content exists above / below.
+
 ## 1.7.135 — 2026-05-08
 
 ### RM cast visual is now school-aware

@@ -924,19 +924,56 @@ function _drawBattleItemPanel(menuX) {
   _drawBattleItemCursors(menuX);
 }
 
+// Bottom-panel content area is HUD_BOT_H - 16 = 48 px tall after the 8 px
+// inset on top + bottom. At rowH=12, exactly 4 rows fit. The list scrolls
+// when the player knows more than 4 castable spells.
+const SPELL_ROW_H = 12;
+const SPELL_VISIBLE_ROWS = 4;
+
+// Pure-derive scroll position from cursor so we don't need new persistent
+// state: scrollTop centers the cursor in the 4-row window when possible,
+// clamped so we never scroll past either end of the list.
+function _spellScrollTop(list) {
+  if (list.length <= SPELL_VISIBLE_ROWS) return 0;
+  const half = Math.floor(SPELL_VISIBLE_ROWS / 2);
+  return Math.max(0, Math.min(
+    list.length - SPELL_VISIBLE_ROWS,
+    inputSt.itemPageCursor - half,
+  ));
+}
+
 function _drawBattleSpellList(baseX, rightAreaW, palette) {
-  const rowH = 14;
   const topY = HUD_BOT_Y + 12;
   ui.ctx.save();
   ui.ctx.beginPath();
   ui.ctx.rect(baseX - 8, HUD_BOT_Y + 8, rightAreaW + 8, HUD_BOT_H - 16);
   ui.ctx.clip();
   const list = inputSt.spellSelectList;
-  for (let i = 0; i < list.length; i++) {
-    const spellId = list[i];
+  // Empty state — defensive. Magic action shouldn't be reachable without a
+  // castable spell, but if it ever is, render "No spells" so the panel
+  // isn't a blank box.
+  if (list.length === 0) {
+    const noSpellsBytes = _nameToBytes('No spells');
+    drawText(ui.ctx, baseX + 8, topY, noSpellsBytes, palette);
+    ui.ctx.restore();
+    return;
+  }
+  // Gray palette for spells the player can't afford. Reuses the same
+  // base palette but swaps the active text color (slot 3) to NES $10
+  // (gray) — visually differentiates from full-color affordable rows
+  // without re-rendering glyphs in a separate pass.
+  const fadedPal = [...palette];
+  fadedPal[3] = 0x10;
+  const scrollTop = _spellScrollTop(list);
+  const rowCount = Math.min(SPELL_VISIBLE_ROWS, list.length);
+  for (let i = 0; i < rowCount; i++) {
+    const idx = scrollTop + i;
+    const spellId = list[idx];
     const name = getSpellNameClean(spellId);
     const cost = getSpellMPCost(spellId);
-    drawText(ui.ctx, baseX + 8, topY + i * rowH, name, palette);
+    const affordable = ps.mp >= cost;
+    const rowPal = affordable ? palette : fadedPal;
+    drawText(ui.ctx, baseX + 8, topY + i * SPELL_ROW_H, name, rowPal);
     if (cost > 0) {
       const costStr = String(cost);
       const costBytes = new Uint8Array(costStr.length);
@@ -945,17 +982,31 @@ function _drawBattleSpellList(baseX, rightAreaW, palette) {
       // right edge sits at x=248. Place cost so its right edge is at x=240 (8px margin).
       const PANEL_INNER_RIGHT = CANVAS_W - 16;
       const costX = PANEL_INNER_RIGHT - measureText(costBytes);
-      drawText(ui.ctx, costX, topY + i * rowH, costBytes, palette);
+      drawText(ui.ctx, costX, topY + i * SPELL_ROW_H, costBytes, rowPal);
     }
+  }
+  // Scroll indicators — reuse the global 8×8 arrow tiles already cached in
+  // `ui.scrollArrow{Up,Down}` (built once in sprite-init). Pinned to the
+  // right edge of the panel area, blink at 250 ms cadence so they read as
+  // active hints rather than static decoration.
+  const arrowX = baseX + rightAreaW - 12;
+  const blink = (Math.floor(Date.now() / 250) & 1) === 0;
+  if (scrollTop > 0 && ui.scrollArrowUp && blink) {
+    ui.ctx.drawImage(ui.scrollArrowUp, arrowX, topY - 4);
+  }
+  if (scrollTop + SPELL_VISIBLE_ROWS < list.length && ui.scrollArrowDown && blink) {
+    ui.ctx.drawImage(ui.scrollArrowDown, arrowX, topY + SPELL_VISIBLE_ROWS * SPELL_ROW_H - 4);
   }
   ui.ctx.restore();
 }
 
 function _drawBattleSpellCursor(baseX) {
   if (!_cursorTileCanvas() || battleSt.battleState !== 'item-select' || inputSt.menuMode !== 'magic') return;
-  const rowH = 14;
   const topY = HUD_BOT_Y + 12;
-  ui.ctx.drawImage(_cursorTileCanvas(), baseX - 8, topY + inputSt.itemPageCursor * rowH - 4);
+  const list = inputSt.spellSelectList;
+  if (list.length === 0) return;
+  const cursorRow = inputSt.itemPageCursor - _spellScrollTop(list);
+  ui.ctx.drawImage(_cursorTileCanvas(), baseX - 8, topY + cursorRow * SPELL_ROW_H - 4);
 }
 function _battleMenuStates() {
   const bs = battleSt.battleState;
