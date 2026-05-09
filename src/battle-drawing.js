@@ -39,7 +39,7 @@ import { getCastAnimElapsedMs, getCurrentSpellId, getSpellTargets, getSpellHitId
 import { drawCasterCastBehind, drawCasterCastFront,
          jobToCastKey, CAST_T_LUNGE, CAST_T_HEAL, CAST_T_RETURN, CAST_PHASE_MS,
          CAST_T_THROW_PROJ_START, CAST_T_THROW_IMPACT_START, CAST_T_THROW_RETURN,
-         CAST_PHASE_MS_THROW, logCastSuccess } from './cast-anim.js';
+         CAST_PHASE_MS_THROW } from './cast-anim.js';
 import { getSpellAnim, getSpellAnimForItem, getSpellAnimFrame } from './spell-anim.js';
 import { getProjectileTile } from './projectile-anim.js';
 import { hudSt } from './hud-state.js';
@@ -1686,7 +1686,22 @@ function _drawAllyPortrait(i, ally, isVicPose, isAllyAttack, isAllyHit, isNearFa
       else weaponDraws.push({ img: spec.canvas, x: ppx + spec.dx, y: ppy + spec.dy });
     }
   }
+  // Cast BEHIND — same shape as `_drawBattlePortrait:451`. Halo draws under
+  // portrait. No clip, no wrapper helper — exactly the player block.
+  if (battleSt.battleState === 'ally-magic-cast' &&
+      battleSt.allyMagicCasterIdx === i &&
+      !battleSt.allyMagicItemMode) {
+    drawCasterCastBehind(ui.ctx, ppx + 8, ppy + 8, ally.jobIdx || 0,
+      battleSt.allyMagicSpellId, battleSt.battleTimer, false);
+  }
   ui.ctx.drawImage(portraits[ally.fadeStep], ppx, ppy);
+  // Cast FRONT — same shape as `_drawBattlePortrait:304`. Stars/flame over portrait.
+  if (battleSt.battleState === 'ally-magic-cast' &&
+      battleSt.allyMagicCasterIdx === i &&
+      !battleSt.allyMagicItemMode) {
+    drawCasterCastFront(ui.ctx, ppx + 8, ppy + 8, ally.jobIdx || 0,
+      battleSt.allyMagicSpellId, battleSt.battleTimer, false);
+  }
   // Near-fatal sweat — 2 frames alternating every 133ms, 3px above portrait
   if (isNearFatal && bsc.sweatFrames.length === 2 && !isAllyAttack && !isAllyHit && !isVicPose && !isThisAllySlash) {
     const sweatIdx = Math.floor(Date.now() / 133) & 1;
@@ -1747,21 +1762,13 @@ function drawBattleAllies() {
   if (battleSt.battleAllies.length === 0 || battleSt.battleState === 'none') return;
   const panelTop = HUD_VIEW_Y + 32;
   const weaponDraws = [];
-  // Cast BEHIND pass — outside the panel clip so the BM halo + cast flame can
-  // extend left past HUD_RIGHT_X (the column edge). Mirrors the player pattern
-  // at `_drawBattlePortrait:451`: `if (state) drawCasterCastBehind(...)`. Same
-  // helper, same arg semantics, just sourced from `battleSt.allyMagic*` and
-  // `ally.jobIdx`. The structure must stay outside the row loop's clip — the
-  // cast flame ($51-$57 16-wide canvas anchored at `centerX - 8 - 16 = 136`
-  // for ally row, vs HUD_RIGHT_X = 144) gets clipped otherwise.
-  _drawAllyCastWindup('behind');
-  // Ally rows INSIDE the panel clip — portrait, weapon, text, status, slash.
-  ui.ctx.save();
-  ui.ctx.beginPath();
-  ui.ctx.rect(HUD_RIGHT_X, panelTop, HUD_RIGHT_W, HUD_VIEW_H - 32);
-  ui.ctx.clip();
+  // No global panel clip — matches the player path. `_drawBattlePortrait` runs
+  // without a wrapping clip, which is why its inline cast block at line 451
+  // works without the BM flame getting cut off. Ally rows now mirror that:
+  // each row's content (portrait + cast + weapon + text + status) renders
+  // without being constrained to the panel rect. Local clips inside helpers
+  // (death-slide phase 1) still apply.
   for (let i = 0; i < battleSt.battleAllies.length; i++) _drawAllyRow(i, battleSt.battleAllies[i], panelTop, weaponDraws);
-  ui.ctx.restore();
   if (battleSt.battleState === 'item-target-select' && inputSt.itemTargetType === 'player' && _cursorTileCanvas()) {
     // Single-target ally pick: one solid cursor on the picked row.
     // All-allies: blinking cursor on every living ally (player handled in _drawBattlePortrait).
@@ -1776,31 +1783,6 @@ function drawBattleAllies() {
     }
   }
   _flushAllyWeaponDraws(weaponDraws);
-  // Cast FRONT pass — outside the panel clip, after portrait. Same gating as
-  // the behind pass; layers stars/flame over the portrait.
-  _drawAllyCastWindup('front');
-}
-
-// One body for both cast layers — same gating as the player's cast block at
-// `_drawBattlePortrait:451` and `_drawBattlePortrait:304`, but per-casting-ally.
-// Lives outside the panel clip so the halo + flame can extend past the column.
-function _drawAllyCastWindup(layer) {
-  if (battleSt.battleState !== 'ally-magic-cast') return;
-  if (battleSt.allyMagicItemMode) return;
-  const i = battleSt.allyMagicCasterIdx;
-  if (i < 0) return;
-  const ally = battleSt.battleAllies[i];
-  if (!ally) return;
-  const panelTop = HUD_VIEW_Y + 32;
-  const shakeOff = (battleSt.allyShakeTimer[i] > 0) ? (Math.floor(battleSt.allyShakeTimer[i] / 67) & 1 ? 2 : -2) : 0;
-  const ppx = HUD_RIGHT_X + 8 + shakeOff;
-  const ppy = panelTop + i * ROSTER_ROW_H + 8;
-  // Telemetry: confirms _drawAllyCastWindup is reached + which (job, spell)
-  // is being passed. Layered with the cast-anim miss/success logs so we get
-  // a full trace: windup-called → halo-rendered OR cast-behind-miss.
-  logCastSuccess('ally-windup-' + layer, ally.jobIdx || 0, battleSt.allyMagicSpellId);
-  const fn = layer === 'behind' ? drawCasterCastBehind : drawCasterCastFront;
-  fn(ui.ctx, ppx + 8, ppy + 8, ally.jobIdx || 0, battleSt.allyMagicSpellId, battleSt.battleTimer, false);
 }
 
 function _encounterMonsterPos(idx) {

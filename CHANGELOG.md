@@ -2,6 +2,28 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.166 — 2026-05-09
+
+### fix: ally cast uses the SAME system as user portrait (clip removed)
+
+User kept asking for the ally cast to use the same system as the user portrait. The blocker was the panel clip in `drawBattleAllies` — `_drawBattlePortrait` runs WITHOUT a wrapping clip, which is why its inline cast block at `:451` works. Every "modular" attempt I made (parallel `_drawAllyCastAnim*` helpers v1.7.150, pre/post-clip `_drawAllyCastWindup` v1.7.164) preserved the clip and added complexity to work around it.
+
+**Removed the global panel clip in `drawBattleAllies`.** The clip was wrapping the whole row loop. Now ally rows render without it, exactly like the player portrait. Ally cast inlines in `_drawAllyPortrait` with the SAME shape as `_drawBattlePortrait:451`:
+
+```js
+// before portrait:
+if (battleSt.battleState === 'ally-magic-cast' && battleSt.allyMagicCasterIdx === i && !battleSt.allyMagicItemMode) {
+  drawCasterCastBehind(ui.ctx, ppx + 8, ppy + 8, ally.jobIdx || 0, battleSt.allyMagicSpellId, battleSt.battleTimer, false);
+}
+ui.ctx.drawImage(portraits[ally.fadeStep], ppx, ppy);
+// after portrait:
+if (...same gate) drawCasterCastFront(...);
+```
+
+Identical to the player block. No `_drawAllyCastWindup`, no `_allyCastContext`, no pre/post-pass. The clip removal was the actual unblock — the v1.7.163 inline attempt would have worked if I'd done this then. Should have just removed the clip the first time. Saving this lesson: when the user says "use the same system", check what's actually different first. The clip was a structural divergence I kept treating as a constraint instead of removing.
+
+Local clips inside `_drawAllyPortrait` (death-slide phase 1) still apply where needed.
+
 ## 1.7.165 — 2026-05-09
 
 ### diag: cast windup telemetry pipes to pm2 logs
