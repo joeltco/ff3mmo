@@ -10,6 +10,7 @@ import { mapSt } from './map-state.js';
 import { sprite } from './player-sprite.js';
 import { DIR_DOWN, DIR_UP, DIR_LEFT, DIR_RIGHT } from './sprite.js';
 import { playFF1Track, stopFF1Music, pauseMusic, resumeMusic } from './music.js';
+import { ui } from './ui-state.js';
 import { ps, changeJob, fullHeal, grantExp } from './player-stats.js';
 import { JOBS } from './data/jobs.js';
 import { swapBattleSprites } from './job-sprites.js';
@@ -41,9 +42,19 @@ let _tabScrollX = 0;      // current scroll offset (animated)
 let _tabScrollTarget = 0;  // target scroll offset
 const _tabUnread = [false, false, false, false]; // unread notification per tab
 export let chatScrollOffset = 0; // how many rows scrolled up from bottom
-export function setChatScrollOffset(v) { chatScrollOffset = v; }
+export function setChatScrollOffset(v) { chatScrollOffset = Math.max(0, Math.min(v, _chatMaxScroll)); }
 export function setActiveTab(i) { activeTab = i; _tabBlinkStart = Date.now(); _tabScrollTarget = 0; _tabUnread[i] = false; chatScrollOffset = 0; }
 export function setTabSelectMode(v) { tabSelectMode = v; _tabBlinkStart = Date.now(); if (!v) chatScrollOffset = 0; }
+
+// Cached during the last _drawChatTextArea call. Used by the input handler
+// (movement.js) to clamp scroll without re-running row layout, and by the
+// arrow renderer below.
+let _chatTotalRows = 0;
+let _chatAvailRows = 0;
+let _chatMaxScroll = 0;
+export function getChatMaxScroll() { return _chatMaxScroll; }
+export function canChatScrollUp() { return chatScrollOffset < _chatMaxScroll; }
+export function canChatScrollDown() { return chatScrollOffset > 0; }
 
 // ── Mutable state (exported so game.js can read/write directly) ────────────
 export const chatState = {
@@ -592,7 +603,16 @@ function _drawChatTextArea(ctx, curBoxY, curBoxH, battleFadeAlpha, titleActive) 
   const availRows = Math.max(1, Math.floor(innerH / CHAT_LINE_H) - inputRows);
   const inputLineY = innerBottom - (inputRows - 1) * CHAT_LINE_H;
   const bottomY = chatState.inputActive ? inputLineY - CHAT_LINE_H : innerBottom;
-  const scroll = (CHAT_TABS[activeTab] === 'Private' && tabSelectMode) ? chatScrollOffset : 0;
+  // Cache for input handler + arrow renderer. Re-clamp scroll if the buffer
+  // shrank since the last frame (e.g., tab switch dropped the visible row count).
+  _chatTotalRows = rows.length;
+  _chatAvailRows = availRows;
+  _chatMaxScroll = Math.max(0, rows.length - availRows);
+  if (chatScrollOffset > _chatMaxScroll) chatScrollOffset = _chatMaxScroll;
+  // Apply the offset whenever the chat is expanded (open log) OR in the
+  // legacy Private-tab tab-select mode.
+  const scrollActive = chatState.expanded || (CHAT_TABS[activeTab] === 'Private' && tabSelectMode);
+  const scroll = scrollActive ? chatScrollOffset : 0;
   const endIdx = rows.length - scroll;
   const visible = rows.slice(Math.max(0, endIdx - availRows), endIdx);
   for (let i = 0; i < visible.length; i++) {
@@ -609,5 +629,22 @@ function _drawChatTextArea(ctx, curBoxY, curBoxH, battleFadeAlpha, titleActive) 
     const line1Y = inputRows === 2 ? innerBottom - CHAT_LINE_H : innerBottom;
     const line2Y = innerBottom;
     _drawChatInput(ctx, lineW, startX, line1Y, line2Y);
+  }
+  if (scrollActive) _drawChatScrollArrows(ctx, innerTop, innerBottom);
+}
+
+// Up/down scroll-arrow indicators — same blink rhythm + ui sprites as
+// roster.js:_drawScrollArrows. Renders in the right margin of the chat
+// box so it doesn't overlap text. Only fires when scrolling is "active"
+// (chat expanded or Private-tab select mode).
+function _drawChatScrollArrows(ctx, innerTop, innerBottom) {
+  const blink = Math.floor(Date.now() / 500) & 1;
+  if (!blink) return;
+  const ax = CANVAS_W - 8 - 8; // 8px arrow tile inset from the chat box edge
+  if (canChatScrollUp() && ui.scrollArrowUp) {
+    ctx.drawImage(ui.scrollArrowUp, ax, innerTop + 2);
+  }
+  if (canChatScrollDown() && ui.scrollArrowDown) {
+    ctx.drawImage(ui.scrollArrowDown, ax, innerBottom - 8 - 2);
   }
 }

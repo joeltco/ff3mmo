@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.148 — 2026-05-09
+
+### feat: chat log scroll
+
+When the chat log is expanded (Shift+T), arrow Up scrolls back through history and arrow Down scrolls forward toward the latest. Reuses the same scroll-arrow sprites + 500ms blink rhythm as `roster.js:_drawScrollArrows` — `ui.scrollArrowUp` at top-right of the chat box, `ui.scrollArrowDown` at bottom-right, drawn only when scrollable in that direction.
+
+The scroll-state plumbing already existed (`chatScrollOffset`, `setChatScrollOffset`) for the Private-tab tab-select flow. Generalized so any expanded chat consumes Up/Down. `setChatScrollOffset` now clamps to the cached buffer ceiling (no scrolling past the top); the row-count cache is updated each draw so the input handler doesn't have to re-run row layout.
+
+Movement is gated on `chatState.expanded` (existing return), so character movement is suppressed while scrolling. Scroll resets to 0 when the chat collapses.
+
 ## 1.7.147 — 2026-05-09
 
 ### feat: smarter death respawn

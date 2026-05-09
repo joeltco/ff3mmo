@@ -53,6 +53,7 @@ export function initKeyboardListeners() {
     if (e.key === 'T' && _chatHotkeyAllowed() && !chatState.inputActive) {
       e.preventDefault();
       chatState.expanded = !chatState.expanded;
+      if (!chatState.expanded) setChatScrollOffset(0);
       playSFX(chatState.expanded ? SFX.SCREEN_OPEN : SFX.SCREEN_CLOSE);
     }
     if (e.key === 't' && _chatHotkeyAllowed()) {
