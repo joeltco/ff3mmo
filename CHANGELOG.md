@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.190 — 2026-05-10
+
+### refactor: extract `pvp-drawing.js` from `pvp.js`
+
+Task 3 of `docs/REFACTOR-PLAN.md`. `pvp.js` was 1264 lines mixing state + AI + state-machine updaters + drawing. Drawing extracted to follow the convention set by `battle-draw-encounter.js` and the rest of the battle-draw-* family.
+
+**New file** `src/pvp-drawing.js` (351 lines): `drawBossSpriteBoxPVP`, `_drawSparkleAtCorners`, `_drawPVPEnemyCell`. Pure rendering — opponent + enemy ally cell sprites, weapon overlays, hit/dying/cast/defend/item-use poses, status icons, near-fatal sweat, sparkles, slash overlays. Mirrors the `combatant-pose` + `combatant-cast` patterns used by the player + ally + encounter draws.
+
+**`pvp.js`** 1264 → 935 (-329). Now state + AI + state-machine updaters only — no drawing concerns. Cleaned now-unused imports: `getEnemyHP`, `getPlayerDamageNum`, `getEnemyHealNum`, `getSpellTargets`, `clipToViewport`, `drawBorderedBox`, `inputSt`, `bsc`, `getSlashFramesForWeapon`, `drawSlashOverlay`, `shouldDrawSlash`, `drawCasterCastBehind/Front`, `jobToCastKey`, `drawCastWindup`, `getSpellAnim`, `getSpellAnimForItem`, `drawStatusSpriteAbove`, all `fakePlayer*FullBodyCanvases` + `fakePlayerDeathFrames`, `pickAttackPoseKey/WeaponSpec/Layer`, `pickCombatantBody`, `_jobPalette` (local helper), plus palette pool imports (`PLAYER_PALETTES`, `MONK_PALETTES`, `BLACK_MAGE_PALETTES`, `RED_MAGE_PALETTES`).
+
+**`battle-draw-encounter.js`** — `drawBossSpriteBoxPVP` import path moved from `./pvp.js` to `./pvp-drawing.js`.
+
+Zero behavior change. Same circular-import shape as the battle-draw-* splits (pvp-drawing imports `pvpSt` from pvp.js; pvp.js / battle-draw-encounter.js import `drawBossSpriteBoxPVP` from pvp-drawing.js).
+
 ## 1.7.189 — 2026-05-10
 
 ### fix: ALL spells fire SFX during spell animation, not after
