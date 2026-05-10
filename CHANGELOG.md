@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.192 — 2026-05-10
+
+### refactor: pause input → `pause-menu.js` (last task in REFACTOR-PLAN)
+
+Task 4 of `docs/REFACTOR-PLAN.md`. `input-handler.js` was 1293 lines mixing 4 contexts (battle / roster / tab-select / pause). The pause section was the largest at ~495 lines and tightly coupled to `pauseSt` in `pause-menu.js` — moving it eliminates the cross-file state plumbing.
+
+**`pause-menu.js`** 563 → 1098. Now owns the pause-menu state machine end-to-end: state + transitions + rendering + input. New exports `initPauseMenuInput({ returnToTitle })` and `handlePauseInput`. Local `_zPressed` / `_xPressed` helpers (5 lines each) so pause-menu doesn't need to expose internals from input-handler. `_toggleCrt` is already defined locally in pause-menu (line 476), so no injection needed for it.
+
+**`input-handler.js`** 1293 → 790 (-503). Dropped the pause section + the `_returnToTitle` / `_toggleCrt` injection slots. Cleaned now-unused imports: `pauseMusic`, `playFF1Track`, `FF1_TRACKS`, `changeJob`, `setEquipSlotId`, `getEquipSlotId`, `EQUIP_SLOT_SUBTYPE`, `jobSwitchCost`, `getCastableKnownSpells`, `saveSlotsToDB`, `selectCursor`, `saveSlots`, `removeStatus`, `swapBattleSprites`.
+
+**`main.js`** — added `initPauseMenuInput({ returnToTitle })` call alongside `initInputHandler`. Removed `returnToTitle` and `toggleCrt` from input-handler init.
+
+**`movement.js`** — `handlePauseInput` import path moved from `./input-handler.js` to `./pause-menu.js`.
+
+Zero behavior change. Refactor plan complete (4/4 tasks).
+
 ## 1.7.191 — 2026-05-10
 
 ### fix: PVP cure sparkle was tiled at 4 corners — now single tile (matches player + ally)

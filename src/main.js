@@ -20,7 +20,7 @@ import { battleSt } from './battle-state.js';
 import { chatState, consoleLog, setCommandContext, isDev } from './chat.js';
 import { setLocationGetter, getPlayerLocation } from './roster.js';
 import { titleSt } from './title-screen.js';
-import { pauseSt } from './pause-menu.js';
+import { pauseSt, initPauseMenuInput } from './pause-menu.js';
 import { transSt } from './transitions.js';
 import { initInputHandler, initKeyboardListeners } from './input-handler.js';
 import { setPlayerSprite } from './player-sprite.js';
@@ -127,10 +127,8 @@ export async function loadROM(arrayBuffer) {
   initBattleEncounter({ resetBattleVars });
   initBattleAlly({ buildTurnOrder, processNextTurn, isTeamWiped });
   initBattleEnemy({ processNextTurn, isTeamWiped });
-  initInputHandler({
-    executeBattleCommand, returnToTitle, startPVPBattle,
-    toggleCrt: () => document.getElementById('canvas-wrapper').classList.toggle('crt'),
-  });
+  initInputHandler({ executeBattleCommand, startPVPBattle });
+  initPauseMenuInput({ returnToTitle });
 
   await loadSlotsFromDB();
 

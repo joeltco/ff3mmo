@@ -1,19 +1,28 @@
 // pause-menu.js — pause menu state, transitions, and rendering
 
 import { drawText } from './font-renderer.js';
-import { ps, getEquipSlotId, jobSwitchCost, getJobLevel, getJobLevelStatBonus } from './player-stats.js';
-import { JOBS, JOB_ABBR } from './data/jobs.js';
+import { ps, getEquipSlotId, setEquipSlotId, jobSwitchCost, getJobLevel, getJobLevelStatBonus,
+         recalcCombatStats, changeJob, EQUIP_SLOT_SUBTYPE } from './player-stats.js';
+import { JOBS, JOB_ABBR, canJobEquip } from './data/jobs.js';
 import { _makeFadedPal, nesColorFade } from './palette.js';
 import { _nameToBytes, _buildItemRowBytes } from './text-utils.js';
 import { getItemNameClean, getSpellNameClean } from './text-decoder.js';
 import { SPELLS, getSpellMPCost, getCastableKnownSpells } from './data/spells.js';
-import { stopFF1Music, resumeMusic, playFF1Track, FF1_TRACKS } from './music.js';
+import { stopFF1Music, resumeMusic, playFF1Track, FF1_TRACKS, playSFX, SFX, pauseMusic } from './music.js';
 import { PAUSE_ITEMS } from './data/strings.js';
-import { selectCursor, saveSlots } from './save-state.js';
+import { selectCursor, saveSlots, saveSlotsToDB } from './save-state.js';
 import { ui } from './ui-state.js';
-import { inputSt } from './input-handler.js';
+import { inputSt, keys } from './input-handler.js';
 import { drawBorderedBox, clipToViewport, drawCursorFaded } from './hud-drawing.js';
-import { playerInventory } from './inventory.js';
+import { playerInventory, addItem, removeItem } from './inventory.js';
+import { battleSt } from './battle-state.js';
+import { transSt } from './transitions.js';
+import { mapSt } from './map-state.js';
+import { msgState } from './message-box.js';
+import { ITEMS, isHandEquippable } from './data/items.js';
+import { swapBattleSprites } from './job-sprites.js';
+import { getRosterVisible } from './roster.js';
+import { STATUS, removeStatus } from './status-effects.js';
 
 // NES layout constants — must match game.js
 const HUD_VIEW_X  = 0;
@@ -560,4 +569,530 @@ export function drawPauseMenu(ctx) {
       ctx.drawImage(cursorTile, HUD_RIGHT_X - 4, HUD_VIEW_Y + 12);
     }
   }
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// Pause-menu input handlers — extracted from input-handler.js v1.7.192.
+//
+// Drives the pause-menu state machine from keyboard input. Mirrors the
+// state declared in `pauseSt` above. Outside callers: `handlePauseInput`
+// invoked from `movement.js` (pre-update tick).
+
+// `_returnToTitle` is injected at boot to break the circular import on
+// main.js. `_toggleCrt` is defined locally above (line 476). Set via
+// `initPauseMenuInput({ returnToTitle })`.
+let _returnToTitle = () => {};
+export function initPauseMenuInput(deps) {
+  _returnToTitle = deps.returnToTitle;
+}
+
+// Local helpers — the input-handler module's `_zPressed` / `_xPressed` reset
+// the key state on read. Inlined here so pause-menu doesn't need to expose
+// them as exports from input-handler.
+function _zPressed() {
+  const k = keys;
+  if (!k['z'] && !k['Z']) return false;
+  k['z'] = false; k['Z'] = false; return true;
+}
+function _xPressed() {
+  const k = keys;
+  if (!k['x'] && !k['X']) return false;
+  k['x'] = false; k['X'] = false; return true;
+}
+
+// ── Pause input ────────────────────────────────────────────────────────────
+
+function _pauseInputOpenClose() {
+  const k = keys;
+  if (k['Enter']) {
+    k['Enter'] = false;
+    if (pauseSt.state === 'none' && battleSt.battleState === 'none' && transSt.state === 'none' && !mapSt.shakeActive && !mapSt.starEffect && !mapSt.moving && msgState.state === 'none') {
+      playSFX(SFX.CONFIRM);
+      pauseMusic();
+      playFF1Track(FF1_TRACKS.MENU_SCREEN);
+      pauseSt.state = 'scroll-in'; pauseSt.timer = 0; pauseSt.cursor = 0;
+    }
+    return true;
+  }
+  if (k['x'] || k['X']) {
+    if (pauseSt.state === 'open') {
+      k['x'] = false; k['X'] = false;
+      playSFX(SFX.CONFIRM);
+      pauseSt.state = 'text-out'; pauseSt.timer = 0;
+      return true;
+    }
+  }
+  return false;
+}
+
+function _pauseInputMainMenu() {
+  if (pauseSt.state !== 'open') return false;
+  const k = keys;
+  if (k['ArrowDown']) { k['ArrowDown'] = false; pauseSt.cursor = (pauseSt.cursor + 1) % 7; playSFX(SFX.CURSOR); }
+  if (k['ArrowUp'])   { k['ArrowUp'] = false;   pauseSt.cursor = (pauseSt.cursor + 6) % 7; playSFX(SFX.CURSOR); }
+  if (_zPressed()) {
+    if (pauseSt.cursor === 0) {
+      playSFX(SFX.CONFIRM);
+      pauseSt.state = 'inv-text-out'; pauseSt.timer = 0; pauseSt.invScroll = 0;
+    } else if (pauseSt.cursor === 1) {
+      _pauseInputMagicZ();
+    } else if (pauseSt.cursor === 2) {
+      playSFX(SFX.CONFIRM);
+      pauseSt.state = 'eq-text-out'; pauseSt.timer = 0; pauseSt.eqCursor = 0;
+    } else if (pauseSt.cursor === 3) {
+      playSFX(SFX.CONFIRM);
+      pauseSt.state = 'stats-text-out'; pauseSt.timer = 0;
+    } else if (pauseSt.cursor === 4) {
+      playSFX(SFX.CONFIRM);
+      pauseSt.jobList = [];
+      for (let i = 0; i < 22; i++) { if ((ps.unlockedJobs >> i) & 1) pauseSt.jobList.push(i); }
+      pauseSt.jobCursor = Math.max(0, pauseSt.jobList.indexOf(ps.jobIdx));
+      pauseSt.state = 'job-text-out'; pauseSt.timer = 0;
+    } else if (pauseSt.cursor === 5) {
+      playSFX(SFX.CONFIRM);
+      pauseSt.state = 'options-text-out'; pauseSt.timer = 0; pauseSt.optCursor = 0;
+    } else if (pauseSt.cursor === 6) {
+      playSFX(SFX.CONFIRM);
+      _returnToTitle();
+    }
+  }
+  return true;
+}
+
+// Pause-menu Magic submenu — opens the inventory state machine in 'magic' mode.
+function _pauseInputMagicZ() {
+  const known = getCastableKnownSpells(ps.jobIdx, ps.knownSpells);
+  if (known.length === 0) { playSFX(SFX.ERROR); return; }
+  playSFX(SFX.CONFIRM);
+  pauseSt.menuMode = 'magic';
+  pauseSt.magicCursor = 0;
+  pauseSt.magicHeldId = -1;
+  pauseSt.state = 'inv-text-out';
+  pauseSt.timer = 0;
+}
+
+// Map spell.type → STATUS flag for cure_status spells (Poisona, Bndna, etc.)
+const PAUSE_CURE_FLAG = {
+  poison:    STATUS.POISON,
+  blind:     STATUS.BLIND,
+  silence:   STATUS.SILENCE,
+  mini:      STATUS.MINI,
+  toad:      STATUS.TOAD,
+  petrify:   STATUS.PETRIFY,
+  paralysis: STATUS.PARALYSIS,
+};
+
+// Apply a pause-menu spell cast on the current target (player or roster ally).
+function _applyPauseSpellUse(rosterTargets) {
+  const spellId = pauseSt.useSpellId;
+  const spell = SPELLS.get(spellId);
+  if (!spell) { playSFX(SFX.ERROR); return; }
+  const cost = getSpellMPCost(spellId);
+  if (ps.mp < cost) { playSFX(SFX.ERROR); return; }
+  ps.mp -= cost;
+
+  // Status-cure spells (Poisona, Bndna, …) — remove the matching status and bounce a 0-heal number.
+  if (spell.target === 'cure_status') {
+    const flag = PAUSE_CURE_FLAG[spell.type];
+    if (pauseSt.invAllyTarget >= 0) {
+      const rp = rosterTargets[pauseSt.invAllyTarget];
+      if (!rp) { playSFX(SFX.ERROR); return; }
+      if (flag && rp.status) removeStatus(rp.status, flag);
+      pauseSt.healNum = { value: 0, timer: 0, rosterIdx: pauseSt.invAllyTarget, spellId };
+    } else {
+      if (flag && ps.status) removeStatus(ps.status, flag);
+      pauseSt.healNum = { value: 0, timer: 0, spellId };
+    }
+    playSFX(SFX.CURE);
+    pauseSt.state = 'inv-heal'; pauseSt.timer = 0;
+    pauseSt.useSpellId = 0;
+    saveSlotsToDB();
+    return;
+  }
+
+  // 0x36 Sight — out-of-battle scan has no gameplay effect; guard against
+  // the heal math below using `power: 0` to accidentally tick a few HP.
+  if (spell.target === 'sight') {
+    if (pauseSt.invAllyTarget >= 0) {
+      pauseSt.healNum = { value: 0, timer: 0, rosterIdx: pauseSt.invAllyTarget };
+    } else {
+      pauseSt.healNum = { value: 0, timer: 0 };
+    }
+    playSFX(SFX.SIGHT);
+    pauseSt.state = 'inv-heal'; pauseSt.timer = 0;
+    pauseSt.useSpellId = 0;
+    saveSlotsToDB();
+    return;
+  }
+
+  // Healing spells — white magic uses MND, black magic would use INT.
+  const isWhite = spell.element === 'recovery';
+  const stat = ps.stats ? (isWhite ? (ps.stats.mnd || 5) : (ps.stats.int || 5)) : 5;
+  const atk = Math.floor(stat / 2) + spell.power;
+  const amt = atk + Math.floor(Math.random() * (Math.floor(atk / 2) + 1));
+  if (pauseSt.invAllyTarget >= 0) {
+    const rp = rosterTargets[pauseSt.invAllyTarget];
+    if (!rp) { playSFX(SFX.ERROR); return; }
+    const heal = Math.min(amt, rp.maxHP - rp.hp);
+    rp.hp += heal;
+    pauseSt.healNum = { value: heal, timer: 0, rosterIdx: pauseSt.invAllyTarget, spellId };
+  } else {
+    const heal = Math.min(amt, ps.stats.maxHP - ps.hp);
+    ps.hp += heal;
+    pauseSt.healNum = { value: heal, timer: 0, spellId };
+  }
+  playSFX(SFX.CURE);
+  pauseSt.state = 'inv-heal'; pauseSt.timer = 0;
+  pauseSt.useSpellId = 0;
+  saveSlotsToDB();
+}
+
+function _pauseInvZPress(entries) {
+  if (pauseSt.heldItem === -1) {
+    if (entries.length > 0 && entries[pauseSt.invScroll]) { pauseSt.heldItem = pauseSt.invScroll; playSFX(SFX.CONFIRM); }
+    else playSFX(SFX.ERROR);
+  } else if (pauseSt.heldItem === pauseSt.invScroll) {
+    const [id] = entries[pauseSt.heldItem]; const item = ITEMS.get(Number(id));
+    if (item && item.type === 'consumable') {
+      playSFX(SFX.CONFIRM); pauseSt.heldItem = -1;
+      pauseSt.state = 'inv-target'; pauseSt.timer = 0; pauseSt.useItemId = Number(id); pauseSt.invAllyTarget = -1;
+    } else { pauseSt.heldItem = -1; playSFX(SFX.CONFIRM); }
+  } else {
+    if (entries[pauseSt.invScroll]) { pauseSt.heldItem = pauseSt.invScroll; playSFX(SFX.CONFIRM); }
+    else { pauseSt.heldItem = -1; playSFX(SFX.ERROR); }
+  }
+}
+
+function _pauseInputInventory() {
+  if (pauseSt.state !== 'inventory') return false;
+  if (pauseSt.menuMode === 'magic') return _pauseInputMagicList();
+  const entries = Object.entries(playerInventory).filter(([,c]) => c > 0);
+  const k = keys;
+  if (k['ArrowDown']) {
+    k['ArrowDown'] = false;
+    if (pauseSt.invScroll < entries.length - 1) { pauseSt.invScroll++; playSFX(SFX.CURSOR); }
+  }
+  if (k['ArrowUp']) {
+    k['ArrowUp'] = false;
+    if (pauseSt.invScroll > 0) { pauseSt.invScroll--; playSFX(SFX.CURSOR); }
+  }
+  if (k['z'] || k['Z']) { k['z'] = false; k['Z'] = false; _pauseInvZPress(entries); }
+  if (_xPressed()) {
+    if (pauseSt.heldItem !== -1) { pauseSt.heldItem = -1; playSFX(SFX.CONFIRM); }
+    else { playSFX(SFX.CONFIRM); pauseSt.state = 'inv-items-out'; pauseSt.timer = 0; }
+  }
+  return true;
+}
+
+function _pauseInputMagicList() {
+  const list = getCastableKnownSpells(ps.jobIdx, ps.knownSpells);
+  const k = keys;
+  if (k['ArrowDown']) {
+    k['ArrowDown'] = false;
+    if (pauseSt.magicCursor < list.length - 1) { pauseSt.magicCursor++; playSFX(SFX.CURSOR); }
+  }
+  if (k['ArrowUp']) {
+    k['ArrowUp'] = false;
+    if (pauseSt.magicCursor > 0) { pauseSt.magicCursor--; playSFX(SFX.CURSOR); }
+  }
+  if (_zPressed()) {
+    const spellId = list[pauseSt.magicCursor];
+    if (spellId == null) { playSFX(SFX.ERROR); return true; }
+    const spell = SPELLS.get(spellId);
+    if (!spell) { playSFX(SFX.ERROR); return true; }
+    // Sight (0x36) is a map-reveal spell in NES canon; we don't have an
+    // overworld minimap-reveal system yet, so block out-of-battle casting at
+    // the menu level — no MP cost, no target picker, no fake heal.
+    if (spell.target === 'sight') { playSFX(SFX.ERROR); return true; }
+    if (ps.mp < getSpellMPCost(spellId)) { playSFX(SFX.ERROR); return true; }
+    playSFX(SFX.CONFIRM);
+    pauseSt.useSpellId = spellId;
+    pauseSt.invAllyTarget = -1;   // start on player
+    pauseSt.state = 'inv-target'; pauseSt.timer = 0;
+  }
+  if (_xPressed()) {
+    playSFX(SFX.CONFIRM);
+    pauseSt.state = 'inv-items-out'; pauseSt.timer = 0;
+  }
+  return true;
+}
+
+function _applyPauseItemUse(item, rosterTargets) {
+  if (!item) { playSFX(SFX.ERROR); return; }
+  const eff = item.effect || (item.type === 'consumable' ? 'heal' : null);
+
+  // Cure status items (Antidote, Eye Drops, etc.) — only targets player outside battle
+  if (eff === 'cure_status') {
+    if (ps.status) {
+      const flagMap = { poison: STATUS.POISON, blind: STATUS.BLIND, silence: STATUS.SILENCE, mini: STATUS.MINI, toad: STATUS.TOAD, petrify: STATUS.PETRIFY, paralysis: STATUS.PARALYSIS };
+      const flag = flagMap[item.cures];
+      if (flag) removeStatus(ps.status, flag);
+    }
+    const itemId = pauseSt.useItemId;
+    removeItem(itemId); playSFX(SFX.CURE);
+    pauseSt.healNum = { value: 0, timer: 0, itemId };
+    pauseSt.state = 'inv-heal'; pauseSt.timer = 0;
+    saveSlotsToDB();
+    return;
+  }
+
+  if (eff !== 'heal' && eff !== 'full_heal' && eff !== 'restore_hp') { playSFX(SFX.ERROR); return; }
+  const healPower = eff === 'full_heal' ? 9999 : (item.power || item.value || 50);
+  const itemId = pauseSt.useItemId;
+  if (pauseSt.invAllyTarget >= 0) {
+    const rp = rosterTargets[pauseSt.invAllyTarget];
+    if (!rp) { playSFX(SFX.ERROR); return; }
+    const heal = Math.min(healPower, rp.maxHP - rp.hp);
+    rp.hp += heal; removeItem(itemId); playSFX(SFX.CURE);
+    pauseSt.healNum = { value: heal, timer: 0, rosterIdx: pauseSt.invAllyTarget, itemId };
+    pauseSt.state = 'inv-heal'; pauseSt.timer = 0;
+    saveSlotsToDB();
+  } else {
+    const heal = Math.min(healPower, ps.stats.maxHP - ps.hp);
+    ps.hp += heal; removeItem(itemId); playSFX(SFX.CURE);
+    pauseSt.healNum = { value: heal, timer: 0, itemId };
+    pauseSt.state = 'inv-heal'; pauseSt.timer = 0;
+    saveSlotsToDB();
+  }
+}
+
+function _pauseInputInvTarget() {
+  if (pauseSt.state !== 'inv-target') return false;
+  const rosterTargets = getRosterVisible();
+  const k = keys;
+  // Roster panel only renders 3 rows at a time. When the cursor moves past the
+  // visible window we have to scroll inputSt.rosterScroll so the actual roster
+  // panel scrolls in sync (otherwise the cursor walks off into empty space).
+  const PAUSE_ROSTER_VISIBLE = 3;
+  if (k['ArrowDown']) {
+    k['ArrowDown'] = false;
+    if (pauseSt.invAllyTarget < rosterTargets.length - 1) {
+      pauseSt.invAllyTarget++;
+      const visRow = pauseSt.invAllyTarget - inputSt.rosterScroll;
+      if (visRow >= PAUSE_ROSTER_VISIBLE) inputSt.rosterScroll++;
+      playSFX(SFX.CURSOR);
+    }
+  }
+  if (k['ArrowUp']) {
+    k['ArrowUp'] = false;
+    if (pauseSt.invAllyTarget > -1) {
+      pauseSt.invAllyTarget--;
+      if (pauseSt.invAllyTarget >= 0 && pauseSt.invAllyTarget < inputSt.rosterScroll) {
+        inputSt.rosterScroll = pauseSt.invAllyTarget;
+      }
+      playSFX(SFX.CURSOR);
+    }
+  }
+  if (_zPressed()) {
+    if (pauseSt.useSpellId > 0) _applyPauseSpellUse(rosterTargets);
+    else _applyPauseItemUse(ITEMS.get(pauseSt.useItemId), rosterTargets);
+  }
+  if (_xPressed()) {
+    pauseSt.state = 'inventory'; pauseSt.timer = 0;
+    pauseSt.heldItem = -1;
+    pauseSt.useSpellId = 0;
+    playSFX(SFX.CONFIRM);
+  }
+  return true;
+}
+
+function _enforceEquipRestrictions(jobIdx) {
+  const slots = [-100, -101, -102, -103, -104];
+  for (const eq of slots) {
+    const id = getEquipSlotId(eq);
+    if (id && !canJobEquip(jobIdx, id, ITEMS)) {
+      setEquipSlotId(eq, 0);
+      addItem(id, 1);
+    }
+  }
+  recalcCombatStats();
+  saveSlotsToDB();
+}
+
+function _equipBestMainSlots() {
+  const SLOT_DEFS = [
+    { eq: -100, type: 'hand', stat: 'atk' },
+    { eq: -102, type: 'armor', subtype: 'helmet', stat: 'def' },
+    { eq: -103, type: 'armor', subtype: 'body',   stat: 'def' },
+    { eq: -104, type: 'armor', subtype: 'arms',   stat: 'def' },
+  ];
+  for (const sd of SLOT_DEFS) {
+    const curId = getEquipSlotId(sd.eq); const curItem = ITEMS.get(curId);
+    let bestId = curId, bestVal = curItem ? (curItem[sd.stat] || 0) : 0;
+    for (const [idStr, count] of Object.entries(playerInventory)) {
+      if (count <= 0) continue;
+      const id = Number(idStr); const item = ITEMS.get(id); if (!item) continue;
+      if (sd.type === 'hand' && !isHandEquippable(item)) continue;
+      if (sd.type === 'armor' && (item.type !== 'armor' || item.subtype !== sd.subtype)) continue;
+      if (!canJobEquip(ps.jobIdx, id, ITEMS)) continue;
+      const val = item[sd.stat] || 0; if (val > bestVal) { bestVal = val; bestId = id; }
+    }
+    if (bestId !== curId) {
+      if (curId !== 0) addItem(curId, 1);
+      if (bestId !== 0) { setEquipSlotId(sd.eq, bestId); removeItem(bestId); } else setEquipSlotId(sd.eq, 0);
+    }
+  }
+}
+
+function _equipBestLeftHand() {
+  const curId = getEquipSlotId(-101); const curItem = ITEMS.get(curId);
+  let bestWepId = 0, bestWepAtk = 0, bestShieldId = 0, bestShieldDef = 0;
+  if (curItem?.type === 'weapon') { bestWepAtk = curItem.atk || 0; bestWepId = curId; }
+  else if (curItem?.subtype === 'shield') { bestShieldDef = curItem.def || 0; bestShieldId = curId; }
+  for (const [idStr, count] of Object.entries(playerInventory)) {
+    if (count <= 0) continue;
+    const id = Number(idStr); const item = ITEMS.get(id);
+    if (!item || !isHandEquippable(item)) continue;
+    if (!canJobEquip(ps.jobIdx, id, ITEMS)) continue;
+    if (item.type === 'weapon') { const v = item.atk || 0; if (v > bestWepAtk) { bestWepAtk = v; bestWepId = id; } }
+    else if (item.subtype === 'shield') { const v = item.def || 0; if (v > bestShieldDef) { bestShieldDef = v; bestShieldId = id; } }
+  }
+  const bestId = bestShieldId !== 0 ? bestShieldId : bestWepId;
+  if (bestId !== curId) {
+    if (curId !== 0) addItem(curId, 1);
+    if (bestId !== 0) { setEquipSlotId(-101, bestId); removeItem(bestId); } else setEquipSlotId(-101, 0);
+  }
+}
+
+function _equipOptimum() {
+  _equipBestMainSlots();
+  _equipBestLeftHand();
+  recalcCombatStats();
+  saveSlotsToDB();
+  playSFX(SFX.CONFIRM);
+}
+
+function _pauseInputEquip() {
+  if (pauseSt.state !== 'equip') return false;
+  const k = keys;
+  if (pauseSt.eqCursor < 5) {
+    if (k['ArrowDown'])  { k['ArrowDown'] = false;  pauseSt.eqCursor = (pauseSt.eqCursor + 1) % 5; playSFX(SFX.CURSOR); }
+    if (k['ArrowUp'])    { k['ArrowUp'] = false;    pauseSt.eqCursor = (pauseSt.eqCursor + 4) % 5; playSFX(SFX.CURSOR); }
+    if (k['ArrowRight']) { k['ArrowRight'] = false;  pauseSt._lastEqSlot = pauseSt.eqCursor; pauseSt.eqCursor = 5; playSFX(SFX.CURSOR); }
+  } else {
+    if (k['ArrowLeft'])  { k['ArrowLeft'] = false;   pauseSt.eqCursor = pauseSt._lastEqSlot || 0; playSFX(SFX.CURSOR); }
+  }
+  if (_zPressed()) {
+    if (pauseSt.eqCursor === 5) {
+      _equipOptimum();
+    } else {
+      playSFX(SFX.CONFIRM);
+      pauseSt.eqSlotIdx = -100 - pauseSt.eqCursor;
+      const isWeaponSlot = pauseSt.eqSlotIdx >= -101;
+      const slotSubtype = EQUIP_SLOT_SUBTYPE[String(pauseSt.eqSlotIdx)];
+      pauseSt.eqItemList = [];
+      const currentId = getEquipSlotId(pauseSt.eqSlotIdx);
+      if (currentId !== 0) pauseSt.eqItemList.push({ id: 0, label: 'remove' });
+      for (const [idStr, count] of Object.entries(playerInventory)) {
+        if (count <= 0) continue;
+        const id = Number(idStr);
+        const item = ITEMS.get(id);
+        if (!item) continue;
+        if (!canJobEquip(ps.jobIdx, id, ITEMS)) continue;
+        if (isWeaponSlot && isHandEquippable(item)) pauseSt.eqItemList.push({ id, count });
+        else if (!isWeaponSlot && item.type === 'armor' && item.subtype === slotSubtype) pauseSt.eqItemList.push({ id, count });
+      }
+      pauseSt.eqItemCursor = 0;
+      pauseSt.state = 'eq-items-in'; pauseSt.timer = 0;
+    }
+  }
+  if (_xPressed()) {
+    playSFX(SFX.CONFIRM);
+    pauseSt.state = 'eq-slots-out'; pauseSt.timer = 0;
+  }
+  return true;
+}
+
+function _pauseInputEquipItemSelect() {
+  if (pauseSt.state !== 'eq-item-select') return false;
+  const k = keys;
+  if (k['ArrowDown']) { k['ArrowDown'] = false; if (pauseSt.eqItemCursor < pauseSt.eqItemList.length - 1) { pauseSt.eqItemCursor++; playSFX(SFX.CURSOR); } }
+  if (k['ArrowUp'])   { k['ArrowUp'] = false;   if (pauseSt.eqItemCursor > 0) { pauseSt.eqItemCursor--; playSFX(SFX.CURSOR); } }
+  if (_zPressed()) {
+    const pick = pauseSt.eqItemList[pauseSt.eqItemCursor];
+    if (pick) {
+      const oldId = getEquipSlotId(pauseSt.eqSlotIdx);
+      if (pick.label === 'remove') {
+        setEquipSlotId(pauseSt.eqSlotIdx, 0);
+        if (oldId !== 0) addItem(oldId, 1);
+      } else {
+        setEquipSlotId(pauseSt.eqSlotIdx, pick.id);
+        removeItem(pick.id);
+        if (oldId !== 0) addItem(oldId, 1);
+      }
+      recalcCombatStats();
+      saveSlotsToDB();
+      playSFX(SFX.CONFIRM);
+    }
+    pauseSt.state = 'eq-items-out'; pauseSt.timer = 0;
+  }
+  if (_xPressed()) {
+    playSFX(SFX.CONFIRM);
+    pauseSt.state = 'eq-items-out'; pauseSt.timer = 0;
+  }
+  return true;
+}
+
+function _pauseInputStats() {
+  if (pauseSt.state !== 'stats') return false;
+  if (_xPressed()) { playSFX(SFX.CONFIRM); pauseSt.state = 'stats-out'; pauseSt.timer = 0; }
+  return true;
+}
+
+function _pauseInputJob() {
+  if (pauseSt.state !== 'job') return false;
+  const k = keys;
+  if (k['ArrowDown']) { k['ArrowDown'] = false; pauseSt.jobCursor = (pauseSt.jobCursor + 1) % pauseSt.jobList.length; playSFX(SFX.CURSOR); }
+  if (k['ArrowUp'])   { k['ArrowUp'] = false;   pauseSt.jobCursor = (pauseSt.jobCursor + pauseSt.jobList.length - 1) % pauseSt.jobList.length; playSFX(SFX.CURSOR); }
+  if (_zPressed()) {
+    const newJobIdx = pauseSt.jobList[pauseSt.jobCursor];
+    if (newJobIdx === ps.jobIdx) {
+      playSFX(SFX.CONFIRM);
+      pauseSt.state = 'job-out'; pauseSt.timer = 0;
+    } else {
+      const cost = jobSwitchCost(newJobIdx);
+      if (ps.cp >= cost) {
+        ps.cp -= cost;
+        changeJob(newJobIdx);
+        _enforceEquipRestrictions(newJobIdx);
+        swapBattleSprites(newJobIdx);
+        playSFX(SFX.CONFIRM);
+        pauseSt.state = 'job-out'; pauseSt.timer = 0;
+      } else {
+        playSFX(SFX.ERROR);
+      }
+    }
+  }
+  if (_xPressed()) { playSFX(SFX.CONFIRM); pauseSt.state = 'job-out'; pauseSt.timer = 0; }
+  return true;
+}
+
+function _pauseInputOptions() {
+  if (pauseSt.state !== 'options') return false;
+  const k = keys;
+  if (_zPressed()) {
+    if (pauseSt.optCursor === 0) { _toggleCrt(); playSFX(SFX.CONFIRM); }
+  }
+  if (_xPressed()) { playSFX(SFX.CONFIRM); pauseSt.state = 'options-out'; pauseSt.timer = 0; }
+  return true;
+}
+
+export function handlePauseInput() {
+  if (_pauseInputOpenClose()) return true;
+  if (_pauseInputMainMenu()) return true;
+  if (_pauseInputInventory()) return true;
+  if (_pauseInputInvTarget()) return true;
+  if (pauseSt.state === 'inv-heal') return true;
+  if (pauseSt.state.startsWith('inv-')) return true;
+  if (_pauseInputEquip()) return true;
+  if (_pauseInputEquipItemSelect()) return true;
+  if (pauseSt.state.startsWith('eq-')) return true;
+  if (_pauseInputStats()) return true;
+  if (pauseSt.state.startsWith('stats-')) return true;
+  if (_pauseInputJob()) return true;
+  if (pauseSt.state.startsWith('job-')) return true;
+  if (_pauseInputOptions()) return true;
+  if (pauseSt.state.startsWith('options-')) return true;
+  if (pauseSt.state !== 'none') return true;
+  return false;
 }
