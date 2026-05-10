@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.184 — 2026-05-09
+
+### refactor: split encounter monsters + boss sprite box → `battle-draw-encounter.js`
+
+Phase 2b of the `battle-drawing.js` split. Owns the central enemy-area rendering: random encounter grid (1-4 monsters), boss sprite, dissolve animation, slash hit overlays on enemies, target-select cursors.
+
+**New file** `src/battle-draw-encounter.js` (372 lines): `drawEncounterBox`, `drawBossSpriteBox`, plus internal helpers (`_drawEncounterMonsters`, `_drawEncounterSlashEffects`, `_drawEncounterCursors`, `_isEncounterCombatState`, `_drawBossSprite`, `_drawBossSpriteBoxBoss`, `_drawDissolvedSprite`, `_drawShiftedBlock`).
+
+**New file** `src/battle-grid.js` (53 lines): shared layout math used by encounter rendering, FX, ally rows, and spell projectile/effect targeting. Exports `encounterBoxDims`, `encounterGridLayout`, `pvpEnemyCellCenterLocal` (was the `_pvpEnemyCellCenter` wrapper that auto-pulls live `pvpSt` count). Extracted to break what would have been a circular import between `battle-drawing.js` and `battle-draw-encounter.js`.
+
+**`battle-drawing.js`** 1404 → 1045 (-359). Imports `drawEncounterBox`, `drawBossSpriteBox` from the new encounter module and `encounterGridLayout`, `pvpEnemyCellCenterLocal` from `battle-grid.js`. Cleaned now-unused imports: `_calcBoxExpandSize`, `_encounterGridPos`, `getBossWhiteCanvas`, `getMonsterWhiteCanvas`, `hasMonsterSprites`, `pvpEnemyCellCenter` (raw), `drawBossSpriteBoxPVP`, `_drawMonsterDeath`, `SLASH_FRAME_MS`, `shouldDrawSlash`.
+
+Zero behavior change. `battle-drawing.js` is down 756 lines from the pre-refactor 1801. Phases 2c (ally rows) + 2d (player portrait) remain.
+
 ## 1.7.183 — 2026-05-09
 
 ### refactor: split battle menu + victory box → `battle-draw-menu.js`
