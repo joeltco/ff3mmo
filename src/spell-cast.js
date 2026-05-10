@@ -495,11 +495,16 @@ function _applySpellEffect(target) {
     return;
   }
 
-  // Damage spells (Fire, future BM family) on a friendly target — picker
+  // Offensive damage spells (Fire family) on a friendly target — picker
   // defaults to enemy, but if the user navigates to a friendly cell the spell
   // would otherwise fall through to the heal path below and silently restore
   // HP. Surface "Ineffective" instead and don't apply any effect.
-  if (spell.type === 'damage') {
+  //
+  // NOTE: cannot use `spell.type === 'damage'` here — Cure + Cura have
+  // type='damage' too (it's the dispatch axis for numeric-effect spells).
+  // Use the offensive-target set instead so heal spells reach applyMagicHeal
+  // even on full-HP targets (which post a 0 heal-num — intentional feedback).
+  if (spell.target === 'enemy' || spell.target === 'all_enemies' || spell.target === 'enemy_status') {
     replaceBattleMsg(BATTLE_INEFFECTIVE);
     _playSpellSFXOnce(SFX.ERROR);
     return;

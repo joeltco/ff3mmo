@@ -395,17 +395,23 @@ function _battleInputMagicSelect() {
     const cost = getSpellMPCost(spellId);
     if (ps.mp < cost) { playSFX(SFX.ERROR); return; }
     playSFX(SFX.CONFIRM);
-    // Default-target side per spell semantics. Heal / status-cure white magic
-    // defaults to player so the common case is one Z-press on self. Sight
-    // (scan), damage spells (Fire family), and enemy-status spells (Sleep,
-    // Confuse, Death, all_status family) default to enemy — RIGHTMOST live
-    // cell first (closest to player party), like normal melee targeting
+    // Default-target side per spell semantics. Heal / status-cure / revive /
+    // reflect white magic defaults to player so the common case is one Z-press
+    // on self. Sight (scan), damage spells (Fire family), enemy-status spells
+    // (Sleep, Confuse, Death, all_status family) default to enemy — RIGHTMOST
+    // live cell first (closest to player party), like normal melee targeting
     // feels — fall back to first-live if no right-col alive.
-    const defaultsToEnemy = spell.target === 'sight'
-                         || spell.target === 'enemy'
-                         || spell.target === 'enemy_status'
-                         || spell.target === 'all_enemies'
-                         || spell.type === 'damage';
+    //
+    // NOTE: cannot use `spell.type === 'damage'` to mean "offensive" — Cure +
+    // Cura have type='damage' too because that's the dispatch axis for
+    // numeric-effect spells (heal counts as "damage" the helper applies). Use
+    // the friendly-target set as the inversion criterion instead.
+    const defaultsToPlayer = spell.element === 'recovery'
+                          || spell.target === 'ally'
+                          || spell.target === 'cure_status'
+                          || spell.target === 'revive'
+                          || spell.target === 'reflect';
+    const defaultsToEnemy = !defaultsToPlayer;
     if (defaultsToEnemy) {
       let pick = -1;
       const cnt = _itemTargetCnt();

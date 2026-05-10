@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.187 — 2026-05-10
+
+### fix: Cure cast targeted enemies + showed "Ineffective" on full-HP self
+
+Two related bugs both rooted in `spell.type === 'damage'` being misread as "offensive". Cure's data row in `data/spells.js` is `{ type: 'damage', element: 'recovery', target: 'ally' }` — `type: 'damage'` is the dispatch axis for spells with a numeric effect (heal counts) but it does NOT mean "offensive". The targeting + effect-router both incorrectly used `type === 'damage'` as the offensive flag.
+
+**`input-handler.js`** — default-target picker pointed Cure at enemies. Inverted the check: `defaultsToPlayer` is the friendly-target set (`element === 'recovery'` OR `target === 'ally' / 'cure_status' / 'revive' / 'reflect'`); everything else defaults to enemy.
+
+**`spell-cast.js`** — `_applySpellEffect` had a guard "damage spell cast on a friendly target → Ineffective" that fired on Cure too. Replaced with the offensive-target set (`target === 'enemy' / 'all_enemies' / 'enemy_status'`), so Cure on self/ally now reaches `applyMagicHeal`. Full-HP target now correctly posts a 0 heal-num (intended feedback) instead of an ERROR sfx + "Ineffective" msg.
+
+Pipeline-rule note: `type === 'damage'` will keep tripping callers that read it as "offensive". A future cleanup could rename the dispatch axis (e.g., `dispatch: 'numeric'` vs `'status'` vs `'sight'`) — out of scope for this fix.
+
 ## 1.7.186 — 2026-05-09
 
 ### refactor: split player portrait → `battle-draw-player.js`
