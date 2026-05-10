@@ -2,6 +2,41 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.200 — 2026-05-10
+
+### Fixed: crit-overkill display sums beyond target HP
+
+A 4-hit Monk fist combo with one crit on a 7-HP Carbuncle was showing
+"83 Critical!" — the sum of all 4 hit rolls regardless of overkill.
+`_finalizeComboHits` now caps the displayed total at the target's HP-
+before-combo (snapshot taken in input-handler.js when `hitResults` was
+rolled). Same case now shows "7 Critical!". Faithful behavior: each
+hit's per-hit display is unchanged; only the final combo total is
+capped. Per-target snapshots cover encounter monsters, PVP opponents,
+PVP enemy allies, and the boss-state slot.
+
+### Re-tuned: Ninja stat weights bumped to match canon
+
+Ninja was losing 80% to Monk at L10 in `tools/battle-sim.js` mirror
+runs. Bumped Ninja's str weight from 2 → 3 (now 3/3/2/1/1/0 — matching
+NES canon's "wields all weapons, top physical class"). Verification:
+- NI20 vs MO20: 20% → 63.5% (NI now wins majority)
+- NI10 vs MO10: 19.5% → 50.5% (parity)
+- NI10 vs KN10: 98.5% (speed god vs heavy tank, decisively NI)
+- NI10 vs BB10 unarmed: 18% (Black Belt still dominant unarmed — correct)
+
+### Refactored: pause-menu heal/cure-status routes through shared helpers
+
+`pause-menu.js` was inlining heal math (`Math.min(amt, maxHP - hp); hp +=
+amt`) and `removeStatus(...)` in `_applyPauseSpellUse` and
+`_applyPauseItemUse` — duplicating logic from
+`combatant-cast.js:applyMagicHeal` / `applyMagicCureStatus`. Single-source
+violation per memory `feedback_ff3mmo_single_source_paths.md`. Pause now
+calls into the shared helpers; in-battle and pause heal math stay
+synchronized for any future change. `pauseSt.healNum` lifecycle is
+unchanged (intentionally separate from `getPlayerHealNum` /
+`getAllyDamageNums` since pause runs its own state machine).
+
 ## 1.7.199 — 2026-05-10
 
 ### Added: Ur valley vs wild grasslands — split encounter zones

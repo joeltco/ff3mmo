@@ -296,6 +296,12 @@ function _finalizeComboHits() {
   for (const h of inputSt.hitResults) {
     if (!h.miss) { totalDmg += h.damage; allMiss = false; hitsLanded++; if (h.crit) anyCrit = true; }
   }
+  // Cap displayed total to actual HP loss — a 4-hit crit combo on a 7-HP
+  // target should print "7 Critical!" not "83 Critical!". Snapshot taken in
+  // input-handler.js when hitResults was rolled.
+  if (inputSt.targetHpBefore != null) {
+    totalDmg = Math.min(totalDmg, inputSt.targetHpBefore);
+  }
   setEnemyDmgNum(allMiss ? { miss: true, timer: 0 } : { value: totalDmg, crit: anyCrit, timer: 0 });
   if (pvpSt.isPVPBattle && !allMiss) pvpSt.pvpOpponentShakeTimer = BATTLE_SHAKE_MS;
   // Replace strip message: status > crit > multi-hit

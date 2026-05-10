@@ -22,7 +22,8 @@ import { msgState } from './message-box.js';
 import { ITEMS, isHandEquippable } from './data/items.js';
 import { swapBattleSprites } from './job-sprites.js';
 import { getRosterVisible } from './roster.js';
-import { STATUS, removeStatus } from './status-effects.js';
+import { STATUS } from './status-effects.js';
+import { applyMagicHeal, applyMagicCureStatus } from './combatant-cast.js';
 
 // NES layout constants — must match game.js
 const HUD_VIEW_X  = 0;
@@ -692,15 +693,17 @@ function _applyPauseSpellUse(rosterTargets) {
   ps.mp -= cost;
 
   // Status-cure spells (Poisona, Bndna, …) — remove the matching status and bounce a 0-heal number.
+  // Routes through `applyMagicCureStatus` so the in-battle and pause paths share
+  // the same status-removal logic (single-source per memory feedback).
   if (spell.target === 'cure_status') {
     const flag = PAUSE_CURE_FLAG[spell.type];
     if (pauseSt.invAllyTarget >= 0) {
       const rp = rosterTargets[pauseSt.invAllyTarget];
       if (!rp) { playSFX(SFX.ERROR); return; }
-      if (flag && rp.status) removeStatus(rp.status, flag);
+      if (flag) applyMagicCureStatus(rp, flag);
       pauseSt.healNum = { value: 0, timer: 0, rosterIdx: pauseSt.invAllyTarget, spellId };
     } else {
-      if (flag && ps.status) removeStatus(ps.status, flag);
+      if (flag) applyMagicCureStatus(ps, flag);
       pauseSt.healNum = { value: 0, timer: 0, spellId };
     }
     playSFX(SFX.CURE);
@@ -725,7 +728,10 @@ function _applyPauseSpellUse(rosterTargets) {
     return;
   }
 
-  // Healing spells — white magic uses MND, black magic would use INT.
+  // Healing spells — roll the magic amount with the same formula spell-cast.js
+  // and combatant-cast.js use, then apply via `applyMagicHeal` so the pause and
+  // in-battle paths share one heal-clamp implementation. White magic uses MND,
+  // black magic uses INT (matches spell-cast.js:_rollMagicAmount).
   const isWhite = spell.element === 'recovery';
   const stat = ps.stats ? (isWhite ? (ps.stats.mnd || 5) : (ps.stats.int || 5)) : 5;
   const atk = Math.floor(stat / 2) + spell.power;
@@ -733,12 +739,10 @@ function _applyPauseSpellUse(rosterTargets) {
   if (pauseSt.invAllyTarget >= 0) {
     const rp = rosterTargets[pauseSt.invAllyTarget];
     if (!rp) { playSFX(SFX.ERROR); return; }
-    const heal = Math.min(amt, rp.maxHP - rp.hp);
-    rp.hp += heal;
+    const heal = applyMagicHeal(rp, amt);
     pauseSt.healNum = { value: heal, timer: 0, rosterIdx: pauseSt.invAllyTarget, spellId };
   } else {
-    const heal = Math.min(amt, ps.stats.maxHP - ps.hp);
-    ps.hp += heal;
+    const heal = applyMagicHeal(ps, amt);
     pauseSt.healNum = { value: heal, timer: 0, spellId };
   }
   playSFX(SFX.CURE);
@@ -821,13 +825,12 @@ function _applyPauseItemUse(item, rosterTargets) {
   if (!item) { playSFX(SFX.ERROR); return; }
   const eff = item.effect || (item.type === 'consumable' ? 'heal' : null);
 
-  // Cure status items (Antidote, Eye Drops, etc.) — only targets player outside battle
+  // Cure status items (Antidote, Eye Drops, etc.) — only targets player outside battle.
+  // Routes through `applyMagicCureStatus` so this matches the in-battle path.
   if (eff === 'cure_status') {
-    if (ps.status) {
-      const flagMap = { poison: STATUS.POISON, blind: STATUS.BLIND, silence: STATUS.SILENCE, mini: STATUS.MINI, toad: STATUS.TOAD, petrify: STATUS.PETRIFY, paralysis: STATUS.PARALYSIS };
-      const flag = flagMap[item.cures];
-      if (flag) removeStatus(ps.status, flag);
-    }
+    const flagMap = { poison: STATUS.POISON, blind: STATUS.BLIND, silence: STATUS.SILENCE, mini: STATUS.MINI, toad: STATUS.TOAD, petrify: STATUS.PETRIFY, paralysis: STATUS.PARALYSIS };
+    const flag = flagMap[item.cures];
+    if (flag) applyMagicCureStatus(ps, flag);
     const itemId = pauseSt.useItemId;
     removeItem(itemId); playSFX(SFX.CURE);
     pauseSt.healNum = { value: 0, timer: 0, itemId };
@@ -842,14 +845,14 @@ function _applyPauseItemUse(item, rosterTargets) {
   if (pauseSt.invAllyTarget >= 0) {
     const rp = rosterTargets[pauseSt.invAllyTarget];
     if (!rp) { playSFX(SFX.ERROR); return; }
-    const heal = Math.min(healPower, rp.maxHP - rp.hp);
-    rp.hp += heal; removeItem(itemId); playSFX(SFX.CURE);
+    const heal = applyMagicHeal(rp, healPower);
+    removeItem(itemId); playSFX(SFX.CURE);
     pauseSt.healNum = { value: heal, timer: 0, rosterIdx: pauseSt.invAllyTarget, itemId };
     pauseSt.state = 'inv-heal'; pauseSt.timer = 0;
     saveSlotsToDB();
   } else {
-    const heal = Math.min(healPower, ps.stats.maxHP - ps.hp);
-    ps.hp += heal; removeItem(itemId); playSFX(SFX.CURE);
+    const heal = applyMagicHeal(ps, healPower);
+    removeItem(itemId); playSFX(SFX.CURE);
     pauseSt.healNum = { value: heal, timer: 0, itemId };
     pauseSt.state = 'inv-heal'; pauseSt.timer = 0;
     saveSlotsToDB();

@@ -245,7 +245,7 @@ const _JOB_STAT_WEIGHTS = {
   18: { str: 1, agi: 1, vit: 1, int: 1, mnd: 4, mp: 5 }, // Devout
   19: { str: 1, agi: 1, vit: 1, int: 4, mnd: 1, mp: 5 }, // Magus
   20: { str: 1, agi: 1, vit: 1, int: 3, mnd: 3, mp: 5 }, // Sage
-  21: { str: 2, agi: 3, vit: 2, int: 1, mnd: 1, mp: 0 }, // Ninja — speed god
+  21: { str: 3, agi: 3, vit: 2, int: 1, mnd: 1, mp: 0 }, // Ninja — speed god (NES canon: top physical, all weapons)
 };
 const _DEFAULT_STAT_WEIGHTS = { str: 1, agi: 1, vit: 1, int: 1, mnd: 1, mp: 0 };
 

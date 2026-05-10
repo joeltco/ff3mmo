@@ -225,6 +225,23 @@ function _battleTargetConfirm() {
     inputSt.rHandHitCount = 0; // not dual wielding
   }
   inputSt.battleActionCount++;
+  // Snapshot target HP so _finalizeComboHits can cap the displayed total to
+  // actual HP loss (otherwise a 4-hit combo with a crit prints "83 Critical!"
+  // on a 7-HP goblin — the sum of all hit rolls regardless of overkill).
+  if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
+    const tgtMon = battleSt.encounterMonsters[inputSt.targetIndex];
+    inputSt.targetHpBefore = tgtMon ? tgtMon.hp : 0;
+  } else if (pvpSt.isPVPBattle) {
+    if (pvpSt.pvpPlayerTargetIdx >= 0 && pvpSt.pvpEnemyAllies[pvpSt.pvpPlayerTargetIdx]) {
+      inputSt.targetHpBefore = pvpSt.pvpEnemyAllies[pvpSt.pvpPlayerTargetIdx].hp;
+    } else if (pvpSt.pvpOpponentStats) {
+      inputSt.targetHpBefore = pvpSt.pvpOpponentStats.hp;
+    } else {
+      inputSt.targetHpBefore = battleSt.enemyHP;
+    }
+  } else {
+    inputSt.targetHpBefore = battleSt.enemyHP;
+  }
   const firstHandR = isWeapon(ps.weaponR) || !isWeapon(ps.weaponL);
   const firstWpnId = firstHandR ? ps.weaponR : ps.weaponL;
   const pendingSlashFrames = getSlashFramesForWeapon(firstWpnId, firstHandR);
