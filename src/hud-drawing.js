@@ -12,6 +12,7 @@ import { transSt, topBoxSt, loadingSt } from './transitions.js';
 import { LOAD_FADE_STEP_MS, LOAD_FADE_MAX, drawHUDLoadingMoogle } from './loading-screen.js';
 import { _dmgBounceY } from './data/animation-tables.js';
 import { HEAL_NUM_PAL, drawBattleNum } from './damage-numbers.js';
+import { drawStatusSpriteAbove } from './battle-drawing.js';
 import { inputSt } from './input-handler.js';
 import { bsc } from './battle-sprite-cache.js';
 import { SPELLS } from './data/spells.js';
@@ -226,22 +227,15 @@ function _drawPortraitImage(px, py, nfPortrait, isPauseHeal, infoFadeStep) {
   }
   ctx.drawImage(nfPortrait, px, py);
   const isNearFatal = ps.hp > 0 && ps.stats && ps.hp <= Math.floor(ps.stats.maxHP / 4);
-  if (!isPauseHeal && isNearFatal && nfPortrait === bsc.battlePoses.kneel && bsc.sweatFrames.length === 2)
+  const hasActiveStatus = ps.status && ps.status.mask !== 0;
+  // Sweat (low-HP cue): suppressed when an active status is also rendering
+  // its icon in the same space (status sprite takes priority per the
+  // status-effects audit, v1.7.209).
+  if (!isPauseHeal && isNearFatal && nfPortrait === bsc.battlePoses.kneel && bsc.sweatFrames.length === 2 && !hasActiveStatus)
     ctx.drawImage(bsc.sweatFrames[Math.floor(Date.now() / 133) & 1], px, py - 3);
-  // Status sprite above portrait — show highest priority active status
-  if (ps.status && ps.status.mask !== 0) {
-    const prio = [0x40, 0x100, 0x200, 0x01, 0x10, 0x04, 0x02];
-    for (const flag of prio) {
-      if (ps.status.mask & flag) {
-        const frames = bsc.statusSpriteMap.get(flag);
-        if (frames && frames.length === 2) {
-          const f = frames[Math.floor(Date.now() / 133) & 1];
-          ctx.drawImage(f, px, py - 4);
-        }
-        break;
-      }
-    }
-  }
+  // Status sprite above portrait — single source via drawStatusSpriteAbove
+  // (was inline duplication of the same priority loop pre-v1.7.209).
+  drawStatusSpriteAbove(ctx, ps.status, px, py - 4);
 }
 
 function _drawCureSparkle(px, py, isPauseHeal) {

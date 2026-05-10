@@ -20,7 +20,7 @@ import { getShieldEvade } from './player-stats.js';
 import { pvpGridLayout, PVP_CELL_W, PVP_CELL_H } from './pvp-math.js';
 import { playSlashSFX } from './battle-sfx.js';
 import { resetSlashScatterCache, SWING_HOLD_MS } from './slash-effects.js';
-import { removeStatus, hasStatus, STATUS } from './status-effects.js';
+import { removeStatus, hasStatus, STATUS, blindHitPenalty, miniToadAtkMult } from './status-effects.js';
 import { _nameToBytes } from './text-utils.js';
 import { getSpellNameClean } from './text-decoder.js';
 import { queueBattleMsg, replaceBattleMsg } from './battle-msg.js';
@@ -375,8 +375,13 @@ function _processEnemyFlash() {
   const attackerStats = pvpSt.pvpCurrentEnemyAllyIdx >= 0
     ? pvpSt.pvpEnemyAllies[pvpSt.pvpCurrentEnemyAllyIdx]
     : pvpSt.pvpOpponentStats;
-  const atk = attackerStats ? attackerStats.atk : BOSS_ATK;
-  const hitRate = attackerStats?.hitRate || BOSS_HIT_RATE;
+  // Apply Mini/Toad (zeroes atk) and Blind (halves hit rate) at roll time.
+  // Matches player + ally path; previously skipped so PVP-enemy with these
+  // statuses attacked at full effectiveness.
+  const pvpAtkMult = (attackerStats && attackerStats.status) ? miniToadAtkMult(attackerStats.status) : 1;
+  const pvpBlindMult = (attackerStats && attackerStats.status) ? blindHitPenalty(attackerStats.status) : 1;
+  const atk = (attackerStats ? attackerStats.atk : BOSS_ATK) * pvpAtkMult;
+  const hitRate = (attackerStats?.hitRate || BOSS_HIT_RATE) * pvpBlindMult;
   // Unarmed = dual fists. Single dualWield flag drives both hit count and visual alternation,
   // matching player + ally paths so we don't end up with bespoke per-call-site logic.
   const aRw = !!(attackerStats && isWeapon(attackerStats.weaponId));

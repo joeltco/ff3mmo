@@ -185,7 +185,11 @@ function _drawAllyPortrait(i, ally, isVicPose, isAllyAttack, isAllyHit, isNearFa
     });
     portraits = pickCombatantBody('ally', key, _j, ally.palIdx);
   } else if (isAllyHit && _fp(fakePlayerHitPortraits)) portraits = _fp(fakePlayerHitPortraits);
-  else if (isNearFatal && _fp(fakePlayerKneelPortraits)) portraits = _fp(fakePlayerKneelPortraits);
+  // Kneel pose on near-fatal HP OR active status — matches the player rule
+  // at hud-drawing.js (v1.7.209). Previously allies kneeled only on
+  // near-fatal, so a Silenced/Blinded ally read as "fine" even though the
+  // player counterpart kneels.
+  else if ((isNearFatal || (ally.status && ally.status.mask !== 0)) && _fp(fakePlayerKneelPortraits)) portraits = _fp(fakePlayerKneelPortraits);
   else portraits = _fp(fakePlayerPortraits);
   if (!portraits) return;
   // Ally weapon draws (back-swing during isAllyAttack, forward strike during isThisAllySlash).
@@ -218,8 +222,11 @@ function _drawAllyPortrait(i, ally, isVicPose, isAllyAttack, isAllyHit, isNearFa
   drawCastWindup('behind', ui.ctx, 'ally', i, ppx + 8, ppy + 8);
   ui.ctx.drawImage(portraits[ally.fadeStep], ppx, ppy);
   drawCastWindup('front', ui.ctx, 'ally', i, ppx + 8, ppy + 8);
-  // Near-fatal sweat — 2 frames alternating every 133ms, 3px above portrait
-  if (isNearFatal && bsc.sweatFrames.length === 2 && !isAllyAttack && !isAllyHit && !isVicPose && !isThisAllySlash) {
+  // Near-fatal sweat — 2 frames alternating every 133ms, 3px above portrait.
+  // Suppressed when an active status would render its icon in the same
+  // space (status sprite priority, v1.7.209).
+  const allyHasActiveStatus = ally.status && ally.status.mask !== 0;
+  if (isNearFatal && bsc.sweatFrames.length === 2 && !isAllyAttack && !isAllyHit && !isVicPose && !isThisAllySlash && !allyHasActiveStatus) {
     const sweatIdx = Math.floor(Date.now() / 133) & 1;
     ui.ctx.drawImage(bsc.sweatFrames[sweatIdx], ppx, ppy - 3);
   }

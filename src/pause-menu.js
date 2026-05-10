@@ -817,8 +817,7 @@ function _applyPauseItemUse(item, rosterTargets) {
   // Cure status items (Antidote, Eye Drops, etc.) — only targets player outside battle.
   // Routes through `applyMagicCureStatus` so this matches the in-battle path.
   if (eff === 'cure_status') {
-    const flagMap = { poison: STATUS.POISON, blind: STATUS.BLIND, silence: STATUS.SILENCE, mini: STATUS.MINI, toad: STATUS.TOAD, petrify: STATUS.PETRIFY, paralysis: STATUS.PARALYSIS };
-    const flag = flagMap[item.cures];
+    const flag = STATUS_NAME_TO_FLAG[item.cures];
     if (flag) applyMagicCureStatus(ps, flag);
     const itemId = pauseSt.useItemId;
     removeItem(itemId); playSFX(SFX.CURE);

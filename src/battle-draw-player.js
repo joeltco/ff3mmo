@@ -195,8 +195,11 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
       ui.ctx.drawImage(_frames[_sparkleFi], px, py);
     }
   }
-  // Near-fatal sweat — 2 frames alternating every 133ms, 3px above portrait
-  if (isNearFatal && bsc.sweatFrames.length === 2 && !isAttackPose && !isHitPose && !isVictoryPose && !isDefendPose && !isItemUsePose) {
+  // Near-fatal sweat — 2 frames alternating every 133ms, 3px above portrait.
+  // Suppressed when an active status would render its icon in the same
+  // space (status sprite priority, v1.7.209).
+  const playerHasActiveStatus = ps.status && ps.status.mask !== 0;
+  if (isNearFatal && bsc.sweatFrames.length === 2 && !isAttackPose && !isHitPose && !isVictoryPose && !isDefendPose && !isItemUsePose && !playerHasActiveStatus) {
     const sweatIdx = Math.floor(Date.now() / 133) & 1;
     if (isRunPose) {
       let slideX = 0;

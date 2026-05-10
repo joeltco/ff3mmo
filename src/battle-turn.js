@@ -8,7 +8,7 @@ import { ps, getJobLevelStatBonus } from './player-stats.js';
 import { JOBS } from './data/jobs.js';
 import { ITEMS, isWeapon, isBladedWeapon } from './data/items.js';
 import { SFX, playSFX } from './music.js';
-import { processTurnStart, removeStatus, STATUS, blindHitPenalty, hasStatus, STATUS_NAME_TO_FLAG } from './status-effects.js';
+import { processTurnStart, removeStatus, STATUS, blindHitPenalty, hasStatus, STATUS_NAME_TO_FLAG, miniToadAtkMult } from './status-effects.js';
 import { bsc, getSlashFramesForWeapon } from './battle-sprite-cache.js';
 import { pvpSt } from './pvp.js';
 import { inputSt } from './input-handler.js';
@@ -185,7 +185,14 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
     const dualWield = (aRw && aLw) || (!aRw && !aLw);
     const potentialHits = calcPotentialHits(ally.level || 1, ally.agi, dualWield);
     const _allyJob = JOBS[ally.jobIdx || 0] || {};
-    battleSt.allyHitResults = rollHits(ally.atk, targetDef, ally.hitRate || 85, potentialHits, {
+    // Apply Blind (halves hit rate) and Mini/Toad (zeroes atk) at roll time —
+    // matches player path. Previously skipped, so a Blinded/Mini'd ally
+    // attacked at full effectiveness.
+    const allyBlindMult = ally.status ? blindHitPenalty(ally.status) : 1;
+    const allyAtkMult = ally.status ? miniToadAtkMult(ally.status) : 1;
+    const allyHitRate = (ally.hitRate || 85) * allyBlindMult;
+    const allyAtk = ally.atk * allyAtkMult;
+    battleSt.allyHitResults = rollHits(allyAtk, targetDef, allyHitRate, potentialHits, {
       critPct: _allyJob.critPct || 0,
       critBonus: _allyJob.critBonus || 0,
       shieldEvade: pvpTgt ? (pvpTgt.shieldEvade || 0) : 0,
@@ -209,6 +216,14 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
       pvpSt.pvpCurrentEnemyAllyIdx = pai;
       if (pai < 0 && (!pvpSt.pvpOpponentStats || pvpSt.pvpOpponentStats.hp <= 0)) { processNextTurn(); return; }
       if (pai >= 0 && (pvpSt.pvpEnemyAllies[pai]?.hp ?? 0) <= 0) { processNextTurn(); return; }
+      // PVP status turn-start: paralysis-skip, sleep-wake roll, confuse
+      // snap-out. Was missing entirely — paralysis on PVP enemy let them act,
+      // sleep never woke via the 25% roll.
+      const pvpActor = pai >= 0 ? pvpSt.pvpEnemyAllies[pai] : pvpSt.pvpOpponentStats;
+      if (pvpActor && pvpActor.status) {
+        const { canAct } = processTurnStart(pvpActor.status, pvpActor.maxHP || pvpActor.hp);
+        if (!canAct || pvpActor.hp <= 0) { processNextTurn(); return; }
+      }
       if (pai < 0) pvpSt.pvpEnemyHitIdx = 0;
     }
     if (turn.index >= 0 && battleSt.encounterMonsters && battleSt.encounterMonsters[turn.index].hp <= 0) { processNextTurn(); return; }

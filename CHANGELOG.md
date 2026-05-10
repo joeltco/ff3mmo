@@ -2,6 +2,64 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.209 — 2026-05-10
+
+### Status-effects audit: 6 enforcement gaps closed + priority rule landed
+
+From `docs/STATUS-EFFECTS-AUDIT.md`. Sweep of every place status flags
+are inflicted, enforced, or rendered, plus the low-HP visual cues.
+
+**Priority rule (user-directed):** when both an active status AND
+near-fatal HP would render visual cues above a combatant, the status
+sprite wins. Sweat anim is suppressed across player / ally renderers
+whenever a status icon is also rendering.
+
+**Gameplay enforcement gaps fixed:**
+
+- **#1 Encounter monsters now show status sprite overlay.** Player,
+  ally, and PVP-enemy all already routed through `drawStatusSpriteAbove`
+  — monsters were the only faction without it. A poisoned or slept
+  goblin had no visual indicator. New call site in
+  `battle-draw-encounter.js`, horizontally centered on the monster
+  body (which can be 32 / 48 / 64 px wide).
+- **#2 PVP enemies now run `processTurnStart`.** Encounter monsters had
+  it; PVP enemies silently skipped it. Paralysis-skip, sleep-wake 25%
+  roll, confuse snap-out now apply to PVP main opp + enemy allies.
+- **#3 Ally + PVP-enemy attacks now apply `blindHitPenalty`.** Player
+  and monster attacks already honored Blind; ally and PVP-enemy paths
+  ignored it. A Blinded ally / PVP enemy now has 50% hit rate, matching
+  NES.
+- **#4 Ally + PVP-enemy attacks now apply `miniToadAtkMult`.** Same
+  pattern: Mini/Toad zero-attack was player-only enforcement. Ally and
+  PVP-enemy under Mini/Toad now do 0 damage on physical, matching NES.
+
+**Visual / consistency fixes:**
+
+- **#7 Allies now kneel on active status (matching player rule).**
+  Player path at `hud-drawing.js` was already
+  `near-fatal || hasActiveStatus`; ally was `near-fatal` only. Silenced
+  / blinded / confused allies now visibly read as "in trouble" even at
+  full HP.
+- Folded the inline status-sprite priority loop in `hud-drawing.js`
+  into the shared `drawStatusSpriteAbove` helper. Removes a 4th copy
+  of the `_STATUS_PRIO` array.
+
+**Dedup:**
+
+- **#9 Fourth duplicate name→flag table in `pause-menu.js:820`
+  removed.** v1.7.208's T8 collapsed three duplicates but missed the
+  out-of-battle item-cure path. Now folded into `STATUS_NAME_TO_FLAG`
+  with the others.
+
+**Deferred (need decisions):**
+
+- #5 `canCastMagic` (Silence) is dead code — wiring it in would change
+  observable gameplay (silenced casters can currently cast freely).
+- #6 `STATUS_PAL1/2/3` are placeholder copies of `PAL0` — needs EMU REC
+  OAM capture of each status mid-anim to land the real per-status
+  palettes.
+- #8 Mini/Toad have no body sprite transformation — needs sprite work.
+
 ## 1.7.208 — 2026-05-10
 
 ### Modularization tier 3: physical-attack unify + status-name table collapse

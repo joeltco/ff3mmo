@@ -18,6 +18,7 @@ import { pvpSt } from './pvp.js';
 import { drawBossSpriteBoxPVP } from './pvp-drawing.js';
 import { ui } from './ui-state.js';
 import { isVictoryBattleState } from './battle-update.js';
+import { drawStatusSpriteAbove } from './battle-drawing.js';
 import { clipToViewport, drawBorderedBox } from './hud-drawing.js';
 import { drawMonsterDeath as _drawMonsterDeath } from './render.js';
 import { _encounterGridPos } from './battle-layout.js';
@@ -97,6 +98,16 @@ function _drawEncounterMonsters(gridPos, sprH, boxX, boxY, boxW, boxH, isSlideIn
                          (isBeingHit && battleSt.battleState === 'ally-slash' && shouldDrawSlash(battleSt.allyHitResult) && (Math.floor(battleSt.battleTimer / 60) & 1));
       const isFlashing = battleSt.battleState === 'enemy-flash' && battleSt.currentAttacker === i && Math.floor(battleSt.battleTimer / 33) % 2 === 1;
       if (!isHitBlink) ui.ctx.drawImage(isFlashing ? sprWhite : sprNormal, drawX, drawY);
+      // Status sprite — 16×8 overlay 4 px above the body. Monster sprites
+      // vary in width (32/48/64), so center the 16-wide status icon over
+      // the body. Same priority + cadence as player/ally/PVP via
+      // drawStatusSpriteAbove.
+      const mon = battleSt.encounterMonsters[i];
+      if (mon && mon.status && mon.status.mask) {
+        const sw = sprNormal ? sprNormal.width : 32;
+        const statusX = drawX + Math.floor((sw - 16) / 2);
+        drawStatusSpriteAbove(ui.ctx, mon.status, statusX, drawY - 4);
+      }
     }
   }
 
