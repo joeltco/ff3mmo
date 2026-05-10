@@ -231,11 +231,17 @@ defer to Phase 3).
 - [x] `parseParty` consumes per-member overrides for weapons / status /
   buff / hp / action.
 
-### Phase 4 — Statistical mode
+### Phase 4 — Statistical mode ✅ shipped v1.7.197
 
-- [ ] `--runs=1000` flag — runs N battles, aggregates results
-- [ ] Output: P1 win-rate, avg turns to KO, dmg histogram per side
-- [ ] CSV export for spreadsheet analysis
+- [x] `--runs=N` — re-seeds with `seed+i` per run, suppresses per-turn output,
+  aggregates win rate, turn distribution, dmg/turn averages, dmg histogram.
+- [x] Default text output (Unicode bar charts), `--json` for tooling,
+  `--csv` for spreadsheet analysis (one row per run).
+- [x] Works in both 1v1 (`runBattle`) and encounter (`runEncounter`) modes
+  via the `runStats({ build, runOnce })` factory.
+- [x] `runBattle`/`runEncounter` now return structured `{ text, winner,
+  turns, dmg* }` instead of bare strings — same path used by `runStats`
+  for aggregation and by `main()` for per-turn printing.
 
 ## Out of scope (forever)
 

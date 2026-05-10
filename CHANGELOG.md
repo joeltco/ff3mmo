@@ -2,6 +2,38 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.197 — 2026-05-10
+
+### Added: battle-sim Phase 4 — statistical mode
+
+`tools/battle-sim.js --runs=N` runs the same matchup N times under
+distinct seeds and prints aggregated win rate, turn distribution, and
+damage histograms instead of per-turn output. Works in both 1v1 (duel)
+and encounter modes. Output formats: human (Unicode bar charts, default),
+`--json` (tooling), `--csv` (one row per run for spreadsheet analysis).
+
+```
+# 200-run mirror match — uncovered first-move advantage (P1 wins ~69%, not 50%)
+node tools/battle-sim.js --p1=KN10 --p2=KN10 --runs=200
+
+# Boss balance check — does KN10 reliably solo Land Turtle?
+node tools/battle-sim.js --party=KN10 --boss=land_turtle --runs=100
+
+# 3-party survival rate vs 2 Petits (spAtkRate=80, lethal element-mages)
+node tools/battle-sim.js --party=KN10,WM4,BM4 --enemies=petit*2 --runs=200
+```
+
+Required a refactor: `runBattle` and `runEncounter` now return structured
+`{ text, winner, turns, dmg* }` instead of bare strings. Same path
+serves both per-turn printing (`main()`) and stats aggregation
+(`runStats({ build, runOnce })`).
+
+Battle simulator is **feature-complete** for its original scope —
+physical attacks (3 call shapes), spells (damage/heal/status/buff/cure-
+status/instakill), status (poison/sleep/blind/silence/etc.), buffs
+(haste/protect), defend, multi-target encounters, monster special attacks,
+and statistical analysis. See `tools/battle-sim.PLAN.md` for full status.
+
 ## 1.7.196 — 2026-05-10
 
 ### Added: battle-sim Phase 3.5 — monster specials + per-ally actions

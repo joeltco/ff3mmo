@@ -621,6 +621,7 @@ function runBattle(p1, p2, opts) {
   const a1 = selectAttack(p1, p1Path);
   const a2 = selectAttack(p2, p2Path);
   const lines = [];
+  let dmgP1to2 = 0, dmgP2to1 = 0;
   lines.push(describeProfile(p1, 'P1'));
   lines.push(describeProfile(p2, 'P2'));
   lines.push('');
@@ -638,6 +639,7 @@ function runBattle(p1, p2, opts) {
     if (sot1.canAct) {
       const res1 = applyAction(p1, p2, a1, p1Action);
       res1.lines.forEach(l => lines.push(l));
+      dmgP1to2 += res1.dmgDealt || 0;
       if (p2.hp <= 0) { winner = 'P1'; break; }
     }
 
@@ -649,6 +651,7 @@ function runBattle(p1, p2, opts) {
       if (sot2.canAct) {
         const res2 = applyAction(p2, p1, a2, p2Action);
         res2.lines.forEach(l => lines.push(l));
+        dmgP2to1 += res2.dmgDealt || 0;
         if (p1.hp <= 0) { winner = 'P2'; break; }
       }
     }
@@ -662,7 +665,14 @@ function runBattle(p1, p2, opts) {
   } else {
     lines.push(`═══ Stalemate after ${turns} turns. P1 HP ${p1.hp}/${p1.maxHP}, P2 HP ${p2.hp}/${p2.maxHP} ═══`);
   }
-  return lines.join('\n');
+  return {
+    text: lines.join('\n'),
+    winner,
+    turns: turn,
+    p1HP: p1.hp,  p1MaxHP: p1.maxHP,
+    p2HP: p2.hp,  p2MaxHP: p2.maxHP,
+    dmgP1to2, dmgP2to1,
+  };
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -900,8 +910,9 @@ function parseEnemies(spec) {
 //   3. End when one team is fully KO'd (or --turns reached)
 
 function runEncounter(party, enemies, opts = {}) {
-  const { turns = 30, partyAction = { kind: 'attack' }, enemyAction = { kind: 'attack' } } = opts;
+  const { turns = 30, partyAction = { kind: 'attack' } } = opts;
   const lines = [];
+  let dmgPartyToEnemy = 0, dmgEnemyToParty = 0;
   party.forEach((p, i) => lines.push(describeProfile(p, `P${i + 1}`)));
   enemies.forEach((e, i) => lines.push(describeProfile(e, `E${i + 1}`)));
   lines.push('');
@@ -945,6 +956,10 @@ function runEncounter(party, enemies, opts = {}) {
       const fn = attackFnFor(actor, opts[`${actor._spec}_path`] || 'auto');
       const res = applyAction(actor, target, fn, action);
       res.lines.forEach(l => lines.push(l));
+      if (res.dmgDealt > 0) {
+        if (actor.team === 'player') dmgPartyToEnemy += res.dmgDealt;
+        else dmgEnemyToParty += res.dmgDealt;
+      }
     }
 
     if (winner) break;
@@ -963,7 +978,17 @@ function runEncounter(party, enemies, opts = {}) {
     lines.push(`    Party:   ${party.map(p => `${p._spec}(${p.hp}/${p.maxHP})`).join(', ')}`);
     lines.push(`    Enemies: ${enemies.map(e => `${e._spec}(${e.hp}/${e.maxHP})`).join(', ')}`);
   }
-  return lines.join('\n');
+  return {
+    text: lines.join('\n'),
+    winner,
+    turns: turn,
+    partyAlive: partyAlive().length,
+    enemyAlive: enemiesAlive().length,
+    partyHP: party.map(p => p.hp),
+    enemyHP: enemies.map(e => e.hp),
+    dmgPartyToEnemy,
+    dmgEnemyToParty,
+  };
 }
 
 // ─── Help ───────────────────────────────────────────────────────────────
@@ -994,6 +1019,10 @@ OPTIONS
   --mode=<duel|dummy>    duel = both swing; dummy = only P1 acts (default duel)
   --turns=<N>            Max turns (default 30)
   --seed=<N>             Deterministic RNG via mulberry32 (default 1)
+  --runs=<N>             Statistical mode — run N times, print aggregated
+                         win-rate / turn / damage stats (instead of per-turn)
+  --json                 With --runs: output structured JSON
+  --csv                  With --runs: output CSV (one row per run)
   --help                 Print this help
 
 JOB PREFIXES
@@ -1045,6 +1074,149 @@ EXAMPLES
 `);
 }
 
+// ════════════════════════════════════════════════════════════════════════
+// Phase 4 — Statistical mode (--runs=N)
+// ════════════════════════════════════════════════════════════════════════
+//
+// For balance analysis: run the same matchup N times under different
+// seeds, aggregate results. Suppresses per-turn output. Output formats:
+// human-readable (default), --json, --csv.
+
+function buildDuel(args) {
+  const p1Spec = args.p1 || 'RM7';
+  const p2Spec = args.p2 || 'BM4';
+  const p1 = resolveProfile(p1Spec, args.p1Over);
+  const p2 = resolveProfile(p2Spec, args.p2Over);
+  applyStartingStatus(p1, args.p1Over.status);
+  applyStartingStatus(p2, args.p2Over.status);
+  applyStartingBuffs(p1, args.p1Over.buff);
+  applyStartingBuffs(p2, args.p2Over.buff);
+  if (args.p1Over.hp != null) p1.hp = args.p1Over.hp;
+  if (args.p2Over.hp != null) p2.hp = args.p2Over.hp;
+  return {
+    p1, p2,
+    p1Action: parseAction(args.p1Over.action),
+    p2Action: parseAction(args.p2Over.action),
+  };
+}
+
+function buildEncounter(args) {
+  const party = parseParty(args.party, args.pOver) || [resolveProfile(args.p1 || 'KN10', args.p1Over || {})];
+  party.forEach(p => { p.team = 'player'; if (!p.kind || p.kind === 'monster') p.kind = 'player'; });
+  const enemySpec = args.boss != null ? args.boss : args.enemies;
+  const enemies = parseEnemies(enemySpec) || [];
+  if (enemies.length === 0) throw new Error('Need --enemies or --boss for encounter mode');
+  return {
+    party, enemies,
+    partyAction: parseAction(args.p1Over.action),
+  };
+}
+
+function runStats({ runs, seed, build, runOnce, format, kind }) {
+  const results = [];
+  for (let i = 0; i < runs; i++) {
+    Math.random = seedRandom((seed || 1) + i);
+    let r;
+    try {
+      const built = build();
+      r = runOnce(built);
+    } catch (e) {
+      console.error(`Run ${i + 1} errored: ${e.message}`);
+      process.exit(1);
+    }
+    results.push(r);
+  }
+  if (format === 'json') console.log(JSON.stringify(aggregateStats(results, kind), null, 2));
+  else if (format === 'csv') console.log(formatCSV(results, kind));
+  else console.log(formatStatsText(results, kind, runs));
+}
+
+function aggregateStats(results, kind) {
+  const winners = {};
+  const turnCounts = [];
+  let totalDmgWin = 0, totalDmgLose = 0;
+  for (const r of results) {
+    const w = r.winner || 'stalemate';
+    winners[w] = (winners[w] || 0) + 1;
+    turnCounts.push(r.turns);
+    if (kind === 'duel') {
+      totalDmgWin += r.dmgP1to2;
+      totalDmgLose += r.dmgP2to1;
+    } else {
+      totalDmgWin += r.dmgPartyToEnemy;
+      totalDmgLose += r.dmgEnemyToParty;
+    }
+  }
+  const n = results.length;
+  const sorted = [...turnCounts].sort((a, b) => a - b);
+  return {
+    runs: n,
+    kind,
+    winners,
+    winRate: kind === 'duel'
+      ? { p1: (winners.P1 || 0) / n, p2: (winners.P2 || 0) / n, stalemate: (winners.stalemate || 0) / n }
+      : { party: (winners.party || 0) / n, enemies: (winners.enemies || 0) / n, stalemate: (winners.stalemate || 0) / n },
+    turns: {
+      avg: turnCounts.reduce((s, x) => s + x, 0) / n,
+      min: sorted[0],
+      max: sorted[sorted.length - 1],
+      median: sorted[Math.floor(n / 2)],
+    },
+    avgDmgPerTurn: {
+      offensive: totalDmgWin / Math.max(1, turnCounts.reduce((s, x) => s + x, 0)),
+      defensive: totalDmgLose / Math.max(1, turnCounts.reduce((s, x) => s + x, 0)),
+    },
+  };
+}
+
+function formatStatsText(results, kind, runs) {
+  const stats = aggregateStats(results, kind);
+  const lines = [];
+  lines.push(`═══ ff3mmo battle-sim — STATS over ${runs} runs ═══`);
+  lines.push('');
+  lines.push('Win rate:');
+  for (const [k, v] of Object.entries(stats.winRate)) {
+    const pct = (v * 100).toFixed(1).padStart(5);
+    const bar = '█'.repeat(Math.round(v * 30));
+    lines.push(`  ${k.padEnd(10)} ${pct}%  ${bar}`);
+  }
+  lines.push('');
+  lines.push(`Turns:  avg=${stats.turns.avg.toFixed(2)}  min=${stats.turns.min}  median=${stats.turns.median}  max=${stats.turns.max}`);
+  lines.push(`Damage/turn: ${kind === 'duel' ? 'P1→P2' : 'party→enemy'} = ${stats.avgDmgPerTurn.offensive.toFixed(2)}  |  ${kind === 'duel' ? 'P2→P1' : 'enemy→party'} = ${stats.avgDmgPerTurn.defensive.toFixed(2)}`);
+  lines.push('');
+  // Damage distribution histogram (offensive side)
+  const offensive = results.map(r => kind === 'duel' ? r.dmgP1to2 : r.dmgPartyToEnemy);
+  const min = Math.min(...offensive), max = Math.max(...offensive);
+  const buckets = 8;
+  const bw = Math.max(1, Math.ceil((max - min + 1) / buckets));
+  const hist = new Array(buckets).fill(0);
+  for (const d of offensive) hist[Math.min(buckets - 1, Math.floor((d - min) / bw))]++;
+  const peak = Math.max(...hist);
+  lines.push(`Damage histogram (${kind === 'duel' ? 'P1→P2' : 'party→enemy'} per battle):`);
+  for (let i = 0; i < buckets; i++) {
+    const lo = min + i * bw, hi = min + (i + 1) * bw - 1;
+    const bar = '█'.repeat(Math.round((hist[i] / peak) * 30));
+    lines.push(`  [${String(lo).padStart(4)}–${String(hi).padStart(4)}]  ${String(hist[i]).padStart(4)}  ${bar}`);
+  }
+  return lines.join('\n');
+}
+
+function formatCSV(results, kind) {
+  const lines = [];
+  if (kind === 'duel') {
+    lines.push('run,winner,turns,p1HP,p2HP,dmgP1to2,dmgP2to1');
+    results.forEach((r, i) => {
+      lines.push(`${i + 1},${r.winner || 'stalemate'},${r.turns},${r.p1HP},${r.p2HP},${r.dmgP1to2},${r.dmgP2to1}`);
+    });
+  } else {
+    lines.push('run,winner,turns,partyAlive,enemyAlive,dmgPartyToEnemy,dmgEnemyToParty');
+    results.forEach((r, i) => {
+      lines.push(`${i + 1},${r.winner || 'stalemate'},${r.turns},${r.partyAlive},${r.enemyAlive},${r.dmgPartyToEnemy},${r.dmgEnemyToParty}`);
+    });
+  }
+  return lines.join('\n');
+}
+
 // ─── Entry ──────────────────────────────────────────────────────────────
 function main() {
   const args = parseArgs(process.argv.slice(2));
@@ -1068,6 +1240,16 @@ function main() {
       console.error(`Error: ${e.message}`);
       process.exit(1);
     }
+    if (args.runs && args.runs > 1) {
+      runStats({
+        runs: args.runs, seed,
+        build: () => buildEncounter(args),
+        runOnce: ({ party, enemies, partyAction }) => runEncounter(party, enemies, { turns: args.turns || 30, partyAction }),
+        format: args.json ? 'json' : args.csv ? 'csv' : 'text',
+        kind: 'encounter',
+      });
+      return;
+    }
     console.log(`═══ ff3mmo battle-sim  seed=${seed}  mode=encounter ═══`);
     console.log('');
     const out = runEncounter(party, enemies, {
@@ -1075,7 +1257,7 @@ function main() {
       partyAction,
       enemyAction,
     });
-    console.log(out);
+    console.log(out.text);
     return;
   }
 
@@ -1100,6 +1282,23 @@ function main() {
     process.exit(1);
   }
 
+  if (args.runs && args.runs > 1) {
+    runStats({
+      runs: args.runs, seed,
+      build: () => buildDuel(args),
+      runOnce: ({ p1, p2, p1Action, p2Action }) => runBattle(p1, p2, {
+        mode: args.mode || 'duel',
+        turns: args.turns || 30,
+        p1Path: (args.p1Over && args.p1Over.path) || 'auto',
+        p2Path: (args.p2Over && args.p2Over.path) || 'auto',
+        p1Action, p2Action,
+      }),
+      format: args.json ? 'json' : args.csv ? 'csv' : 'text',
+      kind: 'duel',
+    });
+    return;
+  }
+
   console.log(`═══ ff3mmo battle-sim  seed=${seed}  mode=${args.mode || 'duel'} ═══`);
   console.log('');
   const out = runBattle(p1, p2, {
@@ -1110,7 +1309,7 @@ function main() {
     p1Action,
     p2Action,
   });
-  console.log(out);
+  console.log(out.text);
 }
 
 main();
