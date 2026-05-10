@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.186 — 2026-05-09
+
+### refactor: split player portrait → `battle-draw-player.js`
+
+Phase 2d (final phase) of the `battle-drawing.js` split. Owns the player's left-side portrait and everything that overlays it: pose resolution (idle/attack/hit/defend/victory/run/death), weapon overlays (front + behind), per-spell heal sparkle, status icons, near-fatal sweat, PVP enemy slash overlay, item-target cursor, run-away slide, kneel-slide death animation, plus the full-viewport crit gold flash and boss-strobe flash.
+
+**New file** `src/battle-draw-player.js` (334 lines): `drawBattlePortrait`, `drawBattleCritFlash`, `drawBattleStrobeFlash`, plus internal helpers (`_getPortraitSrc`, `_drawPortraitFrame`, `_drawPortraitWeapon`, `_drawPortraitOverlays`, `_playerPoseCanvas`) and DEATH constants. Imports `_itemSparkleFrames` and `drawStatusSpriteAbove` from `battle-drawing.js` (same shared-helper pattern as the menu / encounter / ally splits).
+
+**`battle-drawing.js`** 799 → 503 (-296). Imports + calls the three new `drawBattle*` functions from the player module. Cleaned now-unused imports: `weaponSubtype`, `pickAttackPoseKey`, `attackWeaponLayer`, `pickCombatantBody`, `pickAttackWeaponSpec`, `ps`, `getHitWeapon`, `isHitRightHand`, `getSlashFramesForWeapon`, `drawSlashOverlay`, `getCastAnimElapsedMs`, `getCurrentSpellId`, `getSpellTargets`, `drawCasterCastBehind/Front`, all `CAST_T_*` constants, `drawCastWindup`, `getAllyDamageNums`, `hudSt`, `fakePlayerDeathPoseCanvases`, `drawHudBox`, `drawSparkleCorners`, `drawBorderedBox`. Removed `PLAYER_POSE_FALLBACK` and `_playerPoseCanvas` (moved with the player).
+
+**`battle-drawing.js` final state**: 503 lines, down from the pre-refactor 1801 (-1298). What remains is the `drawBattle` composer + spell FX (`drawProjectileFan`, `drawSpellEffectAtTargets`, `drawSWExplosion`, `drawSWDamageNumbers`, `_drawPlayerSpellTargetSparkleOnEnemy`, `_drawPVPEnemyOffensiveCast`, `_drawAllyOffensiveCast`) + damage numbers (`drawDamageNumbers`) + battle message strip + the shared exports (`_jobPalette`, `_itemSparkleFrames`, `drawStatusSpriteAbove`).
+
+**Refactor plan complete.** Six new modules: `battle-draw-menu.js`, `battle-draw-encounter.js`, `battle-draw-allies.js`, `battle-draw-player.js`, `battle-grid.js`, `tile-canvas.js` helpers in `canvas-utils.js`. Zero behavior change across all phases.
+
 ## 1.7.185 — 2026-05-09
 
 ### refactor: split ally roster rows → `battle-draw-allies.js`
