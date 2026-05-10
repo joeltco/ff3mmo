@@ -632,28 +632,46 @@ function runBattle(p1, p2, opts) {
     turn++;
     lines.push(`─── Turn ${turn} ───`);
 
-    // P1 start-of-turn + action
-    const sot1 = processStartOfTurn(p1);
-    sot1.lines.forEach(l => lines.push(l));
-    if (p1.hp <= 0) { winner = 'P2'; break; }
-    if (sot1.canAct) {
-      const res1 = applyAction(p1, p2, a1, p1Action);
-      res1.lines.forEach(l => lines.push(l));
-      dmgP1to2 += res1.dmgDealt || 0;
-      if (p2.hp <= 0) { winner = 'P1'; break; }
+    // Per-turn initiative roll — matches live game's battle-turn.js:buildTurnOrder.
+    // Priority = agi*2 + rand(0..255). Random component dominates AGI gap so
+    // equal-AGI combatants split ~50/50 over many turns. In dummy/solo modes
+    // P1 always acts (P2 doesn't act regardless of priority).
+    const p1Pri = (p1.agi || 0) * 2 + Math.floor(Math.random() * 256);
+    const p2Pri = (p2.agi || 0) * 2 + Math.floor(Math.random() * 256);
+    const p1First = p1Pri >= p2Pri;
+
+    function p1Act() {
+      const sot = processStartOfTurn(p1);
+      sot.lines.forEach(l => lines.push(l));
+      if (p1.hp <= 0) { winner = 'P2'; return false; }
+      if (sot.canAct) {
+        const res = applyAction(p1, p2, a1, p1Action);
+        res.lines.forEach(l => lines.push(l));
+        dmgP1to2 += res.dmgDealt || 0;
+        if (p2.hp <= 0) { winner = 'P1'; return false; }
+      }
+      return true;
+    }
+    function p2Act() {
+      if (mode !== 'duel') return true; // dummy/solo: P2 doesn't act
+      const sot = processStartOfTurn(p2);
+      sot.lines.forEach(l => lines.push(l));
+      if (p2.hp <= 0) { winner = 'P1'; return false; }
+      if (sot.canAct) {
+        const res = applyAction(p2, p1, a2, p2Action);
+        res.lines.forEach(l => lines.push(l));
+        dmgP2to1 += res.dmgDealt || 0;
+        if (p1.hp <= 0) { winner = 'P2'; return false; }
+      }
+      return true;
     }
 
-    // P2 start-of-turn + action (skip in dummy/solo)
-    if (mode === 'duel') {
-      const sot2 = processStartOfTurn(p2);
-      sot2.lines.forEach(l => lines.push(l));
-      if (p2.hp <= 0) { winner = 'P1'; break; }
-      if (sot2.canAct) {
-        const res2 = applyAction(p2, p1, a2, p2Action);
-        res2.lines.forEach(l => lines.push(l));
-        dmgP2to1 += res2.dmgDealt || 0;
-        if (p1.hp <= 0) { winner = 'P2'; break; }
-      }
+    if (p1First) {
+      if (!p1Act()) break;
+      if (!p2Act()) break;
+    } else {
+      if (!p2Act()) break;
+      if (!p1Act()) break;
     }
 
     lines.push('');
@@ -927,10 +945,15 @@ function runEncounter(party, enemies, opts = {}) {
     turn++;
     lines.push(`─── Turn ${turn} ───`);
 
-    // AGI-ordered turn order (highest agi first)
+    // AGI-ordered turn order with random initiative — matches live game's
+    // battle-turn.js:buildTurnOrder. Priority = agi*2 + rand(0..255). Random
+    // component dominates AGI*2 (a 20-AGI gap shifts mean by 40 vs random
+    // spread of ±127), so equal-AGI combatants split ~50/50 over many turns.
     const order = [...party, ...enemies]
       .filter(alive)
-      .sort((a, b) => (b.agi || 0) - (a.agi || 0));
+      .map(c => ({ c, pri: (c.agi || 0) * 2 + Math.floor(Math.random() * 256) }))
+      .sort((a, b) => b.pri - a.pri)
+      .map(x => x.c);
 
     for (const actor of order) {
       if (!alive(actor)) continue; // KO'd mid-turn by another actor

@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.201 — 2026-05-10
+
+### Fixed: battle-sim initiative bias — retracted audit finding #3
+
+`tools/battle-sim.js` had hardcoded "P1 acts first every turn" in 1v1
+duel mode, which produced the ~65–70% first-move bias I'd flagged in
+the balance audit. The **live game has been correct all along** —
+`battle-turn.js:buildTurnOrder` uses `priority = agi*2 + rand(0..255)`,
+where the random component dominates AGI gaps so equal-AGI combatants
+split ~50/50 over many turns.
+
+Sim updated to match: per-turn initiative roll using the same formula.
+500-run mirror tests now show 47–55% (vs prior 65–70%) — within RNG
+variance for n=500.
+
+`docs/BALANCE-AUDIT.md` finding #3 retracted with explanation. No live-
+game change.
+
 ## 1.7.200 — 2026-05-10
 
 ### Fixed: crit-overkill display sums beyond target HP

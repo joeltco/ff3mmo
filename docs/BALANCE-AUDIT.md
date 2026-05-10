@@ -10,7 +10,7 @@ are reproducible — repro commands below each finding.
 |---|---------|--------|
 | 1 | `_JOB_STAT_WEIGHTS` missing for jobs 6–21 | ✅ **fixed** v1.7.198 |
 | 2 | Grasslands Werewolf/Killer Bee wipe starter solo | ⚠️ open |
-| 3 | First-move bias (~65–70%) in all mirrors | ⚠️ open |
+| 3 | First-move bias (~65–70%) in all mirrors | ✅ retracted — sim artifact, live game already correct |
 | 4 | Land Turtle solo wide difficulty range | ⚠️ open (mostly improved by #1) |
 | 5 | BM Fire 5–12× physical at L4 vs low-mdef | ⚠️ open |
 | 6 | Altar Cave + Goblin grasslands well-tuned | ✅ |
@@ -184,7 +184,32 @@ node tools/battle-sim.js --party=OK1,FI1,WM1 --enemies=werewolf*4 --runs=200
 
 ---
 
-## 3. First-move advantage is universal (~65–70% in mirrors)
+## 3. First-move advantage is universal (~65–70% in mirrors) — RETRACTED
+
+**Status:** sim artifact, NOT a real bug. The live game's
+`battle-turn.js:buildTurnOrder` already uses `priority = agi*2 + rand(0..255)`
+per turn, so initiative is heavily randomized in production. The sim was
+hardcoding "P1 goes first" in 1v1 duel mode, which is what produced the
+~65–70% first-move bias.
+
+Sim updated v1.7.201 to match the live game's priority formula. Post-fix
+500-run mirror tests:
+
+| Matchup        | P1 wins | P2 wins |
+|----------------|---------|---------|
+| RM7 vs RM7     | 55.0%   | 45.0%   |
+| BM7 vs BM7     | 54.2%   | 45.8%   |
+| WM7 vs WM7     | 49.6%   | 50.4%   |
+| KN7 vs KN7     | 49.0%   | 51.0%   |
+| MO7 vs MO7     | 47.8%   | 52.2%   |
+| BB10 vs BB10   | 48.8%   | 51.2%   |
+| NI20 vs NI20   | 51.2%   | 48.8%   |
+
+All within RNG variance for n=500. The original audit numbers were
+measuring sim implementation, not game design — leaving them in for
+historical context but striking the finding.
+
+### Original (incorrect) section follows
 
 In every mirror match at L7, P1 (acts first) wins ~65–70% of the time.
 Same combatant, same stats, same equipment — turn order alone biases
