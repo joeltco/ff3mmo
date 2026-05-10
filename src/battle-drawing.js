@@ -4,7 +4,7 @@ import { battleSt, getEnemyHP, setEnemyHP } from './battle-state.js';
 import { drawText } from './font-renderer.js';
 import { _makeFadedPal } from './palette.js';
 import { _dmgBounceY } from './data/animation-tables.js';
-import { DMG_NUM_PAL, HEAL_NUM_PAL, drawBattleNum as _drawBattleNumCtx, getMissCanvas } from './damage-numbers.js';
+import { DMG_NUM_PAL, HEAL_NUM_PAL, drawBattleNum as _drawBattleNumCtx, drawDmgPopup } from './damage-numbers.js';
 import { getBossBattleCanvas } from './boss-sprites.js';
 import { getMonsterCanvas } from './monster-sprites.js';
 import { encounterGridLayout, pvpEnemyCellCenterLocal } from './battle-grid.js';
@@ -98,13 +98,11 @@ function drawSWDamageNumbers() {
   // SW_DMG_SHOW_MS), so it should render whenever entries exist. Originally
   // gated on magic-hit/ally-magic-hit because those were the only writers;
   // poison ticks now route here too (battle-turn.js _applyEndOfRoundPoison).
-  const mc = getMissCanvas();
   if (pvpSt.isPVPBattle) {
     for (const [k, dn] of Object.entries(getSwDmgNums())) {
       const { x: cx, y: cy } = pvpEnemyCellCenterLocal(parseInt(k));
       const by = _dmgBounceY(cy + 12, dn.timer);
-      if (dn.miss && mc) ui.ctx.drawImage(mc, cx + 8 - 8, by - 4);
-      else _drawBattleNum(cx + 8, by, dn.value, DMG_NUM_PAL);
+      drawDmgPopup(ui.ctx, dn, cx + 8, by);
     }
     return;
   }
@@ -117,13 +115,11 @@ function drawSWDamageNumbers() {
       const m = battleSt.encounterMonsters[idx];
       const mcv = getMonsterCanvas(m?.monsterId, battleSt.goblinBattleCanvas);
       const rH = idx < 2 ? (row0H || sprH) : (row1H || sprH);
-      const mh = mcv ? mcv.height : rH;
       const mw = mcv ? mcv.width : 32;
       const bx = tp.x + mw - 4;
       const baseY = tp.y + rH - 8;
       const by = _dmgBounceY(baseY, dn.timer);
-      if (dn.miss && mc) ui.ctx.drawImage(mc, bx - 8, by - 4);
-      else _drawBattleNum(bx, by, dn.value, DMG_NUM_PAL);
+      drawDmgPopup(ui.ctx, dn, bx, by);
     }
   } else {
     // Boss — damage number on bottom-right of boss sprite
@@ -134,8 +130,7 @@ function drawSWDamageNumbers() {
       const bx = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2) + Math.floor(bw / 2) - 4;
       const baseY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2) + Math.floor(bh / 2) - 8;
       const by = _dmgBounceY(baseY, dn.timer);
-      if (dn.miss && mc) ui.ctx.drawImage(mc, bx - 8, by - 4);
-      else _drawBattleNum(bx, by, dn.value, DMG_NUM_PAL);
+      drawDmgPopup(ui.ctx, dn, bx, by);
     }
   }
 }
@@ -403,12 +398,7 @@ function _drawBossDmgNum() {
   }
   const by = _dmgBounceY(baseY, getEnemyDmgNum().timer);
   clipToViewport();
-  if (getEnemyDmgNum().miss) {
-    const mc = getMissCanvas();
-    if (mc) ui.ctx.drawImage(mc, bx - 8, by);
-  } else {
-    _drawBattleNum(bx, by, getEnemyDmgNum().value, DMG_NUM_PAL);
-  }
+  drawDmgPopup(ui.ctx, getEnemyDmgNum(), bx, by);
   ui.ctx.restore();
 }
 
@@ -446,12 +436,7 @@ function drawDamageNumbers() {
     const px = HUD_RIGHT_X + 20;
     const baseY = HUD_VIEW_Y + 16;
     const py = _dmgBounceY(baseY, getPlayerDamageNum().timer);
-    if (getPlayerDamageNum().miss) {
-      const mc = getMissCanvas();
-      if (mc) ui.ctx.drawImage(mc, px - 8, py);
-    } else {
-      _drawBattleNum(px, py, getPlayerDamageNum().value, DMG_NUM_PAL);
-    }
+    drawDmgPopup(ui.ctx, getPlayerDamageNum(), px, py);
   }
 
   // Player heal number — green bounce on right side of portrait during item-use

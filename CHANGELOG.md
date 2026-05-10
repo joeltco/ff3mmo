@@ -2,6 +2,31 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.207 — 2026-05-10
+
+### Modularization tier 2: miss-popup helper + heal-num callback factory
+
+- **`drawDmgPopup(ctx, dn, bx, by, pal)`** in `damage-numbers.js` — one
+  helper handles the "miss canvas OR digits" dispatch. Replaces 6 inline
+  branches across `battle-drawing.js` (3 sites in `drawSWDamageNumbers`,
+  `_drawBossDmgNum`, player damage-num) and `battle-draw-allies.js`. **Also
+  fixes a y-offset inconsistency:** the 3 SW-path sites used `by - 4`
+  (miss rendered 4 px above its anchor), the other 3 used `by`. Unified
+  to `by` since the miss canvas is 8 px tall (same as digits) and that's
+  the natural anchor.
+- **`makeHealNumCallback(scope, idx)`** in `damage-numbers.js` — factory
+  for the `onHealNum(amount)` closures that magic helpers
+  (`applyMagicHeal` / `applyMagicCureStatus` / `applyMagicDrain`) invoke.
+  Three scopes: `'self'` (player portrait), `'ally'` (roster row),
+  `'enemy'` (encounter / PVP / boss popup). Folds 4 inline closures
+  across `spell-cast.js`, `battle-ally.js`, and `pvp.js`. Popup format
+  `{ value, timer, [index] }` now lives in exactly one place.
+
+The original tier-2 audit (`docs/MODULARIZATION-AUDIT.md`) called for a
+broader `bindCastIO` helper plus `applyHpDelta` for the `Math.max(0, hp -
+dmg)` clamp — both were narrowed/skipped after deeper inspection. Notes
+landed in the audit doc.
+
 ## 1.7.206 — 2026-05-10
 
 ### Modularization tier 1: heal clamp / initiative / combo-hit summary

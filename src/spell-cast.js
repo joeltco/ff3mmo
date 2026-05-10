@@ -10,7 +10,7 @@ import { ps } from './player-stats.js';
 import { inputSt } from './input-handler.js';
 import { SFX, playSFX } from './music.js';
 import { setPlayerHealNum, setPlayerDamageNum, getAllyDamageNums, setEnemyDmgNum, setEnemyHealNum, setSwDmgNum,
-         tickHealNums, clearHealNums, DMG_SHOW_MS } from './damage-numbers.js';
+         tickHealNums, clearHealNums, DMG_SHOW_MS, makeHealNumCallback } from './damage-numbers.js';
 import { SPELLS, getSpellMPCost, isMultiTargetSpell } from './data/spells.js';
 import { STATUS, addStatus, removeStatus, tryInflictStatus, STATUS_NAME_BYTES } from './status-effects.js';
 import { CAST_PHASE_MS, CAST_PHASE_MS_THROW, CAST_TOTAL_MS, CAST_T_THROW_RETURN, CAST_T_THROW_IMPACT_START,
@@ -377,7 +377,7 @@ function _applyEnemyEffect(idx, spell) {
       sfx: SFX.CURE,
       isUndead: _isUndead(mon),
       onTargetDmgNum: (dmg) => _setEnemyDmg(idx, dmg, false),
-      onTargetHealNum: (heal) => setEnemyHealNum({ value: heal, timer: 0, index: idx }),
+      onTargetHealNum: makeHealNumCallback('enemy', idx),
       onShake: () => { battleSt.battleShakeTimer = BATTLE_SHAKE_MS; },
       onCasterHeal: (amt) => {
         const realHeal = Math.min(amt, (ps.stats?.maxHP ?? ps.hp) - ps.hp);
@@ -424,7 +424,7 @@ function _applyEnemyEffect(idx, spell) {
     applyMagicRecovery(mon, amount, {
       isUndead: _isUndead(mon),
       onDmgNum: (dmg) => _setEnemyDmg(idx, dmg, false),
-      onHealNum: (heal) => setEnemyHealNum({ value: heal, timer: 0, index: idx }),
+      onHealNum: makeHealNumCallback('enemy', idx),
       onShake: () => { battleSt.battleShakeTimer = BATTLE_SHAKE_MS; },
     });
     return;
@@ -523,9 +523,7 @@ function _applySpellEffect(target) {
   const isPlayerTgt = target.type === 'player';
   const tgt = isPlayerTgt ? ps : battleSt.battleAllies[target.index];
   if (!tgt) return;
-  const onHealNum = isPlayerTgt
-    ? (n) => setPlayerHealNum({ value: n, timer: 0 })
-    : (n) => { getAllyDamageNums()[target.index] = { value: n, timer: 0, heal: true }; };
+  const onHealNum = makeHealNumCallback(isPlayerTgt ? 'self' : 'ally', target.index);
 
   // Cure-status (Poisona, Antidote) — shared helper.
   // SFX fires via the engine at sparkle-start (see `getSpellImpactSFX` →

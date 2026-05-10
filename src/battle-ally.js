@@ -11,7 +11,7 @@ import { queueBattleMsg } from './battle-msg.js';
 import { BATTLE_ALLY, BATTLE_SLAIN } from './data/strings.js';
 import { pvpSt } from './pvp.js';
 import { inputSt } from './input-handler.js';
-import { getEnemyDmgNum, setEnemyDmgNum, setPlayerHealNum, getAllyDamageNums, tickHealNums, clearHealNums, setSwDmgNum, DMG_SHOW_MS } from './damage-numbers.js';
+import { getEnemyDmgNum, setEnemyDmgNum, setPlayerHealNum, getAllyDamageNums, tickHealNums, clearHealNums, setSwDmgNum, DMG_SHOW_MS, makeHealNumCallback } from './damage-numbers.js';
 import { ROSTER_FADE_STEPS } from './data/players.js';
 import { IDLE_FRAME_MS } from './combatant-pose.js';
 import { ps } from './player-stats.js';
@@ -293,9 +293,7 @@ function _applyAllyMagicEffect() {
   const isPlayerTgt = battleSt.allyMagicTargetType === 'player';
   const tgt = isPlayerTgt ? ps : battleSt.battleAllies[battleSt.allyMagicTargetIdx];
   if (!tgt) return;
-  const onHealNum = isPlayerTgt
-    ? (n) => setPlayerHealNum({ value: n, timer: 0 })
-    : (n) => { getAllyDamageNums()[battleSt.allyMagicTargetIdx] = { value: n, timer: 0, heal: true }; };
+  const onHealNum = makeHealNumCallback(isPlayerTgt ? 'self' : 'ally', battleSt.allyMagicTargetIdx);
 
   // 0x35 Poisona — strip POISON flag (heal-num placeholder {value:0} = sparkle).
   // SFX engine-driven (fires at sparkle start via playSpellImpactSFX); helper

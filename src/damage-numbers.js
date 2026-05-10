@@ -59,6 +59,25 @@ export function setSwDmgNum(tidx, value, opts = {}) {
   swDmgNums[tidx] = { value, timer: 0, miss: !!opts.miss };
 }
 
+// Factory for the `onHealNum(amount)` callback that magic helpers
+// (applyMagicHeal / applyMagicCureStatus / applyMagicDrain undead) invoke
+// when a heal value lands. Three scopes:
+//   - 'self'  → player portrait popup (idx unused)
+//   - 'ally'  → ally roster row popup (idx = allyIndex)
+//   - 'enemy' → enemy popup; same slot serves encounter monster
+//              (_encounterMonsterPos uses idx), PVP cell
+//              (pvpEnemyCellCenterLocal uses idx), or boss (idx ignored).
+// Original sites (spell-cast.js / battle-ally.js / pvp.js / spell-cast.js
+// drain-undead) all built this closure inline with the exact same shape;
+// folding here means the popup format ({value, timer, [index]}) is defined
+// in one place.
+export function makeHealNumCallback(scope, idx) {
+  if (scope === 'self') return (n) => { playerHealNum = { value: n, timer: 0 }; };
+  if (scope === 'ally') return (n) => { allyDamageNums[idx] = { value: n, timer: 0, heal: true }; };
+  if (scope === 'enemy') return (n) => { enemyHealNum = { value: n, timer: 0, index: idx }; };
+  return null;
+}
+
 // ── Reset (called at battle start) ─────────────────────────────────────────
 export function resetAllDmgNums() {
   enemyDmgNum = null; playerDamageNum = null;
@@ -221,6 +240,22 @@ export function drawBattleNum(ctx, bx, by, value, pal) {
   for (let i = 0; i < digits.length; i++) {
     ctx.drawImage(set[parseInt(digits[i])], x0 + i * 8, by);
   }
+}
+
+// Single source for "miss canvas OR digits" dispatch. All call sites used to
+// inline an `if (dn.miss && mc) drawImage(...) else drawBattleNum(...)`
+// branch, with inconsistent y-offsets (3 sites at `by - 4`, 3 at `by`) — the
+// `- 4` came from the multi-target SW paths, but the miss canvas is 8 px tall
+// (same as digits), so the digits' `by` is the canonical anchor. Unifying
+// here also keeps the x-anchor consistent (`bx - 8`, centering the 16×8 miss
+// canvas around `bx`).
+export function drawDmgPopup(ctx, dn, bx, by, pal = DMG_NUM_PAL) {
+  if (!dn) return;
+  if (dn.miss) {
+    if (missCanvas) ctx.drawImage(missCanvas, bx - 8, by);
+    return;
+  }
+  drawBattleNum(ctx, bx, by, dn.value, pal);
 }
 
 export function dmgBounceY(baseY, timer) {

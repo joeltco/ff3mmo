@@ -2,7 +2,7 @@
 
 import { battleSt, setEnemyHP } from './battle-state.js';
 import { getPlayerLocation } from './roster.js';
-import { getAllyDamageNums, setPlayerDamageNum, setEnemyHealNum } from './damage-numbers.js';
+import { getAllyDamageNums, setPlayerDamageNum, setEnemyHealNum, makeHealNumCallback } from './damage-numbers.js';
 import { ui } from './ui-state.js';
 import { buildTurnOrder, processNextTurn } from './battle-turn.js';
 import { updateBattleAlly } from './battle-ally.js';
@@ -710,7 +710,7 @@ function _applyPVPEnemyMagicEffect() {
   const target = _pvpEnemyByCellIdx(pvpSt.pvpMagicTargetCellIdx);
   if (!target) return;
   const cellIdx = pvpSt.pvpMagicTargetCellIdx;
-  const onHealNum = (n) => setEnemyHealNum({ value: n, timer: 0, index: cellIdx });
+  const onHealNum = makeHealNumCallback('enemy', cellIdx);
 
   if (pvpSt.pvpMagicSpellId === 0x36) {
     applyMagicSight({ sfx: SFX.SIGHT });

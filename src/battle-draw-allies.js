@@ -11,7 +11,7 @@ import { battleSt } from './battle-state.js';
 import { drawText, measureText } from './font-renderer.js';
 import { nesColorFade } from './palette.js';
 import { _dmgBounceY } from './data/animation-tables.js';
-import { DMG_NUM_PAL, HEAL_NUM_PAL, getMissCanvas, drawBattleNum, getAllyDamageNums } from './damage-numbers.js';
+import { DMG_NUM_PAL, HEAL_NUM_PAL, drawDmgPopup, getAllyDamageNums } from './damage-numbers.js';
 import { weaponSubtype, isWeapon } from './data/items.js';
 import { pickAttackPoseKey, pickAttackWeaponSpec, attackWeaponLayer, pickCombatantBody } from './combatant-pose.js';
 import { inputSt } from './input-handler.js';
@@ -257,12 +257,7 @@ function _flushAllyWeaponDraws(weaponDraws) {
   for (const wd of weaponDraws) {
     if (wd.type === 'dmg') {
       const { dn, bx, by } = wd;
-      if (dn.miss) {
-        const mc = getMissCanvas();
-        if (mc) ui.ctx.drawImage(mc, bx - 8, by);
-      } else {
-        drawBattleNum(ui.ctx, bx, by, dn.value, dn.heal ? HEAL_NUM_PAL : DMG_NUM_PAL);
-      }
+      drawDmgPopup(ui.ctx, dn, bx, by, dn.heal ? HEAL_NUM_PAL : DMG_NUM_PAL);
     } else if (wd.type === 'sparkle') {
       const { frame, px, py } = wd;
       // OAM has a single 16×16 sparkle on the target body at [0,5]-[16,13],
