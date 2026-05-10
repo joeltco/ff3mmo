@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.204 — 2026-05-10
+
+### Doc-only: balance-audit + battle-sim plan synchronized
+
+- `docs/BALANCE-AUDIT.md` TL;DR table updated — all six findings now
+  closed (3 fixed, 2 retracted as analysis artifacts, 1 always-OK).
+- `tools/battle-sim.PLAN.md` Phase 1 checkboxes filled (was still
+  showing as todo even though the bug repro + fix shipped in v1.7.193).
+- Memory `project_ff3mmo_next_tasks.md` deleted — all three deferred
+  items resolved (sim Phase 1-4 shipped, RM7 dual-wield fix v1.7.193,
+  pause-menu heal unification v1.7.200).
+
+End-of-session housekeeping; no live-game change.
+
 ## 1.7.203 — 2026-05-10
 
 ### Reverted: crit-overkill display cap (from v1.7.200)

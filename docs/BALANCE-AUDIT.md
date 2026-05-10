@@ -4,16 +4,21 @@ Driven by `tools/battle-sim.js` (Phase 1–4) using statistical mode
 (`--runs=200`/`--runs=100` per matchup, mulberry32-seeded). All numbers
 are reproducible — repro commands below each finding.
 
-**Audit status: 1 fix shipped, 5 issues remain.**
+**Audit status: all findings closed.** 3 fixes shipped, 2 retracted as
+analysis artifacts, 1 always-OK.
 
 | # | Finding | Status |
 |---|---------|--------|
 | 1 | `_JOB_STAT_WEIGHTS` missing for jobs 6–21 | ✅ **fixed** v1.7.198 |
-| 2 | Grasslands Werewolf/Killer Bee wipe starter solo | ⚠️ open |
-| 3 | First-move bias (~65–70%) in all mirrors | ✅ retracted — sim artifact, live game already correct |
-| 4 | Land Turtle solo wide difficulty range | ⚠️ open (mostly improved by #1) |
-| 5 | BM Fire 5–12× physical at L4 vs low-mdef | ✅ retracted — dummy-dpt artifact |
+| 2 | Grasslands Werewolf/Killer Bee wipe starter solo | ✅ **fixed** v1.7.199 (zone split + choke removed) |
+| 3 | First-move bias (~65–70%) in all mirrors | ✅ retracted v1.7.201 — sim artifact; live game uses `agi*2 + rand(0..255)` |
+| 4 | Land Turtle solo wide difficulty range | ✅ resolved by #1 — KN5/TH5/NI5 solo 100%, OK4 stays weak (intended) |
+| 5 | BM Fire 5–12× physical at L4 vs low-mdef | ✅ retracted v1.7.202 — dummy-dpt artifact, encounters clear in equal time |
 | 6 | Altar Cave + Goblin grasslands well-tuned | ✅ |
+
+**Other work shipped during audit (v1.7.200):**
+- Ninja stat-weight bump (str 2→3, fixes "physical god" identity)
+- Pause-menu heal/cure-status unified through `applyMagic*` helpers
 
 > **NOTE — earlier "Monk unarmed broken" finding has been retracted.** That
 > conclusion came from comparing Monk-with-special-weights against jobs that

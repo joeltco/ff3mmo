@@ -152,27 +152,27 @@ selection is the bug, or if the math itself is.
 
 ## Phases
 
-### Phase 1 — Physical attacks (target: ~150 LOC)
+### Phase 1 — Physical attacks ✅ shipped v1.7.193
 
-**Ships:** L7 RM bug repro tool.
+Ships the RM L7 dual-dagger bug repro + fix.
 
-- [ ] Profile shorthand resolver (`RM7` → combatant) using `generateAllyStats`
-- [ ] CLI parser (no deps; `process.argv.slice(2)` + `--key=value` split)
-- [ ] Mulberry32 seeding via `Math.random` replacement
-- [ ] Three attack-path simulators:
-  - `simAttackPlayerSingleWield(att, def)` — one `rollHits` call
-  - `simAttackPlayerDualWield(att, def)` — two `rollHits` (R then L), summed
-  - `simAttackPVP(att, def)` — one `rollHits` with `dualWield=true`
-- [ ] Path selector: by `combatant.role` (`'player'` / `'pvp'`) and weapons
-- [ ] Turn loop: P1 swings → resolve → check KO → P2 swings (or skip if `--mode=dummy`)
-- [ ] Pretty-printer for combatant header + per-turn output
-- [ ] `--help` text
+- [x] Profile shorthand resolver (`RM7` → combatant) via `generateAllyStats`
+- [x] CLI parser (no deps; `--key=value` / `--pN.<key>=<value>` split)
+- [x] Mulberry32 seeding via `Math.random` replacement
+- [x] Three attack-path simulators (player-single, player-dual, pvp)
+- [x] Path selector with `--p1.path=auto|player-single|player-dual|pvp`
+- [x] Turn loop: 1v1 with `--mode=duel|dummy|solo`
+- [x] Pretty-printer for combatant header + per-turn output
+- [x] `--help` text
+- [x] **Bug fix shipped**: `input-handler.js:178` was stripping full weapon
+  sum for dual-wield instead of average (pre-fix RM7 dual-dagger did 4
+  dmg/turn vs L4 BM, post-fix 36-39).
 
-### Phase 1.5 — Output polish
+### Phase 1.5 — Output polish ✅ partial / superseded
 
-- [ ] Per-turn diff view: `P1 HP 120 → 106 (-14)` ANSI red/green
-- [ ] `--quiet` mode: just the final result line (for use in test harness)
-- [ ] `--json` output mode for tooling
+- [-] Per-turn diff view (ANSI) — not shipped, low priority
+- [-] `--quiet` mode — not shipped, low priority
+- [x] `--json` output — shipped under Phase 4 (`--runs --json`)
 
 ### Phase 2 — Spells, status, buffs ✅ shipped v1.7.194
 
