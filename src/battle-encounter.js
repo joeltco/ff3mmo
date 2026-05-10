@@ -44,9 +44,21 @@ export function startRandomEncounter() {
   battleSt.isRandomEncounter = true;
   inputSt.battleActionCount = 0;
 
-  const zoneKey = mapSt.onWorldMap
-    ? 'grasslands'
-    : (['altar_cave_f1','altar_cave_f2','altar_cave_f3','altar_cave_f4'][mapSt.dungeonFloor] || 'altar_cave_f1');
+  // World-map encounter zone is split by region:
+  //   - Ur valley (x=93..96, y=34..44, ~31 walkable tiles between Altar Cave
+  //     and the temporary choke at 95,45) → 'grasslands_valley' (Goblins only)
+  //   - Anywhere else on the world map → 'grasslands_wild' (Werewolves + Bees)
+  // When the choke is removed the wild zone becomes reachable; until then only
+  // the valley sees encounters because that's the only place the player can walk.
+  let zoneKey;
+  if (mapSt.onWorldMap) {
+    const tileX = Math.floor(mapSt.worldX / TILE_SIZE);
+    const tileY = Math.floor(mapSt.worldY / TILE_SIZE);
+    const inValley = tileX >= 93 && tileX <= 96 && tileY >= 34 && tileY <= 44;
+    zoneKey = inValley ? 'grasslands_valley' : 'grasslands_wild';
+  } else {
+    zoneKey = ['altar_cave_f1','altar_cave_f2','altar_cave_f3','altar_cave_f4'][mapSt.dungeonFloor] || 'altar_cave_f1';
+  }
   const zone = ENCOUNTERS.get(zoneKey);
   const formations = zone ? zone.formations : [[{ id: 0x00, min: 1, max: 3 }]];
   const formation = formations[Math.floor(Math.random() * formations.length)];

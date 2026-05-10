@@ -4,13 +4,25 @@
 // Formation data from ROM $5C010 (settings), $5C410 (monster lists), $5CA10 (structures)
 
 export const ENCOUNTERS = new Map([
-  // --- World map (grasslands near Ur) ---
-  ['grasslands', {
+  // --- World map: Ur valley (currently reachable area) ---
+  // 31 walkable tiles between Altar Cave (95,34) and the temporary choke
+  // block (95,45). Goblins only — safe-tier encounters for a starter party.
+  // Selected via bounding box check in battle-encounter.js (x=93..96, y=34..44).
+  ['grasslands_valley', {
     rate: 'low',
     formations: [
-      [{ id: 0x00, min: 2, max: 4 }], // Goblin x2-4
-      [{ id: 0x04, min: 2, max: 4 }], // Killer Bee x2-4
-      [{ id: 0x05, min: 2, max: 4 }], // Werewolf x2-4
+      [{ id: 0x00, min: 1, max: 3 }], // Goblin x1-3
+    ],
+  }],
+  // --- World map: south of choke (currently unreachable, ready for when the
+  // choke at world-map-renderer.js is lifted). Werewolves + Killer Bees are
+  // tier-2 — capped at 3 per formation to avoid werewolf*4 wipes (200-run
+  // sim showed even an L1 3-party only survives 6.5% vs werewolf*4).
+  ['grasslands_wild', {
+    rate: 'low',
+    formations: [
+      [{ id: 0x04, min: 2, max: 3 }], // Killer Bee x2-3 (statusAtk: poison)
+      [{ id: 0x05, min: 2, max: 3 }], // Werewolf x2-3
     ],
   }],
   // --- Altar Cave ---

@@ -2,6 +2,33 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.199 — 2026-05-10
+
+### Added: Ur valley vs wild grasslands — split encounter zones
+
+Random world-map encounters are now zoned by region. The Ur valley (the
+31 walkable tiles in the bounding box x=93..96, y=34..44 — between the
+Altar Cave entrance at (95,34) and the former choke at (95,45)) only
+spawns Goblins (1–3 per formation). Anywhere else on the world map runs
+the wild grasslands table: Werewolf or Killer Bee (2–3 per formation).
+
+Tuning derived from `tools/battle-sim.js --runs=200`:
+- Solo OK1 vs valley goblin×3: 100% win, ~3.9 turns, 2.2 enemy dpt — appropriate starter tempo.
+- Solo OK1 vs wild werewolf×3: 0% win — encourages recruiting before
+  heading south.
+- 3-party OK3/FI3/WM3 vs wild werewolf×3: 100% win, ~3 turns. Tier-2
+  zone is comfortable once you have a party.
+
+Pre-fix the formations were all in one `'grasslands'` table, so a solo
+OK1 in the valley could roll into werewolf×4 (0% survival). Caught by
+the v1.7.197 balance audit. See `docs/BALANCE-AUDIT.md` finding #2.
+
+### Removed: choke block at world tile (95, 45)
+
+The temporary `if (wx === 95 && wy === 45) return false;` in
+`world-map-renderer.js:164` is gone. Players can now walk south of Ur
+and reach the wild grasslands. Recruit a party first.
+
 ## 1.7.198 — 2026-05-10
 
 ### Fixed: 16 advanced jobs were stat-clones (default 1/1/1/1/1 weights)

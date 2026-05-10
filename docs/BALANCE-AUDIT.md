@@ -4,22 +4,24 @@ Driven by `tools/battle-sim.js` (Phase 1–4) using statistical mode
 (`--runs=200`/`--runs=100` per matchup, mulberry32-seeded). All numbers
 are reproducible — repro commands below each finding.
 
-**TL;DR — six issues worth attention:**
+**Audit status: 1 fix shipped, 5 issues remain.**
 
-1. 🐛 **`_JOB_STAT_WEIGHTS` only filled for jobIdx 0–5** — Knight/Thief/Ranger/**Black Belt**/Ninja/etc. all use flat 1/1/1/1/1 default. Single concrete fix.
-2. ⚠️  **Werewolf and Killer Bee in grasslands wipe a starter solo** — 0–6% win
-3. ⚠️  **First-move advantage is universal (~65–70% in mirrors)** — design choice or bug?
-4. ⚠️  **Land Turtle is a coin-flip solo, trivial in 3-party** — wide difficulty range
-5. ⚠️  **Black Mage at L4 deals 5–12× physical damage** vs low-mdef targets
-6. ✅  **Altar Cave + Goblin grasslands** are appropriately tuned
+| # | Finding | Status |
+|---|---------|--------|
+| 1 | `_JOB_STAT_WEIGHTS` missing for jobs 6–21 | ✅ **fixed** v1.7.198 |
+| 2 | Grasslands Werewolf/Killer Bee wipe starter solo | ⚠️ open |
+| 3 | First-move bias (~65–70%) in all mirrors | ⚠️ open |
+| 4 | Land Turtle solo wide difficulty range | ⚠️ open (mostly improved by #1) |
+| 5 | BM Fire 5–12× physical at L4 vs low-mdef | ⚠️ open |
+| 6 | Altar Cave + Goblin grasslands well-tuned | ✅ |
 
 > **NOTE — earlier "Monk unarmed broken" finding has been retracted.** That
 > conclusion came from comparing Monk-with-special-weights against jobs that
-> were silently using default 1/1/1/1/1 weights. Once the missing weights are
-> added (#1 below), Monk's unarmed power is right-sized: ahead in early game
-> (gear-poor) and pulled past by Fighter once tier-3 swords (atk 35 → 120 →
-> 160) come online. Monks are *supposed* to kick ass unarmed, and they do.
-> See section 1 for the actual bug + fix.
+> were silently using default 1/1/1/1/1 weights. Once the missing weights
+> were added (#1, shipped v1.7.198), Monk's unarmed power is right-sized:
+> dominant when other classes are gear-poor, pulled past by Fighter when
+> tier-2+ swords come online. Monks are *supposed* to kick ass unarmed,
+> and they do.
 
 ---
 
@@ -101,13 +103,45 @@ These are *guesses* — the user owns the design and should refine. The
 weights respect class identity (tanks have str/vit, mages have int/mnd,
 speed jobs have agi).
 
-**Repro:**
+**Repro (pre-fix):**
 ```bash
 for spec in OK10 FI10 MO10 KN10 BB10 NI10; do
   node tools/battle-sim.js --p1=$spec --turns=1 --seed=1 | grep "P1:"
 done
 # All non-OK/FI/MO show identical stats — confirms the fall-through.
 ```
+
+### Post-fix verification (v1.7.198)
+
+Stats now show class identity at L10:
+
+| Job          | ATK | DEF | AGI | INT | MND | Identity         |
+|--------------|-----|-----|-----|-----|-----|------------------|
+| Onion Knight | 10  | 10  | 15  | 15  | 15  | baseline         |
+| Fighter      | 15  | 15  | 15  | 15  | 15  | str+vit physical |
+| Monk         | 15  | 15  | 25  | 15  | 15  | str+agi+vit      |
+| Knight       | 20  | 15  | 15  | 15  | 15  | heavy tank       |
+| Thief        | 10  | 10  | 35  | 15  | 15  | speed king       |
+| Black Belt   | 20  | 15  | 35  | 15  | 15  | Monk evolved     |
+| Viking       | 20  | 15  | 15  | 15  | 15  | heaviest tank    |
+| Ninja        | 15  | 15  | 35  | 15  | 15  | speed god        |
+| Black Mage   | 10  | 10  | 15  | 35  | 15  | int caster       |
+| Devout       | —   | —   | —   | —   | 45  | white peak (mp 5) |
+
+**Cross-job results post-fix (200 runs each):**
+
+- BB10 vs MO10 unarmed: BB wins **98.5%** (evolution works) ✓
+- VI10 vs KN10: VI wins **97.5%** (heaviest tank) ✓
+- MO10 unarmed vs KN10 default: MO wins **99.5%** (Knight needs gear)
+- MO7 unarmed vs FI7 + thunder sword (atk 25): FI wins **74%** (gear-tier
+  weapon catches Monk — confirms the right design tension)
+
+**Still open (not addressed by stat weights):**
+- Knight at default loadout still loses to Monk unarmed (gear progression issue)
+- Ninja vs Monk at L10: MO wins 80.5% — Ninja's 2/3/2 weights might be
+  under-tuned for "physical god" identity. Bumping to 3/3/2 is a
+  one-line follow-up if you want Ninja to be the dominant late-game
+  physical (NES canon).
 
 ---
 
