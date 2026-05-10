@@ -13,6 +13,13 @@ import { calcAttackerAtk, calcPotentialHits, rollHits, elemMultiplier } from '..
 import { ITEMS, isWeapon } from '../src/data/items.js';
 import { JOBS } from '../src/data/jobs.js';
 import { generateAllyStats } from '../src/data/players.js';
+import { SPELLS } from '../src/data/spells.js';
+import {
+  STATUS, STATUS_NAMES, addStatus, removeStatus, hasStatus,
+  tryInflictStatus, processTurnStart, blindHitPenalty, miniToadAtkMult,
+  canCastMagic, wakeOnHit,
+} from '../src/status-effects.js';
+import { applyBuff, hasBuff, BUFF_HASTE, BUFF_PROTECT } from '../src/buffs.js';
 
 // ─── Job shorthand ──────────────────────────────────────────────────────
 const JOB_PREFIX = {
@@ -91,8 +98,8 @@ function describeProfile(p, label) {
   const l = p.weaponL != null ? ITEMS.get(p.weaponL) : null;
   const wpnStr = `R: ${itemStr(p.weaponR, r)}   L: ${itemStr(p.weaponL, l)}`;
   return [
-    `${label}: ${p._spec}  ${job} L${p.level}  HP ${p.hp}  ATK ${p.atk}  DEF ${p.def}  AGI ${p.agi}  hitRate ${p.hitRate}`,
-    `    ${wpnStr}   evade ${p.evade}   shieldEvade ${p.shieldEvade}`,
+    `${label}: ${p._spec}  ${job} L${p.level}  HP ${p.hp}  ATK ${p.atk}  DEF ${p.def}  AGI ${p.agi}  INT ${p.int} MND ${p.mnd} mdef ${p.mdef||0}  hitRate ${p.hitRate}`,
+    `    ${wpnStr}   evade ${p.evade}   shieldEvade ${p.shieldEvade}${describeStatusBuffs(p)}`,
   ].join('\n');
 }
 
@@ -116,17 +123,24 @@ function attackPlayerSingleWield(att, def, opts = {}) {
   const job = JOBS[att.jobIdx] || {};
   const wpnElem = ITEMS.get(att.weaponR)?.element || null;
   const elemMult = elemMultiplier(wpnElem, def.weakness, def.resist);
-  const hits = calcPotentialHits(att.level, att.agi, false);
-  const results = rollHits(att.atk, def.def, att.hitRate, hits, {
+  const blindMult = att.status ? blindHitPenalty(att.status) : 1;
+  const atkMult   = att.status ? miniToadAtkMult(att.status) : 1;
+  const hasted    = !!hasBuff(att, BUFF_HASTE);
+  const protected_ = !!hasBuff(def, BUFF_PROTECT);
+  const hits = calcPotentialHits(att.level, att.agi, false, hasted);
+  const effAtk = Math.floor(att.atk * atkMult);
+  const effHit = att.hitRate * blindMult;
+  const results = rollHits(effAtk, def.def, effHit, hits, {
     critPct: job.critPct || 0,
     critBonus: job.critBonus || 0,
     elemMult,
     evade: def.evade || 0,
     shieldEvade: def.shieldEvade || 0,
     defendHalve: !!opts.targetDefending,
-    targetProtected: !!opts.targetProtected,
+    targetProtected: protected_,
   });
-  return { path: 'player-single', atkUsed: att.atk, hitsRolled: hits, results };
+  if (def.status && hasStatus(def.status, STATUS.SLEEP)) wakeOnHit(def.status);
+  return { path: 'player-single', atkUsed: effAtk, hitsRolled: hits, results, hasted, protectedTarget: protected_ };
 }
 
 function attackPlayerDualWield(att, def, opts = {}) {
@@ -143,19 +157,23 @@ function attackPlayerDualWield(att, def, opts = {}) {
   const wpnAtkComponent = (rArmed && lArmed)
     ? Math.floor((rWpnAtk + lWpnAtk) / 2)
     : rWpnAtk + lWpnAtk;
-  const baseAtk = att.atk - wpnAtkComponent;
-  const hitsPerHand = calcPotentialHits(att.level, att.agi, false);
+  const blindMult = att.status ? blindHitPenalty(att.status) : 1;
+  const atkMult   = att.status ? miniToadAtkMult(att.status) : 1;
+  const hasted    = !!hasBuff(att, BUFF_HASTE);
+  const protected_ = !!hasBuff(def, BUFF_PROTECT);
+  const baseAtk = (att.atk - wpnAtkComponent) * atkMult;
+  const hitsPerHand = calcPotentialHits(att.level, att.agi, false, hasted);
   const critOpts = {
     critPct: job.critPct || 0,
     critBonus: job.critBonus || 0,
     evade: def.evade || 0,
     shieldEvade: def.shieldEvade || 0,
     defendHalve: !!opts.targetDefending,
-    targetProtected: !!opts.targetProtected,
+    targetProtected: protected_,
   };
   function rollHand(wpn) {
     const handAtk = baseAtk + (wpn ? (wpn.atk || 0) : 0);
-    const handHit = wpn ? (wpn.hit || 80) : 80;
+    const handHit = (wpn ? (wpn.hit || 80) : 80) * blindMult;
     return {
       atk: handAtk,
       hit: handHit,
@@ -164,6 +182,7 @@ function attackPlayerDualWield(att, def, opts = {}) {
   }
   const r = rollHand(rWpn);
   const l = rollHand(lWpn);
+  if (def.status && hasStatus(def.status, STATUS.SLEEP)) wakeOnHit(def.status);
   return {
     path: 'player-dual',
     baseAtk,
@@ -171,6 +190,8 @@ function attackPlayerDualWield(att, def, opts = {}) {
     lHand: l,
     hitsRolled: hitsPerHand * 2,
     results: [...r.results, ...l.results],
+    hasted,
+    protectedTarget: protected_,
   };
 }
 
@@ -180,16 +201,23 @@ function attackPVP(att, def, opts = {}) {
   const lArmed = att.weaponL != null && isWeapon(att.weaponL);
   const isUnarmed = !rArmed && !lArmed;
   const dualWield = (rArmed && lArmed) || isUnarmed;
-  const hits = calcPotentialHits(att.level, att.agi, dualWield);
-  const results = rollHits(att.atk, def.def, att.hitRate, hits, {
+  const blindMult = att.status ? blindHitPenalty(att.status) : 1;
+  const atkMult   = att.status ? miniToadAtkMult(att.status) : 1;
+  const hasted    = !!hasBuff(att, BUFF_HASTE);
+  const protected_ = !!hasBuff(def, BUFF_PROTECT);
+  const hits = calcPotentialHits(att.level, att.agi, dualWield, hasted);
+  const effAtk = Math.floor(att.atk * atkMult);
+  const effHit = att.hitRate * blindMult;
+  const results = rollHits(effAtk, def.def, effHit, hits, {
     critPct: job.critPct || 0,
     critBonus: job.critBonus || 0,
     evade: def.evade || 0,
     shieldEvade: def.shieldEvade || 0,
     defendHalve: !!opts.targetDefending,
-    targetProtected: !!opts.targetProtected,
+    targetProtected: protected_,
   });
-  return { path: 'pvp', atkUsed: att.atk, hitsRolled: hits, dualWield, results };
+  if (def.status && hasStatus(def.status, STATUS.SLEEP)) wakeOnHit(def.status);
+  return { path: 'pvp', atkUsed: effAtk, hitsRolled: hits, dualWield, results, hasted, protectedTarget: protected_ };
 }
 
 function selectAttack(att, override) {
@@ -202,6 +230,253 @@ function selectAttack(att, override) {
   const unarmed = !rArmed && !lArmed;
   if ((rArmed && lArmed) || unarmed) return attackPlayerDualWield;
   return attackPlayerSingleWield;
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// Phase 2 — spells, status, buffs
+// ════════════════════════════════════════════════════════════════════════
+
+// ─── Spell name → ID (lowercase) ────────────────────────────────────────
+// Subset covering common starter / mid-game spells. Extend as needed.
+const SPELL_BY_NAME = {
+  // Black magic — damage
+  fire:    0x31, fira:   0x23, firaga:  0x0e,
+  bzzard:  0x32, bzzara: 0x24, bzzaga:  0x1d,
+  thunder: 0x2a, tara:   0x25, taga:    0x15,
+  spark:   0x29, heatra: 0x22, icen:    0x30,
+  bio:     0x0f, holy:   0x05, flare:   0x00, meteor: 0x02,
+  // Black magic — status
+  poison:  0x2b, blind:  0x2c, sleep:   0x33,
+  silence: 0x21, confuse:0x20, break:   0x1c, breakga:0x08,
+  death:   0x01, raze:   0x16, toad:    0x2e, mini:   0x2f,
+  // White magic — heal
+  cure:    0x34, cura:   0x26, curaga:  0x18, curaja: 0x0a,
+  // White magic — cure-status
+  poisona: 0x35, bndna:  0x28, esuna:   0x0b,
+  // Buffs
+  haste:   0x13, protect:0x1a, reflect: 0x0c,
+  // Drain / utility
+  drain:   0x09, libra:  0x1f, erase:   0x17,
+};
+
+function resolveSpell(name) {
+  if (typeof name === 'number') return { id: name, spell: SPELLS.get(name) };
+  if (/^0x[0-9a-fA-F]+$/.test(name)) {
+    const id = parseInt(name, 16);
+    return { id, spell: SPELLS.get(id) };
+  }
+  const id = SPELL_BY_NAME[name.toLowerCase()];
+  if (id == null) throw new Error(`Unknown spell "${name}". Known: ${Object.keys(SPELL_BY_NAME).join(', ')}`);
+  return { id, spell: SPELLS.get(id) };
+}
+
+function spellName(id) {
+  for (const [n, sid] of Object.entries(SPELL_BY_NAME)) if (sid === id) return n;
+  return `0x${id.toString(16).padStart(2, '0')}`;
+}
+
+// ─── Magic damage / heal math (port of combatant-cast.js + spell-cast.js) ───
+//
+// NES FF3 magic formula (31/B1B4): atk = floor(stat/2) + power, +rand(0..atk/2).
+// White magic (heal / cure_status / revive) uses caster MND; black magic (damage)
+// uses INT. Pulled directly from spell-cast.js:_rollMagicAmount + pvp.js:606.
+
+function simRollMagicAmount(caster, power, useMnd) {
+  const stat = useMnd ? (caster.mnd || 5) : (caster.int || 5);
+  const baseAtk = Math.floor(stat / 2) + power;
+  return baseAtk + Math.floor(Math.random() * (Math.floor(baseAtk / 2) + 1));
+}
+
+function spellUsesMnd(spell) {
+  // spell-cast.js:261 / 396 / 517 — all three roles use the same predicate.
+  return spell.element === 'recovery'
+      || spell.target === 'cure_status'
+      || spell.target === 'revive';
+}
+
+// applyMagicDamage from combatant-cast.js:225 — port without SFX/render hooks.
+function simApplyMagicDamage(target, baseDmg, spell) {
+  if (!target || target.hp <= 0) return 0;
+  const eMult = elemMultiplier(spell.element, target.weakness, target.resist);
+  const mdef = target.mdef || 0;
+  const dmg = Math.max(1, Math.floor(baseDmg * eMult) - mdef);
+  target.hp = Math.max(0, target.hp - dmg);
+  return { dmg, eMult, mdef };
+}
+
+// applyMagicHeal from combatant-cast.js:241.
+function simApplyMagicHeal(target, amount) {
+  if (!target) return 0;
+  const maxHP = target.maxHP || target.hp || 0;
+  const realHeal = Math.min(amount, maxHP - (target.hp || 0));
+  target.hp = (target.hp || 0) + realHeal;
+  return realHeal;
+}
+
+// applyMagicCureStatus from combatant-cast.js:253.
+function simApplyMagicCureStatus(target, statusFlag) {
+  if (!target || !target.status) return false;
+  const wasSet = !!(target.status.mask & statusFlag);
+  removeStatus(target.status, statusFlag);
+  return wasSet;
+}
+
+// applyMagicStatus from combatant-cast.js:354.
+function simApplyMagicStatus(target, statusName, hitChance) {
+  if (!target || !target.status) return 0;
+  const resist = target.statusResist || 0;
+  return tryInflictStatus(target.status, statusName, hitChance, resist);
+}
+
+// applyMagicInstakill from combatant-cast.js:331.
+function simApplyMagicInstakill(target, hitChance) {
+  if (!target || target.hp <= 0) return false;
+  if (Math.random() * 100 < hitChance) {
+    if (target.status) addStatus(target.status, STATUS.DEATH);
+    target.hp = 0;
+    return true;
+  }
+  return false;
+}
+
+// Map cure-status spell IDs to the flag they cure.
+const CURE_STATUS_FLAG = {
+  0x35: STATUS.POISON,    // Poisona
+  0x28: STATUS.BLIND,     // Bndna
+  0x0b: 0xFFFF,           // Esuna — clears all major debuffs (mask)
+};
+
+// Mirror of combatant-cast.js:applySpell — the dispatcher.
+// Returns a structured result for pretty-printing.
+function simApplySpell(caster, target, spell, spellId) {
+  const useMnd = spellUsesMnd(spell);
+  const out = { spellId, spellName: spellName(spellId), spell, useMnd };
+
+  // Status spell on enemy (Sleep, Poison, Blind, etc.)
+  if (spell.target === 'enemy_status') {
+    if (spell.type === 'death') {
+      out.kind = 'instakill';
+      out.killed = simApplyMagicInstakill(target, spell.hit);
+      return out;
+    }
+    out.kind = 'status';
+    out.applied = simApplyMagicStatus(target, spell.type, spell.hit);
+    return out;
+  }
+
+  // Status spell on enemy (Poison spell type='poison' target='enemy', Blind type='blind' target='enemy_status')
+  // Some status spells like Poison (0x2b) have target='enemy' but type='poison'. Handle those here.
+  if (['poison', 'blind', 'sleep', 'paralysis', 'silence', 'mini', 'toad', 'confuse'].includes(spell.type)
+      && spell.target === 'enemy') {
+    out.kind = 'status';
+    out.applied = simApplyMagicStatus(target, spell.type, spell.hit);
+    return out;
+  }
+
+  // Cure-status (Poisona, Bndna, Esuna) — strips a status from a friendly.
+  if (spell.target === 'cure_status') {
+    const flag = CURE_STATUS_FLAG[spellId] || 0;
+    out.kind = 'cure_status';
+    out.flag = flag;
+    out.amountRolled = simRollMagicAmount(caster, spell.power || 0, useMnd);
+    out.cured = simApplyMagicCureStatus(target, flag);
+    return out;
+  }
+
+  // Recovery — heal non-undead, damage undead.
+  if (spell.element === 'recovery' && spell.target === 'ally') {
+    out.kind = 'heal';
+    out.amountRolled = simRollMagicAmount(caster, spell.power, true);
+    out.healed = simApplyMagicHeal(target, out.amountRolled);
+    return out;
+  }
+
+  // Buff cast (Haste, Protect) — power=5/hit=75 etc; we just apply unconditionally for now.
+  if (spell.target === 'haste') {
+    out.kind = 'buff';
+    out.buff = 'haste';
+    applyBuff(target || caster, BUFF_HASTE);
+    return out;
+  }
+  if (spell.target === 'protect') {
+    out.kind = 'buff';
+    out.buff = 'protect';
+    applyBuff(target || caster, BUFF_PROTECT);
+    return out;
+  }
+
+  // Default: damage spell (Fire / Bzzard / Bolt / etc).
+  out.kind = 'damage';
+  out.amountRolled = simRollMagicAmount(caster, spell.power, useMnd);
+  const r = simApplyMagicDamage(target, out.amountRolled, spell);
+  if (typeof r === 'object') Object.assign(out, r);
+  else out.dmg = r;
+  return out;
+}
+
+function describeSpellResult(caster, target, r) {
+  const lines = [];
+  lines.push(`  ${caster._spec} casts ${r.spellName} on ${target ? target._spec : 'self'}  [${r.kind}]`);
+  if (r.kind === 'damage') {
+    lines.push(`    rolled baseDmg = floor(${r.useMnd ? 'mnd' : 'int'}/2) + power(${r.spell.power}) + rand → ${r.amountRolled}`);
+    lines.push(`    elemMult=${r.eMult}  mdef=${r.mdef}  →  dmg=${r.dmg}`);
+  } else if (r.kind === 'heal') {
+    lines.push(`    rolled = floor(mnd/2) + power(${r.spell.power}) + rand → ${r.amountRolled}  →  healed ${r.healed}`);
+  } else if (r.kind === 'status') {
+    lines.push(`    type=${r.spell.type} hit=${r.spell.hit}%  →  ${r.applied ? `LANDED (${STATUS_NAMES[r.applied] || r.applied})` : 'resisted/missed'}`);
+  } else if (r.kind === 'cure_status') {
+    lines.push(`    flag=${r.flag.toString(16)}  →  ${r.cured ? 'cured' : 'no effect'}`);
+  } else if (r.kind === 'instakill') {
+    lines.push(`    hit=${r.spell.hit}%  →  ${r.killed ? 'KILLED' : 'resisted'}`);
+  } else if (r.kind === 'buff') {
+    lines.push(`    applied ${r.buff} to ${target ? target._spec : caster._spec}`);
+  }
+  return lines.join('\n');
+}
+
+// ─── Actions ────────────────────────────────────────────────────────────
+// Action spec: 'attack' | 'defend' | 'cast:<spellName>' | 'cast:0xNN'
+
+function parseAction(actStr) {
+  if (!actStr || actStr === 'attack') return { kind: 'attack' };
+  if (actStr === 'defend') return { kind: 'defend' };
+  if (actStr.startsWith('cast:')) {
+    const { id, spell } = resolveSpell(actStr.slice(5));
+    if (!spell) throw new Error(`Spell ${actStr.slice(5)} not found in SPELLS map`);
+    return { kind: 'cast', spellId: id, spell };
+  }
+  throw new Error(`Bad action "${actStr}". Use attack | defend | cast:<spell>`);
+}
+
+// ─── Status / buff CLI helpers ──────────────────────────────────────────
+function applyStartingStatus(combatant, csv) {
+  if (!csv) return;
+  for (const name of String(csv).split(',').map(s => s.trim()).filter(Boolean)) {
+    const flag = STATUS[name.toUpperCase()];
+    if (flag == null) throw new Error(`Unknown status "${name}". Known: ${Object.keys(STATUS).join(', ')}`);
+    addStatus(combatant.status, flag);
+  }
+}
+
+function applyStartingBuffs(combatant, csv) {
+  if (!csv) return;
+  for (const name of String(csv).split(',').map(s => s.trim()).filter(Boolean)) {
+    applyBuff(combatant, name);
+  }
+}
+
+function describeStatusBuffs(p) {
+  const parts = [];
+  if (p.status && p.status.mask) {
+    const flags = [];
+    for (const [n, f] of Object.entries(STATUS)) if (p.status.mask & f) flags.push(n.toLowerCase());
+    if (flags.length) parts.push(`status: ${flags.join(',')}`);
+  }
+  if (p.buffs) {
+    const bs = Object.keys(p.buffs).filter(k => p.buffs[k]);
+    if (bs.length) parts.push(`buffs: ${bs.join(',')}`);
+  }
+  return parts.length ? `   [${parts.join('  ')}]` : '';
 }
 
 // ─── Output ─────────────────────────────────────────────────────────────
@@ -234,8 +509,82 @@ function printAttackResult(att, def, ar) {
 }
 
 // ─── Main loop ──────────────────────────────────────────────────────────
+//
+// Per-turn flow per actor:
+//   1. processTurnStart → poison tick + sleep/paralysis act-skip
+//   2. If canAct: execute action (attack | defend | cast)
+//   3. Apply damage to opponent / heal-self / status to target
+
+function applyAction(actor, target, attackFn, action, opts = {}) {
+  // Returns { lines: string[], dmgDealt, healed, hpBefore, hpAfter, killedTarget }
+  const lines = [];
+
+  if (action.kind === 'defend') {
+    actor._defendsNextSwing = true;
+    lines.push(`  ${actor._spec} defends.`);
+    return { lines, dmgDealt: 0, healed: 0, killedTarget: false };
+  }
+
+  if (action.kind === 'cast') {
+    if (!canCastMagic(actor.status)) {
+      lines.push(`  ${actor._spec} tries to cast ${spellName(action.spellId)} — SILENCED, fizzles.`);
+      return { lines, dmgDealt: 0, healed: 0, killedTarget: false };
+    }
+    // Cure family targets a friendly. In dummy/PvP-flavoured sim mode `target`
+    // is always the opponent, so route heals to self instead.
+    const isHealOrBuff = action.spell.element === 'recovery'
+      || action.spell.target === 'cure_status'
+      || action.spell.target === 'haste'
+      || action.spell.target === 'protect';
+    const spellTarget = isHealOrBuff ? actor : target;
+    const tgtHpBefore = spellTarget ? spellTarget.hp : 0;
+    const r = simApplySpell(actor, spellTarget, action.spell, action.spellId);
+    lines.push(describeSpellResult(actor, spellTarget, r));
+    const dmg = r.dmg || 0;
+    const healed = r.healed || 0;
+    if (spellTarget && (dmg > 0 || healed > 0)) {
+      lines.push(`    ${spellTarget._spec} HP: ${tgtHpBefore} → ${spellTarget.hp}`);
+    }
+    return {
+      lines,
+      dmgDealt: dmg,
+      healed,
+      killedTarget: spellTarget && spellTarget.hp <= 0 && dmg > 0,
+    };
+  }
+
+  // Default: attack. Consume target's "defend next swing" flag if set.
+  const targetDefending = !!target._defendsNextSwing;
+  if (targetDefending) target._defendsNextSwing = false;
+  const ar = attackFn(actor, target, { ...opts, targetDefending });
+  const o = printAttackResult(actor, target, ar);
+  lines.push(o.lines);
+  const hpBefore = target.hp;
+  target.hp = Math.max(0, target.hp - o.total);
+  const halvedTag = targetDefending ? '  (halved by defend)' : '';
+  lines.push(`    ${target._spec} HP: ${hpBefore} → ${target.hp}${halvedTag}`);
+  return { lines, dmgDealt: o.total, healed: 0, killedTarget: target.hp <= 0 };
+}
+
+function processStartOfTurn(actor) {
+  if (!actor.status) return { canAct: true, lines: [] };
+  const lines = [];
+  const { canAct, poisonDmg } = processTurnStart(actor.status, actor.maxHP);
+  if (poisonDmg > 0) {
+    const before = actor.hp;
+    actor.hp = Math.max(0, actor.hp - poisonDmg);
+    lines.push(`  ${actor._spec} takes ${poisonDmg} poison damage  (HP ${before} → ${actor.hp})`);
+  }
+  if (!canAct) {
+    if (hasStatus(actor.status, STATUS.SLEEP))      lines.push(`  ${actor._spec} is asleep — skips turn.`);
+    else if (hasStatus(actor.status, STATUS.PARALYSIS)) lines.push(`  ${actor._spec} is paralyzed — skips turn.`);
+    else                                                 lines.push(`  ${actor._spec} cannot act.`);
+  }
+  return { canAct, lines };
+}
+
 function runBattle(p1, p2, opts) {
-  const { mode = 'duel', turns = 30, p1Path = 'auto', p2Path = 'auto' } = opts;
+  const { mode = 'duel', turns = 30, p1Path = 'auto', p2Path = 'auto', p1Action = { kind: 'attack' }, p2Action = { kind: 'attack' } } = opts;
   const a1 = selectAttack(p1, p1Path);
   const a2 = selectAttack(p2, p2Path);
   const lines = [];
@@ -249,25 +598,28 @@ function runBattle(p1, p2, opts) {
     turn++;
     lines.push(`─── Turn ${turn} ───`);
 
-    // P1 swings
-    const r1 = a1(p1, p2);
-    const o1 = printAttackResult(p1, p2, r1);
-    lines.push(o1.lines);
-    const p2HpBefore = p2.hp;
-    p2.hp = Math.max(0, p2.hp - o1.total);
-    lines.push(`    ${p2._spec} HP: ${p2HpBefore} → ${p2.hp}`);
-    if (p2.hp <= 0) { winner = 'P1'; break; }
-
-    // P2 swings (skip in dummy/solo)
-    if (mode === 'duel') {
-      const r2 = a2(p2, p1);
-      const o2 = printAttackResult(p2, p1, r2);
-      lines.push(o2.lines);
-      const p1HpBefore = p1.hp;
-      p1.hp = Math.max(0, p1.hp - o2.total);
-      lines.push(`    ${p1._spec} HP: ${p1HpBefore} → ${p1.hp}`);
-      if (p1.hp <= 0) { winner = 'P2'; break; }
+    // P1 start-of-turn + action
+    const sot1 = processStartOfTurn(p1);
+    sot1.lines.forEach(l => lines.push(l));
+    if (p1.hp <= 0) { winner = 'P2'; break; }
+    if (sot1.canAct) {
+      const res1 = applyAction(p1, p2, a1, p1Action);
+      res1.lines.forEach(l => lines.push(l));
+      if (p2.hp <= 0) { winner = 'P1'; break; }
     }
+
+    // P2 start-of-turn + action (skip in dummy/solo)
+    if (mode === 'duel') {
+      const sot2 = processStartOfTurn(p2);
+      sot2.lines.forEach(l => lines.push(l));
+      if (p2.hp <= 0) { winner = 'P1'; break; }
+      if (sot2.canAct) {
+        const res2 = applyAction(p2, p1, a2, p2Action);
+        res2.lines.forEach(l => lines.push(l));
+        if (p1.hp <= 0) { winner = 'P2'; break; }
+      }
+    }
+
     lines.push('');
   }
 
@@ -300,7 +652,12 @@ OPTIONS
   --p1.path=<auto|player-single|player-dual|pvp>
                          Force which attack call shape P1 uses.
                          "auto" picks dual if both hands armed, else single.
-  --mode=<duel|dummy>    duel = both swing; dummy = only P1 swings (default duel)
+  --p1.action=<spec>     attack (default), defend, or cast:<spell>
+                         e.g. --p1.action=cast:Fire   --p1.action=cast:Cure
+  --p1.status=<csv>      Starting status flags (poison,sleep,blind,...)
+  --p1.buff=<csv>        Starting buffs (haste,protect,reflect)
+  --p2.* same as p1.*
+  --mode=<duel|dummy>    duel = both swing; dummy = only P1 acts (default duel)
   --turns=<N>            Max turns (default 30)
   --seed=<N>             Deterministic RNG via mulberry32 (default 1)
   --help                 Print this help
@@ -308,14 +665,34 @@ OPTIONS
 JOB PREFIXES
   OK FI MO WM BM RM RA KN TH SC GE DR VI BB MK CO BA SU DE MG SA NI
 
-EXAMPLES
-  # The L7 RM dual-dagger anomaly — observe per-hand atk going negative:
-  node tools/battle-sim.js --p1=RM7 --p1.weaponR=0x1F --p1.weaponL=0x1F \\
-                           --p2=BM4 --mode=dummy --turns=3 --seed=1
+SPELL NAMES (case-insensitive)
+  Damage:  fire fira firaga bzzard bzzara bzzaga thunder tara taga
+           spark heatra icen bio holy flare meteor
+  Status:  poison blind sleep silence confuse break breakga death
+           raze toad mini
+  Heal:    cure cura curaga curaja
+  Cure:    poisona bndna esuna
+  Buffs:   haste protect reflect
+  Other:   drain libra erase
 
-  # Same matchup, force PVP path to see the difference:
-  node tools/battle-sim.js --p1=RM7 --p1.weaponR=0x1F --p1.weaponL=0x1F \\
-                           --p2=BM4 --p1.path=pvp --mode=dummy --turns=3 --seed=1
+EXAMPLES
+  # Default fight (RM7 dual-dagger vs BM4)
+  node tools/battle-sim.js
+
+  # BM4 casts Fire on RM7 each turn (dummy mode = no retaliation)
+  node tools/battle-sim.js --p1=BM4 --p1.action=cast:Fire \\
+                           --p2=RM7 --mode=dummy --turns=3
+
+  # Sleep an enemy then attack while it can't act
+  node tools/battle-sim.js --p1=BM4 --p1.action=cast:Sleep --p2=KN5 \\
+                           --mode=dummy --turns=4
+
+  # Hasted RM vs Protected KN — buff stack effects
+  node tools/battle-sim.js --p1=RM7 --p1.buff=haste --p1.weaponR=0x1F --p1.weaponL=0x1F \\
+                           --p2=KN10 --p2.buff=protect --turns=5
+
+  # Poisoned attacker — HP ticks down each turn
+  node tools/battle-sim.js --p1=KN10 --p1.status=poison --p2=BM4 --turns=5
 `);
 }
 
@@ -330,10 +707,18 @@ function main() {
   const p1Spec = args.p1 || 'RM7';
   const p2Spec = args.p2 || 'BM4';
 
-  let p1, p2;
+  let p1, p2, p1Action, p2Action;
   try {
     p1 = resolveProfile(p1Spec, args.p1Over);
     p2 = resolveProfile(p2Spec, args.p2Over);
+    applyStartingStatus(p1, args.p1Over.status);
+    applyStartingStatus(p2, args.p2Over.status);
+    applyStartingBuffs(p1, args.p1Over.buff);
+    applyStartingBuffs(p2, args.p2Over.buff);
+    if (args.p1Over.hp != null) p1.hp = args.p1Over.hp;
+    if (args.p2Over.hp != null) p2.hp = args.p2Over.hp;
+    p1Action = parseAction(args.p1Over.action);
+    p2Action = parseAction(args.p2Over.action);
   } catch (e) {
     console.error(`Error: ${e.message}`);
     process.exit(1);
@@ -346,6 +731,8 @@ function main() {
     turns: args.turns || 30,
     p1Path: args.p1Over.path || 'auto',
     p2Path: args.p2Over.path || 'auto',
+    p1Action,
+    p2Action,
   });
   console.log(out);
 }

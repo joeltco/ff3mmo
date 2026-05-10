@@ -2,6 +2,51 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.194 — 2026-05-10
+
+### Added: battle-sim Phase 2 — spells, status, buffs
+
+`tools/battle-sim.js` now supports magic, status conditions, and buffs.
+Ported the pure math from `combatant-cast.js` (apply* helpers) + `spell-cast.js`
+(`_rollMagicAmount`) directly into the sim — `combatant-cast.js` itself
+imports canvas / SFX modules so it can't be loaded into Node. `status-effects.js`
+and `buffs.js` are pure and imported live.
+
+New CLI:
+- `--p1.action=attack|defend|cast:<spell>` — force the actor's action this turn
+- `--p1.status=poison,sleep,blind,...` — start with a status applied
+- `--p1.buff=haste,protect` — start with a buff active
+- `--p1.hp=N` — override starting HP (handy for testing Cure)
+
+Spell name resolver covers Fire / Bzzard / Thunder / Cure / Poisona / Sleep /
+Death / Haste / Protect / Drain / etc. — see `SPELL_BY_NAME` in the script
+or run `--help` for the full list. Unknown names error fast.
+
+Status mechanics now in the sim:
+- **Poison**: floor(maxHP/16) HP loss at start of actor's turn
+- **Sleep / Paralysis**: skip turn; sleep wakes on physical hit
+- **Blind**: halved hit rate via `blindHitPenalty`
+- **Mini / Toad**: atk * 0 → damage clamps to 1 via `miniToadAtkMult`
+- **Silence**: blocks `cast:` action with "SILENCED, fizzles"
+- **Petrify / Death**: skip turn (treated as KO at runtime)
+
+Buff mechanics:
+- **Haste**: doubles hit count via `calcPotentialHits(level, agi, dual, hasted=true)`
+- **Protect**: halves incoming physical via `rollHits.targetProtected`
+
+Defend action: halves the NEXT incoming swing (consumed by that swing,
+not reset on turn boundary). Output tags damage with "(halved by defend)".
+
+```
+node tools/battle-sim.js --p1=BM4 --p1.action=cast:Fire --p2=RM7 --mode=dummy --turns=3
+node tools/battle-sim.js --p1=WM4 --p1.hp=10 --p1.action=cast:Cure --mode=solo
+node tools/battle-sim.js --p1=KN10 --p1.status=poison --p2=BM4 --turns=5
+node tools/battle-sim.js --p1=RM7 --p1.buff=haste --p2=KN10 --p2.buff=protect
+```
+
+Phase 3 (encounters / monsters / multi-target) and Phase 4 (statistical
+mode) deferred — see `tools/battle-sim.PLAN.md`.
+
 ## 1.7.193 — 2026-05-10
 
 ### Fixed: player dual-wield damage clamping (3-5/turn instead of ~36-39)

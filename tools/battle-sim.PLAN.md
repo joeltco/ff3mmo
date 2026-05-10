@@ -174,18 +174,29 @@ selection is the bug, or if the math itself is.
 - [ ] `--quiet` mode: just the final result line (for use in test harness)
 - [ ] `--json` output mode for tooling
 
-### Phase 2 — Spells, status, buffs
+### Phase 2 — Spells, status, buffs ✅ shipped v1.7.194
 
-- [ ] Spell cast: damage / heal / status. Mirror `combatant-cast.js`
-  helpers but Node-side (port `applyMagicDamage`, `applyMagicHeal`,
-  `applyMagicCureStatus`, etc. — they're pure once you strip the
-  visual-state side effects).
-- [ ] Status effects: poison tick, sleep skip-turn, blind hit penalty,
-  mini/toad atk multiplier, paralysis, stone.
-- [ ] Buffs: Haste (2× hits via `calcPotentialHits`), Protect (halves
-  physical via `rollHits` opts).
-- [ ] AI: simple reactive heuristic (low HP → cast Cure, status-locked →
-  Esuna, otherwise attack). Or `--p1.action=cast:Fire` for forced moves.
+- [x] Spell cast: damage / heal / cure-status / status / instakill / buff.
+  Ported pure math from `combatant-cast.js` + `spell-cast.js:_rollMagicAmount`.
+- [x] Status effects via `status-effects.js` (pure import): poison tick,
+  sleep + paralysis skip-turn, blind hit penalty, mini/toad atk multiplier,
+  silence blocks cast, sleep wake-on-hit.
+- [x] Buffs via `buffs.js` (pure import): Haste (2× hits via
+  `calcPotentialHits`), Protect (halves physical via `rollHits.targetProtected`).
+- [x] Defend action: halves NEXT incoming swing on actor (consumed when
+  the swing lands, not on turn boundary).
+- [x] CLI: `--p1.action=attack|defend|cast:<spell>`,
+  `--p1.status=poison,sleep`, `--p1.buff=haste,protect`, `--p1.hp=N`.
+- [x] Spell-name resolver covering the common spells (Fire, Bzzard, Sleep,
+  Cure, Poisona, Esuna, Death, Haste, Protect, etc.) — see SPELL_BY_NAME.
+- [-] AI heuristic: deferred. Manual `--p1.action` is enough; AI lives in
+  Phase 2.5 if a need surfaces.
+
+**Skipped intentionally** (would need encounter / multi-target plumbing):
+multi-target spells (Curaja, Quake, Aero), reflect bouncing, drain
+caster-heal, MP cost / "out of MP" handling, monster `weakness`/`resist`
+elemental scaling (data is there but no synthetic monsters use it yet —
+defer to Phase 3).
 
 ### Phase 3 — Encounters & bosses
 
