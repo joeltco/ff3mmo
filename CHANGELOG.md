@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.185 — 2026-05-09
+
+### refactor: split ally roster rows → `battle-draw-allies.js`
+
+Phase 2c of the `battle-drawing.js` split. Owns the right-hand panel: per-ally portrait, weapon overlays, name + LV/HP text, status sprite, cast windup, heal sparkles, death animation, PVP enemy slash overlay on targeted ally, item-target cursors.
+
+**New file** `src/battle-draw-allies.js` (294 lines): `drawBattleAllies`, plus internal helpers (`_drawAllyRow`, `_drawAllyPortrait`, `_drawAllyTexts`, `_flushAllyWeaponDraws`).
+
+**`battle-drawing.js`** 1045 → 799 (-246). Imports `drawBattleAllies` from the new module and re-exports it (game-loop.js still imports from `battle-drawing.js`). `_jobPalette` and `_itemSparkleFrames` exported here for reuse by the ally module — same circular-import shape that worked for `drawBattleMenu` and `drawEncounterBox`. `DEATH_*` constants kept in `battle-drawing.js` (player portrait still uses them; will move with Phase 2d).
+
+Cleaned now-unused imports: `measureText`, `nesColorFade`, `isWeapon`, `drawLvHpRow`, `getSpellHitIdx`, all `fakePlayer*Portraits` except `fakePlayerDeathPoseCanvases` (still needed by player portrait).
+
+Zero behavior change. `battle-drawing.js` is down 1002 lines from the pre-refactor 1801 — only the player portrait + spell FX + damage-number/msg-strip rendering remain. Phase 2d (player portrait) is the last chunk.
+
 ## 1.7.184 — 2026-05-09
 
 ### refactor: split encounter monsters + boss sprite box → `battle-draw-encounter.js`
