@@ -216,13 +216,36 @@ export const ROSTER_FADE_STEPS = 4;
 // Both `generateAllyStats` (PVP enemies + roster allies) AND `initPlayerStats`
 // / `grantExp` / `changeJob` (local player) read from this matrix via
 // `computeJobStats`. There is no second stat path.
+// Per-job stat weights drive `computeJobStats(jobIdx, level)`. All 22 jobs
+// covered. Entries 6+ added 2026-05-10 — previously fell through to default
+// 1/1/1/1/1, leaving Knight/Thief/Ranger/Black Belt/etc. as stat-clones at
+// every level (caught by tools/battle-sim.js statistical sweep).
 const _JOB_STAT_WEIGHTS = {
-  0: { str: 1, agi: 1, vit: 1, int: 1, mnd: 1, mp: 0 },
-  1: { str: 2, agi: 1, vit: 2, int: 1, mnd: 1, mp: 0 },
-  2: { str: 2, agi: 2, vit: 2, int: 1, mnd: 1, mp: 0 },
-  3: { str: 1, agi: 1, vit: 1, int: 1, mnd: 3, mp: 3 },
-  4: { str: 1, agi: 1, vit: 1, int: 3, mnd: 1, mp: 3 },
-  5: { str: 1, agi: 1, vit: 1, int: 2, mnd: 2, mp: 2 },
+   0: { str: 1, agi: 1, vit: 1, int: 1, mnd: 1, mp: 0 }, // Onion Knight
+   1: { str: 2, agi: 1, vit: 2, int: 1, mnd: 1, mp: 0 }, // Fighter
+   2: { str: 2, agi: 2, vit: 2, int: 1, mnd: 1, mp: 0 }, // Monk
+   3: { str: 1, agi: 1, vit: 1, int: 1, mnd: 3, mp: 3 }, // White Mage
+   4: { str: 1, agi: 1, vit: 1, int: 3, mnd: 1, mp: 3 }, // Black Mage
+   5: { str: 1, agi: 1, vit: 1, int: 2, mnd: 2, mp: 2 }, // Red Mage
+  // --- L9 unlocks ---
+   6: { str: 1, agi: 2, vit: 1, int: 1, mnd: 1, mp: 0 }, // Ranger — bow + speed
+   7: { str: 2, agi: 1, vit: 3, int: 1, mnd: 1, mp: 0 }, // Knight — heavy tank
+   8: { str: 1, agi: 3, vit: 1, int: 1, mnd: 1, mp: 0 }, // Thief — speed king
+   9: { str: 1, agi: 1, vit: 1, int: 2, mnd: 2, mp: 0 }, // Scholar — knowledge
+  // --- L14 unlocks ---
+  10: { str: 1, agi: 2, vit: 1, int: 1, mnd: 2, mp: 0 }, // Geomancer
+  11: { str: 2, agi: 1, vit: 2, int: 1, mnd: 1, mp: 0 }, // Dragoon
+  12: { str: 3, agi: 1, vit: 3, int: 1, mnd: 1, mp: 0 }, // Viking — heaviest tank
+  13: { str: 3, agi: 3, vit: 3, int: 1, mnd: 1, mp: 0 }, // Black Belt — Monk evolved
+  14: { str: 2, agi: 1, vit: 2, int: 1, mnd: 1, mp: 1 }, // Magic Knight — hybrid
+  15: { str: 1, agi: 1, vit: 1, int: 1, mnd: 3, mp: 4 }, // Conjurer
+  16: { str: 1, agi: 2, vit: 1, int: 1, mnd: 2, mp: 0 }, // Bard
+  // --- L29+ unlocks (high tier) ---
+  17: { str: 1, agi: 1, vit: 1, int: 1, mnd: 3, mp: 4 }, // Summoner
+  18: { str: 1, agi: 1, vit: 1, int: 1, mnd: 4, mp: 5 }, // Devout
+  19: { str: 1, agi: 1, vit: 1, int: 4, mnd: 1, mp: 5 }, // Magus
+  20: { str: 1, agi: 1, vit: 1, int: 3, mnd: 3, mp: 5 }, // Sage
+  21: { str: 2, agi: 3, vit: 2, int: 1, mnd: 1, mp: 0 }, // Ninja — speed god
 };
 const _DEFAULT_STAT_WEIGHTS = { str: 1, agi: 1, vit: 1, int: 1, mnd: 1, mp: 0 };
 

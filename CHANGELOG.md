@@ -2,6 +2,34 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.198 — 2026-05-10
+
+### Fixed: 16 advanced jobs were stat-clones (default 1/1/1/1/1 weights)
+
+`_JOB_STAT_WEIGHTS` in `src/data/players.js:219` only had entries for jobs
+0–5 (Onion Knight, Fighter, Monk, White Mage, Black Mage, Red Mage). Every
+job past Red Mage fell through to `_DEFAULT_STAT_WEIGHTS = { str:1, agi:1,
+vit:1, int:1, mnd:1, mp:0 }`. Caught by `tools/battle-sim.js` statistical
+sweep — at L10 every advanced job had identical ATK 17 / DEF 10 / AGI 15
+/ INT 15 / MND 15.
+
+Concrete consequences pre-fix:
+- **Black Belt** (Monk's L14 evolution) was *worse* than Monk because Monk
+  had str/agi/vit weight 2 and Black Belt had 1/1/1/1/1.
+- **Knight, Thief, Ranger, Ninja, Viking, Magic Knight, Dragoon** —
+  16 advanced jobs were functionally identical at every level.
+- **Hidden symptom**: the audit's "Monk unarmed broken" finding was an
+  artifact of comparing Monk-with-real-weights against Knight-with-default.
+
+Filled in 16 missing weight entries with class-identity-driven values:
+Knight 2/1/3/1/1/0 (heavy tank), Thief 1/3/1/1/1/0 (speed), Black Belt
+3/3/3/1/1/0 (Monk-evolved), Ninja 2/3/2/1/1/0 (speed god), etc. See
+`src/data/players.js` for the full table; class assignments are
+guess-based and open to refinement.
+
+This is a re-tuning, not a strict bug fix — every L9+ player who logs in
+post-deploy will see their stats jump to match their class identity.
+
 ## 1.7.197 — 2026-05-10
 
 ### Added: battle-sim Phase 4 — statistical mode
