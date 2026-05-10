@@ -94,7 +94,10 @@ function drawSWExplosion() {
 }
 
 function drawSWDamageNumbers() {
-  if (battleSt.battleState !== 'magic-hit' && battleSt.battleState !== 'ally-magic-hit') return;
+  // No state gate — swDmgNums is per-target with its own timer (auto-clears at
+  // SW_DMG_SHOW_MS), so it should render whenever entries exist. Originally
+  // gated on magic-hit/ally-magic-hit because those were the only writers;
+  // poison ticks now route here too (battle-turn.js _applyEndOfRoundPoison).
   const mc = getMissCanvas();
   if (pvpSt.isPVPBattle) {
     for (const [k, dn] of Object.entries(getSwDmgNums())) {

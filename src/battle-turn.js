@@ -14,7 +14,7 @@ import { pvpSt } from './pvp.js';
 import { inputSt } from './input-handler.js';
 import { queueBattleMsg, replaceBattleMsg } from './battle-msg.js';
 import { _nameToBytes } from './text-utils.js';
-import { getAllyDamageNums, setEnemyDmgNum, setEnemyHealNum, setPlayerDamageNum, setPlayerHealNum } from './damage-numbers.js';
+import { getAllyDamageNums, setEnemyDmgNum, setEnemyHealNum, setPlayerDamageNum, setPlayerHealNum, setSwDmgNum } from './damage-numbers.js';
 import { startSpellCast } from './spell-cast.js';
 import { SPELLS } from './data/spells.js';
 import { selectCursor, saveSlots, saveSlotsToDB } from './save-state.js';
@@ -264,7 +264,7 @@ function _applyEndOfRoundPoison() {
       const dmg = Math.floor((mon.maxHP || mon.hp) / 16);
       if (dmg <= 0) continue;
       mon.hp = Math.max(0, mon.hp - dmg);
-      setEnemyDmgNum({ value: dmg, timer: 0, index: i });
+      setSwDmgNum(i, dmg);
       anyTicked = true;
     }
   }
@@ -272,7 +272,7 @@ function _applyEndOfRoundPoison() {
     const opp = pvpSt.pvpOpponentStats;
     if (opp && opp.hp > 0 && opp.status && hasStatus(opp.status, STATUS.POISON)) {
       const dmg = Math.floor((opp.maxHP || opp.hp) / 16);
-      if (dmg > 0) { opp.hp = Math.max(0, opp.hp - dmg); setEnemyDmgNum({ value: dmg, timer: 0 }); anyTicked = true; }
+      if (dmg > 0) { opp.hp = Math.max(0, opp.hp - dmg); setSwDmgNum(0, dmg); anyTicked = true; }
     }
     for (let i = 0; i < pvpSt.pvpEnemyAllies.length; i++) {
       const e = pvpSt.pvpEnemyAllies[i];
@@ -281,6 +281,7 @@ function _applyEndOfRoundPoison() {
       const dmg = Math.floor((e.maxHP || e.hp) / 16);
       if (dmg <= 0) continue;
       e.hp = Math.max(0, e.hp - dmg);
+      setSwDmgNum(i + 1, dmg);
       anyTicked = true;
     }
   }

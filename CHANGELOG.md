@@ -2,6 +2,36 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.205 — 2026-05-10
+
+### Poison-tick damage numbers fixed across encounter + PVP
+
+Three bugs surfaced by the damage-number animation audit, all the same
+root cause: poison ticks wrote to the single global `enemyDmgNum` slot
+keyed by the player's last-selected target, which can't represent
+multi-target poison.
+
+- **Multi-monster encounter poison** (`battle-turn.js`) — looped
+  `setEnemyDmgNum` across N poisoned monsters; each iteration
+  overwrote the prior, so only the last monster's number rendered.
+  Now routes through `setSwDmgNum(i, dmg)` per-cell.
+- **Encounter monster popup position** — even when only one monster
+  was poisoned, `_drawBossDmgNum` resolved position via
+  `inputSt.targetIndex` instead of the dmg-num's own `index` field,
+  so the popup landed on whichever cell the player happened to be
+  pointing at. Resolved by the per-cell `setSwDmgNum` move (the
+  draw site keys position by map key, no `inputSt.targetIndex`
+  lookup).
+- **PVP enemy-ally poison ticks were silent** — main opponent got a
+  popup, but allies in `pvpSt.pvpEnemyAllies` had HP applied with
+  no number rendered. Added `setSwDmgNum(i + 1, dmg)` to the loop
+  and converted the main opp to `setSwDmgNum(0, dmg)` for
+  consistency.
+- Dropped the `magic-hit / ally-magic-hit` state gate from
+  `drawSWDamageNumbers` — `swDmgNums` is per-target with its own
+  750ms timer, so gating by battle state was incidental to the
+  original (magic-only) writer set, not load-bearing.
+
 ## 1.7.204 — 2026-05-10
 
 ### Doc-only: balance-audit + battle-sim plan synchronized

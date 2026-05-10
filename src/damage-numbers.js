@@ -34,7 +34,7 @@ let playerDamageNum = null;  // enemy hits player
 let playerHealNum   = null;  // heal on player portrait
 let enemyHealNum    = null;  // heal on enemy {value, timer, index}
 let allyDamageNums  = {};    // {allyIdx: {value, timer, crit?, miss?, heal?}}
-let swDmgNums       = {};    // {targetIdx: {value, timer}} — magic item per-target
+let swDmgNums       = {};    // {targetIdx: {value, timer, miss?}} — per-target popups (multi-target magic, poison ticks across encounter/PVP)
 
 // ── Getters / setters ───────────────────────────────────────────────────────
 export function getEnemyDmgNum()        { return enemyDmgNum; }
