@@ -300,19 +300,17 @@ function _applyAllyMagicEffect() {
     : (n) => { getAllyDamageNums()[battleSt.allyMagicTargetIdx] = { value: n, timer: 0, heal: true }; };
 
   // 0x35 Poisona — strip POISON flag (heal-num placeholder {value:0} = sparkle).
+  // SFX engine-driven (fires at sparkle start via playSpellImpactSFX); helper
+  // does not carry SFX.
   if (spellId === 0x35) {
     applyMagicCureStatus(tgt, STATUS.POISON, {
-      sfx: SFX.CURE,
       onSparkle: () => onHealNum(0),
     });
     return;
   }
 
-  // 0x34 Cure (default) — heal pre-rolled allyMagicHealAmount.
-  applyMagicHeal(tgt, battleSt.allyMagicHealAmount, {
-    sfx: SFX.CURE,
-    onHealNum,
-  });
+  // 0x34 Cure (default) — heal pre-rolled allyMagicHealAmount. SFX engine-driven.
+  applyMagicHeal(tgt, battleSt.allyMagicHealAmount, { onHealNum });
 }
 
 function _updateAllyMagicCast(dt) {
@@ -330,15 +328,18 @@ function _updateAllyMagicCast(dt) {
     // Heal-style and throw-style use different per-phase timings (heal has no
     // projectile + applies later for the sequential pipeline). Pick which
     // timing constants apply by inspecting the active spell once per frame.
+    //
+    // SFX timing rule (memory `feedback_ff3mmo_sfx_during_spell_anim.md`):
+    // every spell fires SFX at SPELL-ANIM START. Throw = impact-burst start;
+    // Heal = sparkle-burst start (= preImpactGap into magic-hit). The engine
+    // drives both via `playSpellImpactSFX(spell)` which uses the shared
+    // selector — helpers never carry SFX.
     const isHeal = _isAllyMagicHealSpell(battleSt.allyMagicSpellId);
-    const sfxMs    = isHeal ? -1 : ALLY_THROW_SFX_MS;        // heal SFX fires at apply via helper
+    const sfxMs    = isHeal ? CAST_PHASE_MS_HEAL.preImpactGap : ALLY_THROW_SFX_MS;
     const effectMs = isHeal ? ALLY_HEAL_EFFECT_MS : ALLY_THROW_EFFECT_MS;
     const hitMs    = isHeal ? ALLY_HEAL_HIT_MS    : ALLY_THROW_HIT_MS;
 
-    // Impact SFX at IMPACT START (throw only) — `playSpellImpactSFX` is the
-    // SHARED selector (combatant-cast.js); same call used by player + PVP
-    // engines. Returns null for heal-style, so heal naturally skips this gate.
-    if (sfxMs >= 0 && !battleSt.allyMagicSfxPlayed && battleSt.battleTimer >= sfxMs) {
+    if (!battleSt.allyMagicSfxPlayed && battleSt.battleTimer >= sfxMs) {
       const spell = SPELLS.get(battleSt.allyMagicSpellId);
       if (spell) playSpellImpactSFX(spell);
       battleSt.allyMagicSfxPlayed = true;

@@ -2,6 +2,32 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.189 — 2026-05-10
+
+### fix: ALL spells fire SFX during spell animation, not after
+
+User has stated this rule 14+ times across the project history: every spell's SFX is synced to the spell animation, not to the apply / damage-number pop. Throw-style was correct (FIRE_BOOM at impact-burst start). Heal-style (Cure / Poisona / cure_status) was wrong — SFX was firing at apply-time inside `applyMagicHeal` / `applyMagicCureStatus` via `opts.sfx`, alongside the heal-num pop. Saved as memory `feedback_ff3mmo_sfx_during_spell_anim.md` so it stops getting re-broken.
+
+**Fix:** SFX is engine-driven for ALL spells. Single source: `getSpellImpactSFX(spell)` selector + `playSpellImpactSFX(spell)` engine call. Helpers no longer carry SFX.
+
+1. **`combatant-cast.js`** — `getSpellImpactSFX` now returns `SFX.CURE` for `element === 'recovery'` / `target === 'cure_status'` / `target === 'ally'` / `target === 'revive'`. No longer returns null for heal-style.
+
+2. **`spell-cast.js`** — `sfxStartMs` is set for heal-style too: `CAST_T_HEAL_ANIM_START - buildup` (= 100 ms into magic-hit, sparkle-start). Stripped `sfx: SFX.CURE` from `applyMagicHeal` and `applyMagicCureStatus` calls.
+
+3. **`battle-ally.js`** — heal SFX gate is now `CAST_PHASE_MS_HEAL.preImpactGap` (= 100 ms into ally-magic-hit). Stripped `sfx: SFX.CURE` from helper calls.
+
+4. **`pvp.js`** — same as ally.
+
+**Resulting timeline (heal-style):**
+```
+0       800   900             1183  1283       2033ms
+|--cast--| gap |sparkle + SFX  | gap |---heal-num bounce---|
+              ↑ sparkle start =        ↑ apply (heal-num posts)
+                SFX fires here
+```
+
+`applyMagicSight` keeps its `sfx` opt (Sight has no spell-anim — its SFX is the visual feedback). Other helpers (`applyMagicDrain` / `applyMagicRecovery` / `applyMagicAllStatus` etc.) used in offensive paths are unchanged for now — those have their own SFX timings, untouched.
+
 ## 1.7.188 — 2026-05-10
 
 ### fix: heal sparkle + heal-num now sequential (no overlap)

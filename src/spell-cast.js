@@ -14,7 +14,7 @@ import { setPlayerHealNum, setPlayerDamageNum, getAllyDamageNums, setEnemyDmgNum
 import { SPELLS, getSpellMPCost, isMultiTargetSpell } from './data/spells.js';
 import { STATUS, addStatus, removeStatus, tryInflictStatus, STATUS_NAME_BYTES } from './status-effects.js';
 import { CAST_PHASE_MS, CAST_PHASE_MS_THROW, CAST_TOTAL_MS, CAST_T_THROW_RETURN, CAST_T_THROW_IMPACT_START,
-         CAST_T_HEAL_APPLY } from './cast-anim.js';
+         CAST_T_HEAL_APPLY, CAST_T_HEAL_ANIM_START } from './cast-anim.js';
 import { applyMagicDamage, applyMagicStatus, applyMagicHeal,
          applyMagicCureStatus, applyMagicSight, applyMagicDrain,
          applyMagicRecovery, applyMagicAllStatus, applyMagicInstakill,
@@ -528,21 +528,18 @@ function _applySpellEffect(target) {
     : (n) => { getAllyDamageNums()[target.index] = { value: n, timer: 0, heal: true }; };
 
   // Cure-status (Poisona, Antidote) — shared helper.
+  // SFX fires via the engine at sparkle-start (see `getSpellImpactSFX` →
+  // `playSpellImpactSFX`). NOT passed to the helper.
   if (isCureStatus) {
     const flag = SPELL_CURE_FLAG[spell.type];
     applyMagicCureStatus(tgt, flag, {
-      sfx: SFX.CURE,
       onSparkle: () => onHealNum(0),
     });
     return;
   }
 
-  // Cure (heal) — shared helper. SFX is CURE for recovery spells, SW_HIT
-  // legacy for non-recovery friendly heals (rare).
-  applyMagicHeal(tgt, amount, {
-    sfx: isHeal ? SFX.CURE : SFX.SW_HIT,
-    onHealNum,
-  });
+  // Cure (heal) — shared helper. SFX engine-driven; not in opts.
+  applyMagicHeal(tgt, amount, { onHealNum });
 }
 
 // Returns true if the captured white-magic anim (magic circle build-up + cast
@@ -599,21 +596,28 @@ export function updateSpellCast(dt) {
     ? (isThrown ? (CAST_T_THROW_RETURN - CAST_PHASE_MS.buildup + 500)
                 : (hitEffectMs + DMG_SHOW_MS))
     : 1100;
-  // sfxStartMs = when the spell SFX plays. For thrown damage spells with
-  // a cross-faction target, fire at IMPACT START (when the burst begins
-  // rendering) so the boom sound plays during the visual rather than at
-  // the damage-number pop. Heal-style and Sight keep firing SFX inside
-  // _applyEnemyEffect / _applySpellEffect at hitEffectMs.
+  // sfxStartMs = when the spell SFX plays. ALL spells fire SFX during the
+  // spell-animation phase — engine drives it, helpers never carry SFX.
+  // (See memory `feedback_ff3mmo_sfx_during_spell_anim.md`.)
+  //
+  // - Throw (Fire / Bzzard / Sleep): SFX at IMPACT START (burst begins).
+  // - Heal-style (Cure / Poisona / recovery / cure_status): SFX at SPARKLE
+  //   START (heal-sparkle canvas begins rendering).
+  // - Sight: special — its SFX still fires at hitEffectMs because Sight has
+  //   no spell-anim render (the "Ineffective" msg is the visual feedback).
   const _hasCrossFactionTarget = _targets.some(t => t && t.type === 'enemy');
-  // Any thrown spell with a cross-faction target fires its impact SFX at
-  // burst start (Fire, Blizzard, Sleep). Sight is excluded — it has no impact
-  // bundle and plays its own SFX inside _applyEnemyEffect at hitEffectMs.
   const _isThrownToEnemy = isThrown && spell && spell.target !== 'sight' && _hasCrossFactionTarget;
   // Item-use skips the cast windup, so magic-hit starts the impact at timer=0
   // — fire SFX immediately. Spell-cast keeps the projectile-end offset.
-  const sfxStartMs = _isThrownToEnemy
-    ? (_isItemUse ? 0 : (CAST_T_THROW_IMPACT_START - CAST_PHASE_MS.buildup))
-    : -1;
+  let sfxStartMs;
+  if (_isThrownToEnemy) {
+    sfxStartMs = _isItemUse ? 0 : (CAST_T_THROW_IMPACT_START - CAST_PHASE_MS.buildup);
+  } else if (useCastAnim && !isThrown && spell && spell.target !== 'sight') {
+    // Heal-style sparkle starts at preImpactGap into magic-hit phase.
+    sfxStartMs = CAST_T_HEAL_ANIM_START - CAST_PHASE_MS.buildup;
+  } else {
+    sfxStartMs = -1;  // legacy / sight / unknown — SFX gated inside _apply* helpers
+  }
 
   if (battleSt.battleState === 'magic-cast') {
     if (battleSt.battleTimer >= castDur) {

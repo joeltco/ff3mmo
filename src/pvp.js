@@ -737,18 +737,16 @@ function _applyPVPEnemyMagicEffect() {
     applyMagicSight({ sfx: SFX.SIGHT });
     return;
   }
+  // SFX engine-driven (fires at sparkle-start in _processPVPEnemyMagic);
+  // helpers no longer carry SFX.
   if (pvpSt.pvpMagicSpellId === 0x35) {
     applyMagicCureStatus(target, STATUS.POISON, {
-      sfx: SFX.CURE,
       onSparkle: () => onHealNum(0),
     });
     return;
   }
   // 0x34 Cure
-  applyMagicHeal(target, pvpSt.pvpMagicHealAmount, {
-    sfx: SFX.CURE,
-    onHealNum,
-  });
+  applyMagicHeal(target, pvpSt.pvpMagicHealAmount, { onHealNum });
 }
 
 function _processPVPEnemyMagic(dt) {
@@ -763,17 +761,18 @@ function _processPVPEnemyMagic(dt) {
   }
   if (battleSt.battleState === 'pvp-enemy-magic-hit') {
     tickHealNums(dt);
-    // Heal vs throw timing — same split as `battle-ally.js`. Heal-style has
-    // no projectile + applies later for the sequential pipeline (no overlap
-    // between the sparkle and the heal number bounce).
+    // Heal vs throw timing — same split as `battle-ally.js`. Heal has no
+    // projectile + applies later for sequential pipeline.
+    //
+    // SFX timing rule: every spell fires SFX at SPELL-ANIM START. Throw =
+    // impact-burst start; Heal = sparkle-burst start. Engine-driven via
+    // `playSpellImpactSFX`; helpers never carry SFX.
     const isHeal = _isPVPMagicHealSpell(pvpSt.pvpMagicSpellId);
-    const sfxMs    = isHeal ? -1 : PVP_THROW_SFX_MS;     // heal SFX fires at apply via helper
+    const sfxMs    = isHeal ? CAST_PHASE_MS_HEAL.preImpactGap : PVP_THROW_SFX_MS;
     const effectMs = isHeal ? PVP_HEAL_EFFECT_MS : PVP_THROW_EFFECT_MS;
     const hitMs    = isHeal ? PVP_HEAL_HIT_MS    : PVP_THROW_HIT_MS;
 
-    // Impact SFX at IMPACT START (throw only) — `playSpellImpactSFX` is the
-    // SHARED selector. Returns null for heal-style; selector also gates that.
-    if (sfxMs >= 0 && !pvpSt.pvpMagicSfxPlayed && battleSt.battleTimer >= sfxMs) {
+    if (!pvpSt.pvpMagicSfxPlayed && battleSt.battleTimer >= sfxMs) {
       const spell = SPELLS.get(pvpSt.pvpMagicSpellId);
       if (spell) playSpellImpactSFX(spell);
       pvpSt.pvpMagicSfxPlayed = true;
