@@ -3,6 +3,7 @@
 import { battleSt, getEnemyHP, setEnemyHP, BATTLE_SHAKE_MS, BATTLE_DMG_SHOW_MS } from './battle-state.js';
 import { playSlashSFX } from './battle-sfx.js';
 import { resetSlashScatterCache, shouldDrawSlash, SWING_HOLD_MS } from './slash-effects.js';
+import { summarizeHits } from './battle-math.js';
 import { isWeapon } from './data/items.js';
 import { SFX, playSFX } from './music.js';
 import { _nameToBytes } from './text-utils.js';
@@ -33,10 +34,7 @@ export function initBattleAlly({ buildTurnOrder, processNextTurn, isTeamWiped })
 
 // ── Combo finalization ───────────────────────────────────────────────────────
 function _finalizeAllyCombo() {
-  let totalDmg = 0, anyCrit = false, allMiss = true, hitsLanded = 0;
-  for (const h of battleSt.allyHitResults) {
-    if (!h.miss) { totalDmg += h.damage; allMiss = false; hitsLanded++; if (h.crit) anyCrit = true; }
-  }
+  const { totalDmg, anyCrit, allMiss } = summarizeHits(battleSt.allyHitResults);
   setEnemyDmgNum(allMiss ? { miss: true, timer: 0 } : { value: totalDmg, crit: anyCrit, timer: 0 });
   inputSt.targetIndex = battleSt.allyTargetIndex;
 }

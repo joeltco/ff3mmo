@@ -10,7 +10,7 @@ import { resetBattleVars, isTeamWiped, updateBattleTimers, updatePoisonTick,
          updateBattlePlayerAttack, updateBattleDefendItem, updateBattleEndSequence,
          tryJoinPlayerAlly, advancePVPTargetOrVictory } from './battle-update.js';
 import { playSFX, stopSFX, SFX, pauseMusic, playTrack, TRACKS } from './music.js';
-import { rollHits, calcPotentialHits, BOSS_HIT_RATE, GOBLIN_HIT_RATE } from './battle-math.js';
+import { rollHits, calcPotentialHits, BOSS_HIT_RATE, GOBLIN_HIT_RATE, summarizeHits } from './battle-math.js';
 import { ITEMS, isWeapon, weaponSubtype } from './data/items.js';
 import { PLAYER_POOL, generateAllyStats } from './data/players.js';
 import { JOBS } from './data/jobs.js';
@@ -916,10 +916,7 @@ function _processPVPEnemySlash() {
     battleSt.battleState = 'pvp-second-windup'; battleSt.battleTimer = 0;
   } else {
     // Finalize — sum all hits into one damage number
-    let totalDmg = 0, anyCrit = false, allMiss = true;
-    for (const h of pvpSt.pvpEnemyHitResults) {
-      if (!h.miss && !h.shieldBlock) { totalDmg += h.dmg; allMiss = false; if (h.crit) anyCrit = true; }
-    }
+    const { totalDmg, anyCrit, allMiss } = summarizeHits(pvpSt.pvpEnemyHitResults, { dmgKey: 'dmg', respectShieldBlock: true });
     if (targetAlly >= 0) {
       getAllyDamageNums()[targetAlly] = allMiss ? { miss: true, timer: 0 } : { value: totalDmg, crit: anyCrit, timer: 0 };
       battleSt.battleState = allMiss ? 'ally-damage-show-enemy' : 'ally-hit';

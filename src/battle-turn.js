@@ -1,7 +1,7 @@
 // Battle turn order + turn dispatch — extracted from game.js
 
 import { battleSt, getEnemyHP, setEnemyHP, BATTLE_SHAKE_MS, BOSS_DEF, BOSS_MAX_HP } from './battle-state.js';
-import { rollHits, calcPotentialHits } from './battle-math.js';
+import { rollHits, calcPotentialHits, rollInitiative } from './battle-math.js';
 import { BATTLE_RAN_AWAY, BATTLE_CANT_ESCAPE, BATTLE_ALLY } from './data/strings.js';
 import { getMonsterName, getSpellNameClean, getItemNameClean } from './text-decoder.js';
 import { ps, getJobLevelStatBonus } from './player-stats.js';
@@ -16,6 +16,7 @@ import { queueBattleMsg, replaceBattleMsg } from './battle-msg.js';
 import { _nameToBytes } from './text-utils.js';
 import { getAllyDamageNums, setEnemyDmgNum, setEnemyHealNum, setPlayerDamageNum, setPlayerHealNum, setSwDmgNum } from './damage-numbers.js';
 import { startSpellCast } from './spell-cast.js';
+import { applyMagicHeal } from './combatant-cast.js';
 import { SPELLS } from './data/spells.js';
 import { selectCursor, saveSlots, saveSlotsToDB } from './save-state.js';
 import { removeItem } from './inventory.js';
@@ -27,32 +28,30 @@ export function buildTurnOrder() {
   const actors = [];
   if (ps.hp > 0) {
     const playerAgi = (ps.stats ? ps.stats.agi : 5) + getJobLevelStatBonus().agi;
-    actors.push({ type: 'player', priority: (playerAgi * 2) + Math.floor(Math.random() * 256) });
+    actors.push({ type: 'player', priority: rollInitiative(playerAgi) });
   }
   for (let i = 0; i < battleSt.battleAllies.length; i++) {
     if (battleSt.battleAllies[i].hp > 0)
-      actors.push({ type: 'ally', index: i, priority: (battleSt.battleAllies[i].agi * 2) + Math.floor(Math.random() * 256) });
+      actors.push({ type: 'ally', index: i, priority: rollInitiative(battleSt.battleAllies[i].agi) });
   }
   if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
     for (let i = 0; i < battleSt.encounterMonsters.length; i++) {
       if (battleSt.encounterMonsters[i].hp > 0) {
-        const mAgi = battleSt.encounterMonsters[i].agi || 0;
-        actors.push({ type: 'enemy', index: i, priority: (mAgi * 2) + Math.floor(Math.random() * 256) });
+        actors.push({ type: 'enemy', index: i, priority: rollInitiative(battleSt.encounterMonsters[i].agi) });
       }
     }
   } else if (pvpSt.isPVPBattle) {
     if (pvpSt.pvpOpponentStats && pvpSt.pvpOpponentStats.hp > 0) {
-      const oAgi = pvpSt.pvpOpponentStats.agi || 0;
-      actors.push({ type: 'enemy', index: -1, pvpAllyIdx: -1, priority: (oAgi * 2) + Math.floor(Math.random() * 256) });
+      actors.push({ type: 'enemy', index: -1, pvpAllyIdx: -1, priority: rollInitiative(pvpSt.pvpOpponentStats.agi) });
     }
     for (let i = 0; i < pvpSt.pvpEnemyAllies.length; i++) {
       if (pvpSt.pvpEnemyAllies[i].hp > 0) {
-        const aAgi = pvpSt.pvpEnemyAllies[i].agi || 0;
-        actors.push({ type: 'enemy', index: -1, pvpAllyIdx: i, priority: (aAgi * 2) + Math.floor(Math.random() * 256) });
+        actors.push({ type: 'enemy', index: -1, pvpAllyIdx: i, priority: rollInitiative(pvpSt.pvpEnemyAllies[i].agi) });
       }
     }
   } else {
-    actors.push({ type: 'enemy', index: -1, priority: Math.floor(Math.random() * 256) });
+    // Boss has no agi field; agi=0 → priority is just the rand roll (0..255).
+    actors.push({ type: 'enemy', index: -1, priority: rollInitiative(0) });
   }
   actors.sort((a, b) => b.priority - a.priority);
   return actors;
@@ -545,22 +544,27 @@ function _playerTurnConsumable() {
     return;
   }
 
-  // Default: heal HP by power amount
+  // Default: heal HP by power amount. Routes through applyMagicHeal so Cure
+  // spell + Potion can't drift on the clamp/HP-write logic. SFX already
+  // played at line 526; pass no `sfx` opt to avoid double-fire. The boss /
+  // PVP-main-opp path stays inline because it goes through getEnemyHP /
+  // setEnemyHP wrappers (no `target.hp` accessor).
   if (target === 'player' && (allyIndex === undefined || allyIndex < 0)) {
-    const heal = Math.min(power, ps.stats.maxHP - ps.hp);
-    ps.hp += heal; battleSt.itemHealAmount = heal; setPlayerHealNum({ value: heal, timer: 0 });
+    const heal = applyMagicHeal(ps, power, { onHealNum: (n) => setPlayerHealNum({ value: n, timer: 0 }) });
+    battleSt.itemHealAmount = heal;
   } else if (target === 'player' && allyIndex >= 0) {
     const ally = battleSt.battleAllies[allyIndex];
     if (ally) {
-      const heal = Math.min(power, ally.maxHP - ally.hp);
-      ally.hp += heal; battleSt.itemHealAmount = heal;
-      getAllyDamageNums()[allyIndex] = { value: heal, timer: 0, heal: true };
+      const heal = applyMagicHeal(ally, power, {
+        onHealNum: (n) => { getAllyDamageNums()[allyIndex] = { value: n, timer: 0, heal: true }; },
+      });
+      battleSt.itemHealAmount = heal;
     }
   } else {
     const mon = battleSt.isRandomEncounter && battleSt.encounterMonsters ? battleSt.encounterMonsters[target] : null;
     if (mon) {
-      const heal = Math.min(power, mon.maxHP - mon.hp);
-      mon.hp += heal; battleSt.itemHealAmount = heal; setEnemyHealNum({ value: heal, timer: 0, index: target });
+      const heal = applyMagicHeal(mon, power, { onHealNum: (n) => setEnemyHealNum({ value: n, timer: 0, index: target }) });
+      battleSt.itemHealAmount = heal;
     } else {
       const curHP = getEnemyHP();
       const maxHP = pvpSt.isPVPBattle ? (pvpSt.pvpOpponentStats ? pvpSt.pvpOpponentStats.maxHP : 1) : BOSS_MAX_HP;

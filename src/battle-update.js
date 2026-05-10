@@ -13,6 +13,7 @@ import { IDLE_FRAME_MS } from './combatant-pose.js';
 import { bsc, getSlashFramesForWeapon, getSlashPattern, setSlashOffsetForFrame } from './battle-sprite-cache.js';
 import { SLASH_FRAME_MS, shouldDrawSlash, SWING_HOLD_MS } from './slash-effects.js';
 import { buildTurnOrder, processNextTurn } from './battle-turn.js';
+import { summarizeHits } from './battle-math.js';
 import { updateBattleAlly } from './battle-ally.js';
 import { updateBattleEnemyTurn } from './battle-enemy.js';
 import { updateSpellCast, resetSpellCastVars } from './spell-cast.js';
@@ -292,10 +293,7 @@ function _updateBattleMenuConfirm() {
 // ── Player attack chain ────────────────────────────────────────────────────
 
 function _finalizeComboHits() {
-  let totalDmg = 0, anyCrit = false, allMiss = true, hitsLanded = 0;
-  for (const h of inputSt.hitResults) {
-    if (!h.miss) { totalDmg += h.damage; allMiss = false; hitsLanded++; if (h.crit) anyCrit = true; }
-  }
+  const { totalDmg, anyCrit, allMiss, hitsLanded } = summarizeHits(inputSt.hitResults);
   setEnemyDmgNum(allMiss ? { miss: true, timer: 0 } : { value: totalDmg, crit: anyCrit, timer: 0 });
   if (pvpSt.isPVPBattle && !allMiss) pvpSt.pvpOpponentShakeTimer = BATTLE_SHAKE_MS;
   // Replace strip message: status > crit > multi-hit

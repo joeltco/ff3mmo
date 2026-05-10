@@ -2,6 +2,33 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.206 — 2026-05-10
+
+### Modularization tier 1: heal clamp / initiative / combo-hit summary
+
+Three single-source refactors from the modularization audit
+(`docs/MODULARIZATION-AUDIT.md`). No behavior change — pure
+deduplication. Goal: kill the "two parallel paths drift" failure mode at
+the root for these three high-risk patterns.
+
+- **Heal clamp** — Potion paths (player / ally / encounter monster) now
+  route through `applyMagicHeal` instead of duplicating
+  `Math.min(power, maxHP - hp)` + HP write inline. Cure spell + Potion
+  share one helper, can't drift on overheal logic. Boss / PVP-main-opp
+  branch stays inline because it goes through `getEnemyHP` / `setEnemyHP`
+  wrappers (no `target.hp` accessor).
+- **Initiative roll** — `(agi * 2) + Math.floor(Math.random() * 256)`
+  was duplicated five times in `buildTurnOrder` (player / ally /
+  encounter / PVP-opp / PVP-enemy-ally). New `rollInitiative(agi)` in
+  `battle-math.js` collapses all five to one-liners.
+- **Combo-hit summary** — `totalDmg / anyCrit / allMiss` reduction was
+  duplicated verbatim across `battle-update.js:_finalizeComboHits`,
+  `battle-ally.js:_finalizeAllyCombo`, and `pvp.js` enemy-attack
+  finalize. New `summarizeHits(hits, opts)` in `battle-math.js` handles
+  the player/ally `damage` key and the PVP `dmg` + shield-block variant
+  via opts. (The v1.7.193 dual-wield bug was inside one of these — now
+  it can't recur in two of three sites.)
+
 ## 1.7.205 — 2026-05-10
 
 ### Poison-tick damage numbers fixed across encounter + PVP

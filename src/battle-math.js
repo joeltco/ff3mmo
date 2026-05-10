@@ -6,6 +6,32 @@ export const BOSS_HIT_RATE = 85;   // boss accuracy
 export const GOBLIN_HIT_RATE = 75; // goblin accuracy
 export const DAMAGE_CAP = 9999;
 
+// Initiative priority — `agi*2 + rand(0..255)`. Higher rolls go first.
+// Single source for buildTurnOrder (player / ally / encounter / PVP-opp /
+// PVP-enemy-ally) so the formula can't drift across actor types.
+export function rollInitiative(agi) {
+  return ((agi || 0) * 2) + Math.floor(Math.random() * 256);
+}
+
+// Reduce a hit-results array to its battle-display summary. Used by player,
+// ally, and PVP combo-hit finalizers (battle-update / battle-ally / pvp).
+// `dmgKey` defaults to 'damage'; PVP uses 'dmg'. `respectShieldBlock` skips
+// blocked hits (PVP only — player/ally roll shield-block into miss earlier).
+export function summarizeHits(hits, opts = {}) {
+  const dmgKey = opts.dmgKey || 'damage';
+  const respectShieldBlock = !!opts.respectShieldBlock;
+  let totalDmg = 0, anyCrit = false, allMiss = true, hitsLanded = 0;
+  for (const h of hits) {
+    if (h.miss) continue;
+    if (respectShieldBlock && h.shieldBlock) continue;
+    totalDmg += h[dmgKey];
+    allMiss = false;
+    hitsLanded++;
+    if (h.crit) anyCrit = true;
+  }
+  return { totalDmg, anyCrit, allMiss, hitsLanded };
+}
+
 // NES elemental multiplier: 2x if target is weak, 0.5x if target resists
 // atkElem/weakness/resist can be a string or array of strings
 export function elemMultiplier(atkElem, weakness, resist) {
