@@ -14,12 +14,18 @@ import { ITEMS, isWeapon } from '../src/data/items.js';
 import { JOBS } from '../src/data/jobs.js';
 import { generateAllyStats } from '../src/data/players.js';
 import { SPELLS } from '../src/data/spells.js';
+import { MONSTERS } from '../src/data/monsters.js';
 import {
-  STATUS, STATUS_NAMES, addStatus, removeStatus, hasStatus,
+  STATUS, STATUS_NAMES, addStatus, removeStatus, hasStatus, createStatusState,
   tryInflictStatus, processTurnStart, blindHitPenalty, miniToadAtkMult,
   canCastMagic, wakeOnHit,
 } from '../src/status-effects.js';
 import { applyBuff, hasBuff, BUFF_HASTE, BUFF_PROTECT } from '../src/buffs.js';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // ─── Job shorthand ──────────────────────────────────────────────────────
 const JOB_PREFIX = {
@@ -93,6 +99,18 @@ function resolveProfile(spec, overrides = {}) {
 }
 
 function describeProfile(p, label) {
+  if (p.kind === 'monster') {
+    const tags = [];
+    if (p.boss) tags.push('BOSS');
+    if (p.atkElem) tags.push(`elem:${Array.isArray(p.atkElem) ? p.atkElem.join('/') : p.atkElem}`);
+    if (p.weakness) tags.push(`weak:${Array.isArray(p.weakness) ? p.weakness.join('/') : p.weakness}`);
+    if (p.resist) tags.push(`resist:${Array.isArray(p.resist) ? p.resist.join('/') : p.resist}`);
+    if (p.spAtkRate) tags.push(`spAtk:${p.spAtkRate}%`);
+    return [
+      `${label}: ${p._spec}  L${p.level}  HP ${p.hp}/${p.maxHP}  ATK ${p.atk}×${p.attackRoll}  DEF ${p.def}  AGI ${p.agi}  mdef ${p.mdef}  hitRate ${p.hitRate}` +
+        (tags.length ? `  [${tags.join(' ')}]` : ''),
+    ].join('\n');
+  }
   const job = JOBS[p.jobIdx]?.name || `job#${p.jobIdx}`;
   const r = ITEMS.get(p.weaponR);
   const l = p.weaponL != null ? ITEMS.get(p.weaponL) : null;
@@ -632,6 +650,216 @@ function runBattle(p1, p2, opts) {
   return lines.join('\n');
 }
 
+// ════════════════════════════════════════════════════════════════════════
+// Phase 3 — monsters, encounters, multi-target battles
+// ════════════════════════════════════════════════════════════════════════
+
+// ─── Monster name → ID (parsed from data/monsters.js comments) ──────────
+//
+// data/monsters.js has lines like `[0xCC, { ... }],   // Land Turtle`. The
+// MONSTERS map exports stats but not names. Parse the trailing `// Name`
+// comment once at startup so users can write `--enemies=goblin*3` instead
+// of `--enemies=0x00*3`.
+const MONSTER_BY_NAME = (() => {
+  const map = new Map();
+  try {
+    const src = readFileSync(join(__dirname, '..', 'src', 'data', 'monsters.js'), 'utf8');
+    const re = /^\s*\[(0x[0-9a-fA-F]+), \{.*\}\],\s*\/\/\s*(.+)$/gm;
+    let m;
+    while ((m = re.exec(src))) {
+      const id = parseInt(m[1], 16);
+      const name = m[2].trim().toLowerCase().replace(/[^a-z0-9]+/g, '_');
+      map.set(name, id);
+    }
+  } catch (e) {
+    console.warn(`[battle-sim] could not parse monsters.js for names: ${e.message}`);
+  }
+  return map;
+})();
+
+function resolveMonsterId(spec) {
+  if (typeof spec === 'number') return spec;
+  if (/^0x[0-9a-fA-F]+$/.test(spec)) return parseInt(spec, 16);
+  const id = MONSTER_BY_NAME.get(spec.toLowerCase().replace(/[^a-z0-9]+/g, '_'));
+  if (id == null) throw new Error(`Unknown monster "${spec}". Try a hex ID or lowercase snake_case (e.g. "land_turtle", "killer_bee").`);
+  return id;
+}
+
+// ─── Monster combatant builder ──────────────────────────────────────────
+//
+// Mirrors the shape produced by `generateAllyStats` (so encounter rendering
+// + applyAction don't need to special-case monster vs player) plus monster-
+// specific fields used by `attackMonster` (attackRoll, atkElem, weakness,
+// resist, statusAtk, spAtkRate, attacks).
+
+function buildMonster(spec, idx = 0) {
+  const id = resolveMonsterId(spec);
+  const m = MONSTERS.get(id);
+  if (!m) throw new Error(`Monster ID 0x${id.toString(16)} not in MONSTERS map`);
+  // Default name: parse comment from monsters.js to recover. Fall back to hex.
+  let name = `0x${id.toString(16)}`;
+  for (const [n, mid] of MONSTER_BY_NAME) if (mid === id) { name = n; break; }
+  return {
+    kind: 'monster',
+    team: 'enemy',
+    _spec: idx > 0 ? `${name}#${idx}` : name,
+    name,
+    monsterId: id,
+    level: m.level || 1,
+    hp: m.hp,
+    maxHP: m.hp,
+    atk: m.atk || 5,
+    def: m.def || 0,
+    agi: m.agi || 5,
+    int: m.spiritInt || 5,
+    mnd: m.spiritInt || 5,
+    hitRate: m.hitRate || 70,
+    evade: m.evade || 0,
+    shieldEvade: 0,
+    mdef: m.mdef || 0,
+    attackRoll: m.attackRoll || 1,
+    atkElem: m.atkElem || null,
+    weakness: m.weakness || null,
+    resist: m.resist || null,
+    statusAtk: m.statusAtk || null,
+    statusResist: m.statusResist || 0,
+    spAtkRate: m.spAtkRate || 0,
+    attacks: m.attacks || null,
+    boss: !!m.boss,
+    weaponR: 0, weaponL: null, jobIdx: -1,
+    status: createStatusState(),
+    buffs: {},
+  };
+}
+
+// ─── Monster attack call shape (battle-enemy.js:189 rollMultiHit) ───────
+function attackMonster(att, def, opts = {}) {
+  const blindMult = att.status ? blindHitPenalty(att.status) : 1;
+  const protected_ = !!hasBuff(def, BUFF_PROTECT);
+  const rolls = att.attackRoll || 1;
+  const eMult = elemMultiplier(att.atkElem, def.weakness, def.resist);
+  const effHit = (att.hitRate || 70) * blindMult;
+  const results = rollHits(att.atk, def.def, effHit, rolls, {
+    elemMult: eMult,
+    evade: def.evade || 0,
+    shieldEvade: def.shieldEvade || 0,
+    defendHalve: !!opts.targetDefending,
+    targetProtected: protected_,
+    // No crit for monsters (NES canon — only player/ally weapons crit).
+  });
+  if (def.status && hasStatus(def.status, STATUS.SLEEP)) wakeOnHit(def.status);
+  return { path: 'monster', atkUsed: att.atk, hitsRolled: rolls, results, protectedTarget: protected_ };
+}
+
+// Pick the right attack fn for any combatant.
+function attackFnFor(c, override) {
+  if (c.kind === 'monster') return attackMonster;
+  return selectAttack(c, override);
+}
+
+// ─── Party / enemy CLI parsers ──────────────────────────────────────────
+//
+// --party=RM7,BM4,WM4              → 3 player-team combatants
+// --enemies=goblin*3,killer_bee*2  → multi-instance monster array
+// --enemies=land_turtle            → boss fight (1 monster)
+
+function parseParty(spec) {
+  if (spec == null) return null;
+  const specs = String(spec).split(',').map(s => s.trim()).filter(Boolean);
+  return specs.map((s, i) => {
+    const c = resolveProfile(s);
+    c.team = 'player';
+    c.kind = i === 0 ? 'player' : 'ally';
+    c.buffs = c.buffs || {};
+    return c;
+  });
+}
+
+function parseEnemies(spec) {
+  if (spec == null) return null;
+  // Numeric spec (parseVal coerced --enemies=0xCC to 204) — single monster ID.
+  if (typeof spec === 'number') return [buildMonster(spec)];
+  const out = [];
+  for (const part of String(spec).split(',').map(s => s.trim()).filter(Boolean)) {
+    const m = part.match(/^(.+?)(?:\*(\d+))?$/);
+    const id = m[1];
+    const n = parseInt(m[2] || '1', 10);
+    for (let i = 0; i < n; i++) out.push(buildMonster(id, n > 1 ? i + 1 : 0));
+  }
+  return out;
+}
+
+// ─── Encounter loop ─────────────────────────────────────────────────────
+//
+// Multi-target battle: party (player + allies) vs enemies (monsters).
+// Per turn:
+//   1. Sort all alive combatants by AGI desc (NES canon — fastest acts first)
+//   2. Each combatant: processStartOfTurn → action → hit random alive enemy
+//   3. End when one team is fully KO'd (or --turns reached)
+
+function runEncounter(party, enemies, opts = {}) {
+  const { turns = 30, partyAction = { kind: 'attack' }, enemyAction = { kind: 'attack' } } = opts;
+  const lines = [];
+  party.forEach((p, i) => lines.push(describeProfile(p, `P${i + 1}`)));
+  enemies.forEach((e, i) => lines.push(describeProfile(e, `E${i + 1}`)));
+  lines.push('');
+
+  const alive = (c) => c.hp > 0 && !(c.status && hasStatus(c.status, STATUS.DEATH));
+  const partyAlive   = () => party.filter(alive);
+  const enemiesAlive = () => enemies.filter(alive);
+
+  let turn = 0;
+  let winner = null;
+  while (turn < turns) {
+    turn++;
+    lines.push(`─── Turn ${turn} ───`);
+
+    // AGI-ordered turn order (highest agi first)
+    const order = [...party, ...enemies]
+      .filter(alive)
+      .sort((a, b) => (b.agi || 0) - (a.agi || 0));
+
+    for (const actor of order) {
+      if (!alive(actor)) continue; // KO'd mid-turn by another actor
+      // Bail if either side wiped
+      if (partyAlive().length === 0) { winner = 'enemies'; break; }
+      if (enemiesAlive().length === 0) { winner = 'party'; break; }
+
+      const sot = processStartOfTurn(actor);
+      sot.lines.forEach(l => lines.push(l));
+      if (!alive(actor)) continue;
+      if (!sot.canAct) continue;
+
+      // Pick a target on the opposite team — random alive
+      const targets = actor.team === 'player' ? enemiesAlive() : partyAlive();
+      if (targets.length === 0) break;
+      const target = targets[Math.floor(Math.random() * targets.length)];
+
+      const action = actor.team === 'player' ? partyAction : enemyAction;
+      const fn = attackFnFor(actor, opts[`${actor._spec}_path`] || 'auto');
+      const res = applyAction(actor, target, fn, action);
+      res.lines.forEach(l => lines.push(l));
+    }
+
+    if (winner) break;
+    if (partyAlive().length === 0) { winner = 'enemies'; break; }
+    if (enemiesAlive().length === 0) { winner = 'party'; break; }
+    lines.push('');
+  }
+
+  lines.push('');
+  if (winner === 'party') {
+    lines.push(`═══ Party wins on turn ${turn}. Survivors: ${partyAlive().map(p => `${p._spec}(${p.hp})`).join(', ')} ═══`);
+  } else if (winner === 'enemies') {
+    lines.push(`═══ Enemies win on turn ${turn}. Survivors: ${enemiesAlive().map(e => `${e._spec}(${e.hp})`).join(', ')} ═══`);
+  } else {
+    lines.push(`═══ Stalemate after ${turns} turns ═══`);
+    lines.push(`    Party:   ${party.map(p => `${p._spec}(${p.hp}/${p.maxHP})`).join(', ')}`);
+    lines.push(`    Enemies: ${enemies.map(e => `${e._spec}(${e.hp}/${e.maxHP})`).join(', ')}`);
+  }
+  return lines.join('\n');
+}
+
 // ─── Help ───────────────────────────────────────────────────────────────
 function printHelp() {
   console.log(`
@@ -675,8 +903,17 @@ SPELL NAMES (case-insensitive)
   Buffs:   haste protect reflect
   Other:   drain libra erase
 
+ENCOUNTER MODE
+  --party=<csv>          Comma-separated profile shorthand (RM7,BM4,WM4)
+  --enemies=<csv>        Monster shorthand with optional *N multiplier
+                         e.g. --enemies=goblin*3,killer_bee
+                              --enemies=land_turtle  (boss)
+  --boss=<name>          Alias for --enemies=<name>
+  Monster names are lowercase snake_case (e.g. goblin, killer_bee,
+  land_turtle, blue_wisp, zombie). Hex IDs (--enemies=0x00*4) also work.
+
 EXAMPLES
-  # Default fight (RM7 dual-dagger vs BM4)
+  # 1v1 duel (default — RM7 dual-dagger vs BM4)
   node tools/battle-sim.js
 
   # BM4 casts Fire on RM7 each turn (dummy mode = no retaliation)
@@ -691,8 +928,14 @@ EXAMPLES
   node tools/battle-sim.js --p1=RM7 --p1.buff=haste --p1.weaponR=0x1F --p1.weaponL=0x1F \\
                            --p2=KN10 --p2.buff=protect --turns=5
 
-  # Poisoned attacker — HP ticks down each turn
-  node tools/battle-sim.js --p1=KN10 --p1.status=poison --p2=BM4 --turns=5
+  # Encounter — solo player vs 3 goblins
+  node tools/battle-sim.js --party=KN5 --enemies=goblin*3
+
+  # Boss fight — Land Turtle (altar cave boss)
+  node tools/battle-sim.js --party=KN10,WM4 --boss=land_turtle --turns=15
+
+  # Mid-game encounter — 3-player party vs zombie horde
+  node tools/battle-sim.js --party=KN10,WM4,BM4 --enemies=zombie*4 --turns=10
 `);
 }
 
@@ -704,6 +947,33 @@ function main() {
   const seed = args.seed != null ? args.seed : 1;
   Math.random = seedRandom(seed);
 
+  // ── Encounter mode (Phase 3) ──
+  if (args.enemies != null || args.party != null || args.boss != null) {
+    let party, enemies, partyAction, enemyAction;
+    try {
+      party = parseParty(args.party) || [resolveProfile(args.p1 || 'KN10', args.p1Over || {})];
+      party.forEach(p => { p.team = 'player'; if (!p.kind || p.kind === 'monster') p.kind = 'player'; });
+      const enemySpec = args.boss != null ? args.boss : args.enemies;
+      enemies = parseEnemies(enemySpec) || [];
+      if (enemies.length === 0) throw new Error('Need --enemies or --boss for encounter mode');
+      partyAction = parseAction(args.p1Over.action);
+      enemyAction = { kind: 'attack' }; // monster spAtk is Phase 3.5
+    } catch (e) {
+      console.error(`Error: ${e.message}`);
+      process.exit(1);
+    }
+    console.log(`═══ ff3mmo battle-sim  seed=${seed}  mode=encounter ═══`);
+    console.log('');
+    const out = runEncounter(party, enemies, {
+      turns: args.turns || 30,
+      partyAction,
+      enemyAction,
+    });
+    console.log(out);
+    return;
+  }
+
+  // ── 1v1 duel mode (Phase 1 + 2) ──
   const p1Spec = args.p1 || 'RM7';
   const p2Spec = args.p2 || 'BM4';
 

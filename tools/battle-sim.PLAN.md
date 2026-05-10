@@ -198,12 +198,25 @@ caster-heal, MP cost / "out of MP" handling, monster `weakness`/`resist`
 elemental scaling (data is there but no synthetic monsters use it yet —
 defer to Phase 3).
 
-### Phase 3 — Encounters & bosses
+### Phase 3 — Encounters & bosses ✅ shipped v1.7.195
 
-- [ ] Monster combatants from `data/monsters.js`
-- [ ] Multi-target battles (1 player + 2 allies vs 4 monsters)
-- [ ] Boss path (Land Turtle / monster 0xCC) — note: only one boss in game
-- [ ] Encounter loop: per-turn agent ordering by AGI
+- [x] Monster combatants from `data/monsters.js` via `buildMonster(idOrName)`.
+  Auto-extracts the 231 monster names from inline comments at startup so
+  `--enemies=goblin*3` works (lowercase snake_case). Hex IDs and decimal
+  IDs both accepted.
+- [x] Multi-target battles via `--party=RM7,BM4,WM4 --enemies=goblin*3,killer_bee`.
+  AGI-ordered turn loop sorts all alive combatants per turn.
+- [x] Monster attack call shape (`attackMonster`) mirrors `battle-enemy.js:189
+  rollMultiHit` — uses `mon.attackRoll` for hit count, `mon.atk` direct
+  (no str/2), `mon.atkElem` for elemental, `mon.weakness`/`resist` for
+  defender lookup, no crit (NES canon).
+- [x] Boss path: `--boss=land_turtle` shorthand. `[BOSS]` tag in header.
+- [x] Spell casts work in encounter mode (Cure auto-redirects to self).
+- [x] Targeting: random alive enemy on opposite team.
+- [-] Monster special attacks (`mon.spAtkRate` + `mon.attacks[]`) — deferred
+  to Phase 3.5. Currently monsters only do physical attacks.
+- [-] Per-ally action overrides (`--p2.action=cast:Fire`) — deferred.
+  Currently the whole party uses `--p1.action`.
 
 ### Phase 4 — Statistical mode
 

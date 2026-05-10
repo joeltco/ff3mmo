@@ -2,6 +2,43 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.195 — 2026-05-10
+
+### Added: battle-sim Phase 3 — encounters, monsters, boss fights
+
+`tools/battle-sim.js` now supports multi-target encounters: a party of
+players/allies vs an array of monsters. AGI-ordered turn loop, random
+target selection, full elemental weakness/resist scaling, boss-fight
+support.
+
+```
+# Solo player vs 3 goblins
+node tools/battle-sim.js --party=KN5 --enemies=goblin*3
+
+# Boss fight — Land Turtle (the game's only boss)
+node tools/battle-sim.js --party=KN10,WM4 --boss=land_turtle --turns=15
+
+# 3-player party vs zombie horde with elemental weakness
+node tools/battle-sim.js --party=KN10,WM4,BM4 --enemies=zombie*4 --p1.action=cast:Fire
+# (Fire on zombie → elemMult=2 because zombie has weakness:fire)
+```
+
+Monster names parsed from `data/monsters.js` inline comments at startup
+(231 monsters, lowercase snake_case — goblin, killer_bee, land_turtle,
+blue_wisp, etc.). Hex IDs (`--enemies=0xCC`) and decimal IDs also work.
+
+Monster attack call shape (`attackMonster`) mirrors `battle-enemy.js
+rollMultiHit` exactly: uses `mon.attackRoll` for hit count, direct
+`mon.atk` (no str/2), `mon.atkElem` for elemental scaling against
+defender's `weakness`/`resist`, no crits (NES canon).
+
+Phase 3 deliberately skipped:
+- Monster special attacks (`spAtkRate` + `attacks[]`) — Phase 3.5
+- Per-ally action overrides — Phase 3.5
+- Statistical mode (`--runs=1000`) — Phase 4
+
+See `tools/battle-sim.PLAN.md` for full status.
+
 ## 1.7.194 — 2026-05-10
 
 ### Added: battle-sim Phase 2 — spells, status, buffs
