@@ -2,6 +2,51 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.193 — 2026-05-10
+
+### Fixed: player dual-wield damage clamping (3-5/turn instead of ~36-39)
+
+Per-hand `baseAtk` in `_battleTargetConfirm` (input-handler.js:178) stripped
+the **full sum** of both weapon ATKs from `ps.atk`, but `calcAttackerAtk`
+only added the **average** for dual-wield (battle-math.js:52-55). Net:
+`baseAtk` went negative by `(rWpn+lWpn)/2`, per-hit damage clamped to
+minimum 1, dual-wielding two daggers hit BARELY harder than no weapon at all.
+
+Reproduced via the new battle simulator: a level-7 Red Mage dual-wielding
+daggers (atk 8 each) vs a level-4 Black Mage was producing 3-5 dmg/turn
+when the math says ~36-42 expected. The PVP attack path (which uses the
+already-correct `attackerStats.atk`) was meanwhile producing 36-39
+consistently. The fix routes player-dual through the same average so both
+paths agree.
+
+Single-wield, unarmed Monk, and PVP / ally attacks were unaffected and are
+unchanged. 50-seed parity sweep confirmed: matched weapons Δ=0; mixed
+weapons Δ=±0.7 dmg/turn (RNG-pattern variance, both paths converge in
+expectation).
+
+### Added: `tools/battle-sim.js` — terminal battle simulator
+
+Node-runnable simulator that mirrors the three prod attack call shapes
+(`player-single`, `player-dual`, `pvp`) using `battle-math.js` directly.
+Lets Claude observe combat damage output without browser testing — same
+pipeline that surfaced the dual-wield bug above.
+
+```
+node tools/battle-sim.js --help
+node tools/battle-sim.js --p1=RM7 --p1.weaponR=0x1F --p1.weaponL=0x1F \
+                         --p2=BM4 --mode=dummy --turns=5 --seed=1
+```
+
+Profile shorthand (`RM7`, `BM4`, etc.) resolves via `generateAllyStats` for
+single-source combatant stats. Three modes: `duel` (round-robin),
+`dummy` (P2 is HP target — best for isolating a single attacker), `solo`.
+Deterministic via `--seed` (mulberry32 swap of `Math.random`). Path
+override (`--p1.path=pvp`) for cross-checking the three call shapes
+against each other.
+
+Phase 1 only — physical attacks. Spells, status, buffs, monsters, and
+statistical mode are deferred to Phases 2-4 (see `tools/battle-sim.PLAN.md`).
+
 ## 1.7.192 — 2026-05-10
 
 ### refactor: pause input → `pause-menu.js` (last task in REFACTOR-PLAN)

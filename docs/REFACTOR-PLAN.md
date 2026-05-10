@@ -2,17 +2,43 @@
 
 Snapshot from project evaluation at v1.7.181. Each task is independently shippable; deploy one at a time and smoke-test before moving on.
 
+**STATUS: COMPLETE (4/4)** — all four tasks shipped v1.7.182 → v1.7.192.
+
 ## Order of operations
 
-1. **Extract `tile-canvas.js`** — dedupe `_decodeTilePixels` + `_make8` (3 callers)
-2. **Split `battle-drawing.js`** (1801 lines → 4–5 files)
-3. **Extract `pvp-drawing.js`** from `pvp.js`
-4. **Split `input-handler.js`** — pause section → `pause-menu.js`
+1. ✅ **Extract `tile-canvas.js`** — dedupe `_decodeTilePixels` + `_make8` (3 callers) — v1.7.182
+2. ✅ **Split `battle-drawing.js`** (1801 lines → 503 + 5 new modules + `battle-grid.js`) — v1.7.183–186
+3. ✅ **Extract `pvp-drawing.js`** from `pvp.js` (1264 → 935) — v1.7.190
+4. ✅ **Split `input-handler.js`** — pause section → `pause-menu.js` (1293 → 790) — v1.7.192
 
 Memory rules apply throughout:
 - Bump `package.json` + CHANGELOG + commit msg per deploy
 - Smoke test (headless-load, grep pm2 for `ReferenceError`) after each
 - pm2 logs first if anything looks broken post-deploy
+
+## Final layout
+
+```
+src/
+├─ canvas-utils.js           ← _make8Canvas, _hflipCanvas, _vflipCanvas (Task 1)
+├─ battle-drawing.js         ← drawBattle composer + spell FX + dmg numbers (-1298 lines)
+├─ battle-draw-menu.js       ← action menu, item/spell lists, victory box (Task 2a)
+├─ battle-draw-encounter.js  ← encounter monsters + boss sprite + dissolve (Task 2b)
+├─ battle-draw-allies.js     ← ally roster row rendering (Task 2c)
+├─ battle-draw-player.js     ← player portrait + crit/strobe flashes (Task 2d)
+├─ battle-grid.js            ← shared layout helpers (encounter + pvp grid)
+├─ pvp.js                    ← state + AI + state machine (Task 3 — drawing extracted)
+├─ pvp-drawing.js            ← PVP enemy box + cells (Task 3)
+├─ input-handler.js          ← battle + roster + tab-select input (Task 4 — pause moved)
+└─ pause-menu.js             ← pause state + transitions + rendering + input (Task 4)
+```
+
+## Deferred work (out of scope for refactor)
+
+See memory `project_ff3mmo_next_tasks.md`:
+1. Terminal battle simulator (`tools/battle-sim.js`)
+2. RM L7 dual-dagger → 4 dmg anomaly (investigate via sim)
+3. Pause-menu heal/cure-status uses parallel paths (single-source violation)
 
 ---
 

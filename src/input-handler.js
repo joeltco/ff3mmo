@@ -175,7 +175,16 @@ function _battleTargetConfirm() {
   const atkMult = ps.status ? miniToadAtkMult(ps.status) : 1;
   // Per-hand ATK: strip weapon ATK from ps.atk (Monk/BB unarmed uses special formula, already in ps.atk)
   // Mini/Toad reduces effective ATK to 0 (calcDamage clamps result to minimum 1)
-  const baseAtk = (ps.atk - (ITEMS.get(ps.weaponR)?.atk || 0) - (ITEMS.get(ps.weaponL)?.atk || 0)) * atkMult;
+  // Dual-wield: calcAttackerAtk only ADDED the average (rWpn+lWpn)/2, so strip
+  // the average — not the sum — or baseAtk goes negative by half the weapon
+  // value and per-hand damage clamps to 1-2. Reproduced via tools/battle-sim.js
+  // (RM7 dual-dagger vs BM4: was 3-5/turn, should be 36-39/turn).
+  const rWpnAtkRaw = ITEMS.get(ps.weaponR)?.atk || 0;
+  const lWpnAtkRaw = ITEMS.get(ps.weaponL)?.atk || 0;
+  const wpnAtkComponent = (rIsWeapon && lIsWeapon)
+    ? Math.floor((rWpnAtkRaw + lWpnAtkRaw) / 2)
+    : (rWpnAtkRaw + lWpnAtkRaw);
+  const baseAtk = (ps.atk - wpnAtkComponent) * atkMult;
   const rWpn = rIsWeapon ? ITEMS.get(ps.weaponR) : null;
   const lWpn = lIsWeapon ? ITEMS.get(ps.weaponL) : null;
   const job = JOBS[ps.jobIdx] || {};
