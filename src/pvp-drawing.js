@@ -327,7 +327,11 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
     if (!(_frames && _frames.length === 2)) _frames = bsc.cureSparkleFrames;
     if (_frames && _frames.length === 2) {
       const fi = Math.floor(battleSt.battleTimer / 67) & 1;
-      _drawSparkleAtCorners(sprX, sprY, _frames[fi]);
+      // Single 16×16 sparkle on the target body — matches the player + ally
+      // cure render (`battle-draw-player.js` / `battle-draw-allies.js`). Was
+      // tiling at the 4 corners (`_drawSparkleAtCorners`) which is the
+      // DEFEND sparkle pattern, not the cure pattern.
+      ui.ctx.drawImage(_frames[fi], sprX, sprY);
     }
   }
 

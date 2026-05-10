@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.191 — 2026-05-10
+
+### fix: PVP cure sparkle was tiled at 4 corners — now single tile (matches player + ally)
+
+Pre-existing bug surfaced during PVP smoke testing: the cure / heal sparkle on a PVP enemy was being drawn via `_drawSparkleAtCorners` (the 4-corner mirrored pattern used by the DEFEND sparkle) instead of a plain `ctx.drawImage`. Player + ally cure renders are single-tile (`battle-draw-player.js` / `battle-draw-allies.js`); PVP should match.
+
+Fixed in `pvp-drawing.js:_drawPVPEnemyCell` — cure sparkle now draws once at body top-left. `_drawSparkleAtCorners` is still used for the defend sparkle (which is intentionally 4-corner).
+
 ## 1.7.190 — 2026-05-10
 
 ### refactor: extract `pvp-drawing.js` from `pvp.js`
