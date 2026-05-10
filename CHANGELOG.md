@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.203 — 2026-05-10
+
+### Reverted: crit-overkill display cap (from v1.7.200)
+
+The cap in `_finalizeComboHits` and the matching HP snapshot in
+`input-handler.js` are gone. Combo display is back to the faithful
+NES-style behavior: shows the full sum of all hit rolls, including
+overkill (e.g. a 4-fist crit combo on a 7-HP Carbuncle correctly prints
+"83 Critical!" — that was right all along).
+
+The Ninja stat-weight bump and pause-menu heal unification from v1.7.200
+are unaffected; only the display cap is reverted.
+
 ## 1.7.202 — 2026-05-10
 
 ### Doc-only: retract audit finding #5 — magic vs physical at low mdef
