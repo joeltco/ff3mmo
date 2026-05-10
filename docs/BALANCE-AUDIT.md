@@ -12,7 +12,7 @@ are reproducible — repro commands below each finding.
 | 2 | Grasslands Werewolf/Killer Bee wipe starter solo | ⚠️ open |
 | 3 | First-move bias (~65–70%) in all mirrors | ✅ retracted — sim artifact, live game already correct |
 | 4 | Land Turtle solo wide difficulty range | ⚠️ open (mostly improved by #1) |
-| 5 | BM Fire 5–12× physical at L4 vs low-mdef | ⚠️ open |
+| 5 | BM Fire 5–12× physical at L4 vs low-mdef | ✅ retracted — dummy-dpt artifact |
 | 6 | Altar Cave + Goblin grasslands well-tuned | ✅ |
 
 > **NOTE — earlier "Monk unarmed broken" finding has been retracted.** That
@@ -286,7 +286,35 @@ node tools/battle-sim.js --party=FI5 --boss=land_turtle --runs=200
 
 ---
 
-## 5. Black Mage at L4 outdamages physical 5–12×
+## 5. Black Mage at L4 outdamages physical 5–12× — RETRACTED
+
+**Status:** dummy-dpt artifact. The 5–12× ratio was measured against a
+KN15 dummy (high-HP) where Fire could fully express its burst.
+
+In actual live encounters, classes clear in nearly identical turn counts
+because each enemy dies in roughly 1 hit either way. **Solo class clearing
+the live valley goblin×3 formation (5 HP each, mdef 10) over 200 runs:**
+
+| Action               | Win % | Avg turns |
+|----------------------|-------|-----------|
+| OK4 / FI4 / KN4 attack | 100% | 3.82      |
+| MO4 unarmed          | 100%  | 3.02      |
+| BM4 cast Fire        | 100%  | 3.00      |
+| BM4 default attack   | 100%  | 3.82      |
+
+BM Fire at 3.00 turns is only 0.82 faster than physical — not 5×, not
+12×. The damage overflow per cast doesn't accelerate clear time when
+each enemy already dies in one hit.
+
+Wild zone (werewolf×3, 24 HP each) shows the proper class spread:
+KN4 86% / 7.39 turns (durable), MO4 100% / 3.37 (speed), BM4 Fire 86% /
+3.03 (burst-but-fragile). Magic and physical have their niches; neither
+is OP.
+
+The audit number was a measurement artifact, not a balance issue.
+Leaving the original section below for historical context.
+
+### Original (now retracted) section follows
 
 L4 dpt vs static KN15 dummy (mdef 2), 200 runs:
 

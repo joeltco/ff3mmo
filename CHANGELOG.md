@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.202 — 2026-05-10
+
+### Doc-only: retract audit finding #5 — magic vs physical at low mdef
+
+The "BM Fire 5–12× physical dpt" finding was measured against a high-HP
+dummy (KN15) where Fire's burst could fully express. In actual live
+encounter formations (valley goblin×3, wild werewolf×3) all classes
+clear in nearly identical turn counts because each enemy dies in roughly
+1 hit either way. Goblin×3 solo: physical 3.82 turns vs BM Fire 3.00
+turns — only 0.82 turn difference, not the 5–12× the dummy data
+suggested.
+
+Audit doc updated with the corrected per-class encounter clear data and
+the retraction. No live-game change.
+
 ## 1.7.201 — 2026-05-10
 
 ### Fixed: battle-sim initiative bias — retracted audit finding #3
