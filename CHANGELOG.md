@@ -2,6 +2,42 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.196 — 2026-05-10
+
+### Added: battle-sim Phase 3.5 — monster specials + per-ally actions
+
+`tools/battle-sim.js` Phase 3.5 closes the Phase 3 deferred items.
+
+**Monster special attacks.** Ported `SPECIAL_ATTACKS` table from
+`battle-enemy.js:27` (29 entries — Fire / Bzzard / Thunder / Holy / Flare
+/ Meteor / Drain / Bad Breath / Glare / Sleep / Toad / Confuse / Silence
+/ Mini / Reflect / etc.). Each turn, monsters with `spAtkRate > 0` roll
+that % chance to use a random attack from their `attacks[]` array.
+Damage formula is `floor(spiritInt/2) + spec.power + rand` clamped after
+elem mult and mdef — matches `_doSpecialAttack` exactly. Multi-status
+(Bad Breath) tries each flag independently against the same hit chance.
+
+```
+node tools/battle-sim.js --party=KN10 --enemies=petit --turns=5
+# Petit (spAtkRate=80) opens with Bzzard for 43 dmg, follows up with Fire for 35
+
+node tools/battle-sim.js --party=KN10 --enemies=mandrake --turns=5 --seed=1
+# Mandrake's Bad Breath lands Poison + Blind + Silence + Mini in one hit
+```
+
+**Per-ally action overrides.** Generalized `--pN.<key>=<value>` parsing —
+`--p1.action`, `--p2.action`, `--p3.action`, `--p4.action` now control
+each party member independently. Previously only `--p1.action` worked.
+
+```
+# KN attacks while WM heals
+node tools/battle-sim.js --party=KN5,WM4 --p1.action=attack \\
+                         --p2.action=cast:Cure --enemies=goblin*2
+```
+
+Phase 4 (statistical mode) is the last queued item — see
+`tools/battle-sim.PLAN.md`.
+
 ## 1.7.195 — 2026-05-10
 
 ### Added: battle-sim Phase 3 — encounters, monsters, boss fights

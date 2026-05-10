@@ -47,14 +47,25 @@ function seedRandom(seed) {
 
 // ─── CLI ────────────────────────────────────────────────────────────────
 function parseArgs(argv) {
-  const out = { p1Over: {}, p2Over: {} };
+  const out = { p1Over: {}, p2Over: {}, pOver: {} };
   for (const a of argv) {
     if (!a.startsWith('--')) continue;
     const [rawKey, ...rest] = a.slice(2).split('=');
     const val = rest.join('=');
     if (rawKey === 'help' || rawKey === 'h') { out.help = true; continue; }
-    if (rawKey.startsWith('p1.')) { out.p1Over[rawKey.slice(3)] = parseVal(val); continue; }
-    if (rawKey.startsWith('p2.')) { out.p2Over[rawKey.slice(3)] = parseVal(val); continue; }
+    // Generalized --pN.<key>=<value> for parties up to N members.
+    const pMatch = rawKey.match(/^p(\d+)\.(.+)$/);
+    if (pMatch) {
+      const n = parseInt(pMatch[1], 10);
+      const subkey = pMatch[2];
+      const v = parseVal(val);
+      if (!out.pOver[n]) out.pOver[n] = {};
+      out.pOver[n][subkey] = v;
+      // Backward-compat aliases for the 1v1 code path.
+      if (n === 1) out.p1Over[subkey] = v;
+      if (n === 2) out.p2Over[subkey] = v;
+      continue;
+    }
     out[rawKey] = parseVal(val);
   }
   return out;
@@ -543,6 +554,10 @@ function applyAction(actor, target, attackFn, action, opts = {}) {
     return { lines, dmgDealt: 0, healed: 0, killedTarget: false };
   }
 
+  if (action.kind === 'spAttack') {
+    return executeSpecialAttack(actor, target, action);
+  }
+
   if (action.kind === 'cast') {
     if (!canCastMagic(actor.status)) {
       lines.push(`  ${actor._spec} tries to cast ${spellName(action.spellId)} — SILENCED, fizzles.`);
@@ -732,6 +747,88 @@ function buildMonster(spec, idx = 0) {
   };
 }
 
+// ─── Monster special-attack table (port of battle-enemy.js:27 SPECIAL_ATTACKS) ──
+const SPECIAL_ATTACKS = {
+  'Fire':       { type: 'damage', power: 25,  hit: 100, element: 'fire' },
+  'Fira':       { type: 'damage', power: 55,  hit: 100, element: 'fire' },
+  'Firaga':     { type: 'damage', power: 150, hit: 100, element: 'fire' },
+  'Bzzard':     { type: 'damage', power: 25,  hit: 100, element: 'ice' },
+  'Bzzara':     { type: 'damage', power: 55,  hit: 100, element: 'ice' },
+  'Bzzaga':     { type: 'damage', power: 85,  hit: 100, element: 'ice' },
+  'Thunder':    { type: 'damage', power: 35,  hit: 100, element: 'bolt' },
+  'Thundara':   { type: 'damage', power: 55,  hit: 100, element: 'bolt' },
+  'Thundaga':   { type: 'damage', power: 110, hit: 100, element: 'bolt' },
+  'Tornado':    { type: 'damage', power: 4,   hit: 40,  element: 'air' },
+  'Aeroga':     { type: 'damage', power: 115, hit: 100, element: null },
+  'Quake':      { type: 'damage', power: 133, hit: 100, element: 'earth' },
+  'Holy':       { type: 'damage', power: 160, hit: 100, element: 'holy' },
+  'Flare':      { type: 'damage', power: 200, hit: 100, element: null },
+  'Meteor':     { type: 'damage', power: 180, hit: 100, element: null },
+  'Bio':        { type: 'damage', power: 130, hit: 100, element: null },
+  'Drain':      { type: 'damage', power: 160, hit: 100, element: null },
+  'Blind':      { type: 'status', hit: 60,  status: 'blind' },
+  'Poison':     { type: 'status', hit: 60,  status: 'poison' },
+  'Glare':      { type: 'status', hit: 80,  status: 'paralysis' },
+  'Sleep':      { type: 'status', hit: 15,  status: 'sleep' },
+  'Confuse':    { type: 'status', hit: 25,  status: 'confuse' },
+  'Toad':       { type: 'status', hit: 80,  status: 'toad' },
+  'Mini':       { type: 'status', hit: 80,  status: 'mini' },
+  'Silence':    { type: 'status', hit: 60,  status: 'silence' },
+  'Bad Breath': { type: 'multi_status', hit: 60, statuses: ['poison', 'blind', 'silence', 'toad', 'mini'] },
+  'Reflect':    { type: 'none' },
+  'Sence':      { type: 'none' },
+};
+
+// Roll spAtkRate% for a monster's special attack. Returns either an
+// `{ kind: 'attack' }` (use physical attack) or `{ kind: 'spAttack', ... }` action.
+function pickMonsterAction(mon) {
+  if (!mon.attacks || !mon.spAtkRate || mon.spAtkRate <= 0) return { kind: 'attack' };
+  if (Math.random() * 100 >= mon.spAtkRate) return { kind: 'attack' };
+  const atkName = mon.attacks[Math.floor(Math.random() * mon.attacks.length)];
+  const spec = SPECIAL_ATTACKS[atkName];
+  if (!spec || spec.type === 'none') return { kind: 'attack' };
+  return { kind: 'spAttack', name: atkName, spec };
+}
+
+// Execute a monster's special attack (port of battle-enemy.js:_doSpecialAttack).
+function executeSpecialAttack(mon, target, action) {
+  const { spec, name } = action;
+  const lines = [];
+  if (spec.type === 'damage') {
+    const eMult = elemMultiplier(spec.element, target.weakness, target.resist);
+    const castStat = mon.int || mon.mnd || 5;
+    const baseAtk = Math.floor(castStat / 2) + spec.power;
+    const roll = baseAtk + Math.floor(Math.random() * (Math.floor(baseAtk / 2) + 1));
+    let dmg = Math.max(1, Math.floor(roll * eMult) - (target.mdef || 0));
+    const targetDefending = !!target._defendsNextSwing;
+    if (targetDefending) { target._defendsNextSwing = false; dmg = Math.max(1, Math.floor(dmg / 2)); }
+    const hpBefore = target.hp;
+    target.hp = Math.max(0, target.hp - dmg);
+    lines.push(`  ${mon._spec} uses ${name} on ${target._spec}  [special: damage]`);
+    lines.push(`    rolled = floor(int/2) + ${spec.power} + rand → ${roll}  elemMult=${eMult}  mdef=${target.mdef||0}  →  dmg=${dmg}${targetDefending ? '  (halved by defend)' : ''}`);
+    lines.push(`    ${target._spec} HP: ${hpBefore} → ${target.hp}`);
+    return { lines, dmgDealt: dmg, healed: 0, killedTarget: target.hp <= 0 };
+  }
+  if (spec.type === 'status') {
+    const applied = simApplyMagicStatus(target, spec.status, spec.hit);
+    lines.push(`  ${mon._spec} uses ${name} on ${target._spec}  [special: status]`);
+    lines.push(`    type=${spec.status} hit=${spec.hit}%  →  ${applied ? `LANDED (${STATUS_NAMES[applied]})` : 'resisted/missed'}`);
+    return { lines, dmgDealt: 0, healed: 0, killedTarget: false };
+  }
+  if (spec.type === 'multi_status') {
+    const landed = [];
+    for (const s of spec.statuses) {
+      const f = simApplyMagicStatus(target, s, spec.hit);
+      if (f) landed.push(STATUS_NAMES[f] || s);
+    }
+    lines.push(`  ${mon._spec} uses ${name} on ${target._spec}  [special: multi-status]`);
+    lines.push(`    hit=${spec.hit}% per flag  →  ${landed.length ? `LANDED ${landed.join(', ')}` : 'all missed'}`);
+    return { lines, dmgDealt: 0, healed: 0, killedTarget: false };
+  }
+  lines.push(`  ${mon._spec} uses ${name}  [no effect]`);
+  return { lines, dmgDealt: 0, healed: 0, killedTarget: false };
+}
+
 // ─── Monster attack call shape (battle-enemy.js:189 rollMultiHit) ───────
 function attackMonster(att, def, opts = {}) {
   const blindMult = att.status ? blindHitPenalty(att.status) : 1;
@@ -763,11 +860,16 @@ function attackFnFor(c, override) {
 // --enemies=goblin*3,killer_bee*2  → multi-instance monster array
 // --enemies=land_turtle            → boss fight (1 monster)
 
-function parseParty(spec) {
+function parseParty(spec, pOver = {}) {
   if (spec == null) return null;
   const specs = String(spec).split(',').map(s => s.trim()).filter(Boolean);
   return specs.map((s, i) => {
-    const c = resolveProfile(s);
+    const overrides = pOver[i + 1] || {};
+    const c = resolveProfile(s, overrides);
+    if (overrides.status) applyStartingStatus(c, overrides.status);
+    if (overrides.buff)   applyStartingBuffs(c, overrides.buff);
+    if (overrides.hp != null) c.hp = overrides.hp;
+    if (overrides.action) c._action = parseAction(overrides.action);
     c.team = 'player';
     c.kind = i === 0 ? 'player' : 'ally';
     c.buffs = c.buffs || {};
@@ -835,7 +937,11 @@ function runEncounter(party, enemies, opts = {}) {
       if (targets.length === 0) break;
       const target = targets[Math.floor(Math.random() * targets.length)];
 
-      const action = actor.team === 'player' ? partyAction : enemyAction;
+      // Per-actor action: party uses _action override → partyAction; monsters
+      // roll spAtkRate per turn for special attacks (Glare, Fire, Bad Breath, etc.).
+      const action = actor.team === 'player'
+        ? (actor._action || partyAction)
+        : pickMonsterAction(actor);
       const fn = attackFnFor(actor, opts[`${actor._spec}_path`] || 'auto');
       const res = applyAction(actor, target, fn, action);
       res.lines.forEach(l => lines.push(l));
@@ -951,7 +1057,7 @@ function main() {
   if (args.enemies != null || args.party != null || args.boss != null) {
     let party, enemies, partyAction, enemyAction;
     try {
-      party = parseParty(args.party) || [resolveProfile(args.p1 || 'KN10', args.p1Over || {})];
+      party = parseParty(args.party, args.pOver) || [resolveProfile(args.p1 || 'KN10', args.p1Over || {})];
       party.forEach(p => { p.team = 'player'; if (!p.kind || p.kind === 'monster') p.kind = 'player'; });
       const enemySpec = args.boss != null ? args.boss : args.enemies;
       enemies = parseEnemies(enemySpec) || [];

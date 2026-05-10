@@ -213,10 +213,23 @@ defer to Phase 3).
 - [x] Boss path: `--boss=land_turtle` shorthand. `[BOSS]` tag in header.
 - [x] Spell casts work in encounter mode (Cure auto-redirects to self).
 - [x] Targeting: random alive enemy on opposite team.
-- [-] Monster special attacks (`mon.spAtkRate` + `mon.attacks[]`) — deferred
-  to Phase 3.5. Currently monsters only do physical attacks.
-- [-] Per-ally action overrides (`--p2.action=cast:Fire`) — deferred.
-  Currently the whole party uses `--p1.action`.
+- [-] Monster special attacks (`mon.spAtkRate` + `mon.attacks[]`) — Phase 3.5.
+- [-] Per-ally action overrides (`--p2.action=cast:Fire`) — Phase 3.5.
+
+### Phase 3.5 — Monster spells + per-ally actions ✅ shipped v1.7.196
+
+- [x] `SPECIAL_ATTACKS` table ported from `battle-enemy.js:27` (Fire/Bzzard/
+  Thunder/Holy/Flare/Meteor/Drain/Bad Breath/Glare/Toad/Sleep/etc.).
+- [x] `pickMonsterAction(mon)` rolls `spAtkRate%` per turn, selects from
+  `mon.attacks[]`, falls back to physical.
+- [x] `executeSpecialAttack(mon, target, action)` — damage / status /
+  multi_status branches, mirrors `_doSpecialAttack` math (`baseAtk =
+  floor(int/2) + power`).
+- [x] Generalized CLI: `--pN.<key>=<value>` for parties up to N members.
+  `--p1.action`/`--p2.action`/`--p3.action`/`--p4.action` work
+  independently per party member.
+- [x] `parseParty` consumes per-member overrides for weapons / status /
+  buff / hp / action.
 
 ### Phase 4 — Statistical mode
 
