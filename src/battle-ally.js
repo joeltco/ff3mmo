@@ -1,9 +1,10 @@
 // Battle ally update logic — extracted from game.js
 
-import { battleSt, getEnemyHP, setEnemyHP, BATTLE_SHAKE_MS, BATTLE_DMG_SHOW_MS } from './battle-state.js';
+import { battleSt, getEnemyHP, BATTLE_SHAKE_MS, BATTLE_DMG_SHOW_MS } from './battle-state.js';
 import { playSlashSFX } from './battle-sfx.js';
 import { resetSlashScatterCache, shouldDrawSlash, SWING_HOLD_MS } from './slash-effects.js';
 import { summarizeHits } from './battle-math.js';
+import { applyPhysicalHitToEnemy } from './physical-attack.js';
 import { isWeapon } from './data/items.js';
 import { SFX, playSFX } from './music.js';
 import { _nameToBytes } from './text-utils.js';
@@ -118,17 +119,18 @@ function _updateAllyAttack() {
     const drawSlash = shouldDrawSlash(hit);
     if (battleSt.battleTimer >= SWING_HOLD_MS) {
       if (drawSlash) {
-        // Defend halving for PVP opponent
-        if (pvpSt.isPVPBattle && pvpSt.pvpOpponentIsDefending && battleSt.allyTargetIndex < 0)
-          hit.damage = Math.max(1, Math.floor(hit.damage / 2));
-        // Apply damage per hit
-        if (battleSt.allyTargetIndex >= 0 && battleSt.encounterMonsters) {
-          battleSt.encounterMonsters[battleSt.allyTargetIndex].hp = Math.max(0, battleSt.encounterMonsters[battleSt.allyTargetIndex].hp - hit.damage);
-        } else if (battleSt.allyTargetIndex < 0) {
-          setEnemyHP(Math.max(0, getEnemyHP() - hit.damage));
-          if (pvpSt.isPVPBattle) pvpSt.pvpOpponentShakeTimer = BATTLE_SHAKE_MS;
+        // Pick the weapon for this swing (matches the hand alternation set
+        // when the slash kicked off — see _updateAllyAttackBack). Allies use
+        // the same wpn-status inflict + wake-on-hit semantics as the player
+        // (user-confirmed 2026-05-10; previously gated to player only).
+        const ally = battleSt.battleAllies[battleSt.currentAllyAttacker];
+        const wpnId = ally
+          ? (battleSt.allyHitIsLeft ? ally.weaponL : ally.weaponId)
+          : null;
+        applyPhysicalHitToEnemy(hit, battleSt.allyTargetIndex, { weaponId: wpnId, attackerIsAlly: true });
+        if (battleSt.allyTargetIndex < 0 && pvpSt.isPVPBattle) {
+          pvpSt.pvpOpponentShakeTimer = BATTLE_SHAKE_MS;
         }
-        if (hit.crit) battleSt.critFlashTimer = 0;
       }
       // Advance combo
       battleSt.allyHitIdx = battleSt.allyHitIdx + 1;

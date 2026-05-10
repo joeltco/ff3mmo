@@ -25,7 +25,6 @@ import { queueBattleMsg, replaceBattleMsg, updateBattleMsg as _updateBattleMsg, 
 import { resetAllDmgNums, tickDmgNums, tickHealNums, clearHealNums,
          setEnemyDmgNum } from './damage-numbers.js';
 import { playSFX, stopMusic, pauseMusic, resumeMusic, playTrack, TRACKS, SFX } from './music.js';
-import { ITEMS } from './data/items.js';
 import { MONSTERS } from './data/monsters.js';
 import { PLAYER_POOL, generateAllyStats } from './data/players.js';
 import { BATTLE_ROAR, BATTLE_CANT_ESCAPE, BATTLE_CRITICAL, BATTLE_SLAIN } from './data/strings.js';
@@ -34,7 +33,8 @@ import { respawnAfterDeath } from './map-loading.js';
 import { _nameToBytes } from './text-utils.js';
 import { getPlayerLocation } from './roster.js';
 import { DIR_DOWN } from './sprite.js';
-import { tryInflictStatus, wakeOnHit, STATUS_NAME_BYTES } from './status-effects.js';
+import { STATUS_NAME_BYTES } from './status-effects.js';
+import { applyPhysicalHitToEnemy } from './physical-attack.js';
 import { playSlashSFX } from './battle-sfx.js';
 import { saveSlotsToDB } from './save-state.js';
 import { addItem, buildItemSelectList } from './inventory.js';
@@ -375,29 +375,8 @@ function _updatePlayerSlash() {
   }
   if (battleSt.battleTimer >= SWING_HOLD_MS) {
     if (drawSlash) {
-      if (pvpSt.isPVPBattle && pvpSt.pvpOpponentIsDefending)
-        hit.damage = Math.max(1, Math.floor(hit.damage / 2));
-      if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
-        const targetMon = battleSt.encounterMonsters[inputSt.targetIndex];
-        targetMon.hp = Math.max(0, targetMon.hp - hit.damage);
-        // Physical hit wakes sleeping targets
-        if (targetMon.status) wakeOnHit(targetMon.status);
-        // Weapon on-hit status infliction
-        if (targetMon.status && targetMon.hp > 0) {
-          const wpnId = getHitWeapon(battleSt.currentHitIdx, inputSt.rHandHitCount);
-          const wpnData = ITEMS.get(wpnId);
-          if (wpnData && wpnData.status) {
-            const arr = Array.isArray(wpnData.status) ? wpnData.status : [wpnData.status];
-            for (const s of arr) {
-              const applied = tryInflictStatus(targetMon.status, s, wpnData.hit || 50, targetMon.statusResist);
-              if (applied) battleSt.comboStatusInflicted = applied;
-            }
-          }
-        }
-      } else {
-        setEnemyHP(Math.max(0, getEnemyHP() - hit.damage));
-      }
-      if (hit.crit) battleSt.critFlashTimer = 0;
+      const wpnId = getHitWeapon(battleSt.currentHitIdx, inputSt.rHandHitCount);
+      applyPhysicalHitToEnemy(hit, inputSt.targetIndex, { weaponId: wpnId });
     }
     battleSt.battleState = 'player-hit-show';
     battleSt.battleTimer = 0;

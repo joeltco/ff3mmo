@@ -8,7 +8,7 @@ import { ps, getJobLevelStatBonus } from './player-stats.js';
 import { JOBS } from './data/jobs.js';
 import { ITEMS, isWeapon, isBladedWeapon } from './data/items.js';
 import { SFX, playSFX } from './music.js';
-import { processTurnStart, removeStatus, STATUS, blindHitPenalty, hasStatus } from './status-effects.js';
+import { processTurnStart, removeStatus, STATUS, blindHitPenalty, hasStatus, STATUS_NAME_TO_FLAG } from './status-effects.js';
 import { bsc, getSlashFramesForWeapon } from './battle-sprite-cache.js';
 import { pvpSt } from './pvp.js';
 import { inputSt } from './input-handler.js';
@@ -508,12 +508,6 @@ function _playerTurnFight() {
   battleSt.battleState = 'attack-back'; battleSt.battleTimer = 0;
 }
 
-const CURE_NAME_TO_FLAG = {
-  poison: STATUS.POISON, blind: STATUS.BLIND, silence: STATUS.SILENCE,
-  mini: STATUS.MINI, toad: STATUS.TOAD, petrify: STATUS.PETRIFY,
-  paralysis: STATUS.PARALYSIS,
-};
-
 function _playerTurnConsumable() {
   const itemId = inputSt.playerActionPending.itemId;
   const itemDat = ITEMS.get(itemId);
@@ -527,7 +521,7 @@ function _playerTurnConsumable() {
 
   if (effect === 'cure_status') {
     // Status cure items — only target player for now
-    const flag = CURE_NAME_TO_FLAG[itemDat.cures];
+    const flag = STATUS_NAME_TO_FLAG[itemDat.cures];
     if (flag && ps.status) removeStatus(ps.status, flag);
     battleSt.itemHealAmount = 0;
     battleSt.battleState = 'item-use'; battleSt.battleTimer = 0;

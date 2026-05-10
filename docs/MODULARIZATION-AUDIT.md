@@ -16,8 +16,8 @@ the recurring memory `feedback_ff3mmo_single_source_paths.md` and
 | 4 | Miss-canvas blit pattern duplicated 5×, y-offset inconsistent | 🟡 2 | ✅ v1.7.207 |
 | 5 | Cast-callback I/O bindings (`onHealNum`) duplicated 4× | 🟡 2 | ✅ v1.7.207 (narrowed) |
 | 6 | `Math.max(0, hp - dmg)` HP zero-clamp duplicated 12+ sites | 🟡 2 | ❎ skipped (see #6 below) |
-| 7 | Three near-identical "pick target & apply enemy damage" paths | 🔴 3 | deferred |
-| 8 | `CURE_NAME_TO_FLAG` table — could consolidate with status-effects | 🔴 3 | deferred |
+| 7 | Physical-attack damage paths (player + ally) unified, found 2 gaps | 🔴 3 | ✅ v1.7.208 |
+| 8 | Three duplicate `CURE_NAME_TO_FLAG`-style tables collapsed to one export | 🔴 3 | ✅ v1.7.208 |
 
 ## #1 — Heal clamp duplicated
 
@@ -134,15 +134,51 @@ absorb the clamp — not worth a dedicated helper.
 **Revisit if:** a future bug hinges on inconsistent HP-zero-clamp behavior
 across paths.
 
-## #7 — DEFERRED: Three near-identical "pick target & apply enemy damage" paths
+## #7 — Physical-attack damage paths unified
 
-`spell-cast.js:_setEnemyDmg` already handles encounter / PVP / boss split
-for spells. Physical-attack paths re-derive the target each time, but they
-also carry slash-anim state, so it's not pure refactor.
+**Sites:** `battle-update.js:_updatePlayerSlash` (40+ lines) and
+`battle-ally.js:_updateAllySlash` (~13 lines). Both apply a single
+physical hit to the targeted enemy after the slash holds out, but they
+diverged silently:
 
-Revisit if a target-resolution bug crosses encounter ↔ PVP again.
+| Step                             | Player | Ally (before) | Ally (after) |
+|----------------------------------|--------|---------------|--------------|
+| PVP defend halving               | ✅     | ✅            | ✅           |
+| Encounter / boss / PVP-opp HP    | ✅     | ✅            | ✅           |
+| `wakeOnHit` on sleeping target   | ✅     | ❌            | ✅           |
+| Weapon on-hit status inflict     | ✅     | ❌            | ✅           |
+| Crit-flash trigger               | ✅     | ✅            | ✅           |
 
-## #8 — DEFERRED: `CURE_NAME_TO_FLAG` consolidation
+**User-confirmed gap fixes (2026-05-10):** ally hits now wake sleeping
+monsters AND inflict weapon-status (poison blade etc.). Both omissions
+were unfilled gaps, not design — confirmed before shipping the unify so
+it's a single intentional behavior change rather than a side-effect.
 
-Local mapping in `battle-turn.js:512`. Implicit elsewhere
-(`status-effects.js`). Small footprint; not worth the churn yet.
+**New module:** `src/physical-attack.js` exposes
+`applyPhysicalHitToEnemy(hit, targetIdx, opts)`. Signatures are minimal:
+`opts.weaponId` for status inflict, `opts.attackerIsAlly` for future
+per-attacker behavior (currently informational only).
+
+**Out of scope:** the PVP-enemy-attacking-player path (`pvp.js`
+`_processPVPEnemySlash`) is structurally different (target side is
+friendly, no encounter dispatch, no weapon-status from monsters in PVP).
+Could fold but the win is small.
+
+## #8 — Status name → flag table collapsed
+
+**Sites found:** `battle-turn.js` `CURE_NAME_TO_FLAG` (7 entries) +
+`spell-cast.js` `SPELL_CURE_FLAG` (7 entries) + `pause-menu.js`
+`PAUSE_CURE_FLAG` (7 entries) + `status-effects.js` `NAME_TO_FLAG`
+(10 entries, was private). All four mapped lowercase status names to
+the corresponding `STATUS.*` bitmask flag — three of them were
+verbatim duplicates of a subset of the fourth.
+
+**Fix:** export the 10-entry table from `status-effects.js` as
+`STATUS_NAME_TO_FLAG`. Replace all three local tables. The 3 extra
+entries (`death`, `sleep`, `confuse`) are a no-op for cure paths
+(no item / spell / pause-menu effect maps to those names today) but
+remove the future drift risk.
+
+**Revealed during the audit:** the original audit doc said this was
+"single consumer" — wrong. Three consumers, all with identical
+mappings, was real duplication.

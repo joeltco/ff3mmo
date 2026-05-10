@@ -2,6 +2,39 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.208 — 2026-05-10
+
+### Modularization tier 3: physical-attack unify + status-name table collapse
+
+Closes the last two open items in `docs/MODULARIZATION-AUDIT.md`.
+
+**Tier 3 #7 — physical-attack damage path unified (with two confirmed
+behavior fixes):**
+
+- New module `src/physical-attack.js` — `applyPhysicalHitToEnemy(hit,
+  targetIdx, opts)` is the single source for "apply one physical hit
+  to the targeted enemy" (defend-halve, encounter/boss/PVP-opp dispatch,
+  HP write, wake-on-hit, weapon-status inflict, crit-flash).
+- `battle-update.js` (player attack) and `battle-ally.js` (ally attack)
+  now both call the helper. Roughly 35 lines removed.
+- **Confirmed gap fixes** (asked user before shipping, per the
+  `dont_flip_confirmed` rule):
+  - **Ally physical hits now wake sleeping enemies.** Player path
+    already called `wakeOnHit`; ally path silently skipped it.
+  - **Ally physical hits now inflict weapon-on-hit status.** Player
+    path rolled `wpnData.status` against the target's resistance; ally
+    path silently skipped it. Allies use the same `weaponId` /
+    `weaponL` lookup the slash anim already uses.
+
+**Tier 3 #8 — three duplicate status-name tables collapsed:**
+
+- `battle-turn.js` had `CURE_NAME_TO_FLAG`, `spell-cast.js` had
+  `SPELL_CURE_FLAG`, `pause-menu.js` had `PAUSE_CURE_FLAG` — verbatim
+  duplicates of a 7-entry subset. `status-effects.js` already had a
+  private 10-entry `NAME_TO_FLAG` covering the same mapping plus
+  `death`/`sleep`/`confuse`.
+- Exported as `STATUS_NAME_TO_FLAG`. All three duplicates removed.
+
 ## 1.7.207 — 2026-05-10
 
 ### Modularization tier 2: miss-popup helper + heal-num callback factory

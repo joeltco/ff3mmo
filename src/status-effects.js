@@ -71,7 +71,11 @@ export function clearAll(state) {
 // hitChance: 0-100 (for weapon statuses, NES uses the weapon's hit%; for spells, spell hit%)
 // Returns the status flag that was applied, or 0 if missed/resisted.
 
-const NAME_TO_FLAG = {
+// Canonical lowercase-name → STATUS flag table. Used by tryInflictStatus
+// and exported for cure-status routing (battle-turn.js consumables,
+// spell-cast.js spells, pause-menu.js out-of-battle spells). Three local
+// tables collapsed here in v1.7.208.
+export const STATUS_NAME_TO_FLAG = {
   paralysis: STATUS.PARALYSIS,
   poison:    STATUS.POISON,
   blind:     STATUS.BLIND,
@@ -83,6 +87,7 @@ const NAME_TO_FLAG = {
   sleep:     STATUS.SLEEP,
   confuse:   STATUS.CONFUSE,
 };
+const NAME_TO_FLAG = STATUS_NAME_TO_FLAG;
 
 // resist: optional — status name, array of names, or bitmask of NAME_TO_FLAG.
 // If the incoming status matches any resisted flag, inflict auto-fails (NES immunity check).

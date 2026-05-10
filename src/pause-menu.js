@@ -22,7 +22,7 @@ import { msgState } from './message-box.js';
 import { ITEMS, isHandEquippable } from './data/items.js';
 import { swapBattleSprites } from './job-sprites.js';
 import { getRosterVisible } from './roster.js';
-import { STATUS } from './status-effects.js';
+import { STATUS, STATUS_NAME_TO_FLAG } from './status-effects.js';
 import { applyMagicHeal, applyMagicCureStatus } from './combatant-cast.js';
 
 // NES layout constants — must match game.js
@@ -672,17 +672,6 @@ function _pauseInputMagicZ() {
   pauseSt.timer = 0;
 }
 
-// Map spell.type → STATUS flag for cure_status spells (Poisona, Bndna, etc.)
-const PAUSE_CURE_FLAG = {
-  poison:    STATUS.POISON,
-  blind:     STATUS.BLIND,
-  silence:   STATUS.SILENCE,
-  mini:      STATUS.MINI,
-  toad:      STATUS.TOAD,
-  petrify:   STATUS.PETRIFY,
-  paralysis: STATUS.PARALYSIS,
-};
-
 // Apply a pause-menu spell cast on the current target (player or roster ally).
 function _applyPauseSpellUse(rosterTargets) {
   const spellId = pauseSt.useSpellId;
@@ -696,7 +685,7 @@ function _applyPauseSpellUse(rosterTargets) {
   // Routes through `applyMagicCureStatus` so the in-battle and pause paths share
   // the same status-removal logic (single-source per memory feedback).
   if (spell.target === 'cure_status') {
-    const flag = PAUSE_CURE_FLAG[spell.type];
+    const flag = STATUS_NAME_TO_FLAG[spell.type];
     if (pauseSt.invAllyTarget >= 0) {
       const rp = rosterTargets[pauseSt.invAllyTarget];
       if (!rp) { playSFX(SFX.ERROR); return; }

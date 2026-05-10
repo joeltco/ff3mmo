@@ -12,7 +12,7 @@ import { SFX, playSFX } from './music.js';
 import { setPlayerHealNum, setPlayerDamageNum, getAllyDamageNums, setEnemyDmgNum, setEnemyHealNum, setSwDmgNum,
          tickHealNums, clearHealNums, DMG_SHOW_MS, makeHealNumCallback } from './damage-numbers.js';
 import { SPELLS, getSpellMPCost, isMultiTargetSpell } from './data/spells.js';
-import { STATUS, addStatus, removeStatus, tryInflictStatus, STATUS_NAME_BYTES } from './status-effects.js';
+import { STATUS, addStatus, removeStatus, tryInflictStatus, STATUS_NAME_BYTES, STATUS_NAME_TO_FLAG } from './status-effects.js';
 import { CAST_PHASE_MS, CAST_PHASE_MS_THROW, CAST_TOTAL_MS, CAST_T_THROW_RETURN, CAST_T_THROW_IMPACT_START,
          CAST_T_HEAL_APPLY, CAST_T_HEAL_ANIM_START } from './cast-anim.js';
 import { applyMagicDamage, applyMagicStatus, applyMagicHeal,
@@ -27,17 +27,6 @@ import { getSpellNameClean, getItemNameClean } from './text-decoder.js';
 import { elemMultiplier } from './battle-math.js';
 import { pvpSt } from './pvp.js';
 import { applyBuff, BUFF_HASTE, BUFF_PROTECT, BUFF_REFLECT } from './buffs.js';
-
-// Map spell.type → STATUS flag for cure_status spells (Poisona, Bndna, etc.)
-const SPELL_CURE_FLAG = {
-  poison:    STATUS.POISON,
-  blind:     STATUS.BLIND,
-  silence:   STATUS.SILENCE,
-  mini:      STATUS.MINI,
-  toad:      STATUS.TOAD,
-  petrify:   STATUS.PETRIFY,
-  paralysis: STATUS.PARALYSIS,
-};
 
 let _processNextTurn = () => {};
 export function initSpellCast({ processNextTurn }) { _processNextTurn = processNextTurn; }
@@ -529,7 +518,7 @@ function _applySpellEffect(target) {
   // SFX fires via the engine at sparkle-start (see `getSpellImpactSFX` →
   // `playSpellImpactSFX`). NOT passed to the helper.
   if (isCureStatus) {
-    const flag = SPELL_CURE_FLAG[spell.type];
+    const flag = STATUS_NAME_TO_FLAG[spell.type];
     applyMagicCureStatus(tgt, flag, {
       onSparkle: () => onHealNum(0),
     });
