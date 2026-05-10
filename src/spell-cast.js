@@ -13,7 +13,8 @@ import { setPlayerHealNum, setPlayerDamageNum, getAllyDamageNums, setEnemyDmgNum
          tickHealNums, clearHealNums, DMG_SHOW_MS } from './damage-numbers.js';
 import { SPELLS, getSpellMPCost, isMultiTargetSpell } from './data/spells.js';
 import { STATUS, addStatus, removeStatus, tryInflictStatus, STATUS_NAME_BYTES } from './status-effects.js';
-import { CAST_PHASE_MS, CAST_PHASE_MS_THROW, CAST_T_HEAL, CAST_TOTAL_MS, CAST_T_THROW_RETURN, CAST_T_THROW_IMPACT_START } from './cast-anim.js';
+import { CAST_PHASE_MS, CAST_PHASE_MS_THROW, CAST_TOTAL_MS, CAST_T_THROW_RETURN, CAST_T_THROW_IMPACT_START,
+         CAST_T_HEAL_APPLY } from './cast-anim.js';
 import { applyMagicDamage, applyMagicStatus, applyMagicHeal,
          applyMagicCureStatus, applyMagicSight, applyMagicDrain,
          applyMagicRecovery, applyMagicAllStatus, applyMagicInstakill,
@@ -581,18 +582,22 @@ export function updateSpellCast(dt) {
   // heal number appears). hitTotalMs = total duration of magic-hit state.
   // Both measured from magic-hit start (= elapsedMs CAST_PHASE_MS.buildup).
   //
-  // - Heal-style (Cure, Poisona): effect at CAST_T_HEAL boundary (sparkle
-  //   start), total = CAST_TOTAL_MS - buildup (matches OAM Cure timing).
+  // - Heal-style (Cure, Poisona): same sequential pipeline as throw, just no
+  //   projectile. preImpactGap → sparkle (impact) → postImpactGap → apply →
+  //   damage-num bounce. Effect fires at CAST_T_HEAL_APPLY (= preGap+impact+
+  //   postGap) so the heal number is sequential with the sparkle, not parallel.
+  //   Total extends by DMG_SHOW_MS so the number's bounce + stick play out
+  //   before the state ends.
   // - Throw-style (Fire): effect at impact END so the damage number doesn't
   //   pop mid-burst — extend total by 500 ms so the number's bounce
   //   actually plays before the state transitions to monster-death.
   const hitEffectMs = useCastAnim
     ? (isThrown ? (CAST_T_THROW_RETURN - CAST_PHASE_MS.buildup)
-                : (CAST_T_HEAL - CAST_PHASE_MS.buildup))
+                : (CAST_T_HEAL_APPLY - CAST_PHASE_MS.buildup))
     : 400;
   const hitTotalMs  = useCastAnim
     ? (isThrown ? (CAST_T_THROW_RETURN - CAST_PHASE_MS.buildup + 500)
-                : (CAST_TOTAL_MS - CAST_PHASE_MS.buildup))
+                : (hitEffectMs + DMG_SHOW_MS))
     : 1100;
   // sfxStartMs = when the spell SFX plays. For thrown damage spells with
   // a cross-faction target, fire at IMPACT START (when the burst begins

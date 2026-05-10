@@ -19,7 +19,7 @@ import { inputSt } from './input-handler.js';
 import { bsc, getSlashFramesForWeapon } from './battle-sprite-cache.js';
 import { drawSlashOverlay } from './slash-effects.js';
 import { getCastAnimElapsedMs, getCurrentSpellId, getSpellTargets } from './spell-cast.js';
-import { CAST_T_HEAL, CAST_T_RETURN } from './cast-anim.js';
+import { CAST_T_HEAL_ANIM_START, CAST_T_HEAL_ANIM_END, CAST_PHASE_MS_HEAL } from './cast-anim.js';
 import { drawCastWindup } from './combatant-cast.js';
 import { getSpellAnim } from './spell-anim.js';
 import { hudSt } from './hud-state.js';
@@ -167,7 +167,7 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
     const _frames = _itemSparkleFrames(inputSt.playerActionPending?.itemId);
     if (_frames && _frames.length === 2) ui.ctx.drawImage(_frames[_sparkleFi], px, py);
   }
-  if (isCureMagicSelf && cureMs >= CAST_T_HEAL && cureMs < CAST_T_RETURN) {
+  if (isCureMagicSelf && cureMs >= CAST_T_HEAL_ANIM_START && cureMs < CAST_T_HEAL_ANIM_END) {
     const _bundle = getSpellAnim(getCurrentSpellId());
     if (_bundle && _bundle.kind === 'portrait-2frame') {
       ui.ctx.drawImage(_bundle.frames[_sparkleFi], px, py);
@@ -176,9 +176,17 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
   // Ally-cast magic OR item on player. The ally-item AI sets allyMagicSpellId
   // to a sentinel (0x34 Cure for potion, 0x35 Poisona for antidote) so the
   // per-spell-id lookup picks the correct frames for both modes.
+  //
+  // Sparkle window is time-based (preImpactGap..preImpactGap+impact within
+  // ally-magic-hit) — NOT gated on `allyMagicEffectApplied` anymore. Apply
+  // happens AFTER the sparkle ends + postImpactGap, so the heal number bounces
+  // sequentially rather than overlapping the spell anim.
+  const _allyHealAnimStart = CAST_PHASE_MS_HEAL.preImpactGap;
+  const _allyHealAnimEnd   = _allyHealAnimStart + CAST_PHASE_MS_HEAL.impact;
   const isAllyHealOnPlayer = battleSt.battleState === 'ally-magic-hit'
     && battleSt.allyMagicTargetType === 'player'
-    && battleSt.allyMagicEffectApplied;
+    && battleSt.battleTimer >= _allyHealAnimStart
+    && battleSt.battleTimer < _allyHealAnimEnd;
   if (isAllyHealOnPlayer) {
     const _allyBundle = getSpellAnim(battleSt.allyMagicSpellId);
     const _frames = (_allyBundle && _allyBundle.kind === 'portrait-2frame')

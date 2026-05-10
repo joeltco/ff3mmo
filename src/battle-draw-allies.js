@@ -18,7 +18,7 @@ import { inputSt } from './input-handler.js';
 import { bsc, getSlashFramesForWeapon } from './battle-sprite-cache.js';
 import { drawSlashOverlay } from './slash-effects.js';
 import { getCastAnimElapsedMs, getCurrentSpellId, getSpellTargets, getSpellHitIdx } from './spell-cast.js';
-import { CAST_T_HEAL, CAST_T_RETURN } from './cast-anim.js';
+import { CAST_T_HEAL_ANIM_START, CAST_T_HEAL_ANIM_END, CAST_PHASE_MS_HEAL } from './cast-anim.js';
 import { drawCastWindup } from './combatant-cast.js';
 import { getSpellAnim } from './spell-anim.js';
 import { fakePlayerPortraits, fakePlayerVictoryPortraits, fakePlayerHitPortraits,
@@ -70,7 +70,7 @@ function _drawAllyRow(i, ally, panelTop, weaponDraws) {
   // spell's bundle (`Cure → blue`, `Poisona → magenta`); item-use routes by
   // item.effect (heal → recovery sparkle, cure_status → poisona magenta).
   const _allyMagicBundle = isAllyHealMagic ? getSpellAnim(getCurrentSpellId()) : null;
-  const _allyMagicSparkle = isAllyHealMagic && _allyCureMs >= CAST_T_HEAL && _allyCureMs < CAST_T_RETURN
+  const _allyMagicSparkle = isAllyHealMagic && _allyCureMs >= CAST_T_HEAL_ANIM_START && _allyCureMs < CAST_T_HEAL_ANIM_END
     && _allyMagicBundle && _allyMagicBundle.kind === 'portrait-2frame'
     ? _allyMagicBundle.frames : null;
   const _allyItemSparkle = isAllyHealItem
@@ -79,10 +79,18 @@ function _drawAllyRow(i, ally, panelTop, weaponDraws) {
   // WM ally cast magic OR item on this ally. The item AI sets allyMagicSpellId
   // to a sentinel (0x34 Cure for potion, 0x35 Poisona for antidote) so the
   // per-spell-id lookup picks the correct target frames for both modes.
+  //
+  // Sparkle window is time-based (preImpactGap..preImpactGap+impact within
+  // ally-magic-hit) — NOT gated on `allyMagicEffectApplied` anymore. Apply
+  // happens AFTER the sparkle ends + postImpactGap, so the heal number bounces
+  // sequentially rather than overlapping the spell anim.
+  const _allyHealAnimStart = CAST_PHASE_MS_HEAL.preImpactGap;
+  const _allyHealAnimEnd   = _allyHealAnimStart + CAST_PHASE_MS_HEAL.impact;
   const isAllyHealOnAlly = battleSt.battleState === 'ally-magic-hit'
     && battleSt.allyMagicTargetType === 'ally'
     && battleSt.allyMagicTargetIdx === i
-    && battleSt.allyMagicEffectApplied;
+    && battleSt.battleTimer >= _allyHealAnimStart
+    && battleSt.battleTimer < _allyHealAnimEnd;
   let _allyAllyCureSparkle = null;
   if (isAllyHealOnAlly) {
     const _aaBundle = getSpellAnim(battleSt.allyMagicSpellId);

@@ -17,7 +17,7 @@ import { ps } from './player-stats.js';
 import { STATUS } from './status-effects.js';
 import { SPELLS } from './data/spells.js';
 import { replaceBattleMsg } from './battle-msg.js';
-import { CAST_PHASE_MS_THROW } from './cast-anim.js';
+import { CAST_PHASE_MS_THROW, CAST_PHASE_MS_HEAL } from './cast-anim.js';
 import { applyMagicDamage, applyMagicStatus, applyMagicHeal,
          applyMagicCureStatus, applyMagicSight, playSpellImpactSFX } from './combatant-cast.js';
 
@@ -200,26 +200,41 @@ function _updateAllyEnemyHit() {
 // so number visible until hit-phase t=850ms — overlaps the ret window cleanly,
 // auto-clears via tickDmgNums in updateBattle. No state-transition flicker.
 //
-// Same-faction (heal) cast skips projectile (no fan rendered for same-faction);
-// heal sparkle plays the entire hit phase. EFFECT applies at the same 150 ms
-// — slight tightening from the prior 400 ms (heal pops earlier, still visible
-// for ~700 ms via tickHealNums until clearHealNums on hit end).
 const ALLY_MAGIC_CAST_MS   = CAST_PHASE_MS_THROW.buildup;       // 800
+
+// Throw-style timing (offensive Fire / Bzzard / Sleep on enemy) ────────────
 // SFX fires at IMPACT START — same rule the player thrown impact-walk uses
 // (`spell-cast.js:650`). Without this, FIRE_BOOM / SW_HIT / SLEEP_PUFF would
 // fire at damage-apply time = AFTER burst ends, sounding stale.
-const ALLY_MAGIC_SFX_MS    = CAST_PHASE_MS_THROW.projectile +   // 250
+const ALLY_THROW_SFX_MS    = CAST_PHASE_MS_THROW.projectile +   // 250
                              CAST_PHASE_MS_THROW.preImpactGap;
-// Effect (damage / heal) fires AFTER the impact burst + post-impact gap.
+// Effect (damage) fires AFTER the impact burst + post-impact gap.
 // Sequence: cast → projectile → preImpactGap → impact (SFX) → postImpactGap → damage → bounce → stick → end.
-const ALLY_MAGIC_EFFECT_MS = CAST_PHASE_MS_THROW.projectile +   // 900
+const ALLY_THROW_EFFECT_MS = CAST_PHASE_MS_THROW.projectile +   // 900
                              CAST_PHASE_MS_THROW.preImpactGap +
                              CAST_PHASE_MS_THROW.impact +
                              CAST_PHASE_MS_THROW.postImpactGap;
-// Hit phase ends after damage number's full bounce + stick. The damage number
-// stays visible motionless for `DMG_STICK_MS` after the bounce so the next-turn
-// / death-wipe transition has a clear beat to read the number.
-const ALLY_MAGIC_HIT_MS    = ALLY_MAGIC_EFFECT_MS + DMG_SHOW_MS;  // 1650
+const ALLY_THROW_HIT_MS    = ALLY_THROW_EFFECT_MS + DMG_SHOW_MS;  // 1650
+
+// Heal-style timing (same-team Cure / Poisona on player or ally) ───────────
+// No projectile (per the same-team rule). Sparkle is the spell anim.
+// Sequence: cast → preImpactGap → sparkle (impact) → postImpactGap → apply
+// (heal-num + SFX) → bounce → stick → end. SFX fires at apply time via
+// the helper's `opts.sfx` — there's no separate impact-start SFX for heal.
+const ALLY_HEAL_EFFECT_MS  = CAST_PHASE_MS_HEAL.preImpactGap +   // 483
+                             CAST_PHASE_MS_HEAL.impact +
+                             CAST_PHASE_MS_HEAL.postImpactGap;
+const ALLY_HEAL_HIT_MS     = ALLY_HEAL_EFFECT_MS + DMG_SHOW_MS;  // 1233
+
+// Spell IDs that route through the heal pipeline (same-team).
+function _isAllyMagicHealSpell(spellId) {
+  const spell = SPELLS.get(spellId);
+  if (!spell) return false;
+  return spell.element === 'recovery'
+      || spell.target === 'ally'
+      || spell.target === 'cure_status'
+      || spell.target === 'revive';
+}
 
 // Resolve the offensive-cast target object from the ally-magic state.
 // Idx convention matches `spell-cast.js:_getEnemyAt`:
@@ -312,18 +327,27 @@ function _updateAllyMagicCast(dt) {
   }
   if (battleSt.battleState === 'ally-magic-hit') {
     tickHealNums(dt);
-    // Impact SFX at IMPACT START — `playSpellImpactSFX` is the SHARED selector
-    // (combatant-cast.js); same call used by player + PVP-enemy engines.
-    if (!battleSt.allyMagicSfxPlayed && battleSt.battleTimer >= ALLY_MAGIC_SFX_MS) {
+    // Heal-style and throw-style use different per-phase timings (heal has no
+    // projectile + applies later for the sequential pipeline). Pick which
+    // timing constants apply by inspecting the active spell once per frame.
+    const isHeal = _isAllyMagicHealSpell(battleSt.allyMagicSpellId);
+    const sfxMs    = isHeal ? -1 : ALLY_THROW_SFX_MS;        // heal SFX fires at apply via helper
+    const effectMs = isHeal ? ALLY_HEAL_EFFECT_MS : ALLY_THROW_EFFECT_MS;
+    const hitMs    = isHeal ? ALLY_HEAL_HIT_MS    : ALLY_THROW_HIT_MS;
+
+    // Impact SFX at IMPACT START (throw only) — `playSpellImpactSFX` is the
+    // SHARED selector (combatant-cast.js); same call used by player + PVP
+    // engines. Returns null for heal-style, so heal naturally skips this gate.
+    if (sfxMs >= 0 && !battleSt.allyMagicSfxPlayed && battleSt.battleTimer >= sfxMs) {
       const spell = SPELLS.get(battleSt.allyMagicSpellId);
       if (spell) playSpellImpactSFX(spell);
       battleSt.allyMagicSfxPlayed = true;
     }
-    if (!battleSt.allyMagicEffectApplied && battleSt.battleTimer >= ALLY_MAGIC_EFFECT_MS) {
+    if (!battleSt.allyMagicEffectApplied && battleSt.battleTimer >= effectMs) {
       _applyAllyMagicEffect();
       battleSt.allyMagicEffectApplied = true;
     }
-    if (battleSt.battleTimer >= ALLY_MAGIC_HIT_MS) {
+    if (battleSt.battleTimer >= hitMs) {
       clearHealNums();
       // Kill detection — if the offensive cast dropped an enemy to 0 HP,
       // route to the same death state the player cast uses (`spell-cast.js:

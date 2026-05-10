@@ -2,6 +2,36 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.188 — 2026-05-10
+
+### fix: heal sparkle + heal-num now sequential (no overlap)
+
+User report: "spell animation and sfx is happening during damage number bounce" for ally→player heal. Same bug existed for player self-heal and PVP-enemy heal — sparkle and heal-num both started at apply time and ran in parallel. Violates the pipeline rule (cast → spell-anim → gap → numbers, never overlapping).
+
+**Root cause:** heal-style hit phase had `apply` time = sparkle start time. Apply posts the heal num + plays SFX + flips a flag that triggers the sparkle render. So all three fired at the same instant, then ran together for ~283 ms.
+
+**Fix — same shape as the cross-faction throw pipeline (which was already correct):**
+
+1. **`cast-anim.js`** — added `CAST_PHASE_MS_HEAL` (`buildup 800` + `preImpactGap 100` + `impact 283` + `postImpactGap 100`) and the boundary constants `CAST_T_HEAL_ANIM_START / END / APPLY`. Throw and heal now share the same gap structure (just no projectile for heal).
+
+2. **`spell-cast.js`** — heal-style `hitEffectMs` now resolves to `CAST_T_HEAL_APPLY - buildup` (= 483 ms after magic-hit start), and `hitTotalMs` extends by `DMG_SHOW_MS` so the heal-num bounce + stick play out fully before the state ends. Apply time is now AFTER the sparkle window + post-impact gap.
+
+3. **`battle-ally.js`** — split timing constants into `ALLY_THROW_*` (offensive) and `ALLY_HEAL_*` (same-team). `_updateAllyMagicCast` picks per-spell at frame time via `_isAllyMagicHealSpell`. Heal SFX gate is null (helper plays it at apply via `opts.sfx`).
+
+4. **`pvp.js`** — same split (`PVP_THROW_*` / `PVP_HEAL_*`) for symmetric PVP-enemy paths. Sparkle render gate in `_drawPVPEnemyCell` is now time-windowed.
+
+5. **`battle-draw-player.js` + `battle-draw-allies.js`** — sparkle render gates moved from "apply-flag" to "time-window" (`battleTimer >= preGap && < preGap+impact`). Player self-heal gate updated to use the new `CAST_T_HEAL_ANIM_*` boundaries.
+
+**Resulting timeline (heal-style):**
+```
+0       800  900    1183 1283       2033ms
+|--cast--|gap|sparkle|gap|----heal-num bounce + stick----|
+        cast end   apply happens here ↑
+                   (heal-num posts + SFX plays)
+```
+
+Cross-faction throws (Fire / Bzzard / Sleep) keep their existing throw pipeline and are unchanged.
+
 ## 1.7.187 — 2026-05-10
 
 ### fix: Cure cast targeted enemies + showed "Ineffective" on full-HP self

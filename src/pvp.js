@@ -40,7 +40,7 @@ import { queueBattleMsg, replaceBattleMsg } from './battle-msg.js';
 import { BATTLE_FOE } from './data/strings.js';
 import { tickHealNums, clearHealNums, DMG_SHOW_MS } from './damage-numbers.js';
 import { SPELLS } from './data/spells.js';
-import { drawCasterCastBehind, drawCasterCastFront, jobToCastKey, CAST_PHASE_MS_THROW } from './cast-anim.js';
+import { drawCasterCastBehind, drawCasterCastFront, jobToCastKey, CAST_PHASE_MS_THROW, CAST_PHASE_MS_HEAL } from './cast-anim.js';
 import { drawCastWindup, applyMagicDamage, applyMagicStatus, applyMagicHeal,
          applyMagicCureStatus, applyMagicSight, playSpellImpactSFX } from './combatant-cast.js';
 import { getSpellAnim, getSpellAnimForItem } from './spell-anim.js';
@@ -513,21 +513,41 @@ function _tryPVPEnemyItem(casterCellIdx) {
 // Cast windup matches the player thrown-spell buildup so the BM/RM halo +
 // flame size-cycle has time to play out fully (was 600 ms — truncated the
 // pulse). Hit phase + effect timing unchanged.
-// PVP-enemy magic timing — all derived from `CAST_PHASE_MS_THROW` to match
-// the player throw pipeline byte-for-byte. See `battle-ally.js` for the full
-// frame-timeline breakdown; PVP-enemy mirrors it (just with mirror=true on
-// the cast windup since opponents face right).
+// PVP-enemy magic timing — derived from `CAST_PHASE_MS_THROW` (offensive,
+// cross-faction) and `CAST_PHASE_MS_HEAL` (same-team, no projectile) to
+// match the player + ally pipelines byte-for-byte. See `battle-ally.js` for
+// the full frame-timeline breakdown; PVP-enemy mirrors it (just with
+// mirror=true on the cast windup since opponents face right).
 const PVP_MAGIC_CAST_MS   = CAST_PHASE_MS_THROW.buildup;        // 800
+
+// Throw-style (offensive Fire / Bzzard / Sleep on player party) ────────────
 // SFX at IMPACT START — same rule as player + ally throw paths.
-const PVP_MAGIC_SFX_MS    = CAST_PHASE_MS_THROW.projectile +    // 250
+const PVP_THROW_SFX_MS    = CAST_PHASE_MS_THROW.projectile +    // 250
                             CAST_PHASE_MS_THROW.preImpactGap;
 // Effect at end of postImpactGap — burst fully plays out, beat, then damage pops.
-const PVP_MAGIC_EFFECT_MS = CAST_PHASE_MS_THROW.projectile +    // 900
+const PVP_THROW_EFFECT_MS = CAST_PHASE_MS_THROW.projectile +    // 900
                             CAST_PHASE_MS_THROW.preImpactGap +
                             CAST_PHASE_MS_THROW.impact +
                             CAST_PHASE_MS_THROW.postImpactGap;
-// Hit phase ends after damage number's full bounce + stick (DMG_SHOW_MS).
-const PVP_MAGIC_HIT_MS    = PVP_MAGIC_EFFECT_MS + DMG_SHOW_MS;   // 1650
+const PVP_THROW_HIT_MS    = PVP_THROW_EFFECT_MS + DMG_SHOW_MS;   // 1650
+
+// Heal-style (same-team Cure / Poisona on opponent or PVP-enemy ally) ──────
+// No projectile. Sparkle is the spell anim. Sequence: cast → preImpactGap →
+// sparkle → postImpactGap → apply (heal-num + SFX) → bounce.
+const PVP_HEAL_EFFECT_MS  = CAST_PHASE_MS_HEAL.preImpactGap +    // 483
+                            CAST_PHASE_MS_HEAL.impact +
+                            CAST_PHASE_MS_HEAL.postImpactGap;
+const PVP_HEAL_HIT_MS     = PVP_HEAL_EFFECT_MS + DMG_SHOW_MS;    // 1233
+
+// Spell IDs that route through the heal pipeline (same-team).
+function _isPVPMagicHealSpell(spellId) {
+  const spell = SPELLS.get(spellId);
+  if (!spell) return false;
+  return spell.element === 'recovery'
+      || spell.target === 'ally'
+      || spell.target === 'cure_status'
+      || spell.target === 'revive';
+}
 
 function _pvpEnemyByCellIdx(idx) {
   if (idx === 0) return pvpSt.pvpOpponentStats;
@@ -743,17 +763,26 @@ function _processPVPEnemyMagic(dt) {
   }
   if (battleSt.battleState === 'pvp-enemy-magic-hit') {
     tickHealNums(dt);
-    // Impact SFX at IMPACT START — `playSpellImpactSFX` is the SHARED selector.
-    if (!pvpSt.pvpMagicSfxPlayed && battleSt.battleTimer >= PVP_MAGIC_SFX_MS) {
+    // Heal vs throw timing — same split as `battle-ally.js`. Heal-style has
+    // no projectile + applies later for the sequential pipeline (no overlap
+    // between the sparkle and the heal number bounce).
+    const isHeal = _isPVPMagicHealSpell(pvpSt.pvpMagicSpellId);
+    const sfxMs    = isHeal ? -1 : PVP_THROW_SFX_MS;     // heal SFX fires at apply via helper
+    const effectMs = isHeal ? PVP_HEAL_EFFECT_MS : PVP_THROW_EFFECT_MS;
+    const hitMs    = isHeal ? PVP_HEAL_HIT_MS    : PVP_THROW_HIT_MS;
+
+    // Impact SFX at IMPACT START (throw only) — `playSpellImpactSFX` is the
+    // SHARED selector. Returns null for heal-style; selector also gates that.
+    if (sfxMs >= 0 && !pvpSt.pvpMagicSfxPlayed && battleSt.battleTimer >= sfxMs) {
       const spell = SPELLS.get(pvpSt.pvpMagicSpellId);
       if (spell) playSpellImpactSFX(spell);
       pvpSt.pvpMagicSfxPlayed = true;
     }
-    if (!pvpSt.pvpMagicEffectApplied && battleSt.battleTimer >= PVP_MAGIC_EFFECT_MS) {
+    if (!pvpSt.pvpMagicEffectApplied && battleSt.battleTimer >= effectMs) {
       _applyPVPEnemyMagicEffect();
       pvpSt.pvpMagicEffectApplied = true;
     }
-    if (battleSt.battleTimer >= PVP_MAGIC_HIT_MS) {
+    if (battleSt.battleTimer >= hitMs) {
       clearHealNums();
       pvpSt.pvpMagicCasterCellIdx = -1;
       pvpSt.pvpMagicTargetCellIdx = -1;
@@ -1187,8 +1216,19 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   // phase of an enemy magic cast. Item routes via the item's `animSpellId`
   // (declarative on the item record); magic routes by `pvpMagicSpellId` via
   // the per-spell bundle.
+  //
+  // Magic-target window is time-gated: sparkle plays during the heal-anim
+  // window (preImpactGap..preImpactGap+impact), NOT for the entire pvp-enemy
+  // -magic-hit phase. This keeps it sequential with the heal number bounce
+  // that follows the postImpactGap. Item-use keeps the full-phase render
+  // (item flow doesn't have the same staged timing).
+  const _pvpHealAnimStart = CAST_PHASE_MS_HEAL.preImpactGap;
+  const _pvpHealAnimEnd   = _pvpHealAnimStart + CAST_PHASE_MS_HEAL.impact;
   const isPotionTarget = bs === 'pvp-opp-potion' && pvpSt.pvpItemTargetCellIdx === idx;
-  const isMagicTarget  = bs === 'pvp-enemy-magic-hit' && pvpSt.pvpMagicTargetCellIdx === idx;
+  const isMagicTarget  = bs === 'pvp-enemy-magic-hit'
+    && pvpSt.pvpMagicTargetCellIdx === idx
+    && battleSt.battleTimer >= _pvpHealAnimStart
+    && battleSt.battleTimer < _pvpHealAnimEnd;
   if (isPotionTarget || isMagicTarget) {
     let _frames = null;
     if (isPotionTarget) {

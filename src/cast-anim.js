@@ -82,6 +82,25 @@ export const CAST_T_THROW_IMPACT_START = CAST_T_THROW_PROJ_START + CAST_PHASE_MS
 export const CAST_T_THROW_DAMAGE_START = CAST_T_THROW_IMPACT_START + CAST_PHASE_MS_THROW.impact + CAST_PHASE_MS_THROW.postImpactGap;
 export const CAST_T_THROW_RETURN       = CAST_T_THROW_DAMAGE_START + CAST_PHASE_MS_THROW.ret;
 
+// Heal-style timing — same shape as throw but no projectile (same-team
+// cast / heal / cure-status). Sequence: buildup → preImpactGap → impact
+// (sparkle) → postImpactGap → apply (heal-num pop + SFX) → bounce. Same
+// rule the user enforces for the whole pipeline: cast, then spell anim,
+// then short gap, then numbers — never overlapping.
+//
+// `impact` matches the captured Cure heal-burst length (was CAST_PHASE_MS.heal).
+// The pre/post gaps are the same 100 ms beats used by the throw pipeline so
+// heal vs damage casts read with the same cadence.
+export const CAST_PHASE_MS_HEAL = {
+  buildup:       800,
+  preImpactGap:  100,  // breathing room: cast ends, beat, then sparkle begins
+  impact:        283,  // sparkle duration (CAST_PHASE_MS.heal legacy)
+  postImpactGap: 100,  // breathing room: sparkle ends, beat, then heal-num pops
+};
+export const CAST_T_HEAL_ANIM_START = CAST_PHASE_MS_HEAL.buildup + CAST_PHASE_MS_HEAL.preImpactGap;
+export const CAST_T_HEAL_ANIM_END   = CAST_T_HEAL_ANIM_START + CAST_PHASE_MS_HEAL.impact;
+export const CAST_T_HEAL_APPLY      = CAST_T_HEAL_ANIM_END + CAST_PHASE_MS_HEAL.postImpactGap;
+
 // ── WM aura: rotating star tile ───────────────────────────────────────────
 const WM_T_49_STAR = new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 0x10,0x38,0xFE,0x7C,0x7C,0x6C,0x44,0x00]);
 
