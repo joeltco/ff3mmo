@@ -63,6 +63,14 @@ sync if either side is ever tweaked.
 
 ## #3 — Player death is alpha-fade only; ally death has 3 phases
 
+> **CORRECTED v1.7.213** — this finding was an audit error. The player
+> portrait DOES have the full 3-phase animation (kneel-slide 500 ms +
+> text-fade 300 ms + pose-fade 300 ms) identical to allies, implemented
+> in `src/battle-draw-player.js`. The "alpha-fade only" reading below
+> was wrong; the timeline narrative under "Player death:" describes
+> the info-panel fade only, not the portrait. Section retained for
+> historical context; do NOT re-implement based on its conclusion.
+
 Ally death:
 - **Phase 1 (500ms):** kneel portrait slides down 16px, clipped to portrait box.
 - **Phase 2 (300ms):** name/HP text fades to alpha 0.

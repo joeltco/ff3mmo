@@ -2,6 +2,69 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.220 — 2026-05-11
+
+### Docs audit pass + one MULTI-AUDIT dedup miss
+
+Full audit of the 16 active markdowns vs v1.7.219 code. Most docs
+audited clean (BALANCE / BUFFS / STATUS-EFFECTS / SAVE-STATE /
+INVENTORY-ECONOMY / JOB-EXP / MODULARIZATION / battle-sim.PLAN /
+CLAUDE.md). This release closes the stale ones and one real code
+gap that the audit surfaced.
+
+**Code:**
+
+- `src/battle-drawing.js` — removed the local
+  `const BATTLE_TEXT_STEPS = 4`, now imports from `battle-state.js`.
+  `MULTI-AUDIT.md` item #2 claimed v1.7.217 had finished this dedup,
+  but `battle-drawing.js` still carried its own copy. Zero behavior
+  change; closes the actual MULTI-AUDIT promise.
+
+**Docs:**
+
+- `README.md` — status banner v1.7.21 → v1.7.219 (165 releases of
+  drift). Spell-anim line rewritten: Cure + Poisona only →
+  unified `combatant-cast.js` pipeline with full WM/BM spell set
+  (Cure, Poisona, Fire, Blizzard, Thunder, Sleep, Sight, Drain,
+  Recovery, AllStatus, Instakill, status cures). Added 1.7.18x–
+  1.7.21x line covering the battle-sim CLI, modularization, and
+  multiplayer-prep audit series.
+- `docs/REFACTOR-PLAN.md` → `docs/history/REFACTOR-PLAN.md`. All 4
+  tasks shipped v1.7.182–v1.7.192; doc is a completed historical
+  artifact. Joins `docs/history/REFACTOR.md` and `CHANGELOG-pre-1.6.md`.
+- `docs/design-notes.md` — Followups section rewritten. The
+  "Damage spells (Black Mage)" + "Per-spell anim + SFX" bullets
+  pointed at `src/cure-anim.js` (deleted long ago) with the v1.7.49
+  per-school palette-swap model. Replaced with the current state:
+  `spell-anim.js` is the per-spell-ID registry, `combatant-cast.js`
+  is the unified cast / throw / impact / apply pipeline across
+  player / ally / PVP-enemy. v1.7.49 disaster preserved as History.
+  Magic section line about "Per-spell anim sprites still need PPU
+  capture" updated to reflect the parity harness path.
+- `MULTIPLAYER.md` — intro rewritten. Was "not started" with no
+  context. Now: "not started — but seam-prep is underway", with
+  pointers to the v1.7.20x–v1.7.21x prep audits (SAVE-STATE,
+  INVENTORY-ECONOMY, JOB-EXP, MULTI-AUDIT, MODULARIZATION) that
+  tightened every mutation seam the websocket layer will eventually
+  hook.
+- `docs/EMU-PLAN.md` — Status header v1.7.50 → v1.7.219 (169
+  releases stale). Added plan-status paragraph explaining why
+  remaining EMU-internal items (1.4 initial scenes, 2 DIFF-AGAINST-FILE,
+  4 polish bag) have been deprioritized. Added a "Capture pipeline
+  downstream" section linking the v1.7.54–v1.7.219 cascade (Fire
+  disasters → parity harness → unified `combatant-cast.js` pipeline →
+  battle-sim CLI → multiplayer-prep audits) so the plan's "this is
+  the highest-leverage tool" claim ties back to actual shipped work.
+- `docs/DEATH-ANIMATIONS-AUDIT.md` — §3 marked "CORRECTED v1.7.213".
+  The finding claimed the player portrait has alpha-fade-only death;
+  v1.7.213 verified the portrait actually runs the full 3-phase anim
+  (kneel-slide + text-fade + pose-fade) identical to allies in
+  `battle-draw-player.js`. Doc text retained for history with a
+  callout banner so the wrong conclusion isn't re-implemented.
+
+Smoke test passes (`smoke.sh`: HTTP 200, no `ReferenceError` /
+`TypeError` / `SyntaxError` / `Uncaught` in console).
+
 ## 1.7.219 — 2026-05-10
 
 ### Inventory + economy audit (multiplayer-prep) — single mutation seams

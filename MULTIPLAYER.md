@@ -2,7 +2,14 @@
 
 Replace fake `PLAYER_POOL` with real connected players.
 
-**Current state: not started.** The plan below has not been implemented. The live game still uses the simulated roster from `src/data/players.js` (see README "Status"). This doc is kept as the design target for when networked play lands.
+**Current state: not started — but seam-prep is underway.** The networked layer below has not been implemented; the live game still uses the simulated roster from `src/data/players.js` (see README "Status"). What *has* happened is a deliberate multiplayer-prep audit series in the v1.7.20x–v1.7.21x band that tightens every mutation seam the websocket layer will eventually hook into, so the eventual cutover is plumbing instead of refactoring:
+
+- **`docs/SAVE-STATE-AUDIT.md`** (v1.7.215–v1.7.216) — `saveSlotsToDB()` is the single persistence seam; `consumedTiles`, last-town respawn position, and post-death status clear all routed through it.
+- **`docs/INVENTORY-ECONOMY-AUDIT.md`** (v1.7.219) — `addItem` / `removeItem` / `grantGil` / `spendGil` validated, idempotent, return actual deltas; ready for websocket delta emission from one site per op.
+- **`docs/JOB-EXP-AUDIT.md`** (v1.7.218) — `jobLevelStatBonus(jobIdx, jobLv)` and `generateAllyStats(player)` ensure fake players and (future) real players compute stats deterministically from the same inputs, so a websocket-delivered roster entry can render identically on every client.
+- **`docs/MULTI-AUDIT.md`** + **`docs/MODULARIZATION-AUDIT.md`** (v1.7.206–v1.7.217) — physical-hit, heal-clamp, status-flag, initiative, slash-timing, and message-text constants consolidated to single sources; reduces the number of code paths the network layer has to keep in sync.
+
+This doc is kept as the design target for when networked play lands. Full implementation is deferred until economics/server design is finalized.
 
 ---
 

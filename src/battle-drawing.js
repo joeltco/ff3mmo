@@ -1,6 +1,6 @@
 // Battle drawing functions — extracted from game.js (pure rendering, no state mutation except critFlashTimer)
 
-import { battleSt, getEnemyHP, setEnemyHP } from './battle-state.js';
+import { battleSt, getEnemyHP, setEnemyHP, BATTLE_TEXT_STEPS } from './battle-state.js';
 import { drawText } from './font-renderer.js';
 import { _makeFadedPal } from './palette.js';
 import { _dmgBounceY } from './data/animation-tables.js';
@@ -50,7 +50,7 @@ const ROSTER_ROW_H = 32;
 
 // (Ally portrait pose map moved to combatant-pose.js — `pickCombatantBody('ally', ...)`
 //  is the single source of truth for both ally portraits and opp full-bodies as of v1.7.161.)
-const BATTLE_TEXT_STEPS = 4;
+// BATTLE_TEXT_STEPS imported from battle-state.js (single source, v1.7.217 dedup).
 const BATTLE_FLASH_FRAME_MS = 16.67;
 const BOSS_PREFLASH_MS = 133;
 const BOSS_BLOCK_SIZE = 16;

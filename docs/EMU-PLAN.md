@@ -4,7 +4,7 @@ Tracks the audit findings from `docs/design-notes.md` discussion. Phase 0 is mob
 
 Each phase is mergeable on its own. Bumps `package.json` + a CHANGELOG entry per release per the deploy convention.
 
-## Status (as of v1.7.50)
+## Status (as of v1.7.219)
 
 | Phase | Status | Released |
 |---|---|---|
@@ -12,11 +12,13 @@ Each phase is mergeable on its own. Bumps `package.json` + a CHANGELOG entry per
 | 1.1 — multi-slot savestates | ✅ shipped | v1.6.97 (+ aliasing fix v1.6.98) |
 | 1.2 — scene library framework | ✅ shipped | v1.6.99 |
 | 1.3 — scene capture flow (`EXPORT SCENE`) | ✅ shipped | v1.6.99 |
-| 1.4 — initial committed scenes | ⚪ pending — `index.json` ships `[]`; `SCENES` panel renders empty | — |
-| 2 — DIFF-AGAINST-FILE | ⚪ pending | — |
+| 1.4 — initial committed scenes | ⚪ still pending as of v1.7.219 — `src/debug/scenes/index.json` ships `[]`; `SCENES` panel renders empty | — |
+| 2 — DIFF-AGAINST-FILE | ⚪ still pending as of v1.7.219 — no diff panel landed | — |
 | 3 — REC N FRAMES (multi-frame OAM/BG) | ✅ shipped | v1.7.0 (cap raised 60→240 in v1.7.9) |
 | 4 — polish & harden | ⚪ partial — auto-pause on capture done in v1.6.96; rest pending | — |
 | 5 — nice-to-haves | ⚪ deferred | — |
+
+**Plan status:** The high-leverage core (REC N FRAMES + multi-slot savestates + scene framework) shipped and unblocked all subsequent sprite/anim/spell capture work — see "Adjacent work" below for the cascade. The remaining EMU-internal items (initial scene commits, DIFF-AGAINST-FILE, polish bag) have been deprioritized while v1.7.5x–v1.7.21x focused on actually consuming the capture pipeline (Cure/Poisona/Fire/Blizzard/etc. spell animations, parity harness `tools/parity-check-spell.js`, modularization passes, audit work). Pull individual remaining items forward when a specific session needs them.
 
 SRAM-preset extension (out-of-plan, drove the magic-capture phase):
 - v1.7.6 — `WM SPELLS` / `BM SPELLS` / `CALL SPELLS` preset buttons on the PARTY/INVENTORY editor; pokes job + level + MP + spell-list bytes for a one-tap "ready to cast" loadout
@@ -34,6 +36,14 @@ Adjacent work driven by REC N FRAMES captures:
   - **1.7.48** — slash hit-gate folded inside `drawSlashOverlay` (`opts.hit` short-circuits via `shouldDrawSlash`; caller-side wraps no longer required). Fixes "missed PVP swing flashes slash on user portrait".
   - **1.7.49 (REVERTED in 1.7.53)** — attempted to replace `src/cure-anim.js` with a `src/spell-anim.js` registry keyed by spell ID. Theory: REC OAM showed Cure and Poisona using entirely different tile bytes, so the shared "flame + palette swap" model in `cure-anim.js` was wrong. Reality: the captured Poisona tiles were the on-target effect frames, not caster frames; v1.7.49 wired them to the caster phase, replacing the working flame+stars build-up with a static overlay. The 1.7.10–1.7.20 "Cure animation" entry above is the canonical model; v1.7.49 is the cautionary tale. v1.7.54 brought the captured Poisona target tiles back into `cure-anim.js` as `poisonaTargetFrames`, wired to the *target* during the heal phase — the architecture is now per-school palette swap on the caster + per-school target frames.
   - **1.7.50** — removed the now-redundant `OK_DEATH` / `WR_DEATH` / `MO_DEATH` byte constants and the 295-line dead legacy sprite-init branch (`_initFakePosePortraits`, `_buildIdleFullBodies`, etc.). All 22 jobs flow through `_buildFakePlayerSet` → `getJobPoseTileBundle`.
+
+Capture pipeline downstream (v1.7.54–v1.7.219), summarized — see CHANGELOG.md for the per-version detail:
+- v1.7.54–v1.7.56 — Poisona target frames re-landed in the right phase + ally-cast paths fixed + canvas dimensions corrected.
+- v1.7.87–v1.7.94 — Fire spell disasters (v1.7.87 / v1.7.88 / v1.7.90) followed by the **OAM parity harness** (`tools/render-oam-dump.js` + `classify-spell-phases.js` + `parity-check-spell.js`), which is now the canonical path from REC OAM capture → spell-anim tile bytes. Don't hand-author from a dump; run the harness.
+- v1.7.100 — Fire shipped via harness; architecture (cast=per-job, projectile=shared, on-target=registry) became the per-spell template.
+- v1.7.150–v1.7.181 — spell pipeline unified across player / ally / PVP-enemy via `src/combatant-cast.js` (`drawCastWindup`, `drawSpellThrow`, `applySpell`, `applyMagicDamage/Status/Heal/CureStatus/Sight/Drain/Recovery/AllStatus/Instakill/Erase`, `getSpellImpactSFX`).
+- v1.7.18x–v1.7.20x — battle-sim CLI (`tools/battle-sim.js`, 4 shipped phases) + modularization passes (single-source helpers for physical hits, heal clamping, initiative, slash timing, status flags, message-text steps).
+- v1.7.21x — multiplayer-prep audit series (save-state, inventory + economy, job-EXP, status, buffs, death animations, balance) closing out non-EMU surface.
 
 User feedback (v1.7.0 retro): **REC N FRAMES is the highest-leverage feature in the EMU debugger.** Future EMU work should weight ideas by how much they extend the capture pipeline. The DEDUPE toggle (Phase 4.6 below) is the obvious next-leverage move on REC itself — NES holds anim states 2–4 frames per pose, so a 20-frame REC produces ~4–6 actually distinct states. DEDUPE collapses identical consecutive frames into one block with a `// frames 0..3 (4× same)` header, cutting textarea length 60–70 % and making transitions jump out.
 
