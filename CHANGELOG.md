@@ -2,6 +2,47 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.227 — 2026-05-11
+
+### fix: roster panel brightened under closing wipe on respawn
+
+During the defeat → respawn transition, the roster panel was
+visibly fading from black back to bright **while the wipe bars
+were still closing over the screen**. Root cause was two unsynced
+fade sources fighting for the panel:
+
+- `rosterBattleFade` — 4-step × 100 ms = 400 ms tick fade, driven
+  by `battleState`. At `battleState === 'none'` it ramped IN from
+  black → visible.
+- `_rosterTransFade()` — synced to `WIPE_DURATION` (733 ms), but
+  **only engages when `transSt.rosterLocChanged === true`**.
+
+`triggerWipe(action, destMapId)` returns `false` for `rosterLocChanged`
+when `destMapId` is null. And `respawnAfterDeath` was calling
+`triggerWipe(action, useExit ? null : fallbackMapId)` — the
+world-map-exit path (the common case: died in a dungeon, respawn
+on world) passed `null`, so the trans-fade never engaged. The
+faster 400 ms battle fade ramped in alone, lighting the roster
+under the closing bars.
+
+Two-part fix:
+
+1. **`src/map-loading.js`** — `respawnAfterDeath` now passes
+   `'world'` as the destMapId for the useExit case (string sentinel
+   already handled by `rosterLocForMapId`). Trans-fade now engages
+   for every respawn → location change.
+2. **`src/roster.js`** — `_updateBattleFade` gates the `'none' → 'in'`
+   branch on `transSt.state !== 'closing' && !== 'hold' && !== 'trap-falling'`.
+   While a wipe is closing or holding, the trans-fade owns the
+   visible roster fade. Once `'opening'` (or `'none'`), the battle
+   fade may ramp in normally. Behavior outside the defeat flow is
+   unchanged (normal battle-end with no wipe still ramps in
+   immediately, because `transSt.state === 'none'`).
+
+Result: roster stays fully black through the wipe-close + hold,
+then fades back in synced to the wipe-opening (and the location
+swap under the bars is invisible, as it should be).
+
 ## 1.7.226 — 2026-05-11
 
 ### Search box: smooth Searching→Connecting swap + 1s auto-advance

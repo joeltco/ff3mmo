@@ -156,7 +156,17 @@ function _updateBattleFade(dt, battleState) {
   if (battleState !== 'none' && battleState !== 'roar-hold' && rosterBattleFading !== 'out' && rosterBattleFade < ROSTER_FADE_STEPS) {
     rosterBattleFading = 'out';
     rosterBattleFadeTimer = 0;
-  } else if (battleState === 'none' && rosterBattleFade > 0 && rosterBattleFading !== 'in') {
+  } else if (
+    battleState === 'none' &&
+    // While a wipe is closing or holding, the trans-fade owns the
+    // visible roster fade (synced to WIPE_DURATION). Letting the
+    // 400 ms battle fade ramp-in run concurrently caused the roster
+    // to brighten under the still-closing wipe bars during the
+    // defeat → respawn flow. v1.7.227.
+    transSt.state !== 'closing' && transSt.state !== 'hold' && transSt.state !== 'trap-falling' &&
+    rosterBattleFade > 0 &&
+    rosterBattleFading !== 'in'
+  ) {
     rosterBattleFading = 'in';
     rosterBattleFadeTimer = 0;
   }

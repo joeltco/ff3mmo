@@ -280,6 +280,14 @@ export function respawnAfterDeath() {
   const exitY = ps.lastWorldExitY;
   const useExit = exitX != null && exitY != null;
   const fallbackMapId = ps.lastTown || 114;
+  // Pass a concrete destMapId so `rosterLocChanged` computes correctly
+  // (`triggerWipe` returns false when destMapId is null — pre-v1.7.227
+  // the world-exit respawn path skipped the trans-fade and let the
+  // 400 ms battle fade ramp in *during* the 733 ms wipe-close,
+  // brightening the roster panel under the closing bars).
+  // `rosterLocForMapId('world')` returns 'world' — the roster module
+  // already handles the string sentinel.
+  const destForFade = useExit ? 'world' : fallbackMapId;
   triggerWipe(() => {
     mapSt.dungeonFloor = -1;
     mapSt.encounterSteps = 0;
@@ -289,5 +297,5 @@ export function respawnAfterDeath() {
     } else {
       loadMapById(fallbackMapId);
     }
-  }, useExit ? null : fallbackMapId);
+  }, destForFade);
 }
