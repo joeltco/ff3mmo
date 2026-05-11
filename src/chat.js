@@ -5,7 +5,7 @@ import { selectCursor, saveSlots } from './save-state.js';
 import { _nesNameToString, _nameToBytes } from './text-utils.js';
 import { drawText, measureText, TEXT_WHITE } from './font-renderer.js';
 import { nesColorFade } from './palette.js';
-import { getPlayerLocation } from './roster.js';
+import { partyInviteSt } from './party-invite.js';
 import { mapSt } from './map-state.js';
 import { sprite } from './player-sprite.js';
 import { DIR_DOWN, DIR_UP, DIR_LEFT, DIR_RIGHT } from './sprite.js';
@@ -34,7 +34,7 @@ const HUD_VIEW_Y = 32;
 const HUD_BOT_H  = 64;
 
 // ── Chat tabs ─────────────────────────────────────────────────────────────
-export const CHAT_TABS = ['World', 'Room', 'Private', 'System'];
+export const CHAT_TABS = ['World', 'Party', 'Private', 'System'];
 export let activeTab = 0;  // index into CHAT_TABS
 export let tabSelectMode = false;
 let _tabBlinkStart = 0;
@@ -58,7 +58,7 @@ export function canChatScrollDown() { return chatScrollOffset > 0; }
 
 // ── Mutable state (exported so game.js can read/write directly) ────────────
 export const chatState = {
-  messages:    [],     // [{ text, type, channel }] type: 'chat'|'system'|'console', channel: 'all'|'room'|'pm'|'sys'
+  messages:    [],     // [{ text, type, channel }] type: 'chat'|'system'|'console', channel: 'all'|'party'|'world'|'pm'|'sys'
   autoTimer:   8000,   // ms until next auto message
   fontReady:   false,
   inputActive: false,  // t key opens input
@@ -70,18 +70,18 @@ export const chatState = {
 
 // ── Public API ─────────────────────────────────────────────────────────────
 
-export function addChatMessage(text, type, channel, loc) {
-  // Default channel based on type
+export function addChatMessage(text, type, channel) {
+  // Default channel based on type. Untyped user chat lands on 'party'
+  // (was 'room' pre-v1.7.236 when Room was the location-scoped tab).
   if (!channel) {
     if (type === 'console' || type === 'system') channel = 'sys';
-    else channel = 'room';
+    else channel = 'party';
   }
   const msg = { text, type: type || 'chat', channel };
-  if (channel === 'room') msg.loc = loc || getPlayerLocation();
   chatState.messages.push(msg);
   while (chatState.messages.length > CHAT_HISTORY) chatState.messages.shift();
   // Mark background tabs as unread
-  const tabMap = { world: 0, room: 1, pm: 2, sys: 3 };
+  const tabMap = { world: 0, party: 1, pm: 2, sys: 3 };
   const tabIdx = tabMap[channel];
   if (tabIdx !== undefined && tabIdx !== activeTab && tabIdx !== 3) _tabUnread[tabIdx] = true;
 }
@@ -89,7 +89,7 @@ export function addChatMessage(text, type, channel, loc) {
 function _passesTabFilter(msg) {
   const tab = CHAT_TABS[activeTab];
   if (tab === 'World') return msg.channel === 'world' || msg.channel === 'sys';
-  if (tab === 'Room') return (msg.channel === 'room' && msg.loc === getPlayerLocation()) || msg.channel === 'sys';
+  if (tab === 'Party') return msg.channel === 'party' || msg.channel === 'sys';
   if (tab === 'Private') return msg.channel === 'pm';
   if (tab === 'System') return msg.channel === 'sys';
   return true;
@@ -352,9 +352,9 @@ export function onChatKeyDown(e) {
         const slot = saveSlots[selectCursor];
         const senderName = (slot && slot.name) ? _nesNameToString(slot.name) : 'You';
         // Route to the channel of the active tab so the user's own message renders
-        // wherever they're typing. CHAT_TABS = [World, Room, Private, System];
-        // System tab falls back to 'room' since users can't post to system.
-        const TAB_TO_CHANNEL = ['world', 'room', 'pm', 'room'];
+        // wherever they're typing. CHAT_TABS = [World, Party, Private, System];
+        // System tab falls back to 'party' since users can't post to system.
+        const TAB_TO_CHANNEL = ['world', 'party', 'pm', 'party'];
         addChatMessage(senderName + ': ' + chatState.inputText, 'chat', TAB_TO_CHANNEL[activeTab]);
       }
     }
@@ -383,17 +383,19 @@ export function updateChat(dt, battleState, titleActive) {
     chatState.autoTimer -= dt;
     if (chatState.autoTimer <= 0) {
       chatState.autoTimer = CHAT_AUTO_MIN_MS + Math.random() * (CHAT_AUTO_MAX_MS - CHAT_AUTO_MIN_MS);
-      // 60% local room chat, 40% world chat from other rooms
-      const loc = getPlayerLocation();
-      const local = PLAYER_POOL.filter(p => p.loc === loc);
-      const remote = PLAYER_POOL.filter(p => p.loc !== loc);
-      const useLocal = local.length > 0 && (remote.length === 0 || Math.random() < 0.6);
-      const p = useLocal
-        ? local[Math.floor(Math.random() * local.length)]
-        : remote[Math.floor(Math.random() * remote.length)];
+      // v1.7.236: Room → Party. 60% party-member chatter when the user
+      // has any party members; 40% world hubbub from non-party. Empty
+      // party → 100% world. No location filter — global pool minus party
+      // is the world feed.
+      const partyMembers = PLAYER_POOL.filter(p => partyInviteSt.partyMembers.includes(p.name));
+      const others = PLAYER_POOL.filter(p => !partyInviteSt.partyMembers.includes(p.name));
+      const useParty = partyMembers.length > 0 && (others.length === 0 || Math.random() < 0.6);
+      const p = useParty
+        ? partyMembers[Math.floor(Math.random() * partyMembers.length)]
+        : others[Math.floor(Math.random() * others.length)];
       if (!p) return;
       const phrase = CHAT_PHRASES[Math.floor(Math.random() * CHAT_PHRASES.length)];
-      addChatMessage(p.name + ': ' + phrase, 'chat', useLocal ? 'room' : 'world', p.loc);
+      addChatMessage(p.name + ': ' + phrase, 'chat', useParty ? 'party' : 'world');
     }
   }
 }

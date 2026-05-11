@@ -2,6 +2,32 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.236 — 2026-05-11
+
+### Feature: chat Room tab → Party tab
+
+Replaces the location-scoped Room chat with a party-scoped Party
+chat, riding on the v1.7.235 party system. Tab is permanently the
+second slot in `CHAT_TABS` (preserves muscle memory + tab cursor
+positions); only the label and filter change.
+
+- `src/chat.js`:
+  - `CHAT_TABS`: `'Room' → 'Party'`.
+  - Channel default (when `addChatMessage` is called without one):
+    `'room' → 'party'`. `'pm'` and `'sys'` defaults unchanged.
+  - Filter: Party tab shows `msg.channel === 'party' || 'sys'`.
+    Drops the per-message `msg.loc` location check — channel is the
+    gate, party membership is the producer-side gate.
+  - Tab-to-channel map for user input: slot 1 routes to `'party'`.
+  - Auto-fake-chat producer: 60 % party-member chatter when the user
+    has any members; 40 % world hubbub from non-party. Empty party
+    falls back to 100 % world. No location filter on the world feed.
+  - Drops the now-unused `getPlayerLocation` import.
+
+Legacy `room`-channel messages in an open buffer at upgrade time
+will silently disappear from view (no tab matches the channel) and
+rotate out as `CHAT_HISTORY` (~64 lines) fills.
+
 ## 1.7.235 — 2026-05-11
 
 ### Feature: roster Party action → invite-and-accept flow
