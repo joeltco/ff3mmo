@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.224 — 2026-05-11
+
+### Search: Z is inert during "Searching...", only X forfeits
+
+v1.7.223 had Z and X both cancel — that read as "A button cancels"
+which is wrong. The "Searching..." message *is* the search; A
+shouldn't dismiss it. Only B (X / back) forfeits now. Z presses
+are swallowed so they don't fall through to other handlers.
+"Connecting..." (resolving) still dismisses on Z and triggers
+the PVP battle, same as v1.7.222.
+
 ## 1.7.223 — 2026-05-11
 
 ### Search UX polish: marquee + no-silent-dismiss

@@ -114,10 +114,14 @@ export function handleInput() {
   if (msgState.state !== 'none') {
     if (msgState.state === 'hold') {
       if (isSearchActive() && !isSearchResolving()) {
-        if (keys['z'] || keys['Z'] || keys['x'] || keys['X']) {
-          keys['z'] = false; keys['Z'] = false;
+        // Only X (B / back) forfeits. Z is inert while searching —
+        // the message is the search; you can't A-confirm it away.
+        // v1.7.224.
+        if (keys['x'] || keys['X']) {
           keys['x'] = false; keys['X'] = false;
           cancelPVPSearch('user');  // replaces "Searching..." with "Cancelled"
+        } else if (keys['z'] || keys['Z']) {
+          keys['z'] = false; keys['Z'] = false;  // eat the press, no-op
         }
       } else if (keys['z'] || keys['Z']) {
         keys['z'] = false; keys['Z'] = false;
