@@ -2,6 +2,25 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.228 — 2026-05-11
+
+### Remove spell-cast telemetry (chat + pm2 noise)
+
+Three first-time-only debug sentinels from the unified spell-cast
+pipeline buildout — useful when v1.7.181 was wiring
+`combatant-cast.js` across player / ally / PVP-enemy, now noise.
+
+- `src/cast-anim.js` — removed `_logCastBehindMiss` (`[cast-behind-miss]`
+  when halo geometry was missing) and `logCastSuccess` (`[cast-render]`
+  on first successful halo paint per role/job/spell). `consoleLog` /
+  `isDev` import also dropped (the only consumers).
+- `src/combatant-cast.js` — removed `_logWindupCalled` (`[windup-call]`
+  on first windup per role/layer/job/spell) and its callsite inside
+  `drawCastWindup`.
+
+All three piped to `/api/client-error` and the first two to the
+in-game dev console. Render paths are unchanged — telemetry only.
+
 ## 1.7.227 — 2026-05-11
 
 ### fix: roster panel brightened under closing wipe on respawn

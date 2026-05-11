@@ -25,7 +25,6 @@
 
 import { _makeCanvas16, _make8Canvas } from './canvas-utils.js';
 import { getSpellSchool } from './data/spells.js';
-import { consoleLog, isDev } from './chat.js';
 
 // ── Per-job default palettes ──────────────────────────────────────────────
 const WM_DEFAULT_PAL = [0x0F, 0x12, 0x22, 0x31];  // blue / cyan / white
@@ -480,12 +479,7 @@ const _FLAME_DY      = -3;       // flame top relative to sprite center
 export function drawCasterCastBehind(ctx, centerX, centerY, jobIdx, spellId, elapsedMs, mirror = false) {
   if (elapsedMs < 0 || !shouldDrawHalo(elapsedMs)) return;
   const visual = getCastVisual(jobIdx, spellId);
-  if (!visual || !visual.haloCanvas) {
-    _logCastBehindMiss(jobIdx, spellId, visual);
-    return;
-  }
-  // Success telemetry — first time this (job, spell) renders successfully.
-  logCastSuccess('halo', jobIdx, spellId);
+  if (!visual || !visual.haloCanvas) return;
   const halo = visual.haloCanvas;
   if (mirror) {
     ctx.save();
@@ -497,42 +491,6 @@ export function drawCasterCastBehind(ctx, centerX, centerY, jobIdx, spellId, ela
     ctx.drawImage(halo, centerX - _HALO_HALF_W, centerY - _HALO_HALF_H);
   }
 }
-const _castMissLogged = new Set();
-function _logCastBehindMiss(jobIdx, spellId, visual) {
-  const tag = jobIdx + ':' + (spellId == null ? '?' : spellId.toString(16)) + ':' +
-    (visual ? (visual.jobKey || 'no-key') : 'no-visual');
-  if (_castMissLogged.has(tag)) return;
-  _castMissLogged.add(tag);
-  const msg = '[cast-behind-miss] job=' + jobIdx + ' spell=$' +
-    (spellId == null ? '?' : spellId.toString(16)) + ' resolved=' +
-    (visual ? (visual.jobKey || '?') : 'null');
-  if (isDev()) consoleLog(msg);
-  // Also POST to /api/client-error so it surfaces in `pm2 logs server --err`
-  // for SSH-only debugging. Endpoint already exists for client exceptions; we
-  // piggyback the same pipe with a non-error tag.
-  try {
-    fetch('/api/client-error', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ msg, stack: '', ctx: {} }) }).catch(() => {});
-  } catch (_e) { /* fetch missing in odd contexts; in-game console still has it */ }
-}
-
-// Success telemetry — fires once per (jobIdx, spellId) pair the FIRST time the
-// halo successfully renders. Confirms the render path is reached + data is
-// resolving correctly. Pipes to chat + pm2 (same channel as the miss log).
-const _castSuccessLogged = new Set();
-export function logCastSuccess(role, jobIdx, spellId) {
-  const tag = role + ':' + jobIdx + ':' + (spellId == null ? '?' : spellId.toString(16));
-  if (_castSuccessLogged.has(tag)) return;
-  _castSuccessLogged.add(tag);
-  const msg = '[cast-render] role=' + role + ' job=' + jobIdx + ' spell=$' +
-    (spellId == null ? '?' : spellId.toString(16));
-  if (isDev()) consoleLog(msg);
-  try {
-    fetch('/api/client-error', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ msg, stack: '', ctx: {} }) }).catch(() => {});
-  } catch (_e) { /* noop */ }
-}
-
 // WM stars + cast flame (WM or BM bytes) — drawn AFTER the sprite. The cast
 // flame anchors at the LEFT of the sprite center (or right when mirrored)
 // for both jobs; only the underlying tile bytes + animation sequence differ.

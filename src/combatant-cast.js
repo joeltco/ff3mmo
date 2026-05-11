@@ -64,24 +64,8 @@ function _resolveCastContext(role, idx) {
 export function drawCastWindup(layer, ctx, role, idx, x, y, mirror = false) {
   const c = _resolveCastContext(role, idx);
   if (!c) return;
-  // Role-aware telemetry — fires once per (role, layer, jobIdx, spellId) so we
-  // can see in pm2 whether each role is actually reaching the renderer.
-  _logWindupCalled(role, layer, c.jobIdx, c.spellId, x, y);
   const fn = layer === 'behind' ? drawCasterCastBehind : drawCasterCastFront;
   fn(ctx, x, y, c.jobIdx, c.spellId, c.elapsed, mirror);
-}
-const _windupLogged = new Set();
-function _logWindupCalled(role, layer, jobIdx, spellId, x, y) {
-  const tag = role + ':' + layer + ':' + jobIdx + ':' + (spellId == null ? '?' : spellId.toString(16));
-  if (_windupLogged.has(tag)) return;
-  _windupLogged.add(tag);
-  if (typeof fetch !== 'undefined') {
-    const msg = '[windup-call] ' + tag + ' at(' + x + ',' + y + ')';
-    try {
-      fetch('/api/client-error', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ msg, stack: '', ctx: {} }) }).catch(() => {});
-    } catch (_e) { /* noop */ }
-  }
 }
 
 // Spell throw animation (projectile fan → impact burst). Single helper for
