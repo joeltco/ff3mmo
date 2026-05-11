@@ -295,27 +295,36 @@ function _drawPauseInventory(ctx) {
   }
 }
 
+// Shrines-name override caps each spell at icon + 5 chars = 48px wide. With
+// the old single-column layout (cost pinned to the panel-right at x=128) we
+// were leaving ~5 char-widths of empty space mid-row, so v1.7.243 folds the
+// list into a 2-column grid. Each column is HUD_VIEW_W / 2 = 72 px wide:
+// cursor(8) + name(48) + cost(8-16, right-aligned at column end). 2-digit
+// cost values brush against the name end for the longest spells — accept
+// it for now, the row is still readable.
+const MAGIC_COL_W = HUD_VIEW_W >> 1;  // 72 px
 function _drawPauseMagicList(ctx) {
   const px = HUD_VIEW_X, finalY = HUD_VIEW_Y;
   const fadeStep = _pauseFadeStep('inv-items-in', 'inv-items-out');
   const fadedPal = _makeFadedPal(fadeStep);
   const list = getCastableKnownSpells(ps.jobIdx, ps.knownSpells);
-  const colW = HUD_VIEW_W;
-  const costRightX = px + colW - 16;
   for (let i = 0; i < list.length; i++) {
     const id = list[i];
     const name = getSpellNameShrines(id);
-    const iy = finalY + 12 + i * 14;
-    drawText(ctx, px + 24, iy, name, fadedPal);
+    const row = i >> 1;
+    const col = i & 1;
+    const colX = px + col * MAGIC_COL_W;
+    const iy = finalY + 12 + row * 14;
+    drawText(ctx, colX + 12, iy, name, fadedPal);
     const cost = getSpellMPCost(id);
     if (cost > 0) {
       const costStr = String(cost);
       const costBytes = new Uint8Array(costStr.length);
       for (let c = 0; c < costStr.length; c++) costBytes[c] = 0x80 + parseInt(costStr[c]);
-      drawText(ctx, costRightX - costBytes.length * 8, iy, costBytes, fadedPal);
+      drawText(ctx, colX + MAGIC_COL_W - costBytes.length * 8 - 4, iy, costBytes, fadedPal);
     }
     if (i === pauseSt.magicCursor && pauseSt.state !== 'inv-target' && pauseSt.state !== 'inv-heal') {
-      drawCursorFaded(px + 8, iy - 4, fadeStep);
+      drawCursorFaded(colX + 4, iy - 4, fadeStep);
     }
   }
 }
@@ -783,13 +792,26 @@ function _pauseInputInventory() {
 function _pauseInputMagicList() {
   const list = getCastableKnownSpells(ps.jobIdx, ps.knownSpells);
   const k = keys;
+  // 2-column grid: index i lives at row=i>>1, col=i&1. Down/Up step by 2
+  // (move row, same column); Right/Left step by 1 (move column). Edge
+  // guards keep the cursor inside the populated range.
   if (k['ArrowDown']) {
     k['ArrowDown'] = false;
-    if (pauseSt.magicCursor < list.length - 1) { pauseSt.magicCursor++; playSFX(SFX.CURSOR); }
+    if (pauseSt.magicCursor + 2 < list.length) { pauseSt.magicCursor += 2; playSFX(SFX.CURSOR); }
   }
   if (k['ArrowUp']) {
     k['ArrowUp'] = false;
-    if (pauseSt.magicCursor > 0) { pauseSt.magicCursor--; playSFX(SFX.CURSOR); }
+    if (pauseSt.magicCursor >= 2) { pauseSt.magicCursor -= 2; playSFX(SFX.CURSOR); }
+  }
+  if (k['ArrowRight']) {
+    k['ArrowRight'] = false;
+    if ((pauseSt.magicCursor & 1) === 0 && pauseSt.magicCursor + 1 < list.length) {
+      pauseSt.magicCursor++; playSFX(SFX.CURSOR);
+    }
+  }
+  if (k['ArrowLeft']) {
+    k['ArrowLeft'] = false;
+    if ((pauseSt.magicCursor & 1) === 1) { pauseSt.magicCursor--; playSFX(SFX.CURSOR); }
   }
   if (_zPressed()) {
     const spellId = list[pauseSt.magicCursor];

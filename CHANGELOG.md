@@ -2,6 +2,28 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.243 — 2026-05-11
+
+### Tighter magic-list layouts now that names are shorter
+
+Shrines-name override (v1.7.242) capped every spell at icon + 5 chars
+= 48 px, leaving ~5 char-widths of empty real estate per row at both
+the pause Magic and battle Magic sites. This release uses that space:
+
+- **Pause Magic** (`_drawPauseMagicList`, `pause-menu.js:298`) now
+  renders the known-spells list in 2 columns. Each column is half of
+  HUD_VIEW_W (72 px) — cursor at column edge, name at +12, MP cost
+  right-aligned at column end. Doubles the visible spell density;
+  Sages with ~24 known spells fit in 12 rows instead of 24.
+- **Cursor** (`_pauseInputMagicList`, `pause-menu.js:783`) is now
+  2-D — Up/Down step by 2 (next row, same column), Left/Right step
+  by 1 (across columns). Edge guards keep the cursor inside the
+  populated range.
+- **Battle Magic** (`_drawBattleSpellList`, `battle-draw-menu.js:139`)
+  parks the MP cost 8 px to the right of the name instead of pinning
+  it to the panel right edge. Removes the broken-alignment look that
+  the wider gap created.
+
 ## 1.7.242 — 2026-05-11
 
 ### RPG Shrines short names for the 56 player-castable spells
