@@ -6,7 +6,7 @@ import { ps, getEquipSlotId, setEquipSlotId, jobSwitchCost, getJobLevel, getJobL
 import { JOBS, JOB_ABBR, canJobEquip } from './data/jobs.js';
 import { _makeFadedPal, nesColorFade } from './palette.js';
 import { _nameToBytes, _buildItemRowBytes } from './text-utils.js';
-import { getItemNameClean, getSpellNameClean, getSpellNameWithIcon } from './text-decoder.js';
+import { getItemNameClean, getSpellNameClean, getSpellNameShrines } from './text-decoder.js';
 import { SPELLS, getSpellMPCost, getCastableKnownSpells } from './data/spells.js';
 import { stopFF1Music, resumeMusic, playFF1Track, FF1_TRACKS, playSFX, SFX, pauseMusic } from './music.js';
 import { PAUSE_ITEMS } from './data/strings.js';
@@ -304,7 +304,7 @@ function _drawPauseMagicList(ctx) {
   const costRightX = px + colW - 16;
   for (let i = 0; i < list.length; i++) {
     const id = list[i];
-    const name = getSpellNameWithIcon(id);
+    const name = getSpellNameShrines(id);
     const iy = finalY + 12 + i * 14;
     drawText(ctx, px + 24, iy, name, fadedPal);
     const cost = getSpellMPCost(id);

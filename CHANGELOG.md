@@ -2,6 +2,36 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.242 — 2026-05-11
+
+### RPG Shrines short names for the 56 player-castable spells
+
+The IPS English patch uses FF6-style names that don't match NES FF3
+canon (Curaja/Curaga/Cura/Cure vs Cure4/Cure3/Cure2/Cure;
+Bzzaga/Bzzara/Bzzard vs Ice3/Ice2/Ice; Catas/Hyper for Odin/Titan,
+etc.) — and they're 6-7 chars wide, which crowded the spell-list
+rows once the icon prefix was added in v1.7.241.
+
+`src/data/spells.js` now ships `SPELL_NAMES_SHRINES`, a 56-entry
+override map sourced from shrines.rpgclassics.com/nes/ff3/spells.shtml,
+covering every WM/BM/Summon spell at every tier:
+
+- WM L1-L8: Pure/Cure/Sight … WWind/Life2/Holy
+- BM L1-L8: Sleep/Fire/Ice … Flare/Death/Meteo
+- Summons: Chocb/Shiva/Ramuh/Ifrit/Titan/Odin/Levia/Baham
+
+`text-decoder.js` adds `getSpellNameShrines(spellId)` — looks up
+the override and returns `[ROM icon byte] + [encoded letter bytes]`
+when present, falls through to `getSpellNameWithIcon` for the
+enemy-only tail (0x38+) which never reaches the list sites.
+
+Battle Magic / pause Magic / magic shop / inspect ally now render
+each row at max icon + 5 chars (was icon + 7), leaving room for
+the MP cost or price suffix at every site. Enemy-only spells
+(Zantetsuken / Particle Beam / Bad Breath / etc.) keep their ROM
+names since they never appear in player-facing lists; battle-log
+strings continue to use `getSpellNameClean` for the same reason.
+
 ## 1.7.241 — 2026-05-11
 
 ### Spell icons in magic lists

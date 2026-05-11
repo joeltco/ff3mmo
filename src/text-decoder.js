@@ -22,6 +22,8 @@
 //   $0607-$061F  Summon names
 //   $0620-$06AF  Battle messages
 
+import { SPELL_NAMES_SHRINES } from './data/spells.js';
+
 // --- ROM offsets ---
 const PTR_TABLE = 0x030010;   // 1712 × 2-byte pointers
 const BANK_BASE = 0x18;       // NES text banks start at $18
@@ -63,6 +65,17 @@ CHAR_MAP[0xE6] = '+';  // plus
 // Item type icon tiles ($5C-$7B range) — first byte in item/spell names
 const ICON_TILES = new Set();
 for (let b = 0x5C; b <= 0x7B; b++) ICON_TILES.add(b);
+
+// ASCII → NES tile byte (lowercase / uppercase / digits / space). Anything
+// unknown falls through to space. Kept local so text-decoder stays free of
+// imports from text-utils.js, which would cycle through font-renderer.
+function _asciiToTileByte(ch) {
+  const c = ch.charCodeAt(0);
+  if (c >= 65 && c <= 90)  return 0x8A + (c - 65);     // A-Z
+  if (c >= 97 && c <= 122) return 0xCA + (c - 97);     // a-z
+  if (c >= 48 && c <= 57)  return 0x80 + (c - 48);     // 0-9
+  return 0xFF;                                          // space / fallback
+}
 
 let _romData = null;
 
@@ -171,6 +184,30 @@ export function getSpellNameClean(spellId) {
   }
   while (out.length > 0 && out[out.length - 1] === 0xFF) out.pop();
   return new Uint8Array(out);
+}
+
+/**
+ * Returns icon-prefixed Shrines short-name bytes for a spell when one is
+ * registered in SPELL_NAMES_SHRINES (player-castable spells, 0x00-0x37);
+ * falls through to getSpellNameWithIcon for the enemy-only tail. The icon
+ * byte is taken from the ROM (so the magic-school grouping stays correct
+ * even if a Shrines name is renamed later). Use this at the four player
+ * spell-list sites; battle-log / chat keep stripping via getSpellNameClean.
+ * @param {number} spellId
+ * @returns {Uint8Array}
+ */
+export function getSpellNameShrines(spellId) {
+  const override = SPELL_NAMES_SHRINES.get(spellId);
+  if (override == null) return getSpellNameWithIcon(spellId);
+  const romBytes = getSpellName(spellId);
+  const iconByte = (romBytes.length > 0 && ICON_TILES.has(romBytes[0])) ? romBytes[0] : null;
+  const letters = new Uint8Array(override.length);
+  for (let i = 0; i < override.length; i++) letters[i] = _asciiToTileByte(override[i]);
+  if (iconByte == null) return letters;
+  const out = new Uint8Array(letters.length + 1);
+  out[0] = iconByte;
+  out.set(letters, 1);
+  return out;
 }
 
 /**

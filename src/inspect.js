@@ -14,7 +14,7 @@
 import { generateAllyStats } from './data/players.js';
 import { JOBS } from './data/jobs.js';
 import { ITEMS } from './data/items.js';
-import { getItemNameClean, getSpellNameClean, getSpellNameWithIcon } from './text-decoder.js';
+import { getItemNameClean, getSpellNameClean, getSpellNameShrines } from './text-decoder.js';
 import { _nameToBytes } from './text-utils.js';
 import { drawText, measureText, TEXT_WHITE } from './font-renderer.js';
 import { drawBorderedBox, clipToViewport } from './hud-drawing.js';
@@ -136,7 +136,7 @@ export function drawInspect() {
     y += 2;
     const shown = s.knownSpells.slice(0, 2);
     for (const spellId of shown) {
-      drawText(ctx, tx, y, getSpellNameWithIcon(spellId), pal);
+      drawText(ctx, tx, y, getSpellNameShrines(spellId), pal);
       y += STEP;
     }
     if (s.knownSpells.length > 2) {

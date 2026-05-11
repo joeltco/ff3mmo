@@ -94,6 +94,41 @@ export const SPELLS = new Map([
   [0x57, { power: 120, hit:  40, element: 'earth', type: 'damage', target: 'enemy', anim: 0x03 }], // Avalanche
 ]);
 
+// Short display names per RPG Shrines (shrines.rpgclassics.com/nes/ff3/spells.shtml).
+// These override the IPS-patched ROM names (which use FF6-style Curaja/Curaga/Cura
+// for the 4 cure tiers, "Bzzard/Bzzara/Bzzaga/Bzzra" for ice, IPS-author nicknames
+// "Catas"/"Hyper" for Odin/Titan, etc.). Used by getSpellNameShrines for the four
+// player-facing spell-list sites — battle Magic, pause Magic, magic shop, ally
+// inspect — alongside the ROM-baked $72/$74/$75 magic-school icon. 5-char cap
+// keeps every row at icon+5 = 6 char-widths, leaving comfortable margin for cost
+// or price suffixes at every render site.
+//
+// Enemy-only spells (0x38+) aren't included; they never appear in the four
+// override sites and fall through to ROM names for battle-log strings.
+export const SPELL_NAMES_SHRINES = new Map([
+  // Black Magic (icon $75)
+  [0x00, 'Flare'], [0x01, 'Death'], [0x02, 'Meteo'],          // L8
+  [0x08, 'Brak2'], [0x07, 'Quake'], [0x09, 'Drain'],          // L7
+  [0x0e, 'Fire3'], [0x0f, 'Bio'],   [0x10, 'Warp'],           // L6
+  [0x15, 'Bolt3'], [0x17, 'Erase'], [0x16, 'Kill'],           // L5
+  [0x1d, 'Ice3'],  [0x1e, 'Shade'], [0x1c, 'Break'],          // L4
+  [0x23, 'Fire2'], [0x24, 'Ice2'],  [0x25, 'Bolt2'],          // L3
+  [0x2a, 'Bolt'],  [0x2b, 'Venom'], [0x2c, 'Blind'],          // L2
+  [0x33, 'Sleep'], [0x31, 'Fire'],  [0x32, 'Ice'],            // L1
+  // White Magic (icon $74)
+  [0x03, 'WWind'], [0x04, 'Life2'], [0x05, 'Holy'],           // L8
+  [0x0a, 'Cure4'], [0x0c, 'Wall'],  [0x0b, 'Heal'],           // L7
+  [0x11, 'Aero2'], [0x12, 'Soft'],  [0x13, 'Haste'],          // L6
+  [0x18, 'Cure3'], [0x19, 'Life'],  [0x1a, 'Safe'],           // L5
+  [0x1f, 'Libra'], [0x20, 'Confu'], [0x21, 'Mute'],           // L4
+  [0x26, 'Cure2'], [0x28, 'Wash'],  [0x27, 'Exit'],           // L3
+  [0x2d, 'Aero'],  [0x2e, 'Toad'],  [0x2f, 'Mini'],           // L2
+  [0x35, 'Pure'],  [0x34, 'Cure'],  [0x36, 'Sight'],          // L1
+  // Call Magic / Summons (icon $72) — one per level
+  [0x06, 'Baham'], [0x0d, 'Levia'], [0x14, 'Odin'],  [0x1b, 'Titan'],
+  [0x22, 'Ifrit'], [0x29, 'Ramuh'], [0x30, 'Shiva'], [0x37, 'Chocb'],
+]);
+
 // MP cost per spell (player-cast). Approximates NES per-level slot cost as a flat MP value.
 // In NES FF3, Cure + Poisona both consume one Lv1 white-magic slot — same cost.
 // Equalised to 2 MP each so the WM start kit (~6 MP) gives ~3 casts before sleep,
