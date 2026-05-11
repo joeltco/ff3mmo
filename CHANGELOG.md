@@ -2,6 +2,32 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.229 — 2026-05-11
+
+### Roster fades with every map-screen wipe
+
+Generalized `_rosterTransFade` in `src/roster.js` so the roster panel
+syncs to every `transSt` wipe — not just location-changing ones.
+Pre-v1.7.229 the trans-fade was gated on `transSt.rosterLocChanged`,
+so interior wipes (chest open, pond heal, same-loc map moves) left
+the roster panel bright while the bars closed over the rest of the
+screen.
+
+Now: every wipe closes the roster with the bars (`'closing'` phase
+ramps trans-fade 0 → max), holds it black through `'hold'` / `'loading'`
+/ `'trap-falling'`, then re-opens it with the bars (`'opening'`
+phase ramps back to 0). Trans-fade was already modularized — just
+needed to apply universally.
+
+Also added `'loading'` to the battle-fade ramp-in gate (v1.7.227)
+so dungeon-load screens don't get a battle-fade ramp underneath
+the loading UI. Belt-and-suspenders for the respawn-into-dungeon
+edge case.
+
+`transSt.rosterLocChanged` is still set by `triggerWipe` /
+`map-triggers.js` — leaving it in place in case it's useful for a
+different consumer later — just no longer read by the roster fade.
+
 ## 1.7.228 — 2026-05-11
 
 ### Remove spell-cast telemetry (chat + pm2 noise)

@@ -142,11 +142,17 @@ function _rosterStartFadeOut(name) {
 
 function _rosterTransFade() {
   const FADE_STEP_MS = WIPE_DURATION / ROSTER_FADE_STEPS;
-  if (transSt.rosterLocChanged) {
-    if (transSt.state === 'closing') return Math.min(Math.floor(transSt.timer / FADE_STEP_MS), ROSTER_FADE_STEPS);
-    if (transSt.state === 'hold' || transSt.state === 'trap-falling') return ROSTER_FADE_STEPS;
-    if (transSt.state === 'opening') return Math.max(ROSTER_FADE_STEPS - Math.floor(transSt.timer / FADE_STEP_MS), 0);
-  }
+  // Tie the roster fade to the map-screen wipe state for EVERY wipe —
+  // not just location-changing ones. Pre-v1.7.229 the trans-fade was
+  // gated on `transSt.rosterLocChanged`, so interior wipes (chest
+  // open, pond heal, same-loc map moves) left the roster panel
+  // bright while the screen closed and re-opened. Now: every wipe
+  // closes the roster with the bars; every wipe re-opens it with
+  // the bars. `'loading'` is the dungeon-load screen between hold
+  // and opening — roster stays maxed-out through it.
+  if (transSt.state === 'closing') return Math.min(Math.floor(transSt.timer / FADE_STEP_MS), ROSTER_FADE_STEPS);
+  if (transSt.state === 'hold' || transSt.state === 'loading' || transSt.state === 'trap-falling') return ROSTER_FADE_STEPS;
+  if (transSt.state === 'opening') return Math.max(ROSTER_FADE_STEPS - Math.floor(transSt.timer / FADE_STEP_MS), 0);
   const infoFade = HUD_INFO_FADE_STEPS - Math.min(Math.floor(hudSt.hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
   if (infoFade > 0) return infoFade;
   return 0;
@@ -163,7 +169,7 @@ function _updateBattleFade(dt, battleState) {
     // 400 ms battle fade ramp-in run concurrently caused the roster
     // to brighten under the still-closing wipe bars during the
     // defeat → respawn flow. v1.7.227.
-    transSt.state !== 'closing' && transSt.state !== 'hold' && transSt.state !== 'trap-falling' &&
+    transSt.state !== 'closing' && transSt.state !== 'hold' && transSt.state !== 'loading' && transSt.state !== 'trap-falling' &&
     rosterBattleFade > 0 &&
     rosterBattleFading !== 'in'
   ) {
