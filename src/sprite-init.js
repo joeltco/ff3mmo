@@ -479,6 +479,12 @@ function _initBattleDefendSprites(palette) {
   return { battleSpriteDefendCanvas, battleSpriteDefendFadeCanvases, defendSparkleFrames, cureSparkleFrames };
 }
 
+// Sweat droplets — always white regardless of body palette. Tile bytes are
+// sparse (1-2 pixels set per droplet) so only index 1 / 2 typically render.
+// Pre-v1.7.211 this used the body palette and droplets took on skin/hair
+// colors, which read wrong.
+const SWEAT_PAL = [0x0F, 0x30, 0x30, 0x30]; // transparent + pure white
+
 function _initBattleLowHPSprites(palette) {
   const battleSpriteKneelCanvas = _buildCanvas4(_FP_KNEEL, palette);
   const battleSpriteKneelFadeCanvases = _buildFadedCanvas4Set(_FP_KNEEL, palette);
@@ -494,7 +500,7 @@ function _initBattleLowHPSprites(palette) {
     sc.width = 16; sc.height = 8;
     const sctx = sc.getContext('2d');
     for (let t = 0; t < 2; t++) {
-      _blitTile(sctx, decodeTile(frameTiles[t], 0), palette, t * 8, 0);
+      _blitTile(sctx, decodeTile(frameTiles[t], 0), SWEAT_PAL, t * 8, 0);
     }
     return sc;
   });
@@ -502,12 +508,18 @@ function _initBattleLowHPSprites(palette) {
   return { battleSpriteKneelCanvas, battleSpriteKneelFadeCanvases, sweatFrames };
 }
 
-// Status effect sprite animations — 2-frame 16×8 each, from ROM $1B250-$1B440
-// Palette per status from disassembly: pal0=paralysis/silence/poison/near-fatal, pal1=sleep, pal2=confused, pal3=blind/petrify
-const STATUS_PAL0 = [0x0F, 0x36, 0x30, 0x16]; // black, pink, white, dark red
-const STATUS_PAL1 = [0x0F, 0x36, 0x30, 0x16]; // sleep (same pal0 for now)
-const STATUS_PAL2 = [0x0F, 0x36, 0x30, 0x16]; // confused (same pal0 for now)
-const STATUS_PAL3 = [0x0F, 0x36, 0x30, 0x16]; // blind/petrify (same pal0 for now)
+// Status effect sprite animations — 2-frame 16×8 each, from ROM $1B250-$1B440.
+// Palette per status group (NES FF3 disasm groups; values designer-picked
+// 2026-05-10, not from REC OAM capture):
+//   pal0 — paralysis / silence / poison / near-fatal (pink/red, vibrant)
+//   pal1 — sleep (blue, "Zzz" cool-color cliché)
+//   pal2 — confused (purple/magenta, swirly stars cliché)
+//   pal3 — blind / petrify (gray/stone, dim)
+// Index 0 is transparent in sprite context; visible colors are indices 1-3.
+const STATUS_PAL0 = [0x0F, 0x36, 0x30, 0x16]; // pink outline / white fill / dark red shadow
+const STATUS_PAL1 = [0x0F, 0x21, 0x30, 0x11]; // light blue outline / white fill / med blue shadow — sleep
+const STATUS_PAL2 = [0x0F, 0x24, 0x30, 0x14]; // magenta / white / dark purple — confused
+const STATUS_PAL3 = [0x0F, 0x00, 0x30, 0x0F]; // light gray / white / black — blind/petrify
 
 const STATUS_SPRITE_DATA = {
   0x01: { // PARALYSIS

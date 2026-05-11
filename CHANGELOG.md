@@ -2,6 +2,32 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.211 — 2026-05-10
+
+### Per-status sprite palettes + white sweat droplets
+
+**Per-status palettes (#6):** `STATUS_PAL1/2/3` were placeholder
+copies of `PAL0` so every status icon rendered red/pink. Now distinct
+per the NES disasm grouping, with designer-chosen values (explicitly
+not claiming NES capture — see `STATUS-EFFECTS-AUDIT.md`):
+
+- `STATUS_PAL0` unchanged — pink/white/dark red (poison, paralysis,
+  silence, near-fatal).
+- `STATUS_PAL1` light blue / white / med blue — sleep "Zzz".
+- `STATUS_PAL2` magenta / white / dark purple — confused stars.
+- `STATUS_PAL3` light gray / white / black — blind eye + petrify.
+
+**Sweat droplets force-white:** previously blitted with the body
+palette, so droplets took on the active job's skin/hair colors and
+read poorly. New dedicated `SWEAT_PAL = [0x0F, 0x30, 0x30, 0x30]`
+(pure white) — droplets are now visible on every job.
+
+**Priority rule confirmed (already shipped v1.7.209):** when a
+combatant has both active status AND near-fatal sweat conditions,
+the status icon wins. Sweat suppressed via `!hasActiveStatus` gate
+at all three render sites (`hud-drawing.js`, `battle-draw-player.js`,
+`battle-draw-allies.js`).
+
 ## 1.7.210 — 2026-05-10
 
 ### Silence now blocks MP casts (item #5 from status-effects audit)

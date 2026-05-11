@@ -13,7 +13,8 @@ the same screen real estate above each combatant.
 | 3 | Ally + PVP-enemy attacks ignore `blindHitPenalty` | gameplay | ✅ v1.7.209 |
 | 4 | Ally + PVP-enemy attacks ignore `miniToadAtkMult` | gameplay | ✅ v1.7.209 |
 | 5 | `canCastMagic` (Silence) is dead code | gameplay | ✅ v1.7.210 |
-| 6 | `STATUS_PAL1/2/3` are placeholder copies of `PAL0` | visual | ⏸ deferred — needs NES capture |
+| 6 | `STATUS_PAL1/2/3` per-status palettes (designer-picked, not NES capture) | visual | ✅ v1.7.211 |
+| 6b | Sweat droplets force-white via dedicated `SWEAT_PAL` | visual | ✅ v1.7.211 |
 | 7 | Player kneels on active status; allies don't | visual | ✅ v1.7.209 |
 | 8 | Mini/Toad have no body sprite (transformation invisible) | visual | ⏸ deferred — sprite work |
 | 9 | Fourth duplicate name→flag table in `pause-menu.js:820` | dedup | ✅ v1.7.209 |
@@ -114,12 +115,33 @@ weapon-on-hit (e.g., `0x2e` Defender sword has `silence` in its
 status list); those will still use their specials. Reasonable
 under-reach — revisit if specific monster specials need gating.
 
-## #6 — DEFERRED: `STATUS_PAL1/2/3` placeholder copies of `PAL0`
+## #6 — Per-status palettes (designer-picked, not NES capture)
 
-`sprite-init.js:507-510`. The comment claims per-status palette
-differences (sleep ≠ confuse ≠ blind/petrify) from the NES disasm,
-but the bytes are identical. Needs an EMU REC OAM capture of each
-status mid-anim to land the real palettes.
+User chose designer's-call route (2026-05-10): use plausible NES-style
+colors per status group rather than chase EMU REC OAM captures. The
+audit doc and source comment both state explicitly these are
+ff3mmo's palettes, not NES canon — so the "never fabricate NES data"
+rule isn't being violated; we're not claiming these match disasm.
+
+**Palettes shipped v1.7.211:**
+- `STATUS_PAL0` `[0x0F, 0x36, 0x30, 0x16]` — pink/white/dark red.
+  Unchanged. Poison / Paralysis / Silence / near-fatal.
+- `STATUS_PAL1` `[0x0F, 0x21, 0x30, 0x11]` — light blue / white /
+  med blue. Sleep. (Cool-toned "Zzz" cliché.)
+- `STATUS_PAL2` `[0x0F, 0x24, 0x30, 0x14]` — magenta / white / dark
+  purple. Confused. (Swirly stars cliché.)
+- `STATUS_PAL3` `[0x0F, 0x00, 0x30, 0x0F]` — light gray / white /
+  black. Blind & Petrify. (Dim / stone-like.)
+
+## #6b — Sweat droplets now force-white via `SWEAT_PAL`
+
+Side fix landed alongside #6: sweat droplets were blitting with the
+body palette, so they took on whatever skin/hair colors the active
+job had. Made the droplets nearly invisible on light-palette jobs.
+
+New constant `SWEAT_PAL = [0x0F, 0x30, 0x30, 0x30]` (transparent +
+pure white). Sweat tile blits use it directly, ignoring the body
+palette param.
 
 ## #7 — Player kneels on active status; allies don't
 
