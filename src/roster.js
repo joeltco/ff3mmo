@@ -7,6 +7,7 @@ import { chatState, addChatMessage } from './chat.js';
 import { nesColorFade } from './palette.js';
 import { _nameToBytes, drawLvHpRow } from './text-utils.js';
 import { drawText, measureText, TEXT_WHITE } from './font-renderer.js';
+import { isSearchingFor } from './pvp-search.js';
 import { fakePlayerPortraits } from './fake-player-sprites.js';
 import { ui } from './ui-state.js';
 import { transSt, WIPE_DURATION } from './transitions.js';
@@ -266,9 +267,17 @@ function _drawRosterRow(p, i, panelTop) {
   drawText(ui.ctx, HUD_RIGHT_X + HUD_RIGHT_W - 8 - nameW, rowY + 8, nameBytes, namePal);
 
   const panelLeft = HUD_RIGHT_X + 32 + 8;
-  const maxHP = p.maxHP || 28;
-  const hp = p.hp != null ? p.hp : maxHP;
-  drawLvHpRow(ui.ctx, panelLeft, HUD_RIGHT_X + HUD_RIGHT_W - 8, rowY + 16, p.level, hp, maxHP, fadeStep);
+  if (isSearchingFor(p)) {
+    // Search active on this target — replace Lv/HP with status text.
+    // Uses the same NES palette family as Lv label for consistency.
+    const searchPal = [0x0F, 0x0F, 0x0F, 0x28];
+    for (let s = 0; s < fadeStep; s++) searchPal[3] = nesColorFade(searchPal[3]);
+    drawText(ui.ctx, panelLeft, rowY + 16, _nameToBytes('Searching...'), searchPal);
+  } else {
+    const maxHP = p.maxHP || 28;
+    const hp = p.hp != null ? p.hp : maxHP;
+    drawLvHpRow(ui.ctx, panelLeft, HUD_RIGHT_X + HUD_RIGHT_W - 8, rowY + 16, p.level, hp, maxHP, fadeStep);
+  }
 }
 
 function _drawScrollArrows(panelTop, maxVisible, canScrollUp, canScrollDown) {
@@ -366,8 +375,13 @@ export function drawRosterMenu() {
 
   if (inputSt.rosterState === 'menu') {
     const textPal = TEXT_WHITE;
+    // Battle → "Cancel" when search is active on the stashed target.
+    // v1.7.222 — gives the user a discoverable cancel without inventing a
+    // new keybinding.
+    const searching = isSearchingFor(inputSt.rosterMenuTarget);
     for (let i = 0; i < ROSTER_MENU_ITEMS.length; i++) {
-      const label = ROSTER_MENU_ITEMS[i];
+      let label = ROSTER_MENU_ITEMS[i];
+      if (label === 'Battle' && searching) label = 'Cancel';
       const labelBytes = _nameToBytes(label);
       drawText(ui.ctx, menuX + 16, menuY + 8 + i * 14, labelBytes, textPal);
     }

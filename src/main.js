@@ -23,6 +23,7 @@ import { titleSt } from './title-screen.js';
 import { pauseSt, initPauseMenuInput } from './pause-menu.js';
 import { transSt } from './transitions.js';
 import { initInputHandler, initKeyboardListeners } from './input-handler.js';
+import { initPVPSearch } from './pvp-search.js';
 import { setPlayerSprite } from './player-sprite.js';
 import { startPVPBattle } from './pvp.js';
 import { initMapLoading, loadMapById } from './map-loading.js';
@@ -128,6 +129,7 @@ export async function loadROM(arrayBuffer) {
   initBattleAlly({ buildTurnOrder, processNextTurn, isTeamWiped });
   initBattleEnemy({ processNextTurn, isTeamWiped });
   initInputHandler({ executeBattleCommand, startPVPBattle });
+  initPVPSearch({ startPVPBattle });
   initPauseMenuInput({ returnToTitle });
 
   await loadSlotsFromDB();

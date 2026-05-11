@@ -2,6 +2,100 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.222 — 2026-05-11
+
+### Roster Battle: search-and-hook flow (replaces instant accept)
+
+Replaces the old "Challenged X! → 1.5-4s → X accepted! → battle"
+flow with a real MMO-feel search mechanic. Picking **Battle** on a
+roster player now starts a *search* — the target rolls an encounter
+timer in the background, and on each roll a hook chance is rolled.
+On success the search resolves into a PVP battle via the existing
+`_startPVPBattle` flow.
+
+**Flow:**
+
+1. Pick **Battle** → persistent "Searching for X..." message shows.
+2. Z dismisses the message (search continues silently in background).
+   X (back) cancels the search and replaces the message with
+   "Cancelled".
+3. While searching, the target's roster row shows "Searching..." in
+   place of the Lv/HP line.
+4. Re-opening the menu on the same target flips the **Battle** label
+   to **Cancel** — Z on Cancel ends the search the same way.
+5. On hook → "Connecting..." message → PVP battle starts on close
+   (same hand-off the old "accepted!" path used).
+6. On timeout (5 min real-time) or 3 missed rolls in a row →
+   "Search expired" message; cooldown engages.
+7. 60 s cooldown per target after any search ends (success / fail /
+   cancel) before the same player can re-target the same target.
+
+**Hook formula** (in `src/pvp-search.js`):
+
+```
+hookChance = clamp(
+  BASE_HOOK + (chAGI - tgtAGI) * AGI_PER_PT + jobBonus(challenger),
+  HOOK_MIN, HOOK_MAX
+)
+```
+
+| Constant | Value | Rationale |
+|---|---|---|
+| `BASE_HOOK` | 0.25 | Feels right; not free, not rare |
+| `AGI_PER_PT` | 0.015 | ±15% at AGI gap of 10 |
+| `HOOK_MIN` / `HOOK_MAX` | 0.10 / 0.75 | Never a sure hook, never impossible |
+| Thief job bonus | +0.15 | Ambush identity |
+| Ranger job bonus | +0.08 | Tracker identity |
+
+AGI is the lever because STR / INT / MND already drive ATK / magic;
+giving AGI a niche puts use on a stat that was thin. Level
+differential was rejected (encourages bullying low-level players).
+
+**Resolution-gate.** The *search* persists across town visits and
+map changes — only hook *resolution* requires
+`battleState === 'none' && (onWorldMap || dungeonFloor >= 0)`. A
+roll fired while the challenger is in town counts as a missed roll,
+not a free park-in-town-forever fish.
+
+**Fake-target encounter sim.** Real networked players would have
+their actual step counter drive the hook check via websocket. Today
+fake `PLAYER_POOL` players don't roll encounters at all, so the
+target's "next roll" is simulated by a per-target 8-15 s sim timer
+inside `pvp-search.js`. When the multiplayer layer lands, swap the
+sim for the websocket `target_encountered` signal — the rest of the
+flow is unchanged. Documented in the module head comment.
+
+**State:** `src/pvp-search.js` owns `pvpSearchSt` (active, target,
+startedAtMs, missedRolls, targetRollTimer, resolving, cooldowns).
+Init via `initPVPSearch({ startPVPBattle })` from `main.js`. Tick
+from `game-loop.js` next to `updateRoster`.
+
+**UI surface:**
+
+- `src/roster.js _drawRosterRow` — branches on `isSearchingFor(p)`
+  to render "Searching..." (NES `0x28` yellow) instead of Lv/HP
+  when the row is the active search target. Only fires when the
+  target is in the same location (since roster only shows nearby
+  players); search is silent when the target has moved away.
+- `src/roster.js drawRosterMenu` — flips the "Battle" label to
+  "Cancel" when `isSearchingFor(inputSt.rosterMenuTarget)`. No new
+  menu item; no new keybinding.
+- `src/movement.js` universal message handler — X-press during msg
+  hold cancels an active search (and replaces the message with
+  "Cancelled"). Z continues to dismiss the message normally.
+
+**Edge cases handled:**
+
+- Auto-cancel on death (`ps.hp <= 0`) so a game-over respawn doesn't
+  leave a zombie search ticking.
+- Search start is refused if the target is on cooldown (shows
+  "X on cooldown" message instead).
+- Hook resolution blocked during `battleState !== 'none'` — counts
+  as missed roll so other battle paths don't get hijacked.
+- `inputSt.rosterMenuExitTo` set to `'none'` so the roster panel
+  closes after the search starts; user can re-open S to see the
+  searching indicator.
+
 ## 1.7.221 — 2026-05-11
 
 ### Roster menu audit — close findings #1–#4

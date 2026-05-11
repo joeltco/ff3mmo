@@ -8,6 +8,7 @@ import { inputSt, handleBattleInput, handleRosterInput, keys } from './input-han
 import { sprite } from './player-sprite.js';
 import { pauseSt, handlePauseInput } from './pause-menu.js';
 import { msgState, showMsgBox, dismissMsgBox } from './message-box.js';
+import { isSearchActive, isSearchResolving, cancelPVPSearch } from './pvp-search.js';
 import { chatState, tabSelectMode, chatScrollOffset, setChatScrollOffset, canChatScrollUp, canChatScrollDown } from './chat.js';
 import { ps } from './player-stats.js';
 import { playSFX, playTrack, TRACKS, SFX } from './music.js';
@@ -102,11 +103,19 @@ export function handleInput() {
   if (handleRosterInput()) return;
   if (handlePauseInput()) return;
 
-  // Universal message box — Z to dismiss during hold
+  // Universal message box — Z dismisses during hold. X cancels an
+  // active PVP search (and replaces the message with the "Cancelled"
+  // status), so the "Searching..." persistent message has a back-out
+  // path. Z continues the search silently. v1.7.222.
   if (msgState.state !== 'none') {
-    if (msgState.state === 'hold' && (keys['z'] || keys['Z'])) {
-      keys['z'] = false; keys['Z'] = false;
-      dismissMsgBox();
+    if (msgState.state === 'hold') {
+      if (keys['z'] || keys['Z']) {
+        keys['z'] = false; keys['Z'] = false;
+        dismissMsgBox();
+      } else if ((keys['x'] || keys['X']) && isSearchActive() && !isSearchResolving()) {
+        keys['x'] = false; keys['X'] = false;
+        cancelPVPSearch('user');  // overwrites the "Searching..." message with "Cancelled"
+      }
     }
     return;
   }

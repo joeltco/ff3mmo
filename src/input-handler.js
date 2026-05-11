@@ -20,6 +20,7 @@ import { mapSt } from './map-state.js';
 import { pvpSt } from './pvp.js';
 import { advanceBattleMsgZ } from './battle-msg.js';
 import { getRosterVisible, ROSTER_MENU_ITEMS } from './roster.js';
+import { startPVPSearch, cancelPVPSearch, isSearchingFor, isSearchOnCooldown } from './pvp-search.js';
 import { playerInventory, addItem, removeItem, INV_SLOTS } from './inventory.js';
 
 // Keyboard poll map — mutated by window listeners, read throughout the codebase.
@@ -685,16 +686,21 @@ function _rosterInputBrowse() {
   }
 }
 
-function _rosterMenuDuelAction(target) {
-  const challenged = _nameToBytes('Challenged ');
-  const nameBytes = _nameToBytes(target.name);
-  const exclam = new Uint8Array([0xC4]);
-  const challengeMsg = new Uint8Array(challenged.length + nameBytes.length + 1);
-  challengeMsg.set(challenged, 0); challengeMsg.set(nameBytes, challenged.length); challengeMsg.set(exclam, challenged.length + nameBytes.length);
-  showMsgBox(challengeMsg, () => {
-    setTimeout(() => showMsgBox(_nameToBytes(target.name + ' accepted!'), () => _startPVPBattle(target)),
-      1500 + Math.floor(Math.random() * 2500));
-  });
+// Battle action: starts a *search* (or cancels the active one if the
+// player picks the same target again — menu label flips to 'Cancel').
+// The search-and-hook flow itself lives in `pvp-search.js`. v1.7.222.
+function _rosterMenuBattleAction(target) {
+  if (isSearchingFor(target)) {
+    cancelPVPSearch('user');
+    return;
+  }
+  if (isSearchOnCooldown(target.name)) {
+    showMsgBox(_nameToBytes(target.name + ' on cooldown'));
+    return;
+  }
+  if (!startPVPSearch(target)) {
+    showMsgBox(_nameToBytes('Already searching'));
+  }
 }
 
 function _rosterInputMenu() {
@@ -716,9 +722,13 @@ function _rosterInputMenu() {
     inputSt.rosterMenuTimer = 0;
     if (!target) return;  // defensive — should be unreachable since menu-in guards it
     playSFX(SFX.CONFIRM);
-    if (action === 'Battle' && (mapSt.onWorldMap || mapSt.dungeonFloor >= 0)) {
-      inputSt.rosterMenuExitTo = 'none';  // Battle commits the menu — PVP intro owns next state. v1.7.221.
-      _rosterMenuDuelAction(target);
+    // Battle: starts a search (or cancels if same target). Search can
+    // be cancelled from town, but starting it gates on a PVP location.
+    // The search itself persists across map changes — only hook
+    // *resolution* re-checks the gate (in pvp-search.js).
+    if (action === 'Battle' && (isSearchingFor(target) || mapSt.onWorldMap || mapSt.dungeonFloor >= 0)) {
+      inputSt.rosterMenuExitTo = 'none';  // commit menu — search owns next state. v1.7.221+.
+      _rosterMenuBattleAction(target);
     } else {
       const actionBytes = _nameToBytes(action), nameBytes = _nameToBytes(target.name);
       const sep = new Uint8Array([0xFF]);
