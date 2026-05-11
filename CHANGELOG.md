@@ -2,6 +2,39 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.210 — 2026-05-10
+
+### Silence now blocks MP casts (item #5 from status-effects audit)
+
+`canCastMagic` was exported from `status-effects.js` but had zero
+importers — Silence was inflicted-only. Now gated at every spell-cast
+entry point:
+
+- **Player battle menu** — picking Magic while Silenced plays
+  `SFX.ERROR` and shows "Silenced" on the message strip. Cursor stays
+  on the slot so you can pick Item / Defend / Run instead.
+- **Ally AI** — `_tryAllyCure`, `_tryAllyPoisona`,
+  `_tryAllyOffensiveCast` each early-return when Silenced, falling
+  through to physical attack.
+- **PVP enemy AI** — same pattern on `_tryPVPEnemyCure`,
+  `_tryPVPEnemyOffensiveCast`, `_tryPVPEnemyPoisona`.
+- **Pause-menu spell cast** — Silenced player can't cast Cure from the
+  inventory menu either.
+
+**Items bypass Silence** (NES-faithful — items don't channel magic).
+Echo Herbs (`0xac`) is the cure (already routes through
+`STATUS_NAME_TO_FLAG`).
+
+**Wear-off:** none. Silence persists until cured, matching Blind /
+Mini / Toad / Petrify (the sticky statuses). Sleep / Confuse /
+Paralysis still have their 25% per-turn auto-clear in
+`processTurnStart`.
+
+**Monster specials NOT gated** — Fire / Bzzard / Glare / Bad Breath
+etc. fire whether the monster is Silenced or not. Monsters don't have
+MP so the "blocks MP casts" rule doesn't apply. Revisit if a specific
+monster ability needs Silence-gating.
+
 ## 1.7.209 — 2026-05-10
 
 ### Status-effects audit: 6 enforcement gaps closed + priority rule landed

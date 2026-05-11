@@ -12,7 +12,7 @@ the same screen real estate above each combatant.
 | 2 | PVP enemies skip `processTurnStart` (no paralysis/sleep/confuse handling) | gameplay | ✅ v1.7.209 |
 | 3 | Ally + PVP-enemy attacks ignore `blindHitPenalty` | gameplay | ✅ v1.7.209 |
 | 4 | Ally + PVP-enemy attacks ignore `miniToadAtkMult` | gameplay | ✅ v1.7.209 |
-| 5 | `canCastMagic` (Silence) is dead code | gameplay | ⏸ deferred — needs user OK |
+| 5 | `canCastMagic` (Silence) is dead code | gameplay | ✅ v1.7.210 |
 | 6 | `STATUS_PAL1/2/3` are placeholder copies of `PAL0` | visual | ⏸ deferred — needs NES capture |
 | 7 | Player kneels on active status; allies don't | visual | ✅ v1.7.209 |
 | 8 | Mini/Toad have no body sprite (transformation invisible) | visual | ⏸ deferred — sprite work |
@@ -86,13 +86,33 @@ Sites NOT enforcing: ally attack and PVP-enemy attack — same two as #3.
 roll site. Helper returns 0 for Mini/Toad (zero damage from physical),
 1 otherwise.
 
-## #5 — DEFERRED: `canCastMagic` (Silence) is dead code
+## #5 — Silence enforcement landed
 
-Exported from `status-effects.js:191`, zero importers. A Silenced
-player can still cast spells. Wiring this in *would* change observable
-gameplay (existing battles where you'd silenced the player would now
-gate magic), so deferring until you sign off — flagging in case you
-want it for ally / monster too.
+User-confirmed scope (2026-05-10): block all MP-cost spell casts,
+all factions, no auto-wear-off (Echo Herbs is the cure). Items bypass
+Silence (NES-faithful — items don't channel magic).
+
+**Six gate sites added:**
+
+1. Player battle menu (`battle-update.js`) — picking the Magic slot
+   while Silenced plays `SFX.ERROR`, shows "Silenced" on the strip,
+   leaves the cursor on the slot.
+2. Ally Cure AI (`battle-turn.js:_tryAllyCure`) — early return,
+   falls through to physical attack.
+3. Ally Poisona AI (`battle-turn.js:_tryAllyPoisona`) — same.
+4. Ally offensive cast AI (`battle-turn.js:_tryAllyOffensiveCast`) — same.
+5. PVP enemy AI: `_tryPVPEnemyCure`, `_tryPVPEnemyOffensiveCast`,
+   `_tryPVPEnemyPoisona` (`pvp.js`) — each early-returns when caster
+   is Silenced.
+6. Pause-menu spell cast (`pause-menu.js:_applyPauseSpellUse`) —
+   `SFX.ERROR` + no-op when the player is Silenced.
+
+**NOT gated:** monster special attacks (Fire / Bzzard / Glare / Bad
+Breath etc.). Monsters don't have MP, so the "blocks all MP casts"
+rule doesn't apply. Some NES monsters can still be Silenced via
+weapon-on-hit (e.g., `0x2e` Defender sword has `silence` in its
+status list); those will still use their specials. Reasonable
+under-reach — revisit if specific monster specials need gating.
 
 ## #6 — DEFERRED: `STATUS_PAL1/2/3` placeholder copies of `PAL0`
 

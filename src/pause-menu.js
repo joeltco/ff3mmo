@@ -22,7 +22,7 @@ import { msgState } from './message-box.js';
 import { ITEMS, isHandEquippable } from './data/items.js';
 import { swapBattleSprites } from './job-sprites.js';
 import { getRosterVisible } from './roster.js';
-import { STATUS, STATUS_NAME_TO_FLAG } from './status-effects.js';
+import { STATUS, STATUS_NAME_TO_FLAG, canCastMagic } from './status-effects.js';
 import { applyMagicHeal, applyMagicCureStatus } from './combatant-cast.js';
 
 // NES layout constants — must match game.js
@@ -677,6 +677,9 @@ function _applyPauseSpellUse(rosterTargets) {
   const spellId = pauseSt.useSpellId;
   const spell = SPELLS.get(spellId);
   if (!spell) { playSFX(SFX.ERROR); return; }
+  // Silence gate — Silenced player can't cast out-of-battle either.
+  // Echo Herbs still work (items bypass Silence).
+  if (ps.status && !canCastMagic(ps.status)) { playSFX(SFX.ERROR); return; }
   const cost = getSpellMPCost(spellId);
   if (ps.mp < cost) { playSFX(SFX.ERROR); return; }
   ps.mp -= cost;

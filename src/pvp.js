@@ -20,7 +20,7 @@ import { getShieldEvade } from './player-stats.js';
 import { pvpGridLayout, PVP_CELL_W, PVP_CELL_H } from './pvp-math.js';
 import { playSlashSFX } from './battle-sfx.js';
 import { resetSlashScatterCache, SWING_HOLD_MS } from './slash-effects.js';
-import { removeStatus, hasStatus, STATUS, blindHitPenalty, miniToadAtkMult } from './status-effects.js';
+import { removeStatus, hasStatus, STATUS, blindHitPenalty, miniToadAtkMult, canCastMagic } from './status-effects.js';
 import { _nameToBytes } from './text-utils.js';
 import { getSpellNameClean } from './text-decoder.js';
 import { queueBattleMsg, replaceBattleMsg } from './battle-msg.js';
@@ -549,6 +549,7 @@ function _pvpEnemyTeamCellIdxs() {
 
 function _tryPVPEnemyCure(caster, casterCellIdx) {
   if (!caster || !caster.knownSpells || !caster.knownSpells.includes(0x34)) return false;
+  if (caster.status && !canCastMagic(caster.status)) return false; // Silenced
   // Build candidates among living enemy teammates with maxHP set.
   const candidates = [];
   for (const cellIdx of _pvpEnemyTeamCellIdxs()) {
@@ -583,6 +584,7 @@ function _tryPVPEnemyCure(caster, casterCellIdx) {
 // (caller should `return true` from the dispatch).
 function _tryPVPEnemyOffensiveCast(caster, casterCellIdx) {
   if (!caster || !Array.isArray(caster.knownSpells)) return false;
+  if (caster.status && !canCastMagic(caster.status)) return false; // Silenced
   // Activation gate — keep casts feeling like a "sometimes" choice, not the
   // default. WMs without offensive spells fall through to attack as before.
   const offensive = caster.knownSpells.filter(s => s === 0x31 || s === 0x32 || s === 0x33);
@@ -629,6 +631,7 @@ function _tryPVPEnemyOffensiveCast(caster, casterCellIdx) {
 
 function _tryPVPEnemyPoisona(caster, casterCellIdx) {
   if (!caster || !caster.knownSpells || !caster.knownSpells.includes(0x35)) return false;
+  if (caster.status && !canCastMagic(caster.status)) return false; // Silenced
   // Priority: self → other teammates (in cell-idx order).
   let targetCellIdx = -1;
   if (caster.status && hasStatus(caster.status, STATUS.POISON)) {

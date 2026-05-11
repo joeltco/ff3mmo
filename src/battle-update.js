@@ -33,7 +33,7 @@ import { respawnAfterDeath } from './map-loading.js';
 import { _nameToBytes } from './text-utils.js';
 import { getPlayerLocation } from './roster.js';
 import { DIR_DOWN } from './sprite.js';
-import { STATUS_NAME_BYTES } from './status-effects.js';
+import { STATUS_NAME_BYTES, canCastMagic, STATUS } from './status-effects.js';
 import { applyPhysicalHitToEnemy } from './physical-attack.js';
 import { playSlashSFX } from './battle-sfx.js';
 import { saveSlotsToDB } from './save-state.js';
@@ -132,6 +132,15 @@ export function executeBattleCommand(index) {
     // Fire in their battle menu — RM sees both.
     const castableKnown = (ps.knownSpells || []).filter(id => canCastSpell(ps.jobIdx, id));
     if (isMage && castableKnown.length > 0) {
+      // Silence gate — Silenced player can't pick Magic. SFX.ERROR + "Silenced"
+      // strip; cursor stays on the slot so the player can re-pick or arrow over
+      // to Item / Run. Items + Defend still work (NES: Silence only blocks
+      // MP-cost spell casts, not items).
+      if (ps.status && !canCastMagic(ps.status)) {
+        playSFX(SFX.ERROR);
+        replaceBattleMsg(STATUS_NAME_BYTES[STATUS.SILENCE]);
+        return;
+      }
       playSFX(SFX.CONFIRM);
       inputSt.menuMode = 'magic';
       inputSt.spellSelectList = castableKnown;

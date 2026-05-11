@@ -8,7 +8,7 @@ import { ps, getJobLevelStatBonus } from './player-stats.js';
 import { JOBS } from './data/jobs.js';
 import { ITEMS, isWeapon, isBladedWeapon } from './data/items.js';
 import { SFX, playSFX } from './music.js';
-import { processTurnStart, removeStatus, STATUS, blindHitPenalty, hasStatus, STATUS_NAME_TO_FLAG, miniToadAtkMult } from './status-effects.js';
+import { processTurnStart, removeStatus, STATUS, blindHitPenalty, hasStatus, STATUS_NAME_TO_FLAG, miniToadAtkMult, canCastMagic } from './status-effects.js';
 import { bsc, getSlashFramesForWeapon } from './battle-sprite-cache.js';
 import { pvpSt } from './pvp.js';
 import { inputSt } from './input-handler.js';
@@ -306,6 +306,8 @@ function _applyEndOfRoundPoison() {
 // Returns true if ally cast Cure this turn (caller should NOT also do attack).
 function _tryAllyCure(ally, allyIdx) {
   if (!ally.knownSpells || !ally.knownSpells.includes(0x34)) return false;
+  if (ally.status && !canCastMagic(ally.status)) return false; // Silenced — fall through to physical
+
   // Build heal candidates: player + every other living ally. Each entry tracks
   // hpPct so we can pick the one most in need. Threshold: < 0.6 = needs heal.
   const candidates = [];
@@ -347,6 +349,8 @@ function _tryAllyCure(ally, allyIdx) {
 // no need to deduct MP here since fake-roster allies don't track MP.
 function _tryAllyPoisona(ally, allyIdx) {
   if (!ally.knownSpells || !ally.knownSpells.includes(0x35)) return false;
+  if (ally.status && !canCastMagic(ally.status)) return false; // Silenced
+
   let target = null;
   if (ps.hp > 0 && ps.status && hasStatus(ps.status, STATUS.POISON)) {
     target = { type: 'player', idx: -1 };
@@ -396,6 +400,7 @@ function _tryAllyPoisona(ally, allyIdx) {
 // track MP). Encounter-only for v1; PVP target path TODO.
 function _tryAllyOffensiveCast(ally, allyIdx) {
   if (!ally || !Array.isArray(ally.knownSpells)) return false;
+  if (ally.status && !canCastMagic(ally.status)) return false; // Silenced
   const offensive = ally.knownSpells.filter(s => s === 0x31 || s === 0x32 || s === 0x33);
   if (offensive.length === 0) return false;
   if (Math.random() >= 0.45) return false;
