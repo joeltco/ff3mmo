@@ -19,7 +19,7 @@ import { getSlashFramesForWeapon, setSlashOffsetForFrame } from './battle-sprite
 import { mapSt } from './map-state.js';
 import { pvpSt } from './pvp.js';
 import { advanceBattleMsgZ } from './battle-msg.js';
-import { getRosterVisible } from './roster.js';
+import { getRosterVisible, ROSTER_MENU_ITEMS } from './roster.js';
 import { playerInventory, addItem, removeItem, INV_SLOTS } from './inventory.js';
 
 // Keyboard poll map — mutated by window listeners, read throughout the codebase.
@@ -61,7 +61,7 @@ export function initKeyboardListeners() {
 const HUD_VIEW_X = 0, HUD_VIEW_Y = 32, HUD_VIEW_W = 144, HUD_VIEW_H = 144;
 const BOSS_DEF = (MONSTERS.get(0xCC) || { def: 1 }).def;
 const ROSTER_VISIBLE = 3;
-const ROSTER_MENU_ITEMS = ['Party', 'Battle', 'Trade', 'Message', 'Inspect'];
+// ROSTER_MENU_ITEMS imported from roster.js (single source, v1.7.221 dedup).
 
 // ── Mutable state (imported by main.js draw/update code) ───────────────────
 
@@ -93,6 +93,8 @@ export const inputSt = {
   rosterScroll:       0,
   rosterMenuCursor:   0,
   rosterMenuTimer:    0,
+  rosterMenuTarget:   null,    // stashed at menu-in so a mid-menu fade-out can't redirect the dispatch
+  rosterMenuExitTo:   'browse',// 'browse' (default — return to roster) or 'none' (action committed, full close). v1.7.221.
 };
 
 // _s bag retired — direct imports + injected callbacks above
@@ -668,6 +670,10 @@ function _rosterInputBrowse() {
     }
   }
   if (_zPressed()) {
+    const target = getRosterVisible()[inputSt.rosterCursor];
+    if (!target) return;  // empty/stale row — refuse silently. v1.7.221.
+    inputSt.rosterMenuTarget = target;
+    inputSt.rosterMenuExitTo = 'browse';
     inputSt.rosterState = 'menu-in';
     inputSt.rosterMenuTimer = 0;
     inputSt.rosterMenuCursor = 0;
@@ -705,11 +711,13 @@ function _rosterInputMenu() {
   }
   if (_zPressed()) {
     const action = ROSTER_MENU_ITEMS[inputSt.rosterMenuCursor];
-    const target = getRosterVisible()[inputSt.rosterCursor];
+    const target = inputSt.rosterMenuTarget;  // stashed at menu-in; immune to mid-menu fade-out. v1.7.221.
     inputSt.rosterState = 'menu-out';
     inputSt.rosterMenuTimer = 0;
+    if (!target) return;  // defensive — should be unreachable since menu-in guards it
     playSFX(SFX.CONFIRM);
     if (action === 'Battle' && (mapSt.onWorldMap || mapSt.dungeonFloor >= 0)) {
+      inputSt.rosterMenuExitTo = 'none';  // Battle commits the menu — PVP intro owns next state. v1.7.221.
       _rosterMenuDuelAction(target);
     } else {
       const actionBytes = _nameToBytes(action), nameBytes = _nameToBytes(target.name);
@@ -738,7 +746,7 @@ export function handleRosterInput() {
       setTabSelectMode(false);
       inputSt.rosterState = 'none';
       playSFX(SFX.CONFIRM);
-    } else if (inputSt.rosterState === 'none' && battleSt.battleState === 'none' && pauseSt.state === 'none' && transSt.state === 'none' && !mapSt.shakeActive && !mapSt.starEffect && !mapSt.moving && msgState.state === 'none') {
+    } else if (inputSt.rosterState === 'none' && battleSt.battleState === 'none' && pauseSt.state === 'none' && transSt.state === 'none' && !mapSt.shakeActive && !mapSt.starEffect && !mapSt.moving && msgState.state === 'none' && getRosterVisible().length > 0) {
       inputSt.rosterState = 'browse';
       inputSt.rosterCursor = 0;
       inputSt.rosterScroll = 0;

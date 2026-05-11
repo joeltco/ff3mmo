@@ -29,7 +29,7 @@ const ROSTER_FADE_STEP_MS = 100;
 const ROSTER_SLIDE_SPEED  = 0.15;  // px per ms
 const ROSTER_ROW_H        = 32;
 const ROSTER_VISIBLE      = 3;
-const ROSTER_MENU_ITEMS   = ['Party', 'Battle', 'Trade', 'Message', 'Inspect'];
+export const ROSTER_MENU_ITEMS = ['Party', 'Battle', 'Trade', 'Message', 'Inspect'];
 
 // ── Mutable state ─────────────────────────────────────────────────────────
 let rosterTimer        = 0;
@@ -350,7 +350,15 @@ export function drawRosterMenu() {
   } else if (inputSt.rosterState === 'menu-out') {
     const t = Math.min(inputSt.rosterMenuTimer / SLIDE_MS, 1);
     menuX = finalX + ((HUD_VIEW_X + HUD_VIEW_W) - finalX) * t;
-    if (t >= 1) { inputSt.rosterState = msgState.state !== 'none' ? 'none' : 'browse'; inputSt.rosterMenuTimer = 0; }
+    if (t >= 1) {
+      // Exit target is set by the dispatch (Battle → 'none', stubs/cancel → 'browse').
+      // v1.7.221 — replaces the old msgState race that could flip between 'none' and 'browse'
+      // during the 1.5–4 s gap of Battle's two-message flow.
+      inputSt.rosterState = inputSt.rosterMenuExitTo || 'browse';
+      inputSt.rosterMenuTimer = 0;
+      inputSt.rosterMenuTarget = null;
+      inputSt.rosterMenuExitTo = 'browse';
+    }
   }
 
   clipToViewport();

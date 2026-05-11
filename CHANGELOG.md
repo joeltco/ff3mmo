@@ -2,6 +2,65 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.221 — 2026-05-11
+
+### Roster menu audit — close findings #1–#4
+
+From `docs/ROSTER-MENU-AUDIT.md`. Closes the four open findings on
+the roster action menu (Party / Battle / Trade / Message / Inspect).
+Stub items (Party / Trade / Message / Inspect) keep their existing
+behavior; only the hardening + Battle commit-state changes.
+
+- **#1 (high) — empty-roster null-deref.** Pressing `S` to open
+  roster, then `Z` on the (empty) first row, then `Z` on the action
+  menu would dereference `undefined.name` in any location with no
+  fake players currently visible. Two guards added: the `S` entry
+  at `input-handler.js:741` now requires
+  `getRosterVisible().length > 0`, and the `Z`-in-browse handler
+  at `input-handler.js:670` refuses if the cursor row resolves to
+  `undefined`. Defensive `!target` short-circuit also added to the
+  menu Z-press so a stale stash can't crash.
+
+- **#2 (high) — `menu-out` / `msgState` race.** The Battle action
+  shows two sequential messages with a 1500–4000 ms RNG gap between
+  them. The 150 ms menu-out slide almost always lands inside that
+  gap, when `msgState.state === 'none'` — so the old terminal
+  branch (`roster.js:353`) sent the roster back to `'browse'`
+  while the "accepted!" message was still about to fire on top.
+  User could scroll roster + queue a second `_rosterMenuDuelAction`
+  in parallel with the in-flight PVP intro.
+
+  Replaced with an explicit `inputSt.rosterMenuExitTo` set at
+  dispatch time: `'none'` for Battle (action commits — PVP intro
+  owns the next state), `'browse'` for stubs + X-cancel (return
+  to roster after the short message dismisses). `msgState` is no
+  longer read in the terminal.
+
+- **#3 (med) — `ROSTER_MENU_ITEMS` defined twice.** Same dedup
+  pattern as v1.7.220's `BATTLE_TEXT_STEPS` fix. Now exported from
+  `roster.js` (where it lives next to the other roster constants);
+  `input-handler.js` imports it.
+
+- **#4 (med) — cursor target can drift mid-menu.** `_clampRosterCursor`
+  runs from the fade-tick regardless of `rosterState`. If a roster
+  player faded out while the menu was open, the cursor would
+  re-clamp and the Z-press dispatch would commit against a
+  different `getRosterVisible()[rosterCursor]` than the one the
+  user saw selected. Fixed by stashing the target into
+  `inputSt.rosterMenuTarget` at menu-in (one read of
+  `getRosterVisible()[cursor]`, never re-read) and reading from
+  the stash in the menu Z-press. Stash cleared at menu-out terminal.
+
+**State additions:** `inputSt.rosterMenuTarget` (null default) +
+`inputSt.rosterMenuExitTo` (`'browse'` default). Both reset at
+menu-out terminal so the next menu-in starts clean.
+
+**Behavior preserved:** stub actions (Party / Trade / Message /
+Inspect) still render the `<Action>⏤<Name>` message and dismiss
+back to browse. X-cancel from the menu still returns to browse.
+Battle precondition (`onWorldMap || dungeonFloor >= 0`) unchanged —
+PVP in town stays blocked.
+
 ## 1.7.220 — 2026-05-11
 
 ### Docs audit pass + one MULTI-AUDIT dedup miss
