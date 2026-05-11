@@ -12,7 +12,7 @@ import {
   BATTLE_GOBLIN_NAME, BATTLE_BOSS_NAME, BATTLE_LEVEL_UP, BATTLE_JOB_LEVEL_UP,
   BATTLE_FOUND, BATTLE_MENU_ITEMS, BATTLE_MAGIC,
 } from './data/strings.js';
-import { getMonsterName, getItemNameClean, getSpellNameClean } from './text-decoder.js';
+import { getMonsterName, getItemNameClean, getSpellNameClean, getSpellNameWithIcon } from './text-decoder.js';
 import { getSpellMPCost } from './data/spells.js';
 import { ps } from './player-stats.js';
 import {
@@ -163,7 +163,7 @@ function _drawBattleSpellList(baseX, rightAreaW, palette) {
   for (let i = 0; i < rowCount; i++) {
     const idx = scrollTop + i;
     const spellId = list[idx];
-    const name = getSpellNameClean(spellId);
+    const name = getSpellNameWithIcon(spellId);
     const cost = getSpellMPCost(spellId);
     const affordable = ps.mp >= cost;
     const rowPal = affordable ? palette : fadedPal;

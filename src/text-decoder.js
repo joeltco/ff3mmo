@@ -174,6 +174,32 @@ export function getSpellNameClean(spellId) {
 }
 
 /**
+ * Like getSpellNameClean, but preserves the magic-school icon byte
+ * ($72 Summon / $74 White / $75 Black) when it appears as the first byte.
+ * The icon tile graphics live in the font atlas (ROM 0x1B710 forward) and
+ * render through drawText() like any other glyph — see font-renderer.js.
+ * Use in spell-list rows; battle-log / chat callers stay on the clean path.
+ * @param {number} spellId
+ * @returns {Uint8Array}
+ */
+export function getSpellNameWithIcon(spellId) {
+  const bytes = getSpellName(spellId);
+  const out = [];
+  const isIcon = bytes.length > 0 && ICON_TILES.has(bytes[0]);
+  if (isIcon) out.push(bytes[0]);
+  for (let i = isIcon ? 1 : 0; i < bytes.length; i++) {
+    const b = bytes[i];
+    const isLetter = (b >= 0x8A && b <= 0xA3) || (b >= 0xCA && b <= 0xE3);
+    const isDigit = b >= 0x80 && b <= 0x89;
+    const isPunct = b === 0xC4 || b === 0xC5 || b === 0xC8 || b === 0xC9;
+    const isSpace = b === 0xFF;
+    if (isLetter || isDigit || isPunct || isSpace) out.push(b);
+  }
+  while (out.length > 0 && out[out.length - 1] === 0xFF) out.pop();
+  return new Uint8Array(out);
+}
+
+/**
  * Get job name bytes.
  * @param {number} jobId — job index (0x00-0x15)
  * @returns {Uint8Array}

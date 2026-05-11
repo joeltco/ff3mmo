@@ -2,6 +2,34 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.241 — 2026-05-11
+
+### Spell icons in magic lists
+
+Reveals the magic-school icon glyph that's been baked into every ROM
+spell name all along — three 8×8 tiles already loaded into the font
+atlas at tile IDs `$72` (Summon, ROM 0x1B730), `$74` (White Magic,
+ROM 0x1B750), `$75` (Black Magic, ROM 0x1B760). The IPS English
+patch put letters at `$7E+` and `$8A+`, leaving these icon tiles
+untouched in the font region.
+
+`text-decoder.js` previously dropped the icon byte at every callsite
+via `getSpellNameClean`. New `getSpellNameWithIcon` preserves the
+leading icon byte and applies the same character allowlist for
+padding. Wired into the four spell-list render sites:
+
+- `battle-draw-menu.js:166` — in-battle Magic command list.
+- `pause-menu.js:307` — pause-menu Magic tab.
+- `shop.js:456` — magic-shop spell rows.
+- `inspect.js:139` — ally inspect panel "known spells" rows.
+
+Untouched: battle-log/message-strip callers (`battle-turn.js`,
+`spell-cast.js`, `pvp.js`) and chat (`chat.js`) keep stripping —
+icon-mid-sentence and ASCII-only contexts respectively.
+
+No new tile data authored. Icons render through the existing
+`drawText` path using palette in effect at each site.
+
 ## 1.7.240 — 2026-05-11
 
 ### Docs: roster-menu audit — mark all four stubs shipped
