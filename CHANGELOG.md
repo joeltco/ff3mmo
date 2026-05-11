@@ -2,6 +2,40 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.214 — 2026-05-10
+
+### Reflect now actually blocks enemy magic (was completely dead)
+
+From `docs/BUFFS-AUDIT.md`. The buff system has Haste (✓ enforced),
+Protect (✓ enforced), and Reflect (☠ dead). `BUFF_REFLECT` was being
+written but never read anywhere — the Reflect spell (0x0c, MP cost)
+and the Curtain item (5000 gil) both literally did nothing.
+
+**MVP shipped this version:**
+
+- If the **player** has the Reflect buff and a **PVP enemy** casts
+  Fire / Blizzard / Sleep targeting them, the spell is blocked.
+  Damage / status apply is skipped entirely.
+- "Reflected!" appears on the battle message strip (existing
+  `BATTLE_REFLECT` bytes).
+- `SFX.SW_HIT` plays on reflect — distinguishes from a clean miss.
+
+**Out of scope (deferred — see audit doc):**
+
+- **Bounce-back targeting** (NES canon). MVP just blocks; doesn't
+  bounce damage back to the caster's team. Player gets the same
+  defensive value either way; deferring the cool counter-damage
+  visual until the re-target plumbing is in.
+- **Encounter monster specials** (Fire breath / Glare / Bad Breath
+  etc.) — these don't route through the spell-cast pipeline and
+  `SPECIAL_ATTACKS` doesn't classify magic vs non-magic. ~1 hour
+  ticket once the classification is settled.
+- **Ally / monster Reflect** — allies / monsters / PVP enemies still
+  have no buff support per `buffs.js` v0 scope.
+- **Friendly Cure pass-through** — NES literal bounces all magic
+  including ally Cure on player. Our v0.5 leaves friendly heals
+  through (designer choice; revisit if it surprises).
+
 ## 1.7.213 — 2026-05-10
 
 ### Death animations audit — second batch (real fixes + audit correction)

@@ -24,7 +24,8 @@ import { removeStatus, hasStatus, STATUS, blindHitPenalty, miniToadAtkMult, canC
 import { _nameToBytes } from './text-utils.js';
 import { getSpellNameClean } from './text-decoder.js';
 import { queueBattleMsg, replaceBattleMsg } from './battle-msg.js';
-import { BATTLE_FOE } from './data/strings.js';
+import { BATTLE_FOE, BATTLE_REFLECT } from './data/strings.js';
+import { hasBuff, BUFF_REFLECT } from './buffs.js';
 import { tickHealNums, clearHealNums, DMG_SHOW_MS } from './damage-numbers.js';
 import { SPELLS } from './data/spells.js';
 import { CAST_PHASE_MS_THROW, CAST_PHASE_MS_HEAL } from './cast-anim.js';
@@ -667,6 +668,17 @@ function _applyPVPEnemyMagicEffect() {
     const sid = pvpSt.pvpMagicSpellId;
     const partyTgt = partyIdx === -1 ? ps : (battleSt.battleAllies[partyIdx] || null);
     if (!partyTgt || partyTgt.hp <= 0) {
+      pvpSt.pvpMagicPartyTargetIdx = -100;
+      return;
+    }
+    // Reflect MVP (v1.7.214) — if the player has Reflect, block hostile
+    // spell damage/status entirely. NES canon bounces to the caster's team;
+    // we keep MVP scope to "full block + Reflected! message" until the
+    // bounce-back targeting ships (see BUFFS-AUDIT.md #7). Allies don't
+    // have buffs per buffs.js v0 scope, so only player target gates here.
+    if (partyIdx === -1 && hasBuff(ps, BUFF_REFLECT)) {
+      replaceBattleMsg(BATTLE_REFLECT);
+      playSFX(SFX.SW_HIT);
       pvpSt.pvpMagicPartyTargetIdx = -100;
       return;
     }
