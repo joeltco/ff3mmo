@@ -103,8 +103,20 @@ export function triggerWipe(action, destMapId) {
 
 // --- Z-action handlers (called from handleAction in game.js) ---
 
+// Stamp a tile-mutation into ps.consumedTiles so the change persists across
+// map re-entry / save+load (v1.7.215 SAVE-STATE-AUDIT.md #1-3). Mutates the
+// in-memory tilemap AND records the mutation keyed by (mapId, "x,y").
+function _consumeTile(facedX, facedY, newTileId) {
+  mapSt.mapData.tilemap[facedY * 32 + facedX] = newTileId;
+  const mapId = mapSt.currentMapId;
+  if (mapId == null) return;
+  if (!ps.consumedTiles) ps.consumedTiles = {};
+  if (!ps.consumedTiles[mapId]) ps.consumedTiles[mapId] = {};
+  ps.consumedTiles[mapId][`${facedX},${facedY}`] = newTileId;
+}
+
 export function handleChest(facedX, facedY) {
-  mapSt.mapData.tilemap[facedY * 32 + facedX] = 0x7D;
+  _consumeTile(facedX, facedY, 0x7D);
   const entry = rollLootEntry(mapSt.currentMapId);
   let msg;
   if (typeof entry === 'object' && entry.gil) {
@@ -124,10 +136,11 @@ export function handleChest(facedX, facedY) {
 }
 
 export function handleSecretWall(facedX, facedY) {
-  mapSt.mapData.tilemap[facedY * 32 + facedX] = 0x30;
+  _consumeTile(facedX, facedY, 0x30);
   mapSt.secretWalls.delete(`${facedX},${facedY}`);
   mapSt.mapRenderer = new MapRenderer(mapSt.mapData, mapSt.worldX / TILE_SIZE, mapSt.worldY / TILE_SIZE);
   resetIndoorWaterCache();
+  saveSlotsToDB();
 }
 
 export function handleRockPuzzle() {
@@ -135,10 +148,11 @@ export function handleRockPuzzle() {
   mapSt.shakeActive = true; mapSt.shakeTimer = 0;
   mapSt.shakePendingAction = () => {
     playSFX(SFX.DOOR);
-    for (const wt of mapSt.rockSwitch.wallTiles) mapSt.mapData.tilemap[wt.y * 32 + wt.x] = wt.newTile;
+    for (const wt of mapSt.rockSwitch.wallTiles) _consumeTile(wt.x, wt.y, wt.newTile);
     mapSt.rockSwitch = null;
     mapSt.mapRenderer = new MapRenderer(mapSt.mapData, mapSt.worldX / TILE_SIZE, mapSt.worldY / TILE_SIZE);
     resetIndoorWaterCache();
+    saveSlotsToDB();
   };
 }
 

@@ -2,6 +2,53 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.215 — 2026-05-10
+
+### Chest farming exploit closed + map mutations now persist across re-entry
+
+From `docs/SAVE-STATE-AUDIT.md`, items #1-3. The biggest finding from
+the save-state audit:
+
+**The exploit:** `handleChest` mutated the in-memory tilemap to mark
+chests as opened, but the mutation only lived as long as
+`mapSt.mapData` stayed in memory. Every call to `loadMapById`
+regenerated the floor fresh from ROM (`generateFloor(romRaw, ...)`),
+wiping all tile mutations. So a player could exit a dungeon, walk
+back in, and every chest was closed again. Tier-1 economy break —
+infinite gil/item farming.
+
+Same root cause affected `handleSecretWall` (opened walls re-hid on
+re-entry, minor exploit) and `handleRockPuzzle` (solved puzzles
+reset, could break progression or enable loot re-farming).
+
+**The fix:** persistent tile-mutation map.
+
+- New field `ps.consumedTiles: { [mapId]: { "x,y": newTileId } }`
+  added to player state. Saved to the slot schema, loaded on game
+  start, JSON-cloned through both save and load paths.
+- `map-triggers.js` got a private `_consumeTile(x, y, newTileId)`
+  helper that updates the in-memory tilemap AND records the
+  mutation in `ps.consumedTiles`. All three sites (`handleChest`,
+  `handleSecretWall`, `handleRockPuzzle`) route through it.
+- `map-loading.js` got a `_replayConsumedTiles(mapId, mapData)`
+  helper called after `generateFloor` (dungeon) or `loadMap`
+  (regular map). Iterates the saved mutations for that map and
+  overwrites the matching tilemap cells. Also tidies the
+  `secretWalls` set so revealed walls don't keep their "still
+  hidden" trigger.
+- `handleSecretWall` and `handleRockPuzzle` also now call
+  `saveSlotsToDB()` (chest open already did).
+
+**Side effects to test:** chests stay opened across map re-entry +
+save/load. Secret walls stay revealed. Rock puzzles stay solved.
+First-run players have empty `consumedTiles` so behavior is
+unchanged on fresh saves.
+
+**Other audit items deferred** (see `SAVE-STATE-AUDIT.md`): #4 dead
+worldX/Y/currentMapId schema (design call), #5 status persisting
+through death-respawn (design call), #6 theoretical save race (no
+observed corruption), #7 server-save retry (no observed need).
+
 ## 1.7.214 — 2026-05-10
 
 ### Reflect now actually blocks enemy magic (was completely dead)

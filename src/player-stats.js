@@ -38,6 +38,13 @@ export const ps = {
   lastWorldExitY: null, // overworld tile Y — paired with X, used for death respawn when slain on overworld
   knownSpells: [],      // array of spell IDs the player has learned (granted by job + magic shop)
   buffs: {},            // active battle buffs (haste/protect/reflect). Cleared on resetBattleVars; not persisted.
+  // Persistent map mutations — keyed by mapId, then "x,y" coord, value is the
+  // new tile byte. Replayed in loadMapById after generateFloor rebuilds the
+  // fresh tilemap from ROM, so chests stay opened / secret walls stay
+  // revealed / rock puzzles stay solved across map re-entry (and saves).
+  // Pre-v1.7.215 these mutations were in-memory only and reset on re-entry,
+  // letting players farm chests by exiting and walking back in.
+  consumedTiles: {},
 };
 
 // Starting spells granted when a player first switches into a mage job.

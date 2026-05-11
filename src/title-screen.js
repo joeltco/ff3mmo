@@ -722,6 +722,7 @@ function _updateTitleMainOutCase() {
   ps.lastWorldExitX = (slot && slot.lastWorldExitX != null) ? slot.lastWorldExitX : null;
   ps.lastWorldExitY = (slot && slot.lastWorldExitY != null) ? slot.lastWorldExitY : null;
   ps.knownSpells = (slot && Array.isArray(slot.knownSpells)) ? [...slot.knownSpells] : [];
+  ps.consumedTiles = (slot && slot.consumedTiles) ? JSON.parse(JSON.stringify(slot.consumedTiles)) : {};
   grantStartingSpells(ps.jobIdx);
   swapBattleSprites(ps.jobIdx);
   transSt.pendingTrack = TRACKS.TOWN_UR;

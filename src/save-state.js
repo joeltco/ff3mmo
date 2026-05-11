@@ -67,6 +67,7 @@ export async function saveSlotsToDB() {
     slot.lastWorldExitX = ps.lastWorldExitX;
     slot.lastWorldExitY = ps.lastWorldExitY;
     slot.knownSpells = ps.knownSpells ? [...ps.knownSpells] : [];
+    slot.consumedTiles = ps.consumedTiles ? JSON.parse(JSON.stringify(ps.consumedTiles)) : {};
   }
   try {
     const data = saveSlots.map(s => s ? {
@@ -93,6 +94,7 @@ export async function saveSlotsToDB() {
       lastWorldExitY: s.lastWorldExitY != null ? s.lastWorldExitY : null,
       playTime: s.playTime || 0,
       knownSpells: Array.isArray(s.knownSpells) ? [...s.knownSpells] : [],
+      consumedTiles: s.consumedTiles || {},
     } : null);
     // Local IndexedDB
     const db = await openSaveDB();

@@ -81,6 +81,22 @@ function _openReturnDoor(playerX, playerY) {
   }
 }
 
+// Replay persisted tile mutations (chests opened, secret walls revealed,
+// rock puzzles solved) onto a freshly-generated tilemap. Stored at
+// ps.consumedTiles[mapId][`${x},${y}`] = newTileId. See SAVE-STATE-AUDIT.md
+// #1-3 (v1.7.215). Also tidies the relevant `secretWalls` set so a revealed
+// wall doesn't keep its "still hidden" trigger.
+function _replayConsumedTiles(mapId, mapData) {
+  const consumed = ps.consumedTiles && ps.consumedTiles[mapId];
+  if (!consumed) return;
+  for (const key of Object.keys(consumed)) {
+    const [x, y] = key.split(',').map(Number);
+    if (Number.isNaN(x) || Number.isNaN(y)) continue;
+    mapData.tilemap[y * 32 + x] = consumed[key];
+    if (mapSt.secretWalls && mapSt.secretWalls.has(key)) mapSt.secretWalls.delete(key);
+  }
+}
+
 function _loadDungeonFloor(mapId, returnX, returnY) {
   const floorIndex = mapId - 1000;
   mapSt.dungeonFloor = floorIndex;
@@ -94,6 +110,7 @@ function _loadDungeonFloor(mapId, returnX, returnY) {
   mapSt.pondTiles = result.pondTiles || null;
   mapSt.dungeonDestinations = result.dungeonDestinations;
   mapSt.currentMapId = mapId;
+  _replayConsumedTiles(mapId, result);
   const playerX = returnX !== undefined ? returnX : result.entranceX;
   const playerY = returnY !== undefined ? returnY : result.entranceY;
   mapSt.worldX = playerX * TILE_SIZE;
@@ -125,6 +142,7 @@ function _loadRegularMap(mapId, returnX, returnY) {
   const mapData = loadMap(romRaw, mapId);
   mapSt.mapData = mapData;
   mapSt.currentMapId = mapId;
+  _replayConsumedTiles(mapId, mapData);
   if (AREA_NAMES.has(mapId)) ps.lastTown = mapId;
   if (returnX !== undefined) applyPassage(mapData.tilemap);
   const ex = mapData.entranceX;

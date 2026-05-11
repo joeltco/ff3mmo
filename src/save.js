@@ -39,6 +39,7 @@ export function parseSaveSlots(data) {
       onWorldMap: s.onWorldMap != null ? s.onWorldMap : null,
       currentMapId: s.currentMapId != null ? s.currentMapId : null,
       knownSpells: Array.isArray(s.knownSpells) ? [...s.knownSpells] : [],
+      consumedTiles: (s.consumedTiles && typeof s.consumedTiles === 'object') ? s.consumedTiles : {},
     };
   });
 }
