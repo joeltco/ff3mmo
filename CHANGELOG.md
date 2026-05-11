@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.234 — 2026-05-11
+
+### Fix: PVP cure/antidote sparkle vertical-center
+
+The 16×16 cure/antidote sparkle on a PVP-enemy target was drawn at
+the body's top-left, which only covered the upper 16 rows of the
+16×24 full-body sprite — read as "head/shoulders only", visually
+skewed up. Now drawn at `sprY + 4` so it lands on body
+vertical-center, matching the offensive-magic on-target burst path
+(`_getMagicTargetCenter` returns `cellTop + 16` for PVP).
+
+Player + ally cure render unchanged — their portraits are 16×16, so
+drawing at portrait-top-left already centers correctly.
+
+- `src/pvp-drawing.js` — `+4 px` Y offset on the PVP cure/antidote
+  sparkle draw (line ~332). Comment rewritten to explain the body
+  geometry vs the player/ally portrait geometry.
+
 ## 1.7.233 — 2026-05-11
 
 ### Docs sweep: refresh markdowns for 1.7.22x band

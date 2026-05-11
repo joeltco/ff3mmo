@@ -325,11 +325,12 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
     if (!(_frames && _frames.length === 2)) _frames = bsc.cureSparkleFrames;
     if (_frames && _frames.length === 2) {
       const fi = Math.floor(battleSt.battleTimer / 67) & 1;
-      // Single 16×16 sparkle on the target body — matches the player + ally
-      // cure render (`battle-draw-player.js` / `battle-draw-allies.js`). Was
-      // tiling at the 4 corners (`_drawSparkleAtCorners`) which is the
-      // DEFEND sparkle pattern, not the cure pattern.
-      ui.ctx.drawImage(_frames[fi], sprX, sprY);
+      // 16×16 sparkle vertically centered on the 16×24 PVP body — matches
+      // the offensive-magic `_getMagicTargetCenter` convention (cellTop + 16
+      // = body center). Player/ally render the same call at portrait-top-
+      // left because their portrait IS 16×16; PVP's full body needs +4 to
+      // land mid-torso instead of head/shoulders.
+      ui.ctx.drawImage(_frames[fi], sprX, sprY + 4);
     }
   }
 
