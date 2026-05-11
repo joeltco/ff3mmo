@@ -34,6 +34,20 @@ export function dismissMsgBox() {
   msgState.timer = 0;
 }
 
+// Smooth swap: when a message is already on screen and held, replace
+// the text + onClose without re-animating slide-in. Falls back to
+// `showMsgBox` if no message is currently held — caller doesn't need
+// to know which case applies. Used by the PVP search flow to slide
+// "Searching..." into "Connecting..." without a flicker. v1.7.226.
+export function replaceMsgBoxText(bytes, onClose) {
+  if (msgState.state === 'hold') {
+    msgState.bytes   = bytes;
+    msgState.onClose = onClose || null;
+  } else {
+    showMsgBox(bytes, onClose);
+  }
+}
+
 export function updateMsgBox(dt) {
   if (msgState.state === 'none') return;
   msgState.timer += Math.min(dt, 33);

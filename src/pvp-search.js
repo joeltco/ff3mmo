@@ -20,7 +20,7 @@ import { generateAllyStats } from './data/players.js';
 import { mapSt } from './map-state.js';
 import { battleSt } from './battle-state.js';
 import { _nameToBytes } from './text-utils.js';
-import { showMsgBox } from './message-box.js';
+import { showMsgBox, replaceMsgBoxText, dismissMsgBox } from './message-box.js';
 import { playSFX, SFX } from './music.js';
 
 // Tuning constants. Surface them up here so they're easy to find.
@@ -40,6 +40,7 @@ const MAX_MISSED_ROLLS     = 3;
 const TARGET_ROLL_MIN_MS   = 8000;
 const TARGET_ROLL_MAX_MS   = 15000;
 const COOLDOWN_MS          = 60 * 1000;
+const CONNECTING_HOLD_MS   = 1000;   // auto-advance "Connecting..." into battle after this delay (v1.7.226)
 
 export const pvpSearchSt = {
   active: false,
@@ -48,6 +49,7 @@ export const pvpSearchSt = {
   missedRolls: 0,
   targetRollTimer: 0,
   resolving: false,
+  connectingHoldMs: 0,     // counts down while "Connecting..." holds; at 0 → dismiss → onClose → battle
   cooldowns: new Map(),    // targetName -> expiresAtMs
 };
 
@@ -160,17 +162,32 @@ function _runHookCheck() {
 function _resolveAsHook() {
   const target = pvpSearchSt.target;
   pvpSearchSt.resolving = true;
-  // "Connecting..." is the bridge between search-fire and PVP intro.
-  // The PVP battle starts when the message closes (same pattern the
-  // old two-stage flow used).
-  showMsgBox(_nameToBytes('Connecting...'), () => {
+  pvpSearchSt.connectingHoldMs = CONNECTING_HOLD_MS;
+  // Smooth swap so the "Searching..." box stays on-screen and just
+  // re-letters into "Connecting..." — no slide-out / slide-in flicker.
+  // tickPVPSearch auto-dismisses after CONNECTING_HOLD_MS, which
+  // triggers slide-out → onClose → battle. v1.7.226.
+  replaceMsgBoxText(_nameToBytes('Connecting...'), () => {
     _endSearch(target.name);
     _startPVPBattle(target);
   });
 }
 
 export function tickPVPSearch(dt) {
-  if (!pvpSearchSt.active || pvpSearchSt.resolving) return;
+  if (!pvpSearchSt.active) return;
+  // Resolving — "Connecting..." is on screen. Tick the hold timer;
+  // when it expires, dismiss the message which fires onClose →
+  // _startPVPBattle. User doesn't need to press anything. v1.7.226.
+  if (pvpSearchSt.resolving) {
+    if (pvpSearchSt.connectingHoldMs > 0) {
+      pvpSearchSt.connectingHoldMs -= dt;
+      if (pvpSearchSt.connectingHoldMs <= 0) {
+        pvpSearchSt.connectingHoldMs = 0;
+        dismissMsgBox();
+      }
+    }
+    return;
+  }
   // Auto-cancel on death — search is meaningless if the challenger
   // can't fight back.
   if (ps.hp <= 0) {

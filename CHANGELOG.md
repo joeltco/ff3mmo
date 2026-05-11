@@ -2,6 +2,27 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.226 — 2026-05-11
+
+### Search box: smooth Searching→Connecting swap + 1s auto-advance
+
+- **Smooth text swap.** "Searching..." used to slide out and
+  "Connecting..." slide back in, which read as two separate boxes.
+  New `replaceMsgBoxText(bytes, onClose)` in `src/message-box.js` —
+  if a message is already in the `hold` state, swap the bytes +
+  callback in place without re-animating slide-in. Falls back to
+  `showMsgBox` if no message is currently held, so the helper is
+  safe to call unconditionally. PVP search now uses it for the
+  Searching→Connecting transition; the box stays on-screen and
+  just re-letters.
+- **Auto-advance into battle.** "Connecting..." used to wait for a
+  Z press to fire `_startPVPBattle`. Now `pvpSearchSt.connectingHoldMs`
+  counts down from 1000 ms in `tickPVPSearch`; on expiry it calls
+  `dismissMsgBox()` → slide-out → existing onClose → battle. Z still
+  works for power users who want to advance early (movement.js's
+  universal Z-dismiss path is unchanged for the resolving state).
+  Total wall-clock from hook fire to flash-strobe: ≈ 1080 ms.
+
 ## 1.7.225 — 2026-05-11
 
 ### fix: PVP enemy spell-kill didn't end the battle
