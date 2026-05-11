@@ -2,6 +2,30 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.240 — 2026-05-11
+
+### Docs: roster-menu audit — mark all four stubs shipped
+
+No code change. Updates `docs/ROSTER-MENU-AUDIT.md` to reflect that
+the four deferred stubs (Party / Trade / Message / Inspect) all
+shipped in v1.7.235–v1.7.239:
+
+- TL;DR row 5: ⏸ → ✅ all four shipped.
+- Action dispatch matrix: per-action handler + version reference;
+  describes the defensive `else` fallback that remains in
+  `_rosterInputMenu` as a guard against future label additions
+  without handlers.
+- Finding #5: rewritten from "stubs, deferred" to per-action
+  summary of what shipped. Calls out that Battle/Party/Trade share
+  the negotiation lifecycle pattern (`project_ff3mmo_roster_action_pattern.md`)
+  while Message/Inspect diverge intentionally (UI affordances, no
+  accept-roll).
+- Fake-vs-real seam table: per-action cutover description
+  replacing the single "stubs" row.
+- Followups: closed all four original deferrals; added four
+  smaller followups (party SRAM persistence, trade scroll arrows,
+  inspect spell pagination, PM visual prefix).
+
 ## 1.7.239 — 2026-05-11
 
 ### Feature: roster Inspect action → read-only stat panel
