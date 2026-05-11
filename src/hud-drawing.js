@@ -32,7 +32,7 @@ function _pauseTargetFrames() {
   else if (hn.itemId != null) bundle = getSpellAnimForItem(hn.itemId);
   return (bundle && bundle.kind === 'portrait-2frame') ? bundle.frames : null;
 }
-import { hudSt, HUD_HPLV_STEP_MS } from './hud-state.js';
+import { hudSt, HUD_HPLV_STEP_MS, PLAYER_DEATH_HOLD_MS, PLAYER_DEATH_FADE_MS, PLAYER_DEATH_TOTAL_MS } from './hud-state.js';
 import { titleSt } from './title-screen.js';
 import { ui } from './ui-state.js';
 import { shopHoverEquippable, shopHoverStatDelta } from './shop.js';
@@ -281,9 +281,11 @@ function _drawHUDInfoPanel() {
   if (infoFadeStep >= HUD_INFO_FADE_STEPS) return;
   const playerDeathTimer = hudSt.playerDeathTimer;
   if (playerDeathTimer != null) {
-    if (playerDeathTimer < 500) {
-    } else if (playerDeathTimer < 800) {
-      const deathAlpha = 1 - (playerDeathTimer - 500) / 300;
+    if (playerDeathTimer < PLAYER_DEATH_HOLD_MS) {
+      // Hold phase — render normally.
+    } else if (playerDeathTimer < PLAYER_DEATH_TOTAL_MS) {
+      // Fade phase — alpha ramps 1 → 0 over PLAYER_DEATH_FADE_MS.
+      const deathAlpha = 1 - (playerDeathTimer - PLAYER_DEATH_HOLD_MS) / PLAYER_DEATH_FADE_MS;
       ctx.save(); ctx.globalAlpha = deathAlpha;
     } else { return; }
   }
@@ -294,7 +296,7 @@ function _drawHUDInfoPanel() {
   const sy = HUD_VIEW_Y + 8;
   const panelRight = HUD_RIGHT_X + HUD_RIGHT_W - 8 + shakeOff;
   const slot = saveSlots[selectCursor];
-  const deathTextFading = playerDeathTimer != null && playerDeathTimer >= 500 && playerDeathTimer < 800;
+  const deathTextFading = playerDeathTimer != null && playerDeathTimer >= PLAYER_DEATH_HOLD_MS && playerDeathTimer < PLAYER_DEATH_TOTAL_MS;
   if (!slot) { if (deathTextFading) ctx.restore(); return; }
   const namePal = [...TEXT_WHITE];
   for (let s = 0; s < infoFadeStep; s++) namePal[3] = nesColorFade(namePal[3]);

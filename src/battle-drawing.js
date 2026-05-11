@@ -58,7 +58,6 @@ const BOSS_BLOCK_COLS = 3;
 const BOSS_BLOCKS = 9;
 const BOSS_DISSOLVE_STEPS = 8;
 const BOSS_DISSOLVE_FRAME_MS = 16.67;
-const MONSTER_DEATH_MS = 250;
 const MONSTER_SLIDE_MS = 267;
 // SLASH_FRAME_MS imported from slash-effects.js (single source of truth — pre-1.7.4
 // this was 50 here vs 30 in battle-update.js, which made ally `af` sprite-frame

@@ -2,6 +2,30 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.212 — 2026-05-10
+
+### Death animations audit — first batch (cleanup)
+
+From `docs/DEATH-ANIMATIONS-AUDIT.md`. Six combatant types die in this
+game (player, ally, encounter monster, boss, PVP main opp, PVP enemy
+ally), each with its own dissolve / fade flow. Initial sweep landed
+the two safe items; the rest (player death-pose feature parity, PVP
+multi-cell death routing, multi-target spell-kill dissolves) stay open
+pending design decisions.
+
+- **#1 `MONSTER_DEATH_MS` dedup.** Was declared `const = 250` in
+  `battle-drawing.js`, `pvp-drawing.js`, and `battle-draw-encounter.js`
+  on top of the canonical export from `battle-state.js`. The
+  `battle-drawing.js` copy was dead (no usage). The other two were
+  live duplicates. Now all three import from `battle-state.js`.
+- **#2 Player death magic-number cleanup.** `hud-drawing.js` had
+  inline literals `500` (hold duration), `800` (total), `300` (fade
+  divisor). Now `PLAYER_DEATH_HOLD_MS = 500`, `PLAYER_DEATH_FADE_MS
+  = 300`, `PLAYER_DEATH_TOTAL_MS = 800` exported from `hud-state.js`.
+  Matches the naming pattern in `battle-draw-allies.js`
+  (`DEATH_SLIDE_MS` / `_TXTFADE_MS` / `_POSEFADE_MS` / `_TOTAL_MS`),
+  so player and ally death timings can be reasoned about side-by-side.
+
 ## 1.7.211 — 2026-05-10
 
 ### Per-status sprite palettes + white sweat droplets

@@ -11,7 +11,7 @@
 // helpers, same `combatant-cast` cast-windup hookup, same shared status-
 // sprite + slash overlays. Only the box layout (`pvpGridLayout`) differs.
 
-import { battleSt, getEnemyHP } from './battle-state.js';
+import { battleSt, getEnemyHP, MONSTER_DEATH_MS } from './battle-state.js';
 import { pvpSt } from './pvp.js';
 import { ui } from './ui-state.js';
 import { inputSt } from './input-handler.js';
@@ -36,7 +36,6 @@ import { _jobPalette, drawStatusSpriteAbove } from './battle-drawing.js';
 const BOSS_BOX_EXPAND_MS      = 300;
 const PVP_BOX_RESIZE_MS       = 300;
 const SLASH_FRAMES            = 3;
-const MONSTER_DEATH_MS        = 250;
 const DEFEND_SPARKLE_FRAME_MS = 133;
 
 function _cursorTileCanvas() { return ui.cursorTileCanvas; }
