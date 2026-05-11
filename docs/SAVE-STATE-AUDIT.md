@@ -13,10 +13,10 @@ public entry — called 47 times across 9 files; the schema lives at
 | 1 | **Chest farming exploit** — opened chests reset on map re-entry; tilemap mutation is in-memory only | gameplay/economy bug | ✅ v1.7.215 |
 | 2 | Secret walls reset on map re-entry | nicety / minor exploit | ✅ v1.7.215 (same fix path) |
 | 3 | Rock puzzle resets on map re-entry | progression risk | ✅ v1.7.215 (same fix path) |
-| 4 | `worldX/Y/currentMapId/onWorldMap` saved but never read at load time | dead schema | ⏸ deferred — design decision |
-| 5 | Status flags persist through death-respawn | gameplay | ⏸ deferred — design decision |
-| 6 | `saveSlotsToDB` not awaited; concurrent saves race | theoretical | ⏸ deferred — no observed corruption |
-| 7 | `serverSave` failures not retried | resilience | ⏸ deferred — next save resyncs |
+| 4 | Saved position now restored on load (was hardcoded Ur fallback) | dead schema → live | ✅ v1.7.216 |
+| 5 | Status flags now clear on death-respawn (revive = clean state) | gameplay | ✅ v1.7.216 |
+| 6 | `saveSlotsToDB` not awaited — verified not a bug | theoretical | ✅ verified safe |
+| 7 | `serverSave` failures not retried — verified self-healing | resilience | ✅ verified safe |
 | 8 | Equipment saved inside `slot.stats` (nested) | naming clarity | ⏸ deferred — works fine |
 
 ## What's saved (verified clean)
@@ -76,59 +76,54 @@ rebuilds `mapData` fresh from ROM. The tilemap mutations are wiped.
   `generateFloor` — chest tiles stay opened, secret walls stay
   revealed, rock puzzles stay solved.
 
-## #4 — `worldX/Y/currentMapId/onWorldMap` are dead schema
+## #4 — Saved position now restored on load (v1.7.216)
 
-`saveSlotsToDB` writes them at lines 62-65. `parseSaveSlots` parses
-them at `save.js:37-40`. **But nothing reads them on load** —
-`title-screen.js:728` is hardcoded `loadMapById(114)` (Ur), no
-fallback to saved position.
+Per the user's memory `feedback_ff3mmo_own_thing.md` (ff3mmo is its
+own MMORPG, not a NES port), continuing a save now resumes where you
+left off, not at Ur.
 
-So the saved fields waste IndexedDB bytes + server-sync payload + JSON
-parse time on every load. Either:
-- **Option A:** wire them up so loading a save respawns the player at
-  their saved position (proper RPG behavior).
-- **Option B:** delete the dead fields from the schema entirely
-  (clean up the dead data).
+Load logic (`title-screen.js:_updateTitleMainOutCase`):
+- Fresh slot (no `stats` yet) → Ur, `loadMapById(114)`, classic Ur
+  spawn nudge.
+- Saved overworld position → `loadWorldMapAtPosition(worldX/TILE_SIZE,
+  worldY/TILE_SIZE)` with `TRACKS.WORLD_MAP`.
+- Saved town / dungeon → `loadMapById(currentMapId, tileX, tileY)`.
+  The map-load path swaps the music track for floor tracks
+  automatically.
+- Any missing position data falls back to Ur (defensive).
 
-Currently undecided — needs design call. The "always start at Ur"
-behavior is technically NES-classic-game-feel (you respawn at the
-town when continuing), but for an MMORPG with persistent world state
-(per the user's memory `feedback_ff3mmo_own_thing.md`) the worldX/Y
-restore makes more sense.
+## #5 — Status now clears on death-respawn (v1.7.216)
 
-## #5 — Status persists through death-respawn
+`_respawnAtLastTown` now calls `clearAll(ps.status)` alongside the
+HP/MP max-restore. Matches NES canon (revive = clean state) and the
+expected gameplay flow — a player who eats a Land Turtle Bzzard
+crit while Poisoned doesn't respawn full-HP-but-still-poisoned and
+have to spend an Antidote before the next encounter.
 
-`_respawnAtLastTown` (`battle-update.js:712`) restores `ps.hp` and
-`ps.mp` to max but **does not clear `ps.status.mask`**. A player who
-dies poisoned/blinded/etc. respawns full-HP but still afflicted.
+## #6 — Save race: verified safe
 
-NES FF3 canon: death clears most statuses (revive is a clean state).
-Our current behavior could be:
-- **Intentional** (player paid for items to cure status; death
-  shouldn't be a free cure) — keep as is.
-- **Unintentional gap** (gameplay flow expects revive = clean) — add
-  `clearAll(ps.status)` to `_respawnAtLastTown`.
+Re-examined for the v1.7.216 sweep. `saveSlotsToDB` is `async` but
+all `ps` reads happen **synchronously before the first `await`**
+(the await on `openSaveDB()` at line ~98). JS single-threaded
+execution guarantees one call's reads are atomic — there's no point
+where another call could interleave between two reads of the same
+function. IndexedDB then serializes the writes via the transaction
+queue. Last-write-wins on identical data is correct.
 
-Awaiting design decision.
+Not a bug. Flagged in v1.7.215 audit out of caution; closed.
 
-## #6 — Save race condition (theoretical)
+## #7 — Server save retry: verified self-healing
 
-`saveSlotsToDB` is `async` but **fire-and-forget** at all 47 call
-sites — none `await` it. Two saves fired back-to-back race the
-IndexedDB transaction + the server POST. In practice both reads of
-`ps` see the same state, so the writes are idempotent and consistent.
+Re-examined for the v1.7.216 sweep. Each `saveSlotsToDB` call
+rebuilds `data` from scratch via `saveSlots.map(...)`. A failed
+`serverSave` means the local IndexedDB has the latest state but the
+server doesn't — until the **next** save call, which rebuilds and
+re-sends the same fresh data. The only data-loss window is "user
+quits between failed-save and next-save", which is identical to the
+"user quits before IndexedDB transaction settles" window — same risk
+profile as any local-first persistence layer.
 
-The risk would be saving mid-operation (read state at step N, save at
-step N+1, second save at step N+2 — IndexedDB resolves them out of
-order, ending with step N+1 data). Not observed; flagged for
-awareness.
-
-## #7 — Server save no retry
-
-`serverSave` failures are caught + logged (`save-state.js:104`) but
-not retried. If the server is unreachable, the next `saveSlotsToDB`
-call will resync (because `data[i]` is rebuilt from the local slot
-each time). Acceptable for v0; could add an offline queue later.
+Not a bug under v0 expectations. Flagged in v1.7.215 audit; closed.
 
 ## #8 — Equipment saved nested inside `stats`
 

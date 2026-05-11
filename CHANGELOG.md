@@ -2,6 +2,50 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.216 — 2026-05-10
+
+### Save-state audit — close the rest of the open items
+
+Closes items #4-7 from `docs/SAVE-STATE-AUDIT.md`. #4 and #5 are real
+fixes; #6 and #7 were re-examined and confirmed not bugs.
+
+**#4 Saved position now restored on load.** Pre-v1.7.216 every
+"Continue" routed through `loadMapById(114)` (Ur), regardless of
+where the player saved. The `worldX`/`worldY`/`currentMapId`/
+`onWorldMap` schema fields were dead — written every save, never
+read on load.
+
+Now in `title-screen.js`:
+- Saved overworld position → `loadWorldMapAtPosition(tx, ty)` with
+  `TRACKS.WORLD_MAP`.
+- Saved town / dungeon → `loadMapById(currentMapId, tx, ty)`. The
+  map-load path picks the right music track per floor / town.
+- Fresh slot (no `stats`) → Ur fallback with the classic spawn nudge
+  (unchanged behavior).
+
+Per the user's memory `feedback_ff3mmo_own_thing.md` — ff3mmo is an
+MMORPG, not a NES port; continuing a save should resume where you
+left off, not at Ur.
+
+**#5 Status now clears on death-respawn.** `_respawnAtLastTown`
+restored HP/MP to max but left `ps.status.mask` untouched. A player
+who died poisoned/blinded/silenced respawned full-HP but still
+afflicted — would take poison damage at the next encounter and need
+to spend an Antidote before they could fight. Now adds
+`clearAll(ps.status)` alongside the HP/MP max-restore. Revive =
+clean state, matching NES canon.
+
+**#6 + #7 verified safe (no fix needed).**
+
+- **#6 Save race:** `saveSlotsToDB` is `async` but all `ps` reads
+  happen **synchronously before the first `await`**. JS
+  single-threaded execution makes reads atomic within one call;
+  IndexedDB serializes writes via its transaction queue.
+  Last-write-wins on identical data. Closed.
+- **#7 Server retry:** each save rebuilds `data` from scratch from
+  `saveSlots`. A failed `serverSave` self-heals on the next call.
+  Same risk profile as any local-first persistence layer. Closed.
+
 ## 1.7.215 — 2026-05-10
 
 ### Chest farming exploit closed + map mutations now persist across re-entry

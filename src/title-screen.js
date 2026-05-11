@@ -11,7 +11,7 @@ import { computeJobStats } from './data/players.js';
 import { hudSt } from './hud-state.js';
 import { transSt } from './transitions.js';
 import { mapSt } from './map-state.js';
-import { loadMapById } from './map-loading.js';
+import { loadMapById, loadWorldMapAtPosition } from './map-loading.js';
 import { serverDeleteSlot } from './save.js';
 import { fakePlayerPortraits } from './fake-player-sprites.js';
 import { drawCursorFaded } from './hud-drawing.js';
@@ -725,9 +725,31 @@ function _updateTitleMainOutCase() {
   ps.consumedTiles = (slot && slot.consumedTiles) ? JSON.parse(JSON.stringify(slot.consumedTiles)) : {};
   grantStartingSpells(ps.jobIdx);
   swapBattleSprites(ps.jobIdx);
-  transSt.pendingTrack = TRACKS.TOWN_UR;
-  loadMapById(114);
-  mapSt.worldY -= 6 * TILE_SIZE;
+  // Position restore (v1.7.216 — SAVE-STATE-AUDIT.md #4). Pre-v1.7.216 every
+  // load went to Ur (114) regardless of where the player saved — the
+  // worldX/Y/currentMapId/onWorldMap schema fields were dead. Now:
+  //   - Loaded slot with saved overworld position → resume on world map.
+  //   - Loaded slot with saved currentMapId → resume in that town/dungeon
+  //     at the saved tile coords.
+  //   - Fresh slot (no stats yet) or any missing position data → Ur.
+  // The `mapSt.worldY -= 6 * TILE_SIZE` hack is the Ur-spawn nudge; only
+  // applied on the fallback path.
+  const hasSavedPos = slot && slot.stats &&
+                      ((slot.onWorldMap && slot.worldX != null && slot.worldY != null) ||
+                       (!slot.onWorldMap && slot.currentMapId != null));
+  if (hasSavedPos && slot.onWorldMap) {
+    transSt.pendingTrack = TRACKS.WORLD_MAP;
+    loadWorldMapAtPosition(slot.worldX / TILE_SIZE, slot.worldY / TILE_SIZE);
+  } else if (hasSavedPos) {
+    transSt.pendingTrack = TRACKS.TOWN_UR; // _loadRegularMap / floor music takes over if not Ur
+    const tx = slot.worldX != null ? slot.worldX / TILE_SIZE : undefined;
+    const ty = slot.worldY != null ? slot.worldY / TILE_SIZE : undefined;
+    loadMapById(slot.currentMapId, tx, ty);
+  } else {
+    transSt.pendingTrack = TRACKS.TOWN_UR;
+    loadMapById(114);
+    mapSt.worldY -= 6 * TILE_SIZE;
+  }
   transSt.state = 'hud-fade-in';
   transSt.timer = 0;
   // ps is now aligned with the active slot — saveSlotsToDB can safely bake.

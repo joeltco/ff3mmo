@@ -33,7 +33,7 @@ import { respawnAfterDeath } from './map-loading.js';
 import { _nameToBytes } from './text-utils.js';
 import { getPlayerLocation } from './roster.js';
 import { DIR_DOWN } from './sprite.js';
-import { STATUS_NAME_BYTES, canCastMagic, STATUS } from './status-effects.js';
+import { STATUS_NAME_BYTES, canCastMagic, STATUS, clearAll as clearAllStatus } from './status-effects.js';
 import { applyPhysicalHitToEnemy } from './physical-attack.js';
 import { playSlashSFX } from './battle-sfx.js';
 import { saveSlotsToDB } from './save-state.js';
@@ -713,6 +713,10 @@ function _respawnAtLastTown() {
   hudSt.playerDeathTimer = null;
   ps.hp = ps.stats ? ps.stats.maxHP : 28;
   ps.mp = ps.stats ? ps.stats.maxMP : 0;
+  // Revive = clean state. Status flags don't carry through death (NES canon
+  // + SAVE-STATE-AUDIT.md #5). Pre-v1.7.216 a player who died poisoned
+  // would respawn full-HP but still poisoned, taking damage at next battle.
+  if (ps.status) clearAllStatus(ps.status);
   respawnAfterDeath();
   saveSlotsToDB();
 }
