@@ -59,10 +59,8 @@ const BOSS_BLOCKS = 9;
 const BOSS_DISSOLVE_STEPS = 8;
 const BOSS_DISSOLVE_FRAME_MS = 16.67;
 const MONSTER_SLIDE_MS = 267;
-// SLASH_FRAME_MS imported from slash-effects.js (single source of truth — pre-1.7.4
-// this was 50 here vs 30 in battle-update.js, which made ally `af` sprite-frame
-// indexing lag the state machine).
-const SLASH_FRAMES = 3;
+// SLASH_FRAME_MS / SLASH_FRAMES imported from slash-effects.js (single source).
+// Local copy of SLASH_FRAMES was dead pre-v1.7.217 — removed.
 const DEFEND_SPARKLE_FRAME_MS = 133;
 
 

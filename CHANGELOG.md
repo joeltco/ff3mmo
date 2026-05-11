@@ -2,6 +2,47 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.217 — 2026-05-10
+
+### Multi-system audit — slash + spell-anim + encounter + chat + HUD fade
+
+Five-area sweep documented in `docs/MULTI-AUDIT.md`. Most areas
+verified clean. Two real dedup items shipped:
+
+- **`SLASH_FRAMES = 3` consolidated.** Was a local `const` in
+  `battle-drawing.js`, `pvp.js`, `pvp-drawing.js`, and
+  `battle-draw-encounter.js`. Now exported from `slash-effects.js`
+  alongside `SLASH_FRAME_MS` / `SWING_HOLD_MS`. The
+  `battle-drawing.js` and `pvp.js` copies were already dead (declared
+  but unused).
+- **`BATTLE_TEXT_STEPS` / `BATTLE_TEXT_STEP_MS` consolidated.** Were
+  duplicated as local `const` blocks (4 / 50) in
+  `battle-draw-menu.js`, `battle-update.js`, and `pvp.js`. Now
+  exported from `battle-state.js` alongside the other battle timing
+  constants (`MONSTER_DEATH_MS`, `BATTLE_SHAKE_MS`, `DEATH_*`).
+
+**Verified clean (no changes needed):**
+
+- Spell-anim phase pipeline — `CAST_PHASE_MS_THROW` /
+  `CAST_PHASE_MS_HEAL` / `CAST_T_LUNGE`/`HEAL`/`RETURN` all live in
+  `cast-anim.js` as the single source. All four consumers
+  (`spell-cast`, `combatant-cast`, `battle-ally`, `pvp`) import; no
+  local copies.
+- Chat command registry — `registerCommand` is the single public
+  entry, 17 commands route through it, dev gating via `opts.dev`.
+- HUD fade — `TOPBOX_FADE_*` lives in `transitions.js`,
+  `HUD_INFO_FADE_*` in `hud-state.js`. Single sources.
+
+**Documented (no action — see `MULTI-AUDIT.md`):**
+
+- Encounter rate rolls threshold per-step (not per-encounter) — the
+  practical effect is well-tuned, but the distribution differs from
+  NES. Doc'd for tuning reference.
+- `encounterSteps` resets on map load — re-entry grace period
+  exploit. Typical NES behavior; design call.
+- Hardcoded valley bounding box `(93..96, 34..44)` in two files.
+  Minor surface; defer until a third consumer appears.
+
 ## 1.7.216 — 2026-05-10
 
 ### Save-state audit — close the rest of the open items

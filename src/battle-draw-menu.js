@@ -5,7 +5,7 @@
 // state mutation. The only outside callers are `drawBattleMenu` and `drawVictoryBox`
 // invoked from `drawBattle` in `battle-drawing.js`.
 
-import { battleSt } from './battle-state.js';
+import { battleSt, BATTLE_TEXT_STEPS, BATTLE_TEXT_STEP_MS } from './battle-state.js';
 import { drawText, measureText } from './font-renderer.js';
 import { nesColorFade, _makeFadedPal } from './palette.js';
 import {
@@ -29,8 +29,7 @@ const HUD_BOT_Y = 176, HUD_BOT_H = 64;
 const CANVAS_W = 256;
 const BATTLE_PANEL_W = 120;
 const INV_SLOTS = 3;
-const BATTLE_TEXT_STEP_MS = 50;
-const BATTLE_TEXT_STEPS = 4;
+// BATTLE_TEXT_STEPS / BATTLE_TEXT_STEP_MS now imported from battle-state.js (single source).
 const BOSS_BOX_EXPAND_MS = 300;
 const VICTORY_BOX_W = BATTLE_PANEL_W;
 const VICTORY_BOX_H = HUD_BOT_H;

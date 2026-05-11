@@ -12,7 +12,7 @@ import { getMonsterCanvas, getMonsterWhiteCanvas, hasMonsterSprites } from './mo
 import { getBossBattleCanvas, getBossWhiteCanvas } from './boss-sprites.js';
 import { inputSt } from './input-handler.js';
 import { bsc, getSlashFramesForWeapon } from './battle-sprite-cache.js';
-import { drawSlashOverlay, SLASH_FRAME_MS, shouldDrawSlash } from './slash-effects.js';
+import { drawSlashOverlay, SLASH_FRAME_MS, SLASH_FRAMES, shouldDrawSlash } from './slash-effects.js';
 import { getSpellTargets } from './spell-cast.js';
 import { pvpSt } from './pvp.js';
 import { drawBossSpriteBoxPVP } from './pvp-drawing.js';
@@ -32,7 +32,6 @@ const BOSS_BLOCKS = 9;
 const BOSS_DISSOLVE_STEPS = 8;
 const BOSS_DISSOLVE_FRAME_MS = 16.67;
 const MONSTER_SLIDE_MS = 267;
-const SLASH_FRAMES = 3;
 
 function _cursorTileCanvas() { return ui.cursorTileCanvas; }
 

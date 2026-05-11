@@ -1,6 +1,6 @@
 // PVP duel system — state, AI logic, rendering
 
-import { battleSt, setEnemyHP } from './battle-state.js';
+import { battleSt, setEnemyHP, BATTLE_TEXT_STEPS, BATTLE_TEXT_STEP_MS } from './battle-state.js';
 import { getPlayerLocation } from './roster.js';
 import { getAllyDamageNums, setPlayerDamageNum, setEnemyHealNum, makeHealNumCallback } from './damage-numbers.js';
 import { ui } from './ui-state.js';
@@ -43,12 +43,9 @@ const BOSS_BOX_EXPAND_MS     = 300;
 const PVP_BOX_RESIZE_MS      = 300;
 const BATTLE_SHAKE_MS        = 300;
 const BATTLE_DMG_SHOW_MS     = 550;
-const SLASH_FRAMES           = 3;
 const BOSS_ATK               = (MONSTERS.get(0xCC) || { atk: 8 }).atk;
 const BATTLE_FLASH_FRAMES    = 65;
 const BATTLE_FLASH_FRAME_MS  = 16.67;
-const BATTLE_TEXT_STEPS      = 4;
-const BATTLE_TEXT_STEP_MS    = 50;
 const MONSTER_DEATH_MS       = 250;
 const DEFEND_SPARKLE_FRAME_MS = 133;
 const DEFEND_SPARKLE_TOTAL_MS = 533;

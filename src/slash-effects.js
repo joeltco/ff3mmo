@@ -83,6 +83,9 @@ export function initSwordSlashSprites() {
 // flash ~67 ms (OAM-derived from f14608 dual-wield capture); the prior 30 ms
 // felt like a flicker rather than three solid impacts within the 333 ms swing.
 export const SLASH_FRAME_MS = 67;
+// Slash anim is a 3-frame strip; the overlay sprite renders at frameIdx 0..2.
+// Was duplicated as `const SLASH_FRAMES = 3` in 4 consumer files pre-v1.7.217.
+export const SLASH_FRAMES = 3;
 
 // Predicate: should this hit get a slash flash overlay? False on miss —
 // shouldDrawSlash is the canonical predicate for "should this hit produce a slash flash?".

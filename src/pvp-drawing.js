@@ -17,7 +17,7 @@ import { ui } from './ui-state.js';
 import { inputSt } from './input-handler.js';
 import { pvpGridLayout, PVP_CELL_W, PVP_CELL_H } from './pvp-math.js';
 import { bsc, getSlashFramesForWeapon } from './battle-sprite-cache.js';
-import { drawSlashOverlay } from './slash-effects.js';
+import { drawSlashOverlay, SLASH_FRAMES } from './slash-effects.js';
 import { isWeapon, weaponSubtype } from './data/items.js';
 import { pickAttackPoseKey, pickAttackWeaponSpec, attackWeaponLayer, pickCombatantBody, IDLE_FRAME_MS } from './combatant-pose.js';
 import { drawCastWindup } from './combatant-cast.js';
@@ -35,7 +35,6 @@ import { _jobPalette, drawStatusSpriteAbove } from './battle-drawing.js';
 // ── Layout constants (match pvp.js) ───────────────────────────────────────
 const BOSS_BOX_EXPAND_MS      = 300;
 const PVP_BOX_RESIZE_MS       = 300;
-const SLASH_FRAMES            = 3;
 const DEFEND_SPARKLE_FRAME_MS = 133;
 
 function _cursorTileCanvas() { return ui.cursorTileCanvas; }

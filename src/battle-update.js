@@ -2,7 +2,7 @@
 // run, boss dissolve, victory, defeat, and main updateBattle() loop.
 
 import { battleSt, getEnemyHP, setEnemyHP, BOSS_MAX_HP,
-         BATTLE_SHAKE_MS, MONSTER_DEATH_MS } from './battle-state.js';
+         BATTLE_SHAKE_MS, MONSTER_DEATH_MS, BATTLE_TEXT_STEPS, BATTLE_TEXT_STEP_MS } from './battle-state.js';
 import { inputSt } from './input-handler.js';
 import { sprite } from './player-sprite.js';
 import { pvpSt, resetPVPState, updatePVPBattle } from './pvp.js';
@@ -40,8 +40,7 @@ import { saveSlotsToDB } from './save-state.js';
 import { addItem, buildItemSelectList } from './inventory.js';
 
 // ── Constants ──────────────────────────────────────────────────────────────
-const BATTLE_TEXT_STEP_MS      = 50;
-const BATTLE_TEXT_STEPS        = 4;
+// BATTLE_TEXT_STEPS / BATTLE_TEXT_STEP_MS now imported from battle-state.js (single source).
 const BATTLE_FLASH_FRAMES      = 65;
 const BATTLE_FLASH_FRAME_MS    = 16.67;
 const BOSS_BOX_EXPAND_MS       = 300;

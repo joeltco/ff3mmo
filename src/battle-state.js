@@ -98,6 +98,12 @@ export const BATTLE_DMG_SHOW_MS = DMG_SHOW_MS;
 export const BOSS_PREFLASH_MS = 133;
 export const MONSTER_DEATH_MS = 250;
 
+// Battle text fade — drives menu / message strip / item-list fade-in/out.
+// 4 fade steps × 50 ms = 200 ms full fade. Was duplicated as local
+// constants in battle-draw-menu.js, battle-update.js, and pvp.js pre-v1.7.217.
+export const BATTLE_TEXT_STEPS   = 4;
+export const BATTLE_TEXT_STEP_MS = 50;
+
 // Player + ally death-animation timing — three-phase choreography:
 //   Phase 1 (DEATH_SLIDE_MS): kneel portrait slides down 16 px.
 //   Phase 2 (DEATH_TXTFADE_MS): name / HP text fades to alpha 0.
