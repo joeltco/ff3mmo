@@ -2,6 +2,42 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.238 — 2026-05-11
+
+### Feature: roster Message action → Private-tab whisper
+
+Wires the fourth roster action into the existing Private chat tab.
+Fire-and-forget — no accept-roll (Message has no negotiation
+semantics). Single-player: the message renders locally tagged with
+the recipient. Multiplayer: the websocket layer relays to the
+target client based on the `to` field.
+
+- `src/chat.js`:
+  - `chatState.pendingRecipient` — set by the roster Message action
+    to stash the next message's recipient. Cleared on send / escape
+    / fresh `t` key open.
+  - `addChatMessage(text, type, channel, meta)` — new optional
+    `meta` arg carries `{ from, to }` for pm-channel messages.
+    Stored on the message for the future server-relay filter.
+  - On Enter in chat input: when active tab is Private and a
+    `pendingRecipient` is set, display text becomes
+    `"You → Bob: <text>"` and the message is tagged with
+    `from: 'You'`, `to: 'Bob'`.
+- `src/input-handler.js`:
+  - `_rosterMenuMessageAction(target)` — switches active tab to
+    Private, opens chat input, stashes `chatState.pendingRecipient`.
+  - Z-press dispatch routes `action === 'Message'` through it.
+  - `t` key handler clears `pendingRecipient` on fresh chat open
+    so a regular T-typed message doesn't get a stale PM target.
+
+No new state module — Message is just three lines of state setup
+(tab + input + recipient stash) so it doesn't justify the
+party-invite-style module. Diverges intentionally from the roster
+action lifecycle pattern documented in
+`project_ff3mmo_roster_action_pattern.md` because Message has no
+accept-roll. Server-relay cutover seam = the `meta.to` field on
+the message; websocket layer reads it.
+
 ## 1.7.237 — 2026-05-11
 
 ### Feature: roster Trade action → give-only offer flow

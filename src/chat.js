@@ -66,11 +66,14 @@ export const chatState = {
   cursorTimer: 0,      // blinks every 500 ms
   expanded:    false,  // T (shift) toggles expanded view
   expandAnim:  0,      // 0=collapsed, 1=expanded (animated)
+  pendingRecipient: null,  // PM recipient name, stashed when roster Message
+                           // action opens chat input. Cleared on send / escape
+                           // / fresh 't' open. v1.7.238.
 };
 
 // ── Public API ─────────────────────────────────────────────────────────────
 
-export function addChatMessage(text, type, channel) {
+export function addChatMessage(text, type, channel, meta) {
   // Default channel based on type. Untyped user chat lands on 'party'
   // (was 'room' pre-v1.7.236 when Room was the location-scoped tab).
   if (!channel) {
@@ -78,6 +81,13 @@ export function addChatMessage(text, type, channel) {
     else channel = 'party';
   }
   const msg = { text, type: type || 'chat', channel };
+  // Optional sender / recipient for pm-channel routing — used by the
+  // websocket layer to filter Private to conversations the local
+  // player is part of. v1.7.238.
+  if (meta) {
+    if (meta.from) msg.from = meta.from;
+    if (meta.to)   msg.to   = meta.to;
+  }
   chatState.messages.push(msg);
   while (chatState.messages.length > CHAT_HISTORY) chatState.messages.shift();
   // Mark background tabs as unread
@@ -355,12 +365,23 @@ export function onChatKeyDown(e) {
         // wherever they're typing. CHAT_TABS = [World, Party, Private, System];
         // System tab falls back to 'party' since users can't post to system.
         const TAB_TO_CHANNEL = ['world', 'party', 'pm', 'party'];
-        addChatMessage(senderName + ': ' + chatState.inputText, 'chat', TAB_TO_CHANNEL[activeTab]);
+        const channel = TAB_TO_CHANNEL[activeTab];
+        // PM: prepend `→ <recipient>` to the display text and tag the
+        // message with from/to so the websocket relay knows who to
+        // deliver to. v1.7.238.
+        const recipient = (channel === 'pm') ? chatState.pendingRecipient : null;
+        const text = recipient
+          ? senderName + ' → ' + recipient + ': ' + chatState.inputText
+          : senderName + ': ' + chatState.inputText;
+        const meta = recipient ? { from: senderName, to: recipient } : null;
+        addChatMessage(text, 'chat', channel, meta);
       }
     }
     chatState.inputActive = false; chatState.inputText = '';
+    chatState.pendingRecipient = null;
   } else if (e.key === 'Escape') {
     chatState.inputActive = false; chatState.inputText = '';
+    chatState.pendingRecipient = null;
   } else if (e.key === 'Backspace') {
     chatState.inputText = chatState.inputText.slice(0, -1);
   } else if (e.key.length === 1 && chatState.inputText.length < 42) {

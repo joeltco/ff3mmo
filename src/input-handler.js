@@ -55,6 +55,7 @@ export function initKeyboardListeners() {
     if (e.key === 't' && _chatHotkeyAllowed()) {
       e.preventDefault();
       chatState.inputActive = true; chatState.inputText = ''; chatState.cursorTimer = 0;
+      chatState.pendingRecipient = null;  // fresh open — drop any stale PM target
     }
   });
   window.addEventListener('keyup', (e) => { keys[e.key] = false; });
@@ -705,6 +706,20 @@ function _rosterMenuBattleAction(target) {
   }
 }
 
+// Message action: switches active chat tab to Private + opens the
+// chat input + stashes the target as the next message's recipient.
+// No state machine, no accept-roll — Message is fire-and-forget.
+// Websocket relay (Step 1 in MULTIPLAYER.md) will deliver to the
+// target client; today the message renders locally in the Private
+// tab tagged with `to: <target.name>`. v1.7.238.
+function _rosterMenuMessageAction(target) {
+  setActiveTab(2);  // Private
+  chatState.inputActive = true;
+  chatState.inputText = '';
+  chatState.cursorTimer = 0;
+  chatState.pendingRecipient = target.name;
+}
+
 // Trade action: opens the inline item-pick panel for a give-only offer
 // to the target. Flow lives in `trade.js`. Mid-offer pick reopens to
 // 'Cancel' the same target. v1.7.237.
@@ -786,6 +801,10 @@ function _rosterInputMenu() {
       // Item-pick panel owns the next state. v1.7.237.
       inputSt.rosterMenuExitTo = 'none';
       _rosterMenuTradeAction(target);
+    } else if (action === 'Message') {
+      // Chat input owns the next state. v1.7.238.
+      inputSt.rosterMenuExitTo = 'none';
+      _rosterMenuMessageAction(target);
     } else {
       const actionBytes = _nameToBytes(action), nameBytes = _nameToBytes(target.name);
       const sep = new Uint8Array([0xFF]);
