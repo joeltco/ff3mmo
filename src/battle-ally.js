@@ -47,6 +47,9 @@ function _updateAllyDamageShow() {
     battleSt.battleState = 'monster-death'; battleSt.battleTimer = 0; playSFX(SFX.MONSTER_DEATH);
   } else if (!battleSt.isRandomEncounter && getEnemyHP() <= 0) {
     if (pvpSt.isPVPBattle) {
+      // Explicit dying-cell map (was relying on _buildPVPDyingMap lazy fallback).
+      const cellIdx = pvpSt.pvpPlayerTargetIdx < 0 ? 0 : pvpSt.pvpPlayerTargetIdx + 1;
+      pvpSt.pvpDyingMap = new Map([[cellIdx, 0]]);
       battleSt.battleState = 'pvp-dissolve'; battleSt.battleTimer = 0; playSFX(SFX.MONSTER_DEATH);
     } else { battleSt.battleState = 'boss-dissolve'; battleSt.battleTimer = 0; playSFX(SFX.BOSS_DEATH); }
   } else {

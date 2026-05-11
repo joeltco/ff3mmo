@@ -26,13 +26,3 @@ export const hudSt = {
 export const HUD_INFO_FADE_STEPS = 4;
 export const HUD_INFO_FADE_STEP_MS = 200;
 export const HUD_HPLV_STEP_MS = 60;
-
-// Player death animation timing — two-phase (hold → alpha fade).
-// Total: PLAYER_DEATH_HOLD_MS + PLAYER_DEATH_FADE_MS = 800ms.
-// Compare with battle-draw-allies.js DEATH_SLIDE_MS / DEATH_TXTFADE_MS /
-// DEATH_POSEFADE_MS for the ally 3-phase variant. Player keeps its simpler
-// fade-only shape (audit doc DEATH-ANIMATIONS-AUDIT.md #3 flags this as a
-// possible feature-parity gap; deferred pending design decision).
-export const PLAYER_DEATH_HOLD_MS = 500;
-export const PLAYER_DEATH_FADE_MS = 300;
-export const PLAYER_DEATH_TOTAL_MS = PLAYER_DEATH_HOLD_MS + PLAYER_DEATH_FADE_MS;

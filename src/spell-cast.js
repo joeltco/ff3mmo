@@ -695,12 +695,31 @@ export function updateSpellCast(dt) {
 // both the throw-walk completion and the heal-style total-time completion.
 function _finishMagicHit() {
   clearHealNums();
+  // Collect kills across the spell's target set. Encounter monsters use
+  // monsterIndex (idx into encounterMonsters); PVP enemies use cellIdx
+  // (0 = main opp, 1+ = pvpEnemyAllies[idx-1]). Pre-v1.7.213 the PVP
+  // branch only fired for the player's currently-selected target via
+  // getEnemyHP() — multi-target spells that killed off-target PVP enemies
+  // would die silently with no dissolve anim.
   const killedEnemyIndices = [];
+  const killedPVPCells = [];
   if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
     for (const t of _targets) {
       if (t.type === 'enemy' && battleSt.encounterMonsters[t.index]?.hp <= 0) {
         killedEnemyIndices.push(t.index);
       }
+    }
+  } else if (pvpSt.isPVPBattle) {
+    for (const t of _targets) {
+      if (t.type !== 'pvp-enemy') continue;
+      const tgt = t.index === 0 ? pvpSt.pvpOpponentStats : pvpSt.pvpEnemyAllies[t.index - 1];
+      if (tgt && tgt.hp <= 0) killedPVPCells.push(t.index);
+    }
+    // Single-target spell path didn't carry a `pvp-enemy` target descriptor —
+    // fall back to the player's currently-selected target dying via getEnemyHP.
+    if (killedPVPCells.length === 0 && getEnemyHP() <= 0) {
+      const cellIdx = pvpSt.pvpPlayerTargetIdx < 0 ? 0 : pvpSt.pvpPlayerTargetIdx + 1;
+      killedPVPCells.push(cellIdx);
     }
   }
   if (killedEnemyIndices.length > 0) {
@@ -709,17 +728,17 @@ function _finishMagicHit() {
     battleSt.battleState = 'monster-death';
     battleSt.battleTimer = 0;
     playSFX(SFX.MONSTER_DEATH);
-  } else if (!battleSt.isRandomEncounter && getEnemyHP() <= 0) {
+  } else if (killedPVPCells.length > 0) {
     replaceBattleMsg(BATTLE_SLAIN);
-    if (pvpSt.isPVPBattle) {
-      battleSt.battleState = 'pvp-dissolve';
-      battleSt.battleTimer = 0;
-      playSFX(SFX.MONSTER_DEATH);
-    } else {
-      battleSt.battleState = 'boss-dissolve';
-      battleSt.battleTimer = 0;
-      playSFX(SFX.BOSS_DEATH);
-    }
+    pvpSt.pvpDyingMap = new Map(killedPVPCells.map(i => [i, 0]));
+    battleSt.battleState = 'pvp-dissolve';
+    battleSt.battleTimer = 0;
+    playSFX(SFX.MONSTER_DEATH);
+  } else if (!battleSt.isRandomEncounter && !pvpSt.isPVPBattle && getEnemyHP() <= 0) {
+    replaceBattleMsg(BATTLE_SLAIN);
+    battleSt.battleState = 'boss-dissolve';
+    battleSt.battleTimer = 0;
+    playSFX(SFX.BOSS_DEATH);
   } else if (isBattleMsgBusy()) {
     // Battle message still on screen (Sight's "Ineffective", status-name
     // strips, future spell-text dialog) — defer turn advance through

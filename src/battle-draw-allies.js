@@ -7,7 +7,7 @@
 // `drawBattleAllies` invoked from `drawBattle` in `battle-drawing.js` and
 // from `game-loop.js` (post-battle visibility window).
 
-import { battleSt } from './battle-state.js';
+import { battleSt, DEATH_SLIDE_MS, DEATH_TXTFADE_MS, DEATH_POSEFADE_MS, DEATH_TOTAL_MS } from './battle-state.js';
 import { drawText, measureText } from './font-renderer.js';
 import { nesColorFade } from './palette.js';
 import { _dmgBounceY } from './data/animation-tables.js';
@@ -39,11 +39,7 @@ const HUD_VIEW_Y = 32;
 const HUD_RIGHT_X = 144, HUD_RIGHT_W = 112;
 const ROSTER_ROW_H = 32;
 
-// ── Death animation phases ────────────────────────────────────────────────
-const DEATH_SLIDE_MS    = 500;
-const DEATH_TXTFADE_MS  = 300;
-const DEATH_POSEFADE_MS = 300;
-const DEATH_TOTAL_MS    = DEATH_SLIDE_MS + DEATH_TXTFADE_MS + DEATH_POSEFADE_MS;
+// Death-animation constants now imported from battle-state.js (single source).
 
 function _cursorTileCanvas() { return ui.cursorTileCanvas; }
 

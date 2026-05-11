@@ -9,7 +9,7 @@
 // `drawBattleCritFlash`, `drawBattleStrobeFlash` invoked from `drawBattle`
 // in `battle-drawing.js`.
 
-import { battleSt } from './battle-state.js';
+import { battleSt, DEATH_SLIDE_MS, DEATH_TXTFADE_MS, DEATH_POSEFADE_MS, DEATH_TOTAL_MS } from './battle-state.js';
 import { _dmgBounceY } from './data/animation-tables.js';
 import { weaponSubtype } from './data/items.js';
 import { pickAttackPoseKey, pickAttackWeaponSpec, attackWeaponLayer } from './combatant-pose.js';
@@ -48,11 +48,7 @@ function _playerPoseCanvas(p, key) {
   return p[key] || (PLAYER_POSE_FALLBACK[key] && p[PLAYER_POSE_FALLBACK[key]]) || null;
 }
 
-// ── Death animation phases ────────────────────────────────────────────────
-const DEATH_SLIDE_MS    = 500;
-const DEATH_TXTFADE_MS  = 300;
-const DEATH_POSEFADE_MS = 300;
-const DEATH_TOTAL_MS    = DEATH_SLIDE_MS + DEATH_TXTFADE_MS + DEATH_POSEFADE_MS;
+// Death-animation constants now imported from battle-state.js (single source).
 
 // ── Pose source resolution ────────────────────────────────────────────────
 

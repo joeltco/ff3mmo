@@ -98,6 +98,21 @@ export const BATTLE_DMG_SHOW_MS = DMG_SHOW_MS;
 export const BOSS_PREFLASH_MS = 133;
 export const MONSTER_DEATH_MS = 250;
 
+// Player + ally death-animation timing — three-phase choreography:
+//   Phase 1 (DEATH_SLIDE_MS): kneel portrait slides down 16 px.
+//   Phase 2 (DEATH_TXTFADE_MS): name / HP text fades to alpha 0.
+//   Phase 3 (DEATH_POSEFADE_MS): prone death-pose sprite fades in.
+// Player and ally use the SAME timing (1100 ms total). Previously
+// duplicated in both battle-draw-player.js and battle-draw-allies.js;
+// hud-drawing.js had its own derived 500/800/300 constants. v1.7.213
+// consolidates here so any tweak applies everywhere.
+export const DEATH_SLIDE_MS    = 500;
+export const DEATH_TXTFADE_MS  = 300;
+export const DEATH_POSEFADE_MS = 300;
+export const DEATH_TOTAL_MS    = DEATH_SLIDE_MS + DEATH_TXTFADE_MS + DEATH_POSEFADE_MS;
+// Convenience: the info-panel hide point (after slide + text-fade).
+export const DEATH_INFO_HIDE_MS = DEATH_SLIDE_MS + DEATH_TXTFADE_MS;
+
 // PVP-aware enemy HP accessors.
 // NOTE: `setEnemyHP` writes battleSt.enemyHP unconditionally (even in PVP) — preserve this
 // behavior; some non-PVP code paths rely on the fallback being always-updated.

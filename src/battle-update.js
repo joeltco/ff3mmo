@@ -416,6 +416,10 @@ function _updatePlayerDamageShow() {
     } else if (!battleSt.isRandomEncounter && getEnemyHP() <= 0) {
       replaceBattleMsg(BATTLE_SLAIN);
       if (pvpSt.isPVPBattle) {
+        // Explicit dying-cell map; getEnemyHP() returned 0 for the player's
+        // currently-targeted cell, so derive cellIdx from pvpPlayerTargetIdx.
+        const cellIdx = pvpSt.pvpPlayerTargetIdx < 0 ? 0 : pvpSt.pvpPlayerTargetIdx + 1;
+        pvpSt.pvpDyingMap = new Map([[cellIdx, 0]]);
         battleSt.battleState = 'pvp-dissolve'; battleSt.battleTimer = 0; playSFX(SFX.MONSTER_DEATH);
       } else { battleSt.battleState = 'boss-dissolve'; battleSt.battleTimer = 0; playSFX(SFX.BOSS_DEATH); }
     } else {

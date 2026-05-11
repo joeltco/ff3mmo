@@ -1,6 +1,6 @@
 // hud-drawing.js — HUD rendering, top box, portrait, info panel, utility draw helpers
 
-import { battleSt, getEnemyHP, setEnemyHP } from './battle-state.js';
+import { battleSt, getEnemyHP, setEnemyHP, DEATH_SLIDE_MS, DEATH_TXTFADE_MS, DEATH_INFO_HIDE_MS } from './battle-state.js';
 import { NES_SYSTEM_PALETTE } from './tile-decoder.js';
 import { drawText, measureText, TEXT_WHITE } from './font-renderer.js';
 import { nesColorFade, _makeFadedPal } from './palette.js';
@@ -32,7 +32,7 @@ function _pauseTargetFrames() {
   else if (hn.itemId != null) bundle = getSpellAnimForItem(hn.itemId);
   return (bundle && bundle.kind === 'portrait-2frame') ? bundle.frames : null;
 }
-import { hudSt, HUD_HPLV_STEP_MS, PLAYER_DEATH_HOLD_MS, PLAYER_DEATH_FADE_MS, PLAYER_DEATH_TOTAL_MS } from './hud-state.js';
+import { hudSt, HUD_HPLV_STEP_MS } from './hud-state.js';
 import { titleSt } from './title-screen.js';
 import { ui } from './ui-state.js';
 import { shopHoverEquippable, shopHoverStatDelta } from './shop.js';
@@ -280,12 +280,17 @@ function _drawHUDInfoPanel() {
   const infoFadeStep = HUD_INFO_FADE_STEPS - Math.min(Math.floor(hudSt.hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
   if (infoFadeStep >= HUD_INFO_FADE_STEPS) return;
   const playerDeathTimer = hudSt.playerDeathTimer;
+  // Info panel is the name/HP text portion of the player death sequence.
+  // While phase 1 (DEATH_SLIDE_MS) runs, the panel renders normally. During
+  // phase 2 (DEATH_TXTFADE_MS) the panel alpha-fades to 0. By DEATH_INFO_HIDE_MS
+  // (slide + textfade end) the panel is gone — phase 3 (pose fade-in) takes
+  // over visually at the portrait's location, handled in battle-draw-player.js.
   if (playerDeathTimer != null) {
-    if (playerDeathTimer < PLAYER_DEATH_HOLD_MS) {
-      // Hold phase — render normally.
-    } else if (playerDeathTimer < PLAYER_DEATH_TOTAL_MS) {
-      // Fade phase — alpha ramps 1 → 0 over PLAYER_DEATH_FADE_MS.
-      const deathAlpha = 1 - (playerDeathTimer - PLAYER_DEATH_HOLD_MS) / PLAYER_DEATH_FADE_MS;
+    if (playerDeathTimer < DEATH_SLIDE_MS) {
+      // Phase 1 — text rendered normally.
+    } else if (playerDeathTimer < DEATH_INFO_HIDE_MS) {
+      // Phase 2 — alpha ramps 1 → 0 over DEATH_TXTFADE_MS.
+      const deathAlpha = 1 - (playerDeathTimer - DEATH_SLIDE_MS) / DEATH_TXTFADE_MS;
       ctx.save(); ctx.globalAlpha = deathAlpha;
     } else { return; }
   }
@@ -296,7 +301,7 @@ function _drawHUDInfoPanel() {
   const sy = HUD_VIEW_Y + 8;
   const panelRight = HUD_RIGHT_X + HUD_RIGHT_W - 8 + shakeOff;
   const slot = saveSlots[selectCursor];
-  const deathTextFading = playerDeathTimer != null && playerDeathTimer >= PLAYER_DEATH_HOLD_MS && playerDeathTimer < PLAYER_DEATH_TOTAL_MS;
+  const deathTextFading = playerDeathTimer != null && playerDeathTimer >= DEATH_SLIDE_MS && playerDeathTimer < DEATH_INFO_HIDE_MS;
   if (!slot) { if (deathTextFading) ctx.restore(); return; }
   const namePal = [...TEXT_WHITE];
   for (let s = 0; s < infoFadeStep; s++) namePal[3] = nesColorFade(namePal[3]);

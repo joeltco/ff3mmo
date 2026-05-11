@@ -11,10 +11,10 @@ ally, encounter monster, boss, PVP main opponent, PVP enemy ally.
 |---|------|-------|--------|
 | 1 | `MONSTER_DEATH_MS = 250` duplicated (was 4×, now 1× from `battle-state`) | dedup | ✅ v1.7.212 |
 | 2 | Player death uses magic numbers; now `PLAYER_DEATH_HOLD_MS` / `_FADE_MS` / `_TOTAL_MS` exported from `hud-state` | consistency | ✅ v1.7.212 |
-| 3 | Player death is alpha-fade only; ally has 3-phase 1100ms. No player kneel-slide / pose-fade. | feature parity | ⏸ needs design decision |
-| 4 | `_buildPVPDyingMap` lazy-reads `pvpPlayerTargetIdx`; latent assumption baked into "multi-cell" map shape | latent bug | ⏸ open |
-| 5 | Multi-target player spell on PVP can leave kills un-dissolved | gameplay bug | ⏸ open |
-| 6 | `playerDeathTimer` cleanup — verify battle-end → respawn → battle-start path | minor | ⏸ verify |
+| 3 | ~~Player death is alpha-fade only~~ — **audit error**, player has full 3-phase anim (portrait in `battle-draw-player.js`, info-panel fade in `hud-drawing.js`). Constants now consolidated. | dedup | ✅ v1.7.213 |
+| 4 | `_buildPVPDyingMap` lazy fallback removed; every `pvp-dissolve` transition sets the map explicitly | latent bug | ✅ v1.7.213 |
+| 5 | Multi-target spell on PVP now collects kills across all target cells | gameplay bug | ✅ v1.7.213 |
+| 6 | `playerDeathTimer` cleanup — verified safe (clears in `resetBattleVars` + `_respawnAtLastTown`) | minor | ✅ verified |
 | 7 | Ally `deathTimer` never cleared on revive (no revive in v1) | latent | deferred |
 
 ## Death timing summary
@@ -25,7 +25,7 @@ ally, encounter monster, boss, PVP main opponent, PVP enemy ally.
 | **Boss** | `boss-dissolve` (multi-block stagger) | `BOSS_BLOCKS × BOSS_DISSOLVE_STEPS × BOSS_DISSOLVE_FRAME_MS` | Bayer block-by-block reveal, SFX every 4th block |
 | **PVP main opp** | `pvp-dissolve` (250ms) — no pre-hold | 250ms | Same dither dissolve as encounter monster |
 | **PVP enemy ally** | `pvp-dissolve` (250ms) — no pre-hold | 250ms | Same dither dissolve |
-| **Player** | `playerDeathTimer` (independent of `battleState`) | 800ms | Alpha-fade only (no kneel-slide, no death pose) |
+| **Player** | `playerDeathTimer` (independent of `battleState`) | 1100ms (portrait) + 800ms (info-panel slice) | 3-phase: kneel-slide / info-panel fade / death-pose fade-in. Portrait in `battle-draw-player.js`, info-panel fade in `hud-drawing.js`. |
 | **Ally** | `ally.deathTimer` (independent of `battleState`) | 1100ms (500+300+300) | Kneel-slide (500ms) → text-fade (300ms) → death-pose-fade (300ms) |
 
 ## #1 — `MONSTER_DEATH_MS = 250` duplicated 4×

@@ -228,14 +228,14 @@ function _updatePVPAllyAppear() {
   if (battleSt.battleTimer >= PVP_BOX_RESIZE_MS) _buildAndProcessNextTurn();
   return true;
 }
-function _buildPVPDyingMap() {
-  // Current target: main opponent (grid idx 0) or the ally the player just defeated
-  const dyingIdx = pvpSt.pvpPlayerTargetIdx < 0 ? 0 : pvpSt.pvpPlayerTargetIdx + 1;
-  pvpSt.pvpDyingMap = new Map([[dyingIdx, 0]]);
-}
 function _updatePVPDissolve() {
   if (battleSt.battleState !== 'pvp-dissolve') return false;
-  if (pvpSt.pvpDyingMap.size === 0) _buildPVPDyingMap();
+  // pvpDyingMap is populated explicitly by every caller that transitions
+  // into pvp-dissolve (spell-cast.js, battle-update.js, battle-ally.js).
+  // Pre-v1.7.213 this was a lazy `_buildPVPDyingMap` fallback that read
+  // `pvpPlayerTargetIdx`, which baked a single-target assumption into a
+  // map data structure and would have rendered the wrong cell for any
+  // future AoE that killed off-target.
   const _maxDelay = pvpSt.pvpDyingMap.size > 0 ? Math.max(...pvpSt.pvpDyingMap.values()) : 0;
   if (battleSt.battleTimer >= MONSTER_DEATH_MS + _maxDelay) {
     pvpSt.pvpDyingMap = new Map();

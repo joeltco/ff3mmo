@@ -2,6 +2,50 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.213 — 2026-05-10
+
+### Death animations audit — second batch (real fixes + audit correction)
+
+Closes the remaining items from `docs/DEATH-ANIMATIONS-AUDIT.md`.
+
+**Audit correction (#3):** the doc claimed the player had only an
+800ms alpha-fade death (no kneel-slide, no death pose). Wrong —
+that 800ms block is just the **info-panel** fade-out portion. The
+**portrait** has the full 3-phase 1100ms animation in
+`battle-draw-player.js` (kneel slide → text wait → death-pose
+fade-in), identical timings to the ally. Once verified, the action
+was just to consolidate the duplicated `DEATH_*` constants.
+
+- **`DEATH_SLIDE_MS` / `DEATH_TXTFADE_MS` / `DEATH_POSEFADE_MS` /
+  `DEATH_TOTAL_MS` / `DEATH_INFO_HIDE_MS`** — single source in
+  `battle-state.js`. Was duplicated verbatim in
+  `battle-draw-player.js` and `battle-draw-allies.js`; the v1.7.212
+  `PLAYER_DEATH_HOLD_MS` / `_FADE_MS` / `_TOTAL_MS` constants (added
+  in good faith based on the misread audit) were renamed away —
+  those values were just `DEATH_SLIDE_MS + DEATH_TXTFADE_MS = 800ms`
+  re-derived under different names. Now `hud-drawing.js` reads the
+  canonical constants directly.
+
+**#4 PVP cell-idx lazy build removed.** `_buildPVPDyingMap` used to
+read `pvpPlayerTargetIdx` whenever the dying-cells map was empty,
+which baked a single-target assumption into a multi-cell data
+structure. Latent bug: first AoE spell that killed off-target
+would have rendered the wrong cell. Now every `pvp-dissolve`
+transition (`battle-update.js`, `battle-ally.js`, `spell-cast.js`)
+populates `pvpDyingMap` explicitly. Lazy fallback deleted.
+
+**#5 Multi-target spell-kill collection on PVP.** `_finishMagicHit`
+only collected `killedEnemyIndices` for `t.type === 'enemy'`
+(encounter monsters). PVP multi-target deaths fell through to the
+`getEnemyHP() <= 0` single-target check — kills outside the
+player's current target would die silently. Now the loop also
+collects `killedPVPCells` for `t.type === 'pvp-enemy'` and
+transitions to `pvp-dissolve` with the full kill list.
+
+**#6 verified safe.** `playerDeathTimer` clears in `resetBattleVars`
+(every battle start) and `_respawnAtLastTown` (post-death). Both
+paths cover the battle-end → respawn → battle-start flow.
+
 ## 1.7.212 — 2026-05-10
 
 ### Death animations audit — first batch (cleanup)
