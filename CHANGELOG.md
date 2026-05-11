@@ -2,6 +2,31 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.230 — 2026-05-11
+
+### fix: title→game roster flashed bright then re-faded
+
+v1.7.229 generalized `_rosterTransFade` to fire on every wipe state,
+but missed two transition cases that the HUD top-box already handled
+in `hud-drawing.js:160-171`:
+
+- `'hud-fade-in'` — the title-screen→game flow goes directly from
+  hud-fade-in → opening (skipping closing/hold). Pre-fix, the roster
+  fell through to the `infoFade` fallback during hud-fade-in (visible
+  immediately), then the `'opening'` branch forced it back to black
+  and ramped from max → 0 over `WIPE_DURATION`. User saw the panel
+  "pop in, then fade back in again".
+- `transSt.topBoxAlreadyBright` — set by `_updateTransition` when
+  hud-fade-in completes (`transitions.js:84`) so `'opening'` knows
+  the panels are already at full alpha. The HUD top-box checks this
+  to skip re-fading; the roster wasn't.
+
+Now `_rosterTransFade` handles `'hud-fade-in'` (ramps from black →
+visible synced to `hudInfoFadeTimer`, matching the HUD top-box) and
+short-circuits `'opening'` when `topBoxAlreadyBright` is set (roster
+stays bright through the wipe-bar open). Regular wipes (closing →
+hold → opening) are unchanged.
+
 ## 1.7.229 — 2026-05-11
 
 ### Roster fades with every map-screen wipe

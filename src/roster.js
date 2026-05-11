@@ -142,17 +142,22 @@ function _rosterStartFadeOut(name) {
 
 function _rosterTransFade() {
   const FADE_STEP_MS = WIPE_DURATION / ROSTER_FADE_STEPS;
-  // Tie the roster fade to the map-screen wipe state for EVERY wipe —
-  // not just location-changing ones. Pre-v1.7.229 the trans-fade was
-  // gated on `transSt.rosterLocChanged`, so interior wipes (chest
-  // open, pond heal, same-loc map moves) left the roster panel
-  // bright while the screen closed and re-opened. Now: every wipe
-  // closes the roster with the bars; every wipe re-opens it with
-  // the bars. `'loading'` is the dungeon-load screen between hold
-  // and opening — roster stays maxed-out through it.
+  // Roster syncs to every wipe — see HUD top-box handling in
+  // `hud-drawing.js:160-171` for the matching pattern. v1.7.230
+  // adds `'hud-fade-in'` + the `topBoxAlreadyBright` short-circuit
+  // for the title→game flow, which goes directly hud-fade-in →
+  // opening (skipping closing/hold). Pre-fix, the title-screen
+  // transition flashed the roster bright during hud-fade-in and
+  // then re-faded it from black during opening.
   if (transSt.state === 'closing') return Math.min(Math.floor(transSt.timer / FADE_STEP_MS), ROSTER_FADE_STEPS);
   if (transSt.state === 'hold' || transSt.state === 'loading' || transSt.state === 'trap-falling') return ROSTER_FADE_STEPS;
-  if (transSt.state === 'opening') return Math.max(ROSTER_FADE_STEPS - Math.floor(transSt.timer / FADE_STEP_MS), 0);
+  if (transSt.state === 'hud-fade-in') {
+    return Math.max(ROSTER_FADE_STEPS - Math.floor(hudSt.hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), 0);
+  }
+  if (transSt.state === 'opening') {
+    if (transSt.topBoxAlreadyBright) return 0;  // hud-fade-in already brought the roster up; don't re-fade
+    return Math.max(ROSTER_FADE_STEPS - Math.floor(transSt.timer / FADE_STEP_MS), 0);
+  }
   const infoFade = HUD_INFO_FADE_STEPS - Math.min(Math.floor(hudSt.hudInfoFadeTimer / HUD_INFO_FADE_STEP_MS), HUD_INFO_FADE_STEPS);
   if (infoFade > 0) return infoFade;
   return 0;
