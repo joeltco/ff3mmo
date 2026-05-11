@@ -19,7 +19,7 @@ see #3). State machine: `'none' → 'browse' → 'menu-in' → 'menu' →
 | 2 | **`menu-out` ↔ `msgState` race** — Battle's two-stage message can leave roster in `browse` overlaid by a message | state-machine bug | ✅ v1.7.221 |
 | 3 | **`ROSTER_MENU_ITEMS` defined twice** (input-handler.js + roster.js) | dedup | ✅ v1.7.221 |
 | 4 | **Cursor target can drift mid-menu** — if a roster member fades out while the menu is open, Z dispatches the wrong target | input correctness | ✅ v1.7.221 |
-| 5 | Party / Trade / Message / Inspect are stubs — render an `Action⏤Name` message and dismiss | by-design (v0) | ⏸ deferred per `MULTIPLAYER.md` |
+| 5 | Party / Trade / Message / Inspect are stubs — render an `Action⏤Name` message and dismiss | by-design (v0) | ✅ all four shipped (v1.7.235–v1.7.239) |
 | 6 | Battle gate `(onWorldMap \|\| dungeonFloor >= 0)` blocks PVP in town — correct, but worth documenting | spec clarity | ⏸ note |
 | 7 | Roster can be opened while chat is expanded (typing-mode is blocked, just expanded isn't) | minor input-gate gap | ⏸ low |
 | 8 | "Challenged X!" → 1.5-2.5s gap → "X accepted!" leaves roster visible during PVP intro | UX timing | ✅ obsoleted by Battle redesign (v1.7.222+) |
@@ -55,15 +55,17 @@ search persists across map changes; only *resolution* re-checks
 
 | Action | Precondition | Handler | Status |
 |--------|--------------|---------|--------|
-| Party | none | `showMsgBox("Party⏤<name>")` | ⏸ stub |
-| Battle | `mapSt.onWorldMap \|\| mapSt.dungeonFloor >= 0` | `_rosterMenuDuelAction(target)` → 2-stage msg → `_startPVPBattle` | ✅ live |
-| Trade | none | `showMsgBox("Trade⏤<name>")` | ⏸ stub |
-| Message | none | `showMsgBox("Message⏤<name>")` | ⏸ stub |
-| Inspect | none | `showMsgBox("Inspect⏤<name>")` | ⏸ stub |
+| Party   | none | `_rosterMenuPartyAction` → `pvp-search.js`-style invite-and-accept → `partyInviteSt.partyMembers` | ✅ live (v1.7.235) |
+| Battle  | `mapSt.onWorldMap \|\| mapSt.dungeonFloor >= 0` (resolve gate; *search* starts anywhere) | `_rosterMenuBattleAction` → `pvp-search.js` search-and-hook → `_startPVPBattle` | ✅ live (v1.7.222–226) |
+| Trade   | none | `_rosterMenuTradeAction` → `trade.js` item-pick panel → offer-and-accept → `removeItem` on accept | ✅ live (v1.7.237) |
+| Message | none | `_rosterMenuMessageAction` → switches active chat tab to Private + opens chat input + stashes `chatState.pendingRecipient` | ✅ live (v1.7.238) |
+| Inspect | none | `_rosterMenuInspectAction` → `inspect.js` read-only stat panel (job / level / HP / ATK/DEF / AGI/INT/MND/EVD / equipment / spells) | ✅ live (v1.7.239) |
 
-Code path for stubs: `input-handler.js:714-720` (generic fallback —
-action label byte-encoded, `0xFF` separator, target name, single
-`showMsgBox`). No callback, no follow-up state.
+A generic `else` stub fallback remains in `_rosterInputMenu` after the
+five explicit branches — unreachable for today's `ROSTER_MENU_ITEMS`
+but kept as a defensive guard so a new label added without a handler
+doesn't fail silently. Remove only when ROSTER_MENU_ITEMS becomes
+truly closed.
 
 ## #1 — Empty-roster null dereference
 
@@ -184,17 +186,36 @@ PVP. Subtle and reproducible.
 into a new `inputSt.rosterMenuTarget` and read from there in
 `_rosterInputMenu`. Clears at `menu-out` completion.
 
-## #5 — Party / Trade / Message / Inspect are stubs
+## #5 — Party / Trade / Message / Inspect (all shipped v1.7.235–v1.7.239)
 
-Confirmed intentional per `MULTIPLAYER.md` — full implementations
-require the websocket layer (chat relay for Message, inventory sync
-for Trade, party-invite protocol for Party, stat panel rendering for
-Inspect). For v0 the stub renders `<Action>⏤<TargetName>` and dismisses.
+The deferred-on-websocket reading was wrong — single-player landed
+all four with the multiplayer cutover designed in as a single sim-timer
+swap, not a full rewrite. Summary of what shipped:
 
-No bug. But the code reads as a generic fallback in the dispatch
-branch (`input-handler.js:714-720`); a comment marking each one as
-"// stub — see MULTIPLAYER.md Step N" would prevent future-Claude
-from mistaking the catch-all for an intentional handler. Optional.
+- **Party** (v1.7.235, `src/party-invite.js`) — invite-and-accept,
+  level-differential + Bard/Ranger/Knight bonus. Accepted members
+  auto-join `battleAllies` at every battle start regardless of
+  location (party travels with you). Max 3. Manual-dismiss lifetime.
+  Tab "Room" → "Party" landed v1.7.236; party chat is closed
+  (`msg.channel === 'party'` filter, no fallthrough).
+- **Trade** (v1.7.237, `src/trade.js`) — give-only offer with an
+  inline item-pick panel covering the HUD viewport. Accept formula
+  is item-price-weighted (`clamp(0.25 + price/1500, 0.10, 0.90)`).
+  On accept `removeItem` runs locally; multiplayer adds the
+  symmetric `addItem` on the recipient's client.
+- **Message** (v1.7.238, `src/chat.js` wiring) — picks reuse the
+  existing Private chat tab. Stashes `chatState.pendingRecipient`,
+  tags the sent message with `from` + `to` for websocket relay.
+  No state machine; Message is fire-and-forget.
+- **Inspect** (v1.7.239, `src/inspect.js`) — standalone read-only
+  stat panel. Job / Lv / HP / ATK/DEF / AGI/INT/MND/EVD / equipment
+  / spells. Data source = `generateAllyStats(target)`, identical
+  to what the battle code uses, so the panel is fight-accurate.
+
+The three negotiation actions (Battle / Party / Trade) share one
+lifecycle pattern documented in
+`project_ff3mmo_roster_action_pattern.md`. Message and Inspect
+diverge intentionally — they don't have accept semantics.
 
 ## #6 — Battle gate is correct (not a bug; noting for spec)
 
@@ -244,16 +265,27 @@ swapped for a real connected-player list:
 |------|---------------------|--------------|
 | Browse / cursor | `PLAYER_POOL` filtered by `loc` is the source | Replace `PLAYER_POOL` reads in `getRosterVisible` / `getPlayersAtLocation` with the websocket roster cache |
 | Battle | `target` has `name/jobIdx/level/weapon*/armor/helm/shield/palIdx` — read by `generateAllyStats(target)` (`pvp.js:111`) | Real roster entries must carry the same fields; `JOB-EXP-AUDIT.md` already confirmed `generateAllyStats` is deterministic on these inputs |
-| Party / Trade / Message / Inspect | stubs | Each needs its own websocket message type (`party-invite`, `trade-request`, `chat-direct`, `inspect-request`) |
+| Party    | sim-timer accept-roll in `tickPartyInvite`             | Replace roll with server-relayed `invite_response` signal. Server enforces "one party per player" by rejecting accepts for already-partied targets |
+| Trade    | sim-timer accept-roll in `tickTrade`; `removeItem` local on accept | Replace roll with server-relayed `trade_response` signal. On accept the server runs the symmetric `addItem` on the recipient's client |
+| Message  | local `addChatMessage` tagged with `from` + `to`       | Server relays the `pm` message to the `to` client; receiver's `addChatMessage` runs with the original `from` intact |
+| Inspect  | `generateAllyStats(target)` reads `PLAYER_POOL` entry  | Replace `PLAYER_POOL.find(name === ...)` with the websocket roster cache lookup; same `generateAllyStats` call on the resolved entry |
 | State machine | Local-only; no race with network | Add `'menu-awaiting-server'` state between menu-out and result message for Party/Trade/Battle (handshake confirmation before flow commits) |
 
 ## Followups (deferred)
 
-- **Trade UI** — needs inventory-overlay design + server arbitration. Not in `MULTIPLAYER.md` Step 1-3 scope.
-- **Inspect panel** — natural fit for the existing pause-menu equip
-  inspector. Could land as a single-player feature first (inspect roster
-  in Ur) without the websocket layer.
-- **Party** — requires a party state machine (separate from the
-  roster). Deferred indefinitely.
-- **Direct Message** — chat.js already has tabs; a `to:<name>`
-  whisper would be cheaper than a full party system.
+Roster-menu surface is feature-complete as of v1.7.239. Remaining
+followups are multiplayer-cutover work in `MULTIPLAYER.md`, not
+roster-menu features. Open items:
+
+- **Party persistence across save/reload** — `partyInviteSt.partyMembers`
+  is in-memory only; needs SRAM schema field so saves don't dissolve
+  the party.
+- **Trade item-pick scroll arrows** — `src/trade.js` lists the first
+  ~5 items without paging UI. Add scroll-arrow hints when inventory
+  overflows.
+- **Inspect spell list overflow** — `src/inspect.js` shows the first 2
+  known spells + "+N more". Page-through or expanded list for late-game
+  Black Mages with 7+ spells.
+- **Roster-menu visual indicator while typing PM** — Message picks
+  switch the chat tab but the input row doesn't show "→ Bob" until
+  after send. Optional prefix in the prompt.
