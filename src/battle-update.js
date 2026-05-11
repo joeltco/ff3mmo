@@ -32,6 +32,7 @@ import { showMsgBox } from './message-box.js';
 import { respawnAfterDeath } from './map-loading.js';
 import { _nameToBytes } from './text-utils.js';
 import { getPlayerLocation } from './roster.js';
+import { partyInviteSt } from './party-invite.js';
 import { DIR_DOWN } from './sprite.js';
 import { STATUS_NAME_BYTES, canCastMagic, STATUS, clearAll as clearAllStatus } from './status-effects.js';
 import { applyPhysicalHitToEnemy } from './physical-attack.js';
@@ -270,12 +271,35 @@ export function tryJoinPlayerAlly() {
     pvpSt.pvpOpponent && pvpSt.pvpOpponent.name,
     ...pvpSt.pvpEnemyAllies.map(a => a.name),
   ].filter(Boolean));
+  // Pre-pass: invited party members auto-join — no random roll, no
+  // location check (party members travel with the player, unlike the
+  // random ally pool which only pulls from roster at the current loc).
+  // Per-battle stats regenerate via generateAllyStats (same as random
+  // allies), so death in a previous fight doesn't disqualify them.
+  // Cap respected. v1.7.235.
+  let partyJoined = false;
+  for (const name of partyInviteSt.partyMembers) {
+    if (battleSt.battleAllies.length >= 3) break;
+    if (pvpNames.has(name)) continue;
+    if (battleSt.battleAllies.some(a => a.name === name)) continue;
+    const member = PLAYER_POOL.find(p => p.name === name);
+    if (!member) continue;
+    battleSt.battleAllies.push(generateAllyStats(member));
+    partyJoined = true;
+  }
+  if (battleSt.battleAllies.length >= 3) {
+    if (partyJoined) { battleSt.battleState = 'ally-fade-in'; battleSt.battleTimer = 0; return true; }
+    return false;
+  }
   const eligible = PLAYER_POOL.filter(p =>
     p.loc === loc &&
     !battleSt.battleAllies.some(a => a.name === p.name) &&
     !pvpNames.has(p.name)
   );
-  if (eligible.length === 0 || Math.random() >= 0.5) return false;
+  if (eligible.length === 0 || Math.random() >= 0.5) {
+    if (partyJoined) { battleSt.battleState = 'ally-fade-in'; battleSt.battleTimer = 0; return true; }
+    return false;
+  }
   battleSt.battleAllies.push(generateAllyStats(eligible[Math.floor(Math.random() * eligible.length)]));
   battleSt.battleState = 'ally-fade-in'; battleSt.battleTimer = 0;
   return true;

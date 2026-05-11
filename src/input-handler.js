@@ -21,6 +21,7 @@ import { pvpSt } from './pvp.js';
 import { advanceBattleMsgZ } from './battle-msg.js';
 import { getRosterVisible, ROSTER_MENU_ITEMS } from './roster.js';
 import { startPVPSearch, cancelPVPSearch, isSearchingFor, isSearchOnCooldown } from './pvp-search.js';
+import { startPartyInvite, cancelPartyInvite, isInvitingTarget, isInviteOnCooldown, isInParty, isPartyFull, removeFromParty } from './party-invite.js';
 import { playerInventory, addItem, removeItem, INV_SLOTS } from './inventory.js';
 
 // Keyboard poll map — mutated by window listeners, read throughout the codebase.
@@ -703,6 +704,33 @@ function _rosterMenuBattleAction(target) {
   }
 }
 
+// Party action: starts an *invite* (or cancels the active one / dismisses
+// an existing party member on the same target — menu label flips to
+// 'Cancel' / 'Dismiss' respectively). Invite-and-accept flow lives in
+// `party-invite.js`. v1.7.235.
+function _rosterMenuPartyAction(target) {
+  if (isInvitingTarget(target)) {
+    cancelPartyInvite('user');
+    return;
+  }
+  if (isInParty(target)) {
+    removeFromParty(target.name);
+    showMsgBox(_nameToBytes(target.name + ' left party'));
+    return;
+  }
+  if (isPartyFull()) {
+    showMsgBox(_nameToBytes('Party full'));
+    return;
+  }
+  if (isInviteOnCooldown(target.name)) {
+    showMsgBox(_nameToBytes(target.name + ' on cooldown'));
+    return;
+  }
+  if (!startPartyInvite(target)) {
+    showMsgBox(_nameToBytes('Already inviting'));
+  }
+}
+
 function _rosterInputMenu() {
   const k = keys;
   if (k['ArrowDown']) {
@@ -729,6 +757,12 @@ function _rosterInputMenu() {
     if (action === 'Battle' && (isSearchingFor(target) || mapSt.onWorldMap || mapSt.dungeonFloor >= 0)) {
       inputSt.rosterMenuExitTo = 'none';  // commit menu — search owns next state. v1.7.221+.
       _rosterMenuBattleAction(target);
+    } else if (action === 'Party') {
+      // Invite / Cancel-invite / Dismiss-member all route through one
+      // helper. Exit-to none so the invite owns the next state (same
+      // pattern as Battle). v1.7.235.
+      inputSt.rosterMenuExitTo = 'none';
+      _rosterMenuPartyAction(target);
     } else {
       const actionBytes = _nameToBytes(action), nameBytes = _nameToBytes(target.name);
       const sep = new Uint8Array([0xFF]);

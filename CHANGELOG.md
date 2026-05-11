@@ -2,6 +2,48 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.235 — 2026-05-11
+
+### Feature: roster Party action → invite-and-accept flow
+
+Mirror of the v1.7.222 Battle search-and-hook redesign, applied to
+the roster *Party* action. Selecting Party on a roster target starts
+a persistent "Inviting X..." invitation. The target rolls an accept
+chance every 5-12 s on a per-target sim timer. On accept the target
+joins `partyInviteSt.partyMembers` and auto-joins the player's
+`battleAllies` at the start of every subsequent battle — no location
+filter (party travels with you, unlike the random-roll pool).
+
+- `src/party-invite.js` — new module. Exports `startPartyInvite`,
+  `cancelPartyInvite`, `tickPartyInvite`, `isInviteActive`,
+  `isInviteResolving`, `isInvitingTarget`, `isInviteOnCooldown`,
+  `isInParty`, `isPartyFull`, `removeFromParty`,
+  `getAcceptChance`, `partyInviteSt`, `PARTY_MAX`. Accept formula:
+  `clamp(0.35 + (chLevel − tgtLevel) × 0.01 + jobBonus, 0.15, 0.80)`
+  with Bard +0.20, Ranger +0.08, Knight +0.05. Same lifecycle
+  envelope as `pvp-search.js` — 5 min real-time timeout, 3-missed
+  cap, 60 s per-target cooldown, 1 s "Joined" auto-advance hold.
+  Single sim-timer seam for the eventual websocket cutover.
+- `src/input-handler.js` — adds `_rosterMenuPartyAction(target)`
+  alongside `_rosterMenuBattleAction`. Z-press dispatch routes
+  `action === 'Party'` through it. Handles invite-start, mid-invite
+  cancel, dismiss-existing-member, party-full, and on-cooldown.
+- `src/roster.js` — menu label flips `Party → Cancel` mid-invite and
+  `Party → Dismiss` once they're a member (matches Battle/Cancel
+  pattern). Roster row marquees "Inviting..." in place of Lv/HP
+  during an active invite, mirroring the search marquee.
+- `src/movement.js` — universal-message hand-off block extended:
+  during `'hold'` with an active invite, X forfeits and Z is inert
+  (same rules as the search).
+- `src/battle-update.js` — `tryJoinPlayerAlly()` pre-pass adds any
+  party members to `battleAllies` (no roll, no loc check). Existing
+  50 % random ally roll continues for any remaining slots.
+- `src/game-loop.js` — `tickPartyInvite(dt)` next to `tickPVPSearch`.
+
+Known followups: party persistence across save/reload (needs SRAM
+schema field), per-member dismiss UI feedback (currently the same
+"left party" string for all dismissals).
+
 ## 1.7.234 — 2026-05-11
 
 ### Fix: PVP cure/antidote sparkle vertical-center

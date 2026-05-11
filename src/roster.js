@@ -8,6 +8,7 @@ import { nesColorFade } from './palette.js';
 import { _nameToBytes, drawLvHpRow } from './text-utils.js';
 import { drawText, measureText, TEXT_WHITE } from './font-renderer.js';
 import { isSearchingFor } from './pvp-search.js';
+import { isInvitingTarget, isInParty } from './party-invite.js';
 import { fakePlayerPortraits } from './fake-player-sprites.js';
 import { ui } from './ui-state.js';
 import { transSt, WIPE_DURATION } from './transitions.js';
@@ -288,19 +289,20 @@ function _drawRosterRow(p, i, panelTop) {
   drawText(ui.ctx, HUD_RIGHT_X + HUD_RIGHT_W - 8 - nameW, rowY + 8, nameBytes, namePal);
 
   const panelLeft = HUD_RIGHT_X + 32 + 8;
-  if (isSearchingFor(p)) {
-    // Search active on this target — replace Lv/HP with status text.
-    // v1.7.223: text is wider than the 64-px box, so we marquee-scroll
-    // it left, clipped to the row's lower text band. Two copies offset
-    // by `period` make the wrap seamless.
-    const searchPal = [0x0F, 0x0F, 0x0F, 0x28];
-    for (let s = 0; s < fadeStep; s++) searchPal[3] = nesColorFade(searchPal[3]);
-    const textBytes = _nameToBytes('Searching...');
+  const _searchingHere = isSearchingFor(p);
+  const _invitingHere  = isInvitingTarget(p);
+  if (_searchingHere || _invitingHere) {
+    // Search/invite active on this target — replace Lv/HP with status text.
+    // Marquee-scrolled when wider than the 64-px box; two copies offset by
+    // `period` make the wrap seamless. v1.7.223 (search), v1.7.235 (invite).
+    const statusPal = [0x0F, 0x0F, 0x0F, 0x28];
+    for (let s = 0; s < fadeStep; s++) statusPal[3] = nesColorFade(statusPal[3]);
+    const textBytes = _nameToBytes(_searchingHere ? 'Searching...' : 'Inviting...');
     const textW     = measureText(textBytes);
     const boxRight  = HUD_RIGHT_X + HUD_RIGHT_W - 8;
     const boxW      = boxRight - panelLeft;
     if (textW <= boxW) {
-      drawText(ui.ctx, panelLeft, rowY + 16, textBytes, searchPal);
+      drawText(ui.ctx, panelLeft, rowY + 16, textBytes, statusPal);
     } else {
       const SCROLL_PX_MS = 0.05;   // 50 px / s — readable NES-ish cadence
       const GAP_PX       = 12;
@@ -310,8 +312,8 @@ function _drawRosterRow(p, i, panelTop) {
       ui.ctx.beginPath();
       ui.ctx.rect(panelLeft, rowY + 14, boxW, 12);
       ui.ctx.clip();
-      drawText(ui.ctx, panelLeft - offset, rowY + 16, textBytes, searchPal);
-      drawText(ui.ctx, panelLeft - offset + period, rowY + 16, textBytes, searchPal);
+      drawText(ui.ctx, panelLeft - offset, rowY + 16, textBytes, statusPal);
+      drawText(ui.ctx, panelLeft - offset + period, rowY + 16, textBytes, statusPal);
       ui.ctx.restore();
     }
   } else {
@@ -420,9 +422,16 @@ export function drawRosterMenu() {
     // v1.7.222 — gives the user a discoverable cancel without inventing a
     // new keybinding.
     const searching = isSearchingFor(inputSt.rosterMenuTarget);
+    const inviting  = isInvitingTarget(inputSt.rosterMenuTarget);
+    const inParty   = isInParty(inputSt.rosterMenuTarget);
     for (let i = 0; i < ROSTER_MENU_ITEMS.length; i++) {
       let label = ROSTER_MENU_ITEMS[i];
       if (label === 'Battle' && searching) label = 'Cancel';
+      // Party: 'Cancel' mid-invite, 'Dismiss' once they're a member,
+      // 'Party' otherwise. Single source — stashed target carries through
+      // the menu fade-out, same as Battle. v1.7.235.
+      else if (label === 'Party' && inviting) label = 'Cancel';
+      else if (label === 'Party' && inParty)  label = 'Dismiss';
       const labelBytes = _nameToBytes(label);
       drawText(ui.ctx, menuX + 16, menuY + 8 + i * 14, labelBytes, textPal);
     }

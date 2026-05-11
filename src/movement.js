@@ -9,6 +9,7 @@ import { sprite } from './player-sprite.js';
 import { pauseSt, handlePauseInput } from './pause-menu.js';
 import { msgState, showMsgBox, dismissMsgBox } from './message-box.js';
 import { isSearchActive, isSearchResolving, cancelPVPSearch } from './pvp-search.js';
+import { isInviteActive, isInviteResolving, cancelPartyInvite } from './party-invite.js';
 import { chatState, tabSelectMode, chatScrollOffset, setChatScrollOffset, canChatScrollUp, canChatScrollDown } from './chat.js';
 import { ps } from './player-stats.js';
 import { playSFX, playTrack, TRACKS, SFX } from './music.js';
@@ -122,6 +123,15 @@ export function handleInput() {
           cancelPVPSearch('user');  // replaces "Searching..." with "Cancelled"
         } else if (keys['z'] || keys['Z']) {
           keys['z'] = false; keys['Z'] = false;  // eat the press, no-op
+        }
+      } else if (isInviteActive() && !isInviteResolving()) {
+        // Same hand-off rules as the search — message IS the invite,
+        // X forfeits, Z is inert. v1.7.235.
+        if (keys['x'] || keys['X']) {
+          keys['x'] = false; keys['X'] = false;
+          cancelPartyInvite('user');
+        } else if (keys['z'] || keys['Z']) {
+          keys['z'] = false; keys['Z'] = false;
         }
       } else if (keys['z'] || keys['Z']) {
         keys['z'] = false; keys['Z'] = false;

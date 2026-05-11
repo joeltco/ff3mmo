@@ -12,6 +12,7 @@ import { waterSt, tickWater } from './water-animation.js';
 import { updateChat, updateChatTabs, drawChat, drawChatTabs, isDev, consoleLog } from './chat.js';
 import { rosterBattleFade, updateRoster, drawRoster, drawRosterMenu } from './roster.js';
 import { tickPVPSearch } from './pvp-search.js';
+import { tickPartyInvite } from './party-invite.js';
 import { updateMsgBox, drawMsgBox } from './message-box.js';
 import { titleSt, drawTitleSkyInHUD, drawTitle, updateTitle } from './title-screen.js';
 import { updatePauseMenu, drawPauseMenu } from './pause-menu.js';
@@ -130,6 +131,7 @@ function _gameLoopUpdate(dt) {
   handleInput();
   updateRoster(dt);
   tickPVPSearch(dt);
+  tickPartyInvite(dt);
   updateChat(dt, battleSt.battleState);
   updateChatTabs(dt);
   updatePauseMenu(dt);
