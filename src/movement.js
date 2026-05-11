@@ -11,6 +11,7 @@ import { msgState, showMsgBox, dismissMsgBox } from './message-box.js';
 import { isSearchActive, isSearchResolving, cancelPVPSearch } from './pvp-search.js';
 import { isInviteActive, isInviteResolving, cancelPartyInvite } from './party-invite.js';
 import { isTradeOffering, isTradePicking, cancelTrade, handleTradePickInput } from './trade.js';
+import { isInspectOpen, handleInspectInput } from './inspect.js';
 import { chatState, tabSelectMode, chatScrollOffset, setChatScrollOffset, canChatScrollUp, canChatScrollDown } from './chat.js';
 import { ps } from './player-stats.js';
 import { playSFX, playTrack, TRACKS, SFX } from './music.js';
@@ -105,6 +106,8 @@ export function handleInput() {
   // Trade item-pick panel takes priority over roster — opened from the
   // roster menu but owns its own input loop. v1.7.237.
   if (isTradePicking() && handleTradePickInput(keys)) return;
+  // Inspect stat panel — same pattern, owns its own input loop. v1.7.239.
+  if (isInspectOpen() && handleInspectInput(keys)) return;
   if (handleRosterInput()) return;
   if (handlePauseInput()) return;
 

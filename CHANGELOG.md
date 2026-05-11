@@ -2,6 +2,40 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.239 — 2026-05-11
+
+### Feature: roster Inspect action → read-only stat panel
+
+Last of the five roster actions wired (Battle / Party / Trade /
+Message / Inspect now all live). Picking Inspect on a roster
+target opens a bordered overlay covering the HUD viewport showing
+job + level + HP + ATK/DEF + AGI/INT/MND/EVD + equipped gear +
+known spells. X (or Z) closes. No state machine, no accept-roll —
+UI affordance, not a negotiation. Mirrors `trade.js`'s item-pick
+panel pattern.
+
+- `src/inspect.js` — new module. Exports `openInspect`,
+  `closeInspect`, `isInspectOpen`, `handleInspectInput`,
+  `drawInspect`, `inspectSt`. Stats source is
+  `generateAllyStats(target)` — same shape `tryJoinPlayerAlly` and
+  `pvp-search.js` use, so what the inspect shows is what the
+  target would fight as. First 2 spells listed; over-2 shows
+  "+N more".
+- `src/input-handler.js` — adds `_rosterMenuInspectAction(target)`
+  alongside the other four. Z-press dispatch routes
+  `action === 'Inspect'` through it. Exit-to none — the panel owns
+  the next state.
+- `src/movement.js` — input dispatcher calls `handleInspectInput`
+  before the roster handler when the panel is open. Movement keys
+  blocked while inspecting.
+- `src/game-loop.js` — `drawInspect()` after the trade panel.
+
+Intentional divergence from the roster-action lifecycle pattern
+documented in `project_ff3mmo_roster_action_pattern.md`. That
+pattern applies to negotiations (Battle/Party/Trade); Inspect and
+Message are UI affordances that don't need the sim-timer
+envelope.
+
 ## 1.7.238 — 2026-05-11
 
 ### Feature: roster Message action → Private-tab whisper

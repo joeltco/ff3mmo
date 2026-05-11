@@ -14,6 +14,7 @@ import { rosterBattleFade, updateRoster, drawRoster, drawRosterMenu } from './ro
 import { tickPVPSearch } from './pvp-search.js';
 import { tickPartyInvite } from './party-invite.js';
 import { tickTrade, drawTradePick } from './trade.js';
+import { drawInspect } from './inspect.js';
 import { updateMsgBox, drawMsgBox } from './message-box.js';
 import { titleSt, drawTitleSkyInHUD, drawTitle, updateTitle } from './title-screen.js';
 import { updatePauseMenu, drawPauseMenu } from './pause-menu.js';
@@ -188,6 +189,7 @@ function _gameLoopDraw() {
     drawMsgBox(ctx, drawBorderedBox);
     drawRosterMenu();
     drawTradePick();
+    drawInspect();
     drawBattle();
     drawSWExplosion();
     drawSWDamageNumbers();

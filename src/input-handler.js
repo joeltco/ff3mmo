@@ -23,6 +23,7 @@ import { getRosterVisible, ROSTER_MENU_ITEMS } from './roster.js';
 import { startPVPSearch, cancelPVPSearch, isSearchingFor, isSearchOnCooldown } from './pvp-search.js';
 import { startPartyInvite, cancelPartyInvite, isInvitingTarget, isInviteOnCooldown, isInParty, isPartyFull, removeFromParty } from './party-invite.js';
 import { openTradePick, cancelTrade, isTradingWith, isTradePicking, isTradeOnCooldown, handleTradePickInput } from './trade.js';
+import { openInspect } from './inspect.js';
 import { playerInventory, addItem, removeItem, INV_SLOTS } from './inventory.js';
 
 // Keyboard poll map — mutated by window listeners, read throughout the codebase.
@@ -706,6 +707,13 @@ function _rosterMenuBattleAction(target) {
   }
 }
 
+// Inspect action: opens the read-only stat panel for the target.
+// Flow lives in `inspect.js`. UI-only — no state machine, no
+// accept-roll. v1.7.239.
+function _rosterMenuInspectAction(target) {
+  openInspect(target);
+}
+
 // Message action: switches active chat tab to Private + opens the
 // chat input + stashes the target as the next message's recipient.
 // No state machine, no accept-roll — Message is fire-and-forget.
@@ -805,6 +813,10 @@ function _rosterInputMenu() {
       // Chat input owns the next state. v1.7.238.
       inputSt.rosterMenuExitTo = 'none';
       _rosterMenuMessageAction(target);
+    } else if (action === 'Inspect') {
+      // Stat panel owns the next state. v1.7.239.
+      inputSt.rosterMenuExitTo = 'none';
+      _rosterMenuInspectAction(target);
     } else {
       const actionBytes = _nameToBytes(action), nameBytes = _nameToBytes(target.name);
       const sep = new Uint8Array([0xFF]);
