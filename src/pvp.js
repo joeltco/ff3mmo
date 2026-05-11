@@ -36,6 +36,23 @@ import { IDLE_FRAME_MS } from './combatant-pose.js';
 function _cursorTileCanvas() { return ui.cursorTileCanvas; }
 function _buildAndProcessNextTurn() { battleSt.turnQueue = buildTurnOrder(); processNextTurn(); }
 
+// Single source for "PVP enemy action complete — advance turn unless the
+// player team is wiped". Pre-v1.7.225 the physical-hit and SouthWind paths
+// inlined this check, but the spell-cast path (`_processPVPEnemyMagic`)
+// called `processNextTurn()` unconditionally — so a spell that dropped
+// the player to 0 HP left the battle running until the next physical
+// hit landed and caught the wipe. Route every "end of PVP-enemy action"
+// site through this helper.
+function _advancePVPTurnOrEnd() {
+  if (isTeamWiped()) {
+    battleSt.isDefending = false;
+    battleSt.battleState = 'enemy-box-close';
+    battleSt.battleTimer = 0;
+  } else {
+    processNextTurn();
+  }
+}
+
 // ── Local constants (mirrors game.js values — keep in sync) ──────────────────
 const HUD_VIEW_X = 0, HUD_VIEW_Y = 32, HUD_VIEW_W = 144, HUD_VIEW_H = 144;
 const BOSS_PREFLASH_MS       = 133;
@@ -784,7 +801,7 @@ function _processPVPEnemyMagic(dt) {
       pvpSt.pvpMagicPartyTargetIdx = -100;
       pvpSt.pvpMagicSpellId = 0;
       pvpSt.pvpMagicDamageRoll = 0;
-      processNextTurn();
+      _advancePVPTurnOrEnd();  // v1.7.225 — was processNextTurn() (skipped teamwipe → spell-kill bug)
     }
     return true;
   }
@@ -861,13 +878,7 @@ function _processPVPOppSWHit() {
           battleSt.turnQueue = battleSt.turnQueue.filter(t => !(t.type === 'ally' && t.index === i));
         }
       }
-      if (isTeamWiped()) {
-        battleSt.isDefending = false;
-        battleSt.battleState = 'enemy-box-close';
-        battleSt.battleTimer = 0;
-      } else {
-        processNextTurn();
-      }
+      _advancePVPTurnOrEnd();
     }
   }
   return true;
@@ -875,11 +886,7 @@ function _processPVPOppSWHit() {
 
 function _processEnemyDamageShow() {
   if (battleSt.battleTimer < BATTLE_DMG_SHOW_MS) return;
-  if (isTeamWiped()) {
-    battleSt.isDefending = false;
-    battleSt.battleState = 'enemy-box-close';
-    battleSt.battleTimer = 0;
-  } else { processNextTurn(); }
+  _advancePVPTurnOrEnd();
 }
 
 function _processPVPSecondWindup() {

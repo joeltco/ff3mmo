@@ -2,6 +2,36 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.225 — 2026-05-11
+
+### fix: PVP enemy spell-kill didn't end the battle
+
+Reported via battle-sim cross-check (sim ended the duel immediately
+on spell-kill; live game kept advancing turns until the next
+physical hit on the player). Root cause: the three "PVP enemy
+action complete" sites had drifted apart —
+
+- `_processEnemyDamageShow` (physical hit) — ✓ checked `isTeamWiped`
+- `_processPVPOppSWHit` (SouthWind) — ✓ checked `isTeamWiped`
+- `_processPVPEnemyMagic` end-of-`pvp-enemy-magic-hit` — ✗ called
+  `processNextTurn()` unconditionally
+
+So when a spell dropped the player to 0 HP, the turn queue rolled
+forward (player turn skipped via `ps.hp <= 0` guards) until the
+PVP enemy's next physical hit landed — and `_processEnemyDamageShow`
+finally caught the wipe and transitioned to `enemy-box-close`. The
+intermediate turns visibly ran on a dead player.
+
+Fix in `src/pvp.js`: extracted `_advancePVPTurnOrEnd()` — single
+source for "if player team wiped → `enemy-box-close`, else
+`processNextTurn`". Routed all three sites through it. Per the
+`feedback_ff3mmo_single_source_paths` memory — two parallel paths
+drift; one fixed and one unfixed is the failure mode.
+
+No gameplay change for the physical / SW paths (already correct,
+just deduped). Spell-kill now ends the battle on the apply tick,
+same frame as `setPlayerDamageNum(value)` posts the final number.
+
 ## 1.7.224 — 2026-05-11
 
 ### Search: Z is inert during "Searching...", only X forfeits
