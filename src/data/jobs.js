@@ -115,6 +115,22 @@ export function canJobEquip(jobIdx, itemId, ITEMS) {
   return !!(item.jobs & (1 << jobIdx));
 }
 
+// Pure job-level → stat bonus helper. Same math as
+// player-stats.js:getJobLevelStatBonus minus the `ps` read, so the
+// fake-player path (data/players.js:generateAllyStats) can apply
+// per-job bonuses without circular imports. NES-style: jobLv * weight / 20,
+// floored — caps at ~5 bonus per stat at jobLv 99 for a W=1 stat.
+export function jobLevelStatBonus(jobIdx, jobLv) {
+  const w = JOB_SCALING[jobIdx] || [0, 0, 0, 0, 0];
+  return {
+    str: Math.floor(jobLv * w[0] / 20),
+    agi: Math.floor(jobLv * w[1] / 20),
+    vit: Math.floor(jobLv * w[2] / 20),
+    int: Math.floor(jobLv * w[3] / 20),
+    mnd: Math.floor(jobLv * w[4] / 20),
+  };
+}
+
 // Build full exp-to-next table (98 levels, 24-bit LE each)
 export function buildExpTable(romData) {
   const table = new Uint32Array(98);

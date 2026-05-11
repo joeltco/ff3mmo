@@ -2,6 +2,54 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.218 — 2026-05-10
+
+### Job-system audit (multiplayer-prep) — fake-player jobLevel divergence closed
+
+From `docs/JOB-EXP-AUDIT.md`. Focused on the path remote players will
+use when the websocket hookup ships — since the fake-player system is
+that seam (per memory `project_ff3mmo_fake_player_multiplayer.md`),
+any divergence between local-player and fake-player stat paths is a
+latent multiplayer-determinism bug.
+
+**Real fixes:**
+
+- **`generateAllyStats` now respects `jobLevel`** (was hardcoded to
+  `1`). New optional fields on the player descriptor:
+  - `player.jobLevel` — single number (current job's level).
+  - `player.jobLevels[jobIdx].level` — full JP progression map.
+  - Default `1` if neither is provided (PLAYER_POOL entries today),
+    so static NPCs are unchanged.
+- **Fake-player path now applies `jobLevelStatBonus`** to AGI / STR /
+  VIT / INT / MND, matching the local-player path
+  (`input-handler.js` / `battle-turn.js`). Pre-v1.7.218 a remote
+  player at jobLv 50 would have +12 hit-count-eligible AGI on their
+  own client and +0 on a teammate's — silent desync.
+- **`calcAttackerAtk` now gets the real `jobLevel`** instead of `1` —
+  Monk / Black Belt unarmed bonus (`floor(jobLevel/4)`) scales
+  correctly for remote Monks.
+- **`jobLevel` field on output** now reflects the actual value used,
+  not the constant `1`.
+
+**Refactor:**
+
+- New pure helper `jobLevelStatBonus(jobIdx, jobLv)` in `data/jobs.js`
+  (no `ps` read — usable from fake-player path without circular
+  imports). `player-stats.js:getJobLevelStatBonus` is now a thin
+  wrapper that fills in `ps.jobIdx` / `ps.jobLevels` defaults.
+
+**Documented (no action — design calls deferred):**
+
+- `EXP / 4` divisor in `grantExp` is NES legacy (4-party split). For
+  real multiplayer, may need to scale by participating-player count.
+  Flagged for the websocket ticket.
+- Three separate job-tuning tables (`_JOB_STAT_WEIGHTS`,
+  `JOB_SCALING`, `JP_RATES`) each cover different mechanics
+  (char-level / job-level / JP rate). Adding a new job requires
+  editing all three.
+- `isMonkClass = jobIdx === 2 || jobIdx === 13` magic-index check
+  duplicated across files — could be `JOBS[i].isMonkClass`.
+
 ## 1.7.217 — 2026-05-10
 
 ### Multi-system audit — slash + spell-anim + encounter + chat + HUD fade

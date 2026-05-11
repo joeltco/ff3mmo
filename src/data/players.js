@@ -2,6 +2,7 @@
 import { ITEMS } from './items.js';
 import { calcAttackerAtk } from '../battle-math.js';
 import { createStatusState } from '../status-effects.js';
+import { jobLevelStatBonus } from './jobs.js';
 
 export const LOCATIONS = ['world', 'ur', 'cave-0', 'cave-1', 'cave-2', 'cave-3', 'crystal'];
 
@@ -279,8 +280,23 @@ export function getJobLevelDelta(jobIdx) {
 export function generateAllyStats(player) {
   const lv = player.level;
   const s = computeJobStats(player.jobIdx, lv);
-  const { str, agi, vit, mnd } = s;
-  const int_ = s.int;
+  // Resolve job-level for this character. Multiplayer-prep (v1.7.218): real
+  // remote players carry JP progress (`player.jobLevel` shortcut OR full
+  // `player.jobLevels[jobIdx].level` map). Static PLAYER_POOL entries have
+  // neither; default to 1 so behavior is unchanged for fake NPCs.
+  const jobLv = (typeof player.jobLevel === 'number' && player.jobLevel > 0)
+    ? player.jobLevel
+    : (player.jobLevels && player.jobLevels[player.jobIdx]?.level) || 1;
+  // Apply job-level stat bonus on top of character-level stats (matches the
+  // local-player path — input-handler.js + battle-turn.js both call
+  // getJobLevelStatBonus). Pre-v1.7.218 the fake-player path skipped this,
+  // making remote-player AGI / STR / etc. silently diverge from local.
+  const jpBonus = jobLevelStatBonus(player.jobIdx, jobLv);
+  const str  = s.str  + jpBonus.str;
+  const agi  = s.agi  + jpBonus.agi;
+  const vit  = s.vit  + jpBonus.vit;
+  const int_ = s.int  + jpBonus.int;
+  const mnd  = s.mnd  + jpBonus.mnd;
   const hp = s.maxHP;
   const loc = player.loc;
   // Gear by location (matches chest loot tiers)
@@ -307,7 +323,7 @@ export function generateAllyStats(player) {
   const lWpnAtk = lIsWpn ? (lWpnItem.atk || 0) : 0;
   const isMonkClass = player.jobIdx === 2 || player.jobIdx === 13; // Monk / BlackBelt
   const atk = calcAttackerAtk({
-    rWpnAtk, lWpnAtk, isMonkClass, level: lv, str, jobLevel: 1,
+    rWpnAtk, lWpnAtk, isMonkClass, level: lv, str, jobLevel: jobLv,
   });
   // floor(vit/2) — mirrors the player's recalcDEF and the floor(str/2) attacker
   // formula. Prior `vit + totalDef` left NPC allies tankier than their stat-screen
@@ -324,5 +340,5 @@ export function generateAllyStats(player) {
   const hitRate = wpnItem ? (wpnItem.hit || 80) : 80;
   // Pass through known spells so battle-turn's WM heal AI can decide what to cast.
   const knownSpells = Array.isArray(player.knownSpells) ? [...player.knownSpells] : [];
-  return { name: player.name, palIdx: player.palIdx, jobIdx: player.jobIdx || 0, level: lv, hp, maxHP: hp, atk, def, agi, int: int_, mnd, evade, mdef, shieldEvade, statusResist, hitRate, weaponId, weaponL, knownSpells, jobLevel: 1, fadeStep: ROSTER_FADE_STEPS, status: createStatusState() };
+  return { name: player.name, palIdx: player.palIdx, jobIdx: player.jobIdx || 0, level: lv, hp, maxHP: hp, atk, def, agi, int: int_, mnd, evade, mdef, shieldEvade, statusResist, hitRate, weaponId, weaponL, knownSpells, jobLevel: jobLv, fadeStep: ROSTER_FADE_STEPS, status: createStatusState() };
 }

@@ -1,6 +1,6 @@
 // player-stats.js — player combat stats, equip slots, exp, and derived stat helpers
 
-import { buildExpTable, JOBS, JOB_SCALING } from './data/jobs.js';
+import { buildExpTable, JOBS, jobLevelStatBonus } from './data/jobs.js';
 import { computeJobStats, getJobLevelDelta } from './data/players.js';
 import { ITEMS, isWeapon } from './data/items.js';
 import { BASE_HIT_RATE, calcAttackerAtk } from './battle-math.js';
@@ -257,16 +257,11 @@ export function getJobLevel(jobIdx = ps.jobIdx) {
   return ps.jobLevels[jobIdx]?.level || 1;
 }
 
-// Per-job stat bonuses from job level (remake-style scaling)
+// Per-job stat bonuses from job level (remake-style scaling). Thin wrapper
+// over the pure `jobLevelStatBonus(jobIdx, jobLv)` in data/jobs.js — the
+// pure version is shared with the fake-player path (data/players.js).
 export function getJobLevelStatBonus(jobIdx = ps.jobIdx, jobLv = getJobLevel(jobIdx)) {
-  const w = JOB_SCALING[jobIdx] || [0,0,0,0,0];
-  return {
-    str: Math.floor(jobLv * w[0] / 20),
-    agi: Math.floor(jobLv * w[1] / 20),
-    vit: Math.floor(jobLv * w[2] / 20),
-    int: Math.floor(jobLv * w[3] / 20),
-    mnd: Math.floor(jobLv * w[4] / 20),
-  };
+  return jobLevelStatBonus(jobIdx, jobLv);
 }
 
 // Call once per battle victory with total actions taken.
