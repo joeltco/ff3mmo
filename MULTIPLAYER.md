@@ -90,6 +90,35 @@ Populated on first save or character creation. Queried on WebSocket connect to b
 - Server validates turns to prevent cheating
 - Biggest piece — requires presence + roster working first
 
+**Local prep landed v1.7.222–v1.7.226: roster Battle action now
+runs a *search-and-hook* flow instead of an instant accept.**
+
+- `src/pvp-search.js` — owns the lifecycle. `startPVPSearch(target)`
+  shows a persistent "Searching for X..." message; `cancelPVPSearch`
+  on X / on death / on timeout / on missed-cap; auto-resolves into
+  "Connecting..." → `_startPVPBattle` when a hook fires.
+- **Hook formula:** `clamp(0.25 + (chAGI − tgtAGI) × 0.015 + jobBonus, 0.10, 0.75)`
+  with Thief +0.15 / Ranger +0.08. All tunables at the top of the
+  module.
+- **Search persists across map changes; only resolution gates on
+  `(onWorldMap || dungeonFloor >= 0)`.** Town searches roll-but-can't-fire,
+  burning a missed slot — prevents fish-from-town parking.
+- **Target's encounter roll is simulated today** (8–15 s per-target
+  sim timer in `tickPVPSearch`). Real multiplayer replaces this
+  with a websocket `target_encountered` signal — the rest of the
+  flow (hook chance, "Connecting...", `_startPVPBattle` hand-off)
+  is unchanged. **This is the single seam to swap on Step 3 wire-up.**
+- Roster row "Searching..." marquee + menu label flip (`Battle` →
+  `Cancel`) are already in the row renderer; both read the search
+  state via `isSearchingFor(target)`. No additional UI work needed
+  for multiplayer.
+
+When networking lands, Step 3 reduces to: replace the sim timer
+with the server-driven signal, add server-side hook arbitration
+for the parallel-challengers case (first-hook-wins, others get
+"missed" message), and wire `_startPVPBattle` to accept a remote
+target object instead of a `PLAYER_POOL` entry.
+
 ---
 
 ## Status

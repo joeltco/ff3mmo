@@ -22,7 +22,34 @@ see #3). State machine: `'none' → 'browse' → 'menu-in' → 'menu' →
 | 5 | Party / Trade / Message / Inspect are stubs — render an `Action⏤Name` message and dismiss | by-design (v0) | ⏸ deferred per `MULTIPLAYER.md` |
 | 6 | Battle gate `(onWorldMap \|\| dungeonFloor >= 0)` blocks PVP in town — correct, but worth documenting | spec clarity | ⏸ note |
 | 7 | Roster can be opened while chat is expanded (typing-mode is blocked, just expanded isn't) | minor input-gate gap | ⏸ low |
-| 8 | "Challenged X!" → 1.5-2.5s gap → "X accepted!" leaves roster visible during PVP intro | UX timing | ⏸ design question |
+| 8 | "Challenged X!" → 1.5-2.5s gap → "X accepted!" leaves roster visible during PVP intro | UX timing | ✅ obsoleted by Battle redesign (v1.7.222+) |
+
+## Battle action redesign (v1.7.222–v1.7.226)
+
+Findings #6 (Battle precondition) and #8 (instant accept feels
+wrong) drove a full redesign of the **Battle** action. The old
+"Challenged X! → 1.5-4s delay → X accepted! → battle" flow was
+replaced with a **search-and-hook** mechanic — full spec lives in
+`src/pvp-search.js` and `MULTIPLAYER.md`. Summary:
+
+- Pick **Battle** → persistent "Searching for X..." message stays
+  on screen. Roster row shows "Searching..." marquee (50 px/s,
+  seamless wrap) in place of Lv/HP. Menu label flips
+  `Battle` → `Cancel` for the same target.
+- Background: target rolls a hook check every 8-15 s on a sim
+  timer. Hook chance = `clamp(0.25 + (chAGI − tgtAGI) × 0.015 +
+  jobBonus, 0.10, 0.75)`. Thief +0.15, Ranger +0.08.
+- On hook → message swaps in-place to "Connecting..." (via
+  `replaceMsgBoxText` — no slide flicker), auto-advances after
+  1000 ms → battle.
+- Z is inert during "Searching..." (the message *is* the search);
+  X (back) forfeits and replaces it with "Cancelled".
+- 5-min real-time timeout / 3-missed-in-a-row cap / 60 s per-target
+  cooldown after any close.
+
+Battle precondition (#6) now applies to *search start* only —
+search persists across map changes; only *resolution* re-checks
+`(onWorldMap || dungeonFloor >= 0)`. Cancel works from anywhere.
 
 ## Action dispatch matrix
 

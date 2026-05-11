@@ -2,6 +2,26 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.233 — 2026-05-11
+
+### Docs sweep: refresh markdowns for 1.7.22x band
+
+No code change. Brings project markdowns up to date with the
+search-and-hook system + roster fade modularization + menu-state
+work that landed across 1.7.220-1.7.232.
+
+- `README.md` — version banner v1.7.219 → v1.7.232. Added
+  1.7.22x summary paragraph covering `pvp-search.js`,
+  `_rosterTransFade` modularization, and `_advancePVPTurnOrEnd`.
+- `MULTIPLAYER.md` — Step 3 expanded with what already shipped
+  locally (search lifecycle, hook formula, the sim-timer seam) so
+  the cutover plan is precise.
+- `docs/design-notes.md` — new `## PVP search` section + new
+  `## Roster fade` section between Magic and Battle-attack-animation.
+  Followup #4 (multiplayer) updated to note the local search prep.
+- `docs/ROSTER-MENU-AUDIT.md` — finding #8 closed; added a
+  "Battle action redesign" section covering v1.7.222-v1.7.226.
+
 ## 1.7.232 — 2026-05-11
 
 ### Cleanup: remove `player-miss-show` dead code
