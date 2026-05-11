@@ -2,6 +2,25 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.231 — 2026-05-11
+
+### fix: battle menu disappeared during PVP opponent magic casts
+
+`_battleMenuStates()` in `src/battle-draw-menu.js` enumerates every
+battleState where the menu/HUD panel is rendered. The PVP-enemy
+attack states (slash / potion / SouthWind throw + hit) were all in
+the list, but **`pvp-enemy-magic-cast` and `pvp-enemy-magic-hit`
+were missing**, so the menu blanked for the full 1.6–2.4 s spell
+animation.
+
+Likely landed missing from the original PVP-spell wire-up; the
+analogous random-encounter monster cast (`enemy-attack` /
+`enemy-damage-show`) was already in the list, and ally casts are
+covered by the `bs.startsWith('ally-')` catch-all. Only the
+PVP-enemy spell states were never added explicitly.
+
+One-line fix: added both states to the `isMenu` predicate.
+
 ## 1.7.230 — 2026-05-11
 
 ### fix: title→game roster flashed bright then re-faded

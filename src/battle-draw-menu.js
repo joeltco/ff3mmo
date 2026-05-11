@@ -218,6 +218,7 @@ function _battleMenuStates() {
     bs === 'run-success' || bs === 'run-fail' || bs === 'enemy-flash' ||
     bs === 'enemy-attack' || bs === 'enemy-damage-show' || bs === 'poison-tick' || bs === 'poison-end-tick' || bs === 'pvp-second-windup' ||
     bs === 'pvp-ally-appear' || bs === 'pvp-defend-anim' || bs === 'pvp-enemy-slash' ||
+    bs === 'pvp-enemy-magic-cast' || bs === 'pvp-enemy-magic-hit' ||
     bs === 'pvp-opp-potion' || bs === 'pvp-opp-sw-throw' || bs === 'pvp-opp-sw-hit' || bs === 'message-hold' || bs === 'msg-wait' ||
     bs.startsWith('ally-') || bs === 'boss-dissolve';
   const isVictory = isVictoryBattleState() || bs === 'victory-name-out' || bs === 'encounter-box-close' || bs === 'enemy-box-close';
