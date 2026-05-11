@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.244 — 2026-05-11
+
+### Revert v1.7.243 — both magic-list layout tweaks
+
+User didn't like the 2-column pause Magic grid or the tightened
+battle Magic cost gap. Reverts `_drawPauseMagicList`,
+`_pauseInputMagicList`, and `_drawBattleSpellList` to their v1.7.242
+single-column / panel-right-aligned state. Shrines short names
+(v1.7.242) and icon-prefix rendering (v1.7.241) stay in.
+
 ## 1.7.243 — 2026-05-11
 
 ### Tighter magic-list layouts now that names are shorter

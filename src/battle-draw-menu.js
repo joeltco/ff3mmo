@@ -172,12 +172,10 @@ function _drawBattleSpellList(baseX, rightAreaW, palette) {
       const costStr = String(cost);
       const costBytes = new Uint8Array(costStr.length);
       for (let c = 0; c < costStr.length; c++) costBytes[c] = 0x80 + parseInt(costStr[c]);
-      // Park the MP cost just to the right of the name (8 px gap) instead of
-      // pinning it to the panel's right edge — the Shrines-name override caps
-      // every spell at icon + 5 chars = 48 px, so the trailing whitespace
-      // between name and cost was reading as broken alignment.
-      const nameW = measureText(name);
-      const costX = baseX + 8 + nameW + 8;
+      // Bottom panel's outer clip is rect(8, HUD_BOT_Y, CANVAS_W-16, HUD_BOT_H) so the
+      // right edge sits at x=248. Place cost so its right edge is at x=240 (8px margin).
+      const PANEL_INNER_RIGHT = CANVAS_W - 16;
+      const costX = PANEL_INNER_RIGHT - measureText(costBytes);
       drawText(ui.ctx, costX, topY + i * SPELL_ROW_H, costBytes, rowPal);
     }
   }
