@@ -2,6 +2,36 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.223 — 2026-05-11
+
+### Search UX polish: marquee + no-silent-dismiss
+
+Two follow-ups on v1.7.222's roster search-and-hook flow.
+
+- **"Searching..." marquee.** The 12-character text was wider than
+  the 64-px box on the roster row, so it overflowed the inner
+  panel boundary (clipped at the canvas edge). Now it marquees:
+  50 px / s, two seamless copies offset by `textW + 12 px` so the
+  wrap is invisible. Clipped to a 12-px band at `rowY + 14` so the
+  scroll doesn't bleed into the name line above. `roster.js _drawRosterRow`.
+- **Any close = forfeit.** Z used to silently dismiss the
+  "Searching..." message, leaving the search active in the background
+  and freeing the player to move around (movement is gated by
+  `msgState !== 'none'`; once the message closed, walking + new
+  encounters resumed). That was the wrong feel — the searching
+  message *is* the search; closing it should commit you out.
+  `movement.js` universal msg handler now treats Z and X identically
+  while `isSearchActive() && !isSearchResolving()`: both replace the
+  "Searching..." message with "Cancelled" and end the search.
+
+  Side effect: movement-during-search is naturally blocked because
+  the message box stays up until the player either forfeits or the
+  hook resolves into "Connecting...". No new movement-block flag
+  needed.
+
+  "Connecting..." (resolving state) is unaffected — Z dismisses
+  normally and triggers the PVP battle on close, same as v1.7.222.
+
 ## 1.7.222 — 2026-05-11
 
 ### Roster Battle: search-and-hook flow (replaces instant accept)

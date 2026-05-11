@@ -103,18 +103,25 @@ export function handleInput() {
   if (handleRosterInput()) return;
   if (handlePauseInput()) return;
 
-  // Universal message box — Z dismisses during hold. X cancels an
-  // active PVP search (and replaces the message with the "Cancelled"
-  // status), so the "Searching..." persistent message has a back-out
-  // path. Z continues the search silently. v1.7.222.
+  // Universal message box — Z dismisses during hold. While a PVP
+  // search is active (and not yet resolving), the message *is* the
+  // search — Z and X both forfeit. You can't silently close the
+  // "Searching..." message and wander around with the hook still in
+  // flight. The msgState=hold check also blocks movement input
+  // (input never reaches the arrow-key handler below until the
+  // user commits one way or the other). v1.7.222 added X-back-out;
+  // v1.7.223 tightened to "any close = forfeit".
   if (msgState.state !== 'none') {
     if (msgState.state === 'hold') {
-      if (keys['z'] || keys['Z']) {
+      if (isSearchActive() && !isSearchResolving()) {
+        if (keys['z'] || keys['Z'] || keys['x'] || keys['X']) {
+          keys['z'] = false; keys['Z'] = false;
+          keys['x'] = false; keys['X'] = false;
+          cancelPVPSearch('user');  // replaces "Searching..." with "Cancelled"
+        }
+      } else if (keys['z'] || keys['Z']) {
         keys['z'] = false; keys['Z'] = false;
         dismissMsgBox();
-      } else if ((keys['x'] || keys['X']) && isSearchActive() && !isSearchResolving()) {
-        keys['x'] = false; keys['X'] = false;
-        cancelPVPSearch('user');  // overwrites the "Searching..." message with "Cancelled"
       }
     }
     return;

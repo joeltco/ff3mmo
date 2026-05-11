@@ -269,10 +269,30 @@ function _drawRosterRow(p, i, panelTop) {
   const panelLeft = HUD_RIGHT_X + 32 + 8;
   if (isSearchingFor(p)) {
     // Search active on this target — replace Lv/HP with status text.
-    // Uses the same NES palette family as Lv label for consistency.
+    // v1.7.223: text is wider than the 64-px box, so we marquee-scroll
+    // it left, clipped to the row's lower text band. Two copies offset
+    // by `period` make the wrap seamless.
     const searchPal = [0x0F, 0x0F, 0x0F, 0x28];
     for (let s = 0; s < fadeStep; s++) searchPal[3] = nesColorFade(searchPal[3]);
-    drawText(ui.ctx, panelLeft, rowY + 16, _nameToBytes('Searching...'), searchPal);
+    const textBytes = _nameToBytes('Searching...');
+    const textW     = measureText(textBytes);
+    const boxRight  = HUD_RIGHT_X + HUD_RIGHT_W - 8;
+    const boxW      = boxRight - panelLeft;
+    if (textW <= boxW) {
+      drawText(ui.ctx, panelLeft, rowY + 16, textBytes, searchPal);
+    } else {
+      const SCROLL_PX_MS = 0.05;   // 50 px / s — readable NES-ish cadence
+      const GAP_PX       = 12;
+      const period       = textW + GAP_PX;
+      const offset       = Math.floor((performance.now() * SCROLL_PX_MS) % period);
+      ui.ctx.save();
+      ui.ctx.beginPath();
+      ui.ctx.rect(panelLeft, rowY + 14, boxW, 12);
+      ui.ctx.clip();
+      drawText(ui.ctx, panelLeft - offset, rowY + 16, textBytes, searchPal);
+      drawText(ui.ctx, panelLeft - offset + period, rowY + 16, textBytes, searchPal);
+      ui.ctx.restore();
+    }
   } else {
     const maxHP = p.maxHP || 28;
     const hp = p.hp != null ? p.hp : maxHP;
