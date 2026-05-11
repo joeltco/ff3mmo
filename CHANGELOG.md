@@ -2,6 +2,30 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.232 — 2026-05-11
+
+### Cleanup: remove `player-miss-show` dead code
+
+Surfaced by the v1.7.231 menu-state audit. `'player-miss-show'`
+was referenced as a battleState in 6 sites across 3 files but
+**never assigned anywhere** — misses share the `'player-hit-show'`
+state and the renderers branch on `inputSt.hitResults[i].miss`.
+The dead literal in the menu predicate / render guards / dispatch
+implied coverage that didn't exist.
+
+Removed:
+
+- `src/battle-update.js` — `_updatePlayerMissShow()` (unreachable)
+  + its slot in `updateBattlePlayerAttack()` dispatch chain.
+  `MISS_SHOW_MS` constant also dropped (its only reader was the
+  deleted function).
+- `src/battle-draw-encounter.js` — 4 OR-chain literals at lines
+  74 / 163 / 269 / 294 (encounter, combat-state, boss-PVP, boss).
+- `src/battle-draw-menu.js` — 1 literal in the `isMenu` predicate
+  (line 214).
+
+Zero behavior change — the state was inert.
+
 ## 1.7.231 — 2026-05-11
 
 ### fix: battle menu disappeared during PVP opponent magic casts

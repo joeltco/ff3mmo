@@ -211,7 +211,7 @@ function _battleMenuStates() {
   const isAppear  = bs === 'boss-appear' || bs === 'monster-slide-in';
   const isFade    = bs === 'battle-fade-in';
   const isMenu    = isFade || bs === 'menu-open' || bs === 'target-select' || bs === 'confirm-pause' ||
-    bs === 'attack-back' || bs === 'attack-fwd' || bs === 'player-slash' || bs === 'player-hit-show' || bs === 'player-miss-show' ||
+    bs === 'attack-back' || bs === 'attack-fwd' || bs === 'player-slash' || bs === 'player-hit-show' ||
     bs === 'player-damage-show' || bs === 'pre-monster-death' || bs === 'monster-death' || bs === 'defend-anim' ||
     bs.startsWith('item-') ||
     bs === 'magic-cast' || bs === 'magic-hit' ||

@@ -56,7 +56,6 @@ const FWD_SWING_MS             = 80;
 // gives the strike weight before the number lands. Was 100 ms.
 const HIT_PAUSE_MS             = 316;
 const HIT_COMBO_PAUSE_MS       = 30;
-const MISS_SHOW_MS             = 300;
 const PLAYER_DMG_SHOW_MS       = 700;
 // Brief pause between damage-show and the monster-death animation. NES holds
 // 85 ms here (OAM f14608 frames 105-109) with the SP3 palette dimmed — the
@@ -399,12 +398,6 @@ function _updatePlayerHitShow() {
   return true;
 }
 
-function _updatePlayerMissShow() {
-  if (battleSt.battleState !== 'player-miss-show') return false;
-  if (battleSt.battleTimer >= MISS_SHOW_MS) _advanceHitCombo();
-  return true;
-}
-
 function _updatePlayerDamageShow() {
   if (battleSt.battleState !== 'player-damage-show') return false;
   if (battleSt.battleTimer >= PLAYER_DMG_SHOW_MS) {
@@ -450,7 +443,6 @@ export function updateBattlePlayerAttack() {
          _updatePlayerAttackFwd() ||
          _updatePlayerSlash() ||
          _updatePlayerHitShow() ||
-         _updatePlayerMissShow() ||
          _updatePlayerDamageShow() ||
          _updatePreMonsterDeath() ||
          _updateMonsterDeath();
