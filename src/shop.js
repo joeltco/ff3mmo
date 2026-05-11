@@ -20,7 +20,7 @@ import { getItemNameClean, getSpellNameClean } from './text-decoder.js';
 import { ITEMS } from './data/items.js';
 import { SHOPS } from './data/shops.js';
 import { SPELLS, getSpellBuyPrice, canLearnSpell } from './data/spells.js';
-import { ps } from './player-stats.js';
+import { ps, grantGil, spendGil } from './player-stats.js';
 import { addItem, removeItem, playerInventory } from './inventory.js';
 import { showMsgBox } from './message-box.js';
 import { playSFX, SFX, pauseMusic, resumeMusic, playFF1Track, stopFF1Music, FF1_TRACKS } from './music.js';
@@ -278,12 +278,11 @@ function _attemptBuy(itemId) {
   if (_isSpellShop()) { _attemptBuySpell(itemId); return; }
   const item = ITEMS.get(itemId);
   if (!item) { playSFX(SFX.ERROR); return; }
-  if (ps.gil < item.price) {
+  if (!spendGil(item.price)) {
     playSFX(SFX.ERROR);
     showMsgBox(_nameToBytes('Not enough gil!'));
     return;
   }
-  ps.gil -= item.price;
   addItem(itemId, 1);
   saveSlotsToDB();
   playSFX(SFX.TREASURE);
@@ -304,12 +303,11 @@ function _attemptBuySpell(spellId) {
     showMsgBox(_nameToBytes('Already known!'));
     return;
   }
-  if (ps.gil < price) {
+  if (!spendGil(price)) {
     playSFX(SFX.ERROR);
     showMsgBox(_nameToBytes('Not enough gil!'));
     return;
   }
-  ps.gil -= price;
   if (!ps.knownSpells) ps.knownSpells = [];
   ps.knownSpells.push(spellId);
   saveSlotsToDB();
@@ -329,7 +327,7 @@ function _spellActionMsg(prefixStr, spellId) {
 
 function _attemptSell(entry) {
   if (!entry || !entry.id || entry.count <= 0) { playSFX(SFX.ERROR); return; }
-  ps.gil += entry.price;
+  grantGil(entry.price);
   removeItem(entry.id);
   saveSlotsToDB();
   playSFX(SFX.TREASURE);

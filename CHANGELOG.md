@@ -2,6 +2,58 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.219 — 2026-05-10
+
+### Inventory + economy audit (multiplayer-prep) — single mutation seams
+
+From `docs/INVENTORY-ECONOMY-AUDIT.md`. Tightens the inventory and
+gil mutation surface so the future websocket layer can hook delta
+emission from one place per operation. No gameplay behavior change.
+
+**New helpers in `inventory.js`:**
+
+- `addItem(id, count)` — now validates count (rejects non-finite,
+  non-positive, NaN). Returns the actual amount added (0 if
+  rejected). Defensive against future untrusted callers
+  (websocket-broadcast deltas, etc.).
+- `removeItem(id, count = 1)` — now takes a count param (was always
+  exactly 1). Clamps to current inventory count. Returns actual
+  amount removed.
+- `getItemCount(id)` — new. Returns 0 (not undefined) for missing
+  items. Single seam for "how many do I have" lookups.
+- `hasItem(id)` — new. Boolean convenience.
+
+**New helpers in `player-stats.js`:**
+
+- `grantGil(amount)` — single seam for "give the player money".
+  Validates amount, returns actual granted. Pre-v1.7.219 every gil
+  mutation was inline `ps.gil += X` (8 sites).
+- `spendGil(amount)` — returns `true` on success, `false` if
+  insufficient. Pre-v1.7.219 sites did the `if (ps.gil < price) {
+  error } ps.gil -= price` dance inline.
+
+**Refactored 6 gil-mutation sites:**
+
+- `shop.js` — buy item, buy spell, sell item (3 sites)
+- `battle-update.js` — victory rewards (encounter / PVP / boss, 3 sites)
+- `map-triggers.js` — chest gil
+
+Set-assignment sites (`ps.gil = X`) intentionally left inline: the
+`/gil` cheat and load-time restoration are assignments, not deltas.
+
+**Verified clean (no change):**
+
+- Sell price = `floor(buy/2)` — NES-faithful.
+- Monster drop = 25% per mob, first hit wins.
+- Equipment-best auto-equip — short-circuits on `bestId === curId`.
+
+**Deferred (design calls):**
+
+- Item quantity cap (NES caps at 99; uncapped today — depends on
+  MMO scope).
+- Gil cap in gameplay (only the `/gil` cheat caps at 999999;
+  depends on economy design).
+
 ## 1.7.218 — 2026-05-10
 
 ### Job-system audit (multiplayer-prep) — fake-player jobLevel divergence closed

@@ -8,7 +8,7 @@ import { sprite } from './player-sprite.js';
 import { pvpSt, resetPVPState, updatePVPBattle } from './pvp.js';
 import { hudSt } from './hud-state.js';
 import { mapSt } from './map-state.js';
-import { ps, grantExp, grantCP, getHitWeapon, isHitRightHand, gainJobJP } from './player-stats.js';
+import { ps, grantExp, grantCP, getHitWeapon, isHitRightHand, gainJobJP, grantGil } from './player-stats.js';
 import { IDLE_FRAME_MS } from './combatant-pose.js';
 import { bsc, getSlashFramesForWeapon, getSlashPattern, setSlashOffsetForFrame } from './battle-sprite-cache.js';
 import { SLASH_FRAME_MS, shouldDrawSlash, SWING_HOLD_MS } from './slash-effects.js';
@@ -490,7 +490,7 @@ function _triggerPVPVictory() {
   battleSt.encounterExpGained = Math.max(1, Math.floor(rawPvpExp / 4));
   battleSt.encounterGilGained = Math.max(1, Math.floor(10 * oppLv / 4));
   battleSt.encounterCpGained = Math.max(1, Math.floor(oppLv / 4)); grantCP(battleSt.encounterCpGained);
-  ps.gil += battleSt.encounterGilGained;
+  grantGil(battleSt.encounterGilGained);
   battleSt.encounterJobLevelUp = gainJobJP(inputSt.battleActionCount || 1);
   inputSt.battleActionCount = 0;
   saveSlotsToDB();
@@ -527,7 +527,7 @@ function _updateMonsterDeath() {
       battleSt.encounterExpGained = Math.max(1, Math.floor(rawExp / 4));
       battleSt.encounterGilGained = Math.max(1, Math.floor(battleSt.encounterMonsters.reduce((sum, m) => sum + (m.gil || 0), 0) / 4));
       battleSt.encounterCpGained = Math.max(1, Math.floor(battleSt.encounterMonsters.reduce((sum, m) => sum + (m.cp || 1), 0) / 4)); grantCP(battleSt.encounterCpGained);
-      ps.gil += battleSt.encounterGilGained;
+      grantGil(battleSt.encounterGilGained);
       battleSt.encounterJobLevelUp = gainJobJP(inputSt.battleActionCount || 1);
       inputSt.battleActionCount = 0;
       battleSt.encounterDropItem = null;
@@ -645,7 +645,7 @@ function _updateBossDissolve(dt) {
     grantExp(rawBossExp);
     battleSt.encounterExpGained = Math.max(1, Math.floor(rawBossExp / 4));
     battleSt.encounterGilGained = Math.max(1, Math.floor((_bossData?.gil || 500) / 4));
-    ps.gil += battleSt.encounterGilGained;
+    grantGil(battleSt.encounterGilGained);
     battleSt.encounterCpGained = Math.max(1, Math.floor((_bossData?.cp || 10) / 4)); grantCP(battleSt.encounterCpGained);
     battleSt.encounterJobLevelUp = gainJobJP(inputSt.battleActionCount || 1);
     inputSt.battleActionCount = 0;

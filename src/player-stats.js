@@ -291,6 +291,29 @@ export function grantCP(amount) {
   ps.cp = Math.min(255, ps.cp + amount);
 }
 
+// Gil mutation helpers — single seam for "give the player money" /
+// "deduct gil" so the future multiplayer layer can hook delta emission
+// from one place instead of 8 inline `ps.gil += X` / `ps.gil -= X` sites.
+// No cap yet (see INVENTORY-ECONOMY-AUDIT.md #6 — depends on economy
+// design); helpers return the actual amount transacted.
+export function grantGil(amount) {
+  const n = Number(amount);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  const intN = Math.floor(n);
+  ps.gil += intN;
+  return intN;
+}
+
+// Returns true if gil was successfully deducted, false if insufficient.
+export function spendGil(amount) {
+  const n = Number(amount);
+  if (!Number.isFinite(n) || n <= 0) return false;
+  const intN = Math.floor(n);
+  if (ps.gil < intN) return false;
+  ps.gil -= intN;
+  return true;
+}
+
 // Cost to switch from current job to newJobIdx.
 // NES formula (disasm 3D/AD85): cost = (|physDiff| + |chaosDiff|) * 4 - newJobLevel, min 0.
 // Alignment byte: high nibble = physical/magical index, low nibble = lawful/chaotic index.

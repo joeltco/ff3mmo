@@ -11,7 +11,7 @@ import { transSt, topBoxSt, startWipeTransition } from './transitions.js';
 import { resetIndoorWaterCache } from './water-animation.js';
 import { showMsgBox } from './message-box.js';
 import { POND_RESTORED } from './data/strings.js';
-import { ps } from './player-stats.js';
+import { ps, grantGil } from './player-stats.js';
 import { getItemNameClean } from './text-decoder.js';
 import { mapSt } from './map-state.js';
 import { rebuildFlameSprites } from './flame-sprites.js';
@@ -122,7 +122,7 @@ export function handleChest(facedX, facedY) {
   if (typeof entry === 'object' && entry.gil) {
     const [min, max] = entry.gil;
     const amount = min + Math.floor(Math.random() * (max - min + 1));
-    ps.gil += amount;
+    grantGil(amount);
     msg = foundGilMsg(amount);
   } else {
     addItem(entry, 1);
