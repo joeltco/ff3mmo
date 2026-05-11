@@ -9,6 +9,7 @@ import { _nameToBytes, drawLvHpRow } from './text-utils.js';
 import { drawText, measureText, TEXT_WHITE } from './font-renderer.js';
 import { isSearchingFor } from './pvp-search.js';
 import { isInvitingTarget, isInParty } from './party-invite.js';
+import { isTradingWith } from './trade.js';
 import { fakePlayerPortraits } from './fake-player-sprites.js';
 import { ui } from './ui-state.js';
 import { transSt, WIPE_DURATION } from './transitions.js';
@@ -424,6 +425,7 @@ export function drawRosterMenu() {
     const searching = isSearchingFor(inputSt.rosterMenuTarget);
     const inviting  = isInvitingTarget(inputSt.rosterMenuTarget);
     const inParty   = isInParty(inputSt.rosterMenuTarget);
+    const trading   = isTradingWith(inputSt.rosterMenuTarget);
     for (let i = 0; i < ROSTER_MENU_ITEMS.length; i++) {
       let label = ROSTER_MENU_ITEMS[i];
       if (label === 'Battle' && searching) label = 'Cancel';
@@ -432,6 +434,7 @@ export function drawRosterMenu() {
       // the menu fade-out, same as Battle. v1.7.235.
       else if (label === 'Party' && inviting) label = 'Cancel';
       else if (label === 'Party' && inParty)  label = 'Dismiss';
+      else if (label === 'Trade' && trading)  label = 'Cancel';
       const labelBytes = _nameToBytes(label);
       drawText(ui.ctx, menuX + 16, menuY + 8 + i * 14, labelBytes, textPal);
     }

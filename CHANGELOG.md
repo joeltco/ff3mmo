@@ -2,6 +2,48 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.237 — 2026-05-11
+
+### Feature: roster Trade action → give-only offer flow
+
+Third action in the roster-menu lifecycle family (after Battle's
+search-and-hook v1.7.222-226 and Party's invite-and-accept
+v1.7.235). Picking Trade opens an inline item-pick panel listing
+the player's inventory. Selecting an item starts a persistent
+"Offering [item] to X..." invitation; the target rolls an accept
+chance every 4-10 s on a per-target sim timer. On accept, the item
+leaves `playerInventory` (single-player: just disappears — fake
+players have no inventory yet); the multiplayer cutover swaps the
+sim roll for a server-relayed `trade_response` signal and adds the
+item to the target's inventory.
+
+- `src/trade.js` — new module. Exports `openTradePick`, `commitOffer`,
+  `cancelTrade`, `tickTrade`, `drawTradePick`, `handleTradePickInput`,
+  `isTradeActive`, `isTradeOffering`, `isTradeResolving`,
+  `isTradePicking`, `isTradingWith`, `isTradeOnCooldown`,
+  `getAcceptChance`, `getActiveTradeTargetName`, `tradeSt`. State
+  machine: `'closed' | 'item-pick' | 'offering' | 'resolving'`.
+  Accept formula: `clamp(0.25 + price/1500, 0.10, 0.90)` — higher
+  value items land easier; no level/job factors. Same lifecycle
+  envelope as party-invite (5 min timeout, 3-missed cap, 60 s
+  cooldown, 1 s "Accepted" auto-advance hold).
+- `src/input-handler.js` — adds `_rosterMenuTradeAction(target)`
+  alongside Battle and Party. Z-press dispatch routes
+  `action === 'Trade'` through it. Handles in-flight cancel,
+  on-cooldown, empty-inventory, already-trading.
+- `src/movement.js` — universal-message hand-off block extended
+  for active trade offer (X forfeits, Z inert). Trade item-pick
+  input handler injected before the roster handler so the picker
+  owns its own input loop while open.
+- `src/game-loop.js` — `tickTrade(dt)` next to the other ticks;
+  `drawTradePick()` after the roster menu draw.
+- `src/roster.js` — menu label flips `Trade → Cancel` mid-offer,
+  same pattern as Battle/Party.
+
+Known followups: the inline item-pick panel mirrors shop's
+`_drawList` style minimally — no scroll arrows or category split.
+Iterate on UX as needed.
+
 ## 1.7.236 — 2026-05-11
 
 ### Feature: chat Room tab → Party tab

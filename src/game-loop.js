@@ -13,6 +13,7 @@ import { updateChat, updateChatTabs, drawChat, drawChatTabs, isDev, consoleLog }
 import { rosterBattleFade, updateRoster, drawRoster, drawRosterMenu } from './roster.js';
 import { tickPVPSearch } from './pvp-search.js';
 import { tickPartyInvite } from './party-invite.js';
+import { tickTrade, drawTradePick } from './trade.js';
 import { updateMsgBox, drawMsgBox } from './message-box.js';
 import { titleSt, drawTitleSkyInHUD, drawTitle, updateTitle } from './title-screen.js';
 import { updatePauseMenu, drawPauseMenu } from './pause-menu.js';
@@ -132,6 +133,7 @@ function _gameLoopUpdate(dt) {
   updateRoster(dt);
   tickPVPSearch(dt);
   tickPartyInvite(dt);
+  tickTrade(dt);
   updateChat(dt, battleSt.battleState);
   updateChatTabs(dt);
   updatePauseMenu(dt);
@@ -185,6 +187,7 @@ function _gameLoopDraw() {
     drawShop();
     drawMsgBox(ctx, drawBorderedBox);
     drawRosterMenu();
+    drawTradePick();
     drawBattle();
     drawSWExplosion();
     drawSWDamageNumbers();

@@ -22,6 +22,7 @@ import { advanceBattleMsgZ } from './battle-msg.js';
 import { getRosterVisible, ROSTER_MENU_ITEMS } from './roster.js';
 import { startPVPSearch, cancelPVPSearch, isSearchingFor, isSearchOnCooldown } from './pvp-search.js';
 import { startPartyInvite, cancelPartyInvite, isInvitingTarget, isInviteOnCooldown, isInParty, isPartyFull, removeFromParty } from './party-invite.js';
+import { openTradePick, cancelTrade, isTradingWith, isTradePicking, isTradeOnCooldown, handleTradePickInput } from './trade.js';
 import { playerInventory, addItem, removeItem, INV_SLOTS } from './inventory.js';
 
 // Keyboard poll map — mutated by window listeners, read throughout the codebase.
@@ -704,6 +705,24 @@ function _rosterMenuBattleAction(target) {
   }
 }
 
+// Trade action: opens the inline item-pick panel for a give-only offer
+// to the target. Flow lives in `trade.js`. Mid-offer pick reopens to
+// 'Cancel' the same target. v1.7.237.
+function _rosterMenuTradeAction(target) {
+  if (isTradingWith(target)) {
+    cancelTrade('user');
+    return;
+  }
+  if (isTradeOnCooldown(target.name)) {
+    showMsgBox(_nameToBytes(target.name + ' on cooldown'));
+    return;
+  }
+  const result = openTradePick(target);
+  if (result === 'busy')    showMsgBox(_nameToBytes('Already trading'));
+  else if (result === 'empty') showMsgBox(_nameToBytes('No items'));
+  // 'ok' — panel is now open; item-pick handler takes the next input.
+}
+
 // Party action: starts an *invite* (or cancels the active one / dismisses
 // an existing party member on the same target — menu label flips to
 // 'Cancel' / 'Dismiss' respectively). Invite-and-accept flow lives in
@@ -763,6 +782,10 @@ function _rosterInputMenu() {
       // pattern as Battle). v1.7.235.
       inputSt.rosterMenuExitTo = 'none';
       _rosterMenuPartyAction(target);
+    } else if (action === 'Trade') {
+      // Item-pick panel owns the next state. v1.7.237.
+      inputSt.rosterMenuExitTo = 'none';
+      _rosterMenuTradeAction(target);
     } else {
       const actionBytes = _nameToBytes(action), nameBytes = _nameToBytes(target.name);
       const sep = new Uint8Array([0xFF]);
