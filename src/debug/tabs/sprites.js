@@ -1,6 +1,6 @@
 // SPRITES tab — tile/sprite/poses viewer. Moved from index.html konami viewer.
 //
-// Context expected on mount: { getFF3Buffer(), getFF12Buffer() }
+// Context expected on mount: { getFF3Buffer(), getFF1Buffer(), getFF2Buffer() }
 
 import { decodeTile, NES_SYSTEM_PALETTE } from '../../tile-decoder.js';
 import { JOB_NAMES, BATTLE_SPRITE_ROM, BATTLE_JOB_SIZE } from '../../data/jobs.js';
@@ -171,7 +171,8 @@ function _buildDOM(parent) {
     return b;
   };
   const rom3 = mkBtn('FF3', true);
-  const rom12 = mkBtn('FF1&2');
+  const rom1 = mkBtn('FF1');
+  const rom2 = mkBtn('FF2');
   const sprite = mkBtn('SPRITE');
   const layout = mkBtn('ROW', false, true);
   const height = mkBtn('24', false, true);
@@ -190,7 +191,7 @@ function _buildDOM(parent) {
   const go = document.createElement('button');
   go.textContent = 'GO';
   go.style.cssText = 'padding:6px 14px;background:#2a2a3e;border:1px solid #555;border-radius:4px;color:#c8a832;font-family:monospace;font-size:13px;cursor:pointer;';
-  [rom3, rom12, sprite, layout, height, pal, bank, poses, exportBtn, offset, go].forEach(el => jumpRow.appendChild(el));
+  [rom3, rom1, rom2, sprite, layout, height, pal, bank, poses, exportBtn, offset, go].forEach(el => jumpRow.appendChild(el));
   wrap.appendChild(jumpRow);
 
   const grid = document.createElement('div');
@@ -232,21 +233,22 @@ function _buildDOM(parent) {
   parent.appendChild(exportOverlay);
 
   return { root: wrap, exportOverlay, header, jumpRow, grid, frameRow, flabel, nav,
-    rom3, rom12, sprite, layout, height, pal, bank, poses, exportBtn, offset, go,
+    rom3, rom1, rom2, sprite, layout, height, pal, bank, poses, exportBtn, offset, go,
     fprev, fnext, up, down, exportText, exportClose };
 }
 
 function _wireEvents() {
-  dom.rom3.addEventListener('click', () => {
-    tileRomBuffer = ctx.getFF3Buffer(); tilePage = 0; tileBaseOffset = 16;
-    dom.rom3._setActive(true); dom.rom12._setActive(false);
+  function _selectRom(which) {
+    const getters = { ff3: ctx.getFF3Buffer, ff1: ctx.getFF1Buffer, ff2: ctx.getFF2Buffer };
+    tileRomBuffer = getters[which]?.(); tilePage = 0; tileBaseOffset = 16;
+    dom.rom3._setActive(which === 'ff3');
+    dom.rom1._setActive(which === 'ff1');
+    dom.rom2._setActive(which === 'ff2');
     _renderTilePage();
-  });
-  dom.rom12.addEventListener('click', () => {
-    tileRomBuffer = ctx.getFF12Buffer(); tilePage = 0; tileBaseOffset = 16;
-    dom.rom12._setActive(true); dom.rom3._setActive(false);
-    _renderTilePage();
-  });
+  }
+  dom.rom3.addEventListener('click', () => _selectRom('ff3'));
+  dom.rom1.addEventListener('click', () => _selectRom('ff1'));
+  dom.rom2.addEventListener('click', () => _selectRom('ff2'));
 
   dom.bank.addEventListener('click', () => {
     chrBankIdx = (chrBankIdx + 1) % CHR_BANKS.length;

@@ -2,6 +2,48 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.256 — 2026-05-12
+
+### Replace FF1+II SUROM cart with FF1 + FF2 standalones
+
+The Famicom FF I・II compilation is SUROM (extended MMC1 with 512 KB
+PRG) and jsnes only implements the standard 4-bit PRG select, so any
+attempt to run the cart inside the EMU tab produced a gray screen
+(boot vector lives in the upper 256 KB, unreachable). Replaced with
+two standalone ROMs (both regular MMC1, both jsnes-runnable):
+
+- `ff1Raw` (FF1 NES, 256 KB) → FF1 battle music, bank `$0D` extract
+- `ff2Raw` (FF2 Famicom, 256 KB) → Adamantoise sprite, offset `0xBF10`
+  (= old FF1+II cart offset `0x04BF10` minus FF1's 256 KB prefix)
+
+Changes:
+
+- `boot.js`: split `loadFF12ROM(buf)` → `loadFF1ROM(buf)` +
+  `loadFF2ROM(buf)`. Replaced `ff12Raw` with `ff1Raw` / `ff2Raw` and
+  the matching `getFF1Raw()` / `getFF2Raw()` accessors.
+- `sprite-init.js`: `FF2_ADAMANTOISE_SPRITE` offset `0x04BF10` →
+  `0x0BF10`. `initLoadingScreenFadeFrames(rom, ff12Raw)` param renamed
+  to `ff2Raw`.
+- `main.js`: re-exports `loadFF1ROM` + `loadFF2ROM` instead of
+  `loadFF12ROM`.
+- `index.html`: two ROM file pickers (FF1 + FF2) instead of one;
+  indexedDB cache keys `'ff1'` and `'ff2'` instead of `'ff12'`;
+  `tryLaunch` now waits on all three buffers; debug-panel ctx provides
+  `getFF1Buffer()` + `getFF2Buffer()`.
+- `debug/tabs/emu.js`: ROM toggle is now 3-way (FF3 / FF1 / FF2);
+  `_switchRom` keyed off a `ROM_TARGETS` map so adding more ROMs later
+  only needs a button + entry. Stripped the v1.7.255 EMU-DIAG logger
+  (job done — we got our answer).
+- `debug/tabs/sprites.js`: tile-viewer ROM toggle goes from
+  `FF3 / FF1&2` to `FF3 / FF1 / FF2`.
+- `data/shop-sprites.js`: capture-flow docs point at the in-app EMU
+  tab + the new FF1 toggle instead of FCEUX/Mesen offline.
+
+Migration: users with the FF1+II cart cached will see the picker
+asking for FF1 and FF2 separately on next boot. Old `'ff12'` cache
+entry in indexedDB is now orphaned and can be cleared by the browser
+at its leisure.
+
 ## 1.7.255 — 2026-05-12
 
 ### EMU tab: diagnostic logger for FF1&2 ROM swap

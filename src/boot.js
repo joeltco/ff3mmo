@@ -27,11 +27,18 @@ import { initSpellAnim } from './spell-anim.js';
 
 const TITLE_FADE_MAX = 4;
 
-let ff12Raw = null;       // FF1&2 ROM — Adamantoise sprite + FF1 music
+// FF1+II Famicom compilation was SUROM (extended MMC1 with 512 KB PRG),
+// which jsnes can't bank-switch. v1.7.256 split it into two standalones:
+//   ff1Raw — FF1 NES (256 KB MMC1, regular) → FF1 battle music
+//   ff2Raw — FF2 Famicom (256 KB MMC1, regular) → Adamantoise sprite
+// Both run cleanly in jsnes for in-app PPU capture.
+let ff1Raw = null;
+let ff2Raw = null;
 
-// Accessor for diagnostics + the EMU tab's FF1&2 toggle. Returns null
-// until loadFF12ROM has been called.
-export function getFF12Raw() { return ff12Raw; }
+// Accessors for the EMU tab's ROM toggle. Return null until the
+// corresponding loadFFnROM has been called.
+export function getFF1Raw() { return ff1Raw; }
+export function getFF2Raw() { return ff2Raw; }
 export let romRaw = null; // Primary FF3 ROM — live binding: also consumed by job-sprites.js after init
 
 export function initSpriteAssets(rom) {
@@ -74,7 +81,7 @@ export function initSpriteAssets(rom) {
   const ms = initMoogleSprite(rom);
   hudSt.moogleFrames = ms.moogleFrames;
 
-  const lf = initLoadingScreenFadeFrames(rom, ff12Raw);
+  const lf = initLoadingScreenFadeFrames(rom, ff2Raw);
   hudSt.moogleFadeFrames = lf.moogleFadeFrames;
   hudSt.bossFadeFrames = lf.bossFadeFrames;
 
@@ -98,18 +105,25 @@ export function initTitleAssets(rom) {
   titleSt.logoFrames = initTitleLogo();
 }
 
-// FF1&2 ROM provides Adamantoise boss sprite + FF1 battle music. Called by
-// index.html once the secondary ROM is available (may arrive before or after
-// loadROM depending on which file the user selects first).
-export function loadFF12ROM(arrayBuffer) {
-  ff12Raw = new Uint8Array(arrayBuffer);
-  const ad = initAdamantoise(ff12Raw);
+// FF1 standalone NES ROM — provides FF1 battle music (bank $0D). Called
+// by index.html once the secondary ROM is available (may arrive before
+// or after loadROM depending on which file the user selects first).
+export function loadFF1ROM(arrayBuffer) {
+  ff1Raw = new Uint8Array(arrayBuffer);
+  initFF1Music(ff1Raw);
+}
+
+// FF2 standalone Famicom ROM — provides the Adamantoise boss sprite at
+// offset 0xBF10 (FF2 bank $02 + $3F00). Drives the loading-screen boss
+// silhouette fade alongside the moogle.
+export function loadFF2ROM(arrayBuffer) {
+  ff2Raw = new Uint8Array(arrayBuffer);
+  const ad = initAdamantoise(ff2Raw);
   hudSt.adamantoiseFrames = ad.adamantoiseFrames;
-  initFF1Music(ff12Raw);
   if (romRaw) {
-    // Primary ROM already loaded — rebuild loading-screen fade frames so the
-    // boss silhouette fade is available now that ff12Raw exists.
-    const lf2 = initLoadingScreenFadeFrames(romRaw, ff12Raw);
+    // Primary FF3 ROM already loaded — rebuild loading-screen fade frames
+    // so the boss silhouette fade is available now that ff2Raw exists.
+    const lf2 = initLoadingScreenFadeFrames(romRaw, ff2Raw);
     hudSt.moogleFadeFrames = lf2.moogleFadeFrames;
     hudSt.bossFadeFrames = lf2.bossFadeFrames;
   }

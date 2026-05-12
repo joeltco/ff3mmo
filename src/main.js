@@ -38,7 +38,7 @@ import { resetBattleVars, isTeamWiped, executeBattleCommand } from './battle-upd
 import { startGameLoop } from './game-loop.js';
 import { initSpriteAssets, initTitleAssets } from './boot.js';
 import { SPRITE_PAL_TOP, SPRITE_PAL_BTM } from './job-sprites.js';
-export { loadFF12ROM } from './boot.js';
+export { loadFF1ROM, loadFF2ROM } from './boot.js';
 
 const CANVAS_W = 256;          // 16 metatiles wide (NES resolution)
 const CANVAS_H = 240;          // 15 metatiles tall (NES resolution)

@@ -89,7 +89,7 @@ export function mount(root, context) {
 
   if (!window.jsnes) { _status('jsnes library not loaded (check lib/jsnes.min.js)', true); return; }
   // Always boot into FF3 first — that's the project's primary ROM.
-  // The ROM-toggle row in the UI lets the user swap to FF1&2 mid-session.
+  // The ROM-toggle row in the UI lets the user swap to FF1 / FF2.
   currentRom = 'ff3';
   _refreshRomButtons();
   const rom = ctx.getFF3Buffer();
@@ -98,16 +98,24 @@ export function mount(root, context) {
   _patchAndInit(rom, 'ff3');
 }
 
-// Swap the running emulator to the other ROM. No-op if already there or
-// if the requested ROM hasn't been loaded yet (FF1&2 is optional —
-// users only need it for FF1-derived sprite/music captures).
+// Map ROM type → context accessor + human label. Adding more ROMs
+// (e.g., FF4 or other reference carts) only needs an entry here + a
+// button in _buildDOM.
+const ROM_TARGETS = {
+  ff3: { label: 'FF3',  get: () => ctx.getFF3Buffer?.() },
+  ff1: { label: 'FF1',  get: () => ctx.getFF1Buffer?.() },
+  ff2: { label: 'FF2',  get: () => ctx.getFF2Buffer?.() },
+};
+
+// Swap the running emulator to the requested ROM. No-op if already
+// there or if the target hasn't been loaded yet (FF1 / FF2 are
+// optional — users only need them for FF1/FF2-derived captures).
 function _switchRom(target) {
   if (target === currentRom) return;
-  if (target !== 'ff3' && target !== 'ff12') return;
-  const rom = target === 'ff12' ? ctx.getFF12Buffer() : ctx.getFF3Buffer();
+  if (!ROM_TARGETS[target]) return;
+  const rom = ROM_TARGETS[target].get();
   if (!rom) {
-    const label = target === 'ff12' ? 'FF1&2' : 'FF3';
-    _status(`No ${label} ROM loaded — drop one on the title screen first`, true);
+    _status(`No ${ROM_TARGETS[target].label} ROM loaded — drop one on the title screen first`, true);
     return;
   }
   _stop();
@@ -120,60 +128,14 @@ function _switchRom(target) {
   if (dom?.frame) dom.frame.textContent = 'f0';
   currentRom = target;
   _refreshRomButtons();
-  _logRomDiag(rom, target, 'pre-init');
   _patchAndInit(rom, target);
-}
-
-// POST a snapshot of the ROM header + (when available) jsnes parse state
-// to /api/client-error so we can read it via SSH on prod (`pm2 logs
-// server`). Used to debug the FF1&2 toggle path where the browser is
-// remote and devtools aren't reachable.
-function _logRomDiag(buffer, target, phase) {
-  try {
-    const b = new Uint8Array(buffer);
-    const hdr = Array.from(b.slice(0, 16)).map(x => x.toString(16).padStart(2, '0')).join(' ');
-    const magic = String.fromCharCode(b[0], b[1], b[2]);
-    const magicOk = magic === 'NES' && b[3] === 0x1A;
-    const prgBanks = b[4];
-    const chrBanks = b[5];
-    const flags6 = b[6];
-    const flags7 = b[7];
-    const mapper = ((flags6 >> 4) | (flags7 & 0xF0));
-    const sizeKB = (b.length / 1024).toFixed(1);
-    const payload = {
-      msg: `[EMU DIAG ${phase}] ${target.toUpperCase()} ROM`,
-      ctx: {
-        bytes: b.length,
-        sizeKB,
-        ines_magic: magic + (b[3] === 0x1A ? '\\x1A' : '?'),
-        ines_ok: magicOk,
-        ines_header: hdr,
-        prg_banks_16k: prgBanks,
-        chr_banks_8k: chrBanks,
-        flags6_bin: flags6.toString(2).padStart(8, '0'),
-        flags7_bin: flags7.toString(2).padStart(8, '0'),
-        mapper,
-        battery: !!(flags6 & 0x02),
-        trainer: !!(flags6 & 0x04),
-        four_screen: !!(flags6 & 0x08),
-      },
-    };
-    if (nes?.rom) {
-      payload.ctx.jsnes_mapper_type = nes.rom.mapperType;
-      payload.ctx.jsnes_mapper_supported = typeof nes.rom.mapperSupported === 'function' ? nes.rom.mapperSupported() : null;
-      payload.ctx.jsnes_prg_count = nes.rom.romCount;
-      payload.ctx.jsnes_chr_count = nes.rom.vromCount;
-    }
-    fetch('/api/client-error', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).catch(() => {});
-  } catch (e) {
-    fetch('/api/client-error', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ msg: '[EMU DIAG] dump-threw: ' + e.message }) }).catch(() => {});
-  }
 }
 
 // Highlight the active ROM button gold; dim the other.
 function _refreshRomButtons() {
-  if (!dom?.btnRomFF3 || !dom?.btnRomFF12) return;
-  for (const [id, btn] of [['ff3', dom.btnRomFF3], ['ff12', dom.btnRomFF12]]) {
+  if (!dom?.btnRomFF3) return;
+  for (const [id, btn] of [['ff3', dom.btnRomFF3], ['ff1', dom.btnRomFF1], ['ff2', dom.btnRomFF2]]) {
+    if (!btn) continue;
     const active = id === currentRom;
     btn.style.borderColor = active ? '#c8a832' : '#444';
     btn.style.color = active ? '#c8a832' : '#888';
@@ -233,15 +195,7 @@ function _initEmulator(romBuffer) {
     nes = new window.jsnes.NES({
       onFrame: _onFrame,
       onAudioSample: _onAudioSample,
-      onStatusUpdate: (s) => {
-        console.log('[jsnes]', s);
-        _status('jsnes: ' + s);
-        // Mirror every jsnes status to pm2 logs so SSH-only sessions can
-        // see them. Mapper errors / banking failures come through here.
-        try {
-          fetch('/api/client-error', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ msg: '[EMU DIAG jsnes] ' + s, ctx: { rom: currentRom } }) }).catch(() => {});
-        } catch (_) { /* ignore */ }
-      },
+      onStatusUpdate: (s) => { console.log('[jsnes]', s); _status('jsnes: ' + s); },
       onBatteryRamWrite: _onBatteryRamWriteSfx,
       sampleRate: 44100,
     });
@@ -263,42 +217,14 @@ function _initEmulator(romBuffer) {
   const prgCount = nes.rom?.romCount;
   const chrCount = nes.rom?.vromCount;
   _status(`ROM ok — mapper ${mapper}, PRG ${prgCount}×16KB, CHR ${chrCount}×8KB. Starting…`);
-  // Post-init diag dump so we see jsnes' resolved view alongside the
-  // raw header. Visible via `pm2 logs server` on prod.
-  _logRomDiag(romBuffer, currentRom, 'post-init');
 
   frameCount = 0;
   _start();
 
   // If no frame renders within 500ms, report it.
   setTimeout(() => {
-    if (frameCount === 0 && running) {
-      _status('no frames after 500ms — jsnes may be stuck', true);
-      fetch('/api/client-error', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ msg: '[EMU DIAG] stuck — no frames @ 500ms', ctx: { rom: currentRom } }) }).catch(() => {});
-    }
+    if (frameCount === 0 && running) _status('no frames after 500ms — jsnes may be stuck', true);
   }, 500);
-  // Also fire a 3-second snapshot so we can see if jsnes recovered from
-  // a slow start vs is stuck on a gray boot screen.
-  setTimeout(() => {
-    if (!nes) return;
-    const ppuCtrl = nes.ppu?.f_nmiOnVblank;
-    const ppuMask = nes.ppu?.f_dispType;
-    const ppuFrame = nes.ppu?.frameCounter ?? frameCount;
-    fetch('/api/client-error', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
-      msg: '[EMU DIAG] 3s snapshot',
-      ctx: {
-        rom: currentRom,
-        host_frames: frameCount,
-        running,
-        ppu_nmi_enabled: ppuCtrl,
-        ppu_disp_type: ppuMask,
-        ppu_frame: ppuFrame,
-        // jsnes mirror palette[0] = universal BG — if everything's gray
-        // it's likely $30 (light gray) or $00 (dark gray).
-        ppu_bg_color_$3F00: nes.ppu?.imgPalette?.[0],
-      }
-    }) }).catch(() => {});
-  }, 3000);
 }
 
 function _onFrame(buffer) {
@@ -1367,8 +1293,9 @@ function _buildDOM(parent) {
   romLabel.textContent = 'ROM:';
   romLabel.style.cssText = 'color:#888;font-size:11px;font-family:monospace;';
   const btnRomFF3 = mkBtn('FF3', () => _switchRom('ff3'));
-  const btnRomFF12 = mkBtn('FF1&2', () => _switchRom('ff12'));
-  romRow.append(romLabel, btnRomFF3, btnRomFF12);
+  const btnRomFF1 = mkBtn('FF1', () => _switchRom('ff1'));
+  const btnRomFF2 = mkBtn('FF2', () => _switchRom('ff2'));
+  romRow.append(romLabel, btnRomFF3, btnRomFF1, btnRomFF2);
   rightCol.appendChild(romRow);
 
   // Slot row: 4 numbered savestate slots. Tap to select; gold border = selected,
@@ -1552,7 +1479,7 @@ function _buildDOM(parent) {
 
   parent.appendChild(root);
 
-  const d = { root, canvas, status, frame, btnPause, btnStep, btnReset, btnSound, btnRomFF3, btnRomFF12, btnSave, btnLoad, btnSnap, btnSnapBG, btnWpn, btnRecOam, btnRecBg, btnDedupe, recFramesInput, recGapInput, btnCopy, btnSaveFile, slotButtons, tileInput, btnTileDump, output, writeInput, scenesSummary, scenesList, sceneNameInput, sceneDescInput };
+  const d = { root, canvas, status, frame, btnPause, btnStep, btnReset, btnSound, btnRomFF3, btnRomFF1, btnRomFF2, btnSave, btnLoad, btnSnap, btnSnapBG, btnWpn, btnRecOam, btnRecBg, btnDedupe, recFramesInput, recGapInput, btnCopy, btnSaveFile, slotButtons, tileInput, btnTileDump, output, writeInput, scenesSummary, scenesList, sceneNameInput, sceneDescInput };
   dom = d;
   _installKeys();
   _refreshSlotButtons();

@@ -23,11 +23,12 @@
 //    shop CHR bundle loaded by `LoadShopBGCHRPalettes`.
 //
 // 4. Capture path for ff3mmo:
-//      a. Boot the FF1&2 ROM in an emulator (FCEUX/Mesen — the in-app
-//         EMU tab is hardcoded to FF3).
-//      b. Enter each shop type once.
-//      c. SNAP BG (or PPU pattern-table dump at $0000-$06FF) gives the
-//         shop CHR bundle as 128 tiles × 16 bytes = 2048 bytes.
+//      a. Konami → EMU tab → ROM toggle → `FF1` (added in v1.7.256
+//         after we discovered the old FF1+II compilation was SUROM and
+//         jsnes couldn't bank-switch past 256 KB).
+//      b. Walk the party into each shop type once.
+//      c. Pause + SNAP BG dumps PPU $0000-$06FF as 128 tiles × 16
+//         bytes = 2048 bytes (the shop CHR bundle).
 //      d. Slice tiles `1 + type*14` through `14 + type*14` per keeper
 //         and paste below.
 //

@@ -462,8 +462,11 @@
       <label for="rom-file">Load FF3 ROM (.nes)</label>
       <input type="file" id="rom-file">
       <br><br>
-      <label for="rom-file-ff12">Load FF1&amp;2 ROM (.nes)</label>
-      <input type="file" id="rom-file-ff12">
+      <label for="rom-file-ff1">Load FF1 ROM (.nes)</label>
+      <input type="file" id="rom-file-ff1">
+      <br><br>
+      <label for="rom-file-ff2">Load FF2 ROM (.nes)</label>
+      <input type="file" id="rom-file-ff2">
     </div>
     <div id="rom-info"></div>
   </div>
@@ -525,7 +528,7 @@
     })();
   </script>
   <script type="module">
-    import { init, loadROM, loadFF12ROM, getMobileInputMode } from './src/main.js';
+    import { init, loadROM, loadFF1ROM, loadFF2ROM, getMobileInputMode } from './src/main.js';
 
     // --- Auth ---
     const API = '';  // same origin
@@ -683,7 +686,8 @@
     init();
 
     let ff3Buffer = null;
-    let ff12Buffer = null;
+    let ff1Buffer = null;
+    let ff2Buffer = null;
 
     // --- IndexedDB ROM cache ---
     const DB_NAME = 'ff3mmo-roms';
@@ -720,10 +724,17 @@
     }
 
     // --- Launch ---
+    function _romStatusText() {
+      const have = [ff3Buffer && 'FF3', ff1Buffer && 'FF1', ff2Buffer && 'FF2'].filter(Boolean);
+      const missing = ['FF3', 'FF1', 'FF2'].filter(t => !{ FF3: ff3Buffer, FF1: ff1Buffer, FF2: ff2Buffer }[t]);
+      return have.join(' | ') + (have.length ? '' : '') + (missing.length ? ` — load ${missing.join(' + ')} ROM` : '');
+    }
+
     async function tryLaunch() {
-      if (!ff3Buffer || !ff12Buffer) return;
+      if (!ff3Buffer || !ff1Buffer || !ff2Buffer) return;
       try {
-        loadFF12ROM(ff12Buffer);
+        loadFF1ROM(ff1Buffer);
+        loadFF2ROM(ff2Buffer);
         await loadROM(ff3Buffer);
         document.getElementById('canvas-wrapper').style.display = 'block';
         { const sc = document.getElementById('scanline-canvas');
@@ -742,13 +753,15 @@
 
     async function loadCachedROMs() {
       try {
-        const [cached3, cached12] = await Promise.all([
+        const [cached3, cached1, cached2] = await Promise.all([
           getCachedROM('ff3'),
-          getCachedROM('ff12')
+          getCachedROM('ff1'),
+          getCachedROM('ff2'),
         ]);
         if (cached3) ff3Buffer = cached3;
-        if (cached12) ff12Buffer = cached12;
-        if (ff3Buffer && ff12Buffer) {
+        if (cached1) ff1Buffer = cached1;
+        if (cached2) ff2Buffer = cached2;
+        if (ff3Buffer && ff1Buffer && ff2Buffer) {
           const picker = document.getElementById('rom-picker');
           picker.innerHTML = '';
           const btn = document.createElement('label');
@@ -757,10 +770,8 @@
           btn.addEventListener('click', () => tryLaunch());
           picker.appendChild(btn);
           document.getElementById('rom-info').textContent = 'ROMs loaded from cache';
-        } else if (ff3Buffer) {
-          document.getElementById('rom-info').textContent = 'FF3 cached — load FF1&2 ROM';
-        } else if (ff12Buffer) {
-          document.getElementById('rom-info').textContent = 'FF1&2 cached — load FF3 ROM';
+        } else {
+          document.getElementById('rom-info').textContent = _romStatusText();
         }
       } catch (e) {
         // IndexedDB unavailable
@@ -772,16 +783,25 @@
       if (!file) return;
       ff3Buffer = await file.arrayBuffer();
       cacheROM('ff3', ff3Buffer).catch(() => {});
-      document.getElementById('rom-info').textContent = 'FF3 loaded' + (ff12Buffer ? ' | FF1&2 loaded' : ' — load FF1&2 ROM');
+      document.getElementById('rom-info').textContent = _romStatusText();
       tryLaunch();
     });
 
-    document.getElementById('rom-file-ff12')?.addEventListener('change', async (e) => {
+    document.getElementById('rom-file-ff1')?.addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      ff12Buffer = await file.arrayBuffer();
-      cacheROM('ff12', ff12Buffer).catch(() => {});
-      document.getElementById('rom-info').textContent = (ff3Buffer ? 'FF3 loaded | ' : '') + 'FF1&2 loaded' + (!ff3Buffer ? ' — load FF3 ROM' : '');
+      ff1Buffer = await file.arrayBuffer();
+      cacheROM('ff1', ff1Buffer).catch(() => {});
+      document.getElementById('rom-info').textContent = _romStatusText();
+      tryLaunch();
+    });
+
+    document.getElementById('rom-file-ff2')?.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      ff2Buffer = await file.arrayBuffer();
+      cacheROM('ff2', ff2Buffer).catch(() => {});
+      document.getElementById('rom-info').textContent = _romStatusText();
       tryLaunch();
     });
 
@@ -826,7 +846,8 @@
     import('./src/debug/panel.js').then(({ initDebugPanel }) => {
       initDebugPanel({
         getFF3Buffer: () => ff3Buffer,
-        getFF12Buffer: () => ff12Buffer,
+        getFF1Buffer: () => ff1Buffer,
+        getFF2Buffer: () => ff2Buffer,
       });
     }).catch(e => console.error('[debug] failed to init panel', e));
 

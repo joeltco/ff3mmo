@@ -26,7 +26,12 @@ import { LOAD_FADE_MAX } from './loading-screen.js';
 
 // --- Constants (moved from game.js, only used by init code) ---
 
-const FF2_ADAMANTOISE_SPRITE = 0x04BF10;  // 4 tiles, 16×16, row-major (TL,TR,BL,BR)
+// Adamantoise sprite — 4 tiles, 16×16, row-major (TL,TR,BL,BR). Offset
+// inside the FF2 standalone Famicom ROM (FF2 bank $02 + $3F00). The old
+// FF1+II compilation offset 0x04BF10 = FF1's 256 KB + this same FF2
+// offset; we switched to standalones in v1.7.256 because the FF1+II
+// cart is SUROM and jsnes can't bank-switch past 256 KB PRG.
+const FF2_ADAMANTOISE_SPRITE = 0x0BF10;
 const LAND_TURTLE_PAL_TOP = [0x0F, 0x13, 0x23, 0x28];
 const LAND_TURTLE_PAL_BOT = [0x0F, 0x19, 0x18, 0x28];
 
@@ -812,7 +817,7 @@ export function initMoogleSprite(romData) {
   return { moogleFrames: [normal, flipped] };
 }
 
-export function initLoadingScreenFadeFrames(romData, ff12Raw) {
+export function initLoadingScreenFadeFrames(romData, ff2Raw) {
   const moogleFadeFrames = [];
   for (let step = 0; step <= LOAD_FADE_MAX; step++) {
     const normal = renderSpriteFaded(romData, MOOGLE_SPRITE_OFF, MOOGLE_PAL, step);
@@ -821,10 +826,10 @@ export function initLoadingScreenFadeFrames(romData, ff12Raw) {
   }
 
   let bossFadeFrames = null;
-  if (ff12Raw) {
+  if (ff2Raw) {
     bossFadeFrames = [];
     for (let step = 0; step <= LOAD_FADE_MAX; step++) {
-      const normal = renderBossFaded(ff12Raw, step);
+      const normal = renderBossFaded(ff2Raw, step);
       const flipped = _hflipCanvas16(normal);
       bossFadeFrames.push([normal, flipped]);
     }
