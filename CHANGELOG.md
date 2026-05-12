@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.262 — 2026-05-12
+
+### Save on shop entry (resume at counter, not town entrance)
+
+Follow-up to v1.7.261. The town-entry save persists the entrance
+position, not wherever the player wandered to inside the town —
+which meant quitting from a shop resumed at the entrance tile.
+Added `saveSlotsToDB()` at the top of `openShop` so the
+tile-in-front-of-the-counter is captured before the map-out fade
+begins. A tab close while inside the shop now resumes exactly at the
+counter on next launch.
+
 ## 1.7.261 — 2026-05-12
 
 ### Save on map transitions + scope shopkeeper fade to shop-in/-out only

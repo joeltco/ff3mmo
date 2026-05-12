@@ -99,6 +99,11 @@ const ROOT_LABELS = ['Buy', 'Sell', 'Exit'];
 export function openShop(shopId) {
   const shop = SHOPS.get(shopId);
   if (!shop || (!shop.items && !shop.spells)) return false;
+  // Persist the player's exact tile-in-front-of-counter coords before the
+  // shop covers the screen. A tab close while inside the shop will then
+  // resume right at the counter on next launch, not at the town entrance
+  // (which is the most recent prior save from the loadMapById call).
+  saveSlotsToDB();
   shopSt.state      = 'map-out';
   shopSt.timer      = 0;
   shopSt.shopId     = shopId;
