@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.249 — 2026-05-11
+
+### Pause job menu: full Shrines name instead of 2-letter abbr
+
+Now that v1.7.248 lined up `JOB_NAMES_SHRINES`, the pause job-change
+panel can show the short name directly (`OnionKid`, `Karateka`,
+`Geomanc` etc.) instead of the 2-letter abbreviation. Replaces the
+`JOB_ABBR[jobIdx]` lookup at `pause-menu.js:532` with
+`JOB_NAMES_SHRINES[jobIdx]`, truncated to 8 chars so `Geomancer`
+clamps to `Geomanc` (only entry > 8). Layout shift: Lv right-aligned
+at `valRx - 24` (was `tx + 32`) — leaves 64 px / 8 chars for the
+name and keeps the 3-char cost column at the far right.
+
+`JOB_ABBR` stays exported for any other surface that wants the
+2-letter form.
+
 ## 1.7.248 — 2026-05-11
 
 ### Shrines short-names for jobs (inspect overlay)

@@ -3,7 +3,7 @@
 import { drawText } from './font-renderer.js';
 import { ps, getEquipSlotId, setEquipSlotId, jobSwitchCost, getJobLevel, getJobLevelStatBonus,
          recalcCombatStats, changeJob, EQUIP_SLOT_SUBTYPE } from './player-stats.js';
-import { JOBS, JOB_ABBR, canJobEquip } from './data/jobs.js';
+import { JOBS, JOB_NAMES_SHRINES, canJobEquip } from './data/jobs.js';
 import { _makeFadedPal, nesColorFade } from './palette.js';
 import { _nameToBytes, _buildItemRowBytes } from './text-utils.js';
 import { getItemNameClean, getItemNameShrines, getSpellNameClean, getSpellNameShrines } from './text-decoder.js';
@@ -528,12 +528,17 @@ function _drawPauseJob(ctx) {
       pal = fadedPal;
     }
     const ry = y + i * 12;
-    // Abbr (2 chars)  Lv (right-aligned 2 chars)  Cost (right-aligned 2 chars)
-    drawText(ctx, tx, ry, _nameToBytes(JOB_ABBR[jobIdx] || '??'), pal);
+    // Shrines short name (≤8 chars, truncated)  Lv (right-aligned 2 chars)  Cost (right-aligned 2-3 chars)
+    const fullName = JOB_NAMES_SHRINES[jobIdx] || '??';
+    const nameStr = fullName.length > 8 ? fullName.slice(0, 8) : fullName;
+    drawText(ctx, tx, ry, _nameToBytes(nameStr), pal);
     const jlv = getJobLevel(jobIdx);
     const jlvBytes = _nameToBytes(String(jlv));
-    const lvX = tx + 32; // after abbr + gap
-    drawText(ctx, lvX + 16 - jlvBytes.length * 8, ry, jlvBytes, pal);
+    // Lv right-aligned just before the cost column. valRx=128 is the
+    // cost right-edge; cost is ≤3 chars (24 px), so Lv ends at 104.
+    // Name occupies tx (24) .. lvRx-16 (88) = 64 px = 8 chars.
+    const lvRx = valRx - 24;
+    drawText(ctx, lvRx - jlvBytes.length * 8, ry, jlvBytes, pal);
     if (!isCurrentJob && cost > 0) {
       const costBytes = _nameToBytes(String(cost));
       drawText(ctx, valRx - costBytes.length * 8, ry, costBytes, pal);
