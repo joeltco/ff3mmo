@@ -2,6 +2,41 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.257 — 2026-05-12
+
+### FF1 weapon shopkeeper lands + new shop panel layout
+
+First captured keeper. 13 keeper tiles ($01–$0D in
+`SHOPKEEP_IMAGE_LAYOUT` order, 208 bytes) for the FF1 weapon-shop
+keeper pasted into `SHOP_KEEPER_TILES['weapon']` from a SNAP BG capture
+in the standalone FF1 USA ROM (frame 1997). Palette matches
+`SHOP_PALETTES.weapon` from the disassembly extraction. Tile guard in
+`_drawShopkeeper` dropped from 14×16 → 13×16 to match.
+
+Reworked the shop panel layout:
+
+- **Keeper** at upper-left (`KEEPER_X / KEEPER_Y`), figure spans
+  panel-relative y=20..84, x=8..56.
+- **Buy / Sell / Exit** menu pinned to the right column
+  (`MENU_X = px + 72`); always drawn so the player keeps context. Dims
+  to color-0 while the buy/sell list owns the cursor.
+- **Gil** label moved off the keeper area to sit above the menu.
+- **Item list** anchored to the lower half (`LIST_Y0 = py + 96`), full
+  panel width, with scroll. `LIST_VISIBLE_ROWS = 4` (computed from
+  remaining panel height).
+
+Buy/sell list now scrolls — `shopSt.scroll` mirrors the inventory and
+magic-list math (cursor crosses visible edge → scroll shifts); blink
+arrows pin to the right edge via `ui.scrollArrowUp/Down`, same
+primitives the battle spell list uses. Sell-list shrink path also
+clamps scroll so a freshly-empty bottom row doesn't strand the
+viewport.
+
+Deferred to a follow-up: "Buy 1 / Buy 4 / Buy 10" / "Sell 1 / Sell
+All" quantity menu (will replace the Buy/Sell/Exit text when an item
+is selected). Other shop types still no-op (armor / item / magic
+keeper tiles pending captures).
+
 ## 1.7.256 — 2026-05-12
 
 ### Replace FF1+II SUROM cart with FF1 + FF2 standalones

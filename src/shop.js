@@ -41,6 +41,17 @@ const INNER_W = HUD_VIEW_W - 16;
 const INNER_H = HUD_VIEW_H - 16;
 const ROW_H = 12;
 
+// v1.7.257 layout — FF1-style. Keeper occupies the upper-left, the
+// Buy/Sell/Exit menu sits in the upper-right, and the buy/sell list
+// stretches across the bottom of the panel.
+const KEEPER_X       = HUD_VIEW_X + 8;       // panel-relative x for the keeper origin
+const KEEPER_Y       = HUD_VIEW_Y + 4;       // sprite's row 0 starts here (rows 0-1 are blank backdrop)
+const MENU_X         = HUD_VIEW_X + 72;      // Buy/Sell/Exit column, right of keeper
+const MENU_Y         = HUD_VIEW_Y + 32;      // first menu row (Buy)
+const MENU_STEP      = 16;                   // per-row spacing in menu
+const LIST_Y0        = HUD_VIEW_Y + 96;      // first list row (below keeper)
+const LIST_VISIBLE_ROWS = Math.floor((HUD_VIEW_Y + HUD_VIEW_H - 8 - LIST_Y0) / ROW_H);  // = 4
+
 // Inner text-fade timing — matches pause-menu PAUSE_TEXT_STEP_MS / PAUSE_TEXT_STEPS
 const TEXT_STEP_MS  = 100;
 const TEXT_STEPS    = 4;
@@ -69,6 +80,7 @@ export const shopSt = {
   shopId:     null,
   rootCursor: 0,        // 0=Buy, 1=Sell, 2=Exit
   cursor:     0,
+  scroll:     0,        // first visible row of the buy/sell list (v1.7.257 layout)
   confirm:    false,
   sellList:   [],
   afterFade:  null,     // next state after a 'menu-out' (root menu fades into a sub-screen)
@@ -87,6 +99,7 @@ export function openShop(shopId) {
   shopSt.shopId     = shopId;
   shopSt.rootCursor = 0;
   shopSt.cursor     = 0;
+  shopSt.scroll     = 0;
   shopSt.confirm    = false;
   shopSt.afterFade  = null;
   shopSt.fadeFrames = null;
@@ -230,12 +243,12 @@ function _menuInput(keys) {
   if (keys['z'] || keys['Z']) {
     keys['z'] = false; keys['Z'] = false;
     if (shopSt.rootCursor === 0) {
-      shopSt.cursor = 0; shopSt.state = 'menu-out'; shopSt.timer = 0; shopSt.afterFade = 'buy-in';
+      shopSt.cursor = 0; shopSt.scroll = 0; shopSt.state = 'menu-out'; shopSt.timer = 0; shopSt.afterFade = 'buy-in';
       playSFX(SFX.CONFIRM);
     } else if (shopSt.rootCursor === 1) {
       if (_isSpellShop()) { playSFX(SFX.ERROR); return; }   // can't sell spells
       _rebuildSellList();
-      shopSt.cursor = 0; shopSt.state = 'menu-out'; shopSt.timer = 0; shopSt.afterFade = 'sell-in';
+      shopSt.cursor = 0; shopSt.scroll = 0; shopSt.state = 'menu-out'; shopSt.timer = 0; shopSt.afterFade = 'sell-in';
       playSFX(SFX.CONFIRM);
     } else {
       shopSt.state = 'shop-out'; shopSt.timer = 0; playSFX(SFX.CONFIRM);
@@ -257,6 +270,7 @@ function _listInput(keys, list, isSell) {
       if (isSell) {
         _rebuildSellList();
         if (shopSt.cursor >= shopSt.sellList.length) shopSt.cursor = Math.max(0, shopSt.sellList.length - 1);
+        if (shopSt.scroll > shopSt.cursor) shopSt.scroll = shopSt.cursor;
       }
     } else if (keys['x'] || keys['X'] || keys['Escape']) {
       keys['x'] = false; keys['X'] = false; keys['Escape'] = false;
@@ -264,8 +278,22 @@ function _listInput(keys, list, isSell) {
     }
     return;
   }
-  if (keys['ArrowDown']) { keys['ArrowDown'] = false; if (shopSt.cursor < list.length - 1) { shopSt.cursor++; playSFX(SFX.CURSOR); } }
-  if (keys['ArrowUp'])   { keys['ArrowUp']   = false; if (shopSt.cursor > 0) { shopSt.cursor--; playSFX(SFX.CURSOR); } }
+  if (keys['ArrowDown']) {
+    keys['ArrowDown'] = false;
+    if (shopSt.cursor < list.length - 1) {
+      shopSt.cursor++;
+      if (shopSt.cursor - shopSt.scroll >= LIST_VISIBLE_ROWS) shopSt.scroll = shopSt.cursor - LIST_VISIBLE_ROWS + 1;
+      playSFX(SFX.CURSOR);
+    }
+  }
+  if (keys['ArrowUp']) {
+    keys['ArrowUp'] = false;
+    if (shopSt.cursor > 0) {
+      shopSt.cursor--;
+      if (shopSt.cursor < shopSt.scroll) shopSt.scroll = shopSt.cursor;
+      playSFX(SFX.CURSOR);
+    }
+  }
   if (keys['z'] || keys['Z']) {
     keys['z'] = false; keys['Z'] = false;
     if (list.length > 0) { shopSt.confirm = true; playSFX(SFX.CONFIRM); }
@@ -387,25 +415,22 @@ export function drawShop() {
 
   clipToViewport();
 
-  // Sub-screen content. Shop-in / shop-out always show the root menu.
+  // v1.7.257 layout — keeper + Gil + right-column menu are present in
+  // every visible shop state. The buy/sell item list paints on top of
+  // the lower half only when we're inside those states.
   const s = shopSt.state;
-  if (s === 'shop-in' || s === 'shop-out' ||
-      s === 'menu' || s === 'menu-in' || s === 'menu-out')
-    _drawRootMenu(ctx);
-  else if (s === 'buy' || s === 'buy-in' || s === 'buy-out')
+  const fadeStep = _innerTextFadeStep();
+  _drawShopkeeper(ctx, KEEPER_X, KEEPER_Y);
+  _drawGil(ctx, fadeStep);
+  // Menu dimmed when the list owns the cursor; full brightness in idle.
+  const inList = s === 'buy' || s === 'buy-in' || s === 'buy-out' ||
+                 s === 'sell' || s === 'sell-in' || s === 'sell-out';
+  const menuPal = inList ? [0x0F, 0x0F, 0x0F, 0x00] : null;  // null → use faded pal
+  _drawRootMenu(ctx, fadeStep, menuPal);
+  if (s === 'buy' || s === 'buy-in' || s === 'buy-out')
     _drawList(ctx, _items(), /*isSell*/false);
   else if (s === 'sell' || s === 'sell-in' || s === 'sell-out')
     _drawList(ctx, shopSt.sellList, /*isSell*/true);
-
-  // FF1-style shopkeeper sprite — drawn over the menu/list. Currently a
-  // no-op for every shop type because `data/shop-sprites.js` has no
-  // entries yet (captures pending from FF1&2 ROM); the call site lights
-  // up the moment any shop type lands tile bytes. Position will likely
-  // need to move (Gil row currently sits at y=10, this draws over it)
-  // once we see real frames.
-  if (s !== 'shop-in' && s !== 'shop-out') {
-    _drawShopkeeper(ctx, HUD_VIEW_X + 8, HUD_VIEW_Y + 8);
-  }
 
   ctx.restore();
 
@@ -427,7 +452,9 @@ function _drawGil(ctx, fadeStep) {
   const pal = _makeFadedPal(fadeStep);
   const lbl = _nameToBytes('Gil');
   const val = _nameToBytes(String(ps.gil));
-  drawText(ctx, HUD_VIEW_X + 16, HUD_VIEW_Y + 10, lbl, pal);
+  // Label sits at the right column (after the keeper) so the sprite's
+  // upper-left area stays clean. Value right-aligned at the panel edge.
+  drawText(ctx, MENU_X, HUD_VIEW_Y + 10, lbl, pal);
   drawText(ctx, HUD_VIEW_X + HUD_VIEW_W - 16 - measureText(val), HUD_VIEW_Y + 10, val, pal);
 }
 
@@ -444,7 +471,7 @@ function _drawGil(ctx, fadeStep) {
 // 0 in the layout means "transparent backdrop" — skipped.
 function _drawShopkeeper(ctx, originX, originY) {
   const sprite = getShopSprite(getShopType(shopSt.shopId));
-  if (!sprite || !sprite.tiles || sprite.tiles.length < 14 * 16) return;
+  if (!sprite || !sprite.tiles || sprite.tiles.length < 13 * 16) return;
   const pal = sprite.palette;
   if (!pal || pal.length < 4) return;
   for (let row = 0; row < SHOPKEEP_IMAGE_LAYOUT.length; row++) {
@@ -459,40 +486,49 @@ function _drawShopkeeper(ctx, originX, originY) {
   }
 }
 
-function _drawRootMenu(ctx) {
-  const fadeStep = _innerTextFadeStep();
-  const pal = _makeFadedPal(fadeStep);
-  _drawGil(ctx, fadeStep);
-  const startY = HUD_VIEW_Y + 36;
+// Right-column menu — Buy / Sell / Exit. Drawn in every shop state
+// so the player always has the keeper + menu context, even while the
+// buy/sell list has focus below. Cursor only renders when state is
+// 'menu' (interactive); during buy/sell/confirm the items list owns
+// the cursor.
+function _drawRootMenu(ctx, fadeStep, palOverride) {
+  const pal = palOverride || _makeFadedPal(fadeStep);
   for (let i = 0; i < ROOT_LABELS.length; i++) {
-    const y = startY + i * 16;
-    drawText(ctx, HUD_VIEW_X + 24, y, _nameToBytes(ROOT_LABELS[i]), pal);
+    drawText(ctx, MENU_X + 16, MENU_Y + i * MENU_STEP, _nameToBytes(ROOT_LABELS[i]), pal);
   }
-  if (shopSt.state === 'menu')
-    drawCursorFaded(HUD_VIEW_X + 8, startY + shopSt.rootCursor * 16 - 4, fadeStep);
+  if (shopSt.state === 'menu') {
+    drawCursorFaded(MENU_X, MENU_Y + shopSt.rootCursor * MENU_STEP - 4, fadeStep);
+  }
 }
 
+// Buy / sell item list — full panel width below the keeper. Scrolls
+// when the list overflows `LIST_VISIBLE_ROWS` rows; blink arrows pinned
+// to the right edge mirror the battle spell list's affordance.
 function _drawList(ctx, list, isSell) {
   const fadeStep = _innerTextFadeStep();
   const pal = _makeFadedPal(fadeStep);
-  _drawGil(ctx, fadeStep);
 
-  const listY0 = HUD_VIEW_Y + 26;
   const nameX  = HUD_VIEW_X + 24;
   const priceX = HUD_VIEW_X + HUD_VIEW_W - 16;
 
   if (list.length === 0) {
-    drawText(ctx, nameX, listY0, _nameToBytes(isSell ? 'Nothing to sell' : '---'), pal);
+    drawText(ctx, nameX, LIST_Y0, _nameToBytes(isSell ? 'Nothing to sell' : '---'), pal);
     return;
   }
 
+  // Clamp scroll so the visible window always shows real rows.
+  const maxScroll = Math.max(0, list.length - LIST_VISIBLE_ROWS);
+  if (shopSt.scroll > maxScroll) shopSt.scroll = maxScroll;
+  const start = shopSt.scroll;
+
   const isSpell = _isSpellShop();
-  for (let i = 0; i < list.length; i++) {
+  for (let r = 0; r < LIST_VISIBLE_ROWS && start + r < list.length; r++) {
+    const i = start + r;
+    const y = LIST_Y0 + r * ROW_H;
     if (isSpell) {
       const id = list[i];
       if (!SPELLS.get(id)) continue;
       const price = getSpellBuyPrice(id);
-      const y     = listY0 + i * ROW_H;
       const name  = getSpellNameShrines(id);
       const pNum  = _nameToBytes(String(price));
       drawText(ctx, nameX, y, name, pal);
@@ -502,14 +538,26 @@ function _drawList(ctx, list, isSell) {
     const id    = isSell ? list[i].id    : list[i];
     const price = isSell ? list[i].price : (ITEMS.get(id) && ITEMS.get(id).price) || 0;
     if (!ITEMS.get(id)) continue;
-    const y     = listY0 + i * ROW_H;
     const name  = getItemNameShrines(id);
     const pNum  = _nameToBytes(String(price));
     drawText(ctx, nameX, y, name, pal);
     drawText(ctx, priceX - measureText(pNum), y, pNum, pal);
   }
-  if (shopSt.state === 'buy' || shopSt.state === 'sell')
-    drawCursorFaded(HUD_VIEW_X + 8, listY0 + shopSt.cursor * ROW_H - 4, 0);
+
+  // Scroll arrows — same primitives the battle spell list uses.
+  const arrowX = HUD_VIEW_X + HUD_VIEW_W - 12;
+  const blink = (Math.floor(Date.now() / 250) & 1) === 0;
+  if (start > 0 && ui.scrollArrowUp && blink) {
+    ctx.drawImage(ui.scrollArrowUp, arrowX, LIST_Y0 - 4);
+  }
+  if (start + LIST_VISIBLE_ROWS < list.length && ui.scrollArrowDown && blink) {
+    ctx.drawImage(ui.scrollArrowDown, arrowX, LIST_Y0 + LIST_VISIBLE_ROWS * ROW_H - 4);
+  }
+
+  if (shopSt.state === 'buy' || shopSt.state === 'sell') {
+    const visRow = shopSt.cursor - start;
+    drawCursorFaded(HUD_VIEW_X + 8, LIST_Y0 + visRow * ROW_H - 4, 0);
+  }
 }
 
 // Text palette tuned for the blue confirm box: color 1/2 (font shadow) map
