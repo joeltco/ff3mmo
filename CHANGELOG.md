@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.276 — 2026-05-12
+
+### Wipe dungeon `consumedTiles` on cave (re-)entry
+
+The Altar Cave dungeon-seed is regenerated to `Date.now()` on every
+entry from overworld — so each run has a fresh procedural layout. But
+`ps.consumedTiles[mapId]` (chest opens, secret walls, rock puzzles)
+was being carried across runs. Those (x,y) override coords pointed at
+the *previous* run's tile positions, which don't correspond to
+anything in the new layout. Result: walking into floor 0 or 1 of a
+fresh run, you'd see open-chest tiles scattered at random spots
+("ghost chests") with no actual chest underneath them.
+
+Fix: when the cave entry trigger fires (`destMap === 111`) and the
+seed is regenerated, delete every `ps.consumedTiles[mapId]` whose
+mapId is in the dungeon range (≥1000). Town entries (<1000) keep
+their persisted state, so an opened chest in Ur stays opened.
+
 ## 1.7.275 — 2026-05-12
 
 ### Cave / town entry captures the overworld entrance tile

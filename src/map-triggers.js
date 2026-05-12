@@ -216,6 +216,17 @@ function _checkWorldMapTrigger(tileX, tileY) {
   if (destMap === 111) {
     mapSt.dungeonSeed = Date.now();
     clearDungeonCache();
+    // Procedural dungeon: each run gets a fresh seed → fresh layout. The
+    // `ps.consumedTiles[mapId]` overrides from a previous run point at
+    // (x,y) coords that no longer correspond to anything in the new
+    // layout, so leaving them in place draws "ghost" open chests on
+    // floor tiles. Wipe any dungeon-range mapIds (>=1000) to clear the
+    // slate; town mapIds (<1000) keep their persisted state.
+    if (ps.consumedTiles) {
+      for (const key of Object.keys(ps.consumedTiles)) {
+        if (Number(key) >= 1000) delete ps.consumedTiles[key];
+      }
+    }
     destMap = 1000;
     transSt.dungeon = true;
   }
