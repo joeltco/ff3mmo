@@ -12,7 +12,7 @@
 // what the target would fight as.
 
 import { generateAllyStats } from './data/players.js';
-import { JOBS } from './data/jobs.js';
+import { JOBS, JOB_NAMES_SHRINES } from './data/jobs.js';
 import { ITEMS } from './data/items.js';
 import { getItemNameClean, getItemNameShrines, getSpellNameClean, getSpellNameShrines } from './text-decoder.js';
 import { _nameToBytes } from './text-utils.js';
@@ -87,7 +87,7 @@ export function drawInspect() {
   y += STEP;
 
   // Job + Lv
-  const jobName = (JOBS[target.jobIdx] && JOBS[target.jobIdx].name) || '???';
+  const jobName = JOB_NAMES_SHRINES[target.jobIdx] || (JOBS[target.jobIdx] && JOBS[target.jobIdx].name) || '???';
   drawText(ctx, tx, y, _nameToBytes(jobName), pal);
   const lvBytes = _nameToBytes('Lv ' + s.level);
   drawText(ctx, rx - measureText(lvBytes), y, lvBytes, pal);

@@ -2,6 +2,28 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.248 — 2026-05-11
+
+### Shrines short-names for jobs (inspect overlay)
+
+Closes out the rename project. Adds `JOB_NAMES_SHRINES` (22 entries) to
+`data/jobs.js` using the canonical FF3J transliterations from
+`shrines.rpgclassics.com/nes/ff3/jobs.shtml`: OnionKid, WhiteWiz,
+BlackWiz, RedWiz, Hunter, Karateka, M.Knight, Shaman, Warlock, etc.
+
+Wired into the inspect overlay (`inspect.js:90`) — the player-facing
+roster surface. Console debug commands (`/job`) and the debug sprites
+tab keep the long English `name` for ambiguity-free terminal output.
+No ROM fall-through path because job names are JS strings, not ROM
+bytes — diverges from the items/spells/monsters override pattern in
+that one respect.
+
+Also realigns `JOB_ABBR` (used in the pause Equip / stats column at
+`pause-menu.js:532`) to match the Shrines first letter: `WM/BM/RM` →
+`WW/BW/RW`, `Ra → Hu`, `BB → Ka`, `De → Sh`, `Ma → Wa`. The internal
+job-bitmask constants at the top of `data/jobs.js` already used this
+convention (`Ww/Bw/Rw/Hu/Ka/Sh/Wa`), so the abbr table now matches.
+
 ## 1.7.247 — 2026-05-11
 
 ### Shrines short-names for monsters (in-battle name box)

@@ -11,7 +11,7 @@ Raw fetched content cached here so future sessions don't need to re-fetch.
 | Spells (56 player-castable) | ✅ shipped | ✅ shipped | v1.7.241–242 |
 | Items (200 ROM entries) | ✅ shipped v1.7.246 (`ITEM_NAMES_SHRINES`, 159 entries) | ✅ shipped v1.7.245 (font atlas extended to load $60–$6F icon tiles + `getItemNameWithIcon` at 9 render sites) | v1.7.245–246 |
 | Monsters (~231 bestiary entries) | ✅ shipped v1.7.247 (`MONSTER_NAMES_SHRINES`, 184 entries) | n/a (no icons in monster names) | v1.7.247 |
-| Jobs (22 entries) | ⏳ not started | n/a | not started |
+| Jobs (22 entries) | ✅ shipped v1.7.248 (`JOB_NAMES_SHRINES`, 22 entries) | n/a (no icon, no ROM fall-through) | v1.7.248 |
 
 ## Pattern (proven on spells, replicate for items/monsters)
 
@@ -141,7 +141,16 @@ WaterFang / WindFang
 
 ## Next-session todo
 
-1. **Jobs (22)** — same pattern, optional, lowest priority.
+All four name surfaces (spells, items, monsters, jobs) shipped. Future
+follow-ups, if requested:
+
+- Add punctuation tile mappings to `_asciiToTileByte` so Shrines names
+  with `'` (Zeus'Rage / Imp'sYawn / Devil'sSigh) and `.` (M.Gauche /
+  BombR.Arm) round-trip cleanly through the spell/item override path.
+- Re-audit the omitted battle items + 40 omitted monsters once we have
+  authoritative Shrines pairings (Larva, Helldiver, Parademon, etc.).
+- If user wants Shrines variant in `/job` console output and the debug
+  sprites tab too, swap those callers to `JOB_NAMES_SHRINES`.
 
 ## Monsters shipped notes (v1.7.247)
 

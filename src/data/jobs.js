@@ -102,8 +102,28 @@ export const JOB_SCALING = [
 // Convenience — job names array in ROM order
 export const JOB_NAMES = JOBS.map(j => j.name);
 
-// 2-letter abbreviations for compact UI
-export const JOB_ABBR = ['OK','Fi','Mo','WM','BM','RM','Ra','Kn','Th','Sc','Ge','Dr','Vi','BB','MK','Co','Ba','Su','De','Ma','Sa','Ni'];
+// 2-letter abbreviations for compact UI. First letter from the Shrines
+// short-name (see JOB_NAMES_SHRINES) — keeps the pause Equip / stats
+// roster column in sync with the inspect overlay, and matches the
+// internal job-bitmask constants up top (Bw/Ww/Rw/Hu/Ka/Wa/Sh).
+export const JOB_ABBR = ['OK','Fi','Mo','WW','BW','RW','Hu','Kn','Th','Sc','Ge','Dr','Vi','Ka','MK','Co','Ba','Su','Sh','Wa','Sa','Ni'];
+
+// Shrines short-names — the FF3J transliterations Shrines uses on
+// shrines.rpgclassics.com/nes/ff3/jobs.shtml. Sits alongside the long
+// English remake-style `name` fields above. Used by player-facing roster
+// surfaces (inspect overlay). Console debug commands (/job) and the
+// debug sprites tab keep the long name so it's unambiguous at the
+// terminal. Mirrors the items/spells/monsters override pattern but
+// without a ROM fall-through because job names are JS strings, not ROM
+// bytes — there's no underlying data layer to defer to.
+export const JOB_NAMES_SHRINES = [
+  'OnionKid', 'Fighter',  'Monk',     'WhiteWiz',
+  'BlackWiz', 'RedWiz',   'Hunter',   'Knight',
+  'Thief',    'Scholar',  'Geomancer','Dragoon',
+  'Viking',   'Karateka', 'M.Knight', 'Conjurer',
+  'Bard',     'Summoner', 'Shaman',   'Warlock',
+  'Sage',     'Ninja',
+];
 
 // Check if job can equip an item (by item ID, needs ITEMS map passed in)
 // Uses per-item jobs bitmask where bit N = job index N can equip
