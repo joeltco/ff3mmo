@@ -14,7 +14,7 @@
 
 import { drawText, measureText } from './font-renderer.js';
 import { drawBorderedBox, drawCursorFaded, clipToViewport } from './hud-drawing.js';
-import { _makeFadedPal, nesColorFade } from './palette.js';
+import { _makeFadedPal, _stepPalFade } from './palette.js';
 import { _nameToBytes } from './text-utils.js';
 import { getItemNameClean, getItemNameShrines, getSpellNameClean, getSpellNameShrines } from './text-decoder.js';
 import { ITEMS } from './data/items.js';
@@ -479,12 +479,8 @@ function _drawShopkeeper(ctx, originX, originY, fadeStep = 0) {
   if (!sprite || !sprite.tiles || sprite.tiles.length < 13 * 16) return;
   const basePal = sprite.palette;
   if (!basePal || basePal.length < 4) return;
-  const pal = [basePal[0], basePal[1], basePal[2], basePal[3]];
-  for (let s = 0; s < fadeStep; s++) {
-    pal[1] = nesColorFade(pal[1]);
-    pal[2] = nesColorFade(pal[2]);
-    pal[3] = nesColorFade(pal[3]);
-  }
+  const pal = basePal.slice();
+  for (let s = 0; s < fadeStep; s++) _stepPalFade(pal);
   for (let row = 0; row < SHOPKEEP_IMAGE_LAYOUT.length; row++) {
     const rowTiles = SHOPKEEP_IMAGE_LAYOUT[row];
     for (let col = 0; col < rowTiles.length; col++) {

@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.259 — 2026-05-12
+
+### Use the shared `_stepPalFade` helper in `_drawShopkeeper`
+
+v1.7.258 rolled its own per-slot fade loop instead of using
+`palette.js`'s existing `_stepPalFade(pal)` helper. Same output but the
+keeper now goes through the same code path as every other faded
+surface — no per-feature copies of the slot 1..3 step.
+
 ## 1.7.258 — 2026-05-12
 
 ### Shopkeeper sprite fades alongside menu text
