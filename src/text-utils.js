@@ -37,15 +37,6 @@ export function _nesNameToString(bytes) {
   return s;
 }
 
-// Build inventory row: "ItemName ×N" as NES bytes
-export function _buildItemRowBytes(nameBytes, countStr) {
-  const rowBytes = new Uint8Array(nameBytes.length + 2 + countStr.length);
-  rowBytes.set(nameBytes, 0);
-  rowBytes[nameBytes.length] = 0xFF; rowBytes[nameBytes.length + 1] = 0xE1;
-  for (let d = 0; d < countStr.length; d++) rowBytes[nameBytes.length + 2 + d] = 0x80 + parseInt(countStr[d]);
-  return rowBytes;
-}
-
 // "Got N <suffix>" — shared core for EXP/Gil text
 export function _makeGotNText(amount, suffix) {
   const arr = [0x90, 0xD8, 0xDD, 0xFF]; // "Got "

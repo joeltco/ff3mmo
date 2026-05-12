@@ -1,11 +1,11 @@
 // pause-menu.js — pause menu state, transitions, and rendering
 
-import { drawText } from './font-renderer.js';
+import { drawText, measureText } from './font-renderer.js';
 import { ps, getEquipSlotId, setEquipSlotId, jobSwitchCost, getJobLevel, getJobLevelStatBonus,
          recalcCombatStats, changeJob, EQUIP_SLOT_SUBTYPE } from './player-stats.js';
 import { JOBS, JOB_NAMES_SHRINES, canJobEquip } from './data/jobs.js';
 import { _makeFadedPal, nesColorFade } from './palette.js';
-import { _nameToBytes, _buildItemRowBytes } from './text-utils.js';
+import { _nameToBytes } from './text-utils.js';
 import { getItemNameClean, getItemNameShrines, getSpellNameClean, getSpellNameShrines } from './text-decoder.js';
 import { SPELLS, getSpellMPCost, getCastableKnownSpells } from './data/spells.js';
 import { stopFF1Music, resumeMusic, playFF1Track, FF1_TRACKS, playSFX, SFX, pauseMusic } from './music.js';
@@ -279,13 +279,14 @@ function _drawPauseInventory(ctx) {
   const entries = Object.entries(playerInventory).filter(([,c]) => c > 0);
   const maxVisible = Math.floor((HUD_VIEW_H - 16) / 14);
   const startIdx = Math.max(0, Math.min(pauseSt.invScroll, Math.max(0, entries.length - maxVisible)));
+  const countRx = px + HUD_VIEW_W - 16;
   for (let i = 0; i < maxVisible && startIdx + i < entries.length; i++) {
     const [id, count] = entries[startIdx + i];
     const nameBytes = getItemNameShrines(Number(id));
-    const countStr = String(count);
-    const rowBytes = _buildItemRowBytes(nameBytes, countStr);
+    const countBytes = _nameToBytes(String(count));
     const iy = finalY + 12 + i * 14;
-    drawText(ctx, px + 24, iy, rowBytes, fadedPal);
+    drawText(ctx, px + 24, iy, nameBytes, fadedPal);
+    drawText(ctx, countRx - measureText(countBytes), iy, countBytes, fadedPal);
     if (pauseSt.heldItem >= 0 && startIdx + i === pauseSt.heldItem && pauseSt.state !== 'inv-target' && pauseSt.state !== 'inv-heal')
       drawCursorFaded(px + 8, iy - 4, fadeStep);
     if (startIdx + i === pauseSt.invScroll && pauseSt.state !== 'inv-target' && pauseSt.state !== 'inv-heal') {

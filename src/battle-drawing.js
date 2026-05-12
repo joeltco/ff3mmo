@@ -20,7 +20,7 @@ export function _jobPalette(jobIdx, palIdx) {
   return pool[palIdx] || pool[0];
 }
 
-import { _nameToBytes, _buildItemRowBytes } from './text-utils.js';
+import { _nameToBytes } from './text-utils.js';
 import { pvpSt } from './pvp.js';
 import { inputSt } from './input-handler.js';
 import { bsc } from './battle-sprite-cache.js';

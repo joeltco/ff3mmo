@@ -2,6 +2,26 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.250 — 2026-05-12
+
+### Item menus: right-align counts (consistency pass)
+
+Pause inventory + battle item list now draw the count digits
+right-aligned at the panel inner right edge, matching the layout used
+by the battle spell list (MP cost), pause job panel (Lv + Cost), trade
+item-pick (count), and inspect overlay (stat values). Previously these
+two surfaces inlined the count as `Name ×N` floating directly after
+the name, which drifted with name length and looked inconsistent
+against everything else.
+
+Pause inventory: count right-edge at `px + HUD_VIEW_W - 16` = 128.
+Battle item list: count right-edge at `px + rightAreaW - 8`, the same
+anchor used by the spell-cost column.
+
+Removed the now-unused `_buildItemRowBytes` helper in `text-utils.js`
+and its three stale imports (`pause-menu.js`, `battle-draw-menu.js`,
+`battle-drawing.js`).
+
 ## 1.7.249 — 2026-05-11
 
 ### Pause job menu: full Shrines name instead of 2-letter abbr

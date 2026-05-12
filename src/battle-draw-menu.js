@@ -16,7 +16,7 @@ import { getMonsterNameShrines, getItemNameClean, getItemNameShrines, getSpellNa
 import { getSpellMPCost } from './data/spells.js';
 import { ps } from './player-stats.js';
 import {
-  _nameToBytes, _buildItemRowBytes, makeExpText, makeGilText, makeCpText, makeItemDropText,
+  _nameToBytes, makeExpText, makeGilText, makeCpText, makeItemDropText,
 } from './text-utils.js';
 import { pvpSt } from './pvp.js';
 import { inputSt } from './input-handler.js';
@@ -67,15 +67,20 @@ function _drawBattleItemList(baseX, rightAreaW, invPal, slidePixel, totalInvPage
       drawText(ui.ctx, px + 8, topY + rowH + 6, lRow, invPal);
     } else {
       const startIdx = (pg - 1) * INV_SLOTS;
+      // Count digits right-aligned at the panel inner right edge — matches
+      // the spell-list MP cost layout (_drawBattleSpellList) so both menus
+      // read consistently.
+      const countRx = px + rightAreaW - 8;
       for (let r = 0; r < INV_SLOTS; r++) {
         const idx = startIdx + r;
         if (idx >= inputSt.itemSelectList.length) break;
         const item = inputSt.itemSelectList[idx];
         if (!item) continue;
         const nameBytes = getItemNameShrines(item.id);
-        const countStr = String(item.count);
-        const rowBytes = _buildItemRowBytes(nameBytes, countStr);
-        drawText(ui.ctx, px + 8, topY + r * rowH, rowBytes, invPal);
+        const countBytes = _nameToBytes(String(item.count));
+        const ry = topY + r * rowH;
+        drawText(ui.ctx, px + 8, ry, nameBytes, invPal);
+        drawText(ui.ctx, countRx - measureText(countBytes), ry, countBytes, invPal);
       }
     }
   }
