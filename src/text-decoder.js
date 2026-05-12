@@ -146,6 +146,37 @@ export function getItemNameClean(itemId) {
 }
 
 /**
+ * Like getItemNameClean, but preserves the item-type icon byte
+ * ($60-$6F shield/body/helm/glv/claw/book/rod/etc., $7B for consumables)
+ * when it appears as the first byte. The icon tiles live in the font atlas
+ * ($60-$6F via v1.7.245 atlas extension, $7B already in range) and render
+ * through drawText() like any other glyph. Use in inventory / shop / equip
+ * / battle item list / inspect / trade rows; battle-log / chat callers
+ * stay on the clean path.
+ * @param {number} itemId
+ * @returns {Uint8Array}
+ */
+export function getItemNameWithIcon(itemId) {
+  const bytes = getItemName(itemId);
+  if (bytes.length === 0) return bytes;
+  const hasIcon = ICON_TILES.has(bytes[0]);
+  if (hasIcon) {
+    // Skip any padding spaces between icon and first letter
+    let i = 1;
+    while (i < bytes.length && bytes[i] === 0xFF) i++;
+    if (i === 1) return bytes;
+    const out = new Uint8Array(1 + (bytes.length - i));
+    out[0] = bytes[0];
+    out.set(bytes.subarray(i), 1);
+    return out;
+  }
+  // No icon — strip leading spaces, same as getItemNameClean
+  let s = 0;
+  while (s < bytes.length && bytes[s] === 0xFF) s++;
+  return s > 0 ? bytes.slice(s) : bytes;
+}
+
+/**
  * Get monster name bytes.
  * @param {number} monsterId — ROM bestiary index (0x00-0xE6)
  * @returns {Uint8Array}

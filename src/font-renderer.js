@@ -1,7 +1,10 @@
 // Font Renderer — draws text using NES font tiles extracted from ROM
 //
-// Font tiles: 144 tiles at ROM 0x1B710 (tile IDs $70-$FF)
-// After English IPS patch, these contain A-Z, a-z, 0-9, symbols.
+// Font tiles: 160 tiles at ROM 0x1B610 (tile IDs $60-$FF)
+// Letters/digits/punctuation live at $70-$FF (English IPS patch);
+// item-type icon graphics live at $60-$6F (shield/armor/helm/sword/
+// axe/spear/bow/rod/staff/etc.) and the magic-school icons at
+// $72/$74/$75 share the same atlas.
 // Each tile is 8x8 pixels, 2BPP NES format.
 //
 // Text bytes from the text decoder ARE tile IDs — they index directly
@@ -11,10 +14,13 @@ import { decodeTile, NES_SYSTEM_PALETTE } from './tile-decoder.js';
 import { getItemName, getItemNameClean, getMonsterName, getSpellName,
          getJobName, getStringBytes } from './text-decoder.js';
 
-// Font tile range
-const FONT_ROM_OFFSET = 0x1B710;  // ROM file offset (with iNES header)
-const FONT_TILE_START = 0x70;
-const FONT_TILE_COUNT = 144;      // $70-$FF
+// Font tile range — extended down to $60 in v1.7.245 to cover the
+// item-type icon tiles (shield $60, body $61, helm $62, gauntlet $63,
+// claw $64, book $65, rod $66, hammer $67, spear $68, knife $69,
+// axe $6a, sword $6b, katana $6c, harp $6d, bow $6e, bell $6f).
+const FONT_ROM_OFFSET = 0x1B610;  // ROM file offset (with iNES header)
+const FONT_TILE_START = 0x60;
+const FONT_TILE_COUNT = 160;      // $60-$FF
 
 // Common text palettes (NES color indices)
 // [transparent, color1, color2, color3]

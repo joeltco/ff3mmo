@@ -2,6 +2,36 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.245 — 2026-05-11
+
+### Item-type icons in inventory/shop/equip/battle rows
+
+Extends the font atlas down by 16 tiles ($70 → $60 start, count 144→160)
+so the ROM item-type icon graphics at $60–$6F load alongside the
+letters/digits. Adds `getItemNameWithIcon(itemId)` mirroring
+`getSpellNameWithIcon` — keeps the leading icon byte (or strips the
+leading 0xFF padding when the item has no icon, e.g., key items).
+Wired into 9 player-facing list rows:
+
+- `pause-menu.js:284` inventory list (Z to use)
+- `pause-menu.js:349` equip slot display (R/L/Bd/Hd/Sh/Glv)
+- `pause-menu.js:396` equip-item picker
+- `battle-draw-menu.js:60-64` battle weapon names (RH/LH)
+- `battle-draw-menu.js:75` battle item list
+- `shop.js:466` shop buy/sell rows
+- `inspect.js:125` inspect ally equipment
+- `trade.js:274` trade item-pick rows
+
+Mid-sentence callers (`shop.js:339` "Buy X!", `shop.js:498` confirm
+prompt, `trade.js:169` "Offering X to Y...") stay on the clean path
+so the icon glyph doesn't appear inside a sentence.
+
+The actual Shrines-name override for items (mirror of
+`SPELL_NAMES_SHRINES`) is deferred to a future session — see
+`docs/SHRINES-RENAMES.md` for the cached source data and mapping plan.
+ROM names still render with their compressed-dictionary garble until
+that override lands.
+
 ## 1.7.244 — 2026-05-11
 
 ### Revert v1.7.243 — both magic-list layout tweaks
