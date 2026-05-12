@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.270 — 2026-05-12
+
+### FF1 black-magic-shop keeper (staged for future bmagic shop type)
+
+Third keeper. 13 tiles ($2B–$37 in shop CHR; +42 additive over weapon
+per FF1 `lut_ShopkeepAdditive`, since black-magic is FF1 shop type 3 →
+3×14 = 42). Captured via SNAP BG on standalone FF1 USA ROM, frame
+8626. Palette verified against PPU BG0 = matches
+`SHOP_PALETTES['black-magic']`.
+
+Won't render yet: ff3mmo's only magic shop right now is Ur's WM Lv1
+shop, which maps through `FF3MMO_TO_FF1.magic = 'white-magic'`. The
+black-magic tiles are staged for when a `bmagic` shop type lands
+(easiest: split `magic` into `wmagic` / `bmagic` in `FF3MMO_TO_FF1`
+and add the tag to each shops.js entry).
+
+White-magic + item keepers still pending captures.
+
 ## 1.7.269 — 2026-05-12
 
 ### FF1 armor-shop keeper
