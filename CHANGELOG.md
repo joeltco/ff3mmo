@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.283 — 2026-05-12
+
+### Doc refresh (no behavior change)
+
+- `docs/design-notes.md` — new **Item icons** section covering the v1.7.278-282 override series: which slots are used, which items route through each, the 4-step plumbing pattern for adding more, and which icons were confirmed clean without a swap.
+- `docs/SHRINES-RENAMES.md` — added "A.W. Jackson icon overrides" subsection with the same slot table for cross-reference from the renames work.
+
 ## 1.7.282 — 2026-05-12
 
 - **Distinct spear icon.** Chaos Rush's `$68` spear tile was a thin diagonal stroke with no spearhead — readable as a line, not iconic. Lifted A.W. Jackson's `$EC` (diagonal with a triangular head) into slot `$73` (verified unused across items / spells / monsters / jobs) and overrode the 4 spear/lance items (#1A Thunder Spear, #1B Wind Spear, #1C Blood Lance, #1D Holy Lance). Final entry in the icon audit series — every shared-byte case is now split.

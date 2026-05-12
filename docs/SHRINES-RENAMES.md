@@ -60,6 +60,31 @@ Raw fetched content cached here so future sessions don't need to re-fetch.
 v1.7.245 extended `FONT_TILE_START` from `$70` to `$60` (count 144→160)
 so all of `$60`–`$7B` icon graphics now load into the font atlas.
 
+## A.W. Jackson icon overrides (v1.7.278–v1.7.282)
+
+Chaos Rush packs visually-distinct item families under one icon byte
+in six places. Lifted tile bytes from the A.W. Jackson translation
+(local cache: `/tmp/ff3-aw/FF3E.IPS`) and parked them at unused
+Chaos Rush slots; `text-decoder.js` reroutes the affected item IDs.
+
+| Slot | Used by | Source | Items |
+|---|---|---|---|
+| `$73` | Spear (with head) | A.W. `$EC` | #1A-#1D (Thunder/Wind Spear, Blood/Holy Lance) — replaces generic `$68` |
+| `$76` | Claw | A.W. `$E6` | #01-#05 (Kaizer / Cat / Wyvern / Faerie / Hellish) — split from nunchaku `$64` |
+| `$77` | Arrow | A.W. `$F3` | #4F-#56 (Wooden / Holy / Iron / Bolt / Fire / Ice / Medusa / Yoichi) — split from bow `$6E` |
+| `$78` | Bracer / Ring | A.W. `$E5` | #8B, #8E, #91-#93, #95 (Bronze/Mithril/Power/Rune/Diamond Brc + Protect Ring) — split from gauntlet `$63` |
+| `$79` | Staff | A.W. `$EA` | #0E-#14 (Staff / FlameStaff / IceStaff / LightStaff / GolemStaff / RuneStaff / ElderStaff) — split from rod `$66` |
+| `$7A` | Mail (heavy armor) | A.W. `$E2` | #74-#78, #7C, #7E, #7F, #83-#85, #88-#8A — split from robe-style `$61` |
+
+Each override is a 4-step plumbing change: drop 16 tile bytes in
+`font-renderer.js`, register the slot, add `XXX_ITEM_IDS` +
+`XXX_ICON_BYTE` to `text-decoder.js`, and branch in both
+`getItemNameWithIcon` and `getItemNameShrines`. Untouched
+single-subtype icons (shield / helm / book / hammer / knife / axe /
+sword / katana / harp / bell / boomerang / shuriken / consumable /
+gauntlet) were confirmed visually clean against A.W. Jackson and
+need no swap.
+
 ## Cached Shrines data (fetched 2026-05-11)
 
 ### Spells — already shipped, see `src/data/spells.js#SPELL_NAMES_SHRINES`
