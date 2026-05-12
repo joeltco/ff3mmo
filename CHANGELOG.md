@@ -2,6 +2,39 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.260 — 2026-05-12
+
+### Shop quantity selector in the right column (replaces blue confirm)
+
+Item shops (weapon / armor / item) no longer pop the blue "Buy Cure?"
+box on Z. Instead, the right column's Buy/Sell/Exit text is suppressed
+and a quantity widget takes its place:
+
+```
+Buy            ← or Sell
+qty       01
+gil      150
+```
+
+Input (active only while `shopSt.confirm` is true):
+
+- **Up** — qty +1
+- **Down** — qty −1
+- **Right** — qty +10
+- **Left** — qty −10
+- **Z** — commit purchase / sale for the selected `shopSt.qty`
+- **X** — cancel back to the buy/sell list
+
+`shopSt.qty` and `shopSt.qtyMax` track the in-flight selection.
+`_qtyCap(target, isSell)` resolves the per-item ceiling — bought items
+cap at `min(99, floor(gil / price))`, sold items at `min(99,
+entry.count)`. `_attemptBuy(itemId, qty)` and `_attemptSell(entry,
+qty)` now take a quantity; the toast message reads "Bought N Potion!"
+or "Sold N Potion!" when qty > 1.
+
+Spell shops keep the original single-purchase blue confirm — quantity
+doesn't apply (each spell can only be learned once).
+
 ## 1.7.259 — 2026-05-12
 
 ### Use the shared `_stepPalFade` helper in `_drawShopkeeper`

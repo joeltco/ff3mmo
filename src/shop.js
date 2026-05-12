@@ -82,6 +82,11 @@ export const shopSt = {
   cursor:     0,
   scroll:     0,        // first visible row of the buy/sell list (v1.7.257 layout)
   confirm:    false,
+  // Quantity selector (v1.7.260) — when `confirm` is true on a non-spell shop,
+  // the right column hosts a buy/sell-how-many widget instead of the old blue
+  // confirm box. Spells stay single-purchase (`qty` ignored, blue box gone).
+  qty:        1,
+  qtyMax:     1,
   sellList:   [],
   afterFade:  null,     // next state after a 'menu-out' (root menu fades into a sub-screen)
   fadeFrames: null,     // [Canvas] from buildNesFadeFrames, lazily built on first map-out frame
@@ -260,13 +265,33 @@ function _menuInput(keys) {
   }
 }
 
+function _qtyCap(target, isSell) {
+  if (_isSpellShop()) return 1;
+  if (isSell) return Math.min(99, target.count);
+  const item = ITEMS.get(target);
+  const price = (item && item.price) || 0;
+  if (price <= 0) return 99;
+  return Math.min(99, Math.floor(ps.gil / price));
+}
+
 function _listInput(keys, list, isSell) {
   if (shopSt.confirm) {
+    // Spells: single-purchase confirm (existing blue box). Items: in-place
+    // quantity selector in the right column.
+    const isSpell = _isSpellShop();
+    if (!isSpell) {
+      if (keys['ArrowUp'])    { keys['ArrowUp']    = false; if (shopSt.qty < shopSt.qtyMax) { shopSt.qty = Math.min(shopSt.qtyMax, shopSt.qty + 1);  playSFX(SFX.CURSOR); } }
+      if (keys['ArrowDown'])  { keys['ArrowDown']  = false; if (shopSt.qty > 1)              { shopSt.qty = Math.max(1, shopSt.qty - 1);             playSFX(SFX.CURSOR); } }
+      if (keys['ArrowRight']) { keys['ArrowRight'] = false; if (shopSt.qty < shopSt.qtyMax) { shopSt.qty = Math.min(shopSt.qtyMax, shopSt.qty + 10); playSFX(SFX.CURSOR); } }
+      if (keys['ArrowLeft'])  { keys['ArrowLeft']  = false; if (shopSt.qty > 1)              { shopSt.qty = Math.max(1, shopSt.qty - 10);            playSFX(SFX.CURSOR); } }
+    }
     if (keys['z'] || keys['Z']) {
       keys['z'] = false; keys['Z'] = false;
-      if (isSell) _attemptSell(list[shopSt.cursor]);
-      else        _attemptBuy(list[shopSt.cursor]);
+      if (isSpell) _attemptBuy(list[shopSt.cursor]);
+      else if (isSell) _attemptSell(list[shopSt.cursor], shopSt.qty);
+      else        _attemptBuy(list[shopSt.cursor], shopSt.qty);
       shopSt.confirm = false;
+      shopSt.qty = 1;
       if (isSell) {
         _rebuildSellList();
         if (shopSt.cursor >= shopSt.sellList.length) shopSt.cursor = Math.max(0, shopSt.sellList.length - 1);
@@ -274,7 +299,7 @@ function _listInput(keys, list, isSell) {
       }
     } else if (keys['x'] || keys['X'] || keys['Escape']) {
       keys['x'] = false; keys['X'] = false; keys['Escape'] = false;
-      shopSt.confirm = false; playSFX(SFX.CONFIRM);
+      shopSt.confirm = false; shopSt.qty = 1; playSFX(SFX.CONFIRM);
     }
     return;
   }
@@ -296,7 +321,12 @@ function _listInput(keys, list, isSell) {
   }
   if (keys['z'] || keys['Z']) {
     keys['z'] = false; keys['Z'] = false;
-    if (list.length > 0) { shopSt.confirm = true; playSFX(SFX.CONFIRM); }
+    if (list.length > 0) {
+      shopSt.confirm = true;
+      shopSt.qtyMax = _qtyCap(list[shopSt.cursor], isSell);
+      shopSt.qty = shopSt.qtyMax > 0 ? 1 : 0;
+      playSFX(SFX.CONFIRM);
+    }
   }
   if (keys['x'] || keys['X'] || keys['Escape']) {
     keys['x'] = false; keys['X'] = false; keys['Escape'] = false;
@@ -304,19 +334,21 @@ function _listInput(keys, list, isSell) {
   }
 }
 
-function _attemptBuy(itemId) {
+function _attemptBuy(itemId, qty = 1) {
   if (_isSpellShop()) { _attemptBuySpell(itemId); return; }
   const item = ITEMS.get(itemId);
   if (!item) { playSFX(SFX.ERROR); return; }
-  if (!spendGil(item.price)) {
+  if (qty <= 0) { playSFX(SFX.ERROR); return; }
+  const total = item.price * qty;
+  if (!spendGil(total)) {
     playSFX(SFX.ERROR);
     showMsgBox(_nameToBytes('Not enough gil!'));
     return;
   }
-  addItem(itemId, 1);
+  addItem(itemId, qty);
   saveSlotsToDB();
   playSFX(SFX.TREASURE);
-  showMsgBox(_actionMsg('Bought ', itemId));
+  showMsgBox(_actionMsg(qty > 1 ? `Bought ${qty} ` : 'Bought ', itemId));
 }
 
 function _attemptBuySpell(spellId) {
@@ -355,13 +387,14 @@ function _spellActionMsg(prefixStr, spellId) {
   return out;
 }
 
-function _attemptSell(entry) {
+function _attemptSell(entry, qty = 1) {
   if (!entry || !entry.id || entry.count <= 0) { playSFX(SFX.ERROR); return; }
-  grantGil(entry.price);
-  removeItem(entry.id);
+  const n = Math.max(1, Math.min(qty, entry.count));
+  grantGil(entry.price * n);
+  for (let i = 0; i < n; i++) removeItem(entry.id);
   saveSlotsToDB();
   playSFX(SFX.TREASURE);
-  showMsgBox(_actionMsg('Sold ', entry.id));
+  showMsgBox(_actionMsg(n > 1 ? `Sold ${n} ` : 'Sold ', entry.id));
 }
 
 function _actionMsg(prefixStr, itemId) {
@@ -423,19 +456,30 @@ export function drawShop() {
   _drawShopkeeper(ctx, KEEPER_X, KEEPER_Y, fadeStep);
   _drawGil(ctx, fadeStep);
   // Menu dimmed when the list owns the cursor; full brightness in idle.
+  // While the qty selector is up, the Buy/Sell/Exit text is suppressed
+  // entirely — the same right column is reused as the qty widget.
   const inList = s === 'buy' || s === 'buy-in' || s === 'buy-out' ||
                  s === 'sell' || s === 'sell-in' || s === 'sell-out';
-  const menuPal = inList ? [0x0F, 0x0F, 0x0F, 0x00] : null;  // null → use faded pal
-  _drawRootMenu(ctx, fadeStep, menuPal);
+  const isItemConfirm = shopSt.confirm && (s === 'buy' || s === 'sell') && !_isSpellShop();
+  if (!isItemConfirm) {
+    const menuPal = inList ? [0x0F, 0x0F, 0x0F, 0x00] : null;  // null → use faded pal
+    _drawRootMenu(ctx, fadeStep, menuPal);
+  }
   if (s === 'buy' || s === 'buy-in' || s === 'buy-out')
     _drawList(ctx, _items(), /*isSell*/false);
   else if (s === 'sell' || s === 'sell-in' || s === 'sell-out')
     _drawList(ctx, shopSt.sellList, /*isSell*/true);
 
+  if (isItemConfirm) {
+    const list = s === 'buy' ? _items() : shopSt.sellList;
+    _drawQuantity(ctx, fadeStep, list[shopSt.cursor], s === 'sell');
+  }
+
   ctx.restore();
 
-  // Confirm overlay — only show in idle, never during fades
-  if (shopSt.confirm && (s === 'buy' || s === 'sell')) {
+  // Spell shops keep the original blue confirm box (single-purchase flow,
+  // qty selector doesn't apply — you can only learn a spell once).
+  if (shopSt.confirm && (s === 'buy' || s === 'sell') && _isSpellShop()) {
     const list = s === 'buy' ? _items() : shopSt.sellList;
     _drawConfirm(list[shopSt.cursor], s === 'sell');
   }
@@ -565,6 +609,42 @@ function _drawList(ctx, list, isSell) {
     const visRow = shopSt.cursor - start;
     drawCursorFaded(HUD_VIEW_X + 8, LIST_Y0 + visRow * ROW_H - 4, 0);
   }
+}
+
+// Right-column quantity selector (v1.7.260). Replaces the old blue
+// confirm box for item shops. Up/Down ±1, Right/Left ±10, capped at
+// `shopSt.qtyMax` and 1. Z commits, X cancels (input wired in
+// `_listInput`). Spells skip this path and keep the blue confirm.
+//
+// Layout in the right column (x = MENU_X..panel right edge, ~56 px):
+//   y=22  "Buy" / "Sell"           (header)
+//   y=38  "qty"  label / value     (label left, qty right-aligned)
+//   y=54  "gil"  label / value     (label left, qty*price right-aligned)
+//   y=70  cursor (decorative — input is via arrow keys, not a vertical cursor)
+function _drawQuantity(ctx, fadeStep, target, isSell) {
+  if (!target) return;
+  const pal = _makeFadedPal(fadeStep);
+  const labelX = MENU_X;
+  const valRx  = HUD_VIEW_X + HUD_VIEW_W - 16;
+
+  const header = _nameToBytes(isSell ? 'Sell' : 'Buy');
+  drawText(ctx, labelX, HUD_VIEW_Y + 22, header, pal);
+
+  const qtyLbl = _nameToBytes('qty');
+  drawText(ctx, labelX, HUD_VIEW_Y + 38, qtyLbl, pal);
+  const qtyStr = String(shopSt.qty).padStart(2, '0');
+  const qtyVal = _nameToBytes(qtyStr);
+  drawText(ctx, valRx - measureText(qtyVal), HUD_VIEW_Y + 38, qtyVal, pal);
+
+  // Cost = qty × price. For sell, the entry holds the per-unit price.
+  const unit = isSell
+    ? target.price
+    : ((ITEMS.get(target) && ITEMS.get(target).price) || 0);
+  const cost = unit * shopSt.qty;
+  const costLbl = _nameToBytes('gil');
+  drawText(ctx, labelX, HUD_VIEW_Y + 54, costLbl, pal);
+  const costVal = _nameToBytes(String(cost));
+  drawText(ctx, valRx - measureText(costVal), HUD_VIEW_Y + 54, costVal, pal);
 }
 
 // Text palette tuned for the blue confirm box: color 1/2 (font shadow) map
