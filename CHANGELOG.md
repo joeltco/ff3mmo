@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.258 — 2026-05-12
+
+### Shopkeeper sprite fades alongside menu text
+
+The new keeper tiles in v1.7.257 painted at full saturation during
+shop-in / shop-out / menu sub-fade transitions while the rest of the
+panel faded through the standard `nesColorFade` palette steps. Plumbed
+the existing `fadeStep` into `_drawShopkeeper(ctx, x, y, fadeStep)` —
+each non-transparent palette slot (1..3) gets stepped that many times
+toward black on every draw. Slot 0 stays transparent. Keeper now
+appears / disappears with the menu in lockstep.
+
 ## 1.7.257 — 2026-05-12
 
 ### FF1 weapon shopkeeper lands + new shop panel layout

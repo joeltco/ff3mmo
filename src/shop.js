@@ -14,7 +14,7 @@
 
 import { drawText, measureText } from './font-renderer.js';
 import { drawBorderedBox, drawCursorFaded, clipToViewport } from './hud-drawing.js';
-import { _makeFadedPal } from './palette.js';
+import { _makeFadedPal, nesColorFade } from './palette.js';
 import { _nameToBytes } from './text-utils.js';
 import { getItemNameClean, getItemNameShrines, getSpellNameClean, getSpellNameShrines } from './text-decoder.js';
 import { ITEMS } from './data/items.js';
@@ -420,7 +420,7 @@ export function drawShop() {
   // the lower half only when we're inside those states.
   const s = shopSt.state;
   const fadeStep = _innerTextFadeStep();
-  _drawShopkeeper(ctx, KEEPER_X, KEEPER_Y);
+  _drawShopkeeper(ctx, KEEPER_X, KEEPER_Y, fadeStep);
   _drawGil(ctx, fadeStep);
   // Menu dimmed when the list owns the cursor; full brightness in idle.
   const inList = s === 'buy' || s === 'buy-in' || s === 'buy-out' ||
@@ -459,7 +459,7 @@ function _drawGil(ctx, fadeStep) {
 }
 
 // FF1-style shopkeeper sprite — 10×10 BG nametable rect using the FF1
-// `lut_ShopkeepImage` layout (`SHOPKEEP_IMAGE_LAYOUT`). The 14 keeper
+// `lut_ShopkeepImage` layout (`SHOPKEEP_IMAGE_LAYOUT`). The 13 keeper
 // tiles for the active shop type live in `SHOP_KEEPER_TILES` keyed by
 // FF1 canonical type ('weapon'|'armor'|'white-magic'|'black-magic'|
 // 'item'); ff3mmo's 4-type catalog maps through `FF3MMO_TO_FF1` inside
@@ -467,13 +467,24 @@ function _drawGil(ctx, fadeStep) {
 // landed yet — adding tile bytes to the map lights up the matching
 // shops with no further wiring.
 //
-// Layout tile indices 1..13 reference `sprite.tiles` (14×16 bytes), tile
+// Layout tile indices 1..13 reference `sprite.tiles` (13×16 bytes), tile
 // 0 in the layout means "transparent backdrop" — skipped.
-function _drawShopkeeper(ctx, originX, originY) {
+//
+// `fadeStep` runs the keeper's palette slots 1..3 through `nesColorFade`
+// that many times so the sprite fades in/out alongside the menu text
+// during shop-in / shop-out and sub-state transitions. Slot 0 stays
+// transparent and is never recolored.
+function _drawShopkeeper(ctx, originX, originY, fadeStep = 0) {
   const sprite = getShopSprite(getShopType(shopSt.shopId));
   if (!sprite || !sprite.tiles || sprite.tiles.length < 13 * 16) return;
-  const pal = sprite.palette;
-  if (!pal || pal.length < 4) return;
+  const basePal = sprite.palette;
+  if (!basePal || basePal.length < 4) return;
+  const pal = [basePal[0], basePal[1], basePal[2], basePal[3]];
+  for (let s = 0; s < fadeStep; s++) {
+    pal[1] = nesColorFade(pal[1]);
+    pal[2] = nesColorFade(pal[2]);
+    pal[3] = nesColorFade(pal[3]);
+  }
   for (let row = 0; row < SHOPKEEP_IMAGE_LAYOUT.length; row++) {
     const rowTiles = SHOPKEEP_IMAGE_LAYOUT[row];
     for (let col = 0; col < rowTiles.length; col++) {
