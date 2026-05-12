@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.269 — 2026-05-12
+
+### FF1 armor-shop keeper
+
+Second keeper landed. 13 tiles for the armor-shop NPC ($0F–$1B in the
+shop CHR bundle; tile additive 14 over the weapon-shop tiles per FF1's
+`lut_ShopkeepAdditive`). Captured via SNAP BG on the standalone FF1 USA
+ROM, frame 1617. Palette verified against PPU BG0 = matches the cached
+`SHOP_PALETTES.armor` from the disassembly extraction.
+
+`SHOP_KEEPER_TILES['armor']` now lights up the Ur armor shop. Item +
+magic keepers still pending captures.
+
 ## 1.7.268 — 2026-05-12
 
 ### Respawn checkpoint is overworld-only (NES-style save model)
