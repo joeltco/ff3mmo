@@ -34,14 +34,16 @@ export const TEXT_YELLOW  = [0x0F, 0x28, 0x18, 0x30]; // yellow on black
 let _fontPixels = null;  // Map<tileId, Uint8Array(64)>
 let _tileCache = null;   // Map<paletteKey, Map<tileId, HTMLCanvasElement>>
 
-// Arrow + claw + bracer/ring icon tiles — sourced from the A.W. Jackson
-// FF3 fan translation, which splits glyphs the original JP ROM (and
-// Chaos Rush) collapse into one. Arrows ($F3 in A.W.J.) share $6E with
-// bows in Chaos Rush; claws ($E6) share $64 with nunchaku; bracers /
-// rings ($E5) share $63 with gauntlets / gloves. Each tile lands at
+// Icon tiles sourced from the A.W. Jackson FF3 fan translation, which
+// splits glyphs the original JP ROM (and Chaos Rush) collapse into one:
+// arrows ($F3 in A.W.J.) share $6E with bows in Chaos Rush; claws
+// ($E6) share $64 with nunchaku; bracers / rings ($E5) share $63 with
+// gauntlets / gloves; staves ($EA) share $66 with rods; mail-style body
+// armor ($E2) shares $61 with robe-style body armor. Each tile lands at
 // an unused icon slot in the Chaos Rush font atlas and the
 // corresponding item IDs override their ROM icon byte in
-// text-decoder.js (ARROW_ITEM_IDS / CLAW_ITEM_IDS / BRACER_ITEM_IDS).
+// text-decoder.js (ARROW_ITEM_IDS / CLAW_ITEM_IDS / BRACER_ITEM_IDS /
+// STAFF_ITEM_IDS / MAIL_ITEM_IDS).
 const ARROW_TILE_ID = 0x77;
 const ARROW_TILE_BYTES = new Uint8Array([
   0x00, 0x60, 0x60, 0x10, 0x08, 0x06, 0x05, 0x02,
@@ -56,6 +58,16 @@ const BRACER_TILE_ID = 0x78;
 const BRACER_TILE_BYTES = new Uint8Array([
   0x00, 0x6c, 0x72, 0x22, 0x44, 0x48, 0x30, 0x00,
   0xff, 0xdd, 0x9c, 0xfc, 0xf9, 0xf3, 0x87, 0xcf,
+]);
+const STAFF_TILE_ID = 0x79;
+const STAFF_TILE_BYTES = new Uint8Array([
+  0x70, 0xf0, 0xd8, 0x58, 0x0c, 0x06, 0x03, 0x00,
+  0x8f, 0x0f, 0x07, 0x07, 0xa3, 0xf1, 0xf8, 0xfc,
+]);
+const MAIL_TILE_ID = 0x7A;
+const MAIL_TILE_BYTES = new Uint8Array([
+  0x00, 0x36, 0x77, 0x63, 0x08, 0x22, 0x5d, 0x08,
+  0xc9, 0xa4, 0xc2, 0x80, 0x88, 0xa2, 0xc9, 0xa2,
 ]);
 
 /**
@@ -75,6 +87,8 @@ export function initFont(romData) {
   _fontPixels.set(ARROW_TILE_ID,  decodeTile(ARROW_TILE_BYTES,  0));
   _fontPixels.set(CLAW_TILE_ID,   decodeTile(CLAW_TILE_BYTES,   0));
   _fontPixels.set(BRACER_TILE_ID, decodeTile(BRACER_TILE_BYTES, 0));
+  _fontPixels.set(STAFF_TILE_ID,  decodeTile(STAFF_TILE_BYTES,  0));
+  _fontPixels.set(MAIL_TILE_ID,   decodeTile(MAIL_TILE_BYTES,   0));
 }
 
 /**

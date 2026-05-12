@@ -2,6 +2,10 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.281 — 2026-05-12
+
+- **Distinct staff icon + mail-style body armor icon.** Last two cases where Chaos Rush packs visually-distinct items under one icon byte. Rods (`$66`, items #09-#0D) and staves (#0E-#14) shared one tile; A.W. Jackson splits to `$E9`/`$EA`, so staves get a new slot `$79` (A.W. `$EA` — branched/Y-top staff head). Body armor (`$61`, 25 items) was lumped together; A.W. splits by weight into `$E1` (robe/cloth) and `$E2` (mail/plate), so the 14 mail-style entries (Onion / Mithril / Shell / Ice / Flame Mail / Viking / Knight / Dragon / Demon / Diamond / Reflect / Genji / Crystal / Rusty Mail) get a new slot `$7A` (A.W. `$E2` — scale/rivet pattern); the 11 robe-style entries keep `$61`. Same plumbing as the v1.7.278-280 arrow / claw / bracer splits.
+
 ## 1.7.280 — 2026-05-12
 
 - **Distinct bracer/ring icon for arm-slot accessories.** Bracers (Bronze / Mithril / Power / Rune / Diamond) and Protect Ring share ROM byte `$63` with gauntlets and gloves — the Chaos Rush tile reads as a hand, fine for gloves but wrong for wrist accessories. A.W. Jackson splits the arm slot into `$E4` (gauntlet) and `$E5` (bracer/ring); lifted the bracer tile to slot `$78`, added `BRACER_ITEM_IDS` (`0x8B, 0x8E, 0x91, 0x92, 0x93, 0x95`) + override branches in both `getItemNameWithIcon` and `getItemNameShrines`. Gauntlets / gloves keep `$63`.

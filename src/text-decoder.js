@@ -86,6 +86,20 @@ const CLAW_ICON_BYTE = 0x76;
 // let gauntlets/gloves keep $63 (Chaos Rush's hand shape).
 const BRACER_ITEM_IDS = new Set([0x8B, 0x8E, 0x91, 0x92, 0x93, 0x95]);
 const BRACER_ICON_BYTE = 0x78;
+// Staff items (#0E-#14) — share $66 with rods (#09-#0D). A.W. splits
+// into $E9 (rod) and $EA (staff); we lift the staff tile to $79.
+const STAFF_ITEM_IDS = new Set([0x0E, 0x0F, 0x10, 0x11, 0x12, 0x13, 0x14]);
+const STAFF_ICON_BYTE = 0x79;
+// Mail-style body armor — share $61 with robe-style body armor. A.W.
+// splits by armor weight into $E1 (robe/light) and $E2 (mail/heavy);
+// we lift the mail tile to $7A. Robes (#72, #73, #79, #7A, #7B, #7D,
+// #80-#82, #86, #87) keep $61.
+const MAIL_ITEM_IDS = new Set([
+  0x74, 0x75, 0x76, 0x77, 0x78,
+  0x7C, 0x7E, 0x7F,
+  0x83, 0x84, 0x85, 0x88, 0x89, 0x8A,
+]);
+const MAIL_ICON_BYTE = 0x7A;
 
 // ASCII → NES tile byte (lowercase / uppercase / digits / space). Anything
 // unknown falls through to space. Kept local so text-decoder stays free of
@@ -186,6 +200,8 @@ export function getItemNameWithIcon(itemId) {
     if (ARROW_ITEM_IDS.has(itemId)) iconByte = ARROW_ICON_BYTE;
     else if (CLAW_ITEM_IDS.has(itemId)) iconByte = CLAW_ICON_BYTE;
     else if (BRACER_ITEM_IDS.has(itemId)) iconByte = BRACER_ICON_BYTE;
+    else if (STAFF_ITEM_IDS.has(itemId)) iconByte = STAFF_ICON_BYTE;
+    else if (MAIL_ITEM_IDS.has(itemId)) iconByte = MAIL_ICON_BYTE;
     // Skip any padding spaces between icon and first letter
     let i = 1;
     while (i < bytes.length && bytes[i] === 0xFF) i++;
@@ -218,6 +234,8 @@ export function getItemNameShrines(itemId) {
   if (ARROW_ITEM_IDS.has(itemId)) iconByte = ARROW_ICON_BYTE;
   else if (CLAW_ITEM_IDS.has(itemId)) iconByte = CLAW_ICON_BYTE;
   else if (BRACER_ITEM_IDS.has(itemId)) iconByte = BRACER_ICON_BYTE;
+  else if (STAFF_ITEM_IDS.has(itemId)) iconByte = STAFF_ICON_BYTE;
+  else if (MAIL_ITEM_IDS.has(itemId)) iconByte = MAIL_ICON_BYTE;
   const letters = new Uint8Array(override.length);
   for (let i = 0; i < override.length; i++) letters[i] = _asciiToTileByte(override[i]);
   if (iconByte == null) return letters;
