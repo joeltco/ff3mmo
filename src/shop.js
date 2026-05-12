@@ -466,15 +466,17 @@ export function drawShop() {
   const keeperFade = (s === 'shop-in' || s === 'shop-out') ? fadeStep : 0;
   _drawShopkeeper(ctx, KEEPER_X, KEEPER_Y, keeperFade);
   _drawGil(ctx, fadeStep);
-  // Menu dimmed when the list owns the cursor; full brightness in idle.
+  // Menu always at the same brightness during intra-shop transitions —
+  // selecting Buy/Sell shouldn't flash the Buy/Sell/Exit text to black,
+  // because the menu is part of the panel layout (right column), not a
+  // sub-screen that fades out. Only the outer shop-in / shop-out tween
+  // touches the menu palette.
   // While the qty selector is up, the Buy/Sell/Exit text is suppressed
   // entirely — the same right column is reused as the qty widget.
-  const inList = s === 'buy' || s === 'buy-in' || s === 'buy-out' ||
-                 s === 'sell' || s === 'sell-in' || s === 'sell-out';
   const isItemConfirm = shopSt.confirm && (s === 'buy' || s === 'sell') && !_isSpellShop();
   if (!isItemConfirm) {
-    const menuPal = inList ? [0x0F, 0x0F, 0x0F, 0x00] : null;  // null → use faded pal
-    _drawRootMenu(ctx, fadeStep, menuPal);
+    const menuFade = (s === 'shop-in' || s === 'shop-out') ? fadeStep : 0;
+    _drawRootMenu(ctx, menuFade);
   }
   if (s === 'buy' || s === 'buy-in' || s === 'buy-out')
     _drawList(ctx, _items(), /*isSell*/false);
@@ -553,8 +555,8 @@ function _drawShopkeeper(ctx, originX, originY, fadeStep = 0) {
 // buy/sell list has focus below. Cursor only renders when state is
 // 'menu' (interactive); during buy/sell/confirm the items list owns
 // the cursor.
-function _drawRootMenu(ctx, fadeStep, palOverride) {
-  const pal = palOverride || _makeFadedPal(fadeStep);
+function _drawRootMenu(ctx, fadeStep) {
+  const pal = _makeFadedPal(fadeStep);
   for (let i = 0; i < ROOT_LABELS.length; i++) {
     drawText(ctx, MENU_X + 16, MENU_Y + i * MENU_STEP, _nameToBytes(ROOT_LABELS[i]), pal);
   }

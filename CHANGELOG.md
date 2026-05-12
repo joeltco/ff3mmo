@@ -2,6 +2,25 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.263 — 2026-05-12
+
+### Buy/Sell/Exit menu no longer flashes to black on Buy / Sell
+
+Pressing Z on Buy or Sell triggered the old menu-out / sub-screen-in
+text fade, which faded the right-column Buy/Sell/Exit text through
+black before the item list took over the panel below. But the menu
+is part of the shop's persistent layout (right column, always
+visible), not a sub-screen, so the fade looked like a flicker.
+
+The keeper sprite was already scoped to outer shop-in / shop-out only
+(v1.7.261). Did the same for the menu text: it stays at full
+brightness through every intra-shop transition. Only shop-in /
+shop-out fades the menu.
+
+Dropped the now-unused `palOverride` parameter from `_drawRootMenu` —
+the "in-list dim to invisible" override is gone; the menu just stays
+visible the whole time.
+
 ## 1.7.262 — 2026-05-12
 
 ### Save on shop entry (resume at counter, not town entrance)
