@@ -99,11 +99,12 @@ const ROOT_LABELS = ['Buy', 'Sell', 'Exit'];
 export function openShop(shopId) {
   const shop = SHOPS.get(shopId);
   if (!shop || (!shop.items && !shop.spells)) return false;
-  // Persist the player's exact tile-in-front-of-counter coords before the
-  // shop covers the screen. A tab close while inside the shop will then
-  // resume right at the counter on next launch, not at the town entrance
-  // (which is the most recent prior save from the loadMapById call).
-  saveSlotsToDB();
+  // Note: v1.7.262 added a saveSlotsToDB() here to capture the
+  // exact-counter coords, but the shop exit doesn't have a matching save,
+  // so the counter position ended up "sticky" — walking out to the
+  // overworld and quitting still reloaded to the counter. The
+  // loadMapById save (v1.7.261) is enough to keep you in the right
+  // town if you quit mid-shop. Reverted in v1.7.264.
   shopSt.state      = 'map-out';
   shopSt.timer      = 0;
   shopSt.shopId     = shopId;

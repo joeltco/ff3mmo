@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.264 — 2026-05-12
+
+### Revert openShop save (sticky shop position)
+
+v1.7.262 added `saveSlotsToDB()` at the top of `openShop` to capture
+the exact tile-in-front-of-counter coords. But there was no matching
+save on shop exit / overworld walk, so the counter position became
+sticky: walk out of the shop, leave the town through the gate (which
+DOES save via `loadWorldMapAt`), walk around the overworld (no saves),
+quit — and reload still reads "you are at the counter" because the
+openShop save outranked the world-map walks.
+
+Reverted. The `loadMapById` save from v1.7.261 is the right trade:
+quitting mid-shop reloads you to the town entrance (in the right
+town, not stranded on the overworld), and overworld walks aren't
+clobbered by stale shop entries. The exact-counter UX wasn't worth
+the sticky bug.
+
 ## 1.7.263 — 2026-05-12
 
 ### Buy/Sell/Exit menu no longer flashes to black on Buy / Sell
