@@ -6,7 +6,7 @@ import { ps, getEquipSlotId, setEquipSlotId, jobSwitchCost, getJobLevel, getJobL
 import { JOBS, JOB_ABBR, canJobEquip } from './data/jobs.js';
 import { _makeFadedPal, nesColorFade } from './palette.js';
 import { _nameToBytes, _buildItemRowBytes } from './text-utils.js';
-import { getItemNameClean, getItemNameWithIcon, getSpellNameClean, getSpellNameShrines } from './text-decoder.js';
+import { getItemNameClean, getItemNameShrines, getSpellNameClean, getSpellNameShrines } from './text-decoder.js';
 import { SPELLS, getSpellMPCost, getCastableKnownSpells } from './data/spells.js';
 import { stopFF1Music, resumeMusic, playFF1Track, FF1_TRACKS, playSFX, SFX, pauseMusic } from './music.js';
 import { PAUSE_ITEMS } from './data/strings.js';
@@ -281,7 +281,7 @@ function _drawPauseInventory(ctx) {
   const startIdx = Math.max(0, Math.min(pauseSt.invScroll, Math.max(0, entries.length - maxVisible)));
   for (let i = 0; i < maxVisible && startIdx + i < entries.length; i++) {
     const [id, count] = entries[startIdx + i];
-    const nameBytes = getItemNameWithIcon(Number(id));
+    const nameBytes = getItemNameShrines(Number(id));
     const countStr = String(count);
     const rowBytes = _buildItemRowBytes(nameBytes, countStr);
     const iy = finalY + 12 + i * 14;
@@ -346,7 +346,7 @@ function _drawPauseEquipSlots(ctx) {
     const activePal = (dimSlots && r === pauseSt.eqCursor) ? fadedPal : labelPal;
     drawText(ctx, px + 24, iy, label, activePal);
     if (slotId !== 0) {
-      drawText(ctx, px + 24, iy + 9, getItemNameWithIcon(slotId), activePal);
+      drawText(ctx, px + 24, iy + 9, getItemNameShrines(slotId), activePal);
     } else {
       drawText(ctx, px + 24, iy + 9, new Uint8Array([0xC2,0xC2,0xC2]), activePal);
     }
@@ -393,7 +393,7 @@ function _drawPauseEquipItems(ctx) {
       if (entry.label === 'remove') {
         drawText(ctx, listX + 16, iy, new Uint8Array([0x9B,0xCE,0xD6,0xD8,0xDF,0xCE]), fadedPal);
       } else {
-        drawText(ctx, listX + 16, iy, getItemNameWithIcon(entry.id), fadedPal);
+        drawText(ctx, listX + 16, iy, getItemNameShrines(entry.id), fadedPal);
       }
     }
     if (drawCursorFaded) {

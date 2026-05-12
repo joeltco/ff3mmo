@@ -16,7 +16,7 @@ import { drawText, measureText } from './font-renderer.js';
 import { drawBorderedBox, drawCursorFaded, clipToViewport } from './hud-drawing.js';
 import { _makeFadedPal } from './palette.js';
 import { _nameToBytes } from './text-utils.js';
-import { getItemNameClean, getItemNameWithIcon, getSpellNameClean, getSpellNameShrines } from './text-decoder.js';
+import { getItemNameClean, getItemNameShrines, getSpellNameClean, getSpellNameShrines } from './text-decoder.js';
 import { ITEMS } from './data/items.js';
 import { SHOPS } from './data/shops.js';
 import { SPELLS, getSpellBuyPrice, canLearnSpell } from './data/spells.js';
@@ -463,7 +463,7 @@ function _drawList(ctx, list, isSell) {
     const price = isSell ? list[i].price : (ITEMS.get(id) && ITEMS.get(id).price) || 0;
     if (!ITEMS.get(id)) continue;
     const y     = listY0 + i * ROW_H;
-    const name  = getItemNameWithIcon(id);
+    const name  = getItemNameShrines(id);
     const pNum  = _nameToBytes(String(price));
     drawText(ctx, nameX, y, name, pal);
     drawText(ctx, priceX - measureText(pNum), y, pNum, pal);

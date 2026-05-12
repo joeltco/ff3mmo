@@ -12,7 +12,7 @@ import {
   BATTLE_GOBLIN_NAME, BATTLE_BOSS_NAME, BATTLE_LEVEL_UP, BATTLE_JOB_LEVEL_UP,
   BATTLE_FOUND, BATTLE_MENU_ITEMS, BATTLE_MAGIC,
 } from './data/strings.js';
-import { getMonsterName, getItemNameClean, getItemNameWithIcon, getSpellNameClean, getSpellNameShrines } from './text-decoder.js';
+import { getMonsterName, getItemNameClean, getItemNameShrines, getSpellNameClean, getSpellNameShrines } from './text-decoder.js';
 import { getSpellMPCost } from './data/spells.js';
 import { ps } from './player-stats.js';
 import {
@@ -57,11 +57,11 @@ function _drawBattleItemList(baseX, rightAreaW, invPal, slidePixel, totalInvPage
     if (pg === 0) {
       const RH_LABEL = new Uint8Array([0x9B,0x91,0xFF]);
       const LH_LABEL = new Uint8Array([0x95,0x91,0xFF]);
-      const rName = ps.weaponR !== 0 ? getItemNameWithIcon(ps.weaponR) : new Uint8Array([0xC2,0xC2,0xC2]);
+      const rName = ps.weaponR !== 0 ? getItemNameShrines(ps.weaponR) : new Uint8Array([0xC2,0xC2,0xC2]);
       const rRow = new Uint8Array(RH_LABEL.length + rName.length);
       rRow.set(RH_LABEL, 0); rRow.set(rName, RH_LABEL.length);
       drawText(ui.ctx, px + 8, topY, rRow, invPal);
-      const lName = ps.weaponL !== 0 ? getItemNameWithIcon(ps.weaponL) : new Uint8Array([0xC2,0xC2,0xC2]);
+      const lName = ps.weaponL !== 0 ? getItemNameShrines(ps.weaponL) : new Uint8Array([0xC2,0xC2,0xC2]);
       const lRow = new Uint8Array(LH_LABEL.length + lName.length);
       lRow.set(LH_LABEL, 0); lRow.set(lName, LH_LABEL.length);
       drawText(ui.ctx, px + 8, topY + rowH + 6, lRow, invPal);
@@ -72,7 +72,7 @@ function _drawBattleItemList(baseX, rightAreaW, invPal, slidePixel, totalInvPage
         if (idx >= inputSt.itemSelectList.length) break;
         const item = inputSt.itemSelectList[idx];
         if (!item) continue;
-        const nameBytes = getItemNameWithIcon(item.id);
+        const nameBytes = getItemNameShrines(item.id);
         const countStr = String(item.count);
         const rowBytes = _buildItemRowBytes(nameBytes, countStr);
         drawText(ui.ctx, px + 8, topY + r * rowH, rowBytes, invPal);

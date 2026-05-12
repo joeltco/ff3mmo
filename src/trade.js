@@ -25,7 +25,7 @@ import { _nameToBytes } from './text-utils.js';
 import { showMsgBox, replaceMsgBoxText, dismissMsgBox } from './message-box.js';
 import { playSFX, SFX } from './music.js';
 import { drawText, measureText, TEXT_WHITE } from './font-renderer.js';
-import { getItemNameClean, getItemNameWithIcon } from './text-decoder.js';
+import { getItemNameClean, getItemNameShrines } from './text-decoder.js';
 import { drawBorderedBox, drawCursorFaded, clipToViewport } from './hud-drawing.js';
 import { ui } from './ui-state.js';
 
@@ -271,7 +271,7 @@ export function drawTradePick() {
     if (idx >= list.length) break;
     const entry = list[idx];
     const y = listY0 + i * ROW_H;
-    drawText(ctx, nameX, y, getItemNameWithIcon(entry.id), TEXT_WHITE);
+    drawText(ctx, nameX, y, getItemNameShrines(entry.id), TEXT_WHITE);
     const cNum = _nameToBytes(String(entry.count));
     drawText(ctx, countX - measureText(cNum), y, cNum, TEXT_WHITE);
   }

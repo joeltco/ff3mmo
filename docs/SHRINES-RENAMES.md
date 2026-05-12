@@ -9,7 +9,7 @@ Raw fetched content cached here so future sessions don't need to re-fetch.
 | Surface | Shrines override | Icons rendered | Deploy |
 |---|---|---|---|
 | Spells (56 player-castable) | ✅ shipped | ✅ shipped | v1.7.241–242 |
-| Items (200 ROM entries) | ⏳ data fetched, mapping not done | ✅ shipped v1.7.245 (font atlas extended to load $60–$6F icon tiles + `getItemNameWithIcon` at 9 render sites) | v1.7.245 |
+| Items (200 ROM entries) | ✅ shipped v1.7.246 (`ITEM_NAMES_SHRINES`, 159 entries) | ✅ shipped v1.7.245 (font atlas extended to load $60–$6F icon tiles + `getItemNameWithIcon` at 9 render sites) | v1.7.245–246 |
 | Monsters (~231 bestiary entries) | ⏳ data not yet fetched | n/a (no icons in monster names) | not started |
 | Jobs (22 entries) | ⏳ not started | n/a | not started |
 
@@ -141,20 +141,23 @@ WaterFang / WindFang
 
 ## Next-session todo
 
-1. **Map Shrines item names → ff3mmo ROM IDs** in `src/data/items.js`.
-   Pattern: cross-reference by `subtype` + `atk` (weapons) or `subtype` + `def`
-   (armor) + `price`. Same job-equip mask should match.
-   The IPS-patched ROM names (e.g., `[60]Leath[be]Sh[bd][ee]` = "Leather Shield")
-   already give a strong hint per ID before stat-matching — see histogram in
-   ROM icon byte ranges table above.
-2. **Add `ITEM_NAMES_SHRINES` Map** to `src/data/items.js` (mirror
-   `SPELL_NAMES_SHRINES` in `src/data/spells.js`).
-3. **Add `getItemNameShrines(itemId)`** to `src/text-decoder.js`, same shape
-   as `getSpellNameShrines` (icon byte from ROM + ASCII letters from override).
-4. **Switch the 9 render sites** from `getItemNameWithIcon` to
-   `getItemNameShrines`.
-5. **Then monsters** — fetch `shrines.rpgclassics.com/nes/ff3/enemies.shtml`,
+1. **Monsters** — fetch `shrines.rpgclassics.com/nes/ff3/enemies.shtml`,
    build `MONSTER_NAMES_SHRINES`, wire into `getMonsterName` callers (the
    key one is the in-battle enemy name box; chat / message-strip stay on
    ROM bytes).
-6. **Jobs (22)** — same pattern, optional, lowest priority.
+2. **Jobs (22)** — same pattern, optional, lowest priority.
+
+## Items shipped notes (v1.7.246)
+
+- 200 ROM entries → 159 overrides. Skipped: unused ROM IDs in `ITEMS`
+  Map (0x00, 0x47, 0x57, 0xa5, 0xb0, 0xb7, 0xbd, 0xc0, 0xc1, 0xc2,
+  0xc4) and battle items where the Shrines pairing was ambiguous
+  (Oershroom / Earth Drum / Black Musk / Tranquilizer).
+- Same-name collisions on shared icons (e.g., two "Mithril" gloves
+  $63 — one bracer, one gauntlet) are intentional and match Shrines
+  list convention. If the user wants disambiguation, suffix the
+  override values with " G" / " R" in `ITEM_NAMES_SHRINES`.
+- Punctuation in Shrines names (apostrophes, periods) was stripped
+  because `_asciiToTileByte` only encodes A-Z/a-z/0-9. If we add
+  punctuation tile mappings later, revisit "Zeus'Rage" / "Imp'sYawn"
+  / "Devil'sSigh" / "M.Gauche" / "BombR.Arm".

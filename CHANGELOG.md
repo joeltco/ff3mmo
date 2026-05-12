@@ -2,6 +2,31 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.246 — 2026-05-11
+
+### Shrines short-names for items
+
+Mirrors the v1.7.242 spell-name override now that v1.7.245 wired the
+item-type icons into the font atlas. Adds `ITEM_NAMES_SHRINES` (Map<id,
+shortName>) in `data/items.js` covering 159 player-equippable + key /
+consumable / battle items, sourced from
+`shrines.rpgclassics.com/nes/ff3/{items,weapons,armor}.shtml` and
+cached in `docs/SHRINES-RENAMES.md`.
+
+Adds `getItemNameShrines(itemId)` in `text-decoder.js`. Same shape as
+`getSpellNameShrines`: pulls the icon byte from ROM so the slot grouping
+stays correct, then maps the ASCII override letters to font-atlas tile
+bytes. Falls through to `getItemNameWithIcon` for items with no
+override (ambiguous Shrines pairings like Oershroom / Earth Drum /
+Black Musk / Tranquilizer — they keep the ROM name).
+
+Switched all 9 render sites from `getItemNameWithIcon` →
+`getItemNameShrines`: pause inventory, pause equip slot, pause equip
+picker, battle RH/LH weapon, battle item list, shop buy/sell row,
+trade item-pick, inspect equipment row. Mid-sentence callers
+(`Offering X to Y...`, shop success messages) stay on
+`getItemNameClean` — same boundary as spells.
+
 ## 1.7.245 — 2026-05-11
 
 ### Item-type icons in inventory/shop/equip/battle rows

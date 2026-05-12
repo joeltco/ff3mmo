@@ -23,6 +23,7 @@
 //   $0620-$06AF  Battle messages
 
 import { SPELL_NAMES_SHRINES } from './data/spells.js';
+import { ITEM_NAMES_SHRINES } from './data/items.js';
 
 // --- ROM offsets ---
 const PTR_TABLE = 0x030010;   // 1712 × 2-byte pointers
@@ -174,6 +175,29 @@ export function getItemNameWithIcon(itemId) {
   let s = 0;
   while (s < bytes.length && bytes[s] === 0xFF) s++;
   return s > 0 ? bytes.slice(s) : bytes;
+}
+
+/**
+ * Returns icon-prefixed Shrines short-name bytes for an item when one is
+ * registered in ITEM_NAMES_SHRINES; falls through to getItemNameWithIcon
+ * when no override exists (battle items without a clean Shrines pairing,
+ * unused IDs, etc.). The icon byte is taken from the ROM so the slot
+ * grouping stays correct even if the Shrines table is edited later.
+ * @param {number} itemId
+ * @returns {Uint8Array}
+ */
+export function getItemNameShrines(itemId) {
+  const override = ITEM_NAMES_SHRINES.get(itemId);
+  if (override == null) return getItemNameWithIcon(itemId);
+  const romBytes = getItemName(itemId);
+  const iconByte = (romBytes.length > 0 && ICON_TILES.has(romBytes[0])) ? romBytes[0] : null;
+  const letters = new Uint8Array(override.length);
+  for (let i = 0; i < override.length; i++) letters[i] = _asciiToTileByte(override[i]);
+  if (iconByte == null) return letters;
+  const out = new Uint8Array(letters.length + 1);
+  out[0] = iconByte;
+  out.set(letters, 1);
+  return out;
 }
 
 /**
