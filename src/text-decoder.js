@@ -74,6 +74,12 @@ for (let b = 0x5C; b <= 0x7B; b++) ICON_TILES.add(b);
 // in font-renderer.js#ARROW_TILE_BYTES.
 const ARROW_ITEM_IDS = new Set([0x4F, 0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56]);
 const ARROW_ICON_BYTE = 0x77;
+// Claw items (#01-#05) — share $64 with nunchaku (#06-#08) in the ROM.
+// The shared tile reads as two diagonal sticks (correct for nunchaku),
+// so claws are the ones that need a distinct glyph. A.W. Jackson's
+// claw tile lands at $76; nunchaku keeps $64.
+const CLAW_ITEM_IDS = new Set([0x01, 0x02, 0x03, 0x04, 0x05]);
+const CLAW_ICON_BYTE = 0x76;
 
 // ASCII → NES tile byte (lowercase / uppercase / digits / space). Anything
 // unknown falls through to space. Kept local so text-decoder stays free of
@@ -170,7 +176,9 @@ export function getItemNameWithIcon(itemId) {
   if (bytes.length === 0) return bytes;
   const hasIcon = ICON_TILES.has(bytes[0]);
   if (hasIcon) {
-    const iconByte = ARROW_ITEM_IDS.has(itemId) ? ARROW_ICON_BYTE : bytes[0];
+    let iconByte = bytes[0];
+    if (ARROW_ITEM_IDS.has(itemId)) iconByte = ARROW_ICON_BYTE;
+    else if (CLAW_ITEM_IDS.has(itemId)) iconByte = CLAW_ICON_BYTE;
     // Skip any padding spaces between icon and first letter
     let i = 1;
     while (i < bytes.length && bytes[i] === 0xFF) i++;
@@ -201,6 +209,7 @@ export function getItemNameShrines(itemId) {
   const romBytes = getItemName(itemId);
   let iconByte = (romBytes.length > 0 && ICON_TILES.has(romBytes[0])) ? romBytes[0] : null;
   if (ARROW_ITEM_IDS.has(itemId)) iconByte = ARROW_ICON_BYTE;
+  else if (CLAW_ITEM_IDS.has(itemId)) iconByte = CLAW_ICON_BYTE;
   const letters = new Uint8Array(override.length);
   for (let i = 0; i < override.length; i++) letters[i] = _asciiToTileByte(override[i]);
   if (iconByte == null) return letters;

@@ -34,15 +34,22 @@ export const TEXT_YELLOW  = [0x0F, 0x28, 0x18, 0x30]; // yellow on black
 let _fontPixels = null;  // Map<tileId, Uint8Array(64)>
 let _tileCache = null;   // Map<paletteKey, Map<tileId, HTMLCanvasElement>>
 
-// Arrow icon tile — sourced from the A.W. Jackson FF3 fan translation
-// (tile $F3 of that ROM, which has a distinct arrow glyph). Chaos Rush
-// + the JP original both render arrows with the bow icon at $6E, so
-// we drop the arrow tile into an unused icon slot ($77) and override
-// arrow item names to point at it. See getItemNameShrines.
+// Arrow + claw icon tiles — sourced from the A.W. Jackson FF3 fan
+// translation, which splits glyphs the original JP ROM (and Chaos Rush)
+// collapse into one. Arrows ($F3 in A.W.J.) share $6E with bows in
+// Chaos Rush; claws ($E6 in A.W.J.) share $64 with nunchaku. Both
+// tiles land at unused icon slots in the Chaos Rush font atlas and
+// the corresponding item IDs override their ROM icon byte in
+// text-decoder.js (ARROW_ITEM_IDS / CLAW_ITEM_IDS).
 const ARROW_TILE_ID = 0x77;
 const ARROW_TILE_BYTES = new Uint8Array([
   0x00, 0x60, 0x60, 0x10, 0x08, 0x06, 0x05, 0x02,
   0xff, 0xff, 0xdf, 0x8f, 0xe7, 0xf3, 0xf7, 0xfa,
+]);
+const CLAW_TILE_ID = 0x76;
+const CLAW_TILE_BYTES = new Uint8Array([
+  0x08, 0x24, 0x12, 0x48, 0x23, 0x17, 0x0e, 0x00,
+  0xff, 0xe7, 0xd3, 0xc9, 0xa2, 0xd4, 0xe0, 0xf1,
 ]);
 
 /**
@@ -60,6 +67,7 @@ export function initFont(romData) {
     _fontPixels.set(tileId, pixels);
   }
   _fontPixels.set(ARROW_TILE_ID, decodeTile(ARROW_TILE_BYTES, 0));
+  _fontPixels.set(CLAW_TILE_ID,  decodeTile(CLAW_TILE_BYTES,  0));
 }
 
 /**

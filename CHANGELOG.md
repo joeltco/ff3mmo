@@ -2,6 +2,10 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.279 — 2026-05-12
+
+- **Distinct claw icon for claw items.** Claws (#01-#05: Kaizer / Cat / Wyvern / Faerie / Hellish) share ROM byte `$64` with nunchaku (#06-#08) — the shared tile reads as two diagonal sticks, which is right for nunchaku but wrong for claws. Same pattern as v1.7.278's arrow fix: lifted A.W. Jackson's claw tile (their `$E6`), landed it at Chaos Rush slot `$76`, added `CLAW_ITEM_IDS` + `CLAW_ICON_BYTE` to `text-decoder.js`, override branches in both `getItemNameWithIcon` and `getItemNameShrines`. Nunchaku keeps `$64`.
+
 ## 1.7.278 — 2026-05-12
 
 - **Distinct arrow icon for arrow items.** Bows and arrows both use `$6E` in the original FF3 NES ROM (and in Chaos Rush) — the tile is a combined bow-with-arrow glyph, so arrows render with what reads as a bow icon. The A.W. Jackson translation gives arrows their own tile at `$F3`. Lifted those 16 bytes into `font-renderer.js#ARROW_TILE_BYTES`, installed at slot `$77` (unused in the Chaos Rush atlas). `text-decoder.js#ARROW_ITEM_IDS` (`0x4F-0x56`) now overrides the icon byte in both `getItemNameWithIcon` and `getItemNameShrines`, so inventory / shop / equip / battle-item / inspect / trade rows all show the new arrow glyph; bows keep `$6E`.
