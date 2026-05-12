@@ -2,6 +2,34 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.255 — 2026-05-12
+
+### EMU tab: diagnostic logger for FF1&2 ROM swap
+
+Wires the EMU tab's ROM-toggle path into `/api/client-error` so SSH-only
+sessions can diagnose the FF1&2 boot (devtools-less debugging). Three
+hook points POST to pm2 logs with the `[EMU DIAG …]` tag:
+
+1. `_logRomDiag(buffer, target, 'pre-init')` — iNES header (16 bytes),
+   magic, PRG/CHR bank counts, flag6/flag7 bit patterns, computed
+   mapper number. Fired the moment the ROM toggle is tapped, before
+   jsnes touches it.
+2. `_logRomDiag(buffer, target, 'post-init')` — same as above, plus
+   `jsnes_mapper_type`, `jsnes_mapper_supported`, `jsnes_prg_count`,
+   `jsnes_chr_count` (jsnes' resolved view of the same ROM). Fired
+   after `nes.loadROM()`.
+3. `onStatusUpdate` mirror — every jsnes internal status message
+   (the place a "mapper not supported" or banking error would surface)
+   echoes to pm2 alongside the existing console.log.
+
+Also a 3-second snapshot fires `host_frames`, PPU NMI-enabled flag,
+PPU display type, and `imgPalette[0]` (NES universal-background color)
+so we can tell whether the "gray" is jsnes-not-rendering or
+PPU-rendering-only-gray.
+
+Added `getFF12Raw()` export to `boot.js` for future console
+diagnostics, even though the EMU tab path doesn't need it.
+
 ## 1.7.254 — 2026-05-12
 
 ### EMU tab: ROM toggle (FF3 / FF1&2)

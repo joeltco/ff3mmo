@@ -120,7 +120,54 @@ function _switchRom(target) {
   if (dom?.frame) dom.frame.textContent = 'f0';
   currentRom = target;
   _refreshRomButtons();
+  _logRomDiag(rom, target, 'pre-init');
   _patchAndInit(rom, target);
+}
+
+// POST a snapshot of the ROM header + (when available) jsnes parse state
+// to /api/client-error so we can read it via SSH on prod (`pm2 logs
+// server`). Used to debug the FF1&2 toggle path where the browser is
+// remote and devtools aren't reachable.
+function _logRomDiag(buffer, target, phase) {
+  try {
+    const b = new Uint8Array(buffer);
+    const hdr = Array.from(b.slice(0, 16)).map(x => x.toString(16).padStart(2, '0')).join(' ');
+    const magic = String.fromCharCode(b[0], b[1], b[2]);
+    const magicOk = magic === 'NES' && b[3] === 0x1A;
+    const prgBanks = b[4];
+    const chrBanks = b[5];
+    const flags6 = b[6];
+    const flags7 = b[7];
+    const mapper = ((flags6 >> 4) | (flags7 & 0xF0));
+    const sizeKB = (b.length / 1024).toFixed(1);
+    const payload = {
+      msg: `[EMU DIAG ${phase}] ${target.toUpperCase()} ROM`,
+      ctx: {
+        bytes: b.length,
+        sizeKB,
+        ines_magic: magic + (b[3] === 0x1A ? '\\x1A' : '?'),
+        ines_ok: magicOk,
+        ines_header: hdr,
+        prg_banks_16k: prgBanks,
+        chr_banks_8k: chrBanks,
+        flags6_bin: flags6.toString(2).padStart(8, '0'),
+        flags7_bin: flags7.toString(2).padStart(8, '0'),
+        mapper,
+        battery: !!(flags6 & 0x02),
+        trainer: !!(flags6 & 0x04),
+        four_screen: !!(flags6 & 0x08),
+      },
+    };
+    if (nes?.rom) {
+      payload.ctx.jsnes_mapper_type = nes.rom.mapperType;
+      payload.ctx.jsnes_mapper_supported = typeof nes.rom.mapperSupported === 'function' ? nes.rom.mapperSupported() : null;
+      payload.ctx.jsnes_prg_count = nes.rom.romCount;
+      payload.ctx.jsnes_chr_count = nes.rom.vromCount;
+    }
+    fetch('/api/client-error', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).catch(() => {});
+  } catch (e) {
+    fetch('/api/client-error', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ msg: '[EMU DIAG] dump-threw: ' + e.message }) }).catch(() => {});
+  }
 }
 
 // Highlight the active ROM button gold; dim the other.
@@ -186,7 +233,15 @@ function _initEmulator(romBuffer) {
     nes = new window.jsnes.NES({
       onFrame: _onFrame,
       onAudioSample: _onAudioSample,
-      onStatusUpdate: (s) => { console.log('[jsnes]', s); _status('jsnes: ' + s); },
+      onStatusUpdate: (s) => {
+        console.log('[jsnes]', s);
+        _status('jsnes: ' + s);
+        // Mirror every jsnes status to pm2 logs so SSH-only sessions can
+        // see them. Mapper errors / banking failures come through here.
+        try {
+          fetch('/api/client-error', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ msg: '[EMU DIAG jsnes] ' + s, ctx: { rom: currentRom } }) }).catch(() => {});
+        } catch (_) { /* ignore */ }
+      },
       onBatteryRamWrite: _onBatteryRamWriteSfx,
       sampleRate: 44100,
     });
@@ -208,14 +263,42 @@ function _initEmulator(romBuffer) {
   const prgCount = nes.rom?.romCount;
   const chrCount = nes.rom?.vromCount;
   _status(`ROM ok — mapper ${mapper}, PRG ${prgCount}×16KB, CHR ${chrCount}×8KB. Starting…`);
+  // Post-init diag dump so we see jsnes' resolved view alongside the
+  // raw header. Visible via `pm2 logs server` on prod.
+  _logRomDiag(romBuffer, currentRom, 'post-init');
 
   frameCount = 0;
   _start();
 
   // If no frame renders within 500ms, report it.
   setTimeout(() => {
-    if (frameCount === 0 && running) _status('no frames after 500ms — jsnes may be stuck', true);
+    if (frameCount === 0 && running) {
+      _status('no frames after 500ms — jsnes may be stuck', true);
+      fetch('/api/client-error', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ msg: '[EMU DIAG] stuck — no frames @ 500ms', ctx: { rom: currentRom } }) }).catch(() => {});
+    }
   }, 500);
+  // Also fire a 3-second snapshot so we can see if jsnes recovered from
+  // a slow start vs is stuck on a gray boot screen.
+  setTimeout(() => {
+    if (!nes) return;
+    const ppuCtrl = nes.ppu?.f_nmiOnVblank;
+    const ppuMask = nes.ppu?.f_dispType;
+    const ppuFrame = nes.ppu?.frameCounter ?? frameCount;
+    fetch('/api/client-error', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+      msg: '[EMU DIAG] 3s snapshot',
+      ctx: {
+        rom: currentRom,
+        host_frames: frameCount,
+        running,
+        ppu_nmi_enabled: ppuCtrl,
+        ppu_disp_type: ppuMask,
+        ppu_frame: ppuFrame,
+        // jsnes mirror palette[0] = universal BG — if everything's gray
+        // it's likely $30 (light gray) or $00 (dark gray).
+        ppu_bg_color_$3F00: nes.ppu?.imgPalette?.[0],
+      }
+    }) }).catch(() => {});
+  }, 3000);
 }
 
 function _onFrame(buffer) {

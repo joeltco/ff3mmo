@@ -28,6 +28,10 @@ import { initSpellAnim } from './spell-anim.js';
 const TITLE_FADE_MAX = 4;
 
 let ff12Raw = null;       // FF1&2 ROM — Adamantoise sprite + FF1 music
+
+// Accessor for diagnostics + the EMU tab's FF1&2 toggle. Returns null
+// until loadFF12ROM has been called.
+export function getFF12Raw() { return ff12Raw; }
 export let romRaw = null; // Primary FF3 ROM — live binding: also consumed by job-sprites.js after init
 
 export function initSpriteAssets(rom) {
