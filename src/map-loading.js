@@ -16,6 +16,7 @@ import { mapSt } from './map-state.js';
 import { battleSt } from './battle-state.js';
 import { applyPassage, triggerWipe } from './map-triggers.js';
 import { ps } from './player-stats.js';
+import { saveSlotsToDB } from './save-state.js';
 
 const TILE_SIZE = 16;
 
@@ -210,10 +211,18 @@ export function setupTopBox(mapId, isWorldMap) {
 export function loadMapById(mapId, returnX, returnY) {
   mapSt.onWorldMap = false;
   setupTopBox(mapId, false);
-  if (mapId >= 1000) { _loadDungeonFloor(mapId, returnX, returnY); return; }
-  // Leaving dungeon → respawn the boss next time we re-enter.
-  battleSt.enemyDefeated = false;
-  _loadRegularMap(mapId, returnX, returnY);
+  if (mapId >= 1000) { _loadDungeonFloor(mapId, returnX, returnY); }
+  else {
+    // Leaving dungeon → respawn the boss next time we re-enter.
+    battleSt.enemyDefeated = false;
+    _loadRegularMap(mapId, returnX, returnY);
+  }
+  // Save the new map + player coords so a tab close while inside a town /
+  // dungeon (e.g., quitting from a shop) doesn't fall back to the last
+  // overworld save. The save is gated on `psAligned` inside
+  // `saveSlotsToDB`, so the startup-time `loadMapById` call (before
+  // setPsAligned(true)) is a no-op.
+  saveSlotsToDB();
 }
 
 function _landOnWorldMap(tileX, tileY) {
@@ -243,6 +252,7 @@ export function loadWorldMapAt(trigId) {
   const tileX = pos ? pos.x : 0;
   const tileY = pos ? pos.y : 0;
   _landOnWorldMap(tileX, tileY);
+  saveSlotsToDB();
 }
 
 export function loadWorldMapAtPosition(tileX, tileY) {
@@ -254,6 +264,7 @@ export function loadWorldMapAtPosition(tileX, tileY) {
   mapSt.mapData = null;
   setupTopBox(0, true);
   _landOnWorldMap(tileX, tileY);
+  saveSlotsToDB();
 }
 
 // Wipe-and-respawn after a player KO. Single chokepoint for the post-death

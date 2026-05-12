@@ -453,7 +453,13 @@ export function drawShop() {
   // the lower half only when we're inside those states.
   const s = shopSt.state;
   const fadeStep = _innerTextFadeStep();
-  _drawShopkeeper(ctx, KEEPER_X, KEEPER_Y, fadeStep);
+  // Keeper sprite only fades on the outer shop-in / shop-out transitions
+  // (matches the bordered-box fade). Intra-shop menu sub-fades
+  // (menu-in / menu-out / buy-in / sell-in / etc.) leave the keeper at
+  // full saturation so it doesn't flicker every time the user picks
+  // Buy / Sell.
+  const keeperFade = (s === 'shop-in' || s === 'shop-out') ? fadeStep : 0;
+  _drawShopkeeper(ctx, KEEPER_X, KEEPER_Y, keeperFade);
   _drawGil(ctx, fadeStep);
   // Menu dimmed when the list owns the cursor; full brightness in idle.
   // While the qty selector is up, the Buy/Sell/Exit text is suppressed

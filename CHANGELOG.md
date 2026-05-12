@@ -2,6 +2,29 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.261 — 2026-05-12
+
+### Save on map transitions + scope shopkeeper fade to shop-in/-out only
+
+Two fixes:
+
+1. **Quitting from a shop no longer respawns on the overworld.** Map
+   transitions weren't writing the save — only chest opens / pond
+   heals / battle ends / shop purchases / explicit save commands.
+   So entering a town silently kept the old (world-map) save, and a
+   tab close before any savepoint persisted that stale state.
+   Added `saveSlotsToDB()` to the end of `loadMapById`,
+   `loadWorldMapAt`, and `loadWorldMapAtPosition`. The startup-time
+   load call is a no-op because `psAligned` is still false; runtime
+   transitions persist properly.
+2. **Shopkeeper sprite no longer flickers between menu states.**
+   v1.7.258 wired the keeper into the same `fadeStep` as the menu
+   text, which meant every intra-shop transition (menu → buy,
+   buy → menu, etc.) faded the sprite alongside the text. The
+   keeper is part of the shop "set", not the menu text, so only
+   the outer `shop-in / shop-out` transitions fade it now — every
+   intra-shop sub-fade leaves the keeper at full saturation.
+
 ## 1.7.260 — 2026-05-12
 
 ### Shop quantity selector in the right column (replaces blue confirm)
