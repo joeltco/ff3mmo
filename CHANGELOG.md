@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.271 — 2026-05-12
+
+### FF1 white-magic-shop keeper (lights up Ur magic shop)
+
+Fourth keeper. 13 tiles ($1D–$29 in shop CHR; +28 additive over weapon
+per FF1 `lut_ShopkeepAdditive`, since white-magic is FF1 shop type 2).
+Captured via SNAP BG on standalone FF1 USA ROM, frame 9257. Palette
+verified against PPU BG0 = matches `SHOP_PALETTES['white-magic']`.
+
+`FF3MMO_TO_FF1.magic = 'white-magic'`, so Ur's magic shop (Cure /
+Poisona / Sight) now displays this keeper.
+
+Item-shop keeper still pending capture.
+
 ## 1.7.270 — 2026-05-12
 
 ### FF1 black-magic-shop keeper (staged for future bmagic shop type)
