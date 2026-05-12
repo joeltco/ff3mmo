@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.272 — 2026-05-12
+
+### FF1 item-shop keeper (all four Ur shops now lit)
+
+Last keeper. 13 tiles ($55–$61 in shop CHR; +84 additive over weapon
+per FF1 `lut_ShopkeepAdditive`, since item is FF1 shop type 6).
+Captured via SNAP BG on standalone FF1 USA ROM, frame 10912. Palette
+verified against PPU BG0 = matches `SHOP_PALETTES.item`.
+
+All four of Ur's shops now render their keepers (weapon / armor /
+item / magic). Black-magic keeper is still staged for a future bmagic
+shop type. Clinic / inn / caravan keepers from FF1's full 8-type set
+aren't captured — those shop types don't exist in ff3mmo yet.
+
 ## 1.7.271 — 2026-05-12
 
 ### FF1 white-magic-shop keeper (lights up Ur magic shop)
