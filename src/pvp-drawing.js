@@ -19,6 +19,7 @@ import { pvpGridLayout, PVP_CELL_W, PVP_CELL_H } from './pvp-math.js';
 import { bsc, getSlashFramesForWeapon } from './battle-sprite-cache.js';
 import { drawSlashOverlay, SLASH_FRAMES } from './slash-effects.js';
 import { isWeapon, weaponSubtype } from './data/items.js';
+import { isLeftHandHit } from './battle-math.js';
 import { pickAttackPoseKey, pickAttackWeaponSpec, attackWeaponLayer, pickCombatantBody, IDLE_FRAME_MS } from './combatant-pose.js';
 import { drawCastWindup } from './combatant-cast.js';
 import { CAST_PHASE_MS_HEAL } from './cast-anim.js';
@@ -175,16 +176,13 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   // Which hand is this enemy using right now?
   // Even hit index = right hand, odd = left hand (if dual-wielding)
   const isAttackState = isThisAttacking && (bs === 'enemy-attack' || bs === 'pvp-enemy-slash' || bs === 'ally-hit');
-  // Hand selection: dual or unarmed → first half right-hand, second half
-  // left-hand (RRLL pattern, v1.7.273); single weapon → that hand only.
-  // Drives off isThisAttacking (not isMain) so PVP enemy allies use the
-  // same split.
+  // Hand selection — RRLL via `isLeftHandHit` (single source). Drives
+  // off isThisAttacking (not isMain) so PVP enemy allies use the same
+  // split as the lead enemy.
   const eRw = enemy && isWeapon(enemy.weaponId);
   const eLw = enemy && isWeapon(enemy.weaponL);
-  const altByHit = (eRw && eLw) || (!eRw && !eLw);
   const _enemyTotalHits = pvpSt.pvpEnemyHitResults ? pvpSt.pvpEnemyHitResults.length : 0;
-  const _enemyRHandHits = _enemyTotalHits >> 1;
-  const _altIsL = altByHit ? (pvpSt.pvpEnemyHitIdx >= _enemyRHandHits) : !eRw;
+  const _altIsL = isLeftHandHit(pvpSt.pvpEnemyHitIdx, _enemyTotalHits, eRw, eLw);
   const isLeftHandWind = isThisAttacking && bs === 'pvp-second-windup' && _altIsL;
   const isLeftHandAtk  = isThisAttacking && isAttackState && _altIsL;
   const activeWeaponId = (isLeftHandWind || isLeftHandAtk)

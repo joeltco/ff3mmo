@@ -2,6 +2,32 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.274 — 2026-05-12
+
+### Modularize hand-selection for dual-strike combos
+
+v1.7.273 fixed the RRLL pattern by duplicating the same
+`(rW && lW) || (!rW && !lW) → hitIdx < total>>1` shape across six
+sites. Pulled into a single helper in `battle-math.js`:
+
+```js
+isRightHandHit(hitIdx, totalHits, rW, lW)
+isLeftHandHit(hitIdx, totalHits, rW, lW)
+```
+
+Pure math — booleans in, boolean out, no dependency on `items.js` /
+`isWeapon`. Callers:
+
+- `player-stats.js#isHitRightHand` (unarmed + dual-weapon)
+- `battle-ally.js` (windup hand-select + post-hit advance)
+- `battle-draw-allies.js` (upcoming-hand display)
+- `pvp.js` (PVP enemy combat hand-select)
+- `pvp-drawing.js` (PVP enemy sprite pose)
+
+Behavior unchanged from v1.7.273; the formula now lives in one place
+and the next combat path that needs hand selection just imports the
+helper.
+
 ## 1.7.273 — 2026-05-12
 
 ### Dual-strike attacks are RRLL across all combatants

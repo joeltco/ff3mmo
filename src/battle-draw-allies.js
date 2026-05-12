@@ -13,6 +13,7 @@ import { nesColorFade } from './palette.js';
 import { _dmgBounceY } from './data/animation-tables.js';
 import { DMG_NUM_PAL, HEAL_NUM_PAL, drawDmgPopup, getAllyDamageNums } from './damage-numbers.js';
 import { weaponSubtype, isWeapon } from './data/items.js';
+import { isLeftHandHit } from './battle-math.js';
 import { pickAttackPoseKey, pickAttackWeaponSpec, attackWeaponLayer, pickCombatantBody } from './combatant-pose.js';
 import { inputSt } from './input-handler.js';
 import { bsc, getSlashFramesForWeapon } from './battle-sprite-cache.js';
@@ -155,11 +156,9 @@ function _drawAllyPortrait(i, ally, isVicPose, isAllyAttack, isAllyHit, isNearFa
   // Inter-hit hand-change gap: during ally-attack-back after hit 0, if the upcoming hand differs
   // from the previous hit's hand, hold idle pose so R↔L transitions read as separate strikes.
   const _allyRw = isWeapon(ally.weaponId), _allyLw = isWeapon(ally.weaponL);
-  const _allyDualOrUnarmed = (_allyRw && _allyLw) || (!_allyRw && !_allyLw);
-  // RRLL pattern (v1.7.273): mirror the ally-update hand selection.
+  // Mirror the ally-update hand selection (RRLL via `isLeftHandHit`).
   const _allyTotalHits = battleSt.allyHitResults ? battleSt.allyHitResults.length : 0;
-  const _allyRHandHits = _allyTotalHits >> 1;
-  const _allyUpcomingLeft = _allyDualOrUnarmed ? (battleSt.allyHitIdx >= _allyRHandHits) : !_allyRw;
+  const _allyUpcomingLeft = isLeftHandHit(battleSt.allyHitIdx, _allyTotalHits, _allyRw, _allyLw);
   const allyHandChangeGap = battleSt.battleState === 'ally-attack-back' && battleSt.allyHitIdx > 0 &&
     battleSt.allyHitIsLeft !== _allyUpcomingLeft && battleSt.currentAllyAttacker === i;
   // WM caster pose during ally-magic-cast / ally-magic-hit — same arm-up pose as

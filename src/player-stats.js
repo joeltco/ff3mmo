@@ -3,7 +3,7 @@
 import { buildExpTable, JOBS, jobLevelStatBonus } from './data/jobs.js';
 import { computeJobStats, getJobLevelDelta } from './data/players.js';
 import { ITEMS, isWeapon } from './data/items.js';
-import { BASE_HIT_RATE, calcAttackerAtk } from './battle-math.js';
+import { BASE_HIT_RATE, calcAttackerAtk, isRightHandHit } from './battle-math.js';
 import { createStatusState } from './status-effects.js';
 
 // Mutable player state — replaces the scattered globals in game.js
@@ -170,18 +170,13 @@ export function getHitWeapon(hitIdx, rHandHitCount = 0) {
 }
 
 export function isHitRightHand(hitIdx, rHandHitCount = 0) {
+  // `rHandHitCount` is the input-handler-provided split point (= total / 2
+  // for dual/unarmed). v1.7.274 delegates to the shared
+  // `isRightHandHit` helper — `totalHits = rHandHitCount * 2` reconstructs
+  // the combo length the helper expects.
   const rW = isWeapon(ps.weaponR);
   const lW = isWeapon(ps.weaponL);
-  // RRLL pattern: dual weapons OR dual fists (unarmed) both split the
-  // combo with all right-hand strikes first, then all left. Matches the
-  // input-handler's hitResults order (`[...rHits, ...lHits]`) and the
-  // canon NES Monk attack flow. v1.7.273 — previously unarmed alternated
-  // per hit, which the user reported as visually wrong (a 4-hit fist
-  // combo was reading RLRL instead of RRLL).
-  const dualHits = (rW && lW) || (!rW && !lW);
-  if (dualHits && rHandHitCount > 0) return hitIdx < rHandHitCount;
-  if (rW || lW) return rW; // single weapon hand
-  return true; // unarmed with no rHandHitCount provided — default to right
+  return isRightHandHit(hitIdx, rHandHitCount * 2, rW, lW);
 }
 
 export function initPlayerStats(romData) {

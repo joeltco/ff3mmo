@@ -94,6 +94,26 @@ export function calcPotentialHits(level, agi, dualWield, hasted = false) {
   return n;
 }
 
+// Which hand owns the `hitIdx`th hit in a combo. v1.7.273 standardized
+// on RRLL across player / ally / PVP-enemy: first half right, second
+// half left. Single-weapon callers fall through to the equipped hand.
+// Inputs are booleans rather than weapon IDs so the helper stays free
+// of `isWeapon` / `ITEMS` dependencies.
+//   hitIdx     — current hit index (0-based)
+//   totalHits  — full length of the combo (e.g., hitResults.length)
+//   rW / lW    — true if the corresponding hand has a weapon
+//                (both false = unarmed dual fists, both true = dual wield)
+// Returns true for right-hand. `isLeftHandHit` is the boolean complement.
+export function isRightHandHit(hitIdx, totalHits, rW, lW) {
+  const dualOrUnarmed = (rW && lW) || (!rW && !lW);
+  if (dualOrUnarmed) return hitIdx < (totalHits >> 1);
+  return !!rW;
+}
+
+export function isLeftHandHit(hitIdx, totalHits, rW, lW) {
+  return !isRightHandHit(hitIdx, totalHits, rW, lW);
+}
+
 // Roll per-hit results for player/ally/PVP attacks.
 // opts.shieldEvade: % chance to block per hit (0 = no shield)
 // opts.evade: % chance to dodge per hit (0 = no armor evade)

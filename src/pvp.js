@@ -10,7 +10,7 @@ import { resetBattleVars, isTeamWiped, updateBattleTimers, updatePoisonTick,
          updateBattlePlayerAttack, updateBattleDefendItem, updateBattleEndSequence,
          tryJoinPlayerAlly, advancePVPTargetOrVictory } from './battle-update.js';
 import { playSFX, stopSFX, SFX, pauseMusic, playTrack, TRACKS } from './music.js';
-import { rollHits, calcPotentialHits, BOSS_HIT_RATE, GOBLIN_HIT_RATE, summarizeHits } from './battle-math.js';
+import { rollHits, calcPotentialHits, BOSS_HIT_RATE, GOBLIN_HIT_RATE, summarizeHits, isLeftHandHit } from './battle-math.js';
 import { ITEMS, isWeapon, weaponSubtype } from './data/items.js';
 import { PLAYER_POOL, generateAllyStats } from './data/players.js';
 import { JOBS } from './data/jobs.js';
@@ -904,14 +904,11 @@ function _processPVPSecondWindup() {
   const attackerStats = pvpSt.pvpCurrentEnemyAllyIdx >= 0
     ? pvpSt.pvpEnemyAllies[pvpSt.pvpCurrentEnemyAllyIdx]
     : pvpSt.pvpOpponentStats;
-  // Hand selection: dual or unarmed → first half right-hand, second half
-  // left-hand (RRLL pattern, v1.7.273). Single weapon → that hand only.
+  // Hand selection — RRLL pattern via `isLeftHandHit` (single source).
   const rW = attackerStats && isWeapon(attackerStats.weaponId);
   const lW = attackerStats && isWeapon(attackerStats.weaponL);
-  const dualOrUnarmed = (rW && lW) || (!rW && !lW);
   const totalHits = pvpSt.pvpEnemyHitResults ? pvpSt.pvpEnemyHitResults.length : 0;
-  const rHandHits = totalHits >> 1;
-  const isLeftHit = dualOrUnarmed ? (pvpSt.pvpEnemyHitIdx >= rHandHits) : !rW;
+  const isLeftHit = isLeftHandHit(pvpSt.pvpEnemyHitIdx, totalHits, rW, lW);
   const wId = isLeftHit ? (attackerStats ? attackerStats.weaponL : null) : (attackerStats ? attackerStats.weaponId : null);
   if (wId != null) playSlashSFX(wId, hit && hit.crit); else playSFX(SFX.ATTACK_HIT);
   resetSlashScatterCache();

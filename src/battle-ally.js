@@ -3,7 +3,7 @@
 import { battleSt, getEnemyHP, BATTLE_SHAKE_MS, BATTLE_DMG_SHOW_MS } from './battle-state.js';
 import { playSlashSFX } from './battle-sfx.js';
 import { resetSlashScatterCache, shouldDrawSlash, SWING_HOLD_MS } from './slash-effects.js';
-import { summarizeHits } from './battle-math.js';
+import { summarizeHits, isLeftHandHit } from './battle-math.js';
 import { applyPhysicalHitToEnemy } from './physical-attack.js';
 import { isWeapon } from './data/items.js';
 import { SFX, playSFX } from './music.js';
@@ -85,13 +85,12 @@ function _updateAllyAttack() {
     const rW = isWeapon(allyNow.weaponId);
     const lW = isWeapon(allyNow.weaponL);
     const allyUnarmed = !rW && !lW;
-    const dualOrUnarmed = (rW && lW) || allyUnarmed;
     // Pre-compute the upcoming hand so we can detect a hand change before committing to it.
-    // RRLL pattern (v1.7.273): first half of dual-wield / dual-fist
-    // strikes are right-hand, second half are left.
+    // `isLeftHandHit` encodes the RRLL pattern (v1.7.273): first half
+    // of the combo is right-hand, second half left. Single-weapon
+    // attackers always strike with the equipped hand.
     const totalHits = battleSt.allyHitResults ? battleSt.allyHitResults.length : 0;
-    const allyRHandHits = totalHits >> 1;  // floor(total / 2)
-    const willBeLeft = dualOrUnarmed ? (battleSt.allyHitIdx >= allyRHandHits) : !rW;
+    const willBeLeft = isLeftHandHit(battleSt.allyHitIdx, totalHits, rW, lW);
     const handChange = battleSt.allyHitIdx > 0 && battleSt.allyHitIsLeft !== willBeLeft;
     const delay = handChange ? IDLE_FRAME_MS
                 : (allyUnarmed ? 0 : (battleSt.allyHitIdx === 0 ? ALLY_BACK_MS : ALLY_COMBO_PAUSE_MS));
@@ -145,12 +144,8 @@ function _updateAllyAttack() {
         const nextAlly = battleSt.battleAllies[battleSt.currentAllyAttacker];
         const nrW = nextAlly && isWeapon(nextAlly.weaponId);
         const nlW = nextAlly && isWeapon(nextAlly.weaponL);
-        const nextDualOrUnarmed = (nrW && nlW) || (!nrW && !nlW);
-        const nextTotal = battleSt.allyHitResults.length;
-        const nextRHandHits = nextTotal >> 1;
-        battleSt.allyHitIsLeft = nextDualOrUnarmed
-          ? (battleSt.allyHitIdx >= nextRHandHits)
-          : !nrW;
+        battleSt.allyHitIsLeft = isLeftHandHit(
+          battleSt.allyHitIdx, battleSt.allyHitResults.length, nrW, nlW);
         battleSt.battleState = 'ally-attack-back';
         battleSt.battleTimer = 0;
       } else {
