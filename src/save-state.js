@@ -58,11 +58,18 @@ export async function saveSlotsToDB() {
     slot.cp = ps.cp;
     slot.statusMask = ps.status ? ps.status.mask : 0;
     slot.statusPoisonTick = ps.status ? (ps.status.poisonDmgTick || 0) : 0;
+    // Position getter can return null to mean "don't touch position
+    // fields this save" — used while a shop panel is open so the
+    // counter-tile location doesn't outrank the player's last safe
+    // checkpoint (loadMapById on town entry / loadWorldMapAt on gate /
+    // battle end). Inventory + gil from the purchase still persist.
     const pos = _getPosition();
-    slot.worldX = pos.worldX;
-    slot.worldY = pos.worldY;
-    slot.onWorldMap = pos.onWorldMap;
-    slot.currentMapId = pos.currentMapId;
+    if (pos) {
+      slot.worldX = pos.worldX;
+      slot.worldY = pos.worldY;
+      slot.onWorldMap = pos.onWorldMap;
+      slot.currentMapId = pos.currentMapId;
+    }
     slot.lastTown = ps.lastTown;
     slot.lastWorldExitX = ps.lastWorldExitX;
     slot.lastWorldExitY = ps.lastWorldExitY;

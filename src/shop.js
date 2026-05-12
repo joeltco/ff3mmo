@@ -466,7 +466,10 @@ export function drawShop() {
   // Buy / Sell.
   const keeperFade = (s === 'shop-in' || s === 'shop-out') ? fadeStep : 0;
   _drawShopkeeper(ctx, KEEPER_X, KEEPER_Y, keeperFade);
-  _drawGil(ctx, fadeStep);
+  // Gil text uses the same gray-tween as the menu so the whole right
+  // column (keeper + Gil + Buy/Sell/Exit) behaves as one piece. No
+  // flash-to-black on Buy / Sell selection.
+  _drawGil(ctx, _menuFadeStep(s, fadeStep));
   // Menu palette: bright in 'menu' state, gray when the buy/sell list
   // has focus, and tweens between the two during menu-out / menu-in.
   // Never goes through black on intra-shop transitions — see

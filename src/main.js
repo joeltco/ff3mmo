@@ -24,6 +24,7 @@ import { pauseSt, initPauseMenuInput } from './pause-menu.js';
 import { transSt } from './transitions.js';
 import { initInputHandler, initKeyboardListeners } from './input-handler.js';
 import { initPVPSearch } from './pvp-search.js';
+import { shopSt } from './shop.js';
 import { setPlayerSprite } from './player-sprite.js';
 import { startPVPBattle } from './pvp.js';
 import { initMapLoading, loadMapById } from './map-loading.js';
@@ -44,7 +45,18 @@ const CANVAS_W = 256;          // 16 metatiles wide (NES resolution)
 const CANVAS_H = 240;          // 15 metatiles tall (NES resolution)
 
 export function init() {
-  setPositionGetter(() => ({ worldX: mapSt.worldX, worldY: mapSt.worldY, onWorldMap: mapSt.onWorldMap, currentMapId: mapSt.currentMapId }));
+  // Return null while a shop is up so saveSlotsToDB skips position writes.
+  // The player's `mapSt.worldX/Y` during a shop is the tile in front of
+  // the counter — saving that makes a tab close mid-shop persist the
+  // counter position, which is sticky across overworld exits (since
+  // overworld walks don't save per-step). Letting the position writes
+  // pause while the shop is open keeps the last "safe" save
+  // (loadMapById on town entry, loadWorldMapAt on gate, battle end,
+  // etc.) as the respawn point.
+  setPositionGetter(() => {
+    if (shopSt.state !== 'closed') return null;
+    return { worldX: mapSt.worldX, worldY: mapSt.worldY, onWorldMap: mapSt.onWorldMap, currentMapId: mapSt.currentMapId };
+  });
   setLocationGetter(() => ({ onWorldMap: mapSt.onWorldMap, currentMapId: mapSt.currentMapId }));
   const canvas = document.getElementById('game-canvas');
   const ctx = canvas.getContext('2d');

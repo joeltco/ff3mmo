@@ -2,6 +2,35 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.266 — 2026-05-12
+
+### Gil also dims (no flash) + don't save in-shop position
+
+Two more fixes off the same complaint chain.
+
+1. **Gil text** was still using the full inner fade step, so on
+   Buy / Sell selection it flashed to black with the rest of the
+   panel. Now uses the same `_menuFadeStep` tween — Gil dims to gray
+   alongside the menu, then back to bright. The whole right column
+   (keeper, Gil, menu) moves as a single piece.
+2. **Quitting mid-shop respawned at the counter tile** (NES Ur is in
+   a desert region, so walking out of that respawn dropped the
+   player straight into desert overworld — looked like the game
+   teleported them). Root cause: `_attemptBuy` / `_attemptSell`
+   trigger `saveSlotsToDB()` after each purchase, and the save was
+   happily persisting the counter-tile coords. Reload then put the
+   player on the counter and walking south through Ur's gate left
+   them on the surrounding desert overworld.
+
+   Fix: `setPositionGetter` in `main.js` now returns `null` while
+   `shopSt.state !== 'closed'`. `saveSlotsToDB` interprets a null
+   position getter as "don't touch position fields this save" — so
+   inventory + gil still persist, but the slot's `worldX / worldY /
+   onWorldMap / currentMapId` stay pinned to whatever the last
+   pre-shop save wrote (`loadMapById` on town entry, etc.). Quitting
+   mid-shop now respawns at the town entrance, not the counter, and
+   exits don't dump the player into the desert.
+
 ## 1.7.265 — 2026-05-12
 
 ### Buy/Sell/Exit dims to gray (not black) when list has focus
