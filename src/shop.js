@@ -18,7 +18,9 @@ import { _makeFadedPal } from './palette.js';
 import { _nameToBytes } from './text-utils.js';
 import { getItemNameClean, getItemNameShrines, getSpellNameClean, getSpellNameShrines } from './text-decoder.js';
 import { ITEMS } from './data/items.js';
-import { SHOPS } from './data/shops.js';
+import { SHOPS, getShopType } from './data/shops.js';
+import { getShopSprite } from './data/shop-sprites.js';
+import { decodeTile, drawTile } from './tile-decoder.js';
 import { SPELLS, getSpellBuyPrice, canLearnSpell } from './data/spells.js';
 import { ps, grantGil, spendGil } from './player-stats.js';
 import { addItem, removeItem, playerInventory } from './inventory.js';
@@ -395,6 +397,16 @@ export function drawShop() {
   else if (s === 'sell' || s === 'sell-in' || s === 'sell-out')
     _drawList(ctx, shopSt.sellList, /*isSell*/true);
 
+  // FF1-style shopkeeper sprite — drawn over the menu/list. Currently a
+  // no-op for every shop type because `data/shop-sprites.js` has no
+  // entries yet (captures pending from FF1&2 ROM); the call site lights
+  // up the moment any shop type lands tile bytes. Position will likely
+  // need to move (Gil row currently sits at y=10, this draws over it)
+  // once we see real frames.
+  if (s !== 'shop-in' && s !== 'shop-out') {
+    _drawShopkeeper(ctx, HUD_VIEW_X + 8, HUD_VIEW_Y + 8);
+  }
+
   ctx.restore();
 
   // Confirm overlay — only show in idle, never during fades
@@ -417,6 +429,25 @@ function _drawGil(ctx, fadeStep) {
   const val = _nameToBytes(String(ps.gil));
   drawText(ctx, HUD_VIEW_X + 16, HUD_VIEW_Y + 10, lbl, pal);
   drawText(ctx, HUD_VIEW_X + HUD_VIEW_W - 16 - measureText(val), HUD_VIEW_Y + 10, val, pal);
+}
+
+// FF1-style shopkeeper sprite — 2×3 tiles (16×24 px) drawn at the top of
+// the shop panel. Lookup is keyed by shop type ('weapon'|'armor'|'item'|
+// 'magic'); no-ops when sprite data hasn't been captured yet for the
+// active type, so adding entries to `data/shop-sprites.js` lights this
+// up incrementally without further wiring.
+function _drawShopkeeper(ctx, originX, originY) {
+  const sprite = getShopSprite(getShopType(shopSt.shopId));
+  if (!sprite || !sprite.tiles || sprite.tiles.length < 96) return;
+  const pal = sprite.palette;
+  if (!pal || pal.length < 4) return;
+  for (let row = 0; row < 3; row++) {
+    for (let col = 0; col < 2; col++) {
+      const tileIdx = row * 2 + col;
+      const pixels = decodeTile(sprite.tiles, tileIdx * 16);
+      drawTile(ctx, pixels, pal, originX + col * 8, originY + row * 8);
+    }
+  }
 }
 
 function _drawRootMenu(ctx) {

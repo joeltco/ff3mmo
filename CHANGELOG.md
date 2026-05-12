@@ -2,6 +2,35 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.252 — 2026-05-12
+
+### FF1 shopkeeper scaffolding (data + dispatch, no sprites yet)
+
+Lays the wiring for FF1-style shop NPCs. No visible change yet —
+captures from the FF1&2 ROM are pending and the
+`SHOP_SPRITES` Map is empty, so every shop type falls through the
+guard and renders nothing.
+
+- `data/shops.js`: each shop entry tagged with `type:` ('weapon',
+  'armor', 'item', 'magic'). `getShopType(shopId)` resolves the tag
+  with a shape-based fallback for unaffixed legacy entries.
+- `data/shop-sprites.js` (new): `Map<type, {tiles, palette}>` keyed by
+  shop type. 6 tiles × 16 bytes per shopkeeper (2×3, 16×24 px),
+  4-color subpalette. Empty for now; each new entry lights up the
+  matching shop type with no further wiring.
+- `shop.js`: `_drawShopkeeper(ctx, x, y)` reads the active shop type,
+  decodes the 6 tiles via the existing `tile-decoder.js` primitives
+  (`decodeTile` + `drawTile`), and paints the 2×3 cluster. Hooked into
+  `drawShop()` at `(HUD_VIEW_X + 8, HUD_VIEW_Y + 8)`. Position will
+  likely need to move once we see the first real frame against the
+  current Gil row at y=10.
+
+Capture path: the in-game EMU tab is hardcoded for the FF3 ROM
+(`ctx.getFF3Buffer`). Lighting this up means either extending it to
+also accept `ff12Raw` from `boot.js` or running the FF1&2 ROM in an
+external emulator (FCEUX/Mesen) and pasting the OAM-dumped tile bytes
+into `SHOP_SPRITES`.
+
 ## 1.7.251 — 2026-05-12
 
 ### Pause magic list scrolls now
