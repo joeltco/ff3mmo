@@ -209,6 +209,21 @@ export function setupTopBox(mapId, isWorldMap) {
 }
 
 export function loadMapById(mapId, returnX, returnY) {
+  // Entering a town / dungeon FROM overworld? Capture the entrance tile
+  // before flipping `mapSt.onWorldMap`, so:
+  //   1. `ps.lastWorldExitX/Y` (death respawn point) updates to the
+  //      entrance tile. Dying inside the Altar Cave then dumps the
+  //      player back at the cave entrance on overworld, not at the
+  //      last town gate they walked through.
+  //   2. The `saveSlotsToDB` here fires while `onWorldMap` is still
+  //      true, so the position getter (v1.7.268, overworld-only) accepts
+  //      and writes the entrance into the slot. Logging out inside the
+  //      dungeon then reloads at the same entrance.
+  if (mapSt.onWorldMap) {
+    ps.lastWorldExitX = Math.floor(mapSt.worldX / TILE_SIZE);
+    ps.lastWorldExitY = Math.floor(mapSt.worldY / TILE_SIZE);
+    saveSlotsToDB();
+  }
   mapSt.onWorldMap = false;
   setupTopBox(mapId, false);
   if (mapId >= 1000) { _loadDungeonFloor(mapId, returnX, returnY); }
@@ -217,11 +232,9 @@ export function loadMapById(mapId, returnX, returnY) {
     battleSt.enemyDefeated = false;
     _loadRegularMap(mapId, returnX, returnY);
   }
-  // Save the new map + player coords so a tab close while inside a town /
-  // dungeon (e.g., quitting from a shop) doesn't fall back to the last
-  // overworld save. The save is gated on `psAligned` inside
-  // `saveSlotsToDB`, so the startup-time `loadMapById` call (before
-  // setPsAligned(true)) is a no-op.
+  // Secondary save for inventory / HP / etc. picked up between the
+  // entrance and the new map load. Position is null (onWorldMap=false
+  // now), so this won't touch the entrance coords we just wrote.
   saveSlotsToDB();
 }
 

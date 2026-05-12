@@ -2,6 +2,34 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.275 — 2026-05-12
+
+### Cave / town entry captures the overworld entrance tile
+
+Two respawn paths used to land somewhere stale when dying or logging
+out inside the Altar Cave:
+
+- **Death** — `respawnAfterDeath` uses `ps.lastWorldExitX/Y`, which was
+  only updated by `_landOnWorldMap`. That means `lastWorldExit` tracked
+  "last place the player LANDED on overworld" — i.e., the gate they
+  walked out of. Dying in the Altar Cave dumped the player back at the
+  Ur gate, not at the cave entrance.
+- **Logout** — the slot's `worldX/Y` was the last overworld save (v1.7.268
+  scope). If the player walked from Ur's gate to the cave entrance
+  without any save event in between, the slot still pointed at the
+  gate, so reload spawned them at the gate.
+
+Fix: `loadMapById` now captures the player's current tile into both
+`ps.lastWorldExitX/Y` AND `slot.worldX/Y` **before** flipping
+`mapSt.onWorldMap` to false. The save fires while `onWorldMap` is still
+true so the v1.7.268 position-getter accepts it and writes the
+entrance coords.
+
+Result: stepping on the Altar Cave entrance tile is now the
+checkpoint. Die in floor 4, respawn at the cave entrance on overworld.
+Log out in floor 2, reload at the cave entrance on overworld. Same
+applies to every town / dungeon entered directly from overworld.
+
 ## 1.7.274 — 2026-05-12
 
 ### Modularize hand-selection for dual-strike combos
