@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.251 — 2026-05-12
+
+### Pause magic list scrolls now
+
+The pause magic list was rendering every castable spell with no scroll
+clamp — jobs with deep spell pools (Sage, Red Mage / Magic Knight at
+mid-level, dual-school combos) overflowed past the panel bottom and
+clipped the cursor outside the box.
+
+Added `pauseSt.magicScroll` mirroring `invScroll`, computed
+`maxVisible = floor((HUD_VIEW_H - 16) / 14)` (~9 rows), and scrolls the
+window when the cursor moves past the visible edge — same math as
+inventory. Reset to 0 when the magic submenu opens.
+
+Also cleaned up the inline digit-loop for MP cost — uses
+`_nameToBytes(String(cost))` + `measureText` like the rest of the
+right-aligned-value sites.
+
 ## 1.7.250 — 2026-05-12
 
 ### Item menus: right-align counts (consistency pass)

@@ -64,6 +64,7 @@ export const pauseSt = {
   // Magic submenu (piggybacks on inv-* state machine; menuMode toggles list/input/draw branches)
   menuMode:     'inv',   // 'inv' or 'magic'
   magicCursor:  0,       // active spell index when menuMode === 'magic'
+  magicScroll:  0,       // first visible row in magic list (Sage can know 15+)
   useSpellId:   0,       // spell ID stashed between magic-list Z press and inv-target confirm (0 = none)
 };
 
@@ -301,21 +302,22 @@ function _drawPauseMagicList(ctx) {
   const fadeStep = _pauseFadeStep('inv-items-in', 'inv-items-out');
   const fadedPal = _makeFadedPal(fadeStep);
   const list = getCastableKnownSpells(ps.jobIdx, ps.knownSpells);
-  const colW = HUD_VIEW_W;
-  const costRightX = px + colW - 16;
-  for (let i = 0; i < list.length; i++) {
-    const id = list[i];
+  const costRightX = px + HUD_VIEW_W - 16;
+  // Mirror inventory's scroll math — Sage/dual-school jobs can know more
+  // spells than the panel fits at 14 px per row.
+  const maxVisible = Math.floor((HUD_VIEW_H - 16) / 14);
+  const startIdx = Math.max(0, Math.min(pauseSt.magicScroll, Math.max(0, list.length - maxVisible)));
+  for (let i = 0; i < maxVisible && startIdx + i < list.length; i++) {
+    const id = list[startIdx + i];
     const name = getSpellNameShrines(id);
     const iy = finalY + 12 + i * 14;
     drawText(ctx, px + 24, iy, name, fadedPal);
     const cost = getSpellMPCost(id);
     if (cost > 0) {
-      const costStr = String(cost);
-      const costBytes = new Uint8Array(costStr.length);
-      for (let c = 0; c < costStr.length; c++) costBytes[c] = 0x80 + parseInt(costStr[c]);
-      drawText(ctx, costRightX - costBytes.length * 8, iy, costBytes, fadedPal);
+      const costBytes = _nameToBytes(String(cost));
+      drawText(ctx, costRightX - measureText(costBytes), iy, costBytes, fadedPal);
     }
-    if (i === pauseSt.magicCursor && pauseSt.state !== 'inv-target' && pauseSt.state !== 'inv-heal') {
+    if (startIdx + i === pauseSt.magicCursor && pauseSt.state !== 'inv-target' && pauseSt.state !== 'inv-heal') {
       drawCursorFaded(px + 8, iy - 4, fadeStep);
     }
   }
@@ -673,6 +675,7 @@ function _pauseInputMagicZ() {
   playSFX(SFX.CONFIRM);
   pauseSt.menuMode = 'magic';
   pauseSt.magicCursor = 0;
+  pauseSt.magicScroll = 0;
   pauseSt.magicHeldId = -1;
   pauseSt.state = 'inv-text-out';
   pauseSt.timer = 0;
@@ -789,13 +792,22 @@ function _pauseInputInventory() {
 function _pauseInputMagicList() {
   const list = getCastableKnownSpells(ps.jobIdx, ps.knownSpells);
   const k = keys;
+  const maxVisible = Math.floor((HUD_VIEW_H - 16) / 14);
   if (k['ArrowDown']) {
     k['ArrowDown'] = false;
-    if (pauseSt.magicCursor < list.length - 1) { pauseSt.magicCursor++; playSFX(SFX.CURSOR); }
+    if (pauseSt.magicCursor < list.length - 1) {
+      pauseSt.magicCursor++;
+      if (pauseSt.magicCursor - pauseSt.magicScroll >= maxVisible) pauseSt.magicScroll = pauseSt.magicCursor - maxVisible + 1;
+      playSFX(SFX.CURSOR);
+    }
   }
   if (k['ArrowUp']) {
     k['ArrowUp'] = false;
-    if (pauseSt.magicCursor > 0) { pauseSt.magicCursor--; playSFX(SFX.CURSOR); }
+    if (pauseSt.magicCursor > 0) {
+      pauseSt.magicCursor--;
+      if (pauseSt.magicCursor < pauseSt.magicScroll) pauseSt.magicScroll = pauseSt.magicCursor;
+      playSFX(SFX.CURSOR);
+    }
   }
   if (_zPressed()) {
     const spellId = list[pauseSt.magicCursor];
