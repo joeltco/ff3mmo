@@ -2,6 +2,40 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.253 — 2026-05-12
+
+### FF1 shopkeeper scaffolding — canonical 10×10 BG layout
+
+Reworked v1.7.252's scaffolding after reading the Disch/Entroper FF1
+disassembly (`bank_0E.asm:DrawShop`, `bank_0F.asm:LoadShopBGCHRPalettes`,
+`Constants.inc:lut_ShopCHR/lut_BackdropPal`).
+
+What changed vs the placeholder 2×3 / 16×24 assumption:
+
+- FF1 shopkeeper is **BG plane**, not OAM — capture path is SNAP BG, not
+  SNAP OAM.
+- 8 canonical FF1 shop types (added black-magic, clinic, inn, caravan to
+  the type map for completeness; ff3mmo only renders 4 today, with
+  `magic` mapping to FF1's white-magic until a BM shop opens).
+- Per-type **4-byte backdrop palette** cached from `lut_BackdropPal` in
+  bank_00.dat (extracted, not approximated).
+- Per-keeper sprite is **14 unique tiles**, arranged through a 10×10
+  nametable rect (`lut_ShopkeepImage`). All 8 keepers share the same
+  rect layout — the differentiation is an additive `type * 14` over the
+  shop CHR bundle.
+
+`shop-sprites.js` now exports `SHOPKEEP_IMAGE_LAYOUT`, `SHOP_PALETTES`,
+`FF3MMO_TO_FF1`, and a `SHOP_KEEPER_TILES` Map keyed by FF1 canonical
+type (224 bytes per keeper = 14 tiles × 16). `_drawShopkeeper` in
+shop.js walks the 10×10 layout, decoding each tile through the existing
+`tile-decoder` primitives. Still a no-op for every shop because no
+captures have landed — the Map is empty.
+
+Capture flow (in `shop-sprites.js` header): boot FF1&2 in FCEUX/Mesen
+(the in-app EMU tab is hardcoded to FF3), enter each shop type, SNAP BG
+on $0000-$06FF, slice tiles `1+type*14 .. 14+type*14` per keeper, paste
+into the Map.
+
 ## 1.7.252 — 2026-05-12
 
 ### FF1 shopkeeper scaffolding (data + dispatch, no sprites yet)

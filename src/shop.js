@@ -19,7 +19,7 @@ import { _nameToBytes } from './text-utils.js';
 import { getItemNameClean, getItemNameShrines, getSpellNameClean, getSpellNameShrines } from './text-decoder.js';
 import { ITEMS } from './data/items.js';
 import { SHOPS, getShopType } from './data/shops.js';
-import { getShopSprite } from './data/shop-sprites.js';
+import { getShopSprite, SHOPKEEP_IMAGE_LAYOUT } from './data/shop-sprites.js';
 import { decodeTile, drawTile } from './tile-decoder.js';
 import { SPELLS, getSpellBuyPrice, canLearnSpell } from './data/spells.js';
 import { ps, grantGil, spendGil } from './player-stats.js';
@@ -431,20 +431,29 @@ function _drawGil(ctx, fadeStep) {
   drawText(ctx, HUD_VIEW_X + HUD_VIEW_W - 16 - measureText(val), HUD_VIEW_Y + 10, val, pal);
 }
 
-// FF1-style shopkeeper sprite — 2×3 tiles (16×24 px) drawn at the top of
-// the shop panel. Lookup is keyed by shop type ('weapon'|'armor'|'item'|
-// 'magic'); no-ops when sprite data hasn't been captured yet for the
-// active type, so adding entries to `data/shop-sprites.js` lights this
-// up incrementally without further wiring.
+// FF1-style shopkeeper sprite — 10×10 BG nametable rect using the FF1
+// `lut_ShopkeepImage` layout (`SHOPKEEP_IMAGE_LAYOUT`). The 14 keeper
+// tiles for the active shop type live in `SHOP_KEEPER_TILES` keyed by
+// FF1 canonical type ('weapon'|'armor'|'white-magic'|'black-magic'|
+// 'item'); ff3mmo's 4-type catalog maps through `FF3MMO_TO_FF1` inside
+// `getShopSprite`. No-op when the capture for the active type hasn't
+// landed yet — adding tile bytes to the map lights up the matching
+// shops with no further wiring.
+//
+// Layout tile indices 1..13 reference `sprite.tiles` (14×16 bytes), tile
+// 0 in the layout means "transparent backdrop" — skipped.
 function _drawShopkeeper(ctx, originX, originY) {
   const sprite = getShopSprite(getShopType(shopSt.shopId));
-  if (!sprite || !sprite.tiles || sprite.tiles.length < 96) return;
+  if (!sprite || !sprite.tiles || sprite.tiles.length < 14 * 16) return;
   const pal = sprite.palette;
   if (!pal || pal.length < 4) return;
-  for (let row = 0; row < 3; row++) {
-    for (let col = 0; col < 2; col++) {
-      const tileIdx = row * 2 + col;
-      const pixels = decodeTile(sprite.tiles, tileIdx * 16);
+  for (let row = 0; row < SHOPKEEP_IMAGE_LAYOUT.length; row++) {
+    const rowTiles = SHOPKEEP_IMAGE_LAYOUT[row];
+    for (let col = 0; col < rowTiles.length; col++) {
+      const idx = rowTiles[col];
+      if (idx === 0) continue;            // backdrop — leave transparent
+      const tileOff = (idx - 1) * 16;     // 1..13 maps to byte offsets 0..192
+      const pixels = decodeTile(sprite.tiles, tileOff);
       drawTile(ctx, pixels, pal, originX + col * 8, originY + row * 8);
     }
   }
