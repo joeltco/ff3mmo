@@ -24,6 +24,7 @@
 
 import { SPELL_NAMES_SHRINES } from './data/spells.js';
 import { ITEM_NAMES_SHRINES } from './data/items.js';
+import { MONSTER_NAMES_SHRINES } from './data/monsters.js';
 
 // --- ROM offsets ---
 const PTR_TABLE = 0x030010;   // 1712 × 2-byte pointers
@@ -198,6 +199,23 @@ export function getItemNameShrines(itemId) {
   out[0] = iconByte;
   out.set(letters, 1);
   return out;
+}
+
+/**
+ * Returns Shrines short-name bytes for a monster when one is registered
+ * in MONSTER_NAMES_SHRINES (in-battle name-box surface); falls through
+ * to the ROM bytes via getMonsterName when no override exists (unmatched
+ * monsters, dummied IDs, "C" placeholders at 0xE5/0xE6). Monsters have
+ * no icon byte, so this returns raw ASCII tile bytes.
+ * @param {number} monsterId
+ * @returns {Uint8Array}
+ */
+export function getMonsterNameShrines(monsterId) {
+  const override = MONSTER_NAMES_SHRINES.get(monsterId);
+  if (override == null) return getMonsterName(monsterId);
+  const letters = new Uint8Array(override.length);
+  for (let i = 0; i < override.length; i++) letters[i] = _asciiToTileByte(override[i]);
+  return letters;
 }
 
 /**

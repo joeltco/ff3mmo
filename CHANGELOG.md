@@ -2,6 +2,28 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.247 — 2026-05-11
+
+### Shrines short-names for monsters (in-battle name box)
+
+Mirrors the v1.7.246 item rename. Adds `MONSTER_NAMES_SHRINES` (Map<id,
+shortName>) appended to `data/monsters.js` with 184 unambiguous entries
+sourced from `shrines.rpgclassics.com/nes/ff3/enemies{1,2}.shtml`.
+Skipped (no clean Shrines pairing — fall through to ROM name):
+Larva, Helldiver, Parademon, Far Darrig, Aughisky alts, Hellgaroo,
+Dracrocotta, HelgaruMage, Noggle, Kagura, KierHermit, Gaap, Aeon,
+Drake, Azer, ShadwMaster, GlasLabolas, two Bahamut clones, Demon
+Xande, and the 0xE5/0xE6 "C" tombstones.
+
+Adds `getMonsterNameShrines(monsterId)` in `text-decoder.js`. Monsters
+have no icon byte, so it returns raw ASCII tile bytes (or falls through
+to `getMonsterName`). Wired into the two in-battle name-box sites
+(`_battleEnemyName`, `_battleEnemyNames`) in `battle-draw-menu.js`.
+
+Battle-log message queue (`battle-turn.js:241`, `Goblin attacks!`) +
+the unused `drawMonsterName` helper stay on `getMonsterName` ROM bytes
+— same boundary as items/spells.
+
 ## 1.7.246 — 2026-05-11
 
 ### Shrines short-names for items

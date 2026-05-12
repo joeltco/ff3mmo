@@ -236,3 +236,89 @@ export const MONSTERS = new Map([
   [0xE5, { level: 99, hp: 45000, atk: 185, attackRoll: 11, hitRate:  70, def: 11, evade: 50, mdef: 56, mevade: 5, exp:     0, gil:     0, cp: 80, resist: ['dark','bolt','ice','fire','air','earth','holy'], spAtkRate: 100, attacks: ['ParcleBeam'], spiritInt: 255, boss: true, steal: 0xA6, location: ['dark_world_boss'] }], // C
   [0xE6, { level: 99, hp: 65000, atk: 240, attackRoll: 11, hitRate:  83, def: 255, evade: 99, mdef: 99, mevade: 32, exp:     0, gil:     0, cp: 80, resist: ['dark','bolt','ice','fire','air','earth','holy'], spAtkRate: 99, attacks: ['ParcleBeam'], spiritInt: 255, boss: true, steal: 0xA6, location: ['dark_world_boss'] }], // C
 ]);
+
+// Shrines short-name overrides for monsters. Used by the in-battle enemy
+// name box (battle-draw-menu.js _battleEnemyName / _battleEnemyNames).
+// Battle-log message queue (battle-turn.js) and any future mid-sentence
+// callers stay on the raw getMonsterName ROM bytes — same boundary as
+// items/spells.
+//
+// Source: shrines.rpgclassics.com/nes/ff3/enemies1.shtml + enemies2.shtml.
+// Only entries with an unambiguous ROM → Shrines pairing are listed.
+// Entries where the rename is unclear (Larva, Helldiver, Parademon,
+// Hellgaroo, Dracrocotta, ShadwMaster, Aeon, Drake, Azer, etc.) are
+// omitted and fall through to the ROM name via getMonsterName.
+//
+// Punctuation in Shrines names (`.` in "Bone D.", "K. Lizard", "Q.Lamia",
+// "Liger S.") is dropped on render — `_asciiToTileByte` only encodes
+// A-Z/a-z/0-9. The remaining letters still read correctly.
+export const MONSTER_NAMES_SHRINES = new Map([
+  [0x00, 'Goblin'],       [0x01, 'Carbuncle'],    [0x02, 'EyeFang'],
+  [0x03, 'BlueWisp'],     [0x04, 'KillerBee'],    [0x05, 'Werewolf'],
+  [0x06, 'Berserker'],    [0x07, 'RedWisp'],      [0x08, 'DarkEye'],
+  [0x09, 'Zombie'],       [0x0A, 'Mummy'],        [0x0B, 'Skeleton'],
+  [0x0C, 'CurseCoin'],    [0x0E, 'Shadow'],       [0x0F, 'Revenant'],
+  [0x10, 'Firefry'],      [0x12, 'RustBird'],     [0x13, 'Rukh'],
+  [0x14, 'Basilisk'],     [0x15, 'Bugbear'],      [0x16, 'Mandrake'],
+  [0x17, 'UnneCln'],      [0x18, 'Leprechaun'],   [0x19, 'DarkFace'],
+  [0x1A, 'Puti'],         [0x1B, 'PoisonBat'],    [0x1C, 'Liliput'],
+  [0x1D, 'WereRat'],      [0x1E, 'BloodWorm'],    [0x1F, 'KillerFish'],
+  [0x20, 'Hermit'],       [0x21, 'SeaElmntl'],    [0x22, 'Tangi'],
+  [0x23, 'Sahuagin'],     [0x25, 'Griffon'],      [0x26, 'Lynx'],
+  [0x27, 'Hornet'],       [0x28, 'Knocker'],      [0x29, 'Flyer'],
+  [0x2A, 'LizardMan'],    [0x2B, 'Gorgone'],      [0x2C, 'RedCap'],
+  [0x2D, 'Barometz'],     [0x2E, 'Slime'],        [0x2F, 'Tarantula'],
+  [0x30, 'Cafjel'],       [0x31, 'Pygman'],       [0x33, 'BloodBat'],
+  [0x34, 'PutiMage'],     [0x36, 'Ohishuki'],     [0x37, 'Bomb'],
+  [0x38, 'Manticore'],    [0x39, 'Boulder'],      [0x3A, 'SeaDevil'],
+  [0x3B, 'Merman'],       [0x3C, 'RuinWave'],     [0x3D, 'Balloon'],
+  [0x3E, 'Milmecoreo'],   [0x3F, 'Crocotta'],     [0x40, 'Adamantai'],
+  [0x41, 'RedMallow'],    [0x42, 'Pharaoh'],      [0x43, 'Lemwraith'],
+  [0x44, 'Lamia'],        [0x45, 'Daemon'],       [0x46, 'Dullahan'],
+  [0x47, 'Anetto'],       [0x48, 'Mermaid'],      [0x49, 'Seahorse'],
+  [0x4A, 'SeaSerpnt'],    [0x4B, 'Cocktrice'],    [0x4C, 'VenomToad'],
+  [0x4D, 'TwinHead'],     [0x4E, 'Roper'],        [0x4F, 'Agaria'],
+  [0x50, 'DarkFoot'],     [0x51, 'GiganToad'],    [0x52, 'TwinLiger'],
+  [0x53, 'Storoper'],     [0x54, 'Pudding'],      [0x56, 'Vulcan'],
+  [0x58, 'Magician'],     [0x5A, 'GoldEagle'],    [0x5B, 'GoldWarr'],
+  [0x5C, 'GoldBear'],     [0x5D, 'GoldKngt'],     [0x5E, 'Nightmare'],
+  [0x60, 'Needler'],      [0x61, 'Catoblepas'],   [0x62, 'Sorcerer'],
+  [0x64, 'SandWorm'],     [0x65, 'Icefry'],       [0x67, 'Simurgh'],
+  [0x68, 'Harpy'],        [0x69, 'Gargoyle'],     [0x6A, 'Chimera'],
+  [0x6B, 'DevilHorse'],   [0x6C, 'RockGargoyl'], [0x6D, 'BullMan'],
+  [0x6E, 'DarkKngt'],     [0x6F, 'MageFlyer'],    [0x71, 'Abuto'],
+  [0x72, 'Nepto'],        [0x74, 'Charybdis'],    [0x75, 'Dirai'],
+  [0x76, 'MChimera'],     [0x77, 'KLizard'],      [0x78, 'Pterosaur'],
+  [0x79, 'Wyvern'],       [0x7A, 'Behemoth'],     [0x7B, 'Seaking'],
+  [0x7C, 'Dragon'],       [0x7D, 'Kyklops'],      [0x7E, 'BossTroll'],
+  [0x7F, 'Fahan'],        [0x80, 'Kenkos'],       [0x81, 'Balfrey'],
+  [0x82, 'Dosmea'],       [0x83, 'SeaWitch'],     [0x85, 'OlogHai'],
+  [0x86, 'Kelpie'],       [0x87, 'Aegil'],        [0x88, 'Pyralis'],
+  [0x89, 'Sirenos'],      [0x8B, 'Azrael'],       [0x8C, 'Eater'],
+  [0x8E, 'DZombie'],      [0x8F, 'DeathClaw'],    [0x90, 'HellHorse'],
+  [0x91, 'Cronos'],       [0x92, 'Valar'],        [0x93, 'Haniel'],
+  [0x94, 'Vassago'],      [0x95, 'Peryton'],      [0x96, 'Ogre'],
+  [0x97, 'Cyclops'],      [0x98, 'Nemesis'],      [0x99, 'Humbaba'],
+  [0x9A, 'DthNeedle'],    [0x9B, 'Liger'],        [0x9C, 'ZandeCln'],
+  [0x9E, 'Minotaur'],     [0x9F, 'Ouroboros'],    [0xA0, 'Planktae'],
+  [0xA1, 'SeaLion'],      [0xA2, 'Remora'],       [0xA3, 'Grenade'],
+  [0xA5, 'GtBoros'],      [0xA6, 'LigerS'],       [0xA7, 'QLamia'],
+  [0xA8, 'IronClaw'],     [0xA9, 'GtDaemon'],     [0xAA, 'Thanatos'],
+  [0xAB, 'BoneD'],        [0xAC, 'KBehemoth'],    [0xAD, 'DorgaCln'],
+  [0xAE, 'GreenD'],       [0xAF, 'Abai'],         [0xB0, 'Sleipnir'],
+  [0xB1, 'Haokah'],       [0xB2, 'Acheron'],      [0xB3, 'Oceanos'],
+  [0xB4, 'Amon'],         [0xB5, 'Gomoree'],      [0xB6, 'Bluk'],
+  [0xB8, 'Platinal'],     [0xB9, 'Qumqum'],       [0xBA, 'Shinobi'],
+  [0xBC, 'Kage'],         [0xBD, 'DGeneral'],     [0xC1, 'Jormungnd'],
+  [0xC2, 'Thor'],         [0xC3, 'Hekaton'],      [0xC4, 'Hydra'],
+  [0xC5, 'QScylla'],      [0xC6, 'Garm'],         [0xC7, 'DoubleD'],
+  [0xC8, 'YellowD'],      [0xC9, 'Bahamut'],      [0xCA, 'Odin'],
+  [0xCB, 'Leviathan'],    [0xCC, 'LandTurtl'],    [0xCD, 'Jinn'],
+  [0xCE, 'BigRat'],       [0xCF, 'Medusa'],       [0xD0, 'Guzco'],
+  [0xD1, 'Salamandr'],    [0xD2, 'Hyne'],         [0xD3, 'Kraken'],
+  [0xD4, 'Goldor'],       [0xD5, 'Garuda'],       [0xD7, 'Dorga'],
+  [0xD8, 'Unne'],         [0xD9, 'Titan'],        [0xDA, 'Ninja'],
+  [0xDB, 'Kunoichi'],     [0xDC, 'General'],      [0xDD, 'Scylla'],
+  [0xDE, 'Guardian'],     [0xDF, 'RedD'],         [0xE1, 'Cerberus'],
+  [0xE2, '2HeadD'],       [0xE3, 'Echidna'],      [0xE4, 'Ahriman'],
+]);

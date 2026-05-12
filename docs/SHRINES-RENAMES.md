@@ -10,7 +10,7 @@ Raw fetched content cached here so future sessions don't need to re-fetch.
 |---|---|---|---|
 | Spells (56 player-castable) | ✅ shipped | ✅ shipped | v1.7.241–242 |
 | Items (200 ROM entries) | ✅ shipped v1.7.246 (`ITEM_NAMES_SHRINES`, 159 entries) | ✅ shipped v1.7.245 (font atlas extended to load $60–$6F icon tiles + `getItemNameWithIcon` at 9 render sites) | v1.7.245–246 |
-| Monsters (~231 bestiary entries) | ⏳ data not yet fetched | n/a (no icons in monster names) | not started |
+| Monsters (~231 bestiary entries) | ✅ shipped v1.7.247 (`MONSTER_NAMES_SHRINES`, 184 entries) | n/a (no icons in monster names) | v1.7.247 |
 | Jobs (22 entries) | ⏳ not started | n/a | not started |
 
 ## Pattern (proven on spells, replicate for items/monsters)
@@ -141,11 +141,24 @@ WaterFang / WindFang
 
 ## Next-session todo
 
-1. **Monsters** — fetch `shrines.rpgclassics.com/nes/ff3/enemies.shtml`,
-   build `MONSTER_NAMES_SHRINES`, wire into `getMonsterName` callers (the
-   key one is the in-battle enemy name box; chat / message-strip stay on
-   ROM bytes).
-2. **Jobs (22)** — same pattern, optional, lowest priority.
+1. **Jobs (22)** — same pattern, optional, lowest priority.
+
+## Monsters shipped notes (v1.7.247)
+
+- 224 ROM entries (in `MONSTERS` Map) → 184 overrides. Skipped 40
+  where the Shrines name was ambiguous or absent (Larva, Helldiver,
+  Parademon, Far Darrig, Hellgaroo, Dracrocotta, HelgaruMage, Noggle,
+  Kagura, KierHermit, Gaap, Aeon, Drake, Azer, ShadwMaster,
+  GlasLabolas, Demon Xande, duplicate Bahamut at 0xD6, two unused
+  dummies). Those fall through to ROM bytes.
+- Periods in Shrines names ("Bone D.", "K. Lizard", "Liger S.",
+  "Q.Lamia") are dropped on render — `_asciiToTileByte` collapses
+  punctuation to space ($FF). Mostly invisible because punctuation is
+  trailing.
+- Only the in-battle name box (`_battleEnemyName` +
+  `_battleEnemyNames`) was switched. Battle-log message queue stays on
+  `getMonsterName` so sentences like "Goblin attacks!" still read
+  cleanly with the longer Shrines variant.
 
 ## Items shipped notes (v1.7.246)
 

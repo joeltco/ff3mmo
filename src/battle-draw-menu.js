@@ -12,7 +12,7 @@ import {
   BATTLE_GOBLIN_NAME, BATTLE_BOSS_NAME, BATTLE_LEVEL_UP, BATTLE_JOB_LEVEL_UP,
   BATTLE_FOUND, BATTLE_MENU_ITEMS, BATTLE_MAGIC,
 } from './data/strings.js';
-import { getMonsterName, getItemNameClean, getItemNameShrines, getSpellNameClean, getSpellNameShrines } from './text-decoder.js';
+import { getMonsterNameShrines, getItemNameClean, getItemNameShrines, getSpellNameClean, getSpellNameShrines } from './text-decoder.js';
 import { getSpellMPCost } from './data/spells.js';
 import { ps } from './player-stats.js';
 import {
@@ -329,7 +329,7 @@ function _battleEnemyNames() {
   for (const m of battleSt.encounterMonsters) {
     if (m.hp <= 0 || seen.has(m.monsterId)) continue;
     seen.add(m.monsterId);
-    const baseName = getMonsterName(m.monsterId) || BATTLE_GOBLIN_NAME;
+    const baseName = getMonsterNameShrines(m.monsterId) || BATTLE_GOBLIN_NAME;
     const count = battleSt.encounterMonsters.filter(e => e.hp > 0 && e.monsterId === m.monsterId).length;
     if (count > 1) {
       const arr = Array.from(baseName);
@@ -354,7 +354,7 @@ function _battleEnemyName() {
       ? inputSt.targetIndex
       : battleSt.encounterMonsters.findIndex(m => m.hp > 0);
     const monsterId = battleSt.encounterMonsters[ti >= 0 ? ti : 0].monsterId;
-    const baseName = getMonsterName(monsterId) || BATTLE_GOBLIN_NAME;
+    const baseName = getMonsterNameShrines(monsterId) || BATTLE_GOBLIN_NAME;
     // Count how many of this same type are alive
     const aliveOfType = battleSt.encounterMonsters.filter(m => m.hp > 0 && m.monsterId === monsterId).length;
     if (aliveOfType > 1) {
