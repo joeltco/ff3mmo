@@ -69,6 +69,11 @@ const MAIL_TILE_BYTES = new Uint8Array([
   0x00, 0x36, 0x77, 0x63, 0x08, 0x22, 0x5d, 0x08,
   0xc9, 0xa4, 0xc2, 0x80, 0x88, 0xa2, 0xc9, 0xa2,
 ]);
+const SPEAR_TILE_ID = 0x73;
+const SPEAR_TILE_BYTES = new Uint8Array([
+  0xc0, 0xe0, 0x68, 0x10, 0x28, 0x0c, 0x06, 0x03,
+  0xbf, 0x7f, 0x4b, 0x97, 0xe7, 0xc3, 0xf1, 0xf8,
+]);
 
 /**
  * Initialize font tiles from ROM data.
@@ -89,6 +94,7 @@ export function initFont(romData) {
   _fontPixels.set(BRACER_TILE_ID, decodeTile(BRACER_TILE_BYTES, 0));
   _fontPixels.set(STAFF_TILE_ID,  decodeTile(STAFF_TILE_BYTES,  0));
   _fontPixels.set(MAIL_TILE_ID,   decodeTile(MAIL_TILE_BYTES,   0));
+  _fontPixels.set(SPEAR_TILE_ID,  decodeTile(SPEAR_TILE_BYTES,  0));
 }
 
 /**

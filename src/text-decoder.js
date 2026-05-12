@@ -100,6 +100,13 @@ const MAIL_ITEM_IDS = new Set([
   0x83, 0x84, 0x85, 0x88, 0x89, 0x8A,
 ]);
 const MAIL_ICON_BYTE = 0x7A;
+// Spear items (#1A-#1D: Thunder / Wind Spear, Blood / Holy Lance) — the
+// Chaos Rush $68 tile is a thin diagonal line with no spearhead, reads
+// as generic. A.W. Jackson's $EC has an actual triangular head; we lift
+// it to slot $73 (unused everywhere across items / spells / monsters /
+// jobs in Chaos Rush).
+const SPEAR_ITEM_IDS = new Set([0x1A, 0x1B, 0x1C, 0x1D]);
+const SPEAR_ICON_BYTE = 0x73;
 
 // ASCII → NES tile byte (lowercase / uppercase / digits / space). Anything
 // unknown falls through to space. Kept local so text-decoder stays free of
@@ -202,6 +209,7 @@ export function getItemNameWithIcon(itemId) {
     else if (BRACER_ITEM_IDS.has(itemId)) iconByte = BRACER_ICON_BYTE;
     else if (STAFF_ITEM_IDS.has(itemId)) iconByte = STAFF_ICON_BYTE;
     else if (MAIL_ITEM_IDS.has(itemId)) iconByte = MAIL_ICON_BYTE;
+    else if (SPEAR_ITEM_IDS.has(itemId)) iconByte = SPEAR_ICON_BYTE;
     // Skip any padding spaces between icon and first letter
     let i = 1;
     while (i < bytes.length && bytes[i] === 0xFF) i++;
@@ -236,6 +244,7 @@ export function getItemNameShrines(itemId) {
   else if (BRACER_ITEM_IDS.has(itemId)) iconByte = BRACER_ICON_BYTE;
   else if (STAFF_ITEM_IDS.has(itemId)) iconByte = STAFF_ICON_BYTE;
   else if (MAIL_ITEM_IDS.has(itemId)) iconByte = MAIL_ICON_BYTE;
+  else if (SPEAR_ITEM_IDS.has(itemId)) iconByte = SPEAR_ICON_BYTE;
   const letters = new Uint8Array(override.length);
   for (let i = 0; i < override.length; i++) letters[i] = _asciiToTileByte(override[i]);
   if (iconByte == null) return letters;
