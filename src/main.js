@@ -45,16 +45,19 @@ const CANVAS_W = 256;          // 16 metatiles wide (NES resolution)
 const CANVAS_H = 240;          // 15 metatiles tall (NES resolution)
 
 export function init() {
-  // Return null while a shop is up so saveSlotsToDB skips position writes.
-  // The player's `mapSt.worldX/Y` during a shop is the tile in front of
-  // the counter — saving that makes a tab close mid-shop persist the
-  // counter position, which is sticky across overworld exits (since
-  // overworld walks don't save per-step). Letting the position writes
-  // pause while the shop is open keeps the last "safe" save
-  // (loadMapById on town entry, loadWorldMapAt on gate, battle end,
-  // etc.) as the respawn point.
+  // Only persist position when the player is actually on the overworld.
+  // Walking around towns / dungeons / shop counters does NOT move the
+  // respawn point — the last `loadWorldMapAt` (overworld entry from a
+  // gate) or battle-end on overworld is the checkpoint. This keeps
+  // tab-close `beforeunload` saves from stamping "you respawn on the
+  // weapon shop door tile" or similar.
+  //
+  // Returning `null` is honored by `saveSlotsToDB`: it still writes
+  // inventory / gil / HP / stats, just skips `worldX / worldY /
+  // onWorldMap / currentMapId`.
   setPositionGetter(() => {
     if (shopSt.state !== 'closed') return null;
+    if (!mapSt.onWorldMap) return null;
     return { worldX: mapSt.worldX, worldY: mapSt.worldY, onWorldMap: mapSt.onWorldMap, currentMapId: mapSt.currentMapId };
   });
   setLocationGetter(() => ({ onWorldMap: mapSt.onWorldMap, currentMapId: mapSt.currentMapId }));

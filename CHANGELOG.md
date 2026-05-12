@@ -2,6 +2,34 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.268 — 2026-05-12
+
+### Respawn checkpoint is overworld-only (NES-style save model)
+
+Walking around inside a town shouldn't move your respawn point. v1.7.266
+gated position writes while the shop panel was up, but tab-close
+`beforeunload` saves fired the moment you closed the shop and were
+standing on the counter-door tile inside the town — same end result,
+just one frame later. The respawn followed you tile-by-tile across the
+town map.
+
+New rule: `setPositionGetter` returns `null` whenever
+`mapSt.onWorldMap` is false (in town / dungeon / sub-map) OR a shop
+panel is up. `saveSlotsToDB` skips `worldX / worldY / onWorldMap /
+currentMapId` on null. Inventory / gil / HP / stats still persist.
+
+Result: the only events that move the respawn point are now:
+
+- `loadWorldMapAt` / `loadWorldMapAtPosition` (overworld entry / pop)
+- Any save fired while standing on the overworld (battle end,
+  `beforeunload`, etc.)
+
+Existing corrupted slots that already point at a town tile will
+respawn there until you walk back out to overworld once — that
+`loadWorldMapAt` writes the gate position and the slot's clean from
+then on. Or clear `ff3mmo-saves` from browser IndexedDB for an
+immediate reset.
+
 ## 1.7.267 — 2026-05-12
 
 ### Gil stays bright through intra-shop transitions
