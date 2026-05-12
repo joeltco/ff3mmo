@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.267 — 2026-05-12
+
+### Gil stays bright through intra-shop transitions
+
+v1.7.266 routed Gil through the same gray-tween as the Buy/Sell/Exit
+menu so the whole right column moved as one piece. The "no flash to
+black" half was right; the "dim to gray on selection" half wasn't —
+Gil is informational, not a focusable menu option. Reverted to the
+keeperFade path: Gil only fades on outer shop-in / shop-out, never on
+intra-shop transitions. Menu still dims to gray when the list takes
+focus (separate concern, unchanged).
+
 ## 1.7.266 — 2026-05-12
 
 ### Gil also dims (no flash) + don't save in-shop position
