@@ -23,6 +23,10 @@ let frameCount = 0;
 let imgData = null;
 let img32 = null;
 let canvasCtx = null;
+// Which ROM the emulator is currently running. 'ff3' applies the English
+// IPS patch on init; 'ff12' boots the raw FF1&2 buffer (no patch). Used
+// for capturing FF1 shopkeeper / NPC sprites that don't ship with FF3.
+let currentRom = 'ff3';
 
 // Savestate slots — persisted to localStorage so they survive refreshes.
 // Four numbered slots; SAVE/LOAD always act on the currently-selected slot.
@@ -84,27 +88,71 @@ export function mount(root, context) {
   dom = _buildDOM(root);
 
   if (!window.jsnes) { _status('jsnes library not loaded (check lib/jsnes.min.js)', true); return; }
+  // Always boot into FF3 first — that's the project's primary ROM.
+  // The ROM-toggle row in the UI lets the user swap to FF1&2 mid-session.
+  currentRom = 'ff3';
+  _refreshRomButtons();
   const rom = ctx.getFF3Buffer();
   if (!rom) { _status('No ROM loaded — load FF3 on the title screen first', true); return; }
 
-  _patchAndInit(rom);
+  _patchAndInit(rom, 'ff3');
 }
 
-async function _patchAndInit(romBuffer) {
-  // IPS is overwrite-only, so re-applying to an already-patched buffer is a no-op.
+// Swap the running emulator to the other ROM. No-op if already there or
+// if the requested ROM hasn't been loaded yet (FF1&2 is optional —
+// users only need it for FF1-derived sprite/music captures).
+function _switchRom(target) {
+  if (target === currentRom) return;
+  if (target !== 'ff3' && target !== 'ff12') return;
+  const rom = target === 'ff12' ? ctx.getFF12Buffer() : ctx.getFF3Buffer();
+  if (!rom) {
+    const label = target === 'ff12' ? 'FF1&2' : 'FF3';
+    _status(`No ${label} ROM loaded — drop one on the title screen first`, true);
+    return;
+  }
+  _stop();
+  // Hand the old NES instance to GC; _initEmulator builds a fresh one.
+  // Savestate slots are NOT cleared — they're shaped for the previous ROM,
+  // so a LOAD after a ROM swap will fail loudly (jsnes guard) rather than
+  // silently corrupt; that's the right trade for a debug tool.
+  nes = null;
+  frameCount = 0;
+  if (dom?.frame) dom.frame.textContent = 'f0';
+  currentRom = target;
+  _refreshRomButtons();
+  _patchAndInit(rom, target);
+}
+
+// Highlight the active ROM button gold; dim the other.
+function _refreshRomButtons() {
+  if (!dom?.btnRomFF3 || !dom?.btnRomFF12) return;
+  for (const [id, btn] of [['ff3', dom.btnRomFF3], ['ff12', dom.btnRomFF12]]) {
+    const active = id === currentRom;
+    btn.style.borderColor = active ? '#c8a832' : '#444';
+    btn.style.color = active ? '#c8a832' : '#888';
+  }
+}
+
+async function _patchAndInit(romBuffer, romType) {
   const patched = new Uint8Array(new Uint8Array(romBuffer));
-  try {
-    _status('fetching English IPS patch…');
-    const resp = await fetch('patches/ff3-english.ips');
-    if (resp.ok) {
-      applyIPS(patched, new Uint8Array(await resp.arrayBuffer()));
-      _status('IPS applied, booting…');
-    } else {
-      _status('no IPS patch found, booting raw ROM…');
+  // Only FF3 needs the English IPS — FF1&2 boots raw.
+  if (romType === 'ff3') {
+    // IPS is overwrite-only, so re-applying to an already-patched buffer is a no-op.
+    try {
+      _status('fetching English IPS patch…');
+      const resp = await fetch('patches/ff3-english.ips');
+      if (resp.ok) {
+        applyIPS(patched, new Uint8Array(await resp.arrayBuffer()));
+        _status('IPS applied, booting…');
+      } else {
+        _status('no IPS patch found, booting raw ROM…');
+      }
+    } catch (e) {
+      console.warn('[emu] IPS fetch failed', e);
+      _status('IPS fetch failed, booting raw ROM…');
     }
-  } catch (e) {
-    console.warn('[emu] IPS fetch failed', e);
-    _status('IPS fetch failed, booting raw ROM…');
+  } else {
+    _status('booting FF1&2 raw ROM…');
   }
   _initEmulator(patched.buffer);
 }
@@ -1227,6 +1275,19 @@ function _buildDOM(parent) {
   btnRow.append(btnPause, btnStep, btnReset, btnSound);
   rightCol.appendChild(btnRow);
 
+  // ROM toggle — swap between FF3 (default) and the FF1&2 cart. FF1&2
+  // is optional; only loaded if the user dropped a second ROM on the
+  // title screen (used for FF1 shopkeeper / NPC captures).
+  const romRow = document.createElement('div');
+  romRow.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;align-items:center;';
+  const romLabel = document.createElement('span');
+  romLabel.textContent = 'ROM:';
+  romLabel.style.cssText = 'color:#888;font-size:11px;font-family:monospace;';
+  const btnRomFF3 = mkBtn('FF3', () => _switchRom('ff3'));
+  const btnRomFF12 = mkBtn('FF1&2', () => _switchRom('ff12'));
+  romRow.append(romLabel, btnRomFF3, btnRomFF12);
+  rightCol.appendChild(romRow);
+
   // Slot row: 4 numbered savestate slots. Tap to select; gold border = selected,
   // green text + bullet = populated. SAVE/LOAD always act on the selected slot.
   const slotRow = document.createElement('div');
@@ -1408,10 +1469,11 @@ function _buildDOM(parent) {
 
   parent.appendChild(root);
 
-  const d = { root, canvas, status, frame, btnPause, btnStep, btnReset, btnSound, btnSave, btnLoad, btnSnap, btnSnapBG, btnWpn, btnRecOam, btnRecBg, btnDedupe, recFramesInput, recGapInput, btnCopy, btnSaveFile, slotButtons, tileInput, btnTileDump, output, writeInput, scenesSummary, scenesList, sceneNameInput, sceneDescInput };
+  const d = { root, canvas, status, frame, btnPause, btnStep, btnReset, btnSound, btnRomFF3, btnRomFF12, btnSave, btnLoad, btnSnap, btnSnapBG, btnWpn, btnRecOam, btnRecBg, btnDedupe, recFramesInput, recGapInput, btnCopy, btnSaveFile, slotButtons, tileInput, btnTileDump, output, writeInput, scenesSummary, scenesList, sceneNameInput, sceneDescInput };
   dom = d;
   _installKeys();
   _refreshSlotButtons();
+  _refreshRomButtons();
   // Fire-and-forget: populate the SCENES panel header count without blocking mount.
   _refreshScenesList();
   return d;

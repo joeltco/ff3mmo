@@ -2,6 +2,26 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.254 — 2026-05-12
+
+### EMU tab: ROM toggle (FF3 / FF1&2)
+
+Adds a `ROM: [FF3] [FF1&2]` toggle row to the EMU tab in the Konami
+debugger. FF3 is still the default; tapping FF1&2 stops the running
+emulator, drops the current jsnes instance, and re-inits against
+`ctx.getFF12Buffer()` (already wired in `index.html`). FF1&2 boots
+raw — the FF3 English IPS step is skipped.
+
+Active ROM gets a gold border so it's obvious which one is running.
+Savestate slots are not namespaced by ROM — a LOAD after a swap will
+fail loudly via jsnes' built-in guard rather than silently corrupt;
+acceptable trade for a debug tool.
+
+Unlocks the FF1 shopkeeper capture path documented in v1.7.253:
+boot FF3, hit Konami, EMU tab, ROM toggle → FF1&2, walk to each shop
+in the FF1 game, SNAP BG on $0000-$06FF, paste the 14-tile slice into
+`SHOP_KEEPER_TILES`.
+
 ## 1.7.253 — 2026-05-12
 
 ### FF1 shopkeeper scaffolding — canonical 10×10 BG layout
