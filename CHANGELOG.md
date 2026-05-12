@@ -2,6 +2,10 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.280 — 2026-05-12
+
+- **Distinct bracer/ring icon for arm-slot accessories.** Bracers (Bronze / Mithril / Power / Rune / Diamond) and Protect Ring share ROM byte `$63` with gauntlets and gloves — the Chaos Rush tile reads as a hand, fine for gloves but wrong for wrist accessories. A.W. Jackson splits the arm slot into `$E4` (gauntlet) and `$E5` (bracer/ring); lifted the bracer tile to slot `$78`, added `BRACER_ITEM_IDS` (`0x8B, 0x8E, 0x91, 0x92, 0x93, 0x95`) + override branches in both `getItemNameWithIcon` and `getItemNameShrines`. Gauntlets / gloves keep `$63`.
+
 ## 1.7.279 — 2026-05-12
 
 - **Distinct claw icon for claw items.** Claws (#01-#05: Kaizer / Cat / Wyvern / Faerie / Hellish) share ROM byte `$64` with nunchaku (#06-#08) — the shared tile reads as two diagonal sticks, which is right for nunchaku but wrong for claws. Same pattern as v1.7.278's arrow fix: lifted A.W. Jackson's claw tile (their `$E6`), landed it at Chaos Rush slot `$76`, added `CLAW_ITEM_IDS` + `CLAW_ICON_BYTE` to `text-decoder.js`, override branches in both `getItemNameWithIcon` and `getItemNameShrines`. Nunchaku keeps `$64`.

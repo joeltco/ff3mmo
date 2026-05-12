@@ -80,6 +80,12 @@ const ARROW_ICON_BYTE = 0x77;
 // claw tile lands at $76; nunchaku keeps $64.
 const CLAW_ITEM_IDS = new Set([0x01, 0x02, 0x03, 0x04, 0x05]);
 const CLAW_ICON_BYTE = 0x76;
+// Bracer + ring items (#8B, #8E, #91-#93, #95) — share $63 with gauntlets
+// and gloves in the ROM. A.W. Jackson splits the arm slot into $E4
+// (gauntlet) and $E5 (bracer/ring); we lift the bracer tile to $78 and
+// let gauntlets/gloves keep $63 (Chaos Rush's hand shape).
+const BRACER_ITEM_IDS = new Set([0x8B, 0x8E, 0x91, 0x92, 0x93, 0x95]);
+const BRACER_ICON_BYTE = 0x78;
 
 // ASCII → NES tile byte (lowercase / uppercase / digits / space). Anything
 // unknown falls through to space. Kept local so text-decoder stays free of
@@ -179,6 +185,7 @@ export function getItemNameWithIcon(itemId) {
     let iconByte = bytes[0];
     if (ARROW_ITEM_IDS.has(itemId)) iconByte = ARROW_ICON_BYTE;
     else if (CLAW_ITEM_IDS.has(itemId)) iconByte = CLAW_ICON_BYTE;
+    else if (BRACER_ITEM_IDS.has(itemId)) iconByte = BRACER_ICON_BYTE;
     // Skip any padding spaces between icon and first letter
     let i = 1;
     while (i < bytes.length && bytes[i] === 0xFF) i++;
@@ -210,6 +217,7 @@ export function getItemNameShrines(itemId) {
   let iconByte = (romBytes.length > 0 && ICON_TILES.has(romBytes[0])) ? romBytes[0] : null;
   if (ARROW_ITEM_IDS.has(itemId)) iconByte = ARROW_ICON_BYTE;
   else if (CLAW_ITEM_IDS.has(itemId)) iconByte = CLAW_ICON_BYTE;
+  else if (BRACER_ITEM_IDS.has(itemId)) iconByte = BRACER_ICON_BYTE;
   const letters = new Uint8Array(override.length);
   for (let i = 0; i < override.length; i++) letters[i] = _asciiToTileByte(override[i]);
   if (iconByte == null) return letters;
