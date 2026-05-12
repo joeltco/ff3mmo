@@ -6,7 +6,7 @@ A browser-based NES Final Fantasy III engine that extracts all assets from user-
 
 ## Status
 
-v1.7.232 — Full combat system, PVP duels, job system with 22 jobs, status effects, procedural dungeons, simulated roster, local chat, town shops (Buy/Sell/Exit, NES palette fade transition, FF1 NSF shop music, equip-preview HUD portrait + ATK/DEF delta indicator), and a unified spell pipeline (player / ally / PVP-enemy all route through `combatant-cast.js` — cast windup, spell throw, impact, status / heal / damage apply, SFX). White and Black Mage spells cover Cure, Poisona, Fire, Blizzard (SouthWind = Blizzara), Thunder, Sleep, Sight, Drain, Recovery, AllStatus, Instakill, and status cures; offensive throws use per-school target frames + per-spell palette swaps, heal-style spells use the magic-circle + 8-sparkle ring + heal-phase tile flicker captured from the ROM. All game data (items, monsters, spells, encounters, jobs) is extracted from ROM via Data Crystal offsets with NES-verified combat formulas (damage, multi-hit, per-job crit, job-alignment switch cost, magic damage with caster INT/MND, per-side status immunity). On defeat, players respawn at the last town they visited with full HP/MP.
+v1.7.277 — Full combat system, PVP duels, job system with 22 jobs, status effects, procedural dungeons, simulated roster, local chat, FF1-style town shops (keeper sprite on the left + Buy/Sell/Exit on the right + scrolling item list + quantity selector capped by gil/inventory, NES palette fade transition, FF1 NSF shop music, equip-preview HUD portrait + ATK/DEF delta indicator), and a unified spell pipeline (player / ally / PVP-enemy all route through `combatant-cast.js` — cast windup, spell throw, impact, status / heal / damage apply, SFX). White and Black Mage spells cover Cure, Poisona, Fire, Blizzard (SouthWind = Blizzara), Thunder, Sleep, Sight, Drain, Recovery, AllStatus, Instakill, and status cures; offensive throws use per-school target frames + per-spell palette swaps, heal-style spells use the magic-circle + 8-sparkle ring + heal-phase tile flicker captured from the ROM. All game data (items, monsters, spells, encounters, jobs) is extracted from ROM via Data Crystal offsets with NES-verified combat formulas (damage, multi-hit, per-job crit, job-alignment switch cost, magic damage with caster INT/MND, per-side status immunity). Player-facing lists (spells / items / monsters / jobs) render Shrines short-names with the ROM icon byte preserved. Dual-strike combos resolve **RRLL** (right-hand first half, left-hand second half) via the single `battle-math.js` hand-selection helper. Respawn / save behavior is NES-style: position writes are overworld-only, the entry tile of each town / dungeon is captured as the respawn checkpoint, and procedural-dungeon `consumedTiles` wipe on cave re-entry. On defeat, players respawn at the last town gate or cave entrance they walked through on overworld, with full HP/MP.
 
 The 1.7.x line shipped an in-browser **EMU debugger tab** (jsnes-backed; opens via Konami code) with multi-frame OAM/BG capture, 4-slot savestates, a scene-library scaffold (panel + commit flow live; the committed scene set still ships empty), live SRAM read/write, and one-tap magic-grant SRAM presets (`WM SPELLS` / `BM SPELLS` / `ALL SPELLS`) for jumping the running ROM into spell-cast captures. The capture pipeline drove per-weapon slash scatter (bladed deterministic UR→LL, impact RNG-per-hit), the slash-flash hit-gate folded inside `drawSlashOverlay` (single-source miss/shield-block suppression across player / ally / PVP paths, 1.7.48), and the per-spell animation registry in `src/spell-anim.js`, keyed by spell ID with distinct tile bytes per spell. REC OAM cap was raised to 240 frames so multi-second spell anims fit in one capture. The 1.7.18x–1.7.21x band layered a battle-sim CLI (`tools/battle-sim.js`, four shipped phases covering physical / spells / encounters / monster specials), a modularization pass (single-source helpers for physical hits, heal clamping, initiative, slash timing, status flags, message-text steps), and a multiplayer-prep audit series (save-state, inventory + economy, job-EXP, status effects, buffs, death animations, balance) that tightened every mutation seam in advance of the websocket layer. The 1.7.22x band added the **roster Battle search-and-hook flow** (`src/pvp-search.js` — replaces the old instant-accept duel with an AGI-differential hook check + Thief / Ranger job bonus, persistent "Searching..." message with marquee row indicator and X-to-forfeit), modularized the **roster fade** to sync with every map-screen wipe via `_rosterTransFade` (drops the `rosterLocChanged` gate, matches HUD top-box pattern for `'hud-fade-in'` + `topBoxAlreadyBright`), and consolidated the **PVP-enemy turn end** through a single `_advancePVPTurnOrEnd` helper in `pvp.js` so spell / SW / physical paths can't drift on team-wipe detection.
 
@@ -32,9 +32,12 @@ Networked multiplayer (WebSocket presence, real chat, real PVP) is planned — s
 
 - A modern browser (tested in Firefox and Chrome)
 - Node.js (for the dev server)
-- Two ROM files (not included):
-  - `Final Fantasy III (Japan).nes` — 524,304 bytes, Mapper 4 (MMC3)
-  - `Final Fantasy I, II (Japan).nes` — 524,304 bytes, Mapper 1 (MMC1)
+- Three ROM files (not included):
+  - `Final Fantasy III (Japan).nes` — 524,304 bytes, Mapper 4 (MMC3) — primary game ROM
+  - `Final Fantasy (USA).nes` — 262,160 bytes, Mapper 1 (MMC1) — FF1 NSF battle/shop music
+  - `Final Fantasy II (Japan).nes` — 262,160 bytes, Mapper 1 (MMC1) — Adamantoise sprite at `0xBF10`
+
+(Prior to v1.7.256 the FF1+II Famicom compilation cart was used in place of the latter two. It was SUROM — extended MMC1 — and jsnes can't bank-switch its upper 256 KB, so the split standalones replaced it.)
 
 ## Setup
 
@@ -42,7 +45,7 @@ Networked multiplayer (WebSocket presence, real chat, real PVP) is planned — s
 npm start
 ```
 
-Opens `http://localhost:3000`. Load both ROM files via the file pickers (or click **Start** if they're cached from a previous session).
+Opens `http://localhost:3000`. Load all three ROM files via the file pickers (or click **Start** if they're cached from a previous session).
 
 ### ROM caching
 

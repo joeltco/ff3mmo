@@ -2,6 +2,10 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.278 — 2026-05-12
+
+- **Distinct arrow icon for arrow items.** Bows and arrows both use `$6E` in the original FF3 NES ROM (and in Chaos Rush) — the tile is a combined bow-with-arrow glyph, so arrows render with what reads as a bow icon. The A.W. Jackson translation gives arrows their own tile at `$F3`. Lifted those 16 bytes into `font-renderer.js#ARROW_TILE_BYTES`, installed at slot `$77` (unused in the Chaos Rush atlas). `text-decoder.js#ARROW_ITEM_IDS` (`0x4F-0x56`) now overrides the icon byte in both `getItemNameWithIcon` and `getItemNameShrines`, so inventory / shop / equip / battle-item / inspect / trade rows all show the new arrow glyph; bows keep `$6E`.
+
 ## 1.7.277 — 2026-05-12
 
 ### Doc + stale-comment cleanup (no behavior change)

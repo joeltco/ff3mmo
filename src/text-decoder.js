@@ -68,6 +68,13 @@ CHAR_MAP[0xE6] = '+';  // plus
 const ICON_TILES = new Set();
 for (let b = 0x5C; b <= 0x7B; b++) ICON_TILES.add(b);
 
+// Arrow items (#4F-#56) — the ROM names them with $6E (bow icon), same as
+// the bows themselves. We swap in $77 so the list shows a distinct arrow
+// glyph; the tile bytes come from the A.W. Jackson translation and live
+// in font-renderer.js#ARROW_TILE_BYTES.
+const ARROW_ITEM_IDS = new Set([0x4F, 0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56]);
+const ARROW_ICON_BYTE = 0x77;
+
 // ASCII → NES tile byte (lowercase / uppercase / digits / space). Anything
 // unknown falls through to space. Kept local so text-decoder stays free of
 // imports from text-utils.js, which would cycle through font-renderer.
@@ -163,12 +170,13 @@ export function getItemNameWithIcon(itemId) {
   if (bytes.length === 0) return bytes;
   const hasIcon = ICON_TILES.has(bytes[0]);
   if (hasIcon) {
+    const iconByte = ARROW_ITEM_IDS.has(itemId) ? ARROW_ICON_BYTE : bytes[0];
     // Skip any padding spaces between icon and first letter
     let i = 1;
     while (i < bytes.length && bytes[i] === 0xFF) i++;
-    if (i === 1) return bytes;
+    if (i === 1 && iconByte === bytes[0]) return bytes;
     const out = new Uint8Array(1 + (bytes.length - i));
-    out[0] = bytes[0];
+    out[0] = iconByte;
     out.set(bytes.subarray(i), 1);
     return out;
   }
@@ -191,7 +199,8 @@ export function getItemNameShrines(itemId) {
   const override = ITEM_NAMES_SHRINES.get(itemId);
   if (override == null) return getItemNameWithIcon(itemId);
   const romBytes = getItemName(itemId);
-  const iconByte = (romBytes.length > 0 && ICON_TILES.has(romBytes[0])) ? romBytes[0] : null;
+  let iconByte = (romBytes.length > 0 && ICON_TILES.has(romBytes[0])) ? romBytes[0] : null;
+  if (ARROW_ITEM_IDS.has(itemId)) iconByte = ARROW_ICON_BYTE;
   const letters = new Uint8Array(override.length);
   for (let i = 0; i < override.length; i++) letters[i] = _asciiToTileByte(override[i]);
   if (iconByte == null) return letters;
