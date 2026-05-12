@@ -156,7 +156,10 @@ function _drawAllyPortrait(i, ally, isVicPose, isAllyAttack, isAllyHit, isNearFa
   // from the previous hit's hand, hold idle pose so R↔L transitions read as separate strikes.
   const _allyRw = isWeapon(ally.weaponId), _allyLw = isWeapon(ally.weaponL);
   const _allyDualOrUnarmed = (_allyRw && _allyLw) || (!_allyRw && !_allyLw);
-  const _allyUpcomingLeft = _allyDualOrUnarmed ? (battleSt.allyHitIdx % 2 === 1) : !_allyRw;
+  // RRLL pattern (v1.7.273): mirror the ally-update hand selection.
+  const _allyTotalHits = battleSt.allyHitResults ? battleSt.allyHitResults.length : 0;
+  const _allyRHandHits = _allyTotalHits >> 1;
+  const _allyUpcomingLeft = _allyDualOrUnarmed ? (battleSt.allyHitIdx >= _allyRHandHits) : !_allyRw;
   const allyHandChangeGap = battleSt.battleState === 'ally-attack-back' && battleSt.allyHitIdx > 0 &&
     battleSt.allyHitIsLeft !== _allyUpcomingLeft && battleSt.currentAllyAttacker === i;
   // WM caster pose during ally-magic-cast / ally-magic-hit — same arm-up pose as

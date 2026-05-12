@@ -2,6 +2,39 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.273 — 2026-05-12
+
+### Dual-strike attacks are RRLL across all combatants
+
+A roster Monk's 4-hit unarmed combo was rendering R / L / R / L
+(alternating per hit) instead of R / R / L / L (all right-hand
+strikes, then all left). The player's *dual-wield with weapons* path
+was already RRLL via `inputSt.rHandHitCount` — but the player
+*unarmed* path, the ally path, and the PVP enemy path all used a per-hit
+`hitIdx % 2 === 1` toggle, which gives the alternating pattern.
+
+Fix routes every dual-strike site through the same "first half right,
+second half left" split:
+
+- `player-stats.js#isHitRightHand` — unarmed branch now uses
+  `hitIdx < rHandHitCount` like the dual-weapon branch. The input
+  handler already populates `rHandHitCount` for the unarmed case (it
+  routes through `if (dualWield)`), so this just makes the read side
+  honor it.
+- `battle-ally.js` (both the pre-windup hand-select at line 90 and
+  the post-hit advance at line 144) — computes
+  `rHandHits = battleSt.allyHitResults.length >> 1` and decides hand
+  on `hitIdx >= rHandHits`.
+- `battle-draw-allies.js` — same split mirrored into the draw-time
+  upcoming-hand check so the inter-hit idle gap fires at the same
+  R→L boundary the update path uses.
+- `pvp.js` + `pvp-drawing.js` — same split keyed off
+  `pvpSt.pvpEnemyHitResults.length`.
+
+NES Monk OAM canon is RLRL; the in-game flow here matches the user's
+visual preference (and the input-handler's existing comment "NES: all
+right hand hits first, then all left hand hits").
+
 ## 1.7.272 — 2026-05-12
 
 ### FF1 item-shop keeper (all four Ur shops now lit)

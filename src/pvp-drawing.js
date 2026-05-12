@@ -175,12 +175,16 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   // Which hand is this enemy using right now?
   // Even hit index = right hand, odd = left hand (if dual-wielding)
   const isAttackState = isThisAttacking && (bs === 'enemy-attack' || bs === 'pvp-enemy-slash' || bs === 'ally-hit');
-  // Hand selection: dual or unarmed → alternate per hit; single weapon → that hand only.
-  // Drives off isThisAttacking (not isMain) so PVP enemy allies also alternate when unarmed.
+  // Hand selection: dual or unarmed → first half right-hand, second half
+  // left-hand (RRLL pattern, v1.7.273); single weapon → that hand only.
+  // Drives off isThisAttacking (not isMain) so PVP enemy allies use the
+  // same split.
   const eRw = enemy && isWeapon(enemy.weaponId);
   const eLw = enemy && isWeapon(enemy.weaponL);
   const altByHit = (eRw && eLw) || (!eRw && !eLw);
-  const _altIsL = altByHit ? (pvpSt.pvpEnemyHitIdx % 2 === 1) : !eRw;
+  const _enemyTotalHits = pvpSt.pvpEnemyHitResults ? pvpSt.pvpEnemyHitResults.length : 0;
+  const _enemyRHandHits = _enemyTotalHits >> 1;
+  const _altIsL = altByHit ? (pvpSt.pvpEnemyHitIdx >= _enemyRHandHits) : !eRw;
   const isLeftHandWind = isThisAttacking && bs === 'pvp-second-windup' && _altIsL;
   const isLeftHandAtk  = isThisAttacking && isAttackState && _altIsL;
   const activeWeaponId = (isLeftHandWind || isLeftHandAtk)

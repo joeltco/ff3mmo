@@ -904,12 +904,14 @@ function _processPVPSecondWindup() {
   const attackerStats = pvpSt.pvpCurrentEnemyAllyIdx >= 0
     ? pvpSt.pvpEnemyAllies[pvpSt.pvpCurrentEnemyAllyIdx]
     : pvpSt.pvpOpponentStats;
-  // Hand selection: dual or unarmed → alternate per hit; single weapon → that hand only
+  // Hand selection: dual or unarmed → first half right-hand, second half
+  // left-hand (RRLL pattern, v1.7.273). Single weapon → that hand only.
   const rW = attackerStats && isWeapon(attackerStats.weaponId);
   const lW = attackerStats && isWeapon(attackerStats.weaponL);
-  const isLeftHit = (rW && lW) || (!rW && !lW)
-    ? (pvpSt.pvpEnemyHitIdx % 2 === 1)
-    : !rW;
+  const dualOrUnarmed = (rW && lW) || (!rW && !lW);
+  const totalHits = pvpSt.pvpEnemyHitResults ? pvpSt.pvpEnemyHitResults.length : 0;
+  const rHandHits = totalHits >> 1;
+  const isLeftHit = dualOrUnarmed ? (pvpSt.pvpEnemyHitIdx >= rHandHits) : !rW;
   const wId = isLeftHit ? (attackerStats ? attackerStats.weaponL : null) : (attackerStats ? attackerStats.weaponId : null);
   if (wId != null) playSlashSFX(wId, hit && hit.crit); else playSFX(SFX.ATTACK_HIT);
   resetSlashScatterCache();
