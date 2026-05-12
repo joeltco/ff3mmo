@@ -2,6 +2,28 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.277 — 2026-05-12
+
+### Doc + stale-comment cleanup (no behavior change)
+
+`docs/design-notes.md` brought current for the v1.7.257-276 wave:
+- **Shops** section updated with the three-zone keeper-left / menu-right
+  / list-bottom layout, the quantity selector, scrolling, fade scoping,
+  and the FF1 keeper sprite system.
+- **Saves** section gained three bullets: overworld-only position writes
+  (v1.7.268), entry-tile checkpoint (v1.7.275), and dungeon
+  `consumedTiles` wipe on cave re-entry (v1.7.276).
+- **Hand combat** updated: the "fists alternate per hit" line was stale;
+  combos are RRLL across all combatants via `battle-math.js`'s
+  `isRightHandHit / isLeftHandHit` helpers (v1.7.273-274).
+
+Also swept the FF1&2-era comments that survived the v1.7.256 ROM split:
+- `src/boot.js` header
+- `src/debug/tabs/emu.js` (ROM toggle docstring + status text)
+- `src/ff1-nsf-builder.js` header
+- `src/music.js` SHOP track comment
+- `index.html` orphan CSS selector (`#rom-file-ff12`)
+
 ## 1.7.276 — 2026-05-12
 
 ### Wipe dungeon `consumedTiles` on cave (re-)entry

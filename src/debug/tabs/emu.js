@@ -24,8 +24,8 @@ let imgData = null;
 let img32 = null;
 let canvasCtx = null;
 // Which ROM the emulator is currently running. 'ff3' applies the English
-// IPS patch on init; 'ff12' boots the raw FF1&2 buffer (no patch). Used
-// for capturing FF1 shopkeeper / NPC sprites that don't ship with FF3.
+// IPS patch on init; 'ff1' / 'ff2' boot raw (no patch). Used for
+// capturing FF1 shopkeeper / FF2 NPC sprites that don't ship with FF3.
 let currentRom = 'ff3';
 
 // Savestate slots — persisted to localStorage so they survive refreshes.
@@ -144,7 +144,7 @@ function _refreshRomButtons() {
 
 async function _patchAndInit(romBuffer, romType) {
   const patched = new Uint8Array(new Uint8Array(romBuffer));
-  // Only FF3 needs the English IPS — FF1&2 boots raw.
+  // Only FF3 needs the English IPS — FF1 / FF2 boot raw.
   if (romType === 'ff3') {
     // IPS is overwrite-only, so re-applying to an already-patched buffer is a no-op.
     try {
@@ -161,7 +161,7 @@ async function _patchAndInit(romBuffer, romType) {
       _status('IPS fetch failed, booting raw ROM…');
     }
   } else {
-    _status('booting FF1&2 raw ROM…');
+    _status(`booting ${romType.toUpperCase()} raw ROM…`);
   }
   _initEmulator(patched.buffer);
 }
@@ -1284,9 +1284,9 @@ function _buildDOM(parent) {
   btnRow.append(btnPause, btnStep, btnReset, btnSound);
   rightCol.appendChild(btnRow);
 
-  // ROM toggle — swap between FF3 (default) and the FF1&2 cart. FF1&2
-  // is optional; only loaded if the user dropped a second ROM on the
-  // title screen (used for FF1 shopkeeper / NPC captures).
+  // ROM toggle — swap between FF3 (default), FF1, and FF2 standalones.
+  // FF1 / FF2 are optional; the picker on the title screen lets users
+  // drop them in. Used for FF1 shopkeeper / FF2 NPC captures.
   const romRow = document.createElement('div');
   romRow.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;align-items:center;';
   const romLabel = document.createElement('span');

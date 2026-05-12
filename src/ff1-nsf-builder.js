@@ -1,4 +1,4 @@
-// FF1 NSF Builder — assembles an NSF from the FF1 portion of the FF1&2 compilation ROM
+// FF1 NSF Builder — assembles an NSF from the standalone FF1 NES ROM
 //
 // FF1's entire sound engine + song data lives in bank $0D ($8000-$BFFF, 16KB).
 // MusicPlay entry: $B099 (via JMP at $B000)

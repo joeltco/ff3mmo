@@ -1,6 +1,7 @@
-// Boot — one-shot asset initialization from FF3 ROM (and FF1&2 ROM for
-// Adamantoise + FF1 music). All functions are pure ROM-in / canvases-out
-// with side effects only on shared module state (hudSt/battleSt/titleSt/ui).
+// Boot — one-shot asset initialization from FF3 ROM (with FF1 standalone
+// for music and FF2 standalone for the Adamantoise sprite). All functions
+// are pure ROM-in / canvases-out with side effects only on shared module
+// state (hudSt / battleSt / titleSt / ui).
 
 import { initHUD } from './hud-init.js';
 import { loadBossSprite } from './boss-sprites.js';
