@@ -467,17 +467,15 @@ export function drawShop() {
   const keeperFade = (s === 'shop-in' || s === 'shop-out') ? fadeStep : 0;
   _drawShopkeeper(ctx, KEEPER_X, KEEPER_Y, keeperFade);
   _drawGil(ctx, fadeStep);
-  // Menu always at the same brightness during intra-shop transitions —
-  // selecting Buy/Sell shouldn't flash the Buy/Sell/Exit text to black,
-  // because the menu is part of the panel layout (right column), not a
-  // sub-screen that fades out. Only the outer shop-in / shop-out tween
-  // touches the menu palette.
+  // Menu palette: bright in 'menu' state, gray when the buy/sell list
+  // has focus, and tweens between the two during menu-out / menu-in.
+  // Never goes through black on intra-shop transitions — see
+  // `_menuFadeStep` for the full mapping.
   // While the qty selector is up, the Buy/Sell/Exit text is suppressed
   // entirely — the same right column is reused as the qty widget.
   const isItemConfirm = shopSt.confirm && (s === 'buy' || s === 'sell') && !_isSpellShop();
   if (!isItemConfirm) {
-    const menuFade = (s === 'shop-in' || s === 'shop-out') ? fadeStep : 0;
-    _drawRootMenu(ctx, menuFade);
+    _drawRootMenu(ctx, _menuFadeStep(s, fadeStep));
   }
   if (s === 'buy' || s === 'buy-in' || s === 'buy-out')
     _drawList(ctx, _items(), /*isSell*/false);
@@ -564,6 +562,32 @@ function _drawRootMenu(ctx, fadeStep) {
   if (shopSt.state === 'menu') {
     drawCursorFaded(MENU_X, MENU_Y + shopSt.rootCursor * MENU_STEP - 4, fadeStep);
   }
+}
+
+// Resolve the menu's effective fade step per state. Encodes the
+// "gray when list has focus, bright when menu has focus" rule:
+//   - menu / shop-in / shop-out → outer fadeStep (bright in idle)
+//   - buy* / sell*               → 2 (mid-gray, sit and stay)
+//   - menu-out                   → tween 0 → 2 (bright → gray)
+//   - menu-in                    → tween 2 → 0 (gray → bright)
+// Capped at 2 to avoid the full fade-to-black the previous version did.
+function _menuFadeStep(state, outerFade) {
+  if (state === 'shop-in' || state === 'shop-out') return outerFade;
+  if (state === 'menu') return 0;
+  if (state === 'buy' || state === 'sell' ||
+      state === 'buy-in' || state === 'sell-in' ||
+      state === 'buy-out' || state === 'sell-out') return 2;
+  if (state === 'menu-out') {
+    // _textFadeStep ramps 0 → TEXT_STEPS during the out tween. Cap so we
+    // land at gray, never black.
+    return Math.min(outerFade, 2);
+  }
+  if (state === 'menu-in') {
+    // _textFadeStep ramps TEXT_STEPS → 0 during the in tween. Cap so we
+    // start at gray (2), tween down to 0 (bright).
+    return Math.min(outerFade, 2);
+  }
+  return 0;
 }
 
 // Buy / sell item list — full panel width below the keeper. Scrolls

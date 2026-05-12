@@ -2,6 +2,25 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.265 — 2026-05-12
+
+### Buy/Sell/Exit dims to gray (not black) when list has focus
+
+v1.7.263 stopped the menu text from fading to black on Buy / Sell
+selection, but it then stayed at full brightness — which made it look
+"still active" while the cursor was actually on the item list below.
+Restored the gray-out behavior with a proper tween:
+
+- `menu` (idle)        → bright
+- `menu-out`           → tween bright → gray over the fade duration
+- `buy*` / `sell*`     → gray (mid, NES `$10`)
+- `menu-in`            → tween gray → bright
+- `shop-in` / `shop-out` → outer fade (unchanged)
+
+`_menuFadeStep(state, outerFade)` caps the intra-shop fade at 2 so the
+text never reaches `$0F` (black) on those transitions. Outer
+shop-in/-out still goes through black with the rest of the panel.
+
 ## 1.7.264 — 2026-05-12
 
 ### Revert openShop save (sticky shop position)
