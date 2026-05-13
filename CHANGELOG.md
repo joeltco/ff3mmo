@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.297 — 2026-05-13
+
+### Message-box text: visual centering
+
+- **`_drawMsgText` now centers on visual glyph height (8px), not nominal line height (12px).** The trailing 4px gap below the last line was being counted as text height, biasing every page upward — most obvious in the 3-line case where the top of the text hugged the top of the box. Recentering accounts for the gap; text shifts down ~2px for 1-line, ~2px for 3-line.
+
 ## 1.7.296 — 2026-05-13
 
 ### NPC collision: respect player mid-walk

@@ -167,8 +167,13 @@ export function drawMsgBox(ctx, drawBorderedBoxFn) {
 function _drawMsgText(ctx, bytes, boxY, boxW, boxH, maxChars, lineH, yOff) {
   const lines = _wrapMsgBytes(bytes, maxChars);
   const fadedPal = [0x02, 0x02, 0x02, 0x30];
-  const textBlockH = lines.length * lineH;
-  const startTY = boxY + Math.floor((boxH - textBlockH) / 2) + yOff;
+  // Glyphs are 8px tall but lineH is 12 — the trailing 4px gap below the
+  // last line throws off geometric centering (visually biased upward, most
+  // obvious in the 3-line case). Subtract one gap to get the actual visual
+  // height, then center on that.
+  const GLYPH_H = 8;
+  const visualH = lines.length === 0 ? 0 : lines.length * lineH - (lineH - GLYPH_H);
+  const startTY = boxY + Math.floor((boxH - visualH) / 2) + yOff;
   for (let i = 0; i < lines.length; i++) {
     const tw = measureText(lines[i]);
     const tx = Math.floor((boxW - tw) / 2);
