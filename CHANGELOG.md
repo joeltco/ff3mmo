@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.304 — 2026-05-13
+
+### Respawn fix: overworld→town entry captures position
+
+- **Logout in a shop respawned at the previous cave exit, not at the town gate.** `_checkWorldMapTrigger` flipped `mapSt.onWorldMap = false` BEFORE calling `loadMapById(townMapId)`. Inside `loadMapById`, the position-capture block (which writes the entrance tile to `slot.worldX/Y/onWorldMap/currentMapId` so logout-then-login respawns at the gate) is gated on `mapSt.onWorldMap` being true. The pre-flip skipped it. Slot's saved position stayed at whatever tile `_landOnWorldMap` last wrote — typically the Altar Cave exit. Removed the early flip; `loadMapById` already handles the transition.
+
 ## 1.7.303 — 2026-05-13
 
 ### Drop dead IPS files

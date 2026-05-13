@@ -233,7 +233,12 @@ function _checkWorldMapTrigger(tileX, tileY) {
   const finalDest = destMap;
   triggerWipe(() => {
     mapSt.mapStack.push({ mapId: 'world', worldId: 0, x: savedX, y: savedY });
-    mapSt.onWorldMap = false;
+    // DO NOT pre-flip `mapSt.onWorldMap = false` here. `loadMapById` captures
+    // the entrance tile into `ps.lastWorldExitX/Y` + saves the slot's
+    // `worldX/Y/onWorldMap/currentMapId` ONLY when `mapSt.onWorldMap` is still
+    // true at entry. Flipping early means the slot's position never updates
+    // to the town/dungeon entrance, and logout-then-login respawns wherever
+    // `_landOnWorldMap` last wrote — typically the previous cave exit tile.
     loadMapById(finalDest);
     mapSt.disabledTrigger = { x: mapSt.worldX / TILE_SIZE, y: mapSt.worldY / TILE_SIZE };
   }, finalDest);
