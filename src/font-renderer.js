@@ -24,14 +24,18 @@ const FONT_ROM_OFFSET = 0x1B610;  // ROM file offset (with iNES header)
 const FONT_TILE_START = 0x60;
 const FONT_TILE_COUNT = 160;      // $60-$FF
 
-// Common text palettes (NES color indices)
+// Common text palettes (NES color indices).
 // [transparent, color1, color2, color3]
-export const TEXT_WHITE   = [0x0F, 0x0F, 0x0F, 0x30]; // white on black
-export const TEXT_GREY    = [0x0F, 0x10, 0x00, 0x30]; // grey on black
-export const TEXT_BLUE    = [0x0F, 0x12, 0x02, 0x30]; // blue on black
-export const TEXT_RED     = [0x0F, 0x16, 0x06, 0x30]; // red on black
-export const TEXT_GREEN   = [0x0F, 0x1A, 0x0A, 0x30]; // green on black
-export const TEXT_YELLOW  = [0x0F, 0x28, 0x18, 0x30]; // yellow on black
+// AWJ convention: letters paint color 3, item-class icons paint color 1.
+// Both must map to the same visible color or one of them goes missing —
+// CR's letters-only used color 3 so the v1.7.297-and-earlier values worked
+// for letters but rendered AWJ icons (e.g., staff $EA) as black-on-black.
+export const TEXT_WHITE   = [0x0F, 0x30, 0x0F, 0x30]; // white (icons + letters)
+export const TEXT_GREY    = [0x0F, 0x10, 0x00, 0x10]; // grey
+export const TEXT_BLUE    = [0x0F, 0x12, 0x02, 0x12]; // blue
+export const TEXT_RED     = [0x0F, 0x16, 0x06, 0x16]; // red
+export const TEXT_GREEN   = [0x0F, 0x1A, 0x0A, 0x1A]; // green
+export const TEXT_YELLOW  = [0x0F, 0x28, 0x18, 0x28]; // yellow
 
 let _fontPixels = null;  // Map<tileId, Uint8Array(64)>
 let _tileCache = null;   // Map<paletteKey, Map<tileId, HTMLCanvasElement>>

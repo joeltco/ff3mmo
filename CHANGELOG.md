@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.299 — 2026-05-13
+
+### AWJ icons: palette color-1 fix
+
+- **Item-class icons (`$E0-$F5`) were rendering black-on-black** after the v1.7.298 AWJ swap. AWJ encodes icon tiles with foreground pixels on color index 1 (plane 0 only); letter tiles use color index 3 (both planes). Our `TEXT_WHITE` was `[0x0F, 0x0F, 0x0F, 0x30]` — color 3 mapped to white (letters worked) but color 1 mapped to NES black (icons invisible). Now `[0x0F, 0x30, 0x0F, 0x30]` so both planes render visibly. Same single-line fix applied to all named palettes (`TEXT_GREY/BLUE/RED/GREEN/YELLOW`) so colored highlight rows render icons and letters in the same hue. This is the actual fix for "staff icon is gone" — the v1.7.298 migration had everything wired correctly, just couldn't see it.
+
 ## 1.7.298 — 2026-05-13
 
 ### Text engine: swap Chaos Rush → A.W. Jackson translation
