@@ -41,7 +41,11 @@ function _renderSprites(camX, camY, originX, originY, spriteY) {
       ui.ctx.drawImage(frames[flameFrame], sx, sy);
     }
   }
-  if (!mapSt.onWorldMap) {
+  // Strict gate: only draw NPCs when a real indoor map is loaded. Boot /
+  // title / loading screens leave `mapRenderer` null but may have stale
+  // `_npcs` state from a previous session, so the `onWorldMap` check alone
+  // isn't enough.
+  if (!mapSt.onWorldMap && mapSt.mapRenderer && mapSt.mapData) {
     drawNpcs(ui.ctx, camX, camY, originX, originY);
   }
   if (mapSt.bossSprite) {

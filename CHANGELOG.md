@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.290 — 2026-05-13
+
+### Altar moogle: swap to ROM-extracted sprite
+
+- **Deleted `data/moogle-sprite.js` (hand-authored pixel art) and routed the Altar Cave moogle through `hudSt.moogleFrames`** — the ROM-extracted moogle sprite built by `initMoogleSprite` (`sprite-init.js`, `MOOGLE_SPRITE_OFF = 0x01EA10`, `MOOGLE_PAL = [0x0F, 0x0F, 0x16, 0x30]`). Same asset already used by the loading-screen right panel. `npc.js` now reads from `hudSt` instead of building its own canvas, and the 2-frame bob alternates between the normal and h-flipped frames.
+
 ## 1.7.289 — 2026-05-13
 
 ### First NPC: Altar Cave moogle (kupo!)
