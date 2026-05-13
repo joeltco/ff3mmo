@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.318 — 2026-05-13
+
+### Equip screen: weapon slot labels → "R. Hand" / "L. Hand"
+
+- Pause-menu equip slots previously read "R!Hand" / "L!Hand" (the CR-era literal used `$C4` which renders as `!` in AWJ — likely a longstanding typo where a `.` was intended). Updated to "R. Hand" / "L. Hand" with proper period + space.
+
 ## 1.7.317 — 2026-05-13
 
 ### Inspect: hand labels R/L → RH/LH
