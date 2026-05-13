@@ -96,8 +96,7 @@ const _frozenIdleStates = new Set([
   'menu-open', 'target-select', 'confirm-pause',
   'item-menu-out', 'item-list-in', 'item-select', 'item-cancel-out', 'item-cancel-in',
   'item-list-out', 'item-slide', 'item-target-select', 'item-use-menu-in',
-  'message-hold', 'msg-wait',
-  'none', 'roar-hold', 'victory-msg',
+  'none', 'roar-hold',
   'exp-hold', 'gil-hold', 'cp-hold', 'item-hold',
 ]);
 let _watchState = null;

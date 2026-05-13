@@ -18,7 +18,6 @@ import { canJobEquip, JOBS } from './data/jobs.js';
 import { getSlashFramesForWeapon, setSlashOffsetForFrame } from './battle-sprite-cache.js';
 import { mapSt } from './map-state.js';
 import { pvpSt } from './pvp.js';
-import { advanceBattleMsgZ } from './battle-msg.js';
 import { getRosterVisible, ROSTER_MENU_ITEMS } from './roster.js';
 import { startPVPSearch, cancelPVPSearch, isSearchingFor, isSearchOnCooldown } from './pvp-search.js';
 import { startPartyInvite, cancelPartyInvite, isInvitingTarget, isInviteOnCooldown, isInParty, isPartyFull, removeFromParty } from './party-invite.js';
@@ -618,8 +617,6 @@ function _battleInputHoldStates() {
   const clearZ = () => { k['z'] = false; k['Z'] = false; };
   if (battleSt.battleState === 'roar-hold') {
     if (msgState.state === 'hold' && z) { clearZ(); dismissMsgBox(); }
-  } else if (battleSt.battleState === 'victory-msg') {
-    if (z) { clearZ(); advanceBattleMsgZ(); battleSt.battleTimer = 0; }
   } else if (battleSt.battleState === 'exp-hold') {
     if (z) { clearZ(); battleSt.battleState = 'exp-fade-out'; battleSt.battleTimer = 0; }
   } else if (battleSt.battleState === 'gil-hold') {

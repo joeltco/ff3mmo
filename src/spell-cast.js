@@ -20,7 +20,7 @@ import { applyMagicDamage, applyMagicStatus, applyMagicHeal,
          applyMagicRecovery, applyMagicAllStatus, applyMagicInstakill,
          applyMagicErase, getSpellImpactSFX } from './combatant-cast.js';
 import { pvpGridLayout } from './pvp-math.js';
-import { queueBattleMsg, replaceBattleMsg, isBattleMsgBusy } from './battle-msg.js';
+import { queueBattleMsg, replaceBattleMsg } from './battle-msg.js';
 import { BATTLE_INEFFECTIVE, BATTLE_HASTE, BATTLE_PROTECT, BATTLE_REFLECT, BATTLE_SLAIN } from './data/strings.js';
 import { _nameToBytes } from './text-utils.js';
 import { getSpellNameClean, getItemNameClean } from './text-decoder.js';
@@ -690,9 +690,9 @@ export function updateSpellCast(dt) {
 }
 
 // Shared transition tail: clears heal numbers, detects spell-kills, and
-// routes to monster-death / boss-dissolve / pvp-dissolve / msg-wait /
-// next-turn the same way the legacy parallel-apply branch did. Called by
-// both the throw-walk completion and the heal-style total-time completion.
+// routes to monster-death / boss-dissolve / pvp-dissolve / next-turn the
+// same way the legacy parallel-apply branch did. Called by both the
+// throw-walk completion and the heal-style total-time completion.
 function _finishMagicHit() {
   clearHealNums();
   // Collect kills across the spell's target set. Encounter monsters use
@@ -739,12 +739,6 @@ function _finishMagicHit() {
     battleSt.battleState = 'boss-dissolve';
     battleSt.battleTimer = 0;
     playSFX(SFX.BOSS_DEATH);
-  } else if (isBattleMsgBusy()) {
-    // Battle message still on screen (Sight's "Ineffective", status-name
-    // strips, future spell-text dialog) — defer turn advance through
-    // msg-wait gate.
-    battleSt.battleState = 'msg-wait';
-    battleSt.battleTimer = 0;
   } else {
     _processNextTurn();
   }

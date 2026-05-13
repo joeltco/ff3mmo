@@ -6,7 +6,7 @@ import { calcDamage, elemMultiplier, BOSS_HIT_RATE, GOBLIN_HIT_RATE } from './ba
 import { ps, getShieldEvade } from './player-stats.js';
 import { SFX, playSFX } from './music.js';
 import { tryInflictStatus, blindHitPenalty, wakeOnHit, STATUS_NAME_BYTES } from './status-effects.js';
-import { isBattleMsgBusy, queueBattleMsg, replaceBattleMsg } from './battle-msg.js';
+import { queueBattleMsg, replaceBattleMsg } from './battle-msg.js';
 import { _nameToBytes } from './text-utils.js';
 import { getPlayerDamageNum, setPlayerDamageNum, getAllyDamageNums } from './damage-numbers.js';
 import { selectCursor, saveSlots } from './save-state.js';
@@ -142,9 +142,8 @@ function _doSpecialAttack(mon, spec, targetAlly = -1) {
     }
     battleSt.battleState = 'enemy-damage-show'; battleSt.battleTimer = 0;
   } else {
-    // No-op attacks (Reflect, Sence, etc.) — wait for msg then skip
-    if (isBattleMsgBusy()) { battleSt.battleState = 'msg-wait'; battleSt.battleTimer = 0; }
-    else _processNextTurn();
+    // No-op attacks (Reflect, Sence, etc.) — msg drains independently
+    _processNextTurn();
   }
 }
 
@@ -246,7 +245,6 @@ function _processEnemyDamageShowState() {
     battleSt.isDefending = false;
     battleSt.battleState = battleSt.isRandomEncounter ? 'encounter-box-close' : 'enemy-box-close';
     battleSt.battleTimer = 0;
-  } else if (isBattleMsgBusy()) { battleSt.battleState = 'msg-wait'; battleSt.battleTimer = 0;
   } else { _processNextTurn(); }
 }
 

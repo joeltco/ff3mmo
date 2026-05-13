@@ -460,8 +460,8 @@ function drawBattleMessageStrip() {
     fadeStep = Math.min(Math.floor(battleSt.battleTimer / (MSG_FADE_OUT_MS / BATTLE_TEXT_STEPS)), BATTLE_TEXT_STEPS);
   } else if (t < MSG_FADE_IN_MS) {
     fadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(t / (MSG_FADE_IN_MS / BATTLE_TEXT_STEPS)), BATTLE_TEXT_STEPS);
-  } else if (msg.waitForZ || msg.persist || t < MSG_FADE_IN_MS + hold) {
-    fadeStep = 0; // waitForZ/persist: stay solid after fade-in
+  } else if (msg.persist || t < MSG_FADE_IN_MS + hold) {
+    fadeStep = 0; // persist: stay solid after fade-in
   } else {
     fadeStep = Math.min(Math.floor((t - MSG_FADE_IN_MS - hold) / (MSG_FADE_OUT_MS / BATTLE_TEXT_STEPS)), BATTLE_TEXT_STEPS);
   }

@@ -20,8 +20,7 @@ import { updateSpellCast, resetSpellCastVars } from './spell-cast.js';
 import { canCastSpell } from './data/spells.js';
 import { clearAllBuffs } from './buffs.js';
 import { queueBattleMsg, replaceBattleMsg, updateBattleMsg as _updateBattleMsg, clearBattleMsgQueue,
-         queueVictoryRewards as _queueVictoryRewards, getBattleMsgCurrent,
-         isBattleMsgBusy, clearVictoryPersist } from './battle-msg.js';
+         queueVictoryRewards as _queueVictoryRewards, clearVictoryPersist } from './battle-msg.js';
 import { resetAllDmgNums, tickDmgNums, tickHealNums, clearHealNums,
          setEnemyDmgNum } from './damage-numbers.js';
 import { playSFX, stopMusic, pauseMusic, resumeMusic, playTrack, TRACKS, SFX } from './music.js';
@@ -181,8 +180,7 @@ export function executeBattleCommand(index) {
     } else {
       playSFX(SFX.ERROR);
       queueBattleMsg(BATTLE_CANT_ESCAPE);
-      battleSt.battleState = 'message-hold';
-      battleSt.battleTimer = 0;
+      // Menu stays open; strip drains on its own clock.
     }
   }
 }
@@ -308,10 +306,7 @@ export function tryJoinPlayerAlly() {
 // ── Menu confirm ───────────────────────────────────────────────────────────
 
 function _updateBattleMenuConfirm() {
-  if (battleSt.battleState === 'message-hold') {
-    // Boss/non-random escape failure: wait for the BATTLE_CANT_ESCAPE strip to drain, then re-open menu.
-    if (!isBattleMsgBusy()) { battleSt.battleState = 'menu-open'; battleSt.battleTimer = 0; }
-  } else if (battleSt.battleState === 'confirm-pause') {
+  if (battleSt.battleState === 'confirm-pause') {
     if (battleSt.battleTimer >= 150) {
       battleSt.allyJoinRound++;
       if (tryJoinPlayerAlly()) return true;
@@ -439,8 +434,7 @@ function _updatePlayerDamageShow() {
         battleSt.battleState = 'pvp-dissolve'; battleSt.battleTimer = 0; playSFX(SFX.MONSTER_DEATH);
       } else { battleSt.battleState = 'boss-dissolve'; battleSt.battleTimer = 0; playSFX(SFX.BOSS_DEATH); }
     } else {
-      if (getBattleMsgCurrent()) { battleSt.battleState = 'msg-wait'; battleSt.battleTimer = 0; }
-      else processNextTurn();
+      processNextTurn();
     }
   }
   return true;
@@ -577,8 +571,7 @@ function _updateMonsterDeath() {
 export function updateBattleDefendItem(dt) {
   if (battleSt.battleState === 'defend-anim') {
     if (battleSt.battleTimer >= DEFEND_SPARKLE_TOTAL_MS) {
-      if (getBattleMsgCurrent()) { battleSt.battleState = 'msg-wait'; battleSt.battleTimer = 0; }
-      else processNextTurn();
+      processNextTurn();
     }
   } else if (battleSt.battleState === 'item-use') {
     tickHealNums(dt);
@@ -622,15 +615,11 @@ function _updateItemMenuFades() {
 
 function _updateBattleRun() {
   if (battleSt.battleState === 'run-fail') {
-    if (!isBattleMsgBusy()) {
-      processNextTurn();
-    }
+    processNextTurn();
     return true;
   }
   if (battleSt.battleState === 'run-success') {
-    if (!isBattleMsgBusy()) {
-      battleSt.runSlideBack = true; battleSt.battleState = 'encounter-box-close'; battleSt.battleTimer = 0;
-    }
+    battleSt.runSlideBack = true; battleSt.battleState = 'encounter-box-close'; battleSt.battleTimer = 0;
     return true;
   }
   return false;
@@ -802,7 +791,6 @@ export function updateBattle(dt) {
   if (battleSt.battleState === 'none') return;
   battleSt.battleTimer += Math.min(dt, 33);
   _updateBattleMsg(dt);
-  if (battleSt.battleState === 'msg-wait') { if (!getBattleMsgCurrent()) processNextTurn(); return; }
   if (pvpSt.isPVPBattle) { updatePVPBattle(dt); return; }
   updateBattleTimers(dt);
   _updatePoisonTick()              ||

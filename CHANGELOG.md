@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.287 — 2026-05-12
+
+### Battle message strip — non-blocking pacing
+
+- **Animations no longer wait on messages.** Deleted the `msg-wait` and `message-hold` battle states + every gate that paused the state machine for the strip to drain (`battle-enemy.js` post-damage + no-op-attack paths, `battle-update.js` player-damage-show / defend-anim / run-fail / run-success / boss-escape, `spell-cast.js` post-impact). Strip now runs entirely on its own 1200ms clock (200 fade-in + 800 hold + 200 fade-out) independent of combat flow.
+- **`queueBattleMsg` cuts in immediately.** Merged with `replaceBattleMsg` — both are now the same function: if a message is already displaying, new text swaps in place without re-fading and the hold timer resets so the new text gets its full display window. The queue array is gone; only the current slot remains.
+- **Dead code removed:** `waitForZ` flag + `advanceBattleMsgZ` (never set by anyone), `isBattleMsgBusy` (only used by the deleted gates), orphan `'victory-msg'` state branch in `input-handler.js`, freeze-watchdog allowlist entries for the deleted states.
+
 ## 1.7.286 — 2026-05-12
 
 ### DS-exclusive ultimate gear (24 items)
