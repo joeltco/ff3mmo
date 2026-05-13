@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.322 — 2026-05-13
+
+### Dual-wield ATK display: sum of both weapons (canon)
+
+- v1.7.321 changed dual to `max` which made dagger+knife and knife+shield read the same — equipping a second weapon visibly did nothing. Replaced with canon NES menu behavior: dual ATK = `rWpnAtk + lWpnAtk + floor(str/2)`. Dagger(6)+Knife(8) now reads ATK 19 vs Knife+Shield ATK 13.
+- Combat math: `rollHits` extended with `opts.lAtk` + `opts.splitRH`. When `splitRH=true`, the back half of the combo (RRLL ordering) uses the left-hand ATK. Player path already split per-hand; ally + PVP-enemy paths now do the same via opts. Single-wield with weapon in the left hand: rolls at the equipped hand's ATK, not str/2-only.
+- Player damage per turn is unchanged (input-handler.js already rolled each hand at its own weapon ATK; only the displayed sum stripping updated). Ally + PVP mismatched-dual damage is now strictly canon-equivalent (was averaging via `combatant.atk × 2 hits`; now per-hand RRLL).
+- The 2026-05-08 sum-and-double 2× bug is NOT reintroduced — `rollHits` only ever applies a single hand's ATK to a single hit.
+
 ## 1.7.321 — 2026-05-13
 
 ### Dual-wield ATK display fix: max(rWpn, lWpn), not average

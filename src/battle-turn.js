@@ -105,13 +105,21 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
         const potHits = calcPotentialHits(lv, agi, false);
         const _playerJob = JOBS[ps.jobIdx] || {};
         const _playerCrit = { critPct: _playerJob.critPct || 0, critBonus: _playerJob.critBonus || 0 };
+        // Confused player attacks a random target with the right-hand (or only
+        // equipped) weapon. ps.atk holds the display sum (rWpn+lWpn+str/2), so
+        // strip the offhand contribution back out — otherwise a confused
+        // dual-wielder hits at sum-ATK for a single-hand roll.
+        const _cRWpnAtk = isWeapon(ps.weaponR) ? (ITEMS.get(ps.weaponR)?.atk || 0) : 0;
+        const _cLWpnAtk = isWeapon(ps.weaponL) ? (ITEMS.get(ps.weaponL)?.atk || 0) : 0;
+        const _firstHandWpnAtk = isWeapon(ps.weaponR) ? _cRWpnAtk : _cLWpnAtk;
+        const _confuseAtk = ps.atk - _cRWpnAtk - _cLWpnAtk + _firstHandWpnAtk;
         if (pick.type === 'monster') {
           const mon = battleSt.encounterMonsters[pick.index];
           const firstWpnId = isWeapon(ps.weaponR) ? ps.weaponR : ps.weaponL;
           const firstHandR = isWeapon(ps.weaponR) || !isWeapon(ps.weaponL);
           const bladed = isBladedWeapon(firstWpnId);
           inputSt.playerActionPending = { command: 'fight', targetIndex: pick.index,
-            hitResults: rollHits(ps.atk, mon.def, effHitRate, potHits, { ..._playerCrit, evade: mon.evade || 0 }),
+            hitResults: rollHits(_confuseAtk, mon.def, effHitRate, potHits, { ..._playerCrit, evade: mon.evade || 0 }),
             slashFrames: getSlashFramesForWeapon(firstWpnId, firstHandR),
             slashOffX: bladed ? 8 : Math.floor(Math.random() * 40) - 20,
             slashOffY: bladed ? -8 : Math.floor(Math.random() * 40) - 20,
@@ -119,7 +127,7 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
         } else {
           // Self or ally: roll hits, apply damage directly, skip slash animation
           const targetDef = pick.type === 'self' ? ps.def : (battleSt.battleAllies[pick.index].def || 0);
-          const hits = rollHits(ps.atk, targetDef, effHitRate, potHits, _playerCrit);
+          const hits = rollHits(_confuseAtk, targetDef, effHitRate, potHits, _playerCrit);
           let totalDmg = 0;
           for (const h of hits) { if (!h.miss && !h.shieldBlock) totalDmg += h.damage; }
           if (totalDmg > 0) {
@@ -191,12 +199,24 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
     const allyBlindMult = ally.status ? blindHitPenalty(ally.status) : 1;
     const allyAtkMult = ally.status ? miniToadAtkMult(ally.status) : 1;
     const allyHitRate = (ally.hitRate || 85) * allyBlindMult;
-    const allyAtk = ally.atk * allyAtkMult;
-    battleSt.allyHitResults = rollHits(allyAtk, targetDef, allyHitRate, potentialHits, {
+    // Per-hand ATK split (v1.7.322): ally.atk is the DISPLAY value (sum of both
+    // weapon ATKs + str/2). Strip weapon component to recover str/2, then add
+    // each hand's own weapon ATK back. RRLL split inside rollHits via opts.lAtk
+    // + splitRH. Single-wield: pass the equipped hand's atk as `mainAtk` so
+    // left-hand-only loadouts don't roll at str/2.
+    const allyRWpnAtk = aRw ? (ITEMS.get(ally.weaponId)?.atk || 0) : 0;
+    const allyLWpnAtk = aLw ? (ITEMS.get(ally.weaponL)?.atk || 0) : 0;
+    const allyBaseAtk = (ally.atk - allyRWpnAtk - allyLWpnAtk) * allyAtkMult;
+    const allyRAtk = allyBaseAtk + allyRWpnAtk;
+    const allyLAtk = allyBaseAtk + allyLWpnAtk;
+    const allyMainAtk = dualWield ? allyRAtk : (aRw ? allyRAtk : allyLAtk);
+    battleSt.allyHitResults = rollHits(allyMainAtk, targetDef, allyHitRate, potentialHits, {
       critPct: _allyJob.critPct || 0,
       critBonus: _allyJob.critBonus || 0,
       shieldEvade: pvpTgt ? (pvpTgt.shieldEvade || 0) : 0,
       evade: monTgt ? (monTgt.evade || 0) : pvpTgt ? (pvpTgt.evade || 0) : 0,
+      lAtk: allyLAtk,
+      splitRH: dualWield,
     });
     battleSt.allyHitIdx = 0;
     battleSt.allyHitResult = battleSt.allyHitResults[0];

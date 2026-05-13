@@ -179,13 +179,14 @@ function _battleTargetConfirm() {
   const hitsPerHand = calcPotentialHits(lv, agi, false, hasted); // base hits per hand
   const blindMult = ps.status ? blindHitPenalty(ps.status) : 1;
   const atkMult = ps.status ? miniToadAtkMult(ps.status) : 1;
-  // Per-hand ATK: strip the weapon-ATK component from ps.atk so baseAtk holds
-  // just floor(str/2) (or the Monk/BB unarmed formula). Each hand then adds its
-  // own weapon ATK below. Must match calcAttackerAtk's wpnAtk = max(r, l).
+  // Per-hand ATK: strip the weapon-ATK component (sum of both hands' weapons) from
+  // ps.atk so baseAtk holds just floor(str/2) (or the Monk/BB unarmed formula).
+  // Each hand then adds its own weapon ATK below. Must match calcAttackerAtk's
+  // display value = rWpnAtk + lWpnAtk + floor(str/2).
   // Mini/Toad reduces effective ATK to 0 (calcDamage clamps result to minimum 1).
   const rWpnAtkRaw = ITEMS.get(ps.weaponR)?.atk || 0;
   const lWpnAtkRaw = ITEMS.get(ps.weaponL)?.atk || 0;
-  const wpnAtkComponent = Math.max(rWpnAtkRaw, lWpnAtkRaw);
+  const wpnAtkComponent = rWpnAtkRaw + lWpnAtkRaw;
   const baseAtk = (ps.atk - wpnAtkComponent) * atkMult;
   const rWpn = rIsWeapon ? ITEMS.get(ps.weaponR) : null;
   const lWpn = lIsWeapon ? ITEMS.get(ps.weaponL) : null;

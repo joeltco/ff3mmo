@@ -63,26 +63,23 @@ export function calcDamage(atk, def, crit = false, critBonus = 0, elemMult = 1) 
 // Non-Monks add floor(str/2) — without it, weapon ATK alone is too low to overcome
 // any equipped defender's DEF (vit + armor stack) and damage clamps to 1.
 //
-// Dual-wield: returns max(rWpnAtk, lWpnAtk) + str/2 as the canonical ATK display
-// (the better hand's per-hit ATK). The player path in input-handler.js rolls each
-// hand independently at its own weapon ATK, so averaging the two hands distorted
-// the displayed ATK below either weapon's true per-hit power — equipping a
-// weaker offhand visibly LOWERED ATK, and adding a shield instead made it go UP
-// (the "12 vs 13" dagger+knife / dagger+shield bug, v1.7.321).
+// Returns DISPLAY ATK = rWpnAtk + lWpnAtk + floor(str/2). For dual-wield the
+// menu shows the SUM of both weapons (canon NES menu behavior + intuitive UX —
+// holding two weapons reads as a bigger number than holding one + a shield).
+// Single-wield: one slot is 0 so sum collapses to the equipped weapon.
 //
-// Ally / PVP-enemy use this value directly in `rollHits` with 2× hits
-// (potentialHits doubles when dualWield=true). For matched weapons that
-// matches canon expected damage; for mismatched dual it's slightly above the
-// per-hand canon (~14% on a 6/8 split), which is an acceptable tradeoff for
-// the consistent display. The summing-both-ATKs bug from 2026-05-08 (OK D+K
-// hit Altar Cave boss for 2× canon) is NOT reintroduced — max ≤ sum.
+// IMPORTANT: this is the display value. Damage rolls MUST split per-hand —
+// each hand contributes its own weapon ATK + floor(str/2), with hits divided
+// between the hands (RRLL). Player rolls per-hand in input-handler.js#rollHand.
+// Ally + PVP rolls per-hand via rollHits opts.lAtk / opts.splitRH (v1.7.322).
+// Using `combatant.atk` directly in a single rollHits call with 2× hits would
+// re-create the 2026-05-08 sum-and-double 2× canon bug.
 export function calcAttackerAtk({ rWpnAtk, lWpnAtk, isMonkClass, level, str, jobLevel }) {
   const isUnarmed = !rWpnAtk && !lWpnAtk;
   if (isUnarmed && isMonkClass) {
     return Math.floor(str / 4) + Math.floor(level * 1.5) + Math.floor(jobLevel / 4) + 2;
   }
-  const wpnAtk = Math.max(rWpnAtk, lWpnAtk);
-  return wpnAtk + Math.floor(str / 2);
+  return rWpnAtk + lWpnAtk + Math.floor(str / 2);
 }
 
 // Hit count: 1 + floor(level/12) + floor(AGI/12). NES uses /16; we tightened to
@@ -129,18 +126,25 @@ export function isLeftHandHit(hitIdx, totalHits, rW, lW) {
 // opts.elemMult: elemental multiplier (default 1)
 // opts.critPct: % chance to crit per hit (0 if not provided). From attacker's job modifier.
 // opts.critBonus: flat damage added on crit (0 if not provided). From attacker's job modifier.
+// opts.lAtk + opts.splitRH: when splitRH=true, hits 0..floor(n/2)-1 use `atk` (right
+//   hand) and floor(n/2)..n-1 use `lAtk` (left hand). RRLL ordering matches
+//   battle-math.js#isRightHandHit + the slash-animation timing. Used by ally and
+//   PVP-enemy dual-wield paths; player splits per-hand earlier and calls rollHits
+//   once per hand instead.
 export function rollHits(atk, def, hitRate, potentialHits, opts = {}) {
   const { shieldEvade = 0, evade = 0, defendHalve = false, targetProtected = false,
-          elemMult = 1, critPct = 0, critBonus = 0 } = opts;
+          elemMult = 1, critPct = 0, critBonus = 0, lAtk = 0, splitRH = false } = opts;
   const results = [];
+  const splitIdx = splitRH ? (potentialHits >> 1) : potentialHits;
   for (let i = 0; i < potentialHits; i++) {
+    const handAtk = (splitRH && i >= splitIdx) ? lAtk : atk;
     if (shieldEvade > 0 && Math.random() * 100 < shieldEvade) {
       results.push({ shieldBlock: true });
     } else if (evade > 0 && Math.random() * 100 < evade) {
       results.push({ miss: true });
     } else if (Math.random() * 100 < hitRate) {
       const crit = critPct > 0 && Math.random() * 100 < critPct;
-      let dmg = calcDamage(atk, def, crit, critBonus, elemMult);
+      let dmg = calcDamage(handAtk, def, crit, critBonus, elemMult);
       if (defendHalve) dmg = Math.max(1, Math.floor(dmg / 2));
       if (targetProtected) dmg = Math.max(1, Math.floor(dmg / 2));
       results.push({ damage: dmg, crit });

@@ -395,7 +395,7 @@ function _processEnemyFlash() {
   // statuses attacked at full effectiveness.
   const pvpAtkMult = (attackerStats && attackerStats.status) ? miniToadAtkMult(attackerStats.status) : 1;
   const pvpBlindMult = (attackerStats && attackerStats.status) ? blindHitPenalty(attackerStats.status) : 1;
-  const atk = (attackerStats ? attackerStats.atk : BOSS_ATK) * pvpAtkMult;
+  const displayAtk = (attackerStats ? attackerStats.atk : BOSS_ATK) * pvpAtkMult;
   const hitRate = (attackerStats?.hitRate || BOSS_HIT_RATE) * pvpBlindMult;
   // Unarmed = dual fists. Single dualWield flag drives both hit count and visual alternation,
   // matching player + ally paths so we don't end up with bespoke per-call-site logic.
@@ -404,13 +404,29 @@ function _processEnemyFlash() {
   const isUnarmed = !aRw && !aLw;
   const dualWield = (aRw && aLw) || isUnarmed;
   const potentialHits = calcPotentialHits(attackerStats?.level || 1, attackerStats?.agi || 5, dualWield);
+  // Per-hand ATK split (v1.7.322): attackerStats.atk is the DISPLAY sum
+  // (rWpn+lWpn+str/2). Strip the weapon component to recover str/2, then add
+  // each hand's own weapon ATK back. RRLL split inside rollHits via opts.lAtk
+  // + splitRH. BOSS_ATK has no weapon decomposition — falls through with
+  // rAtk == lAtk == displayAtk.
+  const pvpRWpnAtk = aRw ? (ITEMS.get(attackerStats.weaponId)?.atk || 0) : 0;
+  const pvpLWpnAtk = aLw ? (ITEMS.get(attackerStats.weaponL)?.atk || 0) : 0;
+  const pvpBaseAtk = displayAtk - pvpRWpnAtk - pvpLWpnAtk;
+  const pvpRAtk = pvpBaseAtk + pvpRWpnAtk;
+  const pvpLAtk = pvpBaseAtk + pvpLWpnAtk;
+  const pvpMainAtk = dualWield ? pvpRAtk : (aRw ? pvpRAtk : pvpLAtk);
 
   pvpSt.pvpEnemyHitIdx = 0;
   pvpSt.pvpEnemyDualWield = dualWield;
   pvpSt.pvpEnemyUnarmed = isUnarmed; // still needed by renderer to pick fist canvas vs blade
   const def = targetAlly >= 0 ? battleSt.battleAllies[targetAlly].def : ps.def;
   const attackerJob = JOBS[attackerStats?.jobIdx || 0] || {};
-  const baseOpts = { critPct: attackerJob.critPct || 0, critBonus: attackerJob.critBonus || 0 };
+  const baseOpts = {
+    critPct: attackerJob.critPct || 0,
+    critBonus: attackerJob.critBonus || 0,
+    lAtk: pvpLAtk,
+    splitRH: dualWield,
+  };
   const opts = targetAlly >= 0 ? {
     // PVP enemy hits one of player's roster allies — apply that ally's shield/evade
     // (matches battle-enemy.js path for monster-vs-ally; was being skipped here so
@@ -425,7 +441,7 @@ function _processEnemyFlash() {
     defendHalve: battleSt.isDefending,
     targetProtected: !!(ps.buffs && ps.buffs.protect),
   };
-  const raw = rollHits(atk, def, hitRate, potentialHits, opts);
+  const raw = rollHits(pvpMainAtk, def, hitRate, potentialHits, opts);
   // Map to PVP result format: { miss, shieldBlock, dmg, crit }
   pvpSt.pvpEnemyHitResults = raw.map(h => {
     if (h.shieldBlock) return { miss: false, shieldBlock: true, dmg: 0, crit: false };
