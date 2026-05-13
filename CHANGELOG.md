@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.295 — 2026-05-13
+
+### Message-box page-scroll transition
+
+- **Z-advance through a multi-page dialogue now scrolls the old text UP** and the new text in from below over 160ms — the box stays still, only the text scrolls inside it. Outer clip keeps the box inside the map viewport; an inner clip (`boxY+4 to boxY+boxH-4`) keeps the scrolling text from bleeding past the borders.
+- New `'page-scroll'` state on `msgState`, with `scrollFromBytes` holding the outgoing page. `updateMsgBox` transitions back to `'hold'` after the scroll completes; `drawMsgBox` renders both pages at offset `-progress*boxH` and `(1-progress)*boxH`. Spam-press Z mid-scroll snaps to the next page.
+- Final page still uses the existing slide-out (whole box slides up out of view).
+
 ## 1.7.294 — 2026-05-13
 
 ### NPCs share the player's tile-vs-sprite vertical offset
