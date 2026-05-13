@@ -75,7 +75,9 @@ export function drawInspect() {
   const s = inspectSt.stats;
   if (!target || !s) return;
 
-  clipToViewport();
+  // No clipToViewport — that clips to the LEFT HUD area (x=0..144); we
+  // anchor over the right-side roster panel (x=144..256) and need to draw
+  // outside that clip.
   drawBorderedBox(HUD_VIEW_X, HUD_VIEW_Y, HUD_VIEW_W, HUD_VIEW_H, true);
 
   const tx = HUD_VIEW_X + 8;
@@ -103,6 +105,4 @@ export function drawInspect() {
   equipRow('Bd', target.armorId);
   equipRow('Hd', target.helmId);
   equipRow('Sh', target.shieldId);
-
-  ctx.restore();
 }

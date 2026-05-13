@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.314 — 2026-05-13
+
+### Inspect overlay: drop left-HUD clip
+
+- v1.7.313 anchored the inspect overlay to x=144 (right-side roster panel) but `clipToViewport()` clips to the LEFT HUD area (x=0..144), so the entire overlay got clipped out and rendered nothing. Removed the clip + its paired `ctx.restore()`.
+
 ## 1.7.313 — 2026-05-13
 
 ### Inspect overlay: anchor to roster panel
