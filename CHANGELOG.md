@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.285 — 2026-05-12
+
+### Robe icon split
+
+- **Distinct robe icon for cloth/light body armor.** v1.7.281 lifted A.W. Jackson's mail tile ($E2) to slot $7A and left the 11 robe-class items on Chaos Rush's $61 — assuming $61 was the robe-style tile. It's not: CR's $61 is a vest/sleeveless silhouette that reads as generic for hooded-robe items. Lifted A.W.'s $E1 (hooded-robe shape) into slot $7C (verified unused across items / spells / monsters / jobs) and routed the 11 robes through it: Cloth (#72), Leather (#73), Kenpo (#79), DarkSuit (#7A), Wizard (#7B), BlackBelt (#7D), Bard (#80), Scholar (#81), Gaia (#82), WhiteRobe (#86), BlackRobe (#87). Heavy mail items keep $7A; CR's $61 still renders for any body-armor item not in either override list (currently none — every body armor is now classified).
+
 ## 1.7.284 — 2026-05-12
 
 ### Shrines override cleanup (no behavior change)

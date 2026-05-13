@@ -69,6 +69,15 @@ const MAIL_TILE_BYTES = new Uint8Array([
   0x00, 0x36, 0x77, 0x63, 0x08, 0x22, 0x5d, 0x08,
   0xc9, 0xa4, 0xc2, 0x80, 0x88, 0xa2, 0xc9, 0xa2,
 ]);
+// Robe-style body armor — CR's $61 is a vest/sleeveless silhouette that
+// reads as generic for the 11 robe-class items (Cloth / Leather / Kenpo /
+// DarkSuit / Wizard / BlackBelt / Bard / Scholar / Gaia / WhiteRobe /
+// BlackRobe). A.W.'s $E1 is a clear hooded-robe shape.
+const ROBE_TILE_ID = 0x7C;
+const ROBE_TILE_BYTES = new Uint8Array([
+  0xe7, 0xff, 0xbd, 0x3c, 0x3c, 0x7e, 0x7e, 0x00,
+  0xdb, 0xe7, 0xbf, 0x03, 0xbf, 0x7f, 0x7f, 0xff,
+]);
 const SPEAR_TILE_ID = 0x73;
 const SPEAR_TILE_BYTES = new Uint8Array([
   0xc0, 0xe0, 0x68, 0x10, 0x28, 0x0c, 0x06, 0x03,
@@ -95,6 +104,7 @@ export function initFont(romData) {
   _fontPixels.set(STAFF_TILE_ID,  decodeTile(STAFF_TILE_BYTES,  0));
   _fontPixels.set(MAIL_TILE_ID,   decodeTile(MAIL_TILE_BYTES,   0));
   _fontPixels.set(SPEAR_TILE_ID,  decodeTile(SPEAR_TILE_BYTES,  0));
+  _fontPixels.set(ROBE_TILE_ID,   decodeTile(ROBE_TILE_BYTES,   0));
 }
 
 /**

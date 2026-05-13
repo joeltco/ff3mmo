@@ -107,6 +107,12 @@ const MAIL_ICON_BYTE = 0x7A;
 // jobs in Chaos Rush).
 const SPEAR_ITEM_IDS = new Set([0x1A, 0x1B, 0x1C, 0x1D]);
 const SPEAR_ICON_BYTE = 0x73;
+// Robe-style body armor items — CR's $61 vest silhouette read as generic
+// for robe-class items. A.W. Jackson's $E1 (hooded robe) lands at slot
+// $7C and overrides Cloth / Leather / Kenpo / DarkSuit / Wizard /
+// BlackBelt / Bard / Scholar / Gaia / WhiteRobe / BlackRobe.
+const ROBE_ITEM_IDS = new Set([0x72, 0x73, 0x79, 0x7A, 0x7B, 0x7D, 0x80, 0x81, 0x82, 0x86, 0x87]);
+const ROBE_ICON_BYTE = 0x7C;
 
 // ASCII → NES tile byte (lowercase / uppercase / digits / space). Anything
 // unknown falls through to space. Kept local so text-decoder stays free of
@@ -209,6 +215,7 @@ export function getItemNameWithIcon(itemId) {
     else if (BRACER_ITEM_IDS.has(itemId)) iconByte = BRACER_ICON_BYTE;
     else if (STAFF_ITEM_IDS.has(itemId)) iconByte = STAFF_ICON_BYTE;
     else if (MAIL_ITEM_IDS.has(itemId)) iconByte = MAIL_ICON_BYTE;
+    else if (ROBE_ITEM_IDS.has(itemId)) iconByte = ROBE_ICON_BYTE;
     else if (SPEAR_ITEM_IDS.has(itemId)) iconByte = SPEAR_ICON_BYTE;
     // Skip any padding spaces between icon and first letter
     let i = 1;
@@ -244,6 +251,7 @@ export function getItemNameShrines(itemId) {
   else if (BRACER_ITEM_IDS.has(itemId)) iconByte = BRACER_ICON_BYTE;
   else if (STAFF_ITEM_IDS.has(itemId)) iconByte = STAFF_ICON_BYTE;
   else if (MAIL_ITEM_IDS.has(itemId)) iconByte = MAIL_ICON_BYTE;
+  else if (ROBE_ITEM_IDS.has(itemId)) iconByte = ROBE_ICON_BYTE;
   else if (SPEAR_ITEM_IDS.has(itemId)) iconByte = SPEAR_ICON_BYTE;
   const letters = new Uint8Array(override.length);
   for (let i = 0; i < override.length; i++) letters[i] = _asciiToTileByte(override[i]);
