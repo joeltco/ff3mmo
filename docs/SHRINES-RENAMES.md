@@ -9,9 +9,12 @@ Raw fetched content cached here so future sessions don't need to re-fetch.
 | Surface | Shrines override | Icons rendered | Deploy |
 |---|---|---|---|
 | Spells (56 player-castable) | ✅ shipped | ✅ shipped | v1.7.241–242 |
-| Items (200 ROM entries) | ✅ shipped v1.7.246 (`ITEM_NAMES_SHRINES`, 159 entries) | ✅ shipped v1.7.245 (font atlas extended to load $60–$6F icon tiles + `getItemNameWithIcon` at 9 render sites) | v1.7.245–246 |
-| Monsters (~231 bestiary entries) | ✅ shipped v1.7.247 (`MONSTER_NAMES_SHRINES`, 184 entries) | n/a (no icons in monster names) | v1.7.247 |
+| Items (200 ROM + 24 DS-extension) | ✅ shipped v1.7.246 (`ITEM_NAMES_SHRINES`, 192 entries after v1.7.284 cleanup + v1.7.286 DS additions) | ✅ shipped v1.7.245 (font atlas extended to load $60–$6F icon tiles + `getItemNameWithIcon` at 9 render sites) | v1.7.245–246 |
+| Monsters (~231 bestiary entries) | ✅ shipped v1.7.247 (`MONSTER_NAMES_SHRINES`, 114 entries after v1.7.284 cleanup) | n/a (no icons in monster names) | v1.7.247 |
+| Spells (56 player-castable) | ✅ shipped (`SPELL_NAMES_SHRINES`, 36 entries after v1.7.284 cleanup) | ✅ shipped | v1.7.241–242 |
 | Jobs (22 entries) | ✅ shipped v1.7.248 (`JOB_NAMES_SHRINES`, 22 entries) | n/a (no icon, no ROM fall-through) | v1.7.248 |
+
+**v1.7.284 cleanup:** 129 no-op override entries deleted across items/spells/monsters (entries whose rendered Shrines name was byte-identical to the CR ROM string). The maps now read as a list of *intentional* deviations from ROM (width-savers, renames, CR-garble fixes) rather than a mix of necessary + redundant.
 
 ## Pattern (proven on spells, replicate for items/monsters)
 
@@ -195,12 +198,14 @@ follow-ups, if requested:
   `getMonsterName` so sentences like "Goblin attacks!" still read
   cleanly with the longer Shrines variant.
 
-## Items shipped notes (v1.7.246)
+## Items shipped notes (v1.7.246 → cleanup v1.7.284 → DS extension v1.7.286)
 
-- 200 ROM entries → 159 overrides. Skipped: unused ROM IDs in `ITEMS`
+- Initial pass (v1.7.246): 200 ROM entries → 159 overrides. Skipped: unused ROM IDs in `ITEMS`
   Map (0x00, 0x47, 0x57, 0xa5, 0xb0, 0xb7, 0xbd, 0xc0, 0xc1, 0xc2,
   0xc4) and battle items where the Shrines pairing was ambiguous
   (Oershroom / Earth Drum / Black Musk / Tranquilizer).
+- v1.7.284 cleanup: 19 no-op item entries deleted (CR ROM bytes already matched the Shrines render).
+- v1.7.286 DS extension: 24 new entries added for DS-exclusive ultimates at IDs 0xC8-0xDF (Ultima / OnionBld / Celest / Gigantic / Shura / Angel / Lilith / Crimson / Gladius / Artemis / Queen / Omnitome / Blessed / MagicLnc / Mighty / Murakumo / Royal / Ballad / MstrDogi / Astral / Millenum / HolyWand / SageStaf / Muramasa). These have no ROM strings; `getItemName` short-circuits via the per-entry `icon` field in `ITEMS`. Current map size: 192 entries.
 - Same-name collisions on shared icons (e.g., two "Mithril" gloves
   $63 — one bracer, one gauntlet) are intentional and match Shrines
   list convention. If the user wants disambiguation, suffix the

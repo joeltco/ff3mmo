@@ -143,10 +143,17 @@ Canonical NES animation pattern, captured from PPU OAM while the Monk punched a 
   - **claw ($76)** — claws (#01-#05) split from nunchaku ($64). v1.7.279
   - **bracer/ring ($78)** — bracers + Protect Ring (#8B, #8E, #91-#93, #95) split from gauntlets/gloves ($63). v1.7.280
   - **staff ($79)** — staves (#0E-#14) split from rods ($66). v1.7.281
-  - **mail/heavy armor ($7A)** — 14 mail-style body armor entries (#74-#78, #7C, #7E, #7F, #83-#85, #88-#8A) split from robe-style body armor ($61). v1.7.281
+  - **mail/heavy armor ($7A)** — 14 mail-style body armor entries (#74-#78, #7C, #7E, #7F, #83-#85, #88-#8A) split from body-armor ($61). v1.7.281
   - **spear with head ($73)** — spears + lances (#1A-#1D) replace a generic diagonal stroke ($68). v1.7.282
+  - **robe/light body armor ($7C)** — 11 robe-class items (#72, #73, #79, #7A, #7B, #7D, #80-#82, #86, #87 — Cloth / Leather / Kenpo / DarkSuit / Wizard / BlackBelt / Bard / Scholar / Gaia / WhiteRobe / BlackRobe) split from body-armor ($61). v1.7.285. After this, all 25 body armor items render as either mail ($7A) or robe ($7C); CR's $61 still loads into the font atlas but is unreachable from any render path.
 - **The `_ITEM_IDS` sets in `text-decoder.js` are the only place item→icon overrides live.** No other render site needs to know. Adding another override is a 4-step plumbing change: drop the 16 tile bytes in `font-renderer.js`, register the slot, add `XXX_ITEM_IDS` + `XXX_ICON_BYTE` to `text-decoder.js`, add a branch in both `getItemNameWithIcon` and `getItemNameShrines`. The A.W. Jackson IPS is locally cached at `/tmp/ff3-aw/FF3E.IPS` for further glyph capture.
 - **Untouched single-subtype icons** — shield ($60), helmet ($62), book ($65), hammer ($67), knife ($69), axe ($6A), sword ($6B), katana ($6C), harp ($6D), bell ($6F), boomerang ($70), shuriken ($71), consumable ($7B), and gauntlet/glove ($63 after the bracer split) all read correctly in Chaos Rush — confirmed against the A.W. Jackson equivalents byte-by-byte. No further splits pending.
+
+### DS-exclusive ultimate gear (IDs 0xC8-0xDF)
+
+- **24 items past the ROM string range** added v1.7.286: Ultima Weapon (Mognet quest reward) + 22 Legendary Blacksmith job-mastery rewards + Onion Blade. Stats lifted from FF3 DS, jobs mapped to ff3mmo's NES analogs (DS Dark Knight → Magic Knight; Evoker → Conjurer; Devout → Shaman; Magus → Warlock). Celestial Gloves (DS Freelancer reward) are unrestricted — Freelancer doesn't exist as a separate class in ff3mmo.
+- **Synthesis path** — each entry carries an explicit `icon: 0xNN` field. `getItemName(itemId)` short-circuits to `new Uint8Array([icon])` when the field is present, bypassing the ROM string lookup that would otherwise read past `0x04C7` into the spell table. Name letters come from `ITEM_NAMES_SHRINES` as usual. No new code paths in the renderers — `getItemNameWithIcon` / `getItemNameShrines` keep working unchanged.
+- **No pickup mechanism yet.** Data-only registration. Drop tables / shop slots / job-mastery hooks deferred. When implementing pickup, candidates are: (a) rare drops from new endgame monsters (mirrors the Onion-equipment-from-dragons pattern), (b) a post-game crystal shop, (c) job-level-99 grant (closest to DS semantics).
 
 ## Monster data
 
