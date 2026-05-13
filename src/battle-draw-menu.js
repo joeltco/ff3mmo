@@ -104,7 +104,7 @@ function _drawBattleItemCursors(baseX) {
 function _drawBattleItemPanel(menuX) {
   const ITEM_SLIDE_MS = 200;
   const rightAreaW = CANVAS_W - BATTLE_PANEL_W - 8;
-  const invPal = [0x0F, 0x0F, 0x0F, 0x30];
+  const invPal = [0x0F, 0x30, 0x0F, 0x30];
   let invFadeStep = 0;
   if (battleSt.battleState === 'item-list-in') invFadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(battleSt.battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
   else if (battleSt.battleState === 'item-cancel-out' || battleSt.battleState === 'item-list-out') invFadeStep = Math.min(Math.floor(battleSt.battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
@@ -299,14 +299,14 @@ function _drawBattleMenuItems(positions, isVictory, isClose, isFade, fadedPal, m
     let menuPal;
     if (isMenuFade || isItemMenuOut) {
       const mfStep = Math.min(Math.floor(battleSt.battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
-      menuPal = [0x0F, 0x0F, 0x0F, 0x30];
+      menuPal = [0x0F, 0x30, 0x0F, 0x30];
       for (let s = 0; s < mfStep; s++) menuPal[3] = nesColorFade(menuPal[3]);
     } else if (isItemMenuIn) {
       const mfStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(battleSt.battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
-      menuPal = [0x0F, 0x0F, 0x0F, 0x30];
+      menuPal = [0x0F, 0x30, 0x0F, 0x30];
       for (let s = 0; s < mfStep; s++) menuPal[3] = nesColorFade(menuPal[3]);
     } else {
-      menuPal = isVictory ? [0x0F, 0x0F, 0x0F, 0x30] : fadedPal;
+      menuPal = isVictory ? [0x0F, 0x30, 0x0F, 0x30] : fadedPal;
     }
     const isMage = _MAGE_JOBS.has(ps.jobIdx);
     for (let i = 0; i < BATTLE_MENU_ITEMS.length; i++) {

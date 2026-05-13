@@ -2,7 +2,13 @@
 
 All notable changes to this project are documented here.
 
-## 1.7.299 — 2026-05-13
+## 1.7.300 — 2026-05-13
+
+### AWJ icons: faded-palette + inline-palette fix
+
+- **v1.7.299's exported palettes were the right fix but had no effect on inventory.** `_makeFadedPal` in `palette.js` (used by every pause-menu / inventory / magic / battle-menu row) built its own `[0x0F, 0x0F, 0x0F, 0x30]` palette inline — color 1 still NES black. Same hardcoded literal appeared 6 more times across `roster.js`, `battle-draw-allies.js`, `battle-draw-menu.js`. All 7 spots flipped to `[0x0F, 0x30, 0x0F, 0x30]` so AWJ item-class icons paint visibly. `_makeFadedPal` now fades color 1 alongside color 3.
+
+
 
 ### AWJ icons: palette color-1 fix
 
