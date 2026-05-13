@@ -81,42 +81,12 @@ export function drawInspect() {
   const STEP = 11;
   let y = HUD_VIEW_Y + 8;
 
-  // Name top-right (matches pause stats screen layout)
+  // Name centered at top so it's clear who's being inspected.
   const nameBytes = _nameToBytes(target.name);
-  drawText(ctx, rx - measureText(nameBytes), y, nameBytes, pal);
-  y += STEP;
+  drawText(ctx, HUD_VIEW_X + Math.floor((HUD_VIEW_W - measureText(nameBytes)) / 2), y, nameBytes, pal);
+  y += STEP + 2;
 
-  // Job + Lv
-  const jobName = JOB_NAMES_SHRINES[target.jobIdx] || (JOBS[target.jobIdx] && JOBS[target.jobIdx].name) || '???';
-  drawText(ctx, tx, y, _nameToBytes(jobName), pal);
-  const lvBytes = _nameToBytes('Lv ' + s.level);
-  drawText(ctx, rx - measureText(lvBytes), y, lvBytes, pal);
-  y += STEP;
-
-  // HP
-  const hpStr = s.hp + '/' + s.maxHP;
-  const hpBytes = _nameToBytes(hpStr);
-  drawText(ctx, tx, y, _nameToBytes('HP'), pal);
-  drawText(ctx, rx - measureText(hpBytes), y, hpBytes, pal);
-  y += STEP;
-
-  const GAP = 8;
-  const r1LabelX = tx + 64;
-  function pair(l0, v0, l1, v1) {
-    const l0b = _nameToBytes(l0), v0b = _nameToBytes(v0);
-    const l1b = _nameToBytes(l1), v1b = _nameToBytes(v1);
-    drawText(ctx, tx, y, l0b, pal);
-    drawText(ctx, tx + l0b.length * 8 + GAP, y, v0b, pal);
-    drawText(ctx, r1LabelX, y, l1b, pal);
-    drawText(ctx, rx - v1b.length * 8, y, v1b, pal);
-    y += STEP;
-  }
-  pair('ATK', String(s.atk), 'DEF', String(s.def));
-  pair('AGI', String(s.agi), 'INT', String(s.int));
-  pair('MND', String(s.mnd), 'EVD', String(s.evade));
-
-  // Equipment block — only rows with actual items
-  y += 2;
+  // Equipment block — only rows with actual items.
   function equipRow(label, itemId) {
     if (itemId == null) return;
     const item = ITEMS.get(itemId);
@@ -130,19 +100,6 @@ export function drawInspect() {
   equipRow('Bd', target.armorId);
   equipRow('Hd', target.helmId);
   equipRow('Sh', target.shieldId);
-
-  // Spells (first 2 — Black Mages at high level can have many)
-  if (s.knownSpells && s.knownSpells.length > 0) {
-    y += 2;
-    const shown = s.knownSpells.slice(0, 2);
-    for (const spellId of shown) {
-      drawText(ctx, tx, y, getSpellNameShrines(spellId), pal);
-      y += STEP;
-    }
-    if (s.knownSpells.length > 2) {
-      drawText(ctx, tx, y, _nameToBytes('+' + (s.knownSpells.length - 2) + ' more'), pal);
-    }
-  }
 
   ctx.restore();
 }

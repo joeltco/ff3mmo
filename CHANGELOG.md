@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.311 — 2026-05-13
+
+### Inspect overlay: equipment only
+
+- Stripped name-top-right, job/level row, HP, ATK/DEF/AGI/INT/MND/EVD pairs, and the spell list from the inspect overlay. Now shows the target's name (centered at top) and just the equipment rows (R / L / Bd / Hd / Sh).
+
 ## 1.7.310 — 2026-05-13
 
 ### Roster panels: blue interior fill → black (the actual fix)
