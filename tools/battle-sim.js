@@ -180,12 +180,9 @@ function attackPlayerDualWield(att, def, opts = {}) {
   const lWpnAtk = (lWpn?.atk) || 0;
   const rArmed = isWeapon(att.weaponR);
   const lArmed = att.weaponL != null && isWeapon(att.weaponL);
-  // input-handler.js:178 — strip the AVERAGE of weapon ATKs (matches what
-  // calcAttackerAtk added for dual-wield). Single-wield strips the equipped
-  // weapon (one of the two ATKs is 0).
-  const wpnAtkComponent = (rArmed && lArmed)
-    ? Math.floor((rWpnAtk + lWpnAtk) / 2)
-    : rWpnAtk + lWpnAtk;
+  // Strip the MAX of weapon ATKs (matches calcAttackerAtk's wpnAtk =
+  // max(r, l) — v1.7.321). Single-wield: one ATK is 0, so max == equipped.
+  const wpnAtkComponent = Math.max(rWpnAtk, lWpnAtk);
   const blindMult = att.status ? blindHitPenalty(att.status) : 1;
   const atkMult   = att.status ? miniToadAtkMult(att.status) : 1;
   const hasted    = !!hasBuff(att, BUFF_HASTE);

@@ -179,17 +179,13 @@ function _battleTargetConfirm() {
   const hitsPerHand = calcPotentialHits(lv, agi, false, hasted); // base hits per hand
   const blindMult = ps.status ? blindHitPenalty(ps.status) : 1;
   const atkMult = ps.status ? miniToadAtkMult(ps.status) : 1;
-  // Per-hand ATK: strip weapon ATK from ps.atk (Monk/BB unarmed uses special formula, already in ps.atk)
-  // Mini/Toad reduces effective ATK to 0 (calcDamage clamps result to minimum 1)
-  // Dual-wield: calcAttackerAtk only ADDED the average (rWpn+lWpn)/2, so strip
-  // the average — not the sum — or baseAtk goes negative by half the weapon
-  // value and per-hand damage clamps to 1-2. Reproduced via tools/battle-sim.js
-  // (RM7 dual-dagger vs BM4: was 3-5/turn, should be 36-39/turn).
+  // Per-hand ATK: strip the weapon-ATK component from ps.atk so baseAtk holds
+  // just floor(str/2) (or the Monk/BB unarmed formula). Each hand then adds its
+  // own weapon ATK below. Must match calcAttackerAtk's wpnAtk = max(r, l).
+  // Mini/Toad reduces effective ATK to 0 (calcDamage clamps result to minimum 1).
   const rWpnAtkRaw = ITEMS.get(ps.weaponR)?.atk || 0;
   const lWpnAtkRaw = ITEMS.get(ps.weaponL)?.atk || 0;
-  const wpnAtkComponent = (rIsWeapon && lIsWeapon)
-    ? Math.floor((rWpnAtkRaw + lWpnAtkRaw) / 2)
-    : (rWpnAtkRaw + lWpnAtkRaw);
+  const wpnAtkComponent = Math.max(rWpnAtkRaw, lWpnAtkRaw);
   const baseAtk = (ps.atk - wpnAtkComponent) * atkMult;
   const rWpn = rIsWeapon ? ITEMS.get(ps.weaponR) : null;
   const lWpn = lIsWeapon ? ITEMS.get(ps.weaponL) : null;

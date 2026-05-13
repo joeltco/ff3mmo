@@ -63,21 +63,25 @@ export function calcDamage(atk, def, crit = false, critBonus = 0, elemMult = 1) 
 // Non-Monks add floor(str/2) — without it, weapon ATK alone is too low to overcome
 // any equipped defender's DEF (vit + armor stack) and damage clamps to 1.
 //
-// Dual-wield: per-hit ATK uses the AVERAGE of both weapon ATKs, not the sum.
-// `calcPotentialHits` already doubles the hit count when dualWield=true, so
-// each hand "strikes" once per turn at near-single-weapon power. Summing
-// both ATKs and doubling hits compounded into quadratic damage (caught
-// 2026-05-08 — lv3 OK D+K hit the Altar Cave boss for 40+ dmg/turn,
-// roughly 2× canon). Average + double-hit lands close to NES canon, where
-// each hand's strike resolves separately at that hand's own weapon ATK.
+// Dual-wield: returns max(rWpnAtk, lWpnAtk) + str/2 as the canonical ATK display
+// (the better hand's per-hit ATK). The player path in input-handler.js rolls each
+// hand independently at its own weapon ATK, so averaging the two hands distorted
+// the displayed ATK below either weapon's true per-hit power — equipping a
+// weaker offhand visibly LOWERED ATK, and adding a shield instead made it go UP
+// (the "12 vs 13" dagger+knife / dagger+shield bug, v1.7.321).
+//
+// Ally / PVP-enemy use this value directly in `rollHits` with 2× hits
+// (potentialHits doubles when dualWield=true). For matched weapons that
+// matches canon expected damage; for mismatched dual it's slightly above the
+// per-hand canon (~14% on a 6/8 split), which is an acceptable tradeoff for
+// the consistent display. The summing-both-ATKs bug from 2026-05-08 (OK D+K
+// hit Altar Cave boss for 2× canon) is NOT reintroduced — max ≤ sum.
 export function calcAttackerAtk({ rWpnAtk, lWpnAtk, isMonkClass, level, str, jobLevel }) {
   const isUnarmed = !rWpnAtk && !lWpnAtk;
   if (isUnarmed && isMonkClass) {
     return Math.floor(str / 4) + Math.floor(level * 1.5) + Math.floor(jobLevel / 4) + 2;
   }
-  const wpnAtk = (rWpnAtk > 0 && lWpnAtk > 0)
-    ? Math.floor((rWpnAtk + lWpnAtk) / 2)
-    : (rWpnAtk + lWpnAtk);  // single-wield: one slot is 0, so this is just the equipped weapon
+  const wpnAtk = Math.max(rWpnAtk, lWpnAtk);
   return wpnAtk + Math.floor(str / 2);
 }
 

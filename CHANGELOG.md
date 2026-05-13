@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.321 — 2026-05-13
+
+### Dual-wield ATK display fix: max(rWpn, lWpn), not average
+
+- Reported bug: Red Mage L6 with dagger + knife → ATK 12. Swap knife for leather shield → ATK 13. Adding a defensive item raised offense, which made no sense to players.
+- Root cause: `calcAttackerAtk` returned `avg(rWpnAtk, lWpnAtk) + floor(str/2)` for dual-wield, so the weaker offhand dragged the displayed ATK down below the better hand's per-hit value. Per-hand combat damage already rolls each hand at its own weapon ATK (`input-handler.js:rollHand`), so the average was a display-only distortion — the actual damage per turn was unchanged.
+- Fix: dual-wield now displays `max(rWpnAtk, lWpnAtk) + floor(str/2)`. Knife+dagger reads 13 (the knife's per-hit value), matching knife+shield. Player per-hand damage unchanged. `input-handler.js#wpnAtkComponent` updated to use `max` so `baseAtk = floor(str/2)` is recovered correctly. `tools/battle-sim.js` mirrored.
+- Side effect: ally + PVP-enemy paths apply `combatant.atk` to all hits in a single `rollHits` call, so mismatched dual-wielding ally/PVP now hits ~8-14% above prior expected damage (matched-weapon dual: identical). The 2026-05-08 sum-and-double bug (OK D+K → boss for 2× canon) is NOT reintroduced — max ≤ sum.
+
 ## 1.7.320 — 2026-05-13
 
 ### Shop confirm / message box: blue gone + X dismisses
