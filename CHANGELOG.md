@@ -2,6 +2,10 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.317 — 2026-05-13
+
+### Inspect: hand labels R/L → RH/LH
+
 ## 1.7.316 — 2026-05-13
 
 ### Inspect overlay: widen 96 → 120

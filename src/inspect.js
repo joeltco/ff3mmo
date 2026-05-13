@@ -130,8 +130,8 @@ export function drawInspect() {
     drawText(ctx, tx + 20, y, getItemNameShrines(itemId), pal);
     y += STEP;
   }
-  equipRow('R',  s.weaponId);
-  if (s.weaponL != null) equipRow('L', s.weaponL);
+  equipRow('RH', s.weaponId);
+  if (s.weaponL != null) equipRow('LH', s.weaponL);
   equipRow('Bd', target.armorId);
   equipRow('Hd', target.helmId);
   equipRow('Sh', target.shieldId);
