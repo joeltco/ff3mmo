@@ -14,8 +14,10 @@ import { MOOGLE_GFX_ID, MOOGLE_PAL } from './sprite-init.js';
 const TILE_SIZE = 16;
 
 const WALK_DURATION_MS = 480;
-const PAUSE_MIN_MS     = 600;
-const PAUSE_MAX_MS     = 1800;
+const PAUSE_MIN_MS     = 1500;
+const PAUSE_MAX_MS     = 4000;
+const WALK_RUN_MIN     = 1;     // tiles in a single walk burst before pausing
+const WALK_RUN_MAX     = 3;
 const FLOOR = 0x30;
 
 let _npcs = [];
@@ -50,6 +52,7 @@ export function addMoogle(tileX, tileY) {
     walkFromY: tileY,
     dir: DIR_DOWN,
     talkFacing: null,  // DIR_* when set during dialogue, overrides wander dir
+    runRemaining: 0,   // tiles left in the current walk burst
   });
 }
 
@@ -91,7 +94,9 @@ function _tickNpc(npc, dt) {
   npc.timer -= dt;
   if (npc.mode === 'pause') {
     if (npc.timer > 0) return;
-    _startWalk(npc);
+    // Start a new walk burst: pick a direction + a 1..3-tile run length.
+    npc.runRemaining = WALK_RUN_MIN + Math.floor(Math.random() * (WALK_RUN_MAX - WALK_RUN_MIN + 1));
+    _startWalk(npc, null);
     return;
   }
   if (npc.timer <= 0) {
@@ -99,6 +104,10 @@ function _tickNpc(npc, dt) {
     npc.tileY = npc.walkFromY + npc.walkDY;
     npc.pixelOffX = 0;
     npc.pixelOffY = 0;
+    npc.runRemaining--;
+    // Continue the burst in the SAME direction if there are tiles left AND
+    // the next step is legal. Otherwise pause.
+    if (npc.runRemaining > 0 && _trySameDir(npc)) return;
     npc.mode = 'pause';
     npc.timer = _randPauseMs();
     return;
@@ -106,6 +115,24 @@ function _tickNpc(npc, dt) {
   const progress = 1 - (npc.timer / WALK_DURATION_MS);
   npc.pixelOffX = Math.round(npc.walkDX * TILE_SIZE * progress) - npc.walkDX * TILE_SIZE;
   npc.pixelOffY = Math.round(npc.walkDY * TILE_SIZE * progress) - npc.walkDY * TILE_SIZE;
+}
+
+// Same-direction continuation: keep the same dx/dy if the next tile is legal.
+function _trySameDir(npc) {
+  if (!mapSt.mapData) return false;
+  const dx = npc.walkDX, dy = npc.walkDY;
+  const tx = npc.tileX + dx, ty = npc.tileY + dy;
+  if (!_isOpenAreaTile(mapSt.mapData.tilemap, tx, ty)) return false;
+  if (_tileOccupied(tx, ty, npc)) return false;
+  npc.mode = 'walk';
+  npc.timer = WALK_DURATION_MS;
+  npc.walkFromX = npc.tileX;
+  npc.walkFromY = npc.tileY;
+  npc.tileX = tx;
+  npc.tileY = ty;
+  npc.pixelOffX = -dx * TILE_SIZE;
+  npc.pixelOffY = -dy * TILE_SIZE;
+  return true;
 }
 
 function _startWalk(npc) {
@@ -128,6 +155,7 @@ function _startWalk(npc) {
     npc.dir = _dxDyToDir(dx, dy);
     return;
   }
+  npc.runRemaining = 0;
   npc.timer = _randPauseMs();
 }
 

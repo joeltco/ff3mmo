@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.293 — 2026-05-13
+
+### Moogle wander: 1-3 tile bursts + longer pauses
+
+- **Each walk burst is now a 1-3 tile run in a single direction.** `runRemaining` is rolled at burst-start; the moogle keeps stepping the same `(dx, dy)` until the counter expires or the next tile is illegal (off open area, occupied), then pauses. Direction picks still go through the shuffled-dirs loop on burst-start.
+- **Pause range bumped to 1500-4000ms** (was 600-1800ms). The moogle stands around much longer between bursts.
+
 ## 1.7.292 — 2026-05-13
 
 ### Moogle uses full 4-direction walking sprite
