@@ -206,12 +206,17 @@ function _randPauseMs() {
 
 // ── Render ─────────────────────────────────────────────────────────────────
 
-export function drawNpcs(ctx, camX, camY, originX, originY) {
+export function drawNpcs(ctx, camX, camY, originX, originY, spriteY) {
   if (_npcs.length === 0) return;
   const moogle = _getMoogleSprite();
   if (!moogle) return;
+  // World→screen transforms: map tiles use `originY` (3px below `spriteY`),
+  // sprites use `spriteY` so they sit *on* the tile instead of inside it —
+  // same vertical offset the player draw uses. We use `spriteY` here so the
+  // moogle's feet align with the player's on the same row. xOff / yOff /
+  // bottomFlip / bob from WALK_FRAMES are applied inside `Sprite.draw`.
   const wLeft = camX - originX;
-  const wTop = camY - originY;
+  const wTop  = camY - (spriteY != null ? spriteY : originY);
   for (const npc of _npcs) {
     if (npc.spriteKey !== 'moogle') continue;
     const sx = npc.tileX * TILE_SIZE + npc.pixelOffX - wLeft;

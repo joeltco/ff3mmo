@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.294 — 2026-05-13
+
+### NPCs share the player's tile-vs-sprite vertical offset
+
+- **`drawNpcs` now uses `spriteY` (not `originY`) for the world-to-screen Y transform.** Map tiles are drawn relative to `originY = SCREEN_CENTER_Y + 3` while sprites use `spriteY = SCREEN_CENTER_Y` — the 3-pixel "sprite stands on the tile" offset. Before this fix the moogle was anchored to the tile origin and sat 3 pixels lower than the player on the same row.
+- Per-frame `xOff` / `yOff` / `bottomFlip` from `WALK_FRAMES` were already inherited automatically (they're applied inside `Sprite.draw`).
+
 ## 1.7.293 — 2026-05-13
 
 ### Moogle wander: 1-3 tile bursts + longer pauses

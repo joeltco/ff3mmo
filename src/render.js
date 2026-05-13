@@ -46,7 +46,7 @@ function _renderSprites(camX, camY, originX, originY, spriteY) {
   // `_npcs` state from a previous session, so the `onWorldMap` check alone
   // isn't enough.
   if (!mapSt.onWorldMap && mapSt.mapRenderer && mapSt.mapData) {
-    drawNpcs(ui.ctx, camX, camY, originX, originY);
+    drawNpcs(ui.ctx, camX, camY, originX, originY, spriteY);
   }
   if (mapSt.bossSprite) {
     const blinkHidden = battleSt.bossFlashTimer > 0 && (Math.floor(battleSt.bossFlashTimer / 60) & 1);
