@@ -283,7 +283,7 @@ function _drawRosterRow(p, i, panelTop) {
   const portraits = jobPortraits && jobPortraits[p.palIdx];
   if (portraits) ui.ctx.drawImage(portraits[fadeStep], HUD_RIGHT_X + 8, rowY + 8);
 
-  const namePal = [0x0F, 0x30, 0x0F, 0x30];
+  const namePal = [0x0F, 0x10, 0x0F, 0x30];
   for (let s = 0; s < fadeStep; s++) namePal[3] = nesColorFade(namePal[3]);
   const nameBytes = _nameToBytes(p.name);
   const nameW = measureText(nameBytes);

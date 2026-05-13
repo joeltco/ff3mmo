@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.301 — 2026-05-13
+
+### AWJ icons: light-grey body + white accents
+
+- **Palette color 1 dropped from `$30` (white) to `$10` (light grey)** across `TEXT_WHITE`, `_makeFadedPal`, and all 6 inline copies. AWJ designs item icons as 2-tone glyphs: color 1 = main body, color 3 = highlight. Pure white-on-white flattened them into solid silhouettes; light-grey body + white highlights restores the depth on robe / mail / helm icons. Color-1-only icons (staff / rod / knife / hammer / spear / axe / bow / arrow / bell / boomerang) now paint in light grey — still visible, slightly dimmer than the letter text. Colored palettes (`TEXT_BLUE/RED/GREEN/YELLOW`) follow the same pattern: dark variant of the hue for color 1, bright for color 3.
+
 ## 1.7.300 — 2026-05-13
 
 ### AWJ icons: faded-palette + inline-palette fix

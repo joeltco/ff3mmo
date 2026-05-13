@@ -26,16 +26,16 @@ const FONT_TILE_COUNT = 160;      // $60-$FF
 
 // Common text palettes (NES color indices).
 // [transparent, color1, color2, color3]
-// AWJ convention: letters paint color 3, item-class icons paint color 1.
-// Both must map to the same visible color or one of them goes missing —
-// CR's letters-only used color 3 so the v1.7.297-and-earlier values worked
-// for letters but rendered AWJ icons (e.g., staff $EA) as black-on-black.
-export const TEXT_WHITE   = [0x0F, 0x30, 0x0F, 0x30]; // white (icons + letters)
-export const TEXT_GREY    = [0x0F, 0x10, 0x00, 0x10]; // grey
-export const TEXT_BLUE    = [0x0F, 0x12, 0x02, 0x12]; // blue
-export const TEXT_RED     = [0x0F, 0x16, 0x06, 0x16]; // red
-export const TEXT_GREEN   = [0x0F, 0x1A, 0x0A, 0x1A]; // green
-export const TEXT_YELLOW  = [0x0F, 0x28, 0x18, 0x28]; // yellow
+// AWJ convention: letters paint color 3 only, item-class icons paint color 1
+// (and sometimes color 3 for 2-tone highlight). Pairing color 1 = light grey
+// with color 3 = white gives staff/rod/knife (color-1-only) a dimmer body,
+// and gives robe/mail/helm (2-tone) a grey body with white accents.
+export const TEXT_WHITE   = [0x0F, 0x10, 0x0F, 0x30]; // light grey + white
+export const TEXT_GREY    = [0x0F, 0x00, 0x00, 0x10]; // dim grey
+export const TEXT_BLUE    = [0x0F, 0x02, 0x02, 0x12]; // dark + bright blue
+export const TEXT_RED     = [0x0F, 0x06, 0x06, 0x16]; // dark + bright red
+export const TEXT_GREEN   = [0x0F, 0x0A, 0x0A, 0x1A]; // dark + bright green
+export const TEXT_YELLOW  = [0x0F, 0x18, 0x18, 0x28]; // dark + bright yellow
 
 let _fontPixels = null;  // Map<tileId, Uint8Array(64)>
 let _tileCache = null;   // Map<paletteKey, Map<tileId, HTMLCanvasElement>>
