@@ -155,6 +155,40 @@ Canonical NES animation pattern, captured from PPU OAM while the Monk punched a 
 - **Synthesis path** — each entry carries an explicit `icon: 0xNN` field. `getItemName(itemId)` short-circuits to `new Uint8Array([icon])` when the field is present, bypassing the ROM string lookup that would otherwise read past `0x04C7` into the spell table. Name letters come from `ITEM_NAMES_SHRINES` as usual. No new code paths in the renderers — `getItemNameWithIcon` / `getItemNameShrines` keep working unchanged.
 - **No pickup mechanism yet.** Data-only registration. Drop tables / shop slots / job-mastery hooks deferred. When implementing pickup, candidates are: (a) rare drops from new endgame monsters (mirrors the Onion-equipment-from-dragons pattern), (b) a post-game crystal shop, (c) job-level-99 grant (closest to DS semantics).
 
+## NPCs
+
+`src/npc.js` is the canonical NPC runtime (v1.7.291-297). First NPC shipped: a moogle on Altar Cave floor 1.
+
+- **Sprite source — always ROM-extracted.** ff3mmo has a documented sprite-extraction pipeline. NEVER hand-author NPC sprites. For the moogle: `MOOGLE_GFX_ID = 42` → `MOOGLE_SPRITE_OFF = 0x01EA10`, palette `MOOGLE_PAL = [0x0F, 0x0F, 0x16, 0x30]` (exported from `sprite-init.js`). For a new NPC, grep `sprite-init.js` for the gfx ID convention and add a parallel `{NAME}_GFX_ID` / `{NAME}_PAL` export — reference image + ROM offset, never a pixel grid. See also memory note `feedback_ff3mmo_never_hand_author_sprites.md`.
+- **Render shares the player's `Sprite` class.** One instance per NPC type, lazy-init on first draw, configured per-NPC at draw time. The shared `WALK_FRAMES` map (tiles 0-3 DOWN, 4-7 UP, 8-15 SIDE with HFLIP for RIGHT, plus `bottomFlip` and `yOff` walk-bob) gives 4 directions × 2 frames for free.
+- **Render Y-anchor must use `spriteY` (not `originY`).** Map tiles use `originY = SCREEN_CENTER_Y + 3`; sprites use `spriteY = SCREEN_CENTER_Y`, the 3-pixel "sprite stands on the tile" offset. Inheriting this is what makes NPC feet line up with the player on the same row. `drawNpcs(ctx, camX, camY, originX, originY, spriteY)` — pass `spriteY` and use it for the Y world-to-screen transform.
+- **FF-style wander loop.** Walk burst = 1-3 tiles in one direction (`runRemaining` rolled at burst-start, walk = 480ms per tile, same-direction continuation via `_trySameDir`). Pause = random 1500-4000ms. Pathway-avoidance: `_isOpenAreaTile` requires FLOOR + ≥3 walkable neighbors so NPCs never roam onto a 1-wide corridor and can't block the player's path.
+- **Collision is lerp-aware and symmetric.** `_tileOccupied` treats the player as occupying `Math.floor` AND `Math.ceil` of `worldX/worldY` (the player straddles two tiles mid-walk). Other NPCs check both `tileX/Y` (current/destination) and `walkFromX/Y` (source during walk). `findNpcAt` (called from `movement.js`) is also symmetric.
+- **Talk-facing.** When the player presses Z facing an NPC, `talkFacing` pins the render direction to the OPPOSITE of the player's facing (NPC turns to look at you). Cleared in the `onAllDone` callback of `showMsgBoxPages`. Wander freezes during dialogue (`msgState.state !== 'none'`).
+- **Placement + lifecycle.** `clearNpcs()` must be called on every map transition (dungeon load, regular-map load, world-map load). Defensive render guard: `drawNpcs` only fires when `mapSt.mapRenderer && mapSt.mapData && !mapSt.onWorldMap`.
+- **Dialogue lives in `src/data/npcs.js`** as a `dialogue: [...]` field per NPC. The catalog key convention is `<mapname>_<idx>` for ROM-anchored NPCs, descriptive id for synthetic ones (e.g. `altar_moogle`).
+- **Tick site:** `updateNpcs(dt)` is called from `game-loop.js` once per frame, gated on `battleSt.battleState === 'none'`. Don't add a parallel update hook.
+
+## Message-box dialogue surface
+
+`src/message-box.js` (v1.7.297) is the canonical overworld dialogue surface. Any new dialogue (NPCs, signs, item-pickup blurbs, post-event explainer text) goes through this — do NOT spin up a parallel box.
+
+- **API.** `showMsgBox(bytes, onClose?)` — one-shot. `showMsgBoxPages(pages, onAllDone?)` — multi-page. `replaceMsgBoxText(bytes, onClose?)` — text-swap mid-hold without re-animating (used by PVP search, not normally needed for dialogue). `dismissMsgBox()` — force slide-out from `hold`; don't call directly inside a multi-page chain, let the page driver own the lifecycle.
+- **State machine.** `msgState.state` ∈ `{ 'none', 'slide-in', 'hold', 'page-scroll', 'slide-out' }`. Slide-in / slide-out use `SLIDE_MS = 80` (whole box slides through the top of the viewport). `page-scroll` uses `SCROLL_MS = 160` (box stays still, text scrolls inside an inner clip `boxY+4 to boxY+boxH-4`). `msgState.onAdvance` is the multi-page hook — when set, the overworld Z handler in `movement.js` routes to it instead of `dismissMsgBox`.
+- **Scroll-up transition.** `showMsgBoxPages` plays slide-in once for page 1; every Z scrolls the previous page UP and the next page in from below over 160ms; slide-out only after the final Z. Spam-press Z mid-scroll snaps to the next page. Final Z forces slide-out regardless of current sub-state.
+- **Text centering.** `_drawMsgText` centers on **visual glyph height** (`GLYPH_H = 8`) not nominal `lineH = 12`. The trailing 4px gap below the last line was biasing 3-line pages toward the top of the box — fixed in v1.7.297, do not revert. Inner clip `boxY+4 to boxY+boxH-4` keeps the scrolling text from bleeding over the border tiles.
+- **Layout.** Box is 144 × 48px, top-aligned in HUD viewport (`HUD_VIEW_Y = 32`). Wrap is 16 chars/line via `_wrapMsgBytes`; 3 lines max fit comfortably. Write dialogue strings short enough that the wrap result lands at ≤3 lines per page.
+- **Behavior coupling.** Movement is blocked while `msgState.state !== 'none'` (overworld Z handler in `movement.js`). NPC wander ticks also freeze the same way. `onClose` (one-shot) / `onAllDone` (pages) fire AFTER slide-out completes, in `updateMsgBox`.
+
+## Battle message strip
+
+`src/battle-msg.js` (v1.7.287-288). The in-battle right-side strip is a separate non-blocking surface — different system from the overworld `message-box.js` above.
+
+- **Non-blocking.** Animations never wait on the strip. The old `msg-wait` and `message-hold` battle states were deleted in v1.7.287 along with every gate that paused the state machine for the strip to drain (`battle-enemy.js`, `battle-update.js`, `spell-cast.js`). Strip runs entirely on its own 1200ms clock (200 fade-in + 800 hold + 200 fade-out).
+- **Queue collapsed to one slot.** `queueBattleMsg` and `replaceBattleMsg` are the same function: if a message is already displaying, the new text swaps in place without re-fading and the hold timer resets. The queue array is gone; new turns / status / crit / hits / slain all cut in immediately.
+- **Display names are Shrines short-names.** Battle-strip + PVP-strip + item-use messages route through `getSpellNameShrinesClean` / `getItemNameShrinesClean` (v1.7.288) so the strip shows `Ice` / `Ice2` / `Ice3` instead of raw ROM `Bzzard` / `Bzzra` / `Bzzaga`. Without these helpers the strip diverges from the spell menu / shop / inspect panels.
+- **Don't add new `isBattleMsgBusy` gates.** That predicate is gone. If you need to delay something post-attack, gate it on the actual animation completing, not on the strip.
+
 ## Monster data
 
 - **`src/data/monsters.js` is auto-generated from the ROM** via `tools/gen-monsters-js.js`. That script reads `$60010` (monster props), `$61010` (stat table, indexed via byte 9/12 of the props), `$61210` (attack scripts), gil/EXP/CP tables, and preserves `steal`/`drops`/`location` from the existing file. To regenerate: `node tools/gen-monsters-js.js > src/data/monsters.js`. Verify the result against `tools/rom-dump-monsters.txt` before committing.
