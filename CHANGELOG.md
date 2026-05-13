@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.312 — 2026-05-13
+
+### Inspect overlay: shrunk to fit content
+
+- Sized from 144×144 (full HUD viewport) down to 112×88, centered horizontally at x=72, y=48. Fits the v1.7.311 equipment-only layout with no wasted empty space.
+
 ## 1.7.311 — 2026-05-13
 
 ### Inspect overlay: equipment only

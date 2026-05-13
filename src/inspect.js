@@ -21,10 +21,12 @@ import { drawBorderedBox, clipToViewport } from './hud-drawing.js';
 import { ui } from './ui-state.js';
 import { playSFX, SFX } from './music.js';
 
-const HUD_VIEW_X = 0;
-const HUD_VIEW_Y = 32;
-const HUD_VIEW_W = 144;
-const HUD_VIEW_H = 144;
+// Sized to fit name + up to 6 equipment rows (R/L/Bd/Hd/Sh) with tight
+// padding; centered horizontally in the canvas viewport (256 px wide).
+const HUD_VIEW_W = 112;
+const HUD_VIEW_H = 88;
+const HUD_VIEW_X = (256 - HUD_VIEW_W) / 2;  // 72
+const HUD_VIEW_Y = 48;
 
 export const inspectSt = {
   open: false,
