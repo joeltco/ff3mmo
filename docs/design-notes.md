@@ -38,6 +38,17 @@ Deferred work that's been noted in changelog entries but doesn't yet have a home
 - **Jobs 3–21 use `_genericBundle`** in `combatant-sprites.js` — reads ROM at each job's `jobBase` using the shared tile-index convention. Approximate due to MMC3 CHR banking; PPU-capture specific poses if a job renders scrambled. (1.7.50: legacy `_initGenericJobPosePortraits` / `_buildGenericJobFullBodies` helpers in `sprite-init.js` were deleted along with the rest of the dead per-job branch — every job flows through `_buildFakePlayerSet` → `getJobPoseTileBundle`.)
 - **Death tiles for every job** are at `jobBase + 0x240` (PPU tile indices 36-41), 6 tiles in a 3×2 prone grid. `_deathTilesForJob(romData, jobIdx)` in `combatant-sprites.js` is the single helper that all four bundles (OK / WR / MO / generic) use. The per-job `OK_DEATH` / `WR_DEATH` / `MO_DEATH` constants were removed in 1.7.50 once the stride was verified byte-for-byte against the ROM for jobs 0/1/2.
 
+## Dual-wield ATK (display vs combat)
+
+Two values must stay separate:
+
+- **Display** (`calcAttackerAtk` in `battle-math.js`) returns `rWpnAtk + lWpnAtk + floor(str/2)`. That's the canon NES menu — sum of both equipped weapons + str bonus. Single-wield: one slot is 0 so it collapses to the equipped weapon. Unarmed Monk/BlackBelt: special level-based formula (`floor(str/4) + floor(level*1.5) + floor(jobLevel/4) + 2`). This is what shows on the equip / status screen and what's stored as `ps.atk` / `ally.atk` / fake-player `.atk`.
+- **Per-hit combat ATK** is **always** computed per-hand: `floor(str/2) + (this hand's weapon ATK)`. Each hand rolls its own hits at its own ATK. RRLL split — first half of the combo uses the right hand, second half uses the left (`battle-math.js#isRightHandHit`).
+
+How callers get per-hand from the stored display value: strip the weapon component (`displayAtk - rWpnAtk - lWpnAtk`) to recover `floor(str/2)`, then add each hand's weapon back. Player path does this inline in `input-handler.js#rollHand`. Ally + PVP-enemy use `rollHits` extended with `opts.lAtk` + `opts.splitRH=true` so a single call still produces the RRLL combo internally.
+
+Never feed the display value directly into `rollHits` with `2 × hits` — that re-creates the 2026-05-08 OK-D+K 2× canon-damage bug (sum doubled = quadratic damage). The single-call `rollHits` always applies exactly one hand's ATK per hit. v1.7.181 worked around this by averaging (`avg(rWpn, lWpn)`) but that distorted the display so adding a weaker offhand lowered ATK — fixed in v1.7.322 by splitting display from combat properly.
+
 ## Unarmed combat (fists)
 
 Canonical NES animation pattern, captured from PPU OAM while the Monk punched a target:
