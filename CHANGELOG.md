@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.308 — 2026-05-13
+
+### DS-exclusive items: remap icon bytes from CR → AWJ slots
+
+- **All 24 DS-exclusive items (0xC8-0xDF) had `icon:` fields pointing at CR icon byte slots** ($6B sword, $66 rod, $7C robe, $79 staff, $63 gauntlet, etc.). After the AWJ swap those bytes are letters/punctuation/empty in the font atlas; the items would render with garbage prefixes. Remapped each to its AWJ equivalent: sword $EF, rod $E9, staff $EA, knife $ED, bow $F2, book $E8, bell $F4, spear $EC, hammer $EB, gauntlet $E4, bracer $E5, robe $E1, helmet $E3, axe $EE, katana $F0.
+
 ## 1.7.307 — 2026-05-13
 
 ### AWJ icon range extended ($E0-$FE)
