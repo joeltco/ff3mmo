@@ -101,12 +101,11 @@ export function drawBorderedBox(x, y, w, h, blue = false, transparentEdge = fals
     : transparentEdge && ui.borderTransparentTileCanvases ? ui.borderTransparentTileCanvases
     : ui.borderTileCanvases;
   const [TL, TOP, TR, LEFT, RIGHT, BL, BOT, BR] = tileSet;
-  if (blue) {
-    const nb = NES_SYSTEM_PALETTE[0x02];
-    ctx.fillStyle = `rgb(${nb[0]},${nb[1]},${nb[2]})`;
-  } else {
-    ctx.fillStyle = '#000';
-  }
+  // Interior fill always black — the `blue` flag now only selects an
+  // alternate border-tile set (still named borderBlueTileCanvases for
+  // back-compat); the dark-blue interior was a CR-era cue and reads
+  // wrong in the AWJ atlas.
+  ctx.fillStyle = '#000';
   ctx.fillRect(x + 8, y + 8, w - 16, h - 16);
   ctx.drawImage(TL, x, y); ctx.drawImage(TR, x + w - 8, y);
   ctx.drawImage(BL, x, y + h - 8); ctx.drawImage(BR, x + w - 8, y + h - 8);

@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.310 — 2026-05-13
+
+### Roster panels: blue interior fill → black (the actual fix)
+
+- v1.7.309 only changed the border-tile palette; `drawBorderedBox(..., blue=true)` separately filled the box interior with `NES_SYSTEM_PALETTE[0x02]` (dark blue) via a hardcoded `ctx.fillRect` branch in `hud-drawing.js`. That's why blue still showed everywhere. Dropped the branch; interior always fills `#000` now.
+
 ## 1.7.309 — 2026-05-13
 
 ### Roster panels: blue → black
