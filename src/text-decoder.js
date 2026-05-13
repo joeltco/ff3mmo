@@ -55,8 +55,8 @@ for (let i = 0; i < 10; i++) CHAR_MAP[0x80 + i] = String.fromCharCode(48 + i);
 // Space
 CHAR_MAP[0xFF] = ' ';
 // Common symbols (AWJ font atlas)
-CHAR_MAP[0xBE] = ',';  // comma
-CHAR_MAP[0xBF] = "'";  // apostrophe (verified: Zeus'Rage in ROM)
+CHAR_MAP[0xBF] = "'";  // apostrophe — top-of-cell curl (verified: Zeus'Rage)
+CHAR_MAP[0xC0] = ',';  // comma — bottom-of-cell curl (descends below baseline)
 CHAR_MAP[0xC1] = '.';  // period
 CHAR_MAP[0xC2] = '-';  // hyphen
 CHAR_MAP[0xC3] = '"';  // double quote (best-fit slot in AWJ)

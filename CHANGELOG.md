@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.305 — 2026-05-13
+
+### Comma fix: AWJ comma lives at $C0, not $BE
+
+- **Commas rendered as apostrophes.** I mismapped AWJ's comma slot during the v1.7.298 swap. Tile `$BE` has its curl at the TOP-right of the cell (looks like an apostrophe); tile `$C0` has the curl at the BOTTOM (true comma, descends below baseline). Fixed `_nameToBytes` to emit `$C0`, dropped the wrong `CHAR_MAP[0xBE] = ','` entry, and updated `_migrateNameToAWJ` (CR `$A5` comma → AWJ `$C0`). No encoded byte-array literals in the codebase used `$BE` as a comma — all $BE occurrences are sprite tile data.
+
 ## 1.7.304 — 2026-05-13
 
 ### Respawn fix: overworld→town entry captures position

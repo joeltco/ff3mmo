@@ -11,8 +11,8 @@ export function _nameToBytes(name) {
     if (ch >= 65 && ch <= 90) bytes.push(0x8A + (ch - 65));       // A-Z
     else if (ch >= 97 && ch <= 122) bytes.push(0xA4 + (ch - 97)); // a-z (AWJ)
     else if (ch >= 48 && ch <= 57) bytes.push(0x80 + (ch - 48));  // 0-9
-    else if (ch === 44)  bytes.push(0xBE); // , (AWJ comma)
-    else if (ch === 39)  bytes.push(0xBF); // ' (AWJ apostrophe)
+    else if (ch === 44)  bytes.push(0xC0); // , (AWJ comma — bottom curl)
+    else if (ch === 39)  bytes.push(0xBF); // ' (AWJ apostrophe — top curl)
     else if (ch === 46)  bytes.push(0xC1); // .
     else if (ch === 45)  bytes.push(0xC2); // -
     else if (ch === 33)  bytes.push(0xC4); // !

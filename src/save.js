@@ -17,8 +17,8 @@ function _migrateNameToAWJ(bytes) {
   for (let i = 0; i < bytes.length; i++) {
     const b = bytes[i];
     if (b >= 0xCA && b <= 0xE3) out[i] = b - 0x26;
-    else if (b === 0xA5) out[i] = 0xBE;
-    else if (b === 0xA9) out[i] = 0xBF;
+    else if (b === 0xA5) out[i] = 0xC0;  // CR comma → AWJ comma
+    else if (b === 0xA9) out[i] = 0xBF;  // CR apostrophe → AWJ apostrophe
     else out[i] = b;
   }
   return out;
