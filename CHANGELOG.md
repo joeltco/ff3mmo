@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.291 — 2026-05-13
+
+### Altar moogle: FF-style wander + talk-face + smooth dialogue
+
+- **NPCs now walk one tile, pause, walk one tile, pause** — classic FF NPC cadence. Walk = 480ms smooth-tween across the tile; pause = random 600-1800ms; direction = uniform random per step. The moogle holds its idle frame while paused and alternates the 2-frame walk cycle (normal / h-flipped) while moving.
+- **Pathway-avoidance:** the wander only steps onto tiles with ≥3 walkable floor neighbors — same "open area" predicate that placed the moogle. The moogle won't ever roam onto a 1-wide corridor and can't block the player's path through the cave.
+- **Collision is symmetric:** the moogle's source AND destination tiles both register in `findNpcAt`, so the player can't walk through a moogle mid-step. The moogle also won't step onto the player's tile or another NPC.
+- **Wander freezes during dialogue** — `msgState !== 'none'` pauses every NPC's tick, so the moogle doesn't drift away while you're reading their lines.
+- **NPC faces the player when talked to.** Press Z facing the moogle and they pivot to look at you — `npc.talkFacing` is set from the player's facing direction (LEFT/RIGHT pick the matching mirror frame; UP/DOWN fall back to right-facing since the ROM moogle has only horizontal flip).
+- **Multi-page dialogue flows through ONE message box.** New `showMsgBoxPages` helper: slide-in once on page 1, Z swaps text in place via `replaceMsgBoxText` (no animation between pages), slide-out only after the last page.
+
 ## 1.7.290 — 2026-05-13
 
 ### Altar moogle: swap to ROM-extracted sprite

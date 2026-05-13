@@ -22,6 +22,7 @@ import { drawShop, updateShop } from './shop.js';
 import { transSt, loadingSt, updateTransition, updateTopBoxScroll,
          drawTransitionOverlay, WIPE_DURATION } from './transitions.js';
 import { handleInput, updateMovement } from './movement.js';
+import { updateNpcs } from './npc.js';
 import { updateBattle } from './battle-update.js';
 import { pvpSt } from './pvp.js';
 import { drawBattle, drawBattleAllies, drawSWExplosion, drawSWDamageNumbers } from './battle-drawing.js';
@@ -141,6 +142,7 @@ function _gameLoopUpdate(dt) {
   updateMsgBox(dt);
   updateBattle(dt);
   updateMovement(dt);
+  if (battleSt.battleState === 'none') updateNpcs(dt);
   updateTransition(dt);
   updateTopBoxScroll(dt);
   if (mapSt.pondStrobeTimer > 0) mapSt.pondStrobeTimer = Math.max(0, mapSt.pondStrobeTimer - dt);

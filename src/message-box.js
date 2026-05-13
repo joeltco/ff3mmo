@@ -12,10 +12,13 @@ const SLIDE_MS = 80;  // faster slide than old viewport box
 
 // ── Mutable state ──────────────────────────────────────────────────────────
 export const msgState = {
-  state:   'none',  // 'slide-in'|'hold'|'slide-out'|'none'
-  timer:   0,
-  bytes:   null,    // Uint8Array text
-  onClose: null,    // callback after slide-out completes
+  state:     'none',  // 'slide-in'|'hold'|'slide-out'|'none'
+  timer:     0,
+  bytes:     null,    // Uint8Array text
+  onClose:   null,    // callback after slide-out completes
+  onAdvance: null,    // if set, Z calls this instead of dismissMsgBox (used
+                      // by multi-page dialogues to swap text without sliding
+                      // the box in and out between pages)
 };
 
 // ── Public API ─────────────────────────────────────────────────────────────
@@ -48,6 +51,31 @@ export function replaceMsgBoxText(bytes, onClose) {
   }
 }
 
+// Show a sequence of pages through a single box. Slide-in plays once on
+// page 1, the text swaps without animation on every Z-advance after that,
+// and slide-out only plays after the final page. `onAllDone` fires once
+// the slide-out completes (after the last page).
+export function showMsgBoxPages(pages, onAllDone) {
+  if (!pages || pages.length === 0) return;
+  let idx = 0;
+  const advance = () => {
+    idx++;
+    if (idx >= pages.length) {
+      msgState.onAdvance = null;
+      msgState.onClose = onAllDone || null;
+      // Force slide-out regardless of current sub-state.
+      if (msgState.state === 'hold') {
+        msgState.state = 'slide-out';
+        msgState.timer = 0;
+      }
+    } else {
+      replaceMsgBoxText(pages[idx]);
+    }
+  };
+  showMsgBox(pages[0]);
+  msgState.onAdvance = advance;
+}
+
 export function updateMsgBox(dt) {
   if (msgState.state === 'none') return;
   msgState.timer += Math.min(dt, 33);
@@ -57,7 +85,8 @@ export function updateMsgBox(dt) {
   } else if (msgState.state === 'slide-out') {
     if (msgState.timer >= SLIDE_MS) {
       const cb = msgState.onClose;
-      msgState.state = 'none'; msgState.timer = 0; msgState.bytes = null; msgState.onClose = null;
+      msgState.state = 'none'; msgState.timer = 0; msgState.bytes = null;
+      msgState.onClose = null; msgState.onAdvance = null;
       if (cb) cb();
     }
   }

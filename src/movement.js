@@ -159,7 +159,8 @@ export function handleInput() {
         }
       } else if (keys['z'] || keys['Z']) {
         keys['z'] = false; keys['Z'] = false;
-        dismissMsgBox();
+        if (msgState.onAdvance) msgState.onAdvance();
+        else dismissMsgBox();
       }
     }
     return;
