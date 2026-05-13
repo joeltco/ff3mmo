@@ -161,6 +161,9 @@ export function handleInput() {
         keys['z'] = false; keys['Z'] = false;
         if (msgState.onAdvance) msgState.onAdvance();
         else dismissMsgBox();
+      } else if (!msgState.onAdvance && (keys['x'] || keys['X'] || keys['Escape'])) {
+        keys['x'] = false; keys['X'] = false; keys['Escape'] = false;
+        dismissMsgBox();
       }
     }
     return;

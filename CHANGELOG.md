@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.320 — 2026-05-13
+
+### Shop confirm / message box: blue gone + X dismisses
+
+- Shop buy/sell confirm popup (spell shops) and the universal "Bought X!" / "Sold X!" message box still leaked NES `$02` blue through their text-shadow palette (`[0x02, 0x02, 0x02, 0x30]`) even after v1.7.310 turned the box bg black. Both flipped to canonical AWJ palette `[0x0F, 0x10, 0x0F, 0x30]` (transparent shadow, light-grey body, white glyph).
+- X / B / Escape now dismisses single-page message boxes (e.g. after a purchase). Previously only Z worked, so on mobile the user had to tap A to clear the "Bought" message. The X-dismiss branch is gated on `msgState.onAdvance` being null so multi-page NPC dialogue still advances on Z only.
+
 ## 1.7.319 — 2026-05-13
 
 ### Party chat: system messages filtered out

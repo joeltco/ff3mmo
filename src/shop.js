@@ -687,10 +687,7 @@ function _drawQuantity(ctx, fadeStep, target, isSell) {
   drawText(ctx, valRx - measureText(costVal), HUD_VIEW_Y + 54, costVal, pal);
 }
 
-// Text palette tuned for the blue confirm box: color 1/2 (font shadow) map
-// to NES $02 (the same blue as the box bg), so the shadow is invisible and
-// the white glyph reads cleanly. Color 0 stays transparent.
-const CONFIRM_TEXT_PAL = [0x02, 0x02, 0x02, 0x30];
+const CONFIRM_TEXT_PAL = [0x0F, 0x10, 0x0F, 0x30];
 
 function _drawConfirm(target, isSell) {
   if (!target) return;
