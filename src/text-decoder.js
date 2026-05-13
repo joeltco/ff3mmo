@@ -23,7 +23,7 @@
 //   $0620-$06AF  Battle messages
 
 import { SPELL_NAMES_SHRINES } from './data/spells.js';
-import { ITEM_NAMES_SHRINES } from './data/items.js';
+import { ITEMS, ITEM_NAMES_SHRINES } from './data/items.js';
 import { MONSTER_NAMES_SHRINES } from './data/monsters.js';
 
 // --- ROM offsets ---
@@ -176,6 +176,11 @@ export function getStringBytes(stringId) {
  * @returns {Uint8Array}
  */
 export function getItemName(itemId) {
+  // Synthesized items (DS ultimates at 0xC8+) carry an explicit `icon`
+  // field in their ITEMS entry and have no ROM string — return just the
+  // icon byte and let the Shrines override path supply the letters.
+  const data = ITEMS.get(itemId);
+  if (data && data.icon != null) return new Uint8Array([data.icon]);
   return getStringBytes(STRING_ITEMS + itemId);
 }
 

@@ -233,6 +233,38 @@ export const ITEMS = new Map([
   [0xc5, { type: 'battle_item', price:  5000, animSpellId: 0x0c }], // Curtain → Reflect (self-buff stub until reflect mechanics ship)
   [0xc6, { type: 'battle_item', price:  5000, animSpellId: 0x00 }], // Chocobo's Wrath → Flare
   [0xc7, { type: 'battle_item', price:  5000, animSpellId: 0x05 }], // White Musk → Holy
+
+  // === DS-exclusive ultimate gear (v1.7.286) ===
+  // IDs 0xC8-0xDF live past the ROM string range — these are runtime-
+  // synthesized items with no ROM bytes. Each entry carries an explicit
+  // `icon` field; text-decoder.js short-circuits getItemName for any
+  // entry that has it. Source: FF3 DS Mognet quest reward (Ultima Weapon)
+  // + Legendary Blacksmith job-level-99 mastery rewards. Stats lifted
+  // from DS values; jobs mapped to closest ff3mmo NES analog.
+  [0xc8, { type: 'weapon', subtype: 'sword',    icon: 0x6b, atk: 200, hit: 100, strBonus: 10, price: 0, jobs: On|Fi|Rw|Kn|Mk|Ni }], // Ultima (DS Mognet quest reward)
+  [0xc9, { type: 'weapon', subtype: 'sword',    icon: 0x6b, atk: 150, hit: 100, strBonus: 7, agiBonus: 7, vitBonus: 7, intBonus: 7, mndBonus: 7, price: 0, jobs: On }], // Onion Blade (DS Onion Knight mastery)
+  [0xca, { type: 'armor',  subtype: 'arms',     icon: 0x63, def: 40, evade: 0, mdef: 18, strBonus: 15, agiBonus: 15, vitBonus: 15, intBonus: 15, mndBonus: 15, price: 0, jobs: ALL }], // Celestial Gloves (DS Freelancer mastery — unrestricted)
+  [0xcb, { type: 'weapon', subtype: 'axe',      icon: 0x6a, atk: 155, hit: 80, strBonus: 20, price: 0, jobs: Vi|Ni }], // Gigantic Axe (DS Warrior mastery)
+  [0xcc, { type: 'armor',  subtype: 'arms',     icon: 0x63, def: 45, evade: 0, mdef: 19, strBonus: 20, price: 0, jobs: Mo|Ka|Ni }], // Shura Gloves (DS Monk mastery)
+  [0xcd, { type: 'armor',  subtype: 'body',     icon: 0x7c, def: 45, evade: 12, mdef: 48, mndBonus: 28, price: 0, jobs: Ww|Sa|Ni }], // Angel Robe (DS White Mage mastery)
+  [0xce, { type: 'weapon', subtype: 'rod',      icon: 0x66, atk: 110, hit: 80, intBonus: 20, casts: 0x01, price: 0, jobs: Bw|Co|Su|Wa|Sa|Ni }], // Lilith Rod (DS Black Mage; casts Death)
+  [0xcf, { type: 'armor',  subtype: 'body',     icon: 0x7c, def: 50, evade: 12, mdef: 25, strBonus: 10, agiBonus: 10, vitBonus: 10, intBonus: 10, mndBonus: 10, price: 0, jobs: Rw|Sa|Ni }], // Crimson Vest (DS Red Mage mastery)
+  [0xd0, { type: 'weapon', subtype: 'knife',    icon: 0x69, atk: 130, hit: 90, agiBonus: 20, price: 0, jobs: Th|Ni }], // Gladius (DS Thief mastery)
+  [0xd1, { type: 'weapon', subtype: 'bow',      icon: 0x6e, atk: 122, hit: 90, strBonus: 10, agiBonus: 10, price: 0, jobs: Hu|Ni }], // Artemis Bow (DS Ranger mastery)
+  [0xd2, { type: 'weapon', subtype: 'sword',    icon: 0x6b, atk: 140, hit: 90, vitBonus: 10, mndBonus: 10, casts: 0x0c, price: 0, jobs: Kn|Ni }], // Save the Queen (DS Knight; casts Wall)
+  [0xd3, { type: 'weapon', subtype: 'book',     icon: 0x65, atk: 130, hit: 80, intBonus: 10, mndBonus: 5, price: 0, jobs: Sc|Sa|Ni }], // Omnitome (DS Scholar mastery)
+  [0xd4, { type: 'weapon', subtype: 'bell',     icon: 0x6f, atk: 130, hit: 80, agiBonus: 10, mndBonus: 10, intBonus: 10, price: 0, jobs: Ge|Ni }], // Blessed Bell (DS Geomancer mastery)
+  [0xd5, { type: 'weapon', subtype: 'spear',    icon: 0x73, atk: 145, hit: 90, strBonus: 20, price: 0, jobs: Dr|Ni }], // Magic Lance (DS Dragoon mastery)
+  [0xd6, { type: 'weapon', subtype: 'hammer',   icon: 0x67, atk: 145, hit: 80, element: 'bolt', vitBonus: 20, price: 0, jobs: Vi|Ni }], // Mighty Hammer (DS Viking mastery)
+  [0xd7, { type: 'weapon', subtype: 'sword',    icon: 0x6b, atk: 140, hit: 100, agiBonus: 20, price: 0, jobs: Mk|Ni }], // Murakumo (DS Dark Knight → Magic Knight)
+  [0xd8, { type: 'armor',  subtype: 'helmet',   icon: 0x62, def: 33, evade: 5, mdef: 36, intBonus: 10, mndBonus: 10, price: 0, jobs: Co|Ni }], // Royal Crown (DS Evoker → Conjurer)
+  [0xd9, { type: 'armor',  subtype: 'helmet',   icon: 0x62, def: 35, evade: 5, mdef: 34, vitBonus: 10, mndBonus: 10, price: 0, jobs: Ba|Ni }], // Ballad Crown (DS Bard mastery)
+  [0xda, { type: 'armor',  subtype: 'body',     icon: 0x7c, def: 54, evade: 12, mdef: 23, agiBonus: 10, mndBonus: 10, price: 0, jobs: Ka|Mo|Ni }], // Master Dogi (DS Black Belt → Karateka)
+  [0xdb, { type: 'armor',  subtype: 'arms',     icon: 0x78, def: 47, evade: 5, mdef: 20, intBonus: 10, mndBonus: 10, price: 0, jobs: Su|Co|Wa|Ni }], // Astral Bracers (DS Summoner mastery)
+  [0xdc, { type: 'weapon', subtype: 'rod',      icon: 0x66, atk: 110, hit: 80, intBonus: 10, mndBonus: 10, casts: 0x1d, price: 0, jobs: Wa|Sa|Ni }], // Millenium Rod (DS Magus → Warlock; casts Ice3)
+  [0xdd, { type: 'weapon', subtype: 'staff',    icon: 0x79, atk: 110, hit: 80, mndBonus: 20, casts: 0x18, price: 0, jobs: Sh|Ww|Sa|Ni }], // Holy Wand (DS Devout → Shaman; casts Cure3)
+  [0xde, { type: 'weapon', subtype: 'staff',    icon: 0x79, atk: 110, hit: 80, strBonus: 10, agiBonus: 10, vitBonus: 10, intBonus: 10, mndBonus: 10, price: 0, jobs: Sa|Ni }], // Sage Staff (DS Sage mastery)
+  [0xdf, { type: 'weapon', subtype: 'katana',   icon: 0x6c, atk: 140, hit: 100, strBonus: 5, vitBonus: 5, intBonus: 5, mndBonus: 5, agiBonus: 10, price: 0, jobs: Mk|Ni }], // Muramasa (DS Ninja mastery)
 ]);
 
 // Shrines short-name overrides for player-facing list/inventory rows.
@@ -335,6 +367,16 @@ export const ITEM_NAMES_SHRINES = new Map([
   [0xb9, 'GodsWine'], [0xba, 'TurtlShl'], [0xbc, 'BlackHole'],
   [0xbe, 'LilthKiss'],[0xbf, 'ImpsYawn'], [0xc3, 'Pillow'],
   [0xc5, 'Barrier'],  [0xc6, 'ChocoRage'],[0xc7, 'WhiteScnt'],
+  // DS-exclusive ultimates (v1.7.286). IDs 0xC8-0xDF — synthesized
+  // items past the ROM string range. See ITEMS map above.
+  [0xc8, 'Ultima'],   [0xc9, 'OnionBld'], [0xca, 'Celest'],
+  [0xcb, 'Gigantic'], [0xcc, 'Shura'],    [0xcd, 'Angel'],
+  [0xce, 'Lilith'],   [0xcf, 'Crimson'],  [0xd0, 'Gladius'],
+  [0xd1, 'Artemis'],  [0xd2, 'Queen'],    [0xd3, 'Omnitome'],
+  [0xd4, 'Blessed'],  [0xd5, 'MagicLnc'], [0xd6, 'Mighty'],
+  [0xd7, 'Murakumo'], [0xd8, 'Royal'],    [0xd9, 'Ballad'],
+  [0xda, 'MstrDogi'], [0xdb, 'Astral'],   [0xdc, 'Millenum'],
+  [0xdd, 'HolyWand'], [0xde, 'SageStaf'], [0xdf, 'Muramasa'],
 ]);
 
 export function isWeapon(id) { const i = ITEMS.get(id); return i && i.type === 'weapon' && i.subtype !== 'shield'; }

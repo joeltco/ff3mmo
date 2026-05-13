@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.286 — 2026-05-12
+
+### DS-exclusive ultimate gear (24 items)
+
+- **Added the FF3 DS Mognet quest reward (Ultima Weapon) + 22 Legendary Blacksmith job-mastery rewards + 1 Onion Knight item.** Items live at IDs `0xC8-0xDF` — past the ROM string range. Each entry carries an explicit `icon` field; `getItemName` short-circuits ROM lookup when the field is present and returns the icon byte directly. Name letters come from `ITEM_NAMES_SHRINES` (no ROM dependency).
+- **Names** are Shrines-style short forms: `Ultima` / `OnionBld` / `Celest` / `Gigantic` / `Shura` / `Angel` / `Lilith` / `Crimson` / `Gladius` / `Artemis` / `Queen` / `Omnitome` / `Blessed` / `MagicLnc` / `Mighty` / `Murakumo` / `Royal` / `Ballad` / `MstrDogi` / `Astral` / `Millenum` / `HolyWand` / `SageStaf` / `Muramasa`.
+- **Stats** lifted from DS values, jobs mapped to closest ff3mmo NES analog (DS Dark Knight → Magic Knight; DS Evoker → Conjurer; DS Devout → Shaman; DS Magus → Warlock). Ultima Weapon set to atk 200 (new ceiling, above Ragnarok 180). Class-locked except Celestial Gloves which are unrestricted (DS Freelancer mastery — Freelancer doesn't exist as a separate class in ff3mmo).
+- **No pickup mechanism yet** — these are data registrations only. Drop tables, shop slots, and quest hooks are deferred to a follow-up.
+
 ## 1.7.285 — 2026-05-12
 
 ### Robe icon split
