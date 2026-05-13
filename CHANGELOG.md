@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.298 — 2026-05-13
+
+### Text engine: swap Chaos Rush → A.W. Jackson translation
+
+- **`patches/ff3-awj.ips` replaces `ff3-english.ips`** as the IPS applied at boot (`main.js`, `debug/tabs/emu.js`). The A.W. Jackson + Neill Corlett + SoM2Freak FF3 English patch (March 1999) has dedicated per-class item icons baked into the ROM font atlas, so the 7 hand-extracted icon-override tile sets we shipped in v1.7.278-285 (arrow / claw / bracer / staff / mail / spear / robe) are no longer needed. Staff items now render with a distinct staff glyph at `$EA`; mail vs. robe body armor split cleanly via `$E1` / `$E2`.
+- **Character encoding shifted.** AWJ font: digits `$80-$89` (unchanged), uppercase A-Z `$8A-$A3` (unchanged), lowercase a-z `$A4-$BD` (was `$CA-$E3` in CR). Punctuation slots moved: comma `$BE` (was `$A5`), apostrophe `$BF` (was `$A9`). `_asciiToTileByte` / `_nameToBytes` / `_nesNameToString` updated. `ICON_TILES` now recognizes `$72-$75` (spell-school) + `$E0-$F5` (item class).
+- **77 encoded byte-array literals translated** across `data/strings.js`, `title-screen.js`, `loading-screen.js`, `pause-menu.js`, `status-effects.js`, `map-triggers.js`, `movement.js`, `text-utils.js`, `main.js` via automated CR→AWJ byte translator. Sprite tile-data arrays in `debug/tabs/sprites.js` left untouched.
+- **All `*_ITEM_IDS` override sets removed** from `text-decoder.js`. `getItemNameWithIcon` no longer rewrites the ROM icon byte; the AWJ ROM already encodes the right icon. `getItemNameShrines` simplified to just prepend the ROM icon byte to the Shrines short-name.
+- **Hand-extracted `*_TILE_BYTES` constants removed** from `font-renderer.js` (arrow / claw / bracer / staff / mail / spear / robe — 7 tiles). The full $60-$FF font atlas now loads directly from AWJ-patched ROM with no JS overrides.
+- AWJ uses LIGATURE TILES (e.g., `$CD = "il"`, `$CE = "li"`, `$CF = "ll"`) — single 8x8 glyphs rendering 2 letters squeezed. No decoder-side DTE expansion needed; renderer just draws each byte as one tile.
+- Bonus fixes that fall out automatically: staff icon for basic Staff (0x0E) — works because AWJ ROM ships `$EA` as the first byte. Leather body armor uses AWJ's `$E1` clothing-silhouette glyph (less hooded-robe than CR's $7C; same icon for all light body armor including wizard robes — known limitation, AWJ groups them too).
+
 ## 1.7.297 — 2026-05-13
 
 ### Message-box text: visual centering

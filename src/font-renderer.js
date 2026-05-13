@@ -1,23 +1,25 @@
 // Font Renderer — draws text using NES font tiles extracted from ROM
 //
-// Font tiles: 160 tiles at ROM 0x1B610 (tile IDs $60-$FF)
-// Letters/digits/punctuation live at $70-$FF (English IPS patch);
-// item-type icon graphics live at $60-$6F (shield/armor/helm/sword/
-// axe/spear/bow/rod/staff/etc.) and the magic-school icons at
-// $72/$74/$75 share the same atlas.
-// Each tile is 8x8 pixels, 2BPP NES format.
-//
-// Text bytes from the text decoder ARE tile IDs — they index directly
-// into these font tiles. Color index 0 = transparent, 1-3 = text colors.
+// AWJ font atlas (post-IPS):
+//   Digits 0-9        $80-$89
+//   Uppercase A-Z     $8A-$A3
+//   Lowercase a-z     $A4-$BD
+//   Ligatures         $BE-$DF (single-tile digraphs: "il"=$CD, "li"=$CE, "ll"=$CF…)
+//   Punctuation       $C1-$C9 (. - " ! ? % / : ellipsis)
+//   Spell-school icons $72-$75 (Summon/?/White/Black)
+//   Item-class icons  $E0-$F5 (shield/robe/mail/helm/gauntlet/bracer/claw/
+//                              nunchuck/book/rod/staff/hammer/spear/knife/
+//                              axe/sword/katana/harp/bow/arrow/bell/boomerang)
+//   Space             $FF
+// Each tile is 8x8 pixels, 2BPP NES format. Text bytes ARE tile IDs.
 
 import { decodeTile, NES_SYSTEM_PALETTE } from './tile-decoder.js';
 import { getItemName, getItemNameClean, getMonsterName, getSpellName,
          getJobName, getStringBytes } from './text-decoder.js';
 
-// Font tile range — extended down to $60 in v1.7.245 to cover the
-// item-type icon tiles (shield $60, body $61, helm $62, gauntlet $63,
-// claw $64, book $65, rod $66, hammer $67, spear $68, knife $69,
-// axe $6a, sword $6b, katana $6c, harp $6d, bow $6e, bell $6f).
+// Full font atlas $60-$FF (160 tiles). AWJ uses essentially every tile in
+// this range — punctuation/ligature/icon glyphs are baked into the ROM
+// at known slots, no hand-extracted overrides needed.
 const FONT_ROM_OFFSET = 0x1B610;  // ROM file offset (with iNES header)
 const FONT_TILE_START = 0x60;
 const FONT_TILE_COUNT = 160;      // $60-$FF
@@ -34,56 +36,6 @@ export const TEXT_YELLOW  = [0x0F, 0x28, 0x18, 0x30]; // yellow on black
 let _fontPixels = null;  // Map<tileId, Uint8Array(64)>
 let _tileCache = null;   // Map<paletteKey, Map<tileId, HTMLCanvasElement>>
 
-// Icon tiles sourced from the A.W. Jackson FF3 fan translation, which
-// splits glyphs the original JP ROM (and Chaos Rush) collapse into one:
-// arrows ($F3 in A.W.J.) share $6E with bows in Chaos Rush; claws
-// ($E6) share $64 with nunchaku; bracers / rings ($E5) share $63 with
-// gauntlets / gloves; staves ($EA) share $66 with rods; mail-style body
-// armor ($E2) shares $61 with robe-style body armor. Each tile lands at
-// an unused icon slot in the Chaos Rush font atlas and the
-// corresponding item IDs override their ROM icon byte in
-// text-decoder.js (ARROW_ITEM_IDS / CLAW_ITEM_IDS / BRACER_ITEM_IDS /
-// STAFF_ITEM_IDS / MAIL_ITEM_IDS).
-const ARROW_TILE_ID = 0x77;
-const ARROW_TILE_BYTES = new Uint8Array([
-  0x00, 0x60, 0x60, 0x10, 0x08, 0x06, 0x05, 0x02,
-  0xff, 0xff, 0xdf, 0x8f, 0xe7, 0xf3, 0xf7, 0xfa,
-]);
-const CLAW_TILE_ID = 0x76;
-const CLAW_TILE_BYTES = new Uint8Array([
-  0x08, 0x24, 0x12, 0x48, 0x23, 0x17, 0x0e, 0x00,
-  0xff, 0xe7, 0xd3, 0xc9, 0xa2, 0xd4, 0xe0, 0xf1,
-]);
-const BRACER_TILE_ID = 0x78;
-const BRACER_TILE_BYTES = new Uint8Array([
-  0x00, 0x6c, 0x72, 0x22, 0x44, 0x48, 0x30, 0x00,
-  0xff, 0xdd, 0x9c, 0xfc, 0xf9, 0xf3, 0x87, 0xcf,
-]);
-const STAFF_TILE_ID = 0x79;
-const STAFF_TILE_BYTES = new Uint8Array([
-  0x70, 0xf0, 0xd8, 0x58, 0x0c, 0x06, 0x03, 0x00,
-  0x8f, 0x0f, 0x07, 0x07, 0xa3, 0xf1, 0xf8, 0xfc,
-]);
-const MAIL_TILE_ID = 0x7A;
-const MAIL_TILE_BYTES = new Uint8Array([
-  0x00, 0x36, 0x77, 0x63, 0x08, 0x22, 0x5d, 0x08,
-  0xc9, 0xa4, 0xc2, 0x80, 0x88, 0xa2, 0xc9, 0xa2,
-]);
-// Robe-style body armor — CR's $61 is a vest/sleeveless silhouette that
-// reads as generic for the 11 robe-class items (Cloth / Leather / Kenpo /
-// DarkSuit / Wizard / BlackBelt / Bard / Scholar / Gaia / WhiteRobe /
-// BlackRobe). A.W.'s $E1 is a clear hooded-robe shape.
-const ROBE_TILE_ID = 0x7C;
-const ROBE_TILE_BYTES = new Uint8Array([
-  0xe7, 0xff, 0xbd, 0x3c, 0x3c, 0x7e, 0x7e, 0x00,
-  0xdb, 0xe7, 0xbf, 0x03, 0xbf, 0x7f, 0x7f, 0xff,
-]);
-const SPEAR_TILE_ID = 0x73;
-const SPEAR_TILE_BYTES = new Uint8Array([
-  0xc0, 0xe0, 0x68, 0x10, 0x28, 0x0c, 0x06, 0x03,
-  0xbf, 0x7f, 0x4b, 0x97, 0xe7, 0xc3, 0xf1, 0xf8,
-]);
-
 /**
  * Initialize font tiles from ROM data.
  * Call after IPS patch is applied.
@@ -98,13 +50,6 @@ export function initFont(romData) {
     const pixels = decodeTile(romData, FONT_ROM_OFFSET + i * 16);
     _fontPixels.set(tileId, pixels);
   }
-  _fontPixels.set(ARROW_TILE_ID,  decodeTile(ARROW_TILE_BYTES,  0));
-  _fontPixels.set(CLAW_TILE_ID,   decodeTile(CLAW_TILE_BYTES,   0));
-  _fontPixels.set(BRACER_TILE_ID, decodeTile(BRACER_TILE_BYTES, 0));
-  _fontPixels.set(STAFF_TILE_ID,  decodeTile(STAFF_TILE_BYTES,  0));
-  _fontPixels.set(MAIL_TILE_ID,   decodeTile(MAIL_TILE_BYTES,   0));
-  _fontPixels.set(SPEAR_TILE_ID,  decodeTile(SPEAR_TILE_BYTES,  0));
-  _fontPixels.set(ROBE_TILE_ID,   decodeTile(ROBE_TILE_BYTES,   0));
 }
 
 /**

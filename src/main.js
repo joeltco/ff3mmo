@@ -109,8 +109,8 @@ function _startTitleScreen() {
   titleSt.waterScroll = 0;
   titleSt.shipTimer = 0;
   titleSt.pressZ = isMobile
-    ? new Uint8Array([0x99,0xDB,0xCE,0xDC,0xDC,0xFF,0x8A])  // "Press A"
-    : new Uint8Array([0x99,0xDB,0xCE,0xDC,0xDC,0xFF,0xA3]); // "Press Z"
+    ? new Uint8Array([0x99,0xB5,0xA8,0xB6,0xB6,0xFF,0x8A])  // "Press A"
+    : new Uint8Array([0x99,0xB5,0xA8,0xB6,0xB6,0xFF,0xA3]); // "Press Z"
   playTrack(TRACKS.TITLE_SCREEN);
   startGameLoop();
 }
@@ -118,7 +118,7 @@ export async function loadROM(arrayBuffer) {
   const _bootStart = performance.now();
   const romBytes = new Uint8Array(arrayBuffer);
   try {
-    const ipsResp = await fetch('patches/ff3-english.ips');
+    const ipsResp = await fetch('patches/ff3-awj.ips');
     if (ipsResp.ok) {
       const ipsData = new Uint8Array(await ipsResp.arrayBuffer());
       applyIPS(romBytes, ipsData);

@@ -77,7 +77,7 @@ function encodeNumber(n) {
 
 function foundItemMsg(itemId) {
   const itemName = getItemNameClean(itemId);
-  const found = [0x8F, 0xD8, 0xDE, 0xD7, 0xCD, 0xFF]; // "Found "
+  const found = [0x8F,0xB2,0xB8,0xB1,0xA7,0xFF]; // "Found "
   const msg = new Uint8Array(found.length + itemName.length + 1);
   msg.set(found, 0); msg.set(itemName, found.length);
   msg[found.length + itemName.length] = 0xC4; // "!"
@@ -85,9 +85,9 @@ function foundItemMsg(itemId) {
 }
 
 function foundGilMsg(amount) {
-  const found = [0x8F, 0xD8, 0xDE, 0xD7, 0xCD, 0xFF];             // "Found "
+  const found = [0x8F,0xB2,0xB8,0xB1,0xA7,0xFF];             // "Found "
   const num = encodeNumber(amount);
-  const gilWord = [0xFF, 0xD0, 0xD2, 0xD5, 0xC4];                 // " gil!"
+  const gilWord = [0xFF,0xAA,0xAC,0xAF,0xC4];                 // " gil!"
   const msg = new Uint8Array(found.length + num.length + gilWord.length);
   msg.set(found, 0);
   msg.set(num, found.length);

@@ -331,11 +331,11 @@ function _drawPauseEquipSlots(ctx) {
   const fadeStep = _pauseFadeStep('eq-slots-in', 'eq-slots-out');
   const fadedPal = _makeFadedPal(fadeStep);
   const EQ_LABELS = [
-    new Uint8Array([0x9B,0xC4,0x91,0xCA,0xD7,0xCD]),
-    new Uint8Array([0x95,0xC4,0x91,0xCA,0xD7,0xCD]),
-    new Uint8Array([0x91,0xCE,0xCA,0xCD]),
-    new Uint8Array([0x8B,0xD8,0xCD,0xE2]),
-    new Uint8Array([0x8A,0xDB,0xD6,0xDC]),
+    new Uint8Array([0x9B,0xC4,0x91,0xA4,0xB1,0xA7]),
+    new Uint8Array([0x95,0xC4,0x91,0xA4,0xB1,0xA7]),
+    new Uint8Array([0x91,0xA8,0xA4,0xA7]),
+    new Uint8Array([0x8B,0xB2,0xA7,0xBC]),
+    new Uint8Array([0x8A,0xB5,0xB0,0xB6]),
   ];
   const EQ_IDS = [-100, -101, -102, -103, -104];
   const eqRowH = 22;
@@ -356,7 +356,7 @@ function _drawPauseEquipSlots(ctx) {
   }
   // "Opt" right-aligned on R.Hand row
   const optPal  = dimSlots ? [0x0F, 0x0F, 0x0F, 0x00] : fadedPal;
-  const optText = new Uint8Array([0x98,0xD9,0xDD]); // "Opt"
+  const optText = new Uint8Array([0x98,0xB3,0xB7]); // "Opt"
   const optX = px + HUD_VIEW_W - 16 - optText.length * 8;
   const optActivePal = (dimSlots && pauseSt.eqCursor === 5) ? fadedPal : optPal;
   drawText(ctx, optX, eqStartY, optText, optActivePal);
@@ -394,7 +394,7 @@ function _drawPauseEquipItems(ctx) {
       const iy = useY + i * 12;
       if (iy + 8 > finalY + HUD_VIEW_H - 8) break;
       if (entry.label === 'remove') {
-        drawText(ctx, listX + 16, iy, new Uint8Array([0x9B,0xCE,0xD6,0xD8,0xDF,0xCE]), fadedPal);
+        drawText(ctx, listX + 16, iy, new Uint8Array([0x9B,0xA8,0xB0,0xB2,0xB9,0xA8]), fadedPal);
       } else {
         drawText(ctx, listX + 16, iy, getItemNameShrines(entry.id), fadedPal);
       }
@@ -469,8 +469,8 @@ function _drawPauseStats(ctx) {
 }
 
 const OPT_CRT_LABEL = new Uint8Array([0x8C,0x9B,0x9D]); // "CRT"
-const OPT_ON  = new Uint8Array([0x98,0xD7]); // "On"
-const OPT_OFF = new Uint8Array([0x98,0xCF,0xCF]); // "Off"
+const OPT_ON  = new Uint8Array([0x98,0xB1]); // "On"
+const OPT_OFF = new Uint8Array([0x98,0xA9,0xA9]); // "Off"
 
 function _isCrtOn() {
   const el = document.getElementById('canvas-wrapper');

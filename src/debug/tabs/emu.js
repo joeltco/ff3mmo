@@ -149,7 +149,7 @@ async function _patchAndInit(romBuffer, romType) {
     // IPS is overwrite-only, so re-applying to an already-patched buffer is a no-op.
     try {
       _status('fetching English IPS patch…');
-      const resp = await fetch('patches/ff3-english.ips');
+      const resp = await fetch('patches/ff3-awj.ips');
       if (resp.ok) {
         applyIPS(patched, new Uint8Array(await resp.arrayBuffer()));
         _status('IPS applied, booting…');
