@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.303 — 2026-05-13
+
+### Drop dead IPS files
+
+- **Removed `patches/ff3-english.ips`** (Chaos Rush translation, ~61 KB) — no longer referenced after the v1.7.298 AWJ swap.
+- **Removed `patches/ff3-ff6font.ips`** — unused experiment, never wired into the engine.
+- Kept `patches/CREDITS-ff3-translation.txt` for legal attribution to Chaos Rush even though we don't ship the patch anymore.
+
 ## 1.7.302 — 2026-05-13
 
 ### AWJ letter range: fix getSpellNameWithIcon filter
