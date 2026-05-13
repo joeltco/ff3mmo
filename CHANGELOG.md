@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.315 — 2026-05-13
+
+### Inspect overlay: slide-in from right, compact
+
+- Compact 96×80 panel anchored flush to the right edge of the HUD viewport (x=48, y=40). Slides in from `x=HUD_VIEW_W` (offscreen right) to its final position over 150 ms when opened; reverses for close. Clipped to the HUD viewport so the slide reveals from the right edge like the roster action menu.
+
 ## 1.7.314 — 2026-05-13
 
 ### Inspect overlay: drop left-HUD clip
