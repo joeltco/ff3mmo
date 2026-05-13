@@ -8,6 +8,7 @@ import { DIR_DOWN } from './sprite.js';
 import { sprite } from './player-sprite.js';
 import { resetIndoorWaterCache } from './water-animation.js';
 import { clearFlameSprites, rebuildFlameSprites } from './flame-sprites.js';
+import { clearNpcs, placeMoogleAtCaveCenter } from './npc.js';
 import { transSt, topBoxSt } from './transitions.js';
 import { BATTLE_BG_MAP_LOOKUP, renderBattleBg } from './battle-bg.js';
 import { AREA_NAMES, DUNGEON_NAME } from './data/strings.js';
@@ -119,6 +120,8 @@ function _loadDungeonFloor(mapId, returnX, returnY) {
   mapSt.mapRenderer = new MapRenderer(result, playerX, playerY);
   resetIndoorWaterCache();
   clearFlameSprites();
+  clearNpcs();
+  if (floorIndex === 0) placeMoogleAtCaveCenter(result);
   mapSt.bossSprite = (floorIndex === 4 && hudSt.adamantoiseFrames && !battleSt.enemyDefeated)
     ? { frames: hudSt.adamantoiseFrames, px: 6 * TILE_SIZE, py: 8 * TILE_SIZE } : null;
   mapSt.disabledTrigger = { x: playerX, y: playerY };
@@ -160,6 +163,7 @@ function _loadRegularMap(mapId, returnX, returnY) {
     mapSt.disabledTrigger = (spawnMid === 0x44 || playerY !== ey) ? { x: playerX, y: playerY } : null;
   } else { mapSt.disabledTrigger = null; }
   rebuildFlameSprites(mapSt.mapData, mapSt.mapRenderer, TILE_SIZE);
+  clearNpcs();
   mapSt.moving = false;
   sprite.setDirection(DIR_DOWN);
   sprite.resetFrame();
@@ -260,6 +264,7 @@ export function loadWorldMapAt(trigId) {
   mapSt.mapData = null;
   mapSt.bossSprite = null;
   battleSt.enemyDefeated = false; // boss respawns whenever player exits to the world map
+  clearNpcs();
   setupTopBox(0, true);
   const pos = mapSt.worldMapData.triggerPositions.get(trigId);
   const tileX = pos ? pos.x : 0;
@@ -275,6 +280,7 @@ export function loadWorldMapAtPosition(tileX, tileY) {
   battleSt.enemyDefeated = false;
   mapSt.mapRenderer = null;
   mapSt.mapData = null;
+  clearNpcs();
   setupTopBox(0, true);
   _landOnWorldMap(tileX, tileY);
   saveSlotsToDB();

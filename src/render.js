@@ -11,6 +11,7 @@ import { DIR_DOWN, DIR_UP, DIR_LEFT, DIR_RIGHT } from './sprite.js';
 import { poisonFlashTimer, setPoisonFlashTimer } from './movement.js';
 import { ui } from './ui-state.js';
 import { sprite } from './player-sprite.js';
+import { drawNpcs } from './npc.js';
 
 const CANVAS_W = 256;
 const CANVAS_H = 240;
@@ -39,6 +40,9 @@ function _renderSprites(camX, camY, originX, originY, spriteY) {
       const frames = _ff.get(flame.npcId);
       ui.ctx.drawImage(frames[flameFrame], sx, sy);
     }
+  }
+  if (!mapSt.onWorldMap) {
+    drawNpcs(ui.ctx, camX, camY, originX, originY);
   }
   if (mapSt.bossSprite) {
     const blinkHidden = battleSt.bossFlashTimer > 0 && (Math.floor(battleSt.bossFlashTimer / 60) & 1);

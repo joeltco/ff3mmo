@@ -21,4 +21,17 @@ export const NPCS = new Map([
   ['ur_armor_shop',  { role: 'shopkeeper', shop: 'ur_armor' }],
   ['ur_item_shop',   { role: 'shopkeeper', shop: 'ur_item' }],
   ['ur_magic_shop',  { role: 'shopkeeper', shop: 'ur_magic' }],
+
+  // --- Synthetic NPCs (not in ROM — hand-authored sprite + dialogue) ---
+  ['altar_moogle', {
+    role: 'moogle',
+    sprite: 'moogle',
+    placement: { mapId: 1000, mode: 'cave-center' },  // Altar floor 1
+    dialogue: [
+      'Kupo! Welcome to Altar Cave!',
+      'Layout shuffles every visit, kupo.',
+      'Watch for hidden walls, kupo!',
+      'Reach the crystal to unlock new jobs!',
+    ],
+  }],
 ]);

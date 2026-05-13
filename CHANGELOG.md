@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.289 — 2026-05-13
+
+### First NPC: Altar Cave moogle (kupo!)
+
+- **Added a walking moogle to the middle of Altar Cave floor 1.** Hand-authored 16×16 sprite, 2-frame walk-in-place idle (feet step apart on alternate frames). Moogles don't exist in NES FF3 — DS-flavored addition, original pixel art. Pink pompom, white body, black outline.
+- **NPC subsystem scaffolding:** new `src/npc.js` owns the runtime NPC list, frame cache, palette pipeline, tile-based lookup, and multi-page dialogue chain. New `src/data/moogle-sprite.js` holds the pixel grids. `src/data/npcs.js` extended with synthetic-NPC entries (role + sprite + dialogue).
+- **Walking-blocked + Z-to-talk:** `movement.js` blocks player from walking onto an NPC tile (same pattern as the boss-sprite block) and routes Z-presses facing an NPC into `talkToNpc`, which walks through the dialogue array one message-box per Z-advance.
+- **Placement is bottleneck-safe:** the moogle spirals outward from tile (16, 10) and lands on the first FLOOR tile with ≥3 walkable neighbors — never sits on a 1-wide chokepoint.
+
 ## 1.7.288 — 2026-05-13
 
 ### Battle messages now use Shrines short-names

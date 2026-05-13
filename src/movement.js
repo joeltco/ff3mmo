@@ -24,6 +24,7 @@ import { tickRandomEncounter } from './battle-encounter.js';
 import { startBattle } from './battle-update.js';
 import { MapRenderer } from './map-renderer.js';
 import { resetIndoorWaterCache } from './water-animation.js';
+import { findNpcAt, talkToNpc } from './npc.js';
 
 const TILE_SIZE = 16;
 const WALK_DURATION = 16 * (1000 / 60);  // 16 NES frames at 60fps ≈ 267ms per tile
@@ -51,6 +52,13 @@ export function startMove(dir) {
 
   // Block walking onto boss sprite tile
   if (mapSt.bossSprite && !battleSt.enemyDefeated && tileX === mapSt.bossSprite.px / TILE_SIZE && tileY === mapSt.bossSprite.py / TILE_SIZE) {
+    sprite.setDirection(dir);
+    sprite.resetFrame();
+    return;
+  }
+
+  // Block walking onto an NPC tile (overworld map only — NPCs are solid)
+  if (!mapSt.onWorldMap && findNpcAt(tileX, tileY)) {
     sprite.setDirection(dir);
     sprite.resetFrame();
     return;
@@ -213,6 +221,10 @@ function handleAction() {
     startBattle();
     return;
   }
+
+  // NPC dialogue
+  const npc = findNpcAt(facedX, facedY);
+  if (npc) { talkToNpc(npc); return; }
 
   const facedTile = mapSt.mapData.tilemap[facedY * 32 + facedX];
 
