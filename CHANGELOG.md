@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.319 — 2026-05-13
+
+### Party chat: system messages filtered out
+
+- Party tab now shows party messages only — system notifications no longer leak in. Aligns with the party-chat-strictly-party-only invariant. System messages still live in the dedicated System tab; World tab keeps the system fallback for now.
+
 ## 1.7.318 — 2026-05-13
 
 ### Equip screen: weapon slot labels → "R. Hand" / "L. Hand"

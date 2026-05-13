@@ -99,7 +99,7 @@ export function addChatMessage(text, type, channel, meta) {
 function _passesTabFilter(msg) {
   const tab = CHAT_TABS[activeTab];
   if (tab === 'World') return msg.channel === 'world' || msg.channel === 'sys';
-  if (tab === 'Party') return msg.channel === 'party' || msg.channel === 'sys';
+  if (tab === 'Party') return msg.channel === 'party';
   if (tab === 'Private') return msg.channel === 'pm';
   if (tab === 'System') return msg.channel === 'sys';
   return true;
