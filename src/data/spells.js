@@ -115,6 +115,7 @@ export const SPELL_NAMES_SHRINES = new Map([
   [0x23, 'Fire2'], [0x24, 'Ice2'],  [0x25, 'Bolt2'],          // L3
   [0x2a, 'Bolt'],  [0x2b, 'Venom'], // L2
   [0x32, 'Ice'],            // L1
+  [0x3a, 'Ice2'],           // L2 (player-cast Bzzra / SouthWind delivery)
   // White Magic (icon $74)
   [0x03, 'WWind'], [0x04, 'Life2'], // L8
   [0x0a, 'Cure4'], [0x0c, 'Wall'],  [0x0b, 'Heal'],           // L7

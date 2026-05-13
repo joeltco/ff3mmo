@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.288 — 2026-05-13
+
+### Battle messages now use Shrines short-names
+
+- **Strip shows `Ice` / `Ice2` / `Ice3` / `Fire` etc. instead of ROM forms like `Bzzard` / `Bzzra` / `Bzzaga`.** Battle-message strip + PVP message strip + item-use messages were calling `getSpellNameClean` / `getItemNameClean`, which return raw IPS-patched ROM letters with only icon/padding stripped — so the strip read `Bzzard` while the menu, shop, and inspect panels showed `Ice`. Now all 10 strip call sites (`battle-turn.js` ×5, `spell-cast.js` ×2, `pvp.js` ×3) go through new `getSpellNameShrinesClean` / `getItemNameShrinesClean` helpers that return Shrines-override letters when present, with ROM-clean fallback for entries without an override.
+- **Added missing `0x3a → 'Ice2'` to `SPELL_NAMES_SHRINES`** — this is the BM Lv2 ice spell players actually cast (5 MP, 700g, also delivered by SouthWind item). It had no override entry so even after the strip fix it would have fallen through to ROM "Blzzard"/"Bzzra".
+
 ## 1.7.287 — 2026-05-12
 
 ### Battle message strip — non-blocking pacing

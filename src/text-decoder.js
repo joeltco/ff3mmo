@@ -349,6 +349,27 @@ export function getSpellNameShrines(spellId) {
   return out;
 }
 
+// Shrines-name letters only, no icon — for battle-message strip / chat /
+// any text-only surface that wants the player-facing short name without
+// the magic-school glyph. Falls through to ROM-clean when no override.
+export function getSpellNameShrinesClean(spellId) {
+  const override = SPELL_NAMES_SHRINES.get(spellId);
+  if (override == null) return getSpellNameClean(spellId);
+  const letters = new Uint8Array(override.length);
+  for (let i = 0; i < override.length; i++) letters[i] = _asciiToTileByte(override[i]);
+  return letters;
+}
+
+// Shrines-name letters only for items — parallel to getSpellNameShrinesClean.
+// Falls through to ROM-clean when no override.
+export function getItemNameShrinesClean(itemId) {
+  const override = ITEM_NAMES_SHRINES.get(itemId);
+  if (override == null) return getItemNameClean(itemId);
+  const letters = new Uint8Array(override.length);
+  for (let i = 0; i < override.length; i++) letters[i] = _asciiToTileByte(override[i]);
+  return letters;
+}
+
 /**
  * Like getSpellNameClean, but preserves the magic-school icon byte
  * ($72 Summon / $74 White / $75 Black) when it appears as the first byte.

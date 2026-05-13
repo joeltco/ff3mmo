@@ -22,7 +22,7 @@ import { playSlashSFX } from './battle-sfx.js';
 import { resetSlashScatterCache, SWING_HOLD_MS } from './slash-effects.js';
 import { removeStatus, hasStatus, STATUS, blindHitPenalty, miniToadAtkMult, canCastMagic } from './status-effects.js';
 import { _nameToBytes } from './text-utils.js';
-import { getSpellNameClean } from './text-decoder.js';
+import { getSpellNameShrinesClean } from './text-decoder.js';
 import { queueBattleMsg, replaceBattleMsg } from './battle-msg.js';
 import { BATTLE_FOE, BATTLE_REFLECT } from './data/strings.js';
 import { hasBuff, BUFF_REFLECT } from './buffs.js';
@@ -585,7 +585,7 @@ function _tryPVPEnemyCure(caster, casterCellIdx) {
   pvpSt.pvpMagicHealAmount     = heal;
   pvpSt.pvpMagicEffectApplied  = false;
   queueBattleMsg(caster.name ? _nameToBytes(caster.name) : BATTLE_FOE);
-  replaceBattleMsg(getSpellNameClean(0x34));
+  replaceBattleMsg(getSpellNameShrinesClean(0x34));
   playSFX(SFX.MAGIC_CAST);
   battleSt.battleState = 'pvp-enemy-magic-cast';
   battleSt.battleTimer = 0;
@@ -637,7 +637,7 @@ function _tryPVPEnemyOffensiveCast(caster, casterCellIdx) {
   pvpSt.pvpMagicDamageRoll     = dmg;
   pvpSt.pvpMagicEffectApplied  = false;
   queueBattleMsg(caster.name ? _nameToBytes(caster.name) : BATTLE_FOE);
-  replaceBattleMsg(getSpellNameClean(spellId));
+  replaceBattleMsg(getSpellNameShrinesClean(spellId));
   playSFX(SFX.MAGIC_CAST);
   battleSt.battleState = 'pvp-enemy-magic-cast';
   battleSt.battleTimer = 0;
@@ -666,7 +666,7 @@ function _tryPVPEnemyPoisona(caster, casterCellIdx) {
   pvpSt.pvpMagicHealAmount     = 0;
   pvpSt.pvpMagicEffectApplied  = false;
   queueBattleMsg(caster.name ? _nameToBytes(caster.name) : BATTLE_FOE);
-  replaceBattleMsg(getSpellNameClean(0x35));
+  replaceBattleMsg(getSpellNameShrinesClean(0x35));
   playSFX(SFX.MAGIC_CAST);
   battleSt.battleState = 'pvp-enemy-magic-cast';
   battleSt.battleTimer = 0;

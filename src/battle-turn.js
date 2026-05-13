@@ -3,7 +3,7 @@
 import { battleSt, getEnemyHP, setEnemyHP, BATTLE_SHAKE_MS, BOSS_DEF, BOSS_MAX_HP } from './battle-state.js';
 import { rollHits, calcPotentialHits, rollInitiative } from './battle-math.js';
 import { BATTLE_RAN_AWAY, BATTLE_CANT_ESCAPE, BATTLE_ALLY } from './data/strings.js';
-import { getMonsterName, getSpellNameClean, getItemNameClean } from './text-decoder.js';
+import { getMonsterName, getSpellNameShrinesClean, getItemNameShrinesClean } from './text-decoder.js';
 import { ps, getJobLevelStatBonus } from './player-stats.js';
 import { JOBS } from './data/jobs.js';
 import { ITEMS, isWeapon, isBladedWeapon } from './data/items.js';
@@ -336,7 +336,7 @@ function _tryAllyCure(ally, allyIdx) {
   battleSt.allyMagicEffectApplied = false;
   battleSt.allyMagicItemMode     = false;
   queueBattleMsg(ally.name ? _nameToBytes(ally.name) : BATTLE_ALLY);
-  replaceBattleMsg(getSpellNameClean(0x34));
+  replaceBattleMsg(getSpellNameShrinesClean(0x34));
   playSFX(SFX.MAGIC_CAST);
   battleSt.battleState = 'ally-magic-cast';
   battleSt.battleTimer = 0;
@@ -380,7 +380,7 @@ function _tryAllyPoisona(ally, allyIdx) {
   battleSt.allyMagicEffectApplied = false;
   battleSt.allyMagicItemMode      = false;
   queueBattleMsg(ally.name ? _nameToBytes(ally.name) : BATTLE_ALLY);
-  replaceBattleMsg(getSpellNameClean(0x35));
+  replaceBattleMsg(getSpellNameShrinesClean(0x35));
   playSFX(SFX.MAGIC_CAST);
   battleSt.battleState = 'ally-magic-cast';
   battleSt.battleTimer = 0;
@@ -452,7 +452,7 @@ function _tryAllyOffensiveCast(ally, allyIdx) {
   battleSt.allyMagicEffectApplied = false;
   battleSt.allyMagicItemMode      = false;
   queueBattleMsg(ally.name ? _nameToBytes(ally.name) : BATTLE_ALLY);
-  replaceBattleMsg(getSpellNameClean(spellId));
+  replaceBattleMsg(getSpellNameShrinesClean(spellId));
   playSFX(SFX.MAGIC_CAST);
   battleSt.battleState = 'ally-magic-cast';
   battleSt.battleTimer = 0;
@@ -504,7 +504,7 @@ function _tryAllyItem(ally, allyIdx) {
   battleSt.allyMagicEffectApplied = false;
   battleSt.allyMagicItemMode      = true;
   queueBattleMsg(ally.name ? _nameToBytes(ally.name) : BATTLE_ALLY);
-  replaceBattleMsg(getSpellNameClean(spellSentinel));
+  replaceBattleMsg(getSpellNameShrinesClean(spellSentinel));
   playSFX(SFX.CURE);
   battleSt.battleState = 'ally-magic-cast';
   battleSt.battleTimer = 0;
@@ -535,7 +535,7 @@ function _playerTurnConsumable() {
   const power = itemDat?.power || 50;
 
   // Player name was queued at command dispatch; swap in the item name now.
-  replaceBattleMsg(getItemNameClean(itemId));
+  replaceBattleMsg(getItemNameShrinesClean(itemId));
   playSFX(SFX.CURE);
   const { target, allyIndex } = inputSt.playerActionPending;
 

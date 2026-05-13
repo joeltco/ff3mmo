@@ -23,7 +23,7 @@ import { pvpGridLayout } from './pvp-math.js';
 import { queueBattleMsg, replaceBattleMsg } from './battle-msg.js';
 import { BATTLE_INEFFECTIVE, BATTLE_HASTE, BATTLE_PROTECT, BATTLE_REFLECT, BATTLE_SLAIN } from './data/strings.js';
 import { _nameToBytes } from './text-utils.js';
-import { getSpellNameClean, getItemNameClean } from './text-decoder.js';
+import { getSpellNameShrinesClean, getItemNameShrinesClean } from './text-decoder.js';
 import { elemMultiplier } from './battle-math.js';
 import { pvpSt } from './pvp.js';
 import { applyBuff, BUFF_HASTE, BUFF_PROTECT, BUFF_REFLECT } from './buffs.js';
@@ -175,9 +175,9 @@ export function startSpellCast(spellId, targetSpec, opts = {}) {
   // (don't queue) so the actor name already on the strip swaps in-place;
   // queue depth stays at 1 per turn.
   if (_isItemUse && opts.itemId != null) {
-    replaceBattleMsg(getItemNameClean(opts.itemId));
+    replaceBattleMsg(getItemNameShrinesClean(opts.itemId));
   } else {
-    replaceBattleMsg(getSpellNameClean(spellId));
+    replaceBattleMsg(getSpellNameShrinesClean(spellId));
   }
 
   const mode = (targetSpec && targetSpec.targetMode) || 'single';
