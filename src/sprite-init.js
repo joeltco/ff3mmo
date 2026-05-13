@@ -42,9 +42,9 @@ const GOBLIN_TILE_PAL = [0,0,0,0, 1,0,1,0, 1,1,1,1, 1,1,1,1];
 const GOBLIN_TILES = 16;
 const GOBLIN_COLS = 4;
 
-const MOOGLE_GFX_ID = 42;
+export const MOOGLE_GFX_ID = 42;
 const MOOGLE_SPRITE_OFF = 0x01C010 + MOOGLE_GFX_ID * 256; // 0x01EA10
-const MOOGLE_PAL = [0x0F, 0x0F, 0x16, 0x30];
+export const MOOGLE_PAL = [0x0F, 0x0F, 0x16, 0x30];
 
 const INVINCIBLE_TILE_ROM = 0x17A90;
 const INVINCIBLE_PAL = [0x0F, 0x0F, 0x27, 0x30];

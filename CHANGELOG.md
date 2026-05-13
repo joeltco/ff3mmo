@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.292 — 2026-05-13
+
+### Moogle uses full 4-direction walking sprite
+
+- **Routes the moogle through the shared `Sprite` class** (ROM bank `MOOGLE_GFX_ID = 42` at `0x01EA10`, palette `MOOGLE_PAL = [0x0F, 0x0F, 0x16, 0x30]`). All 16 tiles in the bank are now in play — tiles 0-3 DOWN, 4-7 UP, 8-15 SIDE (LEFT uses as-is, RIGHT applies HFLIP), with the same `bottomFlip` and `yOff` walk-bob conventions the player sprite uses. The 2-frame normal/flipped pair from `hudSt.moogleFrames` was a battle/loading-screen asset and is left untouched.
+- **Moogle's direction tracks its wander.** Walking down shows the down-facing sprite, walking left shows the left-facing one, etc. `_dxDyToDir` maps the walk vector to `DIR_DOWN/UP/LEFT/RIGHT`.
+- **Talk-facing now respects all four axes,** not just LEFT/RIGHT. Player approaches from above → moogle faces UP; from the left → moogle faces RIGHT; etc.
+- **Exported `MOOGLE_GFX_ID` and `MOOGLE_PAL`** from `sprite-init.js` so the NPC layer can build its own `Sprite` instance.
+
 ## 1.7.291 — 2026-05-13
 
 ### Altar moogle: FF-style wander + talk-face + smooth dialogue
