@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.309 — 2026-05-13
+
+### Roster panels: blue → black
+
+- Inspect overlay and Trade panel borders now fill with NES black (`$0F`) instead of dark blue (`$02`). `ui.borderBlueTileCanvases` palette swapped from `[0x02, 0x00, 0x02, 0x30]` to `[0x0F, 0x00, 0x0F, 0x30]`. Variable name kept to avoid churn.
+
 ## 1.7.308 — 2026-05-13
 
 ### DS-exclusive items: remap icon bytes from CR → AWJ slots
