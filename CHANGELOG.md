@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.307 — 2026-05-13
+
+### AWJ icon range extended ($E0-$FE)
+
+- **Shuriken (item 0x41) wasn't recognizing its icon.** AWJ baked the shuriken glyph at byte `$F6`, but `ICON_TILES` only covered `$E0-$F5`. Extended to `$E0-$FE` so Shuriken + any other high-byte item-class icons render through the icon-aware paths. Auditing all 200 items + 88 spells + 231 monsters: zero remaining unknown bytes after this extension. Known limitation: 15 job names (Knight, Hunter, etc.) use ROM bytes in `$29-$4D` as text-engine dictionary indices that AWJ expands at runtime; those slots are leftover-kana tiles in our font atlas so jobs display with subtle glyph gaps. Fixing requires implementing the dictionary lookup — deferred to a separate change.
+
 ## 1.7.306 — 2026-05-13
 
 ### Loading-screen moogle: "Boss, Kupo!"

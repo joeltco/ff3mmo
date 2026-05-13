@@ -67,12 +67,13 @@ CHAR_MAP[0xC7] = '/';  // slash
 CHAR_MAP[0xC8] = ':';  // colon
 CHAR_MAP[0xC9] = '…';  // ellipsis (three-dot glyph)
 
-// AWJ has dedicated per-class item icons at $E0-$F5 and spell-school icons
-// at $72-$75. Detect both ranges — text engine strips/passes-through these
-// as first-byte icons.
+// AWJ has dedicated per-class item icons at $E0-$FE (Shuriken at $F6, plus
+// further weapon classes through $FE) and spell-school icons at $72-$75.
+// Detect both ranges — text engine strips/passes-through these as first-byte
+// icons.
 const ICON_TILES = new Set();
 for (let b = 0x72; b <= 0x75; b++) ICON_TILES.add(b);  // spell-school
-for (let b = 0xE0; b <= 0xF5; b++) ICON_TILES.add(b);  // item class
+for (let b = 0xE0; b <= 0xFE; b++) ICON_TILES.add(b);  // item class (extended for Shuriken $F6+)
 
 // ASCII → NES tile byte (lowercase / uppercase / digits / space). Anything
 // unknown falls through to space. Kept local so text-decoder stays free of
