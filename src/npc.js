@@ -179,9 +179,15 @@ function _isOpenAreaTile(tilemap, x, y) {
 }
 
 function _tileOccupied(tx, ty, selfNpc) {
-  const ptx = (mapSt.worldX / TILE_SIZE) | 0;
-  const pty = (mapSt.worldY / TILE_SIZE) | 0;
-  if (tx === ptx && ty === pty) return true;
+  // Player straddles two tiles mid-walk (lerped worldX/worldY). Use floor AND
+  // ceil so the moogle treats both the player's FROM and TO tiles as occupied
+  // until the walk completes — fixes "moogle walked through me" where the
+  // moogle stepped into the player's destination during a player walk.
+  const pfx = Math.floor(mapSt.worldX / TILE_SIZE);
+  const pcx = Math.ceil(mapSt.worldX / TILE_SIZE);
+  const pfy = Math.floor(mapSt.worldY / TILE_SIZE);
+  const pcy = Math.ceil(mapSt.worldY / TILE_SIZE);
+  if ((tx === pfx || tx === pcx) && (ty === pfy || ty === pcy)) return true;
   for (const other of _npcs) {
     if (other === selfNpc) continue;
     if (other.tileX === tx && other.tileY === ty) return true;

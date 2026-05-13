@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.296 — 2026-05-13
+
+### NPC collision: respect player mid-walk
+
+- **Moogle no longer walks through the player.** `_tileOccupied` used `(worldX / TILE_SIZE) | 0` which truncates, so while the player was mid-walk between two tiles the moogle only saw the FROM tile and could legally step into the destination. Now uses `Math.floor` AND `Math.ceil` of the player's lerped `worldX/worldY` so both straddled tiles register as occupied until the walk completes.
+
 ## 1.7.295 — 2026-05-13
 
 ### Message-box page-scroll transition
