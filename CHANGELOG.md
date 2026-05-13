@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.284 — 2026-05-12
+
+### Shrines override cleanup (no behavior change)
+
+- Deleted 129 no-op entries from `ITEM_NAMES_SHRINES` (19), `SPELL_NAMES_SHRINES` (20), `MONSTER_NAMES_SHRINES` (90) where the rendered Shrines name was byte-identical to the Chaos Rush ROM string after icon strip. The fall-through path (`getXxxNameShrines` → `getXxxNameWithIcon` → ROM) produces identical output for these IDs, so the override was carrying no signal.
+- Sizes after cleanup: items 187→168, spells 56→36, monsters 204→114 (-129 entries total, -41 source lines). Jobs left alone — 21 of 22 entries are CR-garbled (ligature bytes Chaos Rush uses for compressed text), and `pause-menu.js` falls through to `'??'` not `JOBS[i].name`, so no entry is safely deletable there.
+- What remains in each map is now strictly: width-savers (217 entries), pure renames (46), or CR-garbled fixes (76 entries where deletion would surface broken-looking glyphs). Maps now read as a list of intentional deviations from ROM, not a mix of "intentional" and "shipped just in case."
+
 ## 1.7.283 — 2026-05-12
 
 ### Doc refresh (no behavior change)

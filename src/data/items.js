@@ -252,12 +252,12 @@ export const ITEM_NAMES_SHRINES = new Map([
   [0x01, 'Kaiser'],   [0x02, 'CatClaw'],  [0x03, 'Dragon'],
   [0x04, 'Elven'],    [0x05, 'HellClaw'],
   // Nunchaku
-  [0x06, 'Nunchuck'], [0x07, 'Tonfa'],    [0x08, '3Part'],
+  [0x08, '3Part'],
   // Rods
   [0x09, 'Mithril'],  [0x0a, 'Flame'],    [0x0b, 'Ice'],
   [0x0c, 'Light'],    [0x0d, 'Ultimate'],
   // Staves
-  [0x0e, 'Staff'],    [0x0f, 'Burning'],  [0x10, 'Freezing'],
+  [0x0f, 'Burning'],  [0x10, 'Freezing'],
   [0x11, 'Shining'],  [0x12, 'Golem'],    [0x13, 'Rune'],
   [0x14, 'Eldest'],
   // Hammers
@@ -269,31 +269,27 @@ export const ITEM_NAMES_SHRINES = new Map([
   [0x1a, 'Thunder'],  [0x1b, 'Wind'],     [0x1c, 'Blood'],
   [0x1d, 'Holy'],
   // Knives
-  [0x1e, 'Knife'],    [0x1f, 'Dagger'],   [0x20, 'Mithril'],
+  [0x20, 'Mithril'],
   [0x21, 'MGauche'],  [0x22, 'Orialcon'], [0x23, 'AirKnife'],
   // Swords
   [0x24, 'Long'],     [0x25, 'WSlayer'],  [0x26, 'Shiny'],
   [0x27, 'Mithril'],  [0x28, 'Serpent'],  [0x29, 'IceBlade'],
-  [0x2a, 'Tyrving'],  [0x2b, 'Salamand'], [0x2c, 'King'],
-  [0x2e, 'Ancient'],  [0x30, 'Blood'],    [0x31, 'Defender'],
-  [0x35, 'Break'],    [0x36, 'Excalibur'],[0x38, 'Ragnarok'],
+  [0x2a, 'Tyrving'],  [0x2c, 'King'],
+  [0x2e, 'Ancient'],  [0x30, 'Blood'],    [0x35, 'Break'],    [0x38, 'Ragnarok'],
   [0x39, 'Onion'],
   // Katanas
-  [0x2f, 'Ashura'],   [0x33, 'Kotetsu'],  [0x34, 'Kiku'],
-  [0x37, 'Masamune'],
+  [0x33, 'Kotetsu'],  [0x34, 'Kiku'],
   // Books
   [0x3a, 'Flame'],    [0x3b, 'Ice'],      [0x3c, 'Inferno'],
   [0x3d, 'Light'],    [0x3e, 'Illumina'], [0x42, 'Blizzard'],
   // Boomerangs
-  [0x3f, 'Boomerang'],[0x40, 'FullMoon'],
-  // Shuriken
-  [0x41, 'Shuriken'],
+  [0x40, 'FullMoon'],
   // Bells
   [0x43, 'Giyaman'],  [0x44, 'Earth'],    [0x45, 'Rune'],
   // Harps
   [0x46, 'Madora'],   [0x48, 'Lamia'],    [0x49, 'Loki'],
   // Bows
-  [0x4a, 'Bow'],      [0x4b, 'GreatBow'], [0x4c, 'Killer'],
+  [0x4b, 'GreatBow'], [0x4c, 'Killer'],
   [0x4d, 'Rune'],     [0x4e, 'Yoichi'],
   // Arrows
   [0x4f, 'Wooden'],   [0x50, 'Holy'],     [0x51, 'Iron'],
@@ -303,14 +299,11 @@ export const ITEM_NAMES_SHRINES = new Map([
   [0x58, 'Leather'],  [0x59, 'Onion'],    [0x5a, 'Mithril'],
   [0x5b, 'Ice'],      [0x5c, 'Hero'],     [0x5d, 'Demon'],
   [0x5e, 'Diamond'],  [0x5f, 'Aegis'],    [0x60, 'Genji'],
-  [0x61, 'Crystal'],
   // Helmets
   [0x62, 'Leather'],  [0x63, 'Onion'],    [0x64, 'Mithril'],
-  [0x65, 'Carapace'], [0x66, 'Ice'],      [0x67, 'Headband'],
-  [0x68, 'Scholar'],  [0x69, 'DarkHood'], [0x6a, 'Chakra'],
+  [0x65, 'Carapace'], [0x66, 'Ice'],      [0x68, 'Scholar'],  [0x69, 'DarkHood'], [0x6a, 'Chakra'],
   [0x6b, 'Viking'],   [0x6c, 'Dragon'],   [0x6d, 'Feather'],
   [0x6e, 'Diamond'],  [0x6f, 'Genji'],    [0x70, 'Crystal'],
-  [0x71, 'Ribbon'],
   // Body armor / robes
   [0x72, 'Cloth'],    [0x73, 'Leather'],  [0x74, 'Onion'],
   [0x75, 'Mithril'],  [0x76, 'Carapace'], [0x77, 'Ice'],
@@ -334,10 +327,8 @@ export const ITEM_NAMES_SHRINES = new Map([
   [0xa1, 'EarthFang'],[0xa2, 'Lute'],     [0xa3, 'SylxKey'],
   [0xa4, 'MidgBread'],
   // Consumables
-  [0xa6, 'Potion'],   [0xa7, 'HiPotion'], [0xa8, 'Elixir'],
-  [0xa9, 'FenixDown'],[0xaa, 'Soft'],     [0xab, 'MaidKiss'],
+  [0xa7, 'HiPotion'], [0xa9, 'FenixDown'],[0xaa, 'Soft'],     [0xab, 'MaidKiss'],
   [0xac, 'EchoHerb'], [0xad, 'LuckMallet'],[0xae, 'Eyedrop'],
-  [0xaf, 'Antidote'],
   // Battle items — only entries with an unambiguous Shrines pairing
   [0xb1, 'BombShard'],[0xb2, 'SouthWind'],[0xb3, 'ZeusRage'],
   [0xb5, 'NorthWind'],[0xb6, 'GodsRage'], [0xb8, 'LamiaScl'],
