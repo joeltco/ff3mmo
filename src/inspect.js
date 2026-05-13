@@ -29,9 +29,9 @@ const HUD_VIEW_H = 144;
 
 // Compact panel sized to name + 5 equipment rows. Anchors flush to the
 // right edge of the HUD viewport so the slide reveals from x=HUD_VIEW_W.
-const PANEL_W = 96;
+const PANEL_W = 120;
 const PANEL_H = 80;
-const PANEL_FINAL_X = HUD_VIEW_X + HUD_VIEW_W - PANEL_W;  // 48
+const PANEL_FINAL_X = HUD_VIEW_X + HUD_VIEW_W - PANEL_W;  // 24
 const PANEL_Y = HUD_VIEW_Y + 8;                            // 40
 const SLIDE_MS = 150;
 

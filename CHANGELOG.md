@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.316 — 2026-05-13
+
+### Inspect overlay: widen 96 → 120
+
+- Longer item names (FlameMail, GoldNeedle, etc.) were spilling past the panel right edge. Widened from 96 to 120 px (final x = 24). Equipment names up to 10 chars (icon + 9 letters) fit cleanly inside.
+
 ## 1.7.315 — 2026-05-13
 
 ### Inspect overlay: slide-in from right, compact
