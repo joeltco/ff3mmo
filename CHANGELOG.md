@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.302 — 2026-05-13
+
+### AWJ letter range: fix getSpellNameWithIcon filter
+
+- **Cure / Sight / Pure rendered as just "C" / "S" / "P".** `getSpellNameWithIcon` (the fallback for spells without a `SPELL_NAMES_SHRINES` override — Cure 0x34, Sight 0x36, Pure 0x35) had its letter allowlist still on CR's lowercase range `0xCA-0xE3`, so AWJ's lowercase `0xA4-0xBD` got filtered out as "non-letter padding" and only the uppercase first letter survived. Updated to `0xA4-0xBD` for letters, added `0xBE-0xDF` for ligatures, and updated the punctuation set to AWJ's slots. Same fix as `getSpellNameClean` in v1.7.298 but I missed this twin function.
+
 ## 1.7.301 — 2026-05-13
 
 ### AWJ icons: light-grey body + white accents

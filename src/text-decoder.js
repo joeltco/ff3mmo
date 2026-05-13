@@ -335,11 +335,13 @@ export function getSpellNameWithIcon(spellId) {
   if (isIcon) out.push(bytes[0]);
   for (let i = isIcon ? 1 : 0; i < bytes.length; i++) {
     const b = bytes[i];
-    const isLetter = (b >= 0x8A && b <= 0xA3) || (b >= 0xCA && b <= 0xE3);
+    const isLetter = (b >= 0x8A && b <= 0xA3) || (b >= 0xA4 && b <= 0xBD);
+    const isLigature = b >= 0xBE && b <= 0xDF;
     const isDigit = b >= 0x80 && b <= 0x89;
-    const isPunct = b === 0xC4 || b === 0xC5 || b === 0xC8 || b === 0xC9;
+    const isPunct = b === 0xC1 || b === 0xC2 || b === 0xC4 || b === 0xC5 ||
+                    b === 0xC6 || b === 0xC7 || b === 0xC8;
     const isSpace = b === 0xFF;
-    if (isLetter || isDigit || isPunct || isSpace) out.push(b);
+    if (isLetter || isLigature || isDigit || isPunct || isSpace) out.push(b);
   }
   while (out.length > 0 && out[out.length - 1] === 0xFF) out.pop();
   return new Uint8Array(out);
