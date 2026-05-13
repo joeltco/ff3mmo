@@ -21,12 +21,13 @@ import { drawBorderedBox, clipToViewport } from './hud-drawing.js';
 import { ui } from './ui-state.js';
 import { playSFX, SFX } from './music.js';
 
-// Sized to fit name + up to 6 equipment rows (R/L/Bd/Hd/Sh) with tight
-// padding; centered horizontally in the canvas viewport (256 px wide).
+// Anchored to the roster panel on the right (x=144, panelTop=64, 112×112).
+// Same footprint so the inspect overlay slots into the same screen space
+// the player was already focused on.
+const HUD_VIEW_X = 144;
+const HUD_VIEW_Y = 64;
 const HUD_VIEW_W = 112;
-const HUD_VIEW_H = 88;
-const HUD_VIEW_X = (256 - HUD_VIEW_W) / 2;  // 72
-const HUD_VIEW_Y = 48;
+const HUD_VIEW_H = 112;
 
 export const inspectSt = {
   open: false,

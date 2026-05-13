@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.313 — 2026-05-13
+
+### Inspect overlay: anchor to roster panel
+
+- Repositioned to (x=144, y=64, 112×112) so it sits exactly on top of the right-side roster panel the player was already focused on — instead of floating in the middle of the screen.
+
 ## 1.7.312 — 2026-05-13
 
 ### Inspect overlay: shrunk to fit content
