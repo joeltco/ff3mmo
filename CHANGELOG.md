@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.306 — 2026-05-13
+
+### Loading-screen moogle: "Boss, Kupo!"
+
+- Added a comma to the moogle's chat bubble. "Boss Kupo!" → "Boss, Kupo!".
+
 ## 1.7.305 — 2026-05-13
 
 ### Comma fix: AWJ comma lives at $C0, not $BE
