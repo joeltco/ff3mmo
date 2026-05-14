@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.343 — 2026-05-14
+
+### Fix: new-game door exits to Ur, not desert
+
+- `title-screen.js` fresh-slot path: walking out the opening-scene door (map 7) was dumping the player at map 7's NES-canon overworld position — which is desert. The exit-prev logic fell into its empty-`mapStack` branch (`loadWorldMapAt(findWorldExitIndex(currentMapId))`) and used the desert tile that map 7 originally lived next to.
+- Fix: seed `mapStack` with Ur's overworld tile (`findWorldExitIndex(114) → triggerPositions`) at new-game start, so `_checkExitPrev` pops a 'world' entry and lands the player at Ur's gate via `loadWorldMapAtPosition`.
+
 ## 1.7.342 — 2026-05-14
 
 ### Fix: name-entry lowercase + purge stale Chaos Rush migration
