@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.345 — 2026-05-14
+
+### Fix: opening-scene door now leads into Ur, not the overworld
+
+- Walking out of the opening scene (map 7) was dropping the player onto the world map at Ur's overworld tile. Switched to dropping into Ur's interior (map 114) at the natural town entrance.
+- `_checkExitPrev` extended with a "missing return coords → natural entrance" branch so a seeded mapStack entry like `{mapId: 114}` resolves correctly.
+- `title-screen.js` new-game seed + `respawnAfterDeath` Ur-death seed both updated to push `{mapId: 114}` (no coords) instead of a `'world'` entry.
+
 ## 1.7.344 — 2026-05-14
 
 ### Death in Ur respawns at opening-scene checkpoint

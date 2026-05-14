@@ -12,7 +12,6 @@ import { hudSt } from './hud-state.js';
 import { transSt } from './transitions.js';
 import { mapSt } from './map-state.js';
 import { loadMapById, loadWorldMapAtPosition } from './map-loading.js';
-import { findWorldExitIndex } from './map-triggers.js';
 import { serverDeleteSlot } from './save.js';
 import { fakePlayerPortraits } from './fake-player-sprites.js';
 import { drawCursorFaded } from './hud-drawing.js';
@@ -749,13 +748,11 @@ function _updateTitleMainOutCase() {
   } else {
     // Fresh slot — new players spawn in the opening scene (map 7, tile 4,4)
     // with the elder + 2 attendants placed by map-loading.js#_placeOpeningScene.
-    // Seed mapStack with Ur's overworld tile so walking out the opening-scene
-    // door lands the player in front of Ur (instead of map 7's NES-canon
-    // overworld position, which is in the desert).
+    // Seed mapStack with Ur (no return coords) so walking out the
+    // opening-scene door drops the player at Ur's natural town entrance —
+    // _checkExitPrev's null-coord branch defers to `loadMapById(114)`.
     transSt.pendingTrack = TRACKS.TOWN_UR;
-    const urTrigId = findWorldExitIndex(114, mapSt.worldMapData);
-    const urPos = mapSt.worldMapData.triggerPositions.get(urTrigId);
-    if (urPos) mapSt.mapStack.push({ mapId: 'world', worldId: 0, x: urPos.x, y: urPos.y });
+    mapSt.mapStack.push({ mapId: 114 });
     loadMapById(7, 4, 4);
   }
   transSt.state = 'hud-fade-in';
