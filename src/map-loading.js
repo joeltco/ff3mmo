@@ -8,7 +8,20 @@ import { DIR_DOWN } from './sprite.js';
 import { sprite } from './player-sprite.js';
 import { resetIndoorWaterCache } from './water-animation.js';
 import { clearFlameSprites, rebuildFlameSprites } from './flame-sprites.js';
-import { clearNpcs, placeMoogleAtCaveCenter, addBlackMageShopkeeper } from './npc.js';
+import { clearNpcs, placeMoogleAtCaveCenter, addBlackMageShopkeeper, addCustomNpc } from './npc.js';
+import { DIR_LEFT, DIR_RIGHT } from './sprite.js';
+
+// Captured from OAM @ frame 1860 — opening scene palettes (PPU SP2/SP3).
+// pal3 = head/hat top half, pal2 = robe/body bottom half.
+const OPENING_PAL3 = [0x1A, 0x0F, 0x27, 0x30];
+const OPENING_PAL2 = [0x1A, 0x0F, 0x12, 0x36];
+
+function _placeOpeningScene() {
+  // Player spawns at (4, 4); elder 1N, attendants 2W (facing right) + 2E (facing left).
+  addCustomNpc('opening_elder', 4, 3, { gfxId: 4, palTop: OPENING_PAL3, palBtm: OPENING_PAL2, dir: DIR_DOWN });
+  addCustomNpc('opening_left',  2, 4, { gfxId: 2, palTop: OPENING_PAL3, palBtm: OPENING_PAL2, dir: DIR_RIGHT });
+  addCustomNpc('opening_right', 6, 4, { gfxId: 3, palTop: OPENING_PAL3, palBtm: OPENING_PAL2, dir: DIR_LEFT });
+}
 import { transSt, topBoxSt } from './transitions.js';
 import { BATTLE_BG_MAP_LOOKUP, renderBattleBg } from './battle-bg.js';
 import { AREA_NAMES, DUNGEON_NAME } from './data/strings.js';
@@ -165,6 +178,7 @@ function _loadRegularMap(mapId, returnX, returnY) {
   rebuildFlameSprites(mapSt.mapData, mapSt.mapRenderer, TILE_SIZE);
   clearNpcs();
   if (mapId === 3) addBlackMageShopkeeper(4, 4, 'ur_magic');
+  if (mapId === 7) _placeOpeningScene();
   mapSt.moving = false;
   sprite.setDirection(DIR_DOWN);
   sprite.resetFrame();

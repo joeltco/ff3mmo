@@ -746,9 +746,10 @@ function _updateTitleMainOutCase() {
     const ty = slot.worldY != null ? slot.worldY / TILE_SIZE : undefined;
     loadMapById(slot.currentMapId, tx, ty);
   } else {
+    // Fresh slot — new players spawn in the opening scene (map 7, tile 4,4)
+    // with the elder + 2 attendants placed by map-loading.js#_placeOpeningScene.
     transSt.pendingTrack = TRACKS.TOWN_UR;
-    loadMapById(114);
-    mapSt.worldY -= 6 * TILE_SIZE;
+    loadMapById(7, 4, 4);
   }
   transSt.state = 'hud-fade-in';
   transSt.timer = 0;

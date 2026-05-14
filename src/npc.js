@@ -91,6 +91,42 @@ export function addBlackMageShopkeeper(tileX, tileY, shopId) {
   });
 }
 
+// Generic stationary NPC backed by the player walk-sprite class with a
+// custom GFX_ID + palette. Lazy sprite cache keyed by `key`. Used for the
+// new-game opening scene (elder + 2 attendants).
+const _customSprites = new Map();
+function _getCustomSprite(key, gfxId, topPal, btmPal) {
+  if (_customSprites.has(key)) return _customSprites.get(key);
+  if (!romRaw) return null;
+  const s = new Sprite(romRaw, topPal, btmPal);
+  s.setGfxID(gfxId);
+  _customSprites.set(key, s);
+  return s;
+}
+
+export function addCustomNpc(key, tileX, tileY, opts) {
+  _npcs.push({
+    key,
+    tileX, tileY,
+    spriteKey: 'custom',
+    dialogue: null,
+    mode: 'idle-march',
+    timer: 0,
+    pixelOffX: 0,
+    pixelOffY: 0,
+    walkDX: 0,
+    walkDY: 0,
+    walkFromX: tileX,
+    walkFromY: tileY,
+    dir: opts.dir != null ? opts.dir : DIR_DOWN,
+    talkFacing: null,
+    runRemaining: 0,
+    gfxId: opts.gfxId,
+    palTop: opts.palTop,
+    palBtm: opts.palBtm,
+  });
+}
+
 export function placeMoogleAtCaveCenter(mapData) {
   const cx = 16, cy = 10;
   for (let r = 0; r < 12; r++) {
@@ -287,6 +323,16 @@ export function drawNpcs(ctx, camX, camY, originX, originY, spriteY) {
         bm.resetFrame();
       }
       bm.draw(ctx, sx, sy);
+    } else if (npc.spriteKey === 'custom') {
+      const s = _getCustomSprite(npc.key, npc.gfxId, npc.palTop, npc.palBtm);
+      if (!s) continue;
+      s.setDirection(npc.talkFacing != null ? npc.talkFacing : npc.dir);
+      if (npc.mode === 'idle-march' && npc.talkFacing == null) {
+        s.setWalkProgress((npc.timer / IDLE_MARCH_MS) % 1);
+      } else {
+        s.resetFrame();
+      }
+      s.draw(ctx, sx, sy);
     }
   }
 }

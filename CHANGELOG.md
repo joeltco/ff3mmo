@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.327 — 2026-05-14
+
+### Opening scene: 3 NPCs on map 7 for new players
+
+- New-game spawn moved from Ur overworld (map 114) to map 7 tile (4, 4) — the opening scene captured by the user's OAM dump.
+- 3 stationary NPCs placed on map 7 entry: elder at (4, 3) facing south, left attendant at (2, 4) facing right, right attendant at (6, 4) facing left. Each uses the player walk-sprite class with a different `gfxId` (4 / 2 / 3 = BM / Mo / WM) and the captured opening-scene palette (pal3 top, pal2 bottom). Walking animation cycles in place via the existing `idle-march` mode.
+- Generic `addCustomNpc(key, x, y, { gfxId, palTop, palBtm, dir })` helper in `npc.js` — reuse for any future scripted-scene NPC.
+
 ## 1.7.326 — 2026-05-14
 
 ### SNAP OAM: map tile coords per group, not just screen pixels
