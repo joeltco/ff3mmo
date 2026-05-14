@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.326 — 2026-05-14
+
+### SNAP OAM: map tile coords per group, not just screen pixels
+
+- The OAM snapshot now reads FF3J player tile from RAM `$68`/`$69`, derives the camera offset from the player sprite's OAM position, and outputs each group's MAP TILE coords (in addition to screen origin). One tap of SNAP OAM is now self-contained for placing the captured sprites in ff3mmo without a separate READ STATE + diff pass.
+- Header line shows player map tile + camera offset so the derivation is auditable.
+
 ## 1.7.325 — 2026-05-14
 
 ### EMU READ STATE: dump CPU zero page + $0200 mirror

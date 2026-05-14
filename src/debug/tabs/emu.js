@@ -638,8 +638,19 @@ function _oamSnapshotText() {
     if (mergedGroup === null) groups.push([s]);
   }
   const tiles = nes.ppu.ptTile;
+  // FF3J: player tile X / Y live at zero page $68 / $69 (verified by step-diff).
+  // Compute camera offset from the player's OAM position so we can derive map
+  // tile coords for every other sprite group in the snapshot.
+  const playerTileX = _ram(0x68);
+  const playerTileY = _ram(0x69);
+  const player = sprites.find(s => s.i === 0) || sprites[0] || null;
+  const camX = player ? (playerTileX * 16 - player.x) : 0;
+  const camY = player ? (playerTileY * 16 - (player.y - 1)) : 0;
   const out = [];
   out.push(`// OAM snapshot @ frame ${frameCount} — ${sprites.length} visible sprites in ${groups.length} groups`);
+  out.push('');
+  out.push(`// Player map tile: (${playerTileX}, ${playerTileY})   camera offset: (${camX}, ${camY})`);
+  out.push(`// (RAM $68=playerTileX, $69=playerTileY, derived: groupTileX = (originX + camX) >> 4)`);
   out.push('');
   out.push(_dumpPpuctrl());
   out.push('');
@@ -651,7 +662,9 @@ function _oamSnapshotText() {
     const grp = groups[g].sort((a, b) => (a.y - b.y) || (a.x - b.x));
     const minX = Math.min(...grp.map(s => s.x));
     const minY = Math.min(...grp.map(s => s.y));
-    out.push(`// ── group ${g} (${grp.length} tiles, origin ${minX},${minY}) ──`);
+    const tileX = (minX + camX) >> 4;
+    const tileY = (minY + camY) >> 4;
+    out.push(`// ── group ${g} (${grp.length} tiles, screen ${minX},${minY} → map tile (${tileX},${tileY})) ──`);
     for (const s of grp) {
       const ptIdx = 256 + s.t;
       const tile = tiles[ptIdx];
