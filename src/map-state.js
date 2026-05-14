@@ -40,6 +40,12 @@ export const mapSt = {
 
   // ── Encounter ─────────────────────────────────────────────────────
   encounterSteps: 0,
+  // Indoor-map encounter patch (set when entering a town tile that
+  // flood-fills into an encounter zone). Set<y*32+x> of tilemap indices
+  // the player triggers random encounters on. Cleared on every map load
+  // by the loader that opts in.
+  encounterPatch: null,
+  encounterPatchZone: null, // ENCOUNTERS key for the active patch (e.g. 'grasslands_wild')
 
   // ── World-fx (triggered by map tile interactions) ─────────────────
   shakeActive: false,

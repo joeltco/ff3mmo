@@ -20,15 +20,14 @@ export function initBattleEncounter({ resetBattleVars }) { _resetBattleVars = re
 // ── Random encounter step counter ──────────────────────────────────────────
 export function tickRandomEncounter() {
   if (battleSt.battleState !== 'none') return false;
+  const tileX = Math.floor(mapSt.worldX / TILE_SIZE);
+  const tileY = Math.floor(mapSt.worldY / TILE_SIZE);
   const inDungeon = mapSt.dungeonFloor >= 0 && mapSt.dungeonFloor < 4;
-  const onGrass = mapSt.onWorldMap && mapSt.worldMapRenderer && (() => {
-    const tileX = Math.floor(mapSt.worldX / TILE_SIZE);
-    const tileY = Math.floor(mapSt.worldY / TILE_SIZE);
-    return !mapSt.worldMapRenderer.getTriggerAt(tileX, tileY);
-  })();
-  if (!inDungeon && !onGrass) return false;
+  const onGrass = mapSt.onWorldMap && mapSt.worldMapRenderer && !mapSt.worldMapRenderer.getTriggerAt(tileX, tileY);
+  const inPatch = mapSt.encounterPatch && mapSt.encounterPatch.has(tileY * 32 + tileX);
+  if (!inDungeon && !onGrass && !inPatch) return false;
   mapSt.encounterSteps++;
-  const threshold = onGrass
+  const threshold = (onGrass || inPatch)
     ? 20 + Math.floor(Math.random() * 20)
     : 15 + Math.floor(Math.random() * 15);
   if (mapSt.encounterSteps >= threshold) {
@@ -56,6 +55,9 @@ export function startRandomEncounter() {
     const tileY = Math.floor(mapSt.worldY / TILE_SIZE);
     const inValley = tileX >= 93 && tileX <= 96 && tileY >= 34 && tileY <= 44;
     zoneKey = inValley ? 'grasslands_valley' : 'grasslands_wild';
+  } else if (mapSt.encounterPatch && mapSt.encounterPatchZone) {
+    // Indoor map flood-filled encounter patch (e.g. Ur dark-tile patch).
+    zoneKey = mapSt.encounterPatchZone;
   } else {
     zoneKey = ['altar_cave_f1','altar_cave_f2','altar_cave_f3','altar_cave_f4'][mapSt.dungeonFloor] || 'altar_cave_f1';
   }

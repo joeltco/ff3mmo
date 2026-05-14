@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.341 — 2026-05-14
+
+### Indoor encounter patch — Ur dark-tile zone
+
+- New `mapSt.encounterPatch` (Set of tilemap indices) + `mapSt.encounterPatchZone` (ENCOUNTERS key). Set at indoor-map load by a flood-fill from a seed tile, matching the same tile ID 4-way. Tile additions/extensions in the patch ROM just work.
+- Ur (114): seed `(22, 8)` tile `0x2f` runs `grasslands_wild` formations (Werewolves + Bees). Stepping anywhere in the patch ticks the encounter counter.
+- `tickRandomEncounter` extended with `inPatch` predicate; uses the slower grass-style threshold (`20 + rand(20)`).
+
 ## 1.7.340 — 2026-05-14
 
 ### Spells are items now — scroll items wired end-to-end

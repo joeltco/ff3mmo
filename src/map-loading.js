@@ -139,6 +139,26 @@ function _loadDungeonFloor(mapId, returnX, returnY) {
   if (returnX !== undefined) _openReturnDoor(playerX, playerY);
 }
 
+// Flood-fill the tilemap from (sx, sy), matching the same tile ID 4-way.
+// Returns a Set of y*32+x indices the player triggers encounters on. Used
+// by town encounter-patch zones — see Ur (114) where the dark-tile patch
+// (tile 0x2f at 22,8) runs `grasslands_wild`.
+function _floodFillTilePatch(tilemap, sx, sy) {
+  const targetId = tilemap[sy * 32 + sx];
+  const out = new Set();
+  const stack = [[sx, sy]];
+  while (stack.length > 0) {
+    const [x, y] = stack.pop();
+    if (x < 0 || x >= 32 || y < 0 || y >= 32) continue;
+    const idx = y * 32 + x;
+    if (out.has(idx)) continue;
+    if (tilemap[idx] !== targetId) continue;
+    out.add(idx);
+    stack.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]);
+  }
+  return out;
+}
+
 function _loadRegularMap(mapId, returnX, returnY) {
   mapSt.dungeonFloor = -1;
   mapSt.encounterSteps = 0;
@@ -150,6 +170,8 @@ function _loadRegularMap(mapId, returnX, returnY) {
   mapSt.warpTile = null;
   mapSt.pondTiles = null;
   mapSt.bossSprite = null;
+  mapSt.encounterPatch = null;
+  mapSt.encounterPatchZone = null;
   const mapData = loadMap(romRaw, mapId);
   mapSt.mapData = mapData;
   mapSt.currentMapId = mapId;
@@ -173,6 +195,13 @@ function _loadRegularMap(mapId, returnX, returnY) {
   clearNpcs();
   if (mapId === 3) addBlackMageShopkeeper(4, 4, 'ur_magic');
   if (mapId === 7) placeOpeningScene();
+  // Ur (114) has a dark-tile patch in the town that spawns wild
+  // grasslands encounters (Werewolves + Bees). Flood-fill from the seed
+  // tile so adding/extending the patch in the ROM just works.
+  if (mapId === 114) {
+    mapSt.encounterPatch = _floodFillTilePatch(mapData.tilemap, 22, 8);
+    mapSt.encounterPatchZone = 'grasslands_wild';
+  }
   mapSt.moving = false;
   sprite.setDirection(DIR_DOWN);
   sprite.resetFrame();
