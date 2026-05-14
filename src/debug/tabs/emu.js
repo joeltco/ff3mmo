@@ -1093,6 +1093,20 @@ function _dumpState() {
     if (id === 0 && qty === 0) continue;
     out.push(`//   [${String(i).padStart(2)}] id=$${_hex(id,2)} qty=${qty}`);
   }
+  out.push('');
+  out.push('// CPU RAM zero page ($00-$FF) — FF3J stores player tile X/Y + map ID here');
+  for (let r = 0; r < 16; r++) {
+    let line = `// $${_hex(r * 16, 2)}: `;
+    for (let c = 0; c < 16; c++) line += _hex(_ram(r * 16 + c), 2) + ' ';
+    out.push(line.trimEnd());
+  }
+  out.push('');
+  out.push('// CPU RAM $0200-$02FF (OAM + game-state mirror)');
+  for (let r = 0; r < 16; r++) {
+    let line = `// $${_hex(0x200 + r * 16, 4)}: `;
+    for (let c = 0; c < 16; c++) line += _hex(_ram(0x200 + r * 16 + c), 2) + ' ';
+    out.push(line.trimEnd());
+  }
   dom.output.value = out.join('\n');
   _status(`state dumped @ frame ${frameCount}`);
 }

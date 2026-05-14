@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.325 — 2026-05-14
+
+### EMU READ STATE: dump CPU zero page + $0200 mirror
+
+- Extended `_dumpState` in `src/debug/tabs/emu.js` to also dump CPU zero page ($00-$FF) and the $0200-$02FF region after the existing party/inventory block. FF3J keeps player tile X/Y + current map ID in zero-page, so a single STATE dump from any scene now gives us enough to locate the player without guessing.
+
 ## 1.7.324 — 2026-05-14
 
 ### Black mage shopkeeper at the Ur magic-shop pentagram tile
