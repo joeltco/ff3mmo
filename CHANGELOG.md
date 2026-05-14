@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.347 — 2026-05-14
+
+### Fix: stale battle BG leaks into Ur top-box
+
+- Entering Ur via the new opening-scene chain (map 7 → map 6 → 114) left `hudSt.topBoxBgCanvas` holding map 6's battle BG. The town render path gates on `!isTown` so it *shouldn't* draw, but any unguarded draw path would flash the stale canvas. `setupTopBox(114)` now explicitly nulls the canvas + fade frames on town entry.
+
 ## 1.7.346 — 2026-05-14
 
 ### Fix: opening-scene exit chain — map 7 upstairs → map 6 ground floor → Ur
