@@ -34,18 +34,18 @@ const LOOT_POOLS = {
     { weight: 30, pool: [GIL(10, 30)] },
   ],
   1000: [ // Altar Cave F1
-    { weight: 55, pool: [0xA6, 0xA6, 0xAF, 0xAE] },               // Potion(2x), Antidote, Eye Drops
+    { weight: 55, pool: [0xA6] },                                 // Potion
     { weight: 30, pool: [GIL(20, 60)] },
     { weight: 15, pool: [0x62] },                                 // Leather Cap
   ],
   1001: [ // Altar Cave F2
-    { weight: 45, pool: [0xA6, 0xAF, 0xAE] },
+    { weight: 45, pool: [0xA6] },                                 // Potion
     { weight: 30, pool: [GIL(40, 100)] },
     { weight: 20, pool: [0x62, 0x1F, 0x06, 0x0E] },               // Leather Cap, Dagger, Nunchuck, Staff
     { weight:  5, pool: [0x58] },                                 // Leather Shield
   ],
   1002: [ // Altar Cave F3
-    { weight: 35, pool: [0xA6, 0xAF] },
+    { weight: 35, pool: [0xA6] },                                 // Potion
     { weight: 30, pool: [GIL(75, 175)] },
     { weight: 25, pool: [0x58, 0x1F] },                           // Leather Shield, Dagger
     { weight: 10, pool: [0x73] },                                 // Leather Armor

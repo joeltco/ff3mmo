@@ -47,24 +47,6 @@ export const ps = {
   consumedTiles: {},
 };
 
-// Starting spells granted when a player first switches into a mage job.
-// Keyed by jobIdx. White Mage = 3, Black Mage = 4, Red Mage = 5.
-// School-gating (data/spells.js JOB_SCHOOLS): WM = white only, BM = black
-// only, RM = both. RM starts with one entry from each school.
-const STARTING_SPELLS = {
-  3: [0x34, 0x35, 0x36],       // White Mage: Cure, Poisona, Sight
-  4: [0x31, 0x32, 0x33],       // Black Mage: Fire + Bzzard + Sleep
-  5: [0x34, 0x31, 0x32, 0x33], // Red Mage: Cure + Fire + Bzzard + Sleep (cross-school starter)
-};
-
-export function grantStartingSpells(jobIdx = ps.jobIdx) {
-  const list = STARTING_SPELLS[jobIdx];
-  if (!list) return;
-  for (const id of list) {
-    if (!ps.knownSpells.includes(id)) ps.knownSpells.push(id);
-  }
-}
-
 // Equip slot index mapping: -100=RH, -101=LH, -102=Head, -103=Body, -104=Arms
 export const EQUIP_SLOT_SUBTYPE = { '-102': 'helmet', '-103': 'body', '-104': 'arms' };
 
@@ -344,7 +326,6 @@ export function changeJob(newJobIdx) {
   // Clamp HP/MP to new maximums
   ps.hp = Math.min(ps.hp, s.maxHP); ps.stats.hp = ps.hp;
   ps.mp = Math.min(ps.mp, s.maxMP); ps.stats.mp = ps.mp;
-  grantStartingSpells(newJobIdx);
   recalcCombatStats();
 }
 

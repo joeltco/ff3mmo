@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.339 — 2026-05-14
+
+### No starting spells; antidote + eye drops out of altar loot
+
+- Removed `STARTING_SPELLS` + `grantStartingSpells`. White / Black / Red Mages no longer receive Cure / Poisona / Sight / Fire / Bzzard / Sleep on job entry. All magic must be found or bought.
+- Altar Cave F1-F3 loot pools no longer roll Antidote (`0xAF`) or Eye Drops (`0xAE`). F4 was already without; Ur town (`114`) chest pool untouched.
+
 ## 1.7.338 — 2026-05-14
 
 ### Ur magic shop: drop Cure from catalog

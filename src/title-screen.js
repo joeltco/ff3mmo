@@ -6,7 +6,7 @@ import { _nameToBytes } from './text-utils.js';
 import { selectCursor, saveSlots, nameBuffer, NAME_MAX_LEN,
          setSelectCursor, setNameBuffer, saveSlotsToDB, setPsAligned } from './save-state.js';
 import { playSFX, fadeOutMusic, SFX, TRACKS } from './music.js';
-import { ps, fullHeal, recalcCombatStats, grantStartingSpells, initPlayerStats } from './player-stats.js';
+import { ps, fullHeal, recalcCombatStats, initPlayerStats } from './player-stats.js';
 import { computeJobStats } from './data/players.js';
 import { hudSt } from './hud-state.js';
 import { transSt } from './transitions.js';
@@ -723,7 +723,6 @@ function _updateTitleMainOutCase() {
   ps.lastWorldExitY = (slot && slot.lastWorldExitY != null) ? slot.lastWorldExitY : null;
   ps.knownSpells = (slot && Array.isArray(slot.knownSpells)) ? [...slot.knownSpells] : [];
   ps.consumedTiles = (slot && slot.consumedTiles) ? JSON.parse(JSON.stringify(slot.consumedTiles)) : {};
-  grantStartingSpells(ps.jobIdx);
   swapBattleSprites(ps.jobIdx);
   // Position restore (v1.7.216 — SAVE-STATE-AUDIT.md #4). Pre-v1.7.216 every
   // load went to Ur (114) regardless of where the player saved — the
