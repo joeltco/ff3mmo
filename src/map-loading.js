@@ -15,7 +15,7 @@ import { AREA_NAMES, DUNGEON_NAME } from './data/strings.js';
 import { hudSt } from './hud-state.js';
 import { mapSt } from './map-state.js';
 import { battleSt } from './battle-state.js';
-import { applyPassage, triggerWipe } from './map-triggers.js';
+import { applyPassage, triggerWipe, findWorldExitIndex } from './map-triggers.js';
 import { ps } from './player-stats.js';
 import { saveSlotsToDB } from './save-state.js';
 
@@ -344,6 +344,24 @@ export function loadWorldMapAtPosition(tileX, tileY) {
 // first encounter before ever exiting Ur), fall back to `ps.lastTown` (default
 // Ur, 114).
 export function respawnAfterDeath() {
+  // Death in Ur (the starting town) sends the player back to the opening-
+  // scene spawn at map 7 (4, 4) — the "home/safe haven" checkpoint.
+  // mapStack gets seeded with Ur's overworld tile so walking out the door
+  // again lands at Ur (matching the new-game flow).
+  if (mapSt.currentMapId === 114) {
+    triggerWipe(() => {
+      mapSt.dungeonFloor = -1;
+      mapSt.encounterSteps = 0;
+      mapSt.mapStack = [];
+      if (mapSt.worldMapData) {
+        const urTrigId = findWorldExitIndex(114, mapSt.worldMapData);
+        const urPos = mapSt.worldMapData.triggerPositions.get(urTrigId);
+        if (urPos) mapSt.mapStack.push({ mapId: 'world', worldId: 0, x: urPos.x, y: urPos.y });
+      }
+      loadMapById(7, 4, 4);
+    }, 7);
+    return;
+  }
   const exitX = ps.lastWorldExitX;
   const exitY = ps.lastWorldExitY;
   const useExit = exitX != null && exitY != null;

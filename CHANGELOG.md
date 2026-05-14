@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.344 — 2026-05-14
+
+### Death in Ur respawns at opening-scene checkpoint
+
+- `respawnAfterDeath` now special-cases `currentMapId === 114` (Ur): player loads back at map 7 (4, 4) — the new-game opening-scene spawn — instead of the standard "last overworld exit" rule. mapStack is reseeded with Ur's overworld tile so walking out the opening-scene door drops back at Ur's gate (same as the new-game flow).
+- Other deaths (overworld, dungeon, other towns) unchanged.
+
 ## 1.7.343 — 2026-05-14
 
 ### Fix: new-game door exits to Ur, not desert
