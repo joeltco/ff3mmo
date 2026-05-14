@@ -8,15 +8,7 @@ import { DIR_DOWN } from './sprite.js';
 import { sprite } from './player-sprite.js';
 import { resetIndoorWaterCache } from './water-animation.js';
 import { clearFlameSprites, rebuildFlameSprites } from './flame-sprites.js';
-import { clearNpcs, placeMoogleAtCaveCenter, addBlackMageShopkeeper, addSceneNpc, addBossNpc, getLandTurtleFrames } from './npc.js';
-import { OPENING_ELDER, OPENING_LEFT_ATTENDANT, OPENING_RIGHT_ATTENDANT } from './data/opening-scene.js';
-
-function _placeOpeningScene() {
-  // Player spawns at (4, 4); elder 1N, attendants 2W (facing right) + 2E (facing left).
-  addSceneNpc('opening_elder', 4, 3, OPENING_ELDER);
-  addSceneNpc('opening_left',  2, 4, OPENING_LEFT_ATTENDANT);
-  addSceneNpc('opening_right', 6, 4, OPENING_RIGHT_ATTENDANT);
-}
+import { clearNpcs, placeMoogleAtCaveCenter, placeOpeningScene, addBlackMageShopkeeper, addBossNpc, getLandTurtleFrames } from './npc.js';
 import { transSt, topBoxSt } from './transitions.js';
 import { BATTLE_BG_MAP_LOOKUP, renderBattleBg } from './battle-bg.js';
 import { AREA_NAMES, DUNGEON_NAME } from './data/strings.js';
@@ -180,7 +172,7 @@ function _loadRegularMap(mapId, returnX, returnY) {
   rebuildFlameSprites(mapSt.mapData, mapSt.mapRenderer, TILE_SIZE);
   clearNpcs();
   if (mapId === 3) addBlackMageShopkeeper(4, 4, 'ur_magic');
-  if (mapId === 7) _placeOpeningScene();
+  if (mapId === 7) placeOpeningScene();
   mapSt.moving = false;
   sprite.setDirection(DIR_DOWN);
   sprite.resetFrame();

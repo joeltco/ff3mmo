@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.337 — 2026-05-14
+
+### NPC module polish — single resolver, single factory, single render path
+
+- Three sprite getters (`_getMoogleSprite` / `_getBlackMageSprite` / `_getSceneSprite`) collapsed into one `_getSprite(npc)` driven by a `_SPRITE_FACTORIES` table keyed on `spriteKey`. New NPC types add a factory entry; render dispatch needs no edit.
+- Three NPC record builders collapsed into one `_makeNpc(key, tileX, tileY, opts)` factory. The 15-field skeleton now lives in one place. `addMoogle` / `addBlackMageShopkeeper` / `addBossNpc` / `addSceneNpc` are 3-5 lines each — they only declare what makes them different (role + mode).
+- Three render branches collapsed into one sprite-class path plus a `_drawBossNpc` helper. `drawNpcs` for moogle / black-mage / scene now: resolve sprite, set direction, compute walk phase via `_walkPhase(npc)`, draw. Boss stays separate (canvas frames, not Sprite class).
+- `_placeOpeningScene` moved out of `map-loading.js` into `npc.js` as exported `placeOpeningScene()`. Mirrors `placeMoogleAtCaveCenter`'s shape; `OPENING_*` imports now live next to the helper that uses them.
+- Dropped dead `getNpcs` export (no consumers).
+
 ## 1.7.336 — 2026-05-14
 
 ### Tighten + polish for compaction
