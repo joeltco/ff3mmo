@@ -13,15 +13,15 @@ import { MOOGLE_GFX_ID, MOOGLE_PAL } from './sprite-init.js';
 import { BM_WALK_TOP, BM_WALK_BTM } from './job-sprites.js';
 import { openShop } from './shop.js';
 
-// Scene NPC sprite cache — same Sprite class the moogle + black mage use,
-// but constructed with an inline 256-byte tile bundle instead of the
-// global ROM. We set `gfxBase = 0` so `tileIdx * 16` indexes directly
-// into the bundle.
+// Scene NPC sprite cache — same Sprite class the moogle + black mage use.
+// Reads from `romRaw` at the NPC's bundle offset (verified to contain the
+// captured OAM tiles plus the alternate-frame tiles for a real walk cycle).
 const _sceneSprites = new Map();
 function _getSceneSprite(key, spec) {
   if (_sceneSprites.has(key)) return _sceneSprites.get(key);
-  const s = new Sprite(spec.bundle, spec.palTop, spec.palBtm);
-  s.gfxBase = 0;
+  if (!romRaw) return null;
+  const s = new Sprite(romRaw, spec.palTop, spec.palBtm);
+  s.gfxBase = spec.romOffset;
   s.tileCache.clear();
   _sceneSprites.set(key, s);
   return s;

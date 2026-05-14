@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.333 — 2026-05-14
+
+### Opening NPCs animate from real ROM bundles — no fabrication
+
+- The captured OAM tiles ARE in ff3mmo's FF3-English.nes (AWJ patched). Located the full 16-tile walk-sprite bundles by byte-searching the ROM: elder at `0x01EC00`, left attendant at `0x01E000`, right attendant at `0x01E200`. Each bundle contains slots 0-3 (DOWN), 4-7 (UP), 8-11 (LEFT frame 0), 12-15 (LEFT frame 1) — verified the alternate-frame body tiles differ as expected for a walk cycle.
+- Switched `data/opening-scene.js` from inline tile bundles to `{ romOffset, palTop, palBtm, dir, animate }`. `npc.js#_getSceneSprite` now constructs `new Sprite(romRaw, palTop, palBtm)` and overrides `gfxBase = romOffset` — same Sprite class the moogle + black mage already use, no parallel path.
+- All three opening NPCs now `animate: true` with REAL FF3 walk frames from ROM. No bobble, no inline tile data, no fabrication.
+
 ## 1.7.332 — 2026-05-14
 
 ### SNAP OAM: dump full 16-tile walk-sprite bundle per group
