@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.342 — 2026-05-14
+
+### Fix: name-entry lowercase + purge stale Chaos Rush migration
+
+- `title-screen.js#onNameEntryKeyDown` pushed lowercase letters at the pre-v1.7.298 Chaos Rush byte (`$CA + ch - 97`). After the AWJ font swap, lowercase letters live at `$A4-$BD`; `$CA-$E3` is now ligature tiles. Typing 'a' rendered as ligature glyph #0, 'b' as #1, etc. Fixed to emit `$A4 + (ch - 97)`.
+- Deleted `save.js#_migrateNameToAWJ`. The CR→AWJ name migration ran on every load and treated bytes `$A5` / `$A9` as CR sentinels — but those are legitimate AWJ lowercase 'b' and 'f'. Any name containing 'b' or 'f' was silently rewriting those letters to comma / apostrophe on load. Migration was 40+ releases stale; any pre-v1.7.298 saves have long since been re-saved. Both call sites in `parseSaveSlots` now read save bytes verbatim.
+
 ## 1.7.341 — 2026-05-14
 
 ### Indoor encounter patch — Ur dark-tile zone

@@ -648,8 +648,9 @@ export function onNameEntryKeyDown(e) {
     else { titleSt.state = 'select'; titleSt.timer = 0; }
   } else if (e.key.length === 1 && /[a-zA-Z]/.test(e.key) && nameBuffer.length < NAME_MAX_LEN) {
     const ch = e.key;
+    // AWJ font: uppercase $8A-$A3, lowercase $A4-$BD.
     if (ch >= 'A' && ch <= 'Z') nameBuffer.push(0x8A + ch.charCodeAt(0) - 65);
-    else nameBuffer.push(0xCA + ch.charCodeAt(0) - 97);
+    else nameBuffer.push(0xA4 + ch.charCodeAt(0) - 97);
   }
 }
 
