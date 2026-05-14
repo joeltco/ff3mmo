@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.324 — 2026-05-14
+
+### Black mage shopkeeper at the Ur magic-shop pentagram tile
+
+- Place a south-facing walking black mage NPC at map 3 (4, 4) — the pentagram floor tile that previously had an invisible counter. Talking to him opens the magic shop directly (no dialogue intermediate).
+- Catalog trimmed to Cure + Pure (was Cure / Poisona / Sight). Pure is Poisona, already remapped in the shop UI via `BUYABLE_SPELL_NAMES`.
+- New stationary-NPC `idle-march` mode in `npc.js`: walk-frame cycle plays in place without changing tile. Sprite is the player's Black Mage walk GFX (jobIdx 4) with the BM_WALK_TOP / BM_WALK_BTM palettes from `job-sprites.js`.
+- New `talkToNpc` path: if an NPC has `shopId`, the shop opens directly (skip dialogue). Existing dialogue NPCs (moogle, etc.) unchanged.
+
 ## 1.7.323 — 2026-05-13
 
 ### Revert NPC message-box palette — leave the shared template alone

@@ -10,6 +10,8 @@ import { _nameToBytes } from './text-utils.js';
 import { sprite as playerSprite } from './player-sprite.js';
 import { Sprite, DIR_DOWN, DIR_UP, DIR_LEFT, DIR_RIGHT } from './sprite.js';
 import { MOOGLE_GFX_ID, MOOGLE_PAL } from './sprite-init.js';
+import { BM_WALK_TOP, BM_WALK_BTM } from './job-sprites.js';
+import { openShop } from './shop.js';
 
 const TILE_SIZE = 16;
 
@@ -19,9 +21,11 @@ const PAUSE_MAX_MS     = 4000;
 const WALK_RUN_MIN     = 1;     // tiles in a single walk burst before pausing
 const WALK_RUN_MAX     = 3;
 const FLOOR = 0x30;
+const IDLE_MARCH_MS    = 480;   // walk-cycle period for stationary shopkeeper NPCs
 
 let _npcs = [];
 let _moogleSprite = null;
+let _blackMageSprite = null;
 
 function _getMoogleSprite() {
   if (_moogleSprite) return _moogleSprite;
@@ -29,6 +33,14 @@ function _getMoogleSprite() {
   _moogleSprite = new Sprite(romRaw, MOOGLE_PAL, MOOGLE_PAL);
   _moogleSprite.setGfxID(MOOGLE_GFX_ID);
   return _moogleSprite;
+}
+
+function _getBlackMageSprite() {
+  if (_blackMageSprite) return _blackMageSprite;
+  if (!romRaw) return null;
+  _blackMageSprite = new Sprite(romRaw, BM_WALK_TOP, BM_WALK_BTM);
+  _blackMageSprite.setGfxID(4); // jobIdx 4 = Black Mage walk-sprite GFX bank
+  return _blackMageSprite;
 }
 
 // ── Public API ─────────────────────────────────────────────────────────────
@@ -53,6 +65,29 @@ export function addMoogle(tileX, tileY) {
     dir: DIR_DOWN,
     talkFacing: null,  // DIR_* when set during dialogue, overrides wander dir
     runRemaining: 0,   // tiles left in the current walk burst
+  });
+}
+
+// Stationary shopkeeper NPC — uses player walk-sprite GFX (jobIdx 4 + BM palette).
+// Stays on its tile, marches walk-frames in place, opens `shopId` on Z.
+export function addBlackMageShopkeeper(tileX, tileY, shopId) {
+  _npcs.push({
+    key: 'bm_shop',
+    tileX, tileY,
+    spriteKey: 'black_mage',
+    dialogue: null,
+    shopId,
+    mode: 'idle-march',
+    timer: 0,
+    pixelOffX: 0,
+    pixelOffY: 0,
+    walkDX: 0,
+    walkDY: 0,
+    walkFromX: tileX,
+    walkFromY: tileY,
+    dir: DIR_DOWN,
+    talkFacing: null,
+    runRemaining: 0,
   });
 }
 
@@ -91,6 +126,10 @@ export function updateNpcs(dt) {
 }
 
 function _tickNpc(npc, dt) {
+  if (npc.mode === 'idle-march') {
+    npc.timer = (npc.timer + dt) % (IDLE_MARCH_MS * 2);
+    return;
+  }
   npc.timer -= dt;
   if (npc.mode === 'pause') {
     if (npc.timer > 0) return;
@@ -214,37 +253,55 @@ function _randPauseMs() {
 
 export function drawNpcs(ctx, camX, camY, originX, originY, spriteY) {
   if (_npcs.length === 0) return;
-  const moogle = _getMoogleSprite();
-  if (!moogle) return;
   // World→screen transforms: map tiles use `originY` (3px below `spriteY`),
   // sprites use `spriteY` so they sit *on* the tile instead of inside it —
   // same vertical offset the player draw uses. We use `spriteY` here so the
-  // moogle's feet align with the player's on the same row. xOff / yOff /
+  // NPC's feet align with the player's on the same row. xOff / yOff /
   // bottomFlip / bob from WALK_FRAMES are applied inside `Sprite.draw`.
   const wLeft = camX - originX;
   const wTop  = camY - (spriteY != null ? spriteY : originY);
   for (const npc of _npcs) {
-    if (npc.spriteKey !== 'moogle') continue;
     const sx = npc.tileX * TILE_SIZE + npc.pixelOffX - wLeft;
     const sy = npc.tileY * TILE_SIZE + npc.pixelOffY - wTop;
     if (sx < -16 || sx > 256 || sy < -16 || sy > 240) continue;
-    // Direction: locked to player during dialogue, otherwise current wander dir.
-    moogle.setDirection(npc.talkFacing != null ? npc.talkFacing : npc.dir);
-    // Walk-cycle frame: while walking, advance from progress; while paused/talking, hold frame 0.
-    if (npc.mode === 'walk' && npc.talkFacing == null) {
-      const progress = 1 - (npc.timer / WALK_DURATION_MS);
-      moogle.setWalkProgress(progress);
-    } else {
-      moogle.resetFrame();
+    if (npc.spriteKey === 'moogle') {
+      const moogle = _getMoogleSprite();
+      if (!moogle) continue;
+      // Direction: locked to player during dialogue, otherwise current wander dir.
+      moogle.setDirection(npc.talkFacing != null ? npc.talkFacing : npc.dir);
+      // Walk-cycle frame: while walking, advance from progress; while paused/talking, hold frame 0.
+      if (npc.mode === 'walk' && npc.talkFacing == null) {
+        const progress = 1 - (npc.timer / WALK_DURATION_MS);
+        moogle.setWalkProgress(progress);
+      } else {
+        moogle.resetFrame();
+      }
+      moogle.draw(ctx, sx, sy);
+    } else if (npc.spriteKey === 'black_mage') {
+      const bm = _getBlackMageSprite();
+      if (!bm) continue;
+      bm.setDirection(npc.talkFacing != null ? npc.talkFacing : npc.dir);
+      if (npc.mode === 'idle-march' && npc.talkFacing == null) {
+        bm.setWalkProgress((npc.timer / IDLE_MARCH_MS) % 1);
+      } else {
+        bm.resetFrame();
+      }
+      bm.draw(ctx, sx, sy);
     }
-    moogle.draw(ctx, sx, sy);
   }
 }
 
 // ── Dialogue ───────────────────────────────────────────────────────────────
 
 export function talkToNpc(npc) {
-  if (!npc || !npc.dialogue || npc.dialogue.length === 0) return;
+  if (!npc) return;
+  // Shopkeeper NPC: open the linked shop directly. The shop UI takes over;
+  // no dialogue box. Keep the NPC's south-facing pose (don't flip to player).
+  if (npc.shopId) {
+    openShop(npc.shopId);
+    return;
+  }
+  if (!npc.dialogue || npc.dialogue.length === 0) return;
   // NPC turns to face the player. Player's facing = direction they walked
   // INTO the NPC, so the NPC's talk-facing is the opposite axis.
   if (playerSprite) {

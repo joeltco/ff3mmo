@@ -8,7 +8,7 @@ import { DIR_DOWN } from './sprite.js';
 import { sprite } from './player-sprite.js';
 import { resetIndoorWaterCache } from './water-animation.js';
 import { clearFlameSprites, rebuildFlameSprites } from './flame-sprites.js';
-import { clearNpcs, placeMoogleAtCaveCenter } from './npc.js';
+import { clearNpcs, placeMoogleAtCaveCenter, addBlackMageShopkeeper } from './npc.js';
 import { transSt, topBoxSt } from './transitions.js';
 import { BATTLE_BG_MAP_LOOKUP, renderBattleBg } from './battle-bg.js';
 import { AREA_NAMES, DUNGEON_NAME } from './data/strings.js';
@@ -164,6 +164,7 @@ function _loadRegularMap(mapId, returnX, returnY) {
   } else { mapSt.disabledTrigger = null; }
   rebuildFlameSprites(mapSt.mapData, mapSt.mapRenderer, TILE_SIZE);
   clearNpcs();
+  if (mapId === 3) addBlackMageShopkeeper(4, 4, 'ur_magic');
   mapSt.moving = false;
   sprite.setDirection(DIR_DOWN);
   sprite.resetFrame();
