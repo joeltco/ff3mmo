@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.323 — 2026-05-13
+
+### Revert NPC message-box palette — leave the shared template alone
+
+- v1.7.320 swapped `_drawMsgText` in `src/message-box.js` to the AWJ canonical palette `[0x0F, 0x10, 0x0F, 0x30]` while removing residual blue from the shop confirm popup. That edit was out-of-scope: the universal `drawMsgBox` template is shared with NPC dialogue, signs, and popups. Restored the original `[0x02, 0x02, 0x02, 0x30]` so NPC text reads as the classic NES blue-shadow / white-fill again. Shop confirm keeps its own `CONFIRM_TEXT_PAL` in `src/shop.js` (unchanged from v1.7.320).
+
 ## 1.7.322 — 2026-05-13
 
 ### Dual-wield ATK display: sum of both weapons (canon)
