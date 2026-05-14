@@ -344,16 +344,19 @@ export function loadWorldMapAtPosition(tileX, tileY) {
 // first encounter before ever exiting Ur), fall back to `ps.lastTown` (default
 // Ur, 114).
 export function respawnAfterDeath() {
-  // Death in Ur (the starting town) sends the player back to the opening-
-  // scene spawn at map 7 (4, 4) — the "home/safe haven" checkpoint.
-  // mapStack reseeds with Ur (no return coords) so walking out the
-  // opening-scene door again drops at Ur's natural entrance, matching
-  // the new-game flow.
+  // Death in Ur (the starting town) sends the player back to the
+  // opening-scene spawn at map 7 (4, 4) — the "home/safe haven"
+  // checkpoint. mapStack reseeds with the canonical Ur → elder house
+  // ground floor (map 6) → upstairs (map 7) path so walking out drops
+  // the player back at Ur via the natural door chain.
   if (mapSt.currentMapId === 114) {
     triggerWipe(() => {
       mapSt.dungeonFloor = -1;
       mapSt.encounterSteps = 0;
-      mapSt.mapStack = [{ mapId: 114 }];
+      mapSt.mapStack = [
+        { mapId: 114, x:  9 * TILE_SIZE, y: 26 * TILE_SIZE },
+        { mapId:   6, x: 12 * TILE_SIZE, y: 13 * TILE_SIZE },
+      ];
       loadMapById(7, 4, 4);
     }, 7);
     return;

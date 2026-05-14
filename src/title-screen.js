@@ -746,13 +746,19 @@ function _updateTitleMainOutCase() {
     const ty = slot.worldY != null ? slot.worldY / TILE_SIZE : undefined;
     loadMapById(slot.currentMapId, tx, ty);
   } else {
-    // Fresh slot — new players spawn in the opening scene (map 7, tile 4,4)
-    // with the elder + 2 attendants placed by map-loading.js#_placeOpeningScene.
-    // Seed mapStack with Ur (no return coords) so walking out the
-    // opening-scene door drops the player at Ur's natural town entrance —
-    // _checkExitPrev's null-coord branch defers to `loadMapById(114)`.
+    // Fresh slot — new players spawn upstairs in the elder's house
+    // (map 7, tile 4, 4) with elder + 2 attendants placed by
+    // map-loading.js#_placeOpeningScene.
+    //
+    // ROM canon path is: map 7 upstairs → map 6 (elder ground floor) at
+    // (12, 13) via the stair door → Ur (map 114) at (9, 26) via the
+    // ground-floor exit. Seed mapStack with the SAME entries the engine
+    // would have pushed if the player had walked in from Ur naturally,
+    // so each $68 exit_prev pop returns to the right map at the right
+    // tile.
     transSt.pendingTrack = TRACKS.TOWN_UR;
-    mapSt.mapStack.push({ mapId: 114 });
+    mapSt.mapStack.push({ mapId: 114, x: 9 * TILE_SIZE, y: 26 * TILE_SIZE });
+    mapSt.mapStack.push({ mapId:   6, x: 12 * TILE_SIZE, y: 13 * TILE_SIZE });
     loadMapById(7, 4, 4);
   }
   transSt.state = 'hud-fade-in';

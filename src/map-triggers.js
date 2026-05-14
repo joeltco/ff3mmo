@@ -334,11 +334,6 @@ function _checkExitPrev() {
       const prev = mapSt.mapStack.pop();
       if (prev.mapId === 'world') {
         loadWorldMapAtPosition(prev.x, prev.y);
-      } else if (prev.x == null || prev.y == null) {
-        // Seeded entry with no return coords (e.g. new-game opening-scene
-        // → Ur). Drop at the destination map's natural entrance.
-        loadMapById(prev.mapId);
-        if (exitingCrystalRoom) playTrack(TRACKS.CRYSTAL_CAVE);
       } else {
         loadMapById(prev.mapId, prev.x / TILE_SIZE, prev.y / TILE_SIZE);
         if (exitingCrystalRoom) playTrack(TRACKS.CRYSTAL_CAVE);

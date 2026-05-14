@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.346 — 2026-05-14
+
+### Fix: opening-scene exit chain — map 7 upstairs → map 6 ground floor → Ur
+
+- ROM canon: map 7 = elder's upstairs, map 6 = elder's ground floor (door at (12, 13) leads up to map 7), map 114 (Ur) = town (door at (9, 26) leads into map 6). Walking out of map 7 should land at map 6's stair tile, then walking out of map 6 should land at Ur's door tile.
+- Previous patches (v1.7.343-345) tried to redirect map 7's `exit_prev` directly to Ur via single-entry `mapStack` seeds. That collapsed two levels of the building into one. Replaced with a 2-entry seed `[{mapId:114, x:9, y:26}, {mapId:6, x:12, y:13}]` — same shape the engine would push if the player had walked in naturally from Ur.
+- Same fix applied to `respawnAfterDeath` Ur-death path.
+- Dropped the v1.7.345 null-coord fallback branch in `_checkExitPrev` (no callers).
+
 ## 1.7.345 — 2026-05-14
 
 ### Fix: opening-scene door now leads into Ur, not the overworld
