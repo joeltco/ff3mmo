@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.329 — 2026-05-14
+
+### Opening NPCs: one NPC module, no fake animation
+
+- Killed the parallel `_drawSceneNpc` raw-tile render path. All NPCs (moogle, magic-shop black mage, opening-scene elder + attendants) now go through the player `Sprite` class — exactly the pattern the moogle + black mage already used.
+- Built 256-byte sprite-bank bundles per scene NPC in `data/opening-scene.js`. Elder's 4 captured tiles drop into slots 0-3 (DOWN frame 0); attendant tiles go into slots 8-11 (LEFT frame 0). `new Sprite(bundle, palTop, palBtm)` + `sprite.gfxBase = 0` reads them like any ROM-backed sprite.
+- Elder's walk cycle is REAL — FF3's DOWN frame 1 reuses tiles 0-3 with a bottomFlip toggle, which the Sprite class already implements. No invented motion.
+- Attendants stay on frame 0 (new `static` NPC mode in `_tickNpc`) because frame-1 tile slots aren't captured. No bobble, no shimmer, no fabricated motion. They render the exact captured pose.
+- Also fixed an elder `bl/br` swap in the data file: had `$43` in `bl` slot, `$42` in `br`, opposite of FF3's canonical DOWN frame 0 layout. Restored canonical so the Sprite class's bottomFlip produces the captured frame 1 pose correctly.
+
 ## 1.7.328 — 2026-05-14
 
 ### Opening scene NPCs: render captured tile bytes (not ROM GFX banks)
