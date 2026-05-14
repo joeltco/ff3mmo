@@ -9,7 +9,8 @@ import { playSFX, fadeOutMusic, SFX, TRACKS } from './music.js';
 import { ps, fullHeal, recalcCombatStats, initPlayerStats } from './player-stats.js';
 import { computeJobStats } from './data/players.js';
 import { hudSt } from './hud-state.js';
-import { transSt } from './transitions.js';
+import { transSt, topBoxSt } from './transitions.js';
+import { AREA_NAMES } from './data/strings.js';
 import { mapSt } from './map-state.js';
 import { loadMapById, loadWorldMapAtPosition } from './map-loading.js';
 import { serverDeleteSlot } from './save.js';
@@ -757,6 +758,14 @@ function _updateTitleMainOutCase() {
     // so each $68 exit_prev pop returns to the right map at the right
     // tile.
     transSt.pendingTrack = TRACKS.TOWN_UR;
+    // Pre-set topBox to "Ur" so the elder house's interior maps (7, 6)
+    // inherit the town name in the top strip — same as any other Ur
+    // building (shops). Without this, setupTopBox(7) would load map 7's
+    // battle BG into the strip since isTown defaults to false.
+    topBoxSt.isTown = true;
+    topBoxSt.nameBytes = AREA_NAMES.get(114);
+    topBoxSt.state = 'pending';
+    hudSt.topBoxMode = 'name';
     mapSt.mapStack.push({ mapId: 114, x: 9 * TILE_SIZE, y: 26 * TILE_SIZE });
     mapSt.mapStack.push({ mapId:   6, x: 12 * TILE_SIZE, y: 13 * TILE_SIZE });
     loadMapById(7, 4, 4);

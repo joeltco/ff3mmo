@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.349 — 2026-05-14
+
+### Fix: opening-scene top-strip shows "Ur", not map 7's battle BG
+
+- Real root cause of the "grass on top" complaint: new-game spawn loads map 7 (elder's upstairs) with `topBoxSt.isTown=false` (default). `setupTopBox(7)` then loads map 7's battle BG into the top strip — which is grass-themed. For shops in Ur, isTown is already true (player entered from town), so the battle-BG branch skips and "Ur" persists in the top strip; new game never had that prior state.
+- Title-screen new-game branch now pre-sets `topBoxSt.isTown=true` + `nameBytes="Ur"` + mode `'name'` before `loadMapById(7)`. setupTopBox skips the battle-BG branch (gated on `!topBoxSt.isTown`) and the elder house interior inherits the Ur name strip — same as any other Ur building.
+
 ## 1.7.348 — 2026-05-14
 
 ### Fix: map fill-tile pattern leaks into HUD top-strip
