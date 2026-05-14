@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.330 — 2026-05-14
+
+### Only moogle walks; magic-shop BM + elder static
+
+- Black mage shopkeeper (map 3): `idle-march` → `static`.
+- Opening scene elder (map 7): `animate: true` → `false`.
+- Attendants already static. Moogle (Altar Cave) keeps its FF-wander.
+
 ## 1.7.329 — 2026-05-14
 
 ### Opening NPCs: one NPC module, no fake animation

@@ -46,15 +46,15 @@ function _bundle(slots) {
   return out;
 }
 
-// Elder — DOWN-facing. Slots 0-3 = canonical DOWN frame 0 layout. Sprite class
-// renders frame 1 by applying bottomFlip to the same 4 tiles, so the walk cycle
-// from one captured frame is REAL (not fabricated).
+// Elder — DOWN-facing, static. (Could be animated via Sprite's bottomFlip
+// toggle since DOWN frame 1 reuses tiles 0-3, but the user wants only the
+// moogle walking for now.)
 export const OPENING_ELDER = {
   bundle: _bundle([[0, TILE_40], [1, TILE_41], [2, TILE_42], [3, TILE_43]]),
   palTop: SCENE_PAL_TOP,
   palBtm: SCENE_PAL_BTM,
   dir: DIR_DOWN,
-  animate: true,
+  animate: false,
 };
 
 // Left attendant — faces RIGHT (toward player). Captured frame goes into

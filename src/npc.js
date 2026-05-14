@@ -83,7 +83,7 @@ export function addMoogle(tileX, tileY) {
 }
 
 // Stationary shopkeeper NPC — uses player walk-sprite GFX (jobIdx 4 + BM palette).
-// Stays on its tile, marches walk-frames in place, opens `shopId` on Z.
+// Static pose on its tile; opens `shopId` on Z.
 export function addBlackMageShopkeeper(tileX, tileY, shopId) {
   _npcs.push({
     key: 'bm_shop',
@@ -91,7 +91,7 @@ export function addBlackMageShopkeeper(tileX, tileY, shopId) {
     spriteKey: 'black_mage',
     dialogue: null,
     shopId,
-    mode: 'idle-march',
+    mode: 'static',
     timer: 0,
     pixelOffX: 0,
     pixelOffY: 0,
