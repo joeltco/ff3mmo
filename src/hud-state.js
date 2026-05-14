@@ -15,11 +15,12 @@ export const hudSt = {
 
   // ── Loading-screen sprite caches (init-once from ROM) ─────────────
   loadingBgFadeFrames: null, // battle BG fade frames for loading screen
-  moogleFadeFrames: null,    // [bright, step1, step2, black] per walk frame pair
-  bossFadeFrames: null,      // same structure for adamantoise
-  adamantoiseFrames: null,   // [normal, flipped] canvases
   moogleFrames: null,        // [normal, flipped] canvases
   invincibleFrames: null,    // [frameA, frameB] 32×32 canvases (east-facing)
+  // NOTE: moogleFadeFrames / bossFadeFrames / adamantoiseFrames moved to
+  // npc.js (single source for NPC-style sprite assets). Use:
+  //   getLoadingMoogleFadeFrames() / getLandTurtleFadeFrames() /
+  //   getLandTurtleFrames() from `./npc.js`.
 };
 
 // Timing constants — shared so consumers don't need local copies

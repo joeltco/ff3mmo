@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.336 — 2026-05-14
+
+### Tighten + polish for compaction
+
+- Verified all three opening-scene NPC bundles have all 16 slots populated → 4 directions + 2 walk frames available through the standard `Sprite.WALK_FRAMES` layout.
+- Land Turtle (boss) only renders the [normal, flipped] south-facing pair (FF3 NES boss has no other directions).
+- Removed dead `hudSt.adamantoiseFrames` / `hudSt.moogleFadeFrames` / `hudSt.bossFadeFrames` fields — all now live behind getters in `npc.js`.
+- README status bumped + 1.7.33x band paragraph added.
+
 ## 1.7.335 — 2026-05-14
 
 ### Opening scene ROM offsets +16 — account for iNES header
