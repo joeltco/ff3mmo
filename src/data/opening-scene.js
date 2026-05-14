@@ -46,15 +46,15 @@ function _bundle(slots) {
   return out;
 }
 
-// Elder — DOWN-facing, static. (Could be animated via Sprite's bottomFlip
-// toggle since DOWN frame 1 reuses tiles 0-3, but the user wants only the
-// moogle walking for now.)
+// Elder — DOWN-facing, walks in place. FF3 DOWN frame 1 reuses tiles 0-3
+// with bottomFlip applied by the Sprite class, so a single captured frame
+// produces a REAL walk cycle (not fabricated).
 export const OPENING_ELDER = {
   bundle: _bundle([[0, TILE_40], [1, TILE_41], [2, TILE_42], [3, TILE_43]]),
   palTop: SCENE_PAL_TOP,
   palBtm: SCENE_PAL_BTM,
   dir: DIR_DOWN,
-  animate: false,
+  animate: true,
 };
 
 // Left attendant — faces RIGHT (toward player). Captured frame goes into

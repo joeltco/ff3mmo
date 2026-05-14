@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.331 — 2026-05-14
+
+### Restore walk cycle on BM shopkeeper + elder
+
+- BM shopkeeper back to `idle-march` (real walk cycle from FF3 BM walk sprite bank, two real frames).
+- Elder back to `animate: true` (DOWN frame 1 = bottomFlip of frame 0, same 4 captured tiles — real cycle, not fabricated).
+- Attendants remain `static` — only frame 0 captured. Animating with empty frame-1 slots would flicker; faking it would be the bobble that got correctly rejected.
+
 ## 1.7.330 — 2026-05-14
 
 ### Only moogle walks; magic-shop BM + elder static
