@@ -6,6 +6,7 @@ import { NES_SYSTEM_PALETTE } from './tile-decoder.js';
 import { loadingSt, transSt } from './transitions.js';
 import { MONSTERS } from './data/monsters.js';
 import { hudSt } from './hud-state.js';
+import { getLandTurtleFrames, getLandTurtleFadeFrames, getLoadingMoogleFadeFrames } from './npc.js';
 import { ui, isMobile, drawBoxOnCtx } from './ui-state.js';
 import { drawText, measureText, TEXT_WHITE } from './font-renderer.js';
 
@@ -62,9 +63,10 @@ function _drawLoadingInfoBox(cx, vpTop, vpBot, fadeLevel, fadedTextPal) {
   drawText(ui.ctx, infoBoxX + Math.floor((infoBoxW - floorsW) / 2), infoBoxY + 10, _FLOORS_BYTES, fadedTextPal);
   const bossContentX = infoBoxX + Math.floor((infoBoxW - bossRowW) / 2);
   const bossRowY = infoBoxY + 22;
-  const bossFade = hudSt.bossFadeFrames;
+  const bossFade = getLandTurtleFadeFrames();
+  const landTurtle = getLandTurtleFrames();
   if (bossFade) ui.ctx.drawImage(bossFade[fadeLevel][Math.floor(transSt.timer / 400) & 1], bossContentX, bossRowY);
-  else if (hudSt.adamantoiseFrames) ui.ctx.drawImage(hudSt.adamantoiseFrames[0], bossContentX, bossRowY);
+  else if (landTurtle) ui.ctx.drawImage(landTurtle[0], bossContentX, bossRowY);
   drawText(ui.ctx, bossContentX + 20, bossRowY + 4, _LODHP_BYTES, fadedTextPal);
 }
 
@@ -105,7 +107,7 @@ function _drawLoadingChatBubble(rpCX, rpY, rpH, fadeLevel) {
 }
 
 function _drawLoadingMoogleSprite(moogleX, moogleY, fadeLevel) {
-  const moogleFade = hudSt.moogleFadeFrames;
+  const moogleFade = getLoadingMoogleFadeFrames();
   if (!moogleFade) return;
   ui.ctx.drawImage(moogleFade[fadeLevel][Math.floor(transSt.timer / 400) & 1], moogleX, moogleY);
 }

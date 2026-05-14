@@ -12,6 +12,8 @@ import { Sprite, DIR_DOWN, DIR_UP, DIR_LEFT, DIR_RIGHT } from './sprite.js';
 import { MOOGLE_GFX_ID, MOOGLE_PAL } from './sprite-init.js';
 import { BM_WALK_TOP, BM_WALK_BTM } from './job-sprites.js';
 import { openShop } from './shop.js';
+import { waterSt } from './water-animation.js';
+import { battleSt } from './battle-state.js';
 
 // Scene NPC sprite cache — same Sprite class the moogle + black mage use.
 // Reads from `romRaw` at the NPC's bundle offset (verified to contain the
@@ -40,6 +42,21 @@ const IDLE_MARCH_MS    = 480;   // walk-cycle period for stationary shopkeeper N
 let _npcs = [];
 let _moogleSprite = null;
 let _blackMageSprite = null;
+
+// ── Sprite asset registry ──────────────────────────────────────────────────
+// All NPC-style sprite canvases route through this module. Single source
+// of truth, set once at boot by sprite-init.js consumers, read by map +
+// loading-screen + render.
+let _landTurtleFrames = null;        // [normal16, flipped16] — boss on map
+let _landTurtleFadeFrames = null;    // [[normal, flipped], ...] per fade level
+let _loadingMoogleFadeFrames = null; // [[normal, flipped], ...] per fade level
+
+export function setLandTurtleFrames(f) { _landTurtleFrames = f; }
+export function getLandTurtleFrames() { return _landTurtleFrames; }
+export function setLandTurtleFadeFrames(f) { _landTurtleFadeFrames = f; }
+export function getLandTurtleFadeFrames() { return _landTurtleFadeFrames; }
+export function setLoadingMoogleFadeFrames(f) { _loadingMoogleFadeFrames = f; }
+export function getLoadingMoogleFadeFrames() { return _loadingMoogleFadeFrames; }
 
 function _getMoogleSprite() {
   if (_moogleSprite) return _moogleSprite;
@@ -99,6 +116,28 @@ export function addBlackMageShopkeeper(tileX, tileY, shopId) {
     walkDY: 0,
     walkFromX: tileX,
     walkFromY: tileY,
+    dir: DIR_DOWN,
+    talkFacing: null,
+    runRemaining: 0,
+  });
+}
+
+// Boss NPC (Land Turtle on the altar floor). Pre-rendered 16×16 canvas
+// frames live in the asset registry above. Stays on its tile, no
+// walking; battle is started by `movement.js#handleAction` when the
+// player faces this tile.
+export function addBossNpc(tileX, tileY) {
+  _npcs.push({
+    key: 'boss_land_turtle',
+    tileX, tileY,
+    spriteKey: 'boss',
+    dialogue: null,
+    mode: 'static',
+    timer: 0,
+    pixelOffX: 0,
+    pixelOffY: 0,
+    walkDX: 0, walkDY: 0,
+    walkFromX: tileX, walkFromY: tileY,
     dir: DIR_DOWN,
     talkFacing: null,
     runRemaining: 0,
@@ -337,6 +376,17 @@ export function drawNpcs(ctx, camX, camY, originX, originY, spriteY) {
         s.resetFrame();
       }
       s.draw(ctx, sx, sy);
+    } else if (npc.spriteKey === 'boss') {
+      const frames = _landTurtleFrames;
+      if (!frames) continue;
+      // Blink-out during boss flash (e.g., spell impact); preserved from
+      // the previous render.js path.
+      const blinkHidden = battleSt.bossFlashTimer > 0 && (Math.floor(battleSt.bossFlashTimer / 60) & 1);
+      if (blinkHidden) continue;
+      // 2-frame idle animation on water-tick parity (also preserved).
+      const idx = Math.floor(waterSt.tick / 8) & 1;
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(frames[idx], sx, sy);
     }
   }
 }

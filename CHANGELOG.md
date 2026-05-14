@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.334 — 2026-05-14
+
+### Land turtle (map + loading) + loading moogle all route through npc.js
+
+- Moved the sprite-asset registry for the Land Turtle on the altar floor (boss), the Land Turtle fade frames on the loading screen, and the loading-screen moogle fade frames from `hudSt` to `npc.js`. Single source of truth: setters called once at boot, getters consumed by every renderer.
+- Added `addBossNpc(tileX, tileY)` to npc.js. `drawNpcs` now renders the boss alongside other NPCs, preserving the `waterSt.tick / 8` 2-frame idle anim and the `bossFlashTimer` blink-out behavior. Removed the parallel `mapSt.bossSprite` render path from `render.js`. `mapSt.bossSprite` lives on as a no-frames presence flag for the existing battle-trigger + collision checks in `movement.js`.
+- `boot.js` now calls `setLandTurtleFrames` / `setLandTurtleFadeFrames` / `setLoadingMoogleFadeFrames` instead of writing to `hudSt`. `loading-screen.js` and `map-loading.js` read via the getters.
+
 ## 1.7.333 — 2026-05-14
 
 ### Opening NPCs animate from real ROM bundles — no fabrication

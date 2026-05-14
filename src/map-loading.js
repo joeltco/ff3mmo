@@ -8,7 +8,7 @@ import { DIR_DOWN } from './sprite.js';
 import { sprite } from './player-sprite.js';
 import { resetIndoorWaterCache } from './water-animation.js';
 import { clearFlameSprites, rebuildFlameSprites } from './flame-sprites.js';
-import { clearNpcs, placeMoogleAtCaveCenter, addBlackMageShopkeeper, addSceneNpc } from './npc.js';
+import { clearNpcs, placeMoogleAtCaveCenter, addBlackMageShopkeeper, addSceneNpc, addBossNpc, getLandTurtleFrames } from './npc.js';
 import { OPENING_ELDER, OPENING_LEFT_ATTENDANT, OPENING_RIGHT_ATTENDANT } from './data/opening-scene.js';
 
 function _placeOpeningScene() {
@@ -130,8 +130,15 @@ function _loadDungeonFloor(mapId, returnX, returnY) {
   clearFlameSprites();
   clearNpcs();
   if (floorIndex === 0) placeMoogleAtCaveCenter(result);
-  mapSt.bossSprite = (floorIndex === 4 && hudSt.adamantoiseFrames && !battleSt.enemyDefeated)
-    ? { frames: hudSt.adamantoiseFrames, px: 6 * TILE_SIZE, py: 8 * TILE_SIZE } : null;
+  // Boss is now an NPC rendered through `drawNpcs`. Keep `mapSt.bossSprite`
+  // as a no-frames presence flag for the existing battle-trigger / collision
+  // checks in movement.js + battle code.
+  if (floorIndex === 4 && getLandTurtleFrames() && !battleSt.enemyDefeated) {
+    mapSt.bossSprite = { px: 6 * TILE_SIZE, py: 8 * TILE_SIZE };
+    addBossNpc(6, 8);
+  } else {
+    mapSt.bossSprite = null;
+  }
   mapSt.disabledTrigger = { x: playerX, y: playerY };
   mapSt.moving = false;
   sprite.setDirection(DIR_DOWN);

@@ -48,19 +48,8 @@ function _renderSprites(camX, camY, originX, originY, spriteY) {
   if (!mapSt.onWorldMap && mapSt.mapRenderer && mapSt.mapData) {
     drawNpcs(ui.ctx, camX, camY, originX, originY, spriteY);
   }
-  if (mapSt.bossSprite) {
-    const blinkHidden = battleSt.bossFlashTimer > 0 && (Math.floor(battleSt.bossFlashTimer / 60) & 1);
-    if (!blinkHidden) {
-      const wLeft = camX - originX;
-      const wTop = camY - originY;
-      const bx = mapSt.bossSprite.px - wLeft;
-      const by = mapSt.bossSprite.py - wTop;
-      if (bx > -16 && bx < CANVAS_W && by > -16 && by < CANVAS_H) {
-        ui.ctx.imageSmoothingEnabled = false;
-        ui.ctx.drawImage(mapSt.bossSprite.frames[Math.floor(waterSt.tick / 8) & 1], bx, by);
-      }
-    }
-  }
+  // Boss render moved into `npc.js#drawNpcs` (spriteKey: 'boss'). Single
+  // NPC module path for moogle / shopkeeper / opening scene / boss.
   if (sprite) sprite.draw(ui.ctx, SCREEN_CENTER_X, spriteY);
 }
 

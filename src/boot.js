@@ -10,6 +10,7 @@ import { hudSt } from './hud-state.js';
 import { ui } from './ui-state.js';
 import { battleSt } from './battle-state.js';
 import { initFlameRawTiles, initStarTiles } from './flame-sprites.js';
+import { setLandTurtleFrames, setLandTurtleFadeFrames, setLoadingMoogleFadeFrames } from './npc.js';
 import { initTitleWater, initTitleSky, initTitleUnderwater,
          initUnderwaterSprites, initTitleOcean, initTitleLogo } from './title-animations.js';
 import { ps, initPlayerStats, initExpTable } from './player-stats.js';
@@ -83,8 +84,8 @@ export function initSpriteAssets(rom) {
   hudSt.moogleFrames = ms.moogleFrames;
 
   const lf = initLoadingScreenFadeFrames(rom, ff2Raw);
-  hudSt.moogleFadeFrames = lf.moogleFadeFrames;
-  hudSt.bossFadeFrames = lf.bossFadeFrames;
+  setLoadingMoogleFadeFrames(lf.moogleFadeFrames);
+  setLandTurtleFadeFrames(lf.bossFadeFrames);
 
   initMusic(rom);
   initFlameRawTiles(rom);
@@ -120,12 +121,12 @@ export function loadFF1ROM(arrayBuffer) {
 export function loadFF2ROM(arrayBuffer) {
   ff2Raw = new Uint8Array(arrayBuffer);
   const ad = initAdamantoise(ff2Raw);
-  hudSt.adamantoiseFrames = ad.adamantoiseFrames;
+  setLandTurtleFrames(ad.adamantoiseFrames);
   if (romRaw) {
     // Primary FF3 ROM already loaded — rebuild loading-screen fade frames
     // so the boss silhouette fade is available now that ff2Raw exists.
     const lf2 = initLoadingScreenFadeFrames(romRaw, ff2Raw);
-    hudSt.moogleFadeFrames = lf2.moogleFadeFrames;
-    hudSt.bossFadeFrames = lf2.bossFadeFrames;
+    setLoadingMoogleFadeFrames(lf2.moogleFadeFrames);
+    setLandTurtleFadeFrames(lf2.bossFadeFrames);
   }
 }
