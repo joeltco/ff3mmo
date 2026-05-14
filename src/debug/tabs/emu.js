@@ -675,6 +675,21 @@ function _oamSnapshotText() {
       out.push(`//   [${dx},${dy}] tile=$${_hex(s.t, 2)} pal${s.a & 3}${flags}`);
       out.push(`new Uint8Array([${Array.from(bytes).map(b => '0x' + _hex(b, 2)).join(',')}]),`);
     }
+    // Full 16-tile walk-sprite bundle for this NPC (frame 0 + 1, all 4
+    // directions). The visible tiles above show only one frame; FF3 walk
+    // cycles need the other frame too. Bundle base = floor(min_tile_id / 16)
+    // * 16. All 16 tiles come from PPU at capture time even if not
+    // currently rendered — so a single SNAP captures the full walk anim.
+    const minTileId = Math.min(...grp.map(s => s.t));
+    const bundleBase = (minTileId >> 4) << 4;
+    out.push(`//   full 16-tile bundle (base $${_hex(bundleBase, 2)}): slots 0-3=DOWN, 4-7=UP, 8-11=LEFT/RIGHT f0, 12-15=LEFT/RIGHT f1`);
+    for (let t = 0; t < 16; t++) {
+      const ptIdx = 256 + bundleBase + t;
+      const tile = tiles[ptIdx];
+      if (!tile || !tile.pix) { out.push(`//   slot ${t} ($${_hex(bundleBase + t, 2)}): EMPTY`); continue; }
+      const bytes = _encodeTile(tile.pix);
+      out.push(`//   slot ${t} ($${_hex(bundleBase + t, 2)}): new Uint8Array([${Array.from(bytes).map(b => '0x' + _hex(b, 2)).join(',')}]),`);
+    }
     out.push('');
   }
   return { text: out.join('\n'), sprites: sprites.length, groups: groups.length };

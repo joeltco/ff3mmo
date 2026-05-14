@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.332 — 2026-05-14
+
+### SNAP OAM: dump full 16-tile walk-sprite bundle per group
+
+- `_oamSnapshotText` was only emitting the visible OAM tiles per group, so a single capture missed the OTHER walk-frame tiles (DOWN frame 1 vs frame 0, LEFT frame 0 vs frame 1, the UP frames). Those tiles WERE in PPU at capture time — the tool just didn't print them. Now after each group's visible tiles, dump all 16 slots of the NPC's GFX bundle (`floor(min_tile_id / 16) * 16` through +15) so one SNAP captures the full walk anim. Eliminates the need to bobble or fake the second frame.
+
 ## 1.7.331 — 2026-05-14
 
 ### Restore walk cycle on BM shopkeeper + elder
