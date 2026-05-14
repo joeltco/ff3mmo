@@ -241,13 +241,6 @@ export function setupTopBox(mapId, isWorldMap) {
     topBoxSt.isTown = true;
     topBoxSt.nameBytes = AREA_NAMES.get(114);
     hudSt.topBoxMode = 'name';
-    // Wipe any stale battle BG carried over from a non-town map (e.g.
-    // walking out of the elder house via map 7 → map 6 → Ur chain leaves
-    // map 6's battle BG in the canvas). The render gate on `!isTown`
-    // SHOULD suppress it, but if anything draws unconditionally we'd flash
-    // grass under the Ur name box during transitions.
-    hudSt.topBoxBgCanvas = null;
-    hudSt.topBoxBgFadeFrames = null;
   } else if (!topBoxSt.isTown) {
     const bgId = romRaw[BATTLE_BG_MAP_LOOKUP + mapId] & 0x1F;
     const result = renderBattleBg(romRaw, bgId);

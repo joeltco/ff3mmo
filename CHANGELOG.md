@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.348 — 2026-05-14
+
+### Fix: map fill-tile pattern leaks into HUD top-strip
+
+- `MapRenderer.draw` fills the entire 256×240 canvas with the map's fillTile pattern (Ur = `$00` grass), including the top 32px where the HUD top-strip sits. Non-town maps cover the leak with `hudSt.topBoxBgCanvas`; towns relied on the name-box border, which doesn't render during `state='pending'` / early fade-in — so grass tiles flashed through into the top-strip when entering Ur.
+- `_drawTopBoxBattleBG` now blacks out the top 32px unconditionally before any state-dependent draws. The battle BG / name border render on top as before.
+- Reverted v1.7.347's defensive null of `hudSt.topBoxBgCanvas` on town entry — it was the wrong layer (rendering was gated correctly; the leak was below it).
+
 ## 1.7.347 — 2026-05-14
 
 ### Fix: stale battle BG leaks into Ur top-box

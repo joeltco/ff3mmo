@@ -151,6 +151,12 @@ function _drawTopBoxBattleBG() {
   const battleShakeTimer = battleSt.battleShakeTimer;
   const topShake = ((battleState === 'enemy-attack' || battleState === 'poison-tick' || battleState === 'pvp-opp-sw-hit') && battleShakeTimer > 0)
     ? (Math.floor(battleShakeTimer / 67) & 1 ? 2 : -2) : 0;
+  // MapRenderer.draw fills the entire canvas with the map's fillTile
+  // pattern (Ur=$00 grass) — the top 32px would otherwise show that
+  // pattern through any HUD render gap. Black it out before the
+  // conditional draws so no map fill leaks into the strip.
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, CANVAS_W, HUD_TOP_H);
   if (transSt.state !== 'loading' && !topBoxSt.isTown && hudSt.topBoxBgCanvas) {
     ctx.drawImage(hudSt.topBoxBgCanvas, topShake, 0);
   }
