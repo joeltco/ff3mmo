@@ -55,19 +55,14 @@ export const SHOPKEEP_IMAGE_LAYOUT = [
 // Per-shop-type backdrop palette (4 NES color indices). Cached from
 // FF1 disassembly bank_00.dat at offset $3200+$40+type*4. Type slot 0
 // is treated as transparent at render time.
-// FF1 used dark NES indices ($00 gray, $17 brown, $07 very-dark brown) for
-// the decorative counter pillar + frame around each keeper. Those read as
-// "off-black" against ff3mmo's pure-black box interior. White-magic's $0C
-// dark teal reads as deliberate cool accent and stays. Remap weapon/armor/
-// item's frame slot to $0F so it blends into the box black.
 export const SHOP_PALETTES = {
-  weapon:        [0x0F, 0x30, 0x0F, 0x31],
-  armor:         [0x0F, 0x10, 0x27, 0x0F],
+  weapon:        [0x0F, 0x30, 0x00, 0x31],
+  armor:         [0x0F, 0x10, 0x27, 0x17],
   'white-magic': [0x0F, 0x3C, 0x1C, 0x0C],
   'black-magic': [0x0F, 0x3B, 0x1B, 0x0B],
   clinic:        [0x0F, 0x37, 0x16, 0x10],
   inn:           [0x0F, 0x36, 0x16, 0x07],
-  item:          [0x0F, 0x37, 0x17, 0x0F],
+  item:          [0x0F, 0x37, 0x17, 0x07],
   caravan:       [0x0F, 0x30, 0x28, 0x16],
 };
 

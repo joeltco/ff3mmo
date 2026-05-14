@@ -2,14 +2,6 @@
 
 All notable changes to this project are documented here.
 
-## 1.7.325 — 2026-05-14
-
-### Shop keeper frame palette: kill the off-black halo
-
-- Weapon / armor / item shop keepers had a visible gray/brown rectangle around the swords / armor pieces / barrels — FF1's decorative counter pillar + frame colors ($00 gray, $17 brown, $07 very-dark brown) reading as "off-black" against ff3mmo's pure-black box interior.
-- Remapped the frame slot to NES $0F (pure black) in `SHOP_PALETTES.weapon` (slot 2), `.armor` (slot 3), and `.item` (slot 3). Background around the keeper now blends into the box. Weapon keeper's coat shares the same slot and loses some shading detail, but the figure stays readable.
-- White-magic untouched — its slot 3 = $0C dark teal reads as a deliberate cool accent.
-
 ## 1.7.324 — 2026-05-14
 
 ### Black mage shopkeeper at the Ur magic-shop pentagram tile
