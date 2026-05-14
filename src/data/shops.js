@@ -30,10 +30,11 @@ export const SHOPS = new Map([
   ['ur_magic', {
     type: 'magic',
     mapId: 3, counter: { x: 4, y: 4 },
-    spells: [0x34, 0x35],
-    // Cure + Pure (Poisona, renamed in shop UI via BUYABLE_SPELL_NAMES). 100 gil each.
-    // Higher tiers (Cura/Cure2 in mid-game towns, Curaga/Cure3 later) ship with
-    // their respective magic-shop catalogs as those towns come online.
+    spells: [0x35],
+    // Pure (Poisona, renamed in shop UI via BUYABLE_SPELL_NAMES). 100 gil.
+    // Cure ships with starting spells, not the Ur shop. Higher tiers
+    // (Cura/Cure2 in mid-game towns, Curaga/Cure3 later) ship with their
+    // respective magic-shop catalogs as those towns come online.
   }],
 ]);
 

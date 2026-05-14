@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.338 — 2026-05-14
+
+### Ur magic shop: drop Cure from catalog
+
+- Cure is granted at character creation (starting spell list); selling it in the very first magic shop made the shop's only useful purchase Pure. Catalog is now `[0x35]` (Pure only).
+
 ## 1.7.337 — 2026-05-14
 
 ### NPC module polish — single resolver, single factory, single render path
