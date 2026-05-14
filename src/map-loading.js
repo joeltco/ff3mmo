@@ -102,6 +102,11 @@ function _replayConsumedTiles(mapId, mapData) {
 function _loadDungeonFloor(mapId, returnX, returnY) {
   const floorIndex = mapId - 1000;
   mapSt.dungeonFloor = floorIndex;
+  // Clear any town encounter-patch state carried in from the entry map
+  // (e.g. Ur's grasslands_wild patch). Otherwise startRandomEncounter falls
+  // into the patch branch and spawns overworld monsters inside the dungeon.
+  mapSt.encounterPatch = null;
+  mapSt.encounterPatchZone = null;
   const result = generateFloor(romRaw, floorIndex, mapSt.dungeonSeed);
   mapSt.mapData = result;
   mapSt.secretWalls = result.secretWalls;

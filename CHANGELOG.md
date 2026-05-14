@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.350 — 2026-05-14
+
+### Fix: altar cave spawning overworld monsters
+
+- `_loadDungeonFloor` was missing the `mapSt.encounterPatch` / `encounterPatchZone` clear that `_loadRegularMap` does. Entering Ur sets the patch to `grasslands_wild` (the dark-tile encounter patch). Descending into the altar cave didn't wipe it, and `startRandomEncounter`'s patch branch runs before the `altar_cave_fN` branch — so the leftover Ur state shadowed the dungeon zone and spawned Werewolves/Bees inside the cave.
+- Dungeon loader now clears both fields up front, same as the regular-map loader.
+
 ## 1.7.349 — 2026-05-14
 
 ### Fix: opening-scene top-strip shows "Ur", not map 7's battle BG
