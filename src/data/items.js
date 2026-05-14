@@ -265,6 +265,22 @@ export const ITEMS = new Map([
   [0xdd, { type: 'weapon', subtype: 'staff',    icon: 0xEA, atk: 110, hit: 80, mndBonus: 20, casts: 0x18, price: 0, jobs: Sh|Ww|Sa|Ni }], // Holy Wand (DS Devout → Shaman; casts Cure3)
   [0xde, { type: 'weapon', subtype: 'staff',    icon: 0xEA, atk: 110, hit: 80, strBonus: 10, agiBonus: 10, vitBonus: 10, intBonus: 10, mndBonus: 10, price: 0, jobs: Sa|Ni }], // Sage Staff (DS Sage mastery)
   [0xdf, { type: 'weapon', subtype: 'katana',   icon: 0xF0, atk: 140, hit: 100, strBonus: 5, vitBonus: 5, intBonus: 5, mndBonus: 5, agiBonus: 10, price: 0, jobs: Mk|Ni }], // Muramasa (DS Ninja mastery)
+
+  // === Spell scrolls (v1.7.340) ===
+  // Learn-once consumables. Name + icon route through `getSpellNameShrines`
+  // so the inventory row reads exactly like the spell entry it teaches
+  // (school icon + short name). `learnedSpell` is the canonical bridge —
+  // pause-menu Z-press routes by item.type === 'scroll' through
+  // `_applyScrollLearn` (job-school gated via canLearnSpell, refuses if
+  // already known). Tradable (lives in playerInventory like any item);
+  // findable as rare chest loot; sold by magic shops as a regular item.
+  [0xe0, { type: 'scroll', learnedSpell: 0x31, price:  100 }], // Fire
+  [0xe1, { type: 'scroll', learnedSpell: 0x32, price:  100 }], // Bzzard / Ice
+  [0xe2, { type: 'scroll', learnedSpell: 0x33, price:  200 }], // Sleep
+  [0xe3, { type: 'scroll', learnedSpell: 0x34, price:  100 }], // Cure
+  [0xe4, { type: 'scroll', learnedSpell: 0x35, price:  100 }], // Pure (Poisona)
+  [0xe5, { type: 'scroll', learnedSpell: 0x36, price:  100 }], // Sight
+  [0xe6, { type: 'scroll', learnedSpell: 0x3a, price:  700 }], // Ice2 / Blizzara
 ]);
 
 // Shrines short-name overrides for player-facing list/inventory rows.

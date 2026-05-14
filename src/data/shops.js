@@ -30,11 +30,13 @@ export const SHOPS = new Map([
   ['ur_magic', {
     type: 'magic',
     mapId: 3, counter: { x: 4, y: 4 },
-    spells: [0x35],
-    // Pure (Poisona, renamed in shop UI via BUYABLE_SPELL_NAMES). 100 gil.
-    // Cure ships with starting spells, not the Ur shop. Higher tiers
-    // (Cura/Cure2 in mid-game towns, Curaga/Cure3 later) ship with their
-    // respective magic-shop catalogs as those towns come online.
+    items: [0xE4],
+    // Pure scroll (Poisona). 100 gil. Sells the scroll item — player learns
+    // by using it from inventory (`pause-menu.js#_applyScrollLearn`).
+    // Type stays 'magic' for shopkeeper-sprite lookup; catalog routes
+    // through the regular item-shop buy/sell flow (qty selector, sell-back).
+    // Higher tiers (Cura, Curaga) ship with their respective magic-shop
+    // catalogs as those towns come online.
   }],
 ]);
 

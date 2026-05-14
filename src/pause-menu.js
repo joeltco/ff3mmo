@@ -7,7 +7,7 @@ import { JOBS, JOB_NAMES_SHRINES, canJobEquip } from './data/jobs.js';
 import { _makeFadedPal, nesColorFade } from './palette.js';
 import { _nameToBytes } from './text-utils.js';
 import { getItemNameClean, getItemNameShrines, getSpellNameClean, getSpellNameShrines } from './text-decoder.js';
-import { SPELLS, getSpellMPCost, getCastableKnownSpells } from './data/spells.js';
+import { SPELLS, getSpellMPCost, getCastableKnownSpells, canLearnSpell } from './data/spells.js';
 import { stopFF1Music, resumeMusic, playFF1Track, FF1_TRACKS, playSFX, SFX, pauseMusic } from './music.js';
 import { PAUSE_ITEMS } from './data/strings.js';
 import { selectCursor, saveSlots, saveSlotsToDB } from './save-state.js';
@@ -18,7 +18,7 @@ import { playerInventory, addItem, removeItem } from './inventory.js';
 import { battleSt } from './battle-state.js';
 import { transSt } from './transitions.js';
 import { mapSt } from './map-state.js';
-import { msgState } from './message-box.js';
+import { msgState, showMsgBox } from './message-box.js';
 import { ITEMS, isHandEquippable } from './data/items.js';
 import { swapBattleSprites } from './job-sprites.js';
 import { getRosterVisible } from './roster.js';
@@ -761,11 +761,50 @@ function _pauseInvZPress(entries) {
     if (item && item.type === 'consumable') {
       playSFX(SFX.CONFIRM); pauseSt.heldItem = -1;
       pauseSt.state = 'inv-target'; pauseSt.timer = 0; pauseSt.useItemId = Number(id); pauseSt.invAllyTarget = -1;
+    } else if (item && item.type === 'scroll') {
+      pauseSt.heldItem = -1;
+      _applyScrollLearn(Number(id), item);
     } else { pauseSt.heldItem = -1; playSFX(SFX.CONFIRM); }
   } else {
     if (entries[pauseSt.invScroll]) { pauseSt.heldItem = pauseSt.invScroll; playSFX(SFX.CONFIRM); }
     else { pauseSt.heldItem = -1; playSFX(SFX.ERROR); }
   }
+}
+
+// Scroll-use flow. Already-known scrolls refuse (the player can trade
+// them instead — see [[ff3mmo-shops]] catalog for buy-back). Wrong job
+// also refuses (school-gated via canLearnSpell). On success: spell ID
+// joins ps.knownSpells permanently (carries across future job changes)
+// and the scroll is consumed.
+function _applyScrollLearn(itemId, item) {
+  const spellId = item.learnedSpell;
+  if (spellId == null) { playSFX(SFX.ERROR); return; }
+  if (!ps.knownSpells) ps.knownSpells = [];
+  if (ps.knownSpells.includes(spellId)) {
+    playSFX(SFX.ERROR);
+    showMsgBox(_nameToBytes('Already known!'));
+    return;
+  }
+  if (!canLearnSpell(ps.jobIdx, spellId)) {
+    playSFX(SFX.ERROR);
+    showMsgBox(_nameToBytes("Can't learn that!"));
+    return;
+  }
+  ps.knownSpells.push(spellId);
+  removeItem(itemId);
+  playSFX(SFX.TREASURE);
+  saveSlotsToDB();
+  showMsgBox(_scrollLearnedMsg(spellId));
+}
+
+function _scrollLearnedMsg(spellId) {
+  const prefix = _nameToBytes('Learned ');
+  const name   = getSpellNameClean(spellId);
+  const out    = new Uint8Array(prefix.length + name.length + 1);
+  out.set(prefix, 0);
+  out.set(name, prefix.length);
+  out[prefix.length + name.length] = 0xC4; // !
+  return out;
 }
 
 function _pauseInputInventory() {

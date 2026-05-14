@@ -137,10 +137,13 @@ export function getStringBytes(stringId) {
  * @returns {Uint8Array}
  */
 export function getItemName(itemId) {
+  // Scroll items: name + magic-school icon route through the spell name
+  // pipeline so the inventory row reads exactly like the spell it teaches.
+  const data = ITEMS.get(itemId);
+  if (data && data.learnedSpell != null) return getSpellNameShrines(data.learnedSpell);
   // Synthesized items (DS ultimates at 0xC8+) carry an explicit `icon`
   // field in their ITEMS entry and have no ROM string — return just the
   // icon byte and let the Shrines override path supply the letters.
-  const data = ITEMS.get(itemId);
   if (data && data.icon != null) return new Uint8Array([data.icon]);
   return getStringBytes(STRING_ITEMS + itemId);
 }

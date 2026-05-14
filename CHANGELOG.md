@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.340 — 2026-05-14
+
+### Spells are items now — scroll items wired end-to-end
+
+- Added 7 spell-scroll items (`0xE0–0xE6`) covering every player-castable spell (Fire, Bzzard, Sleep, Cure, Pure, Sight, Ice2). Each carries `learnedSpell: 0xNN` as the bridge.
+- Scroll inventory rows render through `getSpellNameShrines` — same magic-school icon + short name as the spell entry. No separate name table.
+- Pause-menu Z-press on a held scroll routes to `_applyScrollLearn`: refuses if already known ("Already known!"), refuses if current job's school can't learn it ("Can't learn that!"), otherwise pushes the spell ID into `ps.knownSpells`, consumes the item, plays the treasure chime, shows "Learned Cure!".
+- Ur magic shop converted from direct-learn (`spells: [0x35]`) to scroll item shop (`items: [0xE4]`). Shopkeeper-sprite lookup still routes through `type: 'magic'`; the buy/sell/qty flow is the regular item-shop path.
+- Altar Cave F1-F4 loot pools each gain a `weight: 3` rare tier rolling Cure scroll (`0xE3`) or Sleep scroll (`0xE2`). Other floors' weights nudged down to keep totals balanced.
+- Scrolls are tradable for free — `playerInventory` is the same bag every other item lives in, and trade walks it unfiltered.
+
 ## 1.7.339 — 2026-05-14
 
 ### No starting spells; antidote + eye drops out of altar loot
