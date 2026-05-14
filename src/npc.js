@@ -12,6 +12,52 @@ import { Sprite, DIR_DOWN, DIR_UP, DIR_LEFT, DIR_RIGHT } from './sprite.js';
 import { MOOGLE_GFX_ID, MOOGLE_PAL } from './sprite-init.js';
 import { BM_WALK_TOP, BM_WALK_BTM } from './job-sprites.js';
 import { openShop } from './shop.js';
+import { decodeTile, drawTile } from './tile-decoder.js';
+
+// Draw a 16×16 scene NPC from 4 raw 2BPP tiles. Top row (tl/tr) uses
+// `palTop`, bottom row (bl/br) uses `palBtm`. `flipAll` mirrors the whole
+// sprite horizontally; `flipBtm` mirrors only the bottom row (FF3 DOWN
+// frame 1 pose). Decoded pixels are cached per-sprite so we don't decode
+// every frame.
+const _sceneCache = new WeakMap();
+function _drawSceneNpc(ctx, x, y, s) {
+  let cached = _sceneCache.get(s);
+  if (!cached) {
+    cached = {
+      tl: decodeTile(s.tl), tr: decodeTile(s.tr),
+      bl: decodeTile(s.bl), br: decodeTile(s.br),
+    };
+    if (s.flipAll || s.flipBtm) {
+      const flip = px => { const o = new Uint8Array(64); for (let r=0;r<8;r++) for (let c=0;c<8;c++) o[r*8+c]=px[r*8+(7-c)]; return o; };
+      if (s.flipAll) {
+        cached.tlF = flip(cached.tl); cached.trF = flip(cached.tr);
+        cached.blF = flip(cached.bl); cached.brF = flip(cached.br);
+      }
+      if (s.flipBtm) {
+        cached.blF = cached.blF || flip(cached.bl);
+        cached.brF = cached.brF || flip(cached.br);
+      }
+    }
+    _sceneCache.set(s, cached);
+  }
+  if (s.flipAll) {
+    // Mirror whole sprite: swap L/R columns AND flip each tile.
+    drawTile(ctx, cached.trF, s.palTop, x,     y);
+    drawTile(ctx, cached.tlF, s.palTop, x + 8, y);
+    drawTile(ctx, cached.brF, s.palBtm, x,     y + 8);
+    drawTile(ctx, cached.blF, s.palBtm, x + 8, y + 8);
+  } else if (s.flipBtm) {
+    drawTile(ctx, cached.tl,  s.palTop, x,     y);
+    drawTile(ctx, cached.tr,  s.palTop, x + 8, y);
+    drawTile(ctx, cached.brF, s.palBtm, x,     y + 8);
+    drawTile(ctx, cached.blF, s.palBtm, x + 8, y + 8);
+  } else {
+    drawTile(ctx, cached.tl, s.palTop, x,     y);
+    drawTile(ctx, cached.tr, s.palTop, x + 8, y);
+    drawTile(ctx, cached.bl, s.palBtm, x,     y + 8);
+    drawTile(ctx, cached.br, s.palBtm, x + 8, y + 8);
+  }
+}
 
 const TILE_SIZE = 16;
 
@@ -91,24 +137,14 @@ export function addBlackMageShopkeeper(tileX, tileY, shopId) {
   });
 }
 
-// Generic stationary NPC backed by the player walk-sprite class with a
-// custom GFX_ID + palette. Lazy sprite cache keyed by `key`. Used for the
-// new-game opening scene (elder + 2 attendants).
-const _customSprites = new Map();
-function _getCustomSprite(key, gfxId, topPal, btmPal) {
-  if (_customSprites.has(key)) return _customSprites.get(key);
-  if (!romRaw) return null;
-  const s = new Sprite(romRaw, topPal, btmPal);
-  s.setGfxID(gfxId);
-  _customSprites.set(key, s);
-  return s;
-}
-
-export function addCustomNpc(key, tileX, tileY, opts) {
+// Scene NPC — renders 4 raw 2BPP tiles (top-row palTop, bottom-row palBtm)
+// at the NPC's tile position. Used for one-off cutscene NPCs whose CHR
+// isn't in any standard sprite bank (opening scene on map 7).
+export function addSceneNpc(key, tileX, tileY, sprite) {
   _npcs.push({
     key,
     tileX, tileY,
-    spriteKey: 'custom',
+    spriteKey: 'scene',
     dialogue: null,
     mode: 'idle-march',
     timer: 0,
@@ -118,12 +154,10 @@ export function addCustomNpc(key, tileX, tileY, opts) {
     walkDY: 0,
     walkFromX: tileX,
     walkFromY: tileY,
-    dir: opts.dir != null ? opts.dir : DIR_DOWN,
+    dir: DIR_DOWN,
     talkFacing: null,
     runRemaining: 0,
-    gfxId: opts.gfxId,
-    palTop: opts.palTop,
-    palBtm: opts.palBtm,
+    scene: sprite, // { tl, tr, bl, br, palTop, palBtm, flipAll, flipBtm }
   });
 }
 
@@ -323,16 +357,10 @@ export function drawNpcs(ctx, camX, camY, originX, originY, spriteY) {
         bm.resetFrame();
       }
       bm.draw(ctx, sx, sy);
-    } else if (npc.spriteKey === 'custom') {
-      const s = _getCustomSprite(npc.key, npc.gfxId, npc.palTop, npc.palBtm);
-      if (!s) continue;
-      s.setDirection(npc.talkFacing != null ? npc.talkFacing : npc.dir);
-      if (npc.mode === 'idle-march' && npc.talkFacing == null) {
-        s.setWalkProgress((npc.timer / IDLE_MARCH_MS) % 1);
-      } else {
-        s.resetFrame();
-      }
-      s.draw(ctx, sx, sy);
+    } else if (npc.spriteKey === 'scene') {
+      // 1-pixel Y bobble approximates a walk cycle from the single captured frame.
+      const bobble = (npc.mode === 'idle-march' && npc.timer % (IDLE_MARCH_MS * 2) < IDLE_MARCH_MS) ? -1 : 0;
+      _drawSceneNpc(ctx, sx, sy + bobble, npc.scene);
     }
   }
 }

@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.328 — 2026-05-14
+
+### Opening scene NPCs: render captured tile bytes (not ROM GFX banks)
+
+- v1.7.327 placed the opening-scene NPCs using `Sprite.setGfxID(2/3/4)`, assuming PPU OAM tile IDs $40/$2C/$3C mapped to ff3mmo's standard ROM GFX banks (BM / Mo / WM). They don't — FF3 NES bank-switches CHR for cutscenes, so those PPU tiles aren't in any standard sprite bank.
+- New `data/opening-scene.js` stores the raw 2BPP tile bytes from the user's OAM capture (frame 1860) for each NPC: elder, left attendant, right attendant. Top-row palette = SP3 `[0x1A, 0x0F, 0x27, 0x30]`, bottom-row = SP2 `[0x1A, 0x0F, 0x12, 0x36]`.
+- New `addSceneNpc` + `_drawSceneNpc` path in `npc.js` decodes the 4 raw tiles, caches them, handles `flipAll` (left attendant) and `flipBtm` (elder DOWN-frame-1 pose). 1px Y bobble approximates a walk cycle from the single captured frame.
+- `addCustomNpc` (GFX_ID-based) removed — it was wrong for this use case.
+
 ## 1.7.327 — 2026-05-14
 
 ### Opening scene: 3 NPCs on map 7 for new players
