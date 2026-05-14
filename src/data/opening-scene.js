@@ -16,6 +16,9 @@
 //   slots 8-11  = LEFT frame 0
 //   slots 12-15 = LEFT frame 1   (mirror via Sprite class for RIGHT)
 //
+// Offsets are relative to `romRaw` (which INCLUDES the 16-byte iNES
+// header), matching the convention SPRITE_TILE_BASE uses in sprite.js.
+//
 // PPU palette state at capture (sprite palettes 2 + 3):
 //   SP2 = [0x1A, 0x0F, 0x12, 0x36]
 //   SP3 = [0x1A, 0x0F, 0x27, 0x30]
@@ -26,7 +29,7 @@ const SCENE_PAL_TOP = [0x1A, 0x0F, 0x27, 0x30]; // PPU SP3
 const SCENE_PAL_BTM = [0x1A, 0x0F, 0x12, 0x36]; // PPU SP2
 
 export const OPENING_ELDER = {
-  romOffset: 0x01EC00,
+  romOffset: 0x01EC10,
   palTop: SCENE_PAL_TOP,
   palBtm: SCENE_PAL_BTM,
   dir: DIR_DOWN,
@@ -34,7 +37,7 @@ export const OPENING_ELDER = {
 };
 
 export const OPENING_LEFT_ATTENDANT = {
-  romOffset: 0x01E000,
+  romOffset: 0x01E010,
   palTop: SCENE_PAL_TOP,
   palBtm: SCENE_PAL_BTM,
   dir: DIR_RIGHT, // faces toward player (player at 4,4; attendant at 2,4)
@@ -42,7 +45,7 @@ export const OPENING_LEFT_ATTENDANT = {
 };
 
 export const OPENING_RIGHT_ATTENDANT = {
-  romOffset: 0x01E200,
+  romOffset: 0x01E210,
   palTop: SCENE_PAL_TOP,
   palBtm: SCENE_PAL_BTM,
   dir: DIR_LEFT, // faces toward player (attendant at 6,4)

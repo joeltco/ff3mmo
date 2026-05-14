@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.335 — 2026-05-14
+
+### Opening scene ROM offsets +16 — account for iNES header
+
+- v1.7.333 located the elder + attendant ROM offsets by byte-searching a HEADER-STRIPPED copy of FF3-English.nes, then used those offsets verbatim against `romRaw`, which INCLUDES the 16-byte iNES header. All three Sprite.gfxBase values were 16 bytes early — fetching the wrong tiles. Bumped each offset by 16 to match the convention `SPRITE_TILE_BASE` uses (`0x01C010` = tile 0 in PPU = ROM offset 0x10 past the iNES header).
+- Elder: 0x01EC00 → 0x01EC10
+- Left attendant: 0x01E000 → 0x01E010
+- Right attendant: 0x01E200 → 0x01E210
+
 ## 1.7.334 — 2026-05-14
 
 ### Land turtle (map + loading) + loading moogle all route through npc.js
