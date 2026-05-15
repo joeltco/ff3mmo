@@ -24,6 +24,8 @@ import { battleSt } from './battle-state.js';
 import { _nameToBytes } from './text-utils.js';
 import { showMsgBox, replaceMsgBoxText, dismissMsgBox } from './message-box.js';
 import { playSFX, SFX } from './music.js';
+import { sendNetPartyInvite, sendNetPartyCancel, sendNetPartyResponse,
+         setNetPartyInviteHandler, setNetPartyResultHandler } from './net.js';
 
 const BASE_ACCEPT   = 0.35;
 const LEVEL_PER_PT  = 0.01;
@@ -54,8 +56,12 @@ export const partyInviteSt = {
   targetRollTimer: 0,
   resolving: false,
   joinedHoldMs: 0,
+  isRealTarget: false,        // true when the active invite is wire-driven
   cooldowns: new Map(),       // targetName -> expiresAtMs
   partyMembers: [],           // array of player names, persistent until dismissed
+  // Real-player party members — name → wire-delivered profile. Looked up by
+  // `tryJoinPlayerAlly` when the name isn't in PLAYER_POOL.
+  partyMemberProfiles: new Map(),
 };
 
 function _rollTimerMs() {
@@ -120,9 +126,13 @@ export function startPartyInvite(target) {
   partyInviteSt.target           = target;
   partyInviteSt.startedAtMs      = _now();
   partyInviteSt.missedRolls      = 0;
-  partyInviteSt.targetRollTimer  = _rollTimerMs();
+  partyInviteSt.isRealTarget     = !!(target.isReal && target.userId);
+  // Real-player invites have the server gate the response; local sim timer
+  // is parked at Infinity so `tickPartyInvite` only watches death/timeout.
+  partyInviteSt.targetRollTimer  = partyInviteSt.isRealTarget ? Infinity : _rollTimerMs();
   partyInviteSt.resolving        = false;
   showMsgBox(_nameToBytes('Inviting ' + target.name + '...'));
+  if (partyInviteSt.isRealTarget) sendNetPartyInvite(target.userId);
   return true;
 }
 
@@ -132,6 +142,7 @@ function _endInvite(targetName) {
   partyInviteSt.resolving = false;
   partyInviteSt.missedRolls = 0;
   partyInviteSt.targetRollTimer = 0;
+  partyInviteSt.isRealTarget = false;
   if (targetName) {
     partyInviteSt.cooldowns.set(targetName, _now() + COOLDOWN_MS);
   }
@@ -140,7 +151,10 @@ function _endInvite(targetName) {
 export function cancelPartyInvite(reason = 'user') {
   if (!partyInviteSt.active) return;
   const targetName = partyInviteSt.target && partyInviteSt.target.name;
+  const wasReal = partyInviteSt.isRealTarget;
   _endInvite(targetName);
+  // Real-target invites — tell the server to drop the pending invite.
+  if (wasReal && reason !== 'server') sendNetPartyCancel();
   if (reason === 'user') {
     showMsgBox(_nameToBytes('Cancelled'));
     playSFX(SFX.CONFIRM);
@@ -148,6 +162,10 @@ export function cancelPartyInvite(reason = 'user') {
     showMsgBox(_nameToBytes('Invite expired'));
   } else if (reason === 'death') {
     // Silent — game-over flow owns the screen
+  } else if (reason === 'rejected') {
+    showMsgBox(_nameToBytes('Declined'));
+  } else if (reason === 'offline') {
+    showMsgBox(_nameToBytes('Target offline'));
   }
 }
 
@@ -172,17 +190,60 @@ function _runAcceptCheck() {
   }
 }
 
-function _resolveAsJoin() {
-  const target = partyInviteSt.target;
+function _resolveAsJoin(remotePartner) {
+  // `remotePartner` is the wire-delivered profile when a real player
+  // accepted the invite — stashed into `partyMemberProfiles` so
+  // `tryJoinPlayerAlly` can find them at battle start. Fake-roster path
+  // passes null (the name lookup hits PLAYER_POOL directly).
+  const target = remotePartner || partyInviteSt.target;
   partyInviteSt.resolving = true;
   partyInviteSt.joinedHoldMs = JOINED_HOLD_MS;
   replaceMsgBoxText(_nameToBytes('Joined'), () => {
-    if (!partyInviteSt.partyMembers.includes(target.name) && !isPartyFull()) {
-      partyInviteSt.partyMembers.push(target.name);
+    if (target && target.name) {
+      if (!partyInviteSt.partyMembers.includes(target.name) && !isPartyFull()) {
+        partyInviteSt.partyMembers.push(target.name);
+      }
+      if (remotePartner) {
+        partyInviteSt.partyMemberProfiles.set(target.name, remotePartner);
+      }
     }
-    _endInvite(target.name);
+    _endInvite(target && target.name);
   });
 }
+
+// MP party-invite wire — receiver side (B). Server forwards A's invite with
+// A's full profile. For MVP, auto-respond using the same `getAcceptChance`
+// formula the fake-PvP path uses (server already knows A's level/job so
+// a future server-side roll would also work; running on the client lets
+// the user decline later via UI without server changes).
+setNetPartyInviteHandler((msg) => {
+  const challenger = msg && msg.challenger;
+  if (!challenger) return;
+  // Compute accept chance using the SHARED formula (challenger.level + jobIdx
+  // are in the wire profile). `getAcceptChance` reads `ps.level` / `ps.jobIdx`
+  // for the local side — fine, we want OUR roll on incoming invites.
+  const chance = getAcceptChance(challenger);
+  const accept = Math.random() < chance;
+  sendNetPartyResponse(accept);
+});
+
+// Inviter side (A) — server relays B's response. On accept we have B's
+// fresh profile; route through the existing `_resolveAsJoin` swap so the
+// "Joined" message + cooldown logic stays in one place.
+setNetPartyResultHandler((msg) => {
+  if (!partyInviteSt.active || !partyInviteSt.isRealTarget) return;
+  if (msg && msg.accept && msg.partner) {
+    _resolveAsJoin(msg.partner);
+    return;
+  }
+  if (msg && msg.reason === 'offline') {
+    cancelPartyInvite('offline');
+    return;
+  }
+  // Server reported a rejection — show the "Declined" message and apply
+  // the standard cooldown.
+  cancelPartyInvite('rejected');
+});
 
 export function tickPartyInvite(dt) {
   if (!partyInviteSt.active) return;
@@ -208,6 +269,10 @@ export function tickPartyInvite(dt) {
     cancelPartyInvite('missed-cap');
     return;
   }
+  // Real-target invites are gated by the server's relay of the target's
+  // response — no local sim roll. `tickPartyInvite` only watches death /
+  // timeout in that branch.
+  if (partyInviteSt.isRealTarget) return;
   partyInviteSt.targetRollTimer -= dt;
   if (partyInviteSt.targetRollTimer <= 0) {
     _runAcceptCheck();

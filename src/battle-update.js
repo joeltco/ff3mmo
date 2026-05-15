@@ -286,7 +286,11 @@ export function tryJoinPlayerAlly() {
     if (battleSt.battleAllies.length >= 3) break;
     if (pvpNames.has(name)) continue;
     if (battleSt.battleAllies.some(a => a.name === name)) continue;
-    const member = PLAYER_POOL.find(p => p.name === name);
+    // Look up fake-roster entries first, then real-player profiles stashed
+    // on accept (`party-invite-result`). Real players appear via the wire
+    // profile shape and feed `generateAllyStats` the same way.
+    const member = PLAYER_POOL.find(p => p.name === name)
+                || partyInviteSt.partyMemberProfiles.get(name);
     if (!member) continue;
     battleSt.battleAllies.push(generateAllyStats(member));
     partyJoined = true;

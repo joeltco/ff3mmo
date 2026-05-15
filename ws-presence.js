@@ -63,6 +63,10 @@ const _pvpSearches = new Map();
 // chosen action instead of local AI (MP Step 4 part 2).
 const _pvpPartners = new Map();
 
+// Pending party invites — challengerUserId → targetUserId. Set on
+// `party-invite`, cleared on `party-cancel` / response / disconnect.
+const _partyInvites = new Map();
+
 // Hook-chance formula — mirror of `src/pvp-search.js#getHookChance`.
 // AGI differential + Thief/Ranger job bonus, clamped to [10%, 75%].
 // Constants live alongside the client source for cross-reference (any
@@ -295,6 +299,50 @@ function _handleMessage(entry, msg) {
       });
       return;
     }
+    case 'party-invite': {
+      // A invites B. Server records the pending invite and forwards to B
+      // with A's profile so B's client can auto-accept (or prompt, in a
+      // future UI). One invite per challenger at a time — replaces.
+      if (!entry.helloed) return;
+      const targetUserId = parsed.targetUserId | 0;
+      if (!targetUserId || targetUserId === entry.userId) return;
+      const target = _connected.get(targetUserId);
+      if (!target || !target.helloed) {
+        _send(entry.ws, { type: 'party-invite-result', accept: false, reason: 'offline' });
+        return;
+      }
+      _partyInvites.set(entry.userId, targetUserId);
+      _send(target.ws, {
+        type: 'party-invite-incoming',
+        challengerUserId: entry.userId,
+        challenger: { userId: entry.userId, ...entry.profile, loc: entry.loc },
+      });
+      return;
+    }
+    case 'party-cancel': {
+      _partyInvites.delete(entry.userId);
+      return;
+    }
+    case 'party-invite-response': {
+      // B answers the invite. Find the challenger by looking up the invite
+      // that targets B, forward A's profile alongside the accept flag.
+      if (!entry.helloed) return;
+      const accept = !!parsed.accept;
+      let challengerId = null;
+      for (const [chId, tgtId] of _partyInvites) {
+        if (tgtId === entry.userId) { challengerId = chId; break; }
+      }
+      if (!challengerId) return;
+      _partyInvites.delete(challengerId);
+      const challenger = _connected.get(challengerId);
+      if (!challenger || !challenger.helloed) return;
+      _send(challenger.ws, {
+        type:    'party-invite-result',
+        accept,
+        partner: { userId: entry.userId, ...entry.profile, loc: entry.loc },
+      });
+      return;
+    }
     case 'pvp-end': {
       // Either player signals the battle is over (fled / lost / won locally).
       // Server drops the partner pair so a new pvp-match can fire later.
@@ -438,6 +486,17 @@ export function attachWebSocketPresence(httpServer) {
           const partner = _connected.get(partnerId);
           if (partner && partner.helloed) {
             _send(partner.ws, { type: 'pvp-action', kind: 'disconnect' });
+          }
+        }
+        // Clean up pending party invites involving this user.
+        _partyInvites.delete(userId);  // outgoing
+        for (const [chId, tgtId] of [..._partyInvites]) {
+          if (tgtId === userId) {
+            _partyInvites.delete(chId);
+            const challenger = _connected.get(chId);
+            if (challenger && challenger.helloed) {
+              _send(challenger.ws, { type: 'party-invite-result', accept: false, reason: 'offline' });
+            }
           }
         }
         if (entry.helloed) {

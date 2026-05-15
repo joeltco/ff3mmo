@@ -2,6 +2,28 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.378 — 2026-05-15
+
+### Real party invites over the wire
+
+- Server (`ws-presence.js`): new `_partyInvites: Map<challengerUserId, targetUserId>` for pending invites. Handlers: `party-invite` records + forwards `party-invite-incoming` with challenger profile; `party-cancel` clears; `party-invite-response` looks up the matching invite and relays `party-invite-result` to the challenger with the target's profile on accept (or `reason` on reject/offline). Disconnect path cleans up invites in either direction.
+- Client (`src/net.js`): `sendNetPartyInvite(targetUserId)` / `sendNetPartyCancel()` / `sendNetPartyResponse(accept)` + `setNetPartyInviteHandler(fn)` / `setNetPartyResultHandler(fn)`.
+- Client (`src/party-invite.js`):
+  - `startPartyInvite(target)` branches on `target.isReal && target.userId`. Real-target invites send `party-invite` over the wire; the local sim timer is parked at `Infinity` (server gates the response).
+  - `cancelPartyInvite` sends `party-cancel` for real targets so the server clears the pending invite.
+  - Incoming-invite handler (receiver side, B): auto-rolls accept chance using the same `getAcceptChance(challenger)` formula the fake-pvp path uses, emits `party-invite-response`. No UI prompt yet — MVP auto-rolls; future UI iteration can swap in a real prompt.
+  - Result handler (inviter side, A): on accept routes through the existing `_resolveAsJoin(remotePartner)` swap with the wire-delivered profile; on reject shows "Declined" with the standard 60s cooldown; on offline shows "Target offline".
+  - New `partyInviteSt.partyMemberProfiles: Map<name, profile>` stashes accepted real-player profiles so `tryJoinPlayerAlly` can find them at battle start (PLAYER_POOL doesn't include real online players).
+- Client (`src/battle-update.js#tryJoinPlayerAlly`): name lookup falls back to `partyInviteSt.partyMemberProfiles` after `PLAYER_POOL`. Real party allies enter battle via the same `generateAllyStats` pipeline as fake ones.
+
+What this gets you: open the game on two browsers, both at the same location. Browser A clicks Party on Browser B's roster row → A sees "Inviting B..." → B's client rolls accept (level-differential + Bard/Ranger/Knight bonus) → if accept, A sees "Joined" and B is now in A's party (joins A's battleAllies at battle start). If reject, A sees "Declined" with cooldown.
+
+What's NOT in this deploy (carry to future passes):
+- **UI prompt on incoming invite** — B's accept is automatic via the chance formula. A future iteration could pop a yes/no prompt on B's screen.
+- **One-party-per-player on B's side** — B can be in multiple players' parties. (The 3-cap is enforced on the inviter's side, so this is mostly cosmetic.)
+- **Disband on inviter disconnect** — if A drops, B's client doesn't know it's no longer in A's party. (Symptom: B's name might stay in A's `partyMembers` if A reconnects with stale state.)
+- **Real-player ally HP / status sync across the party-member lifetime** — `tryJoinPlayerAlly` regenerates stats from the cached profile each battle; mid-session HP/status changes on the real player aren't propagated to A's party tracker.
+
 ## 1.7.377 — 2026-05-15
 
 ### PvP opponent-flee handling

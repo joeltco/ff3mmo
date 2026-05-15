@@ -30,6 +30,8 @@ let _onPVPMatch = null;      // ({opponent}) → void — set via setNetPVPMatch
 let _onPVPFailed = null;     // ({reason}) → void — set via setNetPVPFailedHandler
 let _onPVPNone = null;       // () → void — set via setNetPVPEncounterNoneHandler
 let _onPVPAction = null;     // (action) → void — set via setNetPVPActionHandler
+let _onPartyInvite = null;   // ({challenger}) → void — invite arrived; auto-respond or prompt
+let _onPartyResult = null;   // ({accept, partner?, reason?}) → void — our outgoing invite resolved
 const MAX_RECONNECT_DELAY = 30000;
 
 function _getToken() {
@@ -131,6 +133,18 @@ function _handleMessage(data) {
       if (_onPVPAction) {
         try { _onPVPAction(msg); }
         catch (e) { console.warn('[net] pvp-action handler error', e); }
+      }
+      return;
+    case 'party-invite-incoming':
+      if (_onPartyInvite) {
+        try { _onPartyInvite(msg); }
+        catch (e) { console.warn('[net] party-invite-incoming handler error', e); }
+      }
+      return;
+    case 'party-invite-result':
+      if (_onPartyResult) {
+        try { _onPartyResult(msg); }
+        catch (e) { console.warn('[net] party-invite-result handler error', e); }
       }
       return;
   }
@@ -291,6 +305,34 @@ export function sendNetPVPResult(outcome) {
 
 export function setNetPVPActionHandler(fn) {
   _onPVPAction = typeof fn === 'function' ? fn : null;
+}
+
+// Real party invites over the wire. Mirror of `pvp-search` lifecycle:
+// challenger emits `party-invite`; server forwards to target as
+// `party-invite-incoming` with the challenger's profile; target auto-rolls
+// (or prompts) and emits `party-invite-response`; server relays to
+// challenger as `party-invite-result` with the target's profile on accept.
+export function sendNetPartyInvite(targetUserId) {
+  if (!_helloed || !targetUserId) return false;
+  return _send({ type: 'party-invite', targetUserId });
+}
+
+export function sendNetPartyCancel() {
+  if (!_helloed) return false;
+  return _send({ type: 'party-cancel' });
+}
+
+export function sendNetPartyResponse(accept) {
+  if (!_helloed) return false;
+  return _send({ type: 'party-invite-response', accept: !!accept });
+}
+
+export function setNetPartyInviteHandler(fn) {
+  _onPartyInvite = typeof fn === 'function' ? fn : null;
+}
+
+export function setNetPartyResultHandler(fn) {
+  _onPartyResult = typeof fn === 'function' ? fn : null;
 }
 
 export function getOnlinePlayers() {
