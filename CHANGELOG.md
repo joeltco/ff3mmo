@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.381 — 2026-05-15
+
+### Disband on inviter / member disconnect
+
+- Server (`ws-presence.js`) disconnect handler now notifies the surviving party side:
+  - If a MEMBER drops, inviter receives `party-member-left {memberUserId, memberName}`.
+  - If an INVITER drops, every member receives `party-disbanded {inviterUserId, inviterName}`.
+  - `party-leave` (member-initiated explicit leave) mirrors the member-disconnect notify path.
+- Client (`src/net.js`): `setNetPartyMemberLeftHandler(fn)` / `setNetPartyDisbandedHandler(fn)`.
+- `party-invite.js`:
+  - On `party-member-left` (we were the inviter): drops the name from `partyMembers`, clears `partyMemberProfiles`, logs `* <Name> left party` to chat. Next battle no longer spawns a ghost ally from stale cached stats.
+  - On `party-disbanded` (we were a member): logs `* <Inviter>'s party disbanded` to chat. No local state to clear on the member side (they don't track which party they're in today), but the system message tells the player what happened.
+
+Combined with the v1.7.380 one-party-per-player rule: when A disconnects, B's server-side membership clears AND B sees the disband notification. C can now invite B fresh; the cooldown still applies if B was recently invited by anyone (60s).
+
 ## 1.7.380 — 2026-05-15
 
 ### One-party-per-player enforcement

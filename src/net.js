@@ -32,6 +32,8 @@ let _onPVPNone = null;       // () → void — set via setNetPVPEncounterNoneHa
 let _onPVPAction = null;     // (action) → void — set via setNetPVPActionHandler
 let _onPartyInvite = null;   // ({challenger}) → void — invite arrived; auto-respond or prompt
 let _onPartyResult = null;   // ({accept, partner?, reason?}) → void — our outgoing invite resolved
+let _onPartyMemberLeft = null;  // ({memberUserId, memberName}) → void — a member of OUR party disconnected/left
+let _onPartyDisbanded = null;   // ({inviterUserId, inviterName}) → void — the party WE were in disbanded
 const MAX_RECONNECT_DELAY = 30000;
 
 function _getToken() {
@@ -145,6 +147,18 @@ function _handleMessage(data) {
       if (_onPartyResult) {
         try { _onPartyResult(msg); }
         catch (e) { console.warn('[net] party-invite-result handler error', e); }
+      }
+      return;
+    case 'party-member-left':
+      if (_onPartyMemberLeft) {
+        try { _onPartyMemberLeft(msg); }
+        catch (e) { console.warn('[net] party-member-left handler error', e); }
+      }
+      return;
+    case 'party-disbanded':
+      if (_onPartyDisbanded) {
+        try { _onPartyDisbanded(msg); }
+        catch (e) { console.warn('[net] party-disbanded handler error', e); }
       }
       return;
   }
@@ -348,6 +362,14 @@ export function setNetPartyInviteHandler(fn) {
 
 export function setNetPartyResultHandler(fn) {
   _onPartyResult = typeof fn === 'function' ? fn : null;
+}
+
+export function setNetPartyMemberLeftHandler(fn) {
+  _onPartyMemberLeft = typeof fn === 'function' ? fn : null;
+}
+
+export function setNetPartyDisbandedHandler(fn) {
+  _onPartyDisbanded = typeof fn === 'function' ? fn : null;
 }
 
 export function getOnlinePlayers() {

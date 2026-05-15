@@ -374,10 +374,20 @@ function _handleMessage(entry, msg) {
     }
     case 'party-leave': {
       // Member voluntarily leaves their current party (no UI yet, but the
-      // hook exists for future client-side "leave party" action).
+      // hook exists for future client-side "leave party" action). Mirror
+      // of the disconnect-as-member path: notify the inviter so they can
+      // clear local state too.
       if (!entry.helloed) return;
-      if (_partyMemberships.has(entry.userId)) {
-        _partyMemberships.delete(entry.userId);
+      const inviterId = _partyMemberships.get(entry.userId);
+      if (inviterId == null) return;
+      _partyMemberships.delete(entry.userId);
+      const inviter = _connected.get(inviterId);
+      if (inviter && inviter.helloed) {
+        _send(inviter.ws, {
+          type:         'party-member-left',
+          memberUserId: entry.userId,
+          memberName:   entry.profile?.name || '',
+        });
       }
       return;
     }
@@ -538,10 +548,34 @@ export function attachWebSocketPresence(httpServer) {
           }
         }
         // Clean up party memberships involving this user (as member or as
-        // inviter — both directions).
+        // inviter — both directions) and notify the surviving side so they
+        // can clear their local party state.
+        const wasInPartyOf = _partyMemberships.get(userId);
         _partyMemberships.delete(userId);
+        if (wasInPartyOf) {
+          // This user was a member; tell their inviter.
+          const inviter = _connected.get(wasInPartyOf);
+          if (inviter && inviter.helloed) {
+            _send(inviter.ws, {
+              type:        'party-member-left',
+              memberUserId: userId,
+              memberName:  entry.profile?.name || '',
+            });
+          }
+        }
         for (const [memberId, inviterId] of [..._partyMemberships]) {
-          if (inviterId === userId) _partyMemberships.delete(memberId);
+          if (inviterId !== userId) continue;
+          _partyMemberships.delete(memberId);
+          // This user was the inviter; tell each ex-member their party
+          // disbanded.
+          const member = _connected.get(memberId);
+          if (member && member.helloed) {
+            _send(member.ws, {
+              type:           'party-disbanded',
+              inviterUserId:  userId,
+              inviterName:    entry.profile?.name || '',
+            });
+          }
         }
         if (entry.helloed) {
           _broadcast({ type: 'player-leave', userId }, userId);

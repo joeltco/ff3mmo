@@ -27,7 +27,9 @@ import { battleSt as _battleSt } from './battle-state.js';
 import { playSFX, SFX } from './music.js';
 import { sendNetPartyInvite, sendNetPartyCancel, sendNetPartyResponse,
          sendNetPartyDismiss,
-         setNetPartyInviteHandler, setNetPartyResultHandler } from './net.js';
+         setNetPartyInviteHandler, setNetPartyResultHandler,
+         setNetPartyMemberLeftHandler, setNetPartyDisbandedHandler } from './net.js';
+import { addChatMessage } from './chat.js';
 
 const BASE_ACCEPT   = 0.35;
 const LEVEL_PER_PT  = 0.01;
@@ -242,6 +244,31 @@ setNetPartyInviteHandler((msg) => {
     () => sendNetPartyResponse(true),
     () => sendNetPartyResponse(false),
   );
+});
+
+// MP disband cleanup — when a real-player party member disconnects or
+// leaves, drop them from the local party list + clear their cached
+// profile so the next battle doesn't try to spawn a ghost ally from
+// stale data. Server enforces one-party-per-player by clearing the
+// membership too (so the dropped player can accept new invites).
+setNetPartyMemberLeftHandler((msg) => {
+  const name = msg && msg.memberName;
+  if (!name) return;
+  const i = partyInviteSt.partyMembers.indexOf(name);
+  if (i >= 0) partyInviteSt.partyMembers.splice(i, 1);
+  partyInviteSt.partyMemberProfiles.delete(name);
+  addChatMessage('* ' + name + ' left party', 'system');
+});
+
+// MP disband cleanup — this client was a MEMBER of someone's party (the
+// inviter). The inviter dropped, so the party is broken. No local party
+// state to clear on the member side today (members don't track which
+// party they're in), but log a system message so the player knows what
+// happened.
+setNetPartyDisbandedHandler((msg) => {
+  const name = msg && msg.inviterName;
+  if (!name) return;
+  addChatMessage('* ' + name + "'s party disbanded", 'system');
 });
 
 // Inviter side (A) — server relays B's response. On accept we have B's
