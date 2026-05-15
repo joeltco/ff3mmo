@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.354 — 2026-05-14
+
+### Fix: real root cause of black message boxes — restore blue palette on border tiles
+
+- The actual breakage was v1.7.309 (`a0d81d4`) in `hud-init.js`. Past-Claude was trying to recolor the roster panel and flipped the palette of `ui.borderBlueTileCanvases` from `[0x02, 0x00, 0x02, 0x30]` (NES $02 = dark blue) to `[0x0F, 0x00, 0x0F, 0x30]` (NES $0F = black) — but that bag is the shared "blue" border tileset every blue-box caller (message box, shop, trade, inspect) opts into. v1.7.310 (`7dc23be`) then dropped the matching blue `fillRect` interior, leaving everything black.
+- Restored the palette at hud-init.js:56 to `[0x02, 0x00, 0x02, 0x30]`. Now the inner pixels of the border tiles themselves carry blue. Combined with the blue `fillRect` interior restored in v1.7.352, every blue-box caller is uniformly blue with proper rounded transparent corners — same as pre-v1.7.309.
+- Reverted v1.7.353's "fill full extent" — that was eating the rounded corner pixels. Back to the original `x+8, y+8, w-16, h-16` inset.
+
 ## 1.7.353 — 2026-05-14
 
 ### Fix: blue box interior bleeds through under border tiles

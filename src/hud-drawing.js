@@ -107,10 +107,7 @@ export function drawBorderedBox(x, y, w, h, blue = false, transparentEdge = fals
   } else {
     ctx.fillStyle = '#000';
   }
-  // Fill the full box, not just the inset interior — AWJ border tiles have
-  // transparent inner pixels, so an 8px inset leaves a strip under the edges
-  // that bleeds the map through. Border tiles render opaque pixels on top.
-  ctx.fillRect(x, y, w, h);
+  ctx.fillRect(x + 8, y + 8, w - 16, h - 16);
   ctx.drawImage(TL, x, y); ctx.drawImage(TR, x + w - 8, y);
   ctx.drawImage(BL, x, y + h - 8); ctx.drawImage(BR, x + w - 8, y + h - 8);
   for (let tx = x + 8; tx < x + w - 8; tx += 8) { ctx.drawImage(TOP, tx, y); ctx.drawImage(BOT, tx, y + h - 8); }
