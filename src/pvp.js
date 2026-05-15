@@ -158,6 +158,22 @@ setNetPVPActionHandler((msg) => {
     battleSt.battleTimer = 0;
     return;
   }
+  // Partner's WS dropped mid-battle. Server pushes this synthetic action
+  // so the remaining client doesn't soft-freeze waiting for input that
+  // will never come. Treat as a forced flee — no XP/Gil rewards (the
+  // existing `resetPVPState` outcome logic reports `fled` since opp.hp
+  // stays > 0), no opponent-died animation. v1.7.383 — pre-fix used
+  // `opponentStats.hp = 0` which dropped the loser through the death
+  // path and granted unearned XP.
+  if (msg && msg.kind === 'disconnect') {
+    const oppName = pvpSt.pvpOpponent && pvpSt.pvpOpponent.name;
+    queueBattleMsg(_nameToBytes((oppName ? oppName + ' lost link' : 'Foe lost link')));
+    playSFX(SFX.RUN_AWAY);
+    _wireOpponentActions.length = 0;
+    battleSt.battleState = 'enemy-box-close';
+    battleSt.battleTimer = 0;
+    return;
+  }
   _wireOpponentActions.push(msg);
 });
 
@@ -689,10 +705,12 @@ function _applyWireOpponentAction(action, casterCellIdx) {
   }
 
   if (action.kind === 'disconnect') {
-    // Partner dropped the WS. End the battle as a defeat for them so the
-    // local player isn't soft-frozen waiting for input that never comes.
-    if (pvpSt.pvpOpponentStats) pvpSt.pvpOpponentStats.hp = 0;
-    return false;  // let regular flow handle the death
+    // Wire-arrival site short-circuits disconnect to `enemy-box-close` with
+    // a "lost link" message (see `setNetPVPActionHandler`). A disconnect
+    // action in the queue here is unreachable today; if it ever shows up
+    // (out-of-order delivery, race), no-op so we don't accidentally treat
+    // it as an attack or unearned victory.
+    return false;
   }
 
   if (action.kind === 'defend') {

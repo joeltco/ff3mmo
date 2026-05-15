@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.383 — 2026-05-15
+
+### Graceful PvP forfeit on partner WS disconnect
+
+- Pre-v1.7.383 the disconnect path forced `pvpOpponentStats.hp = 0` so the remaining player would "win" the fight — dissolved death animation, unearned XP/Gil, message log lying about a kill that didn't happen.
+- Now mirrors the opponent-flee path (v1.7.377): `setNetPVPActionHandler` short-circuits `kind:'disconnect'` to `enemy-box-close` directly, with the message **"`<Name>` lost link"** and `SFX.RUN_AWAY`. No death anim, no rewards (opp.hp stays > 0 so `resetPVPState` reports outcome `fled` — same path as a normal flee).
+- `_applyWireOpponentAction`'s `'disconnect'` branch is now a no-op (unreachable since wire-arrival short-circuits; defensive against out-of-order delivery).
+
+Net effect: A is mid-PvP with B. B's connection drops. A sees "B lost link" → battle box closes → back to overworld with no XP. No fake victory, no fake death animation. Server's outcome mismatch logger is happy too (B never reports, A reports `fled`, server stashes A's report harmlessly until A's next disconnect cleans it up).
+
 ## 1.7.382 — 2026-05-15
 
 ### Mid-session sync for real-player party members
