@@ -8,6 +8,7 @@ Replace fake `PLAYER_POOL` with real connected players.
 - **`docs/INVENTORY-ECONOMY-AUDIT.md`** (v1.7.219) — `addItem` / `removeItem` / `grantGil` / `spendGil` validated, idempotent, return actual deltas; ready for websocket delta emission from one site per op.
 - **`docs/JOB-EXP-AUDIT.md`** (v1.7.218) — `jobLevelStatBonus(jobIdx, jobLv)` and `generateAllyStats(player)` ensure fake players and (future) real players compute stats deterministically from the same inputs, so a websocket-delivered roster entry can render identically on every client.
 - **`docs/MULTI-AUDIT.md`** + **`docs/MODULARIZATION-AUDIT.md`** (v1.7.206–v1.7.217) — physical-hit, heal-clamp, status-flag, initiative, slash-timing, and message-text constants consolidated to single sources; reduces the number of code paths the network layer has to keep in sync.
+- **`docs/COMBAT-MULTIPLAYER-AUDIT.md`** (2026-05-15) — full combat + fake-player readiness pass. Spell/physical apply layer is unified; gaps are above it (no AI seam, per-role state bags, faction-locked target lists, no resolution-time target redirect, unseeded RNG, direct HP mutation). Includes the recommended fix order to land before Step 1.
 
 This doc is kept as the design target for when networked play lands. Full implementation is deferred until economics/server design is finalized.
 

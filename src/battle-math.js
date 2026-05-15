@@ -1,5 +1,12 @@
 // Pure combat math — no globals, no DOM, safe to import anywhere
 // Based on NES FF3 disassembly (31/BB28 get_number_of_hits, 31/BB44 calculate_damage)
+//
+// Every gameplay roll goes through `rand()` (seedable mulberry32 in rng.js)
+// so two clients running the same battle agree byte-for-byte once the
+// websocket layer broadcasts the seed. Pre-v1.7.358 these used Math.random
+// and would diverge on the first hit roll.
+
+import { rand } from './rng.js';
 
 export const BASE_HIT_RATE = 80;   // 80% accuracy per hit (unarmed Onion Knight)
 export const BOSS_HIT_RATE = 85;   // boss accuracy
@@ -10,7 +17,7 @@ export const DAMAGE_CAP = 9999;
 // Single source for buildTurnOrder (player / ally / encounter / PVP-opp /
 // PVP-enemy-ally) so the formula can't drift across actor types.
 export function rollInitiative(agi) {
-  return ((agi || 0) * 2) + Math.floor(Math.random() * 256);
+  return ((agi || 0) * 2) + Math.floor(rand() * 256);
 }
 
 // Reduce a hit-results array to its battle-display summary. Used by player,
@@ -51,7 +58,7 @@ export function elemMultiplier(atkElem, weakness, resist) {
 // Crit adds flat bonus (NES $28: per-job/weapon crit bonus, additive not multiplicative)
 // elemMult: elemental multiplier (1 = neutral, 2 = weak, 0.5 = resist)
 export function calcDamage(atk, def, crit = false, critBonus = 0, elemMult = 1) {
-  let dmg = atk + Math.floor(Math.random() * (Math.floor(atk / 2) + 1)) - def;
+  let dmg = atk + Math.floor(rand() * (Math.floor(atk / 2) + 1)) - def;
   if (crit) dmg += critBonus;
   dmg = Math.floor(dmg * elemMult);
   return Math.min(DAMAGE_CAP, Math.max(1, dmg));
@@ -138,12 +145,12 @@ export function rollHits(atk, def, hitRate, potentialHits, opts = {}) {
   const splitIdx = splitRH ? (potentialHits >> 1) : potentialHits;
   for (let i = 0; i < potentialHits; i++) {
     const handAtk = (splitRH && i >= splitIdx) ? lAtk : atk;
-    if (shieldEvade > 0 && Math.random() * 100 < shieldEvade) {
+    if (shieldEvade > 0 && rand() * 100 < shieldEvade) {
       results.push({ shieldBlock: true });
-    } else if (evade > 0 && Math.random() * 100 < evade) {
+    } else if (evade > 0 && rand() * 100 < evade) {
       results.push({ miss: true });
-    } else if (Math.random() * 100 < hitRate) {
-      const crit = critPct > 0 && Math.random() * 100 < critPct;
+    } else if (rand() * 100 < hitRate) {
+      const crit = critPct > 0 && rand() * 100 < critPct;
       let dmg = calcDamage(handAtk, def, crit, critBonus, elemMult);
       if (defendHalve) dmg = Math.max(1, Math.floor(dmg / 2));
       if (targetProtected) dmg = Math.max(1, Math.floor(dmg / 2));

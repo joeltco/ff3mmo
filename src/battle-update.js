@@ -14,6 +14,7 @@ import { bsc, getSlashFramesForWeapon, getSlashPattern, setSlashOffsetForFrame }
 import { SLASH_FRAME_MS, shouldDrawSlash, SWING_HOLD_MS } from './slash-effects.js';
 import { buildTurnOrder, processNextTurn } from './battle-turn.js';
 import { summarizeHits } from './battle-math.js';
+import { reseedFromEntropy } from './rng.js';
 import { updateBattleAlly } from './battle-ally.js';
 import { updateBattleEnemyTurn } from './battle-enemy.js';
 import { updateSpellCast, resetSpellCastVars } from './spell-cast.js';
@@ -105,6 +106,7 @@ export function isVictoryBattleState() {
 }
 
 export function startBattle() {
+  reseedFromEntropy();
   battleSt.battleState = 'roar-hold';
   battleSt.battleTimer = 0;
   showMsgBox(BATTLE_ROAR, () => { battleSt.battleState = 'flash-strobe'; battleSt.battleTimer = 0; playSFX(SFX.BATTLE_SWIPE); });

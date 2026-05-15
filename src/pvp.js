@@ -11,6 +11,7 @@ import { resetBattleVars, isTeamWiped, updateBattleTimers, updatePoisonTick,
          tryJoinPlayerAlly, advancePVPTargetOrVictory } from './battle-update.js';
 import { playSFX, stopSFX, SFX, pauseMusic, playTrack, TRACKS } from './music.js';
 import { rollHits, calcPotentialHits, BOSS_HIT_RATE, GOBLIN_HIT_RATE, summarizeHits, isLeftHandHit } from './battle-math.js';
+import { reseedFromEntropy } from './rng.js';
 import { ITEMS, isWeapon, weaponSubtype } from './data/items.js';
 import { PLAYER_POOL, generateAllyStats } from './data/players.js';
 import { JOBS } from './data/jobs.js';
@@ -123,6 +124,7 @@ export const pvpSt = {
 
 // ── Init / teardown ───────────────────────────────────────────────────────────
 export function startPVPBattle(target) {
+  reseedFromEntropy();
   pvpSt.isPVPBattle             = true;
   pvpSt.pvpOpponent             = target;
   pvpSt.pvpOpponentStats        = generateAllyStats(target);
