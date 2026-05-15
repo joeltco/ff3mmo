@@ -22,6 +22,8 @@ import { battleSt } from './battle-state.js';
 import { _nameToBytes } from './text-utils.js';
 import { showMsgBox, replaceMsgBoxText, dismissMsgBox } from './message-box.js';
 import { playSFX, SFX } from './music.js';
+import { sendNetPVPSearch, sendNetPVPCancel,
+         setNetPVPMatchHandler, setNetPVPFailedHandler } from './net.js';
 
 // Tuning constants. Surface them up here so they're easy to find.
 const BASE_HOOK     = 0.25;
@@ -104,10 +106,16 @@ export function startPVPSearch(target) {
   pvpSearchSt.target           = target;
   pvpSearchSt.startedAtMs      = _now();
   pvpSearchSt.missedRolls      = 0;
-  pvpSearchSt.targetRollTimer  = _rollTimerMs();
+  // For real-player targets, the server runs the roll timer + hook chance
+  // (MP Step 3). Local `targetRollTimer` stays inert so `tickPVPSearch` does
+  // nothing but death/timeout watching. For fake-pool targets, the legacy
+  // sim path drives the hook locally.
+  pvpSearchSt.isRealTarget     = !!(target.isReal && target.userId);
+  pvpSearchSt.targetRollTimer  = pvpSearchSt.isRealTarget ? Infinity : _rollTimerMs();
   pvpSearchSt.resolving        = false;
   const msg = _nameToBytes('Searching for ' + target.name + '...');
   showMsgBox(msg);
+  if (pvpSearchSt.isRealTarget) sendNetPVPSearch(target.userId);
   return true;
 }
 
@@ -117,6 +125,7 @@ function _endSearch(targetName) {
   pvpSearchSt.resolving = false;
   pvpSearchSt.missedRolls = 0;
   pvpSearchSt.targetRollTimer = 0;
+  pvpSearchSt.isRealTarget = false;
   if (targetName) {
     pvpSearchSt.cooldowns.set(targetName, _now() + COOLDOWN_MS);
   }
@@ -125,7 +134,10 @@ function _endSearch(targetName) {
 export function cancelPVPSearch(reason = 'user') {
   if (!pvpSearchSt.active) return;
   const targetName = pvpSearchSt.target && pvpSearchSt.target.name;
+  const wasReal = pvpSearchSt.isRealTarget;
   _endSearch(targetName);
+  // Tell the server to drop the real-target search; fake targets are local.
+  if (wasReal && reason !== 'server') sendNetPVPCancel();
   if (reason === 'user') {
     showMsgBox(_nameToBytes('Cancelled'));
     playSFX(SFX.CONFIRM);
@@ -133,6 +145,10 @@ export function cancelPVPSearch(reason = 'user') {
     showMsgBox(_nameToBytes('Search expired'));
   } else if (reason === 'death') {
     // Silent — game-over flow owns the screen
+  } else if (reason === 'target-offline' || reason === 'target-left' || reason === 'different-location') {
+    showMsgBox(_nameToBytes('Target unavailable'));
+  } else if (reason === 'target-engaged') {
+    showMsgBox(_nameToBytes('Missed!'));
   }
 }
 
@@ -159,8 +175,12 @@ function _runHookCheck() {
   }
 }
 
-function _resolveAsHook() {
-  const target = pvpSearchSt.target;
+function _resolveAsHook(remoteOpponent) {
+  // remoteOpponent is set when the server-driven match path fires (MP Step 3);
+  // we hand that profile to `_startPVPBattle` instead of the cached roster
+  // entry so the opponent's current loc / hp / equipment are accurate.
+  // Fake-PvP path passes null and uses the existing `pvpSearchSt.target`.
+  const target = remoteOpponent || pvpSearchSt.target;
   pvpSearchSt.resolving = true;
   pvpSearchSt.connectingHoldMs = CONNECTING_HOLD_MS;
   // Smooth swap so the "Searching..." box stays on-screen and just
@@ -168,10 +188,42 @@ function _resolveAsHook() {
   // tickPVPSearch auto-dismisses after CONNECTING_HOLD_MS, which
   // triggers slide-out → onClose → battle. v1.7.226.
   replaceMsgBoxText(_nameToBytes('Connecting...'), () => {
-    _endSearch(target.name);
+    _endSearch(target && target.name);
     _startPVPBattle(target);
   });
 }
+
+// MP Step 3 wire handlers — installed at module load. The server runs the
+// roll timer for real-player searches; the local `tickPVPSearch` only watches
+// for death / timeout in that branch.
+setNetPVPMatchHandler((msg) => {
+  const opp = msg && msg.opponent;
+  if (!opp) return;
+  // Two flows: (a) this client is the challenger and has an active search →
+  // resolve into battle through the existing "Connecting..." swap; (b) this
+  // client is the target and didn't search → start a fresh search-resolve
+  // shell so the same UX plays out.
+  if (!pvpSearchSt.active) {
+    // Synthesize a minimal search so `_resolveAsHook` has somewhere to live.
+    pvpSearchSt.active = true;
+    pvpSearchSt.target = opp;
+    pvpSearchSt.isRealTarget = true;
+    pvpSearchSt.startedAtMs = _now();
+    pvpSearchSt.missedRolls = 0;
+    pvpSearchSt.targetRollTimer = Infinity;
+    showMsgBox(_nameToBytes(opp.name + ' challenges you!'));
+    // Brief 250 ms pause before the "Connecting..." swap so the player
+    // reads the challenge line.
+    setTimeout(() => _resolveAsHook(opp), 250);
+    return;
+  }
+  _resolveAsHook(opp);
+});
+
+setNetPVPFailedHandler((msg) => {
+  const reason = (msg && msg.reason) || 'target-offline';
+  cancelPVPSearch(reason);
+});
 
 export function tickPVPSearch(dt) {
   if (!pvpSearchSt.active) return;
@@ -202,6 +254,10 @@ export function tickPVPSearch(dt) {
     cancelPVPSearch('missed-cap');
     return;
   }
+  // Real-target searches let the server drive the timer + hook check; only
+  // watch for death / timeout locally. Fake-pool targets keep the legacy
+  // client-side sim.
+  if (pvpSearchSt.isRealTarget) return;
   pvpSearchSt.targetRollTimer -= dt;
   if (pvpSearchSt.targetRollTimer <= 0) {
     _runHookCheck();

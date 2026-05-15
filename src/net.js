@@ -25,6 +25,8 @@ let _locPollHandle = null;
 let _reconnectDelay = 1000;
 let _myUserId = null;
 let _onChat = null;          // (msg) → void — set via setNetChatHandler
+let _onPVPMatch = null;      // ({opponent}) → void — set via setNetPVPMatchHandler
+let _onPVPFailed = null;     // ({reason}) → void — set via setNetPVPFailedHandler
 const MAX_RECONNECT_DELAY = 30000;
 
 function _getToken() {
@@ -93,6 +95,23 @@ function _handleMessage(data) {
       if (_onChat) {
         try { _onChat(msg); }
         catch (e) { console.warn('[net] chat handler error', e); }
+      }
+      return;
+    case 'pvp-match':
+      // { opponent: {userId, name, jobIdx, level, ..., loc} } — server says
+      // we're matched into a PvP battle. Both parties (challenger + target)
+      // receive this. Hand off to the registered handler so pvp-search.js
+      // can transition to the battle UI.
+      if (_onPVPMatch) {
+        try { _onPVPMatch(msg); }
+        catch (e) { console.warn('[net] pvp-match handler error', e); }
+      }
+      return;
+    case 'pvp-search-failed':
+      // { reason: 'offline'|'different-location'|'target-left'|'target-engaged' }
+      if (_onPVPFailed) {
+        try { _onPVPFailed(msg); }
+        catch (e) { console.warn('[net] pvp-search-failed handler error', e); }
       }
       return;
   }
@@ -174,6 +193,27 @@ export function sendNetChat(channel, text, to) {
 // during init. Replaces any previous handler.
 export function setNetChatHandler(fn) {
   _onChat = typeof fn === 'function' ? fn : null;
+}
+
+// PvP search wire (MP Step 3). Replaces the v1.7.222 client-side sim
+// timer in `pvp-search.js`. Server runs the roll loop and broadcasts
+// `pvp-match` to both parties when a hook fires.
+export function sendNetPVPSearch(targetUserId) {
+  if (!_helloed || !targetUserId) return false;
+  return _send({ type: 'pvp-search', targetUserId });
+}
+
+export function sendNetPVPCancel() {
+  if (!_helloed) return false;
+  return _send({ type: 'pvp-cancel' });
+}
+
+export function setNetPVPMatchHandler(fn) {
+  _onPVPMatch = typeof fn === 'function' ? fn : null;
+}
+
+export function setNetPVPFailedHandler(fn) {
+  _onPVPFailed = typeof fn === 'function' ? fn : null;
 }
 
 export function getOnlinePlayers() {

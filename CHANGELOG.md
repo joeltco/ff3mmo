@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.369 — 2026-05-15
+
+### Multiplayer Step 3: PvP search over the wire
+
+- `ws-presence.js` now handles `pvp-search` / `pvp-cancel` from clients. Per-challenger `Map<userId, {targetUserId, timer}>` runs an 8–15 s roll loop server-side; on a 35% hook (MVP fixed rate — stat-aware arbitration is Step 4) the server broadcasts `pvp-match` to both parties with each other's profiles. First-hook-wins arbitration: any other searches targeting either side of the match get cancelled with reason `target-engaged`.
+- `src/net.js` adds `sendNetPVPSearch(targetUserId)`, `sendNetPVPCancel()`, `setNetPVPMatchHandler(fn)`, `setNetPVPFailedHandler(fn)`.
+- `src/pvp-search.js` branches on `target.isReal && target.userId`: real-player searches relay through the server (local `targetRollTimer` is parked at `Infinity`); fake-pool searches keep the legacy client-side sim. Match handler routes through the existing `_resolveAsHook` → "Connecting..." → `_startPVPBattle` flow with the wire-delivered opponent profile.
+- The CHALLENGED party also receives `pvp-match` and gets pulled into the battle via a synthesized search shell ("\<name\> challenges you!" → 250 ms beat → Connecting → battle). No accept/decline UI for parity with the existing fake-PvP UX.
+- Cleanup hooks: client disconnect cancels its own active search AND notifies any other challengers targeting it with `pvp-search-failed reason=target-offline`. `cancelPVPSearch` sends `pvp-cancel` to server for real targets.
+- Battle itself remains local on each client (each sims independently against the opponent profile). Two clients with the same starting state will diverge on RNG-dependent rolls because seeds aren't synced yet — server-authoritative combat-over-wire is Step 4. The Step 3 deliverable is "two real players can enter the same PvP battle session," not "the outcomes match."
+
 ## 1.7.368 — 2026-05-15
 
 ### Multiplayer Step 2: Real chat over the wire
