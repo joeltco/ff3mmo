@@ -64,8 +64,14 @@ export const LOCATIONS = ['world', 'ur', 'cave-0', 'cave-1', 'cave-2', 'cave-3',
 // `knownSpells` is what fake-player AI casts in PVP. Sight $36 is dead
 // weight on AI (it's the player's enemy-HP peek) — never include it on
 // fake-player entries.
+//
+// v1.7.386 — Real multiplayer is live, fakes hidden. The roster panel,
+// random ally fills, fake-PvP, mid-battle ally joins, and fake chat
+// patter all key off the exported `PLAYER_POOL` array. Exporting `[]`
+// keeps every call site working but with no entries to surface. To
+// re-enable, change the export at the bottom to point at `_FAKE_POOL`.
 // ─────────────────────────────────────────────────────────────────────────
-export const PLAYER_POOL = [
+const _FAKE_POOL = [
   // ── Onion Knight (5) — apprentice / orphan vibe ──
   { name: 'Nyx',     level: 1, palIdx: 0, camper: false, loc: 'ur',      jobIdx: 0, weaponR: 0x1E,                armorId: 0x73, helmId: 0x62 },                                  // OK — Knife
   { name: 'Wren',    level: 4, palIdx: 5, camper: false, loc: 'cave-0',  jobIdx: 0, weaponR: 0x1F,                armorId: 0x73, helmId: 0x62, shieldId: 0x58 },                  // OK — Dagger + Shield
@@ -109,6 +115,18 @@ export const PLAYER_POOL = [
   { name: 'Quill',   level: 3, palIdx: 7, camper: false, loc: 'world',   jobIdx: 5, weaponR: 0x1F,                armorId: 0x73, helmId: 0x62,                 knownSpells: [0x34] },                     // RM — Dagger (caster RM)
   { name: 'Soren',   level: 4, palIdx: 0, camper: false, loc: 'cave-2',  jobIdx: 5, weaponR: 0x1E,                armorId: 0x73, helmId: 0x62, shieldId: 0x58, knownSpells: [0x34, 0x31] },               // RM — Knife + Shield
 ];
+
+// Active pool — empty by default in multiplayer mode. Swap to `_FAKE_POOL`
+// to bring the archived fake-roster back (single-player flavor / pre-MP
+// behavior). All consumers (`roster.js`, `tryJoinPlayerAlly`, fake-PvP /
+// fake-party-invite paths, chat sender pool) import this constant.
+export const PLAYER_POOL = [];
+
+// Kept reachable so anyone curious can `console.log(_FAKE_POOL)` or wire
+// a runtime toggle later. The ESLint rule below silences the "unused"
+// warning since the archive's whole purpose is to be unused at runtime.
+// eslint-disable-next-line no-unused-vars
+const _FAKE_POOL_REF = _FAKE_POOL;
 
 // Palette variants — only color 3 changes (original $16 = red outfit)
 // Colors 0=$0F, 1=$36 (skin), 2=$30 (white) stay the same

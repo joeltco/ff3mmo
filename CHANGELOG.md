@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.386 — 2026-05-15
+
+### Fake players hidden — real-multiplayer mode only
+
+- `data/players.js` PLAYER_POOL exported as `[]`. The original 30-entry fake-roster (Nyx / Wren / Brom / Aldric / …) is preserved in the file as the non-exported `_FAKE_POOL` const so it's a one-line re-enable: change the `export const PLAYER_POOL = [];` to `export const PLAYER_POOL = _FAKE_POOL;`.
+- All consumers silently see an empty pool — no code changes elsewhere:
+  - **Roster panel**: only real online players appear. If you're solo, the panel is empty until someone else logs in.
+  - **`_tryJoinPlayerAlly` random-roll branch**: filter returns empty, early-returns false. No wandering NPC joins your party mid-battle.
+  - **`tryJoinPVPEnemyAlly`**: same. No NPC reinforcements on either side.
+  - **Fake PvP search / party invite**: target is never a `PLAYER_POOL` entry (since roster has no fakes), so the local sim-timer paths never trigger. All PvP / party flows now exclusively wire-driven.
+  - **Fake chat patter**: the periodic NPC chat sender (`* Brom: ...` lines) early-returns since the pool is empty. World chat is real-player-only.
+- Reversible: anyone who wants to run with the old fake-populated world flips the export back. No behavior changes outside the population question.
+
 ## 1.7.385 — 2026-05-15
 
 ### pvp-action actor-mismatch auto-reconcile
