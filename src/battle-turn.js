@@ -18,6 +18,7 @@ import { getAllyDamageNums, setEnemyDmgNum, setEnemyHealNum, setPlayerDamageNum,
 import { startSpellCast } from './spell-cast.js';
 import { applyMagicHeal } from './combatant-cast.js';
 import { dispatchDelta } from './deltas.js';
+import { sendNetPVPAction } from './net.js';
 import { SPELLS } from './data/spells.js';
 import { selectCursor, saveSlots, saveSlotsToDB } from './save-state.js';
 import { removeItem } from './inventory.js';
@@ -226,6 +227,14 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
     });
     battleSt.allyHitIdx = 0;
     battleSt.allyHitResult = battleSt.allyHitResults[0];
+    // MP party-PvP — relay ally physical attack target so the opponent's
+    // client drives its matching pvp-enemy-ally turn from this pick. PvP
+    // target: pvpTgt is the cell idx via pvpPlayerTargetIdx (-1=main opp,
+    // N=ally N). Map to wire cell idx (main=0, ally N → N+1).
+    if (pvpSt.isWirePVP && pvpSt.isPVPBattle) {
+      const tgtCellIdx = pvpSt.pvpPlayerTargetIdx < 0 ? 0 : pvpSt.pvpPlayerTargetIdx + 1;
+      _emitWireAllyAction(turn.index, { kind: 'attack', target: { side: 'opp', idx: tgtCellIdx } });
+    }
     battleSt.battleState = 'ally-attack-back'; battleSt.battleTimer = 0;
   } else {
     battleSt.currentAttacker = turn.index;
@@ -360,12 +369,36 @@ function _tryAllyCure(ally, allyIdx) {
     targets: [{ faction: target.ref.type, idx: target.ref.index }],
     healAmount: heal,
   });
+  _emitWireAllyAction(allyIdx, { kind: 'magic', spellId: SPELL_CURE, target: _wireTargetFromAllyMagicBag() });
   queueBattleMsg(ally.name ? _nameToBytes(ally.name) : BATTLE_ALLY);
   replaceBattleMsg(getSpellNameShrinesClean(SPELL_CURE));
   playSFX(SFX.MAGIC_CAST);
   battleSt.battleState = 'ally-magic-cast';
   battleSt.battleTimer = 0;
   return true;
+}
+
+// MP party-PvP — emit an ally's chosen action to the wire partner so the
+// opponent's client can drive the matching pvp-enemy-ally cell from real
+// input rather than its own local AI. Caller invokes this after writing the
+// state bag (so the state-bag write also drives the LOCAL animation flow as
+// usual). actor.idx is allyIdx + 1 (cell-idx convention: 0 = main player,
+// 1+ = ally cell on the sender's player side).
+function _emitWireAllyAction(allyIdx, payload) {
+  if (!pvpSt.isWirePVP) return;
+  sendNetPVPAction({ ...payload, actor: { idx: allyIdx + 1 } });
+}
+
+// Translate the ally state bag's `{ allyMagicTargetType, allyMagicTargetIdx }`
+// into the wire target shape. 'player'/-1 → me.0 (sender's main player);
+// 'player'/N or 'ally'/N → me.(N+1); 'enemy'|'pvp-enemy'/N → opp.N
+// (where N is the pvp-enemy cell idx).
+function _wireTargetFromAllyMagicBag() {
+  const t = battleSt.allyMagicTargetType;
+  const i = battleSt.allyMagicTargetIdx;
+  if (t === 'player') return { side: 'me', idx: i < 0 ? 0 : i + 1 };
+  if (t === 'ally')   return { side: 'me', idx: i + 1 };
+  return { side: 'opp', idx: i | 0 };  // 'enemy' (random encounter) reuses same convention
 }
 
 // Build the player-team list for AI decisions. Order = player → ally 0 →
@@ -428,6 +461,7 @@ function _tryAllyPoisona(ally, allyIdx) {
     spellId: SPELL_POISONA,
     targets: [{ faction: target.ref.type, idx: target.ref.index }],
   });
+  _emitWireAllyAction(allyIdx, { kind: 'magic', spellId: SPELL_POISONA, target: _wireTargetFromAllyMagicBag() });
   queueBattleMsg(ally.name ? _nameToBytes(ally.name) : BATTLE_ALLY);
   replaceBattleMsg(getSpellNameShrinesClean(SPELL_POISONA));
   playSFX(SFX.MAGIC_CAST);
@@ -497,6 +531,7 @@ function _tryAllyOffensiveCast(ally, allyIdx) {
     targets: [{ faction: targetType, idx: target.ref.index }],
     damageRoll: dmg,
   });
+  _emitWireAllyAction(allyIdx, { kind: 'magic', spellId, target: _wireTargetFromAllyMagicBag() });
   queueBattleMsg(ally.name ? _nameToBytes(ally.name) : BATTLE_ALLY);
   replaceBattleMsg(getSpellNameShrinesClean(spellId));
   playSFX(SFX.MAGIC_CAST);
@@ -546,6 +581,7 @@ function _tryAllyItem(ally, allyIdx) {
     targets: [{ faction: target.ref.type, idx: target.ref.index }],
     healAmount: 50,
   });
+  _emitWireAllyAction(allyIdx, { kind: 'item', itemId: 0xa6, target: _wireTargetFromAllyMagicBag() });
   queueBattleMsg(ally.name ? _nameToBytes(ally.name) : BATTLE_ALLY);
   replaceBattleMsg(getSpellNameShrinesClean(spellSentinel));
   playSFX(SFX.CURE);

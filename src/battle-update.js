@@ -326,26 +326,35 @@ function _updateBattleMenuConfirm() {
 }
 
 // Translate the local player's `inputSt.playerActionPending` into the wire
-// action shape and emit. Target perspective: 'me' = the local player /
-// caster (self-heal / self-buff); 'opp' = the PvP opponent.
+// action shape and emit. Wire shape (party-PvP):
+//   actor:  { idx }            — sender's actor cell (0 = main player; 1+ = ally on sender's side)
+//   target: { side, idx }      — 'me' = sender's player side, 'opp' = sender's opponent side;
+//                                idx 0 = main, 1+ = ally cell
+// Receiver swaps `side` and uses idx unchanged.
 function _emitWirePVPAction(pending) {
   const cmd = pending && pending.command;
-  if (cmd === 'fight')   { sendNetPVPAction({ kind: 'attack' }); return; }
-  if (cmd === 'defend')  { sendNetPVPAction({ kind: 'defend' }); return; }
-  if (cmd === 'run')     { sendNetPVPAction({ kind: 'run' }); return; }
-  if (cmd === 'magic') {
-    // 1v1 → only self or opponent. `pending.target === 'player'` AND no
-    // explicit ally index means self; everything else (including
-    // enemyIndex picks) is the opponent.
-    const isSelf = pending.target === 'player'
-      && (pending.allyIndex == null || pending.allyIndex < 0);
-    sendNetPVPAction({ kind: 'magic', spellId: pending.spellId, target: isSelf ? 'me' : 'opp' });
+  const actor = { idx: 0 };  // local player is always the sender's main actor.
+  if (cmd === 'defend') { sendNetPVPAction({ kind: 'defend', actor }); return; }
+  if (cmd === 'run')    { sendNetPVPAction({ kind: 'run',    actor }); return; }
+  if (cmd === 'fight') {
+    // pvpPlayerTargetIdx convention: -1 = main opp, N >= 0 = pvpEnemyAllies[N].
+    const tgtIdx = pvpSt.pvpPlayerTargetIdx < 0 ? 0 : pvpSt.pvpPlayerTargetIdx + 1;
+    sendNetPVPAction({ kind: 'attack', actor, target: { side: 'opp', idx: tgtIdx } });
     return;
   }
-  if (cmd === 'item') {
+  if (cmd === 'magic' || cmd === 'item') {
+    // For player-target spells/items: pending.target='player'; pending.allyIndex
+    // = -1 (self) or N (ally N). For offensive: pending.target is the 0-based
+    // enemy cell idx (0=main opp, 1+=pvpEnemyAllies).
     const isSelf = pending.target === 'player'
       && (pending.allyIndex == null || pending.allyIndex < 0);
-    sendNetPVPAction({ kind: 'item', itemId: pending.itemId, target: isSelf ? 'me' : 'opp' });
+    const isAlly = pending.target === 'player' && pending.allyIndex >= 0;
+    let target;
+    if (isSelf)      target = { side: 'me',  idx: 0 };
+    else if (isAlly) target = { side: 'me',  idx: pending.allyIndex + 1 };
+    else             target = { side: 'opp', idx: typeof pending.target === 'number' ? pending.target : 0 };
+    if (cmd === 'magic') sendNetPVPAction({ kind: 'magic', spellId: pending.spellId, actor, target });
+    else                 sendNetPVPAction({ kind: 'item',  itemId:  pending.itemId,  actor, target });
     return;
   }
 }

@@ -2,6 +2,36 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.376 — 2026-05-15
+
+### Party-ally PvP: ally action relay (2 of 3)
+
+- Wire action shape extended for multi-actor parties:
+  - `actor: { idx }` — 0 = sender's main player, 1+ = ally cell on sender's player side
+  - `target: { side, idx }` — `me` / `opp` from sender's perspective, idx 0 = main, 1+ = ally cell
+  - Receiver swaps `side` (sender's `me` → receiver's `opp`, etc.) and uses idx unchanged.
+- SEND side:
+  - Player emit (`_emitWirePVPAction` in `battle-update.js`) now carries `actor.idx = 0`, `target` derived from `pending.target` / `pending.allyIndex` / `pvpPlayerTargetIdx`.
+  - Each `_tryAlly*` in `battle-turn.js` (Cure / Poisona / OffensiveCast / Item) calls `_emitWireAllyAction` with `actor.idx = allyIdx + 1` and target derived from the just-written `battleSt.allyMagic*` bag.
+  - Ally physical attack site (line ~230) emits `kind:'attack'` with target = pvpPlayerTargetIdx + 1.
+- RECEIVE side (`pvp.js`):
+  - `_wireOpponentActions` is now a FIFO queue (was single slot). Multiple ally actions can queue between consecutive opponent turns.
+  - `_processEnemyFlash` peeks the queue head and validates `action.actor.idx === casterCellIdx`. Mismatch logs `[pvp-action] actor mismatch` (turn-order desync indicator).
+  - `_wireTargetToEngineRef(target)` translates the wire `{side, idx}` into engine refs (`{side:'enemy', cellIdx}` for pvp-enemy targets or `{side:'player', partyIdx}` for player-side targets).
+  - `_applyWireOpponentAction` for `'attack'` stashes the resolved player-side ally idx into `_wirePendingAttackTargetAlly`; the post-preflash attack flow reads it instead of running the AI target pick.
+  - `_applyWireOpponentAction` for `'magic'` uses `ref.cellIdx` (same-team heal) or `ref.partyIdx` (cross-faction cast) to set `pvpMagic*` bag fields.
+- Backward-compatible: missing `actor`/`target` defaults to `{idx:0}` / `{side:'opp', idx:0}` so 1v1 still works.
+
+### Party-ally PvP status (2 of 3 done; 3rd already shipped)
+
+| Step | Status |
+|---|---|
+| 1 — Roster sync at match start | ✅ v1.7.375 |
+| 2 — Ally action relay (this) | ✅ v1.7.376 |
+| 3 — Disable fake mid-battle joins | ✅ v1.7.375 |
+
+For 1v1 + party PvP (up to 3 cells per side, real players + their party allies): both clients now see identical battles. Each side's allies emit their AI-chosen action over the wire; the receiver applies it on the matching pvp-enemy-ally cell with the synced RNG seed producing identical damage / heal rolls. Mid-battle fake-ally joins are gated off (they would diverge per-client).
+
 ## 1.7.375 — 2026-05-15
 
 ### Party-ally PvP: roster sync (1 of 3)

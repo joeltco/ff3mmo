@@ -131,14 +131,36 @@ export const pvpSt = {
 // _playSlashSFX moved to battle-sfx.js → playSlashSFX
 
 // ── Init / teardown ───────────────────────────────────────────────────────────
-// MP Step 4 part 2 — incoming opponent actions, drained by `_processEnemyFlash`
-// when it's the opponent's turn. One slot is enough for strict-alternating
-// 1v1 turns; extend to a queue if/when ally-side wire relay lands.
-let _wireOpponentAction = null;
+// MP Step 4 part 2 + party-ally PvP — incoming opponent actions. Now a
+// queue (FIFO) since party-PvP has multiple actors per side and actions
+// arrive in turn order. Drained by `_processEnemyFlash` whenever a
+// pvp-enemy cell takes its turn; the head of the queue must match
+// `casterCellIdx === action.actor.idx`.
+const _wireOpponentActions = [];
+// Pending physical-attack target — `_applyWireOpponentAction` stashes this
+// when kind='attack' so the existing post-preflash attack flow can read it
+// instead of running the AI target-pick.
+let _wirePendingAttackTargetAlly = -1;
 setNetPVPActionHandler((msg) => {
   if (!pvpSt.isWirePVP) return;
-  _wireOpponentAction = msg;
+  _wireOpponentActions.push(msg);
 });
+
+// Translate a wire target — sender's perspective — into the receiver's
+// engine refs. Sender's 'me' = receiver's 'opp' (pvp-enemy cell idx).
+// Sender's 'opp' = receiver's 'me' (player side; partyIdx 0=player, 1+=allyCell).
+// Returns { side: 'enemy'|'player', cellIdx?, partyIdx? } where:
+//   side='enemy' + cellIdx = receiver's pvp-enemy cell (0=main, 1+=pvpEnemyAllies[N-1])
+//   side='player' + partyIdx = receiver's player side (-1=ps, 0+=battleAllies[N])
+function _wireTargetToEngineRef(target) {
+  if (!target) return { side: 'enemy', cellIdx: 0 };
+  if (target.side === 'me') {
+    return { side: 'enemy', cellIdx: target.idx | 0 };
+  }
+  // 'opp' on sender = 'me' on receiver → player side. idx 0=player, N>=1=ally(N-1).
+  if (target.idx === 0) return { side: 'player', partyIdx: -1 };
+  return { side: 'player', partyIdx: (target.idx | 0) - 1 };
+}
 
 export function startPVPBattle(target, opts) {
   // MP Step 4 — when both players have a server-broadcast `seed`, use it so
@@ -152,7 +174,8 @@ export function startPVPBattle(target, opts) {
   // actions instead of running local AI. Set whenever the server provided a
   // seed (only happens on wire-driven `pvp-match` paths).
   pvpSt.isWirePVP               = !!hasSeed;
-  _wireOpponentAction           = null;
+  _wireOpponentActions.length   = 0;
+  _wirePendingAttackTargetAlly  = -1;
   pvpSt.isPVPBattle             = true;
   pvpSt.pvpOpponent             = target;
   pvpSt.pvpOpponentStats        = generateAllyStats(target);
@@ -198,7 +221,8 @@ export function resetPVPState() {
     sendNetPVPEnd();
   }
   pvpSt.isWirePVP               = false;
-  _wireOpponentAction           = null;
+  _wireOpponentActions.length   = 0;
+  _wirePendingAttackTargetAlly  = -1;
   pvpSt.isPVPBattle             = false;
   pvpSt.pvpOpponent             = null;
   pvpSt.pvpOpponentStats        = null;
@@ -380,18 +404,29 @@ function _processEnemyFlash() {
   if (!pvpSt.pvpPreflashDecided && pvpSt.isPVPBattle) {
     if (pvpSt.isWirePVP) {
       // MP Step 4 part 2 — opponent is a real player. Hold the preflash state
-      // until their client relays the chosen action via WS. `setNetPVPActionHandler`
-      // stows the incoming message in `_wireOpponentAction`.
-      if (!_wireOpponentAction) return false;
-      const action = _wireOpponentAction;
-      _wireOpponentAction = null;
-      pvpSt.pvpPreflashDecided = true;
+      // until their client relays the chosen action via WS. Queue head must
+      // match the current pvp-enemy cell; out-of-order delivery is a desync.
+      if (_wireOpponentActions.length === 0) return false;
       const casterCellIdx = pvpSt.pvpCurrentEnemyAllyIdx < 0
         ? 0
         : pvpSt.pvpCurrentEnemyAllyIdx + 1;
+      const head = _wireOpponentActions[0];
+      const actorIdx = (head && head.actor && head.actor.idx) | 0;
+      if (actorIdx !== casterCellIdx) {
+        // Skip — wait for matching action (queue may include actions for a
+        // different cell that arrived early). For strict-alternating turn
+        // order this shouldn't happen; flag if it does.
+        console.warn('[pvp-action] actor mismatch:',
+                     'expected casterCellIdx=' + casterCellIdx,
+                     'queue head actor.idx=' + actorIdx);
+        return false;
+      }
+      const action = _wireOpponentActions.shift();
+      pvpSt.pvpPreflashDecided = true;
       // _applyWireOpponentAction returns true when it transitioned to a
       // non-attack state (defend / magic / item). Returns false for 'attack'
-      // (and unhandled kinds) — fall through to the regular attack windup.
+      // — fall through to the regular attack windup, with the target stashed
+      // in `_wirePendingAttackTargetAlly`.
       if (_applyWireOpponentAction(action, casterCellIdx)) return true;
     } else {
       pvpSt.pvpPreflashDecided = true;
@@ -446,15 +481,28 @@ function _processEnemyFlash() {
   if (!_earlyUnarmed && battleSt.battleTimer < BOSS_PREFLASH_MS) return false;
 
   // Pre-flash elapsed — resolve attack
-  const livingAllies = battleSt.battleAllies.filter(a => a.hp > 0);
   let targetAlly = -1;
-  if (livingAllies.length > 0) {
-    const allyOptions = battleSt.battleAllies.map((a, i) => a.hp > 0 ? i : -1).filter(i => i >= 0);
-    if (ps.hp <= 0) {
-      // Player dead — must target a living ally
-      targetAlly = allyOptions[Math.floor(Math.random() * allyOptions.length)];
-    } else if (Math.random() >= 1 / (1 + livingAllies.length)) {
-      targetAlly = allyOptions[Math.floor(Math.random() * allyOptions.length)];
+  if (pvpSt.isWirePVP) {
+    // Wire-driven attack — target was stashed by `_applyWireOpponentAction`.
+    // Validate the picked target is still alive; if not, fall through to
+    // player. (Server should send a fresh wire action on stale picks but
+    // belt-and-braces here.)
+    targetAlly = _wirePendingAttackTargetAlly;
+    if (targetAlly >= 0) {
+      const a = battleSt.battleAllies[targetAlly];
+      if (!a || a.hp <= 0) targetAlly = -1;
+    }
+    _wirePendingAttackTargetAlly = -1;
+  } else {
+    const livingAllies = battleSt.battleAllies.filter(a => a.hp > 0);
+    if (livingAllies.length > 0) {
+      const allyOptions = battleSt.battleAllies.map((a, i) => a.hp > 0 ? i : -1).filter(i => i >= 0);
+      if (ps.hp <= 0) {
+        // Player dead — must target a living ally
+        targetAlly = allyOptions[Math.floor(Math.random() * allyOptions.length)];
+      } else if (Math.random() >= 1 / (1 + livingAllies.length)) {
+        targetAlly = allyOptions[Math.floor(Math.random() * allyOptions.length)];
+      }
     }
   }
   pvpSt.pvpOpponentIsDefending = false;
@@ -604,6 +652,19 @@ function _applyWireOpponentAction(action, casterCellIdx) {
   if (action.kind === 'attack' || action.kind === 'run') {
     // Run on the opponent side currently has no engine path; treat as attack
     // so the battle keeps moving. Real opponent-run handling = part 3.
+    //
+    // Stash the wire target so the existing post-preflash attack flow
+    // (`_processEnemyFlash` below) uses it instead of the AI random pick.
+    // Sender's `target.side === 'opp'` → receiver's player side, where
+    // idx 0 = ps (-1 in `targetAlly` convention), idx N >= 1 = ally cell N-1.
+    const t = action.target;
+    if (!t || t.side !== 'opp') {
+      _wirePendingAttackTargetAlly = -1;
+    } else if ((t.idx | 0) === 0) {
+      _wirePendingAttackTargetAlly = -1;
+    } else {
+      _wirePendingAttackTargetAlly = (t.idx | 0) - 1;
+    }
     return false;
   }
 
@@ -628,7 +689,10 @@ function _applyWireOpponentAction(action, casterCellIdx) {
   if (action.kind === 'magic' && typeof action.spellId === 'number') {
     const spell = SPELLS.get(action.spellId);
     if (!spell) return false;
-    const targetSelf = action.target === 'me';
+    // Wire target shape: { side: 'me'|'opp', idx }. After perspective swap,
+    // sender's 'me' → receiver's pvp-enemy cell (cellIdx = target.idx).
+    // sender's 'opp' → receiver's player side (partyIdx = target.idx === 0 ? -1 : target.idx - 1).
+    const ref = _wireTargetToEngineRef(action.target);
     // Same RNG calls the AI path would have made — with synced seed, both
     // clients land on the same roll.
     let heal = 0, dmg = 0;
@@ -638,12 +702,14 @@ function _applyWireOpponentAction(action, casterCellIdx) {
       dmg = rollOffensiveDamage(caster, spell);
     }
     pvpSt.pvpMagicCasterCellIdx = casterCellIdx;
-    if (targetSelf) {
-      pvpSt.pvpMagicTargetCellIdx  = casterCellIdx;
+    if (ref.side === 'enemy') {
+      // Same-team (pvp-enemy → pvp-enemy) — Cure / Poisona on teammate.
+      pvpSt.pvpMagicTargetCellIdx  = ref.cellIdx;
       pvpSt.pvpMagicPartyTargetIdx = -1;
     } else {
+      // Cross-faction (pvp-enemy → player side) — offensive cast.
       pvpSt.pvpMagicTargetCellIdx  = -1;
-      pvpSt.pvpMagicPartyTargetIdx = -1;  // 1v1 → player
+      pvpSt.pvpMagicPartyTargetIdx = ref.partyIdx;
     }
     pvpSt.pvpMagicSpellId        = action.spellId;
     pvpSt.pvpMagicHealAmount     = heal;
@@ -653,8 +719,8 @@ function _applyWireOpponentAction(action, casterCellIdx) {
       caster: { faction: 'pvp-enemy', idx: casterCellIdx },
       spellId: action.spellId,
       targets: [{
-        faction: targetSelf ? 'pvp-enemy' : 'player',
-        idx:     targetSelf ? casterCellIdx : -1,
+        faction: ref.side === 'enemy' ? 'pvp-enemy' : 'player',
+        idx:     ref.side === 'enemy' ? ref.cellIdx : ref.partyIdx,
       }],
       healAmount: heal,
       damageRoll: dmg,
