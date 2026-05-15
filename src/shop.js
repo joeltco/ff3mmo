@@ -703,7 +703,7 @@ function _drawConfirm(target, isSell) {
   const boxH = 40;
   const boxY = HUD_VIEW_Y + HUD_VIEW_H - boxH;
   clipToViewport();
-  drawBorderedBox(HUD_VIEW_X, boxY, boxW, boxH, true);
+  drawBorderedBox(HUD_VIEW_X, boxY, boxW, boxH, false, true);
 
   const verb = isSell ? 'Sell ' : (isSpell ? 'Learn ' : 'Buy ');
   const prefix = _nameToBytes(verb);

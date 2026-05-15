@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.355 — 2026-05-14
+
+### Fix: keep shop boxes black, not blue
+
+- v1.7.354 restored canonical blue to every `drawBorderedBox(blue=true)` caller. Shop boxes were swept up in that since they also opt into `blue=true`, but they need to stay black.
+- Routed shop's confirm box through `drawBorderedBox(blue=false, transparentEdge=true)` — same combo used by battle-encounter / pvp boxes. Black fill with transparent rounded corners, identical to shop's previous rendering. Message box / trade / inspect stay blue.
+
 ## 1.7.354 — 2026-05-14
 
 ### Fix: real root cause of black message boxes — restore blue palette on border tiles
