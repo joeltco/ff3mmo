@@ -1,7 +1,8 @@
 // Battle enemy turn update logic — extracted from game.js
 
 import { battleSt, getEnemyHP, setEnemyHP,
-         BATTLE_SHAKE_MS, BATTLE_DMG_SHOW_MS, BOSS_PREFLASH_MS, BOSS_ATK } from './battle-state.js';
+         BATTLE_SHAKE_MS, BATTLE_DMG_SHOW_MS, BOSS_PREFLASH_MS, BOSS_ATK,
+         setEnemyAttackerTarget } from './battle-state.js';
 import { calcDamage, elemMultiplier, BOSS_HIT_RATE, GOBLIN_HIT_RATE } from './battle-math.js';
 import { ps, getShieldEvade } from './player-stats.js';
 import { SFX, playSFX } from './music.js';
@@ -196,7 +197,8 @@ function _processEnemyFlash() {
     return { total, landed };
   }
   if (targetAlly >= 0) {
-    battleSt.enemyTargetAllyIdx = targetAlly;
+    const attackerRef = battleSt.encounterMonsters && battleSt.encounterMonsters[battleSt.currentAttacker];
+    setEnemyAttackerTarget(attackerRef, targetAlly);
     const ally = battleSt.battleAllies[targetAlly];
     const { total, landed } = rollMultiHit(ally.def, null, ally.shieldEvade || 0, ally.evade || 0);
     if (landed > 0) {

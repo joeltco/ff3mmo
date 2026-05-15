@@ -66,6 +66,14 @@ export const battleSt = {
   allyShakeTimer: {},       // {allyIdx: ms remaining}
   allyExitTimer: 0,
   enemyTargetAllyIdx: -1,
+  // v1.7.364 step 7/7 — per-attacker mirror of enemyTargetAllyIdx. Keyed by
+  // the attacker combatant object (encounter monster, pvpOpponentStats, or
+  // pvpEnemyAllies entry). Single-player play is turn-based so only one
+  // entry is active at a time — the integer above tracks the currently-
+  // animating attack. The Map is populated for the wire layer (future
+  // multiplayer that may render parallel attacks). Readers stay on the
+  // integer until the parallel-render refactor lands.
+  enemyTargetAllyIdxByAttacker: new WeakMap(),
 
   // ── Ally cast (WM heal AI) ────────────────────────────────────────
   allyMagicCasterIdx: -1,             // ally index of the caster
@@ -113,6 +121,17 @@ export const battleSt = {
 // calls `setActiveCast` so the wire layer has one place to read. Legacy
 // per-role state bags continue to be populated by their existing writers
 // — readers haven't migrated yet, so single-player play is unchanged.
+// v1.7.364 step 7/7 — set both the legacy single integer AND the per-
+// attacker WeakMap. Callers pass `attackerRef` as the attacker combatant
+// object (so refs are GC'd when the battle ends). Pass null for resets
+// that don't correspond to a specific attacker.
+export function setEnemyAttackerTarget(attackerRef, targetAllyIdx) {
+  battleSt.enemyTargetAllyIdx = targetAllyIdx;
+  if (attackerRef) {
+    battleSt.enemyTargetAllyIdxByAttacker.set(attackerRef, targetAllyIdx);
+  }
+}
+
 export function setActiveCast(cast) {
   battleSt.activeCast = {
     caster:        cast.caster,

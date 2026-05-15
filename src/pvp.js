@@ -1,6 +1,6 @@
 // PVP duel system — state, AI logic, rendering
 
-import { battleSt, setEnemyHP, BATTLE_TEXT_STEPS, BATTLE_TEXT_STEP_MS, setActiveCast } from './battle-state.js';
+import { battleSt, setEnemyHP, BATTLE_TEXT_STEPS, BATTLE_TEXT_STEP_MS, setActiveCast, setEnemyAttackerTarget } from './battle-state.js';
 import { getPlayerLocation } from './roster.js';
 import { getAllyDamageNums, setPlayerDamageNum, setEnemyHealNum, makeHealNumCallback } from './damage-numbers.js';
 import { ui } from './ui-state.js';
@@ -311,7 +311,7 @@ function _runEnemyAttack(targetAlly) {
   // overlaps the BOSS_PREFLASH_MS window and is visible by the time the swing lands.)
   // Stage hit-by-hit combo for both player and ally targets so multi-hit attacks
   // (especially unarmed R/L alternation) actually animate per strike.
-  battleSt.enemyTargetAllyIdx = targetAlly; // -1 for player, >=0 for ally
+  setEnemyAttackerTarget(attackerStats, targetAlly); // -1 for player, >=0 for ally
   pvpSt.pvpPendingAttack = pvpSt.pvpEnemyHitResults[0] || { miss: true, shieldBlock: false, dmg: 0, crit: false };
   const pendingCrit = pvpSt.pvpPendingAttack && pvpSt.pvpPendingAttack.crit;
   const wId = attackerStats ? attackerStats.weaponId : null;

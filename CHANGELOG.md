@@ -2,6 +2,30 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.364 — 2026-05-15
+
+### Combat: per-attacker enemyTargetAllyIdx scaffold (multiplayer prep step 7 of 7)
+
+- New `battleSt.enemyTargetAllyIdxByAttacker` — `WeakMap` keyed by the attacker combatant object (encounter monster, `pvpOpponentStats`, or `pvpEnemyAllies` entry). Single-player play is turn-based so only one entry is active at a time — the legacy `battleSt.enemyTargetAllyIdx` integer still tracks the currently-animating attack. The Map is populated for the wire layer's future parallel-render path.
+- `setEnemyAttackerTarget(attackerRef, targetAllyIdx)` helper in `battle-state.js` writes both the legacy integer AND the Map entry. Called from `battle-enemy.js#_runMonsterAttack` (encounter monster) and `pvp.js#_runEnemyAttack` (PvP enemy).
+- Readers stay on the legacy integer until the parallel-render refactor lands. WeakMap entries auto-clear when encounter monsters / PvP rosters get GC'd at battle end — no explicit reset needed.
+
+### Multiplayer prep series complete
+
+All 7 audit-recommended fixes from `docs/COMBAT-MULTIPLAYER-AUDIT.md` shipped over v1.7.358–v1.7.364. Single-player play is unchanged throughout; the cumulative work is:
+
+| Step | Subject | Version |
+|------|---------|---------|
+| 1 | Seedable RNG (`src/rng.js`) — no client desync on hit rolls | 1.7.358 |
+| 2 | Apply-time target redirect (`resolveLivingTarget`) — no silent spell-miss on dead targets | 1.7.359 |
+| 3 | Unified AI decision helpers (`src/combatant-ai.js`) — 6 AI functions ~halved in size | 1.7.360 |
+| 4 | Cross-faction targeting — player can intentionally hit own team with offensive spells | 1.7.361 |
+| 5 | Unified `activeCast` bag — one source-of-truth for "who is casting what at whom" | 1.7.362 |
+| 6 | `dispatchDelta` seam (`src/deltas.js`) — wire interception point for HP/status/death | 1.7.363 |
+| 7 | Per-attacker target map — parallel-render-ready ally-target tracking | 1.7.364 |
+
+Real-multiplayer cutover is now a contained plumbing job: server emits authoritative deltas, client routes through `dispatchDelta`. PvP-enemy AI gets replaced by wire signals at the eight `_tryPVPEnemy*` / `_tryAlly*` AI seams; ally AI stays for empty party slots.
+
 ## 1.7.363 — 2026-05-15
 
 ### Combat: dispatchDelta seam (multiplayer prep step 6 of 7)
