@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.358 — 2026-05-15
+
+### Combat: seedable RNG (multiplayer prep step 1 of 7)
+
+- New `src/rng.js` — mulberry32 PRNG with `seed(n)` / `reseedFromEntropy()` / `rand()` / `randInt` / `randIntExclusive` / `pickOne` / `chance`. Drop-in for `Math.random()` at every gameplay-affecting roll.
+- `battle-math.js` swapped: `rollInitiative`, `calcDamage`, and the four `rollHits` rolls (shield-evade / evade / hit / crit) all use `rand()` now.
+- Seeded at battle entry — `startBattle()` (encounters) and `startPVPBattle()` (duels) both call `reseedFromEntropy()`. The seed source today is `Date.now() ^ Math.random()` so single-player feel is identical; when the websocket server lands it sends an authoritative seed and every client rolls the same sequence.
+- Cosmetic `Math.random` calls (UI shimmer, idle wander, fake-player roster timing) intentionally untouched — they don't need to agree across clients.
+- Step 1 in the audit-recommended fix order from `docs/COMBAT-MULTIPLAYER-AUDIT.md`. Subsequent steps (resolveTarget, AI seam, faction-agnostic targeting, unified activeCast, dispatchDelta, per-attacker target) will land incrementally — each keeps single-player playable.
+
 ## 1.7.357 — 2026-05-15
 
 ### Fix: treasure "Found …!" message uses icon + full item name
