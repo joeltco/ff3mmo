@@ -12,7 +12,7 @@ import { resetBattleVars, isTeamWiped, updateBattleTimers, updatePoisonTick,
 import { playSFX, stopSFX, SFX, pauseMusic, playTrack, TRACKS } from './music.js';
 import { rollHits, calcPotentialHits, BOSS_HIT_RATE, GOBLIN_HIT_RATE, summarizeHits, isLeftHandHit } from './battle-math.js';
 import { reseedFromEntropy, seed as seedRng } from './rng.js';
-import { setNetPVPActionHandler, sendNetPVPEnd } from './net.js';
+import { setNetPVPActionHandler, sendNetPVPEnd, sendNetPVPResult } from './net.js';
 import { dispatchDelta } from './deltas.js';
 import { canCastBasic, canCastAny, pickHealTarget, pickPoisonedTarget,
          pickRandomLivingTarget, pickOffensiveSpell, rollOffensiveDamage,
@@ -179,10 +179,17 @@ export function startPVPBattle(target, opts) {
 }
 
 export function resetPVPState() {
-  // MP Step 4 part 2 — tell the server this client is dropping the battle so
-  // the partner pair clears server-side. Safe to call when not wire-PvP
-  // (sendNetPVPEnd returns false silently).
-  if (pvpSt.isWirePVP) sendNetPVPEnd();
+  // MP Step 4 part 2/3 — report outcome + end-of-battle to the server. The
+  // partner pair clears once both sides report. Outcome is inferred from
+  // the live state: opponent HP 0 = we won; player HP 0 = we lost;
+  // everything else (player ran / fake-roster cancel) = fled. Safe to call
+  // when not wire-PvP (the send helpers return false silently).
+  if (pvpSt.isWirePVP) {
+    const oppHP = pvpSt.pvpOpponentStats ? (pvpSt.pvpOpponentStats.hp | 0) : 0;
+    const outcome = ps.hp <= 0 ? 'lost' : (oppHP <= 0 ? 'won' : 'fled');
+    sendNetPVPResult(outcome);
+    sendNetPVPEnd();
+  }
   pvpSt.isWirePVP               = false;
   _wireOpponentAction           = null;
   pvpSt.isPVPBattle             = false;

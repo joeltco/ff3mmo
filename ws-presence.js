@@ -301,6 +301,39 @@ function _handleMessage(entry, msg) {
       }
       return;
     }
+    case 'pvp-result': {
+      // MP Step 4 part 3 — both clients report their final outcome
+      // ('won' | 'lost' | 'fled'). Server records the first report; on the
+      // second, compares for consistency. With seed sync (part 1) + action
+      // relay (part 2) the two sides MUST agree on the outcome — a mismatch
+      // is a divergence bug to investigate (logged for observability; not
+      // auto-corrected at MVP).
+      if (!entry.helloed) return;
+      const outcome = String(parsed.outcome || '').slice(0, 16);
+      const partnerId = _pvpPartners.get(entry.userId);
+      if (!partnerId) return;
+      const partner = _connected.get(partnerId);
+      if (!partner) {
+        _pvpPartners.delete(entry.userId);
+        return;
+      }
+      if (partner._lastPVPResult) {
+        const myExpected = partner._lastPVPResult === 'won'  ? 'lost'
+                         : partner._lastPVPResult === 'lost' ? 'won'
+                         : partner._lastPVPResult;  // 'fled' → both flee
+        if (outcome !== myExpected) {
+          console.warn('[pvp-result mismatch]',
+            'userA=' + partnerId, 'reported=' + partner._lastPVPResult,
+            '| userB=' + entry.userId, 'reported=' + outcome);
+        }
+        delete partner._lastPVPResult;
+        _pvpPartners.delete(entry.userId);
+        _pvpPartners.delete(partnerId);
+      } else {
+        entry._lastPVPResult = outcome;
+      }
+      return;
+    }
     case 'chat': {
       // Multiplayer Step 2 — relay world / party / pm chat to other clients.
       // World chat = location-scoped (everyone at the same `loc` sees it).

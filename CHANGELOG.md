@@ -2,6 +2,31 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.374 — 2026-05-15
+
+### MP Step 4 part 3: PvP outcome reporting
+
+- Client (`src/pvp.js#resetPVPState`) infers the local outcome from live state — `ps.hp <= 0` = lost, `pvpOpponentStats.hp <= 0` = won, otherwise fled — and sends `pvp-result {outcome}` to the server alongside the existing `pvp-end`.
+- Server (`ws-presence.js`) records the first report and compares with the partner's report when it arrives. The two clients must agree (`won`↔`lost` or both `fled`); mismatch is logged as `[pvp-result mismatch]` for divergence-bug observability.
+- No auto-correction at MVP — with seed sync (part 1) + action relay (part 2) the engines should agree. Mismatches indicate a real bug to investigate (RNG path slipped, action arrived out of order, etc).
+
+### MP Step 4 complete
+
+All three parts shipped tonight (1.7.372 / 1.7.373 / 1.7.374):
+
+| Part | What |
+|---|---|
+| 1 | Seed sync — server broadcasts a 32-bit seed on `pvp-match`; both clients seed `rng.js` before `_startPVPBattle`. All `rand()` calls agree. |
+| 2 | Action relay — `pvp-action` over wire; opponent's turn FSM (`_processEnemyFlash`) holds preflash until wire delivers, then `_applyWireOpponentAction` writes the same state bag the AI would have. |
+| 3 | Outcome reporting — `pvp-result` from both clients; server flags mismatch. |
+
+For 1v1 PvP without party allies: two real players see the same battle, the same hit rolls, the same damage numbers, the same end state. Magic / item / defend / attack all sync.
+
+Known scope limits (carry to a future step):
+- Party allies on either side still run local AI (drifts).
+- Opponent-run isn't modeled (treated as attack).
+- Partner WS disconnect mid-battle forces opponent HP to 0 (crude — better resolution would be graceful forfeit).
+
 ## 1.7.373 — 2026-05-15
 
 ### MP Step 4 part 2: PvP action relay

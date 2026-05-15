@@ -266,6 +266,15 @@ export function sendNetPVPEnd() {
   return _send({ type: 'pvp-end' });
 }
 
+// MP Step 4 part 3 — report the local battle outcome so the server can
+// flag divergence between the two clients. With seed + action sync, the
+// two reports should be opposite-and-matching ('won' vs 'lost') or both
+// 'fled'. Anything else is logged server-side as a bug.
+export function sendNetPVPResult(outcome) {
+  if (!_helloed || !outcome) return false;
+  return _send({ type: 'pvp-result', outcome });
+}
+
 export function setNetPVPActionHandler(fn) {
   _onPVPAction = typeof fn === 'function' ? fn : null;
 }
