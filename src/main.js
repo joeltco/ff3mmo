@@ -88,6 +88,23 @@ export function init() {
         weaponL: ps.weaponL | 0,
         armorId: ps.body | 0,
         helmId:  ps.head | 0,
+        // MP party-PvP — full ally roster so the opponent's client can
+        // populate `pvpEnemyAllies` from this client's actual party instead
+        // of fake-rostering from its local PLAYER_POOL. Each entry is the
+        // already-derived battleAllies shape (post-`generateAllyStats`) so
+        // the receiver can drop it straight in. `status` is omitted; the
+        // receiver inits a fresh status mask on use.
+        allies: (battleSt.battleAllies || []).filter(Boolean).map(a => ({
+          name: a.name, jobIdx: a.jobIdx | 0, level: a.level | 0, palIdx: a.palIdx | 0,
+          hp: a.hp | 0, maxHP: a.maxHP | 0,
+          atk: a.atk | 0, def: a.def | 0, agi: a.agi | 0,
+          int: a.int | 0, mnd: a.mnd | 0,
+          evade: a.evade | 0, mdef: a.mdef | 0, shieldEvade: a.shieldEvade | 0,
+          statusResist: a.statusResist | 0, hitRate: a.hitRate | 0,
+          weaponId: a.weaponId, weaponL: a.weaponL,
+          knownSpells: Array.isArray(a.knownSpells) ? a.knownSpells.slice() : [],
+          jobLevel: a.jobLevel | 0,
+        })),
       };
     },
     () => getPlayerLocation(),

@@ -29,7 +29,7 @@ import { getShieldEvade } from './player-stats.js';
 import { pvpGridLayout, PVP_CELL_W, PVP_CELL_H } from './pvp-math.js';
 import { playSlashSFX } from './battle-sfx.js';
 import { resetSlashScatterCache, SWING_HOLD_MS } from './slash-effects.js';
-import { removeStatus, hasStatus, STATUS, blindHitPenalty, miniToadAtkMult, canCastMagic } from './status-effects.js';
+import { removeStatus, hasStatus, STATUS, blindHitPenalty, miniToadAtkMult, canCastMagic, createStatusState } from './status-effects.js';
 import { _nameToBytes } from './text-utils.js';
 import { getSpellNameShrinesClean } from './text-decoder.js';
 import { queueBattleMsg, replaceBattleMsg } from './battle-msg.js';
@@ -163,7 +163,14 @@ export function startPVPBattle(target, opts) {
   pvpSt.pvpEnemyHitIdx          = 0;
   pvpSt.pvpPendingAttack        = null;
   pvpSt.pvpPreflashDecided      = false;
-  pvpSt.pvpEnemyAllies          = [];
+  // MP party-PvP — populate pvpEnemyAllies from the wire-delivered roster.
+  // The wire entries arrive in already-derived `generateAllyStats` shape so
+  // they drop straight in; only `status` (omitted on send) needs to be
+  // initialized fresh. Fake-PvP and 1v1 wire (no allies) fall through to
+  // empty array. Cap at 2 — engine assumes ≤3 combatants per side.
+  pvpSt.pvpEnemyAllies          = Array.isArray(target.allies)
+    ? target.allies.slice(0, 2).map(a => ({ ...a, status: createStatusState() }))
+    : [];
   pvpSt.pvpCurrentEnemyAllyIdx  = -1;
   pvpSt.pvpPlayerTargetIdx      = -1;
   pvpSt.pvpBoxResizeStartTime   = 0;
@@ -228,6 +235,11 @@ export function resetPVPState() {
 // ── Ally joining ──────────────────────────────────────────────────────────────
 export function tryJoinPVPEnemyAlly() {
   if (!pvpSt.isPVPBattle || pvpSt.pvpEnemyAllies.length >= 3) return false;
+  // MP wire-PvP — opponent's allies are fixed at match start from the
+  // wire-delivered roster. Fake-roster joins from the local PLAYER_POOL
+  // would diverge per-client (each client picks independently). Skip
+  // entirely; server-arbitrated dynamic joins are a future extension.
+  if (pvpSt.isWirePVP) return false;
   const loc = getPlayerLocation();
   const inBattle = new Set([
     pvpSt.pvpOpponent && pvpSt.pvpOpponent.name,

@@ -21,6 +21,7 @@ let _helloed = false;        // we've sent at least one `hello`
 let _profileFn = null;       // () → profile object
 let _locFn = null;           // () → location string
 let _lastSentLoc = null;
+let _lastSentAlliesSig = '';
 let _locPollHandle = null;
 let _reconnectDelay = 1000;
 let _myUserId = null;
@@ -172,6 +173,19 @@ function _startLocPoll() {
     if (!_helloed) { _sendHello(); return; }
     if (loc !== _lastSentLoc) {
       if (_send({ type: 'location', loc })) _lastSentLoc = loc;
+    }
+    // MP party-PvP — re-sync local ally roster on change so the server
+    // has fresh data when a PvP match fires. Cheap signature compare,
+    // wire send only on diff. Profile getter returns the latest party.
+    if (_profileFn) {
+      const profile = _profileFn();
+      if (profile) {
+        const sig = JSON.stringify(profile.allies || []);
+        if (sig !== _lastSentAlliesSig) {
+          _send({ type: 'update', allies: profile.allies || [] });
+          _lastSentAlliesSig = sig;
+        }
+      }
     }
   }, 500);
 }

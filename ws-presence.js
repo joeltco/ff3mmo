@@ -193,6 +193,9 @@ function _handleMessage(entry, msg) {
         armorId:  profile.armorId | 0,
         helmId:   profile.helmId | 0,
         shieldId: profile.shieldId == null ? undefined : profile.shieldId | 0,
+        // MP party-PvP — opaque ally roster; server doesn't validate, just
+        // relays at match time. Caller enforces shape on each side.
+        allies:   Array.isArray(profile.allies) ? profile.allies.slice(0, 3) : [],
       };
       entry.loc = String(parsed.loc || 'ur').slice(0, 16);
       const wasHelloed = entry.helloed;
@@ -227,7 +230,8 @@ function _handleMessage(entry, msg) {
       if (!entry.helloed) return;
       const fields = {};
       for (const k of ['name', 'jobIdx', 'level', 'palIdx', 'hp', 'maxHP', 'agi',
-                       'weaponR', 'weaponL', 'armorId', 'helmId', 'shieldId']) {
+                       'weaponR', 'weaponL', 'armorId', 'helmId', 'shieldId',
+                       'allies']) {
         if (parsed[k] != null) {
           entry.profile[k] = parsed[k];
           fields[k] = parsed[k];

@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.375 — 2026-05-15
+
+### Party-ally PvP: roster sync (1 of 3)
+
+- Wire profile (`src/main.js#connectNet` getter) now carries an `allies` array — each entry the already-derived `generateAllyStats` shape (stats + equipment + knownSpells). `src/net.js` polls allies every 500 ms and emits `update {allies}` on signature change.
+- Server (`ws-presence.js`) stores `entry.profile.allies` on `hello`/`update`. Existing `pvp-match` spread already carries it through to the opponent payload, so both clients see each other's real party at match start.
+- `src/pvp.js#startPVPBattle` populates `pvpEnemyAllies` from `target.allies` — wire-delivered roster drops straight in with a fresh `createStatusState()` per entry. 1v1 (no allies) falls through to empty array.
+- `tryJoinPVPEnemyAlly` early-returns when `isWirePVP` — fake-roster mid-battle joins would diverge per-client. Server-arbitrated dynamic joins are a future extension; the wire-PvP roster is now fixed at match start.
+
+What this gets you: if A has 2 party allies and B has 1, both clients show A=3-cell side, B=2-cell side, with the right names/jobs/equipment on each portrait. Action relay for ally turns is the next piece (currently A's ally still runs local AI on A's client AND on B's client independently — they'll drift).
+
 ## 1.7.374 — 2026-05-15
 
 ### MP Step 4 part 3: PvP outcome reporting
