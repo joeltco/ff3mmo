@@ -157,6 +157,23 @@ export function handleInput() {
         } else if (keys['z'] || keys['Z']) {
           keys['z'] = false; keys['Z'] = false;
         }
+      } else if (msgState.isPrompt) {
+        // Yes/no prompt (v1.7.379) — Z = accept, X = decline. Each fires the
+        // matching callback and slides the box out. Used by party-invite
+        // incoming, reusable for any future yes/no UI.
+        if (keys['z'] || keys['Z']) {
+          keys['z'] = false; keys['Z'] = false;
+          const cb = msgState.onAccept;
+          msgState.isPrompt = false; msgState.onAccept = null; msgState.onDecline = null;
+          dismissMsgBox();
+          if (cb) cb();
+        } else if (keys['x'] || keys['X'] || keys['Escape']) {
+          keys['x'] = false; keys['X'] = false; keys['Escape'] = false;
+          const cb = msgState.onDecline;
+          msgState.isPrompt = false; msgState.onAccept = null; msgState.onDecline = null;
+          dismissMsgBox();
+          if (cb) cb();
+        }
       } else if (keys['z'] || keys['Z']) {
         keys['z'] = false; keys['Z'] = false;
         if (msgState.onAdvance) msgState.onAdvance();

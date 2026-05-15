@@ -22,7 +22,8 @@ import { ps } from './player-stats.js';
 import { generateAllyStats } from './data/players.js';
 import { battleSt } from './battle-state.js';
 import { _nameToBytes } from './text-utils.js';
-import { showMsgBox, replaceMsgBoxText, dismissMsgBox } from './message-box.js';
+import { showMsgBox, replaceMsgBoxText, dismissMsgBox, showMsgBoxPrompt, msgState } from './message-box.js';
+import { battleSt as _battleSt } from './battle-state.js';
 import { playSFX, SFX } from './music.js';
 import { sendNetPartyInvite, sendNetPartyCancel, sendNetPartyResponse,
          setNetPartyInviteHandler, setNetPartyResultHandler } from './net.js';
@@ -212,19 +213,24 @@ function _resolveAsJoin(remotePartner) {
 }
 
 // MP party-invite wire — receiver side (B). Server forwards A's invite with
-// A's full profile. For MVP, auto-respond using the same `getAcceptChance`
-// formula the fake-PvP path uses (server already knows A's level/job so
-// a future server-side roll would also work; running on the client lets
-// the user decline later via UI without server changes).
+// A's full profile. Show a Z/X prompt in the message box; the player picks.
+// If B is busy (in a battle or another msg already on screen), auto-decline
+// rather than overlay — protects the FSM from incoming UI during combat.
 setNetPartyInviteHandler((msg) => {
   const challenger = msg && msg.challenger;
   if (!challenger) return;
-  // Compute accept chance using the SHARED formula (challenger.level + jobIdx
-  // are in the wire profile). `getAcceptChance` reads `ps.level` / `ps.jobIdx`
-  // for the local side — fine, we want OUR roll on incoming invites.
-  const chance = getAcceptChance(challenger);
-  const accept = Math.random() < chance;
-  sendNetPartyResponse(accept);
+  if (_battleSt.battleState !== 'none' || msgState.state !== 'none') {
+    sendNetPartyResponse(false);
+    return;
+  }
+  // Two-line prompt: name + invite verb on line 1 (wraps), prompt cue on line 2.
+  // The 16-char wrap puts "<Name> wants party" on line 1 (typ.) and the cue
+  // on line 2.
+  const text = _nameToBytes(challenger.name + ' wants party Z=ok X=no');
+  showMsgBoxPrompt(text,
+    () => sendNetPartyResponse(true),
+    () => sendNetPartyResponse(false),
+  );
 });
 
 // Inviter side (A) — server relays B's response. On accept we have B's

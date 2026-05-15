@@ -19,6 +19,12 @@ export const msgState = {
   onClose:         null,    // callback after slide-out completes
   onAdvance:       null,    // if set, Z calls this instead of dismissMsgBox
   scrollFromBytes: null,    // during 'page-scroll', the outgoing page text
+  // Prompt mode (v1.7.379) — when `isPrompt` is true, Z fires `onAccept` and
+  // X fires `onDecline` instead of the normal dismiss flow. Used for the
+  // incoming party invite y/n prompt; reusable for any future yes/no UI.
+  isPrompt:        false,
+  onAccept:        null,
+  onDecline:       null,
 };
 
 // ── Public API ─────────────────────────────────────────────────────────────
@@ -28,6 +34,24 @@ export function showMsgBox(bytes, onClose) {
   msgState.state   = 'slide-in';
   msgState.timer   = 0;
   msgState.onClose = onClose || null;
+  msgState.isPrompt = false;
+  msgState.onAccept = null;
+  msgState.onDecline = null;
+}
+
+// Yes/no prompt. Z fires `onAccept` then dismisses; X fires `onDecline` then
+// dismisses. Caller is responsible for putting the y/n cue in the message
+// text (e.g., "Z=ok X=no") — keeps this primitive UI-free so any future
+// prompt can render whatever style fits the context.
+export function showMsgBoxPrompt(bytes, onAccept, onDecline) {
+  msgState.bytes     = bytes;
+  msgState.state     = 'slide-in';
+  msgState.timer     = 0;
+  msgState.onClose   = null;
+  msgState.onAdvance = null;
+  msgState.isPrompt  = true;
+  msgState.onAccept  = onAccept || null;
+  msgState.onDecline = onDecline || null;
 }
 
 // Trigger slide-out from the 'hold' phase. No-op if not currently held.
@@ -110,6 +134,7 @@ export function updateMsgBox(dt) {
       msgState.state = 'none'; msgState.timer = 0; msgState.bytes = null;
       msgState.onClose = null; msgState.onAdvance = null;
       msgState.scrollFromBytes = null;
+      msgState.isPrompt = false; msgState.onAccept = null; msgState.onDecline = null;
       if (cb) cb();
     }
   }

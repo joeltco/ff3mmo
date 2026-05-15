@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.379 — 2026-05-15
+
+### UI prompt on incoming party invite (replaces auto-accept roll)
+
+- New `showMsgBoxPrompt(bytes, onAccept, onDecline)` primitive in `message-box.js`. Sets `msgState.isPrompt = true` + two callbacks. Reusable for any future yes/no UI (trade requests, friend invites, etc.).
+- `movement.js` msg-box hold handler: when `msgState.isPrompt`, Z fires `onAccept` then dismisses; X / Escape fires `onDecline` then dismisses. Clears prompt fields before slide-out so the callbacks can't re-fire.
+- `party-invite.js` incoming handler swapped from auto-roll to prompt. The message reads "`<name>` wants party Z=ok X=no" (wraps to two lines at the 16-char box width). Z sends `party-invite-response {accept:true}`; X sends `{accept:false}`. If B is mid-battle or another `msgBox` is on screen, auto-decline so the FSM isn't interrupted — they can re-invite later (with the standard 60s cooldown).
+- The pre-v1.7.379 auto-roll using `getAcceptChance` is gone for real-player invites (the function still serves fake-roster invites in `_runAcceptCheck`).
+
 ## 1.7.378 — 2026-05-15
 
 ### Real party invites over the wire
