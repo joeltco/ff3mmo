@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.367 — 2026-05-15
+
+### Engine keep-alive in background tabs + freeze watchdog tweak
+
+- Replaced `requestAnimationFrame` with a Web Worker setInterval heartbeat in `src/game-loop.js`. The worker posts a tick message every 16 ms; the main thread runs `gameLoop()` on receipt. Workers survive tab-backgrounding far better than rAF (paused) or main-thread setInterval (throttled to ~1 Hz), so the engine keeps ticking — required for multiplayer sync. Two pre-existing freeze-watchdog reports of `state=magic-hit stuck for 5s` were both tab-resume false-positives caused by rAF pausing; with the worker driver those won't recur.
+- Added `levelup-hold` and `joblv-hold` to the watchdog's idle-state set. They follow the same pattern as `exp-hold` / `gil-hold` / `cp-hold` — short timer-driven hold states that were missing from the allowlist.
+- No display-refresh sync trade-off matters for this NES-style 60 Hz fixed-timestep engine; all animations are dt-based.
+
 ## 1.7.366 — 2026-05-15
 
 ### Multiplayer Step 1: WebSocket presence

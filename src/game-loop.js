@@ -99,6 +99,10 @@ const _frozenIdleStates = new Set([
   'item-list-out', 'item-slide', 'item-target-select', 'item-use-menu-in',
   'none', 'roar-hold',
   'exp-hold', 'gil-hold', 'cp-hold', 'item-hold',
+  // v1.7.367 — timer-advanced *-hold states that were missing from the idle
+  // set. Identical pattern to exp-hold / gil-hold / cp-hold but on the
+  // level-up + job-level-up message strips.
+  'levelup-hold', 'joblv-hold',
 ]);
 let _watchState = null;
 let _watchSince = 0;
@@ -202,7 +206,15 @@ function _gameLoopDraw() {
   }
 }
 
-function gameLoop(timestamp) {
+function gameLoop() {
+  // v1.7.367 — driven by a Web Worker heartbeat (see `_startTicker`) so the
+  // engine keeps ticking when the tab is backgrounded. Required for
+  // multiplayer sync: rAF + main-thread setInterval are both throttled to
+  // ~1 Hz (or stopped) when the tab is hidden, which would pause the engine
+  // and desync from the server. Worker setInterval is throttled far less
+  // aggressively. `performance.now()` is read fresh each call since the
+  // worker doesn't supply a timestamp like rAF did.
+  const timestamp = performance.now();
   const dt = Math.min(timestamp - lastTime, 50); // cap at 50ms to prevent frame-spike skipping animations
   lastTime = timestamp;
   const ctx = ui.ctx;
@@ -212,7 +224,6 @@ function gameLoop(timestamp) {
     if (titleSt.state !== 'done') drawTitleSkyInHUD(ctx, roundTopBoxCorners); // guard: updateTitle may have set titleSt.state='done'
     updateChat(dt, 'none', true);
     drawChat(ctx, drawHudBox, 0, true);
-    requestAnimationFrame(gameLoop);
     return;
   }
 
@@ -223,12 +234,36 @@ function gameLoop(timestamp) {
     _gameLoopDraw();
   } catch (e) {
     _reportError('GAME LOOP ERROR', e);
-    requestAnimationFrame(gameLoop);
     return;
   }
 
   _tickFreezeWatchdog(timestamp);
-  requestAnimationFrame(gameLoop);
+}
+
+// Worker-driven 60 Hz heartbeat. The worker's setInterval keeps running when
+// the tab is hidden — unlike rAF (paused) and main-thread setInterval
+// (throttled to ~1 Hz). The cost is no display-refresh sync, which is fine
+// for a 60 Hz NES-style game with dt-based animations.
+let _tickWorker = null;
+function _startTicker() {
+  if (_tickWorker) return;
+  const workerCode = `
+    let handle = null;
+    onmessage = function(e) {
+      if (e.data === 'start') {
+        if (handle == null) handle = setInterval(function() { postMessage(0); }, 16);
+      } else if (e.data === 'stop') {
+        if (handle != null) { clearInterval(handle); handle = null; }
+      }
+    };
+  `;
+  const blob = new Blob([workerCode], { type: 'application/javascript' });
+  _tickWorker = new Worker(URL.createObjectURL(blob));
+  _tickWorker.onmessage = () => {
+    try { gameLoop(); }
+    catch (e) { _reportError('TICK ERROR', e); }
+  };
+  _tickWorker.postMessage('start');
 }
 
 export function startGameLoop() {
@@ -245,5 +280,5 @@ export function startGameLoop() {
       _reportError('UNHANDLED REJECTION', r instanceof Error ? r : { message: String(r), stack: '' });
     });
   }
-  requestAnimationFrame(gameLoop);
+  _startTicker();
 }
