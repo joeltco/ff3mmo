@@ -15,7 +15,8 @@ import { SLASH_FRAME_MS, shouldDrawSlash, SWING_HOLD_MS } from './slash-effects.
 import { buildTurnOrder, processNextTurn } from './battle-turn.js';
 import { summarizeHits } from './battle-math.js';
 import { reseedFromEntropy } from './rng.js';
-import { sendNetPVPAction, getOnlinePlayerByName } from './net.js';
+import { sendNetPVPAction, sendNetPVPAllyJoin, getOnlinePlayerByName } from './net.js';
+import { rand } from './rng.js';
 import { updateBattleAlly } from './battle-ally.js';
 import { updateBattleEnemyTurn } from './battle-enemy.js';
 import { updateSpellCast, resetSpellCastVars } from './spell-cast.js';
@@ -309,11 +310,25 @@ export function tryJoinPlayerAlly() {
     !battleSt.battleAllies.some(a => a.name === p.name) &&
     !pvpNames.has(p.name)
   );
-  if (eligible.length === 0 || Math.random() >= 0.5) {
+  // Wire-PvP uses synced `rand()` so both clients can roll independently
+  // and pick the same ally — the eligible list is identical on both sides
+  // (PLAYER_POOL is identical; in-battle names cover all combatants on
+  // both teams via the wire-synced rosters from v1.7.375/v1.7.376).
+  const roll = pvpSt.isWirePVP ? rand() : Math.random();
+  if (eligible.length === 0 || roll >= 0.5) {
     if (partyJoined) { battleSt.battleState = 'ally-fade-in'; battleSt.battleTimer = 0; return true; }
     return false;
   }
-  battleSt.battleAllies.push(generateAllyStats(eligible[Math.floor(Math.random() * eligible.length)]));
+  const pickIdx = Math.floor((pvpSt.isWirePVP ? rand() : Math.random()) * eligible.length);
+  const picked = eligible[pickIdx];
+  battleSt.battleAllies.push(generateAllyStats(picked));
+  // Wire-PvP — let the partner grow their `pvpEnemyAllies` by the same
+  // name so both sides see the new ally on the correct cell. Receiver
+  // looks the name up in PLAYER_POOL (identical static data) and runs
+  // its own `generateAllyStats`.
+  if (pvpSt.isWirePVP && pvpSt.isPVPBattle && picked && picked.name) {
+    sendNetPVPAllyJoin(picked.name);
+  }
   battleSt.battleState = 'ally-fade-in'; battleSt.battleTimer = 0;
   return true;
 }

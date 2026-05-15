@@ -12,7 +12,8 @@ import { resetBattleVars, isTeamWiped, updateBattleTimers, updatePoisonTick,
 import { playSFX, stopSFX, SFX, pauseMusic, playTrack, TRACKS } from './music.js';
 import { rollHits, calcPotentialHits, BOSS_HIT_RATE, GOBLIN_HIT_RATE, summarizeHits, isLeftHandHit } from './battle-math.js';
 import { reseedFromEntropy, seed as seedRng } from './rng.js';
-import { setNetPVPActionHandler, sendNetPVPEnd, sendNetPVPResult } from './net.js';
+import { setNetPVPActionHandler, sendNetPVPEnd, sendNetPVPResult,
+         setNetPVPAllyJoinHandler } from './net.js';
 import { dispatchDelta } from './deltas.js';
 import { canCastBasic, canCastAny, pickHealTarget, pickPoisonedTarget,
          pickRandomLivingTarget, pickOffensiveSpell, rollOffensiveDamage,
@@ -141,6 +142,33 @@ const _wireOpponentActions = [];
 // when kind='attack' so the existing post-preflash attack flow can read it
 // instead of running the AI target-pick.
 let _wirePendingAttackTargetAlly = -1;
+// Partner's `_tryJoinPlayerAlly` picked a fake-roster ally. Add the same
+// ally to our `pvpEnemyAllies` (the partner-side view of their party) with
+// the same resize-anim setup `tryJoinPVPEnemyAlly` would have used. Look
+// up the name in our local PLAYER_POOL — both clients have identical
+// static data so the lookup + `generateAllyStats` produces matching stats.
+setNetPVPAllyJoinHandler((msg) => {
+  if (!pvpSt.isWirePVP || !pvpSt.isPVPBattle) return;
+  const name = msg && msg.name;
+  if (!name) return;
+  if (pvpSt.pvpEnemyAllies.length >= 3) return;
+  const pick = PLAYER_POOL.find(p => p.name === name);
+  if (!pick) return;
+  const oldTotal = 1 + pvpSt.pvpEnemyAllies.length;
+  const { cols: oldCols, rows: oldRows, gridPos: oldGP } = pvpGridLayout(oldTotal);
+  pvpSt.pvpBoxResizeFromW = oldCols * PVP_CELL_W + 16;
+  pvpSt.pvpBoxResizeFromH = oldRows * PVP_CELL_H + 16;
+  const cx = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2);
+  const cy = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
+  pvpSt.pvpEnemySlidePosFrom = Array.from({length: oldTotal}, (_, i) => {
+    const [gr, gc] = oldGP[i] || [0, 0];
+    return { x: cx - oldCols*12 + gc*PVP_CELL_W + 4, y: cy - oldRows*16 + gr*PVP_CELL_H + 4 };
+  });
+  pvpSt.pvpEnemyAllies.push(generateAllyStats(pick));
+  battleSt.battleState = 'pvp-ally-appear';
+  battleSt.battleTimer = 0;
+});
+
 setNetPVPActionHandler((msg) => {
   if (!pvpSt.isWirePVP) return;
   // Flee ends the battle for both sides immediately, regardless of whose

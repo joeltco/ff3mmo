@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.384 — 2026-05-15
+
+### Fake-roster ally mid-battle joins re-enabled in wire-PvP
+
+- Pre-v1.7.384 `_tryJoinPlayerAlly`'s random-roll branch fired locally and silently — only the side that took the turn grew their party; the partner saw stale rosters because the new ally wasn't synced.
+- Now: when `_tryJoinPlayerAlly` picks a fake-roster ally during wire-PvP, the rolls use seeded `rand()` (eligible list is identical across clients thanks to the v1.7.375/v1.7.376 roster sync, but the gate + pick rolls needed seed-sync to land on the same name). The picked ally's PLAYER_POOL name is emitted via `pvp-ally-join {name}` to the partner; partner looks up the name in their identical PLAYER_POOL, runs `generateAllyStats` locally, and pushes to `pvpEnemyAllies` with the same resize-anim setup `tryJoinPVPEnemyAlly` uses.
+- New wire helpers: `sendNetPVPAllyJoin(name)` / `setNetPVPAllyJoinHandler(fn)` in `src/net.js`. Server relay is a one-liner forwarding to the partner.
+- Both sides' parties grow symmetrically — A's confirm-pause adds X to A's left; B sees X appear on B's right. B's confirm-pause adds Y to B's left; A sees Y appear on A's right.
+- `tryJoinPVPEnemyAlly` (the local-only opponent-side picker) stays gated off during wire-PvP — opponent-side growth happens only via the wire signal from the OTHER client's `_tryJoinPlayerAlly`.
+- Wire is small: just `{name}`, not full stats. PLAYER_POOL is identical static data across clients.
+
 ## 1.7.383 — 2026-05-15
 
 ### Graceful PvP forfeit on partner WS disconnect

@@ -31,6 +31,7 @@ let _onPVPMatch = null;      // ({opponent}) → void — set via setNetPVPMatch
 let _onPVPFailed = null;     // ({reason}) → void — set via setNetPVPFailedHandler
 let _onPVPNone = null;       // () → void — set via setNetPVPEncounterNoneHandler
 let _onPVPAction = null;     // (action) → void — set via setNetPVPActionHandler
+let _onPVPAllyJoin = null;   // ({name}) → void — partner picked a fake-roster ally; mirror on our side
 let _onPartyInvite = null;   // ({challenger}) → void — invite arrived; auto-respond or prompt
 let _onPartyResult = null;   // ({accept, partner?, reason?}) → void — our outgoing invite resolved
 let _onPartyMemberLeft = null;  // ({memberUserId, memberName}) → void — a member of OUR party disconnected/left
@@ -136,6 +137,12 @@ function _handleMessage(data) {
       if (_onPVPAction) {
         try { _onPVPAction(msg); }
         catch (e) { console.warn('[net] pvp-action handler error', e); }
+      }
+      return;
+    case 'pvp-ally-join':
+      if (_onPVPAllyJoin) {
+        try { _onPVPAllyJoin(msg); }
+        catch (e) { console.warn('[net] pvp-ally-join handler error', e); }
       }
       return;
     case 'party-invite-incoming':
@@ -331,6 +338,18 @@ export function sendNetPVPResult(outcome) {
 
 export function setNetPVPActionHandler(fn) {
   _onPVPAction = typeof fn === 'function' ? fn : null;
+}
+
+// Fake-roster ally join — sender's `_tryJoinPlayerAlly` picked an ally
+// from the local PLAYER_POOL; tell the partner so they grow their
+// `pvpEnemyAllies` by the same name (deterministic look-up on receive).
+export function sendNetPVPAllyJoin(name) {
+  if (!_helloed || !name) return false;
+  return _send({ type: 'pvp-ally-join', name });
+}
+
+export function setNetPVPAllyJoinHandler(fn) {
+  _onPVPAllyJoin = typeof fn === 'function' ? fn : null;
 }
 
 // Real party invites over the wire. Mirror of `pvp-search` lifecycle:

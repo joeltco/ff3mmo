@@ -286,6 +286,20 @@ function _handleMessage(entry, msg) {
       _resolveEncounterHook(entry);
       return;
     }
+    case 'pvp-ally-join': {
+      // Mid-battle fake-roster ally pick on the sender's player team. Server
+      // relays to the partner so they add the same ally to their
+      // `pvpEnemyAllies` (the opponent-side view). Wire carries just the
+      // PLAYER_POOL name — both clients re-derive stats locally via
+      // `generateAllyStats` so the wire stays small.
+      if (!entry.helloed) return;
+      const partnerId = _pvpPartners.get(entry.userId);
+      if (!partnerId) return;
+      const partner = _connected.get(partnerId);
+      if (!partner || partner.ws.readyState !== 1) return;
+      _send(partner.ws, { type: 'pvp-ally-join', name: String(parsed.name || '').slice(0, 16) });
+      return;
+    }
     case 'pvp-action': {
       // MP Step 4 part 2 — relay the player's chosen action to their PvP
       // partner so the partner's client can drive the opponent's turn from
