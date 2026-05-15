@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.351 — 2026-05-14
+
+### Refactor: single source for per-map state resets in map-loading.js
+
+- v1.7.350 fixed the altar-cave-spawning-overworld-monsters bug by adding a missing `encounterPatch`/`encounterPatchZone` clear to `_loadDungeonFloor`. Root cause was structural — the four map loaders (`_loadRegularMap`, `_loadDungeonFloor`, `loadWorldMapAt`, `loadWorldMapAtPosition`) each maintained their own duplicated list of per-map state resets. v1.7.341 added the patch fields and only wired the clear into `_loadRegularMap`; the other three drifted.
+- Extracted `_resetPerMapState()` covering the union of per-map fields (`dungeonFloor`, `encounterSteps`, `dungeonDestinations`, `secretWalls`, `falseWalls`, `hiddenTraps`, `rockSwitch`, `warpTile`, `pondTiles`, `bossSprite`, `encounterPatch`, `encounterPatchZone`, `mapData`, `mapRenderer`, `disabledTrigger`, `openDoor`). All four loaders call it first, then apply mode-specific values. Adding a new per-map field is now a one-line edit.
+- No behavior change in the happy paths (every loader's mode-specific assignments still override the defaults). Worldmap loaders now also clear dungeon-only fields, which were harmlessly leaking through before.
+
 ## 1.7.350 — 2026-05-14
 
 ### Fix: altar cave spawning overworld monsters

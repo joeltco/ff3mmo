@@ -99,14 +99,36 @@ function _replayConsumedTiles(mapId, mapData) {
   }
 }
 
-function _loadDungeonFloor(mapId, returnX, returnY) {
-  const floorIndex = mapId - 1000;
-  mapSt.dungeonFloor = floorIndex;
-  // Clear any town encounter-patch state carried in from the entry map
-  // (e.g. Ur's grasslands_wild patch). Otherwise startRandomEncounter falls
-  // into the patch branch and spawns overworld monsters inside the dungeon.
+// Single source of truth for per-map state defaults. Every loader (regular
+// indoor, dungeon, worldmap) calls this before applying its own values, so
+// adding a new per-map field on mapSt just means adding one line here — no
+// risk of one loader carrying stale state from the previous map (e.g. v1.7.341
+// shipped encounterPatch but only wired the clear into _loadRegularMap; entering
+// Ur then descending into the altar cave kept the patch and spawned overworld
+// monsters underground. Fixed in v1.7.350; centralized here in v1.7.351).
+function _resetPerMapState() {
+  mapSt.dungeonFloor = -1;
+  mapSt.encounterSteps = 0;
+  mapSt.dungeonDestinations = null;
+  mapSt.secretWalls = null;
+  mapSt.falseWalls = null;
+  mapSt.hiddenTraps = null;
+  mapSt.rockSwitch = null;
+  mapSt.warpTile = null;
+  mapSt.pondTiles = null;
+  mapSt.bossSprite = null;
   mapSt.encounterPatch = null;
   mapSt.encounterPatchZone = null;
+  mapSt.mapData = null;
+  mapSt.mapRenderer = null;
+  mapSt.disabledTrigger = null;
+  mapSt.openDoor = null;
+}
+
+function _loadDungeonFloor(mapId, returnX, returnY) {
+  _resetPerMapState();
+  const floorIndex = mapId - 1000;
+  mapSt.dungeonFloor = floorIndex;
   const result = generateFloor(romRaw, floorIndex, mapSt.dungeonSeed);
   mapSt.mapData = result;
   mapSt.secretWalls = result.secretWalls;
@@ -165,18 +187,7 @@ function _floodFillTilePatch(tilemap, sx, sy) {
 }
 
 function _loadRegularMap(mapId, returnX, returnY) {
-  mapSt.dungeonFloor = -1;
-  mapSt.encounterSteps = 0;
-  mapSt.dungeonDestinations = null;
-  mapSt.secretWalls = null;
-  mapSt.falseWalls = null;
-  mapSt.hiddenTraps = null;
-  mapSt.rockSwitch = null;
-  mapSt.warpTile = null;
-  mapSt.pondTiles = null;
-  mapSt.bossSprite = null;
-  mapSt.encounterPatch = null;
-  mapSt.encounterPatchZone = null;
+  _resetPerMapState();
   const mapData = loadMap(romRaw, mapId);
   mapSt.mapData = mapData;
   mapSt.currentMapId = mapId;
@@ -301,11 +312,8 @@ function _landOnWorldMap(tileX, tileY) {
 }
 
 export function loadWorldMapAt(trigId) {
+  _resetPerMapState();
   mapSt.onWorldMap = true;
-  mapSt.dungeonFloor = -1;
-  mapSt.mapRenderer = null;
-  mapSt.mapData = null;
-  mapSt.bossSprite = null;
   battleSt.enemyDefeated = false; // boss respawns whenever player exits to the world map
   clearNpcs();
   setupTopBox(0, true);
@@ -317,12 +325,9 @@ export function loadWorldMapAt(trigId) {
 }
 
 export function loadWorldMapAtPosition(tileX, tileY) {
+  _resetPerMapState();
   mapSt.onWorldMap = true;
-  mapSt.dungeonFloor = -1;
-  mapSt.encounterSteps = 0;
   battleSt.enemyDefeated = false;
-  mapSt.mapRenderer = null;
-  mapSt.mapData = null;
   clearNpcs();
   setupTopBox(0, true);
   _landOnWorldMap(tileX, tileY);
