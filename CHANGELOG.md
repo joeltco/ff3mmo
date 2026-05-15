@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.362 — 2026-05-15
+
+### Combat: unified activeCast scaffold (multiplayer prep step 5 of 7)
+
+- New `battleSt.activeCast` — single source-of-truth bag for "who is casting what at whom right now," populated from every cast-start site (1 player + 4 ally + 3 PvP-enemy). Shape: `{ caster: {faction, idx}, spellId, isItemUse, targets: [{faction, idx}], healAmount, damageRoll, hitIdx, effectApplied, sfxPlayed }`.
+- Three legacy state bags (`battleSt.allyMagic*`, `pvpSt.pvpMagic*`, `spell-cast.js` module-locals) still populated in parallel. Readers haven't migrated yet — single-player play unchanged. The wire layer (step 6/7) will read `activeCast` so a remote-player cast intent has one place to write instead of three.
+- `setActiveCast(cast)` / `clearActiveCast()` / `getActiveCast()` exported from `battle-state.js`. `clearActiveCast` runs at `resetSpellCastVars` cast-end; AI-driven casts overwrite at the next cast start.
+- Scaffold-only: no gameplay change. Step 6 (`dispatchDelta`) wires HP / status / KO writes through one interceptable seam; step 7 splits the single-integer enemyTargetAllyIdx into a per-attacker map.
+
 ## 1.7.361 — 2026-05-15
 
 ### Combat: cross-faction targeting (multiplayer prep step 4 of 7)

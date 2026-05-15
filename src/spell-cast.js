@@ -5,7 +5,7 @@
 // legacy 1100 ms timing; captured spells (Cure, Poisona, Sight, Fire) use the
 // CAST_PHASE_MS model from cast-anim.js (~1667 ms).
 
-import { battleSt, getEnemyHP, setEnemyHP, BATTLE_SHAKE_MS } from './battle-state.js';
+import { battleSt, getEnemyHP, setEnemyHP, BATTLE_SHAKE_MS, setActiveCast, clearActiveCast } from './battle-state.js';
 import { ps } from './player-stats.js';
 import { inputSt } from './input-handler.js';
 import { SFX, playSFX } from './music.js';
@@ -106,6 +106,7 @@ export function resetSpellCastVars() {
   _spellId = 0; _targets = []; _hitIdx = 0; _effectApplied = false; _baseAmount = -1;
   _sfxPlayed = false;
   _magicHitPhase = 'impact-walk';
+  clearActiveCast();
 }
 
 // NES FF3 magic formula (31/B1B4): atk = floor(stat/2) + power, +rand(0..atk/2).
@@ -267,6 +268,18 @@ export function startSpellCast(spellId, targetSpec, opts = {}) {
   if (!_isItemUse) {
     playSFX(SFX.MAGIC_CAST);
   }
+  // v1.7.362 step 5/7 — unified active-cast bag. Module-local `_spellId`,
+  // `_targets`, `_isItemUse` continue to drive the player-cast pipeline;
+  // this populates the shared bag so the wire layer (future step) has one
+  // place to read instead of three.
+  setActiveCast({
+    caster: { faction: 'player', idx: -1 },
+    spellId,
+    isItemUse: _isItemUse,
+    targets: _targets.map(t => ({ faction: t.type, idx: t.index ?? -1 })),
+    healAmount: _baseAmount >= 0 ? _baseAmount : 0,
+    damageRoll: 0,
+  });
 }
 
 function _getEnemyAt(idx) {

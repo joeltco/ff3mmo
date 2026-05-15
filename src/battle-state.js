@@ -78,6 +78,27 @@ export const battleSt = {
   allyMagicSfxPlayed:    false,  // gated SFX at impact start, separate from apply timing
   allyMagicItemMode: false,           // true = consumable (potion/antidote), suppresses cast flame visual
 
+  // ── Unified active cast (v1.7.362 step 5/7) ───────────────────────
+  // Single source-of-truth for "who is casting what at whom right now,"
+  // shared across player / ally / pvp-enemy roles. The legacy per-role
+  // bags above (`allyMagic*`) and in `pvpSt.pvpMagic*` are still
+  // populated for back-compat; the wire layer (future step 6/7) reads /
+  // writes `activeCast` so a remote-player cast intent doesn't need to
+  // know which legacy bag to target.
+  //
+  // Shape:
+  //   { caster:    { faction: 'player' | 'ally' | 'pvp-enemy',
+  //                  idx: number },
+  //     spellId:   number,
+  //     isItemUse: boolean,
+  //     targets:   [{ faction, idx }, ...],   // mixed-faction allowed
+  //     healAmount:    number,                // 0 if not a heal
+  //     damageRoll:    number,                // 0 if rolled per-target
+  //     hitIdx:        number,
+  //     effectApplied: boolean,
+  //     sfxPlayed:     boolean }
+  activeCast: null,
+
   // ── Item use ──────────────────────────────────────────────────────
   itemHealAmount: 0,
 
@@ -86,6 +107,33 @@ export const battleSt = {
   goblinWhiteCanvas: null,
   goblinDeathFrames: null,
 };
+
+// v1.7.362 step 5/7 — unified active-cast helpers. Every cast-start site
+// (player startSpellCast, ally _tryAlly* AI, pvp-enemy _tryPVPEnemy* AI)
+// calls `setActiveCast` so the wire layer has one place to read. Legacy
+// per-role state bags continue to be populated by their existing writers
+// — readers haven't migrated yet, so single-player play is unchanged.
+export function setActiveCast(cast) {
+  battleSt.activeCast = {
+    caster:        cast.caster,
+    spellId:       cast.spellId,
+    isItemUse:     !!cast.isItemUse,
+    targets:       cast.targets || [],
+    healAmount:    cast.healAmount || 0,
+    damageRoll:    cast.damageRoll || 0,
+    hitIdx:        0,
+    effectApplied: false,
+    sfxPlayed:     false,
+  };
+}
+
+export function clearActiveCast() {
+  battleSt.activeCast = null;
+}
+
+export function getActiveCast() {
+  return battleSt.activeCast;
+}
 
 // Boss constants (Adamantoise — monster 0xCC)
 export const BOSS_ATK = _BOSS_DATA.atk;

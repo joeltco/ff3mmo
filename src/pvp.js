@@ -1,6 +1,6 @@
 // PVP duel system — state, AI logic, rendering
 
-import { battleSt, setEnemyHP, BATTLE_TEXT_STEPS, BATTLE_TEXT_STEP_MS } from './battle-state.js';
+import { battleSt, setEnemyHP, BATTLE_TEXT_STEPS, BATTLE_TEXT_STEP_MS, setActiveCast } from './battle-state.js';
 import { getPlayerLocation } from './roster.js';
 import { getAllyDamageNums, setPlayerDamageNum, setEnemyHealNum, makeHealNumCallback } from './damage-numbers.js';
 import { ui } from './ui-state.js';
@@ -595,6 +595,12 @@ function _tryPVPEnemyCure(caster, casterCellIdx) {
   pvpSt.pvpMagicSpellId        = SPELL_CURE;
   pvpSt.pvpMagicHealAmount     = heal;
   pvpSt.pvpMagicEffectApplied  = false;
+  setActiveCast({
+    caster: { faction: 'pvp-enemy', idx: casterCellIdx },
+    spellId: SPELL_CURE,
+    targets: [{ faction: 'pvp-enemy', idx: target.ref.cellIdx }],
+    healAmount: heal,
+  });
   queueBattleMsg(caster.name ? _nameToBytes(caster.name) : BATTLE_FOE);
   replaceBattleMsg(getSpellNameShrinesClean(SPELL_CURE));
   playSFX(SFX.MAGIC_CAST);
@@ -660,6 +666,14 @@ function _tryPVPEnemyOffensiveCast(caster, casterCellIdx) {
   pvpSt.pvpMagicHealAmount     = 0;
   pvpSt.pvpMagicDamageRoll     = dmg;
   pvpSt.pvpMagicEffectApplied  = false;
+  // partyIdx convention: -1 = player, 0+ = battleAllies[i].
+  const targetFaction = target.ref.partyIdx === -1 ? 'player' : 'ally';
+  setActiveCast({
+    caster: { faction: 'pvp-enemy', idx: casterCellIdx },
+    spellId,
+    targets: [{ faction: targetFaction, idx: target.ref.partyIdx }],
+    damageRoll: dmg,
+  });
   queueBattleMsg(caster.name ? _nameToBytes(caster.name) : BATTLE_FOE);
   replaceBattleMsg(getSpellNameShrinesClean(spellId));
   playSFX(SFX.MAGIC_CAST);
@@ -687,6 +701,11 @@ function _tryPVPEnemyPoisona(caster, casterCellIdx) {
   pvpSt.pvpMagicSpellId        = SPELL_POISONA;
   pvpSt.pvpMagicHealAmount     = 0;
   pvpSt.pvpMagicEffectApplied  = false;
+  setActiveCast({
+    caster: { faction: 'pvp-enemy', idx: casterCellIdx },
+    spellId: SPELL_POISONA,
+    targets: [{ faction: 'pvp-enemy', idx: target.ref.cellIdx }],
+  });
   queueBattleMsg(caster.name ? _nameToBytes(caster.name) : BATTLE_FOE);
   replaceBattleMsg(getSpellNameShrinesClean(SPELL_POISONA));
   playSFX(SFX.MAGIC_CAST);

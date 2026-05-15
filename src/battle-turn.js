@@ -1,6 +1,6 @@
 // Battle turn order + turn dispatch — extracted from game.js
 
-import { battleSt, getEnemyHP, setEnemyHP, BATTLE_SHAKE_MS, BOSS_DEF, BOSS_MAX_HP } from './battle-state.js';
+import { battleSt, getEnemyHP, setEnemyHP, BATTLE_SHAKE_MS, BOSS_DEF, BOSS_MAX_HP, setActiveCast } from './battle-state.js';
 import { rollHits, calcPotentialHits, rollInitiative, resolveLivingTarget } from './battle-math.js';
 import { BATTLE_RAN_AWAY, BATTLE_CANT_ESCAPE, BATTLE_ALLY } from './data/strings.js';
 import { getMonsterName, getSpellNameShrinesClean, getItemNameShrinesClean } from './text-decoder.js';
@@ -347,6 +347,12 @@ function _tryAllyCure(ally, allyIdx) {
   battleSt.allyMagicHealAmount    = heal;
   battleSt.allyMagicEffectApplied = false;
   battleSt.allyMagicItemMode      = false;
+  setActiveCast({
+    caster: { faction: 'ally', idx: allyIdx },
+    spellId: SPELL_CURE,
+    targets: [{ faction: target.ref.type, idx: target.ref.index }],
+    healAmount: heal,
+  });
   queueBattleMsg(ally.name ? _nameToBytes(ally.name) : BATTLE_ALLY);
   replaceBattleMsg(getSpellNameShrinesClean(SPELL_CURE));
   playSFX(SFX.MAGIC_CAST);
@@ -410,6 +416,11 @@ function _tryAllyPoisona(ally, allyIdx) {
   battleSt.allyMagicHealAmount    = 0;
   battleSt.allyMagicEffectApplied = false;
   battleSt.allyMagicItemMode      = false;
+  setActiveCast({
+    caster: { faction: 'ally', idx: allyIdx },
+    spellId: SPELL_POISONA,
+    targets: [{ faction: target.ref.type, idx: target.ref.index }],
+  });
   queueBattleMsg(ally.name ? _nameToBytes(ally.name) : BATTLE_ALLY);
   replaceBattleMsg(getSpellNameShrinesClean(SPELL_POISONA));
   playSFX(SFX.MAGIC_CAST);
@@ -473,6 +484,12 @@ function _tryAllyOffensiveCast(ally, allyIdx) {
   battleSt.allyMagicDamageRoll    = dmg;
   battleSt.allyMagicEffectApplied = false;
   battleSt.allyMagicItemMode      = false;
+  setActiveCast({
+    caster: { faction: 'ally', idx: allyIdx },
+    spellId,
+    targets: [{ faction: targetType, idx: target.ref.index }],
+    damageRoll: dmg,
+  });
   queueBattleMsg(ally.name ? _nameToBytes(ally.name) : BATTLE_ALLY);
   replaceBattleMsg(getSpellNameShrinesClean(spellId));
   playSFX(SFX.MAGIC_CAST);
@@ -515,6 +532,13 @@ function _tryAllyItem(ally, allyIdx) {
   battleSt.allyMagicHealAmount    = 50;
   battleSt.allyMagicEffectApplied = false;
   battleSt.allyMagicItemMode      = true;
+  setActiveCast({
+    caster: { faction: 'ally', idx: allyIdx },
+    spellId: spellSentinel,
+    isItemUse: true,
+    targets: [{ faction: target.ref.type, idx: target.ref.index }],
+    healAmount: 50,
+  });
   queueBattleMsg(ally.name ? _nameToBytes(ally.name) : BATTLE_ALLY);
   replaceBattleMsg(getSpellNameShrinesClean(spellSentinel));
   playSFX(SFX.CURE);
