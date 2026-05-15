@@ -1,6 +1,6 @@
 // PVP duel system — state, AI logic, rendering
 
-import { battleSt, setEnemyHP, BATTLE_TEXT_STEPS, BATTLE_TEXT_STEP_MS, setActiveCast, setEnemyAttackerTarget } from './battle-state.js';
+import { battleSt, setEnemyHP, BATTLE_TEXT_STEPS, BATTLE_TEXT_STEP_MS, setActiveCast, clearActiveCast, setEnemyAttackerTarget } from './battle-state.js';
 import { getPlayerLocation } from './roster.js';
 import { getAllyDamageNums, setPlayerDamageNum, setEnemyHealNum, makeHealNumCallback } from './damage-numbers.js';
 import { ui } from './ui-state.js';
@@ -776,13 +776,19 @@ function _applyWireOpponentAction(action, casterCellIdx) {
     // sender's 'me' → receiver's pvp-enemy cell (cellIdx = target.idx).
     // sender's 'opp' → receiver's player side (partyIdx = target.idx === 0 ? -1 : target.idx - 1).
     const ref = _wireTargetToEngineRef(action.target);
-    // Same RNG calls the AI path would have made — with synced seed, both
-    // clients land on the same roll.
+    // Damage / heal values: sender's payload is authoritative when present
+    // (v1.7.389). Synced RNG should still produce a matching local roll, but
+    // carrying the explicit value rules out cursor-drift mismatches if the
+    // two clients made different numbers of rand() calls before this point.
+    // Fall back to local roll for older clients that don't send the values.
+    // See docs/MULTIPLAYER-AUDIT-2026-05-15.md #24.
     let heal = 0, dmg = 0;
     if (spell.element === 'recovery' || spell.target === 'cure_status') {
-      heal = (spell.power > 0) ? rollCureAmount(caster) : 0;
+      heal = (typeof action.healAmount === 'number') ? (action.healAmount | 0)
+           : (spell.power > 0 ? rollCureAmount(caster) : 0);
     } else {
-      dmg = rollOffensiveDamage(caster, spell);
+      dmg = (typeof action.damageRoll === 'number') ? (action.damageRoll | 0)
+          : rollOffensiveDamage(caster, spell);
     }
     pvpSt.pvpMagicCasterCellIdx = casterCellIdx;
     if (ref.side === 'enemy') {
@@ -817,17 +823,52 @@ function _applyWireOpponentAction(action, casterCellIdx) {
   }
 
   if (action.kind === 'item') {
-    // MVP — opponent's item use is a potion on themselves (match the AI's
-    // existing behavior in `_tryPVPEnemyItem`). Targeted PvP item-use is a
-    // part-2.5 extension.
-    if (casterCellIdx === 0 && pvpSt.pvpOpponentStats) {
-      const maxHP = pvpSt.pvpOpponentStats.maxHP;
-      const curHP = pvpSt.pvpOpponentStats.hp;
-      const heal = Math.min(50, maxHP - curHP);
-      if (heal > 0) {
-        pvpSt.pvpOpponentStats.hp = curHP + heal;
-        setEnemyHealNum({ value: heal, timer: 0 });
+    // v1.7.389 — full item target translation (audit #23). Pre-fix the
+    // receiver always healed the main opp regardless of `action.target`,
+    // so an item used by an opp ally — or used on an ally cell — visually
+    // healed the wrong combatant on the receiver's side.
+    const itemId = (action.itemId | 0) || 0;
+    const item = ITEMS.get(itemId);
+    const ref = _wireTargetToEngineRef(action.target);
+    if (ref.side === 'enemy') {
+      // Same-team heal/cure on the opponent's side (their player heals
+      // themselves or one of their allies). Apply on our pvp-enemy cell.
+      const tgt = _pvpEnemyByCellIdx(ref.cellIdx);
+      if (tgt && item) {
+        if (item.effect === 'cure_status' && item.cures) {
+          const flag = {
+            poison: STATUS.POISON, blind: STATUS.BLIND,
+            mini: STATUS.MINI, toad: STATUS.TOAD,
+            silence: STATUS.SILENCE, petrify: STATUS.PETRIFY,
+          }[item.cures];
+          if (flag && tgt.status) removeStatus(tgt.status, flag);
+          setEnemyHealNum({ value: 0, timer: 0, index: ref.cellIdx });
+        } else if (item.effect === 'heal') {
+          const heal = Math.min(item.power || 50, (tgt.maxHP || tgt.hp) - tgt.hp);
+          if (heal > 0) {
+            dispatchDelta({ type: 'hp', target: tgt, amount: heal });
+            setEnemyHealNum({ value: heal, timer: 0, index: ref.cellIdx });
+          }
+        } else if (item.effect === 'full_heal') {
+          const heal = (tgt.maxHP || tgt.hp) - tgt.hp;
+          if (heal > 0) {
+            dispatchDelta({ type: 'hp', target: tgt, amount: heal });
+            setEnemyHealNum({ value: heal, timer: 0, index: ref.cellIdx });
+          }
+        }
       }
+      pvpSt.pvpItemCasterCellIdx = casterCellIdx;
+      pvpSt.pvpItemTargetCellIdx = ref.cellIdx;
+      pvpSt.pvpItemKind = item?.effect === 'cure_status' ? 'antidote' : 'potion';
+      pvpSt.pvpItemId = itemId;
+    } else {
+      // Cross-faction — opp's item targets the player side (rare; offensive
+      // items aren't in v1 but the path is wired for future grenade-style
+      // items). Today we just play the animation on the targeted cell.
+      pvpSt.pvpItemCasterCellIdx = casterCellIdx;
+      pvpSt.pvpItemTargetCellIdx = -1;
+      pvpSt.pvpItemKind = 'potion';
+      pvpSt.pvpItemId = itemId;
     }
     playSFX(SFX.CURE);
     battleSt.battleState = 'pvp-opp-potion';
@@ -1157,6 +1198,7 @@ function _processPVPEnemyMagic(dt) {
       pvpSt.pvpMagicPartyTargetIdx = -100;
       pvpSt.pvpMagicSpellId = 0;
       pvpSt.pvpMagicDamageRoll = 0;
+      clearActiveCast();  // v1.7.389 — was leaking the state bag between spell rounds. Audit #32.
       _advancePVPTurnOrEnd();  // v1.7.225 — was processNextTurn() (skipped teamwipe → spell-kill bug)
     }
     return true;

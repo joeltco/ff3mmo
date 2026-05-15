@@ -109,7 +109,14 @@ let _watchSince = 0;
 let _watchReported = false;
 function _tickFreezeWatchdog(now) {
   const cur = battleSt.battleState;
-  if (!cur || cur === 'none' || _frozenIdleStates.has(cur)) {
+  // Wire-PvP exception: when we're waiting for an opponent's action to arrive,
+  // `enemy-flash` is an INPUT-waiting state, not a stuck state. Treating it
+  // as idle until the action lands prevents the watchdog from firing during
+  // normal network jitter. Audit #31.
+  const wireWait = cur === 'enemy-flash'
+    && pvpSt.isWirePVP
+    && !pvpSt.pvpPreflashDecided;
+  if (!cur || cur === 'none' || _frozenIdleStates.has(cur) || wireWait) {
     _watchState = cur;
     _watchSince = now;
     _watchReported = false;

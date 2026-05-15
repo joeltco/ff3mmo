@@ -419,11 +419,14 @@ function _handleMessage(entry, msg) {
       const partner = _connected.get(partnerId);
       if (!partner || partner.ws.readyState !== 1) return;
       _send(partner.ws, {
-        type:    'pvp-action',
-        kind:    parsed.kind,
-        target:  parsed.target,     // 'me' | 'opp' (sender's perspective)
-        spellId: parsed.spellId,    // for kind === 'magic'
-        itemId:  parsed.itemId,     // for kind === 'item'
+        type:       'pvp-action',
+        kind:       parsed.kind,
+        actor:      parsed.actor,         // { idx } — sender's cell
+        target:     parsed.target,        // { side: 'me'|'opp', idx } — sender's perspective
+        spellId:    parsed.spellId,       // for kind === 'magic'
+        itemId:     parsed.itemId,        // for kind === 'item'
+        damageRoll: parsed.damageRoll,    // v1.7.389 — sender's pre-rolled damage (audit #24)
+        healAmount: parsed.healAmount,    // v1.7.389 — sender's pre-rolled heal (audit #24)
       });
       return;
     }

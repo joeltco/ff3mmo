@@ -2,6 +2,7 @@
 
 import { battleSt, getEnemyHP, setEnemyHP, BATTLE_SHAKE_MS, BOSS_DEF, BOSS_MAX_HP, setActiveCast } from './battle-state.js';
 import { rollHits, calcPotentialHits, rollInitiative, resolveLivingTarget } from './battle-math.js';
+import { rand } from './rng.js';
 import { BATTLE_RAN_AWAY, BATTLE_CANT_ESCAPE, BATTLE_ALLY } from './data/strings.js';
 import { getMonsterName, getSpellNameShrinesClean, getItemNameShrinesClean } from './text-decoder.js';
 import { ps, getJobLevelStatBonus } from './player-stats.js';
@@ -381,7 +382,7 @@ function _tryAllyCure(ally, allyIdx) {
     targets: [{ faction: target.ref.type, idx: target.ref.index }],
     healAmount: heal,
   });
-  _emitWireAllyAction(allyIdx, { kind: 'magic', spellId: SPELL_CURE, target: _wireTargetFromAllyMagicBag() });
+  _emitWireAllyAction(allyIdx, { kind: 'magic', spellId: SPELL_CURE, target: _wireTargetFromAllyMagicBag(), healAmount: heal });
   queueBattleMsg(ally.name ? _nameToBytes(ally.name) : BATTLE_ALLY);
   replaceBattleMsg(getSpellNameShrinesClean(SPELL_CURE));
   playSFX(SFX.MAGIC_CAST);
@@ -543,7 +544,7 @@ function _tryAllyOffensiveCast(ally, allyIdx) {
     targets: [{ faction: targetType, idx: target.ref.index }],
     damageRoll: dmg,
   });
-  _emitWireAllyAction(allyIdx, { kind: 'magic', spellId, target: _wireTargetFromAllyMagicBag() });
+  _emitWireAllyAction(allyIdx, { kind: 'magic', spellId, target: _wireTargetFromAllyMagicBag(), damageRoll: dmg });
   queueBattleMsg(ally.name ? _nameToBytes(ally.name) : BATTLE_ALLY);
   replaceBattleMsg(getSpellNameShrinesClean(spellId));
   playSFX(SFX.MAGIC_CAST);
@@ -763,7 +764,9 @@ function _playerTurnRun() {
     if (alive.length > 0) avgLevel = alive.reduce((s, m) => s + (m.level || 1), 0) / alive.length;
   }
   const successRate = Math.min(99, Math.max(1, playerAgi + 25 - Math.floor(avgLevel / 4)));
-  if (Math.floor(Math.random() * 100) < successRate) {
+  // rand() (not Math.random) so any future code that depends on the RNG cursor
+  // being in lockstep won't fork on a run attempt. Audit #4.
+  if (Math.floor(rand() * 100) < successRate) {
     queueBattleMsg(BATTLE_RAN_AWAY);
     playSFX(SFX.RUN_AWAY);
     battleSt.battleState = 'run-success'; battleSt.battleTimer = 0;

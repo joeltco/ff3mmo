@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.389 — 2026-05-15
+
+### Multiplayer audit batch 3 — protocol completeness
+
+- **#24 `pvp-action {kind: 'magic'}` carries `damageRoll` / `healAmount`**: sender's pre-rolled values now travel on the wire; receiver uses them directly when present, falls back to a local roll otherwise. With synced RNG the values should match anyway, but the explicit payload defuses any cursor-drift desync from divergent rand() call counts before the cast.
+- **Hidden bug: server didn't relay `actor.idx`**: `pvp-action` relay only forwarded `kind / target / spellId / itemId`. Sender's `_emitWireAllyAction` set `actor: {idx: allyIdx + 1}` for ally actions, but the server dropped it. Receiver read `headActor = (head?.actor?.idx) | 0` → always 0, so any ally action (cell ≥ 1) hit the queue-mismatch branch and soft-froze the FSM in `enemy-flash`. Party-PvP ally turns would not have functioned across the wire. Now relayed.
+- **#23 wire item target translation**: receiver's `_applyWireOpponentAction` for `kind: 'item'` was hardcoded to "heal main opp on yourself only". Now mirrors the magic path — translates `target.side / idx` properly, handles cure-status / heal / full_heal effects, and routes the heal-num + SFX to the right cell.
+- **#32 `clearActiveCast` after wire-pvp magic**: `_processPVPEnemyMagic` was leaking `activeCast` across spell rounds. Cleared at end-of-hit alongside the other per-cast state.
+- **#31 freeze watchdog ignores wire-wait**: `enemy-flash` while `pvpSt.isWirePVP && !pvpPreflashDecided` is now treated as idle. Stops the watchdog from firing during normal network jitter on the receiver's side.
+- **#4 `_playerTurnRun` uses `rand()`**: kept the AGI roll seeded so any future code path that wants to lockstep across clients sees a consistent cursor.
+
 ## 1.7.388 — 2026-05-15
 
 ### Multiplayer audit batch 2 — server hardening + UX
