@@ -734,6 +734,16 @@ function _playerTurnMagic() {
 }
 
 function _playerTurnRun() {
+  // PvP flee always succeeds (cross-client lockstep doesn't have a stable
+  // single source for the AGI-vs-level roll). Show the same RAN_AWAY +
+  // SFX as a successful encounter flee.
+  if (pvpSt.isPVPBattle) {
+    queueBattleMsg(BATTLE_RAN_AWAY);
+    playSFX(SFX.RUN_AWAY);
+    battleSt.battleState = 'run-success';
+    battleSt.battleTimer = 0;
+    return;
+  }
   const playerAgi = (ps.stats ? ps.stats.agi : 5) + getJobLevelStatBonus().agi;
   let avgLevel = 1;
   if (battleSt.encounterMonsters) {

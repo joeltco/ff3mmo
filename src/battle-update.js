@@ -173,8 +173,11 @@ export function executeBattleCommand(index) {
     battleSt.battleState = 'item-menu-out';
     battleSt.battleTimer = 0;
   } else {
-    // Run
-    if (battleSt.isRandomEncounter) {
+    // Run — allowed in random encounters AND in PvP (the boss fight is the
+    // only no-flee case left). PvP flee in `_playerTurnRun` always succeeds
+    // since rolling against the opponent's AGI would diverge across clients
+    // (each AGI is on its own side).
+    if (battleSt.isRandomEncounter || pvpSt.isPVPBattle) {
       playSFX(SFX.CONFIRM);
       battleSt.isDefending = false;
       inputSt.playerActionPending = { command: 'run' };
@@ -662,7 +665,12 @@ function _updateBattleRun() {
     return true;
   }
   if (battleSt.battleState === 'run-success') {
-    battleSt.runSlideBack = true; battleSt.battleState = 'encounter-box-close'; battleSt.battleTimer = 0;
+    battleSt.runSlideBack = true;
+    // PvP uses `enemy-box-close` (cleans up via `resetPVPState`); random
+    // encounters use `encounter-box-close`. Same visual close, different
+    // cleanup path.
+    battleSt.battleState = pvpSt.isPVPBattle ? 'enemy-box-close' : 'encounter-box-close';
+    battleSt.battleTimer = 0;
     return true;
   }
   return false;

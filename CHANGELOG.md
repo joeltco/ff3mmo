@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.377 — 2026-05-15
+
+### PvP opponent-flee handling
+
+- Player can now flee from PvP. Pre-v1.7.377 the Run menu in PvP showed "Can't escape!" (only random encounters allowed flee). `battle-update.js#executeBattleCommand` now gates Run on `isRandomEncounter || isPVPBattle`.
+- `_playerTurnRun` in `battle-turn.js` takes a PvP fast-path: skip the AGI-vs-level success roll (no stable single source for it cross-client) and always succeed with `BATTLE_RAN_AWAY` + `SFX.RUN_AWAY`. Transitions to `run-success` like the encounter path.
+- `_updateBattleRun` routes `run-success` to `enemy-box-close` when `isPVPBattle` (vs `encounter-box-close` for monster fights) so `resetPVPState` cleans up the PvP-specific state and the existing Step 4 outcome report (`fled`) fires correctly.
+- Receiver side (`pvp.js#setNetPVPActionHandler`): a `kind:'run'` wire action short-circuits the normal queue dispatch and transitions immediately to `enemy-box-close` with `"OpponentName fled!"` + `SFX.RUN_AWAY`, regardless of whose turn was about to fire. Any queued wire actions get drained (they're moot once the battle ends).
+- `_applyWireOpponentAction`'s `'run'` branch is now a no-op (unreachable today since wire-arrival short-circuits, but defensively safe if an out-of-order delivery ever queues one).
+- Outcome reporting: both sides infer `fled` from `resetPVPState`'s outcome derivation (player HP > 0, opponent HP > 0 → `fled`). Server's `pvp-result` mismatch check passes since both clients report identically.
+
 ## 1.7.376 — 2026-05-15
 
 ### Party-ally PvP: ally action relay (2 of 3)

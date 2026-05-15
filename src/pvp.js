@@ -143,6 +143,21 @@ const _wireOpponentActions = [];
 let _wirePendingAttackTargetAlly = -1;
 setNetPVPActionHandler((msg) => {
   if (!pvpSt.isWirePVP) return;
+  // Flee ends the battle for both sides immediately, regardless of whose
+  // turn was about to fire. Short-circuit the normal queue dispatch and
+  // transition straight to `enemy-box-close` (which runs `resetPVPState`
+  // + reports `outcome: 'fled'` server-side). Sender's local
+  // `_playerTurnRun` lands on `run-success` → same `enemy-box-close`.
+  if (msg && msg.kind === 'run') {
+    const oppName = pvpSt.pvpOpponent && pvpSt.pvpOpponent.name;
+    queueBattleMsg(_nameToBytes((oppName ? oppName + ' fled!' : 'Foe fled!')));
+    playSFX(SFX.RUN_AWAY);
+    // Drain any pending wire actions — they're moot once the battle ends.
+    _wireOpponentActions.length = 0;
+    battleSt.battleState = 'enemy-box-close';
+    battleSt.battleTimer = 0;
+    return;
+  }
   _wireOpponentActions.push(msg);
 });
 
@@ -649,10 +664,15 @@ function _applyWireOpponentAction(action, casterCellIdx) {
   if (!action || !action.kind) return false;
   const caster = _pvpEnemyByCellIdx(casterCellIdx);
 
-  if (action.kind === 'attack' || action.kind === 'run') {
-    // Run on the opponent side currently has no engine path; treat as attack
-    // so the battle keeps moving. Real opponent-run handling = part 3.
-    //
+  if (action.kind === 'run') {
+    // Wire-arrival site short-circuits flee to `enemy-box-close` (see
+    // `setNetPVPActionHandler`). A run action in the queue here is
+    // unreachable today; if it ever shows up (out-of-order delivery,
+    // race), no-op so we don't accidentally treat flee as an attack.
+    return false;
+  }
+
+  if (action.kind === 'attack') {
     // Stash the wire target so the existing post-preflash attack flow
     // (`_processEnemyFlash` below) uses it instead of the AI random pick.
     // Sender's `target.side === 'opp'` → receiver's player side, where
