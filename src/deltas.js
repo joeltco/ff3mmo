@@ -16,11 +16,16 @@
 // server). The default is `applyLocal` which mutates directly.
 //
 // Delta shapes:
-//   { type: 'hp',          target, amount, source? }   — signed HP change.
+//   { type: 'hp',          target, amount, min?, source? } — signed HP change.
 //                                                          amount < 0 = damage,
 //                                                          amount > 0 = heal.
-//                                                          Clamps to [0, maxHP]
+//                                                          Clamps to [min, maxHP]
 //                                                          when max is available.
+//                                                          Default min=0; pass
+//                                                          min=1 for poison
+//                                                          damage on player/ally
+//                                                          (NES rule: never kill
+//                                                          from full).
 //   { type: 'statusAdd',   target, flag, source? }     — apply status flag.
 //   { type: 'statusRemove',target, flag, source? }     — clear status flag.
 //   { type: 'death',       target, source? }           — force HP to 0 +
@@ -67,7 +72,8 @@ export function applyLocal(d) {
     case 'hp': {
       const cur = d.target.hp || 0;
       const max = _maxHP(d.target);
-      const next = Math.max(0, Math.min(max || Infinity, cur + d.amount));
+      const floor = d.min || 0;
+      const next = Math.max(floor, Math.min(max || Infinity, cur + d.amount));
       d.target.hp = next;
       return;
     }

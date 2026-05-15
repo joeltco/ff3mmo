@@ -12,6 +12,7 @@ import { resetBattleVars, isTeamWiped, updateBattleTimers, updatePoisonTick,
 import { playSFX, stopSFX, SFX, pauseMusic, playTrack, TRACKS } from './music.js';
 import { rollHits, calcPotentialHits, BOSS_HIT_RATE, GOBLIN_HIT_RATE, summarizeHits, isLeftHandHit } from './battle-math.js';
 import { reseedFromEntropy } from './rng.js';
+import { dispatchDelta } from './deltas.js';
 import { canCastBasic, canCastAny, pickHealTarget, pickPoisonedTarget,
          pickRandomLivingTarget, pickOffensiveSpell, rollOffensiveDamage,
          rollCureAmount, rollActivation,
@@ -512,7 +513,7 @@ function _tryPVPEnemyItem(casterCellIdx) {
   const t = _pvpEnemyByCellIdx(wounded.ref.cellIdx);
   const heal = Math.min(50, (t.maxHP || t.hp) - t.hp);
   if (heal <= 0) return false;
-  t.hp += heal;
+  dispatchDelta({ type: 'hp', target: t, amount: heal });
   pvpSt.pvpItemCasterCellIdx = casterCellIdx;
   pvpSt.pvpItemTargetCellIdx = wounded.ref.cellIdx;
   pvpSt.pvpItemKind = 'potion';
@@ -886,13 +887,13 @@ function _processPVPOppSWHit() {
   if (battleSt.battleTimer >= 400 && !pvpSt._swDmgApplied) {
     const dmg = pvpSt._oppSWPerDmg;
     if (tidx === -1) {
-      ps.hp = Math.max(0, ps.hp - dmg);
+      dispatchDelta({ type: 'hp', target: ps, amount: -dmg });
       setPlayerDamageNum({ value: dmg, timer: 0 });
       battleSt.battleShakeTimer = BATTLE_SHAKE_MS;
     } else {
       const ally = battleSt.battleAllies[tidx];
       if (ally && ally.hp > 0) {
-        ally.hp = Math.max(0, ally.hp - dmg);
+        dispatchDelta({ type: 'hp', target: ally, amount: -dmg });
         getAllyDamageNums()[tidx] = { value: dmg, timer: 0 };
         battleSt.allyShakeTimer[tidx] = BATTLE_SHAKE_MS;
       }
@@ -966,10 +967,10 @@ function _processPVPEnemySlash() {
   if (pending && !pending.miss && !pending.shieldBlock) {
     if (targetAlly >= 0) {
       const ally = battleSt.battleAllies[targetAlly];
-      if (ally) ally.hp = Math.max(0, ally.hp - pending.dmg);
+      if (ally) dispatchDelta({ type: 'hp', target: ally, amount: -pending.dmg });
       battleSt.allyShakeTimer[targetAlly] = BATTLE_SHAKE_MS;
     } else {
-      ps.hp = Math.max(0, ps.hp - pending.dmg);
+      dispatchDelta({ type: 'hp', target: ps, amount: -pending.dmg });
       battleSt.battleShakeTimer = BATTLE_SHAKE_MS;
     }
     if (pending.crit) battleSt.critFlashTimer = 0;

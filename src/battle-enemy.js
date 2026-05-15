@@ -3,6 +3,7 @@
 import { battleSt, getEnemyHP, setEnemyHP,
          BATTLE_SHAKE_MS, BATTLE_DMG_SHOW_MS, BOSS_PREFLASH_MS, BOSS_ATK,
          setEnemyAttackerTarget } from './battle-state.js';
+import { dispatchDelta } from './deltas.js';
 import { calcDamage, elemMultiplier, BOSS_HIT_RATE, GOBLIN_HIT_RATE } from './battle-math.js';
 import { ps, getShieldEvade } from './player-stats.js';
 import { SFX, playSFX } from './music.js';
@@ -69,7 +70,7 @@ function _doSpecialAttack(mon, spec, targetAlly = -1) {
       const roll = baseAtk + Math.floor(Math.random() * (Math.floor(baseAtk / 2) + 1));
       const raw = Math.floor(roll * eMult) - (ally.mdef || 0);
       const dmg = Math.max(1, raw);
-      ally.hp = Math.max(0, ally.hp - dmg);
+      dispatchDelta({ type: 'hp', target: ally, amount: -dmg });
       getAllyDamageNums()[targetAlly] = { value: dmg, timer: 0 };
       battleSt.allyShakeTimer[targetAlly] = BATTLE_SHAKE_MS;
       playSFX(SFX.ATTACK_HIT);
@@ -107,10 +108,10 @@ function _doSpecialAttack(mon, spec, targetAlly = -1) {
     const dmg = Math.max(1, raw);
     if (battleSt.isDefending) {
       const reduced = Math.max(1, Math.floor(dmg / 2));
-      ps.hp = Math.max(0, ps.hp - reduced);
+      dispatchDelta({ type: 'hp', target: ps, amount: -reduced });
       setPlayerDamageNum({ value: reduced, timer: 0 });
     } else {
-      ps.hp = Math.max(0, ps.hp - dmg);
+      dispatchDelta({ type: 'hp', target: ps, amount: -dmg });
       setPlayerDamageNum({ value: dmg, timer: 0 });
     }
     playSFX(SFX.ATTACK_HIT);
@@ -202,7 +203,7 @@ function _processEnemyFlash() {
     const ally = battleSt.battleAllies[targetAlly];
     const { total, landed } = rollMultiHit(ally.def, null, ally.shieldEvade || 0, ally.evade || 0);
     if (landed > 0) {
-      battleSt.battleAllies[targetAlly].hp = Math.max(0, battleSt.battleAllies[targetAlly].hp - total);
+      dispatchDelta({ type: 'hp', target: battleSt.battleAllies[targetAlly], amount: -total });
       getAllyDamageNums()[targetAlly] = { value: total, timer: 0 };
       battleSt.allyShakeTimer[targetAlly] = BATTLE_SHAKE_MS;
       playSFX(SFX.ATTACK_HIT); battleSt.battleState = 'ally-hit'; battleSt.battleTimer = 0;
@@ -219,7 +220,7 @@ function _processEnemyFlash() {
       // Protect halves physical damage independently of Defend; both stack.
       // Canon FF3 NES Protect is physical-only — leave magic damage paths alone.
       if (ps.buffs && ps.buffs.protect) dmg = Math.max(1, Math.floor(dmg / 2));
-      ps.hp = Math.max(0, ps.hp - dmg);
+      dispatchDelta({ type: 'hp', target: ps, amount: -dmg });
       setPlayerDamageNum({ value: dmg, timer: 0 });
       // Physical hit wakes sleeping targets
       if (ps.status) wakeOnHit(ps.status);

@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.365 — 2026-05-15
+
+### Combat: complete dispatchDelta HP migration (multiplayer prep step 6.5)
+
+- All 17 remaining direct `target.hp = Math.max(...)` writes routed through `dispatchDelta`. Combat is now server-authoritative-ready for HP — every damage and heal write goes through one interceptable seam.
+- Sites covered: 5 in `battle-enemy.js` (monster sp-atk magic damage on ally + player, monster multi-hit on ally + player, regular monster hit on player), 7 in `battle-turn.js` (2 confused-player friendly damage paths + 5 end-of-round poison ticks across player / ally / monster / pvp-opp / pvp-enemy-ally), 5 in `pvp.js` (1 self-heal potion + 2 SW-throw damage + 2 PvP slash damage).
+- New `min` field on `hp` deltas — clamps the floor. Used by end-of-round poison on player/ally to honor the NES rule that poison never kills from full HP. Default `min=0`; monsters / PvP-enemies pass no `min` so they CAN die to poison.
+- Verified via grep: zero `\.hp = Math\.max\|\.hp -= \|\.hp += ` remaining in combat files.
+- Status mask writes via `tryInflictStatus` / `addStatus` / `removeStatus` are still inline (status-effects.js mutates internally). Not in step 6.5 scope; status delta migration is a separate follow-up.
+
 ## 1.7.364 — 2026-05-15
 
 ### Combat: per-attacker enemyTargetAllyIdx scaffold (multiplayer prep step 7 of 7)

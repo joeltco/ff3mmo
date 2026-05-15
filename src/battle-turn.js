@@ -17,6 +17,7 @@ import { _nameToBytes } from './text-utils.js';
 import { getAllyDamageNums, setEnemyDmgNum, setEnemyHealNum, setPlayerDamageNum, setPlayerHealNum, setSwDmgNum } from './damage-numbers.js';
 import { startSpellCast } from './spell-cast.js';
 import { applyMagicHeal } from './combatant-cast.js';
+import { dispatchDelta } from './deltas.js';
 import { SPELLS } from './data/spells.js';
 import { selectCursor, saveSlots, saveSlotsToDB } from './save-state.js';
 import { removeItem } from './inventory.js';
@@ -137,11 +138,11 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
           for (const h of hits) { if (!h.miss && !h.shieldBlock) totalDmg += h.damage; }
           if (totalDmg > 0) {
             if (pick.type === 'self') {
-              ps.hp = Math.max(0, ps.hp - totalDmg);
+              dispatchDelta({ type: 'hp', target: ps, amount: -totalDmg });
               setPlayerDamageNum({ value: totalDmg, timer: 0 });
             } else {
               const ally = battleSt.battleAllies[pick.index];
-              ally.hp = Math.max(0, ally.hp - totalDmg);
+              dispatchDelta({ type: 'hp', target: ally, amount: -totalDmg });
               getAllyDamageNums()[pick.index] = { value: totalDmg, timer: 0 };
             }
             battleSt.battleShakeTimer = BATTLE_SHAKE_MS;
@@ -280,7 +281,8 @@ function _applyEndOfRoundPoison() {
     const max = ps.stats ? ps.stats.maxHP : ps.hp;
     const dmg = Math.floor(max / 16);
     if (dmg > 0) {
-      ps.hp = Math.max(1, ps.hp - dmg);
+      // NES rule: poison never kills player/ally from full → clamp to 1.
+      dispatchDelta({ type: 'hp', target: ps, amount: -dmg, min: 1 });
       setPlayerDamageNum({ value: dmg, timer: 0 });
       anyTicked = true;
     }
@@ -291,7 +293,7 @@ function _applyEndOfRoundPoison() {
     if (!hasStatus(ally.status, STATUS.POISON)) continue;
     const dmg = Math.floor((ally.maxHP || ally.hp) / 16);
     if (dmg <= 0) continue;
-    ally.hp = Math.max(1, ally.hp - dmg);
+    dispatchDelta({ type: 'hp', target: ally, amount: -dmg, min: 1 });
     getAllyDamageNums()[i] = { value: dmg, timer: 0 };
     anyTicked = true;
   }
@@ -302,7 +304,8 @@ function _applyEndOfRoundPoison() {
       if (!hasStatus(mon.status, STATUS.POISON)) continue;
       const dmg = Math.floor((mon.maxHP || mon.hp) / 16);
       if (dmg <= 0) continue;
-      mon.hp = Math.max(0, mon.hp - dmg);
+      // Monsters/PvP-enemies CAN die to poison — no min clamp.
+      dispatchDelta({ type: 'hp', target: mon, amount: -dmg });
       setSwDmgNum(i, dmg);
       anyTicked = true;
     }
@@ -311,7 +314,11 @@ function _applyEndOfRoundPoison() {
     const opp = pvpSt.pvpOpponentStats;
     if (opp && opp.hp > 0 && opp.status && hasStatus(opp.status, STATUS.POISON)) {
       const dmg = Math.floor((opp.maxHP || opp.hp) / 16);
-      if (dmg > 0) { opp.hp = Math.max(0, opp.hp - dmg); setSwDmgNum(0, dmg); anyTicked = true; }
+      if (dmg > 0) {
+        dispatchDelta({ type: 'hp', target: opp, amount: -dmg });
+        setSwDmgNum(0, dmg);
+        anyTicked = true;
+      }
     }
     for (let i = 0; i < pvpSt.pvpEnemyAllies.length; i++) {
       const e = pvpSt.pvpEnemyAllies[i];
@@ -319,7 +326,7 @@ function _applyEndOfRoundPoison() {
       if (!hasStatus(e.status, STATUS.POISON)) continue;
       const dmg = Math.floor((e.maxHP || e.hp) / 16);
       if (dmg <= 0) continue;
-      e.hp = Math.max(0, e.hp - dmg);
+      dispatchDelta({ type: 'hp', target: e, amount: -dmg });
       setSwDmgNum(i + 1, dmg);
       anyTicked = true;
     }
