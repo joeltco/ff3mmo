@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.382 — 2026-05-15
+
+### Mid-session sync for real-player party members
+
+- `src/net.js` poll loop now diffs the local player's main profile (level / palIdx / equipment / hp / maxHP / agi etc) every 500 ms and emits `update {…}` when the signature changes. Pre-v1.7.382 only `location` and `allies` polled; level-ups and equipment swaps never propagated past the initial `hello` snapshot.
+- New `getOnlinePlayerByName(name)` exposed from `src/net.js`. Returns the live wire profile from `_onlinePlayers` — gets refreshed every time the server broadcasts a `player-update` for that user.
+- `src/battle-update.js#tryJoinPlayerAlly` lookup chain reordered:
+  1. `PLAYER_POOL` (stable fake-roster data)
+  2. `getOnlinePlayerByName` — live wire profile (mid-session fresh)
+  3. `partyInviteSt.partyMemberProfiles` — last-resort cache for transient reconnects
+  
+  Real-player party members now spawn into A's battles using their latest level / equipment / agi — what B has at battle-start time, not what they had at accept-the-invite time.
+- `generateAllyStats` always sets `hp = maxHP`, so mid-battle HP changes don't carry over (each ally enters battle at full HP). This is the existing single-player behavior; KO'd-in-prior-battle members effectively revive when entering A's next battle. Mid-battle HP propagation is a future polish (not needed for the "B levels up after being invited" case the user described).
+
 ## 1.7.381 — 2026-05-15
 
 ### Disband on inviter / member disconnect

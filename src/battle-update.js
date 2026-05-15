@@ -15,7 +15,7 @@ import { SLASH_FRAME_MS, shouldDrawSlash, SWING_HOLD_MS } from './slash-effects.
 import { buildTurnOrder, processNextTurn } from './battle-turn.js';
 import { summarizeHits } from './battle-math.js';
 import { reseedFromEntropy } from './rng.js';
-import { sendNetPVPAction } from './net.js';
+import { sendNetPVPAction, getOnlinePlayerByName } from './net.js';
 import { updateBattleAlly } from './battle-ally.js';
 import { updateBattleEnemyTurn } from './battle-enemy.js';
 import { updateSpellCast, resetSpellCastVars } from './spell-cast.js';
@@ -286,10 +286,15 @@ export function tryJoinPlayerAlly() {
     if (battleSt.battleAllies.length >= 3) break;
     if (pvpNames.has(name)) continue;
     if (battleSt.battleAllies.some(a => a.name === name)) continue;
-    // Look up fake-roster entries first, then real-player profiles stashed
-    // on accept (`party-invite-result`). Real players appear via the wire
-    // profile shape and feed `generateAllyStats` the same way.
+    // Lookup order (most → least fresh):
+    //   1. PLAYER_POOL          — fake-roster entries; stable static data.
+    //   2. getOnlinePlayerByName — live wire profile from the partner if
+    //      they're currently online. Picks up any level-up / equipment
+    //      swap since the invite was accepted (mid-session sync).
+    //   3. partyMemberProfiles  — last-resort cache from accept time, in
+    //      case the live entry is briefly missing during a reconnect.
     const member = PLAYER_POOL.find(p => p.name === name)
+                || getOnlinePlayerByName(name)
                 || partyInviteSt.partyMemberProfiles.get(name);
     if (!member) continue;
     battleSt.battleAllies.push(generateAllyStats(member));

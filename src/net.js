@@ -22,6 +22,7 @@ let _profileFn = null;       // () → profile object
 let _locFn = null;           // () → location string
 let _lastSentLoc = null;
 let _lastSentAlliesSig = '';
+let _lastSentPlayerSig = '';
 let _locPollHandle = null;
 let _reconnectDelay = 1000;
 let _myUserId = null;
@@ -202,16 +203,27 @@ function _startLocPoll() {
     if (loc !== _lastSentLoc) {
       if (_send({ type: 'location', loc })) _lastSentLoc = loc;
     }
-    // MP party-PvP — re-sync local ally roster on change so the server
-    // has fresh data when a PvP match fires. Cheap signature compare,
-    // wire send only on diff. Profile getter returns the latest party.
+    // MP — re-sync local profile (allies AND main-player fields) on change
+    // so the server has fresh data for any party member who's looking at us.
+    // Two diffs: the ally roster (changes on recruit/dismiss/death) and the
+    // main-player profile (changes on level-up, equipment swap, etc).
     if (_profileFn) {
       const profile = _profileFn();
       if (profile) {
-        const sig = JSON.stringify(profile.allies || []);
-        if (sig !== _lastSentAlliesSig) {
-          _send({ type: 'update', allies: profile.allies || [] });
-          _lastSentAlliesSig = sig;
+        const allies = profile.allies || [];
+        const alliesSig = JSON.stringify(allies);
+        if (alliesSig !== _lastSentAlliesSig) {
+          _send({ type: 'update', allies });
+          _lastSentAlliesSig = alliesSig;
+        }
+        // Strip `allies` from the player payload so we don't redundantly
+        // send it again, then signature the rest. Wire is small — even a
+        // full re-send on every change is fine.
+        const { allies: _drop, ...playerOnly } = profile;
+        const playerSig = JSON.stringify(playerOnly);
+        if (playerSig !== _lastSentPlayerSig) {
+          _send({ type: 'update', ...playerOnly });
+          _lastSentPlayerSig = playerSig;
         }
       }
     }
@@ -382,6 +394,18 @@ export function getOnlineAtLocation(loc) {
     if (p.loc === loc) out.push(p);
   }
   return out;
+}
+
+// Find an online player by display name. Used by `tryJoinPlayerAlly` to
+// pull a fresh profile when a party member is currently online — so any
+// level-up / equipment change since the invite was accepted reflects in
+// the next battle. Names aren't guaranteed unique; returns the first match.
+export function getOnlinePlayerByName(name) {
+  if (!name) return null;
+  for (const p of _onlinePlayers.values()) {
+    if (p.name === name) return p;
+  }
+  return null;
 }
 
 export function getMyUserId() { return _myUserId; }
