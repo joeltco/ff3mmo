@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.388 — 2026-05-15
+
+### Multiplayer audit batch 2 — server hardening + UX
+
+- **#6 per-connection rate limit**: token bucket (60 capacity, 20/s refill) on every incoming frame. Excess silently dropped — a malicious client can no longer flood `chat` / `update` / `pvp-search` to saturate broadcast bandwidth.
+- **#8 PM by userId**: chat PM now prefers `parsed.toUserId` and routes directly to that connection. Legacy `to`-by-name path stops at the first match (was broadcasting to every user who shares the recipient's name). The previous behavior meant anyone could rename to "Joel" and intercept every PM addressed to Joel.
+- **#10 per-IP connection cap**: max 10 simultaneous WS connections from one IP (X-Forwarded-For aware for nginx). Excess gets 429.
+- **#11 stale-search cleanup on location change**: when a player crosses a map boundary, the server scans `_pvpSearches` for their outgoing search (drops + notifies if the target is now in a different `loc`) and incoming searches targeting them (drops + notifies challengers who didn't follow). Pre-fix the challenger sat at "Searching..." for the full 5-minute timeout.
+- **#15 / #21 pvp-match arrives during in-flight battle**: client guards `setNetPVPMatchHandler` with `battleState !== 'none'`. The 500 ms `pvp-encounter` fallback could otherwise stack a PvP battle on top of an already-starting monster encounter. On arrival, sends `pvp-end` so the server clears the partner pair cleanly.
+- **#22 party chat by membership, not location**: server keeps `_partyMemberships` (memberId → inviterId) — party-channel chat now broadcasts to that party's set (inviter + members) regardless of where they're standing. Pre-fix everyone in the same location saw your party chat.
+- **#25 chat field caps**: `channel` capped at 8 chars; `to` at 16 (was unbounded server-side, allowing huge channel strings as a cheap DoS).
+
 ## 1.7.387 — 2026-05-15
 
 ### Multiplayer audit batch 1 — sync + server hardening

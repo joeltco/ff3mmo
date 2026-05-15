@@ -22,7 +22,7 @@ import { battleSt } from './battle-state.js';
 import { _nameToBytes } from './text-utils.js';
 import { showMsgBox, replaceMsgBoxText, dismissMsgBox } from './message-box.js';
 import { playSFX, SFX } from './music.js';
-import { sendNetPVPSearch, sendNetPVPCancel,
+import { sendNetPVPSearch, sendNetPVPCancel, sendNetPVPEnd,
          setNetPVPMatchHandler, setNetPVPFailedHandler } from './net.js';
 
 // Tuning constants. Surface them up here so they're easy to find.
@@ -201,6 +201,17 @@ setNetPVPMatchHandler((msg) => {
   const opp = msg && msg.opponent;
   if (!opp) return;
   const seed = (msg && typeof msg.seed === 'number') ? msg.seed : null;
+  // Guard against the encounter race: if our `pvp-encounter` ping timed out
+  // at 500 ms and we already kicked into a monster battle, the in-flight
+  // `pvp-match` would stack a PvP battle on top. Same applies if we're
+  // anywhere else mid-battle. Decline with `pvp-end` so the server clears
+  // the partner pair and the challenger sees a clean failure.
+  // See docs/MULTIPLAYER-AUDIT-2026-05-15.md #15 / #21.
+  if (battleSt.battleState !== 'none') {
+    sendNetPVPEnd();
+    if (pvpSearchSt.active) cancelPVPSearch('target-engaged');
+    return;
+  }
   // Two flows: (a) this client is the challenger and has an active search →
   // resolve into battle through the existing "Connecting..." swap; (b) this
   // client is the target and didn't search → start a fresh search-resolve

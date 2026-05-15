@@ -125,6 +125,44 @@ function _pvpHookChance(challengerProfile, targetProfile) {
   return Math.max(PVP_HOOK_MIN, Math.min(PVP_HOOK_MAX, raw));
 }
 
+// Per-connection token bucket. Capacity 60 messages, refill 20/s. Each
+// incoming frame consumes one token before any handling. Excess frames are
+// dropped silently. Bursting is fine (60 tokens covers a typical 500 ms
+// poll storm at session start); sustained flood is throttled.
+// See docs/MULTIPLAYER-AUDIT-2026-05-15.md #6.
+const RATE_CAPACITY  = 60;
+const RATE_REFILL_PS = 20;
+
+function _rateAllow(entry) {
+  const now = Date.now();
+  if (entry._rateTokens == null) {
+    entry._rateTokens = RATE_CAPACITY;
+    entry._rateRefilledAt = now;
+  }
+  const elapsed = (now - entry._rateRefilledAt) / 1000;
+  if (elapsed > 0) {
+    entry._rateTokens = Math.min(RATE_CAPACITY, entry._rateTokens + elapsed * RATE_REFILL_PS);
+    entry._rateRefilledAt = now;
+  }
+  if (entry._rateTokens < 1) return false;
+  entry._rateTokens -= 1;
+  return true;
+}
+
+// Returns true when A and B are in the same party (one inviter + their
+// active members). Used to gate `chat` channel='party' so a stray "party"
+// message from someone in the same location doesn't leak into another
+// party's tab. See docs/MULTIPLAYER-AUDIT-2026-05-15.md #22.
+function _inSameParty(uidA, uidB) {
+  if (uidA === uidB) return true;
+  const aInviter = _partyMemberships.get(uidA);
+  const bInviter = _partyMemberships.get(uidB);
+  if (aInviter && bInviter) return aInviter === bInviter;          // both members of same party
+  if (aInviter) return aInviter === uidB;                          // A is member, B is inviter
+  if (bInviter) return bInviter === uidA;                          // B is member, A is inviter
+  return false;                                                    // neither is in any party
+}
+
 function _broadcast(payload, exceptUserId = null) {
   const msg = JSON.stringify(payload);
   for (const [uid, entry] of _connected) {
@@ -215,6 +253,7 @@ function _snapshotPayload(excludeUserId) {
 }
 
 function _handleMessage(entry, msg) {
+  if (!_rateAllow(entry)) return;
   let parsed;
   try { parsed = JSON.parse(msg); }
   catch { return; }
@@ -273,6 +312,27 @@ function _handleMessage(entry, msg) {
       if (!loc || loc === entry.loc) return;
       entry.loc = loc;
       _broadcast({ type: 'player-move', userId: entry.userId, loc }, entry.userId);
+      // v1.7.388 — clean up loc-scoped state that became stale on this move.
+      // Pre-fix the challenger could walk out of the search area and sit at
+      // "Searching..." until the 5-min timeout because the server silently
+      // skipped their entry in `_resolveEncounterHook`. Same for party
+      // invites; the invite would tick until timeout with no signal back.
+      // See docs/MULTIPLAYER-AUDIT-2026-05-15.md #11.
+      const myOutSearch = _pvpSearches.get(entry.userId);
+      if (myOutSearch) {
+        const tgt = _connected.get(myOutSearch.targetUserId);
+        if (!tgt || tgt.loc !== loc) {
+          _clearSearch(entry.userId);
+          _send(entry.ws, { type: 'pvp-search-failed', reason: 'different-location' });
+        }
+      }
+      for (const [chId, s] of [..._pvpSearches]) {
+        if (s.targetUserId !== entry.userId) continue;
+        const ch = _connected.get(chId);
+        if (!ch || ch.loc === loc) continue;       // challenger followed us — keep search
+        _clearSearch(chId);
+        if (ch.helloed) _send(ch.ws, { type: 'pvp-search-failed', reason: 'different-location' });
+      }
       return;
     }
     case 'update': {
@@ -496,34 +556,58 @@ function _handleMessage(entry, msg) {
       return;
     }
     case 'chat': {
-      // Multiplayer Step 2 — relay world / party / pm chat to other clients.
-      // World chat = location-scoped (everyone at the same `loc` sees it).
-      // PM chat = targeted by `to` (recipient's display name); the server
-      // looks up the matching user. Party chat is currently location-scoped
-      // too (full party-state isn't wired across the wire yet — Step 3+).
+      // Relay world / party / pm chat to other clients.
+      //   - world: location-scoped (everyone at the same `loc`).
+      //   - party: by party-membership lookup (`_inSameParty`), not by loc.
+      //            See docs/MULTIPLAYER-AUDIT-2026-05-15.md #22.
+      //   - pm:    targeted by `toUserId` (preferred) or `to` display name
+      //            fallback. PM-by-name was the entire chat security model
+      //            since v1.7.366 — anyone could rename to "Joel" and read
+      //            every PM sent to Joel. See audit #8.
       if (!entry.helloed) return;
-      const channel = String(parsed.channel || 'world');
+      const channel = String(parsed.channel || 'world').slice(0, 8);
       const text = String(parsed.text || '').slice(0, 200);
       if (!text) return;
       const senderName = entry.profile?.name || 'Player';
       if (channel === 'pm') {
-        const toName = String(parsed.to || '').slice(0, 16);
+        const toUserId = (parsed.toUserId | 0) || 0;
+        const toName   = String(parsed.to || '').slice(0, 16);
+        if (toUserId) {
+          // Preferred path — direct userId target. Spoof-proof.
+          const target = _connected.get(toUserId);
+          if (!target || !target.helloed) return;
+          _send(target.ws, { type: 'chat', userId: entry.userId, name: senderName,
+                             channel, text, to: target.profile?.name || toName });
+          return;
+        }
+        // Legacy fallback — name-based routing. Keeps old clients working
+        // until everyone is on the new wire. NEW clients should always send
+        // `toUserId`.
         if (!toName) return;
-        // Find the recipient by display name. Names aren't unique in the
-        // engine (it's just whatever the player typed), so deliver to ALL
-        // matching connected users for now. Step 3+ should resolve via
-        // userId.
         for (const [, target] of _connected) {
           if (!target.helloed) continue;
           if (target.profile?.name !== toName) continue;
           _send(target.ws, { type: 'chat', userId: entry.userId, name: senderName,
                              channel, text, to: toName });
+          break;  // stop at the first match — name collisions no longer broadcast.
         }
-        // Echo back to the sender's other tabs (none today but harmless).
         return;
       }
-      // World / party — broadcast to others at the same location. Sender's
-      // own client already added the message locally, so exclude them.
+      if (channel === 'party') {
+        // Membership-scoped; ignores location. If sender isn't in any party,
+        // nothing routes (the message is a no-op, matching how a solo
+        // player's "party tab" send falls on the floor).
+        for (const [uid, target] of _connected) {
+          if (uid === entry.userId) continue;
+          if (!target.helloed) continue;
+          if (!_inSameParty(entry.userId, uid)) continue;
+          _send(target.ws, { type: 'chat', userId: entry.userId, name: senderName,
+                             channel, text });
+        }
+        return;
+      }
+      // World — broadcast to others at the same location. Sender's own
+      // client already added the message locally, so exclude them.
       for (const [uid, target] of _connected) {
         if (uid === entry.userId) continue;
         if (!target.helloed) continue;
@@ -541,6 +625,20 @@ function _handleMessage(entry, msg) {
 // and rules out OOM-via-fat-frame attacks. See
 // docs/MULTIPLAYER-AUDIT-2026-05-15.md #5.
 const WS_MAX_PAYLOAD = 16 * 1024;
+
+// Cap concurrent WS connections per source IP. Realistic households share
+// one IP across multiple devices, but ten simultaneous logins from one IP
+// is more likely an attacker than a family. See audit #10.
+const MAX_CONN_PER_IP = 10;
+const _connsByIp = new Map();   // ip → count
+
+function _getRemoteIp(req) {
+  // Trust X-Forwarded-For from nginx (only one hop). Falls back to socket
+  // address for direct connections.
+  const xff = req.headers['x-forwarded-for'];
+  if (xff) return String(xff).split(',')[0].trim();
+  return req.socket?.remoteAddress || 'unknown';
+}
 
 export function attachWebSocketPresence(httpServer) {
   const wss = new WebSocketServer({ noServer: true, maxPayload: WS_MAX_PAYLOAD });
@@ -566,6 +664,17 @@ export function attachWebSocketPresence(httpServer) {
     }
     const userId = decoded.userId;
 
+    // Per-IP connection cap — audit #10. Stale-replace below still counts
+    // against the user (it's a same-user reload), but blocks one-IP fanout
+    // from many fake userIds.
+    const ip = _getRemoteIp(req);
+    const ipCount = _connsByIp.get(ip) || 0;
+    if (ipCount >= MAX_CONN_PER_IP) {
+      socket.write('HTTP/1.1 429 Too Many Connections\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+
     // If a previous WS is still open for this user (page reload race),
     // close it. The new connection wins.
     const stale = _connected.get(userId);
@@ -575,13 +684,22 @@ export function attachWebSocketPresence(httpServer) {
     }
 
     wss.handleUpgrade(req, socket, head, (ws) => {
-      const entry = { ws, userId, profile: null, loc: null, helloed: false };
+      const entry = { ws, userId, profile: null, loc: null, helloed: false, ip };
       _connected.set(userId, entry);
+      _connsByIp.set(ip, ipCount + 1);
 
       ws.on('message', (data) => _handleMessage(entry, data.toString()));
       ws.on('close', () => {
         const cur = _connected.get(userId);
         if (cur === entry) _connected.delete(userId);
+        // Release the IP slot. Only count this close once; double-close (a
+        // stale-replace + a network drop) shouldn't underflow the bucket.
+        if (!entry._ipReleased) {
+          entry._ipReleased = true;
+          const n = (_connsByIp.get(entry.ip) || 1) - 1;
+          if (n > 0) _connsByIp.set(entry.ip, n);
+          else _connsByIp.delete(entry.ip);
+        }
         // Cancel this user's outgoing PvP search if any.
         _clearSearch(userId);
         // Cancel any searches targeting this user — notify each challenger.
