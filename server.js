@@ -2,6 +2,7 @@ import { createServer } from 'http';
 import { readFile } from 'fs/promises';
 import { extname, join } from 'path';
 import { handleAPI } from './api.js';
+import { attachWebSocketPresence } from './ws-presence.js';
 
 const { version } = JSON.parse(await readFile('./package.json', 'utf8'));
 
@@ -11,7 +12,7 @@ const MIME = {
   '.nes': 'application/octet-stream', '.bin': 'application/octet-stream',
 };
 
-createServer(async (req, res) => {
+const httpServer = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
 
   // API routes
@@ -37,4 +38,9 @@ createServer(async (req, res) => {
     res.writeHead(404);
     res.end('Not found');
   }
-}).listen(3000, () => console.log('Server at http://localhost:3000'));
+});
+
+// Attach WebSocket presence at /api/ws (auth via ?token=<JWT>).
+attachWebSocketPresence(httpServer);
+
+httpServer.listen(3000, () => console.log('Server at http://localhost:3000'));

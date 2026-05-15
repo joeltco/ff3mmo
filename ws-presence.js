@@ -1,0 +1,198 @@
+// ws-presence.js — WebSocket presence for ff3mmo multiplayer Step 1.
+//
+// Mounted on the existing HTTP server via the 'upgrade' event so a single
+// node process serves both static files / REST API and real-time presence.
+//
+// Auth: JWT passed as `?token=...` on the upgrade URL (browsers can't set
+// Authorization headers on WebSocket connections). Reused from api.js
+// without re-issuing — the existing 30-day token is valid here too.
+//
+// Wire protocol (JSON over text frames):
+//
+//   client → server:
+//     { type: 'hello', profile: { name, jobIdx, level, palIdx, hp, maxHP,
+//                                  weaponR, weaponL?, armorId, helmId,
+//                                  shieldId? }, loc: 'world'|'ur'|... }
+//         Sent ONCE after the save slot is loaded. Without it, the user is
+//         authenticated but invisible to other players.
+//     { type: 'location', loc }
+//         Sent when the local player crosses a map boundary (overworld →
+//         town, town → cave, etc).
+//     { type: 'update', ...profileFields }
+//         Sent when equipment, level, hp, or palIdx changes mid-session.
+//
+//   server → client:
+//     { type: 'snapshot', players: [{userId, ...profile, loc}] }
+//         Sent immediately after `hello` — the full current presence map.
+//     { type: 'player-join', player: {userId, ...profile, loc} }
+//         Broadcast to OTHER clients when a player sends `hello`.
+//     { type: 'player-leave', userId }
+//         Broadcast when a player's WebSocket closes (or they explicitly leave).
+//     { type: 'player-move', userId, loc }
+//         Broadcast when a player changes location.
+//     { type: 'player-update', userId, fields }
+//         Broadcast when a player's profile fields change.
+//
+// Presence state is in-memory only. Restarting the server drops all
+// presence; clients reconnect on next page load. DB-backed persistence
+// is a Step 2/3 concern — for visible Step 1 it's not needed.
+
+import { WebSocketServer } from 'ws';
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const jwt = require('jsonwebtoken');
+
+const JWT_SECRET = process.env.JWT_SECRET || 'ff3mmo-dev-secret-change-in-prod';
+
+// userId → { ws, userId, profile, loc, helloed }
+// `helloed=false` means authenticated but not yet visible to other players
+// (no `hello` message received). Snapshots only include `helloed=true` players.
+const _connected = new Map();
+
+function _broadcast(payload, exceptUserId = null) {
+  const msg = JSON.stringify(payload);
+  for (const [uid, entry] of _connected) {
+    if (uid === exceptUserId) continue;
+    if (!entry.helloed) continue;  // not visible yet
+    if (entry.ws.readyState !== 1) continue;  // 1 = OPEN
+    try { entry.ws.send(msg); } catch { /* drop */ }
+  }
+}
+
+function _send(ws, payload) {
+  if (ws.readyState !== 1) return;
+  try { ws.send(JSON.stringify(payload)); } catch { /* drop */ }
+}
+
+function _snapshotPayload(excludeUserId) {
+  const players = [];
+  for (const [uid, entry] of _connected) {
+    if (uid === excludeUserId) continue;
+    if (!entry.helloed) continue;
+    players.push({ userId: uid, ...entry.profile, loc: entry.loc });
+  }
+  return { type: 'snapshot', players };
+}
+
+function _handleMessage(entry, msg) {
+  let parsed;
+  try { parsed = JSON.parse(msg); }
+  catch { return; }
+  if (!parsed || typeof parsed !== 'object') return;
+
+  switch (parsed.type) {
+    case 'hello': {
+      // First identification — register profile + loc and broadcast join.
+      const profile = parsed.profile || {};
+      entry.profile = {
+        name:     String(profile.name || 'Player').slice(0, 16),
+        jobIdx:   profile.jobIdx | 0,
+        level:    profile.level | 0,
+        palIdx:   profile.palIdx | 0,
+        hp:       profile.hp | 0,
+        maxHP:    profile.maxHP | 0,
+        weaponR:  profile.weaponR | 0,
+        weaponL:  profile.weaponL == null ? undefined : profile.weaponL | 0,
+        armorId:  profile.armorId | 0,
+        helmId:   profile.helmId | 0,
+        shieldId: profile.shieldId == null ? undefined : profile.shieldId | 0,
+      };
+      entry.loc = String(parsed.loc || 'ur').slice(0, 16);
+      const wasHelloed = entry.helloed;
+      entry.helloed = true;
+      // Send the current snapshot to the new client so they see everyone else.
+      _send(entry.ws, _snapshotPayload(entry.userId));
+      // Broadcast join to OTHER clients. If `hello` is resent (re-identify
+      // after a save-slot swap), broadcast a `player-update` instead.
+      if (!wasHelloed) {
+        _broadcast({
+          type: 'player-join',
+          player: { userId: entry.userId, ...entry.profile, loc: entry.loc },
+        }, entry.userId);
+      } else {
+        _broadcast({
+          type: 'player-update',
+          userId: entry.userId,
+          fields: { ...entry.profile, loc: entry.loc },
+        }, entry.userId);
+      }
+      return;
+    }
+    case 'location': {
+      if (!entry.helloed) return;
+      const loc = String(parsed.loc || '').slice(0, 16);
+      if (!loc || loc === entry.loc) return;
+      entry.loc = loc;
+      _broadcast({ type: 'player-move', userId: entry.userId, loc }, entry.userId);
+      return;
+    }
+    case 'update': {
+      if (!entry.helloed) return;
+      const fields = {};
+      for (const k of ['name', 'jobIdx', 'level', 'palIdx', 'hp', 'maxHP',
+                       'weaponR', 'weaponL', 'armorId', 'helmId', 'shieldId']) {
+        if (parsed[k] != null) {
+          entry.profile[k] = parsed[k];
+          fields[k] = parsed[k];
+        }
+      }
+      if (Object.keys(fields).length === 0) return;
+      _broadcast({ type: 'player-update', userId: entry.userId, fields }, entry.userId);
+      return;
+    }
+  }
+}
+
+export function attachWebSocketPresence(httpServer) {
+  const wss = new WebSocketServer({ noServer: true });
+
+  httpServer.on('upgrade', (req, socket, head) => {
+    const url = new URL(req.url, 'http://localhost');
+    if (url.pathname !== '/api/ws') {
+      socket.destroy();
+      return;
+    }
+    const token = url.searchParams.get('token');
+    if (!token) {
+      socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+    let decoded;
+    try { decoded = jwt.verify(token, JWT_SECRET); }
+    catch {
+      socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+    const userId = decoded.userId;
+
+    // If a previous WS is still open for this user (page reload race),
+    // close it. The new connection wins.
+    const stale = _connected.get(userId);
+    if (stale && stale.ws.readyState <= 1) {
+      try { stale.ws.close(4001, 'replaced'); } catch { /* drop */ }
+      _connected.delete(userId);
+    }
+
+    wss.handleUpgrade(req, socket, head, (ws) => {
+      const entry = { ws, userId, profile: null, loc: null, helloed: false };
+      _connected.set(userId, entry);
+
+      ws.on('message', (data) => _handleMessage(entry, data.toString()));
+      ws.on('close', () => {
+        const cur = _connected.get(userId);
+        if (cur === entry) _connected.delete(userId);
+        if (entry.helloed) {
+          _broadcast({ type: 'player-leave', userId }, userId);
+        }
+      });
+      ws.on('error', () => { /* close handler runs on its own */ });
+
+      // Auth-acknowledge so the client knows it can send `hello`.
+      _send(ws, { type: 'ready', userId });
+    });
+  });
+
+  return wss;
+}

@@ -59,6 +59,7 @@ export default [
       'server.js',
       'api.js',
       'debug-server.js',
+      'ws-presence.js',
       'tools/**/*.js',
       'tools/**/*.mjs',
     ],

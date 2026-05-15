@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.366 — 2026-05-15
+
+### Multiplayer Step 1: WebSocket presence
+
+- New `ws-presence.js` (server) — WebSocket endpoint at `/api/ws?token=<JWT>` mounted on the existing HTTP server via the `upgrade` event. Auth reuses the existing 30-day JWT (no separate token issuance). In-memory presence Map; restart drops state, clients reconnect on next load.
+- New `src/net.js` (client) — connects on `connectNet(profileFn, locFn)` from `main.js#init`. On `ready`, sends `hello` with the local profile + location. Polls location every 500 ms and emits `location` on change. Auto-reconnects with exponential backoff (1 s → 30 s cap).
+- Wire protocol: client sends `hello` / `location` / `update`; server broadcasts `snapshot` (on join) / `player-join` / `player-leave` / `player-move` / `player-update` to other clients.
+- `getRosterPlayers()` and `getRosterVisible()` in `src/roster.js` now prepend real online players above the fake pool. Real players don't participate in the fake-mover fade/slide animation — presence is driven by wire events.
+- `deploy.sh` runs `npm install --omit=dev` on the remote so the new `ws` dependency lands without manual intervention.
+- **Visible result**: two browsers logged into different accounts on `ff3mmo.com` see each other's character in the roster panel when at the same location. Walk into Ur → roster shows the other player. Walk onto the overworld → roster updates.
+
+What's NOT in Step 1 (deferred to Step 2/3):
+- Chat over the wire (still local-only)
+- PvP search hook via wire (still uses `pvp-search.js` sim timer against fake pool)
+- DB persistence for player profiles (in-memory only; restart loses presence)
+- Fade-in / slide animation for real-player join/leave (they pop in instantly)
+
 ## 1.7.365 — 2026-05-15
 
 ### Combat: complete dispatchDelta HP migration (multiplayer prep step 6.5)

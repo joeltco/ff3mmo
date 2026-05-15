@@ -37,6 +37,9 @@ import { addItem, setPlayerInventory } from './inventory.js';
 import { saveSlots } from './save-state.js';
 import { resetBattleVars, isTeamWiped, executeBattleCommand } from './battle-update.js';
 import { startGameLoop } from './game-loop.js';
+import { connectNet } from './net.js';
+import { ps } from './player-stats.js';
+import { selectCursor } from './save-state.js';
 import { initSpriteAssets, initTitleAssets } from './boot.js';
 import { SPRITE_PAL_TOP, SPRITE_PAL_BTM } from './job-sprites.js';
 export { loadFF1ROM, loadFF2ROM } from './boot.js';
@@ -61,6 +64,30 @@ export function init() {
     return { worldX: mapSt.worldX, worldY: mapSt.worldY, onWorldMap: mapSt.onWorldMap, currentMapId: mapSt.currentMapId };
   });
   setLocationGetter(() => ({ onWorldMap: mapSt.onWorldMap, currentMapId: mapSt.currentMapId }));
+
+  // Multiplayer presence — opens WebSocket to /api/ws if the user is
+  // authenticated. The profile getter returns null until the save slot is
+  // loaded; the poll loop in net.js handles late readiness and re-hellos
+  // automatically. No-op when there's no JWT (single-player demo path).
+  connectNet(
+    () => {
+      const slot = saveSlots[selectCursor];
+      if (!slot || !ps.stats) return null;
+      return {
+        name:    slot.name || 'Player',
+        jobIdx:  ps.jobIdx | 0,
+        level:   ps.stats.level | 0 || 1,
+        palIdx:  0,
+        hp:      ps.hp | 0,
+        maxHP:   ps.stats.maxHP | 0,
+        weaponR: ps.weaponR | 0,
+        weaponL: ps.weaponL | 0,
+        armorId: ps.body | 0,
+        helmId:  ps.head | 0,
+      };
+    },
+    () => getPlayerLocation(),
+  );
   const canvas = document.getElementById('game-canvas');
   const ctx = canvas.getContext('2d');
   canvas.width = CANVAS_W;

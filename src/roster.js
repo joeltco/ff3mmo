@@ -17,6 +17,7 @@ import { battleSt } from './battle-state.js';
 import { hudSt, HUD_INFO_FADE_STEPS, HUD_INFO_FADE_STEP_MS } from './hud-state.js';
 import { msgState } from './message-box.js';
 import { drawHudBox, drawBorderedBox, clipToViewport, drawRosterSparkle } from './hud-drawing.js';
+import { getOnlineAtLocation } from './net.js';
 
 // ── HUD layout constants (must match game.js) ────────────────────────────
 const CANVAS_W   = 256;
@@ -70,12 +71,19 @@ export function rosterLocForMapId(mapId) {
 
 export function getRosterPlayers() {
   const loc = getPlayerLocation();
-  return PLAYER_POOL.filter(p => p.loc === loc);
+  // Real online players (multiplayer Step 1) appear above the fake pool.
+  // Pre-MP they're always [] so the existing single-player flow is unchanged.
+  const real = getOnlineAtLocation(loc);
+  const fake = PLAYER_POOL.filter(p => p.loc === loc);
+  return [...real, ...fake];
 }
 
 // ── Visible roster (at loc + fading out), sorted by arrival ───────────────
 export function getRosterVisible() {
   const loc = getPlayerLocation();
+  // Real players first — they don't participate in the fake-pool fade/slide
+  // animation (presence is driven by WebSocket join/leave/move events).
+  const real = getOnlineAtLocation(loc);
   const atLoc = PLAYER_POOL.filter(p => p.loc === loc);
   const fadingOut = PLAYER_POOL.filter(p =>
     p.loc !== loc && rosterFadeDir[p.name] === 'out' && rosterFadeMap[p.name] < ROSTER_FADE_STEPS
@@ -88,7 +96,7 @@ export function getRosterVisible() {
     if (bi === -1) return -1;
     return ai - bi;
   });
-  return [...atLoc, ...fadingOut];
+  return [...real, ...atLoc, ...fadingOut];
 }
 
 function _clampRosterCursor() {
