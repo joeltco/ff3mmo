@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.387 — 2026-05-15
+
+### Multiplayer audit batch 1 — sync + server hardening
+
+Full audit landed at `docs/MULTIPLAYER-AUDIT-2026-05-15.md` (38 findings, severity-ranked). This deploy ships the critical-tier fixes:
+
+- **#2 status RNG sync**: `status-effects.js#tryInflictStatus` and `processTurnStart` (sleep-wake, confuse snap-out) swapped `Math.random` → `rand`. With both clients seeded from the server-broadcast PRNG, status rolls now agree across the wire. Pre-fix: a "sleeper wakes" roll could fire on one side and not the other, forking the turn FSM until queue-reorder timed out.
+- **#3 SouthWind throw RNG sync**: `pvp.js` SW damage roll swapped to `rand()`. Was diverging across clients.
+- **#5 WSS maxPayload**: `WebSocketServer` capped at 16 KB per incoming frame (was 100 MB default). Rules out single-frame OOM attacks.
+- **#7 update field validation**: `ws-presence.js` `hello` + `update` both route every profile field through a new `_normalizeProfileField` clamp helper. Pre-fix a malicious client could `update {agi: 9999}` and the server broadcast it verbatim — the hook-chance formula reads `agi` directly, so unbounded values could pin search hooks at the 0.75 cap.
+- **#18 pvp-ally-join carries profile**: wire payload now includes the raw ally `{name, jobIdx, level, palIdx, loc, weapon*, armor*, knownSpells, jobLevel}` instead of just the name. Receiver runs its own `generateAllyStats(profile)` so the mirror cell on `pvpEnemyAllies` matches the sender's local push regardless of whether the name resolves in `PLAYER_POOL`. Pre-fix (with fakes disabled by default in 1.7.386), every ally-join silently no-op'd on the receiver — sender saw 2v1, receiver saw 1v1, turn queues forked next round. Also wired party-member joins through `sendNetPVPAllyJoin` (was only the random-fill branch — covers audit #28 too).
+- **#1 defendHalve cross-client desync**: sender's `rollHits` for PvP attacks on the main opp now includes `defendHalve: pvpSt.pvpOpponentIsDefending`. Receiver's `_processEnemyFlash` already had `defendHalve: battleSt.isDefending` — pre-fix the two diverged 2× per hit any time the defender used Defend. Added `pvpSt.pvpOpponentIsDefending = false` to the end-of-round clear in `processNextTurn` so defend doesn't leak across rounds if the opp doesn't physically attack.
+
 ## 1.7.386 — 2026-05-15
 
 ### Fake players hidden — real-multiplayer mode only

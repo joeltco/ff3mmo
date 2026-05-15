@@ -67,6 +67,12 @@ export function buildTurnOrder() {
 // ── Turn dispatch ──────────────────────────────────────────────────────────
 export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
     battleSt.isDefending = false; inputSt.battleCursor = 0; battleSt.turnTimer = 0;
+    // Wire-PvP: opp's defend is round-scoped. End-of-round clear mirrors
+    // `battleSt.isDefending` above. Without this, an opp who picks defend on
+    // round 1 and never attacks again (paralyzed / cast-only) would protect
+    // every future hit on sender's side. See
+    // docs/MULTIPLAYER-AUDIT-2026-05-15.md #1.
+    if (pvpSt.isPVPBattle) pvpSt.pvpOpponentIsDefending = false;
     if (ps.hp <= 0) {
       battleSt.turnQueue = buildTurnOrder();
       if (battleSt.turnQueue.length === 0) return;
@@ -217,11 +223,17 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
     const allyRAtk = allyBaseAtk + allyRWpnAtk;
     const allyLAtk = allyBaseAtk + allyLWpnAtk;
     const allyMainAtk = dualWield ? allyRAtk : (aRw ? allyRAtk : allyLAtk);
+    // Wire-PvP — when ally attacks the main opp, halve damage if the opp's
+    // wire-delivered 'defend' action set `pvpOpponentIsDefending`. Mirror of
+    // the player-attack site in input-handler.js. See
+    // docs/MULTIPLAYER-AUDIT-2026-05-15.md #1.
+    const oppDefending = pvpTgt === pvpSt.pvpOpponentStats && !!pvpSt.pvpOpponentIsDefending;
     battleSt.allyHitResults = rollHits(allyMainAtk, targetDef, allyHitRate, potentialHits, {
       critPct: _allyJob.critPct || 0,
       critBonus: _allyJob.critBonus || 0,
       shieldEvade: pvpTgt ? (pvpTgt.shieldEvade || 0) : 0,
       evade: monTgt ? (monTgt.evade || 0) : pvpTgt ? (pvpTgt.evade || 0) : 0,
+      defendHalve: oppDefending,
       lAtk: allyLAtk,
       splitRH: dualWield,
     });

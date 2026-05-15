@@ -11,7 +11,7 @@ import { resetBattleVars, isTeamWiped, updateBattleTimers, updatePoisonTick,
          tryJoinPlayerAlly, advancePVPTargetOrVictory } from './battle-update.js';
 import { playSFX, stopSFX, SFX, pauseMusic, playTrack, TRACKS } from './music.js';
 import { rollHits, calcPotentialHits, BOSS_HIT_RATE, GOBLIN_HIT_RATE, summarizeHits, isLeftHandHit } from './battle-math.js';
-import { reseedFromEntropy, seed as seedRng } from './rng.js';
+import { reseedFromEntropy, seed as seedRng, rand } from './rng.js';
 import { setNetPVPActionHandler, sendNetPVPEnd, sendNetPVPResult,
          setNetPVPAllyJoinHandler } from './net.js';
 import { dispatchDelta } from './deltas.js';
@@ -149,10 +149,21 @@ let _wirePendingAttackTargetAlly = -1;
 // static data so the lookup + `generateAllyStats` produces matching stats.
 setNetPVPAllyJoinHandler((msg) => {
   if (!pvpSt.isWirePVP || !pvpSt.isPVPBattle) return;
-  const name = msg && msg.name;
+  // v1.7.387 — wire carries the raw ally profile. Receiver runs its own
+  // `generateAllyStats` on the wired profile so the result matches the
+  // sender's local push regardless of whether the name is in PLAYER_POOL
+  // (default: empty). Pre-v1.7.387 the name was looked up in PLAYER_POOL
+  // and silently failed when fakes were disabled. See
+  // docs/MULTIPLAYER-AUDIT-2026-05-15.md #18.
+  const profile = msg && msg.profile;
+  const name = profile?.name || msg?.name;
   if (!name) return;
   if (pvpSt.pvpEnemyAllies.length >= 3) return;
-  const pick = PLAYER_POOL.find(p => p.name === name);
+  // Resolve the profile to feed `generateAllyStats`. Preference order:
+  //   1. Wire profile if it has the full stat block.
+  //   2. Local PLAYER_POOL lookup (for backwards compat with name-only sends).
+  let pick = profile && profile.jobIdx != null ? profile : null;
+  if (!pick) pick = PLAYER_POOL.find(p => p.name === name);
   if (!pick) return;
   const oldTotal = 1 + pvpSt.pvpEnemyAllies.length;
   const { cols: oldCols, rows: oldRows, gridPos: oldGP } = pvpGridLayout(oldTotal);
@@ -1163,10 +1174,12 @@ function _processPVPOppSWThrow() {
       if (battleSt.battleAllies[i].hp > 0) targets.push(i);
     }
     if (targets.length === 0) { processNextTurn(); return true; }
-    // Roll damage using INT (5 + level), matching player formula (no defense calc)
+    // Roll damage using INT (5 + level), matching player formula (no defense calc).
+    // Wire-PvP: rand() is seeded from the server-broadcast seed; both clients
+    // get identical SW damage. See docs/MULTIPLAYER-AUDIT-2026-05-15.md #3.
     const int = 5 + (pvpSt.pvpOpponentStats.level || 1);
     const swAtk = Math.floor(int / 2) + 55;
-    const swBase = Math.floor((swAtk + Math.floor(Math.random() * Math.floor(swAtk / 2 + 1))) / 2);
+    const swBase = Math.floor((swAtk + Math.floor(rand() * Math.floor(swAtk / 2 + 1))) / 2);
     pvpSt._oppSWTargets = targets;
     pvpSt._oppSWHitIdx = 0;
     pvpSt._oppSWPerDmg = Math.max(1, Math.floor(swBase / targets.length));

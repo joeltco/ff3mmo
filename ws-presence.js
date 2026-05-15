@@ -84,6 +84,39 @@ const PVP_HOOK_MIN   = 0.10;
 const PVP_HOOK_MAX   = 0.75;
 const PVP_JOB_BONUS  = { 6: 0.08, 8: 0.15 };  // Ranger, Thief
 
+// Range clamps for trusted profile fields. The hook-chance formula reads
+// `agi` and `jobIdx` straight out of the broadcast profile, so any
+// unvalidated value lets a malicious client manipulate match-making.
+// See docs/MULTIPLAYER-AUDIT-2026-05-15.md #7.
+function _clamp(n, min, max) {
+  const v = n | 0;
+  return v < min ? min : (v > max ? max : v);
+}
+
+// Sanitize a single profile field (called from both `hello` and `update`).
+// Unknown keys fall through untouched — caller is responsible for the
+// allow-list. Returns `undefined` when the input couldn't be normalized;
+// the caller should drop the field in that case.
+function _normalizeProfileField(key, value) {
+  if (value == null) return undefined;
+  switch (key) {
+    case 'name': return String(value).slice(0, 16);
+    case 'jobIdx':   return _clamp(value, 0, 31);
+    case 'level':    return _clamp(value, 1, 99);
+    case 'palIdx':   return _clamp(value, 0, 31);
+    case 'hp':       return _clamp(value, 0, 9999);
+    case 'maxHP':    return _clamp(value, 1, 9999);
+    case 'agi':      return _clamp(value, 1, 99);
+    case 'weaponR':
+    case 'armorId':
+    case 'helmId':   return _clamp(value, 0, 255);
+    case 'weaponL':
+    case 'shieldId': return value == null ? undefined : _clamp(value, 0, 255);
+    case 'allies':   return Array.isArray(value) ? value.slice(0, 3) : undefined;
+    default: return undefined;
+  }
+}
+
 function _pvpHookChance(challengerProfile, targetProfile) {
   const chAGI  = (challengerProfile && challengerProfile.agi) || 5;
   const tgtAGI = (targetProfile && targetProfile.agi) || 5;
@@ -190,23 +223,28 @@ function _handleMessage(entry, msg) {
   switch (parsed.type) {
     case 'hello': {
       // First identification — register profile + loc and broadcast join.
+      // Every field passes through `_normalizeProfileField` so the broadcast
+      // payload is trusted by the time it lands on other clients (the
+      // hook-chance formula reads agi / jobIdx straight out of this map).
       const profile = parsed.profile || {};
       entry.profile = {
-        name:     String(profile.name || 'Player').slice(0, 16),
-        jobIdx:   profile.jobIdx | 0,
-        level:    profile.level | 0,
-        palIdx:   profile.palIdx | 0,
-        hp:       profile.hp | 0,
-        maxHP:    profile.maxHP | 0,
-        agi:      profile.agi | 0,
-        weaponR:  profile.weaponR | 0,
-        weaponL:  profile.weaponL == null ? undefined : profile.weaponL | 0,
-        armorId:  profile.armorId | 0,
-        helmId:   profile.helmId | 0,
-        shieldId: profile.shieldId == null ? undefined : profile.shieldId | 0,
-        // MP party-PvP — opaque ally roster; server doesn't validate, just
-        // relays at match time. Caller enforces shape on each side.
-        allies:   Array.isArray(profile.allies) ? profile.allies.slice(0, 3) : [],
+        name:     _normalizeProfileField('name',     profile.name) || 'Player',
+        jobIdx:   _normalizeProfileField('jobIdx',   profile.jobIdx) ?? 0,
+        level:    _normalizeProfileField('level',    profile.level) ?? 1,
+        palIdx:   _normalizeProfileField('palIdx',   profile.palIdx) ?? 0,
+        hp:       _normalizeProfileField('hp',       profile.hp) ?? 0,
+        maxHP:    _normalizeProfileField('maxHP',    profile.maxHP) ?? 1,
+        agi:      _normalizeProfileField('agi',      profile.agi) ?? 5,
+        weaponR:  _normalizeProfileField('weaponR',  profile.weaponR) ?? 0,
+        weaponL:  _normalizeProfileField('weaponL',  profile.weaponL),
+        armorId:  _normalizeProfileField('armorId',  profile.armorId) ?? 0,
+        helmId:   _normalizeProfileField('helmId',   profile.helmId) ?? 0,
+        shieldId: _normalizeProfileField('shieldId', profile.shieldId),
+        // MP party-PvP — opaque ally roster; server doesn't validate the
+        // inner stats, just enforces array shape + cap. Each side computes
+        // damage locally from these so a synthesized roster only screws
+        // over the sender.
+        allies:   _normalizeProfileField('allies',   profile.allies) || [],
       };
       entry.loc = String(parsed.loc || 'ur').slice(0, 16);
       const wasHelloed = entry.helloed;
@@ -239,14 +277,18 @@ function _handleMessage(entry, msg) {
     }
     case 'update': {
       if (!entry.helloed) return;
+      // Route every field through the same normalizer `hello` uses. Skipping
+      // this lets a client `update {agi: 9999}` and corrupt hook-chance math
+      // for every other player who reads the broadcast.
       const fields = {};
       for (const k of ['name', 'jobIdx', 'level', 'palIdx', 'hp', 'maxHP', 'agi',
                        'weaponR', 'weaponL', 'armorId', 'helmId', 'shieldId',
                        'allies']) {
-        if (parsed[k] != null) {
-          entry.profile[k] = parsed[k];
-          fields[k] = parsed[k];
-        }
+        if (parsed[k] == null) continue;
+        const v = _normalizeProfileField(k, parsed[k]);
+        if (v === undefined) continue;
+        entry.profile[k] = v;
+        fields[k] = v;
       }
       if (Object.keys(fields).length === 0) return;
       _broadcast({ type: 'player-update', userId: entry.userId, fields }, entry.userId);
@@ -287,17 +329,22 @@ function _handleMessage(entry, msg) {
       return;
     }
     case 'pvp-ally-join': {
-      // Mid-battle fake-roster ally pick on the sender's player team. Server
-      // relays to the partner so they add the same ally to their
-      // `pvpEnemyAllies` (the opponent-side view). Wire carries just the
-      // PLAYER_POOL name — both clients re-derive stats locally via
-      // `generateAllyStats` so the wire stays small.
+      // Mid-battle ally pick on the sender's player team. Server relays the
+      // raw profile to the partner so they can run their own
+      // `generateAllyStats` and add the mirror to `pvpEnemyAllies` — works
+      // whether the ally is a fake-roster pick, a party member, or any other
+      // source. Server doesn't validate the inner stats; receiver re-derives
+      // everything via `generateAllyStats(profile)`.
+      // See docs/MULTIPLAYER-AUDIT-2026-05-15.md #18.
       if (!entry.helloed) return;
       const partnerId = _pvpPartners.get(entry.userId);
       if (!partnerId) return;
       const partner = _connected.get(partnerId);
       if (!partner || partner.ws.readyState !== 1) return;
-      _send(partner.ws, { type: 'pvp-ally-join', name: String(parsed.name || '').slice(0, 16) });
+      const profile = parsed.profile || (parsed.name ? { name: parsed.name } : null);
+      if (!profile) return;
+      profile.name = String(profile.name || '').slice(0, 16);
+      _send(partner.ws, { type: 'pvp-ally-join', profile });
       return;
     }
     case 'pvp-action': {
@@ -489,8 +536,14 @@ function _handleMessage(entry, msg) {
   }
 }
 
+// Cap incoming frames at 16 KB. The largest legitimate payload today is
+// `hello` with a 3-ally roster (~1 KB). 16 KB leaves comfortable headroom
+// and rules out OOM-via-fat-frame attacks. See
+// docs/MULTIPLAYER-AUDIT-2026-05-15.md #5.
+const WS_MAX_PAYLOAD = 16 * 1024;
+
 export function attachWebSocketPresence(httpServer) {
-  const wss = new WebSocketServer({ noServer: true });
+  const wss = new WebSocketServer({ noServer: true, maxPayload: WS_MAX_PAYLOAD });
 
   httpServer.on('upgrade', (req, socket, head) => {
     const url = new URL(req.url, 'http://localhost');

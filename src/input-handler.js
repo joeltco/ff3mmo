@@ -211,10 +211,18 @@ function _battleTargetConfirm() {
             : pvpSt.pvpOpponentStats)
         : null;
       const targetDef = tgt ? tgt.def : BOSS_DEF;
+      // Wire-PvP — when attacking the main opp, halve damage if their wire-
+      // delivered 'defend' action set `pvpOpponentIsDefending`. Without this
+      // the sender computes the full-damage value while the receiver's
+      // `_processEnemyFlash` halves locally — 2× HP divergence across clients
+      // any time the defender uses Defend. See
+      // docs/MULTIPLAYER-AUDIT-2026-05-15.md #1.
+      const oppDefending = tgt === pvpSt.pvpOpponentStats && !!pvpSt.pvpOpponentIsDefending;
       return rollHits(handAtk, targetDef, handHit, hitsPerHand, {
         ...critOpts,
         shieldEvade: tgt ? (tgt.shieldEvade || 0) : 0,
         evade: tgt ? (tgt.evade || 0) : 0,
+        defendHalve: oppDefending,
       });
     }
   }

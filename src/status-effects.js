@@ -3,6 +3,8 @@
 //                     4=silence, 5=toad, 6=petrify, 7=death
 // Only combat-relevant statuses implemented for now.
 
+import { rand } from './rng.js';
+
 export const STATUS = {
   PARALYSIS: 0x01,
   POISON:    0x02,
@@ -102,7 +104,9 @@ export function tryInflictStatus(targetState, statusName, hitChance = 50, resist
     else if (Array.isArray(resist)) { for (const r of resist) resistMask |= NAME_TO_FLAG[r] || 0; }
     if (resistMask & flag) return 0; // immune
   }
-  if (Math.random() * 100 < hitChance) {
+  // Wire-PvP: rand() is seeded from the server-broadcast seed so both clients
+  // roll identically. See docs/MULTIPLAYER-AUDIT-2026-05-15.md #2.
+  if (rand() * 100 < hitChance) {
     addStatus(targetState, flag);
     return flag;
   }
@@ -143,7 +147,7 @@ export function processTurnStart(state, maxHP) {
 
   // Sleep = skip turn (NES: wakes on physical hit, or 25% chance per turn)
   if (hasStatus(state, STATUS.SLEEP)) {
-    if (Math.random() < 0.25) {
+    if (rand() < 0.25) {
       removeStatus(state, STATUS.SLEEP);
     } else {
       canAct = false;
@@ -154,7 +158,7 @@ export function processTurnStart(state, maxHP) {
   if (hasStatus(state, STATUS.CONFUSE)) {
     confused = true;
     // NES: 25% chance to snap out per turn
-    if (Math.random() < 0.25) {
+    if (rand() < 0.25) {
       removeStatus(state, STATUS.CONFUSE);
       confused = false;
     }

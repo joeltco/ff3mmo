@@ -300,6 +300,13 @@ export function tryJoinPlayerAlly() {
     if (!member) continue;
     battleSt.battleAllies.push(generateAllyStats(member));
     partyJoined = true;
+    // Wire-PvP — mirror this party member onto the opponent's `pvpEnemyAllies`.
+    // Pre-v1.7.387 only the random-fill branch sent `pvp-ally-join`; party
+    // members never reached the wire, so the opponent saw 1 fewer combatant
+    // and turn queues forked. See docs/MULTIPLAYER-AUDIT-2026-05-15.md #28.
+    if (pvpSt.isWirePVP && pvpSt.isPVPBattle) {
+      sendNetPVPAllyJoin(_wireAllyProfile(member));
+    }
   }
   if (battleSt.battleAllies.length >= 3) {
     if (partyJoined) { battleSt.battleState = 'ally-fade-in'; battleSt.battleTimer = 0; return true; }
@@ -322,12 +329,14 @@ export function tryJoinPlayerAlly() {
   const pickIdx = Math.floor((pvpSt.isWirePVP ? rand() : Math.random()) * eligible.length);
   const picked = eligible[pickIdx];
   battleSt.battleAllies.push(generateAllyStats(picked));
-  // Wire-PvP — let the partner grow their `pvpEnemyAllies` by the same
-  // name so both sides see the new ally on the correct cell. Receiver
-  // looks the name up in PLAYER_POOL (identical static data) and runs
-  // its own `generateAllyStats`.
+  // Wire-PvP — relay the raw ally profile to the partner so they run their
+  // own `generateAllyStats` and add a matching cell to `pvpEnemyAllies`.
+  // Sending the profile (not just the name) makes this work for fake-roster
+  // picks, party members, and any future ally source without relying on
+  // PLAYER_POOL to be populated on both sides.
+  // See docs/MULTIPLAYER-AUDIT-2026-05-15.md #18.
   if (pvpSt.isWirePVP && pvpSt.isPVPBattle && picked && picked.name) {
-    sendNetPVPAllyJoin(picked.name);
+    sendNetPVPAllyJoin(_wireAllyProfile(picked));
   }
   battleSt.battleState = 'ally-fade-in'; battleSt.battleTimer = 0;
   return true;
@@ -350,6 +359,30 @@ function _updateBattleMenuConfirm() {
     }
   } else { return false; }
   return true;
+}
+
+// Pluck the fields `generateAllyStats` needs out of an ally source object
+// (PLAYER_POOL entry, online roster snapshot, partyMemberProfile cache, or
+// the derived `battleAllies` shape). Receiver runs its own
+// `generateAllyStats(profile)` on this payload — output matches the
+// sender's local push because the stat formulas are deterministic on these
+// inputs.
+function _wireAllyProfile(src) {
+  if (!src) return null;
+  return {
+    name:        src.name,
+    jobIdx:      src.jobIdx | 0,
+    level:       src.level | 0,
+    palIdx:      src.palIdx | 0,
+    loc:         src.loc,
+    weaponR:     src.weaponR != null ? src.weaponR : (src.weaponId != null ? src.weaponId : null),
+    weaponL:     src.weaponL,
+    armorId:     src.armorId,
+    helmId:      src.helmId,
+    shieldId:    src.shieldId,
+    knownSpells: Array.isArray(src.knownSpells) ? src.knownSpells.slice() : [],
+    jobLevel:    src.jobLevel | 0,
+  };
 }
 
 // Translate the local player's `inputSt.playerActionPending` into the wire

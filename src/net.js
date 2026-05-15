@@ -340,12 +340,17 @@ export function setNetPVPActionHandler(fn) {
   _onPVPAction = typeof fn === 'function' ? fn : null;
 }
 
-// Fake-roster ally join — sender's `_tryJoinPlayerAlly` picked an ally
-// from the local PLAYER_POOL; tell the partner so they grow their
-// `pvpEnemyAllies` by the same name (deterministic look-up on receive).
-export function sendNetPVPAllyJoin(name) {
-  if (!_helloed || !name) return false;
-  return _send({ type: 'pvp-ally-join', name });
+// Ally-join — sender's `_tryJoinPlayerAlly` picked an ally for their team.
+// Wire carries the full raw profile (`name, jobIdx, level, palIdx, loc,
+// weapon*, armor*, helm*, shield*, knownSpells, jobLevel`) so the receiver
+// can run its own `generateAllyStats` for identical output without needing
+// the name to resolve in the local PLAYER_POOL. With fakes disabled by
+// default (v1.7.386) and party members coming from `partyMemberProfiles`,
+// the name-only path was a silent no-op on the receiver.
+// See docs/MULTIPLAYER-AUDIT-2026-05-15.md #18.
+export function sendNetPVPAllyJoin(profile) {
+  if (!_helloed || !profile || !profile.name) return false;
+  return _send({ type: 'pvp-ally-join', profile });
 }
 
 export function setNetPVPAllyJoinHandler(fn) {
