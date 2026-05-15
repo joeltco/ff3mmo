@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.352 — 2026-05-14
+
+### Fix: restore blue interior on message boxes / shop / trade / inspect
+
+- v1.7.310 dropped the `blue=true` interior fill from `drawBorderedBox` in `hud-drawing.js` — the commit was scoped to the roster panel ("roster panel interior: actually fill black"), but the roster doesn't pass `blue=true` (it passes `false`). The change was a misdiagnosis: it removed the blue interior for every actual blue-box caller (message box, shop, trade, inspect), which all explicitly opt in with `blue=true`.
+- Restored: `blue=true` now fills the interior with NES `$02` (canon FF3 dialog blue), `blue=false` stays black. Border tiles are unaffected.
+
 ## 1.7.351 — 2026-05-14
 
 ### Refactor: single source for per-map state resets in map-loading.js
