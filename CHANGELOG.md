@@ -2,6 +2,25 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.385 — 2026-05-15
+
+### pvp-action actor-mismatch auto-reconcile
+
+- Pre-v1.7.385: if `_wireOpponentActions` queue head's `actor.idx` didn't match the current `casterCellIdx`, `_processEnemyFlash` logged a warning and `return false`'d — soft-freezing the FSM in `enemy-flash` until the FREEZE WATCHDOG fired.
+- Now: queue scan via `findIndex(a => a.actor.idx === casterCellIdx)`. Matching action gets `splice`'d out and dispatched; non-matching ones stay queued for their own turn firings. The reorder is logged once (`[pvp-action] queue-reorder: cell=N was at queue idx=K`) so we still see when desync happens — but the battle keeps moving.
+- If no matching action exists yet in the queue, still returns false — the FSM holds in `enemy-flash` until the matching action arrives. Same wait behavior, just resilient to reorder.
+
+This was the last item on the multiplayer-prep follow-up queue. Tonight's deploy chain (multiplayer track) closed out:
+
+| Range | Topic |
+|---|---|
+| 1.7.366 → 1.7.371 | Steps 1–3: presence / chat / PvP search |
+| 1.7.372 → 1.7.374 | Step 4 (1v1): seed sync + action relay + outcome reporting |
+| 1.7.375 → 1.7.376 | Party-ally PvP: roster sync + ally action relay |
+| 1.7.377 | Opponent-flee |
+| 1.7.378 → 1.7.381 | Real party invites, prompt UI, one-party-per-player, disband |
+| 1.7.382 → 1.7.385 | Mid-session sync, graceful forfeit, fake-roster joins, mismatch auto-reconcile |
+
 ## 1.7.384 — 2026-05-15
 
 ### Fake-roster ally mid-battle joins re-enabled in wire-PvP

@@ -463,24 +463,30 @@ function _processEnemyFlash() {
   if (!pvpSt.pvpPreflashDecided && pvpSt.isPVPBattle) {
     if (pvpSt.isWirePVP) {
       // MP Step 4 part 2 — opponent is a real player. Hold the preflash state
-      // until their client relays the chosen action via WS. Queue head must
-      // match the current pvp-enemy cell; out-of-order delivery is a desync.
+      // until their client relays the chosen action via WS.
       if (_wireOpponentActions.length === 0) return false;
       const casterCellIdx = pvpSt.pvpCurrentEnemyAllyIdx < 0
         ? 0
         : pvpSt.pvpCurrentEnemyAllyIdx + 1;
+      // Auto-reconcile actor-mismatch (v1.7.385) — under strict-alternating
+      // turn order the queue head matches, but a reorder (rare TCP gap or a
+      // partner-side turn-queue drift) can push the matching action behind
+      // a future-cell action. Scan for the actor.idx that matches our
+      // current casterCellIdx; splice that one out, leave others queued for
+      // their own turn firings. Pre-v1.7.385 the mismatch path returned
+      // false, soft-freezing the FSM.
+      let actionIdx = 0;
       const head = _wireOpponentActions[0];
-      const actorIdx = (head && head.actor && head.actor.idx) | 0;
-      if (actorIdx !== casterCellIdx) {
-        // Skip — wait for matching action (queue may include actions for a
-        // different cell that arrived early). For strict-alternating turn
-        // order this shouldn't happen; flag if it does.
-        console.warn('[pvp-action] actor mismatch:',
-                     'expected casterCellIdx=' + casterCellIdx,
-                     'queue head actor.idx=' + actorIdx);
-        return false;
+      const headActor = (head && head.actor && head.actor.idx) | 0;
+      if (headActor !== casterCellIdx) {
+        actionIdx = _wireOpponentActions.findIndex(a =>
+          ((a && a.actor && a.actor.idx) | 0) === casterCellIdx);
+        if (actionIdx < 0) return false;   // matching action hasn't arrived yet
+        console.warn('[pvp-action] queue-reorder: cell=' + casterCellIdx +
+                     ' was at queue idx=' + actionIdx +
+                     ' (head actor.idx=' + headActor + ')');
       }
-      const action = _wireOpponentActions.shift();
+      const action = _wireOpponentActions.splice(actionIdx, 1)[0];
       pvpSt.pvpPreflashDecided = true;
       // _applyWireOpponentAction returns true when it transitioned to a
       // non-attack state (defend / magic / item). Returns false for 'attack'
