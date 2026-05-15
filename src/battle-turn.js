@@ -20,6 +20,11 @@ import { applyMagicHeal } from './combatant-cast.js';
 import { SPELLS } from './data/spells.js';
 import { selectCursor, saveSlots, saveSlotsToDB } from './save-state.js';
 import { removeItem } from './inventory.js';
+import { canCastBasic, canCastAny, pickHealTarget, pickPoisonedTarget,
+         pickRandomLivingTarget, pickOffensiveSpell, rollOffensiveDamage,
+         rollCureAmount, rollActivation,
+         SPELL_CURE, SPELL_POISONA, AI_HEAL_THRESHOLD, AI_POTION_THRESHOLD,
+         AI_OFFENSIVE_GATE, AI_ITEM_GATE } from './combatant-ai.js';
 
 function _playerName() { return saveSlots[selectCursor]?.name || null; }
 
@@ -324,43 +329,58 @@ function _applyEndOfRoundPoison() {
 
 // ── Ally heal AI (White Mage) ──────────────────────────────────────────────
 // Returns true if ally cast Cure this turn (caller should NOT also do attack).
+// Decision side (knownSpells gate, candidate pick, heal roll) lives in
+// `combatant-ai.js`; this function builds the player-side team list, calls
+// the shared picker, and writes the ally-specific state bag.
 function _tryAllyCure(ally, allyIdx) {
-  if (!ally.knownSpells || !ally.knownSpells.includes(0x34)) return false;
-  if (ally.status && !canCastMagic(ally.status)) return false; // Silenced — fall through to physical
+  if (!canCastBasic(ally, SPELL_CURE)) return false;
 
-  // Build heal candidates: player + every other living ally. Each entry tracks
-  // hpPct so we can pick the one most in need. Threshold: < 0.6 = needs heal.
-  const candidates = [];
-  if (ps.hp > 0 && ps.stats && ps.stats.maxHP) {
-    candidates.push({ type: 'player', idx: -1, pct: ps.hp / ps.stats.maxHP });
-  }
-  for (let i = 0; i < battleSt.battleAllies.length; i++) {
-    const other = battleSt.battleAllies[i];
-    if (!other || other.hp <= 0) continue;
-    if (!other.maxHP) continue;
-    candidates.push({ type: 'ally', idx: i, pct: other.hp / other.maxHP });
-  }
-  // Need at least one teammate below 60% HP. Pick the lowest pct.
-  candidates.sort((a, b) => a.pct - b.pct);
-  const lowest = candidates[0];
-  if (!lowest || lowest.pct >= 0.6) return false;
-  // Cure power 42, formula: floor(MND/2) + power + rand(0..floor(atk/2))
-  const mnd = ally.mnd || 5;
-  const atk = Math.floor(mnd / 2) + 42;
-  const heal = atk + Math.floor(Math.random() * (Math.floor(atk / 2) + 1));
-  battleSt.allyMagicCasterIdx    = allyIdx;
-  battleSt.allyMagicTargetType   = lowest.type;
-  battleSt.allyMagicTargetIdx    = lowest.idx;
-  battleSt.allyMagicSpellId      = 0x34;
-  battleSt.allyMagicHealAmount   = heal;
+  const team = _buildPlayerTeam();
+  const target = pickHealTarget(team, AI_HEAL_THRESHOLD);
+  if (!target) return false;
+
+  const heal = rollCureAmount(ally);
+  battleSt.allyMagicCasterIdx     = allyIdx;
+  battleSt.allyMagicTargetType    = target.ref.type;
+  battleSt.allyMagicTargetIdx     = target.ref.index;
+  battleSt.allyMagicSpellId       = SPELL_CURE;
+  battleSt.allyMagicHealAmount    = heal;
   battleSt.allyMagicEffectApplied = false;
-  battleSt.allyMagicItemMode     = false;
+  battleSt.allyMagicItemMode      = false;
   queueBattleMsg(ally.name ? _nameToBytes(ally.name) : BATTLE_ALLY);
-  replaceBattleMsg(getSpellNameShrinesClean(0x34));
+  replaceBattleMsg(getSpellNameShrinesClean(SPELL_CURE));
   playSFX(SFX.MAGIC_CAST);
   battleSt.battleState = 'ally-magic-cast';
   battleSt.battleTimer = 0;
   return true;
+}
+
+// Build the player-team list for AI decisions. Order = player → ally 0 →
+// ally 1 → … Each entry has { ref, hp, maxHP, status } so the AI helpers in
+// `combatant-ai.js` can scan without dereferencing the underlying combatants.
+// `ref.index` is -1 for the player, ally cell index otherwise — the same
+// shape the legacy state bag uses for `allyMagicTargetType / TargetIdx`.
+function _buildPlayerTeam() {
+  const team = [];
+  if (ps.hp > 0) {
+    team.push({
+      ref: { type: 'player', index: -1 },
+      hp: ps.hp,
+      maxHP: ps.stats?.maxHP,
+      status: ps.status,
+    });
+  }
+  for (let i = 0; i < battleSt.battleAllies.length; i++) {
+    const a = battleSt.battleAllies[i];
+    if (!a) continue;
+    team.push({
+      ref: { type: 'ally', index: i },
+      hp: a.hp,
+      maxHP: a.maxHP,
+      status: a.status,
+    });
+  }
+  return team;
 }
 
 // ── Ally Poisona AI ────────────────────────────────────────────────────────
@@ -368,39 +388,30 @@ function _tryAllyCure(ally, allyIdx) {
 // (player → self → other allies). MP-gated upstream by knownSpells presence;
 // no need to deduct MP here since fake-roster allies don't track MP.
 function _tryAllyPoisona(ally, allyIdx) {
-  if (!ally.knownSpells || !ally.knownSpells.includes(0x35)) return false;
-  if (ally.status && !canCastMagic(ally.status)) return false; // Silenced
+  if (!canCastBasic(ally, SPELL_POISONA)) return false;
 
-  let target = null;
-  if (ps.hp > 0 && ps.status && hasStatus(ps.status, STATUS.POISON)) {
-    target = { type: 'player', idx: -1 };
-  }
-  if (!target) {
-    if (ally.status && hasStatus(ally.status, STATUS.POISON)) {
-      target = { type: 'ally', idx: allyIdx };
-    }
-  }
-  if (!target) {
-    for (let i = 0; i < battleSt.battleAllies.length; i++) {
-      if (i === allyIdx) continue;
-      const other = battleSt.battleAllies[i];
-      if (!other || other.hp <= 0 || !other.status) continue;
-      if (hasStatus(other.status, STATUS.POISON)) {
-        target = { type: 'ally', idx: i };
-        break;
-      }
-    }
-  }
+  // Priority order: player → self → other allies. `_buildPlayerTeam` is
+  // ordered player → ally 0..n, so reorder: player first, then self at
+  // ally.allyIdx, then the remaining allies. Self lands second so a healer
+  // with their own POISON gets cured before scanning others.
+  const team = _buildPlayerTeam();
+  const playerEntry = team.find(t => t.ref.type === 'player');
+  const selfEntry   = team.find(t => t.ref.type === 'ally' && t.ref.index === allyIdx);
+  const others      = team.filter(t => t.ref.type === 'ally' && t.ref.index !== allyIdx);
+  const ordered     = [playerEntry, selfEntry, ...others].filter(Boolean);
+
+  const target = pickPoisonedTarget(ordered);
   if (!target) return false;
+
   battleSt.allyMagicCasterIdx     = allyIdx;
-  battleSt.allyMagicTargetType    = target.type;
-  battleSt.allyMagicTargetIdx     = target.idx;
-  battleSt.allyMagicSpellId       = 0x35;
+  battleSt.allyMagicTargetType    = target.ref.type;
+  battleSt.allyMagicTargetIdx     = target.ref.index;
+  battleSt.allyMagicSpellId       = SPELL_POISONA;
   battleSt.allyMagicHealAmount    = 0;
   battleSt.allyMagicEffectApplied = false;
   battleSt.allyMagicItemMode      = false;
   queueBattleMsg(ally.name ? _nameToBytes(ally.name) : BATTLE_ALLY);
-  replaceBattleMsg(getSpellNameShrinesClean(0x35));
+  replaceBattleMsg(getSpellNameShrinesClean(SPELL_POISONA));
   playSFX(SFX.MAGIC_CAST);
   battleSt.battleState = 'ally-magic-cast';
   battleSt.battleTimer = 0;
@@ -419,53 +430,44 @@ function _tryAllyPoisona(ally, allyIdx) {
 // MP-gated upstream by `knownSpells` presence (fake-roster allies don't
 // track MP). Encounter-only for v1; PVP target path TODO.
 function _tryAllyOffensiveCast(ally, allyIdx) {
-  if (!ally || !Array.isArray(ally.knownSpells)) return false;
-  if (ally.status && !canCastMagic(ally.status)) return false; // Silenced
-  const offensive = ally.knownSpells.filter(s => s === 0x31 || s === 0x32 || s === 0x33);
-  if (offensive.length === 0) return false;
-  if (Math.random() >= 0.45) return false;
+  if (!canCastAny(ally)) return false;
+  const spellId = pickOffensiveSpell(ally);
+  if (!spellId) return false;
+  if (!rollActivation(AI_OFFENSIVE_GATE)) return false;
 
-  // Pick a living enemy target. Encounter battles → random monster slot.
-  // PVP battles → random alive cell, using the same idx convention as
+  // Build the enemy list using the cell-idx convention shared with
   // `spell-cast.js:_getEnemyAt`:
   //   'enemy'      → encounterMonsters[idx]
   //   'pvp-enemy'  → idx === 0 → pvpOpponentStats; idx >= 1 → pvpEnemyAllies[idx - 1]
-  // Reusing that convention lets us pipe damage display through `setSwDmgNum`
-  // (the same multi-target damage-num system the player cast uses).
-  let targetType = null, targetIdx = -1;
+  // The shared damage display (`setSwDmgNum`) keys off these same indices.
+  const enemies = [];
+  let targetType = null;
   if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
-    const livingIdxs = battleSt.encounterMonsters
-      .map((m, i) => (m && m.hp > 0) ? i : -1)
-      .filter(i => i >= 0);
-    if (livingIdxs.length === 0) return false;
     targetType = 'enemy';
-    targetIdx = livingIdxs[Math.floor(Math.random() * livingIdxs.length)];
+    battleSt.encounterMonsters.forEach((m, i) => {
+      if (m) enemies.push({ ref: { type: 'enemy', index: i }, hp: m.hp });
+    });
   } else if (pvpSt.isPVPBattle) {
-    const candidates = [];
-    if (pvpSt.pvpOpponentStats && pvpSt.pvpOpponentStats.hp > 0) candidates.push(0);
-    (pvpSt.pvpEnemyAllies || []).forEach((a, i) => { if (a && a.hp > 0) candidates.push(i + 1); });
-    if (candidates.length === 0) return false;
     targetType = 'pvp-enemy';
-    targetIdx = candidates[Math.floor(Math.random() * candidates.length)];
+    if (pvpSt.pvpOpponentStats) {
+      enemies.push({ ref: { type: 'pvp-enemy', index: 0 }, hp: pvpSt.pvpOpponentStats.hp });
+    }
+    (pvpSt.pvpEnemyAllies || []).forEach((a, i) => {
+      if (a) enemies.push({ ref: { type: 'pvp-enemy', index: i + 1 }, hp: a.hp });
+    });
   } else {
     return false;
   }
 
-  const spellId = offensive[Math.floor(Math.random() * offensive.length)];
+  const target = pickRandomLivingTarget(enemies);
+  if (!target) return false;
   const spell = SPELLS.get(spellId);
   if (!spell) return false;
-  // Damage roll — INT for damage spells (NES black-magic formula). Sleep is
-  // status-only (power=0), no damage roll.
-  let dmg = 0;
-  if (spell.power > 0) {
-    const stat = ally.int || 5;
-    const baseAtk = Math.floor(stat / 2) + spell.power;
-    dmg = baseAtk + Math.floor(Math.random() * (Math.floor(baseAtk / 2) + 1));
-    dmg = Math.max(1, dmg);
-  }
+  const dmg = rollOffensiveDamage(ally, spell);
+
   battleSt.allyMagicCasterIdx     = allyIdx;
   battleSt.allyMagicTargetType    = targetType;
-  battleSt.allyMagicTargetIdx     = targetIdx;
+  battleSt.allyMagicTargetIdx     = target.ref.index;
   battleSt.allyMagicSpellId       = spellId;
   battleSt.allyMagicHealAmount    = 0;
   battleSt.allyMagicDamageRoll    = dmg;
@@ -485,40 +487,30 @@ function _tryAllyOffensiveCast(ally, allyIdx) {
 // allyMagicItemMode=true to suppress the cast flame; sparkle + heal-num still
 // render on the target as with spell casts.
 function _tryAllyItem(ally, allyIdx) {
-  if (Math.random() >= 0.25) return false;
-  // Antidote: any teammate (incl self / player) with POISON
-  let targetType = null, targetIdx = -1, spellSentinel = 0;
-  if (ps.hp > 0 && ps.status && hasStatus(ps.status, STATUS.POISON)) {
-    targetType = 'player'; targetIdx = -1; spellSentinel = 0x35;
-  } else if (ally.status && hasStatus(ally.status, STATUS.POISON)) {
-    targetType = 'ally'; targetIdx = allyIdx; spellSentinel = 0x35;
-  } else {
-    for (let i = 0; i < battleSt.battleAllies.length; i++) {
-      if (i === allyIdx) continue;
-      const o = battleSt.battleAllies[i];
-      if (!o || o.hp <= 0 || !o.status) continue;
-      if (hasStatus(o.status, STATUS.POISON)) { targetType = 'ally'; targetIdx = i; spellSentinel = 0x35; break; }
-    }
+  if (!rollActivation(AI_ITEM_GATE)) return false;
+
+  // Priority 1 — Antidote: scan team for first poisoned member. Order =
+  // player → self → other allies (matches the pre-v1.7.360 hand-rolled
+  // priority order).
+  const teamRaw = _buildPlayerTeam();
+  const playerEntry = teamRaw.find(t => t.ref.type === 'player');
+  const selfEntry   = teamRaw.find(t => t.ref.type === 'ally' && t.ref.index === allyIdx);
+  const others      = teamRaw.filter(t => t.ref.type === 'ally' && t.ref.index !== allyIdx);
+  const orderedPoison = [playerEntry, selfEntry, ...others].filter(Boolean);
+
+  let target = pickPoisonedTarget(orderedPoison);
+  let spellSentinel = SPELL_POISONA;  // antidote uses the Poisona anim slot
+
+  // Priority 2 — Cure Potion: lowest-HP teammate below 50%.
+  if (!target) {
+    target = pickHealTarget(teamRaw, AI_POTION_THRESHOLD);
+    if (!target) return false;
+    spellSentinel = SPELL_CURE;
   }
-  // Cure Potion: lowest-HP teammate < 50%
-  if (!targetType) {
-    const candidates = [];
-    if (ps.hp > 0 && ps.stats && ps.stats.maxHP) {
-      candidates.push({ type: 'player', idx: -1, pct: ps.hp / ps.stats.maxHP });
-    }
-    for (let i = 0; i < battleSt.battleAllies.length; i++) {
-      const o = battleSt.battleAllies[i];
-      if (!o || o.hp <= 0 || !o.maxHP) continue;
-      candidates.push({ type: 'ally', idx: i, pct: o.hp / o.maxHP });
-    }
-    candidates.sort((a, b) => a.pct - b.pct);
-    const lowest = candidates[0];
-    if (!lowest || lowest.pct >= 0.5) return false;
-    targetType = lowest.type; targetIdx = lowest.idx; spellSentinel = 0x34;
-  }
+
   battleSt.allyMagicCasterIdx     = allyIdx;
-  battleSt.allyMagicTargetType    = targetType;
-  battleSt.allyMagicTargetIdx     = targetIdx;
+  battleSt.allyMagicTargetType    = target.ref.type;
+  battleSt.allyMagicTargetIdx     = target.ref.index;
   battleSt.allyMagicSpellId       = spellSentinel;
   battleSt.allyMagicHealAmount    = 50;
   battleSt.allyMagicEffectApplied = false;

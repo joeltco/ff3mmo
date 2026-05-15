@@ -12,6 +12,12 @@ import { resetBattleVars, isTeamWiped, updateBattleTimers, updatePoisonTick,
 import { playSFX, stopSFX, SFX, pauseMusic, playTrack, TRACKS } from './music.js';
 import { rollHits, calcPotentialHits, BOSS_HIT_RATE, GOBLIN_HIT_RATE, summarizeHits, isLeftHandHit } from './battle-math.js';
 import { reseedFromEntropy } from './rng.js';
+import { canCastBasic, canCastAny, pickHealTarget, pickPoisonedTarget,
+         pickRandomLivingTarget, pickOffensiveSpell, rollOffensiveDamage,
+         rollCureAmount, rollActivation,
+         SPELL_CURE, SPELL_POISONA, AI_HEAL_THRESHOLD, AI_POTION_THRESHOLD,
+         AI_OFFENSIVE_GATE, AI_ITEM_GATE,
+         AI_PVP_DEFEND_GATE, AI_PVP_SW_GATE } from './combatant-ai.js';
 import { ITEMS, isWeapon, weaponSubtype } from './data/items.js';
 import { PLAYER_POOL, generateAllyStats } from './data/players.js';
 import { JOBS } from './data/jobs.js';
@@ -340,9 +346,10 @@ function _processEnemyFlash() {
       if (_tryPVPEnemyPoisona(caster, casterCellIdx)) return true;
       if (_tryPVPEnemyOffensiveCast(caster, casterCellIdx)) return true;
     }
-    // Main opp only: defend / potion / SouthWind throw decisions.
+    // Main opp only: defend / potion / SouthWind throw decisions. Activation
+    // rates pulled from `combatant-ai.js` so future balance lives in one place.
     if (pvpSt.pvpCurrentEnemyAllyIdx < 0) {
-      if (Math.random() < 0.30) {
+      if (rollActivation(AI_PVP_DEFEND_GATE)) {
         pvpSt.pvpOpponentIsDefending = true;
         pvpSt.pvpPendingTargetAlly = -1;
         playSFX(SFX.DEFEND_HIT);
@@ -352,14 +359,14 @@ function _processEnemyFlash() {
       const maxHP = pvpSt.pvpOpponentStats.maxHP;
       const curHP = pvpSt.pvpOpponentStats.hp;
       const heal = Math.min(50, maxHP - curHP);
-      if (curHP < maxHP * 0.5 && heal > 0 && Math.random() < 0.25) {
+      if (curHP < maxHP * 0.5 && heal > 0 && rollActivation(AI_ITEM_GATE)) {
         pvpSt.pvpOpponentStats.hp = curHP + heal;
         setEnemyHealNum({ value: heal, timer: 0 });
         playSFX(SFX.CURE);
         battleSt.battleState = 'pvp-opp-potion'; battleSt.battleTimer = 0;
         return true;
       }
-      if (Math.random() < 0.15) {
+      if (rollActivation(AI_PVP_SW_GATE)) {
         battleSt.battleState = 'pvp-opp-sw-throw'; battleSt.battleTimer = 0;
         return true;
       }
@@ -480,42 +487,37 @@ function _processPVPOppPotion() {
 // poisoned teammate (antidote) → lowest-HP teammate <50% (potion). Same
 // sparkle animation as before; renders over the TARGET cell, not the caster.
 function _tryPVPEnemyItem(casterCellIdx) {
-  // 25% activation chance — matches the original main-opp potion rate.
-  if (Math.random() >= 0.25) return false;
-  // Antidote: any teammate with POISON
-  for (const cellIdx of _pvpEnemyTeamCellIdxs()) {
-    const t = _pvpEnemyByCellIdx(cellIdx);
-    if (!t || !t.status) continue;
-    if (hasStatus(t.status, STATUS.POISON)) {
-      removeStatus(t.status, STATUS.POISON);
-      pvpSt.pvpItemCasterCellIdx = casterCellIdx;
-      pvpSt.pvpItemTargetCellIdx = cellIdx;
-      pvpSt.pvpItemKind = 'antidote';
-      pvpSt.pvpItemId = 0xaf;
-      setEnemyHealNum({ value: 0, timer: 0, index: cellIdx });
-      playSFX(SFX.CURE);
-      battleSt.battleState = 'pvp-opp-potion'; battleSt.battleTimer = 0;
-      return true;
-    }
+  if (!rollActivation(AI_ITEM_GATE)) return false;
+
+  const team = _buildPVPEnemyTeam();
+
+  // Antidote: scan team in cell-idx order, take first poisoned teammate.
+  const poisoned = pickPoisonedTarget(team);
+  if (poisoned) {
+    const t = _pvpEnemyByCellIdx(poisoned.ref.cellIdx);
+    removeStatus(t.status, STATUS.POISON);
+    pvpSt.pvpItemCasterCellIdx = casterCellIdx;
+    pvpSt.pvpItemTargetCellIdx = poisoned.ref.cellIdx;
+    pvpSt.pvpItemKind = 'antidote';
+    pvpSt.pvpItemId = 0xaf;
+    setEnemyHealNum({ value: 0, timer: 0, index: poisoned.ref.cellIdx });
+    playSFX(SFX.CURE);
+    battleSt.battleState = 'pvp-opp-potion'; battleSt.battleTimer = 0;
+    return true;
   }
-  // Cure Potion: lowest-HP teammate below 50%
-  let bestCellIdx = -1, bestPct = 1;
-  for (const cellIdx of _pvpEnemyTeamCellIdxs()) {
-    const t = _pvpEnemyByCellIdx(cellIdx);
-    if (!t || !t.maxHP) continue;
-    const pct = t.hp / t.maxHP;
-    if (pct < bestPct) { bestPct = pct; bestCellIdx = cellIdx; }
-  }
-  if (bestCellIdx < 0 || bestPct >= 0.5) return false;
-  const t = _pvpEnemyByCellIdx(bestCellIdx);
+
+  // Cure Potion: lowest-HP teammate below 50%.
+  const wounded = pickHealTarget(team, AI_POTION_THRESHOLD);
+  if (!wounded) return false;
+  const t = _pvpEnemyByCellIdx(wounded.ref.cellIdx);
   const heal = Math.min(50, (t.maxHP || t.hp) - t.hp);
   if (heal <= 0) return false;
   t.hp += heal;
   pvpSt.pvpItemCasterCellIdx = casterCellIdx;
-  pvpSt.pvpItemTargetCellIdx = bestCellIdx;
+  pvpSt.pvpItemTargetCellIdx = wounded.ref.cellIdx;
   pvpSt.pvpItemKind = 'potion';
   pvpSt.pvpItemId = 0xa6;
-  setEnemyHealNum({ value: heal, timer: 0, index: bestCellIdx });
+  setEnemyHealNum({ value: heal, timer: 0, index: wounded.ref.cellIdx });
   playSFX(SFX.CURE);
   battleSt.battleState = 'pvp-opp-potion'; battleSt.battleTimer = 0;
   return true;
@@ -581,33 +583,56 @@ function _pvpEnemyTeamCellIdxs() {
 }
 
 function _tryPVPEnemyCure(caster, casterCellIdx) {
-  if (!caster || !caster.knownSpells || !caster.knownSpells.includes(0x34)) return false;
-  if (caster.status && !canCastMagic(caster.status)) return false; // Silenced
-  // Build candidates among living enemy teammates with maxHP set.
-  const candidates = [];
-  for (const cellIdx of _pvpEnemyTeamCellIdxs()) {
-    const t = _pvpEnemyByCellIdx(cellIdx);
-    if (!t || !t.maxHP) continue;
-    candidates.push({ cellIdx, pct: t.hp / t.maxHP });
-  }
-  candidates.sort((a, b) => a.pct - b.pct);
-  const lowest = candidates[0];
-  if (!lowest || lowest.pct >= 0.6) return false;
-  // Cure power 42 — same formula as ally Cure
-  const mnd = caster.mnd || 5;
-  const atk = Math.floor(mnd / 2) + 42;
-  const heal = atk + Math.floor(Math.random() * (Math.floor(atk / 2) + 1));
+  if (!canCastBasic(caster, SPELL_CURE)) return false;
+
+  const team = _buildPVPEnemyTeam();
+  const target = pickHealTarget(team, AI_HEAL_THRESHOLD);
+  if (!target) return false;
+
+  const heal = rollCureAmount(caster);
   pvpSt.pvpMagicCasterCellIdx  = casterCellIdx;
-  pvpSt.pvpMagicTargetCellIdx  = lowest.cellIdx;
-  pvpSt.pvpMagicSpellId        = 0x34;
+  pvpSt.pvpMagicTargetCellIdx  = target.ref.cellIdx;
+  pvpSt.pvpMagicSpellId        = SPELL_CURE;
   pvpSt.pvpMagicHealAmount     = heal;
   pvpSt.pvpMagicEffectApplied  = false;
   queueBattleMsg(caster.name ? _nameToBytes(caster.name) : BATTLE_FOE);
-  replaceBattleMsg(getSpellNameShrinesClean(0x34));
+  replaceBattleMsg(getSpellNameShrinesClean(SPELL_CURE));
   playSFX(SFX.MAGIC_CAST);
   battleSt.battleState = 'pvp-enemy-magic-cast';
   battleSt.battleTimer = 0;
   return true;
+}
+
+// Build the PvP-enemy team list for AI decisions. Order = main opp (cell 0)
+// → enemy ally 0 → enemy ally 1 → … Each entry's ref carries `cellIdx` so
+// callers can write directly into the cell-indexed state bag.
+function _buildPVPEnemyTeam() {
+  const team = [];
+  for (const cellIdx of _pvpEnemyTeamCellIdxs()) {
+    const t = _pvpEnemyByCellIdx(cellIdx);
+    if (!t) continue;
+    team.push({
+      ref: { cellIdx },
+      hp: t.hp,
+      maxHP: t.maxHP,
+      status: t.status,
+    });
+  }
+  return team;
+}
+
+// Build the player-team list for PvP-enemy offensive casts. Order = player →
+// ally 0 → ally 1 → … Ref carries `partyIdx` (-1 = player, 0+ = ally cell)
+// which is the convention the legacy state bag (`pvpMagicPartyTargetIdx`)
+// uses.
+function _buildPVPPlayerTeam() {
+  const team = [];
+  if (ps.hp > 0) team.push({ ref: { partyIdx: -1 }, hp: ps.hp, maxHP: ps.stats?.maxHP });
+  for (let i = 0; i < battleSt.battleAllies.length; i++) {
+    const a = battleSt.battleAllies[i];
+    if (a) team.push({ ref: { partyIdx: i }, hp: a.hp, maxHP: a.maxHP });
+  }
+  return team;
 }
 
 // PVP enemy offensive cast — BM/RM on the enemy team picks a target on the
@@ -616,40 +641,21 @@ function _tryPVPEnemyCure(caster, casterCellIdx) {
 // the damage number without re-rolling. Returns true when a cast was queued
 // (caller should `return true` from the dispatch).
 function _tryPVPEnemyOffensiveCast(caster, casterCellIdx) {
-  if (!caster || !Array.isArray(caster.knownSpells)) return false;
-  if (caster.status && !canCastMagic(caster.status)) return false; // Silenced
-  // Activation gate — keep casts feeling like a "sometimes" choice, not the
-  // default. WMs without offensive spells fall through to attack as before.
-  const offensive = caster.knownSpells.filter(s => s === 0x31 || s === 0x32 || s === 0x33);
-  if (offensive.length === 0) return false;
-  if (Math.random() >= 0.45) return false;
-  // Pick a target on the player party — player + living roster allies. Skip
-  // the player when KO'd. Random pick among the alive set for variety.
-  const partyTargets = [];
-  if (ps.hp > 0) partyTargets.push(-1);
-  for (let i = 0; i < battleSt.battleAllies.length; i++) {
-    const a = battleSt.battleAllies[i];
-    if (a && a.hp > 0) partyTargets.push(i);
-  }
-  if (partyTargets.length === 0) return false;
-  const targetIdx = partyTargets[Math.floor(Math.random() * partyTargets.length)];
-  const spellId = offensive[Math.floor(Math.random() * offensive.length)];
+  if (!canCastAny(caster)) return false;
+  const spellId = pickOffensiveSpell(caster);
+  if (!spellId) return false;
+  if (!rollActivation(AI_OFFENSIVE_GATE)) return false;
+
+  const enemies = _buildPVPPlayerTeam();
+  const target = pickRandomLivingTarget(enemies);
+  if (!target) return false;
   const spell = SPELLS.get(spellId);
   if (!spell) return false;
-  // Damage roll — Fire/Blizzard use INT (NES FF3 black-magic formula). RM's
-  // INT is W=2 (~67% of a pure BM at the same level) so an RM-cast Fire
-  // hits noticeably softer than a BM-cast Fire. Sleep is status (power=0);
-  // skip the damage roll for it.
-  let dmg = 0;
-  if (spell.power > 0) {
-    const stat = caster.int || 5;
-    const baseAtk = Math.floor(stat / 2) + spell.power;
-    dmg = baseAtk + Math.floor(Math.random() * (Math.floor(baseAtk / 2) + 1));
-    dmg = Math.max(1, dmg);
-  }
+  const dmg = rollOffensiveDamage(caster, spell);
+
   pvpSt.pvpMagicCasterCellIdx  = casterCellIdx;
   pvpSt.pvpMagicTargetCellIdx  = -1;
-  pvpSt.pvpMagicPartyTargetIdx = targetIdx;
+  pvpSt.pvpMagicPartyTargetIdx = target.ref.partyIdx;
   pvpSt.pvpMagicSpellId        = spellId;
   pvpSt.pvpMagicHealAmount     = 0;
   pvpSt.pvpMagicDamageRoll     = dmg;
@@ -663,28 +669,26 @@ function _tryPVPEnemyOffensiveCast(caster, casterCellIdx) {
 }
 
 function _tryPVPEnemyPoisona(caster, casterCellIdx) {
-  if (!caster || !caster.knownSpells || !caster.knownSpells.includes(0x35)) return false;
-  if (caster.status && !canCastMagic(caster.status)) return false; // Silenced
-  // Priority: self → other teammates (in cell-idx order).
-  let targetCellIdx = -1;
-  if (caster.status && hasStatus(caster.status, STATUS.POISON)) {
-    targetCellIdx = casterCellIdx;
-  } else {
-    for (const cellIdx of _pvpEnemyTeamCellIdxs()) {
-      if (cellIdx === casterCellIdx) continue;
-      const t = _pvpEnemyByCellIdx(cellIdx);
-      if (!t || !t.status) continue;
-      if (hasStatus(t.status, STATUS.POISON)) { targetCellIdx = cellIdx; break; }
-    }
-  }
-  if (targetCellIdx < 0) return false;
+  if (!canCastBasic(caster, SPELL_POISONA)) return false;
+
+  // Priority: self → other teammates (in cell-idx order). Reorder the team
+  // so self lands first; the shared picker just takes the first poisoned
+  // entry it finds.
+  const teamRaw = _buildPVPEnemyTeam();
+  const selfEntry = teamRaw.find(t => t.ref.cellIdx === casterCellIdx);
+  const others    = teamRaw.filter(t => t.ref.cellIdx !== casterCellIdx);
+  const ordered   = [selfEntry, ...others].filter(Boolean);
+
+  const target = pickPoisonedTarget(ordered);
+  if (!target) return false;
+
   pvpSt.pvpMagicCasterCellIdx  = casterCellIdx;
-  pvpSt.pvpMagicTargetCellIdx  = targetCellIdx;
-  pvpSt.pvpMagicSpellId        = 0x35;
+  pvpSt.pvpMagicTargetCellIdx  = target.ref.cellIdx;
+  pvpSt.pvpMagicSpellId        = SPELL_POISONA;
   pvpSt.pvpMagicHealAmount     = 0;
   pvpSt.pvpMagicEffectApplied  = false;
   queueBattleMsg(caster.name ? _nameToBytes(caster.name) : BATTLE_FOE);
-  replaceBattleMsg(getSpellNameShrinesClean(0x35));
+  replaceBattleMsg(getSpellNameShrinesClean(SPELL_POISONA));
   playSFX(SFX.MAGIC_CAST);
   battleSt.battleState = 'pvp-enemy-magic-cast';
   battleSt.battleTimer = 0;

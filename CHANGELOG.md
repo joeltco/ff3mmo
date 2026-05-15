@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.360 — 2026-05-15
+
+### Combat: unified AI decision helpers (multiplayer prep step 3 of 7)
+
+- New `src/combatant-ai.js` — shared decision helpers (`pickHealTarget`, `pickPoisonedTarget`, `pickRandomLivingTarget`, `pickOffensiveSpell`, `rollOffensiveDamage`, `rollCureAmount`, `rollActivation`, `canCastBasic`, `canCastAny`) plus the activation-rate constants (`AI_HEAL_THRESHOLD = 0.6`, `AI_POTION_THRESHOLD = 0.5`, `AI_OFFENSIVE_GATE = 0.45`, `AI_ITEM_GATE = 0.25`, `AI_PVP_DEFEND_GATE = 0.30`, `AI_PVP_SW_GATE = 0.15`) and the spell-ID set (`SPELL_CURE`, `SPELL_POISONA`, `OFFENSIVE_SPELLS`).
+- `_tryAllyCure / _tryAllyPoisona / _tryAllyOffensiveCast / _tryAllyItem` (battle-turn.js) and `_tryPVPEnemyCure / _tryPVPEnemyPoisona / _tryPVPEnemyOffensiveCast / _tryPVPEnemyItem` (pvp.js) all reduced to ~25 lines each. Decision logic (candidate pick, threshold compare, damage/heal roll, activation gate) flows through the shared helpers; only the role-specific state-bag write (`battleSt.allyMagic*` vs `pvpSt.pvpMagic*` vs `pvpSt.pvpItem*`) and the `battleState` transition stay local.
+- All AI-side `Math.random` calls (~16 across the eight functions plus the PvP-main defend / SW-throw gates) now route through `rand()` from `src/rng.js` — the seeded PRNG covers the AI surface in addition to the apply layer.
+- New `_buildPlayerTeam()` (battle-turn.js) and `_buildPVPEnemyTeam` / `_buildPVPPlayerTeam` (pvp.js) materialize team lists with stable ref objects so callers can read back the chosen target by ref.index / ref.cellIdx / ref.partyIdx and write directly into the legacy state bags. No behavior change — same thresholds, same priority orders, same damage rolls; just one source for each.
+- Step 3 in the audit fix order. When real-multiplayer wire signals replace fake-player AI for PvP opponents, the swap is now one site (the `_tryPVPEnemy*` calls in `pvp.js`'s preflash dispatch) instead of four. Roster-ally AI stays — empty party slots will keep backfilling from the fake pool.
+
 ## 1.7.359 — 2026-05-15
 
 ### Combat: apply-time target redirect (multiplayer prep step 2 of 7)
