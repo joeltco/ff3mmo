@@ -24,7 +24,8 @@ import { queueBattleMsg, replaceBattleMsg } from './battle-msg.js';
 import { BATTLE_INEFFECTIVE, BATTLE_HASTE, BATTLE_PROTECT, BATTLE_REFLECT, BATTLE_SLAIN } from './data/strings.js';
 import { _nameToBytes } from './text-utils.js';
 import { getSpellNameShrinesClean, getItemNameShrinesClean } from './text-decoder.js';
-import { elemMultiplier } from './battle-math.js';
+import { elemMultiplier, resolveLivingTarget } from './battle-math.js';
+import { rand } from './rng.js';
 import { pvpSt } from './pvp.js';
 import { applyBuff, BUFF_HASTE, BUFF_PROTECT, BUFF_REFLECT } from './buffs.js';
 
@@ -112,7 +113,7 @@ export function resetSpellCastVars() {
 function _rollMagicAmount(power, useMnd) {
   const stat = ps.stats ? (useMnd ? (ps.stats.mnd || 5) : (ps.stats.int || 5)) : 5;
   const atk = Math.floor(stat / 2) + power;
-  return atk + Math.floor(Math.random() * (Math.floor(atk / 2) + 1));
+  return atk + Math.floor(rand() * (Math.floor(atk / 2) + 1));
 }
 
 // NES FF3 marks undead as "weak to holy AND resists holy" — the contradictory
@@ -294,7 +295,25 @@ function _applyEnemyEffect(idx, spell) {
   const isEncounter = battleSt.isRandomEncounter && battleSt.encounterMonsters;
   const isPVP = pvpSt.isPVPBattle;
   const isBoss = !isEncounter && !isPVP;
-  const mon = isBoss ? null : _getEnemyAt(idx);
+  let mon = isBoss ? null : _getEnemyAt(idx);
+
+  // Apply-time target redirect (v1.7.359 step 2/7). If the spell was aimed at
+  // a single target and the picked monster died during cast windup, redirect
+  // to the next-living enemy on the same side so the spell doesn't silently
+  // miss. Multi-target spells walk their own _targets list and skip dead
+  // slots naturally at the apply path. Reassigning `idx` here updates every
+  // closure-bound `_setEnemyDmg(idx, …)` callback below because they capture
+  // the local variable, not its value at call site.
+  if (!isBoss && _targets.length === 1 && mon && mon.hp <= 0) {
+    const factionList = isEncounter
+      ? battleSt.encounterMonsters
+      : [pvpSt.pvpOpponentStats, ...(pvpSt.pvpEnemyAllies || [])];
+    const live = resolveLivingTarget(mon, factionList);
+    if (live) {
+      mon = live;
+      idx = factionList.indexOf(live);
+    }
+  }
 
   // Sight is a no-op against enemies — the spell's effect is the visual
   // (cast anim + projectile flight) plus the "Ineffective" battle message.
@@ -386,7 +405,7 @@ function _applyEnemyEffect(idx, spell) {
 
   // Hit roll (offensive non-recovery only). Recovery on undead always hits at NES hit:100.
   if (!isRecovery && spell.hit > 0 && spell.hit < 100) {
-    if (Math.random() * 100 >= spell.hit) {
+    if (rand() * 100 >= spell.hit) {
       _setEnemyDmg(idx, 0, true);
       return;
     }
@@ -508,11 +527,33 @@ function _applySpellEffect(target) {
     ? Math.max(1, Math.floor(_baseAmount / _targets.length))
     : _rollMagicAmount(spell.power, useMnd);
 
+  // Apply-time target redirect (v1.7.359 step 2/7). If the spell was aimed at
+  // a single friendly and the picked combatant died during cast windup,
+  // redirect to the next-living teammate (another ally first, then the player
+  // as fallback). Multi-target heals re-roll per slot below; dead slots there
+  // skip silently inside applyMagicHeal.
+  let activeTarget = target;
+  if (_targets.length === 1) {
+    const allies = battleSt.battleAllies || [];
+    const picked = target.type === 'player' ? ps : allies[target.index];
+    if (!picked || picked.hp <= 0) {
+      let redirected = null;
+      for (let i = 0; i < allies.length; i++) {
+        if (allies[i] && allies[i].hp > 0) {
+          redirected = { type: 'ally', index: i };
+          break;
+        }
+      }
+      if (!redirected && ps.hp > 0) redirected = { type: 'player' };
+      if (redirected) activeTarget = redirected;
+    }
+  }
+
   // Friendly target — resolve target object + heal-num callback per type.
-  const isPlayerTgt = target.type === 'player';
-  const tgt = isPlayerTgt ? ps : battleSt.battleAllies[target.index];
+  const isPlayerTgt = activeTarget.type === 'player';
+  const tgt = isPlayerTgt ? ps : battleSt.battleAllies[activeTarget.index];
   if (!tgt) return;
-  const onHealNum = makeHealNumCallback(isPlayerTgt ? 'self' : 'ally', target.index);
+  const onHealNum = makeHealNumCallback(isPlayerTgt ? 'self' : 'ally', activeTarget.index);
 
   // Cure-status (Poisona, Antidote) — shared helper.
   // SFX fires via the engine at sparkle-start (see `getSpellImpactSFX` →

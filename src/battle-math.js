@@ -122,6 +122,30 @@ export function isLeftHandHit(hitIdx, totalHits, rW, lW) {
   return !isRightHandHit(hitIdx, totalHits, rW, lW);
 }
 
+// Apply-time target redirect. If `picked` is alive (hp > 0) return it.
+// Otherwise scan `factionList` for the first living combatant. Returns
+// null if the whole faction is dead. Use at apply time (not decision
+// time) so a target that died during cast windup or mid-combo gets
+// redirected to a living teammate instead of silently no-op'ing.
+//
+// `picked`       — single combatant object (may be null/dead)
+// `factionList`  — array of combatants on the same side as `picked`.
+//                  Caller decides the array (player faction =
+//                  [ps, ...battleAllies], enemy faction = encounterMonsters
+//                  or [pvpOpponentStats, ...pvpEnemyAllies], etc).
+//                  Pass null to disable fallback (returns picked-if-alive
+//                  or null).
+//
+// v1.7.359 — multiplayer prep step 2/7.
+export function resolveLivingTarget(picked, factionList) {
+  if (picked && (picked.hp || 0) > 0) return picked;
+  if (!factionList) return null;
+  for (const c of factionList) {
+    if (c && (c.hp || 0) > 0) return c;
+  }
+  return null;
+}
+
 // Roll per-hit results for player/ally/PVP attacks.
 // opts.shieldEvade: % chance to block per hit (0 = no shield)
 // opts.evade: % chance to dodge per hit (0 = no armor evade)

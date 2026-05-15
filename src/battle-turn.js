@@ -1,7 +1,7 @@
 // Battle turn order + turn dispatch — extracted from game.js
 
 import { battleSt, getEnemyHP, setEnemyHP, BATTLE_SHAKE_MS, BOSS_DEF, BOSS_MAX_HP } from './battle-state.js';
-import { rollHits, calcPotentialHits, rollInitiative } from './battle-math.js';
+import { rollHits, calcPotentialHits, rollInitiative, resolveLivingTarget } from './battle-math.js';
 import { BATTLE_RAN_AWAY, BATTLE_CANT_ESCAPE, BATTLE_ALLY } from './data/strings.js';
 import { getMonsterName, getSpellNameShrinesClean, getItemNameShrinesClean } from './text-decoder.js';
 import { ps, getJobLevelStatBonus } from './player-stats.js';
@@ -583,21 +583,55 @@ function _playerTurnConsumable() {
   // played at line 526; pass no `sfx` opt to avoid double-fire. The boss /
   // PVP-main-opp path stays inline because it goes through getEnemyHP /
   // setEnemyHP wrappers (no `target.hp` accessor).
+  //
+  // Apply-time target redirect (v1.7.359 step 2/7): if the picked target died
+  // between menu confirm and turn arrival, redirect to the next-living member
+  // of the same faction so the item doesn't get silently wasted.
   if (target === 'player' && (allyIndex === undefined || allyIndex < 0)) {
-    const heal = applyMagicHeal(ps, power, { onHealNum: (n) => setPlayerHealNum({ value: n, timer: 0 }) });
+    // Heal the player. If dead, fall back to first-living ally.
+    let healTgt = ps, healNumCb = (n) => setPlayerHealNum({ value: n, timer: 0 });
+    if (ps.hp <= 0) {
+      const allies = battleSt.battleAllies || [];
+      for (let i = 0; i < allies.length; i++) {
+        if (allies[i] && allies[i].hp > 0) {
+          healTgt = allies[i];
+          healNumCb = (n) => { getAllyDamageNums()[i] = { value: n, timer: 0, heal: true }; };
+          break;
+        }
+      }
+    }
+    const heal = applyMagicHeal(healTgt, power, { onHealNum: healNumCb });
     battleSt.itemHealAmount = heal;
   } else if (target === 'player' && allyIndex >= 0) {
-    const ally = battleSt.battleAllies[allyIndex];
-    if (ally) {
-      const heal = applyMagicHeal(ally, power, {
-        onHealNum: (n) => { getAllyDamageNums()[allyIndex] = { value: n, timer: 0, heal: true }; },
-      });
+    // Heal an ally. If picked ally dead, fall back: next-living ally → player.
+    const allies = battleSt.battleAllies || [];
+    let healTgt = allies[allyIndex];
+    let healIdx = allyIndex;
+    let healNumCb = (n) => { getAllyDamageNums()[healIdx] = { value: n, timer: 0, heal: true }; };
+    if (!healTgt || healTgt.hp <= 0) {
+      let redirected = false;
+      for (let i = 0; i < allies.length; i++) {
+        if (allies[i] && allies[i].hp > 0) { healTgt = allies[i]; healIdx = i; redirected = true; break; }
+      }
+      if (!redirected && ps.hp > 0) {
+        healTgt = ps;
+        healNumCb = (n) => setPlayerHealNum({ value: n, timer: 0 });
+      }
+    }
+    if (healTgt) {
+      const heal = applyMagicHeal(healTgt, power, { onHealNum: healNumCb });
       battleSt.itemHealAmount = heal;
     }
   } else {
-    const mon = battleSt.isRandomEncounter && battleSt.encounterMonsters ? battleSt.encounterMonsters[target] : null;
+    const mons = battleSt.isRandomEncounter && battleSt.encounterMonsters ? battleSt.encounterMonsters : null;
+    let mon = mons ? mons[target] : null;
+    let monIdx = target;
+    if (mons && (!mon || mon.hp <= 0)) {
+      const live = resolveLivingTarget(mon, mons);
+      if (live) { mon = live; monIdx = mons.indexOf(live); }
+    }
     if (mon) {
-      const heal = applyMagicHeal(mon, power, { onHealNum: (n) => setEnemyHealNum({ value: n, timer: 0, index: target }) });
+      const heal = applyMagicHeal(mon, power, { onHealNum: (n) => setEnemyHealNum({ value: n, timer: 0, index: monIdx }) });
       battleSt.itemHealAmount = heal;
     } else {
       const curHP = getEnemyHP();

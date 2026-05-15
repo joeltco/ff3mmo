@@ -22,6 +22,7 @@ import { getCastAnimElapsedMs, getCurrentSpellId, getSpellTargets,
          getMagicHitPhase, getSpellHitIdx, isCurrentCastItemUse } from './spell-cast.js';
 import { SPELLS } from './data/spells.js';
 import { elemMultiplier } from './battle-math.js';
+import { rand } from './rng.js';
 import { tryInflictStatus, removeStatus, addStatus, STATUS, STATUS_NAME_BYTES } from './status-effects.js';
 import { playSFX, SFX } from './music.js';
 
@@ -314,7 +315,7 @@ export function applyMagicAllStatus(target, hitChance, opts = {}) {
 // trigger monster-death state / ally.deathTimer / pvp-dissolve).
 export function applyMagicInstakill(target, hitChance, opts = {}) {
   if (!target || target.hp <= 0) return false;
-  if (Math.random() * 100 < hitChance) {
+  if (rand() * 100 < hitChance) {
     if (target.status) addStatus(target.status, STATUS.DEATH);
     target.hp = 0;
     if (opts.onDmgNum) opts.onDmgNum(0);

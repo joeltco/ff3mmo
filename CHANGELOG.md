@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.359 — 2026-05-15
+
+### Combat: apply-time target redirect (multiplayer prep step 2 of 7)
+
+- New `resolveLivingTarget(picked, factionList)` in `battle-math.js`. Pure helper: returns the picked combatant if alive, otherwise the first living member of `factionList`, otherwise null. Used at apply time (not decision time) so a target that died during the 800 ms cast windup gets redirected instead of silently wasting the action.
+- `_applyEnemyEffect` in `spell-cast.js` redirects single-target spells to the next-living enemy on the same side (encounter monsters OR `[pvpOpponentStats, ...pvpEnemyAllies]`). Multi-target spells walk their own `_targets` list and skip dead slots naturally — no behavior change for those. Closure-bound `_setEnemyDmg(idx, …)` callbacks pick up the redirected `idx` automatically because they capture the local variable, not its value at call site.
+- `_applySpellEffect` in `spell-cast.js` redirects single-target friendly spells the same way: ally → next-living ally → player as last resort.
+- `_playerTurnConsumable` in `battle-turn.js` redirects heal-item targets: dead player → first living ally; dead ally → next-living ally → player; dead enemy → next-living enemy in the random encounter. Boss / PVP-main fallback (no monster object) unchanged.
+- Two leftover step-1 `Math.random` sites in the apply layer also swapped to `rand()`: `applyMagicInstakill` (combatant-cast.js:317), the player-spell hit roll and magic-amount roll (spell-cast.js:115, 389). Per-faction AI decision sites still on `Math.random` — they get rewritten in step 3 (`decideAction` seam).
+- No behavior change for spells/items aimed at living targets. The redirect only fires when the picked combatant is dead at apply time.
+
 ## 1.7.358 — 2026-05-15
 
 ### Combat: seedable RNG (multiplayer prep step 1 of 7)
