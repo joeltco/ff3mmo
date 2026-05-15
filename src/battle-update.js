@@ -15,6 +15,7 @@ import { SLASH_FRAME_MS, shouldDrawSlash, SWING_HOLD_MS } from './slash-effects.
 import { buildTurnOrder, processNextTurn } from './battle-turn.js';
 import { summarizeHits } from './battle-math.js';
 import { reseedFromEntropy } from './rng.js';
+import { sendNetPVPAction } from './net.js';
 import { updateBattleAlly } from './battle-ally.js';
 import { updateBattleEnemyTurn } from './battle-enemy.js';
 import { updateSpellCast, resetSpellCastVars } from './spell-cast.js';
@@ -310,12 +311,43 @@ export function tryJoinPlayerAlly() {
 function _updateBattleMenuConfirm() {
   if (battleSt.battleState === 'confirm-pause') {
     if (battleSt.battleTimer >= 150) {
+      // MP Step 4 part 2 — relay the player's action to the wire partner
+      // BEFORE turn dispatch fires animations, so the partner's client has
+      // time to drive their opponent-side turn without an extra wait.
+      if (pvpSt.isWirePVP && inputSt.playerActionPending) {
+        _emitWirePVPAction(inputSt.playerActionPending);
+      }
       battleSt.allyJoinRound++;
       if (tryJoinPlayerAlly()) return true;
       battleSt.turnQueue = buildTurnOrder(); processNextTurn();
     }
   } else { return false; }
   return true;
+}
+
+// Translate the local player's `inputSt.playerActionPending` into the wire
+// action shape and emit. Target perspective: 'me' = the local player /
+// caster (self-heal / self-buff); 'opp' = the PvP opponent.
+function _emitWirePVPAction(pending) {
+  const cmd = pending && pending.command;
+  if (cmd === 'fight')   { sendNetPVPAction({ kind: 'attack' }); return; }
+  if (cmd === 'defend')  { sendNetPVPAction({ kind: 'defend' }); return; }
+  if (cmd === 'run')     { sendNetPVPAction({ kind: 'run' }); return; }
+  if (cmd === 'magic') {
+    // 1v1 → only self or opponent. `pending.target === 'player'` AND no
+    // explicit ally index means self; everything else (including
+    // enemyIndex picks) is the opponent.
+    const isSelf = pending.target === 'player'
+      && (pending.allyIndex == null || pending.allyIndex < 0);
+    sendNetPVPAction({ kind: 'magic', spellId: pending.spellId, target: isSelf ? 'me' : 'opp' });
+    return;
+  }
+  if (cmd === 'item') {
+    const isSelf = pending.target === 'player'
+      && (pending.allyIndex == null || pending.allyIndex < 0);
+    sendNetPVPAction({ kind: 'item', itemId: pending.itemId, target: isSelf ? 'me' : 'opp' });
+    return;
+  }
 }
 
 // ── Player attack chain ────────────────────────────────────────────────────

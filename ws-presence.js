@@ -57,6 +57,12 @@ const _connected = new Map();
 // hook chance against each challenger of B at that moment.
 const _pvpSearches = new Map();
 
+// Active PvP battle partners — userId → partnerUserId. Set on pvp-match,
+// cleared on disconnect. The server relays `pvp-action` between partners
+// so each client drives its opponent's turn from the remote player's actual
+// chosen action instead of local AI (MP Step 4 part 2).
+const _pvpPartners = new Map();
+
 // Hook-chance formula — mirror of `src/pvp-search.js#getHookChance`.
 // AGI differential + Thief/Ranger job bonus, clamped to [10%, 75%].
 // Constants live alongside the client source for cross-reference (any
@@ -134,6 +140,9 @@ function _resolveEncounterHook(targetEntry) {
   };
   _send(hookedChallenger.ws, { type: 'pvp-match', opponent: targetOpp, seed });
   _send(targetEntry.ws,      { type: 'pvp-match', opponent: challengerOpp, seed });
+  // Register partners for action relay (MP Step 4 part 2).
+  _pvpPartners.set(hookedChallenger.userId, targetEntry.userId);
+  _pvpPartners.set(targetEntry.userId, hookedChallenger.userId);
   // Clear winning challenger's search.
   _clearSearch(hookedChallenger.userId);
   // Cancel every OTHER challenger of B (and of the winning challenger, if any
@@ -262,6 +271,36 @@ function _handleMessage(entry, msg) {
       _resolveEncounterHook(entry);
       return;
     }
+    case 'pvp-action': {
+      // MP Step 4 part 2 — relay the player's chosen action to their PvP
+      // partner so the partner's client can drive the opponent's turn from
+      // real input rather than local AI. Server doesn't validate / interpret
+      // — clients run the existing engine and arrive at identical outcomes
+      // via the synced seed (Step 4 part 1).
+      if (!entry.helloed) return;
+      const partnerId = _pvpPartners.get(entry.userId);
+      if (!partnerId) return;
+      const partner = _connected.get(partnerId);
+      if (!partner || partner.ws.readyState !== 1) return;
+      _send(partner.ws, {
+        type:    'pvp-action',
+        kind:    parsed.kind,
+        target:  parsed.target,     // 'me' | 'opp' (sender's perspective)
+        spellId: parsed.spellId,    // for kind === 'magic'
+        itemId:  parsed.itemId,     // for kind === 'item'
+      });
+      return;
+    }
+    case 'pvp-end': {
+      // Either player signals the battle is over (fled / lost / won locally).
+      // Server drops the partner pair so a new pvp-match can fire later.
+      const partnerId = _pvpPartners.get(entry.userId);
+      if (partnerId) {
+        _pvpPartners.delete(entry.userId);
+        _pvpPartners.delete(partnerId);
+      }
+      return;
+    }
     case 'chat': {
       // Multiplayer Step 2 — relay world / party / pm chat to other clients.
       // World chat = location-scoped (everyone at the same `loc` sees it).
@@ -352,6 +391,16 @@ export function attachWebSocketPresence(httpServer) {
           const challenger = _connected.get(chId);
           if (challenger && challenger.helloed) {
             _send(challenger.ws, { type: 'pvp-search-failed', reason: 'target-offline' });
+          }
+        }
+        // Notify PvP partner that we dropped (battle effectively ended).
+        const partnerId = _pvpPartners.get(userId);
+        if (partnerId) {
+          _pvpPartners.delete(userId);
+          _pvpPartners.delete(partnerId);
+          const partner = _connected.get(partnerId);
+          if (partner && partner.helloed) {
+            _send(partner.ws, { type: 'pvp-action', kind: 'disconnect' });
           }
         }
         if (entry.helloed) {

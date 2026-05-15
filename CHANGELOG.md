@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.373 — 2026-05-15
+
+### MP Step 4 part 2: PvP action relay
+
+- Server (`ws-presence.js`) tracks `_pvpPartners` on `pvp-match` and relays `pvp-action` messages between them. New `pvp-end` message clears the partner pair (sent on `resetPVPState` and on WS close).
+- Client (`src/net.js`): `sendNetPVPAction(action)` + `sendNetPVPEnd()` + `setNetPVPActionHandler(fn)`.
+- Receive side (`src/pvp.js`): `pvpSt.isWirePVP` flag set when `startPVPBattle` gets a seed. `_processEnemyFlash` gates the preflash AI dispatch on `isWirePVP` — when on, holds in `enemy-flash` until the wire action arrives, then routes through new `_applyWireOpponentAction(action, casterCellIdx)` which translates the wire intent into the same state-bag write the AI would have produced (`'attack'` → fall through to attack windup; `'defend'` → `pvp-defend-anim`; `'magic'` → `pvp-enemy-magic-cast` with `rollCureAmount` / `rollOffensiveDamage` on the synced seed; `'item'` → potion-on-self; `'disconnect'` → force opponent HP to 0).
+- Send side (`src/battle-update.js#_updateBattleMenuConfirm`): on the 150 ms confirm-pause expiry, relays `inputSt.playerActionPending` to the wire. `_emitWirePVPAction` translates `fight`/`defend`/`run`/`magic`/`item` commands into the wire shape with `target: 'me'|'opp'` for the spell/item cases.
+- With seeded RNG (part 1) + same action stream (part 2), both clients run their existing engine and compute identical damage / hit / crit / status results. Outcomes match on both sides for 1v1.
+- **Scope**: 1v1 only (no party allies on either side). PvP with allies has additional ally-action relay needs (each side's allies still run local AI, which drifts) — extension for part 2.5+. Run-on-opponent is not modeled (treated as attack); proper opponent-flee handling is part 3.
+- **Disconnect**: if the partner WS closes mid-battle, server pushes `{kind:'disconnect'}` to the remaining player; their client forces opponent HP to 0 so the battle resolves as a defeat (rather than soft-freezing on the dead wire).
+- **No more drift on AI rolls**: pre-Step-4 part 2, A's client ran AI to drive B's character locally — picking different spells / targets than what B actually chose. Now B's actual chosen action arrives over the wire and drives the simulation on A's side. With synced seed, the resulting roll matches what B's client computed.
+
 ## 1.7.372 — 2026-05-15
 
 ### MP Step 4 (part 1 of 3): PvP RNG seed sync

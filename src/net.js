@@ -28,6 +28,7 @@ let _onChat = null;          // (msg) → void — set via setNetChatHandler
 let _onPVPMatch = null;      // ({opponent}) → void — set via setNetPVPMatchHandler
 let _onPVPFailed = null;     // ({reason}) → void — set via setNetPVPFailedHandler
 let _onPVPNone = null;       // () → void — set via setNetPVPEncounterNoneHandler
+let _onPVPAction = null;     // (action) → void — set via setNetPVPActionHandler
 const MAX_RECONNECT_DELAY = 30000;
 
 function _getToken() {
@@ -121,6 +122,14 @@ function _handleMessage(data) {
       if (_onPVPNone) {
         try { _onPVPNone(); }
         catch (e) { console.warn('[net] pvp-encounter-none handler error', e); }
+      }
+      return;
+    case 'pvp-action':
+      // Opponent's chosen action arrived. Apply it on our side so the
+      // opponent's turn runs from real input rather than local AI.
+      if (_onPVPAction) {
+        try { _onPVPAction(msg); }
+        catch (e) { console.warn('[net] pvp-action handler error', e); }
       }
       return;
   }
@@ -237,6 +246,28 @@ export function sendNetPVPEncounter() {
 
 export function setNetPVPEncounterNoneHandler(fn) {
   _onPVPNone = typeof fn === 'function' ? fn : null;
+}
+
+// MP Step 4 part 2 — relay the local player's action to the PvP partner so
+// their client can drive the opponent's turn from real input. Action shape:
+//   { kind: 'attack' | 'defend' | 'magic' | 'item' | 'run' | 'disconnect',
+//     target?: 'me' | 'opp',      // for magic / item — perspective from sender
+//     spellId?: number,           // for magic
+//     itemId?: number,            // for item
+//   }
+export function sendNetPVPAction(action) {
+  if (!_helloed) return false;
+  return _send({ type: 'pvp-action', ...action });
+}
+
+// Tell the server the local PvP battle has ended (clears the partner pair).
+export function sendNetPVPEnd() {
+  if (!_helloed) return false;
+  return _send({ type: 'pvp-end' });
+}
+
+export function setNetPVPActionHandler(fn) {
+  _onPVPAction = typeof fn === 'function' ? fn : null;
 }
 
 export function getOnlinePlayers() {

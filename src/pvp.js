@@ -12,6 +12,7 @@ import { resetBattleVars, isTeamWiped, updateBattleTimers, updatePoisonTick,
 import { playSFX, stopSFX, SFX, pauseMusic, playTrack, TRACKS } from './music.js';
 import { rollHits, calcPotentialHits, BOSS_HIT_RATE, GOBLIN_HIT_RATE, summarizeHits, isLeftHandHit } from './battle-math.js';
 import { reseedFromEntropy, seed as seedRng } from './rng.js';
+import { setNetPVPActionHandler, sendNetPVPEnd } from './net.js';
 import { dispatchDelta } from './deltas.js';
 import { canCastBasic, canCastAny, pickHealTarget, pickPoisonedTarget,
          pickRandomLivingTarget, pickOffensiveSpell, rollOffensiveDamage,
@@ -130,13 +131,28 @@ export const pvpSt = {
 // _playSlashSFX moved to battle-sfx.js → playSlashSFX
 
 // ── Init / teardown ───────────────────────────────────────────────────────────
+// MP Step 4 part 2 — incoming opponent actions, drained by `_processEnemyFlash`
+// when it's the opponent's turn. One slot is enough for strict-alternating
+// 1v1 turns; extend to a queue if/when ally-side wire relay lands.
+let _wireOpponentAction = null;
+setNetPVPActionHandler((msg) => {
+  if (!pvpSt.isWirePVP) return;
+  _wireOpponentAction = msg;
+});
+
 export function startPVPBattle(target, opts) {
   // MP Step 4 — when both players have a server-broadcast `seed`, use it so
   // every roll (initiative / damage variance / hit / crit / AI pick) lands on
   // the same value on both clients. Falls back to local entropy for fake-PvP
   // and offline play.
-  if (opts && typeof opts.seed === 'number') seedRng(opts.seed);
+  const hasSeed = opts && typeof opts.seed === 'number';
+  if (hasSeed) seedRng(opts.seed);
   else reseedFromEntropy();
+  // Part 2 — wire-PvP flag drives the opponent-turn FSM to wait for wire
+  // actions instead of running local AI. Set whenever the server provided a
+  // seed (only happens on wire-driven `pvp-match` paths).
+  pvpSt.isWirePVP               = !!hasSeed;
+  _wireOpponentAction           = null;
   pvpSt.isPVPBattle             = true;
   pvpSt.pvpOpponent             = target;
   pvpSt.pvpOpponentStats        = generateAllyStats(target);
@@ -163,6 +179,12 @@ export function startPVPBattle(target, opts) {
 }
 
 export function resetPVPState() {
+  // MP Step 4 part 2 — tell the server this client is dropping the battle so
+  // the partner pair clears server-side. Safe to call when not wire-PvP
+  // (sendNetPVPEnd returns false silently).
+  if (pvpSt.isWirePVP) sendNetPVPEnd();
+  pvpSt.isWirePVP               = false;
+  _wireOpponentAction           = null;
   pvpSt.isPVPBattle             = false;
   pvpSt.pvpOpponent             = null;
   pvpSt.pvpOpponentStats        = null;
@@ -337,47 +359,64 @@ function _processEnemyFlash() {
   // (defend / potion / SW-throw) stay gated below so allies don't trigger
   // the SouthWind throw or shield-defend stance.
   if (!pvpSt.pvpPreflashDecided && pvpSt.isPVPBattle) {
-    pvpSt.pvpPreflashDecided = true;
-    const casterCellIdx = pvpSt.pvpCurrentEnemyAllyIdx < 0
-      ? 0
-      : pvpSt.pvpCurrentEnemyAllyIdx + 1;
-    const caster = _pvpEnemyByCellIdx(casterCellIdx);
-    // Mage AI — heal an injured teammate (Cure), cure poison (Poisona),
-    // or cast offensive (Fire/Blizzard/Sleep) on the player party. Heal
-    // takes priority so a mage with Cure tends to stabilize the team
-    // before pivoting to offense. RM with both schools naturally covers
-    // both — Cure when team is hurt, BM-Lv1 otherwise.
-    if (caster && Array.isArray(caster.knownSpells) && caster.knownSpells.length > 0) {
-      if (_tryPVPEnemyCure(caster, casterCellIdx)) return true;
-      if (_tryPVPEnemyPoisona(caster, casterCellIdx)) return true;
-      if (_tryPVPEnemyOffensiveCast(caster, casterCellIdx)) return true;
+    if (pvpSt.isWirePVP) {
+      // MP Step 4 part 2 — opponent is a real player. Hold the preflash state
+      // until their client relays the chosen action via WS. `setNetPVPActionHandler`
+      // stows the incoming message in `_wireOpponentAction`.
+      if (!_wireOpponentAction) return false;
+      const action = _wireOpponentAction;
+      _wireOpponentAction = null;
+      pvpSt.pvpPreflashDecided = true;
+      const casterCellIdx = pvpSt.pvpCurrentEnemyAllyIdx < 0
+        ? 0
+        : pvpSt.pvpCurrentEnemyAllyIdx + 1;
+      // _applyWireOpponentAction returns true when it transitioned to a
+      // non-attack state (defend / magic / item). Returns false for 'attack'
+      // (and unhandled kinds) — fall through to the regular attack windup.
+      if (_applyWireOpponentAction(action, casterCellIdx)) return true;
+    } else {
+      pvpSt.pvpPreflashDecided = true;
+      const casterCellIdx = pvpSt.pvpCurrentEnemyAllyIdx < 0
+        ? 0
+        : pvpSt.pvpCurrentEnemyAllyIdx + 1;
+      const caster = _pvpEnemyByCellIdx(casterCellIdx);
+      // Mage AI — heal an injured teammate (Cure), cure poison (Poisona),
+      // or cast offensive (Fire/Blizzard/Sleep) on the player party. Heal
+      // takes priority so a mage with Cure tends to stabilize the team
+      // before pivoting to offense. RM with both schools naturally covers
+      // both — Cure when team is hurt, BM-Lv1 otherwise.
+      if (caster && Array.isArray(caster.knownSpells) && caster.knownSpells.length > 0) {
+        if (_tryPVPEnemyCure(caster, casterCellIdx)) return true;
+        if (_tryPVPEnemyPoisona(caster, casterCellIdx)) return true;
+        if (_tryPVPEnemyOffensiveCast(caster, casterCellIdx)) return true;
+      }
+      // Main opp only: defend / potion / SouthWind throw decisions. Activation
+      // rates pulled from `combatant-ai.js` so future balance lives in one place.
+      if (pvpSt.pvpCurrentEnemyAllyIdx < 0) {
+        if (rollActivation(AI_PVP_DEFEND_GATE)) {
+          pvpSt.pvpOpponentIsDefending = true;
+          pvpSt.pvpPendingTargetAlly = -1;
+          playSFX(SFX.DEFEND_HIT);
+          battleSt.battleState = 'pvp-defend-anim'; battleSt.battleTimer = 0;
+          return true;
+        }
+        const maxHP = pvpSt.pvpOpponentStats.maxHP;
+        const curHP = pvpSt.pvpOpponentStats.hp;
+        const heal = Math.min(50, maxHP - curHP);
+        if (curHP < maxHP * 0.5 && heal > 0 && rollActivation(AI_ITEM_GATE)) {
+          pvpSt.pvpOpponentStats.hp = curHP + heal;
+          setEnemyHealNum({ value: heal, timer: 0 });
+          playSFX(SFX.CURE);
+          battleSt.battleState = 'pvp-opp-potion'; battleSt.battleTimer = 0;
+          return true;
+        }
+        if (rollActivation(AI_PVP_SW_GATE)) {
+          battleSt.battleState = 'pvp-opp-sw-throw'; battleSt.battleTimer = 0;
+          return true;
+        }
+      }
+      // Decided: will attack — fall through to windup animation
     }
-    // Main opp only: defend / potion / SouthWind throw decisions. Activation
-    // rates pulled from `combatant-ai.js` so future balance lives in one place.
-    if (pvpSt.pvpCurrentEnemyAllyIdx < 0) {
-      if (rollActivation(AI_PVP_DEFEND_GATE)) {
-        pvpSt.pvpOpponentIsDefending = true;
-        pvpSt.pvpPendingTargetAlly = -1;
-        playSFX(SFX.DEFEND_HIT);
-        battleSt.battleState = 'pvp-defend-anim'; battleSt.battleTimer = 0;
-        return true;
-      }
-      const maxHP = pvpSt.pvpOpponentStats.maxHP;
-      const curHP = pvpSt.pvpOpponentStats.hp;
-      const heal = Math.min(50, maxHP - curHP);
-      if (curHP < maxHP * 0.5 && heal > 0 && rollActivation(AI_ITEM_GATE)) {
-        pvpSt.pvpOpponentStats.hp = curHP + heal;
-        setEnemyHealNum({ value: heal, timer: 0 });
-        playSFX(SFX.CURE);
-        battleSt.battleState = 'pvp-opp-potion'; battleSt.battleTimer = 0;
-        return true;
-      }
-      if (rollActivation(AI_PVP_SW_GATE)) {
-        battleSt.battleState = 'pvp-opp-sw-throw'; battleSt.battleTimer = 0;
-        return true;
-      }
-    }
-    // Decided: will attack — fall through to windup animation
   }
 
   // OAM-canonical: unarmed opponents skip the wind-up wait — straight to the strike.
@@ -527,6 +566,108 @@ function _tryPVPEnemyItem(casterCellIdx) {
   playSFX(SFX.CURE);
   battleSt.battleState = 'pvp-opp-potion'; battleSt.battleTimer = 0;
   return true;
+}
+
+// MP Step 4 part 2 — translate a wire-delivered opponent action into the
+// equivalent state-bag write + battleState transition that the local AI
+// would have produced. Returns true if it transitioned to a non-attack
+// state (defend / magic / item); false to fall through to the regular
+// attack-windup flow (kind === 'attack', and any unhandled kind).
+//
+// `action.target` is the SENDER's perspective: 'me' = the sender's own
+// player (which is the pvp-enemy on our side), 'opp' = the sender's
+// opponent (which is the player on our side). For 1v1 only — ally
+// targeting is a part-2.5+ extension.
+function _applyWireOpponentAction(action, casterCellIdx) {
+  if (!action || !action.kind) return false;
+  const caster = _pvpEnemyByCellIdx(casterCellIdx);
+
+  if (action.kind === 'attack' || action.kind === 'run') {
+    // Run on the opponent side currently has no engine path; treat as attack
+    // so the battle keeps moving. Real opponent-run handling = part 3.
+    return false;
+  }
+
+  if (action.kind === 'disconnect') {
+    // Partner dropped the WS. End the battle as a defeat for them so the
+    // local player isn't soft-frozen waiting for input that never comes.
+    if (pvpSt.pvpOpponentStats) pvpSt.pvpOpponentStats.hp = 0;
+    return false;  // let regular flow handle the death
+  }
+
+  if (action.kind === 'defend') {
+    if (casterCellIdx === 0) {
+      pvpSt.pvpOpponentIsDefending = true;
+      pvpSt.pvpPendingTargetAlly = -1;
+    }
+    playSFX(SFX.DEFEND_HIT);
+    battleSt.battleState = 'pvp-defend-anim';
+    battleSt.battleTimer = 0;
+    return true;
+  }
+
+  if (action.kind === 'magic' && typeof action.spellId === 'number') {
+    const spell = SPELLS.get(action.spellId);
+    if (!spell) return false;
+    const targetSelf = action.target === 'me';
+    // Same RNG calls the AI path would have made — with synced seed, both
+    // clients land on the same roll.
+    let heal = 0, dmg = 0;
+    if (spell.element === 'recovery' || spell.target === 'cure_status') {
+      heal = (spell.power > 0) ? rollCureAmount(caster) : 0;
+    } else {
+      dmg = rollOffensiveDamage(caster, spell);
+    }
+    pvpSt.pvpMagicCasterCellIdx = casterCellIdx;
+    if (targetSelf) {
+      pvpSt.pvpMagicTargetCellIdx  = casterCellIdx;
+      pvpSt.pvpMagicPartyTargetIdx = -1;
+    } else {
+      pvpSt.pvpMagicTargetCellIdx  = -1;
+      pvpSt.pvpMagicPartyTargetIdx = -1;  // 1v1 → player
+    }
+    pvpSt.pvpMagicSpellId        = action.spellId;
+    pvpSt.pvpMagicHealAmount     = heal;
+    pvpSt.pvpMagicDamageRoll     = dmg;
+    pvpSt.pvpMagicEffectApplied  = false;
+    setActiveCast({
+      caster: { faction: 'pvp-enemy', idx: casterCellIdx },
+      spellId: action.spellId,
+      targets: [{
+        faction: targetSelf ? 'pvp-enemy' : 'player',
+        idx:     targetSelf ? casterCellIdx : -1,
+      }],
+      healAmount: heal,
+      damageRoll: dmg,
+    });
+    queueBattleMsg(caster?.name ? _nameToBytes(caster.name) : BATTLE_FOE);
+    replaceBattleMsg(getSpellNameShrinesClean(action.spellId));
+    playSFX(SFX.MAGIC_CAST);
+    battleSt.battleState = 'pvp-enemy-magic-cast';
+    battleSt.battleTimer = 0;
+    return true;
+  }
+
+  if (action.kind === 'item') {
+    // MVP — opponent's item use is a potion on themselves (match the AI's
+    // existing behavior in `_tryPVPEnemyItem`). Targeted PvP item-use is a
+    // part-2.5 extension.
+    if (casterCellIdx === 0 && pvpSt.pvpOpponentStats) {
+      const maxHP = pvpSt.pvpOpponentStats.maxHP;
+      const curHP = pvpSt.pvpOpponentStats.hp;
+      const heal = Math.min(50, maxHP - curHP);
+      if (heal > 0) {
+        pvpSt.pvpOpponentStats.hp = curHP + heal;
+        setEnemyHealNum({ value: heal, timer: 0 });
+      }
+    }
+    playSFX(SFX.CURE);
+    battleSt.battleState = 'pvp-opp-potion';
+    battleSt.battleTimer = 0;
+    return true;
+  }
+
+  return false;
 }
 
 // ── PVP enemy magic AI ───────────────────────────────────────────────────────
