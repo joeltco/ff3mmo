@@ -12,7 +12,7 @@ import { resetIndoorWaterCache } from './water-animation.js';
 import { showMsgBox } from './message-box.js';
 import { POND_RESTORED } from './data/strings.js';
 import { ps, grantGil } from './player-stats.js';
-import { getItemNameClean } from './text-decoder.js';
+import { getItemNameShrines } from './text-decoder.js';
 import { mapSt } from './map-state.js';
 import { rebuildFlameSprites } from './flame-sprites.js';
 import { loadMapById, loadWorldMapAt, loadWorldMapAtPosition } from './map-loading.js';
@@ -80,7 +80,7 @@ function encodeNumber(n) {
 }
 
 function foundItemMsg(itemId) {
-  const itemName = getItemNameClean(itemId);
+  const itemName = getItemNameShrines(itemId); // icon byte + Shrines full name
   const found = [0x8F,0xB2,0xB8,0xB1,0xA7,0xFF]; // "Found "
   const msg = new Uint8Array(found.length + itemName.length + 1);
   msg.set(found, 0); msg.set(itemName, found.length);

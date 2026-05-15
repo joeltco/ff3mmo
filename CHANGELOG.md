@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.357 — 2026-05-15
+
+### Fix: treasure "Found …!" message uses icon + full item name
+
+- `foundItemMsg` in map-triggers.js was calling `getItemNameClean(itemId)`, which strips the item-type icon byte AND falls through to ROM-truncated names (the ROM strings are abbreviated to fit the original NES inventory). On chest open the message read e.g. "Found CR!" instead of "Found <icon>Cure!" — same name everywhere else in the UI (shop / pause / trade / inspect) uses `getItemNameShrines`.
+- Switched to `getItemNameShrines(itemId)` so chests now show the icon glyph followed by the canonical Shrines short name, matching every other item-display surface. Gil messages were already correct (no item name involved).
+
 ## 1.7.356 — 2026-05-15
 
 ### Fix: shop "Nothing to sell" overflows the panel right border
