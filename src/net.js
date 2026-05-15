@@ -327,6 +327,21 @@ export function sendNetPartyResponse(accept) {
   return _send({ type: 'party-invite-response', accept: !!accept });
 }
 
+// Inviter side — tell server we're removing this real-player member from
+// our party so the server clears their `_partyMemberships` entry and
+// future invites targeting them stop hitting the 'busy' rejection.
+export function sendNetPartyDismiss(memberUserId) {
+  if (!_helloed || !memberUserId) return false;
+  return _send({ type: 'party-dismiss', memberUserId });
+}
+
+// Member side — voluntarily leave the current party. No UI surface today;
+// hook exists for a future "Leave party" menu option.
+export function sendNetPartyLeave() {
+  if (!_helloed) return false;
+  return _send({ type: 'party-leave' });
+}
+
 export function setNetPartyInviteHandler(fn) {
   _onPartyInvite = typeof fn === 'function' ? fn : null;
 }

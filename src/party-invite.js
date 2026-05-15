@@ -26,6 +26,7 @@ import { showMsgBox, replaceMsgBoxText, dismissMsgBox, showMsgBoxPrompt, msgStat
 import { battleSt as _battleSt } from './battle-state.js';
 import { playSFX, SFX } from './music.js';
 import { sendNetPartyInvite, sendNetPartyCancel, sendNetPartyResponse,
+         sendNetPartyDismiss,
          setNetPartyInviteHandler, setNetPartyResultHandler } from './net.js';
 
 const BASE_ACCEPT   = 0.35;
@@ -103,6 +104,14 @@ export function isPartyFull() {
 export function removeFromParty(targetName) {
   const i = partyInviteSt.partyMembers.indexOf(targetName);
   if (i >= 0) partyInviteSt.partyMembers.splice(i, 1);
+  // MP — drop the cached real-player profile and tell the server to clear
+  // its `_partyMemberships` entry so the dismissed player can accept new
+  // invites again (one-party-per-player). No-op for fake-roster names.
+  const profile = partyInviteSt.partyMemberProfiles.get(targetName);
+  if (profile) {
+    partyInviteSt.partyMemberProfiles.delete(targetName);
+    if (profile.userId) sendNetPartyDismiss(profile.userId);
+  }
 }
 
 // Accept chance formula: level differential + job bonus, clamped. Lower-
@@ -167,6 +176,8 @@ export function cancelPartyInvite(reason = 'user') {
     showMsgBox(_nameToBytes('Declined'));
   } else if (reason === 'offline') {
     showMsgBox(_nameToBytes('Target offline'));
+  } else if (reason === 'busy') {
+    showMsgBox(_nameToBytes('In a party'));
   }
 }
 
@@ -244,6 +255,10 @@ setNetPartyResultHandler((msg) => {
   }
   if (msg && msg.reason === 'offline') {
     cancelPartyInvite('offline');
+    return;
+  }
+  if (msg && msg.reason === 'busy') {
+    cancelPartyInvite('busy');
     return;
   }
   // Server reported a rejection — show the "Declined" message and apply

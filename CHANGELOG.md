@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.380 — 2026-05-15
+
+### One-party-per-player enforcement
+
+- Server (`ws-presence.js`): new `_partyMemberships: Map<memberUserId, inviterUserId>` tracks active memberships. `party-invite` now rejects immediately with `reason: 'busy'` if the target is already in someone's party — the prompt never reaches them.
+- `party-invite-response {accept:true}` sets the membership; reject doesn't. Disconnect clears both directions (as-member and as-inviter — if A drops, all their B/C/… memberships clear so those players can accept new invites).
+- New `party-dismiss {memberUserId}` (sent by the inviter on Party → Dismiss) and `party-leave` (member-initiated, no UI yet) handlers clear the server-side membership. Only the CURRENT inviter for a given member can dismiss them.
+- Client (`src/net.js`): `sendNetPartyDismiss(memberUserId)` + `sendNetPartyLeave()`.
+- `removeFromParty(name)` in `party-invite.js` now drops the cached real-player profile from `partyMemberProfiles` AND sends `party-dismiss` to the server so the membership clears in step.
+- New `cancelPartyInvite('busy')` branch shows "In a party" instead of "Declined" so the inviter sees a specific reason. Same 60s cooldown applies.
+
+Concrete: A invites B, B accepts, B is in A's party. C invites B → C sees "In a party" instantly (no prompt fires on B's screen). When A dismisses B (Party → Dismiss in roster menu), server clears the membership, and now C can invite B successfully.
+
 ## 1.7.379 — 2026-05-15
 
 ### UI prompt on incoming party invite (replaces auto-accept roll)

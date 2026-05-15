@@ -67,6 +67,13 @@ const _pvpPartners = new Map();
 // `party-invite`, cleared on `party-cancel` / response / disconnect.
 const _partyInvites = new Map();
 
+// Active party memberships — memberUserId → inviterUserId. Enforces the
+// one-party-per-player invariant: server rejects a new `party-invite`
+// targeting someone who's already a member. Cleared by explicit
+// `party-dismiss` from the inviter, `party-leave` from the member, or
+// disconnect of either side.
+const _partyMemberships = new Map();
+
 // Hook-chance formula — mirror of `src/pvp-search.js#getHookChance`.
 // AGI differential + Thief/Ranger job bonus, clamped to [10%, 75%].
 // Constants live alongside the client source for cross-reference (any
@@ -301,14 +308,21 @@ function _handleMessage(entry, msg) {
     }
     case 'party-invite': {
       // A invites B. Server records the pending invite and forwards to B
-      // with A's profile so B's client can auto-accept (or prompt, in a
-      // future UI). One invite per challenger at a time — replaces.
+      // with A's profile so B's client can prompt the player. One invite
+      // per challenger at a time — new invite replaces old.
       if (!entry.helloed) return;
       const targetUserId = parsed.targetUserId | 0;
       if (!targetUserId || targetUserId === entry.userId) return;
       const target = _connected.get(targetUserId);
       if (!target || !target.helloed) {
         _send(entry.ws, { type: 'party-invite-result', accept: false, reason: 'offline' });
+        return;
+      }
+      // One-party-per-player — reject immediately if B is already a member.
+      // B's client never sees the prompt; A gets a 'busy' reason back so
+      // the standard cooldown applies + the user knows why it failed.
+      if (_partyMemberships.has(targetUserId)) {
+        _send(entry.ws, { type: 'party-invite-result', accept: false, reason: 'busy' });
         return;
       }
       _partyInvites.set(entry.userId, targetUserId);
@@ -336,11 +350,35 @@ function _handleMessage(entry, msg) {
       _partyInvites.delete(challengerId);
       const challenger = _connected.get(challengerId);
       if (!challenger || !challenger.helloed) return;
+      // One-party-per-player — record membership on accept so future invites
+      // targeting B get the early 'busy' rejection. Reject doesn't set.
+      if (accept) _partyMemberships.set(entry.userId, challengerId);
       _send(challenger.ws, {
         type:    'party-invite-result',
         accept,
         partner: { userId: entry.userId, ...entry.profile, loc: entry.loc },
       });
+      return;
+    }
+    case 'party-dismiss': {
+      // Inviter explicitly dismisses a member (Party → Dismiss in roster
+      // menu). Only the CURRENT inviter for that member can clear it; an
+      // attempt by anyone else is silently ignored.
+      if (!entry.helloed) return;
+      const memberUserId = parsed.memberUserId | 0;
+      if (!memberUserId) return;
+      if (_partyMemberships.get(memberUserId) === entry.userId) {
+        _partyMemberships.delete(memberUserId);
+      }
+      return;
+    }
+    case 'party-leave': {
+      // Member voluntarily leaves their current party (no UI yet, but the
+      // hook exists for future client-side "leave party" action).
+      if (!entry.helloed) return;
+      if (_partyMemberships.has(entry.userId)) {
+        _partyMemberships.delete(entry.userId);
+      }
       return;
     }
     case 'pvp-end': {
@@ -498,6 +536,12 @@ export function attachWebSocketPresence(httpServer) {
               _send(challenger.ws, { type: 'party-invite-result', accept: false, reason: 'offline' });
             }
           }
+        }
+        // Clean up party memberships involving this user (as member or as
+        // inviter — both directions).
+        _partyMemberships.delete(userId);
+        for (const [memberId, inviterId] of [..._partyMemberships]) {
+          if (inviterId === userId) _partyMemberships.delete(memberId);
         }
         if (entry.helloed) {
           _broadcast({ type: 'player-leave', userId }, userId);
