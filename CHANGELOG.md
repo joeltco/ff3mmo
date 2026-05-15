@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.353 — 2026-05-14
+
+### Fix: blue box interior bleeds through under border tiles
+
+- `drawBorderedBox` fills `x+8, y+8, w-16, h-16` — an 8px inset on every side. AWJ border tiles have transparent inner pixels, so the strip *under* the edge tiles wasn't being filled; the map / HUD bg behind the box showed through. Black-fill hid this because black-on-black looked fine; v1.7.352's blue interior exposed it.
+- Now fills the full `x, y, w, h` extent. Border tiles draw their opaque border pixels on top; transparent inner pixels fall through to the interior color underneath.
+
 ## 1.7.352 — 2026-05-14
 
 ### Fix: restore blue interior on message boxes / shop / trade / inspect
