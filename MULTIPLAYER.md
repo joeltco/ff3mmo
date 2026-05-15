@@ -1,128 +1,155 @@
-# Multiplayer Roadmap
+# Multiplayer
 
-Replace fake `PLAYER_POOL` with real connected players.
+**Live as of v1.7.386.** Open `ff3mmo.com` in two browsers with two accounts. Same location → see each other in the roster panel. Chat, party invites, PvP duels all wire-driven. Fakes are off (`PLAYER_POOL` exported empty in `src/data/players.js`).
 
-**Current state: not started — but seam-prep is underway.** The networked layer below has not been implemented; the live game still uses the simulated roster from `src/data/players.js` (see README "Status"). What *has* happened is a deliberate multiplayer-prep audit series in the v1.7.20x–v1.7.21x band that tightens every mutation seam the websocket layer will eventually hook into, so the eventual cutover is plumbing instead of refactoring:
+This doc is the architecture overview + recovery cheatsheet. For the per-deploy changelog of how it got built, see `CHANGELOG.md` 1.7.366 → 1.7.386.
 
-- **`docs/SAVE-STATE-AUDIT.md`** (v1.7.215–v1.7.216) — `saveSlotsToDB()` is the single persistence seam; `consumedTiles`, last-town respawn position, and post-death status clear all routed through it.
-- **`docs/INVENTORY-ECONOMY-AUDIT.md`** (v1.7.219) — `addItem` / `removeItem` / `grantGil` / `spendGil` validated, idempotent, return actual deltas; ready for websocket delta emission from one site per op.
-- **`docs/JOB-EXP-AUDIT.md`** (v1.7.218) — `jobLevelStatBonus(jobIdx, jobLv)` and `generateAllyStats(player)` ensure fake players and (future) real players compute stats deterministically from the same inputs, so a websocket-delivered roster entry can render identically on every client.
-- **`docs/MULTI-AUDIT.md`** + **`docs/MODULARIZATION-AUDIT.md`** (v1.7.206–v1.7.217) — physical-hit, heal-clamp, status-flag, initiative, slash-timing, and message-text constants consolidated to single sources; reduces the number of code paths the network layer has to keep in sync.
-- **`docs/COMBAT-MULTIPLAYER-AUDIT.md`** (2026-05-15) — full combat + fake-player readiness pass. Spell/physical apply layer is unified; gaps are above it (no AI seam, per-role state bags, faction-locked target lists, no resolution-time target redirect, unseeded RNG, direct HP mutation). Includes the recommended fix order to land before Step 1.
+## Architecture
 
-This doc is kept as the design target for when networked play lands. Full implementation is deferred until economics/server design is finalized.
+```
+                                  ┌──────────────────┐
+   browser A  ◄── WSS /api/ws ───►│  ws-presence.js  │◄── WSS /api/ws ──►  browser B
+   src/net.js                     │   (Node, ws)     │                     src/net.js
+                                  └──────────────────┘
+                                      relay only
+                                  (no game-math)
+```
 
----
+**Server (`ws-presence.js`)** — mounted on the existing HTTP server via the `upgrade` event. Auth on connect via JWT (query param `?token=…`, same token as `api.js`). All game-math runs on the clients; server only relays + arbitrates a few small decisions (PvP hook chance, party-membership uniqueness).
 
-## Step 1: WebSocket Presence
+In-memory state on the server:
 
-**Goal:** Server knows who's online and where. Clients see real players in roster.
+| Map | Purpose |
+|---|---|
+| `_connected` | userId → `{ws, profile, loc, helloed}` |
+| `_pvpSearches` | challengerUserId → `{targetUserId}` (pending Battle searches) |
+| `_pvpPartners` | userId → partnerUserId (active 1v1 battle pairs) |
+| `_partyInvites` | challengerUserId → targetUserId (pending Party invites) |
+| `_partyMemberships` | memberUserId → inviterUserId (active party memberships) |
 
-### Server (`ws-presence.js`)
-- Upgrade HTTP server to support WebSocket (`ws` library)
-- On connect: authenticate via JWT (sent as first message or query param)
-- Track connected players in a `Map<userId, { ws, name, loc, level, palIdx, equipment }>`
-- Broadcast to all clients on:
-  - `player-join` — new player connected (full player data)
-  - `player-leave` — player disconnected
-  - `player-move` — player changed location (new loc)
-- On receive from client:
-  - `location` — player changed map (loc string)
-  - `update` — player stats/equipment changed
+All state is in-memory. Restart drops it; clients reconnect on next page load.
 
-### Client (`src/net.js`)
-- Connect WebSocket on successful login (after JWT received)
-- Send `location` on every map change (world map, enter town, enter dungeon floor)
-- Send `update` when equipment/level changes
-- Maintain `onlinePlayers` map, updated from server broadcasts
-- Expose: `getOnlinePlayers()`, `getOnlineAtLocation(loc)`
+**Client (`src/net.js`)** — opens WS after `init()`, sends `hello` with the local profile when the save slot is loaded. Polls every 500 ms for location + ally-roster + main-player-profile changes, emits `update` on diff. Auto-reconnects with exponential backoff (1 s → 30 s cap).
 
-### Roster Integration (`src/roster.js`)
-- `getRosterPlayers()` / `getRosterVisible()` pull from online players + fake backfill
-- Real players sort before fakes
-- Fake movement timer only runs for fake players (unchanged)
-- Everything downstream (PVP, ally recruit, chat) just sees the merged list
+## Wire protocol
 
-### Player Data Shape (shared by real + fake)
-```js
-{
-  name: string,        // display name (from save slot)
-  level: number,
-  palIdx: number,      // 0-7 outfit color
-  loc: string,         // 'world' | 'ur' | 'cave-0' .. 'cave-3' | 'crystal'
-  weaponR: number,     // right-hand weapon item ID
-  weaponL?: number,    // left-hand weapon item ID (dual wield)
-  armorId: number,
-  helmId: number,
-  shieldId?: number,
-  hp: number,
-  maxHP: number,
-  isReal: boolean,     // true = real player, false = fake
+Messages are JSON over text frames. `actor` / `target` are sender's-perspective with idx 0 = main player, 1+ = ally cell.
+
+### Presence (Step 1)
+
+| Direction | Type | Fields |
+|---|---|---|
+| C→S | `hello` | `profile, loc` |
+| C→S | `location` | `loc` |
+| C→S | `update` | partial profile fields (incl. `allies`) |
+| S→C | `ready` | `userId` |
+| S→C | `snapshot` | `players: [{userId, …profile, loc}]` |
+| S→C | `player-join` | `player` |
+| S→C | `player-leave` | `userId` |
+| S→C | `player-move` | `userId, loc` |
+| S→C | `player-update` | `userId, fields` |
+
+### Chat (Step 2)
+
+| Direction | Type | Fields |
+|---|---|---|
+| C→S | `chat` | `channel ('world'|'party'|'pm'), text, to?` |
+| S→C | `chat` | `userId, name, channel, text, to?` |
+
+World/party = location-scoped (only same-loc clients receive). PM = name-targeted (delivered to every match).
+
+### PvP search (Step 3)
+
+| Direction | Type | Fields |
+|---|---|---|
+| C→S | `pvp-search` | `targetUserId` |
+| C→S | `pvp-cancel` | — |
+| C→S | `pvp-encounter` | — (target's client signals an imminent random encounter) |
+| S→C | `pvp-search-failed` | `reason ('offline'|'different-location'|'target-left'|'target-engaged')` |
+| S→C | `pvp-encounter-none` | — (no challenger hooked; proceed with monster fight) |
+| S→C | `pvp-match` | `opponent: {userId, …profile}, seed` |
+
+Hook chance = `clamp(0.25 + (chAGI − tgtAGI) × 0.015 + jobBonus, 0.10, 0.75)` with Thief +0.15 / Ranger +0.08 — same formula as `pvp-search.js#getHookChance`, mirrored on the server.
+
+### PvP combat (Step 4)
+
+| Direction | Type | Fields |
+|---|---|---|
+| C→S | `pvp-action` | `kind ('attack'|'defend'|'magic'|'item'|'run'), actor: {idx}, target?: {side, idx}, spellId?, itemId?` |
+| C→S | `pvp-end` | — (clears partner pair) |
+| C→S | `pvp-result` | `outcome ('won'|'lost'|'fled')` |
+| C→S | `pvp-ally-join` | `name` (fake-roster name for mid-battle ally fill) |
+| S→C | `pvp-action` | relayed; also synthesizes `{kind:'disconnect'}` when partner WS drops |
+| S→C | `pvp-ally-join` | relayed |
+
+Each player's chosen action drives the opponent's turn on the partner's client. Seed sync (broadcast in `pvp-match`) means all rolls inside `battle-math.js` (initiative, damage variance, hit/miss, crit, evade) land on the same value on both sides. Outcome reports get compared server-side; mismatch is logged `[pvp-result mismatch]` as a divergence tripwire.
+
+### Party invites
+
+| Direction | Type | Fields |
+|---|---|---|
+| C→S | `party-invite` | `targetUserId` |
+| C→S | `party-cancel` | — |
+| C→S | `party-invite-response` | `accept` |
+| C→S | `party-dismiss` | `memberUserId` (inviter clears a member) |
+| C→S | `party-leave` | — (member voluntarily leaves) |
+| S→C | `party-invite-incoming` | `challenger: {userId, …profile}` |
+| S→C | `party-invite-result` | `accept, partner?, reason? ('offline'|'busy'|'rejected')` |
+| S→C | `party-member-left` | `memberUserId, memberName` |
+| S→C | `party-disbanded` | `inviterUserId, inviterName` |
+
+Server enforces one-party-per-player. `party-invite` rejects with `reason:'busy'` if target is already a member. Disconnect cleans up both directions and notifies the surviving side.
+
+## Key files
+
+| File | Role |
+|---|---|
+| `ws-presence.js` | server WS endpoint at `/api/ws?token=…`, relay + minimal arbitration |
+| `src/net.js` | client WS connector, polling, send/receive handler registry |
+| `src/main.js#connectNet` | profile getter for the wire — includes player fields + serialized allies |
+| `src/pvp-search.js` | wire-search branch (`isRealTarget`) + match handler |
+| `src/pvp.js#startPVPBattle` | seeds RNG from wire on `opts.seed`; sets `isWirePVP` flag |
+| `src/pvp.js#_processEnemyFlash` | wire branch: queue-scan for matching actor.idx, dispatch via `_applyWireOpponentAction` |
+| `src/battle-update.js#_emitWirePVPAction` | translates `inputSt.playerActionPending` → wire shape |
+| `src/battle-update.js#tryJoinPlayerAlly` | mid-battle fake-roster ally pick (synced `rand()`) + wire `pvp-ally-join` |
+| `src/party-invite.js` | wire-invite branch, accept prompt via `showMsgBoxPrompt` |
+| `src/game-loop.js` | Web Worker tick driver (replaces rAF; survives backgrounded tabs) |
+| `src/rng.js` | seedable mulberry32; combat rolls land identically when seed matches |
+
+## Nginx config
+
+Reverse-proxy needs WebSocket upgrade headers:
+
+```nginx
+location / {
+    proxy_pass http://localhost:3000;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_read_timeout 86400;
 }
 ```
 
-### DB: `players` table
-```sql
-CREATE TABLE IF NOT EXISTS players (
-  user_id INTEGER PRIMARY KEY,
-  name TEXT NOT NULL,
-  level INTEGER DEFAULT 1,
-  pal_idx INTEGER DEFAULT 0,
-  weapon_r INTEGER DEFAULT 0x1E,
-  weapon_l INTEGER,
-  armor_id INTEGER DEFAULT 0x73,
-  helm_id INTEGER DEFAULT 0x62,
-  shield_id INTEGER,
-  FOREIGN KEY (user_id) REFERENCES users(id)
-);
+Already deployed at `/etc/nginx/sites-enabled/ff3mmo` on production. A backup of the pre-WS config lives in `/root/ff3mmo.bak.<timestamp>` on the server.
+
+## Toggling fakes back on
+
+`src/data/players.js` exports `PLAYER_POOL = []` to hide the fake-roster NPCs. The archived 30-entry list is preserved as `_FAKE_POOL` in the same file. To re-enable, swap the export:
+
+```js
+export const PLAYER_POOL = _FAKE_POOL;
 ```
-Populated on first save or character creation. Queried on WebSocket connect to broadcast join.
 
----
+Every consumer (roster, ally fills, fake PvP / fake party paths, chat sender) silently picks them back up.
 
-## Step 2: Real Chat
-- Chat messages relay through WebSocket
-- Server broadcasts `chat` messages to all players at same location
-- Client chat UI already exists — just wire send/receive
+## Recovery / known limits
 
-## Step 3: Real PVP
-- Challenge request → server relays to target → accept/decline
-- Battle actions (attack, defend, item, flee) relayed through server
-- Server validates turns to prevent cheating
-- Biggest piece — requires presence + roster working first
+- **WS connection assumes JWT exists.** Logged-out users get a silent no-op connect (token=null). Fine for the demo flow; no auth-required gating on the WS.
+- **In-memory presence.** Server restart drops `_connected` / `_pvpSearches` / `_pvpPartners` / `_partyMemberships`. Active battles on the clients keep running locally but lose wire sync (next opponent action waits forever — watchdog fires).
+- **PvP-action mismatch** auto-reconciles by scanning the queue for an actor.idx match. Logs `[pvp-action] queue-reorder` once per occurrence.
+- **PvP disconnect** mid-battle ends the surviving client's fight as `outcome:'fled'` with a "lost link" message. No XP/Gil, no fake death animation.
 
-**Local prep landed v1.7.222–v1.7.226: roster Battle action now
-runs a *search-and-hook* flow instead of an instant accept.**
+## Earlier prep work
 
-- `src/pvp-search.js` — owns the lifecycle. `startPVPSearch(target)`
-  shows a persistent "Searching for X..." message; `cancelPVPSearch`
-  on X / on death / on timeout / on missed-cap; auto-resolves into
-  "Connecting..." → `_startPVPBattle` when a hook fires.
-- **Hook formula:** `clamp(0.25 + (chAGI − tgtAGI) × 0.015 + jobBonus, 0.10, 0.75)`
-  with Thief +0.15 / Ranger +0.08. All tunables at the top of the
-  module.
-- **Search persists across map changes; only resolution gates on
-  `(onWorldMap || dungeonFloor >= 0)`.** Town searches roll-but-can't-fire,
-  burning a missed slot — prevents fish-from-town parking.
-- **Target's encounter roll is simulated today** (8–15 s per-target
-  sim timer in `tickPVPSearch`). Real multiplayer replaces this
-  with a websocket `target_encountered` signal — the rest of the
-  flow (hook chance, "Connecting...", `_startPVPBattle` hand-off)
-  is unchanged. **This is the single seam to swap on Step 3 wire-up.**
-- Roster row "Searching..." marquee + menu label flip (`Battle` →
-  `Cancel`) are already in the row renderer; both read the search
-  state via `isSearchingFor(target)`. No additional UI work needed
-  for multiplayer.
-
-When networking lands, Step 3 reduces to: replace the sim timer
-with the server-driven signal, add server-side hook arbitration
-for the parallel-challengers case (first-hook-wins, others get
-"missed" message), and wire `_startPVPBattle` to accept a remote
-target object instead of a `PLAYER_POOL` entry.
-
----
-
-## Status
-- [ ] Step 1: WebSocket Presence
-- [ ] Step 2: Real Chat
-- [ ] Step 3: Real PVP
+The audit series that landed in v1.7.20x–v1.7.217 (`docs/SAVE-STATE-AUDIT.md`, `docs/INVENTORY-ECONOMY-AUDIT.md`, `docs/JOB-EXP-AUDIT.md`, `docs/MULTI-AUDIT.md`, `docs/MODULARIZATION-AUDIT.md`) and v1.7.358–v1.7.365 (`docs/COMBAT-MULTIPLAYER-AUDIT.md`) tightened every mutation seam the WebSocket layer hooks into — `dispatchDelta` for HP/status, seeded RNG, unified spell pipeline, resolveLivingTarget, combatant-ai. The cutover series in v1.7.366+ then plugged into those seams.

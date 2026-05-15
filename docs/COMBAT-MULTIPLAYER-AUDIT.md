@@ -5,6 +5,13 @@ or a battle action goes through, with the question "does this still
 work when the fake is replaced by a remote player?" Reads only — no
 behavior changes landed by this doc.
 
+> **Closed-out status (v1.7.386):** all seven prep steps shipped
+> (v1.7.358 → v1.7.365), and the websocket cutover that the audit was
+> preparing for landed in v1.7.366 → v1.7.386. See `MULTIPLAYER.md` for
+> the live architecture and `CHANGELOG.md` for per-deploy detail. The
+> punch-list below is preserved as the historical record of what was
+> wrong before the cutover.
+
 Companion to `MULTIPLAYER.md` (roadmap) and the v1.7.20x–v1.7.21x
 audit series. This is the **combat-system** half of that prep; the
 earlier series handled save/inventory/economy/job-EXP/modularization.
