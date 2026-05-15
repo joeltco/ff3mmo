@@ -359,7 +359,13 @@ export function respawnAfterDeath() {
   // checkpoint. mapStack reseeds with the canonical Ur → elder house
   // ground floor (map 6) → upstairs (map 7) path so walking out drops
   // the player back at Ur via the natural door chain.
-  if (mapSt.currentMapId === 114) {
+  //
+  // Gate on `!onWorldMap`: `currentMapId` is *not* cleared when stepping
+  // out onto the overworld, so without this gate dying on the world map
+  // anywhere after having last exited Ur would also dump you at the
+  // elder's house. The rule is "die *inside* Ur town" — overworld deaths
+  // fall through to the lastWorldExitX/Y path below.
+  if (!mapSt.onWorldMap && mapSt.currentMapId === 114) {
     triggerWipe(() => {
       mapSt.dungeonFloor = -1;
       mapSt.encounterSteps = 0;

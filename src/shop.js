@@ -603,7 +603,9 @@ function _drawList(ctx, list, isSell) {
   const priceX = HUD_VIEW_X + HUD_VIEW_W - 16;
 
   if (list.length === 0) {
-    drawText(ctx, nameX, LIST_Y0, _nameToBytes(isSell ? 'Nothing to sell' : '---'), pal);
+    const msg = _nameToBytes(isSell ? 'Nothing to sell' : '---');
+    const cx = INNER_X + Math.max(0, ((INNER_W - measureText(msg)) >> 1));
+    drawText(ctx, cx, LIST_Y0, msg, pal);
     return;
   }
 

@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.356 — 2026-05-15
+
+### Fix: shop "Nothing to sell" overflows the panel right border
+
+- The empty-state row in `_drawList` (shop.js:606) was drawn at `nameX = HUD_VIEW_X + 24`. "Nothing to sell" is 15 glyphs × 8 = 120 px, so it ran from x=24 to x=144 — exactly the panel's right border, sliding the last character under the border tiles. Left-aligned at `nameX` (a column position picked for item-name rows that also have a price right-aligned at `priceX`) was wrong for the no-items case where there's no price column.
+- Center the empty-state message in `INNER_X..INNER_X+INNER_W` (the panel's inner content band, x=8..136). 'Nothing to sell' now lands at x=12, '---' centers at x=60. Padded list rows still left-align under `nameX` because they pair with a right-aligned price.
+
+### Fix: dying on overworld respawns at elder's house
+
+- `respawnAfterDeath` had an `if (mapSt.currentMapId === 114)` branch that reseeds the mapStack to the Ur → elder ground → elder upstairs chain and lands the player at map 7 (4, 4). This branch is meant for "die *inside* Ur town" — the safe-haven checkpoint.
+- But `mapSt.currentMapId` is NOT cleared when the player walks out onto the world map (only town/dungeon loaders write it), so after stepping out of Ur it still reads 114. Dying anywhere on the world map fell into the elder-house branch instead of the intended "respawn at last world exit" path.
+- Added `!mapSt.onWorldMap` to the gate. Overworld deaths now fall through to the `lastWorldExitX/Y` → `loadWorldMapAtPosition` path that the design comment above the function describes. Town-deaths still trigger the elder-house homing.
+
 ## 1.7.355 — 2026-05-14
 
 ### Fix: keep shop boxes black, not blue
