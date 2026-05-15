@@ -11,7 +11,7 @@ import { resetBattleVars, isTeamWiped, updateBattleTimers, updatePoisonTick,
          tryJoinPlayerAlly, advancePVPTargetOrVictory } from './battle-update.js';
 import { playSFX, stopSFX, SFX, pauseMusic, playTrack, TRACKS } from './music.js';
 import { rollHits, calcPotentialHits, BOSS_HIT_RATE, GOBLIN_HIT_RATE, summarizeHits, isLeftHandHit } from './battle-math.js';
-import { reseedFromEntropy } from './rng.js';
+import { reseedFromEntropy, seed as seedRng } from './rng.js';
 import { dispatchDelta } from './deltas.js';
 import { canCastBasic, canCastAny, pickHealTarget, pickPoisonedTarget,
          pickRandomLivingTarget, pickOffensiveSpell, rollOffensiveDamage,
@@ -130,8 +130,13 @@ export const pvpSt = {
 // _playSlashSFX moved to battle-sfx.js → playSlashSFX
 
 // ── Init / teardown ───────────────────────────────────────────────────────────
-export function startPVPBattle(target) {
-  reseedFromEntropy();
+export function startPVPBattle(target, opts) {
+  // MP Step 4 — when both players have a server-broadcast `seed`, use it so
+  // every roll (initiative / damage variance / hit / crit / AI pick) lands on
+  // the same value on both clients. Falls back to local entropy for fake-PvP
+  // and offline play.
+  if (opts && typeof opts.seed === 'number') seedRng(opts.seed);
+  else reseedFromEntropy();
   pvpSt.isPVPBattle             = true;
   pvpSt.pvpOpponent             = target;
   pvpSt.pvpOpponentStats        = generateAllyStats(target);

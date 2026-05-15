@@ -175,11 +175,12 @@ function _runHookCheck() {
   }
 }
 
-function _resolveAsHook(remoteOpponent) {
+function _resolveAsHook(remoteOpponent, seed) {
   // remoteOpponent is set when the server-driven match path fires (MP Step 3);
   // we hand that profile to `_startPVPBattle` instead of the cached roster
   // entry so the opponent's current loc / hp / equipment are accurate.
   // Fake-PvP path passes null and uses the existing `pvpSearchSt.target`.
+  // `seed` is the server-broadcast PRNG seed for MP Step 4 sync.
   const target = remoteOpponent || pvpSearchSt.target;
   pvpSearchSt.resolving = true;
   pvpSearchSt.connectingHoldMs = CONNECTING_HOLD_MS;
@@ -189,7 +190,7 @@ function _resolveAsHook(remoteOpponent) {
   // triggers slide-out → onClose → battle. v1.7.226.
   replaceMsgBoxText(_nameToBytes('Connecting...'), () => {
     _endSearch(target && target.name);
-    _startPVPBattle(target);
+    _startPVPBattle(target, typeof seed === 'number' ? { seed } : undefined);
   });
 }
 
@@ -199,6 +200,7 @@ function _resolveAsHook(remoteOpponent) {
 setNetPVPMatchHandler((msg) => {
   const opp = msg && msg.opponent;
   if (!opp) return;
+  const seed = (msg && typeof msg.seed === 'number') ? msg.seed : null;
   // Two flows: (a) this client is the challenger and has an active search →
   // resolve into battle through the existing "Connecting..." swap; (b) this
   // client is the target and didn't search → start a fresh search-resolve
@@ -214,10 +216,10 @@ setNetPVPMatchHandler((msg) => {
     showMsgBox(_nameToBytes(opp.name + ' challenges you!'));
     // Brief 250 ms pause before the "Connecting..." swap so the player
     // reads the challenge line.
-    setTimeout(() => _resolveAsHook(opp), 250);
+    setTimeout(() => _resolveAsHook(opp, seed), 250);
     return;
   }
-  _resolveAsHook(opp);
+  _resolveAsHook(opp, seed);
 });
 
 setNetPVPFailedHandler((msg) => {

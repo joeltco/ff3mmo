@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.372 — 2026-05-15
+
+### MP Step 4 (part 1 of 3): PvP RNG seed sync
+
+- Server (`ws-presence.js`) generates a 32-bit seed when `pvp-match` fires and broadcasts it to both clients alongside the opponent profile.
+- `pvp-search.js` plumbs the seed through `_resolveAsHook → _startPVPBattle(target, { seed })`.
+- `pvp.js#startPVPBattle` now accepts `opts.seed`; when present, calls `seed(n)` from `src/rng.js` instead of `reseedFromEntropy()`. Both clients enter the battle with identical PRNG state, so every roll through `battle-math.js` (initiative, damage variance, hit/miss, crit, shield-evade, evade) and every AI pick that routes through `combatant-ai.js` lands on the same number on both sides.
+- This is part 1 of the combat-sync work. Action-relay (so each client drives the OPPONENT's turn from the wire instead of running AI locally) is part 2 — without it, AI on each side still chooses different targets/spells since each client's AI thinks the opponent is local. Part 1 is necessary but not sufficient for full outcome agreement; it's the foundation parts 2/3 rely on.
+
 ## 1.7.371 — 2026-05-15
 
 ### MP Step 3: server-side hook chance uses AGI formula, not flat 35%

@@ -119,14 +119,21 @@ function _resolveEncounterHook(targetEntry) {
     return;
   }
   // Match. Broadcast pvp-match to both parties with each other's profile.
+  // MP Step 4 — also broadcast a shared 32-bit RNG seed. Both clients seed
+  // their mulberry32 (`src/rng.js`) before `_startPVPBattle` runs, so
+  // initiative rolls / damage rolls / AI picks come out identical on both
+  // sides. Until action-relay lands, AI on each side may still drift if it
+  // reads UNSYNCED state (e.g., the opponent's chosen target), but at least
+  // every roll inside `battle-math.js` agrees.
+  const seed = (Math.random() * 0xffffffff) >>> 0;
   const targetOpp = {
     userId: targetEntry.userId, ...targetEntry.profile, loc: targetEntry.loc,
   };
   const challengerOpp = {
     userId: hookedChallenger.userId, ...hookedChallenger.profile, loc: hookedChallenger.loc,
   };
-  _send(hookedChallenger.ws, { type: 'pvp-match', opponent: targetOpp });
-  _send(targetEntry.ws,      { type: 'pvp-match', opponent: challengerOpp });
+  _send(hookedChallenger.ws, { type: 'pvp-match', opponent: targetOpp, seed });
+  _send(targetEntry.ws,      { type: 'pvp-match', opponent: challengerOpp, seed });
   // Clear winning challenger's search.
   _clearSearch(hookedChallenger.userId);
   // Cancel every OTHER challenger of B (and of the winning challenger, if any
