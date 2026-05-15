@@ -18,6 +18,7 @@ import { battleSt, getEnemyHP, setEnemyHP } from './battle-state.js';
 import { pvpSt } from './pvp.js';
 import { ITEMS } from './data/items.js';
 import { tryInflictStatus, wakeOnHit } from './status-effects.js';
+import { dispatchDelta } from './deltas.js';
 
 // Apply a single physical-attack hit to the currently-targeted enemy.
 //
@@ -44,7 +45,7 @@ export function applyPhysicalHitToEnemy(hit, targetIdx, opts = {}) {
   if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
     const mon = battleSt.encounterMonsters[targetIdx];
     if (!mon) return;
-    mon.hp = Math.max(0, mon.hp - hit.damage);
+    dispatchDelta({ type: 'hp', target: mon, amount: -hit.damage, source: opts.source });
     if (mon.status) wakeOnHit(mon.status);
     if (opts.weaponId != null && mon.status && mon.hp > 0) {
       const wpnData = ITEMS.get(opts.weaponId);

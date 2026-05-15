@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.363 — 2026-05-15
+
+### Combat: dispatchDelta seam (multiplayer prep step 6 of 7)
+
+- New `src/deltas.js` — single interception seam for HP / status / death mutations. `dispatchDelta(d)` applies state changes; the wire layer overrides via `setDeltaApplier(fn)` so a server-broadcast delta lands through the same apply path as local play. Delta types: `hp` (signed, clamps to [0, maxHP]), `statusAdd`, `statusRemove`, `death`.
+- All seven HP / status / death writes in `combatant-cast.js#applyMagic*` migrated: `applyMagicDamage`, `applyMagicHeal`, `applyMagicCureStatus`, `applyMagicDrain`, `applyMagicRecovery` (undead damage branch — non-undead branch routes through `applyMagicHeal` already), `applyMagicInstakill`.
+- `physical-attack.js#applyPhysicalHitToEnemy` migrated for the encounter-monster HP write. Boss path still uses `setEnemyHP` wrapper (no `target.hp` accessor).
+- **Direct mutations remaining**: ~12 sites in `battle-update.js` / `battle-turn.js` / `battle-ally.js` / `battle-enemy.js` / `pvp.js` (mainly enemy-attacks-player-or-ally HP writes, ally-magic-effect apply, PvP-enemy-magic-effect apply, item consume, XP/Gil/CP grants). These are documented as TODO and will be migrated before the websocket cutover; they bypass the seam today and would diverge in multiplayer.
+- Scaffold step. Single-player play unchanged because the default applier is a passthrough that does exactly what the inline writes used to do.
+
 ## 1.7.362 — 2026-05-15
 
 ### Combat: unified activeCast scaffold (multiplayer prep step 5 of 7)

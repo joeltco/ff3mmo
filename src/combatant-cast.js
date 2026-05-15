@@ -23,6 +23,7 @@ import { getCastAnimElapsedMs, getCurrentSpellId, getSpellTargets,
 import { SPELLS } from './data/spells.js';
 import { elemMultiplier } from './battle-math.js';
 import { rand } from './rng.js';
+import { dispatchDelta } from './deltas.js';
 import { tryInflictStatus, removeStatus, addStatus, STATUS, STATUS_NAME_BYTES } from './status-effects.js';
 import { playSFX, SFX } from './music.js';
 
@@ -212,7 +213,7 @@ export function applyMagicDamage(target, baseDmg, spell, opts = {}) {
   const eMult = elemMultiplier(spell.element, target.weakness, target.resist);
   const mdef = target.mdef || 0;
   const dmg = Math.max(1, Math.floor(baseDmg * eMult) - mdef);
-  target.hp = Math.max(0, target.hp - dmg);
+  dispatchDelta({ type: 'hp', target, amount: -dmg, source: opts.source });
   if (opts.onDmgNum) opts.onDmgNum(dmg);
   if (opts.onShake) opts.onShake();
   if (opts.sfx) playSFX(opts.sfx);
@@ -227,7 +228,7 @@ export function applyMagicHeal(target, amount, opts = {}) {
   if (!target) return 0;
   const maxHP = target.maxHP || (target.stats && target.stats.maxHP) || target.hp || 0;
   const realHeal = Math.min(amount, maxHP - (target.hp || 0));
-  target.hp = (target.hp || 0) + realHeal;
+  dispatchDelta({ type: 'hp', target, amount: realHeal, source: opts.source });
   if (opts.onHealNum) opts.onHealNum(realHeal);
   if (opts.sfx) playSFX(opts.sfx);
   return realHeal;
@@ -238,7 +239,7 @@ export function applyMagicHeal(target, amount, opts = {}) {
 export function applyMagicCureStatus(target, statusFlag, opts = {}) {
   if (!target || !target.status) return false;
   const wasSet = !!(target.status.mask & statusFlag);
-  removeStatus(target.status, statusFlag);
+  dispatchDelta({ type: 'statusRemove', target, flag: statusFlag, source: opts.source });
   if (opts.onSparkle) opts.onSparkle();
   if (opts.sfx) playSFX(opts.sfx);
   return wasSet;
@@ -261,7 +262,7 @@ export function applyMagicDrain(target, amount, opts = {}) {
     return applyMagicHeal(target, amount, { sfx: SFX.CURE, onHealNum: opts.onTargetHealNum });
   }
   const dmg = Math.max(1, amount);
-  target.hp = Math.max(0, target.hp - dmg);
+  dispatchDelta({ type: 'hp', target, amount: -dmg, source: opts.source });
   if (opts.onTargetDmgNum) opts.onTargetDmgNum(dmg);
   if (opts.onShake) opts.onShake();
   if (opts.onCasterHeal) opts.onCasterHeal(dmg);
@@ -276,7 +277,7 @@ export function applyMagicRecovery(target, amount, opts = {}) {
   if (!target || target.hp <= 0) return 0;
   if (opts.isUndead) {
     const dmg = Math.max(1, amount);
-    target.hp = Math.max(0, target.hp - dmg);
+    dispatchDelta({ type: 'hp', target, amount: -dmg, source: opts.source });
     if (opts.onDmgNum) opts.onDmgNum(dmg);
     if (opts.onShake) opts.onShake();
     playSFX(opts.damageSfx || SFX.SW_HIT);
@@ -316,8 +317,7 @@ export function applyMagicAllStatus(target, hitChance, opts = {}) {
 export function applyMagicInstakill(target, hitChance, opts = {}) {
   if (!target || target.hp <= 0) return false;
   if (rand() * 100 < hitChance) {
-    if (target.status) addStatus(target.status, STATUS.DEATH);
-    target.hp = 0;
+    dispatchDelta({ type: 'death', target, source: opts.source });
     if (opts.onDmgNum) opts.onDmgNum(0);
     if (opts.sfx) playSFX(opts.sfx);
     if (opts.onKill) opts.onKill();
