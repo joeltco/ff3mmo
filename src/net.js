@@ -24,6 +24,7 @@ let _lastSentLoc = null;
 let _locPollHandle = null;
 let _reconnectDelay = 1000;
 let _myUserId = null;
+let _onChat = null;          // (msg) → void — set via setNetChatHandler
 const MAX_RECONNECT_DELAY = 30000;
 
 function _getToken() {
@@ -85,6 +86,15 @@ function _handleMessage(data) {
       if (p && msg.fields) Object.assign(p, msg.fields);
       return;
     }
+    case 'chat':
+      // { userId, name, channel, text, to? } — relay to the registered
+      // chat handler. If nothing is registered (no chat module imported
+      // yet), drop silently.
+      if (_onChat) {
+        try { _onChat(msg); }
+        catch (e) { console.warn('[net] chat handler error', e); }
+      }
+      return;
   }
 }
 
@@ -147,6 +157,23 @@ export function connectNet(profileFn, locFn) {
 export function sendNetUpdate(fields) {
   if (!_helloed) return;
   _send({ type: 'update', ...fields });
+}
+
+// Relay a chat message over the wire. Channel = 'world' (location-scoped),
+// 'party' (location-scoped today; party-aware in a future step), or 'pm'
+// (targeted by recipient display name). The server broadcasts to other
+// clients; the local message is added via `addChatMessage` by the caller.
+export function sendNetChat(channel, text, to) {
+  if (!_helloed) return false;
+  const payload = { type: 'chat', channel, text };
+  if (to) payload.to = to;
+  return _send(payload);
+}
+
+// Register a callback for incoming chat messages. Called by `chat.js`
+// during init. Replaces any previous handler.
+export function setNetChatHandler(fn) {
+  _onChat = typeof fn === 'function' ? fn : null;
 }
 
 export function getOnlinePlayers() {

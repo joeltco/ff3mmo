@@ -15,6 +15,7 @@ import { ps, changeJob, fullHeal, grantExp } from './player-stats.js';
 import { JOBS } from './data/jobs.js';
 import { swapBattleSprites } from './job-sprites.js';
 import { saveSlotsToDB } from './save-state.js';
+import { sendNetChat, setNetChatHandler } from './net.js';
 import { ITEMS } from './data/items.js';
 import { addItem } from './inventory.js';
 import { getItemNameClean, getSpellNameClean, bytesToAscii } from './text-decoder.js';
@@ -95,6 +96,21 @@ export function addChatMessage(text, type, channel, meta) {
   const tabIdx = tabMap[channel];
   if (tabIdx !== undefined && tabIdx !== activeTab && tabIdx !== 3) _tabUnread[tabIdx] = true;
 }
+
+// Multiplayer Step 2 — install the network chat receiver. Module-load time
+// registration is fine: `net.js` only invokes the handler after WebSocket
+// connect, which happens later in the boot sequence.
+setNetChatHandler((msg) => {
+  // msg = { userId, name, channel, text, to? }
+  if (!msg || !msg.text) return;
+  const senderName = msg.name || 'Player';
+  const channel = msg.channel || 'world';
+  const meta = msg.to ? { from: senderName, to: msg.to } : null;
+  const displayText = msg.to
+    ? senderName + ' → ' + msg.to + ': ' + msg.text
+    : senderName + ': ' + msg.text;
+  addChatMessage(displayText, 'chat', channel, meta);
+});
 
 function _passesTabFilter(msg) {
   const tab = CHAT_TABS[activeTab];
@@ -375,6 +391,14 @@ export function onChatKeyDown(e) {
           : senderName + ': ' + chatState.inputText;
         const meta = recipient ? { from: senderName, to: recipient } : null;
         addChatMessage(text, 'chat', channel, meta);
+        // Multiplayer Step 2 — relay over the wire. The server broadcasts to
+        // other clients (location-scoped for world/party, recipient-targeted
+        // for pm). `chatState.inputText` is the raw message; receivers format
+        // their own "Name: text" display. Returns false if not connected — no
+        // harm, the message still shows locally.
+        const rawText = chatState.inputText;
+        if (channel === 'pm' && recipient) sendNetChat('pm', rawText, recipient);
+        else if (channel === 'world' || channel === 'party') sendNetChat(channel, rawText);
       }
     }
     chatState.inputActive = false; chatState.inputText = '';

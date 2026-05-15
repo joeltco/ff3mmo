@@ -140,6 +140,44 @@ function _handleMessage(entry, msg) {
       _broadcast({ type: 'player-update', userId: entry.userId, fields }, entry.userId);
       return;
     }
+    case 'chat': {
+      // Multiplayer Step 2 — relay world / party / pm chat to other clients.
+      // World chat = location-scoped (everyone at the same `loc` sees it).
+      // PM chat = targeted by `to` (recipient's display name); the server
+      // looks up the matching user. Party chat is currently location-scoped
+      // too (full party-state isn't wired across the wire yet — Step 3+).
+      if (!entry.helloed) return;
+      const channel = String(parsed.channel || 'world');
+      const text = String(parsed.text || '').slice(0, 200);
+      if (!text) return;
+      const senderName = entry.profile?.name || 'Player';
+      if (channel === 'pm') {
+        const toName = String(parsed.to || '').slice(0, 16);
+        if (!toName) return;
+        // Find the recipient by display name. Names aren't unique in the
+        // engine (it's just whatever the player typed), so deliver to ALL
+        // matching connected users for now. Step 3+ should resolve via
+        // userId.
+        for (const [, target] of _connected) {
+          if (!target.helloed) continue;
+          if (target.profile?.name !== toName) continue;
+          _send(target.ws, { type: 'chat', userId: entry.userId, name: senderName,
+                             channel, text, to: toName });
+        }
+        // Echo back to the sender's other tabs (none today but harmless).
+        return;
+      }
+      // World / party — broadcast to others at the same location. Sender's
+      // own client already added the message locally, so exclude them.
+      for (const [uid, target] of _connected) {
+        if (uid === entry.userId) continue;
+        if (!target.helloed) continue;
+        if (target.loc !== entry.loc) continue;
+        _send(target.ws, { type: 'chat', userId: entry.userId, name: senderName,
+                           channel, text });
+      }
+      return;
+    }
   }
 }
 

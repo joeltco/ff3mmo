@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.368 — 2026-05-15
+
+### Multiplayer Step 2: Real chat over the wire
+
+- `ws-presence.js` now handles `{type:'chat', channel, text, to?}` from clients. World / party channels broadcast to other connected clients at the same `loc`; pm targets the recipient by display name (delivered to every match for now — Step 3+ will resolve via userId).
+- `src/net.js` adds `sendNetChat(channel, text, to)` + `setNetChatHandler(fn)`. The chat module installs the receive callback at module load.
+- `src/chat.js#onChatKeyDown` calls `sendNetChat` for world / party / pm on submit. The local `addChatMessage` still runs first so the sender sees their own message instantly; the server relays raw text and remote clients format `"Name: text"` themselves.
+- Console chat ('/help' etc.) stays local — only typed chat (no leading slash) goes over the wire.
+
 ## 1.7.367 — 2026-05-15
 
 ### Engine keep-alive in background tabs + freeze watchdog tweak
