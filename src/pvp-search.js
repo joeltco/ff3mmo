@@ -145,10 +145,17 @@ export function cancelPVPSearch(reason = 'user') {
     showMsgBox(_nameToBytes('Search expired'));
   } else if (reason === 'death') {
     // Silent — game-over flow owns the screen
-  } else if (reason === 'target-offline' || reason === 'target-left' || reason === 'different-location') {
+  } else if (reason === 'target-offline' || reason === 'target-left') {
     showMsgBox(_nameToBytes('Target unavailable'));
+  } else if (reason === 'different-location') {
+    // v1.7.390 — server now sends this when either side crosses a map
+    // boundary mid-search (audit #11). Distinct from the "engaged" path so
+    // the user knows it was a location change, not a coin-flip miss.
+    showMsgBox(_nameToBytes('Target moved'));
   } else if (reason === 'target-engaged') {
-    showMsgBox(_nameToBytes('Missed!'));
+    // The target hooked someone else (or started a battle elsewhere) on
+    // their encounter roll. Distinct from a vanilla miss. Audit #30.
+    showMsgBox(_nameToBytes('Target busy'));
   }
 }
 

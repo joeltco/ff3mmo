@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.390 — 2026-05-15
+
+### Multiplayer audit batch 4 — observability + UX
+
+- **#8 PM-by-userId client wiring**: `sendNetChat` resolves the recipient name to a userId via the local online roster and includes `toUserId` on the wire. Server prefers it; name-only fallback stays for compat.
+- **#14 pvp-result mismatch recovery**: when the server detects two clients reported inconsistent outcomes, it now pushes a synthetic `pvp-action {kind:'disconnect'}` to BOTH partners so neither sits in a half-state. The `[pvp-result mismatch]` server log still fires as the divergence tripwire — and now the players see "Foe lost link" + a clean exit instead of hanging.
+- **#30 search-failed reason differentiation**: `target-busy` (someone else hooked them) shows "Target busy"; `different-location` shows "Target moved"; rolled-miss still shows the original timeout/cancel messages. Pre-fix everything collapsed into the same "Missed!" string.
+- **#38 `MULTIPLAYER.md` updates**: documented party-chat-by-membership, PM-by-userId, the new `damageRoll`/`healAmount` magic payload fields, the `pvp-ally-join` profile shape, and the v1.7.388 defensive limits (`maxPayload`, rate limit, per-IP cap, profile clamp, location cleanup).
+
 ## 1.7.389 — 2026-05-15
 
 ### Multiplayer audit batch 3 — protocol completeness

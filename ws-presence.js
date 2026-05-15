@@ -549,6 +549,13 @@ function _handleMessage(entry, msg) {
           console.warn('[pvp-result mismatch]',
             'userA=' + partnerId, 'reported=' + partner._lastPVPResult,
             '| userB=' + entry.userId, 'reported=' + outcome);
+          // v1.7.390 — when divergence is detected, push a synthetic
+          // `disconnect` to BOTH partners so neither sits in a half-state.
+          // Pre-fix the side reporting first ran out the FSM as if everything
+          // was fine; the lagging side might be waiting for actions that
+          // never arrive. Audit #14.
+          _send(partner.ws, { type: 'pvp-action', kind: 'disconnect' });
+          _send(entry.ws,   { type: 'pvp-action', kind: 'disconnect' });
         }
         delete partner._lastPVPResult;
         _pvpPartners.delete(entry.userId);

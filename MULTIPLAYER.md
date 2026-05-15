@@ -53,10 +53,12 @@ Messages are JSON over text frames. `actor` / `target` are sender's-perspective 
 
 | Direction | Type | Fields |
 |---|---|---|
-| C→S | `chat` | `channel ('world'|'party'|'pm'), text, to?` |
+| C→S | `chat` | `channel ('world'|'party'|'pm'), text, to?, toUserId?` |
 | S→C | `chat` | `userId, name, channel, text, to?` |
 
-World/party = location-scoped (only same-loc clients receive). PM = name-targeted (delivered to every match).
+- **`world`** = location-scoped (only same-loc clients receive).
+- **`party`** = membership-scoped via the server's `_partyMemberships` map (inviter + their members). Does **not** leak to other parties or to bystanders at the same location. (v1.7.388 — was location-scoped pre-fix.)
+- **`pm`** = userId-targeted when the client sends `toUserId`; falls back to first-match-by-name when only `to` is set. The name path stops at the first match so a player can't intercept PMs by renaming to "Joel" anymore. (v1.7.388.)
 
 ### PvP search (Step 3)
 
@@ -75,14 +77,16 @@ Hook chance = `clamp(0.25 + (chAGI − tgtAGI) × 0.015 + jobBonus, 0.10, 0.75)`
 
 | Direction | Type | Fields |
 |---|---|---|
-| C→S | `pvp-action` | `kind ('attack'|'defend'|'magic'|'item'|'run'), actor: {idx}, target?: {side, idx}, spellId?, itemId?` |
+| C→S | `pvp-action` | `kind ('attack'|'defend'|'magic'|'item'|'run'), actor: {idx}, target?: {side, idx}, spellId?, itemId?, damageRoll?, healAmount?` |
 | C→S | `pvp-end` | — (clears partner pair) |
 | C→S | `pvp-result` | `outcome ('won'|'lost'|'fled')` |
-| C→S | `pvp-ally-join` | `name` (fake-roster name for mid-battle ally fill) |
-| S→C | `pvp-action` | relayed; also synthesizes `{kind:'disconnect'}` when partner WS drops |
-| S→C | `pvp-ally-join` | relayed |
+| C→S | `pvp-ally-join` | `profile: { name, jobIdx, level, palIdx, loc, weapon*, armor*, knownSpells, jobLevel }` |
+| S→C | `pvp-action` | relayed in full (incl. `actor`/`damageRoll`/`healAmount`); synthesizes `{kind:'disconnect'}` when partner WS drops or `pvp-result` mismatch is detected (audit #14) |
+| S→C | `pvp-ally-join` | relayed; receiver runs its own `generateAllyStats(profile)` for the mirror cell |
 
-Each player's chosen action drives the opponent's turn on the partner's client. Seed sync (broadcast in `pvp-match`) means all rolls inside `battle-math.js` (initiative, damage variance, hit/miss, crit, evade) land on the same value on both sides. Outcome reports get compared server-side; mismatch is logged `[pvp-result mismatch]` as a divergence tripwire.
+Each player's chosen action drives the opponent's turn on the partner's client. Seed sync (broadcast in `pvp-match`) means all rolls inside `battle-math.js` (initiative, damage variance, hit/miss, crit, evade) AND `status-effects.js` (status infliction, sleep-wake, confuse snap-out) land on the same value on both sides. Outcome reports get compared server-side; mismatch logs `[pvp-result mismatch]` AND ends both sides with a synthetic disconnect rather than letting one side hang (audit #14).
+
+Damage / heal values for magic now also travel on the wire (`damageRoll` / `healAmount`) — receiver uses them directly when present and falls back to a local roll otherwise. Defends an against any RNG-cursor drift between the two clients.
 
 ### Party invites
 
@@ -142,6 +146,14 @@ export const PLAYER_POOL = _FAKE_POOL;
 ```
 
 Every consumer (roster, ally fills, fake PvP / fake party paths, chat sender) silently picks them back up.
+
+## Defensive limits (v1.7.388)
+
+- **`maxPayload` 16 KB** on the WebSocketServer. Single fat-frame OOM attacks rejected at the protocol layer.
+- **Per-connection rate limit**: token bucket, capacity 60, refill 20/s. Excess frames are silently dropped.
+- **Per-IP connection cap**: 10 concurrent WS connections from one source IP. nginx-aware (reads `X-Forwarded-For`). Excess gets 429.
+- **`update` field clamping**: every profile field passes through `_normalizeProfileField` on both `hello` and `update` — `agi/level` clamped 1-99, IDs 0-255, name 16 chars, allies array ≤ 3. Hook-chance formula reads `agi` so this is load-bearing for fair matchmaking.
+- **Location-change cleanup**: server drops the user's stale outgoing search + any incoming searches that now reference a different `loc`, notifying the affected challengers with `pvp-search-failed reason:'different-location'`.
 
 ## Recovery / known limits
 

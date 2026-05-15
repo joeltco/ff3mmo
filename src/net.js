@@ -258,13 +258,19 @@ export function sendNetUpdate(fields) {
 }
 
 // Relay a chat message over the wire. Channel = 'world' (location-scoped),
-// 'party' (location-scoped today; party-aware in a future step), or 'pm'
-// (targeted by recipient display name). The server broadcasts to other
-// clients; the local message is added via `addChatMessage` by the caller.
+// 'party' (party-membership-scoped — server uses `_partyMemberships`), or
+// 'pm' (targeted by userId, with display-name fallback). For PM, the caller
+// passes the recipient's display name; we resolve to a userId from the
+// online roster so the server routes the message directly to that
+// connection — closes the audit #8 name-spoofing gap.
 export function sendNetChat(channel, text, to) {
   if (!_helloed) return false;
   const payload = { type: 'chat', channel, text };
-  if (to) payload.to = to;
+  if (to) {
+    payload.to = to;
+    const target = getOnlinePlayerByName(to);
+    if (target && target.userId) payload.toUserId = target.userId;
+  }
   return _send(payload);
 }
 
