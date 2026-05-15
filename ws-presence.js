@@ -49,15 +49,14 @@ const JWT_SECRET = process.env.JWT_SECRET || 'ff3mmo-dev-secret-change-in-prod';
 // (no `hello` message received). Snapshots only include `helloed=true` players.
 const _connected = new Map();
 
-// Active PvP searches — challengerUserId → { targetUserId, timer }.
-// Server-driven replacement for the v1.7.222 client-side sim timer in
-// `src/pvp-search.js`. On `pvp-search` from a client, server starts a
-// roll timer (8-15 s). On fire, rolls hook chance; hit → broadcast
-// `pvp-match` to both parties + clear search; miss → re-arm.
+// Active PvP searches — challengerUserId → { targetUserId }.
+// The hook is rolled on the TARGET's next random encounter (mirroring the
+// existing fake-PvP design — A clicks Battle, B's next monster encounter
+// has a chance to be replaced by PvP). Server does NOT run a timer; B's
+// client signals an encounter via `pvp-encounter` and the server rolls
+// hook chance against each challenger of B at that moment.
 const _pvpSearches = new Map();
-const PVP_ROLL_MIN_MS  = 8000;
-const PVP_ROLL_RANGE_MS = 7000;
-const PVP_HOOK_CHANCE  = 0.35;  // fixed for MVP — stat-aware arbitration is Step 4.
+const PVP_HOOK_CHANCE = 0.35;  // fixed for MVP — stat-aware arbitration is Step 4.
 
 function _broadcast(payload, exceptUserId = null) {
   const msg = JSON.stringify(payload);
@@ -75,58 +74,47 @@ function _send(ws, payload) {
 }
 
 function _clearSearch(challengerUserId) {
-  const s = _pvpSearches.get(challengerUserId);
-  if (!s) return;
-  if (s.timer) clearTimeout(s.timer);
   _pvpSearches.delete(challengerUserId);
 }
 
-function _startSearchRoll(challengerUserId) {
-  const search = _pvpSearches.get(challengerUserId);
-  if (!search) return;
-  const rollMs = PVP_ROLL_MIN_MS + Math.random() * PVP_ROLL_RANGE_MS;
-  search.timer = setTimeout(() => _runSearchHook(challengerUserId), rollMs);
-}
-
-function _runSearchHook(challengerUserId) {
-  const search = _pvpSearches.get(challengerUserId);
-  if (!search) return;
-  search.timer = null;
-  const challenger = _connected.get(challengerUserId);
-  const target     = _connected.get(search.targetUserId);
-  // Either party gone / not helloed → abort search.
-  if (!challenger || !target || !challenger.helloed || !target.helloed) {
-    _clearSearch(challengerUserId);
-    if (challenger && challenger.helloed) {
-      _send(challenger.ws, { type: 'pvp-search-failed', reason: 'target-offline' });
-    }
-    return;
-  }
-  // Target moved to a different location since the search started — abort.
-  if (challenger.loc !== target.loc) {
-    _clearSearch(challengerUserId);
-    _send(challenger.ws, { type: 'pvp-search-failed', reason: 'target-left' });
-    return;
-  }
-  // Roll hook chance. Miss → re-arm.
-  if (Math.random() >= PVP_HOOK_CHANCE) {
-    _startSearchRoll(challengerUserId);
-    return;
-  }
-  // Hit — broadcast pvp-match to both with each other's profile, then clear
-  // both sides' search state. Per the audit's "first-hook-wins" rule, any
-  // OTHER searches targeting this challenger or target are also cancelled —
-  // those challengers get a "missed" failure so they know to back off.
-  const challengerOpp = { userId: target.userId, ...target.profile, loc: target.loc };
-  const targetOpp     = { userId: challenger.userId, ...challenger.profile, loc: challenger.loc };
-  _send(challenger.ws, { type: 'pvp-match', opponent: challengerOpp });
-  _send(target.ws,     { type: 'pvp-match', opponent: targetOpp });
-  _clearSearch(challengerUserId);
-  // Cancel target's outgoing search if any (target was both A→B and B→C).
-  if (_pvpSearches.has(search.targetUserId)) _clearSearch(search.targetUserId);
-  // Cancel any other searches aimed at either side.
+// B's client sent `pvp-encounter` — they're about to start a random encounter.
+// Find every challenger targeting B and roll hook chance for each in order
+// (oldest search first). First hit wins: match B against that challenger,
+// cancel B's other suitors. If all miss (or there are no challengers),
+// reply with `pvp-encounter-none` so B starts the regular monster fight.
+function _resolveEncounterHook(targetEntry) {
+  const targetUserId = targetEntry.userId;
+  const challengers = [];
   for (const [chId, s] of _pvpSearches) {
-    if (s.targetUserId === challenger.userId || s.targetUserId === target.userId) {
+    if (s.targetUserId !== targetUserId) continue;
+    const ch = _connected.get(chId);
+    if (!ch || !ch.helloed) continue;
+    if (ch.loc !== targetEntry.loc) continue;  // moved away — stale search, skip
+    challengers.push(ch);
+  }
+  let hookedChallenger = null;
+  for (const ch of challengers) {
+    if (Math.random() < PVP_HOOK_CHANCE) { hookedChallenger = ch; break; }
+  }
+  if (!hookedChallenger) {
+    _send(targetEntry.ws, { type: 'pvp-encounter-none' });
+    return;
+  }
+  // Match. Broadcast pvp-match to both parties with each other's profile.
+  const targetOpp = {
+    userId: targetEntry.userId, ...targetEntry.profile, loc: targetEntry.loc,
+  };
+  const challengerOpp = {
+    userId: hookedChallenger.userId, ...hookedChallenger.profile, loc: hookedChallenger.loc,
+  };
+  _send(hookedChallenger.ws, { type: 'pvp-match', opponent: targetOpp });
+  _send(targetEntry.ws,      { type: 'pvp-match', opponent: challengerOpp });
+  // Clear winning challenger's search.
+  _clearSearch(hookedChallenger.userId);
+  // Cancel every OTHER challenger of B (and of the winning challenger, if any
+  // were targeting them too). Per the audit's "first-hook-wins" rule.
+  for (const [chId, s] of [..._pvpSearches]) {
+    if (s.targetUserId === targetUserId || s.targetUserId === hookedChallenger.userId) {
       _clearSearch(chId);
       const otherCh = _connected.get(chId);
       if (otherCh && otherCh.helloed) {
@@ -134,6 +122,8 @@ function _runSearchHook(challengerUserId) {
       }
     }
   }
+  // If B was ALSO searching someone, drop B's outgoing search too.
+  if (_pvpSearches.has(targetUserId)) _clearSearch(targetUserId);
 }
 
 function _snapshotPayload(excludeUserId) {
@@ -225,14 +215,25 @@ function _handleMessage(entry, msg) {
         _send(entry.ws, { type: 'pvp-search-failed', reason: 'different-location' });
         return;
       }
-      // Cancel any existing search by this challenger before starting a new one.
+      // Replace any existing search by this challenger. No server-side timer —
+      // the hook rolls on B's next random encounter (handled in `pvp-encounter`).
       _clearSearch(entry.userId);
-      _pvpSearches.set(entry.userId, { targetUserId, timer: null });
-      _startSearchRoll(entry.userId);
+      _pvpSearches.set(entry.userId, { targetUserId });
       return;
     }
     case 'pvp-cancel': {
       _clearSearch(entry.userId);
+      return;
+    }
+    case 'pvp-encounter': {
+      // B's client is about to start a random encounter. Roll hook chance
+      // against any pending challengers; reply with `pvp-match` (on hit) or
+      // `pvp-encounter-none` (on miss / no challengers) so B can branch.
+      if (!entry.helloed) {
+        _send(entry.ws, { type: 'pvp-encounter-none' });
+        return;
+      }
+      _resolveEncounterHook(entry);
       return;
     }
     case 'chat': {

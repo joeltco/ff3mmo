@@ -10,6 +10,7 @@ import { createStatusState } from './status-effects.js';
 import { mapSt } from './map-state.js';
 import { inputSt } from './input-handler.js';
 import { getMonsterCanvas } from './monster-sprites.js';
+import { sendNetPVPEncounter, setNetPVPEncounterNoneHandler } from './net.js';
 
 const TILE_SIZE = 16;
 
@@ -32,11 +33,38 @@ export function tickRandomEncounter() {
     : 15 + Math.floor(Math.random() * 15);
   if (mapSt.encounterSteps >= threshold) {
     mapSt.encounterSteps = 0;
-    startRandomEncounter();
+    _triggerEncounterWithPVPCheck();
     return true;
   }
   return false;
 }
+
+// MP Step 3 — when an encounter would normally start, first ask the server
+// if anyone is searching for us. The server rolls hook chance against each
+// pending challenger; on a hit it broadcasts `pvp-match` (handled in
+// `pvp-search.js`) which routes the player into PvP via `_startPVPBattle`.
+// On miss / no challengers, the server replies `pvp-encounter-none` and we
+// proceed with the regular monster encounter. A 500 ms fallback covers a
+// dropped or slow server reply.
+let _pendingPVPCheck = false;
+function _triggerEncounterWithPVPCheck() {
+  if (!sendNetPVPEncounter()) {
+    startRandomEncounter();
+    return;
+  }
+  _pendingPVPCheck = true;
+  setTimeout(() => {
+    if (!_pendingPVPCheck) return;
+    _pendingPVPCheck = false;
+    if (battleSt.battleState === 'none') startRandomEncounter();
+  }, 500);
+}
+
+setNetPVPEncounterNoneHandler(() => {
+  if (!_pendingPVPCheck) return;
+  _pendingPVPCheck = false;
+  if (battleSt.battleState === 'none') startRandomEncounter();
+});
 
 // ── Spawn encounter monsters ───────────────────────────────────────────────
 export function startRandomEncounter() {

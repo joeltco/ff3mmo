@@ -27,6 +27,7 @@ let _myUserId = null;
 let _onChat = null;          // (msg) → void — set via setNetChatHandler
 let _onPVPMatch = null;      // ({opponent}) → void — set via setNetPVPMatchHandler
 let _onPVPFailed = null;     // ({reason}) → void — set via setNetPVPFailedHandler
+let _onPVPNone = null;       // () → void — set via setNetPVPEncounterNoneHandler
 const MAX_RECONNECT_DELAY = 30000;
 
 function _getToken() {
@@ -112,6 +113,14 @@ function _handleMessage(data) {
       if (_onPVPFailed) {
         try { _onPVPFailed(msg); }
         catch (e) { console.warn('[net] pvp-search-failed handler error', e); }
+      }
+      return;
+    case 'pvp-encounter-none':
+      // Reply to our `pvp-encounter` ping: no challenger hooked, proceed with
+      // the regular monster encounter.
+      if (_onPVPNone) {
+        try { _onPVPNone(); }
+        catch (e) { console.warn('[net] pvp-encounter-none handler error', e); }
       }
       return;
   }
@@ -214,6 +223,20 @@ export function setNetPVPMatchHandler(fn) {
 
 export function setNetPVPFailedHandler(fn) {
   _onPVPFailed = typeof fn === 'function' ? fn : null;
+}
+
+// MP Step 3 — target-side hook: B's client signals an imminent random
+// encounter so the server can roll challenger hooks at that moment (the
+// "hook fires on the target's next encounter" rule the user clarified).
+// Returns false if not connected — caller falls back to the local monster
+// encounter immediately.
+export function sendNetPVPEncounter() {
+  if (!_helloed) return false;
+  return _send({ type: 'pvp-encounter' });
+}
+
+export function setNetPVPEncounterNoneHandler(fn) {
+  _onPVPNone = typeof fn === 'function' ? fn : null;
 }
 
 export function getOnlinePlayers() {

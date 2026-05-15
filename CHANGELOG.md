@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.370 — 2026-05-15
+
+### MP Step 3 fix: hook fires on TARGET's next encounter, not a server timer
+
+- v1.7.369 had wrong semantics — server ran an autonomous 8-15 s roll loop. User clarified the design: "you select battle, it searches, and the target's NEXT RANDOM ENCOUNTER has a chance to be hooked. until it times out or player leaves area."
+- Server (`ws-presence.js`): removed `_startSearchRoll` / `_runSearchHook` timer. `pvp-search` now just records `{challengerUserId → targetUserId}`. New `pvp-encounter` handler runs when B's client signals an imminent random encounter: iterates pending searches of B, rolls 35% per challenger, first hit wins → broadcasts `pvp-match` to both + cancels other suitors with `pvp-search-failed reason=target-engaged`. All miss → replies `pvp-encounter-none`.
+- Client (`src/net.js`): added `sendNetPVPEncounter()` + `setNetPVPEncounterNoneHandler(fn)`.
+- Client (`src/battle-encounter.js`): when the random-encounter step threshold trips, fires `pvp-encounter` to the server FIRST and parks for up to 500 ms waiting for the reply. `pvp-encounter-none` (or timeout) → start the monster encounter. `pvp-match` (handled in `pvp-search.js`) → enter PvP, monster encounter never spawns. If WS isn't connected, falls through to monster encounter immediately.
+- Until B has an encounter, A's search just waits (capped by the existing client-side `SEARCH_TIMEOUT_MS = 5 min` in `pvp-search.js`). B sitting in town with no encounters = A's search times out naturally.
+
 ## 1.7.369 — 2026-05-15
 
 ### Multiplayer Step 3: PvP search over the wire
