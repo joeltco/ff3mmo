@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.361 — 2026-05-15
+
+### Combat: cross-faction targeting (multiplayer prep step 4 of 7)
+
+- Player can now intentionally pick their own ally (or self) as the target of an offensive spell — Fire / Bzzard / Bolt / Sleep / Confuse / Death / Shade etc. Pre-v1.7.361 this errored with "Ineffective"; engine-side `applyMagic*` helpers were always faction-agnostic, only the dispatch in `spell-cast.js#_applySpellEffect` forbade it.
+- New `_applyFriendlyOffensive(target, spell)` in `spell-cast.js` — mirror of `_applyEnemyEffect`'s offensive branches but with `setPlayerDamageNum` / `getAllyDamageNums()[idx]` damage-num callbacks in place of `_setEnemyDmg`. Routes damage (Fire/Bzzard/Bolt), single status (sleep/confuse/blind/mini/silence), all-status (Shade/Tranquilizer), and instakill (Death) to the same shared helpers the enemy path uses.
+- Step-2 redirect block lifted above the offensive-on-friendly branch so a dying ally during cast windup still gets the next-living redirect for either heal OR damage paths.
+- The confused-attack path (battle-turn.js:128-147) has always written friendly damage via these primitives; this just unifies the player-controlled path with the engine's existing capability.
+- AI heuristic unchanged: roster allies still preferentially heal teammates and damage enemies; PvP enemies still preferentially heal their own team and damage the player's. Cross-faction targeting is a **capability** the engine and player UI now support, not a behavior the AI defaults to. Future Confused-ally-magic / chaos events can pivot the AI toward cross-faction picks without further engine work.
+
 ## 1.7.360 — 2026-05-15
 
 ### Combat: unified AI decision helpers (multiplayer prep step 3 of 7)

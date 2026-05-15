@@ -458,6 +458,72 @@ function _applyEnemyEffect(idx, spell) {
   });
 }
 
+// Apply an offensive spell (damage / status / instakill / all-status) to a
+// FRIENDLY target. v1.7.361 (step 4/7) — pre-step-4 the player could not
+// pick their own ally or self as an offensive target; the dispatch errored
+// with "Ineffective". Engine-side `applyMagic*` helpers were always
+// faction-agnostic, so this is a routing fix not a primitive change. Mirror
+// of `_applyEnemyEffect`'s offensive branches but with player/ally
+// damage-num callbacks (`setPlayerDamageNum` / `getAllyDamageNums()[idx]`)
+// in place of the enemy `_setEnemyDmg` callback.
+function _applyFriendlyOffensive(target, spell) {
+  const isPlayerTgt = target.type === 'player';
+  const tgt = isPlayerTgt ? ps : battleSt.battleAllies[target.index];
+  if (!tgt || tgt.hp <= 0) return;
+
+  const setDmgNum = (val, miss = false) => {
+    if (isPlayerTgt) {
+      setPlayerDamageNum(miss ? { miss: true, timer: 0 } : { value: val, timer: 0 });
+    } else {
+      getAllyDamageNums()[target.index] = miss ? { miss: true, timer: 0 } : { value: val, timer: 0 };
+    }
+  };
+
+  // Status / instakill / all-status routes through dedicated helpers.
+  if (spell.target === 'enemy_status') {
+    if (spell.type === 'death') {
+      applyMagicInstakill(tgt, spell.hit, {
+        sfx: SFX.MONSTER_DEATH,
+        onDmgNum: () => setDmgNum(0),
+        onMiss: () => setDmgNum(0, true),
+      });
+      return;
+    }
+    if (spell.type === 'all_status') {
+      applyMagicAllStatus(tgt, spell.hit, {
+        sfx: SFX.SW_HIT,
+        onStatusLand: _queueStatusMsg,
+        onMiss: () => setDmgNum(0, true),
+      });
+      return;
+    }
+    applyMagicStatus(tgt, spell.type, spell.hit, {
+      sfx: _isThrownStatusType(spell.type) ? null : _spellImpactSFX(spell),
+      onLand: _queueStatusMsg,
+      onMiss: () => setDmgNum(0, true),
+    });
+    return;
+  }
+
+  // Damage spell on friendly. Hit roll first (matches enemy path).
+  if (spell.hit > 0 && spell.hit < 100) {
+    if (rand() * 100 >= spell.hit) {
+      setDmgNum(0, true);
+      return;
+    }
+  }
+
+  const amount = _baseAmount >= 0
+    ? Math.max(1, Math.floor(_baseAmount / _targets.length))
+    : _rollMagicAmount(spell.power, false);
+
+  applyMagicDamage(tgt, amount, spell, {
+    sfx: _isThrownDamageElement(spell.element) ? null : SFX.SW_HIT,
+    onDmgNum: (dealt) => setDmgNum(dealt),
+    onShake: () => { battleSt.battleShakeTimer = BATTLE_SHAKE_MS; },
+  });
+}
+
 function _applySpellEffect(target) {
   const spell = SPELLS.get(_spellId);
   if (!spell) return;
@@ -504,29 +570,6 @@ function _applySpellEffect(target) {
     return;
   }
 
-  // Offensive damage spells (Fire family) on a friendly target — picker
-  // defaults to enemy, but if the user navigates to a friendly cell the spell
-  // would otherwise fall through to the heal path below and silently restore
-  // HP. Surface "Ineffective" instead and don't apply any effect.
-  //
-  // NOTE: cannot use `spell.type === 'damage'` here — Cure + Cura have
-  // type='damage' too (it's the dispatch axis for numeric-effect spells).
-  // Use the offensive-target set instead so heal spells reach applyMagicHeal
-  // even on full-HP targets (which post a 0 heal-num — intentional feedback).
-  if (spell.target === 'enemy' || spell.target === 'all_enemies' || spell.target === 'enemy_status') {
-    replaceBattleMsg(BATTLE_INEFFECTIVE);
-    _playSpellSFXOnce(SFX.ERROR);
-    return;
-  }
-
-  // Friendly target paths (player / ally)
-  const isCureStatus = spell.target === 'cure_status';
-  const isHeal = spell.element === 'recovery';
-  const useMnd = isHeal || isCureStatus || spell.target === 'revive';
-  const amount = _baseAmount >= 0
-    ? Math.max(1, Math.floor(_baseAmount / _targets.length))
-    : _rollMagicAmount(spell.power, useMnd);
-
   // Apply-time target redirect (v1.7.359 step 2/7). If the spell was aimed at
   // a single friendly and the picked combatant died during cast windup,
   // redirect to the next-living teammate (another ally first, then the player
@@ -548,6 +591,30 @@ function _applySpellEffect(target) {
       if (redirected) activeTarget = redirected;
     }
   }
+
+  // Offensive spell on a friendly target (v1.7.361 step 4/7). Pre-step-4 this
+  // errored with "Ineffective" — engine-side `applyMagic*` helpers are
+  // faction-agnostic, only the routing here forbade it. Now mirrors the
+  // confused-attack path (battle-turn.js:128-147) which has always written
+  // friendly damage via the same primitives. Player who intentionally picks
+  // their own ally as Fire target sees damage land + the standard impact anim.
+  //
+  // NOTE: cannot gate by `spell.type === 'damage'` — Cure + Cura have
+  // type='damage' too (it's the dispatch axis for numeric-effect spells).
+  // Gate by offensive-target set instead so heal spells still reach
+  // applyMagicHeal below.
+  if (spell.target === 'enemy' || spell.target === 'all_enemies' || spell.target === 'enemy_status') {
+    _applyFriendlyOffensive(activeTarget, spell);
+    return;
+  }
+
+  // Friendly target paths (player / ally)
+  const isCureStatus = spell.target === 'cure_status';
+  const isHeal = spell.element === 'recovery';
+  const useMnd = isHeal || isCureStatus || spell.target === 'revive';
+  const amount = _baseAmount >= 0
+    ? Math.max(1, Math.floor(_baseAmount / _targets.length))
+    : _rollMagicAmount(spell.power, useMnd);
 
   // Friendly target — resolve target object + heal-num callback per type.
   const isPlayerTgt = activeTarget.type === 'player';
