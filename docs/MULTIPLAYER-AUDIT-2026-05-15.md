@@ -10,6 +10,34 @@ Read every file in the MP stack end-to-end (`ws-presence.js`, `src/net.js`,
 Findings are ranked by severity. Each item includes the failure mode and a
 suggested fix.
 
+## Status (closed out 2026-05-15)
+
+Shipped in v1.7.387 → v1.7.390 (4 deploys, 38 audit items addressed):
+
+| Tier | Fixed | Deferred (with reason) |
+|---|---|---|
+| Critical | #1 #2 #3 #4 #5 #6 #7 #8 #10 | #9 (env-set; verify-only) |
+| High     | #11 #14 #15 #18 #21 #22     | #12 #13 #16 #17 #19 #20 (#20 closed by #7) |
+| Medium   | #23 #24 #25 #28 #31 #32     | #26 #27 (partly mitigated by #14 recovery) |
+| Low / observability | #30 #38         | #29 (superseded by #11) #33-#37 (hygiene) |
+
+Bonus fix found mid-batch-3: server's `pvp-action` relay was dropping the
+`actor` field, so any ally action would soft-freeze the receiver's FSM.
+Documented in CHANGELOG 1.7.389.
+
+Open items left intentionally:
+- **#9** — JWT secret. Verified `JWT_SECRET` is sourced from
+  `/root/.ff3mmo_jwt_secret` in `deploy.sh` and exported to pm2 via
+  `--update-env`. No code change required.
+- **#12 #33** — `_pvpSearches` silent overwrite. Cosmetic; tiny window.
+- **#13 #16** — race windows that Node's single-threaded sync handling
+  closes today. Re-audit if any handler becomes async.
+- **#19 #35** — `update` poll at 500 ms. Tunable but not currently
+  problematic.
+- **#26 #27** — half-state cleanup edges. Mostly covered by #14 mismatch
+  recovery + WS close handler.
+- **#34 #36 #37** — hygiene / single-call-site singletons.
+
 ---
 
 ## CRITICAL — Combat desync
