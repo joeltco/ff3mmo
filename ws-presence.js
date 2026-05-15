@@ -56,7 +56,24 @@ const _connected = new Map();
 // client signals an encounter via `pvp-encounter` and the server rolls
 // hook chance against each challenger of B at that moment.
 const _pvpSearches = new Map();
-const PVP_HOOK_CHANCE = 0.35;  // fixed for MVP — stat-aware arbitration is Step 4.
+
+// Hook-chance formula — mirror of `src/pvp-search.js#getHookChance`.
+// AGI differential + Thief/Ranger job bonus, clamped to [10%, 75%].
+// Constants live alongside the client source for cross-reference (any
+// rebalance has to touch both).
+const PVP_BASE_HOOK  = 0.25;
+const PVP_AGI_PER_PT = 0.015;
+const PVP_HOOK_MIN   = 0.10;
+const PVP_HOOK_MAX   = 0.75;
+const PVP_JOB_BONUS  = { 6: 0.08, 8: 0.15 };  // Ranger, Thief
+
+function _pvpHookChance(challengerProfile, targetProfile) {
+  const chAGI  = (challengerProfile && challengerProfile.agi) || 5;
+  const tgtAGI = (targetProfile && targetProfile.agi) || 5;
+  const jobBonus = PVP_JOB_BONUS[challengerProfile && challengerProfile.jobIdx] || 0;
+  const raw = PVP_BASE_HOOK + (chAGI - tgtAGI) * PVP_AGI_PER_PT + jobBonus;
+  return Math.max(PVP_HOOK_MIN, Math.min(PVP_HOOK_MAX, raw));
+}
 
 function _broadcast(payload, exceptUserId = null) {
   const msg = JSON.stringify(payload);
@@ -94,7 +111,8 @@ function _resolveEncounterHook(targetEntry) {
   }
   let hookedChallenger = null;
   for (const ch of challengers) {
-    if (Math.random() < PVP_HOOK_CHANCE) { hookedChallenger = ch; break; }
+    const chance = _pvpHookChance(ch.profile, targetEntry.profile);
+    if (Math.random() < chance) { hookedChallenger = ch; break; }
   }
   if (!hookedChallenger) {
     _send(targetEntry.ws, { type: 'pvp-encounter-none' });
@@ -153,6 +171,7 @@ function _handleMessage(entry, msg) {
         palIdx:   profile.palIdx | 0,
         hp:       profile.hp | 0,
         maxHP:    profile.maxHP | 0,
+        agi:      profile.agi | 0,
         weaponR:  profile.weaponR | 0,
         weaponL:  profile.weaponL == null ? undefined : profile.weaponL | 0,
         armorId:  profile.armorId | 0,
@@ -191,7 +210,7 @@ function _handleMessage(entry, msg) {
     case 'update': {
       if (!entry.helloed) return;
       const fields = {};
-      for (const k of ['name', 'jobIdx', 'level', 'palIdx', 'hp', 'maxHP',
+      for (const k of ['name', 'jobIdx', 'level', 'palIdx', 'hp', 'maxHP', 'agi',
                        'weaponR', 'weaponL', 'armorId', 'helmId', 'shieldId']) {
         if (parsed[k] != null) {
           entry.profile[k] = parsed[k];

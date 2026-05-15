@@ -80,6 +80,10 @@ export function init() {
         palIdx:  0,
         hp:      ps.hp | 0,
         maxHP:   ps.stats.maxHP | 0,
+        // PvP hook chance is AGI-differential + Thief/Ranger bonus (see
+        // `pvp-search.js#getHookChance`). Server uses the same formula on
+        // `pvp-encounter` rolls, so AGI has to travel with the profile.
+        agi:     ps.stats.agi | 0,
         weaponR: ps.weaponR | 0,
         weaponL: ps.weaponL | 0,
         armorId: ps.body | 0,

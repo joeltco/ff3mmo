@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.371 — 2026-05-15
+
+### MP Step 3: server-side hook chance uses AGI formula, not flat 35%
+
+- v1.7.370 used a fixed `PVP_HOOK_CHANCE = 0.35` server-side and noted "stat-aware later." `pvp-search.js#getHookChance` already had the canonical AGI-differential + Thief/Ranger formula since v1.7.222 — should have just ported it.
+- `ws-presence.js` now mirrors the client formula: `clamp(0.25 + (chAGI − tgtAGI) × 0.015 + jobBonus, 0.10, 0.75)` with Thief (`jobIdx 8`) +0.15 / Ranger (`jobIdx 6`) +0.08. Constants live next to the client copy; any rebalance touches both.
+- Client profile (`src/main.js` connectNet getter, `ws-presence.js` `hello` + `update` handlers) now carries `agi`. Server uses challenger.agi vs target.agi to compute the per-roll chance instead of the flat 35%.
+
 ## 1.7.370 — 2026-05-15
 
 ### MP Step 3 fix: hook fires on TARGET's next encounter, not a server timer
