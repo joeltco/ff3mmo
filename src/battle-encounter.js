@@ -253,6 +253,10 @@ setNetEncounterInviteHandler((msg) => {
     const stats = generateAllyStats(peer);
     stats.userId = peer.userId | 0;
     stats.isWireDriven = true;
+    // Side-channel fade-in (v1.7.423+) — fade from `ROSTER_FADE_STEPS`
+    // down to 0 over `ROSTER_FADE_STEPS * FADE_IN_PER_STEP_MS` ms.
+    // Independent of battleState; drives via the tick in battle-ally.js.
+    stats.fadeInStartMs = Date.now();
     battleSt.battleAllies.push(stats);
   }
   // UX — chat line so the guest sees whose battle they joined. Host name
@@ -290,11 +294,13 @@ setNetEncounterAssistIncomingHandler((msg) => {
     battleSt.encounterTurnIndex = 0;
     seedRng(seed32);
   }
-  // Add joiner to local battleAllies (instant, no fade — see header).
+  // Add joiner to local battleAllies. Side-channel fade-in (v1.7.423+)
+  // animates the portrait from invisible → visible over ~400 ms without
+  // interrupting whatever battleState we're in.
   const joinerStats = generateAllyStats(msg.fromProfile);
   joinerStats.userId = msg.fromUserId | 0;
   joinerStats.isWireDriven = true;
-  joinerStats.fadeStep = 0;  // fully visible from frame one
+  joinerStats.fadeInStartMs = Date.now();
   battleSt.battleAllies.push(joinerStats);
   // Build the snapshot. Peers = self + existing battleAllies that have
   // a userId (skip any AI-driven fakes). Monsters carry live HP.
@@ -333,6 +339,14 @@ setNetEncounterAssistIncomingHandler((msg) => {
   const monsters = (battleSt.encounterMonsters || []).map(m => ({
     monsterId: m.monsterId | 0,
     hp:        m.hp | 0,
+    // Status state — wire-ship the mask + poison tick so the joiner's
+    // monster has the same affliction. Without this, a poisoned monster
+    // on host's side ticks damage each round while the joiner's view
+    // doesn't, → HP divergence over time. v1.7.423.
+    status: m.status ? {
+      mask: m.status.mask | 0,
+      poisonDmgTick: m.status.poisonDmgTick | 0,
+    } : null,
   }));
   sendNetEncounterAssistSnapshot(msg.fromUserId, {
     seed:       battleSt.encounterSeed >>> 0,
@@ -357,6 +371,14 @@ setNetEncounterAssistSnapshotHandler((msg) => {
     if (id == null) continue;
     const mData = MONSTERS.get(id) || MONSTERS.get(0x00);
     if (!mData) continue;
+    // Rebuild status state from wire payload (v1.7.423+). Fall back to
+    // a clean state if the snapshot didn't carry it (legacy or no
+    // affliction).
+    const status = createStatusState();
+    if (m.status) {
+      status.mask = (m.status.mask | 0);
+      status.poisonDmgTick = (m.status.poisonDmgTick | 0);
+    }
     monsters.push({
       monsterId: id,
       hp: m.hp | 0,  // CURRENT hp from snapshot, not initial
@@ -376,7 +398,7 @@ setNetEncounterAssistSnapshotHandler((msg) => {
       resist: mData.resist || null,
       statusResist: mData.statusResist || null,
       spiritInt: mData.spiritInt || 0,
-      status: createStatusState(),
+      status,
     });
   }
   if (monsters.length === 0) return;
@@ -389,15 +411,10 @@ setNetEncounterAssistSnapshotHandler((msg) => {
   battleSt.isRandomEncounter = true;
   inputSt.battleActionCount = 0;
   const seed32 = (msg.seed | 0) >>> 0;
-  battleSt.isWireEncounter = true;
-  battleSt.encounterIsHost = false;
-  battleSt.encounterHostUserId = msg.hostUserId | 0;
-  battleSt.encounterSeed = seed32;
-  battleSt.encounterTurnIndex = msg.turnIndex | 0;
-  seedRng(((seed32 >>> 0) + (msg.turnIndex | 0)) >>> 0);
   battleSt.preBattleTrack = TRACKS.CRYSTAL_CAVE;
   _resetBattleVars();
-  // re-set wire flags (resetBattleVars clears them)
+  // Re-set encounter state after `_resetBattleVars` wipes it (it clears
+  // battleAllies + the wire flags so the next solo battle starts clean).
   battleSt.isWireEncounter = true;
   battleSt.encounterIsHost = false;
   battleSt.encounterHostUserId = msg.hostUserId | 0;
@@ -405,6 +422,7 @@ setNetEncounterAssistSnapshotHandler((msg) => {
   battleSt.encounterTurnIndex = msg.turnIndex | 0;
   battleSt.encounterMonsters = monsters;
   battleSt.isRandomEncounter = true;
+  seedRng(((seed32 >>> 0) + (msg.turnIndex | 0)) >>> 0);
   const peerList = Array.isArray(msg.peers) ? msg.peers.slice() : [];
   peerList.sort((a, b) => {
     const aHost = a.userId === msg.hostUserId ? 0 : 1;
@@ -417,7 +435,7 @@ setNetEncounterAssistSnapshotHandler((msg) => {
     const stats = generateAllyStats(peer);
     stats.userId = peer.userId | 0;
     stats.isWireDriven = true;
-    stats.fadeStep = 0;
+    stats.fadeInStartMs = Date.now();
     battleSt.battleAllies.push(stats);
   }
   const hostName = (peerList[0] && peerList[0].name) || 'Party';
@@ -440,7 +458,7 @@ setNetEncounterAllyJoinHandler((msg) => {
   const stats = generateAllyStats(msg.profile);
   stats.userId = msg.profile.userId | 0;
   stats.isWireDriven = true;
-  stats.fadeStep = 0;
+  stats.fadeInStartMs = Date.now();
   battleSt.battleAllies.push(stats);
   try { addChatMessage('* ' + (msg.profile.name || 'Player') + ' joined the battle!', 'system'); } catch { /* chat optional */ }
 });

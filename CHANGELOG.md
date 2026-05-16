@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.423 — 2026-05-16
+
+### Assist polish: monster status in snapshot + side-channel ally fade-in
+
+- **Monster status in assist snapshot** — pre-fix, the assist snapshot shipped current monster HP but not the status mask. A monster poisoned on host's side ticked end-of-round damage; the joiner's view didn't (clean status), so HP diverged over time. Now `monsters[]` carries `{monsterId, hp, status: {mask, poisonDmgTick}}`. Joiner-side spawn rebuilds the status from wire instead of `createStatusState()` default. Same protocol works for any future status (sleep, paralysis, blind, etc.) since it's the full mask + tick byte.
+- **Side-channel ally fade-in** — new ally additions via the encounter wire (at-start co-op spawn, assist accept by target, assist snapshot for joiner, ally-join broadcast to existing peers) now get an independent fade-in animation driven by `Date.now()` elapsed time. Decrements `fadeStep` from `ROSTER_FADE_STEPS` → 0 over ~400 ms. Runs in `battle-ally.js#_tickAllyFadeIn` every frame regardless of `battleState`, so it works mid-battle without interrupting the FSM (the classic `ally-fade-in` state-machine path was a state-machine pause that doesn't fit mid-flight). Stamp `fadeInStartMs` at push-time; tick decays it.
+- **Pre-existing fade bug fix bundled** — the v1.7.418 invite handler (host's at-start co-op spawn) also left peers at the `generateAllyStats` default `fadeStep = ROSTER_FADE_STEPS` (invisible) because the state machine wasn't triggered. The new side-channel applies here too — peers now animate in properly on the guest's side when the co-op battle opens.
+- **State-machine path untouched** — the classic `tryJoinPlayerAlly` → `ally-fade-in` state still drives the legacy fake-roster random-fill flow (gated on `fadeInStartMs` being absent). No conflict between paths.
+
 ## 1.7.422 — 2026-05-16
 
 ### Battle Assist: overworld players can join in-progress roster battles

@@ -419,7 +419,28 @@ function _updateAllyKOSequence() {
   return false;
 }
 
+// Side-channel fade-in tick (v1.7.423+) — drives the fade-down on any
+// ally that was instant-added (via co-op invite spawn, assist accept,
+// or peer ally-join broadcast). Independent of `battleState` so it works
+// during any mid-battle phase without interrupting the FSM. Each ally
+// carries `fadeInStartMs` set at push-time; `fadeStep` is derived from
+// elapsed time. The classic `_updateAllyJoin` state-machine fade-in still
+// drives the `tryJoinPlayerAlly` path; this is parallel for wire-spawned
+// peers that bypass that state.
+const FADE_IN_PER_STEP_MS = 100;
+function _tickAllyFadeIn() {
+  const now = Date.now();
+  for (const a of battleSt.battleAllies) {
+    if (!a || !a.fadeInStartMs) continue;
+    const elapsed = now - a.fadeInStartMs;
+    const step = ROSTER_FADE_STEPS - Math.floor(elapsed / FADE_IN_PER_STEP_MS);
+    a.fadeStep = Math.max(0, step);
+    if (a.fadeStep <= 0) { delete a.fadeInStartMs; a.fadeStep = 0; }
+  }
+}
+
 export function updateBattleAlly(dt) {
+  _tickAllyFadeIn();
   // Co-op random encounter — wire-driven ally is waiting for the remote
   // player's `encounter-action` to arrive. processNextTurn unshifted the
   // turn back to the queue head and set this state; each frame we retry
