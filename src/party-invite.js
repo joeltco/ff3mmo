@@ -241,7 +241,19 @@ setNetPartyInviteHandler((msg) => {
   // on line 2.
   const text = _nameToBytes(challenger.name + ' wants party Z=ok X=no');
   showMsgBoxPrompt(text,
-    () => sendNetPartyResponse(true),
+    // Accept — mirror the inviter's `_resolveAsJoin` locally so the invitee's
+    // own random encounters also pull the inviter in as an ally. Server only
+    // echoes the join confirmation back to the inviter (`party-invite-result`),
+    // so without this stash the invitee's `partyInviteSt.partyMembers` stays
+    // empty and `tryJoinPlayerAlly`'s pre-pass finds nothing → invitee fights
+    // solo despite being in the party. v1.7.412.
+    () => {
+      if (challenger.name && !partyInviteSt.partyMembers.includes(challenger.name) && !isPartyFull()) {
+        partyInviteSt.partyMembers.push(challenger.name);
+        partyInviteSt.partyMemberProfiles.set(challenger.name, challenger);
+      }
+      sendNetPartyResponse(true);
+    },
     () => sendNetPartyResponse(false),
   );
 });
@@ -268,6 +280,12 @@ setNetPartyMemberLeftHandler((msg) => {
 setNetPartyDisbandedHandler((msg) => {
   const name = msg && msg.inviterName;
   if (!name) return;
+  // Mirror of `setNetPartyMemberLeftHandler` for the invitee side — clear the
+  // inviter from local `partyMembers` + cached profile so future battles don't
+  // try to pull in a ghost ally. v1.7.412.
+  const i = partyInviteSt.partyMembers.indexOf(name);
+  if (i >= 0) partyInviteSt.partyMembers.splice(i, 1);
+  partyInviteSt.partyMemberProfiles.delete(name);
   addChatMessage('* ' + name + "'s party disbanded", 'system');
 });
 

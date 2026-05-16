@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.412 — 2026-05-16
+
+### Party-assist now works in both directions (invitee side wasn't seeing it)
+
+- **Bug**: when A invited B and B accepted, only A's local `partyInviteSt.partyMembers` got populated (via `_resolveAsJoin` in the `party-invite-result` handler). The server doesn't echo a join confirmation back to the invitee — so B's local party state stayed empty, and B's `tryJoinPlayerAlly` pre-pass found nothing to pull in. Result: A's random battles auto-spawned B as ally, but B's random battles fought solo. To the player, it looked like the fake-roster fallback was firing on B's side (it wasn't — `PLAYER_POOL` is `[]`; the pre-pass was just empty).
+- **Fix**: on `setNetPartyInviteHandler` accept, mirror the inviter's `_resolveAsJoin` shape locally — push the inviter's name into `partyMembers` and stash their profile in `partyMemberProfiles`. The original `party-invite-incoming` message already carries A's full profile, so no server change needed. Disband cleanup on the invitee side (`setNetPartyDisbandedHandler`) now also clears the inviter from local state, matching `setNetPartyMemberLeftHandler` on the inviter side.
+
 ## 1.7.411 — 2026-05-16
 
 ### PvP victory: null stale `encounterDropItem` so post-defeat FSM exits cleanly
