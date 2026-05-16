@@ -700,6 +700,10 @@ function _updateMonsterDeath() {
       battleSt.encounterJobLevelUp = gainJobJP(inputSt.battleActionCount || 1);
       inputSt.battleActionCount = 0;
       battleSt.encounterDropItem = null;
+      // Co-op encounter — use synced `rand()` so both clients roll the
+      // same drop result against the shared seed. Each client adds the
+      // item to their own inventory (everyone gets a copy). v1.7.419.
+      const _dropRand = battleSt.isWireEncounter ? rand : Math.random;
       for (const m of battleSt.encounterMonsters) {
         const mData = MONSTERS.get(m.monsterId);
         // Filter null drops first — ROM-extracted drop tables include null placeholder
@@ -707,8 +711,8 @@ function _updateMonsterDeath() {
         // a null roll would still claim the encounter's drop slot via `break` and
         // silently zero out subsequent mobs' chances.
         const validDrops = mData?.drops?.filter(d => d != null) || [];
-        if (validDrops.length && Math.random() < 0.25) {
-          battleSt.encounterDropItem = validDrops[Math.floor(Math.random() * validDrops.length)];
+        if (validDrops.length && _dropRand() < 0.25) {
+          battleSt.encounterDropItem = validDrops[Math.floor(_dropRand() * validDrops.length)];
           break;
         }
       }

@@ -5,6 +5,8 @@ import { battleSt, getEnemyHP, setEnemyHP,
          setEnemyAttackerTarget } from './battle-state.js';
 import { dispatchDelta } from './deltas.js';
 import { calcDamage, elemMultiplier, BOSS_HIT_RATE, GOBLIN_HIT_RATE } from './battle-math.js';
+import { rand } from './rng.js';
+import { getMyUserId } from './net.js';
 import { ps, getShieldEvade } from './player-stats.js';
 import { SFX, playSFX } from './music.js';
 import { tryInflictStatus, blindHitPenalty, wakeOnHit, STATUS_NAME_BYTES } from './status-effects.js';
@@ -154,7 +156,33 @@ function _processEnemyFlash() {
   if (battleSt.battleState !== 'enemy-flash' || battleSt.battleTimer < BOSS_PREFLASH_MS) return false;
   const livingAllies = battleSt.battleAllies.filter(a => a.hp > 0);
   let targetAlly = -1;
-  if (livingAllies.length > 0) {
+  // Co-op random encounter (v1.7.419+) — both clients must pick the SAME
+  // canonical actor for monster targeting. Without this, 'ps' on A's
+  // screen is `ps=A, ally=B` and on B's it's `ps=B, ally=A`; same Math.random
+  // result picks DIFFERENT logical actors → HP diverges. Use shared
+  // `rand()` against a canonical-order team list (host first, then by
+  // ascending userId) so both clients land on the same picked userId,
+  // then map locally to ps (-1) or battleAllies[N].
+  if (battleSt.isWireEncounter) {
+    const team = [];
+    const myUid = getMyUserId() | 0;
+    if (ps.hp > 0) team.push({ userId: myUid, type: 'ps', localIdx: -1 });
+    for (let i = 0; i < battleSt.battleAllies.length; i++) {
+      const a = battleSt.battleAllies[i];
+      if (a && a.hp > 0) team.push({ userId: a.userId | 0, type: 'ally', localIdx: i });
+    }
+    if (team.length > 0) {
+      team.sort((x, y) => {
+        const xHost = x.userId === battleSt.encounterHostUserId ? 0 : 1;
+        const yHost = y.userId === battleSt.encounterHostUserId ? 0 : 1;
+        if (xHost !== yHost) return xHost - yHost;
+        return x.userId - y.userId;
+      });
+      const pickIdx = Math.floor(rand() * team.length);
+      const picked = team[pickIdx];
+      targetAlly = picked.type === 'ps' ? -1 : picked.localIdx;
+    }
+  } else if (livingAllies.length > 0) {
     const allyOptions = battleSt.battleAllies.map((a, i) => a.hp > 0 ? i : -1).filter(i => i >= 0);
     if (ps.hp <= 0) {
       targetAlly = allyOptions[Math.floor(Math.random() * allyOptions.length)];
@@ -203,8 +231,14 @@ function _processEnemyFlash() {
     const ally = battleSt.battleAllies[targetAlly];
     const { total, landed } = rollMultiHit(ally.def, null, ally.shieldEvade || 0, ally.evade || 0);
     if (landed > 0) {
-      dispatchDelta({ type: 'hp', target: battleSt.battleAllies[targetAlly], amount: -total });
-      getAllyDamageNums()[targetAlly] = { value: total, timer: 0 };
+      // Co-op random encounter — wire-driven ally that picked Defend this
+      // round has `ally.isDefending = true` set by
+      // `_applyWireEncounterActionForAlly`. Halve incoming damage to match
+      // the sender's view of their own defend. Round-end clear lives in
+      // `processNextTurn` queue-empty branch. v1.7.419.
+      const dmg = ally.isDefending ? Math.max(1, Math.floor(total / 2)) : total;
+      dispatchDelta({ type: 'hp', target: battleSt.battleAllies[targetAlly], amount: -dmg });
+      getAllyDamageNums()[targetAlly] = { value: dmg, timer: 0 };
       battleSt.allyShakeTimer[targetAlly] = BATTLE_SHAKE_MS;
       playSFX(SFX.ATTACK_HIT); battleSt.battleState = 'ally-hit'; battleSt.battleTimer = 0;
     } else {

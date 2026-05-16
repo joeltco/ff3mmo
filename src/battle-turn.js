@@ -137,6 +137,12 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
     // every future hit on sender's side. See
     // docs/MULTIPLAYER-AUDIT-2026-05-15.md #1.
     if (pvpSt.isPVPBattle) pvpSt.pvpOpponentIsDefending = false;
+    // Co-op random encounter — clear per-ally defend flags set by
+    // wire-driven defend actions. Same round-scoped lifetime as the
+    // player's `battleSt.isDefending`. v1.7.419.
+    if (battleSt.isWireEncounter) {
+      for (const a of battleSt.battleAllies) if (a) a.isDefending = false;
+    }
     if (ps.hp <= 0) {
       // ps dead but allies might still be alive — start a new round, reseed
       // co-op rand cursor at the round boundary like the menu-confirm path.
@@ -249,11 +255,30 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
     // turn (push back to queue head) until the matching encounter-action
     // arrives. v1.7.418.
     if (battleSt.isWireEncounter && ally.isWireDriven && ally.userId) {
+      // Mirror the sender's `processTurnStart` rand consumption so both
+      // clients' rand cursors stay aligned through status rolls (sleep
+      // wake / confuse snap / paralysis skip). Sender ran this in their
+      // player-turn branch and either took the turn (canAct=true → emit)
+      // or skipped (canAct=false → no emit). We do the same: run the
+      // status roll, then either dequeue the action or skip. Flagged
+      // with `turn._statusDone` so the unshift+retry loop doesn't
+      // double-consume the rand. v1.7.419.
+      if (ally.status && !turn._statusDone) {
+        const { canAct } = processTurnStart(ally.status, ally.maxHP || ally.hp);
+        turn._statusDone = true;
+        if (!canAct) { processNextTurn(); return; }
+      }
       const action = dequeueWireEncounterAction(ally.userId);
       if (!action) {
         battleSt.turnQueue.unshift(turn);
-        battleSt.battleState = 'ally-wire-wait';
-        battleSt.battleTimer = 0;
+        // First entry into wait — start the timeout clock. Re-entries
+        // from the per-frame retry tick leave battleTimer accumulating
+        // so the watchdog in `updateBattleAlly` can flip the ally to
+        // AI-fallback after WIRE_WAIT_TIMEOUT_MS. v1.7.419.
+        if (battleSt.battleState !== 'ally-wire-wait') {
+          battleSt.battleState = 'ally-wire-wait';
+          battleSt.battleTimer = 0;
+        }
         return;
       }
       if (_applyWireEncounterActionForAlly(turn.index, ally, action)) return;
@@ -487,30 +512,118 @@ function _emitWireAllyAction(allyIdx, payload) {
 
 // Co-op random encounter — replay a wire-delivered action on the local
 // view of a peer player's ally turn. Returns true if the action was
-// consumed (caller should NOT advance the queue); false if we can't
-// replay this kind (caller falls through to processNextTurn). v1.7.418.
+// consumed (caller should NOT advance the queue); false if it couldn't
+// be replayed (caller falls through to skip via processNextTurn).
+// v1.7.418 / extended v1.7.419 to cover magic + item + defend.
 //
-// MVP supports `attack` (replay with wire-supplied target + hitResults).
-// Other kinds — defend / run / skip / magic / item — fall through to a
-// skip so the FSM stays in sync; full magic / item replay is deferred.
+// Target translation (sender's view → receiver's view):
+//   `self`             → caster is wire-driven ally @ allyIdx → 'ally' / allyIdx
+//   `ally` userId=me   → local ps                              → 'player' / -1
+//   `ally` userId=N    → look up ally with that userId         → 'ally' / N
+//   `monster` idx=N    → 'enemy' / N (both clients sorted identically)
 function _applyWireEncounterActionForAlly(allyIdx, ally, action) {
-  if (!action || action.kind !== 'attack') return false;
-  const tgt = action.target;
-  if (!tgt || tgt.kind !== 'monster') return false;
-  const tgtIdx = tgt.idx | 0;
-  if (!battleSt.encounterMonsters || !battleSt.encounterMonsters[tgtIdx]) return false;
-  const mon = battleSt.encounterMonsters[tgtIdx];
-  if (mon.hp <= 0) return false;
-  battleSt.allyTargetIndex = tgtIdx;
-  // Wire-supplied hitResults keeps damage identical to the peer's view.
-  // If empty / missing (legacy / corrupt payload), the receiver shows
-  // misses — better than diverging from the peer's authoritative roll.
-  battleSt.allyHitResults = Array.isArray(action.hitResults) ? action.hitResults : [];
-  battleSt.allyHitIdx = 0;
-  battleSt.allyHitResult = battleSt.allyHitResults[0] || null;
-  battleSt.battleState = 'ally-attack-back';
-  battleSt.battleTimer = 0;
-  return true;
+  if (!action) return false;
+
+  // Defend — flag per-ally so incoming damage halves. Animation skipped
+  // for MVP; round-end clear lives in processNextTurn's queue-empty
+  // branch alongside `battleSt.isDefending`. v1.7.419.
+  if (action.kind === 'defend') {
+    ally.isDefending = true;
+    return false;
+  }
+
+  // Run / skip — peer fled or skipped. Receiver's local FSM has nothing
+  // to animate for this turn; just advance.
+  if (action.kind === 'run' || action.kind === 'skip') {
+    return false;
+  }
+
+  // Attack
+  if (action.kind === 'attack') {
+    const tgt = action.target;
+    if (!tgt || tgt.kind !== 'monster') return false;
+    const tgtIdx = tgt.idx | 0;
+    if (!battleSt.encounterMonsters || !battleSt.encounterMonsters[tgtIdx]) return false;
+    const mon = battleSt.encounterMonsters[tgtIdx];
+    if (mon.hp <= 0) return false;
+    battleSt.allyTargetIndex = tgtIdx;
+    battleSt.allyHitResults = Array.isArray(action.hitResults) ? action.hitResults : [];
+    battleSt.allyHitIdx = 0;
+    battleSt.allyHitResult = battleSt.allyHitResults[0] || null;
+    battleSt.battleState = 'ally-attack-back';
+    battleSt.battleTimer = 0;
+    return true;
+  }
+
+  // Magic / item — both ride the ally-magic-cast / ally-magic-hit
+  // pipeline. Item uses `allyMagicItemMode=true` to suppress the cast
+  // flame and routes through a sentinel spellId (SPELL_CURE for heal
+  // items, SPELL_POISONA for cure-status). Damage / heal amounts are
+  // pre-rolled by the sender + ride the wire; receiver applies them
+  // directly via the same state bag.
+  if (action.kind === 'magic' || action.kind === 'item') {
+    const isItem = action.kind === 'item';
+    let spellId = (action.spellId | 0);
+    if (isItem && !spellId) {
+      const item = ITEMS.get(action.itemId | 0);
+      spellId = (item && item.effect === 'cure_status') ? SPELL_POISONA : SPELL_CURE;
+    }
+    if (!spellId) return false;
+
+    const tgt = action.target;
+    if (!tgt) return false;
+    let targetType, targetIdx;
+    if (tgt.kind === 'self') {
+      targetType = 'ally';
+      targetIdx = allyIdx;
+    } else if (tgt.kind === 'ally') {
+      const tgtUid = tgt.userId | 0;
+      const myUid = getMyUserId() | 0;
+      if (tgtUid && tgtUid === myUid) {
+        targetType = 'player';
+        targetIdx = -1;
+      } else if (tgtUid) {
+        const i = battleSt.battleAllies.findIndex(a => (a.userId | 0) === tgtUid);
+        if (i < 0) return false;
+        targetType = 'ally';
+        targetIdx = i;
+      } else {
+        return false;
+      }
+    } else if (tgt.kind === 'monster') {
+      targetType = 'enemy';
+      targetIdx = tgt.idx | 0;
+      if (!battleSt.encounterMonsters || !battleSt.encounterMonsters[targetIdx]) return false;
+    } else {
+      return false;
+    }
+
+    battleSt.allyMagicCasterIdx     = allyIdx;
+    battleSt.allyMagicTargetType    = targetType;
+    battleSt.allyMagicTargetIdx     = targetIdx;
+    battleSt.allyMagicSpellId       = spellId;
+    battleSt.allyMagicHealAmount    = action.healAmount | 0;
+    battleSt.allyMagicDamageRoll    = action.damageRoll | 0;
+    battleSt.allyMagicEffectApplied = false;
+    battleSt.allyMagicSfxPlayed     = false;
+    battleSt.allyMagicItemMode      = isItem;
+    setActiveCast({
+      caster: { faction: 'ally', idx: allyIdx },
+      spellId,
+      isItemUse: isItem,
+      targets: [{ faction: targetType, idx: targetIdx }],
+      healAmount: action.healAmount | 0,
+      damageRoll: action.damageRoll | 0,
+    });
+    queueBattleMsg(ally.name ? _nameToBytes(ally.name) : BATTLE_ALLY);
+    replaceBattleMsg(getSpellNameShrinesClean(spellId));
+    playSFX(SFX.MAGIC_CAST);
+    battleSt.battleState = 'ally-magic-cast';
+    battleSt.battleTimer = 0;
+    return true;
+  }
+
+  return false;
 }
 
 // Translate the ally state bag's `{ allyMagicTargetType, allyMagicTargetIdx }`

@@ -425,7 +425,23 @@ export function updateBattleAlly(dt) {
   // turn back to the queue head and set this state; each frame we retry
   // by calling processNextTurn — when the action shows up, the ally turn
   // proceeds; otherwise it stalls another frame. v1.7.418.
+  //
+  // Disconnect timeout (v1.7.419) — if we've been waiting WIRE_WAIT_TIMEOUT_MS
+  // (~30s), the peer's WS probably dropped without the server's synthetic
+  // disconnect arriving (TCP half-open / cellular loss). Pop the stalled
+  // turn, flip the ally to AI-fallback (defend this turn + isWireDriven
+  // off so future turns run AI), then advance.
   if (battleSt.battleState === 'ally-wire-wait') {
+    const WIRE_WAIT_TIMEOUT_MS = 30000;
+    if (battleSt.battleTimer > WIRE_WAIT_TIMEOUT_MS) {
+      const turn = battleSt.turnQueue.shift();
+      if (turn && turn.type === 'ally') {
+        const a = battleSt.battleAllies[turn.index];
+        if (a) { a.isWireDriven = false; a.isDefending = true; }
+      }
+      _processNextTurn();
+      return true;
+    }
     _processNextTurn();
     return true;
   }

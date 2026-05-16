@@ -33,12 +33,41 @@ setNetEncounterActionHandler((msg) => {
   _wireEncounterActions.push(msg);
 });
 
-setNetEncounterEndHandler(() => {
-  // Peer reported their local FSM finished the battle. Our local FSM is
-  // converging on the same outcome via synced rand — this is a safety
-  // signal for cleanup, not a forced state change. Just drain stale wire
-  // actions; the local end-of-battle path resets `isWireEncounter`.
+setNetEncounterEndHandler((msg) => {
+  // Peer reported their local FSM finished the battle. Drain stale wire
+  // actions. Two cases need different handling:
+  //   1. Peer ran or quit while we were still fighting → force our FSM
+  //      to encounter-box-close so we exit too (otherwise we'd be solo
+  //      vs monsters balanced for a party, possibly stalled waiting on
+  //      a wire-driven ally that's no longer coming).
+  //   2. We've already converged on victory / defeat / our own close →
+  //      no-op. The local close path runs endWireEncounter itself.
+  // v1.7.419.
   _wireEncounterActions.length = 0;
+  if (!battleSt.isWireEncounter) return;
+  const bs = battleSt.battleState;
+  // States that already mean "battle is wrapping up locally" — let them
+  // complete instead of jumping them ahead. Anything else → force close.
+  const wrappingUp = (
+    bs === 'none' ||
+    bs === 'encounter-box-close' ||
+    bs === 'enemy-box-close' ||
+    bs === 'victory-name-out' ||
+    bs === 'victory-celebrate' ||
+    bs.startsWith('exp-') ||
+    bs.startsWith('gil-') ||
+    bs.startsWith('cp-') ||
+    bs.startsWith('item-text') || bs.startsWith('item-hold') || bs.startsWith('item-fade') ||
+    bs.startsWith('levelup-') ||
+    bs.startsWith('joblv-') ||
+    bs === 'victory-text-out' ||
+    bs === 'victory-menu-fade' ||
+    bs === 'victory-box-close'
+  );
+  if (wrappingUp) return;
+  if (msg && msg.outcome) {/* observed for future divergence telemetry */}
+  battleSt.battleState = 'encounter-box-close';
+  battleSt.battleTimer = 0;
 });
 
 export function dequeueWireEncounterAction(userId) {
