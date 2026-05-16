@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.403 — 2026-05-16
+
+### Diagnostic logging for PvP hook resolution (temporary)
+
+- Server-only `console.log` lines in `ws-presence.js` around `pvp-search` / `pvp-encounter` / `_resolveEncounterHook` so we can see exactly why one side enters battle while the other stays in "Searching...". Logs include candidate count, skip reasons (not-helloed / loc-mismatch), and per-roll chance/hit. To be removed once the desync is fixed.
+
 ## 1.7.402 — 2026-05-16
 
 ### Multiplayer: player names no longer render as "object"

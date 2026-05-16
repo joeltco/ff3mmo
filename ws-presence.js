@@ -191,22 +191,31 @@ function _clearSearch(challengerUserId) {
 function _resolveEncounterHook(targetEntry) {
   const targetUserId = targetEntry.userId;
   const challengers = [];
+  const skipped = [];
   for (const [chId, s] of _pvpSearches) {
     if (s.targetUserId !== targetUserId) continue;
     const ch = _connected.get(chId);
-    if (!ch || !ch.helloed) continue;
-    if (ch.loc !== targetEntry.loc) continue;  // moved away — stale search, skip
+    if (!ch) { skipped.push({ chId, reason: 'not-connected' }); continue; }
+    if (!ch.helloed) { skipped.push({ chId, reason: 'not-helloed' }); continue; }
+    if (ch.loc !== targetEntry.loc) { skipped.push({ chId, reason: 'loc-mismatch', chLoc: ch.loc, tgtLoc: targetEntry.loc }); continue; }
     challengers.push(ch);
   }
+  console.log('[pvp-hook] target=' + targetUserId + ' loc=' + targetEntry.loc +
+    ' searches=' + _pvpSearches.size + ' candidates=' + challengers.length +
+    (skipped.length ? ' skipped=' + JSON.stringify(skipped) : ''));
   let hookedChallenger = null;
   for (const ch of challengers) {
     const chance = _pvpHookChance(ch.profile, targetEntry.profile);
-    if (Math.random() < chance) { hookedChallenger = ch; break; }
+    const roll = Math.random();
+    console.log('[pvp-hook] roll challenger=' + ch.userId + ' chance=' + chance.toFixed(3) + ' roll=' + roll.toFixed(3) + ' hit=' + (roll < chance));
+    if (roll < chance) { hookedChallenger = ch; break; }
   }
   if (!hookedChallenger) {
+    console.log('[pvp-hook] no-hook → pvp-encounter-none to target=' + targetUserId);
     _send(targetEntry.ws, { type: 'pvp-encounter-none' });
     return;
   }
+  console.log('[pvp-hook] HIT challenger=' + hookedChallenger.userId + ' target=' + targetUserId);
   // Match. Broadcast pvp-match to both parties with each other's profile.
   // MP Step 4 — also broadcast a shared 32-bit RNG seed. Both clients seed
   // their mulberry32 (`src/rng.js`) before `_startPVPBattle` runs, so
@@ -356,15 +365,17 @@ function _handleMessage(entry, msg) {
       return;
     }
     case 'pvp-search': {
-      if (!entry.helloed) return;
+      if (!entry.helloed) { console.log('[pvp-search] reject reason=not-helloed user=' + entry.userId); return; }
       const targetUserId = parsed.targetUserId | 0;
-      if (!targetUserId || targetUserId === entry.userId) return;
+      if (!targetUserId || targetUserId === entry.userId) { console.log('[pvp-search] reject reason=bad-target user=' + entry.userId + ' target=' + targetUserId); return; }
       const target = _connected.get(targetUserId);
       if (!target || !target.helloed) {
+        console.log('[pvp-search] fail reason=offline user=' + entry.userId + ' target=' + targetUserId);
         _send(entry.ws, { type: 'pvp-search-failed', reason: 'offline' });
         return;
       }
       if (target.loc !== entry.loc) {
+        console.log('[pvp-search] fail reason=loc-mismatch user=' + entry.userId + ' loc=' + entry.loc + ' target=' + targetUserId + ' tgtLoc=' + target.loc);
         _send(entry.ws, { type: 'pvp-search-failed', reason: 'different-location' });
         return;
       }
@@ -372,6 +383,7 @@ function _handleMessage(entry, msg) {
       // the hook rolls on B's next random encounter (handled in `pvp-encounter`).
       _clearSearch(entry.userId);
       _pvpSearches.set(entry.userId, { targetUserId });
+      console.log('[pvp-search] OK user=' + entry.userId + ' target=' + targetUserId + ' loc=' + entry.loc);
       return;
     }
     case 'pvp-cancel': {
@@ -383,9 +395,11 @@ function _handleMessage(entry, msg) {
       // against any pending challengers; reply with `pvp-match` (on hit) or
       // `pvp-encounter-none` (on miss / no challengers) so B can branch.
       if (!entry.helloed) {
+        console.log('[pvp-encounter] reject reason=not-helloed user=' + entry.userId);
         _send(entry.ws, { type: 'pvp-encounter-none' });
         return;
       }
+      console.log('[pvp-encounter] from user=' + entry.userId + ' loc=' + entry.loc);
       _resolveEncounterHook(entry);
       return;
     }
