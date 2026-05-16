@@ -7,6 +7,13 @@ export const hudSt = {
   hudHpLvStep: 0,          // crossfade step between Lv row and HP row (0..HUD_INFO_FADE_STEPS)
   hudHpLvTimer: 0,         // ms accumulator for HP/Lv step advance
   playerDeathTimer: null,  // null = alive; number = ms into death animation
+  // Brief heal-sparkle on the player portrait when a partner uses a heal /
+  // cure item on us via the roster (wire `give-item`). Drives the same
+  // `_drawCureSparkle` overlay the pause-menu inv-heal state uses, but for a
+  // fixed window instead of gating on pause-menu state. ms remaining;
+  // counted down by `updatePlayerSpriteAnim` (or any per-frame tick site).
+  // v1.7.416.
+  giveItemHealTimer: 0,
 
   // ── Top-box strip (256×32 above viewport) ─────────────────────────
   topBoxMode: 'name',      // 'name' | 'battle'

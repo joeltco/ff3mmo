@@ -163,6 +163,7 @@ function _tickFreezeWatchdog(now) {
 
 function _gameLoopUpdate(dt) {
   if (hudSt.hudInfoFadeTimer < HUD_INFO_FADE_STEPS * HUD_INFO_FADE_STEP_MS) hudSt.hudInfoFadeTimer += dt;
+  if (hudSt.giveItemHealTimer > 0) hudSt.giveItemHealTimer = Math.max(0, hudSt.giveItemHealTimer - dt);
   updateHudHpLvStep(dt);
   handleInput();
   updateRoster(dt);

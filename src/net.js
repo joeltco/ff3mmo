@@ -36,6 +36,7 @@ let _onPartyInvite = null;   // ({challenger}) → void — invite arrived; auto
 let _onPartyResult = null;   // ({accept, partner?, reason?}) → void — our outgoing invite resolved
 let _onPartyMemberLeft = null;  // ({memberUserId, memberName}) → void — a member of OUR party disconnected/left
 let _onPartyDisbanded = null;   // ({inviterUserId, inviterName}) → void — the party WE were in disbanded
+let _onGiveItem = null;         // ({fromUserId, fromName, itemId}) → void — partner used a heal/cure item on us
 const MAX_RECONNECT_DELAY = 30000;
 
 function _getToken() {
@@ -167,6 +168,12 @@ function _handleMessage(data) {
       if (_onPartyDisbanded) {
         try { _onPartyDisbanded(msg); }
         catch (e) { console.warn('[net] party-disbanded handler error', e); }
+      }
+      return;
+    case 'give-item':
+      if (_onGiveItem) {
+        try { _onGiveItem(msg); }
+        catch (e) { console.warn('[net] give-item handler error', e); }
       }
       return;
   }
@@ -373,6 +380,19 @@ export function sendNetPVPAllyJoin(profile) {
 
 export function setNetPVPAllyJoinHandler(fn) {
   _onPVPAllyJoin = typeof fn === 'function' ? fn : null;
+}
+
+// Wire-give — sender used a heal / cure item on a roster target. Server
+// forwards to `targetUserId`. Receiver applies the effect to their own `ps`
+// in `pause-menu.js#setNetGiveItemHandler`, mirroring the local apply path.
+// v1.7.416.
+export function sendNetGiveItem(targetUserId, itemId) {
+  if (!_helloed || !targetUserId || !itemId) return false;
+  return _send({ type: 'give-item', targetUserId, itemId });
+}
+
+export function setNetGiveItemHandler(fn) {
+  _onGiveItem = typeof fn === 'function' ? fn : null;
 }
 
 // Real party invites over the wire. Mirror of `pvp-search` lifecycle:

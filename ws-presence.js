@@ -448,6 +448,30 @@ function _handleMessage(entry, msg) {
       });
       return;
     }
+    case 'give-item': {
+      // Sender used a heal / cure item from their pause-menu inventory on a
+      // roster target. Server forwards to `targetUserId` so their client can
+      // apply the same effect to their own `ps`. Sender already consumed the
+      // item locally; server doesn't validate ownership (trust-but-verify
+      // model — client paths gate on inventory state, and the worst-case
+      // abuse is healing someone you don't actually have the items for, which
+      // costs the abuser nothing the partner could lose). v1.7.416.
+      if (!entry.helloed) return;
+      const targetUserId = parsed.targetUserId | 0;
+      if (!targetUserId || targetUserId === entry.userId) return;
+      const target = _connected.get(targetUserId);
+      if (!target || !target.helloed) return;
+      const itemId = parsed.itemId | 0;
+      if (!itemId) return;
+      console.log('[give-item] relay user=' + entry.userId + ' → ' + targetUserId + ' item=0x' + itemId.toString(16));
+      _send(target.ws, {
+        type: 'give-item',
+        fromUserId: entry.userId,
+        fromName: entry.profile.name,
+        itemId,
+      });
+      return;
+    }
     case 'party-invite': {
       // A invites B. Server records the pending invite and forwards to B
       // with A's profile so B's client can prompt the player. One invite

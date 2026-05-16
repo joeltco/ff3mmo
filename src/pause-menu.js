@@ -19,7 +19,10 @@ import { battleSt } from './battle-state.js';
 import { transSt } from './transitions.js';
 import { mapSt } from './map-state.js';
 import { msgState, showMsgBox } from './message-box.js';
-import { ITEMS, isHandEquippable } from './data/items.js';
+import { ITEMS, isHandEquippable, ITEM_NAMES_SHRINES } from './data/items.js';
+import { sendNetGiveItem, setNetGiveItemHandler } from './net.js';
+import { addChatMessage } from './chat.js';
+import { hudSt } from './hud-state.js';
 import { swapBattleSprites } from './job-sprites.js';
 import { getRosterVisible } from './roster.js';
 import { STATUS, STATUS_NAME_TO_FLAG, canCastMagic } from './status-effects.js';
@@ -874,14 +877,24 @@ function _applyPauseItemUse(item, rosterTargets) {
   if (!item) { playSFX(SFX.ERROR); return; }
   const eff = item.effect || (item.type === 'consumable' ? 'heal' : null);
 
-  // Cure status items (Antidote, Eye Drops, etc.) — only targets player outside battle.
-  // Routes through `applyMagicCureStatus` so this matches the in-battle path.
+  // Cure status items (Antidote, Eye Drops, etc.) — applies to self OR roster
+  // target if one is picked. Routes through `applyMagicCureStatus` so this
+  // matches the in-battle path. Real-player target also wire-relays the cure.
   if (eff === 'cure_status') {
     const flag = STATUS_NAME_TO_FLAG[item.cures];
-    if (flag) applyMagicCureStatus(ps, flag);
     const itemId = pauseSt.useItemId;
-    removeItem(itemId); playSFX(SFX.CURE);
-    pauseSt.healNum = { value: 0, timer: 0, itemId };
+    if (pauseSt.invAllyTarget >= 0) {
+      const rp = rosterTargets[pauseSt.invAllyTarget];
+      if (!rp) { playSFX(SFX.ERROR); return; }
+      if (flag && rp.status) applyMagicCureStatus(rp, flag);
+      removeItem(itemId); playSFX(SFX.CURE);
+      if (rp.isReal && rp.userId) sendNetGiveItem(rp.userId, itemId);
+      pauseSt.healNum = { value: 0, timer: 0, rosterIdx: pauseSt.invAllyTarget, itemId };
+    } else {
+      if (flag) applyMagicCureStatus(ps, flag);
+      removeItem(itemId); playSFX(SFX.CURE);
+      pauseSt.healNum = { value: 0, timer: 0, itemId };
+    }
     pauseSt.state = 'inv-heal'; pauseSt.timer = 0;
     saveSlotsToDB();
     return;
@@ -895,6 +908,11 @@ function _applyPauseItemUse(item, rosterTargets) {
     if (!rp) { playSFX(SFX.ERROR); return; }
     const heal = applyMagicHeal(rp, healPower);
     removeItem(itemId); playSFX(SFX.CURE);
+    // Wire-give: real player target → relay so their client also applies the
+    // heal to their own `ps` (the local `rp` mutation only touches our roster
+    // snapshot; without this, the partner's actual HP stays the same on their
+    // screen). v1.7.416.
+    if (rp.isReal && rp.userId) sendNetGiveItem(rp.userId, itemId);
     pauseSt.healNum = { value: heal, timer: 0, rosterIdx: pauseSt.invAllyTarget, itemId };
     pauseSt.state = 'inv-heal'; pauseSt.timer = 0;
     saveSlotsToDB();
@@ -1147,3 +1165,35 @@ export function handlePauseInput() {
   if (pauseSt.state !== 'none') return true;
   return false;
 }
+
+// Wire-give receiver — partner used a heal / cure item on us from their pause
+// menu. Mirror the local `_applyPauseItemUse` apply path on our `ps` so HP /
+// status reflects what the sender just spent the item on. Chat-only feedback
+// (no msgbox interrupt) so the receiver doesn't get yanked out of whatever
+// they're doing; HUD HP bar already animates the change. The next poll-loop
+// tick fires the `update` wire diff so every other player's roster row
+// transitions out of the low-HP kneel pose. v1.7.416.
+setNetGiveItemHandler((msg) => {
+  if (!msg || !msg.itemId) return;
+  const item = ITEMS.get(msg.itemId);
+  if (!item) return;
+  const eff = item.effect || (item.type === 'consumable' ? 'heal' : null);
+  let applied = false;
+  if (eff === 'cure_status') {
+    const flag = STATUS_NAME_TO_FLAG[item.cures];
+    if (flag && ps.status) { applyMagicCureStatus(ps, flag); applied = true; }
+  } else if (eff === 'heal' || eff === 'full_heal' || eff === 'restore_hp') {
+    const healPower = eff === 'full_heal' ? 9999 : (item.power || item.value || 50);
+    applyMagicHeal(ps, healPower);
+    applied = true;
+  }
+  if (!applied) return;
+  playSFX(SFX.CURE);
+  // 550 ms heal-sparkle on the player portrait — same duration as the
+  // pause-menu inv-heal timer so the visual cadence matches the sender side.
+  hudSt.giveItemHealTimer = BATTLE_DMG_SHOW_MS;
+  const itemName = ITEM_NAMES_SHRINES.get(msg.itemId) || 'an item';
+  const fromName = msg.fromName || 'Someone';
+  addChatMessage('* ' + fromName + ' sent you ' + itemName, 'system');
+  saveSlotsToDB();
+});

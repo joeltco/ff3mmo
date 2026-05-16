@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.416 — 2026-05-16
+
+### Give-Item: wire-sync the pause-menu "use item on roster" path
+
+- **The action was already built** (pause menu → Inventory → pick potion/antidote → pick roster target → apply heal/cure), but it was local-only — the heal mutated the sender's roster snapshot of the target, not the target's actual `ps`. This deploy adds the wire layer so the partner's real HP / status updates on their own client.
+- **Wire**: new `give-item` message. `src/net.js` exports `sendNetGiveItem(targetUserId, itemId)` + `setNetGiveItemHandler(fn)`. Server (`ws-presence.js`) relays with `fromUserId` + `fromName` attached. Diag log: `[give-item] relay user=N → M item=0xXX`.
+- **Sender**: `_applyPauseItemUse` in `pause-menu.js` now calls `sendNetGiveItem(rp.userId, itemId)` whenever the picked target is a real wire player (`rp.isReal && rp.userId`). Both heal items (potions, hi-potions) and cure-status items (antidotes, eye drops) route through. The existing heal-sparkle animation on the roster row stays unchanged.
+- **Receiver**: handler registered in `pause-menu.js` mirrors the sender's apply path on the receiver's `ps`. Heal items run `applyMagicHeal`; cure_status items run `applyMagicCureStatus`. Plays `SFX.CURE`, sets a 550 ms `hudSt.giveItemHealTimer` so the existing `_drawCureSparkle` overlay fires on the player portrait (same visual treatment the sender already uses for the pause-menu inv-heal state), and posts `* <sender> sent you <item>` to chat. The next 500 ms profile-diff poll auto-broadcasts the new HP / status so every other player's roster ticks too — re-uses the kneel-pose pipeline from v1.7.415.
+- **Animation parity**: sender sees the heal number on the roster row + heal-sparkle in pause menu (existing); receiver sees portrait sparkle + chat line + HP bar bump.
+
 ## 1.7.415 — 2026-05-16
 
 ### Roster: real players now show low-HP kneel pose + sweat overlay

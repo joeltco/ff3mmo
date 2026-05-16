@@ -275,7 +275,10 @@ function _drawHUDPortrait() {
            ? bp.kneel : bp.idle));
   const px = HUD_RIGHT_X + 8, py = HUD_VIEW_Y + 8;
   _drawPortraitImage(px, py, nfPortrait, isPauseHeal, infoFadeStep);
-  _drawCureSparkle(px, py, isPauseHeal);
+  // Sparkle fires when sender is in pause-menu inv-heal OR when we just
+  // received a wire give-item from a partner. Both reuse the same overlay
+  // helper so there's a single visual treatment for heal-on-portrait.
+  _drawCureSparkle(px, py, isPauseHeal || hudSt.giveItemHealTimer > 0);
   _drawPauseHealNum(px, py);
 }
 
