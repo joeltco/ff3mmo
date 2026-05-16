@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.411 — 2026-05-16
+
+### PvP victory: null stale `encounterDropItem` so post-defeat FSM exits cleanly
+
+- **Bug**: after defeating a PvP opponent, the winner's FSM walked through `victory-name-out` → … → `cp-fade-out` → checked `encounterDropItem !== null` and routed to `item-text-in` → `item-hold` because the previous monster encounter had left a drop in the global state. The `item-hold` was invisible (no item text rendered since the drop wasn't fresh) and Z-press advanced no UI the player could see — looked like the game froze with the PvP sprite still up.
+- **Fix**: `_triggerPVPVictory` in `battle-update.js` now clears `encounterDropItem = null` before transitioning to the victory chain. The other terminal-rewards fields (`encounterExpGained` / `encounterGilGained` / `encounterCpGained` / `encounterJobLevelUp`) were already set fresh by `_triggerPVPVictory`; the drop was the only one inheriting prior state.
+
 ## 1.7.410 — 2026-05-16
 
 ### PvP: restore opponent back-swing pose (no new sprite code, just timer reset)

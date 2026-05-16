@@ -622,6 +622,13 @@ function _triggerPVPVictory() {
   grantGil(battleSt.encounterGilGained);
   battleSt.encounterJobLevelUp = gainJobJP(inputSt.battleActionCount || 1);
   inputSt.battleActionCount = 0;
+  // PvP wins don't drop items. Null any leftover drop from a prior monster
+  // encounter so `cp-fade-out`'s `encounterDropItem !== null` branch doesn't
+  // route the FSM through a phantom `item-text-in` → `item-hold` state (which
+  // would render no item text since the drop is from a different fight, and
+  // sit waiting for a Z press that the player has no visual reason to make).
+  // v1.7.411.
+  battleSt.encounterDropItem = null;
   saveSlotsToDB();
   _queueVictoryRewards();
   battleSt.enemyDefeated = true;
