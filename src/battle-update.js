@@ -391,6 +391,11 @@ function _wireAllyProfile(src) {
 //   target: { side, idx }      — 'me' = sender's player side, 'opp' = sender's opponent side;
 //                                idx 0 = main, 1+ = ally cell
 // Receiver swaps `side` and uses idx unchanged.
+// Exported so the PvP-only menu-confirm path (`updatePVPBattle` in pvp.js)
+// can reach it — `updateBattle` early-returns to `updatePVPBattle` when
+// `pvpSt.isPVPBattle` is true, so the in-house `_updateBattleMenuConfirm`
+// caller below is unreachable in PvP and the wire emit has to live there too.
+export function emitWirePVPAction(pending) { _emitWirePVPAction(pending); }
 function _emitWirePVPAction(pending) {
   const cmd = pending && pending.command;
   const actor = { idx: 0 };  // local player is always the sender's main actor.

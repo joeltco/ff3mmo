@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.406 — 2026-05-16
+
+### PvP: wire-emit is finally reachable (P0)
+
+- **Bug**: `_emitWirePVPAction` (`src/battle-update.js:394`) is the single place that translates the local player's chosen action into a wire `pvp-action`. Its only caller was `_updateBattleMenuConfirm`, which lives inside `updateBattle`. But `updateBattle` early-returns at line 902 when `pvpSt.isPVPBattle` is true and dispatches to `updatePVPBattle` instead. **So in every live PvP battle, the wire-emit was unreachable.** Neither client ever sent a `pvp-action`; both clients ended up in `enemy-flash` waiting for an action that was sent nowhere → freeze after the first command. Server diag (`v1.7.405`) confirmed zero `[pvp-action] relay` lines despite plenty of `[pvp-hook] HIT` lines.
+- The harness (`tools/pvp-wire-sim.js`) calls the helpers directly so this dead-code path never failed a regression test.
+- **Fix**: exported `_emitWirePVPAction` as `emitWirePVPAction` from `battle-update.js` and wired it into `_updatePVPMenuConfirm` in `pvp.js` so the PvP-side menu-confirm tick emits exactly like the non-PvP path. Imported `inputSt` into `pvp.js` for the `playerActionPending` payload read.
+
 ## 1.7.405 — 2026-05-16
 
 ### Diag: log every relayed pvp-action on the server

@@ -8,7 +8,7 @@ import { buildTurnOrder, processNextTurn } from './battle-turn.js';
 import { updateBattleAlly } from './battle-ally.js';
 import { resetBattleVars, isTeamWiped, updateBattleTimers, updatePoisonTick,
          updateBattlePlayerAttack, updateBattleDefendItem, updateBattleEndSequence,
-         tryJoinPlayerAlly, advancePVPTargetOrVictory } from './battle-update.js';
+         tryJoinPlayerAlly, advancePVPTargetOrVictory, emitWirePVPAction } from './battle-update.js';
 import { playSFX, stopSFX, SFX, pauseMusic, playTrack, TRACKS } from './music.js';
 import { rollHits, calcPotentialHits, BOSS_HIT_RATE, GOBLIN_HIT_RATE, summarizeHits, isLeftHandHit } from './battle-math.js';
 import { reseedFromEntropy, seed as seedRng, rand } from './rng.js';
@@ -26,6 +26,7 @@ import { PLAYER_POOL, generateAllyStats } from './data/players.js';
 import { JOBS } from './data/jobs.js';
 import { MONSTERS } from './data/monsters.js';
 import { ps } from './player-stats.js';
+import { inputSt } from './input-handler.js';
 import { getShieldEvade } from './player-stats.js';
 import { pvpGridLayout, PVP_CELL_W, PVP_CELL_H } from './pvp-math.js';
 import { playSlashSFX } from './battle-sfx.js';
@@ -391,6 +392,17 @@ function _updatePVPMenuConfirm() {
   const bs = battleSt.battleState;
   if (bs === 'confirm-pause') {
     if (battleSt.battleTimer >= 150) {
+      // Wire-PvP — relay the local player's confirmed action to the partner
+      // BEFORE turn dispatch fires, so their client has time to queue it for
+      // their opponent-side turn. Mirrors `_updateBattleMenuConfirm` in
+      // `battle-update.js`. Pre-fix this emit was unreachable in PvP because
+      // `updateBattle` dispatches to `updatePVPBattle` and never to
+      // `_updateBattleMenuConfirm`; no pvp-action ever hit the wire and both
+      // clients hung in `enemy-flash` waiting for an action that was sent
+      // nowhere. v1.7.406.
+      if (pvpSt.isWirePVP && inputSt.playerActionPending) {
+        emitWirePVPAction(inputSt.playerActionPending);
+      }
       battleSt.allyJoinRound++;
       if (tryJoinPVPEnemyAlly()) return true;
       if (tryJoinPlayerAlly()) return true;
