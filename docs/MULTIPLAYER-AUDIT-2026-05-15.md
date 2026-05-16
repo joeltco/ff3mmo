@@ -12,14 +12,20 @@ suggested fix.
 
 ## Status (closed out 2026-05-15)
 
-Shipped in v1.7.387 → v1.7.390 (4 deploys, 38 audit items addressed):
+Shipped in v1.7.387 → v1.7.393 (7 deploys, all 38 audit items addressed):
 
 | Tier | Fixed | Deferred (with reason) |
 |---|---|---|
-| Critical | #1 #2 #3 #4 #5 #6 #7 #8 #10 | #9 (env-set; verify-only) |
-| High     | #11 #14 #15 #18 #21 #22     | #12 #13 #16 #17 #19 #20 (#20 closed by #7) |
-| Medium   | #23 #24 #25 #28 #31 #32     | #26 #27 (partly mitigated by #14 recovery) |
+| Critical | #1 #2 #3 #4 #5 #6 #7 #8 #10 | #9 (env-set; verified) |
+| High     | #11 #14 #15 #16 #18 #21 #22 | #12 #13 #17 #19 #20 (#20 closed by #7) |
+| Medium   | #23 #24 #25 #26 #28 #31 #32 | #27 (verified — `removeFromParty` already deletes the profile) |
 | Low / observability | #30 #38         | #29 (superseded by #11) #33-#37 (hygiene) |
+
+Plus three follow-on shipments that weren't in the original 38 but emerged from the cleanup:
+
+- **Hidden bug** — server wasn't relaying `pvp-action.actor.idx` (would soft-freeze ally-PvP turn dispatch). v1.7.389.
+- **P0 production-error triage** — `BATTLE DRAW ERROR — pos undefined` (per-frame crash), `FREEZE WATCHDOG` (tab-throttle false positive), `/api/login` brute-force surface, login timing-leak. v1.7.391.
+- **Pre-beta P1 polish** — online roster badge, server-side save validation, `/block` + `/report` + reports table, version-gate cache-bust. v1.7.392 + v1.7.393.
 
 Bonus fix found mid-batch-3: server's `pvp-action` relay was dropping the
 `actor` field, so any ally action would soft-freeze the receiver's FSM.
