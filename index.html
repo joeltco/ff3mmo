@@ -9,6 +9,12 @@
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      /* Prevent pull-to-refresh + overscroll bounce — they make mobile
+         play feel broken when a vertical swipe (intended as a chat-scroll
+         or a dpad slide) bounces the page. */
+      overscroll-behavior: none;
+    }
     body {
       background: #0e0e1a;
       color: #e0e0e0;
@@ -18,7 +24,12 @@
       align-items: center;
       justify-content: center;
       min-height: 100vh;
+      min-height: 100dvh;  /* shrinks with the mobile keyboard; browsers w/o `dvh` use the previous declaration */
       gap: 20px;
+      /* Kill iOS long-press context menus on game UI. Buttons already use
+         user-select:none — this disables the OS-level callout / magnifier
+         that pops up on holding any element. */
+      -webkit-touch-callout: none;
     }
     h1 {
       font-size: 20px;
@@ -240,6 +251,14 @@
       #mobile-controls {
         display: flex;
       }
+    }
+    /* Touch-device override — tablets and landscape phones often have widths
+       > 520px but still want controls. The `is-touch` class is set in JS
+       from the runtime touch-detection in `src/ui-state.js` so the controls
+       show whenever the device reports touch capability, regardless of
+       viewport size. */
+    body.is-touch #mobile-controls {
+      display: flex;
     }
 
     /* Auth screen */
@@ -576,6 +595,12 @@
   </script>
   <script type="module">
     import { init, loadROM, loadFF1ROM, loadFF2ROM, getMobileInputMode } from './src/main.js';
+    import { isMobile } from './src/ui-state.js';
+
+    // Surface the runtime touch-detection to CSS so the mobile-controls
+    // display rule can target it. Catches tablets / landscape phones that
+    // exceed the 520-px media-query breakpoint but still want controls.
+    if (isMobile) document.body.classList.add('is-touch');
 
     // --- Auth ---
     const API = '';  // same origin
@@ -899,21 +924,89 @@
     }).catch(e => console.error('[debug] failed to init panel', e));
 
 
-    // Mobile touch controls
-    document.querySelectorAll('[data-key]').forEach(btn => {
-      btn.addEventListener('touchstart', (e) => {
-        e.preventDefault();
+    // Mobile touch controls — multi-touch slide-tracking. Each Touch
+    // identifier is tracked independently so two fingers can hold separate
+    // buttons (typical: thumb on D-pad, other thumb on A/B). On `touchmove`,
+    // we re-check which button is under each finger via `elementFromPoint`
+    // and fire keyup on the old + keydown on the new if they differ —
+    // sliding the thumb from "up" to "right" on the D-pad now releases up
+    // and presses right without lifting. Dragging off a button releases it
+    // (matches native iOS / Android game controller patterns).
+    (function () {
+      // identifier → { btn: HTMLElement | null }
+      const active = new Map();
+
+      function _buttonUnderPoint(x, y) {
+        const el = document.elementFromPoint(x, y);
+        if (!el) return null;
+        // Walk up to find the nearest [data-key] ancestor (touches sometimes
+        // land on a child span/etc inside the button).
+        let cur = el;
+        while (cur && cur !== document.body) {
+          if (cur.dataset && cur.dataset.key) return cur;
+          cur = cur.parentElement;
+        }
+        return null;
+      }
+
+      function _press(btn) {
+        if (!btn) return;
         btn.classList.add('pressed');
         window.dispatchEvent(new KeyboardEvent('keydown', { key: btn.dataset.key, bubbles: true }));
-      }, { passive: false });
-      const release = (e) => {
-        e.preventDefault();
+      }
+      function _release(btn) {
+        if (!btn) return;
         btn.classList.remove('pressed');
         window.dispatchEvent(new KeyboardEvent('keyup', { key: btn.dataset.key, bubbles: true }));
+      }
+
+      // Listen on each [data-key] element for touchstart (so the browser
+      // routes the touch to us with `preventDefault`-able events) but use
+      // document-level move/end handlers so a finger that slides off the
+      // initial button still gets tracked.
+      document.querySelectorAll('[data-key]').forEach(btn => {
+        btn.addEventListener('touchstart', (e) => {
+          e.preventDefault();
+          for (const t of e.changedTouches) {
+            const target = _buttonUnderPoint(t.clientX, t.clientY) || btn;
+            const prev = active.get(t.identifier);
+            if (prev && prev.btn === target) continue;
+            if (prev) _release(prev.btn);
+            _press(target);
+            active.set(t.identifier, { btn: target });
+          }
+        }, { passive: false });
+      });
+
+      document.addEventListener('touchmove', (e) => {
+        let consumed = false;
+        for (const t of e.changedTouches) {
+          if (!active.has(t.identifier)) continue;
+          consumed = true;
+          const prev = active.get(t.identifier);
+          const target = _buttonUnderPoint(t.clientX, t.clientY);
+          if (target === prev.btn) continue;       // unchanged
+          if (prev.btn) _release(prev.btn);
+          if (target) _press(target);
+          active.set(t.identifier, { btn: target });
+        }
+        if (consumed) e.preventDefault();
+      }, { passive: false });
+
+      const endHandler = (e) => {
+        let consumed = false;
+        for (const t of e.changedTouches) {
+          if (!active.has(t.identifier)) continue;
+          consumed = true;
+          const prev = active.get(t.identifier);
+          if (prev.btn) _release(prev.btn);
+          active.delete(t.identifier);
+        }
+        if (consumed) e.preventDefault();
       };
-      btn.addEventListener('touchend', release, { passive: false });
-      btn.addEventListener('touchcancel', release, { passive: false });
-    });
+      document.addEventListener('touchend',    endHandler, { passive: false });
+      document.addEventListener('touchcancel', endHandler, { passive: false });
+    })();
   </script>
 </body>
 </html>

@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.394 — 2026-05-15
+
+### Pre-beta mobile pass
+
+- **Multi-touch D-pad slide-tracking** (`index.html`): replaced the per-button `touchstart/touchend` listeners with a single document-level tracker. Each `Touch.identifier` is tracked independently — two fingers can hold the D-pad and an action button simultaneously. On `touchmove`, the tracker re-checks which `[data-key]` element is under each finger via `elementFromPoint`; if it changed, fires `keyup` on the old button and `keydown` on the new one. Sliding a thumb from "up" to "right" on the D-pad now releases up and presses right without a lift+tap — matches native game-controller patterns. Dragging off any button releases it.
+- **`is-touch` body class** drives mobile-controls visibility via runtime touch detection. Pre-fix only the `max-width: 520px` media query showed the controls — tablets and landscape phones above 520 px hid them entirely. Now any device that reports `ontouchstart` / `maxTouchPoints > 0` gets controls regardless of viewport width.
+- **`overscroll-behavior: none`** on html/body kills pull-to-refresh and bounce-scroll. A vertical swipe (intended as a D-pad slide or chat scroll) no longer bounces or reloads the page.
+- **`-webkit-touch-callout: none`** on body kills the iOS long-press context menu on game UI.
+- **`min-height: 100dvh`** layered on top of `100vh` so the body shrinks with the mobile keyboard instead of pushing content off-screen below it.
+
 ## 1.7.393 — 2026-05-15
 
 ### Cache-bust + audit edge cases + load harness
