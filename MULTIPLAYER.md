@@ -1,8 +1,8 @@
 # Multiplayer
 
-**Live as of v1.7.417.** Open `ff3mmo.com` in two browsers with two accounts. Same location → see each other in the roster panel. Chat, party invites, PvP duels, low-HP roster pose, and give-item-to-roster all wire-driven. Fakes are off (`PLAYER_POOL` exported empty in `src/data/players.js`).
+**Live as of v1.7.425.** Open `ff3mmo.com` in two browsers with two accounts. Same location → see each other in the roster panel. Chat, party invites, PvP duels, low-HP roster pose, give-item-to-roster, party co-op random encounters, and Battle Assist (any roster player can join an in-progress fight) all wire-driven. Fakes are off (`PLAYER_POOL` exported empty in `src/data/players.js`).
 
-This doc is the architecture overview + recovery cheatsheet. For the per-deploy changelog of how it got built, see `CHANGELOG.md` 1.7.366 → 1.7.417.
+This doc is the architecture overview + recovery cheatsheet. For the per-deploy changelog of how it got built, see `CHANGELOG.md` 1.7.366 → 1.7.425.
 
 ## Architecture
 
@@ -26,6 +26,7 @@ In-memory state on the server:
 | `_pvpPartners` | userId → partnerUserId (active 1v1 battle pairs) |
 | `_partyInvites` | challengerUserId → targetUserId (pending Party invites) |
 | `_partyMemberships` | memberUserId → inviterUserId (active party memberships) |
+| `_encounterGroups` | userId → Set\<peerUserId\> (active co-op random-encounter groups; bidirectional) |
 
 All state is in-memory. Restart drops it; clients reconnect on next page load.
 
@@ -103,6 +104,66 @@ Each player's chosen action drives the opponent's turn on the partner's client. 
 
 Receiver (`pause-menu.js#setNetGiveItemHandler`) mirrors the sender's `_applyPauseItemUse` apply path on its own `ps` — `applyMagicHeal` for `effect: heal / full_heal / restore_hp`, `applyMagicCureStatus` for `effect: cure_status`. Plays `SFX.CURE`, fires the existing `_drawCureSparkle` overlay on the receiver's HUD portrait via `hudSt.giveItemHealTimer` (550 ms window matching the sender's pause-menu `inv-heal` state), and posts `* <sender> sent you <item>` to chat. The next 500 ms profile-diff poll auto-broadcasts the new HP / status so every other player's roster row ticks too — the kneel-pose pipeline in `roster.js` (v1.7.415) reads `p.hp` / `p.maxHP` from the snapshot entry and swaps `fakePlayerPortraits` for `fakePlayerKneelPortraits` + sweat overlay when `hp <= floor(maxHP / 4)`.
 
+### Party co-op random encounters (Step 6 — v1.7.418 → v1.7.421)
+
+Real party members are wire-driven allies in random monster battles instead of AI-simulated. Mirror of the PvP wire pattern.
+
+| Direction | Type | Fields |
+|---|---|---|
+| C→S | `encounter-start` | `seed, monsters: [{monsterId}], partyUserIds` — host triggers a random encounter and pulls party members in |
+| S→C | `encounter-invite` | `seed, monsters, hostUserId, peers: [{userId, …profile}]` — forwarded to each validated party-member candidate |
+| C→S | `encounter-action` | `kind, target, hitResults?, spellId?, itemId?, damageRoll?, healAmount?` — a peer's chosen turn action |
+| S→C | `encounter-action` | relayed with `userId` (sender) attached; `{kind:'disconnect'}` synthesized when a peer drops |
+| C→S | `encounter-end` | `outcome` — peer's local FSM finished the battle |
+| S→C | `encounter-end` | `userId, outcome` — peer reported end; clears the group; receivers force-close their local FSM if mid-battle |
+
+`battleSt.isWireEncounter` is the local flag. `encounterIsHost / encounterHostUserId / encounterSeed / encounterTurnIndex` mirror the PvP `pvpSt._wire*` set.
+
+**Sync defenses (same shape as PvP v1.7.406-v1.7.410, applied to encounters):**
+
+1. **Authoritative pre-rolled values.** `hitResults` rides `encounter-action {kind:'attack'}` so the receiver doesn't re-roll against a drifted cursor. (`damageRoll` / `healAmount` slots present for magic; ally magic replay added v1.7.419.)
+2. **Per-turn rand reseed.** `battle-turn.js#maybeReseedCoopTurn` increments `encounterTurnIndex` and calls `rng.seed(encounterSeed + turnIndex)` at every round boundary (`_updateBattleMenuConfirm` + ps-dead end-of-round path).
+3. **Canonical actor-push order.** `buildTurnOrder` has a `_pushPlayerCoop()` branch that collects `ps` + battleAllies into one team, sorts by (host's userId first, then ascending userId), pushes each through `rollInitiative` in sorted order. Both clients consume rand for the same logical actor regardless of which side they're sitting on.
+4. **Monster-target canonical order** (v1.7.419). `battle-enemy.js#_processEnemyFlash` builds the same canonical team list and picks via shared `rand()`, then maps the picked userId to either local `ps` (-1) or `battleAllies[N]`. Pre-fix, `Math.random()` picked "ps" on one client and "ally" on another for the same monster → instant HP divergence.
+5. **All `Math.random` in `battle-enemy.js` converted to `rand()`** (v1.7.421, the silent killer). Monster physical-attack damage variance, multi-hit hit-rate, evade rolls, special-attack chance + which-attack pick, special-attack damage roll. Pre-fix monster damage was per-client; everything else was synced; HPs diverged turn one.
+
+**Wire-driven ally turn dispatch** (`battle-turn.js#processNextTurn` ally branch). When the ally has `isWireDriven && userId && battleSt.isWireEncounter`:
+- `processTurnStart(ally.status, ally.maxHP)` runs first so sleep-wake / paralysis-skip / confuse-snap rand consumers stay aligned. `turn._statusDone` flag prevents double-consume in the unshift-retry loop.
+- Call `dequeueWireEncounterAction(ally.userId)`. Found → `_applyWireEncounterActionForAlly` replays the action (`attack` reads wire-supplied `hitResults`; `magic`/`item` populate the `ally-magic-cast` state bag from wire payload; `defend` sets `ally.isDefending = true`, halved in `battle-enemy.js` ally-attack damage path; `run`/`skip` advance the turn).
+- Not found → `turnQueue.unshift(turn)`, `battleState = 'ally-wire-wait'`. The state handler in `battle-ally.js#updateBattleAlly` retries `processNextTurn()` each frame. **45 s timeout** (v1.7.424) flips the ally to AI-fallback (`isWireDriven = false; isDefending = true`) so cellular spikes don't hard-stall the FSM.
+
+**Drop-roll sync.** `battle-update.js#_updateMonsterDeath` switches `Math.random → rand` for the drop-chance + drop-pick rolls when `isWireEncounter`. Both clients roll the same outcome; each adds the drop to their own inventory (everyone gets a copy; NES-canon party loot model).
+
+**Run sync.** Sender's `encounter-box-close` fires `endWireEncounter('won'/'lost')` which emits `encounter-end`. The receiver's handler force-transitions to `encounter-box-close` if mid-battle (guarded against already-wrapping-up states so a converged victory completes naturally).
+
+### Battle Assist (Step 7 — v1.7.422 → v1.7.425)
+
+Overworld players can join in-progress roster battles regardless of party membership.
+
+- `inBattle: 0|1` lives in the wire profile (clamped on server, broadcast via `player-update`).
+- Roster row renders a small red 3×3 pixel block at top-left of the portrait box when `p.isReal && p.inBattle` (mirror of the green online dot at top-right). Drives the "Assist" action eligibility.
+
+| Direction | Type | Fields |
+|---|---|---|
+| C→S | `encounter-assist-request` | `targetUserId` — joiner picked Assist on a roster row |
+| S→C | `encounter-assist-incoming` | `fromUserId, fromName, fromProfile` — server forwards to target after validating target is helloed + same-loc + `inBattle` + joiner isn't already in another battle / PvP |
+| C→S | `encounter-assist-snapshot` | `joinerUserId, seed, turnIndex, monsters: [{monsterId, hp, status: {mask, poisonDmgTick}}], peers, hostUserId` — target's auto-accept; full state snapshot of the in-progress battle |
+| S→C | `encounter-assist-snapshot` | relayed to joiner so they spawn the same battle locally |
+| S→C | `encounter-ally-join` | `profile` — broadcast to any OTHER existing peers in the group so they fade-in the new joiner |
+
+**Target side** (`battle-encounter.js#setNetEncounterAssistIncomingHandler`): on receiving the incoming, if a slot is open (`battleAllies.length < 3`) and we're not in PvP and the joiner isn't already in our `battleAllies` (dedup against double-tap, v1.7.424), build the snapshot — current monster HPs + status, peer list (self + existing real allies), seed, turnIndex, hostUserId — and emit. If we were in a SOLO battle, convert to host-of-co-op first: set `isWireEncounter`, `encounterIsHost`, generate seed, start emitting actions from this turn forward via `_updateBattleMenuConfirm`. Locally add the joiner to `battleAllies` with `fadeInStartMs = Date.now()`.
+
+**Joiner side** (`battle-encounter.js#setNetEncounterAssistSnapshotHandler`): spawn the encounter locally from the snapshot. Critical difference vs the at-start `encounter-invite` path: monster HPs come from the snapshot (current state), status mask is rebuilt from wire, seed rand with `(seed + turnIndex)` so subsequent rolls match. Peers pushed to `battleAllies` as wire-driven, sorted canonical (host first), each with `fadeInStartMs`.
+
+**Side-channel ally fade-in** (v1.7.423). `battle-ally.js#_tickAllyFadeIn` runs every frame regardless of `battleState`. Allies with `fadeInStartMs` set get `fadeStep` decremented based on `Date.now()` elapsed; fully visible after ~400 ms. Works mid-battle without interrupting the FSM (the classic `ally-fade-in` state-machine pause doesn't fit mid-flight). Also fixed a pre-existing bug where the v1.7.418 at-start invite handler left guest-side peers at `fadeStep = ROSTER_FADE_STEPS` (invisible).
+
+**Audit-driven dedup + defenses** (v1.7.424):
+- Server `encounter-assist-snapshot` drops the second snapshot if the joiner is already in the target's group (double-tap protection).
+- Target `setNetEncounterAssistIncomingHandler` drops the second incoming if `battleAllies` already has the joiner.
+- `resetBattleVars` calls `clearWireEncounterQueue()` defensively so a half-open TCP queue can't replay against a new battle.
+- Wire-wait timeout bumped 30 → 45 s to absorb legitimate cellular spikes.
+- `_pushPlayerCoop` skips allies with no userId (defensive against future PLAYER_POOL repopulation that would collide at userId=0).
+
 ### Party invites
 
 | Direction | Type | Fields |
@@ -132,7 +193,13 @@ Server enforces one-party-per-player. `party-invite` rejects with `reason:'busy'
 | `src/battle-update.js#_emitWirePVPAction` | translates `inputSt.playerActionPending` → wire shape |
 | `src/battle-update.js#tryJoinPlayerAlly` | mid-battle fake-roster ally pick (synced `rand()`) + wire `pvp-ally-join` |
 | `src/party-invite.js` | wire-invite branch, accept prompt via `showMsgBoxPrompt` |
-| `src/game-loop.js` | Web Worker tick driver (replaces rAF; survives backgrounded tabs) |
+| `src/encounter-wire.js` | encounter wire queue + emit/dequeue helpers (mirror of pvp.js `_wireOpponentActions`) |
+| `src/battle-encounter.js` | host emit (`_maybeHostCoopEncounter`) + guest spawn (encounter-invite) + assist accept + assist-snapshot spawn + ally-join broadcast handlers |
+| `src/battle-turn.js#_pushPlayerCoop` | canonical actor-push order for co-op random encounters |
+| `src/battle-turn.js#maybeReseedCoopTurn` | per-round rand reseed at `seed + turnIndex` |
+| `src/battle-turn.js#_applyWireEncounterActionForAlly` | replays wire-driven ally turns (attack / magic / item / defend) |
+| `src/battle-ally.js#updateBattleAlly` | wire-wait state retry + 45s timeout watchdog + side-channel fade-in tick |
+| `src/game-loop.js` | hybrid rAF / Worker tick driver (rAF when visible, Worker when hidden) |
 | `src/rng.js` | seedable mulberry32; combat rolls land identically when seed matches |
 
 ## Nginx config
@@ -188,3 +255,7 @@ Every consumer (roster, ally fills, fake PvP / fake party paths, chat sender) si
 ## Earlier prep work
 
 The audit series that landed in v1.7.20x–v1.7.217 (`docs/SAVE-STATE-AUDIT.md`, `docs/INVENTORY-ECONOMY-AUDIT.md`, `docs/JOB-EXP-AUDIT.md`, `docs/MULTI-AUDIT.md`, `docs/MODULARIZATION-AUDIT.md`) and v1.7.358–v1.7.365 (`docs/COMBAT-MULTIPLAYER-AUDIT.md`) tightened every mutation seam the WebSocket layer hooks into — `dispatchDelta` for HP/status, seeded RNG, unified spell pipeline, resolveLivingTarget, combatant-ai. The cutover series in v1.7.366+ then plugged into those seams.
+
+## v1.7.418-v1.7.425 closeout (co-op + Battle Assist, 2026-05-16)
+
+Eight deploys built the random-encounter co-op layer on top of the PvP wire pattern, plus the open Battle Assist system that lets any roster player join an in-progress fight regardless of party. All actions (attack / defend / magic / item / run / skip) replay across the wire, all RNG consumers consistent across clients (canonical actor order + per-turn reseed + Math.random→rand conversion in `battle-enemy.js`), all damage / status state synced including mid-battle joiner snapshot, side-channel fade-in for new allies, 45 s timeout watchdog for dropped peers, double-tap dedup at server + target. Wire-sim regression suite is 43/43 (4 PvP + 5 encounter + 4 assist tests added in the closeout). Read `CHANGELOG.md` 1.7.418 → 1.7.425 entries for per-deploy detail.
