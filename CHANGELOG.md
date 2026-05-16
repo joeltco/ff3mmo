@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.400 — 2026-05-15
+
+### Freeze movement during the PvP-encounter check
+
+- **Bug**: when a random encounter triggered, `_triggerEncounterWithPVPCheck` (`src/battle-encounter.js`) sends a `pvp-encounter` to the server and waits up to 500 ms for a `pvp-match` / `pvp-encounter-none` reply (with a 500 ms timeout fallback). During that window `battleSt.battleState` was still `'none'`, so the per-frame `handleInput` kept calling `startMoveFromKeys` — the player visibly walked past the trigger tile while the server roundtrip was in flight.
+- **Fix**: export `isEncounterCheckPending()` from `battle-encounter.js`; `startMoveFromKeys` in `src/movement.js` early-returns while it's true (resets the walk frame so the sprite snaps to idle). Once the encounter or PvP match commits `battleSt.battleState`, the existing `handleBattleInput` gate takes over.
+
 ## 1.7.399 — 2026-05-15
 
 ### ROM-picker copy polish (the actual one)

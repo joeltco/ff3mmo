@@ -20,7 +20,7 @@ import { checkTrigger, openPassage, handleChest, handleSecretWall,
 import { shopSt, openShop, handleShopInput } from './shop.js';
 import { findShopAtCounter } from './data/shops.js';
 import { loadWorldMapAtPosition } from './map-loading.js';
-import { tickRandomEncounter } from './battle-encounter.js';
+import { tickRandomEncounter, isEncounterCheckPending } from './battle-encounter.js';
 import { startBattle } from './battle-update.js';
 import { MapRenderer } from './map-renderer.js';
 import { resetIndoorWaterCache } from './water-animation.js';
@@ -346,6 +346,7 @@ function _checkWarpTile() {
 }
 
 export function startMoveFromKeys(resetOnIdle) {
+  if (isEncounterCheckPending()) { if (resetOnIdle) sprite.resetFrame(); return; }
   if (keys['ArrowDown']) startMove(DIR_DOWN);
   else if (keys['ArrowUp']) startMove(DIR_UP);
   else if (keys['ArrowLeft']) startMove(DIR_LEFT);

@@ -47,6 +47,7 @@ export function tickRandomEncounter() {
 // proceed with the regular monster encounter. A 500 ms fallback covers a
 // dropped or slow server reply.
 let _pendingPVPCheck = false;
+export function isEncounterCheckPending() { return _pendingPVPCheck; }
 function _triggerEncounterWithPVPCheck() {
   if (!sendNetPVPEncounter()) {
     startRandomEncounter();
