@@ -2,6 +2,26 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.422 — 2026-05-16
+
+### Battle Assist: overworld players can join in-progress roster battles
+
+- **The new system**: an overworld player browses the roster, sees who's currently in combat (red dot indicator), picks Assist on a roster target, and gets pulled into that battle as a wire-driven ally. Works regardless of party membership — any roster player can assist anyone in their location. Mid-battle join, snapshot-driven sync. The full encounter-wire co-op machinery (v1.7.418-1.7.421) makes this trivial once spawn is solved.
+- **`inBattle` profile flag** (`src/main.js` + `ws-presence.js`): new clamped 0/1 field on the wire profile. Set to 1 whenever `battleSt.battleState !== 'none'`; the existing 500 ms profile-diff poll auto-pushes the transition. Server normalizes + relays via `player-update` so every other client knows in real time.
+- **Roster row indicator** (`src/roster.js`): small red 3×3 pixel block at top-left of the portrait box for any wire-presence player with `inBattle=1`. Mirror of the green online dot (top-right). Fades with the row.
+- **"Assist" roster menu entry** (`src/roster.js#ROSTER_MENU_ITEMS` + `src/input-handler.js`): new entry between Battle and Trade. Action handler gates on `target.inBattle` and emits `encounter-assist-request {targetUserId}`. Server re-validates (same location, target is helloed + in battle, joiner not already in a battle / PvP).
+- **Server-side wire** (`ws-presence.js`): two new handlers.
+  - `encounter-assist-request`: validates + forwards to target as `encounter-assist-incoming {fromUserId, fromName, fromProfile}`. Does NOT mutate `_encounterGroups` yet — target's auto-accept is what commits.
+  - `encounter-assist-snapshot`: builds (or extends) the encounter group bidirectionally, routes the full snapshot to the joiner, and broadcasts `encounter-ally-join {profile}` to any OTHER existing peers in the group (so they fade-in the new ally on their own client).
+- **Target-side auto-accept + snapshot** (`battle-encounter.js#setNetEncounterAssistIncomingHandler`): on receiving the incoming, if a battle slot is open (`battleAllies.length < 3`) and we're not in PvP, build the snapshot — current monster HPs, peer list (self + existing real allies), seed, turnIndex, hostUserId — and emit `encounter-assist-snapshot`. If we were in a SOLO battle, convert to host-of-co-op first: pick a fresh seed, set `isWireEncounter` + `encounterIsHost`, seed rand, start emitting actions from this turn forward. Locally add the joiner to `battleAllies` as wire-driven (instant, no fade — mid-battle has no safe fade window).
+- **Joiner-side spawn** (`battle-encounter.js#setNetEncounterAssistSnapshotHandler`): spawns the encounter locally from the snapshot. Critical difference vs the at-start `encounter-invite` path: monster HPs come from the snapshot (current state), not from `MONSTERS.get` defaults. Seeds rand with `(seed + turnIndex)` so subsequent rolls match. Peers (excluding self) get pushed to `battleAllies` as wire-driven, sorted canonical (host first).
+- **Existing-peer side ally-join** (`battle-encounter.js#setNetEncounterAllyJoinHandler`): when an existing peer in a co-op battle gets the new-joiner broadcast, they add the joiner to their own `battleAllies` (wire-driven, instant). Mirror of the PvP `pvp-ally-join` shape.
+- **UX chat lines**: target sees `* <joiner> joined your battle!`; joiner sees `* Assisted <host>'s battle!`; existing peers see `* <joiner> joined the battle!`.
+- **4 new wire-sim tests** (43/43 passing): assist-request happy path, reject when target not in battle, snapshot relay + group build, ally-join broadcast on multi-peer assist.
+- **Open follow-ups** (deferred — live testing will surface priority):
+  - Monster status state isn't shipped in the snapshot (joiner spawns with clean status). HP diverges over time if a monster was poisoned. Wire `status: { mask, poisonTimer }` if it matters.
+  - No fade-in animation when target adds the joiner. Mid-battle FSM has no safe slot; v2 could pause the queue and play `ally-fade-in`.
+
 ## 1.7.421 — 2026-05-16
 
 ### Co-Op v4: monster-attack damage sync (the silent killer) + PLAYER_POOL random-fill gate

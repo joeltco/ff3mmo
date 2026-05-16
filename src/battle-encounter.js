@@ -12,6 +12,10 @@ import { inputSt } from './input-handler.js';
 import { getMonsterCanvas } from './monster-sprites.js';
 import { sendNetPVPEncounter, setNetPVPEncounterNoneHandler,
          sendNetEncounterStart, setNetEncounterInviteHandler,
+         sendNetEncounterAssistSnapshot,
+         setNetEncounterAssistIncomingHandler,
+         setNetEncounterAssistSnapshotHandler,
+         setNetEncounterAllyJoinHandler,
          getMyUserId, getOnlinePlayerByName } from './net.js';
 import { partyInviteSt } from './party-invite.js';
 import { pvpSt } from './pvp.js';
@@ -258,4 +262,185 @@ setNetEncounterInviteHandler((msg) => {
   battleSt.battleState = 'flash-strobe';
   battleSt.battleTimer = 0;
   playSFX(SFX.BATTLE_SWIPE);
+});
+
+// ── Battle Assist (v1.7.422+) ──────────────────────────────────────────────
+//
+// Target side — an overworld player picked Assist on us. Auto-accept: build
+// the current battle snapshot (monsters with live HP, peers, seed,
+// turnIndex) and emit it for the server to forward to the joiner. If we're
+// in a solo battle, convert to host-of-co-op on the fly: pick a fresh
+// seed, set wire flags, start emitting actions from this point. Then
+// instant-add the joiner to our local battleAllies as a wire-driven entry
+// (no fade animation — assist is mid-battle and the FSM has no safe
+// fade-in window).
+setNetEncounterAssistIncomingHandler((msg) => {
+  if (!msg || !msg.fromUserId || !msg.fromProfile) return;
+  if (battleSt.battleState === 'none' || pvpSt.isPVPBattle) return;
+  if (battleSt.battleAllies.length >= 3) return;  // no slot
+  const myUid = getMyUserId();
+  if (!myUid) return;
+  // Convert solo → host-of-coop if not already a wire encounter.
+  if (!battleSt.isWireEncounter) {
+    const seed32 = (Math.random() * 0xffffffff) >>> 0;
+    battleSt.isWireEncounter = true;
+    battleSt.encounterIsHost = true;
+    battleSt.encounterHostUserId = myUid;
+    battleSt.encounterSeed = seed32;
+    battleSt.encounterTurnIndex = 0;
+    seedRng(seed32);
+  }
+  // Add joiner to local battleAllies (instant, no fade — see header).
+  const joinerStats = generateAllyStats(msg.fromProfile);
+  joinerStats.userId = msg.fromUserId | 0;
+  joinerStats.isWireDriven = true;
+  joinerStats.fadeStep = 0;  // fully visible from frame one
+  battleSt.battleAllies.push(joinerStats);
+  // Build the snapshot. Peers = self + existing battleAllies that have
+  // a userId (skip any AI-driven fakes). Monsters carry live HP.
+  const peers = [{
+    userId: myUid,
+    name:   msg.fromProfile.targetName || '',
+    // Server doesn't ship our profile back to us; use the snapshot ally
+    // shape — joiner runs generateAllyStats again receiver-side via the
+    // identical static data path. Include the same fields generateAllyStats
+    // reads: name + jobIdx + level + palIdx + loc + weapon/armor + knownSpells.
+  }];
+  // Re-fetch host's own profile fields from battleSt + ps if we can. To
+  // keep this MVP simple, we ship a minimal entry; receiver mostly cares
+  // about userId + display fields. battleAllies entries already carry
+  // generateAllyStats output so we can ship those directly.
+  for (const a of battleSt.battleAllies) {
+    if (!a || !a.userId) continue;
+    if (a.userId === (msg.fromUserId | 0)) continue;  // joiner gets snapshot themselves
+    peers.push({
+      userId: a.userId | 0,
+      name:   a.name,
+      jobIdx: a.jobIdx | 0,
+      level:  a.level | 0,
+      palIdx: a.palIdx | 0,
+      hp:     a.hp | 0,
+      maxHP:  a.maxHP | 0,
+      atk:    a.atk | 0,
+      def:    a.def | 0,
+      agi:    a.agi | 0,
+      weaponR:a.weaponId,
+      weaponL:a.weaponL,
+      knownSpells: Array.isArray(a.knownSpells) ? a.knownSpells.slice() : [],
+      jobLevel: a.jobLevel | 0,
+    });
+  }
+  const monsters = (battleSt.encounterMonsters || []).map(m => ({
+    monsterId: m.monsterId | 0,
+    hp:        m.hp | 0,
+  }));
+  sendNetEncounterAssistSnapshot(msg.fromUserId, {
+    seed:       battleSt.encounterSeed >>> 0,
+    turnIndex:  battleSt.encounterTurnIndex | 0,
+    monsters,
+    peers,
+    hostUserId: battleSt.encounterHostUserId | 0,
+  });
+  try { addChatMessage('* ' + (msg.fromName || 'Player') + ' joined your battle!', 'system'); } catch { /* chat optional */ }
+});
+
+// Joiner side — target accepted our assist. Spawn the battle locally with
+// the wire-supplied state. Mid-battle spawn: encounterMonsters HPs come
+// from the snapshot (NOT the MONSTERS.get defaults). Same RNG seed so
+// subsequent rolls land identically. Peers list excludes self.
+setNetEncounterAssistSnapshotHandler((msg) => {
+  if (!msg || !Array.isArray(msg.monsters) || msg.monsters.length === 0) return;
+  if (battleSt.battleState !== 'none' || pvpSt.isPVPBattle) return;
+  const monsters = [];
+  for (const m of msg.monsters) {
+    const id = m && (m.monsterId | 0);
+    if (id == null) continue;
+    const mData = MONSTERS.get(id) || MONSTERS.get(0x00);
+    if (!mData) continue;
+    monsters.push({
+      monsterId: id,
+      hp: m.hp | 0,  // CURRENT hp from snapshot, not initial
+      maxHP: mData.hp,
+      atk: mData.atk, attackRoll: mData.attackRoll || 1,
+      def: mData.def, evade: mData.evade || 0,
+      mdef: mData.mdef || 0,
+      exp: mData.exp, gil: mData.gil || 0,
+      hitRate: mData.hitRate || GOBLIN_HIT_RATE,
+      spAtkRate: mData.spAtkRate || 0,
+      attacks: mData.attacks || null,
+      level: mData.level || 1,
+      agi: mData.level || 1,
+      statusAtk: mData.statusAtk || null,
+      atkElem: mData.atkElem || null,
+      weakness: mData.weakness || null,
+      resist: mData.resist || null,
+      statusResist: mData.statusResist || null,
+      spiritInt: mData.spiritInt || 0,
+      status: createStatusState(),
+    });
+  }
+  if (monsters.length === 0) return;
+  monsters.sort((a, b) => {
+    const ha = getMonsterCanvas(a.monsterId, battleSt.goblinBattleCanvas)?.height || 32;
+    const hb = getMonsterCanvas(b.monsterId, battleSt.goblinBattleCanvas)?.height || 32;
+    return hb - ha;
+  });
+  battleSt.encounterMonsters = monsters;
+  battleSt.isRandomEncounter = true;
+  inputSt.battleActionCount = 0;
+  const seed32 = (msg.seed | 0) >>> 0;
+  battleSt.isWireEncounter = true;
+  battleSt.encounterIsHost = false;
+  battleSt.encounterHostUserId = msg.hostUserId | 0;
+  battleSt.encounterSeed = seed32;
+  battleSt.encounterTurnIndex = msg.turnIndex | 0;
+  seedRng(((seed32 >>> 0) + (msg.turnIndex | 0)) >>> 0);
+  battleSt.preBattleTrack = TRACKS.CRYSTAL_CAVE;
+  _resetBattleVars();
+  // re-set wire flags (resetBattleVars clears them)
+  battleSt.isWireEncounter = true;
+  battleSt.encounterIsHost = false;
+  battleSt.encounterHostUserId = msg.hostUserId | 0;
+  battleSt.encounterSeed = seed32;
+  battleSt.encounterTurnIndex = msg.turnIndex | 0;
+  battleSt.encounterMonsters = monsters;
+  battleSt.isRandomEncounter = true;
+  const peerList = Array.isArray(msg.peers) ? msg.peers.slice() : [];
+  peerList.sort((a, b) => {
+    const aHost = a.userId === msg.hostUserId ? 0 : 1;
+    const bHost = b.userId === msg.hostUserId ? 0 : 1;
+    if (aHost !== bHost) return aHost - bHost;
+    return (a.userId | 0) - (b.userId | 0);
+  });
+  for (const peer of peerList) {
+    if (battleSt.battleAllies.length >= 3) break;
+    const stats = generateAllyStats(peer);
+    stats.userId = peer.userId | 0;
+    stats.isWireDriven = true;
+    stats.fadeStep = 0;
+    battleSt.battleAllies.push(stats);
+  }
+  const hostName = (peerList[0] && peerList[0].name) || 'Party';
+  try { addChatMessage('* Assisted ' + hostName + "'s battle!", 'system'); } catch { /* chat optional */ }
+  battleSt.battleState = 'flash-strobe';
+  battleSt.battleTimer = 0;
+  playSFX(SFX.BATTLE_SWIPE);
+});
+
+// Existing-peer side — a new ally joined an encounter we're already in.
+// Just add them to battleAllies as wire-driven; no fade since the FSM
+// is mid-flight and there's no safe animation slot. Joiner spawns the
+// same battle on their own client via the snapshot path.
+setNetEncounterAllyJoinHandler((msg) => {
+  if (!msg || !msg.profile || !msg.profile.userId) return;
+  if (!battleSt.isWireEncounter || battleSt.battleState === 'none') return;
+  if (battleSt.battleAllies.length >= 3) return;
+  // Dedup — could happen if server double-forwards.
+  if (battleSt.battleAllies.some(a => a.userId === msg.profile.userId)) return;
+  const stats = generateAllyStats(msg.profile);
+  stats.userId = msg.profile.userId | 0;
+  stats.isWireDriven = true;
+  stats.fadeStep = 0;
+  battleSt.battleAllies.push(stats);
+  try { addChatMessage('* ' + (msg.profile.name || 'Player') + ' joined the battle!', 'system'); } catch { /* chat optional */ }
 });

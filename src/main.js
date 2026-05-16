@@ -85,6 +85,11 @@ export function init() {
         palIdx:  0,
         hp:      ps.hp | 0,
         maxHP:   ps.stats.maxHP | 0,
+        // In-battle flag (v1.7.422+) — drives the roster row "⚔" badge so
+        // other overworld players can see you're fighting + offer Assist.
+        // Auto-pushed by the existing 500ms profile-diff poll in `net.js`
+        // whenever this transitions. Cleared by `battleState === 'none'`.
+        inBattle: battleSt.battleState && battleSt.battleState !== 'none' ? 1 : 0,
         // PvP hook chance is AGI-differential + Thief/Ranger bonus (see
         // `pvp-search.js#getHookChance`). Server uses the same formula on
         // `pvp-encounter` rolls, so AGI has to travel with the profile.

@@ -34,7 +34,7 @@ const ROSTER_FADE_STEP_MS = 100;
 const ROSTER_SLIDE_SPEED  = 0.15;  // px per ms
 const ROSTER_ROW_H        = 32;
 const ROSTER_VISIBLE      = 3;
-export const ROSTER_MENU_ITEMS = ['Party', 'Battle', 'Trade', 'Message', 'Inspect'];
+export const ROSTER_MENU_ITEMS = ['Party', 'Battle', 'Assist', 'Trade', 'Message', 'Inspect'];
 
 // ── Mutable state ─────────────────────────────────────────────────────────
 let rosterTimer        = 0;
@@ -314,6 +314,14 @@ function _drawRosterRow(p, i, panelTop) {
   if (p.isReal && fadeStep < ROSTER_FADE_STEPS) {
     ui.ctx.fillStyle = fadeStep === 0 ? '#5cdc14' : fadeStep === 1 ? '#3a9210' : '#1f4f08';
     ui.ctx.fillRect(HUD_RIGHT_X + 32 - 5, rowY + 2, 3, 3);
+  }
+  // In-battle badge — small red dot at top-left of the portrait box for
+  // any real wire-presence player who's currently in combat (inBattle
+  // flag wire-pushed by main.js profile builder). Drives the "Assist"
+  // action on the roster menu. v1.7.422.
+  if (p.isReal && p.inBattle && fadeStep < ROSTER_FADE_STEPS) {
+    ui.ctx.fillStyle = fadeStep === 0 ? '#f83800' : fadeStep === 1 ? '#a32200' : '#5e1300';
+    ui.ctx.fillRect(HUD_RIGHT_X + 2, rowY + 2, 3, 3);
   }
 
   const namePal = [0x0F, 0x10, 0x0F, 0x30];

@@ -40,6 +40,9 @@ let _onGiveItem = null;         // ({fromUserId, fromName, itemId}) → void —
 let _onEncounterInvite = null;  // ({seed, monsters, hostUserId, peers}) → void — co-op random battle invite from host
 let _onEncounterAction = null;  // ({userId, kind, target, ...}) → void — peer's action in shared co-op battle
 let _onEncounterEnd = null;     // ({userId, outcome}) → void — a peer reported their co-op battle ended
+let _onEncounterAssistIncoming = null; // ({fromUserId, fromName, fromProfile}) → void — overworld player wants to assist us
+let _onEncounterAssistSnapshot = null; // ({seed, turnIndex, monsters, peers, hostUserId}) → void — target accepted our assist, here's the battle state
+let _onEncounterAllyJoin = null;       // ({profile}) → void — new ally joined an in-progress encounter; fade them in
 const MAX_RECONNECT_DELAY = 30000;
 
 function _getToken() {
@@ -205,6 +208,30 @@ function _handleMessage(data) {
       if (_onEncounterEnd) {
         try { _onEncounterEnd(msg); }
         catch (e) { console.warn('[net] encounter-end handler error', e); }
+      }
+      return;
+    case 'encounter-assist-incoming':
+      // Overworld player picked Assist on us. Handler builds the
+      // snapshot + auto-accepts, OR rejects (battle slot full).
+      if (_onEncounterAssistIncoming) {
+        try { _onEncounterAssistIncoming(msg); }
+        catch (e) { console.warn('[net] encounter-assist-incoming handler error', e); }
+      }
+      return;
+    case 'encounter-assist-snapshot':
+      // We assisted someone — server delivered the battle state. Spawn
+      // the encounter locally so we're in sync with the host.
+      if (_onEncounterAssistSnapshot) {
+        try { _onEncounterAssistSnapshot(msg); }
+        catch (e) { console.warn('[net] encounter-assist-snapshot handler error', e); }
+      }
+      return;
+    case 'encounter-ally-join':
+      // A new peer joined our in-progress encounter. Add them to our
+      // local battleAllies via ally-fade-in.
+      if (_onEncounterAllyJoin) {
+        try { _onEncounterAllyJoin(msg); }
+        catch (e) { console.warn('[net] encounter-ally-join handler error', e); }
       }
       return;
   }
@@ -458,6 +485,25 @@ export function sendNetEncounterEnd(outcome) {
 export function setNetEncounterInviteHandler(fn) { _onEncounterInvite = typeof fn === 'function' ? fn : null; }
 export function setNetEncounterActionHandler(fn) { _onEncounterAction = typeof fn === 'function' ? fn : null; }
 export function setNetEncounterEndHandler(fn)    { _onEncounterEnd    = typeof fn === 'function' ? fn : null; }
+
+// Battle Assist (v1.7.422+) — overworld player joins an in-progress
+// encounter on a roster target. `assist-request` from joiner triggers
+// the target to auto-accept and emit `assist-snapshot` (battle state).
+// Server routes the snapshot back to the joiner + broadcasts an
+// `encounter-ally-join` to existing peers so they fade-in the new ally.
+export function sendNetEncounterAssistRequest(targetUserId) {
+  if (!_helloed || !targetUserId) return false;
+  return _send({ type: 'encounter-assist-request', targetUserId });
+}
+
+export function sendNetEncounterAssistSnapshot(joinerUserId, snapshot) {
+  if (!_helloed || !joinerUserId || !snapshot) return false;
+  return _send({ type: 'encounter-assist-snapshot', joinerUserId, ...snapshot });
+}
+
+export function setNetEncounterAssistIncomingHandler(fn) { _onEncounterAssistIncoming = typeof fn === 'function' ? fn : null; }
+export function setNetEncounterAssistSnapshotHandler(fn) { _onEncounterAssistSnapshot = typeof fn === 'function' ? fn : null; }
+export function setNetEncounterAllyJoinHandler(fn)       { _onEncounterAllyJoin       = typeof fn === 'function' ? fn : null; }
 
 // Real party invites over the wire. Mirror of `pvp-search` lifecycle:
 // challenger emits `party-invite`; server forwards to target as

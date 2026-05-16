@@ -128,6 +128,7 @@ function _normalizeProfileField(key, value) {
     case 'hp':       return _clamp(value, 0, 9999);
     case 'maxHP':    return _clamp(value, 1, 9999);
     case 'agi':      return _clamp(value, 1, 99);
+    case 'inBattle': return _clamp(value, 0, 1);
     case 'weaponR':
     case 'armorId':
     case 'helmId':   return _clamp(value, 0, 255);
@@ -304,6 +305,7 @@ function _handleMessage(entry, msg) {
         hp:       _normalizeProfileField('hp',       profile.hp) ?? 0,
         maxHP:    _normalizeProfileField('maxHP',    profile.maxHP) ?? 1,
         agi:      _normalizeProfileField('agi',      profile.agi) ?? 5,
+        inBattle: _normalizeProfileField('inBattle', profile.inBattle) ?? 0,
         weaponR:  _normalizeProfileField('weaponR',  profile.weaponR) ?? 0,
         weaponL:  _normalizeProfileField('weaponL',  profile.weaponL),
         armorId:  _normalizeProfileField('armorId',  profile.armorId) ?? 0,
@@ -373,7 +375,7 @@ function _handleMessage(entry, msg) {
       const fields = {};
       for (const k of ['name', 'jobIdx', 'level', 'palIdx', 'hp', 'maxHP', 'agi',
                        'weaponR', 'weaponL', 'armorId', 'helmId', 'shieldId',
-                       'allies']) {
+                       'allies', 'inBattle']) {
         if (parsed[k] == null) continue;
         const v = _normalizeProfileField(k, parsed[k]);
         if (v === undefined) continue;
@@ -630,6 +632,84 @@ function _handleMessage(entry, msg) {
         });
       }
       console.log('[encounter-start] host=' + entry.userId + ' accepted=' + JSON.stringify(accepted) + ' monsters=' + monsters.length);
+      return;
+    }
+    case 'encounter-assist-request': {
+      // Joiner picked Assist on a roster target who's in battle. Validate
+      // target exists, helloed, same location, currently in battle.
+      // Forward to target as `encounter-assist-incoming`; target's client
+      // auto-accepts by emitting `encounter-assist-snapshot`. The group
+      // mutation happens server-side at snapshot-arrival, not here, so
+      // the joiner doesn't get added to _encounterGroups until the target
+      // actually accepts (handles target-side reject for "battle slot
+      // full" / "already in PvP"). v1.7.422.
+      if (!entry.helloed) return;
+      const targetUserId = parsed.targetUserId | 0;
+      if (!targetUserId || targetUserId === entry.userId) return;
+      const target = _connected.get(targetUserId);
+      if (!target || !target.helloed) return;
+      if (target.loc !== entry.loc) return;
+      if (!target.profile?.inBattle) return;
+      if (_encounterGroups.has(entry.userId)) return;  // joiner already in another battle
+      if (_pvpPartners.has(entry.userId)) return;       // joiner is in PvP
+      console.log('[encounter-assist-request] joiner=' + entry.userId + ' → target=' + targetUserId);
+      _send(target.ws, {
+        type:        'encounter-assist-incoming',
+        fromUserId:  entry.userId,
+        fromName:    entry.profile?.name || 'Player',
+        fromProfile: { userId: entry.userId, ...entry.profile, loc: entry.loc },
+      });
+      return;
+    }
+    case 'encounter-assist-snapshot': {
+      // Target accepted (auto). Snapshot carries the current battle state
+      // for the joiner to spawn locally + the joiner's userId for the
+      // route. Server adds joiner to the existing group (or creates a
+      // pair if target was solo) + broadcasts `encounter-ally-join` to
+      // any OTHER peers already in the group so they fade-in the joiner.
+      if (!entry.helloed) return;
+      const joinerUserId = parsed.joinerUserId | 0;
+      if (!joinerUserId || joinerUserId === entry.userId) return;
+      const joiner = _connected.get(joinerUserId);
+      if (!joiner || !joiner.helloed) return;
+      // Build / extend the encounter group.
+      let group = _encounterGroups.get(entry.userId);
+      if (!group) {
+        // Target was solo — create the bidirectional pair.
+        group = new Set([joinerUserId]);
+        _encounterGroups.set(entry.userId, group);
+        _encounterGroups.set(joinerUserId, new Set([entry.userId]));
+      } else {
+        // Extend existing group with joiner. Update every peer's set.
+        const allPeers = new Set([entry.userId, ...group, joinerUserId]);
+        for (const uid of allPeers) {
+          const peerSet = new Set(allPeers);
+          peerSet.delete(uid);
+          _encounterGroups.set(uid, peerSet);
+        }
+      }
+      console.log('[encounter-assist-snapshot] host=' + entry.userId + ' joiner=' + joinerUserId + ' group=' + Array.from(_encounterGroups.get(entry.userId)).join(','));
+      // Forward the full snapshot to the joiner so they spawn the same
+      // battle locally with current monster HPs + peer list.
+      _send(joiner.ws, {
+        type:       'encounter-assist-snapshot',
+        seed:       (parsed.seed | 0) >>> 0,
+        turnIndex:  parsed.turnIndex | 0,
+        monsters:   Array.isArray(parsed.monsters) ? parsed.monsters.slice(0, 9) : [],
+        peers:      Array.isArray(parsed.peers) ? parsed.peers.slice(0, 8) : [],
+        hostUserId: entry.userId,
+      });
+      // Notify any OTHER peers in the group (not the target who is the
+      // snapshot source, and not the joiner who got the full snapshot)
+      // that a new ally joined. Mirror of `pvp-ally-join` shape.
+      const joinerProfile = { userId: joinerUserId, ...joiner.profile, loc: joiner.loc };
+      for (const peerId of _encounterGroups.get(entry.userId)) {
+        if (peerId === joinerUserId) continue;
+        const peer = _connected.get(peerId);
+        if (peer && peer.helloed) {
+          _send(peer.ws, { type: 'encounter-ally-join', profile: joinerProfile });
+        }
+      }
       return;
     }
     case 'encounter-action': {

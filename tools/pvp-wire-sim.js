@@ -632,6 +632,103 @@ async function suiteWire() {
     await new Promise(r => setTimeout(r, 40));
   });
 
+  // ── Battle Assist — assist-request forwarded when target.inBattle ───────
+  // Mirror of the v1.7.422 wire: joiner emits `encounter-assist-request`
+  // for an in-battle roster target. Server validates target.inBattle +
+  // same loc, forwards to target as `encounter-assist-incoming`.
+  await asyncTest('assist-request forwards to in-battle target', async () => {
+    _testHooks.resetState();
+    const A = await connectClient(port, 1028, { ...baseProfile, name: 'Joiner' });
+    // Target needs inBattle=1; helloed with profile.inBattle=1.
+    const B = await connectClient(port, 1029, { ...targetProfile, name: 'Target', inBattle: 1 });
+    const got = once(B, m => m.type === 'encounter-assist-incoming', 500);
+    A.send(JSON.stringify({ type: 'encounter-assist-request', targetUserId: 1029 }));
+    const m = await got;
+    assertEqual(m.fromUserId, 1028);
+    assertEqual(m.fromName, 'Joiner');
+    assertTrue(m.fromProfile && m.fromProfile.userId === 1028, 'fromProfile not attached');
+    A.close(); B.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  // Rejects assist-request when target is NOT in battle (server-side gate
+  // mirrors the client-side check in input-handler.js).
+  await asyncTest('assist-request rejected when target not in battle', async () => {
+    _testHooks.resetState();
+    const A = await connectClient(port, 1030, { ...baseProfile, name: 'Joiner2' });
+    const B = await connectClient(port, 1031, { ...targetProfile, name: 'Target2', inBattle: 0 });
+    let incoming = false;
+    B.on('message', (d) => {
+      const m = JSON.parse(d.toString());
+      if (m.type === 'encounter-assist-incoming') incoming = true;
+    });
+    A.send(JSON.stringify({ type: 'encounter-assist-request', targetUserId: 1031 }));
+    await new Promise(r => setTimeout(r, 80));
+    assertTrue(!incoming, 'unexpected incoming when target not in battle');
+    A.close(); B.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  // Snapshot relay — target's accept ships a snapshot to joiner + builds
+  // the encounter group.
+  await asyncTest('assist-snapshot routes to joiner + builds group', async () => {
+    _testHooks.resetState();
+    const A = await connectClient(port, 1032, { ...baseProfile, name: 'Joiner3' });
+    const B = await connectClient(port, 1033, { ...targetProfile, name: 'Target3', inBattle: 1 });
+    const got = once(A, m => m.type === 'encounter-assist-snapshot', 500);
+    B.send(JSON.stringify({
+      type: 'encounter-assist-snapshot',
+      joinerUserId: 1032,
+      seed: 0xfeedface,
+      turnIndex: 3,
+      monsters: [{ monsterId: 0x00, hp: 5 }],
+      peers: [{ userId: 1033, name: 'Target3', jobIdx: 4, level: 4, palIdx: 0, hp: 50, maxHP: 52 }],
+      hostUserId: 1033,
+    }));
+    const m = await got;
+    assertEqual(m.seed, 0xfeedface, 'seed not relayed');
+    assertEqual(m.turnIndex, 3, 'turnIndex not relayed');
+    assertEqual(m.monsters[0].hp, 5, 'monster hp not relayed');
+    assertEqual(m.hostUserId, 1033);
+    assertTrue(_testHooks.state.encounterGroups.has(1032), 'joiner not added to group');
+    assertTrue(_testHooks.state.encounterGroups.has(1033), 'host not in group');
+    assertTrue(_testHooks.state.encounterGroups.get(1032).has(1033), 'joiner→host link missing');
+    A.close(); B.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  // When assist joins an EXISTING co-op (target already has peers), the
+  // new joiner gets the snapshot AND existing peers get an ally-join
+  // broadcast so they fade-in the new ally locally.
+  await asyncTest('assist-snapshot broadcasts ally-join to existing peers', async () => {
+    _testHooks.resetState();
+    const A = await connectClient(port, 1034, { ...baseProfile, name: 'NewJoiner' });
+    const B = await connectClient(port, 1035, { ...targetProfile, name: 'Target4', inBattle: 1 });
+    const C = await connectClient(port, 1036, { ...targetProfile, name: 'ExistingPeer' });
+    // B and C are already in a co-op encounter; pre-populate the group.
+    _testHooks.state.encounterGroups.set(1035, new Set([1036]));
+    _testHooks.state.encounterGroups.set(1036, new Set([1035]));
+    const aGot = once(A, m => m.type === 'encounter-assist-snapshot', 500);
+    const cGot = once(C, m => m.type === 'encounter-ally-join', 500);
+    B.send(JSON.stringify({
+      type: 'encounter-assist-snapshot',
+      joinerUserId: 1034,
+      seed: 0xcafe,
+      turnIndex: 1,
+      monsters: [{ monsterId: 0x00, hp: 8 }],
+      peers: [{ userId: 1035, name: 'Target4' }, { userId: 1036, name: 'ExistingPeer' }],
+      hostUserId: 1035,
+    }));
+    await aGot;
+    const ally = await cGot;
+    assertEqual(ally.profile && ally.profile.userId, 1034, 'ally-join carries new joiner profile');
+    // All three must now be reachable from each other.
+    const aGroup = _testHooks.state.encounterGroups.get(1034);
+    assertTrue(aGroup && aGroup.has(1035) && aGroup.has(1036), 'joiner group missing peer links');
+    A.close(); B.close(); C.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
   // ── #22 party chat scopes to party, not location ────────────────────────
   await asyncTest('#22 party chat scopes to party-membership', async () => {
     _testHooks.resetState();
