@@ -32,23 +32,27 @@ import { canCastBasic, canCastAny, pickHealTarget, pickPoisonedTarget,
 function _playerName() { return saveSlots[selectCursor]?.name || null; }
 
 // ── Turn order ─────────────────────────────────────────────────────────────
+// For wire-PvP, the push order is critical: both clients must call
+// `rollInitiative` for the same logical actor first, otherwise the rand cursor
+// (synced via per-turn reseed in `pvp.js#_buildAndProcessNextTurn`) lands on
+// a different actor's priority on each side and the resulting sort produces
+// divergent turn orders. `pvpSt._wirePushOppFirst` is set at battle start so
+// the "higher-userId" client swaps its ps↔opp push order, making both clients
+// agree to roll "lower userId" first. v1.7.409.
 export function buildTurnOrder() {
   const actors = [];
-  if (ps.hp > 0) {
-    const playerAgi = (ps.stats ? ps.stats.agi : 5) + getJobLevelStatBonus().agi;
-    actors.push({ type: 'player', priority: rollInitiative(playerAgi) });
-  }
-  for (let i = 0; i < battleSt.battleAllies.length; i++) {
-    if (battleSt.battleAllies[i].hp > 0)
-      actors.push({ type: 'ally', index: i, priority: rollInitiative(battleSt.battleAllies[i].agi) });
-  }
-  if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
-    for (let i = 0; i < battleSt.encounterMonsters.length; i++) {
-      if (battleSt.encounterMonsters[i].hp > 0) {
-        actors.push({ type: 'enemy', index: i, priority: rollInitiative(battleSt.encounterMonsters[i].agi) });
-      }
+  const swap = !!(pvpSt.isPVPBattle && pvpSt.isWirePVP && pvpSt._wirePushOppFirst);
+  const _pushPlayer = () => {
+    if (ps.hp > 0) {
+      const playerAgi = (ps.stats ? ps.stats.agi : 5) + getJobLevelStatBonus().agi;
+      actors.push({ type: 'player', priority: rollInitiative(playerAgi) });
     }
-  } else if (pvpSt.isPVPBattle) {
+    for (let i = 0; i < battleSt.battleAllies.length; i++) {
+      if (battleSt.battleAllies[i].hp > 0)
+        actors.push({ type: 'ally', index: i, priority: rollInitiative(battleSt.battleAllies[i].agi) });
+    }
+  };
+  const _pushOpp = () => {
     if (pvpSt.pvpOpponentStats && pvpSt.pvpOpponentStats.hp > 0) {
       actors.push({ type: 'enemy', index: -1, pvpAllyIdx: -1, priority: rollInitiative(pvpSt.pvpOpponentStats.agi) });
     }
@@ -57,7 +61,19 @@ export function buildTurnOrder() {
         actors.push({ type: 'enemy', index: -1, pvpAllyIdx: i, priority: rollInitiative(pvpSt.pvpEnemyAllies[i].agi) });
       }
     }
+  };
+  if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
+    _pushPlayer();
+    for (let i = 0; i < battleSt.encounterMonsters.length; i++) {
+      if (battleSt.encounterMonsters[i].hp > 0) {
+        actors.push({ type: 'enemy', index: i, priority: rollInitiative(battleSt.encounterMonsters[i].agi) });
+      }
+    }
+  } else if (pvpSt.isPVPBattle) {
+    if (swap) { _pushOpp(); _pushPlayer(); }
+    else      { _pushPlayer(); _pushOpp(); }
   } else {
+    _pushPlayer();
     // Boss has no agi field; agi=0 → priority is just the rand roll (0..255).
     actors.push({ type: 'enemy', index: -1, priority: rollInitiative(0) });
   }

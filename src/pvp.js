@@ -13,7 +13,7 @@ import { playSFX, stopSFX, SFX, pauseMusic, playTrack, TRACKS } from './music.js
 import { rollHits, calcPotentialHits, BOSS_HIT_RATE, GOBLIN_HIT_RATE, summarizeHits, isLeftHandHit } from './battle-math.js';
 import { reseedFromEntropy, seed as seedRng, rand } from './rng.js';
 import { setNetPVPActionHandler, sendNetPVPEnd, sendNetPVPResult,
-         setNetPVPAllyJoinHandler } from './net.js';
+         setNetPVPAllyJoinHandler, getMyUserId } from './net.js';
 import { dispatchDelta } from './deltas.js';
 import { canCastBasic, canCastAny, pickHealTarget, pickPoisonedTarget,
          pickRandomLivingTarget, pickOffensiveSpell, rollOffensiveDamage,
@@ -278,10 +278,19 @@ export function startPVPBattle(target, opts) {
     // after the first turn's `seedRng(opts.seed)` advances the cursor.
     pvpSt._wireSeed = opts.seed >>> 0;
     pvpSt._wireTurnIndex = 0;
+    // Canonical actor-push order so both clients call `rollInitiative` in the
+    // same sequence (lower userId rolled first, regardless of which side we
+    // are). Without this, A's `buildTurnOrder` rolls A.agi then B.agi while
+    // B's rolls B.agi then A.agi — same rand cursor but different actor
+    // mapping → different priorities → different turn orders → desync. v1.7.409.
+    const myUid = getMyUserId() | 0;
+    const oppUid = (target && (target.userId | 0)) || 0;
+    pvpSt._wirePushOppFirst = !!(myUid && oppUid && myUid > oppUid);
   } else {
     reseedFromEntropy();
     pvpSt._wireSeed = 0;
     pvpSt._wireTurnIndex = 0;
+    pvpSt._wirePushOppFirst = false;
   }
   // Part 2 — wire-PvP flag drives the opponent-turn FSM to wait for wire
   // actions instead of running local AI. Set whenever the server provided a

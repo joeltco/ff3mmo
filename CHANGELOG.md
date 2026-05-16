@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.409 — 2026-05-16
+
+### PvP: canonical actor-push order so initiative agrees across clients
+
+- **Bug**: even with the per-turn rand resync (1.7.408), `buildTurnOrder` was still computing different priorities on the two clients. Reason: each client pushes `ps` (their local player) first, then `opp` (`pvpOpponentStats`). On client A that means `rollInitiative(A.agi)` first, then `rollInitiative(B.agi)`. On client B it's the reverse — same rand cursor, but swapped which AGI it pairs with. So the two clients independently sort the same actors with different priorities → different turn orders → both sides advance from divergent FSMs and look like they're fighting different battles.
+- **Fix**: at battle start, store `pvpSt._wirePushOppFirst = getMyUserId() > target.userId`. Both clients independently compute this from their own + the opponent's userId, and only one of them flips it to `true`. `buildTurnOrder` in `battle-turn.js` swaps the ps↔opp push order on the flag-set client so both clients call `rollInitiative` for the lower-userId actor first → same rand consumption order → same priorities → same turn order. Falls back to the previous order when `pvpSt.isPVPBattle` is false (random encounters, boss) or when there's no wire (fake roster).
+
 ## 1.7.408 — 2026-05-16
 
 ### PvP: per-turn rand resync to converge initiative + downstream rolls
