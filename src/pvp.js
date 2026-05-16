@@ -45,7 +45,22 @@ import { applyMagicDamage, applyMagicStatus, applyMagicHeal,
 import { IDLE_FRAME_MS } from './combatant-pose.js';
 
 function _cursorTileCanvas() { return ui.cursorTileCanvas; }
-function _buildAndProcessNextTurn() { battleSt.turnQueue = buildTurnOrder(); processNextTurn(); }
+// Per-turn re-seed for wire-PvP. Both clients converge to the same rand state
+// at every turn boundary, defining initiative + any non-wire-bypassed rolls on
+// shared ground. Pre-roll drift (each player's pre-confirm consumption) is
+// erased here. Required because each side hits this point after consuming a
+// different number of rand calls (own pre-roll vs nothing for opponent's
+// action) — without the resync, `rollInitiative` produces different turn
+// orders on the two clients and every subsequent roll inherits the drift.
+// v1.7.408.
+function _buildAndProcessNextTurn() {
+  if (pvpSt.isWirePVP && typeof pvpSt._wireSeed === 'number') {
+    pvpSt._wireTurnIndex = (pvpSt._wireTurnIndex | 0) + 1;
+    seedRng(((pvpSt._wireSeed >>> 0) + pvpSt._wireTurnIndex) >>> 0);
+  }
+  battleSt.turnQueue = buildTurnOrder();
+  processNextTurn();
+}
 
 // Single source for "PVP enemy action complete — advance turn unless the
 // player team is wiped". Pre-v1.7.225 the physical-hit and SouthWind paths
@@ -255,8 +270,19 @@ export function startPVPBattle(target, opts) {
   // the same value on both clients. Falls back to local entropy for fake-PvP
   // and offline play.
   const hasSeed = opts && typeof opts.seed === 'number';
-  if (hasSeed) seedRng(opts.seed);
-  else reseedFromEntropy();
+  if (hasSeed) {
+    seedRng(opts.seed);
+    // Save the base seed + reset the turn counter so `_buildAndProcessNextTurn`
+    // can resync both clients to the same rand state at every turn boundary
+    // (see v1.7.408). Without storing the base seed we'd lose the reference
+    // after the first turn's `seedRng(opts.seed)` advances the cursor.
+    pvpSt._wireSeed = opts.seed >>> 0;
+    pvpSt._wireTurnIndex = 0;
+  } else {
+    reseedFromEntropy();
+    pvpSt._wireSeed = 0;
+    pvpSt._wireTurnIndex = 0;
+  }
   // Part 2 — wire-PvP flag drives the opponent-turn FSM to wait for wire
   // actions instead of running local AI. Set whenever the server provided a
   // seed (only happens on wire-driven `pvp-match` paths).

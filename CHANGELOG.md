@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.408 — 2026-05-16
+
+### PvP: per-turn rand resync to converge initiative + downstream rolls
+
+- **Bug class**: even after hits ride the wire (1.7.407), the two clients' `rand()` cursors drift the moment each side pre-rolls its own attack at confirm-time — sender consumes N rand calls, receiver consumes M ≠ N. So `rollInitiative` (turn order), `tryInflictStatus`, sleep-wake and confuse snap-out rolls all run on different states between the two phones, producing visibly different turn orders / status outcomes per round.
+- **Fix**: at every turn boundary, wire-PvP reseeds `rand()` from `(_wireSeed + _wireTurnIndex)` so both clients converge to a shared rand state before `buildTurnOrder` runs. Both phones independently arrive at the same point in the FSM (`_buildAndProcessNextTurn` in `pvp.js`), and the seed + counter are both stored on `pvpSt` so the reseed value is identical without the server sending anything per turn. Pre-roll drift gets erased every round.
+- Stores `pvpSt._wireSeed` + `pvpSt._wireTurnIndex` set in `startPVPBattle`; non-wire PvP (fake roster, single player) skips the resync.
+- Doesn't override the wire-shipped values (hitResults / damageRoll / healAmount still authoritative when provided) — this is for the rand-derived rolls that don't have wire payloads yet.
+
 ## 1.7.407 — 2026-05-16
 
 ### PvP: physical hits ride the wire so attack damage stays in sync
