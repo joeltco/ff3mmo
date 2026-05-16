@@ -228,6 +228,24 @@ export async function loadROM(arrayBuffer) {
     'Boot: ' + bootMs + 'ms',
     dev ? 'Type /help or /devhelp' : 'Type /help for commands',
   ];
+  // First-run tips — fired once per browser-localStorage. Pushed AFTER the
+  // boot lines so the user reads the system metadata first, then the
+  // welcome. `ff3_first_run` is the sentinel; deleting it from localStorage
+  // re-shows the tips on next load (useful for testing).
+  let firstRun = false;
+  try { firstRun = !localStorage.getItem('ff3_first_run'); } catch (_) {}
+  if (firstRun) {
+    startupMsgs.push(
+      '',
+      'Welcome! A few quick pointers:',
+      '  Press T to open chat. Tab through World/Party/PM/System.',
+      '  Cross grass tiles on the overworld to find monsters.',
+      '  Roster panel shows real players online (green dot).',
+      '  Pick Battle on a roster row to issue a PvP challenge.',
+      '  /help lists commands (try /who, /block, /report).',
+    );
+    try { localStorage.setItem('ff3_first_run', '1'); } catch (_) {}
+  }
   startupMsgs.forEach((msg, i) => setTimeout(() => consoleLog(msg), i * 350));
 }
 

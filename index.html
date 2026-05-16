@@ -59,6 +59,14 @@
       border-color: #c8a832;
     }
     #rom-file, #rom-file-ff1, #rom-file-ff2 { display: none; }
+    #rom-hint {
+      font-size: 11px;
+      color: #666;
+      line-height: 1.55;
+      max-width: 360px;
+      text-align: center;
+      margin-top: 8px;
+    }
     #rom-info {
       font-size: 12px;
       color: #888;
@@ -278,6 +286,21 @@
       font-size: 13px;
       color: #c8a832;
       letter-spacing: 2px;
+      margin-bottom: 4px;
+    }
+    #auth-tagline {
+      color: #aaa;
+      font-size: 12px;
+      letter-spacing: 1px;
+      margin-bottom: 4px;
+    }
+    #auth-desc {
+      color: #888;
+      font-size: 11px;
+      line-height: 1.55;
+      max-width: 320px;
+      text-align: center;
+      padding: 0 16px;
       margin-bottom: 8px;
     }
     #auth-tabs {
@@ -448,6 +471,12 @@
   <!-- Auth screen (login / register) -->
   <div id="auth-screen" style="display:none">
     <h2>FF3 MMO</h2>
+    <p id="auth-tagline">A multiplayer take on NES Final Fantasy III</p>
+    <p id="auth-desc">
+      Roster panel, world chat, party invites, real-time PvP — built on the
+      original ROM, loaded fresh in your browser.<br>
+      Sign in to keep your save across devices.
+    </p>
     <div id="auth-tabs">
       <button class="auth-tab active" id="tab-login">Login</button>
       <button class="auth-tab" id="tab-register">Register</button>
@@ -487,6 +516,11 @@
       <label for="rom-file-ff2">Load FF2 ROM (.nes)</label>
       <input type="file" id="rom-file-ff2">
     </div>
+    <p id="rom-hint">
+      You supply your own ROMs — the site doesn't distribute them.<br>
+      FF3 is the main game; FF1 + FF2 supply battle music and one sprite.<br>
+      ROMs cache in your browser after the first load.
+    </p>
     <div id="rom-info"></div>
   </div>
 

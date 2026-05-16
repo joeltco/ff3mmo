@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.395 — 2026-05-15
+
+### Pre-beta first-time UX
+
+- **Auth screen description** (`index.html`): adds a tagline ("A multiplayer take on NES Final Fantasy III") and a 2-line explainer above the Login/Register tabs so a brand-new visitor knows what the site is before they enter credentials. Pre-fix all they saw was the title + email/password fields.
+- **ROM picker hint**: small explainer under the three file inputs — "You supply your own ROMs — the site doesn't distribute them. FF3 is the main game; FF1 + FF2 supply battle music and one sprite. ROMs cache in your browser after the first load." Sets expectations on the legal scope + why three files + why the second visit is faster.
+- **First-run tips** (`src/main.js`): when `localStorage.ff3_first_run` is unset, pushes 6 welcome lines into the chat console after the boot metadata — chat key, encounter mechanic, online indicator, PvP entry point, command list pointer. Once per browser; delete the sentinel to re-show on next load.
+
 ## 1.7.394 — 2026-05-15
 
 ### Pre-beta mobile pass
