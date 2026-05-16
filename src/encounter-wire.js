@@ -82,6 +82,14 @@ export function hasWireEncounterAction(userId) {
   return _wireEncounterActions.some(a => (a.userId | 0) === (userId | 0));
 }
 
+// Defensive drain — called from `resetBattleVars` so a stale action
+// queue from a half-open prior connection doesn't replay against a new
+// battle's same-userId peer. Normal close path already clears via
+// `endWireEncounter`. v1.7.424.
+export function clearWireEncounterQueue() {
+  _wireEncounterActions.length = 0;
+}
+
 // Called by the local end-of-battle paths (victory / defeat / run) to
 // notify peers that our FSM finished + wipe co-op state. Safe to call
 // when not in co-op (no-ops via flag check).

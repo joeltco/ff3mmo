@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.425 — 2026-05-16
+
+### Hotfix v1.7.424 — missing export
+
+- `src/encounter-wire.js` was missing the `clearWireEncounterQueue` export that the v1.7.424 `resetBattleVars` defensive drain imports. Smoke caught it (page failed to load with `SyntaxError: The requested module './encounter-wire.js' does not provide an export named 'clearWireEncounterQueue'`). Added the export.
+
 ## 1.7.424 — 2026-05-16
 
 ### Last-audit fixes: assist-double-tap dedup + wire-queue defensive clear + timeout bump
