@@ -93,6 +93,13 @@ function _reportError(tag, e) {
 // orphan state. Idle states (menu-open, target-select, item-*) are excluded
 // because they wait on user input.
 const FREEZE_THRESHOLD_MS = 5000;
+// Minimum battleTimer delta required to call a state "alive". Worker-driven
+// ticks still fire while the tab is backgrounded but browsers can throttle
+// the rate by 10×+, so a state may legitimately need 20 s wall to finish a
+// 1.5 s game-time animation. Comparing against battleTimer (game time, not
+// wall time) lets us tell genuine FSM hangs apart from tab-throttle slowdown.
+const FREEZE_BATTLETIMER_PROGRESS_MS = 200;
+let _watchBattleTimer = 0;
 const _frozenIdleStates = new Set([
   'menu-open', 'target-select', 'confirm-pause',
   'item-menu-out', 'item-list-in', 'item-select', 'item-cancel-out', 'item-cancel-in',
@@ -119,23 +126,39 @@ function _tickFreezeWatchdog(now) {
   if (!cur || cur === 'none' || _frozenIdleStates.has(cur) || wireWait) {
     _watchState = cur;
     _watchSince = now;
+    _watchBattleTimer = battleSt.battleTimer;
     _watchReported = false;
     return;
   }
   if (cur !== _watchState) {
     _watchState = cur;
     _watchSince = now;
+    _watchBattleTimer = battleSt.battleTimer;
     _watchReported = false;
     return;
   }
-  if (!_watchReported && now - _watchSince >= FREEZE_THRESHOLD_MS) {
-    _watchReported = true;
-    const ctx = _battleCtx();
-    const msg = '[FREEZE WATCHDOG] state=' + cur + ' stuck for ' + Math.round((now - _watchSince) / 1000) + 's';
-    console.error(msg, ctx);
-    fetch('/api/client-error', { method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ msg, stack: '', ctx }) }).catch(() => {});
+  if (_watchReported || now - _watchSince < FREEZE_THRESHOLD_MS) return;
+  // Skip when the tab is hidden — browsers throttle Worker ticks 10×+ on
+  // backgrounded pages, so 5 s of wall time may be only 500 ms of game time.
+  // The state will resume normally when the user returns. Pre-fix this was
+  // the source of the v1.7.390 prod `[FREEZE WATCHDOG] state=magic-hit
+  // stuck for 5s` reports (timer:500 — slow tick, not a real hang).
+  if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+  // Even with a foregrounded tab, only fire if battleTimer (game time) hasn't
+  // measurably advanced. The FSM is genuinely stuck when game time isn't
+  // accumulating; if it is accumulating but slowly, that's still a slow
+  // animation, not a hang.
+  if (battleSt.battleTimer - _watchBattleTimer > FREEZE_BATTLETIMER_PROGRESS_MS) {
+    _watchSince = now;
+    _watchBattleTimer = battleSt.battleTimer;
+    return;
   }
+  _watchReported = true;
+  const ctx = _battleCtx();
+  const msg = '[FREEZE WATCHDOG] state=' + cur + ' stuck for ' + Math.round((now - _watchSince) / 1000) + 's';
+  console.error(msg, ctx);
+  fetch('/api/client-error', { method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ msg, stack: '', ctx }) }).catch(() => {});
 }
 
 function _gameLoopUpdate(dt) {

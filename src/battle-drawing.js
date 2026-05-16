@@ -226,6 +226,7 @@ function _getMagicTargetCenter(tgt) {
     const { sprH, row0H, row1H, gridPos } = encounterGridLayout();
     if (tgt.index >= gridPos.length) return null;
     const pos = gridPos[tgt.index];
+    if (!pos) return null;  // sparse gridPos — caller falls back to a "no target" path rather than throwing per-frame
     const mc = getMonsterCanvas(m.monsterId, battleSt.goblinBattleCanvas);
     const mw = mc ? mc.width : 32;
     const mh = mc ? mc.height : sprH;
@@ -369,6 +370,13 @@ function _encounterMonsterPos(idx) {
   if (gridPos.length === 0) return { bx: 0, baseY: 0 };  // empty layout — caller will draw at (0,0); same guard rail as the other gridPos sites.
   const safeIdx = (idx >= 0 && idx < gridPos.length) ? idx : 0;
   const pos = gridPos[safeIdx];
+  // gridPos can be sparse when the encounter is empty (count=0 fall-through
+  // from `_encounterGridPos` still returns a 4-entry array, but other call
+  // sites can land here mid-transition with an undefined slot). Returning a
+  // zero anchor parks the damage num off-screen-safe rather than throwing
+  // every frame and wiping the rest of `drawBattle`.
+  // See docs/MULTIPLAYER-AUDIT-2026-05-15.md prod-error triage.
+  if (!pos) return { bx: 0, baseY: 0 };
   const m = battleSt.encounterMonsters[safeIdx];
   const mc = getMonsterCanvas(m?.monsterId, battleSt.goblinBattleCanvas);
   const rH = safeIdx < 2 ? (row0H || dSprH) : (row1H || dSprH);

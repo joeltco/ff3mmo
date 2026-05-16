@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.391 — 2026-05-15
+
+### Pre-beta P0 fixes (from prod pm2 error triage)
+
+- **`BATTLE DRAW ERROR — pos is undefined` (24× firings in recent logs)**: `src/battle-drawing.js#_encounterMonsterPos` and `_getMagicTargetCenter` only checked `idx < gridPos.length`, never that `gridPos[idx]` itself was defined. Sparse-array hole during a mid-frame transition (e.g., damage-num still rendering after monster cleared) threw on `pos.x` every render frame, which wiped the rest of `drawBattle` — chat, msg strip, damage nums all gone — until the user navigated away. Added `if (!pos)` early-returns; magic target now returns `null` (caller already handles), monster-num returns a zero anchor so the digit parks offscreen-safe.
+- **`FREEZE WATCHDOG — magic-hit stuck for 5s` (3× firings)**: NOT a real freeze — the watchdog was timing against wall clock, but backgrounded-tab Worker ticks are throttled 10×+ by browsers. Real evidence: `timer:500` at the moment the watchdog fired = 100 ms of game time per 1 s wall. Magic-hit needs ~1750 ms of game time; user just hadn't returned to the tab. Now the watchdog skips reports when `document.visibilityState === 'hidden'` AND requires `battleTimer` to have NOT advanced by more than 200 ms before firing — combining wall-clock + game-clock signals to tell hangs apart from slow ticks.
+- **`/api/login` + `/api/register` + `/api/client-error` rate limit** (`api.js`): token-bucket per IP, AUTH endpoints capped at 5 burst / 1 per sec, client-error at 30 burst / 5 per sec. Pre-fix bcrypt at SALT_ROUNDS=10 (~100 ms per compare) would let a single attacker pin a CPU on bursty login attempts; client-error had no auth and was a log-flood vector. nginx-aware via `X-Forwarded-For`.
+- **Login timing-leak fix**: `bcrypt.compare` now always runs (against a startup-generated dummy hash when the email isn't registered) so the response latency for "user not found" matches "wrong password". Pre-fix the missing compare leaked account enumeration via response timing.
+
 ## 1.7.390 — 2026-05-15
 
 ### Multiplayer audit batch 4 — observability + UX
