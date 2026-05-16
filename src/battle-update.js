@@ -333,6 +333,14 @@ export function tryJoinPlayerAlly() {
     if (partyJoined) { battleSt.battleState = 'ally-fade-in'; battleSt.battleTimer = 0; return true; }
     return false;
   }
+  // Co-op random encounter — skip the PLAYER_POOL random-fill. Host's
+  // local fake-pool could add an actor that doesn't exist on guests'
+  // clients, breaking the canonical turn-order length. Only invited
+  // peers join in co-op. v1.7.421.
+  if (battleSt.isWireEncounter) {
+    if (partyJoined) { battleSt.battleState = 'ally-fade-in'; battleSt.battleTimer = 0; return true; }
+    return false;
+  }
   const eligible = PLAYER_POOL.filter(p =>
     p.loc === loc &&
     !battleSt.battleAllies.some(a => a.name === p.name) &&

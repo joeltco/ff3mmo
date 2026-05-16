@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.421 — 2026-05-16
+
+### Co-Op v4: monster-attack damage sync (the silent killer) + PLAYER_POOL random-fill gate
+
+- **The silent killer.** Monster attack damage / hit / evade rolls in `battle-enemy.js` were on `Math.random` instead of `rand()`. Player-side rolls were synced (battle-math.js uses rand), but monster-side rolls were per-client. Result: same monster hits A for 12 on A's phone and for 7 on B's phone, in the same logical turn — HP diverges instantly even though everything else was wire-synced. The v1.7.418 / v1.7.419 sync work was fundamentally compromised until this fix.
+- **Fix**: blanket conversion of `Math.random` → `rand()` in `battle-enemy.js` (9 sites): monster physical-attack damage variance, multi-hit hit-rate roll, multi-hit shield/armor-evade rolls, special-attack chance + which-attack pick, special-attack damage roll (both player-target and ally-target paths). Co-op battles now produce identical damage on both phones; solo battles unaffected (rand is seeded fresh each battle via `reseedFromEntropy`).
+- **PLAYER_POOL random-fill gate**: `tryJoinPlayerAlly` in co-op now skips the post-party PLAYER_POOL random-fill entirely. Today this is a no-op (PLAYER_POOL is empty), but if fakes ever get re-enabled, the host adding a fake ally that the guest doesn't see would break the canonical turn-order length and silently desync. Defensive guard against future PLAYER_POOL repopulation.
+- Wire-sim still 39/39 passing.
+
 ## 1.7.420 — 2026-05-16
 
 ### Co-Op v3: wire-sim test coverage + UX polish (join chat lines)

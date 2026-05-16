@@ -69,7 +69,7 @@ function _doSpecialAttack(mon, spec, targetAlly = -1) {
       // NES magic damage (31/B1B4-BBE1): atk = floor(INT/2) + power, then +rand(0..atk/2), then -mdef
       const castStat = mon ? (mon.spiritInt || 0) : 0;
       const baseAtk = Math.floor(castStat / 2) + spec.power;
-      const roll = baseAtk + Math.floor(Math.random() * (Math.floor(baseAtk / 2) + 1));
+      const roll = baseAtk + Math.floor(rand() * (Math.floor(baseAtk / 2) + 1));
       const raw = Math.floor(roll * eMult) - (ally.mdef || 0);
       const dmg = Math.max(1, raw);
       dispatchDelta({ type: 'hp', target: ally, amount: -dmg });
@@ -105,7 +105,7 @@ function _doSpecialAttack(mon, spec, targetAlly = -1) {
     const eMult = elemMultiplier(spec.element, null, ps.elemResist);
     const castStat = mon ? (mon.spiritInt || 0) : 0;
     const baseAtk = Math.floor(castStat / 2) + spec.power;
-    const roll = baseAtk + Math.floor(Math.random() * (Math.floor(baseAtk / 2) + 1));
+    const roll = baseAtk + Math.floor(rand() * (Math.floor(baseAtk / 2) + 1));
     const raw = Math.floor(roll * eMult) - (ps.mdef || 0);
     const dmg = Math.max(1, raw);
     if (battleSt.isDefending) {
@@ -158,7 +158,7 @@ function _processEnemyFlash() {
   let targetAlly = -1;
   // Co-op random encounter (v1.7.419+) — both clients must pick the SAME
   // canonical actor for monster targeting. Without this, 'ps' on A's
-  // screen is `ps=A, ally=B` and on B's it's `ps=B, ally=A`; same Math.random
+  // screen is `ps=A, ally=B` and on B's it's `ps=B, ally=A`; same rand
   // result picks DIFFERENT logical actors → HP diverges. Use shared
   // `rand()` against a canonical-order team list (host first, then by
   // ascending userId) so both clients land on the same picked userId,
@@ -185,9 +185,9 @@ function _processEnemyFlash() {
   } else if (livingAllies.length > 0) {
     const allyOptions = battleSt.battleAllies.map((a, i) => a.hp > 0 ? i : -1).filter(i => i >= 0);
     if (ps.hp <= 0) {
-      targetAlly = allyOptions[Math.floor(Math.random() * allyOptions.length)];
-    } else if (Math.random() >= 1 / (1 + livingAllies.length)) {
-      targetAlly = allyOptions[Math.floor(Math.random() * allyOptions.length)];
+      targetAlly = allyOptions[Math.floor(rand() * allyOptions.length)];
+    } else if (rand() >= 1 / (1 + livingAllies.length)) {
+      targetAlly = allyOptions[Math.floor(rand() * allyOptions.length)];
     }
   }
   const mon = (battleSt.currentAttacker >= 0 && battleSt.encounterMonsters) ? battleSt.encounterMonsters[battleSt.currentAttacker] : null;
@@ -197,8 +197,8 @@ function _processEnemyFlash() {
 
   // ── Monster special attack check ──────────────────────────────────────────
   if (mon && mon.spAtkRate > 0 && mon.attacks && mon.attacks.length > 0) {
-    if (Math.random() * 100 < mon.spAtkRate) {
-      const atkName = mon.attacks[Math.floor(Math.random() * mon.attacks.length)];
+    if (rand() * 100 < mon.spAtkRate) {
+      const atkName = mon.attacks[Math.floor(rand() * mon.attacks.length)];
       const spec = SPECIAL_ATTACKS[atkName];
       if (spec && spec.type !== 'none') {
         // Monster name was queued at turn dispatch; swap in the attack name.
@@ -219,9 +219,9 @@ function _processEnemyFlash() {
     const eMult = elemMultiplier(monAtkElem, null, targetResist);
     let total = 0, landed = 0;
     for (let i = 0; i < rolls; i++) {
-      if (shieldEvade > 0 && Math.random() * 100 < shieldEvade) continue;
-      if (armorEvade > 0 && Math.random() * 100 < armorEvade) continue;
-      if (Math.random() * 100 < hitRate) { total += calcDamage(atk, def, false, 0, eMult); landed++; }
+      if (shieldEvade > 0 && rand() * 100 < shieldEvade) continue;
+      if (armorEvade > 0 && rand() * 100 < armorEvade) continue;
+      if (rand() * 100 < hitRate) { total += calcDamage(atk, def, false, 0, eMult); landed++; }
     }
     return { total, landed };
   }
