@@ -1,8 +1,8 @@
 # Multiplayer
 
-**Live as of v1.7.386.** Open `ff3mmo.com` in two browsers with two accounts. Same location → see each other in the roster panel. Chat, party invites, PvP duels all wire-driven. Fakes are off (`PLAYER_POOL` exported empty in `src/data/players.js`).
+**Live as of v1.7.417.** Open `ff3mmo.com` in two browsers with two accounts. Same location → see each other in the roster panel. Chat, party invites, PvP duels, low-HP roster pose, and give-item-to-roster all wire-driven. Fakes are off (`PLAYER_POOL` exported empty in `src/data/players.js`).
 
-This doc is the architecture overview + recovery cheatsheet. For the per-deploy changelog of how it got built, see `CHANGELOG.md` 1.7.366 → 1.7.386.
+This doc is the architecture overview + recovery cheatsheet. For the per-deploy changelog of how it got built, see `CHANGELOG.md` 1.7.366 → 1.7.417.
 
 ## Architecture
 
@@ -77,16 +77,31 @@ Hook chance = `clamp(0.25 + (chAGI − tgtAGI) × 0.015 + jobBonus, 0.10, 0.75)`
 
 | Direction | Type | Fields |
 |---|---|---|
-| C→S | `pvp-action` | `kind ('attack'|'defend'|'magic'|'item'|'run'), actor: {idx}, target?: {side, idx}, spellId?, itemId?, damageRoll?, healAmount?` |
+| C→S | `pvp-action` | `kind ('attack'|'defend'|'magic'|'item'|'run'), actor: {idx}, target?: {side, idx}, spellId?, itemId?, damageRoll?, healAmount?, hitResults?` |
 | C→S | `pvp-end` | — (clears partner pair) |
 | C→S | `pvp-result` | `outcome ('won'|'lost'|'fled')` |
 | C→S | `pvp-ally-join` | `profile: { name, jobIdx, level, palIdx, loc, weapon*, armor*, knownSpells, jobLevel }` |
-| S→C | `pvp-action` | relayed in full (incl. `actor`/`damageRoll`/`healAmount`); synthesizes `{kind:'disconnect'}` when partner WS drops or `pvp-result` mismatch is detected (audit #14) |
+| S→C | `pvp-action` | relayed in full (incl. `actor`/`damageRoll`/`healAmount`/`hitResults`); synthesizes `{kind:'disconnect'}` when partner WS drops or `pvp-result` mismatch is detected (audit #14) |
 | S→C | `pvp-ally-join` | relayed; receiver runs its own `generateAllyStats(profile)` for the mirror cell |
 
 Each player's chosen action drives the opponent's turn on the partner's client. Seed sync (broadcast in `pvp-match`) means all rolls inside `battle-math.js` (initiative, damage variance, hit/miss, crit, evade) AND `status-effects.js` (status infliction, sleep-wake, confuse snap-out) land on the same value on both sides. Outcome reports get compared server-side; mismatch logs `[pvp-result mismatch]` AND ends both sides with a synthetic disconnect rather than letting one side hang (audit #14).
 
-Damage / heal values for magic now also travel on the wire (`damageRoll` / `healAmount`) — receiver uses them directly when present and falls back to a local roll otherwise. Defends an against any RNG-cursor drift between the two clients.
+**Three-layer cursor-drift defense (v1.7.407-v1.7.410):**
+
+1. **Authoritative pre-rolled values ride the wire.** `damageRoll` / `healAmount` (magic, audit #24) and `hitResults` (physical attacks, v1.7.407) are sent in the wire payload. Receiver uses them directly instead of re-rolling on a drifted `rand()` cursor. Each side pre-rolls before `_emitWirePVPAction`, so the same numbers land on both clients.
+2. **Per-turn rand resync.** At every turn boundary, `_buildAndProcessNextTurn` calls `seedRng(_wireSeed + _wireTurnIndex)`. Both clients independently arrive at the same rand state for the next round's `rollInitiative` and any non-wire-bypassed roll (status infliction, sleep-wake, etc.).
+3. **Canonical actor-push order.** `buildTurnOrder` swaps the `ps ↔ opp` push order on the higher-userId client so both clients call `rollInitiative` for the lower-userId actor first — same cursor + same actor mapping → same priorities → same turn order.
+
+**Preflash timer reset (v1.7.410):** when the receiver pops a wire `pvp-action`, `battleSt.battleTimer` is reset to 0 so the `BOSS_PREFLASH_MS` back-swing window starts from wire-arrival, not from FSM entry into `enemy-flash`. Without this, a cellular WS round-trip (~150 ms) would push the timer past the 133 ms preflash gate before the action was even received, and the opponent's back-swing pose would skip entirely.
+
+### Roster co-op (Step 5)
+
+| Direction | Type | Fields |
+|---|---|---|
+| C→S | `give-item` | `targetUserId, itemId` — used a heal / cure consumable from the pause menu on a real-player roster row |
+| S→C | `give-item` | relayed with `fromUserId` + `fromName` attached |
+
+Receiver (`pause-menu.js#setNetGiveItemHandler`) mirrors the sender's `_applyPauseItemUse` apply path on its own `ps` — `applyMagicHeal` for `effect: heal / full_heal / restore_hp`, `applyMagicCureStatus` for `effect: cure_status`. Plays `SFX.CURE`, fires the existing `_drawCureSparkle` overlay on the receiver's HUD portrait via `hudSt.giveItemHealTimer` (550 ms window matching the sender's pause-menu `inv-heal` state), and posts `* <sender> sent you <item>` to chat. The next 500 ms profile-diff poll auto-broadcasts the new HP / status so every other player's roster row ticks too — the kneel-pose pipeline in `roster.js` (v1.7.415) reads `p.hp` / `p.maxHP` from the snapshot entry and swaps `fakePlayerPortraits` for `fakePlayerKneelPortraits` + sweat overlay when `hp <= floor(maxHP / 4)`.
 
 ### Party invites
 

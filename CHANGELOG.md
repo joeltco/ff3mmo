@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.417 — 2026-05-16
+
+### Cleanup: drop client-side party-prepass diag + invitee accept-stash chat lines
+
+- Removed the temporary `[party-prepass]` and `[party] accepted/SKIPPED` `addChatMessage` lines from `battle-update.js#tryJoinPlayerAlly` and `party-invite.js#setNetPartyInviteHandler` (v1.7.414 added them; the asymmetry they were diagnosing is fixed and the spam was polluting the in-game console). Server-side wire relay logs in `ws-presence.js` (`[pvp-search]` / `[pvp-encounter]` / `[pvp-hook]` / `[pvp-action]` / `[pvp-ally-join]` / `[give-item]`) stay — they're low-volume and useful for future debug.
+- Docs: README Status section + `MULTIPLAYER.md` updated to v1.7.417 (PvP three-layer drift defense documented, new Step 5 "Roster co-op" section for the `give-item` wire, roster low-HP pose pipeline cross-ref).
+
 ## 1.7.416 — 2026-05-16
 
 ### Give-Item: wire-sync the pause-menu "use item on roster" path

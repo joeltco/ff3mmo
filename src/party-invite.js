@@ -251,9 +251,6 @@ setNetPartyInviteHandler((msg) => {
       if (challenger.name && !partyInviteSt.partyMembers.includes(challenger.name) && !isPartyFull()) {
         partyInviteSt.partyMembers.push(challenger.name);
         partyInviteSt.partyMemberProfiles.set(challenger.name, challenger);
-        addChatMessage('[party] accepted, stashed ' + challenger.name + ' (now [' + partyInviteSt.partyMembers.join(',') + '])', 'system');
-      } else {
-        addChatMessage('[party] accept-stash SKIPPED name=' + challenger.name + ' inList=' + partyInviteSt.partyMembers.includes(challenger.name) + ' full=' + isPartyFull(), 'system');
       }
       sendNetPartyResponse(true);
     },
