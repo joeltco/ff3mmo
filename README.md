@@ -62,6 +62,32 @@ Opens `http://localhost:3000`. Load all three ROM files via the file pickers (or
 
 ROMs are stored in IndexedDB after the first load. On revisit the page shows a **Start** button instead of file pickers (a user click is required to satisfy the browser's audio-context policy).
 
+## Dev tools
+
+Two terminal simulators run the production code paths in Node — no browser, no canvas — so combat math and the multiplayer wire layer can be exercised without spinning up the game.
+
+```bash
+# Local combat (1v1 duel, party vs encounter, spell pipelines, status, buffs)
+node tools/battle-sim.js --p1=RM7 --p2=BM4 --seed=42
+node tools/battle-sim.js --party=KN10,WM4 --boss=land_turtle --turns=15
+node tools/battle-sim.js --help
+
+# Multiplayer wire regression harness (31 tests across math / server / E2E)
+node tools/pvp-wire-sim.js                     # all suites
+node tools/pvp-wire-sim.js --suite=math        # one suite (math|server|wire)
+node tools/pvp-wire-sim.js --filter=defend     # substring filter
+```
+
+`tools/battle-sim.js` (`tools/battle-sim.PLAN.md`) covers local combat — it imports the real `battle-math.js`, `combatant-cast.js`, `status-effects.js`, `data/*` so any divergence between the sim and the engine is a sim bug, not a coverage gap. Statistical mode (`--runs=N --json`) gives win-rate and damage distribution.
+
+`tools/pvp-wire-sim.js` (`tools/pvp-wire-sim.PLAN.md`) covers the multiplayer wire layer — three suites:
+
+- **Math lockstep** — seeds `rng.js`, runs sender's call, re-seeds, runs receiver's call; asserts identical output. Catches RNG-cursor drift that would desync two clients.
+- **Server unit** — calls `ws-presence.js` internals via a test-only `_testHooks` export (profile clamps, hook-chance formula, party-membership lookup, rate-limit bucket).
+- **End-to-end** — boots `attachWebSocketPresence` on a localhost port and connects two real JWT-authed `ws` clients; drives scripted scenarios (actor relay, mismatch recovery, location cleanup, PM routing, ally-join profile, party-chat scoping, rate-limit burst).
+
+Exit 1 on any failure. `deploy.sh` runs both lint + wire-sim as pre-flight gates before commit. See `docs/MULTIPLAYER-AUDIT-2026-05-15.md` for the audit each test maps back to.
+
 ## Controls
 
 | Key | Action |
