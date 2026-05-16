@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.392 — 2026-05-15
+
+### Pre-beta P1 batch — moderation + roster polish + save integrity
+
+- **Online badge in roster** (`src/roster.js`): real wire-presence players (`isReal: true` from `net.js` snapshot/join) now show a 3×3 green dot at the top-right of the portrait box, fading with the row. Solves the "fakes hidden + empty roster looks broken" first-impression problem in v1.7.386+: with fakes off by default, an empty roster used to look indistinguishable from "the game is broken." Now you can see at a glance which roster entries are real online players.
+- **Server-side save validation** (`api.js`): every `/api/save` POST routes through `_validateSaveData` — 16 KB payload cap, whitelist of known fields, range clamps on every numeric (gil 0-999999, level 1-99, stats 1-99, inventory qty 0-99 per slot, 64-slot inventory cap, etc.). Unknown keys are dropped before insert. Pre-fix a client could write arbitrary JSON into the saves table — no schema enforcement, no size limit. Bug-induced corruption (out-of-range stats from a state desync) AND deliberate cheating (gil: 9999999) both bounded server-side now.
+- **`/block <name>`** (`src/chat.js`): client-side block list, persisted in localStorage by both userId and name. Incoming chat from blocked senders silently dropped — spoof-proof via userId match (resilient to renames) with name fallback for older messages. `/block` (no args) lists blocks, `/block clear` wipes them, `/unblock <name>` removes a single entry.
+- **`/report <name> <reason>`** (`src/chat.js` + `api.js`): POSTs to a new `/api/chat-report` endpoint backed by a `reports` SQLite table. Records reporter userId, target userId (if resolvable from the online roster), target display name, reason (200-char cap), and reporter IP. Rate-limited under the auth bucket (5 burst / 1 per sec). No automated action today — moderator-review trail.
+
 ## 1.7.391 — 2026-05-15
 
 ### Pre-beta P0 fixes (from prod pm2 error triage)

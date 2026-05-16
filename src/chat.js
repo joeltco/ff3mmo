@@ -15,7 +15,7 @@ import { ps, changeJob, fullHeal, grantExp } from './player-stats.js';
 import { JOBS } from './data/jobs.js';
 import { swapBattleSprites } from './job-sprites.js';
 import { saveSlotsToDB } from './save-state.js';
-import { sendNetChat, setNetChatHandler } from './net.js';
+import { sendNetChat, setNetChatHandler, getOnlinePlayerByName } from './net.js';
 import { ITEMS } from './data/items.js';
 import { addItem } from './inventory.js';
 import { getItemNameClean, getSpellNameClean, bytesToAscii } from './text-decoder.js';
@@ -97,12 +97,37 @@ export function addChatMessage(text, type, channel, meta) {
   if (tabIdx !== undefined && tabIdx !== activeTab && tabIdx !== 3) _tabUnread[tabIdx] = true;
 }
 
+// Client-side block list. Persisted in localStorage so /block survives a
+// page reload. Matched on either userId (preferred — spoof-proof since
+// PM-by-userId landed in v1.7.388) or name (fallback for old messages).
+// Stored as plain arrays in localStorage so the contents are inspectable.
+// See docs/MULTIPLAYER-AUDIT-2026-05-15.md — pre-beta P1 #3.
+const _blockedIds   = new Set();
+const _blockedNames = new Set();
+try {
+  const ids = JSON.parse(localStorage.getItem('ff3_blocked_ids')   || '[]');
+  const names = JSON.parse(localStorage.getItem('ff3_blocked_names') || '[]');
+  ids.forEach(i => _blockedIds.add(i | 0));
+  names.forEach(n => _blockedNames.add(String(n)));
+} catch { /* corrupt JSON — ignore */ }
+function _persistBlocks() {
+  try {
+    localStorage.setItem('ff3_blocked_ids',   JSON.stringify([..._blockedIds]));
+    localStorage.setItem('ff3_blocked_names', JSON.stringify([..._blockedNames]));
+  } catch { /* quota / private mode — silent */ }
+}
+
 // Multiplayer Step 2 — install the network chat receiver. Module-load time
 // registration is fine: `net.js` only invokes the handler after WebSocket
 // connect, which happens later in the boot sequence.
 setNetChatHandler((msg) => {
   // msg = { userId, name, channel, text, to? }
   if (!msg || !msg.text) return;
+  // Block filter — silently drop messages from anyone the user has /block'd.
+  // Match by userId first (resilient to renames); name fallback covers old
+  // wire payloads that don't carry userId.
+  if (msg.userId != null && _blockedIds.has(msg.userId | 0)) return;
+  if (msg.name && _blockedNames.has(msg.name)) return;
   const senderName = msg.name || 'Player';
   const channel = msg.channel || 'world';
   const meta = msg.to ? { from: senderName, to: msg.to } : null;
@@ -160,6 +185,65 @@ registerCommand('who', 'Show players in area', (_args, ctx) => {
   const names = ctx.getRosterNames();
   addChatMessage(names.length + ' player(s) in area:', 'console');
   for (const n of names) addChatMessage('  ' + n, 'console');
+});
+
+registerCommand('block', 'Block a player: /block <name>  |  /block (list)  |  /block clear', (args) => {
+  const a = (args || '').trim();
+  if (a === '') {
+    if (_blockedIds.size === 0 && _blockedNames.size === 0) {
+      addChatMessage('No blocked players.', 'console');
+      return;
+    }
+    addChatMessage('Blocked:', 'console');
+    for (const n of _blockedNames) addChatMessage('  ' + n, 'console');
+    return;
+  }
+  if (a.toLowerCase() === 'clear') {
+    _blockedIds.clear(); _blockedNames.clear(); _persistBlocks();
+    addChatMessage('Block list cleared.', 'console');
+    return;
+  }
+  // Resolve to userId via the online roster. If they're offline, store by
+  // name only — block still applies the next time their messages arrive.
+  const target = getOnlinePlayerByName(a);
+  _blockedNames.add(a);
+  if (target && target.userId) _blockedIds.add(target.userId | 0);
+  _persistBlocks();
+  addChatMessage('Blocked ' + a + '.', 'console');
+});
+
+registerCommand('unblock', 'Unblock a player: /unblock <name>', (args) => {
+  const a = (args || '').trim();
+  if (!a) { addChatMessage('Usage: /unblock <name>', 'console'); return; }
+  _blockedNames.delete(a);
+  const target = getOnlinePlayerByName(a);
+  if (target && target.userId) _blockedIds.delete(target.userId | 0);
+  _persistBlocks();
+  addChatMessage('Unblocked ' + a + '.', 'console');
+});
+
+registerCommand('report', 'Report a player: /report <name> <reason>', (args) => {
+  const m = (args || '').trim().match(/^(\S+)\s+(.+)$/);
+  if (!m) { addChatMessage('Usage: /report <name> <reason>', 'console'); return; }
+  const name = m[1], reason = m[2].slice(0, 200);
+  const target = getOnlinePlayerByName(name);
+  const targetUserId = target && target.userId ? (target.userId | 0) : null;
+  const token = localStorage.getItem('ff3_token');
+  if (!token) {
+    addChatMessage('Log in to file reports.', 'console');
+    return;
+  }
+  fetch('/api/chat-report', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+    body: JSON.stringify({ targetUserId, targetName: name, reason }),
+  })
+  .then(r => {
+    if (r.ok)         addChatMessage('Report sent. Thanks.', 'console');
+    else if (r.status === 429) addChatMessage('Slow down — too many reports.', 'console');
+    else              addChatMessage('Report failed (HTTP ' + r.status + ').', 'console');
+  })
+  .catch(() => addChatMessage('Report failed (network).', 'console'));
 });
 
 registerCommand('ff1', 'Play FF1 NSF track N (or "stop" to resume map music)', (args) => {

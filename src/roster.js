@@ -291,6 +291,16 @@ function _drawRosterRow(p, i, panelTop) {
   const portraits = jobPortraits && jobPortraits[p.palIdx];
   if (portraits) ui.ctx.drawImage(portraits[fadeStep], HUD_RIGHT_X + 8, rowY + 8);
 
+  // Online badge — small green dot at top-right of the portrait box for any
+  // real wire-presence player (`isReal: true` from net.js snapshot/join).
+  // Solves the "fakes hidden + empty roster looks broken" first-impression
+  // problem in v1.7.386+. NES-faithful: 3×3 fillRect in NES-palette green
+  // (#5cdc14 = $2A), fades with the row.
+  if (p.isReal && fadeStep < ROSTER_FADE_STEPS) {
+    ui.ctx.fillStyle = fadeStep === 0 ? '#5cdc14' : fadeStep === 1 ? '#3a9210' : '#1f4f08';
+    ui.ctx.fillRect(HUD_RIGHT_X + 32 - 5, rowY + 2, 3, 3);
+  }
+
   const namePal = [0x0F, 0x10, 0x0F, 0x30];
   for (let s = 0; s < fadeStep; s++) namePal[3] = nesColorFade(namePal[3]);
   const nameBytes = _nameToBytes(p.name);
