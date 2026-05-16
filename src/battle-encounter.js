@@ -17,6 +17,7 @@ import { partyInviteSt } from './party-invite.js';
 import { pvpSt } from './pvp.js';
 import { generateAllyStats } from './data/players.js';
 import { seed as seedRng } from './rng.js';
+import { addChatMessage } from './chat.js';
 
 const TILE_SIZE = 16;
 
@@ -154,9 +155,13 @@ function _maybeHostCoopEncounter() {
   const myUid = getMyUserId();
   if (!myUid) return;
   const partyPeers = [];
+  const partyPeerNames = [];
   for (const name of partyInviteSt.partyMembers) {
     const online = getOnlinePlayerByName(name);
-    if (online && online.userId) partyPeers.push(online.userId);
+    if (online && online.userId) {
+      partyPeers.push(online.userId);
+      partyPeerNames.push(online.name || name);
+    }
   }
   if (partyPeers.length === 0) return;
   const seed32 = (Math.random() * 0xffffffff) >>> 0;
@@ -168,6 +173,12 @@ function _maybeHostCoopEncounter() {
   battleSt.encounterSeed = seed32;
   battleSt.encounterTurnIndex = 0;
   seedRng(seed32);
+  // UX — chat line so the host sees who joined their fight. Mirror message
+  // on guest side fires from the invite handler. v1.7.420.
+  const label = partyPeerNames.length === 1
+    ? partyPeerNames[0] + ' joined the battle!'
+    : partyPeerNames.join(' + ') + ' joined the battle!';
+  try { addChatMessage('* ' + label, 'system'); } catch { /* chat optional */ }
 }
 
 // Guest side — host's `encounter-start` was forwarded to us. Spawn the
@@ -240,6 +251,10 @@ setNetEncounterInviteHandler((msg) => {
     stats.isWireDriven = true;
     battleSt.battleAllies.push(stats);
   }
+  // UX — chat line so the guest sees whose battle they joined. Host name
+  // = peers[0] (canonical sort puts host first). v1.7.420.
+  const hostName = (peerList[0] && peerList[0].name) || 'Party';
+  try { addChatMessage('* Joined ' + hostName + "'s battle!", 'system'); } catch { /* chat optional */ }
   battleSt.battleState = 'flash-strobe';
   battleSt.battleTimer = 0;
   playSFX(SFX.BATTLE_SWIPE);

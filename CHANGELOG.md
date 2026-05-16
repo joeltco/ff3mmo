@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.420 — 2026-05-16
+
+### Co-Op v3: wire-sim test coverage + UX polish (join chat lines)
+
+- **5 new encounter-wire tests** in `tools/pvp-wire-sim.js` (now 39/39 passing). Covers: `encounter-start` happy path (invite forwarded with seed + monsters + canonical peer list including host profile), `encounter-start` rejection when no party members accept, `encounter-action` relay (sender's userId attached on relay, hitResults payload preserved), `encounter-end` (outcome relayed + group entry cleared), and disconnect-from-encounter (synthetic `encounter-action {kind:'disconnect'}` arrives at peer when sender drops). Pre-flight regression net for any future drift in the wire shape or `_encounterGroups` lifecycle.
+- **Host-side chat line**: when `_maybeHostCoopEncounter` succeeds, host sees `* <peer1> + <peer2> joined the battle!` so they know who got pulled in. Names from `getOnlinePlayerByName` (same source the wire emit uses).
+- **Guest-side chat line**: when `setNetEncounterInviteHandler` spawns the battle, guest sees `* Joined <host>'s battle!` — host name read from `msg.peers[0]` (canonical sort puts host first). Without this, the battle just appearing while you're walking around is jarring.
+- Both messages tagged `'system'` channel so they route to the chat console and don't pollute party/world tabs.
+
 ## 1.7.419 — 2026-05-16
 
 ### Co-Op v2: magic / item / defend ally replay + monster-target sync + run sync + disconnect watchdog

@@ -516,6 +516,122 @@ async function suiteWire() {
     await new Promise(r => setTimeout(r, 40));
   });
 
+  // ── encounter-wire — host triggers co-op random encounter ──────────────
+  // Validates the server-side flow: `encounter-start` from host with party
+  // members + monster list → server validates each candidate (helloed,
+  // in-same-party, not already in encounter) → forwards `encounter-invite`
+  // to each accepted peer with seed, monsters, host profile, peers list.
+  // Mirror of the v1.7.418 / v1.7.419 co-op layer.
+  await asyncTest('encounter-start relays invite to party member', async () => {
+    _testHooks.resetState();
+    const A = await connectClient(port, 1019, { ...baseProfile, name: 'Host' });
+    const B = await connectClient(port, 1020, { ...targetProfile, name: 'Guest' });
+    // B is in A's party so A.userId qualifies as inviter (one-party-per-player).
+    _testHooks.state.partyMemberships.set(1020, 1019);
+    const got = once(B, m => m.type === 'encounter-invite', 500);
+    A.send(JSON.stringify({
+      type: 'encounter-start',
+      seed: 0x12345678,
+      monsters: [{ monsterId: 0x00 }, { monsterId: 0x00 }],
+      partyUserIds: [1020],
+    }));
+    const m = await got;
+    assertEqual(m.seed, 0x12345678, 'seed not relayed');
+    assertEqual(m.hostUserId, 1019, 'hostUserId not relayed');
+    assertTrue(Array.isArray(m.monsters) && m.monsters.length === 2, 'monsters array malformed');
+    assertEqual(m.monsters[0].monsterId, 0x00);
+    assertTrue(Array.isArray(m.peers) && m.peers.length >= 1, 'peers list missing');
+    // Host's profile should be the first peer entry on the receiver list.
+    assertEqual(m.peers[0].userId, 1019);
+    assertEqual(m.peers[0].name, 'Host');
+    A.close(); B.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  // Rejects encounter-start if no party members are online (server-side
+  // sanity — without an accepted candidate the group is never built).
+  await asyncTest('encounter-start rejects when no candidates accept', async () => {
+    _testHooks.resetState();
+    const A = await connectClient(port, 1021, { ...baseProfile, name: 'Solo' });
+    // No party membership set — partyUserIds [1099] (non-existent) → reject.
+    let invited = false;
+    A.on('message', (d) => {
+      const m = JSON.parse(d.toString());
+      if (m.type === 'encounter-invite') invited = true;
+    });
+    A.send(JSON.stringify({
+      type: 'encounter-start',
+      seed: 0xdeadbeef,
+      monsters: [{ monsterId: 0x00 }],
+      partyUserIds: [1099],
+    }));
+    await new Promise(r => setTimeout(r, 80));
+    assertTrue(!invited, 'unexpected invite emitted with no valid candidates');
+    assertTrue(!_testHooks.state.encounterGroups.has(1021), 'group built despite no accepts');
+    A.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  // encounter-action relays to all peers in group (mirror of pvp-action).
+  await asyncTest('encounter-action relays to peers with userId attached', async () => {
+    _testHooks.resetState();
+    const A = await connectClient(port, 1022, { ...baseProfile, name: 'A_enc' });
+    const B = await connectClient(port, 1023, { ...targetProfile, name: 'B_enc' });
+    // Force group membership directly (mirrors the v1.7.418+ server map).
+    _testHooks.state.encounterGroups.set(1022, new Set([1023]));
+    _testHooks.state.encounterGroups.set(1023, new Set([1022]));
+    const got = once(B, m => m.type === 'encounter-action', 500);
+    A.send(JSON.stringify({
+      type: 'encounter-action',
+      kind: 'attack',
+      target: { kind: 'monster', idx: 0 },
+      hitResults: [{ damage: 12, miss: false, crit: false }],
+    }));
+    const m = await got;
+    assertEqual(m.userId, 1022, 'sender userId not attached on relay');
+    assertEqual(m.kind, 'attack');
+    assertTrue(Array.isArray(m.hitResults), 'hitResults not relayed');
+    assertEqual(m.hitResults[0].damage, 12, 'hitResults payload corrupted');
+    A.close(); B.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  // encounter-end relays + cleans the group.
+  await asyncTest('encounter-end relays + clears group', async () => {
+    _testHooks.resetState();
+    const A = await connectClient(port, 1024, { ...baseProfile, name: 'A_end' });
+    const B = await connectClient(port, 1025, { ...targetProfile, name: 'B_end' });
+    _testHooks.state.encounterGroups.set(1024, new Set([1025]));
+    _testHooks.state.encounterGroups.set(1025, new Set([1024]));
+    const got = once(B, m => m.type === 'encounter-end', 500);
+    A.send(JSON.stringify({ type: 'encounter-end', outcome: 'won' }));
+    const m = await got;
+    assertEqual(m.outcome, 'won');
+    assertEqual(m.userId, 1024, 'sender userId missing on encounter-end');
+    // A's group entry must be cleared; B's may or may not be (we sent
+    // from A so the server only ran _clearEncounterGroup on A — but B's
+    // set referenced A so cross-link cleanup applies). Both should clear.
+    assertTrue(!_testHooks.state.encounterGroups.has(1024), 'A group entry leaked');
+    A.close(); B.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  // Disconnect from an encounter group notifies peers via synthetic
+  // disconnect (mirror of PvP's pvp-action {kind:'disconnect'}).
+  await asyncTest('encounter peer disconnect → synthetic disconnect to peers', async () => {
+    _testHooks.resetState();
+    const A = await connectClient(port, 1026, { ...baseProfile, name: 'A_drop' });
+    const B = await connectClient(port, 1027, { ...targetProfile, name: 'B_drop' });
+    _testHooks.state.encounterGroups.set(1026, new Set([1027]));
+    _testHooks.state.encounterGroups.set(1027, new Set([1026]));
+    const got = once(B, m => m.type === 'encounter-action' && m.kind === 'disconnect', 500);
+    A.close();
+    const m = await got;
+    assertEqual(m.userId, 1026, 'disconnect from wrong userId');
+    B.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
   // ── #22 party chat scopes to party, not location ────────────────────────
   await asyncTest('#22 party chat scopes to party-membership', async () => {
     _testHooks.resetState();
