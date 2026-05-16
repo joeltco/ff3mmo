@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.402 — 2026-05-16
+
+### Multiplayer: player names no longer render as "object"
+
+- **Bug**: `slot.name` is a `Uint8Array` of FF3-encoded text bytes. `JSON.stringify` on a `Uint8Array` serializes as `{"0":N,"1":N,…}` (object-shaped, not array — TypedArrays don't have a `toJSON` method JSON.stringify respects). Server's `_normalizeProfileField('name', value)` then ran `String(value).slice(0, 16)` → `"[object Object]"` → bitmap font drops the `[` `]` glyphs → user sees "object" / "object Object" in the roster.
+- **Fix**: `src/main.js` profile getter now decodes `slot.name` via `_nesNameToString` from `text-utils.js` before sending. Wire carries a real JS string, server clamps to 16 chars, receiver renders the correct name.
+
 ## 1.7.401 — 2026-05-16
 
 ### Multiplayer: fresh registrations now actually connect (P0)

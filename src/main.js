@@ -35,6 +35,7 @@ import { initBattleEncounter } from './battle-encounter.js';
 import { initSpellCast } from './spell-cast.js';
 import { addItem, setPlayerInventory } from './inventory.js';
 import { saveSlots } from './save-state.js';
+import { _nesNameToString } from './text-utils.js';
 import { resetBattleVars, isTeamWiped, executeBattleCommand } from './battle-update.js';
 import { startGameLoop } from './game-loop.js';
 import { connectNet } from './net.js';
@@ -73,8 +74,12 @@ export function init() {
     () => {
       const slot = saveSlots[selectCursor];
       if (!slot || !ps.stats) return null;
+      // slot.name is a Uint8Array of FF3-encoded text bytes. JSON.stringify on
+      // a Uint8Array serializes as `{"0":N,"1":N,…}` (object shape, not array),
+      // which the server then coerces to "[object Object]" via String()/slice.
+      // Decode to a JS string so the wire carries the readable name.
       return {
-        name:    slot.name || 'Player',
+        name:    slot.name ? _nesNameToString(slot.name) : 'Player',
         jobIdx:  ps.jobIdx | 0,
         level:   ps.stats.level | 0 || 1,
         palIdx:  0,
