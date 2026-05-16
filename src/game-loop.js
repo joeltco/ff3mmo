@@ -270,12 +270,33 @@ function gameLoop() {
   _tickFreezeWatchdog(timestamp);
 }
 
-// Worker-driven 60 Hz heartbeat. The worker's setInterval keeps running when
-// the tab is hidden — unlike rAF (paused) and main-thread setInterval
-// (throttled to ~1 Hz). The cost is no display-refresh sync, which is fine
-// for a 60 Hz NES-style game with dt-based animations.
+// Hybrid tick driver. rAF when the tab is visible — Chrome on Android
+// doesn't vsync-align Worker setInterval bursts, which produces stutter
+// (v1.7.403 S23 report). Worker setInterval kicks in only when the tab is
+// hidden, since rAF is paused on hidden tabs and we still need the engine
+// to advance for multiplayer sync. visibilitychange flips between them.
+//
+// One guard prevents double-tick during transitions: the worker's onmessage
+// handler bails when `_activeMode !== 'worker'`, so an in-flight postMessage
+// that arrives after we've switched to rAF gets dropped.
 let _tickWorker = null;
-function _startTicker() {
+let _rafHandle = null;
+let _activeMode = null;  // 'raf' | 'worker' | null
+
+// 60 Hz cap on rAF. The S23 / Pixel 8 / iPhone Pro all have 120 Hz displays;
+// naked rAF would double the per-frame work and the gameLoop draws are already
+// the hot path on Chrome Android. The 14 ms threshold lets every frame through
+// at 60 Hz, and every OTHER frame at 120 Hz — effective 60 Hz on either.
+let _lastRafTickTime = 0;
+function _rafTick(timestamp) {
+  _rafHandle = requestAnimationFrame(_rafTick);
+  if (timestamp - _lastRafTickTime < 14) return;
+  _lastRafTickTime = timestamp;
+  try { gameLoop(); }
+  catch (e) { _reportError('TICK ERROR', e); }
+}
+
+function _initWorker() {
   if (_tickWorker) return;
   const workerCode = `
     let handle = null;
@@ -290,10 +311,41 @@ function _startTicker() {
   const blob = new Blob([workerCode], { type: 'application/javascript' });
   _tickWorker = new Worker(URL.createObjectURL(blob));
   _tickWorker.onmessage = () => {
+    if (_activeMode !== 'worker') return;
     try { gameLoop(); }
     catch (e) { _reportError('TICK ERROR', e); }
   };
-  _tickWorker.postMessage('start');
+}
+
+function _switchTo(mode) {
+  if (_activeMode === mode) return;
+  if (_activeMode === 'raf' && _rafHandle != null) {
+    cancelAnimationFrame(_rafHandle);
+    _rafHandle = null;
+  } else if (_activeMode === 'worker' && _tickWorker) {
+    _tickWorker.postMessage('stop');
+  }
+  _activeMode = mode;
+  // Reset the dt baseline so the gap during the transition doesn't show up
+  // as a giant frame on the first tick after switching.
+  lastTime = performance.now();
+  if (mode === 'raf') {
+    _rafHandle = requestAnimationFrame(_rafTick);
+  } else if (mode === 'worker') {
+    _initWorker();
+    _tickWorker.postMessage('start');
+  }
+}
+
+function _startTicker() {
+  if (_activeMode) return;
+  const hidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
+  _switchTo(hidden ? 'worker' : 'raf');
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => {
+      _switchTo(document.visibilityState === 'hidden' ? 'worker' : 'raf');
+    });
+  }
 }
 
 export function startGameLoop() {

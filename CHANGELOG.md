@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.404 — 2026-05-16
+
+### Chrome-Android stutter fix: hybrid rAF / Worker tick driver
+
+- **Bug**: engine ticked exclusively via Web Worker `setInterval(16ms)` → `postMessage` → main thread. Chrome on Android doesn't vsync-align Worker messages the way Firefox does, so when the main thread is even briefly busy, messages queue up in the worker and arrive as a burst — main thread runs several `gameLoop()` calls back-to-back, then nothing for a stretch. Visible as the unplayable stutter reported on Galaxy S23 / Chrome at v1.7.403. Firefox doesn't show it (different scheduling).
+- **Fix**: `src/game-loop.js` now picks between two drivers based on `document.visibilityState`. While visible: `requestAnimationFrame` (vsync-aligned, no message-queue burst). While hidden: the original Worker `setInterval` (rAF is paused on hidden tabs and MP sync needs the engine alive). A `visibilitychange` listener flips between them; the worker's `onmessage` handler bails when the driver mode isn't `'worker'` so an in-flight postMessage that arrives during the transition can't double-tick. `lastTime` is reset on switch so the gap doesn't show up as a giant single frame.
+- **120 Hz cap**: rAF tick is gated at a 14 ms threshold so 60 / 90 / 120 Hz displays all converge to ~60 effective FPS. Without this the S23's 120 Hz panel would double per-frame render work versus the worker baseline.
+
 ## 1.7.403 — 2026-05-16
 
 ### Diagnostic logging for PvP hook resolution (temporary)
