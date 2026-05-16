@@ -39,6 +39,7 @@
 
 import { WebSocketServer } from 'ws';
 import { createRequire } from 'module';
+import { verifyTokenWithRevocation } from './api.js';
 const require = createRequire(import.meta.url);
 const jwt = require('jsonwebtoken');
 
@@ -689,9 +690,12 @@ export function attachWebSocketPresence(httpServer) {
       socket.destroy();
       return;
     }
-    let decoded;
-    try { decoded = jwt.verify(token, JWT_SECRET); }
-    catch {
+    // Verify with revocation check — `verifyTokenWithRevocation` does the
+    // signature + expiry check AND compares iat against the user's
+    // `token_iat_min` watermark so /api/logout-all actually kills WS
+    // sessions. Pre-beta P3.
+    const decoded = verifyTokenWithRevocation(token);
+    if (!decoded) {
       socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
       socket.destroy();
       return;

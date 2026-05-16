@@ -641,6 +641,43 @@
     let authToken = localStorage.getItem('ff3_token');
     let authEmail = localStorage.getItem('ff3_email');
 
+    // Sliding JWT refresh — if the stored token's `iat` is older than 7
+    // days, call `/api/refresh` to swap it for a fresh 30-day window. Server
+    // rejects refresh attempts on tokens older than 21 days, so a long-idle
+    // user just sees the login screen again. Pre-beta P3.
+    function _tokenAgeSeconds(token) {
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        return Math.floor(Date.now() / 1000) - (payload.iat | 0);
+      } catch (_) { return Infinity; }
+    }
+    async function _maybeRefreshToken() {
+      if (!authToken) return;
+      if (_tokenAgeSeconds(authToken) < 7 * 24 * 3600) return;
+      try {
+        const r = await fetch(`${API}/api/refresh`, {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + authToken },
+        });
+        if (!r.ok) {
+          // 401 → too old or revoked. Clear local state so the auth screen
+          // shows. The user will log in again and get a fresh window.
+          authToken = null; authEmail = null;
+          localStorage.removeItem('ff3_token');
+          localStorage.removeItem('ff3_email');
+          return;
+        }
+        const data = await r.json();
+        if (data && data.token) {
+          authToken = data.token;
+          localStorage.setItem('ff3_token', authToken);
+        }
+      } catch (_) { /* offline — keep the old token until it expires */ }
+    }
+    // Run the refresh check before any auth-using code paths. Fire-and-
+    // forget; the rest of the boot doesn't need to await.
+    _maybeRefreshToken();
+
     const authScreen = document.getElementById('auth-screen');
     const authEmailInput = document.getElementById('auth-email');
     const authPasswordInput = document.getElementById('auth-password');

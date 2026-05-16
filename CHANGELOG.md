@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.396 — 2026-05-15
+
+### Pre-beta JWT rotation + revocation
+
+- **`users.token_iat_min` column** (`api.js`): new per-user "any token issued before this unix-second is invalid" watermark. Default 0 means no revocation. Bumped to `now` by `/api/logout-all` to invalidate every outstanding session in one shot (any HTTP / WS call carrying a now-stale token sees 401).
+- **`verifyTokenWithRevocation` shared helper** (`api.js`): both `authMiddleware` (HTTP) and `ws-presence.js` upgrade handler route through this. Signature check → expiry check → `users.token_iat_min` comparison. Pre-fix the WS path did only the signature/expiry check, so revoking a session wouldn't kill open WS connections.
+- **`POST /api/refresh`**: sliding refresh — takes a valid Bearer token, returns a fresh 30-day token. Hard limit: rejects tokens older than 21 days so a stolen token can't be chained indefinitely. Rate-limited under the auth bucket. Client (`index.html`) calls this on page load when the stored token's `iat` is more than 7 days old; on 401 it clears local auth state and shows the login screen.
+- **`POST /api/logout-all`**: bumps `token_iat_min` to now, then issues a fresh token for the caller (so the user who just logged everyone else out stays signed in). No client UI yet — endpoint is wired for a future "log out other devices" button.
+- **Test surface**: new `_testEnsureUser(userId)` export from `api.js` inserts a stub row so `pvp-wire-sim` + `pvp-load-sim` token mints validate. Two new wire-sim assertions cover the refresh happy path + junk-token rejection. Harness count: 33 (was 31).
+
 ## 1.7.395 — 2026-05-15
 
 ### Pre-beta first-time UX

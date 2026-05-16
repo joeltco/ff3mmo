@@ -27,6 +27,7 @@ import {
   tryInflictStatus, processTurnStart,
 } from '../src/status-effects.js';
 import { attachWebSocketPresence, _testHooks } from '../ws-presence.js';
+import { _testEnsureUser, handleAPI } from '../api.js';
 
 const require = createRequire(import.meta.url);
 const jwt = require('jsonwebtoken');
@@ -322,6 +323,10 @@ function once(ws, predicate, timeoutMs = 1000) {
 }
 
 function connectClient(port, userId, profile) {
+  // Ensure the test userId has a row in `users` so the revocation check in
+  // `verifyTokenWithRevocation` validates the minted token. Pre-beta P3
+  // JWT rotation rejects tokens whose userId isn't in the DB.
+  _testEnsureUser(userId);
   return new Promise((resolve, reject) => {
     const token = mintToken(userId);
     const ws = new WebSocket(`ws://127.0.0.1:${port}/api/ws?token=${token}`);
@@ -344,9 +349,16 @@ async function suiteWire() {
   console.log('\n═══ SUITE 3 — end-to-end wire ═══');
   _testHooks.resetState();
 
-  // Boot the real ws-presence on a localhost port. Random port keeps
-  // re-runs idempotent.
-  const httpServer = createServer();
+  // Boot the real ws-presence + API on a localhost port. Random port keeps
+  // re-runs idempotent. The HTTP path is wired through `handleAPI` so the
+  // /api/refresh + /api/logout-all tests can hit the same server.
+  const httpServer = createServer(async (req, res) => {
+    if (req.url && req.url.startsWith('/api/')) {
+      const handled = await handleAPI(req, res);
+      if (handled) return;
+    }
+    res.writeHead(404); res.end();
+  });
   attachWebSocketPresence(httpServer);
   await new Promise(r => httpServer.listen(0, '127.0.0.1', r));
   const port = httpServer.address().port;
@@ -525,6 +537,28 @@ async function suiteWire() {
     assertTrue(!cReceived, 'party chat leaked to non-party member');
     A.close(); B.close(); C.close();
     await new Promise(r => setTimeout(r, 40));
+  });
+
+  // ── P3 JWT rotation — refresh endpoint smoke ─────────────────────────────
+  await asyncTest('P3 /api/refresh returns a fresh token for a valid one', async () => {
+    _testEnsureUser(2001);
+    const t = mintToken(2001);
+    const r = await fetch(`http://127.0.0.1:${port}/api/refresh`, {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + t },
+    });
+    assertEqual(r.status, 200, 'refresh rejected a valid token');
+    const data = await r.json();
+    assertTrue(typeof data.token === 'string' && data.token.length > 20, 'no token in refresh response');
+    assertTrue(data.token !== t, 'refresh returned the same token (should be a fresh sign)');
+  });
+
+  await asyncTest('P3 /api/refresh rejects junk token with 401', async () => {
+    const r = await fetch(`http://127.0.0.1:${port}/api/refresh`, {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer not-a-jwt' },
+    });
+    assertEqual(r.status, 401, 'junk token was accepted');
   });
 
   // ── teardown ─────────────────────────────────────────────────────────────

@@ -159,6 +159,17 @@ db.exec(`
   );
 `);
 
+// JWT rotation column on `users`. Tokens issued before this unix-second
+// timestamp are rejected as if expired. Bumped by `/api/logout-all` so a
+// user with a stolen token can invalidate every outstanding session
+// without changing their password. Pre-beta P3.
+//
+// `ALTER TABLE ADD COLUMN` is idempotent here only via try/catch — the
+// column might already exist on a re-run.
+try {
+  db.exec('ALTER TABLE users ADD COLUMN token_iat_min INTEGER DEFAULT 0');
+} catch (_) { /* column exists — fine */ }
+
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let body = '';
@@ -180,12 +191,43 @@ function send(res, status, data) {
   res.end(body);
 }
 
+// Verify a JWT against `users.token_iat_min` so /api/logout-all (or any
+// future server-side revocation) actually takes effect. Same return shape
+// as `jwt.verify` on success; null on any failure (bad signature, expired,
+// missing user, iat predates the revocation watermark). Used by both the
+// HTTP middleware and `ws-presence.js` upgrade handler.
+const _tokenIatMinStmt = db.prepare('SELECT token_iat_min FROM users WHERE id = ?');
+
+// Test-only — `tools/pvp-wire-sim.js` and `tools/pvp-load-sim.js` mint
+// JWTs for fabricated userIds. Without a matching `users` row the
+// revocation check rejects them. This helper inserts a stub row if needed
+// so test tokens validate. Never call from production paths.
+const _testEnsureUserStmt = db.prepare(
+  'INSERT OR IGNORE INTO users (id, email, password_hash) VALUES (?, ?, ?)');
+export function _testEnsureUser(userId) {
+  _testEnsureUserStmt.run(userId, 'test-' + userId + '@local', _DUMMY_HASH);
+}
+
+export function verifyTokenWithRevocation(token) {
+  if (!token) return null;
+  let decoded;
+  try { decoded = jwt.verify(token, JWT_SECRET); }
+  catch { return null; }
+  // Pre-beta: tokens minted before the column landed have no iat in the
+  // payload only if a caller signed without expiresIn. Our login/register/
+  // refresh paths all set expiresIn → iat is present. Be defensive anyway.
+  if (!decoded || !decoded.userId || typeof decoded.iat !== 'number') return null;
+  const row = _tokenIatMinStmt.get(decoded.userId);
+  if (!row) return null;                                  // user deleted
+  const min = row.token_iat_min | 0;
+  if (decoded.iat < min) return null;                     // revoked
+  return decoded;
+}
+
 function authMiddleware(req) {
   const header = req.headers['authorization'] || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
-  if (!token) return null;
-  try { return jwt.verify(token, JWT_SECRET); }
-  catch { return null; }
+  return verifyTokenWithRevocation(token);
 }
 
 export async function handleAPI(req, res) {
@@ -247,6 +289,47 @@ export async function handleAPI(req, res) {
     if (!user || !match) return send(res, 401, { error: 'Invalid email or password' }), true;
     const token = jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, { expiresIn: '30d' });
     send(res, 200, { token, email: user.email });
+    return true;
+  }
+
+  // POST /api/refresh — sliding-window refresh for an existing token.
+  // Returns a fresh 30-day token if the supplied token is valid and was
+  // issued recently enough that we trust the holder is the live user. Older
+  // tokens are rejected — the user has to log in again. Pre-beta P3.
+  if (path === '/api/refresh' && req.method === 'POST') {
+    if (!_bucketAllow(_authBuckets, ip, AUTH_CAPACITY, AUTH_REFILL_PS)) {
+      return send(res, 429, { error: 'Too many requests — slow down' }), true;
+    }
+    const user = authMiddleware(req);
+    if (!user) return send(res, 401, { error: 'Not authenticated' }), true;
+    // Reject refreshes for stale-but-not-yet-expired tokens. With 30-day
+    // expiry, a stolen token still works for the rest of its window — but
+    // it can't be refreshed past 21 days of age, so the original window
+    // is the worst-case access for the attacker (vs. infinite chain).
+    const MAX_REFRESH_AGE_S = 21 * 24 * 3600;
+    const ageS = Math.floor(Date.now() / 1000) - user.iat;
+    if (ageS > MAX_REFRESH_AGE_S) return send(res, 401, { error: 'Token too old — re-login' }), true;
+    const newToken = jwt.sign({ userId: user.userId, email: user.email }, JWT_SECRET, { expiresIn: '30d' });
+    send(res, 200, { token: newToken, email: user.email });
+    return true;
+  }
+
+  // POST /api/logout-all — invalidate every outstanding session for this
+  // user by bumping `users.token_iat_min` to now. The next request from any
+  // existing token (HTTP or WS) sees `iat < token_iat_min` and gets a 401.
+  // Pre-beta P3.
+  if (path === '/api/logout-all' && req.method === 'POST') {
+    if (!_bucketAllow(_authBuckets, ip, AUTH_CAPACITY, AUTH_REFILL_PS)) {
+      return send(res, 429, { error: 'Too many requests — slow down' }), true;
+    }
+    const user = authMiddleware(req);
+    if (!user) return send(res, 401, { error: 'Not authenticated' }), true;
+    const now = Math.floor(Date.now() / 1000);
+    db.prepare('UPDATE users SET token_iat_min = ? WHERE id = ?').run(now, user.userId);
+    // Issue a fresh token so the caller (who just logged everyone else out)
+    // stays signed in. iat = now ≥ token_iat_min so this one survives.
+    const newToken = jwt.sign({ userId: user.userId, email: user.email }, JWT_SECRET, { expiresIn: '30d' });
+    send(res, 200, { token: newToken, email: user.email });
     return true;
   }
 

@@ -17,6 +17,7 @@ import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
 import { WebSocket } from 'ws';
 import { attachWebSocketPresence, _testHooks } from '../ws-presence.js';
+import { _testEnsureUser } from '../api.js';
 
 const require = createRequire(import.meta.url);
 const jwt = require('jsonwebtoken');
@@ -52,7 +53,9 @@ class Client {
     this.closed    = false;
   }
   async connect() {
-    const token = _mintToken(1_000_000 + this.id);
+    const uid = 1_000_000 + this.id;
+    _testEnsureUser(uid);   // satisfy revocation check (P3 JWT rotation)
+    const token = _mintToken(uid);
     return new Promise((resolve) => {
       // Spoof X-Forwarded-For per client so the per-IP cap (10 in
       // v1.7.388) doesn't gate the load test. Mirrors what nginx forwards
