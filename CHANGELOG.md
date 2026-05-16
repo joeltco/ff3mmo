@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.413 — 2026-05-16
+
+### Diag: log `pvp-ally-join` relay (temporary)
+
+- Server-only `console.log` lines on the `pvp-ally-join` relay path so we can confirm whether the wire-mirror is firing when a party member joins a wire-PvP battle. Pairs with the existing `pvp-search` / `pvp-encounter` / `pvp-hook` / `pvp-action` diag.
+
 ## 1.7.412 — 2026-05-16
 
 ### Party-assist now works in both directions (invitee side wasn't seeing it)

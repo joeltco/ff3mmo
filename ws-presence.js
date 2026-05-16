@@ -411,14 +411,15 @@ function _handleMessage(entry, msg) {
       // source. Server doesn't validate the inner stats; receiver re-derives
       // everything via `generateAllyStats(profile)`.
       // See docs/MULTIPLAYER-AUDIT-2026-05-15.md #18.
-      if (!entry.helloed) return;
+      if (!entry.helloed) { console.log('[pvp-ally-join] reject reason=not-helloed user=' + entry.userId); return; }
       const partnerId = _pvpPartners.get(entry.userId);
-      if (!partnerId) return;
+      if (!partnerId) { console.log('[pvp-ally-join] reject reason=no-partner user=' + entry.userId); return; }
       const partner = _connected.get(partnerId);
-      if (!partner || partner.ws.readyState !== 1) return;
+      if (!partner || partner.ws.readyState !== 1) { console.log('[pvp-ally-join] reject reason=partner-dead user=' + entry.userId); return; }
       const profile = parsed.profile || (parsed.name ? { name: parsed.name } : null);
-      if (!profile) return;
+      if (!profile) { console.log('[pvp-ally-join] reject reason=no-profile user=' + entry.userId); return; }
       profile.name = String(profile.name || '').slice(0, 16);
+      console.log('[pvp-ally-join] relay user=' + entry.userId + ' → partner=' + partnerId + ' ally=' + profile.name);
       _send(partner.ws, { type: 'pvp-ally-join', profile });
       return;
     }
