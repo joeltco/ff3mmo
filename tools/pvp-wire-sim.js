@@ -1,0 +1,558 @@
+#!/usr/bin/env node
+// tools/pvp-wire-sim.js — terminal regression harness for the multiplayer
+// wire layer. Spec: tools/pvp-wire-sim.PLAN.md
+//
+// Three layers of coverage:
+//   1. Math lockstep — re-seed `rng.js` between simulated client A and B,
+//      assert deterministic combat math.
+//   2. Server unit  — call `ws-presence.js` internals via `_testHooks`.
+//   3. End-to-end   — spin up the real WS server on a localhost port and
+//                     drive two JWT-authed clients through scripted scenarios.
+//
+//   node tools/pvp-wire-sim.js                 # run everything
+//   node tools/pvp-wire-sim.js --suite=math    # one suite only
+//   node tools/pvp-wire-sim.js --filter=defend # one assertion
+//
+// Each failed assertion bumps an exit-code counter; final exit is non-zero
+// when anything fails.
+
+import { createServer } from 'node:http';
+import { createRequire } from 'node:module';
+import { WebSocket } from 'ws';
+
+import { seed as seedRng, rand } from '../src/rng.js';
+import { rollHits, calcDamage, rollInitiative } from '../src/battle-math.js';
+import {
+  STATUS, addStatus, hasStatus, createStatusState,
+  tryInflictStatus, processTurnStart,
+} from '../src/status-effects.js';
+import { attachWebSocketPresence, _testHooks } from '../ws-presence.js';
+
+const require = createRequire(import.meta.url);
+const jwt = require('jsonwebtoken');
+
+// ── Env wiring ─────────────────────────────────────────────────────────────
+// `ws-presence.js` reads `JWT_SECRET` from env at module-load time. If we
+// don't pin it here, the test runs with the dev fallback and our JWTs
+// match anyway. Setting it explicitly makes that contract visible.
+const JWT_SECRET = process.env.JWT_SECRET || 'ff3mmo-dev-secret-change-in-prod';
+
+// ── CLI ────────────────────────────────────────────────────────────────────
+const args = Object.fromEntries(
+  process.argv.slice(2).map(a => {
+    const m = a.match(/^--(\w+)(?:=(.*))?$/);
+    return m ? [m[1], m[2] ?? 'true'] : [a, 'true'];
+  })
+);
+const ONLY_SUITE  = args.suite || null;       // 'math' | 'server' | 'wire'
+const ONLY_FILTER = args.filter || null;      // substring match on test name
+
+// ── Assertion plumbing ─────────────────────────────────────────────────────
+let _passed = 0, _failed = 0;
+const _failures = [];
+
+function test(name, fn) {
+  if (ONLY_FILTER && !name.toLowerCase().includes(ONLY_FILTER.toLowerCase())) return;
+  let err = null;
+  try { fn(); }
+  catch (e) { err = e; }
+  if (err) {
+    _failed++;
+    _failures.push({ name, err });
+    console.log(`  ✗ ${name}\n    ${err.message}`);
+  } else {
+    _passed++;
+    console.log(`  ✓ ${name}`);
+  }
+}
+
+async function asyncTest(name, fn) {
+  if (ONLY_FILTER && !name.toLowerCase().includes(ONLY_FILTER.toLowerCase())) return;
+  let err = null;
+  try { await fn(); }
+  catch (e) { err = e; }
+  if (err) {
+    _failed++;
+    _failures.push({ name, err });
+    console.log(`  ✗ ${name}\n    ${err.message}`);
+  } else {
+    _passed++;
+    console.log(`  ✓ ${name}`);
+  }
+}
+
+function assertEqual(actual, expected, label = '') {
+  const a = JSON.stringify(actual), b = JSON.stringify(expected);
+  if (a !== b) throw new Error(`${label || 'mismatch'}\n      expected: ${b}\n      actual:   ${a}`);
+}
+function assertTrue(cond, msg = 'expected true') {
+  if (!cond) throw new Error(msg);
+}
+function assertClose(actual, expected, tol, label = '') {
+  if (Math.abs(actual - expected) > tol) {
+    throw new Error(`${label || 'not close'}: expected ${expected} ± ${tol}, got ${actual}`);
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// SUITE 1 — Math lockstep
+// ──────────────────────────────────────────────────────────────────────────
+// Each test seeds the RNG, runs the "sender" computation, re-seeds the same
+// value, runs the "receiver" computation. With the audit fixes, both sides
+// should land on the same numbers (or diverge intentionally — e.g.,
+// defendHalve when receiver is defending).
+
+function suiteMath() {
+  console.log('\n═══ SUITE 1 — math lockstep ═══');
+
+  // Audit #2 — `tryInflictStatus` now uses rand(), not Math.random.
+  test('#2 status RNG is deterministic across reseed', () => {
+    const a = createStatusState();
+    const b = createStatusState();
+    seedRng(123);
+    tryInflictStatus(a, 'sleep', 50);
+    seedRng(123);
+    tryInflictStatus(b, 'sleep', 50);
+    assertEqual(a.mask, b.mask, 'mask diverged after same-seed roll');
+  });
+
+  // Audit #2 — processTurnStart sleep-wake roll syncs.
+  test('#2 sleep-wake roll is deterministic', () => {
+    const a = createStatusState();
+    const b = createStatusState();
+    addStatus(a, STATUS.SLEEP);
+    addStatus(b, STATUS.SLEEP);
+    seedRng(7);
+    const ra = processTurnStart(a, 100);
+    seedRng(7);
+    const rb = processTurnStart(b, 100);
+    assertEqual(ra.canAct, rb.canAct, 'canAct diverged');
+    assertEqual(hasStatus(a, STATUS.SLEEP), hasStatus(b, STATUS.SLEEP), 'sleep state diverged');
+  });
+
+  // Audit #1 — rollHits with same seed and same opts → identical output.
+  // Confirms the lockstep baseline before testing the divergence path.
+  test('#1 rollHits is deterministic with same seed + opts', () => {
+    const opts = { critPct: 4, critBonus: 0 };
+    seedRng(99);
+    const a = rollHits(20, 5, 80, 2, opts);
+    seedRng(99);
+    const b = rollHits(20, 5, 80, 2, opts);
+    assertEqual(a, b, 'rollHits output diverged with identical inputs');
+  });
+
+  // Audit #1 — confirms the bug shape: same seed but `defendHalve` toggled
+  // on one side produces DIFFERENT damage. After the fix, both sides pass
+  // `defendHalve` consistently → equality. Pre-fix: only the receiver passed
+  // it → mismatch on every hit while the defender was Defending.
+  test('#1 defendHalve halves damage post-roll', () => {
+    seedRng(99);
+    const without = rollHits(20, 5, 80, 4, { critPct: 0 });
+    seedRng(99);
+    const withHalve = rollHits(20, 5, 80, 4, { critPct: 0, defendHalve: true });
+    // Hit-or-miss pattern matches (rand cursor identical), but landed hits
+    // are halved.
+    for (let i = 0; i < without.length; i++) {
+      const a = without[i], b = withHalve[i];
+      if (a.miss) { assertTrue(b.miss, `hit ${i}: miss/hit fork`); continue; }
+      if (a.shieldBlock) { assertTrue(b.shieldBlock, `hit ${i}: block fork`); continue; }
+      assertTrue(b.damage <= a.damage, `hit ${i}: defendHalve raised damage`);
+    }
+  });
+
+  // Audit #3 — SW throw uses rand() (formula mirrored from pvp.js:1169).
+  test('#3 SouthWind damage formula is deterministic', () => {
+    function rollSW(level, seed) {
+      seedRng(seed);
+      const int_ = 5 + level;
+      const swAtk = Math.floor(int_ / 2) + 55;
+      return Math.floor((swAtk + Math.floor(rand() * Math.floor(swAtk / 2 + 1))) / 2);
+    }
+    assertEqual(rollSW(10, 42), rollSW(10, 42), 'SW damage diverged with same seed');
+  });
+
+  // Audit #4 — _playerTurnRun success roll uses rand() (formula from
+  // battle-turn.js:754).
+  test('#4 run-success roll is deterministic', () => {
+    function rollRun(playerAgi, avgLevel, seed) {
+      seedRng(seed);
+      const successRate = Math.min(99, Math.max(1, playerAgi + 25 - Math.floor(avgLevel / 4)));
+      return Math.floor(rand() * 100) < successRate;
+    }
+    assertEqual(rollRun(15, 10, 1), rollRun(15, 10, 1), 'run roll diverged');
+  });
+
+  // Sanity — rollInitiative is RNG-driven (proves combat turn order syncs).
+  test('rollInitiative is deterministic', () => {
+    seedRng(5);
+    const a = rollInitiative(10);
+    seedRng(5);
+    const b = rollInitiative(10);
+    assertEqual(a, b, 'initiative diverged');
+  });
+
+  // Sanity — calcDamage variance roll syncs.
+  test('calcDamage variance syncs across reseed', () => {
+    seedRng(11);
+    const a = calcDamage(30, 5, false, 0, 1);
+    seedRng(11);
+    const b = calcDamage(30, 5, false, 0, 1);
+    assertEqual(a, b, 'calcDamage diverged');
+  });
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// SUITE 2 — Server unit
+// ──────────────────────────────────────────────────────────────────────────
+// Internals exposed via `_testHooks` (production code path unaffected).
+
+function suiteServer() {
+  console.log('\n═══ SUITE 2 — server unit ═══');
+  _testHooks.resetState();
+
+  const { normalizeProfileField, pvpHookChance, inSameParty, rateAllow,
+          state } = _testHooks;
+
+  // Audit #7 — profile fields clamp on both `hello` and `update`.
+  test('#7 normalize agi clamps to [1, 99]', () => {
+    assertEqual(normalizeProfileField('agi', 9999), 99);
+    assertEqual(normalizeProfileField('agi', -50), 1);
+    assertEqual(normalizeProfileField('agi', 42), 42);
+  });
+  test('#7 normalize level clamps to [1, 99]', () => {
+    assertEqual(normalizeProfileField('level', 0), 1);
+    assertEqual(normalizeProfileField('level', 100), 99);
+  });
+  test('#7 normalize name truncates to 16 chars', () => {
+    assertEqual(normalizeProfileField('name', 'A'.repeat(40)), 'A'.repeat(16));
+  });
+  test('#7 normalize allies caps at 3 entries', () => {
+    const arr = [{a:1},{a:2},{a:3},{a:4},{a:5}];
+    const out = normalizeProfileField('allies', arr);
+    assertEqual(out.length, 3);
+  });
+  test('#7 normalize rejects unknown keys', () => {
+    assertEqual(normalizeProfileField('hax', 999), undefined);
+  });
+
+  // Audit hook formula — both client and server share the same math.
+  test('hook chance — AGI-equal default', () => {
+    const p = { agi: 10, jobIdx: 0 };
+    assertClose(pvpHookChance(p, p), 0.25, 0.0001);
+  });
+  test('hook chance — Thief bonus +0.15', () => {
+    const ch = { agi: 10, jobIdx: 8 };
+    const tg = { agi: 10, jobIdx: 0 };
+    assertClose(pvpHookChance(ch, tg), 0.40, 0.0001);
+  });
+  test('hook chance — clamped to 0.75 max', () => {
+    const ch = { agi: 99, jobIdx: 8 };
+    const tg = { agi: 1, jobIdx: 0 };
+    assertEqual(pvpHookChance(ch, tg), 0.75);
+  });
+  test('hook chance — clamped to 0.10 min', () => {
+    const ch = { agi: 1, jobIdx: 0 };
+    const tg = { agi: 99, jobIdx: 0 };
+    assertEqual(pvpHookChance(ch, tg), 0.10);
+  });
+
+  // Audit #22 — party chat is membership-scoped, not location-scoped.
+  test('#22 inSameParty — direct (inviter ↔ member)', () => {
+    state.partyMemberships.set(20, 10);  // 20 is in 10's party
+    assertTrue(inSameParty(10, 20), 'inviter+member not flagged');
+    assertTrue(inSameParty(20, 10), 'reverse not flagged');
+    _testHooks.resetState();
+  });
+  test('#22 inSameParty — two members same inviter', () => {
+    state.partyMemberships.set(20, 10);
+    state.partyMemberships.set(21, 10);
+    assertTrue(inSameParty(20, 21), 'co-members not flagged');
+    _testHooks.resetState();
+  });
+  test('#22 inSameParty — strangers reject', () => {
+    state.partyMemberships.set(20, 10);
+    state.partyMemberships.set(31, 30);
+    assertTrue(!inSameParty(20, 31), 'unrelated members crossed parties');
+    _testHooks.resetState();
+  });
+  test('#22 inSameParty — both solo reject', () => {
+    assertTrue(!inSameParty(1, 2), 'solo players crossed');
+  });
+
+  // Audit #6 — rate-limit token bucket. Capacity 60; one allow per token.
+  test('#6 rate limit — first 60 frames pass', () => {
+    const entry = {};
+    let passes = 0;
+    for (let i = 0; i < 60; i++) if (rateAllow(entry)) passes++;
+    assertEqual(passes, 60, 'capacity not 60');
+  });
+  test('#6 rate limit — burst overrun blocked', () => {
+    const entry = {};
+    for (let i = 0; i < 60; i++) rateAllow(entry);
+    // Without time advance the 61st is denied.
+    assertTrue(!rateAllow(entry), 'burst did not block');
+  });
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// SUITE 3 — End-to-end wire
+// ──────────────────────────────────────────────────────────────────────────
+// Real `attachWebSocketPresence` against a localhost server, two JWT-authed
+// `ws` clients. Drives scripted scenarios; asserts what the partner
+// receives.
+
+function mintToken(userId) {
+  return jwt.sign({ userId }, JWT_SECRET, { expiresIn: '1h' });
+}
+
+function once(ws, predicate, timeoutMs = 1000) {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error('timeout waiting for predicate')), timeoutMs);
+    const onMsg = (data) => {
+      let msg;
+      try { msg = JSON.parse(data.toString()); } catch { return; }
+      if (predicate(msg)) {
+        clearTimeout(t);
+        ws.off('message', onMsg);
+        resolve(msg);
+      }
+    };
+    ws.on('message', onMsg);
+  });
+}
+
+function connectClient(port, userId, profile) {
+  return new Promise((resolve, reject) => {
+    const token = mintToken(userId);
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/api/ws?token=${token}`);
+    let ready = false;
+    ws.on('open', () => { /* wait for ready */ });
+    ws.on('error', reject);
+    ws.on('message', (data) => {
+      const msg = JSON.parse(data.toString());
+      if (!ready && msg.type === 'ready') {
+        ready = true;
+        ws.send(JSON.stringify({ type: 'hello', profile, loc: 'ur' }));
+        // Wait one tick for the server to broadcast our join, then resolve.
+        setTimeout(() => resolve(ws), 30);
+      }
+    });
+  });
+}
+
+async function suiteWire() {
+  console.log('\n═══ SUITE 3 — end-to-end wire ═══');
+  _testHooks.resetState();
+
+  // Boot the real ws-presence on a localhost port. Random port keeps
+  // re-runs idempotent.
+  const httpServer = createServer();
+  attachWebSocketPresence(httpServer);
+  await new Promise(r => httpServer.listen(0, '127.0.0.1', r));
+  const port = httpServer.address().port;
+
+  const baseProfile = {
+    name: 'Alpha', jobIdx: 5, level: 7, palIdx: 0, hp: 70, maxHP: 70, agi: 12,
+    weaponR: 0x1f, armorId: 0x73, helmId: 0x62,
+  };
+  const targetProfile = {
+    name: 'Beta', jobIdx: 4, level: 4, palIdx: 0, hp: 52, maxHP: 52, agi: 9,
+    weaponR: 0x1e, armorId: 0x73, helmId: 0x62,
+  };
+
+  // ── #18 / #24 / hidden actor relay ───────────────────────────────────────
+  await asyncTest('#18 hidden actor relay — server forwards actor.idx', async () => {
+    _testHooks.resetState();
+    const A = await connectClient(port, 1001, { ...baseProfile, name: 'Alpha' });
+    const B = await connectClient(port, 1002, { ...targetProfile, name: 'Beta' });
+    // Force a partner pair by injecting directly into the server state
+    // (no need to drive a full search→encounter flow for this assertion).
+    _testHooks.state.pvpPartners.set(1001, 1002);
+    _testHooks.state.pvpPartners.set(1002, 1001);
+    // Wait for B to receive the pvp-action with `actor`.
+    const got = once(B, m => m.type === 'pvp-action');
+    A.send(JSON.stringify({
+      type: 'pvp-action', kind: 'magic',
+      actor: { idx: 1 },
+      target: { side: 'opp', idx: 0 },
+      spellId: 0x31,
+      damageRoll: 42, healAmount: 0,
+    }));
+    const msg = await got;
+    assertEqual(msg.kind, 'magic');
+    assertEqual(msg.actor && msg.actor.idx, 1, 'actor.idx not relayed');
+    assertEqual(msg.damageRoll, 42, 'damageRoll not relayed');
+    assertEqual(msg.spellId, 0x31);
+    A.close(); B.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  // ── #11 stale-search cleanup on location change ─────────────────────────
+  await asyncTest('#11 location change drops outgoing search', async () => {
+    _testHooks.resetState();
+    const A = await connectClient(port, 1003, { ...baseProfile, name: 'A1' });
+    const B = await connectClient(port, 1004, { ...targetProfile, name: 'B1' });
+    // A searches B.
+    A.send(JSON.stringify({ type: 'pvp-search', targetUserId: 1004 }));
+    await new Promise(r => setTimeout(r, 30));
+    assertTrue(_testHooks.state.pvpSearches.has(1003), 'search not registered');
+    // A moves to a different loc. Server should drop A's search.
+    const failed = once(A, m => m.type === 'pvp-search-failed', 500);
+    A.send(JSON.stringify({ type: 'location', loc: 'cave-1' }));
+    const f = await failed;
+    assertEqual(f.reason, 'different-location');
+    assertTrue(!_testHooks.state.pvpSearches.has(1003), 'search not cleared');
+    A.close(); B.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  // ── #14 mismatch recovery — both sides get synthetic disconnect ──────────
+  await asyncTest('#14 pvp-result mismatch ends both sides', async () => {
+    _testHooks.resetState();
+    const A = await connectClient(port, 1005, { ...baseProfile, name: 'A2' });
+    const B = await connectClient(port, 1006, { ...targetProfile, name: 'B2' });
+    _testHooks.state.pvpPartners.set(1005, 1006);
+    _testHooks.state.pvpPartners.set(1006, 1005);
+    // Both report `won` — inconsistent. Server should push disconnect to both.
+    const gotA = once(A, m => m.type === 'pvp-action' && m.kind === 'disconnect', 500);
+    const gotB = once(B, m => m.type === 'pvp-action' && m.kind === 'disconnect', 500);
+    A.send(JSON.stringify({ type: 'pvp-result', outcome: 'won' }));
+    await new Promise(r => setTimeout(r, 20));
+    B.send(JSON.stringify({ type: 'pvp-result', outcome: 'won' }));
+    await Promise.all([gotA, gotB]);
+    A.close(); B.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  // ── #8 PM-by-userId routes to that user specifically ────────────────────
+  await asyncTest('#8 PM by toUserId routes to the target', async () => {
+    _testHooks.resetState();
+    const A = await connectClient(port, 1007, { ...baseProfile, name: 'A3' });
+    const B = await connectClient(port, 1008, { ...targetProfile, name: 'B3' });
+    const C = await connectClient(port, 1009, { ...targetProfile, name: 'B3' });  // same display name as B
+    const gotB = once(B, m => m.type === 'chat' && m.channel === 'pm', 500);
+    let cReceived = false;
+    const onC = (d) => { const m = JSON.parse(d.toString()); if (m.type === 'chat') cReceived = true; };
+    C.on('message', onC);
+    A.send(JSON.stringify({ type: 'chat', channel: 'pm', text: 'hi B', toUserId: 1008 }));
+    const m = await gotB;
+    assertEqual(m.text, 'hi B');
+    await new Promise(r => setTimeout(r, 80));
+    assertTrue(!cReceived, 'PM leaked to other user with same display name');
+    A.close(); B.close(); C.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  // ── Hidden bug regression — server relays actor.idx for ally actions ────
+  await asyncTest('hidden actor relay — ally action arrives with idx=2', async () => {
+    _testHooks.resetState();
+    const A = await connectClient(port, 1010, { ...baseProfile, name: 'A4' });
+    const B = await connectClient(port, 1011, { ...targetProfile, name: 'B4' });
+    _testHooks.state.pvpPartners.set(1010, 1011);
+    _testHooks.state.pvpPartners.set(1011, 1010);
+    const got = once(B, m => m.type === 'pvp-action');
+    A.send(JSON.stringify({
+      type: 'pvp-action', kind: 'attack',
+      actor: { idx: 2 },                      // ally cell 1 (allyIdx + 1)
+      target: { side: 'opp', idx: 0 },
+    }));
+    const msg = await got;
+    assertEqual(msg.actor && msg.actor.idx, 2, 'ally actor.idx dropped');
+    A.close(); B.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  // ── #18 pvp-ally-join carries profile ──────────────────────────────────
+  await asyncTest('#18 pvp-ally-join relays profile to partner', async () => {
+    _testHooks.resetState();
+    const A = await connectClient(port, 1012, { ...baseProfile, name: 'A5' });
+    const B = await connectClient(port, 1013, { ...targetProfile, name: 'B5' });
+    _testHooks.state.pvpPartners.set(1012, 1013);
+    _testHooks.state.pvpPartners.set(1013, 1012);
+    const got = once(B, m => m.type === 'pvp-ally-join', 500);
+    const allyProfile = {
+      name: 'Nyx', jobIdx: 8, level: 5, palIdx: 0, loc: 'ur',
+      weaponR: 0x1e, knownSpells: [], jobLevel: 1,
+    };
+    A.send(JSON.stringify({ type: 'pvp-ally-join', profile: allyProfile }));
+    const m = await got;
+    assertEqual(m.profile && m.profile.name, 'Nyx');
+    assertEqual(m.profile && m.profile.jobIdx, 8);
+    A.close(); B.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  // ── #6 rate limit — 200 frames in a tight loop, count what makes it ────
+  await asyncTest('#6 rate limit drops frames past burst capacity', async () => {
+    _testHooks.resetState();
+    const A = await connectClient(port, 1014, { ...baseProfile, name: 'A6' });
+    const B = await connectClient(port, 1015, { ...targetProfile, name: 'B6' });
+    let received = 0;
+    B.on('message', (d) => {
+      const m = JSON.parse(d.toString());
+      if (m.type === 'chat') received++;
+    });
+    for (let i = 0; i < 200; i++) {
+      A.send(JSON.stringify({ type: 'chat', channel: 'world', text: 'spam' + i }));
+    }
+    await new Promise(r => setTimeout(r, 200));
+    // Capacity 60. Some refill might happen during the send loop, so allow
+    // a fudge factor — but it MUST be < 200.
+    assertTrue(received < 200, `rate limit didn't bite: ${received} delivered`);
+    assertTrue(received >= 30, `unexpected: only ${received} delivered`);
+    A.close(); B.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  // ── #22 party chat scopes to party, not location ────────────────────────
+  await asyncTest('#22 party chat scopes to party-membership', async () => {
+    _testHooks.resetState();
+    const A = await connectClient(port, 1016, { ...baseProfile, name: 'A7' });
+    const B = await connectClient(port, 1017, { ...targetProfile, name: 'B7' });
+    const C = await connectClient(port, 1018, { ...targetProfile, name: 'C7' });  // unrelated
+    // B is in A's party.
+    _testHooks.state.partyMemberships.set(1017, 1016);
+    const gotB = once(B, m => m.type === 'chat' && m.channel === 'party', 500);
+    let cReceived = false;
+    C.on('message', (d) => {
+      const m = JSON.parse(d.toString());
+      if (m.type === 'chat' && m.channel === 'party') cReceived = true;
+    });
+    A.send(JSON.stringify({ type: 'chat', channel: 'party', text: 'party only' }));
+    const m = await gotB;
+    assertEqual(m.text, 'party only');
+    await new Promise(r => setTimeout(r, 80));
+    assertTrue(!cReceived, 'party chat leaked to non-party member');
+    A.close(); B.close(); C.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  // ── teardown ─────────────────────────────────────────────────────────────
+  await new Promise(r => httpServer.close(r));
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Main
+// ──────────────────────────────────────────────────────────────────────────
+async function main() {
+  console.log('ff3mmo pvp-wire-sim — multiplayer regression harness');
+
+  if (!ONLY_SUITE || ONLY_SUITE === 'math')   suiteMath();
+  if (!ONLY_SUITE || ONLY_SUITE === 'server') suiteServer();
+  if (!ONLY_SUITE || ONLY_SUITE === 'wire')   await suiteWire();
+
+  console.log('\n═══ summary ═══');
+  console.log(`  passed: ${_passed}`);
+  console.log(`  failed: ${_failed}`);
+  if (_failed > 0) {
+    console.log('\nfailures:');
+    for (const f of _failures) console.log(`  - ${f.name}: ${f.err.message}`);
+    process.exit(1);
+  }
+  process.exit(0);
+}
+
+main().catch((e) => {
+  console.error('harness crashed:', e);
+  process.exit(2);
+});

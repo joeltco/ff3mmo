@@ -785,3 +785,30 @@ export function attachWebSocketPresence(httpServer) {
 
   return wss;
 }
+
+// Test-only surface for `tools/pvp-wire-sim.js`. Production code paths
+// never touch this; it just hands the wire-sim a reference to internal
+// helpers + state maps so the regression harness can exercise the same
+// code that runs in prod without re-implementing it.
+export const _testHooks = {
+  normalizeProfileField: _normalizeProfileField,
+  pvpHookChance: _pvpHookChance,
+  inSameParty: _inSameParty,
+  rateAllow: _rateAllow,
+  state: {
+    connected: _connected,
+    pvpSearches: _pvpSearches,
+    pvpPartners: _pvpPartners,
+    partyInvites: _partyInvites,
+    partyMemberships: _partyMemberships,
+    connsByIp: _connsByIp,
+  },
+  resetState() {
+    _connected.clear();
+    _pvpSearches.clear();
+    _pvpPartners.clear();
+    _partyInvites.clear();
+    _partyMemberships.clear();
+    _connsByIp.clear();
+  },
+};
