@@ -81,6 +81,25 @@ Before writing new code, read the relevant `docs/design-notes.md` section. Each 
 
 Deferred work and known followups live in `design-notes.md#followups`. Check there before assuming something is missing — it may be intentionally not yet shipped.
 
+### Terminal sims — run BEFORE shipping combat / wire changes
+
+Two Node-only harnesses live in `tools/`. They import the real production modules — sim and prod can't drift without the harness catching it.
+
+| Harness | What it covers | Run |
+|---|---|---|
+| `tools/battle-sim.js` | Local combat — duels, party-vs-encounter, spells, statuses, buffs, dual-wield, monster specials. Statistical mode (`--runs=N --json/--csv`). Spec: `tools/battle-sim.PLAN.md`. | `node tools/battle-sim.js --help` |
+| `tools/pvp-wire-sim.js` | Multiplayer wire — 31 tests across math lockstep / server unit / E2E suites. Boots `attachWebSocketPresence` on a localhost port + two real JWT-authed `ws` clients. Spec: `tools/pvp-wire-sim.PLAN.md`. | `node tools/pvp-wire-sim.js [--suite=math\|server\|wire] [--filter=...]` |
+
+`deploy.sh` runs `npm run lint:errors` + `node tools/pvp-wire-sim.js` as pre-flight gates before commit; failure aborts the deploy.
+
+**When to run each:**
+
+- Touching `battle-math.js` / `combatant-cast.js` / `status-effects.js` / spell or item data → **battle-sim**. Use `--seed=N` for reproducibility, `--runs=200 --json` for distributions.
+- Touching `ws-presence.js` / `src/net.js` / `src/pvp.js` / `src/pvp-search.js` / `src/party-invite.js` / `src/rng.js` / wire emit/receive paths → **pvp-wire-sim**. Add a new assertion in the matching suite when you ship a new wire contract; copy the closest existing test for shape.
+- Investigating a "two clients see different state" report → **pvp-wire-sim --suite=math** first to rule out an RNG-path drift.
+
+Full audit context (the 38 findings these tests regress against): `docs/MULTIPLAYER-AUDIT-2026-05-15.md`.
+
 ### PPU tile capture — use the EMU tab in the Konami debugger
 
 The Konami code (↑↑↓↓←→←→ X Z Start) opens a tabbed debug panel. The **EMU tab** (`src/debug/tabs/emu.js`) is a jsnes-backed in-browser FF3 emulator with live OAM/BG/CHR capture — it replaces the old FCEUX Lua workflow for any new sprite, monster tile, weapon frame, or palette work.
