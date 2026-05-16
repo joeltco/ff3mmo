@@ -178,9 +178,21 @@ function _scheduleReconnect() {
   _reconnectDelay = Math.min(MAX_RECONNECT_DELAY, _reconnectDelay * 2);
 }
 
+let _retryScheduled = false;
 function _open() {
+  if (_ws && (_ws.readyState === WebSocket.CONNECTING || _ws.readyState === WebSocket.OPEN)) return;
   const token = _getToken();
-  if (!token) return;  // not logged in — silent no-op
+  if (!token) {
+    // Fresh-page registration boot order: connectNet runs from init() before
+    // the user has logged in, so the token is null. Poll for it so a successful
+    // /api/register or /api/login picks up multiplayer without a page reload.
+    // One timer at a time (_retryScheduled guard) — no exponential growth even
+    // if connectNet or _scheduleReconnect call us repeatedly.
+    if (_retryScheduled) return;
+    _retryScheduled = true;
+    setTimeout(() => { _retryScheduled = false; _open(); }, 2000);
+    return;
+  }
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const url = `${proto}//${location.host}/api/ws?token=${encodeURIComponent(token)}`;
   try { _ws = new WebSocket(url); }

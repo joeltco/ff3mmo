@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.401 — 2026-05-16
+
+### Multiplayer: fresh registrations now actually connect (P0)
+
+- **Bug**: `init()` runs at module-load (index.html:870), which calls `connectNet()` → `_open()` BEFORE the user reaches the auth screen. On a fresh browser with no prior token, `_getToken()` returns null and `_open` returned silently with no retry. The user then registered or logged in, the new token landed in localStorage and in-memory `authToken`, `/api/save` worked (uses the in-memory token), but **WebSocket presence never opened** — the bootstrap had already given up. Anyone signing up fresh stayed invisible to every other player in their roster.
+- **Repro**: nginx access log showed phone B (Chrome Android, lucas@gmail.com, userId 4) successfully registering at 04:04:14, fetching the patch, making four `/api/save` POSTs, but zero `/api/ws` requests.
+- **Fix**: `_open()` in `src/net.js` now schedules a 2-second deferred retry whenever the token is missing, guarded by a single in-flight flag (`_retryScheduled`) so concurrent callers don't stack timers. Once `localStorage.ff3_token` appears (post-register / post-login), the next retry tick promotes to a real WebSocket open. Also added a "WS already connecting/open" early-return at the top of `_open` so the new retry can't race with `_scheduleReconnect` into a double WS.
+
 ## 1.7.400 — 2026-05-15
 
 ### Freeze movement during the PvP-encounter check
