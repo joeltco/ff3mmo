@@ -35,6 +35,17 @@ export const battleSt = {
   encounterCpGained: 0,
   preBattleTrack: null,
 
+  // ── Co-op random encounter (v1.7.418+) ───────────────────────────
+  // Wire-driven monster battle shared with party members. Mirror of
+  // pvpSt._wire* fields. On host: emit encounter-start, mark allies
+  // wire-driven so AI is skipped, wait for guest actions. On guest:
+  // spawn battle from encounter-invite, host appears as battleAlly[0].
+  isWireEncounter: false,
+  encounterIsHost: false,
+  encounterHostUserId: 0,
+  encounterSeed: 0,
+  encounterTurnIndex: 0,
+
   // ── Turn system ───────────────────────────────────────────────────
   turnQueue: [],            // [{type:'player'|'enemy'|'ally', index}]
   currentAttacker: -1,

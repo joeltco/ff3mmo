@@ -37,6 +37,9 @@ let _onPartyResult = null;   // ({accept, partner?, reason?}) → void — our o
 let _onPartyMemberLeft = null;  // ({memberUserId, memberName}) → void — a member of OUR party disconnected/left
 let _onPartyDisbanded = null;   // ({inviterUserId, inviterName}) → void — the party WE were in disbanded
 let _onGiveItem = null;         // ({fromUserId, fromName, itemId}) → void — partner used a heal/cure item on us
+let _onEncounterInvite = null;  // ({seed, monsters, hostUserId, peers}) → void — co-op random battle invite from host
+let _onEncounterAction = null;  // ({userId, kind, target, ...}) → void — peer's action in shared co-op battle
+let _onEncounterEnd = null;     // ({userId, outcome}) → void — a peer reported their co-op battle ended
 const MAX_RECONNECT_DELAY = 30000;
 
 function _getToken() {
@@ -174,6 +177,34 @@ function _handleMessage(data) {
       if (_onGiveItem) {
         try { _onGiveItem(msg); }
         catch (e) { console.warn('[net] give-item handler error', e); }
+      }
+      return;
+    case 'encounter-invite':
+      // Host's client is starting a co-op random encounter with us. Battle
+      // spawn is gated on our state — handler should ignore if we're already
+      // in a battle, otherwise seed the same monsters/RNG locally so both
+      // clients drive identical state.
+      if (_onEncounterInvite) {
+        try { _onEncounterInvite(msg); }
+        catch (e) { console.warn('[net] encounter-invite handler error', e); }
+      }
+      return;
+    case 'encounter-action':
+      // Peer's action arrived. Apply on our side so their actor's turn runs
+      // from real input instead of local AI. msg.kind === 'disconnect' means
+      // the peer dropped — handler should fall back to AI / skip.
+      if (_onEncounterAction) {
+        try { _onEncounterAction(msg); }
+        catch (e) { console.warn('[net] encounter-action handler error', e); }
+      }
+      return;
+    case 'encounter-end':
+      // A peer reported their co-op battle ended. Local FSM should already
+      // be converging via deterministic RNG; this is a safety signal for
+      // cleanup + divergence detection.
+      if (_onEncounterEnd) {
+        try { _onEncounterEnd(msg); }
+        catch (e) { console.warn('[net] encounter-end handler error', e); }
       }
       return;
   }
@@ -394,6 +425,39 @@ export function sendNetGiveItem(targetUserId, itemId) {
 export function setNetGiveItemHandler(fn) {
   _onGiveItem = typeof fn === 'function' ? fn : null;
 }
+
+// Co-op random encounters (v1.7.418+). Mirror of the PvP-action wire but
+// multi-peer: host emits `encounter-start` with seed + monsters + the
+// list of party member userIds to pull in. Server validates each
+// candidate, builds an `_encounterGroups` bidirectional map, and forwards
+// `encounter-invite` to each accepted peer. Action sync via
+// `encounter-action`; battle end via `encounter-end`. Both clients drive
+// the same battle locally with deterministic RNG seeded from the host's
+// seed — only player input + pre-rolled hit results need to ride the wire.
+export function sendNetEncounterStart(seed, monsters, partyUserIds) {
+  if (!_helloed || !seed || !Array.isArray(monsters) || !Array.isArray(partyUserIds)) return false;
+  if (!partyUserIds.length) return false;
+  return _send({ type: 'encounter-start', seed, monsters, partyUserIds });
+}
+
+// Wire shape (action):
+//   { kind: 'attack' | 'defend' | 'magic' | 'item' | 'run' | 'skip',
+//     target?: { kind: 'monster'|'player', idx?, userId? },
+//     spellId?, itemId?, damageRoll?, healAmount?, hitResults? }
+// On receive, msg carries `userId` (the actor who took this action).
+export function sendNetEncounterAction(action) {
+  if (!_helloed) return false;
+  return _send({ type: 'encounter-action', ...action });
+}
+
+export function sendNetEncounterEnd(outcome) {
+  if (!_helloed) return false;
+  return _send({ type: 'encounter-end', outcome: outcome || 'ended' });
+}
+
+export function setNetEncounterInviteHandler(fn) { _onEncounterInvite = typeof fn === 'function' ? fn : null; }
+export function setNetEncounterActionHandler(fn) { _onEncounterAction = typeof fn === 'function' ? fn : null; }
+export function setNetEncounterEndHandler(fn)    { _onEncounterEnd    = typeof fn === 'function' ? fn : null; }
 
 // Real party invites over the wire. Mirror of `pvp-search` lifecycle:
 // challenger emits `party-invite`; server forwards to target as

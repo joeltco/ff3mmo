@@ -420,6 +420,15 @@ function _updateAllyKOSequence() {
 }
 
 export function updateBattleAlly(dt) {
+  // Co-op random encounter — wire-driven ally is waiting for the remote
+  // player's `encounter-action` to arrive. processNextTurn unshifted the
+  // turn back to the queue head and set this state; each frame we retry
+  // by calling processNextTurn — when the action shows up, the ally turn
+  // proceeds; otherwise it stalls another frame. v1.7.418.
+  if (battleSt.battleState === 'ally-wire-wait') {
+    _processNextTurn();
+    return true;
+  }
   if (_updateAllyJoin()) return true;
   if (_updateAllyAttack()) return true;
   if (_updateAllyMagicCast(dt)) return true;

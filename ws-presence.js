@@ -75,6 +75,26 @@ const _partyInvites = new Map();
 // disconnect of either side.
 const _partyMemberships = new Map();
 
+// Active co-op random-encounter groups — userId → Set<peerUserId>. Built
+// when a host's client emits `encounter-start` for a monster fight that
+// pulls in party members; cleared on `encounter-end` / disconnect / the
+// last peer dropping. Bidirectional: if A's set has B and C, then B's set
+// has A and C, and C's has A and B. Mirror of `_pvpPartners` but
+// multi-peer. v1.7.418.
+const _encounterGroups = new Map();
+
+function _clearEncounterGroup(userId) {
+  const peers = _encounterGroups.get(userId);
+  if (!peers) return;
+  _encounterGroups.delete(userId);
+  for (const peerId of peers) {
+    const peerSet = _encounterGroups.get(peerId);
+    if (!peerSet) continue;
+    peerSet.delete(userId);
+    if (peerSet.size === 0) _encounterGroups.delete(peerId);
+  }
+}
+
 // Hook-chance formula — mirror of `src/pvp-search.js#getHookChance`.
 // AGI differential + Thief/Ranger job bonus, clamped to [10%, 75%].
 // Constants live alongside the client source for cross-reference (any
@@ -557,6 +577,99 @@ function _handleMessage(entry, msg) {
       }
       return;
     }
+    case 'encounter-start': {
+      // Host (this user) is triggering a co-op random encounter and wants
+      // to pull party members in. Validate each candidate is helloed + in
+      // same party + not already in another encounter / PvP, then forward
+      // `encounter-invite` to each. The host's own client spawns the battle
+      // locally at the same time — turn dispatch will wait on `encounter-
+      // action` for any actor whose userId is wire-driven.
+      if (!entry.helloed) return;
+      const seed = (parsed.seed | 0) >>> 0;
+      if (!seed) return;
+      const candidates = Array.isArray(parsed.partyUserIds) ? parsed.partyUserIds.slice(0, 8) : [];
+      const monsters   = Array.isArray(parsed.monsters)     ? parsed.monsters.slice(0, 9)     : [];
+      if (!candidates.length || !monsters.length) return;
+      if (_encounterGroups.has(entry.userId)) return;  // already in a co-op battle
+      const accepted = [];
+      for (const cand of candidates) {
+        const cid = cand | 0;
+        if (!cid || cid === entry.userId) continue;
+        const target = _connected.get(cid);
+        if (!target || !target.helloed) continue;
+        if (!_inSameParty(entry.userId, cid)) continue;
+        if (_pvpPartners.has(cid)) continue;
+        if (_encounterGroups.has(cid)) continue;
+        accepted.push(cid);
+      }
+      if (accepted.length === 0) return;
+      const all = [entry.userId, ...accepted];
+      for (const uid of all) {
+        const peerSet = new Set(all);
+        peerSet.delete(uid);
+        _encounterGroups.set(uid, peerSet);
+      }
+      const hostProfile = { userId: entry.userId, ...entry.profile, loc: entry.loc };
+      for (const memberId of accepted) {
+        const target = _connected.get(memberId);
+        if (!target || !target.helloed) continue;
+        const peers = [hostProfile];
+        for (const otherId of accepted) {
+          if (otherId === memberId) continue;
+          const other = _connected.get(otherId);
+          if (other && other.helloed) {
+            peers.push({ userId: otherId, ...other.profile, loc: other.loc });
+          }
+        }
+        _send(target.ws, {
+          type:       'encounter-invite',
+          seed,
+          monsters,
+          hostUserId: entry.userId,
+          peers,
+        });
+      }
+      console.log('[encounter-start] host=' + entry.userId + ' accepted=' + JSON.stringify(accepted) + ' monsters=' + monsters.length);
+      return;
+    }
+    case 'encounter-action': {
+      // Relay a co-op encounter action (player command or wire-driven ally
+      // command) to every other peer in the group. Mirror of pvp-action.
+      if (!entry.helloed) return;
+      const peers = _encounterGroups.get(entry.userId);
+      if (!peers || peers.size === 0) return;
+      for (const peerId of peers) {
+        const peer = _connected.get(peerId);
+        if (!peer || peer.ws.readyState !== 1) continue;
+        _send(peer.ws, {
+          type:       'encounter-action',
+          userId:     entry.userId,
+          kind:       parsed.kind,
+          target:     parsed.target,
+          spellId:    parsed.spellId,
+          itemId:     parsed.itemId,
+          damageRoll: parsed.damageRoll,
+          healAmount: parsed.healAmount,
+          hitResults: parsed.hitResults,
+        });
+      }
+      return;
+    }
+    case 'encounter-end': {
+      // Local battle ended on this user's side. Tell peers + clean up group.
+      if (!entry.helloed) return;
+      const peers = _encounterGroups.get(entry.userId);
+      if (!peers) return;
+      const outcome = String(parsed.outcome || '').slice(0, 16);
+      for (const peerId of peers) {
+        const peer = _connected.get(peerId);
+        if (peer && peer.helloed) {
+          _send(peer.ws, { type: 'encounter-end', userId: entry.userId, outcome });
+        }
+      }
+      _clearEncounterGroup(entry.userId);
+      return;
+    }
     case 'pvp-end': {
       // Either player signals the battle is over (fled / lost / won locally).
       // Server drops the partner pair so a new pvp-match can fire later.
@@ -800,6 +913,19 @@ export function attachWebSocketPresence(httpServer) {
             _send(partner.ws, { type: 'pvp-action', kind: 'disconnect' });
           }
         }
+        // Notify co-op encounter peers we dropped. They take over the
+        // dropped player's actions locally (skip-as-defend / AI fallback)
+        // and clear their own group on receipt.
+        const epeers = _encounterGroups.get(userId);
+        if (epeers) {
+          for (const peerId of epeers) {
+            const peer = _connected.get(peerId);
+            if (peer && peer.helloed) {
+              _send(peer.ws, { type: 'encounter-action', userId, kind: 'disconnect' });
+            }
+          }
+          _clearEncounterGroup(userId);
+        }
         // Clean up pending party invites involving this user.
         _partyInvites.delete(userId);  // outgoing
         for (const [chId, tgtId] of [..._partyInvites]) {
@@ -870,6 +996,7 @@ export const _testHooks = {
     pvpPartners: _pvpPartners,
     partyInvites: _partyInvites,
     partyMemberships: _partyMemberships,
+    encounterGroups: _encounterGroups,
     connsByIp: _connsByIp,
   },
   resetState() {
@@ -878,6 +1005,7 @@ export const _testHooks = {
     _pvpPartners.clear();
     _partyInvites.clear();
     _partyMemberships.clear();
+    _encounterGroups.clear();
     _connsByIp.clear();
   },
 };

@@ -2,7 +2,9 @@
 
 import { battleSt, getEnemyHP, setEnemyHP, BATTLE_SHAKE_MS, BOSS_DEF, BOSS_MAX_HP, setActiveCast } from './battle-state.js';
 import { rollHits, calcPotentialHits, rollInitiative, resolveLivingTarget } from './battle-math.js';
-import { rand } from './rng.js';
+import { rand, seed as seedRng } from './rng.js';
+import { dequeueWireEncounterAction } from './encounter-wire.js';
+import { getMyUserId } from './net.js';
 import { BATTLE_RAN_AWAY, BATTLE_CANT_ESCAPE, BATTLE_ALLY } from './data/strings.js';
 import { getMonsterName, getSpellNameShrinesClean, getItemNameShrinesClean } from './text-decoder.js';
 import { ps, getJobLevelStatBonus } from './player-stats.js';
@@ -52,6 +54,37 @@ export function buildTurnOrder() {
         actors.push({ type: 'ally', index: i, priority: rollInitiative(battleSt.battleAllies[i].agi) });
     }
   };
+  // Co-op random encounter — push ps + battleAllies in canonical order
+  // (host's userId first, then ascending userId) so every client rolls
+  // initiative for the same logical actor against the shared rand cursor.
+  // Mirror of pvpSt._wirePushOppFirst's canonical-side rule (v1.7.409).
+  // Without this, A's `_pushPlayer` pushes ps=A then ally=B, while B's
+  // pushes ps=B then ally=A — same cursor calls, different actors → forks.
+  const _pushPlayerCoop = () => {
+    const myUid = getMyUserId() | 0;
+    const team = [];
+    if (ps.hp > 0) {
+      const playerAgi = (ps.stats ? ps.stats.agi : 5) + getJobLevelStatBonus().agi;
+      team.push({ type: 'player', index: -1, userId: myUid, agi: playerAgi });
+    }
+    for (let i = 0; i < battleSt.battleAllies.length; i++) {
+      const a = battleSt.battleAllies[i];
+      if (!a || a.hp <= 0) continue;
+      team.push({ type: 'ally', index: i, userId: a.userId | 0, agi: a.agi });
+    }
+    const hostUid = battleSt.encounterHostUserId | 0;
+    team.sort((x, y) => {
+      const xHost = x.userId === hostUid ? 0 : 1;
+      const yHost = y.userId === hostUid ? 0 : 1;
+      if (xHost !== yHost) return xHost - yHost;
+      return x.userId - y.userId;
+    });
+    for (const c of team) {
+      const entry = { type: c.type, priority: rollInitiative(c.agi) };
+      if (c.type === 'ally') entry.index = c.index;
+      actors.push(entry);
+    }
+  };
   const _pushOpp = () => {
     if (pvpSt.pvpOpponentStats && pvpSt.pvpOpponentStats.hp > 0) {
       actors.push({ type: 'enemy', index: -1, pvpAllyIdx: -1, priority: rollInitiative(pvpSt.pvpOpponentStats.agi) });
@@ -63,7 +96,8 @@ export function buildTurnOrder() {
     }
   };
   if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
-    _pushPlayer();
+    if (battleSt.isWireEncounter) _pushPlayerCoop();
+    else                          _pushPlayer();
     for (let i = 0; i < battleSt.encounterMonsters.length; i++) {
       if (battleSt.encounterMonsters[i].hp > 0) {
         actors.push({ type: 'enemy', index: i, priority: rollInitiative(battleSt.encounterMonsters[i].agi) });
@@ -81,6 +115,19 @@ export function buildTurnOrder() {
   return actors;
 }
 
+// Co-op random encounter — per-turn rand reseed (mirror of PvP's
+// `_buildAndProcessNextTurn`). Both clients converge to the same cursor
+// at each new round before any rolls happen, erasing any drift from
+// non-wire rand consumers (status / AI / etc) earlier in the previous
+// round. Called from the menu-confirm bridge in `battle-update.js` and
+// from the ps-dead end-of-round path in `processNextTurn` below.
+export function maybeReseedCoopTurn() {
+  if (!battleSt.isWireEncounter || !battleSt.encounterSeed) return;
+  battleSt.encounterTurnIndex = (battleSt.encounterTurnIndex | 0) + 1;
+  const s = ((battleSt.encounterSeed >>> 0) + battleSt.encounterTurnIndex) >>> 0;
+  seedRng(s);
+}
+
 // ── Turn dispatch ──────────────────────────────────────────────────────────
 export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
     battleSt.isDefending = false; inputSt.battleCursor = 0; battleSt.turnTimer = 0;
@@ -91,6 +138,9 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
     // docs/MULTIPLAYER-AUDIT-2026-05-15.md #1.
     if (pvpSt.isPVPBattle) pvpSt.pvpOpponentIsDefending = false;
     if (ps.hp <= 0) {
+      // ps dead but allies might still be alive — start a new round, reseed
+      // co-op rand cursor at the round boundary like the menu-confirm path.
+      maybeReseedCoopTurn();
       battleSt.turnQueue = buildTurnOrder();
       if (battleSt.turnQueue.length === 0) return;
       processNextTurn();
@@ -193,6 +243,23 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
     battleSt.allyHitIsLeft = false;
     const ally = battleSt.battleAllies[turn.index];
     if (!ally || ally.hp <= 0) { processNextTurn(); return; }
+    // Co-op random encounter wire-driven ally — the action belongs to a
+    // peer player who's running their local turn on their phone. Replay
+    // their wire-delivered action instead of running AI here. Stall the
+    // turn (push back to queue head) until the matching encounter-action
+    // arrives. v1.7.418.
+    if (battleSt.isWireEncounter && ally.isWireDriven && ally.userId) {
+      const action = dequeueWireEncounterAction(ally.userId);
+      if (!action) {
+        battleSt.turnQueue.unshift(turn);
+        battleSt.battleState = 'ally-wire-wait';
+        battleSt.battleTimer = 0;
+        return;
+      }
+      if (_applyWireEncounterActionForAlly(turn.index, ally, action)) return;
+      // Fell through (kind we don't replay) — skip this ally's turn.
+      processNextTurn(); return;
+    }
     // Ally status turn-start (paralysis/sleep). Poison damage deferred.
     if (ally.status && !turn._statusDone) {
       const { canAct } = processTurnStart(ally.status, ally.maxHP || ally.hp);
@@ -416,6 +483,34 @@ function _tryAllyCure(ally, allyIdx) {
 function _emitWireAllyAction(allyIdx, payload) {
   if (!pvpSt.isWirePVP) return;
   sendNetPVPAction({ ...payload, actor: { idx: allyIdx + 1 } });
+}
+
+// Co-op random encounter — replay a wire-delivered action on the local
+// view of a peer player's ally turn. Returns true if the action was
+// consumed (caller should NOT advance the queue); false if we can't
+// replay this kind (caller falls through to processNextTurn). v1.7.418.
+//
+// MVP supports `attack` (replay with wire-supplied target + hitResults).
+// Other kinds — defend / run / skip / magic / item — fall through to a
+// skip so the FSM stays in sync; full magic / item replay is deferred.
+function _applyWireEncounterActionForAlly(allyIdx, ally, action) {
+  if (!action || action.kind !== 'attack') return false;
+  const tgt = action.target;
+  if (!tgt || tgt.kind !== 'monster') return false;
+  const tgtIdx = tgt.idx | 0;
+  if (!battleSt.encounterMonsters || !battleSt.encounterMonsters[tgtIdx]) return false;
+  const mon = battleSt.encounterMonsters[tgtIdx];
+  if (mon.hp <= 0) return false;
+  battleSt.allyTargetIndex = tgtIdx;
+  // Wire-supplied hitResults keeps damage identical to the peer's view.
+  // If empty / missing (legacy / corrupt payload), the receiver shows
+  // misses — better than diverging from the peer's authoritative roll.
+  battleSt.allyHitResults = Array.isArray(action.hitResults) ? action.hitResults : [];
+  battleSt.allyHitIdx = 0;
+  battleSt.allyHitResult = battleSt.allyHitResults[0] || null;
+  battleSt.battleState = 'ally-attack-back';
+  battleSt.battleTimer = 0;
+  return true;
 }
 
 // Translate the ally state bag's `{ allyMagicTargetType, allyMagicTargetIdx }`
