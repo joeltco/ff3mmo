@@ -171,6 +171,40 @@ function _rateAllow(entry) {
   return true;
 }
 
+// Per-kind sub-buckets. The global bucket above stops a single connection
+// from drowning the server, but it's a shared pool: 60 `chat` frames in a
+// burst would exhaust the bucket for that connection's `pvp-action`,
+// `encounter-action`, etc. These smaller per-kind buckets cap the
+// kinds that are user-action-driven (not poll-driven) so spamming one
+// can't starve the others. Frames not listed here are global-bucket-only.
+// v1.7.426.
+const PER_KIND_RATES = {
+  'chat':                      { cap: 20, refill: 5 },
+  'encounter-assist-request':  { cap: 6,  refill: 1 },
+  'encounter-start':           { cap: 6,  refill: 1 },
+  'give-item':                 { cap: 6,  refill: 1 },
+  'party-invite':              { cap: 6,  refill: 1 },
+};
+function _rateAllowKind(entry, kind) {
+  const rate = PER_KIND_RATES[kind];
+  if (!rate) return true;
+  if (!entry._kindRates) entry._kindRates = Object.create(null);
+  let b = entry._kindRates[kind];
+  const now = Date.now();
+  if (!b) {
+    b = { tokens: rate.cap, refilledAt: now };
+    entry._kindRates[kind] = b;
+  }
+  const elapsed = (now - b.refilledAt) / 1000;
+  if (elapsed > 0) {
+    b.tokens = Math.min(rate.cap, b.tokens + elapsed * rate.refill);
+    b.refilledAt = now;
+  }
+  if (b.tokens < 1) return false;
+  b.tokens -= 1;
+  return true;
+}
+
 // Returns true when A and B are in the same party (one inviter + their
 // active members). Used to gate `chat` channel='party' so a stray "party"
 // message from someone in the same location doesn't leak into another
@@ -289,6 +323,7 @@ function _handleMessage(entry, msg) {
   try { parsed = JSON.parse(msg); }
   catch { return; }
   if (!parsed || typeof parsed !== 'object') return;
+  if (!_rateAllowKind(entry, parsed.type)) return;
 
   switch (parsed.type) {
     case 'hello': {
@@ -698,12 +733,39 @@ function _handleMessage(entry, msg) {
       console.log('[encounter-assist-snapshot] host=' + entry.userId + ' joiner=' + joinerUserId + ' group=' + Array.from(_encounterGroups.get(entry.userId)).join(','));
       // Forward the full snapshot to the joiner so they spawn the same
       // battle locally with current monster HPs + peer list.
+      //
+      // Peers list is identity-pinned (v1.7.426): every peer.userId must
+      // exist in `_connected` and be helloed, and identity fields
+      // (name / jobIdx / level / palIdx) are overwritten with the server's
+      // trusted profile. Live battle stats (hp, atk, def, weapon, spells)
+      // pass through from the target's view since the server doesn't
+      // track in-battle mutations. Spoofed userIds drop silently. This
+      // means a malicious target can lie about a peer's HP but cannot
+      // inject ghost identities or impersonate a different user.
+      const candidatePeers = Array.isArray(parsed.peers) ? parsed.peers.slice(0, 8) : [];
+      const peers = [];
+      for (const p of candidatePeers) {
+        const puid = (p && p.userId) | 0;
+        if (!puid) continue;
+        if (puid === joinerUserId) continue;  // joiner spawns self locally, not as ally
+        const peerEntry = _connected.get(puid);
+        if (!peerEntry || !peerEntry.helloed) continue;
+        const sp = peerEntry.profile || {};
+        peers.push({
+          ...p,
+          userId: puid,
+          name:   sp.name   != null ? sp.name   : p.name,
+          jobIdx: sp.jobIdx != null ? sp.jobIdx : p.jobIdx,
+          level:  sp.level  != null ? sp.level  : p.level,
+          palIdx: sp.palIdx != null ? sp.palIdx : p.palIdx,
+        });
+      }
       _send(joiner.ws, {
         type:       'encounter-assist-snapshot',
         seed:       (parsed.seed | 0) >>> 0,
         turnIndex:  parsed.turnIndex | 0,
         monsters:   Array.isArray(parsed.monsters) ? parsed.monsters.slice(0, 9) : [],
-        peers:      Array.isArray(parsed.peers) ? parsed.peers.slice(0, 8) : [],
+        peers,
         hostUserId: entry.userId,
       });
       // Notify any OTHER peers in the group (not the target who is the
@@ -1077,6 +1139,8 @@ export const _testHooks = {
   pvpHookChance: _pvpHookChance,
   inSameParty: _inSameParty,
   rateAllow: _rateAllow,
+  rateAllowKind: _rateAllowKind,
+  perKindRates: PER_KIND_RATES,
   state: {
     connected: _connected,
     pvpSearches: _pvpSearches,

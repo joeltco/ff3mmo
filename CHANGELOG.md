@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.426 — 2026-05-16
+
+### MP audit hardening — per-kind rate limit + identity-pinned assist peers + dead-log cleanup
+
+Post-v1.7.425 audit bundle. None were correctness bugs on cooperating two-tab tests; all three are mitigations for hostile clients + cleanup.
+
+- **Per-kind rate-limit buckets** (`ws-presence.js` — `_rateAllowKind`, `PER_KIND_RATES`). The connection-wide token bucket (60 cap / 20-refill) is a single shared pool. A user spamming 60 `chat` frames could starve their own `pvp-action`, `encounter-action`, etc. The new per-kind buckets cap user-action-driven kinds (`chat` 20/5, `encounter-assist-request` 6/1, `encounter-start` 6/1, `give-item` 6/1, `party-invite` 6/1) so spamming one kind can't starve the others. Poll-driven frames (`update`, `pvp-action`, `encounter-action`) are global-bucket-only, unchanged.
+- **Identity-pinned peers list in `encounter-assist-snapshot`**. Server was forwarding `parsed.peers` from the target unchanged. A malicious target could inject ghost identities (unknown userIds), impersonate other users (lie about name/jobIdx/level/palIdx), or include the joiner in their own peers list (causing the joiner to spawn a clone of themself as an ally). Server now: (a) drops any peer.userId that isn't in `_connected` + helloed, (b) overwrites identity fields with the server's trusted profile, (c) drops the joiner from their own peers list, (d) passes live battle stats (hp, atk, def, weapon, spells) through unchanged since the server doesn't track in-battle mutations.
+- **Dead diagnostic log removed** (`src/pvp.js` queue-reorder path). `console.warn` left over from v1.7.406 PvP-drift debugging — the reorder path is exercised normally in coop encounters and the log is no longer useful.
+
+Wire-sim now 47/47 (3 new tests: per-kind chat cap, per-kind assist-request cap, snapshot identity-pin + spoof rejection, snapshot drops joiner-in-own-peers).
+
 ## 1.7.425 — 2026-05-16
 
 ### Hotfix v1.7.424 — missing export

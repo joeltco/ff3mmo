@@ -293,6 +293,31 @@ function suiteServer() {
     // Without time advance the 61st is denied.
     assertTrue(!rateAllow(entry), 'burst did not block');
   });
+
+  // Per-kind bucket (v1.7.426). Spamming one kind must not exhaust the
+  // bucket for other kinds — `chat` has capacity 20, `encounter-action`
+  // is unrestricted (global only). After 20 `chat` frames, further chat
+  // is denied but a different unrestricted kind still passes.
+  test('per-kind rate — chat exhausts independently', () => {
+    const { rateAllowKind, perKindRates } = _testHooks;
+    const entry = {};
+    const cap = perKindRates['chat'].cap;
+    for (let i = 0; i < cap; i++) {
+      assertTrue(rateAllowKind(entry, 'chat'), 'chat denied within capacity');
+    }
+    assertTrue(!rateAllowKind(entry, 'chat'), 'chat allowed past capacity');
+    assertTrue(rateAllowKind(entry, 'pvp-action'), 'unrestricted kind blocked by chat exhaust');
+  });
+  test('per-kind rate — encounter-assist-request capped at 6', () => {
+    const { rateAllowKind, perKindRates } = _testHooks;
+    const entry = {};
+    const cap = perKindRates['encounter-assist-request'].cap;
+    let passes = 0;
+    for (let i = 0; i < cap + 10; i++) {
+      if (rateAllowKind(entry, 'encounter-assist-request')) passes++;
+    }
+    assertEqual(passes, cap, 'assist-request cap not honored');
+  });
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -508,10 +533,10 @@ async function suiteWire() {
       A.send(JSON.stringify({ type: 'chat', channel: 'world', text: 'spam' + i }));
     }
     await new Promise(r => setTimeout(r, 200));
-    // Capacity 60. Some refill might happen during the send loop, so allow
-    // a fudge factor — but it MUST be < 200.
+    // Per-kind cap for chat is 20 (v1.7.426), refill 5/s. Tight loop fits
+    // under 200ms so refill is negligible; ~20 expected. MUST be < 200.
     assertTrue(received < 200, `rate limit didn't bite: ${received} delivered`);
-    assertTrue(received >= 30, `unexpected: only ${received} delivered`);
+    assertTrue(received >= 15, `unexpected: only ${received} delivered`);
     A.close(); B.close();
     await new Promise(r => setTimeout(r, 40));
   });
@@ -726,6 +751,80 @@ async function suiteWire() {
     const aGroup = _testHooks.state.encounterGroups.get(1034);
     assertTrue(aGroup && aGroup.has(1035) && aGroup.has(1036), 'joiner group missing peer links');
     A.close(); B.close(); C.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  // Identity-pin defense (v1.7.426). Target tries to ship a spoofed peer
+  // profile (unknown userId, lies about name/job). Server must drop the
+  // unknown userId entirely and overwrite identity fields on known users
+  // with the server's trusted profile. Live battle stats (hp, atk) flow
+  // through unchanged — server doesn't track those.
+  await asyncTest('assist-snapshot drops unknown-userId peers + pins identity', async () => {
+    _testHooks.resetState();
+    const A = await connectClient(port, 1040, { ...baseProfile, name: 'Joiner5' });
+    const B = await connectClient(port, 1041, { ...targetProfile, name: 'RealName', jobIdx: 3, level: 5, palIdx: 2, inBattle: 1 });
+    const C = await connectClient(port, 1042, { ...baseProfile, name: 'Existing', jobIdx: 1, level: 7, palIdx: 4 });
+    const got = once(A, m => m.type === 'encounter-assist-snapshot', 500);
+    B.send(JSON.stringify({
+      type: 'encounter-assist-snapshot',
+      joinerUserId: 1040,
+      seed: 0xabad1dea,
+      turnIndex: 2,
+      monsters: [{ monsterId: 0x00, hp: 9 }],
+      peers: [
+        // B lies about C's identity (wrong name + job).
+        { userId: 1042, name: 'SPOOFED', jobIdx: 0, level: 99, palIdx: 31, hp: 33, maxHP: 50, atk: 12 },
+        // B injects a peer who isn't connected.
+        { userId: 9999, name: 'GHOST', jobIdx: 0, level: 1, palIdx: 0 },
+        // B includes themselves with correct fields — server should pin those.
+        { userId: 1041, name: 'SHOULDOVERWRITE', jobIdx: 0, level: 99, hp: 40, maxHP: 60 },
+      ],
+      hostUserId: 1041,
+    }));
+    const m = await got;
+    // Ghost (unknown userId 9999) must be absent.
+    assertTrue(!m.peers.some(p => p.userId === 9999), 'ghost peer leaked into snapshot');
+    // C's identity fields are pinned to server profile, not the spoof.
+    const cPeer = m.peers.find(p => p.userId === 1042);
+    assertTrue(cPeer, 'real peer 1042 dropped');
+    assertEqual(cPeer.name, 'Existing', 'name not pinned to server');
+    assertEqual(cPeer.jobIdx, 1, 'jobIdx not pinned to server');
+    assertEqual(cPeer.level, 7, 'level not pinned to server');
+    assertEqual(cPeer.palIdx, 4, 'palIdx not pinned to server');
+    // Live battle stats flow through unchanged (server can't validate them).
+    assertEqual(cPeer.hp, 33, 'hp should pass through');
+    assertEqual(cPeer.atk, 12, 'atk should pass through');
+    // Host's own peer entry should also be pinned.
+    const bPeer = m.peers.find(p => p.userId === 1041);
+    assertTrue(bPeer, 'host peer 1041 dropped');
+    assertEqual(bPeer.name, 'RealName', 'host name not pinned');
+    assertEqual(bPeer.jobIdx, 3, 'host jobIdx not pinned');
+    A.close(); B.close(); C.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  // Defense — target tries to put the joiner into the joiner's own peers
+  // list (would cause the joiner to spawn a clone of themself as an ally).
+  await asyncTest('assist-snapshot drops joiner from own peers list', async () => {
+    _testHooks.resetState();
+    const A = await connectClient(port, 1044, { ...baseProfile, name: 'Joiner6' });
+    const B = await connectClient(port, 1045, { ...targetProfile, name: 'Target6', inBattle: 1 });
+    const got = once(A, m => m.type === 'encounter-assist-snapshot', 500);
+    B.send(JSON.stringify({
+      type: 'encounter-assist-snapshot',
+      joinerUserId: 1044,
+      seed: 0xdead,
+      turnIndex: 0,
+      monsters: [{ monsterId: 0x00, hp: 10 }],
+      peers: [
+        { userId: 1045, name: 'Target6', jobIdx: 0, level: 1, palIdx: 0 },
+        { userId: 1044, name: 'CLONE',   jobIdx: 0, level: 1, palIdx: 0 },
+      ],
+      hostUserId: 1045,
+    }));
+    const m = await got;
+    assertTrue(!m.peers.some(p => p.userId === 1044), 'joiner cloned into own peers list');
+    A.close(); B.close();
     await new Promise(r => setTimeout(r, 40));
   });
 

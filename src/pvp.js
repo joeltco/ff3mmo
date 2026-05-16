@@ -558,9 +558,6 @@ function _processEnemyFlash() {
         actionIdx = _wireOpponentActions.findIndex(a =>
           ((a && a.actor && a.actor.idx) | 0) === casterCellIdx);
         if (actionIdx < 0) return false;   // matching action hasn't arrived yet
-        console.warn('[pvp-action] queue-reorder: cell=' + casterCellIdx +
-                     ' was at queue idx=' + actionIdx +
-                     ' (head actor.idx=' + headActor + ')');
       }
       const action = _wireOpponentActions.splice(actionIdx, 1)[0];
       pvpSt.pvpPreflashDecided = true;
