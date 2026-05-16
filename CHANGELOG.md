@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.405 — 2026-05-16
+
+### Diag: log every relayed pvp-action on the server
+
+- One more temporary `console.log` in `ws-presence.js` for the `pvp-action` relay path. Logs `relay user=N → partner=M kind=K actor=X` on success, or one of three skip reasons (`not-helloed`, `no-partner`, `partner-dead`) on failure. Pairs with the v1.7.403 `pvp-search` / `pvp-encounter` / `pvp-hook` logging to narrow down where the "freeze after first command" desync is breaking.
+
 ## 1.7.404 — 2026-05-16
 
 ### Chrome-Android stutter fix: hybrid rAF / Worker tick driver

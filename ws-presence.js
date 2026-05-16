@@ -428,11 +428,12 @@ function _handleMessage(entry, msg) {
       // real input rather than local AI. Server doesn't validate / interpret
       // — clients run the existing engine and arrive at identical outcomes
       // via the synced seed (Step 4 part 1).
-      if (!entry.helloed) return;
+      if (!entry.helloed) { console.log('[pvp-action] reject reason=not-helloed user=' + entry.userId); return; }
       const partnerId = _pvpPartners.get(entry.userId);
-      if (!partnerId) return;
+      if (!partnerId) { console.log('[pvp-action] reject reason=no-partner user=' + entry.userId + ' kind=' + parsed.kind); return; }
       const partner = _connected.get(partnerId);
-      if (!partner || partner.ws.readyState !== 1) return;
+      if (!partner || partner.ws.readyState !== 1) { console.log('[pvp-action] reject reason=partner-dead user=' + entry.userId + ' partner=' + partnerId); return; }
+      console.log('[pvp-action] relay user=' + entry.userId + ' → partner=' + partnerId + ' kind=' + parsed.kind + ' actor=' + (parsed.actor && parsed.actor.idx));
       _send(partner.ws, {
         type:       'pvp-action',
         kind:       parsed.kind,
