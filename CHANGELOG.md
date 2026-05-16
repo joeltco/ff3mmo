@@ -2,11 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.399 — 2026-05-15
+
+### ROM-picker copy polish (the actual one)
+
+- Trimmed the ROM-picker hint on the auth screen to two lines: "You supply your own ROMs — the site doesn't distribute them." + "ROMs cache in your browser after the first load." The "FF3 is the main game; FF1 + FF2 supply battle music and one sprite" line is gone — that detail is going to keep shifting during alpha (more cross-ROM borrows are planned) and the user doesn't need a per-ROM accounting in the picker.
+- Restored the `ROM ok  PRG=…  CHR=…  mapper=…` boot-log line that 1.7.398 dropped. That edit was a misread of the previous ask.
+
 ## 1.7.398 — 2026-05-15
 
-### Startup console polish
+### Startup console polish (later reverted)
 
-- Dropped the `ROM ok  PRG=…  CHR=…  mapper=…` line from the boot log in `src/main.js`. ROM provenance is going to keep changing during alpha (FF1/FF2 cross-ROM borrows, sprite-pack swaps); printing iNES header counts every boot was noise, not signal. The other four lines (version, save slots, auth, boot ms, /help hint) stay — those are still useful first-look metadata.
+- Dropped the `ROM ok  PRG=…  CHR=…  mapper=…` line from the boot log in `src/main.js`. Restored in 1.7.399 — the actual ask was about the ROM-picker copy on the auth screen, not the boot console.
 
 ## 1.7.397 — 2026-05-15
 

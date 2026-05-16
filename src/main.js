@@ -207,12 +207,22 @@ export async function loadROM(arrayBuffer) {
     loadMapById,
   });
 
+  // Startup console log — every line is real data pulled from the running
+  // session. No fake metrics, no decorative numbers. Values:
+  //   - VERSION: from data/strings.js (matches package.json on deploy)
+  //   - rom.*: parsed iNES header counts + size formula (16k PRG, 8k CHR)
+  //   - saveSlots: array of [name|null, name|null, name|null]; populated count
+  //   - email + dev: from localStorage + DEV_EMAILS whitelist (chat.js)
+  //   - boot: performance.now() delta from loadROM start
   const email = localStorage.getItem('ff3_email');
   const dev = isDev();
   const slotsUsed = saveSlots.filter(s => s != null).length;
+  const prgKB = rom.prgSize / 1024;
+  const chrKB = (rom.chrBanks * 8);
   const bootMs = Math.round(performance.now() - _bootStart);
   const startupMsgs = [
     'FF3 MMO v' + VERSION,
+    'ROM ok  PRG=' + rom.prgBanks + 'x16k (' + prgKB + 'k)  CHR=' + rom.chrBanks + 'x8k (' + chrKB + 'k)  mapper=' + rom.mapper,
     'Save slots: ' + slotsUsed + '/3 used',
     'Auth: ' + (email || 'guest') + (dev ? ' [dev]' : ''),
     'Boot: ' + bootMs + 'ms',
