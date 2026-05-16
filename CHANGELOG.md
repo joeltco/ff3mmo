@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.410 — 2026-05-16
+
+### PvP: restore opponent back-swing pose (no new sprite code, just timer reset)
+
+- **Bug**: opponent back-swing pose (`pvp-drawing.js` `isWindUp` gate at line 173) never rendered on the receiver side because the pre-flash timer was already past `BOSS_PREFLASH_MS` (133 ms) by the time the wire action popped off the queue. `battleSt.battleTimer` starts accumulating when the FSM enters `enemy-flash`, but the wire-PvP path waits in `enemy-flash` until the `pvp-action` arrives — over a cellular WS round-trip that's typically 100-200 ms, so the gate clears immediately on pop and the FSM skips straight from "waiting" to slash.
+- **Fix**: reset `battleSt.battleTimer = 0` when the wire action is consumed in `_processEnemyFlash`. The 133 ms back-swing window now runs from wire-arrival, not from FSM entry, so the opponent's pose actually animates back before the strike.
+- No new sprite code, no parallel render module — same `_processEnemyFlash` → `_runEnemyAttack` → `pvp-enemy-slash` → `pvp-drawing.js#drawPVPEnemy` path that has always handled it. The wind-up gate was just being skipped over by a stale timer.
+
 ## 1.7.409 — 2026-05-16
 
 ### PvP: canonical actor-push order so initiative agrees across clients

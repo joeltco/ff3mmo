@@ -564,6 +564,13 @@ function _processEnemyFlash() {
       }
       const action = _wireOpponentActions.splice(actionIdx, 1)[0];
       pvpSt.pvpPreflashDecided = true;
+      // Reset battleTimer so the BOSS_PREFLASH_MS wind-up window starts from
+      // wire-arrival, not from FSM entry into `enemy-flash`. Without this, any
+      // WS round-trip delay (cellular ~150 ms) makes battleTimer already past
+      // 133 by the time we pop the queue — the pre-flash gate clears
+      // immediately and the opponent skips the entire back-swing pose, going
+      // straight to the slash. v1.7.410.
+      battleSt.battleTimer = 0;
       // _applyWireOpponentAction returns true when it transitioned to a
       // non-attack state (defend / magic / item). Returns false for 'attack'
       // — fall through to the regular attack windup, with the target stashed
