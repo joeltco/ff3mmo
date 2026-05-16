@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.398 — 2026-05-15
+
+### Startup console polish
+
+- Dropped the `ROM ok  PRG=…  CHR=…  mapper=…` line from the boot log in `src/main.js`. ROM provenance is going to keep changing during alpha (FF1/FF2 cross-ROM borrows, sprite-pack swaps); printing iNES header counts every boot was noise, not signal. The other four lines (version, save slots, auth, boot ms, /help hint) stay — those are still useful first-look metadata.
+
 ## 1.7.397 — 2026-05-15
 
 ### "Log out other devices" UI
