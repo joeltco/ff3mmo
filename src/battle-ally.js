@@ -453,7 +453,12 @@ export function updateBattleAlly(dt) {
   // turn, flip the ally to AI-fallback (defend this turn + isWireDriven
   // off so future turns run AI), then advance.
   if (battleSt.battleState === 'ally-wire-wait') {
-    const WIRE_WAIT_TIMEOUT_MS = 30000;
+    // 45s — cellular spikes can hold a single WS round-trip well past
+    // 10s on bad connections, especially during 4G↔5G cutover or in a
+    // crowded venue. 30s was too aggressive; this gives a comfortable
+    // margin without making the player feel the FSM is hard-stuck.
+    // v1.7.424.
+    const WIRE_WAIT_TIMEOUT_MS = 45000;
     if (battleSt.battleTimer > WIRE_WAIT_TIMEOUT_MS) {
       const turn = battleSt.turnQueue.shift();
       if (turn && turn.type === 'ally') {

@@ -674,6 +674,13 @@ function _handleMessage(entry, msg) {
       if (!joiner || !joiner.helloed) return;
       // Build / extend the encounter group.
       let group = _encounterGroups.get(entry.userId);
+      // Server-side dedup (v1.7.424) — if the joiner is already in this
+      // target's group (e.g., double-tap on Assist before the first
+      // snapshot landed), drop the second snapshot. Otherwise both
+      // target's battleAllies and the wire route get duplicated and the
+      // canonical turn-order push rolls initiative twice for the same
+      // userId → silent desync.
+      if (group && group.has(joinerUserId)) return;
       if (!group) {
         // Target was solo — create the bidirectional pair.
         group = new Set([joinerUserId]);

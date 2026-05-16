@@ -284,6 +284,11 @@ setNetEncounterAssistIncomingHandler((msg) => {
   if (battleSt.battleAllies.length >= 3) return;  // no slot
   const myUid = getMyUserId();
   if (!myUid) return;
+  // Target-side dedup (v1.7.424) — joiner double-tapped Assist → server
+  // relayed both incomings → we'd push two identical ally entries +
+  // emit two snapshots, breaking canonical turn-order. Drop the second.
+  const joinerUid = msg.fromUserId | 0;
+  if (battleSt.battleAllies.some(a => a && a.userId === joinerUid)) return;
   // Convert solo → host-of-coop if not already a wire encounter.
   if (!battleSt.isWireEncounter) {
     const seed32 = (Math.random() * 0xffffffff) >>> 0;

@@ -16,7 +16,7 @@ import { buildTurnOrder, processNextTurn, maybeReseedCoopTurn } from './battle-t
 import { summarizeHits } from './battle-math.js';
 import { reseedFromEntropy } from './rng.js';
 import { sendNetPVPAction, sendNetPVPAllyJoin, getOnlinePlayerByName } from './net.js';
-import { emitWireEncounterAction, endWireEncounter } from './encounter-wire.js';
+import { emitWireEncounterAction, endWireEncounter, clearWireEncounterQueue } from './encounter-wire.js';
 import { rand } from './rng.js';
 import { updateBattleAlly } from './battle-ally.js';
 import { updateBattleEnemyTurn } from './battle-enemy.js';
@@ -86,6 +86,12 @@ export function resetBattleVars() {
   battleSt.encounterHostUserId = 0;
   battleSt.encounterSeed = 0;
   battleSt.encounterTurnIndex = 0;
+  // Defensive (v1.7.424) — drain any encounter-action entries left over
+  // from a prior battle. `endWireEncounter` clears on the normal close
+  // path; this guards TCP half-open / browser-tab-switch cases where the
+  // peer's close handler didn't fire on the server and stale actions
+  // could replay against a new co-op partner with the same userId.
+  clearWireEncounterQueue();
   battleSt.isDefending = false; battleSt.battleAllies = []; battleSt.allyJoinRound = 0;
   battleSt.currentAllyAttacker = -1; battleSt.allyTargetIndex = -1; battleSt.allyHitResult = null; battleSt.allyHitIsLeft = false;
   battleSt.allyShakeTimer = {}; battleSt.enemyTargetAllyIdx = -1; battleSt.allyExitTimer = 0;

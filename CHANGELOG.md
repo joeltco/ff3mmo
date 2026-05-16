@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.424 — 2026-05-16
+
+### Last-audit fixes: assist-double-tap dedup + wire-queue defensive clear + timeout bump
+
+Post-implementation audit before live testing flagged these. Three confirmed bugs + two defensive tightenings.
+
+- **Assist double-tap dedup (P0)** — clicking Assist twice on the same target before the first snapshot arrived caused: server forwarded two `encounter-assist-incoming` to the target → target accepted both → `battleAllies` had two entries for the same userId → `_pushPlayerCoop` rolled initiative twice for the same logical actor → silent turn-order desync. Two layers of dedup:
+  - Server (`ws-presence.js#encounter-assist-snapshot`): if `_encounterGroups.get(target).has(joinerUserId)`, drop the second snapshot.
+  - Target (`battle-encounter.js#setNetEncounterAssistIncomingHandler`): skip if `battleAllies` already contains the joiner's userId.
+- **Wire queue defensive clear (P1)** — `_wireEncounterActions` is cleared by `endWireEncounter` on a normal close, but TCP half-open (browser tab kill, cellular drop without RST) leaves stale actions queued. If the same userId rejoins for a new battle later, old actions could replay. `resetBattleVars` in `battle-update.js` now calls `clearWireEncounterQueue()` defensively every battle start.
+- **Wire-wait timeout bump 30 → 45 s (P1)** — cellular spikes during 4G↔5G cutover or crowded venues can hold a single WS round-trip past 10 s; 30 s was too aggressive and would trigger the AI-fallback synthetic disconnect during legitimate slowdowns. 45 s gives margin without making the FSM feel hard-stuck.
+- **`_pushPlayerCoop` userId=0 guard (P2)** — `battle-turn.js#buildTurnOrder` co-op branch now skips allies with no userId. Today this can't fire (PLAYER_POOL random-fill is gated off in co-op), but it's a defensive guard against future fake-pool repopulation that would otherwise collide at userId=0 → unstable canonical sort.
+- **Non-issues (re-read after audit, no fix needed)**:
+  - Solo→host reseed mid-round: `maybeReseedCoopTurn` runs at every round boundary, so the initial reseed just sets the base for `seed + turnIndex` — both clients converge at the next round regardless of mid-round consumption.
+  - Stale `inBattle` cache: target's handler re-validates `battleState !== 'none'` and rejects silently. Joiner gets no snapshot if target already exited — no state corruption (UX gap for joiner, fine for now).
+  - Side-channel fade-in vs state-machine: legacy `tryJoinPlayerAlly` always transitions to `ally-fade-in` after push, so the state machine drives that path. No conflict with wire-spawn allies that carry `fadeInStartMs`.
+
 ## 1.7.423 — 2026-05-16
 
 ### Assist polish: monster status in snapshot + side-channel ally fade-in

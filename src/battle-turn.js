@@ -70,6 +70,12 @@ export function buildTurnOrder() {
     for (let i = 0; i < battleSt.battleAllies.length; i++) {
       const a = battleSt.battleAllies[i];
       if (!a || a.hp <= 0) continue;
+      // Skip allies missing userId — they're AI-driven (legacy fake
+      // pool) and don't belong in the canonical-by-userId sort. They'd
+      // collide at userId=0 and produce unstable ordering between
+      // clients. Defensive guard; PLAYER_POOL random-fill is gated off
+      // in co-op so this shouldn't fire in practice. v1.7.424.
+      if (!a.userId) continue;
       team.push({ type: 'ally', index: i, userId: a.userId | 0, agi: a.agi });
     }
     const hostUid = battleSt.encounterHostUserId | 0;
