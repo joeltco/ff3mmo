@@ -10,7 +10,8 @@ import { drawText, measureText, TEXT_WHITE } from './font-renderer.js';
 import { isSearchingFor } from './pvp-search.js';
 import { isInvitingTarget, isInParty } from './party-invite.js';
 import { isTradingWith } from './trade.js';
-import { fakePlayerPortraits } from './fake-player-sprites.js';
+import { fakePlayerPortraits, fakePlayerKneelPortraits } from './fake-player-sprites.js';
+import { bsc } from './battle-sprite-cache.js';
 import { ui } from './ui-state.js';
 import { transSt, WIPE_DURATION } from './transitions.js';
 import { battleSt } from './battle-state.js';
@@ -287,9 +288,23 @@ function _drawRosterRow(p, i, panelTop) {
   drawHudBox(HUD_RIGHT_X, rowY, 32, ROSTER_ROW_H, fadeStep);
   drawHudBox(HUD_RIGHT_X + 32, rowY, HUD_RIGHT_W - 32, ROSTER_ROW_H, fadeStep);
 
-  const jobPortraits = fakePlayerPortraits[p.jobIdx || 0] || fakePlayerPortraits[0];
+  // Low-HP pose: real wire players carry `hp` / `maxHP` in their snapshot
+  // entry, so swap to the kneel portrait once the threshold matches the
+  // in-battle convention (hp <= maxHP / 4, hp > 0). Fake-pool entries don't
+  // ship hp at runtime and fall through to the idle portrait. v1.7.415.
+  const _hp = (typeof p.hp === 'number') ? p.hp : null;
+  const _maxHP = (typeof p.maxHP === 'number') ? p.maxHP : null;
+  const isNearFatal = _hp != null && _maxHP != null && _hp > 0 && _hp <= Math.floor(_maxHP / 4);
+  const portraitSet = isNearFatal ? fakePlayerKneelPortraits : fakePlayerPortraits;
+  const jobPortraits = portraitSet[p.jobIdx || 0] || portraitSet[0];
   const portraits = jobPortraits && jobPortraits[p.palIdx];
   if (portraits) ui.ctx.drawImage(portraits[fadeStep], HUD_RIGHT_X + 8, rowY + 8);
+  // Sweat overlay — 2-frame alternation matching the battle pose (133 ms cadence).
+  // Fade with the row so it doesn't pop in/out as the row slides.
+  if (isNearFatal && fadeStep < ROSTER_FADE_STEPS && bsc.sweatFrames && bsc.sweatFrames.length === 2) {
+    const sweat = bsc.sweatFrames[Math.floor(Date.now() / 133) & 1];
+    ui.ctx.drawImage(sweat, HUD_RIGHT_X + 8, rowY + 8 - 3);
+  }
 
   // Online badge — small green dot at top-right of the portrait box for any
   // real wire-presence player (`isReal: true` from net.js snapshot/join).

@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.415 — 2026-05-16
+
+### Roster: real players now show low-HP kneel pose + sweat overlay
+
+- Real wire players (`isReal: true`) already carry `hp` and `maxHP` in their snapshot entry, but the roster row was always rendering the idle portrait regardless. `_drawRosterRow` in `src/roster.js` now checks `hp <= floor(maxHP / 4) && hp > 0` and swaps `fakePlayerPortraits` for `fakePlayerKneelPortraits`. Adds the 2-frame sweat overlay (`bsc.sweatFrames`) above the portrait at the same 133 ms cadence used in battle / HUD.
+- Fake-pool entries (none today since `PLAYER_POOL = []`) ship without runtime `hp`, so the threshold check fails and they keep the idle portrait — no regression to the legacy roster look when fakes are toggled back on.
+- HP updates ride the existing `update` wire path; whenever a partner takes damage and emits a profile diff, every other player's roster ticks over to kneel.
+
 ## 1.7.414 — 2026-05-16
 
 ### Diag: client-side party logging (temporary, in-game chat console)
