@@ -16,6 +16,7 @@ import { buildTurnOrder, processNextTurn } from './battle-turn.js';
 import { summarizeHits } from './battle-math.js';
 import { reseedFromEntropy } from './rng.js';
 import { sendNetPVPAction, sendNetPVPAllyJoin, getOnlinePlayerByName } from './net.js';
+import { addChatMessage } from './chat.js';
 import { rand } from './rng.js';
 import { updateBattleAlly } from './battle-ally.js';
 import { updateBattleEnemyTurn } from './battle-enemy.js';
@@ -282,11 +283,12 @@ export function tryJoinPlayerAlly() {
   // Per-battle stats regenerate via generateAllyStats (same as random
   // allies), so death in a previous fight doesn't disqualify them.
   // Cap respected. v1.7.235.
+  addChatMessage('[party-prepass] members=[' + partyInviteSt.partyMembers.join(',') + '] pvpFilter=[' + [...pvpNames].join(',') + ']', 'system');
   let partyJoined = false;
   for (const name of partyInviteSt.partyMembers) {
     if (battleSt.battleAllies.length >= 3) break;
-    if (pvpNames.has(name)) continue;
-    if (battleSt.battleAllies.some(a => a.name === name)) continue;
+    if (pvpNames.has(name)) { addChatMessage('[party-prepass] skip ' + name + ' (in pvp opp set)', 'system'); continue; }
+    if (battleSt.battleAllies.some(a => a.name === name)) { addChatMessage('[party-prepass] skip ' + name + ' (already in allies)', 'system'); continue; }
     // Lookup order (most → least fresh):
     //   1. PLAYER_POOL          — fake-roster entries; stable static data.
     //   2. getOnlinePlayerByName — live wire profile from the partner if
@@ -294,9 +296,10 @@ export function tryJoinPlayerAlly() {
     //      swap since the invite was accepted (mid-session sync).
     //   3. partyMemberProfiles  — last-resort cache from accept time, in
     //      case the live entry is briefly missing during a reconnect.
-    const member = PLAYER_POOL.find(p => p.name === name)
-                || getOnlinePlayerByName(name)
-                || partyInviteSt.partyMemberProfiles.get(name);
+    const onlineHit = getOnlinePlayerByName(name);
+    const cachedHit = partyInviteSt.partyMemberProfiles.get(name);
+    const member = PLAYER_POOL.find(p => p.name === name) || onlineHit || cachedHit;
+    addChatMessage('[party-prepass] lookup ' + name + ' online=' + !!onlineHit + ' cached=' + !!cachedHit + ' final=' + !!member, 'system');
     if (!member) continue;
     battleSt.battleAllies.push(generateAllyStats(member));
     partyJoined = true;

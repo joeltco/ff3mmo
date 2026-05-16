@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.414 — 2026-05-16
+
+### Diag: client-side party logging (temporary, in-game chat console)
+
+- On `setNetPartyInviteHandler` accept (invitee side): logs `[party] accepted, stashed <name>` or `[party] accept-stash SKIPPED ...` so we can see whether the v1.7.412 stash actually fired.
+- On `tryJoinPlayerAlly` (battle confirm-pause pre-pass): logs `[party-prepass] members=[...] pvpFilter=[...]` plus per-name `[party-prepass] lookup <name> online=<bool> cached=<bool> final=<bool>` so we can see whether the partner is in `partyMembers` AND whether the live / cached profile lookups succeed.
+- Lines appear in the in-game chat console (the strip across the bottom). Open chat with T, scroll back to see them.
+
 ## 1.7.413 — 2026-05-16
 
 ### Diag: log `pvp-ally-join` relay (temporary)
