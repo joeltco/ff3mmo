@@ -373,7 +373,7 @@
       z-index: 100;
     }
     #auth-user-bar span { color: #888; }
-    #auth-logout {
+    #auth-logout, #auth-logout-all {
       background: none;
       border: 1px solid #444;
       border-radius: 4px;
@@ -383,7 +383,8 @@
       padding: 2px 8px;
       cursor: pointer;
     }
-    #auth-logout:hover { border-color: #c8a832; color: #c8a832; }
+    #auth-logout:hover, #auth-logout-all:hover { border-color: #c8a832; color: #c8a832; }
+    #auth-logout-all.busy { opacity: 0.5; pointer-events: none; }
 
     /* Password gate */
     #pw-gate {
@@ -490,6 +491,7 @@
   </div>
   <div id="auth-user-bar">
     <span id="auth-email-display"></span>
+    <button id="auth-logout-all" title="Invalidate every other session you have open (other browsers, phones, etc.) without changing your password.">Log out other devices</button>
     <button id="auth-logout">Logout</button>
   </div>
 
@@ -744,6 +746,46 @@
       authToken = null; authEmail = null;
       authUserBar.style.display = 'none';
       location.reload();
+    });
+
+    // "Log out other devices" — hits /api/logout-all which bumps the user's
+    // `token_iat_min` watermark on the server, instantly invalidating every
+    // other token (any HTTP / WS call carrying a now-stale token sees 401).
+    // Server returns a fresh token for the CURRENT session so this user
+    // doesn't kick themselves. Confirms with `confirm()` first since the
+    // action is irreversible for any other open sessions.
+    document.getElementById('auth-logout-all').addEventListener('click', async () => {
+      if (!authToken) return;
+      const ok = window.confirm('Sign out every other browser / device that\'s currently logged in to this account?\n\nYou\'ll stay signed in here. Other sessions will see the login screen on their next request.');
+      if (!ok) return;
+      const btn = document.getElementById('auth-logout-all');
+      btn.classList.add('busy');
+      const origText = btn.textContent;
+      btn.textContent = 'Signing out…';
+      try {
+        const r = await fetch(`${API}/api/logout-all`, {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + authToken },
+        });
+        if (r.ok) {
+          const data = await r.json();
+          if (data && data.token) {
+            authToken = data.token;
+            localStorage.setItem('ff3_token', authToken);
+          }
+          btn.textContent = 'Done';
+          setTimeout(() => { btn.textContent = origText; btn.classList.remove('busy'); }, 1500);
+        } else if (r.status === 429) {
+          btn.textContent = 'Try again in a sec';
+          setTimeout(() => { btn.textContent = origText; btn.classList.remove('busy'); }, 2000);
+        } else {
+          btn.textContent = 'Failed (' + r.status + ')';
+          setTimeout(() => { btn.textContent = origText; btn.classList.remove('busy'); }, 2000);
+        }
+      } catch (_) {
+        btn.textContent = 'Network error';
+        setTimeout(() => { btn.textContent = origText; btn.classList.remove('busy'); }, 2000);
+      }
     });
 
     // --- Server save/load ---

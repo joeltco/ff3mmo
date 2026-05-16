@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.397 — 2026-05-15
+
+### "Log out other devices" UI
+
+- **`#auth-logout-all` button** (`index.html`) sits next to the existing Logout button in the bottom-right user bar. Tooltip explains the action; click prompts with a native `confirm()` so it's not a one-tap mistake. On accept, fetches `POST /api/logout-all`, stores the fresh token from the response (so the current session stays signed in), and surfaces a "Done" / "Failed (status)" / "Try again" / "Network error" state on the button for ~1.5-2 s. Disabled while in flight.
+- **New regression test** in `pvp-wire-sim` covers the full revocation cycle: pre-logout-all refresh succeeds → logout-all returns 200 → same token now 401s on `/api/refresh`. Harness count: 34 (was 33).
+
 ## 1.7.396 — 2026-05-15
 
 ### Pre-beta JWT rotation + revocation

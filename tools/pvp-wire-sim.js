@@ -561,6 +561,30 @@ async function suiteWire() {
     assertEqual(r.status, 401, 'junk token was accepted');
   });
 
+  await asyncTest('P3 /api/logout-all bumps watermark and revokes old tokens', async () => {
+    _testEnsureUser(2002);
+    const t1 = mintToken(2002);
+    // Old token validates before logout-all.
+    let r = await fetch(`http://127.0.0.1:${port}/api/refresh`, {
+      method: 'POST', headers: { 'Authorization': 'Bearer ' + t1 },
+    });
+    assertEqual(r.status, 200, 'refresh rejected a pre-logout-all token');
+    // Trigger logout-all with t1 (server gives us a fresh token in
+    // response, but t1's iat is now older than the watermark).
+    // The minted t1 has iat ≈ now; the bumped watermark is also `now` —
+    // need to wait a second so t1's iat < watermark.
+    await new Promise(r => setTimeout(r, 1100));
+    r = await fetch(`http://127.0.0.1:${port}/api/logout-all`, {
+      method: 'POST', headers: { 'Authorization': 'Bearer ' + t1 },
+    });
+    assertEqual(r.status, 200, 'logout-all rejected a valid token');
+    // Original t1 must now be invalid — any subsequent request 401s.
+    r = await fetch(`http://127.0.0.1:${port}/api/refresh`, {
+      method: 'POST', headers: { 'Authorization': 'Bearer ' + t1 },
+    });
+    assertEqual(r.status, 401, 't1 still works after logout-all (watermark not enforced)');
+  });
+
   // ── teardown ─────────────────────────────────────────────────────────────
   await new Promise(r => httpServer.close(r));
 }
