@@ -180,8 +180,20 @@ setNetPVPAllyJoinHandler((msg) => {
   battleSt.battleTimer = 0;
 });
 
+// States that mean "battle is closing — drop any incoming wire actions
+// instead of queueing them." Once we're in the teardown path, queued
+// actions can never be drained (resetPVPState wipes the queue, but only
+// after the close anim finishes). Audit #16.
+const _wireClosingStates = new Set([
+  'enemy-box-close', 'encounter-box-close', 'run-success', 'run-fail',
+]);
+
 setNetPVPActionHandler((msg) => {
   if (!pvpSt.isWirePVP) return;
+  // Drop wire actions during close — the local FSM is past the point of
+  // applying them, and queueing accumulates garbage that resetPVPState
+  // clears anyway. Audit #16.
+  if (_wireClosingStates.has(battleSt.battleState)) return;
   // Flee ends the battle for both sides immediately, regardless of whose
   // turn was about to fire. Short-circuit the normal queue dispatch and
   // transition straight to `enemy-box-close` (which runs `resetPVPState`

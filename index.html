@@ -506,6 +506,53 @@
 
   <input type="password" id="mobile-input" autocomplete="new-password" autocorrect="off" autocapitalize="off" spellcheck="false">
 
+  <script>
+    // Version-bust gate — runs BEFORE any module imports. Compares the stored
+    // build to the build-stamped `{{VERSION}}` token. On mismatch, navigate
+    // synchronously to `?_v=<build>`; the server detects that query and
+    // returns the new index.html with `Clear-Site-Data: "cache"`, which
+    // empties the HTTP cache before the subsequent module imports run.
+    // Without this, mobile Firefox can ignore `Cache-Control: no-store` and
+    // keep serving stale modules — the prod-error class
+    // `module 'X' doesn't provide an export named Y` is that.
+    // Best-effort fire-and-forget eviction of cache/SW for any browser that
+    // ignores Clear-Site-Data; we don't await — `location.replace` tears
+    // this document down regardless. See P1 #4.
+    (function () {
+      var BUILD = 'v{{VERSION}}';
+      var STORED = null;
+      try { STORED = localStorage.getItem('ff3_build'); } catch (_) {}
+      // First-load OK (no STORED). Same version OK. Mismatch → reload.
+      if (!STORED || STORED === BUILD) {
+        try { localStorage.setItem('ff3_build', BUILD); } catch (_) {}
+        return;
+      }
+      // Anti-loop guard — if we've already reloaded for this build, skip
+      // the remediation (the server is probably broken, not the cache).
+      var attemptedKey = 'ff3_build_reload_for_' + BUILD;
+      try {
+        if (sessionStorage.getItem(attemptedKey)) {
+          localStorage.setItem('ff3_build', BUILD);
+          return;
+        }
+        sessionStorage.setItem(attemptedKey, '1');
+      } catch (_) { /* private mode / quota — proceed anyway */ }
+      try { localStorage.setItem('ff3_build', BUILD); } catch (_) {}
+      // Fire-and-forget eviction (no await).
+      if ('caches' in self) {
+        caches.keys().then(function (ks) { ks.forEach(function (k) { caches.delete(k); }); }).catch(function () {});
+      }
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function (rs) { rs.forEach(function (r) { r.unregister(); }); }).catch(function () {});
+      }
+      // Synchronous navigation — tears down this document immediately. The
+      // fresh page is the one that actually clears HTTP cache via the
+      // `Clear-Site-Data` response header server.js attaches to `?_v=`
+      // requests.
+      var bust = (location.search ? location.search + '&' : '?') + '_v=' + encodeURIComponent(BUILD);
+      location.replace(location.pathname + bust + location.hash);
+    })();
+  </script>
   <script src="lib/libgme.js"></script>
   <script src="lib/jsnes.min.js"></script>
   <script>

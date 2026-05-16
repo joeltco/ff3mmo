@@ -76,9 +76,15 @@ node tools/battle-sim.js --help
 node tools/pvp-wire-sim.js                     # all suites
 node tools/pvp-wire-sim.js --suite=math        # one suite (math|server|wire)
 node tools/pvp-wire-sim.js --filter=defend     # substring filter
+
+# Multiplayer load test — N clients × duration, real ws-presence.js in-proc
+node tools/pvp-load-sim.js --clients=50 --duration=30
+node tools/pvp-load-sim.js --clients=200 --chat-per-min=60
 ```
 
 `tools/battle-sim.js` (`tools/battle-sim.PLAN.md`) covers local combat — it imports the real `battle-math.js`, `combatant-cast.js`, `status-effects.js`, `data/*` so any divergence between the sim and the engine is a sim bug, not a coverage gap. Statistical mode (`--runs=N --json`) gives win-rate and damage distribution.
+
+`tools/pvp-load-sim.js` spins up the real `ws-presence.js` server in-process and drives N simulated clients through realistic chat / update / location traffic. Spoofs `X-Forwarded-For` per client to bypass the per-IP cap during load tests. Useful for right-sizing rate limits + connection caps from data. Baseline run: 200 clients connect in <200 ms, ~86 KB/client RSS, ~13k msgs/s outbound at chat=20/min/client.
 
 `tools/pvp-wire-sim.js` (`tools/pvp-wire-sim.PLAN.md`) covers the multiplayer wire layer — three suites:
 

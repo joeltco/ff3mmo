@@ -557,11 +557,35 @@ function _handleMessage(entry, msg) {
           _send(partner.ws, { type: 'pvp-action', kind: 'disconnect' });
           _send(entry.ws,   { type: 'pvp-action', kind: 'disconnect' });
         }
+        if (partner._lastPVPResultTimer) clearTimeout(partner._lastPVPResultTimer);
         delete partner._lastPVPResult;
+        delete partner._lastPVPResultTimer;
         _pvpPartners.delete(entry.userId);
         _pvpPartners.delete(partnerId);
       } else {
         entry._lastPVPResult = outcome;
+        // Audit #26 — if the partner never reports their outcome (process
+        // killed, TCP half-open, client crash before pvp-end), the partner
+        // pair leaks. Clean up after 10 s — the surviving partner gets a
+        // synthetic disconnect and `_pvpPartners` clears. Pre-fix the pair
+        // would tie up future PvP searches until the lagging side closed
+        // their WS.
+        entry._lastPVPResultTimer = setTimeout(() => {
+          // Re-check that the partner is still pending (no second report
+          // arrived in the meantime).
+          if (entry._lastPVPResult == null) return;
+          delete entry._lastPVPResult;
+          delete entry._lastPVPResultTimer;
+          const partnerNow = _pvpPartners.get(entry.userId);
+          if (partnerNow) {
+            _pvpPartners.delete(entry.userId);
+            _pvpPartners.delete(partnerNow);
+            const p = _connected.get(partnerNow);
+            if (p && p.helloed) _send(p.ws, { type: 'pvp-action', kind: 'disconnect' });
+            const e = _connected.get(entry.userId);
+            if (e && e.helloed) _send(e.ws, { type: 'pvp-action', kind: 'disconnect' });
+          }
+        }, 10000);
       }
       return;
     }

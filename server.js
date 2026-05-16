@@ -27,12 +27,22 @@ const httpServer = createServer(async (req, res) => {
     let data = await readFile(join('.', path));
     const ext = extname(path);
     if (ext === '.html') data = Buffer.from(data.toString().replace('{{VERSION}}', version));
-    res.writeHead(200, {
+    // Cache-busting handshake — when the client's version-gate detects a
+    // stale build it reloads with `?_v=<build>`. We respond with
+    // `Clear-Site-Data: "cache"` so the browser drops every cached resource
+    // for this origin BEFORE the new index.html's modules import. Targets
+    // mobile Firefox specifically, which ignores `Cache-Control: no-store`
+    // in some configurations. P1 #4.
+    const headers = {
       'Content-Type': MIME[ext] || 'application/octet-stream',
       'Cache-Control': 'no-store, no-cache, must-revalidate',
       'Pragma': 'no-cache',
       'Expires': '0',
-    });
+    };
+    if (ext === '.html' && url.searchParams.get('_v')) {
+      headers['Clear-Site-Data'] = '"cache"';
+    }
+    res.writeHead(200, headers);
     res.end(data);
   } catch {
     res.writeHead(404);

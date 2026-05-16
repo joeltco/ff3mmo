@@ -89,6 +89,7 @@ Two Node-only harnesses live in `tools/`. They import the real production module
 |---|---|---|
 | `tools/battle-sim.js` | Local combat — duels, party-vs-encounter, spells, statuses, buffs, dual-wield, monster specials. Statistical mode (`--runs=N --json/--csv`). Spec: `tools/battle-sim.PLAN.md`. | `node tools/battle-sim.js --help` |
 | `tools/pvp-wire-sim.js` | Multiplayer wire — 31 tests across math lockstep / server unit / E2E suites. Boots `attachWebSocketPresence` on a localhost port + two real JWT-authed `ws` clients. Spec: `tools/pvp-wire-sim.PLAN.md`. | `node tools/pvp-wire-sim.js [--suite=math\|server\|wire] [--filter=...]` |
+| `tools/pvp-load-sim.js` | Multiplayer load test — N clients × duration against in-process server. Spoofs X-Forwarded-For per client to bypass the per-IP cap. Reports peak state-map sizes + RSS/client for right-sizing. | `node tools/pvp-load-sim.js --clients=50 --duration=30` |
 
 `deploy.sh` runs `npm run lint:errors` + `node tools/pvp-wire-sim.js` as pre-flight gates before commit; failure aborts the deploy.
 

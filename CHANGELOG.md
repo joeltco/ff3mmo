@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.393 — 2026-05-15
+
+### Cache-bust + audit edge cases + load harness
+
+- **P1 #4 cache-bust** (`index.html` + `server.js`): version-gate script at the top of `index.html` compares `localStorage.ff3_build` to the build-stamped `{{VERSION}}` token. On mismatch, synchronously navigates to `?_v=<build>`; the server detects that query and returns the new HTML with `Clear-Site-Data: "cache"`, evicting the HTTP cache before subsequent module imports run. Anti-loop guard via `sessionStorage` so a broken server doesn't trigger infinite reloads. Best-effort fire-and-forget cache + service-worker eviction in the gate for browsers that ignore Clear-Site-Data. Kills the prod `[BOOT ERROR] module 'X' doesn't provide an export named Y` class hitting stale-cached Android Firefox clients (5× in recent logs).
+- **Audit #16 wire actions during close**: `setNetPVPActionHandler` now early-returns when `battleSt.battleState` is one of `enemy-box-close / encounter-box-close / run-success / run-fail`. Pre-fix queued garbage accumulated until `resetPVPState` ran, with a narrow window where a synthetic `disconnect` could land but never get dispatched.
+- **Audit #26 pvp-result half-state timeout**: server now sets a 10-s timer when one side reports `pvp-result` but the partner hasn't. On timeout, push synthetic `disconnect` to both sides and clear `_pvpPartners`. Pre-fix a dead/crashed partner left a leaked partner-pair entry that could collide with future `pvp-match` registrations for the surviving user.
+- **Load harness** (`tools/pvp-load-sim.js`): spins up the real `ws-presence.js` in-process, opens N JWT-authed `ws` clients (X-Forwarded-For spoofed per client to bypass the per-IP cap), drives realistic chat / update / location traffic for a configurable duration, reports peak state-map sizes + RSS/client. Baseline: 200 clients connect in <200 ms, ~86 KB/client RSS, 13k msgs/s outbound at chat=20/min/client.
+
 ## 1.7.392 — 2026-05-15
 
 ### Pre-beta P1 batch — moderation + roster polish + save integrity
