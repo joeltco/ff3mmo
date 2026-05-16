@@ -443,6 +443,7 @@ function _handleMessage(entry, msg) {
         itemId:     parsed.itemId,        // for kind === 'item'
         damageRoll: parsed.damageRoll,    // v1.7.389 — sender's pre-rolled damage (audit #24)
         healAmount: parsed.healAmount,    // v1.7.389 — sender's pre-rolled heal (audit #24)
+        hitResults: parsed.hitResults,    // v1.7.407 — sender's pre-rolled physical hits
       });
       return;
     }

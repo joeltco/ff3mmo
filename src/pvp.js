@@ -143,6 +143,10 @@ const _wireOpponentActions = [];
 // when kind='attack' so the existing post-preflash attack flow can read it
 // instead of running the AI target-pick.
 let _wirePendingAttackTargetAlly = -1;
+// Sender's pre-rolled hit results (`rollHits` output) shipped over the wire so
+// the receiver can apply identical damage instead of re-rolling on a drifted
+// rand cursor. Cleared after consumption. v1.7.407.
+let _wirePendingHitResults = null;
 // Partner's `_tryJoinPlayerAlly` picked a fake-roster ally. Add the same
 // ally to our `pvpEnemyAllies` (the partner-side view of their party) with
 // the same resize-anim setup `tryJoinPVPEnemyAlly` would have used. Look
@@ -259,6 +263,7 @@ export function startPVPBattle(target, opts) {
   pvpSt.isWirePVP               = !!hasSeed;
   _wireOpponentActions.length   = 0;
   _wirePendingAttackTargetAlly  = -1;
+  _wirePendingHitResults        = null;
   pvpSt.isPVPBattle             = true;
   pvpSt.pvpOpponent             = target;
   pvpSt.pvpOpponentStats        = generateAllyStats(target);
@@ -306,6 +311,7 @@ export function resetPVPState() {
   pvpSt.isWirePVP               = false;
   _wireOpponentActions.length   = 0;
   _wirePendingAttackTargetAlly  = -1;
+  _wirePendingHitResults        = null;
   pvpSt.isPVPBattle             = false;
   pvpSt.pvpOpponent             = null;
   pvpSt.pvpOpponentStats        = null;
@@ -662,7 +668,14 @@ function _processEnemyFlash() {
     defendHalve: battleSt.isDefending,
     targetProtected: !!(ps.buffs && ps.buffs.protect),
   };
-  const raw = rollHits(pvpMainAtk, def, hitRate, potentialHits, opts);
+  // Wire-PvP: consume the sender's pre-rolled hits if they rode the wire.
+  // Falls back to a local roll if absent (one-sided run, or a legacy client
+  // pre-v1.7.407). The local-roll path still consumes the same rand budget,
+  // which is the right behavior for fallback even if the values diverge.
+  const raw = (pvpSt.isWirePVP && _wirePendingHitResults)
+    ? _wirePendingHitResults
+    : rollHits(pvpMainAtk, def, hitRate, potentialHits, opts);
+  _wirePendingHitResults = null;
   // Map to PVP result format: { miss, shieldBlock, dmg, crit }
   pvpSt.pvpEnemyHitResults = raw.map(h => {
     if (h.shieldBlock) return { miss: false, shieldBlock: true, dmg: 0, crit: false };
@@ -770,6 +783,7 @@ function _applyWireOpponentAction(action, casterCellIdx) {
     } else {
       _wirePendingAttackTargetAlly = (t.idx | 0) - 1;
     }
+    _wirePendingHitResults = Array.isArray(action.hitResults) ? action.hitResults : null;
     return false;
   }
 

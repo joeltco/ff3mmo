@@ -404,7 +404,18 @@ function _emitWirePVPAction(pending) {
   if (cmd === 'fight') {
     // pvpPlayerTargetIdx convention: -1 = main opp, N >= 0 = pvpEnemyAllies[N].
     const tgtIdx = pvpSt.pvpPlayerTargetIdx < 0 ? 0 : pvpSt.pvpPlayerTargetIdx + 1;
-    sendNetPVPAction({ kind: 'attack', actor, target: { side: 'opp', idx: tgtIdx } });
+    // hitResults rides the wire (same defense as the magic damageRoll). The
+    // sender pre-rolled hits inside `_battlePlayerAttackConfirm` against the
+    // shared seed, but by the time the receiver runs the opponent-attack path
+    // their `rand()` cursor has been advanced by their own pre-roll, so a
+    // local re-roll lands on different numbers → HP desync. Shipping the
+    // sender's rolls keeps damage values identical across clients.
+    sendNetPVPAction({
+      kind: 'attack',
+      actor,
+      target: { side: 'opp', idx: tgtIdx },
+      hitResults: pending.hitResults || null,
+    });
     return;
   }
   if (cmd === 'magic' || cmd === 'item') {

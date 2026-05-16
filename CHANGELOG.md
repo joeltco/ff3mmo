@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.407 — 2026-05-16
+
+### PvP: physical hits ride the wire so attack damage stays in sync
+
+- **Bug**: after v1.7.406 the wire emit was live, but the two clients showed different damage / HP for the same swing. Root cause: the sender pre-rolls hits at target-confirm (`input-handler.js#_battlePlayerAttackConfirm` populates `inputSt.hitResults` via `rollHits`), and the wire payload only carried `{kind, actor, target}`. The receiver re-rolls hits when applying the opponent-attack at `pvp.js:665`, by which point both clients' `rand()` cursors have diverged (each one consumed their own pre-roll) — so the receiver computes different damage / crit / miss flags. Same drift pattern that magic already fixed via `damageRoll` in v1.7.389 (audit #24).
+- **Fix**: `hitResults` now rides the wire alongside `damageRoll` / `healAmount`. Sender includes the pre-rolled hits array in the attack payload (`battle-update.js#_emitWirePVPAction`); server relays it (`ws-presence.js` `pvp-action` case); receiver stashes it in `_wirePendingHitResults` when consuming the wire action (`pvp.js#_applyWireOpponentAction`) and uses it at the rollHits call site, falling back to a local roll if the field is absent. Both clients now apply identical damage even though their rand cursors are out of sync.
+
 ## 1.7.406 — 2026-05-16
 
 ### PvP: wire-emit is finally reachable (P0)
