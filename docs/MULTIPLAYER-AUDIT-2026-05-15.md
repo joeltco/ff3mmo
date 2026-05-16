@@ -12,20 +12,31 @@ suggested fix.
 
 ## Status (closed out 2026-05-15)
 
-Shipped in v1.7.387 → v1.7.393 (7 deploys, all 38 audit items addressed):
+Shipped in v1.7.387 → v1.7.397 (11 deploys, all 38 audit items addressed + 6 follow-on items from prod-error triage and pre-beta polish):
 
 | Tier | Fixed | Deferred (with reason) |
 |---|---|---|
-| Critical | #1 #2 #3 #4 #5 #6 #7 #8 #10 | #9 (env-set; verified) |
+| Critical | #1 #2 #3 #4 #5 #6 #7 #8 #10 | #9 (env-set; verified in `deploy.sh`) |
 | High     | #11 #14 #15 #16 #18 #21 #22 | #12 #13 #17 #19 #20 (#20 closed by #7) |
 | Medium   | #23 #24 #25 #26 #28 #31 #32 | #27 (verified — `removeFromParty` already deletes the profile) |
 | Low / observability | #30 #38         | #29 (superseded by #11) #33-#37 (hygiene) |
 
-Plus three follow-on shipments that weren't in the original 38 but emerged from the cleanup:
+Plus six follow-on shipments that weren't in the original 38 but emerged from the cleanup:
 
 - **Hidden bug** — server wasn't relaying `pvp-action.actor.idx` (would soft-freeze ally-PvP turn dispatch). v1.7.389.
 - **P0 production-error triage** — `BATTLE DRAW ERROR — pos undefined` (per-frame crash), `FREEZE WATCHDOG` (tab-throttle false positive), `/api/login` brute-force surface, login timing-leak. v1.7.391.
 - **Pre-beta P1 polish** — online roster badge, server-side save validation, `/block` + `/report` + reports table, version-gate cache-bust. v1.7.392 + v1.7.393.
+- **Mobile pass** — multi-touch D-pad slide-tracking, `is-touch` body class for tablets/landscape phones, overscroll/long-press/100dvh polish. v1.7.394.
+- **First-time UX** — auth screen description, ROM picker hint, 6-line first-run chat tips. v1.7.395.
+- **JWT rotation + revocation** — `users.token_iat_min` column, `verifyTokenWithRevocation` shared helper, `/api/refresh` sliding-window (7d trigger / 21d cap), `/api/logout-all`, "Log out other devices" button, WS upgrade revocation. v1.7.396 + v1.7.397.
+
+## Test infrastructure (closed out 2026-05-15)
+
+Three terminal harnesses run pre-flight against every deploy via `deploy.sh`:
+
+- **`tools/battle-sim.js`** — local combat sim (pre-existing).
+- **`tools/pvp-wire-sim.js`** — 34-test wire regression suite. Math lockstep + server unit + E2E. Gates the deploy.
+- **`tools/pvp-load-sim.js`** — N-client load harness. Baseline: 200 clients connect in <200 ms, ~86 KB/client RSS, ~13k msgs/s outbound.
 
 Bonus fix found mid-batch-3: server's `pvp-action` relay was dropping the
 `actor` field, so any ally action would soft-freeze the receiver's FSM.

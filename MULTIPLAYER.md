@@ -147,13 +147,21 @@ export const PLAYER_POOL = _FAKE_POOL;
 
 Every consumer (roster, ally fills, fake PvP / fake party paths, chat sender) silently picks them back up.
 
-## Defensive limits (v1.7.388)
+## Defensive limits (v1.7.388 + v1.7.396)
 
 - **`maxPayload` 16 KB** on the WebSocketServer. Single fat-frame OOM attacks rejected at the protocol layer.
 - **Per-connection rate limit**: token bucket, capacity 60, refill 20/s. Excess frames are silently dropped.
 - **Per-IP connection cap**: 10 concurrent WS connections from one source IP. nginx-aware (reads `X-Forwarded-For`). Excess gets 429.
 - **`update` field clamping**: every profile field passes through `_normalizeProfileField` on both `hello` and `update` — `agi/level` clamped 1-99, IDs 0-255, name 16 chars, allies array ≤ 3. Hook-chance formula reads `agi` so this is load-bearing for fair matchmaking.
 - **Location-change cleanup**: server drops the user's stale outgoing search + any incoming searches that now reference a different `loc`, notifying the affected challengers with `pvp-search-failed reason:'different-location'`.
+- **JWT revocation watermark**: `users.token_iat_min` invalidates every outstanding session in one shot. Both HTTP `authMiddleware` and the WS upgrade route through `verifyTokenWithRevocation` so a logged-out token can't keep a WS open.
+
+## Auth lifecycle (v1.7.396)
+
+- **`POST /api/login`** / **`POST /api/register`** issue a 30-day JWT.
+- **`POST /api/refresh`** — sliding window. Returns a fresh 30-day token if the supplied token is < 21 days old. Client (`index.html`) calls it on page load when the stored token's `iat` is > 7 days old. Older-than-21d tokens get 401 → re-login.
+- **`POST /api/logout-all`** — bumps `users.token_iat_min` to `now`; every other open session sees 401 on its next request. Returns a fresh token for the caller so they stay signed in. Wired to the "Log out other devices" button in the user-bar.
+- **WS upgrade revocation**: the upgrade handler routes through `verifyTokenWithRevocation`, so existing WS sessions die on the next reconnect after a logout-all.
 
 ## Recovery / known limits
 
