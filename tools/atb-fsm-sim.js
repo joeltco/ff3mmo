@@ -68,6 +68,14 @@ try {
   ({ battleSt } = await import('../src/battle-state.js'));
   ({ ps } = await import('../src/player-stats.js'));
   ({ pvpSt } = await import('../src/pvp.js'));
+
+  // Slice 4a — wire the ATB module's clock to our simulated time so wall-
+  // clock-based gauge math advances in lockstep with sim ticks. Without
+  // this, gauges would compute against real Date.now() and barely move
+  // while the sim runs at light-speed through 1500 ticks.
+  const atbMod = await import('../src/atb.js');
+  atbMod._setNow(() => _simMs);
+
   const bu = await import('../src/battle-update.js');
   updateBattle = bu.updateBattle;
   ({ startRandomEncounter } = await import('../src/battle-encounter.js'));

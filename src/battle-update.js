@@ -1102,11 +1102,9 @@ const _ATB_IDLE_STATES = new Set([
 function _tickATB(dt) {
   if (_ATB_IDLE_STATES.has(battleSt.battleState)) return;
   if (isVictoryBattleState()) return;
-  // Wait mode — pause player's gauge at full while their menu is open.
-  const bs = battleSt.battleState;
-  const playerMenuOpen = bs === 'menu-open' || bs === 'target-select' ||
-    bs === 'item-select' || bs === 'item-target-select' || bs === 'item-slide' ||
-    bs === 'item-menu-out' || bs === 'item-list-in' || bs === 'item-cancel-out' ||
-    bs === 'item-cancel-in' || bs === 'item-list-out' || bs === 'item-use-menu-in';
-  tickGauges(dt, { playerMenuOpen });
+  // Slice 4a (v1.7.438) — wall-clock ATB. Wait-mode pause is now automatic:
+  // 'ready' state doesn't tick anymore, so the player's gauge naturally
+  // holds at target while the menu is open. dt is unused by the new
+  // tickGauges but kept in the signature for caller stability.
+  tickGauges(dt);
 }

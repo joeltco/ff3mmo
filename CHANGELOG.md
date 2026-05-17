@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.438 — 2026-05-17
+
+### ATB slice 4a — wall-clock gauge derivation (foundation for cross-client lockstep)
+
+Refactored `src/atb.js` from dt-accumulating to wall-clock-derived gauges. Each unit now tracks `startedFillingAtMs`; `elapsedMs` is computed as `min(target, now - startedFillingAtMs)` on every read. Drops the dt parameter dependency — gauge math is now a pure function of `(state, startedFillingAtMs, _now())`.
+
+- **`markFilling(ref, atMs?)`** accepts an optional explicit timestamp. Slice 4b will pass partner-client timestamps from wire-sync events so co-op clients reset gauges at the same `atMs` instead of independent local clocks.
+- **Wait-mode pause is automatic.** 'ready' state doesn't tick anymore, so the player's gauge naturally holds at target while menu is open. The `opts.playerMenuOpen` parameter is dropped from `tickGauges`.
+- **`_setNow(fn)`** test seam — atb-sim drives a deterministic mock clock, atb-fsm-sim points the engine's clock at its simulated time so wall-clock-derived gauges advance correctly in the headless sim.
+
+32/32 atb-sim (added 4 wall-clock-specific tests including the slice-4b prep test for explicit `atMs` override). 3/3 atb-fsm-sim scenarios green.
+
+Solo battles see no behavioral change. Co-op battles will start showing visibly tighter gauge timing after slice 4b lands the wire events.
+
 ## 1.7.437 — 2026-05-17
 
 ### Queueable commands — menu open during gauge fill

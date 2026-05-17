@@ -6,14 +6,24 @@
 import {
   initATB, addATBUnit, clearATB, tickGauges, getGaugePct, isReady,
   markActing, markFilling, setSpeedMod, deriveMonsterAgi,
-  _atbDebugState, TICK_MS, FILL_MAX,
+  _atbDebugState, _setNow, TICK_MS, FILL_MAX,
 } from '../src/atb.js';
+
+// Deterministic mock clock for slice-4a wall-clock ATB. Each test resets
+// the clock to 0; `advance(ms)` bumps it and runs a tick.
+let _mockNow = 0;
+_setNow(() => _mockNow);
+function advance(ms) {
+  _mockNow += ms;
+  tickGauges(ms);
+}
 
 let _passed = 0, _failed = 0;
 const _failures = [];
 
 function test(name, fn) {
   try {
+    _mockNow = 0;
     clearATB();
     fn();
     _passed++;
@@ -117,7 +127,7 @@ test('tick: anchor unit fills in RA*TICK_MS ms', () => {
   const p = {};
   initATB([{ ref: p, kind: 'player', agi: 10 }]);
   // RA=5, fill time = 5 * 333 = 1665ms
-  tickGauges(1665);
+  advance(1665);
   assertEq(getGaugePct(p), 1, 'pct at cap');
   assert(isReady(p), 'state should be ready');
 });
@@ -128,7 +138,7 @@ test('tick: faster unit fills before anchor', () => {
     { ref: p,    kind: 'player', agi: 10 },
     { ref: fast, kind: 'ally',   agi: 20 },  // RA=2, fill in 666ms
   ]);
-  tickGauges(666);
+  advance(666);
   assert(isReady(fast), 'fast unit ready');
   assert(!isReady(p),   'anchor not ready yet');
 });
@@ -136,21 +146,21 @@ test('tick: faster unit fills before anchor', () => {
 test('tick: getGaugePct mid-fill', () => {
   const p = {};
   initATB([{ ref: p, kind: 'player', agi: 10 }]);
-  tickGauges(832);  // half of 1665
+  advance(832);  // half of 1665
   assertNear(getGaugePct(p), 0.5, 0.01);
 });
 
 test('tick: dt accumulates across multiple calls', () => {
   const p = {};
   initATB([{ ref: p, kind: 'player', agi: 10 }]);
-  for (let i = 0; i < 100; i++) tickGauges(16.65);  // 100 frames at 60fps
+  for (let i = 0; i < 100; i++) advance(16.65);  // 100 frames at 60fps
   assertEq(getGaugePct(p), 1, 'reaches cap via repeated ticks');
 });
 
 test('tick: clamps at target (no overflow)', () => {
   const p = {};
   initATB([{ ref: p, kind: 'player', agi: 10 }]);
-  tickGauges(99999);
+  advance(99999);
   // RA=5 → target = 5 * 333 = 1665 ms; elapsedMs clamps there, not at FILL_MAX.
   assertEq(p._atb.elapsedMs, 5 * TICK_MS);
   assertEq(getGaugePct(p), 1);
@@ -164,8 +174,8 @@ test('wait: player gauge holds at full while menu open; others advance', () => {
     { ref: p,    kind: 'player', agi: 10 },
     { ref: ally, kind: 'ally',   agi: 10 },
   ]);
-  tickGauges(1665);                            // both reach full
-  tickGauges(1000, { playerMenuOpen: true });  // menu open, both already full
+  advance(1665);                            // both reach full
+  advance(1000);  // menu open, both already full
   assertEq(getGaugePct(p),    1, 'player held at cap');
   assertEq(getGaugePct(ally), 1, 'ally clamped, not pushed past');
 });
@@ -174,7 +184,7 @@ test('wait: player gauge KEEPS FILLING during menu if not yet full', () => {
   const p = {};
   initATB([{ ref: p, kind: 'player', agi: 10 }]);
   // Wait-mode only pauses when AT full. Pre-full filling continues.
-  tickGauges(800, { playerMenuOpen: true });
+  advance(800);
   const pct = getGaugePct(p);
   assert(pct > 0 && pct < 1, 'partial fill ok, got ' + pct);
 });
@@ -185,8 +195,59 @@ test('wait: ally keeps filling while player menu open', () => {
     { ref: p,    kind: 'player', agi: 10 },
     { ref: ally, kind: 'ally',   agi: 20 },  // RA=2
   ]);
-  tickGauges(666, { playerMenuOpen: true });
+  advance(666);
   assert(isReady(ally), 'ally hits ready during menu');
+});
+
+// ── Wall-clock (slice 4a) ──────────────────────────────────────────────────
+
+test('wall-clock: gauge advances even with sparse ticks', () => {
+  // Simulates Worker setInterval throttling — clock jumps forward but
+  // tickGauges may not be called during the gap. Wall-clock derivation
+  // means the gauge state is still correct at the next read.
+  const p = {};
+  initATB([{ ref: p, kind: 'player', agi: 10 }]);
+  // Skip the clock forward without calling tickGauges.
+  _mockNow += 1665;
+  // getGaugePct should re-derive from wall clock — no explicit tick needed.
+  assertEq(getGaugePct(p), 1, 'getGaugePct catches up on read');
+});
+
+test('wall-clock: state flip still needs a tickGauges call', () => {
+  // getGaugePct re-derives elapsedMs from clock, but the state transition
+  // (filling -> ready) only fires inside tickGauges. So pickReadyActor
+  // won't see the unit as ready until at least one tick after the gauge
+  // hits target. Acceptable since tickGauges runs every frame in prod.
+  const p = {};
+  initATB([{ ref: p, kind: 'player', agi: 10 }]);
+  _mockNow += 1665;
+  // Without a tickGauges call, state is still 'filling'.
+  assertEq(p._atb.state, 'filling');
+  assert(!isReady(p), 'no state flip without tick');
+  tickGauges(0);  // one tick — flips to 'ready'
+  assert(isReady(p));
+});
+
+test('wall-clock: markFilling resets anchor to current clock', () => {
+  const p = {};
+  initATB([{ ref: p, kind: 'player', agi: 10 }]);
+  advance(1000);
+  markFilling(p);
+  assertEq(p._atb.startedFillingAtMs, _mockNow, 'anchor set to current clock');
+  assertEq(p._atb.elapsedMs, 0);
+});
+
+test('wall-clock: markFilling accepts explicit atMs (slice 4b prep)', () => {
+  // Wire-sync events will pass the partner's timestamp; verify the
+  // override path works.
+  const p = {};
+  initATB([{ ref: p, kind: 'player', agi: 10 }]);
+  advance(1000);
+  markFilling(p, 500);  // explicit anchor at t=500 (somewhere in the past)
+  assertEq(p._atb.startedFillingAtMs, 500);
+  // Reading pct after override — elapsed = now (1000) - anchor (500) = 500.
+  // target = 5*333 = 1665. pct ≈ 0.30
+  assertNear(getGaugePct(p), 500 / 1665, 0.01);
 });
 
 // ── State transitions ──────────────────────────────────────────────────────
@@ -194,17 +255,17 @@ test('wait: ally keeps filling while player menu open', () => {
 test('state: markActing freezes gauge (no further fill)', () => {
   const p = {};
   initATB([{ ref: p, kind: 'player', agi: 10 }]);
-  tickGauges(500);
+  advance(500);
   const beforeGauge = p._atb.elapsedMs;
   markActing(p);
-  tickGauges(1000);
+  advance(1000);
   assertEq(p._atb.elapsedMs, beforeGauge, 'acting gauge frozen');
 });
 
 test('state: markFilling resets to 0', () => {
   const p = {};
   initATB([{ ref: p, kind: 'player', agi: 10 }]);
-  tickGauges(1665);
+  advance(1665);
   markFilling(p);
   assertEq(p._atb.elapsedMs, 0);
   assertEq(p._atb.state, 'filling');
@@ -216,7 +277,7 @@ test('speedMod: 2.0 doubles fill time (Slow)', () => {
   const p = {};
   initATB([{ ref: p, kind: 'player', agi: 10 }]);
   setSpeedMod(p, 2.0);  // target = 5 * 333 * 2 = 3330 ms
-  tickGauges(1665);
+  advance(1665);
   assertNear(getGaugePct(p), 0.5, 0.001, 'half-filled after baseline duration');
 });
 
@@ -224,7 +285,7 @@ test('speedMod: 0.5 halves fill time (Haste)', () => {
   const p = {};
   initATB([{ ref: p, kind: 'player', agi: 10 }]);
   setSpeedMod(p, 0.5);  // target = 5 * 333 * 0.5 = 832.5 ms
-  tickGauges(833);
+  advance(833);
   assertEq(getGaugePct(p), 1, 'full at half baseline');
 });
 
@@ -242,10 +303,10 @@ test('addATBUnit: newcomer uses cached anchor agi', () => {
 test('addATBUnit: ticks alongside existing units', () => {
   const p = {};
   initATB([{ ref: p, kind: 'player', agi: 10 }]);
-  tickGauges(832);
+  advance(832);
   const ally = {};
   addATBUnit({ ref: ally, kind: 'ally', agi: 10 });  // joins mid-fight
-  tickGauges(1665);
+  advance(1665);
   assert(isReady(ally), 'late joiner reaches ready');
   assertEq(getGaugePct(p), 1);
 });
@@ -267,7 +328,7 @@ test('clearATB: wipes _atb from all units', () => {
 test('clearATB: subsequent initATB starts fresh', () => {
   const p = {};
   initATB([{ ref: p, kind: 'player', agi: 10 }]);
-  tickGauges(1665);
+  advance(1665);
   clearATB();
   const q = {};
   initATB([{ ref: q, kind: 'player', agi: 10 }]);
@@ -311,7 +372,7 @@ test('scenario: 4-unit party + monster', () => {
     { ref: mon,    kind: 'monster', agi: 10 },  // RA=5
   ]);
   // After 666ms, only Thief should be ready (RA=2 -> 666ms exact).
-  tickGauges(666);
+  advance(666);
   assert(isReady(thief), 'thief ready first');
   assert(!isReady(p));
   assert(!isReady(knight));

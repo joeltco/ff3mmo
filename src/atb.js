@@ -1,21 +1,26 @@
 // ATB (Active Time Battle) — FF4-style per-unit gauges.
-// Slice 1 (v1.7.428): display-only. Legacy turn queue still drives dispatch;
-// these gauges fill alongside as a visual layer. Subsequent slices replace
-// the queue with gauge-driven dispatch.
+//
+// Slice 4a (v1.7.438): wall-clock derivation. Each unit tracks
+// `startedFillingAtMs` (the moment they last entered 'filling' state);
+// elapsedMs is a derived view of `min(target, now - startedFillingAtMs)`.
+// This replaces the dt-accumulation model and is the foundation for
+// cross-client lockstep in slice 4b (wire sync events on markActing /
+// markFilling so partner clients reset gauges at the same atMs).
 //
 // Model (per FF4 / Hiroyuki Ito):
-//   RA[X]  = floor(5 * anchorAgi / X.agi), min 1, clamped to 1 if either is 0
-//   anchor = highest-priority slot at battle start (we pick the local player)
-//   tick   = base period in ms per RA unit; total fill time = RA * TICK_MS
-//   gauge  = 0..FILL_MAX, fills at rate FILL_MAX / (RA * TICK_MS * speedMod)
+//   RA[X]  = floor(5 * anchorAgi / X.agi), clamped to [RA_MIN, RA_MAX]
+//   anchor = highest-priority slot at battle start (local player)
+//   target = ra * TICK_MS * speedMod (total fill time in ms)
 //
-// Wait mode (v1.7.428): when the player's menu is open and their gauge is
-// already full, hold it at full while the rest of the field keeps ticking.
-// Mirrors FF4 Wait setting. Active mode (gauges keep filling during menu)
-// is not exposed in slice 1.
+// State flow:
+//   filling → ready → acting → (action animates) → filling (markFilling)
 //
-// speedMod is 1.0 by default. Haste/Slow wire to it in a later slice without
-// touching RA — matches FF4's "RA does not change in battle" invariant.
+// Wait mode (v1.7.428→4a): now automatic — 'ready' state doesn't tick, so
+// the player's gauge naturally holds at target while menu is open. Other
+// units still in 'filling' continue advancing toward ready.
+//
+// speedMod is 1.0 by default. Haste/Slow wire to it without touching RA —
+// matches FF4's "RA does not change in battle" invariant.
 
 export const TICK_MS  = 333;   // BS3 equivalent at 60fps (~20 frames/tick)
 export const FILL_MAX = 1000;  // gauge resolution; renderer normalizes to 0..1
@@ -23,20 +28,20 @@ export const FILL_MAX = 1000;  // gauge resolution; renderer normalizes to 0..1
 // RA clamp keeps gauges in a playable range regardless of agi differential.
 // Min 2  → fastest fill = 2*333 = 666ms (no instant-acting bosses).
 // Max 10 → slowest fill = 10*333 = 3.3s (no monsters that never act in a
-//          short fight). v1.7.432 — fixes "battle isn't progressing"
-//          symptom when a low-level monster's derived agi gave RA=25+
-//          (8+ second fill, monster never reached its turn).
+//          short fight). v1.7.432.
 const RA_MIN = 2;
 const RA_MAX = 10;
 
+// Clock seam — production reads Date.now(); tests can override via _setNow.
+let _now = () => Date.now();
+
 // Module-level state. Cleared per battle.
-let _units = [];           // [{ ref, kind, agiSource }]  — kind in 'player'|'ally'|'monster'|'pvp-enemy'
+let _units = [];           // [{ ref, kind, agiSource }]
 let _anchorAgi = 0;
 
 // ── Public API ─────────────────────────────────────────────────────────────
 
 // Register a fresh battle's combatants. `entries` = [{ ref, kind, agi }].
-// Mutates each ref to attach `_atb = { ra, speedMod, gauge, state }`.
 // Anchor = first entry (caller passes player first).
 export function initATB(entries) {
   clearATB();
@@ -56,12 +61,15 @@ export function addATBUnit({ ref, kind, agi }) {
     if (ra < RA_MIN) ra = RA_MIN;
     if (ra > RA_MAX) ra = RA_MAX;
   }
-  // Track elapsed-ms-since-empty instead of an accumulating float gauge —
-  // makes the ready boundary land exactly at ra*TICK_MS*speedMod without
-  // drift across many ticks. `gauge` (0..FILL_MAX) is a derived view.
-  // readyAtMs = wall time when state flipped to 'ready'; used for FIFO
-  // dispatch when multiple units fill simultaneously.
-  ref._atb = { ra, speedMod: 1.0, elapsedMs: 0, state: 'filling', readyAtMs: 0 };
+  // Wall-clock derivation:
+  //   elapsedMs (cached) = min(target, _now() - startedFillingAtMs)
+  //   readyAtMs = wall time when state flipped to 'ready' (FIFO dispatch key)
+  ref._atb = {
+    ra, speedMod: 1.0,
+    elapsedMs: 0, state: 'filling',
+    startedFillingAtMs: _now(),
+    readyAtMs: 0,
+  };
   _units.push({ ref, kind, agiSource: myAgi });
 }
 
@@ -77,27 +85,24 @@ export function clearATB() {
   _anchorAgi = 0;
 }
 
-// Advance all gauges by `dt` ms. `opts.playerMenuOpen` enables Wait-mode
-// pause for the player's gauge once full.
-export function tickGauges(dt, opts = {}) {
-  if (dt <= 0 || _units.length === 0) return;
-  const playerMenuOpen = !!opts.playerMenuOpen;
-  const now = Date.now();
+// Advance all gauges based on wall clock. `dt` is retained in the signature
+// for caller compatibility but no longer used internally — the gauge math
+// is now a pure function of (state, startedFillingAtMs, _now()).
+//
+// Only 'filling' units advance; 'ready' holds at target (Wait mode), 'acting'
+// freezes at the value cached at markActing time.
+export function tickGauges(_dt, _opts = {}) {
+  if (_units.length === 0) return;
+  const now = _now();
   for (const u of _units) {
     const atb = u.ref && u.ref._atb;
     if (!atb) continue;
-    if (atb.state === 'acting') continue;
-    // Dead combatants don't tick. KO'd ally + dead monster + dead PvP
-    // enemy + downed player all stop here. Their gauges resume only on
-    // resurrection (life spell etc.); for now resurrection isn't wired,
-    // so dead = out of ATB rotation for the rest of the battle.
+    if (atb.state !== 'filling') continue;
     if (u.ref.hp != null && u.ref.hp <= 0) continue;
     const target = _fillTargetMs(atb);
     if (target <= 0) continue;
-    const isFull = atb.elapsedMs >= target;
-    if (playerMenuOpen && u.kind === 'player' && isFull) continue;  // Wait
-    atb.elapsedMs = Math.min(target, atb.elapsedMs + dt);
-    if (atb.elapsedMs >= target && atb.state === 'filling') {
+    atb.elapsedMs = Math.min(target, now - atb.startedFillingAtMs);
+    if (atb.elapsedMs >= target) {
       atb.state = 'ready';
       atb.readyAtMs = now;
     }
@@ -105,7 +110,7 @@ export function tickGauges(dt, opts = {}) {
 }
 
 // Pick the next ready unit for dispatch. FIFO — whoever hit 'ready' first
-// goes first. Returns the entry `{ref, kind}` or null.
+// goes first.
 //
 // `opts.skipPlayer` skips the player. Used by the dispatch hub during
 // menu-open: the player is already at full + showing the menu; if THEY
@@ -120,19 +125,23 @@ export function pickReadyActor(opts = {}) {
     if (skipPlayer && u.kind === 'player') continue;
     const atb = u.ref && u.ref._atb;
     if (!atb || atb.state !== 'ready') continue;
-    // Dead units don't dispatch (could have died after their gauge filled).
     if (u.ref.hp != null && u.ref.hp <= 0) continue;
     if (atb.readyAtMs < bestT) { pick = u; bestT = atb.readyAtMs; }
   }
   return pick;
 }
 
-// 0..1 for renderer. Returns 0 when no ATB state attached (out-of-battle).
+// 0..1 for renderer. Re-derives elapsedMs from wall clock if filling
+// so partial-fill reads after a tick gap are still accurate.
 export function getGaugePct(ref) {
   if (!ref || !ref._atb) return 0;
-  const target = _fillTargetMs(ref._atb);
+  const atb = ref._atb;
+  const target = _fillTargetMs(atb);
   if (target <= 0) return 1;
-  return Math.min(1, ref._atb.elapsedMs / target);
+  const e = atb.state === 'filling'
+    ? Math.min(target, _now() - atb.startedFillingAtMs)
+    : atb.elapsedMs;
+  return Math.min(1, e / target);
 }
 
 export function isReady(ref) {
@@ -140,32 +149,41 @@ export function isReady(ref) {
 }
 
 export function markActing(ref) {
-  if (ref && ref._atb) { ref._atb.state = 'acting'; }
+  if (!ref || !ref._atb) return;
+  // Freeze elapsedMs at its current derived value so reads in 'acting'
+  // return the stable cached value (target, typically).
+  const atb = ref._atb;
+  if (atb.state === 'filling') {
+    const target = _fillTargetMs(atb);
+    atb.elapsedMs = Math.min(target, _now() - atb.startedFillingAtMs);
+  }
+  atb.state = 'acting';
 }
 
-// Reset a unit to filling from zero (slice 2+ will call this after action
-// resolves). In slice 1 the legacy queue handles dispatch, so this isn't
-// wired into the action pipeline yet.
-export function markFilling(ref) {
+// Reset a unit to filling from zero. Slice 4b will accept an `atMs`
+// argument so wire-sync events can anchor the reset to a partner's
+// timestamp; for now it defaults to local _now().
+export function markFilling(ref, atMs) {
   if (!ref || !ref._atb) return;
+  const t = (typeof atMs === 'number') ? atMs : _now();
+  ref._atb.startedFillingAtMs = t;
   ref._atb.elapsedMs = 0;
+  ref._atb.readyAtMs = 0;
   ref._atb.state = 'filling';
 }
 
-// Set speed modifier — Haste/Slow will call this in a later slice. >1.0
-// slows (longer fill time), <1.0 hastes. Keeps RA invariant per FF4 canon.
+// Set speed modifier — Haste/Slow will call this. >1.0 slows (longer fill
+// time), <1.0 hastes. Keeps RA invariant per FF4 canon.
 export function setSpeedMod(ref, mod) {
   if (ref && ref._atb && mod > 0) ref._atb.speedMod = mod;
 }
 
-// Iterate registered units. Renderer reads kind for color + uses ref to
-// compute getGaugePct / isReady. Order is insertion order (anchor first).
+// Iterate registered units (renderer uses this).
 export function getATBUnits() {
   return _units.slice();
 }
 
-// Debug / test hook. Don't read from this in production render code —
-// use getGaugePct + isReady instead.
+// Debug / test hook.
 export function _atbDebugState() {
   return _units.map(u => ({
     kind: u.kind,
@@ -176,12 +194,14 @@ export function _atbDebugState() {
   }));
 }
 
-// Monsters in src/data/monsters.js have no `agi` field (FF3 NES didn't use
-// per-monster agility — round order was class/level based). Derive one
-// keyed to the player's typical agi scale: baseline 5, +1 per 2 levels,
-// +1 per 16 evade. The RA clamp on top means even outliers stay playable.
-// v1.7.432 — was `level + (evade>>3)` which gave low-level monsters
-// agi=2-5 vs player=10 → RA=25+ → 8s gauge → monster never acted.
+// Test-only clock override. Pass a function returning ms, or null to reset
+// to Date.now(). Used by atb-sim to drive deterministic gauge math.
+export function _setNow(fn) {
+  _now = (typeof fn === 'function') ? fn : (() => Date.now());
+}
+
+// Monsters in src/data/monsters.js have no `agi` field. Derive one
+// keyed to the player's typical agi scale.
 export function deriveMonsterAgi(monster) {
   if (!monster) return 5;
   const lv = monster.level | 0;
