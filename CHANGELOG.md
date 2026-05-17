@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.449 — 2026-05-17
+
+### Fix — enemy "x2" multiplier showed robe icon
+
+Reported: "Goblin x2" rendered with a leather-armor / robe glyph instead of the lowercase 'x'.
+
+Cause: `_battleEnemyNames` / `_battleEnemyName` in `src/battle-draw-menu.js` pushed `0xE1` as the multiplier character. That worked in the NES-original FF3 font but AWJ remapped `$E0-$F5` to item-class icons (shield/robe/mail/helm/...); `$E1` is now "robe".
+
+Fix: byte `0xBB` (lowercase 'x' per AWJ atlas — `a=$A4`, `x=$A4+23=$BB`). Two call sites updated; same constant doc'd in both spots.
+
 ## 1.7.448 — 2026-05-17
 
 ### Chat tab select — cursor indicator + empty-roster access

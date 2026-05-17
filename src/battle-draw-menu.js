@@ -342,7 +342,11 @@ function _battleEnemyNames() {
     const count = battleSt.encounterMonsters.filter(e => e.hp > 0 && e.monsterId === m.monsterId).length;
     if (count > 1) {
       const arr = Array.from(baseName);
-      arr.push(0xFF, 0xE1, 0x80 + count);
+      // v1.7.449 — 0xBB is lowercase 'x' in the AWJ font atlas
+      // (a=$A4 → x=$BB). Pre-fix used 0xE1, which is the robe / leather-armor
+      // icon in AWJ's $E0-$F5 item-class glyph range. NES-original font had
+      // 'x' at $E1; AWJ remapped it.
+      arr.push(0xFF, 0xBB, 0x80 + count);
       names.push(new Uint8Array(arr));
     } else {
       names.push(baseName);
@@ -368,7 +372,8 @@ function _battleEnemyName() {
     const aliveOfType = battleSt.encounterMonsters.filter(m => m.hp > 0 && m.monsterId === monsterId).length;
     if (aliveOfType > 1) {
       const arr = Array.from(baseName);
-      arr.push(0xFF, 0xE1, 0x80 + aliveOfType);
+      // v1.7.449 — 'x' is 0xBB in AWJ (see _battleEnemyNames).
+      arr.push(0xFF, 0xBB, 0x80 + aliveOfType);
       return new Uint8Array(arr);
     }
     return baseName;
