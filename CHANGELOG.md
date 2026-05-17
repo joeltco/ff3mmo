@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.436 — 2026-05-17
+
+### ATB bar fades out on ready
+
+When the gauge fills, alpha lerps 1→0 over 250ms instead of popping out instantly. Reads as a "loaded" cue. Hidden entirely during the player's slash animation (state === 'acting').
+
 ## 1.7.435 — 2026-05-17
 
 ### ATB bar tighten — render only while filling, drop below portrait

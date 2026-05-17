@@ -322,22 +322,31 @@ export function drawBattlePortrait() {
 }
 
 // ── Player ATB bar (below portrait) ───────────────────────────────────────
-// Only renders while the gauge is actively filling. Hides when:
-//   - 'ready'  → menu is opening / already open
-//   - 'acting' → player's own action is animating (gauge would sit at 100%
-//                the whole time, looks frozen / glitchy on slash frames)
-// Sits 2px below the 16×16 portrait so it doesn't overlap the sprite
-// during attack/hit poses.
+// Visible while the gauge is filling. On state flip to 'ready' (gauge
+// reached full), fade alpha 1→0 over BAR_FADE_MS so the transition reads
+// as "loaded" instead of a hard pop-out. Hidden during 'acting' (player's
+// own slash animation — gauge frozen at 100%, would look stuck).
+const BAR_FADE_MS = 250;
 function _drawPortraitATBBar(pxs, py) {
   const atb = ps._atb;
-  if (!atb || atb.state !== 'filling') return;
+  if (!atb) return;
+  let alpha = 1;
+  if (atb.state === 'ready') {
+    const fadeT = (Date.now() - atb.readyAtMs) / BAR_FADE_MS;
+    if (fadeT >= 1) return;
+    alpha = 1 - fadeT;
+  } else if (atb.state !== 'filling') {
+    return;  // 'acting'
+  }
   const pct = getGaugePct(ps);
   const barW = 16, barH = 2;
-  const x = pxs, y = py + 16 + 2;  // 2px gap below portrait bottom
+  const x = pxs, y = py + 16 + 2;
+  ui.ctx.globalAlpha = alpha;
   ui.ctx.fillStyle = '#000';
   ui.ctx.fillRect(x, y, barW, barH);
   ui.ctx.fillStyle = '#4ec9b0';
   ui.ctx.fillRect(x, y, Math.round(barW * pct), barH);
+  ui.ctx.globalAlpha = 1;
 }
 
 // ── Full-viewport flashes (crit gold flash + boss-strobe) ─────────────────
