@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.457 — 2026-05-17
+
+### Strip stale `'atb-idle'` predicates
+
+Cosmetic cleanup left over from the v1.7.456 ATB revert. `'atb-idle'` was an ATB-era battle state that is no longer assigned anywhere, but 5 OR-branches and one comment were still gating menu/encounter drawing on it.
+
+- Removed `bs === 'atb-idle'` alt from `_isMenuish` predicate (`src/battle-draw-menu.js:218-222`) — also drops the four-line "ATB era —" comment block
+- Removed `battleState === 'atb-idle'` from `_isEncounterCombatState` and the two PvP / boss combat-state checks in `src/battle-draw-encounter.js:161, 267, 291`
+
+No runtime change — all four call sites previously evaluated to `false` on the dead alt. Audit confirmed no other orphan ATB references remain (`pvp-wire-sim` 49/49).
+
 ## 1.7.456 — 2026-05-17
 
 ### Revert ATB rewrite — back to FF3-style round-based combat
