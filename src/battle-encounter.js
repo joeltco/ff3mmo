@@ -21,6 +21,7 @@ import { sendNetPVPEncounter, setNetPVPEncounterNoneHandler,
 import { partyInviteSt } from './party-invite.js';
 import { pvpSt } from './pvp.js';
 import { generateAllyStats } from './data/players.js';
+import { ps } from './player-stats.js';
 import { seed as seedRng } from './rng.js';
 import { addChatMessage } from './chat.js';
 
@@ -314,18 +315,33 @@ setNetEncounterAssistIncomingHandler((msg) => {
   battleSt.battleAllies.push(joinerStats);
   // Build the snapshot. Peers = self + existing battleAllies that have
   // a userId (skip any AI-driven fakes). Monsters carry live HP.
+  //
+  // Host self (peers[0]): must ship every field generateAllyStats reads —
+  // jobIdx, level, weaponR/weaponL/armorId/helmId/shieldId, knownSpells,
+  // jobLevel — otherwise the joiner runs `generateAllyStats({})` and the
+  // host appears on their screen as a level-1 unarmed default-job ally
+  // with degenerate atk/def/hp/agi. Server overwrites name+jobIdx+level+
+  // palIdx with its trusted profile (ws-presence.js:754-761) so we can
+  // pass blanks for those, but equipment + spells + jobLevel pass
+  // through. Current hp/mp ride too so the joiner sees mid-battle HP
+  // rather than full HP (receiver override below).
   const peers = [{
-    userId: myUid,
-    name:   msg.fromProfile.targetName || '',
-    // Server doesn't ship our profile back to us; use the snapshot ally
-    // shape — joiner runs generateAllyStats again receiver-side via the
-    // identical static data path. Include the same fields generateAllyStats
-    // reads: name + jobIdx + level + palIdx + loc + weapon/armor + knownSpells.
+    userId:      myUid,
+    name:        '',
+    jobIdx:      ps.jobIdx | 0,
+    level:       (ps.stats?.level || 1) | 0,
+    palIdx:      0,
+    hp:          ps.hp | 0,
+    mp:          ps.mp | 0,
+    maxHP:       (ps.stats?.maxHP || ps.hp) | 0,
+    weaponR:     ps.weaponR,
+    weaponL:     ps.weaponL,
+    armorId:     ps.body,
+    helmId:      ps.head,
+    shieldId:    ps.arms,
+    knownSpells: Array.isArray(ps.knownSpells) ? ps.knownSpells.slice() : [],
+    jobLevel:    (ps.jobLevels?.[ps.jobIdx]?.level || 1) | 0,
   }];
-  // Re-fetch host's own profile fields from battleSt + ps if we can. To
-  // keep this MVP simple, we ship a minimal entry; receiver mostly cares
-  // about userId + display fields. battleAllies entries already carry
-  // generateAllyStats output so we can ship those directly.
   for (const a of battleSt.battleAllies) {
     if (!a || !a.userId) continue;
     if (a.userId === (msg.fromUserId | 0)) continue;  // joiner gets snapshot themselves
@@ -446,6 +462,13 @@ setNetEncounterAssistSnapshotHandler((msg) => {
     stats.userId = peer.userId | 0;
     stats.isWireDriven = true;
     stats.fadeInStartMs = Date.now();
+    // generateAllyStats sets hp=maxHP from job/level math. Override with
+    // the snapshot's live values so the joiner sees mid-battle HP/MP
+    // rather than full bars (host may have been fighting solo for several
+    // rounds before the assist landed).
+    if (typeof peer.hp === 'number') stats.hp = peer.hp | 0;
+    if (typeof peer.mp === 'number') stats.mp = peer.mp | 0;
+    if (typeof peer.maxHP === 'number' && peer.maxHP > 0) stats.maxHP = peer.maxHP | 0;
     battleSt.battleAllies.push(stats);
   }
   const hostName = (peerList[0] && peerList[0].name) || 'Party';

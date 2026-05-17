@@ -13,6 +13,7 @@
 import { battleSt } from './battle-state.js';
 import { sendNetEncounterAction, sendNetEncounterEnd,
          setNetEncounterActionHandler, setNetEncounterEndHandler } from './net.js';
+import { isHealSpell } from './spell-cast.js';
 
 const _wireEncounterActions = [];
 
@@ -136,7 +137,19 @@ export function emitWireEncounterAction(pending) {
     } else {
       target = { kind: 'monster', idx: typeof pending.target === 'number' ? pending.target : 0 };
     }
-    if (cmd === 'magic') sendNetEncounterAction({ kind: 'magic', spellId: pending.spellId, target });
-    else                 sendNetEncounterAction({ kind: 'item',  itemId:  pending.itemId,  target });
+    if (cmd === 'magic') {
+      // Damage/heal pre-rolled at confirm-pause (battle-update.js#
+      // _updateBattleMenuConfirm) so receivers apply real values instead
+      // of 0. Heal-class spells (Cure family, Poisona, Raise) ride
+      // `healAmount`; everything else rides `damageRoll`.
+      const amt = pending.preRolledAmount | 0;
+      const healKey = isHealSpell(pending.spellId);
+      const extra = (amt > 0)
+        ? (healKey ? { healAmount: amt } : { damageRoll: amt })
+        : {};
+      sendNetEncounterAction({ kind: 'magic', spellId: pending.spellId, target, ...extra });
+    } else {
+      sendNetEncounterAction({ kind: 'item',  itemId:  pending.itemId,  target });
+    }
   }
 }

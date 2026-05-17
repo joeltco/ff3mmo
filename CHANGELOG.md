@@ -2,6 +2,26 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.458 — 2026-05-17
+
+### Co-op assist sync fixes
+
+User reported assists going out of sync between phones. Audit found three contributing bugs (none of them magic-specific, but the magic path also had a latent desync worth fixing in the same pass).
+
+**Bug 1 — Host shipped a blank profile in the assist snapshot** (`src/battle-encounter.js:317-345`).
+
+When a host accepted an incoming assist, `peers[0]` (host self) was just `{ userId, name }` — no `jobIdx / level / weaponR / weaponL / armorId / helmId / shieldId / knownSpells / jobLevel`. The joiner's `generateAllyStats(peer)` ran against this blank object → host rendered as a level-1 unarmed default-job ally with degenerate atk/def/hp/agi. The server enriches `name / jobIdx / level / palIdx` from its trusted profile (`ws-presence.js:754-761`) but doesn't track equipment — those four fields stayed missing. **This is the most likely root cause of "everything off" in assist battles.** Fix builds the host peer from `ps` (jobIdx, level, weaponR, weaponL, body, head, arms, knownSpells, jobLevels) so the joiner has the full input to `generateAllyStats`.
+
+**Bug 2 — Joiner ignored mid-battle HP in the snapshot** (`src/battle-encounter.js`, assist-snapshot handler).
+
+`generateAllyStats` sets `hp = maxHP` from job/level math. The receiver pushed the result straight into `battleSt.battleAllies` without overriding with the snapshot's live HP/MP, so the joiner saw the host (and any existing allies) at full bars even if the host had been fighting solo for several rounds. Fix overrides `stats.hp / mp / maxHP` from the wire payload after `generateAllyStats`.
+
+**Bug 3 — Magic wire payload missing `damageRoll` / `healAmount`** (`src/encounter-wire.js`, `src/battle-update.js#_emitWirePVPAction`).
+
+When a player cast magic in co-op or PvP, `emitWireEncounterAction` / `_emitWirePVPAction` shipped `{ kind: 'magic', spellId, target }` with no roll. Receivers' `_applyAllyMagicEffect` read `action.healAmount | 0 = 0` → 0 heal / 1 damage on watcher phones while the sender's `spell-cast.js` rolled real values at apply time. Fix pre-rolls the amount at `_updateBattleMenuConfirm` via new `prerollSpellAmount(spellId)` helper (`src/spell-cast.js`), stashes on `pending.preRolledAmount`, threads through `startSpellCast(spellId, ts, { preRolledAmount })` so the sender uses the cached value via `_baseAmount`. New `isHealSpell(spellId)` helper picks `healAmount` vs `damageRoll` for the wire payload.
+
+Wire-sim still 49/49 (changes don't touch the wire-receive paths the harness covers).
+
 ## 1.7.457 — 2026-05-17
 
 ### Strip stale `'atb-idle'` predicates

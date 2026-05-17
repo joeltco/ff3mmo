@@ -966,11 +966,16 @@ function _playerTurnMagic() {
   // pending.target is a number → enemy slot in encounter / PVP grid (or boss = 0).
   // pending.targetMode: 'single' | 'all' | 'col-left' | 'col-right' (set by the
   // target picker; multi-target Cure relies on this to build the target list).
+  // preRolledAmount: set when the action rode the wire (battle-update.js
+  // #_updateBattleMenuConfirm pre-rolls before emit so the wire payload
+  // carries the damage/heal value). Sender's spell-cast consumes the cached
+  // value instead of re-rolling so neither side double-consumes rand().
   const tm = pending.targetMode || 'single';
+  const opts = pending.preRolledAmount > 0 ? { preRolledAmount: pending.preRolledAmount } : {};
   if (pending.target === 'player') {
-    startSpellCast(pending.spellId, { allyIndex: pending.allyIndex ?? -1, targetMode: tm });
+    startSpellCast(pending.spellId, { allyIndex: pending.allyIndex ?? -1, targetMode: tm }, opts);
   } else {
-    startSpellCast(pending.spellId, { enemyIndex: pending.target, targetMode: tm });
+    startSpellCast(pending.spellId, { enemyIndex: pending.target, targetMode: tm }, opts);
   }
   // MP changed; persist immediately so a crash doesn't refund the cost.
   saveSlotsToDB();

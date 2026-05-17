@@ -117,6 +117,35 @@ function _rollMagicAmount(power, useMnd) {
   return atk + Math.floor(rand() * (Math.floor(atk / 2) + 1));
 }
 
+// Pre-roll the magic amount for a player-cast spell BEFORE wire emit so the
+// rolled value can ride the wire payload. Co-op + PvP wire bridges call this
+// at confirm-pause (battle-update.js#_updateBattleMenuConfirm); the rolled
+// value gets stashed on `pending.preRolledAmount` and threaded through
+// `startSpellCast(spellId, ts, { preRolledAmount })`. Receivers apply the
+// supplied value directly (battle-turn.js#_applyWireEncounterActionForAlly
+// already reads `action.healAmount` / `action.damageRoll`); sender skips its
+// own roll so neither side double-consumes `rand()`. Returns 0 for spells
+// with no numeric amount (status / revive / buffs).
+export function prerollSpellAmount(spellId) {
+  const spell = SPELLS.get(spellId);
+  if (!spell || !(spell.power > 0)) return 0;
+  const useMnd = spell.element === 'recovery'
+    || spell.target === 'cure_status'
+    || spell.target === 'revive';
+  return _rollMagicAmount(spell.power, useMnd);
+}
+
+// Wire bridge needs to know whether the rolled amount is a heal (rides
+// `healAmount`) or damage (rides `damageRoll`). Mirrors `prerollSpellAmount`'s
+// useMnd decision but exposed for the wire emit sites.
+export function isHealSpell(spellId) {
+  const spell = SPELLS.get(spellId);
+  if (!spell) return false;
+  return spell.element === 'recovery'
+    || spell.target === 'cure_status'
+    || spell.target === 'revive';
+}
+
 // NES FF3 marks undead as "weak to holy AND resists holy" — the contradictory
 // pair is the data signature. Used so recovery spells (Cure family) damage
 // undead instead of healing them.
@@ -246,9 +275,17 @@ export function startSpellCast(spellId, targetSpec, opts = {}) {
     });
   }
 
-  // Multi-target → roll once at cast time, divide at apply time. Single-target
-  // keeps per-target re-roll (legacy). Skips status/revive cures (no amount).
-  if (_targets.length > 1 && spell.power > 0) {
+  // Wire bridge: when the caller pre-rolled the amount (co-op + PvP wire path
+  // at confirm-pause), use that value as `_baseAmount` and skip the local
+  // roll. Without this both sender and receiver would consume different
+  // rand() counts → cursor drift + damage-number divergence. Falls through
+  // to legacy multi-target roll for non-wire / AI paths.
+  if (typeof opts.preRolledAmount === 'number' && opts.preRolledAmount > 0) {
+    _baseAmount = opts.preRolledAmount | 0;
+  } else if (_targets.length > 1 && spell.power > 0) {
+    // Multi-target → roll once at cast time, divide at apply time.
+    // Single-target keeps per-target re-roll (legacy). Skips status/revive
+    // cures (no amount).
     const useMnd = spell.element === 'recovery'
       || spell.target === 'cure_status'
       || spell.target === 'revive';

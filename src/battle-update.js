@@ -20,7 +20,7 @@ import { emitWireEncounterAction, endWireEncounter, clearWireEncounterQueue } fr
 import { rand } from './rng.js';
 import { updateBattleAlly } from './battle-ally.js';
 import { updateBattleEnemyTurn } from './battle-enemy.js';
-import { updateSpellCast, resetSpellCastVars } from './spell-cast.js';
+import { updateSpellCast, resetSpellCastVars, prerollSpellAmount, isHealSpell } from './spell-cast.js';
 import { canCastSpell } from './data/spells.js';
 import { clearAllBuffs } from './buffs.js';
 import { queueBattleMsg, replaceBattleMsg, updateBattleMsg as _updateBattleMsg, clearBattleMsgQueue,
@@ -386,6 +386,20 @@ export function tryJoinPlayerAlly() {
 function _updateBattleMenuConfirm() {
   if (battleSt.battleState === 'confirm-pause') {
     if (battleSt.battleTimer >= 150) {
+      // Pre-roll magic damage/heal BEFORE wire emit so the wire payload
+      // carries the rolled value. Without this, receivers apply 0 (no
+      // wire field → `action.healAmount | 0 = 0`) while sender's
+      // spell-cast rolls a real value at apply time → damage-number +
+      // HP desync across phones. Sender's `startSpellCast` consumes the
+      // pre-rolled amount via `opts.preRolledAmount`, skipping its own
+      // roll so neither side double-consumes rand(). Items don't need
+      // pre-rolling — heal/damage values come from item.power (no RNG).
+      if ((pvpSt.isWirePVP || battleSt.isWireEncounter) && inputSt.playerActionPending) {
+        const pending = inputSt.playerActionPending;
+        if (pending.command === 'magic' && pending.preRolledAmount == null) {
+          pending.preRolledAmount = prerollSpellAmount(pending.spellId) | 0;
+        }
+      }
       // MP Step 4 part 2 — relay the player's action to the wire partner
       // BEFORE turn dispatch fires animations, so the partner's client has
       // time to drive their opponent-side turn without an extra wait.
@@ -480,8 +494,20 @@ function _emitWirePVPAction(pending) {
     if (isSelf)      target = { side: 'me',  idx: 0 };
     else if (isAlly) target = { side: 'me',  idx: pending.allyIndex + 1 };
     else             target = { side: 'opp', idx: typeof pending.target === 'number' ? pending.target : 0 };
-    if (cmd === 'magic') sendNetPVPAction({ kind: 'magic', spellId: pending.spellId, actor, target });
-    else                 sendNetPVPAction({ kind: 'item',  itemId:  pending.itemId,  actor, target });
+    if (cmd === 'magic') {
+      // Magic damage/heal is pre-rolled at confirm-pause (see
+      // `_updateBattleMenuConfirm`) so the wire carries the value
+      // alongside spellId. Without this, receiver's `_applyAllyMagicEffect`
+      // reads `action.healAmount | 0 = 0` and renders 0 heal / 1 damage.
+      const amt = pending.preRolledAmount | 0;
+      const healKey = isHealSpell(pending.spellId);
+      const extra = (amt > 0)
+        ? (healKey ? { healAmount: amt } : { damageRoll: amt })
+        : {};
+      sendNetPVPAction({ kind: 'magic', spellId: pending.spellId, actor, target, ...extra });
+    } else {
+      sendNetPVPAction({ kind: 'item',  itemId:  pending.itemId,  actor, target });
+    }
     return;
   }
 }
