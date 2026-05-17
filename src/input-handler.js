@@ -74,6 +74,11 @@ const ROSTER_VISIBLE = 3;
 export const inputSt = {
   // Battle menu + targeting
   battleCursor:       0,
+  // v1.7.451 — pre-buffered menu pick when the player confirms during an
+  // enemy attack animation (states enemy-flash / enemy-attack /
+  // enemy-damage-show). Stored as 0..3 cursor idx; -1 = nothing buffered.
+  // Flushed at the top of handleBattleInput when state becomes 'menu-open'.
+  bufferedMenuCommand: -1,
   targetIndex:        0,
   hitResults:         [],
   playerActionPending: null,
@@ -653,12 +658,39 @@ export function handleBattleInput() {
   if (battleSt.battleState === 'none') return false;
   if (_battleInputHoldStates()) return true;
   const k = keys;
-  if (battleSt.battleState === 'menu-open') {
+  // v1.7.451 — buffered menu input. During enemy attack animations (enemy-
+  // flash / enemy-attack / enemy-damage-show) the cursor stays interactive
+  // and Z stages a pick that fires on the next menu-open. Lets the player
+  // queue their action without waiting for the swing to finish. FF4 canon
+  // locks the menu during attack animations; this is a deliberate divergence
+  // to keep ff3mmo's combat pace snappy.
+  const bs = battleSt.battleState;
+  const isEnemyAnim = bs === 'enemy-flash' || bs === 'enemy-attack' || bs === 'enemy-damage-show';
+  if (bs === 'menu-open') {
+    // Flush any buffered pick from a previous enemy-anim window.
+    if (inputSt.bufferedMenuCommand >= 0) {
+      const buffered = inputSt.bufferedMenuCommand;
+      inputSt.bufferedMenuCommand = -1;
+      inputSt.battleCursor = buffered;
+      _executeBattleCommand(buffered);
+      return true;
+    }
     if (k['ArrowDown'])  { k['ArrowDown'] = false;  inputSt.battleCursor ^= 2; playSFX(SFX.CURSOR); }
     if (k['ArrowUp'])    { k['ArrowUp'] = false;    inputSt.battleCursor ^= 2; playSFX(SFX.CURSOR); }
     if (k['ArrowRight']) { k['ArrowRight'] = false; inputSt.battleCursor ^= 1; playSFX(SFX.CURSOR); }
     if (k['ArrowLeft'])  { k['ArrowLeft'] = false;  inputSt.battleCursor ^= 1; playSFX(SFX.CURSOR); }
     if (k['z'] || k['Z']) { k['z'] = false; k['Z'] = false; _executeBattleCommand(inputSt.battleCursor); }
+  } else if (isEnemyAnim) {
+    // Cursor navigation works live; Z stages the pick for the next menu-open.
+    if (k['ArrowDown'])  { k['ArrowDown'] = false;  inputSt.battleCursor ^= 2; playSFX(SFX.CURSOR); }
+    if (k['ArrowUp'])    { k['ArrowUp'] = false;    inputSt.battleCursor ^= 2; playSFX(SFX.CURSOR); }
+    if (k['ArrowRight']) { k['ArrowRight'] = false; inputSt.battleCursor ^= 1; playSFX(SFX.CURSOR); }
+    if (k['ArrowLeft'])  { k['ArrowLeft'] = false;  inputSt.battleCursor ^= 1; playSFX(SFX.CURSOR); }
+    if (k['z'] || k['Z']) {
+      k['z'] = false; k['Z'] = false;
+      inputSt.bufferedMenuCommand = inputSt.battleCursor;
+      playSFX(SFX.CONFIRM);
+    }
   } else if (battleSt.battleState === 'target-select') { _battleInputTargetSelect();
   } else if (battleSt.battleState === 'item-select') { _battleInputItemSelect();
   } else if (battleSt.battleState === 'item-target-select') { _battleInputItemTargetSelect();

@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.451 — 2026-05-17
+
+### Buffered menu input during enemy attacks
+
+The menu was previously dead while an enemy was attacking (states `enemy-flash` / `enemy-attack` / `enemy-damage-show`). FF4 canon locks the menu during attack animations — we're diverging to keep ff3mmo's pace snappy.
+
+Now during those states:
+- Cursor navigation is live (←/→/↑/↓ + SFX.CURSOR).
+- The on-screen cursor stays visible on whichever slot you're hovering.
+- Z stages a buffered pick (`inputSt.bufferedMenuCommand`); the action doesn't fire mid-swing.
+- When the FSM returns to `menu-open`, the buffered pick fires immediately on the next input frame — no extra Z press needed.
+
+Implementation: small relax of input + cursor-draw gates, plus `bufferedMenuCommand` cleared in `resetBattleVars`. Existing target-select / item-list / magic submenus stay normal — buffering only covers the top-level slot pick (Fight/Magic-or-Defend/Item/Run). Sub-state input is already responsive once you reach it.
+
 ## 1.7.450 — 2026-05-17
 
 ### Fix — equipment lost on restart (server save validator dropped equipment fields)
