@@ -27,7 +27,7 @@ import { PLAYER_POOL, generateAllyStats } from './data/players.js';
 import { JOBS } from './data/jobs.js';
 import { MONSTERS } from './data/monsters.js';
 import { ps } from './player-stats.js';
-import { pickReadyActor } from './atb.js';
+import { pickReadyActor, isReady } from './atb.js';
 import { inputSt } from './input-handler.js';
 import { getShieldEvade } from './player-stats.js';
 import { pvpGridLayout, PVP_CELL_W, PVP_CELL_H } from './pvp-math.js';
@@ -431,7 +431,8 @@ function _updatePVPOpening() {
   } else if (bs === 'battle-fade-in') {
     if (battleSt.battleTimer >= (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS) {
       initBattleATB();
-      battleSt.battleState = 'atb-idle'; battleSt.battleTimer = 0;
+      // v1.7.437 — menu-open immediately so player can queue early.
+      battleSt.battleState = 'menu-open'; battleSt.battleTimer = 0;
     }
   } else { return false; }
   return true;
@@ -439,7 +440,9 @@ function _updatePVPOpening() {
 function _updatePVPMenuConfirm() {
   const bs = battleSt.battleState;
   if (bs === 'confirm-pause') {
-    if (battleSt.battleTimer >= 150) {
+    // Hold until player's gauge is ready — same queue-command UX as
+    // _updateBattleMenuConfirm. v1.7.437.
+    if (battleSt.battleTimer >= 150 && isReady(ps)) {
       // Wire-PvP — relay the local player's confirmed action to the partner
       // BEFORE turn dispatch fires, so their client has time to queue it for
       // their opponent-side turn. Mirrors `_updateBattleMenuConfirm` in

@@ -43,7 +43,7 @@ import { playSlashSFX } from './battle-sfx.js';
 import { saveSlotsToDB } from './save-state.js';
 import { addItem, buildItemSelectList } from './inventory.js';
 import { initATB, addATBUnit, clearATB, tickGauges, deriveMonsterAgi,
-         pickReadyActor } from './atb.js';
+         pickReadyActor, isReady } from './atb.js';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 // BATTLE_TEXT_STEPS / BATTLE_TEXT_STEP_MS now imported from battle-state.js (single source).
@@ -273,8 +273,11 @@ function _updateBattleOpening() {
   } else if (battleSt.battleState === 'battle-fade-in') {
     if (battleSt.battleTimer >= (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS) {
       initBattleATB();
-      // ATB dispatch hub. Menu opens only when player's gauge hits ready.
-      battleSt.battleState = 'atb-idle'; battleSt.battleTimer = 0;
+      // ATB era — menu is available immediately so the player can queue
+      // their next command while their gauge fills. The dispatch handler
+      // also fires from menu-open (skipPlayer mode) to pick up monster
+      // readies. v1.7.437.
+      battleSt.battleState = 'menu-open'; battleSt.battleTimer = 0;
     }
   } else { return false; }
   return true;
@@ -415,7 +418,11 @@ export function tryJoinPlayerAlly() {
 
 function _updateBattleMenuConfirm() {
   if (battleSt.battleState === 'confirm-pause') {
-    if (battleSt.battleTimer >= 150) {
+    // ATB era — the 150ms pause is the "selected, about to fire" beat,
+    // but the action only actually fires when the player's gauge is ready.
+    // If they queued a command early (gauge still filling), confirm-pause
+    // holds here until isReady(ps) flips true. v1.7.437.
+    if (battleSt.battleTimer >= 150 && isReady(ps)) {
       // MP Step 4 part 2 — relay the player's action to the wire partner
       // BEFORE turn dispatch fires animations, so the partner's client has
       // time to drive their opponent-side turn without an extra wait.

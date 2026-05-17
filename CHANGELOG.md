@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.437 — 2026-05-17
+
+### Queueable commands — menu open during gauge fill
+
+Player can now select an action while the ATB bar is still filling. The action waits at `confirm-pause` until the gauge is ready, then fires. Lets you commit early to your next move instead of staring at the bar.
+
+- **Menu is the idle state.** `battle-fade-in` → `menu-open` directly (was `atb-idle`). `processNextTurn` queue-empty → `menu-open` when player alive, `atb-idle` only when player is down.
+- **`confirm-pause` gates on `isReady(ps)`.** Holds until the player's gauge fills, then dispatches the queued action.
+- Dispatch hub still runs from `menu-open` (skipPlayer) so monster/ally turns interrupt freely while the player is sitting in the menu. Confirm-pause holds non-preemptively (player who commits early gets their action first when their gauge fills).
+
 ## 1.7.436 — 2026-05-17
 
 ### ATB bar fades out on ready

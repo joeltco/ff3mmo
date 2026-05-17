@@ -183,9 +183,12 @@ export function processNextTurn() {
     if (battleSt.isWireEncounter) {
       for (const a of battleSt.battleAllies) if (a) a.isDefending = false;
     }
-    // Yield to ATB dispatch — the atb-idle handler will pick the next
-    // ready actor when their gauge fills.
-    battleSt.battleState = 'atb-idle'; battleSt.battleTimer = 0;
+    // Yield to ATB dispatch. Menu-open is the universal idle state when
+    // the player is alive — they can queue their next command while the
+    // gauge fills. atb-idle only when the player is down (no menu UI).
+    // v1.7.437.
+    battleSt.battleState = (ps.hp > 0) ? 'menu-open' : 'atb-idle';
+    battleSt.battleTimer = 0;
     return;
   }
   const turn = battleSt.turnQueue.shift();
