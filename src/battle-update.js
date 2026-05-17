@@ -95,7 +95,7 @@ export function resetBattleVars() {
   clearWireEncounterQueue();
   battleSt.isDefending = false; battleSt.battleAllies = []; battleSt.allyJoinRound = 0;
   battleSt.currentAllyAttacker = -1; battleSt.allyTargetIndex = -1; battleSt.allyHitResult = null; battleSt.allyHitIsLeft = false;
-  battleSt.allyShakeTimer = {}; battleSt.enemyTargetAllyIdx = -1; battleSt.allyExitTimer = 0;
+  battleSt.allyShakeTimer = {}; battleSt.enemyTargetAllyIdx = -1;
   battleSt.allyMagicCasterIdx = -1; battleSt.allyMagicTargetIdx = -1; battleSt.allyMagicSpellId = 0;
   battleSt.allyMagicHealAmount = 0; battleSt.allyMagicDamageRoll = 0;
   battleSt.allyMagicEffectApplied = false; battleSt.allyMagicSfxPlayed = false; battleSt.allyMagicTargetType = 'player';
@@ -230,7 +230,6 @@ export function updateBattleTimers(dt) {
   }
 
   _updateTurnTimer(dt);
-  _updateAllyExitFade(dt);
 }
 
 function _updateTurnTimer(dt) {
@@ -241,21 +240,6 @@ function _updateTurnTimer(dt) {
   if (battleSt.turnTimer >= TURN_TIME_MS) {
     battleSt.turnTimer = 0; inputSt.itemHeldIdx = -1;
     inputSt.playerActionPending = { command: 'skip' }; battleSt.battleState = 'confirm-pause'; battleSt.battleTimer = 0;
-  }
-}
-
-function _updateAllyExitFade(dt) {
-  if (battleSt.battleAllies.length === 0) return;
-  const isVicState = isVictoryBattleState() && battleSt.battleState !== 'victory-box-close';
-  if (!isVicState) return;
-  const ALLY_EXIT_DELAY_MS = 1500, ALLY_EXIT_STEP_MS = 100;
-  battleSt.allyExitTimer += dt;
-  if (battleSt.allyExitTimer >= ALLY_EXIT_DELAY_MS) {
-    const stepsDone = Math.floor((battleSt.allyExitTimer - ALLY_EXIT_DELAY_MS) / ALLY_EXIT_STEP_MS);
-    const targetFade = Math.min(4, stepsDone);
-    for (let i = 0; i < battleSt.battleAllies.length; i++) {
-      if (battleSt.battleAllies[i].fadeStep < targetFade) battleSt.battleAllies[i].fadeStep = targetFade;
-    }
   }
 }
 

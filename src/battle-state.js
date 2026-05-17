@@ -75,7 +75,6 @@ export const battleSt = {
   allyHitIdx: 0,
   allyHitIsLeft: false,
   allyShakeTimer: {},       // {allyIdx: ms remaining}
-  allyExitTimer: 0,
   enemyTargetAllyIdx: -1,
   // v1.7.364 step 7/7 — per-attacker mirror of enemyTargetAllyIdx. Keyed by
   // the attacker combatant object (encounter monster, pvpOpponentStats, or

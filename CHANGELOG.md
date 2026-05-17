@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.459 — 2026-05-17
+
+### Co-op allies stay in roster through victory until peer leaves
+
+Two related changes so the ally panel reflects "who is actually still here" during the post-battle decision flow:
+
+**1 — Removed auto-fade during victory** (`src/battle-update.js`).
+
+`_updateAllyExitFade` was starting to fade ally portraits to black 1500 ms into any victory state, then dimming over 400 ms regardless of whether the peer was still alive. Players tapping slowly through exp / gil / cp / level-up text saw their allies vanish mid-flow even though the peers were still around. Function deleted; `allyExitTimer` field deleted with it. Allies stay at `fadeStep=0` for the entire local victory sequence; the natural clear at `encounter-box-close` (`battle-update.js:954`) wipes them when the local player actually exits.
+
+**2 — `encounter-end` from a peer removes only that peer when we're wrapping up** (`src/encounter-wire.js`).
+
+Previously the handler did `_wireEncounterActions.length = 0` (wiped every peer's wire queue, not just the departing peer) and then either no-op'd or force-closed our FSM. The no-op case left the departing peer's portrait lingering on our screen until our own box-close fired. New behavior:
+
+- Drain wire actions for the departing `msg.userId` only (other peers still queued).
+- If we're wrapping up locally, splice that peer out of `battleSt.battleAllies` so their portrait disappears the moment they leave on their end.
+- Mid-battle force-close path unchanged (a peer running while we're still fighting still drops us out of the encounter — the alternative would leave us stalled on `ally-wire-wait`).
+
 ## 1.7.458 — 2026-05-17
 
 ### Co-op assist sync fixes

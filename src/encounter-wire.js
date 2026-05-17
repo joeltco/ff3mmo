@@ -35,16 +35,29 @@ setNetEncounterActionHandler((msg) => {
 });
 
 setNetEncounterEndHandler((msg) => {
-  // Peer reported their local FSM finished the battle. Drain stale wire
-  // actions. Two cases need different handling:
+  // Peer reported their local FSM finished the battle. Two cases need
+  // different handling:
   //   1. Peer ran or quit while we were still fighting → force our FSM
   //      to encounter-box-close so we exit too (otherwise we'd be solo
   //      vs monsters balanced for a party, possibly stalled waiting on
   //      a wire-driven ally that's no longer coming).
   //   2. We've already converged on victory / defeat / our own close →
-  //      no-op. The local close path runs endWireEncounter itself.
-  // v1.7.419.
-  _wireEncounterActions.length = 0;
+  //      keep our victory flow alive; just remove the peer from our ally
+  //      panel so their portrait disappears when they leave on their end.
+  //      Previously this was a full no-op + queue wipe, which made the
+  //      peer's portrait linger on our screen until our own box-close
+  //      fired. User wants the ally roster to mirror who is actually
+  //      still here. v1.7.459.
+  const peerUid = (msg && msg.userId) | 0;
+  // Drain wire actions specific to the peer who ended (not the whole
+  // queue — other co-op allies may still be queued).
+  if (peerUid) {
+    for (let i = _wireEncounterActions.length - 1; i >= 0; i--) {
+      if ((_wireEncounterActions[i].userId | 0) === peerUid) {
+        _wireEncounterActions.splice(i, 1);
+      }
+    }
+  }
   if (!battleSt.isWireEncounter) return;
   const bs = battleSt.battleState;
   // States that already mean "battle is wrapping up locally" — let them
@@ -65,7 +78,16 @@ setNetEncounterEndHandler((msg) => {
     bs === 'victory-menu-fade' ||
     bs === 'victory-box-close'
   );
-  if (wrappingUp) return;
+  if (wrappingUp) {
+    // Remove the departing peer from our ally panel so the roster reflects
+    // who is actually still here. Their portrait disappears immediately;
+    // remaining allies (if any) stay through the rest of our victory flow.
+    if (peerUid) {
+      const idx = battleSt.battleAllies.findIndex(a => a && (a.userId | 0) === peerUid);
+      if (idx >= 0) battleSt.battleAllies.splice(idx, 1);
+    }
+    return;
+  }
   if (msg && msg.outcome) {/* observed for future divergence telemetry */}
   battleSt.battleState = 'encounter-box-close';
   battleSt.battleTimer = 0;
