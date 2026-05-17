@@ -56,6 +56,7 @@ function _clamp(n, min, max) {
   const v = (n | 0) || 0;
   return v < min ? min : (v > max ? max : v);
 }
+export function _testValidateSaveData(data) { return _validateSaveData(data); }
 function _validateSaveData(data) {
   if (!data || typeof data !== 'object') return { ok: false, error: 'data must be an object' };
   const raw = JSON.stringify(data);
@@ -70,16 +71,27 @@ function _validateSaveData(data) {
   if (typeof data.hp === 'number')           out.hp = _clamp(data.hp, 0, 9999);
   if (typeof data.mp === 'number' || data.mp === null) out.mp = data.mp == null ? null : _clamp(data.mp, 0, 9999);
   if (data.stats && typeof data.stats === 'object') {
+    // v1.7.450 — extended to include maxMP + equipment slot item-ids.
+    // Pre-fix these were dropped by the server whitelist; on reload (server
+    // preferred over IndexedDB) the player's equipment looked erased because
+    // `slot.stats.weaponR/head/body/arms` came back undefined and the load
+    // path fell back to new-game defaults. Equipment IDs are 0-255; 0 = empty.
     out.stats = {
-      level:  _clamp(data.stats.level, 1, 99),
-      exp:    _clamp(data.stats.exp, 0, 9999999),
-      hp:     _clamp(data.stats.hp, 0, 9999),
-      maxHP:  _clamp(data.stats.maxHP, 1, 9999),
-      str:    _clamp(data.stats.str, 1, 99),
-      agi:    _clamp(data.stats.agi, 1, 99),
-      vit:    _clamp(data.stats.vit, 1, 99),
-      int:    _clamp(data.stats.int, 1, 99),
-      mnd:    _clamp(data.stats.mnd, 1, 99),
+      level:   _clamp(data.stats.level, 1, 99),
+      exp:     _clamp(data.stats.exp, 0, 9999999),
+      hp:      _clamp(data.stats.hp, 0, 9999),
+      maxHP:   _clamp(data.stats.maxHP, 1, 9999),
+      maxMP:   _clamp(data.stats.maxMP, 0, 9999),
+      str:     _clamp(data.stats.str, 1, 99),
+      agi:     _clamp(data.stats.agi, 1, 99),
+      vit:     _clamp(data.stats.vit, 1, 99),
+      int:     _clamp(data.stats.int, 1, 99),
+      mnd:     _clamp(data.stats.mnd, 1, 99),
+      weaponR: _clamp(data.stats.weaponR, 0, 255),
+      weaponL: _clamp(data.stats.weaponL, 0, 255),
+      head:    _clamp(data.stats.head, 0, 255),
+      body:    _clamp(data.stats.body, 0, 255),
+      arms:    _clamp(data.stats.arms, 0, 255),
     };
   }
   if (data.inventory && typeof data.inventory === 'object' && !Array.isArray(data.inventory)) {

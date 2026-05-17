@@ -27,7 +27,7 @@ import {
   tryInflictStatus, processTurnStart,
 } from '../src/status-effects.js';
 import { attachWebSocketPresence, _testHooks } from '../ws-presence.js';
-import { _testEnsureUser, handleAPI } from '../api.js';
+import { _testEnsureUser, handleAPI, _testValidateSaveData } from '../api.js';
 
 const require = createRequire(import.meta.url);
 const jwt = require('jsonwebtoken');
@@ -317,6 +317,47 @@ function suiteServer() {
       if (rateAllowKind(entry, 'encounter-assist-request')) passes++;
     }
     assertEqual(passes, cap, 'assist-request cap not honored');
+  });
+
+  // v1.7.450 — save validator must roundtrip every stats field the client
+  // sends in `playerStatsSnapshot()`. Pre-fix `maxMP` + equipment IDs
+  // (weaponR/L/head/body/arms) were dropped by the whitelist, and on reload
+  // (server preferred) the player's equipment looked erased.
+  test('save validator preserves all stats fields incl. equipment', () => {
+    const input = {
+      name: [0x80, 0x81, 0x82],
+      level: 12,
+      stats: {
+        level: 12, exp: 5000, hp: 250, maxHP: 300, maxMP: 80,
+        str: 22, agi: 18, vit: 17, int: 25, mnd: 28,
+        weaponR: 0x1E, weaponL: 0x00,
+        head: 0x62, body: 0x72, arms: 0x05,
+      },
+    };
+    const { ok, data } = _testValidateSaveData(input);
+    assertEqual(ok, true, 'validator rejected good input');
+    assertEqual(data.stats.maxMP, 80, 'maxMP dropped');
+    assertEqual(data.stats.weaponR, 0x1E, 'weaponR dropped');
+    assertEqual(data.stats.weaponL, 0x00, 'weaponL dropped');
+    assertEqual(data.stats.head, 0x62, 'head dropped');
+    assertEqual(data.stats.body, 0x72, 'body dropped');
+    assertEqual(data.stats.arms, 0x05, 'arms dropped');
+  });
+
+  test('save validator clamps equipment IDs to 0-255', () => {
+    const input = {
+      name: [0x80],
+      stats: {
+        level: 1, exp: 0, hp: 1, maxHP: 1, maxMP: 0,
+        str: 1, agi: 1, vit: 1, int: 1, mnd: 1,
+        weaponR: 9999, weaponL: -10,
+        head: 256, body: 1, arms: 0,
+      },
+    };
+    const { data } = _testValidateSaveData(input);
+    assertEqual(data.stats.weaponR, 255, 'weaponR over-cap');
+    assertEqual(data.stats.weaponL, 0, 'weaponL under-zero');
+    assertEqual(data.stats.head, 255, 'head 256 not clamped');
   });
 }
 

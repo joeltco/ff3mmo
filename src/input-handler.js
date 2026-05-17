@@ -8,6 +8,7 @@ import { msgState, showMsgBox, dismissMsgBox } from './message-box.js';
 import { chatState, CHAT_TABS, activeTab, tabSelectMode, setActiveTab, setTabSelectMode, chatScrollOffset, setChatScrollOffset, onChatKeyDown } from './chat.js';
 import { titleSt, onNameEntryKeyDown } from './title-screen.js';
 import { ps, recalcCombatStats, getHitWeapon, getJobLevelStatBonus } from './player-stats.js';
+import { saveSlotsToDB } from './save-state.js';
 import { ITEMS, isHandEquippable, isWeapon, weaponSubtype } from './data/items.js';
 import { SPELLS, getSpellMPCost, isMultiTargetSpell } from './data/spells.js';
 import { rollHits, calcPotentialHits, elemMultiplier } from './battle-math.js';
@@ -293,6 +294,10 @@ function _itemSelectNav(isEquipPage, totalPages, pageRows) {
 function _itemSelectSwap(isEquipPage, gIdx) {
   const srcEquip = inputSt.itemHeldIdx <= -100;
   const dstEquip = isEquipPage;
+  // v1.7.450 — track whether ps equipment changed so we save once at the
+  // end. Pre-fix the battle-menu equip flow never called saveSlotsToDB, so
+  // weapon swaps mid-battle didn't persist across restart.
+  let equipChanged = false;
   if (!srcEquip && !dstEquip) {
     const dstIdx = (inputSt.itemPage - 1) * INV_SLOTS + inputSt.itemPageCursor;
     const tmp = inputSt.itemSelectList[inputSt.itemHeldIdx];
@@ -309,6 +314,7 @@ function _itemSelectSwap(isEquipPage, gIdx) {
       if (oldWeapon !== 0) addItem(oldWeapon, 1);
       inputSt.itemSelectList[inputSt.itemHeldIdx] = oldWeapon !== 0 ? { id: oldWeapon, count: 1 } : null;
       recalcCombatStats(); inputSt.itemHeldIdx = -1; playSFX(SFX.CONFIRM);
+      equipChanged = true;
     } else { playSFX(SFX.ERROR); inputSt.itemHeldIdx = -1; }
   } else if (srcEquip && !dstEquip) {
     const srcHand = -(inputSt.itemHeldIdx + 100);
@@ -320,16 +326,20 @@ function _itemSelectSwap(isEquipPage, gIdx) {
       removeItem(invItem.id); addItem(handWeaponId, 1);
       inputSt.itemSelectList[dstIdx] = { id: handWeaponId, count: 1 };
       recalcCombatStats(); inputSt.itemHeldIdx = -1; playSFX(SFX.CONFIRM);
+      equipChanged = true;
     } else if (!invItem) {
       if (srcHand === 0) ps.weaponR = 0; else ps.weaponL = 0;
       addItem(handWeaponId, 1);
       inputSt.itemSelectList[dstIdx] = { id: handWeaponId, count: 1 };
       recalcCombatStats(); inputSt.itemHeldIdx = -1; playSFX(SFX.CONFIRM);
+      equipChanged = true;
     } else { playSFX(SFX.ERROR); inputSt.itemHeldIdx = -1; }
   } else {
     const tmp = ps.weaponR; ps.weaponR = ps.weaponL; ps.weaponL = tmp;
     recalcCombatStats(); inputSt.itemHeldIdx = -1; playSFX(SFX.CONFIRM);
+    equipChanged = true;
   }
+  if (equipChanged) saveSlotsToDB();
 }
 
 function _itemSelectZ(isEquipPage, gIdx) {

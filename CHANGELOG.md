@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.450 — 2026-05-17
+
+### Fix — equipment lost on restart (server save validator dropped equipment fields)
+
+Reported: equipment didn't persist across restart.
+
+Root cause: `api.js#_validateSaveData` whitelisted `stats.{level,exp,hp,maxHP,str,agi,vit,int,mnd}` but **dropped** `maxMP` and all five equipment slots (`weaponR/weaponL/head/body/arms`). Client sent them, server stripped them on save. `loadSlotsFromDB` prefers server state over IndexedDB; on reload `slot.stats.weaponR` came back undefined → load path fell back to new-game defaults (Knife / Leather Cap / Cloth Armor). Equipment looked erased.
+
+Pause-menu equip flow calls `saveSlotsToDB()` after every change (`src/pause-menu.js`); that part worked locally but the server save round-trip stripped the fields.
+
+Two fixes:
+1. **`api.js#_validateSaveData`** — extended the `out.stats` whitelist with `maxMP` (clamp 0–9999) and `weaponR/L/head/body/arms` (clamp 0–255 item-id; 0 = empty slot).
+2. **`src/input-handler.js#_itemSelectSwap`** — battle-menu equip swaps never called `saveSlotsToDB()` either. Added a tracked `equipChanged` flag with a single save at the bottom of the function.
+
+Plus a sim guard: 2 new tests in `pvp-wire-sim --suite=server` that round-trip the full stats payload through `_validateSaveData` and assert each equipment field survives + is clamped. Catches future whitelist drift. Wire-sim now 61/61.
+
 ## 1.7.449 — 2026-05-17
 
 ### Fix — enemy "x2" multiplier showed robe icon
