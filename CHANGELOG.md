@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.454 — 2026-05-17
+
+### Fix — Land Turtle sprite stuck after defeat + chest-open flicker
+
+**Land Turtle sprite stayed visible after defeat.** v1.7.453 wired the boss into ATB dispatch but the overworld NPC entry was never removed from `_npcs` after the dissolve. `addBossNpc` runs from `map-loading.js` gated on `!battleSt.enemyDefeated`, so on next dungeon reload the boss respawns correctly — but in the post-defeat moment its sprite just sat there. Added `removeBossNpc()` in `src/npc.js` (filters `_npcs` by key `boss_land_turtle`) and call it from the boss-dissolve completion in `src/battle-update.js` alongside `mapSt.bossSprite = null`.
+
+**Chest-open flicker in altar cave.** `handleChest` in `src/map-triggers.js` was instantiating a fresh `MapRenderer` after every chest open — `prerenderFullMap` walks all 32×32 metatiles + builds two priority-overlay canvases synchronously. ~50–200 ms on mobile = perceptible flicker.
+
+Added `MapRenderer#redrawMetatileAt(tx, ty)` that patches only the changed 16×16 metatile in the three pre-rendered canvases (`_mapCanvas`, `_overlayU`, `_overlayL`). Chest / secret wall / rock-puzzle handlers now call this instead of allocating a new renderer. Full `new MapRenderer(...)` still used for actual map transitions in `map-loading.js` and `map-triggers.js` stairs / warps.
+
 ## 1.7.453 — 2026-05-17
 
 ### Fix — Land Turtle wasn't attacking + staff icon missing + chat-tab cursor

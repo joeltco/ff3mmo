@@ -145,6 +145,15 @@ export function addBossNpc(tileX, tileY) {
   }));
 }
 
+// v1.7.454 — drop the boss NPC from the active list on defeat. The
+// map-loading path gates new spawns on `battleSt.enemyDefeated`, but the
+// already-pushed NPC entry was never removed, so the boss sprite stayed
+// on-screen after the dissolve. On next dungeon reload `addBossNpc` runs
+// again because clearNpcs() ran at map load.
+export function removeBossNpc() {
+  _npcs = _npcs.filter(n => n.key !== 'boss_land_turtle');
+}
+
 // Scene NPC — backed by the player Sprite class with `gfxBase` overridden
 // to a raw FF3 ROM walk bundle (see data/opening-scene.js). `spec.animate`
 // cycles walk frames; otherwise stays on frame 0 (no fabricated motion —

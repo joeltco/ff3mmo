@@ -135,14 +135,18 @@ export function handleChest(facedX, facedY) {
   playSFX(SFX.TREASURE);
   showMsgBox(msg);
   saveSlotsToDB();
-  mapSt.mapRenderer = new MapRenderer(mapSt.mapData, mapSt.worldX / TILE_SIZE, mapSt.worldY / TILE_SIZE);
+  // v1.7.454 — patch the one changed metatile instead of rebuilding the
+  // entire MapRenderer (was a ~50-200ms synchronous canvas-rebuild that
+  // produced a visible screen flicker on chest open in cave maps).
+  if (mapSt.mapRenderer) mapSt.mapRenderer.redrawMetatileAt(facedX, facedY);
   resetIndoorWaterCache();
 }
 
 export function handleSecretWall(facedX, facedY) {
   _consumeTile(facedX, facedY, 0x30);
   mapSt.secretWalls.delete(`${facedX},${facedY}`);
-  mapSt.mapRenderer = new MapRenderer(mapSt.mapData, mapSt.worldX / TILE_SIZE, mapSt.worldY / TILE_SIZE);
+  // v1.7.454 — single-tile patch.
+  if (mapSt.mapRenderer) mapSt.mapRenderer.redrawMetatileAt(facedX, facedY);
   resetIndoorWaterCache();
   saveSlotsToDB();
 }
@@ -152,9 +156,14 @@ export function handleRockPuzzle() {
   mapSt.shakeActive = true; mapSt.shakeTimer = 0;
   mapSt.shakePendingAction = () => {
     playSFX(SFX.DOOR);
-    for (const wt of mapSt.rockSwitch.wallTiles) _consumeTile(wt.x, wt.y, wt.newTile);
+    // v1.7.454 — patch each changed wall tile in place rather than rebuilding
+    // the renderer. Capture the list before _consumeTile mutates state.
+    const wallTiles = mapSt.rockSwitch.wallTiles.slice();
+    for (const wt of wallTiles) _consumeTile(wt.x, wt.y, wt.newTile);
     mapSt.rockSwitch = null;
-    mapSt.mapRenderer = new MapRenderer(mapSt.mapData, mapSt.worldX / TILE_SIZE, mapSt.worldY / TILE_SIZE);
+    if (mapSt.mapRenderer) {
+      for (const wt of wallTiles) mapSt.mapRenderer.redrawMetatileAt(wt.x, wt.y);
+    }
     resetIndoorWaterCache();
     saveSlotsToDB();
   };

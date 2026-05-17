@@ -17,6 +17,7 @@ import { summarizeHits } from './battle-math.js';
 import { reseedFromEntropy } from './rng.js';
 import { sendNetPVPAction, sendNetPVPAllyJoin, getOnlinePlayerByName } from './net.js';
 import { emitWireEncounterAction, endWireEncounter, clearWireEncounterQueue } from './encounter-wire.js';
+import { removeBossNpc } from './npc.js';
 import { rand } from './rng.js';
 import { updateBattleAlly } from './battle-ally.js';
 import { updateBattleEnemyTurn } from './battle-enemy.js';
@@ -888,6 +889,7 @@ function _updateBossDissolve(dt) {
   if (dBlock !== prevBlock && dBlock > 0 && (dBlock & 3) === 0) playSFX(SFX.BOSS_DEATH);
   if (battleSt.battleTimer >= BOSS_BLOCKS * BOSS_DISSOLVE_STEPS * BOSS_DISSOLVE_FRAME_MS) {
     battleSt.enemyDefeated = true; mapSt.bossSprite = null;
+    removeBossNpc();  // v1.7.454 — drop the overworld sprite; respawns on map reload
     ps.unlockedJobs |= 0x3E; // Wind Crystal: bits 1-5 (Warrior, Monk, White Mage, Black Mage, Red Mage)
     // KO'd player: skip rewards and victory, straight to box-close (→ respawn).
     if (ps.hp <= 0) {

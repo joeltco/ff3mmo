@@ -280,6 +280,81 @@ export class MapRenderer {
     this._fillCanvas = fillCanvas;
   }
 
+  // v1.7.454 — patch a single 16×16 metatile in the pre-rendered canvases
+  // after a tile mutation (chest opened, secret wall revealed, rock-puzzle
+  // wall dropped). Pre-fix, every mutation rebuilt the entire MapRenderer
+  // — `prerenderFullMap` iterates 32×32 metatiles + two priority overlays
+  // synchronously, which produced a visible ~50–200 ms screen flicker on
+  // mobile. This method only repaints the changed tile.
+  redrawMetatileAt(tx, ty) {
+    if (tx < 0 || tx >= MAP_SIZE || ty < 0 || ty >= MAP_SIZE) return;
+    if (!this._mapCanvas) return;
+    const { chrTiles, metatiles, palettes, tileAttrs, tilemap, collision } = this.mapData;
+    const mid = tilemap[ty * MAP_SIZE + tx];
+    const m = mid < 128 ? mid : mid & 0x7F;
+    const meta = metatiles[m];
+    if (!meta) return;
+    const palIdx = tileAttrs[m] & 0x03;
+    const pal = palettes[palIdx];
+    const rgbPal = pal.map(nesIdx => NES_SYSTEM_PALETTE[nesIdx & 0x3F] || [0, 0, 0]);
+    const chrIndices = [meta.tl, meta.tr, meta.bl, meta.br];
+    const offsets = [[0, 0], [8, 0], [0, 8], [8, 8]];
+    const props = collision[m];
+
+    const baseX = tx * TILE_SIZE;
+    const baseY = ty * TILE_SIZE;
+
+    // Map canvas — opaque repaint (no clear needed; we overwrite every pixel).
+    const mctx = this._mapCanvas.getContext('2d');
+    const mImg = mctx.createImageData(8, 8);
+    const mData = mImg.data;
+    for (let q = 0; q < 4; q++) {
+      const tile = chrTiles[chrIndices[q]];
+      if (!tile) continue;
+      for (let py = 0; py < 8; py++) {
+        for (let px = 0; px < 8; px++) {
+          const ci = tile[py * 8 + px];
+          const rgb = rgbPal[ci];
+          const di = (py * 8 + px) * 4;
+          mData[di] = rgb[0]; mData[di + 1] = rgb[1]; mData[di + 2] = rgb[2]; mData[di + 3] = 255;
+        }
+      }
+      mctx.putImageData(mImg, baseX + offsets[q][0], baseY + offsets[q][1]);
+    }
+
+    // Overlay canvases — transparent for empty pixels. Clear first since
+    // the previous tile may have had foreground tiles that the new one
+    // doesn't.
+    for (const { canvas, bitMask } of [
+      { canvas: this._overlayU, bitMask: 0x20 },
+      { canvas: this._overlayL, bitMask: 0x10 },
+    ]) {
+      if (!canvas) continue;
+      const octx = canvas.getContext('2d');
+      octx.clearRect(baseX, baseY, TILE_SIZE, TILE_SIZE);
+      if (!(props & bitMask)) continue;
+      const oImg = octx.createImageData(8, 8);
+      const oData = oImg.data;
+      for (let q = 0; q < 4; q++) {
+        const tile = chrTiles[chrIndices[q]];
+        if (!tile) continue;
+        for (let py = 0; py < 8; py++) {
+          for (let px = 0; px < 8; px++) {
+            const ci = tile[py * 8 + px];
+            const di = (py * 8 + px) * 4;
+            if (ci === 0) {
+              oData[di] = 0; oData[di + 1] = 0; oData[di + 2] = 0; oData[di + 3] = 0;
+            } else {
+              const rgb = rgbPal[ci];
+              oData[di] = rgb[0]; oData[di + 1] = rgb[1]; oData[di + 2] = rgb[2]; oData[di + 3] = 255;
+            }
+          }
+        }
+        octx.putImageData(oImg, baseX + offsets[q][0], baseY + offsets[q][1]);
+      }
+    }
+  }
+
   _prerenderPriorityCanvas(chrTiles, metatiles, palettes, tileAttrs, tilemap, bitMask) {
     const canvas = document.createElement('canvas');
     canvas.width = MAP_PX;
