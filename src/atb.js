@@ -22,8 +22,40 @@
 // speedMod is 1.0 by default. Haste/Slow wire to it without touching RA —
 // matches FF4's "RA does not change in battle" invariant.
 
-export const TICK_MS  = 333;   // BS3 equivalent at 60fps (~20 frames/tick)
+// Slice 6 (v1.7.443) — FF4-style Battle Speed (BS1–BS6). Each step is a
+// global multiplier on per-RA-unit fill time. BS3 matches the old
+// hardcoded 333ms; BS1 is fastest, BS6 is slowest. Player-tunable from
+// the pause menu (persisted in localStorage). FF4 maps these to a frames-
+// per-tick range at 60fps; we collapse to a single ms-per-tick value.
+const BATTLE_SPEED_TABLE = {
+  1: 133,  // ~8 frames/tick at 60fps  (FF4 BS1 = 7-9)
+  2: 233,  // ~14 frames/tick
+  3: 333,  // ~20 frames/tick — DEFAULT, matches pre-slice-6 hardcoded TICK_MS
+  4: 500,  // ~30 frames/tick
+  5: 700,  // ~42 frames/tick
+  6: 900,  // ~54 frames/tick — FF4 BS6 = 52-56
+};
+let _battleSpeed = 3;
+export let TICK_MS = BATTLE_SPEED_TABLE[3];  // mutated by setBattleSpeed
 export const FILL_MAX = 1000;  // gauge resolution; renderer normalizes to 0..1
+
+export function setBattleSpeed(n) {
+  const bs = (n | 0) | 0;
+  if (!BATTLE_SPEED_TABLE[bs]) return false;
+  _battleSpeed = bs;
+  TICK_MS = BATTLE_SPEED_TABLE[bs];
+  return true;
+}
+export function getBattleSpeed() { return _battleSpeed; }
+
+// Load persisted speed at module init. Safe in non-browser (atb-sim,
+// atb-fsm-sim) — localStorage is stubbed or missing.
+try {
+  if (typeof localStorage !== 'undefined') {
+    const stored = parseInt(localStorage.getItem('ff3.battleSpeed') || '', 10);
+    if (BATTLE_SPEED_TABLE[stored]) setBattleSpeed(stored);
+  }
+} catch { /* localStorage may be access-denied in some embeds */ }
 
 // RA clamp keeps gauges in a playable range regardless of agi differential.
 // Min 2  → fastest fill = 2*333 = 666ms (no instant-acting bosses).

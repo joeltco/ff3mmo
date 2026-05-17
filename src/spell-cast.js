@@ -28,6 +28,7 @@ import { elemMultiplier, resolveLivingTarget } from './battle-math.js';
 import { rand } from './rng.js';
 import { pvpSt } from './pvp.js';
 import { applyBuff, BUFF_HASTE, BUFF_PROTECT, BUFF_REFLECT } from './buffs.js';
+import { setSpeedMod } from './atb.js';
 
 let _processNextTurn = () => {};
 export function initSpellCast({ processNextTurn }) { _processNextTurn = processNextTurn; }
@@ -566,6 +567,10 @@ function _applySpellEffect(target) {
   // we ship the bounce path.
   if (spell.target === 'haste') {
     applyBuff(ps, BUFF_HASTE);
+    // Slice 6 (v1.7.443) — Haste also doubles the rate the ATB gauge fills.
+    // FF4 canon. speedMod < 1 = faster fill; battle-bound (cleared at
+    // battle exit via the fresh `_atb` from the next initBattleATB).
+    setSpeedMod(ps, 0.5);
     replaceBattleMsg(BATTLE_HASTE);
     _playSpellSFXOnce(SFX.CURE);
     return;

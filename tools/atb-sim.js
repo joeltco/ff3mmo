@@ -6,6 +6,7 @@
 import {
   initATB, addATBUnit, clearATB, tickGauges, getGaugePct, isReady,
   markActing, markFilling, setSpeedMod, deriveMonsterAgi,
+  setBattleSpeed, getBattleSpeed,
   _atbDebugState, _setNow, TICK_MS, FILL_MAX,
 } from '../src/atb.js';
 
@@ -25,6 +26,7 @@ function test(name, fn) {
   try {
     _mockNow = 0;
     clearATB();
+    setBattleSpeed(3);  // reset to default between tests
     fn();
     _passed++;
     console.log('  ok  ' + name);
@@ -197,6 +199,41 @@ test('wait: ally keeps filling while player menu open', () => {
   ]);
   advance(666);
   assert(isReady(ally), 'ally hits ready during menu');
+});
+
+// ── Battle Speed (slice 6) ─────────────────────────────────────────────────
+
+test('battleSpeed: default is BS3 (333ms tick)', () => {
+  assertEq(getBattleSpeed(), 3);
+});
+
+test('battleSpeed: setBattleSpeed(1) makes gauge fill faster', () => {
+  setBattleSpeed(1);
+  const p = {};
+  initATB([{ ref: p, kind: 'player', agi: 10 }]);
+  // BS1 = 133ms/tick × RA=5 = 665ms total fill
+  advance(665);
+  assertEq(getGaugePct(p), 1);
+  assert(isReady(p));
+});
+
+test('battleSpeed: setBattleSpeed(6) makes gauge fill slower', () => {
+  setBattleSpeed(6);
+  const p = {};
+  initATB([{ ref: p, kind: 'player', agi: 10 }]);
+  // BS6 = 900ms/tick × RA=5 = 4500ms total fill
+  advance(1665);  // would've been full at BS3
+  assert(!isReady(p), 'unit ready too early at BS6');
+  advance(4500 - 1665);
+  assert(isReady(p), 'unit not ready by BS6 target');
+});
+
+test('battleSpeed: invalid values rejected', () => {
+  setBattleSpeed(3);
+  assertEq(setBattleSpeed(0), false);
+  assertEq(setBattleSpeed(7), false);
+  assertEq(setBattleSpeed(-1), false);
+  assertEq(getBattleSpeed(), 3, 'value preserved on invalid set');
 });
 
 // ── Wall-clock (slice 4a) ──────────────────────────────────────────────────

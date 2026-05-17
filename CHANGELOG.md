@@ -2,6 +2,28 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.443 — 2026-05-17
+
+### ATB slice 6 — Battle Speed slider (BS1–BS6) + Haste wired to speedMod
+
+Final slice. Player can now tune ATB pace from the pause menu (Options → Speed: 1–6, default 3). Cast Haste makes your gauge fill twice as fast.
+
+**Battle Speed (BS1–BS6):**
+- BS1: 133 ms/tick (~8 frames @ 60fps — fastest, FF4 BS1 = 7-9 frames)
+- BS2: 233 ms/tick
+- BS3: 333 ms/tick (default — matches pre-slice-6 hardcoded value)
+- BS4: 500 ms/tick
+- BS5: 700 ms/tick
+- BS6: 900 ms/tick (~54 frames — slowest, FF4 BS6 = 52-56)
+
+`TICK_MS` becomes a mutable `export let` so all consumers (`_fillTargetMs`, `_isWireFresh`, etc.) live-bind to the current value. Setting persists in `localStorage.ff3.battleSpeed`; read at `atb.js` module init.
+
+**Pause-menu UI:** Options panel has a second row below CRT. Cursor moves with ↑/↓; ←/→ adjusts the speed value (1–6 clamped). Saved instantly.
+
+**Haste wiring:** in `src/spell-cast.js`, the `applyBuff(ps, BUFF_HASTE)` site now also calls `setSpeedMod(ps, 0.5)`. Battle-bound (cleared at battle exit via fresh `_atb` from the next `initBattleATB`). No Slow spell exists in `src/data/spells.js`, so only Haste is wired this slice.
+
+36/36 atb-sim (4 new Battle Speed tests). 54/54 wire-sim. 4/4 fsm-sim.
+
 ## 1.7.442 — 2026-05-17
 
 ### ATB slice 5 — PvP gauge wire-sync (lockstep gauges across duel)
