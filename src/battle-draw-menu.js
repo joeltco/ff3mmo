@@ -215,7 +215,11 @@ function _battleMenuStates() {
   const isSlide   = bs === 'enemy-box-expand' || bs === 'encounter-box-expand';
   const isAppear  = bs === 'boss-appear' || bs === 'monster-slide-in';
   const isFade    = bs === 'battle-fade-in';
-  const isMenu    = isFade || bs === 'menu-open' || bs === 'target-select' || bs === 'confirm-pause' ||
+  // ATB era — 'atb-idle' is the "between actions, waiting for gauges" hub;
+  // the menu panel + enemy names stay visible (cursor stays gated to
+  // 'menu-open' only — see _drawBattleMenuCursor — so the panel shows but
+  // is uninteractable until the player's gauge fills).
+  const isMenu    = isFade || bs === 'menu-open' || bs === 'atb-idle' || bs === 'target-select' || bs === 'confirm-pause' ||
     bs === 'attack-back' || bs === 'attack-fwd' || bs === 'player-slash' || bs === 'player-hit-show' ||
     bs === 'player-damage-show' || bs === 'pre-monster-death' || bs === 'monster-death' || bs === 'defend-anim' ||
     bs.startsWith('item-') ||

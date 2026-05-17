@@ -158,7 +158,7 @@ function _drawEncounterCursors(gridPos, count, slotCenterY) {
 }
 
 function _isEncounterCombatState() {
-  return battleSt.battleState === 'monster-slide-in' || battleSt.battleState === 'battle-fade-in' || battleSt.battleState === 'menu-open' ||
+  return battleSt.battleState === 'monster-slide-in' || battleSt.battleState === 'battle-fade-in' || battleSt.battleState === 'menu-open' || battleSt.battleState === 'atb-idle' ||
     battleSt.battleState === 'target-select' || battleSt.battleState === 'confirm-pause' || battleSt.battleState === 'attack-back' || battleSt.battleState === 'attack-fwd' ||
     battleSt.battleState === 'player-slash' || battleSt.battleState === 'player-hit-show' ||
     battleSt.battleState === 'player-damage-show' || battleSt.battleState === 'pre-monster-death' || battleSt.battleState === 'monster-death' || battleSt.battleState === 'defend-anim' ||
@@ -264,7 +264,7 @@ export function drawBossSpriteBox() {
   if (pvpSt.isPVPBattle) {
     const isCombatPVP = battleSt.battleState === 'battle-fade-in' ||
                     battleSt.battleState === 'enemy-box-expand' || battleSt.battleState === 'enemy-box-close' ||
-                    battleSt.battleState === 'menu-open' || battleSt.battleState === 'target-select' || battleSt.battleState === 'confirm-pause' ||
+                    battleSt.battleState === 'menu-open' || battleSt.battleState === 'atb-idle' || battleSt.battleState === 'target-select' || battleSt.battleState === 'confirm-pause' ||
                     battleSt.battleState === 'attack-back' || battleSt.battleState === 'attack-fwd' || battleSt.battleState === 'player-slash' || battleSt.battleState === 'player-hit-show' ||
                     battleSt.battleState === 'player-damage-show' || battleSt.battleState === 'defend-anim' || battleSt.battleState.startsWith('item-') ||
                     battleSt.battleState === 'magic-cast' || battleSt.battleState === 'magic-hit' ||
@@ -288,7 +288,7 @@ export function drawBossSpriteBox() {
   const isAppear = battleSt.battleState === 'boss-appear';
   const isDissolve = battleSt.battleState === 'boss-dissolve';
   const isCombat = battleSt.battleState === 'battle-fade-in' ||
-                   battleSt.battleState === 'menu-open' || battleSt.battleState === 'target-select' || battleSt.battleState === 'confirm-pause' ||
+                   battleSt.battleState === 'menu-open' || battleSt.battleState === 'atb-idle' || battleSt.battleState === 'target-select' || battleSt.battleState === 'confirm-pause' ||
                    battleSt.battleState === 'attack-back' || battleSt.battleState === 'attack-fwd' || battleSt.battleState === 'player-slash' || battleSt.battleState === 'player-hit-show' ||
                    battleSt.battleState === 'player-damage-show' || battleSt.battleState === 'defend-anim' || battleSt.battleState.startsWith('item-') || battleSt.battleState === 'magic-cast' || battleSt.battleState === 'magic-hit' || battleSt.battleState === 'run-success' || battleSt.battleState === 'run-fail' || battleSt.battleState === 'enemy-flash' ||
                    battleSt.battleState === 'enemy-attack' ||

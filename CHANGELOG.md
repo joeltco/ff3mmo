@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.431 — 2026-05-16
+
+### Battle HUD flash fix — add 'atb-idle' to render allowlists
+
+Slice 3 introduced the `'atb-idle'` battle state as the dispatch hub between actions. Several render gates (encounter monsters, boss sprite, menu panel) had allowlists that included `'menu-open'` but not `'atb-idle'` — so every time the state transitioned to atb-idle (which is now most of the time), those elements disappeared and reappeared on the next state flip. Visible as HUD/monster flashing.
+
+Per [[ff3mmo-predicate-coverage]] memory — when a new battleState lands, audit every is*/allowlist predicate gating render.
+
+- `_isEncounterCombatState()` (battle-draw-encounter.js) — random encounter monsters
+- PvP `isCombatPVP` allowlist (battle-draw-encounter.js) — PvP opponent sprite
+- Boss `isCombat` allowlist (battle-draw-encounter.js) — boss sprite during boss battles
+- `_battleMenuStates#isMenu` (battle-draw-menu.js) — menu panel + enemy name box
+
+Menu cursor stays gated to `'menu-open'` only (player can't interact during atb-idle); panel is now passively visible at all times during combat.
+
 ## 1.7.430 — 2026-05-16
 
 ### Hide ATB gauge bars by default
