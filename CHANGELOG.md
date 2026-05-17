@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.435 — 2026-05-17
+
+### ATB bar tighten — render only while filling, drop below portrait
+
+- Only renders while `state === 'filling'`. The bar was previously also visible during `'acting'` (player's own slash) when the gauge is frozen at 100%, which read as a stuck/glitchy bar over the slash animation.
+- Moved 2px below portrait bottom (was overlapping the bottom-2px strip of the sprite).
+
 ## 1.7.434 — 2026-05-17
 
 ### Player ATB bar on portrait

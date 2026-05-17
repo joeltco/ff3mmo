@@ -24,7 +24,7 @@ import { drawCastWindup } from './combatant-cast.js';
 import { getSpellAnim } from './spell-anim.js';
 import { hudSt } from './hud-state.js';
 import { fakePlayerDeathPoseCanvases } from './fake-player-sprites.js';
-import { getGaugePct, isReady } from './atb.js';
+import { getGaugePct } from './atb.js';
 import { getPlayerDamageNum } from './damage-numbers.js';
 import { ui } from './ui-state.js';
 import { isVictoryBattleState } from './battle-update.js';
@@ -321,18 +321,22 @@ export function drawBattlePortrait() {
   _drawPortraitATBBar(pxs, py);
 }
 
-// ── Player ATB bar (bottom-half overlay on portrait) ──────────────────────
-// Visible while the player's gauge is filling; hides when ready (= menu
-// can open). Shown on the bottom 3px strip of the 16×16 portrait so the
-// player can see how close they are to their next turn at a glance.
+// ── Player ATB bar (below portrait) ───────────────────────────────────────
+// Only renders while the gauge is actively filling. Hides when:
+//   - 'ready'  → menu is opening / already open
+//   - 'acting' → player's own action is animating (gauge would sit at 100%
+//                the whole time, looks frozen / glitchy on slash frames)
+// Sits 2px below the 16×16 portrait so it doesn't overlap the sprite
+// during attack/hit poses.
 function _drawPortraitATBBar(pxs, py) {
-  if (!ps._atb || isReady(ps)) return;
+  const atb = ps._atb;
+  if (!atb || atb.state !== 'filling') return;
   const pct = getGaugePct(ps);
   const barW = 16, barH = 2;
-  const x = pxs, y = py + 16 - barH - 1;  // 1px inset from portrait bottom
+  const x = pxs, y = py + 16 + 2;  // 2px gap below portrait bottom
   ui.ctx.fillStyle = '#000';
   ui.ctx.fillRect(x, y, barW, barH);
-  ui.ctx.fillStyle = '#4ec9b0';  // teal — same hue used by debug gauge
+  ui.ctx.fillStyle = '#4ec9b0';
   ui.ctx.fillRect(x, y, Math.round(barW * pct), barH);
 }
 
