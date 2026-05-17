@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.432 — 2026-05-16
+
+### ATB pacing fix — RA clamp + retuned monster agi (battle progresses without input)
+
+Reported symptom: "battle isn't progressing without user input." Root cause: `deriveMonsterAgi = level + (evade >> 3)` gave low-level monsters agi=2-5 while the player carries agi=10. FF4 RA formula then gave the monster RA=25+ — a 25 × 333ms = 8+ second gauge fill. Player kept killing the monster before its gauge ever filled.
+
+- **RA clamp [2, 10]** in `src/atb.js`. Fastest possible fill = 666ms (no instant-acting bosses), slowest = 3.3s (no never-acting weak monsters).
+- **deriveMonsterAgi retuned** to `max(5, floor(level/2) + 5 + (evade >> 4))`. Goblin (level 1, evade 5) → agi 5 → RA 10 (3.3s fill, vs player 1.7s). Boss-tier level 35 → agi 23 → RA 2 (666ms — fast but capped).
+
+Wire-sim + atb-sim green (28/28 atb tests, 47/47 wire). Tools/atb-fsm-sim.js was built this session (boots stubbed engine + drives `updateBattle(dt)` at 60fps, traces state transitions, flicker detector). Will become a deploy.sh gate once mature.
+
 ## 1.7.431 — 2026-05-16
 
 ### Battle HUD flash fix — add 'atb-idle' to render allowlists

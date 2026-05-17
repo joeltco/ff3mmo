@@ -20,6 +20,15 @@
 export const TICK_MS  = 333;   // BS3 equivalent at 60fps (~20 frames/tick)
 export const FILL_MAX = 1000;  // gauge resolution; renderer normalizes to 0..1
 
+// RA clamp keeps gauges in a playable range regardless of agi differential.
+// Min 2  → fastest fill = 2*333 = 666ms (no instant-acting bosses).
+// Max 10 → slowest fill = 10*333 = 3.3s (no monsters that never act in a
+//          short fight). v1.7.432 — fixes "battle isn't progressing"
+//          symptom when a low-level monster's derived agi gave RA=25+
+//          (8+ second fill, monster never reached its turn).
+const RA_MIN = 2;
+const RA_MAX = 10;
+
 // Module-level state. Cleared per battle.
 let _units = [];           // [{ ref, kind, agiSource }]  — kind in 'player'|'ally'|'monster'|'pvp-enemy'
 let _anchorAgi = 0;
@@ -41,10 +50,11 @@ export function initATB(entries) {
 export function addATBUnit({ ref, kind, agi }) {
   if (!ref) return;
   const myAgi = agi | 0;
-  let ra = 1;
+  let ra = RA_MIN;
   if (_anchorAgi > 0 && myAgi > 0) {
     ra = Math.floor(5 * _anchorAgi / myAgi);
-    if (ra < 1) ra = 1;
+    if (ra < RA_MIN) ra = RA_MIN;
+    if (ra > RA_MAX) ra = RA_MAX;
   }
   // Track elapsed-ms-since-empty instead of an accumulating float gauge —
   // makes the ready boundary land exactly at ra*TICK_MS*speedMod without
@@ -161,12 +171,14 @@ export function _atbDebugState() {
 
 // Monsters in src/data/monsters.js have no `agi` field (FF3 NES didn't use
 // per-monster agility — round order was class/level based). Derive one
-// from level + evade so faster, dodgier monsters tick faster. Tuneable.
-// Missing or level-zero data falls back to 5 (mid-tier baseline).
+// keyed to the player's typical agi scale: baseline 5, +1 per 2 levels,
+// +1 per 16 evade. The RA clamp on top means even outliers stay playable.
+// v1.7.432 — was `level + (evade>>3)` which gave low-level monsters
+// agi=2-5 vs player=10 → RA=25+ → 8s gauge → monster never acted.
 export function deriveMonsterAgi(monster) {
   if (!monster) return 5;
   const lv = monster.level | 0;
   if (lv === 0) return 5;
   const ev = monster.evade | 0;
-  return Math.max(1, lv + (ev >> 3));
+  return Math.max(5, Math.floor(lv / 2) + 5 + (ev >> 4));
 }

@@ -56,11 +56,11 @@ test('RA: 2x anchor agi -> RA=2 (faster)', () => {
   assertEq(fast._atb.ra, 2);
 });
 
-test('RA: 0.5x anchor agi -> RA=10 (slower)', () => {
+test('RA: 0.5x anchor agi -> RA=10 (slower, at clamp max)', () => {
   const p = {}, slow = {};
   initATB([
     { ref: p,    kind: 'player', agi: 10 },
-    { ref: slow, kind: 'ally',   agi: 5  },
+    { ref: slow, kind: 'ally',   agi: 5  },  // floor(50/5)=10, at max
   ]);
   assertEq(slow._atb.ra, 10);
 });
@@ -74,32 +74,41 @@ test('RA: floor (asymmetric divide)', () => {
   assertEq(q._atb.ra, 7);
 });
 
-test('RA: huge agi clamps to 1', () => {
+test('RA: huge agi clamps to RA_MIN=2', () => {
   const p = {}, q = {};
   initATB([
     { ref: p, kind: 'player', agi: 10 },
-    { ref: q, kind: 'ally',   agi: 99 },  // floor(50/99) = 0 -> 1
+    { ref: q, kind: 'ally',   agi: 99 },  // floor(50/99) = 0 -> clamped to 2
   ]);
-  assertEq(q._atb.ra, 1);
+  assertEq(q._atb.ra, 2);
 });
 
-test('RA: zero agi -> RA=1 (no NaN)', () => {
+test('RA: tiny agi clamps to RA_MAX=10', () => {
+  const p = {}, q = {};
+  initATB([
+    { ref: p, kind: 'player', agi: 10 },
+    { ref: q, kind: 'ally',   agi: 2  },  // floor(50/2) = 25 -> clamped to 10
+  ]);
+  assertEq(q._atb.ra, 10);
+});
+
+test('RA: zero agi -> clamped to RA_MIN=2 (no NaN)', () => {
   const p = {}, q = {};
   initATB([
     { ref: p, kind: 'player', agi: 10 },
     { ref: q, kind: 'ally',   agi: 0  },
   ]);
-  assertEq(q._atb.ra, 1);
+  assertEq(q._atb.ra, 2);
 });
 
-test('RA: zero anchor agi -> all RA=1', () => {
+test('RA: zero anchor agi -> all RA=RA_MIN', () => {
   const p = {}, q = {};
   initATB([
     { ref: p, kind: 'player', agi: 0  },
     { ref: q, kind: 'ally',   agi: 10 },
   ]);
-  assertEq(p._atb.ra, 1);
-  assertEq(q._atb.ra, 1);
+  assertEq(p._atb.ra, 2);
+  assertEq(q._atb.ra, 2);
 });
 
 // ── Tick rate ──────────────────────────────────────────────────────────────
@@ -268,10 +277,19 @@ test('clearATB: subsequent initATB starts fresh', () => {
 
 // ── Monster agi derivation ─────────────────────────────────────────────────
 
-test('deriveMonsterAgi: level + (evade >> 3)', () => {
-  assertEq(deriveMonsterAgi({ level: 10, evade: 16 }), 12);  // 10 + 2
-  assertEq(deriveMonsterAgi({ level: 35, evade: 30 }), 38);  // 35 + 3
-  assertEq(deriveMonsterAgi({ level: 1,  evade: 0  }), 1);
+test('deriveMonsterAgi: scaled to player range', () => {
+  // floor(lv/2) + 5 + (ev>>4), min 5
+  assertEq(deriveMonsterAgi({ level: 10, evade: 16 }), 11);  // 5 + 5 + 1
+  assertEq(deriveMonsterAgi({ level: 35, evade: 30 }), 23);  // 17 + 5 + 1
+  assertEq(deriveMonsterAgi({ level: 1,  evade: 0  }), 5);   // floor
+});
+
+test('deriveMonsterAgi: low-level monster acts in playable time', () => {
+  // Goblin-class level 1 → agi 5. Player typical 10. RA = floor(50/5) = 10 (at clamp max).
+  // Fill time = 10 * 333 = 3.3s. Player at agi 10 fills in 5*333 = 1.7s.
+  // Player acts ~2x per monster turn — playable.
+  const goblin = deriveMonsterAgi({ level: 1, evade: 5 });
+  assert(goblin >= 5 && goblin <= 8, 'goblin agi in playable range, got ' + goblin);
 });
 
 test('deriveMonsterAgi: handles missing fields', () => {
