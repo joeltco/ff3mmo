@@ -31,6 +31,7 @@ import { canCastBasic, canCastAny, pickHealTarget, pickPoisonedTarget,
          SPELL_CURE, SPELL_POISONA, AI_HEAL_THRESHOLD, AI_POTION_THRESHOLD,
          AI_OFFENSIVE_GATE, AI_ITEM_GATE } from './combatant-ai.js';
 import { markFilling as _atbMarkFilling, markActing as _atbMarkActing } from './atb.js';
+import { emitAtbFillingSync } from './encounter-wire.js';
 
 function _playerName() { return saveSlots[selectCursor]?.name || null; }
 
@@ -153,7 +154,20 @@ export function _resetLastDispatched() {
     const headActor = _resolveTurnActor(head);
     if (headActor === _lastDispatchedActor) return;
   }
-  _atbMarkFilling(_lastDispatchedActor);
+  const atMs = Date.now();
+  _atbMarkFilling(_lastDispatchedActor, atMs);
+  // Slice 4b (v1.7.439) — emit wire-sync for locally-owned units in co-op
+  // encounters so partner clients reset their gauge for this unit at the
+  // same atMs. Player is always ours; monsters are ours if we're the host.
+  // Wire-driven allies belong to the partner — they emit, we don't.
+  if (battleSt.isWireEncounter) {
+    if (_lastDispatchedActor === ps) {
+      emitAtbFillingSync('player', -1, atMs);
+    } else if (battleSt.encounterIsHost && battleSt.encounterMonsters) {
+      const idx = battleSt.encounterMonsters.indexOf(_lastDispatchedActor);
+      if (idx >= 0) emitAtbFillingSync('monster', idx, atMs);
+    }
+  }
   _lastDispatchedActor = null;
 }
 

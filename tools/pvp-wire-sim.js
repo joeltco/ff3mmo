@@ -621,6 +621,45 @@ async function suiteWire() {
     await new Promise(r => setTimeout(r, 40));
   });
 
+  // Slice 4b — atb-sync relay carries unitKind + monsterIdx + atMs to peers.
+  await asyncTest('atb-sync relays unitKind+atMs to encounter peers', async () => {
+    _testHooks.resetState();
+    const A = await connectClient(port, 1090, { ...baseProfile, name: 'A_atb' });
+    const B = await connectClient(port, 1091, { ...targetProfile, name: 'B_atb' });
+    _testHooks.state.encounterGroups.set(1090, new Set([1091]));
+    _testHooks.state.encounterGroups.set(1091, new Set([1090]));
+    const got = once(B, m => m.type === 'atb-sync', 500);
+    A.send(JSON.stringify({
+      type:       'atb-sync',
+      unitKind:   'player',
+      monsterIdx: -1,
+      atMs:       1700000000000,
+    }));
+    const m = await got;
+    assertEqual(m.userId, 1090, 'sender userId not attached on atb-sync relay');
+    assertEqual(m.unitKind, 'player');
+    assertEqual(m.atMs, 1700000000000);
+    A.close(); B.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  await asyncTest('atb-sync drops when atMs missing', async () => {
+    _testHooks.resetState();
+    const A = await connectClient(port, 1092, { ...baseProfile, name: 'A_atb2' });
+    const B = await connectClient(port, 1093, { ...targetProfile, name: 'B_atb2' });
+    _testHooks.state.encounterGroups.set(1092, new Set([1093]));
+    _testHooks.state.encounterGroups.set(1093, new Set([1092]));
+    let relayed = false;
+    const sub = (e) => { try { const m = JSON.parse(e.data); if (m.type === 'atb-sync') relayed = true; } catch {} };
+    B.addEventListener('message', sub);
+    A.send(JSON.stringify({ type: 'atb-sync', unitKind: 'player', monsterIdx: -1 }));  // no atMs
+    await new Promise(r => setTimeout(r, 80));
+    B.removeEventListener('message', sub);
+    assertTrue(!relayed, 'atb-sync with no atMs was relayed (should drop)');
+    A.close(); B.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
   // encounter-end relays + cleans the group.
   await asyncTest('encounter-end relays + clears group', async () => {
     _testHooks.resetState();

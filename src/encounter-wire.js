@@ -12,7 +12,9 @@
 
 import { battleSt } from './battle-state.js';
 import { sendNetEncounterAction, sendNetEncounterEnd,
-         setNetEncounterActionHandler, setNetEncounterEndHandler } from './net.js';
+         setNetEncounterActionHandler, setNetEncounterEndHandler,
+         sendNetAtbSync, setNetAtbSyncHandler } from './net.js';
+import { markFilling } from './atb.js';
 
 const _wireEncounterActions = [];
 
@@ -86,6 +88,38 @@ export function hasWireEncounterAction(userId) {
 // queue from a half-open prior connection doesn't replay against a new
 // battle's same-userId peer. Normal close path already clears via
 // `endWireEncounter`. v1.7.424.
+// Slice 4b (v1.7.439) — receive partner's ATB gauge reset. Find the
+// matching local unit ref (the peer's player appears as one of our
+// `battleAllies`; monsters are by index) and call markFilling with the
+// sender's wall-clock atMs. Both clients now anchor their gauges to the
+// same timestamp instead of independent local clocks.
+setNetAtbSyncHandler((msg) => {
+  if (!msg || !battleSt.isWireEncounter) return;
+  const atMs = Number(msg.atMs);
+  if (!Number.isFinite(atMs) || atMs <= 0) return;
+  let ref = null;
+  if (msg.unitKind === 'player') {
+    const senderUid = msg.userId | 0;
+    for (const a of battleSt.battleAllies) {
+      if (a && a.userId === senderUid) { ref = a; break; }
+    }
+  } else if (msg.unitKind === 'monster') {
+    if (battleSt.encounterMonsters) {
+      ref = battleSt.encounterMonsters[msg.monsterIdx | 0] || null;
+    }
+  }
+  if (!ref || !ref._atb) return;
+  markFilling(ref, atMs);
+});
+
+// Emit a markFilling sync event for a locally-owned unit. Caller decides
+// ownership via `kind` ('player' for ps; 'monster' if encounterIsHost).
+// No-op outside co-op encounters or when wire isn't ready.
+export function emitAtbFillingSync(unitKind, monsterIdx, atMs) {
+  if (!battleSt.isWireEncounter) return;
+  sendNetAtbSync({ unitKind, monsterIdx: monsterIdx | 0, atMs: Number(atMs) });
+}
+
 export function clearWireEncounterQueue() {
   _wireEncounterActions.length = 0;
 }

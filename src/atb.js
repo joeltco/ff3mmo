@@ -101,7 +101,10 @@ export function tickGauges(_dt, _opts = {}) {
     if (u.ref.hp != null && u.ref.hp <= 0) continue;
     const target = _fillTargetMs(atb);
     if (target <= 0) continue;
-    atb.elapsedMs = Math.min(target, now - atb.startedFillingAtMs);
+    // max(0, ...) handles wire-sync atMs that's slightly ahead of local
+    // clock (clock skew between co-op peers — slice 4b). Gauge holds at 0
+    // until receiver's clock catches up to sender's anchor.
+    atb.elapsedMs = Math.max(0, Math.min(target, now - atb.startedFillingAtMs));
     if (atb.elapsedMs >= target) {
       atb.state = 'ready';
       atb.readyAtMs = now;
@@ -139,9 +142,9 @@ export function getGaugePct(ref) {
   const target = _fillTargetMs(atb);
   if (target <= 0) return 1;
   const e = atb.state === 'filling'
-    ? Math.min(target, _now() - atb.startedFillingAtMs)
+    ? Math.max(0, Math.min(target, _now() - atb.startedFillingAtMs))
     : atb.elapsedMs;
-  return Math.min(1, e / target);
+  return Math.min(1, Math.max(0, e / target));
 }
 
 export function isReady(ref) {

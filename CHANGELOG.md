@@ -2,6 +2,28 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.439 — 2026-05-17
+
+### ATB slice 4b — wire-sync events for co-op gauge lockstep
+
+Builds on slice 4a's wall-clock derivation. When a locally-owned combatant's action finishes (markFilling fires), the owner now broadcasts `atb-sync {unitKind, monsterIdx, atMs}` over the encounter wire. Receiver applies `markFilling(ref, atMs)` so both clients reset that unit's gauge from the same wall-clock anchor instead of independent local clocks.
+
+Ownership rules in co-op random encounters:
+- **Player (`ps`)** — owned by local client, always emit
+- **Wire-driven allies** — owned by partner, partner emits, we apply
+- **Monsters** — owned by host (`battleSt.encounterIsHost`), host emits
+
+`elapsedMs` clamped to `max(0, …)` to handle the case where partner's `atMs` is slightly ahead of receiver's local clock (clock skew). Gauge holds at 0 until the local clock catches up, then advances normally.
+
+Tooling:
+- **ws-presence.js** — new `atb-sync` relay case; `atMs` validated as a finite positive number (Date.now() exceeds 32-bit int range, so `| 0` truncation is forbidden — wire-sim test catches this).
+- **net.js** — `sendNetAtbSync` / `setNetAtbSyncHandler`.
+- **encounter-wire.js** — receive handler resolves the unit ref (ally by `userId`, monster by `monsterIdx`) and calls `markFilling(ref, atMs)`.
+- **battle-turn.js** — `_resetLastDispatched` emits the sync after `markFilling` for locally-owned actors.
+- **pvp-wire-sim.js** — 49/49 (2 new tests: relay carries unitKind+atMs; drops when atMs missing).
+
+Solo battles unchanged. Co-op gauge timing is now bounded by clock skew (~10ms NTP-synced) instead of action-animation drift (50-200ms previously).
+
 ## 1.7.438 — 2026-05-17
 
 ### ATB slice 4a — wall-clock gauge derivation (foundation for cross-client lockstep)

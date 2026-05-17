@@ -210,6 +210,14 @@ function _handleMessage(data) {
         catch (e) { console.warn('[net] encounter-end handler error', e); }
       }
       return;
+    case 'atb-sync':
+      // v1.7.439 — partner's local clock-anchored ATB transition.
+      // Receiver resyncs their gauge to the partner's atMs.
+      if (_onAtbSync) {
+        try { _onAtbSync(msg); }
+        catch (e) { console.warn('[net] atb-sync handler error', e); }
+      }
+      return;
     case 'encounter-assist-incoming':
       // Overworld player picked Assist on us. Handler builds the
       // snapshot + auto-accepts, OR rejects (battle slot full).
@@ -485,6 +493,18 @@ export function sendNetEncounterEnd(outcome) {
 export function setNetEncounterInviteHandler(fn) { _onEncounterInvite = typeof fn === 'function' ? fn : null; }
 export function setNetEncounterActionHandler(fn) { _onEncounterAction = typeof fn === 'function' ? fn : null; }
 export function setNetEncounterEndHandler(fn)    { _onEncounterEnd    = typeof fn === 'function' ? fn : null; }
+
+// Slice 4b (v1.7.439) — ATB gauge-state-transition relay. Owner emits
+// `atb-sync {unitKind, monsterIdx, atMs}` when a locally-owned combatant
+// finishes their action animation (markFilling fires). Receiver calls
+// markFilling on the matching unit ref with the sender's atMs so both
+// clients reset gauges at the same wall-clock anchor.
+let _onAtbSync = null;
+export function sendNetAtbSync(payload) {
+  if (!_helloed) return false;
+  return _send({ type: 'atb-sync', ...payload });
+}
+export function setNetAtbSyncHandler(fn) { _onAtbSync = typeof fn === 'function' ? fn : null; }
 
 // Battle Assist (v1.7.422+) — overworld player joins an in-progress
 // encounter on a roster target. `assist-request` from joiner triggers

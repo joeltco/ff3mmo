@@ -804,6 +804,35 @@ function _handleMessage(entry, msg) {
       }
       return;
     }
+    case 'atb-sync': {
+      // Slice 4b (v1.7.439) — relay ATB gauge state transitions across
+      // co-op peers so both clients' wall-clock gauges reset at the same
+      // timestamp. Sender's local Date.now() carried in `atMs`; receiver
+      // calls `markFilling(unit, atMs)` instead of using their own clock.
+      // Only `filling` is sync'd in this slice — that's the high-impact
+      // reset moment; `acting` just freezes elapsedMs (~ negligible drift).
+      if (!entry.helloed) return;
+      const peers = _encounterGroups.get(entry.userId);
+      if (!peers || peers.size === 0) return;
+      const unitKind = String(parsed.unitKind || '').slice(0, 16);
+      const monsterIdx = parsed.monsterIdx | 0;
+      // Date.now() exceeds 32-bit signed int range (~2.1B), so don't use
+      // `| 0` here. Preserve the full Number; coerce + sanity-check below.
+      const atMs = Number(parsed.atMs);
+      if (!unitKind || !Number.isFinite(atMs) || atMs <= 0) return;
+      for (const peerId of peers) {
+        const peer = _connected.get(peerId);
+        if (!peer || peer.ws.readyState !== 1) continue;
+        _send(peer.ws, {
+          type:       'atb-sync',
+          userId:     entry.userId,
+          unitKind,
+          monsterIdx,
+          atMs,
+        });
+      }
+      return;
+    }
     case 'encounter-end': {
       // Local battle ended on this user's side. Tell peers + clean up group.
       if (!entry.helloed) return;
