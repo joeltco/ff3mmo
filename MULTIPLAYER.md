@@ -1,6 +1,6 @@
 # Multiplayer
 
-**Live as of v1.7.443.** Open `ff3mmo.com` in two browsers with two accounts. Same location → see each other in the roster panel. Chat, party invites, PvP duels, low-HP roster pose, give-item-to-roster, party co-op random encounters, and Battle Assist (any roster player can join an in-progress fight) all wire-driven. Co-op battles run on **server-arbitrated FF4-style ATB** (gauges tick centrally, server broadcasts `atb-ready` events; clients defer dispatch). PvP runs on **client-driven lockstep ATB** with `pvp-atb-sync` keeping gauges aligned without RTT-per-turn latency. Fakes are off (`PLAYER_POOL` exported empty in `src/data/players.js`).
+**Live as of v1.7.456.** Open `ff3mmo.com` in two browsers with two accounts. Same location → see each other in the roster panel. Chat, party invites, PvP duels, low-HP roster pose, give-item-to-roster, party co-op random encounters, and Battle Assist (any roster player can join an in-progress fight) all wire-driven. Combat is **FF3-style round-based** — the FF4 ATB system that shipped in v1.7.428-v1.7.455 was reverted in v1.7.456 (didn't feel right); all `atb-sync` / `atb-ready` / `pvp-atb-sync` wire kinds + the server-side `_encounterBattles` tick loop are gone. Fakes are off (`PLAYER_POOL` exported empty in `src/data/players.js`).
 
 This doc is the architecture overview + recovery cheatsheet. For the per-deploy changelog of how it got built, see `CHANGELOG.md` 1.7.366 → 1.7.443.
 
@@ -164,29 +164,9 @@ Overworld players can join in-progress roster battles regardless of party member
 - Wire-wait timeout bumped 30 → 45 s to absorb legitimate cellular spikes.
 - `_pushPlayerCoop` skips allies with no userId (defensive against future PLAYER_POOL repopulation that would collide at userId=0).
 
-### ATB lockstep + server arbitration (Step 8 — v1.7.428 → v1.7.443)
+### ATB rewrite reverted (v1.7.456)
 
-FF4-style ATB replaces the FF1 round queue + 10 s decision timer. Each combatant has a per-unit gauge filling in `RA × TICK_MS × speedMod` ms (FF4 RA = `floor(5 × anchorAgi / unitAgi)`, clamped to [2, 10] for playable pacing; anchor = local player). Wall-clock derivation: gauges read `Date.now() - startedFillingAtMs` per frame, not accumulated `dt`. Wait-mode is automatic — `'ready'` state doesn't tick, so the player's gauge naturally holds at target while menu is open.
-
-**Co-op random battles — server-arbitrated** (slice 4c + 4d, v1.7.440 + v1.7.441). `ws-presence.js` maintains `_encounterBattles: Map<hostUserId, { peers, units, anchorMs }>`. Each unit has `{ ra, state, startedAt, readyAtMs }`. A 100 ms-interval `setInterval(_tickEncounterBattles, 100)` advances gauges and broadcasts `atb-ready {unitId, atMs}` when a unit fills. Client receives → `markReady(ref, atMs)` flips the local unit to `'ready'`. The dispatch hub (`_updateATBDispatch` in `battle-update.js`) picks the FIFO-earliest ready unit. Without `markReady`, no local dispatch (server-authoritative).
-
-**PvP duels — client-driven lockstep** (slice 5, v1.7.442). PvP doesn't go through the server tick — RTT on every duel turn would hurt the feel. Instead `pvp-atb-sync {unitKind, allyIdx, atMs}` relays the sender's `markFilling` timestamp to the partner so both clients reset gauges at the same wall-clock anchor. Lockstep RNG (existing v1.7.406-v1.7.410 work) keeps damage/state matched.
-
-**Bidirectional `atb-sync`** (slice 4b, v1.7.439). When a locally-owned unit's action animation completes (`_resetLastDispatched` in `battle-turn.js`), the owner emits `atb-sync {unitKind, monsterIdx, atMs}`. Server-side: updates `_encounterBattles[host].units[unitId]` (`state: filling, startedAt: atMs`) so its tick stays in step. Wire-side: relays to peers, each calls `markFilling(ref, atMs)` to anchor their gauge to the same atMs. Ownership: ps always emits; monsters emit only if `battleSt.encounterIsHost`; wire-driven allies are partner-owned, partner emits.
-
-| Direction | Type | Fields |
-|---|---|---|
-| C→S | `atb-sync` | `unitKind: 'player'\|'monster', monsterIdx, atMs` (co-op only) |
-| S→C | `atb-sync` | `userId, unitKind, monsterIdx, atMs` (relay to peers) |
-| S→C | `atb-ready` | `unitId, atMs` — server's authoritative ready flip (co-op only) |
-| C→S | `pvp-atb-sync` | `unitKind: 'player'\|'ally', allyIdx, atMs` (PvP only) |
-| S→C | `pvp-atb-sync` | `userId, unitKind, allyIdx, atMs` (relay to partner) |
-
-**Battle Speed slider** (slice 6, v1.7.443). Pause-menu Options → Speed: 1-6 (default 3 = 333 ms/tick). `TICK_MS` is a live-binding `export let` from `src/atb.js`; consumers re-read on every gauge compute. Persisted in `localStorage.ff3.battleSpeed`. **Haste spell** doubles your gauge fill rate via `setSpeedMod(ps, 0.5)` (battle-bound — cleared at battle exit by the fresh `_atb` from the next `initBattleATB`).
-
-**Menu opens during gauge fill** (slice 3 polish, v1.7.437). Battle starts in `menu-open` instead of `atb-idle` so the player can queue an action while their bar fills. `confirm-pause` holds until `isReady(ps) && battleTimer >= 150`, then fires. Monsters/allies still interrupt freely during the menu (dispatch hub fires on both `'atb-idle'` and `'menu-open'` with `skipPlayer:true` in the latter).
-
-Key constants live in `src/atb.js` (`TICK_MS`, `FILL_MAX`, `RA_MIN`, `RA_MAX`, `BATTLE_SPEED_TABLE`) and **must match the server's `_ATB_TICK_MS`/`_ATB_RA_MIN`/`_ATB_RA_MAX` in `ws-presence.js`**. Drift = co-op desync.
+The FF4-style ATB system that shipped across v1.7.428→v1.7.455 was reverted at user request. Combat is back to **FF3-style round-based**: `buildTurnOrder` rolls initiative once per round, `processNextTurn` works through the queue, `TURN_TIME_MS = 10000` auto-skips a stuck player decision. Deleted: `src/atb.js`, `src/atb-render.js`, `tools/atb-sim.js`, `tools/atb-fsm-sim.js`. Stripped wire kinds: `atb-sync`, `atb-ready`, `pvp-atb-sync`. Stripped server state: `_encounterBattles`, `_tickEncounterBattles`, `_initEncounterBattle`, `_addPlayerToEncounterBattle`, `_broadcastAtbReady`, `_computeRA`, the 100 ms tick `setInterval`. Stripped client: Battle Speed slider, `SPELL_CAST_TIME` table, `setSpeedMod` Haste wire, `_drawPortraitATBBar`. The wire-protocol audit from the original v1.7.418-v1.7.425 co-op band is intact (the round-queue / canonical actor-push / per-turn rand reseed defenses still apply to round-based co-op).
 
 ### Party invites
 
@@ -225,15 +205,6 @@ Server enforces one-party-per-player. `party-invite` rejects with `reason:'busy'
 | `src/battle-ally.js#updateBattleAlly` | wire-wait state retry + 45s timeout watchdog + side-channel fade-in tick |
 | `src/game-loop.js` | hybrid rAF / Worker tick driver (rAF when visible, Worker when hidden) |
 | `src/rng.js` | seedable mulberry32; combat rolls land identically when seed matches |
-| `src/atb.js` | per-unit gauge math (wall-clock derived), `setBattleSpeed`/`setSpeedMod`, `setServerAuthoritative`, `markActing`/`markFilling`/`markReady`, `pickReadyActor({skipPlayer})` |
-| `src/atb-render.js` | dev-only debug gauge row (gated on `window.__atbDebug`) |
-| `src/battle-update.js#initBattleATB` | composite init from `ps + battleAllies + encounterMonsters + pvpSt.*`; toggles server-auth based on `battleSt.isWireEncounter` |
-| `src/battle-update.js#_updateATBDispatch` | solo + co-op dispatch hub — fires on `atb-idle` and `menu-open` (skipPlayer in menu) |
-| `src/pvp.js#_updatePVPATBDispatch` | PvP dispatch hub (mirror of above; receives `pvp-atb-sync` for partner gauge anchors) |
-| `src/encounter-wire.js#setNetAtbSyncHandler` / `setNetAtbReadyHandler` | apply partner/server gauge events to local unit refs |
-| `src/battle-turn.js#_resetLastDispatched` | markFilling at action end + emit `atb-sync` / `pvp-atb-sync` for locally-owned units |
-| `tools/atb-sim.js` | 36-test pure-math suite (deploy.sh gate) |
-| `tools/atb-fsm-sim.js` | stubbed-engine FSM driver (4 scenarios incl. server-auth defers-dispatch) |
 
 ## Nginx config
 
