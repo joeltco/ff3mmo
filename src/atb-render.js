@@ -23,6 +23,10 @@ const FRAME       = '#000';
 
 export function drawATBGauges() {
   if (battleSt.battleState === 'none') return;
+  // Dev-only diagnostic row. Toggle via `window.__atbDebug = true` in the
+  // browser console. Default off — ATB drives dispatch silently in
+  // production; the gauges are tooling, not UI.
+  if (typeof window === 'undefined' || !window.__atbDebug) return;
   const units = getATBUnits();
   if (units.length === 0) return;
   const ctx = ui.ctx;

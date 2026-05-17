@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.430 — 2026-05-16
+
+### Hide ATB gauge bars by default
+
+The v1.7.428 diagnostic row at y=144 was scaffolding for verifying gauges tick. Slice 3 is in, ATB drives dispatch; the bars are no longer needed in production UI. Gated behind `window.__atbDebug = true` (browser console) so it stays reachable for debugging.
+
 ## 1.7.429 — 2026-05-16
 
 ### ATB rewrite slice 3 — gauge-driven dispatch (round queue dies)
