@@ -83,7 +83,98 @@ const _partyMemberships = new Map();
 // multi-peer. v1.7.418.
 const _encounterGroups = new Map();
 
+// ── Slice 4c (v1.7.440) — server-arbitrated ATB ──────────────────────────
+// Per-host battle state: server runs the authoritative ATB tick + broadcasts
+// `atb-ready` events when units fill. Clients receive but don't yet defer
+// dispatch (slice 4d will). For now the broadcasts are advisory — used to
+// detect drift and lay the wire surface.
+//
+// Constants must match `src/atb.js`. Don't drift.
+const _ATB_TICK_MS  = 333;
+const _ATB_RA_MIN   = 2;
+const _ATB_RA_MAX   = 10;
+const _SERVER_TICK_INTERVAL_MS = 100;
+
+const _encounterBattles = new Map();  // hostUserId → battle state
+
+function _computeRA(anchorAgi, agi) {
+  if (!anchorAgi || !agi) return _ATB_RA_MIN;
+  let ra = Math.floor(5 * anchorAgi / agi);
+  if (ra < _ATB_RA_MIN) ra = _ATB_RA_MIN;
+  if (ra > _ATB_RA_MAX) ra = _ATB_RA_MAX;
+  return ra;
+}
+
+function _initEncounterBattle(hostUid, peerUids, monsters /* [{monsterId, agi}] */) {
+  const host = _connected.get(hostUid);
+  const hostAgi = (host && host.profile && (host.profile.agi | 0)) || 5;
+  const units = new Map();
+  const now = Date.now();
+  const peerSet = new Set([hostUid, ...peerUids]);
+  // Player units — keyed `player:<userId>`.
+  for (const uid of peerSet) {
+    const entry = _connected.get(uid);
+    const agi = (entry && entry.profile && (entry.profile.agi | 0)) || 5;
+    units.set('player:' + uid, {
+      ra: _computeRA(hostAgi, agi),
+      state: 'filling',
+      startedAt: now,
+      readyAtMs: 0,
+    });
+  }
+  // Monster units — keyed `monster:<idx>`.
+  for (let i = 0; i < monsters.length; i++) {
+    const agi = (monsters[i] && monsters[i].agi | 0) || 5;
+    units.set('monster:' + i, {
+      ra: _computeRA(hostAgi, agi),
+      state: 'filling',
+      startedAt: now,
+      readyAtMs: 0,
+    });
+  }
+  _encounterBattles.set(hostUid, { peers: peerSet, units, anchorMs: now });
+}
+
+function _clearEncounterBattle(userId) {
+  // userId may be the host (battle keyed under their uid) or any peer.
+  // Clear any battle that includes them.
+  for (const [hostUid, battle] of _encounterBattles) {
+    if (hostUid === userId || battle.peers.has(userId)) {
+      _encounterBattles.delete(hostUid);
+      return;
+    }
+  }
+}
+
+function _broadcastAtbReady(battle, unitId, atMs) {
+  for (const peerUid of battle.peers) {
+    const peer = _connected.get(peerUid);
+    if (!peer || peer.ws.readyState !== 1) continue;
+    _send(peer.ws, { type: 'atb-ready', unitId, atMs });
+  }
+}
+
+function _tickEncounterBattles() {
+  const now = Date.now();
+  for (const battle of _encounterBattles.values()) {
+    for (const [unitId, unit] of battle.units) {
+      if (unit.state !== 'filling') continue;
+      const target = unit.ra * _ATB_TICK_MS;
+      if (now - unit.startedAt >= target) {
+        unit.state = 'ready';
+        unit.readyAtMs = now;
+        _broadcastAtbReady(battle, unitId, now);
+      }
+    }
+  }
+}
+setInterval(_tickEncounterBattles, _SERVER_TICK_INTERVAL_MS);
+
 function _clearEncounterGroup(userId) {
+  // Slice 4c — also clear the server-side ATB battle state. The departing
+  // user might have been the host (battle keyed under their userId), so
+  // try both their own key and any peer's key that maps back through them.
+  _clearEncounterBattle(userId);
   const peers = _encounterGroups.get(userId);
   if (!peers) return;
   _encounterGroups.delete(userId);
@@ -666,7 +757,11 @@ function _handleMessage(entry, msg) {
           peers,
         });
       }
-      console.log('[encounter-start] host=' + entry.userId + ' accepted=' + JSON.stringify(accepted) + ' monsters=' + monsters.length);
+      // Slice 4c — initialize server-side ATB battle state. Monsters
+      // payload carries `agi` from the host's client; player agis come
+      // from each peer's cached profile.
+      _initEncounterBattle(entry.userId, accepted, monsters);
+      console.log('[encounter-start] host=' + entry.userId + ' accepted=' + JSON.stringify(accepted) + ' monsters=' + monsters.length + ' atb-units=' + (_encounterBattles.get(entry.userId)?.units.size || 0));
       return;
     }
     case 'encounter-assist-request': {
@@ -805,21 +900,41 @@ function _handleMessage(entry, msg) {
       return;
     }
     case 'atb-sync': {
-      // Slice 4b (v1.7.439) — relay ATB gauge state transitions across
-      // co-op peers so both clients' wall-clock gauges reset at the same
-      // timestamp. Sender's local Date.now() carried in `atMs`; receiver
-      // calls `markFilling(unit, atMs)` instead of using their own clock.
-      // Only `filling` is sync'd in this slice — that's the high-impact
-      // reset moment; `acting` just freezes elapsedMs (~ negligible drift).
+      // Slice 4b — peer-to-peer ATB sync. Slice 4c — also feeds the
+      // server-side battle state so its tick loop knows when units transition
+      // (filling → acting after dispatch; acting → filling after the action's
+      // animation completes).
       if (!entry.helloed) return;
       const peers = _encounterGroups.get(entry.userId);
       if (!peers || peers.size === 0) return;
       const unitKind = String(parsed.unitKind || '').slice(0, 16);
       const monsterIdx = parsed.monsterIdx | 0;
-      // Date.now() exceeds 32-bit signed int range (~2.1B), so don't use
-      // `| 0` here. Preserve the full Number; coerce + sanity-check below.
       const atMs = Number(parsed.atMs);
       if (!unitKind || !Number.isFinite(atMs) || atMs <= 0) return;
+      // Update server-side battle state. Find the host of this encounter
+      // (we are either the host or one of the peers).
+      let hostUid = entry.userId;
+      if (!_encounterBattles.has(hostUid)) {
+        for (const peerUid of peers) {
+          if (_encounterBattles.has(peerUid)) { hostUid = peerUid; break; }
+        }
+      }
+      const battle = _encounterBattles.get(hostUid);
+      if (battle) {
+        const unitId = unitKind === 'player' ? 'player:' + entry.userId
+                     : unitKind === 'monster' ? 'monster:' + monsterIdx
+                     : null;
+        if (unitId) {
+          const unit = battle.units.get(unitId);
+          if (unit) {
+            // markFilling from a client → server resets that unit's fill anchor.
+            unit.state = 'filling';
+            unit.startedAt = atMs;
+            unit.readyAtMs = 0;
+          }
+        }
+      }
+      // Relay to peers (slice 4b protocol).
       for (const peerId of peers) {
         const peer = _connected.get(peerId);
         if (!peer || peer.ws.readyState !== 1) continue;
@@ -1177,6 +1292,7 @@ export const _testHooks = {
     partyInvites: _partyInvites,
     partyMemberships: _partyMemberships,
     encounterGroups: _encounterGroups,
+    encounterBattles: _encounterBattles,
     connsByIp: _connsByIp,
   },
   resetState() {
@@ -1186,6 +1302,11 @@ export const _testHooks = {
     _partyInvites.clear();
     _partyMemberships.clear();
     _encounterGroups.clear();
+    _encounterBattles.clear();
     _connsByIp.clear();
   },
+  initEncounterBattle: _initEncounterBattle,
+  tickEncounterBattles: _tickEncounterBattles,
+  computeRA: _computeRA,
+  atbConstants: { TICK_MS: _ATB_TICK_MS, RA_MIN: _ATB_RA_MIN, RA_MAX: _ATB_RA_MAX },
 };

@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.440 — 2026-05-17
+
+### ATB slice 4c — server-side state mirror + tick loop (advisory)
+
+Server now runs its own authoritative ATB tick for active co-op random battles. On `encounter-start`, server builds a state mirror (per-unit RA computed from anchor agi, `startedAt` anchored to encounter start). A 100ms-interval tick loop advances each unit and broadcasts `atb-ready {unitId, atMs}` to all peers when their gauge fills. `atb-sync` (slice 4b) is also consumed server-side so the `filling` anchor resets on action completion.
+
+This is **advisory** — clients receive `atb-ready` events but don't change their dispatch logic yet. The lockstep guarantee from slice 4b still holds; the server is now a separate-but-aligned source of truth. Slice 4d will flip clients to defer dispatch to the server's events (full server-arbitrated authority).
+
+- **ws-presence.js** — `_encounterBattles` Map (host userId → { peers, units, anchorMs }), `_initEncounterBattle`, `_clearEncounterBattle`, `_tickEncounterBattles` (`setInterval` at 100ms), `_broadcastAtbReady`. Cleanup wired into `_clearEncounterGroup`.
+- **encounter-start payload** — monsters now carry `agi` (derived client-side via `deriveMonsterAgi`) so the server can compute RA without needing access to `src/data/monsters.js`.
+- **encounter-start handler** — calls `_initEncounterBattle` after the existing peer-set construction.
+- **atb-sync handler** — updates server-side unit state (`state: filling, startedAt: atMs`) in addition to the existing peer relay.
+- **pvp-wire-sim** — 52/52 (3 new tests: battle init builds units + RA, server tick fires atb-ready, client atb-sync resets server anchor).
+
+Constants `_ATB_TICK_MS = 333`, `_ATB_RA_MIN = 2`, `_ATB_RA_MAX = 10` mirror `src/atb.js`. Don't drift.
+
 ## 1.7.439 — 2026-05-17
 
 ### ATB slice 4b — wire-sync events for co-op gauge lockstep

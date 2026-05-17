@@ -643,6 +643,73 @@ async function suiteWire() {
     await new Promise(r => setTimeout(r, 40));
   });
 
+  // Slice 4c — server-side ATB state + tick + atb-ready broadcasts.
+  await asyncTest('encounter-start initializes server-side battle state', async () => {
+    _testHooks.resetState();
+    const A = await connectClient(port, 1094, { ...baseProfile, name: 'A_init', agi: 12 });
+    const B = await connectClient(port, 1095, { ...baseProfile, name: 'B_init', agi: 8 });
+    // Manually init the server-side battle (the encounter-start handler
+    // requires party membership + a real partyMemberships set; quicker to
+    // call the test hook directly).
+    _testHooks.initEncounterBattle(1094, [1095], [
+      { monsterId: 0x00, agi: 6 },
+      { monsterId: 0x02, agi: 10 },
+    ]);
+    const battle = _testHooks.state.encounterBattles.get(1094);
+    assertTrue(!!battle, 'battle not registered');
+    assertEqual(battle.units.size, 4, 'expected 2 players + 2 monsters');
+    assertTrue(battle.units.has('player:1094'), 'host player missing');
+    assertTrue(battle.units.has('player:1095'), 'guest player missing');
+    assertTrue(battle.units.has('monster:0'), 'monster 0 missing');
+    assertTrue(battle.units.has('monster:1'), 'monster 1 missing');
+    // RA sanity — host agi 12 anchor; guest agi 8 → RA=floor(60/8)=7.
+    assertEqual(battle.units.get('player:1095').ra, 7, 'guest RA wrong');
+    A.close(); B.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  await asyncTest('server tick broadcasts atb-ready when unit fills', async () => {
+    _testHooks.resetState();
+    const A = await connectClient(port, 1096, { ...baseProfile, name: 'A_ready', agi: 10 });
+    const B = await connectClient(port, 1097, { ...baseProfile, name: 'B_ready', agi: 10 });
+    _testHooks.initEncounterBattle(1096, [1097], [{ monsterId: 0, agi: 10 }]);
+    // Force the host's player unit to look filled by setting startedAt far in
+    // the past. Tick should flip to 'ready' + broadcast.
+    const battle = _testHooks.state.encounterBattles.get(1096);
+    const playerUnit = battle.units.get('player:1096');
+    playerUnit.startedAt = Date.now() - 99999;  // way past target
+    const got = once(A, m => m.type === 'atb-ready', 500);
+    _testHooks.tickEncounterBattles();
+    const m = await got;
+    assertEqual(m.unitId, 'player:1096', 'wrong unit id in atb-ready');
+    assertEqual(playerUnit.state, 'ready', 'unit state not flipped');
+    A.close(); B.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  await asyncTest('atb-sync from client resets server-side fill anchor', async () => {
+    _testHooks.resetState();
+    const A = await connectClient(port, 1098, { ...baseProfile, name: 'A_anc', agi: 10 });
+    const B = await connectClient(port, 1099, { ...baseProfile, name: 'B_anc', agi: 10 });
+    _testHooks.initEncounterBattle(1098, [1099], []);
+    _testHooks.state.encounterGroups.set(1098, new Set([1099]));
+    _testHooks.state.encounterGroups.set(1099, new Set([1098]));
+    const battle = _testHooks.state.encounterBattles.get(1098);
+    const playerUnit = battle.units.get('player:1098');
+    playerUnit.state = 'ready';
+    playerUnit.startedAt = 1;
+    // Drain any stray B messages
+    await new Promise(r => setTimeout(r, 30));
+    const got = once(B, m => m.type === 'atb-sync', 500);
+    const newAnchor = Date.now();
+    A.send(JSON.stringify({ type: 'atb-sync', unitKind: 'player', monsterIdx: -1, atMs: newAnchor }));
+    await got;  // wait for relay → guarantees server processed
+    assertEqual(playerUnit.state, 'filling', 'state not reset to filling');
+    assertEqual(playerUnit.startedAt, newAnchor, 'startedAt not anchored to atMs');
+    A.close(); B.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
   await asyncTest('atb-sync drops when atMs missing', async () => {
     _testHooks.resetState();
     const A = await connectClient(port, 1092, { ...baseProfile, name: 'A_atb2' });

@@ -3,6 +3,7 @@
 import { battleSt } from './battle-state.js';
 import { addBattleATBAlly } from './battle-update.js';
 import { MONSTERS } from './data/monsters.js';
+import { deriveMonsterAgi } from './atb.js';
 import { ENCOUNTERS } from './data/encounters.js';
 import { GOBLIN_HIT_RATE } from './battle-math.js';
 import { SFX, playSFX } from './music.js';
@@ -170,7 +171,12 @@ function _maybeHostCoopEncounter() {
   }
   if (partyPeers.length === 0) return;
   const seed32 = (Math.random() * 0xffffffff) >>> 0;
-  const monsterPayload = battleSt.encounterMonsters.map(m => ({ monsterId: m.monsterId }));
+  // v1.7.440 — include per-monster derived agi so the server can compute
+  // RA values for its authoritative ATB tick loop (slice 4c).
+  const monsterPayload = battleSt.encounterMonsters.map(m => {
+    const data = MONSTERS.get(m.monsterId) || m;
+    return { monsterId: m.monsterId, agi: deriveMonsterAgi(data) };
+  });
   if (!sendNetEncounterStart(seed32, monsterPayload, partyPeers)) return;
   battleSt.isWireEncounter = true;
   battleSt.encounterIsHost = true;
