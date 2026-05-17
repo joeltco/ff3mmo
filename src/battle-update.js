@@ -43,7 +43,7 @@ import { playSlashSFX } from './battle-sfx.js';
 import { saveSlotsToDB } from './save-state.js';
 import { addItem, buildItemSelectList } from './inventory.js';
 import { initATB, addATBUnit, clearATB, tickGauges, deriveMonsterAgi,
-         pickReadyActor, isReady } from './atb.js';
+         pickReadyActor, isReady, setServerAuthoritative } from './atb.js';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 // BATTLE_TEXT_STEPS / BATTLE_TEXT_STEP_MS now imported from battle-state.js (single source).
@@ -310,6 +310,10 @@ export function initBattleATB() {
     }
   }
   initATB(entries);
+  // Slice 4d (v1.7.441) — co-op random battles defer the ready flip to
+  // the server's authoritative atb-ready broadcasts. PvP stays local-
+  // driven (lockstep RNG covers it; latency would hurt the duel feel).
+  setServerAuthoritative(!!battleSt.isWireEncounter);
 }
 
 // Attach a newly-joined ally to the existing ATB rhythm (Battle Assist).

@@ -13,8 +13,11 @@
 import { battleSt } from './battle-state.js';
 import { sendNetEncounterAction, sendNetEncounterEnd,
          setNetEncounterActionHandler, setNetEncounterEndHandler,
-         sendNetAtbSync, setNetAtbSyncHandler } from './net.js';
-import { markFilling } from './atb.js';
+         sendNetAtbSync, setNetAtbSyncHandler,
+         setNetAtbReadyHandler } from './net.js';
+import { markFilling, markReady } from './atb.js';
+import { ps } from './player-stats.js';
+import { getMyUserId } from './net.js';
 
 const _wireEncounterActions = [];
 
@@ -119,6 +122,37 @@ export function emitAtbFillingSync(unitKind, monsterIdx, atMs) {
   if (!battleSt.isWireEncounter) return;
   sendNetAtbSync({ unitKind, monsterIdx: monsterIdx | 0, atMs: Number(atMs) });
 }
+
+// Slice 4d — receive server's authoritative ready event and apply
+// `markReady` on the matching local unit. unitId shape:
+//   'player:<userId>' — ps if userId matches our uid, else find in
+//                       battleAllies by userId
+//   'monster:<idx>'   — encounterMonsters[idx]
+setNetAtbReadyHandler((msg) => {
+  if (!msg || !battleSt.isWireEncounter) return;
+  const atMs = Number(msg.atMs);
+  if (!Number.isFinite(atMs) || atMs <= 0) return;
+  const unitId = String(msg.unitId || '');
+  if (!unitId) return;
+  let ref = null;
+  if (unitId.startsWith('player:')) {
+    const uid = parseInt(unitId.slice(7), 10) | 0;
+    if (uid === (getMyUserId() | 0)) {
+      ref = ps;
+    } else {
+      for (const a of battleSt.battleAllies) {
+        if (a && a.userId === uid) { ref = a; break; }
+      }
+    }
+  } else if (unitId.startsWith('monster:')) {
+    const idx = parseInt(unitId.slice(8), 10) | 0;
+    if (battleSt.encounterMonsters) {
+      ref = battleSt.encounterMonsters[idx] || null;
+    }
+  }
+  if (!ref || !ref._atb) return;
+  markReady(ref, atMs);
+});
 
 export function clearWireEncounterQueue() {
   _wireEncounterActions.length = 0;

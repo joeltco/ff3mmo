@@ -218,6 +218,14 @@ function _handleMessage(data) {
         catch (e) { console.warn('[net] atb-sync handler error', e); }
       }
       return;
+    case 'atb-ready':
+      // v1.7.441 — server's authoritative ready broadcast (slice 4c/4d).
+      // Client flips local unit's state to 'ready' using server's atMs.
+      if (_onAtbReady) {
+        try { _onAtbReady(msg); }
+        catch (e) { console.warn('[net] atb-ready handler error', e); }
+      }
+      return;
     case 'encounter-assist-incoming':
       // Overworld player picked Assist on us. Handler builds the
       // snapshot + auto-accepts, OR rejects (battle slot full).
@@ -505,6 +513,13 @@ export function sendNetAtbSync(payload) {
   return _send({ type: 'atb-sync', ...payload });
 }
 export function setNetAtbSyncHandler(fn) { _onAtbSync = typeof fn === 'function' ? fn : null; }
+
+// Slice 4c+4d — server's authoritative ATB tick broadcasts `atb-ready`
+// to all peers when a unit's gauge fills. Receiver calls `markReady` on
+// the matching local unit. Server-arbitrated dispatch authority for
+// co-op random battles.
+let _onAtbReady = null;
+export function setNetAtbReadyHandler(fn) { _onAtbReady = typeof fn === 'function' ? fn : null; }
 
 // Battle Assist (v1.7.422+) — overworld player joins an in-progress
 // encounter on a roster target. `assist-request` from joiner triggers

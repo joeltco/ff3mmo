@@ -35,6 +35,15 @@ const RA_MAX = 10;
 // Clock seam — production reads Date.now(); tests can override via _setNow.
 let _now = () => Date.now();
 
+// Slice 4d (v1.7.441) — server-authoritative ready flips. When true, the
+// local tick does NOT promote `filling → ready` on its own. The ready
+// transition comes from a server-broadcast `atb-ready` wire event that
+// calls `markReady(ref, atMs)`. Used for co-op random battles so both
+// clients dispatch from the same authoritative timeline.
+let _serverAuth = false;
+export function setServerAuthoritative(yes) { _serverAuth = !!yes; }
+export function isServerAuthoritative() { return _serverAuth; }
+
 // Module-level state. Cleared per battle.
 let _units = [];           // [{ ref, kind, agiSource }]
 let _anchorAgi = 0;
@@ -83,6 +92,7 @@ export function clearATB() {
   }
   _units = [];
   _anchorAgi = 0;
+  _serverAuth = false;
 }
 
 // Advance all gauges based on wall clock. `dt` is retained in the signature
@@ -105,7 +115,10 @@ export function tickGauges(_dt, _opts = {}) {
     // clock (clock skew between co-op peers — slice 4b). Gauge holds at 0
     // until receiver's clock catches up to sender's anchor.
     atb.elapsedMs = Math.max(0, Math.min(target, now - atb.startedFillingAtMs));
-    if (atb.elapsedMs >= target) {
+    // Slice 4d — in server-auth mode the ready flip comes from `markReady`
+    // (called by the atb-ready wire handler). Local tick still advances
+    // elapsedMs for display continuity but doesn't change state.
+    if (atb.elapsedMs >= target && !_serverAuth) {
       atb.state = 'ready';
       atb.readyAtMs = now;
     }
@@ -161,6 +174,22 @@ export function markActing(ref) {
     atb.elapsedMs = Math.min(target, _now() - atb.startedFillingAtMs);
   }
   atb.state = 'acting';
+}
+
+// Slice 4d — flip a unit from 'filling' to 'ready'. Called by the
+// atb-ready wire handler when the server's authoritative tick says this
+// unit's gauge has filled. Snaps elapsedMs to target so the gauge bar
+// reads as full immediately even if the local wall clock lagged.
+// No-op if the unit is already in 'ready' or 'acting' (avoid resurrecting
+// a stale wire event after the player already dispatched).
+export function markReady(ref, atMs) {
+  if (!ref || !ref._atb) return;
+  const atb = ref._atb;
+  if (atb.state !== 'filling') return;
+  const target = _fillTargetMs(atb);
+  atb.elapsedMs = target;
+  atb.state = 'ready';
+  atb.readyAtMs = (typeof atMs === 'number') ? atMs : _now();
 }
 
 // Reset a unit to filling from zero. Slice 4b will accept an `atMs`

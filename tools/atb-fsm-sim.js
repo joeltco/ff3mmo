@@ -75,6 +75,7 @@ try {
   // while the sim runs at light-speed through 1500 ticks.
   const atbMod = await import('../src/atb.js');
   atbMod._setNow(() => _simMs);
+  globalThis.__atb = atbMod;  // exposed for scenarios to call markReady
 
   const bu = await import('../src/battle-update.js');
   updateBattle = bu.updateBattle;
@@ -267,10 +268,50 @@ function _dumpGauges(label) {
   }
 }
 
-// ── 10. Run ──────────────────────────────────────────────────────────────
+// ── 11. Scenario: server-auth mode (slice 4d) ────────────────────────────
+function _scenarioServerAuthDefersDispatch() {
+  console.log('\n═══ scenario: server-auth defers dispatch until atb-ready ═══');
+  _reset();
+  // Fake a co-op encounter by setting isWireEncounter=true. initBattleATB
+  // will toggle the ATB module into server-auth mode.
+  startRandomEncounter();
+  battleSt.isWireEncounter = true;
+  battleSt.battleState = 'flash-strobe';
+  let menuOpenedAt = -1;
+  // Run 10s — player's local gauge would normally fill at ~1.7s, but
+  // server-auth mode means state stays 'filling' until an atb-ready event
+  // arrives. Menu shouldn't open from a dispatch flip; it's already up
+  // from battle-fade-in, but confirm-pause would gate on isReady(ps).
+  for (let i = 0; i < 600; i++) {
+    _tick();
+    if (menuOpenedAt < 0 && battleSt.battleState === 'menu-open') {
+      menuOpenedAt = _simMs;
+    }
+  }
+  // After 10s of ticking, player should be local-full but NOT flagged ready.
+  const psState = ps._atb && ps._atb.state;
+  const psPct = globalThis.__atb.getGaugePct(ps);
+  console.log(`  player state after 10s: ${psState}, pct: ${psPct.toFixed(2)}`);
+  if (psState === 'filling' && psPct >= 0.99) {
+    console.log('  PASS — server-auth held local flip; gauge full but state is "filling"');
+  } else {
+    console.log(`  FAIL — expected filling@1.00, got ${psState}@${psPct.toFixed(2)}`);
+  }
+
+  // Now inject a server atb-ready event. State should flip.
+  globalThis.__atb.markReady(ps, _simMs);
+  if (ps._atb.state === 'ready') {
+    console.log('  PASS — markReady flipped state to ready after wire event');
+  } else {
+    console.log(`  FAIL — markReady didn't flip; state=${ps._atb.state}`);
+  }
+}
+
+// ── 12. Run ──────────────────────────────────────────────────────────────
 _scenarioIdle();
 _detectOscillation();
 _scenarioAttackOnce();
 _detectOscillation();
 _scenarioMonsterActsWhileMenuOpen();
 _detectOscillation();
+_scenarioServerAuthDefersDispatch();

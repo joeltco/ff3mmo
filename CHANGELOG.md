@@ -2,6 +2,27 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.441 — 2026-05-17
+
+### ATB slice 4d — clients defer ready flip to server (server-arbitrated co-op)
+
+The other half of slice 4c. Co-op random battle clients now wait for the server's `atb-ready` broadcast before flipping a unit from `filling` to `ready`. The local gauge still advances `elapsedMs` for display continuity (no visual lag), but the dispatch authority lives on the server. Solo + PvP keep local-driven (lockstep RNG covers PvP; latency would hurt duel feel).
+
+- **`src/atb.js`** — module-level `_serverAuth` flag + `setServerAuthoritative` / `isServerAuthoritative` exports. `tickGauges` skips the local `filling→ready` flip when set. New `markReady(ref, atMs)` snaps elapsedMs to target + flips state (called by the atb-ready wire handler). `clearATB` resets the flag.
+- **`src/encounter-wire.js`** — `setNetAtbReadyHandler` registers a handler that parses `unitId` (`player:<uid>` or `monster:<idx>`), resolves the local ref (ps if it's our uid, else find ally in `battleAllies` by userId; monster by index), and calls `markReady`.
+- **`src/net.js`** — `setNetAtbReadyHandler` seam + wire-message case for `atb-ready`.
+- **`src/battle-update.js#initBattleATB`** — calls `setServerAuthoritative(battleSt.isWireEncounter)` after the entries list is initialized.
+- **`tools/atb-fsm-sim.js`** — new scenario `_scenarioServerAuthDefersDispatch`: runs 10s of ticking in server-auth mode, asserts player gauge fills to 100% pct but state remains `'filling'`. Then calls `markReady` directly and asserts state flips. 4/4 scenarios green.
+
+Behavior in a co-op battle now:
+1. Server's tick says unit is ready at `atMs` → broadcasts atb-ready
+2. Each client receives, calls `markReady(ref, atMs)` → local state flips, `readyAtMs` aligned to server's atMs
+3. Dispatch handler (existing) picks the unit, processNextTurn fires, action runs
+4. On action completion, atb-sync(filling, atMs=Date.now()) fires → server resets startedAt + relays to peers
+5. All clients converge
+
+Same as slice 4c, this is wire-protocol-only — no `markReady` arrival means no dispatch. The freeze watchdog catches any persistent stall.
+
 ## 1.7.440 — 2026-05-17
 
 ### ATB slice 4c — server-side state mirror + tick loop (advisory)
