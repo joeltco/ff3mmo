@@ -75,6 +75,37 @@ const ICON_TILES = new Set();
 for (let b = 0x72; b <= 0x75; b++) ICON_TILES.add(b);  // spell-school
 for (let b = 0xE0; b <= 0xFE; b++) ICON_TILES.add(b);  // item class (extended for Shuriken $F6+)
 
+// v1.7.453 — subtype → icon byte fallback for items whose ROM name doesn't
+// embed an icon byte (basic staffs / rods / etc. from the original FF3
+// catalog). Used by getItemNameWithIcon when the ROM name has no leading
+// icon AND the items.js entry doesn't carry an explicit `icon` override.
+// Pre-fix the chest "Found Staff!" message had no glyph.
+const _SUBTYPE_ICON = {
+  shield:    0xE0,
+  robe:      0xE1,
+  mail:      0xE2,
+  helmet:    0xE3,
+  gauntlet:  0xE4,
+  bracer:    0xE5,
+  claw:      0xE6,
+  nunchaku:  0xE7,
+  book:      0xE8,
+  rod:       0xE9,
+  staff:     0xEA,
+  hammer:    0xEB,
+  spear:     0xEC,
+  knife:     0xED,
+  axe:       0xEE,
+  sword:     0xEF,
+  katana:    0xF0,
+  harp:      0xF1,
+  bow:       0xF2,
+  arrow:     0xF3,
+  bell:      0xF4,
+  boomerang: 0xF5,
+  shuriken:  0xF6,
+};
+
 // ASCII → NES tile byte (lowercase / uppercase / digits / space). Anything
 // unknown falls through to space. Kept local so text-decoder stays free of
 // imports from text-utils.js, which would cycle through font-renderer.
@@ -192,7 +223,18 @@ export function getItemNameWithIcon(itemId) {
   // No icon — strip leading spaces, same as getItemNameClean
   let s = 0;
   while (s < bytes.length && bytes[s] === 0xFF) s++;
-  return s > 0 ? bytes.slice(s) : bytes;
+  const stripped = s > 0 ? bytes.slice(s) : bytes;
+  // v1.7.453 — fall back to items.js icon / subtype-derived icon when the
+  // ROM name has no leading icon. Fixes "Found Staff!" chest messages
+  // (and any other category-icon-less ROM entry).
+  const data = ITEMS.get(itemId);
+  if (!data) return stripped;
+  const fallback = (typeof data.icon === 'number') ? data.icon : _SUBTYPE_ICON[data.subtype];
+  if (!fallback || !ICON_TILES.has(fallback)) return stripped;
+  const out = new Uint8Array(1 + stripped.length);
+  out[0] = fallback;
+  out.set(stripped, 1);
+  return out;
 }
 
 /**
@@ -208,7 +250,17 @@ export function getItemNameShrines(itemId) {
   const override = ITEM_NAMES_SHRINES.get(itemId);
   if (override == null) return getItemNameWithIcon(itemId);
   const romBytes = getItemName(itemId);
-  const iconByte = (romBytes.length > 0 && ICON_TILES.has(romBytes[0])) ? romBytes[0] : null;
+  let iconByte = (romBytes.length > 0 && ICON_TILES.has(romBytes[0])) ? romBytes[0] : null;
+  // v1.7.453 — same subtype-icon fallback as getItemNameWithIcon. Shrines
+  // overrides used to drop the icon for items whose ROM name lacked one
+  // (basic staffs/rods).
+  if (iconByte == null) {
+    const data = ITEMS.get(itemId);
+    if (data) {
+      const fb = (typeof data.icon === 'number') ? data.icon : _SUBTYPE_ICON[data.subtype];
+      if (fb && ICON_TILES.has(fb)) iconByte = fb;
+    }
+  }
   const letters = new Uint8Array(override.length);
   for (let i = 0; i < override.length; i++) letters[i] = _asciiToTileByte(override[i]);
   if (iconByte == null) return letters;

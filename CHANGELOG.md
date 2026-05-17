@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.453 — 2026-05-17
+
+### Fix — Land Turtle wasn't attacking + staff icon missing + chat-tab cursor
+
+Three bugs, one deploy:
+
+**Land Turtle never took a turn.** The ATB rewrite (v1.7.428→v1.7.443) registered units from `encounterMonsters`, but the boss fight stores HP on `battleSt.enemyHP` and never populates `encounterMonsters`. So `pickReadyActor` never returned the boss and it sat idle. Fix in `src/battle-update.js#initBattleATB`: when not random + not PvP and `getEnemyHP() > 0`, register a stable synthetic ref (`battleSt._bossAtbRef`) with a `hp` getter/setter that proxies through `getEnemyHP/setEnemyHP`. New `kind: 'boss'` dispatch branch in `_updateATBDispatch` queues `{type:'enemy', index:-1, isBoss:true}`; `_resolveTurnActor` and the enemy-turn name-queue branch in `src/battle-turn.js` now recognize `turn.isBoss` and pull the Land Turtle name (monster 0xCC). Existing boss attack code in `src/battle-enemy.js` already handles `currentAttacker=-1` (falls back to `BOSS_ATK / BOSS_HIT_RATE`). `_bossAtbRef` cleared in `resetBattleVars`.
+
+**Chest "Found Staff!" had no glyph.** `getItemNameWithIcon` only prepended an icon when the ROM string itself had one as its first byte. Basic FF3 staffs / rods / etc. don't carry an icon byte in their ROM strings. Added a `_SUBTYPE_ICON` table in `src/text-decoder.js` mapping `items.js#subtype` → AWJ font glyph byte (`staff → 0xEA`, `rod → 0xE9`, `sword → 0xEF`, etc.), used as a fallback in both `getItemNameWithIcon` and `getItemNameShrines`. Items with an explicit `icon: 0xNN` field in `items.js` still take priority.
+
+**Chat-tab cursor was clipped + sat under HUD borders.** v1.7.448 drew the cursor inside `drawChatTabs` at `tx + 2` — that landed *under* the tab's left border tile and was further hidden by the chat-panel border that overlaps the tab bar's bottom 8 px. Moved cursor draw to a separate `drawChatTabCursor(ctx)` exported function that game-loop calls AFTER `drawChat`, positioned at `HUD_RIGHT_X - 8` (just outside the active tab's left edge). Renders on top of the roster / chat panels.
+
 ## 1.7.452 — 2026-05-17
 
 ### Revert v1.7.451 — keep FF4 canon menu lock during enemy attacks

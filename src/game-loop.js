@@ -9,7 +9,7 @@ import { ROSTER_FADE_STEPS } from './data/players.js';
 import { ps } from './player-stats.js';
 import { sprite } from './player-sprite.js';
 import { waterSt, tickWater } from './water-animation.js';
-import { updateChat, updateChatTabs, drawChat, drawChatTabs, isDev, consoleLog } from './chat.js';
+import { updateChat, updateChatTabs, drawChat, drawChatTabs, drawChatTabCursor, isDev, consoleLog } from './chat.js';
 import { rosterBattleFade, updateRoster, drawRoster, drawRosterMenu } from './roster.js';
 import { tickPVPSearch } from './pvp-search.js';
 import { tickPartyInvite } from './party-invite.js';
@@ -226,6 +226,7 @@ function _gameLoopDraw() {
     if (battleSt.battleAllies.length > 0 && battleSt.battleState !== 'none') drawBattleAllies();
     else drawRoster();
     drawChat(ctx, drawHudBox, rosterBattleFade);
+    drawChatTabCursor(ctx);  // v1.7.453 — after chat/roster so it lands on top
     drawPauseMenu(ctx);
     drawShop();
     drawMsgBox(ctx, drawBorderedBox);

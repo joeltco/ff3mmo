@@ -208,6 +208,7 @@ function _resolveTurnActor(turn) {
       if (turn.pvpAllyIdx >= 0) return pvpSt.pvpEnemyAllies[turn.pvpAllyIdx] || null;
       return pvpSt.pvpOpponentStats || null;
     }
+    if (turn.isBoss) return battleSt._bossAtbRef || null;
     if (battleSt.encounterMonsters && turn.index >= 0) {
       return battleSt.encounterMonsters[turn.index] || null;
     }
@@ -473,6 +474,9 @@ export function processNextTurn() {
       const pai = pvpSt.pvpCurrentEnemyAllyIdx;
       const stats = pai >= 0 ? pvpSt.pvpEnemyAllies[pai] : pvpSt.pvpOpponentStats;
       if (stats && stats.name) queueBattleMsg(_nameToBytes(stats.name));
+    } else if (turn.isBoss) {
+      // v1.7.453 — boss turn name queue. Boss is monster 0xCC (Land Turtle).
+      queueBattleMsg(getMonsterName(0xCC) || _nameToBytes('Enemy'));
     } else if (battleSt.currentAttacker >= 0 && battleSt.encounterMonsters) {
       const mon = battleSt.encounterMonsters[battleSt.currentAttacker];
       if (mon) queueBattleMsg(getMonsterName(mon.monsterId) || _nameToBytes('Enemy'));

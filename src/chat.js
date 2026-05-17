@@ -628,16 +628,25 @@ export function drawChatTabs(ctx, fadeStep, drawHudBox) {
       drawText(ctx, tx + Math.floor((w - lw) / 2), TAB_BAR_Y + 8, label, pal);
     }
 
-    // v1.7.448 — solid cursor at the active tab's left edge while in tab
-    // select mode. Sits inside the box, vertically centered on the label.
-    // Stays put while the label blinks so the focus indicator is always
-    // visible. Cursor sprite is 8×8.
-    if (isActive && tabSelectMode) {
-      drawCursorFaded(tx + 2, TAB_BAR_Y + 8, tabFade);
-    }
   }
 
   ctx.restore();
+}
+
+// v1.7.453 — cursor must render AFTER the roster + chat panels so it doesn't
+// get hidden behind their borders, and OUTSIDE the tab's left border tile
+// (the v1.7.448 inside-the-tab placement landed under the border decoration
+// and looked broken). Sits just left of the active tab's left edge; the
+// chat tabs clip rectangle in drawChatTabs would have cut this off so we
+// draw it on its own pass.
+export function drawChatTabCursor(_ctx) {
+  if (!tabSelectMode) return;
+  // Recompute the active tab's left edge — same math as drawChatTabs.
+  // The active tab is always order[0] = HUD_RIGHT_X (positions[0]).
+  // Fade matches what drawChatTabs used (rosterBattleFade-driven), but we
+  // don't need exact parity here — full cursor is fine while select mode
+  // is on (user is actively interacting with the tab bar).
+  drawCursorFaded(HUD_RIGHT_X - 8, TAB_BAR_Y + 8, 0);
 }
 
 // ── Private helpers ────────────────────────────────────────────────────────

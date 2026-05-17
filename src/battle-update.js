@@ -80,6 +80,7 @@ const POISON_END_HOLD_MS       = 700;
 
 export function resetBattleVars() {
   inputSt.battleCursor = 0;
+  battleSt._bossAtbRef = null;  // v1.7.453 — drop stale boss ATB ref
   resetAllDmgNums();
   battleSt.encounterDropItem = null; battleSt.bossFlashTimer = 0; battleSt.battleShakeTimer = 0;
   // Co-op random encounter flags reset every battle start. `_maybeHostCoopEncounter`
@@ -312,6 +313,24 @@ export function initBattleATB() {
       if (!enemyAlly) continue;
       entries.push({ ref: enemyAlly, kind: 'pvp-enemy', agi: enemyAlly.agi | 0 });
     }
+  }
+  // v1.7.453 — boss fights weren't registered as ATB units, so the Land
+  // Turtle never got picked by the dispatch hub and never attacked. Boss HP
+  // is stored on battleSt.enemyHP (separate from encounterMonsters); we
+  // build a stable synthetic ref with a `hp` getter so atb.js can store it
+  // across the battle and pickReadyActor's hp <= 0 check still works as
+  // the boss takes damage.
+  if (!battleSt.isRandomEncounter && !pvpSt.isPVPBattle && getEnemyHP() > 0) {
+    if (!battleSt._bossAtbRef) {
+      battleSt._bossAtbRef = { isBoss: true };
+      Object.defineProperty(battleSt._bossAtbRef, 'hp', {
+        get: () => getEnemyHP(),
+        set: (v) => { setEnemyHP(v); },
+        configurable: true,
+      });
+    }
+    const bossData = MONSTERS.get(0xCC);
+    entries.push({ ref: battleSt._bossAtbRef, kind: 'boss', agi: deriveMonsterAgi(bossData) });
   }
   initATB(entries);
   // Slice 4d (v1.7.441) — co-op random battles defer the ready flip to
@@ -1090,6 +1109,14 @@ function _updateATBDispatch() {
     const idx = battleSt.encounterMonsters.indexOf(ready.ref);
     if (idx < 0) return !inMenu;
     battleSt.turnQueue = [{ type: 'enemy', index: idx }];
+    processNextTurn();
+    return true;
+  }
+  if (ready.kind === 'boss') {
+    // v1.7.453 — boss turn. -1 sentinel + isBoss flag so the enemy-turn
+    // branch in battle-turn.js routes through the legacy boss attack path
+    // (BOSS_ATK / BOSS_HIT_RATE constants when currentAttacker stays -1).
+    battleSt.turnQueue = [{ type: 'enemy', index: -1, isBoss: true }];
     processNextTurn();
     return true;
   }
