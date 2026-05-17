@@ -227,11 +227,14 @@ export function processNextTurn() {
     if (battleSt.isWireEncounter) {
       for (const a of battleSt.battleAllies) if (a) a.isDefending = false;
     }
-    // Yield to ATB dispatch. Menu-open is the universal idle state when
-    // the player is alive — they can queue their next command while the
-    // gauge fills. atb-idle only when the player is down (no menu UI).
-    // v1.7.437.
-    battleSt.battleState = (ps.hp > 0) ? 'menu-open' : 'atb-idle';
+    // v1.7.455 — FF4 canon. After any turn ends, yield to `atb-idle` and
+    // let the dispatch hub re-open the menu only when the player's gauge
+    // fills. Reverts v1.7.437's "menu open while filling" (queueable
+    // commands) — that was Active mode plus pre-queue, which read as
+    // "menu reset on enemy attack" because monsters kept ticking during
+    // sub-menus. With FF4 canon, gauges only tick when nothing else is
+    // happening (`_ATB_TICK_STATES` = atb-idle + menu-open only).
+    battleSt.battleState = 'atb-idle';
     battleSt.battleTimer = 0;
     return;
   }

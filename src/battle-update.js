@@ -279,11 +279,11 @@ function _updateBattleOpening() {
   } else if (battleSt.battleState === 'battle-fade-in') {
     if (battleSt.battleTimer >= (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS) {
       initBattleATB();
-      // ATB era — menu is available immediately so the player can queue
-      // their next command while their gauge fills. The dispatch handler
-      // also fires from menu-open (skipPlayer mode) to pick up monster
-      // readies. v1.7.437.
-      battleSt.battleState = 'menu-open'; battleSt.battleTimer = 0;
+      // v1.7.455 — FF4 canon: menu opens only when the player's gauge is
+      // ready. Yield to atb-idle and let `_updateATBDispatch` pick the
+      // player when their gauge fills (flips to menu-open then). Reverts
+      // v1.7.437's queueable-commands behavior.
+      battleSt.battleState = 'atb-idle'; battleSt.battleTimer = 0;
     }
   } else { return false; }
   return true;
@@ -1126,23 +1126,22 @@ function _updateATBDispatch() {
   return !inMenu;
 }
 
-// Tick ATB gauges. Slice 1: display-only — gauges fill alongside the
-// legacy turn queue but don't gate dispatch. Wait-mode pause kicks in
-// once the player's gauge is full and the menu is open.
-// Skipped during pre-battle opening states and end-of-battle states so
-// the bars don't appear during box-expand or victory.
-const _ATB_IDLE_STATES = new Set([
-  'none', 'roar-hold', 'flash-strobe',
-  'encounter-box-expand', 'enemy-box-expand', 'monster-slide-in',
-  'boss-appear', 'battle-fade-in',
-]);
+// Tick ATB gauges. v1.7.455 — FF4 SNES canon: gauges advance ONLY in true
+// idle states (`atb-idle` = waiting for someone to fill; `menu-open` = player
+// is selecting top-level command, Active mode per v1.7.433 lets monsters
+// keep filling). Every other state — sub-menus, action animations, message
+// strips, pre-battle, victory — pauses all gauges. Mirrors FF4's
+// `BattleMain` calling `DecTimers` only when `$38d9`/`$38da` are both zero.
+//
+// Effect: an enemy can't fill its gauge while the player is navigating
+// item-select / target-select / item-target-select / magic-cast / attack
+// animations / damage display. Pre-fix, monsters filled during sub-menus
+// and dispatched the moment the player closed the sub-menu, which read as
+// "menu reset by enemy attack".
+const _ATB_TICK_STATES = new Set(['atb-idle', 'menu-open']);
 function _tickATB(dt) {
-  if (_ATB_IDLE_STATES.has(battleSt.battleState)) return;
+  if (!_ATB_TICK_STATES.has(battleSt.battleState)) return;
   if (isVictoryBattleState()) return;
-  // Slice 4a (v1.7.438) — wall-clock ATB. Wait-mode pause is now automatic:
-  // 'ready' state doesn't tick anymore, so the player's gauge naturally
-  // holds at target while the menu is open. dt is unused by the new
-  // tickGauges but kept in the signature for caller stability.
   tickGauges(dt);
   // v1.7.444 — one-shot telemetry for server-auth timeout flips. tickGauges
   // sets `forcedReady=true` when it falls back to a local ready flip after

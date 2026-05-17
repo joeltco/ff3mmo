@@ -2,6 +2,28 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.455 — 2026-05-17
+
+### FF4 SNES canon — menu opens only when ready, no visible gauge, sub-menus pause everything
+
+Pulled the canonical battle flow from the [everything8215/ff4 disassembly](https://github.com/everything8215/ff4) (verified against [datacrystal RAM map](https://datacrystal.tcrf.net/wiki/Final_Fantasy_IV_(SNES)/RAM_map)):
+
+- `BattleMain @85d9` calls `DecTimers` each loop **only when `$38d9` and `$38da` are both zero**. Those flags are set during any blocking activity — menu, action animation, message display. When set, every timer freezes.
+- `$16ac` is Battle Speed → `BattleSpeedTbl` → frame counter `$3538`. Throttles tick rate; doesn't gate ticks.
+- FF4 SNES has no on-screen ATB gauge by design.
+
+Pre-fix our system was "Active mode + queueable commands": menu opened at battle-fade-in regardless of gauge state, gauges ticked through every state including sub-menus, gauge bar visible. Net effect — monsters filled while the player was in Item/Magic submenus and dispatched the moment the sub-menu closed, reading as "menu reset by enemy attack." Sloppy, not canon.
+
+Three changes to align:
+
+1. **Gauges tick only when truly idle.** New `_ATB_TICK_STATES = {'atb-idle', 'menu-open'}` in `src/battle-update.js`. Every other state — sub-menus, target-select, action animations, damage display, message strips — pauses all gauges. Mirrors FF4's `$38d9`/`$38da` wait-flag behavior. Active mode is preserved at the top-level menu (per v1.7.433 user choice — monsters can still interrupt while you're sitting on the main menu), but the moment you go into a sub-menu the world freezes.
+
+2. **Menu opens only when player gauge is ready.** Battle-fade-in now transitions to `atb-idle` instead of `menu-open`. Dispatch hub picks the player when their gauge fills and flips to `menu-open` then. After every action, `processNextTurn` yields to `atb-idle` (was conditional on `ps.hp > 0` → menu-open). Reverts v1.7.437's queueable-commands behavior.
+
+3. **No visible gauge bar.** `_drawPortraitATBBar` call commented out in `src/battle-draw-player.js`. Function body kept for reference. FF4 canon — players read battle pacing from the menu appearing, not from a bar.
+
+Sims green (atb-sim 43/43). No changes to the wire protocol.
+
 ## 1.7.454 — 2026-05-17
 
 ### Fix — Land Turtle sprite stuck after defeat + chest-open flicker

@@ -318,7 +318,10 @@ export function drawBattlePortrait() {
     if (isAttackPose) _drawPortraitWeapon(pxs, py, false);
   }
   _drawPortraitOverlays(pxs, py, isDefendPose, isItemUsePose, isNearFatal, isRunPose, isAttackPose, isHitPose, isVictoryPose);
-  _drawPortraitATBBar(pxs, py);
+  // v1.7.455 — gauge bar removed. FF4 SNES has no visible ATB gauge; the menu
+  // only opens when the unit is ready (see _ATB_TICK_STATES gate in
+  // battle-update.js). Function kept for reference but no longer rendered.
+  // _drawPortraitATBBar(pxs, py);
 }
 
 // ── Player ATB bar (below portrait) ───────────────────────────────────────
