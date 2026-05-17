@@ -307,6 +307,13 @@ function _drawPauseMagicList(ctx) {
   const fadedPal = _makeFadedPal(fadeStep);
   const list = getCastableKnownSpells(ps.jobIdx, ps.knownSpells);
   const costRightX = px + HUD_VIEW_W - 16;
+  // v1.7.447 — empty-state mirror of the battle panel's "No spells". A
+  // school-mismatched or freshly-debugged mage opens the menu and sees this
+  // instead of a blank list. X-backs out cleanly via the existing input path.
+  if (list.length === 0) {
+    drawText(ctx, px + 8, finalY + 12, _nameToBytes('No spells'), fadedPal);
+    return;
+  }
   // Mirror inventory's scroll math — Sage/dual-school jobs can know more
   // spells than the panel fits at 14 px per row.
   const maxVisible = Math.floor((HUD_VIEW_H - 16) / 14);
@@ -679,9 +686,10 @@ function _pauseInputMainMenu() {
 }
 
 // Pause-menu Magic submenu — opens the inventory state machine in 'magic' mode.
+// v1.7.447 — open even with an empty castable list. Render shows "No spells"
+// (see _drawPauseMagicList) so the user gets visible feedback that the submenu
+// opened but they haven't learned any school-matching spells yet.
 function _pauseInputMagicZ() {
-  const known = getCastableKnownSpells(ps.jobIdx, ps.knownSpells);
-  if (known.length === 0) { playSFX(SFX.ERROR); return; }
   playSFX(SFX.CONFIRM);
   pauseSt.menuMode = 'magic';
   pauseSt.magicCursor = 0;

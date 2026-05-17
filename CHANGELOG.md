@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.447 — 2026-05-17
+
+### Fix — Magic menus open with empty spell list (no silent Defend fallback)
+
+Reported (after debugging job-flip into White Mage with no learned spells): pause Magic option was a no-op (SFX.ERROR + bail), and the battle Magic slot silently fell through to Defend.
+
+Three changes:
+- **`src/battle-update.js#executeBattleCommand`** slot 1: drop the `&& castableKnown.length > 0` gate. Mage-class jobs (WM/BM/RM) always open the magic submenu, even with an empty filtered list. Non-mages still get Defend on slot 1 (FF3 canon — mages don't have Defend).
+- **`src/pause-menu.js#_pauseInputMagicZ`**: drop the empty-list early-return. Submenu always opens.
+- **`src/pause-menu.js#_drawPauseMagicList`**: render "No spells" empty-state, mirroring the existing battle-panel pattern at `src/battle-draw-menu.js:154`.
+
+Both submenus' input handlers were already empty-safe (Z press on undefined spellId → SFX.ERROR + return; X press → cancel-out). Just had to drop the gates.
+
 ## 1.7.446 — 2026-05-17
 
 ### Fix — overworld msg box bleeds into battle screen

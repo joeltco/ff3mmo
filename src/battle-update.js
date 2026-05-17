@@ -151,8 +151,12 @@ export function executeBattleCommand(index) {
     // Filter to spells the current job can actually cast (school gate).
     // E.g., a White Mage carrying Fire from a previous BM stint won't see
     // Fire in their battle menu — RM sees both.
+    // v1.7.447 — open the magic submenu even when the filtered list is
+    // empty. The empty-state render shows "No spells" so a job-flipped or
+    // unschooled mage sees the panel rather than silently falling through
+    // to Defend (mages don't have Defend in FF3 canon anyway).
     const castableKnown = (ps.knownSpells || []).filter(id => canCastSpell(ps.jobIdx, id));
-    if (isMage && castableKnown.length > 0) {
+    if (isMage) {
       // Silence gate — Silenced player can't pick Magic. SFX.ERROR + "Silenced"
       // strip; cursor stays on the slot so the player can re-pick or arrow over
       // to Item / Run. Items + Defend still work (NES: Silence only blocks
