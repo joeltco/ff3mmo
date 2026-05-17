@@ -4,6 +4,7 @@ import { PLAYER_POOL, CHAT_PHRASES, ROSTER_FADE_STEPS } from './data/players.js'
 import { selectCursor, saveSlots } from './save-state.js';
 import { _nesNameToString, _nameToBytes } from './text-utils.js';
 import { drawText, measureText, TEXT_WHITE } from './font-renderer.js';
+import { drawCursorFaded } from './hud-drawing.js';
 import { nesColorFade } from './palette.js';
 import { partyInviteSt } from './party-invite.js';
 import { mapSt } from './map-state.js';
@@ -625,6 +626,14 @@ export function drawChatTabs(ctx, fadeStep, drawHudBox) {
       const label = _nameToBytes(CHAT_TABS[tabIdx]);
       const lw = measureText(label);
       drawText(ctx, tx + Math.floor((w - lw) / 2), TAB_BAR_Y + 8, label, pal);
+    }
+
+    // v1.7.448 — solid cursor at the active tab's left edge while in tab
+    // select mode. Sits inside the box, vertically centered on the label.
+    // Stays put while the label blinks so the focus indicator is always
+    // visible. Cursor sprite is 8×8.
+    if (isActive && tabSelectMode) {
+      drawCursorFaded(tx + 2, TAB_BAR_Y + 8, tabFade);
     }
   }
 

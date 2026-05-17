@@ -879,10 +879,18 @@ export function handleRosterInput() {
       setTabSelectMode(false);
       inputSt.rosterState = 'none';
       playSFX(SFX.CONFIRM);
-    } else if (inputSt.rosterState === 'none' && battleSt.battleState === 'none' && pauseSt.state === 'none' && transSt.state === 'none' && !mapSt.shakeActive && !mapSt.starEffect && !mapSt.moving && msgState.state === 'none' && getRosterVisible().length > 0) {
-      inputSt.rosterState = 'browse';
-      inputSt.rosterCursor = 0;
-      inputSt.rosterScroll = 0;
+    } else if (inputSt.rosterState === 'none' && battleSt.battleState === 'none' && pauseSt.state === 'none' && transSt.state === 'none' && !mapSt.shakeActive && !mapSt.starEffect && !mapSt.moving && msgState.state === 'none') {
+      // v1.7.448 — if the roster is empty, skip the browse step and go
+      // straight to tab select on the first S press. Pre-fix this branch
+      // gated on getRosterVisible().length > 0 so empty-roster players
+      // couldn't enter tab select at all.
+      if (getRosterVisible().length > 0) {
+        inputSt.rosterState = 'browse';
+        inputSt.rosterCursor = 0;
+        inputSt.rosterScroll = 0;
+      } else {
+        setTabSelectMode(true);
+      }
       playSFX(SFX.CONFIRM);
     } else if (inputSt.rosterState === 'browse') {
       // S from roster browse → tab select

@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.448 — 2026-05-17
+
+### Chat tab select — cursor indicator + empty-roster access
+
+Two follow-ups to the tab select UX:
+
+- **Cursor on the active tab.** `drawChatTabs` now renders the standard 8×8 menu cursor at the active tab's left edge while `tabSelectMode` is on. Stays put while the label blinks so focus is always clear.
+- **Empty-roster access.** Pre-fix, S press from roster=none gated on `getRosterVisible().length > 0` — empty-roster players couldn't enter tab select at all (both S presses were no-ops). Now an empty roster skips the browse step and goes straight to tab select on the first press; non-empty roster keeps the existing two-tap browse → tab select flow.
+
 ## 1.7.447 — 2026-05-17
 
 ### Fix — Magic menus open with empty spell list (no silent Defend fallback)
