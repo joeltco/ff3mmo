@@ -1,8 +1,8 @@
 # Multiplayer
 
-**Live as of v1.7.425.** Open `ff3mmo.com` in two browsers with two accounts. Same location → see each other in the roster panel. Chat, party invites, PvP duels, low-HP roster pose, give-item-to-roster, party co-op random encounters, and Battle Assist (any roster player can join an in-progress fight) all wire-driven. Fakes are off (`PLAYER_POOL` exported empty in `src/data/players.js`).
+**Live as of v1.7.427.** Open `ff3mmo.com` in two browsers with two accounts. Same location → see each other in the roster panel. Chat, party invites, PvP duels, low-HP roster pose, give-item-to-roster, party co-op random encounters, and Battle Assist (any roster player can join an in-progress fight) all wire-driven. Fakes are off (`PLAYER_POOL` exported empty in `src/data/players.js`).
 
-This doc is the architecture overview + recovery cheatsheet. For the per-deploy changelog of how it got built, see `CHANGELOG.md` 1.7.366 → 1.7.425.
+This doc is the architecture overview + recovery cheatsheet. For the per-deploy changelog of how it got built, see `CHANGELOG.md` 1.7.366 → 1.7.427.
 
 ## Architecture
 
@@ -259,3 +259,13 @@ The audit series that landed in v1.7.20x–v1.7.217 (`docs/SAVE-STATE-AUDIT.md`,
 ## v1.7.418-v1.7.425 closeout (co-op + Battle Assist, 2026-05-16)
 
 Eight deploys built the random-encounter co-op layer on top of the PvP wire pattern, plus the open Battle Assist system that lets any roster player join an in-progress fight regardless of party. All actions (attack / defend / magic / item / run / skip) replay across the wire, all RNG consumers consistent across clients (canonical actor order + per-turn reseed + Math.random→rand conversion in `battle-enemy.js`), all damage / status state synced including mid-battle joiner snapshot, side-channel fade-in for new allies, 45 s timeout watchdog for dropped peers, double-tap dedup at server + target. Wire-sim regression suite is 43/43 (4 PvP + 5 encounter + 4 assist tests added in the closeout). Read `CHANGELOG.md` 1.7.418 → 1.7.425 entries for per-deploy detail.
+
+## v1.7.426-v1.7.427 post-launch hardening (2026-05-16)
+
+Four parallel audits across the wire-driven visual + state layer (sprite poses, battle animations, predicate coverage, spell-ID sourcing) found the layer mostly clean end-to-end. The agent findings that turned out to be real reduced to: per-kind WS rate-limit gap, identity-spoofable peer list in the Battle Assist snapshot, and three LOW-severity visual cleanups (held-key leak on `ally-wire-wait`, dead `isOppVictory` branches in `pvp-drawing.js`, sweat overlay at full opacity during Battle Assist fade-in). Two deploys:
+
+**v1.7.426** — Hostile-client hardening. (a) **Per-kind rate-limit buckets** in `ws-presence.js` (`_rateAllowKind` + `PER_KIND_RATES`). The connection-wide token bucket (60/20) is shared across kinds, so a user spamming 60 `chat` frames could starve their own `pvp-action` / `encounter-action`. New per-kind caps for user-action-driven kinds: `chat` 20/5, `encounter-assist-request` / `encounter-start` / `give-item` / `party-invite` 6/1. Poll-driven frames (`update`, `pvp-action`, `encounter-action`) stay global-bucket-only. (b) **Identity-pinned `peers` in `encounter-assist-snapshot`** — server validates every `peer.userId` is in `_connected` + helloed and overwrites identity fields (`name` / `jobIdx` / `level` / `palIdx`) with the server's trusted profile; live battle stats (hp, atk, def, weapon, spells) pass through since the server doesn't track in-battle mutations. Drops unknown userIds + joiner-in-own-peers. (c) Dead `console.warn` removed from the PvP queue-reorder path in `src/pvp.js` (was a v1.7.406 debugging leftover).
+
+**v1.7.427** — Visual cleanup. (a) Action keys drained when `battleState === 'ally-wire-wait'` so a held key can't fire a menu command on the next state transition. (b) `isOppVictory = false` literal + 3 dead branches deleted from `pvp-drawing.js` (PvP battles end on death — opponent never enters a victory pose visible to the survivor). (c) Sweat overlay gated on `fadeStep === 0` so it doesn't float at full opacity while a Battle-Assist joiner's body fades in.
+
+Wire-sim added 4 tests (per-kind chat cap, per-kind assist-request cap, snapshot identity-pin + spoof rejection, joiner-in-own-peers drop) and rebalanced one existing test for the new chat cap. Suite is now 47/47.
