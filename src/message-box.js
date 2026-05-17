@@ -61,6 +61,23 @@ export function dismissMsgBox() {
   msgState.timer = 0;
 }
 
+// v1.7.446 — unconditional hide. Use when a state transition (battle entry,
+// roster fade, etc.) needs to drop any in-flight message regardless of which
+// phase it's in (slide-in / hold / page-scroll / slide-out). `dismissMsgBox`
+// only handles 'hold'; this one wipes everything. No slide-out animation —
+// the caller's wipe usually covers the visual.
+export function forceCloseMsgBox() {
+  msgState.state     = 'none';
+  msgState.timer     = 0;
+  msgState.bytes     = null;
+  msgState.onClose   = null;
+  msgState.onAdvance = null;
+  msgState.isPrompt  = false;
+  msgState.onAccept  = null;
+  msgState.onDecline = null;
+  msgState.scrollFromBytes = null;
+}
+
 // Smooth swap: when a message is already on screen and held, replace
 // the text + onClose without re-animating slide-in. Falls back to
 // `showMsgBox` if no message is currently held — caller doesn't need

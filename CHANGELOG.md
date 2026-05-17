@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.446 — 2026-05-17
+
+### Fix — overworld msg box bleeds into battle screen
+
+Reported: "Found Potion!" stayed visible after a random encounter triggered mid-chest-open.
+
+Cause: `drawMsgBox` runs every frame regardless of `battleSt.battleState`. The battle-spawn paths (`startRandomEncounter`, the encounter-invite handler, the assist-snapshot handler) didn't clear the msg box, so any in-flight overworld message sat on top of the battle wipe and persisted into the encounter view. `dismissMsgBox` only handles the `'hold'` phase — a box in `'slide-in'` (just popped) wouldn't have dismissed either way.
+
+Fix: new `forceCloseMsgBox()` in `src/message-box.js` resets msg state to `'none'` unconditionally (no slide-out animation; the battle wipe covers the visual). Called at the top of `startRandomEncounter` and right before the `'flash-strobe'` transition in both wire-driven battle-spawn handlers.
+
+Boss path (`startBattle`) already overwrites via its own `showMsgBox(BATTLE_ROAR)`, so it stays as-is.
+
 ## 1.7.445 — 2026-05-17
 
 ### FF4 spell cast time (charge) + Active-mode doc fix

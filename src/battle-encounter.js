@@ -1,6 +1,7 @@
 // Random encounter spawning — extracted from game.js
 
 import { battleSt } from './battle-state.js';
+import { forceCloseMsgBox } from './message-box.js';
 import { addBattleATBAlly } from './battle-update.js';
 import { MONSTERS } from './data/monsters.js';
 import { deriveMonsterAgi } from './atb.js';
@@ -84,6 +85,10 @@ setNetPVPEncounterNoneHandler(() => {
 export function startRandomEncounter() {
   battleSt.isRandomEncounter = true;
   inputSt.battleActionCount = 0;
+  // v1.7.446 — drop any in-flight overworld msg box ("Found Potion!" from a
+  // chest, NPC dialogue, etc.) so it doesn't bleed through the battle wipe
+  // and sit on top of the encounter view.
+  forceCloseMsgBox();
 
   // World-map encounter zone is split by region:
   //   - Ur valley (x=93..96, y=34..44, ~31 walkable tiles between Altar Cave
@@ -270,6 +275,8 @@ setNetEncounterInviteHandler((msg) => {
   // = peers[0] (canonical sort puts host first). v1.7.420.
   const hostName = (peerList[0] && peerList[0].name) || 'Party';
   try { addChatMessage('* Joined ' + hostName + "'s battle!", 'system'); } catch { /* chat optional */ }
+  // v1.7.446 — drop any overworld msg box before the battle wipe.
+  forceCloseMsgBox();
   battleSt.battleState = 'flash-strobe';
   battleSt.battleTimer = 0;
   playSFX(SFX.BATTLE_SWIPE);
@@ -462,6 +469,8 @@ setNetEncounterAssistSnapshotHandler((msg) => {
   }
   const hostName = (peerList[0] && peerList[0].name) || 'Party';
   try { addChatMessage('* Assisted ' + hostName + "'s battle!", 'system'); } catch { /* chat optional */ }
+  // v1.7.446 — drop any overworld msg box before the battle wipe.
+  forceCloseMsgBox();
   battleSt.battleState = 'flash-strobe';
   battleSt.battleTimer = 0;
   playSFX(SFX.BATTLE_SWIPE);
