@@ -32,6 +32,11 @@ import { canCastBasic, canCastAny, pickHealTarget, pickPoisonedTarget,
          AI_OFFENSIVE_GATE, AI_ITEM_GATE } from './combatant-ai.js';
 import { markFilling as _atbMarkFilling, markActing as _atbMarkActing } from './atb.js';
 import { emitAtbFillingSync } from './encounter-wire.js';
+import { sendNetPVPAtbSync } from './net.js';
+
+function _sendPVPAtbSync(unitKind, allyIdx, atMs) {
+  sendNetPVPAtbSync({ unitKind, allyIdx: allyIdx | 0, atMs: Number(atMs) });
+}
 
 function _playerName() { return saveSlots[selectCursor]?.name || null; }
 
@@ -166,6 +171,17 @@ export function _resetLastDispatched() {
     } else if (battleSt.encounterIsHost && battleSt.encounterMonsters) {
       const idx = battleSt.encounterMonsters.indexOf(_lastDispatchedActor);
       if (idx >= 0) emitAtbFillingSync('monster', idx, atMs);
+    }
+  }
+  // Slice 5 (v1.7.442) — same idea for PvP. Locally-owned = ps + our
+  // battleAllies. Partner-owned (pvpOpponentStats + pvpEnemyAllies) is
+  // their problem to emit; we apply via setNetPVPAtbSyncHandler.
+  if (pvpSt.isWirePVP) {
+    if (_lastDispatchedActor === ps) {
+      _sendPVPAtbSync('player', -1, atMs);
+    } else {
+      const allyIdx = battleSt.battleAllies.indexOf(_lastDispatchedActor);
+      if (allyIdx >= 0) _sendPVPAtbSync('ally', allyIdx, atMs);
     }
   }
   _lastDispatchedActor = null;

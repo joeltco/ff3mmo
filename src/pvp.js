@@ -14,7 +14,9 @@ import { playSFX, stopSFX, SFX, pauseMusic, playTrack, TRACKS } from './music.js
 import { rollHits, calcPotentialHits, BOSS_HIT_RATE, GOBLIN_HIT_RATE, summarizeHits, isLeftHandHit } from './battle-math.js';
 import { reseedFromEntropy, seed as seedRng, rand } from './rng.js';
 import { setNetPVPActionHandler, sendNetPVPEnd, sendNetPVPResult,
-         setNetPVPAllyJoinHandler, getMyUserId } from './net.js';
+         setNetPVPAllyJoinHandler, getMyUserId,
+         setNetPVPAtbSyncHandler } from './net.js';
+import { markFilling as _atbMarkFilling } from './atb.js';
 import { dispatchDelta } from './deltas.js';
 import { canCastBasic, canCastAny, pickHealTarget, pickPoisonedTarget,
          pickRandomLivingTarget, pickOffensiveSpell, rollOffensiveDamage,
@@ -211,6 +213,28 @@ setNetPVPAllyJoinHandler((msg) => {
 const _wireClosingStates = new Set([
   'enemy-box-close', 'encounter-box-close', 'run-success', 'run-fail',
 ]);
+
+// Slice 5 (v1.7.442) — partner's gauge state transition arrives. Apply
+// markFilling on the corresponding partner-owned unit so both clients'
+// gauges reset from the same wall-clock atMs anchor.
+//   unitKind: 'player' → pvpOpponentStats
+//   unitKind: 'ally', allyIdx → pvpEnemyAllies[allyIdx]
+setNetPVPAtbSyncHandler((msg) => {
+  if (!msg || !pvpSt.isWirePVP) return;
+  const atMs = Number(msg.atMs);
+  if (!Number.isFinite(atMs) || atMs <= 0) return;
+  let ref = null;
+  if (msg.unitKind === 'player') {
+    ref = pvpSt.pvpOpponentStats;
+  } else if (msg.unitKind === 'ally') {
+    const i = msg.allyIdx | 0;
+    if (i >= 0 && i < pvpSt.pvpEnemyAllies.length) {
+      ref = pvpSt.pvpEnemyAllies[i] || null;
+    }
+  }
+  if (!ref || !ref._atb) return;
+  _atbMarkFilling(ref, atMs);
+});
 
 setNetPVPActionHandler((msg) => {
   if (!pvpSt.isWirePVP) return;

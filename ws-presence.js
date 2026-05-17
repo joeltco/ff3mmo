@@ -571,6 +571,30 @@ function _handleMessage(entry, msg) {
       _send(partner.ws, { type: 'pvp-ally-join', profile });
       return;
     }
+    case 'pvp-atb-sync': {
+      // Slice 5 (v1.7.442) — PvP gauge wire-sync. Mirrors the co-op
+      // `atb-sync` relay but routes to the single PvP partner. Lets both
+      // clients anchor each unit's gauge to the same atMs so visible bar
+      // timing converges without going through a server-side tick loop
+      // (PvP keeps client-driven dispatch to minimize duel latency).
+      if (!entry.helloed) return;
+      const partnerId = _pvpPartners.get(entry.userId);
+      if (!partnerId) return;
+      const partner = _connected.get(partnerId);
+      if (!partner || partner.ws.readyState !== 1) return;
+      const unitKind = String(parsed.unitKind || '').slice(0, 16);
+      const allyIdx = parsed.allyIdx | 0;
+      const atMs = Number(parsed.atMs);
+      if (!unitKind || !Number.isFinite(atMs) || atMs <= 0) return;
+      _send(partner.ws, {
+        type:    'pvp-atb-sync',
+        userId:  entry.userId,
+        unitKind,
+        allyIdx,
+        atMs,
+      });
+      return;
+    }
     case 'pvp-action': {
       // MP Step 4 part 2 — relay the player's chosen action to their PvP
       // partner so the partner's client can drive the opponent's turn from

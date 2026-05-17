@@ -146,6 +146,14 @@ function _handleMessage(data) {
         catch (e) { console.warn('[net] pvp-action handler error', e); }
       }
       return;
+    case 'pvp-atb-sync':
+      // v1.7.442 — opponent's gauge state transition. Apply markFilling
+      // on the partner's unit ref (pvpOpponentStats or pvpEnemyAllies[idx]).
+      if (_onPVPAtbSync) {
+        try { _onPVPAtbSync(msg); }
+        catch (e) { console.warn('[net] pvp-atb-sync handler error', e); }
+      }
+      return;
     case 'pvp-ally-join':
       if (_onPVPAllyJoin) {
         try { _onPVPAllyJoin(msg); }
@@ -437,6 +445,20 @@ export function sendNetPVPResult(outcome) {
 
 export function setNetPVPActionHandler(fn) {
   _onPVPAction = typeof fn === 'function' ? fn : null;
+}
+
+// Slice 5 (v1.7.442) — PvP gauge wire-sync. Owner emits when a locally-
+// owned unit (ps + battleAllies) finishes its action animation; partner
+// applies markFilling at the same atMs anchor. PvP stays client-driven
+// for dispatch (low duel latency), this just keeps the visible bars in
+// step across both clients.
+let _onPVPAtbSync = null;
+export function sendNetPVPAtbSync(payload) {
+  if (!_helloed) return false;
+  return _send({ type: 'pvp-atb-sync', ...payload });
+}
+export function setNetPVPAtbSyncHandler(fn) {
+  _onPVPAtbSync = typeof fn === 'function' ? fn : null;
 }
 
 // Ally-join — sender's `_tryJoinPlayerAlly` picked an ally for their team.

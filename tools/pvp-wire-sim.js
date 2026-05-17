@@ -424,6 +424,46 @@ async function suiteWire() {
     await new Promise(r => setTimeout(r, 40));
   });
 
+  // Slice 5 — pvp-atb-sync wire-sync of gauge anchors to PvP partner.
+  await asyncTest('pvp-atb-sync relays unitKind+allyIdx+atMs to partner', async () => {
+    _testHooks.resetState();
+    const A = await connectClient(port, 1080, { ...baseProfile, name: 'A_pvpAtb' });
+    const B = await connectClient(port, 1081, { ...targetProfile, name: 'B_pvpAtb' });
+    _testHooks.state.pvpPartners.set(1080, 1081);
+    _testHooks.state.pvpPartners.set(1081, 1080);
+    const got = once(B, m => m.type === 'pvp-atb-sync', 500);
+    A.send(JSON.stringify({
+      type:     'pvp-atb-sync',
+      unitKind: 'ally',
+      allyIdx:  2,
+      atMs:     1700000000000,
+    }));
+    const m = await got;
+    assertEqual(m.userId, 1080, 'sender userId not attached');
+    assertEqual(m.unitKind, 'ally');
+    assertEqual(m.allyIdx, 2);
+    assertEqual(m.atMs, 1700000000000, 'atMs not preserved (32-bit truncation guard)');
+    A.close(); B.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  await asyncTest('pvp-atb-sync drops when atMs missing', async () => {
+    _testHooks.resetState();
+    const A = await connectClient(port, 1082, { ...baseProfile, name: 'A_pvpAtb2' });
+    const B = await connectClient(port, 1083, { ...targetProfile, name: 'B_pvpAtb2' });
+    _testHooks.state.pvpPartners.set(1082, 1083);
+    _testHooks.state.pvpPartners.set(1083, 1082);
+    let relayed = false;
+    const sub = (e) => { try { const m = JSON.parse(e.data); if (m.type === 'pvp-atb-sync') relayed = true; } catch {} };
+    B.addEventListener('message', sub);
+    A.send(JSON.stringify({ type: 'pvp-atb-sync', unitKind: 'player', allyIdx: -1 }));
+    await new Promise(r => setTimeout(r, 80));
+    B.removeEventListener('message', sub);
+    assertTrue(!relayed, 'pvp-atb-sync with no atMs was relayed (should drop)');
+    A.close(); B.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
   // ── #11 stale-search cleanup on location change ─────────────────────────
   await asyncTest('#11 location change drops outgoing search', async () => {
     _testHooks.resetState();

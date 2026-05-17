@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.442 — 2026-05-17
+
+### ATB slice 5 — PvP gauge wire-sync (lockstep gauges across duel)
+
+Brings PvP duels into the same lockstep gauge model that co-op got in slice 4b. Locally-owned units (player + battleAllies) emit `pvp-atb-sync {unitKind, allyIdx, atMs}` when their action animation completes (markFilling fires). Partner receives → applies markFilling on the mirror unit (pvpOpponentStats for kind='player'; pvpEnemyAllies[allyIdx] for kind='ally') with the sender's atMs anchor.
+
+**Stays client-driven for dispatch** — PvP doesn't go server-arbitrated (slice 4c/4d equivalent). Reason: an RTT round-trip on every duel turn would hurt the duel feel. Lockstep RNG already keeps damage/state matched; this slice only addresses the visible gauge drift (up to ~200ms over long fights pre-fix).
+
+- **ws-presence.js** — new `pvp-atb-sync` case, partner-pair routed via `_pvpPartners`. `atMs` validated as a finite positive Number (don't truncate to int32).
+- **net.js** — `sendNetPVPAtbSync` / `setNetPVPAtbSyncHandler` + message-dispatch case.
+- **pvp.js** — receive handler resolves the partner-owned ref (opp for 'player', enemy-ally[i] for 'ally') and calls `markFilling(ref, atMs)`.
+- **battle-turn.js#_resetLastDispatched** — emit hook mirrors the co-op branch: when `pvpSt.isWirePVP`, ps → 'player' emit; local battleAlly → 'ally' emit with index.
+- **pvp-wire-sim.js** — 54/54 (2 new tests: pvp-atb-sync relays unitKind+allyIdx+atMs; drops when atMs missing).
+
+Solo + co-op untouched. PvP duels now match co-op's lockstep guarantee at the gauge level.
+
 ## 1.7.441 — 2026-05-17
 
 ### ATB slice 4d — clients defer ready flip to server (server-arbitrated co-op)
