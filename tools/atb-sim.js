@@ -398,6 +398,60 @@ test('deriveMonsterAgi: handles missing fields', () => {
 
 // ── Cross-scenario: 4-unit battle ──────────────────────────────────────────
 
+// ── Spell cast time (v1.7.445) ─────────────────────────────────────────────
+
+test('castTime: markFilling with castTimeRa extends target', () => {
+  const p = {};
+  initATB([{ ref: p, kind: 'player', agi: 10 }]);  // RA=5
+  // Default fill: 5 × 333 = 1665ms.
+  advance(1665);
+  assert(isReady(p), 'normal fill ready at 1665ms');
+  markActing(p);
+  // Cast a spell with charge=6 — next fill cycle should be (5+6)×333 = 3663ms.
+  markFilling(p, _mockNow, 6);
+  assertEq(p._atb.castTimeRa, 6, 'castTimeRa stashed');
+  assertEq(p._atb.state, 'filling', 'back to filling');
+  advance(1665);
+  assert(!isReady(p), 'not ready yet — cast charge still adding delay');
+  advance(2000);
+  assert(isReady(p), 'ready after total (5+6)×333 ≈ 3665ms');
+});
+
+test('castTime: omitted on markFilling = 0 (no charge)', () => {
+  const p = {};
+  initATB([{ ref: p, kind: 'player', agi: 10 }]);
+  advance(1665);
+  markActing(p);
+  // Previous cycle had a charge — now we cast a non-spell action (no castTime).
+  markFilling(p, _mockNow);  // no castTimeRa arg → defaults to 0
+  assertEq(p._atb.castTimeRa, 0, 'castTimeRa cleared on fresh markFilling');
+  advance(1665);
+  assert(isReady(p), 'normal fill again');
+});
+
+test('castTime: previous cycle charge does NOT carry over', () => {
+  const p = {};
+  initATB([{ ref: p, kind: 'player', agi: 10 }]);
+  // Cast with charge 10, finish, then immediately attack (no charge).
+  markActing(p);
+  markFilling(p, _mockNow, 10);
+  advance(15 * 333);  // way past target
+  markActing(p);
+  markFilling(p, _mockNow);  // attack — no charge
+  advance(1665);
+  assert(isReady(p), 'attack after spell fills at base RA, not RA+10');
+});
+
+test('castTime: gauge pct reflects extended target', () => {
+  const p = {};
+  initATB([{ ref: p, kind: 'player', agi: 10 }]);  // RA=5
+  markActing(p);
+  markFilling(p, _mockNow, 5);  // (5+5)×333 = 3330ms target
+  advance(1665);  // halfway through extended target
+  const pct = getGaugePct(p);
+  assertNear(pct, 0.5, 0.05, 'gauge halfway through extended target');
+});
+
 // ── Server-auth + timeout fallback (v1.7.444) ──────────────────────────────
 
 test('server-auth: tickGauges does not flip filling→ready locally', () => {

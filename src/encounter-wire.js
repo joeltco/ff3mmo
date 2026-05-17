@@ -112,15 +112,23 @@ setNetAtbSyncHandler((msg) => {
     }
   }
   if (!ref || !ref._atb) return;
-  markFilling(ref, atMs);
+  // v1.7.445 — castTimeRa rides the wire so a peer's long-cast spell shows
+  // the same extended fill bar locally. Clamped 0-99 (FF4 max).
+  const castTimeRa = Math.max(0, Math.min(99, msg.castTimeRa | 0));
+  markFilling(ref, atMs, castTimeRa);
 });
 
 // Emit a markFilling sync event for a locally-owned unit. Caller decides
 // ownership via `kind` ('player' for ps; 'monster' if encounterIsHost).
 // No-op outside co-op encounters or when wire isn't ready.
-export function emitAtbFillingSync(unitKind, monsterIdx, atMs) {
+export function emitAtbFillingSync(unitKind, monsterIdx, atMs, castTimeRa) {
   if (!battleSt.isWireEncounter) return;
-  sendNetAtbSync({ unitKind, monsterIdx: monsterIdx | 0, atMs: Number(atMs) });
+  sendNetAtbSync({
+    unitKind,
+    monsterIdx: monsterIdx | 0,
+    atMs: Number(atMs),
+    castTimeRa: Math.max(0, Math.min(99, (castTimeRa | 0) || 0)),
+  });
 }
 
 // Slice 4d — receive server's authoritative ready event and apply

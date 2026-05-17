@@ -22,7 +22,7 @@ import { startSpellCast } from './spell-cast.js';
 import { applyMagicHeal } from './combatant-cast.js';
 import { dispatchDelta } from './deltas.js';
 import { sendNetPVPAction } from './net.js';
-import { SPELLS } from './data/spells.js';
+import { SPELLS, tagCasterCastTime } from './data/spells.js';
 import { selectCursor, saveSlots, saveSlotsToDB } from './save-state.js';
 import { removeItem } from './inventory.js';
 import { canCastBasic, canCastAny, pickHealTarget, pickPoisonedTarget,
@@ -34,8 +34,13 @@ import { markFilling as _atbMarkFilling, markActing as _atbMarkActing } from './
 import { emitAtbFillingSync } from './encounter-wire.js';
 import { sendNetPVPAtbSync } from './net.js';
 
-function _sendPVPAtbSync(unitKind, allyIdx, atMs) {
-  sendNetPVPAtbSync({ unitKind, allyIdx: allyIdx | 0, atMs: Number(atMs) });
+function _sendPVPAtbSync(unitKind, allyIdx, atMs, castTimeRa) {
+  sendNetPVPAtbSync({
+    unitKind,
+    allyIdx: allyIdx | 0,
+    atMs: Number(atMs),
+    castTimeRa: Math.max(0, Math.min(99, (castTimeRa | 0) || 0)),
+  });
 }
 
 function _playerName() { return saveSlots[selectCursor]?.name || null; }
@@ -160,17 +165,25 @@ export function _resetLastDispatched() {
     if (headActor === _lastDispatchedActor) return;
   }
   const atMs = Date.now();
-  _atbMarkFilling(_lastDispatchedActor, atMs);
+  // v1.7.445 — FF4 spell cast time. The cast-initiation site stashed the
+  // charge value on the actor; consume it now and pass to markFilling so
+  // the next gauge cycle takes (RA + castTime) ticks. Cleared after read
+  // so a non-cast action next turn gets a normal-length fill.
+  const castTimeRa = (_lastDispatchedActor._nextCastTimeRa | 0) || 0;
+  _lastDispatchedActor._nextCastTimeRa = 0;
+  _atbMarkFilling(_lastDispatchedActor, atMs, castTimeRa);
   // Slice 4b (v1.7.439) — emit wire-sync for locally-owned units in co-op
   // encounters so partner clients reset their gauge for this unit at the
   // same atMs. Player is always ours; monsters are ours if we're the host.
   // Wire-driven allies belong to the partner — they emit, we don't.
+  // v1.7.445 — also relay castTimeRa so partner gauges show the same
+  // post-cast charge delay.
   if (battleSt.isWireEncounter) {
     if (_lastDispatchedActor === ps) {
-      emitAtbFillingSync('player', -1, atMs);
+      emitAtbFillingSync('player', -1, atMs, castTimeRa);
     } else if (battleSt.encounterIsHost && battleSt.encounterMonsters) {
       const idx = battleSt.encounterMonsters.indexOf(_lastDispatchedActor);
-      if (idx >= 0) emitAtbFillingSync('monster', idx, atMs);
+      if (idx >= 0) emitAtbFillingSync('monster', idx, atMs, castTimeRa);
     }
   }
   // Slice 5 (v1.7.442) — same idea for PvP. Locally-owned = ps + our
@@ -178,10 +191,10 @@ export function _resetLastDispatched() {
   // their problem to emit; we apply via setNetPVPAtbSyncHandler.
   if (pvpSt.isWirePVP) {
     if (_lastDispatchedActor === ps) {
-      _sendPVPAtbSync('player', -1, atMs);
+      _sendPVPAtbSync('player', -1, atMs, castTimeRa);
     } else {
       const allyIdx = battleSt.battleAllies.indexOf(_lastDispatchedActor);
-      if (allyIdx >= 0) _sendPVPAtbSync('ally', allyIdx, atMs);
+      if (allyIdx >= 0) _sendPVPAtbSync('ally', allyIdx, atMs, castTimeRa);
     }
   }
   _lastDispatchedActor = null;
@@ -613,6 +626,7 @@ function _tryAllyCure(ally, allyIdx) {
   queueBattleMsg(ally.name ? _nameToBytes(ally.name) : BATTLE_ALLY);
   replaceBattleMsg(getSpellNameShrinesClean(SPELL_CURE));
   playSFX(SFX.MAGIC_CAST);
+  tagCasterCastTime(ally, SPELL_CURE);
   battleSt.battleState = 'ally-magic-cast';
   battleSt.battleTimer = 0;
   return true;
@@ -737,6 +751,7 @@ function _applyWireEncounterActionForAlly(allyIdx, ally, action) {
     queueBattleMsg(ally.name ? _nameToBytes(ally.name) : BATTLE_ALLY);
     replaceBattleMsg(getSpellNameShrinesClean(spellId));
     playSFX(SFX.MAGIC_CAST);
+    tagCasterCastTime(ally, spellId, isItem);
     battleSt.battleState = 'ally-magic-cast';
     battleSt.battleTimer = 0;
     return true;
@@ -821,6 +836,7 @@ function _tryAllyPoisona(ally, allyIdx) {
   queueBattleMsg(ally.name ? _nameToBytes(ally.name) : BATTLE_ALLY);
   replaceBattleMsg(getSpellNameShrinesClean(SPELL_POISONA));
   playSFX(SFX.MAGIC_CAST);
+  tagCasterCastTime(ally, SPELL_POISONA);
   battleSt.battleState = 'ally-magic-cast';
   battleSt.battleTimer = 0;
   return true;
@@ -891,6 +907,7 @@ function _tryAllyOffensiveCast(ally, allyIdx) {
   queueBattleMsg(ally.name ? _nameToBytes(ally.name) : BATTLE_ALLY);
   replaceBattleMsg(getSpellNameShrinesClean(spellId));
   playSFX(SFX.MAGIC_CAST);
+  tagCasterCastTime(ally, spellId);
   battleSt.battleState = 'ally-magic-cast';
   battleSt.battleTimer = 0;
   return true;
@@ -941,6 +958,7 @@ function _tryAllyItem(ally, allyIdx) {
   queueBattleMsg(ally.name ? _nameToBytes(ally.name) : BATTLE_ALLY);
   replaceBattleMsg(getSpellNameShrinesClean(spellSentinel));
   playSFX(SFX.CURE);
+  tagCasterCastTime(ally, spellSentinel, true);  // item-use → charge 0
   battleSt.battleState = 'ally-magic-cast';
   battleSt.battleTimer = 0;
   return true;

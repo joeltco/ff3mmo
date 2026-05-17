@@ -15,9 +15,13 @@
 // State flow:
 //   filling → ready → acting → (action animates) → filling (markFilling)
 //
-// Wait mode (v1.7.428→4a): now automatic — 'ready' state doesn't tick, so
-// the player's gauge naturally holds at target while menu is open. Other
-// units still in 'filling' continue advancing toward ready.
+// Mode (v1.7.428 onward): **Active mode**, not Wait mode. FF4 SNES is locked
+// to Wait mode (sub-menus pause every gauge including enemies). We tick
+// monsters' and allies' gauges during the player's menu via the dispatch
+// hub's `pickReadyActor({skipPlayer:true})` branch. Deliberate v1.7.433
+// decision — Wait mode would let MMO players camp menus indefinitely.
+// The player's own gauge naturally holds at target ('ready' state doesn't
+// tick), which is the only Wait-mode-like behavior we preserve.
 //
 // speedMod is 1.0 by default. Haste/Slow wire to it without touching RA —
 // matches FF4's "RA does not change in battle" invariant.
@@ -115,6 +119,7 @@ export function addATBUnit({ ref, kind, agi }) {
   //   readyAtMs = wall time when state flipped to 'ready' (FIFO dispatch key)
   ref._atb = {
     ra, speedMod: 1.0,
+    castTimeRa: 0,  // v1.7.445 — spell post-cast charge; added to next fill target
     elapsedMs: 0, state: 'filling',
     startedFillingAtMs: _now(),
     readyAtMs: 0,
@@ -123,7 +128,12 @@ export function addATBUnit({ ref, kind, agi }) {
 }
 
 function _fillTargetMs(atb) {
-  return atb.ra * TICK_MS * atb.speedMod;
+  // v1.7.445 — FF4 spell cast time / charge. After a spell action, markFilling
+  // sets castTimeRa to the spell's charge value; the next fill cycle takes
+  // (RA + castTime) ticks. Reset on the next markFilling (each call overwrites
+  // — callers that don't pass castTimeRa get 0 and a normal-length fill).
+  const charge = atb.castTimeRa | 0;
+  return (atb.ra + charge) * TICK_MS * atb.speedMod;
 }
 
 export function clearATB() {
@@ -246,16 +256,19 @@ export function markReady(ref, atMs) {
   atb.readyAtMs = (typeof atMs === 'number') ? atMs : _now();
 }
 
-// Reset a unit to filling from zero. Slice 4b will accept an `atMs`
-// argument so wire-sync events can anchor the reset to a partner's
-// timestamp; for now it defaults to local _now().
-export function markFilling(ref, atMs) {
+// Reset a unit to filling from zero. `atMs` anchors the reset to a wall-
+// clock instant (wire-sync uses this so partners line up on the same
+// startedFillingAtMs). `castTimeRa` (v1.7.445) is the FF4 spell charge —
+// extra ticks added to THIS fill cycle's target. Defaults to 0; the
+// previous cycle's charge does NOT carry over (each markFilling overwrites).
+export function markFilling(ref, atMs, castTimeRa) {
   if (!ref || !ref._atb) return;
   const t = (typeof atMs === 'number') ? atMs : _now();
   ref._atb.startedFillingAtMs = t;
   ref._atb.elapsedMs = 0;
   ref._atb.readyAtMs = 0;
   ref._atb.state = 'filling';
+  ref._atb.castTimeRa = (typeof castTimeRa === 'number' && castTimeRa > 0) ? (castTimeRa | 0) : 0;
 }
 
 // Set speed modifier — Haste/Slow will call this. >1.0 slows (longer fill

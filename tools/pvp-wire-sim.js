@@ -767,6 +767,77 @@ async function suiteWire() {
     await new Promise(r => setTimeout(r, 40));
   });
 
+  // v1.7.445 — FF4 spell cast time. atb-sync carries castTimeRa; server
+  // clamps [0, 99], stores on the unit (extending target compute), and
+  // relays to peers.
+  await asyncTest('atb-sync castTimeRa is stored on server unit + relayed', async () => {
+    _testHooks.resetState();
+    const A = await connectClient(port, 1110, { ...baseProfile, name: 'A_ct', agi: 10 });
+    const B = await connectClient(port, 1111, { ...baseProfile, name: 'B_ct', agi: 10 });
+    _testHooks.initEncounterBattle(1110, [1111], []);
+    _testHooks.state.encounterGroups.set(1110, new Set([1111]));
+    _testHooks.state.encounterGroups.set(1111, new Set([1110]));
+    const battle = _testHooks.state.encounterBattles.get(1110);
+    const playerUnit = battle.units.get('player:1110');
+    const got = once(B, m => m.type === 'atb-sync', 500);
+    A.send(JSON.stringify({
+      type:       'atb-sync',
+      unitKind:   'player',
+      monsterIdx: -1,
+      atMs:       Date.now(),
+      castTimeRa: 6,
+    }));
+    const m = await got;
+    assertEqual(m.castTimeRa, 6, 'castTimeRa not relayed to peer');
+    assertEqual(playerUnit.castTimeRa, 6, 'castTimeRa not stored on server unit');
+    A.close(); B.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  await asyncTest('atb-sync castTimeRa clamps malicious > 99', async () => {
+    _testHooks.resetState();
+    const A = await connectClient(port, 1112, { ...baseProfile, name: 'A_clamp', agi: 10 });
+    const B = await connectClient(port, 1113, { ...baseProfile, name: 'B_clamp', agi: 10 });
+    _testHooks.initEncounterBattle(1112, [1113], []);
+    _testHooks.state.encounterGroups.set(1112, new Set([1113]));
+    _testHooks.state.encounterGroups.set(1113, new Set([1112]));
+    const battle = _testHooks.state.encounterBattles.get(1112);
+    const playerUnit = battle.units.get('player:1112');
+    const got = once(B, m => m.type === 'atb-sync', 500);
+    A.send(JSON.stringify({
+      type:       'atb-sync',
+      unitKind:   'player',
+      monsterIdx: -1,
+      atMs:       Date.now(),
+      castTimeRa: 9999,
+    }));
+    const m = await got;
+    assertEqual(m.castTimeRa, 99, 'castTimeRa not clamped to 99');
+    assertEqual(playerUnit.castTimeRa, 99, 'server unit not clamped');
+    A.close(); B.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  await asyncTest('pvp-atb-sync relays castTimeRa to partner', async () => {
+    _testHooks.resetState();
+    const A = await connectClient(port, 1114, { ...baseProfile, name: 'A_pvp_ct', agi: 10 });
+    const B = await connectClient(port, 1115, { ...baseProfile, name: 'B_pvp_ct', agi: 10 });
+    _testHooks.state.pvpPartners.set(1114, 1115);
+    _testHooks.state.pvpPartners.set(1115, 1114);
+    const got = once(B, m => m.type === 'pvp-atb-sync', 500);
+    A.send(JSON.stringify({
+      type:       'pvp-atb-sync',
+      unitKind:   'player',
+      allyIdx:    -1,
+      atMs:       Date.now(),
+      castTimeRa: 4,
+    }));
+    const m = await got;
+    assertEqual(m.castTimeRa, 4, 'pvp castTimeRa not relayed');
+    A.close(); B.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
   // encounter-end relays + cleans the group.
   await asyncTest('encounter-end relays + clears group', async () => {
     _testHooks.resetState();

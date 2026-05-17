@@ -117,6 +117,7 @@ function _initEncounterBattle(hostUid, peerUids, monsters /* [{monsterId, agi}] 
     const agi = (entry && entry.profile && (entry.profile.agi | 0)) || 5;
     units.set('player:' + uid, {
       ra: _computeRA(hostAgi, agi),
+      castTimeRa: 0,  // v1.7.445 — extended by `atb-sync` after spell actions
       state: 'filling',
       startedAt: now,
       readyAtMs: 0,
@@ -127,6 +128,7 @@ function _initEncounterBattle(hostUid, peerUids, monsters /* [{monsterId, agi}] 
     const agi = (monsters[i] && monsters[i].agi | 0) || 5;
     units.set('monster:' + i, {
       ra: _computeRA(hostAgi, agi),
+      castTimeRa: 0,
       state: 'filling',
       startedAt: now,
       readyAtMs: 0,
@@ -151,6 +153,7 @@ function _addPlayerToEncounterBattle(hostUid, joinerUid) {
   const agi = (joiner && joiner.profile && (joiner.profile.agi | 0)) || 5;
   battle.units.set(unitId, {
     ra: _computeRA(hostAgi, agi),
+    castTimeRa: 0,
     state: 'filling',
     startedAt: Date.now(),
     readyAtMs: 0,
@@ -183,7 +186,11 @@ function _tickEncounterBattles() {
   for (const battle of _encounterBattles.values()) {
     for (const [unitId, unit] of battle.units) {
       if (unit.state !== 'filling') continue;
-      const target = unit.ra * _ATB_TICK_MS;
+      // v1.7.445 — FF4 spell cast time. The unit's castTimeRa (set by the
+      // owning client's atb-sync after a spell action) extends THIS cycle's
+      // target. Clamped 0-99 on receive so a malicious client can't park
+      // a peer's gauge forever.
+      const target = (unit.ra + (unit.castTimeRa | 0)) * _ATB_TICK_MS;
       if (now - unit.startedAt >= target) {
         unit.state = 'ready';
         unit.readyAtMs = now;
@@ -610,12 +617,15 @@ function _handleMessage(entry, msg) {
       const allyIdx = parsed.allyIdx | 0;
       const atMs = Number(parsed.atMs);
       if (!unitKind || !Number.isFinite(atMs) || atMs <= 0) return;
+      // v1.7.445 — FF4 spell cast time. Clamped [0, 99].
+      const castTimeRa = Math.max(0, Math.min(99, parsed.castTimeRa | 0));
       _send(partner.ws, {
         type:    'pvp-atb-sync',
         userId:  entry.userId,
         unitKind,
         allyIdx,
         atMs,
+        castTimeRa,
       });
       return;
     }
@@ -984,6 +994,11 @@ function _handleMessage(entry, msg) {
       const monsterIdx = parsed.monsterIdx | 0;
       const atMs = Number(parsed.atMs);
       if (!unitKind || !Number.isFinite(atMs) || atMs <= 0) return;
+      // v1.7.445 — FF4 spell cast time. Clamped [0, 99] (FF4 canon max).
+      // Server-side tick uses (ra + castTimeRa) for the target compute so
+      // the authoritative ready broadcast fires on the same extended delay
+      // the client expects.
+      const castTimeRa = Math.max(0, Math.min(99, parsed.castTimeRa | 0));
       // Update server-side battle state. Find the host of this encounter
       // (we are either the host or one of the peers).
       let hostUid = entry.userId;
@@ -1004,6 +1019,7 @@ function _handleMessage(entry, msg) {
             unit.state = 'filling';
             unit.startedAt = atMs;
             unit.readyAtMs = 0;
+            unit.castTimeRa = castTimeRa;
           }
         }
       }
@@ -1017,6 +1033,7 @@ function _handleMessage(entry, msg) {
           unitKind,
           monsterIdx,
           atMs,
+          castTimeRa,
         });
       }
       return;

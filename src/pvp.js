@@ -42,7 +42,7 @@ import { queueBattleMsg, replaceBattleMsg } from './battle-msg.js';
 import { BATTLE_FOE, BATTLE_REFLECT } from './data/strings.js';
 import { hasBuff, BUFF_REFLECT } from './buffs.js';
 import { tickHealNums, clearHealNums, DMG_SHOW_MS } from './damage-numbers.js';
-import { SPELLS } from './data/spells.js';
+import { SPELLS, tagCasterCastTime } from './data/spells.js';
 import { CAST_PHASE_MS_THROW, CAST_PHASE_MS_HEAL } from './cast-anim.js';
 import { applyMagicDamage, applyMagicStatus, applyMagicHeal,
          applyMagicCureStatus, applyMagicSight, playSpellImpactSFX } from './combatant-cast.js';
@@ -233,7 +233,9 @@ setNetPVPAtbSyncHandler((msg) => {
     }
   }
   if (!ref || !ref._atb) return;
-  _atbMarkFilling(ref, atMs);
+  // v1.7.445 — castTimeRa for FF4 spell cast time relays across duels too.
+  const castTimeRa = Math.max(0, Math.min(99, msg.castTimeRa | 0));
+  _atbMarkFilling(ref, atMs, castTimeRa);
 });
 
 setNetPVPActionHandler((msg) => {
@@ -963,6 +965,7 @@ function _applyWireOpponentAction(action, casterCellIdx) {
     queueBattleMsg(caster?.name ? _nameToBytes(caster.name) : BATTLE_FOE);
     replaceBattleMsg(getSpellNameShrinesClean(action.spellId));
     playSFX(SFX.MAGIC_CAST);
+    tagCasterCastTime(caster, action.spellId);
     battleSt.battleState = 'pvp-enemy-magic-cast';
     battleSt.battleTimer = 0;
     return true;
@@ -1106,6 +1109,7 @@ function _tryPVPEnemyCure(caster, casterCellIdx) {
   queueBattleMsg(caster.name ? _nameToBytes(caster.name) : BATTLE_FOE);
   replaceBattleMsg(getSpellNameShrinesClean(SPELL_CURE));
   playSFX(SFX.MAGIC_CAST);
+  tagCasterCastTime(caster, SPELL_CURE);
   battleSt.battleState = 'pvp-enemy-magic-cast';
   battleSt.battleTimer = 0;
   return true;
@@ -1179,6 +1183,7 @@ function _tryPVPEnemyOffensiveCast(caster, casterCellIdx) {
   queueBattleMsg(caster.name ? _nameToBytes(caster.name) : BATTLE_FOE);
   replaceBattleMsg(getSpellNameShrinesClean(spellId));
   playSFX(SFX.MAGIC_CAST);
+  tagCasterCastTime(caster, spellId);
   battleSt.battleState = 'pvp-enemy-magic-cast';
   battleSt.battleTimer = 0;
   return true;
@@ -1211,6 +1216,7 @@ function _tryPVPEnemyPoisona(caster, casterCellIdx) {
   queueBattleMsg(caster.name ? _nameToBytes(caster.name) : BATTLE_FOE);
   replaceBattleMsg(getSpellNameShrinesClean(SPELL_POISONA));
   playSFX(SFX.MAGIC_CAST);
+  tagCasterCastTime(caster, SPELL_POISONA);
   battleSt.battleState = 'pvp-enemy-magic-cast';
   battleSt.battleTimer = 0;
   return true;

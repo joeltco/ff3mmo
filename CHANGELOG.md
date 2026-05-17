@@ -2,6 +2,34 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.445 — 2026-05-17
+
+### FF4 spell cast time (charge) + Active-mode doc fix
+
+After verifying our ATB against canonical FF4 SNES sources (Free Enterprise Wiki RA / battle-mechanics / battle-timers), this lands the one canonical FF4 ATB feature we never built and corrects a misleading comment.
+
+**Spell cast time / charge** — FF4 mechanic. After a spell action resolves, the caster's next gauge fill target is `(RA + castTime) × TICK_MS × speedMod` instead of just `RA × TICK_MS × speedMod`. Cast-time units are RA-equivalent ticks (1 charge = 1 RA tick). Tuned snappier than FF4 canon for our combat pacing:
+
+| Spell | castTime | Per FF4 |
+|---|---|---|
+| Sight (WM Lv1 utility) | 2 | near-instant |
+| Cure / Poisona (WM Lv1) | 3 | quick heal/cure |
+| Fire / Blizzard / Sleep (BM Lv1) | 4-5 | moderate |
+| Blizzara (BM Lv2) | 6 | Lv2 spells charge longer |
+| (items) | 0 | items resolve immediately per FF4 |
+
+Source: `src/data/spells.js` `SPELL_CAST_TIME`. Defaults to 0 for any spell without an entry. Add a row when wiring a new player-castable spell.
+
+**Wire plumbing.** New `castTimeRa` field on `atb-sync` + `pvp-atb-sync` so peers / partners see the same extended fill bar after a long-cast spell. Server tick (`_tickEncounterBattles`) factors it into the target compute so authoritative `atb-ready` broadcasts fire on the same extended delay. Clamped [0, 99] (FF4 max) on receive so a malicious client can't park a peer's gauge forever.
+
+**Dispatch tagging.** A new `tagCasterCastTime(actor, spellId, isItemUse)` helper in `src/data/spells.js` stashes `actor._nextCastTimeRa`; `_resetLastDispatched` in `battle-turn.js` consumes it on action-end and passes through to `markFilling`. Called at all 10 spell-cast initiation sites (1 player, 5 ally, 4 PvP-enemy).
+
+**Active mode doc fix.** `src/atb.js` comment previously called our mode "automatic Wait mode" — corrected to label it Active mode (monsters tick during the player's sub-menus). FF4 SNES is locked to Wait mode; we deliberately diverged in v1.7.433 to prevent MMO menu-camping.
+
+43/43 atb-sim (+4 castTime tests). 59/59 pvp-wire-sim (+3 castTimeRa relay tests). 5/5 atb-fsm-sim.
+
+Sources verified: [FF4FE Wiki — Battle Mechanics](https://wiki.ff4fe.com/doku.php?id=battle_mechanics), [FF4FE Wiki — Battle Timers](https://wiki.ff4fe.com/doku.php?id=battle_timers), [FF4FE Wiki — Relative Agility](https://wiki.ff4fe.com/doku.php?id=relative_agility).
+
 ## 1.7.444 — 2026-05-17
 
 ### Post-ATB hardening — Battle Assist + watchdog + atb-ready timeout fallback
