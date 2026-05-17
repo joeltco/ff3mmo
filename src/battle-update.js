@@ -43,7 +43,7 @@ import { playSlashSFX } from './battle-sfx.js';
 import { saveSlotsToDB } from './save-state.js';
 import { addItem, buildItemSelectList } from './inventory.js';
 import { initATB, addATBUnit, clearATB, tickGauges, deriveMonsterAgi,
-         pickReadyActor, markActing, markFilling } from './atb.js';
+         pickReadyActor } from './atb.js';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 // BATTLE_TEXT_STEPS / BATTLE_TEXT_STEP_MS now imported from battle-state.js (single source).
@@ -1034,41 +1034,52 @@ export function updateBattle(dt) {
   updateBattleEndSequence(dt);
 }
 
-// ATB dispatch hub — runs when battleState === 'atb-idle'. Picks the next
-// ready actor from the gauge layer (FIFO by readyAtMs) and dispatches via
-// the legacy turn-type machinery (player → menu, ally/monster → 1-entry
-// turn queue + processNextTurn). Hold + return when no one is ready.
+// ATB dispatch hub — runs when battleState === 'atb-idle' OR 'menu-open'.
+//
+// In `atb-idle`: pick the FIFO-earliest ready unit. If it's the player,
+// open the menu. Otherwise dispatch their action via the legacy
+// per-turn-type machinery (1-entry turn queue + processNextTurn).
+//
+// In `menu-open`: player has the menu open and their gauge is paused at
+// full (Wait mode). Other units' gauges keep filling — when one reaches
+// ready, interrupt the menu and dispatch their action. After the action's
+// animation completes, processNextTurn returns the state to atb-idle, and
+// on the next tick this handler re-picks the player and re-opens the menu.
+//
+// Player is left in 'ready' state through the menu phase (no markActing
+// on entry). The re-pick short-circuits when state is already menu-open.
+// markActing fires later inside processNextTurn when the player's confirmed
+// turn actually dispatches.
 function _updateATBDispatch() {
-  if (battleSt.battleState !== 'atb-idle') return false;
-  const ready = pickReadyActor();
-  if (!ready) return true;  // hold; gauges keep filling
+  const bs = battleSt.battleState;
+  if (bs !== 'atb-idle' && bs !== 'menu-open') return false;
+  const inMenu = bs === 'menu-open';
+  // In menu-open, skip the player when picking — the menu is already up
+  // and they're picking. Lets monster/ally interrupts get through.
+  const ready = pickReadyActor({ skipPlayer: inMenu });
+  if (!ready) return !inMenu;  // hold idle; yield in menu so input still works
   if (ready.kind === 'player') {
-    // Player's gauge filled — open the menu. Wait mode freezes their
-    // gauge at full (tickGauges sees playerMenuOpen). When they confirm,
-    // the existing menu-confirm path emits the action; on action
-    // completion processNextTurn drains the queue + we return here.
-    markActing(ps);
+    // Only reachable from atb-idle (skipPlayer is set in menu-open).
     battleSt.battleState = 'menu-open'; battleSt.battleTimer = 0;
     return true;
   }
   if (ready.kind === 'ally') {
     const idx = battleSt.battleAllies.indexOf(ready.ref);
-    if (idx < 0) return true;
+    if (idx < 0) return !inMenu;
     battleSt.turnQueue = [{ type: 'ally', index: idx }];
     processNextTurn();
     return true;
   }
   if (ready.kind === 'monster') {
-    if (!battleSt.encounterMonsters) return true;
+    if (!battleSt.encounterMonsters) return !inMenu;
     const idx = battleSt.encounterMonsters.indexOf(ready.ref);
-    if (idx < 0) return true;
+    if (idx < 0) return !inMenu;
     battleSt.turnQueue = [{ type: 'enemy', index: idx }];
     processNextTurn();
     return true;
   }
-  // PvP-enemy dispatch is handled inside updatePVPBattle's own cascade —
-  // shouldn't land here unless the main loop misroutes.
-  return true;
+  // PvP-enemy dispatch is handled inside updatePVPBattle's own cascade.
+  return !inMenu;
 }
 
 // Tick ATB gauges. Slice 1: display-only — gauges fill alongside the

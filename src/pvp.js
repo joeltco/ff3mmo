@@ -27,7 +27,7 @@ import { PLAYER_POOL, generateAllyStats } from './data/players.js';
 import { JOBS } from './data/jobs.js';
 import { MONSTERS } from './data/monsters.js';
 import { ps } from './player-stats.js';
-import { pickReadyActor, markActing } from './atb.js';
+import { pickReadyActor } from './atb.js';
 import { inputSt } from './input-handler.js';
 import { getShieldEvade } from './player-stats.js';
 import { pvpGridLayout, PVP_CELL_W, PVP_CELL_H } from './pvp-math.js';
@@ -496,38 +496,37 @@ export function updatePVPBattle(dt) {
 }
 
 // PvP ATB dispatch hub — mirrors `_updateATBDispatch` in battle-update.js.
-// When the player's gauge fills, open menu. When a PvP enemy fills, build
-// a synthetic 'enemy' turn entry and route through the legacy dispatch.
+// Fires on both 'atb-idle' and 'menu-open' so PvP opponents can act while
+// the player has the menu open (Wait mode pauses player's gauge only).
 function _updatePVPATBDispatch() {
-  if (battleSt.battleState !== 'atb-idle') return false;
-  const ready = pickReadyActor();
-  if (!ready) return true;  // hold
+  const bs = battleSt.battleState;
+  if (bs !== 'atb-idle' && bs !== 'menu-open') return false;
+  const inMenu = bs === 'menu-open';
+  const ready = pickReadyActor({ skipPlayer: inMenu });
+  if (!ready) return !inMenu;
   if (ready.kind === 'player') {
-    markActing(ps);
     battleSt.battleState = 'menu-open'; battleSt.battleTimer = 0;
     return true;
   }
   if (ready.kind === 'ally') {
     const idx = battleSt.battleAllies.indexOf(ready.ref);
-    if (idx < 0) return true;
+    if (idx < 0) return !inMenu;
     battleSt.turnQueue = [{ type: 'ally', index: idx }];
     processNextTurn();
     return true;
   }
   if (ready.kind === 'pvp-enemy') {
-    // Resolve to the PvP turn encoding: main opp = pvpAllyIdx -1,
-    // enemy ally = pvpAllyIdx >= 0.
     if (ready.ref === pvpSt.pvpOpponentStats) {
       battleSt.turnQueue = [{ type: 'enemy', index: -1, pvpAllyIdx: -1 }];
     } else {
       const ei = pvpSt.pvpEnemyAllies.indexOf(ready.ref);
-      if (ei < 0) return true;
+      if (ei < 0) return !inMenu;
       battleSt.turnQueue = [{ type: 'enemy', index: -1, pvpAllyIdx: ei }];
     }
     processNextTurn();
     return true;
   }
-  return true;
+  return !inMenu;
 }
 
 // ── Enemy turn update ─────────────────────────────────────────────────────────

@@ -105,12 +105,19 @@ export function tickGauges(dt, opts = {}) {
 }
 
 // Pick the next ready unit for dispatch. FIFO — whoever hit 'ready' first
-// goes first. Player wins ties (their `readyAtMs` may be slightly later
-// due to Wait-mode pause). Returns the entry `{ref, kind}` or null.
-export function pickReadyActor() {
+// goes first. Returns the entry `{ref, kind}` or null.
+//
+// `opts.skipPlayer` skips the player. Used by the dispatch hub during
+// menu-open: the player is already at full + showing the menu; if THEY
+// were the FIFO-first ready, the hub would short-circuit and never see
+// the next-ready monster waiting behind them. Setting skipPlayer lets
+// monsters/allies interrupt during the player's menu.
+export function pickReadyActor(opts = {}) {
+  const skipPlayer = !!opts.skipPlayer;
   let pick = null;
   let bestT = Infinity;
   for (const u of _units) {
+    if (skipPlayer && u.kind === 'player') continue;
     const atb = u.ref && u.ref._atb;
     if (!atb || atb.state !== 'ready') continue;
     // Dead units don't dispatch (could have died after their gauge filled).

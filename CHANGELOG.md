@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.433 — 2026-05-17
+
+### Monster attacks during open menu (Wait mode actually works now)
+
+Reported symptom: "if I do nothing, I should be getting attacked — that's not happening." Root cause: `_updateATBDispatch` only ran during `'atb-idle'`. Once the player's gauge filled and the menu opened, dispatch stopped firing — monsters' gauges filled to "ready" but nobody picked them. Sitting on the menu was an unintentional freeze.
+
+- **Dispatch hub fires on both `atb-idle` AND `menu-open`.** During menu-open it skips the player (they're already showing the menu) and dispatches whichever monster/ally readied next.
+- **`pickReadyActor(opts={skipPlayer})`** — needed because the FIFO-first ready unit is usually the player; without the skip, the dispatch hub returned the player every frame and short-circuited before ever seeing the next-ready monster behind them. FSM sim caught this — monster was at `state:ready, readyAtMs:N+1ms` after player's `readyAtMs:N`, but `pickReadyActor()` only returned the player.
+- **Player no longer marked `'acting'` on menu-open transition.** They stay in `'ready'` state through menu phase. `markActing` fires later inside `processNextTurn` when the player's confirmed turn actually dispatches. Cleans up the "player gets stuck after monster interrupts" failure mode.
+
+`tools/atb-fsm-sim.js` boots the engine with proper module init (production main.js wiring replicated) and now exercises the full cycle. Verified: in a 25s idle-menu scenario, monster acts 21 times. State transitions are clean — no flickers detected.
+
 ## 1.7.432 — 2026-05-16
 
 ### ATB pacing fix — RA clamp + retuned monster agi (battle progresses without input)

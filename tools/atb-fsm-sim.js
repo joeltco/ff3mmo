@@ -55,17 +55,36 @@ globalThis.localStorage = {
 };
 globalThis.sessionStorage = { ...globalThis.localStorage, _store: {} };
 
-// ── 2. Import the engine ─────────────────────────────────────────────────
+// ── 2. Import the engine + boot ROM-backed text decoder ──────────────────
 let battleSt, ps, pvpSt, updateBattle, startRandomEncounter, inputSt;
 let MONSTERS;
 try {
+  // Load ROM bytes + init the text decoder so monster-name lookups don't
+  // throw when an action queues a battle message.
+  const { readFileSync } = await import('node:fs');
+  const { initTextDecoder } = await import('../src/text-decoder.js');
+  initTextDecoder(readFileSync('FF3-English.nes'));
+
   ({ battleSt } = await import('../src/battle-state.js'));
   ({ ps } = await import('../src/player-stats.js'));
   ({ pvpSt } = await import('../src/pvp.js'));
-  ({ updateBattle } = await import('../src/battle-update.js'));
+  const bu = await import('../src/battle-update.js');
+  updateBattle = bu.updateBattle;
   ({ startRandomEncounter } = await import('../src/battle-encounter.js'));
   ({ inputSt } = await import('../src/input-handler.js'));
   ({ MONSTERS } = await import('../src/data/monsters.js'));
+
+  // Production main.js wires these at boot. Without them, the per-module
+  // _processNextTurn / _isTeamWiped / _resetBattleVars fall back to no-ops
+  // and the FSM hangs on the first dispatch that needs to advance.
+  const { initBattleAlly } = await import('../src/battle-ally.js');
+  const { initBattleEnemy } = await import('../src/battle-enemy.js');
+  const { initBattleEncounter } = await import('../src/battle-encounter.js');
+  const { buildTurnOrder, processNextTurn } = await import('../src/battle-turn.js');
+  const { resetBattleVars, isTeamWiped } = bu;
+  initBattleEncounter({ resetBattleVars });
+  initBattleAlly({ buildTurnOrder, processNextTurn, isTeamWiped });
+  initBattleEnemy({ processNextTurn, isTeamWiped });
 } catch (e) {
   console.error('atb-fsm-sim: import failed —', e.message);
   console.error(e.stack);
@@ -192,8 +211,58 @@ function _printLog() {
   for (const e of _log.slice(-10)) console.log(`  [${e.t}ms] ${e.from} → ${e.to}`);
 }
 
-// ── 8. Run ───────────────────────────────────────────────────────────────
+// ── 9. Scenario: sit on full gauge, expect monster to attack ─────────────
+function _scenarioMonsterActsWhileMenuOpen() {
+  console.log('\n═══ scenario: sit on menu, monster should attack ═══');
+  _reset();
+  startRandomEncounter();
+  battleSt.battleState = 'flash-strobe';
+  let menuFirstSeenAt = -1;
+  let monsterAttacked = false;
+  let dumpedAt5s = false, dumpedAt10s = false;
+  for (let i = 0; i < 1500; i++) {  // 25 seconds
+    _tick();
+    if (menuFirstSeenAt < 0 && battleSt.battleState === 'menu-open') {
+      menuFirstSeenAt = _simMs;
+    }
+    if (battleSt.battleState === 'enemy-attack' ||
+        battleSt.battleState === 'enemy-damage-show' ||
+        battleSt.battleState === 'player-hit-show') {
+      monsterAttacked = true;
+    }
+    // Diagnostic dumps
+    if (!dumpedAt5s && _simMs >= 5000) {
+      dumpedAt5s = true;
+      _dumpGauges('5s');
+    }
+    if (!dumpedAt10s && _simMs >= 10000) {
+      dumpedAt10s = true;
+      _dumpGauges('10s');
+    }
+  }
+  console.log(`  menu first opened: ${menuFirstSeenAt}ms`);
+  console.log(`  monster attacked while idle: ${monsterAttacked ? 'YES' : 'NO'}`);
+  if (!monsterAttacked) {
+    console.log('  FAIL: monster never acted in 25 simulated seconds with player idle in menu');
+  } else {
+    console.log('  PASS');
+  }
+  _printLog();
+}
+
+function _dumpGauges(label) {
+  console.log(`  [${label}] state=${battleSt.battleState}`);
+  console.log(`    ps._atb = ${JSON.stringify(ps._atb)}`);
+  for (let i = 0; i < (battleSt.encounterMonsters || []).length; i++) {
+    const m = battleSt.encounterMonsters[i];
+    console.log(`    mon[${i}] hp=${m.hp} _atb=${JSON.stringify(m._atb)}`);
+  }
+}
+
+// ── 10. Run ──────────────────────────────────────────────────────────────
 _scenarioIdle();
 _detectOscillation();
 _scenarioAttackOnce();
+_detectOscillation();
+_scenarioMonsterActsWhileMenuOpen();
 _detectOscillation();
