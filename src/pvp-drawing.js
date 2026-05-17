@@ -196,7 +196,11 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   const oppHP   = isMain ? (pvpSt.pvpOpponentStats ? pvpSt.pvpOpponentStats.hp : getEnemyHP()) : (enemy.hp != null ? enemy.hp : 0);
   const oppMaxHP = isMain ? (pvpSt.pvpOpponentStats ? pvpSt.pvpOpponentStats.maxHP : 1) : (enemy.maxHP || 1);
   const isNearFatalOpp = oppHP > 0 && oppHP <= Math.floor(oppMaxHP / 4);
-  const isOppVictory = false;
+  // PvP opponent never enters a victory phase — the battle ends when one
+  // side dies, so the opposing team never gets a celebratory pose visible
+  // to the survivor. Predicate stayed false in v1.7.387+ but the dead
+  // branches were kept for parity with the ally pose machine. Removed in
+  // v1.7.427.
   const isOppDefending = isMain && pvpSt.pvpOpponentIsDefending && bs === 'pvp-defend-anim';
   // Caster victory pose: any cell that's the active item caster during pvp-opp-potion,
   // any cell that's the active magic caster during pvp-enemy-magic-cast/hit, OR main
@@ -229,9 +233,7 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
     body = pickCombatantBody('opp', key, _ej, palIdx) || fullBody;
   } else if (isOppDefending || isOppItemUse) {
     body = _fpb(fakePlayerVictoryFullBodyCanvases) || fullBody;
-  } else if (isOppVictory && (Math.floor(Date.now() / 250) & 1)) {
-    body = _fpb(fakePlayerVictoryFullBodyCanvases) || fullBody;
-  } else if (isNearFatalOpp && !isOppVictory) {
+  } else if (isNearFatalOpp) {
     body = _fpb(fakePlayerKneelFullBodyCanvases) || fullBody;
   }
 
@@ -279,7 +281,7 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   if (weaponSpec && _weaponLayer === 'front') drawBlade();
 
   // Near-fatal sweat — h-flipped to match opponent facing left
-  if (isNearFatalOpp && !isOppVictory && !isDying && bsc.sweatFrames && bsc.sweatFrames.length === 2) {
+  if (isNearFatalOpp && !isDying && bsc.sweatFrames && bsc.sweatFrames.length === 2) {
     const sf = bsc.sweatFrames[Math.floor(Date.now() / 133) & 1];
     const ctx = ui.ctx;
     ctx.save();

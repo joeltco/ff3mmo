@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.427 — 2026-05-16
+
+### Visual-layer cleanup — wire-wait input drain + dead PvP victory branches + sweat fade gate
+
+Post-audit cleanup. Four parallel audits of the wire-driven visual layer (poses, animations, predicates, spell-ID sourcing) found that the layer is in good shape end-to-end. These 3 are the only LOW-severity items worth tidying.
+
+- **Drain action keys on `ally-wire-wait`** (`src/input-handler.js`). `handleBattleInput` returned `true` for `ally-wire-wait` without clearing pressed keys. A key held during the stall could leak into the next state (e.g., Z firing a menu command on transition). Now drains z/Z/x/X when in the stall.
+- **Delete dead PvP `isOppVictory` branches** (`src/pvp-drawing.js`). `isOppVictory` was hardcoded `false` — PvP battles end when one side dies, so the opposing team never enters a celebratory pose visible to the survivor. Removed the dead branches and the `!isOppVictory` tautologies in the kneel + sweat gates.
+- **Gate sweat overlay on `fadeStep === 0`** (`src/battle-draw-allies.js`). When a near-fatal ally joins mid-battle via Battle Assist, the body has a pre-rendered fade array but sweat is a single sprite — rendering it at full opacity while the body fades looked like a floating bead. Suppressed during fade-in.
+
 ## 1.7.426 — 2026-05-16
 
 ### MP audit hardening — per-kind rate limit + identity-pinned assist peers + dead-log cleanup
