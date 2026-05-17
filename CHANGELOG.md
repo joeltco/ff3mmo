@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.434 — 2026-05-17
+
+### Player ATB bar on portrait
+
+Thin 16×2 teal bar overlaid on the bottom strip of the player portrait. Fills with the player's gauge; hides the moment it's full (= menu opens). Gives the player a visible "how close is my next turn" indicator at-a-glance without a separate UI element.
+
 ## 1.7.433 — 2026-05-17
 
 ### Monster attacks during open menu (Wait mode actually works now)
