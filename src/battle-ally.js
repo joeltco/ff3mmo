@@ -64,7 +64,13 @@ function _updateAllyJoin() {
     if (newAlly && battleSt.battleTimer >= 100) {
       newAlly.fadeStep = Math.max(0, newAlly.fadeStep - 1);
       battleSt.battleTimer = 0;
-      if (newAlly.fadeStep <= 0) { battleSt.turnQueue = _buildTurnOrder(); _processNextTurn(); }
+      if (newAlly.fadeStep <= 0) {
+        // ATB era — yield to dispatch hub. The new ally's gauge is
+        // already filling via addBattleATBAlly at push time; no need
+        // to rebuild a round order.
+        battleSt.turnQueue = [];
+        _processNextTurn();
+      }
     }
     return true;
   }

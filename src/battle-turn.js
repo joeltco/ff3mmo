@@ -30,6 +30,7 @@ import { canCastBasic, canCastAny, pickHealTarget, pickPoisonedTarget,
          rollCureAmount, rollActivation,
          SPELL_CURE, SPELL_POISONA, AI_HEAL_THRESHOLD, AI_POTION_THRESHOLD,
          AI_OFFENSIVE_GATE, AI_ITEM_GATE } from './combatant-ai.js';
+import { markFilling as _atbMarkFilling, markActing as _atbMarkActing } from './atb.js';
 
 function _playerName() { return saveSlots[selectCursor]?.name || null; }
 
@@ -135,41 +136,69 @@ export function maybeReseedCoopTurn() {
 }
 
 // ── Turn dispatch ──────────────────────────────────────────────────────────
-export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
+// Track the actor currently animating so we can reset their gauge when their
+// action ends. Set at dispatch (markActing + cache ref), cleared when
+// processNextTurn re-enters (markFilling).
+let _lastDispatchedActor = null;
+
+export function _resetLastDispatched() {
+  if (!_lastDispatchedActor) return;
+  // Wire-wait retry guard: when an ally's wire-action hasn't arrived,
+  // `updateBattleAlly` re-calls processNextTurn with the same turn entry
+  // unshifted at the queue head. Detect that and skip the reset — the
+  // ally's gauge should stay at full while we wait, not drop to 0 every
+  // retry frame.
+  if (battleSt.turnQueue.length > 0) {
+    const head = battleSt.turnQueue[0];
+    const headActor = _resolveTurnActor(head);
+    if (headActor === _lastDispatchedActor) return;
+  }
+  _atbMarkFilling(_lastDispatchedActor);
+  _lastDispatchedActor = null;
+}
+
+function _resolveTurnActor(turn) {
+  if (turn.type === 'player') return ps;
+  if (turn.type === 'ally') return battleSt.battleAllies[turn.index] || null;
+  if (turn.type === 'enemy') {
+    if (pvpSt.isPVPBattle) {
+      if (turn.pvpAllyIdx >= 0) return pvpSt.pvpEnemyAllies[turn.pvpAllyIdx] || null;
+      return pvpSt.pvpOpponentStats || null;
+    }
+    if (battleSt.encounterMonsters && turn.index >= 0) {
+      return battleSt.encounterMonsters[turn.index] || null;
+    }
+  }
+  return null;
+}
+
+export function processNextTurn() {
+  // ATB era: a turn just completed (or is being skipped). Reset the actor
+  // that was animating, then yield to the ATB dispatch hub when the
+  // legacy queue is empty.
+  _resetLastDispatched();
+  if (battleSt.turnQueue.length === 0) {
     battleSt.isDefending = false; inputSt.battleCursor = 0; battleSt.turnTimer = 0;
-    // Wire-PvP: opp's defend is round-scoped. End-of-round clear mirrors
-    // `battleSt.isDefending` above. Without this, an opp who picks defend on
-    // round 1 and never attacks again (paralyzed / cast-only) would protect
-    // every future hit on sender's side. See
-    // docs/MULTIPLAYER-AUDIT-2026-05-15.md #1.
     if (pvpSt.isPVPBattle) pvpSt.pvpOpponentIsDefending = false;
-    // Co-op random encounter — clear per-ally defend flags set by
-    // wire-driven defend actions. Same round-scoped lifetime as the
-    // player's `battleSt.isDefending`. v1.7.419.
     if (battleSt.isWireEncounter) {
       for (const a of battleSt.battleAllies) if (a) a.isDefending = false;
     }
-    if (ps.hp <= 0) {
-      // ps dead but allies might still be alive — start a new round, reseed
-      // co-op rand cursor at the round boundary like the menu-confirm path.
-      maybeReseedCoopTurn();
-      battleSt.turnQueue = buildTurnOrder();
-      if (battleSt.turnQueue.length === 0) return;
-      processNextTurn();
-      return;
-    }
-    // End-of-round poison: every poisoned actor (player + allies + monsters /
-    // PVP opponents) ticks simultaneously, damage numbers pop together, no
-    // portrait shake or hit-pose. Differs from NES (per-turn-start tick) but
-    // matches the requested UX of one consolidated end-of-round phase.
-    if (_applyEndOfRoundPoison()) {
-      battleSt.battleState = 'poison-end-tick'; battleSt.battleTimer = 0;
-      return;
-    }
-    battleSt.battleState = 'menu-open'; battleSt.battleTimer = 0;
+    // Yield to ATB dispatch — the atb-idle handler will pick the next
+    // ready actor when their gauge fills.
+    battleSt.battleState = 'atb-idle'; battleSt.battleTimer = 0;
     return;
   }
   const turn = battleSt.turnQueue.shift();
+  // Per-actor poison tick at start of this turn (replaces the legacy
+  // end-of-round consolidated poison phase). Skipped if status flag isn't
+  // set or the actor is already dead.
+  _maybePerActorPoison(turn);
+  // Mark this actor acting — gauge freezes until their action completes.
+  const actor = _resolveTurnActor(turn);
+  if (actor) {
+    _atbMarkActing(actor);
+    _lastDispatchedActor = actor;
+  }
   if (turn.type === 'player') {
     if (ps.hp <= 0) { processNextTurn(); return; }
     // Status turn-start: paralysis/sleep skip, confuse flag.
@@ -411,6 +440,57 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
 // floor(maxHP/16) and gets a damage-num popped on their slot. Player + allies
 // clamp to HP 1 (NES never lets poison kill from full); enemies/monsters can
 // die. Returns true if any actor ticked (caller drives the hold-state).
+// Per-actor poison tick — applied at the start of each actor's turn in
+// ATB world. Replaces the legacy `_applyEndOfRoundPoison` consolidated
+// phase (which existed because the round-based queue had a natural
+// "round boundary" — gone with ATB). NES rule: player/ally poison clamps
+// at min 1 HP; monsters + PvP enemies can die to poison.
+function _maybePerActorPoison(turn) {
+  if (turn.type === 'player') {
+    if (ps.hp > 0 && ps.status && hasStatus(ps.status, STATUS.POISON)) {
+      const max = ps.stats ? ps.stats.maxHP : ps.hp;
+      const dmg = Math.floor(max / 16);
+      if (dmg > 0) {
+        dispatchDelta({ type: 'hp', target: ps, amount: -dmg, min: 1 });
+        setPlayerDamageNum({ value: dmg, timer: 0 });
+      }
+    }
+  } else if (turn.type === 'ally') {
+    const i = turn.index;
+    const ally = battleSt.battleAllies[i];
+    if (ally && ally.hp > 0 && ally.status && hasStatus(ally.status, STATUS.POISON)) {
+      const dmg = Math.floor((ally.maxHP || ally.hp) / 16);
+      if (dmg > 0) {
+        dispatchDelta({ type: 'hp', target: ally, amount: -dmg, min: 1 });
+        getAllyDamageNums()[i] = { value: dmg, timer: 0 };
+      }
+    }
+  } else if (turn.type === 'enemy') {
+    if (pvpSt.isPVPBattle) {
+      const tgt = turn.pvpAllyIdx >= 0 ? pvpSt.pvpEnemyAllies[turn.pvpAllyIdx] : pvpSt.pvpOpponentStats;
+      if (tgt && tgt.hp > 0 && tgt.status && hasStatus(tgt.status, STATUS.POISON)) {
+        const dmg = Math.floor((tgt.maxHP || tgt.hp) / 16);
+        if (dmg > 0) {
+          dispatchDelta({ type: 'hp', target: tgt, amount: -dmg });
+          setSwDmgNum(turn.pvpAllyIdx >= 0 ? turn.pvpAllyIdx + 1 : 0, dmg);
+        }
+      }
+    } else if (battleSt.isRandomEncounter && battleSt.encounterMonsters && turn.index >= 0) {
+      const mon = battleSt.encounterMonsters[turn.index];
+      if (mon && mon.hp > 0 && mon.status && hasStatus(mon.status, STATUS.POISON)) {
+        const dmg = Math.floor((mon.maxHP || mon.hp) / 16);
+        if (dmg > 0) {
+          dispatchDelta({ type: 'hp', target: mon, amount: -dmg });
+          setSwDmgNum(turn.index, dmg);
+        }
+      }
+    }
+  }
+}
+
+// Legacy end-of-round poison — retired with the round-queue dispatch.
+// Kept as a no-op stub in case any remaining caller references it during
+// the ATB transition; remove once all references are cleaned up.
 function _applyEndOfRoundPoison() {
   let anyTicked = false;
   if (ps.hp > 0 && ps.status && hasStatus(ps.status, STATUS.POISON)) {

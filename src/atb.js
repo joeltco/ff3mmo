@@ -49,7 +49,9 @@ export function addATBUnit({ ref, kind, agi }) {
   // Track elapsed-ms-since-empty instead of an accumulating float gauge —
   // makes the ready boundary land exactly at ra*TICK_MS*speedMod without
   // drift across many ticks. `gauge` (0..FILL_MAX) is a derived view.
-  ref._atb = { ra, speedMod: 1.0, elapsedMs: 0, state: 'filling' };
+  // readyAtMs = wall time when state flipped to 'ready'; used for FIFO
+  // dispatch when multiple units fill simultaneously.
+  ref._atb = { ra, speedMod: 1.0, elapsedMs: 0, state: 'filling', readyAtMs: 0 };
   _units.push({ ref, kind, agiSource: myAgi });
 }
 
@@ -70,17 +72,42 @@ export function clearATB() {
 export function tickGauges(dt, opts = {}) {
   if (dt <= 0 || _units.length === 0) return;
   const playerMenuOpen = !!opts.playerMenuOpen;
+  const now = Date.now();
   for (const u of _units) {
     const atb = u.ref && u.ref._atb;
     if (!atb) continue;
     if (atb.state === 'acting') continue;
+    // Dead combatants don't tick. KO'd ally + dead monster + dead PvP
+    // enemy + downed player all stop here. Their gauges resume only on
+    // resurrection (life spell etc.); for now resurrection isn't wired,
+    // so dead = out of ATB rotation for the rest of the battle.
+    if (u.ref.hp != null && u.ref.hp <= 0) continue;
     const target = _fillTargetMs(atb);
     if (target <= 0) continue;
     const isFull = atb.elapsedMs >= target;
     if (playerMenuOpen && u.kind === 'player' && isFull) continue;  // Wait
     atb.elapsedMs = Math.min(target, atb.elapsedMs + dt);
-    if (atb.elapsedMs >= target && atb.state === 'filling') atb.state = 'ready';
+    if (atb.elapsedMs >= target && atb.state === 'filling') {
+      atb.state = 'ready';
+      atb.readyAtMs = now;
+    }
   }
+}
+
+// Pick the next ready unit for dispatch. FIFO — whoever hit 'ready' first
+// goes first. Player wins ties (their `readyAtMs` may be slightly later
+// due to Wait-mode pause). Returns the entry `{ref, kind}` or null.
+export function pickReadyActor() {
+  let pick = null;
+  let bestT = Infinity;
+  for (const u of _units) {
+    const atb = u.ref && u.ref._atb;
+    if (!atb || atb.state !== 'ready') continue;
+    // Dead units don't dispatch (could have died after their gauge filled).
+    if (u.ref.hp != null && u.ref.hp <= 0) continue;
+    if (atb.readyAtMs < bestT) { pick = u; bestT = atb.readyAtMs; }
+  }
+  return pick;
 }
 
 // 0..1 for renderer. Returns 0 when no ATB state attached (out-of-battle).

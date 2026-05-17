@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.429 — 2026-05-16
+
+### ATB rewrite slice 3 — gauge-driven dispatch (round queue dies)
+
+Big swing. The round-based turn queue + 10s decision timer are gone. Gauges now drive WHO acts WHEN, in all battle types (solo random + boss + co-op random + PvP). Faster units act more often. The freeze class from v1.7.x's `magic-hit timer:500 stuck for 5s` is structurally impossible now: there's no central queue for one client's animation to block.
+
+- **New `'atb-idle'` battle state** = the dispatch hub. After `battle-fade-in`, every battle transitions to `atb-idle` instead of `menu-open`. Menu only opens when the player's gauge hits ready.
+- **`_updateATBDispatch()` (battle-update.js) + `_updatePVPATBDispatch()` (pvp.js)** — top of the update cascade. Polls `pickReadyActor()` (FIFO by `readyAtMs`); on hit, routes the actor through legacy per-turn-type dispatch via a one-entry turn queue.
+- **`processNextTurn()` (battle-turn.js)** queue-empty branch rewritten: yields to `atb-idle` instead of rebuilding a round. `_resetLastDispatched()` resets the previous actor's gauge to 0 at the moment a new turn dispatches — gives the visible "fill → act → reset → refill" loop. Wire-wait retry guard skips the reset when the same actor's turn is unshifted back onto the queue (gauge stays full while waiting on the partner's wire action).
+- **`markActing()` / `markFilling()` (atb.js)** wired in: dispatch freezes the actor's gauge at full; action completion resets it to 0. Dead combatants stop ticking and stop dispatching (added `hp <= 0` gates in tick + pickReadyActor).
+- **Per-actor poison tick** replaces the legacy `_applyEndOfRoundPoison` consolidated phase. Damage fires at the start of each poisoned actor's dispatched turn (NES behavior). The dedicated `poison-end-tick` 700ms hold is gone — there's no more "round boundary" in ATB.
+- **`TURN_TIME_MS = 10000`** deleted with the entire `_updateTurnTimer` function. The gauge IS the new clock; sitting on a full gauge no longer auto-skips, but everyone else's gauge keeps moving while yours sits.
+- **`pvp.js#_buildAndProcessNextTurn`** now dispatches only the player's confirmed action (single-entry queue), not a full round.
+- **`tryJoinPlayerAlly` ally-fade-in** no longer rebuilds the round on fade complete — yields to atb-idle.
+
+Wire-driven ally (co-op random) compatibility verified: `dequeueWireEncounterAction` stall path still drops the engine into `ally-wire-wait`, and the wire-wait retry preserves the ally's gauge state until the partner's action arrives.
+
 ## 1.7.428 — 2026-05-16
 
 ### ATB rewrite slice 1 — gauge math + display bars (no behavior change)

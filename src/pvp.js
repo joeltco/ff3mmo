@@ -27,6 +27,7 @@ import { PLAYER_POOL, generateAllyStats } from './data/players.js';
 import { JOBS } from './data/jobs.js';
 import { MONSTERS } from './data/monsters.js';
 import { ps } from './player-stats.js';
+import { pickReadyActor, markActing } from './atb.js';
 import { inputSt } from './input-handler.js';
 import { getShieldEvade } from './player-stats.js';
 import { pvpGridLayout, PVP_CELL_W, PVP_CELL_H } from './pvp-math.js';
@@ -59,7 +60,9 @@ function _buildAndProcessNextTurn() {
     pvpSt._wireTurnIndex = (pvpSt._wireTurnIndex | 0) + 1;
     seedRng(((pvpSt._wireSeed >>> 0) + pvpSt._wireTurnIndex) >>> 0);
   }
-  battleSt.turnQueue = buildTurnOrder();
+  // ATB era — dispatch only the player's confirmed action this cycle.
+  // Other combatants' gauges drive their own dispatches via atb-idle.
+  battleSt.turnQueue = [{ type: 'player' }];
   processNextTurn();
 }
 
@@ -428,7 +431,7 @@ function _updatePVPOpening() {
   } else if (bs === 'battle-fade-in') {
     if (battleSt.battleTimer >= (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS) {
       initBattleATB();
-      battleSt.battleState = 'menu-open'; battleSt.battleTimer = 0;
+      battleSt.battleState = 'atb-idle'; battleSt.battleTimer = 0;
     }
   } else { return false; }
   return true;
@@ -479,6 +482,7 @@ function _updatePVPDissolve() {
 }
 export function updatePVPBattle(dt) {
   updateBattleTimers(dt);
+  _updatePVPATBDispatch()        ||
   updatePoisonTick()             ||
   _updatePVPOpening()         ||
   _updatePVPMenuConfirm()     ||
@@ -489,6 +493,41 @@ export function updatePVPBattle(dt) {
   updateBattleAlly(dt)           ||
   updateBattleEnemyTurn(dt) ||
   updateBattleEndSequence(dt);
+}
+
+// PvP ATB dispatch hub — mirrors `_updateATBDispatch` in battle-update.js.
+// When the player's gauge fills, open menu. When a PvP enemy fills, build
+// a synthetic 'enemy' turn entry and route through the legacy dispatch.
+function _updatePVPATBDispatch() {
+  if (battleSt.battleState !== 'atb-idle') return false;
+  const ready = pickReadyActor();
+  if (!ready) return true;  // hold
+  if (ready.kind === 'player') {
+    markActing(ps);
+    battleSt.battleState = 'menu-open'; battleSt.battleTimer = 0;
+    return true;
+  }
+  if (ready.kind === 'ally') {
+    const idx = battleSt.battleAllies.indexOf(ready.ref);
+    if (idx < 0) return true;
+    battleSt.turnQueue = [{ type: 'ally', index: idx }];
+    processNextTurn();
+    return true;
+  }
+  if (ready.kind === 'pvp-enemy') {
+    // Resolve to the PvP turn encoding: main opp = pvpAllyIdx -1,
+    // enemy ally = pvpAllyIdx >= 0.
+    if (ready.ref === pvpSt.pvpOpponentStats) {
+      battleSt.turnQueue = [{ type: 'enemy', index: -1, pvpAllyIdx: -1 }];
+    } else {
+      const ei = pvpSt.pvpEnemyAllies.indexOf(ready.ref);
+      if (ei < 0) return true;
+      battleSt.turnQueue = [{ type: 'enemy', index: -1, pvpAllyIdx: ei }];
+    }
+    processNextTurn();
+    return true;
+  }
+  return true;
 }
 
 // ── Enemy turn update ─────────────────────────────────────────────────────────

@@ -42,7 +42,8 @@ import { applyPhysicalHitToEnemy } from './physical-attack.js';
 import { playSlashSFX } from './battle-sfx.js';
 import { saveSlotsToDB } from './save-state.js';
 import { addItem, buildItemSelectList } from './inventory.js';
-import { initATB, addATBUnit, clearATB, tickGauges, deriveMonsterAgi } from './atb.js';
+import { initATB, addATBUnit, clearATB, tickGauges, deriveMonsterAgi,
+         pickReadyActor, markActing, markFilling } from './atb.js';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 // BATTLE_TEXT_STEPS / BATTLE_TEXT_STEP_MS now imported from battle-state.js (single source).
@@ -67,7 +68,9 @@ const PLAYER_DMG_SHOW_MS       = 700;
 // "the hit registered, now they fall" beat. Was 0 (immediate transition).
 const PRE_DEATH_PAUSE_MS       = 85;
 const DEFEND_SPARKLE_TOTAL_MS  = 533;
-const TURN_TIME_MS             = 10000;
+// TURN_TIME_MS (10s player-decision auto-skip) deleted in v1.7.429 — the
+// ATB gauge IS the new clock. If a player sits on a full gauge, their
+// gauge stays full; the rest of the field keeps moving (Wait mode).
 const VICTORY_BOX_ROWS         = 8;
 const VICTORY_ROW_FRAME_MS     = 16.67;
 const POISON_TICK_MS           = 500;
@@ -226,20 +229,10 @@ export function updateBattleTimers(dt) {
     if (ally.deathTimer != null) ally.deathTimer += dt;
   }
 
-  _updateTurnTimer(dt);
   _updateAllyExitFade(dt);
 }
 
-function _updateTurnTimer(dt) {
-  const isPlayerDeciding = battleSt.battleState === 'menu-open' || battleSt.battleState === 'target-select' ||
-    battleSt.battleState === 'item-select' || battleSt.battleState === 'item-target-select' || battleSt.battleState === 'item-slide';
-  if (!isPlayerDeciding) return;
-  battleSt.turnTimer += dt;
-  if (battleSt.turnTimer >= TURN_TIME_MS) {
-    battleSt.turnTimer = 0; inputSt.itemHeldIdx = -1;
-    inputSt.playerActionPending = { command: 'skip' }; battleSt.battleState = 'confirm-pause'; battleSt.battleTimer = 0;
-  }
-}
+// Legacy 10s auto-skip retired in v1.7.429 — replaced by ATB gauge clock.
 
 function _updateAllyExitFade(dt) {
   if (battleSt.battleAllies.length === 0) return;
@@ -280,7 +273,8 @@ function _updateBattleOpening() {
   } else if (battleSt.battleState === 'battle-fade-in') {
     if (battleSt.battleTimer >= (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS) {
       initBattleATB();
-      battleSt.battleState = 'menu-open'; battleSt.battleTimer = 0;
+      // ATB dispatch hub. Menu opens only when player's gauge hits ready.
+      battleSt.battleState = 'atb-idle'; battleSt.battleTimer = 0;
     }
   } else { return false; }
   return true;
@@ -441,7 +435,10 @@ function _updateBattleMenuConfirm() {
       // boundary so both clients land on the same initiative + AI rolls.
       // Mirror of PvP's `_buildAndProcessNextTurn`.
       maybeReseedCoopTurn();
-      battleSt.turnQueue = buildTurnOrder(); processNextTurn();
+      // ATB era — dispatch only the player's confirmed action this cycle.
+      // Other combatants' gauges drive their own dispatches via atb-idle.
+      battleSt.turnQueue = [{ type: 'player' }];
+      processNextTurn();
     }
   } else { return false; }
   return true;
@@ -1025,6 +1022,7 @@ export function updateBattle(dt) {
   _tickATB(dt);
   if (pvpSt.isPVPBattle) { updatePVPBattle(dt); return; }
   updateBattleTimers(dt);
+  _updateATBDispatch()             ||
   _updatePoisonTick()              ||
   _updateBattleOpening()           ||
   _updateBattleMenuConfirm()       ||
@@ -1034,6 +1032,43 @@ export function updateBattle(dt) {
   updateBattleAlly(dt)             ||
   updateBattleEnemyTurn()          ||
   updateBattleEndSequence(dt);
+}
+
+// ATB dispatch hub — runs when battleState === 'atb-idle'. Picks the next
+// ready actor from the gauge layer (FIFO by readyAtMs) and dispatches via
+// the legacy turn-type machinery (player → menu, ally/monster → 1-entry
+// turn queue + processNextTurn). Hold + return when no one is ready.
+function _updateATBDispatch() {
+  if (battleSt.battleState !== 'atb-idle') return false;
+  const ready = pickReadyActor();
+  if (!ready) return true;  // hold; gauges keep filling
+  if (ready.kind === 'player') {
+    // Player's gauge filled — open the menu. Wait mode freezes their
+    // gauge at full (tickGauges sees playerMenuOpen). When they confirm,
+    // the existing menu-confirm path emits the action; on action
+    // completion processNextTurn drains the queue + we return here.
+    markActing(ps);
+    battleSt.battleState = 'menu-open'; battleSt.battleTimer = 0;
+    return true;
+  }
+  if (ready.kind === 'ally') {
+    const idx = battleSt.battleAllies.indexOf(ready.ref);
+    if (idx < 0) return true;
+    battleSt.turnQueue = [{ type: 'ally', index: idx }];
+    processNextTurn();
+    return true;
+  }
+  if (ready.kind === 'monster') {
+    if (!battleSt.encounterMonsters) return true;
+    const idx = battleSt.encounterMonsters.indexOf(ready.ref);
+    if (idx < 0) return true;
+    battleSt.turnQueue = [{ type: 'enemy', index: idx }];
+    processNextTurn();
+    return true;
+  }
+  // PvP-enemy dispatch is handled inside updatePVPBattle's own cascade —
+  // shouldn't land here unless the main loop misroutes.
+  return true;
 }
 
 // Tick ATB gauges. Slice 1: display-only — gauges fill alongside the
