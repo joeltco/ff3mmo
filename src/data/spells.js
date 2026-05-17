@@ -145,40 +145,6 @@ export const SPELL_MP_COST = new Map([
   [0x3a, 5],  // Blizzara / Bzzra / Ice2 (BM Lv2 — also delivered by SouthWind item)
 ]);
 
-// Spell cast time / charge — FF4 ATB mechanic (v1.7.445). After a spell
-// resolves, the caster's next gauge fill target is `(RA + castTime) * TICK_MS
-// * speedMod` instead of just `RA * TICK_MS * speedMod`. Charge units are
-// the same as RA (one cast-time point = one RA tick).
-//
-// Tuned snappier than FF4 canon (FF4 Cure = 4, Firaga = 10, Meteo = 99) to
-// keep our combat brisk; biggest delays live on higher-level offensive
-// spells. Default = 0 (no charge) for spells without an entry; combat code
-// treats absence the same as 0. Add a row when you wire a new player-
-// castable spell.
-export const SPELL_CAST_TIME = new Map([
-  [0x31, 4],  // Fire     (BM Lv1) — moderate charge
-  [0x32, 4],  // Bzzard / Blizzard Lv1 (BM)
-  [0x33, 5],  // Sleep    (BM Lv1 status)
-  [0x34, 3],  // Cure     (WM Lv1) — quick heal
-  [0x35, 3],  // Poisona  (WM Lv1 cure-status)
-  [0x36, 2],  // Sight    (WM Lv1 utility, near-instant)
-  [0x3a, 6],  // Blizzara (BM Lv2) — Lv2 spells get a longer charge
-]);
-
-export function getSpellCastTime(spellId) {
-  return SPELL_CAST_TIME.get(spellId) | 0;  // 0 default
-}
-
-// v1.7.445 — stash the next-fill charge on the caster so _resetLastDispatched
-// in battle-turn.js picks it up and passes it to atb.js markFilling. Items
-// (BachusWine etc.) skip the charge per FF4 — items resolve immediately.
-// Called at every spell-cast initiation site (player + ally + PvP-enemy);
-// no-op when spellId has no SPELL_CAST_TIME entry.
-export function tagCasterCastTime(actor, spellId, isItemUse) {
-  if (!actor) return;
-  actor._nextCastTimeRa = isItemUse ? 0 : getSpellCastTime(spellId);
-}
-
 // Magic-shop buy price per spell (gil). NES FF3 sells level-1 white magic for 100 gil.
 export const SPELL_BUY_PRICE = new Map([
   [0x31, 100],  // Fire (BM Lv1)

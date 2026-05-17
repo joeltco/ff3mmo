@@ -8,15 +8,12 @@ import { buildTurnOrder, processNextTurn } from './battle-turn.js';
 import { updateBattleAlly } from './battle-ally.js';
 import { resetBattleVars, isTeamWiped, updateBattleTimers, updatePoisonTick,
          updateBattlePlayerAttack, updateBattleDefendItem, updateBattleEndSequence,
-         tryJoinPlayerAlly, advancePVPTargetOrVictory, emitWirePVPAction,
-         initBattleATB } from './battle-update.js';
+         tryJoinPlayerAlly, advancePVPTargetOrVictory, emitWirePVPAction } from './battle-update.js';
 import { playSFX, stopSFX, SFX, pauseMusic, playTrack, TRACKS } from './music.js';
 import { rollHits, calcPotentialHits, BOSS_HIT_RATE, GOBLIN_HIT_RATE, summarizeHits, isLeftHandHit } from './battle-math.js';
 import { reseedFromEntropy, seed as seedRng, rand } from './rng.js';
 import { setNetPVPActionHandler, sendNetPVPEnd, sendNetPVPResult,
-         setNetPVPAllyJoinHandler, getMyUserId,
-         setNetPVPAtbSyncHandler } from './net.js';
-import { markFilling as _atbMarkFilling } from './atb.js';
+         setNetPVPAllyJoinHandler, getMyUserId } from './net.js';
 import { dispatchDelta } from './deltas.js';
 import { canCastBasic, canCastAny, pickHealTarget, pickPoisonedTarget,
          pickRandomLivingTarget, pickOffensiveSpell, rollOffensiveDamage,
@@ -29,7 +26,6 @@ import { PLAYER_POOL, generateAllyStats } from './data/players.js';
 import { JOBS } from './data/jobs.js';
 import { MONSTERS } from './data/monsters.js';
 import { ps } from './player-stats.js';
-import { pickReadyActor, isReady } from './atb.js';
 import { inputSt } from './input-handler.js';
 import { getShieldEvade } from './player-stats.js';
 import { pvpGridLayout, PVP_CELL_W, PVP_CELL_H } from './pvp-math.js';
@@ -42,7 +38,7 @@ import { queueBattleMsg, replaceBattleMsg } from './battle-msg.js';
 import { BATTLE_FOE, BATTLE_REFLECT } from './data/strings.js';
 import { hasBuff, BUFF_REFLECT } from './buffs.js';
 import { tickHealNums, clearHealNums, DMG_SHOW_MS } from './damage-numbers.js';
-import { SPELLS, tagCasterCastTime } from './data/spells.js';
+import { SPELLS } from './data/spells.js';
 import { CAST_PHASE_MS_THROW, CAST_PHASE_MS_HEAL } from './cast-anim.js';
 import { applyMagicDamage, applyMagicStatus, applyMagicHeal,
          applyMagicCureStatus, applyMagicSight, playSpellImpactSFX } from './combatant-cast.js';
@@ -62,9 +58,7 @@ function _buildAndProcessNextTurn() {
     pvpSt._wireTurnIndex = (pvpSt._wireTurnIndex | 0) + 1;
     seedRng(((pvpSt._wireSeed >>> 0) + pvpSt._wireTurnIndex) >>> 0);
   }
-  // ATB era — dispatch only the player's confirmed action this cycle.
-  // Other combatants' gauges drive their own dispatches via atb-idle.
-  battleSt.turnQueue = [{ type: 'player' }];
+  battleSt.turnQueue = buildTurnOrder();
   processNextTurn();
 }
 
@@ -213,30 +207,6 @@ setNetPVPAllyJoinHandler((msg) => {
 const _wireClosingStates = new Set([
   'enemy-box-close', 'encounter-box-close', 'run-success', 'run-fail',
 ]);
-
-// Slice 5 (v1.7.442) — partner's gauge state transition arrives. Apply
-// markFilling on the corresponding partner-owned unit so both clients'
-// gauges reset from the same wall-clock atMs anchor.
-//   unitKind: 'player' → pvpOpponentStats
-//   unitKind: 'ally', allyIdx → pvpEnemyAllies[allyIdx]
-setNetPVPAtbSyncHandler((msg) => {
-  if (!msg || !pvpSt.isWirePVP) return;
-  const atMs = Number(msg.atMs);
-  if (!Number.isFinite(atMs) || atMs <= 0) return;
-  let ref = null;
-  if (msg.unitKind === 'player') {
-    ref = pvpSt.pvpOpponentStats;
-  } else if (msg.unitKind === 'ally') {
-    const i = msg.allyIdx | 0;
-    if (i >= 0 && i < pvpSt.pvpEnemyAllies.length) {
-      ref = pvpSt.pvpEnemyAllies[i] || null;
-    }
-  }
-  if (!ref || !ref._atb) return;
-  // v1.7.445 — castTimeRa for FF4 spell cast time relays across duels too.
-  const castTimeRa = Math.max(0, Math.min(99, msg.castTimeRa | 0));
-  _atbMarkFilling(ref, atMs, castTimeRa);
-});
 
 setNetPVPActionHandler((msg) => {
   if (!pvpSt.isWirePVP) return;
@@ -455,20 +425,14 @@ function _updatePVPOpening() {
     // Skip boss-appear (land turtle) — PVP box goes straight to battle-fade-in
     if (battleSt.battleTimer >= BOSS_BOX_EXPAND_MS) { battleSt.battleState = 'battle-fade-in'; battleSt.battleTimer = 0; }
   } else if (bs === 'battle-fade-in') {
-    if (battleSt.battleTimer >= (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS) {
-      initBattleATB();
-      // v1.7.437 — menu-open immediately so player can queue early.
-      battleSt.battleState = 'menu-open'; battleSt.battleTimer = 0;
-    }
+    if (battleSt.battleTimer >= (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS) { battleSt.battleState = 'menu-open'; battleSt.battleTimer = 0; }
   } else { return false; }
   return true;
 }
 function _updatePVPMenuConfirm() {
   const bs = battleSt.battleState;
   if (bs === 'confirm-pause') {
-    // Hold until player's gauge is ready — same queue-command UX as
-    // _updateBattleMenuConfirm. v1.7.437.
-    if (battleSt.battleTimer >= 150 && isReady(ps)) {
+    if (battleSt.battleTimer >= 150) {
       // Wire-PvP — relay the local player's confirmed action to the partner
       // BEFORE turn dispatch fires, so their client has time to queue it for
       // their opponent-side turn. Mirrors `_updateBattleMenuConfirm` in
@@ -511,7 +475,6 @@ function _updatePVPDissolve() {
 }
 export function updatePVPBattle(dt) {
   updateBattleTimers(dt);
-  _updatePVPATBDispatch()        ||
   updatePoisonTick()             ||
   _updatePVPOpening()         ||
   _updatePVPMenuConfirm()     ||
@@ -522,40 +485,6 @@ export function updatePVPBattle(dt) {
   updateBattleAlly(dt)           ||
   updateBattleEnemyTurn(dt) ||
   updateBattleEndSequence(dt);
-}
-
-// PvP ATB dispatch hub — mirrors `_updateATBDispatch` in battle-update.js.
-// Fires on both 'atb-idle' and 'menu-open' so PvP opponents can act while
-// the player has the menu open (Wait mode pauses player's gauge only).
-function _updatePVPATBDispatch() {
-  const bs = battleSt.battleState;
-  if (bs !== 'atb-idle' && bs !== 'menu-open') return false;
-  const inMenu = bs === 'menu-open';
-  const ready = pickReadyActor({ skipPlayer: inMenu });
-  if (!ready) return !inMenu;
-  if (ready.kind === 'player') {
-    battleSt.battleState = 'menu-open'; battleSt.battleTimer = 0;
-    return true;
-  }
-  if (ready.kind === 'ally') {
-    const idx = battleSt.battleAllies.indexOf(ready.ref);
-    if (idx < 0) return !inMenu;
-    battleSt.turnQueue = [{ type: 'ally', index: idx }];
-    processNextTurn();
-    return true;
-  }
-  if (ready.kind === 'pvp-enemy') {
-    if (ready.ref === pvpSt.pvpOpponentStats) {
-      battleSt.turnQueue = [{ type: 'enemy', index: -1, pvpAllyIdx: -1 }];
-    } else {
-      const ei = pvpSt.pvpEnemyAllies.indexOf(ready.ref);
-      if (ei < 0) return !inMenu;
-      battleSt.turnQueue = [{ type: 'enemy', index: -1, pvpAllyIdx: ei }];
-    }
-    processNextTurn();
-    return true;
-  }
-  return !inMenu;
 }
 
 // ── Enemy turn update ─────────────────────────────────────────────────────────
@@ -965,7 +894,6 @@ function _applyWireOpponentAction(action, casterCellIdx) {
     queueBattleMsg(caster?.name ? _nameToBytes(caster.name) : BATTLE_FOE);
     replaceBattleMsg(getSpellNameShrinesClean(action.spellId));
     playSFX(SFX.MAGIC_CAST);
-    tagCasterCastTime(caster, action.spellId);
     battleSt.battleState = 'pvp-enemy-magic-cast';
     battleSt.battleTimer = 0;
     return true;
@@ -1109,7 +1037,6 @@ function _tryPVPEnemyCure(caster, casterCellIdx) {
   queueBattleMsg(caster.name ? _nameToBytes(caster.name) : BATTLE_FOE);
   replaceBattleMsg(getSpellNameShrinesClean(SPELL_CURE));
   playSFX(SFX.MAGIC_CAST);
-  tagCasterCastTime(caster, SPELL_CURE);
   battleSt.battleState = 'pvp-enemy-magic-cast';
   battleSt.battleTimer = 0;
   return true;
@@ -1183,7 +1110,6 @@ function _tryPVPEnemyOffensiveCast(caster, casterCellIdx) {
   queueBattleMsg(caster.name ? _nameToBytes(caster.name) : BATTLE_FOE);
   replaceBattleMsg(getSpellNameShrinesClean(spellId));
   playSFX(SFX.MAGIC_CAST);
-  tagCasterCastTime(caster, spellId);
   battleSt.battleState = 'pvp-enemy-magic-cast';
   battleSt.battleTimer = 0;
   return true;
@@ -1216,7 +1142,6 @@ function _tryPVPEnemyPoisona(caster, casterCellIdx) {
   queueBattleMsg(caster.name ? _nameToBytes(caster.name) : BATTLE_FOE);
   replaceBattleMsg(getSpellNameShrinesClean(SPELL_POISONA));
   playSFX(SFX.MAGIC_CAST);
-  tagCasterCastTime(caster, SPELL_POISONA);
   battleSt.battleState = 'pvp-enemy-magic-cast';
   battleSt.battleTimer = 0;
   return true;

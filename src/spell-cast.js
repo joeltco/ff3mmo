@@ -11,7 +11,7 @@ import { inputSt } from './input-handler.js';
 import { SFX, playSFX } from './music.js';
 import { setPlayerHealNum, setPlayerDamageNum, getAllyDamageNums, setEnemyDmgNum, setEnemyHealNum, setSwDmgNum,
          tickHealNums, clearHealNums, DMG_SHOW_MS, makeHealNumCallback } from './damage-numbers.js';
-import { SPELLS, getSpellMPCost, isMultiTargetSpell, tagCasterCastTime } from './data/spells.js';
+import { SPELLS, getSpellMPCost, isMultiTargetSpell } from './data/spells.js';
 import { STATUS, addStatus, removeStatus, tryInflictStatus, STATUS_NAME_BYTES, STATUS_NAME_TO_FLAG } from './status-effects.js';
 import { CAST_PHASE_MS, CAST_PHASE_MS_THROW, CAST_TOTAL_MS, CAST_T_THROW_RETURN, CAST_T_THROW_IMPACT_START,
          CAST_T_HEAL_APPLY, CAST_T_HEAL_ANIM_START } from './cast-anim.js';
@@ -28,7 +28,6 @@ import { elemMultiplier, resolveLivingTarget } from './battle-math.js';
 import { rand } from './rng.js';
 import { pvpSt } from './pvp.js';
 import { applyBuff, BUFF_HASTE, BUFF_PROTECT, BUFF_REFLECT } from './buffs.js';
-import { setSpeedMod } from './atb.js';
 
 let _processNextTurn = () => {};
 export function initSpellCast({ processNextTurn }) { _processNextTurn = processNextTurn; }
@@ -261,10 +260,6 @@ export function startSpellCast(spellId, targetSpec, opts = {}) {
   if (!_isItemUse) {
     ps.mp -= getSpellMPCost(spellId);
   }
-  // v1.7.445 — FF4 spell cast time. Stash on the caster; consumed by
-  // _resetLastDispatched at action-end, applied to the next gauge fill via
-  // markFilling. Items skip (resolve immediately per FF4 base 0).
-  tagCasterCastTime(ps, spellId, _isItemUse);
   battleSt.battleState = 'magic-cast';
   battleSt.battleTimer = 0;
   // Cast SFX — FF3J disasm at 33/B0D8 (black) and 33/B0FF (white) writes $A1 to
@@ -571,10 +566,6 @@ function _applySpellEffect(target) {
   // we ship the bounce path.
   if (spell.target === 'haste') {
     applyBuff(ps, BUFF_HASTE);
-    // Slice 6 (v1.7.443) — Haste also doubles the rate the ATB gauge fills.
-    // FF4 canon. speedMod < 1 = faster fill; battle-bound (cleared at
-    // battle exit via the fresh `_atb` from the next initBattleATB).
-    setSpeedMod(ps, 0.5);
     replaceBattleMsg(BATTLE_HASTE);
     _playSpellSFXOnce(SFX.CURE);
     return;

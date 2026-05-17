@@ -2,6 +2,30 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.456 — 2026-05-17
+
+### Revert ATB rewrite — back to FF3-style round-based combat
+
+User feedback: ATB feel wasn't working. Reverting the entire v1.7.428→v1.7.455 ATB system back to the pre-ATB FF3-style flow:
+
+- Player picks all party commands at round start
+- Initiative-rolled turn queue processes once
+- `TURN_TIME_MS = 10000` decision auto-skip restored
+- No gauges, no real-time
+
+**Surgical revert.** Used `git checkout b7be156 -- <files>` to restore the four core battle files (`battle-update.js`, `battle-turn.js`, `battle-ally.js`, `pvp.js`, `battle-encounter.js`) to v1.7.427 state. Deleted `src/atb.js`, `src/atb-render.js`, `tools/atb-sim.js`, `tools/atb-fsm-sim.js`. Stripped all ATB-related code from `encounter-wire.js`, `net.js`, `ws-presence.js` (atb-sync / atb-ready / pvp-atb-sync wire kinds removed; server-side `_encounterBattles` tick loop removed). Removed Battle Speed slider from pause-menu, `SPELL_CAST_TIME` table + `tagCasterCastTime` helper from `data/spells.js`, `setSpeedMod` Haste wire from `spell-cast.js`, `_drawPortraitATBBar` from `battle-draw-player.js`, `drawATBGauges` call from `battle-drawing.js`.
+
+**Preserved post-ATB fixes that aren't ATB-related:**
+- v1.7.446 `forceCloseMsgBox` on battle entry (chest msg box bleeding into battle)
+- v1.7.447 Magic menu opens even with empty spell list
+- v1.7.448 chat tab cursor + empty-roster tab select
+- v1.7.449 enemy "x2" multiplier glyph (AWJ font fix)
+- v1.7.450 server save validator includes equipment fields
+- v1.7.453 staff icon subtype fallback + chat tab z-order
+- v1.7.454 `removeBossNpc` on dissolve + `MapRenderer#redrawMetatileAt` chest-flicker fix
+
+Wire-sim now 49/49 (down from 61/61 — 12 ATB-protocol tests removed). Lint clean. Land Turtle returns to legacy turn-queue flow (the v1.7.453 boss-ATB registration is gone; boss attack runs through the original `BOSS_ATK`/`BOSS_HIT_RATE` path).
+
 ## 1.7.455 — 2026-05-17
 
 ### FF4 SNES canon — menu opens only when ready, no visible gauge, sub-menus pause everything

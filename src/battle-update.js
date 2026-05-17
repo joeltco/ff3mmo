@@ -17,7 +17,6 @@ import { summarizeHits } from './battle-math.js';
 import { reseedFromEntropy } from './rng.js';
 import { sendNetPVPAction, sendNetPVPAllyJoin, getOnlinePlayerByName } from './net.js';
 import { emitWireEncounterAction, endWireEncounter, clearWireEncounterQueue } from './encounter-wire.js';
-import { removeBossNpc } from './npc.js';
 import { rand } from './rng.js';
 import { updateBattleAlly } from './battle-ally.js';
 import { updateBattleEnemyTurn } from './battle-enemy.js';
@@ -43,8 +42,7 @@ import { applyPhysicalHitToEnemy } from './physical-attack.js';
 import { playSlashSFX } from './battle-sfx.js';
 import { saveSlotsToDB } from './save-state.js';
 import { addItem, buildItemSelectList } from './inventory.js';
-import { initATB, addATBUnit, clearATB, tickGauges, deriveMonsterAgi,
-         pickReadyActor, isReady, setServerAuthoritative, getATBUnits } from './atb.js';
+import { removeBossNpc } from './npc.js';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 // BATTLE_TEXT_STEPS / BATTLE_TEXT_STEP_MS now imported from battle-state.js (single source).
@@ -69,9 +67,7 @@ const PLAYER_DMG_SHOW_MS       = 700;
 // "the hit registered, now they fall" beat. Was 0 (immediate transition).
 const PRE_DEATH_PAUSE_MS       = 85;
 const DEFEND_SPARKLE_TOTAL_MS  = 533;
-// TURN_TIME_MS (10s player-decision auto-skip) deleted in v1.7.429 — the
-// ATB gauge IS the new clock. If a player sits on a full gauge, their
-// gauge stays full; the rest of the field keeps moving (Wait mode).
+const TURN_TIME_MS             = 10000;
 const VICTORY_BOX_ROWS         = 8;
 const VICTORY_ROW_FRAME_MS     = 16.67;
 const POISON_TICK_MS           = 500;
@@ -81,7 +77,6 @@ const POISON_END_HOLD_MS       = 700;
 
 export function resetBattleVars() {
   inputSt.battleCursor = 0;
-  battleSt._bossAtbRef = null;  // v1.7.453 — drop stale boss ATB ref
   resetAllDmgNums();
   battleSt.encounterDropItem = null; battleSt.bossFlashTimer = 0; battleSt.battleShakeTimer = 0;
   // Co-op random encounter flags reset every battle start. `_maybeHostCoopEncounter`
@@ -154,9 +149,8 @@ export function executeBattleCommand(index) {
     // E.g., a White Mage carrying Fire from a previous BM stint won't see
     // Fire in their battle menu — RM sees both.
     // v1.7.447 — open the magic submenu even when the filtered list is
-    // empty. The empty-state render shows "No spells" so a job-flipped or
-    // unschooled mage sees the panel rather than silently falling through
-    // to Defend (mages don't have Defend in FF3 canon anyway).
+    // empty. "No spells" panel renders instead of silently falling through
+    // to Defend (mages don't have Defend in FF3 canon).
     const castableKnown = (ps.knownSpells || []).filter(id => canCastSpell(ps.jobIdx, id));
     if (isMage) {
       // Silence gate — Silenced player can't pick Magic. SFX.ERROR + "Silenced"
@@ -235,10 +229,20 @@ export function updateBattleTimers(dt) {
     if (ally.deathTimer != null) ally.deathTimer += dt;
   }
 
+  _updateTurnTimer(dt);
   _updateAllyExitFade(dt);
 }
 
-// Legacy 10s auto-skip retired in v1.7.429 — replaced by ATB gauge clock.
+function _updateTurnTimer(dt) {
+  const isPlayerDeciding = battleSt.battleState === 'menu-open' || battleSt.battleState === 'target-select' ||
+    battleSt.battleState === 'item-select' || battleSt.battleState === 'item-target-select' || battleSt.battleState === 'item-slide';
+  if (!isPlayerDeciding) return;
+  battleSt.turnTimer += dt;
+  if (battleSt.turnTimer >= TURN_TIME_MS) {
+    battleSt.turnTimer = 0; inputSt.itemHeldIdx = -1;
+    inputSt.playerActionPending = { command: 'skip' }; battleSt.battleState = 'confirm-pause'; battleSt.battleTimer = 0;
+  }
+}
 
 function _updateAllyExitFade(dt) {
   if (battleSt.battleAllies.length === 0) return;
@@ -277,74 +281,9 @@ function _updateBattleOpening() {
   } else if (battleSt.battleState === 'boss-appear') {
     if (battleSt.battleTimer >= BOSS_BLOCKS * BOSS_DISSOLVE_STEPS * BOSS_DISSOLVE_FRAME_MS) { battleSt.battleState = 'battle-fade-in'; battleSt.battleTimer = 0; }
   } else if (battleSt.battleState === 'battle-fade-in') {
-    if (battleSt.battleTimer >= (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS) {
-      initBattleATB();
-      // v1.7.455 — FF4 canon: menu opens only when the player's gauge is
-      // ready. Yield to atb-idle and let `_updateATBDispatch` pick the
-      // player when their gauge fills (flips to menu-open then). Reverts
-      // v1.7.437's queueable-commands behavior.
-      battleSt.battleState = 'atb-idle'; battleSt.battleTimer = 0;
-    }
+    if (battleSt.battleTimer >= (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS) { battleSt.battleState = 'menu-open'; battleSt.battleTimer = 0; }
   } else { return false; }
   return true;
-}
-
-// ── ATB init / ally-join helpers ──────────────────────────────────────────
-// Build the per-unit ATB entry set from current battleSt + ps + pvpSt and
-// hand it to atb.js. Anchor = local player (first entry). Slice 1: gauges
-// are display-only; legacy turn queue still drives dispatch.
-export function initBattleATB() {
-  const entries = [];
-  entries.push({ ref: ps, kind: 'player', agi: (ps.stats && ps.stats.agi) | 0 });
-  for (const ally of battleSt.battleAllies) {
-    if (!ally) continue;
-    entries.push({ ref: ally, kind: 'ally', agi: ally.agi | 0 });
-  }
-  if (battleSt.encounterMonsters) {
-    for (const mon of battleSt.encounterMonsters) {
-      if (!mon) continue;
-      entries.push({ ref: mon, kind: 'monster', agi: deriveMonsterAgi(MONSTERS.get(mon.monsterId) || mon) });
-    }
-  }
-  if (pvpSt.isPVPBattle) {
-    if (pvpSt.pvpOpponentStats) {
-      entries.push({ ref: pvpSt.pvpOpponentStats, kind: 'pvp-enemy', agi: pvpSt.pvpOpponentStats.agi | 0 });
-    }
-    for (const enemyAlly of pvpSt.pvpEnemyAllies) {
-      if (!enemyAlly) continue;
-      entries.push({ ref: enemyAlly, kind: 'pvp-enemy', agi: enemyAlly.agi | 0 });
-    }
-  }
-  // v1.7.453 — boss fights weren't registered as ATB units, so the Land
-  // Turtle never got picked by the dispatch hub and never attacked. Boss HP
-  // is stored on battleSt.enemyHP (separate from encounterMonsters); we
-  // build a stable synthetic ref with a `hp` getter so atb.js can store it
-  // across the battle and pickReadyActor's hp <= 0 check still works as
-  // the boss takes damage.
-  if (!battleSt.isRandomEncounter && !pvpSt.isPVPBattle && getEnemyHP() > 0) {
-    if (!battleSt._bossAtbRef) {
-      battleSt._bossAtbRef = { isBoss: true };
-      Object.defineProperty(battleSt._bossAtbRef, 'hp', {
-        get: () => getEnemyHP(),
-        set: (v) => { setEnemyHP(v); },
-        configurable: true,
-      });
-    }
-    const bossData = MONSTERS.get(0xCC);
-    entries.push({ ref: battleSt._bossAtbRef, kind: 'boss', agi: deriveMonsterAgi(bossData) });
-  }
-  initATB(entries);
-  // Slice 4d (v1.7.441) — co-op random battles defer the ready flip to
-  // the server's authoritative atb-ready broadcasts. PvP stays local-
-  // driven (lockstep RNG covers it; latency would hurt the duel feel).
-  setServerAuthoritative(!!battleSt.isWireEncounter);
-}
-
-// Attach a newly-joined ally to the existing ATB rhythm (Battle Assist).
-// Safe to call before initBattleATB has run — it'll no-op until anchor is set.
-export function addBattleATBAlly(ally) {
-  if (!ally) return;
-  addATBUnit({ ref: ally, kind: 'ally', agi: ally.agi | 0 });
 }
 
 // ── Ally join ──────────────────────────────────────────────────────────────
@@ -446,11 +385,7 @@ export function tryJoinPlayerAlly() {
 
 function _updateBattleMenuConfirm() {
   if (battleSt.battleState === 'confirm-pause') {
-    // ATB era — the 150ms pause is the "selected, about to fire" beat,
-    // but the action only actually fires when the player's gauge is ready.
-    // If they queued a command early (gauge still filling), confirm-pause
-    // holds here until isReady(ps) flips true. v1.7.437.
-    if (battleSt.battleTimer >= 150 && isReady(ps)) {
+    if (battleSt.battleTimer >= 150) {
       // MP Step 4 part 2 — relay the player's action to the wire partner
       // BEFORE turn dispatch fires animations, so the partner's client has
       // time to drive their opponent-side turn without an extra wait.
@@ -470,10 +405,7 @@ function _updateBattleMenuConfirm() {
       // boundary so both clients land on the same initiative + AI rolls.
       // Mirror of PvP's `_buildAndProcessNextTurn`.
       maybeReseedCoopTurn();
-      // ATB era — dispatch only the player's confirmed action this cycle.
-      // Other combatants' gauges drive their own dispatches via atb-idle.
-      battleSt.turnQueue = [{ type: 'player' }];
-      processNextTurn();
+      battleSt.turnQueue = buildTurnOrder(); processNextTurn();
     }
   } else { return false; }
   return true;
@@ -889,7 +821,7 @@ function _updateBossDissolve(dt) {
   if (dBlock !== prevBlock && dBlock > 0 && (dBlock & 3) === 0) playSFX(SFX.BOSS_DEATH);
   if (battleSt.battleTimer >= BOSS_BLOCKS * BOSS_DISSOLVE_STEPS * BOSS_DISSOLVE_FRAME_MS) {
     battleSt.enemyDefeated = true; mapSt.bossSprite = null;
-    removeBossNpc();  // v1.7.454 — drop the overworld sprite; respawns on map reload
+    removeBossNpc();  // v1.7.454 — drop overworld sprite; respawns on map reload
     ps.unlockedJobs |= 0x3E; // Wind Crystal: bits 1-5 (Warrior, Monk, White Mage, Black Mage, Red Mage)
     // KO'd player: skip rewards and victory, straight to box-close (→ respawn).
     if (ps.hp <= 0) {
@@ -995,7 +927,6 @@ function _updateBoxClose() {
       sprite.setDirection(DIR_DOWN); battleSt.isRandomEncounter = false; battleSt.encounterMonsters = null;
       battleSt.dyingMonsterIndices = new Map(); battleSt.battleAllies = []; battleSt.allyJoinRound = 0;
       stopMusic();
-      clearATB();
       battleSt.battleState = 'none'; battleSt.battleTimer = 0;
       if (playerDead) _respawnAtLastTown();
       else resumeMusic();
@@ -1009,7 +940,6 @@ function _updateBoxClose() {
       resetPVPState();
       sprite.setDirection(DIR_DOWN);
       battleSt.battleAllies = []; battleSt.allyJoinRound = 0;
-      clearATB();
       battleSt.battleState = 'none'; battleSt.battleTimer = 0;
       if (playerDead) {
         stopMusic();
@@ -1055,10 +985,8 @@ export function updateBattle(dt) {
   if (battleSt.battleState === 'none') return;
   battleSt.battleTimer += Math.min(dt, 33);
   _updateBattleMsg(dt);
-  _tickATB(dt);
   if (pvpSt.isPVPBattle) { updatePVPBattle(dt); return; }
   updateBattleTimers(dt);
-  _updateATBDispatch()             ||
   _updatePoisonTick()              ||
   _updateBattleOpening()           ||
   _updateBattleMenuConfirm()       ||
@@ -1068,99 +996,4 @@ export function updateBattle(dt) {
   updateBattleAlly(dt)             ||
   updateBattleEnemyTurn()          ||
   updateBattleEndSequence(dt);
-}
-
-// ATB dispatch hub — runs when battleState === 'atb-idle' OR 'menu-open'.
-//
-// In `atb-idle`: pick the FIFO-earliest ready unit. If it's the player,
-// open the menu. Otherwise dispatch their action via the legacy
-// per-turn-type machinery (1-entry turn queue + processNextTurn).
-//
-// In `menu-open`: player has the menu open and their gauge is paused at
-// full (Wait mode). Other units' gauges keep filling — when one reaches
-// ready, interrupt the menu and dispatch their action. After the action's
-// animation completes, processNextTurn returns the state to atb-idle, and
-// on the next tick this handler re-picks the player and re-opens the menu.
-//
-// Player is left in 'ready' state through the menu phase (no markActing
-// on entry). The re-pick short-circuits when state is already menu-open.
-// markActing fires later inside processNextTurn when the player's confirmed
-// turn actually dispatches.
-function _updateATBDispatch() {
-  const bs = battleSt.battleState;
-  if (bs !== 'atb-idle' && bs !== 'menu-open') return false;
-  const inMenu = bs === 'menu-open';
-  // In menu-open, skip the player when picking — the menu is already up
-  // and they're picking. Lets monster/ally interrupts get through.
-  const ready = pickReadyActor({ skipPlayer: inMenu });
-  if (!ready) return !inMenu;  // hold idle; yield in menu so input still works
-  if (ready.kind === 'player') {
-    // Only reachable from atb-idle (skipPlayer is set in menu-open).
-    battleSt.battleState = 'menu-open'; battleSt.battleTimer = 0;
-    return true;
-  }
-  if (ready.kind === 'ally') {
-    const idx = battleSt.battleAllies.indexOf(ready.ref);
-    if (idx < 0) return !inMenu;
-    battleSt.turnQueue = [{ type: 'ally', index: idx }];
-    processNextTurn();
-    return true;
-  }
-  if (ready.kind === 'monster') {
-    if (!battleSt.encounterMonsters) return !inMenu;
-    const idx = battleSt.encounterMonsters.indexOf(ready.ref);
-    if (idx < 0) return !inMenu;
-    battleSt.turnQueue = [{ type: 'enemy', index: idx }];
-    processNextTurn();
-    return true;
-  }
-  if (ready.kind === 'boss') {
-    // v1.7.453 — boss turn. -1 sentinel + isBoss flag so the enemy-turn
-    // branch in battle-turn.js routes through the legacy boss attack path
-    // (BOSS_ATK / BOSS_HIT_RATE constants when currentAttacker stays -1).
-    battleSt.turnQueue = [{ type: 'enemy', index: -1, isBoss: true }];
-    processNextTurn();
-    return true;
-  }
-  // PvP-enemy dispatch is handled inside updatePVPBattle's own cascade.
-  return !inMenu;
-}
-
-// Tick ATB gauges. v1.7.455 — FF4 SNES canon: gauges advance ONLY in true
-// idle states (`atb-idle` = waiting for someone to fill; `menu-open` = player
-// is selecting top-level command, Active mode per v1.7.433 lets monsters
-// keep filling). Every other state — sub-menus, action animations, message
-// strips, pre-battle, victory — pauses all gauges. Mirrors FF4's
-// `BattleMain` calling `DecTimers` only when `$38d9`/`$38da` are both zero.
-//
-// Effect: an enemy can't fill its gauge while the player is navigating
-// item-select / target-select / item-target-select / magic-cast / attack
-// animations / damage display. Pre-fix, monsters filled during sub-menus
-// and dispatched the moment the player closed the sub-menu, which read as
-// "menu reset by enemy attack".
-const _ATB_TICK_STATES = new Set(['atb-idle', 'menu-open']);
-function _tickATB(dt) {
-  if (!_ATB_TICK_STATES.has(battleSt.battleState)) return;
-  if (isVictoryBattleState()) return;
-  tickGauges(dt);
-  // v1.7.444 — one-shot telemetry for server-auth timeout flips. tickGauges
-  // sets `forcedReady=true` when it falls back to a local ready flip after
-  // a missed `atb-ready` wire frame. POST once so we can measure drop rates
-  // in prod logs, then clear the flag so we don't spam.
-  if (battleSt.isWireEncounter) {
-    for (const u of getATBUnits()) {
-      const atb = u.ref && u.ref._atb;
-      if (!atb || !atb.forcedReady) continue;
-      atb.forcedReady = false;
-      const msg = '[atb-ready timeout] kind=' + u.kind + ' ra=' + atb.ra;
-      console.warn(msg);
-      try {
-        fetch('/api/client-error', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ msg, stack: '', ctx: { battleState: battleSt.battleState } }),
-        }).catch(() => {});
-      } catch { /* node sims have no fetch */ }
-    }
-  }
 }

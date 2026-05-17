@@ -2,9 +2,7 @@
 
 import { battleSt } from './battle-state.js';
 import { forceCloseMsgBox } from './message-box.js';
-import { addBattleATBAlly } from './battle-update.js';
 import { MONSTERS } from './data/monsters.js';
-import { deriveMonsterAgi } from './atb.js';
 import { ENCOUNTERS } from './data/encounters.js';
 import { GOBLIN_HIT_RATE } from './battle-math.js';
 import { SFX, playSFX } from './music.js';
@@ -86,8 +84,7 @@ export function startRandomEncounter() {
   battleSt.isRandomEncounter = true;
   inputSt.battleActionCount = 0;
   // v1.7.446 — drop any in-flight overworld msg box ("Found Potion!" from a
-  // chest, NPC dialogue, etc.) so it doesn't bleed through the battle wipe
-  // and sit on top of the encounter view.
+  // chest, NPC dialogue, etc.) so it doesn't bleed through the battle wipe.
   forceCloseMsgBox();
 
   // World-map encounter zone is split by region:
@@ -176,12 +173,7 @@ function _maybeHostCoopEncounter() {
   }
   if (partyPeers.length === 0) return;
   const seed32 = (Math.random() * 0xffffffff) >>> 0;
-  // v1.7.440 — include per-monster derived agi so the server can compute
-  // RA values for its authoritative ATB tick loop (slice 4c).
-  const monsterPayload = battleSt.encounterMonsters.map(m => {
-    const data = MONSTERS.get(m.monsterId) || m;
-    return { monsterId: m.monsterId, agi: deriveMonsterAgi(data) };
-  });
+  const monsterPayload = battleSt.encounterMonsters.map(m => ({ monsterId: m.monsterId }));
   if (!sendNetEncounterStart(seed32, monsterPayload, partyPeers)) return;
   battleSt.isWireEncounter = true;
   battleSt.encounterIsHost = true;
@@ -275,8 +267,7 @@ setNetEncounterInviteHandler((msg) => {
   // = peers[0] (canonical sort puts host first). v1.7.420.
   const hostName = (peerList[0] && peerList[0].name) || 'Party';
   try { addChatMessage('* Joined ' + hostName + "'s battle!", 'system'); } catch { /* chat optional */ }
-  // v1.7.446 — drop any overworld msg box before the battle wipe.
-  forceCloseMsgBox();
+  forceCloseMsgBox();  // v1.7.446
   battleSt.battleState = 'flash-strobe';
   battleSt.battleTimer = 0;
   playSFX(SFX.BATTLE_SWIPE);
@@ -355,27 +346,18 @@ setNetEncounterAssistIncomingHandler((msg) => {
       jobLevel: a.jobLevel | 0,
     });
   }
-  const monsters = (battleSt.encounterMonsters || []).map(m => {
-    // v1.7.444 — include derived agi so the server can register the joiner
-    // (and missing monster units if target was solo) in `_encounterBattles`.
-    // Without this, an assist join into a solo battle leaves the server with
-    // no battle state → no `atb-ready` ever broadcasts → both peers freeze
-    // in `'filling'` forever under server-auth ATB.
-    const data = MONSTERS.get(m.monsterId | 0) || m;
-    return {
-      monsterId: m.monsterId | 0,
-      hp:        m.hp | 0,
-      agi:       deriveMonsterAgi(data),
-      // Status state — wire-ship the mask + poison tick so the joiner's
-      // monster has the same affliction. Without this, a poisoned monster
-      // on host's side ticks damage each round while the joiner's view
-      // doesn't, → HP divergence over time. v1.7.423.
-      status: m.status ? {
-        mask: m.status.mask | 0,
-        poisonDmgTick: m.status.poisonDmgTick | 0,
-      } : null,
-    };
-  });
+  const monsters = (battleSt.encounterMonsters || []).map(m => ({
+    monsterId: m.monsterId | 0,
+    hp:        m.hp | 0,
+    // Status state — wire-ship the mask + poison tick so the joiner's
+    // monster has the same affliction. Without this, a poisoned monster
+    // on host's side ticks damage each round while the joiner's view
+    // doesn't, → HP divergence over time. v1.7.423.
+    status: m.status ? {
+      mask: m.status.mask | 0,
+      poisonDmgTick: m.status.poisonDmgTick | 0,
+    } : null,
+  }));
   sendNetEncounterAssistSnapshot(msg.fromUserId, {
     seed:       battleSt.encounterSeed >>> 0,
     turnIndex:  battleSt.encounterTurnIndex | 0,
@@ -465,12 +447,10 @@ setNetEncounterAssistSnapshotHandler((msg) => {
     stats.isWireDriven = true;
     stats.fadeInStartMs = Date.now();
     battleSt.battleAllies.push(stats);
-    addBattleATBAlly(stats);
   }
   const hostName = (peerList[0] && peerList[0].name) || 'Party';
   try { addChatMessage('* Assisted ' + hostName + "'s battle!", 'system'); } catch { /* chat optional */ }
-  // v1.7.446 — drop any overworld msg box before the battle wipe.
-  forceCloseMsgBox();
+  forceCloseMsgBox();  // v1.7.446
   battleSt.battleState = 'flash-strobe';
   battleSt.battleTimer = 0;
   playSFX(SFX.BATTLE_SWIPE);
@@ -491,6 +471,5 @@ setNetEncounterAllyJoinHandler((msg) => {
   stats.isWireDriven = true;
   stats.fadeInStartMs = Date.now();
   battleSt.battleAllies.push(stats);
-  addBattleATBAlly(stats);
   try { addChatMessage('* ' + (msg.profile.name || 'Player') + ' joined the battle!', 'system'); } catch { /* chat optional */ }
 });

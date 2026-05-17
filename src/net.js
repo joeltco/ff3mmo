@@ -146,14 +146,6 @@ function _handleMessage(data) {
         catch (e) { console.warn('[net] pvp-action handler error', e); }
       }
       return;
-    case 'pvp-atb-sync':
-      // v1.7.442 — opponent's gauge state transition. Apply markFilling
-      // on the partner's unit ref (pvpOpponentStats or pvpEnemyAllies[idx]).
-      if (_onPVPAtbSync) {
-        try { _onPVPAtbSync(msg); }
-        catch (e) { console.warn('[net] pvp-atb-sync handler error', e); }
-      }
-      return;
     case 'pvp-ally-join':
       if (_onPVPAllyJoin) {
         try { _onPVPAllyJoin(msg); }
@@ -216,22 +208,6 @@ function _handleMessage(data) {
       if (_onEncounterEnd) {
         try { _onEncounterEnd(msg); }
         catch (e) { console.warn('[net] encounter-end handler error', e); }
-      }
-      return;
-    case 'atb-sync':
-      // v1.7.439 — partner's local clock-anchored ATB transition.
-      // Receiver resyncs their gauge to the partner's atMs.
-      if (_onAtbSync) {
-        try { _onAtbSync(msg); }
-        catch (e) { console.warn('[net] atb-sync handler error', e); }
-      }
-      return;
-    case 'atb-ready':
-      // v1.7.441 — server's authoritative ready broadcast (slice 4c/4d).
-      // Client flips local unit's state to 'ready' using server's atMs.
-      if (_onAtbReady) {
-        try { _onAtbReady(msg); }
-        catch (e) { console.warn('[net] atb-ready handler error', e); }
       }
       return;
     case 'encounter-assist-incoming':
@@ -447,20 +423,6 @@ export function setNetPVPActionHandler(fn) {
   _onPVPAction = typeof fn === 'function' ? fn : null;
 }
 
-// Slice 5 (v1.7.442) — PvP gauge wire-sync. Owner emits when a locally-
-// owned unit (ps + battleAllies) finishes its action animation; partner
-// applies markFilling at the same atMs anchor. PvP stays client-driven
-// for dispatch (low duel latency), this just keeps the visible bars in
-// step across both clients.
-let _onPVPAtbSync = null;
-export function sendNetPVPAtbSync(payload) {
-  if (!_helloed) return false;
-  return _send({ type: 'pvp-atb-sync', ...payload });
-}
-export function setNetPVPAtbSyncHandler(fn) {
-  _onPVPAtbSync = typeof fn === 'function' ? fn : null;
-}
-
 // Ally-join — sender's `_tryJoinPlayerAlly` picked an ally for their team.
 // Wire carries the full raw profile (`name, jobIdx, level, palIdx, loc,
 // weapon*, armor*, helm*, shield*, knownSpells, jobLevel`) so the receiver
@@ -523,25 +485,6 @@ export function sendNetEncounterEnd(outcome) {
 export function setNetEncounterInviteHandler(fn) { _onEncounterInvite = typeof fn === 'function' ? fn : null; }
 export function setNetEncounterActionHandler(fn) { _onEncounterAction = typeof fn === 'function' ? fn : null; }
 export function setNetEncounterEndHandler(fn)    { _onEncounterEnd    = typeof fn === 'function' ? fn : null; }
-
-// Slice 4b (v1.7.439) — ATB gauge-state-transition relay. Owner emits
-// `atb-sync {unitKind, monsterIdx, atMs}` when a locally-owned combatant
-// finishes their action animation (markFilling fires). Receiver calls
-// markFilling on the matching unit ref with the sender's atMs so both
-// clients reset gauges at the same wall-clock anchor.
-let _onAtbSync = null;
-export function sendNetAtbSync(payload) {
-  if (!_helloed) return false;
-  return _send({ type: 'atb-sync', ...payload });
-}
-export function setNetAtbSyncHandler(fn) { _onAtbSync = typeof fn === 'function' ? fn : null; }
-
-// Slice 4c+4d — server's authoritative ATB tick broadcasts `atb-ready`
-// to all peers when a unit's gauge fills. Receiver calls `markReady` on
-// the matching local unit. Server-arbitrated dispatch authority for
-// co-op random battles.
-let _onAtbReady = null;
-export function setNetAtbReadyHandler(fn) { _onAtbReady = typeof fn === 'function' ? fn : null; }
 
 // Battle Assist (v1.7.422+) — overworld player joins an in-progress
 // encounter on a roster target. `assist-request` from joiner triggers

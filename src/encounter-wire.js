@@ -12,12 +12,7 @@
 
 import { battleSt } from './battle-state.js';
 import { sendNetEncounterAction, sendNetEncounterEnd,
-         setNetEncounterActionHandler, setNetEncounterEndHandler,
-         sendNetAtbSync, setNetAtbSyncHandler,
-         setNetAtbReadyHandler } from './net.js';
-import { markFilling, markReady } from './atb.js';
-import { ps } from './player-stats.js';
-import { getMyUserId } from './net.js';
+         setNetEncounterActionHandler, setNetEncounterEndHandler } from './net.js';
 
 const _wireEncounterActions = [];
 
@@ -91,76 +86,6 @@ export function hasWireEncounterAction(userId) {
 // queue from a half-open prior connection doesn't replay against a new
 // battle's same-userId peer. Normal close path already clears via
 // `endWireEncounter`. v1.7.424.
-// Slice 4b (v1.7.439) — receive partner's ATB gauge reset. Find the
-// matching local unit ref (the peer's player appears as one of our
-// `battleAllies`; monsters are by index) and call markFilling with the
-// sender's wall-clock atMs. Both clients now anchor their gauges to the
-// same timestamp instead of independent local clocks.
-setNetAtbSyncHandler((msg) => {
-  if (!msg || !battleSt.isWireEncounter) return;
-  const atMs = Number(msg.atMs);
-  if (!Number.isFinite(atMs) || atMs <= 0) return;
-  let ref = null;
-  if (msg.unitKind === 'player') {
-    const senderUid = msg.userId | 0;
-    for (const a of battleSt.battleAllies) {
-      if (a && a.userId === senderUid) { ref = a; break; }
-    }
-  } else if (msg.unitKind === 'monster') {
-    if (battleSt.encounterMonsters) {
-      ref = battleSt.encounterMonsters[msg.monsterIdx | 0] || null;
-    }
-  }
-  if (!ref || !ref._atb) return;
-  // v1.7.445 — castTimeRa rides the wire so a peer's long-cast spell shows
-  // the same extended fill bar locally. Clamped 0-99 (FF4 max).
-  const castTimeRa = Math.max(0, Math.min(99, msg.castTimeRa | 0));
-  markFilling(ref, atMs, castTimeRa);
-});
-
-// Emit a markFilling sync event for a locally-owned unit. Caller decides
-// ownership via `kind` ('player' for ps; 'monster' if encounterIsHost).
-// No-op outside co-op encounters or when wire isn't ready.
-export function emitAtbFillingSync(unitKind, monsterIdx, atMs, castTimeRa) {
-  if (!battleSt.isWireEncounter) return;
-  sendNetAtbSync({
-    unitKind,
-    monsterIdx: monsterIdx | 0,
-    atMs: Number(atMs),
-    castTimeRa: Math.max(0, Math.min(99, (castTimeRa | 0) || 0)),
-  });
-}
-
-// Slice 4d — receive server's authoritative ready event and apply
-// `markReady` on the matching local unit. unitId shape:
-//   'player:<userId>' — ps if userId matches our uid, else find in
-//                       battleAllies by userId
-//   'monster:<idx>'   — encounterMonsters[idx]
-setNetAtbReadyHandler((msg) => {
-  if (!msg || !battleSt.isWireEncounter) return;
-  const atMs = Number(msg.atMs);
-  if (!Number.isFinite(atMs) || atMs <= 0) return;
-  const unitId = String(msg.unitId || '');
-  if (!unitId) return;
-  let ref = null;
-  if (unitId.startsWith('player:')) {
-    const uid = parseInt(unitId.slice(7), 10) | 0;
-    if (uid === (getMyUserId() | 0)) {
-      ref = ps;
-    } else {
-      for (const a of battleSt.battleAllies) {
-        if (a && a.userId === uid) { ref = a; break; }
-      }
-    }
-  } else if (unitId.startsWith('monster:')) {
-    const idx = parseInt(unitId.slice(8), 10) | 0;
-    if (battleSt.encounterMonsters) {
-      ref = battleSt.encounterMonsters[idx] || null;
-    }
-  }
-  if (!ref || !ref._atb) return;
-  markReady(ref, atMs);
-});
 
 export function clearWireEncounterQueue() {
   _wireEncounterActions.length = 0;

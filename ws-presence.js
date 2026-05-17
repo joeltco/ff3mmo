@@ -83,129 +83,7 @@ const _partyMemberships = new Map();
 // multi-peer. v1.7.418.
 const _encounterGroups = new Map();
 
-// ── Slice 4c (v1.7.440) — server-arbitrated ATB ──────────────────────────
-// Per-host battle state: server runs the authoritative ATB tick + broadcasts
-// `atb-ready` events when units fill. Clients receive but don't yet defer
-// dispatch (slice 4d will). For now the broadcasts are advisory — used to
-// detect drift and lay the wire surface.
-//
-// Constants must match `src/atb.js`. Don't drift.
-const _ATB_TICK_MS  = 333;
-const _ATB_RA_MIN   = 2;
-const _ATB_RA_MAX   = 10;
-const _SERVER_TICK_INTERVAL_MS = 100;
-
-const _encounterBattles = new Map();  // hostUserId → battle state
-
-function _computeRA(anchorAgi, agi) {
-  if (!anchorAgi || !agi) return _ATB_RA_MIN;
-  let ra = Math.floor(5 * anchorAgi / agi);
-  if (ra < _ATB_RA_MIN) ra = _ATB_RA_MIN;
-  if (ra > _ATB_RA_MAX) ra = _ATB_RA_MAX;
-  return ra;
-}
-
-function _initEncounterBattle(hostUid, peerUids, monsters /* [{monsterId, agi}] */) {
-  const host = _connected.get(hostUid);
-  const hostAgi = (host && host.profile && (host.profile.agi | 0)) || 5;
-  const units = new Map();
-  const now = Date.now();
-  const peerSet = new Set([hostUid, ...peerUids]);
-  // Player units — keyed `player:<userId>`.
-  for (const uid of peerSet) {
-    const entry = _connected.get(uid);
-    const agi = (entry && entry.profile && (entry.profile.agi | 0)) || 5;
-    units.set('player:' + uid, {
-      ra: _computeRA(hostAgi, agi),
-      castTimeRa: 0,  // v1.7.445 — extended by `atb-sync` after spell actions
-      state: 'filling',
-      startedAt: now,
-      readyAtMs: 0,
-    });
-  }
-  // Monster units — keyed `monster:<idx>`.
-  for (let i = 0; i < monsters.length; i++) {
-    const agi = (monsters[i] && monsters[i].agi | 0) || 5;
-    units.set('monster:' + i, {
-      ra: _computeRA(hostAgi, agi),
-      castTimeRa: 0,
-      state: 'filling',
-      startedAt: now,
-      readyAtMs: 0,
-    });
-  }
-  _encounterBattles.set(hostUid, { peers: peerSet, units, anchorMs: now });
-}
-
-// Slice 4c addendum (v1.7.444) — add a single player unit to an existing
-// battle's `units` map. Used by `encounter-assist-snapshot` so a joining
-// player's gauge participates in the server-arbitrated tick. Without this,
-// the joiner's local `_serverAuth` mode waits forever for an `atb-ready`
-// that never comes (their `player:<uid>` unit doesn't exist server-side).
-function _addPlayerToEncounterBattle(hostUid, joinerUid) {
-  const battle = _encounterBattles.get(hostUid);
-  if (!battle) return false;
-  const unitId = 'player:' + joinerUid;
-  if (battle.units.has(unitId)) return true;  // already registered
-  const host = _connected.get(hostUid);
-  const hostAgi = (host && host.profile && (host.profile.agi | 0)) || 5;
-  const joiner = _connected.get(joinerUid);
-  const agi = (joiner && joiner.profile && (joiner.profile.agi | 0)) || 5;
-  battle.units.set(unitId, {
-    ra: _computeRA(hostAgi, agi),
-    castTimeRa: 0,
-    state: 'filling',
-    startedAt: Date.now(),
-    readyAtMs: 0,
-  });
-  battle.peers.add(joinerUid);
-  return true;
-}
-
-function _clearEncounterBattle(userId) {
-  // userId may be the host (battle keyed under their uid) or any peer.
-  // Clear any battle that includes them.
-  for (const [hostUid, battle] of _encounterBattles) {
-    if (hostUid === userId || battle.peers.has(userId)) {
-      _encounterBattles.delete(hostUid);
-      return;
-    }
-  }
-}
-
-function _broadcastAtbReady(battle, unitId, atMs) {
-  for (const peerUid of battle.peers) {
-    const peer = _connected.get(peerUid);
-    if (!peer || peer.ws.readyState !== 1) continue;
-    _send(peer.ws, { type: 'atb-ready', unitId, atMs });
-  }
-}
-
-function _tickEncounterBattles() {
-  const now = Date.now();
-  for (const battle of _encounterBattles.values()) {
-    for (const [unitId, unit] of battle.units) {
-      if (unit.state !== 'filling') continue;
-      // v1.7.445 — FF4 spell cast time. The unit's castTimeRa (set by the
-      // owning client's atb-sync after a spell action) extends THIS cycle's
-      // target. Clamped 0-99 on receive so a malicious client can't park
-      // a peer's gauge forever.
-      const target = (unit.ra + (unit.castTimeRa | 0)) * _ATB_TICK_MS;
-      if (now - unit.startedAt >= target) {
-        unit.state = 'ready';
-        unit.readyAtMs = now;
-        _broadcastAtbReady(battle, unitId, now);
-      }
-    }
-  }
-}
-setInterval(_tickEncounterBattles, _SERVER_TICK_INTERVAL_MS);
-
 function _clearEncounterGroup(userId) {
-  // Slice 4c — also clear the server-side ATB battle state. The departing
-  // user might have been the host (battle keyed under their userId), so
-  // try both their own key and any peer's key that maps back through them.
-  _clearEncounterBattle(userId);
   const peers = _encounterGroups.get(userId);
   if (!peers) return;
   _encounterGroups.delete(userId);
@@ -602,33 +480,6 @@ function _handleMessage(entry, msg) {
       _send(partner.ws, { type: 'pvp-ally-join', profile });
       return;
     }
-    case 'pvp-atb-sync': {
-      // Slice 5 (v1.7.442) — PvP gauge wire-sync. Mirrors the co-op
-      // `atb-sync` relay but routes to the single PvP partner. Lets both
-      // clients anchor each unit's gauge to the same atMs so visible bar
-      // timing converges without going through a server-side tick loop
-      // (PvP keeps client-driven dispatch to minimize duel latency).
-      if (!entry.helloed) return;
-      const partnerId = _pvpPartners.get(entry.userId);
-      if (!partnerId) return;
-      const partner = _connected.get(partnerId);
-      if (!partner || partner.ws.readyState !== 1) return;
-      const unitKind = String(parsed.unitKind || '').slice(0, 16);
-      const allyIdx = parsed.allyIdx | 0;
-      const atMs = Number(parsed.atMs);
-      if (!unitKind || !Number.isFinite(atMs) || atMs <= 0) return;
-      // v1.7.445 — FF4 spell cast time. Clamped [0, 99].
-      const castTimeRa = Math.max(0, Math.min(99, parsed.castTimeRa | 0));
-      _send(partner.ws, {
-        type:    'pvp-atb-sync',
-        userId:  entry.userId,
-        unitKind,
-        allyIdx,
-        atMs,
-        castTimeRa,
-      });
-      return;
-    }
     case 'pvp-action': {
       // MP Step 4 part 2 — relay the player's chosen action to their PvP
       // partner so the partner's client can drive the opponent's turn from
@@ -815,11 +666,7 @@ function _handleMessage(entry, msg) {
           peers,
         });
       }
-      // Slice 4c — initialize server-side ATB battle state. Monsters
-      // payload carries `agi` from the host's client; player agis come
-      // from each peer's cached profile.
-      _initEncounterBattle(entry.userId, accepted, monsters);
-      console.log('[encounter-start] host=' + entry.userId + ' accepted=' + JSON.stringify(accepted) + ' monsters=' + monsters.length + ' atb-units=' + (_encounterBattles.get(entry.userId)?.units.size || 0));
+      console.log('[encounter-start] host=' + entry.userId + ' accepted=' + JSON.stringify(accepted) + ' monsters=' + monsters.length);
       return;
     }
     case 'encounter-assist-request': {
@@ -883,32 +730,7 @@ function _handleMessage(entry, msg) {
           _encounterGroups.set(uid, peerSet);
         }
       }
-      // v1.7.444 — register the joiner in the server-side ATB battle state
-      // so they participate in the authoritative tick loop. Two cases:
-      //   (a) Target was already a co-op host → `_encounterBattles[target]`
-      //       already exists; just append the joiner's `player:<uid>` unit.
-      //   (b) Target was solo (pre-promotion) → no battle state yet; init
-      //       it from the snapshot's monsters (each carries `agi` since
-      //       v1.7.444's client change to the assist snapshot payload).
-      //
-      // Without this, the joiner's local ATB toggles into server-auth mode
-      // on `initBattleATB`, then waits forever for an `atb-ready` that the
-      // server can't broadcast (no unit registered) → frozen-in-filling
-      // freeze watchdog hits at 5 s.
-      const snapshotMonsters = Array.isArray(parsed.monsters) ? parsed.monsters.slice(0, 9) : [];
-      if (!_encounterBattles.has(entry.userId)) {
-        // Solo target case. Init the battle with target as host + joiner as
-        // first peer. Monsters list carries agi.
-        const monsterPayload = snapshotMonsters.map(m => ({
-          monsterId: (m && m.monsterId) | 0,
-          agi:       (m && m.agi) | 0 || 5,
-        }));
-        _initEncounterBattle(entry.userId, [joinerUserId], monsterPayload);
-      } else {
-        // Existing co-op group case.
-        _addPlayerToEncounterBattle(entry.userId, joinerUserId);
-      }
-      console.log('[encounter-assist-snapshot] host=' + entry.userId + ' joiner=' + joinerUserId + ' group=' + Array.from(_encounterGroups.get(entry.userId)).join(',') + ' atb-units=' + (_encounterBattles.get(entry.userId)?.units.size || 0));
+      console.log('[encounter-assist-snapshot] host=' + entry.userId + ' joiner=' + joinerUserId + ' group=' + Array.from(_encounterGroups.get(entry.userId)).join(','));
       // Forward the full snapshot to the joiner so they spawn the same
       // battle locally with current monster HPs + peer list.
       //
@@ -978,62 +800,6 @@ function _handleMessage(entry, msg) {
           damageRoll: parsed.damageRoll,
           healAmount: parsed.healAmount,
           hitResults: parsed.hitResults,
-        });
-      }
-      return;
-    }
-    case 'atb-sync': {
-      // Slice 4b — peer-to-peer ATB sync. Slice 4c — also feeds the
-      // server-side battle state so its tick loop knows when units transition
-      // (filling → acting after dispatch; acting → filling after the action's
-      // animation completes).
-      if (!entry.helloed) return;
-      const peers = _encounterGroups.get(entry.userId);
-      if (!peers || peers.size === 0) return;
-      const unitKind = String(parsed.unitKind || '').slice(0, 16);
-      const monsterIdx = parsed.monsterIdx | 0;
-      const atMs = Number(parsed.atMs);
-      if (!unitKind || !Number.isFinite(atMs) || atMs <= 0) return;
-      // v1.7.445 — FF4 spell cast time. Clamped [0, 99] (FF4 canon max).
-      // Server-side tick uses (ra + castTimeRa) for the target compute so
-      // the authoritative ready broadcast fires on the same extended delay
-      // the client expects.
-      const castTimeRa = Math.max(0, Math.min(99, parsed.castTimeRa | 0));
-      // Update server-side battle state. Find the host of this encounter
-      // (we are either the host or one of the peers).
-      let hostUid = entry.userId;
-      if (!_encounterBattles.has(hostUid)) {
-        for (const peerUid of peers) {
-          if (_encounterBattles.has(peerUid)) { hostUid = peerUid; break; }
-        }
-      }
-      const battle = _encounterBattles.get(hostUid);
-      if (battle) {
-        const unitId = unitKind === 'player' ? 'player:' + entry.userId
-                     : unitKind === 'monster' ? 'monster:' + monsterIdx
-                     : null;
-        if (unitId) {
-          const unit = battle.units.get(unitId);
-          if (unit) {
-            // markFilling from a client → server resets that unit's fill anchor.
-            unit.state = 'filling';
-            unit.startedAt = atMs;
-            unit.readyAtMs = 0;
-            unit.castTimeRa = castTimeRa;
-          }
-        }
-      }
-      // Relay to peers (slice 4b protocol).
-      for (const peerId of peers) {
-        const peer = _connected.get(peerId);
-        if (!peer || peer.ws.readyState !== 1) continue;
-        _send(peer.ws, {
-          type:       'atb-sync',
-          userId:     entry.userId,
-          unitKind,
-          monsterIdx,
-          atMs,
-          castTimeRa,
         });
       }
       return;
@@ -1382,7 +1148,6 @@ export const _testHooks = {
     partyInvites: _partyInvites,
     partyMemberships: _partyMemberships,
     encounterGroups: _encounterGroups,
-    encounterBattles: _encounterBattles,
     connsByIp: _connsByIp,
   },
   resetState() {
@@ -1392,12 +1157,6 @@ export const _testHooks = {
     _partyInvites.clear();
     _partyMemberships.clear();
     _encounterGroups.clear();
-    _encounterBattles.clear();
     _connsByIp.clear();
   },
-  initEncounterBattle: _initEncounterBattle,
-  addPlayerToEncounterBattle: _addPlayerToEncounterBattle,
-  tickEncounterBattles: _tickEncounterBattles,
-  computeRA: _computeRA,
-  atbConstants: { TICK_MS: _ATB_TICK_MS, RA_MIN: _ATB_RA_MIN, RA_MAX: _ATB_RA_MAX },
 };

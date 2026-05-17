@@ -13,7 +13,6 @@ import { PAUSE_ITEMS } from './data/strings.js';
 import { selectCursor, saveSlots, saveSlotsToDB } from './save-state.js';
 import { ui } from './ui-state.js';
 import { inputSt, keys } from './input-handler.js';
-import { setBattleSpeed, getBattleSpeed } from './atb.js';
 import { drawBorderedBox, clipToViewport, drawCursorFaded } from './hud-drawing.js';
 import { playerInventory, addItem, removeItem } from './inventory.js';
 import { battleSt } from './battle-state.js';
@@ -502,17 +501,12 @@ function _drawPauseOptions(ctx) {
   const tx = px + 24;
   const valRx = px + HUD_VIEW_W - 16;
   let y = finalY + 12;
-  // Row 0 — CRT toggle
+  // Row 0 — CRT toggle (only row now; v1.7.456 reverted Battle Speed row)
   drawText(ctx, tx, y, OPT_CRT_LABEL, fadedPal);
   const valBytes = _isCrtOn() ? OPT_ON : OPT_OFF;
   drawText(ctx, valRx - valBytes.length * 8, y, valBytes, fadedPal);
-  // Row 1 — Battle Speed (slice 6, v1.7.443). ←/→ adjusts when cursor here.
-  y += 16;
-  drawText(ctx, tx, y, _nameToBytes('Speed'), fadedPal);
-  const bsBytes = _nameToBytes(String(getBattleSpeed()));
-  drawText(ctx, valRx - bsBytes.length * 8, y, bsBytes, fadedPal);
   if (drawCursorFaded) {
-    drawCursorFaded(px + 8, (finalY + 12) + pauseSt.optCursor * 16 - 4, fadeStep);
+    drawCursorFaded(px + 8, (finalY + 12) - 4, fadeStep);
   }
 }
 
@@ -1154,29 +1148,10 @@ function _pauseInputJob() {
 function _pauseInputOptions() {
   if (pauseSt.state !== 'options') return false;
   const k = keys;
-  // 2 rows: 0 = CRT toggle, 1 = Battle Speed (slice 6).
-  if (k['ArrowDown']) { k['ArrowDown'] = false; pauseSt.optCursor = (pauseSt.optCursor + 1) % 2; playSFX(SFX.CURSOR); }
-  if (k['ArrowUp'])   { k['ArrowUp']   = false; pauseSt.optCursor = (pauseSt.optCursor + 1) % 2; playSFX(SFX.CURSOR); }
-  if (_zPressed()) {
-    if (pauseSt.optCursor === 0) { _toggleCrt(); playSFX(SFX.CONFIRM); }
-  }
-  // Battle Speed adjust (slice 6, v1.7.443) — ←/→ on row 1.
-  if (pauseSt.optCursor === 1) {
-    if (k['ArrowRight']) { k['ArrowRight'] = false; _adjustBattleSpeed(+1); }
-    if (k['ArrowLeft'])  { k['ArrowLeft']  = false; _adjustBattleSpeed(-1); }
-  }
+  // v1.7.456 — round-based revert dropped Battle Speed. Options has CRT only.
+  if (_zPressed()) { _toggleCrt(); playSFX(SFX.CONFIRM); }
   if (_xPressed()) { playSFX(SFX.CONFIRM); pauseSt.state = 'options-out'; pauseSt.timer = 0; }
   return true;
-}
-
-function _adjustBattleSpeed(delta) {
-  const cur = getBattleSpeed();
-  const next = Math.max(1, Math.min(6, cur + delta));
-  if (next === cur) return;
-  if (setBattleSpeed(next)) {
-    try { localStorage.setItem('ff3.battleSpeed', String(next)); } catch { /* ok */ }
-    playSFX(SFX.CURSOR);
-  }
 }
 
 export function handlePauseInput() {
