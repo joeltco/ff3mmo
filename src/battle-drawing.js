@@ -40,6 +40,7 @@ import { getBattleMsgCurrent, getBattleMsgTimer, computeMsgTimings,
 import { clipToViewport, grayViewport } from './hud-drawing.js';
 import { ui } from './ui-state.js';
 import { isVictoryBattleState as _isVictoryBattleState } from './battle-update.js';
+import { drawATBGauges } from './atb-render.js';
 
 function _cursorTileCanvas() { return ui.cursorTileCanvas; }
 
@@ -156,6 +157,7 @@ function drawBattle() {
   drawVictoryBox();
   drawBattleMessageStrip();
   drawDamageNumbers();
+  drawATBGauges();
 }
 
 // ── Centralized magic render helpers ─────────────────────────────────────

@@ -8,7 +8,8 @@ import { buildTurnOrder, processNextTurn } from './battle-turn.js';
 import { updateBattleAlly } from './battle-ally.js';
 import { resetBattleVars, isTeamWiped, updateBattleTimers, updatePoisonTick,
          updateBattlePlayerAttack, updateBattleDefendItem, updateBattleEndSequence,
-         tryJoinPlayerAlly, advancePVPTargetOrVictory, emitWirePVPAction } from './battle-update.js';
+         tryJoinPlayerAlly, advancePVPTargetOrVictory, emitWirePVPAction,
+         initBattleATB } from './battle-update.js';
 import { playSFX, stopSFX, SFX, pauseMusic, playTrack, TRACKS } from './music.js';
 import { rollHits, calcPotentialHits, BOSS_HIT_RATE, GOBLIN_HIT_RATE, summarizeHits, isLeftHandHit } from './battle-math.js';
 import { reseedFromEntropy, seed as seedRng, rand } from './rng.js';
@@ -425,7 +426,10 @@ function _updatePVPOpening() {
     // Skip boss-appear (land turtle) — PVP box goes straight to battle-fade-in
     if (battleSt.battleTimer >= BOSS_BOX_EXPAND_MS) { battleSt.battleState = 'battle-fade-in'; battleSt.battleTimer = 0; }
   } else if (bs === 'battle-fade-in') {
-    if (battleSt.battleTimer >= (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS) { battleSt.battleState = 'menu-open'; battleSt.battleTimer = 0; }
+    if (battleSt.battleTimer >= (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS) {
+      initBattleATB();
+      battleSt.battleState = 'menu-open'; battleSt.battleTimer = 0;
+    }
   } else { return false; }
   return true;
 }

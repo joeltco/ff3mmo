@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.428 — 2026-05-16
+
+### ATB rewrite slice 1 — gauge math + display bars (no behavior change)
+
+The strict-turn-queue + 10s decision-timeout system is being replaced with FF4-style ATB (Active Time Battle, Hiroyuki Ito 1991). Reason: the queue serializes every animation through one client's FSM, so a stall on phone 1 (`magic-hit timer:500 stuck for 5s`) blocks the whole party's battle, and co-op random battles can't sync if any client diverges. ATB gives every combatant its own gauge — fast clients don't have to wait on slow ones for the timeline to move.
+
+Slice 1 ships the math + render layer with gauges display-only. The legacy turn queue still drives dispatch. Subsequent slices (solo dispatch → co-op server-arbitrated → PvP → battle speed slider) replace the queue.
+
+- **`src/atb.js`** — FF4 Relative Agility (`RA = floor(5 × anchorAgi / unitAgi)`, min 1, anchor = local player). Per-unit `elapsedMs` ticker; `getGaugePct` normalizes for renderer. Wait-mode pause for player at full gauge while menu open. Pure module; testable in isolation.
+- **`src/battle-update.js`** — `initBattleATB()` fires at `battle-fade-in → menu-open` (solo + boss); `addBattleATBAlly()` covers Battle Assist mid-fight joiners. `_tickATB()` advances gauges every frame, gated to active battle (skipped during box-expand / fade-in / victory). `clearATB()` on battle exit.
+- **`src/pvp.js`** — mirror init hook at PvP's own `battle-fade-in → menu-open`.
+- **`src/battle-encounter.js`** — `addBattleATBAlly` at Battle Assist target-side push + existing-peer join handler.
+- **`src/atb-render.js`** — row of 20×3px gauges at y=144, color-coded by kind (player teal, ally blue, monster red, pvp-enemy orange). Ready units blink yellow.
+- **`tools/atb-sim.js`** — 26-test regression suite (RA math + tick rate + Wait pause + speedMod + mid-add + clear). Wired into `deploy.sh` as pre-flight gate.
+
+Monsters have no `agi` in `monsters.js` (FF3 NES didn't use per-monster agility). `deriveMonsterAgi(mon) = level + (evade >> 3)` keeps fast/dodgy monsters fast in ATB without hand-editing the auto-generated catalog.
+
 ## 1.7.427 — 2026-05-16
 
 ### Visual-layer cleanup — wire-wait input drain + dead PvP victory branches + sweat fade gate

@@ -42,6 +42,7 @@ import { applyPhysicalHitToEnemy } from './physical-attack.js';
 import { playSlashSFX } from './battle-sfx.js';
 import { saveSlotsToDB } from './save-state.js';
 import { addItem, buildItemSelectList } from './inventory.js';
+import { initATB, addATBUnit, clearATB, tickGauges, deriveMonsterAgi } from './atb.js';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 // BATTLE_TEXT_STEPS / BATTLE_TEXT_STEP_MS now imported from battle-state.js (single source).
@@ -277,9 +278,48 @@ function _updateBattleOpening() {
   } else if (battleSt.battleState === 'boss-appear') {
     if (battleSt.battleTimer >= BOSS_BLOCKS * BOSS_DISSOLVE_STEPS * BOSS_DISSOLVE_FRAME_MS) { battleSt.battleState = 'battle-fade-in'; battleSt.battleTimer = 0; }
   } else if (battleSt.battleState === 'battle-fade-in') {
-    if (battleSt.battleTimer >= (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS) { battleSt.battleState = 'menu-open'; battleSt.battleTimer = 0; }
+    if (battleSt.battleTimer >= (BATTLE_TEXT_STEPS + 1) * BATTLE_TEXT_STEP_MS) {
+      initBattleATB();
+      battleSt.battleState = 'menu-open'; battleSt.battleTimer = 0;
+    }
   } else { return false; }
   return true;
+}
+
+// ── ATB init / ally-join helpers ──────────────────────────────────────────
+// Build the per-unit ATB entry set from current battleSt + ps + pvpSt and
+// hand it to atb.js. Anchor = local player (first entry). Slice 1: gauges
+// are display-only; legacy turn queue still drives dispatch.
+export function initBattleATB() {
+  const entries = [];
+  entries.push({ ref: ps, kind: 'player', agi: (ps.stats && ps.stats.agi) | 0 });
+  for (const ally of battleSt.battleAllies) {
+    if (!ally) continue;
+    entries.push({ ref: ally, kind: 'ally', agi: ally.agi | 0 });
+  }
+  if (battleSt.encounterMonsters) {
+    for (const mon of battleSt.encounterMonsters) {
+      if (!mon) continue;
+      entries.push({ ref: mon, kind: 'monster', agi: deriveMonsterAgi(MONSTERS.get(mon.monsterId) || mon) });
+    }
+  }
+  if (pvpSt.isPVPBattle) {
+    if (pvpSt.pvpOpponentStats) {
+      entries.push({ ref: pvpSt.pvpOpponentStats, kind: 'pvp-enemy', agi: pvpSt.pvpOpponentStats.agi | 0 });
+    }
+    for (const enemyAlly of pvpSt.pvpEnemyAllies) {
+      if (!enemyAlly) continue;
+      entries.push({ ref: enemyAlly, kind: 'pvp-enemy', agi: enemyAlly.agi | 0 });
+    }
+  }
+  initATB(entries);
+}
+
+// Attach a newly-joined ally to the existing ATB rhythm (Battle Assist).
+// Safe to call before initBattleATB has run — it'll no-op until anchor is set.
+export function addBattleATBAlly(ally) {
+  if (!ally) return;
+  addATBUnit({ ref: ally, kind: 'ally', agi: ally.agi | 0 });
 }
 
 // ── Ally join ──────────────────────────────────────────────────────────────
@@ -922,6 +962,7 @@ function _updateBoxClose() {
       sprite.setDirection(DIR_DOWN); battleSt.isRandomEncounter = false; battleSt.encounterMonsters = null;
       battleSt.dyingMonsterIndices = new Map(); battleSt.battleAllies = []; battleSt.allyJoinRound = 0;
       stopMusic();
+      clearATB();
       battleSt.battleState = 'none'; battleSt.battleTimer = 0;
       if (playerDead) _respawnAtLastTown();
       else resumeMusic();
@@ -935,6 +976,7 @@ function _updateBoxClose() {
       resetPVPState();
       sprite.setDirection(DIR_DOWN);
       battleSt.battleAllies = []; battleSt.allyJoinRound = 0;
+      clearATB();
       battleSt.battleState = 'none'; battleSt.battleTimer = 0;
       if (playerDead) {
         stopMusic();
@@ -980,6 +1022,7 @@ export function updateBattle(dt) {
   if (battleSt.battleState === 'none') return;
   battleSt.battleTimer += Math.min(dt, 33);
   _updateBattleMsg(dt);
+  _tickATB(dt);
   if (pvpSt.isPVPBattle) { updatePVPBattle(dt); return; }
   updateBattleTimers(dt);
   _updatePoisonTick()              ||
@@ -991,4 +1034,26 @@ export function updateBattle(dt) {
   updateBattleAlly(dt)             ||
   updateBattleEnemyTurn()          ||
   updateBattleEndSequence(dt);
+}
+
+// Tick ATB gauges. Slice 1: display-only — gauges fill alongside the
+// legacy turn queue but don't gate dispatch. Wait-mode pause kicks in
+// once the player's gauge is full and the menu is open.
+// Skipped during pre-battle opening states and end-of-battle states so
+// the bars don't appear during box-expand or victory.
+const _ATB_IDLE_STATES = new Set([
+  'none', 'roar-hold', 'flash-strobe',
+  'encounter-box-expand', 'enemy-box-expand', 'monster-slide-in',
+  'boss-appear', 'battle-fade-in',
+]);
+function _tickATB(dt) {
+  if (_ATB_IDLE_STATES.has(battleSt.battleState)) return;
+  if (isVictoryBattleState()) return;
+  // Wait mode — pause player's gauge at full while their menu is open.
+  const bs = battleSt.battleState;
+  const playerMenuOpen = bs === 'menu-open' || bs === 'target-select' ||
+    bs === 'item-select' || bs === 'item-target-select' || bs === 'item-slide' ||
+    bs === 'item-menu-out' || bs === 'item-list-in' || bs === 'item-cancel-out' ||
+    bs === 'item-cancel-in' || bs === 'item-list-out' || bs === 'item-use-menu-in';
+  tickGauges(dt, { playerMenuOpen });
 }

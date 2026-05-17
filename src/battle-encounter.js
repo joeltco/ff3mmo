@@ -1,6 +1,7 @@
 // Random encounter spawning — extracted from game.js
 
 import { battleSt } from './battle-state.js';
+import { addBattleATBAlly } from './battle-update.js';
 import { MONSTERS } from './data/monsters.js';
 import { ENCOUNTERS } from './data/encounters.js';
 import { GOBLIN_HIT_RATE } from './battle-math.js';
@@ -442,6 +443,7 @@ setNetEncounterAssistSnapshotHandler((msg) => {
     stats.isWireDriven = true;
     stats.fadeInStartMs = Date.now();
     battleSt.battleAllies.push(stats);
+    addBattleATBAlly(stats);
   }
   const hostName = (peerList[0] && peerList[0].name) || 'Party';
   try { addChatMessage('* Assisted ' + hostName + "'s battle!", 'system'); } catch { /* chat optional */ }
@@ -465,5 +467,6 @@ setNetEncounterAllyJoinHandler((msg) => {
   stats.isWireDriven = true;
   stats.fadeInStartMs = Date.now();
   battleSt.battleAllies.push(stats);
+  addBattleATBAlly(stats);
   try { addChatMessage('* ' + (msg.profile.name || 'Player') + ' joined the battle!', 'system'); } catch { /* chat optional */ }
 });
