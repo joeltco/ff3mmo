@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.452 — 2026-05-17
+
+### Revert v1.7.451 — keep FF4 canon menu lock during enemy attacks
+
+Reverted the buffered-menu-input change. FF4 SNES locks the menu during enemy attack animations in both Wait and Active modes; our previous behavior matched canon and the divergence wasn't worth the visual confusion.
+
+Restored `_drawBattleMenuCursor`, `handleBattleInput`, `resetBattleVars`, and dropped `inputSt.bufferedMenuCommand`.
+
 ## 1.7.451 — 2026-05-17
 
 ### Buffered menu input during enemy attacks

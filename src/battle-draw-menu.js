@@ -323,18 +323,10 @@ function _drawBattleMenuItems(positions, isVictory, isClose, isFade, fadedPal, m
 
 function _drawBattleMenuCursor(positions, isFade, fadeStep) {
   if (!_cursorTileCanvas()) return;
-  // v1.7.451 — keep the cursor visible during enemy attack animations so the
-  // player can see their cursor move and confirm a buffered pick. The action
-  // doesn't fire until the next menu-open (see handleBattleInput).
-  const bs = battleSt.battleState;
-  const isEnemyAnim = bs === 'enemy-flash' || bs === 'enemy-attack' || bs === 'enemy-damage-show';
-  if (bs !== 'menu-open' && !isFade && !isEnemyAnim) return;
-  if (bs === 'target-select') return;
-  // If a pick has already been buffered, parking the cursor on the buffered
-  // slot reads better than letting it drift.
-  const idx = inputSt.bufferedMenuCommand >= 0 ? inputSt.bufferedMenuCommand : inputSt.battleCursor;
-  const curX = positions[idx][0] - 16;
-  const curY = positions[idx][1] - 4;
+  if (battleSt.battleState !== 'menu-open' && !isFade) return;
+  if (battleSt.battleState === 'target-select') return;
+  const curX = positions[inputSt.battleCursor][0] - 16;
+  const curY = positions[inputSt.battleCursor][1] - 4;
   drawCursorFaded(curX, curY, fadeStep);
 }
 

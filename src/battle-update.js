@@ -80,7 +80,6 @@ const POISON_END_HOLD_MS       = 700;
 
 export function resetBattleVars() {
   inputSt.battleCursor = 0;
-  inputSt.bufferedMenuCommand = -1;  // v1.7.451 — clear any pending buffered action
   resetAllDmgNums();
   battleSt.encounterDropItem = null; battleSt.bossFlashTimer = 0; battleSt.battleShakeTimer = 0;
   // Co-op random encounter flags reset every battle start. `_maybeHostCoopEncounter`
