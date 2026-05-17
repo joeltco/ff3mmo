@@ -348,18 +348,27 @@ setNetEncounterAssistIncomingHandler((msg) => {
       jobLevel: a.jobLevel | 0,
     });
   }
-  const monsters = (battleSt.encounterMonsters || []).map(m => ({
-    monsterId: m.monsterId | 0,
-    hp:        m.hp | 0,
-    // Status state — wire-ship the mask + poison tick so the joiner's
-    // monster has the same affliction. Without this, a poisoned monster
-    // on host's side ticks damage each round while the joiner's view
-    // doesn't, → HP divergence over time. v1.7.423.
-    status: m.status ? {
-      mask: m.status.mask | 0,
-      poisonDmgTick: m.status.poisonDmgTick | 0,
-    } : null,
-  }));
+  const monsters = (battleSt.encounterMonsters || []).map(m => {
+    // v1.7.444 — include derived agi so the server can register the joiner
+    // (and missing monster units if target was solo) in `_encounterBattles`.
+    // Without this, an assist join into a solo battle leaves the server with
+    // no battle state → no `atb-ready` ever broadcasts → both peers freeze
+    // in `'filling'` forever under server-auth ATB.
+    const data = MONSTERS.get(m.monsterId | 0) || m;
+    return {
+      monsterId: m.monsterId | 0,
+      hp:        m.hp | 0,
+      agi:       deriveMonsterAgi(data),
+      // Status state — wire-ship the mask + poison tick so the joiner's
+      // monster has the same affliction. Without this, a poisoned monster
+      // on host's side ticks damage each round while the joiner's view
+      // doesn't, → HP divergence over time. v1.7.423.
+      status: m.status ? {
+        mask: m.status.mask | 0,
+        poisonDmgTick: m.status.poisonDmgTick | 0,
+      } : null,
+    };
+  });
   sendNetEncounterAssistSnapshot(msg.fromUserId, {
     seed:       battleSt.encounterSeed >>> 0,
     turnIndex:  battleSt.encounterTurnIndex | 0,

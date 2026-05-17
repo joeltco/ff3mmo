@@ -43,7 +43,7 @@ import { playSlashSFX } from './battle-sfx.js';
 import { saveSlotsToDB } from './save-state.js';
 import { addItem, buildItemSelectList } from './inventory.js';
 import { initATB, addATBUnit, clearATB, tickGauges, deriveMonsterAgi,
-         pickReadyActor, isReady, setServerAuthoritative } from './atb.js';
+         pickReadyActor, isReady, setServerAuthoritative, getATBUnits } from './atb.js';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 // BATTLE_TEXT_STEPS / BATTLE_TEXT_STEP_MS now imported from battle-state.js (single source).
@@ -1111,4 +1111,24 @@ function _tickATB(dt) {
   // holds at target while the menu is open. dt is unused by the new
   // tickGauges but kept in the signature for caller stability.
   tickGauges(dt);
+  // v1.7.444 — one-shot telemetry for server-auth timeout flips. tickGauges
+  // sets `forcedReady=true` when it falls back to a local ready flip after
+  // a missed `atb-ready` wire frame. POST once so we can measure drop rates
+  // in prod logs, then clear the flag so we don't spam.
+  if (battleSt.isWireEncounter) {
+    for (const u of getATBUnits()) {
+      const atb = u.ref && u.ref._atb;
+      if (!atb || !atb.forcedReady) continue;
+      atb.forcedReady = false;
+      const msg = '[atb-ready timeout] kind=' + u.kind + ' ra=' + atb.ra;
+      console.warn(msg);
+      try {
+        fetch('/api/client-error', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ msg, stack: '', ctx: { battleState: battleSt.battleState } }),
+        }).catch(() => {});
+      } catch { /* node sims have no fetch */ }
+    }
+  }
 }

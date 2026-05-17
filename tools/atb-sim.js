@@ -7,6 +7,7 @@ import {
   initATB, addATBUnit, clearATB, tickGauges, getGaugePct, isReady,
   markActing, markFilling, setSpeedMod, deriveMonsterAgi,
   setBattleSpeed, getBattleSpeed,
+  setServerAuthoritative, markReady,
   _atbDebugState, _setNow, TICK_MS, FILL_MAX,
 } from '../src/atb.js';
 
@@ -396,6 +397,45 @@ test('deriveMonsterAgi: handles missing fields', () => {
 });
 
 // ── Cross-scenario: 4-unit battle ──────────────────────────────────────────
+
+// ── Server-auth + timeout fallback (v1.7.444) ──────────────────────────────
+
+test('server-auth: tickGauges does not flip filling→ready locally', () => {
+  const p = {};
+  initATB([{ ref: p, kind: 'player', agi: 10 }]);
+  setServerAuthoritative(true);  // must be set AFTER initATB (clearATB resets it)
+  // RA=5 → 5*333 = 1665ms target. Tick past target, state should stay filling.
+  advance(2000);
+  assertEq(p._atb.state, 'filling', 'state stays filling under server-auth');
+  // Receiving the wire ready flip transitions to ready.
+  markReady(p, _mockNow);
+  assertEq(p._atb.state, 'ready', 'markReady flips to ready');
+  setServerAuthoritative(false);  // restore for subsequent tests
+});
+
+test('server-auth: forced ready after grace window with no wire ready', () => {
+  const p = {};
+  initATB([{ ref: p, kind: 'player', agi: 10 }]);
+  setServerAuthoritative(true);
+  // RA=5 → target=1665ms. Grace=1500ms. Tick to 1665ms → still filling.
+  advance(1665);
+  assertEq(p._atb.state, 'filling', 'still filling at target (server-auth)');
+  assert(!p._atb.forcedReady, 'forcedReady not yet set');
+  // Tick to target+grace+1 → flips locally, forcedReady=true.
+  advance(1500 + 1);
+  assertEq(p._atb.state, 'ready', 'forced flip to ready after grace');
+  assertEq(p._atb.forcedReady, true, 'forcedReady flag set');
+  setServerAuthoritative(false);
+});
+
+test('server-auth: solo (non-wire) mode is unaffected — flips at target', () => {
+  setServerAuthoritative(false);
+  const p = {};
+  initATB([{ ref: p, kind: 'player', agi: 10 }]);
+  advance(1665);
+  assertEq(p._atb.state, 'ready', 'solo flips at target');
+  assert(!p._atb.forcedReady, 'forcedReady stays false in solo');
+});
 
 test('scenario: 4-unit party + monster', () => {
   const p = {}, knight = {}, thief = {}, wm = {}, mon = {};

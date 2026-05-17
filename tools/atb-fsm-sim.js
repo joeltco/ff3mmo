@@ -278,20 +278,26 @@ function _scenarioServerAuthDefersDispatch() {
   battleSt.isWireEncounter = true;
   battleSt.battleState = 'flash-strobe';
   let menuOpenedAt = -1;
-  // Run 10s — player's local gauge would normally fill at ~1.7s, but
-  // server-auth mode means state stays 'filling' until an atb-ready event
-  // arrives. Menu shouldn't open from a dispatch flip; it's already up
-  // from battle-fade-in, but confirm-pause would gate on isReady(ps).
-  for (let i = 0; i < 600; i++) {
+  // Run until the player gauge has filled but the v1.7.444 grace window hasn't
+  // expired yet. initBattleATB fires after battle-fade-in (~1.5-2s in this
+  // sim), and from that point: target=1665ms (RA=5×333ms), grace=1500ms.
+  // So the "filled, server-auth holding" window is ~T+1665 → T+3165.
+  // Tick until ps._atb exists AND elapsedMs ≈ target, then sample.
+  for (let i = 0; i < 240; i++) {
     _tick();
     if (menuOpenedAt < 0 && battleSt.battleState === 'menu-open') {
       menuOpenedAt = _simMs;
     }
+    const atb = ps._atb;
+    if (atb && atb.state === 'filling') {
+      const target = atb.ra * 333 * atb.speedMod;
+      // Stop once the gauge is full so we sample before grace expires.
+      if (atb.elapsedMs >= target) break;
+    }
   }
-  // After 10s of ticking, player should be local-full but NOT flagged ready.
   const psState = ps._atb && ps._atb.state;
   const psPct = globalThis.__atb.getGaugePct(ps);
-  console.log(`  player state after 10s: ${psState}, pct: ${psPct.toFixed(2)}`);
+  console.log(`  player state at sim ${(_simMs/1000).toFixed(2)}s: ${psState}, pct: ${psPct.toFixed(2)}`);
   if (psState === 'filling' && psPct >= 0.99) {
     console.log('  PASS — server-auth held local flip; gauge full but state is "filling"');
   } else {
@@ -307,6 +313,29 @@ function _scenarioServerAuthDefersDispatch() {
   }
 }
 
+// v1.7.444 — when no `atb-ready` arrives within the grace window, the local
+// gauge must force-flip to ready and set the `forcedReady` telemetry flag.
+function _scenarioServerAuthTimeoutFallback() {
+  console.log('\n═══ scenario: server-auth timeout forces local ready flip ═══');
+  _reset();
+  startRandomEncounter();
+  battleSt.isWireEncounter = true;
+  battleSt.battleState = 'flash-strobe';
+  // Run ~5s — past target (~1.7s) + grace (1.5s) = 3.2s. No wire event
+  // arrives, so the local fallback must fire.
+  for (let i = 0; i < 320; i++) _tick();
+  const psState = ps._atb && ps._atb.state;
+  const forced  = ps._atb && ps._atb.forcedReady;
+  console.log(`  player state after 5s (no wire): ${psState}, forcedReady=${forced}`);
+  // forcedReady might already be cleared by _tickATB's telemetry consumer
+  // — what we actually require is that the state did flip (no eternal stall).
+  if (psState === 'ready') {
+    console.log('  PASS — timeout fallback flipped to ready');
+  } else {
+    console.log(`  FAIL — expected ready, got ${psState}`);
+  }
+}
+
 // ── 12. Run ──────────────────────────────────────────────────────────────
 _scenarioIdle();
 _detectOscillation();
@@ -315,3 +344,4 @@ _detectOscillation();
 _scenarioMonsterActsWhileMenuOpen();
 _detectOscillation();
 _scenarioServerAuthDefersDispatch();
+_scenarioServerAuthTimeoutFallback();

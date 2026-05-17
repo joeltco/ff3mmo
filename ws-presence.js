@@ -135,6 +135,30 @@ function _initEncounterBattle(hostUid, peerUids, monsters /* [{monsterId, agi}] 
   _encounterBattles.set(hostUid, { peers: peerSet, units, anchorMs: now });
 }
 
+// Slice 4c addendum (v1.7.444) — add a single player unit to an existing
+// battle's `units` map. Used by `encounter-assist-snapshot` so a joining
+// player's gauge participates in the server-arbitrated tick. Without this,
+// the joiner's local `_serverAuth` mode waits forever for an `atb-ready`
+// that never comes (their `player:<uid>` unit doesn't exist server-side).
+function _addPlayerToEncounterBattle(hostUid, joinerUid) {
+  const battle = _encounterBattles.get(hostUid);
+  if (!battle) return false;
+  const unitId = 'player:' + joinerUid;
+  if (battle.units.has(unitId)) return true;  // already registered
+  const host = _connected.get(hostUid);
+  const hostAgi = (host && host.profile && (host.profile.agi | 0)) || 5;
+  const joiner = _connected.get(joinerUid);
+  const agi = (joiner && joiner.profile && (joiner.profile.agi | 0)) || 5;
+  battle.units.set(unitId, {
+    ra: _computeRA(hostAgi, agi),
+    state: 'filling',
+    startedAt: Date.now(),
+    readyAtMs: 0,
+  });
+  battle.peers.add(joinerUid);
+  return true;
+}
+
 function _clearEncounterBattle(userId) {
   // userId may be the host (battle keyed under their uid) or any peer.
   // Clear any battle that includes them.
@@ -849,7 +873,32 @@ function _handleMessage(entry, msg) {
           _encounterGroups.set(uid, peerSet);
         }
       }
-      console.log('[encounter-assist-snapshot] host=' + entry.userId + ' joiner=' + joinerUserId + ' group=' + Array.from(_encounterGroups.get(entry.userId)).join(','));
+      // v1.7.444 — register the joiner in the server-side ATB battle state
+      // so they participate in the authoritative tick loop. Two cases:
+      //   (a) Target was already a co-op host → `_encounterBattles[target]`
+      //       already exists; just append the joiner's `player:<uid>` unit.
+      //   (b) Target was solo (pre-promotion) → no battle state yet; init
+      //       it from the snapshot's monsters (each carries `agi` since
+      //       v1.7.444's client change to the assist snapshot payload).
+      //
+      // Without this, the joiner's local ATB toggles into server-auth mode
+      // on `initBattleATB`, then waits forever for an `atb-ready` that the
+      // server can't broadcast (no unit registered) → frozen-in-filling
+      // freeze watchdog hits at 5 s.
+      const snapshotMonsters = Array.isArray(parsed.monsters) ? parsed.monsters.slice(0, 9) : [];
+      if (!_encounterBattles.has(entry.userId)) {
+        // Solo target case. Init the battle with target as host + joiner as
+        // first peer. Monsters list carries agi.
+        const monsterPayload = snapshotMonsters.map(m => ({
+          monsterId: (m && m.monsterId) | 0,
+          agi:       (m && m.agi) | 0 || 5,
+        }));
+        _initEncounterBattle(entry.userId, [joinerUserId], monsterPayload);
+      } else {
+        // Existing co-op group case.
+        _addPlayerToEncounterBattle(entry.userId, joinerUserId);
+      }
+      console.log('[encounter-assist-snapshot] host=' + entry.userId + ' joiner=' + joinerUserId + ' group=' + Array.from(_encounterGroups.get(entry.userId)).join(',') + ' atb-units=' + (_encounterBattles.get(entry.userId)?.units.size || 0));
       // Forward the full snapshot to the joiner so they spawn the same
       // battle locally with current monster HPs + peer list.
       //
@@ -1330,6 +1379,7 @@ export const _testHooks = {
     _connsByIp.clear();
   },
   initEncounterBattle: _initEncounterBattle,
+  addPlayerToEncounterBattle: _addPlayerToEncounterBattle,
   tickEncounterBattles: _tickEncounterBattles,
   computeRA: _computeRA,
   atbConstants: { TICK_MS: _ATB_TICK_MS, RA_MIN: _ATB_RA_MIN, RA_MAX: _ATB_RA_MAX },

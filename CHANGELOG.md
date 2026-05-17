@@ -2,6 +2,26 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.444 — 2026-05-17
+
+### Post-ATB hardening — Battle Assist + watchdog + atb-ready timeout fallback
+
+Three fixes from the MP evaluation. None blocking the ATB rewrite landing but each would have shown up in early beta:
+
+**Fix #1 — Battle Assist + server-arbitrated ATB.** `encounter-assist-snapshot` now registers the joining player in the server-side `_encounterBattles[host].units` map. Two cases handled:
+- Target was solo (no battle yet) — server inits the battle from the snapshot's monsters (which now carry `agi` so the server can compute RA).
+- Target was already a co-op host — server appends a `player:<joinerUid>` unit via the new `_addPlayerToEncounterBattle` helper.
+
+Pre-fix, the joiner's local ATB toggled into server-auth mode on `initBattleATB`, then waited forever for an `atb-ready` that the server couldn't broadcast (no unit registered) → freeze watchdog at 5 s.
+
+Client change in `src/battle-encounter.js`: snapshot monster payload now includes `agi: deriveMonsterAgi(data)` per entry.
+
+**Fix #2 — `ally-wire-wait` freeze-watchdog carve-out.** Added `ally-wire-wait` alongside the existing wire-PvP `enemy-flash` carve-out in `src/game-loop.js#_tickFreezeWatchdog`. Cellular jitter regularly produces 5–15 s waits before the 45 s ally-side fallback fires; without this carve-out the watchdog was about to spam `/api/client-error` during normal co-op play.
+
+**Fix #3 — `atb-ready` timeout fallback.** In server-auth mode, if no `atb-ready` arrives within `target + 1500 ms` of the gauge filling, the client force-flips locally and tags the unit with `forcedReady=true`. `_tickATB` consumes the flag once and POSTs `[atb-ready timeout] kind=… ra=…` telemetry so we can measure drop rates in prod logs. Prevents a single dropped server frame from killing the whole battle.
+
+39/39 atb-sim (+3 server-auth tests). 56/56 pvp-wire-sim (+2 assist registration tests). 5/5 atb-fsm-sim (+1 timeout-fallback scenario).
+
 ## 1.7.443 — 2026-05-17
 
 ### ATB slice 6 — Battle Speed slider (BS1–BS6) + Haste wired to speedMod

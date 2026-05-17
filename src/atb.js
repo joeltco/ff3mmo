@@ -76,6 +76,14 @@ let _serverAuth = false;
 export function setServerAuthoritative(yes) { _serverAuth = !!yes; }
 export function isServerAuthoritative() { return _serverAuth; }
 
+// v1.7.444 — atb-ready timeout fallback. When server-auth, a dropped
+// `atb-ready` frame would otherwise leave the local gauge full-but-still-
+// `'filling'` forever (FSM freezes on the next dispatch attempt). After
+// `target + SERVER_AUTH_GRACE_MS` of being effectively full, force the
+// flip locally + tag with `forcedReady` so a one-shot telemetry POST
+// fires upstream. Lets a single dropped frame not kill the whole battle.
+const SERVER_AUTH_GRACE_MS = 1500;
+
 // Module-level state. Cleared per battle.
 let _units = [];           // [{ ref, kind, agiSource }]
 let _anchorAgi = 0;
@@ -150,9 +158,23 @@ export function tickGauges(_dt, _opts = {}) {
     // Slice 4d — in server-auth mode the ready flip comes from `markReady`
     // (called by the atb-ready wire handler). Local tick still advances
     // elapsedMs for display continuity but doesn't change state.
-    if (atb.elapsedMs >= target && !_serverAuth) {
-      atb.state = 'ready';
-      atb.readyAtMs = now;
+    if (atb.elapsedMs >= target) {
+      if (!_serverAuth) {
+        atb.state = 'ready';
+        atb.readyAtMs = now;
+      } else {
+        // v1.7.444 fallback — if no `atb-ready` arrives within the grace
+        // window after the gauge would have filled, force the flip locally
+        // so a single dropped server frame doesn't freeze the battle.
+        // `forcedReady` flag is consumed by `_tickATB` to fire one-shot
+        // telemetry.
+        const elapsedSinceTarget = (now - atb.startedFillingAtMs) - target;
+        if (elapsedSinceTarget >= SERVER_AUTH_GRACE_MS) {
+          atb.state = 'ready';
+          atb.readyAtMs = now;
+          atb.forcedReady = true;
+        }
+      }
     }
   }
 }

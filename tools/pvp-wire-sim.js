@@ -974,6 +974,74 @@ async function suiteWire() {
     await new Promise(r => setTimeout(r, 40));
   });
 
+  // v1.7.444 — assist-snapshot must register the joiner in the server-side
+  // ATB battle state, otherwise the joiner's local server-auth gauge waits
+  // forever for an `atb-ready` that never comes. Two cases: solo target
+  // (battle gets initialized from snapshot monsters) and existing co-op
+  // group target (joiner appended to existing units map).
+  await asyncTest('assist-snapshot inits server ATB state when target was solo', async () => {
+    _testHooks.resetState();
+    const A = await connectClient(port, 1048, { ...baseProfile, name: 'Joiner7', agi: 12 });
+    const B = await connectClient(port, 1049, { ...targetProfile, name: 'Target7', agi: 10, inBattle: 1 });
+    const got = once(A, m => m.type === 'encounter-assist-snapshot', 500);
+    B.send(JSON.stringify({
+      type: 'encounter-assist-snapshot',
+      joinerUserId: 1048,
+      seed: 0xb01,
+      turnIndex: 0,
+      // Snapshot carries monsters with agi (v1.7.444 client change) so server
+      // can init the battle in the solo→co-op promotion case.
+      monsters: [
+        { monsterId: 0x00, hp: 10, agi: 5 },
+        { monsterId: 0x01, hp: 8,  agi: 7 },
+      ],
+      peers: [{ userId: 1049, name: 'Target7', jobIdx: 0, level: 1, palIdx: 0 }],
+      hostUserId: 1049,
+    }));
+    await got;
+    const battle = _testHooks.state.encounterBattles.get(1049);
+    assertTrue(battle, 'server-side battle not initialized after assist-snapshot');
+    assertTrue(battle.units.has('player:1049'), 'host player unit missing');
+    assertTrue(battle.units.has('player:1048'), 'joiner player unit missing');
+    assertTrue(battle.units.has('monster:0'), 'monster 0 unit missing');
+    assertTrue(battle.units.has('monster:1'), 'monster 1 unit missing');
+    assertTrue(battle.peers.has(1048), 'joiner not in peer set');
+    assertTrue(battle.peers.has(1049), 'host not in peer set');
+    A.close(); B.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  await asyncTest('assist-snapshot appends joiner unit to existing co-op battle', async () => {
+    _testHooks.resetState();
+    const A = await connectClient(port, 1050, { ...baseProfile, name: 'Joiner8', agi: 15 });
+    const B = await connectClient(port, 1051, { ...targetProfile, name: 'Target8', agi: 10, inBattle: 1 });
+    const C = await connectClient(port, 1052, { ...targetProfile, name: 'Peer8',   agi: 10 });
+    // Pre-populate group + server-side battle (target was already co-op host).
+    _testHooks.state.encounterGroups.set(1051, new Set([1052]));
+    _testHooks.state.encounterGroups.set(1052, new Set([1051]));
+    _testHooks.initEncounterBattle(1051, [1052], [{ monsterId: 0x00, agi: 5 }]);
+    const before = _testHooks.state.encounterBattles.get(1051).units.size;
+    const got = once(A, m => m.type === 'encounter-assist-snapshot', 500);
+    B.send(JSON.stringify({
+      type: 'encounter-assist-snapshot',
+      joinerUserId: 1050,
+      seed: 0xb02,
+      turnIndex: 1,
+      monsters: [{ monsterId: 0x00, hp: 10, agi: 5 }],
+      peers: [{ userId: 1051, name: 'Target8' }, { userId: 1052, name: 'Peer8' }],
+      hostUserId: 1051,
+    }));
+    await got;
+    const battle = _testHooks.state.encounterBattles.get(1051);
+    assertEqual(battle.units.size, before + 1, 'joiner unit not appended');
+    assertTrue(battle.units.has('player:1050'), 'joiner player unit missing');
+    assertTrue(battle.peers.has(1050), 'joiner not added to peer set');
+    // Existing units must not be re-init'd (state preserved).
+    assertTrue(battle.units.has('player:1052'), 'existing peer unit lost');
+    A.close(); B.close(); C.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
   // ── #22 party chat scopes to party, not location ────────────────────────
   await asyncTest('#22 party chat scopes to party-membership', async () => {
     _testHooks.resetState();
