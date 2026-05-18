@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.467 — 2026-05-18
+
+### Defer assist-incoming until the host is at a round boundary
+
+Real cause of "unsyncs after first round of attacks in assist": when the host accepted an assist mid-round, the snapshot shipped HP at the *moment of send* — but the host's monsters kept attacking the host locally between that send and the joiner's spawn. Those attacks don't ride the wire (only player / ally actions do), so the joiner's view of the host's HP started ahead by however much the host took during the rest of the round. Round 1 then ran in lockstep but applied damage to different starting HP → permanent divergence.
+
+Fix (`src/battle-encounter.js`): the assist-incoming handler now queues into `_pendingAssistIncoming` when `battleState !== 'menu-open'`; exported `drainPendingAssistIncoming()` flushes the queue when the host is at the safe boundary. Called every tick from `updateBattle` (`src/battle-update.js`) — internal state-gate makes it a no-op outside the window. Result: the snapshot is built from a stable round-boundary state, so both clients enter their first co-op round with matching HP.
+
+UX caveat: a joiner whose assist-request lands mid-round now waits until the host's current round ends (typically <10s) before spawning into the battle. Previously they spawned instantly into a state that was about to diverge.
+
 ## 1.7.466 — 2026-05-18
 
 ### Spell hit-check moved into `applyMagicDamage` — sender + watcher RNG lockstep

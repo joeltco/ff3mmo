@@ -21,6 +21,7 @@ import { rand } from './rng.js';
 import { updateBattleAlly } from './battle-ally.js';
 import { updateBattleEnemyTurn } from './battle-enemy.js';
 import { updateSpellCast, resetSpellCastVars, prerollSpellAmount, isHealSpell } from './spell-cast.js';
+import { drainPendingAssistIncoming } from './battle-encounter.js';
 import { canCastSpell } from './data/spells.js';
 import { clearAllBuffs } from './buffs.js';
 import { queueBattleMsg, replaceBattleMsg, updateBattleMsg as _updateBattleMsg, clearBattleMsgQueue,
@@ -994,6 +995,9 @@ const _updatePoisonTick = updatePoisonTick;
 export function updateBattle(dt) {
   if (battleSt.battleState === 'none') return;
   battleSt.battleTimer += Math.min(dt, 33);
+  // Drain any queued assist-incoming requests if we just hit menu-open.
+  // Internal state-gate makes this a no-op outside the safe window.
+  drainPendingAssistIncoming();
   _updateBattleMsg(dt);
   if (pvpSt.isPVPBattle) { updatePVPBattle(dt); return; }
   updateBattleTimers(dt);

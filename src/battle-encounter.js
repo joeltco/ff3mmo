@@ -368,7 +368,41 @@ setNetEncounterInviteHandler((msg) => {
 // instant-add the joiner to our local battleAllies as a wire-driven entry
 // (no fade animation — assist is mid-battle and the FSM has no safe
 // fade-in window).
+const _pendingAssistIncoming = [];
+
+// Drain queued assist-incoming requests when the host's FSM is safe to
+// build a snapshot. Called from `battle-turn.js` right before transitioning
+// to `menu-open` at round boundary. v1.7.467.
+export function drainPendingAssistIncoming() {
+  if (_pendingAssistIncoming.length === 0) return;
+  if (battleSt.battleState !== 'menu-open' && battleSt.battleState !== 'none') return;
+  const batch = _pendingAssistIncoming.splice(0, _pendingAssistIncoming.length);
+  for (const msg of batch) _processAssistIncoming(msg);
+}
+
 setNetEncounterAssistIncomingHandler((msg) => {
+  if (!msg || !msg.fromUserId || !msg.fromProfile) return;
+  if (battleSt.battleState === 'none' || pvpSt.isPVPBattle) return;
+  // Defer processing until the host is at a round boundary (`menu-open`).
+  // Mid-round acceptance ships a snapshot of A's current HP, but A's
+  // monsters keep attacking A locally between the snapshot send and the
+  // joiner's spawn — those attacks don't ride the wire (only player /
+  // ally actions do), so the joiner's view of A's HP starts ahead of A's
+  // by however much damage A takes during the rest of the round. From
+  // round 1 onward both phones reseed in lockstep but apply round-1
+  // damage to different starting HP → permanent divergence. Queuing
+  // until `menu-open` ships a stable snapshot from a clean boundary so
+  // both clients enter round 1 with matching state. v1.7.467.
+  if (battleSt.battleState !== 'menu-open') {
+    if (!_pendingAssistIncoming.some(q => q.fromUserId === msg.fromUserId)) {
+      _pendingAssistIncoming.push(msg);
+    }
+    return;
+  }
+  _processAssistIncoming(msg);
+});
+
+function _processAssistIncoming(msg) {
   if (!msg || !msg.fromUserId || !msg.fromProfile) return;
   if (battleSt.battleState === 'none' || pvpSt.isPVPBattle) return;
   if (battleSt.battleAllies.length >= 3) return;  // no slot
@@ -466,7 +500,7 @@ setNetEncounterAssistIncomingHandler((msg) => {
     hostUserId: battleSt.encounterHostUserId | 0,
   });
   try { addChatMessage('* ' + (msg.fromName || 'Player') + ' joined your battle!', 'system'); } catch { /* chat optional */ }
-});
+}
 
 // Joiner side — target accepted our assist. Spawn the battle locally with
 // the wire-supplied state. Mid-battle spawn: encounterMonsters HPs come
