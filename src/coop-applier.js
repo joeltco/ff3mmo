@@ -27,6 +27,8 @@ import { setNetEncounterResolutionHandler, setNetEncounterSnapshotHandler,
 // arbiter sim's convergence tests.
 import { COOP_HOST_ARB } from './coop-resolver.js';
 import { applyDeltaToActor, applyEncounterSnapshot } from './coop-deltas.js';
+import { setPlayerDamageNum, setPlayerHealNum, setEnemyDmgNum,
+         setSwDmgNum, getAllyDamageNums } from './damage-numbers.js';
 
 // Last applied resolution turnIdx. Packets must arrive monotonically
 // (host's _turnIdx counter). Out-of-order packets are queued and applied
@@ -102,13 +104,20 @@ function _apply(msg) {
   // status, MP all flow through `applyDeltaToActor` (coop-deltas.js).
   // This is the only HP-write path on guests under host-arb; legacy
   // local-damage code is short-circuited at the call site by the
-  // `COOP_HOST_ARB && !encounterIsHost` gate (added in Phase 2.5 / live
-  // cut-over).
+  // `COOP_HOST_ARB && !encounterIsHost` gate.
   if (Array.isArray(msg.deltas)) {
     for (const delta of msg.deltas) {
       const actor = resolveActorRef(delta.target);
       if (actor) applyDeltaToActor(actor, delta);
     }
+  }
+  // Phase 6.9 — dispatch fx cues. The cues drive damage-num overlays,
+  // death state transitions, and other visual/state-machine effects
+  // that the legacy local FSM was computing inline. With short-circuits
+  // (Phase 6.7) the local FSM no longer mutates state; the packet now
+  // drives both state (via deltas) and visuals (via cues).
+  if (Array.isArray(msg.fx)) {
+    for (const cue of msg.fx) _dispatchFxCue(cue);
   }
   // Phase 4 — `meta.encounterEnd: true` signals host transitioned to
   // post-battle (victory / defeat / fled). Guests follow by flipping
@@ -123,14 +132,122 @@ function _apply(msg) {
       battleSt.battleTimer = 0;
     }
   }
-  // Phase 2+: walk msg.fx, dispatch to existing anim entry points
-  //   (slash, magic-cast, magic-impact, damage-num, death,
-  //    item-use, item-impact, poison-tick-start). Animation cues are
-  //    role-specific — the renderer for `kind: 'slash'` on a monster
-  //    target is the same one the local FSM would have driven for a
-  //    player attack. The exact dispatch wiring lands when we attach
-  //    to the live FSM in Phase 4.5; the sim tests state convergence only.
   _lastAppliedTurnIdx = msg.turnIdx | 0;
+}
+
+// Phase 6.9 — dispatch a single fx cue. Cue kinds covered:
+//
+//   damage-num — overlay authoritative dmg/heal/miss value on the
+//     correct damage-num slot (player / ally / enemy). Closes the
+//     "guest shows wrong number for a frame" caveat from Phase 6.7.
+//
+//   death — trigger death animation for the resolved target. Encounter-
+//     scope routing only (monster targets); player/ally death routing
+//     is handled by the local FSM's hp-check loop after the applier
+//     writes hp=0.
+//
+//   Other kinds (slash / magic-cast / magic-impact / item-use /
+//     item-impact / poison-tick-start) are no-ops here — those
+//     animations are already driven by the local FSM state machine
+//     (battleState transitions kick off in legacy code paths even
+//     under guest short-circuit, since only the HP/status mutations
+//     are skipped, not the state transitions).
+//
+// `ref` resolution mirrors `resolveActorRef` but returns a {kind, slot}
+// pair so the right setter is callable (damage-numbers' slots are
+// keyed differently per faction).
+function _dispatchFxCue(cue) {
+  if (!cue || !cue.kind) return;
+  if (cue.kind === 'damage-num') {
+    _dispatchDamageNum(cue);
+    return;
+  }
+  if (cue.kind === 'death') {
+    _dispatchDeath(cue);
+    return;
+  }
+  // Other cues — no-op (local FSM handles animation flow).
+}
+
+// Authoritative damage-num overlay. Routes by target.kind:
+//   player + own userId  → setPlayerDamageNum / setPlayerHealNum
+//   player + peer userId → getAllyDamageNums()[allyIdx]
+//   monster              → setSwDmgNum(idx, value, {miss})
+function _dispatchDamageNum(cue) {
+  if (!cue.target) return;
+  const value   = cue.value | 0;
+  const variant = String(cue.variant || 'dmg');
+  const isHeal  = variant === 'heal';
+  const isMiss  = variant === 'miss';
+  const isCrit  = variant === 'crit';
+
+  if (cue.target.kind === 'monster') {
+    setSwDmgNum(cue.target.idx | 0, value, { miss: isMiss });
+    // Multi-monster encounters also use setEnemyDmgNum as the "currently
+    // selected" enemy slot. Keep that in sync when the host indicates
+    // the player's-aim target was hit — but we don't know which monster
+    // is currently selected on the guest's UI; setSwDmgNum drives the
+    // per-slot overlay which is sufficient.
+    return;
+  }
+  if (cue.target.kind === 'player') {
+    const uid = cue.target.userId | 0;
+    if (!uid) return;
+    if (uid === (getMyUserId() | 0)) {
+      // Local player slot
+      if (isMiss) {
+        setPlayerDamageNum({ miss: true, timer: 0 });
+      } else if (isHeal) {
+        setPlayerHealNum({ value, timer: 0 });
+      } else {
+        setPlayerDamageNum({ value, crit: isCrit, timer: 0 });
+      }
+      return;
+    }
+    // Ally slot — find by userId in battleAllies
+    if (!Array.isArray(battleSt.battleAllies)) return;
+    const idx = battleSt.battleAllies.findIndex(a => a && (a.userId | 0) === uid);
+    if (idx < 0) return;
+    if (isMiss) {
+      getAllyDamageNums()[idx] = { miss: true, timer: 0 };
+    } else if (isHeal) {
+      getAllyDamageNums()[idx] = { value, timer: 0, heal: true };
+    } else {
+      getAllyDamageNums()[idx] = { value, crit: isCrit, timer: 0 };
+    }
+    return;
+  }
+}
+
+// Authoritative death routing for monster targets. Sets up the
+// `dyingMonsterIndices` map + transitions to `monster-death` state so
+// the local FSM plays the dissolve anim. Player / ally death isn't
+// routed here; the applier writes hp=0 via deltas and the local FSM's
+// next hp-check picks up the transition (the legacy `_isTeamWiped`
+// check still runs every frame).
+function _dispatchDeath(cue) {
+  if (!cue.target || cue.target.kind !== 'monster') return;
+  if (!battleSt.encounterMonsters) return;
+  const idx = cue.target.idx | 0;
+  const mon = battleSt.encounterMonsters[idx];
+  if (!mon || mon.hp > 0) return;
+  // If a death anim is already in flight for this idx, don't restart.
+  if (battleSt.dyingMonsterIndices && battleSt.dyingMonsterIndices.has(idx)) return;
+  if (!battleSt.dyingMonsterIndices || !(battleSt.dyingMonsterIndices instanceof Map)) {
+    battleSt.dyingMonsterIndices = new Map();
+  }
+  battleSt.dyingMonsterIndices.set(idx, 0);
+  // Only transition battleState if FSM is in a state where death-anim
+  // makes sense — i.e., we just applied a damage delta. Don't yank the
+  // FSM out of unrelated states (menu-open, victory flow, etc.).
+  const bs = battleSt.battleState;
+  const canTransition = bs === 'ally-damage-show' || bs === 'player-damage-show'
+                      || bs === 'enemy-damage-show' || bs === 'magic-hit'
+                      || bs === 'ally-magic-hit' || bs === 'poison-end-tick';
+  if (canTransition) {
+    battleSt.battleState = 'monster-death';
+    battleSt.battleTimer = 0;
+  }
 }
 
 // Joining peer's local FSM spawns from this snapshot under host-arb.

@@ -412,6 +412,34 @@ function suiteWire() {
       'resetApplier should be exported');
   });
 
+  // ── Phase 6.9 fx-cue dispatch wiring ────────────────────────────────
+  test('coop-applier.js dispatches fx cues from resolution packets', () => {
+    const src = readSrc('coop-applier.js');
+    assertTrue(/function\s+_dispatchFxCue\b/.test(src),
+      'should have _dispatchFxCue helper');
+    assertTrue(/function\s+_dispatchDamageNum\b/.test(src),
+      'should have _dispatchDamageNum helper for damage-num cues');
+    assertTrue(/function\s+_dispatchDeath\b/.test(src),
+      'should have _dispatchDeath helper for death cues');
+    assertTrue(/setSwDmgNum\b/.test(src),
+      'should call setSwDmgNum for monster damage numbers');
+    assertTrue(/setPlayerDamageNum\b/.test(src),
+      'should call setPlayerDamageNum for player damage');
+    assertTrue(/setPlayerHealNum\b/.test(src),
+      'should call setPlayerHealNum for player heal');
+    assertTrue(/dyingMonsterIndices/.test(src),
+      'should set dyingMonsterIndices on monster death');
+  });
+
+  test('coop-applier.js _apply iterates msg.fx for cue dispatch', () => {
+    const src = readSrc('coop-applier.js');
+    // The dispatch loop should be inside _apply
+    assertTrue(/Array\.isArray\(msg\.fx\)/.test(src),
+      '_apply should check msg.fx is an array');
+    assertTrue(/_dispatchFxCue\(cue\)/.test(src),
+      '_apply should call _dispatchFxCue for each cue');
+  });
+
   // ── Server relay (Phase 1) ───────────────────────────────────────────
   // Verify the server-side case statements exist in ws-presence.js. Full
   // E2E relay test (boots a WS server + clients) lives in pvp-wire-sim's

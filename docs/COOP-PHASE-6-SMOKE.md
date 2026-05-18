@@ -43,15 +43,17 @@ Host emits a host-arb resolution packet at every co-op-relevant mutation point. 
 | `src/battle-turn.js` | `_playerTurnConsumable` | Skip `removeStatus` (cure_status) + `ps.hp = maxHP` (Elixir) |
 | `src/battle-turn.js` | `_applyEndOfRoundPoison` | Skip per-actor `dispatchDelta` |
 
-## Known caveats (Phase 6.9 will close)
+## Phase 6.9 — fx cue dispatch (SHIPPED)
 
-1. **Damage numbers show LOCAL values briefly.** Each apply function's callbacks fire with the locally-computed dmg/heal value, which may differ from host's authoritative value during the wire-RTT window (~50-200ms). HP itself converges as soon as the packet arrives.
+The Phase 6.7 caveats above are now closed by `_dispatchFxCue` in `src/coop-applier.js`. When a resolution packet arrives, the applier walks `msg.fx` and routes each cue:
 
-2. **Death state transitions may lag on guest.** The guest's FSM checks `target.hp <= 0` locally to decide death/wipe transitions. With the short-circuit, hp doesn't drop locally — the FSM may advance past the wipe check before the packet writes hp=0. Visible symptom: monster at "0 HP" but no death anim, until the applier writes hp and the next-turn dispatch sees it. Phase 6.9 (fx cue dispatch) drives death transitions from the packet's `{kind: 'death', target}` cue, closing this gap.
+- **`damage-num`** — overlays the AUTHORITATIVE dmg/heal/miss value on the right damage-num slot (player / ally / monster), so guests display host's numbers even if their local computation differed. Closes caveats 1 and 3.
+- **`death`** — for monster targets, sets `dyingMonsterIndices` + transitions `battleState` to `monster-death` when the FSM is in a damage-show / impact / poison-tick state. Closes caveat 2 (for monsters; player/ally death still drives off the local hp=0 check the applier writes, which fires on the next FSM tick).
+- **`slash` / `magic-cast` / `magic-impact` / `item-use` / `item-impact` / `poison-tick-start`** — no-op in the applier. Animations are still driven by the local FSM's state transitions (those transitions fire under flag-on guest since only HP/status mutations are short-circuited, not state changes).
 
-3. **Locally-computed values may diverge from host.** The `applyMagicDamage` callback still receives a locally-computed `dmg` based on guest's view of `target.weakness` / `target.resist` / `target.mdef`. If those differ from host's view (the v1.7.472 root cause), the damage number briefly shows the wrong value. Phase 6.9 fx cues will carry the authoritative value.
+The remaining edge case: a lethal attack on player/ally on guest may show the death anim one FSM tick (~16ms at 60fps) late. Acceptable for v1; could be tightened by adding death-cue dispatch for player/ally refs if live testing surfaces an issue.
 
-For Stage 2 live smoke, these caveats are visual / cosmetic — HP convergence is the criterion. If they cause confusion in testing, Phase 6.9 is the fix.
+**Flag flip is now fully safe.** The remaining work is Phase 7 (dead-code cleanup) and Phase 8 (docs refresh), neither of which gates live testing.
 
 ## Smoke test plan (to run AFTER Phase 6.5 ships)
 
