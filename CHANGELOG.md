@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.465 — 2026-05-18
+
+### New `tools/coop-wire-sim.js` regression harness (quick smoke)
+
+7-test harness that boots the real `ws-presence.js` server + 2-3 JWT-authed `ws` clients on a localhost port and walks the co-op + party-fanout surface I broke and re-broke shipping v1.7.460-v1.7.464. Covers: party-invite accept routing, mesh fanout (`party-member-joined`) to existing members, `party-snapshot` to the new joiner, `party-member-left` fanout on leave, `encounter-start` triggering immediate `inBattle=1` player-update broadcast, `encounter-action` relaying `damageRoll`/`healAmount` intact, `encounter-end` clearing `inBattle=0` on host. Wired into `deploy.sh` alongside `pvp-wire-sim.js` (now 49/49 + 7/7 pre-flight gates).
+
+Quick smoke only — no edge-case coverage (assist mid-flight, disconnect-mid-battle, three-way co-op, spell hit-check drift); those are TODOs once the basic scenarios are reliable.
+
 ## 1.7.464 — 2026-05-18
 
 ### Co-op watcher spell coverage — route through shared `applySpell`
