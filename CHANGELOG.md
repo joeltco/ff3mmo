@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.469 — 2026-05-18
+
+### Battle auto-runs — shorter turn timer + defend-on-idle
+
+User reported one phone stuck waiting on the other's input for ~10s. Auto-skip existed but `TURN_TIME_MS = 10000` was too long for co-op feel — when one phone is at `menu-open` and the other in `ally-wire-wait`, the waiter's clock is the bottleneck for round throughput.
+
+- `TURN_TIME_MS`: 10s → **5s** (`src/battle-update.js:71`). Snappier auto-cadence; still gives the user time to think before firing.
+- Auto-action: `'skip'` → **`'defend'`** (`src/battle-update.js:_updateTurnTimer`). Skip wasted the turn entirely; defend at least halves incoming damage. Round-progression behavior is identical (one wire emit, queue advances).
+
+Combined effect: an AFK player's turn fires within 5s, defending instead of skipping; the waiting peer's `ally-wire-wait` clears as soon as that wire action arrives. The 45s `WIRE_WAIT_TIMEOUT_MS` AI-fallback stays unchanged for actual disconnect cases.
+
 ## 1.7.468 — 2026-05-18
 
 ### Per-turn RNG reseed (replaces per-round)

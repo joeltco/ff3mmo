@@ -68,7 +68,12 @@ const PLAYER_DMG_SHOW_MS       = 700;
 // "the hit registered, now they fall" beat. Was 0 (immediate transition).
 const PRE_DEATH_PAUSE_MS       = 85;
 const DEFEND_SPARKLE_TOTAL_MS  = 533;
-const TURN_TIME_MS             = 10000;
+// Auto-action fires after this much idle time at menu-open / target-select.
+// Co-op battles need a snappier auto-cadence than solo — when one phone is
+// at menu-open and the other is in ally-wire-wait, the waiter's clock is
+// the bottleneck for round throughput. 5s gives the user time to think
+// without making the other phone feel stuck. v1.7.469.
+const TURN_TIME_MS             = 5000;
 const VICTORY_BOX_ROWS         = 8;
 const VICTORY_ROW_FRAME_MS     = 16.67;
 const POISON_TICK_MS           = 500;
@@ -241,7 +246,12 @@ function _updateTurnTimer(dt) {
   battleSt.turnTimer += dt;
   if (battleSt.turnTimer >= TURN_TIME_MS) {
     battleSt.turnTimer = 0; inputSt.itemHeldIdx = -1;
-    inputSt.playerActionPending = { command: 'skip' }; battleSt.battleState = 'confirm-pause'; battleSt.battleTimer = 0;
+    // Auto-action: defend instead of skip. Skip wastes the turn entirely;
+    // defend at least halves incoming damage for the round. Behaves the
+    // same for round-progression purposes (one wire emit, queue advances).
+    // v1.7.469.
+    inputSt.playerActionPending = { command: 'defend' };
+    battleSt.battleState = 'confirm-pause'; battleSt.battleTimer = 0;
   }
 }
 
