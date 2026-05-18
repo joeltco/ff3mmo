@@ -20,16 +20,10 @@ import { isHealSpell } from './spell-cast.js';
 // flag-off (Phases 1-5) keeps the handlers installed but no-op'd.
 import './coop-applier.js';
 
-// Host-authoritative co-op rewrite (Phase 1+). Build-time const that
-// gates every host-arb code path. Default `false` keeps the legacy
-// deterministic-lockstep code path active. Phase 6 flips it to `true`
-// to make host-arb the live default; Phase 7 deletes the flag-off
-// branches entirely. See docs/COOP-REWRITE-PLAN.md.
-//
-// Runtime debug toggle is NOT exposed yet — flag is build-time only
-// (per Open Question #4 in the plan). If live A/B comparison becomes
-// useful during phase-6 smoke testing, wire it to the debug tab.
-export const COOP_HOST_ARB = false;
+// Re-export the host-arb flag here for backward-compat — actual owner is
+// `coop-resolver.js` so Node-side tooling can read it without dragging in
+// browser-only modules through this file. See docs/COOP-REWRITE-PLAN.md.
+export { COOP_HOST_ARB } from './coop-resolver.js';
 
 const _wireEncounterActions = [];
 

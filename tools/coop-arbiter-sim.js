@@ -41,6 +41,10 @@ import {
   sendNetEncounterResolution, setNetEncounterResolutionHandler,
   sendNetEncounterSnapshot, setNetEncounterSnapshotHandler,
 } from '../src/net.js';
+import {
+  buildPhysicalAttackPacket, buildMonsterAttackPacket,
+  applyDeltaToActor, applyPacketDeltas,
+} from '../src/coop-deltas.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SRC_DIR = resolve(__dirname, '..', 'src');
@@ -337,15 +341,22 @@ function suiteWire() {
     assertTrue(true);
   });
 
-  // ── COOP_HOST_ARB flag (Phase 1) ─────────────────────────────────────
-  // Read from source — module is browser-only (encounter-wire.js pulls in
-  // spell-cast.js → ui-state.js → window). Phase 6 flips this to true.
+  // ── COOP_HOST_ARB flag (Phase 1+) ────────────────────────────────────
+  // Owned by coop-resolver.js (Node-clean module so this sim can load it
+  // without browser shims). Re-exported by encounter-wire.js for the
+  // production import chain. Phase 6 flips this to true.
   test('COOP_HOST_ARB flag exists and defaults to false (Phase 1-5)', () => {
-    const src = readSrc('encounter-wire.js');
+    const src = readSrc('coop-resolver.js');
     const m = src.match(/export\s+const\s+COOP_HOST_ARB\s*=\s*(true|false)\s*;/);
-    assertTrue(m, 'COOP_HOST_ARB should be declared in encounter-wire.js');
+    assertTrue(m, 'COOP_HOST_ARB should be declared in coop-resolver.js');
     assertEqual(m[1], 'false',
       `COOP_HOST_ARB is ${m[1]} — Phases 1-5 require it stays false until Phase 6 flip`);
+  });
+  test('encounter-wire.js re-exports COOP_HOST_ARB from coop-resolver', () => {
+    const src = readSrc('encounter-wire.js');
+    assertTrue(
+      /export\s*\{\s*COOP_HOST_ARB\s*\}\s*from\s*['"]\.\/coop-resolver\.js['"]/.test(src),
+      'encounter-wire.js should re-export COOP_HOST_ARB from coop-resolver');
   });
 
   // ── coop-resolver.js export surface (Phase 1) ────────────────────────
@@ -449,86 +460,131 @@ function suiteWire() {
 // init). Phase 2+ adds physical / magic / status / KO scenarios that
 // actually drive the production FSM.
 
+// Build an actor-shaped object that `applyDeltaToActor` can mutate in
+// place. Mirrors the real `ps` shape: `hp`, `mp`, `maxHP`, `maxMP`, and a
+// nested `status: {mask, poisonDmgTick}` block. The helper functions
+// in `coop-deltas.js` read these field names directly.
+function _makeCombatant({ userId = 0, hp, maxHP, mp = 0, maxMP = 0 }) {
+  return {
+    userId, hp, maxHP, mp, maxMP,
+    status: { mask: 0, poisonDmgTick: 0 },
+  };
+}
+function _makeMonster({ monsterId, hp, maxHP }) {
+  return {
+    monsterId, hp, maxHP,
+    status: { mask: 0, poisonDmgTick: 0 },
+  };
+}
+
 class Phone {
   constructor(role, userId) {
     this.role = role;             // 'host' | 'guest'
     this.userId = userId;
-    // Snapshot fields — populated by initEncounter / mutated by drive()
-    this.hp = 0;
-    this.maxHP = 0;
-    this.mp = 0;
-    this.statusMask = 0;
-    this.battleAllies = [];       // [{ userId, hp, maxHP, statusMask }]
-    this.monsters = [];           // [{ monsterId, hp, maxHP, statusMask }]
-    this.perTurnIndex = 0;        // mirrors battleSt.perTurnIndex
+    // ps-like self block + roster + monsters. Shape matches production
+    // singletons (ps + battleSt.battleAllies + battleSt.encounterMonsters)
+    // closely enough that `applyDeltaToActor` mutates them identically.
+    this.self = _makeCombatant({ userId, hp: 0, maxHP: 0 });
+    this.battleAllies = [];
+    this.monsters = [];
+    this.perTurnIndex = 0;
     this.encounterSeed = 0;
   }
 
-  // Snapshot the convergence-relevant subset for comparison. Cosmetic
-  // fields (camera shake, particle scatter) intentionally excluded.
+  // Resolve an ActorRef from a resolution packet to a local actor pointer.
+  // Mirrors `coop-applier.js#resolveActorRef` but operates on Phone state
+  // instead of the production singleton.
+  actorLookup(ref) {
+    if (!ref) return null;
+    if (ref.kind === 'monster') {
+      const idx = ref.idx | 0;
+      return this.monsters[idx] || null;
+    }
+    if (ref.kind === 'player') {
+      const uid = ref.userId | 0;
+      if (!uid) return null;
+      if (uid === this.userId) return this.self;
+      return this.battleAllies.find(a => a && (a.userId | 0) === uid) || null;
+    }
+    return null;
+  }
+
+  // Apply a host-emitted resolution packet. Single entry point for the
+  // sim; mirrors what `coop-applier.js#_apply` does in production.
+  applyPacket(packet) {
+    applyPacketDeltas(packet, (ref) => this.actorLookup(ref));
+  }
+
+  // ActorRef pointing at this phone's own player.
+  selfRef() { return { kind: 'player', userId: this.userId }; }
+
   convergenceSnapshot() {
     return {
-      hp: this.hp,
-      maxHP: this.maxHP,
-      mp: this.mp,
-      statusMask: this.statusMask,
+      self: { hp: this.self.hp, maxHP: this.self.maxHP, mp: this.self.mp,
+              statusMask: this.self.status.mask | 0 },
       battleAllies: this.battleAllies.map(a => ({
-        userId: a.userId, hp: a.hp, maxHP: a.maxHP, statusMask: a.statusMask,
+        userId: a.userId, hp: a.hp, maxHP: a.maxHP, statusMask: a.status.mask | 0,
       })),
       monsters: this.monsters.map(m => ({
-        monsterId: m.monsterId, hp: m.hp, maxHP: m.maxHP, statusMask: m.statusMask,
+        monsterId: m.monsterId, hp: m.hp, maxHP: m.maxHP,
+        statusMask: m.status.mask | 0,
       })),
       perTurnIndex: this.perTurnIndex,
     };
   }
 }
 
-// Initialize two phones to identical post-`encounter-invite` state.
-// Caller passes the per-phone identity; this seeds both with matching
-// monster HP, ally rosters, and starting HP/MP.
-function initEncounter({ hostUid, guestUid, encounterSeed = 0xC0FFEE }) {
+function initEncounter({ hostUid, guestUid, encounterSeed = 0xC0FFEE,
+                         monsterHP = 20 } = {}) {
   const host = new Phone('host', hostUid);
   const guest = new Phone('guest', guestUid);
 
-  host.hp = guest.hp = 50;
-  host.maxHP = guest.maxHP = 50;
-  host.mp = guest.mp = 12;
+  host.self  = _makeCombatant({ userId: hostUid,  hp: 50, maxHP: 50, mp: 12, maxMP: 12 });
+  guest.self = _makeCombatant({ userId: guestUid, hp: 50, maxHP: 50, mp: 12, maxMP: 12 });
   host.encounterSeed = guest.encounterSeed = encounterSeed;
 
-  // Host's view: own ps is host (not in battleAllies), guest is the ally.
-  host.battleAllies = [{ userId: guestUid, hp: 50, maxHP: 50, statusMask: 0 }];
-  // Guest's view: own ps is guest, host is the ally.
-  guest.battleAllies = [{ userId: hostUid, hp: 50, maxHP: 50, statusMask: 0 }];
+  // Each phone sees the OTHER player as a battleAlly. Host: ally is guest.
+  // Guest: ally is host. Same shape; userId is the discriminator.
+  host.battleAllies  = [_makeCombatant({ userId: guestUid, hp: 50, maxHP: 50 })];
+  guest.battleAllies = [_makeCombatant({ userId: hostUid,  hp: 50, maxHP: 50 })];
 
-  // Both see the same monster roster.
-  host.monsters = [{ monsterId: 1, hp: 20, maxHP: 20, statusMask: 0 }];
-  guest.monsters = [{ monsterId: 1, hp: 20, maxHP: 20, statusMask: 0 }];
+  host.monsters  = [_makeMonster({ monsterId: 1, hp: monsterHP, maxHP: monsterHP })];
+  guest.monsters = [_makeMonster({ monsterId: 1, hp: monsterHP, maxHP: monsterHP })];
 
   return { host, guest };
 }
 
-// Compare convergence-relevant state across two phones, accounting for the
-// userId-anchored frame swap (host's `ps` ↔ guest's `battleAllies[0]`).
+// Compare convergence-relevant state across two phones. Accounts for the
+// userId-anchored frame swap: host's `self` ↔ guest's view of host in
+// `battleAllies`, and vice versa.
 function assertConvergence(host, guest, label = '') {
-  // Host's view of host = host.hp; guest's view of host = guest.battleAllies.find(userId=host.userId).hp
-  const guestViewOfHost = guest.battleAllies.find(a => a.userId === host.userId);
-  const hostViewOfGuest = host.battleAllies.find(a => a.userId === guest.userId);
+  const guestViewOfHost = guest.battleAllies.find(a => a && a.userId === host.userId);
+  const hostViewOfGuest = host.battleAllies.find(a => a && a.userId === guest.userId);
   assertTrue(guestViewOfHost != null, `${label}: guest is missing host from battleAllies`);
   assertTrue(hostViewOfGuest != null, `${label}: host is missing guest from battleAllies`);
-  assertEqual(host.hp, guestViewOfHost.hp,
-    `${label}: host's view of self HP=${host.hp} != guest's view of host HP=${guestViewOfHost.hp}`);
-  assertEqual(guest.hp, hostViewOfGuest.hp,
-    `${label}: guest's view of self HP=${guest.hp} != host's view of guest HP=${hostViewOfGuest.hp}`);
+  assertEqual(host.self.hp, guestViewOfHost.hp,
+    `${label}: host self.hp=${host.self.hp} != guest's view of host hp=${guestViewOfHost.hp}`);
+  assertEqual(guest.self.hp, hostViewOfGuest.hp,
+    `${label}: guest self.hp=${guest.self.hp} != host's view of guest hp=${hostViewOfGuest.hp}`);
+  assertEqual(host.self.status.mask | 0, guestViewOfHost.status.mask | 0,
+    `${label}: host status mask diverged from guest's view`);
+  assertEqual(guest.self.status.mask | 0, hostViewOfGuest.status.mask | 0,
+    `${label}: guest status mask diverged from host's view`);
   assertEqual(host.monsters.map(m => m.hp), guest.monsters.map(m => m.hp),
     `${label}: monster HP diverged`);
+  assertEqual(
+    host.monsters.map(m => m.status.mask | 0),
+    guest.monsters.map(m => m.status.mask | 0),
+    `${label}: monster status masks diverged`);
   assertEqual(host.perTurnIndex, guest.perTurnIndex,
     `${label}: perTurnIndex diverged`);
 }
 
 function suiteConvergence() {
   _currentSuite = 'convergence';
-  console.log('\n═══ SUITE 3 — CONVERGENCE (Phase 0: zero-turn baseline) ═══');
+  console.log('\n═══ SUITE 3 — CONVERGENCE (Phase 2: physical attacks) ═══');
 
+  // ── Baselines (retained from Phase 0) ────────────────────────────────
   test('zero-turn baseline: two phones identical after init', () => {
     const { host, guest } = initEncounter({ hostUid: 1, guestUid: 2 });
     assertConvergence(host, guest, 'baseline');
@@ -538,22 +594,216 @@ function suiteConvergence() {
     const { host, guest } = initEncounter({ hostUid: 1, guestUid: 2 });
     const hostSnap = host.convergenceSnapshot();
     const guestSnap = guest.convergenceSnapshot();
-    // Both phones see the same monster set.
     assertEqual(hostSnap.monsters, guestSnap.monsters, 'monster set diverged at init');
-    // Per-turn index starts at 0 on both.
     assertEqual(hostSnap.perTurnIndex, 0, 'host perTurnIndex non-zero at init');
     assertEqual(guestSnap.perTurnIndex, 0, 'guest perTurnIndex non-zero at init');
   });
 
-  // Phase 2+ will add scenarios like:
-  //   - 5 rounds physical attacks
-  //   - mixed magic + physical
-  //   - end-of-round poison tick
-  //   - KO event
-  //   - assist join mid-battle
+  // ── Phase 2: physical attacks via host-arb delta packets ─────────────
   //
-  // Each scenario drives both phones through the same logical action stream
-  // and asserts assertConvergence(host, guest) at the end.
+  // The pattern: host builds a packet via `buildPhysicalAttackPacket` /
+  // `buildMonsterAttackPacket` (production: `coop-resolver.js` does this).
+  // Host applies the packet to its own state. Guest receives the packet
+  // and applies it. Both phones land in the same convergence-relevant
+  // state — the whole point of host-authoritative deltas.
+
+  test('host physical attack on monster — convergence after single hit', () => {
+    const { host, guest } = initEncounter({ hostUid: 1, guestUid: 2 });
+    const packet = buildPhysicalAttackPacket({
+      actor: host.selfRef(),
+      target: { kind: 'monster', idx: 0 },
+      hits: [{ miss: false, shieldBlock: false, damage: 12, crit: false }],
+      weaponId: 0x1E, hand: 'R',
+    });
+    host.applyPacket(packet);
+    guest.applyPacket(packet);
+    assertEqual(host.monsters[0].hp, 8, 'host monster HP after 12 dmg from 20 maxHP');
+    assertConvergence(host, guest, 'after host physical attack');
+  });
+
+  test('guest physical attack on monster — convergence after single hit', () => {
+    const { host, guest } = initEncounter({ hostUid: 1, guestUid: 2 });
+    // Guest emits the packet (production: guest sends encounter-action to
+    // host, host resolves, host emits encounter-resolution). For the sim
+    // we elide the round trip and just build the packet with guest as
+    // the actor; both phones apply.
+    const packet = buildPhysicalAttackPacket({
+      actor: guest.selfRef(),
+      target: { kind: 'monster', idx: 0 },
+      hits: [{ miss: false, shieldBlock: false, damage: 7, crit: false }],
+      weaponId: 0x1F, hand: 'R',
+    });
+    host.applyPacket(packet);
+    guest.applyPacket(packet);
+    assertEqual(host.monsters[0].hp, 13);
+    assertConvergence(host, guest, 'after guest physical attack');
+  });
+
+  test('monster attack on host — converges via wire delta (the headline fix)', () => {
+    // This is the v1.7.472 bug the rewrite exists to fix: under lockstep,
+    // host's `targetAlly = -1` path applies `ps.elemResist` / `protect`,
+    // guest's `targetAlly >= 0` path doesn't. Same logical event, different
+    // damage on each phone → HP desync from round 1. Under host-arb the
+    // host's final damage rides the wire and both phones apply identically.
+    const { host, guest } = initEncounter({ hostUid: 1, guestUid: 2 });
+    const hostFinalDmg = 12;   // host computed this via its ps-path FSM
+    const packet = buildMonsterAttackPacket({
+      monsterIdx: 0,
+      target: host.selfRef(),
+      dmg: hostFinalDmg,
+      miss: false,
+    });
+    host.applyPacket(packet);
+    guest.applyPacket(packet);
+    assertEqual(host.self.hp, 50 - hostFinalDmg, 'host took the damage locally');
+    const guestViewOfHost = guest.battleAllies.find(a => a.userId === host.userId);
+    assertEqual(guestViewOfHost.hp, 50 - hostFinalDmg,
+      "guest's view of host matches host's view (the legacy divergence is gone)");
+    assertConvergence(host, guest, 'monster→host');
+  });
+
+  test('monster attack on guest — converges via wire delta', () => {
+    const { host, guest } = initEncounter({ hostUid: 1, guestUid: 2 });
+    const dmg = 9;
+    const packet = buildMonsterAttackPacket({
+      monsterIdx: 0,
+      target: guest.selfRef(),
+      dmg,
+      miss: false,
+    });
+    host.applyPacket(packet);
+    guest.applyPacket(packet);
+    assertEqual(guest.self.hp, 50 - dmg);
+    const hostViewOfGuest = host.battleAllies.find(a => a.userId === guest.userId);
+    assertEqual(hostViewOfGuest.hp, 50 - dmg);
+    assertConvergence(host, guest, 'monster→guest');
+  });
+
+  test('monster attack miss — no HP change on either phone', () => {
+    const { host, guest } = initEncounter({ hostUid: 1, guestUid: 2 });
+    const packet = buildMonsterAttackPacket({
+      monsterIdx: 0,
+      target: host.selfRef(),
+      dmg: 0,
+      miss: true,
+    });
+    host.applyPacket(packet);
+    guest.applyPacket(packet);
+    assertEqual(host.self.hp, 50);
+    assertConvergence(host, guest, 'monster miss');
+  });
+
+  test('monster attack inflicts status — both phones see the same flag set', () => {
+    // Pre-host-arb: host's ps-path runs `tryInflictStatus` on `ps.status`;
+    // guest's ally-path doesn't. Status afflictions appeared on host only.
+    // Under host-arb: host computes the inflict result (via real
+    // `tryInflictStatus`) and ships the resulting status mask delta;
+    // guests apply identically.
+    const { host, guest } = initEncounter({ hostUid: 1, guestUid: 2 });
+    const POISON_BIT = STATUS.POISON | 0;
+    const packet = buildMonsterAttackPacket({
+      monsterIdx: 0,
+      target: host.selfRef(),
+      dmg: 4,
+      miss: false,
+      statusAdd: POISON_BIT,
+    });
+    host.applyPacket(packet);
+    guest.applyPacket(packet);
+    assertTrue((host.self.status.mask & POISON_BIT) !== 0,
+      'host should have POISON flag set');
+    const guestViewOfHost = guest.battleAllies.find(a => a.userId === host.userId);
+    assertTrue((guestViewOfHost.status.mask & POISON_BIT) !== 0,
+      "guest's view of host should ALSO have POISON flag set");
+    assertConvergence(host, guest, 'monster→host w/ status inflict');
+  });
+
+  test('10-round physical mix converges with no drift', () => {
+    // Drive a longer scenario: alternating host/guest attacks on the
+    // monster + monster counter-attacks on each player. Asserts that
+    // multi-turn drift doesn't accumulate (the per-turn-reseed +
+    // double-bump bugs disappear because guests don't roll combat math
+    // anymore).
+    const { host, guest } = initEncounter({ hostUid: 1, guestUid: 2, monsterHP: 200 });
+    seedRng(7);  // deterministic for the synthetic damage values below
+    for (let round = 0; round < 10; round++) {
+      // Host attacks monster
+      let dmg = 6 + (round % 3);
+      let p = buildPhysicalAttackPacket({
+        actor: host.selfRef(), target: { kind: 'monster', idx: 0 },
+        hits: [{ miss: false, shieldBlock: false, damage: dmg, crit: round === 5 }],
+        weaponId: 0x1E, hand: 'R',
+      });
+      host.applyPacket(p);
+      guest.applyPacket(p);
+
+      // Guest attacks monster
+      dmg = 4 + (round % 2);
+      p = buildPhysicalAttackPacket({
+        actor: guest.selfRef(), target: { kind: 'monster', idx: 0 },
+        hits: [{ miss: false, shieldBlock: false, damage: dmg, crit: false }],
+        weaponId: 0x1F, hand: 'R',
+      });
+      host.applyPacket(p);
+      guest.applyPacket(p);
+
+      // Monster counter-attacks host (odd rounds) or guest (even)
+      const tgt = (round % 2 === 0) ? host.selfRef() : guest.selfRef();
+      p = buildMonsterAttackPacket({
+        monsterIdx: 0, target: tgt, dmg: 3, miss: round === 4,
+      });
+      host.applyPacket(p);
+      guest.applyPacket(p);
+
+      assertConvergence(host, guest, `round ${round}`);
+    }
+    // Sanity bounds
+    assertTrue(host.monsters[0].hp < 200, 'monster took damage over 10 rounds');
+    assertTrue(host.self.hp < 50 || guest.self.hp < 50,
+      'at least one player took damage');
+  });
+
+  test('out-of-order packet apply: same final state regardless of order', () => {
+    // Production handler queues out-of-order packets by `turnIdx`. The
+    // pure delta apply doesn't enforce ordering, BUT all deltas are
+    // commutative for HP (subtraction is associative) so applying
+    // them in any order yields the same final state. Verifies that
+    // claim — if it ever stops being true (e.g., we add a non-commutative
+    // delta type), this test fails and we revisit the ordering protocol.
+    const { host } = initEncounter({ hostUid: 1, guestUid: 2 });
+    const a = buildPhysicalAttackPacket({
+      actor: { kind: 'player', userId: 1 },
+      target: { kind: 'monster', idx: 0 },
+      hits: [{ miss: false, shieldBlock: false, damage: 5, crit: false }],
+      weaponId: 0, hand: 'R',
+    });
+    const b = buildPhysicalAttackPacket({
+      actor: { kind: 'player', userId: 1 },
+      target: { kind: 'monster', idx: 0 },
+      hits: [{ miss: false, shieldBlock: false, damage: 3, crit: false }],
+      weaponId: 0, hand: 'R',
+    });
+    host.applyPacket(a);
+    host.applyPacket(b);
+    const hpOrderAB = host.monsters[0].hp;
+
+    const { host: host2 } = initEncounter({ hostUid: 1, guestUid: 2 });
+    host2.applyPacket(b);
+    host2.applyPacket(a);
+    const hpOrderBA = host2.monsters[0].hp;
+
+    assertEqual(hpOrderAB, hpOrderBA,
+      `apply order should not affect final HP (got ${hpOrderAB} vs ${hpOrderBA})`);
+  });
+
+  // Phase 3+ will add scenarios for:
+  //   - spell casts (offensive, heal, status, multi-target)
+  //   - end-of-round poison tick
+  //   - KO event + monster death routing
+  //   - assist join mid-battle (snapshot consumer)
+  //
+  // Each scenario follows the same pattern: host builds packet, both
+  // phones apply, assertConvergence at the end.
 }
 
 // ──────────────────────────────────────────────────────────────────────────

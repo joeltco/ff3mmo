@@ -22,6 +22,21 @@
 
 import { battleSt } from './battle-state.js';
 import { sendNetEncounterResolution, sendNetEncounterSnapshot } from './net.js';
+import { buildPhysicalAttackPacket, buildMonsterAttackPacket } from './coop-deltas.js';
+
+// Host-authoritative co-op rewrite (Phase 1+). Build-time const that
+// gates every host-arb code path. Default `false` keeps the legacy
+// deterministic-lockstep code path active. Phase 6 flips it to `true`
+// to make host-arb the live default; Phase 7 deletes the flag-off
+// branches entirely. See docs/COOP-REWRITE-PLAN.md.
+//
+// Owned here (not in encounter-wire.js) so Node tooling (coop-arbiter-sim,
+// future regression harnesses) can read it without pulling browser-only
+// modules through encounter-wire.js's transitive imports.
+//
+// Runtime debug toggle is NOT exposed — build-time only (per Open Question
+// #4 in the plan). Wire to debug tab in Phase 6 if A/B comparison helps.
+export const COOP_HOST_ARB = false;
 
 // Monotonic turn-resolution counter. Bumped once per emitted resolution
 // packet. Persists across the encounter; guests track `_lastAppliedTurnIdx`
@@ -32,31 +47,46 @@ let _turnIdx = 0;
 export function getResolverTurnIdx() { return _turnIdx; }
 export function resetResolverTurnIdx() { _turnIdx = 0; }
 
-// Phase 2+ entry. Resolve a physical attack action and ship the resolution.
-// Returns the resolution packet so the host's local FSM can apply the same
-// deltas (single-source-of-truth invariant — host applies the bytes it
-// shipped, not the bytes its FSM would have computed independently).
+// Phase 2 entry. Resolve a physical attack action and ship the resolution.
+// Host's local FSM has already rolled `hits` (via `rollHits()`); this fn
+// captures the outcome into a packet and emits it so guests apply the
+// same total damage rather than re-deriving it from divergent stat paths.
 //
-// Phase 1 stub: returns null to signal "no resolution emitted." Production
-// code paths that gate on `COOP_HOST_ARB` skip these calls anyway.
+// `input` shape:
+//   { actor: <ActorRef>, target: <ActorRef>, hits: [<HitResult>],
+//     weaponId: <int>, hand: 'R'|'L' }
 //
-// eslint-disable-next-line no-unused-vars
-export function resolvePhysicalAttack(_actorRef, _action) {
-  // TODO Phase 2: pull hitResults from host's local FSM, build deltas
-  // (target HP, statusAtk inflict), build fx cues (slash frames, damage-num,
-  // monster-death if applicable), increment _turnIdx, emit, return packet.
-  return null;
+// Caller is responsible for: applying the damage locally on host (host is
+// authoritative — applies what it shipped), and ensuring `hits` matches
+// the local FSM's `rollHits` output for this turn. Returns the emitted
+// packet (with `turnIdx` filled in by `_emitResolution`) or null if no
+// emit happened (flag off / unhelloed / etc.).
+export function resolvePhysicalAttack(input) {
+  const packet = buildPhysicalAttackPacket(input);
+  return _emitResolution(packet);
 }
 
-// Phase 2+ entry. Resolve a monster's turn.
-// eslint-disable-next-line no-unused-vars
-export function resolveMonsterTurn(_monsterIdx) {
-  // TODO Phase 2: run monster AI on host, pick target (respecting the
-  // ps-vs-ally branch ONLY on host — guest no longer runs this code),
-  // compute damage with full ps-path semantics (elemResist, protect,
-  // statusAtk inflict), build deltas + fx cues, emit.
-  return null;
+// Phase 2 entry. Resolve a monster's turn against a player/ally target.
+//
+// Host has already run `_processEnemyTurn` locally (which respects the
+// full ps-path semantics — `elemResist`, `protect`, `statusAtk` inflict,
+// `getShieldEvade`) and computed the final `dmg`. This fn ships that
+// final value over the wire so the guest applies the exact same damage
+// rather than re-deriving via its `ally`-path code (no `elemResist`, no
+// `protect`, no status inflict — the legacy divergence source).
+//
+// `input` shape:
+//   { monsterIdx: <int>, target: <ActorRef>, dmg: <int>, miss: <bool>,
+//     statusAdd: <int> }   // statusAdd: STATUS bitmask, default 0
+export function resolveMonsterAttack(input) {
+  const packet = buildMonsterAttackPacket(input);
+  return _emitResolution(packet);
 }
+
+// Legacy name kept for the original Phase 1 stub signature — alias to
+// `resolveMonsterAttack` so existing call sites + sim grep tests still
+// find the export. Will be inlined away in Phase 7 cleanup.
+export function resolveMonsterTurn(input) { return resolveMonsterAttack(input); }
 
 // Phase 3+ entry. Resolve a spell cast.
 // eslint-disable-next-line no-unused-vars

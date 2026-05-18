@@ -22,7 +22,11 @@ import { battleSt } from './battle-state.js';
 import { ps } from './player-stats.js';
 import { setNetEncounterResolutionHandler, setNetEncounterSnapshotHandler,
          getMyUserId } from './net.js';
-import { COOP_HOST_ARB } from './encounter-wire.js';
+// Pull the flag from its owner (coop-resolver.js) instead of via the
+// encounter-wire re-export — keeps this module Node-importable for the
+// arbiter sim's convergence tests.
+import { COOP_HOST_ARB } from './coop-resolver.js';
+import { applyDeltaToActor } from './coop-deltas.js';
 
 // Last applied resolution turnIdx. Packets must arrive monotonically
 // (host's _turnIdx counter). Out-of-order packets are queued and applied
@@ -94,8 +98,24 @@ function _drainPending() {
 }
 
 function _apply(msg) {
-  // Phase 2+: walk msg.deltas, apply each to the addressed actor.
-  // Phase 2+: walk msg.fx, dispatch to existing anim entry points.
+  // Phase 2 — walk deltas, apply each to the resolved actor. Damage,
+  // status, MP all flow through `applyDeltaToActor` (coop-deltas.js).
+  // This is the only HP-write path on guests under host-arb; legacy
+  // local-damage code is short-circuited at the call site by the
+  // `COOP_HOST_ARB && !encounterIsHost` gate (added in Phase 2.5 / live
+  // cut-over).
+  if (Array.isArray(msg.deltas)) {
+    for (const delta of msg.deltas) {
+      const actor = resolveActorRef(delta.target);
+      if (actor) applyDeltaToActor(actor, delta);
+    }
+  }
+  // Phase 2+: walk msg.fx, dispatch to existing anim entry points
+  //   (slash, damage-num, death). Animation cues are role-specific —
+  //   the renderer for `kind: 'slash'` on a monster target is the same
+  //   one the local FSM would have driven for a player attack. The
+  //   exact dispatch wiring lands when we attach to the live FSM in
+  //   Phase 2.5; the sim tests state convergence only.
   // Phase 4+: msg.meta.encounterEnd → transition to encounter-box-close.
   _lastAppliedTurnIdx = msg.turnIdx | 0;
 }
