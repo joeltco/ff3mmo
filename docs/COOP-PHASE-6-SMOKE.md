@@ -10,33 +10,45 @@
 2. Both logged in with different accounts in the same party.
 3. Both on the most recent prod deploy.
 
-## What's wired (Phase 6 commit)
+## What's wired (Phase 6 + Phase 6.5)
 
 Host emits a host-arb resolution packet at every co-op-relevant mutation point. **Flag is still `false`** so:
 
 - With flag off (current default): packets are **not** emitted. Production runs the legacy lockstep path exactly as today.
-- With flag on: host emits + guests apply. Legacy path is now redundant but not yet short-circuited (Phase 6.5 work).
+- With flag on: host emits + guests apply via the applier. Legacy local-apply on guests is NOT yet short-circuited — see "Still blocking the flag flip" below.
 
-### Host-emit call sites wired
+### Host-emit call sites wired (Phase 6 + 6.5)
 
 | File | Site | Resolution kind | Status |
 |---|---|---|---|
-| `src/battle-enemy.js` | `_processEnemyTurn` — both `ps` and `ally` target paths | `monster-attack` | ✓ wired |
-| `src/battle-update.js` | `_finalizeComboHits` | `attack` (player → monster) | ✓ wired |
-| `src/battle-ally.js` | `_finalizeAllyCombo` | `attack` (ally → monster) | ✓ wired |
-| `src/encounter-wire.js` | `endWireEncounter` | `encounter-end` | ✓ wired |
-| `src/battle-encounter.js` | `_processAssistIncoming` | `encounter-snapshot` (new shape, ships alongside legacy) | ✓ wired |
+| `src/battle-enemy.js` | `_processEnemyTurn` — both `ps` and `ally` target paths | `monster-attack` | ✓ Phase 6 |
+| `src/battle-update.js` | `_finalizeComboHits` | `attack` (player → monster) | ✓ Phase 6 |
+| `src/battle-ally.js` | `_finalizeAllyCombo` | `attack` (ally → monster) | ✓ Phase 6 |
+| `src/encounter-wire.js` | `endWireEncounter` | `encounter-end` | ✓ Phase 6 |
+| `src/battle-encounter.js` | `_processAssistIncoming` | `encounter-snapshot` (new shape, ships alongside legacy) | ✓ Phase 6 |
+| `src/spell-cast.js` | `_finishMagicHit` (snapshot+diff per target) | `magic` (player cast) | ✓ Phase 6.5 |
+| `src/battle-ally.js` | `_applyAllyMagicEffect` | `magic` (ally cast) | ✓ Phase 6.5 |
+| `src/battle-turn.js` | `_playerTurnConsumable` | `item` (player use) | ✓ Phase 6.5 |
+| `src/battle-turn.js` | `_applyEndOfRoundPoison` | `poison-tick` (batch) | ✓ Phase 6.5 |
 
-### Not yet wired (Phase 6.5)
+## Still blocking the flag flip (Phase 6.7 work)
 
-| File | Site | Resolution kind | Reason deferred |
-|---|---|---|---|
-| `src/spell-cast.js` | impact-apply (`applySpell` and friends) | `magic` | Multi-target rollup logic + accumulating TargetResults at each impact phase needs careful state capture. Phase 6.5. |
-| `src/battle-ally.js` | `_applyAllyMagicEffect` | `magic` (ally cast) | Same as above. |
-| `src/battle-turn.js` | `_playerTurnConsumable` | `item` | Multi-target items (Hi-Potion + variants); deferred to Phase 6.5. |
-| `src/battle-turn.js` | `_applyEndOfRoundPoison` | `poison-tick` | Batch packet across actors; straightforward but not in Phase 6 scope. |
+**Guest-side short-circuits are NOT yet wired.** Under host-arb, both the host AND the guest currently apply combat math locally — the guest applies its own legacy lockstep mutation, then the applier writes the host's authoritative delta on top, producing **double-application**.
 
-**Guest-side short-circuits** (where flag-on guest skips legacy combat math and waits for resolution) are deferred to Phase 6.5. With Phase 6's wiring alone, flipping the flag causes guests to apply incoming deltas AND continue running their legacy lockstep apply — double-application, broken state. **DO NOT FLIP THE FLAG YET.** Phase 6.5 will land the short-circuits, then the flip becomes safe.
+Where the short-circuits need to land:
+
+| File | Site | Skip on guest |
+|---|---|---|
+| `src/physical-attack.js` | `applyPhysicalHitToEnemy` | Skip `dispatchDelta` + `tryInflictStatus` + `wakeOnHit` when `COOP_HOST_ARB && isWireEncounter && !encounterIsHost` |
+| `src/battle-enemy.js` | `_processEnemyTurn` damage applies | Skip `dispatchDelta` to `ps` / ally + status inflicts |
+| `src/spell-cast.js` | `applySpell` impact-apply path | Tricky — `applySpell` does both HP mutation + animation triggers. Need either a `dryRun` opt or pre/post hooks so guests get animations without HP writes |
+| `src/battle-ally.js` | `_applyAllyMagicEffect` `applySpell` call | Same as above |
+| `src/battle-turn.js` | `_playerTurnConsumable` heal applies | Skip `applyMagicHeal` / `removeStatus` on guest |
+| `src/battle-turn.js` | `_applyEndOfRoundPoison` per-actor applies | Skip `dispatchDelta` on guest |
+
+The structural change for `applySpell` is the riskiest piece — it requires either an API change or a wrapper that runs animation callbacks without mutating state. That work is what gates safe flag-flip. Best done in a session with live two-phone testing so we can verify each short-circuit doesn't break animation or FSM transitions.
+
+**Do NOT flip `COOP_HOST_ARB` until Phase 6.7 short-circuits ship.** Flipping now produces double-application that's worse than the legacy lockstep bug.
 
 ## Smoke test plan (to run AFTER Phase 6.5 ships)
 

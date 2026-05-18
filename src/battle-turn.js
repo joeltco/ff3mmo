@@ -5,6 +5,7 @@ import { rollHits, calcPotentialHits, rollInitiative, resolveLivingTarget } from
 import { rand, seed as seedRng } from './rng.js';
 import { dequeueWireEncounterAction } from './encounter-wire.js';
 import { getMyUserId } from './net.js';
+import { COOP_HOST_ARB, resolvePoisonTick, resolveItemUse } from './coop-resolver.js';
 import { BATTLE_RAN_AWAY, BATTLE_CANT_ESCAPE, BATTLE_ALLY } from './data/strings.js';
 import { getMonsterName, getSpellNameShrinesClean, getItemNameShrinesClean } from './text-decoder.js';
 import { ps, getJobLevelStatBonus } from './player-stats.js';
@@ -433,14 +434,31 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
 // die. Returns true if any actor ticked (caller drives the hold-state).
 function _applyEndOfRoundPoison() {
   let anyTicked = false;
+  // Phase 6.5 — accumulate per-actor tick results for host-arb emit.
+  // Flag-off: never populated. Encounter only (PvP poison stays
+  // lockstep-local).
+  const haEnabled = COOP_HOST_ARB && battleSt.isWireEncounter
+                    && battleSt.encounterIsHost && !pvpSt.isPVPBattle;
+  const haResults = [];
   if (ps.hp > 0 && ps.status && hasStatus(ps.status, STATUS.POISON)) {
     const max = ps.stats ? ps.stats.maxHP : ps.hp;
     const dmg = Math.floor(max / 16);
     if (dmg > 0) {
       // NES rule: poison never kills player/ally from full → clamp to 1.
+      const beforeHp = ps.hp | 0;
       dispatchDelta({ type: 'hp', target: ps, amount: -dmg, min: 1 });
       setPlayerDamageNum({ value: dmg, timer: 0 });
       anyTicked = true;
+      if (haEnabled) {
+        const myUid = getMyUserId() | 0;
+        if (myUid) {
+          haResults.push({
+            target: { kind: 'player', userId: myUid },
+            dmg:    beforeHp - (ps.hp | 0),
+            death:  ps.hp <= 0 && beforeHp > 0,
+          });
+        }
+      }
     }
   }
   for (let i = 0; i < battleSt.battleAllies.length; i++) {
@@ -449,9 +467,17 @@ function _applyEndOfRoundPoison() {
     if (!hasStatus(ally.status, STATUS.POISON)) continue;
     const dmg = Math.floor((ally.maxHP || ally.hp) / 16);
     if (dmg <= 0) continue;
+    const beforeHp = ally.hp | 0;
     dispatchDelta({ type: 'hp', target: ally, amount: -dmg, min: 1 });
     getAllyDamageNums()[i] = { value: dmg, timer: 0 };
     anyTicked = true;
+    if (haEnabled && ally.userId) {
+      haResults.push({
+        target: { kind: 'player', userId: ally.userId | 0 },
+        dmg:    beforeHp - (ally.hp | 0),
+        death:  ally.hp <= 0 && beforeHp > 0,
+      });
+    }
   }
   if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
     for (let i = 0; i < battleSt.encounterMonsters.length; i++) {
@@ -461,9 +487,17 @@ function _applyEndOfRoundPoison() {
       const dmg = Math.floor((mon.maxHP || mon.hp) / 16);
       if (dmg <= 0) continue;
       // Monsters/PvP-enemies CAN die to poison — no min clamp.
+      const beforeHp = mon.hp | 0;
       dispatchDelta({ type: 'hp', target: mon, amount: -dmg });
       setSwDmgNum(i, dmg);
       anyTicked = true;
+      if (haEnabled) {
+        haResults.push({
+          target: { kind: 'monster', idx: i | 0 },
+          dmg:    beforeHp - (mon.hp | 0),
+          death:  mon.hp <= 0 && beforeHp > 0,
+        });
+      }
     }
   }
   if (pvpSt.isPVPBattle) {
@@ -486,6 +520,9 @@ function _applyEndOfRoundPoison() {
       setSwDmgNum(i + 1, dmg);
       anyTicked = true;
     }
+  }
+  if (haEnabled && haResults.length > 0) {
+    resolvePoisonTick({ results: haResults });
   }
   return anyTicked;
 }
@@ -881,6 +918,38 @@ function _playerTurnConsumable() {
   playSFX(SFX.CURE);
   const { target, allyIndex } = inputSt.playerActionPending;
 
+  // Phase 6.5 — host-arb item emit. Snapshot the picked target's
+  // hp/status BEFORE apply; diff + emit after. Encounter only. Flag-off:
+  // no-op.
+  const haEnabled = COOP_HOST_ARB && battleSt.isWireEncounter
+                    && battleSt.encounterIsHost && !pvpSt.isPVPBattle;
+  let haPickedRef = null;
+  let haBefore = null;
+  let haPickedActor = null;
+  if (haEnabled) {
+    if (target === 'player') {
+      if (allyIndex == null || allyIndex < 0) {
+        haPickedActor = ps;
+        const myUid = getMyUserId() | 0;
+        if (myUid) haPickedRef = { kind: 'player', userId: myUid };
+      } else {
+        haPickedActor = battleSt.battleAllies && battleSt.battleAllies[allyIndex];
+        if (haPickedActor && haPickedActor.userId) {
+          haPickedRef = { kind: 'player', userId: haPickedActor.userId | 0 };
+        }
+      }
+    } else if (typeof target === 'number') {
+      haPickedActor = battleSt.encounterMonsters && battleSt.encounterMonsters[target];
+      haPickedRef = { kind: 'monster', idx: target | 0 };
+    }
+    if (haPickedActor) {
+      haBefore = {
+        hp:   haPickedActor.hp | 0,
+        mask: (haPickedActor.status && haPickedActor.status.mask) | 0,
+      };
+    }
+  }
+
   if (effect === 'cure_status') {
     // Status cure items — only target player for now
     const flag = STATUS_NAME_TO_FLAG[itemDat.cures];
@@ -960,6 +1029,36 @@ function _playerTurnConsumable() {
       const maxHP = pvpSt.isPVPBattle ? (pvpSt.pvpOpponentStats ? pvpSt.pvpOpponentStats.maxHP : 1) : BOSS_MAX_HP;
       const heal = Math.min(power, maxHP - curHP);
       setEnemyHP(curHP + heal); battleSt.itemHealAmount = heal; setEnemyHealNum({ value: heal, timer: 0, index: 0 });
+    }
+  }
+  // Phase 6.5 — emit item-use resolution. Uses the snapshot taken at
+  // function start. Note that the apply-time redirect (target died →
+  // pick next-living) may have shifted the actual recipient; the emit
+  // reflects the PICKED target's net change, which is what the live
+  // target experienced because the redirect re-points the apply, not
+  // the snapshot's actor. If the redirected target differs the legacy
+  // path still applies correctly (host is single source of truth); the
+  // wire emit just may animate on the wrong cell. Cosmetic only, no
+  // state divergence. Future polish: capture the redirect target.
+  if (haEnabled && haPickedActor && haBefore && haPickedRef) {
+    const myUid = getMyUserId() | 0;
+    if (myUid) {
+      const hpDelta = (haPickedActor.hp | 0) - haBefore.hp;
+      const postMask = (haPickedActor.status && haPickedActor.status.mask) | 0;
+      const addBits    = (postMask & ~haBefore.mask) >>> 0;
+      const removeBits = (haBefore.mask & ~postMask) >>> 0;
+      const r = { target: haPickedRef, miss: false };
+      if (hpDelta < 0)      r.dmg  = -hpDelta;
+      else if (hpDelta > 0) r.heal = hpDelta;
+      if (addBits)    r.statusAdd    = addBits;
+      if (removeBits) r.statusRemove = removeBits;
+      if (haPickedActor.hp <= 0 && haBefore.hp > 0) r.death = true;
+      if (hpDelta === 0 && !addBits && !removeBits && !r.death) r.miss = true;
+      resolveItemUse({
+        actor:   { kind: 'player', userId: myUid },
+        itemId:  itemId | 0,
+        results: [r],
+      });
     }
   }
   battleSt.battleState = 'item-use'; battleSt.battleTimer = 0;

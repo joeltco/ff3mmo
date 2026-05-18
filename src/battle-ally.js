@@ -23,7 +23,8 @@ import { CAST_PHASE_MS_THROW, CAST_PHASE_MS_HEAL } from './cast-anim.js';
 import { applyMagicDamage, applyMagicStatus, applyMagicHeal,
          applyMagicCureStatus, applyMagicSight, applyMagicErase,
          applySpell, playSpellImpactSFX } from './combatant-cast.js';
-import { COOP_HOST_ARB, resolvePhysicalAttack } from './coop-resolver.js';
+import { COOP_HOST_ARB, resolvePhysicalAttack, resolveSpellCast } from './coop-resolver.js';
+import { getMyUserId } from './net.js';
 
 // Injected at boot — avoids circular import on main.js
 let _buildTurnOrder = () => [];
@@ -336,11 +337,60 @@ function _applyAllyMagicEffect() {
   const onMiss      = isEnemy      ? () => _setAllyMagicEnemyDmgNum({ miss: true, timer: 0 })    : null;
   const onLand      = isEnemy      ? () => _setAllyMagicEnemyDmgNum({ value: 0, timer: 0 })       : null;
 
+  // Phase 6.5 — host-arb emit for ally-driven spells. Snapshot the
+  // target's HP/MP/status mask BEFORE apply, run applySpell, diff after,
+  // emit resolveSpellCast. Encounter only; flag-gated.
+  const haEnabled = COOP_HOST_ARB && battleSt.isWireEncounter
+                    && battleSt.encounterIsHost && !pvpSt.isPVPBattle;
+  const ally = battleSt.battleAllies[battleSt.allyMagicCasterIdx];
+  const haActorUid = haEnabled && ally && ally.userId ? (ally.userId | 0) : 0;
+  let haBefore = null;
+  if (haActorUid && (tType === 'enemy' || tType === 'player' || tType === 'ally')) {
+    haBefore = {
+      hp:   target.hp | 0,
+      mask: (target.status && target.status.mask) | 0,
+    };
+  }
+
   applySpell(spell, target, {
     amount, statusFlag,
     onDmgNum, onHealNum, onSparkle, onMiss, onLand,
     onStatusMsg: replaceBattleMsg,
   });
+
+  if (haActorUid && haBefore) {
+    const hpDelta = (target.hp | 0) - haBefore.hp;
+    const postMask = (target.status && target.status.mask) | 0;
+    const addBits    = (postMask & ~haBefore.mask) >>> 0;
+    const removeBits = (haBefore.mask & ~postMask) >>> 0;
+    const r = { target: null, miss: false };
+    if (tType === 'enemy')        r.target = { kind: 'monster', idx: tIdx | 0 };
+    else if (tType === 'player')  r.target = { kind: 'player',  userId: haActorUid };  // ally casting on host
+    else if (tType === 'ally') {
+      const tgtAlly = battleSt.battleAllies[tIdx];
+      if (tgtAlly && tgtAlly.userId) r.target = { kind: 'player', userId: tgtAlly.userId | 0 };
+    }
+    if (r.target) {
+      if (hpDelta < 0)      r.dmg  = -hpDelta;
+      else if (hpDelta > 0) r.heal = hpDelta;
+      if (addBits)    r.statusAdd    = addBits;
+      if (removeBits) r.statusRemove = removeBits;
+      if (target.hp <= 0 && haBefore.hp > 0) r.death = true;
+      if (hpDelta === 0 && !addBits && !removeBits && !r.death) r.miss = true;
+      // tType === 'player' means ally cast on HOST's ps. Override actor.userId
+      // back to the casting ally (above r.target.userId may be wrong for that
+      // path). Recompute target ref correctly.
+      if (tType === 'player') {
+        const myUid = getMyUserId() | 0;
+        if (myUid) r.target = { kind: 'player', userId: myUid };
+      }
+      resolveSpellCast({
+        actor:   { kind: 'player', userId: haActorUid },
+        spellId: spellId | 0,
+        results: [r],
+      });
+    }
+  }
 }
 
 function _updateAllyMagicCast(dt) {
