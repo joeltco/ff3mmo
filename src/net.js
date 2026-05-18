@@ -45,6 +45,8 @@ let _onEncounterEnd = null;     // ({userId, outcome}) → void — a peer repor
 let _onEncounterAssistIncoming = null; // ({fromUserId, fromName, fromProfile}) → void — overworld player wants to assist us
 let _onEncounterAssistSnapshot = null; // ({seed, turnIndex, monsters, peers, hostUserId}) → void — target accepted our assist, here's the battle state
 let _onEncounterAllyJoin = null;       // ({profile}) → void — new ally joined an in-progress encounter; fade them in
+let _onEncounterResolution = null;     // ({turnIdx, actor, action, deltas, fx, meta}) → void — host-arb resolution packet (Phase 1+). Flag-gated on receive; flag-off path ignores.
+let _onEncounterSnapshot = null;       // ({turnIdx, battleState, monsters, combatants, hostUserId}) → void — host-arb snapshot to a joiner (Phase 5+). Replaces encounter-assist-snapshot under host-arb.
 const MAX_RECONNECT_DELAY = 30000;
 
 function _getToken() {
@@ -252,6 +254,26 @@ function _handleMessage(data) {
       if (_onEncounterAllyJoin) {
         try { _onEncounterAllyJoin(msg); }
         catch (e) { console.warn('[net] encounter-ally-join handler error', e); }
+      }
+      return;
+    case 'encounter-resolution':
+      // Host-arb resolution packet (Phase 1+). Host emitted a turn outcome
+      // (deltas + fx cues) for us to apply. Handler is flag-gated in
+      // `src/coop-applier.js`; flag-off (default) leaves the queue empty
+      // and ignores incoming packets so the lockstep path runs unchanged.
+      if (_onEncounterResolution) {
+        try { _onEncounterResolution(msg); }
+        catch (e) { console.warn('[net] encounter-resolution handler error', e); }
+      }
+      return;
+    case 'encounter-snapshot':
+      // Host-arb snapshot to a joining peer (Phase 5+). Realized stats +
+      // current HP/MP/status for every combatant. Replaces the existing
+      // `encounter-assist-snapshot` shape under host-arb; both can ride the
+      // wire during migration.
+      if (_onEncounterSnapshot) {
+        try { _onEncounterSnapshot(msg); }
+        catch (e) { console.warn('[net] encounter-snapshot handler error', e); }
       }
       return;
   }
@@ -524,6 +546,36 @@ export function sendNetEncounterAssistSnapshot(joinerUserId, snapshot) {
 export function setNetEncounterAssistIncomingHandler(fn) { _onEncounterAssistIncoming = typeof fn === 'function' ? fn : null; }
 export function setNetEncounterAssistSnapshotHandler(fn) { _onEncounterAssistSnapshot = typeof fn === 'function' ? fn : null; }
 export function setNetEncounterAllyJoinHandler(fn)       { _onEncounterAllyJoin       = typeof fn === 'function' ? fn : null; }
+
+// Host-authoritative co-op rewrite (Phase 1+). See docs/COOP-REWRITE-PLAN.md.
+// Host emits `encounter-resolution` after resolving a turn locally; server
+// fans out to every other peer in `_encounterGroups[hostUid]`. Guests apply
+// the deltas + drive animation from the fx cues. Flag-gated on both sides
+// via `COOP_HOST_ARB` in `src/encounter-wire.js`.
+//
+// Wire shape (host → guests):
+//   { turnIdx, actor: <ActorRef>, action: <ActionRef>,
+//     deltas: [<Delta>...], fx: [<FXCue>...],
+//     meta: { encounterEnd?, outcome? } }
+// See docs/COOP-REWRITE-PLAN.md#wire-contract for the full schema.
+export function sendNetEncounterResolution(packet) {
+  if (!_helloed || !packet) return false;
+  return _send({ type: 'encounter-resolution', ...packet });
+}
+
+// Host → joining peer only. Realized-stats snapshot for mid-battle joins
+// under host-arb (Phase 5+). Distinct from `encounter-assist-snapshot` so
+// the two shapes can coexist during migration.
+//
+// Wire shape:
+//   { joinerUserId, turnIdx, battleState, monsters, combatants, hostUserId }
+export function sendNetEncounterSnapshot(joinerUserId, snapshot) {
+  if (!_helloed || !joinerUserId || !snapshot) return false;
+  return _send({ type: 'encounter-snapshot', joinerUserId, ...snapshot });
+}
+
+export function setNetEncounterResolutionHandler(fn) { _onEncounterResolution = typeof fn === 'function' ? fn : null; }
+export function setNetEncounterSnapshotHandler(fn)   { _onEncounterSnapshot   = typeof fn === 'function' ? fn : null; }
 
 // Real party invites over the wire. Mirror of `pvp-search` lifecycle:
 // challenger emits `party-invite`; server forwards to target as

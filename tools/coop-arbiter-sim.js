@@ -23,11 +23,28 @@
 // the divergence suite to fail, so the gate treats that as green. Drop the
 // flag after Phases 2-4 land.
 
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 import { seed as seedRng, rand } from '../src/rng.js';
 import { calcDamage, elemMultiplier, rollInitiative } from '../src/battle-math.js';
 import {
   STATUS, addStatus, hasStatus, createStatusState, tryInflictStatus,
 } from '../src/status-effects.js';
+// `src/net.js` is Node-clean (only DOM access is inside function bodies,
+// never at module load). Coop-resolver / coop-applier pull in
+// `encounter-wire.js` → `spell-cast.js` → browser-only modules so they
+// can't be import-tested here; Suite 2 grep-checks their export surface
+// against the source instead. A browser-side integration test that boots
+// the full client is Phase 6 territory.
+import {
+  sendNetEncounterResolution, setNetEncounterResolutionHandler,
+  sendNetEncounterSnapshot, setNetEncounterSnapshotHandler,
+} from '../src/net.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const SRC_DIR = resolve(__dirname, '..', 'src');
+function readSrc(rel) { return readFileSync(resolve(SRC_DIR, rel), 'utf8'); }
 
 // ── CLI ────────────────────────────────────────────────────────────────────
 const args = Object.fromEntries(
@@ -278,10 +295,115 @@ function suiteDivergence() {
 
 function suiteWire() {
   _currentSuite = 'wire';
-  console.log('\n═══ SUITE 2 — WIRE CONTRACT (Phase 1 will land tests here) ═══');
+  console.log('\n═══ SUITE 2 — WIRE CONTRACT (Phase 1+) ═══');
 
-  // Placeholder: assert the resolution packet shape we'll define in Phase 1
-  // round-trips through JSON cleanly. For now just verify a sample shape.
+  // ── net.js exports (Phase 1) ─────────────────────────────────────────
+  test('net.js exports sendNetEncounterResolution', () => {
+    assertTrue(typeof sendNetEncounterResolution === 'function',
+      'sendNetEncounterResolution should be a function');
+  });
+  test('net.js exports setNetEncounterResolutionHandler', () => {
+    assertTrue(typeof setNetEncounterResolutionHandler === 'function',
+      'setNetEncounterResolutionHandler should be a function');
+  });
+  test('net.js exports sendNetEncounterSnapshot', () => {
+    assertTrue(typeof sendNetEncounterSnapshot === 'function',
+      'sendNetEncounterSnapshot should be a function');
+  });
+  test('net.js exports setNetEncounterSnapshotHandler', () => {
+    assertTrue(typeof setNetEncounterSnapshotHandler === 'function',
+      'setNetEncounterSnapshotHandler should be a function');
+  });
+
+  // ── send/handler null-safety (Phase 1) ───────────────────────────────
+  // No socket connected in this harness; sends should return false and
+  // not throw. Setter should accept a function and a non-function (null
+  // installs no handler) without throwing.
+  test('sendNetEncounterResolution returns false when not helloed', () => {
+    assertEqual(sendNetEncounterResolution({ turnIdx: 1 }), false,
+      'send should fail-soft when WS not connected');
+  });
+  test('sendNetEncounterSnapshot returns false on missing args', () => {
+    assertEqual(sendNetEncounterSnapshot(0, null), false,
+      'send should reject empty args');
+    assertEqual(sendNetEncounterSnapshot(42, null), false,
+      'send should reject null snapshot');
+  });
+  test('setNetEncounterResolutionHandler accepts fn or null', () => {
+    setNetEncounterResolutionHandler(() => {});
+    setNetEncounterResolutionHandler(null);
+    setNetEncounterResolutionHandler(42);  // non-function → null install
+    // No assertion needed — just confirm no throw.
+    assertTrue(true);
+  });
+
+  // ── COOP_HOST_ARB flag (Phase 1) ─────────────────────────────────────
+  // Read from source — module is browser-only (encounter-wire.js pulls in
+  // spell-cast.js → ui-state.js → window). Phase 6 flips this to true.
+  test('COOP_HOST_ARB flag exists and defaults to false (Phase 1-5)', () => {
+    const src = readSrc('encounter-wire.js');
+    const m = src.match(/export\s+const\s+COOP_HOST_ARB\s*=\s*(true|false)\s*;/);
+    assertTrue(m, 'COOP_HOST_ARB should be declared in encounter-wire.js');
+    assertEqual(m[1], 'false',
+      `COOP_HOST_ARB is ${m[1]} — Phases 1-5 require it stays false until Phase 6 flip`);
+  });
+
+  // ── coop-resolver.js export surface (Phase 1) ────────────────────────
+  test('coop-resolver.js exports expected entry points', () => {
+    const src = readSrc('coop-resolver.js');
+    const expected = [
+      'getResolverTurnIdx', 'resetResolverTurnIdx',
+      'resolvePhysicalAttack', 'resolveMonsterTurn',
+      'resolveSpellCast', 'resolveItemUse',
+      'resolvePoisonTick', 'buildEncounterSnapshot',
+      '_emitResolution', '_emitSnapshot', '_assertIsCoopHost',
+    ];
+    for (const name of expected) {
+      assertTrue(
+        new RegExp(`export\\s+function\\s+${name}\\b`).test(src),
+        `coop-resolver.js missing export: ${name}`);
+    }
+  });
+
+  // ── coop-applier.js export surface (Phase 1) ─────────────────────────
+  test('coop-applier.js installs handlers at module load', () => {
+    const src = readSrc('coop-applier.js');
+    assertTrue(/setNetEncounterResolutionHandler\(_onEncounterResolution\)/.test(src),
+      'applier should install resolution handler at module load');
+    assertTrue(/setNetEncounterSnapshotHandler\(_onEncounterSnapshot\)/.test(src),
+      'applier should install snapshot handler at module load');
+  });
+  test('coop-applier.js gates inbound packets on COOP_HOST_ARB', () => {
+    const src = readSrc('coop-applier.js');
+    assertTrue(/if\s*\(\s*!COOP_HOST_ARB\s*\)\s*return/.test(src),
+      'applier should no-op when COOP_HOST_ARB=false');
+  });
+  test('coop-applier.js exports resolveActorRef + getLastAppliedTurnIdx', () => {
+    const src = readSrc('coop-applier.js');
+    assertTrue(/export\s+function\s+resolveActorRef\b/.test(src),
+      'resolveActorRef should be exported');
+    assertTrue(/export\s+function\s+getLastAppliedTurnIdx\b/.test(src),
+      'getLastAppliedTurnIdx should be exported');
+    assertTrue(/export\s+function\s+resetApplier\b/.test(src),
+      'resetApplier should be exported');
+  });
+
+  // ── Server relay (Phase 1) ───────────────────────────────────────────
+  // Verify the server-side case statements exist in ws-presence.js. Full
+  // E2E relay test (boots a WS server + clients) lives in pvp-wire-sim's
+  // E2E suite shape — out of scope for the arbiter sim until Phase 2+.
+  test('ws-presence.js has encounter-resolution relay case', () => {
+    const src = readFileSync(resolve(SRC_DIR, '..', 'ws-presence.js'), 'utf8');
+    assertTrue(/case\s+'encounter-resolution'\s*:/.test(src),
+      'ws-presence.js should have encounter-resolution case');
+  });
+  test('ws-presence.js has encounter-snapshot relay case', () => {
+    const src = readFileSync(resolve(SRC_DIR, '..', 'ws-presence.js'), 'utf8');
+    assertTrue(/case\s+'encounter-snapshot'\s*:/.test(src),
+      'ws-presence.js should have encounter-snapshot case');
+  });
+
+  // ── Wire packet JSON contracts (Phase 0 baseline, retained) ──────────
   test('encounter-resolution sample packet round-trips through JSON', () => {
     const sample = {
       type: 'encounter-resolution',

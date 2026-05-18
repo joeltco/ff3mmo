@@ -15,6 +15,22 @@ import { sendNetEncounterAction, sendNetEncounterEnd,
          setNetEncounterActionHandler, setNetEncounterEndHandler } from './net.js';
 import { isHealSpell } from './spell-cast.js';
 
+// Side-effect import — wires `encounter-resolution` + `encounter-snapshot`
+// handlers at module load. Flag-gated internally by `COOP_HOST_ARB`, so
+// flag-off (Phases 1-5) keeps the handlers installed but no-op'd.
+import './coop-applier.js';
+
+// Host-authoritative co-op rewrite (Phase 1+). Build-time const that
+// gates every host-arb code path. Default `false` keeps the legacy
+// deterministic-lockstep code path active. Phase 6 flips it to `true`
+// to make host-arb the live default; Phase 7 deletes the flag-off
+// branches entirely. See docs/COOP-REWRITE-PLAN.md.
+//
+// Runtime debug toggle is NOT exposed yet — flag is build-time only
+// (per Open Question #4 in the plan). If live A/B comparison becomes
+// useful during phase-6 smoke testing, wire it to the debug tab.
+export const COOP_HOST_ARB = false;
+
 const _wireEncounterActions = [];
 
 setNetEncounterActionHandler((msg) => {

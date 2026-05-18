@@ -863,6 +863,62 @@ function _handleMessage(entry, msg) {
       }
       return;
     }
+    case 'encounter-resolution': {
+      // Host-authoritative co-op rewrite (Phase 1+). Host resolves the
+      // turn locally and emits a `{turnIdx, actor, action, deltas, fx, meta}`
+      // packet; we fan out to every peer in the encounter group so each
+      // guest can apply deltas + drive animation from fx cues. Server is a
+      // dumb forwarder — no validation of the resolution contents (host is
+      // the source of truth). See docs/COOP-REWRITE-PLAN.md#wire-contract.
+      //
+      // Flag-gated on the receiving end via `COOP_HOST_ARB` in
+      // `src/encounter-wire.js`; flag-off ignores incoming packets so the
+      // existing lockstep path keeps running unchanged during migration.
+      if (!entry.helloed) return;
+      const peers = _encounterGroups.get(entry.userId);
+      if (!peers || peers.size === 0) return;
+      for (const peerId of peers) {
+        const peer = _connected.get(peerId);
+        if (!peer || peer.ws.readyState !== 1) continue;
+        _send(peer.ws, {
+          type:    'encounter-resolution',
+          userId:  entry.userId,
+          turnIdx: parsed.turnIdx,
+          actor:   parsed.actor,
+          action:  parsed.action,
+          deltas:  parsed.deltas,
+          fx:      parsed.fx,
+          meta:    parsed.meta,
+        });
+      }
+      return;
+    }
+    case 'encounter-snapshot': {
+      // Host → specific joining peer only. Realized-stats snapshot used by
+      // the host-arb mid-battle join path (Phase 5+). Distinct wire kind
+      // from `encounter-assist-snapshot` so both can coexist during
+      // migration. Forwarded to `parsed.joinerUserId` only — not fanned
+      // out to the group.
+      if (!entry.helloed) return;
+      const joinerUserId = parsed.joinerUserId | 0;
+      if (!joinerUserId) return;
+      // Joiner must already be in the encounter group on the server side
+      // — same gating as encounter-assist-snapshot. Without this check a
+      // misbehaving host could push spurious snapshots to anyone.
+      const peers = _encounterGroups.get(entry.userId);
+      if (!peers || !peers.has(joinerUserId)) return;
+      const target = _connected.get(joinerUserId);
+      if (!target || !target.helloed) return;
+      _send(target.ws, {
+        type:        'encounter-snapshot',
+        hostUserId:  entry.userId,
+        turnIdx:     parsed.turnIdx,
+        battleState: parsed.battleState,
+        monsters:    parsed.monsters,
+        combatants:  parsed.combatants,
+      });
+      return;
+    }
     case 'encounter-end': {
       // Local battle ended on this user's side. Tell peers + clean up group.
       if (!entry.helloed) return;
