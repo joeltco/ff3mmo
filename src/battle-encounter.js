@@ -31,6 +31,20 @@ const TILE_SIZE = 16;
 let _resetBattleVars = () => {};
 export function initBattleEncounter({ resetBattleVars }) { _resetBattleVars = resetBattleVars; }
 
+// Count party members currently online (helloed). Used to scale the per-step
+// encounter threshold so a 3-person party walking together doesn't trigger
+// ~3× the encounters a solo player would; instead the combined rate matches
+// solo. v1.7.461.
+function _countOnlinePartyMembers() {
+  if (!partyInviteSt.partyMembers || partyInviteSt.partyMembers.length === 0) return 0;
+  let n = 0;
+  for (const name of partyInviteSt.partyMembers) {
+    const online = getOnlinePlayerByName(name);
+    if (online && online.userId) n++;
+  }
+  return n;
+}
+
 // ── Random encounter step counter ──────────────────────────────────────────
 export function tickRandomEncounter() {
   if (battleSt.battleState !== 'none') return false;
@@ -41,9 +55,15 @@ export function tickRandomEncounter() {
   const inPatch = mapSt.encounterPatch && mapSt.encounterPatch.has(tileY * 32 + tileX);
   if (!inDungeon && !onGrass && !inPatch) return false;
   mapSt.encounterSteps++;
-  const threshold = (onGrass || inPatch)
+  // Split encounter triggers across the party. Each member ticks their own
+  // step counter; scaling the threshold by (party size + self) means a party
+  // of N walking together rolls encounters at ~1× the solo rate (each
+  // individual rolls at 1/N). Solo path unchanged (partyScale=1).
+  const partyScale = _countOnlinePartyMembers() + 1;
+  const baseThreshold = (onGrass || inPatch)
     ? 20 + Math.floor(Math.random() * 20)
     : 15 + Math.floor(Math.random() * 15);
+  const threshold = baseThreshold * partyScale;
   if (mapSt.encounterSteps >= threshold) {
     mapSt.encounterSteps = 0;
     _triggerEncounterWithPVPCheck();

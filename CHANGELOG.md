@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.461 — 2026-05-17
+
+### Party encounter triggers split across members
+
+Each party member ticks their own `mapSt.encounterSteps` independently, so a 3-person party walking together used to trigger ~3× the encounters a solo player would. Now `tickRandomEncounter` (`src/battle-encounter.js`) scales the step threshold by `(online party members + 1)`, so each individual rolls at 1/N and the combined party rate matches the solo rate. New helper `_countOnlinePartyMembers()` counts party members whose presence the client has from `getOnlinePlayerByName`. Solo path is unchanged (`partyScale = 1`).
+
 ## 1.7.460 — 2026-05-17
 
 ### Party system: full-mesh sync (no more star topology)
