@@ -26,7 +26,7 @@ import { setNetEncounterResolutionHandler, setNetEncounterSnapshotHandler,
 // encounter-wire re-export — keeps this module Node-importable for the
 // arbiter sim's convergence tests.
 import { COOP_HOST_ARB } from './coop-resolver.js';
-import { applyDeltaToActor } from './coop-deltas.js';
+import { applyDeltaToActor, applyEncounterSnapshot } from './coop-deltas.js';
 
 // Last applied resolution turnIdx. Packets must arrive monotonically
 // (host's _turnIdx counter). Out-of-order packets are queued and applied
@@ -134,12 +134,47 @@ function _apply(msg) {
 }
 
 // Joining peer's local FSM spawns from this snapshot under host-arb.
-// Phase 5+; flag-gated.
+// Production behavior:
+//   1. Seed `battleSt.battleAllies` from snapshot.combatants (excluding self)
+//   2. Seed `battleSt.encounterMonsters` from snapshot.monsters
+//   3. Set `battleSt.battleState` to snapshot.battleState
+//   4. Set `battleSt.encounterHostUserId` so subsequent resolution
+//      packets resolve hostward correctly
+//   5. Mark `battleSt.isWireEncounter = true` + `encounterIsHost = false`
+//   6. Reset applier counters to snapshot.turnIdx so the next
+//      resolution lands at turnIdx+1 without queueing.
+//
+// Phase 5 lands the wiring through `applyEncounterSnapshot`; the live
+// FSM transition (flash-strobe → wire-encounter spawn) attaches in
+// Phase 5.5 when the legacy `encounter-assist-snapshot` path gets
+// short-circuited under the flag.
 function _onEncounterSnapshot(msg) {
   if (!COOP_HOST_ARB) return;
   if (!msg) return;
-  // TODO Phase 5: spawn local battle from realized stats + current HP.
+
+  // Mark co-op state — production flag-on guests need these set BEFORE
+  // applyEncounterSnapshot runs so subsequent resolution packets route
+  // through the correct hostUserId.
+  battleSt.isWireEncounter = true;
+  battleSt.encounterIsHost = false;
+  battleSt.encounterHostUserId = msg.hostUserId | 0;
+  battleSt.encounterSeed = 0;  // unused under host-arb; kept zero for safety
+
+  // applyEncounterSnapshot mutates `target.battleAllies` + `monsters` +
+  // `battleState` in place. We pass `battleSt` directly so it writes to
+  // the live singleton.
+  applyEncounterSnapshot(msg, battleSt, getMyUserId() | 0);
+  // `target.monsters` is the snapshot consumer's field; production
+  // singleton calls it `encounterMonsters`. Mirror over.
+  if (Array.isArray(battleSt.monsters)) {
+    battleSt.encounterMonsters = battleSt.monsters;
+    delete battleSt.monsters;
+  }
+  // Reset applier turn-idx so the next resolution doesn't queue. Host's
+  // counter at snapshot time is the high-water mark; we accept anything
+  // strictly greater.
   _lastAppliedTurnIdx = msg.turnIdx | 0;
+  _pendingResolutions.length = 0;
 }
 
 // Install handlers at module load. Mirrors how `encounter-wire.js` wires

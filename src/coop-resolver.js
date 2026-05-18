@@ -24,7 +24,7 @@ import { battleSt } from './battle-state.js';
 import { sendNetEncounterResolution, sendNetEncounterSnapshot } from './net.js';
 import { buildPhysicalAttackPacket, buildMonsterAttackPacket,
          buildMagicPacket, buildItemUsePacket, buildPoisonTickPacket,
-         buildEncounterEndPacket } from './coop-deltas.js';
+         buildEncounterEndPacket, buildEncounterSnapshot } from './coop-deltas.js';
 
 // Host-authoritative co-op rewrite (Phase 1+). Build-time const that
 // gates every host-arb code path. Default `false` keeps the legacy
@@ -168,18 +168,33 @@ export function resolveEncounterEnd(input) {
   return _emitResolution(packet);
 }
 
-// Phase 5+ entry. Build + ship the mid-battle snapshot to a joining peer.
+// Re-export the pure builder so callers can inspect a snapshot's shape
+// without sending it. Live host emit goes through `resolveEncounterJoin`.
+export { buildEncounterSnapshot };
+
+// Phase 5 entry. Build + ship the mid-battle snapshot to a joining peer.
 // Ships realized stats (atk/def/agi/maxHP/etc.) rather than profile fields
 // to eliminate the `recalcStats` vs `generateAllyStats` divergence as a
 // class — joiner runs no stats math on the snapshot, just consumes the
 // realized values directly.
 //
-// eslint-disable-next-line no-unused-vars
-export function buildEncounterSnapshot(_joinerUserId) {
-  // TODO Phase 5: enumerate battleAllies + ps (host's view of self) +
-  // encounterMonsters, ship current HP/MP/status, ship realized stats
-  // computed from host's authoritative state.
-  return null;
+// `input` shape:
+//   { joinerUserId: <int>, hostUserId: <int>, turnIdx: <int>,
+//     battleState: <string>, monsters: [...], combatants: [...] }
+//
+// Production wiring (Phase 5.5): when host receives an
+// `encounter-assist-incoming` and is in a safe state (menu-open), it
+// builds the input from `ps + battleAllies + encounterMonsters` and
+// calls this. The wire goes through `sendNetEncounterSnapshot` (joiner-
+// only, not fanned out to the encounter group).
+//
+// Returns the snapshot object that was sent, or null on send failure.
+export function resolveEncounterJoin(input) {
+  if (!input || !input.joinerUserId) return null;
+  const snapshot = buildEncounterSnapshot(input);
+  if (!snapshot) return null;
+  _emitSnapshot(input.joinerUserId | 0, snapshot);
+  return snapshot;
 }
 
 // Internal — used by Phase 2+ entries when emitting. Bumps counter +

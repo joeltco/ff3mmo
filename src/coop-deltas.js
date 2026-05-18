@@ -332,6 +332,180 @@ export function buildPoisonTickPacket({ results }) {
   };
 }
 
+// ── Encounter snapshot for mid-battle joiners (Phase 5) ───────────────────
+//
+// Joiner picked Assist on a roster target who's in an encounter. Host
+// auto-accepts and ships their CURRENT battle state to the joiner so
+// the joiner spawns their local FSM mid-fight with matching HP/status/
+// turn position. From this point forward the joiner receives normal
+// `encounter-resolution` packets and applies them like any other guest.
+//
+// Crucial design point: combatants ship REALIZED STATS rather than
+// profile fields. Pre-host-arb the snapshot shipped profile-like fields
+// and the joiner ran `generateAllyStats(profile)` to derive `atk/def/agi`;
+// this produced different values than the host's `recalcStats` because
+// `generateAllyStats` ignores `strBonus/vitBonus` from gear. Two stat
+// computation paths → silent HP-damage drift over time. Under host-arb
+// the joiner never recomputes — host's authoritative values ride the
+// wire and the joiner consumes them directly.
+//
+// `input` shape (host-side):
+//   {
+//     hostUserId: <int>,
+//     turnIdx:    <int>,              // host's current resolution counter
+//     battleState: <string>,           // FSM state to seed joiner with
+//     monsters: [
+//       { monsterId, hp, maxHP, status: { mask, poisonDmgTick } }
+//     ],
+//     combatants: [
+//       // Excludes the joiner; includes host + every existing peer
+//       {
+//         userId, name,
+//         hp, mp, maxHP, maxMP,
+//         jobIdx, level, palIdx,
+//         atk, def, agi, evade, mdef, hitRate, shieldEvade,
+//         weaponR, weaponL, armorId, helmId, shieldId,
+//         knownSpells, jobLevel,
+//         status: { mask, poisonDmgTick },
+//       }
+//     ],
+//   }
+//
+// Wire shape (after server forwards to joiner — server prepends
+// `hostUserId` from the sender; see `ws-presence.js#encounter-snapshot`):
+//   { type: 'encounter-snapshot', hostUserId, turnIdx, battleState,
+//     monsters, combatants }
+//
+// The builder is a pass-through over the input — its job is to enforce
+// the schema (drop unknown fields, ensure numbers are integers, etc.).
+export function buildEncounterSnapshot(input) {
+  if (!input) return null;
+  const monsters = Array.isArray(input.monsters) ? input.monsters.map(m => ({
+    monsterId: m.monsterId | 0,
+    hp:        m.hp | 0,
+    maxHP:     m.maxHP | 0,
+    status: {
+      mask:          (m.status && m.status.mask) | 0,
+      poisonDmgTick: (m.status && m.status.poisonDmgTick) | 0,
+    },
+  })) : [];
+  const combatants = Array.isArray(input.combatants) ? input.combatants.map(c => ({
+    userId:      c.userId | 0,
+    name:        String(c.name || ''),
+    hp:          c.hp | 0,
+    mp:          c.mp | 0,
+    maxHP:       c.maxHP | 0,
+    maxMP:       c.maxMP | 0,
+    jobIdx:      c.jobIdx | 0,
+    level:       (c.level | 0) || 1,
+    palIdx:      c.palIdx | 0,
+    atk:         c.atk | 0,
+    def:         c.def | 0,
+    agi:         (c.agi | 0) || 1,
+    evade:       c.evade | 0,
+    mdef:        c.mdef | 0,
+    hitRate:     (c.hitRate | 0) || 80,
+    shieldEvade: c.shieldEvade | 0,
+    weaponR:     c.weaponR ?? null,
+    weaponL:     c.weaponL ?? null,
+    armorId:     c.armorId ?? null,
+    helmId:      c.helmId ?? null,
+    shieldId:    c.shieldId ?? null,
+    knownSpells: Array.isArray(c.knownSpells) ? c.knownSpells.slice() : [],
+    jobLevel:    (c.jobLevel | 0) || 1,
+    status: {
+      mask:          (c.status && c.status.mask) | 0,
+      poisonDmgTick: (c.status && c.status.poisonDmgTick) | 0,
+    },
+  })) : [];
+  return {
+    hostUserId:  input.hostUserId | 0,
+    turnIdx:     input.turnIdx | 0,
+    battleState: String(input.battleState || 'menu-open'),
+    monsters,
+    combatants,
+  };
+}
+
+// Apply an `encounter-snapshot` payload to a joiner's local state. The
+// `target` object is the joiner's own state container with the fields
+// the production applier writes to (battleSt-shape on production;
+// Phone-shape in the sim).
+//
+// `target` shape (callsite-supplied; mutate-in-place):
+//   {
+//     battleAllies: [],   // will be populated from combatants (excluding self)
+//     monsters:     [],   // will be populated from snapshot monsters
+//     battleState:  string,
+//     encounterHostUserId: int,
+//     turnIdx:      int,  // sets `_lastAppliedTurnIdx` on production applier
+//   }
+//
+// `selfUserId` — the joiner's own userId. Combatants matching this id
+// are excluded from `battleAllies` (joiner's `ps` represents self).
+//
+// Mutates `target` in place. Returns `target` for chaining.
+export function applyEncounterSnapshot(snapshot, target, selfUserId) {
+  if (!snapshot || !target) return target;
+  const myUid = selfUserId | 0;
+
+  target.battleState = snapshot.battleState;
+  target.encounterHostUserId = snapshot.hostUserId | 0;
+  target.turnIdx = snapshot.turnIdx | 0;
+
+  // Monsters — replace wholesale (snapshot is authoritative for mid-fight
+  // state including current HP + poison ticks).
+  target.monsters = snapshot.monsters.map(m => ({
+    monsterId: m.monsterId | 0,
+    hp:        m.hp | 0,
+    maxHP:     m.maxHP | 0,
+    status: {
+      mask:          (m.status && m.status.mask) | 0,
+      poisonDmgTick: (m.status && m.status.poisonDmgTick) | 0,
+    },
+  }));
+
+  // Combatants — populate battleAllies from non-self entries. Each ally
+  // carries realized stats so the joiner never re-runs generateAllyStats.
+  target.battleAllies = [];
+  for (const c of snapshot.combatants) {
+    const uid = c.userId | 0;
+    if (uid === myUid) continue;
+    target.battleAllies.push({
+      userId:      uid,
+      name:        c.name,
+      hp:          c.hp | 0,
+      mp:          c.mp | 0,
+      maxHP:       c.maxHP | 0,
+      maxMP:       c.maxMP | 0,
+      jobIdx:      c.jobIdx | 0,
+      level:       c.level | 0,
+      palIdx:      c.palIdx | 0,
+      atk:         c.atk | 0,
+      def:         c.def | 0,
+      agi:         c.agi | 0,
+      evade:       c.evade | 0,
+      mdef:        c.mdef | 0,
+      hitRate:     c.hitRate | 0,
+      shieldEvade: c.shieldEvade | 0,
+      weaponR:     c.weaponR ?? null,
+      weaponL:     c.weaponL ?? null,
+      armorId:     c.armorId ?? null,
+      helmId:      c.helmId ?? null,
+      shieldId:    c.shieldId ?? null,
+      knownSpells: Array.isArray(c.knownSpells) ? c.knownSpells.slice() : [],
+      jobLevel:    c.jobLevel | 0,
+      status: {
+        mask:          (c.status && c.status.mask) | 0,
+        poisonDmgTick: (c.status && c.status.poisonDmgTick) | 0,
+      },
+      isWireDriven: true,
+    });
+  }
+
+  return target;
+}
+
 // ── Encounter-end signal (Phase 4) ────────────────────────────────────────
 //
 // Host detected end-of-battle (all monsters dead → victory; all players
