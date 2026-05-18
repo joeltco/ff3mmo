@@ -172,6 +172,35 @@ export function resolveEncounterEnd(input) {
 // without sending it. Live host emit goes through `resolveEncounterJoin`.
 export { buildEncounterSnapshot };
 
+// Phase 6.7 — single source of truth for the guest-side short-circuit
+// gate. Returns true when this client is a guest in an active host-arb
+// co-op battle and should defer authoritative mutations to incoming
+// resolution packets. Used at every legacy local-apply call site.
+//
+// IMPORTANT: when this returns true, the local FSM should NOT mutate
+// HP / status — the host's emitted resolution will arrive shortly and
+// the applier will write the authoritative values. Animation cues
+// (slash, cast windup, damage-num display) continue to fire from the
+// FSM as today; only the underlying state change is deferred.
+//
+// Caveats (until fx-cue dispatch lands in Phase 6.9):
+//   1. Locally-displayed damage numbers reflect the GUEST's local
+//      computation (possibly divergent from host) until the packet
+//      arrives. HP itself converges via the applier.
+//   2. Death state transitions on guest depend on local hp checks; if
+//      lethal damage doesn't land locally (because we skipped the
+//      mutation), the FSM may not transition to death/wipe state
+//      until the applier writes hp=0 — by which point the FSM may
+//      have advanced past the death check.
+//
+// Phase 6.9 will dispatch fx cues from the resolution packet to drive
+// damage numbers + death transitions on guest, closing both caveats.
+export function isCoopGuest() {
+  return COOP_HOST_ARB
+      && battleSt.isWireEncounter
+      && !battleSt.encounterIsHost;
+}
+
 // Phase 5 entry. Build + ship the mid-battle snapshot to a joining peer.
 // Ships realized stats (atk/def/agi/maxHP/etc.) rather than profile fields
 // to eliminate the `recalcStats` vs `generateAllyStats` divergence as a

@@ -31,24 +31,27 @@ Host emits a host-arb resolution packet at every co-op-relevant mutation point. 
 | `src/battle-turn.js` | `_playerTurnConsumable` | `item` (player use) | ✓ Phase 6.5 |
 | `src/battle-turn.js` | `_applyEndOfRoundPoison` | `poison-tick` (batch) | ✓ Phase 6.5 |
 
-## Still blocking the flag flip (Phase 6.7 work)
+## Guest-side short-circuits (Phase 6.7)
 
-**Guest-side short-circuits are NOT yet wired.** Under host-arb, both the host AND the guest currently apply combat math locally — the guest applies its own legacy lockstep mutation, then the applier writes the host's authoritative delta on top, producing **double-application**.
+**SHIPPED.** Every legacy local-apply call site is now gated by `isCoopGuest()` (single source in `src/coop-resolver.js`). Under flag-on + guest mode, the local HP / status mutation is skipped; the host's resolution packet drives the authoritative state via the applier. Animation callbacks (damage-num display, screen shake, SFX) continue firing locally so the visual experience reads correctly.
 
-Where the short-circuits need to land:
-
-| File | Site | Skip on guest |
+| File | Function | Behavior under flag-on guest |
 |---|---|---|
-| `src/physical-attack.js` | `applyPhysicalHitToEnemy` | Skip `dispatchDelta` + `tryInflictStatus` + `wakeOnHit` when `COOP_HOST_ARB && isWireEncounter && !encounterIsHost` |
-| `src/battle-enemy.js` | `_processEnemyTurn` damage applies | Skip `dispatchDelta` to `ps` / ally + status inflicts |
-| `src/spell-cast.js` | `applySpell` impact-apply path | Tricky — `applySpell` does both HP mutation + animation triggers. Need either a `dryRun` opt or pre/post hooks so guests get animations without HP writes |
-| `src/battle-ally.js` | `_applyAllyMagicEffect` `applySpell` call | Same as above |
-| `src/battle-turn.js` | `_playerTurnConsumable` heal applies | Skip `applyMagicHeal` / `removeStatus` on guest |
-| `src/battle-turn.js` | `_applyEndOfRoundPoison` per-actor applies | Skip `dispatchDelta` on guest |
+| `src/physical-attack.js` | `applyPhysicalHitToEnemy` | Early-return — full skip |
+| `src/battle-enemy.js` | `_processEnemyTurn` (ps + ally branches) | Skip `dispatchDelta` + `wakeOnHit` + `tryInflictStatus` |
+| `src/combatant-cast.js` | `applyMagicDamage` / `applyMagicHeal` / `applyMagicCureStatus` / `applyMagicDrain` / `applyMagicRecovery` / `applyMagicAllStatus` / `applyMagicInstakill` / `applyMagicStatus` | Skip `dispatchDelta` + `tryInflictStatus`; callbacks fire |
+| `src/battle-turn.js` | `_playerTurnConsumable` | Skip `removeStatus` (cure_status) + `ps.hp = maxHP` (Elixir) |
+| `src/battle-turn.js` | `_applyEndOfRoundPoison` | Skip per-actor `dispatchDelta` |
 
-The structural change for `applySpell` is the riskiest piece — it requires either an API change or a wrapper that runs animation callbacks without mutating state. That work is what gates safe flag-flip. Best done in a session with live two-phone testing so we can verify each short-circuit doesn't break animation or FSM transitions.
+## Known caveats (Phase 6.9 will close)
 
-**Do NOT flip `COOP_HOST_ARB` until Phase 6.7 short-circuits ship.** Flipping now produces double-application that's worse than the legacy lockstep bug.
+1. **Damage numbers show LOCAL values briefly.** Each apply function's callbacks fire with the locally-computed dmg/heal value, which may differ from host's authoritative value during the wire-RTT window (~50-200ms). HP itself converges as soon as the packet arrives.
+
+2. **Death state transitions may lag on guest.** The guest's FSM checks `target.hp <= 0` locally to decide death/wipe transitions. With the short-circuit, hp doesn't drop locally — the FSM may advance past the wipe check before the packet writes hp=0. Visible symptom: monster at "0 HP" but no death anim, until the applier writes hp and the next-turn dispatch sees it. Phase 6.9 (fx cue dispatch) drives death transitions from the packet's `{kind: 'death', target}` cue, closing this gap.
+
+3. **Locally-computed values may diverge from host.** The `applyMagicDamage` callback still receives a locally-computed `dmg` based on guest's view of `target.weakness` / `target.resist` / `target.mdef`. If those differ from host's view (the v1.7.472 root cause), the damage number briefly shows the wrong value. Phase 6.9 fx cues will carry the authoritative value.
+
+For Stage 2 live smoke, these caveats are visual / cosmetic — HP convergence is the criterion. If they cause confusion in testing, Phase 6.9 is the fix.
 
 ## Smoke test plan (to run AFTER Phase 6.5 ships)
 
