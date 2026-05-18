@@ -461,17 +461,22 @@ export function updateBattleAlly(dt) {
   // turn, flip the ally to AI-fallback (defend this turn + isWireDriven
   // off so future turns run AI), then advance.
   if (battleSt.battleState === 'ally-wire-wait') {
-    // 45s — cellular spikes can hold a single WS round-trip well past
-    // 10s on bad connections, especially during 4G↔5G cutover or in a
-    // crowded venue. 30s was too aggressive; this gives a comfortable
-    // margin without making the player feel the FSM is hard-stuck.
-    // v1.7.424.
-    const WIRE_WAIT_TIMEOUT_MS = 45000;
+    // v1.7.470 — turn-scoped auto-defend instead of permanent AI fallback.
+    // Pre-fix the 45s timeout flipped `isWireDriven=false` permanently, so
+    // a single slow wire delivery downgraded the peer to local AI for the
+    // rest of the battle — that's what "fake player logic firing without
+    // input" looked like to the user. Auto-defend a single turn (keeping
+    // `isWireDriven=true`) lets the queue advance without letting AI take
+    // over, and the next turn's wire-wait will run normally if the peer's
+    // actions resume. Shortened to 7s — fits inside the 5s auto-defend
+    // window on the peer's own clock plus a 2s safety margin for the
+    // round-trip; longer than that and the play feels stuck.
+    const WIRE_WAIT_TIMEOUT_MS = 7000;
     if (battleSt.battleTimer > WIRE_WAIT_TIMEOUT_MS) {
       const turn = battleSt.turnQueue.shift();
       if (turn && turn.type === 'ally') {
         const a = battleSt.battleAllies[turn.index];
-        if (a) { a.isWireDriven = false; a.isDefending = true; }
+        if (a) { a.isDefending = true; }
       }
       _processNextTurn();
       return true;

@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.470 — 2026-05-18
+
+### Stop fake-player AI from taking over a real peer's turn
+
+User reported "still using fake player logic, attacking without selecting attack". Cause: `battle-ally.js#updateBattleAlly`'s `ally-wire-wait` timeout was 45 seconds AND flipped `ally.isWireDriven = false` permanently. After 45s of no wire delivery the peer was downgraded to local AI for the rest of the battle — the AI helpers (`_tryAllyCure`, `_tryAllyPoisona`, `_tryAllyOffensiveCast`, fallthrough attack) then ran every subsequent turn even when the peer was perfectly online + just being slow.
+
+- Timeout 45s → **7s** — fits inside the 5s auto-defend window on the peer's own clock plus a 2s round-trip safety margin.
+- Removed the `isWireDriven = false` flip. The auto-action is now scoped to the SINGLE missed turn: `isDefending = true` (so monster damage halves), queue advances, next turn's `ally-wire-wait` runs normally. If the peer's wire actions resume, dispatch goes back to wire-replay — no permanent AI takeover.
+
+`encounter-wire.js:28`'s explicit `disconnect` handler is unchanged — that's a server-confirmed peer drop, not a transient delay, so the permanent flip still makes sense there.
+
 ## 1.7.469 — 2026-05-18
 
 ### Battle auto-runs — shorter turn timer + defend-on-idle
