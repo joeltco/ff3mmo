@@ -121,18 +121,31 @@ export function buildTurnOrder() {
   return actors;
 }
 
-// Co-op random encounter — per-turn rand reseed (mirror of PvP's
-// `_buildAndProcessNextTurn`). Both clients converge to the same cursor
-// at each new round before any rolls happen, erasing any drift from
-// non-wire rand consumers (status / AI / etc) earlier in the previous
-// round. Called from the menu-confirm bridge in `battle-update.js` and
-// from the ps-dead end-of-round path in `processNextTurn` below.
-export function maybeReseedCoopTurn() {
+// Co-op random encounter — bump the per-turn counter + reseed RNG to
+// `encounterSeed + perTurnIndex`. Called at two sites:
+//
+//   1. Confirm-pause completion (battle-update.js) — round-start reseed,
+//      runs before `buildTurnOrder` so initiative + every roll inside the
+//      first turn share a seed across both phones.
+//   2. Top of `processNextTurn` after `queue.shift()` — per-turn reseed,
+//      wipes any mid-turn rand drift from the previous turn before the
+//      next turn dispatches.
+//
+// Both phones process the same turn queue in the same order so they
+// increment `perTurnIndex` identically — same seed per turn → lockstep.
+// v1.7.468. Replaces the old per-round-only reseed (`maybeReseedCoopTurn`)
+// that left mid-round drift sources visible (status inflicts, AI ally
+// activation, monster spAtk rolls, etc.).
+export function reseedCoopTurnRand() {
   if (!battleSt.isWireEncounter || !battleSt.encounterSeed) return;
-  battleSt.encounterTurnIndex = (battleSt.encounterTurnIndex | 0) + 1;
-  const s = ((battleSt.encounterSeed >>> 0) + battleSt.encounterTurnIndex) >>> 0;
+  battleSt.perTurnIndex = (battleSt.perTurnIndex | 0) + 1;
+  const s = ((battleSt.encounterSeed >>> 0) + battleSt.perTurnIndex) >>> 0;
   seedRng(s);
 }
+
+// Backwards-compatible alias — callers that still reach for the round-
+// boundary name keep working. Hits the same per-turn-bump path now.
+export const maybeReseedCoopTurn = reseedCoopTurnRand;
 
 // ── Turn dispatch ──────────────────────────────────────────────────────────
 export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
@@ -170,6 +183,13 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
     return;
   }
   const turn = battleSt.turnQueue.shift();
+  // Per-turn reseed (v1.7.468) — every turn dispatch starts from
+  // `encounterSeed + perTurnIndex` on both phones, so any rand drift
+  // accumulated inside the previous turn (status rolls / AI fallback /
+  // shieldEvade asymmetry / etc.) gets wiped here. Sender-only pre-rolls
+  // (rollHand at confirm-pause) and watcher-skipped checks no longer
+  // produce visible divergence beyond the turn they happen in.
+  reseedCoopTurnRand();
   if (turn.type === 'player') {
     if (ps.hp <= 0) { processNextTurn(); return; }
     // Status turn-start: paralysis/sleep skip, confuse flag.

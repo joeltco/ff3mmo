@@ -45,6 +45,14 @@ export const battleSt = {
   encounterHostUserId: 0,
   encounterSeed: 0,
   encounterTurnIndex: 0,
+  // Monotonic per-turn counter — bumped + used as seed offset at every
+  // dispatch in `processNextTurn` so each turn re-seeds from
+  // `encounterSeed + perTurnIndex`. Both phones increment lockstep by
+  // processing the same turn queue in the same order, so any mid-turn
+  // rand drift gets wiped before the next turn dispatch. v1.7.468 — turns
+  // the per-round reseed (`maybeReseedCoopTurn`) into a per-turn reseed
+  // so the lockstep window shrinks from "round" to "turn".
+  perTurnIndex: 0,
 
   // ── Turn system ───────────────────────────────────────────────────
   turnQueue: [],            // [{type:'player'|'enemy'|'ally', index}]

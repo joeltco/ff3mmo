@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.468 — 2026-05-18
+
+### Per-turn RNG reseed (replaces per-round)
+
+The previous "deterministic-lockstep" model rolled RNG identically on both phones from a per-round shared seed and assumed every code path consumed `rand()` symmetrically. Every drift bug shipped this session (magic hit-check, status inflict, monster spAtk roll, AI ally fallback, shieldEvade asymmetry, ...) was a different way of breaking that assumption mid-round.
+
+User's call: stop trying to perfectly mirror every rand consumer; just re-seed at every turn dispatch so any per-turn drift gets wiped before the next turn starts. New `battleSt.perTurnIndex` monotonic counter; new helper `reseedCoopTurnRand()` (`src/battle-turn.js`) bumps it and seeds RNG to `encounterSeed + perTurnIndex`. Called at two sites:
+
+1. **Confirm-pause completion** (alias kept as `maybeReseedCoopTurn` so the existing call in `battle-update.js:_updateBattleMenuConfirm` still fires). Reseed before `buildTurnOrder` so initiative + every roll inside the first turn share a seed across phones.
+2. **Top of `processNextTurn`** after `queue.shift()`. Reseed before every individual turn so the previous turn's mid-turn drift can't leak into this turn's rolls.
+
+Both phones process the same turn queue in the same order, so `perTurnIndex` increments identically — same seed per turn → guaranteed lockstep at every turn boundary. `encounterTurnIndex` retained for snapshot-spawn compatibility (joiner reseeds to `seed + msg.turnIndex` on assist snapshot) but no longer drives the reseed cadence.
+
+Solo battles: `reseedCoopTurnRand` early-returns when `isWireEncounter` is false. RNG flows naturally. No regression in single-player.
+
 ## 1.7.467 — 2026-05-18
 
 ### Defer assist-incoming until the host is at a round boundary
