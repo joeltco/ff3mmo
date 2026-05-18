@@ -15,8 +15,9 @@ import { SLASH_FRAME_MS, shouldDrawSlash, SWING_HOLD_MS } from './slash-effects.
 import { buildTurnOrder, processNextTurn, maybeReseedCoopTurn } from './battle-turn.js';
 import { summarizeHits } from './battle-math.js';
 import { reseedFromEntropy } from './rng.js';
-import { sendNetPVPAction, sendNetPVPAllyJoin, getOnlinePlayerByName } from './net.js';
+import { sendNetPVPAction, sendNetPVPAllyJoin, getOnlinePlayerByName, getMyUserId } from './net.js';
 import { emitWireEncounterAction, endWireEncounter, clearWireEncounterQueue } from './encounter-wire.js';
+import { COOP_HOST_ARB, resolvePhysicalAttack } from './coop-resolver.js';
 import { rand } from './rng.js';
 import { updateBattleAlly } from './battle-ally.js';
 import { updateBattleEnemyTurn } from './battle-enemy.js';
@@ -520,6 +521,26 @@ function _finalizeComboHits() {
       replaceBattleMsg(BATTLE_CRITICAL);
     } else if (hitsLanded > 1) {
       replaceBattleMsg(_nameToBytes(hitsLanded + ' hits!'));
+    }
+  }
+  // Phase 6 — host-arb emit. Encounter only (PvP runs its own lockstep
+  // model and is untouched by the rewrite). Ships the rolled hit results
+  // so guests apply the exact damage sequence host's local FSM produced.
+  // Flag-gated: COOP_HOST_ARB=false → no-op. Live cut-over flips the
+  // flag after two-phone smoke (see docs/COOP-PHASE-6-SMOKE.md).
+  if (COOP_HOST_ARB && battleSt.isWireEncounter && battleSt.encounterIsHost
+      && !pvpSt.isPVPBattle && inputSt.targetIndex >= 0) {
+    const myUid = getMyUserId() | 0;
+    if (myUid) {
+      // hand: capture the dominant hand from the first landed hit. Slash
+      // anim cue uses this; doesn't affect HP convergence.
+      resolvePhysicalAttack({
+        actor:  { kind: 'player', userId: myUid },
+        target: { kind: 'monster', idx: inputSt.targetIndex },
+        hits:   inputSt.hitResults || [],
+        weaponId: ps.weaponR || ps.weaponL || 0,
+        hand:    isHitRightHand(0, inputSt.rHandHitCount) ? 'R' : 'L',
+      });
     }
   }
   battleSt.comboStatusInflicted = 0;

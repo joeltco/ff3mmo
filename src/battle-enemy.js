@@ -14,6 +14,7 @@ import { queueBattleMsg, replaceBattleMsg } from './battle-msg.js';
 import { _nameToBytes } from './text-utils.js';
 import { getPlayerDamageNum, setPlayerDamageNum, getAllyDamageNums } from './damage-numbers.js';
 import { selectCursor, saveSlots } from './save-state.js';
+import { COOP_HOST_ARB, resolveMonsterAttack } from './coop-resolver.js';
 
 // Injected at boot — avoids circular import on main.js
 let _processNextTurn = () => {};
@@ -229,31 +230,55 @@ function _processEnemyFlash() {
     const attackerRef = battleSt.encounterMonsters && battleSt.encounterMonsters[battleSt.currentAttacker];
     setEnemyAttackerTarget(attackerRef, targetAlly);
     const ally = battleSt.battleAllies[targetAlly];
+    const preStatusMask = (ally.status && ally.status.mask) | 0;
     const { total, landed } = rollMultiHit(ally.def, null, ally.shieldEvade || 0, ally.evade || 0);
+    let finalDmg = 0;
+    let miss = false;
     if (landed > 0) {
       // Co-op random encounter — wire-driven ally that picked Defend this
       // round has `ally.isDefending = true` set by
       // `_applyWireEncounterActionForAlly`. Halve incoming damage to match
       // the sender's view of their own defend. Round-end clear lives in
       // `processNextTurn` queue-empty branch. v1.7.419.
-      const dmg = ally.isDefending ? Math.max(1, Math.floor(total / 2)) : total;
-      dispatchDelta({ type: 'hp', target: battleSt.battleAllies[targetAlly], amount: -dmg });
-      getAllyDamageNums()[targetAlly] = { value: dmg, timer: 0 };
+      finalDmg = ally.isDefending ? Math.max(1, Math.floor(total / 2)) : total;
+      dispatchDelta({ type: 'hp', target: battleSt.battleAllies[targetAlly], amount: -finalDmg });
+      getAllyDamageNums()[targetAlly] = { value: finalDmg, timer: 0 };
       battleSt.allyShakeTimer[targetAlly] = BATTLE_SHAKE_MS;
       playSFX(SFX.ATTACK_HIT); battleSt.battleState = 'ally-hit'; battleSt.battleTimer = 0;
     } else {
+      miss = true;
       getAllyDamageNums()[targetAlly] = { miss: true, timer: 0 };
       battleSt.battleState = 'ally-damage-show-enemy'; battleSt.battleTimer = 0;
     }
+    // Phase 6 — host-arb emit. Ships the final post-defend damage value +
+    // any status-mask additions so guests apply identical state without
+    // re-running rollMultiHit (which on guest's `ally`-path would use
+    // different stat fields than the canonical ps-path the host runs).
+    // Flag-gated: COOP_HOST_ARB=false → no-op. Live cut-over flips the
+    // flag after two-phone smoke (see docs/COOP-PHASE-6-SMOKE.md).
+    if (COOP_HOST_ARB && battleSt.isWireEncounter && battleSt.encounterIsHost && ally.userId) {
+      const postStatusMask = (ally.status && ally.status.mask) | 0;
+      resolveMonsterAttack({
+        monsterIdx: battleSt.currentAttacker,
+        target: { kind: 'player', userId: ally.userId | 0 },
+        dmg:      finalDmg,
+        miss,
+        statusAdd: (postStatusMask & ~preStatusMask) >>> 0,
+      });
+    }
   } else {
     const shieldEvade = getShieldEvade();
+    const preStatusMask = (ps.status && ps.status.mask) | 0;
     const { total, landed } = rollMultiHit(ps.def, ps.elemResist, shieldEvade, ps.evade);
+    let finalDmg = 0;
+    let miss = false;
     if (landed > 0) {
       let dmg = total;
       if (battleSt.isDefending) dmg = Math.max(1, Math.floor(dmg / 2));
       // Protect halves physical damage independently of Defend; both stack.
       // Canon FF3 NES Protect is physical-only — leave magic damage paths alone.
       if (ps.buffs && ps.buffs.protect) dmg = Math.max(1, Math.floor(dmg / 2));
+      finalDmg = dmg;
       dispatchDelta({ type: 'hp', target: ps, amount: -dmg });
       setPlayerDamageNum({ value: dmg, timer: 0 });
       // Physical hit wakes sleeping targets
@@ -268,8 +293,25 @@ function _processEnemyFlash() {
       battleSt.battleShakeTimer = BATTLE_SHAKE_MS;
       battleSt.battleState = 'enemy-attack'; battleSt.battleTimer = 0;
     } else {
+      miss = true;
       setPlayerDamageNum({ miss: true, timer: 0 });
       battleSt.battleState = 'enemy-damage-show'; battleSt.battleTimer = 0;
+    }
+    // Phase 6 — host-arb emit. See ally-branch comment above. Status-mask
+    // delta captures wake-on-hit + statusAtk inflict, so guest's view of
+    // host's status converges exactly.
+    if (COOP_HOST_ARB && battleSt.isWireEncounter && battleSt.encounterIsHost) {
+      const postStatusMask = (ps.status && ps.status.mask) | 0;
+      const myUid = getMyUserId() | 0;
+      if (myUid) {
+        resolveMonsterAttack({
+          monsterIdx: battleSt.currentAttacker,
+          target: { kind: 'player', userId: myUid },
+          dmg:      finalDmg,
+          miss,
+          statusAdd: (postStatusMask & ~preStatusMask) >>> 0,
+        });
+      }
     }
   }
   return true;

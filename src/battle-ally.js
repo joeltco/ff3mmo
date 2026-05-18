@@ -23,6 +23,7 @@ import { CAST_PHASE_MS_THROW, CAST_PHASE_MS_HEAL } from './cast-anim.js';
 import { applyMagicDamage, applyMagicStatus, applyMagicHeal,
          applyMagicCureStatus, applyMagicSight, applyMagicErase,
          applySpell, playSpellImpactSFX } from './combatant-cast.js';
+import { COOP_HOST_ARB, resolvePhysicalAttack } from './coop-resolver.js';
 
 // Injected at boot — avoids circular import on main.js
 let _buildTurnOrder = () => [];
@@ -39,6 +40,24 @@ function _finalizeAllyCombo() {
   const { totalDmg, anyCrit, allMiss } = summarizeHits(battleSt.allyHitResults);
   setEnemyDmgNum(allMiss ? { miss: true, timer: 0 } : { value: totalDmg, crit: anyCrit, timer: 0 });
   inputSt.targetIndex = battleSt.allyTargetIndex;
+  // Phase 6 — host-arb emit. The attacking "ally" on host's view is a
+  // peer player; their action was relayed via `encounter-action` and
+  // host ran the rolled hits locally. Ship the outcome so every other
+  // guest (including the original sender) applies the same damage.
+  // Encounter only (PvP unaffected). Flag-gated; default off.
+  if (COOP_HOST_ARB && battleSt.isWireEncounter && battleSt.encounterIsHost
+      && !pvpSt.isPVPBattle && battleSt.allyTargetIndex >= 0) {
+    const ally = battleSt.battleAllies[battleSt.currentAllyAttacker];
+    if (ally && ally.userId) {
+      resolvePhysicalAttack({
+        actor:  { kind: 'player', userId: ally.userId | 0 },
+        target: { kind: 'monster', idx: battleSt.allyTargetIndex },
+        hits:   battleSt.allyHitResults || [],
+        weaponId: ally.weaponId || ally.weaponL || 0,
+        hand:    battleSt.allyHitIsLeft ? 'L' : 'R',
+      });
+    }
+  }
 }
 
 // ── After damage-show: check for death/dissolve or advance turn ──────────────

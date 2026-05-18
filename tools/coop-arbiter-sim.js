@@ -356,9 +356,15 @@ function suiteWire() {
   });
   test('encounter-wire.js re-exports COOP_HOST_ARB from coop-resolver', () => {
     const src = readSrc('encounter-wire.js');
-    assertTrue(
-      /export\s*\{\s*COOP_HOST_ARB\s*\}\s*from\s*['"]\.\/coop-resolver\.js['"]/.test(src),
-      'encounter-wire.js should re-export COOP_HOST_ARB from coop-resolver');
+    // Accept either re-export form:
+    //   `export { COOP_HOST_ARB } from './coop-resolver.js';`     (direct re-export)
+    //   `import { COOP_HOST_ARB } from './coop-resolver.js'; ... export { COOP_HOST_ARB };`
+    //     (import-then-export, used when the symbol is also consumed locally)
+    const importsIt = /import\s*\{[^}]*\bCOOP_HOST_ARB\b[^}]*\}\s*from\s*['"]\.\/coop-resolver\.js['"]/.test(src);
+    const exportsIt = /export\s*\{[^}]*\bCOOP_HOST_ARB\b[^}]*\}/.test(src);
+    const directReexport = /export\s*\{\s*COOP_HOST_ARB\s*\}\s*from\s*['"]\.\/coop-resolver\.js['"]/.test(src);
+    assertTrue(directReexport || (importsIt && exportsIt),
+      'encounter-wire.js should import COOP_HOST_ARB from coop-resolver and either re-export it directly or via an export {} statement');
   });
 
   // ── coop-resolver.js export surface (Phase 1) ────────────────────────

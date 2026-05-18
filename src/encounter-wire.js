@@ -14,6 +14,7 @@ import { battleSt } from './battle-state.js';
 import { sendNetEncounterAction, sendNetEncounterEnd,
          setNetEncounterActionHandler, setNetEncounterEndHandler } from './net.js';
 import { isHealSpell } from './spell-cast.js';
+import { COOP_HOST_ARB, resolveEncounterEnd } from './coop-resolver.js';
 
 // Side-effect import — wires `encounter-resolution` + `encounter-snapshot`
 // handlers at module load. Flag-gated internally by `COOP_HOST_ARB`, so
@@ -23,7 +24,7 @@ import './coop-applier.js';
 // Re-export the host-arb flag here for backward-compat — actual owner is
 // `coop-resolver.js` so Node-side tooling can read it without dragging in
 // browser-only modules through this file. See docs/COOP-REWRITE-PLAN.md.
-export { COOP_HOST_ARB } from './coop-resolver.js';
+export { COOP_HOST_ARB };
 
 const _wireEncounterActions = [];
 
@@ -129,6 +130,14 @@ export function clearWireEncounterQueue() {
 // when not in co-op (no-ops via flag check).
 export function endWireEncounter(outcome) {
   if (!battleSt.isWireEncounter) return;
+  // Phase 6 — host-arb encounter-end emit. Captures the outcome before
+  // the local cleanup zeroes `encounterIsHost`. Guests with the flag on
+  // transition to encounter-box-close via the applier's meta.encounterEnd
+  // hook. Flag-gated; default off (legacy `encounter-end` wire still
+  // ships via sendNetEncounterEnd below for the flag-off path).
+  if (COOP_HOST_ARB && battleSt.encounterIsHost) {
+    resolveEncounterEnd({ outcome: outcome || 'ended' });
+  }
   sendNetEncounterEnd(outcome || 'ended');
   battleSt.isWireEncounter = false;
   battleSt.encounterIsHost = false;

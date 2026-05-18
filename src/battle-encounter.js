@@ -26,6 +26,7 @@ import { generateAllyStats } from './data/players.js';
 import { ps } from './player-stats.js';
 import { seed as seedRng } from './rng.js';
 import { addChatMessage } from './chat.js';
+import { COOP_HOST_ARB, resolveEncounterJoin } from './coop-resolver.js';
 
 const TILE_SIZE = 16;
 
@@ -518,6 +519,89 @@ function _processAssistIncoming(msg) {
     peers,
     hostUserId: battleSt.encounterHostUserId | 0,
   });
+  // Phase 6 — host-arb encounter-snapshot emit. Ships REALIZED stats
+  // (ps.atk / ps.def computed from recalcStats) directly so the joiner
+  // never re-runs generateAllyStats on profile fields — eliminates the
+  // pre-rewrite divergence where guest's view of host had different
+  // atk/def than host's own. Flag-gated; default off (legacy snapshot
+  // above still drives the production path). Sent in ADDITION to the
+  // legacy snapshot during migration; guest with flag on uses this one
+  // and ignores the legacy.
+  if (COOP_HOST_ARB && battleSt.encounterIsHost) {
+    const combatants = [{
+      userId:      myUid,
+      name:        '',
+      hp:          ps.hp | 0,
+      mp:          ps.mp | 0,
+      maxHP:       (ps.stats?.maxHP || ps.hp) | 0,
+      maxMP:       (ps.stats?.maxMP || ps.mp) | 0,
+      jobIdx:      ps.jobIdx | 0,
+      level:       (ps.stats?.level || 1) | 0,
+      palIdx:      0,
+      atk:         ps.atk | 0,
+      def:         ps.def | 0,
+      agi:         (ps.stats?.agi || 5) | 0,
+      evade:       ps.evade | 0,
+      mdef:        ps.mdef | 0,
+      hitRate:     ps.hitRate | 0,
+      shieldEvade: 0,
+      weaponR:     ps.weaponR,
+      weaponL:     ps.weaponL,
+      armorId:     ps.body,
+      helmId:      ps.head,
+      shieldId:    ps.arms,
+      knownSpells: Array.isArray(ps.knownSpells) ? ps.knownSpells.slice() : [],
+      jobLevel:    (ps.jobLevels?.[ps.jobIdx]?.level || 1) | 0,
+      status: { mask: (ps.status?.mask | 0), poisonDmgTick: (ps.status?.poisonDmgTick | 0) },
+    }];
+    for (const a of battleSt.battleAllies) {
+      if (!a || !a.userId) continue;
+      if (a.userId === (msg.fromUserId | 0)) continue;
+      combatants.push({
+        userId:      a.userId | 0,
+        name:        a.name,
+        hp:          a.hp | 0,
+        mp:          a.mp | 0,
+        maxHP:       a.maxHP | 0,
+        maxMP:       a.maxMP | 0,
+        jobIdx:      a.jobIdx | 0,
+        level:       a.level | 0,
+        palIdx:      a.palIdx | 0,
+        atk:         a.atk | 0,
+        def:         a.def | 0,
+        agi:         a.agi | 0,
+        evade:       a.evade | 0,
+        mdef:        a.mdef | 0,
+        hitRate:     a.hitRate | 0,
+        shieldEvade: a.shieldEvade | 0,
+        weaponR:     a.weaponId,
+        weaponL:     a.weaponL,
+        armorId:     a.armorId,
+        helmId:      a.helmId,
+        shieldId:    a.shieldId,
+        knownSpells: Array.isArray(a.knownSpells) ? a.knownSpells.slice() : [],
+        jobLevel:    a.jobLevel | 0,
+        status: { mask: (a.status?.mask | 0), poisonDmgTick: (a.status?.poisonDmgTick | 0) },
+      });
+    }
+    const monstersHA = (battleSt.encounterMonsters || []).map(m => ({
+      monsterId: m.monsterId | 0,
+      hp:        m.hp | 0,
+      maxHP:     m.maxHP | 0,
+      status: {
+        mask:          (m.status?.mask | 0),
+        poisonDmgTick: (m.status?.poisonDmgTick | 0),
+      },
+    }));
+    resolveEncounterJoin({
+      joinerUserId: msg.fromUserId | 0,
+      hostUserId:   battleSt.encounterHostUserId | 0,
+      turnIdx:      battleSt.encounterTurnIndex | 0,
+      battleState:  'menu-open',
+      monsters:     monstersHA,
+      combatants,
+    });
+  }
   try { addChatMessage('* ' + (msg.fromName || 'Player') + ' joined your battle!', 'system'); } catch { /* chat optional */ }
 }
 
