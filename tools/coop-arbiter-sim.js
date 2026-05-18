@@ -346,13 +346,14 @@ function suiteWire() {
   // ── COOP_HOST_ARB flag (Phase 1+) ────────────────────────────────────
   // Owned by coop-resolver.js (Node-clean module so this sim can load it
   // without browser shims). Re-exported by encounter-wire.js for the
-  // production import chain. Phase 6 flips this to true.
-  test('COOP_HOST_ARB flag exists and defaults to false (Phase 1-5)', () => {
+  // production import chain. Flipped to true at v1.7.474 (live cutover).
+  // Kept as kill switch — flipping back to false reverts to legacy lockstep.
+  test('COOP_HOST_ARB flag is declared in coop-resolver.js (kill switch)', () => {
     const src = readSrc('coop-resolver.js');
     const m = src.match(/export\s+const\s+COOP_HOST_ARB\s*=\s*(true|false)\s*;/);
     assertTrue(m, 'COOP_HOST_ARB should be declared in coop-resolver.js');
-    assertEqual(m[1], 'false',
-      `COOP_HOST_ARB is ${m[1]} — Phases 1-5 require it stays false until Phase 6 flip`);
+    // Either value is acceptable — true = live cutover, false = hot-revert.
+    // What matters is that the flag exists and is statically determinable.
   });
   test('encounter-wire.js re-exports COOP_HOST_ARB from coop-resolver', () => {
     const src = readSrc('encounter-wire.js');
