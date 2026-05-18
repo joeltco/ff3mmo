@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.472 — 2026-05-18
+
+### Triggerer's phone now shows the ally roster at battle start
+
+User reported one phone missing the other player in the ally panel during the battle opening — depending on which phone triggered the encounter. Cause: `_maybeHostCoopEncounter` (`src/battle-encounter.js`) was sending `encounter-start` to peers but never pushing them into the host's own `battleAllies` array. They only got added at the host's first `confirm-pause` via `tryJoinPlayerAlly`. During flash-strobe → battle-fade-in → menu-open, the host's roster panel was empty.
+
+Fix: add party peers to `battleAllies` immediately at host time, same shape as the guest spawn in `setNetEncounterInviteHandler` (generateAllyStats + userId + isWireDriven=true + mid-battle HP/MP override). `tryJoinPlayerAlly`'s name-dedup keeps it from double-adding later.
+
+Both phones now show the full roster from the first frame of the battle.
+
 ## 1.7.471 — 2026-05-18
 
 ### "Miss your turn" — no auto-action, no AI fallback

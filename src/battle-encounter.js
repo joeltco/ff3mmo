@@ -226,11 +226,13 @@ function _maybeHostCoopEncounter() {
   if (!myUid) return;
   const partyPeers = [];
   const partyPeerNames = [];
+  const partyPeerProfiles = [];
   for (const name of partyInviteSt.partyMembers) {
     const online = getOnlinePlayerByName(name);
     if (online && online.userId) {
       partyPeers.push(online.userId);
       partyPeerNames.push(online.name || name);
+      partyPeerProfiles.push(online);
     }
   }
   if (partyPeers.length === 0) return;
@@ -243,6 +245,23 @@ function _maybeHostCoopEncounter() {
   battleSt.encounterSeed = seed32;
   battleSt.encounterTurnIndex = 0;
   seedRng(seed32);
+  // Add party peers to the host's local `battleAllies` IMMEDIATELY so they
+  // show on the host's roster panel from flash-strobe onward. Pre-v1.7.472
+  // the peers were only added at the host's first `confirm-pause` via
+  // `tryJoinPlayerAlly`, so during the battle opening the triggerer saw
+  // their own row only — "one phone isn't showing both roster players".
+  // Guests already do this in `setNetEncounterInviteHandler`. v1.7.472.
+  for (const profile of partyPeerProfiles) {
+    if (battleSt.battleAllies.length >= 3) break;
+    if (battleSt.battleAllies.some(a => a && a.userId === (profile.userId | 0))) continue;
+    const stats = generateAllyStats(profile);
+    stats.userId = profile.userId | 0;
+    stats.isWireDriven = true;
+    if (typeof profile.hp === 'number')    stats.hp    = profile.hp    | 0;
+    if (typeof profile.mp === 'number')    stats.mp    = profile.mp    | 0;
+    if (typeof profile.maxHP === 'number' && profile.maxHP > 0) stats.maxHP = profile.maxHP | 0;
+    battleSt.battleAllies.push(stats);
+  }
   // UX — chat line so the host sees who joined their fight. Mirror message
   // on guest side fires from the invite handler. v1.7.420.
   const label = partyPeerNames.length === 1
