@@ -28,7 +28,8 @@ import { playSFX, SFX } from './music.js';
 import { sendNetPartyInvite, sendNetPartyCancel, sendNetPartyResponse,
          sendNetPartyDismiss,
          setNetPartyInviteHandler, setNetPartyResultHandler,
-         setNetPartyMemberLeftHandler, setNetPartyDisbandedHandler } from './net.js';
+         setNetPartyMemberLeftHandler, setNetPartyDisbandedHandler,
+         setNetPartyMemberJoinedHandler, setNetPartySnapshotHandler } from './net.js';
 import { addChatMessage } from './chat.js';
 
 const BASE_ACCEPT   = 0.35;
@@ -277,6 +278,36 @@ setNetPartyMemberLeftHandler((msg) => {
 // state to clear on the member side today (members don't track which
 // party they're in), but log a system message so the player knows what
 // happened.
+// MP party-sync — a NEW member just accepted an invite to our party. Server
+// notifies every existing member so all views stay in lockstep (pre-v1.7.460
+// the server only notified the inviter, leaving members with a stale star-
+// topology view: A sees [B,C] but B saw only [A] and C saw only [A]).
+setNetPartyMemberJoinedHandler((msg) => {
+  const m = msg && msg.member;
+  if (!m || !m.name) return;
+  if (!partyInviteSt.partyMembers.includes(m.name) && !isPartyFull()) {
+    partyInviteSt.partyMembers.push(m.name);
+    partyInviteSt.partyMemberProfiles.set(m.name, m);
+    addChatMessage('* ' + m.name + ' joined party', 'system');
+  }
+});
+
+// MP party-sync — we JUST accepted an invite to a party that already has
+// other members. Server hands us the list so our partyMembers mirrors the
+// inviter's view immediately. Inviter (A) is already added by the local
+// accept handler at `setNetPartyInviteHandler`; this snapshot covers any
+// OTHER existing members (e.g., C was already in A's party when we joined).
+setNetPartySnapshotHandler((msg) => {
+  const members = Array.isArray(msg && msg.members) ? msg.members : [];
+  for (const m of members) {
+    if (!m || !m.name) continue;
+    if (partyInviteSt.partyMembers.includes(m.name)) continue;
+    if (isPartyFull()) break;
+    partyInviteSt.partyMembers.push(m.name);
+    partyInviteSt.partyMemberProfiles.set(m.name, m);
+  }
+});
+
 setNetPartyDisbandedHandler((msg) => {
   const name = msg && msg.inviterName;
   if (!name) return;

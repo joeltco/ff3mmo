@@ -209,6 +209,29 @@ function _rateAllowKind(entry, kind) {
 // active members). Used to gate `chat` channel='party' so a stray "party"
 // message from someone in the same location doesn't leak into another
 // party's tab. See docs/MULTIPLAYER-AUDIT-2026-05-15.md #22.
+// Fan a member-leaves event out to every remaining party member (inviter
+// + other accepted members). Pre-v1.7.460 only the inviter got the notice;
+// peer members kept stale local `partyMembers` entries until reconnect.
+// Caller must have already removed `leaverUserId` from `_partyMemberships`
+// before invoking — this only walks live memberships.
+function _broadcastPartyMemberLeft(inviterId, leaverUserId, leaverName) {
+  const recipients = new Set();
+  recipients.add(inviterId);
+  for (const [memberId, mInviterId] of _partyMemberships) {
+    if (mInviterId === inviterId) recipients.add(memberId);
+  }
+  recipients.delete(leaverUserId);
+  for (const uid of recipients) {
+    const peer = _connected.get(uid);
+    if (!peer || !peer.helloed) continue;
+    _send(peer.ws, {
+      type:         'party-member-left',
+      memberUserId: leaverUserId,
+      memberName:   leaverName,
+    });
+  }
+}
+
 function _inSameParty(uidA, uidB) {
   if (uidA === uidB) return true;
   const aInviter = _partyMemberships.get(uidA);
@@ -581,6 +604,29 @@ function _handleMessage(entry, msg) {
         accept,
         partner: { userId: entry.userId, ...entry.profile, loc: entry.loc },
       });
+      // Party star-topology sync (v1.7.460) — when a new member accepts and
+      // the inviter already has other members, every existing member needs
+      // to learn about the joiner, and the joiner needs to learn about the
+      // existing members. Without this fanout the local `partyMembers` list
+      // diverges across the three views: A sees [B,C] but B saw only [A]
+      // and C saw only [A].
+      if (accept) {
+        const existingMembers = [];
+        for (const [memberId, inviterId] of _partyMemberships) {
+          if (inviterId !== challengerId) continue;
+          if (memberId === entry.userId) continue;  // skip the new joiner themselves
+          const m = _connected.get(memberId);
+          if (!m || !m.helloed) continue;
+          existingMembers.push({ userId: memberId, ...m.profile, loc: m.loc });
+          _send(m.ws, {
+            type:   'party-member-joined',
+            member: { userId: entry.userId, ...entry.profile, loc: entry.loc },
+          });
+        }
+        if (existingMembers.length > 0) {
+          _send(entry.ws, { type: 'party-snapshot', members: existingMembers });
+        }
+      }
       return;
     }
     case 'party-dismiss': {
@@ -597,21 +643,14 @@ function _handleMessage(entry, msg) {
     }
     case 'party-leave': {
       // Member voluntarily leaves their current party (no UI yet, but the
-      // hook exists for future client-side "leave party" action). Mirror
-      // of the disconnect-as-member path: notify the inviter so they can
-      // clear local state too.
+      // hook exists for future client-side "leave party" action). Fan out
+      // to every member (inviter + peer members), not just the inviter,
+      // so all local views stay in sync. v1.7.460.
       if (!entry.helloed) return;
       const inviterId = _partyMemberships.get(entry.userId);
       if (inviterId == null) return;
       _partyMemberships.delete(entry.userId);
-      const inviter = _connected.get(inviterId);
-      if (inviter && inviter.helloed) {
-        _send(inviter.ws, {
-          type:         'party-member-left',
-          memberUserId: entry.userId,
-          memberName:   entry.profile?.name || '',
-        });
-      }
+      _broadcastPartyMemberLeft(inviterId, entry.userId, entry.profile?.name || '');
       return;
     }
     case 'encounter-start': {
@@ -1088,19 +1127,12 @@ export function attachWebSocketPresence(httpServer) {
         }
         // Clean up party memberships involving this user (as member or as
         // inviter — both directions) and notify the surviving side so they
-        // can clear their local party state.
+        // can clear their local party state. v1.7.460 — fans out to every
+        // surviving member, not just the inviter (see `_broadcastPartyMemberLeft`).
         const wasInPartyOf = _partyMemberships.get(userId);
         _partyMemberships.delete(userId);
         if (wasInPartyOf) {
-          // This user was a member; tell their inviter.
-          const inviter = _connected.get(wasInPartyOf);
-          if (inviter && inviter.helloed) {
-            _send(inviter.ws, {
-              type:        'party-member-left',
-              memberUserId: userId,
-              memberName:  entry.profile?.name || '',
-            });
-          }
+          _broadcastPartyMemberLeft(wasInPartyOf, userId, entry.profile?.name || '');
         }
         for (const [memberId, inviterId] of [..._partyMemberships]) {
           if (inviterId !== userId) continue;

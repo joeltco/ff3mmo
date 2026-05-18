@@ -2,6 +2,26 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.460 — 2026-05-17
+
+### Party system: full-mesh sync (no more star topology)
+
+Pre-fix, `party-invite-response` only notified the inviter on accept and `party-member-left` only notified the inviter on disconnect. That left non-inviter members with a stale view:
+
+- A invites B → both see each other. ✓
+- A invites C → A's view = [B, C]; **B still saw [A]; C saw [A]**. ✗
+- B disconnects → only A learns. **C kept B in their list.** ✗
+
+**Server (`ws-presence.js`):**
+
+- On accept (`party-invite-response`, accept branch): walk every existing member of the inviter's party and `_send` them a new `party-member-joined` with the joiner's profile. Send the joiner a `party-snapshot` listing the existing members so their `partyMembers` mirrors the inviter's view immediately.
+- New helper `_broadcastPartyMemberLeft(inviterId, leaverUserId, leaverName)` — fans `party-member-left` out to inviter + every accepted member of the same party. Replaces the inviter-only `_send` at both the disconnect cleanup and `party-leave` action.
+
+**Client (`src/net.js` + `src/party-invite.js`):**
+
+- New wire kinds `party-member-joined` and `party-snapshot` with handlers + setters.
+- `party-invite.js` handlers splice the joiner into `partyMembers` + `partyMemberProfiles` (and `partyMembers` for the snapshot). System chat note on the joined event so members see "* X joined party".
+
 ## 1.7.459 — 2026-05-17
 
 ### Co-op allies stay in roster through victory until peer leaves

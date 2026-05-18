@@ -36,6 +36,8 @@ let _onPartyInvite = null;   // ({challenger}) → void — invite arrived; auto
 let _onPartyResult = null;   // ({accept, partner?, reason?}) → void — our outgoing invite resolved
 let _onPartyMemberLeft = null;  // ({memberUserId, memberName}) → void — a member of OUR party disconnected/left
 let _onPartyDisbanded = null;   // ({inviterUserId, inviterName}) → void — the party WE were in disbanded
+let _onPartyMemberJoined = null; // ({member}) → void — a NEW member joined OUR party (existing-member side)
+let _onPartySnapshot = null;    // ({members}) → void — list of existing party peers (new-joiner side)
 let _onGiveItem = null;         // ({fromUserId, fromName, itemId}) → void — partner used a heal/cure item on us
 let _onEncounterInvite = null;  // ({seed, monsters, hostUserId, peers}) → void — co-op random battle invite from host
 let _onEncounterAction = null;  // ({userId, kind, target, ...}) → void — peer's action in shared co-op battle
@@ -174,6 +176,24 @@ function _handleMessage(data) {
       if (_onPartyDisbanded) {
         try { _onPartyDisbanded(msg); }
         catch (e) { console.warn('[net] party-disbanded handler error', e); }
+      }
+      return;
+    case 'party-member-joined':
+      // An existing member of OUR party was told a new joiner accepted.
+      // Existing local partyMembers list is missing that joiner; this msg
+      // backfills them so views stay in sync across the whole party.
+      if (_onPartyMemberJoined) {
+        try { _onPartyMemberJoined(msg); }
+        catch (e) { console.warn('[net] party-member-joined handler error', e); }
+      }
+      return;
+    case 'party-snapshot':
+      // We just accepted an invite and the party already had other members.
+      // Server is telling us about them so our partyMembers list mirrors
+      // the inviter's view.
+      if (_onPartySnapshot) {
+        try { _onPartySnapshot(msg); }
+        catch (e) { console.warn('[net] party-snapshot handler error', e); }
       }
       return;
     case 'give-item':
@@ -554,6 +574,14 @@ export function setNetPartyMemberLeftHandler(fn) {
 
 export function setNetPartyDisbandedHandler(fn) {
   _onPartyDisbanded = typeof fn === 'function' ? fn : null;
+}
+
+export function setNetPartyMemberJoinedHandler(fn) {
+  _onPartyMemberJoined = typeof fn === 'function' ? fn : null;
+}
+
+export function setNetPartySnapshotHandler(fn) {
+  _onPartySnapshot = typeof fn === 'function' ? fn : null;
 }
 
 export function getOnlinePlayers() {
