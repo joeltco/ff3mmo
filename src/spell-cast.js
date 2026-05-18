@@ -453,14 +453,6 @@ function _applyEnemyEffect(idx, spell) {
   const isRecovery = spell.element === 'recovery';
   const useMnd = isRecovery || spell.target === 'cure_status' || spell.target === 'revive';
 
-  // Hit roll (offensive non-recovery only). Recovery on undead always hits at NES hit:100.
-  if (!isRecovery && spell.hit > 0 && spell.hit < 100) {
-    if (rand() * 100 >= spell.hit) {
-      _setEnemyDmg(idx, 0, true);
-      return;
-    }
-  }
-
   const amount = _baseAmount >= 0
     ? Math.max(1, Math.floor(_baseAmount / _targets.length))
     : _rollMagicAmount(spell.power, useMnd);
@@ -490,6 +482,17 @@ function _applyEnemyEffect(idx, spell) {
 
   // Non-recovery (damage) spell on enemy.
   if (isBoss) {
+    // Boss path bypasses applyMagicDamage (no monster object), so do the
+    // hit-check locally to preserve hit<100 miss chance. No watcher
+    // counterpart for boss combat (battleSt.isRandomEncounter=false,
+    // pvpSt.isPVPBattle=false → `_allyMagicEnemyTarget` returns null on
+    // peer side), so the asymmetric rand consumption here doesn't break
+    // co-op sync. Battle Assist on a boss fight is the one edge case where
+    // this would drift — TODO if/when assist-on-boss ships.
+    if (spell.hit > 0 && spell.hit < 100 && rand() * 100 >= spell.hit) {
+      _setEnemyDmg(idx, 0, true);
+      return;
+    }
     const dmg = Math.max(1, amount);
     setEnemyHP(Math.max(0, getEnemyHP() - dmg));
     _setEnemyDmg(idx, dmg, false);
@@ -501,10 +504,15 @@ function _applyEnemyEffect(idx, spell) {
   // Shared `applyMagicDamage` helper. SFX: thrown elements (fire/ice/bolt) get
   // fired by the engine at impact start; non-thrown damage fires here via
   // opts.sfx. Most damage spells are thrown so opts.sfx is usually null.
+  // Hit-check now lives inside `applyMagicDamage` (v1.7.466) so the sender
+  // and the wire-driven watcher consume the same rand count — pre-fix the
+  // sender rolled here and the watcher skipped, drifting the round cursor
+  // by one per hit<100 damage cast.
   applyMagicDamage(mon, amount, spell, {
     sfx: _isThrownDamageElement(spell.element) ? null : SFX.SW_HIT,
     onDmgNum: (dealt) => _setEnemyDmg(idx, dealt, false),
-    onShake: () => { battleSt.battleShakeTimer = BATTLE_SHAKE_MS; },
+    onMiss:   () => _setEnemyDmg(idx, 0, true),
+    onShake:  () => { battleSt.battleShakeTimer = BATTLE_SHAKE_MS; },
   });
 }
 
@@ -555,14 +563,9 @@ function _applyFriendlyOffensive(target, spell) {
     return;
   }
 
-  // Damage spell on friendly. Hit roll first (matches enemy path).
-  if (spell.hit > 0 && spell.hit < 100) {
-    if (rand() * 100 >= spell.hit) {
-      setDmgNum(0, true);
-      return;
-    }
-  }
-
+  // Damage spell on friendly. Hit-check now happens inside applyMagicDamage
+  // (v1.7.466 — keeps the rand-consumption symmetric with the wire watcher
+  // path). On miss, `onMiss` fires the miss display instead of `onDmgNum`.
   const amount = _baseAmount >= 0
     ? Math.max(1, Math.floor(_baseAmount / _targets.length))
     : _rollMagicAmount(spell.power, false);
@@ -570,7 +573,8 @@ function _applyFriendlyOffensive(target, spell) {
   applyMagicDamage(tgt, amount, spell, {
     sfx: _isThrownDamageElement(spell.element) ? null : SFX.SW_HIT,
     onDmgNum: (dealt) => setDmgNum(dealt),
-    onShake: () => { battleSt.battleShakeTimer = BATTLE_SHAKE_MS; },
+    onMiss:   () => setDmgNum(0, true),
+    onShake:  () => { battleSt.battleShakeTimer = BATTLE_SHAKE_MS; },
   });
 }
 

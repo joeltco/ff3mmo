@@ -208,8 +208,23 @@ export function applySpell(spell, target, opts = {}) {
 // Apply Fire / Bzzard damage to an enemy target. Pre-rolled `baseDmg` from
 // the role-specific damage roller (player uses `_rollMagicAmount`, ally/PVP
 // use `*MagicDamageRoll`). Returns the actual damage dealt (post-mult/mdef).
+//
+// Hit-check is internal (v1.7.466): spells with `hit > 0 && hit < 100` and
+// `element !== 'recovery'` roll one `rand() * 100 >= spell.hit`. Pre-fix the
+// sender did this roll in `spell-cast.js#_applyEnemyEffect` and the watcher
+// skipped it entirely — sender consumed +1 rand per hit<100 damage cast, so
+// every subsequent rand() (monster AI, status inflict, AI ally activation)
+// read a different value on the two phones until the next round-boundary
+// reseed. Both roles now route through here so they consume identical rand
+// counts; only the round reseed can reset cursor alignment.
 export function applyMagicDamage(target, baseDmg, spell, opts = {}) {
   if (!target || target.hp <= 0) return 0;
+  if (spell && spell.hit > 0 && spell.hit < 100 && spell.element !== 'recovery') {
+    if (rand() * 100 >= spell.hit) {
+      if (opts.onMiss) opts.onMiss();
+      return 0;
+    }
+  }
   const eMult = elemMultiplier(spell.element, target.weakness, target.resist);
   const mdef = target.mdef || 0;
   const dmg = Math.max(1, Math.floor(baseDmg * eMult) - mdef);

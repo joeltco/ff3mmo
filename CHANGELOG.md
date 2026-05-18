@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.466 — 2026-05-18
+
+### Spell hit-check moved into `applyMagicDamage` — sender + watcher RNG lockstep
+
+For damage spells with `hit > 0 && hit < 100` (Tornado, FastCurrent, Glare-as-damage, Avalanche, Wind Slash, Whirlpool, etc.), the sender rolled `rand() * 100 >= spell.hit` in `spell-cast.js#_applyEnemyEffect:458` and `_applyFriendlyOffensive:560` before calling `applyMagicDamage`. The wire-driven watcher's `applySpell` path skipped the check entirely — sender consumed +1 rand per hit<100 damage cast, every subsequent rand() in the same round (monster AI target picks, status inflicts on attacks, AI ally activation rolls) read a different value on the two phones until the round-boundary reseed wiped it.
+
+Hit-check moved into `applyMagicDamage` itself (`src/combatant-cast.js:211-218`): both sender and watcher now route through the same code path so they consume identical rand counts. New `opts.onMiss` callback fires the miss-display the caller used to fire manually. Boss-path keeps its own hit-check (`spell-cast.js:492`) — boss combat has no wire-driven watcher (`_allyMagicEnemyTarget` returns null on peer side), so the asymmetric rand consumption there doesn't break co-op sync.
+
+Round-boundary `maybeReseedCoopTurn` still bounds drift to one round in case anything else slips in; this fix removes the largest known remaining mid-round drift source.
+
 ## 1.7.465 — 2026-05-18
 
 ### New `tools/coop-wire-sim.js` regression harness (quick smoke)
