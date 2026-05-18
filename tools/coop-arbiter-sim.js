@@ -42,7 +42,7 @@ import {
   sendNetEncounterSnapshot, setNetEncounterSnapshotHandler,
 } from '../src/net.js';
 import {
-  buildPhysicalAttackPacket, buildMonsterAttackPacket,
+  buildPhysicalAttackPacket, buildMonsterAttackPacket, buildMagicPacket,
   applyDeltaToActor, applyPacketDeltas,
 } from '../src/coop-deltas.js';
 
@@ -582,7 +582,7 @@ function assertConvergence(host, guest, label = '') {
 
 function suiteConvergence() {
   _currentSuite = 'convergence';
-  console.log('\n═══ SUITE 3 — CONVERGENCE (Phase 2: physical attacks) ═══');
+  console.log('\n═══ SUITE 3 — CONVERGENCE (Phase 3: physical + magic) ═══');
 
   // ── Baselines (retained from Phase 0) ────────────────────────────────
   test('zero-turn baseline: two phones identical after init', () => {
@@ -796,10 +796,215 @@ function suiteConvergence() {
       `apply order should not affect final HP (got ${hpOrderAB} vs ${hpOrderBA})`);
   });
 
-  // Phase 3+ will add scenarios for:
-  //   - spell casts (offensive, heal, status, multi-target)
+  // ── Phase 3: magic / spells ──────────────────────────────────────────
+  //
+  // Same pattern as physical attacks: host (or whoever casts) computes
+  // the per-target outcome locally, packs into a TargetResult array,
+  // ships via `buildMagicPacket`. Both phones apply identical deltas.
+
+  test('offensive spell (Fire on monster): damage delta lands on both phones', () => {
+    const { host, guest } = initEncounter({ hostUid: 1, guestUid: 2, monsterHP: 50 });
+    const packet = buildMagicPacket({
+      actor: host.selfRef(),
+      spellId: 0x31,   // Fire (canonical first-tier offensive)
+      results: [
+        { target: { kind: 'monster', idx: 0 }, dmg: 18, miss: false },
+      ],
+    });
+    host.applyPacket(packet);
+    guest.applyPacket(packet);
+    assertEqual(host.monsters[0].hp, 32);
+    assertConvergence(host, guest, 'Fire on monster');
+  });
+
+  test('heal spell (Cure on self): hp delta lifts host on both phones', () => {
+    const { host, guest } = initEncounter({ hostUid: 1, guestUid: 2 });
+    // Take some damage first
+    host.self.hp = 30;
+    guest.battleAllies.find(a => a.userId === 1).hp = 30;
+    const packet = buildMagicPacket({
+      actor: host.selfRef(),
+      spellId: 0x34,   // Cure
+      results: [{ target: host.selfRef(), heal: 15, miss: false }],
+    });
+    host.applyPacket(packet);
+    guest.applyPacket(packet);
+    assertEqual(host.self.hp, 45);
+    assertConvergence(host, guest, 'Cure on self');
+  });
+
+  test('heal spell (Cure on ally cross-faction): both phones agree', () => {
+    // Host casts Cure on guest. Important convergence case: host's view
+    // of guest = battleAllies[0]; guest's view of guest = ps. Same userId
+    // resolves through actorLookup on each side.
+    const { host, guest } = initEncounter({ hostUid: 1, guestUid: 2 });
+    // Wound guest
+    guest.self.hp = 25;
+    host.battleAllies.find(a => a.userId === 2).hp = 25;
+    const packet = buildMagicPacket({
+      actor: host.selfRef(),
+      spellId: 0x34,
+      results: [{ target: guest.selfRef(), heal: 20, miss: false }],
+    });
+    host.applyPacket(packet);
+    guest.applyPacket(packet);
+    assertEqual(guest.self.hp, 45, 'guest healed on their own view');
+    assertEqual(host.battleAllies.find(a => a.userId === 2).hp, 45,
+      "host's view of guest also healed");
+    assertConvergence(host, guest, 'Cure on ally');
+  });
+
+  test('status-inflict spell (Sleep on monster): mask flag set both sides', () => {
+    const { host, guest } = initEncounter({ hostUid: 1, guestUid: 2 });
+    const SLEEP_BIT = STATUS.SLEEP | 0;
+    const packet = buildMagicPacket({
+      actor: host.selfRef(),
+      spellId: 0x33,   // Sleep
+      results: [
+        { target: { kind: 'monster', idx: 0 }, miss: false,
+          statusAdd: SLEEP_BIT },
+      ],
+    });
+    host.applyPacket(packet);
+    guest.applyPacket(packet);
+    assertTrue((host.monsters[0].status.mask & SLEEP_BIT) !== 0,
+      'host monster should have SLEEP set');
+    assertTrue((guest.monsters[0].status.mask & SLEEP_BIT) !== 0,
+      'guest monster should have SLEEP set');
+    assertConvergence(host, guest, 'Sleep on monster');
+  });
+
+  test('cure-status spell (Poisona on poisoned ally): mask flag cleared', () => {
+    const { host, guest } = initEncounter({ hostUid: 1, guestUid: 2 });
+    const POISON = STATUS.POISON | 0;
+    // Pre-condition: guest is poisoned (synced via prior round)
+    guest.self.status.mask |= POISON;
+    host.battleAllies.find(a => a.userId === 2).status.mask |= POISON;
+    const packet = buildMagicPacket({
+      actor: host.selfRef(),
+      spellId: 0x35,   // Poisona
+      results: [
+        { target: guest.selfRef(), miss: false, statusRemove: POISON },
+      ],
+    });
+    host.applyPacket(packet);
+    guest.applyPacket(packet);
+    assertEqual(guest.self.status.mask & POISON, 0,
+      'POISON should be cleared on guest');
+    assertEqual(host.battleAllies.find(a => a.userId === 2).status.mask & POISON, 0,
+      "host's view of guest should also be POISON-free");
+    assertConvergence(host, guest, 'Poisona on ally');
+  });
+
+  test('multi-target heal (Curaga on whole party): every target heals', () => {
+    const { host, guest } = initEncounter({ hostUid: 1, guestUid: 2 });
+    // Wound both players
+    host.self.hp = 20;
+    guest.battleAllies.find(a => a.userId === 1).hp = 20;
+    guest.self.hp = 18;
+    host.battleAllies.find(a => a.userId === 2).hp = 18;
+    const packet = buildMagicPacket({
+      actor: host.selfRef(),
+      spellId: 0x36,   // Curaga (multi-target heal)
+      results: [
+        { target: host.selfRef(),  heal: 25, miss: false },
+        { target: guest.selfRef(), heal: 25, miss: false },
+      ],
+    });
+    host.applyPacket(packet);
+    guest.applyPacket(packet);
+    assertEqual(host.self.hp, 45);
+    assertEqual(guest.self.hp, 43);
+    assertConvergence(host, guest, 'Curaga multi-target');
+  });
+
+  test('multi-target damage (AOE on multiple monsters)', () => {
+    const { host, guest } = initEncounter({ hostUid: 1, guestUid: 2 });
+    // Add a second monster
+    host.monsters.push(_makeMonster({ monsterId: 2, hp: 15, maxHP: 15 }));
+    guest.monsters.push(_makeMonster({ monsterId: 2, hp: 15, maxHP: 15 }));
+    const packet = buildMagicPacket({
+      actor: host.selfRef(),
+      spellId: 0x11,   // Aeroga (multi-target damage from data/spells.js)
+      results: [
+        { target: { kind: 'monster', idx: 0 }, dmg: 8, miss: false },
+        { target: { kind: 'monster', idx: 1 }, dmg: 8, miss: false },
+      ],
+    });
+    host.applyPacket(packet);
+    guest.applyPacket(packet);
+    assertEqual(host.monsters[0].hp, 12);
+    assertEqual(host.monsters[1].hp, 7);
+    assertConvergence(host, guest, 'AOE multi-target damage');
+  });
+
+  test('spell miss: no HP delta applied (impact fx still emitted)', () => {
+    const { host, guest } = initEncounter({ hostUid: 1, guestUid: 2 });
+    const packet = buildMagicPacket({
+      actor: host.selfRef(),
+      spellId: 0x33,   // Sleep (35% hit by canon, can miss)
+      results: [
+        { target: { kind: 'monster', idx: 0 }, miss: true,
+          statusAdd: STATUS.SLEEP },
+      ],
+    });
+    host.applyPacket(packet);
+    guest.applyPacket(packet);
+    assertEqual(host.monsters[0].hp, 20, 'no damage on miss');
+    assertEqual(host.monsters[0].status.mask, 0, 'no status set on miss');
+    // FX cue still includes the miss indicator
+    const missFx = packet.fx.find(c => c.kind === 'magic-impact');
+    assertTrue(missFx.miss === true, 'magic-impact fx should carry miss=true');
+    const dmgNum = packet.fx.find(c => c.kind === 'damage-num');
+    assertEqual(dmgNum.variant, 'miss', 'damage-num should show miss variant');
+    assertConvergence(host, guest, 'spell miss');
+  });
+
+  test('mixed-result multi-target (one hits, one misses, one heals)', () => {
+    // Edge case: a spell that does different things to different targets.
+    // Real game has these (e.g., a multi-target offensive spell where one
+    // target resists fully). Asserts the per-target outcome packing works.
+    const { host, guest } = initEncounter({ hostUid: 1, guestUid: 2 });
+    host.monsters.push(_makeMonster({ monsterId: 2, hp: 15, maxHP: 15 }));
+    guest.monsters.push(_makeMonster({ monsterId: 2, hp: 15, maxHP: 15 }));
+    const packet = buildMagicPacket({
+      actor: host.selfRef(),
+      spellId: 0x31,
+      results: [
+        { target: { kind: 'monster', idx: 0 }, dmg: 10, miss: false },
+        { target: { kind: 'monster', idx: 1 }, miss: true },
+        { target: host.selfRef(), heal: 5, miss: false },  // synthetic — host heals self on cast
+      ],
+    });
+    host.applyPacket(packet);
+    guest.applyPacket(packet);
+    assertEqual(host.monsters[0].hp, 10);
+    assertEqual(host.monsters[1].hp, 15, 'missed target unchanged');
+    assertEqual(host.self.hp, 50, 'synthetic heal clamped at maxHP');
+    assertConvergence(host, guest, 'mixed multi-target');
+  });
+
+  test('death cue carries through deltas + fx', () => {
+    const { host, guest } = initEncounter({ hostUid: 1, guestUid: 2, monsterHP: 5 });
+    const packet = buildMagicPacket({
+      actor: host.selfRef(),
+      spellId: 0x31,
+      results: [
+        { target: { kind: 'monster', idx: 0 }, dmg: 12, miss: false, death: true },
+      ],
+    });
+    host.applyPacket(packet);
+    guest.applyPacket(packet);
+    assertEqual(host.monsters[0].hp, 0, 'host monster HP clamped to 0');
+    assertEqual(guest.monsters[0].hp, 0, 'guest monster HP clamped to 0');
+    const deathFx = packet.fx.find(c => c.kind === 'death');
+    assertTrue(deathFx != null, 'death fx cue should be emitted');
+    assertConvergence(host, guest, 'death routing');
+  });
+
+  // Phase 4+ will add scenarios for:
   //   - end-of-round poison tick
-  //   - KO event + monster death routing
+  //   - item use (potions, antidotes)
   //   - assist join mid-battle (snapshot consumer)
   //
   // Each scenario follows the same pattern: host builds packet, both

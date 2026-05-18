@@ -123,3 +123,101 @@ export function applyPacketDeltas(packet, actorLookup) {
     if (actor) applyDeltaToActor(actor, d);
   }
 }
+
+// ── Spell packet builder (Phase 3) ────────────────────────────────────────
+//
+// Host runs `applySpell` locally and the per-target outcomes are then
+// shipped to guests as deltas. This unifies every spell kind in
+// `src/data/spells.js`: damage (Fire, Bolt, Bahamur), heal (Cure, Curaga),
+// status-inflict (Sleep, Stop), cure-status (Poisona, Esuna), drain
+// (Drain), revive (Raise), instakill (Death, Warp), erase, sight, recovery.
+//
+// `input` shape:
+//   {
+//     actor:   <ActorRef>,
+//     spellId: <int>,
+//     results: [<TargetResult>, ...],   // one per logical target
+//   }
+//
+// `<TargetResult>` shape (only fields needed for this target's outcome
+// need to be set; the builder skips no-op fields):
+//   {
+//     target:        <ActorRef>,
+//     dmg?:          <int>,             // positive damage value
+//     heal?:         <int>,              // positive heal value
+//     miss?:         <bool>,             // host's hit-check missed
+//     statusAdd?:    <int>,              // STATUS bitmask to OR in
+//     statusRemove?: <int>,              // STATUS bitmask to clear
+//     death?:        <bool>,             // host computed target.hp <= 0
+//   }
+//
+// Multi-target spells (Curaja, Aeroga, etc.) pack N TargetResults into
+// one packet — guests apply all in one frame and animate each impact
+// from the matching fx cue. Single-target spells just pass `results`
+// with one entry.
+//
+// Production wiring (Phase 3.5 cut-over): host's `applySpell` callsite
+// (in `spell-cast.js` for player casts, `battle-ally.js` for ally casts,
+// `pvp.js` for pvp-enemy casts under co-op pvp eventually) wraps its
+// per-target outcomes into TargetResult shape and passes to
+// `coop-resolver.js#resolveSpellCast`.
+export function buildMagicPacket({ actor, spellId, results }) {
+  const sid = spellId | 0;
+  const resArr = Array.isArray(results) ? results : [];
+  const deltas = [];
+  const fx = [{ kind: 'magic-cast', caster: actor, spellId: sid }];
+
+  for (const r of resArr) {
+    if (!r || !r.target) continue;
+    const target = r.target;
+
+    // Build the delta. Omit if there's no state change (pure miss).
+    const delta = { target };
+    let hasChange = false;
+    if (!r.miss) {
+      if (typeof r.dmg === 'number' && r.dmg > 0) {
+        delta.hp = -(r.dmg | 0);
+        hasChange = true;
+      } else if (typeof r.heal === 'number' && r.heal > 0) {
+        delta.hp = r.heal | 0;
+        hasChange = true;
+      }
+      const add = (r.statusAdd | 0) >>> 0;
+      const rem = (r.statusRemove | 0) >>> 0;
+      if (add || rem) {
+        delta.status = { add, remove: rem };
+        hasChange = true;
+      }
+      if (r.death) {
+        delta.death = true;
+        hasChange = true;
+      }
+    }
+    if (hasChange) deltas.push(delta);
+
+    // FX cues per target — impact + damage/heal/miss number.
+    fx.push({ kind: 'magic-impact', target, spellId: sid, miss: !!r.miss });
+    if (r.miss) {
+      fx.push({ kind: 'damage-num', target, value: 0, variant: 'miss' });
+    } else if (typeof r.dmg === 'number' && r.dmg > 0) {
+      fx.push({ kind: 'damage-num', target, value: r.dmg | 0, variant: 'dmg' });
+    } else if (typeof r.heal === 'number' && r.heal > 0) {
+      fx.push({ kind: 'damage-num', target, value: r.heal | 0, variant: 'heal' });
+    }
+    if (r.death) {
+      fx.push({ kind: 'death', target });
+    }
+  }
+
+  return {
+    actor,
+    action: {
+      kind:    'magic',
+      spellId: sid,
+      targets: resArr.map(r => r && r.target).filter(Boolean),
+    },
+    deltas,
+    fx,
+    meta: { encounterEnd: false },
+  };
+}

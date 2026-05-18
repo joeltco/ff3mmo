@@ -22,7 +22,8 @@
 
 import { battleSt } from './battle-state.js';
 import { sendNetEncounterResolution, sendNetEncounterSnapshot } from './net.js';
-import { buildPhysicalAttackPacket, buildMonsterAttackPacket } from './coop-deltas.js';
+import { buildPhysicalAttackPacket, buildMonsterAttackPacket,
+         buildMagicPacket } from './coop-deltas.js';
 
 // Host-authoritative co-op rewrite (Phase 1+). Build-time const that
 // gates every host-arb code path. Default `false` keeps the legacy
@@ -88,14 +89,32 @@ export function resolveMonsterAttack(input) {
 // find the export. Will be inlined away in Phase 7 cleanup.
 export function resolveMonsterTurn(input) { return resolveMonsterAttack(input); }
 
-// Phase 3+ entry. Resolve a spell cast.
-// eslint-disable-next-line no-unused-vars
-export function resolveSpellCast(_actorRef, _spellId, _targets) {
-  // TODO Phase 3: run host's applySpell once, capture every mutation,
-  // build deltas (damage / heal / status / cure / sight / erase / drain),
-  // build fx cues (cast windup, projectile, impact, damage-num, death),
-  // emit. Multi-target spells fan multiple deltas into one packet.
-  return null;
+// Phase 3 entry. Resolve a spell cast and ship the resolution.
+//
+// `input` shape:
+//   { actor: <ActorRef>, spellId: <int>, results: [<TargetResult>, ...] }
+//
+// Each TargetResult contains the per-target outcome the host computed
+// via `applySpell` (or `applyMagicDamage` / `applyMagicHeal` / etc.) —
+// dmg/heal/miss/statusAdd/statusRemove/death. The builder converts
+// them into a single multi-target packet so guests apply N target
+// changes in one frame.
+//
+// Caller responsibilities:
+//   1. Run `applySpell` (or the spell-specific helper) locally on host
+//      so the rolls happen exactly once on the authoritative side.
+//   2. Convert each target's outcome into a TargetResult.
+//   3. Pass the array to `resolveSpellCast`.
+//
+// Production wiring (Phase 3.5): the `spell-cast.js` impact-apply
+// callsites + `battle-ally.js#_applyAllyMagicEffect` accumulate the
+// TargetResults during local apply, then call this once per cast.
+//
+// Returns the emitted packet (with `turnIdx` filled in) or null when
+// the wire send fails (unhelloed / disconnect).
+export function resolveSpellCast(input) {
+  const packet = buildMagicPacket(input);
+  return _emitResolution(packet);
 }
 
 // Phase 4+ entry. Resolve item use.
