@@ -98,7 +98,7 @@ function _drainPending() {
 }
 
 function _apply(msg) {
-  // Phase 2 — walk deltas, apply each to the resolved actor. Damage,
+  // Phase 2+ — walk deltas, apply each to the resolved actor. Damage,
   // status, MP all flow through `applyDeltaToActor` (coop-deltas.js).
   // This is the only HP-write path on guests under host-arb; legacy
   // local-damage code is short-circuited at the call site by the
@@ -110,13 +110,26 @@ function _apply(msg) {
       if (actor) applyDeltaToActor(actor, delta);
     }
   }
+  // Phase 4 — `meta.encounterEnd: true` signals host transitioned to
+  // post-battle (victory / defeat / fled). Guests follow by flipping
+  // their local FSM into `encounter-box-close` so the post-battle flow
+  // (XP, gil, level-ups) runs through the same shared code path. The
+  // optional `meta.outcome` field carries the host's verdict.
+  if (msg.meta && msg.meta.encounterEnd && battleSt.battleState !== 'none') {
+    // Defensive — only act if we're still in an active wire encounter.
+    // Solo / boss / PvP battles never set the encounter-end flag here.
+    if (battleSt.isWireEncounter && !battleSt.encounterIsHost) {
+      battleSt.battleState = 'encounter-box-close';
+      battleSt.battleTimer = 0;
+    }
+  }
   // Phase 2+: walk msg.fx, dispatch to existing anim entry points
-  //   (slash, damage-num, death). Animation cues are role-specific —
-  //   the renderer for `kind: 'slash'` on a monster target is the same
-  //   one the local FSM would have driven for a player attack. The
-  //   exact dispatch wiring lands when we attach to the live FSM in
-  //   Phase 2.5; the sim tests state convergence only.
-  // Phase 4+: msg.meta.encounterEnd → transition to encounter-box-close.
+  //   (slash, magic-cast, magic-impact, damage-num, death,
+  //    item-use, item-impact, poison-tick-start). Animation cues are
+  //    role-specific — the renderer for `kind: 'slash'` on a monster
+  //    target is the same one the local FSM would have driven for a
+  //    player attack. The exact dispatch wiring lands when we attach
+  //    to the live FSM in Phase 4.5; the sim tests state convergence only.
   _lastAppliedTurnIdx = msg.turnIdx | 0;
 }
 

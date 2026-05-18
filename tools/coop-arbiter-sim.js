@@ -43,6 +43,7 @@ import {
 } from '../src/net.js';
 import {
   buildPhysicalAttackPacket, buildMonsterAttackPacket, buildMagicPacket,
+  buildItemUsePacket, buildPoisonTickPacket, buildEncounterEndPacket,
   applyDeltaToActor, applyPacketDeltas,
 } from '../src/coop-deltas.js';
 
@@ -582,7 +583,7 @@ function assertConvergence(host, guest, label = '') {
 
 function suiteConvergence() {
   _currentSuite = 'convergence';
-  console.log('\n═══ SUITE 3 — CONVERGENCE (Phase 3: physical + magic) ═══');
+  console.log('\n═══ SUITE 3 — CONVERGENCE (Phase 4: physical + magic + items + KO) ═══');
 
   // ── Baselines (retained from Phase 0) ────────────────────────────────
   test('zero-turn baseline: two phones identical after init', () => {
@@ -1002,10 +1003,227 @@ function suiteConvergence() {
     assertConvergence(host, guest, 'death routing');
   });
 
-  // Phase 4+ will add scenarios for:
-  //   - end-of-round poison tick
-  //   - item use (potions, antidotes)
+  // ── Phase 4: items, poison tick, KO/death, encounter end ─────────────
+
+  test('item use (Potion on self): heal delta lands on both phones', () => {
+    const { host, guest } = initEncounter({ hostUid: 1, guestUid: 2 });
+    host.self.hp = 30;
+    guest.battleAllies.find(a => a.userId === 1).hp = 30;
+    const packet = buildItemUsePacket({
+      actor: host.selfRef(),
+      itemId: 0xa6,   // canonical Potion id
+      results: [{ target: host.selfRef(), heal: 50, miss: false }],
+    });
+    host.applyPacket(packet);
+    guest.applyPacket(packet);
+    assertEqual(host.self.hp, 50, 'Potion healed clamped to maxHP');
+    assertEqual(packet.action.kind, 'item');
+    assertEqual(packet.action.itemId, 0xa6);
+    assertConvergence(host, guest, 'Potion on self');
+  });
+
+  test('item use (Antidote on poisoned ally): status cleared both phones', () => {
+    const { host, guest } = initEncounter({ hostUid: 1, guestUid: 2 });
+    const POISON = STATUS.POISON | 0;
+    guest.self.status.mask |= POISON;
+    host.battleAllies.find(a => a.userId === 2).status.mask |= POISON;
+    const packet = buildItemUsePacket({
+      actor: host.selfRef(),
+      itemId: 0xa7,
+      results: [{ target: guest.selfRef(), miss: false, statusRemove: POISON }],
+    });
+    host.applyPacket(packet);
+    guest.applyPacket(packet);
+    assertEqual(guest.self.status.mask & POISON, 0);
+    assertEqual(host.battleAllies.find(a => a.userId === 2).status.mask & POISON, 0);
+    assertConvergence(host, guest, 'Antidote on ally');
+  });
+
+  test('item use (Elixir on self): full heal to maxHP', () => {
+    const { host, guest } = initEncounter({ hostUid: 1, guestUid: 2 });
+    host.self.hp = 5;
+    guest.battleAllies.find(a => a.userId === 1).hp = 5;
+    const packet = buildItemUsePacket({
+      actor: host.selfRef(),
+      itemId: 0xa8,
+      results: [{ target: host.selfRef(), heal: 999, miss: false }],
+    });
+    host.applyPacket(packet);
+    guest.applyPacket(packet);
+    assertEqual(host.self.hp, 50, 'Elixir clamped to maxHP=50');
+    assertConvergence(host, guest, 'Elixir on self');
+  });
+
+  test('item use (Phoenix Down on KO ally): revive + partial HP', () => {
+    // Host's FSM: target.hp from 0 → some-positive. Delta carries the
+    // heal value (Phoenix Down typically restores 1 HP per NES canon).
+    // Guest applies same delta → same revive.
+    const { host, guest } = initEncounter({ hostUid: 1, guestUid: 2 });
+    // KO guest first
+    guest.self.hp = 0;
+    host.battleAllies.find(a => a.userId === 2).hp = 0;
+    const packet = buildItemUsePacket({
+      actor: host.selfRef(),
+      itemId: 0xa9,
+      results: [{ target: guest.selfRef(), heal: 1, miss: false }],
+    });
+    host.applyPacket(packet);
+    guest.applyPacket(packet);
+    assertEqual(guest.self.hp, 1, 'Phoenix Down revived guest with 1 HP');
+    assertEqual(host.battleAllies.find(a => a.userId === 2).hp, 1);
+    assertConvergence(host, guest, 'Phoenix Down revive');
+  });
+
+  test('end-of-round poison tick: batch packet damages every poisoned actor', () => {
+    // Three actors poisoned: host, guest, monster. Host runs poison tick
+    // locally (with NES clamp-to-1 rule for players) and ships the
+    // post-clamp values. Both phones apply identical deltas.
+    const { host, guest } = initEncounter({ hostUid: 1, guestUid: 2, monsterHP: 40 });
+    const POISON = STATUS.POISON | 0;
+    // All three poisoned
+    host.self.status.mask |= POISON;
+    guest.battleAllies.find(a => a.userId === 1).status.mask |= POISON;
+    guest.self.status.mask |= POISON;
+    host.battleAllies.find(a => a.userId === 2).status.mask |= POISON;
+    host.monsters[0].status.mask |= POISON;
+    guest.monsters[0].status.mask |= POISON;
+
+    // Host computed tick amounts. Player/ally clamped to floor(maxHP/16)=3
+    // and clamped to HP-1; monster takes floor(40/16)=2.
+    const packet = buildPoisonTickPacket({
+      results: [
+        { target: host.selfRef(),  dmg: 3, death: false },
+        { target: guest.selfRef(), dmg: 3, death: false },
+        { target: { kind: 'monster', idx: 0 }, dmg: 2, death: false },
+      ],
+    });
+    host.applyPacket(packet);
+    guest.applyPacket(packet);
+    assertEqual(host.self.hp, 47);
+    assertEqual(guest.self.hp, 47);
+    assertEqual(host.monsters[0].hp, 38);
+    assertEqual(packet.action.kind, 'poison-tick');
+    assertConvergence(host, guest, 'poison tick batch');
+  });
+
+  test('poison tick can kill monster (death flag in delta)', () => {
+    const { host, guest } = initEncounter({ hostUid: 1, guestUid: 2, monsterHP: 2 });
+    const packet = buildPoisonTickPacket({
+      results: [{ target: { kind: 'monster', idx: 0 }, dmg: 2, death: true }],
+    });
+    host.applyPacket(packet);
+    guest.applyPacket(packet);
+    assertEqual(host.monsters[0].hp, 0);
+    assertEqual(guest.monsters[0].hp, 0);
+    const deathFx = packet.fx.find(c => c.kind === 'death');
+    assertTrue(deathFx != null, 'death fx should fire on monster KO via poison');
+    assertConvergence(host, guest, 'poison tick KOs monster');
+  });
+
+  test('player KO from monster attack: hp drops to 0, fx death cue emitted', () => {
+    const { host, guest } = initEncounter({ hostUid: 1, guestUid: 2 });
+    // Host's view: guest at low HP, takes lethal hit. Host's local FSM
+    // computes the final damage that drops guest to 0. Builder packs
+    // the death flag.
+    guest.self.hp = 5;
+    host.battleAllies.find(a => a.userId === 2).hp = 5;
+    const packet = buildMonsterAttackPacket({
+      monsterIdx: 0,
+      target: guest.selfRef(),
+      dmg: 7,
+      miss: false,
+    });
+    // Inject the death flag manually since buildMonsterAttackPacket
+    // doesn't infer it (host's FSM does the lethal check + sets the
+    // flag before resolveMonsterAttack). For Phase 5 we may push this
+    // into the builder by accepting a `death` field.
+    if (packet.deltas[0]) packet.deltas[0].death = true;
+    packet.fx.push({ kind: 'death', target: guest.selfRef() });
+
+    host.applyPacket(packet);
+    guest.applyPacket(packet);
+    assertEqual(guest.self.hp, 0, 'guest KO to 0 HP');
+    assertEqual(host.battleAllies.find(a => a.userId === 2).hp, 0);
+    assertConvergence(host, guest, 'player KO');
+  });
+
+  test('monster death from physical attack: hp=0, death cue rides packet', () => {
+    const { host, guest } = initEncounter({ hostUid: 1, guestUid: 2, monsterHP: 5 });
+    const packet = buildPhysicalAttackPacket({
+      actor: host.selfRef(),
+      target: { kind: 'monster', idx: 0 },
+      hits: [{ miss: false, shieldBlock: false, damage: 8, crit: true }],
+      weaponId: 0x1E, hand: 'R',
+    });
+    // Death flag is appended by the host's FSM after applying locally;
+    // the builder doesn't infer (yet — could be a Phase 5 convenience).
+    packet.deltas[0].death = true;
+    packet.fx.push({ kind: 'death', target: { kind: 'monster', idx: 0 } });
+    host.applyPacket(packet);
+    guest.applyPacket(packet);
+    assertEqual(host.monsters[0].hp, 0);
+    assertEqual(guest.monsters[0].hp, 0);
+    assertConvergence(host, guest, 'monster death from physical');
+  });
+
+  test('encounter-end packet: meta.encounterEnd carries outcome', () => {
+    // Host transitions to encounter-box-close (all monsters dead).
+    // Resolution packet's meta.encounterEnd signals guests to follow.
+    // Sim verifies the meta + action shape; FSM transition wiring lands
+    // when applier attaches to live FSM in Phase 4.5.
+    const packet = buildEncounterEndPacket({
+      outcome: 'victory',
+      deltas: [],
+      fx:     [{ kind: 'encounter-end', outcome: 'victory' }],
+    });
+    assertEqual(packet.meta.encounterEnd, true);
+    assertEqual(packet.meta.outcome, 'victory');
+    assertEqual(packet.action.kind, 'encounter-end');
+    assertEqual(packet.action.outcome, 'victory');
+  });
+
+  test('encounter-end (defeat): outcome carries through', () => {
+    const packet = buildEncounterEndPacket({ outcome: 'defeat' });
+    assertEqual(packet.meta.outcome, 'defeat');
+    assertEqual(packet.action.outcome, 'defeat');
+  });
+
+  test('encounter-end (fled): outcome carries through', () => {
+    const packet = buildEncounterEndPacket({ outcome: 'fled' });
+    assertEqual(packet.meta.outcome, 'fled');
+  });
+
+  test('TPK / wipe: both players KO via mass monster attack — single packet, dual death', () => {
+    // Worst-case: a single big AOE drops both players to 0 in one turn.
+    // Two deltas + two death fx in one packet. Demonstrates the
+    // multi-target death routing.
+    const { host, guest } = initEncounter({ hostUid: 1, guestUid: 2 });
+    host.self.hp = 3;
+    guest.battleAllies.find(a => a.userId === 1).hp = 3;
+    guest.self.hp = 2;
+    host.battleAllies.find(a => a.userId === 2).hp = 2;
+    // Synthetic AOE — using buildMagicPacket so we can pack 2 targets.
+    const packet = buildMagicPacket({
+      actor: { kind: 'monster', idx: 0 },
+      spellId: 0x1d,  // canonical mass-damage spell ID (Toxic)
+      results: [
+        { target: host.selfRef(),  dmg: 10, miss: false, death: true },
+        { target: guest.selfRef(), dmg: 10, miss: false, death: true },
+      ],
+    });
+    host.applyPacket(packet);
+    guest.applyPacket(packet);
+    assertEqual(host.self.hp, 0);
+    assertEqual(guest.self.hp, 0);
+    const deathFx = packet.fx.filter(c => c.kind === 'death');
+    assertEqual(deathFx.length, 2, 'two death cues, one per fallen player');
+    assertConvergence(host, guest, 'TPK from AOE');
+  });
+
+  // Phase 5+ will add scenarios for:
   //   - assist join mid-battle (snapshot consumer)
+  //   - host-disconnect recovery (encounter-end forced by server)
+  //   - peer-disconnect (battleAllies splice, queue drain)
   //
   // Each scenario follows the same pattern: host builds packet, both
   // phones apply, assertConvergence at the end.

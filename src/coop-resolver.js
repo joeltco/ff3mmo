@@ -23,7 +23,8 @@
 import { battleSt } from './battle-state.js';
 import { sendNetEncounterResolution, sendNetEncounterSnapshot } from './net.js';
 import { buildPhysicalAttackPacket, buildMonsterAttackPacket,
-         buildMagicPacket } from './coop-deltas.js';
+         buildMagicPacket, buildItemUsePacket, buildPoisonTickPacket,
+         buildEncounterEndPacket } from './coop-deltas.js';
 
 // Host-authoritative co-op rewrite (Phase 1+). Build-time const that
 // gates every host-arb code path. Default `false` keeps the legacy
@@ -117,18 +118,54 @@ export function resolveSpellCast(input) {
   return _emitResolution(packet);
 }
 
-// Phase 4+ entry. Resolve item use.
-// eslint-disable-next-line no-unused-vars
-export function resolveItemUse(_actorRef, _itemId, _targets) {
-  // TODO Phase 4.
-  return null;
+// Phase 4 entry. Resolve a battle-item use (Potion / Antidote / Elixir /
+// Phoenix Down / thrown weapon / etc.). Same TargetResult shape as magic;
+// items don't roll RNG for power (item.power is flat) so per-target
+// outcomes are deterministic on the host side.
+//
+// `input` shape:
+//   { actor: <ActorRef>, itemId: <int>, results: [<TargetResult>, ...] }
+//
+// Production wiring (Phase 4.5): `battle-turn.js#_playerTurnConsumable`
+// + `battle-ally.js#_applyAllyItemEffect` accumulate per-target outcomes
+// and call this once per item use.
+export function resolveItemUse(input) {
+  const packet = buildItemUsePacket(input);
+  return _emitResolution(packet);
 }
 
-// Phase 4+ entry. End-of-round poison tick — batches every poisoned actor
-// into one resolution packet so guests apply the whole tick in one frame.
-export function resolvePoisonTick() {
-  // TODO Phase 4.
-  return null;
+// Phase 4 entry. End-of-round poison tick — batches every poisoned actor
+// (player, allies, monsters, PvP enemies) into one resolution packet so
+// guests apply the whole tick in one frame, matching the existing
+// "consolidated end-of-round phase" UX.
+//
+// Host runs `_applyEndOfRoundPoison` locally first (which enforces the
+// NES clamp-to-1 rule for player/ally and lets monsters die); the
+// resulting per-actor damage values + death flags are passed in via
+// `input.results`.
+//
+// `input` shape:
+//   { results: [{ target, dmg, death }, ...] }
+export function resolvePoisonTick(input) {
+  const packet = buildPoisonTickPacket(input);
+  return _emitResolution(packet);
+}
+
+// Phase 4 entry. Host detected end-of-battle — emit the encounter-end
+// signal so guests transition to `encounter-box-close` and run the
+// post-battle flow (victory / defeat / fled).
+//
+// `input` shape:
+//   { outcome: 'victory'|'defeat'|'fled', deltas?: [], fx?: [] }
+//
+// Production wiring (Phase 4.5): wherever `battleSt.battleState` flips to
+// `'encounter-box-close'` on host (battle-update.js + battle-enemy.js +
+// battle-ally.js), the host-arb branch calls this in addition to (or
+// instead of) the local transition. Cleanup of legacy paths happens in
+// Phase 7.
+export function resolveEncounterEnd(input) {
+  const packet = buildEncounterEndPacket(input);
+  return _emitResolution(packet);
 }
 
 // Phase 5+ entry. Build + ship the mid-battle snapshot to a joining peer.

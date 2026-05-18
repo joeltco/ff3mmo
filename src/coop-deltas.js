@@ -221,3 +221,135 @@ export function buildMagicPacket({ actor, spellId, results }) {
     meta: { encounterEnd: false },
   };
 }
+
+// ── Item-use packet builder (Phase 4) ─────────────────────────────────────
+//
+// Battle item use — Potion / Hi-Potion / Elixir / Antidote / Eye Drops /
+// Phoenix Down / Cabin / battle-thrown weapons. Same TargetResult shape
+// as magic; the only structural difference is `action.kind = 'item'` and
+// the action carries `itemId` instead of `spellId`. Items don't roll RNG
+// for power (item.power is a flat value), so `miss` is always false for
+// healing/cure items — but we keep the field for parity with magic and
+// in case future items add a roll (e.g., "30% chance to also stun").
+export function buildItemUsePacket({ actor, itemId, results }) {
+  const iid = itemId | 0;
+  const resArr = Array.isArray(results) ? results : [];
+  const deltas = [];
+  // No cast-windup cue for items (item-use anim is a quick consume).
+  // Live FSM will render the item-use anim from the action kind itself.
+  const fx = [{ kind: 'item-use', user: actor, itemId: iid }];
+
+  for (const r of resArr) {
+    if (!r || !r.target) continue;
+    const target = r.target;
+    const delta = { target };
+    let hasChange = false;
+    if (!r.miss) {
+      if (typeof r.dmg === 'number' && r.dmg > 0) {
+        delta.hp = -(r.dmg | 0);
+        hasChange = true;
+      } else if (typeof r.heal === 'number' && r.heal > 0) {
+        delta.hp = r.heal | 0;
+        hasChange = true;
+      }
+      const add = (r.statusAdd | 0) >>> 0;
+      const rem = (r.statusRemove | 0) >>> 0;
+      if (add || rem) {
+        delta.status = { add, remove: rem };
+        hasChange = true;
+      }
+      if (r.death) {
+        delta.death = true;
+        hasChange = true;
+      }
+    }
+    if (hasChange) deltas.push(delta);
+
+    fx.push({ kind: 'item-impact', target, itemId: iid, miss: !!r.miss });
+    if (r.miss) {
+      fx.push({ kind: 'damage-num', target, value: 0, variant: 'miss' });
+    } else if (typeof r.dmg === 'number' && r.dmg > 0) {
+      fx.push({ kind: 'damage-num', target, value: r.dmg | 0, variant: 'dmg' });
+    } else if (typeof r.heal === 'number' && r.heal > 0) {
+      fx.push({ kind: 'damage-num', target, value: r.heal | 0, variant: 'heal' });
+    }
+    if (r.death) {
+      fx.push({ kind: 'death', target });
+    }
+  }
+
+  return {
+    actor,
+    action: {
+      kind:    'item',
+      itemId:  iid,
+      targets: resArr.map(r => r && r.target).filter(Boolean),
+    },
+    deltas,
+    fx,
+    meta: { encounterEnd: false },
+  };
+}
+
+// ── End-of-round poison tick (Phase 4) ────────────────────────────────────
+//
+// Host's `_applyEndOfRoundPoison` runs once per round and accumulates
+// damage on every poisoned actor. Player + allies clamp to HP=1 (NES
+// rule — poison never kills from full); monsters can die. Host applies
+// the rule locally, so the delta carries the already-clamped value —
+// guests don't need to know the clamp rule.
+//
+// `results` shape: array of `{ target, dmg, death }` — one entry per
+// actor that ticked. Caller (`coop-resolver.js`) filters out the
+// non-poisoned ones; this builder packages whatever it's given.
+//
+// Why a separate action kind: animation is different from spell/item
+// (consolidated end-of-round damage-num pop, no impact burst), so the
+// guest FSM dispatches on `action.kind === 'poison-tick'` to drive its
+// `poison-end-tick` battleState.
+export function buildPoisonTickPacket({ results }) {
+  const resArr = Array.isArray(results) ? results : [];
+  const deltas = [];
+  const fx = [{ kind: 'poison-tick-start' }];
+
+  for (const r of resArr) {
+    if (!r || !r.target) continue;
+    if (!(typeof r.dmg === 'number' && r.dmg > 0)) continue;
+    const delta = { target: r.target, hp: -(r.dmg | 0) };
+    if (r.death) delta.death = true;
+    deltas.push(delta);
+    fx.push({ kind: 'damage-num', target: r.target,
+              value: r.dmg | 0, variant: 'dmg' });
+    if (r.death) fx.push({ kind: 'death', target: r.target });
+  }
+
+  return {
+    actor:  { kind: 'system' },
+    action: { kind: 'poison-tick' },
+    deltas,
+    fx,
+    meta: { encounterEnd: false },
+  };
+}
+
+// ── Encounter-end signal (Phase 4) ────────────────────────────────────────
+//
+// Host detected end-of-battle (all monsters dead → victory; all players
+// dead → defeat; player picked run + succeeded → fled). Emit a
+// resolution packet whose `meta.encounterEnd: true` tells guests to
+// transition to `encounter-box-close` and run the appropriate
+// post-battle flow. Deltas may be empty (if all needed state changes
+// already shipped in the resolution that caused the end) or carry the
+// killing blow that triggered the transition.
+//
+// `outcome`: 'victory' | 'defeat' | 'fled' — guest FSM picks the
+// post-battle path from this. Defaults to 'victory' if omitted.
+export function buildEncounterEndPacket({ outcome = 'victory', deltas = [], fx = [] } = {}) {
+  return {
+    actor:  { kind: 'system' },
+    action: { kind: 'encounter-end', outcome },
+    deltas: Array.isArray(deltas) ? deltas : [],
+    fx:     Array.isArray(fx)     ? fx     : [],
+    meta:   { encounterEnd: true, outcome },
+  };
+}
