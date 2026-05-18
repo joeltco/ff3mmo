@@ -2,6 +2,8 @@
 
 All notable changes to this project are documented here.
 
+> **Co-op sync status (as of v1.7.472, 2026-05-18):** BROKEN. The v1.7.458→v1.7.472 band attempted to fix party-encounter HP/state desync between phones. User confirmed in live testing that the result is "even worse" — host's `_maybeHostCoopEncounter` peer-add (v1.7.472) ships profile data that produces wrong HP on the guest's view; per-turn reseed (v1.7.468) is correct in spirit but can't paper over within-turn `if/else` branch divergence (e.g., monster-attacks-ps vs monster-attacks-ally(host) paths in `battle-enemy.js:228-273`). Suggested next-session move: full revert of the band OR a server-arbitrated rewrite. See memory `project_ff3mmo_coop_sync_2026_05_18.md` for the full post-mortem.
+
 ## 1.7.472 — 2026-05-18
 
 ### Triggerer's phone now shows the ally roster at battle start
