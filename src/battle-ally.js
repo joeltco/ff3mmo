@@ -461,23 +461,16 @@ export function updateBattleAlly(dt) {
   // turn, flip the ally to AI-fallback (defend this turn + isWireDriven
   // off so future turns run AI), then advance.
   if (battleSt.battleState === 'ally-wire-wait') {
-    // v1.7.470 — turn-scoped auto-defend instead of permanent AI fallback.
-    // Pre-fix the 45s timeout flipped `isWireDriven=false` permanently, so
-    // a single slow wire delivery downgraded the peer to local AI for the
-    // rest of the battle — that's what "fake player logic firing without
-    // input" looked like to the user. Auto-defend a single turn (keeping
-    // `isWireDriven=true`) lets the queue advance without letting AI take
-    // over, and the next turn's wire-wait will run normally if the peer's
-    // actions resume. Shortened to 7s — fits inside the 5s auto-defend
-    // window on the peer's own clock plus a 2s safety margin for the
-    // round-trip; longer than that and the play feels stuck.
-    const WIRE_WAIT_TIMEOUT_MS = 7000;
+    // v1.7.471 — peer misses the turn if no wire action arrives in the
+    // same window the local player has (TURN_TIME_MS=10s). No auto-defend,
+    // no AI fallback — just skip the queue forward. `isWireDriven` stays
+    // true so the next turn's wire-wait runs normally if the peer's
+    // actions resume. Matches the local "miss your turn" semantics.
+    // Pre-v1.7.471: 45s timeout flipped `isWireDriven=false` permanently
+    // → fake-AI took over; v1.7.470 tried turn-scoped defend; both wrong.
+    const WIRE_WAIT_TIMEOUT_MS = 10000;
     if (battleSt.battleTimer > WIRE_WAIT_TIMEOUT_MS) {
-      const turn = battleSt.turnQueue.shift();
-      if (turn && turn.type === 'ally') {
-        const a = battleSt.battleAllies[turn.index];
-        if (a) { a.isDefending = true; }
-      }
+      battleSt.turnQueue.shift();  // drop the unfulfilled turn; no animation, no damage.
       _processNextTurn();
       return true;
     }

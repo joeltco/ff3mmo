@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.471 — 2026-05-18
+
+### "Miss your turn" — no auto-action, no AI fallback
+
+User clarification: there should be no auto-anything. If you take too long, you miss your turn. That was the original 10-second design.
+
+- `TURN_TIME_MS`: 5s → **10s** (revert). The 5s experiment in v1.7.469 wasn't the right call.
+- Auto-action: `'defend'` → **`'skip'`** (revert). Skip is the miss-your-turn semantic — no animation, no damage halving.
+- `ally-wire-wait` timeout: 7s → **10s** (matches local clock). Peer misses the turn on the same timer the local player has.
+- `ally-wire-wait` fallback: removed `isDefending = true`. Just shift the unfulfilled turn off the queue. No defend, no AI. `isWireDriven` stays true so the next turn runs wire-driven normally.
+
+`encounter-wire.js#disconnect` handler unchanged — explicit server-confirmed peer drops still flip `isWireDriven=false` (that's a real disconnect, not a guess). Inside an active session, peers always stay wire-driven; missed turns just skip silently.
+
 ## 1.7.470 — 2026-05-18
 
 ### Stop fake-player AI from taking over a real peer's turn
