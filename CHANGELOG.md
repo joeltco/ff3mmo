@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.462 — 2026-05-17
+
+### Party member's next trigger auto-joins teammate's in-progress battle
+
+When a party member was opening a chest / standing in dialogue / on a different floor at the moment their teammate's battle started, they were skipped from the initial `encounter-start` fanout (correct — they were busy). Previously their NEXT step-counter trigger spawned a parallel encounter; now it auto-joins the teammate's existing battle via the assist flow IF they're in the same location.
+
+New helper `_findPartyMemberInBattleSameLoc()` (`src/battle-encounter.js`) walks party members, filters by `online.inBattle && online.loc === myLoc`, and returns the first match. `tickRandomEncounter`'s post-threshold branch checks for a match first; on hit it calls `sendNetEncounterAssistRequest(host.userId)` and arms a 1s fallback to spawn a fresh encounter only if no assist-snapshot arrives (host's battle could have ended between presence-poll and now). Solo + no-eligible-party-member path unchanged.
+
 ## 1.7.461 — 2026-05-17
 
 ### Party encounter triggers split across members

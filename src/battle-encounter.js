@@ -14,11 +14,13 @@ import { getMonsterCanvas } from './monster-sprites.js';
 import { sendNetPVPEncounter, setNetPVPEncounterNoneHandler,
          sendNetEncounterStart, setNetEncounterInviteHandler,
          sendNetEncounterAssistSnapshot,
+         sendNetEncounterAssistRequest,
          setNetEncounterAssistIncomingHandler,
          setNetEncounterAssistSnapshotHandler,
          setNetEncounterAllyJoinHandler,
          getMyUserId, getOnlinePlayerByName } from './net.js';
 import { partyInviteSt } from './party-invite.js';
+import { getPlayerLocation } from './roster.js';
 import { pvpSt } from './pvp.js';
 import { generateAllyStats } from './data/players.js';
 import { ps } from './player-stats.js';
@@ -45,6 +47,27 @@ function _countOnlinePartyMembers() {
   return n;
 }
 
+// When our step-counter would normally trigger a fresh encounter, first
+// look for a party member who is currently in a battle in the SAME location
+// (same dungeon floor / world / town). If found, return their presence
+// record so the trigger redirects to an assist-request — they auto-accept
+// and emit the snapshot which spawns us into their battle. Covers the case
+// where a member was opening a chest / on a different floor when their
+// teammate's battle started; their NEXT trigger pulls them in instead of
+// spawning a parallel encounter. v1.7.462.
+function _findPartyMemberInBattleSameLoc() {
+  if (!partyInviteSt.partyMembers || partyInviteSt.partyMembers.length === 0) return null;
+  const myLoc = getPlayerLocation();
+  for (const name of partyInviteSt.partyMembers) {
+    const online = getOnlinePlayerByName(name);
+    if (!online || !online.userId) continue;
+    if (!online.inBattle) continue;
+    if (online.loc !== myLoc) continue;
+    return online;
+  }
+  return null;
+}
+
 // ── Random encounter step counter ──────────────────────────────────────────
 export function tickRandomEncounter() {
   if (battleSt.battleState !== 'none') return false;
@@ -66,6 +89,23 @@ export function tickRandomEncounter() {
   const threshold = baseThreshold * partyScale;
   if (mapSt.encounterSteps >= threshold) {
     mapSt.encounterSteps = 0;
+    // If a party member is already in a battle in our location, redirect
+    // this trigger into an assist-join instead of spawning a parallel
+    // fight. Their client auto-accepts and emits the assist-snapshot which
+    // spawns us into their existing battle. Falls back to a fresh
+    // encounter if the snapshot doesn't arrive within 1s (their battle
+    // ended, server rejected, etc.).
+    const partyHost = _findPartyMemberInBattleSameLoc();
+    if (partyHost) {
+      sendNetEncounterAssistRequest(partyHost.userId);
+      _pendingPartyJoin = true;
+      setTimeout(() => {
+        if (!_pendingPartyJoin) return;
+        _pendingPartyJoin = false;
+        if (battleSt.battleState === 'none') _triggerEncounterWithPVPCheck();
+      }, 1000);
+      return true;
+    }
     _triggerEncounterWithPVPCheck();
     return true;
   }
@@ -80,7 +120,8 @@ export function tickRandomEncounter() {
 // proceed with the regular monster encounter. A 500 ms fallback covers a
 // dropped or slow server reply.
 let _pendingPVPCheck = false;
-export function isEncounterCheckPending() { return _pendingPVPCheck; }
+let _pendingPartyJoin = false;
+export function isEncounterCheckPending() { return _pendingPVPCheck || _pendingPartyJoin; }
 function _triggerEncounterWithPVPCheck() {
   if (!sendNetPVPEncounter()) {
     startRandomEncounter();
