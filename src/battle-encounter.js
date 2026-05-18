@@ -260,7 +260,30 @@ function _maybeHostCoopEncounter() {
 // initiative-roll ordering against the shared rand cursor.
 setNetEncounterInviteHandler((msg) => {
   if (!msg || !msg.seed || !Array.isArray(msg.monsters) || msg.monsters.length === 0) return;
-  if (battleSt.battleState !== 'none' || pvpSt.isPVPBattle) return;
+  if (pvpSt.isPVPBattle) return;
+  // Concurrent encounter-start race (v1.7.463). Both party members can hit
+  // the step-counter threshold within the same network frame, each
+  // spawning a local battle and sending `encounter-start`. Server
+  // serializes by arrival — second one is silently dropped — but the
+  // loser's local FSM is now in self-hosted `flash-strobe`. When the
+  // winner's invite arrives, take it: tear down our half-built host
+  // battle and respawn as a guest of the actual host.
+  const isSelfHostRace = battleSt.isWireEncounter
+    && battleSt.encounterIsHost
+    && battleSt.battleState === 'flash-strobe'
+    && (msg.hostUserId | 0) !== (getMyUserId() | 0);
+  if (battleSt.battleState !== 'none' && !isSelfHostRace) return;
+  if (isSelfHostRace) {
+    battleSt.encounterMonsters = null;
+    battleSt.isRandomEncounter = false;
+    battleSt.isWireEncounter = false;
+    battleSt.encounterIsHost = false;
+    battleSt.encounterHostUserId = 0;
+    battleSt.encounterSeed = 0;
+    battleSt.encounterTurnIndex = 0;
+    battleSt.battleState = 'none';
+    battleSt.battleTimer = 0;
+  }
   const monsters = [];
   for (const m of msg.monsters) {
     const id = m && (m.monsterId | 0);

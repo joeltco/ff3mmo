@@ -95,6 +95,20 @@ function _clearEncounterGroup(userId) {
   }
 }
 
+// Server-driven inBattle push (v1.7.463). The 500 ms profile-diff poll that
+// normally syncs `inBattle` is too slow for the encounter-start race: party
+// member A triggers an encounter and B's step counter trips before A's poll
+// reaches B, so B's local cache of A.inBattle is still 0 → B spawns a
+// parallel battle instead of redirecting via assist. Calling this on
+// encounter-start success / encounter-end overrides the poll cadence and
+// pushes the flag to every connected client immediately.
+function _pushInBattle(userId, inBattle) {
+  const entry = _connected.get(userId);
+  if (!entry) return;
+  if (entry.profile) entry.profile.inBattle = inBattle ? 1 : 0;
+  _broadcast({ type: 'player-update', userId, fields: { inBattle: inBattle ? 1 : 0 } }, userId);
+}
+
 // Hook-chance formula — mirror of `src/pvp-search.js#getHookChance`.
 // AGI differential + Thief/Ranger job bonus, clamped to [10%, 75%].
 // Constants live alongside the client source for cross-reference (any
@@ -705,6 +719,12 @@ function _handleMessage(entry, msg) {
           peers,
         });
       }
+      // Push inBattle=1 for host + every accepted candidate immediately so
+      // party members' local caches don't race the 500 ms profile poll. The
+      // next step-trigger on a busy member will see the flag and route via
+      // assist-request instead of spawning a parallel encounter. v1.7.463.
+      _pushInBattle(entry.userId, true);
+      for (const uid of accepted) _pushInBattle(uid, true);
       console.log('[encounter-start] host=' + entry.userId + ' accepted=' + JSON.stringify(accepted) + ' monsters=' + monsters.length);
       return;
     }
@@ -856,6 +876,7 @@ function _handleMessage(entry, msg) {
         }
       }
       _clearEncounterGroup(entry.userId);
+      _pushInBattle(entry.userId, false);
       return;
     }
     case 'pvp-end': {

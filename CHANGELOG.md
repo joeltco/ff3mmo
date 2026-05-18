@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.463 — 2026-05-18
+
+### Parallel-battles race in party encounters
+
+User reported "still not syncing" with the symptom that two party members walking together kept spawning separate battles instead of joining one. The auto-join shipped in v1.7.462 reads the 500 ms-polled `inBattle` profile flag, which lagged behind the actual encounter start. Two fixes:
+
+**Server (`ws-presence.js`):** new `_pushInBattle(userId, flag)` helper. On `encounter-start` success, immediately set `entry.profile.inBattle = 1` for the host + every accepted candidate AND `_broadcast` a `player-update` to all peers — eliminates the 500 ms cache lag so the next step-trigger on any party member sees the flag and routes via assist instead of spawning parallel. Symmetric clear on `encounter-end`.
+
+**Client (`src/battle-encounter.js#setNetEncounterInviteHandler`):** when both phones trip the step threshold within the same network frame, each spawns a local host battle and sends `encounter-start`; the server processes by arrival order and silently drops the loser. The loser's local FSM is then stuck in self-hosted `flash-strobe` when the winner's `encounter-invite` arrives. New `isSelfHostRace` branch tears the half-built host state down (`isWireEncounter / encounterIsHost / encounterMonsters / battleState=`none`) and lets the spawn path below run as a guest of the actual host.
+
 ## 1.7.462 — 2026-05-17
 
 ### Party member's next trigger auto-joins teammate's in-progress battle
