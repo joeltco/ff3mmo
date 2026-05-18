@@ -16,12 +16,13 @@ import { getEnemyDmgNum, setEnemyDmgNum, setPlayerHealNum, getAllyDamageNums, ti
 import { ROSTER_FADE_STEPS } from './data/players.js';
 import { IDLE_FRAME_MS } from './combatant-pose.js';
 import { ps } from './player-stats.js';
-import { STATUS } from './status-effects.js';
+import { STATUS, STATUS_NAME_TO_FLAG } from './status-effects.js';
 import { SPELLS } from './data/spells.js';
 import { replaceBattleMsg } from './battle-msg.js';
 import { CAST_PHASE_MS_THROW, CAST_PHASE_MS_HEAL } from './cast-anim.js';
 import { applyMagicDamage, applyMagicStatus, applyMagicHeal,
-         applyMagicCureStatus, applyMagicSight, playSpellImpactSFX } from './combatant-cast.js';
+         applyMagicCureStatus, applyMagicSight, applyMagicErase,
+         applySpell, playSpellImpactSFX } from './combatant-cast.js';
 
 // Injected at boot — avoids circular import on main.js
 let _buildTurnOrder = () => [];
@@ -270,50 +271,57 @@ function _applyAllyMagicEffect() {
   const spell = SPELLS.get(spellId);
   if (!spell) return;
 
-  // 0x36 Sight
-  if (spellId === 0x36) {
-    applyMagicSight({ sfx: SFX.SIGHT });
-    return;
-  }
+  // Sight has no target — peek the front-row enemy. Erase / dispel likewise.
+  if (spell.target === 'sight') { applyMagicSight({ sfx: SFX.SIGHT }); return; }
+  if (spell.target === 'erase') { applyMagicErase(); return; }
 
-  // 0x31/0x32/0x33 — Fire / Bzzard / Sleep on enemy target
-  if (spellId === 0x31 || spellId === 0x32 || spellId === 0x33) {
-    const tgt = _allyMagicEnemyTarget();
-    if (spellId === 0x33) {
-      // SFX already played at impact start (engine timer-driven); helper
-      // doesn't double-fire. Damage number / status msg fire here.
-      applyMagicStatus(tgt, 'sleep', spell.hit || 15, {
-        onStatusMsg: replaceBattleMsg,
-        onLand: () => _setAllyMagicEnemyDmgNum({ value: 0, timer: 0, status: 'sleep' }),
-        onMiss: () => _setAllyMagicEnemyDmgNum({ miss: true, timer: 0 }),
-      });
-      return;
-    }
-    applyMagicDamage(tgt, battleSt.allyMagicDamageRoll || 0, spell, {
-      onDmgNum: (dmg) => _setAllyMagicEnemyDmgNum({ value: dmg, timer: 0 }),
-    });
-    return;
-  }
+  // Resolve target object + faction. v1.7.464 — previously this dispatcher
+  // only knew six spell IDs (0x31, 0x32, 0x33, 0x34, 0x35, 0x36); every
+  // other player-cast spell (Fira / Bzzara / Stone / Confuse / Drain /
+  // Catas / Curaja / Raise / etc.) fell through to a default Cure-style
+  // heal call, which silently healed enemy targets and mis-applied buffs.
+  // Watchers now route through `applySpell` (the same dispatcher the
+  // sender uses) so every spell renders correctly on every phone.
+  const tType = battleSt.allyMagicTargetType;
+  const tIdx  = battleSt.allyMagicTargetIdx;
+  const isEnemy = tType === 'enemy' || tType === 'pvp-enemy';
+  const isPlayerTgt = tType === 'player';
+  let target = null;
+  if (isEnemy) target = _allyMagicEnemyTarget();
+  else if (isPlayerTgt) target = ps;
+  else if (tType === 'ally') target = battleSt.battleAllies[tIdx];
+  if (!target) return;
 
-  // Heal-side (target is friendly: player or ally). Resolve target object +
-  // heal-number callback per target type, hand off to shared helpers.
-  const isPlayerTgt = battleSt.allyMagicTargetType === 'player';
-  const tgt = isPlayerTgt ? ps : battleSt.battleAllies[battleSt.allyMagicTargetIdx];
-  if (!tgt) return;
-  const onHealNum = makeHealNumCallback(isPlayerTgt ? 'self' : 'ally', battleSt.allyMagicTargetIdx);
+  // Pick amount channel. Heal / cure-status / revive spells ride
+  // `healAmount`; everything else rides `damageRoll`. Both pre-rolled by the
+  // sender at confirm-pause (v1.7.458 `prerollSpellAmount`).
+  const isHeal = spell.element === 'recovery'
+    || spell.target === 'cure_status'
+    || spell.target === 'revive';
+  const amount = isHeal
+    ? (battleSt.allyMagicHealAmount | 0)
+    : (battleSt.allyMagicDamageRoll | 0);
 
-  // 0x35 Poisona — strip POISON flag (heal-num placeholder {value:0} = sparkle).
-  // SFX engine-driven (fires at sparkle start via playSpellImpactSFX); helper
-  // does not carry SFX.
-  if (spellId === 0x35) {
-    applyMagicCureStatus(tgt, STATUS.POISON, {
-      onSparkle: () => onHealNum(0),
-    });
-    return;
-  }
+  // Cure-status spells (Poisona, Esuna, Bndna, etc.) — pick the status
+  // flag from `spell.type` the same way the sender does (spell-cast.js:679).
+  const statusFlag = spell.target === 'cure_status'
+    ? (STATUS_NAME_TO_FLAG[spell.type] || STATUS.POISON)
+    : 0;
 
-  // 0x34 Cure (default) — heal pre-rolled allyMagicHealAmount. SFX engine-driven.
-  applyMagicHeal(tgt, battleSt.allyMagicHealAmount, { onHealNum });
+  // Callbacks per faction. Damage numbers / heal numbers / status messages
+  // route to the role-specific renderers; applySpell dispatches the actual
+  // mutation.
+  const onDmgNum    = isEnemy      ? (dmg) => _setAllyMagicEnemyDmgNum({ value: dmg, timer: 0 }) : null;
+  const onHealNum   = !isEnemy     ? makeHealNumCallback(isPlayerTgt ? 'self' : 'ally', tIdx)    : null;
+  const onSparkle   = !isEnemy     ? () => onHealNum && onHealNum(0)                              : null;
+  const onMiss      = isEnemy      ? () => _setAllyMagicEnemyDmgNum({ miss: true, timer: 0 })    : null;
+  const onLand      = isEnemy      ? () => _setAllyMagicEnemyDmgNum({ value: 0, timer: 0 })       : null;
+
+  applySpell(spell, target, {
+    amount, statusFlag,
+    onDmgNum, onHealNum, onSparkle, onMiss, onLand,
+    onStatusMsg: replaceBattleMsg,
+  });
 }
 
 function _updateAllyMagicCast(dt) {

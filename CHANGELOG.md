@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 1.7.464 — 2026-05-18
+
+### Co-op watcher spell coverage — route through shared `applySpell`
+
+`src/battle-ally.js#_applyAllyMagicEffect` only handled six spell IDs (`0x31 Fire`, `0x32 Bzzard`, `0x33 Sleep`, `0x34 Cure`, `0x35 Poisona`, `0x36 Sight`). Every other player-cast spell — Fira, Bzzara, Tara, Cura, Curaga, Curaja, Raise, Stone, Confuse, Drain, Catas, Tornado, etc. — fell through to a default `applyMagicHeal` call. Watchers saw heal sparkles on enemies that should have been taking damage; status spells silently no-op'd; the host's HP / damage numbers diverged from the joiner's view by the entire spell payload.
+
+Rewrite routes through `applySpell` (the same dispatcher the sender's `_applySpellEffect` reaches at `src/combatant-cast.js:155-198`): faction-resolve the target, pick `amount` from `damageRoll` or `healAmount` based on `spell.element === 'recovery' || spell.target === 'cure_status' || spell.target === 'revive'`, derive `statusFlag` from `STATUS_NAME_TO_FLAG[spell.type]` for `cure_status` spells (mirror of `spell-cast.js:679`), and hand the dispatcher every faction-appropriate render callback (`onDmgNum`, `onHealNum`, `onSparkle`, `onMiss`, `onLand`, `onStatusMsg`). Sight + erase keep their no-target fast paths.
+
+Hit-check drift on `spell.hit < 100` damage spells is still a known cursor-drift source (sender rolls in `spell-cast.js:458`, watcher doesn't); not addressed in this deploy — needs the hit roll moved into a shared helper that both sides call.
+
 ## 1.7.463 — 2026-05-18
 
 ### Parallel-battles race in party encounters
