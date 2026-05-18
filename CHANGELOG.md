@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented here.
 
-> **Co-op sync status (as of v1.7.472, 2026-05-18):** BROKEN. The v1.7.458→v1.7.472 band attempted to fix party-encounter HP/state desync between phones. User confirmed in live testing that the result is "even worse" — host's `_maybeHostCoopEncounter` peer-add (v1.7.472) ships profile data that produces wrong HP on the guest's view; per-turn reseed (v1.7.468) is correct in spirit but can't paper over within-turn `if/else` branch divergence (e.g., monster-attacks-ps vs monster-attacks-ally(host) paths in `battle-enemy.js:228-273`). Suggested next-session move: full revert of the band OR a server-arbitrated rewrite. See memory `project_ff3mmo_coop_sync_2026_05_18.md` for the full post-mortem.
+> **Co-op sync status (as of 2026-05-18):** Lockstep model was BROKEN in v1.7.472. **Host-authoritative deltas rewrite shipped behind `COOP_HOST_ARB` (Phases 0-7, commits `19f1403` → `a36e2b4`). Flag default `false` — prod still runs the broken lockstep path until live cutover.** Cutover procedure + two-phone smoke checklist: `docs/COOP-PHASE-6-SMOKE.md`. Architecture overview: `MULTIPLAYER.md` "Party co-op random encounters — host-authoritative model". Full plan: `docs/COOP-REWRITE-PLAN.md`.
 
 > **Rewrite plan landed (2026-05-18):** Option B — host-authoritative deltas. Full plan at [`docs/COOP-REWRITE-PLAN.md`](docs/COOP-REWRITE-PLAN.md) (8 phases, gated by `COOP_HOST_ARB` flag, PvP untouched).
 > - **Phase 0 (convergence harness):** SHIPPED. `tools/coop-arbiter-sim.js` + `tools/coop-arbiter-sim.PLAN.md`. Harness documents the 5 audit-flagged divergence sources as failing tests; `deploy.sh` gates via `--expect-fail` until Phases 2-4 land.

@@ -10,6 +10,8 @@ Read every file in the MP stack end-to-end (`ws-presence.js`, `src/net.js`,
 Findings are ranked by severity. Each item includes the failure mode and a
 suggested fix.
 
+> **2026-05-18 follow-up:** the lockstep co-op sync defenses validated in this audit (per-turn reseed, canonical actor-push, Math.random → rand conversion) ultimately couldn't paper over structural code-path asymmetry between host's `ps`-path and guest's `ally`-path for the same monster attack. v1.7.458 → v1.7.472 fix band broke and was abandoned. Replaced by a host-authoritative deltas rewrite (Phases 0-7, commits `19f1403` → `a36e2b4`) — see `docs/COOP-REWRITE-PLAN.md` for the new model + `MULTIPLAYER.md` for the architecture overview. PvP findings in this audit are still load-bearing.
+
 ## Status (closed out 2026-05-15)
 
 Shipped in v1.7.387 → v1.7.397 (11 deploys, all 38 audit items addressed + 6 follow-on items from prod-error triage and pre-beta polish):

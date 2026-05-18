@@ -1,6 +1,6 @@
 # Multiplayer
 
-**Live as of v1.7.472, but co-op party-encounter sync is BROKEN.** HP / damage / state diverges between phones in party encounters from round 1; the v1.7.458→v1.7.472 fix band made it worse per live testing on 2026-05-18. PvP duels, presence, chat, party invites, give-item, roster low-HP pose are all still working. Solo + boss combat unaffected. **Read `project_ff3mmo_coop_sync_2026_05_18.md` memory before touching co-op.** Two viable next moves: full revert of the band, or rewrite to server-arbitrated turn outcomes (one side resolves the turn, broadcasts HP/anim deltas to all clients; eliminates the deterministic-lockstep dependency).
+**Live as of v1.7.472. Co-op party-encounter sync was BROKEN under the deterministic-lockstep model. The host-authoritative rewrite is shipped behind `COOP_HOST_ARB` (default `false`) — live cutover is pending two-phone smoke; until the flag flips, prod still runs the broken lockstep path.** PvP duels, presence, chat, party invites, give-item, roster low-HP pose are all working. Solo + boss combat unaffected. **Read `docs/COOP-REWRITE-PLAN.md` for the host-arb model spec and `docs/COOP-PHASE-6-SMOKE.md` for the flag-flip + smoke checklist.**
 
 Open `ff3mmo.com` in two browsers with two accounts. Same location → see each other in the roster panel. Chat, party invites, PvP duels, low-HP roster pose, give-item-to-roster, party co-op random encounters, and Battle Assist (any roster player can join an in-progress fight) all wire-driven. Combat is **FF3-style round-based** — the FF4 ATB system that shipped in v1.7.428-v1.7.455 was reverted in v1.7.456 (didn't feel right); all `atb-sync` / `atb-ready` / `pvp-atb-sync` wire kinds + the server-side `_encounterBattles` tick loop are gone. Fakes are off (`PLAYER_POOL` exported empty in `src/data/players.js`).
 
@@ -106,9 +106,62 @@ Each player's chosen action drives the opponent's turn on the partner's client. 
 
 Receiver (`pause-menu.js#setNetGiveItemHandler`) mirrors the sender's `_applyPauseItemUse` apply path on its own `ps` — `applyMagicHeal` for `effect: heal / full_heal / restore_hp`, `applyMagicCureStatus` for `effect: cure_status`. Plays `SFX.CURE`, fires the existing `_drawCureSparkle` overlay on the receiver's HUD portrait via `hudSt.giveItemHealTimer` (550 ms window matching the sender's pause-menu `inv-heal` state), and posts `* <sender> sent you <item>` to chat. The next 500 ms profile-diff poll auto-broadcasts the new HP / status so every other player's roster row ticks too — the kneel-pose pipeline in `roster.js` (v1.7.415) reads `p.hp` / `p.maxHP` from the snapshot entry and swaps `fakePlayerPortraits` for `fakePlayerKneelPortraits` + sweat overlay when `hp <= floor(maxHP / 4)`.
 
-### Party co-op random encounters (Step 6 — v1.7.418 → v1.7.421)
+### Party co-op random encounters — host-authoritative model (the rewrite)
 
-Real party members are wire-driven allies in random monster battles instead of AI-simulated. Mirror of the PvP wire pattern.
+**Active model** (pending flag flip; see `COOP_HOST_ARB` in `src/coop-resolver.js`). The deterministic-lockstep approach below was abandoned at v1.7.472 after fifteen failed patch attempts; the rewrite plan + per-phase commits are in `docs/COOP-REWRITE-PLAN.md`. This subsection documents the new model — the legacy section below remains for historical context only.
+
+**Core principle.** One client (the encounter host — whoever triggered the random encounter) resolves the turn locally and emits a `{deltas, fx}` packet over the wire. Every other client (guests) applies the deltas + drives animation from the fx cues. Guests **do not run combat math** under host-arb. The "two phones run the same FSM and pray rand() stays aligned" anti-pattern is structurally gone.
+
+**Module layout:**
+
+- `src/coop-resolver.js` — host-side. `resolvePhysicalAttack` / `resolveMonsterAttack` / `resolveSpellCast` / `resolveItemUse` / `resolvePoisonTick` / `resolveEncounterEnd` / `resolveEncounterJoin`. Each captures the host's locally-applied outcome + emits a resolution packet. Also owns `COOP_HOST_ARB` (the kill-switch flag) and `isCoopGuest()` (single source for the guest-skip gate).
+- `src/coop-applier.js` — guest-side. Installs `encounter-resolution` + `encounter-snapshot` handlers at module load. `_apply()` walks `msg.deltas` (HP / status mutations) + `msg.fx` (animation cues). `_dispatchDamageNum` / `_dispatchDeath` route fx cues to the existing damage-number / death-anim helpers.
+- `src/coop-deltas.js` — pure, Node-clean. Packet builders (`buildPhysicalAttackPacket` / `buildMonsterAttackPacket` / `buildMagicPacket` / `buildItemUsePacket` / `buildPoisonTickPacket` / `buildEncounterEndPacket` / `buildEncounterSnapshot`) + `applyDeltaToActor`. Used by both production AND the arbiter sim (`tools/coop-arbiter-sim.js`) so convergence tests exercise the actual production logic.
+
+**Wire shape:**
+
+| Direction | Type | Fields |
+|---|---|---|
+| C→S | `encounter-resolution` | `{turnIdx, actor, action, deltas: [<Delta>], fx: [<FXCue>], meta}` — host's authoritative turn outcome |
+| S→C | `encounter-resolution` | relayed to every peer in `_encounterGroups[hostUid]` with `userId: <host>` attached |
+| C→S | `encounter-snapshot` | `{joinerUserId, turnIdx, battleState, monsters, combatants}` — host → specific joiner only, mid-battle assist join with realized stats |
+| S→C | `encounter-snapshot` | relayed to the targeted joiner with `hostUserId` attached |
+
+`Delta`: `{target: <ActorRef>, hp?, mp?, status?: {add, remove}, poisonDmgTick?, death?}`. `FXCue`: `{kind: 'slash'|'magic-cast'|'magic-impact'|'item-use'|'item-impact'|'damage-num'|'death'|'poison-tick-start', ...}`. Full schemas: `docs/COOP-REWRITE-PLAN.md#wire-contract`.
+
+**Host-emit call sites (production wiring):**
+
+| File | Site | Resolution |
+|---|---|---|
+| `src/battle-enemy.js#_processEnemyTurn` | both ps + ally damage branches | `resolveMonsterAttack` |
+| `src/battle-update.js#_finalizeComboHits` | player physical combo end | `resolvePhysicalAttack` |
+| `src/battle-ally.js#_finalizeAllyCombo` | wire-driven ally combo end | `resolvePhysicalAttack` (host running peer's relayed action) |
+| `src/spell-cast.js#_finishMagicHit` | player spell apply | `resolveSpellCast` (snapshot+diff over `_targets`) |
+| `src/battle-ally.js#_applyAllyMagicEffect` | ally spell apply | `resolveSpellCast` (single-target snapshot+diff) |
+| `src/battle-turn.js#_playerTurnConsumable` | item use | `resolveItemUse` |
+| `src/battle-turn.js#_applyEndOfRoundPoison` | poison batch | `resolvePoisonTick` |
+| `src/encounter-wire.js#endWireEncounter` | battle wrap-up | `resolveEncounterEnd` |
+| `src/battle-encounter.js#_processAssistIncoming` | mid-battle joiner | `resolveEncounterJoin` (realized stats) |
+
+**Guest-side short-circuits (Phase 6.7).** At every call site that legacy code uses to mutate HP / status, a single `isCoopGuest()` gate skips the local apply. Animation callbacks still fire so visuals read correctly; the resolution packet drives authoritative state via the applier. Sites: `applyPhysicalHitToEnemy`, `_processEnemyTurn` damage applies, every `applyMagic*` helper in `combatant-cast.js`, `_playerTurnConsumable` cure-status + Elixir paths, `_applyEndOfRoundPoison` per-actor applies.
+
+**Snapshot+diff pattern (Phase 6.5 spell wiring).** Rather than instrument every internal apply path (`applyMagicDamage`, `applyMagicHeal`, ...) to write to a host-arb accumulator, the spell-cast resolver snapshots `{hp, mp, mask}` for each target BEFORE `applySpell` runs, then diffs against the post-apply state. Damage, heal, status add, status remove, death — all derived automatically from the diff. Adding new spells requires zero host-arb code changes.
+
+**Killed bugs:**
+
+1. The v1.7.472 monster-attack divergence (`targetAlly = -1` vs `targetAlly >= 0` branches with different stat fields, status inflicts, protect halving). Guests never run either branch under host-arb.
+2. The `recalcStats` vs `generateAllyStats` divergence for host-self stats. The snapshot ships realized stats directly; joiners never recompute.
+3. The mid-battle turnIdx misalignment Phase 7 caught in code review (legacy snapshot shipped `encounterTurnIndex` = 0 instead of the resolver's actual counter).
+
+**Convergence regression gate:** `tools/coop-arbiter-sim.js` — three suites, 59 tests. Suite 1 documents the lockstep divergence sources (5 failing-by-design baselines). Suite 2 validates wire-shape contracts + module export surface. Suite 3 drives 38 convergence scenarios (physical, magic, items, poison, KO, snapshot, multi-round drift). Runs in `deploy.sh` via `--expect-fail` mode (Suite 1 baseline failures are the "green" state until live cutover).
+
+**Flag flip + live smoke:** see `docs/COOP-PHASE-6-SMOKE.md` for the procedure.
+
+### Party co-op random encounters — legacy lockstep model (HISTORICAL)
+
+Pre-rewrite implementation. Documented here for context — **do not extend this model**; route new co-op work through the host-arb resolver/applier above.
+
+Real party members are wire-driven allies in random monster battles instead of AI-simulated. Mirror of the PvP wire pattern. Both clients run identical FSMs from a shared seed.
 
 | Direction | Type | Fields |
 |---|---|---|
@@ -119,20 +172,22 @@ Real party members are wire-driven allies in random monster battles instead of A
 | C→S | `encounter-end` | `outcome` — peer's local FSM finished the battle |
 | S→C | `encounter-end` | `userId, outcome` — peer reported end; clears the group; receivers force-close their local FSM if mid-battle |
 
-`battleSt.isWireEncounter` is the local flag. `encounterIsHost / encounterHostUserId / encounterSeed / encounterTurnIndex` mirror the PvP `pvpSt._wire*` set.
+`battleSt.isWireEncounter` is the local flag. `encounterIsHost / encounterHostUserId / encounterSeed` mirror the PvP `pvpSt._wire*` set. (`encounterTurnIndex` was retired in Phase 7 — see `getResolverTurnIdx()` for the authoritative counter.)
 
 **Sync defenses (same shape as PvP v1.7.406-v1.7.410, applied to encounters):**
 
 1. **Authoritative pre-rolled values.** `hitResults` rides `encounter-action {kind:'attack'}` so the receiver doesn't re-roll against a drifted cursor. (`damageRoll` / `healAmount` slots present for magic; ally magic replay added v1.7.419.)
-2. **Per-turn rand reseed.** `battle-turn.js#maybeReseedCoopTurn` increments `encounterTurnIndex` and calls `rng.seed(encounterSeed + turnIndex)` at every round boundary (`_updateBattleMenuConfirm` + ps-dead end-of-round path).
+2. **Per-turn rand reseed.** `battle-turn.js#maybeReseedCoopTurn` increments `battleSt.perTurnIndex` and calls `rng.seed(encounterSeed + perTurnIndex)` at every round boundary (`_updateBattleMenuConfirm` + ps-dead end-of-round path).
 3. **Canonical actor-push order.** `buildTurnOrder` has a `_pushPlayerCoop()` branch that collects `ps` + battleAllies into one team, sorts by (host's userId first, then ascending userId), pushes each through `rollInitiative` in sorted order. Both clients consume rand for the same logical actor regardless of which side they're sitting on.
 4. **Monster-target canonical order** (v1.7.419). `battle-enemy.js#_processEnemyFlash` builds the same canonical team list and picks via shared `rand()`, then maps the picked userId to either local `ps` (-1) or `battleAllies[N]`. Pre-fix, `Math.random()` picked "ps" on one client and "ally" on another for the same monster → instant HP divergence.
 5. **All `Math.random` in `battle-enemy.js` converted to `rand()`** (v1.7.421, the silent killer). Monster physical-attack damage variance, multi-hit hit-rate, evade rolls, special-attack chance + which-attack pick, special-attack damage roll. Pre-fix monster damage was per-client; everything else was synced; HPs diverged turn one.
 
+**Why it ultimately failed:** the defenses above synchronized rand cursors but couldn't fix structural code-path asymmetry — when a monster attacked the encounter triggerer, host's FSM took the `targetAlly = -1` branch (uses `ps.def`, `ps.elemResist`, `protect`, status inflict) while guest's FSM took the `targetAlly >= 0` branch (uses `ally.def`, no elemResist, no protect, no inflict). Same logical event, different functions, different HP outputs. The rewrite eliminates this by having only ONE side resolve and ship deltas; see the host-arb section above.
+
 **Wire-driven ally turn dispatch** (`battle-turn.js#processNextTurn` ally branch). When the ally has `isWireDriven && userId && battleSt.isWireEncounter`:
 - `processTurnStart(ally.status, ally.maxHP)` runs first so sleep-wake / paralysis-skip / confuse-snap rand consumers stay aligned. `turn._statusDone` flag prevents double-consume in the unshift-retry loop.
 - Call `dequeueWireEncounterAction(ally.userId)`. Found → `_applyWireEncounterActionForAlly` replays the action (`attack` reads wire-supplied `hitResults`; `magic`/`item` populate the `ally-magic-cast` state bag from wire payload; `defend` sets `ally.isDefending = true`, halved in `battle-enemy.js` ally-attack damage path; `run`/`skip` advance the turn).
-- Not found → `turnQueue.unshift(turn)`, `battleState = 'ally-wire-wait'`. The state handler in `battle-ally.js#updateBattleAlly` retries `processNextTurn()` each frame. **45 s timeout** (v1.7.424) flips the ally to AI-fallback (`isWireDriven = false; isDefending = true`) so cellular spikes don't hard-stall the FSM.
+- Not found → `turnQueue.unshift(turn)`, `battleState = 'ally-wire-wait'`. The state handler in `battle-ally.js#updateBattleAlly` retries `processNextTurn()` each frame. **10 s timeout** (v1.7.471) drops the ally's turn — miss-your-turn semantics — without changing `isWireDriven`.
 
 **Drop-roll sync.** `battle-update.js#_updateMonsterDeath` switches `Math.random → rand` for the drop-chance + drop-pick rolls when `isWireEncounter`. Both clients roll the same outcome; each adds the drop to their own inventory (everyone gets a copy; NES-canon party loot model).
 
