@@ -183,18 +183,17 @@ export { buildEncounterSnapshot };
 // (slash, cast windup, damage-num display) continue to fire from the
 // FSM as today; only the underlying state change is deferred.
 //
-// Caveats (until fx-cue dispatch lands in Phase 6.9):
-//   1. Locally-displayed damage numbers reflect the GUEST's local
-//      computation (possibly divergent from host) until the packet
-//      arrives. HP itself converges via the applier.
-//   2. Death state transitions on guest depend on local hp checks; if
-//      lethal damage doesn't land locally (because we skipped the
-//      mutation), the FSM may not transition to death/wipe state
-//      until the applier writes hp=0 — by which point the FSM may
-//      have advanced past the death check.
+// Caveats (closed in Phase 6.9 via fx-cue dispatch in coop-applier.js):
+//   - Damage numbers now overlay the host's authoritative value when
+//     the resolution packet arrives, via `damage-num` fx cues.
+//   - Monster death transitions fire from `death` fx cues so the
+//     dissolve anim plays even if the FSM advanced past its local
+//     hp-check before the packet landed.
 //
-// Phase 6.9 will dispatch fx cues from the resolution packet to drive
-// damage numbers + death transitions on guest, closing both caveats.
+// Remaining edge case: player/ally death anim still drives off the
+// local hp=0 check the applier writes (~1 FSM tick latency at 60fps;
+// usually invisible). Acceptable for v1; can add player/ally death-cue
+// dispatch if live testing surfaces an issue.
 export function isCoopGuest() {
   return COOP_HOST_ARB
       && battleSt.isWireEncounter

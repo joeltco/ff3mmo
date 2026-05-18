@@ -44,7 +44,14 @@ export const battleSt = {
   encounterIsHost: false,
   encounterHostUserId: 0,
   encounterSeed: 0,
-  encounterTurnIndex: 0,
+  // `encounterTurnIndex` was a v1.7.422-era per-round counter for assist-
+  // join seed alignment. Phase 5 of the host-arb rewrite moved that
+  // alignment to the resolver's own counter (`getResolverTurnIdx`) and
+  // the field stopped being incremented anywhere. Removed in Phase 7;
+  // legacy `encounter-assist-snapshot` ships `turnIndex: 0` literally
+  // (joiners read it but never act on it), host-arb `encounter-snapshot`
+  // ships `turnIdx: getResolverTurnIdx()` so the applier aligns its
+  // `_lastAppliedTurnIdx` correctly.
   // Monotonic per-turn counter — bumped + used as seed offset at every
   // dispatch in `processNextTurn` so each turn re-seeds from
   // `encounterSeed + perTurnIndex`. Both phones increment lockstep by

@@ -93,7 +93,6 @@ export function resetBattleVars() {
   battleSt.encounterIsHost = false;
   battleSt.encounterHostUserId = 0;
   battleSt.encounterSeed = 0;
-  battleSt.encounterTurnIndex = 0;
   battleSt.perTurnIndex = 0;
   // Defensive (v1.7.424) — drain any encounter-action entries left over
   // from a prior battle. `endWireEncounter` clears on the normal close

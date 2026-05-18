@@ -143,7 +143,6 @@ export function endWireEncounter(outcome) {
   battleSt.encounterIsHost = false;
   battleSt.encounterHostUserId = 0;
   battleSt.encounterSeed = 0;
-  battleSt.encounterTurnIndex = 0;
   _wireEncounterActions.length = 0;
 }
 

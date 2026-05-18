@@ -26,7 +26,7 @@ import { generateAllyStats } from './data/players.js';
 import { ps } from './player-stats.js';
 import { seed as seedRng } from './rng.js';
 import { addChatMessage } from './chat.js';
-import { COOP_HOST_ARB, resolveEncounterJoin } from './coop-resolver.js';
+import { COOP_HOST_ARB, resolveEncounterJoin, getResolverTurnIdx } from './coop-resolver.js';
 
 const TILE_SIZE = 16;
 
@@ -244,7 +244,6 @@ function _maybeHostCoopEncounter() {
   battleSt.encounterIsHost = true;
   battleSt.encounterHostUserId = myUid;
   battleSt.encounterSeed = seed32;
-  battleSt.encounterTurnIndex = 0;
   seedRng(seed32);
   // Add party peers to the host's local `battleAllies` IMMEDIATELY so they
   // show on the host's roster panel from flash-strobe onward. Pre-v1.7.472
@@ -300,7 +299,6 @@ setNetEncounterInviteHandler((msg) => {
     battleSt.encounterIsHost = false;
     battleSt.encounterHostUserId = 0;
     battleSt.encounterSeed = 0;
-    battleSt.encounterTurnIndex = 0;
     battleSt.battleState = 'none';
     battleSt.battleTimer = 0;
   }
@@ -345,7 +343,6 @@ setNetEncounterInviteHandler((msg) => {
   battleSt.encounterIsHost = false;
   battleSt.encounterHostUserId = msg.hostUserId | 0;
   battleSt.encounterSeed = seed32;
-  battleSt.encounterTurnIndex = 0;
   seedRng(seed32);
   battleSt.preBattleTrack = TRACKS.CRYSTAL_CAVE;
   // _resetBattleVars wipes battleAllies; populate AFTER it runs.
@@ -440,7 +437,6 @@ function _processAssistIncoming(msg) {
     battleSt.encounterIsHost = true;
     battleSt.encounterHostUserId = myUid;
     battleSt.encounterSeed = seed32;
-    battleSt.encounterTurnIndex = 0;
     seedRng(seed32);
   }
   // Add joiner to local battleAllies. Side-channel fade-in (v1.7.423+)
@@ -514,7 +510,11 @@ function _processAssistIncoming(msg) {
   }));
   sendNetEncounterAssistSnapshot(msg.fromUserId, {
     seed:       battleSt.encounterSeed >>> 0,
-    turnIndex:  battleSt.encounterTurnIndex | 0,
+    // Legacy field — was a per-round counter retired in Phase 5. Ships
+    // 0 for backward-compat with peers running older code; receivers
+    // read it but never act on it. Host-arb snapshot below carries the
+    // authoritative `turnIdx` from the resolver counter.
+    turnIndex:  0,
     monsters,
     peers,
     hostUserId: battleSt.encounterHostUserId | 0,
@@ -596,7 +596,12 @@ function _processAssistIncoming(msg) {
     resolveEncounterJoin({
       joinerUserId: msg.fromUserId | 0,
       hostUserId:   battleSt.encounterHostUserId | 0,
-      turnIdx:      battleSt.encounterTurnIndex | 0,
+      // Authoritative turnIdx — the resolver's monotonic counter at
+      // snapshot time. Joiner aligns `_lastAppliedTurnIdx` to this so
+      // subsequent resolutions land contiguously. Phase 5 incorrectly
+      // shipped `encounterTurnIndex` (always 0) which made every post-
+      // snapshot packet queue forever; fixed in Phase 7.
+      turnIdx:      getResolverTurnIdx() | 0,
       battleState:  'menu-open',
       monsters:     monstersHA,
       combatants,
@@ -666,9 +671,11 @@ setNetEncounterAssistSnapshotHandler((msg) => {
   battleSt.encounterIsHost = false;
   battleSt.encounterHostUserId = msg.hostUserId | 0;
   battleSt.encounterSeed = seed32;
-  battleSt.encounterTurnIndex = msg.turnIndex | 0;
   battleSt.encounterMonsters = monsters;
   battleSt.isRandomEncounter = true;
+  // `msg.turnIndex` is the legacy wire field — ships 0 since Phase 7;
+  // the seed math is effectively `seed32 + 0 = seed32`. Kept here so
+  // older clients still emitting a non-zero value don't break the join.
   seedRng(((seed32 >>> 0) + (msg.turnIndex | 0)) >>> 0);
   const peerList = Array.isArray(msg.peers) ? msg.peers.slice() : [];
   peerList.sort((a, b) => {
