@@ -1,9 +1,9 @@
 # coop-arbiter-sim — co-op battle convergence regression harness
 
-**Status:** Phase 0 baseline — captures the v1.7.472 divergence as failing tests, plus the convergence-harness skeleton for Phases 2-5 to extend.
+**Status:** Phases 0-8 SHIPPED. 59 tests passing + 5 expected divergence (the Suite 1 baselines stay failing-by-design as historical reference for the lockstep failure modes). Runs in `deploy.sh` via `--expect-fail` until live flag flip; that flag drops post-cutover.
 **Spec for:** `tools/coop-arbiter-sim.js`
 **Runs in:** `deploy.sh` (pre-flight gate, alongside `pvp-wire-sim.js` and `coop-wire-sim.js`)
-**See also:** [`docs/COOP-REWRITE-PLAN.md`](../docs/COOP-REWRITE-PLAN.md)
+**See also:** [`docs/COOP-REWRITE-PLAN.md`](../docs/COOP-REWRITE-PLAN.md), [`docs/COOP-PHASE-6-SMOKE.md`](../docs/COOP-PHASE-6-SMOKE.md)
 
 ## Why this harness exists
 

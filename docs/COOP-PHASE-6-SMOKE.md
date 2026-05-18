@@ -1,7 +1,7 @@
 # Phase 6 — Two-Phone Live Smoke Checklist
 
-**Status:** ready to test once the flag flips.
-**Authored:** 2026-05-18, after Phase 6 host-emit wiring shipped.
+**Status:** READY. Phases 0-8 shipped + deployed at v1.7.473 (`COOP_HOST_ARB = false`). All caveats closed by Phase 6.9; flag flip is structurally safe. Awaiting two-phone live verification.
+**Authored:** 2026-05-18.
 **Owner:** user — Claude cannot run this; it needs two real devices on the wire.
 
 ## Prerequisites

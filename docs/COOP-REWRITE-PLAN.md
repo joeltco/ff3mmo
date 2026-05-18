@@ -1,10 +1,10 @@
 # Co-op Battle Rewrite — Host-Authoritative Plan
 
-**Status:** draft, pending implementation
+**Status:** Phases 0-8 SHIPPED (commits `19f1403` → `6d05aac`). Live in prod at v1.7.473 with `COOP_HOST_ARB = false` — flag-off path runs unchanged. Two-phone smoke + flag flip is the remaining gate; see [`COOP-PHASE-6-SMOKE.md`](COOP-PHASE-6-SMOKE.md). Phase 7.5 (strip legacy lockstep code) deferred until 48h clean live smoke.
 **Authored:** 2026-05-18 (v1.7.472 baseline)
 **Scope:** random party encounters only — boss fights (LandTurtle) and solo random encounters use the unchanged single-player FSM; PvP duels use the unchanged lockstep model.
 **Supersedes:** the v1.7.458 → v1.7.472 deterministic-lockstep fix attempts. Post-mortem of the broken state lives in the auto-memory file `project_ff3mmo_coop_sync_2026_05_18.md`.
-**Line-number caveat:** every `file.js:NN` reference below is current as of v1.7.472. Verify with `git blame` before relying on a specific line.
+**Line-number caveat:** every `file.js:NN` reference below was current as of v1.7.472 when this doc was authored. Verify with `git blame` before relying on a specific line.
 
 ## Contents
 
