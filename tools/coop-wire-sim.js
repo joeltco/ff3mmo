@@ -318,6 +318,55 @@ async function suite() {
     await new Promise(r => setTimeout(r, 40));
   });
 
+  // ── server passes through viewEvent on encounter-resolution relay (v1.7.491+) ──
+  await asyncTest('encounter-resolution relay preserves viewEvent payload', async () => {
+    _testHooks.resetState();
+    const A = await connectClient(port, 2090, baseProfile('A10', 5, 7, 12));
+    const B = await connectClient(port, 2091, baseProfile('B10', 4, 6, 10));
+    const incB = once(B, m => m.type === 'party-invite-incoming');
+    A.send(JSON.stringify({ type: 'party-invite', targetUserId: 2091 }));
+    await incB;
+    B.send(JSON.stringify({ type: 'party-invite-response', accept: true }));
+    await new Promise(r => setTimeout(r, 30));
+    const bInvite = once(B, m => m.type === 'encounter-invite');
+    A.send(JSON.stringify({
+      type: 'encounter-start', seed: 0xCAFE1234,
+      monsters: [{ monsterId: 0x00 }], partyUserIds: [2091],
+    }));
+    await bInvite;
+    // Host emits encounter-resolution carrying a viewEvent. Server MUST
+    // pass viewEvent through on the fanout — v1.7.486 bug was silently
+    // dropping it which caused phone 2 to freeze waiting forever.
+    const bGotRes = once(B, m => m.type === 'encounter-resolution');
+    A.send(JSON.stringify({
+      type:    'encounter-resolution',
+      turnIdx: 1,
+      actor:   { kind: 'player', userId: 2090 },
+      action:  { kind: 'attack' },
+      deltas:  [],
+      fx:      [],
+      meta:    { encounterEnd: false },
+      viewEvent: {
+        eventKind: 'attack',
+        animMs:    600,
+        actor:     { kind: 'player', userId: 2090 },
+        target:    { kind: 'monster', idx: 0 },
+        hits:      [{ damage: 14, miss: false, crit: false, shieldBlock: false }],
+        weaponId:  0x1E,
+        hand:      'R',
+        killsTarget: false,
+        finalState: { actors: [], monsters: [{ idx: 0, hp: 86, statusMask: 0, alive: true }] },
+      },
+    }));
+    const res = await bGotRes;
+    assertTrue(res.viewEvent != null, 'viewEvent passed through on relay');
+    assertEqual(res.viewEvent.eventKind, 'attack', 'eventKind preserved');
+    assertEqual(res.viewEvent.hits[0].damage, 14, 'hits payload preserved');
+    assertEqual(res.viewEvent.finalState.monsters[0].hp, 86, 'finalState preserved');
+    A.close(); B.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
   // ── host disconnect — server promotes a surviving peer (v1.7.476) ──────
   await asyncTest('host disconnect broadcasts encounter-host-changed to surviving peer', async () => {
     _testHooks.resetState();

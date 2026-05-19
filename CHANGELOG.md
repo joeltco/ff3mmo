@@ -18,6 +18,33 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.492 — 2026-05-19
+
+### Co-op viewer rewrite — P8.1: harness hardening (regression tests for live failures)
+
+Every viewer bug we shipped that broke live had no test that would have caught it. Closing that gap: each post-deploy failure now has a regression test in the harness that runs in `deploy.sh`. P8 spec was 30+ tests; now at 30 viewer + 10 wire (was 22 + 9).
+
+**New viewer-sim tests (8 added):**
+- `v1.7.490 — encounter-start updates battleAllies IN PLACE, preserves fadeStep` — would have caught the `drawAllyPortrait` throw
+- `v1.7.490 — fallback path pushes ally with safe render defaults when missing` — assist-join race coverage
+- `v1.7.486 — ingest-rejected when packet missing viewEvent (server bug repro)` — graceful reject when server drops viewEvent
+- `v1.7.488 — battleTimer advances during flash-strobe anim` — would have caught the frozen-flash bug
+- `out-of-order packets reorder by turnIdx in queue` — packet-loss recovery
+- `item event triggers heal callback for player target` — item path coverage
+- `player-death event applies finalState alive=false` — death path coverage
+- `turn-begin event with prompt=true sets battleState=menu-open` — input prompt coverage
+
+**New wire-sim test:**
+- `encounter-resolution relay preserves viewEvent payload` — exact repro of v1.7.486 server bug. Sends a resolution with viewEvent through the real server, asserts the payload arrives intact on the peer.
+
+**Test counts:**
+- coop-viewer-sim: 22 → 30
+- coop-wire-sim: 9 → 10
+- pvp-wire-sim: 49 (unchanged)
+- coop-arbiter-sim: 59 + 5 (unchanged)
+
+Flag still on. No production behavior change; this is purely test infrastructure.
+
 ## 1.7.491 — 2026-05-19
 
 ### Co-op viewer rewrite — P9.3: fix drawAllyPortrait throw

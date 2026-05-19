@@ -504,6 +504,191 @@ test('encounter-end event exits viewer mode', () => {
   assertEqual(battleSt.battleState, 'victory-name-out', 'transitioned to victory flow');
 });
 
+// ── 4b. Regression tests for v1.7.486-91 live failures ──────────────────
+
+console.log('\n── regression: live failure modes ──');
+
+test('v1.7.490 — encounter-start updates battleAllies IN PLACE, preserves fadeStep', () => {
+  // Pre-populated battleAllies (as legacy invite handler would do) MUST be
+  // updated in place, not replaced. Otherwise fadeStep/weaponId/portraits
+  // get wiped and `_drawAllyPortrait` throws on `portraits[undefined]`.
+  resetState();
+  _testHooks.forceActive();
+  coopViewSt.lastAppliedTurnIdx = 0;
+  // Simulate legacy invite handler having built a full ally entry.
+  battleSt.battleAllies = [{
+    userId: 100, name: 'Host', hp: 50, maxHP: 80, jobIdx: 0, level: 5, palIdx: 0,
+    atk: 10, def: 5, agi: 6, evade: 0, mdef: 0, shieldEvade: 0, statusResist: 0,
+    hitRate: 80, weaponId: 0x1E, weaponL: null, knownSpells: [1, 2, 3],
+    jobLevel: 3, fadeStep: 4, isWireDriven: true,
+    status: { mask: 0, poisonDmgTick: 0 },
+  }];
+
+  _testHooks.injectEvent(buildEncounterStartViewEvent({
+    monsters: [{ monsterId: 1, hp: 30, maxHP: 30, statusMask: 0 }],
+    combatants: [
+      { userId: 100, name: 'Host', hp: 70, maxHP: 100, jobIdx: 0, level: 5, palIdx: 0, atk: 25, def: 12, agi: 8 },
+    ],
+    hostUserId: 100,
+    midBattle: false,
+    finalState: { actors: [], monsters: [] },
+  }), 1);
+  updateCoopView(16);
+  // The entry must STILL be the same object (in-place update), preserving fadeStep
+  assertEqual(battleSt.battleAllies.length, 1, 'no extra entry pushed');
+  const a = battleSt.battleAllies[0];
+  assertEqual(a.fadeStep, 4, 'fadeStep preserved (was wiped pre-v1.7.491, caused drawAllyPortrait throw)');
+  assertEqual(a.weaponId, 0x1E, 'weaponId preserved');
+  assertEqual(a.knownSpells.length, 3, 'knownSpells preserved');
+  // Realized stats overridden from event
+  assertEqual(a.hp, 70, 'hp updated from event');
+  assertEqual(a.maxHP, 100, 'maxHP updated from event');
+  assertEqual(a.atk, 25, 'atk updated from event');
+  assertEqual(a.def, 12, 'def updated from event');
+  _testHooks.forceInactive();
+});
+
+test('v1.7.490 — fallback path pushes ally with safe render defaults when missing', () => {
+  // Edge case: invite handler didn't pre-populate (assist-join race or
+  // similar). Viewer must push a defensive entry with fadeStep=0 so
+  // renderer doesn't throw.
+  resetState();
+  _testHooks.forceActive();
+  coopViewSt.lastAppliedTurnIdx = 0;
+  battleSt.battleAllies = [];
+
+  _testHooks.injectEvent(buildEncounterStartViewEvent({
+    monsters: [],
+    combatants: [
+      { userId: 100, name: 'Host', hp: 80, maxHP: 100, jobIdx: 0, level: 5, palIdx: 0, atk: 20, def: 10, agi: 8 },
+    ],
+    hostUserId: 100,
+    midBattle: false,
+    finalState: { actors: [], monsters: [] },
+  }), 1);
+  updateCoopView(16);
+  assertEqual(battleSt.battleAllies.length, 1);
+  const a = battleSt.battleAllies[0];
+  assertEqual(a.fadeStep, 0, 'fallback entry has fadeStep=0 (was undefined pre-fix)');
+  assertEqual(a.hitRate, 80, 'hitRate defaulted to 80');
+  assertTrue(Array.isArray(a.knownSpells), 'knownSpells is an array');
+  _testHooks.forceInactive();
+});
+
+test('v1.7.486 — ingest-rejected when packet missing viewEvent (server bug repro)', () => {
+  // Server was silently dropping viewEvent on encounter-resolution relay.
+  // Guest received legacy fields only; viewer's ingest must reject cleanly
+  // without crashing.
+  resetState();
+  _testHooks.forceActive();
+  coopViewSt.lastAppliedTurnIdx = 0;
+  // Simulate a packet without viewEvent field (the broken server relay shape)
+  ingestViewEventPacket({ turnIdx: 1, actor: { kind: 'player', userId: 100 }, deltas: [], fx: [] });
+  assertEqual(coopViewSt.cueQueue.length, 0, 'no viewEvent → queue empty (graceful reject)');
+  _testHooks.forceInactive();
+});
+
+test('v1.7.488 — battleTimer advances during flash-strobe anim', () => {
+  // Renderer reads battleTimer to compute strobe alpha. Without viewer
+  // advancing it, flash visual freezes at frame 0.
+  resetState();
+  _testHooks.forceActive();
+  coopViewSt.lastAppliedTurnIdx = 0;
+
+  _testHooks.injectEvent(buildEncounterStartViewEvent({
+    monsters: [],
+    combatants: [],
+    hostUserId: 100,
+    midBattle: false,
+    finalState: { actors: [], monsters: [] },
+  }), 1);
+  updateCoopView(16);
+  assertEqual(battleSt.battleState, 'flash-strobe');
+  assertEqual(battleSt.battleTimer, 0, 'battleTimer starts at 0');
+  updateCoopView(100);
+  assertTrue(battleSt.battleTimer > 0, 'battleTimer advanced during anim');
+  const mid = battleSt.battleTimer;
+  updateCoopView(100);
+  assertTrue(battleSt.battleTimer > mid, 'battleTimer keeps advancing');
+  _testHooks.forceInactive();
+});
+
+// ── 4c. Edge cases (out-of-order, gaps, item, death) ────────────────────
+
+console.log('\n── edge cases ──');
+
+test('out-of-order packets reorder by turnIdx in queue', () => {
+  resetState();
+  _testHooks.forceActive();
+  coopViewSt.lastAppliedTurnIdx = 0;
+  // Insert higher turnIdx first
+  _testHooks.injectEvent({ eventKind: 'attack', animMs: 100, finalState: { actors: [], monsters: [] } }, 5);
+  _testHooks.injectEvent({ eventKind: 'attack', animMs: 100, finalState: { actors: [], monsters: [] } }, 2);
+  _testHooks.injectEvent({ eventKind: 'attack', animMs: 100, finalState: { actors: [], monsters: [] } }, 8);
+  _testHooks.injectEvent({ eventKind: 'attack', animMs: 100, finalState: { actors: [], monsters: [] } }, 1);
+  assertEqual(coopViewSt.cueQueue.map(e => e.turnIdx).join(','), '1,2,5,8', 'queue ordered by turnIdx');
+  _testHooks.forceInactive();
+});
+
+test('item event triggers heal callback for player target', () => {
+  resetState();
+  _testHooks.forceActive();
+  coopViewSt.lastAppliedTurnIdx = 0;
+  battleSt.battleAllies = [{ userId: 200, name: 'A', hp: 30, maxHP: 100, status: { mask: 0 }, fadeStep: 0 }];
+
+  _testHooks.injectEvent(buildItemViewEvent({
+    actor:  { kind: 'player', userId: 100 },
+    itemId: 0x60,
+    target: { kind: 'player', userId: 200 },
+    dmg:    0,
+    heal:   40,
+    revives: false,
+    finalState: buildFinalState({ actors: [{ ref: { kind: 'player', userId: 200 }, hp: 70, statusMask: 0, alive: true }] }),
+  }), 1);
+  updateCoopView(16);
+  // Heal num routed via getAllyDamageNums (index 0 for the only ally)
+  const dn = getAllyDamageNums()[0];
+  assertTrue(dn != null, 'heal num set');
+  assertEqual(dn.value, 40);
+  assertTrue(dn.heal, 'heal flag set');
+  // After anim done, hp updated
+  updateCoopView(1000);
+  assertEqual(battleSt.battleAllies[0].hp, 70, 'hp updated from finalState');
+  _testHooks.forceInactive();
+});
+
+test('player-death event applies finalState alive=false', () => {
+  resetState();
+  _testHooks.forceActive();
+  coopViewSt.lastAppliedTurnIdx = 0;
+  battleSt.battleAllies = [{ userId: 200, name: 'A', hp: 0, maxHP: 100, status: { mask: 0 }, fadeStep: 0 }];
+
+  _testHooks.injectEvent(buildPlayerDeathViewEvent({
+    target: { kind: 'player', userId: 200 },
+    finalState: buildFinalState({ actors: [{ ref: { kind: 'player', userId: 200 }, hp: 0, statusMask: 0, alive: false }] }),
+  }), 1);
+  updateCoopView(16);
+  updateCoopView(700);  // animMs 600
+  assertEqual(battleSt.battleAllies[0].hp, 0);
+  assertEqual(coopViewSt.lastAppliedTurnIdx, 1);
+  _testHooks.forceInactive();
+});
+
+test('turn-begin event with prompt=true sets battleState=menu-open', () => {
+  resetState();
+  _testHooks.forceActive();
+  coopViewSt.lastAppliedTurnIdx = 0;
+  battleSt.battleState = 'flash-strobe';  // some prior state
+
+  _testHooks.injectEvent(buildTurnBeginViewEvent({
+    actor:  { kind: 'player', userId: 200 },
+    prompt: true,
+  }), 1);
+  updateCoopView(16);
+  assertEqual(battleSt.battleState, 'menu-open', 'menu-open set on prompt=true');
+  _testHooks.forceInactive();
+});
+
 // ── 5. Host promotion handoff ────────────────────────────────────────────
 
 console.log('\n── host promotion ──');
