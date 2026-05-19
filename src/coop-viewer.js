@@ -292,7 +292,17 @@ export function updateCoopView(dt) {
   if (done) {
     _writeFinalState(event);
     coopViewSt.lastAppliedTurnIdx = event.turnIdx | 0;
+    const wasEncounterEnd = event.eventKind === 'encounter-end';
     coopViewSt.currentAnim = null;
+    // P6 — after the encounter-end anim completes, hand control back
+    // to the legacy `updateBattle` FSM so it can progress the
+    // `encounter-box-close` timer + restore overworld. Viewer can't
+    // own the wrap-up itself because reward / inventory mutations live
+    // in the legacy victory flow.
+    if (wasEncounterEnd) {
+      exitViewerMode();
+      return;
+    }
     // Chain immediately if queue has another item — keeps animation
     // train tight when host emits a multi-event burst.
     if (coopViewSt.cueQueue.length > 0) _beginNextAnim();

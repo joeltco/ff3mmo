@@ -18,6 +18,20 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.483 — 2026-05-19
+
+### Co-op viewer rewrite — P6: encounter lifecycle
+
+**Host emit at spawn:** `_maybeHostCoopEncounter` in `src/battle-encounter.js` now emits a `resolveEncounterStart` ViewEvent immediately after the local battle spawn. The payload carries realized stats (hp/maxHP/atk/def/agi/...) for every combatant — host's `ps` (from `ps.stats`) + every battleAlly entry (already realized via `generateAllyStats` at spawn). Guests under viewer mode use this to bootstrap battleSt without re-running `generateAllyStats`, eliminating the legacy hp-from-job-stats bug.
+
+**Guest enter:** `setNetEncounterInviteHandler` calls `enterViewerMode()` after the legacy battleAllies spawn. Legacy spawn stays as a fallback display until the host's encounter-start ViewEvent arrives (~50ms cellular RTT); when it lands the viewer overwrites the roster with realized stats.
+
+**Encounter end handoff:** After `_animEncounterEnd` finishes (event animMs elapsed, `battleState` transitioned to `victory-name-out` or `encounter-box-close`), the viewer calls `exitViewerMode()` so the legacy `updateBattle` FSM picks up the wrap-up (reward grant, inventory updates, box-close timer, return to overworld). Required because reward/inventory mutations live in the legacy victory flow.
+
+Flag-off path unchanged on both sides. Viewer entry guarded by `COOP_VIEWER_MODE`; emit guarded too.
+
+Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 9/9, coop-arbiter-sim 59+5, headless smoke green.
+
 ## 1.7.482 — 2026-05-19
 
 ### Co-op viewer rewrite — P5: host emit extensions

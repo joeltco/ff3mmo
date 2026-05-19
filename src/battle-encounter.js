@@ -26,6 +26,8 @@ import { generateAllyStats } from './data/players.js';
 import { ps } from './player-stats.js';
 import { seed as seedRng } from './rng.js';
 import { addChatMessage } from './chat.js';
+import { COOP_VIEWER_MODE, resolveEncounterStart } from './coop-resolver.js';
+import { enterViewerMode } from './coop-viewer.js';
 import { COOP_HOST_ARB, resolveEncounterJoin, getResolverTurnIdx } from './coop-resolver.js';
 
 const TILE_SIZE = 16;
@@ -268,6 +270,74 @@ function _maybeHostCoopEncounter() {
     ? partyPeerNames[0] + ' joined the battle!'
     : partyPeerNames.join(' + ') + ' joined the battle!';
   try { addChatMessage('* ' + label, 'system'); } catch { /* chat optional */ }
+
+  // P6 — viewer-mode handoff. Emit the encounter-start ViewEvent so
+  // every guest's coop-viewer bootstraps battleSt from realized stats
+  // (combatants ship hp/maxHP/atk/def/... directly, not derived via
+  // generateAllyStats). The viewer ignores the legacy invite-spawn
+  // state and writes the canonical state from this packet. Flag-off
+  // path is unchanged.
+  if (COOP_VIEWER_MODE) {
+    _emitHostEncounterStartViewEvent();
+  }
+}
+
+function _emitHostEncounterStartViewEvent() {
+  if (!battleSt.isWireEncounter || !battleSt.encounterIsHost) return;
+  const myUid = getMyUserId() | 0;
+  if (!myUid) return;
+  // Build combatants from host's local state. The host is ps + every
+  // battleAlly. Guests reading the event filter themselves out by
+  // userId; that lookup is in coop-viewer.js#_applyEncounterStartFinalState.
+  const combatants = [];
+  // Host (ps) — pull from ps + ps.stats so realized values match what
+  // host's FSM computed via recalcStats.
+  const psStats = ps.stats || {};
+  combatants.push({
+    userId:    myUid,
+    name:      ps.name || '',
+    hp:        ps.hp | 0,
+    mp:        ps.mp | 0,
+    maxHP:     psStats.maxHP | 0,
+    maxMP:     psStats.maxMP | 0,
+    jobIdx:    ps.jobIdx | 0,
+    level:     ps.level | 0,
+    palIdx:    ps.palIdx | 0,
+    atk:       psStats.atk | 0,
+    def:       psStats.def | 0,
+    agi:       psStats.agi | 0,
+  });
+  // Battle allies — already have realized stats baked in from
+  // _maybeHostCoopEncounter's generateAllyStats call.
+  for (const a of (battleSt.battleAllies || [])) {
+    if (!a || !a.userId) continue;
+    combatants.push({
+      userId:  a.userId | 0,
+      name:    a.name || '',
+      hp:      a.hp | 0,
+      mp:      a.mp | 0,
+      maxHP:   a.maxHP | 0,
+      maxMP:   a.maxMP | 0,
+      jobIdx:  a.jobIdx | 0,
+      level:   a.level | 0,
+      palIdx:  a.palIdx | 0,
+      atk:     a.atk | 0,
+      def:     a.def | 0,
+      agi:     a.agi | 0,
+    });
+  }
+  const monsters = (battleSt.encounterMonsters || []).map(m => ({
+    monsterId:  m.monsterId | 0,
+    hp:         m.hp | 0,
+    maxHP:      m.maxHP | 0,
+    statusMask: (m.status && m.status.mask) | 0,
+  }));
+  resolveEncounterStart({
+    monsters,
+    combatants,
+    hostUserId: myUid,
+    midBattle:  false,
+  });
 }
 
 // Guest side — host's `encounter-start` was forwarded to us. Spawn the
@@ -373,6 +443,15 @@ setNetEncounterInviteHandler((msg) => {
   battleSt.battleState = 'flash-strobe';
   battleSt.battleTimer = 0;
   playSFX(SFX.BATTLE_SWIPE);
+  // P6 — viewer-mode entry. Coop-viewer takes over the guest's battle
+  // tick from here. The legacy battleAllies populated above stays as a
+  // fallback display while we wait for the host's encounter-start
+  // ViewEvent (~50ms cellular RTT); when it arrives the viewer
+  // overwrites battleAllies + encounterMonsters with realized stats.
+  // Flag-off skips the entry — legacy FSM keeps driving the battle.
+  if (COOP_VIEWER_MODE) {
+    enterViewerMode();
+  }
 });
 
 // ── Battle Assist (v1.7.422+) ──────────────────────────────────────────────
