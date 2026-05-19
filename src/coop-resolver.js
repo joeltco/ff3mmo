@@ -58,7 +58,7 @@ export const COOP_HOST_ARB = false;
 //   { HOST_ARB: false, VIEWER: false } → legacy lockstep (current prod)
 //   { HOST_ARB: true,  VIEWER: false } → host-arb only (v1.7.474–76; broken live)
 //   {                  VIEWER: true  } → viewer (target end state)
-export const COOP_VIEWER_MODE = true;
+export const COOP_VIEWER_MODE = false;
 
 // Debug instrumentation flag (P9.2+). When `true`, the viewer + resolver
 // fire structured `[coop-viewer]` logs to /api/client-error at every key
