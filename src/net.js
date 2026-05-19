@@ -47,6 +47,7 @@ let _onEncounterAssistSnapshot = null; // ({seed, turnIndex, monsters, peers, ho
 let _onEncounterAllyJoin = null;       // ({profile}) → void — new ally joined an in-progress encounter; fade them in
 let _onEncounterResolution = null;     // ({turnIdx, actor, action, deltas, fx, meta}) → void — host-arb resolution packet (Phase 1+). Flag-gated on receive; flag-off path ignores.
 let _onEncounterSnapshot = null;       // ({turnIdx, battleState, monsters, combatants, hostUserId}) → void — host-arb snapshot to a joiner (Phase 5+). Replaces encounter-assist-snapshot under host-arb.
+let _onEncounterHostChanged = null;    // ({droppedUserId, newHostUserId}) → void — server picked a new host after the previous host dropped (v1.7.476).
 const MAX_RECONNECT_DELAY = 30000;
 
 function _getToken() {
@@ -274,6 +275,16 @@ function _handleMessage(data) {
       if (_onEncounterSnapshot) {
         try { _onEncounterSnapshot(msg); }
         catch (e) { console.warn('[net] encounter-snapshot handler error', e); }
+      }
+      return;
+    case 'encounter-host-changed':
+      // Server picked a new host after the previous one dropped (v1.7.476).
+      // Carries { droppedUserId, newHostUserId }. Handler in
+      // `src/encounter-wire.js` updates `battleSt.encounterHostUserId` and
+      // flips `encounterIsHost = true` if the new host is us.
+      if (_onEncounterHostChanged) {
+        try { _onEncounterHostChanged(msg); }
+        catch (e) { console.warn('[net] encounter-host-changed handler error', e); }
       }
       return;
   }
@@ -576,6 +587,7 @@ export function sendNetEncounterSnapshot(joinerUserId, snapshot) {
 
 export function setNetEncounterResolutionHandler(fn) { _onEncounterResolution = typeof fn === 'function' ? fn : null; }
 export function setNetEncounterSnapshotHandler(fn)   { _onEncounterSnapshot   = typeof fn === 'function' ? fn : null; }
+export function setNetEncounterHostChangedHandler(fn){ _onEncounterHostChanged = typeof fn === 'function' ? fn : null; }
 
 // Real party invites over the wire. Mirror of `pvp-search` lifecycle:
 // challenger emits `party-invite`; server forwards to target as

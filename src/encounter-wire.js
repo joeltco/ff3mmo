@@ -12,7 +12,8 @@
 
 import { battleSt } from './battle-state.js';
 import { sendNetEncounterAction, sendNetEncounterEnd,
-         setNetEncounterActionHandler, setNetEncounterEndHandler } from './net.js';
+         setNetEncounterActionHandler, setNetEncounterEndHandler,
+         setNetEncounterHostChangedHandler, getMyUserId } from './net.js';
 import { isHealSpell } from './spell-cast.js';
 import { COOP_HOST_ARB, isCoopGuest, resolveEncounterEnd } from './coop-resolver.js';
 
@@ -132,6 +133,34 @@ setNetEncounterEndHandler((msg) => {
   if (msg && msg.outcome) {/* observed for future divergence telemetry */}
   battleSt.battleState = 'encounter-box-close';
   battleSt.battleTimer = 0;
+});
+
+// Host-promotion handoff (v1.7.476). Server picked a new host because the
+// previous one disconnected. Update our local `encounterHostUserId` and, if
+// the new host is us, flip `encounterIsHost = true` so isCoopGuest() stops
+// blocking local applies and our FSM starts emitting resolution packets to
+// remaining peers.
+//
+// The dropped user's ally portrait is removed so the roster matches who's
+// actually still in the fight. Server emits this BEFORE the corresponding
+// `encounter-action kind=disconnect` so the v1.7.475 force-close guard sees
+// the updated encounterHostUserId and stays a no-op.
+setNetEncounterHostChangedHandler((msg) => {
+  if (!msg || !battleSt.isWireEncounter) return;
+  const droppedUid = (msg.droppedUserId | 0);
+  const newHostUid = (msg.newHostUserId | 0);
+  if (!newHostUid) return;
+  battleSt.encounterHostUserId = newHostUid;
+  const myUid = getMyUserId() | 0;
+  if (myUid && myUid === newHostUid) {
+    battleSt.encounterIsHost = true;
+  }
+  // Remove dropped peer's ally entry so the panel reflects who's actually
+  // still here.
+  if (droppedUid) {
+    const idx = battleSt.battleAllies.findIndex(a => a && (a.userId | 0) === droppedUid);
+    if (idx >= 0) battleSt.battleAllies.splice(idx, 1);
+  }
 });
 
 export function dequeueWireEncounterAction(userId) {

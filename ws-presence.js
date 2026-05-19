@@ -83,15 +83,26 @@ const _partyMemberships = new Map();
 // multi-peer. v1.7.418.
 const _encounterGroups = new Map();
 
+// Per-participant host pointer — userId → hostUserId. Set when an encounter
+// group is created or extended (encounter-start, encounter-assist-snapshot).
+// Used by the disconnect handler to detect when the dropped user was the
+// host, so we can pick a new host instead of force-closing surviving
+// guests. v1.7.476 (host-arb host-promotion).
+const _encounterHosts = new Map();
+
 function _clearEncounterGroup(userId) {
   const peers = _encounterGroups.get(userId);
   if (!peers) return;
   _encounterGroups.delete(userId);
+  _encounterHosts.delete(userId);
   for (const peerId of peers) {
     const peerSet = _encounterGroups.get(peerId);
     if (!peerSet) continue;
     peerSet.delete(userId);
-    if (peerSet.size === 0) _encounterGroups.delete(peerId);
+    if (peerSet.size === 0) {
+      _encounterGroups.delete(peerId);
+      _encounterHosts.delete(peerId);
+    }
   }
 }
 
@@ -698,6 +709,7 @@ function _handleMessage(entry, msg) {
         const peerSet = new Set(all);
         peerSet.delete(uid);
         _encounterGroups.set(uid, peerSet);
+        _encounterHosts.set(uid, entry.userId);
       }
       const hostProfile = { userId: entry.userId, ...entry.profile, loc: entry.loc };
       for (const memberId of accepted) {
@@ -780,6 +792,9 @@ function _handleMessage(entry, msg) {
         group = new Set([joinerUserId]);
         _encounterGroups.set(entry.userId, group);
         _encounterGroups.set(joinerUserId, new Set([entry.userId]));
+        // Solo target becomes host of the new 2-player group.
+        _encounterHosts.set(entry.userId, entry.userId);
+        _encounterHosts.set(joinerUserId, entry.userId);
       } else {
         // Extend existing group with joiner. Update every peer's set.
         const allPeers = new Set([entry.userId, ...group, joinerUserId]);
@@ -788,6 +803,9 @@ function _handleMessage(entry, msg) {
           peerSet.delete(uid);
           _encounterGroups.set(uid, peerSet);
         }
+        // Joiner inherits the existing host pointer; target keeps theirs.
+        const existingHost = _encounterHosts.get(entry.userId) || entry.userId;
+        _encounterHosts.set(joinerUserId, existingHost);
       }
       console.log('[encounter-assist-snapshot] host=' + entry.userId + ' joiner=' + joinerUserId + ' group=' + Array.from(_encounterGroups.get(entry.userId)).join(','));
       // Forward the full snapshot to the joiner so they spawn the same
@@ -1178,15 +1196,51 @@ export function attachWebSocketPresence(httpServer) {
             _send(partner.ws, { type: 'pvp-action', kind: 'disconnect' });
           }
         }
-        // Notify co-op encounter peers we dropped. They take over the
-        // dropped player's actions locally (skip-as-defend / AI fallback)
-        // and clear their own group on receipt.
+        // Notify co-op encounter peers we dropped. Under host-arb
+        // (v1.7.474+), if the dropped user was the encounter host, also
+        // broadcast `encounter-host-changed` so a surviving peer takes over
+        // resolution duties instead of every guest freezing waiting for
+        // packets that will never come (v1.7.476). Otherwise (dropped user
+        // was a guest), just send the legacy disconnect notification — host
+        // falls back to local AI for their ally turn.
         const epeers = _encounterGroups.get(userId);
         if (epeers) {
+          const wasHost = _encounterHosts.get(userId) === userId;
+          let newHostUserId = 0;
+          if (wasHost && epeers.size > 0) {
+            // Pick the first surviving peer as the new host. Stable order
+            // not guaranteed across reconnects but adequate for a single
+            // promotion event. Future: prefer the longest-connected peer
+            // or the one with lowest userId for determinism across drops.
+            newHostUserId = [...epeers][0] | 0;
+          }
           for (const peerId of epeers) {
             const peer = _connected.get(peerId);
-            if (peer && peer.helloed) {
-              _send(peer.ws, { type: 'encounter-action', userId, kind: 'disconnect' });
+            if (!peer || !peer.helloed) continue;
+            // Order matters: host-changed BEFORE the disconnect notification
+            // so the client's encounterHostUserId has already been updated
+            // to the new host by the time the disconnect handler runs its
+            // force-close guard (which checks `droppedUid === current host`).
+            if (newHostUserId) {
+              _send(peer.ws, {
+                type:           'encounter-host-changed',
+                droppedUserId:  userId,
+                newHostUserId,
+              });
+            }
+            _send(peer.ws, { type: 'encounter-action', userId, kind: 'disconnect' });
+          }
+          // Re-key host pointer on the surviving peers BEFORE clearing the
+          // dropped user's group entry. After this loop runs, the dropped
+          // user's hostPtr is gone via _clearEncounterGroup; surviving peers
+          // point at newHostUserId (or remain pointing at the old host if no
+          // promotion fired, which won't matter since _clearEncounterGroup
+          // is about to remove the dropped user from each peer's set).
+          if (newHostUserId) {
+            for (const peerId of epeers) {
+              if (_encounterHosts.has(peerId)) {
+                _encounterHosts.set(peerId, newHostUserId);
+              }
             }
           }
           _clearEncounterGroup(userId);

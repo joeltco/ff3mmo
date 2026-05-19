@@ -318,6 +318,70 @@ async function suite() {
     await new Promise(r => setTimeout(r, 40));
   });
 
+  // ── host disconnect — server promotes a surviving peer (v1.7.476) ──────
+  await asyncTest('host disconnect broadcasts encounter-host-changed to surviving peer', async () => {
+    _testHooks.resetState();
+    const A = await connectClient(port, 2070, baseProfile('A8', 5, 7, 12));
+    const B = await connectClient(port, 2071, baseProfile('B8', 4, 6, 10));
+    const incB = once(B, m => m.type === 'party-invite-incoming');
+    A.send(JSON.stringify({ type: 'party-invite', targetUserId: 2071 }));
+    await incB;
+    B.send(JSON.stringify({ type: 'party-invite-response', accept: true }));
+    await new Promise(r => setTimeout(r, 30));
+    const bInvite = once(B, m => m.type === 'encounter-invite');
+    A.send(JSON.stringify({
+      type: 'encounter-start', seed: 0xBEEFCAFE,
+      monsters: [{ monsterId: 0x00 }], partyUserIds: [2071],
+    }));
+    await bInvite;
+    // Host (A) drops. B should receive host-changed naming themselves as
+    // the new host (only surviving peer) BEFORE the disconnect notification.
+    const bGotHostChanged = once(B, m => m.type === 'encounter-host-changed');
+    const bGotDisconnect  = once(B, m => m.type === 'encounter-action' && m.kind === 'disconnect');
+    A.close();
+    const hc = await bGotHostChanged;
+    const dc = await bGotDisconnect;
+    assertEqual(hc.droppedUserId, 2070, 'droppedUserId not stamped');
+    assertEqual(hc.newHostUserId, 2071, 'newHostUserId should be the only surviving peer');
+    assertEqual(dc.userId, 2070, 'disconnect notify carries dropped uid');
+    B.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  // ── guest disconnect — host gets the legacy notification, no host-changed ──
+  await asyncTest('guest disconnect does NOT trigger encounter-host-changed', async () => {
+    _testHooks.resetState();
+    const A = await connectClient(port, 2080, baseProfile('A9', 5, 7, 12));
+    const B = await connectClient(port, 2081, baseProfile('B9', 4, 6, 10));
+    const incB = once(B, m => m.type === 'party-invite-incoming');
+    A.send(JSON.stringify({ type: 'party-invite', targetUserId: 2081 }));
+    await incB;
+    B.send(JSON.stringify({ type: 'party-invite-response', accept: true }));
+    await new Promise(r => setTimeout(r, 30));
+    const bInvite = once(B, m => m.type === 'encounter-invite');
+    A.send(JSON.stringify({
+      type: 'encounter-start', seed: 0xCAFEFEED,
+      monsters: [{ monsterId: 0x00 }], partyUserIds: [2081],
+    }));
+    await bInvite;
+    // Guest (B) drops. A receives disconnect notify; should NOT receive
+    // encounter-host-changed.
+    let aGotHostChanged = false;
+    A.on('message', (raw) => {
+      const m = JSON.parse(raw.toString());
+      if (m.type === 'encounter-host-changed') aGotHostChanged = true;
+    });
+    const aGotDisconnect = once(A, m => m.type === 'encounter-action' && m.kind === 'disconnect');
+    B.close();
+    const dc = await aGotDisconnect;
+    assertEqual(dc.userId, 2081, 'disconnect notify carries guest uid');
+    // Brief settle to give any (unwanted) host-changed time to arrive.
+    await new Promise(r => setTimeout(r, 50));
+    if (aGotHostChanged) throw new Error('encounter-host-changed should NOT fire when guest drops');
+    A.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
   // Done — close server.
   await new Promise(r => httpServer.close(r));
 }
