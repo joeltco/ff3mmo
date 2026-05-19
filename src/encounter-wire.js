@@ -15,7 +15,9 @@ import { sendNetEncounterAction, sendNetEncounterEnd,
          setNetEncounterActionHandler, setNetEncounterEndHandler,
          setNetEncounterHostChangedHandler, getMyUserId } from './net.js';
 import { isHealSpell } from './spell-cast.js';
-import { COOP_HOST_ARB, isCoopGuest, resolveEncounterEnd } from './coop-resolver.js';
+import { COOP_HOST_ARB, COOP_VIEWER_MODE, isCoopGuest,
+         resolveEncounterEnd, setResolverTurnIdx } from './coop-resolver.js';
+import { coopViewSt, leaveViewerForPromotion } from './coop-viewer.js';
 
 // Side-effect import — wires `encounter-resolution` + `encounter-snapshot`
 // handlers at module load. Flag-gated internally by `COOP_HOST_ARB`, so
@@ -152,8 +154,21 @@ setNetEncounterHostChangedHandler((msg) => {
   if (!newHostUid) return;
   battleSt.encounterHostUserId = newHostUid;
   const myUid = getMyUserId() | 0;
-  if (myUid && myUid === newHostUid) {
+  const promotingMe = !!(myUid && myUid === newHostUid);
+  if (promotingMe) {
     battleSt.encounterIsHost = true;
+    // P7 — viewer-mode promotion handoff. If I was running the viewer
+    // (flag-on + active), tear it down and initialize the resolver's
+    // turnIdx so my first emitted packet (turnIdx + 1) lands
+    // monotonically for remaining guests who've already applied up to
+    // `lastAppliedTurnIdx`. Slam battleState to `menu-open` so the
+    // FSM picks up at a clean turn boundary.
+    if (COOP_VIEWER_MODE && coopViewSt.active) {
+      const lastIdx = leaveViewerForPromotion();
+      setResolverTurnIdx(lastIdx);
+      battleSt.battleState = 'menu-open';
+      battleSt.battleTimer = 0;
+    }
   }
   // Remove dropped peer's ally entry so the panel reflects who's actually
   // still here.

@@ -68,6 +68,11 @@ let _turnIdx = 0;
 
 export function getResolverTurnIdx() { return _turnIdx; }
 export function resetResolverTurnIdx() { _turnIdx = 0; }
+// P7 — set the resolver's monotonic counter on host promotion. The new
+// host initializes to the viewer's `lastAppliedTurnIdx` so the next
+// emitted packet (turnIdx + 1) lands monotonically for remaining guests
+// who've already applied up to that count.
+export function setResolverTurnIdx(n) { _turnIdx = n | 0; }
 
 // Phase 2 entry. Resolve a physical attack action and ship the resolution.
 // Host's local FSM has already rolled `hits` (via `rollHits()`); this fn

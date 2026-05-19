@@ -18,6 +18,25 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.484 — 2026-05-19
+
+### Co-op viewer rewrite — P7: host promotion handoff
+
+When the host disconnects and the server promotes a surviving peer (v1.7.476 flow), the new host's `setNetEncounterHostChangedHandler` now also:
+
+1. Checks `COOP_VIEWER_MODE && coopViewSt.active` — was I running the viewer?
+2. If so, calls `leaveViewerForPromotion()` which returns the viewer's `lastAppliedTurnIdx` and tears down `coopViewSt`.
+3. Calls `setResolverTurnIdx(lastIdx)` so my next emitted packet (`turnIdx + 1`) lands monotonically for remaining guests.
+4. Slams `battleState = 'menu-open'` so the FSM picks up at a clean turn boundary.
+
+The new host's legacy `updateBattle` FSM resumes ticking. From this point I'm running the same code path as a regular host — battleAllies + encounterMonsters were already mutated by the viewer to reflect host's last-known state, so my FSM has the data it needs.
+
+Edge case: if a different guest is promoted (not me), the v1.7.476 handler still updates `encounterHostUserId` for routing. My viewer stays active; future resolution packets route to it as before.
+
+`setResolverTurnIdx` is new export in `src/coop-resolver.js`.
+
+Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 9/9, coop-arbiter-sim 59+5.
+
 ## 1.7.483 — 2026-05-19
 
 ### Co-op viewer rewrite — P6: encounter lifecycle
