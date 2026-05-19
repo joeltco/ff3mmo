@@ -14,7 +14,7 @@ import { battleSt } from './battle-state.js';
 import { sendNetEncounterAction, sendNetEncounterEnd,
          setNetEncounterActionHandler, setNetEncounterEndHandler } from './net.js';
 import { isHealSpell } from './spell-cast.js';
-import { COOP_HOST_ARB, resolveEncounterEnd } from './coop-resolver.js';
+import { COOP_HOST_ARB, isCoopGuest, resolveEncounterEnd } from './coop-resolver.js';
 
 // Side-effect import — wires `encounter-resolution` + `encounter-snapshot`
 // handlers at module load. Flag-gated internally by `COOP_HOST_ARB`, so
@@ -31,12 +31,42 @@ const _wireEncounterActions = [];
 setNetEncounterActionHandler((msg) => {
   if (!msg) return;
   if (msg.kind === 'disconnect') {
-    // Peer dropped — clear wire-driven flag on their ally entry so the
-    // ally-turn handler falls back to local AI (defend). Battle proceeds
-    // single-player-style for the rest of the round.
     if (msg.userId) {
+      const droppedUid = msg.userId | 0;
+      // Legacy fallback: clear isWireDriven on the dropped peer's ally entry
+      // so the ally-turn handler falls back to local AI (defend). Battle
+      // proceeds single-player-style for the rest of the round.
       for (const a of battleSt.battleAllies) {
-        if (a && a.userId === (msg.userId | 0)) { a.isWireDriven = false; }
+        if (a && a.userId === droppedUid) { a.isWireDriven = false; }
+      }
+      // v1.7.475 — host-arb host-disconnect rescue. Under flag-on (host-arb
+      // model), guests have every local HP/status apply short-circuited by
+      // isCoopGuest() and rely on host's resolution packets. If the host
+      // drops, those packets stop and the guest would freeze in-battle
+      // forever. Force-close so the guest can escape. v2 work: host
+      // promotion / state handoff. Today: clean exit, lost progress.
+      if (isCoopGuest() && droppedUid === (battleSt.encounterHostUserId | 0)) {
+        const bs = battleSt.battleState;
+        const wrappingUp = (
+          bs === 'none' ||
+          bs === 'encounter-box-close' ||
+          bs === 'enemy-box-close' ||
+          bs === 'victory-name-out' ||
+          bs === 'victory-celebrate' ||
+          bs.startsWith('exp-') ||
+          bs.startsWith('gil-') ||
+          bs.startsWith('cp-') ||
+          bs.startsWith('item-text') || bs.startsWith('item-hold') || bs.startsWith('item-fade') ||
+          bs.startsWith('levelup-') ||
+          bs.startsWith('joblv-') ||
+          bs === 'victory-text-out' ||
+          bs === 'victory-menu-fade' ||
+          bs === 'victory-box-close'
+        );
+        if (!wrappingUp) {
+          battleSt.battleState = 'encounter-box-close';
+          battleSt.battleTimer = 0;
+        }
       }
     }
     return;
