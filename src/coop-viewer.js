@@ -481,4 +481,19 @@ export const _testHooks = {
     const handler = VIEW_ANIM_REGISTRY[kind];
     return handler ? handler(event, animState, dt) : null;
   },
+  // Bypass the COOP_VIEWER_MODE flag for tests. Forces `active=true` and
+  // pushes the packet directly into the queue. Used by
+  // `tools/coop-viewer-sim.js` to exercise queue + dispatch without
+  // requiring a flag-on build.
+  forceActive: () => { coopViewSt.active = true; },
+  forceInactive: () => { coopViewSt.active = false; coopViewSt.cueQueue.length = 0; coopViewSt.currentAnim = null; },
+  injectEvent: (viewEvent, turnIdx) => {
+    const tidx = turnIdx | 0;
+    if (tidx <= coopViewSt.lastAppliedTurnIdx) return;
+    if (coopViewSt.cueQueue.length >= 32) coopViewSt.cueQueue.shift();
+    const ev = { ...viewEvent, turnIdx: tidx };
+    let i = coopViewSt.cueQueue.length - 1;
+    while (i >= 0 && (coopViewSt.cueQueue[i].turnIdx | 0) > tidx) i--;
+    coopViewSt.cueQueue.splice(i + 1, 0, ev);
+  },
 };

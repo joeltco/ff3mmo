@@ -18,6 +18,28 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.485 — 2026-05-19
+
+### Co-op viewer rewrite — P8: coverage harness
+
+`tools/coop-viewer-sim.js` (~600 LOC). 21 tests covering:
+
+- **Queue management** (5): injectEvent ordering, dup drop, 32-entry cap, no-op without flag, enterViewerMode flag gate
+- **Direct anim invocation** (5): attack done-at-animMs, swDmgNum on first frame, multi-target magic, monster-death dyingMonsterIndices cycle, poison-tick batch damage-nums
+- **Dispatch loop** (3): one event per anim cycle, multi-event chaining, unknown eventKind warn + finalState passthrough
+- **Encounter lifecycle** (2): encounter-start bootstraps battleSt, encounter-end exits viewer + transitions FSM
+- **Host promotion** (1): leaveViewerForPromotion returns lastIdx + tears down
+- **Wire envelope** (2): wrapViewEventForWire shape + meta.encounterEnd flip
+- **finalState writer** (3): battleAllies hp + statusMask writes, monster hp writes, unresolvable ref no-op
+
+**Browser shim approach** — the viewer pulls in browser-coupled imports through battle-state.js. The harness installs minimal globalThis stubs (window/document/Image/Audio/AudioContext/Worker/localStorage/fetch/WebSocket) before the import, avoiding a jsdom dependency. ~80 LOC of shim.
+
+**Test hooks added** to `src/coop-viewer.js`: `_testHooks.forceActive()`, `forceInactive()`, `injectEvent(viewEvent, turnIdx)` — bypass the build-time `COOP_VIEWER_MODE` flag for tests so the queue + dispatch can be exercised in flag-off builds.
+
+`deploy.sh` now runs the viewer sim as a pre-flight gate.
+
+Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 9/9, coop-viewer-sim 21/21, coop-arbiter-sim 59+5.
+
 ## 1.7.484 — 2026-05-19
 
 ### Co-op viewer rewrite — P7: host promotion handoff
