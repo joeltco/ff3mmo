@@ -18,6 +18,22 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.488 — 2026-05-19
+
+### Co-op viewer rewrite — P9.1: fix flash-strobe freeze, flag back on
+
+Two bugs found from v1.7.486 two-phone live smoke. Both fixed, flag flipped back on.
+
+**Bug 1 — server dropping `viewEvent` on encounter-resolution relay.** `ws-presence.js:898-909` was explicitly listing fields to copy (turnIdx, actor, action, deltas, fx, meta) and silently omitting the new `viewEvent` payload. Guests under viewer mode saw `msg.viewEvent === undefined`, the coop-applier route condition failed, packet fell through to the legacy host-arb path which is gated on `COOP_HOST_ARB=false` → no-op. **Viewer queue stayed empty forever.** Fix: pass `viewEvent` through in the relay.
+
+**Bug 2 — viewer parks battleState at 'flash-strobe' indefinitely.** `_animEncounterStart` set `battleSt.battleState = 'flash-strobe'` to drive the legacy spawn visual, but the legacy `updateBattle` FSM (which auto-advances flash-strobe → monster-name-in → menu-open) isn't running on guests. After the anim's `animMs` (1200) elapsed, battleState was still 'flash-strobe' and `battleTimer` was frozen at 0 (the viewer never advanced it). Renderer kept drawing the strobe at frame 0 forever. Fix: viewer advances `battleTimer` during the flash AND parks `battleState = 'menu-open'` after anim completes — the legacy "battle HUD shown, awaiting action" state that the renderer treats as stable.
+
+Live test plan unchanged: refresh both phones, walk into encounter, verify both see roster + HUD + monsters.
+
+If still broken, hot-revert is one line: `COOP_VIEWER_MODE = false` in `src/coop-resolver.js` + deploy.
+
+Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 9/9, coop-viewer-sim 22/22 (added "encounter-start parks battleState=menu-open after anim" regression test), coop-arbiter-sim 59+5.
+
 ## 1.7.487 — 2026-05-19
 
 ### Hot-revert: `COOP_VIEWER_MODE = false`

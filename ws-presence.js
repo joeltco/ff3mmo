@@ -899,14 +899,20 @@ function _handleMessage(entry, msg) {
         const peer = _connected.get(peerId);
         if (!peer || peer.ws.readyState !== 1) continue;
         _send(peer.ws, {
-          type:    'encounter-resolution',
-          userId:  entry.userId,
-          turnIdx: parsed.turnIdx,
-          actor:   parsed.actor,
-          action:  parsed.action,
-          deltas:  parsed.deltas,
-          fx:      parsed.fx,
-          meta:    parsed.meta,
+          type:      'encounter-resolution',
+          userId:    entry.userId,
+          turnIdx:   parsed.turnIdx,
+          actor:     parsed.actor,
+          action:    parsed.action,
+          deltas:    parsed.deltas,
+          fx:        parsed.fx,
+          meta:      parsed.meta,
+          // P9.1 — pass through the ViewEvent payload for viewer-mode
+          // clients (docs/COOP-VIEWER-PLAN.md). Was dropped silently in
+          // the original encounter-resolution relay; guests under
+          // COOP_VIEWER_MODE saw msg.viewEvent=undefined and never
+          // ingested. Caused the v1.7.486 flash-strobe freeze.
+          viewEvent: parsed.viewEvent,
         });
       }
       return;

@@ -460,6 +460,32 @@ test('encounter-start event bootstraps battleSt', () => {
   _testHooks.forceInactive();
 });
 
+test('encounter-start parks battleState=menu-open after anim (P9.1)', () => {
+  resetState();
+  _testHooks.forceActive();
+  coopViewSt.lastAppliedTurnIdx = 0;
+  battleSt.encounterMonsters = null;
+  battleSt.battleAllies = [];
+
+  _testHooks.injectEvent(buildEncounterStartViewEvent({
+    monsters: [{ monsterId: 1, hp: 50, maxHP: 50, statusMask: 0 }],
+    combatants: [{ userId: 100, name: 'Host', hp: 80, maxHP: 100, jobIdx: 0, level: 5, palIdx: 0, atk: 20, def: 10, agi: 8 }],
+    hostUserId: 100,
+    midBattle: false,
+    finalState: { actors: [], monsters: [] },
+  }), 1);
+  updateCoopView(16);
+  assertEqual(battleSt.battleState, 'flash-strobe', 'during anim → flash-strobe');
+  const earlyTimer = battleSt.battleTimer;
+  updateCoopView(500);
+  assertTrue(battleSt.battleTimer > earlyTimer, 'battleTimer advances during flash');
+  // Drive past animMs (1200)
+  updateCoopView(800);
+  assertEqual(battleSt.battleState, 'menu-open', 'parks at menu-open after anim — was the v1.7.486 freeze bug');
+  assertEqual(battleSt.battleTimer, 0, 'battleTimer reset on park');
+  _testHooks.forceInactive();
+});
+
 test('encounter-end event exits viewer mode', () => {
   resetState();
   _testHooks.forceActive();

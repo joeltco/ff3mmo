@@ -225,8 +225,24 @@ function _animEncounterStart(event, animState, dt) {
     battleSt.battleState = event.midBattle ? 'menu-open' : 'flash-strobe';
     battleSt.battleTimer = 0;
     playSFX(SFX.BATTLE_SWIPE);
+  } else if (battleSt.battleState === 'flash-strobe') {
+    // P9.1 — viewer must drive battleTimer manually since updateBattle
+    // (which normally does this) isn't running on guests. The renderer
+    // reads battleTimer to compute the strobe alpha; without this the
+    // flash visual freezes at frame 0.
+    battleSt.battleTimer += dt;
   }
-  return { done: tickElapsed(animState, dt, event.animMs) };
+  const done = tickElapsed(animState, dt, event.animMs);
+  if (done) {
+    // P9.1 — park at HUD-displaying state for the idle gap before the
+    // host's first turn lands. menu-open is the legacy "battle HUD
+    // shown, awaiting action" state; renderer treats it as a stable
+    // resting state. Without this, the guest stays at flash-strobe
+    // forever (v1.7.486 freeze bug).
+    battleSt.battleState = 'menu-open';
+    battleSt.battleTimer = 0;
+  }
+  return { done };
 }
 
 function _animEncounterEnd(event, animState, dt) {
