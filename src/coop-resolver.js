@@ -21,10 +21,17 @@
 // is active.
 
 import { battleSt } from './battle-state.js';
-import { sendNetEncounterResolution, sendNetEncounterSnapshot } from './net.js';
+import { ps } from './player-stats.js';
+import { sendNetEncounterResolution, sendNetEncounterSnapshot, getMyUserId } from './net.js';
 import { buildPhysicalAttackPacket, buildMonsterAttackPacket,
          buildMagicPacket, buildItemUsePacket, buildPoisonTickPacket,
-         buildEncounterEndPacket, buildEncounterSnapshot } from './coop-deltas.js';
+         buildEncounterEndPacket, buildEncounterSnapshot,
+         // P5 — ViewEvent builders (docs/COOP-VIEWER-PLAN.md).
+         buildAttackViewEvent, buildMagicViewEvent, buildItemViewEvent,
+         buildMonsterAttackViewEvent, buildPoisonTickViewEvent,
+         buildMonsterDeathViewEvent, buildPlayerDeathViewEvent,
+         buildEncounterStartViewEvent, buildEncounterEndViewEvent,
+         buildTurnBeginViewEvent } from './coop-deltas.js';
 
 // Host-authoritative co-op rewrite (Phase 1+). Build-time const that
 // gates every host-arb code path. Default `false` keeps the legacy
@@ -78,7 +85,19 @@ export function resetResolverTurnIdx() { _turnIdx = 0; }
 // emit happened (flag off / unhelloed / etc.).
 export function resolvePhysicalAttack(input) {
   const packet = buildPhysicalAttackPacket(input);
-  return _emitResolution(packet);
+  const finalState = _buildAutoFinalState(_refsFromPacket(packet));
+  const targetLocal = _resolveLocalActor(input.target);
+  const killsTarget = !!(targetLocal && targetLocal.hp <= 0);
+  const viewEvent = buildAttackViewEvent({
+    actor:       input.actor,
+    target:      input.target,
+    hits:        input.hits,
+    weaponId:    input.weaponId,
+    hand:        input.hand,
+    killsTarget,
+    finalState,
+  });
+  return _emitWithViewEvent(packet, viewEvent);
 }
 
 // Phase 2 entry. Resolve a monster's turn against a player/ally target.
@@ -95,7 +114,19 @@ export function resolvePhysicalAttack(input) {
 //     statusAdd: <int> }   // statusAdd: STATUS bitmask, default 0
 export function resolveMonsterAttack(input) {
   const packet = buildMonsterAttackPacket(input);
-  return _emitResolution(packet);
+  const finalState = _buildAutoFinalState([input.target]);
+  const targetLocal = _resolveLocalActor(input.target);
+  const killsTarget = !!(targetLocal && targetLocal.hp <= 0);
+  const viewEvent = buildMonsterAttackViewEvent({
+    monsterIdx:   input.monsterIdx,
+    target:       input.target,
+    dmg:          input.dmg,
+    miss:         input.miss,
+    statusAdded:  input.statusAdd | 0,
+    killsTarget,
+    finalState,
+  });
+  return _emitWithViewEvent(packet, viewEvent);
 }
 
 // Legacy name kept for the original Phase 1 stub signature — alias to
@@ -128,7 +159,27 @@ export function resolveMonsterTurn(input) { return resolveMonsterAttack(input); 
 // the wire send fails (unhelloed / disconnect).
 export function resolveSpellCast(input) {
   const packet = buildMagicPacket(input);
-  return _emitResolution(packet);
+  // ViewEvent targets — derive from host-arb's per-target results.
+  const vTargets = Array.isArray(input.results) ? input.results.map(r => ({
+    ref:           r.target,
+    result:        r.miss ? 'miss' : (r.absorbed ? 'absorbed' : 'hit'),
+    dmg:           r.dmg  | 0,
+    heal:          r.heal | 0,
+    statusAdded:   r.statusAdd    | 0,
+    statusRemoved: r.statusRemove | 0,
+    revives:       !!r.revive,
+    kills:         !!r.death,
+  })) : [];
+  const refs = [input.actor, ...vTargets.map(t => t.ref)].filter(Boolean);
+  const finalState = _buildAutoFinalState(refs);
+  const viewEvent = buildMagicViewEvent({
+    actor:      input.actor,
+    spellId:    input.spellId,
+    targets:    vTargets,
+    isItemUse:  !!input.isItemUse,
+    finalState,
+  });
+  return _emitWithViewEvent(packet, viewEvent);
 }
 
 // Phase 4 entry. Resolve a battle-item use (Potion / Antidote / Elixir /
@@ -144,7 +195,21 @@ export function resolveSpellCast(input) {
 // and call this once per item use.
 export function resolveItemUse(input) {
   const packet = buildItemUsePacket(input);
-  return _emitResolution(packet);
+  // Items typically single-target — pick the first result's target.
+  const firstResult = (Array.isArray(input.results) && input.results[0]) || {};
+  const refs = [input.actor, firstResult.target].filter(Boolean);
+  const finalState = _buildAutoFinalState(refs);
+  const viewEvent = buildItemViewEvent({
+    actor:          input.actor,
+    itemId:         input.itemId,
+    target:         firstResult.target,
+    dmg:            firstResult.dmg  | 0,
+    heal:           firstResult.heal | 0,
+    revives:        !!firstResult.revive,
+    statusRemoved:  firstResult.statusRemove | 0,
+    finalState,
+  });
+  return _emitWithViewEvent(packet, viewEvent);
 }
 
 // Phase 4 entry. End-of-round poison tick — batches every poisoned actor
@@ -161,7 +226,15 @@ export function resolveItemUse(input) {
 //   { results: [{ target, dmg, death }, ...] }
 export function resolvePoisonTick(input) {
   const packet = buildPoisonTickPacket(input);
-  return _emitResolution(packet);
+  const ticks = (Array.isArray(input.results) ? input.results : []).map(r => ({
+    ref:   r.target,
+    dmg:   r.dmg | 0,
+    kills: !!r.death,
+  }));
+  const refs = ticks.map(t => t.ref).filter(Boolean);
+  const finalState = _buildAutoFinalState(refs);
+  const viewEvent = buildPoisonTickViewEvent({ ticks, finalState });
+  return _emitWithViewEvent(packet, viewEvent);
 }
 
 // Phase 4 entry. Host detected end-of-battle — emit the encounter-end
@@ -178,12 +251,112 @@ export function resolvePoisonTick(input) {
 // Phase 7.
 export function resolveEncounterEnd(input) {
   const packet = buildEncounterEndPacket(input);
-  return _emitResolution(packet);
+  // ViewEvent — carries rewards baked in so guest's victory screen
+  // doesn't need to read battleSt.encounterExpGained.
+  const viewEvent = buildEncounterEndViewEvent({
+    outcome: input && input.outcome,
+    rewards: (input && input.rewards) || null,
+    // No actor refs to populate finalState — encounter-end is the
+    // final state by definition. Viewer transitions to box-close.
+    finalState: { actors: [], monsters: [] },
+  });
+  return _emitWithViewEvent(packet, viewEvent);
 }
 
 // Re-export the pure builder so callers can inspect a snapshot's shape
 // without sending it. Live host emit goes through `resolveEncounterJoin`.
 export { buildEncounterSnapshot };
+
+// ── P5 — new resolver entries for viewer-mode events ──────────────────
+//
+// These ship ViewEvents that don't have an existing host-arb-deltas
+// equivalent. Each emits a minimal legacy packet (action: kind) for
+// backwards-compat + the ViewEvent for viewers.
+
+// `input`: { monsterIdx }
+export function resolveMonsterDeath(input) {
+  const idx = (input && input.monsterIdx | 0) | 0;
+  const mon = battleSt.encounterMonsters && battleSt.encounterMonsters[idx];
+  const packet = {
+    actor:  { kind: 'system' },
+    action: { kind: 'monster-death', monsterIdx: idx },
+    deltas: [],
+    fx:     [{ kind: 'death', target: { kind: 'monster', idx } }],
+    meta:   { encounterEnd: false },
+  };
+  const finalState = mon ? {
+    actors: [],
+    monsters: [{ idx, hp: 0, statusMask: (mon.status && mon.status.mask) | 0, alive: false }],
+  } : { actors: [], monsters: [] };
+  const viewEvent = buildMonsterDeathViewEvent({ monsterIdx: idx, finalState });
+  return _emitWithViewEvent(packet, viewEvent);
+}
+
+// `input`: { target: ActorRef }
+export function resolvePlayerDeath(input) {
+  const target = input && input.target;
+  if (!target) return null;
+  const packet = {
+    actor:  { kind: 'system' },
+    action: { kind: 'player-death', target },
+    deltas: [],
+    fx:     [{ kind: 'death', target }],
+    meta:   { encounterEnd: false },
+  };
+  const finalState = _buildAutoFinalState([target]);
+  const viewEvent = buildPlayerDeathViewEvent({ target, finalState });
+  return _emitWithViewEvent(packet, viewEvent);
+}
+
+// `input`: { actor: ActorRef, promptUserId?: number }
+// `promptUserId` — if set AND a recipient's userId matches, that
+// recipient's viewer surfaces the menu. For v1 we ship the flag
+// universally (the per-recipient gate lives in the viewer's
+// `_animTurnBegin` reading event.prompt and comparing to its myUid).
+//
+// Production wiring (P6+): host's `battle-turn.js#processNextTurn`
+// calls this right before dispatching each turn so guests know who's
+// active.
+export function resolveTurnBegin(input) {
+  const actor = (input && input.actor) || { kind: 'system' };
+  const packet = {
+    actor,
+    action: { kind: 'turn-begin' },
+    deltas: [],
+    fx:     [],
+    meta:   { encounterEnd: false },
+  };
+  const viewEvent = buildTurnBeginViewEvent({
+    actor,
+    prompt:     !!(input && input.prompt),
+    finalState: { actors: [], monsters: [] },
+  });
+  return _emitWithViewEvent(packet, viewEvent);
+}
+
+// `input`: { monsters, combatants, hostUserId, midBattle? }
+// Host emits at encounter spawn (flash-strobe entry) — replaces the
+// guest's local `setNetEncounterInviteHandler` build-state path under
+// viewer mode. Carries realized stats so guest never runs
+// generateAllyStats.
+export function resolveEncounterStart(input) {
+  if (!input) return null;
+  const packet = {
+    actor:  { kind: 'system' },
+    action: { kind: 'encounter-start' },
+    deltas: [],
+    fx:     [],
+    meta:   { encounterEnd: false },
+  };
+  const viewEvent = buildEncounterStartViewEvent({
+    monsters:   input.monsters,
+    combatants: input.combatants,
+    hostUserId: input.hostUserId | 0,
+    midBattle:  !!input.midBattle,
+    finalState: { actors: [], monsters: [] },
+  });
+  return _emitWithViewEvent(packet, viewEvent);
+}
 
 // Phase 6.7 — single source of truth for the guest-side short-circuit
 // gate. Returns true when this client is a guest in an active host-arb
@@ -252,6 +425,93 @@ export function _emitResolution(packet) {
 // against the resolution stream).
 export function _emitSnapshot(joinerUserId, snapshot) {
   return sendNetEncounterSnapshot(joinerUserId, { turnIdx: _turnIdx, ...snapshot });
+}
+
+// ── P5 — ViewEvent finalState helpers ──────────────────────────────────
+//
+// Each ViewEvent carries `finalState` so the guest's viewer reconciles
+// to authoritative HP/status after the anim. We build it by reading
+// host-side state RIGHT NOW (post-apply); whoever called the resolver
+// has already mutated battleSt + ps + encounterMonsters locally.
+
+// Resolve an ActorRef to the host's local state pointer. Mirrors what
+// `coop-applier.js#resolveActorRef` does on the guest side — kept
+// aligned so both walks of the ref produce the same actor.
+export function _resolveLocalActor(ref) {
+  if (!ref) return null;
+  if (ref.kind === 'monster') {
+    const idx = ref.idx | 0;
+    return (battleSt.encounterMonsters && battleSt.encounterMonsters[idx]) || null;
+  }
+  if (ref.kind === 'player') {
+    const uid = ref.userId | 0;
+    if (!uid) return null;
+    if (uid === (getMyUserId() | 0)) return ps;
+    if (!battleSt.battleAllies) return null;
+    return battleSt.battleAllies.find(a => a && (a.userId | 0) === uid) || null;
+  }
+  return null;
+}
+
+// Build the ViewEvent finalState block from a list of refs. Reads each
+// actor's current hp/mp/status/alive directly from host state. Refs
+// that don't resolve are dropped (peer dropped mid-packet).
+//
+// Output shape matches `coop-deltas.js#buildFinalState`:
+//   { actors: [{ ref, hp, mp, statusMask, alive }, ...],
+//     monsters: [{ idx, hp, statusMask, alive }, ...] }
+export function _buildAutoFinalState(refs) {
+  const actors = [];
+  const monsters = [];
+  if (!Array.isArray(refs)) return { actors, monsters };
+  const seen = new Set();
+  for (const ref of refs) {
+    if (!ref) continue;
+    const key = ref.kind + ':' + (ref.kind === 'monster' ? (ref.idx | 0) : (ref.userId | 0));
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const actor = _resolveLocalActor(ref);
+    if (!actor) continue;
+    if (ref.kind === 'monster') {
+      monsters.push({
+        idx:        ref.idx | 0,
+        hp:         actor.hp | 0,
+        statusMask: (actor.status && actor.status.mask) | 0,
+        alive:      (actor.hp | 0) > 0,
+      });
+    } else {
+      actors.push({
+        ref,
+        hp:         actor.hp | 0,
+        mp:         actor.mp | 0,
+        statusMask: (actor.status && actor.status.mask) | 0,
+        alive:      (actor.hp | 0) > 0,
+      });
+    }
+  }
+  return { actors, monsters };
+}
+
+// Pull refs out of a resolution packet's actor + action.target. Used to
+// auto-build finalState without callers passing explicit refs.
+function _refsFromPacket(packet) {
+  const refs = [];
+  if (packet.actor) refs.push(packet.actor);
+  if (packet.action && packet.action.target) refs.push(packet.action.target);
+  return refs;
+}
+
+// ── P5 — emit a host-arb packet WITH an attached ViewEvent ─────────────
+//
+// Every resolver entry calls this. The legacy host-arb fields
+// (deltas, fx) ride alongside the new ViewEvent block for backwards-
+// compat with host-arb-only clients during the migration window. The
+// guest's `coop-applier.js` (P4) routes to the viewer when
+// `COOP_VIEWER_MODE && coopViewSt.active && msg.viewEvent`, else
+// falls through to the legacy delta apply.
+function _emitWithViewEvent(packet, viewEvent) {
+  if (viewEvent) packet.viewEvent = viewEvent;
+  return _emitResolution(packet);
 }
 
 // Sanity guard for use during phases 2-5. Throws if a resolver entry is
