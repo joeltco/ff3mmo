@@ -40,6 +40,19 @@ import { buildPhysicalAttackPacket, buildMonsterAttackPacket,
 // #4 in the plan). Wire to debug tab in Phase 6 if A/B comparison helps.
 export const COOP_HOST_ARB = false;
 
+// Co-op viewer rewrite (P1+, docs/COOP-VIEWER-PLAN.md). When `true`, guests
+// stop running the battle FSM during co-op encounters and instead consume
+// host-emitted ViewEvents via `src/coop-viewer.js` as a packet-driven
+// animation player. Implies `COOP_HOST_ARB`-style host-resolves model
+// regardless of that flag's setting. Default `false` so plan can land in
+// stages without changing live behavior.
+//
+// Three-state matrix (see docs/COOP-VIEWER-PLAN.md#compat):
+//   { HOST_ARB: false, VIEWER: false } → legacy lockstep (current prod)
+//   { HOST_ARB: true,  VIEWER: false } → host-arb only (v1.7.474–76; broken live)
+//   {                  VIEWER: true  } → viewer (target end state)
+export const COOP_VIEWER_MODE = false;
+
 // Monotonic turn-resolution counter. Bumped once per emitted resolution
 // packet. Persists across the encounter; guests track `_lastAppliedTurnIdx`
 // and apply in order (drop dupes, queue out-of-order — see
