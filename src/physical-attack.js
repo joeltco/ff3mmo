@@ -19,7 +19,6 @@ import { pvpSt } from './pvp.js';
 import { ITEMS } from './data/items.js';
 import { tryInflictStatus, wakeOnHit } from './status-effects.js';
 import { dispatchDelta } from './deltas.js';
-import { isCoopGuest } from './coop-resolver.js';
 
 // Apply a single physical-attack hit to the currently-targeted enemy.
 //
@@ -43,15 +42,12 @@ export function applyPhysicalHitToEnemy(hit, targetIdx, opts = {}) {
     hit.damage = Math.max(1, Math.floor(hit.damage / 2));
   }
 
-  // Phase 6.7 — guest-side short-circuit. Under host-arb, the host
-  // applies the authoritative damage + status via resolvePhysicalAttack;
-  // its resolution packet is applied by coop-applier#_apply which writes
-  // the same HP delta + status flag. The slash + damage-num animation
-  // is driven by FSM state transitions (not this function), so they
-  // continue firing — only the underlying mutation is deferred to the
-  // host's wire packet. Flag-off path is unchanged.
-  if (isCoopGuest()) return;
-
+  // P11 (v1.7.494): removed the guest-side short-circuit. Under viewer
+  // mode the guest's FSM doesn't tick at all, so this function never
+  // executes on guests. Under flag-off hot-revert (VIEWER=false +
+  // HOST_ARB=false), isCoopGuest is always false anyway. The historical
+  // host-arb-only mode (VIEWER=false, HOST_ARB=true) which needed this
+  // short-circuit was never shipped successfully to prod.
   if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
     const mon = battleSt.encounterMonsters[targetIdx];
     if (!mon) return;

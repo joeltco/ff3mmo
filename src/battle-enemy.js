@@ -14,7 +14,7 @@ import { queueBattleMsg, replaceBattleMsg } from './battle-msg.js';
 import { _nameToBytes } from './text-utils.js';
 import { getPlayerDamageNum, setPlayerDamageNum, getAllyDamageNums } from './damage-numbers.js';
 import { selectCursor, saveSlots } from './save-state.js';
-import { COOP_HOST_ARB, resolveMonsterAttack, isCoopGuest } from './coop-resolver.js';
+import { COOP_HOST_ARB, resolveMonsterAttack } from './coop-resolver.js';
 
 // Injected at boot — avoids circular import on main.js
 let _processNextTurn = () => {};
@@ -241,13 +241,7 @@ function _processEnemyFlash() {
       // the sender's view of their own defend. Round-end clear lives in
       // `processNextTurn` queue-empty branch. v1.7.419.
       finalDmg = ally.isDefending ? Math.max(1, Math.floor(total / 2)) : total;
-      // Phase 6.7 — guest-side short-circuit. Skip the HP write; the
-      // host's resolveMonsterAttack ships the authoritative damage and
-      // the applier writes hp via the packet. Animation cues (shake,
-      // damage-num, state transition) still fire.
-      if (!isCoopGuest()) {
-        dispatchDelta({ type: 'hp', target: battleSt.battleAllies[targetAlly], amount: -finalDmg });
-      }
+      dispatchDelta({ type: 'hp', target: battleSt.battleAllies[targetAlly], amount: -finalDmg });
       getAllyDamageNums()[targetAlly] = { value: finalDmg, timer: 0 };
       battleSt.allyShakeTimer[targetAlly] = BATTLE_SHAKE_MS;
       playSFX(SFX.ATTACK_HIT); battleSt.battleState = 'ally-hit'; battleSt.battleTimer = 0;
@@ -285,23 +279,15 @@ function _processEnemyFlash() {
       // Canon FF3 NES Protect is physical-only — leave magic damage paths alone.
       if (ps.buffs && ps.buffs.protect) dmg = Math.max(1, Math.floor(dmg / 2));
       finalDmg = dmg;
-      // Phase 6.7 — guest-side short-circuit. Skip HP write + status
-      // mutations; host's resolveMonsterAttack ships the authoritative
-      // values via the packet. Animations + state transition continue.
-      const guestSkip = isCoopGuest();
-      if (!guestSkip) {
-        dispatchDelta({ type: 'hp', target: ps, amount: -dmg });
-      }
+      dispatchDelta({ type: 'hp', target: ps, amount: -dmg });
       setPlayerDamageNum({ value: dmg, timer: 0 });
       // Physical hit wakes sleeping targets
-      if (!guestSkip && ps.status) wakeOnHit(ps.status);
+      if (ps.status) wakeOnHit(ps.status);
       // Monster statusAtk: try to inflict status on player
-      if (!guestSkip) {
-        const monStatus = mon ? mon.statusAtk : null;
-        if (monStatus && ps.status) {
-          const arr = Array.isArray(monStatus) ? monStatus : [monStatus];
-          for (const s of arr) tryInflictStatus(ps.status, s, hitRate, ps.statusResist);
-        }
+      const monStatus = mon ? mon.statusAtk : null;
+      if (monStatus && ps.status) {
+        const arr = Array.isArray(monStatus) ? monStatus : [monStatus];
+        for (const s of arr) tryInflictStatus(ps.status, s, hitRate, ps.statusResist);
       }
       playSFX(SFX.ATTACK_HIT);
       battleSt.battleShakeTimer = BATTLE_SHAKE_MS;

@@ -26,7 +26,6 @@ import { rand } from './rng.js';
 import { dispatchDelta } from './deltas.js';
 import { tryInflictStatus, removeStatus, addStatus, STATUS, STATUS_NAME_BYTES } from './status-effects.js';
 import { playSFX, SFX } from './music.js';
-import { isCoopGuest } from './coop-resolver.js';
 
 // Resolve role-specific cast context. Returns { jobIdx, spellId, elapsed }
 // or null if this role is not currently casting (or doesn't match `idx`).
@@ -229,14 +228,9 @@ export function applyMagicDamage(target, baseDmg, spell, opts = {}) {
   const eMult = elemMultiplier(spell.element, target.weakness, target.resist);
   const mdef = target.mdef || 0;
   const dmg = Math.max(1, Math.floor(baseDmg * eMult) - mdef);
-  // Phase 6.7 — guest-side short-circuit. Host's resolveSpellCast ships
-  // authoritative damage; applier writes hp via packet. Animation
-  // callbacks (onDmgNum / onShake / sfx) still fire — they receive the
-  // locally-computed dmg value which may differ from host's value
-  // briefly until the packet arrives.
-  if (!isCoopGuest()) {
-    dispatchDelta({ type: 'hp', target, amount: -dmg, source: opts.source });
-  }
+  // P11 (v1.7.494): removed guest short-circuit — viewer mode bypasses
+  // the guest FSM entirely, so this function only runs on the host.
+  dispatchDelta({ type: 'hp', target, amount: -dmg, source: opts.source });
   if (opts.onDmgNum) opts.onDmgNum(dmg);
   if (opts.onShake) opts.onShake();
   if (opts.sfx) playSFX(opts.sfx);
@@ -251,10 +245,7 @@ export function applyMagicHeal(target, amount, opts = {}) {
   if (!target) return 0;
   const maxHP = target.maxHP || (target.stats && target.stats.maxHP) || target.hp || 0;
   const realHeal = Math.min(amount, maxHP - (target.hp || 0));
-  // Phase 6.7 — guest short-circuit; host's resolution writes hp.
-  if (!isCoopGuest()) {
-    dispatchDelta({ type: 'hp', target, amount: realHeal, source: opts.source });
-  }
+  dispatchDelta({ type: 'hp', target, amount: realHeal, source: opts.source });
   if (opts.onHealNum) opts.onHealNum(realHeal);
   if (opts.sfx) playSFX(opts.sfx);
   return realHeal;
@@ -265,10 +256,7 @@ export function applyMagicHeal(target, amount, opts = {}) {
 export function applyMagicCureStatus(target, statusFlag, opts = {}) {
   if (!target || !target.status) return false;
   const wasSet = !!(target.status.mask & statusFlag);
-  // Phase 6.7 — guest short-circuit; host's resolution clears status.
-  if (!isCoopGuest()) {
-    dispatchDelta({ type: 'statusRemove', target, flag: statusFlag, source: opts.source });
-  }
+  dispatchDelta({ type: 'statusRemove', target, flag: statusFlag, source: opts.source });
   if (opts.onSparkle) opts.onSparkle();
   if (opts.sfx) playSFX(opts.sfx);
   return wasSet;
@@ -291,12 +279,7 @@ export function applyMagicDrain(target, amount, opts = {}) {
     return applyMagicHeal(target, amount, { sfx: SFX.CURE, onHealNum: opts.onTargetHealNum });
   }
   const dmg = Math.max(1, amount);
-  // Phase 6.7 — guest short-circuit; host's resolution writes target hp
-  // + caster heal. Callbacks fire so animation flows.
-  const guestSkip = isCoopGuest();
-  if (!guestSkip) {
-    dispatchDelta({ type: 'hp', target, amount: -dmg, source: opts.source });
-  }
+  dispatchDelta({ type: 'hp', target, amount: -dmg, source: opts.source });
   if (opts.onTargetDmgNum) opts.onTargetDmgNum(dmg);
   if (opts.onShake) opts.onShake();
   if (opts.onCasterHeal) opts.onCasterHeal(dmg);
@@ -311,10 +294,7 @@ export function applyMagicRecovery(target, amount, opts = {}) {
   if (!target || target.hp <= 0) return 0;
   if (opts.isUndead) {
     const dmg = Math.max(1, amount);
-    // Phase 6.7 — guest short-circuit; host writes hp via packet.
-    if (!isCoopGuest()) {
-      dispatchDelta({ type: 'hp', target, amount: -dmg, source: opts.source });
-    }
+    dispatchDelta({ type: 'hp', target, amount: -dmg, source: opts.source });
     if (opts.onDmgNum) opts.onDmgNum(dmg);
     if (opts.onShake) opts.onShake();
     playSFX(opts.damageSfx || SFX.SW_HIT);
@@ -330,13 +310,6 @@ export function applyMagicRecovery(target, amount, opts = {}) {
 // caller can queue per-status battle messages. Returns the OR'd applied mask.
 export function applyMagicAllStatus(target, hitChance, opts = {}) {
   if (!target || !target.status) return 0;
-  // Phase 6.7 — guest short-circuit. Skip tryInflictStatus (which mutates
-  // the status mask); host writes the authoritative mask via packet.
-  // Animations + status-name messages still fire via the callbacks.
-  if (isCoopGuest()) {
-    if (opts.onMiss) opts.onMiss();
-    return 0;
-  }
   const candidates = opts.candidates || ['paralysis', 'blind', 'silence', 'sleep', 'confuse'];
   const resist = target.statusResist || 0;
   let anyApplied = 0;
@@ -361,11 +334,7 @@ export function applyMagicAllStatus(target, hitChance, opts = {}) {
 export function applyMagicInstakill(target, hitChance, opts = {}) {
   if (!target || target.hp <= 0) return false;
   if (rand() * 100 < hitChance) {
-    // Phase 6.7 — guest short-circuit; host's resolution sets hp=0 +
-    // death status via the packet. Animation callbacks still fire.
-    if (!isCoopGuest()) {
-      dispatchDelta({ type: 'death', target, source: opts.source });
-    }
+    dispatchDelta({ type: 'death', target, source: opts.source });
     if (opts.onDmgNum) opts.onDmgNum(0);
     if (opts.sfx) playSFX(opts.sfx);
     if (opts.onKill) opts.onKill();
@@ -386,12 +355,6 @@ export function applyMagicErase(opts = {}) {
 // status flag (truthy) on land, 0 on miss.
 export function applyMagicStatus(target, statusName, hitChance, opts = {}) {
   if (!target || !target.status) return 0;
-  // Phase 6.7 — guest short-circuit. tryInflictStatus mutates status mask;
-  // host writes mask via packet. Skip + fire onMiss so animation flows.
-  if (isCoopGuest()) {
-    if (opts.onMiss) opts.onMiss();
-    return 0;
-  }
   const resist = target.statusResist || 0;
   const applied = tryInflictStatus(target.status, statusName, hitChance, resist);
   if (applied) {

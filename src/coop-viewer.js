@@ -29,7 +29,7 @@
 
 import { battleSt } from './battle-state.js';
 import { ps } from './player-stats.js';
-import { COOP_VIEWER_MODE, COOP_VIEWER_DEBUG } from './coop-resolver.js';
+import { COOP_VIEWER_MODE, COOP_VIEWER_DEBUG, _setCoopViewStRef } from './coop-resolver.js';
 import { getMyUserId } from './net.js';
 import { playSFX, SFX } from './music.js';
 import {
@@ -94,6 +94,10 @@ export const coopViewSt = {
   // Bookkeeping
   pendingResync:       false,
 };
+
+// Register the coopViewSt back-reference with coop-resolver so its
+// `isCoopGuest()` can read our `active` flag without a circular import.
+_setCoopViewStRef(coopViewSt);
 
 // Max queue depth before we start dropping oldest non-final-state
 // events. finalState carried on every event means HP stays correct

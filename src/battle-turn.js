@@ -5,7 +5,7 @@ import { rollHits, calcPotentialHits, rollInitiative, resolveLivingTarget } from
 import { rand, seed as seedRng } from './rng.js';
 import { dequeueWireEncounterAction } from './encounter-wire.js';
 import { getMyUserId } from './net.js';
-import { COOP_HOST_ARB, resolvePoisonTick, resolveItemUse, isCoopGuest } from './coop-resolver.js';
+import { COOP_HOST_ARB, resolvePoisonTick, resolveItemUse } from './coop-resolver.js';
 import { BATTLE_RAN_AWAY, BATTLE_CANT_ESCAPE, BATTLE_ALLY } from './data/strings.js';
 import { getMonsterName, getSpellNameShrinesClean, getItemNameShrinesClean } from './text-decoder.js';
 import { ps, getJobLevelStatBonus } from './player-stats.js';
@@ -440,18 +440,13 @@ function _applyEndOfRoundPoison() {
   const haEnabled = COOP_HOST_ARB && battleSt.isWireEncounter
                     && battleSt.encounterIsHost && !pvpSt.isPVPBattle;
   const haResults = [];
-  // Phase 6.7 — guest short-circuit. Skip HP mutation on guest; host's
-  // resolvePoisonTick packet writes the authoritative tick damage.
-  // Damage numbers still display from the local computation so the
-  // animation reads correctly.
-  const guestSkip = isCoopGuest();
   if (ps.hp > 0 && ps.status && hasStatus(ps.status, STATUS.POISON)) {
     const max = ps.stats ? ps.stats.maxHP : ps.hp;
     const dmg = Math.floor(max / 16);
     if (dmg > 0) {
       // NES rule: poison never kills player/ally from full → clamp to 1.
       const beforeHp = ps.hp | 0;
-      if (!guestSkip) dispatchDelta({ type: 'hp', target: ps, amount: -dmg, min: 1 });
+      dispatchDelta({ type: 'hp', target: ps, amount: -dmg, min: 1 });
       setPlayerDamageNum({ value: dmg, timer: 0 });
       anyTicked = true;
       if (haEnabled) {
@@ -473,7 +468,7 @@ function _applyEndOfRoundPoison() {
     const dmg = Math.floor((ally.maxHP || ally.hp) / 16);
     if (dmg <= 0) continue;
     const beforeHp = ally.hp | 0;
-    if (!guestSkip) dispatchDelta({ type: 'hp', target: ally, amount: -dmg, min: 1 });
+    dispatchDelta({ type: 'hp', target: ally, amount: -dmg, min: 1 });
     getAllyDamageNums()[i] = { value: dmg, timer: 0 };
     anyTicked = true;
     if (haEnabled && ally.userId) {
@@ -493,7 +488,7 @@ function _applyEndOfRoundPoison() {
       if (dmg <= 0) continue;
       // Monsters/PvP-enemies CAN die to poison — no min clamp.
       const beforeHp = mon.hp | 0;
-      if (!guestSkip) dispatchDelta({ type: 'hp', target: mon, amount: -dmg });
+      dispatchDelta({ type: 'hp', target: mon, amount: -dmg });
       setSwDmgNum(i, dmg);
       anyTicked = true;
       if (haEnabled) {
@@ -957,9 +952,8 @@ function _playerTurnConsumable() {
 
   if (effect === 'cure_status') {
     // Status cure items — only target player for now.
-    // Phase 6.7 — guest short-circuit; host writes status mask via packet.
     const flag = STATUS_NAME_TO_FLAG[itemDat.cures];
-    if (flag && ps.status && !isCoopGuest()) removeStatus(ps.status, flag);
+    if (flag && ps.status) removeStatus(ps.status, flag);
     battleSt.itemHealAmount = 0;
     battleSt.battleState = 'item-use'; battleSt.battleTimer = 0;
     return;
@@ -967,12 +961,9 @@ function _playerTurnConsumable() {
 
   if (effect === 'full_heal') {
     // Elixir — full HP restore.
-    // Phase 6.7 — guest short-circuit; host writes hp via packet.
-    // setPlayerHealNum still fires so the heal-num shows during the
-    // host-arb apply window.
     if (target === 'player' && (allyIndex === undefined || allyIndex < 0)) {
       const heal = ps.stats.maxHP - ps.hp;
-      if (!isCoopGuest()) ps.hp = ps.stats.maxHP;
+      ps.hp = ps.stats.maxHP;
       battleSt.itemHealAmount = heal; setPlayerHealNum({ value: heal, timer: 0 });
     }
     battleSt.battleState = 'item-use'; battleSt.battleTimer = 0;

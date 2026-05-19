@@ -392,7 +392,19 @@ export function resolveEncounterStart(input) {
 // local hp=0 check the applier writes (~1 FSM tick latency at 60fps;
 // usually invisible). Acceptable for v1; can add player/ally death-cue
 // dispatch if live testing surfaces an issue.
+// Updated P11 (v1.7.494): now also returns true under viewer mode when this
+// client is an active viewer. Under viewer mode the FSM doesn't tick so the
+// historical "skip HP mutation" semantic is moot, BUT the encounter-wire
+// force-close safety net (v1.7.475) needs to detect "I'm a guest" to handle
+// host-disconnect edge cases without crashing.
+//
+// We can't import coopViewSt directly (circular) so the viewer-mode branch
+// reads the state via a lazy lookup. Falls back to the legacy host-arb
+// semantic when viewer state isn't loaded (e.g., during early module init).
+let _coopViewStRef = null;
+export function _setCoopViewStRef(ref) { _coopViewStRef = ref; }
 export function isCoopGuest() {
+  if (COOP_VIEWER_MODE && _coopViewStRef && _coopViewStRef.active) return true;
   return COOP_HOST_ARB
       && battleSt.isWireEncounter
       && !battleSt.encounterIsHost;

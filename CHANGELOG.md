@@ -18,6 +18,29 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.494 — 2026-05-19
+
+### Co-op viewer rewrite — P11: strip dead `isCoopGuest()` short-circuits
+
+Under the viewer model the guest's battle FSM never ticks, so the `isCoopGuest()` short-circuits at HP-mutation call sites are dead code. Under flag-off hot-revert (`VIEWER=false` + `HOST_ARB=false`) `isCoopGuest()` returns false anyway, so the short-circuits never fire there either. The historical host-arb-only mode (`VIEWER=false` + `HOST_ARB=true`) that would have needed them was never successfully shipped to prod.
+
+**Updated `isCoopGuest()` semantics** to ALSO return true when `COOP_VIEWER_MODE && coopViewSt.active`, so the encounter-wire force-close safety net (v1.7.475) still detects "I'm a guest" under viewer mode. Wired via new `_setCoopViewStRef` helper to avoid circular imports.
+
+**Removed short-circuits:**
+- `src/physical-attack.js#applyPhysicalHitToEnemy` — top-of-function early-return
+- `src/combatant-cast.js` — 8 short-circuits across `applyMagicDamage`, `applyMagicHeal`, `applyMagicCureStatus`, `applyMagicDrain`, `applyMagicRecovery`, `applyMagicAllStatus`, `applyMagicInstakill`, `applyMagicStatus`
+- `src/battle-enemy.js#_processEnemyTurn` — both ps + ally damage branches (3 sites: dispatchDelta + wakeOnHit + statusAtk inflict)
+- `src/battle-turn.js#_applyEndOfRoundPoison` — 3 sites (ps/ally/monster batch)
+- `src/battle-turn.js#_playerTurnConsumable` — cure_status + Elixir paths
+
+**Imports removed:** `isCoopGuest` no longer imported by physical-attack, combatant-cast, battle-enemy, battle-turn. Still exported from coop-resolver for `encounter-wire.js`'s safety net.
+
+**Files preserved:** `src/encounter-wire.js#setNetEncounterActionHandler` keeps `isCoopGuest()` check on the force-close path — handles the edge case where a host disconnects with no promotion (server bug or empty-peer-set race).
+
+Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 10/10, coop-viewer-sim 30/30, coop-arbiter-sim 59+5.
+
+Net diff: -120 lines of dead code across 4 files.
+
 ## 1.7.493 — 2026-05-19
 
 ### Co-op viewer rewrite — docs + debug helper
