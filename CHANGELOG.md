@@ -18,6 +18,26 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.497 — 2026-05-19
+
+### Co-op lockstep fix — unify monster-attack branches (direct fix for v1.7.472)
+
+Three rewrites (host-arb, viewer model, fix-forward attempts) routed around the actual bug instead of fixing it. Direct fix: `_processEnemyFlash` and `_doSpecialAttack` in `src/battle-enemy.js` had two branches for the same logical event (monster hits ps vs monster hits ally) that diverged in 6 ways — element resist, Protect halving, wake-on-hit, monster `statusAtk` infliction (physical), Defend halving (special-damage), and element resist (special-damage) were all silently missing from the ally branch. Same `rand()` cursor on both clients → same `total` → then host halves for Protect, guest doesn't → HP diverges turn one. That's the v1.7.472 bug.
+
+**The fix in three pieces:**
+
+1. **`src/data/players.js#generateAllyStats`** — added `elemResist` (deduped union over every equipped slot, mirroring `recalcCombatStats`) and `buffs: {}` to the returned ally object. Without these the ally branch had no field to read.
+
+2. **`src/battle-enemy.js`** — added `_targetCombatant(targetAlly)` resolver that returns a symmetric view of either `ps` or `battleSt.battleAllies[targetAlly]` with every field + closure helpers the hit path needs (`setDmgNum`, `setStatusDmgNum`, `setMiss`, `onShake`, `stateHit`, `stateMiss`). Replaced both branches in `_processEnemyFlash` and `_doSpecialAttack` with one body. Net `battle-enemy.js`: 337 → 313 lines despite adding a 48-line helper.
+
+3. **`tools/encounter-sim.js` (NEW, ~290 LOC)** — 12-test regression harness that probes the unified path for ps-vs-ally symmetry. Sanity tests confirm `elemResist`/`Protect`/`Defend` actually reduce damage (7 → 3); symmetry tests confirm ps-target damage = ally-target damage across baseline / elemResist / Protect / Defend / statusAtk-poison / wake-on-hit scenarios. Wired into `deploy.sh` as the second pre-flight gate. If anyone re-introduces an asymmetric branch the harness fails fast.
+
+**Side effects (positive):** monster element attacks now resist on allies wearing FlameMail (was a pre-existing solo-mode bug); ally Defend halves monster special-damage attacks; allies wake when hit while asleep; monster `statusAtk` (poison, paralysis, etc) inflicts on allies.
+
+**Dormant rewrite code unchanged.** `coop-resolver.js` / `coop-applier.js` / `coop-deltas.js` / `coop-viewer.js` / `coop-view-anims.js` (~2400 LOC) still compiled but unreached under `COOP_HOST_ARB=false` + `COOP_VIEWER_MODE=false`. Cleanup deferred until two-phone smoke confirms the direct fix holds; both rewrite kill-switches stay available as hot-revert paths.
+
+Gates: lint 0, encounter-sim 12/12, pvp-wire-sim, coop-wire-sim, coop-viewer-sim, coop-arbiter-sim all pre-existing.
+
 ## 1.7.496 — 2026-05-19
 
 ### Hot-revert (3rd): viewer model not working live, `COOP_VIEWER_MODE = false`

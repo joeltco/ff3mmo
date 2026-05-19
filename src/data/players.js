@@ -358,5 +358,18 @@ export function generateAllyStats(player) {
   const hitRate = wpnItem ? (wpnItem.hit || 80) : 80;
   // Pass through known spells so battle-turn's WM heal AI can decide what to cast.
   const knownSpells = Array.isArray(player.knownSpells) ? [...player.knownSpells] : [];
-  return { name: player.name, palIdx: player.palIdx, jobIdx: player.jobIdx || 0, level: lv, hp, maxHP: hp, atk, def, agi, int: int_, mnd, evade, mdef, shieldEvade, statusResist, hitRate, weaponId, weaponL, knownSpells, jobLevel: jobLv, fadeStep: ROSTER_FADE_STEPS, status: createStatusState() };
+  // Element resist union over every equipped slot — mirrors recalcCombatStats
+  // (player-stats.js). Without this, monster element attacks bypass ally
+  // resist gear, and the ally-target branch of _processEnemyTurn diverges
+  // from the ps-target branch under co-op.
+  const elemResistSet = new Set();
+  for (const id of [weaponId, weaponL, player.armorId, player.helmId, player.shieldId]) {
+    if (id == null) continue;
+    const r = ITEMS.get(id)?.resist;
+    if (!r) continue;
+    const arr = Array.isArray(r) ? r : [r];
+    for (const e of arr) elemResistSet.add(e);
+  }
+  const elemResist = [...elemResistSet];
+  return { name: player.name, palIdx: player.palIdx, jobIdx: player.jobIdx || 0, level: lv, hp, maxHP: hp, atk, def, agi, int: int_, mnd, evade, mdef, shieldEvade, statusResist, elemResist, buffs: {}, hitRate, weaponId, weaponL, knownSpells, jobLevel: jobLv, fadeStep: ROSTER_FADE_STEPS, status: createStatusState() };
 }
