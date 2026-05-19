@@ -106,11 +106,102 @@ Each player's chosen action drives the opponent's turn on the partner's client. 
 
 Receiver (`pause-menu.js#setNetGiveItemHandler`) mirrors the sender's `_applyPauseItemUse` apply path on its own `ps` — `applyMagicHeal` for `effect: heal / full_heal / restore_hp`, `applyMagicCureStatus` for `effect: cure_status`. Plays `SFX.CURE`, fires the existing `_drawCureSparkle` overlay on the receiver's HUD portrait via `hudSt.giveItemHealTimer` (550 ms window matching the sender's pause-menu `inv-heal` state), and posts `* <sender> sent you <item>` to chat. The next 500 ms profile-diff poll auto-broadcasts the new HP / status so every other player's roster row ticks too — the kneel-pose pipeline in `roster.js` (v1.7.415) reads `p.hp` / `p.maxHP` from the snapshot entry and swaps `fakePlayerPortraits` for `fakePlayerKneelPortraits` + sweat overlay when `hp <= floor(maxHP / 4)`.
 
-### Party co-op random encounters — host-authoritative model (the rewrite)
+### Party co-op random encounters — viewer (card-game) model (current)
 
-**Active model** (pending flag flip; see `COOP_HOST_ARB` in `src/coop-resolver.js`). The deterministic-lockstep approach below was abandoned at v1.7.472 after fifteen failed patch attempts; the rewrite plan + per-phase commits are in `docs/COOP-REWRITE-PLAN.md`. This subsection documents the new model — the legacy section below remains for historical context only.
+**Active model** behind `COOP_VIEWER_MODE` in `src/coop-resolver.js`. Spec: `docs/COOP-VIEWER-PLAN.md`. Supersedes both the v1.7.458-72 lockstep model AND the v1.7.474-77 host-arb-only attempt that broke live (both documented below as historical).
 
-**Core principle.** One client (the encounter host — whoever triggered the random encounter) resolves the turn locally and emits a `{deltas, fx}` packet over the wire. Every other client (guests) applies the deltas + drives animation from the fx cues. Guests **do not run combat math** under host-arb. The "two phones run the same FSM and pray rand() stays aligned" anti-pattern is structurally gone.
+**Core principle — card game, not lockstep.** The encounter host runs the battle FSM unchanged. Guests **do not run a battle FSM at all**. Each guest's `updateCoopView(dt)` (replacing `updateBattle(dt)` in the game loop) is a packet-driven animation player consuming `ViewEvent` packets carrying self-contained `finalState` snapshots. There is exactly ONE FSM per encounter, on the host. Two-FSM lockstep is structurally impossible.
+
+**Module layout:**
+
+- `src/coop-viewer.js` — guest-side. `coopViewSt` (queue, currentAnim, lastAppliedTurnIdx), `enterViewerMode()`, `exitViewerMode()`, `leaveViewerForPromotion()`, `ingestViewEventPacket(packet)`, `updateCoopView(dt)`. Anim registry maps eventKind → handler.
+- `src/coop-view-anims.js` — re-exports shared low-level primitives (slash, damage-num, spell-anim, SFX, monster-death timing) the viewer's anim handlers consume directly.
+- `src/coop-deltas.js` — ViewEvent builders: `buildAttackViewEvent`, `buildMagicViewEvent`, `buildItemViewEvent`, `buildMonsterAttackViewEvent`, `buildPoisonTickViewEvent`, `buildMonsterDeathViewEvent`, `buildPlayerDeathViewEvent`, `buildEncounterStartViewEvent`, `buildEncounterEndViewEvent`, `buildTurnBeginViewEvent`. Plus `buildFinalState`, `wrapViewEventForWire`, `VIEW_ANIM_MS`.
+- `src/coop-resolver.js` — host-side. Existing `resolve*` (PhysicalAttack/MonsterAttack/SpellCast/ItemUse/PoisonTick/EncounterEnd) attach a ViewEvent to each emitted packet via `_emitWithViewEvent`. New entries: `resolveMonsterDeath`, `resolvePlayerDeath`, `resolveTurnBegin`, `resolveEncounterStart`. Helpers: `_resolveLocalActor`, `_buildAutoFinalState`, `setResolverTurnIdx`. Owns flags: `COOP_HOST_ARB` (legacy kill-switch), `COOP_VIEWER_MODE` (viewer enable), `COOP_VIEWER_DEBUG` (instrumentation).
+- `src/coop-applier.js` — under `COOP_VIEWER_MODE && coopViewSt.active && msg.viewEvent`, routes incoming `encounter-resolution` to `coopViewer.ingestViewEventPacket`. Falls back to legacy host-arb deltas otherwise.
+
+**Wire shape — additive on the existing `encounter-resolution`:**
+
+```
+encounter-resolution (host → all guests):
+  {
+    turnIdx,              // monotonic per encounter
+    actor, action,        // legacy host-arb passthrough (backwards-compat)
+    deltas, fx, meta,
+    viewEvent: {          // ViewEvent payload — viewer reads only this
+      eventKind,          // 'attack' | 'magic' | 'item' | 'monster-attack' | ...
+      turnIdx,            // mirror for downstream
+      animMs,             // viewer anim duration (calibrated to host FSM)
+      finalState: {       // authoritative post-anim actor + monster state
+        actors:   [{ ref, hp, mp, statusMask, alive }, ...],
+        monsters: [{ idx, hp, statusMask, alive }, ...],
+      },
+      // kind-specific: actor, target, hits, dmg, etc.
+    }
+  }
+```
+
+Every event is self-contained — `finalState` lets the viewer reconcile to authoritative state on every event, so lost packets don't corrupt state.
+
+**Host-emit call sites (host's FSM unchanged; each existing resolve\* attaches a ViewEvent):**
+
+| File | Site | ViewEvent kind |
+|---|---|---|
+| `src/battle-enemy.js#_processEnemyTurn` | both ps + ally branches | `monster-attack` |
+| `src/battle-update.js#_finalizeComboHits` | player physical combo | `attack` |
+| `src/battle-ally.js#_finalizeAllyCombo` | wire-driven ally combo | `attack` |
+| `src/spell-cast.js#_finishMagicHit` | player spell impact | `magic` |
+| `src/battle-ally.js#_applyAllyMagicEffect` | ally spell impact | `magic` |
+| `src/battle-turn.js#_playerTurnConsumable` | item use | `item` |
+| `src/battle-turn.js#_applyEndOfRoundPoison` | poison batch | `poison-tick` |
+| `src/encounter-wire.js#endWireEncounter` | battle wrap-up | `encounter-end` |
+| `src/battle-encounter.js#_maybeHostCoopEncounter` | encounter spawn | `encounter-start` (P6) |
+| `src/battle-encounter.js#_processAssistIncoming` | mid-battle joiner | (legacy snapshot + `encounter-snapshot` ViewEvent) |
+
+**Guest's input path is unchanged.** Picking Attack/Magic/etc. emits a normal `encounter-action` to the host. Host's FSM consumes it, resolves the turn, ships back a ViewEvent. Viewer plays the anim. Single round-trip.
+
+**Encounter lifecycle (viewer mode):**
+
+1. Host walks into encounter → `_maybeHostCoopEncounter` runs → server sends `encounter-invite` to guests + host emits `encounter-start` ViewEvent
+2. Guest's invite handler: legacy spawn via `generateAllyStats` (fills sprite/portrait/weapon canvases) + `enterViewerMode()` (sets `coopViewSt.active = true`)
+3. Guest receives `encounter-start` ViewEvent → `_animEncounterStart` updates `battleAllies` IN PLACE with realized stats (does NOT wipe; preserves `fadeStep` + canvases the renderer needs) → parks `battleState = 'menu-open'` after flash anim
+4. Host emits turn events; viewer plays each
+5. `encounter-end` ViewEvent → `_animEncounterEnd` transitions to `victory-name-out` / `encounter-box-close` → `exitViewerMode()` → legacy `updateBattle` resumes for wrap-up
+
+**Host promotion (v1.7.476 + P7 viewer handoff).** When the host disconnects, server picks first surviving peer + broadcasts `encounter-host-changed { droppedUserId, newHostUserId }`. The new host's handler in `encounter-wire.js`:
+- `leaveViewerForPromotion()` — tears down `coopViewSt`, returns last `lastAppliedTurnIdx`
+- `setResolverTurnIdx(lastIdx)` — initializes resolver's monotonic counter so next emit lands monotonically for remaining guests
+- `battleState = 'menu-open'` — FSM resumes at a clean turn boundary
+
+The new host's `battleAllies` + `encounterMonsters` were already mutated by the viewer to reflect host's last-known state, so the FSM has the data it needs.
+
+**Diagnostic instrumentation (`COOP_VIEWER_DEBUG = true`).** Every viewer state-change boundary fires a structured `[coop-viewer]` log via `POST /api/client-error`. Tags: `enterViewerMode-called` / `-done`, `exitViewerMode-called`, `ingest-rejected` (reason), `ingest-ok`, `ingest-dup-drop`, `anim-begin`, `anim-done`, `anim-handler-threw`, `updateCoopView-first-tick`. Host side: `invite-received`, `host-emit-start`, `host-emit-start-rejected`. Wire receive: `wire-resolution-received` (turnIdx, eventKind, hasViewEvent, msg keys). Each carries a context block with myUid, active, queueLen, lastApplied, currentKind, battleState, battleTimer, isWireEncounter, encounterIsHost, battleAlliesLen, monstersLen. To grep:
+
+```
+ssh root@68.183.59.19 'tail -300 /root/.pm2/logs/server-error.log | grep coop-viewer'
+```
+
+**Killed failure modes vs lockstep / host-arb-only:**
+
+1. The v1.7.472 monster-attack divergence (`targetAlly` branches with different stat fields). Guest never runs ANY combat code under viewer mode.
+2. The v1.7.486 server-dropping-viewEvent on relay → guest freezes waiting forever. Now: wire-sim test `encounter-resolution relay preserves viewEvent payload` is a gate.
+3. The v1.7.488 flash-strobe freeze (viewer not advancing `battleTimer`, not parking `battleState`). Now: viewer-sim test `v1.7.488 — battleTimer advances during flash-strobe anim` + `encounter-start parks battleState=menu-open after anim`.
+4. The v1.7.490 `drawAllyPortrait` throw (viewer wiping `battleAllies` instead of updating in place). Now: viewer-sim test `v1.7.490 — encounter-start updates battleAllies IN PLACE, preserves fadeStep`.
+5. The v1.7.491 host emit reading `atk`/`def`/`agi` from wrong source (`ps.stats` vs `ps`). Fixed; guests now get realized values.
+
+**Regression gates (`deploy.sh`):**
+- `tools/coop-viewer-sim.js` — 30 tests (queue, anim dispatch, encounter lifecycle, promotion, wire envelope, finalState writer, regression suite)
+- `tools/coop-wire-sim.js` — 10 tests (delivery + viewEvent passthrough)
+- `tools/coop-arbiter-sim.js` — 59 + 5 (host-arb resolver/applier convergence)
+- `tools/pvp-wire-sim.js` — 49 (PvP, untouched)
+
+**Hot-revert procedure.** Flip `COOP_VIEWER_MODE = false` in `src/coop-resolver.js`, deploy. The flag-off path is the v1.7.477 lockstep baseline (broken in the known v1.7.472 way, not the new way). All viewer code stays compiled, dormant.
+
+### Party co-op random encounters — host-authoritative model (HISTORICAL)
+
+Predecessor of the viewer model above. Shipped at v1.7.474, broke live (phone freezes, wrong HP, missing roster), reverted at v1.7.477. The resolver/deltas/wire plumbing is REUSED by the viewer model — only the guest-side behavior was wrong. Documented here in past tense.
+
+**Core principle (defunct).** Host resolves locally and ships `{deltas, fx}` packets. Guest applies deltas + drives animation from fx cues. **Two FSMs running concurrently** — guest still ran its battle FSM, with `isCoopGuest()` short-circuits at HP-mutation call sites. Phone freezes occurred when guest's FSM expected legacy `encounter-action` queue drains at FSM phases that no longer corresponded to host's emit timing.
 
 **Module layout:**
 
