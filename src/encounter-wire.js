@@ -75,6 +75,12 @@ setNetEncounterActionHandler((msg) => {
     return;
   }
   if (!battleSt.isWireEncounter) return;
+  // P12 (v1.7.495): under viewer mode the guest's FSM doesn't tick, so
+  // nothing drains `_wireEncounterActions`. Skip the push to prevent
+  // unbounded queue growth. The viewer consumes `encounter-resolution`
+  // ViewEvents directly via `coop-applier.js`; legacy encounter-action
+  // queueing is only useful under flag-off lockstep mode.
+  if (COOP_VIEWER_MODE && coopViewSt.active) return;
   _wireEncounterActions.push(msg);
 });
 
