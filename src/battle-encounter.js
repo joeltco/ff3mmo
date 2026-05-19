@@ -313,8 +313,9 @@ function _emitHostEncounterStartViewEvent() {
   // battleAlly. Guests reading the event filter themselves out by
   // userId; that lookup is in coop-viewer.js#_applyEncounterStartFinalState.
   const combatants = [];
-  // Host (ps) — pull from ps + ps.stats so realized values match what
-  // host's FSM computed via recalcStats.
+  // Host (ps) — realized atk/def/hitRate/evade/mdef live on `ps` directly
+  // (set by recalcStats). maxHP/maxMP/level live on `ps.stats`. Wrong
+  // source = guest gets atk=0 etc.; was a P5 bug.
   const psStats = ps.stats || {};
   combatants.push({
     userId:    myUid,
@@ -324,11 +325,14 @@ function _emitHostEncounterStartViewEvent() {
     maxHP:     psStats.maxHP | 0,
     maxMP:     psStats.maxMP | 0,
     jobIdx:    ps.jobIdx | 0,
-    level:     ps.level | 0,
+    level:     (psStats.level | 0) || 1,
     palIdx:    ps.palIdx | 0,
-    atk:       psStats.atk | 0,
-    def:       psStats.def | 0,
-    agi:       psStats.agi | 0,
+    atk:       ps.atk   | 0,
+    def:       ps.def   | 0,
+    agi:       (psStats.agi | 0) || 1,
+    evade:     ps.evade | 0,
+    mdef:      ps.mdef  | 0,
+    hitRate:   (ps.hitRate | 0) || 80,
   });
   // Battle allies — already have realized stats baked in from
   // _maybeHostCoopEncounter's generateAllyStats call.

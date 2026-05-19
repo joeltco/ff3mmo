@@ -18,6 +18,18 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.491 — 2026-05-19
+
+### Co-op viewer rewrite — P9.3: fix drawAllyPortrait throw
+
+Instrumentation from v1.7.490 surfaced the real bug. Guest's `_drawAllyPortrait` was throwing on `drawImage(portraits[ally.fadeStep], ...)` because the viewer's `_applyEncounterStartFinalState` wiped `battleSt.battleAllies` and re-populated with a minimal stat object lacking `fadeStep` (and `weaponId`, `weaponL`, `knownSpells`, etc.). `portraits[undefined]` returned undefined → drawImage throws → entire frame's remaining draws (monsters, music start, damage numbers) skipped by the catch.
+
+**Fix A — viewer updates battleAllies IN PLACE**, doesn't wipe. The legacy `setNetEncounterInviteHandler` already populated entries via `generateAllyStats` which sets fadeStep + sprite/weapon canvases + spell list. Viewer now only overrides the realized stat fields (hp/mp/maxHP/atk/def/agi/evade/mdef) from the host's authoritative payload. Render-required fields stay intact. Fallback path (entry missing — assist-join race) builds a defensive entry with `fadeStep: 0` + safe defaults.
+
+**Fix B — host's `_emitHostEncounterStartViewEvent` was reading atk/def/agi from `ps.stats`**, but those realized values live on `ps` directly (set by `recalcStats`). Was a v1.7.482 P5 bug — guests got atk/def=0. Now reads from the right source. Also fields now include `evade`, `mdef`, `hitRate` for completeness.
+
+Both fixes flag-gated by `COOP_VIEWER_MODE`. Sims green (22/22 viewer, 9/9 coop-wire, 49/49 pvp-wire, 59+5 arbiter). Live re-test next.
+
 ## 1.7.490 — 2026-05-19
 
 ### Co-op viewer rewrite — P9.2: instrumented + flag back on

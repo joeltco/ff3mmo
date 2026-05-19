@@ -521,42 +521,82 @@ function _summarizeAttackHits(hits) {
   return { value: total, miss: false };
 }
 
-// Bootstrap battle state from an encounter-start event. Sets monsters,
-// battleAllies, isWireEncounter, encounterIsHost=false.
+// Bootstrap battle state from an encounter-start event. Sets monsters and
+// updates battleAllies realized stats IN PLACE — the legacy
+// `setNetEncounterInviteHandler` already populated battleAllies via
+// `generateAllyStats` (which builds the full ally object with sprite-render
+// fields: fadeStep, weaponId, knownSpells, etc.). We override only the
+// realized stat fields (hp/mp/maxHP/atk/def/agi/etc.) from the host's
+// authoritative payload so guests don't recompute via `generateAllyStats`'s
+// hp=job-maxHP path. Critical: do NOT replace the array — that wipes
+// fadeStep, weapon canvases, and other render-required fields, causing
+// `_drawAllyPortrait` to throw on `portraits[undefined]` (v1.7.490 bug).
 function _applyEncounterStartFinalState(event) {
   battleSt.isWireEncounter = true;
   battleSt.encounterIsHost = false;
   battleSt.encounterHostUserId = event.hostUserId | 0;
   battleSt.isRandomEncounter = true;
-  // Monsters
+  // Monsters — replace wholesale (no render-side derived state on monsters
+  // that needs preserving; monsterId + hp + status is sufficient).
   battleSt.encounterMonsters = (event.monsters || []).map(m => ({
     monsterId: m.monsterId | 0,
     hp:        m.hp | 0,
     maxHP:     m.maxHP | 0,
     status:    { mask: (m.statusMask | 0), poisonDmgTick: 0 },
   }));
-  // Battle allies (combatants minus self) — realized stats baked in.
+  // Battle allies — update in place, do NOT replace.
   const myUid = getMyUserId() | 0;
-  battleSt.battleAllies = [];
+  if (!Array.isArray(battleSt.battleAllies)) battleSt.battleAllies = [];
   for (const c of (event.combatants || [])) {
     const uid = c.userId | 0;
-    if (uid === myUid) continue;
-    battleSt.battleAllies.push({
-      userId:       uid,
-      name:         c.name || '',
-      hp:           c.hp | 0,
-      mp:           c.mp | 0,
-      maxHP:        c.maxHP | 0,
-      maxMP:        c.maxMP | 0,
-      jobIdx:       c.jobIdx | 0,
-      level:        c.level | 0,
-      palIdx:       c.palIdx | 0,
-      atk:          c.atk | 0,
-      def:          c.def | 0,
-      agi:          c.agi | 0,
-      isWireDriven: true,
-      status:       { mask: 0, poisonDmgTick: 0 },
-    });
+    if (!uid || uid === myUid) continue;
+    let ally = battleSt.battleAllies.find(a => a && (a.userId | 0) === uid);
+    if (ally) {
+      // Override realized stats; leave fadeStep, weaponId, weaponL,
+      // knownSpells, body/portrait canvases alone.
+      ally.hp     = c.hp     | 0;
+      if (typeof c.mp    === 'number') ally.mp    = c.mp    | 0;
+      if (typeof c.maxHP === 'number' && c.maxHP > 0) ally.maxHP = c.maxHP | 0;
+      if (typeof c.maxMP === 'number' && c.maxMP > 0) ally.maxMP = c.maxMP | 0;
+      if (typeof c.atk   === 'number') ally.atk   = c.atk   | 0;
+      if (typeof c.def   === 'number') ally.def   = c.def   | 0;
+      if (typeof c.agi   === 'number') ally.agi   = c.agi   | 0;
+      if (typeof c.evade === 'number') ally.evade = c.evade | 0;
+      if (typeof c.mdef  === 'number') ally.mdef  = c.mdef  | 0;
+      _vlog('encounter-start-ally-updated', { uid, hp: ally.hp, maxHP: ally.maxHP });
+    } else {
+      // Edge case: invite handler didn't pre-populate (assist join, race
+      // condition). Fall back to a defensive entry with safe render
+      // defaults so the renderer doesn't throw. Sprite/portrait won't
+      // be ideal but won't crash.
+      _vlog('encounter-start-ally-missing-pushing-fallback', { uid });
+      battleSt.battleAllies.push({
+        userId:       uid,
+        name:         c.name || '',
+        hp:           c.hp     | 0,
+        mp:           c.mp     | 0,
+        maxHP:        (c.maxHP | 0) || 1,
+        maxMP:        c.maxMP  | 0,
+        jobIdx:       c.jobIdx | 0,
+        level:        (c.level | 0) || 1,
+        palIdx:       c.palIdx | 0,
+        atk:          c.atk    | 0,
+        def:          c.def    | 0,
+        agi:          (c.agi   | 0) || 1,
+        evade:        c.evade  | 0,
+        mdef:         c.mdef   | 0,
+        shieldEvade:  c.shieldEvade | 0,
+        statusResist: c.statusResist | 0,
+        hitRate:      (c.hitRate | 0) || 80,
+        weaponId:     c.weaponId ?? 0x1E,
+        weaponL:      c.weaponL  ?? null,
+        knownSpells:  Array.isArray(c.knownSpells) ? c.knownSpells.slice() : [],
+        jobLevel:     (c.jobLevel | 0) || 1,
+        fadeStep:     0,  // already-faded-in for mid-battle join
+        isWireDriven: true,
+        status:       { mask: 0, poisonDmgTick: 0 },
+      });
+    }
   }
 }
 
