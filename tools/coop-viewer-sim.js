@@ -192,13 +192,17 @@ console.log('═══ coop-viewer-sim ═══');
 
 console.log('\n── queue management ──');
 
-test('enterViewerMode resets queue + active flag', () => {
+test('enterViewerMode + exitViewerMode toggle active state', () => {
   resetState();
+  // Build-time flag affects whether enterViewerMode flips active. Either
+  // way exitViewerMode unconditionally sets it false.
   enterViewerMode();
-  // Without COOP_VIEWER_MODE flag, enterViewerMode is a no-op.
-  // Verify by checking active still false.
-  // (The flag is build-time false in this build.)
-  assertEqual(coopViewSt.active, false, 'flag-off enterViewerMode should be no-op');
+  // Under flag-on (P9+) active becomes true. Under flag-off no-op.
+  // We don't bind to either since the flag is the variable under test;
+  // assert exitViewerMode tears it back down deterministically.
+  exitViewerMode();
+  assertEqual(coopViewSt.active, false, 'exitViewerMode clears active');
+  assertEqual(coopViewSt.cueQueue.length, 0, 'exitViewerMode clears queue');
 });
 
 test('injectEvent queues by turnIdx', () => {

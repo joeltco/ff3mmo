@@ -18,6 +18,34 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.486 — 2026-05-19
+
+### Co-op viewer rewrite — P9: flag flip LIVE — `COOP_VIEWER_MODE = true`
+
+Production co-op battles now run the card-game viewer model on the guest side. Host runs the battle FSM (unchanged); guest runs a packet-driven animation player that consumes self-contained ViewEvents carrying `finalState` snapshots. Guest's battle FSM does not tick during co-op encounters.
+
+**What this fixes vs the v1.7.474-76 host-arb-only attempt:**
+- **Phone freezing** — guest FSM no longer stuck in `ally-wire-wait` waiting on a legacy `encounter-action` that's racing the resolution packet. Viewer doesn't have ally-wire-wait. Single state machine, host-authoritative.
+- **Wrong HP** — every ViewEvent carries `finalState` (authoritative HP/MP/status for every affected actor). Viewer writes it after the anim completes. No re-derivation from divergent profile fields.
+- **Missing roster** — host emits `encounter-start` ViewEvent with realized stats (hp/maxHP/atk/def/agi) for every combatant. Guest's `_animEncounterStart` bootstraps battleSt directly, bypassing `generateAllyStats` (which had the hp=job-maxHP bug for the encounter-invite path).
+
+**Hot-revert procedure** if live smoke fails: flip `COOP_VIEWER_MODE = false` in `src/coop-resolver.js`, deploy. The flag-off path is unchanged from v1.7.477 baseline (legacy lockstep, broken-but-known). All viewer code stays compiled, just dormant.
+
+**Two-phone smoke gate (next):**
+1. Two phones, same party, walk into wild encounter
+2. Both screens show 2-row roster at battle open (host + guest)
+3. HP/MP match between phones at start AND after every turn
+4. Player physical attacks resolve identically on both phones
+5. Cure on ally — heal num + HP delta match
+6. Monster KOs a player — death anim plays on both phones same beat
+7. Victory flow runs to completion on both phones
+
+If any fail, hot-revert + investigate. P10 is the 48h observation window.
+
+PvP path completely untouched. Solo encounters never enter viewer mode.
+
+Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 9/9, coop-viewer-sim 21/21, coop-arbiter-sim 59+5.
+
 ## 1.7.485 — 2026-05-19
 
 ### Co-op viewer rewrite — P8: coverage harness
