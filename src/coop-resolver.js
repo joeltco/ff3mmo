@@ -38,7 +38,7 @@ import { buildPhysicalAttackPacket, buildMonsterAttackPacket,
 //
 // Runtime debug toggle is NOT exposed — build-time only (per Open Question
 // #4 in the plan). Wire to debug tab in Phase 6 if A/B comparison helps.
-export const COOP_HOST_ARB = true;
+export const COOP_HOST_ARB = false;
 
 // Monotonic turn-resolution counter. Bumped once per emitted resolution
 // packet. Persists across the encounter; guests track `_lastAppliedTurnIdx`
