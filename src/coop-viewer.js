@@ -29,7 +29,7 @@
 
 import { battleSt } from './battle-state.js';
 import { ps } from './player-stats.js';
-import { COOP_VIEWER_MODE } from './coop-resolver.js';
+import { COOP_VIEWER_MODE, COOP_VIEWER_DEBUG } from './coop-resolver.js';
 import { getMyUserId } from './net.js';
 import { playSFX, SFX } from './music.js';
 import {
@@ -40,6 +40,49 @@ import {
   MONSTER_DEATH_MS,
   tickElapsed,
 } from './coop-view-anims.js';
+
+// ── Diagnostic logging (P9.2+) ───────────────────────────────────────────
+//
+// Posts structured `[coop-viewer]` entries to /api/client-error so failures
+// surface in pm2 logs. The harness 22/22 didn't catch live freezes (v1.7.486
+// + v1.7.488); we need observability to find what's actually breaking.
+// Gated on COOP_VIEWER_DEBUG so we can leave it on through diagnosis and
+// flip it off once the viewer is stable.
+
+function _vlog(tag, ctx = {}) {
+  if (!COOP_VIEWER_DEBUG) return;
+  try {
+    const payload = {
+      msg:   '[coop-viewer] ' + tag,
+      stack: null,
+      ctx:   {
+        myUid:            (typeof window !== 'undefined' && window._lastMyUid) || 0,
+        active:           coopViewSt.active,
+        queueLen:         coopViewSt.cueQueue.length,
+        lastApplied:      coopViewSt.lastAppliedTurnIdx,
+        currentKind:      coopViewSt.currentAnim ? coopViewSt.currentAnim.event.eventKind : null,
+        battleState:      battleSt.battleState,
+        battleTimer:      battleSt.battleTimer,
+        isWireEncounter:  !!battleSt.isWireEncounter,
+        encounterIsHost:  !!battleSt.encounterIsHost,
+        encounterHostUid: battleSt.encounterHostUserId | 0,
+        battleAlliesLen:  Array.isArray(battleSt.battleAllies) ? battleSt.battleAllies.length : -1,
+        monstersLen:      Array.isArray(battleSt.encounterMonsters) ? battleSt.encounterMonsters.length : -1,
+        ...ctx,
+      },
+    };
+    if (typeof fetch === 'function') {
+      fetch('/api/client-error', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(payload),
+      }).catch(() => {});
+    }
+    if (typeof console !== 'undefined' && console.log) {
+      console.log('[coop-viewer]', tag, payload.ctx);
+    }
+  } catch { /* never break the viewer */ }
+}
 
 // ── State ────────────────────────────────────────────────────────────────
 
@@ -65,17 +108,20 @@ const MAX_QUEUE_DEPTH = 32;
 // viewer state, hands control of `battleSt` to the viewer. The first
 // `encounter-start` ViewEvent will populate monsters + combatants.
 export function enterViewerMode() {
+  _vlog('enterViewerMode-called', { flagOn: COOP_VIEWER_MODE });
   if (!COOP_VIEWER_MODE) return;
   coopViewSt.active = true;
   coopViewSt.cueQueue.length = 0;
   coopViewSt.currentAnim = null;
   coopViewSt.lastAppliedTurnIdx = 0;
   coopViewSt.pendingResync = false;
+  _vlog('enterViewerMode-done');
 }
 
 // Called when the encounter ends (encounter-end ViewEvent completes) or
 // when the encounter is force-closed (host dropped + no promotion).
 export function exitViewerMode() {
+  _vlog('exitViewerMode-called');
   coopViewSt.active = false;
   coopViewSt.cueQueue.length = 0;
   coopViewSt.currentAnim = null;
@@ -99,13 +145,27 @@ export function leaveViewerForPromotion() {
 // is the full `encounter-resolution` envelope; we read `viewEvent`
 // and queue it sorted by turnIdx.
 export function ingestViewEventPacket(packet) {
-  if (!COOP_VIEWER_MODE || !coopViewSt.active) return;
-  if (!packet || !packet.viewEvent) return;
+  if (!COOP_VIEWER_MODE || !coopViewSt.active) {
+    _vlog('ingest-rejected', {
+      reason: !COOP_VIEWER_MODE ? 'flag-off' : 'inactive',
+      hasPacket: !!packet,
+      hasViewEvent: !!(packet && packet.viewEvent),
+    });
+    return;
+  }
+  if (!packet || !packet.viewEvent) {
+    _vlog('ingest-rejected', { reason: 'no-viewEvent-in-packet', packetKeys: packet ? Object.keys(packet) : [] });
+    return;
+  }
   const event = packet.viewEvent;
   const turnIdx = packet.turnIdx | 0;
   event.turnIdx = turnIdx;  // mirror onto event for downstream
+  _vlog('ingest-ok', { turnIdx, eventKind: event.eventKind });
   // Drop dups + already-applied
-  if (turnIdx <= coopViewSt.lastAppliedTurnIdx) return;
+  if (turnIdx <= coopViewSt.lastAppliedTurnIdx) {
+    _vlog('ingest-dup-drop', { turnIdx });
+    return;
+  }
   // Cap queue depth
   if (coopViewSt.cueQueue.length >= MAX_QUEUE_DEPTH) {
     coopViewSt.cueQueue.shift();
@@ -283,8 +343,16 @@ const VIEW_ANIM_REGISTRY = {
 // Called from the main loop under viewer mode. Replaces `updateBattle`
 // for guests in co-op. Animations advance, finalState writes happen at
 // anim end, next packet dequeues.
+// One-shot first-tick log so we can confirm updateCoopView is being called
+// at all on a real device.
+let _loggedFirstTick = false;
+
 export function updateCoopView(dt) {
   if (!coopViewSt.active) return;
+  if (!_loggedFirstTick) {
+    _loggedFirstTick = true;
+    _vlog('updateCoopView-first-tick', { dt });
+  }
   // If no current anim, try to pick up the next packet.
   if (!coopViewSt.currentAnim && coopViewSt.cueQueue.length > 0) {
     _beginNextAnim();
@@ -304,11 +372,19 @@ export function updateCoopView(dt) {
     coopViewSt.currentAnim = null;
     return;
   }
-  const { done } = handler(event, animState, dt);
+  let handlerResult;
+  try {
+    handlerResult = handler(event, animState, dt);
+  } catch (e) {
+    _vlog('anim-handler-threw', { kind: event.eventKind, err: e && e.message });
+    handlerResult = { done: true };
+  }
+  const { done } = handlerResult;
   if (done) {
     _writeFinalState(event);
     coopViewSt.lastAppliedTurnIdx = event.turnIdx | 0;
     const wasEncounterEnd = event.eventKind === 'encounter-end';
+    _vlog('anim-done', { kind: event.eventKind, turnIdx: event.turnIdx, wasEncounterEnd });
     coopViewSt.currentAnim = null;
     // P6 — after the encounter-end anim completes, hand control back
     // to the legacy `updateBattle` FSM so it can progress the
@@ -333,6 +409,7 @@ function _beginNextAnim() {
     event,
     animState: { elapsedMs: 0, kind: event.eventKind },
   };
+  _vlog('anim-begin', { kind: event.eventKind, turnIdx: event.turnIdx });
 }
 
 // ── finalState writer ────────────────────────────────────────────────────

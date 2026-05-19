@@ -26,8 +26,22 @@ import { generateAllyStats } from './data/players.js';
 import { ps } from './player-stats.js';
 import { seed as seedRng } from './rng.js';
 import { addChatMessage } from './chat.js';
-import { COOP_VIEWER_MODE, resolveEncounterStart } from './coop-resolver.js';
+import { COOP_VIEWER_MODE, COOP_VIEWER_DEBUG, resolveEncounterStart } from './coop-resolver.js';
 import { enterViewerMode } from './coop-viewer.js';
+
+function _vlog(tag, ctx = {}) {
+  if (!COOP_VIEWER_DEBUG) return;
+  try {
+    if (typeof fetch === 'function') {
+      fetch('/api/client-error', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ msg: '[coop-viewer] ' + tag, stack: null, ctx }),
+      }).catch(() => {});
+    }
+    console.log('[coop-viewer]', tag, ctx);
+  } catch { /* never break */ }
+}
 import { COOP_HOST_ARB, resolveEncounterJoin, getResolverTurnIdx } from './coop-resolver.js';
 
 const TILE_SIZE = 16;
@@ -283,9 +297,18 @@ function _maybeHostCoopEncounter() {
 }
 
 function _emitHostEncounterStartViewEvent() {
-  if (!battleSt.isWireEncounter || !battleSt.encounterIsHost) return;
+  if (!battleSt.isWireEncounter || !battleSt.encounterIsHost) {
+    _vlog('host-emit-start-rejected', {
+      isWireEncounter: !!battleSt.isWireEncounter,
+      encounterIsHost: !!battleSt.encounterIsHost,
+    });
+    return;
+  }
   const myUid = getMyUserId() | 0;
-  if (!myUid) return;
+  if (!myUid) {
+    _vlog('host-emit-start-rejected', { reason: 'no-myUid' });
+    return;
+  }
   // Build combatants from host's local state. The host is ps + every
   // battleAlly. Guests reading the event filter themselves out by
   // userId; that lookup is in coop-viewer.js#_applyEncounterStartFinalState.
@@ -332,6 +355,13 @@ function _emitHostEncounterStartViewEvent() {
     maxHP:      m.maxHP | 0,
     statusMask: (m.status && m.status.mask) | 0,
   }));
+  _vlog('host-emit-start', {
+    monstersLen: monsters.length,
+    combatantsLen: combatants.length,
+    hostUserId: myUid,
+    // Sample first combatant to confirm realized stats are present.
+    sampleCombatant: combatants[0] || null,
+  });
   resolveEncounterStart({
     monsters,
     combatants,
@@ -449,6 +479,13 @@ setNetEncounterInviteHandler((msg) => {
   // ViewEvent (~50ms cellular RTT); when it arrives the viewer
   // overwrites battleAllies + encounterMonsters with realized stats.
   // Flag-off skips the entry — legacy FSM keeps driving the battle.
+  _vlog('invite-received', {
+    flagOn: COOP_VIEWER_MODE,
+    seed: msg.seed,
+    monstersLen: msg.monsters.length,
+    peersLen: peerList.length,
+    hostUserId: msg.hostUserId,
+  });
   if (COOP_VIEWER_MODE) {
     enterViewerMode();
   }

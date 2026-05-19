@@ -25,9 +25,23 @@ import { setNetEncounterResolutionHandler, setNetEncounterSnapshotHandler,
 // Pull the flag from its owner (coop-resolver.js) instead of via the
 // encounter-wire re-export — keeps this module Node-importable for the
 // arbiter sim's convergence tests.
-import { COOP_HOST_ARB, COOP_VIEWER_MODE } from './coop-resolver.js';
+import { COOP_HOST_ARB, COOP_VIEWER_MODE, COOP_VIEWER_DEBUG } from './coop-resolver.js';
 import { applyDeltaToActor, applyEncounterSnapshot } from './coop-deltas.js';
 import { coopViewSt, ingestViewEventPacket } from './coop-viewer.js';
+
+function _vlog(tag, ctx = {}) {
+  if (!COOP_VIEWER_DEBUG) return;
+  try {
+    if (typeof fetch === 'function') {
+      fetch('/api/client-error', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ msg: '[coop-viewer] ' + tag, stack: null, ctx }),
+      }).catch(() => {});
+    }
+    console.log('[coop-viewer]', tag, ctx);
+  } catch { /* never break */ }
+}
 import { setPlayerDamageNum, setPlayerHealNum, setEnemyDmgNum,
          setSwDmgNum, getAllyDamageNums } from './damage-numbers.js';
 
@@ -74,6 +88,15 @@ export function resolveActorRef(ref) {
 // lockstep code path stays live.
 function _onEncounterResolution(msg) {
   if (!msg) return;
+  _vlog('wire-resolution-received', {
+    turnIdx: msg.turnIdx,
+    hasViewEvent: !!msg.viewEvent,
+    viewEventKind: msg.viewEvent && msg.viewEvent.eventKind,
+    viewerFlag: COOP_VIEWER_MODE,
+    viewerActive: coopViewSt.active,
+    actionKind: msg.action && msg.action.kind,
+    msgKeys: Object.keys(msg),
+  });
   // P4 — viewer mode routing. When the flag is on AND we're an active
   // viewer AND the packet carries a ViewEvent, route to the viewer's
   // queue. The viewer owns its own dedup / ordering / finalState

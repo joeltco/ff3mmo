@@ -58,7 +58,14 @@ export const COOP_HOST_ARB = false;
 //   { HOST_ARB: false, VIEWER: false } → legacy lockstep (current prod)
 //   { HOST_ARB: true,  VIEWER: false } → host-arb only (v1.7.474–76; broken live)
 //   {                  VIEWER: true  } → viewer (target end state)
-export const COOP_VIEWER_MODE = false;
+export const COOP_VIEWER_MODE = true;
+
+// Debug instrumentation flag (P9.2+). When `true`, the viewer + resolver
+// fire structured `[coop-viewer]` logs to /api/client-error at every key
+// state boundary. Cheap to leave on during diagnosis; turn off post-stable.
+// Independent of `COOP_VIEWER_MODE` — useful for verifying host emit even
+// when the receiving guest is on flag-off (legacy) path.
+export const COOP_VIEWER_DEBUG = true;
 
 // Monotonic turn-resolution counter. Bumped once per emitted resolution
 // packet. Persists across the encounter; guests track `_lastAppliedTurnIdx`
