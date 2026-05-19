@@ -24,6 +24,7 @@ import { transSt, loadingSt, updateTransition, updateTopBoxScroll,
 import { handleInput, updateMovement } from './movement.js';
 import { updateNpcs } from './npc.js';
 import { updateBattle } from './battle-update.js';
+import { coopViewSt, updateCoopView } from './coop-viewer.js';
 import { pvpSt } from './pvp.js';
 import { drawBattle, drawBattleAllies, drawSWExplosion, drawSWDamageNumbers } from './battle-drawing.js';
 import { render, drawPoisonFlash, drawPondStrobe, updateStarEffect } from './render.js';
@@ -181,7 +182,15 @@ function _gameLoopUpdate(dt) {
   updatePauseMenu(dt);
   updateShop(dt);
   updateMsgBox(dt);
-  updateBattle(dt);
+  // Co-op viewer (P4+, docs/COOP-VIEWER-PLAN.md). When active, the
+  // guest's battle FSM is replaced by a packet-driven animation
+  // player. `coopViewSt.active` is gated on COOP_VIEWER_MODE + being
+  // a co-op guest, so this is a strict either/or — never both.
+  if (coopViewSt.active) {
+    updateCoopView(dt);
+  } else {
+    updateBattle(dt);
+  }
   updateMovement(dt);
   if (battleSt.battleState === 'none') updateNpcs(dt);
   updateTransition(dt);

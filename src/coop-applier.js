@@ -25,8 +25,9 @@ import { setNetEncounterResolutionHandler, setNetEncounterSnapshotHandler,
 // Pull the flag from its owner (coop-resolver.js) instead of via the
 // encounter-wire re-export — keeps this module Node-importable for the
 // arbiter sim's convergence tests.
-import { COOP_HOST_ARB } from './coop-resolver.js';
+import { COOP_HOST_ARB, COOP_VIEWER_MODE } from './coop-resolver.js';
 import { applyDeltaToActor, applyEncounterSnapshot } from './coop-deltas.js';
+import { coopViewSt, ingestViewEventPacket } from './coop-viewer.js';
 import { setPlayerDamageNum, setPlayerHealNum, setEnemyDmgNum,
          setSwDmgNum, getAllyDamageNums } from './damage-numbers.js';
 
@@ -72,10 +73,19 @@ export function resolveActorRef(ref) {
 // when COOP_HOST_ARB=false (Phases 1-5 dev), this no-ops so the legacy
 // lockstep code path stays live.
 function _onEncounterResolution(msg) {
+  if (!msg) return;
+  // P4 — viewer mode routing. When the flag is on AND we're an active
+  // viewer AND the packet carries a ViewEvent, route to the viewer's
+  // queue. The viewer owns its own dedup / ordering / finalState
+  // writes. Legacy delta path is bypassed.
+  if (COOP_VIEWER_MODE && coopViewSt.active && msg.viewEvent) {
+    ingestViewEventPacket(msg);
+    return;
+  }
   if (!COOP_HOST_ARB) return;
   if (!battleSt.isWireEncounter) return;
   if (battleSt.encounterIsHost) return;  // host runs resolver, not applier
-  if (!msg || typeof msg.turnIdx !== 'number') return;
+  if (typeof msg.turnIdx !== 'number') return;
 
   const tidx = msg.turnIdx | 0;
   if (tidx <= _lastAppliedTurnIdx) return;  // dupe
