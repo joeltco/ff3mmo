@@ -35,32 +35,6 @@ export const battleSt = {
   encounterCpGained: 0,
   preBattleTrack: null,
 
-  // ── Co-op random encounter (v1.7.418+) ───────────────────────────
-  // Wire-driven monster battle shared with party members. Mirror of
-  // pvpSt._wire* fields. On host: emit encounter-start, mark allies
-  // wire-driven so AI is skipped, wait for guest actions. On guest:
-  // spawn battle from encounter-invite, host appears as battleAlly[0].
-  isWireEncounter: false,
-  encounterIsHost: false,
-  encounterHostUserId: 0,
-  encounterSeed: 0,
-  // `encounterTurnIndex` was a v1.7.422-era per-round counter for assist-
-  // join seed alignment. Phase 5 of the host-arb rewrite moved that
-  // alignment to the resolver's own counter (`getResolverTurnIdx`) and
-  // the field stopped being incremented anywhere. Removed in Phase 7;
-  // legacy `encounter-assist-snapshot` ships `turnIndex: 0` literally
-  // (joiners read it but never act on it), host-arb `encounter-snapshot`
-  // ships `turnIdx: getResolverTurnIdx()` so the applier aligns its
-  // `_lastAppliedTurnIdx` correctly.
-  // Monotonic per-turn counter — bumped + used as seed offset at every
-  // dispatch in `processNextTurn` so each turn re-seeds from
-  // `encounterSeed + perTurnIndex`. Both phones increment lockstep by
-  // processing the same turn queue in the same order, so any mid-turn
-  // rand drift gets wiped before the next turn dispatch. v1.7.468 — turns
-  // the per-round reseed (`maybeReseedCoopTurn`) into a per-turn reseed
-  // so the lockstep window shrinks from "round" to "turn".
-  perTurnIndex: 0,
-
   // ── Turn system ───────────────────────────────────────────────────
   turnQueue: [],            // [{type:'player'|'enemy'|'ally', index}]
   currentAttacker: -1,

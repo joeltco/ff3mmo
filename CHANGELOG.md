@@ -18,6 +18,27 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.500 — 2026-05-20
+
+### Co-op party battles + Battle Assist RIPPED OUT — clean slate for a from-scratch rebuild
+
+After three failed architectures (lockstep v1.7.418-472, host-arb v1.7.474-477, viewer v1.7.486-496) all froze the guest phone, co-op random encounters and Battle Assist are fully removed. Random encounters are **solo-only** again. This is a deliberate clean baseline to rebuild co-op on; the design intent + root-cause analysis are preserved in the `ff3mmo-coop-rebuild` auto-memory, and the removed implementation is in git history before this commit.
+
+**Deleted wholesale:** `src/coop-resolver.js`, `coop-applier.js`, `coop-deltas.js`, `coop-viewer.js`, `coop-view-anims.js`, `encounter-wire.js`; `tools/coop-arbiter-sim.js` (+PLAN), `coop-viewer-sim.js`, `coop-wire-sim.js`, `coop-debug-grep.sh`; `docs/COOP-VIEWER-PLAN.md`, `COOP-REWRITE-PLAN.md`, `COOP-PHASE-6-SMOKE.md`.
+
+**Surgically removed:**
+- Server (`ws-presence.js`): all `encounter-*` wire kinds (start/invite/action/end/resolution/snapshot/assist-request/assist-snapshot/ally-join/host-changed), `_encounterGroups`, `_encounterHosts`, `_clearEncounterGroup`, `_pushInBattle`, the disconnect-promotion block, and the `encounter-*` per-kind rate-limit entries.
+- Client wire (`net.js`): every `sendNetEncounter*` / `setNetEncounter*` + their dispatch cases and handler vars.
+- Battle (`battle-encounter.js`): `_maybeHostCoopEncounter`, the encounter-invite handler, all Battle Assist handlers, the assist-request redirect + party-scaled encounter threshold. (`battle-turn.js`): `_pushPlayerCoop`, `reseedCoopTurnRand`/`maybeReseedCoopTurn`, `_applyWireEncounterActionForAlly`, the wire-driven ally dispatch, and the host-arb item/poison emits. (`battle-ally.js`): `ally-wire-wait` + the side-channel `_tickAllyFadeIn`. (`battle-update.js` / `battle-enemy.js` / `spell-cast.js`): the dormant resolver emit blocks. (`game-loop.js`): the `coopViewSt` viewer branch.
+- State (`battle-state.js`): `isWireEncounter`, `encounterIsHost`, `encounterHostUserId`, `encounterSeed`, `perTurnIndex`.
+- UI: the roster "Assist" menu action (`roster.js` `ROSTER_MENU_ITEMS`, `input-handler.js`).
+
+**KEPT, verified intact:** solo + boss combat, PvP duels (fully separate `pvpSt`/`pvp-*` wire), party invites + membership, party/world/PM chat, presence, roster, give-item, low-HP pose, the `inBattle` presence badge.
+
+**Two fixes from the prior debugging effort survive** (they're correct independent of co-op and PvP relies on them): the monster-attack branch unification in `battle-enemy.js` (`_targetCombatant`, guarded by `tools/encounter-sim.js`) and the realized-stats wire profile + `generateAllyStats` fast path (guarded by `tools/wire-stats-diag.js`).
+
+Net: ~3000 LOC removed across 13 files + 9 deletions. Gates: lint 0, encounter-sim 12/12, wire-stats-diag lossless, pvp-wire-sim, battle-sim. `deploy.sh` drops the three deleted co-op sim gates.
+
 ## 1.7.499 — 2026-05-19
 
 ### Co-op fix — the actual bug: concurrent-trigger race (both phones host)

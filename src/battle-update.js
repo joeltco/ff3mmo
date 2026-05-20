@@ -12,17 +12,14 @@ import { ps, grantExp, grantCP, getHitWeapon, isHitRightHand, gainJobJP, grantGi
 import { IDLE_FRAME_MS } from './combatant-pose.js';
 import { bsc, getSlashFramesForWeapon, getSlashPattern, setSlashOffsetForFrame } from './battle-sprite-cache.js';
 import { SLASH_FRAME_MS, shouldDrawSlash, SWING_HOLD_MS } from './slash-effects.js';
-import { buildTurnOrder, processNextTurn, maybeReseedCoopTurn } from './battle-turn.js';
+import { buildTurnOrder, processNextTurn } from './battle-turn.js';
 import { summarizeHits } from './battle-math.js';
 import { reseedFromEntropy } from './rng.js';
-import { sendNetPVPAction, sendNetPVPAllyJoin, getOnlinePlayerByName, getMyUserId } from './net.js';
-import { emitWireEncounterAction, endWireEncounter, clearWireEncounterQueue } from './encounter-wire.js';
-import { COOP_HOST_ARB, resolvePhysicalAttack } from './coop-resolver.js';
+import { sendNetPVPAction, sendNetPVPAllyJoin, getOnlinePlayerByName } from './net.js';
 import { rand } from './rng.js';
 import { updateBattleAlly } from './battle-ally.js';
 import { updateBattleEnemyTurn } from './battle-enemy.js';
 import { updateSpellCast, resetSpellCastVars, prerollSpellAmount, isHealSpell } from './spell-cast.js';
-import { drainPendingAssistIncoming } from './battle-encounter.js';
 import { canCastSpell } from './data/spells.js';
 import { clearAllBuffs } from './buffs.js';
 import { queueBattleMsg, replaceBattleMsg, updateBattleMsg as _updateBattleMsg, clearBattleMsgQueue,
@@ -86,20 +83,6 @@ export function resetBattleVars() {
   inputSt.battleCursor = 0;
   resetAllDmgNums();
   battleSt.encounterDropItem = null; battleSt.bossFlashTimer = 0; battleSt.battleShakeTimer = 0;
-  // Co-op random encounter flags reset every battle start. `_maybeHostCoopEncounter`
-  // (host) and `setNetEncounterInviteHandler` (guest) re-set them after this
-  // runs. v1.7.418.
-  battleSt.isWireEncounter = false;
-  battleSt.encounterIsHost = false;
-  battleSt.encounterHostUserId = 0;
-  battleSt.encounterSeed = 0;
-  battleSt.perTurnIndex = 0;
-  // Defensive (v1.7.424) — drain any encounter-action entries left over
-  // from a prior battle. `endWireEncounter` clears on the normal close
-  // path; this guards TCP half-open / browser-tab-switch cases where the
-  // peer's close handler didn't fire on the server and stale actions
-  // could replay against a new co-op partner with the same userId.
-  clearWireEncounterQueue();
   battleSt.isDefending = false; battleSt.battleAllies = []; battleSt.allyJoinRound = 0;
   battleSt.currentAllyAttacker = -1; battleSt.allyTargetIndex = -1; battleSt.allyHitResult = null; battleSt.allyHitIsLeft = false;
   battleSt.allyShakeTimer = {}; battleSt.enemyTargetAllyIdx = -1;
@@ -314,15 +297,6 @@ export function tryJoinPlayerAlly() {
                 || PLAYER_POOL.find(p => p.name === name);
     if (!member) continue;
     const allyStats = generateAllyStats(member);
-    // Co-op random encounter (v1.7.418+) — when the host's local
-    // `_maybeHostCoopEncounter` flagged this battle as wire-driven, tag
-    // each real party member's ally entry so turn dispatch waits for
-    // their wire input instead of running local AI. `userId` is set if
-    // the member came from the live-online lookup (most common path).
-    if (battleSt.isWireEncounter && member.userId) {
-      allyStats.userId = member.userId | 0;
-      allyStats.isWireDriven = true;
-    }
     battleSt.battleAllies.push(allyStats);
     partyJoined = true;
     // Wire-PvP — mirror this party member onto the opponent's `pvpEnemyAllies`.
@@ -334,14 +308,6 @@ export function tryJoinPlayerAlly() {
     }
   }
   if (battleSt.battleAllies.length >= 3) {
-    if (partyJoined) { battleSt.battleState = 'ally-fade-in'; battleSt.battleTimer = 0; return true; }
-    return false;
-  }
-  // Co-op random encounter — skip the PLAYER_POOL random-fill. Host's
-  // local fake-pool could add an actor that doesn't exist on guests'
-  // clients, breaking the canonical turn-order length. Only invited
-  // peers join in co-op. v1.7.421.
-  if (battleSt.isWireEncounter) {
     if (partyJoined) { battleSt.battleState = 'ally-fade-in'; battleSt.battleTimer = 0; return true; }
     return false;
   }
@@ -388,7 +354,7 @@ function _updateBattleMenuConfirm() {
       // pre-rolled amount via `opts.preRolledAmount`, skipping its own
       // roll so neither side double-consumes rand(). Items don't need
       // pre-rolling — heal/damage values come from item.power (no RNG).
-      if ((pvpSt.isWirePVP || battleSt.isWireEncounter) && inputSt.playerActionPending) {
+      if (pvpSt.isWirePVP && inputSt.playerActionPending) {
         const pending = inputSt.playerActionPending;
         if (pending.command === 'magic' && pending.preRolledAmount == null) {
           pending.preRolledAmount = prerollSpellAmount(pending.spellId) | 0;
@@ -400,19 +366,8 @@ function _updateBattleMenuConfirm() {
       if (pvpSt.isWirePVP && inputSt.playerActionPending) {
         _emitWirePVPAction(inputSt.playerActionPending);
       }
-      // Co-op random encounter (v1.7.418+) — peers drive this player's
-      // ally turn on their side from this action's payload. Same emit-
-      // before-dispatch shape PvP uses; receivers consume in their ally
-      // turn handler (`dequeueWireEncounterAction`).
-      if (battleSt.isWireEncounter && inputSt.playerActionPending) {
-        emitWireEncounterAction(inputSt.playerActionPending);
-      }
       battleSt.allyJoinRound++;
       if (tryJoinPlayerAlly()) return true;
-      // Co-op random encounter — reseed shared rand cursor at the round
-      // boundary so both clients land on the same initiative + AI rolls.
-      // Mirror of PvP's `_buildAndProcessNextTurn`.
-      maybeReseedCoopTurn();
       battleSt.turnQueue = buildTurnOrder(); processNextTurn();
     }
   } else { return false; }
@@ -520,26 +475,6 @@ function _finalizeComboHits() {
       replaceBattleMsg(BATTLE_CRITICAL);
     } else if (hitsLanded > 1) {
       replaceBattleMsg(_nameToBytes(hitsLanded + ' hits!'));
-    }
-  }
-  // Phase 6 — host-arb emit. Encounter only (PvP runs its own lockstep
-  // model and is untouched by the rewrite). Ships the rolled hit results
-  // so guests apply the exact damage sequence host's local FSM produced.
-  // Flag-gated: COOP_HOST_ARB=false → no-op. Live cut-over flips the
-  // flag after two-phone smoke (see docs/COOP-PHASE-6-SMOKE.md).
-  if (COOP_HOST_ARB && battleSt.isWireEncounter && battleSt.encounterIsHost
-      && !pvpSt.isPVPBattle && inputSt.targetIndex >= 0) {
-    const myUid = getMyUserId() | 0;
-    if (myUid) {
-      // hand: capture the dominant hand from the first landed hit. Slash
-      // anim cue uses this; doesn't affect HP convergence.
-      resolvePhysicalAttack({
-        actor:  { kind: 'player', userId: myUid },
-        target: { kind: 'monster', idx: inputSt.targetIndex },
-        hits:   inputSt.hitResults || [],
-        weaponId: ps.weaponR || ps.weaponL || 0,
-        hand:    isHitRightHand(0, inputSt.rHandHitCount) ? 'R' : 'L',
-      });
     }
   }
   battleSt.comboStatusInflicted = 0;
@@ -758,10 +693,7 @@ function _updateMonsterDeath() {
       battleSt.encounterJobLevelUp = gainJobJP(inputSt.battleActionCount || 1);
       inputSt.battleActionCount = 0;
       battleSt.encounterDropItem = null;
-      // Co-op encounter — use synced `rand()` so both clients roll the
-      // same drop result against the shared seed. Each client adds the
-      // item to their own inventory (everyone gets a copy). v1.7.419.
-      const _dropRand = battleSt.isWireEncounter ? rand : Math.random;
+      const _dropRand = Math.random;
       for (const m of battleSt.encounterMonsters) {
         const mData = MONSTERS.get(m.monsterId);
         // Filter null drops first — ROM-extracted drop tables include null placeholder
@@ -957,13 +889,6 @@ function _updateBoxClose() {
     if (battleSt.battleTimer >= BOSS_BOX_EXPAND_MS) {
       const playerDead = ps.hp <= 0;
       battleSt.runSlideBack = false;
-      // Co-op random encounter — notify peers our FSM finished + wipe wire
-      // state. Mirror of `sendNetPVPEnd` for the encounter wire (v1.7.418+).
-      // Safe to call when not in co-op (no-ops via internal flag check).
-      if (battleSt.isWireEncounter) {
-        const outcome = playerDead ? 'lost' : 'won';
-        endWireEncounter(outcome);
-      }
       sprite.setDirection(DIR_DOWN); battleSt.isRandomEncounter = false; battleSt.encounterMonsters = null;
       battleSt.dyingMonsterIndices = new Map(); battleSt.battleAllies = []; battleSt.allyJoinRound = 0;
       stopMusic();
@@ -1024,9 +949,6 @@ const _updatePoisonTick = updatePoisonTick;
 export function updateBattle(dt) {
   if (battleSt.battleState === 'none') return;
   battleSt.battleTimer += Math.min(dt, 33);
-  // Drain any queued assist-incoming requests if we just hit menu-open.
-  // Internal state-gate makes this a no-op outside the safe window.
-  drainPendingAssistIncoming();
   _updateBattleMsg(dt);
   if (pvpSt.isPVPBattle) { updatePVPBattle(dt); return; }
   updateBattleTimers(dt);

@@ -75,50 +75,6 @@ const _partyInvites = new Map();
 // disconnect of either side.
 const _partyMemberships = new Map();
 
-// Active co-op random-encounter groups — userId → Set<peerUserId>. Built
-// when a host's client emits `encounter-start` for a monster fight that
-// pulls in party members; cleared on `encounter-end` / disconnect / the
-// last peer dropping. Bidirectional: if A's set has B and C, then B's set
-// has A and C, and C's has A and B. Mirror of `_pvpPartners` but
-// multi-peer. v1.7.418.
-const _encounterGroups = new Map();
-
-// Per-participant host pointer — userId → hostUserId. Set when an encounter
-// group is created or extended (encounter-start, encounter-assist-snapshot).
-// Used by the disconnect handler to detect when the dropped user was the
-// host, so we can pick a new host instead of force-closing surviving
-// guests. v1.7.476 (host-arb host-promotion).
-const _encounterHosts = new Map();
-
-function _clearEncounterGroup(userId) {
-  const peers = _encounterGroups.get(userId);
-  if (!peers) return;
-  _encounterGroups.delete(userId);
-  _encounterHosts.delete(userId);
-  for (const peerId of peers) {
-    const peerSet = _encounterGroups.get(peerId);
-    if (!peerSet) continue;
-    peerSet.delete(userId);
-    if (peerSet.size === 0) {
-      _encounterGroups.delete(peerId);
-      _encounterHosts.delete(peerId);
-    }
-  }
-}
-
-// Server-driven inBattle push (v1.7.463). The 500 ms profile-diff poll that
-// normally syncs `inBattle` is too slow for the encounter-start race: party
-// member A triggers an encounter and B's step counter trips before A's poll
-// reaches B, so B's local cache of A.inBattle is still 0 → B spawns a
-// parallel battle instead of redirecting via assist. Calling this on
-// encounter-start success / encounter-end overrides the poll cadence and
-// pushes the flag to every connected client immediately.
-function _pushInBattle(userId, inBattle) {
-  const entry = _connected.get(userId);
-  if (!entry) return;
-  if (entry.profile) entry.profile.inBattle = inBattle ? 1 : 0;
-  _broadcast({ type: 'player-update', userId, fields: { inBattle: inBattle ? 1 : 0 } }, userId);
-}
 
 // Hook-chance formula — mirror of `src/pvp-search.js#getHookChance`.
 // AGI differential + Thief/Ranger job bonus, clamped to [10%, 75%].
@@ -198,15 +154,12 @@ function _rateAllow(entry) {
 
 // Per-kind sub-buckets. The global bucket above stops a single connection
 // from drowning the server, but it's a shared pool: 60 `chat` frames in a
-// burst would exhaust the bucket for that connection's `pvp-action`,
-// `encounter-action`, etc. These smaller per-kind buckets cap the
-// kinds that are user-action-driven (not poll-driven) so spamming one
-// can't starve the others. Frames not listed here are global-bucket-only.
-// v1.7.426.
+// burst would exhaust the bucket for that connection's `pvp-action`.
+// These smaller per-kind buckets cap the kinds that are user-action-driven
+// (not poll-driven) so spamming one can't starve the others. Frames not
+// listed here are global-bucket-only. v1.7.426.
 const PER_KIND_RATES = {
   'chat':                      { cap: 20, refill: 5 },
-  'encounter-assist-request':  { cap: 6,  refill: 1 },
-  'encounter-start':           { cap: 6,  refill: 1 },
   'give-item':                 { cap: 6,  refill: 1 },
   'party-invite':              { cap: 6,  refill: 1 },
 };
@@ -678,287 +631,6 @@ function _handleMessage(entry, msg) {
       _broadcastPartyMemberLeft(inviterId, entry.userId, entry.profile?.name || '');
       return;
     }
-    case 'encounter-start': {
-      // Host (this user) is triggering a co-op random encounter and wants
-      // to pull party members in. Validate each candidate is helloed + in
-      // same party + not already in another encounter / PvP, then forward
-      // `encounter-invite` to each. The host's own client spawns the battle
-      // locally at the same time — turn dispatch will wait on `encounter-
-      // action` for any actor whose userId is wire-driven.
-      if (!entry.helloed) return;
-      const seed = (parsed.seed | 0) >>> 0;
-      if (!seed) return;
-      const candidates = Array.isArray(parsed.partyUserIds) ? parsed.partyUserIds.slice(0, 8) : [];
-      const monsters   = Array.isArray(parsed.monsters)     ? parsed.monsters.slice(0, 9)     : [];
-      if (!candidates.length || !monsters.length) return;
-      if (_encounterGroups.has(entry.userId)) return;  // already in a co-op battle
-      const accepted = [];
-      for (const cand of candidates) {
-        const cid = cand | 0;
-        if (!cid || cid === entry.userId) continue;
-        const target = _connected.get(cid);
-        if (!target || !target.helloed) continue;
-        if (!_inSameParty(entry.userId, cid)) continue;
-        if (_pvpPartners.has(cid)) continue;
-        if (_encounterGroups.has(cid)) continue;
-        accepted.push(cid);
-      }
-      if (accepted.length === 0) return;
-      const all = [entry.userId, ...accepted];
-      for (const uid of all) {
-        const peerSet = new Set(all);
-        peerSet.delete(uid);
-        _encounterGroups.set(uid, peerSet);
-        _encounterHosts.set(uid, entry.userId);
-      }
-      const hostProfile = { userId: entry.userId, ...entry.profile, loc: entry.loc };
-      for (const memberId of accepted) {
-        const target = _connected.get(memberId);
-        if (!target || !target.helloed) continue;
-        const peers = [hostProfile];
-        for (const otherId of accepted) {
-          if (otherId === memberId) continue;
-          const other = _connected.get(otherId);
-          if (other && other.helloed) {
-            peers.push({ userId: otherId, ...other.profile, loc: other.loc });
-          }
-        }
-        _send(target.ws, {
-          type:       'encounter-invite',
-          seed,
-          monsters,
-          hostUserId: entry.userId,
-          peers,
-        });
-      }
-      // Push inBattle=1 for host + every accepted candidate immediately so
-      // party members' local caches don't race the 500 ms profile poll. The
-      // next step-trigger on a busy member will see the flag and route via
-      // assist-request instead of spawning a parallel encounter. v1.7.463.
-      _pushInBattle(entry.userId, true);
-      for (const uid of accepted) _pushInBattle(uid, true);
-      console.log('[encounter-start] host=' + entry.userId + ' accepted=' + JSON.stringify(accepted) + ' monsters=' + monsters.length);
-      return;
-    }
-    case 'encounter-assist-request': {
-      // Joiner picked Assist on a roster target who's in battle. Validate
-      // target exists, helloed, same location, currently in battle.
-      // Forward to target as `encounter-assist-incoming`; target's client
-      // auto-accepts by emitting `encounter-assist-snapshot`. The group
-      // mutation happens server-side at snapshot-arrival, not here, so
-      // the joiner doesn't get added to _encounterGroups until the target
-      // actually accepts (handles target-side reject for "battle slot
-      // full" / "already in PvP"). v1.7.422.
-      if (!entry.helloed) return;
-      const targetUserId = parsed.targetUserId | 0;
-      if (!targetUserId || targetUserId === entry.userId) return;
-      const target = _connected.get(targetUserId);
-      if (!target || !target.helloed) return;
-      if (target.loc !== entry.loc) return;
-      if (!target.profile?.inBattle) return;
-      if (_encounterGroups.has(entry.userId)) return;  // joiner already in another battle
-      if (_pvpPartners.has(entry.userId)) return;       // joiner is in PvP
-      console.log('[encounter-assist-request] joiner=' + entry.userId + ' → target=' + targetUserId);
-      _send(target.ws, {
-        type:        'encounter-assist-incoming',
-        fromUserId:  entry.userId,
-        fromName:    entry.profile?.name || 'Player',
-        fromProfile: { userId: entry.userId, ...entry.profile, loc: entry.loc },
-      });
-      return;
-    }
-    case 'encounter-assist-snapshot': {
-      // Target accepted (auto). Snapshot carries the current battle state
-      // for the joiner to spawn locally + the joiner's userId for the
-      // route. Server adds joiner to the existing group (or creates a
-      // pair if target was solo) + broadcasts `encounter-ally-join` to
-      // any OTHER peers already in the group so they fade-in the joiner.
-      if (!entry.helloed) return;
-      const joinerUserId = parsed.joinerUserId | 0;
-      if (!joinerUserId || joinerUserId === entry.userId) return;
-      const joiner = _connected.get(joinerUserId);
-      if (!joiner || !joiner.helloed) return;
-      // Build / extend the encounter group.
-      let group = _encounterGroups.get(entry.userId);
-      // Server-side dedup (v1.7.424) — if the joiner is already in this
-      // target's group (e.g., double-tap on Assist before the first
-      // snapshot landed), drop the second snapshot. Otherwise both
-      // target's battleAllies and the wire route get duplicated and the
-      // canonical turn-order push rolls initiative twice for the same
-      // userId → silent desync.
-      if (group && group.has(joinerUserId)) return;
-      if (!group) {
-        // Target was solo — create the bidirectional pair.
-        group = new Set([joinerUserId]);
-        _encounterGroups.set(entry.userId, group);
-        _encounterGroups.set(joinerUserId, new Set([entry.userId]));
-        // Solo target becomes host of the new 2-player group.
-        _encounterHosts.set(entry.userId, entry.userId);
-        _encounterHosts.set(joinerUserId, entry.userId);
-      } else {
-        // Extend existing group with joiner. Update every peer's set.
-        const allPeers = new Set([entry.userId, ...group, joinerUserId]);
-        for (const uid of allPeers) {
-          const peerSet = new Set(allPeers);
-          peerSet.delete(uid);
-          _encounterGroups.set(uid, peerSet);
-        }
-        // Joiner inherits the existing host pointer; target keeps theirs.
-        const existingHost = _encounterHosts.get(entry.userId) || entry.userId;
-        _encounterHosts.set(joinerUserId, existingHost);
-      }
-      console.log('[encounter-assist-snapshot] host=' + entry.userId + ' joiner=' + joinerUserId + ' group=' + Array.from(_encounterGroups.get(entry.userId)).join(','));
-      // Forward the full snapshot to the joiner so they spawn the same
-      // battle locally with current monster HPs + peer list.
-      //
-      // Peers list is identity-pinned (v1.7.426): every peer.userId must
-      // exist in `_connected` and be helloed, and identity fields
-      // (name / jobIdx / level / palIdx) are overwritten with the server's
-      // trusted profile. Live battle stats (hp, atk, def, weapon, spells)
-      // pass through from the target's view since the server doesn't
-      // track in-battle mutations. Spoofed userIds drop silently. This
-      // means a malicious target can lie about a peer's HP but cannot
-      // inject ghost identities or impersonate a different user.
-      const candidatePeers = Array.isArray(parsed.peers) ? parsed.peers.slice(0, 8) : [];
-      const peers = [];
-      for (const p of candidatePeers) {
-        const puid = (p && p.userId) | 0;
-        if (!puid) continue;
-        if (puid === joinerUserId) continue;  // joiner spawns self locally, not as ally
-        const peerEntry = _connected.get(puid);
-        if (!peerEntry || !peerEntry.helloed) continue;
-        const sp = peerEntry.profile || {};
-        peers.push({
-          ...p,
-          userId: puid,
-          name:   sp.name   != null ? sp.name   : p.name,
-          jobIdx: sp.jobIdx != null ? sp.jobIdx : p.jobIdx,
-          level:  sp.level  != null ? sp.level  : p.level,
-          palIdx: sp.palIdx != null ? sp.palIdx : p.palIdx,
-        });
-      }
-      _send(joiner.ws, {
-        type:       'encounter-assist-snapshot',
-        seed:       (parsed.seed | 0) >>> 0,
-        turnIndex:  parsed.turnIndex | 0,
-        monsters:   Array.isArray(parsed.monsters) ? parsed.monsters.slice(0, 9) : [],
-        peers,
-        hostUserId: entry.userId,
-      });
-      // Notify any OTHER peers in the group (not the target who is the
-      // snapshot source, and not the joiner who got the full snapshot)
-      // that a new ally joined. Mirror of `pvp-ally-join` shape.
-      const joinerProfile = { userId: joinerUserId, ...joiner.profile, loc: joiner.loc };
-      for (const peerId of _encounterGroups.get(entry.userId)) {
-        if (peerId === joinerUserId) continue;
-        const peer = _connected.get(peerId);
-        if (peer && peer.helloed) {
-          _send(peer.ws, { type: 'encounter-ally-join', profile: joinerProfile });
-        }
-      }
-      return;
-    }
-    case 'encounter-action': {
-      // Relay a co-op encounter action (player command or wire-driven ally
-      // command) to every other peer in the group. Mirror of pvp-action.
-      if (!entry.helloed) return;
-      const peers = _encounterGroups.get(entry.userId);
-      if (!peers || peers.size === 0) return;
-      for (const peerId of peers) {
-        const peer = _connected.get(peerId);
-        if (!peer || peer.ws.readyState !== 1) continue;
-        _send(peer.ws, {
-          type:       'encounter-action',
-          userId:     entry.userId,
-          kind:       parsed.kind,
-          target:     parsed.target,
-          spellId:    parsed.spellId,
-          itemId:     parsed.itemId,
-          damageRoll: parsed.damageRoll,
-          healAmount: parsed.healAmount,
-          hitResults: parsed.hitResults,
-        });
-      }
-      return;
-    }
-    case 'encounter-resolution': {
-      // Host-authoritative co-op rewrite (Phase 1+). Host resolves the
-      // turn locally and emits a `{turnIdx, actor, action, deltas, fx, meta}`
-      // packet; we fan out to every peer in the encounter group so each
-      // guest can apply deltas + drive animation from fx cues. Server is a
-      // dumb forwarder — no validation of the resolution contents (host is
-      // the source of truth). See docs/COOP-REWRITE-PLAN.md#wire-contract.
-      //
-      // Flag-gated on the receiving end via `COOP_HOST_ARB` in
-      // `src/encounter-wire.js`; flag-off ignores incoming packets so the
-      // existing lockstep path keeps running unchanged during migration.
-      if (!entry.helloed) return;
-      const peers = _encounterGroups.get(entry.userId);
-      if (!peers || peers.size === 0) return;
-      for (const peerId of peers) {
-        const peer = _connected.get(peerId);
-        if (!peer || peer.ws.readyState !== 1) continue;
-        _send(peer.ws, {
-          type:      'encounter-resolution',
-          userId:    entry.userId,
-          turnIdx:   parsed.turnIdx,
-          actor:     parsed.actor,
-          action:    parsed.action,
-          deltas:    parsed.deltas,
-          fx:        parsed.fx,
-          meta:      parsed.meta,
-          // P9.1 — pass through the ViewEvent payload for viewer-mode
-          // clients (docs/COOP-VIEWER-PLAN.md). Was dropped silently in
-          // the original encounter-resolution relay; guests under
-          // COOP_VIEWER_MODE saw msg.viewEvent=undefined and never
-          // ingested. Caused the v1.7.486 flash-strobe freeze.
-          viewEvent: parsed.viewEvent,
-        });
-      }
-      return;
-    }
-    case 'encounter-snapshot': {
-      // Host → specific joining peer only. Realized-stats snapshot used by
-      // the host-arb mid-battle join path (Phase 5+). Distinct wire kind
-      // from `encounter-assist-snapshot` so both can coexist during
-      // migration. Forwarded to `parsed.joinerUserId` only — not fanned
-      // out to the group.
-      if (!entry.helloed) return;
-      const joinerUserId = parsed.joinerUserId | 0;
-      if (!joinerUserId) return;
-      // Joiner must already be in the encounter group on the server side
-      // — same gating as encounter-assist-snapshot. Without this check a
-      // misbehaving host could push spurious snapshots to anyone.
-      const peers = _encounterGroups.get(entry.userId);
-      if (!peers || !peers.has(joinerUserId)) return;
-      const target = _connected.get(joinerUserId);
-      if (!target || !target.helloed) return;
-      _send(target.ws, {
-        type:        'encounter-snapshot',
-        hostUserId:  entry.userId,
-        turnIdx:     parsed.turnIdx,
-        battleState: parsed.battleState,
-        monsters:    parsed.monsters,
-        combatants:  parsed.combatants,
-      });
-      return;
-    }
-    case 'encounter-end': {
-      // Local battle ended on this user's side. Tell peers + clean up group.
-      if (!entry.helloed) return;
-      const peers = _encounterGroups.get(entry.userId);
-      if (!peers) return;
-      const outcome = String(parsed.outcome || '').slice(0, 16);
-      for (const peerId of peers) {
-        const peer = _connected.get(peerId);
-        if (peer && peer.helloed) {
-          _send(peer.ws, { type: 'encounter-end', userId: entry.userId, outcome });
-        }
-      }
-      _clearEncounterGroup(entry.userId);
-      _pushInBattle(entry.userId, false);
-      return;
-    }
     case 'pvp-end': {
       // Either player signals the battle is over (fled / lost / won locally).
       // Server drops the partner pair so a new pvp-match can fire later.
@@ -1202,55 +874,6 @@ export function attachWebSocketPresence(httpServer) {
             _send(partner.ws, { type: 'pvp-action', kind: 'disconnect' });
           }
         }
-        // Notify co-op encounter peers we dropped. Under host-arb
-        // (v1.7.474+), if the dropped user was the encounter host, also
-        // broadcast `encounter-host-changed` so a surviving peer takes over
-        // resolution duties instead of every guest freezing waiting for
-        // packets that will never come (v1.7.476). Otherwise (dropped user
-        // was a guest), just send the legacy disconnect notification — host
-        // falls back to local AI for their ally turn.
-        const epeers = _encounterGroups.get(userId);
-        if (epeers) {
-          const wasHost = _encounterHosts.get(userId) === userId;
-          let newHostUserId = 0;
-          if (wasHost && epeers.size > 0) {
-            // Pick the first surviving peer as the new host. Stable order
-            // not guaranteed across reconnects but adequate for a single
-            // promotion event. Future: prefer the longest-connected peer
-            // or the one with lowest userId for determinism across drops.
-            newHostUserId = [...epeers][0] | 0;
-          }
-          for (const peerId of epeers) {
-            const peer = _connected.get(peerId);
-            if (!peer || !peer.helloed) continue;
-            // Order matters: host-changed BEFORE the disconnect notification
-            // so the client's encounterHostUserId has already been updated
-            // to the new host by the time the disconnect handler runs its
-            // force-close guard (which checks `droppedUid === current host`).
-            if (newHostUserId) {
-              _send(peer.ws, {
-                type:           'encounter-host-changed',
-                droppedUserId:  userId,
-                newHostUserId,
-              });
-            }
-            _send(peer.ws, { type: 'encounter-action', userId, kind: 'disconnect' });
-          }
-          // Re-key host pointer on the surviving peers BEFORE clearing the
-          // dropped user's group entry. After this loop runs, the dropped
-          // user's hostPtr is gone via _clearEncounterGroup; surviving peers
-          // point at newHostUserId (or remain pointing at the old host if no
-          // promotion fired, which won't matter since _clearEncounterGroup
-          // is about to remove the dropped user from each peer's set).
-          if (newHostUserId) {
-            for (const peerId of epeers) {
-              if (_encounterHosts.has(peerId)) {
-                _encounterHosts.set(peerId, newHostUserId);
-              }
-            }
-          }
-          _clearEncounterGroup(userId);
-        }
         // Clean up pending party invites involving this user.
         _partyInvites.delete(userId);  // outgoing
         for (const [chId, tgtId] of [..._partyInvites]) {
@@ -1316,7 +939,6 @@ export const _testHooks = {
     pvpPartners: _pvpPartners,
     partyInvites: _partyInvites,
     partyMemberships: _partyMemberships,
-    encounterGroups: _encounterGroups,
     connsByIp: _connsByIp,
   },
   resetState() {
@@ -1325,7 +947,6 @@ export const _testHooks = {
     _pvpPartners.clear();
     _partyInvites.clear();
     _partyMemberships.clear();
-    _encounterGroups.clear();
     _connsByIp.clear();
   },
 };

@@ -24,7 +24,6 @@ import { startPVPSearch, cancelPVPSearch, isSearchingFor, isSearchOnCooldown } f
 import { startPartyInvite, cancelPartyInvite, isInvitingTarget, isInviteOnCooldown, isInParty, isPartyFull, removeFromParty } from './party-invite.js';
 import { openTradePick, cancelTrade, isTradingWith, isTradePicking, isTradeOnCooldown, handleTradePickInput } from './trade.js';
 import { openInspect } from './inspect.js';
-import { sendNetEncounterAssistRequest } from './net.js';
 import { playerInventory, addItem, removeItem, INV_SLOTS } from './inventory.js';
 
 // Keyboard poll map — mutated by window listeners, read throughout the codebase.
@@ -764,27 +763,6 @@ function _rosterMenuTradeAction(target) {
   // 'ok' — panel is now open; item-pick handler takes the next input.
 }
 
-// Assist action: joiner picks an in-battle roster target to assist.
-// Server validates target.inBattle + same-loc; target's client auto-
-// accepts and emits the snapshot. Both gates are also enforced here
-// for fast user feedback (no need to round-trip for the rejection).
-// v1.7.422.
-function _rosterMenuAssistAction(target) {
-  if (!target || !target.userId) {
-    showMsgBox(_nameToBytes('Cannot assist'));
-    return;
-  }
-  if (!target.inBattle) {
-    showMsgBox(_nameToBytes(target.name + ' not in battle'));
-    return;
-  }
-  // Same-loc check uses the local snapshot's `loc` field — server
-  // re-validates against authoritative loc.
-  if (!sendNetEncounterAssistRequest(target.userId)) {
-    showMsgBox(_nameToBytes('Not connected'));
-  }
-}
-
 // Party action: starts an *invite* (or cancels the active one / dismisses
 // an existing party member on the same target — menu label flips to
 // 'Cancel' / 'Dismiss' respectively). Invite-and-accept flow lives in
@@ -844,12 +822,6 @@ function _rosterInputMenu() {
       // pattern as Battle). v1.7.235.
       inputSt.rosterMenuExitTo = 'none';
       _rosterMenuPartyAction(target);
-    } else if (action === 'Assist') {
-      // Battle Assist (v1.7.422+) — wire-request to the in-battle target;
-      // target's auto-accept emits the snapshot back. Fire-and-forget;
-      // the snapshot handler in battle-encounter.js owns the next state.
-      inputSt.rosterMenuExitTo = 'none';
-      _rosterMenuAssistAction(target);
     } else if (action === 'Trade') {
       // Item-pick panel owns the next state. v1.7.237.
       inputSt.rosterMenuExitTo = 'none';

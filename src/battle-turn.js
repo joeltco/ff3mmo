@@ -2,10 +2,7 @@
 
 import { battleSt, getEnemyHP, setEnemyHP, BATTLE_SHAKE_MS, BOSS_DEF, BOSS_MAX_HP, setActiveCast } from './battle-state.js';
 import { rollHits, calcPotentialHits, rollInitiative, resolveLivingTarget } from './battle-math.js';
-import { rand, seed as seedRng } from './rng.js';
-import { dequeueWireEncounterAction } from './encounter-wire.js';
-import { getMyUserId } from './net.js';
-import { COOP_HOST_ARB, resolvePoisonTick, resolveItemUse } from './coop-resolver.js';
+import { rand } from './rng.js';
 import { BATTLE_RAN_AWAY, BATTLE_CANT_ESCAPE, BATTLE_ALLY } from './data/strings.js';
 import { getMonsterName, getSpellNameShrinesClean, getItemNameShrinesClean } from './text-decoder.js';
 import { ps, getJobLevelStatBonus } from './player-stats.js';
@@ -55,43 +52,6 @@ export function buildTurnOrder() {
         actors.push({ type: 'ally', index: i, priority: rollInitiative(battleSt.battleAllies[i].agi) });
     }
   };
-  // Co-op random encounter — push ps + battleAllies in canonical order
-  // (host's userId first, then ascending userId) so every client rolls
-  // initiative for the same logical actor against the shared rand cursor.
-  // Mirror of pvpSt._wirePushOppFirst's canonical-side rule (v1.7.409).
-  // Without this, A's `_pushPlayer` pushes ps=A then ally=B, while B's
-  // pushes ps=B then ally=A — same cursor calls, different actors → forks.
-  const _pushPlayerCoop = () => {
-    const myUid = getMyUserId() | 0;
-    const team = [];
-    if (ps.hp > 0) {
-      const playerAgi = (ps.stats ? ps.stats.agi : 5) + getJobLevelStatBonus().agi;
-      team.push({ type: 'player', index: -1, userId: myUid, agi: playerAgi });
-    }
-    for (let i = 0; i < battleSt.battleAllies.length; i++) {
-      const a = battleSt.battleAllies[i];
-      if (!a || a.hp <= 0) continue;
-      // Skip allies missing userId — they're AI-driven (legacy fake
-      // pool) and don't belong in the canonical-by-userId sort. They'd
-      // collide at userId=0 and produce unstable ordering between
-      // clients. Defensive guard; PLAYER_POOL random-fill is gated off
-      // in co-op so this shouldn't fire in practice. v1.7.424.
-      if (!a.userId) continue;
-      team.push({ type: 'ally', index: i, userId: a.userId | 0, agi: a.agi });
-    }
-    const hostUid = battleSt.encounterHostUserId | 0;
-    team.sort((x, y) => {
-      const xHost = x.userId === hostUid ? 0 : 1;
-      const yHost = y.userId === hostUid ? 0 : 1;
-      if (xHost !== yHost) return xHost - yHost;
-      return x.userId - y.userId;
-    });
-    for (const c of team) {
-      const entry = { type: c.type, priority: rollInitiative(c.agi) };
-      if (c.type === 'ally') entry.index = c.index;
-      actors.push(entry);
-    }
-  };
   const _pushOpp = () => {
     if (pvpSt.pvpOpponentStats && pvpSt.pvpOpponentStats.hp > 0) {
       actors.push({ type: 'enemy', index: -1, pvpAllyIdx: -1, priority: rollInitiative(pvpSt.pvpOpponentStats.agi) });
@@ -103,8 +63,7 @@ export function buildTurnOrder() {
     }
   };
   if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
-    if (battleSt.isWireEncounter) _pushPlayerCoop();
-    else                          _pushPlayer();
+    _pushPlayer();
     for (let i = 0; i < battleSt.encounterMonsters.length; i++) {
       if (battleSt.encounterMonsters[i].hp > 0) {
         actors.push({ type: 'enemy', index: i, priority: rollInitiative(battleSt.encounterMonsters[i].agi) });
@@ -122,32 +81,6 @@ export function buildTurnOrder() {
   return actors;
 }
 
-// Co-op random encounter — bump the per-turn counter + reseed RNG to
-// `encounterSeed + perTurnIndex`. Called at two sites:
-//
-//   1. Confirm-pause completion (battle-update.js) — round-start reseed,
-//      runs before `buildTurnOrder` so initiative + every roll inside the
-//      first turn share a seed across both phones.
-//   2. Top of `processNextTurn` after `queue.shift()` — per-turn reseed,
-//      wipes any mid-turn rand drift from the previous turn before the
-//      next turn dispatches.
-//
-// Both phones process the same turn queue in the same order so they
-// increment `perTurnIndex` identically — same seed per turn → lockstep.
-// v1.7.468. Replaces the old per-round-only reseed (`maybeReseedCoopTurn`)
-// that left mid-round drift sources visible (status inflicts, AI ally
-// activation, monster spAtk rolls, etc.).
-export function reseedCoopTurnRand() {
-  if (!battleSt.isWireEncounter || !battleSt.encounterSeed) return;
-  battleSt.perTurnIndex = (battleSt.perTurnIndex | 0) + 1;
-  const s = ((battleSt.encounterSeed >>> 0) + battleSt.perTurnIndex) >>> 0;
-  seedRng(s);
-}
-
-// Backwards-compatible alias — callers that still reach for the round-
-// boundary name keep working. Hits the same per-turn-bump path now.
-export const maybeReseedCoopTurn = reseedCoopTurnRand;
-
 // ── Turn dispatch ──────────────────────────────────────────────────────────
 export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
     battleSt.isDefending = false; inputSt.battleCursor = 0; battleSt.turnTimer = 0;
@@ -157,16 +90,8 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
     // every future hit on sender's side. See
     // docs/MULTIPLAYER-AUDIT-2026-05-15.md #1.
     if (pvpSt.isPVPBattle) pvpSt.pvpOpponentIsDefending = false;
-    // Co-op random encounter — clear per-ally defend flags set by
-    // wire-driven defend actions. Same round-scoped lifetime as the
-    // player's `battleSt.isDefending`. v1.7.419.
-    if (battleSt.isWireEncounter) {
-      for (const a of battleSt.battleAllies) if (a) a.isDefending = false;
-    }
     if (ps.hp <= 0) {
-      // ps dead but allies might still be alive — start a new round, reseed
-      // co-op rand cursor at the round boundary like the menu-confirm path.
-      maybeReseedCoopTurn();
+      // ps dead but allies might still be alive — start a new round.
       battleSt.turnQueue = buildTurnOrder();
       if (battleSt.turnQueue.length === 0) return;
       processNextTurn();
@@ -184,13 +109,6 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
     return;
   }
   const turn = battleSt.turnQueue.shift();
-  // Per-turn reseed (v1.7.468) — every turn dispatch starts from
-  // `encounterSeed + perTurnIndex` on both phones, so any rand drift
-  // accumulated inside the previous turn (status rolls / AI fallback /
-  // shieldEvade asymmetry / etc.) gets wiped here. Sender-only pre-rolls
-  // (rollHand at confirm-pause) and watcher-skipped checks no longer
-  // produce visible divergence beyond the turn they happen in.
-  reseedCoopTurnRand();
   if (turn.type === 'player') {
     if (ps.hp <= 0) { processNextTurn(); return; }
     // Status turn-start: paralysis/sleep skip, confuse flag.
@@ -276,42 +194,6 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
     battleSt.allyHitIsLeft = false;
     const ally = battleSt.battleAllies[turn.index];
     if (!ally || ally.hp <= 0) { processNextTurn(); return; }
-    // Co-op random encounter wire-driven ally — the action belongs to a
-    // peer player who's running their local turn on their phone. Replay
-    // their wire-delivered action instead of running AI here. Stall the
-    // turn (push back to queue head) until the matching encounter-action
-    // arrives. v1.7.418.
-    if (battleSt.isWireEncounter && ally.isWireDriven && ally.userId) {
-      // Mirror the sender's `processTurnStart` rand consumption so both
-      // clients' rand cursors stay aligned through status rolls (sleep
-      // wake / confuse snap / paralysis skip). Sender ran this in their
-      // player-turn branch and either took the turn (canAct=true → emit)
-      // or skipped (canAct=false → no emit). We do the same: run the
-      // status roll, then either dequeue the action or skip. Flagged
-      // with `turn._statusDone` so the unshift+retry loop doesn't
-      // double-consume the rand. v1.7.419.
-      if (ally.status && !turn._statusDone) {
-        const { canAct } = processTurnStart(ally.status, ally.maxHP || ally.hp);
-        turn._statusDone = true;
-        if (!canAct) { processNextTurn(); return; }
-      }
-      const action = dequeueWireEncounterAction(ally.userId);
-      if (!action) {
-        battleSt.turnQueue.unshift(turn);
-        // First entry into wait — start the timeout clock. Re-entries
-        // from the per-frame retry tick leave battleTimer accumulating
-        // so the watchdog in `updateBattleAlly` can flip the ally to
-        // AI-fallback after WIRE_WAIT_TIMEOUT_MS. v1.7.419.
-        if (battleSt.battleState !== 'ally-wire-wait') {
-          battleSt.battleState = 'ally-wire-wait';
-          battleSt.battleTimer = 0;
-        }
-        return;
-      }
-      if (_applyWireEncounterActionForAlly(turn.index, ally, action)) return;
-      // Fell through (kind we don't replay) — skip this ally's turn.
-      processNextTurn(); return;
-    }
     // Ally status turn-start (paralysis/sleep). Poison damage deferred.
     if (ally.status && !turn._statusDone) {
       const { canAct } = processTurnStart(ally.status, ally.maxHP || ally.hp);
@@ -434,31 +316,14 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
 // die. Returns true if any actor ticked (caller drives the hold-state).
 function _applyEndOfRoundPoison() {
   let anyTicked = false;
-  // Phase 6.5 — accumulate per-actor tick results for host-arb emit.
-  // Flag-off: never populated. Encounter only (PvP poison stays
-  // lockstep-local).
-  const haEnabled = COOP_HOST_ARB && battleSt.isWireEncounter
-                    && battleSt.encounterIsHost && !pvpSt.isPVPBattle;
-  const haResults = [];
   if (ps.hp > 0 && ps.status && hasStatus(ps.status, STATUS.POISON)) {
     const max = ps.stats ? ps.stats.maxHP : ps.hp;
     const dmg = Math.floor(max / 16);
     if (dmg > 0) {
       // NES rule: poison never kills player/ally from full → clamp to 1.
-      const beforeHp = ps.hp | 0;
       dispatchDelta({ type: 'hp', target: ps, amount: -dmg, min: 1 });
       setPlayerDamageNum({ value: dmg, timer: 0 });
       anyTicked = true;
-      if (haEnabled) {
-        const myUid = getMyUserId() | 0;
-        if (myUid) {
-          haResults.push({
-            target: { kind: 'player', userId: myUid },
-            dmg:    beforeHp - (ps.hp | 0),
-            death:  ps.hp <= 0 && beforeHp > 0,
-          });
-        }
-      }
     }
   }
   for (let i = 0; i < battleSt.battleAllies.length; i++) {
@@ -467,17 +332,9 @@ function _applyEndOfRoundPoison() {
     if (!hasStatus(ally.status, STATUS.POISON)) continue;
     const dmg = Math.floor((ally.maxHP || ally.hp) / 16);
     if (dmg <= 0) continue;
-    const beforeHp = ally.hp | 0;
     dispatchDelta({ type: 'hp', target: ally, amount: -dmg, min: 1 });
     getAllyDamageNums()[i] = { value: dmg, timer: 0 };
     anyTicked = true;
-    if (haEnabled && ally.userId) {
-      haResults.push({
-        target: { kind: 'player', userId: ally.userId | 0 },
-        dmg:    beforeHp - (ally.hp | 0),
-        death:  ally.hp <= 0 && beforeHp > 0,
-      });
-    }
   }
   if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
     for (let i = 0; i < battleSt.encounterMonsters.length; i++) {
@@ -487,17 +344,9 @@ function _applyEndOfRoundPoison() {
       const dmg = Math.floor((mon.maxHP || mon.hp) / 16);
       if (dmg <= 0) continue;
       // Monsters/PvP-enemies CAN die to poison — no min clamp.
-      const beforeHp = mon.hp | 0;
       dispatchDelta({ type: 'hp', target: mon, amount: -dmg });
       setSwDmgNum(i, dmg);
       anyTicked = true;
-      if (haEnabled) {
-        haResults.push({
-          target: { kind: 'monster', idx: i | 0 },
-          dmg:    beforeHp - (mon.hp | 0),
-          death:  mon.hp <= 0 && beforeHp > 0,
-        });
-      }
     }
   }
   if (pvpSt.isPVPBattle) {
@@ -520,9 +369,6 @@ function _applyEndOfRoundPoison() {
       setSwDmgNum(i + 1, dmg);
       anyTicked = true;
     }
-  }
-  if (haEnabled && haResults.length > 0) {
-    resolvePoisonTick({ results: haResults });
   }
   return anyTicked;
 }
@@ -573,121 +419,6 @@ function _emitWireAllyAction(allyIdx, payload) {
   sendNetPVPAction({ ...payload, actor: { idx: allyIdx + 1 } });
 }
 
-// Co-op random encounter — replay a wire-delivered action on the local
-// view of a peer player's ally turn. Returns true if the action was
-// consumed (caller should NOT advance the queue); false if it couldn't
-// be replayed (caller falls through to skip via processNextTurn).
-// v1.7.418 / extended v1.7.419 to cover magic + item + defend.
-//
-// Target translation (sender's view → receiver's view):
-//   `self`             → caster is wire-driven ally @ allyIdx → 'ally' / allyIdx
-//   `ally` userId=me   → local ps                              → 'player' / -1
-//   `ally` userId=N    → look up ally with that userId         → 'ally' / N
-//   `monster` idx=N    → 'enemy' / N (both clients sorted identically)
-function _applyWireEncounterActionForAlly(allyIdx, ally, action) {
-  if (!action) return false;
-
-  // Defend — flag per-ally so incoming damage halves. Animation skipped
-  // for MVP; round-end clear lives in processNextTurn's queue-empty
-  // branch alongside `battleSt.isDefending`. v1.7.419.
-  if (action.kind === 'defend') {
-    ally.isDefending = true;
-    return false;
-  }
-
-  // Run / skip — peer fled or skipped. Receiver's local FSM has nothing
-  // to animate for this turn; just advance.
-  if (action.kind === 'run' || action.kind === 'skip') {
-    return false;
-  }
-
-  // Attack
-  if (action.kind === 'attack') {
-    const tgt = action.target;
-    if (!tgt || tgt.kind !== 'monster') return false;
-    const tgtIdx = tgt.idx | 0;
-    if (!battleSt.encounterMonsters || !battleSt.encounterMonsters[tgtIdx]) return false;
-    const mon = battleSt.encounterMonsters[tgtIdx];
-    if (mon.hp <= 0) return false;
-    battleSt.allyTargetIndex = tgtIdx;
-    battleSt.allyHitResults = Array.isArray(action.hitResults) ? action.hitResults : [];
-    battleSt.allyHitIdx = 0;
-    battleSt.allyHitResult = battleSt.allyHitResults[0] || null;
-    battleSt.battleState = 'ally-attack-back';
-    battleSt.battleTimer = 0;
-    return true;
-  }
-
-  // Magic / item — both ride the ally-magic-cast / ally-magic-hit
-  // pipeline. Item uses `allyMagicItemMode=true` to suppress the cast
-  // flame and routes through a sentinel spellId (SPELL_CURE for heal
-  // items, SPELL_POISONA for cure-status). Damage / heal amounts are
-  // pre-rolled by the sender + ride the wire; receiver applies them
-  // directly via the same state bag.
-  if (action.kind === 'magic' || action.kind === 'item') {
-    const isItem = action.kind === 'item';
-    let spellId = (action.spellId | 0);
-    if (isItem && !spellId) {
-      const item = ITEMS.get(action.itemId | 0);
-      spellId = (item && item.effect === 'cure_status') ? SPELL_POISONA : SPELL_CURE;
-    }
-    if (!spellId) return false;
-
-    const tgt = action.target;
-    if (!tgt) return false;
-    let targetType, targetIdx;
-    if (tgt.kind === 'self') {
-      targetType = 'ally';
-      targetIdx = allyIdx;
-    } else if (tgt.kind === 'ally') {
-      const tgtUid = tgt.userId | 0;
-      const myUid = getMyUserId() | 0;
-      if (tgtUid && tgtUid === myUid) {
-        targetType = 'player';
-        targetIdx = -1;
-      } else if (tgtUid) {
-        const i = battleSt.battleAllies.findIndex(a => (a.userId | 0) === tgtUid);
-        if (i < 0) return false;
-        targetType = 'ally';
-        targetIdx = i;
-      } else {
-        return false;
-      }
-    } else if (tgt.kind === 'monster') {
-      targetType = 'enemy';
-      targetIdx = tgt.idx | 0;
-      if (!battleSt.encounterMonsters || !battleSt.encounterMonsters[targetIdx]) return false;
-    } else {
-      return false;
-    }
-
-    battleSt.allyMagicCasterIdx     = allyIdx;
-    battleSt.allyMagicTargetType    = targetType;
-    battleSt.allyMagicTargetIdx     = targetIdx;
-    battleSt.allyMagicSpellId       = spellId;
-    battleSt.allyMagicHealAmount    = action.healAmount | 0;
-    battleSt.allyMagicDamageRoll    = action.damageRoll | 0;
-    battleSt.allyMagicEffectApplied = false;
-    battleSt.allyMagicSfxPlayed     = false;
-    battleSt.allyMagicItemMode      = isItem;
-    setActiveCast({
-      caster: { faction: 'ally', idx: allyIdx },
-      spellId,
-      isItemUse: isItem,
-      targets: [{ faction: targetType, idx: targetIdx }],
-      healAmount: action.healAmount | 0,
-      damageRoll: action.damageRoll | 0,
-    });
-    queueBattleMsg(ally.name ? _nameToBytes(ally.name) : BATTLE_ALLY);
-    replaceBattleMsg(getSpellNameShrinesClean(spellId));
-    playSFX(SFX.MAGIC_CAST);
-    battleSt.battleState = 'ally-magic-cast';
-    battleSt.battleTimer = 0;
-    return true;
-  }
-
-  return false;
-}
 
 // Translate the ally state bag's `{ allyMagicTargetType, allyMagicTargetIdx }`
 // into the wire target shape. 'player'/-1 → me.0 (sender's main player);
@@ -918,38 +649,6 @@ function _playerTurnConsumable() {
   playSFX(SFX.CURE);
   const { target, allyIndex } = inputSt.playerActionPending;
 
-  // Phase 6.5 — host-arb item emit. Snapshot the picked target's
-  // hp/status BEFORE apply; diff + emit after. Encounter only. Flag-off:
-  // no-op.
-  const haEnabled = COOP_HOST_ARB && battleSt.isWireEncounter
-                    && battleSt.encounterIsHost && !pvpSt.isPVPBattle;
-  let haPickedRef = null;
-  let haBefore = null;
-  let haPickedActor = null;
-  if (haEnabled) {
-    if (target === 'player') {
-      if (allyIndex == null || allyIndex < 0) {
-        haPickedActor = ps;
-        const myUid = getMyUserId() | 0;
-        if (myUid) haPickedRef = { kind: 'player', userId: myUid };
-      } else {
-        haPickedActor = battleSt.battleAllies && battleSt.battleAllies[allyIndex];
-        if (haPickedActor && haPickedActor.userId) {
-          haPickedRef = { kind: 'player', userId: haPickedActor.userId | 0 };
-        }
-      }
-    } else if (typeof target === 'number') {
-      haPickedActor = battleSt.encounterMonsters && battleSt.encounterMonsters[target];
-      haPickedRef = { kind: 'monster', idx: target | 0 };
-    }
-    if (haPickedActor) {
-      haBefore = {
-        hp:   haPickedActor.hp | 0,
-        mask: (haPickedActor.status && haPickedActor.status.mask) | 0,
-      };
-    }
-  }
-
   if (effect === 'cure_status') {
     // Status cure items — only target player for now.
     const flag = STATUS_NAME_TO_FLAG[itemDat.cures];
@@ -1030,36 +729,6 @@ function _playerTurnConsumable() {
       const maxHP = pvpSt.isPVPBattle ? (pvpSt.pvpOpponentStats ? pvpSt.pvpOpponentStats.maxHP : 1) : BOSS_MAX_HP;
       const heal = Math.min(power, maxHP - curHP);
       setEnemyHP(curHP + heal); battleSt.itemHealAmount = heal; setEnemyHealNum({ value: heal, timer: 0, index: 0 });
-    }
-  }
-  // Phase 6.5 — emit item-use resolution. Uses the snapshot taken at
-  // function start. Note that the apply-time redirect (target died →
-  // pick next-living) may have shifted the actual recipient; the emit
-  // reflects the PICKED target's net change, which is what the live
-  // target experienced because the redirect re-points the apply, not
-  // the snapshot's actor. If the redirected target differs the legacy
-  // path still applies correctly (host is single source of truth); the
-  // wire emit just may animate on the wrong cell. Cosmetic only, no
-  // state divergence. Future polish: capture the redirect target.
-  if (haEnabled && haPickedActor && haBefore && haPickedRef) {
-    const myUid = getMyUserId() | 0;
-    if (myUid) {
-      const hpDelta = (haPickedActor.hp | 0) - haBefore.hp;
-      const postMask = (haPickedActor.status && haPickedActor.status.mask) | 0;
-      const addBits    = (postMask & ~haBefore.mask) >>> 0;
-      const removeBits = (haBefore.mask & ~postMask) >>> 0;
-      const r = { target: haPickedRef, miss: false };
-      if (hpDelta < 0)      r.dmg  = -hpDelta;
-      else if (hpDelta > 0) r.heal = hpDelta;
-      if (addBits)    r.statusAdd    = addBits;
-      if (removeBits) r.statusRemove = removeBits;
-      if (haPickedActor.hp <= 0 && haBefore.hp > 0) r.death = true;
-      if (hpDelta === 0 && !addBits && !removeBits && !r.death) r.miss = true;
-      resolveItemUse({
-        actor:   { kind: 'player', userId: myUid },
-        itemId:  itemId | 0,
-        results: [r],
-      });
     }
   }
   battleSt.battleState = 'item-use'; battleSt.battleTimer = 0;

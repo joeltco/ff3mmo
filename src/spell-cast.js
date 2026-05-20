@@ -28,8 +28,6 @@ import { elemMultiplier, resolveLivingTarget } from './battle-math.js';
 import { rand } from './rng.js';
 import { pvpSt } from './pvp.js';
 import { applyBuff, BUFF_HASTE, BUFF_PROTECT, BUFF_REFLECT } from './buffs.js';
-import { COOP_HOST_ARB, resolveSpellCast } from './coop-resolver.js';
-import { getMyUserId } from './net.js';
 
 let _processNextTurn = () => {};
 export function initSpellCast({ processNextTurn }) { _processNextTurn = processNextTurn; }
@@ -108,102 +106,7 @@ export function resetSpellCastVars() {
   _spellId = 0; _targets = []; _hitIdx = 0; _effectApplied = false; _baseAmount = -1;
   _sfxPlayed = false;
   _magicHitPhase = 'impact-walk';
-  _hostArbBefore = [];
   clearActiveCast();
-}
-
-// Phase 6.5 — host-arb emit support. Snapshot the BEFORE state of each
-// target at cast-init time (`startSpellCast`), diff against the final
-// state at `_finishMagicHit`, ship resulting TargetResults via
-// `resolveSpellCast`. Flag-gated; default off → no emit, no behavior
-// change.
-let _hostArbBefore = [];
-
-// Resolve a target descriptor (`{ type, index }`) to its live actor in
-// `battleSt`. Returns null for unrouted targets (pvp-enemy under co-op,
-// for example — pvp lives outside host-arb scope).
-function _hostArbResolveActor(t) {
-  if (!t) return null;
-  if (t.type === 'player') return ps;
-  if (t.type === 'ally')   return battleSt.battleAllies && battleSt.battleAllies[t.index];
-  if (t.type === 'enemy') {
-    if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
-      return battleSt.encounterMonsters[t.index];
-    }
-  }
-  return null;  // pvp / boss — host-arb encounter-only
-}
-
-// Build an ActorRef from a target descriptor for the resolution packet.
-function _hostArbActorRef(t, myUid) {
-  if (!t) return null;
-  if (t.type === 'player') return { kind: 'player', userId: myUid | 0 };
-  if (t.type === 'ally') {
-    const a = battleSt.battleAllies && battleSt.battleAllies[t.index];
-    return a && a.userId ? { kind: 'player', userId: a.userId | 0 } : null;
-  }
-  if (t.type === 'enemy') return { kind: 'monster', idx: t.index | 0 };
-  return null;
-}
-
-// Capture {hp, mp, mask} for every target so we can diff after apply.
-// Called at startSpellCast right after `_targets` is finalized. Skips
-// when host-arb is off so flag-off path has zero overhead.
-function _hostArbSnapshotBefore() {
-  if (!COOP_HOST_ARB) return;
-  _hostArbBefore = _targets.map(t => {
-    const actor = _hostArbResolveActor(t);
-    if (!actor) return null;
-    return {
-      hp:   actor.hp | 0,
-      mp:   actor.mp | 0,
-      mask: (actor.status && actor.status.mask) | 0,
-    };
-  });
-}
-
-// Diff final state against snapshot, emit. Called from `_finishMagicHit`
-// before death routing — the resolver's `death` flag is set per-target
-// from `finalActor.hp <= 0`. Encounter-only; PvP paths get null actorRefs
-// and are filtered out.
-function _hostArbEmitSpellResolution() {
-  if (!COOP_HOST_ARB) return;
-  if (!battleSt.isWireEncounter || !battleSt.encounterIsHost) return;
-  if (!_targets || _targets.length === 0) return;
-  const myUid = getMyUserId() | 0;
-  if (!myUid) return;
-
-  const results = [];
-  for (let i = 0; i < _targets.length; i++) {
-    const t = _targets[i];
-    const before = _hostArbBefore[i];
-    const actor = _hostArbResolveActor(t);
-    const ref = _hostArbActorRef(t, myUid);
-    if (!actor || !before || !ref) continue;
-    const hpDelta = (actor.hp | 0) - before.hp;
-    const maskDelta = (actor.status && actor.status.mask | 0) - before.mask;
-    const addBits = (((actor.status && actor.status.mask | 0)) & ~before.mask) >>> 0;
-    const removeBits = (before.mask & ~((actor.status && actor.status.mask | 0))) >>> 0;
-    const r = { target: ref, miss: false };
-    if (hpDelta < 0)      r.dmg  = -hpDelta;
-    else if (hpDelta > 0) r.heal = hpDelta;
-    if (addBits)    r.statusAdd    = addBits;
-    if (removeBits) r.statusRemove = removeBits;
-    if (actor.hp <= 0 && before.hp > 0) r.death = true;
-    // Pure no-op target (e.g., miss / ineffective): mark miss so guest's
-    // animation still plays the impact cue.
-    if (hpDelta === 0 && !addBits && !removeBits && !r.death) {
-      r.miss = true;
-    }
-    results.push(r);
-    void maskDelta;
-  }
-  if (results.length === 0) return;
-  resolveSpellCast({
-    actor: { kind: 'player', userId: myUid },
-    spellId: _spellId | 0,
-    results,
-  });
 }
 
 // NES FF3 magic formula (31/B1B4): atk = floor(stat/2) + power, +rand(0..atk/2).
@@ -215,14 +118,12 @@ function _rollMagicAmount(power, useMnd) {
 }
 
 // Pre-roll the magic amount for a player-cast spell BEFORE wire emit so the
-// rolled value can ride the wire payload. Co-op + PvP wire bridges call this
-// at confirm-pause (battle-update.js#_updateBattleMenuConfirm); the rolled
+// rolled value can ride the wire payload. The PvP wire bridge calls this at
+// confirm-pause (battle-update.js#_updateBattleMenuConfirm); the rolled
 // value gets stashed on `pending.preRolledAmount` and threaded through
-// `startSpellCast(spellId, ts, { preRolledAmount })`. Receivers apply the
-// supplied value directly (battle-turn.js#_applyWireEncounterActionForAlly
-// already reads `action.healAmount` / `action.damageRoll`); sender skips its
-// own roll so neither side double-consumes `rand()`. Returns 0 for spells
-// with no numeric amount (status / revive / buffs).
+// `startSpellCast(spellId, ts, { preRolledAmount })`. The receiver applies
+// the supplied value directly so neither side double-consumes `rand()`.
+// Returns 0 for spells with no numeric amount (status / revive / buffs).
 export function prerollSpellAmount(spellId) {
   const spell = SPELLS.get(spellId);
   if (!spell || !(spell.power > 0)) return 0;
@@ -372,10 +273,6 @@ export function startSpellCast(spellId, targetSpec, opts = {}) {
     });
   }
 
-  // Phase 6.5 — capture pre-apply state for host-arb diff emit. Must
-  // run AFTER `_targets` is finalized + BEFORE any mutation. Flag-off:
-  // no-op.
-  _hostArbSnapshotBefore();
 
   // Wire bridge: when the caller pre-rolled the amount (co-op + PvP wire path
   // at confirm-pause), use that value as `_baseAmount` and skip the local
@@ -959,11 +856,6 @@ export function updateSpellCast(dt) {
 // throw-walk completion and the heal-style total-time completion.
 function _finishMagicHit() {
   clearHealNums();
-  // Phase 6.5 — emit host-arb spell resolution BEFORE death-routing
-  // logic below. Captures the diff between pre-cast snapshot and
-  // post-apply state; ships per-target dmg/heal/miss/status/death.
-  // Flag-off: no-op. Encounter-only.
-  _hostArbEmitSpellResolution();
   // Collect kills across the spell's target set. Encounter monsters use
   // monsterIndex (idx into encounterMonsters); PVP enemies use cellIdx
   // (0 = main opp, 1+ = pvpEnemyAllies[idx-1]). Pre-v1.7.213 the PVP

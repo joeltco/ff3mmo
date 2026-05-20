@@ -34,7 +34,7 @@ const ROSTER_FADE_STEP_MS = 100;
 const ROSTER_SLIDE_SPEED  = 0.15;  // px per ms
 const ROSTER_ROW_H        = 32;
 const ROSTER_VISIBLE      = 3;
-export const ROSTER_MENU_ITEMS = ['Party', 'Battle', 'Assist', 'Trade', 'Message', 'Inspect'];
+export const ROSTER_MENU_ITEMS = ['Party', 'Battle', 'Trade', 'Message', 'Inspect'];
 
 // ── Mutable state ─────────────────────────────────────────────────────────
 let rosterTimer        = 0;

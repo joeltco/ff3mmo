@@ -6,7 +6,6 @@ import { battleSt, getEnemyHP, setEnemyHP,
 import { dispatchDelta } from './deltas.js';
 import { calcDamage, elemMultiplier, BOSS_HIT_RATE, GOBLIN_HIT_RATE } from './battle-math.js';
 import { rand } from './rng.js';
-import { getMyUserId } from './net.js';
 import { ps, getShieldEvade } from './player-stats.js';
 import { SFX, playSFX } from './music.js';
 import { tryInflictStatus, blindHitPenalty, wakeOnHit, STATUS_NAME_BYTES } from './status-effects.js';
@@ -14,7 +13,6 @@ import { queueBattleMsg, replaceBattleMsg } from './battle-msg.js';
 import { _nameToBytes } from './text-utils.js';
 import { getPlayerDamageNum, setPlayerDamageNum, getAllyDamageNums } from './damage-numbers.js';
 import { selectCursor, saveSlots } from './save-state.js';
-import { COOP_HOST_ARB, resolveMonsterAttack } from './coop-resolver.js';
 
 // Injected at boot — avoids circular import on main.js
 let _processNextTurn = () => {};
@@ -169,33 +167,7 @@ function _processEnemyFlash() {
   if (battleSt.battleState !== 'enemy-flash' || battleSt.battleTimer < BOSS_PREFLASH_MS) return false;
   const livingAllies = battleSt.battleAllies.filter(a => a.hp > 0);
   let targetAlly = -1;
-  // Co-op random encounter (v1.7.419+) — both clients must pick the SAME
-  // canonical actor for monster targeting. Without this, 'ps' on A's
-  // screen is `ps=A, ally=B` and on B's it's `ps=B, ally=A`; same rand
-  // result picks DIFFERENT logical actors → HP diverges. Use shared
-  // `rand()` against a canonical-order team list (host first, then by
-  // ascending userId) so both clients land on the same picked userId,
-  // then map locally to ps (-1) or battleAllies[N].
-  if (battleSt.isWireEncounter) {
-    const team = [];
-    const myUid = getMyUserId() | 0;
-    if (ps.hp > 0) team.push({ userId: myUid, type: 'ps', localIdx: -1 });
-    for (let i = 0; i < battleSt.battleAllies.length; i++) {
-      const a = battleSt.battleAllies[i];
-      if (a && a.hp > 0) team.push({ userId: a.userId | 0, type: 'ally', localIdx: i });
-    }
-    if (team.length > 0) {
-      team.sort((x, y) => {
-        const xHost = x.userId === battleSt.encounterHostUserId ? 0 : 1;
-        const yHost = y.userId === battleSt.encounterHostUserId ? 0 : 1;
-        if (xHost !== yHost) return xHost - yHost;
-        return x.userId - y.userId;
-      });
-      const pickIdx = Math.floor(rand() * team.length);
-      const picked = team[pickIdx];
-      targetAlly = picked.type === 'ps' ? -1 : picked.localIdx;
-    }
-  } else if (livingAllies.length > 0) {
+  if (livingAllies.length > 0) {
     const allyOptions = battleSt.battleAllies.map((a, i) => a.hp > 0 ? i : -1).filter(i => i >= 0);
     if (ps.hp <= 0) {
       targetAlly = allyOptions[Math.floor(rand() * allyOptions.length)];
@@ -243,17 +215,13 @@ function _processEnemyFlash() {
     const attackerRef = battleSt.encounterMonsters && battleSt.encounterMonsters[battleSt.currentAttacker];
     setEnemyAttackerTarget(attackerRef, targetAlly);
   }
-  const preStatusMask = (t.status && t.status.mask) | 0;
   const { total, landed } = rollMultiHit(t.def, t.elemResist, t.shieldEvade, t.evade);
-  let finalDmg = 0;
-  let miss = false;
   if (landed > 0) {
     let dmg = total;
     if (t.isDefending) dmg = Math.max(1, Math.floor(dmg / 2));
     // Protect halves physical damage independently of Defend; both stack.
     // Canon FF3 NES Protect is physical-only — leave magic damage paths alone.
     if (t.hasProtect) dmg = Math.max(1, Math.floor(dmg / 2));
-    finalDmg = dmg;
     dispatchDelta({ type: 'hp', target: t.ref, amount: -dmg });
     t.setDmgNum(dmg);
     // Physical hit wakes sleeping targets
@@ -269,26 +237,9 @@ function _processEnemyFlash() {
     battleSt.battleState = t.stateHit;
     battleSt.battleTimer = 0;
   } else {
-    miss = true;
     t.setMiss();
     battleSt.battleState = t.stateMiss;
     battleSt.battleTimer = 0;
-  }
-  // Host-arb emit — kept under flag-off so the dormant rewrite stays
-  // exercisable. Will be removed in the rewrite-deletion pass.
-  if (COOP_HOST_ARB && battleSt.isWireEncounter && battleSt.encounterIsHost) {
-    const postStatusMask = (t.status && t.status.mask) | 0;
-    const statusAdd = (postStatusMask & ~preStatusMask) >>> 0;
-    const targetUid = (targetAlly >= 0) ? (t.ref.userId | 0) : (getMyUserId() | 0);
-    if (targetUid) {
-      resolveMonsterAttack({
-        monsterIdx: battleSt.currentAttacker,
-        target: { kind: 'player', userId: targetUid },
-        dmg:      finalDmg,
-        miss,
-        statusAdd,
-      });
-    }
   }
   return true;
 }

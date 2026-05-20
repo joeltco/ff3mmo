@@ -23,8 +23,6 @@ import { CAST_PHASE_MS_THROW, CAST_PHASE_MS_HEAL } from './cast-anim.js';
 import { applyMagicDamage, applyMagicStatus, applyMagicHeal,
          applyMagicCureStatus, applyMagicSight, applyMagicErase,
          applySpell, playSpellImpactSFX } from './combatant-cast.js';
-import { COOP_HOST_ARB, resolvePhysicalAttack, resolveSpellCast } from './coop-resolver.js';
-import { getMyUserId } from './net.js';
 
 // Injected at boot — avoids circular import on main.js
 let _buildTurnOrder = () => [];
@@ -41,24 +39,6 @@ function _finalizeAllyCombo() {
   const { totalDmg, anyCrit, allMiss } = summarizeHits(battleSt.allyHitResults);
   setEnemyDmgNum(allMiss ? { miss: true, timer: 0 } : { value: totalDmg, crit: anyCrit, timer: 0 });
   inputSt.targetIndex = battleSt.allyTargetIndex;
-  // Phase 6 — host-arb emit. The attacking "ally" on host's view is a
-  // peer player; their action was relayed via `encounter-action` and
-  // host ran the rolled hits locally. Ship the outcome so every other
-  // guest (including the original sender) applies the same damage.
-  // Encounter only (PvP unaffected). Flag-gated; default off.
-  if (COOP_HOST_ARB && battleSt.isWireEncounter && battleSt.encounterIsHost
-      && !pvpSt.isPVPBattle && battleSt.allyTargetIndex >= 0) {
-    const ally = battleSt.battleAllies[battleSt.currentAllyAttacker];
-    if (ally && ally.userId) {
-      resolvePhysicalAttack({
-        actor:  { kind: 'player', userId: ally.userId | 0 },
-        target: { kind: 'monster', idx: battleSt.allyTargetIndex },
-        hits:   battleSt.allyHitResults || [],
-        weaponId: ally.weaponId || ally.weaponL || 0,
-        hand:    battleSt.allyHitIsLeft ? 'L' : 'R',
-      });
-    }
-  }
 }
 
 // ── After damage-show: check for death/dissolve or advance turn ──────────────
@@ -337,60 +317,11 @@ function _applyAllyMagicEffect() {
   const onMiss      = isEnemy      ? () => _setAllyMagicEnemyDmgNum({ miss: true, timer: 0 })    : null;
   const onLand      = isEnemy      ? () => _setAllyMagicEnemyDmgNum({ value: 0, timer: 0 })       : null;
 
-  // Phase 6.5 — host-arb emit for ally-driven spells. Snapshot the
-  // target's HP/MP/status mask BEFORE apply, run applySpell, diff after,
-  // emit resolveSpellCast. Encounter only; flag-gated.
-  const haEnabled = COOP_HOST_ARB && battleSt.isWireEncounter
-                    && battleSt.encounterIsHost && !pvpSt.isPVPBattle;
-  const ally = battleSt.battleAllies[battleSt.allyMagicCasterIdx];
-  const haActorUid = haEnabled && ally && ally.userId ? (ally.userId | 0) : 0;
-  let haBefore = null;
-  if (haActorUid && (tType === 'enemy' || tType === 'player' || tType === 'ally')) {
-    haBefore = {
-      hp:   target.hp | 0,
-      mask: (target.status && target.status.mask) | 0,
-    };
-  }
-
   applySpell(spell, target, {
     amount, statusFlag,
     onDmgNum, onHealNum, onSparkle, onMiss, onLand,
     onStatusMsg: replaceBattleMsg,
   });
-
-  if (haActorUid && haBefore) {
-    const hpDelta = (target.hp | 0) - haBefore.hp;
-    const postMask = (target.status && target.status.mask) | 0;
-    const addBits    = (postMask & ~haBefore.mask) >>> 0;
-    const removeBits = (haBefore.mask & ~postMask) >>> 0;
-    const r = { target: null, miss: false };
-    if (tType === 'enemy')        r.target = { kind: 'monster', idx: tIdx | 0 };
-    else if (tType === 'player')  r.target = { kind: 'player',  userId: haActorUid };  // ally casting on host
-    else if (tType === 'ally') {
-      const tgtAlly = battleSt.battleAllies[tIdx];
-      if (tgtAlly && tgtAlly.userId) r.target = { kind: 'player', userId: tgtAlly.userId | 0 };
-    }
-    if (r.target) {
-      if (hpDelta < 0)      r.dmg  = -hpDelta;
-      else if (hpDelta > 0) r.heal = hpDelta;
-      if (addBits)    r.statusAdd    = addBits;
-      if (removeBits) r.statusRemove = removeBits;
-      if (target.hp <= 0 && haBefore.hp > 0) r.death = true;
-      if (hpDelta === 0 && !addBits && !removeBits && !r.death) r.miss = true;
-      // tType === 'player' means ally cast on HOST's ps. Override actor.userId
-      // back to the casting ally (above r.target.userId may be wrong for that
-      // path). Recompute target ref correctly.
-      if (tType === 'player') {
-        const myUid = getMyUserId() | 0;
-        if (myUid) r.target = { kind: 'player', userId: myUid };
-      }
-      resolveSpellCast({
-        actor:   { kind: 'player', userId: haActorUid },
-        spellId: spellId | 0,
-        results: [r],
-      });
-    }
-  }
 }
 
 function _updateAllyMagicCast(dt) {
@@ -496,56 +427,7 @@ function _updateAllyKOSequence() {
   return false;
 }
 
-// Side-channel fade-in tick (v1.7.423+) — drives the fade-down on any
-// ally that was instant-added (via co-op invite spawn, assist accept,
-// or peer ally-join broadcast). Independent of `battleState` so it works
-// during any mid-battle phase without interrupting the FSM. Each ally
-// carries `fadeInStartMs` set at push-time; `fadeStep` is derived from
-// elapsed time. The classic `_updateAllyJoin` state-machine fade-in still
-// drives the `tryJoinPlayerAlly` path; this is parallel for wire-spawned
-// peers that bypass that state.
-const FADE_IN_PER_STEP_MS = 100;
-function _tickAllyFadeIn() {
-  const now = Date.now();
-  for (const a of battleSt.battleAllies) {
-    if (!a || !a.fadeInStartMs) continue;
-    const elapsed = now - a.fadeInStartMs;
-    const step = ROSTER_FADE_STEPS - Math.floor(elapsed / FADE_IN_PER_STEP_MS);
-    a.fadeStep = Math.max(0, step);
-    if (a.fadeStep <= 0) { delete a.fadeInStartMs; a.fadeStep = 0; }
-  }
-}
-
 export function updateBattleAlly(dt) {
-  _tickAllyFadeIn();
-  // Co-op random encounter — wire-driven ally is waiting for the remote
-  // player's `encounter-action` to arrive. processNextTurn unshifted the
-  // turn back to the queue head and set this state; each frame we retry
-  // by calling processNextTurn — when the action shows up, the ally turn
-  // proceeds; otherwise it stalls another frame. v1.7.418.
-  //
-  // Disconnect timeout (v1.7.419) — if we've been waiting WIRE_WAIT_TIMEOUT_MS
-  // (~30s), the peer's WS probably dropped without the server's synthetic
-  // disconnect arriving (TCP half-open / cellular loss). Pop the stalled
-  // turn, flip the ally to AI-fallback (defend this turn + isWireDriven
-  // off so future turns run AI), then advance.
-  if (battleSt.battleState === 'ally-wire-wait') {
-    // v1.7.471 — peer misses the turn if no wire action arrives in the
-    // same window the local player has (TURN_TIME_MS=10s). No auto-defend,
-    // no AI fallback — just skip the queue forward. `isWireDriven` stays
-    // true so the next turn's wire-wait runs normally if the peer's
-    // actions resume. Matches the local "miss your turn" semantics.
-    // Pre-v1.7.471: 45s timeout flipped `isWireDriven=false` permanently
-    // → fake-AI took over; v1.7.470 tried turn-scoped defend; both wrong.
-    const WIRE_WAIT_TIMEOUT_MS = 10000;
-    if (battleSt.battleTimer > WIRE_WAIT_TIMEOUT_MS) {
-      battleSt.turnQueue.shift();  // drop the unfulfilled turn; no animation, no damage.
-      _processNextTurn();
-      return true;
-    }
-    _processNextTurn();
-    return true;
-  }
   if (_updateAllyJoin()) return true;
   if (_updateAllyAttack()) return true;
   if (_updateAllyMagicCast(dt)) return true;
