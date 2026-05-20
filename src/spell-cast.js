@@ -482,12 +482,7 @@ function _applyEnemyEffect(idx, spell) {
   // Non-recovery (damage) spell on enemy.
   if (isBoss) {
     // Boss path bypasses applyMagicDamage (no monster object), so do the
-    // hit-check locally to preserve hit<100 miss chance. No watcher
-    // counterpart for boss combat (battleSt.isRandomEncounter=false,
-    // pvpSt.isPVPBattle=false → `_allyMagicEnemyTarget` returns null on
-    // peer side), so the asymmetric rand consumption here doesn't break
-    // co-op sync. Battle Assist on a boss fight is the one edge case where
-    // this would drift — TODO if/when assist-on-boss ships.
+    // hit-check locally to preserve hit<100 miss chance.
     if (spell.hit > 0 && spell.hit < 100 && rand() * 100 >= spell.hit) {
       _setEnemyDmg(idx, 0, true);
       return;

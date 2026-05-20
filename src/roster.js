@@ -317,8 +317,8 @@ function _drawRosterRow(p, i, panelTop) {
   }
   // In-battle badge — small red dot at top-left of the portrait box for
   // any real wire-presence player who's currently in combat (inBattle
-  // flag wire-pushed by main.js profile builder). Drives the "Assist"
-  // action on the roster menu. v1.7.422.
+  // flag wire-pushed by main.js profile builder). Presence-only as of
+  // v1.7.500 — the "Assist" roster action it once fed was removed.
   if (p.isReal && p.inBattle && fadeStep < ROSTER_FADE_STEPS) {
     ui.ctx.fillStyle = fadeStep === 0 ? '#f83800' : fadeStep === 1 ? '#a32200' : '#5e1300';
     ui.ctx.fillRect(HUD_RIGHT_X + 2, rowY + 2, 3, 3);

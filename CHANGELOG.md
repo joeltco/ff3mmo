@@ -18,6 +18,38 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.501 — 2026-05-20
+
+### Fix PvP desync — challenger in PvP battle while target loads monsters
+
+A successful PvP hook split the two phones apart **every time the match
+resolved on the target's side**:
+
+- `_triggerEncounterWithPVPCheck` (battle-encounter.js) armed a 500 ms fallback
+  that fired `startRandomEncounter()` if `battleState === 'none'`.
+- When the hook HIT, the target's `pvp-match` handler resolved through a
+  `CONNECTING_HOLD_MS` (1000 ms) "Connecting..." hold during which `battleState`
+  is *still* `'none'` — the PvP battle only starts when the hold expires.
+- Nobody cleared `_pendingPVPCheck`, so at 500 ms the fallback dropped the
+  target into a **monster fight** while the challenger entered PvP alone. The
+  server kept relaying `pvp-action` to a target who was no longer in the match.
+
+Fix: the match handler now calls `cancelPendingPVPCheck()` the instant it
+commits to the battle, neutralising the fallback; the fallback timeout is
+widened 500 ms → 2500 ms so a slow-but-not-dropped match reply isn't pre-empted
+either (both hit and miss still resolve via explicit wire messages well before
+it — the timeout is dropped-packet insurance only). The wire-sim can't catch
+this (it's a client `setTimeout` race, not a wire-contract issue); verified by
+two-phone live smoke.
+
+### Comment cleanup — Battle-Assist references after the v1.7.500 rip-out
+
+Corrected stale comments in `main.js`, `roster.js`, `battle-draw-allies.js`,
+`spell-cast.js`, and `physical-attack.js` that still described the removed
+Battle-Assist action / co-op viewer / host-arb modes as live. No behavior
+change. The in-battle ⚔ roster badge + `inBattle` wire flag are kept as pure
+presence (and the foundation the assist/party-battle rebuild reattaches to).
+
 ## 1.7.500 — 2026-05-20
 
 ### Co-op party battles + Battle Assist RIPPED OUT — clean slate for a from-scratch rebuild

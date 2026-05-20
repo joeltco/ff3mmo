@@ -224,10 +224,10 @@ function _drawAllyPortrait(i, ally, isVicPose, isAllyAttack, isAllyHit, isNearFa
   // Suppressed when an active status would render its icon in the same
   // space (status sprite priority, v1.7.209).
   const allyHasActiveStatus = ally.status && ally.status.mask !== 0;
-  // Suppress sweat during Battle-Assist fade-in (fadeStep > 0). The body
-  // has a pre-rendered fade array but sweat is a single sprite; rendering
-  // it at full opacity while the body fades looks like a floating bead.
-  // v1.7.427.
+  // Suppress sweat during ally fade-in (fadeStep > 0 — e.g. a PvP ally
+  // joining mid-battle). The body has a pre-rendered fade array but sweat
+  // is a single sprite; rendering it at full opacity while the body fades
+  // looks like a floating bead.
   if (isNearFatal && bsc.sweatFrames.length === 2 && !isAllyAttack && !isAllyHit && !isVicPose && !isThisAllySlash && !allyHasActiveStatus && ally.fadeStep === 0) {
     const sweatIdx = Math.floor(Date.now() / 133) & 1;
     ui.ctx.drawImage(bsc.sweatFrames[sweatIdx], ppx, ppy - 3);

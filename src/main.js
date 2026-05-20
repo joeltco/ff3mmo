@@ -88,10 +88,13 @@ export function init() {
         maxHP:   ps.stats.maxHP | 0,
         mp:      ps.mp | 0,
         maxMP:   ps.stats.maxMP | 0,
-        // In-battle flag (v1.7.422+) — drives the roster row "⚔" badge so
-        // other overworld players can see you're fighting + offer Assist.
+        // In-battle presence flag — drives the roster row "⚔" badge so
+        // other overworld players can see you're currently fighting.
         // Auto-pushed by the existing 500ms profile-diff poll in `net.js`
         // whenever this transitions. Cleared by `battleState === 'none'`.
+        // (Pure presence as of v1.7.500; the Battle-Assist action it once
+        //  fed was removed — this flag is the foundation the assist/party-
+        //  battle rebuild reattaches to. See the ff3mmo-coop-rebuild memory.)
         inBattle: battleSt.battleState && battleSt.battleState !== 'none' ? 1 : 0,
         // PvP hook chance is AGI-differential + Thief/Ranger bonus (see
         // `pvp-search.js#getHookChance`). Server uses the same formula on

@@ -45,10 +45,24 @@ export function tickRandomEncounter() {
 // pending challenger; on a hit it broadcasts `pvp-match` (handled in
 // `pvp-search.js`) which routes the player into PvP via `_startPVPBattle`.
 // On miss / no challengers, the server replies `pvp-encounter-none` and we
-// proceed with the regular monster encounter. A 500 ms fallback covers a
-// dropped or slow server reply.
+// proceed with the regular monster encounter. The fallback below only covers
+// a server reply that's fully DROPPED — both hit (`pvp-match`) and miss
+// (`pvp-encounter-none`) resolve via explicit messages well before it.
+//
+// It must be longer than the PvP match's "Connecting..." hold
+// (`CONNECTING_HOLD_MS`, 1000 ms in pvp-search.js): when a hook HITS, the
+// target's match handler shows "Connecting..." for that hold while
+// `battleState` is still 'none'. A short fallback would fire
+// `startRandomEncounter()` mid-hold and drop the target into a monster fight
+// while the challenger sits in a PvP battle alone (the v1.7.501 desync). The
+// match handler also calls `cancelPendingPVPCheck()` to neutralise the
+// fallback immediately on resolve; the long timeout is just dropped-packet
+// insurance on top of that.
 let _pendingPVPCheck = false;
 export function isEncounterCheckPending() { return _pendingPVPCheck; }
+// Called by pvp-search.js the instant a `pvp-match` resolves on this client,
+// so the optimistic monster-encounter fallback can't pre-empt the PvP battle.
+export function cancelPendingPVPCheck() { _pendingPVPCheck = false; }
 function _triggerEncounterWithPVPCheck() {
   if (!sendNetPVPEncounter()) {
     startRandomEncounter();
@@ -59,7 +73,7 @@ function _triggerEncounterWithPVPCheck() {
     if (!_pendingPVPCheck) return;
     _pendingPVPCheck = false;
     if (battleSt.battleState === 'none') startRandomEncounter();
-  }, 500);
+  }, 2500);
 }
 
 setNetPVPEncounterNoneHandler(() => {

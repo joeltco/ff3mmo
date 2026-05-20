@@ -24,6 +24,7 @@ import { showMsgBox, replaceMsgBoxText, dismissMsgBox } from './message-box.js';
 import { playSFX, SFX } from './music.js';
 import { sendNetPVPSearch, sendNetPVPCancel, sendNetPVPEnd,
          setNetPVPMatchHandler, setNetPVPFailedHandler } from './net.js';
+import { cancelPendingPVPCheck } from './battle-encounter.js';
 
 // Tuning constants. Surface them up here so they're easy to find.
 const BASE_HOOK     = 0.25;
@@ -219,6 +220,12 @@ setNetPVPMatchHandler((msg) => {
     if (pvpSearchSt.active) cancelPVPSearch('target-engaged');
     return;
   }
+  // We're committing to the PvP battle — kill the optimistic monster-encounter
+  // fallback armed by `_triggerEncounterWithPVPCheck` on the target side. Its
+  // `battleState === 'none'` guard isn't enough: the "Connecting..." hold below
+  // keeps `battleState` at 'none' for ~1 s, so without this the fallback would
+  // spawn a monster fight on top of the match (v1.7.501 desync).
+  cancelPendingPVPCheck();
   // Two flows: (a) this client is the challenger and has an active search →
   // resolve into battle through the existing "Connecting..." swap; (b) this
   // client is the target and didn't search → start a fresh search-resolve

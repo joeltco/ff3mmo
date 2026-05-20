@@ -42,12 +42,7 @@ export function applyPhysicalHitToEnemy(hit, targetIdx, opts = {}) {
     hit.damage = Math.max(1, Math.floor(hit.damage / 2));
   }
 
-  // P11 (v1.7.494): removed the guest-side short-circuit. Under viewer
-  // mode the guest's FSM doesn't tick at all, so this function never
-  // executes on guests. Under flag-off hot-revert (VIEWER=false +
-  // HOST_ARB=false), isCoopGuest is always false anyway. The historical
-  // host-arb-only mode (VIEWER=false, HOST_ARB=true) which needed this
-  // short-circuit was never shipped successfully to prod.
+  // Random-encounter damage path (solo only as of v1.7.500).
   if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
     const mon = battleSt.encounterMonsters[targetIdx];
     if (!mon) return;
