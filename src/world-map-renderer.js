@@ -11,7 +11,7 @@ const TILE_SIZE = 16;
 // popup on an invisible wall (v1.7.503-); the explicit isPassable block had
 // been lost in the March→May modularization, so this also restores the gate.
 const CHOKE_TILE_X = 95;
-const CHOKE_TILE_Y = 45;
+const CHOKE_TILE_Y = 44;
 
 export class WorldMapRenderer {
   constructor(worldMapData) {

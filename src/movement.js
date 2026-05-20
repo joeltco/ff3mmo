@@ -68,7 +68,7 @@ export function startMove(dir) {
   if (renderer && !renderer.isPassable(tileX, tileY)) {
     sprite.setDirection(dir);
     sprite.resetFrame();
-    // (95,45) south of Ur is now physically blocked by a boulder overlay
+    // (95,44) south of Ur is now physically blocked by a boulder overlay
     // (world-map-renderer.js) — no "Coming Soon!" popup needed. v1.7.505.
     return;
   }
