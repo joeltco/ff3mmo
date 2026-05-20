@@ -11,6 +11,7 @@ import { transSt, topBoxSt, startWipeTransition } from './transitions.js';
 import { resetIndoorWaterCache } from './water-animation.js';
 import { showMsgBox } from './message-box.js';
 import { POND_RESTORED } from './data/strings.js';
+import { openBed } from './bed.js';
 import { ps, grantGil } from './player-stats.js';
 import { getItemNameShrines } from './text-decoder.js';
 import { mapSt } from './map-state.js';
@@ -360,6 +361,9 @@ export function checkTrigger() {
   if (mapSt.disabledTrigger && tileX === mapSt.disabledTrigger.x && tileY === mapSt.disabledTrigger.y) return false;
   if (mapSt.onWorldMap) return _checkWorldMapTrigger(tileX, tileY);
   if (!mapSt.mapRenderer || !mapSt.mapData) return false;
+  // Bed tiles aren't ROM trigger tiles, so check them before the trigger
+  // lookup (which would early-return null). Stepping onto a bed → rest scene.
+  if (mapSt.mapRenderer.isBedTileAt(tileX, tileY)) { openBed(); return true; }
   const trigger = mapSt.mapRenderer.getTriggerAt(tileX, tileY);
   if (!trigger) return false;
   if (_checkHiddenTrap(trigger, tileX, tileY)) return true;

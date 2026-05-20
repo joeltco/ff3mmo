@@ -1,6 +1,7 @@
 // Map Renderer — pre-renders full map to a canvas, draws viewport, checks collision
 
 import { NES_SYSTEM_PALETTE, buildWaterFrames } from './tile-decoder.js';
+import { isBedTileId } from './data/beds.js';
 
 const TILE_SIZE = 16;
 const MAP_SIZE = 32; // 32×32 metatiles
@@ -463,6 +464,14 @@ export class MapRenderer {
     }
   }
 
+  // True if the metatile at (tileX, tileY) is a bed tile for this map's
+  // tileset (data/beds.js). Drives both walk-on collision and the rest trigger.
+  isBedTileAt(tileX, tileY) {
+    if (tileX < 0 || tileX >= MAP_SIZE || tileY < 0 || tileY >= MAP_SIZE) return false;
+    const id = this.mapData.tilemap[tileY * MAP_SIZE + tileX] & 0x7F;
+    return isBedTileId(this.mapData.tileset, id);
+  }
+
   isPassable(tileX, tileY) {
     if (tileX < 0 || tileX >= MAP_SIZE || tileY < 0 || tileY >= MAP_SIZE) {
       return false;
@@ -472,6 +481,11 @@ export class MapRenderer {
     if (tileX === this.mapData.entranceX && tileY === this.mapData.entranceY) {
       return true;
     }
+
+    // Bed tiles are walk-on rest spots (bed.js owns the scene). Pass over their
+    // default collision so you can step fully onto a bed; the step-on trigger
+    // in map-triggers.js then opens the rest scene.
+    if (this.isBedTileAt(tileX, tileY)) return true;
 
     // Check dynamic trigger map first — entrance tiles are passable
     const key = `${tileX},${tileY}`;

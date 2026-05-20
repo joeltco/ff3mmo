@@ -19,6 +19,7 @@ import { updateMsgBox, drawMsgBox } from './message-box.js';
 import { titleSt, drawTitleSkyInHUD, drawTitle, updateTitle } from './title-screen.js';
 import { updatePauseMenu, drawPauseMenu } from './pause-menu.js';
 import { drawShop, updateShop } from './shop.js';
+import { drawBed, updateBed } from './bed.js';
 import { transSt, loadingSt, updateTransition, updateTopBoxScroll,
          drawTransitionOverlay, WIPE_DURATION } from './transitions.js';
 import { handleInput, updateMovement } from './movement.js';
@@ -174,6 +175,7 @@ function _gameLoopUpdate(dt) {
   updateChatTabs(dt);
   updatePauseMenu(dt);
   updateShop(dt);
+  updateBed(dt);
   updateMsgBox(dt);
   updateBattle(dt);
   updateMovement(dt);
@@ -223,6 +225,7 @@ function _gameLoopDraw() {
     drawChatTabCursor(ctx);  // v1.7.453 — after chat/roster so it lands on top
     drawPauseMenu(ctx);
     drawShop();
+    drawBed();
     drawMsgBox(ctx, drawBorderedBox);
     drawRosterMenu();
     drawTradePick();

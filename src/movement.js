@@ -18,6 +18,7 @@ import { playSFX, playTrack, TRACKS, SFX } from './music.js';
 import { checkTrigger, openPassage, handleChest, handleSecretWall,
          handleRockPuzzle, handlePondHeal, triggerWipe } from './map-triggers.js';
 import { shopSt, openShop, handleShopInput } from './shop.js';
+import { bedSt, handleBedInput } from './bed.js';
 import { findShopAtCounter } from './data/shops.js';
 import { loadWorldMapAtPosition } from './map-loading.js';
 import { tickRandomEncounter, isEncounterCheckPending } from './battle-encounter.js';
@@ -106,6 +107,8 @@ export function updateMovement(dt) {
 
 export function handleInput() {
   if (!sprite) return;
+  // Bed rest scene owns all input while active (fade / sleep / wake).
+  if (bedSt.state !== 'closed' && handleBedInput(keys)) return;
   // Shop has top priority — block all other input while open. Message box can
   // open over a shop (e.g. "Bought X!") and is handled below.
   if (shopSt.state !== 'closed' && msgState.state === 'none' && handleShopInput(keys)) return;

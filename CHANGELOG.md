@@ -18,6 +18,19 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.507 — 2026-05-20
+
+### Inn bed rest system
+
+Step onto any bed tile in the inn (map 8) to rest: the screen fades to dark, the FF3 rest jingle plays once, HP/MP refill (status effects untouched), then any key fades back in. No cost.
+
+- **Tile-identity driven — works for all present and future beds.** New pure registry `src/data/beds.js` (`BED_TILE_IDS` keyed by tileset → metatile ids; inn tileset 5 = `0x0a`/`0x0b`/`0x62`) + `isBedTileId()`. Any map that places those tiles becomes a rest spot automatically; no per-map coordinate registration.
+- **Beds are now walk-on.** `MapRenderer.isBedTileAt()` + a check in `isPassable` make bed tiles passable by tile identity (per-position, not a shared-tileset collision edit — other maps unaffected). This unblocks all 4 beds including the previously-blocked bottom halves.
+- **New scene module** `src/bed.js` mirrors the shop lifecycle (`closed → fade-out → sleep → wake-wait → fade-in`). Step-on entry via `checkTrigger`; update/draw dispatched from `game-loop.js`; input gated in `movement.js`. Map music pauses during rest and resumes after.
+- **Heal:** `ps.hp/mp = max` only (no status clear), then `saveSlotsToDB()` so the inn doubles as a checkpoint (mirrors the pond heal).
+- **Music:** added `isSFXEnded()` to `music.js`; the rest jingle is the one-shot `playSFX(0x57)` (from the inn REC OAM capture, `$7F49=$96 → track $57`). Bed graphics stay on the BG map — no tiles authored from the capture.
+- Verified: lint + syntax clean; bed-tile detection 12/12 on map 8; headless page-load clean. In-game rest flow needs a live browser to eyeball.
+
 ## 1.7.506 — 2026-05-20
 
 ### Nudge the choke boulder one tile north

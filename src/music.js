@@ -280,6 +280,13 @@ export function stopSFX() {
   sfxMuted = true;  // instant silence — no expensive gme_seek
 }
 
+// True once the one-shot SFX channel has finished (or isn't playing). The
+// bed/rest scene uses this to know when the sleep jingle is done.
+export function isSFXEnded() {
+  if (!sfxEmu || typeof Module === 'undefined' || !Module.ccall) return true;
+  return Module.ccall('gme_track_ended', 'number', ['number'], [sfxEmu]) === 1;
+}
+
 // --- FF1 music (third emulator) ---
 
 export function initFF1Music(romData) {
