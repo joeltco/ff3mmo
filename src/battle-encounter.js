@@ -388,12 +388,22 @@ setNetEncounterInviteHandler((msg) => {
   // the step-counter threshold within the same network frame, each
   // spawning a local battle and sending `encounter-start`. Server
   // serializes by arrival — second one is silently dropped — but the
-  // loser's local FSM is now in self-hosted `flash-strobe`. When the
-  // winner's invite arrives, take it: tear down our half-built host
-  // battle and respawn as a guest of the actual host.
+  // loser's local FSM is now self-hosting. When the winner's invite
+  // arrives, take it: tear down our half-built host battle and respawn as
+  // a guest of the actual host.
+  //
+  // v1.7.499 — widened the takeover window. Pre-fix this only fired while
+  // the loser was in `flash-strobe` (~0.5s). A real cellular RTT (~150ms)
+  // routinely pushed the loser into `menu-open` before the winner's invite
+  // landed, so the takeover was missed and BOTH phones fought parallel
+  // battles (server logs showed alternating `host=A`/`host=B`). The guest
+  // never appeared in the host's fight and the host waited out the
+  // wire-wait timeout on a peer that was busy in its own battle. Now gated
+  // on "no action committed yet" (battleActionCount === 0), which covers
+  // every pre-action state, not just the intro animation.
   const isSelfHostRace = battleSt.isWireEncounter
     && battleSt.encounterIsHost
-    && battleSt.battleState === 'flash-strobe'
+    && (inputSt.battleActionCount | 0) === 0
     && (msg.hostUserId | 0) !== (getMyUserId() | 0);
   if (battleSt.battleState !== 'none' && !isSelfHostRace) return;
   if (isSelfHostRace) {

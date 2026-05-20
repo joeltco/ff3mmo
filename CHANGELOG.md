@@ -18,6 +18,29 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.499 — 2026-05-19
+
+### Co-op fix — the actual bug: concurrent-trigger race (both phones host)
+
+Production server logs from a live two-phone session showed the real problem, which the v1.7.497/498 stat fixes did not touch:
+
+```
+[encounter-start] host=2 accepted=[4]
+[encounter-start] host=4 accepted=[2]   ← both phones host their own battle
+[encounter-start] host=2 accepted=[4]
+[encounter-start] host=4 accepted=[2]
+```
+
+When two party members walk together, both hit their random-encounter step threshold within the same network frame. Each spawns a local battle and sends `encounter-start`. The server serializes by arrival (single-threaded) so the first wins and the second is rejected — but the **loser's** client already self-hosted a local battle. The loser is supposed to tear it down and rejoin as a guest when the winner's `encounter-invite` arrives (`battle-encounter.js` `isSelfHostRace`), but that takeover only fired while the loser was in the `flash-strobe` intro state (~0.5s). A real cellular RTT (~150ms) routinely pushed the loser into `menu-open` before the invite landed, so the takeover was missed and **both phones fought parallel battles**: the guest never appeared in the host's fight, and the host waited out the 10s wire-wait timeout on a peer busy in its own battle. This is the "phone 2 not showing roster allies / phone 1 plays without player 2 acting" symptom — a structural coupling failure, not a stat divergence.
+
+**Fix:** widened the takeover window in `setNetEncounterInviteHandler`. The race takeover is now gated on `inputSt.battleActionCount === 0` (no action committed yet) instead of `battleState === 'flash-strobe'`. This covers every pre-action state — flash-strobe, menu-open, ally fade-in — so the loser reliably abandons its self-hosted battle and rejoins as a guest regardless of how far the intro animation advanced before the invite arrived.
+
+**Regression guard:** `tools/coop-wire-sim.js` gains "concurrent encounter-start yields exactly one invite (single host)" — both clients fire `encounter-start` naming the other; asserts the server delivers exactly one invite total (first-wins arbitration). 11/11.
+
+**What this fix does NOT cover:** the client-side takeover itself can't be unit-tested without a full-client FSM harness; it requires live two-phone validation. The server arbitration it relies on is now gated. The v1.7.497 (monster-attack branch unification) and v1.7.498 (wire-profile stat parity) fixes remain necessary — they make the math converge *once both players are correctly in the same battle*, which this fix is what finally makes happen.
+
+Gates: lint 0, encounter-sim 12/12, wire-stats-diag lossless, coop-wire-sim 11/11, pvp-wire-sim 49/49, coop-viewer-sim 30/30, coop-arbiter-sim 59 + 5 expected.
+
 ## 1.7.498 — 2026-05-19
 
 ### Co-op lockstep fix — wire-profile stat parity (the second half of the v1.7.472 fix)

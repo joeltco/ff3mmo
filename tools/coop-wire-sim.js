@@ -431,6 +431,44 @@ async function suite() {
     await new Promise(r => setTimeout(r, 40));
   });
 
+  // ── concurrent-trigger race — server arbitrates a single host (v1.7.499) ──
+  // Both party members hit their encounter step at the same time and each
+  // sends `encounter-start` naming the other. The server processes frames
+  // serially, so the first start wins (creates the group + sends one
+  // invite to the other member); the second start sees the group already
+  // exists and is rejected. Net: exactly ONE invite is delivered. This is
+  // the arbitration the client-side takeover (battle-encounter.js
+  // isSelfHostRace) depends on — without single-host arbitration the
+  // takeover has nothing well-defined to converge on.
+  await asyncTest('concurrent encounter-start yields exactly one invite (single host)', async () => {
+    _testHooks.resetState();
+    const A = await connectClient(port, 2090, baseProfile('A10', 5, 7, 12));
+    const B = await connectClient(port, 2091, baseProfile('B10', 4, 6, 10));
+    const incB = once(B, m => m.type === 'party-invite-incoming');
+    A.send(JSON.stringify({ type: 'party-invite', targetUserId: 2091 }));
+    await incB;
+    B.send(JSON.stringify({ type: 'party-invite-response', accept: true }));
+    await new Promise(r => setTimeout(r, 30));
+    // Count invites delivered to each side.
+    let aInvites = 0, bInvites = 0;
+    A.on('message', (raw) => { if (JSON.parse(raw.toString()).type === 'encounter-invite') aInvites++; });
+    B.on('message', (raw) => { if (JSON.parse(raw.toString()).type === 'encounter-invite') bInvites++; });
+    // Both fire encounter-start naming the other, back to back.
+    A.send(JSON.stringify({
+      type: 'encounter-start', seed: 0x11112222,
+      monsters: [{ monsterId: 0x00 }], partyUserIds: [2091],
+    }));
+    B.send(JSON.stringify({
+      type: 'encounter-start', seed: 0x33334444,
+      monsters: [{ monsterId: 0x00 }], partyUserIds: [2090],
+    }));
+    await new Promise(r => setTimeout(r, 80));
+    const total = aInvites + bInvites;
+    assertEqual(total, 1, `expected exactly one invite, got ${total} (A=${aInvites} B=${bInvites})`);
+    A.close(); B.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
   // Done — close server.
   await new Promise(r => httpServer.close(r));
 }
