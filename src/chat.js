@@ -10,7 +10,7 @@ import { partyInviteSt } from './party-invite.js';
 import { mapSt } from './map-state.js';
 import { sprite } from './player-sprite.js';
 import { DIR_DOWN, DIR_UP, DIR_LEFT, DIR_RIGHT } from './sprite.js';
-import { playFF1Track, stopFF1Music, pauseMusic, resumeMusic, playSFX, stopSFX } from './music.js';
+import { playFF1Track, stopFF1Music, pauseMusic, resumeMusic } from './music.js';
 import { ui } from './ui-state.js';
 import { ps, changeJob, fullHeal, grantExp } from './player-stats.js';
 import { JOBS } from './data/jobs.js';
@@ -258,17 +258,6 @@ registerCommand('ff1', 'Play FF1 NSF track N (or "stop" to resume map music)', (
   if (!Number.isFinite(n) || n < 0) { addChatMessage('Usage: /ff1 <track-index> | /ff1 stop', 'console'); return; }
   pauseMusic(); playFF1Track(n);
   addChatMessage('FF1 NSF track ' + n, 'console');
-}, { dev: true });
-
-// Audition FF3 NSF tracks by ear (one-shot, on the SFX channel) — for finding
-// jingles/SFX like the inn rest tune. Accepts decimal or 0xNN hex.
-registerCommand('sfx', 'Play FF3 NSF track N once (decimal or 0xNN). /sfx stop to cut.', (args) => {
-  const a = (args || '').trim().toLowerCase();
-  if (a === 'stop' || a === 'off') { stopSFX(); addChatMessage('SFX cut', 'console'); return; }
-  const n = a.startsWith('0x') ? parseInt(a, 16) : parseInt(a, 10);
-  if (!Number.isFinite(n) || n < 0) { addChatMessage('Usage: /sfx <track> (e.g. /sfx 0x46) | /sfx stop', 'console'); return; }
-  playSFX(n);
-  addChatMessage('FF3 NSF track 0x' + n.toString(16) + ' (' + n + ')', 'console');
 }, { dev: true });
 
 registerCommand('pos', 'Show player tile + faced tile', () => {
