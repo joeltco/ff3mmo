@@ -88,10 +88,12 @@ Two Node-only harnesses live in `tools/`. They import the real production module
 | Harness | What it covers | Run |
 |---|---|---|
 | `tools/battle-sim.js` | Local combat — duels, party-vs-encounter, spells, statuses, buffs, dual-wield, monster specials. Statistical mode (`--runs=N --json/--csv`). Spec: `tools/battle-sim.PLAN.md`. | `node tools/battle-sim.js --help` |
-| `tools/pvp-wire-sim.js` | Multiplayer wire — 31 tests across math lockstep / server unit / E2E suites. Boots `attachWebSocketPresence` on a localhost port + two real JWT-authed `ws` clients. Spec: `tools/pvp-wire-sim.PLAN.md`. | `node tools/pvp-wire-sim.js [--suite=math\|server\|wire] [--filter=...]` |
+| `tools/encounter-sim.js` | Monster-attack lockstep — drives `_processEnemyFlash` and asserts ps-target vs ally-target symmetry (elemResist / Protect / Defend / wake-on-hit / statusAtk). Guards the `_targetCombatant` unification. | `node tools/encounter-sim.js` |
+| `tools/wire-stats-diag.js` | Wire-profile parity — builds a real `ps` via `recalcCombatStats`, ships it through the `main.js#connectNet` profile shape, runs `generateAllyStats` on the receiver, asserts every combat-stat field matches. Guards the realized-stats wire fix. | `node tools/wire-stats-diag.js` |
+| `tools/pvp-wire-sim.js` | Multiplayer wire — 37 tests across math lockstep / server unit / E2E suites (PvP, party, chat, give-item, JWT). Boots `attachWebSocketPresence` on a localhost port + two real JWT-authed `ws` clients. Spec: `tools/pvp-wire-sim.PLAN.md`. | `node tools/pvp-wire-sim.js [--suite=math\|server\|wire] [--filter=...]` |
 | `tools/pvp-load-sim.js` | Multiplayer load test — N clients × duration against in-process server. Spoofs X-Forwarded-For per client to bypass the per-IP cap. Reports peak state-map sizes + RSS/client for right-sizing. | `node tools/pvp-load-sim.js --clients=50 --duration=30` |
 
-`deploy.sh` runs `npm run lint:errors` + `node tools/pvp-wire-sim.js` as pre-flight gates before commit; failure aborts the deploy.
+`deploy.sh` runs `npm run lint:errors` + `node tools/encounter-sim.js` + `node tools/wire-stats-diag.js` + `node tools/pvp-wire-sim.js` as pre-flight gates before commit; failure aborts the deploy. (The `tools/coop-*-sim.js` harnesses were deleted in v1.7.500 along with the co-op battle system.)
 
 **When to run each:**
 
