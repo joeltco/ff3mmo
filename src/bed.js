@@ -14,7 +14,7 @@
 import { ps } from './player-stats.js';
 import { saveSlotsToDB } from './save-state.js';
 import { buildNesFadeFrames } from './nes-fade.js';
-import { playSFX, isSFXEnded, pauseMusic, resumeMusic } from './music.js';
+import { pauseMusic, resumeMusic } from './music.js';
 import { ui } from './ui-state.js';
 import { drawText, measureText } from './font-renderer.js';
 
@@ -26,9 +26,10 @@ const INNER_W = HUD_VIEW_W - 16, INNER_H = HUD_VIEW_H - 16;
 const FADE_STEPS   = 4;
 const FADE_STEP_MS = 80;
 const FADE_MS      = (FADE_STEPS + 1) * FADE_STEP_MS;  // 400ms
-const REST_JINGLE  = 0x57;    // FF3 NSF rest tune (inn REC OAM capture: $7F49=$96 → track $57)
-const SLEEP_MIN_MS = 300;     // hold before polling jingle-end so it's surely playing
-const SLEEP_MAX_MS = 8000;    // safety — never hang if the jingle never reports end
+const SLEEP_MS     = 700;     // dark beat before the wake prompt
+// NOTE: the rest jingle is intentionally NOT played. Track 0x57 (inferred from
+// the inn REC OAM capture) screeched — wrong NSF track. Re-add a one-shot
+// playSFX(<verified track>) in openBed once the correct rest tune is known.
 
 const PROMPT     = 'Press any key';
 const PROMPT_PAL = [0x0F, 0x10, 0x0F, 0x30];
@@ -49,7 +50,6 @@ export function openBed() {
   bedSt.fadeFrames = null;
   bedSt.healed = false;
   pauseMusic();
-  playSFX(REST_JINGLE);
   return true;
 }
 
@@ -76,7 +76,7 @@ export function updateBed(dt) {
   if (s === 'fade-out') {
     if (bedSt.timer >= FADE_MS) { bedSt.state = 'sleep'; bedSt.timer = 0; }
   } else if (s === 'sleep') {
-    if (bedSt.timer >= SLEEP_MIN_MS && (isSFXEnded() || bedSt.timer >= SLEEP_MAX_MS)) {
+    if (bedSt.timer >= SLEEP_MS) {
       _rest();
       bedSt.state = 'wake-wait'; bedSt.timer = 0;
     }
