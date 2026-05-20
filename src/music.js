@@ -287,6 +287,24 @@ export function isSFXEnded() {
   return Module.ccall('gme_track_ended', 'number', ['number'], [sfxEmu]) === 1;
 }
 
+// Diagnostics for the debug NSF tab — shows why audio might be silent.
+export function audioStatus() {
+  return {
+    module: (typeof Module !== 'undefined' && !!Module.ccall),
+    nsf: !!nsfData,
+    ctx: audioCtx ? audioCtx.state : 'none',
+    track: currentTrack,
+  };
+}
+
+// Ensure the AudioContext exists and is running (browser autoplay needs a
+// user gesture — call this from a click handler before playing).
+export function resumeAudio() {
+  if (!audioCtx) audioCtx = new AudioContext();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx.state;
+}
+
 // --- FF1 music (third emulator) ---
 
 export function initFF1Music(romData) {
