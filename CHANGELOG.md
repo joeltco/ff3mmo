@@ -18,6 +18,16 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.505 — 2026-05-20
+
+### Boulder blocks the choke south of Ur (was walkable)
+
+The world-map choke at tile (95,45) south of Ur — gating the unfinished region — is now a physical boulder instead of an invisible wall + "Coming Soon!" popup.
+
+- **Bug fixed:** the explicit `isPassable` block for (95,45) added in `949db68` was lost in the March→May modularization, so on v1.7.504 the choke was actually **walkable** — players could wander into the unfinished world. `WorldMapRenderer.isPassable` now hard-blocks (95,45) regardless of terrain prop.
+- **Boulder sprite:** captured via the EMU SNAP OAM tool (group 1, single-palette; tiles $90–$93, sprite sub-palette `[0x1A,0x0F,0x27,0x30]`), landed verbatim in `src/data/boulder-sprite.js`. Decoded once into a 16×16 offscreen canvas via `tile-decoder.js` and drawn on tile (95,45) by `WorldMapRenderer.drawOverlay` (wrap-aware, mirrors the tile-draw walk, renders as solid foreground over the player). Choke coords are shared constants so collision + render can't drift.
+- Removed the "Coming Soon!" message box (`movement.js`) and its now-orphaned `showMsgBox` import — the boulder is the explanation now.
+
 ## 1.7.504 — 2026-05-20
 
 ### Real roster players auto-assist in solo encounters

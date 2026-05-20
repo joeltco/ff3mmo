@@ -7,7 +7,7 @@ import { transSt } from './transitions.js';
 import { inputSt, handleBattleInput, handleRosterInput, keys } from './input-handler.js';
 import { sprite } from './player-sprite.js';
 import { pauseSt, handlePauseInput } from './pause-menu.js';
-import { msgState, showMsgBox, dismissMsgBox } from './message-box.js';
+import { msgState, dismissMsgBox } from './message-box.js';
 import { isSearchActive, isSearchResolving, cancelPVPSearch } from './pvp-search.js';
 import { isInviteActive, isInviteResolving, cancelPartyInvite } from './party-invite.js';
 import { isTradeOffering, isTradePicking, cancelTrade, handleTradePickInput } from './trade.js';
@@ -68,9 +68,8 @@ export function startMove(dir) {
   if (renderer && !renderer.isPassable(tileX, tileY)) {
     sprite.setDirection(dir);
     sprite.resetFrame();
-    if (mapSt.onWorldMap && tileX === 95 && tileY === 45) {
-      showMsgBox(new Uint8Array([0x8C,0xB2,0xB0,0xAC,0xB1,0xAA,0xFF,0x9C,0xB2,0xB2,0xB1,0xC4])); // "Coming Soon!"
-    }
+    // (95,45) south of Ur is now physically blocked by a boulder overlay
+    // (world-map-renderer.js) — no "Coming Soon!" popup needed. v1.7.505.
     return;
   }
 
