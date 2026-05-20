@@ -15,7 +15,7 @@ import { SLASH_FRAME_MS, shouldDrawSlash, SWING_HOLD_MS } from './slash-effects.
 import { buildTurnOrder, processNextTurn } from './battle-turn.js';
 import { summarizeHits } from './battle-math.js';
 import { reseedFromEntropy } from './rng.js';
-import { sendNetPVPAction, sendNetPVPAllyJoin, getOnlinePlayerByName } from './net.js';
+import { sendNetPVPAction, sendNetPVPAllyJoin, getOnlinePlayerByName, getOnlineAtLocation } from './net.js';
 import { rand } from './rng.js';
 import { updateBattleAlly } from './battle-ally.js';
 import { updateBattleEnemyTurn } from './battle-enemy.js';
@@ -311,34 +311,58 @@ export function tryJoinPlayerAlly() {
     if (partyJoined) { battleSt.battleState = 'ally-fade-in'; battleSt.battleTimer = 0; return true; }
     return false;
   }
-  const eligible = PLAYER_POOL.filter(p =>
-    p.loc === loc &&
-    !battleSt.battleAllies.some(a => a.name === p.name) &&
-    !pvpNames.has(p.name)
-  );
-  // Wire-PvP uses synced `rand()` so both clients can roll independently
-  // and pick the same ally — the eligible list is identical on both sides
-  // (PLAYER_POOL is identical; in-battle names cover all combatants on
-  // both teams via the wire-synced rosters from v1.7.375/v1.7.376).
-  const roll = pvpSt.isWirePVP ? rand() : Math.random();
-  if (eligible.length === 0 || roll >= 0.5) {
-    if (partyJoined) { battleSt.battleState = 'ally-fade-in'; battleSt.battleTimer = 0; return true; }
-    return false;
+  // ── Wire-PvP ally fill (unchanged — lockstep-critical) ───────────────
+  // Both clients must roll identically, so this stays a deterministic
+  // single-pick from the shared PLAYER_POOL via `rand()` and relays the
+  // pick over the wire. Do NOT fold the solo auto-assist below into this
+  // branch — `pvp-wire-sim` #18 asserts this exact behavior.
+  if (pvpSt.isWirePVP) {
+    const eligible = PLAYER_POOL.filter(p =>
+      p.loc === loc &&
+      !battleSt.battleAllies.some(a => a.name === p.name) &&
+      !pvpNames.has(p.name)
+    );
+    const roll = rand();
+    if (eligible.length === 0 || roll >= 0.5) {
+      if (partyJoined) { battleSt.battleState = 'ally-fade-in'; battleSt.battleTimer = 0; return true; }
+      return false;
+    }
+    const pickIdx = Math.floor(rand() * eligible.length);
+    const picked = eligible[pickIdx];
+    battleSt.battleAllies.push(generateAllyStats(picked));
+    // Relay the raw ally profile so the partner runs their own
+    // generateAllyStats and adds a matching `pvpEnemyAllies` cell.
+    // See docs/MULTIPLAYER-AUDIT-2026-05-15.md #18.
+    if (pvpSt.isPVPBattle && picked && picked.name) {
+      sendNetPVPAllyJoin(_wireAllyProfile(picked));
+    }
+    battleSt.battleState = 'ally-fade-in'; battleSt.battleTimer = 0;
+    return true;
   }
-  const pickIdx = Math.floor((pvpSt.isWirePVP ? rand() : Math.random()) * eligible.length);
-  const picked = eligible[pickIdx];
-  battleSt.battleAllies.push(generateAllyStats(picked));
-  // Wire-PvP — relay the raw ally profile to the partner so they run their
-  // own `generateAllyStats` and add a matching cell to `pvpEnemyAllies`.
-  // Sending the profile (not just the name) makes this work for fake-roster
-  // picks, party members, and any future ally source without relying on
-  // PLAYER_POOL to be populated on both sides.
-  // See docs/MULTIPLAYER-AUDIT-2026-05-15.md #18.
-  if (pvpSt.isWirePVP && pvpSt.isPVPBattle && picked && picked.name) {
-    sendNetPVPAllyJoin(_wireAllyProfile(picked));
+
+  // ── Solo auto-assist: real roster players in the room help out ───────
+  // Every real online player at the current location joins as a local-AI
+  // ally using their exact broadcast build — generateAllyStats's realized-
+  // stats fast path consumes the wire profile verbatim (jobIdx, atk/def/
+  // evade/mdef, equipment, knownSpells, jobLevel). Like the fake-player
+  // system, but with real player data. No random gate — whoever's in the
+  // room helps, up to the 3-ally cap (the party pre-pass may have taken
+  // slots already). Self is never in the roster (net.js excludes
+  // _myUserId), so no clone. Enemy AI still targets the whole team. v1.7.503.
+  let roomJoined = false;
+  for (const p of getOnlineAtLocation(loc)) {
+    if (battleSt.battleAllies.length >= 3) break;
+    if (!p || !p.name) continue;
+    if (battleSt.battleAllies.some(a => a.name === p.name)) continue;
+    if (pvpNames.has(p.name)) continue;
+    battleSt.battleAllies.push(generateAllyStats(p));
+    roomJoined = true;
   }
-  battleSt.battleState = 'ally-fade-in'; battleSt.battleTimer = 0;
-  return true;
+  if (partyJoined || roomJoined) {
+    battleSt.battleState = 'ally-fade-in'; battleSt.battleTimer = 0;
+    return true;
+  }
+  return false;
 }
 
 // ── Menu confirm ───────────────────────────────────────────────────────────

@@ -18,6 +18,17 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.504 — 2026-05-20
+
+### Real roster players auto-assist in solo encounters
+
+In a solo battle, every real online player in the same room (`getOnlineAtLocation(loc)`) now auto-joins as a local-AI ally using their **exact broadcast build** — job, realized atk/def/evade/mdef, equipment (incl. dual-wield), `knownSpells`, jobLevel. Like the fake-player (`PLAYER_POOL`) system, but with real player data. `generateAllyStats`'s realized-stats fast path already consumed the wire profile verbatim, so magic / AI / poses are hooked with no further wiring.
+
+- No random gate — whoever's in the room helps, filling up to the 3-ally cap (the invited-party pre-pass takes slots first; the room loop dedups by name). Self is never in the roster (`net.js` excludes `_myUserId`), so no clone.
+- Enemy AI still targets the whole team (player + allies) — unchanged.
+- Wire-PvP ally fill is left byte-for-byte intact behind a `pvpSt.isWirePVP` branch — its deterministic single-pick + `sendNetPVPAllyJoin` relay still satisfy `pvp-wire-sim` #18.
+- Gates green: lint 0, encounter-sim 12/12, wire-stats-diag lossless, pvp-wire-sim 37/37. Added a focused check that a real online-player profile flows through `generateAllyStats` with all build fields verbatim (14/14).
+
 ## 1.7.503 — 2026-05-20
 
 ### Open-beta hardening pass
