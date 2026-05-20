@@ -52,6 +52,7 @@ export function mount(root) {
     b.onclick = fn;
     return b;
   };
+  row.appendChild(mk('🔊 Start audio', () => { const r = resumeAudio(); _nowEl.textContent = 'resumeAudio → ' + r; _refreshStatus(); }, '#264'));
   row.appendChild(mk('◀ prev', () => { const n = Math.max(0, _cur - 1); inp().value = '0x' + n.toString(16); playSong(n); }));
   row.appendChild(mk('▶ Play song', () => { const n = _parse(inp().value); if (n != null) playSong(n); }, '#2a4'));
   row.appendChild(mk('Play once', () => { const n = _parse(inp().value); if (n != null) playOne(n); }));

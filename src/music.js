@@ -298,11 +298,20 @@ export function audioStatus() {
 }
 
 // Ensure the AudioContext exists and is running (browser autoplay needs a
-// user gesture — call this from a click handler before playing).
+// user gesture — call this from a click handler before playing). Returns the
+// resulting state, or an error string the debug tab can surface.
 export function resumeAudio() {
-  if (!audioCtx) audioCtx = new AudioContext();
-  if (audioCtx.state === 'suspended') audioCtx.resume();
-  return audioCtx.state;
+  try {
+    if (!audioCtx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return 'no-AudioContext-ctor';
+      audioCtx = new AC();
+    }
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx.state;
+  } catch (e) {
+    return 'error: ' + (e && e.message ? e.message : String(e));
+  }
 }
 
 // --- FF1 music (third emulator) ---
