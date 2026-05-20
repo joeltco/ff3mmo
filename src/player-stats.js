@@ -262,6 +262,37 @@ export function gainJobJP(actionCount) {
   return null;
 }
 
+// Effective attacker stats (base + jpBonus + equipment bonuses). Mirrors
+// the inline computation in `recalcCombatStats`. Used by the wire profile
+// builder in `src/main.js#connectNet` so remote viewers see the same
+// magic-damage and initiative numbers the local player uses — without
+// this, ally combat math diverges from ps combat math because
+// `generateAllyStats` doesn't sum equipment stat bonuses and doesn't see
+// the local jobLevel.
+export function getEffectiveStats() {
+  const allSlots = [ps.weaponR, ps.weaponL, ps.head, ps.body, ps.arms];
+  let strB = 0, agiB = 0, vitB = 0, intB = 0, mndB = 0;
+  for (const id of allSlots) {
+    const item = ITEMS.get(id);
+    if (!item) continue;
+    strB += item.strBonus || 0;
+    agiB += item.agiBonus || 0;
+    vitB += item.vitBonus || 0;
+    intB += item.intBonus || 0;
+    mndB += item.mndBonus || 0;
+  }
+  const jl  = getJobLevel();
+  const jlb = jobLevelStatBonus(ps.jobIdx, jl);
+  const base = ps.stats || { str: 5, agi: 5, vit: 5, int: 5, mnd: 5 };
+  return {
+    str: (base.str | 0) + strB + jlb.str,
+    agi: (base.agi | 0) + agiB + jlb.agi,
+    vit: (base.vit | 0) + vitB + jlb.vit,
+    int: (base.int | 0) + intB + jlb.int,
+    mnd: (base.mnd | 0) + mndB + jlb.mnd,
+  };
+}
+
 // Shield evade — base evade from shield item only (no proficiency bonus)
 export function getShieldEvade() {
   const shieldItem = ITEMS.get(ps.weaponR)?.subtype === 'shield' ? ITEMS.get(ps.weaponR)

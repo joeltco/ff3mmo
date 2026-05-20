@@ -18,6 +18,42 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.498 — 2026-05-19
+
+### Co-op lockstep fix — wire-profile stat parity (the second half of the v1.7.472 fix)
+
+v1.7.497 unified the monster-attack code path but two-phone smoke still showed desync. Diagnostic harness `tools/wire-stats-diag.js` (NEW) revealed the second divergence source: **8 of 16 combat-stat fields diverge** between a player's local `ps` (via `recalcCombatStats`) and the same player's reconstructed ally view on a remote phone (via `generateAllyStats(wireProfile)`). Same player object, different stat values, depending on which phone is looking. Same unified code path on both phones, different inputs, different damage — HP drifts turn one.
+
+**Sample divergence for a Lv30/jobLv9 WM with mid-tier equipment:**
+
+```
+   ok atk               185 (was: 177)
+   ok def               45  (was: 42)  ← every monster physical takes 3 less damage on the wrong side
+   ok evade             29  (was: 20)  ← evasion roll lands differently between phones
+   ok mdef              23  (was: 19)
+   ok jobLevel          9   (was: 1)
+   ok mp/maxMP          95  (was: null)
+   ok knownSpells       3   (was: 0)   ← remote view thinks player knows no spells
+```
+
+**Mechanical causes:**
+- `connectNet` wire profile in `src/main.js` never shipped `jobLevel`, the accessory (`arms`) slot, `mp`/`maxMP`, `knownSpells`, or any realized combat stats.
+- `generateAllyStats` re-derived combat stats from the partial equipment IDs that did ship, missing equipment stat bonuses (`strBonus`, `agiBonus`, etc.) and the missing slot entirely.
+
+**Fix in 3 pieces:**
+
+1. **`src/player-stats.js`** — added `getEffectiveStats()` helper returning `{str, agi, vit, int, mnd}` with jpBonus + equipment stat bonuses applied. Mirrors the inline math already inside `recalcCombatStats`.
+
+2. **`src/main.js#connectNet`** — wire profile now ships realized `atk/def/evade/mdef/hitRate/shieldEvade/statusResist/elemResist`, effective `intStat/mndStat` (named with `Stat` suffix to avoid `int` reserved-word collisions), `mp/maxMP`, `jobLevel`, `knownSpells`. The existing `agi` field changes from base → effective; this also nudges the server's PvP hook chance formula to use effective agi (consistent with what local damage math uses but a tiny balance shift).
+
+3. **`src/data/players.js#generateAllyStats`** — added an early-return fast path: if `typeof player.atk === 'number'` (signal that wire shipped realized stats), build the ally directly from those fields. PLAYER_POOL AI fakes fall through to the legacy compute path unchanged.
+
+4. **`tools/wire-stats-diag.js` (NEW, ~190 LOC)** — boots a Lv30 WM with realistic equipment, ships through the production wire profile, runs `generateAllyStats` on the receiver side, prints every diverging field with a pass/fail count. Wired into `deploy.sh` as a regression gate so the next person who trims a wire field gets caught at lint-time. Post-fix: all 18 fields match.
+
+**Backward compat:** stale clients running old-shape profile → receiver's `generateAllyStats` sees no `atk` field → falls through to legacy compute path → same behavior as pre-v1.7.498 for that peer. Mixed deployments don't crash; they just don't benefit until both phones reload.
+
+Gates: lint 0, encounter-sim 12/12, wire-stats-diag 18/18 fields match, pvp-wire-sim 49/49, coop-wire-sim 10/10, coop-viewer-sim 30/30, coop-arbiter-sim 59 pass + 5 expected.
+
 ## 1.7.497 — 2026-05-19
 
 ### Co-op lockstep fix — unify monster-attack branches (direct fix for v1.7.472)

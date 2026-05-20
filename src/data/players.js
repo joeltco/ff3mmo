@@ -296,6 +296,48 @@ export function getJobLevelDelta(jobIdx) {
 }
 
 export function generateAllyStats(player) {
+  // Realized-stats fast path — real wire players ship their
+  // post-recalcCombatStats values (atk, def, evade, mdef, etc.) directly.
+  // Use them verbatim instead of re-deriving via the equipment-walk path
+  // below, which silently drops the accessory slot, equipment stat
+  // bonuses, and jobLevel — producing different numbers than the
+  // sender's local ps. PLAYER_POOL AI fakes don't ship realized stats so
+  // they fall through to the legacy compute path.
+  if (player && typeof player.atk === 'number') {
+    const maxHP = (typeof player.maxHP === 'number' && player.maxHP > 0)
+      ? (player.maxHP | 0) : (player.hp | 0) || 1;
+    const maxMP = (typeof player.maxMP === 'number' && player.maxMP >= 0)
+      ? (player.maxMP | 0) : 0;
+    return {
+      name:         player.name,
+      palIdx:       player.palIdx | 0,
+      jobIdx:       player.jobIdx | 0,
+      level:        (player.level | 0) || 1,
+      hp:           player.hp | 0,
+      maxHP,
+      mp:           player.mp | 0,
+      maxMP,
+      atk:          player.atk          | 0,
+      def:          player.def          | 0,
+      agi:          (player.agi         | 0) || 1,
+      int:          player.intStat      | 0,
+      mnd:          player.mndStat      | 0,
+      evade:        player.evade        | 0,
+      mdef:         player.mdef         | 0,
+      shieldEvade:  player.shieldEvade  | 0,
+      statusResist: player.statusResist | 0,
+      elemResist:   Array.isArray(player.elemResist) ? [...player.elemResist] : [],
+      buffs:        {},
+      hitRate:      (player.hitRate | 0) || 80,
+      weaponId:     player.weaponR != null ? player.weaponR : 0x1E,
+      weaponL:      player.weaponL != null ? player.weaponL : null,
+      knownSpells:  Array.isArray(player.knownSpells) ? [...player.knownSpells] : [],
+      jobLevel:     (player.jobLevel | 0) || 1,
+      fadeStep:     ROSTER_FADE_STEPS,
+      status:       createStatusState(),
+    };
+  }
+
   const lv = player.level;
   const s = computeJobStats(player.jobIdx, lv);
   // Resolve job-level for this character. Multiplayer-prep (v1.7.218): real

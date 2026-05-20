@@ -39,7 +39,7 @@ import { _nesNameToString } from './text-utils.js';
 import { resetBattleVars, isTeamWiped, executeBattleCommand } from './battle-update.js';
 import { startGameLoop } from './game-loop.js';
 import { connectNet } from './net.js';
-import { ps } from './player-stats.js';
+import { ps, getEffectiveStats, getShieldEvade, getJobLevel } from './player-stats.js';
 import { selectCursor } from './save-state.js';
 import { initSpriteAssets, initTitleAssets } from './boot.js';
 import { SPRITE_PAL_TOP, SPRITE_PAL_BTM } from './job-sprites.js';
@@ -78,6 +78,7 @@ export function init() {
       // a Uint8Array serializes as `{"0":N,"1":N,…}` (object shape, not array),
       // which the server then coerces to "[object Object]" via String()/slice.
       // Decode to a JS string so the wire carries the readable name.
+      const eff = getEffectiveStats();
       return {
         name:    slot.name ? _nesNameToString(slot.name) : 'Player',
         jobIdx:  ps.jobIdx | 0,
@@ -85,6 +86,8 @@ export function init() {
         palIdx:  0,
         hp:      ps.hp | 0,
         maxHP:   ps.stats.maxHP | 0,
+        mp:      ps.mp | 0,
+        maxMP:   ps.stats.maxMP | 0,
         // In-battle flag (v1.7.422+) — drives the roster row "⚔" badge so
         // other overworld players can see you're fighting + offer Assist.
         // Auto-pushed by the existing 500ms profile-diff poll in `net.js`
@@ -93,11 +96,35 @@ export function init() {
         // PvP hook chance is AGI-differential + Thief/Ranger bonus (see
         // `pvp-search.js#getHookChance`). Server uses the same formula on
         // `pvp-encounter` rolls, so AGI has to travel with the profile.
-        agi:     ps.stats.agi | 0,
+        // Ship effective agi (base + jpBonus + equipment bonuses) so the
+        // receiver's ally view matches the sender's ps for initiative
+        // rolls; server's hook chance now uses effective agi too.
+        agi:     eff.agi,
         weaponR: ps.weaponR | 0,
         weaponL: ps.weaponL | 0,
         armorId: ps.body | 0,
         helmId:  ps.head | 0,
+        // Realized combat stats — without these, the receiver's
+        // `generateAllyStats(profile)` re-derives different values than
+        // the sender's local `recalcCombatStats` (missing equipment stat
+        // bonuses, missing accessory slot, missing jobLevel). Every
+        // monster attack against this player then resolves to different
+        // damage on different phones. See tools/wire-stats-diag.js.
+        atk:           ps.atk | 0,
+        def:           ps.def | 0,
+        evade:         ps.evade | 0,
+        mdef:          ps.mdef | 0,
+        hitRate:       ps.hitRate | 0,
+        shieldEvade:   getShieldEvade() | 0,
+        statusResist:  ps.statusResist | 0,
+        elemResist:    Array.isArray(ps.elemResist) ? [...ps.elemResist] : [],
+        // Effective magic-damage stats (base + jpBonus + equipment bonuses).
+        intStat:       eff.int,
+        mndStat:       eff.mnd,
+        // jobLevel for AI healer chooser + UI display on the receiver
+        jobLevel:      getJobLevel() | 0,
+        // knownSpells so wire-driven ally turns can dispatch magic
+        knownSpells:   Array.isArray(ps.knownSpells) ? [...ps.knownSpells] : [],
         // MP party-PvP — full ally roster so the opponent's client can
         // populate `pvpEnemyAllies` from this client's actual party instead
         // of fake-rostering from its local PLAYER_POOL. Each entry is the
