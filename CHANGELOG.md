@@ -18,6 +18,17 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.509 — 2026-05-20
+
+### Bed rest: real FF3 palette fade (from the REC OAM capture)
+
+Replaced the placeholder fade-to-black with the actual inn palette ramp the REC OAM capture documented. The room palette **crossfades to a fixed dark-blue "night" palette and holds**, instead of going to solid black.
+
+- `bed.js` now drives the captured per-frame `$3F00` color pairs (`0x1a→0x12`, `0x30→0x12`, `0x00→0x02`, `0x28→0x02`, etc., frame 0 → frame 40 hold). Each room color converges toward dark blue; sprite-only colors (player/candle: `0x17/0x22/0x15/0x36`) aren't in the map palette, so they stay lit — the room dims while characters stay visible, exactly like the capture.
+- Applied as a live per-frame crossfade over the inner viewport (animation keeps going while dimming), `t` ramping 0→1 over 600ms; a dimmed snapshot covers the 8s hold; reversed on wake.
+- Flow: step on bed → palette dims to night (600ms) → **8s hold** → "Press any key" → fades back in. HP/MP refill (status untouched) + save.
+- Drops the generic `buildNesFadeFrames` snapshot-to-black approach for the bed.
+
 ## 1.7.508 — 2026-05-20
 
 ### Hotfix: bed rest screeched + stuck on black

@@ -1,53 +1,75 @@
 // bed.js — inn bed rest scene.
 //
-// Step onto any bed tile (see data/beds.js — tile-id driven, so every present
-// and future bed works with no per-map setup) to rest: the screen fades to
-// dark, the FF3 rest jingle plays once, HP/MP refill (status untouched), then
-// any key fades back in.
+// Step onto any bed tile (data/beds.js — tile-id driven, every present/future
+// bed works with no per-map setup) to rest: the room palette crossfades to a
+// dim "night" palette, holds 8s, then any key fades it back in. HP/MP refill
+// (status untouched). No cost.
 //
-// Lifecycle mirrors the shop scene:
-//   closed → fade-out → sleep → wake-wait → fade-in → closed
-// Wired in: game-loop.js (updateBed/drawBed), movement.js (input gate),
-// map-triggers.js#checkTrigger (step-on entry via MapRenderer.isBedTileAt).
-// Bed graphics live on the BG map; nothing here authors tiles.
+// The fade is the FF3 inn palette ramp captured via REC OAM: each room color
+// converges toward a fixed dark-blue palette (NES_DARK below, taken straight
+// from the capture's per-frame $3F00 tables — frame 0 → frame 40 hold), while
+// sprite-only colors (player/candle: 0x17/0x22/0x15/0x36/0x27) aren't in the
+// map so they stay lit. NOT a fade-to-black, NOT a frozen snapshot.
+//
+// Lifecycle: closed → fade-out → sleep(8s) → wake-wait → fade-in → closed.
+// Wired in game-loop (update/draw), movement (input gate), map-triggers
+// (step-on via MapRenderer.isBedTileAt).
 
 import { ps } from './player-stats.js';
 import { saveSlotsToDB } from './save-state.js';
-import { buildNesFadeFrames } from './nes-fade.js';
 import { pauseMusic, resumeMusic } from './music.js';
 import { ui } from './ui-state.js';
 import { drawText, measureText } from './font-renderer.js';
+import { NES_SYSTEM_PALETTE } from './tile-decoder.js';
 
-// Inner map viewport — same region the shop fades.
+// Inner map viewport (the area that dims — HUD chrome stays put).
 const HUD_VIEW_X = 0, HUD_VIEW_Y = 32, HUD_VIEW_W = 144, HUD_VIEW_H = 144;
 const INNER_X = HUD_VIEW_X + 8, INNER_Y = HUD_VIEW_Y + 8;
 const INNER_W = HUD_VIEW_W - 16, INNER_H = HUD_VIEW_H - 16;
 
-const FADE_STEPS   = 4;
-const FADE_STEP_MS = 80;
-const FADE_MS      = (FADE_STEPS + 1) * FADE_STEP_MS;  // 400ms
-const SLEEP_MS     = 700;     // dark beat before the wake prompt
-// NOTE: the rest jingle is intentionally NOT played. Track 0x57 (inferred from
-// the inn REC OAM capture) screeched — wrong NSF track. Re-add a one-shot
-// playSFX(<verified track>) in openBed once the correct rest tune is known.
+const FADE_MS  = 600;     // palette ramp duration (≈36 NTSC frames in the capture)
+const SLEEP_MS = 8000;    // dark hold before the wake prompt
 
 const PROMPT     = 'Press any key';
 const PROMPT_PAL = [0x0F, 0x10, 0x0F, 0x30];
 
+// Captured FF3 inn fade: source NES color → dark-palette target (frame 0 →
+// frame 40 hold). Room colors converge to dark blue; everything else is
+// identity (sprite/candle/player colors aren't listed, so they stay lit).
+const _DARK_PAIRS = [
+  [0x00, 0x02], [0x08, 0x02], [0x28, 0x02], [0x2b, 0x02],
+  [0x10, 0x12], [0x11, 0x12], [0x18, 0x12], [0x1a, 0x12],
+  [0x30, 0x12], [0x31, 0x12],
+];
+const NES_DARK = (() => {
+  const t = new Uint8Array(64);
+  for (let i = 0; i < 64; i++) t[i] = i;
+  for (const [s, d] of _DARK_PAIRS) t[s] = d;
+  return t;
+})();
+
+// Reverse RGB → NES index (viewport pixels are exact NES colors, no smoothing).
+const _rgbToIdx = (() => {
+  const m = new Map();
+  for (let i = 0; i < NES_SYSTEM_PALETTE.length; i++) {
+    const [r, g, b] = NES_SYSTEM_PALETTE[i];
+    m.set((r << 16) | (g << 8) | b, i);
+  }
+  return m;
+})();
+
 export const bedSt = {
   state:      'closed',   // closed | fade-out | sleep | wake-wait | fade-in
   timer:      0,
-  fadeFrames: null,       // [Canvas] from buildNesFadeFrames, built lazily on first fade frame
+  holdCanvas: null,       // dimmed snapshot drawn during sleep / wake-wait
   healed:     false,
 };
 
-// Enter the rest scene. Called from checkTrigger when the player steps onto a
-// bed tile. No-op if already resting.
 export function openBed() {
   if (bedSt.state !== 'closed') return false;
   bedSt.state = 'fade-out';
   bedSt.timer = 0;
-  bedSt.fadeFrames = null;
+  bedSt.holdCanvas = null;
   bedSt.healed = false;
   pauseMusic();
   return true;
@@ -56,12 +78,12 @@ export function openBed() {
 function _close() {
   bedSt.state = 'closed';
   bedSt.timer = 0;
-  bedSt.fadeFrames = null;
+  bedSt.holdCanvas = null;
   bedSt.healed = false;
   resumeMusic();
 }
 
-// Refill HP/MP only — status effects are intentionally left untouched.
+// Refill HP/MP only — status effects intentionally untouched. Save = checkpoint.
 function _rest() {
   if (bedSt.healed) return;
   bedSt.healed = true;
@@ -69,17 +91,33 @@ function _rest() {
   saveSlotsToDB();
 }
 
+// Crossfade the inner viewport toward the dark palette by amount t (0..1),
+// in place, on the live (re-rendered) frame so animation keeps going.
+function _dimViewport(ctx, t) {
+  let img;
+  try { img = ctx.getImageData(INNER_X, INNER_Y, INNER_W, INNER_H); }
+  catch { return; }
+  const d = img.data;
+  for (let p = 0; p < d.length; p += 4) {
+    const idx = _rgbToIdx.get((d[p] << 16) | (d[p + 1] << 8) | d[p + 2]);
+    if (idx === undefined) continue;
+    const dark = NES_SYSTEM_PALETTE[NES_DARK[idx]];
+    if (dark === NES_SYSTEM_PALETTE[idx]) continue;  // identity color — leave lit
+    d[p]     = (d[p]     + (dark[0] - d[p])     * t) | 0;
+    d[p + 1] = (d[p + 1] + (dark[1] - d[p + 1]) * t) | 0;
+    d[p + 2] = (d[p + 2] + (dark[2] - d[p + 2]) * t) | 0;
+  }
+  ctx.putImageData(img, INNER_X, INNER_Y);
+}
+
 export function updateBed(dt) {
   if (bedSt.state === 'closed') return;
   bedSt.timer += Math.min(dt, 33);
   const s = bedSt.state;
   if (s === 'fade-out') {
-    if (bedSt.timer >= FADE_MS) { bedSt.state = 'sleep'; bedSt.timer = 0; }
+    if (bedSt.timer >= FADE_MS) { bedSt.state = 'sleep'; bedSt.timer = 0; bedSt.holdCanvas = null; }
   } else if (s === 'sleep') {
-    if (bedSt.timer >= SLEEP_MS) {
-      _rest();
-      bedSt.state = 'wake-wait'; bedSt.timer = 0;
-    }
+    if (bedSt.timer >= SLEEP_MS) { _rest(); bedSt.state = 'wake-wait'; bedSt.timer = 0; }
   } else if (s === 'fade-in') {
     if (bedSt.timer >= FADE_MS) _close();
   }
@@ -94,8 +132,7 @@ export function handleBedInput(keys) {
     for (const k of Object.keys(keys)) { if (keys[k]) { pressed = true; keys[k] = false; } }
     if (pressed) { bedSt.state = 'fade-in'; bedSt.timer = 0; }
   } else {
-    // Drain keys during fades/sleep so a held key can't leak into movement.
-    for (const k of Object.keys(keys)) keys[k] = false;
+    for (const k of Object.keys(keys)) keys[k] = false;  // drain during fades/sleep
   }
   return true;
 }
@@ -106,20 +143,26 @@ export function drawBed() {
   if (!ctx) return;
   const s = bedSt.state;
 
-  if (s === 'fade-out' || s === 'fade-in') {
-    if (!bedSt.fadeFrames) {
-      bedSt.fadeFrames = buildNesFadeFrames(ctx.canvas, INNER_X, INNER_Y, INNER_W, INNER_H, FADE_STEPS);
+  if (s === 'fade-out') {
+    const t = Math.min(1, bedSt.timer / FADE_MS);
+    _dimViewport(ctx, t);
+    // At full dark, snapshot the dimmed viewport for the hold.
+    if (t >= 1 && !bedSt.holdCanvas) {
+      const c = document.createElement('canvas');
+      c.width = INNER_W; c.height = INNER_H;
+      c.getContext('2d').drawImage(ctx.canvas, INNER_X, INNER_Y, INNER_W, INNER_H, 0, 0, INNER_W, INNER_H);
+      bedSt.holdCanvas = c;
     }
-    const raw  = Math.min(FADE_STEPS, Math.floor(bedSt.timer / FADE_STEP_MS));
-    const step = (s === 'fade-out') ? raw : (FADE_STEPS - raw);  // out: bright→dark, in: dark→bright
-    const frame = bedSt.fadeFrames[Math.max(0, Math.min(step, FADE_STEPS))];
-    if (frame) ctx.drawImage(frame, INNER_X, INNER_Y);
+    return;
+  }
+  if (s === 'fade-in') {
+    _dimViewport(ctx, Math.max(0, 1 - bedSt.timer / FADE_MS));
     return;
   }
 
-  // sleep / wake-wait — held fully dark.
-  ctx.fillStyle = '#000';
-  ctx.fillRect(INNER_X, INNER_Y, INNER_W, INNER_H);
+  // sleep / wake-wait — draw the held dim frame over the (live) viewport.
+  if (bedSt.holdCanvas) ctx.drawImage(bedSt.holdCanvas, INNER_X, INNER_Y);
+  else _dimViewport(ctx, 1);
   if (s === 'wake-wait' && Math.floor(bedSt.timer / 400) % 2 === 0) {
     const x = INNER_X + Math.max(0, (INNER_W - measureText(PROMPT)) >> 1);
     const y = INNER_Y + (INNER_H >> 1) - 4;
