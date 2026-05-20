@@ -123,13 +123,7 @@ function _tickFreezeWatchdog(now) {
   const wireWait = cur === 'enemy-flash'
     && pvpSt.isWirePVP
     && !pvpSt.pvpPreflashDecided;
-  // Co-op encounter exception (v1.7.444): `ally-wire-wait` is an input-waiting
-  // state too — the wire-driven ally is parked until their partner's
-  // `encounter-action` lands. Cellular jitter regularly produces 5-15 s waits
-  // before the 45 s ally-side fallback kicks in (`battle-ally.js`); without
-  // this carve-out the watchdog spams /api/client-error during normal play.
-  const allyWireWait = cur === 'ally-wire-wait';
-  if (!cur || cur === 'none' || _frozenIdleStates.has(cur) || wireWait || allyWireWait) {
+  if (!cur || cur === 'none' || _frozenIdleStates.has(cur) || wireWait) {
     _watchState = cur;
     _watchSince = now;
     _watchBattleTimer = battleSt.battleTimer;

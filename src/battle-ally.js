@@ -13,7 +13,6 @@ import { BATTLE_ALLY, BATTLE_SLAIN } from './data/strings.js';
 import { pvpSt } from './pvp.js';
 import { inputSt } from './input-handler.js';
 import { getEnemyDmgNum, setEnemyDmgNum, setPlayerHealNum, getAllyDamageNums, tickHealNums, clearHealNums, setSwDmgNum, DMG_SHOW_MS, makeHealNumCallback } from './damage-numbers.js';
-import { ROSTER_FADE_STEPS } from './data/players.js';
 import { IDLE_FRAME_MS } from './combatant-pose.js';
 import { ps } from './player-stats.js';
 import { STATUS, STATUS_NAME_TO_FLAG } from './status-effects.js';
@@ -403,36 +402,11 @@ function _updateAllyMagicCast(dt) {
   return false;
 }
 
-// ── Ally KO sequence ─────────────────────────────────────────────────────────
-function _updateAllyKOSequence() {
-  if (battleSt.battleState === 'ally-ko-fade') {
-    const koAlly = battleSt.battleAllies[battleSt.enemyTargetAllyIdx];
-    if (koAlly && battleSt.battleTimer >= 100) {
-      koAlly.fadeStep = Math.min(ROSTER_FADE_STEPS, koAlly.fadeStep + 1);
-      battleSt.battleTimer = 0;
-      if (koAlly.fadeStep >= ROSTER_FADE_STEPS) {
-        battleSt.turnQueue = battleSt.turnQueue.filter(t => !(t.type === 'ally' && t.index === battleSt.enemyTargetAllyIdx));
-        battleSt.enemyTargetAllyIdx = -1;
-        if (_isTeamWiped()) {
-          battleSt.battleState = battleSt.isRandomEncounter ? 'encounter-box-close' : 'enemy-box-close';
-          battleSt.battleTimer = 0;
-        } else {
-          _processNextTurn();
-        }
-      }
-    }
-    return true;
-  }
-  if (battleSt.battleState === 'ally-ko-msg') return true;
-  return false;
-}
-
 export function updateBattleAlly(dt) {
   if (_updateAllyJoin()) return true;
   if (_updateAllyAttack()) return true;
   if (_updateAllyMagicCast(dt)) return true;
   if (battleSt.battleState === 'ally-damage-show') { if (battleSt.battleTimer >= 700) _updateAllyDamageShow(); return true; }
   if (_updateAllyEnemyHit()) return true;
-  if (_updateAllyKOSequence()) return true;
   return false;
 }

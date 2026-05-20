@@ -17,8 +17,17 @@ const httpServer = createServer(async (req, res) => {
 
   // API routes
   if (url.pathname.startsWith('/api/')) {
-    const handled = await handleAPI(req, res);
-    if (handled) return;
+    // Guard every API handler: a malformed payload (e.g. a non-string field
+    // that throws on a string method) must return 500, not reject the async
+    // handler and leave the client socket hanging with no response.
+    try {
+      const handled = await handleAPI(req, res);
+      if (handled) return;
+    } catch (e) {
+      console.error('[api] handler threw for ' + url.pathname + ':', e && e.message);
+      if (!res.headersSent) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end('{"error":"Internal error"}'); }
+      return;
+    }
   }
 
   // Static files

@@ -274,7 +274,9 @@ export async function handleAPI(req, res) {
       return send(res, 429, { error: 'Too many requests — slow down' }), true;
     }
     const { email, password } = await readBody(req);
-    if (!email || !password) return send(res, 400, { error: 'Email and password required' }), true;
+    if (typeof email !== 'string' || typeof password !== 'string' || !email || !password) {
+      return send(res, 400, { error: 'Email and password required' }), true;
+    }
     if (password.length < 6) return send(res, 400, { error: 'Password must be at least 6 characters' }), true;
     const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
     if (existing) return send(res, 409, { error: 'Email already registered' }), true;

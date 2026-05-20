@@ -541,7 +541,7 @@ function _handleMessage(entry, msg) {
       const target = _connected.get(targetUserId);
       if (!target || !target.helloed) return;
       const itemId = parsed.itemId | 0;
-      if (!itemId) return;
+      if (itemId <= 0 || itemId > 255) return;
       console.log('[give-item] relay user=' + entry.userId + ' → ' + targetUserId + ' item=0x' + itemId.toString(16));
       _send(target.ws, {
         type: 'give-item',

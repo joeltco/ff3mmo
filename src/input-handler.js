@@ -661,11 +661,6 @@ export function handleBattleInput() {
   } else if (battleSt.battleState === 'target-select') { _battleInputTargetSelect();
   } else if (battleSt.battleState === 'item-select') { _battleInputItemSelect();
   } else if (battleSt.battleState === 'item-target-select') { _battleInputItemTargetSelect();
-  } else if (battleSt.battleState === 'ally-wire-wait') {
-    // Stalling for a wire-driven ally action. Drain action keys so a key
-    // held during the stall can't fire a menu command on the next state
-    // transition. v1.7.427.
-    k['z'] = false; k['Z'] = false; k['x'] = false; k['X'] = false;
   }
   return true;
 }

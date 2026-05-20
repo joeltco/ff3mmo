@@ -112,6 +112,14 @@ export function startRandomEncounter() {
   const formations = zone ? zone.formations : [[{ id: 0x00, min: 1, max: 3 }]];
   const formation = formations[Math.floor(Math.random() * formations.length)];
 
+  // INVARIANT: this array is built once per battle and NEVER shrinks — dead
+  // monsters keep their slot with hp=0; it's only reset to `null` at battle
+  // end (battle-update.js). Every combat index (targetIndex, allyTargetIndex,
+  // currentAttacker, confused pick.index) is derived from a hp>0 filter on
+  // this array within the same synchronous turn, so `encounterMonsters[idx]`
+  // is always a defined object for the life of the battle. If you ever splice
+  // or remove dead monsters here, re-audit every `encounterMonsters[idx]`
+  // dereference — they assume stable indices and would then need bounds guards.
   battleSt.encounterMonsters = [];
   for (const group of formation) {
     const count = group.min + Math.floor(Math.random() * (group.max - group.min + 1));
