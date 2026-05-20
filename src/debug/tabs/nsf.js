@@ -1,9 +1,14 @@
 // NSF tab — audition FF3 NSF tracks by ear (find jingles/songs like the inn
-// rest tune). Uses playTrack(), which tears down + recreates the emulator per
+// rest tune). Uses M().playTrack(), which tears down + recreates the emulator per
 // call, so switching tracks actually restarts — unlike the SFX channel, which
 // reuses its emu and wouldn't change sounds (why /sfx didn't work).
 
-import { playTrack, stopMusic, playSFX, stopSFX, audioStatus, resumeAudio } from '../../music.js';
+import * as _music from '../../music.js';
+
+// Prefer the game instance's audio API (exposed on window by initMusic). The
+// debug panel can be a separate module instance whose nsfData is null, so
+// calling its own playTrack would bail silently — use the live one.
+const M = () => (typeof window !== 'undefined' && window.__ff3music) || _music;
 
 let _cur = 0x57;     // last track tried (the inn capture's screechy guess — a starting point)
 let _nowEl = null;
@@ -19,7 +24,7 @@ function _hex(n) { return '0x' + n.toString(16) + ' (' + n + ')'; }
 
 function _refreshStatus() {
   if (!_statEl) return;
-  const s = audioStatus();
+  const s = M().audioStatus();
   const bad = (!s.module || !s.nsf || s.ctx !== 'running');
   _statEl.style.color = bad ? '#e66' : '#6c6';
   _statEl.textContent = `audio: libgme=${s.module ? 'ok' : 'MISSING'}  nsf=${s.nsf ? 'ok' : 'MISSING'}  ctx=${s.ctx}  cur=0x${(s.track >>> 0).toString(16)}`;
@@ -39,9 +44,9 @@ export function mount(root) {
   _nowEl = wrap.querySelector('#nsf-now');
   const inp = () => wrap.querySelector('#nsf-track');
 
-  const playSong = (n) => { resumeAudio(); stopSFX(); playTrack(n); _cur = n; _nowEl.textContent = '▶ song  ' + _hex(n) + '  (loops)'; _refreshStatus(); };
-  const playOne  = (n) => { resumeAudio(); stopMusic(); playSFX(n); _cur = n; _nowEl.textContent = '▶ once  ' + _hex(n) + '  (SFX channel)'; _refreshStatus(); };
-  const stop     = () => { stopMusic(); stopSFX(); _nowEl.textContent = '— stopped —'; _refreshStatus(); };
+  const playSong = (n) => { M().resumeAudio(); M().stopSFX(); M().playTrack(n); _cur = n; _nowEl.textContent = '▶ song  ' + _hex(n) + '  (loops)'; _refreshStatus(); };
+  const playOne  = (n) => { M().resumeAudio(); M().stopMusic(); M().playSFX(n); _cur = n; _nowEl.textContent = '▶ once  ' + _hex(n) + '  (SFX channel)'; _refreshStatus(); };
+  const stop     = () => { M().stopMusic(); M().stopSFX(); _nowEl.textContent = '— stopped —'; _refreshStatus(); };
 
   const row = document.createElement('div');
   row.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px';
@@ -52,7 +57,7 @@ export function mount(root) {
     b.onclick = fn;
     return b;
   };
-  row.appendChild(mk('🔊 Start audio', () => { const r = resumeAudio(); _nowEl.textContent = 'resumeAudio → ' + r; _refreshStatus(); }, '#264'));
+  row.appendChild(mk('🔊 Start audio', () => { const r = M().resumeAudio(); _nowEl.textContent = 'resumeAudio → ' + r; _refreshStatus(); }, '#264'));
   row.appendChild(mk('◀ prev', () => { const n = Math.max(0, _cur - 1); inp().value = '0x' + n.toString(16); playSong(n); }));
   row.appendChild(mk('▶ Play song', () => { const n = _parse(inp().value); if (n != null) playSong(n); }, '#2a4'));
   row.appendChild(mk('Play once', () => { const n = _parse(inp().value); if (n != null) playOne(n); }));
@@ -75,6 +80,6 @@ export function mount(root) {
 
 export function unmount() {
   if (_statTimer) { clearInterval(_statTimer); _statTimer = null; }
-  stopMusic(); stopSFX();
+  M().stopMusic(); M().stopSFX();
   _nowEl = null; _statEl = null;
 }
