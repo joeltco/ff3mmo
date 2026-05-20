@@ -416,6 +416,10 @@ async function suiteWire() {
     res.writeHead(404); res.end();
   });
   attachWebSocketPresence(httpServer);
+  // PvP is disabled in prod (v1.7.502) but the wire contract still needs
+  // regression coverage for the eventual authoritative-host rewrite — turn it
+  // on here so the search/encounter/match tests below exercise the real path.
+  _testHooks.setPvpEnabled(true);
   await new Promise(r => httpServer.listen(0, '127.0.0.1', r));
   const port = httpServer.address().port;
 

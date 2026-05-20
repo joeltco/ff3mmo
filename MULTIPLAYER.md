@@ -1,8 +1,8 @@
 # Multiplayer
 
-**Co-op party battles + Battle Assist were REMOVED in v1.7.500** after three failed architectures (lockstep / host-arb / viewer) all froze the guest phone. Random monster encounters are **solo-only** again. PvP duels, presence, chat, party invites (the social layer), give-item, roster low-HP pose are all working and unaffected. Solo + boss combat unaffected. **A from-scratch co-op rebuild is planned — see the `ff3mmo-coop-rebuild` auto-memory for the failure history, root causes, and what survives. The removed code is in git history before v1.7.500.**
+**Co-op party battles + Battle Assist were REMOVED in v1.7.500; PvP duels were DISABLED in v1.7.502.** Both real-time two-client battle features are off — same root cause: client-side lockstep can't hold cross-phone determinism. Co-op was ripped out after three failed architectures (lockstep / host-arb / viewer) all froze the guest phone; random monster encounters are **solo-only** again. PvP was then turned off behind a flag (`PVP_ENABLED` in `ws-presence.js` + `pvp-search.js`) after live battles desynced completely (turn order / damage / end-of-battle). **All PvP code is left in place** for a planned rewrite to an authoritative-host model (one side computes outcomes + relays deltas; the other renders — no determinism required). **Presence, chat, party invites (the social layer), give-item, roster low-HP pose all still work and are unaffected.** Solo + boss combat unaffected. See the `ff3mmo-coop-rebuild` + `ff3mmo-pvp-disabled` auto-memories for failure history, root causes, and re-enable steps.
 
-Open `ff3mmo.com` in two browsers with two accounts. Same location → see each other in the roster panel. Chat, party invites, PvP duels, low-HP roster pose, give-item-to-roster, party co-op random encounters, and Battle Assist (any roster player can join an in-progress fight) all wire-driven. Combat is **FF3-style round-based** — the FF4 ATB system that shipped in v1.7.428-v1.7.455 was reverted in v1.7.456 (didn't feel right); all `atb-sync` / `atb-ready` / `pvp-atb-sync` wire kinds + the server-side `_encounterBattles` tick loop are gone. Fakes are off (`PLAYER_POOL` exported empty in `src/data/players.js`).
+Open `ff3mmo.com` in two browsers with two accounts. Same location → see each other in the roster panel. Chat, party invites, low-HP roster pose, and give-item-to-roster are all wire-driven and working. (PvP duels are disabled as of v1.7.502; party co-op random encounters + Battle Assist were removed in v1.7.500.) Combat is **FF3-style round-based** — the FF4 ATB system that shipped in v1.7.428-v1.7.455 was reverted in v1.7.456 (didn't feel right); all `atb-sync` / `atb-ready` / `pvp-atb-sync` wire kinds + the server-side `_encounterBattles` tick loop are gone. Fakes are off (`PLAYER_POOL` exported empty in `src/data/players.js`).
 
 This doc is the architecture overview + recovery cheatsheet. For the per-deploy changelog of how it got built, see `CHANGELOG.md` 1.7.366 → 1.7.443.
 
@@ -64,6 +64,10 @@ Messages are JSON over text frames. `actor` / `target` are sender's-perspective 
 - **`pm`** = userId-targeted when the client sends `toUserId`; falls back to first-match-by-name when only `to` is set. The name path stops at the first match so a player can't intercept PMs by renaming to "Joel" anymore. (v1.7.388.)
 
 ### PvP search (Step 3)
+
+> **DISABLED v1.7.502.** The wire shapes below are documented as-built and still
+> regression-tested, but `PVP_ENABLED` is off (server + client) so no search is
+> registered and no match fires. Re-enable per the status note at the top.
 
 | Direction | Type | Fields |
 |---|---|---|

@@ -58,6 +58,16 @@ const _connected = new Map();
 // hook chance against each challenger of B at that moment.
 const _pvpSearches = new Map();
 
+// PvP master switch (server side). DISABLED v1.7.502 — PvP roster battles are
+// off pending the authoritative-host battle-sync rewrite (client-side lockstep
+// desynced live). This is the hard kill switch: with it off, the server never
+// registers a search and never fires a `pvp-match`, so no PvP battle can start
+// even from a stale-cached client that still sends `pvp-search`/`pvp-encounter`.
+// Re-enable by flipping this AND the client `PVP_ENABLED` in pvp-search.js.
+// Mutable so the pvp-wire-sim can turn it on (via `_testHooks.setPvpEnabled`)
+// to keep regression-testing the wire contract while prod stays off.
+let PVP_ENABLED = false;
+
 // Active PvP battle partners — userId → partnerUserId. Set on pvp-match,
 // cleared on disconnect. The server relays `pvp-action` between partners
 // so each client drives its opponent's turn from the remote player's actual
@@ -423,6 +433,11 @@ function _handleMessage(entry, msg) {
       return;
     }
     case 'pvp-search': {
+      if (!PVP_ENABLED) {
+        console.log('[pvp-search] reject reason=pvp-disabled user=' + entry.userId);
+        _send(entry.ws, { type: 'pvp-search-failed', reason: 'offline' });
+        return;
+      }
       if (!entry.helloed) { console.log('[pvp-search] reject reason=not-helloed user=' + entry.userId); return; }
       const targetUserId = parsed.targetUserId | 0;
       if (!targetUserId || targetUserId === entry.userId) { console.log('[pvp-search] reject reason=bad-target user=' + entry.userId + ' target=' + targetUserId); return; }
@@ -454,6 +469,12 @@ function _handleMessage(entry, msg) {
       // `pvp-encounter-none` (on miss / no challengers) so B can branch.
       if (!entry.helloed) {
         console.log('[pvp-encounter] reject reason=not-helloed user=' + entry.userId);
+        _send(entry.ws, { type: 'pvp-encounter-none' });
+        return;
+      }
+      if (!PVP_ENABLED) {
+        // PvP disabled — never hook; the client proceeds to a normal monster
+        // encounter on `pvp-encounter-none`.
         _send(entry.ws, { type: 'pvp-encounter-none' });
         return;
       }
@@ -928,6 +949,7 @@ export function attachWebSocketPresence(httpServer) {
 // code that runs in prod without re-implementing it.
 export const _testHooks = {
   normalizeProfileField: _normalizeProfileField,
+  setPvpEnabled(v) { PVP_ENABLED = !!v; },
   pvpHookChance: _pvpHookChance,
   inSameParty: _inSameParty,
   rateAllow: _rateAllow,

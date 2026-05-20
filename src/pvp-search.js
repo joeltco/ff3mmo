@@ -26,6 +26,22 @@ import { sendNetPVPSearch, sendNetPVPCancel, sendNetPVPEnd,
          setNetPVPMatchHandler, setNetPVPFailedHandler } from './net.js';
 import { cancelPendingPVPCheck } from './battle-encounter.js';
 
+// ── PvP master switch ────────────────────────────────────────────────────────
+// DISABLED (v1.7.502). PvP roster battles are turned off pending a rewrite of
+// the battle-sync model. The current model is client-side lockstep — both
+// phones run the full battle FSM independently and stay identical only if they
+// consume `rand()` in the exact same order, cycle-for-cycle, through animations
+// / timers / network races. That determinism is too fragile to hold (it's the
+// same approach that failed for co-op three times, ripped out in v1.7.500), so
+// live PvP battles desynced completely (turn order, damage, end-of-battle).
+//
+// All PvP code is intentionally LEFT IN PLACE for the eventual rewrite to an
+// authoritative-host model (one side computes outcomes, the other only renders
+// deltas — no determinism required). To re-enable, flip BOTH this flag and the
+// server-side `PVP_ENABLED` in `ws-presence.js`. See the ff3mmo-pvp-disabled
+// memory for the full rationale.
+export const PVP_ENABLED = false;
+
 // Tuning constants. Surface them up here so they're easy to find.
 const BASE_HOOK     = 0.25;
 const AGI_PER_PT    = 0.015;
@@ -100,6 +116,10 @@ export function getHookChance(target) {
 }
 
 export function startPVPSearch(target) {
+  if (!PVP_ENABLED) {
+    showMsgBox(_nameToBytes('PvP is disabled'));
+    return false;
+  }
   if (pvpSearchSt.active) return false;
   if (!target) return false;
   if (isSearchOnCooldown(target.name)) return false;
@@ -206,6 +226,9 @@ function _resolveAsHook(remoteOpponent, seed) {
 // roll timer for real-player searches; the local `tickPVPSearch` only watches
 // for death / timeout in that branch.
 setNetPVPMatchHandler((msg) => {
+  // PvP disabled (v1.7.502) — decline any match that still arrives (e.g. from a
+  // stale-cached peer that hasn't reloaded) so a battle can't start on us.
+  if (!PVP_ENABLED) { sendNetPVPEnd(); return; }
   const opp = msg && msg.opponent;
   if (!opp) return;
   const seed = (msg && typeof msg.seed === 'number') ? msg.seed : null;

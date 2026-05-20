@@ -34,7 +34,11 @@ const ROSTER_FADE_STEP_MS = 100;
 const ROSTER_SLIDE_SPEED  = 0.15;  // px per ms
 const ROSTER_ROW_H        = 32;
 const ROSTER_VISIBLE      = 3;
-export const ROSTER_MENU_ITEMS = ['Party', 'Battle', 'Trade', 'Message', 'Inspect'];
+// 'Battle' (PvP) removed v1.7.502 — PvP disabled pending the authoritative-host
+// battle-sync rewrite. Re-add it here when flipping `PVP_ENABLED` back on
+// (pvp-search.js + ws-presence.js). The Battle dispatch in input-handler.js is
+// left intact and simply unreachable while the item is absent.
+export const ROSTER_MENU_ITEMS = ['Party', 'Trade', 'Message', 'Inspect'];
 
 // ── Mutable state ─────────────────────────────────────────────────────────
 let rosterTimer        = 0;

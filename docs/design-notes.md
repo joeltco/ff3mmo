@@ -92,6 +92,15 @@ Canonical NES animation pattern, captured from PPU OAM while the Monk punched a 
 
 ## PVP search
 
+> **PvP DISABLED v1.7.502** behind `PVP_ENABLED` (server `ws-presence.js` +
+> client `pvp-search.js`); the "Battle" roster item is removed. Live two-phone
+> PvP battles desynced completely — the client-side lockstep model can't hold
+> cross-phone `rand()`-cursor determinism (same failure that killed co-op,
+> v1.7.500). All code is left in place for a rewrite to an authoritative-host
+> model (one side computes outcomes + relays deltas; the other renders). The
+> design below is as-built. Re-enable: flip both flags + re-add `'Battle'` to
+> `ROSTER_MENU_ITEMS`. See the `ff3mmo-pvp-disabled` memory.
+
 - **Roster Battle = search-and-hook, not instant duel.** Lives in `src/pvp-search.js`. Picking *Battle* in the roster menu calls `startPVPSearch(target)` → persistent "Searching for X..." message + roster row marquees "Searching...". The target rolls a hook check on a sim timer (8–15 s); on success the message swaps in-place (via `replaceMsgBoxText` — no slide flicker) to "Connecting...", auto-advances after 1000 ms, and hands off to the existing `_startPVPBattle(target)`.
 - **Hook formula.** `clamp(BASE_HOOK + (chAGI − tgtAGI) × AGI_PER_PT + jobBonus, HOOK_MIN, HOOK_MAX)` — tunables at top of `pvp-search.js`. Defaults: 0.25 base, 0.015 per AGI point, [0.10, 0.75] clamp. Thief +0.15, Ranger +0.08. AGI is the lever (STR/INT/MND already drive other systems; AGI was thin).
 - **Search persists across map changes; only resolution gates on a valid PVP location** (`battleState === 'none' && (mapSt.onWorldMap || mapSt.dungeonFloor >= 0)`). Hook rolls fired while in town count as a missed roll — prevents fishing from town forever. 3 missed-in-a-row OR 5 min real-time → "Search expired" + 60 s cooldown per target.
