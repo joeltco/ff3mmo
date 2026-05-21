@@ -23,7 +23,7 @@ import { updateBed } from './bed.js';
 import { transSt, loadingSt, updateTransition, updateTopBoxScroll,
          drawTransitionOverlay, WIPE_DURATION } from './transitions.js';
 import { handleInput, updateMovement } from './movement.js';
-import { updateNpcs } from './npc.js';
+import { updateNpcs, tickOpeningIntro } from './npc.js';
 import { updateBattle } from './battle-update.js';
 import { pvpSt } from './pvp.js';
 import { drawBattle, drawBattleAllies, drawSWExplosion, drawSWDamageNumbers } from './battle-drawing.js';
@@ -181,6 +181,7 @@ function _gameLoopUpdate(dt) {
   updateMovement(dt);
   if (battleSt.battleState === 'none') updateNpcs(dt);
   updateTransition(dt);
+  tickOpeningIntro();
   updateTopBoxScroll(dt);
   if (mapSt.pondStrobeTimer > 0) mapSt.pondStrobeTimer = Math.max(0, mapSt.pondStrobeTimer - dt);
   if (mapSt.shakeActive) {

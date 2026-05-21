@@ -13,6 +13,7 @@ import { transSt, topBoxSt } from './transitions.js';
 import { AREA_NAMES } from './data/strings.js';
 import { mapSt } from './map-state.js';
 import { loadMapById, loadWorldMapAtPosition } from './map-loading.js';
+import { queueOpeningIntro } from './npc.js';
 import { serverDeleteSlot } from './save.js';
 import { fakePlayerPortraits } from './fake-player-sprites.js';
 import { drawCursorFaded } from './hud-drawing.js';
@@ -769,6 +770,9 @@ function _updateTitleMainOutCase() {
     mapSt.mapStack.push({ mapId: 114, x: 9 * TILE_SIZE, y: 26 * TILE_SIZE });
     mapSt.mapStack.push({ mapId:   6, x: 12 * TILE_SIZE, y: 13 * TILE_SIZE });
     loadMapById(7, 4, 4);
+    // Scripted intro banter (elder + 2 attendants) plays once the entry
+    // fade settles — fresh-slot only, so it never replays on revisit/respawn.
+    queueOpeningIntro();
   }
   transSt.state = 'hud-fade-in';
   transSt.timer = 0;

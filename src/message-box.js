@@ -97,7 +97,10 @@ export function replaceMsgBoxText(bytes, onClose) {
 // text in from below (no box re-animation between pages), and slide-out
 // only plays after the final page. `onAllDone` fires once the slide-out
 // completes (after the last page).
-export function showMsgBoxPages(pages, onAllDone) {
+// onPage(idx) — optional, fires as each page becomes the active one (page 0 at
+// open, then on every advance). Used by the opening-scene intro to turn the
+// player to face whichever NPC is speaking.
+export function showMsgBoxPages(pages, onAllDone, onPage) {
   if (!pages || pages.length === 0) return;
   let idx = 0;
   const advance = () => {
@@ -111,6 +114,7 @@ export function showMsgBoxPages(pages, onAllDone) {
       msgState.timer = 0;
       return;
     }
+    if (onPage) onPage(idx);
     // Mid-scroll spam press: snap to the new page and skip remaining scroll.
     if (msgState.state === 'page-scroll') {
       msgState.bytes = pages[idx];
@@ -130,6 +134,7 @@ export function showMsgBoxPages(pages, onAllDone) {
     }
   };
   showMsgBox(pages[0]);
+  if (onPage) onPage(0);
   msgState.onAdvance = advance;
 }
 

@@ -20,7 +20,8 @@ import { sprite as playerSprite } from './player-sprite.js';
 import { Sprite, DIR_DOWN, DIR_UP, DIR_LEFT, DIR_RIGHT } from './sprite.js';
 import { MOOGLE_GFX_ID, MOOGLE_PAL } from './sprite-init.js';
 import { BM_WALK_TOP, BM_WALK_BTM } from './job-sprites.js';
-import { OPENING_ELDER, OPENING_LEFT_ATTENDANT, OPENING_RIGHT_ATTENDANT } from './data/opening-scene.js';
+import { OPENING_ELDER, OPENING_LEFT_ATTENDANT, OPENING_RIGHT_ATTENDANT, OPENING_INTRO } from './data/opening-scene.js';
+import { transSt } from './transitions.js';
 import { TOWN_NPCS } from './data/town-npcs.js';
 import { openShop } from './shop.js';
 import { waterSt } from './water-animation.js';
@@ -201,6 +202,34 @@ export function placeTownNpcs(mapId) {
   const list = TOWN_NPCS.get(mapId);
   if (!list) return;
   for (const n of list) addSceneNpc(n.key, n.x, n.y, n.spec);
+}
+
+// ── Opening-scene intro ──────────────────────────────────────────────────
+// Scripted conversation between the elder + 2 attendants the moment a NEW
+// GAME spawns the player at map 7 (4,4). Queued only from the fresh-slot
+// path (title-screen.js) — never on a death-respawn or revisit to map 7. The
+// open message box locks movement until the last page slides out; the player
+// sprite turns to face whichever NPC is speaking. Afterward, each NPC's own
+// `dialogue` plays on talk.
+let _openingIntroPending = false;
+export function queueOpeningIntro() { _openingIntroPending = true; }
+
+export function tickOpeningIntro() {
+  if (!_openingIntroPending) return;
+  // Only fire on map 7, once the entry transition has settled and no box is up.
+  if (mapSt.currentMapId !== 7) { _openingIntroPending = false; return; }
+  if (transSt.state !== 'none' || msgState.state !== 'none') return;
+  _openingIntroPending = false;
+
+  const face = (i) => {
+    const line = OPENING_INTRO[i];
+    if (line && playerSprite) { playerSprite.setDirection(line.dir); playerSprite.resetFrame(); }
+  };
+  const pages = OPENING_INTRO.map(l => _nameToBytes(l.text));
+  showMsgBoxPages(pages, () => {
+    // Hand control back facing the elder (north) — where the player woke.
+    if (playerSprite) { playerSprite.setDirection(DIR_UP); playerSprite.resetFrame(); }
+  }, face);
 }
 
 export function findNpcAt(tileX, tileY) {
