@@ -163,19 +163,46 @@
       user-select: none;
       -webkit-user-select: none;
     }
-    #utility-row {
-      display: flex;
-      justify-content: center;
-      gap: 8px;
-      padding: 8px 12px;
-      background: #0a0a14;
-      border-bottom: 1px solid #222;
-    }
     #main-controls {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 16px 20px;
+      padding: 18px 22px 2px;
+    }
+    /* Menu/utility pills, angled like a Game Boy's SELECT/START, centered
+       below the D-pad + A/B. CHAT/LOG on top, SELECT/START beneath. */
+    #center-cluster {
+      align-self: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 9px;
+      padding: 6px 0 12px;
+    }
+    .pill-row {
+      display: flex;
+      gap: 16px;
+    }
+    .pill-btn {
+      min-width: 60px;
+      padding: 6px 9px;
+      border-radius: 11px;
+      border: 1px solid #383848;
+      background: #16161f;
+      color: #888;
+      font-size: 9px;
+      font-family: 'Courier New', monospace;
+      letter-spacing: 1px;
+      text-align: center;
+      transform: rotate(-22deg);
+      touch-action: none;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .pill-btn:active, .pill-btn.pressed {
+      background: #2a2a3e;
+      border-color: #c8a832;
+      color: #c8a832;
     }
     #dpad {
       display: grid;
@@ -214,9 +241,12 @@
     }
     #action-btns {
       display: flex;
-      gap: 14px;
+      gap: 16px;
       align-items: center;
     }
+    /* A sits upper-right, B lower-left — the Game Boy diagonal. */
+    .action-btn.btn-a { transform: translateY(-18px); }
+    .action-btn.btn-b { transform: translateY(18px); }
     .action-btn {
       width: 70px;
       height: 70px;
@@ -237,27 +267,6 @@
     .action-btn:active, .action-btn.pressed {
       background: #3a3a50;
       border-color: #c8a832;
-    }
-    .util-btn {
-      flex: 1;
-      max-width: 90px;
-      padding: 7px 4px;
-      border-radius: 14px;
-      border: 1px solid #383848;
-      background: #16161f;
-      color: #888;
-      font-size: 10px;
-      font-family: 'Courier New', monospace;
-      letter-spacing: 1px;
-      text-align: center;
-      touch-action: none;
-      cursor: pointer;
-      -webkit-tap-highlight-color: transparent;
-    }
-    .util-btn:active, .util-btn.pressed {
-      background: #2a2a3e;
-      border-color: #c8a832;
-      color: #c8a832;
     }
     @media (max-width: 520px) {
       #mobile-controls {
@@ -536,13 +545,9 @@
   <div id="version-badge">v{{VERSION}}</div>
   <div id="controls-hint"><kbd>&larr;</kbd> <kbd>&uarr;</kbd> <kbd>&darr;</kbd> <kbd>&rarr;</kbd> Move &nbsp;&middot;&nbsp; <kbd>Z</kbd> Action &nbsp;&middot;&nbsp; <kbd>X</kbd> Back</div>
 
+  <!-- Game Boy-style deck: D-pad left, A(upper-right)/B(lower-left) on the
+       diagonal, and the menu/utility pills angled in the center below. -->
   <div id="mobile-controls">
-    <div id="utility-row">
-      <button class="util-btn" data-key="t">CHAT</button>
-      <button class="util-btn" data-key="T">LOG</button>
-      <button class="util-btn" data-key="s">SELECT</button>
-      <button class="util-btn" data-key="Enter">START</button>
-    </div>
     <div id="main-controls">
       <div id="dpad">
         <div class="dpad-btn transparent"></div>
@@ -556,8 +561,18 @@
         <div class="dpad-btn transparent"></div>
       </div>
       <div id="action-btns">
-        <button class="action-btn" data-key="x">B</button>
-        <button class="action-btn" data-key="z">A</button>
+        <button class="action-btn btn-b" data-key="x">B</button>
+        <button class="action-btn btn-a" data-key="z">A</button>
+      </div>
+    </div>
+    <div id="center-cluster">
+      <div class="pill-row">
+        <button class="pill-btn" data-key="t">CHAT</button>
+        <button class="pill-btn" data-key="T">LOG</button>
+      </div>
+      <div class="pill-row">
+        <button class="pill-btn" data-key="s">SELECT</button>
+        <button class="pill-btn" data-key="Enter">START</button>
       </div>
     </div>
   </div>
