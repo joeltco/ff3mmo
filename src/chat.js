@@ -10,7 +10,7 @@ import { partyInviteSt } from './party-invite.js';
 import { mapSt } from './map-state.js';
 import { sprite } from './player-sprite.js';
 import { DIR_DOWN, DIR_UP, DIR_LEFT, DIR_RIGHT } from './sprite.js';
-import { playFF1Track, stopFF1Music, pauseMusic, resumeMusic } from './music.js';
+import { playFF1Track, stopFF1Music, playFF2Track, stopFF2Music, pauseMusic, resumeMusic } from './music.js';
 import { ui } from './ui-state.js';
 import { ps, changeJob, fullHeal, grantExp } from './player-stats.js';
 import { JOBS } from './data/jobs.js';
@@ -260,6 +260,19 @@ registerCommand('ff1', 'Play FF1 NSF track N (or "stop" to resume map music)', (
   addChatMessage('FF1 NSF track ' + n, 'console');
 }, { dev: true });
 
+registerCommand('ff2', 'Play FF2 NSF track N (or "stop" to resume map music)', (args) => {
+  const a = (args || '').trim().toLowerCase();
+  if (a === '' || a === 'stop' || a === 'off') {
+    stopFF2Music(); resumeMusic();
+    addChatMessage('FF2 NSF stopped, map music resumed', 'console');
+    return;
+  }
+  const n = parseInt(a, 10);
+  if (!Number.isFinite(n) || n < 0) { addChatMessage('Usage: /ff2 <track-index> | /ff2 stop', 'console'); return; }
+  pauseMusic(); playFF2Track(n);
+  addChatMessage('FF2 NSF track ' + n, 'console');
+}, { dev: true });
+
 registerCommand('pos', 'Show player tile + faced tile', () => {
   if (mapSt.onWorldMap) {
     const tx = (mapSt.worldX / 16) | 0, ty = (mapSt.worldY / 16) | 0;
@@ -417,7 +430,7 @@ registerCommand('devhelp', 'Dev commands grouped by category', () => {
     ['Job & spells',  ['job', 'spell']],
     ['Items',         ['give']],
     ['Navigation',    ['warp']],
-    ['Audio',         ['ff1']],
+    ['Audio',         ['ff1', 'ff2']],
   ];
   addChatMessage('Dev commands:', 'console');
   for (const [label, names] of groups) {
