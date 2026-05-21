@@ -6,6 +6,25 @@ import { attachWebSocketPresence } from './ws-presence.js';
 
 const { version } = JSON.parse(await readFile('./package.json', 'utf8'));
 
+// Beta/dev gate password, injected into index.html's #pw-gate (a soft
+// client-side "invite only" curtain — not real auth). Per-server via env:
+//   unset            → 'ff3dev'  (default closed-beta gate, e.g. local/dev)
+//   GATE_PASSWORD=off → ''        (gate disabled — open beta server)
+//   GATE_PASSWORD=xyz → 'xyz'     (custom gate password)
+// So the same codebase runs gated on dev and open (or differently keyed) on
+// the beta server just by changing the env at launch.
+const GATE_PASSWORD = (() => {
+  const v = process.env.GATE_PASSWORD;
+  if (v === undefined) return 'ff3dev';
+  return v.trim().toLowerCase() === 'off' ? '' : v;
+})();
+// Escape for safe embedding inside a single-quoted JS string literal.
+const GATE_PASSWORD_JS = GATE_PASSWORD.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+// Hide the gate from the first paint when disabled — the unlock script is a
+// deferred module, so without this an open server would flash the gate.
+const GATE_DISPLAY = GATE_PASSWORD ? '' : 'display:none';
+console.log('Gate: ' + (GATE_PASSWORD ? 'ON' : 'OFF (open)'));
+
 const MIME = {
   '.html': 'text/html', '.js': 'application/javascript', '.mjs': 'application/javascript',
   '.css': 'text/css', '.json': 'application/json', '.png': 'image/png',
@@ -35,7 +54,10 @@ const httpServer = createServer(async (req, res) => {
   try {
     let data = await readFile(join('.', path));
     const ext = extname(path);
-    if (ext === '.html') data = Buffer.from(data.toString().replace('{{VERSION}}', version));
+    if (ext === '.html') data = Buffer.from(data.toString()
+      .replace('{{VERSION}}', version)
+      .replaceAll('{{GATE_PASSWORD}}', GATE_PASSWORD_JS)
+      .replaceAll('{{GATE_DISPLAY}}', GATE_DISPLAY));
     // Cache-busting handshake — when the client's version-gate detects a
     // stale build it reloads with `?_v=<build>`. We respond with
     // `Clear-Site-Data: "cache"` so the browser drops every cached resource

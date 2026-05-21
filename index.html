@@ -105,6 +105,10 @@
       height: 480px;
       image-rendering: pixelated;
       image-rendering: crisp-edges;
+      /* Kill the double-tap-to-zoom + 300ms tap delay over the play area so
+         rapid tapping reads as gameplay, not a browser zoom gesture. Pinch
+         zoom still works (accessibility). */
+      touch-action: manipulation;
     }
     #version-badge { display: none; }
     #controls-hint {
@@ -495,8 +499,8 @@
     <button id="auth-logout">Logout</button>
   </div>
 
-  <!-- Password gate -->
-  <div id="pw-gate">
+  <!-- Password gate; server injects an inline display style to hide when disabled -->
+  <div id="pw-gate" style="{{GATE_DISPLAY}}">
     <h2>FF3 MMO</h2>
     <p id="pw-tagline">&#9670; Coming Soon &#9670;</p>
     <p id="pw-sub">Something is being built here.<br>Closed beta — invite only.</p>
@@ -826,7 +830,11 @@
     window.ff3Auth = { serverSave, serverDeleteSave, serverLoadSaves };
 
     // --- Password gate ---
-    const GATE_PW = 'ff3dev';
+    // Server injects the gate password into the literal below; empty string =
+    // gate disabled (open server). If it survives un-replaced (page opened as
+    // a static file, not via the server) fall back to the closed-beta pw.
+    let GATE_PW = '{{GATE_PASSWORD}}';
+    if (GATE_PW.indexOf('{{') === 0) GATE_PW = 'ff3dev';
     const gate = document.getElementById('pw-gate');
     const pwInput = document.getElementById('pw-input');
     const pwErr = document.getElementById('pw-err');
@@ -844,7 +852,8 @@
       }
     }
 
-    if (sessionStorage.getItem('ff3_auth') === '1') {
+    if (!GATE_PW || sessionStorage.getItem('ff3_auth') === '1') {
+      // No gate (open server) or already unlocked this session → straight in.
       unlockGate();
     } else {
       pwInput.focus();
@@ -853,7 +862,7 @@
     }
 
     function checkPw() {
-      if (pwInput.value.trim().toLowerCase() === GATE_PW) {
+      if (pwInput.value.trim().toLowerCase() === GATE_PW.trim().toLowerCase()) {
         unlockGate();
       } else {
         pwErr.textContent = 'Wrong password.';

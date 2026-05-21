@@ -122,6 +122,18 @@ export function initMusic(romData) {
   nsfData = buildNSF(romData);
 }
 
+// Create + resume the shared AudioContext. Mobile browsers (and desktop
+// autoplay policy) only let audio start from inside a user-gesture call stack,
+// so this is wired to the first touch/click/key in main.js. Once unlocked the
+// context stays unlocked, so every later playTrack / SFX / chime just works —
+// without this, music + the @-mention chime can stay silent on phones.
+export function unlockAudio() {
+  try {
+    if (!audioCtx) audioCtx = new AudioContext();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  } catch { /* no Web Audio support — silent */ }
+}
+
 export function playTrack(trackId) {
   if (!nsfData) return;
   if (typeof Module === 'undefined' || !Module.ccall) return;

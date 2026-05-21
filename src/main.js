@@ -5,7 +5,7 @@ import { Sprite } from './sprite.js';
 import { loadWorldMap } from './world-map-loader.js';
 import { WorldMapRenderer } from './world-map-renderer.js';
 import { clearDungeonCache } from './dungeon-generator.js';
-import { playTrack, TRACKS, fadeOutFF1Music, clearMusicStash } from './music.js';
+import { playTrack, TRACKS, fadeOutFF1Music, clearMusicStash, unlockAudio } from './music.js';
 import { applyIPS } from './ips-patcher.js';
 import { initTextDecoder } from './text-decoder.js';
 import { initFont } from './font-renderer.js';
@@ -158,6 +158,20 @@ export function init() {
 
   initKeyboardListeners();
   window.addEventListener('beforeunload', () => { saveSlotsToDB(); });
+
+  // Unlock audio on the first user gesture (mobile autoplay policy). One-shot:
+  // the handlers remove themselves once the context is resumed. Covers touch,
+  // mouse, and key so it fires whether the player taps the gate, clicks, or
+  // presses a key first.
+  const _unlock = () => {
+    unlockAudio();
+    window.removeEventListener('pointerdown', _unlock);
+    window.removeEventListener('touchend', _unlock);
+    window.removeEventListener('keydown', _unlock);
+  };
+  window.addEventListener('pointerdown', _unlock, { passive: true });
+  window.addEventListener('touchend', _unlock, { passive: true });
+  window.addEventListener('keydown', _unlock);
 }
 
 function returnToTitle() {
