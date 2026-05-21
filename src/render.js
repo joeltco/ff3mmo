@@ -12,6 +12,7 @@ import { poisonFlashTimer, setPoisonFlashTimer } from './movement.js';
 import { ui } from './ui-state.js';
 import { sprite } from './player-sprite.js';
 import { drawNpcs } from './npc.js';
+import { isBedDimming, drawBedDim } from './bed.js';
 
 const CANVAS_W = 256;
 const CANVAS_H = 240;
@@ -61,14 +62,27 @@ function _renderMapAndWater(camX, camY, originX, originY, spriteY) {
     mapSt.mapRenderer.draw(ui.ctx, camX, camY, originX, originY);
     _updateIndoorWater(mapSt.mapRenderer, waterSt.tick);
   }
-  if (transSt.state === 'none' &&
-      (battleSt.battleState === 'none' || battleSt.battleState === 'flash-strobe' || battleSt.battleState.startsWith('roar-'))) {
-    _renderSprites(camX, camY, originX, originY, spriteY);
-  }
-  if (mapSt.onWorldMap && mapSt.worldMapRenderer) {
-    mapSt.worldMapRenderer.drawOverlay(ui.ctx, camX, camY, originX, originY, SCREEN_CENTER_X, spriteY);
-  } else if (mapSt.mapRenderer) {
-    mapSt.mapRenderer.drawOverlay(ui.ctx, camX, camY, originX, originY, SCREEN_CENTER_X, spriteY);
+
+  const spritesVisible = transSt.state === 'none' &&
+    (battleSt.battleState === 'none' || battleSt.battleState === 'flash-strobe' || battleSt.battleState.startsWith('roar-'));
+  const _drawOverlay = () => {
+    if (mapSt.onWorldMap && mapSt.worldMapRenderer) {
+      mapSt.worldMapRenderer.drawOverlay(ui.ctx, camX, camY, originX, originY, SCREEN_CENTER_X, spriteY);
+    } else if (mapSt.mapRenderer) {
+      mapSt.mapRenderer.drawOverlay(ui.ctx, camX, camY, originX, originY, SCREEN_CENTER_X, spriteY);
+    }
+  };
+
+  if (isBedDimming()) {
+    // Bed rest: dim the whole BG (map + overlay) first, THEN draw sprites on
+    // top at full brightness — so player / NPC / candle sprites never fade with
+    // the room, even where their colors collide with a room color.
+    _drawOverlay();
+    drawBedDim(ui.ctx);
+    if (spritesVisible) _renderSprites(camX, camY, originX, originY, spriteY);
+  } else {
+    if (spritesVisible) _renderSprites(camX, camY, originX, originY, spriteY);
+    _drawOverlay();
   }
 }
 

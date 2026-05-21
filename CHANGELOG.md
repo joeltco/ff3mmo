@@ -18,6 +18,18 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.521 — 2026-05-21
+
+### Bed rest: player / NPC / candle sprites no longer dim with the room
+
+The fade snapped the whole composited viewport via the palette LUT, so any sprite pixel whose NES color collided with a room color got dimmed too — player and NPC sprites visibly faded. Moved the dim into the render pipeline so it only touches the BG layer:
+
+- `bed.js` exposes `isBedDimming()` + `drawBedDim(ctx)` (replaces the old game-loop `drawBed()`).
+- `render.js#_renderMapAndWater`: while the bed is dimming, the BG (map **and** overlay) is dimmed first, then the sprite pass (flames / NPCs / player) draws on top at full brightness. Normal frames keep the original sprite→overlay order.
+- Removed `drawBed()` from the game-loop draw list.
+
+Sprites can no longer fade by color collision — they're composited after the dim.
+
 ## 1.7.520 — 2026-05-21
 
 ### Bed rest: jingle on the dark frame (not during fade) + dark hold 5s → 6s

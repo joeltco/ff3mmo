@@ -15,14 +15,14 @@
 //   walk-out  — sprite walks down one tile off the bed, then the pond-heal
 //               "Fully Restored!" message box shows and the scene closes.
 //
-// Wired in game-loop (update/draw), movement (input gate), map-triggers
-// (step-on via MapRenderer.isBedTileAt, fired from _onMoveComplete so the step
-// is always fully complete first).
+// Wired in game-loop (updateBed), render (isBedDimming/drawBedDim — dims the BG
+// before the sprite pass so sprites never fade), movement (input gate), and
+// map-triggers (step-on via MapRenderer.isBedTileAt, fired from _onMoveComplete
+// so the step is always fully complete first).
 
 import { ps } from './player-stats.js';
 import { saveSlotsToDB } from './save-state.js';
 import { pauseMusic, resumeMusic, playSFX, stopSFX } from './music.js';
-import { ui } from './ui-state.js';
 import { mapSt } from './map-state.js';
 import { sprite } from './player-sprite.js';
 import { DIR_LEFT, DIR_DOWN } from './sprite.js';
@@ -111,19 +111,26 @@ export function handleBedInput(keys) {
   return true;
 }
 
-export function drawBed() {
+// True while the room is dimmed (fade-out / sleep / fade-in). render.js uses
+// this to dim the BG layer (map + overlay) BEFORE sprites are drawn, so the
+// player / NPCs / candle land on top at full brightness and never fade.
+export function isBedDimming() {
   const s = bedSt.state;
-  // settle / walk-out stay fully lit; closed draws nothing.
-  if (s === 'closed' || s === 'settle' || s === 'walk-out') return;
-  const ctx = ui.ctx;
-  if (!ctx) return;
+  return s === 'fade-out' || s === 'fade-in' || s === 'sleep';
+}
 
+// Snap the room (BG layer) to the captured fade palette. Called from render.js
+// after the map+overlay draw and before the sprite pass — never operates on
+// composited sprite pixels, so sprite colors that happen to match a room color
+// can't be dimmed by collision.
+export function drawBedDim(ctx) {
+  const s = bedSt.state;
   if (s === 'fade-out') {
     applyPaletteLut(ctx, FADE.lutForProgress(bedSt.timer / FADE_MS), INNER_X, INNER_Y, INNER_W, INNER_H);
   } else if (s === 'fade-in') {
     applyPaletteLut(ctx, FADE.lutForProgress(1 - bedSt.timer / FADE_MS), INNER_X, INNER_Y, INNER_W, INNER_H);
-  } else {
-    // sleep — hold the dark palette live so the candle keeps flickering.
+  } else if (s === 'sleep') {
+    // hold the dark palette live so the candle keeps flickering on top
     applyPaletteLut(ctx, FADE.finalLut, INNER_X, INNER_Y, INNER_W, INNER_H);
   }
 }
