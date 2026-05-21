@@ -41,12 +41,15 @@ export const INN_KEEPER = {
   dir: DIR_DOWN,
   animate: true,
   // Reachable NPC (no counter) — turns to face the player on talk. Hospitable
-  // innkeeper; the beds here are free. Pages render via showMsgBoxPages.
+  // innkeeper; the beds here are free. Pages render via showMsgBoxPages. Keep
+  // each page ≤2 wrapped lines: the box is HUD_VIEW_W=144 (maxChars 16) and
+  // only 2 lines clear the border tiles — longer pages spill past the frame.
   dialogue: [
-    'Welcome to our inn, traveler! Come in, come in.',
-    'Road-weary? The beds here are yours, free of charge.',
-    'Rest as long as you like. Nothing mends body and soul like a good sleep.',
-    'Sweet dreams, dear. Our door is always open to you.',
+    'Welcome to our inn, traveler!',
+    'The beds here are free.',
+    'Rest as long as you like.',
+    'A good sleep mends all.',
+    'Sweet dreams, dear!',
   ],
 };
 
