@@ -22,6 +22,7 @@ Deferred work that's been noted in changelog entries but doesn't yet have a home
 - **Gil is a valid chest entry.** Pool entries of shape `{ gil: [min, max] }` roll a random amount into `ps.gil` and show "Found N gil!".
 - **SouthWind (0xB2) is not in any chest pool.** It was previously the legendary-tier chest drop; now obtainable only via late-game monster drops (Darkface, Parademon, Crocotta, Lemur).
 - **`steal` field on monsters is unused.** No steal command exists in battle.
+- **Ur town chests respawn 24h after looting.** Town chests (`UR_CHEST_MAPS` in `map-triggers.js`) record an open-time in `ps.consumedTilesAt` (parallel to `consumedTiles`, persisted alongside it); `expireResettableChests(mapId)` runs on map load and drops any opened-chest mutation ≥24h old so the fresh-from-ROM closed chest returns. Dungeon chests (mapId ≥ 1000) still reset on cave re-entry instead.
 - **Boss and PVP victories have no item drops.** Only EXP/Gil/CP rewards.
 - **Death = no rewards.** If the player is at `ps.hp <= 0` when monsters all die / boss dissolves / PVP opponent falls, EXP/gil/CP/item drops and job JP are all skipped. The victory flow is bypassed; box-close transitions straight to the `'game-over'` state.
 
@@ -255,3 +256,33 @@ Three (now four) libgme emulators run side-by-side in `src/music.js`, each fed a
 
 - **`src/data/monsters.js` is auto-generated from the ROM** via `tools/gen-monsters-js.js`. That script reads `$60010` (monster props), `$61010` (stat table, indexed via byte 9/12 of the props), `$61210` (attack scripts), gil/EXP/CP tables, and preserves `steal`/`drops`/`location` from the existing file. To regenerate: `node tools/gen-monsters-js.js > src/data/monsters.js`. Verify the result against `tools/rom-dump-monsters.txt` before committing.
 - **`statusResist` order is high-bit-first** (death, petrify, toad, silence, mini, blind, poison, paralysis) — same decoding as `statusAtk`, driven by `statusVal` in the generator.
+
+## Encounter rates
+
+- **Per-zone, data-driven.** Each zone in `src/data/encounters.js` has a `rate` (`high`/`normal`/`low`/`fixed`); `RATE_STEPS` maps it to a `{base, spread}` step range (steps until the next roll — lower = more frequent). `battle-encounter.js#tickRandomEncounter` resolves the current zone via the shared `currentEncounterZoneKey()` helper (also used for the formation pick) and draws the threshold from the rate. Changing a zone's frequency is a one-word edit; no logic change.
+- **Current rates:** `high` 10–19 (~2× — Ur dark-tile patch / `grasslands_wild` = killer bee + werewolf), `normal` 15–29 (Ur valley goblins, Altar Cave floors), `low` 20–39 (open world grass), `fixed` = never random-rolled (boss). The gate for *whether* to tick (`inDungeon`/`onGrass`/`inPatch`) is separate from the cadence.
+
+## Level cap
+
+- **`MAX_LEVEL` in `src/player-stats.js` is the single source** (currently 5). `grantExp` stops there and pins `expToNext` to `0xFFFFFF`; `expToNextForLevel(lv)` is the shared threshold helper for the level-up loop and the save-load path; `title-screen` clamps legacy higher-level saves down on load. `api.js` mirrors the cap as a server-side clamp (1–5) on the save whitelist. Pause menu shows `MAX` at the cap. Job levels are a separate system (still 99).
+
+## Moderation (open beta)
+
+- **`moderation.js` (repo root, pure ESM)** is the single source, imported by `ws-presence.js`. `sanitizeName` strips a display name to renderable font glyphs (no emoji/zero-width/homoglyph spoofs); `cleanChatText` masks profanity (de-leet + repeat-collapse + Scunthorpe-safe exact match for ambiguous words); `isCleanName` rejects profane names → "Player". Names are sanitized in `_normalizeProfileField`; all chat (world/party/pm) is masked in the relay. Soft + tunable — masking only changes display, never drops the message. `api.js` adds a per-IP `/api/register` cap (5 burst, then 1/10min).
+
+## Chat & PM
+
+- **Channels:** world (location-scoped), party (membership-scoped), pm (targeted by `toUserId`, name fallback). Server relay = `ws-presence.js` `case 'chat'`; client receive + send = `src/chat.js`.
+- **@-mentions:** typing `@` + Tab autocompletes from the online roster (`getOnlinePlayers`). An incoming message that `@`-mentions you (`_mentions` vs `localPlayerName()`) renders gold and plays a chime; PMs chime too unless you're already on the Private tab.
+- **Mention chime = FF2 NSF track 8** (`FF2_TRACKS.MENTION_CHIME`). `music.js#playMentionChime` plays it on a dedicated 5th emulator so it never disturbs map music; one-shot (auto-stops at track end or 2.2 s).
+- **PM commands:** `/pm` `/w` `/tell` `/msg <name> <message>`, `/r <message>` (reply to last). `_sendPm` is the shared send path (also used by the roster "Message" action via `focusPmSession`).
+- **Private tab = per-conversation sessions.** Up/down in tab-select pages partners (`pmSessionStep`); the view filters to the focused partner (`_activePmPartner`) and the `→Name` prompt + reply target follow it. `_pmSession` outranks `pendingRecipient`, so `focusPmSession` (roster Message / `/pm`) overrides the focused conversation.
+
+## Beta/dev gate
+
+- **Soft client-side curtain** (`#pw-gate` in `index.html`), not real auth — account login + save validation sit behind it regardless. `server.js` injects the password from the `GATE_PASSWORD` env var into `{{GATE_PASSWORD}}`/`{{GATE_DISPLAY}}` (`.replaceAll`, since the tokens also appear in comments): unset → `ff3dev` (closed-beta default), `off`/empty → disabled (gate hidden from first paint), any value → custom. Same codebase runs gated on dev and open (or differently keyed) on the beta server just by changing the launch env.
+
+## Mobile controls
+
+- **On-screen deck** (`#mobile-controls` in `index.html`), shown via `@media (max-width:520px)` or the `is-touch` body class (`isMobile` from `ui-state.js`). Game Boy layout: CHAT/LOG flat top strip (right-aligned), D-pad left, A (upper-right) / B (lower-left) on the diagonal, SELECT/START as `-22°` angled center pills. Every button carries a `data-key`; the multi-touch slide handler walks `[data-key]` and dispatches synthetic `KeyboardEvent`s + toggles `.pressed`, so the same code path serves keyboard and touch. CHAT's `data-key="t"` also focuses the hidden `#mobile-input` to summon the keyboard.
+- **Audio gesture-unlock:** `music.js#unlockAudio` (create + resume the shared `AudioContext`) is wired to a one-shot pointer/touch/key handler in `main.js` — mobile autoplay policy otherwise leaves music + the @-chime silent. `touch-action: manipulation` on the canvas kills double-tap-zoom over the play area.
