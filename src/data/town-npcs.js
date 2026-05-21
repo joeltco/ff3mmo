@@ -40,6 +40,14 @@ export const INN_KEEPER = {
   palBtm: [0x1A, 0x0F, 0x12, 0x36], // SP2 — dress
   dir: DIR_DOWN,
   animate: true,
+  // Reachable NPC (no counter) — turns to face the player on talk. Hospitable
+  // innkeeper; the beds here are free. Pages render via showMsgBoxPages.
+  dialogue: [
+    'Welcome to our inn, traveler! Come in, come in.',
+    'Road-weary? The beds here are yours, free of charge.',
+    'Rest as long as you like. Nothing mends body and soul like a good sleep.',
+    'Sweet dreams, dear. Our door is always open to you.',
+  ],
 };
 
 // Map ID → keepers to place on that map. One render path: every entry goes

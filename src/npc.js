@@ -163,6 +163,7 @@ export function addSceneNpc(key, tileX, tileY, spec) {
   _npcs.push(_makeNpc(key, tileX, tileY, {
     spriteKey: 'scene',
     scene:     spec,
+    dialogue:  spec.dialogue || null,
     mode:      spec.animate ? 'idle-march' : 'static',
     dir:       spec.dir,
   }));
