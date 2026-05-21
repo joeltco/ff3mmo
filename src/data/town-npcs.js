@@ -10,11 +10,12 @@ import { DIR_DOWN } from '../sprite.js';
 // counter tile (8,15); keeper one tile north at (8,14), facing the player).
 // Bundle 0x1E210 is the same walk-sprite shape as the opening right attendant
 // but recolored by its own capture palette: magenta hair (SP3), blue tunic
-// (SP2). Stays on frame 0 facing down — counter-bound, no wander.
+// (SP2). Idle-march (walk-cycle in place) facing down — counter-bound, so it
+// animates without wandering.
 export const INN_ITEM_KEEPER = {
   romOffset: 0x01E210,
   palTop: [0x1A, 0x0F, 0x15, 0x36], // SP3 — head / hair
   palBtm: [0x1A, 0x0F, 0x12, 0x36], // SP2 — body / legs
   dir: DIR_DOWN,
-  animate: false,
+  animate: true,
 };
