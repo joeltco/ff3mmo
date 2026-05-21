@@ -214,11 +214,28 @@ A from-scratch rebuild is planned. **Read the `ff3mmo-coop-rebuild` auto-memory 
 - **Dialogue lives in `src/data/npcs.js`** as a `dialogue: [...]` field per NPC. The catalog key convention is `<mapname>_<idx>` for ROM-anchored NPCs, descriptive id for synthetic ones (e.g. `altar_moogle`).
 - **Tick site:** `updateNpcs(dt)` is called from `game-loop.js` once per frame, gated on `battleSt.battleState === 'none'`. Don't add a parallel update hook.
 
+### Town keepers + scene NPCs (v1.7.524-532)
+
+- **Scene NPCs** (opening elder/attendants, town keepers) use the player `Sprite` class with `gfxBase` overridden to a raw ROM walk-bundle offset (`addSceneNpc(key, x, y, spec)`). A spec is `{ romOffset, palTop, palBtm, dir, animate, dialogue? }` (header-inclusive offset). `animate:true` → idle-march in place; `false` → static frame 0. Optional `dialogue` array → talk-faces + `showMsgBoxPages`.
+- **Town keepers are data-driven** via `TOWN_NPCS` (map ID → keeper list) in `src/data/town-npcs.js`, placed by `npc.js#placeTownNpcs(mapId)` (called for every regular map). One render path; add a keeper by adding a registry row. Shop keepers sit behind counter tiles → unreachable → stay `DIR_DOWN` (no talk-facing); reachable NPCs (e.g. the innkeeper at map 8 (3,14)) talk-face normally.
+- **Finding a sprite from an OAM snap:** `tools/npc-sprite-tool.mjs` (`search <hexbytes>` → ROM offset; `render <off> [palTop] [palBtm]` → 4-direction PPM). Byte-search the displayed **top-row, unflipped** OAM tiles — the dump's auto-reconstructed "base $00" bundle often follows the *player* sprite, not the NPC.
+- **Opening intro cutscene (v1.7.532):** on a fresh-slot new game (map 7, 4,4), `queueOpeningIntro()` (title-screen) queues a scripted elder+attendant conversation; `tickOpeningIntro()` (game-loop) fires it once the entry fade settles. `OPENING_INTRO` (`data/opening-scene.js`) is `[{dir, text}]`; the player sprite turns to face each speaker via the `showMsgBoxPages` `onPage(idx)` hook. Open box locks movement until the last line. Queued only on fresh-slot — never on revisit/respawn.
+
+## Music (FF3 / FF1 / FF2 NSF)
+
+Three (now four) libgme emulators run side-by-side in `src/music.js`, each fed an NSF built at runtime from the user's ROM (never distribute the rip).
+
+- **FF3 (main):** `nsf-builder.js` (MMC3, banks `$36/$37/$38/$39/$09`). `playTrack(TRACKS.*)` / `stopMusic` / `pauseMusic` / `resumeMusic`. Plus a 2nd FF3 emulator for SFX (`playSFX`).
+- **FF1:** `ff1-nsf-builder.js` (bank `$0D`, init `$B003`, play `$B099`). `initFF1Music` / `playFF1Track(idx)` / `stopFF1Music`.
+- **FF2 (J):** `ff2-nsf-builder.js` (bank `$0D`, **PLAY `$9800`, INIT-song `$9867`** with id in zero-page `$E0`, 31-song table `$9E0D` — RE'd from ROM, xref [everything8215/ff2](https://github.com/everything8215/ff2)). `initFF2Music` (boot.js#loadFF2ROM) / `playFF2Track(idx)` / `stopFF2Music` / `ff2MusicReady`. RE helper: `tools/ff2-sound-re.mjs`.
+- **Building/area music** is wired in `map-loading.js#_loadRegularMap`. The elder house (maps 6+7) plays FF2 `FF2_TRACKS.ELDER_HOUSE` (track 24): null `pendingTrack`, `stopMusic()` (FF3), `playFF2Track` — idempotent across both floors, restores the FF3 town theme on exit, guarded by `ff2MusicReady()`.
+- **Track indices are 0-based** (`gme_start_track`); don't infer them from "track N" names. Audition by ear with the `/ff1 <n>` / `/ff2 <n>` dev commands (`chat.js`), then lock the constant.
+
 ## Message-box dialogue surface
 
 `src/message-box.js` (v1.7.297) is the canonical overworld dialogue surface. Any new dialogue (NPCs, signs, item-pickup blurbs, post-event explainer text) goes through this — do NOT spin up a parallel box.
 
-- **API.** `showMsgBox(bytes, onClose?)` — one-shot. `showMsgBoxPages(pages, onAllDone?)` — multi-page. `replaceMsgBoxText(bytes, onClose?)` — text-swap mid-hold without re-animating (used by PVP search, not normally needed for dialogue). `dismissMsgBox()` — force slide-out from `hold`; don't call directly inside a multi-page chain, let the page driver own the lifecycle.
+- **API.** `showMsgBox(bytes, onClose?)` — one-shot. `showMsgBoxPages(pages, onAllDone?, onPage?)` — multi-page; `onPage(idx)` fires as each page becomes active (used by the opening intro to turn the player toward the speaker). `replaceMsgBoxText(bytes, onClose?)` — text-swap mid-hold without re-animating (used by PVP search, not normally needed for dialogue). `dismissMsgBox()` — force slide-out from `hold`; don't call directly inside a multi-page chain, let the page driver own the lifecycle.
 - **State machine.** `msgState.state` ∈ `{ 'none', 'slide-in', 'hold', 'page-scroll', 'slide-out' }`. Slide-in / slide-out use `SLIDE_MS = 80` (whole box slides through the top of the viewport). `page-scroll` uses `SCROLL_MS = 160` (box stays still, text scrolls inside an inner clip `boxY+4 to boxY+boxH-4`). `msgState.onAdvance` is the multi-page hook — when set, the overworld Z handler in `movement.js` routes to it instead of `dismissMsgBox`.
 - **Scroll-up transition.** `showMsgBoxPages` plays slide-in once for page 1; every Z scrolls the previous page UP and the next page in from below over 160ms; slide-out only after the final Z. Spam-press Z mid-scroll snaps to the next page. Final Z forces slide-out regardless of current sub-state.
 - **Text centering.** `_drawMsgText` centers on **visual glyph height** (`GLYPH_H = 8`) not nominal `lineH = 12`. The trailing 4px gap below the last line was biasing 3-line pages toward the top of the box — fixed in v1.7.297, do not revert. Inner clip `boxY+4 to boxY+boxH-4` keeps the scrolling text from bleeding over the border tiles.
