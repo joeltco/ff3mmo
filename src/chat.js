@@ -131,6 +131,16 @@ export function pmSessionStep(dir) {
 // Number of distinct conversations — drives the "more sessions" arrow cue.
 export function pmSessionCount() { return pmPartners().length; }
 
+// Focus a conversation and make it the reply target — used by the roster
+// "Message" action. Sets _pmSession (which outranks pendingRecipient in
+// _activePmPartner) so opening Message on a new player overrides whatever
+// conversation was previously in focus.
+export function focusPmSession(name) {
+  _pmSession = name || null;
+  chatState.pendingRecipient = name || null;
+  setChatScrollOffset(0);
+}
+
 // Reply target = the focused conversation. Used by the send path + prompt.
 function _pmTarget() { return _activePmPartner(); }
 

@@ -5,7 +5,7 @@ import { playSFX, SFX } from './music.js';
 import { pauseSt } from './pause-menu.js';
 import { transSt } from './transitions.js';
 import { msgState, showMsgBox, dismissMsgBox } from './message-box.js';
-import { chatState, CHAT_TABS, activeTab, tabSelectMode, setActiveTab, setTabSelectMode, setChatScrollOffset, onChatKeyDown, pmSessionStep } from './chat.js';
+import { chatState, CHAT_TABS, activeTab, tabSelectMode, setActiveTab, setTabSelectMode, setChatScrollOffset, onChatKeyDown, pmSessionStep, focusPmSession } from './chat.js';
 import { titleSt, onNameEntryKeyDown } from './title-screen.js';
 import { ps, recalcCombatStats, getHitWeapon, getJobLevelStatBonus } from './player-stats.js';
 import { saveSlotsToDB } from './save-state.js';
@@ -737,7 +737,7 @@ function _rosterMenuMessageAction(target) {
   chatState.inputActive = true;
   chatState.inputText = '';
   chatState.cursorTimer = 0;
-  chatState.pendingRecipient = target.name;
+  focusPmSession(target.name);  // focus this conversation + set it as reply target
 }
 
 // Trade action: opens the inline item-pick panel for a give-only offer
