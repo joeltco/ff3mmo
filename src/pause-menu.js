@@ -466,7 +466,7 @@ function _drawPauseStats(ctx) {
   drawText(ctx, statRx - mpb.length * 8, y, mpb, fadedPal);
   y += STEP;
   statRow('EXP',  String(s.exp));
-  statRow('Next', String(s.expToNext));
+  statRow('Next', s.expToNext >= 0xFFFFFF ? 'MAX' : String(s.expToNext));
   statPair('ATK', String(ps.atk),  'DEF', String(ps.def));
   statPair('HIT', String(ps.hitRate), 'EVD', String(ps.evade));
   const jlb = getJobLevelStatBonus();

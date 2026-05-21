@@ -6,6 +6,12 @@ import { ITEMS, isWeapon } from './data/items.js';
 import { BASE_HIT_RATE, calcAttackerAtk, isRightHandHit } from './battle-math.js';
 import { createStatusState } from './status-effects.js';
 
+// Hard level cap. The ROM exp table holds 98 thresholds (levels 1-99), but
+// gameplay clamps progression here. grantExp stops leveling at MAX_LEVEL and
+// pins expToNext to 0xFFFFFF ("MAX") so a capped player never crosses another
+// threshold. See chat.js /level, title-screen.js load, api.js server clamp.
+export const MAX_LEVEL = 5;
+
 // Mutable player state — replaces the scattered globals in game.js
 export const ps = {
   stats: null,      // { str, agi, vit, int, mnd, hp, maxHP, mp, maxMP, level, exp, expToNext }
@@ -190,6 +196,14 @@ export function initExpTable(romData) {
   ps.stats.expToNext = ps.expTable[0];
 }
 
+// Cumulative exp needed to leave the given level. Single source for both the
+// level-up loop (grantExp) and the save-load path (title-screen). Returns
+// 0xFFFFFF ("MAX") at the level cap or past the end of the ROM table.
+export function expToNextForLevel(lv) {
+  if (lv >= MAX_LEVEL) return 0xFFFFFF;
+  return (lv - 1 < 98) ? ps.expTable[lv - 1] : 0xFFFFFF;
+}
+
 export function fullHeal() {
   ps.stats.hp = ps.stats.maxHP; ps.stats.mp = ps.stats.maxMP;
   ps.hp = ps.stats.maxHP; ps.mp = ps.stats.maxMP;
@@ -199,7 +213,7 @@ export function grantExp(amount) {
   // NES splits EXP across 4 party members; we have 1 player, so divide by 4
   ps.stats.exp += Math.max(1, Math.floor(amount / 4));
   ps.leveledUp = false;
-  while (ps.stats.exp >= ps.stats.expToNext && ps.stats.level < 99) {
+  while (ps.stats.exp >= ps.stats.expToNext && ps.stats.level < MAX_LEVEL) {
     ps.stats.level++;
     const lv = ps.stats.level;
 
@@ -223,9 +237,7 @@ export function grantExp(amount) {
     // Update derived combat stats
     recalcCombatStats();
 
-    // Next threshold
-    if (lv - 1 < 98) ps.stats.expToNext = ps.expTable[lv - 1];
-    else ps.stats.expToNext = 0xFFFFFF; // max level
+    ps.stats.expToNext = expToNextForLevel(lv);
 
     ps.leveledUp = true;
   }

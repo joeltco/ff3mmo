@@ -6,7 +6,7 @@ import { _nameToBytes } from './text-utils.js';
 import { selectCursor, saveSlots, nameBuffer, NAME_MAX_LEN,
          setSelectCursor, setNameBuffer, saveSlotsToDB, setPsAligned } from './save-state.js';
 import { playSFX, fadeOutMusic, SFX, TRACKS } from './music.js';
-import { ps, fullHeal, recalcCombatStats, initPlayerStats } from './player-stats.js';
+import { ps, fullHeal, recalcCombatStats, initPlayerStats, MAX_LEVEL, expToNextForLevel } from './player-stats.js';
 import { computeJobStats } from './data/players.js';
 import { hudSt } from './hud-state.js';
 import { transSt, topBoxSt } from './transitions.js';
@@ -686,7 +686,7 @@ function _updateTitleMainOutCase() {
     // exp / known spells all stay untouched. HP and MP are clamped to the
     // (possibly new) max values.
     const slotJob = slot.jobIdx || 0;
-    const slotLv  = slot.level || 1;
+    const slotLv  = Math.min(slot.level || 1, MAX_LEVEL);  // clamp legacy saves to the cap
     const computed = computeJobStats(slotJob, slotLv);
     ps.stats.str = computed.str;
     ps.stats.agi = computed.agi;
@@ -697,7 +697,7 @@ function _updateTitleMainOutCase() {
     ps.stats.maxMP = computed.maxMP;
     ps.stats.level = slotLv;
     ps.stats.exp = slot.exp;
-    ps.stats.expToNext = (slotLv - 1 < 98) ? ps.expTable[slotLv - 1] : 0xFFFFFF;
+    ps.stats.expToNext = expToNextForLevel(slotLv);
     if (slot.hp != null) {
       ps.hp = Math.min(slot.hp, ps.stats.maxHP);
       ps.mp = (slot.mp != null) ? Math.min(slot.mp, ps.stats.maxMP) : ps.stats.maxMP;

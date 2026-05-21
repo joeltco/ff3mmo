@@ -12,7 +12,7 @@ import { sprite } from './player-sprite.js';
 import { DIR_DOWN, DIR_UP, DIR_LEFT, DIR_RIGHT } from './sprite.js';
 import { playFF1Track, stopFF1Music, playFF2Track, stopFF2Music, pauseMusic, resumeMusic } from './music.js';
 import { ui } from './ui-state.js';
-import { ps, changeJob, fullHeal, grantExp } from './player-stats.js';
+import { ps, changeJob, fullHeal, grantExp, MAX_LEVEL } from './player-stats.js';
 import { JOBS } from './data/jobs.js';
 import { swapBattleSprites } from './job-sprites.js';
 import { saveSlotsToDB } from './save-state.js';
@@ -355,10 +355,10 @@ registerCommand('cp', 'Set capacity points to N (or show current)', (args) => {
   addChatMessage('CP: ' + ps.cp, 'console');
 }, { dev: true });
 
-registerCommand('level', 'Force player level to N via grantExp loop (1-99)', (args) => {
+registerCommand('level', `Force player level to N via grantExp loop (1-${MAX_LEVEL})`, (args) => {
   if (!args) { addChatMessage('Level: ' + ps.stats.level, 'console'); return; }
   const target = parseInt(args, 10);
-  if (!Number.isFinite(target) || target < 1 || target > 99) { addChatMessage('Bad level (1-99)', 'console'); return; }
+  if (!Number.isFinite(target) || target < 1 || target > MAX_LEVEL) { addChatMessage(`Bad level (1-${MAX_LEVEL})`, 'console'); return; }
   let safety = 200;  // cap loops in case grantExp can't push level (edge case)
   while (ps.stats.level < target && safety-- > 0) grantExp(ps.stats.expToNext || 1);
   saveSlotsToDB();

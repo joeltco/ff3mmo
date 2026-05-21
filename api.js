@@ -66,7 +66,7 @@ function _validateSaveData(data) {
   // for future client bugs to inject arbitrary state into the DB).
   const out = {};
   if (Array.isArray(data.name))             out.name = data.name.slice(0, 8).map(b => _clamp(b, 0, 255));
-  if (typeof data.level === 'number')        out.level = _clamp(data.level, 1, 99);
+  if (typeof data.level === 'number')        out.level = _clamp(data.level, 1, 5);   // level cap — mirror MAX_LEVEL in src/player-stats.js
   if (typeof data.exp === 'number')          out.exp = _clamp(data.exp, 0, 9999999);
   if (typeof data.hp === 'number')           out.hp = _clamp(data.hp, 0, 9999);
   if (typeof data.mp === 'number' || data.mp === null) out.mp = data.mp == null ? null : _clamp(data.mp, 0, 9999);
@@ -77,7 +77,7 @@ function _validateSaveData(data) {
     // `slot.stats.weaponR/head/body/arms` came back undefined and the load
     // path fell back to new-game defaults. Equipment IDs are 0-255; 0 = empty.
     out.stats = {
-      level:   _clamp(data.stats.level, 1, 99),
+      level:   _clamp(data.stats.level, 1, 5),   // level cap — mirror MAX_LEVEL in src/player-stats.js
       exp:     _clamp(data.stats.exp, 0, 9999999),
       hp:      _clamp(data.stats.hp, 0, 9999),
       maxHP:   _clamp(data.stats.maxHP, 1, 9999),
