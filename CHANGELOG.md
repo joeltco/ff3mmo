@@ -18,6 +18,19 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.516 — 2026-05-20
+
+### Bed rest: real NES palette fade (discrete steps, not alpha) + modularized + A/B wake + settle
+
+The fade was an **RGB alpha crossfade** — `_dimViewport` lerped each pixel toward the dark endpoint by a continuous `t`, producing in-between colors that aren't real NES colors. The NES swaps the whole palette in **discrete steps**; it never blends. Rebuilt it from the captured per-frame `$3F00` tables (REC OAM f1266+, keyframes 0/5/8/12/16/20/24/28/32/36/40) and snap to the keyframe for the current frame — a hardware-style swap. (The old endpoint was actually correct; the bug was purely the interpolation.)
+
+- **Modularized.** New `src/nes-palette-fade.js` (reusable engine: `buildPaletteFade(keys)` → `{durationMs, finalLut, lutForProgress}`, `applyPaletteLut(ctx, lut, x, y, w, h)`) + `src/data/inn-fade-palette.js` (the captured keyframes). `bed.js` is now a thin consumer. Any future scene can drive a captured NES palette transition through the same engine.
+- **Settle beat.** New `settle` state (300ms) holds the room lit with the player standing on the bed before the dim starts — the trigger already fires from `_onMoveComplete` (post-step), so the step is complete; this just makes it visible.
+- **A or B to wake.** The wake prompt now responds to A (`z`) or B (`x`); prompt text updated to "Press A or B".
+- **8s sleep enforced.** Input is drained through settle / fade / sleep, so the 8s dark hold can't be skipped — A/B only acts at the wake prompt.
+
+Fade cadence is now true NTSC timing: 40 frames ≈ 667ms.
+
 ## 1.7.515 — 2026-05-20
 
 ### Bed rest jingle wired (track 0) + ripped out the NSF audition machinery
