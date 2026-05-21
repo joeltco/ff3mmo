@@ -4,14 +4,15 @@
 // bed works with no per-map setup) to rest. No cost; refills HP/MP only
 // (status untouched).
 //
-// Lifecycle: closed → settle → fade-out → sleep(6s) → wake-wait → fade-in → closed.
-//   settle    — brief beat showing the player standing on the bed before it dims
+// Lifecycle: closed → settle → fade-out → sleep(6s) → fade-in → walk-out → closed.
+//   settle    — face left and hold the room lit, on the bed, before it dims
 //               (so you see the full step land). Music pauses + rest jingle plays.
 //   fade-out  — the captured FF3 inn palette ramp (nes-palette-fade.js, discrete
 //               hardware steps — NOT an alpha crossfade).
 //   sleep     — 6s dark hold, input drained (the rest can't be skipped).
-//   wake-wait — dark hold + prompt; press A (z) or B (x) to wake.
-//   fade-in   — palette ramp in reverse, then close.
+//   fade-in   — palette ramp in reverse; auto-advances (no button to wake).
+//   walk-out  — sprite walks down one tile off the bed, then the pond-heal
+//               "Fully Restored!" message box shows and the scene closes.
 //
 // Wired in game-loop (update/draw), movement (input gate), map-triggers
 // (step-on via MapRenderer.isBedTileAt, fired from _onMoveComplete so the step
@@ -21,7 +22,12 @@ import { ps } from './player-stats.js';
 import { saveSlotsToDB } from './save-state.js';
 import { pauseMusic, resumeMusic, playSFX, stopSFX } from './music.js';
 import { ui } from './ui-state.js';
-import { drawText, measureText } from './font-renderer.js';
+import { mapSt } from './map-state.js';
+import { sprite } from './player-sprite.js';
+import { DIR_LEFT, DIR_DOWN } from './sprite.js';
+import { startMove } from './movement.js';
+import { showMsgBox } from './message-box.js';
+import { POND_RESTORED } from './data/strings.js';
 import { buildPaletteFade, applyPaletteLut } from './nes-palette-fade.js';
 import { INN_FADE_KEYS } from './data/inn-fade-palette.js';
 
@@ -33,14 +39,11 @@ const INNER_W = HUD_VIEW_W - 16, INNER_H = HUD_VIEW_H - 16;
 const FADE = buildPaletteFade(INN_FADE_KEYS);  // captured inn fade (discrete steps)
 const FADE_MS  = FADE.durationMs;              // ≈667ms, true NTSC cadence
 const SETTLE_MS = 300;    // show the landed step before the room dims
-const SLEEP_MS  = 6000;   // forced dark hold before the wake prompt
+const SLEEP_MS  = 6000;   // forced dark hold before waking
 const REST_JINGLE = 0;    // inn rest tune — first track in the FF3 NSF playlist
 
-const PROMPT     = 'Press A or B';
-const PROMPT_PAL = [0x0F, 0x10, 0x0F, 0x30];
-
 export const bedSt = {
-  state:  'closed',   // closed | settle | fade-out | sleep | wake-wait | fade-in
+  state:  'closed',   // closed | settle | fade-out | sleep | fade-in | walk-out
   timer:  0,
   healed: false,
 };
@@ -50,6 +53,8 @@ export function openBed() {
   bedSt.state = 'settle';
   bedSt.timer = 0;
   bedSt.healed = false;
+  sprite.setDirection(DIR_LEFT);   // lie facing left
+  sprite.resetFrame();
   pauseMusic();
   playSFX(REST_JINGLE);   // one-shot on the SFX channel so it plays once, no loop
   return true;
@@ -59,7 +64,7 @@ function _close() {
   bedSt.state = 'closed';
   bedSt.timer = 0;
   bedSt.healed = false;
-  stopSFX();        // cut the jingle if it's still ringing on wake
+  stopSFX();        // cut the jingle if it's still ringing
   resumeMusic();
 }
 
@@ -80,46 +85,41 @@ export function updateBed(dt) {
   } else if (s === 'fade-out') {
     if (bedSt.timer >= FADE_MS) { bedSt.state = 'sleep'; bedSt.timer = 0; }
   } else if (s === 'sleep') {
-    if (bedSt.timer >= SLEEP_MS) { _rest(); bedSt.state = 'wake-wait'; bedSt.timer = 0; }
+    if (bedSt.timer >= SLEEP_MS) { _rest(); bedSt.state = 'fade-in'; bedSt.timer = 0; }
   } else if (s === 'fade-in') {
-    if (bedSt.timer >= FADE_MS) _close();
+    if (bedSt.timer >= FADE_MS) {
+      bedSt.state = 'walk-out';
+      startMove(DIR_DOWN);   // step one tile off the bed (sets facing + lerp)
+    }
+  } else if (s === 'walk-out') {
+    if (!mapSt.moving) {     // step finished — confirm rest, hand off, close
+      showMsgBox(POND_RESTORED, null);
+      _close();
+    }
   }
-  // wake-wait transitions only on input (handleBedInput).
 }
 
-// Owns all input while active — returns true to block movement/other scenes.
+// Owns all input while active — drains everything (no wake button) and returns
+// true to block movement / other scenes until the scene closes itself.
 export function handleBedInput(keys) {
   if (bedSt.state === 'closed') return false;
-  // A (z) or B (x) wakes from the prompt; everything else is drained so the
-  // settle / fade / 8s sleep can't be skipped.
-  if (bedSt.state === 'wake-wait' && (keys['z'] || keys['Z'] || keys['x'] || keys['X'])) {
-    bedSt.state = 'fade-in';
-    bedSt.timer = 0;
-  }
   for (const k of Object.keys(keys)) keys[k] = false;
   return true;
 }
 
 export function drawBed() {
-  if (bedSt.state === 'closed' || bedSt.state === 'settle') return;  // settle stays lit
+  const s = bedSt.state;
+  // settle / walk-out stay fully lit; closed draws nothing.
+  if (s === 'closed' || s === 'settle' || s === 'walk-out') return;
   const ctx = ui.ctx;
   if (!ctx) return;
-  const s = bedSt.state;
 
   if (s === 'fade-out') {
     applyPaletteLut(ctx, FADE.lutForProgress(bedSt.timer / FADE_MS), INNER_X, INNER_Y, INNER_W, INNER_H);
-    return;
-  }
-  if (s === 'fade-in') {
+  } else if (s === 'fade-in') {
     applyPaletteLut(ctx, FADE.lutForProgress(1 - bedSt.timer / FADE_MS), INNER_X, INNER_Y, INNER_W, INNER_H);
-    return;
-  }
-
-  // sleep / wake-wait — hold the dark palette live so the candle keeps flickering.
-  applyPaletteLut(ctx, FADE.finalLut, INNER_X, INNER_Y, INNER_W, INNER_H);
-  if (s === 'wake-wait' && Math.floor(bedSt.timer / 400) % 2 === 0) {
-    const x = INNER_X + Math.max(0, (INNER_W - measureText(PROMPT)) >> 1);
-    const y = INNER_Y + (INNER_H >> 1) - 4;
-    drawText(ctx, x, y, PROMPT, PROMPT_PAL);
+  } else {
+    // sleep — hold the dark palette live so the candle keeps flickering.
+    applyPaletteLut(ctx, FADE.finalLut, INNER_X, INNER_Y, INNER_W, INNER_H);
   }
 }

@@ -18,6 +18,19 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.518 — 2026-05-20
+
+### Bed rest: face left, auto-wake, walk off the bed, "Fully Restored!" message
+
+Reworked the wake half of the rest scene to play like the inn cutscene instead of a press-to-dismiss prompt:
+
+- **Face left on trigger.** `openBed()` now sets the sprite to `DIR_LEFT` (lying toward the wall) before the settle/dim.
+- **No wake button.** Dropped the `wake-wait` state and the A/B prompt — after the 6s sleep the room auto fades back in.
+- **Walk off the bed.** New `walk-out` state: once the fade-in finishes, the sprite walks down one tile via `startMove(DIR_DOWN)`.
+- **Pond-heal message.** When the step lands, the pond `POND_RESTORED` ("Fully Restored!") message box shows and the scene closes. (HP/MP were already refilled at the sleep→wake transition; this reuses the existing pond confirmation, not the full star/strobe ritual.)
+
+Lifecycle is now: closed → settle → fade-out → sleep(6s) → fade-in → walk-out → closed.
+
 ## 1.7.517 — 2026-05-20
 
 ### Bed rest: shorten the dark hold 8s → 6s
