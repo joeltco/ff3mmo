@@ -17,7 +17,7 @@ import { ps, initPlayerStats, initExpTable } from './player-stats.js';
 import { initRoster } from './roster.js';
 import { titleSt } from './title-screen.js';
 import { initMonsterSprites } from './monster-sprites.js';
-import { initMusic, initFF1Music } from './music.js';
+import { initMusic, initFF1Music, initFF2Music } from './music.js';
 import { initCursorTile, initScrollArrows, initAdamantoise,
          initGoblinSprite, initInvincibleSprite, initMoogleSprite,
          initLoadingScreenFadeFrames } from './sprite-init.js';
@@ -122,6 +122,8 @@ export function loadFF2ROM(arrayBuffer) {
   ff2Raw = new Uint8Array(arrayBuffer);
   const ad = initAdamantoise(ff2Raw);
   setLandTurtleFrames(ad.adamantoiseFrames);
+  initFF2Music(ff2Raw); // FF2 NSF for the elder-house theme
+
   if (romRaw) {
     // Primary FF3 ROM already loaded — rebuild loading-screen fade frames
     // so the boss silhouette fade is available now that ff2Raw exists.

@@ -5,6 +5,7 @@
 
 import { buildNSF } from './nsf-builder.js';
 import { buildFF1NSF } from './ff1-nsf-builder.js';
+import { buildFF2NSF } from './ff2-nsf-builder.js';
 
 // Track indices — ROM song IDs (map properties byte 10)
 export const TRACKS = {
@@ -54,6 +55,13 @@ export const FF1_TRACKS = {
   SHOP:        14,  // FF1 NSF — shop theme (verified by ear via /ff1 14)
 };
 
+// FF2 NSF track indices (0-based into the 31-entry song table). Audition-
+// confirm the exact index by ear if a track sounds wrong (off-by-one between
+// player-UI 1-based numbering and the 0-based gme_start_track call).
+export const FF2_TRACKS = {
+  ELDER_HOUSE: 3,  // requested: "nsf 3 from ff2 rom" — elder house theme
+};
+
 let nsfData = null;    // Built NSF Uint8Array
 let audioCtx = null;   // Web Audio context
 let gainNode = null;   // Master gain — used for fade-out
@@ -85,6 +93,15 @@ let ff1GainNode = null;
 let ff1FadeTimer = null;
 let ff1Buf = null;
 let ff1Track = -1;
+
+// FF2 music — fourth libgme emulator for FF2 ROM music (elder-house theme).
+let ff2NsfData = null;
+let ff2Emu = null;
+let ff2EmuRef = null;
+let ff2Node = null;
+let ff2GainNode = null;
+let ff2Buf = null;
+let ff2Track = -1;
 
 const BUF_SIZE = 4096; // samples per channel per callback (music, ~85ms at 48kHz)
 const SFX_BUF_SIZE = 2048;  // smaller buffer for SFX (~42ms latency at 48kHz)
@@ -382,6 +399,73 @@ export function fadeOutFF1Music(durationMs) {
   ff1GainNode.gain.setValueAtTime(ff1GainNode.gain.value, audioCtx.currentTime);
   ff1GainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + durationMs / 1000);
   ff1FadeTimer = setTimeout(() => { ff1FadeTimer = null; stopFF1Music(); }, durationMs);
+}
+
+// --- FF2 music (fourth emulator) — elder house theme ---
+
+export function initFF2Music(romData) {
+  ff2NsfData = buildFF2NSF(romData);
+}
+
+export function ff2MusicReady() { return ff2NsfData != null; }
+
+export function playFF2Track(trackId) {
+  if (!ff2NsfData) return;
+  if (typeof Module === 'undefined' || !Module.ccall) return;
+  if (trackId === ff2Track) return;
+  ff2Track = trackId;
+
+  if (!audioCtx) { audioCtx = new AudioContext(); }
+  if (audioCtx.state === 'suspended') { audioCtx.resume(); }
+
+  if (ff2Node) { ff2Node.disconnect(); ff2Node = null; }
+  if (ff2Emu) { Module.ccall('gme_delete', 'number', ['number'], [ff2Emu]); ff2Emu = null; }
+
+  if (!ff2EmuRef) { ff2EmuRef = Module.allocate(1, 'i32', Module.ALLOC_STATIC); }
+
+  const err = Module.ccall('gme_open_data', 'number',
+    ['array', 'number', 'number', 'number'],
+    [ff2NsfData, ff2NsfData.length, ff2EmuRef, audioCtx.sampleRate]);
+  if (err !== 0) { console.error('ff2 gme_open_data failed'); return; }
+  ff2Emu = Module.getValue(ff2EmuRef, 'i32');
+
+  Module.ccall('gme_ignore_silence', 'number', ['number'], [ff2Emu, 1]);
+
+  if (Module.ccall('gme_start_track', 'number', ['number', 'number'], [ff2Emu, trackId]) !== 0) {
+    console.error('ff2 gme_start_track failed for track', trackId);
+    return;
+  }
+
+  if (!ff2Buf) { ff2Buf = Module._malloc(BUF_SIZE * 2 * 2); }
+
+  ff2Node = audioCtx.createScriptProcessor(BUF_SIZE, 0, 2);
+  ff2Node.onaudioprocess = (e) => {
+    if (!ff2Emu) return;
+    if (Module.ccall('gme_track_ended', 'number', ['number'], [ff2Emu]) === 1) {
+      Module.ccall('gme_start_track', 'number', ['number', 'number'], [ff2Emu, ff2Track]);
+    }
+    Module.ccall('gme_play', 'number',
+      ['number', 'number', 'number'],
+      [ff2Emu, BUF_SIZE * 2, ff2Buf]);
+    const ch0 = e.outputBuffer.getChannelData(0);
+    const ch1 = e.outputBuffer.getChannelData(1);
+    const base = ff2Buf >> 1;
+    for (let i = 0; i < BUF_SIZE; i++) {
+      ch0[i] = Module.HEAP16[base + i * 2]     / 32768;
+      ch1[i] = Module.HEAP16[base + i * 2 + 1] / 32768;
+    }
+  };
+
+  if (!ff2GainNode) { ff2GainNode = audioCtx.createGain(); ff2GainNode.connect(audioCtx.destination); }
+  ff2GainNode.gain.cancelScheduledValues(audioCtx.currentTime);
+  ff2GainNode.gain.setValueAtTime(1, audioCtx.currentTime);
+  ff2Node.connect(ff2GainNode);
+}
+
+export function stopFF2Music() {
+  if (ff2Node) { ff2Node.disconnect(); ff2Node = null; }
+  if (ff2Emu) { Module.ccall('gme_delete', 'number', ['number'], [ff2Emu]); ff2Emu = null; }
+  ff2Track = -1;
 }
 
 export function clearMusicStash() {

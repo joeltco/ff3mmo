@@ -3,7 +3,7 @@
 import { loadMap } from './map-loader.js';
 import { MapRenderer } from './map-renderer.js';
 import { generateFloor } from './dungeon-generator.js';
-import { playTrack, TRACKS } from './music.js';
+import { playTrack, stopMusic, playFF2Track, stopFF2Music, ff2MusicReady, TRACKS, FF2_TRACKS } from './music.js';
 import { DIR_DOWN } from './sprite.js';
 import { sprite } from './player-sprite.js';
 import { resetIndoorWaterCache } from './water-animation.js';
@@ -223,7 +223,20 @@ function _loadRegularMap(mapId, returnX, returnY) {
   sprite.setDirection(DIR_DOWN);
   sprite.resetFrame();
   if (returnX !== undefined) _openReturnDoor(playerX, playerY);
-  if (mapId === 114 && transSt.pendingTrack == null) playTrack(TRACKS.TOWN_UR);
+  // Elder house (both floors, maps 6 + 7) gets its own music — FF2 NSF track,
+  // played on the FF2 emulator while the FF3 track is stopped. Idempotent
+  // across the two floors (playFF2Track no-ops on the same track), so it plays
+  // continuously 6<->7 and only restarts the FF3 town theme on exit to Ur.
+  if ((mapId === 6 || mapId === 7) && ff2MusicReady()) {
+    // Clear any queued FF3 track (e.g. new-game pendingTrack=TOWN_UR) so the
+    // entry transition won't start FF3 music over the FF2 house theme.
+    transSt.pendingTrack = null;
+    stopMusic();
+    playFF2Track(FF2_TRACKS.ELDER_HOUSE);
+  } else {
+    stopFF2Music();
+    if (mapId === 114 && transSt.pendingTrack == null) playTrack(TRACKS.TOWN_UR);
+  }
 }
 
 export function setupTopBox(mapId, isWorldMap) {
