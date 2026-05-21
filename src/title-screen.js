@@ -726,6 +726,7 @@ function _updateTitleMainOutCase() {
   ps.lastWorldExitY = (slot && slot.lastWorldExitY != null) ? slot.lastWorldExitY : null;
   ps.knownSpells = (slot && Array.isArray(slot.knownSpells)) ? [...slot.knownSpells] : [];
   ps.consumedTiles = (slot && slot.consumedTiles) ? JSON.parse(JSON.stringify(slot.consumedTiles)) : {};
+  ps.consumedTilesAt = (slot && slot.consumedTilesAt) ? JSON.parse(JSON.stringify(slot.consumedTilesAt)) : {};
   swapBattleSprites(ps.jobIdx);
   // Position restore (v1.7.216 — SAVE-STATE-AUDIT.md #4). Pre-v1.7.216 every
   // load went to Ur (114) regardless of where the player saved — the

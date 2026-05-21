@@ -12,8 +12,8 @@ export const SHOPS = new Map([
   ['ur_weapon', {
     type: 'weapon',
     mapId: 5, counter: { x: 3, y: 15 },
-    items: [0x1F, 0x24, 0x0E, 0x06, 0x4A, 0x4F],
-    // Dagger, Longsword, Staff, Nunchuck, Bow, Wooden Arrow
+    items: [0x1F, 0x24, 0x0E, 0x06],
+    // Dagger, Longsword, Staff, Nunchuck
   }],
   ['ur_armor', {
     type: 'armor',

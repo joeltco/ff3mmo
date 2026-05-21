@@ -40,6 +40,7 @@ export function parseSaveSlots(data) {
       currentMapId: s.currentMapId != null ? s.currentMapId : null,
       knownSpells: Array.isArray(s.knownSpells) ? [...s.knownSpells] : [],
       consumedTiles: (s.consumedTiles && typeof s.consumedTiles === 'object') ? s.consumedTiles : {},
+      consumedTilesAt: (s.consumedTilesAt && typeof s.consumedTilesAt === 'object') ? s.consumedTilesAt : {},
     };
   });
 }

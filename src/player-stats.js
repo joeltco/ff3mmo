@@ -45,6 +45,12 @@ export const ps = {
   // Pre-v1.7.215 these mutations were in-memory only and reset on re-entry,
   // letting players farm chests by exiting and walking back in.
   consumedTiles: {},
+  // Parallel to consumedTiles, keyed the same way (mapId → "x,y" → epoch ms):
+  // the time a chest tile was opened. Used by expireResettableChests to bring
+  // Ur town chests back 24h after looting (an MMO-style respawn node). Only
+  // opened-chest mutations carry a timestamp; secret walls / rock puzzles do
+  // not and never expire.
+  consumedTilesAt: {},
 };
 
 // Equip slot index mapping: -100=RH, -101=LH, -102=Head, -103=Body, -104=Arms

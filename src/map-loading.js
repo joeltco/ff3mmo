@@ -15,7 +15,7 @@ import { AREA_NAMES, DUNGEON_NAME } from './data/strings.js';
 import { hudSt } from './hud-state.js';
 import { mapSt } from './map-state.js';
 import { battleSt } from './battle-state.js';
-import { applyPassage, triggerWipe } from './map-triggers.js';
+import { applyPassage, triggerWipe, expireResettableChests } from './map-triggers.js';
 import { ps } from './player-stats.js';
 import { saveSlotsToDB } from './save-state.js';
 
@@ -191,6 +191,7 @@ function _loadRegularMap(mapId, returnX, returnY) {
   const mapData = loadMap(romRaw, mapId);
   mapSt.mapData = mapData;
   mapSt.currentMapId = mapId;
+  expireResettableChests(mapId);   // Ur chests respawn 24h after looting
   _replayConsumedTiles(mapId, mapData);
   if (AREA_NAMES.has(mapId)) ps.lastTown = mapId;
   if (returnX !== undefined) applyPassage(mapData.tilemap);

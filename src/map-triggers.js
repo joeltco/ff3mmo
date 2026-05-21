@@ -25,6 +25,15 @@ const TILE_SIZE = 16;
 const BATTLE_FLASH_FRAMES = 65;
 const BATTLE_FLASH_FRAME_MS = 16.67;
 
+// Chest tiles: 0x7C closed (walk-up trigger), 0x7D opened (post-loot).
+const OPENED_CHEST = 0x7D;
+// Ur town respawns its chests 24h after they're looted. Map set = Ur overworld
+// (114) + every Ur interior room (see project_ff3mmo_ur_buildout). Dungeon
+// chests (mapId >= 1000) are NOT in here — those reset on cave re-entry via
+// the procedural-regen wipe in _checkWorldMapTrigger.
+const CHEST_RESET_MS = 24 * 60 * 60 * 1000;
+const UR_CHEST_MAPS = new Set([114, 1, 2, 3, 4, 5, 6, 7, 8, 9, 147]);
+
 // Chest loot pools, keyed by map ID. Each tier has a `weight` and a `pool` of
 // either item IDs (numbers) or `{ gil: [min, max] }` entries.
 // Crystal room (1004) is a boss room and has no chests.
@@ -38,28 +47,28 @@ const LOOT_POOLS = {
     { weight: 52, pool: [0xA6] },                                 // Potion
     { weight: 30, pool: [GIL(20, 60)] },
     { weight: 15, pool: [0x62] },                                 // Leather Cap
-    { weight:  3, pool: [0xE3, 0xE2] },                           // Cure scroll, Sleep scroll (rare)
+    { weight:  3, pool: [0xE3, 0xE1] },                           // Cure scroll, Ice scroll (rare)
   ],
   1001: [ // Altar Cave F2
     { weight: 42, pool: [0xA6] },                                 // Potion
     { weight: 30, pool: [GIL(40, 100)] },
     { weight: 20, pool: [0x62, 0x1F, 0x06, 0x0E] },               // Leather Cap, Dagger, Nunchuck, Staff
     { weight:  5, pool: [0x58] },                                 // Leather Shield
-    { weight:  3, pool: [0xE3, 0xE2] },                           // Cure scroll, Sleep scroll (rare)
+    { weight:  3, pool: [0xE3, 0xE1] },                           // Cure scroll, Ice scroll (rare)
   ],
   1002: [ // Altar Cave F3
     { weight: 32, pool: [0xA6] },                                 // Potion
     { weight: 30, pool: [GIL(75, 175)] },
     { weight: 25, pool: [0x58, 0x1F] },                           // Leather Shield, Dagger
     { weight: 10, pool: [0x73] },                                 // Leather Armor
-    { weight:  3, pool: [0xE3, 0xE2] },                           // Cure scroll, Sleep scroll (rare)
+    { weight:  3, pool: [0xE3, 0xE1] },                           // Cure scroll, Ice scroll (rare)
   ],
   1003: [ // Altar Cave F4
     { weight: 22, pool: [0xA6] },
     { weight: 30, pool: [GIL(125, 275)] },
     { weight: 25, pool: [0x73, 0x1F] },                           // Leather Armor, Dagger
     { weight: 20, pool: [0x8B, 0x24] },                           // Bronze Bracers (mage arm), Longsword
-    { weight:  3, pool: [0xE3, 0xE2] },                           // Cure scroll, Sleep scroll (rare)
+    { weight:  3, pool: [0xE3, 0xE1] },                           // Cure scroll, Ice scroll (rare)
   ],
 };
 const DEFAULT_LOOT = LOOT_POOLS[1000];
@@ -120,8 +129,39 @@ function _consumeTile(facedX, facedY, newTileId) {
   ps.consumedTiles[mapId][`${facedX},${facedY}`] = newTileId;
 }
 
+// Record when a chest was opened so expireResettableChests can respawn it
+// later. Parallel to consumedTiles; persisted alongside it (save-state.js).
+function _stampChestTime(facedX, facedY) {
+  const mapId = mapSt.currentMapId;
+  if (mapId == null) return;
+  if (!ps.consumedTilesAt) ps.consumedTilesAt = {};
+  if (!ps.consumedTilesAt[mapId]) ps.consumedTilesAt[mapId] = {};
+  ps.consumedTilesAt[mapId][`${facedX},${facedY}`] = Date.now();
+}
+
+// Respawn Ur town chests on a 24h timer. Called on map load BEFORE
+// _replayConsumedTiles: any opened-chest mutation that has aged out (or has no
+// recorded open-time — i.e. it predates this feature) is dropped from
+// consumedTiles, so the fresh-from-ROM tilemap keeps its closed chest. Only
+// OPENED_CHEST mutations are touched; secret walls / rock puzzles never expire.
+export function expireResettableChests(mapId) {
+  if (!UR_CHEST_MAPS.has(mapId)) return;
+  const consumed = ps.consumedTiles && ps.consumedTiles[mapId];
+  if (!consumed) return;
+  const times = (ps.consumedTilesAt && ps.consumedTilesAt[mapId]) || null;
+  const now = Date.now();
+  for (const key of Object.keys(consumed)) {
+    if (consumed[key] !== OPENED_CHEST) continue;
+    const t = times && times[key];
+    if (t != null && now - t < CHEST_RESET_MS) continue; // still on cooldown
+    delete consumed[key];
+    if (times) delete times[key];
+  }
+}
+
 export function handleChest(facedX, facedY) {
-  _consumeTile(facedX, facedY, 0x7D);
+  _consumeTile(facedX, facedY, OPENED_CHEST);
+  _stampChestTime(facedX, facedY);
   const entry = rollLootEntry(mapSt.currentMapId);
   let msg;
   if (typeof entry === 'object' && entry.gil) {
@@ -239,6 +279,11 @@ function _checkWorldMapTrigger(tileX, tileY) {
     if (ps.consumedTiles) {
       for (const key of Object.keys(ps.consumedTiles)) {
         if (Number(key) >= 1000) delete ps.consumedTiles[key];
+      }
+    }
+    if (ps.consumedTilesAt) {
+      for (const key of Object.keys(ps.consumedTilesAt)) {
+        if (Number(key) >= 1000) delete ps.consumedTilesAt[key];
       }
     }
     destMap = 1000;
