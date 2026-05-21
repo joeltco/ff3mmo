@@ -8,7 +8,7 @@ import { DIR_DOWN } from './sprite.js';
 import { sprite } from './player-sprite.js';
 import { resetIndoorWaterCache } from './water-animation.js';
 import { clearFlameSprites, rebuildFlameSprites } from './flame-sprites.js';
-import { clearNpcs, placeMoogleAtCaveCenter, placeOpeningScene, addBlackMageShopkeeper, addBossNpc, getLandTurtleFrames } from './npc.js';
+import { clearNpcs, placeMoogleAtCaveCenter, placeOpeningScene, placeInnNpcs, addBlackMageShopkeeper, addBossNpc, getLandTurtleFrames } from './npc.js';
 import { transSt, topBoxSt } from './transitions.js';
 import { BATTLE_BG_MAP_LOOKUP, renderBattleBg } from './battle-bg.js';
 import { AREA_NAMES, DUNGEON_NAME } from './data/strings.js';
@@ -211,6 +211,7 @@ function _loadRegularMap(mapId, returnX, returnY) {
   clearNpcs();
   if (mapId === 3) addBlackMageShopkeeper(4, 4, 'ur_magic');
   if (mapId === 7) placeOpeningScene();
+  if (mapId === 8) placeInnNpcs();
   // Ur (114) has a dark-tile patch in the town that spawns wild
   // grasslands encounters (Werewolves + Bees). Flood-fill from the seed
   // tile so adding/extending the patch in the ROM just works.

@@ -21,6 +21,7 @@ import { Sprite, DIR_DOWN, DIR_UP, DIR_LEFT, DIR_RIGHT } from './sprite.js';
 import { MOOGLE_GFX_ID, MOOGLE_PAL } from './sprite-init.js';
 import { BM_WALK_TOP, BM_WALK_BTM } from './job-sprites.js';
 import { OPENING_ELDER, OPENING_LEFT_ATTENDANT, OPENING_RIGHT_ATTENDANT } from './data/opening-scene.js';
+import { INN_ITEM_KEEPER } from './data/town-npcs.js';
 import { openShop } from './shop.js';
 import { waterSt } from './water-animation.js';
 import { battleSt } from './battle-state.js';
@@ -190,6 +191,12 @@ export function placeOpeningScene() {
   addSceneNpc('opening_elder', 4, 3, OPENING_ELDER);
   addSceneNpc('opening_left',  2, 4, OPENING_LEFT_ATTENDANT);
   addSceneNpc('opening_right', 6, 4, OPENING_RIGHT_ATTENDANT);
+}
+
+// Map 8 (inn): the item-shop keeper stands behind the counter at (8,15),
+// one tile north at (8,14), facing south toward the player.
+export function placeInnNpcs() {
+  addSceneNpc('inn_item_keeper', 8, 14, INN_ITEM_KEEPER);
 }
 
 export function findNpcAt(tileX, tileY) {
