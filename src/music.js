@@ -59,7 +59,7 @@ export const FF1_TRACKS = {
 // confirm the exact index by ear if a track sounds wrong (off-by-one between
 // player-UI 1-based numbering and the 0-based gme_start_track call).
 export const FF2_TRACKS = {
-  ELDER_HOUSE: 2,  // "nsf 3" = 1-based track 3 → 0-based gme index 2 (elder house theme)
+  ELDER_HOUSE: 24,  // elder house theme — confirmed by ear via /ff2 24
 };
 
 let nsfData = null;    // Built NSF Uint8Array
