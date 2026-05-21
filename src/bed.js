@@ -4,12 +4,12 @@
 // bed works with no per-map setup) to rest. No cost; refills HP/MP only
 // (status untouched).
 //
-// Lifecycle: closed → settle → fade-out → sleep(6s) → fade-in → walk-out → closed.
+// Lifecycle: closed → settle → fade-out → sleep(5s) → fade-in → walk-out → closed.
 //   settle    — face left and hold the room lit, on the bed, before it dims
 //               (so you see the full step land). Music pauses + rest jingle plays.
 //   fade-out  — the captured FF3 inn palette ramp (nes-palette-fade.js, discrete
 //               hardware steps — NOT an alpha crossfade).
-//   sleep     — 6s dark hold, input drained (the rest can't be skipped).
+//   sleep     — 5s dark hold, input drained (the rest can't be skipped).
 //   fade-in   — palette ramp in reverse; auto-advances (no button to wake).
 //   walk-out  — sprite walks down one tile off the bed, then the pond-heal
 //               "Fully Restored!" message box shows and the scene closes.
@@ -39,7 +39,7 @@ const INNER_W = HUD_VIEW_W - 16, INNER_H = HUD_VIEW_H - 16;
 const FADE = buildPaletteFade(INN_FADE_KEYS);  // captured inn fade (discrete steps)
 const FADE_MS  = FADE.durationMs;              // ≈667ms, true NTSC cadence
 const SETTLE_MS = 300;    // show the landed step before the room dims
-const SLEEP_MS  = 6000;   // forced dark hold before waking
+const SLEEP_MS  = 5000;   // forced dark hold before waking
 const REST_JINGLE = 0;    // inn rest tune — first track in the FF3 NSF playlist
 
 export const bedSt = {
