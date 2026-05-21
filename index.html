@@ -163,6 +163,21 @@
       user-select: none;
       -webkit-user-select: none;
     }
+    /* CHAT/LOG sit in a flat strip up top (where the old utility row was). */
+    #top-row {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      padding: 8px 12px;
+      background: #0a0a14;
+      border-bottom: 1px solid #222;
+    }
+    #top-row .pill-btn {
+      transform: none;        /* flat up here, only the center pills angle */
+      border-radius: 14px;
+      min-width: 84px;
+      font-size: 10px;
+    }
     #main-controls {
       display: flex;
       align-items: center;
@@ -548,6 +563,10 @@
   <!-- Game Boy-style deck: D-pad left, A(upper-right)/B(lower-left) on the
        diagonal, and the menu/utility pills angled in the center below. -->
   <div id="mobile-controls">
+    <div id="top-row">
+      <button class="pill-btn" data-key="t">CHAT</button>
+      <button class="pill-btn" data-key="T">LOG</button>
+    </div>
     <div id="main-controls">
       <div id="dpad">
         <div class="dpad-btn transparent"></div>
@@ -569,10 +588,6 @@
       <div class="pill-row">
         <button class="pill-btn" data-key="s">SELECT</button>
         <button class="pill-btn" data-key="Enter">START</button>
-      </div>
-      <div class="pill-row">
-        <button class="pill-btn" data-key="t">CHAT</button>
-        <button class="pill-btn" data-key="T">LOG</button>
       </div>
     </div>
   </div>
