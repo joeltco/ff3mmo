@@ -39,8 +39,8 @@ export const OPENING_ELDER = {
   dir: DIR_DOWN,
   animate: true,
   dialogue: [
-    'The crystal waits below.',
-    'Find it, and grow strong.',
+    'The crystal lies north,',
+    'in the cave. Grow strong.',
   ],
 };
 
@@ -63,8 +63,8 @@ export const OPENING_RIGHT_ATTENDANT = {
   dir: DIR_LEFT, // faces toward player (attendant at 6,4)
   animate: true,
   dialogue: [
-    'Mind the caves below.',
-    'Monsters lurk there.',
+    'The northern cave is',
+    'full of monsters.',
   ],
 };
 
