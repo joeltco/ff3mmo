@@ -130,6 +130,24 @@ A from-scratch rebuild is planned. **Read the `ff3mmo-coop-rebuild` auto-memory 
 - **Respawn flow.** `respawnAfterDeath()` passes a real `destMapId` to `triggerWipe` (`'world'` for the world-exit case, `fallbackMapId` for the town case) so `rosterLocChanged` is correctly computed and the trans-fade engages even for same-loc respawns.
 - **`transSt.rosterLocChanged` is set by `triggerWipe` / map-triggers but no longer read by the roster fade** (v1.7.229 dropped the gate so trans-fade fires on every wipe, not just loc-changing ones). Left in place in case a different consumer needs it later.
 
+## NES palette fade (inn bed, future scenes)
+
+`src/nes-palette-fade.js` is a reusable hardware-style palette fade. The NES swaps its whole palette in **discrete steps** and never blends colors — so a "fade" is a sequence of palette snaps, NOT an RGB alpha crossfade.
+
+- **`buildPaletteFade(keys)`** takes captured keyframes `[nesFrame, BG0×4, BG1×4, BG2×4, BG3×4]` (row 0 = the lit/source state) and returns `{ durationMs, finalLut, lutForProgress(prog) }`. Each `lut` is a 64-entry source→target NES-index map built by pairing each keyframe's palette slots against frame 0; **unmapped colors stay identity**, so any color not in the BG palette (sprites, UI) is never touched.
+- **`applyPaletteLut(ctx, lut, x, y, w, h)`** snaps a canvas region in place via reverse RGB→NES-index lookup. Callers must re-render the source frame each tick (the game does), so pixels are always the lit source colors going in.
+- **Captured keyframe data lives in `src/data/*-fade-palette.js`** — currently `inn-fade-palette.js` (REC OAM `$3F00` dump, f1266+, keyframes 0/5/8/12/16/20/24/28/32/36/40, frame 0 lit → frame 40 dark hold). Cadence = span frames ÷ 60 (≈667 ms for the inn).
+- **Do NOT lerp RGB between endpoints.** v1.7.509 shipped an alpha crossfade (in-between colors that aren't real NES colors) even though the capture had every discrete keyframe; rebuilt discrete in v1.7.516. The endpoint was right; the interpolation was the bug.
+
+## Bed rest (inn sleep)
+
+`src/bed.js` is the inn rest scene. Step onto any bed tile to rest: HP/MP refill only (status untouched), no cost.
+
+- **Tile-identity trigger, not per-coordinate.** `src/data/beds.js` (`isBedTileId(tileset, metatileId)`) is the registry — map 8 inn (tileset 5) bed tiles `0x0a/0x0b/0x62`. Every present/future bed works with no per-map setup. `map-renderer.js#isBedTileAt` makes bed tiles passable and `map-triggers.js#checkTrigger` calls `openBed()` — fired from `movement.js#_onMoveComplete`, so the step lerp is always complete before the scene starts.
+- **Lifecycle (`bedSt.state`):** closed → `settle` (300 ms, sprite faces `DIR_LEFT`, music pauses) → `fade-out` (≈667 ms, the inn palette fade) → `sleep` (6 s dark hold; the rest jingle `playSFX(0)` fires on the first fully-dark frame, not during the fade; input drained so it can't be skipped) → `fade-in` (auto, no wake button) → `walk-out` (`startMove(DIR_DOWN)` one tile off the bed) → on step-land `showMsgBox(POND_RESTORED)` + close. Heal happens at the sleep→fade-in transition (`_rest()`), `saveSlotsToDB()` checkpoints.
+- **The dim runs in the render pipeline, not the game-loop draw list.** `render.js#_renderMapAndWater` checks `isBedDimming()` and, while dimming, dims the BG layer (map **and** overlay) via `drawBedDim(ctx)` BEFORE the sprite pass — so player / NPC / candle sprites composite on top at full brightness and never fade by color collision. (v1.7.521 fix: the old game-loop `drawBed()` dimmed the composited frame including sprite pixels.)
+- **`POND_RESTORED` in `data/strings.js` = "HP/MP Restored"** is shared by the bed and the pond heal (`map-triggers.js#handlePondHeal`). The slash uses the AWJ font's real glyph at byte `0xC7` (`text-decoder.js` CHAR_MAP, not a best-fit placeholder).
+
 ## Battle attack animation
 
 - **Per-hit cycle.** Each hit goes through three states: `attack-back` (wind-up pose) → `attack-fwd` (transition, `FWD_SWING_MS`) → `player-slash` (impact, `getSlashHoldMs(weaponId)` from `slash-effects.js` — per-weapon: blade `3 × 30 ms = 90 ms`, impact `2 × 30 ms = 60 ms`). On a miss or shield-block, the slash *flash* is suppressed but the body-pose dwell still runs the full `SWING_HOLD_MS` so the strike rhythm reads consistently. Suppression lives inside `drawSlashOverlay` itself (1.7.48) — callers pass `hit` via opts and the helper short-circuits via `shouldDrawSlash`; no caller-side wrapper required.
