@@ -40,6 +40,7 @@
 import { WebSocketServer } from 'ws';
 import { createRequire } from 'module';
 import { verifyTokenWithRevocation } from './api.js';
+import { sanitizeName, isCleanName, cleanChatText } from './moderation.js';
 const require = createRequire(import.meta.url);
 const jwt = require('jsonwebtoken');
 
@@ -112,7 +113,12 @@ function _clamp(n, min, max) {
 function _normalizeProfileField(key, value) {
   if (value == null) return undefined;
   switch (key) {
-    case 'name': return String(value).slice(0, 16);
+    // Strip to renderable glyphs (no emoji/zero-width/homoglyph spoofs); a
+    // profane or empty result falls back to 'Player' rather than broadcasting.
+    case 'name': {
+      const n = sanitizeName(value);
+      return (n && isCleanName(n)) ? n : 'Player';
+    }
     case 'jobIdx':   return _clamp(value, 0, 31);
     case 'level':    return _clamp(value, 1, 99);
     case 'palIdx':   return _clamp(value, 0, 31);
@@ -737,7 +743,10 @@ function _handleMessage(entry, msg) {
       //            every PM sent to Joel. See audit #8.
       if (!entry.helloed) return;
       const channel = String(parsed.channel || 'world').slice(0, 8);
-      const text = String(parsed.text || '').slice(0, 200);
+      // Profanity is masked server-side so every recipient sees cleaned text
+      // regardless of client (the sender's own local echo stays raw — they
+      // already know what they typed). Applies to world / party / pm alike.
+      const text = cleanChatText(String(parsed.text || '').slice(0, 200));
       if (!text) return;
       const senderName = entry.profile?.name || 'Player';
       if (channel === 'pm') {

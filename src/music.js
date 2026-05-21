@@ -59,7 +59,8 @@ export const FF1_TRACKS = {
 // confirm the exact index by ear if a track sounds wrong (off-by-one between
 // player-UI 1-based numbering and the 0-based gme_start_track call).
 export const FF2_TRACKS = {
-  ELDER_HOUSE: 24,  // elder house theme — confirmed by ear via /ff2 24
+  ELDER_HOUSE: 24,   // elder house theme — confirmed by ear via /ff2 24
+  MENTION_CHIME: 8,  // short jingle played when someone @-mentions you in chat
 };
 
 let nsfData = null;    // Built NSF Uint8Array
@@ -102,6 +103,17 @@ let ff2Node = null;
 let ff2GainNode = null;
 let ff2Buf = null;
 let ff2Track = -1;
+
+// Mention chime — a fifth, dedicated FF2 emulator so a one-shot notification
+// jingle never disturbs the background map music (FF3 town on the main emu,
+// or FF2 elder-house on ff2Emu). Built lazily from the same ff2NsfData.
+let chimeEmu = null;
+let chimeEmuRef = null;
+let chimeNode = null;
+let chimeBuf = null;
+let chimeGainNode = null;
+let chimeStopTimer = null;
+const CHIME_MS = 2200;  // hard cap — a looping NSF track won't run forever
 
 const BUF_SIZE = 4096; // samples per channel per callback (music, ~85ms at 48kHz)
 const SFX_BUF_SIZE = 2048;  // smaller buffer for SFX (~42ms latency at 48kHz)
@@ -466,6 +478,60 @@ export function stopFF2Music() {
   if (ff2Node) { ff2Node.disconnect(); ff2Node = null; }
   if (ff2Emu) { Module.ccall('gme_delete', 'number', ['number'], [ff2Emu]); ff2Emu = null; }
   ff2Track = -1;
+}
+
+// Play the mention chime once on its own emulator/gain, leaving whatever map
+// music is playing untouched. Re-triggering restarts the jingle. Auto-stops
+// on track end or after CHIME_MS, whichever comes first. No-op until the FF2
+// ROM has been loaded (ff2NsfData built in initFF2Music).
+export function playMentionChime() {
+  if (!ff2NsfData) return;
+  if (typeof Module === 'undefined' || !Module.ccall) return;
+  if (!audioCtx) { audioCtx = new AudioContext(); }
+  if (audioCtx.state === 'suspended') { audioCtx.resume(); }
+  _stopChime();  // collapse a still-ringing chime so rapid pings re-trigger
+
+  if (!chimeEmuRef) { chimeEmuRef = Module.allocate(1, 'i32', Module.ALLOC_STATIC); }
+  const err = Module.ccall('gme_open_data', 'number',
+    ['array', 'number', 'number', 'number'],
+    [ff2NsfData, ff2NsfData.length, chimeEmuRef, audioCtx.sampleRate]);
+  if (err !== 0) { console.error('chime gme_open_data failed'); return; }
+  chimeEmu = Module.getValue(chimeEmuRef, 'i32');
+
+  Module.ccall('gme_ignore_silence', 'number', ['number'], [chimeEmu, 1]);
+  if (Module.ccall('gme_start_track', 'number', ['number', 'number'], [chimeEmu, FF2_TRACKS.MENTION_CHIME]) !== 0) {
+    console.error('chime gme_start_track failed'); _stopChime(); return;
+  }
+
+  if (!chimeBuf) { chimeBuf = Module._malloc(BUF_SIZE * 2 * 2); }
+  chimeNode = audioCtx.createScriptProcessor(BUF_SIZE, 0, 2);
+  chimeNode.onaudioprocess = (e) => {
+    const ch0 = e.outputBuffer.getChannelData(0);
+    const ch1 = e.outputBuffer.getChannelData(1);
+    // Track ended (or torn down) → emit silence; the timer does the teardown
+    // so we never delete the emu from inside its own audio callback.
+    if (!chimeEmu || Module.ccall('gme_track_ended', 'number', ['number'], [chimeEmu]) === 1) {
+      ch0.fill(0); ch1.fill(0); return;
+    }
+    Module.ccall('gme_play', 'number', ['number', 'number', 'number'], [chimeEmu, BUF_SIZE * 2, chimeBuf]);
+    const base = chimeBuf >> 1;
+    for (let i = 0; i < BUF_SIZE; i++) {
+      ch0[i] = Module.HEAP16[base + i * 2]     / 32768;
+      ch1[i] = Module.HEAP16[base + i * 2 + 1] / 32768;
+    }
+  };
+
+  if (!chimeGainNode) { chimeGainNode = audioCtx.createGain(); chimeGainNode.connect(audioCtx.destination); }
+  chimeGainNode.gain.cancelScheduledValues(audioCtx.currentTime);
+  chimeGainNode.gain.setValueAtTime(0.85, audioCtx.currentTime);
+  chimeNode.connect(chimeGainNode);
+  chimeStopTimer = setTimeout(_stopChime, CHIME_MS);
+}
+
+function _stopChime() {
+  if (chimeStopTimer) { clearTimeout(chimeStopTimer); chimeStopTimer = null; }
+  if (chimeNode) { chimeNode.disconnect(); chimeNode = null; }
+  if (chimeEmu) { Module.ccall('gme_delete', 'number', ['number'], [chimeEmu]); chimeEmu = null; }
 }
 
 export function clearMusicStash() {

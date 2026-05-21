@@ -16,8 +16,14 @@ const SALT_ROUNDS = 10;
 // See docs/MULTIPLAYER-AUDIT-2026-05-15.md — pre-beta P0 #3.
 const _authBuckets    = new Map();   // ip → { tokens, refilledAt }
 const _errorBuckets   = new Map();
+const _registerBuckets = new Map();  // ip → { tokens, refilledAt } — account creation
 const AUTH_CAPACITY   = 5;   const AUTH_REFILL_PS  = 1;   // 5/burst, 1/s sustained
 const ERROR_CAPACITY  = 30;  const ERROR_REFILL_PS = 5;
+// Account creation is far rarer than login — a single human makes one account.
+// Cap it hard per IP (5 burst, then 1 every 10 min) so a script can't mint
+// thousands of accounts to flood the roster / DB during open beta. In-memory,
+// so it resets on restart — that's fine layered on top of the auth bucket.
+const REGISTER_CAPACITY = 5;  const REGISTER_REFILL_PS = 1 / 600;
 
 function _bucketAllow(map, ip, capacity, refillPs) {
   const now = Date.now();
@@ -272,6 +278,9 @@ export async function handleAPI(req, res) {
   if (path === '/api/register' && req.method === 'POST') {
     if (!_bucketAllow(_authBuckets, ip, AUTH_CAPACITY, AUTH_REFILL_PS)) {
       return send(res, 429, { error: 'Too many requests — slow down' }), true;
+    }
+    if (!_bucketAllow(_registerBuckets, ip, REGISTER_CAPACITY, REGISTER_REFILL_PS)) {
+      return send(res, 429, { error: 'Too many accounts from this network — try later' }), true;
     }
     const { email, password } = await readBody(req);
     if (typeof email !== 'string' || typeof password !== 'string' || !email || !password) {

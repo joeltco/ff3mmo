@@ -18,6 +18,22 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.541 — 2026-05-21
+
+### Open-beta hardening: moderation + chat/PM overhaul
+
+**Moderation (server-side, untrusted input):**
+- New `moderation.js` (pure module). `sanitizeName` strips display names to renderable font glyphs — kills emoji / zero-width / homoglyph spoofs; `cleanChatText` masks profanity (catches leet/spaced/repeated evasion without Scunthorpe false-positives).
+- `ws-presence.js`: every name sanitized + profanity-rejected (→ "Player"); all chat (world/party/pm) masked in the relay.
+- `api.js`: per-IP signup cap on `/api/register` (5 burst, then 1 / 10 min), layered on the auth bucket.
+
+**@-mentions + chime:**
+- Type `@` + Tab autocompletes from the online roster. A message that @-mentions you renders gold and plays a chime (FF2 NSF track 8) on a dedicated emulator that never disturbs map music; auto-stops at track end or 2.2 s. PMs chime too (unless you're already on the Private tab).
+
+**PM polish + conversation sessions:**
+- `/pm` `/w` `/tell` `/msg <name> <message>` and `/r <message>` (reply to last).
+- The Private tab is now per-conversation: up/down in select mode pages between partners, the view filters to the focused thread, and the `→Name` prompt + reply target follow it. Sending/receiving focuses the relevant conversation.
+
 ## 1.7.540 — 2026-05-21
 
 ### Data-driven encounter rates

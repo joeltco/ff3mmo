@@ -5,7 +5,7 @@ import { playSFX, SFX } from './music.js';
 import { pauseSt } from './pause-menu.js';
 import { transSt } from './transitions.js';
 import { msgState, showMsgBox, dismissMsgBox } from './message-box.js';
-import { chatState, CHAT_TABS, activeTab, tabSelectMode, setActiveTab, setTabSelectMode, chatScrollOffset, setChatScrollOffset, onChatKeyDown } from './chat.js';
+import { chatState, CHAT_TABS, activeTab, tabSelectMode, setActiveTab, setTabSelectMode, setChatScrollOffset, onChatKeyDown, pmSessionStep } from './chat.js';
 import { titleSt, onNameEntryKeyDown } from './title-screen.js';
 import { ps, recalcCombatStats, getHitWeapon, getJobLevelStatBonus } from './player-stats.js';
 import { saveSlotsToDB } from './save-state.js';
@@ -898,16 +898,16 @@ function _tabSelectInput() {
     setActiveTab((activeTab + 1) % CHAT_TABS.length);
     playSFX(SFX.CURSOR);
   }
-  // Up/down scrolls chat history on Private tab
+  // Up/down pages through PM conversations on the Private tab.
   if (CHAT_TABS[activeTab] === 'Private') {
     if (k['ArrowUp']) {
       k['ArrowUp'] = false;
-      setChatScrollOffset(chatScrollOffset + 1);
+      pmSessionStep(-1);
       playSFX(SFX.CURSOR);
     }
     if (k['ArrowDown']) {
       k['ArrowDown'] = false;
-      setChatScrollOffset(Math.max(0, chatScrollOffset - 1));
+      pmSessionStep(1);
       playSFX(SFX.CURSOR);
     }
   }

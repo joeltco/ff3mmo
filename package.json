@@ -1,13 +1,13 @@
 {
   "name": "ff3mmo",
-  "version": "1.7.540",
+  "version": "1.7.541",
   "description": "NES RPG engine — runtime ROM extraction, procedural dungeons, NSF music",
   "private": true,
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "lint": "eslint src tools server.js api.js debug-server.js ws-presence.js",
-    "lint:errors": "eslint --quiet src tools server.js api.js debug-server.js ws-presence.js"
+    "lint": "eslint src tools server.js api.js debug-server.js ws-presence.js moderation.js",
+    "lint:errors": "eslint --quiet src tools server.js api.js debug-server.js ws-presence.js moderation.js"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",

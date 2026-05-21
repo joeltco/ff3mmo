@@ -10,13 +10,13 @@ import { partyInviteSt } from './party-invite.js';
 import { mapSt } from './map-state.js';
 import { sprite } from './player-sprite.js';
 import { DIR_DOWN, DIR_UP, DIR_LEFT, DIR_RIGHT } from './sprite.js';
-import { playFF1Track, stopFF1Music, playFF2Track, stopFF2Music, pauseMusic, resumeMusic } from './music.js';
+import { playFF1Track, stopFF1Music, playFF2Track, stopFF2Music, pauseMusic, resumeMusic, playMentionChime } from './music.js';
 import { ui } from './ui-state.js';
 import { ps, changeJob, fullHeal, grantExp, MAX_LEVEL } from './player-stats.js';
 import { JOBS } from './data/jobs.js';
 import { swapBattleSprites } from './job-sprites.js';
 import { saveSlotsToDB } from './save-state.js';
-import { sendNetChat, setNetChatHandler, getOnlinePlayerByName } from './net.js';
+import { sendNetChat, setNetChatHandler, getOnlinePlayerByName, getOnlinePlayers } from './net.js';
 import { ITEMS } from './data/items.js';
 import { addItem } from './inventory.js';
 import { getItemNameClean, getSpellNameClean, bytesToAscii } from './text-decoder.js';
@@ -73,6 +73,77 @@ export const chatState = {
                            // / fresh 't' open. v1.7.238.
 };
 
+// ── Mentions + PM state ─────────────────────────────────────────────────────
+
+// Active save-slot name — labels outgoing messages and detects @-mentions in
+// incoming ones. Falls back to 'You' before a slot is chosen.
+export function localPlayerName() {
+  const slot = saveSlots[selectCursor];
+  return (slot && slot.name) ? _nesNameToString(slot.name) : 'You';
+}
+
+let _lastPmFrom = null;     // last player who PM'd us — target for `/r`
+let _lastPmPartner = null;  // last PM peer (either direction) — default Private-tab target
+let _pmSession = null;      // conversation currently in focus on the Private tab
+
+// The partner name a pm message belongs to, from the local player's POV:
+// outgoing → recipient, incoming → sender. Partnerless pm lines (hints/errors)
+// return null so they show in every conversation.
+function _pmPartnerOf(msg) {
+  if (msg.channel !== 'pm') return null;
+  const me = localPlayerName();
+  if (msg.from && msg.from === me) return msg.to || null;
+  return msg.from || null;
+}
+
+// Distinct PM partners in first-seen order — the navigable session list.
+export function pmPartners() {
+  const seen = [];
+  for (const m of chatState.messages) {
+    const p = _pmPartnerOf(m);
+    if (p && !seen.includes(p)) seen.push(p);
+  }
+  return seen;
+}
+
+// Conversation currently in focus: explicit session pick wins, then a roster /
+// `/pm` recipient, then the last partner, then the newest conversation.
+function _activePmPartner() {
+  if (_pmSession) return _pmSession;
+  if (chatState.pendingRecipient) return chatState.pendingRecipient;
+  if (_lastPmPartner) return _lastPmPartner;
+  const list = pmPartners();
+  return list.length ? list[list.length - 1] : null;
+}
+
+// Up/down on the Private tab pages through conversations (wraps). The reply
+// target follows the focused session and the view resets to its latest line.
+export function pmSessionStep(dir) {
+  const list = pmPartners();
+  if (list.length === 0) return;
+  let idx = list.indexOf(_activePmPartner());
+  if (idx < 0) idx = list.length - 1;
+  _pmSession = list[(idx + dir + list.length) % list.length];
+  chatState.pendingRecipient = _pmSession;
+  setChatScrollOffset(0);
+}
+
+// Number of distinct conversations — drives the "more sessions" arrow cue.
+export function pmSessionCount() { return pmPartners().length; }
+
+// Reply target = the focused conversation. Used by the send path + prompt.
+function _pmTarget() { return _activePmPartner(); }
+
+// True if `text` @-mentions `name`. Case-insensitive; the name's spaces are
+// stripped so "@JohnDoe" pings "John Doe". Matches the whole @-token only, so
+// "@jo" won't ping "John" (autocomplete inserts the full name).
+function _mentions(text, name) {
+  const compact = String(name || '').replace(/\s+/g, '').toLowerCase();
+  if (!compact) return false;
+  const toks = String(text).toLowerCase().match(/@([a-z0-9]+)/g);
+  return !!toks && toks.some(t => t.slice(1) === compact);
+}
+
 // ── Public API ─────────────────────────────────────────────────────────────
 
 export function addChatMessage(text, type, channel, meta) {
@@ -89,6 +160,7 @@ export function addChatMessage(text, type, channel, meta) {
   if (meta) {
     if (meta.from) msg.from = meta.from;
     if (meta.to)   msg.to   = meta.to;
+    if (meta.mention) msg.mention = true;  // renders highlighted (see _buildChatRows)
   }
   chatState.messages.push(msg);
   while (chatState.messages.length > CHAT_HISTORY) chatState.messages.shift();
@@ -131,18 +203,35 @@ setNetChatHandler((msg) => {
   if (msg.name && _blockedNames.has(msg.name)) return;
   const senderName = msg.name || 'Player';
   const channel = msg.channel || 'world';
-  const meta = msg.to ? { from: senderName, to: msg.to } : null;
+  const mentioned = _mentions(msg.text, localPlayerName());
+  const meta = {};
+  if (msg.to) { meta.from = senderName; meta.to = msg.to; }
+  if (mentioned) meta.mention = true;
   const displayText = msg.to
     ? senderName + ' → ' + msg.to + ': ' + msg.text
     : senderName + ': ' + msg.text;
-  addChatMessage(displayText, 'chat', channel, meta);
+  addChatMessage(displayText, 'chat', channel, Object.keys(meta).length ? meta : null);
+  if (channel === 'pm') {
+    _lastPmFrom = senderName; _lastPmPartner = senderName;
+    if (!_pmSession) _pmSession = senderName;  // focus first convo; don't yank an active one
+  }
+  // Chime on an @-mention always; on an incoming PM only when you're not
+  // already watching the Private tab (no point pinging a live conversation).
+  if (mentioned || (channel === 'pm' && activeTab !== 2)) playMentionChime();
 });
 
 function _passesTabFilter(msg) {
   const tab = CHAT_TABS[activeTab];
   if (tab === 'World') return msg.channel === 'world' || msg.channel === 'sys';
   if (tab === 'Party') return msg.channel === 'party';
-  if (tab === 'Private') return msg.channel === 'pm';
+  if (tab === 'Private') {
+    // Show only the focused conversation. Partnerless pm lines (hints/errors)
+    // pass through; before any PM exists, show nothing.
+    if (msg.channel !== 'pm') return false;
+    const partner = _pmPartnerOf(msg);
+    if (!partner) return true;
+    return partner === _activePmPartner();
+  }
   if (tab === 'System') return msg.channel === 'sys';
   return true;
 }
@@ -245,6 +334,38 @@ registerCommand('report', 'Report a player: /report <name> <reason>', (args) => 
     else              addChatMessage('Report failed (HTTP ' + r.status + ').', 'console');
   })
   .catch(() => addChatMessage('Report failed (network).', 'console'));
+});
+
+// Send a PM: echo it locally on the Private tab, relay over the wire, and
+// remember the recipient as the current conversation partner. PM hints/echoes
+// use channel 'pm' (not 'console') so they land on the Private tab the user is
+// looking at, not the System tab.
+function _sendPm(name, message) {
+  const text = String(message || '').trim();
+  if (!name) { addChatMessage('No PM recipient. Use /pm <name> <message>.', 'system', 'pm'); return; }
+  if (!text) return;
+  const me = localPlayerName();
+  addChatMessage(me + ' → ' + name + ': ' + text, 'chat', 'pm', { from: me, to: name });
+  sendNetChat('pm', text, name);
+  chatState.pendingRecipient = name;
+  _lastPmPartner = name;
+  _pmSession = name;  // sending focuses that conversation on the Private tab
+}
+
+function _pmCommand(args) {
+  const m = (args || '').match(/^(\S+)\s+([\s\S]+)$/);
+  if (!m) { addChatMessage('Usage: /pm <name> <message>', 'system', 'pm'); return; }
+  const target = getOnlinePlayerByName(m[1]);
+  if (!target || !target.name) { addChatMessage('No online player "' + m[1] + '".', 'system', 'pm'); return; }
+  _sendPm(target.name, m[2]);
+}
+registerCommand('pm',   'Private message: /pm <name> <message>', _pmCommand);
+registerCommand('w',    'Whisper — alias of /pm: /w <name> <message>', _pmCommand);
+registerCommand('tell', 'Alias of /pm: /tell <name> <message>', _pmCommand);
+registerCommand('msg',  'Alias of /pm: /msg <name> <message>', _pmCommand);
+registerCommand('r', 'Reply to the last player who PM\'d you: /r <message>', (args) => {
+  if (!_lastPmFrom) { addChatMessage('No one has messaged you yet.', 'system', 'pm'); return; }
+  _sendPm(_lastPmFrom, args);
 });
 
 registerCommand('ff1', 'Play FF1 NSF track N (or "stop" to resume map music)', (args) => {
@@ -466,6 +587,21 @@ export function consoleLog(text) { addChatMessage(text, 'console'); }
 
 // ── Chat input handler (moved from game.js) ──────────────────────────────
 
+// Tab-complete a trailing "@partial" against the online roster. Names are
+// compacted (spaces removed) so the inserted mention is a single @-token that
+// _mentions() can match exactly. No-op when the input doesn't end in a partial
+// @-token or nothing matches.
+function _autocompleteMention() {
+  const m = chatState.inputText.match(/@([A-Za-z0-9]*)$/);
+  if (!m) return;
+  const partial = m[1].toLowerCase();
+  const names = getOnlinePlayers().map(p => p.name).filter(Boolean);
+  const hit = names.find(n => n.replace(/\s+/g, '').toLowerCase().startsWith(partial));
+  if (!hit) return;
+  const completed = chatState.inputText.slice(0, m.index) + '@' + hit.replace(/\s+/g, '') + ' ';
+  if (completed.length <= 60) chatState.inputText = completed;
+}
+
 export function onChatKeyDown(e) {
   e.preventDefault();
   if (e.key === 'Enter') {
@@ -473,37 +609,28 @@ export function onChatKeyDown(e) {
       if (chatState.inputText[0] === '/') {
         _execCommand(chatState.inputText);
       } else {
-        const slot = saveSlots[selectCursor];
-        const senderName = (slot && slot.name) ? _nesNameToString(slot.name) : 'You';
-        // Route to the channel of the active tab so the user's own message renders
-        // wherever they're typing. CHAT_TABS = [World, Party, Private, System];
-        // System tab falls back to 'party' since users can't post to system.
+        // Route to the channel of the active tab so the user's own message
+        // renders wherever they're typing. CHAT_TABS = [World, Party, Private,
+        // System]; System falls back to 'party' since users can't post there.
         const TAB_TO_CHANNEL = ['world', 'party', 'pm', 'party'];
         const channel = TAB_TO_CHANNEL[activeTab];
-        // PM: prepend `→ <recipient>` to the display text and tag the
-        // message with from/to so the websocket relay knows who to
-        // deliver to. v1.7.238.
-        const recipient = (channel === 'pm') ? chatState.pendingRecipient : null;
-        const text = recipient
-          ? senderName + ' → ' + recipient + ': ' + chatState.inputText
-          : senderName + ': ' + chatState.inputText;
-        const meta = recipient ? { from: senderName, to: recipient } : null;
-        addChatMessage(text, 'chat', channel, meta);
-        // Multiplayer Step 2 — relay over the wire. The server broadcasts to
-        // other clients (location-scoped for world/party, recipient-targeted
-        // for pm). `chatState.inputText` is the raw message; receivers format
-        // their own "Name: text" display. Returns false if not connected — no
-        // harm, the message still shows locally.
-        const rawText = chatState.inputText;
-        if (channel === 'pm' && recipient) sendNetChat('pm', rawText, recipient);
-        else if (channel === 'world' || channel === 'party') sendNetChat(channel, rawText);
+        if (channel === 'pm') {
+          // PM goes to the explicit pick or the last conversation partner.
+          _sendPm(_pmTarget(), chatState.inputText);
+        } else {
+          addChatMessage(localPlayerName() + ': ' + chatState.inputText, 'chat', channel);
+          sendNetChat(channel, chatState.inputText);
+        }
       }
     }
+    // Keep pendingRecipient so a follow-up reply on the Private tab still has a
+    // target; it's only dropped on Escape or a fresh 't' open (input-handler).
     chatState.inputActive = false; chatState.inputText = '';
-    chatState.pendingRecipient = null;
   } else if (e.key === 'Escape') {
     chatState.inputActive = false; chatState.inputText = '';
     chatState.pendingRecipient = null;
+  } else if (e.key === 'Tab') {
+    _autocompleteMention();
   } else if (e.key === 'Backspace') {
     chatState.inputText = chatState.inputText.slice(0, -1);
   } else if (e.key.length === 1 && chatState.inputText.length < 42) {
@@ -694,19 +821,20 @@ function _buildChatRows(ctx, lineW, startX, titleActive) {
       for (const line of _chatWrap(ctx, m.text, lineW))
         rows.push({ color: '#7898c8', text: line, x: startX });
     } else {
+      const mention = m.mention || false;  // highlight messages that @ you
       const colon = m.text.indexOf(':');
       if (colon > -1) {
         const namePart  = m.text.slice(0, colon + 1);
         const msgPart   = m.text.slice(colon + 2);
         const nameW     = ctx.measureText(namePart).width;
         const firstLine = _chatWrap(ctx, msgPart, lineW - nameW)[0];
-        rows.push({ namePart, nameW, msgPart: firstLine, x: startX });
+        rows.push({ namePart, nameW, msgPart: firstLine, x: startX, mention });
         const remainder = msgPart.slice(firstLine.length).replace(/^ /, '');
         if (remainder.length > 0)
-          rows.push({ color: '#e0e0e0', text: _chatWrap(ctx, remainder, lineW)[0], x: startX });
+          rows.push({ color: '#e0e0e0', text: _chatWrap(ctx, remainder, lineW)[0], x: startX, mention });
       } else {
         for (const line of _chatWrap(ctx, m.text, lineW))
-          rows.push({ color: '#e0e0e0', text: line, x: startX });
+          rows.push({ color: '#e0e0e0', text: line, x: startX, mention });
       }
     }
   }
@@ -714,7 +842,11 @@ function _buildChatRows(ctx, lineW, startX, titleActive) {
 }
 
 function _drawChatInput(ctx, lineW, startX, inputLine1Y, inputLine2Y) {
-  const promptW    = ctx.measureText('> ').width;
+  // On the Private tab the prompt shows the PM recipient ("→Name") so the user
+  // always sees who they're about to message; elsewhere it's the plain "> ".
+  const pmTarget = (CHAT_TABS[activeTab] === 'Private') ? _pmTarget() : null;
+  const promptStr = pmTarget ? ('→' + pmTarget + ' ') : '> ';
+  const promptW    = ctx.measureText(promptStr).width;
   const inputAvail = lineW - promptW;
   let splitIdx = chatState.inputText.length;
   for (let i = 1; i <= chatState.inputText.length; i++) {
@@ -723,7 +855,7 @@ function _drawChatInput(ctx, lineW, startX, inputLine1Y, inputLine2Y) {
   const line1Text = chatState.inputText.slice(0, splitIdx);
   const line2Text = chatState.inputText.slice(splitIdx);
   ctx.fillStyle = '#d8b858';
-  ctx.fillText('>', startX, inputLine1Y);
+  ctx.fillText(promptStr, startX, inputLine1Y);
   ctx.fillStyle = '#ffffff';
   ctx.fillText(line1Text, startX + promptW, inputLine1Y);
   ctx.fillText(line2Text, startX, inputLine2Y);
@@ -782,9 +914,9 @@ function _drawChatTextArea(ctx, curBoxY, curBoxH, battleFadeAlpha, titleActive) 
     const lineY = bottomY - (visible.length - 1 - i) * CHAT_LINE_H;
     if (r.namePart !== undefined) {
       ctx.fillStyle = '#d8b858'; ctx.fillText(r.namePart, r.x, lineY);
-      ctx.fillStyle = '#e0e0e0'; ctx.fillText(r.msgPart, r.x + r.nameW, lineY);
+      ctx.fillStyle = r.mention ? '#ffd84a' : '#e0e0e0'; ctx.fillText(r.msgPart, r.x + r.nameW, lineY);
     } else {
-      ctx.fillStyle = r.color; ctx.fillText(r.text, r.x, lineY);
+      ctx.fillStyle = r.mention ? '#ffd84a' : r.color; ctx.fillText(r.text, r.x, lineY);
     }
   }
   if (chatState.inputActive) {
@@ -803,10 +935,16 @@ function _drawChatScrollArrows(ctx, innerTop, innerBottom) {
   const blink = Math.floor(Date.now() / 500) & 1;
   if (!blink) return;
   const ax = CANVAS_W - 8 - 8; // 8px arrow tile inset from the chat box edge
-  if (canChatScrollUp() && ui.scrollArrowUp) {
+  // In Private select mode up/down pages conversations (a cycle), so show both
+  // arrows whenever there's more than one to page through. Elsewhere the
+  // arrows reflect row scrolling in the expanded log.
+  const pmMode = CHAT_TABS[activeTab] === 'Private' && tabSelectMode;
+  const showUp   = pmMode ? pmSessionCount() > 1 : canChatScrollUp();
+  const showDown = pmMode ? pmSessionCount() > 1 : canChatScrollDown();
+  if (showUp && ui.scrollArrowUp) {
     ctx.drawImage(ui.scrollArrowUp, ax, innerTop + 2);
   }
-  if (canChatScrollDown() && ui.scrollArrowDown) {
+  if (showDown && ui.scrollArrowDown) {
     ctx.drawImage(ui.scrollArrowDown, ax, innerBottom - 8 - 2);
   }
 }
