@@ -21,7 +21,7 @@ import { Sprite, DIR_DOWN, DIR_UP, DIR_LEFT, DIR_RIGHT } from './sprite.js';
 import { MOOGLE_GFX_ID, MOOGLE_PAL } from './sprite-init.js';
 import { BM_WALK_TOP, BM_WALK_BTM } from './job-sprites.js';
 import { OPENING_ELDER, OPENING_LEFT_ATTENDANT, OPENING_RIGHT_ATTENDANT } from './data/opening-scene.js';
-import { INN_ITEM_KEEPER } from './data/town-npcs.js';
+import { TOWN_NPCS } from './data/town-npcs.js';
 import { openShop } from './shop.js';
 import { waterSt } from './water-animation.js';
 import { battleSt } from './battle-state.js';
@@ -193,10 +193,13 @@ export function placeOpeningScene() {
   addSceneNpc('opening_right', 6, 4, OPENING_RIGHT_ATTENDANT);
 }
 
-// Map 8 (inn): the item-shop keeper stands behind the counter at (8,15),
-// one tile north at (8,14), facing south toward the player.
-export function placeInnNpcs() {
-  addSceneNpc('inn_item_keeper', 8, 14, INN_ITEM_KEEPER);
+// Town keepers (shop NPCs behind counters) — data-driven from TOWN_NPCS.
+// No-op for maps with no entry. Each keeper renders via the shared Sprite
+// class; counter-bound, so they idle-march facing down (never talk-faced).
+export function placeTownNpcs(mapId) {
+  const list = TOWN_NPCS.get(mapId);
+  if (!list) return;
+  for (const n of list) addSceneNpc(n.key, n.x, n.y, n.spec);
 }
 
 export function findNpcAt(tileX, tileY) {
