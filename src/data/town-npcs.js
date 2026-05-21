@@ -20,8 +20,8 @@ export const INN_ITEM_KEEPER = {
   animate: true,
 };
 
-// Ur weapon shop — keeper. Stands at map 5 (3,22), counter at (3,23), player
-// approaches from (3,24). Bundle 0x1E610: magenta hair (SP3), blue overalls
+// Ur weapon shop — keeper. Stands at map 5 (3,14), behind the ur_weapon
+// counter at (3,15). Bundle 0x1E610: magenta hair (SP3), blue overalls
 // (SP2). Idle-march facing down — counter-bound.
 export const WEAPON_KEEPER = {
   romOffset: 0x01E610,
@@ -35,5 +35,5 @@ export const WEAPON_KEEPER = {
 // through npc.js#placeTownNpcs → addSceneNpc → shared Sprite class.
 export const TOWN_NPCS = new Map([
   [8, [{ key: 'inn_item_keeper', x: 8, y: 14, spec: INN_ITEM_KEEPER }]],
-  [5, [{ key: 'weapon_keeper',   x: 3, y: 22, spec: WEAPON_KEEPER }]],
+  [5, [{ key: 'weapon_keeper',   x: 3, y: 14, spec: WEAPON_KEEPER }]],
 ]);
