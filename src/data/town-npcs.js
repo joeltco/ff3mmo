@@ -36,4 +36,7 @@ export const WEAPON_KEEPER = {
 export const TOWN_NPCS = new Map([
   [8, [{ key: 'inn_item_keeper', x: 8, y: 14, spec: INN_ITEM_KEEPER }]],
   [5, [{ key: 'weapon_keeper',   x: 3, y: 14, spec: WEAPON_KEEPER }]],
+  // Armor keeper reuses the weapon keeper's sprite (same bundle 0x1E610),
+  // behind the ur_armor counter at (3,5).
+  [4, [{ key: 'armor_keeper',    x: 3, y:  4, spec: WEAPON_KEEPER }]],
 ]);
