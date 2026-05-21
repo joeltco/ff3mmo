@@ -57,21 +57,40 @@ let rosterBattleFading    = 'none'; // 'none'|'out'|'in'
 let _getLocState = () => ({ onWorldMap: false, currentMapId: 114 });
 export function setLocationGetter(fn) { _getLocState = fn; }
 
-export function getPlayerLocation() {
-  const { onWorldMap, currentMapId } = _getLocState();
-  if (onWorldMap) return 'world';
-  if (currentMapId === 114) return 'ur';
-  if (currentMapId === 1004) return 'crystal';
-  if (currentMapId >= 1000 && currentMapId < 1004) return 'cave-' + (currentMapId - 1000);
-  return 'ur';
-}
+// Ur interior building map IDs → roster location key. Each room is its own
+// roster location so players group by the room they're standing in (inn,
+// tavern, well, each shop, each elder/secret-house floor) instead of all
+// being lumped under one unified 'ur'. Keys stay ≤16 chars — ws-presence.js
+// clamps the wire `loc` to 16 (and prefix 'ur-' future-proofs against other
+// towns' interiors, e.g. a later 'kazus-inn').
+const UR_ROOM_LOC = new Map([
+  [2,   'ur-secret'],   // secret house (ground floor)
+  [1,   'ur-secret2'],  // secret room (secret house, upstairs)
+  [3,   'ur-magic'],    // white-magic shop
+  [4,   'ur-armor'],    // armor shop
+  [5,   'ur-weapon'],   // weapon shop
+  [6,   'ur-elder1'],   // elder's house (ground floor)
+  [7,   'ur-elder2'],   // elder's house (upstairs)
+  [8,   'ur-inn'],      // inn (ground floor)
+  [9,   'ur-tavern'],   // tavern (inn, upstairs)
+  [147, 'ur-well'],     // well
+]);
 
+// Single source for "what roster location is this map?". getPlayerLocation()
+// delegates here so the live location and the transition-change check
+// (map-triggers.js) can never drift apart.
 export function rosterLocForMapId(mapId) {
   if (mapId === 'world') return 'world';
   if (mapId === 114) return 'ur';
   if (mapId === 1004) return 'crystal';
   if (mapId >= 1000 && mapId < 1004) return 'cave-' + (mapId - 1000);
-  return 'ur';
+  return UR_ROOM_LOC.get(mapId) || 'ur';
+}
+
+export function getPlayerLocation() {
+  const { onWorldMap, currentMapId } = _getLocState();
+  if (onWorldMap) return 'world';
+  return rosterLocForMapId(currentMapId);
 }
 
 export function getRosterPlayers() {
