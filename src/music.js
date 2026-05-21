@@ -89,38 +89,8 @@ let ff1Track = -1;
 const BUF_SIZE = 4096; // samples per channel per callback (music, ~85ms at 48kHz)
 const SFX_BUF_SIZE = 2048;  // smaller buffer for SFX (~42ms latency at 48kHz)
 
-// AudioContext is shared on `window` so the dynamically-imported debug panel
-// (which can resolve to a SEPARATE music.js module instance via the cache-bust
-// query) reuses the game's one context instead of seeing audioCtx=null.
-// webkit fallback covers older mobile Safari.
-function _ensureAudioCtx() {
-  if (typeof window === 'undefined') return null;
-  if (window.__ff3AudioCtx) { audioCtx = window.__ff3AudioCtx; return audioCtx; }
-  const AC = window.AudioContext || window.webkitAudioContext;
-  if (!AC) return null;
-  audioCtx = new AC();
-  window.__ff3AudioCtx = audioCtx;
-  return audioCtx;
-}
-
-// Resume the shared context on the first user interaction (autoplay policy).
-if (typeof window !== 'undefined') {
-  const _kick = () => { const c = _ensureAudioCtx(); if (c && c.state === 'suspended') c.resume(); };
-  window.addEventListener('pointerdown', _kick);
-  window.addEventListener('keydown', _kick);
-  window.addEventListener('touchstart', _kick);
-}
-
 export function initMusic(romData) {
   nsfData = buildNSF(romData);
-  // Expose THIS (working) instance's audio API on window. The debug panel is
-  // dynamically imported and can resolve to a separate music.js instance whose
-  // nsfData is null — so it must call the game instance's functions, not its
-  // own. initMusic only runs in the game instance, so this is always the live
-  // one (the debug instance never overwrites it).
-  if (typeof window !== 'undefined') {
-    window.__ff3music = { playTrack, stopMusic, playSFX, stopSFX, audioStatus, resumeAudio };
-  }
 }
 
 export function playTrack(trackId) {
@@ -130,7 +100,9 @@ export function playTrack(trackId) {
   currentTrack = trackId;
 
   // Create AudioContext on first use (browser autoplay policy)
-  if (!audioCtx) _ensureAudioCtx();
+  if (!audioCtx) {
+    audioCtx = new AudioContext();
+  }
   if (!gainNode) {
     gainNode = audioCtx.createGain();
     gainNode.connect(audioCtx.destination);
@@ -237,7 +209,9 @@ export function playSFX(sfxId) {
   if (typeof Module === 'undefined' || !Module.ccall) return;
 
   // Ensure AudioContext exists
-  if (!audioCtx) _ensureAudioCtx();
+  if (!audioCtx) {
+    audioCtx = new AudioContext();
+  }
   if (audioCtx.state === 'suspended') {
     audioCtx.resume();
   }
@@ -306,37 +280,6 @@ export function stopSFX() {
   sfxMuted = true;  // instant silence — no expensive gme_seek
 }
 
-// True once the one-shot SFX channel has finished (or isn't playing). The
-// bed/rest scene uses this to know when the sleep jingle is done.
-export function isSFXEnded() {
-  if (!sfxEmu || typeof Module === 'undefined' || !Module.ccall) return true;
-  return Module.ccall('gme_track_ended', 'number', ['number'], [sfxEmu]) === 1;
-}
-
-// Diagnostics for the debug NSF tab — shows why audio might be silent.
-export function audioStatus() {
-  return {
-    module: (typeof Module !== 'undefined' && !!Module.ccall),
-    nsf: !!nsfData,
-    ctx: audioCtx ? audioCtx.state : 'none',
-    track: currentTrack,
-  };
-}
-
-// Ensure the AudioContext exists and is running (browser autoplay needs a
-// user gesture — call this from a click handler before playing). Returns the
-// resulting state, or an error string the debug tab can surface.
-export function resumeAudio() {
-  try {
-    const c = _ensureAudioCtx();
-    if (!c) return 'no-AudioContext-ctor';
-    if (c.state === 'suspended') c.resume();
-    return c.state;
-  } catch (e) {
-    return 'error: ' + (e && e.message ? e.message : String(e));
-  }
-}
-
 // --- FF1 music (third emulator) ---
 
 export function initFF1Music(romData) {
@@ -349,7 +292,9 @@ export function playFF1Track(trackId) {
   if (trackId === ff1Track) return;
   ff1Track = trackId;
 
-  if (!audioCtx) _ensureAudioCtx();
+  if (!audioCtx) {
+    audioCtx = new AudioContext();
+  }
   if (audioCtx.state === 'suspended') {
     audioCtx.resume();
   }

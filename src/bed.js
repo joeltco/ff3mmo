@@ -17,7 +17,7 @@
 
 import { ps } from './player-stats.js';
 import { saveSlotsToDB } from './save-state.js';
-import { pauseMusic, resumeMusic } from './music.js';
+import { pauseMusic, resumeMusic, playSFX, stopSFX } from './music.js';
 import { ui } from './ui-state.js';
 import { drawText, measureText } from './font-renderer.js';
 import { NES_SYSTEM_PALETTE } from './tile-decoder.js';
@@ -29,6 +29,7 @@ const INNER_W = HUD_VIEW_W - 16, INNER_H = HUD_VIEW_H - 16;
 
 const FADE_MS  = 600;     // palette ramp duration (≈36 NTSC frames in the capture)
 const SLEEP_MS = 8000;    // dark hold before the wake prompt
+const REST_JINGLE = 0;    // inn rest tune — first track in the FF3 NSF playlist
 
 const PROMPT     = 'Press any key';
 const PROMPT_PAL = [0x0F, 0x10, 0x0F, 0x30];
@@ -72,6 +73,7 @@ export function openBed() {
   bedSt.holdCanvas = null;
   bedSt.healed = false;
   pauseMusic();
+  playSFX(REST_JINGLE);   // one-shot on the SFX channel so it plays once, no loop
   return true;
 }
 
@@ -80,6 +82,7 @@ function _close() {
   bedSt.timer = 0;
   bedSt.holdCanvas = null;
   bedSt.healed = false;
+  stopSFX();        // cut the jingle if it's still ringing on wake
   resumeMusic();
 }
 
