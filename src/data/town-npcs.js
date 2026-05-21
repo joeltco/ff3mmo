@@ -31,10 +31,24 @@ export const WEAPON_KEEPER = {
   animate: true,
 };
 
+// Ur inn — innkeeper (the woman). Stands at map 8 (3,14). Bundle 0x1E010 (same
+// walk-sprite shape as the opening left attendant) recolored by its own capture
+// palette: magenta hair (SP3), blue dress (SP2). Idle-march facing down.
+export const INN_KEEPER = {
+  romOffset: 0x01E010,
+  palTop: [0x1A, 0x0F, 0x15, 0x36], // SP3 — head / hair
+  palBtm: [0x1A, 0x0F, 0x12, 0x36], // SP2 — dress
+  dir: DIR_DOWN,
+  animate: true,
+};
+
 // Map ID → keepers to place on that map. One render path: every entry goes
 // through npc.js#placeTownNpcs → addSceneNpc → shared Sprite class.
 export const TOWN_NPCS = new Map([
-  [8, [{ key: 'inn_item_keeper', x: 8, y: 14, spec: INN_ITEM_KEEPER }]],
+  [8, [
+    { key: 'inn_item_keeper', x: 8, y: 14, spec: INN_ITEM_KEEPER },
+    { key: 'inn_keeper',      x: 3, y: 14, spec: INN_KEEPER },
+  ]],
   [5, [{ key: 'weapon_keeper',   x: 3, y: 14, spec: WEAPON_KEEPER }]],
   // Armor keeper reuses the weapon keeper's sprite (same bundle 0x1E610),
   // behind the ur_armor counter at (3,5).
