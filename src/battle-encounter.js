@@ -3,7 +3,7 @@
 import { battleSt } from './battle-state.js';
 import { forceCloseMsgBox } from './message-box.js';
 import { MONSTERS } from './data/monsters.js';
-import { ENCOUNTERS } from './data/encounters.js';
+import { ENCOUNTERS, RATE_STEPS } from './data/encounters.js';
 import { GOBLIN_HIT_RATE } from './battle-math.js';
 import { SFX, playSFX } from './music.js';
 import { TRACKS } from './music.js';
@@ -19,6 +19,23 @@ const TILE_SIZE = 16;
 let _resetBattleVars = () => {};
 export function initBattleEncounter({ resetBattleVars }) { _resetBattleVars = resetBattleVars; }
 
+// Resolve the encounter zone for the player's current position. Single source
+// for both the step-threshold (zone.rate) in tickRandomEncounter and the
+// formation pick when an encounter fires. Matches the gate in
+// tickRandomEncounter: world-map grass splits into valley/wild by bounding
+// box; an indoor flood-fill patch uses its own zone (e.g. the Ur dark-tile
+// patch); otherwise the current Altar Cave floor.
+function currentEncounterZoneKey() {
+  if (mapSt.onWorldMap) {
+    const tileX = Math.floor(mapSt.worldX / TILE_SIZE);
+    const tileY = Math.floor(mapSt.worldY / TILE_SIZE);
+    const inValley = tileX >= 93 && tileX <= 96 && tileY >= 34 && tileY <= 44;
+    return inValley ? 'grasslands_valley' : 'grasslands_wild';
+  }
+  if (mapSt.encounterPatch && mapSt.encounterPatchZone) return mapSt.encounterPatchZone;
+  return ['altar_cave_f1', 'altar_cave_f2', 'altar_cave_f3', 'altar_cave_f4'][mapSt.dungeonFloor] || 'altar_cave_f1';
+}
+
 // ── Random encounter step counter ──────────────────────────────────────────
 export function tickRandomEncounter() {
   if (battleSt.battleState !== 'none') return false;
@@ -29,9 +46,12 @@ export function tickRandomEncounter() {
   const inPatch = mapSt.encounterPatch && mapSt.encounterPatch.has(tileY * 32 + tileX);
   if (!inDungeon && !onGrass && !inPatch) return false;
   mapSt.encounterSteps++;
-  const threshold = (onGrass || inPatch)
-    ? 20 + Math.floor(Math.random() * 20)
-    : 15 + Math.floor(Math.random() * 15);
+  // Cadence is data-driven: each zone's `rate` maps to a step range via
+  // RATE_STEPS. Lower threshold = more frequent (e.g. the Ur patch's
+  // grasslands_wild is rate 'high' = 2x the open-grass rate).
+  const zone = ENCOUNTERS.get(currentEncounterZoneKey());
+  const r = (zone && RATE_STEPS[zone.rate]) || RATE_STEPS.normal;
+  const threshold = r.base + Math.floor(Math.random() * r.spread);
   if (mapSt.encounterSteps >= threshold) {
     mapSt.encounterSteps = 0;
     _triggerEncounterWithPVPCheck();
@@ -90,24 +110,9 @@ export function startRandomEncounter() {
   // chest, NPC dialogue, etc.) so it doesn't bleed through the battle wipe.
   forceCloseMsgBox();
 
-  // World-map encounter zone is split by region:
-  //   - Ur valley (x=93..96, y=34..44, ~31 walkable tiles between Altar Cave
-  //     and the temporary choke at 95,45) → 'grasslands_valley' (Goblins only)
-  //   - Anywhere else on the world map → 'grasslands_wild' (Werewolves + Bees)
-  // When the choke is removed the wild zone becomes reachable; until then only
-  // the valley sees encounters because that's the only place the player can walk.
-  let zoneKey;
-  if (mapSt.onWorldMap) {
-    const tileX = Math.floor(mapSt.worldX / TILE_SIZE);
-    const tileY = Math.floor(mapSt.worldY / TILE_SIZE);
-    const inValley = tileX >= 93 && tileX <= 96 && tileY >= 34 && tileY <= 44;
-    zoneKey = inValley ? 'grasslands_valley' : 'grasslands_wild';
-  } else if (mapSt.encounterPatch && mapSt.encounterPatchZone) {
-    // Indoor map flood-filled encounter patch (e.g. Ur dark-tile patch).
-    zoneKey = mapSt.encounterPatchZone;
-  } else {
-    zoneKey = ['altar_cave_f1','altar_cave_f2','altar_cave_f3','altar_cave_f4'][mapSt.dungeonFloor] || 'altar_cave_f1';
-  }
+  // Zone selection (valley vs wild by bounding box, indoor patch, or cave
+  // floor) is shared with the rate lookup — see currentEncounterZoneKey.
+  const zoneKey = currentEncounterZoneKey();
   const zone = ENCOUNTERS.get(zoneKey);
   const formations = zone ? zone.formations : [[{ id: 0x00, min: 1, max: 3 }]];
   const formation = formations[Math.floor(Math.random() * formations.length)];
