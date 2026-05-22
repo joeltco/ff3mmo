@@ -537,14 +537,14 @@
 
   <div id="rom-picker-wrap" style="display:none; text-align:center">
     <div id="rom-picker">
-      <label for="rom-file">Load FF3 ROM (.nes)</label>
-      <input type="file" id="rom-file">
+      <label for="rom-file">Load FF3 ROM (.nes / .zip)</label>
+      <input type="file" id="rom-file" accept=".nes,.zip,application/zip">
       <br><br>
-      <label for="rom-file-ff1">Load FF1 ROM (.nes)</label>
-      <input type="file" id="rom-file-ff1">
+      <label for="rom-file-ff1">Load FF1 ROM (.nes / .zip)</label>
+      <input type="file" id="rom-file-ff1" accept=".nes,.zip,application/zip">
       <br><br>
-      <label for="rom-file-ff2">Load FF2 ROM (.nes)</label>
-      <input type="file" id="rom-file-ff2">
+      <label for="rom-file-ff2">Load FF2 ROM (.nes / .zip)</label>
+      <input type="file" id="rom-file-ff2" accept=".nes,.zip,application/zip">
     </div>
     <p id="rom-hint">
       You supply your own ROMs — the site doesn't distribute them.<br>
@@ -665,6 +665,7 @@
   <script type="module">
     import { init, loadROM, loadFF1ROM, loadFF2ROM, getMobileInputMode } from './src/main.js';
     import { isMobile } from './src/ui-state.js';
+    import { extractRomFromZip } from './src/zip-loader.js';
 
     // Surface the runtime touch-detection to CSS so the mobile-controls
     // display rule can target it. Catches tablets / landscape phones that
@@ -1004,7 +1005,12 @@
     document.getElementById('rom-file')?.addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      ff3Buffer = await file.arrayBuffer();
+      try {
+        ff3Buffer = await extractRomFromZip(await file.arrayBuffer());
+      } catch (err) {
+        document.getElementById('rom-info').textContent = `Error: ${err.message}`;
+        return;
+      }
       cacheROM('ff3', ff3Buffer).catch(() => {});
       document.getElementById('rom-info').textContent = _romStatusText();
       tryLaunch();
@@ -1013,7 +1019,12 @@
     document.getElementById('rom-file-ff1')?.addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      ff1Buffer = await file.arrayBuffer();
+      try {
+        ff1Buffer = await extractRomFromZip(await file.arrayBuffer());
+      } catch (err) {
+        document.getElementById('rom-info').textContent = `Error: ${err.message}`;
+        return;
+      }
       cacheROM('ff1', ff1Buffer).catch(() => {});
       document.getElementById('rom-info').textContent = _romStatusText();
       tryLaunch();
@@ -1022,7 +1033,12 @@
     document.getElementById('rom-file-ff2')?.addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      ff2Buffer = await file.arrayBuffer();
+      try {
+        ff2Buffer = await extractRomFromZip(await file.arrayBuffer());
+      } catch (err) {
+        document.getElementById('rom-info').textContent = `Error: ${err.message}`;
+        return;
+      }
       cacheROM('ff2', ff2Buffer).catch(() => {});
       document.getElementById('rom-info').textContent = _romStatusText();
       tryLaunch();
