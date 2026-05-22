@@ -103,6 +103,52 @@ setNetPVPEncounterNoneHandler(() => {
 });
 
 // ── Spawn encounter monsters ───────────────────────────────────────────────
+// Build one encounter-monster object from a monster id. Shared by random
+// encounters and the chest mimic so the combat-stat shape stays in one place.
+function _makeEncounterMonster(id) {
+  const mData = MONSTERS.get(id) || MONSTERS.get(0x00);
+  return {
+    monsterId: id,
+    hp: mData.hp, maxHP: mData.hp,
+    atk: mData.atk, attackRoll: mData.attackRoll || 1,
+    def: mData.def, evade: mData.evade || 0,
+    mdef: mData.mdef || 0,
+    exp: mData.exp, gil: mData.gil || 0,
+    hitRate: mData.hitRate || GOBLIN_HIT_RATE,
+    spAtkRate: mData.spAtkRate || 0,
+    attacks: mData.attacks || null,
+    level: mData.level || 1,
+    agi: mData.level || 1,
+    statusAtk: mData.statusAtk || null,
+    atkElem: mData.atkElem || null,
+    weakness: mData.weakness || null,
+    resist: mData.resist || null,
+    statusResist: mData.statusResist || null,
+    spiritInt: mData.spiritInt || 0,
+    status: createStatusState(),
+  };
+}
+
+// Chest mimic — one random monster from the current floor's encounter pool,
+// using the normal battle flash. Called by map-triggers when a chest rolls the
+// `monster` loot tier.
+export function startChestMimic() {
+  battleSt.isRandomEncounter = true;
+  inputSt.battleActionCount = 0;
+  forceCloseMsgBox();
+  const zone = ENCOUNTERS.get(currentEncounterZoneKey());
+  const formations = zone ? zone.formations : [[{ id: 0x00, min: 1, max: 1 }]];
+  const ids = [];
+  for (const f of formations) for (const g of f) if (!ids.includes(g.id)) ids.push(g.id);
+  const id = ids.length ? ids[Math.floor(Math.random() * ids.length)] : 0x00;
+  battleSt.encounterMonsters = [_makeEncounterMonster(id)];
+  battleSt.preBattleTrack = TRACKS.CRYSTAL_CAVE;
+  _resetBattleVars();
+  battleSt.battleState = 'flash-strobe';
+  battleSt.battleTimer = 0;
+  playSFX(SFX.BATTLE_SWIPE);
+}
+
 export function startRandomEncounter() {
   battleSt.isRandomEncounter = true;
   inputSt.battleActionCount = 0;
@@ -130,27 +176,7 @@ export function startRandomEncounter() {
     const count = group.min + Math.floor(Math.random() * (group.max - group.min + 1));
     for (let i = 0; i < count; i++) {
       if (battleSt.encounterMonsters.length >= 4) break;
-      const mData = MONSTERS.get(group.id) || MONSTERS.get(0x00);
-      battleSt.encounterMonsters.push({
-        monsterId: group.id,
-        hp: mData.hp, maxHP: mData.hp,
-        atk: mData.atk, attackRoll: mData.attackRoll || 1,
-        def: mData.def, evade: mData.evade || 0,
-        mdef: mData.mdef || 0,
-        exp: mData.exp, gil: mData.gil || 0,
-        hitRate: mData.hitRate || GOBLIN_HIT_RATE,
-        spAtkRate: mData.spAtkRate || 0,
-        attacks: mData.attacks || null,
-        level: mData.level || 1,
-        agi: mData.level || 1,
-        statusAtk: mData.statusAtk || null,
-        atkElem: mData.atkElem || null,
-        weakness: mData.weakness || null,
-        resist: mData.resist || null,
-        statusResist: mData.statusResist || null,
-        spiritInt: mData.spiritInt || 0,
-        status: createStatusState(),
-      });
+      battleSt.encounterMonsters.push(_makeEncounterMonster(group.id));
     }
     if (battleSt.encounterMonsters.length >= 4) break;
   }

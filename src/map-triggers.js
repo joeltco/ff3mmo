@@ -10,6 +10,8 @@ import { clearDungeonCache } from './dungeon-generator.js';
 import { transSt, topBoxSt, startWipeTransition } from './transitions.js';
 import { resetIndoorWaterCache } from './water-animation.js';
 import { showMsgBox } from './message-box.js';
+import { startChestMimic } from './battle-encounter.js';
+import { _nameToBytes } from './text-utils.js';
 import { POND_RESTORED } from './data/strings.js';
 import { openBed } from './bed.js';
 import { ps, grantGil } from './player-stats.js';
@@ -48,6 +50,7 @@ const LOOT_POOLS = {
     { weight: 30, pool: [GIL(20, 60)] },
     { weight: 15, pool: [0x62] },                                 // Leather Cap
     { weight:  3, pool: [0xE3, 0xE1] },                           // Cure scroll, Ice scroll (rare)
+    { weight: 12, monster: true },                                // Chest mimic — 1 random monster
   ],
   1001: [ // Altar Cave F2
     { weight: 12, pool: [0xA6] },                                 // Potion (rarer — was 42)
@@ -55,6 +58,7 @@ const LOOT_POOLS = {
     { weight: 20, pool: [0x62, 0x1F, 0x06, 0x0E] },               // Leather Cap, Dagger, Nunchuck, Staff
     { weight:  5, pool: [0x58] },                                 // Leather Shield
     { weight:  3, pool: [0xE3, 0xE1] },                           // Cure scroll, Ice scroll (rare)
+    { weight: 12, monster: true },                                // Chest mimic — 1 random monster
   ],
   1002: [ // Altar Cave F3
     { weight: 9, pool: [0xA6] },                                  // Potion (rarer — was 32)
@@ -62,6 +66,7 @@ const LOOT_POOLS = {
     { weight: 25, pool: [0x58, 0x1F] },                           // Leather Shield, Dagger
     { weight: 10, pool: [0x73] },                                 // Leather Armor
     { weight:  3, pool: [0xE3, 0xE1] },                           // Cure scroll, Ice scroll (rare)
+    { weight: 12, monster: true },                                // Chest mimic — 1 random monster
   ],
   1003: [ // Altar Cave F4
     { weight: 6, pool: [0xA6] },                                  // Potion (rarer — was 22)
@@ -69,6 +74,7 @@ const LOOT_POOLS = {
     { weight: 25, pool: [0x73, 0x1F] },                           // Leather Armor, Dagger
     { weight: 20, pool: [0x8B, 0x24] },                           // Bronze Bracers (mage arm), Longsword
     { weight:  3, pool: [0xE3, 0xE1] },                           // Cure scroll, Ice scroll (rare)
+    { weight: 12, monster: true },                                // Chest mimic — 1 random monster
   ],
 };
 const DEFAULT_LOOT = LOOT_POOLS[1000];
@@ -79,6 +85,7 @@ function rollLootEntry(mapId) {
   let roll = Math.random() * total;
   let tier = tiers[0];
   for (const t of tiers) { if (roll < t.weight) { tier = t; break; } roll -= t.weight; }
+  if (tier.monster) return { monster: true };   // chest mimic — caller starts a battle
   return tier.pool[Math.floor(Math.random() * tier.pool.length)];
 }
 
@@ -162,7 +169,22 @@ export function expireResettableChests(mapId) {
 export function handleChest(facedX, facedY) {
   _consumeTile(facedX, facedY, OPENED_CHEST);
   _stampChestTime(facedX, facedY);
+  // v1.7.454 — patch the one changed metatile instead of rebuilding the
+  // entire MapRenderer (was a ~50-200ms synchronous canvas-rebuild that
+  // produced a visible screen flicker on chest open in cave maps).
+  if (mapSt.mapRenderer) mapSt.mapRenderer.redrawMetatileAt(facedX, facedY);
+  resetIndoorWaterCache();
+  saveSlotsToDB();   // chest is consumed regardless of outcome
+
   const entry = rollLootEntry(mapSt.currentMapId);
+
+  // Chest mimic — "Monster appeared!", then (on dismiss) the normal battle
+  // flash + one random monster from this floor's pool.
+  if (entry && entry.monster) {
+    showMsgBox(_nameToBytes('Monster appeared!'), () => startChestMimic());
+    return;
+  }
+
   let msg;
   if (typeof entry === 'object' && entry.gil) {
     const [min, max] = entry.gil;
@@ -175,12 +197,6 @@ export function handleChest(facedX, facedY) {
   }
   playSFX(SFX.TREASURE);
   showMsgBox(msg);
-  saveSlotsToDB();
-  // v1.7.454 — patch the one changed metatile instead of rebuilding the
-  // entire MapRenderer (was a ~50-200ms synchronous canvas-rebuild that
-  // produced a visible screen flicker on chest open in cave maps).
-  if (mapSt.mapRenderer) mapSt.mapRenderer.redrawMetatileAt(facedX, facedY);
-  resetIndoorWaterCache();
 }
 
 export function handleSecretWall(facedX, facedY) {
