@@ -5,6 +5,7 @@ import { battleSt, getEnemyHP, setEnemyHP, BOSS_MAX_HP,
          BATTLE_SHAKE_MS, MONSTER_DEATH_MS, BATTLE_TEXT_STEPS, BATTLE_TEXT_STEP_MS } from './battle-state.js';
 import { inputSt } from './input-handler.js';
 import { sprite } from './player-sprite.js';
+import { battleSpeedMult } from './settings.js';
 import { pvpSt, resetPVPState, updatePVPBattle } from './pvp.js';
 import { hudSt } from './hud-state.js';
 import { mapSt } from './map-state.js';
@@ -972,6 +973,10 @@ const _updatePoisonTick = updatePoisonTick;
 
 export function updateBattle(dt) {
   if (battleSt.battleState === 'none') return;
+  // Battle Speed (Options): scale the whole battle clock so timers, message
+  // holds, and animations all pace together. Solo-only — PvP/co-op are disabled,
+  // so there's no wire-sync that depends on wall-clock dt here.
+  dt = dt * battleSpeedMult();
   battleSt.battleTimer += Math.min(dt, 33);
   _updateBattleMsg(dt);
   if (pvpSt.isPVPBattle) { updatePVPBattle(dt); return; }

@@ -42,3 +42,13 @@ export function volGain(step) {
   const s = Math.max(0, Math.min(VOL_MAX, step | 0));
   return s / VOL_MAX;
 }
+
+// Battle speed — scales the battle update dt. >1 = faster (timers/messages/
+// animations all reach their thresholds sooner). Index by battleSpeed setting
+// (0=slow, 1=normal, 2=fast). Normal is 1.0 so default play is unchanged.
+export const BATTLE_SPEED_LABELS = ['Slow', 'Norm', 'Fast'];
+const BATTLE_SPEED_MULT = [0.65, 1.0, 1.6];
+
+export function battleSpeedMult() {
+  return BATTLE_SPEED_MULT[getSetting('battleSpeed')] ?? 1.0;
+}

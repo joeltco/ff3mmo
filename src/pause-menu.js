@@ -9,7 +9,7 @@ import { _nameToBytes } from './text-utils.js';
 import { getItemNameClean, getItemNameShrines, getSpellNameClean, getSpellNameShrines } from './text-decoder.js';
 import { SPELLS, getSpellMPCost, getCastableKnownSpells, canLearnSpell } from './data/spells.js';
 import { stopFF1Music, resumeMusic, playFF1Track, FF1_TRACKS, playSFX, SFX, pauseMusic, applyMusicVolume, applySfxVolume } from './music.js';
-import { getSetting, setSetting, VOL_MAX } from './settings.js';
+import { getSetting, setSetting, VOL_MAX, BATTLE_SPEED_LABELS } from './settings.js';
 import { PAUSE_ITEMS } from './data/strings.js';
 import { selectCursor, saveSlots, saveSlotsToDB } from './save-state.js';
 import { ui } from './ui-state.js';
@@ -496,7 +496,7 @@ function _toggleCrt() {
 }
 
 const OPT_ROW_H = 16;       // vertical pitch between option rows
-const OPT_ROW_COUNT = 4;    // Color, Music, SFX, CRT (text/battle speed land in Slice C)
+const OPT_ROW_COUNT = 5;    // Color, Music, SFX, Battle, CRT
 
 // Volume bar — VOL_MAX cells, `level` filled. Drawn right-aligned at valRx.
 function _drawVolBar(ctx, valRx, y, level, fadeStep) {
@@ -544,11 +544,17 @@ function _drawPauseOptions(ctx) {
   drawText(ctx, tx, y2, _nameToBytes('SFX'), fadedPal);
   _drawVolBar(ctx, valRx, y2, getSetting('sfxVol'), fadeStep);
 
-  // Row 3 — CRT toggle
+  // Row 3 — Battle speed
   const y3 = y0 + OPT_ROW_H * 3;
-  drawText(ctx, tx, y3, OPT_CRT_LABEL, fadedPal);
+  drawText(ctx, tx, y3, _nameToBytes('BATTLE'), fadedPal);
+  const bsBytes = _nameToBytes(BATTLE_SPEED_LABELS[getSetting('battleSpeed')] || 'Norm');
+  drawText(ctx, valRx - bsBytes.length * 8, y3, bsBytes, fadedPal);
+
+  // Row 4 — CRT toggle
+  const y4 = y0 + OPT_ROW_H * 4;
+  drawText(ctx, tx, y4, OPT_CRT_LABEL, fadedPal);
   const valBytes = _isCrtOn() ? OPT_ON : OPT_OFF;
-  drawText(ctx, valRx - valBytes.length * 8, y3, valBytes, fadedPal);
+  drawText(ctx, valRx - valBytes.length * 8, y4, valBytes, fadedPal);
 
   if (drawCursorFaded) {
     drawCursorFaded(px + 8, (y0 - 4) + pauseSt.optCursor * OPT_ROW_H, fadeStep);
@@ -1204,6 +1210,13 @@ function _changeVolume(key, dir, apply) {
   playSFX(SFX.CURSOR);                       // also lets the player hear the new SFX level
 }
 
+function _changeBattleSpeed(dir) {
+  const next = Math.max(0, Math.min(2, getSetting('battleSpeed') + dir));
+  if (next === getSetting('battleSpeed')) return;
+  setSetting('battleSpeed', next);
+  playSFX(SFX.CURSOR);
+}
+
 function _pauseInputOptions() {
   if (pauseSt.state !== 'options') return false;
   const k = keys;
@@ -1220,6 +1233,9 @@ function _pauseInputOptions() {
   } else if (pauseSt.optCursor === 2) {    // SFX volume
     if (left)  { k['ArrowLeft'] = false;  _changeVolume('sfxVol', -1, applySfxVolume); }
     if (right) { k['ArrowRight'] = false; _changeVolume('sfxVol', 1, applySfxVolume); }
+  } else if (pauseSt.optCursor === 3) {    // Battle speed (Slow/Norm/Fast)
+    if (left)  { k['ArrowLeft'] = false;  _changeBattleSpeed(-1); }
+    if (right) { k['ArrowRight'] = false; _changeBattleSpeed(1); }
   } else {                                  // CRT — either direction or Z toggles
     if (left || right) { k['ArrowLeft'] = false; k['ArrowRight'] = false; _toggleCrt(); playSFX(SFX.CONFIRM); }
     if (_zPressed()) { _toggleCrt(); playSFX(SFX.CONFIRM); }
