@@ -329,29 +329,23 @@ function _drawRosterRow(p, i, panelTop) {
     ui.ctx.drawImage(sweat, HUD_RIGHT_X + 8, rowY + 8 - 3);
   }
 
-  // Online badge — small green dot at top-right of the portrait box for any
-  // real wire-presence player (`isReal: true` from net.js snapshot/join).
-  // Solves the "fakes hidden + empty roster looks broken" first-impression
-  // problem in v1.7.386+. NES-faithful: 3×3 fillRect in NES-palette green
-  // (#5cdc14 = $2A), fades with the row.
-  if (p.isReal && fadeStep < ROSTER_FADE_STEPS) {
-    ui.ctx.fillStyle = fadeStep === 0 ? '#5cdc14' : fadeStep === 1 ? '#3a9210' : '#1f4f08';
-    ui.ctx.fillRect(HUD_RIGHT_X + 32 - 5, rowY + 2, 3, 3);
+  // Name. For a real player currently in combat, blink the name to a red
+  // "Battle!" (replaces the old red in-battle dot). The green online dot was
+  // dropped — being in the roster already implies the player is online.
+  // `inBattle` flag is wire-pushed by main.js's profile builder.
+  const inBattle = p.isReal && p.inBattle && fadeStep < ROSTER_FADE_STEPS;
+  const showBattle = inBattle && (Math.floor(Date.now() / 450) & 1); // ~450ms blink
+  if (showBattle) {
+    const battlePal = [0x0F, 0x10, 0x0F, 0x16];  // red letters (AWJ color 3)
+    for (let s = 0; s < fadeStep; s++) battlePal[3] = nesColorFade(battlePal[3]);
+    const bBytes = _nameToBytes('Battle!');
+    drawText(ui.ctx, HUD_RIGHT_X + HUD_RIGHT_W - 8 - measureText(bBytes), rowY + 8, bBytes, battlePal);
+  } else {
+    const namePal = [0x0F, 0x10, 0x0F, 0x30];
+    for (let s = 0; s < fadeStep; s++) namePal[3] = nesColorFade(namePal[3]);
+    const nameBytes = _nameToBytes(p.name);
+    drawText(ui.ctx, HUD_RIGHT_X + HUD_RIGHT_W - 8 - measureText(nameBytes), rowY + 8, nameBytes, namePal);
   }
-  // In-battle badge — small red dot at top-left of the portrait box for
-  // any real wire-presence player who's currently in combat (inBattle
-  // flag wire-pushed by main.js profile builder). Presence-only as of
-  // v1.7.500 — the "Assist" roster action it once fed was removed.
-  if (p.isReal && p.inBattle && fadeStep < ROSTER_FADE_STEPS) {
-    ui.ctx.fillStyle = fadeStep === 0 ? '#f83800' : fadeStep === 1 ? '#a32200' : '#5e1300';
-    ui.ctx.fillRect(HUD_RIGHT_X + 2, rowY + 2, 3, 3);
-  }
-
-  const namePal = [0x0F, 0x10, 0x0F, 0x30];
-  for (let s = 0; s < fadeStep; s++) namePal[3] = nesColorFade(namePal[3]);
-  const nameBytes = _nameToBytes(p.name);
-  const nameW = measureText(nameBytes);
-  drawText(ui.ctx, HUD_RIGHT_X + HUD_RIGHT_W - 8 - nameW, rowY + 8, nameBytes, namePal);
 
   const panelLeft = HUD_RIGHT_X + 32 + 8;
   const _searchingHere = isSearchingFor(p);
