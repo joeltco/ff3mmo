@@ -48,7 +48,7 @@ export const SFX = {
   SIGHT:        0x81,  // SFX $40 + $41 — Sight scan/projectile impact. UNVERIFIED: was inferred from a $7F49=$40 residual in the f5887 capture, but post-1.7.111 we know that residual byte is the audio engine's post-consume bookkeeping value, not the requested SFX index. Recapture Sight with the v1.7.111+ EMU dumper to get the actual `$Cx` write and update.
   FIRE_BOOM:    0x82,  // SFX $41 + $41 — Fire spell impact. Verified via REC OAM f1301 (2026-05-08, post-v1.7.111 dumper): CPU writes `$C1` to $7F49 at frame 19 → NSF track `$C1 - $3F = $82`. Was 0x81 before v1.7.112; that was inferred from the post-consume residual `$40`, which is NOT the requested index — the engine does its own bookkeeping after consuming the high-bit pulse.
   SLEEP_PUFF:   0x95,  // SFX $54 + $41 — Sleep spell impact. Verified via REC OAM sleep-emu-snap (2026-05-08, v1.7.111+ dumper): CPU writes `$D4` to $7F49 at frame 74 → NSF track `$D4 - $3F = $95`.
-  CRYSTAL_THUNDER: 0x7F,  // NSF track $7F = FF3 unified sound id $7F — the crystal flash/thunder. From FF3 Altar-Cave crystal event $4B (`F8 7F`); F8 plays the NSF track directly (cf. `F8 36` = crystal-room song $36).
+  CRYSTAL_THUNDER: 132,  // NSF track 132 ($84) — crystal flash thunder/crash. Found by audition (/sfx); the disasm event $4B `F8 7F` pointed here.
 };
 
 // FF1 track indices (0-based, for ff1 NSF)
