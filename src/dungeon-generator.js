@@ -111,7 +111,7 @@ function generateCaveOutline(anchorX, startRow, endRow, rng) {
 // Outline generator for path mode: run-based movement with bottom convergence.
 // Each wall picks a direction and holds it for several rows (smooth curves, not zigzag).
 // Bottom 40%: snakes converge toward each other, forming a V/U shape.
-function generateCaveOutlinePath(anchorX, startRow, endRow, rng) {
+function generateCaveOutlinePath(anchorX, startRow, endRow, rng, maxWidth = 10) {
   const left = new Array(32).fill(0);
   const right = new Array(32).fill(31);
   const totalRows = endRow - startRow;
@@ -198,7 +198,7 @@ function generateCaveOutlinePath(anchorX, startRow, endRow, rng) {
       dl = left[y] - left[y - 1];
       dr = right[y] - right[y - 1];
     }
-    if (width > 10) {
+    if (width > maxWidth) {
       left[y] = left[y - 1]; right[y] = right[y - 1];
       dl = 0; dr = 0;
     }
@@ -217,9 +217,9 @@ function generateCaveOutlinePath(anchorX, startRow, endRow, rng) {
 
 // Build cave shape: $00 perimeter, $30 interior, $5f outside
 // pathMode: trace perimeter as a path (exactly 2 $00 neighbors per tile)
-function buildCaveShape(tilemap, anchorX, startRow, endRow, rng, pathMode) {
+function buildCaveShape(tilemap, anchorX, startRow, endRow, rng, pathMode, clamp, maxWidth) {
   if (pathMode) {
-    const { left, right } = generateCaveOutlinePath(anchorX, startRow, endRow, rng);
+    const { left, right } = generateCaveOutlinePath(anchorX, startRow, endRow, rng, maxWidth);
 
     // Left wall: snake down from startRow to endRow
     tilemap[startRow * 32 + left[startRow]] = CEILING;
@@ -242,10 +242,13 @@ function buildCaveShape(tilemap, anchorX, startRow, endRow, rng, pathMode) {
       tilemap[(y - 1) * 32 + next] = CEILING;              // then up
     }
 
-    // Fill interior: scan each row for outermost $00 tiles, fill between
+    // Fill interior: scan each row for outermost $00 tiles, fill between.
+    // `clamp` [x0,x1] restricts the scan to this chamber's columns so a second
+    // side-by-side chamber in the same row range doesn't merge with it.
+    const fl = clamp ? clamp[0] : 0, fr = clamp ? clamp[1] : 31;
     for (let y = startRow; y <= endRow; y++) {
       let minX = 32, maxX = -1;
-      for (let x = 0; x < 32; x++) {
+      for (let x = fl; x <= fr; x++) {
         if (tilemap[y * 32 + x] === CEILING) {
           if (x < minX) minX = x;
           if (x > maxX) maxX = x;
@@ -914,7 +917,7 @@ function placeEntrance(tilemap, x, y, floorIndex) {
 
 // Floor feature counts per floor index
 const FLOOR_CONFIG = [
-  { stairs: 1, traps: 0, chests: [1, 2], ponds: 0, skeletons: [4, 7], secrets: 1 }, // floor 0
+  { stairs: 1, traps: 0, chests: [2, 4], ponds: 0, skeletons: [6, 10], secrets: 1 }, // floor 0 (two rooms)
   { stairs: 0, traps: [3, 5], chests: [4, 6], ponds: 0, skeletons: 9, secrets: 0 }, // floor 1
   { stairs: 0, traps: 0, chests: 0, ponds: 0, skeletons: 0, secrets: 0, rockPuzzle: true }, // floor 2
   { stairs: 0, traps: 0, chests: 0, ponds: 0, skeletons: [4, 6], secrets: 0 },             // floor 3
@@ -1310,62 +1313,80 @@ function _generateFloor(romData, floorIndex, seed) {
     entranceY = pos.entranceY;
     warpTile = pos.warpTile;
   } else if (floorIndex === 0) {
-    // ── Floor 0: Path-mode cave ──────────────────────────────────────
-    const startRow = 5;
-    const endRow = 15;
+    // ── Floor 0: two side-by-side chambers joined by a walkable corridor ──
+    // Room A (entry, top entrance) + Room B (exit stairs), on opposite sides
+    // (left/right randomized). Outside visual: each room is rock carved into
+    // the FILL_VOID grid, so they read as two rock formations in open space.
+    // The width cap (~10) in generateCaveOutlinePath keeps the two anchored
+    // chambers in their halves so they don't merge.
+    const roomTop = 5, roomBot = 19;
+    const aOnRight = rng() < 0.5;
+    const aAnchor = aOnRight ? 22 : 9;   // Room A (entry)
+    const bAnchor = aOnRight ? 9 : 22;   // Room B (exit) — opposite side
+    // Narrow rooms (width ~8) so two fit with a center corridor gap AND ~4 cols
+    // of outer void for the secret corridor. Clamps encompass each room's walls
+    // (anchor ±4-5) without overlapping the other room. left void 0-3 | room
+    // 4-13 | gap 14-17 | room 18-27 | right void 28-31.
+    const ROOM_W = 8;
+    const RIGHT_HALF = [17, 27], LEFT_HALF = [4, 14];
 
-    // Entrance column (slightly randomized)
-    entranceX = 14 + Math.floor(rng() * 4);
+    buildCaveShape(tilemap, aAnchor, roomTop, roomBot, rng, true, aOnRight ? RIGHT_HALF : LEFT_HALF, ROOM_W);  // Room A
+    buildCaveShape(tilemap, bAnchor, roomTop, roomBot, rng, true, aOnRight ? LEFT_HALF : RIGHT_HALF, ROOM_W);  // Room B
 
-    // 1. Build cave shape: perimeter ($00), interior ($30)
-    buildCaveShape(tilemap, entranceX, startRow, endRow, rng, true);
-
-    // 2. Place entrance (overwrites boundary tiles on entrance rows)
+    // Entrance into Room A (top), passage down to its first row.
+    entranceX = aAnchor;
     const columnY = 3;
     placeEntrance(tilemap, entranceX, columnY, 0);
     entranceY = columnY - 1;
-
-    // 3. Place exit block on bottom wall
-    let exitX = null;
-    {
-      let minX = 32, maxX = -1;
-      for (let x = 0; x < 32; x++) {
-        if (tilemap[endRow * 32 + x] === CEILING) {
-          if (x < minX) minX = x;
-          if (x > maxX) maxX = x;
-        }
-      }
-      exitX = minX + 2 + Math.floor(rng() * Math.max(1, maxX - minX - 3));
-      placeExit(tilemap, exitX, endRow);
-    }
-
-    // 4. Carve floor path from entrance bottom to cave
-    for (let y = columnY + 1; y < startRow; y++) {
+    for (let y = columnY + 1; y < roomTop; y++) {
       if (y < 32) tilemap[y * 32 + entranceX] = FLOOR;
     }
 
-    // 5. Clean up + overhang
+    // Exit stairs on Room B's bottom wall, centered on B's floor span.
+    let exitX = bAnchor;
+    {
+      const probeRow = roomBot - 1;
+      let minX = 32, maxX = -1;
+      for (let x = 0; x < 32; x++) {
+        if (!isFloorTile(tilemap[probeRow * 32 + x])) continue;
+        const onB = aOnRight ? (x < 16) : (x >= 16);
+        if (onB) { if (x < minX) minX = x; if (x > maxX) maxX = x; }
+      }
+      if (maxX >= minX) exitX = Math.floor((minX + maxX) / 2);
+    }
+    placeExit(tilemap, exitX, roomBot);
+
+    // Cleanup + overhang on the rooms. The corridor is carved AFTER this so the
+    // gap-closing pass doesn't wall it up.
     enforceMinCeilingGap(tilemap);
     addOverhang(tilemap);
 
-    // Save for secret path placement below
-    var exitXForSecret = exitX;
-    var startRowForSecret = startRow;
-    var endRowForSecret = endRow;
-    var exitXForUsed = exitX;
-    var endRowForUsed = endRow;
-    // Bounding box of the path-mode cave floor (rows startRow..endRow) so corner
-    // chests + scattered skeletons land inside the cave instead of falling back
-    // to generic wall-adjacent placement. v1.7.561.
-    var chamberBounds = (() => {
-      let left = 32, right = -1;
-      for (let y = startRow; y <= endRow; y++) {
-        for (let x = 0; x < 32; x++) {
-          if (isFloorTile(tilemap[y * 32 + x])) { if (x < left) left = x; if (x > right) right = x; }
-        }
+    // Walkable corridor bridging the two rooms at the mid row — 3 tiles tall so
+    // enforceMinCeilingGap (which closes floor runs < 3) leaves it intact.
+    const corrMid = roomTop + Math.floor((roomBot - roomTop) / 2);
+    for (let row = corrMid - 1; row <= corrMid + 1; row++) {
+      let lo = 32, hi = -1;
+      for (let x = 0; x < 32; x++) {
+        if (isFloorTile(tilemap[row * 32 + x])) { if (x < lo) lo = x; if (x > hi) hi = x; }
       }
-      return right >= left ? { top: startRow, bot: endRow, left, right } : null;
-    })();
+      for (let x = lo; hi >= lo && x <= hi; x++) {
+        if (!isFloorTile(tilemap[row * 32 + x])) tilemap[row * 32 + x] = FLOOR;
+      }
+    }
+    // Enclose the corridor: rock above/below where it punched through void.
+    for (let x = 0; x < 32; x++) {
+      if (!isFloorTile(tilemap[corrMid * 32 + x])) continue;
+      if (tilemap[(corrMid - 2) * 32 + x] === FILL_VOID) tilemap[(corrMid - 2) * 32 + x] = CEILING;
+      if (tilemap[(corrMid + 2) * 32 + x] === FILL_VOID) tilemap[(corrMid + 2) * 32 + x] = CEILING;
+    }
+
+    var exitXForSecret = exitX;
+    var startRowForSecret = roomTop;
+    var endRowForSecret = roomBot;
+    var exitXForUsed = exitX;
+    var endRowForUsed = roomBot;
+    // Features (chests/skeletons) span both rooms.
+    var chamberBounds = { top: roomTop, bot: roomBot, left: 1, right: 30 };
 
   } else if (floorIndex === 2) {
     // ── Floor 2: Rock puzzle — building incrementally ───────────────────
@@ -2225,13 +2246,15 @@ function _generateFloor(romData, floorIndex, seed) {
       ? config.chests[0] + Math.floor(rng() * (config.chests[1] - config.chests[0] + 1))
       : config.chests;
     for (let i = 0; i < chestCount; i++) {
-      const pos = chamberBounds
-        ? findCornerFloor(tilemap, rng, used, chamberBounds)
-        : findWallAdjacentFloor(tilemap, rng, used);
+      // Prefer a corner; fall back to any wall-adjacent floor so multi-room
+      // floors (floor 0) reliably place their chests instead of starving when
+      // the combined bounds have few qualifying corners.
+      const pos = (chamberBounds && findCornerFloor(tilemap, rng, used, chamberBounds))
+        || findWallAdjacentFloor(tilemap, rng, used);
       if (pos) {
         tilemap[pos.y * 32 + pos.x] = CHEST;
-        for (let dy = -4; dy <= 4; dy++) {
-          for (let dx = -4; dx <= 4; dx++) {
+        for (let dy = -3; dy <= 3; dy++) {
+          for (let dx = -3; dx <= 3; dx++) {
             used.add(`${pos.x + dx},${pos.y + dy}`);
           }
         }

@@ -226,7 +226,10 @@ export function addSceneNpc(key, tileX, tileY, spec) {
 }
 
 export function placeMoogleAtCaveCenter(mapData) {
-  const cx = 16, cy = 10;
+  // Spiral out from Room A's column (the entry column) so the moogle lands in
+  // the opening room, not the center gap between the two floor-1 rooms. v1.7.564.
+  const cx = (mapData && mapData.entranceX != null) ? mapData.entranceX : 16;
+  const cy = 9;
   for (let r = 0; r < 12; r++) {
     for (let dy = -r; dy <= r; dy++) {
       for (let dx = -r; dx <= r; dx++) {
