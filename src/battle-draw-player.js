@@ -277,7 +277,8 @@ export function drawBattlePortrait() {
     if (dt >= DEATH_SLIDE_MS + DEATH_TXTFADE_MS) {
       const fadeIn = Math.min((dt - DEATH_SLIDE_MS - DEATH_TXTFADE_MS) / DEATH_POSEFADE_MS, 1);
       const deathAlpha = (phase === 'rise') ? (1 - riseT) : fadeIn;
-      const deathCanvas = (fakePlayerDeathPoseCanvases[ps.jobIdx] || fakePlayerDeathPoseCanvases[0])?.[0];
+      const _dpSet = fakePlayerDeathPoseCanvases[ps.jobIdx] || fakePlayerDeathPoseCanvases[0];
+      const deathCanvas = _dpSet && (_dpSet[ps.palIdx | 0] || _dpSet[0]);   // honor the player's custom color
       if (deathCanvas && deathAlpha > 0) {
         ui.ctx.globalAlpha = deathAlpha;
         const dx = HUD_RIGHT_X + HUD_RIGHT_W - 24 - 8;

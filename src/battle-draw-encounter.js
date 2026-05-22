@@ -166,7 +166,8 @@ function _isEncounterCombatState() {
     battleSt.battleState === 'magic-cast' || battleSt.battleState === 'magic-hit' ||
     battleSt.battleState === 'run-success' || battleSt.battleState === 'run-fail' ||
     battleSt.battleState === 'enemy-flash' || battleSt.battleState === 'enemy-attack' || battleSt.battleState === 'enemy-damage-show' ||
-    battleSt.battleState === 'poison-tick' || battleSt.battleState === 'poison-end-tick' || battleSt.battleState.startsWith('ally-');
+    battleSt.battleState === 'poison-tick' || battleSt.battleState === 'poison-end-tick' || battleSt.battleState.startsWith('ally-') ||
+    battleSt.battleState === 'fenix-revive';   // keep the enemy box up during the death/revive sequence
 }
 export function drawEncounterBox() {
   if (!battleSt.isRandomEncounter || !battleSt.encounterMonsters) return;
