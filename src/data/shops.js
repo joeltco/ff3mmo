@@ -24,9 +24,8 @@ export const SHOPS = new Map([
   ['ur_item', {
     type: 'item',
     mapId: 8, counter: { x: 8, y: 15 },
-    items: [0xA6, 0xAE, 0xAF, 0xA9],
+    items: [0xA6, 0xAE, 0xAF],
     // Potion, Eye Drops, Antidote
-    // TEMP (FenixDown 0xA9): added for revive testing — REMOVE after testing.
   }],
   ['ur_magic', {
     type: 'magic',
