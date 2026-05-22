@@ -40,6 +40,7 @@ import { DIR_DOWN } from './sprite.js';
 import { STATUS_NAME_BYTES, canCastMagic, STATUS, clearAll as clearAllStatus } from './status-effects.js';
 import { applyPhysicalHitToEnemy } from './physical-attack.js';
 import { playSlashSFX } from './battle-sfx.js';
+import { tryStartFenixRevive, updateFenixRevive, resetFenixRevive } from './battle-fenix-revive.js';
 import { saveSlotsToDB } from './save-state.js';
 import { addItem, buildItemSelectList } from './inventory.js';
 import { startCrystalReveal } from './npc.js';
@@ -91,6 +92,7 @@ export function resetBattleVars() {
   battleSt.allyMagicHealAmount = 0; battleSt.allyMagicDamageRoll = 0;
   battleSt.allyMagicEffectApplied = false; battleSt.allyMagicSfxPlayed = false; battleSt.allyMagicTargetType = 'player';
   hudSt.playerDeathTimer = null;
+  resetFenixRevive();
   // Buffs are battle-bound — wipe haste/protect/reflect so each battle starts
   // clean. When per-ally / per-enemy buffs ship, clear those here too.
   clearAllBuffs(ps);
@@ -213,8 +215,14 @@ export function updateBattleTimers(dt) {
   for (const idx in battleSt.allyShakeTimer) {
     if (battleSt.allyShakeTimer[idx] > 0) battleSt.allyShakeTimer[idx] = Math.max(0, battleSt.allyShakeTimer[idx] - dt);
   }
-  // Start player death animation on first frame of hp=0
-  if (ps.hp <= 0 && hudSt.playerDeathTimer == null && battleSt.battleState !== 'none') { hudSt.playerDeathTimer = 0; }
+  // Start player death animation on first frame of hp=0. If a FenixDown is
+  // held, tryStartFenixRevive consumes it and seizes the battle into the revive
+  // sub-FSM (battleState 'fenix-revive') — the death anim still plays, then the
+  // revive sequence takes over instead of routing to game-over.
+  if (ps.hp <= 0 && hudSt.playerDeathTimer == null && battleSt.battleState !== 'none') {
+    hudSt.playerDeathTimer = 0;
+    tryStartFenixRevive();
+  }
   if (hudSt.playerDeathTimer != null) hudSt.playerDeathTimer += dt;
   for (const ally of battleSt.battleAllies) {
     if (ally.deathTimer != null) ally.deathTimer += dt;
@@ -982,6 +990,9 @@ export function updateBattle(dt) {
   _updateBattleMsg(dt);
   if (pvpSt.isPVPBattle) { updatePVPBattle(dt); return; }
   updateBattleTimers(dt);
+  // FenixDown auto-revive owns the FSM while active — short-circuit the normal
+  // handlers so a held death can't route to game-over mid-revive.
+  if (updateFenixRevive(dt)) return;
   _updatePoisonTick()              ||
   _updateBattleOpening()           ||
   _updateBattleMenuConfirm()       ||

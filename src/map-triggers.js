@@ -58,6 +58,7 @@ const LOOT_POOLS = {
     { weight: 20, pool: [0x62, 0x1F, 0x06, 0x0E] },               // Leather Cap, Dagger, Nunchuck, Staff
     { weight:  5, pool: [0x58] },                                 // Leather Shield
     { weight:  3, pool: [0xE3, 0xE1] },                           // Cure scroll, Ice scroll (rare)
+    { weight:  2, pool: [0xA9] },                                 // Phoenix Down (very rare revive)
     { weight: 12, monster: true },                                // Chest mimic — 1 random monster
   ],
   1002: [ // Altar Cave F3
@@ -66,6 +67,7 @@ const LOOT_POOLS = {
     { weight: 25, pool: [0x58, 0x1F] },                           // Leather Shield, Dagger
     { weight: 10, pool: [0x73] },                                 // Leather Armor
     { weight:  3, pool: [0xE3, 0xE1] },                           // Cure scroll, Ice scroll (rare)
+    { weight:  2, pool: [0xA9] },                                 // Phoenix Down (very rare revive)
     { weight: 12, monster: true },                                // Chest mimic — 1 random monster
   ],
   1003: [ // Altar Cave F4
@@ -74,6 +76,7 @@ const LOOT_POOLS = {
     { weight: 25, pool: [0x73, 0x1F] },                           // Leather Armor, Dagger
     { weight: 20, pool: [0x8B, 0x24] },                           // Bronze Bracers (mage arm), Longsword
     { weight:  3, pool: [0xE3, 0xE1] },                           // Cure scroll, Ice scroll (rare)
+    { weight:  3, pool: [0xA9] },                                 // Phoenix Down (rare revive — best floor odds)
     { weight: 12, monster: true },                                // Chest mimic — 1 random monster
   ],
 };

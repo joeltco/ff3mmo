@@ -32,6 +32,7 @@ import { clipToViewport, drawSparkleCorners, grayViewport } from './hud-drawing.
 // works for the menu/encounter/ally splits. `_itemSparkleFrames` is also used
 // by the ally module; `drawStatusSpriteAbove` is used by both ally and player.
 import { _itemSparkleFrames, drawStatusSpriteAbove } from './battle-drawing.js';
+import { isFenixReviving, fenixRevivePhase, fenixRiseProgress, fenixSparkleFrame, FENIX_ITEM_ID } from './battle-fenix-revive.js';
 
 // ── Layout constants (match battle-drawing.js) ────────────────────────────
 const HUD_VIEW_X = 0, HUD_VIEW_Y = 32, HUD_VIEW_W = 144, HUD_VIEW_H = 144;
@@ -248,9 +249,15 @@ export function drawBattlePortrait() {
   const px = HUD_RIGHT_X + 8;
   const py = HUD_VIEW_Y + 8;
 
-  // Player death animation: slide → text fade → death pose fade
+  // Player death animation: slide → text fade → death pose fade.
+  // FenixDown auto-revive extends this: after the death pose fades in, a revive
+  // sparkle plays ('anim' phase), then the death pose fades back OUT while the
+  // live portrait rises from the bottom of the slot ('rise' phase).
   if (hudSt.playerDeathTimer != null) {
     const dt = Math.min(hudSt.playerDeathTimer, DEATH_TOTAL_MS);
+    const reviving = isFenixReviving();
+    const phase = reviving ? fenixRevivePhase() : null;
+    const riseT = fenixRiseProgress();
 
     // Phase 1: kneel slides down, clipped to inner portrait area (16×16)
     if (dt < DEATH_SLIDE_MS) {
@@ -264,17 +271,38 @@ export function drawBattlePortrait() {
       ui.ctx.restore();
     }
 
-    // Phase 3: death pose fades in, centered in the name/HP info box
+    // Phase 3: death pose fades in, centered in the name/HP info box. During a
+    // FenixDown 'rise' it fades back out (alpha 1→0) as the portrait rises.
     if (dt >= DEATH_SLIDE_MS + DEATH_TXTFADE_MS) {
-      const fadeT = Math.min((dt - DEATH_SLIDE_MS - DEATH_TXTFADE_MS) / DEATH_POSEFADE_MS, 1);
+      const fadeIn = Math.min((dt - DEATH_SLIDE_MS - DEATH_TXTFADE_MS) / DEATH_POSEFADE_MS, 1);
+      const deathAlpha = (phase === 'rise') ? (1 - riseT) : fadeIn;
       const deathCanvas = (fakePlayerDeathPoseCanvases[ps.jobIdx] || fakePlayerDeathPoseCanvases[0])?.[0];
-      if (deathCanvas) {
-        ui.ctx.globalAlpha = fadeT;
+      if (deathCanvas && deathAlpha > 0) {
+        ui.ctx.globalAlpha = deathAlpha;
         const dx = HUD_RIGHT_X + HUD_RIGHT_W - 24 - 8;
         const dy = HUD_VIEW_Y + Math.floor((32 - 16) / 2);
         ui.ctx.drawImage(deathCanvas, dx, dy);
         ui.ctx.globalAlpha = 1;
       }
+    }
+
+    // FenixDown revive sparkle on the portrait slot ('anim' phase). Reuses the
+    // legacy Cure sparkle fallback until the dedicated revive OAM capture lands.
+    if (phase === 'anim') {
+      const frames = _itemSparkleFrames(FENIX_ITEM_ID);
+      if (frames && frames.length === 2) ui.ctx.drawImage(frames[fenixSparkleFrame()], px, py);
+    }
+
+    // FenixDown revive: live portrait rises from the bottom of the slot.
+    if (phase === 'rise' && bsc.battlePoses.idle) {
+      ui.ctx.save();
+      ui.ctx.beginPath();
+      ui.ctx.rect(px, py, 16, 16);
+      ui.ctx.clip();
+      ui.ctx.globalAlpha = riseT;
+      ui.ctx.drawImage(bsc.battlePoses.idle, px, py + Math.floor((1 - riseT) * 16));
+      ui.ctx.globalAlpha = 1;
+      ui.ctx.restore();
     }
     return;
   }
