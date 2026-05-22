@@ -646,7 +646,7 @@ function _playerTurnConsumable() {
 
   // Player name was queued at command dispatch; swap in the item name now.
   replaceBattleMsg(getItemNameShrinesClean(itemId));
-  playSFX(SFX.CURE);
+  playSFX(effect === 'revive' ? SFX.REVIVE : SFX.CURE);
   const { target, allyIndex } = inputSt.playerActionPending;
 
   if (effect === 'cure_status') {
@@ -664,6 +664,29 @@ function _playerTurnConsumable() {
       const heal = ps.stats.maxHP - ps.hp;
       ps.hp = ps.stats.maxHP;
       battleSt.itemHealAmount = heal; setPlayerHealNum({ value: heal, timer: 0 });
+    }
+    battleSt.battleState = 'item-use'; battleSt.battleTimer = 0;
+    return;
+  }
+
+  if (effect === 'revive') {
+    // Revive a downed ally to ~1/3 max HP. (The player's OWN on-death revive is
+    // the separate auto-prompt path in battle-fenix-revive.js; this is the
+    // manual item-menu use, which auto-targets a dead ally — see _itemSelectZ.)
+    // If the chosen target is somehow alive, fall back to a `power` heal so a
+    // rare item is never silently wasted.
+    if (target === 'player' && allyIndex >= 0) {
+      const a = (battleSt.battleAllies || [])[allyIndex];
+      if (a && a.hp <= 0) {
+        const heal = Math.max(1, Math.floor(a.maxHP / 3));
+        a.hp = heal;
+        a.deathTimer = null;   // clear the death pose — ally returns
+        battleSt.itemHealAmount = heal;
+        getAllyDamageNums()[allyIndex] = { value: heal, timer: 0, heal: true };
+      } else if (a) {
+        const heal = applyMagicHeal(a, power, { onHealNum: (n) => { getAllyDamageNums()[allyIndex] = { value: n, timer: 0, heal: true }; } });
+        battleSt.itemHealAmount = heal;
+      }
     }
     battleSt.battleState = 'item-use'; battleSt.battleTimer = 0;
     return;

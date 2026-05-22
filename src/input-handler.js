@@ -357,6 +357,21 @@ function _itemSelectZ(isEquipPage, gIdx) {
       const item = inputSt.itemSelectList[invIdx];
       const itemDat = ITEMS.get(item.id);
       if (itemDat?.type === 'consumable' || itemDat?.type === 'battle_item') {
+        // Revive items (FenixDown) auto-target the first downed ally — you
+        // can't revive a living target, and the player's own death is the
+        // separate auto-prompt. No dead ally → can't use (error, stay in list).
+        if (itemDat.effect === 'revive') {
+          const allies = battleSt.battleAllies || [];
+          let deadIdx = -1;
+          for (let ii = 0; ii < allies.length; ii++) { if (allies[ii] && allies[ii].hp <= 0) { deadIdx = ii; break; } }
+          if (deadIdx < 0) { playSFX(SFX.ERROR); return; }
+          playSFX(SFX.CONFIRM);
+          inputSt.itemHeldIdx = -1; inputSt.itemTargetMode = 'single';
+          inputSt.itemTargetType = 'player'; inputSt.itemTargetIndex = 0; inputSt.itemTargetAllyIndex = deadIdx;
+          inputSt.playerActionPending = { command: 'item', itemId: item.id, target: 'player', allyIndex: deadIdx, targetMode: 'single' };
+          battleSt.battleState = 'item-list-out'; battleSt.battleTimer = 0;
+          return;
+        }
         playSFX(SFX.CONFIRM); inputSt.itemHeldIdx = -1; inputSt.itemTargetMode = 'single';
         if (itemDat.type === 'battle_item' && battleSt.isRandomEncounter && battleSt.encounterMonsters) {
           inputSt.itemTargetType = 'enemy';
