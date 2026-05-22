@@ -31,7 +31,8 @@ current battle state. Stored in a new `bug_reports` SQLite table for manual
 review (no automated action). Server: `/api/bug-report` in `api.js`. Client:
 `registerCommand('bug', …)` in `src/chat.js`.
 
-Review on prod: `sqlite3 /var/www/ff3mmo/ff3mmo.db 'SELECT created_at, player_name, version, map_id, tile_x, tile_y, battle_state, text FROM bug_reports ORDER BY id DESC LIMIT 50;'`
+Review on prod (sqlite3 CLI isn't installed; use the bundled better-sqlite3):
+`ssh root@68.183.59.19 'cd /var/www/ff3mmo && node tools/bug-reports.cjs'`
 
 ## 1.7.574 — 2026-05-22
 

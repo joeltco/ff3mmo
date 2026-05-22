@@ -62,6 +62,7 @@ export default [
       'ws-presence.js',
       'tools/**/*.js',
       'tools/**/*.mjs',
+      'tools/**/*.cjs',
     ],
     languageOptions: {
       ecmaVersion: 2023,
