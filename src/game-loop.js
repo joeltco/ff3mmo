@@ -226,13 +226,15 @@ function _gameLoopDraw() {
     drawChatTabCursor(ctx);  // v1.7.453 — after chat/roster so it lands on top
     drawPauseMenu(ctx);
     drawShop();
-    drawMsgBox(ctx, drawBorderedBox);
     drawRosterMenu();
     drawTradePick();
     drawInspect();
     drawBattle();
     drawSWExplosion();
     drawSWDamageNumbers();
+    // Message box renders LAST so dialogue / prompts (e.g. the FenixDown "Use?"
+    // confirm) sit on top of the battle scene instead of behind it.
+    drawMsgBox(ctx, drawBorderedBox);
   } catch (e) { _reportError('BATTLE DRAW ERROR', e); }
   if (transSt.state === 'hud-fade-out') {
     const alpha = Math.min(transSt.timer / ((HUD_INFO_FADE_STEPS + 1) * HUD_INFO_FADE_STEP_MS), 1);
