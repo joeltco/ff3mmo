@@ -267,46 +267,43 @@ function _updateBattleOpening() {
 // ── Ally join ──────────────────────────────────────────────────────────────
 
 export function tryJoinPlayerAlly() {
-  if (battleSt.battleAllies.length >= 3) return false;
   const loc = getPlayerLocation();
   const pvpNames = new Set([
     pvpSt.pvpOpponent && pvpSt.pvpOpponent.name,
     ...pvpSt.pvpEnemyAllies.map(a => a.name),
   ].filter(Boolean));
-  // Pre-pass: invited party members auto-join — no random roll, no
-  // location check (party members travel with the player, unlike the
-  // random ally pool which only pulls from roster at the current loc).
-  // Per-battle stats regenerate via generateAllyStats (same as random
-  // allies), so death in a previous fight doesn't disqualify them.
-  // Cap respected. v1.7.235.
+
+  // Round-boundary reconcile (solo / co-op-AI only; the wire-PvP path below
+  // is lockstep-deterministic and must not gain nondeterministic removals).
+  // Drop any ally who left the battle's room — "in the room" = their live
+  // broadcast loc still matches the battle's location bucket. Runs before the
+  // fill + before buildTurnOrder, so the turn queue rebuilds clean. This is
+  // the "leave battle if you leave the room" half; the fill below is the
+  // "join battle if you're in the room" half. v1.7.559.
+  if (!pvpSt.isWirePVP) {
+    for (let i = battleSt.battleAllies.length - 1; i >= 0; i--) {
+      const online = getOnlinePlayerByName(battleSt.battleAllies[i].name);
+      if (!online || online.loc !== loc) battleSt.battleAllies.splice(i, 1);
+    }
+  }
+
+  if (battleSt.battleAllies.length >= 3) return false;
+
+  // Pre-pass: party members get PRIORITY for the slots — but only while they're
+  // online AND in the same room (v1.7.559; previously they travelled with the
+  // player anywhere). Other roster players in the room fill the rest below.
   let partyJoined = false;
   for (const name of partyInviteSt.partyMembers) {
     if (battleSt.battleAllies.length >= 3) break;
     if (pvpNames.has(name)) continue;
     if (battleSt.battleAllies.some(a => a.name === name)) continue;
-    // Lookup order (most → least fresh):
-    //   1. getOnlinePlayerByName — live wire profile from the partner if
-    //      they're currently online. Picks up any level-up / equipment
-    //      swap since the invite was accepted.
-    //   2. partyMemberProfiles  — cache from accept time, used while the
-    //      partner is briefly missing during a reconnect.
-    //   3. PLAYER_POOL          — fake-roster fallback; empty by default.
-    //      Pre-v1.7.418 this was first; a fake sharing a real player's
-    //      name would override live data if PLAYER_POOL was repopulated.
-    const member = getOnlinePlayerByName(name)
-                || partyInviteSt.partyMemberProfiles.get(name)
-                || PLAYER_POOL.find(p => p.name === name);
-    if (!member) continue;
-    const allyStats = generateAllyStats(member);
-    battleSt.battleAllies.push(allyStats);
+    const member = getOnlinePlayerByName(name);   // live profile only — room-gated
+    if (!member || member.loc !== loc) continue;
+    battleSt.battleAllies.push(generateAllyStats(member));
     partyJoined = true;
-    // Wire-PvP — mirror this party member onto the opponent's `pvpEnemyAllies`.
-    // Pre-v1.7.387 only the random-fill branch sent `pvp-ally-join`; party
-    // members never reached the wire, so the opponent saw 1 fewer combatant
-    // and turn queues forked. See docs/MULTIPLAYER-AUDIT-2026-05-15.md #28.
-    if (pvpSt.isWirePVP && pvpSt.isPVPBattle) {
-      sendNetPVPAllyJoin(_wireAllyProfile(member));
-    }
+    // Wire-PvP parity — mirror this party member onto the opponent's roster
+    // (see docs/MULTIPLAYER-AUDIT-2026-05-15.md #28).
+    if (pvpSt.isWirePVP && pvpSt.isPVPBattle) sendNetPVPAllyJoin(_wireAllyProfile(member));
   }
   if (battleSt.battleAllies.length >= 3) {
     if (partyJoined) { battleSt.battleState = 'ally-fade-in'; battleSt.battleTimer = 0; return true; }
