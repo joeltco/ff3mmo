@@ -1188,6 +1188,13 @@ const PRESETS = {
   'wm-spells': () => _grantMagic(0x03, WM_MASK, 'WM'),
   'bm-spells': () => _grantMagic(0x04, BM_MASK, 'BM'),
   'all-spells': () => _grantMagic(0x14, ALL_MASK, 'Sage'),
+  // Consumables — ROM item IDs (see src/data/items.js, keyed by ROM id).
+  'fenix-down':  () => `Phoenix Down ×${ITEM_QTY}: ${_grantItems([0xA9], ITEM_QTY).join(' ') || 'inv full'}`,
+  'consumables': () => {
+    const ids = [0xA6, 0xA7, 0xA8, 0xA9, 0xAA, 0xAB, 0xAC, 0xAD, 0xAE, 0xAF];
+    const g = _grantItems(ids, ITEM_QTY);
+    return `granted ${g.length}/${ids.length} consumables ×${ITEM_QTY}`;
+  },
 };
 
 // $6207-$620E is a BITFIELD, not a spell ID — 7 spells per level packed:
@@ -1201,6 +1208,7 @@ const PRESETS = {
 // Real summon books (Chocb/Shiva/Ramuh/Ifrit/Titan/Odin/Levia/Baham) are
 // inventory ITEMS, not bits in $6207. TODO: add a SUMMON BOOKS preset that
 // pokes the right item IDs into $60C0-$60FF.
+const ITEM_QTY = 99;    // qty granted per consumable preset (FF3 stacks to 99)
 const BM_MASK  = 0x07;  // bits 0,1,2 — all 3 black spells per level
 const WM_MASK  = 0x38;  // bits 3,4,5 — all 3 white spells per level
 const ALL_MASK = 0x7F;  // every bit — black + white + summon-effect (Sage's spread)
@@ -1223,6 +1231,29 @@ function _grantMagic(jobId, levelMask, label) {
     _ramWrite(b + SPELL_LIST_OFF + lvl, levelMask);
   }
   return `char A → ${label} (job ${_hex(jobId, 2)}, lv50, joblv99, mask ${_hex(levelMask, 2)})`;
+}
+
+// Poke item IDs into the FF3 inventory SRAM ($60C0 ids / $60E0 qty, 32 slots).
+// Bumps an item that's already present, else fills the first empty slot. Returns
+// the list of granted IDs (hex) — skips any that can't fit when the bag is full.
+function _grantItems(ids, qty) {
+  const granted = [];
+  for (const id of ids) {
+    let slot = -1;
+    for (let i = 0; i < 32; i++) {
+      if (_ram(SRAM_BASE + INV_IDS_OFF + i) === id) { slot = i; break; }
+    }
+    if (slot < 0) {
+      for (let i = 0; i < 32; i++) {
+        if (_ram(SRAM_BASE + INV_IDS_OFF + i) === 0 && _ram(SRAM_BASE + INV_QTY_OFF + i) === 0) { slot = i; break; }
+      }
+    }
+    if (slot < 0) continue;  // inventory full
+    _ramWrite(SRAM_BASE + INV_IDS_OFF + slot, id);
+    _ramWrite(SRAM_BASE + INV_QTY_OFF + slot, qty);
+    granted.push('$' + _hex(id, 2));
+  }
+  return granted;
 }
 
 function _runPreset(name) {
@@ -1504,7 +1535,9 @@ function _buildDOM(parent) {
   const btnWMSpells = mkBtn('WM SPELLS', () => _runPreset('wm-spells'));
   const btnBMSpells = mkBtn('BM SPELLS', () => _runPreset('bm-spells'));
   const btnAllSpells = mkBtn('ALL SPELLS', () => _runPreset('all-spells'));
-  editBtnRow.append(btnDumpState, btnFullHP, btnClearInv, btnWMSpells, btnBMSpells, btnAllSpells);
+  const btnFenix = mkBtn('FENIX DOWN', () => _runPreset('fenix-down'));
+  const btnConsum = mkBtn('CONSUMABLES', () => _runPreset('consumables'));
+  editBtnRow.append(btnDumpState, btnFullHP, btnClearInv, btnWMSpells, btnBMSpells, btnAllSpells, btnFenix, btnConsum);
   editBody.appendChild(editBtnRow);
 
   const writeInput = document.createElement('textarea');
