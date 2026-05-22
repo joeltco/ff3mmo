@@ -531,21 +531,30 @@ export function talkToNpc(npc) {
   showMsgBoxPages(pages, () => { npc.talkFacing = null; });
 }
 
+// Thunder + screen flash (reuses the pond-drink viewport strobe).
+function _crystalFlash() {
+  playSFX(SFX.CRYSTAL_THUNDER);
+  mapSt.pondStrobeTimer = CRYSTAL_FLASH_MS;
+}
+
+// Flash → wait out the strobe → show the pages → flash again on close. Mirrors
+// FF3 event $4B, where the thunder/flash bracket each crystal message.
+function _crystalSpeak(pages) {
+  _crystalFlash();
+  setTimeout(() => {
+    showMsgBoxPages(pages.map(p => _nameToBytes(p)), () => _crystalFlash());
+  }, CRYSTAL_FLASH_MS);
+}
+
 function _talkToCrystal(npc) {
   if (!npc.crystalSpoken) {
-    // First talk (FF3 event $4B): thunder + screen flash, THEN the blessing —
-    // mirrors `F8 7F` (thunder) + `E2/FE 0A` (flash ×N) preceding the dialogue.
-    // Same flash→message ordering as the pond-drink trigger.
-    npc.crystalSpoken = true;
-    playSFX(SFX.CRYSTAL_THUNDER);
-    mapSt.pondStrobeTimer = CRYSTAL_FLASH_MS;
-    setTimeout(() => showMsgBoxPages(CRYSTAL_BLESSING.map(p => _nameToBytes(p))), CRYSTAL_FLASH_MS);
+    npc.crystalSpoken = true;          // first talk = the blessing (FF3 $4B)
+    _crystalSpeak(CRYSTAL_BLESSING);
     return;
   }
-  // Repeat talk = full restore (FF3 $C5: clear status + refill HP/MP), then flavor.
+  // Repeat talk = full restore (FF3 $C5: clear status + refill HP/MP) + flavor.
   if (ps.stats) { ps.hp = ps.stats.maxHP; ps.mp = ps.stats.maxMP; }
   if (ps.status) ps.status.mask = 0;
   saveSlotsToDB();
-  playSFX(SFX.CURE);
-  showMsgBoxPages(CRYSTAL_REVISIT.map(p => _nameToBytes(p)));
+  _crystalSpeak(CRYSTAL_REVISIT);
 }
