@@ -90,6 +90,7 @@ export async function saveSlotsToDB() {
       gil: s.gil || 0,
       jobLevels: s.jobLevels || {},
       jobIdx: s.jobIdx || 0,
+      palIdx: s.palIdx || 0,
       unlockedJobs: s.unlockedJobs != null ? s.unlockedJobs : 0x01,
       cp: s.cp || 0,
       statusMask: s.statusMask || 0,
