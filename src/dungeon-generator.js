@@ -573,6 +573,14 @@ function findCornerFloor(tilemap, rng, used, bounds) {
     const wU = !isFloorTile(tilemap[(y - 1) * 32 + x]);
     const wD = !isFloorTile(tilemap[(y + 1) * 32 + x]);
     if (!((wL || wR) && (wU || wD))) continue;
+    // Must be a real ROOM corner, not a 1-wide corridor bend / spur: exactly one
+    // wall on each axis, and the interior diagonal is floor (a 2x2+ floor block).
+    // A corridor bend has its interior diagonal as wall, so it's rejected — this
+    // keeps chests out of hallways.
+    const dxIn = (wL && !wR) ? 1 : (wR && !wL) ? -1 : 0;
+    const dyIn = (wU && !wD) ? 1 : (wD && !wU) ? -1 : 0;
+    if (dxIn === 0 || dyIn === 0) continue;
+    if (!isFloorTile(tilemap[(y + dyIn) * 32 + (x + dxIn)])) continue;
     // Must be near actual chamber edge — within 3 tiles of bounds on both wall axes
     if (bounds) {
       const nearL = x - bounds.left <= 3;
