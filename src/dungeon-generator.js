@@ -659,7 +659,9 @@ function findCorridorCandidates(tilemap, startRow, endRow, goLeft) {
   for (let y = startRow + 4; y <= endRow - 2; y++) {
     if (y - 3 < 0 || y + 1 >= 32) continue;
     if (goLeft) {
-      for (let x = 3; x < 15; x++) {
+      // Outer-left wall only (cols 3-7). Staying clear of the center keeps the
+      // secret corridor from carving through the room-connecting neck.
+      for (let x = 3; x < 8; x++) {
         if (tilemap[y * 32 + x] !== CEILING) continue;
         const inside = tilemap[y * 32 + x + 1];
         if (inside !== FLOOR && inside !== BONES && inside !== WALL_ROCKY) continue;
@@ -680,7 +682,8 @@ function findCorridorCandidates(tilemap, startRow, endRow, goLeft) {
         if (space) { candidates.push({ x, y }); break; }
       }
     } else {
-      for (let x = 29; x > 16; x--) {
+      // Outer-right wall only (cols 24-29) — clear of the center neck.
+      for (let x = 29; x > 23; x--) {
         if (tilemap[y * 32 + x] !== CEILING) continue;
         const inside = tilemap[y * 32 + x - 1];
         if (inside !== FLOOR && inside !== BONES && inside !== WALL_ROCKY) continue;
@@ -1313,72 +1316,109 @@ function _generateFloor(romData, floorIndex, seed) {
     entranceY = pos.entranceY;
     warpTile = pos.warpTile;
   } else if (floorIndex === 0) {
-    // ── Floor 0: two side-by-side chambers joined by a walkable corridor ──
-    // Room A (entry, top entrance) + Room B (exit stairs), on opposite sides
-    // (left/right randomized). Outside visual: each room is rock carved into
-    // the FILL_VOID grid, so they read as two rock formations in open space.
-    // The width cap (~10) in generateCaveOutlinePath keeps the two anchored
-    // chambers in their halves so they don't merge.
+    // ── Floor 0: two rooms (left/right) joined by a corridor — traced as ONE
+    // continuous ceiling perimeter (snake) so ceilings NEVER disconnect. ──
+    // Built like the deeper-floor boundary mode: assemble one inside-shape mask
+    // (both rooms + a connecting neck), then mark every inside tile that touches
+    // the void as CEILING and the interior as FLOOR. That single perimeter is
+    // the snake. addOverhang then lays 2 rocky tiles under every ceiling, which
+    // also eats the 5-tall neck down to a 1-tile-tall walkable corridor. Outside
+    // stays FILL_VOID — the floor-0 "outside" look.
     const roomTop = 5, roomBot = 19;
     const aOnRight = rng() < 0.5;
     const aAnchor = aOnRight ? 22 : 9;   // Room A (entry)
     const bAnchor = aOnRight ? 9 : 22;   // Room B (exit) — opposite side
-    // Narrow rooms (width ~8) so two fit with a center corridor gap AND ~4 cols
-    // of outer void for the secret corridor. Clamps encompass each room's walls
-    // (anchor ±4-5) without overlapping the other room. left void 0-3 | room
-    // 4-13 | gap 14-17 | room 18-27 | right void 28-31.
     const ROOM_W = 8;
     const RIGHT_HALF = [17, 27], LEFT_HALF = [4, 14];
+    const aHalf = aOnRight ? RIGHT_HALF : LEFT_HALF;
+    const bHalf = aOnRight ? LEFT_HALF : RIGHT_HALF;
 
-    buildCaveShape(tilemap, aAnchor, roomTop, roomBot, rng, true, aOnRight ? RIGHT_HALF : LEFT_HALF, ROOM_W);  // Room A
-    buildCaveShape(tilemap, bAnchor, roomTop, roomBot, rng, true, aOnRight ? LEFT_HALF : RIGHT_HALF, ROOM_W);  // Room B
+    // Inside-shape mask: organic outline for each room, clamped to its half so
+    // they don't overlap, unioned together.
+    const inside = new Uint8Array(1024);
+    const addRoom = (anchor, half) => {
+      const { left, right } = generateCaveOutlinePath(anchor, roomTop, roomBot, rng, ROOM_W);
+      for (let y = roomTop; y <= roomBot; y++) {
+        const l = Math.max(half[0], Math.min(left[y], right[y]));
+        const r = Math.min(half[1], Math.max(left[y], right[y]));
+        for (let x = l; x <= r; x++) inside[y * 32 + x] = 1;
+      }
+    };
+    addRoom(aAnchor, aHalf);
+    addRoom(bAnchor, bHalf);
 
-    // Entrance into Room A (top), passage down to its first row.
+    // Connecting neck: fill ONLY the void gap between the two rooms (not the
+    // full span), 5 mask rows tall at the mid row. Keeping each room's own
+    // shape gives each a simple perimeter loop, so a secret carved into an
+    // outer wall can't cut a room in half. After overhang eats 2 rows the neck
+    // becomes a 1-tile corridor that's part of the single perimeter.
+    const cy = roomTop + Math.floor((roomBot - roomTop) / 2);
+    for (let ny = cy - 2; ny <= cy + 2; ny++) {
+      let leftMax = -1, rightMin = 32;
+      for (let x = 0; x < 16; x++) if (inside[ny * 32 + x]) leftMax = x;
+      for (let x = 16; x < 32; x++) if (inside[ny * 32 + x]) { rightMin = x; break; }
+      if (leftMax >= 0 && rightMin < 32) {
+        for (let x = leftMax + 1; x < rightMin; x++) inside[ny * 32 + x] = 1;
+      }
+    }
+
+    // Boundary detection — ONE continuous CEILING perimeter, FLOOR interior.
+    for (let y = 0; y < 32; y++) {
+      for (let x = 0; x < 32; x++) {
+        if (!inside[y * 32 + x]) continue;
+        const edge =
+          x === 0  || !inside[y * 32 + x - 1] || x === 31 || !inside[y * 32 + x + 1] ||
+          y === 0  || !inside[(y - 1) * 32 + x] || y === 31 || !inside[(y + 1) * 32 + x];
+        tilemap[y * 32 + x] = edge ? CEILING : FLOOR;
+      }
+    }
+    // Close diagonal perimeter gaps so the ceiling is ONE cardinally-connected
+    // snake. Where the wall steps in/out, boundary tracing links two ceilings
+    // only diagonally; bridge each such pair through the inside corner tile.
+    // Iterate to a fixpoint — closing one corner can expose the next.
+    for (let pass = 0; pass < 8; pass++) {
+      let changed = false;
+      for (let y = 0; y < 31; y++) {
+        for (let x = 0; x < 31; x++) {
+          const tl = tilemap[y * 32 + x], tr = tilemap[y * 32 + x + 1];
+          const bl = tilemap[(y + 1) * 32 + x], br = tilemap[(y + 1) * 32 + x + 1];
+          if (tl === CEILING && br === CEILING && tr !== CEILING && bl !== CEILING) {
+            const i = inside[y * 32 + x + 1] ? y * 32 + x + 1 : (y + 1) * 32 + x;
+            tilemap[i] = CEILING; changed = true;
+          } else if (tr === CEILING && bl === CEILING && tl !== CEILING && br !== CEILING) {
+            const i = inside[y * 32 + x] ? y * 32 + x : (y + 1) * 32 + x + 1;
+            tilemap[i] = CEILING; changed = true;
+          }
+        }
+      }
+      if (!changed) break;
+    }
+
+    // Entrance into Room A (top), passage down through the top perimeter.
     entranceX = aAnchor;
     const columnY = 3;
     placeEntrance(tilemap, entranceX, columnY, 0);
     entranceY = columnY - 1;
-    for (let y = columnY + 1; y < roomTop; y++) {
+    for (let y = columnY + 1; y <= roomTop + 1; y++) {
       if (y < 32) tilemap[y * 32 + entranceX] = FLOOR;
     }
 
-    // Exit stairs on Room B's bottom wall, centered on B's floor span.
+    // Exit stairs on Room B's bottom edge, centered on B's floor span.
     let exitX = bAnchor;
     {
-      const probeRow = roomBot - 1;
-      let minX = 32, maxX = -1;
-      for (let x = 0; x < 32; x++) {
-        if (!isFloorTile(tilemap[probeRow * 32 + x])) continue;
-        const onB = aOnRight ? (x < 16) : (x >= 16);
-        if (onB) { if (x < minX) minX = x; if (x > maxX) maxX = x; }
+      let lo = 32, hi = -1;
+      for (let x = bHalf[0]; x <= bHalf[1]; x++) {
+        if (isFloorTile(tilemap[(roomBot - 1) * 32 + x])) { if (x < lo) lo = x; if (x > hi) hi = x; }
       }
-      if (maxX >= minX) exitX = Math.floor((minX + maxX) / 2);
+      if (hi >= lo) exitX = Math.floor((lo + hi) / 2);
     }
     placeExit(tilemap, exitX, roomBot);
 
-    // Close the top of Room B — it has no entrance, so without this its top
-    // floor row sits open against the void. Cap with ceiling above the top
-    // floor span; addOverhang then lays the rocky underside, matching the rest.
-    {
-      const bClamp = aOnRight ? LEFT_HALF : RIGHT_HALF;
-      for (let x = bClamp[0]; x <= bClamp[1]; x++) {
-        if (isFloorTile(tilemap[roomTop * 32 + x]) && tilemap[(roomTop - 1) * 32 + x] === FILL_VOID) {
-          tilemap[(roomTop - 1) * 32 + x] = CEILING;
-        }
-      }
-    }
-
-    // Standard cleanup — same passes/order as the other floors (floor 0 was
-    // missing ensureCeilingConnectivity, which is why ceilings could float).
-    // The connecting corridor is carved LATE (after addOverhang + the final
-    // enforceMinCeilingGap, below) so nothing fills its 1-tile floor and the
-    // closing pass doesn't wall it; ensureCeilingConnectivity runs after the
-    // carve to keep its ceilings clean. Entrance block is untouched by all this.
+    // Standard cleanup — exact passes/order as every other floor.
     enforceMinCeilingGap(tilemap);
     ensureCeilingConnectivity(tilemap);
     addOverhang(tilemap);
 
-    var corrRowForBridge = roomTop + Math.floor((roomBot - roomTop) / 2);
     var exitXForSecret = exitX;
     var startRowForSecret = roomTop;
     var endRowForSecret = roomBot;
@@ -2370,34 +2410,40 @@ function _generateFloor(romData, floorIndex, seed) {
     falseWalls = placeSecretPath(tilemap, startRowForSecret, endRowForSecret, floorIndex, rng, exitXForSecret);
 
     if (floorIndex === 0) {
-      // Clean up the rooms + secret corridors first (same passes/order as the
-      // other floors): close <3 gaps, connect ceilings, then overhang.
+      // Secret corridors can open ceiling gaps — reclose + reconnect.
       enforceMinCeilingGap(tilemap);
       ensureCeilingConnectivity(tilemap);
-      addOverhang(tilemap);
 
-      // THEN carve the connecting corridor — dead last, so no pass mangles it.
-      // Each carved column gets the FULL secret-corridor wall structure built
-      // explicitly: ceiling / rocky / rocky / FLOOR / ceiling / rocky / rocky.
-      // That satisfies every cave invariant by construction — each ceiling has
-      // 2 rocky below it, each rocky has a ceiling above, and the two ceiling
-      // rows are connected horizontal runs. Skips room-floor columns; never
-      // touches the entrance block (rows 0-4, far above the corridor row).
-      if (corrRowForBridge != null) {
-        const cy = corrRowForBridge;
-        let lo = 32, hi = -1;
-        for (let x = 0; x < 32; x++) if (isFloorTile(tilemap[cy * 32 + x])) { if (x < lo) lo = x; if (x > hi) hi = x; }
-        const put = (r, x, t) => { if (r >= 0 && r < 32) tilemap[r * 32 + x] = t; };
-        for (let x = lo; hi >= lo && x <= hi; x++) {
-          if (isFloorTile(tilemap[cy * 32 + x])) continue;   // room floor — leave it
-          put(cy - 3, x, CEILING);
-          put(cy - 2, x, WALL_ROCKY);
-          put(cy - 1, x, WALL_ROCKY);
-          put(cy,     x, FLOOR);
-          put(cy + 1, x, CEILING);
-          put(cy + 2, x, WALL_ROCKY);
-          put(cy + 3, x, WALL_ROCKY);
+      // Guarantee ONE connected main-floor ceiling snake. A secret corridor can
+      // cut a room's perimeter off the entrance snake; bridge it back by
+      // promoting a rocky wall tile that touches BOTH the connected snake and
+      // the cut-off ceiling — only where 2 walls remain beneath it (so no
+      // ceiling is ever left floating). Rows >=22 (the secret teleport room)
+      // are intentionally a separate hidden formation and excluded.
+      const C0 = CEILING, R0 = WALL_ROCKY;
+      const okBelow = (x, y) => {
+        const b1 = y < 31 ? tilemap[(y + 1) * 32 + x] : R0;
+        const b2 = y < 30 ? tilemap[(y + 2) * 32 + x] : R0;
+        return (b1 === R0 || b1 === C0) && (b2 === R0 || b2 === C0);
+      };
+      for (let pass = 0; pass < 16; pass++) {
+        const conn = new Uint8Array(1024); const q = [];
+        for (const sx of [entranceX - 2, entranceX + 2]) { const i = 2 * 32 + sx; if (tilemap[i] === C0) { conn[i] = 1; q.push(i); } }
+        while (q.length) { const j = q.pop(); const x = j % 32, y = (j - x) / 32; for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy; if (nx < 0 || nx > 31 || ny < 0 || ny > 31) continue; const k = ny * 32 + nx; if (!conn[k] && tilemap[k] === C0) { conn[k] = 1; q.push(k); } } }
+        let bridged = false;
+        for (let y = 1; y < 22 && !bridged; y++) {
+          for (let x = 0; x < 32 && !bridged; x++) {
+            if (tilemap[y * 32 + x] !== R0 || !okBelow(x, y)) continue;
+            let tConn = false, tDisc = false;
+            for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+              const nx = x + dx, ny = y + dy; if (nx < 0 || nx > 31 || ny < 0 || ny > 31) continue;
+              const k = ny * 32 + nx; if (tilemap[k] !== C0) continue;
+              if (conn[k]) tConn = true; else if (ny < 22) tDisc = true;
+            }
+            if (tConn && tDisc) { tilemap[y * 32 + x] = C0; bridged = true; }
+          }
         }
+        if (!bridged) break;
       }
     }
 
