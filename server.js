@@ -2,7 +2,11 @@ import { createServer } from 'http';
 import { readFile } from 'fs/promises';
 import { extname, join } from 'path';
 import { handleAPI } from './api.js';
-import { attachWebSocketPresence } from './ws-presence.js';
+import { attachWebSocketPresence, getPlayerCounts } from './ws-presence.js';
+
+// Boot timestamp for the /health uptime field. `process.uptime()` works too
+// but we want a stable wall-clock anchor in case the route adds more later.
+const _bootMs = Date.now();
 
 const { version } = JSON.parse(await readFile('./package.json', 'utf8'));
 
@@ -33,6 +37,27 @@ const MIME = {
 
 const httpServer = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
+
+  // /health — unauthed, unrate-limited status endpoint for external uptime
+  // monitors (UptimeRobot etc.). Cheap and deliberately stable in shape.
+  if (url.pathname === '/health' && req.method === 'GET') {
+    const counts = getPlayerCounts();
+    const body = JSON.stringify({
+      status: 'ok',
+      version,
+      uptimeSec: Math.floor((Date.now() - _bootMs) / 1000),
+      players: counts.visible,
+      playersTotal: counts.total,
+      gate: GATE_PASSWORD ? 'on' : 'off',
+    });
+    res.writeHead(200, {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-store',
+      'Access-Control-Allow-Origin': '*',
+    });
+    res.end(body);
+    return;
+  }
 
   // API routes
   if (url.pathname.startsWith('/api/')) {

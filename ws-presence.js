@@ -820,6 +820,15 @@ function _getRemoteIp(req) {
   return req.socket?.remoteAddress || 'unknown';
 }
 
+// Counts of currently-connected players. `total` includes authed-but-not-yet-
+// helloed sockets; `visible` is the count other clients would see in a snapshot
+// (the count UptimeRobot / status pages should display).
+export function getPlayerCounts() {
+  let visible = 0;
+  for (const p of _connected.values()) if (p.helloed) visible++;
+  return { total: _connected.size, visible };
+}
+
 export function attachWebSocketPresence(httpServer) {
   const wss = new WebSocketServer({ noServer: true, maxPayload: WS_MAX_PAYLOAD });
 
