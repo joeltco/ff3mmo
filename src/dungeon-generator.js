@@ -1356,30 +1356,13 @@ function _generateFloor(romData, floorIndex, seed) {
     }
     placeExit(tilemap, exitX, roomBot);
 
-    // Cleanup + overhang on the rooms. The corridor is carved AFTER this so the
-    // gap-closing pass doesn't wall it up.
+    // Cleanup + overhang on the rooms. The connecting corridor is carved LATE
+    // (after the final enforceMinCeilingGap, below) so a 1-tile-tall passage
+    // doesn't get walled up by the gap-closing pass.
     enforceMinCeilingGap(tilemap);
     addOverhang(tilemap);
 
-    // Walkable corridor bridging the two rooms at the mid row — 3 tiles tall so
-    // enforceMinCeilingGap (which closes floor runs < 3) leaves it intact.
-    const corrMid = roomTop + Math.floor((roomBot - roomTop) / 2);
-    for (let row = corrMid - 1; row <= corrMid + 1; row++) {
-      let lo = 32, hi = -1;
-      for (let x = 0; x < 32; x++) {
-        if (isFloorTile(tilemap[row * 32 + x])) { if (x < lo) lo = x; if (x > hi) hi = x; }
-      }
-      for (let x = lo; hi >= lo && x <= hi; x++) {
-        if (!isFloorTile(tilemap[row * 32 + x])) tilemap[row * 32 + x] = FLOOR;
-      }
-    }
-    // Enclose the corridor: rock above/below where it punched through void.
-    for (let x = 0; x < 32; x++) {
-      if (!isFloorTile(tilemap[corrMid * 32 + x])) continue;
-      if (tilemap[(corrMid - 2) * 32 + x] === FILL_VOID) tilemap[(corrMid - 2) * 32 + x] = CEILING;
-      if (tilemap[(corrMid + 2) * 32 + x] === FILL_VOID) tilemap[(corrMid + 2) * 32 + x] = CEILING;
-    }
-
+    var corrRowForBridge = roomTop + Math.floor((roomBot - roomTop) / 2);
     var exitXForSecret = exitX;
     var startRowForSecret = roomTop;
     var endRowForSecret = roomBot;
@@ -2363,6 +2346,25 @@ function _generateFloor(romData, floorIndex, seed) {
 
     // Corridors carved by placeSecretPath can create ceiling gaps — fix them
     if (floorIndex === 0) enforceMinCeilingGap(tilemap);
+
+    // Floor 0: connect the two rooms with a NARROW (1-tile-tall) corridor.
+    // Carved here — after the final enforceMinCeilingGap — so the thin passage
+    // isn't closed by the <3 gap-closing rule. Bridges the gap between the two
+    // floor clusters at the corridor row; encloses it with rock above/below.
+    if (floorIndex === 0 && corrRowForBridge != null) {
+      const cy = corrRowForBridge;
+      let lo = 32, hi = -1;
+      for (let x = 0; x < 32; x++) {
+        if (isFloorTile(tilemap[cy * 32 + x])) { if (x < lo) lo = x; if (x > hi) hi = x; }
+      }
+      for (let x = lo; hi >= lo && x <= hi; x++) {
+        if (!isFloorTile(tilemap[cy * 32 + x])) {
+          tilemap[cy * 32 + x] = FLOOR;                                  // bridge the gap
+          if (tilemap[(cy - 1) * 32 + x] === FILL_VOID) tilemap[(cy - 1) * 32 + x] = CEILING;
+          if (tilemap[(cy + 1) * 32 + x] === FILL_VOID) tilemap[(cy + 1) * 32 + x] = CEILING;
+        }
+      }
+    }
 
     // Dungeon destinations — all type-1 triggers go to next floor
     const totalType1 = config.stairs + trapsPlaced;
