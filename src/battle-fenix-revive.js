@@ -1,31 +1,34 @@
-// Phoenix Down auto-revive.
+// Phoenix Down revive.
 //
 // When the player would die in battle AND holds a FenixDown (item 0xA9), the
-// item is consumed automatically instead of routing to game-over: the full
-// death animation plays, then a "FenixDown!" message + revive sparkle, the
-// death pose fades, and the player portrait rises from the bottom as the player
-// returns at ~1/3 max HP.
+// death pose plays, then a "Use FenixDown? A:Yes B:No" box. On YES the item is
+// consumed and the revive runs; on NO it's game-over as normal.
 //
-// This owns a self-contained sub-FSM driven through `battleState ===
-// 'fenix-revive'`. Because `updateBattleTimers` (which detects death) runs
-// before every state handler in `updateBattle`, seizing `battleState` here the
-// frame death is detected means the normal turn/box-close handlers — which key
-// off their own specific states — all no-op for the duration. The death visuals
-// render off `hudSt.playerDeathTimer` (independent of battleState), so they keep
-// playing while we own the FSM.
+// Phases (battleState === 'fenix-revive'):
+//   death-anim → confirm → angel → rise → healnum
+//   death-anim: existing death animation plays out (~1s).
+//   confirm:    Yes/No box (input handled in input-handler _battleInputHoldStates).
+//   angel:      revive jingle + the FF3 spirit flaps beside the body (rises).
+//   rise:       HP restored to ~1/3 max, body fades, portrait slides up, "Revived".
+//   healnum:    heal number pops on the returned portrait, then resume battle.
 //
-// The revive sparkle reuses the legacy Cure sparkle (the same fallback every
-// un-captured item animation uses) until the dedicated revive OAM capture
-// lands — see `_itemSparkleFrames` in battle-drawing.js.
+// This owns a self-contained sub-FSM. Because `updateBattleTimers` (which detects
+// death) runs before every state handler in `updateBattle`, seizing `battleState`
+// the frame death is detected means the normal turn/box-close handlers — which key
+// off their own specific states — all no-op for the duration. Death visuals render
+// off `hudSt.playerDeathTimer` (independent of battleState). The item is NOT
+// consumed until YES.
 
 import { battleSt, DEATH_TOTAL_MS } from './battle-state.js';
 import { ps } from './player-stats.js';
 import { hudSt } from './hud-state.js';
 import { hasItem, removeItem } from './inventory.js';
 import { queueBattleMsg } from './battle-msg.js';
+import { showMsgBox, forceCloseMsgBox } from './message-box.js';
 import { _nameToBytes } from './text-utils.js';
 import { playSFX, SFX } from './music.js';
 import { clearAll as clearAllStatus } from './status-effects.js';
+import { setPlayerHealNum, tickHealNums, clearHealNums, DMG_SHOW_MS } from './damage-numbers.js';
 import { processNextTurn } from './battle-turn.js';
 
 export const FENIX_ITEM_ID = 0xA9;
@@ -35,9 +38,14 @@ export const FENIX_ANGEL_MS = 1400;  // the revive angel flaps beside the body
 export const FENIX_RISE_MS  = 450;   // death pose fades + live portrait rises
 const ANGEL_FLAP_MS         = 133;   // per-flap-frame cadence (8 NES frames)
 
-// null = not reviving. Otherwise one of: 'death-anim' | 'angel' | 'rise'.
+// "Use FenixDown? A:Yes B:No" — wraps to 2 lines at 16 chars (drawMsgBox). A/B
+// match the mobile deck (A→z, B→x; index.html) and keyboard (Z/X).
+const CONFIRM_TEXT = _nameToBytes('Use FenixDown? A:Yes B:No');
+
+// null = not reviving. Otherwise: 'death-anim' | 'confirm' | 'angel' | 'rise' | 'healnum'.
 let _phase = null;
 let _t = 0;
+let _reviveHeal = 0;   // HP restored — shown as a heal number after the portrait returns
 
 export function isFenixReviving()  { return _phase != null; }
 export function fenixRevivePhase() { return _phase; }
@@ -54,8 +62,8 @@ export function fenixAngelFrame() { return Math.floor(_t / ANGEL_FLAP_MS) % 3; }
 // death/respawn flow proceed.
 export function tryStartFenixRevive() {
   if (_phase != null) return true;            // already reviving
-  if (!hasItem(FENIX_ITEM_ID)) return false;
-  removeItem(FENIX_ITEM_ID, 1);
+  if (!hasItem(FENIX_ITEM_ID)) return false;  // no item → normal death/respawn
+  // NOTE: the item is NOT consumed here — only on a "Yes" at the confirm box.
   _phase = 'death-anim';
   _t = 0;
   // Round ends here; a fresh round opens on the player's turn after the revive.
@@ -66,6 +74,27 @@ export function tryStartFenixRevive() {
   return true;
 }
 
+// Player chose YES at the confirm box: consume the item and run the revive.
+export function fenixConfirmYes() {
+  if (_phase !== 'confirm') return;
+  if (!hasItem(FENIX_ITEM_ID)) { fenixConfirmNo(); return; }  // safety
+  removeItem(FENIX_ITEM_ID, 1);
+  forceCloseMsgBox();
+  _phase = 'angel';
+  _t = 0;
+  playSFX(SFX.REVIVE);
+}
+
+// Player chose NO (or has no item): decline the revive → normal game-over.
+export function fenixConfirmNo() {
+  forceCloseMsgBox();
+  _phase = null;
+  _t = 0;
+  // ps.hp is still 0 + playerDeathTimer set → box-close routes to respawn.
+  battleSt.battleState = battleSt.isRandomEncounter ? 'encounter-box-close' : 'enemy-box-close';
+  battleSt.battleTimer = 0;
+}
+
 // Sub-FSM tick. Returns true while a revive is active so `updateBattle` stops
 // dispatching the normal handlers this frame.
 export function updateFenixRevive(dt) {
@@ -73,14 +102,14 @@ export function updateFenixRevive(dt) {
   _t += dt;
   if (_phase === 'death-anim') {
     // Let the existing death animation (kneel slide → text fade → pose fade-in)
-    // finish — that's the "death pose held for ~1s" before the angel appears.
+    // finish — the death pose holds ~1s — then ask before reviving.
     if (hudSt.playerDeathTimer != null && hudSt.playerDeathTimer >= DEATH_TOTAL_MS) {
-      _phase = 'angel';
+      _phase = 'confirm';
       _t = 0;
-      // Revive jingle — fires as the angel appears, matching the FF3 capture
-      // (REC OAM @ f311: `$7F49=$D1` → NSF track $92). See SFX.REVIVE.
-      playSFX(SFX.REVIVE);
+      showMsgBox(CONFIRM_TEXT);   // A:Yes / B:No — handled in battle input
     }
+  } else if (_phase === 'confirm') {
+    // Idle — waits for fenixConfirmYes() / fenixConfirmNo() from input.
   } else if (_phase === 'angel') {
     // Angel flaps beside the body, then the character is brought back.
     if (_t >= FENIX_ANGEL_MS) {
@@ -88,7 +117,8 @@ export function updateFenixRevive(dt) {
       _t = 0;
       // Restore at the start of the rise so the HP bar + portrait read alive.
       const maxHP = ps.stats ? ps.stats.maxHP : 28;
-      ps.hp = Math.max(1, Math.floor(maxHP / 3));
+      _reviveHeal = Math.max(1, Math.floor(maxHP / 3));
+      ps.hp = _reviveHeal;   // revived from 0, so HP received == _reviveHeal
       // Revive = clean state (NES canon; mirrors _respawnAtLastTown).
       if (ps.status) clearAllStatus(ps.status);
       // "Revived" message shows as the portrait slides up into the HUD.
@@ -96,7 +126,16 @@ export function updateFenixRevive(dt) {
     }
   } else if (_phase === 'rise') {
     if (_t >= FENIX_RISE_MS) {
-      hudSt.playerDeathTimer = null;
+      hudSt.playerDeathTimer = null;   // portrait has fully returned
+      _phase = 'healnum';
+      _t = 0;
+      // Heal number pops on the returned portrait, showing HP restored.
+      setPlayerHealNum({ value: _reviveHeal, timer: 0 });
+    }
+  } else if (_phase === 'healnum') {
+    tickHealNums(dt);   // bounce + age the number (not ticked elsewhere this state)
+    if (_t >= DMG_SHOW_MS) {
+      clearHealNums();
       _phase = null;
       _t = 0;
       battleSt.turnTimer = 0;
@@ -125,4 +164,5 @@ export function updateFenixRevive(dt) {
 export function resetFenixRevive() {
   _phase = null;
   _t = 0;
+  _reviveHeal = 0;
 }
