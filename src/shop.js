@@ -511,9 +511,13 @@ function _drawGil(ctx, fadeStep) {
   const lbl = _nameToBytes('Gil');
   const val = _nameToBytes(String(ps.gil));
   // Label sits at the right column (after the keeper) so the sprite's
-  // upper-left area stays clean. Value right-aligned at the panel edge.
-  drawText(ctx, MENU_X, HUD_VIEW_Y + 10, lbl, pal);
-  drawText(ctx, HUD_VIEW_X + HUD_VIEW_W - 16 - measureText(val), HUD_VIEW_Y + 10, val, pal);
+  // upper-left area stays clean. Value is right-aligned on its OWN line just
+  // below the label — same-line right-align ran the number back into the "Gil"
+  // label once the total hit 5+ digits (overlap at >9999; gil caps at 999999).
+  // The value line (x≥80 for 6 digits) clears both the keeper and the Buy row
+  // at MENU_Y (HUD_VIEW_Y+32).
+  drawText(ctx, MENU_X, HUD_VIEW_Y + 8, lbl, pal);
+  drawText(ctx, HUD_VIEW_X + HUD_VIEW_W - 16 - measureText(val), HUD_VIEW_Y + 18, val, pal);
 }
 
 // FF1-style shopkeeper sprite — 10×10 BG nametable rect using the FF1
