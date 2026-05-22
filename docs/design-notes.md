@@ -313,3 +313,48 @@ Three (now four) libgme emulators run side-by-side in `src/music.js`, each fed a
 - **Per-character** `ps.palIdx` (0-7), set in Options → Color. Persisted in the save slot (`save-state.js` / `save.js`), survives the server round-trip (`api.js` whitelist clamp 0-7), and is broadcast in the presence profile (`main.js`, replacing the old hardcoded `palIdx: 0`) so other players see your color in roster/battle.
 - **Single source:** `jobBattlePalette(jobIdx, palIdx)` in `src/data/players.js` resolves the 4-entry NES palette (only color 3, the outfit, varies across slots). `battle-drawing.js#_jobPalette` delegates to it, so the player and AI allies share one resolver. `swapBattleSprites(jobIdx, palIdx)` in `src/job-sprites.js` is the one entry point that repaints every view: walk sprite (`sprite.setPalette`, live each frame) + battle/HUD/portrait (`loadJobBattleSprites` → rebuilt canvases; HUD portrait reads `bsc.battlePoses`).
 - **Slot 0 = job canon, byte-identical to pre-feature.** Battle build keeps the original ROM/`JOB_BATTLE_PAL_OVERRIDE` palette at slot 0 and only pulls from the table at slots 1-7. Walk sprite returns the PPU-traced `JOB_WALK_PALS` verbatim at slot 0; slots 1-7 recolor only the outfit slot(s) listed in `WALK_OUTFIT_SLOTS` (deliberately excludes Monk hair / Black Mage face so a color swap never tints skin/hair/face).
+
+## Phoenix Down revive (FenixDown)
+
+FenixDown (item `0xA9`, `effect: 'revive'`) — rare Altar Cave chest loot (F2/F3/F4,
+`LOOT_POOLS` weights 2/2/3). Two ways it triggers, both running one sequence in
+`src/battle-fenix-revive.js` (a self-contained sub-FSM under `battleState ===
+'fenix-revive'`):
+
+- **Player on-death (auto):** when the player would die holding a FenixDown,
+  `tryStartFenixRevive` (called at the single death chokepoint in
+  `updateBattleTimers`, which runs before all state handlers — so the scattered
+  `ps.hp<=0` box-close routes no-op) seizes the battle. It does NOT consume the
+  item until the player confirms.
+- **Manual ally revive:** selecting FenixDown in the battle Item menu auto-targets
+  the first downed ally (`_itemSelectZ`; errors if none — you can't revive the
+  living). `_playerTurnConsumable`'s `revive` branch calls `startAllyRevive(idx)`.
+
+**Phases:** `dmg-hold → death-anim → confirm → angel → rise → healnum`.
+- `dmg-hold` (player only): hold on the hit (shake + damage number) — the portrait
+  does NOT fall until the number finishes, so it reads hit → number → fall.
+- `death-anim`: the death pose plays out (~1s).
+- `confirm` (player only): "Use FenixDown? A:Yes B:No" via `showMsgBox`; input in
+  `input-handler.js#_battleInputHoldStates` (A→z/B→x; the overworld Z/X prompt
+  dispatch in movement.js doesn't run mid-battle). Item consumed only on YES.
+- `angel`: the FF3 party-death spirit (`src/data/revive-angel-sprite.js` — 2×2
+  tiles, SP3 palette, 3-frame flap, captured OAM) appears beside the body and
+  drifts up; `SFX.REVIVE` (NSF track `0x92`) plays.
+- `rise`: HP restored to ~1/3 max (status cleared for the player), death pose
+  fades, portrait slides up, "Revived" message.
+- `healnum`: green heal number pops on the returned portrait (HP restored), then
+  the turn resumes (player: fresh round / victory if simultaneous death; ally:
+  next turn).
+
+**Rendering:** player path in `battle-draw-player.js` death block; ally path in
+`battle-draw-allies.js` death block (gated to `fenixReviveAllyIndex()`). Both key
+off the phase getters. The death pose honors `ps.palIdx` (custom color). NOTE:
+`'fenix-revive'` had to be added to `_isEncounterCombatState()` (battle-draw-encounter.js)
+or the enemy box vanishes during the sequence — the usual new-`battleState`
+predicate-coverage gotcha. `drawMsgBox` renders LAST in game-loop so the confirm
+box sits on top of the battle.
+
+**SFX capture gotcha:** the death/revive SFX is NSF track `0x92`, captured by
+starting REC *before* death (the genuine `$7F49=$D1` write). An earlier capture's
+steady-state `$40` was the post-consume residual, not the request — see SFX.SIGHT
+/ FIRE_BOOM notes.
