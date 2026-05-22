@@ -38,11 +38,14 @@ const CRYSTAL_BLESSING = [
   'The crystal sparkles with a fading light...',
   "'You have been chosen, Light Warrior.'",
   "'Take the last of the light left in me.'",
-  "'The balance of all things is crumbling.'",
-  "'With the Light comes great strength.'",
+  "'With this Light, new strength awakens.'",
+  'New jobs unlocked! Switch jobs in the menu.',
   "'Keep hope. Do not let this world vanish.'",
   'Light surrounds you.',
 ];
+// Crystal flash duration (mirrors the pond-drink screen strobe — reuses the
+// shared `mapSt.pondStrobeTimer` viewport strobe). 65 frames @ ~16.67ms.
+const CRYSTAL_FLASH_MS = Math.round(65 * 16.67);
 const CRYSTAL_REVISIT = [
   'The crystal sheds its light in silence...',
   "'Light Warrior, bring hope to this world.'",
@@ -529,15 +532,20 @@ export function talkToNpc(npc) {
 }
 
 function _talkToCrystal(npc) {
-  playSFX(SFX.CURE);
   if (!npc.crystalSpoken) {
-    npc.crystalSpoken = true;   // first talk = the blessing (no heal, like FF3 $4B)
-    showMsgBoxPages(CRYSTAL_BLESSING.map(p => _nameToBytes(p)));
+    // First talk (FF3 event $4B): thunder + screen flash, THEN the blessing —
+    // mirrors `F8 7F` (thunder) + `E2/FE 0A` (flash ×N) preceding the dialogue.
+    // Same flash→message ordering as the pond-drink trigger.
+    npc.crystalSpoken = true;
+    playSFX(SFX.CRYSTAL_THUNDER);
+    mapSt.pondStrobeTimer = CRYSTAL_FLASH_MS;
+    setTimeout(() => showMsgBoxPages(CRYSTAL_BLESSING.map(p => _nameToBytes(p))), CRYSTAL_FLASH_MS);
     return;
   }
   // Repeat talk = full restore (FF3 $C5: clear status + refill HP/MP), then flavor.
   if (ps.stats) { ps.hp = ps.stats.maxHP; ps.mp = ps.stats.maxMP; }
   if (ps.status) ps.status.mask = 0;
   saveSlotsToDB();
+  playSFX(SFX.CURE);
   showMsgBoxPages(CRYSTAL_REVISIT.map(p => _nameToBytes(p)));
 }
