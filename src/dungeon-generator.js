@@ -918,6 +918,27 @@ function placeEntrance(tilemap, x, y, floorIndex) {
   }
 }
 
+// LOCKED — Entrance landing template. Opens a 3x3 floor pocket directly below
+// the entrance frame so the player ALWAYS arrives in an open area, never a
+// 1-tile-wide neck. Pairs with placeEntrance: the frame's bottom row is already
+// 3 floor tiles; this carries that width down through the top rocky overhang
+// band into the room.
+//   MUST be called AFTER addOverhang — otherwise the overhang pass re-walls the
+//   pocket. The frame floor sits directly above the landing, so no ceiling
+//   pinches it (no overhang-rule violation). `clamp` [x0,x1] keeps the pocket
+//   inside the room's column span. DO NOT inline or fork — this is the single
+//   source for entrance landings.
+function openEntranceLanding(tilemap, entranceX, topRow, clamp) {
+  const lo = clamp ? clamp[0] : 1, hi = clamp ? clamp[1] : 30;
+  for (let y = topRow; y <= topRow + 2; y++) {
+    for (let x = entranceX - 1; x <= entranceX + 1; x++) {
+      if (x >= lo && x <= hi && x >= 0 && x < 32 && y >= 0 && y < 32) {
+        tilemap[y * 32 + x] = FLOOR;
+      }
+    }
+  }
+}
+
 // Floor feature counts per floor index
 const FLOOR_CONFIG = [
   { stairs: 1, traps: 0, chests: [2, 4], ponds: 0, skeletons: [6, 10], secrets: 1 }, // floor 0 (two rooms)
@@ -1419,16 +1440,8 @@ function _generateFloor(romData, floorIndex, seed) {
     ensureCeilingConnectivity(tilemap);
     addOverhang(tilemap);
 
-    // Open the entrance into a 3-wide landing instead of a 1-wide neck. The
-    // frame's bottom row is already 3 floor tiles; carry that width down through
-    // the top rocky band into the room (a 3x3 floor pocket). Done AFTER overhang
-    // so it isn't re-walled; the frame floor sits directly above the landing, so
-    // no ceiling pinches it. Stays inside Room A's column span.
-    for (let y = roomTop; y <= roomTop + 2; y++) {
-      for (let x = entranceX - 1; x <= entranceX + 1; x++) {
-        if (x >= aHalf[0] && x <= aHalf[1] && y < 32) tilemap[y * 32 + x] = FLOOR;
-      }
-    }
+    // Entrance landing — 3x3 open floor pocket (single source: openEntranceLanding).
+    openEntranceLanding(tilemap, entranceX, roomTop, aHalf);
 
     var exitXForSecret = exitX;
     var startRowForSecret = roomTop;
