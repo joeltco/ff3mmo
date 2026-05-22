@@ -77,11 +77,9 @@ export function updateFenixRevive(dt) {
     if (hudSt.playerDeathTimer != null && hudSt.playerDeathTimer >= DEATH_TOTAL_MS) {
       _phase = 'angel';
       _t = 0;
-      // INTERIM SFX: the captured death jingle ($7F49=$40) is the engine's
-      // post-consume residual, not the requested index (see SFX map notes,
-      // v1.7.111-112). Using CURE as the revive cue until a clean recapture
-      // (started BEFORE death) gives the real `$7F49=$Cx` write.
-      playSFX(SFX.CURE);
+      // Revive jingle — fires as the angel appears, matching the FF3 capture
+      // (REC OAM @ f311: `$7F49=$D1` → NSF track $92). See SFX.REVIVE.
+      playSFX(SFX.REVIVE);
     }
   } else if (_phase === 'angel') {
     // Angel flaps beside the body, then the character is brought back.

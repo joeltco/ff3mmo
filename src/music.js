@@ -49,6 +49,7 @@ export const SFX = {
   FIRE_BOOM:    0x82,  // SFX $41 + $41 — Fire spell impact. Verified via REC OAM f1301 (2026-05-08, post-v1.7.111 dumper): CPU writes `$C1` to $7F49 at frame 19 → NSF track `$C1 - $3F = $82`. Was 0x81 before v1.7.112; that was inferred from the post-consume residual `$40`, which is NOT the requested index — the engine does its own bookkeeping after consuming the high-bit pulse.
   SLEEP_PUFF:   0x95,  // SFX $54 + $41 — Sleep spell impact. Verified via REC OAM sleep-emu-snap (2026-05-08, v1.7.111+ dumper): CPU writes `$D4` to $7F49 at frame 74 → NSF track `$D4 - $3F = $95`.
   CRYSTAL_THUNDER: 132,  // NSF track 132 ($84) — crystal flash thunder/crash. Found by audition (/sfx); the disasm event $4B `F8 7F` pointed here.
+  REVIVE:       0x92,  // NSF track $92 — party-death/angel revive jingle. Verified via REC OAM @ f311 (capture STARTED before death): CPU writes `$D1` to $7F49 at frame 40 → track `$D1 - $3F = $92`, firing as the angel appears. The earlier f5299 residual `$40` was post-consume bookkeeping, NOT the request (same trap as SIGHT/FIRE_BOOM).
 };
 
 // FF1 track indices (0-based, for ff1 NSF)
