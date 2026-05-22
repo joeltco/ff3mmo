@@ -509,11 +509,14 @@ function _drawSelectSlotRow(ctx, i, selX, rowY, fadeStep, showContent) {
   _drawTitleBox(ctx, selX + 32, rowY, SEL_W - 32, SEL_ROW_H, fadeStep);
   if (!showContent) return;
 
-  // Portrait — per-job portrait for saved slots, onion knight (job 0) for empty/new
+  // Portrait — per-job portrait for saved slots, onion knight (job 0) for empty/new.
+  // Honors the slot's saved custom color (palIdx); empty/new slots default to 0.
   {
-    const jobIdx = saveSlots[i] ? (saveSlots[i].jobIdx || 0) : 0;
+    const slot = saveSlots[i];
+    const jobIdx = slot ? (slot.jobIdx || 0) : 0;
+    const palIdx = slot ? (slot.palIdx || 0) : 0;
     const jobPortraits = fakePlayerPortraits[jobIdx] || fakePlayerPortraits[0];
-    const palPortraits = jobPortraits && jobPortraits[0]; // palette 0
+    const palPortraits = (jobPortraits && (jobPortraits[palIdx] || jobPortraits[0]));
     if (palPortraits && fadeStep < SELECT_TEXT_STEPS) {
       ctx.drawImage(palPortraits[fadeStep], selX + 8, rowY + 8);
     }
