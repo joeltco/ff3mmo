@@ -10,7 +10,7 @@ import { partyInviteSt } from './party-invite.js';
 import { mapSt } from './map-state.js';
 import { sprite } from './player-sprite.js';
 import { DIR_DOWN, DIR_UP, DIR_LEFT, DIR_RIGHT } from './sprite.js';
-import { playFF1Track, stopFF1Music, playFF2Track, stopFF2Music, pauseMusic, resumeMusic, playMentionChime } from './music.js';
+import { playFF1Track, stopFF1Music, playFF2Track, stopFF2Music, pauseMusic, resumeMusic, playMentionChime, playSFX } from './music.js';
 import { ui } from './ui-state.js';
 import { ps, changeJob, fullHeal, grantExp, MAX_LEVEL } from './player-stats.js';
 import { JOBS } from './data/jobs.js';
@@ -403,6 +403,15 @@ registerCommand('ff2', 'Play FF2 NSF track N (or "stop" to resume map music)', (
   pauseMusic(); playFF2Track(n);
   addChatMessage('FF2 NSF track ' + n, 'console');
 }, { dev: true });
+
+registerCommand('sfx', 'Audition FF3 SFX by NSF track number (e.g. /sfx 127). Accepts decimal or 0x-hex.', (args) => {
+  const a = (args || '').trim();
+  if (!a) { addChatMessage('Usage: /sfx <track>  (decimal or 0x-hex; SFX live ~0x41-0xC0)', 'console'); return; }
+  const n = a.startsWith('0x') ? parseInt(a, 16) : parseInt(a, 10);
+  if (!Number.isFinite(n) || n < 0 || n > 255) { addChatMessage('Track must be 0-255', 'console'); return; }
+  playSFX(n);
+  addChatMessage('SFX track ' + n + ' (0x' + n.toString(16).toUpperCase() + ')', 'console');
+});
 
 registerCommand('pos', 'Show player tile + faced tile', () => {
   if (mapSt.onWorldMap) {

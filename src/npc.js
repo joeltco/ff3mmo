@@ -34,13 +34,13 @@ import { saveSlotsToDB } from './save-state.js';
 // (disassembly event $4B / $C5, strings $1D/$1E). First talk = the blessing;
 // repeat talks = a flavor line + full restore (FF3 $C5 clears status + refills
 // HP/MP). See [[ff3mmo-crystal-reveal]].
+// Pages must wrap to <=3 lines at 16 chars/line (box is 144px wide, 48px tall).
 const CRYSTAL_BLESSING = [
-  'The crystal sparkles with a fading light...',
-  "'You have been chosen, Light Warrior.'",
-  "'Take the last of the light left in me.'",
-  "'With this Light, new strength awakens.'",
-  'New jobs unlocked! Switch jobs in the menu.',
-  "'Keep hope. Do not let this world vanish.'",
+  'The crystal light is slowly fading...',
+  "'You are the chosen Light Warrior.'",
+  "'Take the last of my fading light.'",
+  'Jobs unlocked! Use the menu to switch.',
+  "'Do not let this world vanish.'",
   'Light surrounds you.',
 ];
 // Crystal flash duration (mirrors the pond-drink screen strobe — reuses the
