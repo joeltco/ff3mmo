@@ -1424,8 +1424,22 @@ function _generateFloor(romData, floorIndex, seed) {
     var endRowForSecret = roomBot;
     var exitXForUsed = exitX;
     var endRowForUsed = roomBot;
-    // Features (chests/skeletons) span both rooms.
-    var chamberBounds = { top: roomTop, bot: roomBot, left: 1, right: 30 };
+    // Features (chests/skeletons) span both rooms. Bounds = the ACTUAL floor
+    // bounding box (not 1..30) so findCornerFloor's "near the edge" test lines
+    // up with the real room walls — otherwise every chest fails the corner test
+    // and falls back to wall-adjacent placement.
+    var chamberBounds = (() => {
+      let left = 32, right = -1, top = 32, bot = -1;
+      for (let y = roomTop; y <= roomBot; y++) {
+        for (let x = 0; x < 32; x++) {
+          if (isFloorTile(tilemap[y * 32 + x])) {
+            if (x < left) left = x; if (x > right) right = x;
+            if (y < top) top = y; if (y > bot) bot = y;
+          }
+        }
+      }
+      return right >= left ? { top, bot, left, right } : { top: roomTop, bot: roomBot, left: 1, right: 30 };
+    })();
 
   } else if (floorIndex === 2) {
     // ── Floor 2: Rock puzzle — building incrementally ───────────────────
@@ -2294,11 +2308,12 @@ function _generateFloor(romData, floorIndex, seed) {
       ? config.chests[0] + Math.floor(rng() * (config.chests[1] - config.chests[0] + 1))
       : config.chests;
     for (let i = 0; i < chestCount; i++) {
-      // Prefer a corner; fall back to any wall-adjacent floor so multi-room
-      // floors (floor 0) reliably place their chests instead of starving when
-      // the combined bounds have few qualifying corners.
+      // Chests must ALWAYS sit in a corner (touching >=2 perpendicular walls).
+      // Prefer a corner near the chamber edge; if none is free, fall back to any
+      // corner anywhere (bounds=null still enforces the 2-wall test) — never a
+      // plain wall-adjacent tile, which would leave a chest flat against 1 wall.
       const pos = (chamberBounds && findCornerFloor(tilemap, rng, used, chamberBounds))
-        || findWallAdjacentFloor(tilemap, rng, used);
+        || findCornerFloor(tilemap, rng, used, null);
       if (pos) {
         tilemap[pos.y * 32 + pos.x] = CHEST;
         for (let dy = -3; dy <= 3; dy++) {
