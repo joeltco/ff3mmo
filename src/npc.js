@@ -26,6 +26,28 @@ import { TOWN_NPCS } from './data/town-npcs.js';
 import { openShop } from './shop.js';
 import { waterSt } from './water-animation.js';
 import { battleSt } from './battle-state.js';
+import { ps } from './player-stats.js';
+import { playSFX, SFX } from './music.js';
+import { saveSlotsToDB } from './save-state.js';
+
+// Wind Crystal dialogue — condensed from the FF3 NES Altar-Cave crystal event
+// (disassembly event $4B / $C5, strings $1D/$1E). First talk = the blessing;
+// repeat talks = a flavor line + full restore (FF3 $C5 clears status + refills
+// HP/MP). See [[ff3mmo-crystal-reveal]].
+const CRYSTAL_BLESSING = [
+  'The crystal sparkles with a fading light...',
+  "'You have been chosen, Light Warrior.'",
+  "'Take the last of the light left in me.'",
+  "'The balance of all things is crumbling.'",
+  "'With the Light comes great strength.'",
+  "'Keep hope. Do not let this world vanish.'",
+  'Light surrounds you.',
+];
+const CRYSTAL_REVISIT = [
+  'The crystal sheds its light in silence...',
+  "'Light Warrior, bring hope to this world.'",
+  'HP and MP restored.',
+];
 
 const TILE_SIZE = 16;
 
@@ -479,6 +501,13 @@ function _drawBossNpc(ctx, sx, sy, npc) {
 
 export function talkToNpc(npc) {
   if (!npc) return;
+  // Wind Crystal (post-defeat reveal): blessing on first talk, full restore on
+  // repeat — mirrors the FF3 Altar-Cave crystal event. Only once it's morphed
+  // (crystal phase); a mid-blink talk is ignored.
+  if (npc.reveal) {
+    if (npc.reveal.phase === 'crystal') _talkToCrystal(npc);
+    return;
+  }
   // Shopkeeper NPC: open the linked shop directly. The shop UI takes over;
   // no dialogue box. Keep the NPC's south-facing pose (don't flip to player).
   if (npc.shopId) {
@@ -497,4 +526,18 @@ export function talkToNpc(npc) {
   }
   const pages = npc.dialogue.map(line => _nameToBytes(line));
   showMsgBoxPages(pages, () => { npc.talkFacing = null; });
+}
+
+function _talkToCrystal(npc) {
+  playSFX(SFX.CURE);
+  if (!npc.crystalSpoken) {
+    npc.crystalSpoken = true;   // first talk = the blessing (no heal, like FF3 $4B)
+    showMsgBoxPages(CRYSTAL_BLESSING.map(p => _nameToBytes(p)));
+    return;
+  }
+  // Repeat talk = full restore (FF3 $C5: clear status + refill HP/MP), then flavor.
+  if (ps.stats) { ps.hp = ps.stats.maxHP; ps.mp = ps.stats.maxMP; }
+  if (ps.status) ps.status.mask = 0;
+  saveSlotsToDB();
+  showMsgBoxPages(CRYSTAL_REVISIT.map(p => _nameToBytes(p)));
 }
