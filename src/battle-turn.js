@@ -23,6 +23,7 @@ import { sendNetPVPAction } from './net.js';
 import { SPELLS } from './data/spells.js';
 import { selectCursor, saveSlots, saveSlotsToDB } from './save-state.js';
 import { removeItem } from './inventory.js';
+import { startAllyRevive } from './battle-fenix-revive.js';
 import { canCastBasic, canCastAny, pickHealTarget, pickPoisonedTarget,
          pickRandomLivingTarget, pickOffensiveSpell, rollOffensiveDamage,
          rollCureAmount, rollActivation,
@@ -678,12 +679,13 @@ function _playerTurnConsumable() {
     if (target === 'player' && allyIndex >= 0) {
       const a = (battleSt.battleAllies || [])[allyIndex];
       if (a && a.hp <= 0) {
-        const heal = Math.max(1, Math.floor(a.maxHP / 3));
-        a.hp = heal;
-        a.deathTimer = null;   // clear the death pose — ally returns
-        battleSt.itemHealAmount = heal;
-        getAllyDamageNums()[allyIndex] = { value: heal, timer: 0, heal: true };
+        // Downed ally → run the death-pose → angel → rise → healnum sequence
+        // (seizes battleState 'fenix-revive'). HP, death-timer clear, and heal
+        // number are applied by the sequence at its rise/heal phases.
+        startAllyRevive(allyIndex);
+        return;   // bypass item-use; the sequence advances the turn itself
       } else if (a) {
+        // Living target → fall back to a `power` heal so a rare item isn't wasted.
         const heal = applyMagicHeal(a, power, { onHealNum: (n) => { getAllyDamageNums()[allyIndex] = { value: n, timer: 0, heal: true }; } });
         battleSt.itemHealAmount = heal;
       }

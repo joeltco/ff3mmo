@@ -28,6 +28,8 @@ import { _nameToBytes, drawLvHpRow } from './text-utils.js';
 import { pvpSt } from './pvp.js';
 import { ui } from './ui-state.js';
 import { isVictoryBattleState } from './battle-update.js';
+import { isFenixReviving, fenixReviveAllyIndex, fenixRevivePhase, fenixAngelFrame, fenixAngelProgress, fenixRiseProgress } from './battle-fenix-revive.js';
+import { getReviveAngelFrames } from './data/revive-angel-sprite.js';
 import { drawHudBox } from './hud-drawing.js';
 // `_jobPalette`, `_itemSparkleFrames`, `drawStatusSpriteAbove` are defined in
 // battle-drawing.js and re-exported back to here. Keeping the same circular
@@ -127,15 +129,39 @@ function _drawAllyRow(i, ally, panelTop, weaponDraws) {
       _drawAllyTexts(i, ally, rowY, false, ppx, ppy, weaponDraws);
       ui.ctx.globalAlpha = 1;
     } else {
-      // Phase 3: death pose fades in (24×16, centered in the name/HP info box)
-      const fadeT = Math.min((dt - DEATH_SLIDE_MS - DEATH_TXTFADE_MS) / DEATH_POSEFADE_MS, 1);
+      // Phase 3: death pose fades in (24×16, centered in the name/HP info box).
+      // During a FenixDown revive of THIS ally: the angel flaps beside the body
+      // ('angel'), then the body fades out as the portrait rises ('rise').
+      const reviving = isFenixReviving() && fenixReviveAllyIndex() === i;
+      const phase = reviving ? fenixRevivePhase() : null;
+      const fadeIn = Math.min((dt - DEATH_SLIDE_MS - DEATH_TXTFADE_MS) / DEATH_POSEFADE_MS, 1);
+      const deathAlpha = (phase === 'rise') ? (1 - fenixRiseProgress()) : fadeIn;
       const deathCanvas = (fakePlayerDeathPoseCanvases[ally.jobIdx || 0] || fakePlayerDeathPoseCanvases[0])?.[ally.palIdx];
-      if (deathCanvas) {
-        ui.ctx.globalAlpha = fadeT;
-        const dx = HUD_RIGHT_X + HUD_RIGHT_W - 24 - 8;
-        const dy = rowY + Math.floor((ROSTER_ROW_H - 16) / 2);
+      const dx = HUD_RIGHT_X + HUD_RIGHT_W - 24 - 8;
+      const dy = rowY + Math.floor((ROSTER_ROW_H - 16) / 2);
+      if (deathCanvas && deathAlpha > 0) {
+        ui.ctx.globalAlpha = deathAlpha;
         ui.ctx.drawImage(deathCanvas, dx, dy);
         ui.ctx.globalAlpha = 1;
+      }
+      // Angel beside the body, drifting up.
+      if (phase === 'angel') {
+        const angel = getReviveAngelFrames()[fenixAngelFrame()];
+        ui.ctx.drawImage(angel, dx - 16, dy - Math.floor(fenixAngelProgress() * 8));
+      }
+      // Rise: ally portrait slides up into the portrait slot.
+      if (phase === 'rise') {
+        const idleSet = (fakePlayerPortraits[ally.jobIdx || 0] || fakePlayerPortraits[0])[ally.palIdx];
+        const idle = idleSet && idleSet[ally.fadeStep];
+        if (idle) {
+          const riseT = fenixRiseProgress();
+          ui.ctx.save();
+          ui.ctx.beginPath(); ui.ctx.rect(ppx, ppy, 16, 16); ui.ctx.clip();
+          ui.ctx.globalAlpha = riseT;
+          ui.ctx.drawImage(idle, ppx, ppy + Math.floor((1 - riseT) * 16));
+          ui.ctx.globalAlpha = 1;
+          ui.ctx.restore();
+        }
       }
     }
     ui.ctx.restore();

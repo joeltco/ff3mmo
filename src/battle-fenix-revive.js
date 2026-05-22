@@ -28,7 +28,7 @@ import { showMsgBox, forceCloseMsgBox } from './message-box.js';
 import { _nameToBytes } from './text-utils.js';
 import { playSFX, SFX } from './music.js';
 import { clearAll as clearAllStatus } from './status-effects.js';
-import { setPlayerHealNum, tickHealNums, clearHealNums, DMG_SHOW_MS } from './damage-numbers.js';
+import { setPlayerHealNum, getAllyDamageNums, tickHealNums, clearHealNums, DMG_SHOW_MS } from './damage-numbers.js';
 import { processNextTurn } from './battle-turn.js';
 
 export const FENIX_ITEM_ID = 0xA9;
@@ -46,9 +46,13 @@ const CONFIRM_TEXT = _nameToBytes('Use FenixDown? A:Yes B:No');
 let _phase = null;
 let _t = 0;
 let _reviveHeal = 0;   // HP restored — shown as a heal number after the portrait returns
+let _allyIndex = null; // null = player's own on-death revive; number = ally being revived (manual item)
 
 export function isFenixReviving()  { return _phase != null; }
 export function fenixRevivePhase() { return _phase; }
+// null when reviving the player (renders in battle-draw-player); else the ally
+// row index (renders in battle-draw-allies).
+export function fenixReviveAllyIndex() { return _allyIndex; }
 // 0→1 progress through the portrait-rise phase (0 outside it).
 export function fenixRiseProgress() { return _phase === 'rise' ? Math.min(_t / FENIX_RISE_MS, 1) : 0; }
 // 0→1 progress through the angel phase (drives the angel's upward drift).
@@ -64,6 +68,7 @@ export function tryStartFenixRevive() {
   if (_phase != null) return true;            // already reviving
   if (!hasItem(FENIX_ITEM_ID)) return false;  // no item → normal death/respawn
   // NOTE: the item is NOT consumed here — only on a "Yes" at the confirm box.
+  _allyIndex = null;   // player's own revive
   _phase = 'death-anim';
   _t = 0;
   // Round ends here; a fresh round opens on the player's turn after the revive.
@@ -95,6 +100,21 @@ export function fenixConfirmNo() {
   battleSt.battleTimer = 0;
 }
 
+// Manual FenixDown used on a DOWNED ally (from the battle Item menu). The item
+// is already consumed by _playerTurnItem and the revive SFX played by
+// _playerTurnConsumable; this just runs the angel → rise → healnum sequence on
+// that ally (no confirm — selecting the item IS the confirm), then advances the
+// turn. The ally's death pose is already showing (ally.deathTimer set).
+export function startAllyRevive(allyIndex) {
+  if (_phase != null) return;
+  _allyIndex = allyIndex;
+  _phase = 'angel';
+  _t = 0;
+  battleSt.isDefending = false;
+  battleSt.battleState = 'fenix-revive';
+  battleSt.battleTimer = 0;
+}
+
 // Sub-FSM tick. Returns true while a revive is active so `updateBattle` stops
 // dispatching the normal handlers this frame.
 export function updateFenixRevive(dt) {
@@ -116,21 +136,37 @@ export function updateFenixRevive(dt) {
       _phase = 'rise';
       _t = 0;
       // Restore at the start of the rise so the HP bar + portrait read alive.
-      const maxHP = ps.stats ? ps.stats.maxHP : 28;
-      _reviveHeal = Math.max(1, Math.floor(maxHP / 3));
-      ps.hp = _reviveHeal;   // revived from 0, so HP received == _reviveHeal
-      // Revive = clean state (NES canon; mirrors _respawnAtLastTown).
-      if (ps.status) clearAllStatus(ps.status);
+      // (revived from 0, so HP received == _reviveHeal). The death pose keeps
+      // rendering during the rise via the death timer, which clears at rise end.
+      if (_allyIndex == null) {
+        const maxHP = ps.stats ? ps.stats.maxHP : 28;
+        _reviveHeal = Math.max(1, Math.floor(maxHP / 3));
+        ps.hp = _reviveHeal;
+        // Revive = clean state (NES canon; mirrors _respawnAtLastTown).
+        if (ps.status) clearAllStatus(ps.status);
+      } else {
+        const a = (battleSt.battleAllies || [])[_allyIndex];
+        const maxHP = a ? a.maxHP : 28;
+        _reviveHeal = Math.max(1, Math.floor(maxHP / 3));
+        if (a) a.hp = _reviveHeal;
+      }
       // "Revived" message shows as the portrait slides up into the HUD.
       queueBattleMsg(_nameToBytes('Revived'));
     }
   } else if (_phase === 'rise') {
     if (_t >= FENIX_RISE_MS) {
-      hudSt.playerDeathTimer = null;   // portrait has fully returned
       _phase = 'healnum';
       _t = 0;
-      // Heal number pops on the returned portrait, showing HP restored.
-      setPlayerHealNum({ value: _reviveHeal, timer: 0 });
+      // Death pose has fully faded / portrait returned → pop the heal number.
+      if (_allyIndex == null) {
+        hudSt.playerDeathTimer = null;
+        setPlayerHealNum({ value: _reviveHeal, timer: 0 });
+      } else {
+        const a = (battleSt.battleAllies || [])[_allyIndex];
+        if (a) a.deathTimer = null;
+        // Ally heal numbers ride allyDamageNums (ticked by tickDmgNums each frame).
+        getAllyDamageNums()[_allyIndex] = { value: _reviveHeal, timer: 0, heal: true };
+      }
     }
   } else if (_phase === 'healnum') {
     tickHealNums(dt);   // bounce + age the number (not ticked elsewhere this state)
@@ -165,4 +201,5 @@ export function resetFenixRevive() {
   _phase = null;
   _t = 0;
   _reviveHeal = 0;
+  _allyIndex = null;
 }
