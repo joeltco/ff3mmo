@@ -44,27 +44,27 @@ const LOOT_POOLS = {
     { weight: 30, pool: [GIL(10, 30)] },
   ],
   1000: [ // Altar Cave F1
-    { weight: 52, pool: [0xA6] },                                 // Potion
+    { weight: 16, pool: [0xA6] },                                 // Potion (rarer — was 52)
     { weight: 30, pool: [GIL(20, 60)] },
     { weight: 15, pool: [0x62] },                                 // Leather Cap
     { weight:  3, pool: [0xE3, 0xE1] },                           // Cure scroll, Ice scroll (rare)
   ],
   1001: [ // Altar Cave F2
-    { weight: 42, pool: [0xA6] },                                 // Potion
+    { weight: 12, pool: [0xA6] },                                 // Potion (rarer — was 42)
     { weight: 30, pool: [GIL(40, 100)] },
     { weight: 20, pool: [0x62, 0x1F, 0x06, 0x0E] },               // Leather Cap, Dagger, Nunchuck, Staff
     { weight:  5, pool: [0x58] },                                 // Leather Shield
     { weight:  3, pool: [0xE3, 0xE1] },                           // Cure scroll, Ice scroll (rare)
   ],
   1002: [ // Altar Cave F3
-    { weight: 32, pool: [0xA6] },                                 // Potion
+    { weight: 9, pool: [0xA6] },                                  // Potion (rarer — was 32)
     { weight: 30, pool: [GIL(75, 175)] },
     { weight: 25, pool: [0x58, 0x1F] },                           // Leather Shield, Dagger
     { weight: 10, pool: [0x73] },                                 // Leather Armor
     { weight:  3, pool: [0xE3, 0xE1] },                           // Cure scroll, Ice scroll (rare)
   ],
   1003: [ // Altar Cave F4
-    { weight: 22, pool: [0xA6] },
+    { weight: 6, pool: [0xA6] },                                  // Potion (rarer — was 22)
     { weight: 30, pool: [GIL(125, 275)] },
     { weight: 25, pool: [0x73, 0x1F] },                           // Leather Armor, Dagger
     { weight: 20, pool: [0x8B, 0x24] },                           // Bronze Bracers (mage arm), Longsword
