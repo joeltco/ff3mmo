@@ -59,6 +59,7 @@ const PAUSE_MIN_MS     = 1500;
 const PAUSE_MAX_MS     = 4000;
 const WALK_RUN_MIN     = 1;     // tiles per wander burst
 const WALK_RUN_MAX     = 3;
+const MOOGLE_LEASH     = 2;     // max Chebyshev tiles the cave moogle wanders from its spawn
 const FLOOR            = 0x30;
 const IDLE_MARCH_MS    = 480;   // walk-cycle period for stationary NPCs
 
@@ -171,11 +172,15 @@ export function clearNpcs() { _npcs = []; }
 
 export function addMoogle(tileX, tileY) {
   const entry = NPCS.get('altar_moogle');
-  _npcs.push(_makeNpc('altar_moogle', tileX, tileY, {
+  const npc = _makeNpc('altar_moogle', tileX, tileY, {
     spriteKey: 'moogle',
     dialogue:  (entry && entry.dialogue) || [],
     mode:      'pause',
-  }));
+  });
+  // Wanders, but stays near the chamber center — leashed to within MOOGLE_LEASH
+  // tiles of its spawn so it's always findable. v1.7.561.
+  npc.homeX = tileX; npc.homeY = tileY; npc.leash = MOOGLE_LEASH;
+  _npcs.push(npc);
 }
 
 // Stationary shopkeeper NPC — walks in place; opens `shopId` on Z.
@@ -346,6 +351,7 @@ function _trySameDir(npc) {
   const tx = npc.tileX + dx, ty = npc.tileY + dy;
   if (!_isOpenAreaTile(mapSt.mapData.tilemap, tx, ty)) return false;
   if (_tileOccupied(tx, ty, npc)) return false;
+  if (npc.leash != null && (Math.abs(tx - npc.homeX) > npc.leash || Math.abs(ty - npc.homeY) > npc.leash)) return false;
   npc.mode = 'walk';
   npc.timer = WALK_DURATION_MS;
   npc.walkFromX = npc.tileX;
@@ -364,6 +370,7 @@ function _startWalk(npc) {
     const tx = npc.tileX + dx, ty = npc.tileY + dy;
     if (!_isOpenAreaTile(mapSt.mapData.tilemap, tx, ty)) continue;
     if (_tileOccupied(tx, ty, npc)) continue;
+    if (npc.leash != null && (Math.abs(tx - npc.homeX) > npc.leash || Math.abs(ty - npc.homeY) > npc.leash)) continue;
     npc.mode = 'walk';
     npc.timer = WALK_DURATION_MS;
     npc.walkFromX = npc.tileX;

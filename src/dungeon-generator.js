@@ -914,7 +914,7 @@ function placeEntrance(tilemap, x, y, floorIndex) {
 
 // Floor feature counts per floor index
 const FLOOR_CONFIG = [
-  { stairs: 1, traps: 0, chests: 0, ponds: 0, skeletons: 0, secrets: 1 }, // floor 0
+  { stairs: 1, traps: 0, chests: [1, 2], ponds: 0, skeletons: [4, 7], secrets: 1 }, // floor 0
   { stairs: 0, traps: [3, 5], chests: [4, 6], ponds: 0, skeletons: 9, secrets: 0 }, // floor 1
   { stairs: 0, traps: 0, chests: 0, ponds: 0, skeletons: 0, secrets: 0, rockPuzzle: true }, // floor 2
   { stairs: 0, traps: 0, chests: 0, ponds: 0, skeletons: [4, 6], secrets: 0 },             // floor 3
@@ -1354,7 +1354,18 @@ function _generateFloor(romData, floorIndex, seed) {
     var endRowForSecret = endRow;
     var exitXForUsed = exitX;
     var endRowForUsed = endRow;
-    var chamberBounds = null;
+    // Bounding box of the path-mode cave floor (rows startRow..endRow) so corner
+    // chests + scattered skeletons land inside the cave instead of falling back
+    // to generic wall-adjacent placement. v1.7.561.
+    var chamberBounds = (() => {
+      let left = 32, right = -1;
+      for (let y = startRow; y <= endRow; y++) {
+        for (let x = 0; x < 32; x++) {
+          if (isFloorTile(tilemap[y * 32 + x])) { if (x < left) left = x; if (x > right) right = x; }
+        }
+      }
+      return right >= left ? { top: startRow, bot: endRow, left, right } : null;
+    })();
 
   } else if (floorIndex === 2) {
     // ── Floor 2: Rock puzzle — building incrementally ───────────────────
