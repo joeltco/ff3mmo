@@ -1368,10 +1368,14 @@ function _generateFloor(romData, floorIndex, seed) {
       }
     }
 
-    // Cleanup + overhang on the rooms. The connecting corridor is carved LATE
-    // (after the final enforceMinCeilingGap, below) so a 1-tile-tall passage
-    // doesn't get walled up by the gap-closing pass.
+    // Standard cleanup — same passes/order as the other floors (floor 0 was
+    // missing ensureCeilingConnectivity, which is why ceilings could float).
+    // The connecting corridor is carved LATE (after addOverhang + the final
+    // enforceMinCeilingGap, below) so nothing fills its 1-tile floor and the
+    // closing pass doesn't wall it; ensureCeilingConnectivity runs after the
+    // carve to keep its ceilings clean. Entrance block is untouched by all this.
     enforceMinCeilingGap(tilemap);
+    ensureCeilingConnectivity(tilemap);
     addOverhang(tilemap);
 
     var corrRowForBridge = roomTop + Math.floor((roomBot - roomTop) / 2);
@@ -2356,35 +2360,29 @@ function _generateFloor(romData, floorIndex, seed) {
     // Secret path (floor 0 only)
     falseWalls = placeSecretPath(tilemap, startRowForSecret, endRowForSecret, floorIndex, rng, exitXForSecret);
 
-    // Corridors carved by placeSecretPath can create ceiling gaps — fix them
-    if (floorIndex === 0) enforceMinCeilingGap(tilemap);
+    if (floorIndex === 0) {
+      // Fix any ceiling gaps the secret corridors opened.
+      enforceMinCeilingGap(tilemap);
 
-    // Floor 0: connect the two rooms with a NARROW (1-tile-tall) corridor.
-    // Carved here — after the final enforceMinCeilingGap — so the thin passage
-    // isn't closed by the <3 gap-closing rule. Bridges the gap between the two
-    // floor clusters at the corridor row; encloses it with rock above/below.
-    if (floorIndex === 0 && corrRowForBridge != null) {
-      const cy = corrRowForBridge;
-      let lo = 32, hi = -1;
-      for (let x = 0; x < 32; x++) {
-        if (isFloorTile(tilemap[cy * 32 + x])) { if (x < lo) lo = x; if (x > hi) hi = x; }
+      // Carve the connecting corridor LAST — after addOverhang + the gap-closing
+      // pass — so nothing fills its 1-tile floor and it isn't walled up. Walled
+      // like the secret corridors (rocky+rocky+ceiling above, ceiling+rocky+rocky
+      // below); only fills void, so room/entrance tiles are never overwritten.
+      if (corrRowForBridge != null) {
+        const cy = corrRowForBridge;
+        let lo = 32, hi = -1;
+        for (let x = 0; x < 32; x++) if (isFloorTile(tilemap[cy * 32 + x])) { if (x < lo) lo = x; if (x > hi) hi = x; }
+        const setVoid = (r, x, t) => { if (r >= 0 && r < 32 && tilemap[r * 32 + x] === FILL_VOID) tilemap[r * 32 + x] = t; };
+        for (let x = lo; hi >= lo && x <= hi; x++) {
+          if (isFloorTile(tilemap[cy * 32 + x])) continue;    // room floor — leave it
+          tilemap[cy * 32 + x] = FLOOR;                       // open mouths + bridge gap
+          setVoid(cy - 1, x, WALL_ROCKY); setVoid(cy - 2, x, WALL_ROCKY); setVoid(cy - 3, x, CEILING);
+          setVoid(cy + 1, x, CEILING);    setVoid(cy + 2, x, WALL_ROCKY); setVoid(cy + 3, x, WALL_ROCKY);
+        }
       }
-      // Only fill void above/below — room tiles at the corridor ends keep their
-      // own walls so the tunnel blends into each room.
-      const setVoid = (r, x, t) => { if (r >= 0 && r < 32 && tilemap[r * 32 + x] === FILL_VOID) tilemap[r * 32 + x] = t; };
-      for (let x = lo; hi >= lo && x <= hi; x++) {
-        if (isFloorTile(tilemap[cy * 32 + x])) continue;  // already room floor
-        // 1-tile-tall tunnel through the gap, walled like the rest of the build:
-        // rocky + ceiling above, ceiling + rocky below (same as the secret
-        // corridors). The walkable run stays 1 tile; the rock around it is thick.
-        tilemap[cy * 32 + x] = FLOOR;
-        setVoid(cy - 1, x, WALL_ROCKY);
-        setVoid(cy - 2, x, WALL_ROCKY);
-        setVoid(cy - 3, x, CEILING);
-        setVoid(cy + 1, x, CEILING);
-        setVoid(cy + 2, x, WALL_ROCKY);
-        setVoid(cy + 3, x, WALL_ROCKY);
-      }
+
+      // Clean disconnected ceilings left by the secret corridors + the bridge.
+      ensureCeilingConnectivity(tilemap);
     }
 
     // Dungeon destinations — all type-1 triggers go to next floor
