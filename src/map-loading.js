@@ -8,7 +8,7 @@ import { DIR_DOWN } from './sprite.js';
 import { sprite } from './player-sprite.js';
 import { resetIndoorWaterCache } from './water-animation.js';
 import { clearFlameSprites, rebuildFlameSprites } from './flame-sprites.js';
-import { clearNpcs, placeMoogleAtCaveCenter, placeOpeningScene, placeTownNpcs, addBlackMageShopkeeper, addBossNpc, getLandTurtleFrames } from './npc.js';
+import { clearNpcs, placeMoogleAtCaveCenter, placeOpeningScene, placeTownNpcs, addBlackMageShopkeeper, addBossNpc, addCrystalNpc, getLandTurtleFrames } from './npc.js';
 import { transSt, topBoxSt } from './transitions.js';
 import { BATTLE_BG_MAP_LOOKUP, renderBattleBg } from './battle-bg.js';
 import { AREA_NAMES, DUNGEON_NAME } from './data/strings.js';
@@ -155,6 +155,13 @@ function _loadDungeonFloor(mapId, returnX, returnY) {
   if (floorIndex === 4 && getLandTurtleFrames() && !battleSt.enemyDefeated) {
     mapSt.bossSprite = { px: 6 * TILE_SIZE, py: 8 * TILE_SIZE };
     addBossNpc(6, 8);
+  } else if (floorIndex === 4 && battleSt.enemyDefeated) {
+    // Turtle already beaten this dungeon run — the Wind Crystal stands in its
+    // place (no blink; the live blink→crystal reveal only plays on the winning
+    // turn). No bossSprite → walkable, no re-trigger. Turtle respawns once
+    // enemyDefeated resets on world-map exit (map-loading gate above).
+    mapSt.bossSprite = null;
+    addCrystalNpc(6, 8);
   } else {
     mapSt.bossSprite = null;
   }

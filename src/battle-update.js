@@ -42,7 +42,7 @@ import { applyPhysicalHitToEnemy } from './physical-attack.js';
 import { playSlashSFX } from './battle-sfx.js';
 import { saveSlotsToDB } from './save-state.js';
 import { addItem, buildItemSelectList } from './inventory.js';
-import { removeBossNpc } from './npc.js';
+import { startCrystalReveal } from './npc.js';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 // BATTLE_TEXT_STEPS / BATTLE_TEXT_STEP_MS now imported from battle-state.js (single source).
@@ -818,7 +818,11 @@ function _updateBossDissolve(dt) {
   if (dBlock !== prevBlock && dBlock > 0 && (dBlock & 3) === 0) playSFX(SFX.BOSS_DEATH);
   if (battleSt.battleTimer >= BOSS_BLOCKS * BOSS_DISSOLVE_STEPS * BOSS_DISSOLVE_FRAME_MS) {
     battleSt.enemyDefeated = true; mapSt.bossSprite = null;
-    removeBossNpc();  // v1.7.454 — drop overworld sprite; respawns on map reload
+    // Land Turtle → Wind Crystal: keep the overworld sprite and flip it into
+    // the blink→crystal reveal. It blinks once the battle HUD exits (updateNpcs
+    // only ticks in the overworld), then morphs to the standing crystal. The
+    // turtle still respawns on map reload (re-fightable), see map-loading.
+    startCrystalReveal();
     ps.unlockedJobs |= 0x3E; // Wind Crystal: bits 1-5 (Warrior, Monk, White Mage, Black Mage, Red Mage)
     // KO'd player: skip rewards and victory, straight to box-close (→ respawn).
     if (ps.hp <= 0) {

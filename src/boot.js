@@ -10,7 +10,8 @@ import { hudSt } from './hud-state.js';
 import { ui } from './ui-state.js';
 import { battleSt } from './battle-state.js';
 import { initFlameRawTiles, initStarTiles } from './flame-sprites.js';
-import { setLandTurtleFrames, setLandTurtleFadeFrames, setLoadingMoogleFadeFrames } from './npc.js';
+import { setLandTurtleFrames, setLandTurtleFadeFrames, setLoadingMoogleFadeFrames, setCrystalFrames } from './npc.js';
+import { initCrystalSprite } from './crystal-sprite.js';
 import { initTitleWater, initTitleSky, initTitleUnderwater,
          initUnderwaterSprites, initTitleOcean, initTitleLogo } from './title-animations.js';
 import { ps, initPlayerStats, initExpTable } from './player-stats.js';
@@ -66,6 +67,7 @@ export function initSpriteAssets(rom) {
 
   initRoster();
   loadBossSprite(0xCC); // Land Turtle — only boss in game
+  setCrystalFrames(initCrystalSprite()); // Wind Crystal (Land Turtle defeat reveal)
 
   const gs = initGoblinSprite(rom);
   battleSt.goblinBattleCanvas = gs.goblinBattleCanvas;

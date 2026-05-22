@@ -46,9 +46,34 @@ let _npcs = [];
 let _landTurtleFrames = null;        // [normal16, flipped16]
 let _landTurtleFadeFrames = null;    // [[normal, flipped], ...] per fade level
 let _loadingMoogleFadeFrames = null; // [[normal, flipped], ...] per fade level
+let _crystalFrames = null;           // [frameA, frameB, frameC] — 16×32 Wind Crystal
 
 export function setLandTurtleFrames(f)        { _landTurtleFrames = f; }
 export function getLandTurtleFrames()         { return _landTurtleFrames; }
+export function setCrystalFrames(f)           { _crystalFrames = f; }
+export function getCrystalFrames()            { return _crystalFrames; }
+
+// Land Turtle → Wind Crystal reveal timing (overworld, on defeat).
+const CRYSTAL_BLINK_MS     = 720;    // total blink phase (~4 blinks before morph)
+const CRYSTAL_BLINK_PERIOD = 90;     // visible/hidden toggle interval
+const CRYSTAL_ANIM_MS      = 140;    // crystal shimmer frame hold
+
+// Flip the existing boss NPC into the blink→crystal reveal. Called on defeat
+// instead of removeBossNpc — the turtle stays on the tile, blinks a few times
+// once the battle HUD exits (updateNpcs only ticks in the overworld), then
+// morphs into the standing crystal. See [[ff3mmo-crystal-reveal]].
+export function startCrystalReveal() {
+  const boss = _npcs.find(n => n.key === 'boss_land_turtle');
+  if (boss) boss.reveal = { phase: 'blink', t: 0 };
+}
+
+// Place the already-revealed Wind Crystal (no blink) — used by map-loading when
+// re-entering the Crystal Room with the turtle already defeated this run.
+export function addCrystalNpc(tileX, tileY) {
+  const npc = _makeNpc('boss_land_turtle', tileX, tileY, { spriteKey: 'boss', mode: 'static' });
+  npc.reveal = { phase: 'crystal', t: 0 };
+  _npcs.push(npc);
+}
 export function setLandTurtleFadeFrames(f)    { _landTurtleFadeFrames = f; }
 export function getLandTurtleFadeFrames()     { return _landTurtleFadeFrames; }
 export function setLoadingMoogleFadeFrames(f) { _loadingMoogleFadeFrames = f; }
@@ -245,7 +270,17 @@ export function findNpcAt(tileX, tileY) {
 export function updateNpcs(dt) {
   if (_npcs.length === 0) return;
   if (msgState.state !== 'none') return;
-  for (const npc of _npcs) _tickNpc(npc, dt);
+  for (const npc of _npcs) {
+    if (npc.reveal) { _tickReveal(npc, dt); continue; }
+    _tickNpc(npc, dt);
+  }
+}
+
+function _tickReveal(npc, dt) {
+  npc.reveal.t += dt;
+  if (npc.reveal.phase === 'blink' && npc.reveal.t >= CRYSTAL_BLINK_MS) {
+    npc.reveal.phase = 'crystal'; npc.reveal.t = 0;   // morph; crystal holds forever
+  }
 }
 
 function _tickNpc(npc, dt) {
@@ -394,7 +429,7 @@ export function drawNpcs(ctx, camX, camY, originX, originY, spriteY) {
     if (sx < -16 || sx > 256 || sy < -16 || sy > 240) continue;
 
     if (npc.spriteKey === 'boss') {
-      _drawBossNpc(ctx, sx, sy);
+      _drawBossNpc(ctx, sx, sy, npc);
       continue;
     }
     // Sprite-class NPCs (moogle / black_mage / scene).
@@ -408,17 +443,35 @@ export function drawNpcs(ctx, camX, camY, originX, originY, spriteY) {
   }
 }
 
-function _drawBossNpc(ctx, sx, sy) {
+function _drawBossNpc(ctx, sx, sy, npc) {
+  ctx.imageSmoothingEnabled = false;
+  const reveal = npc && npc.reveal;
+
+  // Defeat reveal — crystal phase: standing Wind Crystal, shimmer-animated.
+  // 16×32, bottom-aligned on the boss tile (extends one tile up).
+  if (reveal && reveal.phase === 'crystal') {
+    const cf = _crystalFrames;
+    if (!cf) return;
+    const ci = Math.floor(reveal.t / CRYSTAL_ANIM_MS) % cf.length;
+    ctx.drawImage(cf[ci], sx, sy - 16);
+    return;
+  }
+
   const frames = _landTurtleFrames;
   if (!frames) return;
-  // Blink-out during boss flash (e.g., spell impact) — preserved from the
-  // previous render.js path.
+
+  // Defeat reveal — blink phase: turtle flashes a few times before morphing.
+  if (reveal && reveal.phase === 'blink') {
+    if (Math.floor(reveal.t / CRYSTAL_BLINK_PERIOD) & 1) return;  // hidden half-cycle
+    ctx.drawImage(frames[0], sx, sy);
+    return;
+  }
+
+  // Normal: blink-out during boss flash (spell impact), else 2-frame idle on
+  // water-tick parity. Land Turtle only has south-facing frames in ROM.
   const blinkHidden = battleSt.bossFlashTimer > 0 && (Math.floor(battleSt.bossFlashTimer / 60) & 1);
   if (blinkHidden) return;
-  // 2-frame idle anim on water-tick parity. Land Turtle only has south-facing
-  // frames in ROM (no other directions captured), so no setDirection.
   const idx = Math.floor(waterSt.tick / 8) & 1;
-  ctx.imageSmoothingEnabled = false;
   ctx.drawImage(frames[idx], sx, sy);
 }
 
