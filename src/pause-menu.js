@@ -8,7 +8,8 @@ import { _makeFadedPal, nesColorFade } from './palette.js';
 import { _nameToBytes } from './text-utils.js';
 import { getItemNameClean, getItemNameShrines, getSpellNameClean, getSpellNameShrines } from './text-decoder.js';
 import { SPELLS, getSpellMPCost, getCastableKnownSpells, canLearnSpell } from './data/spells.js';
-import { stopFF1Music, resumeMusic, playFF1Track, FF1_TRACKS, playSFX, SFX, pauseMusic } from './music.js';
+import { stopFF1Music, resumeMusic, playFF1Track, FF1_TRACKS, playSFX, SFX, pauseMusic, applyMusicVolume, applySfxVolume } from './music.js';
+import { getSetting, setSetting, VOL_MAX } from './settings.js';
 import { PAUSE_ITEMS } from './data/strings.js';
 import { selectCursor, saveSlots, saveSlotsToDB } from './save-state.js';
 import { ui } from './ui-state.js';
@@ -495,7 +496,23 @@ function _toggleCrt() {
 }
 
 const OPT_ROW_H = 16;       // vertical pitch between option rows
-const OPT_ROW_COUNT = 2;    // Color, CRT (Slice A — volume/speed rows land later)
+const OPT_ROW_COUNT = 4;    // Color, Music, SFX, CRT (text/battle speed land in Slice C)
+
+// Volume bar — VOL_MAX cells, `level` filled. Drawn right-aligned at valRx.
+function _drawVolBar(ctx, valRx, y, level, fadeStep) {
+  const CELL_W = 4, GAP = 1, H = 7;
+  const totalW = VOL_MAX * (CELL_W + GAP) - GAP;
+  const x0 = valRx - totalW;
+  let onCol = 0x30, offCol = 0x0F;          // white filled, dark empty
+  for (let s = 0; s < fadeStep; s++) { onCol = nesColorFade(onCol); offCol = nesColorFade(offCol); }
+  const on = NES_SYSTEM_PALETTE[onCol] || [255, 255, 255];
+  const off = NES_SYSTEM_PALETTE[offCol] || [60, 60, 60];
+  for (let i = 0; i < VOL_MAX; i++) {
+    const c = i < level ? on : off;
+    ctx.fillStyle = `rgb(${c[0]},${c[1]},${c[2]})`;
+    ctx.fillRect(x0 + i * (CELL_W + GAP), y, CELL_W, H);
+  }
+}
 
 function _drawPauseOptions(ctx) {
   const px = HUD_VIEW_X, finalY = HUD_VIEW_Y;
@@ -517,11 +534,21 @@ function _drawPauseOptions(ctx) {
   ctx.fillStyle = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
   ctx.fillRect(valRx - slotBytes.length * 8 - 14, y0, 8, 8);
 
-  // Row 1 — CRT toggle
+  // Row 1 — Music volume bar
   const y1 = y0 + OPT_ROW_H;
-  drawText(ctx, tx, y1, OPT_CRT_LABEL, fadedPal);
+  drawText(ctx, tx, y1, _nameToBytes('MUSIC'), fadedPal);
+  _drawVolBar(ctx, valRx, y1, getSetting('musicVol'), fadeStep);
+
+  // Row 2 — SFX volume bar
+  const y2 = y0 + OPT_ROW_H * 2;
+  drawText(ctx, tx, y2, _nameToBytes('SFX'), fadedPal);
+  _drawVolBar(ctx, valRx, y2, getSetting('sfxVol'), fadeStep);
+
+  // Row 3 — CRT toggle
+  const y3 = y0 + OPT_ROW_H * 3;
+  drawText(ctx, tx, y3, OPT_CRT_LABEL, fadedPal);
   const valBytes = _isCrtOn() ? OPT_ON : OPT_OFF;
-  drawText(ctx, valRx - valBytes.length * 8, y1, valBytes, fadedPal);
+  drawText(ctx, valRx - valBytes.length * 8, y3, valBytes, fadedPal);
 
   if (drawCursorFaded) {
     drawCursorFaded(px + 8, (y0 - 4) + pauseSt.optCursor * OPT_ROW_H, fadeStep);
@@ -1169,6 +1196,14 @@ function _changePlayerColor(dir) {
   playSFX(SFX.CURSOR);
 }
 
+function _changeVolume(key, dir, apply) {
+  const next = Math.max(0, Math.min(VOL_MAX, getSetting(key) + dir));
+  if (next === getSetting(key)) return;     // already at the rail — no SFX double-blip
+  setSetting(key, next);
+  apply();                                  // live: re-read setting → master gain
+  playSFX(SFX.CURSOR);                       // also lets the player hear the new SFX level
+}
+
 function _pauseInputOptions() {
   if (pauseSt.state !== 'options') return false;
   const k = keys;
@@ -1179,6 +1214,12 @@ function _pauseInputOptions() {
     if (left)  { k['ArrowLeft'] = false;  _changePlayerColor(-1); }
     if (right) { k['ArrowRight'] = false; _changePlayerColor(1); }
     if (_zPressed()) _changePlayerColor(1);
+  } else if (pauseSt.optCursor === 1) {    // Music volume
+    if (left)  { k['ArrowLeft'] = false;  _changeVolume('musicVol', -1, applyMusicVolume); }
+    if (right) { k['ArrowRight'] = false; _changeVolume('musicVol', 1, applyMusicVolume); }
+  } else if (pauseSt.optCursor === 2) {    // SFX volume
+    if (left)  { k['ArrowLeft'] = false;  _changeVolume('sfxVol', -1, applySfxVolume); }
+    if (right) { k['ArrowRight'] = false; _changeVolume('sfxVol', 1, applySfxVolume); }
   } else {                                  // CRT — either direction or Z toggles
     if (left || right) { k['ArrowLeft'] = false; k['ArrowRight'] = false; _toggleCrt(); playSFX(SFX.CONFIRM); }
     if (_zPressed()) { _toggleCrt(); playSFX(SFX.CONFIRM); }

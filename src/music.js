@@ -6,6 +6,7 @@
 import { buildNSF } from './nsf-builder.js';
 import { buildFF1NSF } from './ff1-nsf-builder.js';
 import { buildFF2NSF } from './ff2-nsf-builder.js';
+import { getSetting, volGain } from './settings.js';
 
 // Track indices — ROM song IDs (map properties byte 10)
 export const TRACKS = {
@@ -118,6 +119,45 @@ const CHIME_MS = 2200;  // hard cap — a looping NSF track won't run forever
 const BUF_SIZE = 4096; // samples per channel per callback (music, ~85ms at 48kHz)
 const SFX_BUF_SIZE = 2048;  // smaller buffer for SFX (~42ms latency at 48kHz)
 
+// Master volume buses. Every music emulator's per-track gain routes through
+// musicMasterGain; SFX + the @-mention chime route through sfxMasterGain. This
+// lets Options → Music / SFX set one gain each without touching the per-track
+// fade-out ramps (which still ride on each emulator's own gain node). Created
+// lazily once the AudioContext exists; initial gain reads from settings.
+let musicMasterGain = null;
+let sfxMasterGain = null;
+
+function _musicMaster() {
+  if (!musicMasterGain && audioCtx) {
+    musicMasterGain = audioCtx.createGain();
+    musicMasterGain.gain.value = volGain(getSetting('musicVol'));
+    musicMasterGain.connect(audioCtx.destination);
+  }
+  return musicMasterGain;
+}
+
+function _sfxMaster() {
+  if (!sfxMasterGain && audioCtx) {
+    sfxMasterGain = audioCtx.createGain();
+    sfxMasterGain.gain.value = volGain(getSetting('sfxVol'));
+    sfxMasterGain.connect(audioCtx.destination);
+  }
+  return sfxMasterGain;
+}
+
+// Re-read the stored volume and apply it to the live bus. Called by the Options
+// menu after changing the setting (and safe to call any time — no-op if the bus
+// isn't created yet, since _musicMaster/_sfxMaster read the setting on create).
+export function applyMusicVolume() {
+  const m = _musicMaster();
+  if (m && audioCtx) m.gain.setValueAtTime(volGain(getSetting('musicVol')), audioCtx.currentTime);
+}
+
+export function applySfxVolume() {
+  const m = _sfxMaster();
+  if (m && audioCtx) m.gain.setValueAtTime(volGain(getSetting('sfxVol')), audioCtx.currentTime);
+}
+
 export function initMusic(romData) {
   nsfData = buildNSF(romData);
 }
@@ -146,7 +186,7 @@ export function playTrack(trackId) {
   }
   if (!gainNode) {
     gainNode = audioCtx.createGain();
-    gainNode.connect(audioCtx.destination);
+    gainNode.connect(_musicMaster());
   }
   if (audioCtx.state === 'suspended') {
     audioCtx.resume();
@@ -312,7 +352,7 @@ export function playSFX(sfxId) {
         ch1[i] = Module.HEAP16[base + i * 2 + 1] / 32768;
       }
     };
-    sfxNode.connect(audioCtx.destination);
+    sfxNode.connect(_sfxMaster());
   }
 }
 
@@ -397,7 +437,7 @@ export function playFF1Track(trackId) {
     }
   };
 
-  if (!ff1GainNode) { ff1GainNode = audioCtx.createGain(); ff1GainNode.connect(audioCtx.destination); }
+  if (!ff1GainNode) { ff1GainNode = audioCtx.createGain(); ff1GainNode.connect(_musicMaster()); }
   if (ff1FadeTimer) { clearTimeout(ff1FadeTimer); ff1FadeTimer = null; }
   ff1GainNode.gain.cancelScheduledValues(audioCtx.currentTime);
   ff1GainNode.gain.setValueAtTime(1, audioCtx.currentTime);
@@ -480,7 +520,7 @@ export function playFF2Track(trackId) {
     }
   };
 
-  if (!ff2GainNode) { ff2GainNode = audioCtx.createGain(); ff2GainNode.connect(audioCtx.destination); }
+  if (!ff2GainNode) { ff2GainNode = audioCtx.createGain(); ff2GainNode.connect(_musicMaster()); }
   ff2GainNode.gain.cancelScheduledValues(audioCtx.currentTime);
   ff2GainNode.gain.setValueAtTime(1, audioCtx.currentTime);
   ff2Node.connect(ff2GainNode);
@@ -533,7 +573,7 @@ export function playMentionChime() {
     }
   };
 
-  if (!chimeGainNode) { chimeGainNode = audioCtx.createGain(); chimeGainNode.connect(audioCtx.destination); }
+  if (!chimeGainNode) { chimeGainNode = audioCtx.createGain(); chimeGainNode.connect(_sfxMaster()); }
   chimeGainNode.gain.cancelScheduledValues(audioCtx.currentTime);
   chimeGainNode.gain.setValueAtTime(0.85, audioCtx.currentTime);
   chimeNode.connect(chimeGainNode);
@@ -576,7 +616,7 @@ export function resumeMusic() {
     emu = stashedEmu;
     node = stashedNode;
     currentTrack = stashedTrack;
-    node.connect(audioCtx.destination);
+    node.connect(_musicMaster());
   }
   stashedEmu = null;
   stashedNode = null;
