@@ -1356,6 +1356,18 @@ function _generateFloor(romData, floorIndex, seed) {
     }
     placeExit(tilemap, exitX, roomBot);
 
+    // Close the top of Room B — it has no entrance, so without this its top
+    // floor row sits open against the void. Cap with ceiling above the top
+    // floor span; addOverhang then lays the rocky underside, matching the rest.
+    {
+      const bClamp = aOnRight ? LEFT_HALF : RIGHT_HALF;
+      for (let x = bClamp[0]; x <= bClamp[1]; x++) {
+        if (isFloorTile(tilemap[roomTop * 32 + x]) && tilemap[(roomTop - 1) * 32 + x] === FILL_VOID) {
+          tilemap[(roomTop - 1) * 32 + x] = CEILING;
+        }
+      }
+    }
+
     // Cleanup + overhang on the rooms. The connecting corridor is carved LATE
     // (after the final enforceMinCeilingGap, below) so a 1-tile-tall passage
     // doesn't get walled up by the gap-closing pass.
@@ -2357,12 +2369,21 @@ function _generateFloor(romData, floorIndex, seed) {
       for (let x = 0; x < 32; x++) {
         if (isFloorTile(tilemap[cy * 32 + x])) { if (x < lo) lo = x; if (x > hi) hi = x; }
       }
+      // Only fill void above/below — room tiles at the corridor ends keep their
+      // own walls so the tunnel blends into each room.
+      const setVoid = (r, x, t) => { if (r >= 0 && r < 32 && tilemap[r * 32 + x] === FILL_VOID) tilemap[r * 32 + x] = t; };
       for (let x = lo; hi >= lo && x <= hi; x++) {
-        if (!isFloorTile(tilemap[cy * 32 + x])) {
-          tilemap[cy * 32 + x] = FLOOR;                                  // bridge the gap
-          if (tilemap[(cy - 1) * 32 + x] === FILL_VOID) tilemap[(cy - 1) * 32 + x] = CEILING;
-          if (tilemap[(cy + 1) * 32 + x] === FILL_VOID) tilemap[(cy + 1) * 32 + x] = CEILING;
-        }
+        if (isFloorTile(tilemap[cy * 32 + x])) continue;  // already room floor
+        // 1-tile-tall tunnel through the gap, walled like the rest of the build:
+        // rocky + ceiling above, ceiling + rocky below (same as the secret
+        // corridors). The walkable run stays 1 tile; the rock around it is thick.
+        tilemap[cy * 32 + x] = FLOOR;
+        setVoid(cy - 1, x, WALL_ROCKY);
+        setVoid(cy - 2, x, WALL_ROCKY);
+        setVoid(cy - 3, x, CEILING);
+        setVoid(cy + 1, x, CEILING);
+        setVoid(cy + 2, x, WALL_ROCKY);
+        setVoid(cy + 3, x, WALL_ROCKY);
       }
     }
 
