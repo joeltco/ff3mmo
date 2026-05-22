@@ -31,12 +31,11 @@ import { processNextTurn } from './battle-turn.js';
 export const FENIX_ITEM_ID = 0xA9;
 
 // Phase durations (ms), each measured from the start of its own phase.
-export const FENIX_MSG_MS  = 900;   // "FenixDown!" message hold
-export const FENIX_ANIM_MS = 700;   // revive sparkle on the portrait
-export const FENIX_RISE_MS = 450;   // death pose fades + live portrait rises
-const SPARKLE_TOGGLE_MS    = 67;    // matches the heal-sparkle cadence
+export const FENIX_ANGEL_MS = 1400;  // the revive angel flaps beside the body
+export const FENIX_RISE_MS  = 450;   // death pose fades + live portrait rises
+const ANGEL_FLAP_MS         = 133;   // per-flap-frame cadence (8 NES frames)
 
-// null = not reviving. Otherwise one of: 'death-anim' | 'message' | 'anim' | 'rise'.
+// null = not reviving. Otherwise one of: 'death-anim' | 'angel' | 'rise'.
 let _phase = null;
 let _t = 0;
 
@@ -44,8 +43,10 @@ export function isFenixReviving()  { return _phase != null; }
 export function fenixRevivePhase() { return _phase; }
 // 0→1 progress through the portrait-rise phase (0 outside it).
 export function fenixRiseProgress() { return _phase === 'rise' ? Math.min(_t / FENIX_RISE_MS, 1) : 0; }
-// Sparkle frame index (0/1) during the 'anim' phase.
-export function fenixSparkleFrame() { return Math.floor(_t / SPARKLE_TOGGLE_MS) & 1; }
+// 0→1 progress through the angel phase (drives the angel's upward drift).
+export function fenixAngelProgress() { return _phase === 'angel' ? Math.min(_t / FENIX_ANGEL_MS, 1) : 0; }
+// Angel flap frame index (0/1/2) — cycles through the 3 captured frames.
+export function fenixAngelFrame() { return Math.floor(_t / ANGEL_FLAP_MS) % 3; }
 
 // Called the frame the player's HP first hits 0 in battle. If a FenixDown is
 // held, consume one and seize the battle into the revive sub-FSM. Returns true
@@ -72,17 +73,19 @@ export function updateFenixRevive(dt) {
   _t += dt;
   if (_phase === 'death-anim') {
     // Let the existing death animation (kneel slide → text fade → pose fade-in)
-    // finish before the revive begins.
+    // finish — that's the "death pose held for ~1s" before the angel appears.
     if (hudSt.playerDeathTimer != null && hudSt.playerDeathTimer >= DEATH_TOTAL_MS) {
-      _phase = 'message';
+      _phase = 'angel';
       _t = 0;
-      queueBattleMsg(_nameToBytes('FenixDown!'));
+      // INTERIM SFX: the captured death jingle ($7F49=$40) is the engine's
+      // post-consume residual, not the requested index (see SFX map notes,
+      // v1.7.111-112). Using CURE as the revive cue until a clean recapture
+      // (started BEFORE death) gives the real `$7F49=$Cx` write.
       playSFX(SFX.CURE);
     }
-  } else if (_phase === 'message') {
-    if (_t >= FENIX_MSG_MS) { _phase = 'anim'; _t = 0; }
-  } else if (_phase === 'anim') {
-    if (_t >= FENIX_ANIM_MS) {
+  } else if (_phase === 'angel') {
+    // Angel flaps beside the body, then the character is brought back.
+    if (_t >= FENIX_ANGEL_MS) {
       _phase = 'rise';
       _t = 0;
       // Restore at the start of the rise so the HP bar + portrait read alive.
@@ -90,6 +93,8 @@ export function updateFenixRevive(dt) {
       ps.hp = Math.max(1, Math.floor(maxHP / 3));
       // Revive = clean state (NES canon; mirrors _respawnAtLastTown).
       if (ps.status) clearAllStatus(ps.status);
+      // "Revived" message shows as the portrait slides up into the HUD.
+      queueBattleMsg(_nameToBytes('Revived'));
     }
   } else if (_phase === 'rise') {
     if (_t >= FENIX_RISE_MS) {

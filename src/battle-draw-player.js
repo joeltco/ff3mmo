@@ -32,7 +32,8 @@ import { clipToViewport, drawSparkleCorners, grayViewport } from './hud-drawing.
 // works for the menu/encounter/ally splits. `_itemSparkleFrames` is also used
 // by the ally module; `drawStatusSpriteAbove` is used by both ally and player.
 import { _itemSparkleFrames, drawStatusSpriteAbove } from './battle-drawing.js';
-import { isFenixReviving, fenixRevivePhase, fenixRiseProgress, fenixSparkleFrame, FENIX_ITEM_ID } from './battle-fenix-revive.js';
+import { isFenixReviving, fenixRevivePhase, fenixRiseProgress, fenixAngelFrame, fenixAngelProgress } from './battle-fenix-revive.js';
+import { getReviveAngelFrames } from './data/revive-angel-sprite.js';
 
 // ── Layout constants (match battle-drawing.js) ────────────────────────────
 const HUD_VIEW_X = 0, HUD_VIEW_Y = 32, HUD_VIEW_W = 144, HUD_VIEW_H = 144;
@@ -286,11 +287,14 @@ export function drawBattlePortrait() {
       }
     }
 
-    // FenixDown revive sparkle on the portrait slot ('anim' phase). Reuses the
-    // legacy Cure sparkle fallback until the dedicated revive OAM capture lands.
-    if (phase === 'anim') {
-      const frames = _itemSparkleFrames(FENIX_ITEM_ID);
-      if (frames && frames.length === 2) ui.ctx.drawImage(frames[fenixSparkleFrame()], px, py);
+    // FenixDown revive: the angel flaps to the LEFT of the death pose, drifting
+    // slightly upward (mirrors FF3's party-death spirit). Captured OAM sprite.
+    if (phase === 'angel') {
+      const angel = getReviveAngelFrames()[fenixAngelFrame()];
+      const dpx = HUD_RIGHT_X + HUD_RIGHT_W - 24 - 8;
+      const dpy = HUD_VIEW_Y + Math.floor((32 - 16) / 2);
+      const rise = Math.floor(fenixAngelProgress() * 8);
+      ui.ctx.drawImage(angel, dpx - 16, dpy - rise);
     }
 
     // FenixDown revive: live portrait rises from the bottom of the slot.
