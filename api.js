@@ -176,6 +176,22 @@ db.exec(`
     created_at INTEGER DEFAULT (unixepoch()),
     FOREIGN KEY (reporter_user_id) REFERENCES users(id)
   );
+  CREATE TABLE IF NOT EXISTS bug_reports (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    player_name TEXT,
+    text TEXT NOT NULL,
+    version TEXT,
+    map_id INTEGER,
+    tile_x INTEGER,
+    tile_y INTEGER,
+    on_world_map INTEGER,
+    dungeon_floor INTEGER,
+    battle_state TEXT,
+    ip TEXT,
+    created_at INTEGER DEFAULT (unixepoch()),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
 `);
 
 // JWT rotation column on `users`. Tokens issued before this unix-second
@@ -374,6 +390,33 @@ export async function handleAPI(req, res) {
     const tgtId = targetUserId == null ? null : (targetUserId | 0) || null;
     db.prepare('INSERT INTO reports (reporter_user_id, target_user_id, target_name, reason, ip) VALUES (?, ?, ?, ?, ?)')
       .run(user.userId, tgtId, cleanName, cleanReason, ip);
+    send(res, 200, { ok: true });
+    return true;
+  }
+
+  // POST /api/bug-report — file a gameplay bug report. Authed + rate-limited
+  // under the auth bucket so spam is bounded. Stores free text plus the
+  // client-supplied context (version, map/coords, battle state) for repro.
+  // Logs to the `bug_reports` table for manual review — no automated action.
+  if (path === '/api/bug-report' && req.method === 'POST') {
+    const user = authMiddleware(req);
+    if (!user) return send(res, 401, { error: 'Not authenticated' }), true;
+    if (!_bucketAllow(_authBuckets, ip, AUTH_CAPACITY, AUTH_REFILL_PS)) {
+      return send(res, 429, { error: 'Too many reports — slow down' }), true;
+    }
+    const b = await readBody(req);
+    const text = String(b.text || '').slice(0, 500);
+    if (!text.trim()) return send(res, 400, { error: 'text required' }), true;
+    const playerName = String(b.playerName || '').slice(0, 32) || null;
+    const version    = String(b.version || '').slice(0, 32) || null;
+    const battleState = String(b.battleState || '').slice(0, 32) || null;
+    const num = (v, lo, hi) => (typeof v === 'number' && isFinite(v)) ? _clamp(v | 0, lo, hi) : null;
+    db.prepare(`INSERT INTO bug_reports
+        (user_id, player_name, text, version, map_id, tile_x, tile_y, on_world_map, dungeon_floor, battle_state, ip)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(user.userId, playerName, text, version,
+           num(b.mapId, 0, 65535), num(b.tileX, 0, 4096), num(b.tileY, 0, 4096),
+           b.onWorldMap ? 1 : 0, num(b.dungeonFloor, -1, 255), battleState, ip);
     send(res, 200, { ok: true });
     return true;
   }

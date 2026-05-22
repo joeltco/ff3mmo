@@ -8,6 +8,7 @@ import { drawCursorFaded } from './hud-drawing.js';
 import { nesColorFade } from './palette.js';
 import { partyInviteSt } from './party-invite.js';
 import { mapSt } from './map-state.js';
+import { battleSt } from './battle-state.js';
 import { sprite } from './player-sprite.js';
 import { DIR_DOWN, DIR_UP, DIR_LEFT, DIR_RIGHT } from './sprite.js';
 import { playFF1Track, stopFF1Music, playFF2Track, stopFF2Music, pauseMusic, resumeMusic, playMentionChime, playSFX } from './music.js';
@@ -340,6 +341,39 @@ registerCommand('report', 'Report a player: /report <name> <reason>', (args) => 
   })
   .then(r => {
     if (r.ok)         addChatMessage('Report sent. Thanks.', 'console');
+    else if (r.status === 429) addChatMessage('Slow down — too many reports.', 'console');
+    else              addChatMessage('Report failed (HTTP ' + r.status + ').', 'console');
+  })
+  .catch(() => addChatMessage('Report failed (network).', 'console'));
+});
+
+registerCommand('bug', 'Report a bug: /bug <description>', (args) => {
+  const text = (args || '').trim().slice(0, 500);
+  if (!text) { addChatMessage('Usage: /bug <description of the problem>', 'console'); return; }
+  const token = localStorage.getItem('ff3_token');
+  if (!token) { addChatMessage('Log in to report bugs.', 'console'); return; }
+  // Auto-attach context for repro. Position is pixels → tiles (16px). The
+  // server already knows userId from the JWT; we send the rest.
+  let version = '';
+  try { version = localStorage.getItem('ff3_build') || ''; } catch (_) {}
+  const ctx = {
+    text,
+    playerName: localPlayerName(),
+    version,
+    mapId: mapSt.currentMapId,
+    tileX: Math.round((mapSt.worldX || 0) / 16),
+    tileY: Math.round((mapSt.worldY || 0) / 16),
+    onWorldMap: !!mapSt.onWorldMap,
+    dungeonFloor: mapSt.dungeonFloor,
+    battleState: battleSt.battleState,
+  };
+  fetch('/api/bug-report', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+    body: JSON.stringify(ctx),
+  })
+  .then(r => {
+    if (r.ok)         addChatMessage('Bug report sent. Thanks for helping!', 'console');
     else if (r.status === 429) addChatMessage('Slow down — too many reports.', 'console');
     else              addChatMessage('Report failed (HTTP ' + r.status + ').', 'console');
   })
