@@ -2214,6 +2214,15 @@ function _generateFloor(romData, floorIndex, seed) {
     for (let dy = -3; dy <= 1; dy++) {
       if (entranceY + dy >= 0) used.add(`${entranceX},${entranceY + dy}`);
     }
+    // Floor 0: keep chests (and traps) out of the entrance block + its landing
+    // in Room A — no chest should sit right where you walk in.
+    if (floorIndex === 0) {
+      for (let yy = 0; yy <= 7; yy++) {
+        for (let xx = entranceX - 2; xx <= entranceX + 2; xx++) {
+          if (xx >= 0 && xx < 32) used.add(`${xx},${yy}`);
+        }
+      }
+    }
 
     // Stairs down — floor 0 uses exit block, deeper floors use farthest floor
     const nextMapId = 1000 + floorIndex + 1;
@@ -2364,25 +2373,31 @@ function _generateFloor(romData, floorIndex, seed) {
       // Fix any ceiling gaps the secret corridors opened.
       enforceMinCeilingGap(tilemap);
 
-      // Carve the connecting corridor LAST — after addOverhang + the gap-closing
-      // pass — so nothing fills its 1-tile floor and it isn't walled up. Walled
-      // like the secret corridors (rocky+rocky+ceiling above, ceiling+rocky+rocky
-      // below); only fills void, so room/entrance tiles are never overwritten.
+      // Carve the connecting corridor between the two rooms (1-tile-tall floor
+      // through the center gap, opening both room walls). FORCE rocky directly
+      // above the floor (cy-1, cy-2) so the final addOverhang below can't drop
+      // overhang onto the corridor floor; the rest only fills void so room +
+      // entrance tiles are never overwritten.
       if (corrRowForBridge != null) {
         const cy = corrRowForBridge;
         let lo = 32, hi = -1;
         for (let x = 0; x < 32; x++) if (isFloorTile(tilemap[cy * 32 + x])) { if (x < lo) lo = x; if (x > hi) hi = x; }
         const setVoid = (r, x, t) => { if (r >= 0 && r < 32 && tilemap[r * 32 + x] === FILL_VOID) tilemap[r * 32 + x] = t; };
+        const force = (r, x, t) => { if (r >= 0 && r < 32) tilemap[r * 32 + x] = t; };
         for (let x = lo; hi >= lo && x <= hi; x++) {
           if (isFloorTile(tilemap[cy * 32 + x])) continue;    // room floor — leave it
           tilemap[cy * 32 + x] = FLOOR;                       // open mouths + bridge gap
-          setVoid(cy - 1, x, WALL_ROCKY); setVoid(cy - 2, x, WALL_ROCKY); setVoid(cy - 3, x, CEILING);
-          setVoid(cy + 1, x, CEILING);    setVoid(cy + 2, x, WALL_ROCKY); setVoid(cy + 3, x, WALL_ROCKY);
+          force(cy - 1, x, WALL_ROCKY); force(cy - 2, x, WALL_ROCKY);  // clear overhead
+          setVoid(cy - 3, x, CEILING);
+          setVoid(cy + 1, x, CEILING); setVoid(cy + 2, x, WALL_ROCKY); setVoid(cy + 3, x, WALL_ROCKY);
         }
       }
 
-      // Clean disconnected ceilings left by the secret corridors + the bridge.
+      // Final cleanup pass order, matching every other floor: connect ceilings,
+      // then addOverhang LAST so EVERY ceiling (rooms, corridor, secret) ends up
+      // with 2 rocky tiles (or another ceiling) beneath it — no floating ceiling.
       ensureCeilingConnectivity(tilemap);
+      addOverhang(tilemap);
     }
 
     // Dungeon destinations — all type-1 triggers go to next floor
