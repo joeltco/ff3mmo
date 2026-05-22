@@ -1419,6 +1419,17 @@ function _generateFloor(romData, floorIndex, seed) {
     ensureCeilingConnectivity(tilemap);
     addOverhang(tilemap);
 
+    // Open the entrance into a 3-wide landing instead of a 1-wide neck. The
+    // frame's bottom row is already 3 floor tiles; carry that width down through
+    // the top rocky band into the room (a 3x3 floor pocket). Done AFTER overhang
+    // so it isn't re-walled; the frame floor sits directly above the landing, so
+    // no ceiling pinches it. Stays inside Room A's column span.
+    for (let y = roomTop; y <= roomTop + 2; y++) {
+      for (let x = entranceX - 1; x <= entranceX + 1; x++) {
+        if (x >= aHalf[0] && x <= aHalf[1] && y < 32) tilemap[y * 32 + x] = FLOOR;
+      }
+    }
+
     var exitXForSecret = exitX;
     var startRowForSecret = roomTop;
     var endRowForSecret = roomBot;
