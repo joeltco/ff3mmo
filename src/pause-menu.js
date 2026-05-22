@@ -24,6 +24,8 @@ import { sendNetGiveItem, setNetGiveItemHandler } from './net.js';
 import { addChatMessage } from './chat.js';
 import { hudSt } from './hud-state.js';
 import { swapBattleSprites } from './job-sprites.js';
+import { jobBattlePalette, PALETTE_SLOTS } from './data/players.js';
+import { NES_SYSTEM_PALETTE } from './tile-decoder.js';
 import { getRosterVisible } from './roster.js';
 import { STATUS, STATUS_NAME_TO_FLAG, canCastMagic } from './status-effects.js';
 import { applyMagicHeal, applyMagicCureStatus } from './combatant-cast.js';
@@ -492,6 +494,9 @@ function _toggleCrt() {
   if (el) el.classList.toggle('crt');
 }
 
+const OPT_ROW_H = 16;       // vertical pitch between option rows
+const OPT_ROW_COUNT = 2;    // Color, CRT (Slice A — volume/speed rows land later)
+
 function _drawPauseOptions(ctx) {
   const px = HUD_VIEW_X, finalY = HUD_VIEW_Y;
   const show = pauseSt.state === 'options-in' || pauseSt.state === 'options' || pauseSt.state === 'options-out';
@@ -500,13 +505,26 @@ function _drawPauseOptions(ctx) {
   const fadedPal = _makeFadedPal(fadeStep);
   const tx = px + 24;
   const valRx = px + HUD_VIEW_W - 16;
-  let y = finalY + 12;
-  // Row 0 — CRT toggle (only row now; v1.7.456 reverted Battle Speed row)
-  drawText(ctx, tx, y, OPT_CRT_LABEL, fadedPal);
+  const y0 = finalY + 12;
+
+  // Row 0 — Color: outfit swatch + slot number (1-8)
+  drawText(ctx, tx, y0, _nameToBytes('COLOR'), fadedPal);
+  const slotBytes = _nameToBytes(String(ps.palIdx + 1));
+  drawText(ctx, valRx - slotBytes.length * 8, y0, slotBytes, fadedPal);
+  let swatchColor = jobBattlePalette(ps.jobIdx, ps.palIdx)[3];
+  for (let s = 0; s < fadeStep; s++) swatchColor = nesColorFade(swatchColor);
+  const rgb = NES_SYSTEM_PALETTE[swatchColor] || [0, 0, 0];
+  ctx.fillStyle = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
+  ctx.fillRect(valRx - slotBytes.length * 8 - 14, y0, 8, 8);
+
+  // Row 1 — CRT toggle
+  const y1 = y0 + OPT_ROW_H;
+  drawText(ctx, tx, y1, OPT_CRT_LABEL, fadedPal);
   const valBytes = _isCrtOn() ? OPT_ON : OPT_OFF;
-  drawText(ctx, valRx - valBytes.length * 8, y, valBytes, fadedPal);
+  drawText(ctx, valRx - valBytes.length * 8, y1, valBytes, fadedPal);
+
   if (drawCursorFaded) {
-    drawCursorFaded(px + 8, (finalY + 12) - 4, fadeStep);
+    drawCursorFaded(px + 8, (y0 - 4) + pauseSt.optCursor * OPT_ROW_H, fadeStep);
   }
 }
 
@@ -1145,12 +1163,31 @@ function _pauseInputJob() {
   return true;
 }
 
+function _changePlayerColor(dir) {
+  ps.palIdx = (ps.palIdx + dir + PALETTE_SLOTS) % PALETTE_SLOTS;
+  swapBattleSprites(ps.jobIdx, ps.palIdx);   // live repaint: walk + battle/HUD
+  playSFX(SFX.CURSOR);
+}
+
 function _pauseInputOptions() {
   if (pauseSt.state !== 'options') return false;
   const k = keys;
-  // v1.7.456 — round-based revert dropped Battle Speed. Options has CRT only.
-  if (_zPressed()) { _toggleCrt(); playSFX(SFX.CONFIRM); }
-  if (_xPressed()) { playSFX(SFX.CONFIRM); pauseSt.state = 'options-out'; pauseSt.timer = 0; }
+  if (k['ArrowDown']) { k['ArrowDown'] = false; pauseSt.optCursor = (pauseSt.optCursor + 1) % OPT_ROW_COUNT; playSFX(SFX.CURSOR); }
+  if (k['ArrowUp'])   { k['ArrowUp'] = false;   pauseSt.optCursor = (pauseSt.optCursor + OPT_ROW_COUNT - 1) % OPT_ROW_COUNT; playSFX(SFX.CURSOR); }
+  const left = k['ArrowLeft'], right = k['ArrowRight'];
+  if (pauseSt.optCursor === 0) {           // Color — left/right cycles slots; Z cycles forward
+    if (left)  { k['ArrowLeft'] = false;  _changePlayerColor(-1); }
+    if (right) { k['ArrowRight'] = false; _changePlayerColor(1); }
+    if (_zPressed()) _changePlayerColor(1);
+  } else {                                  // CRT — either direction or Z toggles
+    if (left || right) { k['ArrowLeft'] = false; k['ArrowRight'] = false; _toggleCrt(); playSFX(SFX.CONFIRM); }
+    if (_zPressed()) { _toggleCrt(); playSFX(SFX.CONFIRM); }
+  }
+  if (_xPressed()) {
+    playSFX(SFX.CONFIRM);
+    pauseSt.state = 'options-out'; pauseSt.timer = 0;
+    saveSlotsToDB();   // persist palIdx (slot bake + server POST); profile poll rebroadcasts
+  }
   return true;
 }
 

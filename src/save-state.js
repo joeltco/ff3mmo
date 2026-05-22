@@ -54,6 +54,7 @@ export async function saveSlotsToDB() {
     slot.gil = ps.gil;
     slot.jobLevels = JSON.parse(JSON.stringify(ps.jobLevels));
     slot.jobIdx = ps.jobIdx;
+    slot.palIdx = ps.palIdx | 0;
     slot.unlockedJobs = ps.unlockedJobs;
     slot.cp = ps.cp;
     slot.statusMask = ps.status ? ps.status.mask : 0;

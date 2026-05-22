@@ -127,6 +127,7 @@ function _validateSaveData(data) {
     out.jobLevels = jl;
   }
   if (typeof data.jobIdx === 'number')       out.jobIdx = _clamp(data.jobIdx, 0, 31);
+  if (typeof data.palIdx === 'number')       out.palIdx = _clamp(data.palIdx, 0, 7);
   if (typeof data.unlockedJobs === 'number') out.unlockedJobs = _clamp(data.unlockedJobs, 0, 0xFFFFFFFF);
   if (typeof data.cp === 'number')           out.cp = _clamp(data.cp, 0, 999999);
   if (typeof data.statusMask === 'number')   out.statusMask = _clamp(data.statusMask, 0, 0xFFFF);

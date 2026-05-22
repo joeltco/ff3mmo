@@ -36,6 +36,7 @@ export const ps = {
   _romData: null,  // stored by initExpTable for use in grantExp
   jobLevels: {},  // { [jobIdx]: { level, jp } } — 100 JP per level, max 99
   jobIdx: 0,            // current job index (0=Onion Knight, 1=Warrior, etc.)
+  palIdx: 0,            // selected sprite color slot 0-7 (Options → Color). 0 = job canon
   unlockedJobs: 0x01,   // bitmask: bit N = job N unlocked. 0x01 = only Onion Knight
   cp: 0,                // capacity points (0-255), earned from battles, spent on job changes
   playTime: 0,          // total play time in seconds

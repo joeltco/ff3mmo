@@ -6,7 +6,7 @@ import { nesColorFade } from './palette.js';
 import { _makeCanvas16, _makeCanvas16ctx, _hflipCanvas16, _makeWhiteCanvas } from './canvas-utils.js';
 import { BAYER4 } from './data/animation-tables.js';
 import { _writePixels64 } from './tile-math.js';
-import { PLAYER_PALETTES, MONK_PALETTES, ROSTER_FADE_STEPS } from './data/players.js';
+import { PLAYER_PALETTES, MONK_PALETTES, ROSTER_FADE_STEPS, jobBattlePalette } from './data/players.js';
 import { BATTLE_SPRITE_ROM, BATTLE_JOB_SIZE, BATTLE_PAL_ROM } from './data/jobs.js';
 // WR / MO tile constants are no longer imported — those jobs now go through
 // `_buildFakePlayerSet` → `getJobPoseTileBundle`. OK_* tiles are still used by
@@ -666,11 +666,19 @@ function _buildPlayerSpriteSet(romData, jobIdx, palette) {
   };
 }
 
-export function initBattleSpriteForJob(romData, jobIdx) {
-  const pov = JOB_BATTLE_PAL_OVERRIDE[jobIdx];
-  const palette = pov
-    ? [0x0F, pov[0], pov[1], pov[2]]
-    : [0x0F, romData[BATTLE_PAL_ROM], romData[BATTLE_PAL_ROM + 1], romData[BATTLE_PAL_ROM + 2]];
+export function initBattleSpriteForJob(romData, jobIdx, palIdx = 0) {
+  // palIdx 0 = canon look: keep the original ROM/override palette verbatim so
+  // the default appearance is byte-identical to pre-color-picker builds. Color
+  // slots 1-7 pull from the shared per-job table (same source as ally render).
+  let palette;
+  if (palIdx > 0) {
+    palette = jobBattlePalette(jobIdx, palIdx);
+  } else {
+    const pov = JOB_BATTLE_PAL_OVERRIDE[jobIdx];
+    palette = pov
+      ? [0x0F, pov[0], pov[1], pov[2]]
+      : [0x0F, romData[BATTLE_PAL_ROM], romData[BATTLE_PAL_ROM + 1], romData[BATTLE_PAL_ROM + 2]];
+  }
   return _buildPlayerSpriteSet(romData, jobIdx, palette);
 }
 

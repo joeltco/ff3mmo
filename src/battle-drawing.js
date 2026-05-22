@@ -10,14 +10,12 @@ import { getMonsterCanvas } from './monster-sprites.js';
 import { encounterGridLayout, pvpEnemyCellCenterLocal } from './battle-grid.js';
 import { drawEncounterBox, drawBossSpriteBox } from './battle-draw-encounter.js';
 import { SPELLS } from './data/spells.js';
-import { PLAYER_PALETTES, MONK_PALETTES, BLACK_MAGE_PALETTES, RED_MAGE_PALETTES } from './data/players.js';
+import { jobBattlePalette } from './data/players.js';
 
+// Thin re-export so existing call sites keep their name; the resolver itself
+// is the single source in data/players.js (shared with the player sprite build).
 export function _jobPalette(jobIdx, palIdx) {
-  const pool = jobIdx === 2 ? MONK_PALETTES
-             : jobIdx === 4 ? BLACK_MAGE_PALETTES
-             : jobIdx === 5 ? RED_MAGE_PALETTES
-             : PLAYER_PALETTES;
-  return pool[palIdx] || pool[0];
+  return jobBattlePalette(jobIdx, palIdx);
 }
 
 import { _nameToBytes } from './text-utils.js';

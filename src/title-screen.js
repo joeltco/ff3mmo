@@ -713,6 +713,7 @@ function _updateTitleMainOutCase() {
   ps.gil = (slot && slot.gil) || 0;
   ps.jobLevels = (slot && slot.jobLevels) ? JSON.parse(JSON.stringify(slot.jobLevels)) : {};
   ps.jobIdx = (slot && slot.jobIdx) || 0;
+  ps.palIdx = (slot && slot.palIdx) ? (slot.palIdx | 0) : 0;
   // Recalc AFTER jobIdx is set — the unarmed Monk/BlackBelt ATK formula in
   // calcAttackerAtk depends on isMonkClass = (jobIdx === 2 || jobIdx === 13).
   if (slot) recalcCombatStats();

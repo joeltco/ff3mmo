@@ -185,6 +185,23 @@ export const RED_MAGE_PALETTES = [
   [0x0F, 0x36, 0x30, 0x35], // pale red
 ];
 
+// SINGLE SOURCE for "what battle palette does (job, palIdx) resolve to".
+// Used by the ally/PVP render path (battle-drawing.js `_jobPalette` delegates
+// here) AND by the local player's own sprite build (sprite-init.js). Slot 0 is
+// each job's canon look; slots 1-7 are the player-selectable color variants.
+// Returns a 4-entry NES palette [0x0F, c1, c2, c3] — only c3 (the outfit color)
+// changes across slots.
+export function jobBattlePalette(jobIdx, palIdx) {
+  const pool = jobIdx === 2 ? MONK_PALETTES
+             : jobIdx === 4 ? BLACK_MAGE_PALETTES
+             : jobIdx === 5 ? RED_MAGE_PALETTES
+             : PLAYER_PALETTES;
+  return pool[palIdx] || pool[0];
+}
+
+// Number of selectable palette slots (all per-job tables are 8 deep).
+export const PALETTE_SLOTS = 8;
+
 export const CHAT_PHRASES = [
   'anyone near floor 3?',
   'need heals',

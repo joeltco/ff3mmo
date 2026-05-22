@@ -66,9 +66,9 @@ export function initBattleSpriteCache() {
   bsc.poisonBubbleFrames = bsc.statusSpriteMap.get(0x02) || [];
 }
 
-// Per-job battle sprites — call at boot and on job change.
-export function loadJobBattleSprites(romRaw, jobIdx) {
-  const bs = initBattleSpriteForJob(romRaw, jobIdx);
+// Per-job battle sprites — call at boot, on job change, and on color change.
+export function loadJobBattleSprites(romRaw, jobIdx, palIdx = 0) {
+  const bs = initBattleSpriteForJob(romRaw, jobIdx, palIdx);
   bsc.battlePoses = bs.poses;
   bsc.defendSparkleFrames = bs.defendSparkleFrames;
   bsc.cureSparkleFrames = bs.cureSparkleFrames;

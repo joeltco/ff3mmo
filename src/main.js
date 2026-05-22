@@ -83,7 +83,7 @@ export function init() {
         name:    slot.name ? _nesNameToString(slot.name) : 'Player',
         jobIdx:  ps.jobIdx | 0,
         level:   ps.stats.level | 0 || 1,
-        palIdx:  0,
+        palIdx:  ps.palIdx | 0,
         hp:      ps.hp | 0,
         maxHP:   ps.stats.maxHP | 0,
         mp:      ps.mp | 0,
