@@ -317,11 +317,13 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
 // die. Returns true if any actor ticked (caller drives the hold-state).
 function _applyEndOfRoundPoison() {
   let anyTicked = false;
-  if (ps.hp > 0 && ps.status && hasStatus(ps.status, STATUS.POISON)) {
+  // NES rule: poison never kills and stops at 1 HP — so at 1 HP it does nothing
+  // (no damage, no number). Only tick when there's room above the floor.
+  if (ps.hp > 1 && ps.status && hasStatus(ps.status, STATUS.POISON)) {
     const max = ps.stats ? ps.stats.maxHP : ps.hp;
     const dmg = Math.floor(max / 16);
     if (dmg > 0) {
-      // NES rule: poison never kills player/ally from full → clamp to 1.
+      // Clamp to 1 (poison never kills the player from full).
       dispatchDelta({ type: 'hp', target: ps, amount: -dmg, min: 1 });
       setPlayerDamageNum({ value: dmg, timer: 0 });
       anyTicked = true;

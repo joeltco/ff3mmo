@@ -311,7 +311,10 @@ export function drawBattlePortrait() {
     return;
   }
 
-  const shakeOff = ((battleSt.battleState === 'enemy-attack' || battleSt.battleState === 'poison-tick' || battleSt.battleState === 'pvp-opp-sw-hit') && battleSt.battleShakeTimer > 0)
+  // Keep shaking through the FenixDown 'dmg-hold' (seized off enemy-attack, but
+  // the hit shake should still read while the damage number holds, before the fall).
+  const _dmgHoldShake = isFenixReviving() && fenixRevivePhase() === 'dmg-hold';
+  const shakeOff = ((battleSt.battleState === 'enemy-attack' || battleSt.battleState === 'poison-tick' || battleSt.battleState === 'pvp-opp-sw-hit' || _dmgHoldShake) && battleSt.battleShakeTimer > 0)
     ? (Math.floor(battleSt.battleShakeTimer / 67) & 1 ? 2 : -2) : 0;
   const isVictoryPose = isVictoryBattleState();
   const isAttackPose = battleSt.battleState === 'attack-back' || battleSt.battleState === 'attack-fwd' || battleSt.battleState === 'player-slash';

@@ -28,7 +28,7 @@ import { showMsgBox, forceCloseMsgBox } from './message-box.js';
 import { _nameToBytes } from './text-utils.js';
 import { playSFX, SFX } from './music.js';
 import { clearAll as clearAllStatus } from './status-effects.js';
-import { setPlayerHealNum, getAllyDamageNums, tickHealNums, clearHealNums, DMG_SHOW_MS } from './damage-numbers.js';
+import { setPlayerHealNum, getAllyDamageNums, getPlayerDamageNum, tickHealNums, clearHealNums, DMG_SHOW_MS } from './damage-numbers.js';
 import { processNextTurn } from './battle-turn.js';
 
 export const FENIX_ITEM_ID = 0xA9;
@@ -42,7 +42,8 @@ const ANGEL_FLAP_MS         = 133;   // per-flap-frame cadence (8 NES frames)
 // match the mobile deck (A→z, B→x; index.html) and keyboard (Z/X).
 const CONFIRM_TEXT = _nameToBytes('Use FenixDown? A:Yes B:No');
 
-// null = not reviving. Otherwise: 'death-anim' | 'confirm' | 'angel' | 'rise' | 'healnum'.
+// null = not reviving. Phases: 'dmg-hold' | 'death-anim' | 'confirm' | 'angel' | 'rise' | 'healnum'.
+//   dmg-hold: wait for the hit's damage number to finish BEFORE the portrait falls.
 let _phase = null;
 let _t = 0;
 let _reviveHeal = 0;   // HP restored — shown as a heal number after the portrait returns
@@ -68,8 +69,10 @@ export function tryStartFenixRevive() {
   if (_phase != null) return true;            // already reviving
   if (!hasItem(FENIX_ITEM_ID)) return false;  // no item → normal death/respawn
   // NOTE: the item is NOT consumed here — only on a "Yes" at the confirm box.
+  // Seize NOW (blocks game-over routing) but hold the portrait fall until the
+  // hit's damage number finishes — start in 'dmg-hold', not 'death-anim'.
   _allyIndex = null;   // player's own revive
-  _phase = 'death-anim';
+  _phase = 'dmg-hold';
   _t = 0;
   // Round ends here; a fresh round opens on the player's turn after the revive.
   battleSt.turnQueue = [];
@@ -120,7 +123,15 @@ export function startAllyRevive(allyIndex) {
 export function updateFenixRevive(dt) {
   if (_phase == null) return false;
   _t += dt;
-  if (_phase === 'death-anim') {
+  if (_phase === 'dmg-hold') {
+    // Hold on the hit (shake + damage number still showing) — the portrait does
+    // NOT fall yet. Once the damage number finishes, start the death animation.
+    if (getPlayerDamageNum() == null) {
+      _phase = 'death-anim';
+      _t = 0;
+      hudSt.playerDeathTimer = 0;   // now the kneel-slide / death pose plays
+    }
+  } else if (_phase === 'death-anim') {
     // Let the existing death animation (kneel slide → text fade → pose fade-in)
     // finish — the death pose holds ~1s — then ask before reviving.
     if (hudSt.playerDeathTimer != null && hudSt.playerDeathTimer >= DEATH_TOTAL_MS) {
