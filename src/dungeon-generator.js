@@ -1508,6 +1508,165 @@ function _generateFloor(romData, floorIndex, seed) {
       return right >= left ? { top, bot, left, right } : { top: roomTop, bot: roomBot, left: 1, right: 30 };
     })();
 
+  } else if (floorIndex === 1) {
+    // ── Floor 1: floor-2 architecture, trap-chamber half only ──────────
+    // Copies floor 2's room/corridor primitives (5×5 + H corridor + 5×5 +
+    // V corridor + 7×7) verbatim. The entrance arch reuses floor 2's
+    // EXIT-BLOCK pattern (placeDeepEntrance embedded in a 5×5 room with
+    // the open side facing the corridor). Flow stops at the 7×7 chamber —
+    // its trap holes ARE the exit to floor 2, no further rooms / no exit
+    // arch. Always top-down (entrance at top, chamber at bottom) since
+    // floor 0's south-wall stairs put the player at floor 1's top.
+
+    entranceX = 5 + Math.floor(rng() * 22); // 5-26
+    const horizDir = entranceX > 16 ? -1 : entranceX < 16 ? 1 : (rng() < 0.5 ? -1 : 1);
+    const vertDir = 1;
+
+    // 5×5 entrance room — identical primitive to floor 2's exit room
+    // (lines 1602-1611 in the floor-2 branch). The corridor exits the
+    // room on +horizDir side, so the room body extends in -horizDir
+    // ("entrFarDir") from the corridor-side edge column entranceX.
+    const entrFarDir = -horizDir;
+    const entrCornerX = entranceX;
+    const entrFloorY = 7;
+    for (let dy = -4; dy <= 2; dy++) {
+      const isEdge = (dy <= -3 || dy >= 1);
+      const jl = isEdge ? Math.floor(rng() * 2) : 0;
+      const jr = isEdge ? Math.floor(rng() * 2) : 0;
+      for (let dx = jl; dx <= 4 - jr; dx++) {
+        const ax = entrCornerX + dx * entrFarDir, ay = entrFloorY + dy;
+        if (ax >= 1 && ax <= 30 && ay >= 0 && ay < 32) tilemap[ay * 32 + ax] = FLOOR;
+      }
+    }
+
+    // Short H corridor — 4-6 steps, 3-row carve (1 walkable row after
+    // overhang), no jitter. Same primitive as floor 2's H corridor
+    // (lines 1533-1540 in the floor-2 branch).
+    const horizStartX = entrCornerX;
+    const horizFloorY = entrFloorY;
+    const pathLength = 4 + Math.floor(rng() * 3); // 4-6 steps
+    for (let s = 1; s <= pathLength; s++) {
+      const hx = horizStartX + s * horizDir;
+      if (hx < 1 || hx > 30) break;
+      for (let dy = -2; dy <= 0; dy++) {
+        const hy = horizFloorY + dy;
+        if (hy >= 0 && hy < 32) tilemap[hy * 32 + hx] = FLOOR;
+      }
+    }
+    const pathEndX = Math.max(1, Math.min(30, horizStartX + pathLength * horizDir));
+    const pathResult = { endX: pathEndX, endFloorY: horizFloorY };
+
+    // 5×5 mid room — direct copy of floor 2's first 5×5 mid room
+    // (lines 1544-1553 in the floor-2 branch).
+    for (let dy = -4; dy <= 2; dy++) {
+      const isEdge = (dy <= -3 || dy >= 1);
+      const jl = isEdge ? Math.floor(rng() * 2) : 0;
+      const jr = isEdge ? Math.floor(rng() * 2) : 0;
+      for (let dx = jl; dx <= 4 - jr; dx++) {
+        const ax = pathResult.endX + dx * horizDir, ay = pathResult.endFloorY + dy;
+        if (ax >= 1 && ax <= 30 && ay >= 0 && ay < 32) tilemap[ay * 32 + ax] = FLOOR;
+      }
+    }
+
+    // V corridor — 5-7 steps DOWN from middle of mid room.
+    // Direct copy of floor 2's V corridor (lines 1557-1564).
+    const vertLength = 5 + Math.floor(rng() * 3);
+    const vertX = pathResult.endX + 2 * horizDir;
+    let vertY = pathResult.endFloorY + 2;
+    for (let s = 0; s < vertLength; s++) {
+      vertY += vertDir;
+      if (vertY < 2 || vertY > 29) break;
+      tilemap[vertY * 32 + vertX] = FLOOR;
+    }
+
+    // 7×7 trap chamber — direct copy of floor 2's 7×7 chamber primitive
+    // (lines 1566-1586), minus the exit-path keep-clear adjustment since
+    // floor 1 has no exit path.
+    const roomDyMin = -2;
+    const roomDyMax = 6;
+    for (let dy = roomDyMin; dy <= roomDyMax; dy++) {
+      const distFromTop = dy - roomDyMin;
+      const distFromBot = roomDyMax - dy;
+      const isEdge = (distFromTop <= 1 || distFromBot <= 1);
+      const jl = isEdge ? Math.floor(rng() * 3) : Math.floor(rng() * 2);
+      const jr = isEdge ? Math.floor(rng() * 3) : Math.floor(rng() * 2);
+      for (let dx = -3 + jl; dx <= 3 - jr; dx++) {
+        const ax = vertX + dx, ay = vertY + dy;
+        if (ax >= 1 && ax <= 30 && ay >= 0 && ay < 32) tilemap[ay * 32 + ax] = FLOOR;
+      }
+    }
+
+    // Cleanup + overhang — same pass order as floor 2.
+    fixDiagonalCeilingPinch(tilemap);
+    removeCeilingProtrusions(tilemap);
+    enforceMinCeilingGap(tilemap);
+    ensureCeilingConnectivity(tilemap);
+    addOverhang(tilemap);
+
+    // Entrance arch — direct copy of floor 2's exit-block placement
+    // (lines 1621-1623). Arch sits 3 tiles INTO the room from the
+    // corridor side, opens back TOWARD the corridor so the player drops
+    // in already facing the corridor exit.
+    const archX = entrCornerX + 3 * entrFarDir;
+    const archBaseRow = entrFloorY - 5;
+    placeDeepEntrance(tilemap, archX, -entrFarDir, archBaseRow);
+    entranceX = archX;
+    entranceY = archBaseRow + 1; // PASSAGE_ENTRY row
+    enforceMinCeilingGap(tilemap);
+
+    // BFS-seal any floor isolated by entrance placement, starting at the
+    // landing FLOOR tile (one row below PASSAGE_BTM).
+    const reachable = new Set();
+    const startIdx = (archBaseRow + 3) * 32 + archX;
+    reachable.add(startIdx);
+    const bfsQ = [[archX, archBaseRow + 3]];
+    while (bfsQ.length) {
+      const [cx, cy] = bfsQ.shift();
+      for (const [dx, dy] of [[0,1],[0,-1],[1,0],[-1,0]]) {
+        const nx = cx + dx, ny = cy + dy;
+        if (nx < 0 || nx > 31 || ny < 0 || ny > 31) continue;
+        const idx = ny * 32 + nx;
+        if (reachable.has(idx)) continue;
+        const t = tilemap[idx];
+        if (t === FLOOR || t === PASSAGE_BTM || t === PASSAGE_ENTRY || t === BONES) {
+          reachable.add(idx);
+          bfsQ.push([nx, ny]);
+        }
+      }
+    }
+    for (let i = 0; i < 1024; i++) {
+      if (!reachable.has(i) && tilemap[i] === FLOOR) tilemap[i] = CEILING;
+    }
+
+    // chamberBounds = the 7×7 trap chamber where trap holes drop.
+    var exitXForSecret = null;
+    var startRowForSecret = 7;
+    var endRowForSecret = 27;
+    var exitXForUsed = null;
+    var endRowForUsed = 27;
+    var chamberBounds = {
+      top: vertY + roomDyMin,
+      bot: vertY + roomDyMax,
+      left: vertX - 3,
+      right: vertX + 3,
+    };
+
+    // Register entrance + mid 5×5 rooms for bonus chest/skeleton placement
+    // via the shared block's extra-room pass. Bounds use the same
+    // start-edge/+4 model as floor 2's chest placement (lines 1705-1707).
+    extraRooms.push({
+      top: entrFloorY - 2,
+      bot: entrFloorY + 2,
+      left: entrFarDir === 1 ? entrCornerX : entrCornerX - 4,
+      right: entrFarDir === 1 ? entrCornerX + 4 : entrCornerX,
+    });
+    extraRooms.push({
+      top: pathResult.endFloorY - 2,
+      bot: pathResult.endFloorY + 2,
+      left: horizDir === 1 ? pathResult.endX : pathResult.endX - 4,
+      right: horizDir === 1 ? pathResult.endX + 4 : pathResult.endX,
+    });
+
   } else if (floorIndex === 2) {
     // ── Floor 2: Rock puzzle — building incrementally ───────────────────
     // Step 1: just a small room for the trap landing

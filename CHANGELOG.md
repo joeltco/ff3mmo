@@ -18,6 +18,37 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.614 — 2026-05-23
+
+### Altar Cave floor 1 — rebuilt with floor 2's room primitives
+
+v1.7.613's `carveSmallCaveRoom` "breathing rooms" off the deeper-floor
+else branch read as bulges in a corridor, not real rooms. Rebuilt floor
+1 with a dedicated `floorIndex === 1` branch that copies floor 2's
+room/corridor primitives verbatim:
+
+- **5×5 entrance room** with arch — direct copy of floor 2's exit
+  pattern: 5×5 carve with edge-row jitter, `placeDeepEntrance` embedded
+  3 tiles into the room opening back toward the corridor.
+- **H corridor** — 4-6 steps, 3-row carve, no jitter (floor 2's primitive).
+- **5×5 mid room** — floor 2's first 5×5 primitive verbatim.
+- **V corridor** — 5-7 steps down from middle of mid room.
+- **7×7 trap chamber** — floor 2's 7×7 primitive (minus the keep-clear
+  exit-path adjustment, since floor 1 has no exit path).
+
+Flow stops at the chamber — its trap holes ARE the exit to floor 2.
+Always top-down (entrance at top, chamber at bottom) since floor 0's
+south-wall stairs land the player at floor 1's top.
+
+Entrance + mid 5×5 rooms registered via `extraRooms` so the shared
+feature pass adds a 50% chance chest + 2-3 skeletons per room (from
+v1.7.613's machinery, now actually getting used).
+
+Existing `carveSmallCaveRoom` helper + else-branch wiring left in place
+as the fallback path for any future floor that doesn't have its own
+explicit branch (currently unreachable in production, all floors 0-4
+have explicit branches).
+
 ## 1.7.613 — 2026-05-23
 
 ### Altar Cave floor 1 — entrance + junction breathing rooms
