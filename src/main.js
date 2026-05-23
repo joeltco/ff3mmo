@@ -281,6 +281,7 @@ export async function loadROM(arrayBuffer) {
     'Auth: ' + (email || 'guest') + (dev ? ' [dev]' : ''),
     'Boot: ' + bootMs + 'ms',
     dev ? 'Type /help or /devhelp' : 'Type /help for commands',
+    'Found a bug? Report it with /bug <description>',
   ];
   // First-run tips — fired once per browser-localStorage. Pushed AFTER the
   // boot lines so the user reads the system metadata first, then the
