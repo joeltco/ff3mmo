@@ -222,6 +222,19 @@ db.exec(`
     created_at INTEGER DEFAULT (unixepoch()),
     FOREIGN KEY (user_id) REFERENCES users(id)
   );
+  CREATE TABLE IF NOT EXISTS trades (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts              INTEGER NOT NULL,
+    sender_user_id  INTEGER NOT NULL,
+    sender_name     TEXT,
+    target_user_id  INTEGER NOT NULL,
+    target_name     TEXT,
+    item_id         INTEGER NOT NULL,
+    accepted        INTEGER NOT NULL,
+    reason          TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_trades_ts ON trades(ts);
+  CREATE INDEX IF NOT EXISTS idx_trades_sender ON trades(sender_user_id);
 `);
 
 // JWT rotation column on `users`. Tokens issued before this unix-second
@@ -256,6 +269,29 @@ export function partyRemoveByInviter(inviterUserId) {
 }
 export function partyLoadAll() {
   return _partyLoadAllStmt.all();
+}
+
+// Trade audit log (v1.7.616). Every trade response — accepted, declined,
+// or blocked at the offer gate — is recorded so we can detect / forensically
+// investigate item-dup abuse without a full server-side inventory mirror.
+// Server still doesn't validate ownership (the documented limitation), but
+// every trade is now traceable to the originating account. Inspect via
+// `tools/trade-audit.cjs`.
+const _tradeLogStmt = db.prepare(
+  'INSERT INTO trades (ts, sender_user_id, sender_name, target_user_id, target_name, item_id, accepted, reason)' +
+  ' VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+);
+export function tradeLog(senderUserId, senderName, targetUserId, targetName, itemId, accepted, reason) {
+  _tradeLogStmt.run(
+    Date.now(),
+    senderUserId | 0,
+    String(senderName || ''),
+    targetUserId | 0,
+    String(targetName || ''),
+    itemId | 0,
+    accepted ? 1 : 0,
+    reason || null,
+  );
 }
 
 // Presence persistence (v1.7.596). Periodic snapshots of the live `_connected`

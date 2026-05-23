@@ -42,9 +42,16 @@ import { createRequire } from 'module';
 import {
   verifyTokenWithRevocation,
   partyAddMember, partyRemoveMember, partyRemoveByInviter, partyLoadAll,
+  tradeLog,
   presenceFlushBatch, presenceDelete, presenceLoadRecent, presenceReap,
 } from './api.js';
 import { sanitizeName, isCleanName, cleanChatText } from './moderation.js';
+import { ITEMS } from './src/data/items.js';
+
+// Item types blocked from roster trade. Key items aren't really inventory —
+// they're quest flags carried in the item table. Everything else
+// (weapon/armor/consumable/battle_item/scroll) is tradeable.
+const NON_TRADEABLE_ITEM_TYPES = new Set(['key']);
 const require = createRequire(import.meta.url);
 const jwt = require('jsonwebtoken');
 
@@ -715,10 +722,23 @@ function _handleMessage(entry, msg) {
       const itemId = parsed.itemId | 0;
       if (!targetUserId || targetUserId === entry.userId) return;
       if (itemId < 1 || itemId > 255) return;
+      // Type whitelist (v1.7.616). Key items aren't transferable — they're
+      // quest flags, not inventory. Server has no inventory mirror so we
+      // can't validate ownership, but type filtering blocks the obvious
+      // dup-equivalent on key/quest items.
+      const itemMeta = ITEMS.get(itemId);
+      if (!itemMeta || NON_TRADEABLE_ITEM_TYPES.has(itemMeta.type)) {
+        tradeLog(entry.userId, entry.profile?.name, targetUserId, '', itemId, 0, 'blocked-type');
+        _send(entry.ws, {
+          type: 'trade-result', targetUserId, targetName: '', accept: false, reason: 'blocked',
+        });
+        return;
+      }
       const target = _connected.get(targetUserId);
       if (!target || !target.helloed) {
         // Tell the sender the target isn't reachable. Same shape as
         // accept/decline so the client's `trade-result` handler covers it.
+        tradeLog(entry.userId, entry.profile?.name, targetUserId, '', itemId, 0, 'offline');
         _send(entry.ws, {
           type: 'trade-result', targetUserId, targetName: '', accept: false, reason: 'offline',
         });
@@ -759,6 +779,13 @@ function _handleMessage(entry, msg) {
       if (!pending || pending.targetUserId !== entry.userId) return;
       _pendingTrades.delete(fromUserId);
       const offerer = _connected.get(fromUserId);
+      // Audit log every response, accepted or declined, BEFORE the relay so
+      // we have an authoritative record even if the relay fails (v1.7.616).
+      tradeLog(
+        fromUserId, offerer?.profile?.name,
+        entry.userId, entry.profile.name,
+        pending.itemId, accept, accept ? 'accept' : 'decline',
+      );
       if (!offerer || !offerer.helloed) return;
       _send(offerer.ws, {
         type: 'trade-result',

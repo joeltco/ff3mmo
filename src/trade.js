@@ -140,6 +140,8 @@ export function cancelTrade(reason = 'user') {
     showMsgBox(_nameToBytes('Declined'));
   } else if (reason === 'offline') {
     showMsgBox(_nameToBytes('Offline'));
+  } else if (reason === 'blocked') {
+    showMsgBox(_nameToBytes('Cannot trade'));
   } else if (reason === 'death') {
     // Silent — game-over flow owns the screen.
   }
@@ -253,6 +255,11 @@ setNetTradeResultHandler((msg) => {
     _resolveAsAccept();
   } else if (msg.reason === 'offline') {
     cancelTrade('offline');
+  } else if (msg.reason === 'blocked') {
+    // Server type-whitelist rejection (key item, or unknown id). Sender
+    // didn't have a chance to consume yet (offer never reached the
+    // target), so just bail with a hint.
+    cancelTrade('blocked');
   } else {
     cancelTrade('declined');
   }
