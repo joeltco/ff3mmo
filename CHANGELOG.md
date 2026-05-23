@@ -18,6 +18,35 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.613 — 2026-05-23
+
+### Altar Cave floor 1 — entrance + junction breathing rooms
+
+Floor 1 (mapId 1001) used to drop the player into a 1-tile vertical
+shaft → straight horizontal corridor → 2-tile bend → vertical drop →
+trap chamber. Now the deeper-floor else branch carves a small organic
+cave room at two points:
+
+- **Entrance room** around `(entranceX, startFloorY)` — small breathing
+  space right at the entrance landing.
+- **Junction room** at `(pathResult.endX, pathResult.endFloorY)` —
+  where the horizontal corridor meets the vertical drop.
+
+Both via the new `carveSmallCaveRoom(tilemap, cx, cy, rng)` helper —
+5-6 wide × 4 tall with light edge jitter, returns its bounds. Top rows
+get eaten by `addOverhang` into walls/rocky, leaving ~2 walkable rows
+each. Rooms overlap the corridor anchor tiles so connectivity is free.
+
+Each room also gets 2-3 skeletons (`findRandomFloor` w/ same 5x5
+boneUsed exclusion as the chamber loop) and a 50% chance at one corner
+chest (`findCornerFloor` w/ the v1.7.589 strict 2-wall test). Room
+bounds passed via the new `extraRooms` array (empty on every other
+branch). Floor 1's existing trap-hole-as-exit model is unchanged.
+
+Validated against floor-view across multiple seeds — chests still in
+corners, no chest-in-corridor regressions, trap chamber feature counts
+~unchanged, ceiling snake intact.
+
 ## 1.7.612 — 2026-05-23
 
 ### Exit delete mode after a successful deletion

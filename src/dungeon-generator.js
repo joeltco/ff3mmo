@@ -1129,6 +1129,37 @@ function carveVerticalPathway(tilemap, startX, startY, vertDir, pathLength, rng)
   return { endX: fx, endY: y };
 }
 
+// Carve a small organic cave room centered on (cx, cy). Used as the entrance
+// "breathing" room and the H↔V corridor junction room on deeper floors —
+// gives the player something to stand in besides a 1-tile corridor before the
+// pathway forks. Runs BEFORE addOverhang, so all FLOOR (top rows are eaten
+// into walls by overhang; bottom rows stay walkable).
+//   width  : 5-6 tiles
+//   height : 4 tiles total (top 2 → wall via overhang, bottom 2 walkable)
+// Light per-row edge jitter keeps it cave-shaped, not rectangular.
+function carveSmallCaveRoom(tilemap, cx, cy, rng) {
+  const w = 5 + Math.floor(rng() * 2);          // 5-6 wide
+  const halfL = Math.floor(w / 2);
+  const halfR = w - 1 - halfL;
+  let bL = 32, bR = -1, bT = 32, bB = -1;
+  for (let dy = -3; dy <= 0; dy++) {            // 4 rows tall, anchored at cy
+    const row = cy + dy;
+    if (row < 1 || row > 30) continue;
+    const jl = Math.floor(rng() * 2);           // 0-1 inset on each side
+    const jr = Math.floor(rng() * 2);
+    const left = Math.max(1, cx - halfL + jl);
+    const right = Math.min(30, cx + halfR - jr);
+    for (let x = left; x <= right; x++) tilemap[row * 32 + x] = FLOOR;
+    if (left <= right) {
+      if (left < bL) bL = left;
+      if (right > bR) bR = right;
+      if (row < bT) bT = row;
+      if (row > bB) bB = row;
+    }
+  }
+  return bR >= bL ? { top: bT, bot: bB, left: bL, right: bR } : null;
+}
+
 // Carve a jagged room at the pathway endpoint, then connect down to the cave.
 // Runs BEFORE addOverhang — just places FLOOR tiles.
 // Room is roughly 6-8 wide × 4-6 tall with random edge jitter.
@@ -1338,6 +1369,10 @@ function _generateFloor(romData, floorIndex, seed) {
   const secretWalls = new Set();
   const dungeonDestinations = new Map();
   let falseWalls = new Map();
+  // Small breathing rooms (entrance + H↔V junction) on the deeper-floor else
+  // branch; the shared feature-placement pass sprinkles skeletons + a chance
+  // chest into each. Empty on every other branch.
+  const extraRooms = [];
 
   if (floorIndex === 4) {
     const pos = generateBossRoom(tilemap, floorIndex);
@@ -2171,19 +2206,20 @@ function _generateFloor(romData, floorIndex, seed) {
       if (row >= 0 && row < 32) tilemap[row * 32 + entranceX] = FLOOR;
     }
 
-    // 1. Horizontal pathway (left or right)
+    // 1a. Entrance breathing room — small cave around the entrance landing so
+    //     the player steps into a room, not a 1-wide drop, before the corridor.
+    const entranceRoom = carveSmallCaveRoom(tilemap, entranceX, startFloorY, rng);
+    if (entranceRoom) extraRooms.push(entranceRoom);
+
+    // 1b. Horizontal pathway (left or right)
     const pathLength = 8 + Math.floor(rng() * 5); // 8-12 steps
     const pathResult = carvePathway(tilemap, entranceX, startFloorY, pathDir, pathLength, rng);
 
-    // 2. Junction — 2 tiles wide to match vertical corridor width
-    for (let dy = -2; dy <= 0; dy++) {
-      const jy = pathResult.endFloorY + dy;
-      for (let dx = 0; dx <= 1; dx++) {
-        if (pathResult.endX + dx >= 0 && pathResult.endX + dx < 32 && jy >= 0 && jy < 32) {
-          tilemap[jy * 32 + pathResult.endX + dx] = FLOOR;
-        }
-      }
-    }
+    // 2. Junction room — small cave where the H corridor meets the V corridor,
+    //    overlapping (endX, endFloorY) so both corridors stay connected. The
+    //    vertical pathway exits through one side of the room.
+    const junctionRoom = carveSmallCaveRoom(tilemap, pathResult.endX, pathResult.endFloorY, rng);
+    if (junctionRoom) extraRooms.push(junctionRoom);
 
     // 3. Vertical pathway (up or down from corridor end)
     const vertLength = 3 + Math.floor(rng() * 2); // 3-4 steps
@@ -2356,6 +2392,21 @@ function _generateFloor(romData, floorIndex, seed) {
       }
     }
 
+    // Extra rooms (entrance + junction) get a 50% chance at one corner chest
+    // each. Same 2-wall corner rule via findCornerFloor — small rooms can fail
+    // the corner test (jitter / overhang), in which case no chest.
+    for (const room of extraRooms) {
+      if (rng() >= 0.5) continue;
+      const pos = findCornerFloor(tilemap, rng, used, room);
+      if (!pos) continue;
+      tilemap[pos.y * 32 + pos.x] = CHEST;
+      for (let dy = -3; dy <= 3; dy++) {
+        for (let dx = -3; dx <= 3; dx++) {
+          used.add(`${pos.x + dx},${pos.y + dy}`);
+        }
+      }
+    }
+
     // Trap holes (interior only — never touching a wall, chamber only)
     // Hidden: placed as $74 for trigger registration, then swapped to $30 for rendering
     // Separate exclusion set — traps only space from each other + entrance/stairs
@@ -2433,6 +2484,24 @@ function _generateFloor(romData, floorIndex, seed) {
         ? findRandomFloor(tilemap, rng, boneUsed, chamberBounds)
         : findWallAdjacentFloor(tilemap, rng, boneUsed);
       if (pos) {
+        tilemap[pos.y * 32 + pos.x] = BONES;
+        for (let dy = -2; dy <= 2; dy++) {
+          for (let dx = -2; dx <= 2; dx++) {
+            boneUsed.add(`${pos.x + dx},${pos.y + dy}`);
+          }
+        }
+        used.add(`${pos.x},${pos.y}`);
+      }
+    }
+
+    // Extra rooms: 2-3 skeletons each, inhabiting the entrance + junction so
+    // they feel as occupied as the trap chamber. Same 5x5 boneUsed exclusion
+    // as the main loop so they don't clump together.
+    for (const room of extraRooms) {
+      const roomSkelCount = 2 + Math.floor(rng() * 2); // 2-3
+      for (let i = 0; i < roomSkelCount; i++) {
+        const pos = findRandomFloor(tilemap, rng, boneUsed, room);
+        if (!pos) break;
         tilemap[pos.y * 32 + pos.x] = BONES;
         for (let dy = -2; dy <= 2; dy++) {
           for (let dx = -2; dx <= 2; dx++) {
