@@ -39,7 +39,10 @@
 
 import { WebSocketServer } from 'ws';
 import { createRequire } from 'module';
-import { verifyTokenWithRevocation } from './api.js';
+import {
+  verifyTokenWithRevocation,
+  partyAddMember, partyRemoveMember, partyLoadAll,
+} from './api.js';
 import { sanitizeName, isCleanName, cleanChatText } from './moderation.js';
 const require = createRequire(import.meta.url);
 const jwt = require('jsonwebtoken');
@@ -85,6 +88,33 @@ const _partyInvites = new Map();
 // `party-dismiss` from the inviter, `party-leave` from the member, or
 // disconnect of either side.
 const _partyMemberships = new Map();
+
+// Seed `_partyMemberships` from the persistent `parties` table at boot
+// (v1.7.595). Parties survive disconnect + server restart; the table is the
+// source of truth, this Map the in-memory mirror. Only explicit leave /
+// dismiss removes rows from either side.
+for (const row of partyLoadAll()) {
+  _partyMemberships.set(row.memberUserId, row.inviterUserId);
+}
+
+// Returns every userId in the same party as `userId` — the inviter (if
+// `userId` is a member), every peer member under the same inviter, and any
+// members `userId` themselves invited. Excludes `userId`. Used by the hello
+// fan-out to re-introduce a returning user to their online party-mates.
+function _getPartyMates(userId) {
+  const mates = new Set();
+  const myInviter = _partyMemberships.get(userId);
+  if (myInviter != null && myInviter !== userId) {
+    mates.add(myInviter);
+    for (const [memberId, inviterId] of _partyMemberships) {
+      if (inviterId === myInviter && memberId !== userId) mates.add(memberId);
+    }
+  }
+  for (const [memberId, inviterId] of _partyMemberships) {
+    if (inviterId === userId) mates.add(memberId);
+  }
+  return [...mates];
+}
 
 
 // Hook-chance formula — mirror of `src/pvp-search.js#getHookChance`.
@@ -381,6 +411,32 @@ function _handleMessage(entry, msg) {
           type: 'player-join',
           player: { userId: entry.userId, ...entry.profile, loc: entry.loc },
         }, entry.userId);
+        // Re-establish persistent party relationships (v1.7.595). If this
+        // user has any party-mates in `_partyMemberships` (either as a
+        // member of someone's party or an inviter of others), tell them
+        // about the online mates via party-snapshot and tell each online
+        // mate that this user is back via party-member-joined. Reuses the
+        // existing client handlers — no client change needed.
+        const mateIds = _getPartyMates(entry.userId);
+        if (mateIds.length > 0) {
+          const onlineMates = mateIds
+            .map(uid => _connected.get(uid))
+            .filter(m => m && m.helloed);
+          if (onlineMates.length > 0) {
+            _send(entry.ws, {
+              type:    'party-snapshot',
+              members: onlineMates.map(m => ({
+                userId: m.userId, ...m.profile, loc: m.loc,
+              })),
+            });
+            const selfMember = {
+              userId: entry.userId, ...entry.profile, loc: entry.loc,
+            };
+            for (const m of onlineMates) {
+              _send(m.ws, { type: 'party-member-joined', member: selfMember });
+            }
+          }
+        }
       } else {
         _broadcast({
           type: 'player-update',
@@ -603,7 +659,10 @@ function _handleMessage(entry, msg) {
       if (!challenger || !challenger.helloed) return;
       // One-party-per-player — record membership on accept so future invites
       // targeting B get the early 'busy' rejection. Reject doesn't set.
-      if (accept) _partyMemberships.set(entry.userId, challengerId);
+      if (accept) {
+        _partyMemberships.set(entry.userId, challengerId);
+        partyAddMember(entry.userId, challengerId);    // persist (v1.7.595)
+      }
       _send(challenger.ws, {
         type:    'party-invite-result',
         accept,
@@ -643,6 +702,7 @@ function _handleMessage(entry, msg) {
       if (!memberUserId) return;
       if (_partyMemberships.get(memberUserId) === entry.userId) {
         _partyMemberships.delete(memberUserId);
+        partyRemoveMember(memberUserId);    // persist (v1.7.595)
       }
       return;
     }
@@ -655,6 +715,7 @@ function _handleMessage(entry, msg) {
       const inviterId = _partyMemberships.get(entry.userId);
       if (inviterId == null) return;
       _partyMemberships.delete(entry.userId);
+      partyRemoveMember(entry.userId);    // persist (v1.7.595)
       _broadcastPartyMemberLeft(inviterId, entry.userId, entry.profile?.name || '');
       return;
     }
@@ -924,28 +985,29 @@ export function attachWebSocketPresence(httpServer) {
             }
           }
         }
-        // Clean up party memberships involving this user (as member or as
-        // inviter — both directions) and notify the surviving side so they
-        // can clear their local party state. v1.7.460 — fans out to every
-        // surviving member, not just the inviter (see `_broadcastPartyMemberLeft`).
+        // Party memberships are PRESERVED across disconnect (v1.7.595) —
+        // SQLite + `_partyMemberships` rows survive until an explicit
+        // leave/dismiss. Peers still get the live "left" notification so
+        // their visible (online-only) party list updates; the underlying
+        // relationship is restored when the user reconnects, via the hello
+        // fan-out (party-snapshot + party-member-joined).
         const wasInPartyOf = _partyMemberships.get(userId);
-        _partyMemberships.delete(userId);
         if (wasInPartyOf) {
           _broadcastPartyMemberLeft(wasInPartyOf, userId, entry.profile?.name || '');
         }
-        for (const [memberId, inviterId] of [..._partyMemberships]) {
+        for (const [memberId, inviterId] of _partyMemberships) {
           if (inviterId !== userId) continue;
-          _partyMemberships.delete(memberId);
-          // This user was the inviter; tell each ex-member their party
-          // disbanded.
+          // This user was the inviter; from each member's POV the inviter
+          // just dropped offline. Symmetric with the member-disconnect case
+          // — was `party-disbanded` pre-v1.7.595 when parties were
+          // session-scoped.
           const member = _connected.get(memberId);
-          if (member && member.helloed) {
-            _send(member.ws, {
-              type:           'party-disbanded',
-              inviterUserId:  userId,
-              inviterName:    entry.profile?.name || '',
-            });
-          }
+          if (!member || !member.helloed) continue;
+          _send(member.ws, {
+            type:  'party-member-left',
+            userId,
+            name:  entry.profile?.name || '',
+          });
         }
         if (entry.helloed) {
           _broadcast({ type: 'player-leave', userId }, userId);

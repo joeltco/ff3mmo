@@ -176,6 +176,13 @@ db.exec(`
     created_at INTEGER DEFAULT (unixepoch()),
     FOREIGN KEY (reporter_user_id) REFERENCES users(id)
   );
+  CREATE TABLE IF NOT EXISTS parties (
+    member_user_id INTEGER PRIMARY KEY,
+    inviter_user_id INTEGER NOT NULL,
+    joined_at INTEGER DEFAULT (unixepoch()),
+    FOREIGN KEY (member_user_id) REFERENCES users(id),
+    FOREIGN KEY (inviter_user_id) REFERENCES users(id)
+  );
   CREATE TABLE IF NOT EXISTS bug_reports (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
@@ -204,6 +211,29 @@ db.exec(`
 try {
   db.exec('ALTER TABLE users ADD COLUMN token_iat_min INTEGER DEFAULT 0');
 } catch (_) { /* column exists — fine */ }
+
+// Party persistence (v1.7.595). The `parties` table is the source of truth
+// for "who is in a party with whom"; `_partyMemberships` in ws-presence.js
+// is the in-memory mirror, seeded from `partyLoadAll()` at boot and kept in
+// lockstep by the helpers below. Persistent across disconnects + restarts;
+// only explicit leave/dismiss removes a row.
+const _partyAddStmt           = db.prepare('INSERT OR REPLACE INTO parties (member_user_id, inviter_user_id) VALUES (?, ?)');
+const _partyRemoveMemberStmt  = db.prepare('DELETE FROM parties WHERE member_user_id = ?');
+const _partyRemoveByInviterStmt = db.prepare('DELETE FROM parties WHERE inviter_user_id = ?');
+const _partyLoadAllStmt       = db.prepare('SELECT member_user_id AS memberUserId, inviter_user_id AS inviterUserId FROM parties');
+
+export function partyAddMember(memberUserId, inviterUserId) {
+  _partyAddStmt.run(memberUserId | 0, inviterUserId | 0);
+}
+export function partyRemoveMember(memberUserId) {
+  _partyRemoveMemberStmt.run(memberUserId | 0);
+}
+export function partyRemoveByInviter(inviterUserId) {
+  _partyRemoveByInviterStmt.run(inviterUserId | 0);
+}
+export function partyLoadAll() {
+  return _partyLoadAllStmt.all();
+}
 
 function readBody(req) {
   return new Promise((resolve, reject) => {
