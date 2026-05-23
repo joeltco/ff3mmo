@@ -1026,7 +1026,8 @@ function _pauseInvDeleteHeld() {
     () => {
       removeItem(itemId, getItemCount(itemId));
       pauseSt.heldItem = -1;
-      pauseSt.invScroll = 0;  // v1.7.611: jump back to top of list after deletion
+      pauseSt.invScroll = 0;       // v1.7.611: jump back to top of list after deletion
+      pauseSt.deleteMode = false;  // v1.7.612: drop any latent delete-mode cursor too
       saveSlotsToDB();
       playSFX(SFX.CONFIRM);
     },
@@ -1055,7 +1056,8 @@ function _pauseInvDeletePress() {
     _nameToBytes('Delete ' + itemName + '? ' + _yesNoLabels()),
     () => {
       removeItem(itemId, getItemCount(itemId));
-      pauseSt.invScroll = 0;  // v1.7.611: jump back to top of list after deletion
+      pauseSt.invScroll = 0;       // v1.7.611: jump back to top of list after deletion
+      pauseSt.deleteMode = false;  // v1.7.612: exit delete mode → clears the held cursor on trash
       saveSlotsToDB();
       playSFX(SFX.CONFIRM);
     },
