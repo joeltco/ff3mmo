@@ -335,17 +335,22 @@ function _drawPauseInventory(ctx) {
   ctx.globalAlpha = prevAlpha;
 
   // Cursor on the trash slot, mirroring the item-row cursor offset (8px
-  // sprite vertically centered on the 16px trash → +4). Drawn in two
-  // cases (either triggers it):
-  //   1. Active cursor — invScroll === INV_CAP (user navigated here).
-  //   2. Mode indicator — deleteMode is on (entered via trash-Z or the
-  //      SELECT shortcut). Stays put while the user navigates items,
-  //      mirroring how the held-item cursor stays at its original row
-  //      during item-switching (v1.7.600). v1.7.605.
-  const showTrashCursor = (pauseSt.invScroll === INV_CAP || pauseSt.deleteMode) &&
-                          pauseSt.state !== 'inv-target' && pauseSt.state !== 'inv-heal';
-  if (showTrashCursor) {
+  // sprite vertically centered on the 16px trash → +4). Two visual
+  // modes (v1.7.607):
+  //   • Hover (invScroll === INV_CAP, deleteMode off) — single cursor.
+  //     User is just navigating past the trash.
+  //   • Engaged (deleteMode on) — DOUBLED cursor at +0 and +4 offset
+  //     (half-overlapping). Matches the held-item pattern from
+  //     v1.7.600 where Z-pick on a row draws two cursors stacked
+  //     (active at px+4, held at px+8) to signal "this is engaged."
+  //     Stays put while the user navigates items, so the trash always
+  //     reads as "the next thing that fires."
+  const visible = pauseSt.state !== 'inv-target' && pauseSt.state !== 'inv-heal';
+  const navigated = pauseSt.invScroll === INV_CAP;
+  const engaged   = pauseSt.deleteMode;
+  if (visible && (navigated || engaged)) {
     drawCursorFaded(tx - 16, ty + 4, fadeStep);
+    if (engaged) drawCursorFaded(tx - 12, ty + 4, fadeStep);
   }
 }
 
