@@ -27,6 +27,12 @@ import { applyBuff, hasBuff, clearAllBuffs, ALL_BUFFS } from './buffs.js';
 // ── Constants ──────────────────────────────────────────────────────────────
 const CHAT_LINE_H      = 9;
 const CHAT_HISTORY     = 30;
+// Chat input cap (v1.7.628). Bumped from 42 → 80 so /bug descriptions +
+// long chat messages have room. Server-side cap (`ws-presence.js` chat
+// case) is 200 chars; this is the client-side typing limit. 80 chars
+// wraps to ~4 visual rows in the bottom-strip chat panel (~21 chars/row
+// in the 8px game font, minus ~3 chars for the prompt on row 1).
+const CHAT_INPUT_CAP   = 80;
 const CHAT_EXPAND_MS   = 650;
 const CHAT_AUTO_MIN_MS = 5000;
 const CHAT_AUTO_MAX_MS = 16000;
@@ -721,7 +727,7 @@ export function onChatKeyDown(e) {
     _autocompleteMention();
   } else if (e.key === 'Backspace') {
     chatState.inputText = chatState.inputText.slice(0, -1);
-  } else if (e.key.length === 1 && chatState.inputText.length < 42) {
+  } else if (e.key.length === 1 && chatState.inputText.length < CHAT_INPUT_CAP) {
     chatState.inputText += e.key;
   }
 }
@@ -929,29 +935,52 @@ function _buildChatRows(ctx, lineW, startX, titleActive) {
   return rows;
 }
 
-function _drawChatInput(ctx, lineW, startX, inputLine1Y, inputLine2Y) {
-  // On the Private tab the prompt shows the PM recipient ("→Name") so the user
-  // always sees who they're about to message; elsewhere it's the plain "> ".
+// Compute how the input text wraps across visual rows. Row 0 has the
+// prompt prefix eating into its available width; subsequent rows use the
+// full lineW. Empty input → one empty row (for the cursor). v1.7.628.
+function _wrapInputText(ctx, text, promptW, lineW) {
+  const lines = [];
+  if (text.length === 0) return [''];
+  let pos = 0;
+  while (pos < text.length) {
+    const avail = (lines.length === 0) ? (lineW - promptW) : lineW;
+    let last = pos;
+    let i = pos + 1;
+    while (i <= text.length) {
+      if (ctx.measureText(text.slice(pos, i)).width > avail) break;
+      last = i;
+      i++;
+    }
+    if (last === pos) last = pos + 1; // guard: at least 1 char per row
+    lines.push(text.slice(pos, last));
+    pos = last;
+  }
+  return lines;
+}
+
+// Render the chat input. `inputBottomY` is the bottom-most baseline; multi-
+// line input stacks upward so the cursor (on the last row) sits at the
+// bottom. The prompt is only on row 0 (top); subsequent rows start at
+// startX. v1.7.628 generalized from the previous 2-line-only renderer.
+function _drawChatInput(ctx, startX, inputBottomY, lines) {
   const pmTarget = (CHAT_TABS[activeTab] === 'Private') ? _pmTarget() : null;
   const promptStr = pmTarget ? ('→' + pmTarget + ' ') : '> ';
   const promptW    = ctx.measureText(promptStr).width;
-  const inputAvail = lineW - promptW;
-  let splitIdx = chatState.inputText.length;
-  for (let i = 1; i <= chatState.inputText.length; i++) {
-    if (ctx.measureText(chatState.inputText.slice(0, i)).width > inputAvail) { splitIdx = i - 1; break; }
-  }
-  const line1Text = chatState.inputText.slice(0, splitIdx);
-  const line2Text = chatState.inputText.slice(splitIdx);
+  const rowCount = lines.length;
+  const topY = inputBottomY - (rowCount - 1) * CHAT_LINE_H;
   ctx.fillStyle = '#d8b858';
-  ctx.fillText(promptStr, startX, inputLine1Y);
+  ctx.fillText(promptStr, startX, topY);
   ctx.fillStyle = '#ffffff';
-  ctx.fillText(line1Text, startX + promptW, inputLine1Y);
-  ctx.fillText(line2Text, startX, inputLine2Y);
+  for (let i = 0; i < rowCount; i++) {
+    const y = topY + i * CHAT_LINE_H;
+    const x = (i === 0) ? (startX + promptW) : startX;
+    ctx.fillText(lines[i], x, y);
+  }
   if (Math.floor(chatState.cursorTimer / 500) % 2 === 0) {
-    if (line2Text.length > 0)
-      ctx.fillRect(startX + ctx.measureText(line2Text).width, inputLine2Y - 7, 6, 8);
-    else
-      ctx.fillRect(startX + promptW + ctx.measureText(line1Text).width, inputLine1Y - 7, 6, 8);
+    const lastLine = lines[rowCount - 1];
+    const lastY = topY + (rowCount - 1) * CHAT_LINE_H;
+    const lastX = (rowCount === 1) ? (startX + promptW) : startX;
+    ctx.fillRect(lastX + ctx.measureText(lastLine).width, lastY - 7, 6, 8);
   }
 }
 
@@ -976,11 +1005,12 @@ function _drawChatTextArea(ctx, curBoxY, curBoxH, battleFadeAlpha, titleActive) 
   const lineW  = CANVAS_W - 8 - startX;
   const rows = _buildChatRows(ctx, lineW, startX, titleActive);
   let inputRows = 0;
+  let inputLines = null;
   if (chatState.inputActive) {
-    const promptW = ctx.measureText('> ').width;
-    const inputFits = chatState.inputText.length === 0 ||
-      ctx.measureText(chatState.inputText).width <= lineW - promptW;
-    inputRows = inputFits ? 1 : 2;
+    const pmTarget = (CHAT_TABS[activeTab] === 'Private') ? _pmTarget() : null;
+    const promptW = ctx.measureText(pmTarget ? ('→' + pmTarget + ' ') : '> ').width;
+    inputLines = _wrapInputText(ctx, chatState.inputText, promptW, lineW);
+    inputRows = inputLines.length;
   }
   const availRows = Math.max(1, Math.floor(innerH / CHAT_LINE_H) - inputRows);
   const inputLineY = innerBottom - (inputRows - 1) * CHAT_LINE_H;
@@ -1008,9 +1038,7 @@ function _drawChatTextArea(ctx, curBoxY, curBoxH, battleFadeAlpha, titleActive) 
     }
   }
   if (chatState.inputActive) {
-    const line1Y = inputRows === 2 ? innerBottom - CHAT_LINE_H : innerBottom;
-    const line2Y = innerBottom;
-    _drawChatInput(ctx, lineW, startX, line1Y, line2Y);
+    _drawChatInput(ctx, startX, innerBottom, inputLines);
   }
   if (scrollActive) _drawChatScrollArrows(ctx, innerTop, innerBottom);
 }
