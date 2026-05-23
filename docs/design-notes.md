@@ -303,8 +303,20 @@ Three (now four) libgme emulators run side-by-side in `src/music.js`, each fed a
 
 ## Beta/dev gate
 
-- **Soft client-side curtain** (`#pw-gate` in `index.html`), not real auth — account login + save validation sit behind it regardless. `server.js` injects the password from the `GATE_PASSWORD` env var into `{{GATE_PASSWORD}}`/`{{GATE_DISPLAY}}` (`.replaceAll`, since the tokens also appear in comments): unset → `ff3dev` (closed-beta default), `off`/empty → disabled (gate hidden from first paint), any value → custom. Same codebase runs gated on dev and open (or differently keyed) on the beta server just by changing the launch env.
+- **Soft client-side curtain** (`#pw-gate` in `index.html`), not real auth — account login + save validation sit behind it regardless. `server.js` injects the password from the `GATE_PASSWORD` env var into `{{GATE_PASSWORD}}`/`{{GATE_DISPLAY}}` (`.replaceAll`, since the tokens also appear in comments): unset → `ff3dev` (closed-beta default), `off`/empty → disabled, any value → custom. Same codebase runs gated on dev and open (or differently keyed) on the beta server just by changing the launch env.
 - **Open-beta landing copy** (v1.7.597): `#landing-pitch` inside `#rom-picker-wrap` carries the public pitch — lede + sub + gold "OPEN BETA" tag. Auto-hides with the picker when gameplay starts. `#rom-hint` collapsed to "You supply your own ROMs — nothing is uploaded." Gate-dialog copy neutralized to `◆ Beta ◆` + "Beta password required." so a cached gate page doesn't read closed-beta.
+
+## Tap-to-enter splash + storage gesture rule
+
+**Load-bearing UX**, not cosmetic. `index.html` ALWAYS shows the `#pw-gate` overlay before the ROM picker, even when `GATE_PASSWORD=off`. When the gate is off the password input is hidden and the button is rebranded "Enter"; pressing it calls `unlockGate()` exactly like the closed-beta password-submit path. v1.7.625.
+
+The pre-gate-flip flow required typing `ff3dev` and clicking Enter on every fresh tab — that was an **accidental user-gesture guard** for the first IndexedDB access. Mobile Firefox (and other browsers with strict tracking protection) classify an origin's IndexedDB as session-only when the first storage access happens BEFORE any user activation; subsequent tab closes wipe it. The post-flip auto-`unlockGate()` path (for returning users with `authToken` in localStorage) ran `loadCachedROMs` before any tap and triggered exactly that classification, breaking ROM cache persistence (player report → v1.7.620-625 thrash).
+
+The splash restores the gesture guard. On the first `pointerdown` / `touchstart` / `keydown` after the splash, `_requestPersistentStorage` calls `navigator.storage.persist()` to ask the browser for durable storage explicitly — Firefox grants it automatically given user activation. The log line `[storage] persist requested → GRANTED|DENIED` lands in the console.
+
+**Hard rule going forward:** never call `unlockGate()` automatically at module load (it touches `loadCachedROMs` and downstream `saveSlotsToDB` paths). Anything that touches `ff3mmo-roms` IndexedDB (ROM bytes, save slots) must run inside a user-gesture context. If a future change wants to bypass the splash on returning visits, the bypass needs a different gesture source first.
+
+Also pulled v1.7.621: server no longer attaches `Clear-Site-Data: "cache"` on `?_v=` version-bust reloads. At least some browsers interpreted that header as broader than spec and wiped IndexedDB between sessions on every version bump. `Cache-Control: no-store, no-cache, must-revalidate` is the actual HTTP-cache defense.
 
 ## /health uptime endpoint
 
