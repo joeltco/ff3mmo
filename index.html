@@ -927,9 +927,40 @@
       }
     }
 
+    // First-user-gesture latch. Mobile Firefox (and likely other tracking-
+    // protection setups) partition IndexedDB to session-only storage when
+    // the first access happens before any user interaction — so reading
+    // cached ROMs on auto-load flags the DB as ephemeral and wipes it on
+    // tab close. The pre-gate-flip flow had the gate-password tap as an
+    // accidental gesture guard; post-flip, returning users hit
+    // loadCachedROMs with no gesture between page load and first IndexedDB
+    // touch. Latch the cache read until any pointer/touch/key event fires.
+    // v1.7.622.
+    let _firstGestureSeen = false;
+    const _firstGestureQueue = [];
+    function onFirstGesture(cb) {
+      if (_firstGestureSeen) { try { cb(); } catch (_) {} return; }
+      _firstGestureQueue.push(cb);
+    }
+    function _emitFirstGesture() {
+      if (_firstGestureSeen) return;
+      _firstGestureSeen = true;
+      const queue = _firstGestureQueue.splice(0);
+      for (const cb of queue) try { cb(); } catch (_) {}
+    }
+    ['pointerdown', 'touchstart', 'keydown'].forEach((t) => {
+      window.addEventListener(t, _emitFirstGesture, { capture: true, passive: true, once: false });
+    });
+
     function showROMPicker() {
       document.getElementById('rom-picker-wrap').style.display = 'block';
-      loadCachedROMs();
+      // Defer the IndexedDB read until a user gesture so the storage isn't
+      // partitioned to session-only on mobile Firefox. If the user has
+      // already interacted (desktop click/keypress, mobile tap) this fires
+      // immediately. Otherwise it waits — uploading a ROM (file picker tap)
+      // counts as the gesture and the file change handler runs cacheROM
+      // post-gesture too, so writes are always persistent.
+      onFirstGesture(() => loadCachedROMs());
     }
 
     init();
