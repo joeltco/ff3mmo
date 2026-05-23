@@ -37,6 +37,29 @@
       text-shadow: 0 0 12px rgba(200, 168, 50, 0.3);
       letter-spacing: 2px;
     }
+    #landing-pitch {
+      margin: 0 auto 28px auto;
+      max-width: 440px;
+      text-align: center;
+      color: #888;
+    }
+    #landing-pitch .pitch-lede {
+      font-size: 14px;
+      line-height: 1.55;
+      margin: 0 0 14px 0;
+    }
+    #landing-pitch .pitch-sub {
+      font-size: 12px;
+      line-height: 1.6;
+      margin: 0 0 16px 0;
+      color: #777;
+    }
+    #landing-pitch .pitch-tag {
+      font-size: 10px;
+      letter-spacing: 3px;
+      color: #c8a832;
+      margin: 0;
+    }
     #rom-picker {
       display: flex;
       flex-direction: column;
@@ -526,8 +549,8 @@
   <!-- Password gate; server injects an inline display style to hide when disabled -->
   <div id="pw-gate" style="{{GATE_DISPLAY}}">
     <h2>FF3 MMO</h2>
-    <p id="pw-tagline">&#9670; Coming Soon &#9670;</p>
-    <p id="pw-sub">Something is being built here.<br>Closed beta — invite only.</p>
+    <p id="pw-tagline">&#9670; Beta &#9670;</p>
+    <p id="pw-sub">Beta password required.</p>
     <input type="password" id="pw-input" placeholder="beta password" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
     <button id="pw-submit">Enter</button>
     <div class="pw-err" id="pw-err"></div>
@@ -536,6 +559,11 @@
   <h1>FF3 MMO</h1>
 
   <div id="rom-picker-wrap" style="display:none; text-align:center">
+    <div id="landing-pitch">
+      <p class="pitch-lede">A turn-based browser MMO inspired by NES-era Final Fantasy.</p>
+      <p class="pitch-sub">No install. No download. Bring three ROMs, get a world.</p>
+      <p class="pitch-tag">— OPEN BETA —</p>
+    </div>
     <div id="rom-picker">
       <label for="rom-file">Load FF3 ROM (.nes / .zip)</label>
       <input type="file" id="rom-file" accept=".nes,.zip,application/zip">
@@ -546,10 +574,7 @@
       <label for="rom-file-ff2">Load FF2 ROM (.nes / .zip)</label>
       <input type="file" id="rom-file-ff2" accept=".nes,.zip,application/zip">
     </div>
-    <p id="rom-hint">
-      You supply your own ROMs — the site doesn't distribute them.<br>
-      ROMs cache in your browser after the first load.
-    </p>
+    <p id="rom-hint">You supply your own ROMs — nothing is uploaded.</p>
     <div id="rom-info"></div>
   </div>
 
