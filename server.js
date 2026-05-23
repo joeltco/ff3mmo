@@ -80,7 +80,12 @@ const httpServer = createServer(async (req, res) => {
     let data = await readFile(join('.', path));
     const ext = extname(path);
     if (ext === '.html') data = Buffer.from(data.toString()
-      .replace('{{VERSION}}', version)
+      // replaceAll, not replace — there are TWO `{{VERSION}}` occurrences
+      // in index.html (one in a comment, one in `var BUILD = 'v{{VERSION}}'`)
+      // and the BUILD one was leaking through as a literal, ending up in
+      // `localStorage.ff3_build` and from there into every bug-report
+      // payload as `[v{{VERSION}}]`. v1.7.627.
+      .replaceAll('{{VERSION}}', version)
       .replaceAll('{{GATE_PASSWORD}}', GATE_PASSWORD_JS)
       .replaceAll('{{GATE_DISPLAY}}', GATE_DISPLAY));
     // Cache-busting handshake — when the client's version-gate detects a

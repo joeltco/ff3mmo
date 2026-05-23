@@ -116,7 +116,14 @@ const LOOT_POOLS = {
 const DEFAULT_LOOT = LOOT_POOLS[1000];
 
 function rollLootEntry(mapId) {
-  const tiers = LOOT_POOLS[mapId] || DEFAULT_LOOT;
+  // Ur interior maps (1-9, 147) don't have their own LOOT_POOLS entry; route
+  // them to the Ur overworld pool (114) so we don't fall through to
+  // DEFAULT_LOOT — that's the cave pool with a `{ monster: true }` mimic
+  // tier, which made Ur chests roll chest mimics (player bug-report
+  // 2026-05-23). v1.7.627.
+  let tiers = LOOT_POOLS[mapId];
+  if (!tiers && UR_CHEST_MAPS.has(mapId)) tiers = LOOT_POOLS[114];
+  if (!tiers) tiers = DEFAULT_LOOT;
   const total = tiers.reduce((s, t) => s + t.weight, 0);
   let roll = Math.random() * total;
   let tier = tiers[0];

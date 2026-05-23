@@ -679,6 +679,15 @@ function _autocompleteMention() {
   if (completed.length <= 60) chatState.inputText = completed;
 }
 
+// Stamp set when chat closes via Enter/Escape so the pause-menu Enter-toggle
+// can suppress itself for a few hundred ms — without this, holding Enter to
+// send a chat message bled the auto-repeat keydown through to the pause
+// open trigger (player bug 2026-05-23). Read by `chatJustClosedRecently`.
+let _chatClosedAt = 0;
+export function chatJustClosedRecently() {
+  return performance.now() - _chatClosedAt < 250;
+}
+
 export function onChatKeyDown(e) {
   e.preventDefault();
   if (e.key === 'Enter') {
@@ -703,9 +712,11 @@ export function onChatKeyDown(e) {
     // Keep pendingRecipient so a follow-up reply on the Private tab still has a
     // target; it's only dropped on Escape or a fresh 't' open (input-handler).
     chatState.inputActive = false; chatState.inputText = '';
+    _chatClosedAt = performance.now();
   } else if (e.key === 'Escape') {
     chatState.inputActive = false; chatState.inputText = '';
     chatState.pendingRecipient = null;
+    _chatClosedAt = performance.now();
   } else if (e.key === 'Tab') {
     _autocompleteMention();
   } else if (e.key === 'Backspace') {

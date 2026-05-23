@@ -27,7 +27,7 @@ import { mapSt } from './map-state.js';
 import { msgState, showMsgBox } from './message-box.js';
 import { ITEMS, isHandEquippable, ITEM_NAMES_SHRINES } from './data/items.js';
 import { sendNetGiveItem, setNetGiveItemHandler } from './net.js';
-import { addChatMessage } from './chat.js';
+import { addChatMessage, chatJustClosedRecently } from './chat.js';
 import { hudSt } from './hud-state.js';
 import { swapBattleSprites } from './job-sprites.js';
 import { jobBattlePalette, PALETTE_SLOTS } from './data/players.js';
@@ -741,6 +741,9 @@ function _pauseInputOpenClose() {
   const k = keys;
   if (k['Enter']) {
     k['Enter'] = false;
+    // Suppress pause-open if chat just closed via Enter (auto-repeat keydown
+    // bled through after chatState.inputActive flipped to false). v1.7.627.
+    if (chatJustClosedRecently()) return;
     if (pauseSt.state === 'none' && battleSt.battleState === 'none' && transSt.state === 'none' && !mapSt.shakeActive && !mapSt.starEffect && !mapSt.moving && msgState.state === 'none') {
       playSFX(SFX.CONFIRM);
       pauseMusic();
