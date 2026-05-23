@@ -36,37 +36,32 @@ const OPENED_CHEST = 0x7D;
 const CHEST_RESET_MS = 24 * 60 * 60 * 1000;
 const UR_CHEST_MAPS = new Set([114, 1, 2, 3, 4, 5, 6, 7, 8, 9, 147]);
 
-// Invisible chests — tiles that look like normal terrain (grass, etc.) but
-// trigger a chest open on Z, then go silent for 24h. Player discovers by
-// pressing Z on the right grass square. Same cooldown machinery as regular
-// chests (`ps.consumedTilesAt[mapId][key]`); no `consumedTiles` entry, so
-// `_replayConsumedTiles` doesn't paint anything visible. Loot rolls from
-// SECRET_LOOT_POOLS (richer than the host map's regular chest pool).
-const SECRET_TREASURES = {
-  114: new Set([
-    '27,8',   // Ur overworld — grass tile near the inn corner.
-    '6,12',   // Ur overworld — second hidden treasure.
-  ]),
-};
-// Inlined `{ gil: [...] }` literal here instead of GIL() — GIL is declared
-// further down the file and this object literal evaluates at module load.
-const SECRET_LOOT_POOLS = {
-  114: [
-    { weight: 35, pool: [0xA6, 0xAF] },              // Potion, Antidote (common)
-    { weight: 30, pool: [{ gil: [100, 250] }] },     // 4-10× a normal Ur chest
-    { weight: 20, pool: [0xA9] },                    // Phoenix Down (rare reward)
-    { weight: 15, pool: [0xE3] },                    // Cure scroll
-  ],
-};
+// Hidden-treasure tiles (`0x78-0x7B`) are the ROM's universal "search here"
+// markers (trigger-type 2 in TRIGGER_TYPE_TABLE) — visually they render as
+// whatever the tileset puts at those metatile slots (vases in town
+// interiors, grass in town overworlds, etc.) and they're collision-blocked
+// so the player walks UP to them like any chest. Press Z to search: each
+// attempt has HIDDEN_TREASURE_HIT_CHANCE odds of pulling from the map's
+// regular chest LOOT_POOLS. Hit → loot + 24h cooldown (per tile). Miss →
+// silent, no cooldown, can re-try. Tile is never mutated, so the vase /
+// grass keeps its appearance forever.
+const HIDDEN_TREASURE_TILE_MIN = 0x78;
+const HIDDEN_TREASURE_TILE_MAX = 0x7B;
+const HIDDEN_TREASURE_HIT_CHANCE = 0.25;
 
-export function isSecretTreasure(mapId, x, y) {
-  const set = SECRET_TREASURES[mapId];
-  return !!(set && set.has(`${x},${y}`));
+export function isHiddenTreasureTile(tileId) {
+  return tileId >= HIDDEN_TREASURE_TILE_MIN && tileId <= HIDDEN_TREASURE_TILE_MAX;
 }
 
-function rollSecretLoot(mapId) {
-  const tiers = SECRET_LOOT_POOLS[mapId];
-  if (!tiers) return null;
+// Pull from the area's existing chest pool. Ur maps without their own
+// LOOT_POOLS entry inherit map 114's pool (Ur defaults). Chest mimic tiers
+// are filtered out — a vase that spawns a battle would be off-tone.
+function rollHiddenTreasureLoot(mapId) {
+  let tiers = LOOT_POOLS[mapId];
+  if (!tiers && UR_CHEST_MAPS.has(mapId)) tiers = LOOT_POOLS[114];
+  if (!tiers) tiers = DEFAULT_LOOT;
+  tiers = tiers.filter(t => !t.monster);
+  if (tiers.length === 0) return null;
   const total = tiers.reduce((s, t) => s + t.weight, 0);
   let roll = Math.random() * total;
   let tier = tiers[0];
@@ -240,22 +235,27 @@ export function handleChest(facedX, facedY) {
   showMsgBox(msg);
 }
 
-// Invisible chest at a hidden-treasure tile. Caller (movement._handleAction)
-// has already confirmed via isSecretTreasure that (facedX, facedY) is a
-// registered secret on the current map. Returns true if loot was awarded,
-// false if the secret is still on its 24h cooldown (caller falls through —
-// no Z action, tile reads as plain grass).
-export function handleSecretTreasure(facedX, facedY) {
+// Search a hidden-treasure tile (vase / grass spot). Caller has already
+// confirmed via isHiddenTreasureTile that (facedX, facedY) is one of the
+// ROM's `0x78-0x7B` trigger tiles. Returns true if loot was awarded
+// (consumed Z, msg box opened); false if the search "missed" or the tile
+// is still on the 24h cooldown. Mis is silent — no message, no cooldown.
+export function handleHiddenTreasure(facedX, facedY) {
   const mapId = mapSt.currentMapId;
   if (mapId == null) return false;
   const key = `${facedX},${facedY}`;
   const lootedAt = ps.consumedTilesAt && ps.consumedTilesAt[mapId] && ps.consumedTilesAt[mapId][key];
   if (lootedAt != null && Date.now() - lootedAt < CHEST_RESET_MS) return false;
 
-  _stampChestTime(facedX, facedY);  // cooldown only — no _consumeTile, tile stays grass
+  // Per-search miss roll. Miss → silent (no message, no cooldown). The
+  // unpredictability is the point: the player learns "search every vase"
+  // is sometimes rewarded.
+  if (Math.random() >= HIDDEN_TREASURE_HIT_CHANCE) return false;
+
+  _stampChestTime(facedX, facedY);  // cooldown only — no _consumeTile, tile stays as-is
   saveSlotsToDB();
 
-  const entry = rollSecretLoot(mapId);
+  const entry = rollHiddenTreasureLoot(mapId);
   if (entry == null) return false;
   let msg;
   if (typeof entry === 'object' && entry.gil) {

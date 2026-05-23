@@ -18,6 +18,43 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.618 — 2026-05-23
+
+### Universal hidden-treasure (vase) system — replaces v1.7.617 per-coord registry
+
+v1.7.617 added a per-coord SECRET_TREASURES registry for two grass
+tiles on map 114. Turns out the ROM had already flagged those exact
+positions — and every "search a vase" spot across the Ur interiors —
+with metatile ids `0x78-0x7B` (trigger-type 2 per the disasm's
+TRIGGER_TYPE_TABLE). Switched to universal detection so every existing
++ future vase / hidden-treasure tile gets the function automatically.
+
+- **Detection** (`map-triggers.js`): `isHiddenTreasureTile(tileId)`
+  returns true for any `0x78-0x7B`. `0x78-0x7B` are already
+  collision-blocked by `map-renderer.js:495`, so the player walks up
+  to them and presses Z (same flow as a `0x7C` chest).
+- **`handleHiddenTreasure(facedX, facedY)`**: 25% per-search hit
+  chance. Miss → silent, no message, no cooldown (player can re-try).
+  Hit → loot + 24h cooldown via the existing `ps.consumedTilesAt[mapId][key]`
+  machinery. Tile is never mutated, so vases / grass keep their
+  appearance forever.
+- **Loot** pulls from the map's regular chest pool via
+  `rollHiddenTreasureLoot`. Ur interiors (maps 1-9) without their own
+  LOOT_POOLS entry inherit map 114's pool. Chest-mimic tiers are
+  filtered out — a vase that spawned a battle would be off-tone.
+- **Wired** in `movement.js` `_handleAction` right after the `0x7C`
+  visible-chest check.
+
+Removed: `SECRET_TREASURES`, `SECRET_LOOT_POOLS`, `isSecretTreasure`,
+`handleSecretTreasure`, `rollSecretLoot` (all v1.7.617 — now covered
+by the universal handler). The (27, 8) and (6, 12) tiles on map 114
+were already `0x78` in the ROM, so they continue to work but now go
+through the 25% hit roll and the regular Ur loot pool instead of
+v1.7.617's richer secret pool.
+
+**Total hidden-treasure tiles auto-detected across Ur**: 19 — map 114
+× 2, map 1 × 5, map 2 × 5, map 7 × 1, map 8 × 3, map 9 × 3.
+
 ## 1.7.617 — 2026-05-23
 
 ### Invisible chest at Ur (27, 8) + chest-cooldown server-save fix
