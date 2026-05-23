@@ -18,6 +18,33 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.602 — 2026-05-22
+
+### Real trash icon (the v1.7.599 one was the up-arrow)
+
+The "trash" sprite baked in v1.7.599 (and re-used on the player-select
+screen in v1.7.601) was actually FF3's discard-menu **up-arrow** (tile
+`$E8`, OAM, vflipped). The real trash can lives in the background layer
+of the same menu — a 2×2 cluster of BG tiles `$58`/`$59`/`$5A`/`$5B` at
+cols 7-8, rows 19-20 (BG snap @ frame 1905, BG3 palette). 16×16 ridged
+silhouette with a pinched lid opening and small base shadow.
+
+`src/data/inventory-icons.js`:
+- `getTrashCanvas()` now composites the four BG tiles into a 16×16
+  silhouette. Custom per-quadrant renderer draws only color index 3
+  (white); indices 0/1/2 (incl. the BG-blue field) stay transparent so
+  the icon sits cleanly on any HUD background.
+- The old `$E8` sprite is preserved (correctly named) as
+  `getUpArrowCanvas()` — same bytes/palette, just labelled honestly.
+
+Call-site sizing:
+- `title-screen.js#_drawTitleSelectBox` — 24×24 box unchanged; sprite
+  offset 8→4 to center the new 16×16 icon.
+- `pause-menu.js#_drawPauseInventory` — delete mode replaces the cursor
+  with the trash (was: cursor + 8×8 up-arrow stub side-by-side). At
+  `activeX = px+8` the 16×16 right edge lands at `px+24`, exactly the
+  item-name start — no overlap.
+
 ## 1.7.601 — 2026-05-22
 
 ### Player-select Delete button uses the trash icon

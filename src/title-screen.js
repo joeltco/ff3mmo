@@ -472,10 +472,10 @@ function _drawTitleSelectBox(ctx, cx) {
   const totalH = 3 * SEL_ROW_H + 2 * gap;
   const topY = HUD_VIEW_Y + Math.floor((HUD_VIEW_H - totalH) / 2);
 
-  // Delete box dimensions — sized to the trash icon (v1.7.601). The icon
-  // is 8×8 with 8px padding on each side → 24×24 square box, replacing
-  // the wider "Delete" text label. Outer HUD position is recomputed from
-  // the new width so the box still hugs the left side of the slot row.
+  // Delete box dimensions — sized to the 16×16 trash icon (v1.7.602; the
+  // original v1.7.601 box was sized for an 8×8 sprite that turned out to
+  // be the FF3 up-arrow, not the trash can). 16×16 sprite + 4px padding
+  // → 24×24 square box. Outer HUD anchors to the box width.
   const labelH = 24;
   const deleteLabelW = 24;
   const row2Y = topY + 2 * (SEL_ROW_H + gap);
@@ -496,7 +496,7 @@ function _drawTitleSelectBox(ctx, cx) {
     const fadeAlpha = Math.max(0, 1 - fadeStep / SELECT_TEXT_STEPS);
     const prevAlpha = ctx.globalAlpha;
     ctx.globalAlpha = prevAlpha * fadeAlpha;
-    ctx.drawImage(getTrashCanvas(), dx + 8, dy + 8);   // 8px padding → centered in 24px box
+    ctx.drawImage(getTrashCanvas(), dx + 4, dy + 4);   // 4px padding → 16×16 centered in 24px box
     ctx.globalAlpha = prevAlpha;
   }
 

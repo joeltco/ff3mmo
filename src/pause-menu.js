@@ -309,9 +309,14 @@ function _drawPauseInventory(ctx) {
       drawCursorFaded(px + 8, iy - 4, fadeStep);
     if (startIdx + i === pauseSt.invScroll && pauseSt.state !== 'inv-target' && pauseSt.state !== 'inv-heal') {
       const activeX = pauseSt.heldItem >= 0 ? px + 4 : px + 8;
-      drawCursorFaded(activeX, iy - 4, fadeStep);
       if (pauseSt.deleteMode) {
-        ctx.drawImage(getTrashCanvas(), activeX + 8, iy - 4);
+        // v1.7.602: real 16×16 trash silhouette replaces the cursor in
+        // delete mode (was: cursor + an 8×8 up-arrow stub mistakenly
+        // baked as a trash icon in v1.7.599). At activeX = px+8 the
+        // 16×16 right edge lands exactly at the item-name start (px+24).
+        ctx.drawImage(getTrashCanvas(), activeX, iy - 4);
+      } else {
+        drawCursorFaded(activeX, iy - 4, fadeStep);
       }
     }
   }
