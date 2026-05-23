@@ -183,6 +183,15 @@ db.exec(`
     FOREIGN KEY (member_user_id) REFERENCES users(id),
     FOREIGN KEY (inviter_user_id) REFERENCES users(id)
   );
+  CREATE TABLE IF NOT EXISTS presence_shadows (
+    user_id INTEGER PRIMARY KEY,
+    name TEXT,
+    loc TEXT,
+    profile_json TEXT,
+    last_seen INTEGER NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_presence_shadows_last_seen ON presence_shadows(last_seen);
   CREATE TABLE IF NOT EXISTS bug_reports (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
@@ -233,6 +242,41 @@ export function partyRemoveByInviter(inviterUserId) {
 }
 export function partyLoadAll() {
   return _partyLoadAllStmt.all();
+}
+
+// Presence persistence (v1.7.596). Periodic snapshots of the live `_connected`
+// roster so a crash doesn't dump everyone's overworld state. Source of truth
+// is SQLite; `_shadows` in ws-presence.js is the post-boot in-memory mirror.
+// Reaped on TTL; deleted explicitly on clean disconnect.
+const _presenceUpsertStmt = db.prepare(
+  'INSERT OR REPLACE INTO presence_shadows (user_id, name, loc, profile_json, last_seen) VALUES (?, ?, ?, ?, ?)'
+);
+const _presenceDeleteStmt = db.prepare('DELETE FROM presence_shadows WHERE user_id = ?');
+const _presenceLoadRecentStmt = db.prepare(
+  'SELECT user_id AS userId, name, loc, profile_json AS profileJson, last_seen AS lastSeen FROM presence_shadows WHERE last_seen >= ?'
+);
+const _presenceReapStmt = db.prepare('DELETE FROM presence_shadows WHERE last_seen < ?');
+
+// db.transaction wraps a batch in one journal sync — meaningfully faster
+// than N individual INSERTs when 100+ players are online.
+const _presenceFlushBatchTxn = db.transaction((rows) => {
+  for (const r of rows) {
+    _presenceUpsertStmt.run(r.userId | 0, r.name, r.loc, r.profileJson, r.lastSeen | 0);
+  }
+});
+
+export function presenceFlushBatch(rows) {
+  if (!rows || rows.length === 0) return;
+  _presenceFlushBatchTxn(rows);
+}
+export function presenceDelete(userId) {
+  _presenceDeleteStmt.run(userId | 0);
+}
+export function presenceLoadRecent(sinceSec) {
+  return _presenceLoadRecentStmt.all(sinceSec | 0);
+}
+export function presenceReap(beforeSec) {
+  return _presenceReapStmt.run(beforeSec | 0).changes;
 }
 
 function readBody(req) {

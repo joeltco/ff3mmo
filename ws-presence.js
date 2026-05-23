@@ -42,6 +42,7 @@ import { createRequire } from 'module';
 import {
   verifyTokenWithRevocation,
   partyAddMember, partyRemoveMember, partyLoadAll,
+  presenceFlushBatch, presenceDelete, presenceLoadRecent, presenceReap,
 } from './api.js';
 import { sanitizeName, isCleanName, cleanChatText } from './moderation.js';
 const require = createRequire(import.meta.url);
@@ -114,6 +115,73 @@ function _getPartyMates(userId) {
     if (inviterId === userId) mates.add(memberId);
   }
   return [...mates];
+}
+
+
+// Presence persistence (v1.7.596). `_shadows` is the in-memory cache of users
+// who were online when the server last died — restored at boot from SQLite
+// so newcomers see a populated world rather than an empty roster. Real
+// `hello` evicts the matching shadow; stale entries age out via TTL reap.
+const PRESENCE_TTL_SEC   = 10 * 60;    // shadows older than this drop
+const PRESENCE_FLUSH_MS  = 30 * 1000;  // periodic write of helloed users
+const PRESENCE_REAP_MS   = 60 * 1000;  // periodic stale-shadow cull
+const _shadows = new Map();   // userId → { userId, profile, loc, lastSeen }
+
+// SIGTERM flag — pm2 restart sends SIGTERM, we set the flag and DON'T exit;
+// pm2 escalates to SIGKILL after its grace period, and SIGKILL doesn't run
+// close handlers, so shadows persist across the restart. Local dev Ctrl-C
+// (SIGINT) we leave alone — default Node exit wipes shadows for connected
+// users, which is fine.
+let _gracefulShutdown = false;
+process.on('SIGTERM', () => { _gracefulShutdown = true; });
+
+// Boot load — restore shadows for users who were online recently. Older
+// entries drop on the next reap. v1.7.596.
+{
+  const cutoff = Math.floor(Date.now() / 1000) - PRESENCE_TTL_SEC;
+  for (const row of presenceLoadRecent(cutoff)) {
+    try {
+      _shadows.set(row.userId, {
+        userId: row.userId,
+        profile: JSON.parse(row.profileJson || '{}'),
+        loc: row.loc || 'ur',
+        lastSeen: row.lastSeen,
+      });
+    } catch { /* corrupt JSON — skip */ }
+  }
+  if (_shadows.size > 0) console.log(`Presence: restored ${_shadows.size} shadows`);
+}
+
+function _flushPresence() {
+  const now = Math.floor(Date.now() / 1000);
+  const rows = [];
+  for (const [uid, entry] of _connected) {
+    if (!entry.helloed) continue;
+    rows.push({
+      userId:      uid,
+      name:        entry.profile?.name || '',
+      loc:         entry.loc || '',
+      profileJson: JSON.stringify(entry.profile || {}),
+      lastSeen:    now,
+    });
+  }
+  if (rows.length > 0) presenceFlushBatch(rows);
+}
+
+function _reapPresence() {
+  const now = Math.floor(Date.now() / 1000);
+  const cutoff = now - PRESENCE_TTL_SEC;
+  for (const [uid, shadow] of _shadows) {
+    if (shadow.lastSeen < cutoff) {
+      _shadows.delete(uid);
+      // Live clients that received this shadow in their initial snapshot
+      // need to know it's gone, or it'll stick in their roster forever.
+      _broadcast({ type: 'player-leave', userId: uid });
+    }
+  }
+  // SQLite has its own retention — rows for users we evicted via `hello`
+  // get overwritten on the next flush, but stale ones must be cleaned.
+  presenceReap(cutoff);
 }
 
 
@@ -356,10 +424,21 @@ function _resolveEncounterHook(targetEntry) {
 
 function _snapshotPayload(excludeUserId) {
   const players = [];
+  const seen = new Set();
   for (const [uid, entry] of _connected) {
     if (uid === excludeUserId) continue;
     if (!entry.helloed) continue;
     players.push({ userId: uid, ...entry.profile, loc: entry.loc });
+    seen.add(uid);
+  }
+  // Shadow entries — users who were online before the last server restart
+  // and haven't reconnected yet. Same shape as live entries so the client
+  // doesn't have to differentiate; a real `hello` will broadcast
+  // `player-join` which upserts in the client roster. v1.7.596.
+  for (const [uid, shadow] of _shadows) {
+    if (uid === excludeUserId) continue;
+    if (seen.has(uid)) continue;
+    players.push({ userId: uid, ...shadow.profile, loc: shadow.loc });
   }
   return { type: 'snapshot', players };
 }
@@ -402,6 +481,11 @@ function _handleMessage(entry, msg) {
       entry.loc = String(parsed.loc || 'ur').slice(0, 16);
       const wasHelloed = entry.helloed;
       entry.helloed = true;
+      // A real connection takes over from any restored shadow for the same
+      // user. The `player-join` broadcast below upserts in clients that
+      // had the shadow in their initial snapshot, so no extra cleanup
+      // message is needed. v1.7.596.
+      _shadows.delete(entry.userId);
       // Send the current snapshot to the new client so they see everyone else.
       _send(entry.ws, _snapshotPayload(entry.userId));
       // Broadcast join to OTHER clients. If `hello` is resent (re-identify
@@ -893,6 +977,12 @@ export function getPlayerCounts() {
 export function attachWebSocketPresence(httpServer) {
   const wss = new WebSocketServer({ noServer: true, maxPayload: WS_MAX_PAYLOAD });
 
+  // Periodic presence snapshot + stale-shadow reap. Started here (not at
+  // module load) so a Node test that imports this file without attaching
+  // the server doesn't have a timer running forever. v1.7.596.
+  setInterval(_flushPresence, PRESENCE_FLUSH_MS).unref?.();
+  setInterval(_reapPresence,  PRESENCE_REAP_MS).unref?.();
+
   httpServer.on('upgrade', (req, socket, head) => {
     const url = new URL(req.url, 'http://localhost');
     if (url.pathname !== '/api/ws') {
@@ -1011,6 +1101,14 @@ export function attachWebSocketPresence(httpServer) {
         }
         if (entry.helloed) {
           _broadcast({ type: 'player-leave', userId }, userId);
+        }
+        // Voluntary disconnect drops the SQLite shadow so the user doesn't
+        // appear in roster snapshots after a future server restart. A
+        // graceful pm2 restart (_gracefulShutdown=true) takes the SIGKILL
+        // path before close handlers run, so this branch isn't reached and
+        // shadows survive — that's the design. v1.7.596.
+        if (!_gracefulShutdown) {
+          presenceDelete(userId);
         }
       });
       ws.on('error', () => { /* close handler runs on its own */ });
