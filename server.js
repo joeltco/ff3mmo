@@ -95,9 +95,14 @@ const httpServer = createServer(async (req, res) => {
       'Pragma': 'no-cache',
       'Expires': '0',
     };
-    if (ext === '.html' && url.searchParams.get('_v')) {
-      headers['Clear-Site-Data'] = '"cache"';
-    }
+    // NOTE: previously set `Clear-Site-Data: "cache"` on `?_v=` reloads as a
+    // belt-and-suspenders for mobile Firefox stale-module loads. Pulled
+    // v1.7.621 — some browsers were interpreting it broader than spec and
+    // wiping IndexedDB (ROM cache + saves) between sessions every time we
+    // shipped a version bump. `Cache-Control: no-store, no-cache,
+    // must-revalidate` above is the actual HTTP-cache defense. If mobile
+    // Firefox stale-module errors return, revisit with a narrower
+    // directive instead of `"cache"`.
     res.writeHead(200, headers);
     res.end(data);
   } catch {
