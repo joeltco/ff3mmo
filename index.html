@@ -927,41 +927,41 @@
       }
     }
 
-    // First-user-gesture latch. Mobile Firefox (and likely other tracking-
-    // protection setups) partition IndexedDB to session-only storage when
-    // the first access happens before any user interaction — so reading
-    // cached ROMs on auto-load flags the DB as ephemeral and wipes it on
-    // tab close. The pre-gate-flip flow had the gate-password tap as an
-    // accidental gesture guard; post-flip, returning users hit
-    // loadCachedROMs with no gesture between page load and first IndexedDB
-    // touch. Latch the cache read until any pointer/touch/key event fires.
-    // v1.7.622.
-    let _firstGestureSeen = false;
-    const _firstGestureQueue = [];
-    function onFirstGesture(cb) {
-      if (_firstGestureSeen) { try { cb(); } catch (_) {} return; }
-      _firstGestureQueue.push(cb);
-    }
-    function _emitFirstGesture() {
-      if (_firstGestureSeen) return;
-      _firstGestureSeen = true;
-      const queue = _firstGestureQueue.splice(0);
-      for (const cb of queue) try { cb(); } catch (_) {}
-    }
-    ['pointerdown', 'touchstart', 'keydown'].forEach((t) => {
-      window.addEventListener(t, _emitFirstGesture, { capture: true, passive: true, once: false });
-    });
-
     function showROMPicker() {
       document.getElementById('rom-picker-wrap').style.display = 'block';
-      // Defer the IndexedDB read until a user gesture so the storage isn't
-      // partitioned to session-only on mobile Firefox. If the user has
-      // already interacted (desktop click/keypress, mobile tap) this fires
-      // immediately. Otherwise it waits — uploading a ROM (file picker tap)
-      // counts as the gesture and the file change handler runs cacheROM
-      // post-gesture too, so writes are always persistent.
-      onFirstGesture(() => loadCachedROMs());
+      loadCachedROMs();
     }
+
+    // Request persistent storage from the browser (v1.7.624). Without this,
+    // some browsers (notably mobile Firefox with strict tracking
+    // protection) treat IndexedDB as "best-effort" / session storage and
+    // evict it between tabs. `navigator.storage.persist()` is the standard
+    // opt-in for "please don't evict me" — granted automatically by Firefox
+    // when there's user activation. Fire-and-forget; failure is fine
+    // (older browsers / refusal just means caching is less reliable, same
+    // as before).
+    async function _requestPersistentStorage() {
+      if (!navigator.storage || !navigator.storage.persist) return;
+      try {
+        const already = await navigator.storage.persisted();
+        if (already) return;
+        const granted = await navigator.storage.persist();
+        console.info('[storage] persist requested → ' + (granted ? 'GRANTED' : 'DENIED'));
+      } catch (e) {
+        console.warn('[storage] persist request failed:', e && e.name);
+      }
+    }
+    // Fire on first user gesture so browsers that require activation
+    // (Firefox) actually grant it.
+    let _persistAsked = false;
+    function _askOncePersisted() {
+      if (_persistAsked) return;
+      _persistAsked = true;
+      _requestPersistentStorage();
+    }
+    ['pointerdown', 'touchstart', 'keydown'].forEach((t) => {
+      window.addEventListener(t, _askOncePersisted, { capture: true, passive: true, once: true });
+    });
 
     init();
 
@@ -1041,13 +1041,9 @@
         console.info('[rom-cache] read FF3=' + (cached3 ? cached3.byteLength + 'B' : 'MISSING') +
                      ' FF1=' + (cached1 ? cached1.byteLength + 'B' : 'MISSING') +
                      ' FF2=' + (cached2 ? cached2.byteLength + 'B' : 'MISSING'));
-        // v1.7.622 deferred this read until first gesture, which means a
-        // user upload that races ahead of the cache read MUST WIN — never
-        // overwrite a fresh user-uploaded buffer with cached bytes (would
-        // resurrect stale/corrupt data over their fresh selection). v1.7.623.
-        if (cached3 && !ff3Buffer) ff3Buffer = cached3;
-        if (cached1 && !ff1Buffer) ff1Buffer = cached1;
-        if (cached2 && !ff2Buffer) ff2Buffer = cached2;
+        if (cached3) ff3Buffer = cached3;
+        if (cached1) ff1Buffer = cached1;
+        if (cached2) ff2Buffer = cached2;
         if (ff3Buffer && ff1Buffer && ff2Buffer) {
           const picker = document.getElementById('rom-picker');
           picker.innerHTML = '';
