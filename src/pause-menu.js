@@ -998,12 +998,11 @@ function _pauseInputInventory() {
 function _pauseInvTrashZPress() {
   if (pauseSt.heldItem !== -1) { _pauseInvDeleteHeld(); return; }
   pauseSt.deleteMode = true;
-  // v1.7.606: jump cursor back to the last item the user was on (not to
-  // row 0). The trash cursor stays put (via the deleteMode check in
-  // _drawPauseInventory) so the user sees a cursor on both the
-  // previously-targeted item AND the trash — clear "this is what gets
-  // deleted next."
-  pauseSt.invScroll = pauseSt.lastItemScroll;
+  // v1.7.609: cursor STAYS on trash (invScroll unchanged). Mirrors
+  // item-selection exactly — Z on row N keeps invScroll === N so the
+  // active + held cursors overlap there and you see the doubled
+  // visual. User then arrows up to pick which item to delete; held
+  // cursor stays at trash, active moves to the item row.
   playSFX(SFX.CONFIRM);
 }
 
