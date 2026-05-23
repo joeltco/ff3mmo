@@ -471,6 +471,16 @@ export function sendNetPartyLeave() {
   return _send({ type: 'party-leave' });
 }
 
+// Inviter side — dissolve our ENTIRE party in one server call. Server
+// emits party-disbanded to each member (who clear their local lists)
+// and one DELETE FROM parties WHERE inviter_user_id=?. Caller should
+// also clear their own local partyMembers — the inviter doesn't get
+// echoed since they aren't in `_partyMemberships`.
+export function sendNetPartyDisband() {
+  if (!_helloed) return false;
+  return _send({ type: 'party-disband' });
+}
+
 export function setNetPartyInviteHandler(fn) {
   _onPartyInvite = typeof fn === 'function' ? fn : null;
 }

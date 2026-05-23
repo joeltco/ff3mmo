@@ -6,7 +6,8 @@ import { _nesNameToString, _nameToBytes } from './text-utils.js';
 import { drawText, measureText, TEXT_WHITE } from './font-renderer.js';
 import { drawCursorFaded } from './hud-drawing.js';
 import { nesColorFade } from './palette.js';
-import { partyInviteSt } from './party-invite.js';
+import { partyInviteSt, disbandMyParty } from './party-invite.js';
+import { sendNetPartyLeave } from './net.js';
 import { mapSt } from './map-state.js';
 import { battleSt } from './battle-state.js';
 import { sprite } from './player-sprite.js';
@@ -410,6 +411,29 @@ registerCommand('msg',  'Alias of /pm: /msg <name> <message>', _pmCommand);
 registerCommand('r', 'Reply to the last player who PM\'d you: /r <message>', (args) => {
   if (!_lastPmFrom) { addChatMessage('No one has messaged you yet.', 'system', 'pm'); return; }
   _sendPm(_lastPmFrom, args);
+});
+
+registerCommand('disband', 'Dismiss your entire party (inviter only)', () => {
+  if (disbandMyParty()) {
+    addChatMessage('* Party disbanded', 'system');
+  } else {
+    addChatMessage('No party to disband.', 'console');
+  }
+});
+
+registerCommand('leave', 'Leave the party you\'re currently in', () => {
+  // Member-side leave. Server's `party-leave` handler clears persistence +
+  // notifies remaining members via party-member-left. Local partyMembers
+  // mostly tracks the inviter-side roster; for members we still clear so
+  // any stale view drops too.
+  if (partyInviteSt.partyMembers.length === 0) {
+    addChatMessage('You\'re not in a party.', 'console');
+    return;
+  }
+  partyInviteSt.partyMembers.length = 0;
+  partyInviteSt.partyMemberProfiles.clear();
+  sendNetPartyLeave();
+  addChatMessage('* You left the party', 'system');
 });
 
 registerCommand('ff1', 'Play FF1 NSF track N (or "stop" to resume map music)', (args) => {

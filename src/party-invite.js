@@ -26,7 +26,7 @@ import { showMsgBox, replaceMsgBoxText, dismissMsgBox, showMsgBoxPrompt, msgStat
 import { battleSt as _battleSt } from './battle-state.js';
 import { playSFX, SFX } from './music.js';
 import { sendNetPartyInvite, sendNetPartyCancel, sendNetPartyResponse,
-         sendNetPartyDismiss,
+         sendNetPartyDismiss, sendNetPartyDisband,
          setNetPartyInviteHandler, setNetPartyResultHandler,
          setNetPartyMemberLeftHandler, setNetPartyDisbandedHandler,
          setNetPartyMemberJoinedHandler, setNetPartySnapshotHandler } from './net.js';
@@ -115,6 +115,26 @@ export function removeFromParty(targetName) {
     partyInviteSt.partyMemberProfiles.delete(targetName);
     if (profile.userId) sendNetPartyDismiss(profile.userId);
   }
+}
+
+// Inviter-side disband. Clears every local party-mate + cached profile and
+// tells the server to drop all members in one shot (server emits
+// party-disbanded to each so their local lists clear too). v1.7.615.
+// Members do not have an inviter-side party — they should /leave instead;
+// returns false if there's no party to disband.
+export function disbandMyParty() {
+  if (partyInviteSt.partyMembers.length === 0) return false;
+  // Only real players are tracked in `_partyMemberships`; if every member
+  // is a fake-roster name, there's no MP party to disband server-side —
+  // just clear locally so /disband still works in single-player setups.
+  let anyReal = false;
+  for (const profile of partyInviteSt.partyMemberProfiles.values()) {
+    if (profile && profile.userId) { anyReal = true; break; }
+  }
+  partyInviteSt.partyMembers.length = 0;
+  partyInviteSt.partyMemberProfiles.clear();
+  if (anyReal) sendNetPartyDisband();
+  return true;
 }
 
 // Accept chance formula: level differential + job bonus, clamped. Lower-
@@ -311,12 +331,14 @@ setNetPartySnapshotHandler((msg) => {
 setNetPartyDisbandedHandler((msg) => {
   const name = msg && msg.inviterName;
   if (!name) return;
-  // Mirror of `setNetPartyMemberLeftHandler` for the invitee side — clear the
-  // inviter from local `partyMembers` + cached profile so future battles don't
-  // try to pull in a ghost ally. v1.7.412.
-  const i = partyInviteSt.partyMembers.indexOf(name);
-  if (i >= 0) partyInviteSt.partyMembers.splice(i, 1);
-  partyInviteSt.partyMemberProfiles.delete(name);
+  // The whole party we were in is gone (inviter disbanded, or we were
+  // dismissed from a party that was otherwise empty). Clear EVERY local
+  // party-mate + cached profile — not just the inviter — so future
+  // battles don't pull in any ghost ally. v1.7.412 cleared one name;
+  // v1.7.615 generalized to the full party since /disband (inviter-side)
+  // and the inviter-side party-dismiss both route through this handler.
+  partyInviteSt.partyMembers.length = 0;
+  partyInviteSt.partyMemberProfiles.clear();
   addChatMessage('* ' + name + "'s party disbanded", 'system');
 });
 

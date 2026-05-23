@@ -1,6 +1,6 @@
 {
   "name": "ff3mmo",
-  "version": "1.7.614",
+  "version": "1.7.615",
   "description": "NES RPG engine — runtime ROM extraction, procedural dungeons, NSF music",
   "private": true,
   "type": "module",

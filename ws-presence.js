@@ -41,7 +41,7 @@ import { WebSocketServer } from 'ws';
 import { createRequire } from 'module';
 import {
   verifyTokenWithRevocation,
-  partyAddMember, partyRemoveMember, partyLoadAll,
+  partyAddMember, partyRemoveMember, partyRemoveByInviter, partyLoadAll,
   presenceFlushBatch, presenceDelete, presenceLoadRecent, presenceReap,
 } from './api.js';
 import { sanitizeName, isCleanName, cleanChatText } from './moderation.js';
@@ -870,9 +870,48 @@ function _handleMessage(entry, msg) {
       if (!entry.helloed) return;
       const memberUserId = parsed.memberUserId | 0;
       if (!memberUserId) return;
-      if (_partyMemberships.get(memberUserId) === entry.userId) {
-        _partyMemberships.delete(memberUserId);
-        partyRemoveMember(memberUserId);    // persist (v1.7.595)
+      if (_partyMemberships.get(memberUserId) !== entry.userId) return;
+      const dismissedPeer = _connected.get(memberUserId);
+      const dismissedName = dismissedPeer?.profile?.name || '';
+      _partyMemberships.delete(memberUserId);
+      partyRemoveMember(memberUserId);    // persist (v1.7.595)
+      // Tell remaining party-mates (inviter + other members) the dismissed
+      // member is gone so their local rosters stay in sync.
+      _broadcastPartyMemberLeft(entry.userId, memberUserId, dismissedName);
+      // Tell the dismissed member their party is over so they can clear
+      // their whole local partyMembers (reusing the party-disbanded handler
+      // — same effect from their POV: the party they were in is dead).
+      if (dismissedPeer?.helloed) {
+        _send(dismissedPeer.ws, {
+          type:          'party-disbanded',
+          inviterUserId: entry.userId,
+          inviterName:   entry.profile?.name || '',
+        });
+      }
+      return;
+    }
+    case 'party-disband': {
+      // Inviter dissolves their ENTIRE party in one action (chat /disband).
+      // Equivalent to dismissing every member one by one but in a single
+      // SQLite write + a clean party-disbanded broadcast to each member.
+      if (!entry.helloed) return;
+      if (_partyMemberships.has(entry.userId)) return; // I'm a member, not an inviter
+      const memberIds = [];
+      for (const [memberId, mInviterId] of _partyMemberships) {
+        if (mInviterId === entry.userId) memberIds.push(memberId);
+      }
+      if (memberIds.length === 0) return;
+      const inviterName = entry.profile?.name || '';
+      for (const memberId of memberIds) _partyMemberships.delete(memberId);
+      partyRemoveByInviter(entry.userId);   // persist (v1.7.595)
+      for (const memberId of memberIds) {
+        const peer = _connected.get(memberId);
+        if (!peer || !peer.helloed) continue;
+        _send(peer.ws, {
+          type:          'party-disbanded',
+          inviterUserId: entry.userId,
+          inviterName,
+        });
       }
       return;
     }
