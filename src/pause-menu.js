@@ -355,11 +355,15 @@ function _drawPauseInventory(ctx) {
   const onTrash = pauseSt.invScroll === INV_CAP;
   const engaged = pauseSt.deleteMode;
   if (visible) {
+    // v1.7.610: draw order matches item-selection exactly — HELD first
+    // (underneath, static), ACTIVE second (on top, moves). Previously
+    // had it inverted, so the moving cursor was the one buried under
+    // the stationary one.
+    if (engaged) drawCursorFaded(tx - 12, ty + 4, fadeStep);
     if (onTrash) {
       const activeX = engaged ? tx - 16 : tx - 12;
       drawCursorFaded(activeX, ty + 4, fadeStep);
     }
-    if (engaged) drawCursorFaded(tx - 12, ty + 4, fadeStep);
   }
 }
 
