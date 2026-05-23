@@ -309,16 +309,26 @@ function _drawPauseInventory(ctx) {
       drawCursorFaded(px + 8, iy - 4, fadeStep);
     if (startIdx + i === pauseSt.invScroll && pauseSt.state !== 'inv-target' && pauseSt.state !== 'inv-heal') {
       const activeX = pauseSt.heldItem >= 0 ? px + 4 : px + 8;
-      if (pauseSt.deleteMode) {
-        // v1.7.602: real 16×16 trash silhouette replaces the cursor in
-        // delete mode (was: cursor + an 8×8 up-arrow stub mistakenly
-        // baked as a trash icon in v1.7.599). At activeX = px+8 the
-        // 16×16 right edge lands exactly at the item-name start (px+24).
-        ctx.drawImage(getTrashCanvas(), activeX, iy - 4);
-      } else {
-        drawCursorFaded(activeX, iy - 4, fadeStep);
-      }
+      drawCursorFaded(activeX, iy - 4, fadeStep);
     }
+  }
+
+  // v1.7.603: trash icon is a fixed mode-indicator in the panel's
+  // bottom-right corner — only visible while delete mode is active. Was
+  // riding the cursor (v1.7.602), which moved with scroll and wasn't
+  // readable as a "mode is on" signal. 16×16 sprite with 4px margin from
+  // the right/bottom edges sits in the clear space below the 8 item rows
+  // (last row ends ~y=150, panel bottom = 176). Fade rides globalAlpha
+  // since the trash is a baked canvas (no palette to step through
+  // nesColorFade like text does).
+  if (pauseSt.deleteMode) {
+    const tx = px + HUD_VIEW_W - 16 - 4;
+    const ty = finalY + HUD_VIEW_H - 16 - 4;
+    const fadeAlpha = Math.max(0, 1 - fadeStep / PAUSE_TEXT_STEPS);
+    const prevAlpha = ctx.globalAlpha;
+    ctx.globalAlpha = prevAlpha * fadeAlpha;
+    ctx.drawImage(getTrashCanvas(), tx, ty);
+    ctx.globalAlpha = prevAlpha;
   }
 }
 
