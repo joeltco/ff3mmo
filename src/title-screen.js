@@ -9,6 +9,7 @@ import { playSFX, fadeOutMusic, SFX, TRACKS } from './music.js';
 import { ps, fullHeal, recalcCombatStats, initPlayerStats, MAX_LEVEL, expToNextForLevel } from './player-stats.js';
 import { computeJobStats } from './data/players.js';
 import { hudSt } from './hud-state.js';
+import { getTrashCanvas } from './data/inventory-icons.js';
 import { transSt, topBoxSt } from './transitions.js';
 import { AREA_NAMES } from './data/strings.js';
 import { mapSt } from './map-state.js';
@@ -81,7 +82,6 @@ const TITLE_DISCLAIM_5 = new Uint8Array([0x97,0xB2,0xFF,0xA4,0xA9,0xA9,0xAC,0xAF
 const TITLE_MMORPG    = new Uint8Array([0x96,0x96,0x98,0x9B,0x99,0x90]);
 const SELECT_TITLE    = new Uint8Array([0x99,0xAF,0xA4,0xBC,0xA8,0xB5,0xFF,0x9C,0xA8,0xAF,0xA8,0xA6,0xB7]);
 const SELECT_SLOT_TEXT   = new Uint8Array([0x97,0xA8,0xBA,0xFF,0x90,0xA4,0xB0,0xA8]);
-const SELECT_DELETE_TEXT = new Uint8Array([0x8D,0xA8,0xAF,0xA8,0xB7,0xA8]);
 
 // ── Mutable state (exported so game.js can read/write directly) ────────────
 export const titleSt = {
@@ -472,9 +472,12 @@ function _drawTitleSelectBox(ctx, cx) {
   const totalH = 3 * SEL_ROW_H + 2 * gap;
   const topY = HUD_VIEW_Y + Math.floor((HUD_VIEW_H - totalH) / 2);
 
-  // Delete box dimensions
+  // Delete box dimensions — sized to the trash icon (v1.7.601). The icon
+  // is 8×8 with 8px padding on each side → 24×24 square box, replacing
+  // the wider "Delete" text label. Outer HUD position is recomputed from
+  // the new width so the box still hugs the left side of the slot row.
   const labelH = 24;
-  const deleteLabelW = measureText(SELECT_DELETE_TEXT) + 16;
+  const deleteLabelW = 24;
   const row2Y = topY + 2 * (SEL_ROW_H + gap);
 
   for (let i = 0; i < 3; i++) {
@@ -482,15 +485,19 @@ function _drawTitleSelectBox(ctx, cx) {
     _drawSelectSlotRow(ctx, i, selX, rowY, fadeStep, showContent);
   }
 
-  // "Delete" label — left of bottom row, bottom-aligned
+  // Trash icon box — left of bottom row, bottom-aligned. Fade rides
+  // globalAlpha since the trash sprite is a baked canvas (no palette to
+  // step through nesColorFade like text does).
   const dx = selX - 4 - deleteLabelW;
   const dy = row2Y + SEL_ROW_H - labelH;
-  const delPal = [0x0F, 0x0F, 0x0F, titleSt.deleteMode ? 0x16 : selectCursor === 3 ? 0x16 : 0x30];
-  for (let s = 0; s < fadeStep; s++) delPal[3] = nesColorFade(delPal[3]);
   _drawTitleBox(ctx, dx, dy, deleteLabelW, labelH, fadeStep);
   if (showContent) {
     if (selectCursor === 3) drawCursorFaded(dx - 10, dy + 4, fadeStep);
-    drawText(ctx, dx + 8, dy + 8, SELECT_DELETE_TEXT, delPal);
+    const fadeAlpha = Math.max(0, 1 - fadeStep / SELECT_TEXT_STEPS);
+    const prevAlpha = ctx.globalAlpha;
+    ctx.globalAlpha = prevAlpha * fadeAlpha;
+    ctx.drawImage(getTrashCanvas(), dx + 8, dy + 8);   // 8px padding → centered in 24px box
+    ctx.globalAlpha = prevAlpha;
   }
 
   // Draw slot cursors AFTER delete box so they aren't covered
