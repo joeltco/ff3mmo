@@ -290,7 +290,7 @@ setNetPartyMemberLeftHandler((msg) => {
   const i = partyInviteSt.partyMembers.indexOf(name);
   if (i >= 0) partyInviteSt.partyMembers.splice(i, 1);
   partyInviteSt.partyMemberProfiles.delete(name);
-  addChatMessage('* ' + name + ' left party', 'system');
+  addChatMessage('* ' + name + ' left the party', 'system');
 });
 
 // MP disband cleanup — this client was a MEMBER of someone's party (the
@@ -308,7 +308,7 @@ setNetPartyMemberJoinedHandler((msg) => {
   if (!partyInviteSt.partyMembers.includes(m.name) && !isPartyFull()) {
     partyInviteSt.partyMembers.push(m.name);
     partyInviteSt.partyMemberProfiles.set(m.name, m);
-    addChatMessage('* ' + m.name + ' joined party', 'system');
+    addChatMessage('* ' + m.name + ' joined the party', 'system');
   }
 });
 

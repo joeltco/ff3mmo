@@ -415,7 +415,7 @@ registerCommand('r', 'Reply to the last player who PM\'d you: /r <message>', (ar
 
 registerCommand('disband', 'Dismiss your entire party (inviter only)', () => {
   if (disbandMyParty()) {
-    addChatMessage('* Party disbanded', 'system');
+    addChatMessage('* You disbanded the party', 'system');
   } else {
     addChatMessage('No party to disband.', 'console');
   }
