@@ -770,7 +770,22 @@ export function drawChat(ctx, drawHudBoxFn, rosterBattleFade, titleActive) {
   if (battleFadeAlpha <= 0) return;
   if (chatState.messages.length === 0 && !chatState.inputActive && chatState.expandAnim === 0) return;
 
-  const curBoxH = HUD_BOT_H + Math.round((CANVAS_H - HUD_VIEW_Y - HUD_BOT_H) * chatState.expandAnim / 8) * 8;
+  // Pre-compute input wrap so we can grow the chat panel UP to fit
+  // multi-row input WITHOUT eating into the message history rows. Without
+  // this, an 80-char message wraps to 3-4 rows and the 5-row panel only
+  // leaves 1-2 rows for chat (player bug 2026-05-23). v1.7.629.
+  ctx.font = '8px "Press Start 2P"';
+  ctx.textBaseline = 'bottom';
+  let extraInputH = 0;
+  if (chatState.inputActive) {
+    const startX = 12;
+    const lineW = CANVAS_W - 8 - startX;
+    const pmTarget = (CHAT_TABS[activeTab] === 'Private') ? _pmTarget() : null;
+    const promptW = ctx.measureText(pmTarget ? ('→' + pmTarget + ' ') : '> ').width;
+    const inputLines = _wrapInputText(ctx, chatState.inputText, promptW, lineW);
+    extraInputH = Math.max(0, inputLines.length - 1) * CHAT_LINE_H;
+  }
+  const curBoxH = HUD_BOT_H + extraInputH + Math.round((CANVAS_H - HUD_VIEW_Y - HUD_BOT_H - extraInputH) * chatState.expandAnim / 8) * 8;
   const curBoxY = CANVAS_H - curBoxH;
   ctx.save();
   _drawChatExpandBG(ctx, drawHudBoxFn, curBoxY, curBoxH, battleFadeAlpha, rosterBattleFade);
