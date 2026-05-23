@@ -111,6 +111,20 @@ function _validateSaveData(data) {
     }
     out.inventory = inv;
   }
+  // v1.7.600 — inventory slot order. Whitelist + clamp to bag-cap. Stale or
+  // duplicate ids are filtered out by setPlayerInventory on load.
+  if (Array.isArray(data.inventoryOrder)) {
+    const order = [];
+    const seen = new Set();
+    for (const raw of data.inventoryOrder) {
+      if (order.length >= 8) break;
+      const id = parseInt(raw, 10);
+      if (!Number.isFinite(id) || id < 0 || id > 255) continue;
+      if (seen.has(id)) continue;
+      order.push(id); seen.add(id);
+    }
+    out.inventoryOrder = order;
+  }
   if (typeof data.gil === 'number')          out.gil = _clamp(data.gil, 0, 999999);
   if (data.jobLevels && typeof data.jobLevels === 'object') {
     const jl = {};

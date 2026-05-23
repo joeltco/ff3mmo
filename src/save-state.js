@@ -3,7 +3,7 @@
 
 import { openSaveDB, serverDeleteSlot, parseSaveSlots } from './save.js';
 import { ps, playerStatsSnapshot } from './player-stats.js';
-import { playerInventory } from './inventory.js';
+import { playerInventory, playerInventoryOrder } from './inventory.js';
 
 // --- State ---
 export let selectCursor = 0;             // 0-2 (which slot)
@@ -51,6 +51,7 @@ export async function saveSlotsToDB() {
     slot.mp = ps.mp;
     slot.stats = playerStatsSnapshot();
     slot.inventory = { ...playerInventory };
+    slot.inventoryOrder = [...playerInventoryOrder];   // v1.7.600 — preserve user-set slot order
     slot.gil = ps.gil;
     slot.jobLevels = JSON.parse(JSON.stringify(ps.jobLevels));
     slot.jobIdx = ps.jobIdx;
@@ -87,6 +88,7 @@ export async function saveSlotsToDB() {
       mp: s.mp != null ? s.mp : null,
       stats: s.stats || null,
       inventory: s.inventory || {},
+      inventoryOrder: Array.isArray(s.inventoryOrder) ? [...s.inventoryOrder] : [],
       gil: s.gil || 0,
       jobLevels: s.jobLevels || {},
       jobIdx: s.jobIdx || 0,

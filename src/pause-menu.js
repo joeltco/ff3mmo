@@ -15,7 +15,10 @@ import { selectCursor, saveSlots, saveSlotsToDB } from './save-state.js';
 import { ui } from './ui-state.js';
 import { inputSt, keys } from './input-handler.js';
 import { drawBorderedBox, clipToViewport, drawCursorFaded } from './hud-drawing.js';
-import { playerInventory, addItem, removeItem, getItemCount } from './inventory.js';
+import {
+  playerInventory, addItem, removeItem, getItemCount,
+  buildItemSelectList, swapInventorySlots, INV_SLOTS, INV_CAP,
+} from './inventory.js';
 import { getTrashCanvas } from './data/inventory-icons.js';
 import { showMsgBoxPrompt } from './message-box.js';
 import { battleSt } from './battle-state.js';
@@ -287,24 +290,26 @@ function _drawPauseInventory(ctx) {
   if (pauseSt.menuMode === 'magic') { _drawPauseMagicList(ctx); return; }
   const fadeStep = _pauseFadeStep('inv-items-in', 'inv-items-out');
   const fadedPal = _makeFadedPal(fadeStep);
-  const entries = Object.entries(playerInventory).filter(([,c]) => c > 0);
-  const maxVisible = Math.floor((HUD_VIEW_H - 16) / 14);
-  const startIdx = Math.max(0, Math.min(pauseSt.invScroll, Math.max(0, entries.length - maxVisible)));
+  // Position-ordered list — buildItemSelectList pads with nulls to INV_SLOTS
+  // so empty slots are reachable as drag/swap targets. v1.7.600.
+  const slots = buildItemSelectList();
+  const maxVisible = Math.min(INV_SLOTS, Math.floor((HUD_VIEW_H - 16) / 14));
+  const startIdx = Math.max(0, Math.min(pauseSt.invScroll, Math.max(0, INV_SLOTS - maxVisible)));
   const countRx = px + HUD_VIEW_W - 16;
-  for (let i = 0; i < maxVisible && startIdx + i < entries.length; i++) {
-    const [id, count] = entries[startIdx + i];
-    const nameBytes = getItemNameShrines(Number(id));
-    const countBytes = _nameToBytes(String(count));
+  for (let i = 0; i < maxVisible && startIdx + i < INV_SLOTS; i++) {
+    const slot = slots[startIdx + i];
     const iy = finalY + 12 + i * 14;
-    drawText(ctx, px + 24, iy, nameBytes, fadedPal);
-    drawText(ctx, countRx - measureText(countBytes), iy, countBytes, fadedPal);
+    if (slot) {
+      const nameBytes = getItemNameShrines(slot.id);
+      const countBytes = _nameToBytes(String(slot.count));
+      drawText(ctx, px + 24, iy, nameBytes, fadedPal);
+      drawText(ctx, countRx - measureText(countBytes), iy, countBytes, fadedPal);
+    }
     if (pauseSt.heldItem >= 0 && startIdx + i === pauseSt.heldItem && pauseSt.state !== 'inv-target' && pauseSt.state !== 'inv-heal')
       drawCursorFaded(px + 8, iy - 4, fadeStep);
     if (startIdx + i === pauseSt.invScroll && pauseSt.state !== 'inv-target' && pauseSt.state !== 'inv-heal') {
       const activeX = pauseSt.heldItem >= 0 ? px + 4 : px + 8;
       drawCursorFaded(activeX, iy - 4, fadeStep);
-      // Delete-mode marker — trash icon to the right of the cursor at the
-      // active row. Renders flat (no fade) so it stands out. v1.7.599.
       if (pauseSt.deleteMode) {
         ctx.drawImage(getTrashCanvas(), activeX + 8, iy - 4);
       }
@@ -824,23 +829,42 @@ function _applyPauseSpellUse(rosterTargets) {
   saveSlotsToDB();
 }
 
-function _pauseInvZPress(entries) {
+// Z press in the Items tab. Three branches:
+//   1. No item held → pick up the item under the cursor. Picking an empty
+//      slot beeps an error (nothing to grab).
+//   2. Held + same row Z → activate the held item (consumable / scroll).
+//   3. Held + different row Z → SWAP the two slot positions (or MOVE into
+//      an empty slot). This is the position-rearrange path the user wants;
+//      pre-v1.7.600 it just re-picked-up the new slot and the held item
+//      stayed put.
+function _pauseInvZPress() {
+  const slots = buildItemSelectList();
   if (pauseSt.heldItem === -1) {
-    if (entries.length > 0 && entries[pauseSt.invScroll]) { pauseSt.heldItem = pauseSt.invScroll; playSFX(SFX.CONFIRM); }
+    if (slots[pauseSt.invScroll]) { pauseSt.heldItem = pauseSt.invScroll; playSFX(SFX.CONFIRM); }
     else playSFX(SFX.ERROR);
-  } else if (pauseSt.heldItem === pauseSt.invScroll) {
-    const [id] = entries[pauseSt.heldItem]; const item = ITEMS.get(Number(id));
+    return;
+  }
+  if (pauseSt.heldItem === pauseSt.invScroll) {
+    const slot = slots[pauseSt.heldItem];
+    if (!slot) { pauseSt.heldItem = -1; playSFX(SFX.ERROR); return; }
+    const item = ITEMS.get(slot.id);
     if (item && item.type === 'consumable') {
       playSFX(SFX.CONFIRM); pauseSt.heldItem = -1;
-      pauseSt.state = 'inv-target'; pauseSt.timer = 0; pauseSt.useItemId = Number(id); pauseSt.invAllyTarget = -1;
+      pauseSt.state = 'inv-target'; pauseSt.timer = 0; pauseSt.useItemId = slot.id; pauseSt.invAllyTarget = -1;
     } else if (item && item.type === 'scroll') {
       pauseSt.heldItem = -1;
-      _applyScrollLearn(Number(id), item);
+      _applyScrollLearn(slot.id, item);
     } else { pauseSt.heldItem = -1; playSFX(SFX.CONFIRM); }
-  } else {
-    if (entries[pauseSt.invScroll]) { pauseSt.heldItem = pauseSt.invScroll; playSFX(SFX.CONFIRM); }
-    else { pauseSt.heldItem = -1; playSFX(SFX.ERROR); }
+    return;
   }
+  // Cross-row Z press — swap (or move-to-empty).
+  if (swapInventorySlots(pauseSt.heldItem, pauseSt.invScroll)) {
+    playSFX(SFX.CONFIRM);
+    saveSlotsToDB();
+  } else {
+    playSFX(SFX.ERROR);
+  }
+  pauseSt.heldItem = -1;
 }
 
 // Scroll-use flow. Already-known scrolls refuse (the player can trade
@@ -882,11 +906,13 @@ function _scrollLearnedMsg(spellId) {
 function _pauseInputInventory() {
   if (pauseSt.state !== 'inventory') return false;
   if (pauseSt.menuMode === 'magic') return _pauseInputMagicList();
-  const entries = Object.entries(playerInventory).filter(([,c]) => c > 0);
   const k = keys;
+  // Navigate the FULL bag (incl. empty trailing slots) so a held item can
+  // be moved into an empty space, not just swapped with another item. The
+  // active row caps at INV_CAP-1 (8 slots total). v1.7.600.
   if (k['ArrowDown']) {
     k['ArrowDown'] = false;
-    if (pauseSt.invScroll < entries.length - 1) { pauseSt.invScroll++; playSFX(SFX.CURSOR); }
+    if (pauseSt.invScroll < INV_CAP - 1) { pauseSt.invScroll++; playSFX(SFX.CURSOR); }
   }
   if (k['ArrowUp']) {
     k['ArrowUp'] = false;
@@ -903,8 +929,8 @@ function _pauseInputInventory() {
   }
   if (k['z'] || k['Z']) {
     k['z'] = false; k['Z'] = false;
-    if (pauseSt.deleteMode) _pauseInvDeletePress(entries);
-    else _pauseInvZPress(entries);
+    if (pauseSt.deleteMode) _pauseInvDeletePress();
+    else _pauseInvZPress();
   }
   if (_xPressed()) {
     if (pauseSt.deleteMode) { pauseSt.deleteMode = false; playSFX(SFX.CONFIRM); }
@@ -918,21 +944,18 @@ function _pauseInputInventory() {
 // invScroll. Confirmed deletion is intentional: this is a destructive
 // action ("Bag full, get rid of stuff"); confirm + sound makes accidental
 // taps unlikely. v1.7.599.
-function _pauseInvDeletePress(entries) {
-  if (entries.length === 0) { playSFX(SFX.ERROR); return; }
-  const target = entries[pauseSt.invScroll];
-  if (!target) { playSFX(SFX.ERROR); return; }
-  const [idStr] = target;
-  const itemId = Number(idStr);
+function _pauseInvDeletePress() {
+  const slot = buildItemSelectList()[pauseSt.invScroll];
+  if (!slot) { playSFX(SFX.ERROR); return; }
+  const itemId = slot.id;
   const itemName = _nesNameToString(getItemNameClean(itemId));
   playSFX(SFX.CONFIRM);
   showMsgBoxPrompt(
     _nameToBytes('Delete ' + itemName + '? Z=ok X=no'),
     () => {
       removeItem(itemId, getItemCount(itemId));
-      // Re-clamp the scroll cursor — the entries list just shrank.
-      const remaining = Object.entries(playerInventory).filter(([,c]) => c > 0).length;
-      if (pauseSt.invScroll >= remaining) pauseSt.invScroll = Math.max(0, remaining - 1);
+      // Cursor stays where it is — the slot becomes an empty position the
+      // user can swap into. v1.7.600.
       saveSlotsToDB();
       playSFX(SFX.CONFIRM);
     },

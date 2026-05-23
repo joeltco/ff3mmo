@@ -23,6 +23,7 @@ export function parseSaveSlots(data) {
       mp: s.mp != null ? s.mp : null,
       stats: s.stats || null,
       inventory: s.inventory || {},
+      inventoryOrder: Array.isArray(s.inventoryOrder) ? [...s.inventoryOrder] : [],
       gil: s.gil || 0,
       jobLevels: s.jobLevels || {},
       jobIdx: s.jobIdx || 0,

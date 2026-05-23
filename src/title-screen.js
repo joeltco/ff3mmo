@@ -712,7 +712,10 @@ function _updateTitleMainOutCase() {
     ps.body = slot.stats.body || 0x00;
     ps.arms = slot.stats.arms || 0x00;
   }
-  setPlayerInventory((slot && slot.inventory) ? { ...slot.inventory } : {});
+  setPlayerInventory(
+    (slot && slot.inventory) ? { ...slot.inventory } : {},
+    (slot && Array.isArray(slot.inventoryOrder)) ? [...slot.inventoryOrder] : null,
+  );
   ps.gil = (slot && slot.gil) || 0;
   ps.jobLevels = (slot && slot.jobLevels) ? JSON.parse(JSON.stringify(slot.jobLevels)) : {};
   ps.jobIdx = (slot && slot.jobIdx) || 0;

@@ -18,6 +18,40 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.600 — 2026-05-22
+
+### Inventory slot order: swap + move-to-empty
+
+Held-item Z on a different row now SWAPS positions (or MOVES into an empty
+slot) instead of silently re-picking-up the new row. Pre-fix the held item
+stayed put because `playerInventory` was an ID-keyed map with no inherent
+order (JS sorts integer-like keys ascending).
+
+`src/inventory.js` — new `playerInventoryOrder` array (capped at `INV_CAP`)
+is the source of truth for visible slot positions. `addItem` appends on
+new IDs; `removeItem` splices when an entry depletes. New
+`swapInventorySlots(srcIdx, dstIdx)` swaps two positions OR moves a filled
+slot into an empty trailing slot. `buildItemSelectList()` now reads from
+the order array and pads to `INV_SLOTS` with nulls.
+
+`src/pause-menu.js` Items tab — display + navigation reworked:
+- Active cursor can navigate to any slot 0..`INV_CAP-1` (empty slots reachable as drag targets).
+- Display iterates `buildItemSelectList()`; nulls render as blank rows.
+- `_pauseInvZPress` cross-row Z calls `swapInventorySlots` + persists.
+- Delete-mode no longer re-clamps the cursor — emptied slots are valid drop targets now.
+
+Persistence: `slot.inventoryOrder` added to both write surfaces in
+`save-state.js#saveSlotsToDB`. `src/save.js` mirrors the field on load.
+`api.js#_validateSaveData` whitelists + clamps it (8 ids max, range 0-255,
+dedup). `setPlayerInventory` accepts the order array; legacy saves
+without it fall back to the existing key-order (matches pre-fix display).
+
+Functional check: order is preserved across swap, move-to-empty, removeItem,
+setPlayerInventory round-trip; cap enforcement still blocks new ids without
+bypass while existing-stack adds and bypassed unequips pass through.
+
+Gates: lint 0, encounter-sim 12/12, pvp-wire-sim 37/37, local boot OK.
+
 ## 1.7.599 — 2026-05-22
 
 ### Inventory cap of 8 + SELECT-toggled delete mode
