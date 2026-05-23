@@ -12,7 +12,7 @@ import { stopFF1Music, resumeMusic, playFF1Track, FF1_TRACKS, playSFX, SFX, paus
 import { getSetting, setSetting, VOL_MAX, BATTLE_SPEED_LABELS } from './settings.js';
 import { PAUSE_ITEMS } from './data/strings.js';
 import { selectCursor, saveSlots, saveSlotsToDB } from './save-state.js';
-import { ui } from './ui-state.js';
+import { ui, isMobile } from './ui-state.js';
 import { inputSt, keys } from './input-handler.js';
 import { drawBorderedBox, clipToViewport, drawCursorFaded } from './hud-drawing.js';
 import {
@@ -333,9 +333,17 @@ function _drawPauseInventory(ctx) {
   ctx.drawImage(getTrashCanvas(), tx, ty);
   ctx.globalAlpha = prevAlpha;
 
-  // Active cursor on the trash slot, mirroring the item-row cursor
-  // offset (8px sprite vertically centered on the 16px trash → +4).
-  if (pauseSt.invScroll === INV_CAP && pauseSt.state !== 'inv-target' && pauseSt.state !== 'inv-heal') {
+  // Cursor on the trash slot, mirroring the item-row cursor offset (8px
+  // sprite vertically centered on the 16px trash → +4). Drawn in two
+  // cases (either triggers it):
+  //   1. Active cursor — invScroll === INV_CAP (user navigated here).
+  //   2. Mode indicator — deleteMode is on (entered via trash-Z or the
+  //      SELECT shortcut). Stays put while the user navigates items,
+  //      mirroring how the held-item cursor stays at its original row
+  //      during item-switching (v1.7.600). v1.7.605.
+  const showTrashCursor = (pauseSt.invScroll === INV_CAP || pauseSt.deleteMode) &&
+                          pauseSt.state !== 'inv-target' && pauseSt.state !== 'inv-heal';
+  if (showTrashCursor) {
     drawCursorFaded(tx - 16, ty + 4, fadeStep);
   }
 }
@@ -988,15 +996,22 @@ function _pauseInvDeleteHeld() {
   const itemName = _nesNameToString(getItemNameClean(itemId));
   playSFX(SFX.CONFIRM);
   showMsgBoxPrompt(
-    _nameToBytes('Delete ' + itemName + '? Z=ok X=no'),
+    _nameToBytes('Delete ' + itemName + '? ' + _yesNoLabels()),
     () => {
       removeItem(itemId, getItemCount(itemId));
       pauseSt.heldItem = -1;
       saveSlotsToDB();
       playSFX(SFX.CONFIRM);
     },
-    () => { /* keep heldItem on cancel — user can retry or drop with X */ },
+    () => { /* keep heldItem on cancel — user can retry or drop with X/B */ },
   );
+}
+
+// Mobile labels A/B when touch is detected, desktop labels Z/X
+// otherwise. The keys themselves stay z/x — mobile buttons map A→z,
+// B→x via `data-key` in index.html. v1.7.605.
+function _yesNoLabels() {
+  return isMobile ? 'A=ok B=no' : 'Z=ok X=no';
 }
 
 // Delete-mode Z press — confirm box, then drop ALL of the held stack at
@@ -1010,7 +1025,7 @@ function _pauseInvDeletePress() {
   const itemName = _nesNameToString(getItemNameClean(itemId));
   playSFX(SFX.CONFIRM);
   showMsgBoxPrompt(
-    _nameToBytes('Delete ' + itemName + '? Z=ok X=no'),
+    _nameToBytes('Delete ' + itemName + '? ' + _yesNoLabels()),
     () => {
       removeItem(itemId, getItemCount(itemId));
       // Cursor stays where it is — the slot becomes an empty position the
@@ -1380,6 +1395,13 @@ function _pauseInputOptions() {
 }
 
 export function handlePauseInput() {
+  // v1.7.605: when a pause-launched yes/no prompt is up (inventory delete
+  // confirm, etc.), let movement.js's `msgState.isPrompt` handler take
+  // Z/X. Pause input would otherwise consume the keys first and the
+  // prompt would never resolve. Returning false here lets the call site
+  // in movement.js fall through to the msg-box block. Same desktop
+  // shortcut + same mobile mapping (A→z, B→x).
+  if (msgState.isPrompt) return false;
   if (_pauseInputOpenClose()) return true;
   if (_pauseInputMainMenu()) return true;
   if (_pauseInputInventory()) return true;
