@@ -16,7 +16,8 @@ import { chatState, tabSelectMode, chatScrollOffset, setChatScrollOffset, canCha
 import { ps } from './player-stats.js';
 import { playSFX, playTrack, TRACKS, SFX } from './music.js';
 import { checkTrigger, openPassage, handleChest, handleSecretWall,
-         handleRockPuzzle, handlePondHeal, triggerWipe } from './map-triggers.js';
+         handleRockPuzzle, handlePondHeal, triggerWipe,
+         isSecretTreasure, handleSecretTreasure } from './map-triggers.js';
 import { shopSt, openShop, handleShopInput } from './shop.js';
 import { bedSt, handleBedInput } from './bed.js';
 import { findShopAtCounter } from './data/shops.js';
@@ -262,6 +263,10 @@ function handleAction() {
   if (shopId && openShop(shopId)) return;
 
   if (facedTile === 0x7C)                                         { handleChest(facedX, facedY); return; }
+  // Invisible chest: registered secret-treasure tiles. If still on the
+  // 24h cooldown handleSecretTreasure returns false and we fall through
+  // so the tile reads as plain grass (no Z action).
+  if (isSecretTreasure(mapSt.currentMapId, facedX, facedY) && handleSecretTreasure(facedX, facedY)) return;
   if (mapSt.secretWalls && mapSt.secretWalls.has(`${facedX},${facedY}`))      { handleSecretWall(facedX, facedY); return; }
   if (mapSt.rockSwitch && mapSt.rockSwitch.rocks.some(r => facedX === r.x && facedY === r.y)) { handleRockPuzzle(); return; }
   if (mapSt.pondTiles && mapSt.pondTiles.has(`${facedX},${facedY}`))          { handlePondHeal(); return; }

@@ -36,6 +36,44 @@ const OPENED_CHEST = 0x7D;
 const CHEST_RESET_MS = 24 * 60 * 60 * 1000;
 const UR_CHEST_MAPS = new Set([114, 1, 2, 3, 4, 5, 6, 7, 8, 9, 147]);
 
+// Invisible chests — tiles that look like normal terrain (grass, etc.) but
+// trigger a chest open on Z, then go silent for 24h. Player discovers by
+// pressing Z on the right grass square. Same cooldown machinery as regular
+// chests (`ps.consumedTilesAt[mapId][key]`); no `consumedTiles` entry, so
+// `_replayConsumedTiles` doesn't paint anything visible. Loot rolls from
+// SECRET_LOOT_POOLS (richer than the host map's regular chest pool).
+const SECRET_TREASURES = {
+  114: new Set([
+    '27,8',   // Ur overworld — grass tile near the inn corner.
+    '6,12',   // Ur overworld — second hidden treasure.
+  ]),
+};
+// Inlined `{ gil: [...] }` literal here instead of GIL() — GIL is declared
+// further down the file and this object literal evaluates at module load.
+const SECRET_LOOT_POOLS = {
+  114: [
+    { weight: 35, pool: [0xA6, 0xAF] },              // Potion, Antidote (common)
+    { weight: 30, pool: [{ gil: [100, 250] }] },     // 4-10× a normal Ur chest
+    { weight: 20, pool: [0xA9] },                    // Phoenix Down (rare reward)
+    { weight: 15, pool: [0xE3] },                    // Cure scroll
+  ],
+};
+
+export function isSecretTreasure(mapId, x, y) {
+  const set = SECRET_TREASURES[mapId];
+  return !!(set && set.has(`${x},${y}`));
+}
+
+function rollSecretLoot(mapId) {
+  const tiers = SECRET_LOOT_POOLS[mapId];
+  if (!tiers) return null;
+  const total = tiers.reduce((s, t) => s + t.weight, 0);
+  let roll = Math.random() * total;
+  let tier = tiers[0];
+  for (const t of tiers) { if (roll < t.weight) { tier = t; break; } roll -= t.weight; }
+  return tier.pool[Math.floor(Math.random() * tier.pool.length)];
+}
+
 // Chest loot pools, keyed by map ID. Each tier has a `weight` and a `pool` of
 // either item IDs (numbers) or `{ gil: [min, max] }` entries.
 // Crystal room (1004) is a boss room and has no chests.
@@ -200,6 +238,38 @@ export function handleChest(facedX, facedY) {
   }
   playSFX(SFX.TREASURE);
   showMsgBox(msg);
+}
+
+// Invisible chest at a hidden-treasure tile. Caller (movement._handleAction)
+// has already confirmed via isSecretTreasure that (facedX, facedY) is a
+// registered secret on the current map. Returns true if loot was awarded,
+// false if the secret is still on its 24h cooldown (caller falls through —
+// no Z action, tile reads as plain grass).
+export function handleSecretTreasure(facedX, facedY) {
+  const mapId = mapSt.currentMapId;
+  if (mapId == null) return false;
+  const key = `${facedX},${facedY}`;
+  const lootedAt = ps.consumedTilesAt && ps.consumedTilesAt[mapId] && ps.consumedTilesAt[mapId][key];
+  if (lootedAt != null && Date.now() - lootedAt < CHEST_RESET_MS) return false;
+
+  _stampChestTime(facedX, facedY);  // cooldown only — no _consumeTile, tile stays grass
+  saveSlotsToDB();
+
+  const entry = rollSecretLoot(mapId);
+  if (entry == null) return false;
+  let msg;
+  if (typeof entry === 'object' && entry.gil) {
+    const [min, max] = entry.gil;
+    const amount = min + Math.floor(Math.random() * (max - min + 1));
+    grantGil(amount);
+    msg = foundGilMsg(amount);
+  } else {
+    addItem(entry, 1);
+    msg = foundItemMsg(entry);
+  }
+  playSFX(SFX.TREASURE);
+  showMsgBox(msg);
+  return true;
 }
 
 export function handleSecretWall(facedX, facedY) {

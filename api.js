@@ -160,6 +160,14 @@ function _validateSaveData(data) {
     // map id, each value is a per-tile set of consumed coords.
     out.consumedTiles = data.consumedTiles;
   }
+  if (data.consumedTilesAt && typeof data.consumedTilesAt === 'object' && !Array.isArray(data.consumedTilesAt)) {
+    // Sibling of consumedTiles — per-tile open timestamps for 24h chest +
+    // secret-treasure respawn. Was missing from this whitelist (v1.7.617)
+    // so server round-trips dropped the cooldowns and Ur chests / secret
+    // treasures came back instantly on next ROM load. Same shape as
+    // consumedTiles (mapId → {key → epoch-ms}).
+    out.consumedTilesAt = data.consumedTilesAt;
+  }
   return { ok: true, data: out };
 }
 
