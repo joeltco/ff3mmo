@@ -326,6 +326,24 @@ Two SQLite tables in `api.js` survive disconnect + pm2 restart so the world does
 
 - **Party-always-join battle (v1.7.594):** `tryJoinPlayerAlly` in `src/battle-update.js` drops the same-room gate for party members. They join battle on `online`-only; non-party roster (auto-assist) is still room-scoped. Wire-PvP path unchanged. Reconcile + fill share one `partyNames = new Set(partyInviteSt.partyMembers)` so the leave-check and the join-fill agree.
 
+## Roster Trade (real multiplayer)
+
+Roster → Trade is a real-MP item transfer (v1.7.598). The original v1.7.237 implementation was a single-player sim that destroyed items on accept-roll regardless of whether the target was a real player — that was a black-hole bug with the post-fake-player roster, fixed pre-gate-flip.
+
+- **Wire shape** (mirrors party-invite's relay + give-item's trust model):
+  - `trade-offer { targetUserId, itemId }` — sender → server. Server validates target is online + itemId 1-255. New offer overwrites prior; prior target gets `trade-cancelled`.
+  - `trade-offer-incoming { fromUserId, fromName, itemId }` — server → target.
+  - `trade-response { fromUserId, accept }` — target → server. Validated against `_pendingTrades.get(fromUserId).targetUserId === entry.userId`; stale/spoofed responses dropped silently.
+  - `trade-result { targetUserId, targetName, accept, reason? }` — server → sender. `reason='offline'` when the target is unreachable.
+  - `trade-cancel` — sender → server. Server relays `trade-cancelled` to the target.
+  - Disconnect cleanup notifies the surviving side via either `trade-cancelled` (if user was an offerer) or `trade-result { accept:false, reason:'offline' }` (if user was a target).
+- **Server state:** `_pendingTrades` Map in `ws-presence.js` (offererUserId → { targetUserId, itemId, expiresAt }). Single outstanding offer per sender. `TRADE_OFFER_TTL_MS = 6 * 60 * 1000` — looser than the client's 5min timeout so cancel-race always has a slot.
+- **Client (`src/trade.js`):**
+  - Sender: `commitOffer` calls `sendNetTradeOffer(target.userId, itemId)`. Refuses if target lacks `userId`. `tickTrade` runs only timeout / death-cancel — no local accept-roll. `cancelTrade` calls `sendNetTradeCancel` on user / timeout / death so server pending clears.
+  - Receiver: `setNetTradeOfferHandler` prompts via `showMsgBoxPrompt('<Name> offers <Item> Z=ok X=no', accept, decline)`. Auto-declines if `battleState !== 'none'` or `msgState.state !== 'none'` or `tradeSt.state !== 'closed'` (busy guard mirrors party). Accept → `addItem` + `sendNetTradeResponse(true)`; decline → `sendNetTradeResponse(false)`. `tradeSt.recvFromUserId` tracks the current prompt's sender so a `trade-cancelled` for a stale offerer doesn't dismiss the wrong prompt.
+  - Sender's `setNetTradeResultHandler`: accept → existing `_resolveAsAccept` (1s "Accepted" hold then `removeItem`); decline → "Declined"; offline → "Offline".
+- **Trust limitation:** server doesn't validate the sender owns the claimed item. A malicious client can `trade-offer` an itemId they don't have, target accepts, target's client adds the item from nothing → dup. Same gap as `give-item`. Open-beta accepted limitation; harden later with a server-side inventory mirror if abuse shows up in `bug_reports` or pm2 logs.
+
 ## Mobile controls
 
 - **On-screen deck** (`#mobile-controls` in `index.html`), shown via `@media (max-width:520px)` or the `is-touch` body class (`isMobile` from `ui-state.js`). Game Boy layout: CHAT/LOG flat top strip (right-aligned), D-pad left, A (upper-right) / B (lower-left) on the diagonal, SELECT/START as `-22°` angled center pills. Every button carries a `data-key`; the multi-touch slide handler walks `[data-key]` and dispatches synthetic `KeyboardEvent`s + toggles `.pressed`, so the same code path serves keyboard and touch. CHAT's `data-key="t"` also focuses the hidden `#mobile-input` to summon the keyboard.
