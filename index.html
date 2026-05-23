@@ -1041,9 +1041,13 @@
         console.info('[rom-cache] read FF3=' + (cached3 ? cached3.byteLength + 'B' : 'MISSING') +
                      ' FF1=' + (cached1 ? cached1.byteLength + 'B' : 'MISSING') +
                      ' FF2=' + (cached2 ? cached2.byteLength + 'B' : 'MISSING'));
-        if (cached3) ff3Buffer = cached3;
-        if (cached1) ff1Buffer = cached1;
-        if (cached2) ff2Buffer = cached2;
+        // v1.7.622 deferred this read until first gesture, which means a
+        // user upload that races ahead of the cache read MUST WIN — never
+        // overwrite a fresh user-uploaded buffer with cached bytes (would
+        // resurrect stale/corrupt data over their fresh selection). v1.7.623.
+        if (cached3 && !ff3Buffer) ff3Buffer = cached3;
+        if (cached1 && !ff1Buffer) ff1Buffer = cached1;
+        if (cached2 && !ff2Buffer) ff2Buffer = cached2;
         if (ff3Buffer && ff1Buffer && ff2Buffer) {
           const picker = document.getElementById('rom-picker');
           picker.innerHTML = '';
