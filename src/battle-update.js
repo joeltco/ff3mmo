@@ -281,32 +281,42 @@ export function tryJoinPlayerAlly() {
     ...pvpSt.pvpEnemyAllies.map(a => a.name),
   ].filter(Boolean));
 
+  // Party members travel with you regardless of room (v1.7.594, reverses the
+  // v1.7.559 room-gate). Same-room roster (non-party) is still room-scoped —
+  // see the "Solo auto-assist" pass below. Held set so both reconcile + fill
+  // agree.
+  const partyNames = new Set(partyInviteSt.partyMembers);
+
   // Round-boundary reconcile (solo / co-op-AI only; the wire-PvP path below
   // is lockstep-deterministic and must not gain nondeterministic removals).
-  // Drop any ally who left the battle's room — "in the room" = their live
-  // broadcast loc still matches the battle's location bucket. Runs before the
-  // fill + before buildTurnOrder, so the turn queue rebuilds clean. This is
-  // the "leave battle if you leave the room" half; the fill below is the
-  // "join battle if you're in the room" half. v1.7.559.
+  // Drop allies who logged off. Non-party allies also drop if they left the
+  // battle's room. Party allies stay as long as they're online — they're
+  // here-for-this-fight no matter where their character is on the map.
+  // Runs before the fill + before buildTurnOrder, so the turn queue rebuilds
+  // clean. The fill below is the "join battle" half.
   if (!pvpSt.isWirePVP) {
     for (let i = battleSt.battleAllies.length - 1; i >= 0; i--) {
-      const online = getOnlinePlayerByName(battleSt.battleAllies[i].name);
-      if (!online || online.loc !== loc) battleSt.battleAllies.splice(i, 1);
+      const ally = battleSt.battleAllies[i];
+      const online = getOnlinePlayerByName(ally.name);
+      if (!online) { battleSt.battleAllies.splice(i, 1); continue; }
+      if (!partyNames.has(ally.name) && online.loc !== loc) {
+        battleSt.battleAllies.splice(i, 1);
+      }
     }
   }
 
   if (battleSt.battleAllies.length >= 3) return false;
 
-  // Pre-pass: party members get PRIORITY for the slots — but only while they're
-  // online AND in the same room (v1.7.559; previously they travelled with the
-  // player anywhere). Other roster players in the room fill the rest below.
+  // Pre-pass: party members get PRIORITY for the slots and join from ANY room
+  // as long as they're online (v1.7.594; previously room-gated like the rest).
+  // Other roster players in the same room fill the remaining slots below.
   let partyJoined = false;
   for (const name of partyInviteSt.partyMembers) {
     if (battleSt.battleAllies.length >= 3) break;
     if (pvpNames.has(name)) continue;
     if (battleSt.battleAllies.some(a => a.name === name)) continue;
-    const member = getOnlinePlayerByName(name);   // live profile only — room-gated
-    if (!member || member.loc !== loc) continue;
+    const member = getOnlinePlayerByName(name);   // live profile only — room-agnostic
+    if (!member) continue;
     battleSt.battleAllies.push(generateAllyStats(member));
     partyJoined = true;
     // Wire-PvP parity — mirror this party member onto the opponent's roster
