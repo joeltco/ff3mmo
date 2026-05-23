@@ -60,7 +60,8 @@ export const pauseSt = {
   state:        'none',  // 'none'|'scroll-in'|'text-in'|'open'|'text-out'|'scroll-out' + sub-states
   timer:        0,
   cursor:       0,       // 0-6 main menu cursor
-  invScroll:    0,       // scroll offset for inventory list
+  invScroll:    0,       // scroll offset for inventory list (0..INV_CAP; INV_CAP = trash slot)
+  lastItemScroll: 0,     // most recent invScroll value that was < INV_CAP — restored when Z fires on the trash so the cursor jumps back to the item the user was inspecting (v1.7.606)
   heldItem:     -1,      // index into inventory entries of held item (-1 = none)
   healNum:      null,    // {value, timer, rosterIdx?} — green heal number during pause item use
   useItemId:    0,       // item ID stashed between target-select and use
@@ -937,6 +938,9 @@ function _scrollLearnedMsg(spellId) {
 function _pauseInputInventory() {
   if (pauseSt.state !== 'inventory') return false;
   if (pauseSt.menuMode === 'magic') return _pauseInputMagicList();
+  // Track the last item-row position so trash-Z can return here. Updates
+  // every frame the cursor is on an item slot (not on the trash). v1.7.606.
+  if (pauseSt.invScroll < INV_CAP) pauseSt.lastItemScroll = pauseSt.invScroll;
   const k = keys;
   // Navigate the FULL bag (incl. empty trailing slots) so a held item can
   // be moved into an empty space (v1.7.600), AND one extra slot past
@@ -980,7 +984,12 @@ function _pauseInputInventory() {
 function _pauseInvTrashZPress() {
   if (pauseSt.heldItem !== -1) { _pauseInvDeleteHeld(); return; }
   pauseSt.deleteMode = true;
-  pauseSt.invScroll = 0;
+  // v1.7.606: jump cursor back to the last item the user was on (not to
+  // row 0). The trash cursor stays put (via the deleteMode check in
+  // _drawPauseInventory) so the user sees a cursor on both the
+  // previously-targeted item AND the trash — clear "this is what gets
+  // deleted next."
+  pauseSt.invScroll = pauseSt.lastItemScroll;
   playSFX(SFX.CONFIRM);
 }
 
