@@ -1026,6 +1026,7 @@ function _pauseInvDeleteHeld() {
     () => {
       removeItem(itemId, getItemCount(itemId));
       pauseSt.heldItem = -1;
+      pauseSt.invScroll = 0;  // v1.7.611: jump back to top of list after deletion
       saveSlotsToDB();
       playSFX(SFX.CONFIRM);
     },
@@ -1054,8 +1055,7 @@ function _pauseInvDeletePress() {
     _nameToBytes('Delete ' + itemName + '? ' + _yesNoLabels()),
     () => {
       removeItem(itemId, getItemCount(itemId));
-      // Cursor stays where it is — the slot becomes an empty position the
-      // user can swap into. v1.7.600.
+      pauseSt.invScroll = 0;  // v1.7.611: jump back to top of list after deletion
       saveSlotsToDB();
       playSFX(SFX.CONFIRM);
     },
