@@ -18,6 +18,41 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.599 — 2026-05-22
+
+### Inventory cap of 8 + SELECT-toggled delete mode
+
+`src/inventory.js` — new `INV_CAP = 8`; `addItem` rejects new IDs when at
+cap unless `opts.bypass` is set; existing-ID stacks still grow without
+limit. New `canAddItem(id)` helper for callers that need to pre-check
+before charging (shop refund, trade-receive decline). `INV_SLOTS` bumped
+3 → 8 to match the cap in the Trade pick panel.
+
+**Equip flows pass `{ bypass: true }`** so unequip never destroys gear
+even when the bag is full: `_enforceEquipRestrictions`, `_equipBestMainSlots`,
+`_equipBestLeftHand`, `_pauseInputEquipItemSelect`, and the two hotkey-equip
+sites in `input-handler.js`.
+
+**Shop** (`src/shop.js#_attemptBuyItem`) pre-checks `canAddItem` before
+spending gil; full-bag buys show "Bag full!" and don't deduct.
+
+**Trade receiver** (`src/trade.js setNetTradeOfferHandler`) auto-declines
+incoming offers when the receiver's bag is full — no prompt, no dup.
+
+**Delete mode** (`src/pause-menu.js`):
+- `pauseSt.deleteMode` boolean, reset on Items-tab exit.
+- SELECT (key `s`) toggles delete mode inside the Items tab. Held-item
+  is cleared on toggle so you can't enter delete mode mid-pickup.
+- Trash icon renders to the right of the cursor while delete mode is on
+  (sprite from FF3 OAM `$E8` capture, SP3 palette `[0x0F, 0x00, 0x10, 0x30]`,
+  pre-baked vflipped in `src/data/inventory-icons.js`).
+- Z in delete mode: `showMsgBoxPrompt("Delete <Item>? Z=ok X=no")`. Confirm
+  drops the entire stack via `removeItem(id, getItemCount(id))`, persists,
+  re-clamps the scroll cursor. X cancels the prompt (and exits delete mode
+  if pressed outside the prompt).
+
+Gates: lint 0, encounter-sim 12/12, pvp-wire-sim 37/37, local boot clean.
+
 ## 1.7.598 — 2026-05-22
 
 ### Real multiplayer trade (pre-flip bug fix)

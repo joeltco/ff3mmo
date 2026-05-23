@@ -5,7 +5,7 @@ import { ps, getEquipSlotId, setEquipSlotId, jobSwitchCost, getJobLevel, getJobL
          recalcCombatStats, changeJob, EQUIP_SLOT_SUBTYPE } from './player-stats.js';
 import { JOBS, JOB_NAMES_SHRINES, canJobEquip } from './data/jobs.js';
 import { _makeFadedPal, nesColorFade } from './palette.js';
-import { _nameToBytes } from './text-utils.js';
+import { _nameToBytes, _nesNameToString } from './text-utils.js';
 import { getItemNameClean, getItemNameShrines, getSpellNameClean, getSpellNameShrines } from './text-decoder.js';
 import { SPELLS, getSpellMPCost, getCastableKnownSpells, canLearnSpell } from './data/spells.js';
 import { stopFF1Music, resumeMusic, playFF1Track, FF1_TRACKS, playSFX, SFX, pauseMusic, applyMusicVolume, applySfxVolume } from './music.js';
@@ -15,7 +15,9 @@ import { selectCursor, saveSlots, saveSlotsToDB } from './save-state.js';
 import { ui } from './ui-state.js';
 import { inputSt, keys } from './input-handler.js';
 import { drawBorderedBox, clipToViewport, drawCursorFaded } from './hud-drawing.js';
-import { playerInventory, addItem, removeItem } from './inventory.js';
+import { playerInventory, addItem, removeItem, getItemCount } from './inventory.js';
+import { getTrashCanvas } from './data/inventory-icons.js';
+import { showMsgBoxPrompt } from './message-box.js';
 import { battleSt } from './battle-state.js';
 import { transSt } from './transitions.js';
 import { mapSt } from './map-state.js';
@@ -72,6 +74,7 @@ export const pauseSt = {
   magicCursor:  0,       // active spell index when menuMode === 'magic'
   magicScroll:  0,       // first visible row in magic list (Sage can know 15+)
   useSpellId:   0,       // spell ID stashed between magic-list Z press and inv-target confirm (0 = none)
+  deleteMode:   false,   // SELECT-toggled inventory delete mode (trash icon active). v1.7.599.
 };
 
 // ── Private helpers ────────────────────────────────────────────────────────
@@ -124,6 +127,7 @@ function _updatePauseInvTransitions(dt) {
   } else if (pauseSt.state === 'inv-items-in') {
     if (pauseSt.timer >= T) { pauseSt.state = 'inventory'; pauseSt.timer = 0; }
   } else if (pauseSt.state === 'inv-items-out') {
+    pauseSt.deleteMode = false;   // exit Items tab → drop delete mode (v1.7.599)
     if (pauseSt.timer >= T) { pauseSt.state = 'inv-shrink'; pauseSt.timer = 0; }
   } else if (pauseSt.state === 'inv-shrink') {
     if (pauseSt.timer >= PAUSE_EXPAND_MS) { pauseSt.state = 'inv-text-in'; pauseSt.timer = 0; }
@@ -299,6 +303,11 @@ function _drawPauseInventory(ctx) {
     if (startIdx + i === pauseSt.invScroll && pauseSt.state !== 'inv-target' && pauseSt.state !== 'inv-heal') {
       const activeX = pauseSt.heldItem >= 0 ? px + 4 : px + 8;
       drawCursorFaded(activeX, iy - 4, fadeStep);
+      // Delete-mode marker — trash icon to the right of the cursor at the
+      // active row. Renders flat (no fade) so it stands out. v1.7.599.
+      if (pauseSt.deleteMode) {
+        ctx.drawImage(getTrashCanvas(), activeX + 8, iy - 4);
+      }
     }
   }
 }
@@ -883,12 +892,52 @@ function _pauseInputInventory() {
     k['ArrowUp'] = false;
     if (pauseSt.invScroll > 0) { pauseSt.invScroll--; playSFX(SFX.CURSOR); }
   }
-  if (k['z'] || k['Z']) { k['z'] = false; k['Z'] = false; _pauseInvZPress(entries); }
+  // SELECT toggles delete mode — trash icon next to cursor, Z deletes (with
+  // confirm) instead of using/equipping. Dropping a held item clears it
+  // first so we can't enter delete mode mid-pickup. v1.7.599.
+  if (k['s'] || k['S']) {
+    k['s'] = false; k['S'] = false;
+    pauseSt.heldItem = -1;
+    pauseSt.deleteMode = !pauseSt.deleteMode;
+    playSFX(SFX.CONFIRM);
+  }
+  if (k['z'] || k['Z']) {
+    k['z'] = false; k['Z'] = false;
+    if (pauseSt.deleteMode) _pauseInvDeletePress(entries);
+    else _pauseInvZPress(entries);
+  }
   if (_xPressed()) {
-    if (pauseSt.heldItem !== -1) { pauseSt.heldItem = -1; playSFX(SFX.CONFIRM); }
+    if (pauseSt.deleteMode) { pauseSt.deleteMode = false; playSFX(SFX.CONFIRM); }
+    else if (pauseSt.heldItem !== -1) { pauseSt.heldItem = -1; playSFX(SFX.CONFIRM); }
     else { playSFX(SFX.CONFIRM); pauseSt.state = 'inv-items-out'; pauseSt.timer = 0; }
   }
   return true;
+}
+
+// Delete-mode Z press — confirm box, then drop ALL of the held stack at
+// invScroll. Confirmed deletion is intentional: this is a destructive
+// action ("Bag full, get rid of stuff"); confirm + sound makes accidental
+// taps unlikely. v1.7.599.
+function _pauseInvDeletePress(entries) {
+  if (entries.length === 0) { playSFX(SFX.ERROR); return; }
+  const target = entries[pauseSt.invScroll];
+  if (!target) { playSFX(SFX.ERROR); return; }
+  const [idStr] = target;
+  const itemId = Number(idStr);
+  const itemName = _nesNameToString(getItemNameClean(itemId));
+  playSFX(SFX.CONFIRM);
+  showMsgBoxPrompt(
+    _nameToBytes('Delete ' + itemName + '? Z=ok X=no'),
+    () => {
+      removeItem(itemId, getItemCount(itemId));
+      // Re-clamp the scroll cursor — the entries list just shrank.
+      const remaining = Object.entries(playerInventory).filter(([,c]) => c > 0).length;
+      if (pauseSt.invScroll >= remaining) pauseSt.invScroll = Math.max(0, remaining - 1);
+      saveSlotsToDB();
+      playSFX(SFX.CONFIRM);
+    },
+    () => { /* no-op */ },
+  );
 }
 
 function _pauseInputMagicList() {
@@ -1031,7 +1080,7 @@ function _enforceEquipRestrictions(jobIdx) {
     const id = getEquipSlotId(eq);
     if (id && !canJobEquip(jobIdx, id, ITEMS)) {
       setEquipSlotId(eq, 0);
-      addItem(id, 1);
+      addItem(id, 1, { bypass: true });   // never destroy gear on job-change unequip
     }
   }
   recalcCombatStats();
@@ -1057,7 +1106,7 @@ function _equipBestMainSlots() {
       const val = item[sd.stat] || 0; if (val > bestVal) { bestVal = val; bestId = id; }
     }
     if (bestId !== curId) {
-      if (curId !== 0) addItem(curId, 1);
+      if (curId !== 0) addItem(curId, 1, { bypass: true });
       if (bestId !== 0) { setEquipSlotId(sd.eq, bestId); removeItem(bestId); } else setEquipSlotId(sd.eq, 0);
     }
   }
@@ -1078,7 +1127,7 @@ function _equipBestLeftHand() {
   }
   const bestId = bestShieldId !== 0 ? bestShieldId : bestWepId;
   if (bestId !== curId) {
-    if (curId !== 0) addItem(curId, 1);
+    if (curId !== 0) addItem(curId, 1, { bypass: true });
     if (bestId !== 0) { setEquipSlotId(-101, bestId); removeItem(bestId); } else setEquipSlotId(-101, 0);
   }
 }
@@ -1143,11 +1192,11 @@ function _pauseInputEquipItemSelect() {
       const oldId = getEquipSlotId(pauseSt.eqSlotIdx);
       if (pick.label === 'remove') {
         setEquipSlotId(pauseSt.eqSlotIdx, 0);
-        if (oldId !== 0) addItem(oldId, 1);
+        if (oldId !== 0) addItem(oldId, 1, { bypass: true });
       } else {
         setEquipSlotId(pauseSt.eqSlotIdx, pick.id);
         removeItem(pick.id);
-        if (oldId !== 0) addItem(oldId, 1);
+        if (oldId !== 0) addItem(oldId, 1, { bypass: true });
       }
       recalcCombatStats();
       saveSlotsToDB();

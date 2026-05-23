@@ -4,18 +4,32 @@
 // (v1.7.219): all reads and writes route through the helpers below so
 // the future websocket layer has one place to hook delta emission.
 
-export const INV_SLOTS = 3; // visible inventory rows per page
+export const INV_CAP = 8;   // max distinct item slots (v1.7.599)
+export const INV_SLOTS = 8; // visible rows in pick panels — matches cap
 
 export const playerInventory = {};
 
+// True if there's room for `id` — either it's already in the bag (stack
+// grows freely) or we're under the slot cap. Callers that need to abort
+// (shop refund, trade decline) check this BEFORE issuing addItem.
+export function canAddItem(id) {
+  if (id in playerInventory) return true;
+  return Object.keys(playerInventory).length < INV_CAP;
+}
+
 // Add `count` of item `id` to the inventory. Validates count: non-finite,
-// non-positive, or non-numeric inputs are no-ops (defensive against
-// future untrusted callers — websocket-broadcast deltas etc.).
-// Returns the actual amount added (0 if rejected).
-export function addItem(id, count) {
+// non-positive, or non-numeric inputs are no-ops. Enforces the slot cap
+// — new IDs are rejected when the bag is full unless `opts.bypass` is
+// set (used by equip-swap flows so gear is never destroyed). Returns the
+// actual amount added (0 if rejected). v1.7.599.
+export function addItem(id, count, opts = {}) {
   const n = Number(count);
   if (!Number.isFinite(n) || n <= 0) return 0;
   const intN = Math.floor(n);
+  if (!opts.bypass && !(id in playerInventory) &&
+      Object.keys(playerInventory).length >= INV_CAP) {
+    return 0;
+  }
   playerInventory[id] = (playerInventory[id] || 0) + intN;
   return intN;
 }

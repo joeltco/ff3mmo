@@ -311,7 +311,7 @@ function _itemSelectSwap(isEquipPage, gIdx) {
       const oldWeapon = handIdx === 0 ? ps.weaponR : ps.weaponL;
       if (handIdx === 0) ps.weaponR = item.id; else ps.weaponL = item.id;
       removeItem(item.id);
-      if (oldWeapon !== 0) addItem(oldWeapon, 1);
+      if (oldWeapon !== 0) addItem(oldWeapon, 1, { bypass: true });
       inputSt.itemSelectList[inputSt.itemHeldIdx] = oldWeapon !== 0 ? { id: oldWeapon, count: 1 } : null;
       recalcCombatStats(); inputSt.itemHeldIdx = -1; playSFX(SFX.CONFIRM);
       equipChanged = true;
@@ -323,13 +323,13 @@ function _itemSelectSwap(isEquipPage, gIdx) {
     const invItem = inputSt.itemSelectList[dstIdx];
     if (invItem && isHandEquippable(ITEMS.get(invItem.id)) && canJobEquip(ps.jobIdx, invItem.id, ITEMS)) {
       if (srcHand === 0) ps.weaponR = invItem.id; else ps.weaponL = invItem.id;
-      removeItem(invItem.id); addItem(handWeaponId, 1);
+      removeItem(invItem.id); addItem(handWeaponId, 1, { bypass: true });
       inputSt.itemSelectList[dstIdx] = { id: handWeaponId, count: 1 };
       recalcCombatStats(); inputSt.itemHeldIdx = -1; playSFX(SFX.CONFIRM);
       equipChanged = true;
     } else if (!invItem) {
       if (srcHand === 0) ps.weaponR = 0; else ps.weaponL = 0;
-      addItem(handWeaponId, 1);
+      addItem(handWeaponId, 1, { bypass: true });
       inputSt.itemSelectList[dstIdx] = { id: handWeaponId, count: 1 };
       recalcCombatStats(); inputSt.itemHeldIdx = -1; playSFX(SFX.CONFIRM);
       equipChanged = true;

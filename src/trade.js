@@ -15,7 +15,7 @@
 // server-side inventory mirror if abuse surfaces. v1.7.598.
 
 import { ITEMS } from './data/items.js';
-import { playerInventory, removeItem, addItem, buildItemSelectList } from './inventory.js';
+import { playerInventory, removeItem, addItem, buildItemSelectList, canAddItem } from './inventory.js';
 import { ps } from './player-stats.js';
 import { battleSt } from './battle-state.js';
 import { _nameToBytes, _nesNameToString } from './text-utils.js';
@@ -220,6 +220,12 @@ setNetTradeOfferHandler((msg) => {
   }
   const fromUserId = msg.fromUserId | 0;
   const itemId = msg.itemId | 0;
+  // Bag-full guard (v1.7.599) — auto-decline before prompting; receiver
+  // can't accept what they couldn't hold anyway.
+  if (!canAddItem(itemId)) {
+    sendNetTradeResponse(fromUserId, false);
+    return;
+  }
   const fromName = String(msg.fromName || '');
   const itemName = _nesNameToString(getItemNameClean(itemId));
   tradeSt.recvFromUserId = fromUserId;

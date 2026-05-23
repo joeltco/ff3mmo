@@ -23,7 +23,7 @@ import { getShopSprite, SHOPKEEP_IMAGE_LAYOUT } from './data/shop-sprites.js';
 import { decodeTile, drawTile } from './tile-decoder.js';
 import { SPELLS, getSpellBuyPrice, canLearnSpell } from './data/spells.js';
 import { ps, grantGil, spendGil } from './player-stats.js';
-import { addItem, removeItem, playerInventory } from './inventory.js';
+import { addItem, removeItem, playerInventory, canAddItem } from './inventory.js';
 import { showMsgBox } from './message-box.js';
 import { playSFX, SFX, pauseMusic, resumeMusic, playFF1Track, stopFF1Music, FF1_TRACKS } from './music.js';
 import { ui, isMobile } from './ui-state.js';
@@ -346,6 +346,13 @@ function _attemptBuy(itemId, qty = 1) {
   if (!item) { playSFX(SFX.ERROR); return; }
   if (qty <= 0) { playSFX(SFX.ERROR); return; }
   const total = item.price * qty;
+  // Pre-check bag space BEFORE spending gil — otherwise a full-bag buy
+  // would charge and lose the item. v1.7.599.
+  if (!canAddItem(itemId)) {
+    playSFX(SFX.ERROR);
+    showMsgBox(_nameToBytes('Bag full!'));
+    return;
+  }
   if (!spendGil(total)) {
     playSFX(SFX.ERROR);
     showMsgBox(_nameToBytes('Not enough gil!'));
