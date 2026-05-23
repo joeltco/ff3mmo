@@ -334,22 +334,31 @@ function _drawPauseInventory(ctx) {
   ctx.drawImage(getTrashCanvas(), tx, ty);
   ctx.globalAlpha = prevAlpha;
 
-  // Cursor on the trash slot, mirroring the item-row cursor offset (8px
-  // sprite vertically centered on the 16px trash → +4). Two visual
-  // modes (v1.7.607):
-  //   • Hover (invScroll === INV_CAP, deleteMode off) — single cursor.
-  //     User is just navigating past the trash.
-  //   • Engaged (deleteMode on) — DOUBLED cursor at +0 and +4 offset
-  //     (half-overlapping). Matches the held-item pattern from
-  //     v1.7.600 where Z-pick on a row draws two cursors stacked
-  //     (active at px+4, held at px+8) to signal "this is engaged."
-  //     Stays put while the user navigates items, so the trash always
-  //     reads as "the next thing that fires."
+  // Cursor on the trash slot, mirroring the item-row pattern exactly
+  // (v1.7.608). Total cursor count never exceeds 2 — same as
+  // item-switching:
+  //   • Active cursor (when invScroll === INV_CAP) — base position
+  //     tx-12; shifts left to tx-16 when also engaged, matching how
+  //     the item-row active shifts from px+8 → px+4 when an item is
+  //     held.
+  //   • "Engaged" cursor (when deleteMode is on) — stays put at tx-12,
+  //     same role as the held-item cursor that stays at px+8 while the
+  //     user navigates other rows. Persists even when invScroll !=
+  //     INV_CAP, so the trash always reads as "the next action."
+  //
+  // Case table (cursor count on trash + item-row cursor count = total):
+  //   onTrash=T, engaged=T → 2 trash (tx-16 + tx-12, half-overlap doubled visual)
+  //   onTrash=T, engaged=F → 1 trash (hover)
+  //   onTrash=F, engaged=T → 1 trash + 1 item row = 2 total
+  //   onTrash=F, engaged=F → 0 trash + 1 item row = 1 total
   const visible = pauseSt.state !== 'inv-target' && pauseSt.state !== 'inv-heal';
-  const navigated = pauseSt.invScroll === INV_CAP;
-  const engaged   = pauseSt.deleteMode;
-  if (visible && (navigated || engaged)) {
-    drawCursorFaded(tx - 16, ty + 4, fadeStep);
+  const onTrash = pauseSt.invScroll === INV_CAP;
+  const engaged = pauseSt.deleteMode;
+  if (visible) {
+    if (onTrash) {
+      const activeX = engaged ? tx - 16 : tx - 12;
+      drawCursorFaded(activeX, ty + 4, fadeStep);
+    }
     if (engaged) drawCursorFaded(tx - 12, ty + 4, fadeStep);
   }
 }
