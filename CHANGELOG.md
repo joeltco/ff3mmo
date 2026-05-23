@@ -18,6 +18,42 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.604 — 2026-05-23
+
+### Trash icon is now a navigable inventory slot
+
+The bottom-right trash is no longer a mode indicator — it's a fixed UI
+slot you can navigate to and act on directly. **Always visible.**
+
+Two delete paths, no SELECT toggle required:
+
+1. **Navigate-to-trash → pick item.** Arrow-down past row 7 lands the
+   cursor on the trash. Z (with no held item) enters delete-pick mode
+   and jumps the cursor back to row 0 so the next Z on an item shows the
+   existing confirm prompt. Mirrors the SELECT-toggle flow exactly.
+2. **Drag-held-to-trash.** Pick up an item with Z (cursor duplicates
+   per v1.7.600), navigate to the trash, press Z. Confirm prompt
+   (`Delete X? Z=ok X=no`) and the held item drops from the bag.
+
+Cursor navigation:
+- `invScroll` now ranges `0..INV_CAP` (was `0..INV_CAP-1`); the extra
+  slot is the trash position.
+- When `invScroll === INV_CAP`, the active cursor draws to the left of
+  the trash sprite (offset `tx-16, ty+4`, vertically centered against
+  the 16×16 trash).
+
+Code:
+- `pause-menu.js#_drawPauseInventory` — trash draw lost its `deleteMode`
+  gate; added a cursor draw when on trash slot.
+- `pause-menu.js#_pauseInputInventory` — arrow-down cap raised to
+  `INV_CAP`; Z dispatches to `_pauseInvTrashZPress` when on trash.
+- New `_pauseInvTrashZPress` + `_pauseInvDeleteHeld` helpers next to
+  `_pauseInvDeletePress` (drag-to-trash confirm prompt mirrors the
+  navigate-then-pick prompt; held item is kept on cancel so the user can
+  put it back or retry).
+
+The SELECT key still toggles delete mode as a quick keyboard shortcut.
+
 ## 1.7.603 — 2026-05-23
 
 ### Inventory delete-mode indicator moves to bottom-right corner

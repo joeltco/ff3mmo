@@ -313,22 +313,30 @@ function _drawPauseInventory(ctx) {
     }
   }
 
-  // v1.7.603: trash icon is a fixed mode-indicator in the panel's
-  // bottom-right corner — only visible while delete mode is active. Was
-  // riding the cursor (v1.7.602), which moved with scroll and wasn't
-  // readable as a "mode is on" signal. 16×16 sprite with 4px margin from
-  // the right/bottom edges sits in the clear space below the 8 item rows
-  // (last row ends ~y=150, panel bottom = 176). Fade rides globalAlpha
-  // since the trash is a baked canvas (no palette to step through
-  // nesColorFade like text does).
-  if (pauseSt.deleteMode) {
-    const tx = px + HUD_VIEW_W - 16 - 4;
-    const ty = finalY + HUD_VIEW_H - 16 - 4;
-    const fadeAlpha = Math.max(0, 1 - fadeStep / PAUSE_TEXT_STEPS);
-    const prevAlpha = ctx.globalAlpha;
-    ctx.globalAlpha = prevAlpha * fadeAlpha;
-    ctx.drawImage(getTrashCanvas(), tx, ty);
-    ctx.globalAlpha = prevAlpha;
+  // v1.7.604: trash icon is a fixed UI slot in the panel's bottom-right
+  // corner — always visible, navigable as `invScroll === INV_CAP` (one
+  // past the last item row). Two delete paths route through it:
+  //   1. Navigate to trash + Z (no held) → enter delete-pick mode and
+  //      jump cursor to row 0; subsequent Z on an item shows the same
+  //      confirm prompt as the SELECT-toggle path.
+  //   2. Pick an item + navigate to trash + Z (held) → confirm-prompt
+  //      and delete the held item (drag-to-trash).
+  // 16×16 sprite with 4px margin from the right/bottom edges sits in
+  // the clear space below the 8 item rows (last row ends ~y=150, panel
+  // bottom = 176). Fade rides globalAlpha since the trash is a baked
+  // canvas (no palette to step through nesColorFade like text does).
+  const tx = px + HUD_VIEW_W - 16 - 4;
+  const ty = finalY + HUD_VIEW_H - 16 - 4;
+  const fadeAlpha = Math.max(0, 1 - fadeStep / PAUSE_TEXT_STEPS);
+  const prevAlpha = ctx.globalAlpha;
+  ctx.globalAlpha = prevAlpha * fadeAlpha;
+  ctx.drawImage(getTrashCanvas(), tx, ty);
+  ctx.globalAlpha = prevAlpha;
+
+  // Active cursor on the trash slot, mirroring the item-row cursor
+  // offset (8px sprite vertically centered on the 16px trash → +4).
+  if (pauseSt.invScroll === INV_CAP && pauseSt.state !== 'inv-target' && pauseSt.state !== 'inv-heal') {
+    drawCursorFaded(tx - 16, ty + 4, fadeStep);
   }
 }
 
@@ -923,19 +931,19 @@ function _pauseInputInventory() {
   if (pauseSt.menuMode === 'magic') return _pauseInputMagicList();
   const k = keys;
   // Navigate the FULL bag (incl. empty trailing slots) so a held item can
-  // be moved into an empty space, not just swapped with another item. The
-  // active row caps at INV_CAP-1 (8 slots total). v1.7.600.
+  // be moved into an empty space (v1.7.600), AND one extra slot past
+  // INV_CAP-1 that lands on the bottom-right trash icon (v1.7.604).
   if (k['ArrowDown']) {
     k['ArrowDown'] = false;
-    if (pauseSt.invScroll < INV_CAP - 1) { pauseSt.invScroll++; playSFX(SFX.CURSOR); }
+    if (pauseSt.invScroll < INV_CAP) { pauseSt.invScroll++; playSFX(SFX.CURSOR); }
   }
   if (k['ArrowUp']) {
     k['ArrowUp'] = false;
     if (pauseSt.invScroll > 0) { pauseSt.invScroll--; playSFX(SFX.CURSOR); }
   }
-  // SELECT toggles delete mode — trash icon next to cursor, Z deletes (with
-  // confirm) instead of using/equipping. Dropping a held item clears it
-  // first so we can't enter delete mode mid-pickup. v1.7.599.
+  // SELECT remains a quick-toggle into delete mode for keyboard users —
+  // equivalent to navigating to the trash + Z. v1.7.599; preserved
+  // alongside the v1.7.604 nav-to-trash UX.
   if (k['s'] || k['S']) {
     k['s'] = false; k['S'] = false;
     pauseSt.heldItem = -1;
@@ -944,7 +952,8 @@ function _pauseInputInventory() {
   }
   if (k['z'] || k['Z']) {
     k['z'] = false; k['Z'] = false;
-    if (pauseSt.deleteMode) _pauseInvDeletePress();
+    if (pauseSt.invScroll === INV_CAP) _pauseInvTrashZPress();
+    else if (pauseSt.deleteMode) _pauseInvDeletePress();
     else _pauseInvZPress();
   }
   if (_xPressed()) {
@@ -953,6 +962,41 @@ function _pauseInputInventory() {
     else { playSFX(SFX.CONFIRM); pauseSt.state = 'inv-items-out'; pauseSt.timer = 0; }
   }
   return true;
+}
+
+// Z pressed while the cursor is on the trash slot (invScroll === INV_CAP).
+// Two paths: drag-to-trash (heldItem >= 0) deletes the held item; bare
+// trash click (no held) enters delete-pick mode + jumps the cursor to
+// row 0 so the next Z fires `_pauseInvDeletePress` on the picked item.
+// v1.7.604.
+function _pauseInvTrashZPress() {
+  if (pauseSt.heldItem !== -1) { _pauseInvDeleteHeld(); return; }
+  pauseSt.deleteMode = true;
+  pauseSt.invScroll = 0;
+  playSFX(SFX.CONFIRM);
+}
+
+// Confirm-prompt delete of the currently-held item (drag-to-trash). On
+// Z=ok the slot empties; on X=no the held item stays picked so the user
+// can put it back or retry. Mirrors `_pauseInvDeletePress` but reads
+// pauseSt.heldItem instead of pauseSt.invScroll. v1.7.604.
+function _pauseInvDeleteHeld() {
+  const slots = buildItemSelectList();
+  const slot = slots[pauseSt.heldItem];
+  if (!slot) { pauseSt.heldItem = -1; playSFX(SFX.ERROR); return; }
+  const itemId = slot.id;
+  const itemName = _nesNameToString(getItemNameClean(itemId));
+  playSFX(SFX.CONFIRM);
+  showMsgBoxPrompt(
+    _nameToBytes('Delete ' + itemName + '? Z=ok X=no'),
+    () => {
+      removeItem(itemId, getItemCount(itemId));
+      pauseSt.heldItem = -1;
+      saveSlotsToDB();
+      playSFX(SFX.CONFIRM);
+    },
+    () => { /* keep heldItem on cancel — user can retry or drop with X */ },
+  );
 }
 
 // Delete-mode Z press — confirm box, then drop ALL of the held stack at
