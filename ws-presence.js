@@ -90,6 +90,14 @@ const _partyInvites = new Map();
 // disconnect of either side.
 const _partyMemberships = new Map();
 
+// Pending roster-trade offers (v1.7.598). offererUserId → { targetUserId,
+// itemId, expiresAt }. Server doesn't track inventory — it relays + arbitrates
+// the offer/response. Same trust model as give-item: a malicious sender can
+// claim an item they don't own and dup it on the recipient's side. Open-beta
+// limitation; harden with a server-side inventory mirror later if abuse shows.
+const _pendingTrades = new Map();
+const TRADE_OFFER_TTL_MS = 6 * 60 * 1000;   // 6min — longer than client 5min
+
 // Seed `_partyMemberships` from the persistent `parties` table at boot
 // (v1.7.595). Parties survive disconnect + server restart; the table is the
 // source of truth, this Map the in-memory mirror. Only explicit leave /
@@ -697,6 +705,84 @@ function _handleMessage(entry, msg) {
       });
       return;
     }
+    // Roster trade — sender offers an item; server stores the pending offer
+    // and relays it to the target. Single outstanding offer per sender; new
+    // offer overwrites old. Same trust model as 'give-item' — server doesn't
+    // validate the sender actually has the item. v1.7.598.
+    case 'trade-offer': {
+      if (!entry.helloed) return;
+      const targetUserId = parsed.targetUserId | 0;
+      const itemId = parsed.itemId | 0;
+      if (!targetUserId || targetUserId === entry.userId) return;
+      if (itemId < 1 || itemId > 255) return;
+      const target = _connected.get(targetUserId);
+      if (!target || !target.helloed) {
+        // Tell the sender the target isn't reachable. Same shape as
+        // accept/decline so the client's `trade-result` handler covers it.
+        _send(entry.ws, {
+          type: 'trade-result', targetUserId, targetName: '', accept: false, reason: 'offline',
+        });
+        return;
+      }
+      // Overwrite any prior outstanding offer from this sender — last write
+      // wins. If the prior target is still prompting, they'll receive a
+      // cancel below so their UI dismisses.
+      const prior = _pendingTrades.get(entry.userId);
+      if (prior && prior.targetUserId !== targetUserId) {
+        const priorTarget = _connected.get(prior.targetUserId);
+        if (priorTarget && priorTarget.helloed) {
+          _send(priorTarget.ws, {
+            type: 'trade-cancelled', fromUserId: entry.userId, fromName: entry.profile.name,
+          });
+        }
+      }
+      _pendingTrades.set(entry.userId, {
+        targetUserId, itemId, expiresAt: Date.now() + TRADE_OFFER_TTL_MS,
+      });
+      _send(target.ws, {
+        type: 'trade-offer-incoming',
+        fromUserId: entry.userId,
+        fromName: entry.profile.name,
+        itemId,
+      });
+      return;
+    }
+    case 'trade-response': {
+      if (!entry.helloed) return;
+      const fromUserId = parsed.fromUserId | 0;
+      const accept = !!parsed.accept;
+      if (!fromUserId) return;
+      const pending = _pendingTrades.get(fromUserId);
+      // Validate the response actually matches an outstanding offer to US.
+      // A stale or spoofed response is silently dropped — the offerer's
+      // client will time out locally.
+      if (!pending || pending.targetUserId !== entry.userId) return;
+      _pendingTrades.delete(fromUserId);
+      const offerer = _connected.get(fromUserId);
+      if (!offerer || !offerer.helloed) return;
+      _send(offerer.ws, {
+        type: 'trade-result',
+        targetUserId: entry.userId,
+        targetName: entry.profile.name,
+        accept,
+      });
+      return;
+    }
+    case 'trade-cancel': {
+      if (!entry.helloed) return;
+      const pending = _pendingTrades.get(entry.userId);
+      if (!pending) return;
+      _pendingTrades.delete(entry.userId);
+      const target = _connected.get(pending.targetUserId);
+      if (target && target.helloed) {
+        _send(target.ws, {
+          type: 'trade-cancelled',
+          fromUserId: entry.userId,
+          fromName: entry.profile.name,
+        });
+      }
+      return;
+    }
     case 'party-invite': {
       // A invites B. Server records the pending invite and forwards to B
       // with A's profile so B's client can prompt the player. One invite
@@ -1073,6 +1159,31 @@ export function attachWebSocketPresence(httpServer) {
             if (challenger && challenger.helloed) {
               _send(challenger.ws, { type: 'party-invite-result', accept: false, reason: 'offline' });
             }
+          }
+        }
+        // Clean up any pending roster-trade offers involving this user.
+        // Trades, unlike parties, are short-lived per-action state — they
+        // don't survive a disconnect on either side. v1.7.598.
+        const ownPending = _pendingTrades.get(userId);
+        if (ownPending) {
+          _pendingTrades.delete(userId);
+          const target = _connected.get(ownPending.targetUserId);
+          if (target && target.helloed) {
+            _send(target.ws, {
+              type: 'trade-cancelled', fromUserId: userId, fromName: entry.profile?.name || '',
+            });
+          }
+        }
+        for (const [offererId, pending] of [..._pendingTrades]) {
+          if (pending.targetUserId !== userId) continue;
+          _pendingTrades.delete(offererId);
+          const offerer = _connected.get(offererId);
+          if (offerer && offerer.helloed) {
+            _send(offerer.ws, {
+              type: 'trade-result',
+              targetUserId: userId, targetName: entry.profile?.name || '',
+              accept: false, reason: 'offline',
+            });
           }
         }
         // Party memberships are PRESERVED across disconnect (v1.7.595) —

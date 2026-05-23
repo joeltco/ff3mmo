@@ -1,33 +1,34 @@
-// trade.js — roster "Trade" → give-only offer flow (v1.7.237).
+// trade.js — roster "Trade" → give-only offer flow.
 //
-// Lifecycle mirror of party-invite.js + pvp-search.js. Picking Trade
-// on a roster target opens an inline item-pick panel; selecting an item
-// starts a persistent "Offering [item] to X..." invitation. The target
-// rolls an accept chance every 4-10 s on a per-target sim timer. On
-// accept, the item leaves the player's inventory (in single-player it
-// just disappears — the fake-player side has no inventory yet); on
-// timeout / cap / cancel the item stays.
+// Lifecycle mirror of party-invite.js. Picking Trade on a roster target
+// opens an inline item-pick panel; selecting an item builds a persistent
+// "Offering [item] to X..." message box and sends a `trade-offer` to the
+// server. The server relays to the target as `trade-offer-incoming`; the
+// target's client prompts (Z/X) and emits `trade-response`; server relays
+// back as `trade-result` to the offerer. On accept: sender removes, target
+// adds. The "value-weighted accept chance" of the old sim path is gone —
+// real players choose for themselves.
 //
-// Today the target's accept roll is *simulated* on a per-target timer.
-// When real networked players land, swap the sim timer for the
-// websocket-relayed "trade_response" signal — the rest of the flow is
-// the same. Same cutover seam as the PVP search and party invite.
-//
-// Accept formula: item-value-weighted, clamped. AGI / level differential
-// doesn't apply — the bid IS the item. See getAcceptChance for the
-// constants.
+// Trust model: server doesn't track inventory. A malicious sender can
+// claim an item they don't have and dup it on the recipient. Same gap as
+// give-item; documented limitation for open beta. Fix later with a
+// server-side inventory mirror if abuse surfaces. v1.7.598.
 
 import { ITEMS } from './data/items.js';
-import { playerInventory, removeItem, buildItemSelectList } from './inventory.js';
+import { playerInventory, removeItem, addItem, buildItemSelectList } from './inventory.js';
 import { ps } from './player-stats.js';
 import { battleSt } from './battle-state.js';
-import { _nameToBytes } from './text-utils.js';
-import { showMsgBox, replaceMsgBoxText, dismissMsgBox } from './message-box.js';
+import { _nameToBytes, _nesNameToString } from './text-utils.js';
+import { showMsgBox, showMsgBoxPrompt, replaceMsgBoxText, dismissMsgBox, msgState } from './message-box.js';
 import { playSFX, SFX } from './music.js';
 import { drawText, measureText, TEXT_WHITE } from './font-renderer.js';
 import { getItemNameClean, getItemNameShrines } from './text-decoder.js';
 import { drawBorderedBox, drawCursorFaded, clipToViewport } from './hud-drawing.js';
 import { ui } from './ui-state.js';
+import {
+  sendNetTradeOffer, sendNetTradeResponse, sendNetTradeCancel,
+  setNetTradeOfferHandler, setNetTradeResultHandler, setNetTradeCancelledHandler,
+} from './net.js';
 
 // HUD viewport (duplicated where needed — canonical source in pvp-math.js)
 const HUD_VIEW_X = 0;
@@ -35,15 +36,7 @@ const HUD_VIEW_Y = 32;
 const HUD_VIEW_W = 144;
 const HUD_VIEW_H = 144;
 
-const BASE_ACCEPT  = 0.25;
-const PRICE_DIVISOR = 1500;  // 1500-gil item adds +1.0 → clamps to MAX
-const ACCEPT_MIN   = 0.10;
-const ACCEPT_MAX   = 0.90;
-
 const OFFER_TIMEOUT_MS  = 5 * 60 * 1000;
-const MAX_MISSED_ROLLS  = 3;
-const TARGET_ROLL_MIN_MS = 4000;
-const TARGET_ROLL_MAX_MS = 10000;
 const COOLDOWN_MS       = 60 * 1000;
 const ACCEPTED_HOLD_MS  = 1000;
 
@@ -57,15 +50,14 @@ export const tradeSt = {
   cursor:          0,
   scroll:          0,
   startedAtMs:     0,
-  missedRolls:     0,
-  targetRollTimer: 0,
   acceptedHoldMs:  0,
   cooldowns:       new Map(),
+  // Receiver-side state — set when a `trade-offer-incoming` is currently
+  // prompting the player. Cleared on accept/decline/cancel. Tracks just
+  // the sender's userId so an incoming `trade-cancelled` can dismiss the
+  // prompt only if it matches.
+  recvFromUserId:  null,
 };
-
-function _rollTimerMs() {
-  return TARGET_ROLL_MIN_MS + Math.random() * (TARGET_ROLL_MAX_MS - TARGET_ROLL_MIN_MS);
-}
 
 function _now() { return performance.now(); }
 
@@ -102,14 +94,6 @@ export function getActiveTradeTargetName() {
   return tradeSt.target ? tradeSt.target.name : null;
 }
 
-// Accept chance formula: item value adds to base; clamped.
-export function getAcceptChance(itemId) {
-  const item = ITEMS.get(itemId);
-  const price = (item && item.price) ? item.price : 0;
-  const raw = BASE_ACCEPT + price / PRICE_DIVISOR;
-  return Math.max(ACCEPT_MIN, Math.min(ACCEPT_MAX, raw));
-}
-
 // Open the item-pick panel for a target. Returns false if the user
 // can't trade right now (already trading, target on cooldown, empty
 // inventory).
@@ -132,8 +116,6 @@ function _endTrade(targetName) {
   tradeSt.itemId = -1;
   tradeSt.cursor = 0;
   tradeSt.scroll = 0;
-  tradeSt.missedRolls = 0;
-  tradeSt.targetRollTimer = 0;
   if (targetName) {
     tradeSt.cooldowns.set(targetName, _now() + COOLDOWN_MS);
   }
@@ -144,28 +126,37 @@ export function cancelTrade(reason = 'user') {
   const targetName = tradeSt.target && tradeSt.target.name;
   const wasOffering = tradeSt.state === 'offering' || tradeSt.state === 'resolving';
   _endTrade(targetName);
+  // Notify the server so the target's prompt dismisses and its pending
+  // entry clears. Skip when we ALREADY got a server result back (declined /
+  // offline) — server state is already gone in those cases. Server is fine
+  // with a no-op cancel if there's no pending offer (race) — drops silently.
+  if (reason === 'user' || reason === 'timeout' || reason === 'death') sendNetTradeCancel();
   if (reason === 'user') {
     if (wasOffering) showMsgBox(_nameToBytes('Cancelled'));
     playSFX(SFX.CONFIRM);
-  } else if (reason === 'timeout' || reason === 'missed-cap') {
+  } else if (reason === 'timeout') {
+    showMsgBox(_nameToBytes('No reply'));
+  } else if (reason === 'declined') {
     showMsgBox(_nameToBytes('Declined'));
+  } else if (reason === 'offline') {
+    showMsgBox(_nameToBytes('Offline'));
   } else if (reason === 'death') {
-    // Silent — game-over flow owns the screen
+    // Silent — game-over flow owns the screen.
   }
 }
 
-// Commit the selected item and transition into the offer/sim-timer
-// phase. Caller (input-handler) drives this from the item-pick Z press.
+// Commit the selected item, transition to the 'offering' phase, and send
+// the offer over the wire. The target's client prompts; resolution comes
+// back asynchronously via `trade-result`. Caller (input-handler) drives
+// this from the item-pick Z press.
 export function commitOffer(itemId) {
   if (tradeSt.state !== 'item-pick') return false;
   if (!playerInventory[itemId]) return false;
   const target = tradeSt.target;
-  if (!target) return false;
+  if (!target || !target.userId) return false;   // no real-player target → bail
   tradeSt.itemId          = itemId;
   tradeSt.state           = 'offering';
   tradeSt.startedAtMs     = _now();
-  tradeSt.missedRolls     = 0;
-  tradeSt.targetRollTimer = _rollTimerMs();
   const itemName = getItemNameClean(itemId);
   const offerBytes = _nameToBytes('Offering ');
   const toBytes    = _nameToBytes(' to ' + target.name + '...');
@@ -174,26 +165,8 @@ export function commitOffer(itemId) {
   msg.set(itemName, offerBytes.length);
   msg.set(toBytes, offerBytes.length + itemName.length);
   showMsgBox(msg);
+  sendNetTradeOffer(target.userId, itemId);
   return true;
-}
-
-// Resolve gate — single-player adds-to-disappear is fine outside combat
-// only. Mid-battle is jarring; counts as a missed roll.
-function _canResolveOffer() {
-  return battleSt.battleState === 'none';
-}
-
-function _runAcceptCheck() {
-  if (!_canResolveOffer()) {
-    tradeSt.missedRolls++;
-    return;
-  }
-  const chance = getAcceptChance(tradeSt.itemId);
-  if (Math.random() < chance) {
-    _resolveAsAccept();
-  } else {
-    tradeSt.missedRolls++;
-  }
 }
 
 function _resolveAsAccept() {
@@ -202,11 +175,10 @@ function _resolveAsAccept() {
   tradeSt.state = 'resolving';
   tradeSt.acceptedHoldMs = ACCEPTED_HOLD_MS;
   replaceMsgBoxText(_nameToBytes('Accepted'), () => {
-    // Item leaves inventory on accept. Single-player: just disappears —
-    // fake players have no inventory. Multiplayer: server relays to the
-    // target client which calls addItem on their side.
+    // Sender side of the inventory mutation. Receiver's client adds the
+    // item via `applyTradeOfferIncoming`'s accept closure (addItem there).
     removeItem(itemId, 1);
-    _endTrade(target.name);
+    _endTrade(target ? target.name : null);
   });
 }
 
@@ -230,16 +202,64 @@ export function tickTrade(dt) {
     cancelTrade('timeout');
     return;
   }
-  if (tradeSt.missedRolls >= MAX_MISSED_ROLLS) {
-    cancelTrade('missed-cap');
+  // Offering phase just waits for `trade-result` from the server — no
+  // local accept-roll. Receiver's prompt has the same 5-min ceiling on
+  // their side; if they walk away the offer eventually times out here.
+}
+
+// ── Net handlers ────────────────────────────────────────────────────────
+
+// Incoming offer FROM another player. Prompt the user with Z/X. Auto-decline
+// if they're already in a battle / another message box / already trading,
+// mirroring the party-invite "busy" guard.
+setNetTradeOfferHandler((msg) => {
+  if (!msg || !msg.fromUserId || !msg.itemId) return;
+  if (battleSt.battleState !== 'none' || msgState.state !== 'none' || tradeSt.state !== 'closed') {
+    sendNetTradeResponse(msg.fromUserId, false);
     return;
   }
-  tradeSt.targetRollTimer -= dt;
-  if (tradeSt.targetRollTimer <= 0) {
-    _runAcceptCheck();
-    tradeSt.targetRollTimer = _rollTimerMs();
+  const fromUserId = msg.fromUserId | 0;
+  const itemId = msg.itemId | 0;
+  const fromName = String(msg.fromName || '');
+  const itemName = _nesNameToString(getItemNameClean(itemId));
+  tradeSt.recvFromUserId = fromUserId;
+  showMsgBoxPrompt(
+    _nameToBytes(fromName + ' offers ' + itemName + ' Z=ok X=no'),
+    () => {
+      tradeSt.recvFromUserId = null;
+      addItem(itemId, 1);
+      sendNetTradeResponse(fromUserId, true);
+      playSFX(SFX.CONFIRM);
+    },
+    () => {
+      tradeSt.recvFromUserId = null;
+      sendNetTradeResponse(fromUserId, false);
+    },
+  );
+});
+
+// Our outgoing offer was resolved. Accept → run the accept hold; otherwise
+// surface a brief reason message and end the trade.
+setNetTradeResultHandler((msg) => {
+  if (!msg) return;
+  if (tradeSt.state !== 'offering') return;   // stale or already resolved
+  if (msg.accept) {
+    _resolveAsAccept();
+  } else if (msg.reason === 'offline') {
+    cancelTrade('offline');
+  } else {
+    cancelTrade('declined');
   }
-}
+});
+
+// Offerer cancelled (or disconnected) before we responded. Dismiss our
+// prompt only if it's currently for this offerer.
+setNetTradeCancelledHandler((msg) => {
+  if (!msg || !msg.fromUserId) return;
+  if (tradeSt.recvFromUserId !== (msg.fromUserId | 0)) return;
+  tradeSt.recvFromUserId = null;
+  dismissMsgBox();
+});
 
 // ── Item-pick panel render + input ──────────────────────────────────────
 

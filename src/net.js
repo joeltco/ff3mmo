@@ -39,6 +39,9 @@ let _onPartyDisbanded = null;   // ({inviterUserId, inviterName}) → void — t
 let _onPartyMemberJoined = null; // ({member}) → void — a NEW member joined OUR party (existing-member side)
 let _onPartySnapshot = null;    // ({members}) → void — list of existing party peers (new-joiner side)
 let _onGiveItem = null;         // ({fromUserId, fromName, itemId}) → void — partner used a heal/cure item on us
+let _onTradeOffer = null;       // ({fromUserId, fromName, itemId}) → void — incoming roster trade offer, prompt user
+let _onTradeResult = null;      // ({targetUserId, targetName, accept}) → void — our outgoing trade resolved
+let _onTradeCancelled = null;   // ({fromUserId, fromName}) → void — offerer cancelled before we responded
 const MAX_RECONNECT_DELAY = 30000;
 
 function _getToken() {
@@ -194,6 +197,24 @@ function _handleMessage(data) {
       if (_onGiveItem) {
         try { _onGiveItem(msg); }
         catch (e) { console.warn('[net] give-item handler error', e); }
+      }
+      return;
+    case 'trade-offer-incoming':
+      if (_onTradeOffer) {
+        try { _onTradeOffer(msg); }
+        catch (e) { console.warn('[net] trade-offer-incoming handler error', e); }
+      }
+      return;
+    case 'trade-result':
+      if (_onTradeResult) {
+        try { _onTradeResult(msg); }
+        catch (e) { console.warn('[net] trade-result handler error', e); }
+      }
+      return;
+    case 'trade-cancelled':
+      if (_onTradeCancelled) {
+        try { _onTradeCancelled(msg); }
+        catch (e) { console.warn('[net] trade-cancelled handler error', e); }
       }
       return;
   }
@@ -460,6 +481,33 @@ export function setNetPartyResultHandler(fn) {
 
 export function setNetPartyMemberLeftHandler(fn) {
   _onPartyMemberLeft = typeof fn === 'function' ? fn : null;
+}
+
+// Roster trade (v1.7.598). Sender → server: offer/cancel; server →
+// receiver: offer-incoming/cancelled; server → sender: result. No
+// server-side inventory truth — clients mutate on the result (same
+// trust model as give-item).
+export function sendNetTradeOffer(targetUserId, itemId) {
+  if (!_helloed || !targetUserId) return false;
+  return _send({ type: 'trade-offer', targetUserId: targetUserId | 0, itemId: itemId | 0 });
+}
+export function sendNetTradeResponse(fromUserId, accept) {
+  if (!_helloed || !fromUserId) return false;
+  return _send({ type: 'trade-response', fromUserId: fromUserId | 0, accept: !!accept });
+}
+export function sendNetTradeCancel() {
+  if (!_helloed) return false;
+  return _send({ type: 'trade-cancel' });
+}
+
+export function setNetTradeOfferHandler(fn) {
+  _onTradeOffer = typeof fn === 'function' ? fn : null;
+}
+export function setNetTradeResultHandler(fn) {
+  _onTradeResult = typeof fn === 'function' ? fn : null;
+}
+export function setNetTradeCancelledHandler(fn) {
+  _onTradeCancelled = typeof fn === 'function' ? fn : null;
 }
 
 export function setNetPartyDisbandedHandler(fn) {

@@ -18,6 +18,54 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.598 — 2026-05-22
+
+### Real multiplayer trade (pre-flip bug fix)
+
+The roster Trade action was a single-player sim that called `removeItem`
+unconditionally on local accept-roll — with real players in the roster
+(post-fake-player era), every accepted trade was destroying items with
+nothing going to the recipient. Replaced the sim with a server-relayed
+offer/response.
+
+**Wire (server in `ws-presence.js`):**
+- `trade-offer` { targetUserId, itemId } — sender → server. Validates target
+  online + itemId in range. Stores in `_pendingTrades` Map (offererUserId
+  → { targetUserId, itemId, expiresAt }). New offer from same sender
+  overwrites prior offer + cancels the prior prompt.
+- `trade-offer-incoming` { fromUserId, fromName, itemId } — server → target.
+- `trade-response` { fromUserId, accept } — target → server. Validates the
+  response matches an outstanding offer; ignored if stale/spoofed.
+- `trade-result` { targetUserId, targetName, accept, reason? } — server →
+  sender. `reason='offline'` when the target is no longer connected.
+- `trade-cancel` — sender → server. Server relays `trade-cancelled` to the
+  target so their prompt dismisses.
+- Disconnect cleanup notifies the surviving side either way.
+
+**Client (`src/trade.js`):**
+- Stripped the sim-roll path (`getAcceptChance`, `MAX_MISSED_ROLLS`,
+  `TARGET_ROLL_*`). `tickTrade` now just runs timeout / death-cancel.
+- `commitOffer` calls `sendNetTradeOffer(target.userId, itemId)`. Refuses
+  to send if the target lacks a `userId` (defensive).
+- `cancelTrade` issues `sendNetTradeCancel()` on user / timeout / death so
+  the server can clear the pending entry.
+- New net handlers: `applyTradeResult` (route accept → existing
+  `_resolveAsAccept`, decline → "Declined", offline → "Offline"),
+  `applyTradeOfferIncoming` (prompt via `showMsgBoxPrompt`; auto-decline
+  if in-battle / another msgbox / already trading — mirrors party-invite
+  busy guard), `applyTradeCancelled` (dismiss prompt if it matches the
+  current `recvFromUserId`).
+- Receiver-side state: just `tradeSt.recvFromUserId` so a `trade-cancelled`
+  for an old sender doesn't dismiss someone else's incoming prompt.
+
+**Trust model — known limitation:** server doesn't track inventory. A
+malicious sender can claim an item they don't actually own → recipient's
+client adds it from nothing (dup). Same gap as `give-item`. Documented in
+`project_ff3mmo_persistence_layer` notes; hardenable with a server-side
+inventory mirror later.
+
+Gates: lint 0, encounter-sim 12/12, pvp-wire-sim 37/37, local boot clean.
+
 ## 1.7.597 — 2026-05-22
 
 ### Open-beta landing copy + neutralized gate (prep #4)
