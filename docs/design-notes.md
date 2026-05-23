@@ -294,6 +294,37 @@ Three (now four) libgme emulators run side-by-side in `src/music.js`, each fed a
 ## Beta/dev gate
 
 - **Soft client-side curtain** (`#pw-gate` in `index.html`), not real auth — account login + save validation sit behind it regardless. `server.js` injects the password from the `GATE_PASSWORD` env var into `{{GATE_PASSWORD}}`/`{{GATE_DISPLAY}}` (`.replaceAll`, since the tokens also appear in comments): unset → `ff3dev` (closed-beta default), `off`/empty → disabled (gate hidden from first paint), any value → custom. Same codebase runs gated on dev and open (or differently keyed) on the beta server just by changing the launch env.
+- **Open-beta landing copy** (v1.7.597): `#landing-pitch` inside `#rom-picker-wrap` carries the public pitch — lede + sub + gold "OPEN BETA" tag. Auto-hides with the picker when gameplay starts. `#rom-hint` collapsed to "You supply your own ROMs — nothing is uploaded." Gate-dialog copy neutralized to `◆ Beta ◆` + "Beta password required." so a cached gate page doesn't read closed-beta.
+
+## /health uptime endpoint
+
+- **`GET /health`** in `server.js` (before the `/api/` dispatch) returns `{ status, version, uptimeSec, players, playersTotal, gate }` as `application/json`. Unauthed, unrate-limited, `Cache-Control: no-store`, `Access-Control-Allow-Origin: *`. `players` (visible — helloed only) is the user-facing count; `playersTotal` includes mid-handshake sockets. `gate` reports `'on'`/`'off'` so the same probe surfaces beta status. v1.7.592.
+- **Source of player count:** `getPlayerCounts()` exported from `ws-presence.js` walks `_connected` once. Includes both live entries (helloed) and is the single source — don't duplicate the iteration elsewhere.
+- Nginx proxies via `location /` (no nginx config change needed).
+
+## Open-beta persistence (parties + presence_shadows)
+
+Two SQLite tables in `api.js` survive disconnect + pm2 restart so the world doesn't reset every time the process bounces.
+
+- **`parties` table** (v1.7.595): `member_user_id` PK → `inviter_user_id`. Helpers: `partyAddMember`, `partyRemoveMember`, `partyRemoveByInviter`, `partyLoadAll`. `_partyMemberships` Map in `ws-presence.js` is the in-memory mirror, seeded at boot.
+  - **Lifetime:** removed ONLY by explicit `party-dismiss` (inviter) or `party-leave` (member). Disconnect no longer dissolves a party.
+  - **Disconnect:** both member-disconnect and inviter-disconnect broadcast `party-member-left` (symmetric); `party-disbanded` is no longer fired server-side (client handler kept for backward compat).
+  - **Reconnect fan-out (first hello):** `_getPartyMates(userId)` returns related userIds (inviter + peer members + members this user invited). Server sends `party-snapshot` to the user listing currently-online mates and `party-member-joined` to each online mate. Reuses existing client message handlers — no client change.
+
+- **`presence_shadows` table** (v1.7.596): `user_id` PK; `name`, `loc`, `profile_json`, `last_seen`. Index on `last_seen` for the reap query. Helpers: `presenceFlushBatch` (one `db.transaction` for batched INSERT OR REPLACE), `presenceDelete`, `presenceLoadRecent`, `presenceReap`.
+  - **Constants** (in `ws-presence.js`): `PRESENCE_TTL_SEC = 600` (10min), `PRESENCE_FLUSH_MS = 30000`, `PRESENCE_REAP_MS = 60000`.
+  - **Boot load:** recent rows seed `_shadows` (same shape as `_connected` entries minus `ws`). Boot logs `Presence: restored N shadows` if non-empty.
+  - **Snapshot integration:** `_snapshotPayload` walks `_connected` first (helloed) then `_shadows` (deduped via `seen` Set). Client doesn't differentiate — same payload shape. A real `hello` evicts the matching shadow; the existing `player-join` broadcast upserts in clients that had the shadow.
+  - **Reap:** every 60s, drops `_shadows` entries with `lastSeen < cutoff`, broadcasts `player-leave` for each (so live clients clean their rosters), then `presenceReap(cutoff)` clears SQLite rows.
+
+- **SIGTERM survival (the non-obvious bit):**
+  ```js
+  let _gracefulShutdown = false;
+  process.on('SIGTERM', () => { _gracefulShutdown = true; });   // DO NOT exit
+  ```
+  Setting the flag without calling `process.exit` means pm2's SIGTERM doesn't trigger close handlers. pm2 escalates to SIGKILL after `kill_timeout`, and SIGKILL is uncatchable — close handlers don't run, so shadows persist across the restart. Voluntary tab-close still hits the close handler with `_gracefulShutdown=false` and calls `presenceDelete(userId)`. Dev `Ctrl-C` (SIGINT) is intentionally untouched.
+
+- **Party-always-join battle (v1.7.594):** `tryJoinPlayerAlly` in `src/battle-update.js` drops the same-room gate for party members. They join battle on `online`-only; non-party roster (auto-assist) is still room-scoped. Wire-PvP path unchanged. Reconcile + fill share one `partyNames = new Set(partyInviteSt.partyMembers)` so the leave-check and the join-fill agree.
 
 ## Mobile controls
 
