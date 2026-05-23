@@ -908,9 +908,24 @@
       }
     }
 
-    if (!GATE_PW || sessionStorage.getItem('ff3_auth') === '1') {
-      // No gate (open server) or already unlocked this session → straight in.
+    if (sessionStorage.getItem('ff3_auth') === '1') {
+      // Already unlocked this tab → straight in (existing flow).
       unlockGate();
+    } else if (!GATE_PW) {
+      // Open beta — no password to enter, but we STILL show a tap-to-start
+      // splash so the first IndexedDB access (loadCachedROMs / saveSlots /
+      // persist request) happens inside a user-gesture context. Without
+      // this gesture, mobile Firefox classifies the origin's storage as
+      // session-only and wipes it on tab close — which is what broke ROM
+      // cache persistence post-flip. Pre-flip the password input was the
+      // accidental gesture guard. v1.7.625.
+      gate.style.display = '';                                    // override the server's display:none
+      pwInput.style.display = 'none';
+      document.getElementById('pw-sub').textContent = 'Tap to enter.';
+      pwErr.style.display = 'none';
+      const submit = document.getElementById('pw-submit');
+      submit.textContent = 'Enter';
+      submit.addEventListener('click', unlockGate);
     } else {
       pwInput.focus();
       document.getElementById('pw-submit').addEventListener('click', checkPw);
