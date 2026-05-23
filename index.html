@@ -1007,6 +1007,9 @@
           getCachedROM('ff1'),
           getCachedROM('ff2'),
         ]);
+        console.info('[rom-cache] read FF3=' + (cached3 ? cached3.byteLength + 'B' : 'MISSING') +
+                     ' FF1=' + (cached1 ? cached1.byteLength + 'B' : 'MISSING') +
+                     ' FF2=' + (cached2 ? cached2.byteLength + 'B' : 'MISSING'));
         if (cached3) ff3Buffer = cached3;
         if (cached1) ff1Buffer = cached1;
         if (cached2) ff2Buffer = cached2;
@@ -1023,7 +1026,9 @@
           document.getElementById('rom-info').textContent = _romStatusText();
         }
       } catch (e) {
-        // IndexedDB unavailable
+        // IndexedDB unavailable — surface the error so we can see if this is
+        // why the cache appears empty (private mode, quota, partition reset).
+        console.warn('[rom-cache] loadCachedROMs FAILED:', e && e.name, e && e.message, e);
       }
     }
 
@@ -1036,7 +1041,9 @@
         document.getElementById('rom-info').textContent = `Error: ${err.message}`;
         return;
       }
-      cacheROM('ff3', ff3Buffer).catch(() => {});
+      cacheROM('ff3', ff3Buffer)
+        .then(() => console.info('[rom-cache] FF3 cached', ff3Buffer.byteLength, 'bytes'))
+        .catch((err) => console.warn('[rom-cache] FF3 cache write FAILED:', err && err.name, err && err.message, err));
       document.getElementById('rom-info').textContent = _romStatusText();
       tryLaunch();
     });
@@ -1050,7 +1057,9 @@
         document.getElementById('rom-info').textContent = `Error: ${err.message}`;
         return;
       }
-      cacheROM('ff1', ff1Buffer).catch(() => {});
+      cacheROM('ff1', ff1Buffer)
+        .then(() => console.info('[rom-cache] FF1 cached', ff1Buffer.byteLength, 'bytes'))
+        .catch((err) => console.warn('[rom-cache] FF1 cache write FAILED:', err && err.name, err && err.message, err));
       document.getElementById('rom-info').textContent = _romStatusText();
       tryLaunch();
     });
@@ -1064,7 +1073,9 @@
         document.getElementById('rom-info').textContent = `Error: ${err.message}`;
         return;
       }
-      cacheROM('ff2', ff2Buffer).catch(() => {});
+      cacheROM('ff2', ff2Buffer)
+        .then(() => console.info('[rom-cache] FF2 cached', ff2Buffer.byteLength, 'bytes'))
+        .catch((err) => console.warn('[rom-cache] FF2 cache write FAILED:', err && err.name, err && err.message, err));
       document.getElementById('rom-info').textContent = _romStatusText();
       tryLaunch();
     });
