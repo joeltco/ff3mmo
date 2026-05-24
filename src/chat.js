@@ -941,25 +941,30 @@ function _buildChatRows(ctx, lineW, startX, titleActive) {
   return rows;
 }
 
-// Greedy character wrap for the input text. Row 0 reserves promptW; rows 1+
-// use the full lineW. Returns at least [''] so a fresh-open empty input still
-// renders the prompt + cursor on a row. v1.7.637.
+// Word-aware wrap for the input text — breaks at the last space inside the
+// row when one exists, falls back to a hard char-break for super-long words.
+// Mirrors `_chatWrap`'s algorithm (used for the chat history) but row 0
+// reserves promptW and rows 1+ get the full lineW. Always returns at least
+// [''] so a fresh-open empty input still renders the prompt + cursor row.
+// v1.7.639 (word wrap; v1.7.637-638 cut mid-word).
 function _wrapInputText(ctx, text, lineW, promptW) {
   const lines = [];
-  let row = '';
-  let avail = lineW - promptW;
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    if (ctx.measureText(row + ch).width > avail) {
-      lines.push(row);
-      row = ch;
-      avail = lineW;
-    } else {
-      row += ch;
+  let start = 0;
+  let avail = lineW - promptW;  // row 0 budget
+  while (start < text.length) {
+    let end = start;
+    let lastSpace = -1;
+    while (end < text.length && ctx.measureText(text.slice(start, end + 1)).width <= avail) {
+      if (text[end] === ' ') lastSpace = end;
+      end++;
     }
+    if (end >= text.length) { lines.push(text.slice(start)); break; }
+    const cut = lastSpace > start ? lastSpace : end;  // word break, else hard
+    lines.push(text.slice(start, cut));
+    start = cut + (text[cut] === ' ' ? 1 : 0);
+    avail = lineW;  // rows 1+ are full-width
   }
-  lines.push(row);
-  return lines;
+  return lines.length ? lines : [''];
 }
 
 function _inputPromptStr() {
