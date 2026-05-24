@@ -2594,10 +2594,8 @@ function _generateFloor(romData, floorIndex, seed) {
         const tx = ti % 32, ty = (ti - tx) / 32;
         if (trapUsed.has(`${tx},${ty}`)) continue;
         if (chamberBounds && (ty < chamberBounds.top || ty > chamberBounds.bot || tx < chamberBounds.left || tx > chamberBounds.right)) continue;
-        // All 8 neighbors must be floor — trap sits in the middle of a 3×3
-        // floor patch, so it doesn't touch a wall orthogonally OR diagonally.
-        // v1.7.645 (was 4-orthogonal).
-        const neighbors = [[0,1],[0,-1],[1,0],[-1,0],[1,1],[1,-1],[-1,1],[-1,-1]];
+        // All 4 orthogonal neighbors must be floor (1 tile from any wall)
+        const neighbors = [[0,1],[0,-1],[1,0],[-1,0]];
         if (!neighbors.every(([dx,dy]) => {
           const nx = tx+dx, ny = ty+dy;
           return nx >= 0 && nx < 32 && ny >= 0 && ny < 32 && isFloorTile(tilemap[ny*32+nx]);
