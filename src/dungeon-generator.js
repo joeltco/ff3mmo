@@ -2846,7 +2846,11 @@ function _generateFloor(romData, floorIndex, seed) {
       // chamber-door upper-diagonal rock promotion in `placeChamberDoor`
       // sticks. Door X is in the "2nd half" of Room B's column range =
       // south-half columns (the half with the exit). v1.7.652.
-      {
+      // Chamber door is a CHANCE feature — not every seed gets one. The
+      // chance is rolled BEFORE the find so seeds without a door don't
+      // burn time on the search. v1.7.676 — 50% on floor 0.
+      const LOCKED_DOOR_CHANCE = 0.5;
+      if (rng() < LOCKED_DOOR_CHANCE) {
         const southMidY = Math.floor((roomTop + roomBot) / 2);
         const southCols = new Set();
         for (let y = southMidY; y <= roomBot; y++) {
