@@ -30,6 +30,12 @@ const CHAT_HISTORY     = 30;
 const CHAT_EXPAND_MS   = 650;
 const CHAT_AUTO_MIN_MS = 5000;
 const CHAT_AUTO_MAX_MS = 16000;
+// Player bug report: 42 was too tight for `/bug` descriptions + longer chat.
+// Server still caps at 200 (see api.js); 80 fits ~3 visual rows in the
+// expanded panel — see _wrapInputText. v1.7.637 (second attempt; v1.7.628's
+// raise was reverted because the panel grew without a BG; we now auto-expand
+// instead, which reuses _drawChatExpandBG and avoids that whole class of bug).
+const CHAT_INPUT_CAP   = 80;
 
 // NES layout — must match game.js
 const CANVAS_W   = 256;
@@ -721,14 +727,39 @@ export function onChatKeyDown(e) {
     _autocompleteMention();
   } else if (e.key === 'Backspace') {
     chatState.inputText = chatState.inputText.slice(0, -1);
-  } else if (e.key.length === 1 && chatState.inputText.length < 42) {
+  } else if (e.key.length === 1 && chatState.inputText.length < CHAT_INPUT_CAP) {
     chatState.inputText += e.key;
   }
 }
 
 // ── Update / Draw ─────────────────────────────────────────────────────────
 
+// Tracks whether the chat-input itself caused the panel to expand, so we
+// don't yank a manual T-expand closed when the user sends/escapes a message.
+// v1.7.637 — auto-expand-while-typing replaces the v1.7.628-630 attempt to
+// grow the fixed panel (which broke because it had no BG behind the growth).
+let _inputAutoExpanded = false;
+let _lastInputActive = false;
+
 export function updateChat(dt, battleState, titleActive) {
+  // Rising edge on inputActive → expand the panel for writing room. Falling
+  // edge → collapse only if we were the ones who opened it. The expand path
+  // reuses _drawChatExpandBG, so the new vertical space gets a proper black
+  // background over the upper HUD area (the trap that killed v1.7.629).
+  if (chatState.inputActive && !_lastInputActive) {
+    if (!chatState.expanded) {
+      chatState.expanded = true;
+      _inputAutoExpanded = true;
+    }
+  } else if (!chatState.inputActive && _lastInputActive) {
+    if (_inputAutoExpanded) {
+      chatState.expanded = false;
+      setChatScrollOffset(0);
+      _inputAutoExpanded = false;
+    }
+  }
+  _lastInputActive = chatState.inputActive;
+
   const expandTarget = chatState.expanded ? 1 : 0;
   if (chatState.expandAnim < expandTarget)
     chatState.expandAnim = Math.min(1, chatState.expandAnim + dt / CHAT_EXPAND_MS);
@@ -929,29 +960,55 @@ function _buildChatRows(ctx, lineW, startX, titleActive) {
   return rows;
 }
 
-function _drawChatInput(ctx, lineW, startX, inputLine1Y, inputLine2Y) {
+// Greedy character wrap for the input text. Row 0 reserves promptW; rows 1+
+// use the full lineW. Returns at least [''] so a fresh-open empty input still
+// renders the prompt + cursor on a row. v1.7.637.
+function _wrapInputText(ctx, text, lineW, promptW) {
+  const lines = [];
+  let row = '';
+  let avail = lineW - promptW;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ctx.measureText(row + ch).width > avail) {
+      lines.push(row);
+      row = ch;
+      avail = lineW;
+    } else {
+      row += ch;
+    }
+  }
+  lines.push(row);
+  return lines;
+}
+
+function _inputPromptStr() {
   // On the Private tab the prompt shows the PM recipient ("→Name") so the user
   // always sees who they're about to message; elsewhere it's the plain "> ".
   const pmTarget = (CHAT_TABS[activeTab] === 'Private') ? _pmTarget() : null;
-  const promptStr = pmTarget ? ('→' + pmTarget + ' ') : '> ';
+  return pmTarget ? ('→' + pmTarget + ' ') : '> ';
+}
+
+function _drawChatInput(ctx, lineW, startX, inputBottomY, lines) {
+  const promptStr = _inputPromptStr();
   const promptW    = ctx.measureText(promptStr).width;
-  const inputAvail = lineW - promptW;
-  let splitIdx = chatState.inputText.length;
-  for (let i = 1; i <= chatState.inputText.length; i++) {
-    if (ctx.measureText(chatState.inputText.slice(0, i)).width > inputAvail) { splitIdx = i - 1; break; }
+  // Render top→bottom so visual row 0 (with prompt) stays at the top of the
+  // input block and the cursor sits on the last (bottom) row.
+  for (let i = 0; i < lines.length; i++) {
+    const y = inputBottomY - (lines.length - 1 - i) * CHAT_LINE_H;
+    if (i === 0) {
+      ctx.fillStyle = '#d8b858'; ctx.fillText(promptStr, startX, y);
+      ctx.fillStyle = '#ffffff'; ctx.fillText(lines[i], startX + promptW, y);
+    } else {
+      ctx.fillStyle = '#ffffff'; ctx.fillText(lines[i], startX, y);
+    }
   }
-  const line1Text = chatState.inputText.slice(0, splitIdx);
-  const line2Text = chatState.inputText.slice(splitIdx);
-  ctx.fillStyle = '#d8b858';
-  ctx.fillText(promptStr, startX, inputLine1Y);
-  ctx.fillStyle = '#ffffff';
-  ctx.fillText(line1Text, startX + promptW, inputLine1Y);
-  ctx.fillText(line2Text, startX, inputLine2Y);
   if (Math.floor(chatState.cursorTimer / 500) % 2 === 0) {
-    if (line2Text.length > 0)
-      ctx.fillRect(startX + ctx.measureText(line2Text).width, inputLine2Y - 7, 6, 8);
-    else
-      ctx.fillRect(startX + promptW + ctx.measureText(line1Text).width, inputLine1Y - 7, 6, 8);
+    const lastIdx = lines.length - 1;
+    const last    = lines[lastIdx];
+    const lastX   = lastIdx === 0
+      ? startX + promptW + ctx.measureText(last).width
+      : startX + ctx.measureText(last).width;
+    ctx.fillRect(lastX, inputBottomY - 7, 6, 8);
   }
 }
 
@@ -975,16 +1032,18 @@ function _drawChatTextArea(ctx, curBoxY, curBoxH, battleFadeAlpha, titleActive) 
   const startX = 12;
   const lineW  = CANVAS_W - 8 - startX;
   const rows = _buildChatRows(ctx, lineW, startX, titleActive);
-  let inputRows = 0;
+  // Wrap the input once so the row-budget calc and the renderer agree.
+  let inputLines = null;
+  let inputRows  = 0;
   if (chatState.inputActive) {
-    const promptW = ctx.measureText('> ').width;
-    const inputFits = chatState.inputText.length === 0 ||
-      ctx.measureText(chatState.inputText).width <= lineW - promptW;
-    inputRows = inputFits ? 1 : 2;
+    const promptW = ctx.measureText(_inputPromptStr()).width;
+    inputLines = _wrapInputText(ctx, chatState.inputText, lineW, promptW);
+    inputRows  = inputLines.length;
   }
   const availRows = Math.max(1, Math.floor(innerH / CHAT_LINE_H) - inputRows);
-  const inputLineY = innerBottom - (inputRows - 1) * CHAT_LINE_H;
-  const bottomY = chatState.inputActive ? inputLineY - CHAT_LINE_H : innerBottom;
+  const bottomY = chatState.inputActive
+    ? innerBottom - inputRows * CHAT_LINE_H
+    : innerBottom;
   // Cache for input handler + arrow renderer. Re-clamp scroll if the buffer
   // shrank since the last frame (e.g., tab switch dropped the visible row count).
   _chatTotalRows = rows.length;
@@ -1008,9 +1067,7 @@ function _drawChatTextArea(ctx, curBoxY, curBoxH, battleFadeAlpha, titleActive) 
     }
   }
   if (chatState.inputActive) {
-    const line1Y = inputRows === 2 ? innerBottom - CHAT_LINE_H : innerBottom;
-    const line2Y = innerBottom;
-    _drawChatInput(ctx, lineW, startX, line1Y, line2Y);
+    _drawChatInput(ctx, lineW, startX, innerBottom, inputLines);
   }
   if (scrollActive) _drawChatScrollArrows(ctx, innerTop, innerBottom);
 }

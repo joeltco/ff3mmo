@@ -18,6 +18,43 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.637 — 2026-05-24
+
+### Chat input — auto-expand panel for writing room (80-char cap, N-row wrap)
+
+Closes the "not enough writing space in chat" UX gap from open-beta
+player report #3. Second attempt after v1.7.628-630's revert.
+
+What's different this time: instead of growing the fixed HUD panel
+upward (which broke v1.7.629 because the new vertical area had no
+black background and rendered over the HUD viewport), the chat panel
+now triggers the existing **T-expand HUD takeover** when the input
+opens. That path already calls `_drawChatExpandBG` to black out the
+upper HUD area, so multi-row input gets proper background coverage
+for free.
+
+Behavior:
+- Opening the input (via `t` hotkey or roster Message action) sets
+  `chatState.expanded = true` and remembers it was the input's doing.
+- Send (Enter) or cancel (Escape) collapses back to the small panel
+  — but only if the expand was input-triggered. A manual T-expand
+  before opening chat stays expanded across the input lifecycle.
+- Input cap raised 42 → 80 chars (server still caps at 200).
+- `_drawChatInput` generalized from the old 1-vs-2 line split to
+  arbitrary N-row wrap via the new `_wrapInputText` helper. Row 0
+  reserves prompt width; rows 1+ use the full chat panel width.
+  80 chars in the 8px font wraps to ~3 visual rows on a 236-px panel.
+- In expanded mode the panel is ~208 px tall (~22 rows), so even a
+  3-row input leaves ~19 rows of message history visible — message
+  scrollback never gets squeezed the way it did in v1.7.629.
+
+Files:
+- `src/chat.js` — `CHAT_INPUT_CAP = 80`, `_inputAutoExpanded` /
+  `_lastInputActive` rising-edge tracking inside `updateChat`,
+  `_wrapInputText` + `_inputPromptStr` helpers, `_drawChatInput`
+  rewrite, `_drawChatTextArea` input-rows budget threads through.
+- `CHAT_LINE_H` / `CHAT_EXPAND_MS` / scroll cache untouched.
+
 ## 1.7.636 — 2026-05-24
 
 ### PWA icons — transparent outside the HUD frame
