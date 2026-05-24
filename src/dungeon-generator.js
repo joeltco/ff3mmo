@@ -2776,6 +2776,23 @@ function _generateFloor(romData, floorIndex, seed) {
             placeLockedRoom(tilemap, romData, replicaAnchorX, replicaAnchorY, rng, {
               chests: 2, skeletons: 3,
             });
+
+            // Teleport pair — reuses the existing `falseWalls` in-map warp
+            // mechanism (movement.js#_checkFalseWall). Player walks onto the
+            // chamber door → screen wipe → lands on the floor tile INSIDE
+            // the locked room (one tile north of the replica's south door,
+            // not ON the door, to avoid bouncing back instantly). Walking
+            // south onto the replica's door → wipes back to the chamber-
+            // floor tile south of the chamber door. v1.7.656.
+            const replicaDoorX  = replicaAnchorX + 4;  // shop col 4
+            const replicaDoorY  = replicaAnchorY + 6;  // grid row 6 = shop row 10
+            const replicaEntryY = replicaAnchorY + 5;  // floor above the door
+            falseWalls.set(`${doorPos.x},${doorPos.y}`, {
+              destX: replicaDoorX, destY: replicaEntryY,
+            });
+            falseWalls.set(`${replicaDoorX},${replicaDoorY}`, {
+              destX: doorPos.x, destY: doorPos.y + 1,
+            });
           }
         }
       }
