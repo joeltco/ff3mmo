@@ -18,6 +18,34 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.643 — 2026-05-24
+
+### Message box is fully modal — no input bleed-through to menus
+
+`movement.js#handleInput` dispatched `handleBattleInput` →
+`handleTradePickInput` → `handleInspectInput` → `handleRosterInput`
+→ `handlePauseInput` BEFORE the universal-msgbox block. Each of those
+internally gates on `msgState.state === 'none'` for their open paths
+(so pause / roster wouldn't actually open during a msgbox), but they
+still unconditionally consumed Enter / S keys at the top of their
+handlers. The msgbox handler below — which uses Z / X — never saw a
+problem, but the architecture was fragile: any new handler that
+forgot the gate, or any handler that read Z / X for a side path,
+would steal input from the msgbox.
+
+Moved the msgbox block to the top of `handleInput` (right after bed
+and shop, both of which are already msgState-aware) and added an
+early `return`. Now when a msgbox is up, ONLY the msgbox handler
+runs and every battle / trade / inspect / roster / pause handler is
+skipped entirely.
+
+Side benefit: trade-pick + inspect panels no longer compete with
+their own confirmation msgboxes for Z / X.
+
+Files:
+- `src/movement.js` — `handleInput()` reordered. Block is unchanged
+  internally; only its position + an early return changed.
+
 ## 1.7.642 — 2026-05-24
 
 ### Altar Cave floor 1 (UI floor 2) — trap polish

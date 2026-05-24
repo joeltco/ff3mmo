@@ -113,23 +113,14 @@ export function handleInput() {
   // Shop has top priority — block all other input while open. Message box can
   // open over a shop (e.g. "Bought X!") and is handled below.
   if (shopSt.state !== 'closed' && msgState.state === 'none' && handleShopInput(keys)) return;
-  if (handleBattleInput()) return;
-  // Trade item-pick panel takes priority over roster — opened from the
-  // roster menu but owns its own input loop. v1.7.237.
-  if (isTradePicking() && handleTradePickInput(keys)) return;
-  // Inspect stat panel — same pattern, owns its own input loop. v1.7.239.
-  if (isInspectOpen() && handleInspectInput(keys)) return;
-  if (handleRosterInput()) return;
-  if (handlePauseInput()) return;
 
-  // Universal message box — Z dismisses during hold. While a PVP
-  // search is active (and not yet resolving), the message *is* the
-  // search — Z and X both forfeit. You can't silently close the
-  // "Searching..." message and wander around with the hook still in
-  // flight. The msgState=hold check also blocks movement input
-  // (input never reaches the arrow-key handler below until the
-  // user commits one way or the other). v1.7.222 added X-back-out;
-  // v1.7.223 tightened to "any close = forfeit".
+  // Universal message box is MODAL — runs before every battle / trade /
+  // inspect / roster / pause handler so those can't pre-consume Enter / S
+  // / Z / X before the msgbox sees them. v1.7.643 (was line ~133; downstream
+  // handlers had their own msgState===none gates but the dispatch order
+  // still let them eat keys destined for the msgbox). PVP search, party
+  // invite, trade offering, and yes/no prompts all share this single path.
+  // v1.7.222 added X-back-out; v1.7.223 tightened to "any close = forfeit".
   if (msgState.state !== 'none') {
     if (msgState.state === 'hold') {
       if (isSearchActive() && !isSearchResolving()) {
@@ -188,6 +179,17 @@ export function handleInput() {
     }
     return;
   }
+
+  // Below this point msgState.state === 'none'; dispatch the rest of the
+  // overworld input chain (battle / trade / inspect / roster / pause).
+  if (handleBattleInput()) return;
+  // Trade item-pick panel takes priority over roster — opened from the
+  // roster menu but owns its own input loop. v1.7.237.
+  if (isTradePicking() && handleTradePickInput(keys)) return;
+  // Inspect stat panel — same pattern, owns its own input loop. v1.7.239.
+  if (isInspectOpen() && handleInspectInput(keys)) return;
+  if (handleRosterInput()) return;
+  if (handlePauseInput()) return;
 
   if (mapSt.moving) return;
   if (transSt.state !== 'none') return;
