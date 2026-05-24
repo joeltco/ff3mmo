@@ -2,7 +2,8 @@
 
 import { loadMap } from './map-loader.js';
 import { MapRenderer } from './map-renderer.js';
-import { generateFloor } from './dungeon-generator.js';
+import { generateFloor, generateSecretRoomMap } from './dungeon-generator.js';
+import { generateLockedRoomMap } from './dungeon-locked-room.js';
 import { playTrack, stopMusic, playFF2Track, stopFF2Music, ff2MusicReady, TRACKS, FF2_TRACKS } from './music.js';
 import { DIR_DOWN } from './sprite.js';
 import { sprite } from './player-sprite.js';
@@ -127,9 +128,29 @@ function _resetPerMapState() {
 
 function _loadDungeonFloor(mapId, returnX, returnY) {
   _resetPerMapState();
-  const floorIndex = mapId - 1000;
-  mapSt.dungeonFloor = floorIndex;
-  const result = generateFloor(romRaw, floorIndex, mapSt.dungeonSeed);
+  let result;
+  // Inside a side-room map (locked / secret), keep `floorIndex` at whatever
+  // the host chamber's floor was (don't reassign `mapSt.dungeonFloor` either)
+  // so the boss / moogle / music checks below stay consistent. v1.7.665.
+  let floorIndex;
+  if (mapId === 1010) {
+    floorIndex = mapSt.dungeonFloor;
+    result = generateLockedRoomMap(romRaw, mapSt.dungeonSeed | 0);
+  } else if (mapId === 1020 || mapId === 1021) {
+    // Secret rooms — side flag encoded in the chamber-side falseWalls dest
+    // (stashed there by placeSecretPath). Default to right-side (goLeft=false)
+    // when re-loading the map without the corridor context.
+    floorIndex = mapSt.dungeonFloor;
+    const prevDest = mapSt.falseWalls
+      ? [...mapSt.falseWalls.values()].find(d => d && d.mapId === mapId)
+      : null;
+    const goLeft = prevDest ? !!prevDest.goLeft : false;
+    result = generateSecretRoomMap(romRaw, goLeft);
+  } else {
+    floorIndex = mapId - 1000;
+    mapSt.dungeonFloor = floorIndex;
+    result = generateFloor(romRaw, floorIndex, mapSt.dungeonSeed);
+  }
   mapSt.mapData = result;
   mapSt.secretWalls = result.secretWalls;
   mapSt.falseWalls = result.falseWalls;

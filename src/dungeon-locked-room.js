@@ -19,7 +19,8 @@
 // Roadmap: door locking + magic-key consumption, teleport trigger wiring,
 //   secret-shop interior variant.
 
-import { loadMap } from './map-loader.js';
+import { loadMap, processTriggerTiles } from './map-loader.js';
+import { loadRomAssets, mulberry32 } from './dungeon-generator.js';
 
 // ── Source map ────────────────────────────────────────────────────────────
 
@@ -261,6 +262,75 @@ export function findChamberDoorPos(tilemap, side, opts = {}) {
 
   if (candidates.length === 0) return null;
   return candidates[Math.floor(rng() * candidates.length)];
+}
+
+/**
+ * Generate a STANDALONE locked-room map — a 32×32 tilemap of void with the
+ * magic-shop replica placed in the center. The south door is registered as
+ * a goBack-type-1 trigger, so walking onto it pops the mapStack and returns
+ * the player to the chamber map (same way stairs-back works).
+ *
+ * Used for separate-map locked rooms (e.g., mapId 1010). The host chamber's
+ * door tile should be a regular type-1 trigger with destination
+ * `{ mapId: 1010 }` — the engine's existing `_triggerMapTransition` handles
+ * the door-open animation + map transition + mapStack push automatically.
+ *
+ * Caller (typically `_loadDungeonFloor`) supplies a seed so chest / skeleton
+ * placement stays deterministic across revisits (otherwise re-entering the
+ * room would rerandomize, breaking the consumed-tile save). v1.7.665.
+ *
+ * @param {Uint8Array} rom    FF3 ROM
+ * @param {number}     seed   integer for mulberry32 (chest scatter)
+ * @returns {object} map data structure compatible with loadMapById.
+ */
+export function generateLockedRoomMap(rom, seed) {
+  const assets = loadRomAssets(rom);
+  const rng = mulberry32(seed | 0);
+
+  // Fill with void; place replica centered.
+  const tilemap = new Uint8Array(1024).fill(VOID_TILE);
+  const anchorX = 11;
+  const anchorY = 10;
+  placeLockedRoom(tilemap, rom, anchorX, anchorY, rng, { chests: 2, skeletons: 3 });
+
+  // South door = exit. Register as goBack so engine pops mapStack to the
+  // chamber map. Door coord matches the shop's south door after translation:
+  // anchorX + 4 col, anchorY + 10 row.
+  const triggerMap = processTriggerTiles(tilemap);
+  const doorX = anchorX + 4;
+  const doorY = anchorY + 10;
+  const dungeonDestinations = new Map();
+  const doorTrig = triggerMap.get(`${doorX},${doorY}`);
+  if (doorTrig) {
+    dungeonDestinations.set(doorTrig.trigId, { goBack: true });
+  }
+
+  return {
+    tileset: 0,
+    fillTile: VOID_TILE,
+    skipRoomClip: true,
+    // Player spawns ON the door (matches magic-shop arrival — door animates
+    // open via _openReturnDoor when returnX/Y is passed to loadMapById).
+    entranceX: doorX,
+    entranceY: doorY,
+    mapExit: 0,
+    tilemap,
+    chrTiles: assets.chrTiles,
+    metatiles: assets.metatiles,
+    palettes: assets.palettes,
+    tileAttrs: assets.tileAttrs,
+    collision: assets.collision,
+    collisionByte2: assets.collisionByte2,
+    entranceData: new Uint8Array(16),
+    triggerMap,
+    secretWalls: new Set(),
+    dungeonDestinations,
+    hiddenTraps: new Set(),
+    falseWalls: new Map(),
+    rockSwitch: null,
+    warpTile: null,
+    pondTiles: null,
+  };
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────

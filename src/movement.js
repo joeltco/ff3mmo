@@ -21,7 +21,7 @@ import { checkTrigger, openPassage, handleChest, handleSecretWall,
 import { shopSt, openShop, handleShopInput } from './shop.js';
 import { bedSt, handleBedInput } from './bed.js';
 import { findShopAtCounter } from './data/shops.js';
-import { loadWorldMapAtPosition } from './map-loading.js';
+import { loadWorldMapAtPosition, loadMapById } from './map-loading.js';
 import { tickRandomEncounter, isEncounterCheckPending } from './battle-encounter.js';
 import { startBattle } from './battle-update.js';
 import { MapRenderer } from './map-renderer.js';
@@ -321,12 +321,34 @@ function _checkFalseWall() {
   const key = `${mapSt.worldX / TILE_SIZE},${mapSt.worldY / TILE_SIZE}`;
   if (!mapSt.falseWalls.has(key)) return false;
   const dest = mapSt.falseWalls.get(key);
-  triggerWipe(() => {
-    mapSt.worldX = dest.destX * TILE_SIZE;
-    mapSt.worldY = dest.destY * TILE_SIZE;
-    sprite.setDirection(DIR_DOWN);
-    mapSt.mapRenderer = new MapRenderer(mapSt.mapData, dest.destX, dest.destY); resetIndoorWaterCache();
-  });
+  // Three destination shapes:
+  //   `{ mapId }`         — separate-map warp (push current map onto stack
+  //                         then loadMapById). v1.7.665.
+  //   `{ goBack: true }`  — pop the mapStack to return to the chamber map
+  //                         at the saved position. v1.7.665.
+  //   `{ destX, destY }`  — legacy in-map warp (existing behavior).
+  if (dest.mapId !== undefined) {
+    const savedX = mapSt.worldX, savedY = mapSt.worldY;
+    triggerWipe(() => {
+      mapSt.mapStack.push({ mapId: mapSt.currentMapId, x: savedX, y: savedY });
+      loadMapById(dest.mapId);
+    }, dest.mapId);
+  } else if (dest.goBack) {
+    const prevMapId = mapSt.mapStack.length > 0 ? mapSt.mapStack[mapSt.mapStack.length - 1].mapId : null;
+    triggerWipe(() => {
+      if (mapSt.mapStack.length > 0) {
+        const prev = mapSt.mapStack.pop();
+        loadMapById(prev.mapId, prev.x / TILE_SIZE, prev.y / TILE_SIZE);
+      }
+    }, prevMapId);
+  } else {
+    triggerWipe(() => {
+      mapSt.worldX = dest.destX * TILE_SIZE;
+      mapSt.worldY = dest.destY * TILE_SIZE;
+      sprite.setDirection(DIR_DOWN);
+      mapSt.mapRenderer = new MapRenderer(mapSt.mapData, dest.destX, dest.destY); resetIndoorWaterCache();
+    });
+  }
   return true;
 }
 

@@ -18,6 +18,54 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.665 — 2026-05-24
+
+### Locked room AND secret room now SEPARATE MAPS (no main-floor visible)
+
+User: "make both secret room and locked room seperate rooms." Both
+side rooms now live in their own 32×32 tilemaps (mapId 1010 for the
+locked room, 1020/1021 for the secret room corridors). When the
+player is inside either, the chamber map isn't loaded at all — the
+NES camera shows only the side-room interior, surrounded by void.
+
+**New module exports:**
+- `dungeon-locked-room.js` → `generateLockedRoomMap(rom, seed)` —
+  builds a void map with the magic-shop replica centered at (11, 10).
+  South door registers as `{ goBack: true }` so walking onto it pops
+  the mapStack back to the chamber. Uses `mulberry32(seed)` so chest
+  scatter stays deterministic across revisits (consumed-tile save
+  invariant).
+- `dungeon-generator.js` → `generateSecretRoomMap(rom, goLeft)` —
+  builds a void map with the secret-room body (corridor + chest
+  alcove) centered around (12/14, 12). Entrance false-ceiling tile
+  registers as `{ goBack: true }` in `falseWalls`.
+- Existing helpers `loadRomAssets` + `mulberry32` exported so the
+  locked-room module can build a full map data structure.
+
+**Chamber refactor:**
+- `placeSecretPath` no longer places the room body in the chamber
+  map. Just carves the corridor + the false-ceiling trigger tile,
+  registers it in `falseWalls` with `{ mapId: 1020|1021, goLeft }`
+  so the secret-room map generator can mirror the original
+  orientation.
+- Floor-0 locked-room hook drops the in-map `placeLockedRoom` call.
+  Chamber door is just a tile placement now — trigger-wiring
+  registers `{ mapId: 1010 }` in `dungeonDestinations`. Engine's
+  standard `_triggerMapTransition` handles door-open + mapStack push.
+
+**`_checkFalseWall` (movement.js) extended** to handle three
+destination shapes: `{ mapId }` (separate-map warp, push mapStack),
+`{ goBack: true }` (pop mapStack), and the legacy `{ destX, destY }`
+(in-map warp, unchanged).
+
+**`_loadDungeonFloor` dispatch** added for mapId 1010 / 1020 / 1021:
+- 1010 → `generateLockedRoomMap`
+- 1020/1021 → `generateSecretRoomMap` (looks up the side flag from
+  the chamber's `falseWalls` so layout stays consistent)
+- Other mapIds → existing `generateFloor`
+- `floorIndex` hoisted so the boss/moogle/music checks see the host
+  chamber's floor when inside a side-room map.
+
 ## 1.7.664 — 2026-05-24
 
 ### Door teleport — land ON the door + fire open-on-arrival (magic-shop way)
