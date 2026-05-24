@@ -16,6 +16,7 @@ import { isTradeOffering, isTradePicking, cancelTrade, handleTradePickInput } fr
 import { isInspectOpen, handleInspectInput } from './inspect.js';
 import { chatState, tabSelectMode, chatScrollOffset, setChatScrollOffset, canChatScrollUp, canChatScrollDown } from './chat.js';
 import { ps } from './player-stats.js';
+import { saveSlotsToDB } from './save-state.js';
 import { playSFX, playTrack, TRACKS, SFX } from './music.js';
 import { checkTrigger, openPassage, handleChest, handleSecretWall,
          handleRockPuzzle, handlePondHeal, triggerWipe,
@@ -290,6 +291,15 @@ function handleAction() {
         () => {
           removeItem(0x98, 1);
           mapSt.lockedDoors.delete(doorKey);
+          // Persist unlock — write the (unchanged) door tile id 0x70 to
+          // ps.consumedTiles so `_replayConsumedTiles` removes the coord
+          // from lockedDoors on next chamber re-entry. Door stays
+          // unlocked across save / reload. v1.7.672.
+          const mapId = mapSt.currentMapId;
+          if (!ps.consumedTiles) ps.consumedTiles = {};
+          if (!ps.consumedTiles[mapId]) ps.consumedTiles[mapId] = {};
+          ps.consumedTiles[mapId][doorKey] = 0x70;
+          saveSlotsToDB();
           showMsgBox(_nameToBytes('Unlocked!'));
         },
         null,  // decline = silent cancel; box just slides out

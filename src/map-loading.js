@@ -97,6 +97,10 @@ function _replayConsumedTiles(mapId, mapData) {
     if (Number.isNaN(x) || Number.isNaN(y)) continue;
     mapData.tilemap[y * 32 + x] = consumed[key];
     if (mapSt.secretWalls && mapSt.secretWalls.has(key)) mapSt.secretWalls.delete(key);
+    // Unlocked-door persistence: any door coord that was unlocked (and
+    // therefore stamped into consumedTiles) gets removed from lockedDoors
+    // so the chamber re-loads with it walkable. v1.7.672.
+    if (mapSt.lockedDoors && mapSt.lockedDoors.has(key)) mapSt.lockedDoors.delete(key);
   }
 }
 
