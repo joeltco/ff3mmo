@@ -18,6 +18,34 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.631 — 2026-05-23
+
+### Telemetry — `navigator.storage.persist()` outcome beacon
+
+Open-beta launch day produced 6 new signups, but only 1 of the 5
+post-flip accounts actually saved a character. To rule in/out mobile
+Firefox storage eviction as a cause of that drop-off, persist-grant
+ratio is now captured server-side.
+
+Each first-tap on the splash POSTs `{already, granted, ua}` to a new
+`/api/storage-beacon` endpoint and a row lands in the `storage_beacons`
+SQLite table. Unauthed (the beacon fires before login), rate-limited
+via the shared client-error bucket, UA truncated to 120 chars, no PII.
+The console.info line `[storage] persist requested → GRANTED|DENIED`
+stays for in-devtools visibility.
+
+After a couple days of data, query the table to see the
+GRANTED/DENIED split broken down by UA — Firefox vs Chrome vs Safari,
+mobile vs desktop. If the denied rate is significant we know to keep
+hardening the gesture/IndexedDB path; if it's negligible the drop-off
+is elsewhere (title-screen UX, curiosity signups, etc).
+
+Files:
+- `api.js` — `storage_beacons` table + `/api/storage-beacon` endpoint
+- `index.html` — fire-and-forget `fetch('/api/storage-beacon', ...)`
+  inside `_requestPersistentStorage`, also beacons the `already=true`
+  returning-visitor case
+
 ## 1.7.630 — 2026-05-23
 
 ### Revert v1.7.628 + v1.7.629 — chat cap raise + panel grow broke layout

@@ -959,9 +959,21 @@
       if (!navigator.storage || !navigator.storage.persist) return;
       try {
         const already = await navigator.storage.persisted();
-        if (already) return;
-        const granted = await navigator.storage.persist();
-        console.info('[storage] persist requested → ' + (granted ? 'GRANTED' : 'DENIED'));
+        // Beacon both cases — `already=true` returning visitor is just as
+        // informative as a fresh grant (it confirms persistence held). One
+        // fire-and-forget POST per first-tap, server reuses the
+        // client-error rate bucket. v1.7.631.
+        let granted = already;
+        if (!already) granted = await navigator.storage.persist();
+        console.info('[storage] persist requested → ' + (granted ? 'GRANTED' : 'DENIED') + (already ? ' (already)' : ''));
+        try {
+          fetch('/api/storage-beacon', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ already, granted, ua: navigator.userAgent.slice(0, 120) }),
+            keepalive: true,
+          }).catch(() => {});
+        } catch (_) { /* fire-and-forget */ }
       } catch (e) {
         console.warn('[storage] persist request failed:', e && e.name);
       }

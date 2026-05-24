@@ -243,6 +243,21 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_trades_ts ON trades(ts);
   CREATE INDEX IF NOT EXISTS idx_trades_sender ON trades(sender_user_id);
+  -- Storage-persist beacon (v1.7.631). Unauthed, one row per first-tap. Used
+  -- to measure GRANTED/DENIED ratio for navigator.storage.persist() across
+  -- the open-beta population — specifically to rule in/out mobile Firefox
+  -- storage eviction as a cause of the post-flip signup-without-save
+  -- drop-off (4 of 5 new signups on launch day created an account but
+  -- never wrote a save). No PII; UA is truncated to 120 chars.
+  CREATE TABLE IF NOT EXISTS storage_beacons (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts          INTEGER NOT NULL,
+    already     INTEGER NOT NULL,   -- 1 = persisted() already true (returning visitor)
+    granted     INTEGER NOT NULL,   -- 1 = persist() returned true
+    ua          TEXT,
+    ip          TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_storage_beacons_ts ON storage_beacons(ts);
 `);
 
 // JWT rotation column on `users`. Tokens issued before this unix-second
@@ -409,6 +424,29 @@ export async function handleAPI(req, res) {
   }
 
   const ip = _getIp(req);
+
+  // POST /api/storage-beacon — record the outcome of
+  // navigator.storage.persist() so we can measure how often browsers grant
+  // durable storage to ff3mmo. Unauthed (no token at first-tap), reuses the
+  // client-error rate bucket (same flood-defense profile: one beacon per
+  // session per IP under normal traffic). v1.7.631.
+  if (path === '/api/storage-beacon' && req.method === 'POST') {
+    if (!_bucketAllow(_errorBuckets, ip, ERROR_CAPACITY, ERROR_REFILL_PS)) {
+      res.writeHead(429); res.end(); return true;
+    }
+    const body = await readBody(req);
+    db.prepare(
+      'INSERT INTO storage_beacons (ts, already, granted, ua, ip) VALUES (?, ?, ?, ?, ?)'
+    ).run(
+      Date.now(),
+      body.already ? 1 : 0,
+      body.granted ? 1 : 0,
+      String(body.ua || '').slice(0, 120),
+      ip
+    );
+    res.writeHead(204); res.end();
+    return true;
+  }
 
   // POST /api/client-error — log client-side errors to pm2 logs. Unauthed;
   // rate-limited so a malicious client can't flood pm2 storage.
