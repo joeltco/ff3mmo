@@ -137,9 +137,12 @@ function _loadDungeonFloor(mapId, returnX, returnY) {
   // the host chamber's floor was (don't reassign `mapSt.dungeonFloor` either)
   // so the boss / moogle / music checks below stay consistent. v1.7.665.
   let floorIndex;
-  if (mapId === 1010) {
+  if (mapId === 1010 || mapId === 1011) {
+    // Standalone locked-room maps — 1010 from floor 0, 1011 from floor 2 (UI
+    // 3). Seed XOR'd with mapId so each room has its own chest layout (but
+    // deterministic per dungeonSeed so consumed-tile state lines up).
     floorIndex = mapSt.dungeonFloor;
-    result = generateLockedRoomMap(romRaw, mapSt.dungeonSeed | 0);
+    result = generateLockedRoomMap(romRaw, ((mapSt.dungeonSeed | 0) ^ mapId) | 0);
   } else if (mapId === 1020 || mapId === 1021) {
     // Secret rooms — side flag encoded in the chamber-side falseWalls dest
     // (stashed there by placeSecretPath). Default to right-side (goLeft=false)
