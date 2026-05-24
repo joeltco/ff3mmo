@@ -18,6 +18,68 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.649 — 2026-05-24
+
+### Locked-room mechanic — door teleports + standalone magic-shop replica
+
+New module `src/dungeon-locked-room.js` — generic locked-room placement
+reusable for any dungeon floor. **Doors are always teleports**: the
+chamber-side door tile (0x44 false-ceiling, walk-through-from-south)
+is a teleport entry; the locked room itself is a standalone area in
+a free portion of the same 32×32 tilemap, NOT physically connected
+to the host chamber. (Teleport trigger wiring TODO — door is
+debug-unlocked / walkable false-ceiling for now.)
+
+**Room template:** the Ur magic shop interior (map 3, upper room
+9×11) is read from ROM at runtime and translated tile-for-tile from
+the shop tileset (5) to the cave tileset (0):
+- 0x00 (ceiling), 0x01 (rock), 0x44 (secret-pass), 0x5f (void): same
+  IDs across both tilesets, pass through.
+- 0x3a / 0x20 / 0x47 (shop floor / counter / carpet) → 0x30 (cave
+  floor) — gutted, no shop decoration.
+- 0x45 / 0x68 (shop door-middle / door-bottom) → 0x44 (cave
+  secret-pass) — uniform with the chamber-side teleport door.
+- 0x1b (shop door-top) → 0x00 (cave ceiling).
+
+Result: floor-0 wall convention (ceiling row on top, rock rows
+underneath) preserved automatically since the source shop interior
+already uses it.
+
+**Module API:**
+- `getMagicShopReplica(rom)` — returns the translated 9×11 tile grid
+  (cached after first call).
+- `placeLockedRoom(tilemap, rom, anchorX, anchorY, rng, opts)` —
+  writes the replica grid into the tilemap at the anchor. Scatters
+  chests + skeletons in the interior (entry/door tiles excluded
+  from the scatter pool). Returns `{interior, bounds}`.
+- `placeChamberDoor(tilemap, doorX, doorY)` — sets the teleport-
+  entry tile on the host chamber's wall.
+- `findChamberDoorPos(tilemap, side, opts)` — wall-walker; picks a
+  wall coord flanked by walls along the wall axis with walkable
+  floor on the chamber-interior side.
+
+**Floor 0 wiring (in `dungeon-generator.js`):**
+- Door X constrained to the south-half columns of Room B ("2nd half
+  of the room with the exit").
+- Door Y in `[1, roomTop + 3]` — `roomTop` is a top-of-area
+  sentinel; actual chamber wall sits ~2-3 rows lower.
+- Replica anchor opposite Room B (B on right → bottom-left at
+  (1, 20); B on left → bottom-right at (22, 20)). Edge cases where
+  the replica overlaps pre-existing floor-0 bottom artifacts are
+  known and left as follow-up (mechanism is correct; placement
+  strategy needs a `findFreeArea` helper or the floor-0 artifact
+  needs cleaning up first).
+
+**Roadmap (deferred):** teleport trigger wiring (chamber door →
+replica entry tile + return); door locking + magic-key consumption;
+FF1 oasis shop tiles for secret-shop variant; `findFreeArea` to
+auto-avoid pre-existing tilemap content.
+
+Files:
+- `src/dungeon-locked-room.js` (NEW) — module
+- `src/dungeon-generator.js` — import + 40-line block inside floor 0
+  setup + 4-line splice in the feature-pass `used` initialization
+
 ## 1.7.648 — 2026-05-24
 
 ### Trap placement — inter-trap spacing 3-tile → 1-tile
