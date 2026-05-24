@@ -69,12 +69,12 @@ export function startMove(dir) {
     return;
   }
 
-  // Locked doors — solid like NPCs; show "Locked." on bump (debounced so
-  // holding the direction button doesn't spam the message box). v1.7.669.
+  // Locked doors — solid like NPCs (silent block). "Locked." message only
+  // fires from the A-press handler so it doesn't spam during movement.
+  // v1.7.680.
   if (mapSt.lockedDoors && mapSt.lockedDoors.has(`${tileX},${tileY}`)) {
     sprite.setDirection(dir);
     sprite.resetFrame();
-    if (msgState.state === 'none') showMsgBox(_nameToBytes('Locked.'));
     return;
   }
 
