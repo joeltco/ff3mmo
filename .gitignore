@@ -4,6 +4,10 @@
 tools/out/
 *.ppm
 *.png
+# PWA icons — committed; built by `node tools/build-pwa-icon.mjs`. v1.7.633.
+!icon-192.png
+!icon-512.png
+!apple-touch-icon.png
 *.gif
 node_modules/
 deploy.sh
