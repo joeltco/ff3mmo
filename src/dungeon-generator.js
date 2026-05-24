@@ -2765,9 +2765,13 @@ function _generateFloor(romData, floorIndex, seed) {
         if (southCols.size > 0) {
           const sxs = [...southCols];
           const xMin = Math.min(...sxs), xMax = Math.max(...sxs);
+          // yRange spans the full chamber depth so the strict rock-5 find
+          // can locate a deeper rock pocket when the chamber's top edge
+          // doesn't have 3 consecutive rocks at row Y-1 (common — chamber
+          // walls are typically 1-tile-thick rocks under ceiling).
           const doorPos = findChamberDoorPos(tilemap, 'north', {
             xRange: { min: xMin, max: xMax },
-            yRange: { min: 1, max: roomTop + 3 },
+            yRange: { min: 1, max: roomBot },
             rng,
           });
           if (doorPos) {

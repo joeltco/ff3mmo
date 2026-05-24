@@ -229,25 +229,26 @@ export function findChamberDoorPos(tilemap, side, opts = {}) {
   if (side === 'north') {
     // Walk top-down; pick the topmost row with any viable candidate so the
     // door sits on the chamber's actual north edge (not an interior wall).
-    // STRICT find — every required surround tile must already exist; no
-    // tile is modified. The chamber wall is structurally ceiling-on-top-of-
-    // rock (addOverhang pattern), so the upper diagonals are typically
-    // ceiling rather than rock. Diagonals are checked as WALL (rock OR
-    // ceiling) — both are walls, just different visual layers — to keep the
-    // find purely non-modifying without disconnecting the ceiling snake.
+    // STRICT find — all 5 surround tiles must ALREADY be rock; no tile is
+    // modified (modifying surrounds risks disconnecting the ceiling snake).
     //   - (x, y)        must be ROCK (overwritten with door)
     //   - (x±1, y)      flanks both rock
     //   - (x, y-1)      above is rock
-    //   - (x±1, y-1)    upper diagonals both walls (rock OR ceiling)
+    //   - (x±1, y-1)    upper diagonals both rock
     //   - (x, y+1)      below is walkable floor (chamber-interior approach)
+    // The chamber wall is mostly 1 tile thick (ceiling + rock + floor) so
+    // top-row positions rarely satisfy all 5 rocks. The find walks DEEP into
+    // the chamber wall (yRange should span the full chamber) — addOverhang
+    // sometimes lays a 2-rock thick band lower down, and corridors create
+    // chamber-adjacent rock pockets with full rock surrounds.
     for (let y = yMin; y <= yMax; y++) {
       for (let x = xMin; x <= xMax; x++) {
         if (tilemap[y * 32 + x] !== ROCK_TILE) continue;
         if (tilemap[y * 32 + x - 1] !== ROCK_TILE) continue;
         if (tilemap[y * 32 + x + 1] !== ROCK_TILE) continue;
         if (tilemap[(y - 1) * 32 + x] !== ROCK_TILE) continue;
-        if (!_isWall(tilemap[(y - 1) * 32 + x - 1])) continue;
-        if (!_isWall(tilemap[(y - 1) * 32 + x + 1])) continue;
+        if (tilemap[(y - 1) * 32 + x - 1] !== ROCK_TILE) continue;
+        if (tilemap[(y - 1) * 32 + x + 1] !== ROCK_TILE) continue;
         if (!_isWalkable(tilemap[(y + 1) * 32 + x])) continue;
         candidates.push({ x, y });
       }
