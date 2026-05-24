@@ -20,7 +20,7 @@
 //   secret-shop interior variant.
 
 import { loadMap, processTriggerTiles } from './map-loader.js';
-import { loadRomAssets, mulberry32 } from './dungeon-generator.js';
+import { loadRomAssets, mulberry32, scatterRoomLoot } from './dungeon-generator.js';
 
 // ── Source map ────────────────────────────────────────────────────────────
 
@@ -51,7 +51,8 @@ const SHOP_TO_CAVE = new Map([
   [0x20, 0x30],
   [0x47, 0x30],
   [0x44, 0x44],  // shop secret-pass → cave secret-pass (passable)
-  [0x45, 0x30],  // shop door-middle → cave floor (passable middle of spine)
+  [0x45, 0x44],  // shop door-middle → cave secret-pass (full false-ceiling
+                 //                    spine; v1.7.666 — was 0x30 floor)
   [0x68, 0x70],  // shop door-bottom → CAVE DOOR (open-on-touch)
   [0x1b, 0x01],  // shop door-top → cave rock (NOT ceiling — keeps the
                  // addOverhang "ceiling on 2 rocks" pattern intact for the
@@ -158,26 +159,21 @@ export function placeLockedRoom(tilemap, rom, anchorX, anchorY, rng, opts = {}) 
     }
   }
 
-  // Reserve cells the player walks through / lands on so chests + skeletons
-  // don't block them. With SHOP_ORIGIN_Y=0 the door spine lives at grid rows
-  // 8-10 col 4 (shop rows 8/9/10: secret-pass → cave 0x44, door-middle →
-  // cave 0x30, door-bottom → cave 0x70). Grid row 7 col 4 is the interior
-  // landing tile where the teleport-in lands the player. v1.7.661.
+  // Use the shared dungeon scatter system: chests go in corners
+  // (findCornerFloor — 2-wall test + near-bounds), skeletons go on random
+  // floor (findRandomFloor). Reserve the door-spine + landing cells so
+  // they're never picked. v1.7.666.
+  const scatterUsed = new Set();
   for (const [dr, dc] of [[7, 4], [8, 4], [9, 4], [10, 4]]) {
-    interior.delete(`${anchorX + dc},${anchorY + dr}`);
+    scatterUsed.add(`${anchorX + dc},${anchorY + dr}`);
   }
-
-  const pool = [...interior].map(s => { const [x, y] = s.split(',').map(Number); return { x, y }; });
-  for (let i = 0; i < chests && pool.length > 0; i++) {
-    const idx = Math.floor(rng() * pool.length);
-    const { x, y } = pool.splice(idx, 1)[0];
-    tilemap[y * 32 + x] = CHEST_TILE;
-  }
-  for (let i = 0; i < skeletons && pool.length > 0; i++) {
-    const idx = Math.floor(rng() * pool.length);
-    const { x, y } = pool.splice(idx, 1)[0];
-    tilemap[y * 32 + x] = BONES_TILE;
-  }
+  const bounds = {
+    top: anchorY, bot: anchorY + gh - 1,
+    left: anchorX, right: anchorX + gw - 1,
+  };
+  scatterRoomLoot(tilemap, rng, bounds, {
+    chests, skeletons, used: scatterUsed,
+  });
 
   return {
     interior,

@@ -441,7 +441,7 @@ function removeCeilingProtrusions(tilemap) {
 
 function isFloorTile(t) { return t === FLOOR || t === BONES; }
 
-function findRandomFloor(tilemap, rng, used, bounds) {
+export function findRandomFloor(tilemap, rng, used, bounds) {
   const candidates = [];
   for (let i = 0; i < 1024; i++) {
     if (!isFloorTile(tilemap[i])) continue;
@@ -561,7 +561,7 @@ function findInteriorFloor(tilemap, rng, used, bounds) {
   return candidates[Math.floor(rng() * candidates.length)];
 }
 
-function findCornerFloor(tilemap, rng, used, bounds) {
+export function findCornerFloor(tilemap, rng, used, bounds) {
   const candidates = [];
   for (let i = 0; i < 1024; i++) {
     if (!isFloorTile(tilemap[i])) continue;
@@ -596,6 +596,43 @@ function findCornerFloor(tilemap, rng, used, bounds) {
   }
   if (candidates.length === 0) return null;
   return candidates[Math.floor(rng() * candidates.length)];
+}
+
+/**
+ * Standard room-loot scatter: chests in corners (findCornerFloor — 2-wall
+ * test + nearness to bounds), skeletons on random floor (findRandomFloor).
+ * Used both by the per-chamber feature pass and by the standalone
+ * locked-room / secret-room map generators so all rooms use the same
+ * placement system. v1.7.666.
+ *
+ * @param {Uint8Array} tilemap
+ * @param {Function}   rng
+ * @param {object}     bounds  {top, bot, left, right}
+ * @param {object}     [opts]
+ * @param {number}     [opts.chests=0]
+ * @param {number}     [opts.skeletons=0]
+ * @param {Set}        [opts.used]  pre-seeded exclusion set; extended.
+ * @returns {{chests: Array, skeletons: Array, used: Set}}
+ */
+export function scatterRoomLoot(tilemap, rng, bounds, opts = {}) {
+  const { chests = 0, skeletons = 0, used = new Set() } = opts;
+  const placedChests = [];
+  const placedBones = [];
+  for (let i = 0; i < chests; i++) {
+    const pos = findCornerFloor(tilemap, rng, used, bounds);
+    if (!pos) break;
+    tilemap[pos.y * 32 + pos.x] = CHEST;
+    used.add(`${pos.x},${pos.y}`);
+    placedChests.push(pos);
+  }
+  for (let i = 0; i < skeletons; i++) {
+    const pos = findRandomFloor(tilemap, rng, used, bounds);
+    if (!pos) break;
+    tilemap[pos.y * 32 + pos.x] = BONES;
+    used.add(`${pos.x},${pos.y}`);
+    placedBones.push(pos);
+  }
+  return { chests: placedChests, skeletons: placedBones, used };
 }
 
 function findWallAdjacentFloor(tilemap, rng, used) {
