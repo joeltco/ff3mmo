@@ -2097,6 +2097,43 @@ function _generateFloor(romData, floorIndex, seed) {
     var endRowForUsed = 27;
     var chamberBounds = null;
 
+    // Locked-room chamber door — 50% chance. Anchored to ONE OF the middle
+    // rooms (5×5 rock puzzle room or 7×7 hub) — explicitly NOT the entry
+    // or exit chambers. Search the whole map for valid 5-rock-surround
+    // positions, then reject any that fall within the entry / exit zones.
+    // v1.7.679.
+    const LOCKED_DOOR_CHANCE_F3 = 0.5;
+    if (rng() < LOCKED_DOOR_CHANCE_F3) {
+      const entryMinX = entranceX - 4, entryMaxX = entranceX + 6;
+      const entryMinY = startFloorY - 5, entryMaxY = startFloorY + 2;
+      const exitMinX = Math.min(exitPathEndX, exitPathEndX + 4 * exitDir) - 2;
+      const exitMaxX = Math.max(exitPathEndX, exitPathEndX + 4 * exitDir) + 2;
+      const exitMinY = exitPathFloorY - 5, exitMaxY = exitPathFloorY + 2;
+      const inEntry = (x, y) => x >= entryMinX && x <= entryMaxX && y >= entryMinY && y <= entryMaxY;
+      const inExit  = (x, y) => x >= exitMinX  && x <= exitMaxX  && y >= exitMinY  && y <= exitMaxY;
+      const candidates = [];
+      for (let y = 2; y < 31; y++) {
+        for (let x = 1; x < 31; x++) {
+          if (inEntry(x, y) || inExit(x, y)) continue;
+          if (tilemap[y * 32 + x] !== WALL_ROCKY) continue;
+          if (tilemap[y * 32 + x - 1] !== WALL_ROCKY) continue;
+          if (tilemap[y * 32 + x + 1] !== WALL_ROCKY) continue;
+          if (tilemap[(y - 1) * 32 + x] !== WALL_ROCKY) continue;
+          if (tilemap[(y - 1) * 32 + x - 1] !== WALL_ROCKY) continue;
+          if (tilemap[(y - 1) * 32 + x + 1] !== WALL_ROCKY) continue;
+          const below = tilemap[(y + 1) * 32 + x];
+          if (below !== FLOOR && below !== BONES && below !== FALSE_CEILING) continue;
+          candidates.push({ x, y });
+        }
+      }
+      if (candidates.length > 0) {
+        const doorPos = candidates[Math.floor(rng() * candidates.length)];
+        placeChamberDoor(tilemap, doorPos.x, doorPos.y);
+        lockedRoomDoors.set(`${doorPos.x},${doorPos.y}`, { mapId: 1011 });
+        lockedDoors.add(`${doorPos.x},${doorPos.y}`);
+      }
+    }
+
   } else if (floorIndex === 3) {
     // ── Floor 4: Long corridor up → 5×5 room → paths left/right to side rooms ──
     // Entrance at bottom (placeDeepExit — same staircase block as floor 1 exit).
