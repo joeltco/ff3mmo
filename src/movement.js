@@ -7,8 +7,9 @@ import { transSt } from './transitions.js';
 import { inputSt, handleBattleInput, handleRosterInput, keys } from './input-handler.js';
 import { sprite } from './player-sprite.js';
 import { pauseSt, handlePauseInput } from './pause-menu.js';
-import { msgState, dismissMsgBox, showMsgBox } from './message-box.js';
+import { msgState, dismissMsgBox, showMsgBox, showMsgBoxPrompt } from './message-box.js';
 import { _nameToBytes } from './text-utils.js';
+import { hasItem, removeItem } from './inventory.js';
 import { isSearchActive, isSearchResolving, cancelPVPSearch } from './pvp-search.js';
 import { isInviteActive, isInviteResolving, cancelPartyInvite } from './party-invite.js';
 import { isTradeOffering, isTradePicking, cancelTrade, handleTradePickInput } from './trade.js';
@@ -274,10 +275,28 @@ function handleAction() {
   const shopId = findShopAtCounter(mapSt.currentMapId, facedX, facedY);
   if (shopId && openShop(shopId)) return;
 
-  // Locked door — A-press shows "Locked." (matches the bump message in
-  // startMove). v1.7.669.
+  // Locked door — if player has a Magic Key (0x98), prompt "Use MagicKey?
+  // A=Yes B=No" via the standard yes/no prompt. Accept → consume one key
+  // + remove coord from lockedDoors (door is now unlocked, next bump
+  // triggers the normal warp). Decline → cancel, door stays locked.
+  // No key in inventory → fall back to the v1.7.669 "Locked." message.
+  // v1.7.671.
   if (mapSt.lockedDoors && mapSt.lockedDoors.has(`${facedX},${facedY}`)) {
-    if (msgState.state === 'none') showMsgBox(_nameToBytes('Locked.'));
+    if (msgState.state !== 'none') return;
+    const doorKey = `${facedX},${facedY}`;
+    if (hasItem(0x98)) {
+      showMsgBoxPrompt(
+        _nameToBytes('Use MagicKey?'),
+        () => {
+          removeItem(0x98, 1);
+          mapSt.lockedDoors.delete(doorKey);
+          showMsgBox(_nameToBytes('Unlocked!'));
+        },
+        null,  // decline = silent cancel; box just slides out
+      );
+    } else {
+      showMsgBox(_nameToBytes('Locked.'));
+    }
     return;
   }
   if (facedTile === 0x7C)                                         { handleChest(facedX, facedY); return; }
