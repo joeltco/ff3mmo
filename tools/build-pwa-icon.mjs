@@ -54,7 +54,8 @@ const BORDER_GRID = [
 // ── Render helpers ─────────────────────────────────────────────────────────
 
 function makeBuffer(w, h) {
-  return Buffer.alloc(w * h * 3, 0);
+  // RGBA. Alpha 0 = fully transparent; we stamp opaque pixels as we draw.
+  return Buffer.alloc(w * h * 4, 0);
 }
 
 function blitTile(buf, w, _h, pixels, palette, dx, dy, { transparent0 = false, maxRows = 8 } = {}) {
@@ -64,8 +65,8 @@ function blitTile(buf, w, _h, pixels, palette, dx, dy, { transparent0 = false, m
       if (transparent0 && ci === 0) continue;
       const nes = palette[ci];
       const rgb = NES_SYSTEM_PALETTE[nes] || [0, 0, 0];
-      const off = ((dy + py) * w + (dx + px)) * 3;
-      buf[off] = rgb[0]; buf[off + 1] = rgb[1]; buf[off + 2] = rgb[2];
+      const off = ((dy + py) * w + (dx + px)) * 4;
+      buf[off] = rgb[0]; buf[off + 1] = rgb[1]; buf[off + 2] = rgb[2]; buf[off + 3] = 255;
     }
   }
 }
@@ -77,9 +78,13 @@ function renderSource(romData) {
   for (let i = 0; i < BORDER_TILE_COUNT; i++) {
     borderTiles.push(decodeTile(romData, BORDER_TILE_ROM + i * 16));
   }
+  // Border tiles: pixel 0 transparent so corner-rounding shows through, AND the
+  // outside-the-rounded-square corners become true alpha-0 (iOS home screen
+  // mask, system wallpaper, etc.). Fill tiles draw opaquely because their
+  // pixel 0 is in the interior, not the outer corner.
   for (let gy = 0; gy < 4; gy++) {
     for (let gx = 0; gx < 4; gx++) {
-      blitTile(buf, SRC_W, SRC_H, borderTiles[BORDER_GRID[gy][gx]], MENU_PALETTE, gx * 8, gy * 8);
+      blitTile(buf, SRC_W, SRC_H, borderTiles[BORDER_GRID[gy][gx]], MENU_PALETTE, gx * 8, gy * 8, { transparent0: true });
     }
   }
   // 2. Top 16×16 of the OK_IDLE sprite (4 body tiles, 2×2). Exact pixels
@@ -94,21 +99,21 @@ function renderSource(romData) {
 }
 
 function nearestScale(src, srcW, srcH, dstW, dstH) {
-  const dst = Buffer.alloc(dstW * dstH * 3);
+  const dst = Buffer.alloc(dstW * dstH * 4);
   const xScale = srcW / dstW, yScale = srcH / dstH;
   for (let y = 0; y < dstH; y++) {
     const sy = Math.min(srcH - 1, Math.floor(y * yScale));
     for (let x = 0; x < dstW; x++) {
       const sx = Math.min(srcW - 1, Math.floor(x * xScale));
-      const so = (sy * srcW + sx) * 3;
-      const dof = (y * dstW + x) * 3;
-      dst[dof] = src[so]; dst[dof + 1] = src[so + 1]; dst[dof + 2] = src[so + 2];
+      const so = (sy * srcW + sx) * 4;
+      const dof = (y * dstW + x) * 4;
+      dst[dof] = src[so]; dst[dof + 1] = src[so + 1]; dst[dof + 2] = src[so + 2]; dst[dof + 3] = src[so + 3];
     }
   }
   return dst;
 }
 
-// ── PNG encoder (truecolor RGB, no alpha) — borrowed from render-oam-dump.js
+// ── PNG encoder (truecolor RGBA) — derived from render-oam-dump.js, alpha added
 function crc32(buf) {
   if (!crc32.table) {
     const t = new Uint32Array(256);
@@ -129,19 +134,19 @@ function chunk(type, data) {
   const crc = Buffer.alloc(4); crc.writeUInt32BE(crc32(Buffer.concat([typeBuf, data])), 0);
   return Buffer.concat([len, typeBuf, data, crc]);
 }
-function encodePNG(rgb, w, h) {
-  const stride = w * 3;
+function encodePNG(rgba, w, h) {
+  const stride = w * 4;
   const filtered = Buffer.alloc((stride + 1) * h);
   for (let y = 0; y < h; y++) {
     filtered[y * (stride + 1)] = 0;
-    Buffer.from(rgb.subarray(y * stride, y * stride + stride)).copy(filtered, y * (stride + 1) + 1);
+    Buffer.from(rgba.subarray(y * stride, y * stride + stride)).copy(filtered, y * (stride + 1) + 1);
   }
   const idat = zlib.deflateSync(filtered);
   const ihdr = Buffer.alloc(13);
   ihdr.writeUInt32BE(w, 0);
   ihdr.writeUInt32BE(h, 4);
   ihdr[8] = 8;     // bit depth
-  ihdr[9] = 2;     // color type = truecolor RGB
+  ihdr[9] = 6;     // color type = truecolor RGBA
   ihdr[10] = 0;    // compression
   ihdr[11] = 0;    // filter
   ihdr[12] = 0;    // interlace
