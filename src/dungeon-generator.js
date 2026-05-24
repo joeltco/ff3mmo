@@ -817,23 +817,26 @@ function placeSecretPath(tilemap, startRow, endRow, floorIndex, rng, exitX) {
     // Chest alcove ceiling nudged up 1 tile. Always 2 $01 under $00.
     const rw = 7;
     const rx = secretGoLeft ? 0 : (32 - rw);
-    // v1.7.653: ry=25 — moved up 1 from v1.7.651's 26 so the bottom
-    // overhang at fy+2 = 31 fits the map (overhang at 32 was being lost).
-    // Net buffer above main floor (row 21) is still 3 rows (22-24).
-    const ry = 25;
-    const fy = ry + 4; // floor row = 29
+    // v1.7.663: ry restored to 24 (original) so the bottom keeps BOTH
+    // overhang rows (fy+2=30, fy+3=31). The v1.7.651 bump to 25/26 lost
+    // the 2nd overhang and left the ceiling cap with only 1 rock under it
+    // (violates the "ceiling on 2 rocks" cave convention).
+    const ry = 24;
+    const fy = ry + 4; // floor row = 28
 
     // Column mapping: c(0)=entrance → c(6)=back wall
     const entCol = secretGoLeft ? rx + rw - 1 : rx;
     const step = secretGoLeft ? -1 : 1;
     const c = i => entCol + step * i;
 
-    // Bottom: all 7 columns get ceiling below + 1-row overhang.
-    // v1.7.651: dropped the 2nd overhang row (was `(fy+3)*32+c(i)`) — with
-    // ry=26 it would land at row 33 and overflow the 32-row map.
+    // Bottom: all 7 columns get ceiling below + 2-row overhang. v1.7.663
+    // restored the 2nd overhang row (fy+3) — at ry=24 it lands at row 31
+    // which is the last valid map row. Required so the ceiling cap row at
+    // fy+1 has 2 rocks below it (cave wall convention).
     for (let i = 0; i < rw; i++) {
       tilemap[(fy + 1) * 32 + c(i)] = CEILING;
       tilemap[(fy + 2) * 32 + c(i)] = WALL_ROCKY;
+      tilemap[(fy + 3) * 32 + c(i)] = WALL_ROCKY;
     }
 
     // Entrance column (i=0): all ceiling above $44 (hides the secret)
