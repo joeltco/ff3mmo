@@ -18,6 +18,32 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.642 — 2026-05-24
+
+### Altar Cave floor 1 (UI floor 2) — trap polish
+
+Trap-chamber floor (`floors[1]` in `dungeon-generator.js`) had two
+issues that combined to make the entry pathway feel unfair:
+
+1. **Trap placement required all 4 orthogonal neighbors to be floor**
+   ("1 tile from any wall"). The trap chambers are narrow — this
+   left very few candidate tiles, so seeds often under-spawned and
+   the few traps that did land clustered in the chamber center.
+   Removed. Traps may now sit against a wall.
+
+2. **Entrance exclusion was a vertical column only** — the entry
+   passage above the entrance was protected, but the first few tiles
+   the player steps onto in the chamber proper weren't. A trap on
+   tile (entranceX, entranceY+1) or one immediately to either side
+   could drop the player to the next floor before they'd taken two
+   steps. Expanded to a 5-wide × 7-tall box around the entrance so
+   the landing AND first strides stay clear.
+
+Files:
+- `src/dungeon-generator.js` (trap placement block around line 2570)
+  — removed the `neighbors.every(...)` check; expanded the entrance
+  `trapUsed` seed from the 1-column loop to a 5×7 nested loop.
+
 ## 1.7.641 — 2026-05-24
 
 ### Fix: chat-log back-out now uses NES B-button (`x`), not literal `b`
