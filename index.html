@@ -4,6 +4,21 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>FF3 MMO</title>
+  <!--
+    PWA manifest + iOS "Add to Home Screen" meta tags (v1.7.632).
+    When a user adds ff3mmo to their iOS Home Screen, Safari opens it
+    standalone (no Safari chrome) AND — importantly — promotes its
+    IndexedDB from "best-effort" to "durable", which is what
+    `navigator.storage.persist()` cannot do for plain Safari. See
+    `feedback_ff3mmo_storage_gesture_rule.md` for the storage-eviction
+    history; storage-beacons table for live ratio.
+  -->
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#c8a832">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="FF3 MMO">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">

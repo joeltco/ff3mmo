@@ -1,0 +1,13 @@
+{
+  "name": "FF3 MMO",
+  "short_name": "FF3 MMO",
+  "description": "NES Final Fantasy III, multiplayer.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0e0e1a",
+  "theme_color": "#c8a832",
+  "categories": ["games", "entertainment"],
+  "icons": []
+}

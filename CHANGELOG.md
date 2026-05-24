@@ -18,6 +18,38 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.632 — 2026-05-24
+
+### iOS PWA manifest — enable durable storage via Add-to-Home-Screen
+
+The first real `/api/storage-beacon` capture from v1.7.631 was iOS Safari
+26.3 returning DENIED for `navigator.storage.persist()`. That's canon
+behavior: iOS Safari only grants persistence to PWAs installed via Add
+to Home Screen.
+
+Ships a minimal PWA manifest + iOS meta tags so users who tap Share →
+Add to Home Screen get:
+- Standalone display (no Safari chrome — full-screen game)
+- Durable IndexedDB (ROM cache + saves no longer evicted)
+- A real-app icon on their Home Screen
+- Status bar styled for the gold-on-dark palette
+
+Files:
+- `manifest.json` (NEW) — `name`, `short_name`, `start_url`, `scope`,
+  `display: standalone`, `theme_color: #c8a832`, `background_color: #0e0e1a`.
+  Icons array is empty for now — iOS uses a screenshot of the gate splash
+  as the Home Screen tile until a real 180×180 PNG ships.
+- `index.html` `<head>` — `<link rel="manifest">` plus
+  `apple-mobile-web-app-capable`, `apple-mobile-web-app-status-bar-style`,
+  `apple-mobile-web-app-title`, `theme-color`.
+
+server.js MIME map already serves `.json` as `application/json`, which
+Chrome and Safari both accept for manifests.
+
+No effect on plain Safari / Firefox / Chrome — they ignore the iOS
+meta tags. Storage-beacon ratio will surface whether installation rate
+follows.
+
 ## 1.7.631 — 2026-05-23
 
 ### Telemetry — `navigator.storage.persist()` outcome beacon
