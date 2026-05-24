@@ -18,6 +18,28 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.661 — 2026-05-24
+
+### Restore FULL 11-row magic shop replica (v1.7.651 trim was wrong)
+
+v1.7.651 trimmed the magic shop from 11 rows down to 7 (took only shop
+rows 4-10) to "fit better with void buffer." That cut off shop rows
+0-3 — the topmost ceiling slab AND the first interior floor row.
+User caught it as "half the room missing."
+
+Restored to full shop:
+- `SHOP_ORIGIN_Y` 4 → 0, `SHOP_H` 7 → 11 (whole upper-room interior).
+- Door spine in `placeLockedRoom` reservation back to grid rows 8-10
+  col 4, interior landing at grid row 7.
+- Floor-0 hook anchor Y 24 → 21 so the full 11-row replica fits
+  (spans rows 21-31). Replica door at anchorY+10, replica entry at
+  anchorY+7. The replica's X range (cols 1-9 or 22-30) doesn't
+  collide with chambers (cols 4-14 / 17-27), so the rows 21-23
+  overlap with chamber Y range is harmless — different X bands.
+
+Verified seeds 1-12: full octagonal magic shop visible in the
+correct corner, door surround still all-rock on 5 sides.
+
 ## 1.7.660 — 2026-05-24
 
 ### Replica + secret room — auto-avoid collision (opposite corner)

@@ -24,15 +24,14 @@ import { loadMap } from './map-loader.js';
 // ── Source map ────────────────────────────────────────────────────────────
 
 const MAGIC_SHOP_MAP_ID = 3;
-const SHOP_ORIGIN_X = 0;  // upper-left corner of the shop interior slice
-// Take the BOTTOM 7 rows of the shop (rows 4-10 in map 3) — the lower diamond
-// half + door corridor. Trimming off the top 4 rows (the topmost ceiling slab)
-// frees vertical room so the replica can be anchored deeper in the dungeon
-// tilemap, putting more void buffer between the host chamber and the replica.
-// v1.7.651 (was full 11-row interior at SHOP_ORIGIN_Y=0).
-const SHOP_ORIGIN_Y = 4;
+const SHOP_ORIGIN_X = 0;
+// FULL magic shop interior — rows 0-10, all 11 rows. v1.7.661 restored
+// after v1.7.651's bottom-only trim was caught as "half the room missing".
+// Anchor placement (caller's responsibility) needs to allow 11 rows below
+// the chamber; the floor-0 hook anchors at Y=21 (spans rows 21-31).
+const SHOP_ORIGIN_Y = 0;
 const SHOP_W = 9;
-const SHOP_H = 7;
+const SHOP_H = 11;
 
 // Shop tileset (5) → cave tileset (0) translation. The magic shop's door
 // is a 3-tile passable SPINE — secret-pass on top (0x44), door-middle in
@@ -156,10 +155,11 @@ export function placeLockedRoom(tilemap, rom, anchorX, anchorY, rng, opts = {}) 
   }
 
   // Reserve cells the player walks through / lands on so chests + skeletons
-  // can't block them. Grid rows 4-6 col 4 are the door spine (secret-pass /
-  // floor / door); grid row 3 col 4 is the interior landing tile where the
-  // teleport-in lands the player. v1.7.658.
-  for (const [dr, dc] of [[3, 4], [4, 4], [5, 4], [6, 4]]) {
+  // don't block them. With SHOP_ORIGIN_Y=0 the door spine lives at grid rows
+  // 8-10 col 4 (shop rows 8/9/10: secret-pass → cave 0x44, door-middle →
+  // cave 0x30, door-bottom → cave 0x70). Grid row 7 col 4 is the interior
+  // landing tile where the teleport-in lands the player. v1.7.661.
+  for (const [dr, dc] of [[7, 4], [8, 4], [9, 4], [10, 4]]) {
     interior.delete(`${anchorX + dc},${anchorY + dr}`);
   }
 

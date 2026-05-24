@@ -2793,18 +2793,18 @@ function _generateFloor(romData, floorIndex, seed) {
 
             // Place door + replica together — if no replica fits, skip both
             // (a chamber door with nowhere to teleport is worse than none).
+            // Anchor Y=21 with the full 11-row replica → spans rows 21-31.
+            // Replica door spine at grid rows 8-10 col 4, interior landing
+            // at grid row 7 col 4 (shop row 7's interior floor). v1.7.661.
             if (replicaAnchorX !== null) {
-              const replicaAnchorY = 24;
+              const replicaAnchorY = 21;
               placeChamberDoor(tilemap, doorPos.x, doorPos.y);
               placeLockedRoom(tilemap, romData, replicaAnchorX, replicaAnchorY, rng, {
                 chests: 2, skeletons: 3,
               });
-              // Save door coords for the trigger-wiring pass below (runs
-              // after processTriggerTiles for trigId lookup). Replica entry
-              // = interior floor at grid row 3 / shop row 7.
               lockedRoomChamberDoor  = { x: doorPos.x, y: doorPos.y };
-              lockedRoomReplicaDoor  = { x: replicaAnchorX + 4, y: replicaAnchorY + 6 };
-              lockedRoomReplicaEntry = { x: replicaAnchorX + 4, y: replicaAnchorY + 3 };
+              lockedRoomReplicaDoor  = { x: replicaAnchorX + 4, y: replicaAnchorY + 10 };
+              lockedRoomReplicaEntry = { x: replicaAnchorX + 4, y: replicaAnchorY + 7 };
             }
           }
         }
