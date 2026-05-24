@@ -2572,15 +2572,8 @@ function _generateFloor(romData, floorIndex, seed) {
     let trapsPlaced = 0;
     const trapUsed = new Set();
     trapUsed.add(`${entranceX},${entranceY}`);
-    // 5×7 landing zone around the entrance — covers the entry passage column
-    // AND the first few strides into the chamber so traps don't drop the
-    // player back to the next floor before they can look around. v1.7.642
-    // (was: vertical column only — left landing tiles unprotected).
-    for (let dy = -3; dy <= 3; dy++) {
-      for (let dx = -2; dx <= 2; dx++) {
-        const ex = entranceX + dx, ey = entranceY + dy;
-        if (ex >= 0 && ex < 32 && ey >= 0 && ey < 32) trapUsed.add(`${ex},${ey}`);
-      }
+    for (let dy = -3; dy <= 1; dy++) {
+      if (entranceY + dy >= 0) trapUsed.add(`${entranceX},${entranceY + dy}`);
     }
     // Block actual feature positions (not their exclusion zones)
     for (let i = 0; i < 1024; i++) {
@@ -2594,17 +2587,19 @@ function _generateFloor(romData, floorIndex, seed) {
       ? config.traps[0] + Math.floor(rng() * (config.traps[1] - config.traps[0] + 1))
       : config.traps;
     for (let i = 0; i < trapCount; i++) {
-      // Build candidates: floor tiles inside chamber, not in trapUsed.
-      // v1.7.642 dropped the "all 4 neighbors must be floor" rule — chambers
-      // here are tight enough that requiring 1-tile-from-every-wall left very
-      // few candidates, which is why seeds were under-spawning. Traps may now
-      // sit against a wall; entrance/passage protection comes from trapUsed.
+      // Build candidates: floor tiles inside chamber, not in trapUsed, all 4 neighbors also floor
       const trapCandidates = [];
       for (let ti = 0; ti < 1024; ti++) {
         if (!isFloorTile(tilemap[ti])) continue;
         const tx = ti % 32, ty = (ti - tx) / 32;
         if (trapUsed.has(`${tx},${ty}`)) continue;
         if (chamberBounds && (ty < chamberBounds.top || ty > chamberBounds.bot || tx < chamberBounds.left || tx > chamberBounds.right)) continue;
+        // All 4 orthogonal neighbors must be floor (1 tile from any wall)
+        const neighbors = [[0,1],[0,-1],[1,0],[-1,0]];
+        if (!neighbors.every(([dx,dy]) => {
+          const nx = tx+dx, ny = ty+dy;
+          return nx >= 0 && nx < 32 && ny >= 0 && ny < 32 && isFloorTile(tilemap[ny*32+nx]);
+        })) continue;
         trapCandidates.push({ x: tx, y: ty });
       }
       const pos = trapCandidates.length > 0 ? trapCandidates[Math.floor(rng() * trapCandidates.length)] : null;
