@@ -2609,8 +2609,11 @@ function _generateFloor(romData, floorIndex, seed) {
       if (pos) {
         tilemap[pos.y * 32 + pos.x] = TRAP_HOLE;
         hiddenTraps.add(`${pos.x},${pos.y}`);
-        for (let dy = -3; dy <= 3; dy++) {
-          for (let dx = -3; dx <= 3; dx++) {
+        // 1-tile inter-trap spacing (3×3 box). v1.7.648 — was 3-tile (7×7),
+        // which ate most of the small trap chambers and capped seeds at 1-2
+        // traps vs the [3, 5] config target.
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
             trapUsed.add(`${pos.x + dx},${pos.y + dy}`);
           }
         }
