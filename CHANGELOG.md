@@ -18,6 +18,31 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.651 — 2026-05-24
+
+### Side rooms — push down for void buffer (not visible from main floor)
+
+Both the locked-room replica and the pre-existing secret-corridor room
+sat too close to the chamber bottom (row ~21) — visible in the main-
+floor camera when the player walked the south end of a chamber.
+
+**Replica trim + bump:** `SHOP_ORIGIN_Y` 0 → 4 and `SHOP_H` 11 → 7,
+so the placed replica is now the bottom 7 rows of the magic shop (the
+lower diamond half + door corridor). Anchor row in floor 0 bumped
+20 → 25. Result: replica spans rows 25-31 with 3 rows of clear void
+(22-24) between it and the chamber bottom. Door-spine cell offsets
+updated to grid rows 4-6 (was 8-10) for the entry-tile reservation.
+
+**Secret room bump:** `placeSecretPath` `ry` 24 → 26, dropping the
+2nd overhang row to fit in the remaining 32-row map (overhang at
+`fy+3` = 33 would overflow). Now spans rows 26-31 with 2-row void
+buffer above.
+
+Files:
+- `src/dungeon-locked-room.js` — slice constants + door-cell offsets
+- `src/dungeon-generator.js` — replica anchor Y 20 → 25; secret room
+  ry 24 → 26 + dropped 2nd overhang row
+
 ## 1.7.650 — 2026-05-24
 
 ### Locked-room door — rock on all 3 sides + late-pass hook

@@ -817,19 +817,24 @@ function placeSecretPath(tilemap, startRow, endRow, floorIndex, rng, exitX) {
     // Chest alcove ceiling nudged up 1 tile. Always 2 $01 under $00.
     const rw = 7;
     const rx = secretGoLeft ? 0 : (32 - rw);
-    const ry = 24;
-    const fy = ry + 4; // floor row = 28
+    // v1.7.651: bumped from ry=24 → ry=26 to add 2 rows of void buffer
+    // between the chamber bottom and the secret room's top edge (was
+    // visible from the main floor camera). Overhang drops the 2nd rocky
+    // row (line 832) since fy+3 = 33 would be off-map.
+    const ry = 26;
+    const fy = ry + 4; // floor row = 30
 
     // Column mapping: c(0)=entrance → c(6)=back wall
     const entCol = secretGoLeft ? rx + rw - 1 : rx;
     const step = secretGoLeft ? -1 : 1;
     const c = i => entCol + step * i;
 
-    // Bottom: all 7 columns get ceiling below + 2-row overhang
+    // Bottom: all 7 columns get ceiling below + 1-row overhang.
+    // v1.7.651: dropped the 2nd overhang row (was `(fy+3)*32+c(i)`) — with
+    // ry=26 it would land at row 33 and overflow the 32-row map.
     for (let i = 0; i < rw; i++) {
       tilemap[(fy + 1) * 32 + c(i)] = CEILING;
       tilemap[(fy + 2) * 32 + c(i)] = WALL_ROCKY;
-      tilemap[(fy + 3) * 32 + c(i)] = WALL_ROCKY;
     }
 
     // Entrance column (i=0): all ceiling above $44 (hides the secret)
@@ -2733,8 +2738,12 @@ function _generateFloor(romData, floorIndex, seed) {
 
             // Standalone magic-shop replica in the bottom corner opposite
             // Room B (B on right → bottom-left, B on left → bottom-right).
+            // Anchor Y=25 with a 7-row replica → spans rows 25-31, leaving
+            // 5 rows of void buffer (20-24) between the chamber bottom (~19)
+            // and the replica's top, so the side room isn't visible from the
+            // main floor camera. v1.7.651.
             const replicaAnchorX = aOnRight ? 22 : 1;
-            const replicaAnchorY = 20;
+            const replicaAnchorY = 25;
             placeLockedRoom(tilemap, romData, replicaAnchorX, replicaAnchorY, rng, {
               chests: 2, skeletons: 3,
             });

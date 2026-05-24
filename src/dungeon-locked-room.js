@@ -24,10 +24,15 @@ import { loadMap } from './map-loader.js';
 // ── Source map ────────────────────────────────────────────────────────────
 
 const MAGIC_SHOP_MAP_ID = 3;
-const SHOP_ORIGIN_X = 0;  // upper-left corner of the shop interior in map 3
-const SHOP_ORIGIN_Y = 0;
-const SHOP_W = 9;         // shop interior width in tiles
-const SHOP_H = 11;        // shop interior height in tiles
+const SHOP_ORIGIN_X = 0;  // upper-left corner of the shop interior slice
+// Take the BOTTOM 7 rows of the shop (rows 4-10 in map 3) — the lower diamond
+// half + door corridor. Trimming off the top 4 rows (the topmost ceiling slab)
+// frees vertical room so the replica can be anchored deeper in the dungeon
+// tilemap, putting more void buffer between the host chamber and the replica.
+// v1.7.651 (was full 11-row interior at SHOP_ORIGIN_Y=0).
+const SHOP_ORIGIN_Y = 4;
+const SHOP_W = 9;
+const SHOP_H = 7;
 
 // Shop tileset (5) → cave tileset (0) translation. Wall + secret-pass tiles
 // share IDs across the two tilesets (00, 01, 44, 5f), so they pass through.
@@ -144,14 +149,12 @@ export function placeLockedRoom(tilemap, rom, anchorX, anchorY, rng, opts = {}) 
     }
   }
 
-  // Reserve the door-entry tile (the floor directly inside the shop's door,
-  // which in the shop interior at (4, 8) → (4, 9) translated through the
-  // tileset = the secret-pass tile and the floor above it). Skip the secret
-  // tile itself + the tile above so chests don't sit in the doorway path.
-  // Door coords inside the grid: door tile at row 10 col 4, entry floor at
-  // row 9 col 4, secret-pass at row 8 col 4. Strip any of these from the
-  // chest pool.
-  for (const [dr, dc] of [[8, 4], [9, 4], [10, 4]]) {
+  // Reserve the door-spine cells so chests / skeletons can't sit on them
+  // (would block the player walking out of the room through the door).
+  // After the SHOP_ORIGIN_Y=4 slice the door cells are at grid rows 4-6 col
+  // 4 (shop's original rows 8-10 col 4: secret-pass, door-middle, door-bottom
+  // → all translated to 0x44 in the cave tileset). v1.7.651.
+  for (const [dr, dc] of [[4, 4], [5, 4], [6, 4]]) {
     interior.delete(`${anchorX + dc},${anchorY + dr}`);
   }
 
