@@ -18,6 +18,39 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.650 — 2026-05-24
+
+### Locked-room door — rock on all 3 sides + late-pass hook
+
+Two fixes to the v1.7.649 chamber-door placement:
+
+1. **Door surrounded by rock on top + left + right.** `findChamberDoorPos`
+   now requires ROCK (0x01) specifically at the door tile, both flanking
+   tiles along the wall axis, AND the tile directly above. Previously the
+   flank check accepted any wall (rock OR ceiling), which let the door
+   land between ceiling tiles.
+
+2. **Locked-room hook moved to after the final `enforceMinCeilingGap`.**
+   The 0x44 false-ceiling door tile counts as ceiling for the gap-fill
+   pass, which was promoting the rock above the door back to ceiling
+   (1-tile gap between chamber's top-ceiling row and the door = "short
+   gap"). Hook now runs at the end of floor-0 wall finalization (after
+   line ~2752) so nothing can disturb the placement.
+
+`roomTop` / `roomBot` / `aOnRight` / `bHalf` in the floor-0 block hoisted
+to `var` so the late hook can see them.
+
+Files:
+- `src/dungeon-locked-room.js` — tightened `findChamberDoorPos` rock
+  check; removed the rock-above force-modify from `placeChamberDoor`.
+- `src/dungeon-generator.js` — early locked-room block deleted; new
+  block placed inside the `floorIndex === 0` post-finalization branch
+  at line ~2752; layout vars hoisted.
+
+Spot-check seeds 1-8 all land doors at (x, 7) with rock above + left +
+right. Locked-room replica placement edge-cases (seed 2 overlap with
+existing bottom-cluster) still TODO.
+
 ## 1.7.649 — 2026-05-24
 
 ### Locked-room mechanic — door teleports + standalone magic-shop replica

@@ -178,9 +178,9 @@ export function placeLockedRoom(tilemap, rom, anchorX, anchorY, rng, opts = {}) 
  * the same false-ceiling 0x44 the locked room's interior uses — the engine
  * treats it as walkable false ceiling, and a future map-trigger registration
  * will fire the teleport-to-locked-room transition when the player steps
- * onto it. Walls flanking the door coord are NOT modified by this call;
- * `findChamberDoorPos` is responsible for picking a coord that already has
- * walls on each side along the wall axis.
+ * onto it. Walls flanking the door coord (and the tile above it) are NOT
+ * modified — `findChamberDoorPos` is responsible for picking a coord that
+ * already satisfies the surround-with-walls invariant.
  *
  * @param {Uint8Array} tilemap
  * @param {number} doorX
@@ -216,10 +216,20 @@ export function findChamberDoorPos(tilemap, side, opts = {}) {
   if (side === 'north') {
     // Walk top-down; pick the topmost row with any viable candidate so the
     // door sits on the chamber's actual north edge (not an interior wall).
+    // Requirements at (x, y):
+    //   - itself must be ROCK (0x01) specifically — will be overwritten
+    //     with the door tile
+    //   - flanks (x-1, y) and (x+1, y) must BOTH be rock (the door has rock
+    //     walls left + right — not bare ceiling)
+    //   - ABOVE (x, y-1) must also be rock (door set into a wall, not
+    //     punched through a ceiling)
+    //   - BELOW (x, y+1) must be walkable floor (chamber-interior side)
     for (let y = yMin; y <= yMax; y++) {
       for (let x = xMin; x <= xMax; x++) {
-        if (!_isWall(tilemap[y * 32 + x])) continue;
-        if (!_isWall(tilemap[y * 32 + x - 1]) || !_isWall(tilemap[y * 32 + x + 1])) continue;
+        if (tilemap[y * 32 + x] !== ROCK_TILE) continue;
+        if (tilemap[y * 32 + x - 1] !== ROCK_TILE) continue;
+        if (tilemap[y * 32 + x + 1] !== ROCK_TILE) continue;
+        if (tilemap[(y - 1) * 32 + x] !== ROCK_TILE) continue;
         if (!_isWalkable(tilemap[(y + 1) * 32 + x])) continue;
         candidates.push({ x, y });
       }

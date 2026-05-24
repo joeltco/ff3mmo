@@ -1389,14 +1389,17 @@ function _generateFloor(romData, floorIndex, seed) {
     // the snake. addOverhang then lays 2 rocky tiles under every ceiling, which
     // also eats the 5-tall neck down to a 1-tile-tall walkable corridor. Outside
     // stays FILL_VOID — the floor-0 "outside" look.
-    const roomTop = 5, roomBot = 19;
-    const aOnRight = rng() < 0.5;
+    // `var` hoist for floor-0 layout constants so the late locked-room hook
+    // (placed after the final enforceMinCeilingGap so its 0x44 door can't
+    // get gap-filled back to ceiling) can see them. v1.7.650.
+    var roomTop = 5, roomBot = 19;
+    var aOnRight = rng() < 0.5;
     const aAnchor = aOnRight ? 22 : 9;   // Room A (entry)
     const bAnchor = aOnRight ? 9 : 22;   // Room B (exit) — opposite side
     const ROOM_W = 8;
     const RIGHT_HALF = [17, 27], LEFT_HALF = [4, 14];
     const aHalf = aOnRight ? RIGHT_HALF : LEFT_HALF;
-    const bHalf = aOnRight ? LEFT_HALF : RIGHT_HALF;
+    var bHalf = aOnRight ? LEFT_HALF : RIGHT_HALF;
 
     // Inside-shape mask: organic outline for each room, clamped to its half so
     // they don't overlap, unioned together.
@@ -1509,54 +1512,13 @@ function _generateFloor(romData, floorIndex, seed) {
       return right >= left ? { top, bot, left, right } : { top: roomTop, bot: roomBot, left: 1, right: 30 };
     })();
 
-    // Locked-room hook (v1.7.649) — teleport door on Room B's north wall +
-    // a standalone magic-shop replica room in a free area of the tilemap.
-    // The two are NOT physically connected; the door tile is the teleport
-    // entry (teleport wiring TODO — currently debug-unlocked / walkable).
-    // Door X is constrained to the "2nd half" of Room B's column range =
-    // the south half's columns (the half that contains the exit).
-    // `var` hoists `lockedRoomExclusion` into the feature-pass scope below.
-    var lockedRoomExclusion = null;
-    {
-      const southMidY = Math.floor((roomTop + roomBot) / 2);
-      const southCols = new Set();
-      for (let y = southMidY; y <= roomBot; y++) {
-        for (let x = bHalf[0]; x <= bHalf[1]; x++) {
-          if (isFloorTile(tilemap[y * 32 + x])) southCols.add(x);
-        }
-      }
-      if (southCols.size > 0) {
-        const sxs = [...southCols];
-        const xMin = Math.min(...sxs), xMax = Math.max(...sxs);
-        // yRange max is roomTop + 3 — `roomTop` is a top-of-area constant, the
-        // actual chamber north wall sits ~2-3 rows below it after addOverhang.
-        const doorPos = findChamberDoorPos(tilemap, 'north', {
-          xRange: { min: xMin, max: xMax },
-          yRange: { min: 1, max: roomTop + 3 },
-          rng,
-        });
-        if (doorPos) {
-          // Teleport-entry tile on the chamber wall.
-          placeChamberDoor(tilemap, doorPos.x, doorPos.y);
-
-          // Standalone magic-shop replica in a free area. Replica is 9×11;
-          // chambers fill rows 5-19, leaving rows 20-30 mostly empty. Anchor
-          // to the corner opposite Room B (B on right → bottom-left, B on
-          // left → bottom-right).
-          const replicaAnchorX = aOnRight ? 22 : 1;
-          const replicaAnchorY = 20;
-          const lrUsed = new Set();
-          // Mark the chamber door + its approach tile so the cave-wide
-          // chest scatter can't block reach to the door.
-          lrUsed.add(`${doorPos.x},${doorPos.y}`);
-          lrUsed.add(`${doorPos.x},${doorPos.y + 1}`);
-          const result = placeLockedRoom(tilemap, romData, replicaAnchorX, replicaAnchorY, rng, {
-            chests: 2, skeletons: 3, used: lrUsed,
-          });
-          if (result) lockedRoomExclusion = lrUsed;
-        }
-      }
-    }
+    // Locked-room hook is now LATE — after the final enforceMinCeilingGap
+    // pass at line ~2752, so its 0x44 false-ceiling door can't trigger the
+    // gap-fill that converts the rock above the door back to ceiling.
+    // `lockedRoomExclusion` is hoisted to the feature-pass scope; chest /
+    // skeleton scatter at line 2491+ runs BEFORE the late hook, so it can't
+    // collide with the room-to-be either way (room interior + door land in
+    // the free corner the cave never spawns features in).
 
   } else if (floorIndex === 1) {
     // ── Floor 1: floor-2 architecture, trap-chamber half only ──────────
@@ -2553,13 +2515,6 @@ function _generateFloor(romData, floorIndex, seed) {
           if (xx >= 0 && xx < 32) used.add(`${xx},${yy}`);
         }
       }
-      // Locked-room exclusion is owned by the dungeon-locked-room module;
-      // tag it here so the cave-wide chest / skeleton scatter can't pull
-      // a tile inside the locked chamber, on the door, or on the approach
-      // tile in front of the door (which would block reach to the door).
-      if (typeof lockedRoomExclusion !== 'undefined' && lockedRoomExclusion) {
-        for (const k of lockedRoomExclusion) used.add(k);
-      }
     }
 
     // Stairs down — floor 0 uses exit block, deeper floors use farthest floor
@@ -2751,6 +2706,41 @@ function _generateFloor(romData, floorIndex, seed) {
       // Secret corridors can open ceiling gaps — reclose + reconnect.
       enforceMinCeilingGap(tilemap);
       ensureCeilingConnectivity(tilemap);
+
+      // Locked-room hook — runs AFTER the final enforceMinCeilingGap pass so
+      // the 0x44 false-ceiling door tile doesn't trigger gap-fill on the rock
+      // above it. v1.7.650. Door X is in the "2nd half" of Room B's column
+      // range = south-half columns (the half with the exit). Door Y is the
+      // chamber's actual north wall (rock with rock above + rock flanking).
+      {
+        const southMidY = Math.floor((roomTop + roomBot) / 2);
+        const southCols = new Set();
+        for (let y = southMidY; y <= roomBot; y++) {
+          for (let x = bHalf[0]; x <= bHalf[1]; x++) {
+            if (isFloorTile(tilemap[y * 32 + x])) southCols.add(x);
+          }
+        }
+        if (southCols.size > 0) {
+          const sxs = [...southCols];
+          const xMin = Math.min(...sxs), xMax = Math.max(...sxs);
+          const doorPos = findChamberDoorPos(tilemap, 'north', {
+            xRange: { min: xMin, max: xMax },
+            yRange: { min: 1, max: roomTop + 3 },
+            rng,
+          });
+          if (doorPos) {
+            placeChamberDoor(tilemap, doorPos.x, doorPos.y);
+
+            // Standalone magic-shop replica in the bottom corner opposite
+            // Room B (B on right → bottom-left, B on left → bottom-right).
+            const replicaAnchorX = aOnRight ? 22 : 1;
+            const replicaAnchorY = 20;
+            placeLockedRoom(tilemap, romData, replicaAnchorX, replicaAnchorY, rng, {
+              chests: 2, skeletons: 3,
+            });
+          }
+        }
+      }
 
       // Guarantee ONE connected main-floor ceiling snake. A secret corridor can
       // cut a room's perimeter off the entrance snake; bridge it back by
