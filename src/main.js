@@ -23,6 +23,7 @@ import { titleSt } from './title-screen.js';
 import { pauseSt, initPauseMenuInput } from './pause-menu.js';
 import { transSt } from './transitions.js';
 import { initInputHandler, initKeyboardListeners } from './input-handler.js';
+import { initGamepadListeners } from './gamepad.js';
 import { initPVPSearch } from './pvp-search.js';
 import { shopSt } from './shop.js';
 import { setPlayerSprite } from './player-sprite.js';
@@ -157,6 +158,7 @@ export function init() {
   ui.canvas = canvas; ui.ctx = ctx;
 
   initKeyboardListeners();
+  initGamepadListeners();
   window.addEventListener('beforeunload', () => { saveSlotsToDB(); });
 
   // Unlock audio on the first user gesture (mobile autoplay policy). One-shot:

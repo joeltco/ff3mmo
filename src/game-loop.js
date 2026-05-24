@@ -10,6 +10,7 @@ import { ps } from './player-stats.js';
 import { sprite } from './player-sprite.js';
 import { waterSt, tickWater } from './water-animation.js';
 import { updateChat, updateChatTabs, drawChat, drawChatTabs, drawChatTabCursor, isDev, consoleLog } from './chat.js';
+import { pollGamepad } from './gamepad.js';
 import { rosterBattleFade, updateRoster, drawRoster, drawRosterMenu } from './roster.js';
 import { tickPVPSearch } from './pvp-search.js';
 import { tickPartyInvite } from './party-invite.js';
@@ -255,6 +256,10 @@ function gameLoop() {
   const dt = Math.min(timestamp - lastTime, 50); // cap at 50ms to prevent frame-spike skipping animations
   lastTime = timestamp;
   const ctx = ui.ctx;
+
+  // Poll gamepad → keys map (input-handler.js). Runs even on title/chat so
+  // the player can navigate the title screen with a controller. v1.7.681.
+  pollGamepad(dt);
 
   if (titleSt.state !== 'done') {
     updateTitle(dt); drawTitle(ctx, waterSt.tick); drawHUD();
