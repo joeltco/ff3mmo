@@ -194,22 +194,12 @@ export function placeLockedRoom(tilemap, rom, anchorX, anchorY, rng, opts = {}) 
  * @param {number} doorY
  */
 export function placeChamberDoor(tilemap, doorX, doorY) {
+  // Pure overwrite — nothing else is touched. `findChamberDoorPos` is the
+  // single source of truth for the surround-with-rocks invariant; if it
+  // returns a coord, all required rocks are already in place. Modifying
+  // anything here risks disconnecting the ceiling snake the dungeon
+  // generator relies on.
   tilemap[doorY * 32 + doorX] = DOOR_TILE;
-  // Frame the door with rock at the upper diagonals. The natural chamber
-  // wall (addOverhang pattern: ceiling on top of rock) leaves (x±1, y-1) as
-  // ceiling, which reads as "door punched through a ceiling row" instead of
-  // "door set into a rock wall". Promote any ceiling at those diagonals to
-  // rock. v1.7.652. (Caller must invoke after the final enforceMinCeilingGap
-  // pass so this promotion isn't undone.)
-  if (doorY - 1 >= 0) {
-    for (const dx of [-1, 1]) {
-      const fx = doorX + dx;
-      if (fx < 0 || fx > 31) continue;
-      if (tilemap[(doorY - 1) * 32 + fx] === CEILING_TILE) {
-        tilemap[(doorY - 1) * 32 + fx] = ROCK_TILE;
-      }
-    }
-  }
 }
 
 /**
@@ -238,20 +228,25 @@ export function findChamberDoorPos(tilemap, side, opts = {}) {
   if (side === 'north') {
     // Walk top-down; pick the topmost row with any viable candidate so the
     // door sits on the chamber's actual north edge (not an interior wall).
-    // Required orthogonal frame:
-    //   - (x, y)       must be ROCK (will be overwritten with the door)
-    //   - (x±1, y)     flanks both rock
-    //   - (x, y-1)     above is rock
-    //   - (x, y+1)     below is walkable floor (chamber-interior approach)
-    // Upper diagonals are NOT required here — naturally the chamber wall has
-    // ceiling at (x±1, y-1) under the addOverhang pattern. `placeChamberDoor`
-    // upgrades those to rock at placement time so the door is fully framed.
+    // STRICT find — every required surround tile must already exist; no
+    // tile is modified. The chamber wall is structurally ceiling-on-top-of-
+    // rock (addOverhang pattern), so the upper diagonals are typically
+    // ceiling rather than rock. Diagonals are checked as WALL (rock OR
+    // ceiling) — both are walls, just different visual layers — to keep the
+    // find purely non-modifying without disconnecting the ceiling snake.
+    //   - (x, y)        must be ROCK (overwritten with door)
+    //   - (x±1, y)      flanks both rock
+    //   - (x, y-1)      above is rock
+    //   - (x±1, y-1)    upper diagonals both walls (rock OR ceiling)
+    //   - (x, y+1)      below is walkable floor (chamber-interior approach)
     for (let y = yMin; y <= yMax; y++) {
       for (let x = xMin; x <= xMax; x++) {
         if (tilemap[y * 32 + x] !== ROCK_TILE) continue;
         if (tilemap[y * 32 + x - 1] !== ROCK_TILE) continue;
         if (tilemap[y * 32 + x + 1] !== ROCK_TILE) continue;
         if (tilemap[(y - 1) * 32 + x] !== ROCK_TILE) continue;
+        if (!_isWall(tilemap[(y - 1) * 32 + x - 1])) continue;
+        if (!_isWall(tilemap[(y - 1) * 32 + x + 1])) continue;
         if (!_isWalkable(tilemap[(y + 1) * 32 + x])) continue;
         candidates.push({ x, y });
       }
