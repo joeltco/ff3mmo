@@ -18,6 +18,38 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.652 — 2026-05-24
+
+### Chamber door — rock on upper diagonals too (+ hook moved past bridging loop)
+
+User: "make sure door always has rock walls touching diagonally."
+
+`placeChamberDoor` now promotes ceiling tiles at the upper-left and
+upper-right diagonals (`(doorX±1, doorY-1)`) to rock when needed. The
+natural chamber wall (addOverhang pattern: ceiling on top of rock)
+typically leaves those diagonals as ceiling, which read as "door
+punched through a ceiling row." Promotion gives a clean rock frame:
+above + left + right + UL + UR.
+
+The locked-room hook moved from BEFORE the floor-0 ceiling-snake
+bridging loop (lines ~2766-2784) to AFTER it — the bridging loop
+converts rocks back to ceilings when bridging disconnected snakes,
+which was undoing the diagonal promotion. Lower diagonals (chamber-
+interior side) stay as-is so floor / bones / chest can naturally sit
+where the chamber wraps around the door's approach.
+
+Files:
+- `src/dungeon-locked-room.js` — `placeChamberDoor` adds the diagonal
+  rock promotion; `findChamberDoorPos` reverted to orthogonal-only
+  rock checks (the natural chamber wall rarely satisfies stricter
+  diagonal find criteria, so the hybrid find-then-modify approach
+  keeps door placement guaranteed).
+- `src/dungeon-generator.js` — locked-room hook moved to end of the
+  `floorIndex === 0` post-finalization block.
+
+Verified across seeds 1-8: all door positions have UL=01 U=01 UR=01
+L=01 R=01.
+
 ## 1.7.651 — 2026-05-24
 
 ### Side rooms — push down for void buffer (not visible from main floor)

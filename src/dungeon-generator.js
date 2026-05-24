@@ -2712,45 +2712,6 @@ function _generateFloor(romData, floorIndex, seed) {
       enforceMinCeilingGap(tilemap);
       ensureCeilingConnectivity(tilemap);
 
-      // Locked-room hook — runs AFTER the final enforceMinCeilingGap pass so
-      // the 0x44 false-ceiling door tile doesn't trigger gap-fill on the rock
-      // above it. v1.7.650. Door X is in the "2nd half" of Room B's column
-      // range = south-half columns (the half with the exit). Door Y is the
-      // chamber's actual north wall (rock with rock above + rock flanking).
-      {
-        const southMidY = Math.floor((roomTop + roomBot) / 2);
-        const southCols = new Set();
-        for (let y = southMidY; y <= roomBot; y++) {
-          for (let x = bHalf[0]; x <= bHalf[1]; x++) {
-            if (isFloorTile(tilemap[y * 32 + x])) southCols.add(x);
-          }
-        }
-        if (southCols.size > 0) {
-          const sxs = [...southCols];
-          const xMin = Math.min(...sxs), xMax = Math.max(...sxs);
-          const doorPos = findChamberDoorPos(tilemap, 'north', {
-            xRange: { min: xMin, max: xMax },
-            yRange: { min: 1, max: roomTop + 3 },
-            rng,
-          });
-          if (doorPos) {
-            placeChamberDoor(tilemap, doorPos.x, doorPos.y);
-
-            // Standalone magic-shop replica in the bottom corner opposite
-            // Room B (B on right → bottom-left, B on left → bottom-right).
-            // Anchor Y=25 with a 7-row replica → spans rows 25-31, leaving
-            // 5 rows of void buffer (20-24) between the chamber bottom (~19)
-            // and the replica's top, so the side room isn't visible from the
-            // main floor camera. v1.7.651.
-            const replicaAnchorX = aOnRight ? 22 : 1;
-            const replicaAnchorY = 25;
-            placeLockedRoom(tilemap, romData, replicaAnchorX, replicaAnchorY, rng, {
-              chests: 2, skeletons: 3,
-            });
-          }
-        }
-      }
-
       // Guarantee ONE connected main-floor ceiling snake. A secret corridor can
       // cut a room's perimeter off the entrance snake; bridge it back by
       // promoting a rocky wall tile that touches BOTH the connected snake and
@@ -2781,6 +2742,42 @@ function _generateFloor(romData, floorIndex, seed) {
           }
         }
         if (!bridged) break;
+      }
+
+      // Locked-room hook — runs LAST in floor-0 finalization, AFTER both
+      // enforceMinCeilingGap and the ceiling-snake bridging loop, so the
+      // chamber-door upper-diagonal rock promotion in `placeChamberDoor`
+      // sticks. Door X is in the "2nd half" of Room B's column range =
+      // south-half columns (the half with the exit). v1.7.652.
+      {
+        const southMidY = Math.floor((roomTop + roomBot) / 2);
+        const southCols = new Set();
+        for (let y = southMidY; y <= roomBot; y++) {
+          for (let x = bHalf[0]; x <= bHalf[1]; x++) {
+            if (isFloorTile(tilemap[y * 32 + x])) southCols.add(x);
+          }
+        }
+        if (southCols.size > 0) {
+          const sxs = [...southCols];
+          const xMin = Math.min(...sxs), xMax = Math.max(...sxs);
+          const doorPos = findChamberDoorPos(tilemap, 'north', {
+            xRange: { min: xMin, max: xMax },
+            yRange: { min: 1, max: roomTop + 3 },
+            rng,
+          });
+          if (doorPos) {
+            placeChamberDoor(tilemap, doorPos.x, doorPos.y);
+            // Standalone magic-shop replica in the bottom corner opposite
+            // Room B (B right → bottom-left anchor; B left → bottom-right).
+            // Anchor Y=25 with the 7-row replica → rows 25-31 + 5-row void
+            // buffer (20-24) hides the side room from the main-floor camera.
+            const replicaAnchorX = aOnRight ? 22 : 1;
+            const replicaAnchorY = 25;
+            placeLockedRoom(tilemap, romData, replicaAnchorX, replicaAnchorY, rng, {
+              chests: 2, skeletons: 3,
+            });
+          }
+        }
       }
     }
 
