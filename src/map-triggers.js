@@ -127,6 +127,14 @@ function rollLootEntry(mapId) {
   // DEFAULT_LOOT — that's the cave pool with a `{ monster: true }` mimic
   // tier, which made Ur chests roll chest mimics (player bug-report
   // 2026-05-23). v1.7.627.
+  // Locked-room chest (mapId 1010) draws from ANY altar floor — picks a
+  // random altar floorId (1000-1003), then uses that pool. So locked-room
+  // chests have a chance at deeper-floor loot the player hasn't reached
+  // yet. v1.7.675.
+  if (mapId === 1010) {
+    const altarFloors = [1000, 1001, 1002, 1003];
+    mapId = altarFloors[Math.floor(Math.random() * altarFloors.length)];
+  }
   let tiers = LOOT_POOLS[mapId];
   if (!tiers && UR_CHEST_MAPS.has(mapId)) tiers = LOOT_POOLS[114];
   if (!tiers) tiers = DEFAULT_LOOT;
