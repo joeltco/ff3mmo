@@ -31,6 +31,8 @@ export const mapSt = {
   secretWalls: null,
   falseWalls: null,
   hiddenTraps: null,
+  lockedDoors: null,  // Set<"x,y"> — door coords that block movement +
+                      // show "Locked." message on bump / A-press. v1.7.669.
   rockSwitch: null,
   warpTile: null,
   pondTiles: null,

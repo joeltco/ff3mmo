@@ -7,7 +7,8 @@ import { transSt } from './transitions.js';
 import { inputSt, handleBattleInput, handleRosterInput, keys } from './input-handler.js';
 import { sprite } from './player-sprite.js';
 import { pauseSt, handlePauseInput } from './pause-menu.js';
-import { msgState, dismissMsgBox } from './message-box.js';
+import { msgState, dismissMsgBox, showMsgBox } from './message-box.js';
+import { _nameToBytes } from './text-utils.js';
 import { isSearchActive, isSearchResolving, cancelPVPSearch } from './pvp-search.js';
 import { isInviteActive, isInviteResolving, cancelPartyInvite } from './party-invite.js';
 import { isTradeOffering, isTradePicking, cancelTrade, handleTradePickInput } from './trade.js';
@@ -63,6 +64,15 @@ export function startMove(dir) {
   if (!mapSt.onWorldMap && findNpcAt(tileX, tileY)) {
     sprite.setDirection(dir);
     sprite.resetFrame();
+    return;
+  }
+
+  // Locked doors — solid like NPCs; show "Locked." on bump (debounced so
+  // holding the direction button doesn't spam the message box). v1.7.669.
+  if (mapSt.lockedDoors && mapSt.lockedDoors.has(`${tileX},${tileY}`)) {
+    sprite.setDirection(dir);
+    sprite.resetFrame();
+    if (msgState.state === 'none') showMsgBox(_nameToBytes('Locked.'));
     return;
   }
 
@@ -264,6 +274,12 @@ function handleAction() {
   const shopId = findShopAtCounter(mapSt.currentMapId, facedX, facedY);
   if (shopId && openShop(shopId)) return;
 
+  // Locked door — A-press shows "Locked." (matches the bump message in
+  // startMove). v1.7.669.
+  if (mapSt.lockedDoors && mapSt.lockedDoors.has(`${facedX},${facedY}`)) {
+    if (msgState.state === 'none') showMsgBox(_nameToBytes('Locked.'));
+    return;
+  }
   if (facedTile === 0x7C)                                         { handleChest(facedX, facedY); return; }
   // Hidden-treasure tiles (0x78-0x7B) — ROM-flagged "search here" markers.
   // Render as vases / grass / etc. Z attempts a search with a small hit

@@ -18,6 +18,31 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.669 — 2026-05-24
+
+### Chamber door is now LOCKED — blocks movement + "Locked." message
+
+Door tile no longer teleports to the locked-room map. Walking into it
+is blocked (treated like an NPC tile — solid). Pressing A while
+facing the door shows "Locked." via the standard `showMsgBox`.
+
+New `mapSt.lockedDoors` Set tracking door coords. Populated in
+`generateFloor` (floor-0 chamber door coord added) and returned to
+the engine via `result.lockedDoors`. Two enforcement sites:
+
+1. `movement.js#startMove` — if target tile is in `lockedDoors`,
+   block movement (face the direction but don't step) and show
+   "Locked." via `showMsgBox(_nameToBytes('Locked.'))`. Debounced
+   on `msgState.state === 'none'` so holding the direction button
+   doesn't spam the box.
+2. `movement.js` A-press handler — if the FACED tile is in
+   `lockedDoors`, show "Locked." instead of any other interaction.
+
+The `dungeonDestinations` entry for mapId 1010 stays wired but
+the trigger is unreachable while locked — once a magic-key gate
+unlocks the door (deletes the coord from `lockedDoors`), the
+teleport fires normally with no further changes.
+
 ## 1.7.668 — 2026-05-24
 
 ### Door spine — false rock wall + open-door visual on arrival

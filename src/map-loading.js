@@ -155,6 +155,7 @@ function _loadDungeonFloor(mapId, returnX, returnY) {
   mapSt.secretWalls = result.secretWalls;
   mapSt.falseWalls = result.falseWalls;
   mapSt.hiddenTraps = result.hiddenTraps;
+  mapSt.lockedDoors = result.lockedDoors || null;
   mapSt.rockSwitch = result.rockSwitch || null;
   mapSt.warpTile = result.warpTile || null;
   mapSt.pondTiles = result.pondTiles || null;

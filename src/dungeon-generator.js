@@ -1464,6 +1464,8 @@ function _generateFloor(romData, floorIndex, seed) {
   const secretWalls = new Set();
   const dungeonDestinations = new Map();
   let falseWalls = new Map();
+  const lockedDoors = new Set();  // v1.7.669 — door coords that block
+                                  // movement and show "Locked."
   // Floor-0 locked-room door coords — hoisted so the late
   // trigger-wiring pass (after processTriggerTiles) can look them up
   // in the triggerMap to find their assigned trigIds. v1.7.657.
@@ -2869,9 +2871,11 @@ function _generateFloor(romData, floorIndex, seed) {
             // replica placement here. Just put the door tile on the chamber
             // wall; the late trigger-wiring pass below routes it to mapId
             // 1010 via the engine's standard type-1 door transition.
-            // v1.7.665.
+            // v1.7.665. v1.7.669 — flag the door as locked so movement is
+            // blocked and A-press shows "Locked." (no map transition).
             placeChamberDoor(tilemap, doorPos.x, doorPos.y);
             lockedRoomChamberDoor = { x: doorPos.x, y: doorPos.y };
+            lockedDoors.add(`${doorPos.x},${doorPos.y}`);
           }
         }
       }
@@ -2954,6 +2958,7 @@ function _generateFloor(romData, floorIndex, seed) {
     dungeonDestinations,
     hiddenTraps,
     falseWalls,
+    lockedDoors,
     rockSwitch: typeof rockSwitch !== 'undefined' ? rockSwitch : null,
     warpTile,
     pondTiles,
