@@ -82,18 +82,14 @@ function renderSource(romData) {
       blitTile(buf, SRC_W, SRC_H, borderTiles[BORDER_GRID[gy][gx]], MENU_PALETTE, gx * 8, gy * 8);
     }
   }
-  // 2. Top 16×12 of the OK_IDLE portrait — full head tiles (rows 0-7) plus
-  //    just the top 4 rows of the body tiles. The bottom 4 rows of OK_IDLE
-  //    contain "leg-stub" pixels that read as full legs when scaled 32×
-  //    even though they're inside the 16×16 portrait the title screen
-  //    draws. Cropping them gives a true bust-shot at icon scale.
+  // 2. Top 16×16 of the OK_IDLE sprite (4 body tiles, 2×2). Exact pixels
+  //    `_renderPortrait` draws into title-screen player-select boxes.
   const pal = PLAYER_PALETTES[0];  // canonical red outfit
   const bodyTiles = OK_IDLE.map((t) => decodeTile(t, 0));
-  const BODY_Y = PORTRAIT_Y + 2;  // shift down 2 so the cropped 12-tall portrait centers in 16-tall interior
-  blitTile(buf, SRC_W, SRC_H, bodyTiles[0], pal, PORTRAIT_X,     BODY_Y,     { transparent0: true });
-  blitTile(buf, SRC_W, SRC_H, bodyTiles[1], pal, PORTRAIT_X + 8, BODY_Y,     { transparent0: true });
-  blitTile(buf, SRC_W, SRC_H, bodyTiles[2], pal, PORTRAIT_X,     BODY_Y + 8, { transparent0: true, maxRows: 4 });
-  blitTile(buf, SRC_W, SRC_H, bodyTiles[3], pal, PORTRAIT_X + 8, BODY_Y + 8, { transparent0: true, maxRows: 4 });
+  blitTile(buf, SRC_W, SRC_H, bodyTiles[0], pal, PORTRAIT_X,     PORTRAIT_Y,     { transparent0: true });
+  blitTile(buf, SRC_W, SRC_H, bodyTiles[1], pal, PORTRAIT_X + 8, PORTRAIT_Y,     { transparent0: true });
+  blitTile(buf, SRC_W, SRC_H, bodyTiles[2], pal, PORTRAIT_X,     PORTRAIT_Y + 8, { transparent0: true });
+  blitTile(buf, SRC_W, SRC_H, bodyTiles[3], pal, PORTRAIT_X + 8, PORTRAIT_Y + 8, { transparent0: true });
   return buf;
 }
 
