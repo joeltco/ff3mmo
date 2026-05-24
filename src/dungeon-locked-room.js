@@ -50,9 +50,12 @@ const SHOP_TO_CAVE = new Map([
   [0x3a, 0x30],
   [0x20, 0x30],
   [0x47, 0x30],
-  [0x44, 0x44],  // shop secret-pass → cave secret-pass (passable)
-  [0x45, 0x44],  // shop door-middle → cave secret-pass (full false-ceiling
-                 //                    spine; v1.7.666 — was 0x30 floor)
+  [0x44, 0x44],  // shop secret-pass → cave false-ceiling (passable, looks
+                 //                    like 0x00 ceiling)
+  [0x45, 0x45],  // shop door-middle → cave false-ROCK-wall (passable, same
+                 //                    0x70 collision as 0x44 but renders
+                 //                    as rock 0x01 in the cave tileset).
+                 //                    v1.7.668 — was 0x44.
   [0x68, 0x70],  // shop door-bottom → CAVE DOOR (open-on-touch)
   [0x1b, 0x01],  // shop door-top → cave rock (NOT ceiling — keeps the
                  // addOverhang "ceiling on 2 rocks" pattern intact for the

@@ -191,7 +191,12 @@ function _loadDungeonFloor(mapId, returnX, returnY) {
   sprite.setDirection(DIR_DOWN);
   sprite.resetFrame();
   if (floorIndex === 4) playTrack(TRACKS.CRYSTAL_ROOM);
-  if (returnX !== undefined) _openReturnDoor(playerX, playerY);
+  // Always fire — `_openReturnDoor` internally no-ops unless the spawn tile
+  // is a type-1 trigger with door collision. For side-room maps (locked
+  // room mapId 1010) the player spawns on the door but the trigger
+  // transition doesn't pass returnX, so without this change the door
+  // rendered closed. v1.7.668.
+  _openReturnDoor(playerX, playerY);
 }
 
 // Flood-fill the tilemap from (sx, sy), matching the same tile ID 4-way.
