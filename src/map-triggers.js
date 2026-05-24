@@ -440,12 +440,22 @@ function _triggerMapTransition(tileX, tileY, dest) {
     ? () => {
         // In-map warp: snap position, refresh the renderer at the new tile,
         // disable the destination trigger for one tick so the door we just
-        // teleported INTO doesn't immediately re-fire.
+        // teleported INTO doesn't immediately re-fire. Then mirror
+        // `_openReturnDoor`: if the destination tile is a door, swap to the
+        // open visual (0x7E) and save the original tile id so movement.js
+        // can close it when the player walks off. Matches magic-shop
+        // arrival: door is open on landing, closes once you walk through.
         mapSt.worldX = dest.destX * 16; mapSt.worldY = dest.destY * 16;
         sprite.setDirection(DIR_DOWN);
         mapSt.mapRenderer = new MapRenderer(mapSt.mapData, dest.destX, dest.destY);
         resetIndoorWaterCache();
         mapSt.disabledTrigger = { x: dest.destX, y: dest.destY };
+        const destTileId = mapSt.mapData.tilemap[dest.destY * 32 + dest.destX];
+        const destTileM = destTileId < 128 ? destTileId : destTileId & 0x7F;
+        if (((mapSt.mapData.collisionByte2[destTileM] >> 4) & 0x0F) === 5) {
+          mapSt.mapRenderer.updateTileAt(dest.destX, dest.destY, 0x7E);
+          mapSt.openDoor = { x: dest.destX, y: dest.destY, tileId: destTileId };
+        }
       }
     : () => { mapSt.mapStack.push({ mapId: mapSt.currentMapId, x: savedX, y: savedY }); loadMapById(destMapId); };
   if (isDoor) {

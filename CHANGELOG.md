@@ -18,6 +18,37 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.664 — 2026-05-24
+
+### Door teleport — land ON the door + fire open-on-arrival (magic-shop way)
+
+User: "im not spawning on the door with the fucking door mechanic, im
+spawning 2 tiles above a closed fucking door."
+
+Two changes to match the magic-shop entrance behavior:
+
+1. **Destinations land ON the door tiles.** `lockedRoomReplicaEntry`
+   moved from `anchorY+7` (interior floor 2 tiles north of the door)
+   to `anchorY+10` (the door tile itself). Chamber return moved from
+   `doorPos.y+1` (floor south of chamber door) to `doorPos.y` (the
+   chamber door itself).
+
+2. **`_triggerMapTransition`'s sameMap finalize now mirrors
+   `_openReturnDoor`:** after snapping the position, checks if the
+   destination tile has door collision (cb2 type 5); if so, swaps to
+   the open-door visual `0x7E` and sets `mapSt.openDoor` so
+   `movement.js` restores the closed visual once the player walks off.
+
+Player now teleports onto the door, sees it open, walks off → door
+closes. Walking back onto the door fires the warp again (other
+direction).
+
+Still outstanding from the same complaint: "I CAN SEE THE MAIN FLOOR
+OUTSIDE OF THE ROOM" (replica is in the same map, camera shows
+chamber tiles) and "WHERES ALL THE FALSE CEILING TILES" (need to
+clarify what the user means — actual magic shop map 3 has only one
+0x44 secret-pass tile in the door spine, which I do replicate).
+
 ## 1.7.663 — 2026-05-24
 
 ### Secret room — restore 2nd overhang row + original ry=24

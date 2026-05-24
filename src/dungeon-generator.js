@@ -2805,9 +2805,13 @@ function _generateFloor(romData, floorIndex, seed) {
               placeLockedRoom(tilemap, romData, replicaAnchorX, replicaAnchorY, rng, {
                 chests: 2, skeletons: 3,
               });
+              // Destinations land ON the door tiles (matches magic-shop
+              // entrance: player arrives standing on the door, engine fires
+              // open-on-arrival animation, then walks off through the spine
+              // / chamber floor). v1.7.664.
               lockedRoomChamberDoor  = { x: doorPos.x, y: doorPos.y };
               lockedRoomReplicaDoor  = { x: replicaAnchorX + 4, y: replicaAnchorY + 10 };
-              lockedRoomReplicaEntry = { x: replicaAnchorX + 4, y: replicaAnchorY + 7 };
+              lockedRoomReplicaEntry = { x: replicaAnchorX + 4, y: replicaAnchorY + 10 };
             }
           }
         }
@@ -2862,7 +2866,11 @@ function _generateFloor(romData, floorIndex, seed) {
       sameMap: true, destX: lockedRoomReplicaEntry.x, destY: lockedRoomReplicaEntry.y,
     });
     if (rmTrig) dungeonDestinations.set(rmTrig.trigId, {
-      sameMap: true, destX: lockedRoomChamberDoor.x, destY: lockedRoomChamberDoor.y + 1,
+      // Land on the chamber door (engine fires open-on-arrival animation,
+      // same as the magic-shop entrance behavior). Player walks off (south
+      // into chamber floor) → disabledTrigger clears → door closes via the
+      // movement.js#openDoor restore. v1.7.664.
+      sameMap: true, destX: lockedRoomChamberDoor.x, destY: lockedRoomChamberDoor.y,
     });
   }
 
