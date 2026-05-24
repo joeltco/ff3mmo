@@ -2775,24 +2775,37 @@ function _generateFloor(romData, floorIndex, seed) {
             rng,
           });
           if (doorPos) {
-            placeChamberDoor(tilemap, doorPos.x, doorPos.y);
-            // Standalone magic-shop replica in the bottom corner opposite
-            // Room B (B right → bottom-left anchor; B left → bottom-right).
-            const replicaAnchorX = aOnRight ? 22 : 1;
-            const replicaAnchorY = 24;
-            placeLockedRoom(tilemap, romData, replicaAnchorX, replicaAnchorY, rng, {
-              chests: 2, skeletons: 3,
-            });
+            // Pick replica anchor opposite the secret-corridor room
+            // (placeSecretPath) so they don't overlap. Check falseWalls keys
+            // at rows 24+ to detect which corners are taken. v1.7.660.
+            let secretLeft = false, secretRight = false;
+            for (const key of falseWalls.keys()) {
+              const [x, y] = key.split(',').map(Number);
+              if (y < 24) continue;
+              if (x <= 10) secretLeft = true;
+              if (x >= 21) secretRight = true;
+            }
+            let replicaAnchorX;
+            if (secretLeft && !secretRight) replicaAnchorX = 22;
+            else if (secretRight && !secretLeft) replicaAnchorX = 1;
+            else if (secretLeft && secretRight) replicaAnchorX = null;  // no free corner
+            else replicaAnchorX = aOnRight ? 22 : 1;
 
-            // Save door coords for the trigger-wiring pass below
-            // (must run AFTER processTriggerTiles to know the assigned
-            // trigIds). Replica entry = interior floor at grid row 3
-            // (shop row 7) — well above the 3-tile passable door spine
-            // (grid rows 4-6) so the player lands inside the room proper,
-            // not on a spine tile that would re-fire the warp. v1.7.658.
-            lockedRoomChamberDoor = { x: doorPos.x, y: doorPos.y };
-            lockedRoomReplicaDoor = { x: replicaAnchorX + 4, y: replicaAnchorY + 6 };
-            lockedRoomReplicaEntry = { x: replicaAnchorX + 4, y: replicaAnchorY + 3 };
+            // Place door + replica together — if no replica fits, skip both
+            // (a chamber door with nowhere to teleport is worse than none).
+            if (replicaAnchorX !== null) {
+              const replicaAnchorY = 24;
+              placeChamberDoor(tilemap, doorPos.x, doorPos.y);
+              placeLockedRoom(tilemap, romData, replicaAnchorX, replicaAnchorY, rng, {
+                chests: 2, skeletons: 3,
+              });
+              // Save door coords for the trigger-wiring pass below (runs
+              // after processTriggerTiles for trigId lookup). Replica entry
+              // = interior floor at grid row 3 / shop row 7.
+              lockedRoomChamberDoor  = { x: doorPos.x, y: doorPos.y };
+              lockedRoomReplicaDoor  = { x: replicaAnchorX + 4, y: replicaAnchorY + 6 };
+              lockedRoomReplicaEntry = { x: replicaAnchorX + 4, y: replicaAnchorY + 3 };
+            }
           }
         }
       }
