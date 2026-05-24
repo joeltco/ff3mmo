@@ -18,6 +18,41 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.638 — 2026-05-24
+
+### Chat input — revert auto-expand; fix multi-line wrap on sent messages
+
+User feedback on v1.7.637: "i dont want the whole log opening up, and
+its cutting off half the message after sending."
+
+Two bugs:
+
+1. **Auto-expand was wrong UX.** v1.7.637 took over the entire HUD
+   region the moment the input opened — too aggressive. Reverted:
+   the chat panel stays at its default `HUD_BOT_H` size while typing
+   (same as pre-v1.7.637). 80-char cap retained; 3-row input now
+   competes with ~2-3 history rows in the small panel — workable for
+   short replies, and the user can still T-expand manually if they
+   want full reading room.
+
+2. **`_buildChatRows` colon branch was dropping wrap rows past the
+   first.** Long-standing latent bug. The "name: message" path pushed
+   row 1 (with the name part + first chunk of message) and then row 2
+   from `_chatWrap(remainder, lineW)[0]` — taking ONLY the first wrap
+   line of the remainder. Any 3rd+ visual row was silently dropped.
+   Hidden by the 42-char cap (messages rarely wrapped past 2 visual
+   rows); v1.7.628's and v1.7.637's 80-char cap exposed it as "half
+   the message cut off". Fix: loop the wrap result for the remainder
+   the same way the no-colon branch already does. Sent messages now
+   render every line in the chat history.
+
+Files:
+- `src/chat.js` — removed `_inputAutoExpanded` / `_lastInputActive`
+  / rising-edge logic from `updateChat`; `_buildChatRows` colon
+  branch now loops `_chatWrap(remainder, lineW)` instead of taking
+  `[0]`. `CHAT_INPUT_CAP = 80` retained; `_wrapInputText` +
+  `_drawChatInput` N-row renderer retained.
+
 ## 1.7.637 — 2026-05-24
 
 ### Chat input — auto-expand panel for writing room (80-char cap, N-row wrap)

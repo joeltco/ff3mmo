@@ -734,32 +734,7 @@ export function onChatKeyDown(e) {
 
 // ── Update / Draw ─────────────────────────────────────────────────────────
 
-// Tracks whether the chat-input itself caused the panel to expand, so we
-// don't yank a manual T-expand closed when the user sends/escapes a message.
-// v1.7.637 — auto-expand-while-typing replaces the v1.7.628-630 attempt to
-// grow the fixed panel (which broke because it had no BG behind the growth).
-let _inputAutoExpanded = false;
-let _lastInputActive = false;
-
 export function updateChat(dt, battleState, titleActive) {
-  // Rising edge on inputActive → expand the panel for writing room. Falling
-  // edge → collapse only if we were the ones who opened it. The expand path
-  // reuses _drawChatExpandBG, so the new vertical space gets a proper black
-  // background over the upper HUD area (the trap that killed v1.7.629).
-  if (chatState.inputActive && !_lastInputActive) {
-    if (!chatState.expanded) {
-      chatState.expanded = true;
-      _inputAutoExpanded = true;
-    }
-  } else if (!chatState.inputActive && _lastInputActive) {
-    if (_inputAutoExpanded) {
-      chatState.expanded = false;
-      setChatScrollOffset(0);
-      _inputAutoExpanded = false;
-    }
-  }
-  _lastInputActive = chatState.inputActive;
-
   const expandTarget = chatState.expanded ? 1 : 0;
   if (chatState.expandAnim < expandTarget)
     chatState.expandAnim = Math.min(1, chatState.expandAnim + dt / CHAT_EXPAND_MS);
@@ -948,9 +923,15 @@ function _buildChatRows(ctx, lineW, startX, titleActive) {
         const nameW     = ctx.measureText(namePart).width;
         const firstLine = _chatWrap(ctx, msgPart, lineW - nameW)[0];
         rows.push({ namePart, nameW, msgPart: firstLine, x: startX, mention });
+        // Loop ALL remaining wrap lines — pre-v1.7.638 took only [0] and
+        // silently dropped the tail. Hidden by the 42-char cap (messages
+        // rarely wrapped past 2 visual rows); the 80-char cap exposed it
+        // as "half the message cut off after sending".
         const remainder = msgPart.slice(firstLine.length).replace(/^ /, '');
-        if (remainder.length > 0)
-          rows.push({ color: '#e0e0e0', text: _chatWrap(ctx, remainder, lineW)[0], x: startX, mention });
+        if (remainder.length > 0) {
+          for (const line of _chatWrap(ctx, remainder, lineW))
+            rows.push({ color: '#e0e0e0', text: line, x: startX, mention });
+        }
       } else {
         for (const line of _chatWrap(ctx, m.text, lineW))
           rows.push({ color: '#e0e0e0', text: line, x: startX, mention });
