@@ -54,6 +54,16 @@ export function initKeyboardListeners() {
       if (!chatState.expanded) setChatScrollOffset(0);
       playSFX(chatState.expanded ? SFX.SCREEN_OPEN : SFX.SCREEN_CLOSE);
     }
+    // `b` / `B` backs out of the expanded chat log (close-only — never opens).
+    // Mirrors the close half of the T-toggle. Safe under typing because the
+    // `chatState.inputActive` early-return above intercepts keys destined for
+    // the chat input. v1.7.640.
+    if ((e.key === 'b' || e.key === 'B') && _chatHotkeyAllowed() && chatState.expanded) {
+      e.preventDefault();
+      chatState.expanded = false;
+      setChatScrollOffset(0);
+      playSFX(SFX.SCREEN_CLOSE);
+    }
     if (e.key === 't' && _chatHotkeyAllowed()) {
       e.preventDefault();
       chatState.inputActive = true; chatState.inputText = ''; chatState.cursorTimer = 0;
