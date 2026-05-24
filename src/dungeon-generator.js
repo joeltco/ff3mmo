@@ -817,12 +817,11 @@ function placeSecretPath(tilemap, startRow, endRow, floorIndex, rng, exitX) {
     // Chest alcove ceiling nudged up 1 tile. Always 2 $01 under $00.
     const rw = 7;
     const rx = secretGoLeft ? 0 : (32 - rw);
-    // v1.7.651: bumped from ry=24 → ry=26 to add 2 rows of void buffer
-    // between the chamber bottom and the secret room's top edge (was
-    // visible from the main floor camera). Overhang drops the 2nd rocky
-    // row (line 832) since fy+3 = 33 would be off-map.
-    const ry = 26;
-    const fy = ry + 4; // floor row = 30
+    // v1.7.653: ry=25 — moved up 1 from v1.7.651's 26 so the bottom
+    // overhang at fy+2 = 31 fits the map (overhang at 32 was being lost).
+    // Net buffer above main floor (row 21) is still 3 rows (22-24).
+    const ry = 25;
+    const fy = ry + 4; // floor row = 29
 
     // Column mapping: c(0)=entrance → c(6)=back wall
     const entCol = secretGoLeft ? rx + rw - 1 : rx;
@@ -2769,10 +2768,11 @@ function _generateFloor(romData, floorIndex, seed) {
             placeChamberDoor(tilemap, doorPos.x, doorPos.y);
             // Standalone magic-shop replica in the bottom corner opposite
             // Room B (B right → bottom-left anchor; B left → bottom-right).
-            // Anchor Y=25 with the 7-row replica → rows 25-31 + 5-row void
-            // buffer (20-24) hides the side room from the main-floor camera.
+            // Anchor Y=24 with the 7-row replica → rows 24-30, leaving row
+            // 31 clear so the replica isn't kissing the map's south edge.
+            // Buffer above (rows 22-23) is still 2 rows from chamber bottom.
             const replicaAnchorX = aOnRight ? 22 : 1;
-            const replicaAnchorY = 25;
+            const replicaAnchorY = 24;
             placeLockedRoom(tilemap, romData, replicaAnchorX, replicaAnchorY, rng, {
               chests: 2, skeletons: 3,
             });
