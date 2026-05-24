@@ -108,6 +108,17 @@ const LOOT_POOLS = {
     { weight:  2, pool: [0xA9] },                                 // Phoenix Down (very rare revive)
     { weight: 12, monster: true },                                // Chest mimic — 1 random monster
   ],
+  1010: [ // Altar Cave locked room (mapId 1010) — RARE loot only.
+          // No common Potion / Gil / mimics; weighted toward scrolls,
+          // HiPotion, Phoenix Down, and battle items. Player who unlocks
+          // the door gets meaningfully better drops than the chamber
+          // chests. v1.7.673.
+    { weight: 30, pool: [0xE3, 0xE1] },                           // Cure scroll, Ice scroll
+    { weight: 25, pool: [0xA7] },                                 // HiPotion
+    { weight: 25, pool: [0xA9] },                                 // Phoenix Down
+    { weight: 15, pool: [0xB6, 0xB3] },                           // GodsRage, ZeusRage (rare battle items)
+    { weight:  5, pool: [0x98] },                                 // Magic Key (bonus key)
+  ],
   1003: [ // Altar Cave F4
     { weight: 6, pool: [0xA6] },                                  // Potion (rarer — was 22)
     { weight: 30, pool: [GIL(125, 275)] },
