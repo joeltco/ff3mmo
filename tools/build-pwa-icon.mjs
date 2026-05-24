@@ -27,7 +27,7 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 import { decodeTile, NES_SYSTEM_PALETTE } from '../src/tile-decoder.js';
-import { OK_IDLE, OK_LEG_L_IDLE, OK_LEG_R_IDLE } from '../src/data/job-sprites.js';
+import { OK_IDLE } from '../src/data/job-sprites.js';
 import { PLAYER_PALETTES } from '../src/data/players.js';
 
 // ── HUD border tiles in ROM (mirrors src/hud-init.js) ──────────────────────
@@ -36,18 +36,19 @@ const BORDER_TILE_COUNT = 9;
 const MENU_PALETTE = [0x0F, 0x00, 0x0F, 0x30];
 // Border tile indices: 0=TL, 1=top, 2=TR, 3=left, 4=right, 5=BL, 6=bot, 7=BR, 8=fill
 
-// ── 48×48 source layout ────────────────────────────────────────────────────
-const SRC_W = 48, SRC_H = 48;
-const PORTRAIT_X = 16, PORTRAIT_Y = 12;   // centers 16×24 portrait in 48×48
+// ── 32×32 source layout — square HUD frame holding the 16×16 portrait ────
+// In-game HUD shows the head+torso 16×16 portrait (4 tiles, no legs); this
+// mirrors that exactly. 32×32 source = 4×4 tile grid with the portrait
+// centered inside a 2×2 interior fill.
+const SRC_W = 32, SRC_H = 32;
+const PORTRAIT_X = 8, PORTRAIT_Y = 8;   // centers 16×16 portrait in 32×32
 
-// 6×6 grid of border-tile indices.
+// 4×4 grid of border-tile indices.
 const BORDER_GRID = [
-  [0, 1, 1, 1, 1, 2],
-  [3, 8, 8, 8, 8, 4],
-  [3, 8, 8, 8, 8, 4],
-  [3, 8, 8, 8, 8, 4],
-  [3, 8, 8, 8, 8, 4],
-  [5, 6, 6, 6, 6, 7],
+  [0, 1, 1, 2],
+  [3, 8, 8, 4],
+  [3, 8, 8, 4],
+  [5, 6, 6, 7],
 ];
 
 // ── Render helpers ─────────────────────────────────────────────────────────
@@ -56,8 +57,8 @@ function makeBuffer(w, h) {
   return Buffer.alloc(w * h * 3, 0);
 }
 
-function blitTile(buf, w, _h, pixels, palette, dx, dy, { transparent0 = false } = {}) {
-  for (let py = 0; py < 8; py++) {
+function blitTile(buf, w, _h, pixels, palette, dx, dy, { transparent0 = false, maxRows = 8 } = {}) {
+  for (let py = 0; py < maxRows; py++) {
     for (let px = 0; px < 8; px++) {
       const ci = pixels[py * 8 + px];
       if (transparent0 && ci === 0) continue;
@@ -76,24 +77,23 @@ function renderSource(romData) {
   for (let i = 0; i < BORDER_TILE_COUNT; i++) {
     borderTiles.push(decodeTile(romData, BORDER_TILE_ROM + i * 16));
   }
-  for (let gy = 0; gy < 6; gy++) {
-    for (let gx = 0; gx < 6; gx++) {
+  for (let gy = 0; gy < 4; gy++) {
+    for (let gx = 0; gx < 4; gx++) {
       blitTile(buf, SRC_W, SRC_H, borderTiles[BORDER_GRID[gy][gx]], MENU_PALETTE, gx * 8, gy * 8);
     }
   }
-  // 2. Portrait body (4 tiles, 2×2) — transparent where pixel == 0 so the
-  //    menu interior shows through (matches the in-game OAM compositing rule).
+  // 2. Top 16×12 of the OK_IDLE portrait — full head tiles (rows 0-7) plus
+  //    just the top 4 rows of the body tiles. The bottom 4 rows of OK_IDLE
+  //    contain "leg-stub" pixels that read as full legs when scaled 32×
+  //    even though they're inside the 16×16 portrait the title screen
+  //    draws. Cropping them gives a true bust-shot at icon scale.
   const pal = PLAYER_PALETTES[0];  // canonical red outfit
   const bodyTiles = OK_IDLE.map((t) => decodeTile(t, 0));
-  blitTile(buf, SRC_W, SRC_H, bodyTiles[0], pal, PORTRAIT_X,     PORTRAIT_Y,     { transparent0: true });
-  blitTile(buf, SRC_W, SRC_H, bodyTiles[1], pal, PORTRAIT_X + 8, PORTRAIT_Y,     { transparent0: true });
-  blitTile(buf, SRC_W, SRC_H, bodyTiles[2], pal, PORTRAIT_X,     PORTRAIT_Y + 8, { transparent0: true });
-  blitTile(buf, SRC_W, SRC_H, bodyTiles[3], pal, PORTRAIT_X + 8, PORTRAIT_Y + 8, { transparent0: true });
-  // 3. Legs (2 tiles, 1×2).
-  const legL = decodeTile(OK_LEG_L_IDLE, 0);
-  const legR = decodeTile(OK_LEG_R_IDLE, 0);
-  blitTile(buf, SRC_W, SRC_H, legL, pal, PORTRAIT_X,     PORTRAIT_Y + 16, { transparent0: true });
-  blitTile(buf, SRC_W, SRC_H, legR, pal, PORTRAIT_X + 8, PORTRAIT_Y + 16, { transparent0: true });
+  const BODY_Y = PORTRAIT_Y + 2;  // shift down 2 so the cropped 12-tall portrait centers in 16-tall interior
+  blitTile(buf, SRC_W, SRC_H, bodyTiles[0], pal, PORTRAIT_X,     BODY_Y,     { transparent0: true });
+  blitTile(buf, SRC_W, SRC_H, bodyTiles[1], pal, PORTRAIT_X + 8, BODY_Y,     { transparent0: true });
+  blitTile(buf, SRC_W, SRC_H, bodyTiles[2], pal, PORTRAIT_X,     BODY_Y + 8, { transparent0: true, maxRows: 4 });
+  blitTile(buf, SRC_W, SRC_H, bodyTiles[3], pal, PORTRAIT_X + 8, BODY_Y + 8, { transparent0: true, maxRows: 4 });
   return buf;
 }
 
@@ -161,7 +161,7 @@ console.log('[icon] reading ROM:', romPath);
 const romData = fs.readFileSync(romPath);
 
 const src = renderSource(romData);
-console.log('[icon] rendered 48×48 source');
+console.log(`[icon] rendered ${SRC_W}×${SRC_H} source`);
 
 const targets = [
   { name: 'icon-192.png', size: 192 },
