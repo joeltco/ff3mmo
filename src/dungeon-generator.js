@@ -1374,6 +1374,12 @@ function _generateFloor(romData, floorIndex, seed) {
   const secretWalls = new Set();
   const dungeonDestinations = new Map();
   let falseWalls = new Map();
+  // Floor-0 locked-room door coords — hoisted so the late
+  // trigger-wiring pass (after processTriggerTiles) can look them up
+  // in the triggerMap to find their assigned trigIds. v1.7.657.
+  let lockedRoomChamberDoor = null;
+  let lockedRoomReplicaDoor = null;
+  let lockedRoomReplicaEntry = null;
   // Small breathing rooms (entrance + H↔V junction) on the deeper-floor else
   // branch; the shared feature-placement pass sprinkles skeletons + a chance
   // chest into each. Empty on every other branch.
@@ -2768,47 +2774,26 @@ function _generateFloor(romData, floorIndex, seed) {
             placeChamberDoor(tilemap, doorPos.x, doorPos.y);
             // Standalone magic-shop replica in the bottom corner opposite
             // Room B (B right → bottom-left anchor; B left → bottom-right).
-            // Anchor Y=24 with the 7-row replica → rows 24-30, leaving row
-            // 31 clear so the replica isn't kissing the map's south edge.
-            // Buffer above (rows 22-23) is still 2 rows from chamber bottom.
             const replicaAnchorX = aOnRight ? 22 : 1;
             const replicaAnchorY = 24;
             placeLockedRoom(tilemap, romData, replicaAnchorX, replicaAnchorY, rng, {
               chests: 2, skeletons: 3,
             });
 
-            // Teleport pair — reuses the existing `falseWalls` in-map warp
-            // mechanism (movement.js#_checkFalseWall). Player walks onto the
-            // chamber door → screen wipe → lands on the floor tile INSIDE
-            // the locked room (one tile north of the replica's south door,
-            // not ON the door, to avoid bouncing back instantly). Walking
-            // south onto the replica's door → wipes back to the chamber-
-            // floor tile south of the chamber door. v1.7.656.
-            const replicaDoorX  = replicaAnchorX + 4;  // shop col 4
-            const replicaDoorY  = replicaAnchorY + 6;  // grid row 6 = shop row 10
-            const replicaEntryY = replicaAnchorY + 5;  // floor above the door
-            falseWalls.set(`${doorPos.x},${doorPos.y}`, {
-              destX: replicaDoorX, destY: replicaEntryY,
-            });
-            falseWalls.set(`${replicaDoorX},${replicaDoorY}`, {
-              destX: doorPos.x, destY: doorPos.y + 1,
-            });
+            // Save door coords for the trigger-wiring pass below
+            // (must run AFTER processTriggerTiles to know the assigned
+            // trigIds). v1.7.657.
+            lockedRoomChamberDoor = { x: doorPos.x, y: doorPos.y };
+            lockedRoomReplicaDoor = { x: replicaAnchorX + 4, y: replicaAnchorY + 6 };
+            lockedRoomReplicaEntry = { x: replicaAnchorX + 4, y: replicaAnchorY + 5 };
           }
         }
       }
     }
 
     // Dungeon destinations — all type-1 triggers go to next floor
-    const totalType1 = config.stairs + trapsPlaced;
-    for (let i = 0; i < totalType1; i++) {
-      dungeonDestinations.set(i, { mapId: nextMapId });
-    }
-
     // Rock puzzle exit: PASSAGE_ENTRY is type 4 (manually registered in triggerMap below).
-    // trigId = 0 (only type-4 trigger on this floor). dungeonDestinations key = totalType1 = 0.
-    if (config.rockPuzzle) {
-      dungeonDestinations.set(totalType1, { mapId: nextMapId });
-    }
+    // trigId is computed after processTriggerTiles via the type-1 fall-through below.
   }
 
   const triggerMap = processTriggerTiles(tilemap);
@@ -2823,6 +2808,39 @@ function _generateFloor(romData, floorIndex, seed) {
   // so processTriggerTiles doesn't register it. Manually add it to the triggerMap.
   if (typeof rockExitX !== 'undefined') {
     triggerMap.set(`${rockExitX},${rockExitY}`, { type: 4, trigId: 0 });
+  }
+
+  // Wire dungeonDestinations from the freshly-built triggerMap (replaces the
+  // old `for (let i = 0; i < totalType1; i++)` loop which assumed trigIds
+  // 0..N-1 were stair/trap; the v1.7.649 locked-room doors insert another
+  // type-1 trigger between them in scan order, shifting all later trigIds).
+  // v1.7.657.
+  const _lockedDoorKeys = new Set();
+  if (lockedRoomChamberDoor) _lockedDoorKeys.add(`${lockedRoomChamberDoor.x},${lockedRoomChamberDoor.y}`);
+  if (lockedRoomReplicaDoor) _lockedDoorKeys.add(`${lockedRoomReplicaDoor.x},${lockedRoomReplicaDoor.y}`);
+  const _nextMapId = 1000 + floorIndex + 1;
+  for (const [coord, trig] of triggerMap) {
+    if (trig.type !== 1) continue;
+    if (_lockedDoorKeys.has(coord)) continue;  // wired below as sameMap
+    dungeonDestinations.set(trig.trigId, { mapId: _nextMapId });
+  }
+  // Rock puzzle exit (type 4)
+  if (typeof rockExitX !== 'undefined') {
+    const rockTrig = triggerMap.get(`${rockExitX},${rockExitY}`);
+    if (rockTrig) dungeonDestinations.set(rockTrig.trigId, { mapId: _nextMapId });
+  }
+  // Locked-room door pair → in-map warp (sameMap). Engine handles door
+  // open + wipe via _triggerMapTransition; pendingAction snaps player
+  // position instead of loadMapById.
+  if (lockedRoomChamberDoor && lockedRoomReplicaDoor && lockedRoomReplicaEntry) {
+    const chTrig = triggerMap.get(`${lockedRoomChamberDoor.x},${lockedRoomChamberDoor.y}`);
+    const rmTrig = triggerMap.get(`${lockedRoomReplicaDoor.x},${lockedRoomReplicaDoor.y}`);
+    if (chTrig) dungeonDestinations.set(chTrig.trigId, {
+      sameMap: true, destX: lockedRoomReplicaEntry.x, destY: lockedRoomReplicaEntry.y,
+    });
+    if (rmTrig) dungeonDestinations.set(rmTrig.trigId, {
+      sameMap: true, destX: lockedRoomChamberDoor.x, destY: lockedRoomChamberDoor.y + 1,
+    });
   }
 
   // Hide traps: swap $74 → $30 after triggers are registered

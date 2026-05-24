@@ -22,6 +22,8 @@ import { loadMapById, loadWorldMapAt, loadWorldMapAtPosition } from './map-loadi
 import { rosterLocForMapId, getPlayerLocation } from './roster.js';
 import { addItem } from './inventory.js';
 import { saveSlotsToDB } from './save-state.js';
+import { sprite } from './player-sprite.js';
+import { DIR_DOWN } from './sprite.js';
 
 const TILE_SIZE = 16;
 const BATTLE_FLASH_FRAMES = 65;
@@ -423,17 +425,36 @@ function _checkHiddenTrap(trigger, tileX, tileY) {
   return false;
 }
 
-function _triggerMapTransition(tileX, tileY, destMapId) {
+// `dest` is either a destMapId number (legacy callers) OR an object
+// `{ mapId }` or `{ sameMap: true, destX, destY }`. The sameMap form
+// keeps the player on the current map and snaps to (destX, destY) —
+// reuses the engine's existing door-open animation. v1.7.657.
+function _triggerMapTransition(tileX, tileY, dest) {
   const tileId = mapSt.mapData.tilemap[tileY * 32 + tileX];
   const tileM = tileId < 128 ? tileId : tileId & 0x7F;
   const savedX = mapSt.worldX, savedY = mapSt.worldY;
-  if ((((mapSt.mapData.collisionByte2[tileM] >> 4) & 0x0F) === 5)) {
+  const isDoor = (((mapSt.mapData.collisionByte2[tileM] >> 4) & 0x0F) === 5);
+  const isSameMap = (typeof dest === 'object' && dest.sameMap);
+  const destMapId = (typeof dest === 'object') ? dest.mapId : dest;
+  const finalize = isSameMap
+    ? () => {
+        // In-map warp: snap position, refresh the renderer at the new tile,
+        // disable the destination trigger for one tick so the door we just
+        // teleported INTO doesn't immediately re-fire.
+        mapSt.worldX = dest.destX * 16; mapSt.worldY = dest.destY * 16;
+        sprite.setDirection(DIR_DOWN);
+        mapSt.mapRenderer = new MapRenderer(mapSt.mapData, dest.destX, dest.destY);
+        resetIndoorWaterCache();
+        mapSt.disabledTrigger = { x: dest.destX, y: dest.destY };
+      }
+    : () => { mapSt.mapStack.push({ mapId: mapSt.currentMapId, x: savedX, y: savedY }); loadMapById(destMapId); };
+  if (isDoor) {
     mapSt.mapRenderer.updateTileAt(tileX, tileY, 0x7E); playSFX(SFX.DOOR);
     transSt.state = 'door-opening'; transSt.timer = 0;
-    transSt.rosterLocChanged = rosterLocForMapId(destMapId) !== getPlayerLocation();
-    transSt.pendingAction = () => { mapSt.mapStack.push({ mapId: mapSt.currentMapId, x: savedX, y: savedY }); loadMapById(destMapId); };
+    transSt.rosterLocChanged = isSameMap ? false : (rosterLocForMapId(destMapId) !== getPlayerLocation());
+    transSt.pendingAction = finalize;
   } else {
-    triggerWipe(() => { mapSt.mapStack.push({ mapId: mapSt.currentMapId, x: savedX, y: savedY }); loadMapById(destMapId); }, destMapId);
+    triggerWipe(finalize, isSameMap ? null : destMapId);
   }
 }
 
@@ -452,7 +473,8 @@ function _checkDynType1(trigger, tileX, tileY) {
       }, prevMapId);
       return true;
     }
-    _triggerMapTransition(tileX, tileY, dest.mapId);
+    // Pass the full `dest` object so the in-map sameMap form is handled.
+    _triggerMapTransition(tileX, tileY, dest);
     return true;
   }
   const destMap = mapSt.mapData.entranceData[trigger.trigId];

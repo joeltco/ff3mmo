@@ -18,6 +18,43 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.657 — 2026-05-24
+
+### Door teleport — proper engine door mechanic (was falseWalls hack)
+
+v1.7.656 wired the locked-room teleport via `falseWalls` (the
+secret-wall in-map warp). That skipped the engine's door-open
+animation entirely — the door read as a fake wall, not a door.
+
+Rewired through the actual type-1 trigger system every other door in
+the codebase uses:
+
+1. **dungeon-generator.js** — Door coords (`lockedRoomChamberDoor`,
+   `lockedRoomReplicaDoor`, `lockedRoomReplicaEntry`) hoisted from
+   the floor-0 hook. After `processTriggerTiles` runs, look each
+   door coord up in the resulting triggerMap to get its assigned
+   trigId, then register `dungeonDestinations[trigId]` with a new
+   `{sameMap: true, destX, destY}` shape. The previous
+   `for (i = 0; i < totalType1; i++)` loop is replaced with a
+   triggerMap iteration that routes each type-1 trigger correctly
+   (stair / trap → next-floor mapId, locked-room doors → in-map
+   sameMap warp). Fixes the trigId-shift bug from inserting the
+   chamber door before the stair in scan order.
+
+2. **map-triggers.js** — `_triggerMapTransition` extended to accept
+   either a destMapId number (legacy) or a `dest` object. When
+   `dest.sameMap`, the pendingAction snaps `mapSt.worldX/Y` to
+   `(destX*16, destY*16)`, refreshes the renderer at the new tile,
+   and sets `mapSt.disabledTrigger` to the destination so the door
+   we land on doesn't immediately re-fire. The door-open animation
+   (swap to 0x7E + SFX.DOOR + 'door-opening' transition) plays
+   either way. `_checkDynType1` updated to pass the full dest
+   object instead of `dest.mapId`. Imports: `sprite`, `DIR_DOWN`.
+
+Player now sees the door open animation, screen wipe, then lands
+inside the locked room. Same mechanic as the magic shop entrance —
+just with an in-map destination.
+
 ## 1.7.656 — 2026-05-24
 
 ### Door teleport wired — chamber ↔ locked room
