@@ -2782,10 +2782,13 @@ function _generateFloor(romData, floorIndex, seed) {
 
             // Save door coords for the trigger-wiring pass below
             // (must run AFTER processTriggerTiles to know the assigned
-            // trigIds). v1.7.657.
+            // trigIds). Replica entry = interior floor at grid row 3
+            // (shop row 7) — well above the 3-tile passable door spine
+            // (grid rows 4-6) so the player lands inside the room proper,
+            // not on a spine tile that would re-fire the warp. v1.7.658.
             lockedRoomChamberDoor = { x: doorPos.x, y: doorPos.y };
             lockedRoomReplicaDoor = { x: replicaAnchorX + 4, y: replicaAnchorY + 6 };
-            lockedRoomReplicaEntry = { x: replicaAnchorX + 4, y: replicaAnchorY + 5 };
+            lockedRoomReplicaEntry = { x: replicaAnchorX + 4, y: replicaAnchorY + 3 };
           }
         }
       }

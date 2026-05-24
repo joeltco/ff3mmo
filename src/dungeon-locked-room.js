@@ -34,22 +34,24 @@ const SHOP_ORIGIN_Y = 4;
 const SHOP_W = 9;
 const SHOP_H = 7;
 
-// Shop tileset (5) → cave tileset (0) translation. Wall + void share IDs
-// across both tilesets (00, 01, 5f) so they pass through. Shop floor (3a,
-// 20, 47) all collapse to cave floor (30). The shop's south door BOTTOM
-// (0x68) becomes the cave door tile 0x70 — the engine has built-in
-// open-on-touch mechanics for tiles whose collisionByte2 marks them type 5
-// (door). The door-middle / door-top / secret-pass frame tiles (0x45, 0x1b,
-// 0x44) become cave ceiling (0x00) so the door's visual frame reads as
-// wall above the door rather than a multi-tile door column.
+// Shop tileset (5) → cave tileset (0) translation. The magic shop's door
+// is a 3-tile passable SPINE — secret-pass on top (0x44), door-middle in
+// the middle (0x45), door-bottom at the south (0x68). All three are
+// walkable; the player walks UP through the spine to enter the shop.
+// We translate them to keep that passability:
+//   - 0x44 → cave 0x44 (same false-ceiling tile, passable)
+//   - 0x45 → cave 0x30 (floor; visually clean inside the door corridor)
+//   - 0x68 → cave 0x70 (visible cave door with engine open-on-touch)
+// Frame tiles (1b door-top, 19/1a stairwell decoration) become cave
+// ceiling. Walls + void share IDs across both tilesets.
 const SHOP_TO_CAVE = new Map([
   [0x00, 0x00],
   [0x01, 0x01],
   [0x3a, 0x30],
   [0x20, 0x30],
   [0x47, 0x30],
-  [0x44, 0x00],  // shop secret-pass → cave ceiling (frame above door)
-  [0x45, 0x00],  // shop door-middle → cave ceiling
+  [0x44, 0x44],  // shop secret-pass → cave secret-pass (passable)
+  [0x45, 0x30],  // shop door-middle → cave floor (passable middle of spine)
   [0x68, 0x70],  // shop door-bottom → CAVE DOOR (open-on-touch)
   [0x1b, 0x00],  // shop door-top → cave ceiling
   [0x5f, 0x5f],
@@ -153,12 +155,11 @@ export function placeLockedRoom(tilemap, rom, anchorX, anchorY, rng, opts = {}) 
     }
   }
 
-  // Reserve the door-spine cells so chests / skeletons can't sit on them
-  // (would block the player walking out of the room through the door).
-  // After the SHOP_ORIGIN_Y=4 slice the door cells are at grid rows 4-6 col
-  // 4 (shop's original rows 8-10 col 4: secret-pass, door-middle, door-bottom
-  // → all translated to 0x44 in the cave tileset). v1.7.651.
-  for (const [dr, dc] of [[4, 4], [5, 4], [6, 4]]) {
+  // Reserve cells the player walks through / lands on so chests + skeletons
+  // can't block them. Grid rows 4-6 col 4 are the door spine (secret-pass /
+  // floor / door); grid row 3 col 4 is the interior landing tile where the
+  // teleport-in lands the player. v1.7.658.
+  for (const [dr, dc] of [[3, 4], [4, 4], [5, 4], [6, 4]]) {
     interior.delete(`${anchorX + dc},${anchorY + dr}`);
   }
 
