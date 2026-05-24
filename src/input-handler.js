@@ -54,15 +54,20 @@ export function initKeyboardListeners() {
       if (!chatState.expanded) setChatScrollOffset(0);
       playSFX(chatState.expanded ? SFX.SCREEN_OPEN : SFX.SCREEN_CLOSE);
     }
-    // `b` / `B` backs out of the expanded chat log (close-only — never opens).
-    // Mirrors the close half of the T-toggle. Safe under typing because the
-    // `chatState.inputActive` early-return above intercepts keys destined for
-    // the chat input. v1.7.640.
-    if ((e.key === 'b' || e.key === 'B') && _chatHotkeyAllowed() && chatState.expanded) {
+    // NES B-button (`x` / `X` on keyboard; same key the on-screen mobile B
+    // button dispatches via index.html `data-key="x"`) backs out of the
+    // expanded chat log. Close-only — never opens. Safe alongside in-game
+    // B-uses because `chatState.expanded` gates it to the log-open state.
+    // v1.7.641 (v1.7.640 mis-bound to literal `b`, which the mobile B button
+    // doesn't fire).
+    if ((e.key === 'x' || e.key === 'X') && _chatHotkeyAllowed() && chatState.expanded) {
       e.preventDefault();
       chatState.expanded = false;
       setChatScrollOffset(0);
       playSFX(SFX.SCREEN_CLOSE);
+      // Consume the press so inspect / overworld interact don't also fire
+      // this frame — same pattern as movement.js / shop.js / trade.js x-cancel.
+      keys['x'] = false; keys['X'] = false;
     }
     if (e.key === 't' && _chatHotkeyAllowed()) {
       e.preventDefault();
