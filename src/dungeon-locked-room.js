@@ -34,35 +34,33 @@ const SHOP_ORIGIN_Y = 4;
 const SHOP_W = 9;
 const SHOP_H = 7;
 
-// Shop tileset (5) → cave tileset (0) translation. Wall + secret-pass tiles
-// share IDs across the two tilesets (00, 01, 44, 5f), so they pass through.
-// Shop floor (3a, 20, 47) all collapse to the single cave floor (30). Shop
-// door tiles (45, 68) become cave secret-pass (44) — same false-ceiling the
-// chamber-side teleport door uses (the player walks through it from the
-// south as the user spec'd). Shop door-top (1b) becomes plain cave ceiling.
-// Any unknown shop tile passes through unchanged (would render as the
-// matching cave tile or — if no match — as garbage; map 3 only contains
-// the IDs covered here).
+// Shop tileset (5) → cave tileset (0) translation. Wall + void share IDs
+// across both tilesets (00, 01, 5f) so they pass through. Shop floor (3a,
+// 20, 47) all collapse to cave floor (30). The shop's south door BOTTOM
+// (0x68) becomes the cave door tile 0x70 — the engine has built-in
+// open-on-touch mechanics for tiles whose collisionByte2 marks them type 5
+// (door). The door-middle / door-top / secret-pass frame tiles (0x45, 0x1b,
+// 0x44) become cave ceiling (0x00) so the door's visual frame reads as
+// wall above the door rather than a multi-tile door column.
 const SHOP_TO_CAVE = new Map([
   [0x00, 0x00],
   [0x01, 0x01],
   [0x3a, 0x30],
   [0x20, 0x30],
   [0x47, 0x30],
-  [0x44, 0x44],
-  [0x45, 0x44],
-  [0x68, 0x44],
-  [0x1b, 0x00],
+  [0x44, 0x00],  // shop secret-pass → cave ceiling (frame above door)
+  [0x45, 0x00],  // shop door-middle → cave ceiling
+  [0x68, 0x70],  // shop door-bottom → CAVE DOOR (open-on-touch)
+  [0x1b, 0x00],  // shop door-top → cave ceiling
   [0x5f, 0x5f],
   // Bottom stairwell room (rows 11-15 of map 3) tiles — not used by the
-  // 11-tall interior slice we take, but listed for completeness in case a
-  // future call extends the source rectangle.
-  [0x08, 0x09],  // shop bones → cave bones
+  // 7-row slice we take, listed for completeness.
+  [0x08, 0x09],
   [0x09, 0x09],
-  [0x19, 0x44],  // shop door-arch → cave secret-pass
+  [0x19, 0x00],
   [0x1a, 0x00],
   [0x1d, 0x01],
-  [0x7c, 0x7c],  // shop chest → cave chest (same ID)
+  [0x7c, 0x7c],
 ]);
 
 // ── Cave tileset constants (mirrored from dungeon-generator.js) ───────────
@@ -71,13 +69,19 @@ const CEILING_TILE = 0x00;
 const ROCK_TILE    = 0x01;
 const BONES_TILE   = 0x09;
 const FLOOR_TILE   = 0x30;
-const SECRET_TILE  = 0x44;  // false ceiling — passable, looks like wall
 const VOID_TILE    = 0x5f;
 const CHEST_TILE   = 0x7c;
+// Cave-tileset closed-door tile. The engine recognizes this as a door via
+// its collisionByte2 attribute ((cb2[0x70] >> 4) & 0x0F === 5) and runs the
+// open-on-touch animation (swaps to 0x7E for the open state, restores on
+// move-off via `_openReturnDoor` + movement.js). Same tile ID is the door
+// in the shop tileset too — engine logic is collisionByte2-driven, not
+// tile-ID-driven. v1.7.654.
+const DOOR_TILE    = 0x70;
 
 // Door tile this module places on the host chamber's wall. Exported so
 // caller / engine teleport-trigger code can register it.
-export const LOCKED_ROOM_DOOR_TILE = SECRET_TILE;
+export const LOCKED_ROOM_DOOR_TILE = DOOR_TILE;
 
 // Shop interior cache — map 3 is identical every load.
 let _replicaCache = null;
@@ -190,7 +194,7 @@ export function placeLockedRoom(tilemap, rom, anchorX, anchorY, rng, opts = {}) 
  * @param {number} doorY
  */
 export function placeChamberDoor(tilemap, doorX, doorY) {
-  tilemap[doorY * 32 + doorX] = SECRET_TILE;
+  tilemap[doorY * 32 + doorX] = DOOR_TILE;
   // Frame the door with rock at the upper diagonals. The natural chamber
   // wall (addOverhang pattern: ceiling on top of rock) leaves (x±1, y-1) as
   // ceiling, which reads as "door punched through a ceiling row" instead of
@@ -262,4 +266,4 @@ export function findChamberDoorPos(tilemap, side, opts = {}) {
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 function _isWall(t)     { return t === CEILING_TILE || t === ROCK_TILE; }
-function _isWalkable(t) { return t === FLOOR_TILE || t === BONES_TILE || t === SECRET_TILE; }
+function _isWalkable(t) { return t === FLOOR_TILE || t === BONES_TILE || t === DOOR_TILE; }
