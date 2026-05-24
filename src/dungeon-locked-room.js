@@ -52,7 +52,10 @@ const SHOP_TO_CAVE = new Map([
   [0x44, 0x44],  // shop secret-pass → cave secret-pass (passable)
   [0x45, 0x30],  // shop door-middle → cave floor (passable middle of spine)
   [0x68, 0x70],  // shop door-bottom → CAVE DOOR (open-on-touch)
-  [0x1b, 0x00],  // shop door-top → cave ceiling
+  [0x1b, 0x01],  // shop door-top → cave rock (NOT ceiling — keeps the
+                 // addOverhang "ceiling on 2 rocks" pattern intact for the
+                 // door column; ceiling here gave ceiling-rock-floor which
+                 // is a 1-rock-under-ceiling glitch). v1.7.662.
   [0x5f, 0x5f],
   // Bottom stairwell room (rows 11-15 of map 3) tiles — not used by the
   // 7-row slice we take, listed for completeness.
