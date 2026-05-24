@@ -2097,24 +2097,6 @@ function _generateFloor(romData, floorIndex, seed) {
     var endRowForUsed = 27;
     var chamberBounds = null;
 
-    // Locked-room chamber door — same chance + find as floor 0, but anchored
-    // to the entry chamber so the door is an OPTIONAL side route off the
-    // entry room (doesn't block the corridor or the rock-puzzle path).
-    // Routes to mapId 1011 (separate locked-room map). v1.7.677.
-    const LOCKED_DOOR_CHANCE_F3 = 0.5;
-    if (rng() < LOCKED_DOOR_CHANCE_F3) {
-      const doorPos = findChamberDoorPos(tilemap, 'north', {
-        xRange: { min: Math.max(1, entranceX - 6), max: Math.min(30, entranceX + 6) },
-        yRange: { min: Math.max(1, entranceY - 6), max: Math.min(30, entranceY + 6) },
-        rng,
-      });
-      if (doorPos) {
-        placeChamberDoor(tilemap, doorPos.x, doorPos.y);
-        lockedRoomDoors.set(`${doorPos.x},${doorPos.y}`, { mapId: 1011 });
-        lockedDoors.add(`${doorPos.x},${doorPos.y}`);
-      }
-    }
-
   } else if (floorIndex === 3) {
     // ── Floor 4: Long corridor up → 5×5 room → paths left/right to side rooms ──
     // Entrance at bottom (placeDeepExit — same staircase block as floor 1 exit).
