@@ -18,7 +18,8 @@ import { battleSt } from './battle-state.js';
 import { hudSt, HUD_INFO_FADE_STEPS, HUD_INFO_FADE_STEP_MS } from './hud-state.js';
 import { msgState } from './message-box.js';
 import { drawHudBox, drawBorderedBox, clipToViewport, drawRosterSparkle } from './hud-drawing.js';
-import { getOnlineAtLocation } from './net.js';
+import { getOnlineAtLocation, getOnlinePlayerByName } from './net.js';
+import { partyInviteSt } from './party-invite.js';
 
 // ── HUD layout constants (must match game.js) ────────────────────────────
 const CANVAS_W   = 256;
@@ -93,13 +94,32 @@ export function getPlayerLocation() {
   return rosterLocForMapId(currentMapId);
 }
 
+// Party members get a permanent roster slot regardless of room or online
+// state — partymates should always be visible at a glance ("if we're
+// partied, I can see them"). Online mates pull their live profile; offline
+// mates fall back to the cached profile (`partyInviteSt.partyMemberProfiles`)
+// set when they were last seen. v1.7.709.
+function _partyRosterEntries(excludeNames) {
+  const out = [];
+  for (const name of partyInviteSt.partyMembers) {
+    if (excludeNames.has(name)) continue;       // already shown via same-loc real list
+    const live = getOnlinePlayerByName(name);
+    if (live) { out.push(live); excludeNames.add(name); continue; }
+    const cached = partyInviteSt.partyMemberProfiles.get(name);
+    if (cached) { out.push({ ...cached, isReal: true }); excludeNames.add(name); }
+  }
+  return out;
+}
+
 export function getRosterPlayers() {
   const loc = getPlayerLocation();
   // Real online players (multiplayer Step 1) appear above the fake pool.
   // Pre-MP they're always [] so the existing single-player flow is unchanged.
   const real = getOnlineAtLocation(loc);
+  const seen = new Set(real.map(p => p.name));
+  const party = _partyRosterEntries(seen);
   const fake = PLAYER_POOL.filter(p => p.loc === loc);
-  return [...real, ...fake];
+  return [...real, ...party, ...fake];
 }
 
 // ── Visible roster (at loc + fading out), sorted by arrival ───────────────
@@ -108,6 +128,11 @@ export function getRosterVisible() {
   // Real players first — they don't participate in the fake-pool fade/slide
   // animation (presence is driven by WebSocket join/leave/move events).
   const real = getOnlineAtLocation(loc);
+  const seen = new Set(real.map(p => p.name));
+  // Party members always-visible (v1.7.709) — slot in right after same-loc
+  // real players, before the fake pool. Stable identity: dedupe against
+  // `seen` so a partymate who IS at the same loc doesn't appear twice.
+  const party = _partyRosterEntries(seen);
   const atLoc = PLAYER_POOL.filter(p => p.loc === loc);
   const fadingOut = PLAYER_POOL.filter(p =>
     p.loc !== loc && rosterFadeDir[p.name] === 'out' && rosterFadeMap[p.name] < ROSTER_FADE_STEPS
@@ -120,7 +145,7 @@ export function getRosterVisible() {
     if (bi === -1) return -1;
     return ai - bi;
   });
-  return [...real, ...atLoc, ...fadingOut];
+  return [...real, ...party, ...atLoc, ...fadingOut];
 }
 
 function _clampRosterCursor() {
